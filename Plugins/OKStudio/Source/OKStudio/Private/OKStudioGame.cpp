@@ -3020,8 +3020,8 @@ void UOKStudioGame::RunSelfTest(bool bExit)
     Step(TEXT("saved fixed neck"));
     {
         AKKPreviewActor* Preview = SceneActor->PreviewOf(A);
-        FVector Before;
-        const bool bBefore = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Before);
+        FVector SavedNeckBefore;
+        const bool bBefore = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), SavedNeckBefore);
         auto NativeQuat = [](const FVector& Euler)
         {
             const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector, Euler, FVector::OneVector).GetRotation();
@@ -3032,20 +3032,20 @@ void UOKStudioGame::RunSelfTest(bool bExit)
         Character.NeckLook = EOKSceneLook::Fixed;
         Document->NotifyChanged();
         SyncNow();
-        FVector Fixed;
-        const bool bFixed = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Fixed);
-        Check(bFixed && FMath::Abs(NativeQuat(Fixed) | Character.FixedNeck[1]) > .99999, TEXT("saved FIX mode applies the source head local"));
+        FVector SavedNeckFixed;
+        const bool bFixed = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), SavedNeckFixed);
+        Check(bFixed && FMath::Abs(NativeQuat(SavedNeckFixed) | Character.FixedNeck[1]) > .99999, TEXT("saved FIX mode applies the source head local"));
         Character.NeckLook = EOKSceneLook::Animation;
         Document->NotifyChanged();
         SyncNow();
-        FVector Restored;
-        const bool bRestored = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Restored);
-        Check(bBefore && bRestored && FMath::Abs(NativeQuat(Restored) | NativeQuat(Before)) > .99999, TEXT("animation mode clears runtime FIX and restores the animated head"));
+        FVector SavedNeckRestored;
+        const bool bRestored = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), SavedNeckRestored);
+        Check(bBefore && bRestored && FMath::Abs(NativeQuat(SavedNeckRestored) | NativeQuat(SavedNeckBefore)) > .99999, TEXT("animation mode clears runtime FIX and restores the animated head"));
         Character.NeckLook = EOKSceneLook::Fixed;
         Document->NotifyChanged();
         SyncNow();
-        const bool bAgain = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Fixed);
-        Check(bAgain && FMath::Abs(NativeQuat(Fixed) | Character.FixedNeck[1]) > .99999, TEXT("saved FIX can be selected again without reimport"));
+        const bool bAgain = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), SavedNeckFixed);
+        Check(bAgain && FMath::Abs(NativeQuat(SavedNeckFixed) | Character.FixedNeck[1]) > .99999, TEXT("saved FIX can be selected again without reimport"));
         Character.FixedNeck.Reset();
         Character.NeckLook = EOKSceneLook::Animation;
         Document->NotifyChanged();

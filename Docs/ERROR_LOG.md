@@ -3730,3 +3730,5 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜Rust 測試誤用 C++ 小數語法**：新斷言寫成 >.9999，Rust 需要 >0.9999，第一輪測試未編譯；已修正後重跑，沒有把編譯失敗列為通過。首次診斷不應列印整個場景全部道具／隱藏角色，6331 輸出過多；改為只讀有效可見角色與需要的骨架欄位。
 
 - **2026-10-21｜保存的固定頭部不能藏在「照動畫」模式下**：初版以 FixedNeck 陣列覆蓋 Animation 模式，畫面雖正確，但 UI「照動畫」不能真正還原動畫頭部。改用獨立 Fixed enum（附加於既有值之後），匯入時明確設為「固定姿勢」；只有有保存頸部資料的角色提供此選項。切回 Animation／Camera／Point 時清除 runtime FIX，保存資料仍可切回使用，避免為單張圖隱藏控制狀態。
+
+- **2026-10-21｜大型 SelfTest 函式新增 Before 變數撞名**：固定頭部切換整合測試使用 FVector Before，遮蔽同一函式前面的 FString Before，Windows 編譯將 C4456 視為錯誤。改成 SavedNeckBefore／SavedNeckFixed／SavedNeckRestored 等用途前綴。保留失敗 build log，以重建後結果驗收；在大型既有函式加測試時先檢查外層名稱，避免重複使用 Before／After／Fixed 這類名稱。
