@@ -329,6 +329,14 @@ bool OKPrepareRuntimeSharedMaterialBinding(const FKKRuntimeMaterialPart& P,const
  }
  TSet<FString> Seen;for(const auto& Slot:P.Textures){if(Seen.Contains(Slot.Property)||Slot.Texture<0)return Fail(TEXT("Shared material source slot invalid"));Seen.Add(Slot.Property);for(const auto& T:Layout->Textures)if(T.Name==Slot.Property){if(T.Dim!=2)return Fail(TEXT("Shared material source texture dimension unsupported"));B.Textures.Add(*T.Name,Slot.Texture);}}
  if(Recipe==EKKRuntimeMaterialRecipe::ForgeEye||Recipe==EKKRuntimeMaterialRecipe::KoikanoEye){for(int32 Layer=0;Layer<2;++Layer){const FName Target=Layer?TEXT("_overtex2"):TEXT("_overtex1");B.Textures.Remove(Target);for(const auto& Slot:P.Textures)if(Slot.Property==FString::Printf(TEXT("_EyeLayer%d"),Layer))B.Textures.Add(Target,Slot.Texture);}}
+ if(!Outline && !FPlatformMisc::GetEnvironmentVariable(TEXT("OK_MATERIAL_BINDING_AUDIT")).IsEmpty()){
+  FString Audit;
+  for(const auto& V:B.Vectors)
+   if(V.Key==TEXT("_ambientshadowG")||V.Key==TEXT("_ShadowColor")||V.Key==TEXT("_Color")||V.Key==TEXT("_LightColor0"))
+    Audit+=FString::Printf(TEXT(" %s=%s"),*V.Key.ToString(),*V.Value.ToString());
+  Audit+=FString::Printf(TEXT(" _KanoVerShift=%.3f"),B.Scalars.FindRef(TEXT("_KanoVerShift")));
+  UE_LOG(LogTemp,Display,TEXT("OK material binding part=%s recipe=%d%s"),*P.Name,int32(Recipe),*Audit);
+ }
  Out=MoveTemp(B);Error.Reset();return true;
 }
 UMaterialInstanceDynamic* OKCreateRuntimeSharedMaterial(const FKKRuntimeMaterialPart& P,TConstArrayView<UTexture2D*> Textures,UMaterialInterface* Parent,const FKKRuntimeMaterialScene& Scene,FString& Error,bool Outline){

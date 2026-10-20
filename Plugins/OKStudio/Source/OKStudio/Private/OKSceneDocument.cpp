@@ -387,6 +387,7 @@ TMap<FName, FLinearColor> FOKScenePost::ShaderGlobals() const
 	if (AmbientShadowG >= 0.f) Out.Add(TEXT("_ambientshadowG"), FLinearColor(AmbientShadow.R, AmbientShadow.G, AmbientShadow.B, 1.f - FMath::Clamp(AmbientShadowG, 0.f, 1.f)));
 	if (LineColorG >= 0.f) Out.Add(TEXT("_LineColorG"), FLinearColor(0.5f, 0.5f, 0.5f, 1.f - FMath::Clamp(LineColorG, 0.f, 1.f)));
 	if (LineWidthG >= 0.f) Out.Add(TEXT("_linewidthG"), FLinearColor(LineWidthG, 0.f, 0.f, 0.f));
+	if (ShaderType >= 0) Out.Add(TEXT("_KanoVerShift"), FLinearColor(ShaderType == 0 ? 0.f : 1.f, 0.f, 0.f, 0.f));
 	return Out;
 }
 

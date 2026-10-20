@@ -443,6 +443,8 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		if (E.TryGetNumberField(TEXT("line_width_g"), Value)) Document->Post.LineWidthG = float(Value);
 		// SceneInfo.rampG: the mt_ramp the scene's characters and items shade with (SystemButtonCtrl sets _RampG).
 		if (E.TryGetNumberField(TEXT("ramp_g"), Value)) Document->Post.RampG = int32(Value);
+		// Studio restores its saved shader mode after loading characters; system.xml is only the card default.
+		if (E.TryGetNumberField(TEXT("shader_type"), Value)) Document->Post.ShaderType = int32(Value);
 		// SceneInfo.sunLightType: the map's time of day (its own sky, when it has one, follows it).
 		if (E.TryGetNumberField(TEXT("sun_light_type"), Value)) Document->Post.SunType = int32(Value);
 		// SceneInfo.caMap: Studio's map position / rotation (MapCtrl.Reflect sets the map root's local transform).

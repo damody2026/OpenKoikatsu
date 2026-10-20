@@ -3765,3 +3765,19 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 
 - **2026-10-21｜4432探針必須先篩選物件型別**：初版JSON探針用「含fk欄位」當角色條件，把大量道具也輸出，且把某些children的陣列誤當dict而失敗。改為遞迴處理dict／list，只選kind=Character，僅輸出服裝、啟用群組與計數，完整資料留本機檔。不得用截斷的大量輸出當角色資料驗收。
 - **2026-10-21｜Studio不能把動畫相位暫停當成物理dt=0**：原AdvanceAnimations固定傳ApplyPoseFrame(0,false)，比較暫停更完全略過角色更新；固定FK腿部後衣物碰撞因此沒有收到經過時間。改由場景每tick統一送一次真實dt，動畫相位可獨立保持；static FK同樣求解，頭部追視先準備target，避免static角色額外步進第二次。需實拍驗證衣物，不可只驗動畫phase有變。
+
+- **2026-10-21｜6964調查重複誤用Windows rg路徑萬用字元**：數次把KKForge*／KKRuntime*直接寫在路徑參數而報os error 123，也曾猜測不存在的檔案位置。改用既有父目錄配合-g篩選；先以rg --files確認精確路徑再讀取。失敗搜尋不能當成程式不存在。
+
+- **2026-10-21｜6964場景shaderType遺漏**：來源SceneInfo.shaderType=0，但角色卡依遊戲system.xml的shaderType=1建立；Studio匯入只處理ramp／陰影色，未把SetShaderType對應的_KanoVerShift帶入，因而繼續用錯的渲染模式。補保存場景ShaderType並透過既有全域材質binding覆寫；缺省=-1保留舊檔／普通卡設定。須以實際前後圖確認影響，不預先將此單一修正當成全部暗部根因。
+
+- **2026-10-21｜6964診斷編譯C4335**：直接decode含CRLF的bytes再以Windows text mode寫回，產生CRCRLF而被編譯器視為Mac格式。修正為原始bytes去除重複CR；後續文字編輯先統一換行或維持bytes，不能把未正規化的CRLF再套系統換行轉換。
+
+- **2026-10-21｜6964環境遮蔽Tint錯誤解碼**：AO後製對保存的Tint再次做sRGB→linear，將6964約0.53錯壓成約0.24，暗部乘色過黑。原作AmplifyOcclusionBase將Tint直接送Shader.SetGlobalColor(_AO_Levels)，同版UnityEngine.Shader可見它直接轉呼叫SetGlobalVectorImpl，沒有色彩轉換。修正只取消這一次錯誤解碼，保留AO強度、半徑與開關；停用AO只是診斷，不能當正式修復。
+
+- **2026-10-21｜6964虹膜來源Linear標記遺失**：原作探針的create_eye RenderTexture與直接mip0讀回一致；舊抽取虹膜有效區RGB誤差約40/255。虹膜先翻列再用PNG bytes重新核對來源，導致Linear旗標失配、以sRGB再次解碼。改讓虹膜與眼白共用「來源bytes＋列方向＋color_space」一次解析，先保留metadata再翻列合成；Session cache revision提升19。先前只有AO／模式修正的圖與14景中途執行不能當最終虹膜驗收，已終止自己持有的過期比較程序。
+
+- **2026-10-21｜6964具名oracle新增檔案路徑需隨工作目錄調整**：在Tools/ok-extract執行時仍以專案根相對路徑寫lib.rs，導致FileNotFound且測試尚未新增就啟動cargo。修正使用絕對路徑，重新編譯並要求具名測試實際1 passed；不能把0 tests或舊binary當作驗收。來源貼圖探針亦先列實際產物，原始Texture2D不可讀時使用linear float readback，不假設source.png必存在。
+
+- **2026-10-21｜6964驗收不應把既有問題混成新修正失敗**：PostTest舊霧斷言以全畫面平均紅色上升3判斷，天空佔大面積使均值僅+1；實際1736個幾何像素紅升／綠降至少5。改以至少100個受影響像素驗證方向與幅度，不改霧正式公式。全庫轉卡首輪則沿用本機未追蹤私有模型，pack未含該mod，乾淨庫gaps=2；依既有共用庫政策改由純追蹤庫轉卡，pack記錄1個私有模型／3查詢與實體zip條目，CLI容量25.2%通過。不能提交私有模型填補乾淨庫，也不能把首輪容量失敗或DIFFERENT記為PASS。
+
+- **2026-10-21｜6964乾淨庫檢查會寫入追蹤的missing.txt**：LFS payload全核對後git clean斷言因前輪失敗CLI更新missing.txt而失敗。先將該輪缺口檔原樣留存Saved/OKStudio/6964-clean-missing-before-restoration.txt，再只還原自己測試寫入的該追蹤檔並重新核對。不可忽略dirty或把失敗證據刪掉。

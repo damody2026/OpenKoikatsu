@@ -478,3 +478,12 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 實際前後圖、來源語義及驗收見 [4432 裙擺圖文紀錄](OK_STUDIO_CLOTH_4432_20261021.md)。
 
 ![4432：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Cloth4432_20261021/comparison.png)
+
+
+### S5：6964 虹膜與過黑陰影（2026-10-21）
+
+虹膜的 Linear 來源旗標原本因先翻列、再比對 PNG bytes 而遺失，造成重複 sRGB 解碼；現在和眼白共用 bytes／列方向／color_space 的單次來源解析。原作 create_eye GPU RT 比對左右虹膜誤差由40.416/255降至0.084778/255，透明覆蓋差異0。另修正AO Tint錯誤再解碼（約0.53→0.24），以及場景shaderType遺漏；session cache revision19。
+
+原作資料、前後實拍與驗收見 [6964 虹膜／陰影紀錄](OK_STUDIO_SHADING_6964_20261021.md)。沒有調曝光、關AO或針對場景染色。
+
+![6964：左原作、中修正前、右修正後](images/OKStudio/Shading6964_20261021/comparison.png)

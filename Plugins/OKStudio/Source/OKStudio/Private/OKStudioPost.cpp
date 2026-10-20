@@ -201,7 +201,9 @@ void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettin
 	M->SetScalarParameterValue(TEXT("FogOn"), Post.bFog ? 1.f : 0.f);
 	M->SetVectorParameterValue(TEXT("FogColor"), Linear(Post.FogColor));
 	M->SetScalarParameterValue(TEXT("AOOn"), Post.bAmbientOcclusion ? 1.f : 0.f);
-	M->SetVectorParameterValue(TEXT("AOTint"), Linear(Post.AmbientOcclusionTint));
+	// AmplifyOcclusionBase writes _AO_Levels with Shader.SetGlobalColor, which
+	// forwards directly to SetGlobalVectorImpl. Its RGB is already shader input.
+	M->SetVectorParameterValue(TEXT("AOTint"), Post.AmbientOcclusionTint);
 	M->SetScalarParameterValue(TEXT("AORadius"), FMath::Max(Post.AmbientOcclusionRadius, 0.001f));
 	M->SetScalarParameterValue(TEXT("ShaftsOn"), Post.bSunShafts ? 1.f : 0.f);
 	// SunShafts.sunColor and sunThreshold reach the shader as vectors (SetVector): not linearised.
