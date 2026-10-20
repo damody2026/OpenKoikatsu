@@ -1,0 +1,125 @@
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+FileOpenOrder/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.suo
+*.user
+*.sln
+*.slnx
+.vsconfig
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.xcodeproj
+*.xcworkspace
+
+# Local game-root pointer (user's Illusion install)
+Saved/Config/WindowsEditor/GameRoot.ini
+**/GameRoot.ini
+
+# Converted Illusion assets must never be committed
+Saved/spike/
+Saved/Converted/
+Saved/TestCards/
+Content/IndependentResources/v1/
+Content/IndependentResources/PairedAnimations/
+Content/IndependentImports/
+Content/Scenes/CrowdRoom/Characters/
+output/CrowdAPNG/
+
+# Logs
+*.log
+
+# Rust
+Tools/character_mcp/rust/target/
+Tools/character_mcp/bin/
+Tools/ok-extract/target/
+Tools/ok-video/target/
+Tools/ok-extract/target-appearance/
+Tools/ok-extract-face346-validation/target/
+
+# Commercial Fab plugin (local editor MCP only)
+Plugins/BpGeneratorUltimate/
+
+# Local reference data. Nothing under ref/ is committed.
+/ref/
+
+# Market data (A-share / US stock daily bars) is rebuilt by Tools/build_ashare_data.lua and Tools/build_us_data.lua
+Content/IndependentResources/MarketData/
+
+Tools/ok-mind/target/
+Tools/ok-rules/target/
+Tools/engine.local.json
+Tools/.thirdparty/
+# OKModel.Open imports (rebuildable from Content/IndependentResources/base_v1)
+Content/OKModels/
+
+# Python bytecode (remaining Blender/UE scripts)
+__pycache__/
+*.pyc
+
+# Per-checkout ports / voice servers (Tools/ok_instance.ps1, Docs/DUAL_LINE_DEVELOPMENT.md)
+local-instance.json
+
+# OK shared library (base_v1): models / index in Git LFS (.gitattributes); work files and replay caches stay local
+Content/IndependentResources/base_v1/work/
+Content/IndependentResources/base_v1/*.okpreview
+
+# Probe / build outputs
+Tools/GamePoseProbe/*.dll
+Tools/RuntimeLightProbe/*.dll
+Tools/ok-extract/target-*/
+output/RuntimeLightProbe.dll
+# New run outputs; files already tracked under output/ stay tracked
+output/*/
+
+# ffmpeg (LGPL build, downloaded locally for OK Studio movie export)
+Tools/ffmpeg/
+# ILSpy command line (ICSharpCode, NuGet ilspycmd), downloaded locally to read the original Studio save formats
+Tools/ilspy/
+
+# 角色卡不進版控（只留在本機）：街頭女主、群眾卡、Demo 卡、Studio 場景拆出的角色卡、含角色的 Studio 樣本場景
+/Content/CharacterCards/
+/UserData/Studio/scene/*_cards/
+/output/StreetSocialAPNG/Male01.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0000010.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0000059.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0000633.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0001268.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0001901.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0003167.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0003800.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0004432.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0005065.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0006331.png
+/Content/IndependentResources/base_v1/studio/samples/koikatu_cs0006964.png
+
+# DeepSeek 設定檔（含 API key）在任何位置都不進版控
+deepseek.json
+# OK Studio 錄出的影片（含角色）不進版控
+/UserData/Studio/movie/*.mp4
+
+# StreetSocialCity：建模中的另一個 UE 專案，不進版控（只留本機）
+/StreetSocialCity/
+/.ai-collab/
+/old_ps1/
+/old_py/
+/output/
+/three/
+# Per-round handoff notes and local launchers stay on this machine
+/HANDOFF*.md
+/NEXT_ROUND.md
+/FINALIK_PORT.md
+/KK_091207.bat
+/model3d.md

@@ -1,0 +1,34 @@
+#include "/Engine/Public/Platform.ush"
+ByteAddressBuffer RawMatrices;
+ByteAddressBuffer WorkItems;
+Buffer<uint> BoneMaps;
+RWBuffer<uint4> OutputTransforms;
+uint WorkCount;
+// One chunk of at most 256 matrices. All values move as uint bits; no TRS
+// decomposition, float arithmetic, half precision or interpolation is involved.
+[numthreads(256,1,1)]
+void MainCS(uint3 Group:SV_GroupID,uint Thread:SV_GroupIndex){
+ if(Group.x>=WorkCount)return;
+ uint4 W=WorkItems.Load4(Group.x*16);
+ if(Thread>=W.w)return;
+ uint D=W.y+Thread*3;
+ if(W.x==0xffffffffu){
+  OutputTransforms[D]=uint4(0x3f800000u,0,0,0);
+  OutputTransforms[D+1]=uint4(0,0x3f800000u,0,0);
+  OutputTransforms[D+2]=uint4(0,0,0x3f800000u,0);return;
+ }
+ // CPU fallback for an unexpected source-array size, preserving engine output.
+ if(W.z==0xfffffffeu){
+  uint S=W.x+Thread*48;
+  OutputTransforms[D]=RawMatrices.Load4(S);
+  OutputTransforms[D+1]=RawMatrices.Load4(S+16);
+  OutputTransforms[D+2]=RawMatrices.Load4(S+32);return;
+ }
+ uint Bone=Thread;
+ if(W.z!=0xffffffffu)Bone=BoneMaps[W.z/4+Thread];
+ uint S=W.x+Bone*64;
+ uint4 A=RawMatrices.Load4(S),B=RawMatrices.Load4(S+16),C=RawMatrices.Load4(S+32),E=RawMatrices.Load4(S+48);
+ OutputTransforms[D]=uint4(A.x,B.x,C.x,E.x);
+ OutputTransforms[D+1]=uint4(A.y,B.y,C.y,E.y);
+ OutputTransforms[D+2]=uint4(A.z,B.z,C.z,E.z);
+}

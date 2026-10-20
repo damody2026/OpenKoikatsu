@@ -1,0 +1,91 @@
+--- a/Engine/Source/Runtime/Engine/Private/Animation/AnimCompress.cpp
++++ b/Engine/Source/Runtime/Engine/Private/Animation/AnimCompress.cpp
+@@ -11,6 +11,60 @@
+ #include "Animation/AnimSequenceDecompressionContext.h"
+ #include "Misc/FeedbackContext.h"
+ #include "AnimationUtils.h"
++#include "HAL/IConsoleManager.h"
++#include "Misc/ScopeRWLock.h"
++
++namespace {
++struct FConstantScaleCache {
++ TWeakObjectPtr<UAnimSequence> Owner;
++ const uint8* Bytes=nullptr;int32 ByteCount=0,TrackCount=0,ISPCMode=-1;
++ const int32* Offsets=nullptr;
++ TArray<FVector> Values;TArray<uint8> Constant;
++};
++FRWLock GConstantScaleCacheLock;
++TMap<const ICompressedAnimData*,TSharedPtr<const FConstantScaleCache,ESPMode::ThreadSafe>> GConstantScaleCaches;
++TAtomic<bool> GHasConstantScaleCaches{false},GConstantScaleCacheFailed{false};
++TAtomic<uint64> GConstantScaleHits{0},GConstantScaleMisses{0},GConstantScaleVerified{0},GConstantScaleMismatches{0};
++TAutoConsoleVariable<int32> CVarConstantScaleCache(TEXT("r.Anim.ConstantScaleCache"),0,TEXT("Opt-in registered immutable constant-key single-scale-track cache."));
++TAutoConsoleVariable<int32> CVarVerifyConstantScaleCache(TEXT("r.Anim.VerifyConstantScaleCache"),0,TEXT("Compare cached scale output with the original decoder; diagnostic only."));
++struct FConstantScaleScratch : TThreadSingleton<FConstantScaleScratch> { BoneTrackArray VariablePairs; };
++bool DecodeCachedConstantScales(const FUECompressedAnimData& Data,FAnimSequenceDecompressionContext& Context,const BoneTrackArray& Pairs,TArrayView<FTransform>& Atoms){
++ if(CVarConstantScaleCache.GetValueOnAnyThread()==0||!GHasConstantScaleCaches.Load()||GConstantScaleCacheFailed.Load())return false;
++ TSharedPtr<const FConstantScaleCache,ESPMode::ThreadSafe> Cache;
++ {FReadScopeLock Lock(GConstantScaleCacheLock);if(const auto* Found=GConstantScaleCaches.Find(&Context.CompressedAnimData))Cache=*Found;}
++ const auto* ISPCVariable=IConsoleManager::Get().FindConsoleVariable(TEXT("a.ConstantKeyLerp.ISPC"));
++ if(!Cache||!Cache->Owner.IsValid(false,true)||Cache->Bytes!=Data.CompressedByteStream.GetData()||Cache->ByteCount!=Data.CompressedByteStream.Num()||Cache->Offsets!=Data.CompressedScaleOffsets.OffsetData.GetData()||Cache->TrackCount!=Data.CompressedScaleOffsets.GetNumTracks()||Cache->ISPCMode!=(ISPCVariable?ISPCVariable->GetInt():-1))return false;
++ TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseConstantScaleCache);
++ const bool Verify=CVarVerifyConstantScaleCache.GetValueOnAnyThread()!=0;TArray<FTransform> Expected;
++ if(Verify){Expected.Append(Atoms.GetData(),Atoms.Num());TArrayView<FTransform> View(Expected);Data.ScaleCodec->GetPoseScales(View,Pairs,Context);}
++ auto& VariablePairs=FConstantScaleScratch::Get().VariablePairs;VariablePairs.Reset();uint64 Hits=0;
++ for(const auto& Pair:Pairs){if(Cache->Constant[Pair.TrackIndex]){Atoms[Pair.AtomIndex].SetScale3D(Cache->Values[Pair.TrackIndex]);++Hits;}else VariablePairs.Add(Pair);}
++ Data.ScaleCodec->GetPoseScales(Atoms,VariablePairs,Context);
++ GConstantScaleHits+=Hits;GConstantScaleMisses+=uint64(VariablePairs.Num());
++ if(Verify){uint64 Mismatches=0;for(const auto& Pair:Pairs){const FVector A=Atoms[Pair.AtomIndex].GetScale3D(),B=Expected[Pair.AtomIndex].GetScale3D();Mismatches+=FMemory::Memcmp(&A,&B,sizeof(A))!=0;}
++  GConstantScaleVerified+=uint64(Pairs.Num());if(Mismatches){GConstantScaleMismatches+=Mismatches;GConstantScaleCacheFailed.Store(true);for(const auto& Pair:Pairs)Atoms[Pair.AtomIndex].SetScale3D(Expected[Pair.AtomIndex].GetScale3D());}
++ }
++ return true;
++}
++}
++ENGINE_API bool PrepareAnimConstantScaleCache(UAnimSequence* Clip){
++ // Runtime immutable cooked clips only. Never retain animation assets or trust
++ // a reused compressed-data address after its owning UObject has expired.
++ if(GIsEditor||!Clip||!Clip->GetSkeleton())return false;
++ const auto DataView=Clip->GetCompressedData();const auto& Compressed=DataView.Get();
++ if(!Compressed.IsValid(Clip)||!Compressed.BoneCompressionCodec||Compressed.BoneCompressionCodec->GetClass()->GetName()!=TEXT("AnimCompress_BitwiseCompressOnly"))return false;
++ const auto& Data=static_cast<const FUECompressedAnimData&>(*Compressed.CompressedDataStructure);
++ const int32 Count=Compressed.CompressedTrackToSkeletonMapTable.Num();
++ if(Data.KeyEncodingFormat!=AKF_ConstantKeyLerp||!Data.CompressedScaleOffsets.IsValid()||Data.CompressedScaleOffsets.GetNumTracks()!=Count)return false;
++ auto Cache=MakeShared<FConstantScaleCache,ESPMode::ThreadSafe>();Cache->Owner=Clip;Cache->Bytes=Data.CompressedByteStream.GetData();Cache->ByteCount=Data.CompressedByteStream.Num();Cache->Offsets=Data.CompressedScaleOffsets.OffsetData.GetData();Cache->TrackCount=Count;
++ const auto* ISPCVariable=IConsoleManager::Get().FindConsoleVariable(TEXT("a.ConstantKeyLerp.ISPC"));Cache->ISPCMode=ISPCVariable?ISPCVariable->GetInt():-1;
++ TArray<FTransform> Initial;Initial.Init(FTransform::Identity,Count);BoneTrackArray Pairs;for(int32 Track=0;Track<Count;++Track){Pairs.Add(BoneTrackPair(Track,Track));Cache->Constant.Add(Data.CompressedScaleOffsets.GetOffsetData(Track,1)==1);}
++ const auto Rate=Clip->GetSamplingFrameRate();FAnimSequenceDecompressionContext Context(Rate,Rate.AsFrameTime(Clip->GetPlayLength()).RoundToFrame().Value,Clip->Interpolation,NAME_None,*Compressed.CompressedDataStructure,Clip->GetSkeleton()->GetRefLocalPoses(),Compressed.CompressedTrackToSkeletonMapTable,Clip->GetSkeleton(),Clip->IsValidAdditive(),Clip->GetAdditiveAnimType());Context.Seek(0.0);
++ TArrayView<FTransform> View(Initial);Data.ScaleCodec->GetPoseScales(View,Pairs,Context);for(const auto& Atom:Initial)Cache->Values.Add(Atom.GetScale3D());
++ {FWriteScopeLock Lock(GConstantScaleCacheLock);for(auto It=GConstantScaleCaches.CreateIterator();It;++It)if(!It.Value()->Owner.IsValid())It.RemoveCurrent();GConstantScaleCaches.Add(Compressed.CompressedDataStructure.Get(),Cache);GHasConstantScaleCaches.Store(true);}
++ return true;
++}
++ENGINE_API void GetAnimConstantScaleCacheStats(uint64& Hits,uint64& Misses,uint64& Verified,uint64& Mismatches,bool& Failed){Hits=GConstantScaleHits.Load();Misses=GConstantScaleMisses.Load();Verified=GConstantScaleVerified.Load();Mismatches=GConstantScaleMismatches.Load();Failed=GConstantScaleCacheFailed.Load();}
+ 
+ #include UE_INLINE_GENERATED_CPP_BY_NAME(AnimCompress)
+ 
+@@ -707,15 +761,23 @@
+ {
+ 	const FUECompressedAnimData& AnimData = static_cast<const FUECompressedAnimData&>(DecompContext.CompressedAnimData);
+ 
+-	AnimData.TranslationCodec->GetPoseTranslations(OutAtoms, TranslationPairs, DecompContext);
+-
+-	AnimData.RotationCodec->GetPoseRotations(OutAtoms, RotationPairs, DecompContext);
++	{
++		TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseDecodeTranslations);
++		AnimData.TranslationCodec->GetPoseTranslations(OutAtoms, TranslationPairs, DecompContext);
++	}
++
++	{
++		TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseDecodeRotations);
++		AnimData.RotationCodec->GetPoseRotations(OutAtoms, RotationPairs, DecompContext);
++	}
+ 
+ 	// Scale can be stripped when it is trivial and equal to the bind pose
+ 	// When this is the case, we assume that the output pose has already been populated with the bind pose
+ 	if (AnimData.CompressedScaleOffsets.IsValid())
+ 	{
+-		AnimData.ScaleCodec->GetPoseScales(OutAtoms, ScalePairs, DecompContext);
++		TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseDecodeScales);
++		if(!DecodeCachedConstantScales(AnimData,DecompContext,ScalePairs,OutAtoms))
++			AnimData.ScaleCodec->GetPoseScales(OutAtoms, ScalePairs, DecompContext);
+ 	}
+ }
+ 

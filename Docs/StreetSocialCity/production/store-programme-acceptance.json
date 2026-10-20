@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "scope": "all current store source bindings and implemented dimensioned furnishing; not whole-store visual or scale approval",
+  "source_manifest_sha256": "fdb35f1e1c44491ef9131fd24ff9cf30f4f1c37036d01037d068dacc95b4cbb0",
+  "stores": 176,
+  "checks": 24104,
+  "errors": [],
+  "legacy_street_buildings_requiring_scale_redesign": [],
+  "actual_tripo_models_approved": false,
+  "all_store_geometry_approved": false
+}

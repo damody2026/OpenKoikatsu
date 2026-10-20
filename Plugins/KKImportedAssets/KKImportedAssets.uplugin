@@ -1,0 +1,11 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Independent Character Assets",
+  "Description": "Runtime asset manifest and static character assembly. No card parser or game installation required.",
+  "Category": "OpenKoikatsu",
+  "EnabledByDefault": true,
+  "CanContainContent": false,
+  "Modules": [{"Name": "KKImportedAssets", "Type": "Runtime", "LoadingPhase": "Default"}]
+}

@@ -1,0 +1,133 @@
+--- a/Engine/Source/Runtime/Engine/Private/SkeletalRender.cpp
++++ b/Engine/Source/Runtime/Engine/Private/SkeletalRender.cpp
+@@ -15,6 +15,97 @@
+ #include "Engine/RendererSettings.h"
+ #include "SkinnedMeshSceneProxyDesc.h"
+ #include "SkinningSceneExtensionProxy.h"
++#include "HAL/ThreadSafeCounter64.h"
++
++static TAutoConsoleVariable<int32> CVarReuseComponentMatrices(TEXT("r.SkeletalMesh.ReuseComponentMatrices"), 0,
++	TEXT("0 original; 1 bounded exact-value cache; 2 exact identity-rotation/unit-scale translation conversion. Inverse binds and visibility still run per mesh."), ECVF_RenderThreadSafe);
++static TAutoConsoleVariable<int32> CVarVerifyComponentMatrices(TEXT("r.SkeletalMesh.VerifyComponentMatrices"), 0,
++	TEXT("Independently recompute every matrix cache hit and compare all float32 bits."), ECVF_RenderThreadSafe);
++static FThreadSafeCounter64 GComponentMatrixHits, GComponentMatrixMisses, GComponentMatrixMismatches, GComponentMatrixVerified;
++static TAtomic<bool> GComponentMatrixCacheFailed{false};
++
++ENGINE_API void GetSkeletalComponentMatrixCacheStats(uint64& Hits, uint64& Misses, uint64& Mismatches, uint64& Verified, bool& Failed)
++{
++	Hits = GComponentMatrixHits.GetValue(); Misses = GComponentMatrixMisses.GetValue();
++	Mismatches = GComponentMatrixMismatches.GetValue(); Failed = GComponentMatrixCacheFailed.Load();
++	Verified = GComponentMatrixVerified.GetValue();
++}
++
++namespace {
++struct FComponentMatrixCache
++{
++	struct FSlot { uint8 Source[sizeof(FTransform)]; FMatrix44f Matrix; bool Valid = false; };
++	FSlot Slots[1024];
++};
++struct FComponentMatrixConversion
++{
++	FComponentMatrixCache* Cache = nullptr;
++	int32 Mode = 0;
++	uint64 Hits = 0, Misses = 0, Mismatches = 0, Verified = 0;
++	bool Verify = false;
++	FComponentMatrixConversion()
++	{
++		Mode = GComponentMatrixCacheFailed.Load() ? 0 : CVarReuseComponentMatrices.GetValueOnAnyThread();
++		Verify = Mode != 0 && CVarVerifyComponentMatrices.GetValueOnAnyThread() != 0;
++		if (Mode == 1)
++		{
++			// Own values, never borrowed component pointers/revisions. Collisions
++			// and allocator reuse only cause misses. Memory is bounded per worker.
++			static thread_local TUniquePtr<FComponentMatrixCache> ThreadCache;
++			if (!ThreadCache) ThreadCache = MakeUnique<FComponentMatrixCache>();
++			Cache = ThreadCache.Get();
++		}
++	}
++	~FComponentMatrixConversion()
++	{
++		// Publish once per mesh/pose pass, not one contended atomic per bone.
++		if (Hits || Misses) { GComponentMatrixHits.Add(Hits); GComponentMatrixMisses.Add(Misses); GComponentMatrixMismatches.Add(Mismatches); GComponentMatrixVerified.Add(Verified); }
++	}
++	FMatrix44f VerifyResult(const FTransform& Source, const FMatrix44f& Result)
++	{
++		if (Verify)
++		{
++			++Verified;
++			const FMatrix44f Original = (FMatrix44f)Source.ToMatrixWithScale();
++			if (FMemory::Memcmp(&Original, &Result, sizeof(Original)) != 0)
++			{
++				++Mismatches; GComponentMatrixCacheFailed.Store(true); Mode = 0; Cache = nullptr;
++				return Original;
++			}
++		}
++		return Result;
++	}
++	FMatrix44f Convert(const FTransform& Source, int32 BoneIndex)
++	{
++		if (Mode == 2)
++		{
++			// Exact identity only (including quaternion signed-zero bits).
++			// Scale comparison is exact, never a near-identity approximation.
++			const FQuat Rotation = Source.GetRotation();
++			if (Source.GetScale3D() == FVector::OneVector && FMemory::Memcmp(&Rotation, &FQuat::Identity, sizeof(Rotation)) == 0)
++			{
++				++Hits; FMatrix44f Result = FMatrix44f::Identity;
++				const FVector Translation = Source.GetTranslation();
++				Result.M[3][0] = float(Translation.X); Result.M[3][1] = float(Translation.Y); Result.M[3][2] = float(Translation.Z);
++				return VerifyResult(Source, Result);
++			}
++			++Misses;
++			return (FMatrix44f)Source.ToMatrixWithScale();
++		}
++		if (!Cache) return (FMatrix44f)Source.ToMatrixWithScale();
++		auto& Slot = Cache->Slots[uint32(BoneIndex) & 1023];
++		if (Slot.Valid && FMemory::Memcmp(Slot.Source, &Source, sizeof(Source)) == 0)
++		{
++			++Hits;
++			return VerifyResult(Source, Slot.Matrix);
++		}
++		++Misses; Slot.Matrix = (FMatrix44f)Source.ToMatrixWithScale();
++		FMemory::Memcpy(Slot.Source, &Source, sizeof(Source)); Slot.Valid = true;
++		return Slot.Matrix;
++	}
++};
++}
++
+ /*-----------------------------------------------------------------------------
+ Globals
+ -----------------------------------------------------------------------------*/
+@@ -450,6 +541,7 @@
+ 	const FSkeletalMeshLODRenderData& LOD = InSkeletalMeshRenderData->LODRenderData[LODIndex];
+ 
+ 	const TArray<FBoneIndexType>* RequiredBoneSets[3] = { &LOD.ActiveBoneIndices, ExtraRequiredBoneIndices, NULL };
++	FComponentMatrixConversion ComponentMatrices;
+ 
+ 	const bool bBoneVisibilityStatesValid = BoneVisibilityStates.Num() == ComponentTransform.Num();
+ 	const bool bCheckForValidMeshPoseOnLeader = UE::Anim::bUseSafeMeshPoseIndices && bIsLeaderCompValid && !DynamicData.GetLeaderValidMeshPoseTransforms()->IsEmpty();
+@@ -487,7 +579,7 @@
+ 					else
+ 					{
+ 						checkSlow(ComponentTransform[LeaderBoneIndex].IsRotationNormalized());
+-						SetValidReferenceToLocal(ThisBoneIndex, (FMatrix44f)ComponentTransform[LeaderBoneIndex].ToMatrixWithScale());
++						SetValidReferenceToLocal(ThisBoneIndex, ComponentMatrices.Convert(ComponentTransform[LeaderBoneIndex], LeaderBoneIndex));
+ 					}
+ 				}
+ 				else
+@@ -520,13 +612,13 @@
+ 						else
+ 						{
+ 							checkSlow(ComponentTransform[ThisBoneIndex].IsRotationNormalized());
+-							SetValidReferenceToLocal(ThisBoneIndex, (FMatrix44f)ComponentTransform[ThisBoneIndex].ToMatrixWithScale());
++							SetValidReferenceToLocal(ThisBoneIndex, ComponentMatrices.Convert(ComponentTransform[ThisBoneIndex], ThisBoneIndex));
+ 						}
+ 					}
+ 					else
+ 					{
+ 						checkSlow(ComponentTransform[ThisBoneIndex].IsRotationNormalized());
+-						SetValidReferenceToLocal(ThisBoneIndex, (FMatrix44f)ComponentTransform[ThisBoneIndex].ToMatrixWithScale());
++						SetValidReferenceToLocal(ThisBoneIndex, ComponentMatrices.Convert(ComponentTransform[ThisBoneIndex], ThisBoneIndex));
+ 					}
+ 				}
+ 			}

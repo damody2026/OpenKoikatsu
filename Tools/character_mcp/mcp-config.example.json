@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openkoikatsu-character": {
+      "command": "C:/portable/OpenKoikatsu/Tools/character_mcp/bin/ok-character-mcp.exe",
+      "args": ["--mailbox", "C:/portable/OpenKoikatsu/Saved/CharacterMCP", "--timeout", "1800"]
+    }
+  }
+}

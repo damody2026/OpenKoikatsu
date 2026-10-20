@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "id": "apng-fcf4c3688e90da71a4d7e0d66a5edef516fa1d4d2222331028eb8841f59d84df",
+  "display_name": "Alice",
+  "age_in_setting": 20,
+  "archetype": "S",
+  "personality_core": {
+    "catchphrase": "还好啦，就那样。",
+    "pride": "即使平凡也不轻易低头",
+    "fear": "被当成可有可无的普通路人",
+    "desire": "想被好好记住、被当成特别的人"
+  },
+  "orientation": "Monogamous",
+  "material": "Mixed",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "shop_staff",
+    "role": "staff",
+    "workplace_place_id": "drinkshop",
+    "job_id": "drinkshop_staff",
+    "competence": 60,
+    "pride": 45
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "drinkshop",
+    "bookstore",
+    "cafe",
+    "park"
+  ],
+  "birthday": "1990-08-17",
+  "department": "",
+  "intelligence": 55,
+  "money": {
+    "cash": 700,
+    "bank": 3000,
+    "income": [
+      {
+        "source": "饮料店打工",
+        "amount": 1500,
+        "cycle": "monthly",
+        "payday": 5
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机月租费",
+        "amount": 99,
+        "due_day": 10
+      }
+    ],
+    "spending_style": "frugal",
+    "treat_pride": 40,
+    "expects_treat": 30,
+    "reciprocity": 50,
+    "saving_goals": [
+      {
+        "item": "兔子造型的新耳机",
+        "amount": 1500,
+        "why": "跑步时想听着喜欢的歌"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "逛书店",
+      "看路边小猫"
+    ],
+    "dislikes": [
+      "苦瓜"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "去冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 50,
+    "jealousy_proneness": 55,
+    "possessiveness": 45,
+    "insecurity": 60,
+    "competitiveness": 40,
+    "self_esteem": 45,
+    "tsundere": 10,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 60,
+    "public_boldness": 35,
+    "charm_resistance": 55,
+    "money_resistance": 55
+  },
+  "bio": "住在大学城附近的普通女孩，高中毕业后在街区附近的饮料店打工，平时喜欢在校园周边闲晃。个性随和但有点慢熟，熟了以后话很多。对生活没有太大的野心，觉得能维持平顺的日子就很好。喜欢喝自己店里的珍奶，也常去附近的书店翻免费杂志。",
+  "source": "llm"
+}

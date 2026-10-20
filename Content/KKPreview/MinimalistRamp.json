@@ -1,0 +1,10 @@
+{
+  "source_zip": "C:\\portable\\KoikatuSunshine\\mods\\Sideloader Modpack\\Augh\\[Augh] Minimalist Shadows v1.0..zipmod",
+  "bundle": "abdata/chara/Augh/minimalist_shadow.unity3d",
+  "texture": "minimalist",
+  "color_space": "Linear",
+  "width": 256,
+  "height": 4,
+  "source_sha256": "a87f694864df91ce5ff871d0c0ae3c3aa83b5220992346e6945dfaa0eb41fcd2",
+  "png_sha256": "08ba18c7f97c9eb3103904493c8a6509c5cdadc8c353f3ab7ce3a0490b23af3e"
+}

@@ -1,0 +1,6922 @@
+{
+	"format": "okscene",
+	"version": 1,
+	"active_camera": -1,
+	"next_id": 126,
+	"map": 34,
+	"duration": 10,
+	"post":
+	{
+		"bBloom": false,
+		"bloomIntensity": 0.67500001192092896,
+		"bDepthOfField": false,
+		"focalDistance": 300,
+		"aperture": 2.7999999523162842,
+		"bVignette": false,
+		"vignetteIntensity": 0.40000000596046448,
+		"exposure": 0
+	},
+	"tracks": [],
+	"objects": [
+		{
+			"id": 1,
+			"parent": -1,
+			"name": "椅子机",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 2,
+			"parent": 1,
+			"name": "教卓",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 0.1035153865814209,
+					"y": 293.30000877380371,
+					"z": 0.89219193905591965
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 682,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 3,
+			"parent": 1,
+			"name": "1列目",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0.89545529335737228,
+					"y": 243.7110424041748,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 4,
+			"parent": 3,
+			"name": "窓側1",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 310.9961986541748,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 5,
+			"parent": 4,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 6,
+			"parent": 4,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 7,
+			"parent": 3,
+			"name": "窓側2",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 152.49911546707153,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 8,
+			"parent": 7,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 9,
+			"parent": 7,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 10,
+			"parent": 3,
+			"name": "窓側3",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 11,
+			"parent": 10,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 12,
+			"parent": 10,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 13,
+			"parent": 3,
+			"name": "窓側4",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -155.9855580329895,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 14,
+			"parent": 13,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 15,
+			"parent": 13,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 16,
+			"parent": 3,
+			"name": "窓側5",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -311.971116065979,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 17,
+			"parent": 16,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 18,
+			"parent": 16,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 19,
+			"parent": 1,
+			"name": "2列目",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0.89545529335737228,
+					"y": 131.17702007293701,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 20,
+			"parent": 19,
+			"name": "窓側1",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 310.9961986541748,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 21,
+			"parent": 20,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 22,
+			"parent": 20,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 23,
+			"parent": 19,
+			"name": "窓側2",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 152.49911546707153,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 24,
+			"parent": 23,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 25,
+			"parent": 23,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 26,
+			"parent": 19,
+			"name": "窓側3",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 27,
+			"parent": 26,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 28,
+			"parent": 26,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 29,
+			"parent": 19,
+			"name": "窓側4",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -155.9855580329895,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 30,
+			"parent": 29,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 31,
+			"parent": 29,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 32,
+			"parent": 19,
+			"name": "窓側5",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -311.971116065979,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 33,
+			"parent": 32,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 34,
+			"parent": 32,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 35,
+			"parent": 1,
+			"name": "3列目",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 36,
+			"parent": 35,
+			"name": "窓側1",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 310.10074615478516,
+					"y": 20.874659717082977,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 37,
+			"parent": 36,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 38,
+			"parent": 36,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 39,
+			"parent": 35,
+			"name": "窓側2",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 151.60366296768188,
+					"y": 20.874659717082977,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 40,
+			"parent": 39,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 41,
+			"parent": 39,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 42,
+			"parent": 35,
+			"name": "窓側3",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0.89545529335737228,
+					"y": 20.874659717082977,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 43,
+			"parent": 42,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 44,
+			"parent": 42,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 45,
+			"parent": 35,
+			"name": "窓側4",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -156.88101053237915,
+					"y": 20.874659717082977,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 46,
+			"parent": 45,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 47,
+			"parent": 45,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 48,
+			"parent": 35,
+			"name": "窓側5",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -312.86656856536865,
+					"y": 20.874659717082977,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 49,
+			"parent": 48,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 50,
+			"parent": 48,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 51,
+			"parent": 1,
+			"name": "4列目",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0.89545529335737228,
+					"y": -90.43891429901123,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 52,
+			"parent": 51,
+			"name": "窓側1",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 310.9961986541748,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 53,
+			"parent": 52,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 54,
+			"parent": 52,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.42142169219460712,
+					"w": 0.90686479551685861
+				},
+				"translation":
+				{
+					"x": 9.8807811737060547,
+					"y": -41.879057884216309,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 55,
+			"parent": 51,
+			"name": "窓側2",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 152.49911546707153,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 56,
+			"parent": 55,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 57,
+			"parent": 55,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 58,
+			"parent": 51,
+			"name": "窓側3",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 59,
+			"parent": 58,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 60,
+			"parent": 58,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 61,
+			"parent": 51,
+			"name": "窓側4",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -155.9855580329895,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 62,
+			"parent": 61,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 63,
+			"parent": 61,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 64,
+			"parent": 51,
+			"name": "窓側5",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -311.971116065979,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 65,
+			"parent": 64,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 66,
+			"parent": 64,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 67,
+			"parent": 1,
+			"name": "5列目",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0.89545529335737228,
+					"y": -212.37308979034424,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 68,
+			"parent": 67,
+			"name": "窓側1",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 310.9961986541748,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 69,
+			"parent": 68,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 70,
+			"parent": 68,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 71,
+			"parent": 67,
+			"name": "窓側2",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 152.49911546707153,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 72,
+			"parent": 71,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 73,
+			"parent": 71,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 74,
+			"parent": 67,
+			"name": "窓側3",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 75,
+			"parent": 74,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 76,
+			"parent": 74,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 77,
+			"parent": 67,
+			"name": "窓側4",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -155.9855580329895,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 78,
+			"parent": 77,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 79,
+			"parent": 77,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 80,
+			"parent": 67,
+			"name": "窓側5",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -311.971116065979,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 81,
+			"parent": 80,
+			"name": "教室机",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 12,
+				"no": 681,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 82,
+			"parent": 80,
+			"name": "教室椅子",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -5.9126853942871094,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 2,
+				"category": 13,
+				"no": 678,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 83,
+			"parent": -1,
+			"name": "Character 82",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.83059215299404765,
+					"w": 0.55688120401456587
+				},
+				"translation":
+				{
+					"x": 318.87960433959961,
+					"y": -132.16552734375,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0004369_cards/char_82.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 0,
+				"time": 9.1407546997070312,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0.73499983549118042,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 0,
+				"studioAnimeCategory": 6,
+				"studioAnimeNo": 1,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": 5,
+				"handRight": 6,
+				"fk": [
+					{
+						"bone": "cf_j_hips",
+						"euler":
+						{
+							"x": 350.66836547851562,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_head",
+						"euler":
+						{
+							"x": 351.34442138671875,
+							"y": 19.494915008544922,
+							"z": 18.850379943847656
+						}
+					},
+					{
+						"bone": "cf_j_neck",
+						"euler":
+						{
+							"x": 356.41104125976562,
+							"y": -1.3014972921610024e-07,
+							"z": 0.0013083915691822767
+						}
+					},
+					{
+						"bone": "cf_j_spine02",
+						"euler":
+						{
+							"x": 14.50142765045166,
+							"y": -2.7558397164284543e-07,
+							"z": 4.2311463356018066
+						}
+					},
+					{
+						"bone": "cf_j_spine01",
+						"euler":
+						{
+							"x": 359.74594116210938,
+							"y": 23.862449645996094,
+							"z": 359.88760375976562
+						}
+					},
+					{
+						"bone": "cf_j_waist01",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_thigh00_R",
+						"euler":
+						{
+							"x": 289.96047973632812,
+							"y": 304.19317626953125,
+							"z": 48.119419097900391
+						}
+					},
+					{
+						"bone": "cf_j_leg01_R",
+						"euler":
+						{
+							"x": 80.511932373046875,
+							"y": 179.99859619140625,
+							"z": 179.99858093261719
+						}
+					},
+					{
+						"bone": "cf_j_leg03_R",
+						"euler":
+						{
+							"x": 356.7508544921875,
+							"y": 2.1472837924957275,
+							"z": 346.6754150390625
+						}
+					},
+					{
+						"bone": "cf_j_toes_R",
+						"euler":
+						{
+							"x": 353.72055053710938,
+							"y": 357.5377197265625,
+							"z": 356.8489990234375
+						}
+					},
+					{
+						"bone": "cf_j_thigh00_L",
+						"euler":
+						{
+							"x": 287.19281005859375,
+							"y": 49.716270446777344,
+							"z": 316.20278930664062
+						}
+					},
+					{
+						"bone": "cf_j_leg01_L",
+						"euler":
+						{
+							"x": 80.173370361328125,
+							"y": 179.98503112792969,
+							"z": 179.98486328125
+						}
+					},
+					{
+						"bone": "cf_j_leg03_L",
+						"euler":
+						{
+							"x": 357.03729248046875,
+							"y": 357.88662719726562,
+							"z": 11.892303466796875
+						}
+					},
+					{
+						"bone": "cf_j_toes_L",
+						"euler":
+						{
+							"x": 353.83197021484375,
+							"y": 3.8650436401367188,
+							"z": 1.1396898031234741
+						}
+					},
+					{
+						"bone": "cf_j_shoulder_R",
+						"euler":
+						{
+							"x": -0,
+							"y": 0,
+							"z": 7.8368849754333496
+						}
+					},
+					{
+						"bone": "cf_j_arm00_R",
+						"euler":
+						{
+							"x": 321.30380249023438,
+							"y": 357.46347045898438,
+							"z": 303.05972290039062
+						}
+					},
+					{
+						"bone": "cf_j_forearm01_R",
+						"euler":
+						{
+							"x": 35.387901306152344,
+							"y": 286.84780883789062,
+							"z": 46.948055267333984
+						}
+					},
+					{
+						"bone": "cf_j_hand_R",
+						"euler":
+						{
+							"x": 36.925258636474609,
+							"y": 4.2258553504943848,
+							"z": 1.3363703489303589
+						}
+					},
+					{
+						"bone": "cf_j_shoulder_L",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_arm00_L",
+						"euler":
+						{
+							"x": 339.11651611328125,
+							"y": 7.0014991760253906,
+							"z": 77.971412658691406
+						}
+					},
+					{
+						"bone": "cf_j_forearm01_L",
+						"euler":
+						{
+							"x": 1.3492155729786202e-14,
+							"y": 112.65204620361328,
+							"z": 2.702371373821278e-15
+						}
+					},
+					{
+						"bone": "cf_j_hand_L",
+						"euler":
+						{
+							"x": 316.17642211914062,
+							"y": 6.1148667335510254,
+							"z": 1.4540749788284302
+						}
+					},
+					{
+						"bone": "cm_J_dan101_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cm_J_dan109_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_00_00",
+						"euler":
+						{
+							"x": 30.269014358520508,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_00_01",
+						"euler":
+						{
+							"x": 29.808042526245117,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_00_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_00_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_00_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_00_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_01_00",
+						"euler":
+						{
+							"x": 22.821531295776367,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_01_01",
+						"euler":
+						{
+							"x": 4.1984438896179199,
+							"y": 35.285903930664062,
+							"z": 22.519683837890625
+						}
+					},
+					{
+						"bone": "cf_j_sk_01_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_01_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_01_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_01_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_02_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_02_01",
+						"euler":
+						{
+							"x": 10.03233528137207,
+							"y": 5.6512727737426758,
+							"z": 29.598224639892578
+						}
+					},
+					{
+						"bone": "cf_j_sk_02_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_02_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_02_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_02_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_03_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_03_01",
+						"euler":
+						{
+							"x": 48.178291320800781,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_03_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_03_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_03_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_03_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_04_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_04_01",
+						"euler":
+						{
+							"x": 27.770574569702148,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_04_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_04_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_04_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_04_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_05_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_05_01",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_05_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_05_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_05_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_05_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_06_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_06_01",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_06_02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_06_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_06_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_06_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_07_00",
+						"euler":
+						{
+							"x": 17.628877639770508,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_07_01",
+						"euler":
+						{
+							"x": 8.1175203323364258,
+							"y": 312.5975341796875,
+							"z": 348.75546264648438
+						}
+					},
+					{
+						"bone": "cf_j_sk_07_02",
+						"euler":
+						{
+							"x": 352.29183959960938,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_07_03",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_07_04",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_sk_07_05",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					}
+				],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 84,
+			"parent": 83,
+			"name": "スマホ",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": 0.35652599719587219,
+					"y": -0.10637978478162841,
+					"z": -0.92424295703626691,
+					"w": 0.085717624104734463
+				},
+				"translation":
+				{
+					"x": -3.183785080909729,
+					"y": 1.6050545498728752,
+					"z": -2.3860171437263489
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 5,
+				"category": 24,
+				"no": 272,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 85,
+			"parent": 83,
+			"name": "恐竜",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.50217105651634131,
+					"y": -0.5021731216959705,
+					"z": 0.49781939845126694,
+					"w": 0.49781746892712053
+				},
+				"translation":
+				{
+					"x": -1.6376327723264694,
+					"y": 0.99999997764825821,
+					"z": -0.99999997764825821
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 86,
+			"parent": 85,
+			"name": "ボディ",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.042812139179459169,
+					"y": 0,
+					"z": 0,
+					"w": 0.99908314005335841
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -0.4999999888241291,
+					"z": -9.0000003576278687
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 87,
+			"parent": 86,
+			"name": "筒2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -0.99999988451600075,
+					"z": 0.18817633390426636
+				},
+				"scale3D":
+				{
+					"x": 1.2000000476837158,
+					"y": 1.2000000476837158,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 415,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.52999997138977051,
+						"b": 0.088333241641521454,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 88,
+			"parent": 86,
+			"name": "筒2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1.2000000476837158,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 415,
+				"colors": [
+					{
+						"r": 0.59923994541168213,
+						"g": 0.70999997854232788,
+						"b": 0.19879996776580811,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 89,
+			"parent": 86,
+			"name": "弧1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 2.635287307202816,
+					"z": -2.9999993741512299
+				},
+				"scale3D":
+				{
+					"x": 0.69999998807907104,
+					"y": 1.2000000476837158,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 457,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 90,
+			"parent": 86,
+			"name": "弧1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 2.3000000044703484,
+					"z": -0.99999997764825821
+				},
+				"scale3D":
+				{
+					"x": 0.64999997615814209,
+					"y": 1.2000000476837158,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 457,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 91,
+			"parent": 86,
+			"name": "弧1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 1.9999999552965164,
+					"z": 0.99999997764825821
+				},
+				"scale3D":
+				{
+					"x": 0.60000002384185791,
+					"y": 1.2000000476837158,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 457,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 92,
+			"parent": 86,
+			"name": "弧1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 1.6000000759959221,
+					"z": 2.9999999329447746
+				},
+				"scale3D":
+				{
+					"x": 0.56000000238418579,
+					"y": 1.2000000476837158,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 457,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 93,
+			"parent": 86,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.57357643635104594,
+					"y": 0,
+					"z": 0,
+					"w": -0.81915204428899191
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -8.6932383477687836,
+					"z": -3.3999994397163391
+				},
+				"scale3D":
+				{
+					"x": 0.55000001192092896,
+					"y": 0.15000000596046448,
+					"z": 0.55000001192092896
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 0.22996990382671356,
+						"g": 0.42499995231628418,
+						"b": 0.1993451863527298,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 94,
+			"parent": 86,
+			"name": "ハート2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.048090310999259596,
+					"y": 0.70546957552256961,
+					"z": -0.048090310999259596,
+					"w": 0.70546957552256961
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": -4.0000002831220627,
+					"z": 2.6000004261732101
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 459,
+				"colors": [
+					{
+						"r": 0.76497775316238403,
+						"g": 0.83928573131561279,
+						"b": 0.29175150394439697,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 95,
+			"parent": 86,
+			"name": "ハート2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.061628410853802634,
+					"y": 0.70441602691565375,
+					"z": -0.061628410853802634,
+					"w": 0.70441602691565375
+				},
+				"translation":
+				{
+					"x": -2.1407094152881001e-08,
+					"y": -4.9000002443790436,
+					"z": -1.5999995172023773
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 459,
+				"colors": [
+					{
+						"r": 0.76497775316238403,
+						"g": 0.83928573131561279,
+						"b": 0.29175150394439697,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 96,
+			"parent": 86,
+			"name": "歪み多角形(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.052813233024387743,
+					"y": -0.067833900038781508,
+					"z": -0.14397379027217355,
+					"w": -0.98584018590119582
+				},
+				"translation":
+				{
+					"x": -5.4999999701976776,
+					"y": 2.3922836408019066,
+					"z": 1.2090825475752354
+				},
+				"scale3D":
+				{
+					"x": 0.30000001192092896,
+					"y": 0.40000000596046448,
+					"z": 0.30000001192092896
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1182,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.62999999523162842,
+						"b": 0.10499989986419678,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 97,
+			"parent": 86,
+			"name": "歪み多角形(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.061441317857917295,
+					"y": 0.11072958449629208,
+					"z": 0.15030828998654852,
+					"w": -0.98049545717381092
+				},
+				"translation":
+				{
+					"x": 5.4999999701976776,
+					"y": 2.3922836408019066,
+					"z": 1.2090825475752354
+				},
+				"scale3D":
+				{
+					"x": 0.30000001192092896,
+					"y": 0.40000000596046448,
+					"z": 0.30000001192092896
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1182,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.63095057010650635,
+						"b": 0.10515832901000977,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 98,
+			"parent": 85,
+			"name": "マフラー",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.15410352110861358,
+					"w": -0.98805470738311219
+				},
+				"translation":
+				{
+					"x": -0.4999999888241291,
+					"y": -1.4999999664723873,
+					"z": -4.9874112010002136
+				},
+				"scale3D":
+				{
+					"x": 0.55000001192092896,
+					"y": 0.89999997615814209,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 6,
+				"category": 32,
+				"no": 596,
+				"colors": [
+					{
+						"r": 0.92647057771682739,
+						"g": 0.86295187473297119,
+						"b": 0.74935120344161987,
+						"a": 1
+					},
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 0.63970589637756348,
+						"g": 0.32926034927368164,
+						"b": 0.32926034927368164,
+						"a": 1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 99,
+			"parent": 85,
+			"name": "顔した",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 100,
+			"parent": 99,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 1,
+					"z": 0,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0.99999997764825821,
+					"z": 0.10000000474974513
+				},
+				"scale3D":
+				{
+					"x": 1.2999999523162842,
+					"y": 1.2999999523162842,
+					"z": 1.1000000238418579
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0.59680706262588501,
+						"g": 0.71071445941925049,
+						"b": 0.19629243016242981,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 101,
+			"parent": 99,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 1,
+					"z": 0,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1.2999999523162842,
+					"y": 1.2999999523162842,
+					"z": 1.1000000238418579
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.52999997138977051,
+						"b": 0.088333241641521454,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 102,
+			"parent": 99,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 8.7422776430179919e-08,
+					"z": 0,
+					"w": 0.99999999999999623
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0.99999997764825821,
+					"z": 0.10000000474974513
+				},
+				"scale3D":
+				{
+					"x": 1.1000000238418579,
+					"y": 1.2000000476837158,
+					"z": 0.0099999997764825821
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 103,
+			"parent": 99,
+			"name": "ハート2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.094713950654112852,
+					"y": -0.70073480543747102,
+					"z": -0.094713950654112852,
+					"w": -0.70073480543747102
+				},
+				"translation":
+				{
+					"x": -3.7771799576979959e-10,
+					"y": -3.9999999105930328,
+					"z": -2.1868355572223663
+				},
+				"scale3D":
+				{
+					"x": 0.25,
+					"y": 0.60000002384185791,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 459,
+				"colors": [
+					{
+						"r": 0.76497775316238403,
+						"g": 0.83928573131561279,
+						"b": 0.29175150394439697,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 104,
+			"parent": 85,
+			"name": "顔上",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.23844402276180043,
+					"y": 0,
+					"z": 0,
+					"w": -0.97115624284106317
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 105,
+			"parent": 104,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 1.9999999552965164,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1.2999999523162842,
+					"y": 1.5,
+					"z": 1.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0.09755948930978775,
+						"g": 0.53214281797409058,
+						"b": 0.16998997330665588,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 106,
+			"parent": 104,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0.99999997764825821,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1.2999999523162842,
+					"y": 1.5,
+					"z": 1.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0.09755948930978775,
+						"g": 0.53214281797409058,
+						"b": 0.16895487904548645,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 107,
+			"parent": 104,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1.2999999523162842,
+					"y": 1.2999999523162842,
+					"z": 1.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.53214281797409058,
+						"b": 0.088690385222434998,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 108,
+			"parent": 104,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 1,
+					"z": 0,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0.99999997764825821,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1.1000000238418579,
+					"y": 1.2000000476837158,
+					"z": 0.0099999997764825821
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 109,
+			"parent": 104,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.99999999999999922,
+					"y": 6.1232342633918194e-17,
+					"z": 6.1232342633918194e-17,
+					"w": -4.3711388215090006e-08
+				},
+				"translation":
+				{
+					"x": -1.4999999664723873,
+					"y": 7.9999998211860657,
+					"z": -0.4999999888241291
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 110,
+			"parent": 104,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.99999999999999922,
+					"y": 6.1232342633918194e-17,
+					"z": 6.1232342633918194e-17,
+					"w": -4.3711388215090006e-08
+				},
+				"translation":
+				{
+					"x": 1.4999999664723873,
+					"y": 7.9999998211860657,
+					"z": -0.4999999888241291
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 111,
+			"parent": 104,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.99999999999999922,
+					"y": 6.1232342633918194e-17,
+					"z": 6.1232342633918194e-17,
+					"w": -4.3711388215090006e-08
+				},
+				"translation":
+				{
+					"x": -3.5000000149011612,
+					"y": 7.0000000298023224,
+					"z": -0.4999999888241291
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 112,
+			"parent": 104,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.99999999999999922,
+					"y": 6.1232342633918194e-17,
+					"z": 6.1232342633918194e-17,
+					"w": -4.3711388215090006e-08
+				},
+				"translation":
+				{
+					"x": 3.5000000149011612,
+					"y": 7.0000000298023224,
+					"z": -0.4999999888241291
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 113,
+			"parent": 104,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.99999999999999922,
+					"y": 6.1232342633918194e-17,
+					"z": 6.1232342633918194e-17,
+					"w": -4.3711388215090006e-08
+				},
+				"translation":
+				{
+					"x": -5.000000074505806,
+					"y": 5.4999999701976776,
+					"z": -0.4999999888241291
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 114,
+			"parent": 104,
+			"name": "コーン(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.99999999999999922,
+					"y": 6.1232342633918194e-17,
+					"z": 6.1232342633918194e-17,
+					"w": -4.3711388215090006e-08
+				},
+				"translation":
+				{
+					"x": 5.000000074505806,
+					"y": 5.4999999701976776,
+					"z": -0.4999999888241291
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 3,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 115,
+			"parent": 104,
+			"name": "ピラミッド(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0.38268346312058987,
+					"z": 0,
+					"w": 0.92387951977194094
+				},
+				"translation":
+				{
+					"x": 0.99999997764825821,
+					"y": 8.7999999523162842,
+					"z": 2.500000037252903
+				},
+				"scale3D":
+				{
+					"x": 0.05000000074505806,
+					"y": 0.05000000074505806,
+					"z": 0.05000000074505806
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 2,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 116,
+			"parent": 104,
+			"name": "ピラミッド(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0.38268343236508989,
+					"z": 0,
+					"w": -0.92387953251128674
+				},
+				"translation":
+				{
+					"x": -0.99999997764825821,
+					"y": 8.7999999523162842,
+					"z": 2.500000037252903
+				},
+				"scale3D":
+				{
+					"x": 0.05000000074505806,
+					"y": 0.05000000074505806,
+					"z": 0.05000000074505806
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 2,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 117,
+			"parent": 104,
+			"name": "スフィア(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 3.5000000149011612,
+					"y": 1.9620399922132492,
+					"z": 3.9934117347002029
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 0,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 118,
+			"parent": 104,
+			"name": "スフィア(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": 0.20954456305212052,
+					"y": -0.054195780066107153,
+					"z": -0.24446159973015752,
+					"w": 0.9451943820059947
+				},
+				"translation":
+				{
+					"x": 5.0433624535799026,
+					"y": 3.5000000149011612,
+					"z": 5.000000074505806
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.10000000149011612,
+					"z": 0.15000000596046448
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 0,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 119,
+			"parent": 104,
+			"name": "スフィア(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -3.5000000149011612,
+					"y": 1.9620399922132492,
+					"z": 3.9934117347002029
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 0,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 120,
+			"parent": 104,
+			"name": "スフィア(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.52623448799208161,
+					"y": 0.0045563644819907202,
+					"z": 0.0073623429753387482,
+					"w": 0.85029541872006609
+				},
+				"translation":
+				{
+					"x": -5.000000074505806,
+					"y": 3.5000000149011612,
+					"z": 5.000000074505806
+				},
+				"scale3D":
+				{
+					"x": 0.10000000149011612,
+					"y": 0.15000000596046448,
+					"z": 0.10000000149011612
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 0,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 121,
+			"parent": 104,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.23153257937690044,
+					"y": 0.33865275815001172,
+					"z": 0.12014474592560126,
+					"w": -0.90403109134085746
+				},
+				"translation":
+				{
+					"x": 3.5999998450279236,
+					"y": 1.9999999552965164,
+					"z": 4.1000001132488251
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.52999997138977051,
+						"b": 0.13249999284744263,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 122,
+			"parent": 104,
+			"name": "立体半円(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": 0.25850703212951914,
+					"y": 0.2429050220548247,
+					"z": 0.034878005872714779,
+					"w": 0.93432049603253176
+				},
+				"translation":
+				{
+					"x": -3.5999998450279236,
+					"y": 1.9999999552965164,
+					"z": 4.1000001132488251
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 0.5
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1173,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0.52999997138977051,
+						"b": 0.13249999284744263,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 123,
+			"parent": 104,
+			"name": "ハート2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.21332743332147236,
+					"y": 0.67415977794026904,
+					"z": -0.21332743332147236,
+					"w": 0.67415977794026904
+				},
+				"translation":
+				{
+					"x": -2.3757080747088821e-07,
+					"y": -3.5000000149011612,
+					"z": 4.5000001788139343
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 459,
+				"colors": [
+					{
+						"r": 0.76497775316238403,
+						"g": 0.83928573131561279,
+						"b": 0.29175150394439697,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 124,
+			"parent": 104,
+			"name": "ハート2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.023443046923417071,
+					"y": -0.70671806510867297,
+					"z": -0.023443046923417071,
+					"w": -0.70671806510867297
+				},
+				"translation":
+				{
+					"x": -1.2203699162327553e-08,
+					"y": -4.9801208078861237,
+					"z": 0.80601796507835388
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 459,
+				"colors": [
+					{
+						"r": 0.76497775316238403,
+						"g": 0.83928573131561279,
+						"b": 0.29175150394439697,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 125,
+			"parent": 104,
+			"name": "ハート2(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.48159663996802288,
+					"y": 0.51774962710900185,
+					"z": -0.48159663996802288,
+					"w": 0.51774962710900185
+				},
+				"translation":
+				{
+					"x": -2.2240176367205322e-07,
+					"y": -0.4999999888241291,
+					"z": 5.9999998658895493
+				},
+				"scale3D":
+				{
+					"x": 0.5,
+					"y": 0.5,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 459,
+				"colors": [
+					{
+						"r": 0.76497775316238403,
+						"g": 0.83928573131561279,
+						"b": 0.29175150394439697,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		}
+	]
+}

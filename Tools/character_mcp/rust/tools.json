@@ -1,0 +1,1276 @@
+[
+  {
+    "definition": {
+      "name": "character_state",
+      "description": "Read loaded editor character, session/revision, busy status and viewport dimensions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "state"
+  },
+  {
+    "definition": {
+      "name": "editor_progress",
+      "description": "Read the editor heartbeat and active operation/phase without queuing behind a long edit or fit. Diagnostic versions may be up to 0.5 seconds old; obtain character_state before a new write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "progress"
+  },
+  {
+    "definition": {
+      "name": "character_load",
+      "description": "Load another local PNG character card in the editor and wait for its preview. Returns a fresh session. Unapplied property edits must be applied/reset first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "load"
+  },
+  {
+    "definition": {
+      "name": "parameters_list",
+      "description": "Search all body, face, bone, physics, mod and detailed card parameters. Inspect supported and requires_apply.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "parameters"
+  },
+  {
+    "definition": {
+      "name": "parameters_get",
+      "description": "Read exact parameter keys.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 256
+          }
+        },
+        "required": [
+          "session",
+          "keys"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "get"
+  },
+  {
+    "definition": {
+      "name": "parameters_set",
+      "description": "Validate a batch before editing. Body/bone values apply immediately; detailed properties are staged until character_apply. Re-read values after writes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "edits": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "edits"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "set"
+  },
+  {
+    "definition": {
+      "name": "parameters_reset",
+      "description": "Reset specified parameters to declared defaults; detailed properties revert unapplied changes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 256
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "keys"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "reset"
+  },
+  {
+    "definition": {
+      "name": "editor_controls",
+      "description": "List editor sliders, selections, toggles, text and numeric controls, including hidden controls. Keys are based on controller fields or bound callback identities.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "controls"
+  },
+  {
+    "definition": {
+      "name": "editor_control_set",
+      "description": "Set one editor control using its advertised value type and choices; invokes the existing editor callback and waits for asynchronous work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "number",
+              "string",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "key",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "control_set"
+  },
+  {
+    "definition": {
+      "name": "editor_action",
+      "description": "Invoke an editor command, including garment state transitions. clothing_kind 0..8 cycles a slot; 100 wears all, 101 partially removes, 102 removes all.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "command": {
+            "type": "string",
+            "enum": [
+              "tpose",
+              "walk",
+              "pause",
+              "replay",
+              "blink",
+              "reset_left_hand",
+              "reset_right_hand",
+              "clothing",
+              "speak",
+              "stop_speech",
+              "load_speech"
+            ]
+          },
+          "clothing_kind": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 102
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "action"
+  },
+  {
+    "definition": {
+      "name": "appearance_catalog",
+      "description": "Load/search available appearance targets and items. May require the locally configured source game.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "catalog"
+  },
+  {
+    "definition": {
+      "name": "appearance_select",
+      "description": "Select an item for a catalog target, or an empty item to reset the target.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "target": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "target",
+          "item"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "appearance"
+  },
+  {
+    "definition": {
+      "name": "appearance_add_accessory",
+      "description": "Add an accessory slot through the existing editor pipeline.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "add_accessory"
+  },
+  {
+    "definition": {
+      "name": "character_apply",
+      "description": "Commit staged detailed properties and wait for the updated character. Returns a fresh session if the working card changes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "session",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "apply"
+  },
+  {
+    "definition": {
+      "name": "snapshot_create",
+      "description": "Create an in-memory full card-data snapshot with staged properties; returns an ID for restoration. Runtime animation/face/camera states are separate editor controls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "snapshot"
+  },
+  {
+    "definition": {
+      "name": "snapshot_restore",
+      "description": "Restore card data and staged properties for the same source character and outfit. Runtime animation/face/camera states are separate editor controls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "snapshot": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "snapshot"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "restore"
+  },
+  {
+    "definition": {
+      "name": "capture_configure",
+      "description": "Configure fixed camera/pose/visibility. yaw/pitch in degrees; distance/ortho_width in Unreal centimeters. Reuse the same settings throughout fitting.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "yaw": {
+            "type": "number"
+          },
+          "pitch": {
+            "type": "number"
+          },
+          "distance": {
+            "type": "number"
+          },
+          "focus": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "projection": {
+            "type": "string",
+            "enum": [
+              "perspective",
+              "orthographic"
+            ]
+          },
+          "ortho_width": {
+            "type": "number"
+          },
+          "tpose": {
+            "type": "boolean"
+          },
+          "hide_hair": {
+            "type": "boolean"
+          },
+          "hide_clothes": {
+            "type": "boolean"
+          },
+          "hide_accessories": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "camera"
+  },
+  {
+    "definition": {
+      "name": "capture_region",
+      "description": "Return rendered PNG after shape/camera settling. rect uses viewport pixels; preview crops the editor preview area. No UI pixels are included.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "preview",
+              "viewport",
+              "rect"
+            ]
+          },
+          "rect": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "screenshot"
+  },
+  {
+    "definition": {
+      "name": "capture_views",
+      "description": "Capture front/side/back at a fixed scale and frozen pose; return three PNG images and camera metadata. Restores camera afterward.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "preview",
+              "viewport"
+            ]
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ]
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "views"
+  },
+  {
+    "definition": {
+      "name": "character_measure",
+      "description": "Read exact posed body/head vertex bounds and world skeleton landmarks, excluding hair/clothing/accessories. Units centimeters. Remove clothing through editor_action first to expose the full body.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "measure"
+  },
+  {
+    "definition": {
+      "name": "body_geometry",
+      "description": "Export current posed body/head triangles to a local JSON file, with exact bounds, units and skeleton landmarks. No renderer skinning-mode changes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "geometry"
+  },
+  {
+    "definition": {
+      "name": "body_sections",
+      "description": "Intersect posed body triangles with world-Z planes. Reports separate closed loops, perimeters, width/depth, area and invalid/open components; does not sum arms into torso girth.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "heights": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 1,
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "session",
+          "heights"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "fit_sections"
+  },
+  {
+    "definition": {
+      "name": "body_masks",
+      "description": "Return body-only orthographic front/side/back silhouette PNGs from actual posed geometry. Use reference ID to retain a fixed projection across edits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ]
+          },
+          "reference": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 1024
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 1024
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "fit_masks"
+  },
+  {
+    "definition": {
+      "name": "reference_prepare",
+      "description": "Import three body reference masks and freeze alignment/projection. mode mask=white foreground/black background; alpha=transparent background; background=explicit RGB border-connected background removal. Pose must match. physical_height constrains stature; without it only proportions are identifiable.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "front": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string"
+          },
+          "back": {
+            "type": "string"
+          },
+          "projection_frame": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 64,
+                "maximum": 1024
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 64,
+                "maximum": 1024
+              },
+              "scale": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 1000
+              },
+              "center": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "floor": {
+                "type": "number"
+              },
+              "physical_height": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 10000
+              },
+              "projection": {
+                "type": "string",
+                "enum": [
+                  "orthographic"
+                ]
+              },
+              "side": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right"
+                ]
+              },
+              "padding": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.5
+              }
+            },
+            "required": [
+              "width",
+              "height",
+              "scale",
+              "center",
+              "floor",
+              "physical_height",
+              "projection"
+            ],
+            "additionalProperties": false
+          },
+          "side_view": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "mask",
+              "alpha",
+              "background"
+            ]
+          },
+          "background": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "tolerance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "physical_height": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "minimum": 0.1,
+            "maximum": 10000
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 1024
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 1024
+          }
+        },
+        "required": [
+          "session",
+          "front",
+          "side",
+          "back"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "fit_reference"
+  },
+  {
+    "definition": {
+      "name": "body_compare",
+      "description": "Compare current posed body silhouettes to prepared references: IoU and mean silhouette boundary error. Returns three current masks at the fixed reference projection.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "reference"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "fit_compare"
+  },
+  {
+    "definition": {
+      "name": "body_sensitivity",
+      "description": "Probe each selected parameter in both directions against fixed reference silhouettes, return loss derivatives and changed-pixel fractions, then restore original values. Uses current model and parameter bounds, not a hardcoded influence table.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reference": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "step_fraction": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 0.5
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "reference",
+          "keys"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "fit_sensitivity"
+  },
+  {
+    "definition": {
+      "name": "body_fit",
+      "description": "Bounded adaptive coordinate search over any supported immediate numeric body/face/bone parameters. Defaults to all 44 body sliders. Retains best values, reports actual error and stop reason, saves resumable checkpoints. Requires matching T-pose and unclothed body; does not guarantee a unique reconstruction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reference": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "max_evaluations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          },
+          "max_seconds": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 7200
+          },
+          "step_fraction": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 0.5
+          },
+          "target_loss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "resume": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "reference"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "fit_fit"
+  },
+  {
+    "definition": {
+      "name": "character_save",
+      "description": "Save current character to a NEW PNG card under Saved/CharacterMCP/cards; does not overwrite a source card. Apply staged detailed properties first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "save"
+  },
+  {
+    "definition": {
+      "name": "body_fit_start",
+      "description": "Start a bounded body fit in the background and immediately return a persistent job ID. Poll body_fit_status; use body_fit_cancel to stop. Recommended for clients with short tool-call timeouts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reference": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 128
+          },
+          "max_evaluations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          },
+          "max_seconds": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 7200
+          },
+          "step_fraction": {
+            "type": "number",
+            "minimum": 0.0001,
+            "maximum": 0.5
+          },
+          "target_loss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "resume": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "revision",
+          "reference"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "job_start"
+  },
+  {
+    "definition": {
+      "name": "body_fit_status",
+      "description": "Read a background fit's progress/checkpoint or final result without waiting behind its mutations. Finished results survive server restarts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "job": {
+            "type": "string"
+          },
+          "include_images": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "job_status"
+  },
+  {
+    "definition": {
+      "name": "body_fit_cancel",
+      "description": "Cancel an active background fit. Check status for best_restored and recovery_error; an already-started editor write may still finish.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "job": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      }
+    },
+    "action": "job_cancel"
+  }
+]

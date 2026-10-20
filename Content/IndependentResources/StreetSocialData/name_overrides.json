@@ -1,0 +1,15 @@
+{
+ "schema": 1,
+ "about": "Game names by card id (apng-<sha256>) where the card's own name differs from the original work; the selection uses these.",
+ "names": {
+  "apng-91e6c5c55f77add610edd982472f7a857d0b61fe97eb93d41039fb21d0b969ba": "贞德·Alter",
+  "apng-8a6b092df8d9de1adf2ef92b31420a647fbf0237283c5a79fec194acdc2d4e53": "雷电将军",
+  "apng-5ffa1374a7341d07a427c45d0d6f8e0f14e24c94982f94690db8e327597bffd4": "三月七",
+  "apng-3b7b3da6b3835e3b165e61f6bfc3e8ebc23842cc06ada5a8e756ac95f31c8e08": "刻晴",
+  "apng-21399fbfa2934a968bc860ceb708190e63183e5a451b1d5d9e701e4d65485427": "胡桃",
+  "apng-a282c751ee7ca974c1624c4aa559fbf825e00102bc4c86e39d7f222f63268f9c": "早濑优香",
+  "apng-a8966f44f7034f323f528141340b6543aa847eefbb3a12842209b85cb9c642dd": "贞德",
+  "apng-fcf4c3688e90da71a4d7e0d66a5edef516fa1d4d2222331028eb8841f59d84df": "爱丽丝",
+  "apng-042c554c020de4ab518d45753e4077f8c5c1aebcf72bdd371a5eb6c2bd9d4c0c": "惠惠"
+ }
+}

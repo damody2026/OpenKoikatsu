@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "id": "apng-5ffa1374a7341d07a427c45d0d6f8e0f14e24c94982f94690db8e327597bffd4",
+  "display_name": "小七",
+  "age_in_setting": 20,
+  "archetype": "G",
+  "personality_core": {
+    "catchphrase": "欸，真的假的？",
+    "pride": "答应别人的事一定做到",
+    "fear": "被当成可有可无的人",
+    "desire": "被认真对待、被记住"
+  },
+  "orientation": "Monogamous",
+  "material": "Romantic",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "cafe",
+    "job_id": "",
+    "competence": 62,
+    "pride": 55
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "bookstore",
+    "drinkshop",
+    "park"
+  ],
+  "birthday": "1990-03-07",
+  "department": "afl",
+  "intelligence": 68,
+  "money": {
+    "cash": 450,
+    "bank": 3200,
+    "income": [
+      {
+        "source": "家里给的生活费",
+        "amount": 1500,
+        "cycle": "monthly",
+        "payday": 10
+      },
+      {
+        "source": "咖啡店工读",
+        "amount": 800,
+        "cycle": "monthly",
+        "payday": 20
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机月租费",
+        "amount": 88,
+        "due_day": 15
+      },
+      {
+        "name": "宿舍水电分摊",
+        "amount": 120,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "frugal",
+    "treat_pride": 45,
+    "expects_treat": 40,
+    "reciprocity": 55,
+    "saving_goals": [
+      {
+        "item": "二手随身听",
+        "amount": 1500,
+        "why": "想在通勤时听自己烧的CD"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "逛书店",
+      "听广播",
+      "手写笔记"
+    ],
+    "dislikes": [
+      "香菜",
+      "恐怖片"
+    ],
+    "allergies": [
+      "花生"
+    ],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "少冰",
+      "toppings": [
+        "dk_pearl"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7,
+      3
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 40,
+    "jealousy_proneness": 50,
+    "possessiveness": 40,
+    "insecurity": 55,
+    "competitiveness": 35,
+    "self_esteem": 52,
+    "tsundere": 10,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 60,
+    "public_boldness": 45,
+    "charm_resistance": 45,
+    "money_resistance": 60
+  },
+  "bio": "台大城里长大的邻家女孩，目前就读大学二年级，主修外文。个性温和健谈，喜欢在小巷里的咖啡店看书，也常和同学一起去饮料店报到。对流行事物保持着恰到好处的好奇心，但不会盲目跟风。高中时曾参加过热舞社，现在则把时间大多花在课业与打工之间。对初次见面的人客气但不造作，聊得来就会露出有点傻气的笑容。",
+  "source": "llm"
+}

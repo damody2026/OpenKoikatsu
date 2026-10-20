@@ -1,0 +1,20 @@
+[package]
+name = "ok-video"
+version = "0.1.0"
+edition = "2021"
+description = "Video to OK motion without Python: decode, detection, ViTPose, HMR2, GVHMR, SMPL-X (Docs/VIDEO_MOTION_NATIVE_PLAN.md)"
+
+[features]
+default = ["cuda"]
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+
+[dependencies]
+candle-core = "0.11"
+candle-nn = "0.11"
+safetensors = "0.8"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+half = "2"
+serde_json = "1"
+
+[profile.release]
+debug = 1

@@ -1,0 +1,222 @@
+[
+  {
+    "key": "",
+    "label": "素材預設"
+  },
+  {
+    "key": "a_n_hair_pony",
+    "label": "馬尾"
+  },
+  {
+    "key": "a_n_hair_twin_L",
+    "label": "左雙馬尾"
+  },
+  {
+    "key": "a_n_hair_twin_R",
+    "label": "右雙馬尾"
+  },
+  {
+    "key": "a_n_hair_pin",
+    "label": "左髮夾"
+  },
+  {
+    "key": "a_n_hair_pin_R",
+    "label": "右髮夾"
+  },
+  {
+    "key": "a_n_headtop",
+    "label": "帽子"
+  },
+  {
+    "key": "a_n_headflont",
+    "label": "額頭"
+  },
+  {
+    "key": "a_n_head",
+    "label": "頭頂"
+  },
+  {
+    "key": "a_n_headside",
+    "label": "頭部中心"
+  },
+  {
+    "key": "a_n_earrings_L",
+    "label": "左耳環"
+  },
+  {
+    "key": "a_n_earrings_R",
+    "label": "右耳環"
+  },
+  {
+    "key": "a_n_megane",
+    "label": "眼鏡"
+  },
+  {
+    "key": "a_n_nose",
+    "label": "鼻子"
+  },
+  {
+    "key": "a_n_mouth",
+    "label": "嘴巴"
+  },
+  {
+    "key": "a_n_neck",
+    "label": "頸部"
+  },
+  {
+    "key": "a_n_bust_f",
+    "label": "上胸"
+  },
+  {
+    "key": "a_n_bust",
+    "label": "上胸中央"
+  },
+  {
+    "key": "a_n_nip_L",
+    "label": "左胸"
+  },
+  {
+    "key": "a_n_nip_R",
+    "label": "右胸"
+  },
+  {
+    "key": "a_n_back",
+    "label": "背部中央"
+  },
+  {
+    "key": "a_n_back_L",
+    "label": "左背"
+  },
+  {
+    "key": "a_n_back_R",
+    "label": "右背"
+  },
+  {
+    "key": "a_n_waist",
+    "label": "腰部"
+  },
+  {
+    "key": "a_n_waist_f",
+    "label": "前腰"
+  },
+  {
+    "key": "a_n_waist_b",
+    "label": "後腰"
+  },
+  {
+    "key": "a_n_waist_L",
+    "label": "左腰"
+  },
+  {
+    "key": "a_n_waist_R",
+    "label": "右腰"
+  },
+  {
+    "key": "a_n_leg_L",
+    "label": "左大腿"
+  },
+  {
+    "key": "a_n_knee_L",
+    "label": "左膝"
+  },
+  {
+    "key": "a_n_ankle_L",
+    "label": "左腳踝"
+  },
+  {
+    "key": "a_n_heel_L",
+    "label": "左腳跟"
+  },
+  {
+    "key": "a_n_leg_R",
+    "label": "右大腿"
+  },
+  {
+    "key": "a_n_knee_R",
+    "label": "右膝"
+  },
+  {
+    "key": "a_n_ankle_R",
+    "label": "右腳踝"
+  },
+  {
+    "key": "a_n_heel_R",
+    "label": "右腳跟"
+  },
+  {
+    "key": "a_n_shoulder_L",
+    "label": "左肩"
+  },
+  {
+    "key": "a_n_elbo_L",
+    "label": "左肘"
+  },
+  {
+    "key": "a_n_arm_L",
+    "label": "左上臂"
+  },
+  {
+    "key": "a_n_wrist_L",
+    "label": "左手腕"
+  },
+  {
+    "key": "a_n_shoulder_R",
+    "label": "右肩"
+  },
+  {
+    "key": "a_n_elbo_R",
+    "label": "右肘"
+  },
+  {
+    "key": "a_n_arm_R",
+    "label": "右上臂"
+  },
+  {
+    "key": "a_n_wrist_R",
+    "label": "右手腕"
+  },
+  {
+    "key": "a_n_hand_L",
+    "label": "左手"
+  },
+  {
+    "key": "a_n_ind_L",
+    "label": "左食指"
+  },
+  {
+    "key": "a_n_mid_L",
+    "label": "左中指"
+  },
+  {
+    "key": "a_n_ring_L",
+    "label": "左無名指"
+  },
+  {
+    "key": "a_n_hand_R",
+    "label": "右手"
+  },
+  {
+    "key": "a_n_ind_R",
+    "label": "右食指"
+  },
+  {
+    "key": "a_n_mid_R",
+    "label": "右中指"
+  },
+  {
+    "key": "a_n_ring_R",
+    "label": "右無名指"
+  },
+  {
+    "key": "a_n_dan",
+    "label": "下腹一"
+  },
+  {
+    "key": "a_n_kokan",
+    "label": "下腹二"
+  },
+  {
+    "key": "a_n_ana",
+    "label": "下腹三"
+  }
+]

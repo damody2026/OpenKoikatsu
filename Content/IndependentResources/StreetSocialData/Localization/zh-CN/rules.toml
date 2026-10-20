@@ -1,0 +1,87 @@
+# 规则（ok-rules）写给玩家或女主看的文字。key 由程序使用，不要改；值可以改。
+
+[test]
+hello = "你好，{name}"
+cards = "{n} 张"
+
+[bluff]
+you = "你"
+need_players = "吹牛要 3 到 6 个人（你和 2 到 5 位女生）"
+dealt = "发牌：{players} 个人，每人约 {each} 张。{first} 先出，点数自己喊。"
+opening = "好啊，来吧！|我可是很会骗人的哦。|先说好，输了不准生气。|哼，谁怕谁。"
+wait_window = "等一下，大家还在决定要不要抓上一手"
+not_your_turn = "现在轮到 {who}"
+one_to_four = "一次出 1 到 4 张"
+not_in_hand = "出的牌不在手上"
+must_claim = "这轮要喊 {rank}（不想跟就「过」）"
+name_rank = "你先出：要喊什么点数？"
+name_rank_example = "你先出：要喊什么点数？（比如「两张 7」）"
+leading = "开新一轮，"
+played = "{who} 盖了 {n} 张，{lead}说是 {n} 张 {rank}（剩 {left} 张）"
+claim = "{count}张{rank}"
+count_words = "一|两|三|四"
+claim_ends = "。|哦。"
+cannot_pass = "你先出，不能过"
+passed = "{who}：过"
+pass_lines = "过。|我不要。|这轮我过。"
+my_pass = "过。"
+all_passed = "大家都过了：牌堆 {n} 张收掉，{who} 开新一轮。"
+nothing_to_call = "现在没有可以抓的牌"
+own_play = "不能抓自己出的牌"
+called = "{who}：「吹牛！」翻开是 {shown} → {verdict}，{loser} 收走 {took} 张"
+lie = "说谎被抓"
+truth = "是真的"
+my_call = "吹牛！"
+call_lines = "吹牛！|骗人，翻开来！|我不信，吹牛！"
+caught_lines = "啧，被抓到了……|唔，怎么看出来的啦！"
+truth_lines = "哼哼，是真的哦。|你看，我才没骗人！"
+leads = "{who} 开新一轮。"
+won = "吹牛结束：{who} 赢了！{most}"
+most_caught = "（最常被抓包的是 {who}，{n} 次）"
+my_win = "我出完了，我赢了！"
+win_lines = "我赢了！|耶，全部出完了！"
+bad_table = "牌局资料不完整"
+over = "牌局已经结束"
+no_seat = "没有这个座位"
+not_her_turn = "不是她的回合"
+hear_call = "吹牛|骗人|不信|翻开"
+hear_pass = "过|不要|pass"
+hear_card_word = "张"
+hear_counts = "1,一:1|2,二,两,兩:2|3,三:3|4,四:4"
+hear_ranks = "10,十:10|A,尖:1|2,二:2|3,三:3|4,四:4|5,五:5|6,六:6|7,七:7|8,八:8|9,九:9|J,勾:11|Q,圈:12|K:13"
+
+# What the player says that the rules listen for (any of the words, "|" between; matched in lower case).
+[hear]
+# A piece of a message naming a control: it goes behind the "?" (message_hint).
+control_hint = "Esc|WASD|Shift|Ctrl|F9|按 E|E 交谈|E 与|Tab 切换|N 开始|P 或|按右侧|选择话题："
+offer_pay = "我请|请你|我付|我来付|我出|算我的|我买单|我买给你|我請|請你|我來付|我買單|我買給你|送你|不准抢着付|别抢着付|不准抢|我买单|这次我来|还没请|没请到|还没請|沒請到|欠你一杯|欠你一顿"
+ask_split = "各付各的|各付各|AA|各自付|分开付|分開付"
+decline_treat = "不用请|不用你请|别请|我自己付|自己付|我付我的|不用你付|我自己来付|不用請|不用你請|別請|我付我的"
+# He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
+self_order = "我要|我点|给我来|给我一|我来一|我想吃|我想喝|我吃|我喝"
+order_for_her = "给你|帮你|你要|你想|请你吃|请你喝|你的"
+# A clock time said for a meeting (shop.rs time_said): words that are one, and what follows a number.
+time_words = "中午|正午|午夜十二点|半夜十二点|分钟后|分钟以后|小时后|半小时后|马上|待会|待会儿|等一下|等下|一会儿"
+# Which day the words name, word:days from today, longer words first (shop.rs day_said; the last one said counts).
+day_words = "大后天:3|大後天:3|后天:2|後天:2|明天:1|明早:1|明晚:1|明儿:1|今天:0|今晚:0|今早:0"
+# Words that name some day at all (shop.rs day_said "dated"): without any, a time still ahead is today.
+date_words = "周|星期|礼拜|号|下次|改天|以后|周末|月"
+time_marks = "点|点钟|時|时|:|：|點"
+invite = "一起|过来|来吧|加入|也来|跟我们|跟着我|来聊|過來|來吧|也來|跟我們|跟著我|來聊"
+# A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
+invite_strong = "一起来|一起來|过来|来吧|加入|也来|跟我们|跟着我|来聊|過來|來吧|也來|跟我們|跟著我|來聊"
+you_words = "你|妳"
+refuse = "不要|别来|不用|不必|別來"
+# A goodbye said (social.rs farewell_heard; compared in Simplified for Chinese).
+goodbye = "再见|拜拜|掰掰|先走|走了|我走啦|回去了|先回|回宿舍|明天见|下次见|改天见|晚上见|待会见|晚安|告辞|先去忙|我先去|不打扰你|周一见|周二见|周三见|周四见|周五见|周六见|周日见|周末见|星期一见|星期二见|星期三见|星期四见|星期五见|星期六见|星期天见|后天见|中午见|下午见|傍晚见|一会见|一会儿见|回头见|一点见|两点见|三点见|四点见|五点见|六点见|七点见|八点见|九点见|十点见|十一点见|十二点见|点半见|路上小心|这就走|我先回去|那我走了|bye|晚点见|晚点聊|晚些见|去忙吧|你去忙|先这样|先忙了|不送了"
+# His own offer to go somewhere with her (social.rs her_proposal_open: he wants it).
+he_offer = "我送你|送你回|陪你去|陪你走|带你去|我陪你|我们去|我请你"
+# A place in a clause about the past is not where they go now (social.rs named_place_id).
+past_ref = "昨天|昨晚|前天|前晚|上次|上回|那天|那次|以前|之前那"
+# He offers to lend her money (social.rs lend_offered): her own "lend" act needs this in his line.
+lend_offer = "借你|借给你|我借|先拿去|拿去用|给你用|我垫|我先垫|帮你垫|我出这钱|转给你|你拿着|拿着吧|收着|你收下|收下吧|给你，|钱给你"
+# Words before a name that make her someone talked about, not called (social.rs misnamed: "跟千鹤").
+name_about = "跟|和|与|同|陪|找|给|对|被|让|是|就是|那是|叫"
+# Her reply proposing something, and his words agreeing (social.rs her_proposal_open).
+propose = "要不要|好不好|怎么样|如何|好吗|我们去|一起去|走吧？|陪我|跟我去|跟我走"
+agree = "好啊|好呀|好的|好喔|可以|行啊|没问题|走吧|走啊|就这么办|当然|一言为定|说定了|就这样|嗯嗯|那就这样|明早见|明天见|明晚见|明早七点见|到时候见|到时见|不见不散"

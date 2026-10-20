@@ -1,0 +1,12 @@
+# zh-CN: ok-mind's instructions to the model (Tools/ok-mind/src/text.rs). ICU MessageFormat: {name}; text between
+# single quotes is literal (the JSON shapes), and an apostrophe is written ''.
+
+[mind]
+compact_prompt = "（系统指示，不是玩家说的话）以上是你和玩家到目前为止的所有对话。对话太长了，请把它整理成一份“长期记忆摘要”，之后只会保留这份摘要和最后约 {keep_tail_chars} 字的原始对话。\n用你自己的第一人称写，必须保留：\n1. 发生过的重要事件与日期（用对话里的游戏日期）\n2. 所有约定和答应过的事，以及有没有兑现\n3. 你对他的感受怎么变化、为什么\n4. 他或你说过、之后可能会再提起的原话（直接引用）\n5. 你和其他女生的关系、听到的传闻\n6. 如果以上内容里已经有一份 {summary_header}，把它的重点合并进来，不要遗漏\n用通顺、完整的简体中文句子写；只输出摘要正文，不要 JSON，约 {summary_chars} 字以内；越早的事写得越精简，越近的事越详细。"
+future_year_reminder = "（系统提醒，不是他说的话）你刚才提到了 {year} 年。现在是 {now} 年，那是未来的事，你不可能知道。请用同样的格式重新回答他上一句话，只谈 {now} 年以前就知道的事。"
+malformed_reply_reminder = "（系统提醒，不是他说的话）你刚才的回复不是规定的 JSON 格式。请只输出一个 JSON 对象，lines 要是字符串数组，再回答一次他上一句话。"
+repeated_reply_reminder = "（系统提醒，不是他说的话）你刚才的台词跟你上一次说的一字不差。请依他这一句话的意思重新回答，用同样的 JSON 格式，不要重复说过的话。"
+summarize_instruction = "（系统指示，不是玩家说的话）这次见面结束了。请用你自己的第一人称，把最后 {n} 条消息（也就是这次见面）整理成 1 到 5 条记忆。每条不超过 60 字，只记之后还值得想起的事：约定、他说过的重要的话、你的感受变化、发生的事件。用简体中文写。只输出一个 JSON 对象：'{\"memories\": [{\"summary\": \"\", \"kind\": \"conversation|promise|confession|gift|date|insult|touch|reveal\", \"importance\": 0.0, \"quoteable\": false, \"emotional_tag\": \"\"}]}'"
+reflect_instruction = "（系统指示，不是玩家说的话）今天结束了。请以你自己的第一人称回顾今天，用简体中文写，只输出一个 JSON 对象：'{\"summary\": \"今天发生的事，80 字内\", \"reflections\": [\"从今天想到的、对他或对自己的看法（最多 3 条，每条 40 字内）\"], \"rel_adjust\": {\"trust\": 0}, \"intent\": \"明天想做的事：none|seek_player|avoid_player|more_shifts|save_money|ask_help\"}'。rel_adjust 是长期的变化，每项 -3 到 +3，没变的不要写。"
+reflect_today = "\n今天你身边发生、但不在对话里的事："
+reply_language = "\n（语言：你说的每一句话（lines）和 reason 都用简体中文写。JSON 的字段名、id，以及 emotion 的值，照指示原样输出；每次回复都要有 face（expr、blush、tears、sweat、gaze），照这一刻的表情填。）"

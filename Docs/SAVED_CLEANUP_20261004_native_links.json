@@ -1,0 +1,253 @@
+{
+  "distinct_files": 8563,
+  "distinct_bytes": 151455370648,
+  "exclusive_bytes": 3621354734,
+  "exclusive_files": 101,
+  "exclusive_largest": [
+    {
+      "size": 609796096,
+      "links": 1,
+      "paths": [
+        "617B75DC43FC1807EF87FFAA5F6B166A\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 458641408,
+      "links": 1,
+      "paths": [
+        "89C279124EDF8E20DE5B0592EA695C70\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 260412872,
+      "links": 1,
+      "paths": [
+        "617B75DC43FC1807EF87FFAA5F6B166A\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 201687040,
+      "links": 1,
+      "paths": [
+        "147151CE45EAE64B0668C286F24D35DB\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 146931712,
+      "links": 1,
+      "paths": [
+        "E79FBCF3471D002BE2A7988855238B57\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 146927616,
+      "links": 1,
+      "paths": [
+        "BF5C00C942C9074E6305C091444FD846\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 146923520,
+      "links": 1,
+      "paths": [
+        "944D1D87401D117D2AA833BFE19EFDCE\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 146915328,
+      "links": 1,
+      "paths": [
+        "AE3E3FB746DC8634723224B9E6916D18\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 146284544,
+      "links": 1,
+      "paths": [
+        "304BAB7349410341D6622C9ABCD77FB5\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 146206720,
+      "links": 1,
+      "paths": [
+        "B9EAAA3940E61DFD3CAA1F92537B1A4C\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 94756864,
+      "links": 1,
+      "paths": [
+        "8264508F41EB24B985B743A13D2CCEEA\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 62772352,
+      "links": 1,
+      "paths": [
+        "89C279124EDF8E20DE5B0592EA695C70\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 58153832,
+      "links": 1,
+      "paths": [
+        "147151CE45EAE64B0668C286F24D35DB\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53522952,
+      "links": 1,
+      "paths": [
+        "944D1D87401D117D2AA833BFE19EFDCE\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53522952,
+      "links": 1,
+      "paths": [
+        "AE3E3FB746DC8634723224B9E6916D18\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53522952,
+      "links": 1,
+      "paths": [
+        "BF5C00C942C9074E6305C091444FD846\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53522952,
+      "links": 1,
+      "paths": [
+        "E79FBCF3471D002BE2A7988855238B57\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53176872,
+      "links": 1,
+      "paths": [
+        "304BAB7349410341D6622C9ABCD77FB5\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53176872,
+      "links": 1,
+      "paths": [
+        "8264508F41EB24B985B743A13D2CCEEA\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 53168632,
+      "links": 1,
+      "paths": [
+        "B9EAAA3940E61DFD3CAA1F92537B1A4C\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 49586176,
+      "links": 1,
+      "paths": [
+        "089684434CDF48C965C65A830DF4CA24\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 49586176,
+      "links": 1,
+      "paths": [
+        "B0C6AD304EA94872E0D452AA4A07E418\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 49586176,
+      "links": 1,
+      "paths": [
+        "E4D7066E42DA9204A64E1ABC5D27C52D\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 49557504,
+      "links": 1,
+      "paths": [
+        "53001B6945255509B8BA16B7A42A2CAB\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "107675E343ADF262360CA3B5A0F8C634\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "261BABC746BCE5D4BC4EF2865AA98C10\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "31F0F4E9468A9D30149124A98F9A63E7\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "421C722A45BED88B20211B916323CE1A\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "6BF9CFBC409C66E2F9A905BFDEA176A4\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "7092432F4F23EE9D2F5173A9751FDA8D\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 31186944,
+      "links": 1,
+      "paths": [
+        "AE9C653D47A53A1512BFD8A2857CECC2\\.ok_cache.sqlite"
+      ]
+    },
+    {
+      "size": 18507072,
+      "links": 1,
+      "paths": [
+        "089684434CDF48C965C65A830DF4CA24\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 18507072,
+      "links": 1,
+      "paths": [
+        "B0C6AD304EA94872E0D452AA4A07E418\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 18507072,
+      "links": 1,
+      "paths": [
+        "E4D7066E42DA9204A64E1ABC5D27C52D\\.ok_cache.sqlite-wal"
+      ]
+    },
+    {
+      "size": 18490592,
+      "links": 1,
+      "paths": [
+        "53001B6945255509B8BA16B7A42A2CAB\\.ok_cache.sqlite-wal"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "note": "Default heroines, one to ten (relative to the project root): their own folder, not the crowd set (CrowdAPNG is renumbered when it is rebuilt). New OK cards (okLb) converted from the original KKS cards with `ok-extract --oklib cards` and accepted by `okcard-check ... live` (MATCH). A player-chosen Saved/StreetSocial/heroines.json takes precedence when it exists.",
+  "cards": [
+    "Content/CharacterCards/StreetHeroines/jeanne_alter.png",
+    "Content/CharacterCards/StreetHeroines/raiden_shogun.png",
+    "Content/CharacterCards/StreetHeroines/march_7th.png",
+    "Content/CharacterCards/StreetHeroines/keqing.png",
+    "Content/CharacterCards/StreetHeroines/hu_tao.png",
+    "Content/CharacterCards/StreetHeroines/hayase_yuuka.png",
+    "Content/CharacterCards/StreetHeroines/jeanne.png",
+    "Content/CharacterCards/StreetHeroines/alice.png",
+    "Content/CharacterCards/StreetHeroines/megumin.png",
+    "Content/CharacterCards/StreetHeroines/encore.png"
+  ]
+}

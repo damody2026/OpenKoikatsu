@@ -1,0 +1,203 @@
+﻿// Included by OKStreetSocialScene.cpp: plan §6.1–6.3 the heroines' own days — rule-written plans and a small
+// behaviour tree per heroine. No LLM call happens here (plan §6.0).
+
+bool AOKStreetSocialScene::BusyWithPlayer(int32 I) const{
+ const auto& S=*State;
+ return S.Target==I||S.Companion==I||S.OutingGirl==I||S.Pair.Partner==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I)||S.PrivateGirl==I
+  ||S.ApproachGirl==I||S.SleepGirl==I||S.SleepGirl2==I||S.RestroomGirl==I||S.SoloGirl==I||S.PendingIntimacy==I||S.Party.Contains(I);
+}
+
+// Where she stands in a place: an anchor that suits what she is doing, spread out so heroines do not overlap.
+FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FString& Kind,float& Yaw) const{
+ const auto* P=OKStreetFindPlace(PlaceId);Yaw=0;if(!P)return State->Agents[I-1].Position;
+ static const TMap<FString,TArray<FString>> Wanted={
+  {TEXT("work"),{TEXT("counter"),TEXT("stand"),TEXT("shelf"),TEXT("bar"),TEXT("lobby"),TEXT("food"),TEXT("pets"),TEXT("seat")}},
+  {TEXT("meal"),{TEXT("table"),TEXT("food"),TEXT("seat"),TEXT("counter")}},
+  {TEXT("class"),{TEXT("seat"),TEXT("class2")}},
+  {TEXT("study"),{TEXT("seat"),TEXT("class2"),TEXT("shelf"),TEXT("lounge")}},
+  {TEXT("leisure"),{TEXT("seat"),TEXT("bench"),TEXT("shelf"),TEXT("tank"),TEXT("pets"),TEXT("fountain"),TEXT("counter")}},
+  {TEXT("encounter"),{TEXT("seat"),TEXT("counter"),TEXT("table")}},
+  {TEXT("rest"),{TEXT("lounge"),TEXT("seat")}},{TEXT("sleep"),{TEXT("lounge"),TEXT("seat")}},
+  {TEXT("errand"),{TEXT("counter"),TEXT("shelf"),TEXT("food"),TEXT("stand")}},{TEXT("social"),{TEXT("seat"),TEXT("table"),TEXT("bench"),TEXT("counter")}},
+  {TEXT("bath"),{TEXT("bath"),TEXT("lounge"),TEXT("seat")}},{TEXT("promise"),{TEXT("seat"),TEXT("table"),TEXT("bench"),TEXT("fountain"),TEXT("counter")}}};
+ const FOKStreetModelAnchor* Found=nullptr;
+ // Asleep: in a bed of the place (the dorms have rooms upstairs), each heroine in her own, the lower floors first. No bed: the lounge.
+ if(Kind==TEXT("sleep")){
+  TArray<const FOKStreetModelAnchor*> Beds;for(const auto& A:P->Anchors)if(A.Name.StartsWith(TEXT("bed")))Beds.Add(&A);
+  if(!Beds.IsEmpty()){Beds.Sort([](const FOKStreetModelAnchor& X,const FOKStreetModelAnchor& Y){return X.Name<Y.Name;});const auto* Bed=Beds[(I-1)%Beds.Num()];Yaw=Bed->Yaw;return Bed->Position;}
+ }
+ // Campus classes name their room exactly ("class3_2": floor 3, room 2).
+ if(Kind.StartsWith(TEXT("class"))&&Kind.Contains(TEXT("_")))Found=P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& A){return A.Name==Kind;});
+ if(!Found)if(const auto* Names=Wanted.Find(Kind.StartsWith(TEXT("class"))?FString(TEXT("class")):Kind))for(const FString& N:*Names){Found=P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& A){return A.Name.StartsWith(N);});if(Found)break;}
+ FVector Spot=Found?Found->Position:(P->Rooms.IsEmpty()?P->Door:P->Rooms[0].GetCenter());
+ if(!Found&&!P->Rooms.IsEmpty())Spot.Z=P->Rooms[0].Min.Z;
+ Yaw=Found?Found->Yaw:0;
+ // Side by side in rows of five (65 cm apart), a second row behind for heroines 6..10.
+ return Spot+FRotator(0,Yaw,0).RotateVector(FVector(-((I-1)/5)*70.f,(((I-1)%5)-2)*65.f,0));
+}
+
+// The street's plans for the day come from the rules (Tools/ok-rules src/plan.rs plan_all): each heroine's day, her own
+// morning and pace, errands, friends meeting, leaving in time, rain, pickups. Here only the facts go in and the plans,
+// the best friends' shared morning, pickup appointments and texts come back.
+void AOKStreetSocialScene::PlanAll(){
+ auto& S=*State;S.PlanDay=S.Store.CalendarDay;S.PlanBlock.Reset();S.PlanEaten.Reset();S.MorningPair={INDEX_NONE,INDEX_NONE};S.LifePairRoute.Reset();
+ // His most frequented place (for jealous heroines who "happen" to be there).
+ FString Haunt;int32 Most=0;for(const auto& P:S.PlayerPlaceMinutes)if(P.Value>Most){Most=P.Value;Haunt=P.Key;}
+ auto Request=OKRulesRequest(TEXT("plan_all"));
+ Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));Request->SetStringField(TEXT("haunt"),Haunt);Request->SetNumberField(TEXT("seed"),FMath::Rand());
+ TArray<TSharedPtr<FJsonValue>> Heroines;
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  const FString Id=OKStreetStableId(S.Manifest.Characters[I]);
+  auto H=MakeShared<FJsonObject>();H->SetNumberField(TEXT("actor"),I);H->SetStringField(TEXT("id"),Id);H->SetStringField(TEXT("name"),S.Manifest.Characters[I].Name);
+  const TSharedPtr<FJsonObject> Profile=S.MindProfiles.FindRef(Id);H->SetObjectField(TEXT("profile"),Profile.IsValid()?Profile.ToSharedRef():MakeShared<FJsonObject>());
+  H->SetObjectField(TEXT("relation"),OKRulesRelationJson(OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget)));
+  H->SetNumberField(TEXT("invest_total"),double(S.HerInvestTotal.FindRef(Id)));H->SetStringField(TEXT("intent"),S.Intents.FindRef(Id));
+  if(const auto* A=S.Store.Academics.Find(Id))H->SetObjectField(TEXT("academic"),OKStreetAcademicJson(*A));
+  TArray<TSharedPtr<FJsonValue>> Promises;
+  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Start/1440==S.Store.CalendarDay){auto B=MakeShared<FJsonObject>();B->SetNumberField(TEXT("start"),double(A.Start%1440));B->SetStringField(TEXT("place"),A.Place);Promises.Add(MakeShared<FJsonValueObject>(B));}
+  H->SetArrayField(TEXT("promises"),Promises);
+  for(const auto& E:S.Store.Company.Staff)if(E.Heroine==Id){H->SetStringField(TEXT("company_place"),CompanyHqPlace());H->SetStringField(TEXT("company_role"),E.Role);}
+  {const FString Own=HeroCompanyPlace(I);if(!Own.IsEmpty()){H->SetStringField(TEXT("company_place"),Own);H->SetStringField(TEXT("company_role"),TEXT("owner"));}} // her own company
+  Heroines.Add(MakeShared<FJsonValueObject>(H));
+ }
+ Request->SetArrayField(TEXT("heroines"),Heroines);
+ TArray<TSharedPtr<FJsonValue>> Bonds;for(const auto& Bond:S.Store.BondHeat)Bonds.Add(MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{MakeShared<FJsonValueString>(Bond.Key),MakeShared<FJsonValueNumber>(Bond.Value)}));
+ Request->SetArrayField(TEXT("bond_heat"),Bonds);
+ Request->SetObjectField(TEXT("doors"),OKRulesDoors());
+ {auto Names=MakeShared<FJsonObject>();for(const auto& P:OKStreetPlaces())Names->SetStringField(P.Id,P.Name);Request->SetObjectField(TEXT("place_names"),Names);}
+ // His meetings still ahead: a pickup is not asked for on top of one (plan.rs).
+ {TArray<TSharedPtr<FJsonValue>> Meet;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending"))Meet.Add(MakeShared<FJsonValueNumber>(double(A.Start)));Request->SetArrayField(TEXT("his_meetings"),Meet);}
+ const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
+ const TSharedPtr<FJsonObject>* Plans=nullptr;
+ if(Answer->TryGetObjectField(TEXT("plans"),Plans))for(const auto& P:(*Plans)->Values){
+  TArray<FOKStreetPlanBlock> Day;for(const auto& V:P.Value->AsArray())if(V->AsObject())Day.Add(OKRulesReadBlock(*V->AsObject()));
+  S.Plans.Add(FCString::Atoi(*FString(*P.Key)),MoveTemp(Day));
+ }
+ const TArray<TSharedPtr<FJsonValue>>* Pair=nullptr;
+ if(Answer->TryGetArrayField(TEXT("morning_pair"),Pair)&&Pair->Num()==2)S.MorningPair={int32((*Pair)[0]->AsNumber()),int32((*Pair)[1]->AsNumber())}; // walking side by side (OKStreetSocialLife.inl)
+ const TArray<TSharedPtr<FJsonValue>>* Pickups=nullptr;
+ if(Answer->TryGetArrayField(TEXT("pickups"),Pickups))for(const auto& V:*Pickups){const auto O=V->AsObject();if(!O)continue;
+  AddAppointment(TEXT("pickup"),int32(O->GetNumberField(TEXT("actor"))),O->GetStringField(TEXT("place")),int64(O->GetNumberField(TEXT("start"))),int32(O->GetNumberField(TEXT("grace"))),O->GetStringField(TEXT("label")));}
+ ApplyRulesEffects(S.Store,*Answer);
+}
+
+const FOKStreetPlanBlock* AOKStreetSocialScene::BlockNow(int32 I,int32 Minute,int32* Index) const{
+ const auto* Plan=State->Plans.Find(I);if(!Plan)return nullptr;
+ for(int32 B=0;B<Plan->Num();++B)if(Minute>=(*Plan)[B].Start&&Minute<(*Plan)[B].End){if(Index)*Index=B;return &(*Plan)[B];}
+ return nullptr;
+}
+
+void AOKStreetSocialScene::TickSchedules(){
+ auto& S=*State;if(S.SelfTest||!S.Mind)return;
+ const double Wall=FPlatformTime::Seconds();if(Wall<S.ScheduleTickAt)return;S.ScheduleTickAt=Wall+0.5;
+ if(S.PlanDay!=S.Store.CalendarDay)PlanAll();
+ const int64 Now=OKStreetMindNow(S);const int32 Minute=int32(Now%1440);
+ if(Now!=S.PlaceCountMinute){S.PlaceCountMinute=Now;const FString Here=PlaceHere(S.Male);if(!Here.IsEmpty())++S.PlayerPlaceMinutes.FindOrAdd(Here);}
+ // Urgent needs (hungry, worn out, grimy) cut in before the plan: the rules decide (plan.rs schedule_tick).
+ TMap<int32,TPair<int32,FOKStreetPlanBlock>> Urgents;
+ {
+  auto Request=OKRulesRequest(TEXT("schedule_tick"));Request->SetNumberField(TEXT("minute"),Minute);
+  {FString Why;Request->SetBoolField(TEXT("cafeteria_open"),!PlaceClosedNow(TEXT("cafeteria"),Why));}
+  TArray<TSharedPtr<FJsonValue>> Rows;
+  for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+   if(!S.Agents.IsValidIndex(I-1)||BusyWithPlayer(I))continue;
+   const FString Id=OKStreetStableId(S.Manifest.Characters[I]);const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
+   auto H=MakeShared<FJsonObject>();H->SetNumberField(TEXT("actor"),I);H->SetNumberField(TEXT("satiety"),R.Satiety);H->SetNumberField(TEXT("energy"),R.Energy);H->SetNumberField(TEXT("hygiene"),R.Hygiene);
+   if(const FOKStreetPlanBlock* B=BlockNow(I,Minute))H->SetObjectField(TEXT("block"),OKRulesBlockJson(*B));
+   H->SetNumberField(TEXT("previous"),S.PlanBlock.FindRef(I,INDEX_NONE));H->SetBoolField(TEXT("bathing"),S.LifeUrgent.FindRef(I)==TEXT("bath"));
+   H->SetStringField(TEXT("home"),OKStreetProfileString(S.MindProfiles.FindRef(Id),nullptr,TEXT("home_place_id")));
+   Rows.Add(MakeShared<FJsonValueObject>(H));
+  }
+  Request->SetArrayField(TEXT("heroines"),Rows);
+  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request))for(const auto& V:Answer->GetArrayField(TEXT("heroines"))){
+   const auto O=V->AsObject();if(!O)continue;const int32 I=int32(O->GetNumberField(TEXT("actor")));
+   if(O->GetBoolField(TEXT("bathing")))S.LifeUrgent.Add(I,TEXT("bath"));else if(S.LifeUrgent.FindRef(I)==TEXT("bath"))S.LifeUrgent.Remove(I);
+   const TSharedPtr<FJsonObject>* U=nullptr;if(!O->TryGetObjectField(TEXT("urgent"),U))continue;
+   Urgents.Add(I,{int32((*U)->GetNumberField(TEXT("index"))),OKRulesReadBlock(*(*U)->GetObjectField(TEXT("block")))});
+   bool Starts=false;if((*U)->TryGetBoolField(TEXT("starts"),Starts)&&Starts){UE_LOG(LogTemp,Display,TEXT("Street life: actor %d goes home for a bath"),I);}
+  }
+ }
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  if(!S.Agents.IsValidIndex(I-1)||BusyWithPlayer(I))continue;
+  const FString Id=OKStreetStableId(S.Manifest.Characters[I]);
+  const int32 Rel=OKStreetRelationIndex(S.Store,Id,S.Manifest.TalkBudget,true);if(!S.Store.Relations.IsValidIndex(Rel))continue;
+  auto& R=S.Store.Relations[Rel];
+  int32 Index=INDEX_NONE;const FOKStreetPlanBlock* Block=BlockNow(I,Minute,&Index);
+  FOKStreetPlanBlock Urgent;
+  if(const auto* U=Urgents.Find(I)){Urgent=U->Value;Block=&Urgent;Index=U->Key;}
+  const int32 Previous=S.PlanBlock.FindRef(I,INDEX_NONE);
+  // Nothing recorded yet: the day (or the game) just started, she is put where her block is. A gap in her plan
+  // (INDEX_NONE recorded: no block then) is not a start; from it she walks on like from any block.
+  const bool Fresh=!S.PlanBlock.Contains(I);
+  if(Fresh||Index!=Previous){
+   // Leaving a work block: her wage for the hours.
+   if(const auto* Plan=S.Plans.Find(I))if(Plan->IsValidIndex(Previous)&&(*Plan)[Previous].Kind==TEXT("work")){
+    const auto& W=(*Plan)[Previous];const int32 Wage=HerWage(W);const int32 Pay=HerShiftPay(I,W,Wage,Minute);
+    if(R.Cash>=0)R.Cash+=OKRulesNetPay(S,Pay,float(Pay)/float(FMath::Max(1,Wage))/176.f);MindObserve(I,TEXT("shared_shift"),OKMsg(TEXT("ui.schedule.worked_part_time"), {{TEXT("place"), OKStreetFindPlace(W.Place)?OKStreetFindPlace(W.Place)->Name:*W.Place}, {TEXT("hours"), (W.End-W.Start)/60}, {TEXT("pay"), Pay}}),W.Place,0.2f);}
+   S.PlanBlock.Add(I,Index);S.PlanBlockSince.Add(I,Minute);S.PlanEaten.Remove(I);
+   auto& A=S.Agents[I-1];
+   if(!Block||Block->Place.IsEmpty()){if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}continue;}
+   FString Why;FOKStreetPlanBlock Alt;
+   if(PlaceClosedNow(Block->Place,Why)&&Block->Kind!=TEXT("sleep")&&Block->Kind!=TEXT("rest")){ // closed: the nearest open place like it, else home (plan.rs plan_alternative)
+    auto Request=OKRulesRequest(TEXT("plan_alternative"));Request->SetObjectField(TEXT("block"),OKRulesBlockJson(*Block));Request->SetObjectField(TEXT("doors"),OKRulesDoors());
+    Request->SetArrayField(TEXT("from"),{MakeShared<FJsonValueNumber>(A.Position.X),MakeShared<FJsonValueNumber>(A.Position.Y)});
+    {const FDateTime T=StreetNow();Request->SetNumberField(TEXT("hours"),T.GetHour()+T.GetMinute()/60.0);Request->SetNumberField(TEXT("weekday"),int32(T.GetDayOfWeek()));}
+    Request->SetStringField(TEXT("home"),OKStreetProfileString(S.MindProfiles.FindRef(Id),nullptr,TEXT("home_place_id")));
+    const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)continue;Alt=OKRulesReadBlock(*Answer->GetObjectField(TEXT("block")));
+    UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d finds %s closed, goes to %s (%s) instead"),I,*Block->Place,*Alt.Place,*Alt.Kind);
+    if(auto* Plan=S.Plans.Find(I);Plan&&Plan->IsValidIndex(Index)){(*Plan)[Index]=Alt;Block=&(*Plan)[Index];}else Block=&Alt;}
+   // Her own day, block by block, is hers to remember (with its time); meal, work, errand and social write their own.
+   if(Block->Kind!=TEXT("meal")&&Block->Kind!=TEXT("work")&&Block->Kind!=TEXT("errand")&&Block->Kind!=TEXT("social")){
+    const FOKStreetPlace* P=OKStreetFindPlace(Block->Place);
+    MindRemember(I,TEXT("life"),OKMsg(TEXT("ui.memory.life_block"),{{TEXT("kind"),Block->Kind},{TEXT("place"),P?FString(P->Name):Block->Place},{TEXT("activity"),Block->Activity},
+     {TEXT("has_activity"),Block->Activity.IsEmpty()||Block->Kind!=TEXT("class")?TEXT("no"):TEXT("yes")},{TEXT("start"),FString::Printf(TEXT("%02d:%02d"),Block->Start/60%24,Block->Start%60)},{TEXT("end"),FString::Printf(TEXT("%02d:%02d"),Block->End/60%24,Block->End%60)}}),Block->Place,0.1f);}
+   float Yaw=0;const FVector Spot=SpotFor(I,Block->Place,Block->Kind==TEXT("class")&&!Block->Activity.IsEmpty()?Block->Activity:Block->Kind,Yaw);
+   UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d %02d:%02d %s at %s (%s, %.0f from him)"),I,Minute/60,Minute%60,*Block->Kind,*Block->Place,!Fresh&&FVector::Dist2D(A.Position,S.Male)<4000?TEXT("walks"):TEXT("placed"),FVector::Dist2D(A.Position,S.Male));
+   A.Held=true;S.ScheduleHeld.Add(I);
+   // Seen by him: she walks there. Out of sight: she is simply there (plan §6.3).
+   // An upper floor: she walks to the building's door, then goes up (no walking through floors).
+   const auto* Dest=OKStreetFindPlace(Block->Place);const bool Upstairs=Spot.Z>100&&Dest;
+   // The day's first block (the game just started) puts her there directly too: no crowd leaving at once.
+   if(!Fresh&&FVector::Dist2D(A.Position,S.Male)<4000){auto Path=PlaceRoute(A.Position,Upstairs?Dest->Door:Spot);if(!Path.IsEmpty()){S.Commutes.Add(I,MoveTemp(Path));if(Upstairs)S.CommuteFinal.Add(I,Spot);else S.CommuteFinal.Remove(I);continue;}}
+   A.Position=Spot;S.Rotations[I]=FRotator(0,Yaw,0);S.Commutes.Remove(I);
+   if(Block->Kind==TEXT("class")||Block->Kind==TEXT("study"))UE_LOG(LogTemp,Display,TEXT("Street %s: actor %d at %s %s z=%.0f"),*Block->Kind,I,*Block->Place,*Block->Activity,Spot.Z);
+  }
+  // Walking along her route: advanced every frame by TickCommutes (a 0.5 s step here made her walk-stop-walk).
+  if(S.Commutes.Contains(I))continue;
+  // At a meal: she orders what she likes within her budget and pays for it (plan §6.2 自主消費).
+  if(Block&&Block->Kind==TEXT("meal")&&!S.PlanEaten.Contains(I)&&!Block->Place.IsEmpty()){
+   S.PlanEaten.Add(I);
+   auto Request=OKRulesRelationRequest(TEXT("plan_meal"),R,S.MindProfiles.FindRef(Id));Request->SetStringField(TEXT("place"),Block->Place);Request->SetNumberField(TEXT("month"),StreetNow().GetMonth());
+   Request->SetNumberField(TEXT("budget"),Block->Budget);Request->SetNumberField(TEXT("seed"),int32(Now)+I);
+   if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);Answer&&Answer->HasField(TEXT("item"))){
+    OKRulesPatchRelation(R,*Answer->GetObjectField(TEXT("relation")));
+    MindObserve(I,TEXT("meal"),OKMsg(TEXT("ui.schedule.ate_at_place"), {{TEXT("place"), OKStreetFindPlace(Block->Place)?OKStreetFindPlace(Block->Place)->Name:*Block->Place}, {TEXT("food"), *Answer->GetStringField(TEXT("name"))}, {TEXT("price"), int32(Answer->GetNumberField(TEXT("price")))}}),Block->Place,0.15f);
+   }
+  }
+ }
+}
+
+// For the stats panel: today's plan with the current block marked.
+FString AOKStreetSocialScene::PlanText(int32 I) const{
+ const auto* Plan=State->Plans.Find(I);if(!Plan)return FString();
+ const int32 Minute=int32(OKStreetMindNow(*State)%1440);TArray<FString> Parts;
+ for(const auto& B:*Plan){const auto* P=OKStreetFindPlace(B.Place);Parts.Add(FString::Printf(TEXT("%s%02d:%02d %s@%s"),Minute>=B.Start&&Minute<B.End?TEXT("▶"):TEXT(""),B.Start/60,B.Start%60,*B.Kind,P?P->Name:OKT(TEXT("ui.etiquette.street_location"))));}
+ return OKT(TEXT("ui.schedule.today_schedule_label"))+FString::Join(Parts,OKT(TEXT("ui.bank.list_separator")));
+}
+
+// Commutes move every frame at walking speed, so she walks continuously from place to place.
+void AOKStreetSocialScene::TickCommutes(float Dt){
+ auto& S=*State;Dt=FMath::Min(Dt,.05f);
+ TArray<int32> Done;
+ for(auto& Pair:S.Commutes){
+  const int32 I=Pair.Key;TArray<FVector>& Path=Pair.Value;if(!S.Agents.IsValidIndex(I-1)){Done.Add(I);continue;}
+  auto& A=S.Agents[I-1];
+  // She noticed him coming up to her: she waits a moment before walking on.
+  if(const double* Until=S.CommutePausedUntil.Find(I)){if(SceneTime()<*Until)continue;S.CommutePausedUntil.Remove(I);}
+  while(Path.Num()>1&&FVector::Dist2D(A.Position,Path[1])<15)Path.RemoveAt(0);
+  if(Path.Num()<2){Done.Add(I);continue;}
+  const FVector Delta=Path[1]-A.Position;const FVector Step=Delta.GetSafeNormal2D()*FMath::Min(float(Delta.Size2D()),OKStreetWalkSpeed*Dt);
+  A.Position+=Step;A.Position.Z=Path[1].Z;S.Rotations[I]=OKStreetFacingMovement(Step,S.Rotations[I]);
+ }
+ for(const int32 I:Done){S.Commutes.Remove(I);if(const FVector* F=S.CommuteFinal.Find(I)){if(S.Agents.IsValidIndex(I-1)&&!StartNpcLift(I,*F))S.Agents[I-1].Position=*F;S.CommuteFinal.Remove(I);}} // seen: up by lift (Life.inl)
+}

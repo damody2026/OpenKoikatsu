@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "passed": true,
+  "runtime_reveal_supported": true,
+  "root": "/Game/IndependentResources/RuntimeMaterials/StreetDisplay24",
+  "note": "Shared runtime materials (Content/IndependentResources/RuntimeMaterials/StreetDisplay24), cooked into the StreetSocial patch (Launch/runtime.json patch, Tools/rebuild_street_social_patch.lua; the base pak only has the older StreetDisplay23). hg_root: the HG render style parents (Plugins/OKHGShading, Docs/HG_RENDER_STYLE.md), cooked into the same patch.",
+  "hg_root": "/Game/IndependentResources/RuntimeMaterials/StreetHG03"
+}

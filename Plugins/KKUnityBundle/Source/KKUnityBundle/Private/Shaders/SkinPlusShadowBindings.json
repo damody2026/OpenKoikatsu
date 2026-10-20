@@ -1,0 +1,1258 @@
+{
+  "shader": "xukmi/SkinPlus",
+  "programs": [
+    {
+      "label": "ShadowCasterDepth",
+      "blob": 12,
+      "sha256": "4e74429639fffaa381cdf30144830fe9158c56f803692ab7a7c7967fa98e9eac",
+      "keywords": [
+        "SHADOWS_DEPTH"
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 49,
+          "declared_vectors": 35
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_AlphaMask_ST",
+          "cb": 0,
+          "offset": 192,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_alpha_a",
+          "cb": 0,
+          "offset": 544,
+          "type": 0,
+          "dim": 1,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_alpha_b",
+          "cb": 0,
+          "offset": 548,
+          "type": 0,
+          "dim": 1,
+          "rows": 0,
+          "array_size": 0
+        }
+      ],
+      "textures": [
+        {
+          "name": "_AlphaMask",
+          "index": 0,
+          "sampler": 0,
+          "dim": 2
+        }
+      ],
+      "samplers": [
+        0
+      ],
+      "instructions": 10,
+      "hlsl_sha256": "ef129bca75d25f56ef8d6cc669f3d98fa0700f8066abf90824f07500fc61c95b"
+    },
+    {
+      "label": "ShadowCasterCube",
+      "blob": 13,
+      "sha256": "4e74429639fffaa381cdf30144830fe9158c56f803692ab7a7c7967fa98e9eac",
+      "keywords": [
+        "SHADOWS_CUBE"
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 49,
+          "declared_vectors": 35
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_AlphaMask_ST",
+          "cb": 0,
+          "offset": 192,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_alpha_a",
+          "cb": 0,
+          "offset": 544,
+          "type": 0,
+          "dim": 1,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_alpha_b",
+          "cb": 0,
+          "offset": 548,
+          "type": 0,
+          "dim": 1,
+          "rows": 0,
+          "array_size": 0
+        }
+      ],
+      "textures": [
+        {
+          "name": "_AlphaMask",
+          "index": 0,
+          "sampler": 0,
+          "dim": 2
+        }
+      ],
+      "samplers": [
+        0
+      ],
+      "instructions": 10,
+      "hlsl_sha256": "ef129bca75d25f56ef8d6cc669f3d98fa0700f8066abf90824f07500fc61c95b"
+    }
+  ],
+  "properties": [
+    {
+      "m_Name": "_ColMask",
+      "m_Description": "Color Mask",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_Col0",
+      "m_Description": "Color 0",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_Col1",
+      "m_Description": "Color 1",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_Col2",
+      "m_Description": "Color 2",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_Col3",
+      "m_Description": "Color 3",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_MainTex",
+      "m_Description": "MainTex",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "white",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_overcolor1",
+      "m_Description": "Over Color1",
+      "m_Attributes": [],
+      "m_Type": 1,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_overtex1",
+      "m_Description": "Over Tex1",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_overcolor2",
+      "m_Description": "Over Color2",
+      "m_Attributes": [],
+      "m_Type": 1,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_overtex2",
+      "m_Description": "Over Tex2",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_overcolor3",
+      "m_Description": "Over Color3",
+      "m_Attributes": [],
+      "m_Type": 1,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_overtex3",
+      "m_Description": "Over Tex3",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_NormalMap",
+      "m_Description": "Normal Map",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "bump",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_NormalMapDetail",
+      "m_Description": "Normal Map Detail",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "bump",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_DetailMask",
+      "m_Description": "Detail Mask",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_LineMask",
+      "m_Description": "Line Mask",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_AlphaMask",
+      "m_Description": "Alpha Mask",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "white",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_EmissionMask",
+      "m_Description": "Emission Mask",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_EmissionColor",
+      "m_Description": "Emission Color",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_EmissionIntensity",
+      "m_Description": "Emission Intensity",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_EmissionMaskMode",
+      "m_Description": "Emission Mask Mode",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_EmissionKeepCol",
+      "m_Description": "Emission Keep Base Color",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_ShadowColor",
+      "m_Description": "Shadow Color",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 0.628000020980835,
+      "m_DefValue[1]": 0.628000020980835,
+      "m_DefValue[2]": 0.628000020980835,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_ShadowHSV",
+      "m_Description": "Shadow HSV",
+      "m_Attributes": [],
+      "m_Type": 1,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_SpecularColor",
+      "m_Description": "Specular Color",
+      "m_Attributes": [],
+      "m_Type": 1,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_DetailNormalMapScale",
+      "m_Description": "DetailNormalMapScale",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_NormalMapScale",
+      "m_Description": "NormalMapScale",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_SpeclarHeight",
+      "m_Description": "Speclar Height",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.9800000190734863,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_SpecularPower",
+      "m_Description": "Specular Power",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_SpecularPowerNail",
+      "m_Description": "Specular Power Nail",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_ShadowExtend",
+      "m_Description": "Shadow Extend",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_rimpower",
+      "m_Description": "Rim Width",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.5,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_rimV",
+      "m_Description": "Rim Strength",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_nipsize",
+      "m_Description": "nipsize",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.5,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_alpha_a",
+      "m_Description": "alpha_a",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_alpha_b",
+      "m_Description": "alpha_b",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_linetexon",
+      "m_Description": "Line Tex On",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_notusetexspecular",
+      "m_Description": "not use tex specular",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_nip",
+      "m_Description": "nip?",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_liquidmask",
+      "m_Description": "Liquid Mask",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_Texture2",
+      "m_Description": "Liquid Tex",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_Texture3",
+      "m_Description": "Liquid Normal",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "bump",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_LiquidTiling",
+      "m_Description": "Liquid Tiling (u/v/us/vs)",
+      "m_Attributes": [],
+      "m_Type": 1,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 2.0,
+      "m_DefValue[3]": 2.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_liquidftop",
+      "m_Description": "liquidftop",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 2.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_liquidfbot",
+      "m_Description": "liquidfbot",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 2.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_liquidbtop",
+      "m_Description": "liquidbtop",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 2.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_liquidbbot",
+      "m_Description": "liquidbbot",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 2.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_liquidface",
+      "m_Description": "liquidface",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 2.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_nip_specular",
+      "m_Description": "nip_specular",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.5,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_tex1mask",
+      "m_Description": "tex1 mask(1=yes)",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_NormalMask",
+      "m_Description": "NormalMask(G)",
+      "m_Attributes": [],
+      "m_Type": 4,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "black",
+        "m_TexDim": 2
+      }
+    },
+    {
+      "m_Name": "_Cutoff",
+      "m_Description": "Alpha cutoff",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.5,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_CustomAmbient",
+      "m_Description": "Custom Ambient",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 0.6666666865348816,
+      "m_DefValue[1]": 0.6666666865348816,
+      "m_DefValue[2]": 0.6666666865348816,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_UseRampForLights",
+      "m_Description": "Use Ramp For Light",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_UseRampForSpecular",
+      "m_Description": "Use Ramp For Specular",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_UseRampForShadows",
+      "m_Description": "Use Ramp For Shadows",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_UseLightColorSpecular",
+      "m_Description": "Use Light Color Specular",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_UseDetailRAsSpecularMap",
+      "m_Description": "Use DetailR as Specular Map",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_LineWidthS",
+      "m_Description": "LineWidthS",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_OutlineOn",
+      "m_Description": "Outline On",
+      "m_Attributes": [
+        "Enum(Off,0,On,1)"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_OutlineColor",
+      "m_Description": "Outline Color",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_UseKKPRim",
+      "m_Description": "Use KKP Rim",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_KKPRimColor",
+      "m_Description": "Body Rim Color",
+      "m_Attributes": [],
+      "m_Type": 0,
+      "m_Flags": 32,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 1.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 1.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_KKPRimSoft",
+      "m_Description": "Body Rim Softness",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.5,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_KKPRimIntensity",
+      "m_Description": "Body Rim Intensity",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.75,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_KKPRimAsDiffuse",
+      "m_Description": "Body Rim As Diffuse",
+      "m_Attributes": [],
+      "m_Type": 3,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 1.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_KKPRimRotateX",
+      "m_Description": "Body Rim Rotate X",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_KKPRimRotateY",
+      "m_Description": "Body Rim Rotate Y",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_DisablePointLights",
+      "m_Description": "Disable Point Lights",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_AdjustBackfaceNormals",
+      "m_Description": "Adjust Backface Normals",
+      "m_Attributes": [
+        "MaterialToggle"
+      ],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_rimReflectMode",
+      "m_Description": "Rimlight Placement",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 0.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_SpecularNormalScale",
+      "m_Description": "Specular Normal Map Relative Scale",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_SpecularDetailNormalScale",
+      "m_Description": "Specular Detail Normal Map Relative Scale",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    },
+    {
+      "m_Name": "_Saturation",
+      "m_Description": "Saturation",
+      "m_Attributes": [],
+      "m_Type": 2,
+      "m_Flags": 0,
+      "m_DefValue[0]": 1.0,
+      "m_DefValue[1]": 0.0,
+      "m_DefValue[2]": 0.0,
+      "m_DefValue[3]": 0.0,
+      "m_DefTexture": {
+        "m_DefaultName": "",
+        "m_TexDim": 1
+      }
+    }
+  ],
+  "source_manifest_sha256": "be6c0de06213966a6f16c86e928a2ca7f64959036d186c9f3b768d77af12c803",
+  "source_parsed_sha256": "1b3f42293579e6a0533bbaefa0c653b21e3fcefb1f24c343b5aa55ceb8dbf488",
+  "scope": "Native pixel instructions and binding schema only; renderer integration remains separate"
+}

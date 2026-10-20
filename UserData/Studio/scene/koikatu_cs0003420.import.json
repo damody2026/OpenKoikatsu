@@ -1,0 +1,17 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/Official/koikatu_cs0003420.png",
+	"version": "1.0.4.2",
+	"characters": 1,
+	"character_cards": 1,
+	"items": 6816,
+	"catalog_items": 5867,
+	"lights": 0,
+	"cameras": 0,
+	"folders": 1987,
+	"routes": 0,
+	"texts": 0,
+	"map": -1,
+	"notes": [
+		"particle items become OK Niagara effects (949)"
+	]
+}

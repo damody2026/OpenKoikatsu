@@ -1,0 +1,695 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UObject/Object.h"
+#include "OKSceneDocument.generated.h"
+
+/** Where a character's eyes or neck look. */
+UENUM(BlueprintType)
+enum class EOKSceneLook : uint8
+{
+	/** The animation's eyes / neck. */
+	Animation,
+	/** Follow the view. */
+	Camera,
+	/** Look at the character's look point. */
+	Point,
+};
+
+/** How a timeline key blends into the next one. */
+UENUM(BlueprintType)
+enum class EOKSceneEase : uint8
+{
+	Linear,
+	EaseInOut,
+	EaseIn,
+	EaseOut,
+	/** Holds this key until the next. */
+	Step,
+};
+
+/** What a scene object is. */
+UENUM(BlueprintType)
+enum class EOKSceneObjectKind : uint8
+{
+	Folder,
+	Character,
+	/** A model of the OK base library (a prop, an accessory, a studio item). */
+	Item,
+	Light,
+	Camera,
+	/** A Niagara effect of the OK effect library (effects.json). */
+	Effect,
+};
+
+UENUM(BlueprintType)
+enum class EOKSceneLightType : uint8
+{
+	Directional,
+	Point,
+	Spot,
+};
+
+/** A character: an OK card (or an original KKS card) with its outfit, animation and state. */
+/** One FK bone of a character: its local rotation in Unity Euler degrees (as KK Studio and its pose files store it). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneFkBone
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	FString Bone;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	FVector Euler = FVector::ZeroVector;
+
+	bool operator==(const FOKSceneFkBone& O) const = default;
+};
+
+/** One Studio IK target of a character: an effector and where it should be (cm, in the character object's space). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneIkTarget
+{
+	GENERATED_BODY()
+
+	/** 0 body, 1 left shoulder, 2 right shoulder, 3 left thigh, 4 right thigh, 5 left hand, 6 right hand, 7 left foot, 8 right foot;
+	 *  bend goals 9 left elbow, 10 right elbow, 11 left knee, 12 right knee. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 Effector = 5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	FVector Position = FVector::ZeroVector;
+
+	bool operator==(const FOKSceneIkTarget& O) const = default;
+};
+
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneCharacter
+{
+	GENERATED_BODY()
+
+	/** Card PNG: absolute, or relative to the project directory. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character")
+	FString Card;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (ClampMin = "0", ClampMax = "6"))
+	int32 Outfit = 0;
+
+	/** OK animation asset (object path); empty: the neutral pose. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (AllowedClasses = "/Script/OKAnimation.OKAnimationAsset"))
+	FSoftObjectPath Animation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (ClampMin = "0", UIMax = "4"))
+	float Speed = 1.f;
+
+	/** Seconds into the animation when the scene opens. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (ClampMin = "0"))
+	float Time = 0.f;
+
+	/** Clothing state per part (top, bottom, bra, shorts, gloves, pantyhose, socks, inner shoes, outer shoes): 0 on, 1 half, 3 off. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", EditFixedSize)
+	TArray<uint8> ClothesStates = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+	/** Face: eyebrow, eye and mouth patterns (-1 keeps the card's). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
+	int32 EyebrowPattern = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
+	int32 EyesPattern = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
+	int32 MouthPattern = -1;
+
+	/** Mouth opening 0..1 (-1 keeps the animation's). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face", meta = (UIMin = "-1", UIMax = "1"))
+	float MouthOpen = -1.f;
+
+	/** Where the eyes look. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
+	EOKSceneLook EyesLook = EOKSceneLook::Camera;
+
+	/** Studio animation of the OK animation library (studio_anims.json): kind 0 Studio motion, 1 H motion; No < 0: none
+	 *  (Animation, an OK animation asset, is used instead). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	int32 StudioAnimeKind = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	int32 StudioAnimeGroup = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	int32 StudioAnimeCategory = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	int32 StudioAnimeNo = -1;
+
+	/** Where the neck turns the head. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	EOKSceneLook NeckLook = EOKSceneLook::Animation;
+
+	/** The point eyes and neck look at in Point mode (cm, the character's space; default: ahead at eye height). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	FVector LookPoint = FVector(0.f, 100.f, 140.f);
+
+	/** Hand shapes (the game's finger patterns; -1: the animation's fingers). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 HandLeft = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 HandRight = -1;
+
+	/** Studio FK: these bones keep these local rotations over the animation (or the neutral pose). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	TArray<FOKSceneFkBone> Fk;
+
+	/** Studio IK: these effectors reach these positions (solved after FK and the card's bone modifiers). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	TArray<FOKSceneIkTarget> Ik;
+
+	bool operator==(const FOKSceneCharacter& O) const = default;
+	/** Same built character: only the card, outfit, clothes and animation need a rebuild; face, pose and look are
+	 *  applied to the shown character. */
+	/** Character state (the card's ChaFileStatus; -1 / empty: the card's own). Changing it rebuilds the character. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	int32 TearsLevel = -1;
+
+	/** Blush (hohoAkaRate 0..1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	float Blush = -1.f;
+
+	/** Nipple stand (nipStandRate 0..1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	float NipStand = -1.f;
+
+	/** Skin gloss (skinTuyaRate 0..1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	float SkinGloss = -1.f;
+
+	/** Fluids per part (siruLv: face, chest front, chest back, lower front, lower back; 0..2; empty: the card's). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	TArray<uint8> Fluids;
+
+	/** Accessory slots shown (20, then one value for every extra MoreAccessories slot; empty: the card's). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	TArray<uint8> AccessoriesShown;
+
+	bool SameState(const FOKSceneCharacter& O) const
+	{
+		return TearsLevel == O.TearsLevel && Blush == O.Blush && NipStand == O.NipStand && SkinGloss == O.SkinGloss && Fluids == O.Fluids && AccessoriesShown == O.AccessoriesShown;
+	}
+
+	bool SameContent(const FOKSceneCharacter& O) const
+	{
+		return Card == O.Card && Outfit == O.Outfit && ClothesStates == O.ClothesStates && Animation == O.Animation && SameState(O)
+			&& StudioAnimeKind == O.StudioAnimeKind && StudioAnimeGroup == O.StudioAnimeGroup && StudioAnimeCategory == O.StudioAnimeCategory && StudioAnimeNo == O.StudioAnimeNo;
+	}
+};
+
+/** One of a Studio item's three pattern slots (OIItemInfo.pattern): a mask from the character list's patterns. */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneItemPattern
+{
+	GENERATED_BODY()
+
+	/** Pattern id (character list mt_pattern, as Studio's pattern list); 0: none. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pattern")
+	int32 Pattern = 0;
+
+	/** Pattern colour (sRGB; alpha blends the pattern in). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pattern")
+	FLinearColor Color = FLinearColor(100.f / 255.f, 100.f / 255.f, 100.f / 255.f, 1.f);
+
+	/** UV offset (X, Y) and scale (Z, W). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pattern")
+	FVector4 Uv = FVector4(0., 0., 1., 1.);
+
+	/** Rotation (× π radians, about the UV centre). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pattern")
+	float Rotation = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pattern")
+	bool bClamp = false;
+
+	bool operator==(const FOKSceneItemPattern& O) const = default;
+};
+
+/** A model of the OK base library, shown like a character part. */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneItem
+{
+	GENERATED_BODY()
+
+	/** Model id (32 hex) in the OK base library. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FString Model;
+
+	/** Prefab of the model; empty: its first prefab. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FString Prefab;
+
+	/** Studio catalogue entry (group, category, no as in the game's item lists); No < 0: Model / Prefab directly. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	int32 Group = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	int32 Category = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	int32 No = -1;
+
+	/** Item colours 1..4 (sRGB); empty or alpha < 0: the model colour. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	TArray<FLinearColor> Colors;
+
+	/** Item shadow colour (sRGB; Studio's item 影色, the item_draw material's _ShadowColor); alpha < 0: the model's. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FLinearColor ShadowColor = FLinearColor(1.f, 1.f, 1.f, -1.f);
+
+	/** Item alpha (Studio 透明度; fades the parts the item offers fading for). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item", meta = (ClampMin = "0", ClampMax = "1"))
+	float Alpha = 1.f;
+
+	/** Outline width scale (Studio 線の太さ, times the item's own width; 0: no outline). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item", meta = (ClampMin = "0"))
+	float LineWidth = 1.f;
+
+	/** Studio item FK: the item's bones and their local rotation (Unity Euler degrees); changing them rebuilds the item. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	TArray<FOKSceneFkBone> Fk;
+
+	/** Pattern slots 1..3 (empty: none); changing them rebuilds the item (the material takes them when it is made). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	TArray<FOKSceneItemPattern> Patterns;
+
+	bool operator==(const FOKSceneItem& O) const = default;
+};
+
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneLight
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
+	EOKSceneLightType Type = EOKSceneLightType::Point;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
+	FLinearColor Color = FLinearColor::White;
+
+	/** Directional: lux; point and spot: candela. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "0"))
+	float Intensity = 8.f;
+
+	/** Point and spot: attenuation radius (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "1"))
+	float Range = 1000.f;
+
+	/** Spot: outer cone angle (degrees). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "1", ClampMax = "80"))
+	float SpotAngle = 30.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
+	bool bShadows = true;
+
+	/** Lights the characters and items only, not the map (Studio's character light). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
+	bool bCharactersOnly = false;
+
+	bool operator==(const FOKSceneLight& O) const = default;
+};
+
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneCamera
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "5", ClampMax = "170"))
+	float Fov = 40.f;
+
+	bool operator==(const FOKSceneCamera& O) const = default;
+};
+
+/** One node of the scene tree. Its transform is relative to its parent (the scene root for Parent = -1). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneEffect
+{
+	GENERATED_BODY()
+
+	/** Effect id in the OK effect library (effects.json). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FString Effect;
+
+	/** Playback speed (time dilation). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	float Speed = 1.f;
+
+	/** User.Intensity of systems that expose it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	float Intensity = 1.f;
+
+	/** User.Color of systems that expose it (alpha < 0: the effect's own colour). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FLinearColor Color = FLinearColor(1.f, 1.f, 1.f, -1.f);
+
+	bool operator==(const FOKSceneEffect& O) const = default;
+};
+
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneObject
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Object")
+	int32 Id = 0;
+
+	/** Id of the parent object, -1 for the scene root. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Object")
+	int32 Parent = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Object")
+	FString Name;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Object")
+	EOKSceneObjectKind Kind = EOKSceneObjectKind::Folder;
+
+	/** Location (cm), rotation and scale relative to the parent. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Object")
+	FTransform Transform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Object")
+	bool bVisible = true;
+
+	/** Under a character: the bone (Studio accessory point, e.g. a_n_hand_R) the object hangs on and follows as the character
+	 * moves; empty: the character root. Transform is then relative to that bone. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Object")
+	FString AttachBone;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (EditCondition = "Kind == EOKSceneObjectKind::Character", EditConditionHides))
+	FOKSceneCharacter Character;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item", meta = (EditCondition = "Kind == EOKSceneObjectKind::Item", EditConditionHides))
+	FOKSceneItem Item;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (EditCondition = "Kind == EOKSceneObjectKind::Light", EditConditionHides))
+	FOKSceneLight Light;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (EditCondition = "Kind == EOKSceneObjectKind::Camera", EditConditionHides))
+	FOKSceneCamera Camera;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect", meta = (EditCondition = "Kind == EOKSceneObjectKind::Effect", EditConditionHides))
+	FOKSceneEffect Effect;
+};
+
+DECLARE_MULTICAST_DELEGATE(FOKSceneChanged);
+
+/** Scene look: post-processing of the view (Studio's bloom, depth of field, vignette and an exposure bias). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKScenePost
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bBloom = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float BloomIntensity = 0.675f;
+
+	/** Bloom threshold (display value 0..1, Studio's bloom threshold): only brighter pixels glow; < 0: every pixel. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float BloomThreshold = -1.f;
+
+	/** Bloom size scale (Studio's bloom blur / 4). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post", meta = (ClampMin = "0.1", ClampMax = "8"))
+	float BloomSize = 1.f;
+
+	/** Studio's ambient shadow colour (sRGB, SceneInfo.ambientShadow; default 128 grey): the items' toon shade. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FLinearColor AmbientShadow = FLinearColor(128.f / 255.f, 128.f / 255.f, 128.f / 255.f, 1.f);
+
+	/** Studio's ambient shadow strength (SceneInfo.ambientShadowG, 0..1); < 0: the shader's own. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float AmbientShadowG = -1.f;
+
+	/** Studio's outline darkness (SceneInfo.lineColorG, 0..1); < 0: the shader's own. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float LineColorG = -1.f;
+
+	/** Studio's outline width (SceneInfo.lineWidthG); < 0: the shader's own. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float LineWidthG = -1.f;
+
+	/** Studio's toon ramp (SceneInfo.rampG, an mt_ramp list number): Studio sets it as the global _RampG of every
+	 * character and item; < 0: each card's own (the character display ramp). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	int32 RampG = -1;
+
+	/** Studio's shader globals for these settings (SystemButtonCtrl.SetAmbientShadow / SetLineColor / SetLineWidth). */
+	TMap<FName, FLinearColor> ShaderGlobals() const;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bDepthOfField = false;
+
+	/** Focus distance (cm) and aperture (f-stop). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float FocalDistance = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float Aperture = 2.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bVignette = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float VignetteIntensity = 0.4f;
+
+	/** Exposure compensation (EV). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float Exposure = 0.f;
+
+	/** Studio screen filter (Filter list number, -1: none): an Amplify Color LUT as colour grading, at this strength
+	 * (KStudio scenes: 1 - aceBlend). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	int32 ColorFilter = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post", meta = (ClampMin = "0", ClampMax = "1"))
+	float ColorFilterIntensity = 1.f;
+
+	/** Background image file (PNG) shown behind the scene, filling the view (Studio's background; empty: none). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FString Background;
+
+	/** Frame image file (PNG with alpha) laid over the whole view (Studio's frame; empty: none). Like Background, a path
+	 * relative to the OK base library (the game's own pictures) or a file of the scene. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FString Frame;
+
+	/** Solid colour behind the scene when there is no Background picture (sRGB; alpha < 0: none). Studio clears to
+	 * light blue when a scene has no map, background or sky. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FLinearColor BackgroundColor = FLinearColor(0.f, 0.f, 0.f, -1.f);
+
+	/** Studio's sky (SceneInfo.skyInfo): a sky dome drawn behind everything with the StudioSky pattern SkyPattern
+	 * (0 clear sky, 1 day, 2 evening, 3 night in the game's list; the OK base library's studio/sky.json). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bSky = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	int32 SkyPattern = 0;
+
+	/** The map's time of day (SceneInfo.sunLightType: 0 morning, 1 day, 2 evening, 3 night). A map with its own sky
+	 * (MapSkyInfo, the OK base library's studio/sky.json maps) shows that time's sky instead of SkyPattern. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	int32 SunType = 0;
+
+	/** Studio's fog (SceneInfo.enableFog, fogColor sRGB): Unity's own exponential-squared fog of everything drawn
+	 * (RenderSettings of the Studio scene: Exp2, density 0.01); the sky and the background stay clear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bFog = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FLinearColor FogColor = FLinearColor(0.9f, 0.9f, 0.9f, 1.f);
+
+	/** Studio's ambient occlusion (SceneInfo.enableAOE: Amplify Occlusion, its Tint sRGB and Radius in metres). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bAmbientOcclusion = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FLinearColor AmbientOcclusionTint = FLinearColor(0.7058824f, 0.7058824f, 0.7058824f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	float AmbientOcclusionRadius = 0.1f;
+
+	/** Studio's sun shafts (SceneInfo.enableSunShafts: Standard Assets SunShafts from the view centre, sunColor and
+	 * sunThreshold as the game's colours). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	bool bSunShafts = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FLinearColor SunShaftColor = FLinearColor(1.f, 1.f, 1.f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	FLinearColor SunShaftThreshold = FLinearColor(0.87f, 0.74f, 0.65f, 1.f);
+
+	/** Writes these settings (only what is switched on) over a post-process block. */
+	void ApplyTo(struct FPostProcessSettings& Settings) const;
+};
+
+/** One timeline key of an object: its transform (relative to its parent) and its value (light intensity, camera FOV). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneKey
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float Time = 0.f;
+
+	/** The curve from this key to the next. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	EOKSceneEase Ease = EOKSceneEase::Linear;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	FTransform Transform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float Value = 0.f;
+
+	/** A character's FK bones at this key (interpolated per bone between keys). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	TArray<FOKSceneFkBone> Fk;
+
+	/** A character's face, hands and clothes at this key: patterns switch at the key, the mouth opening blends. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	bool bCharacterState = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	int32 EyebrowPattern = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	int32 EyesPattern = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	int32 MouthPattern = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float MouthOpen = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	int32 HandLeft = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	int32 HandRight = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	TArray<uint8> ClothesStates;
+};
+
+/** Timeline keys of one object, in time order. */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneTrack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	int32 ObjectId = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	TArray<FOKSceneKey> Keys;
+
+	/** The position follows a smooth curve through the keys (Catmull-Rom; a camera path) instead of straight segments. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	bool bSmoothPath = false;
+};
+
+/**
+ * The scene object tree shared by the in-game studio and the Unreal editor studio, stored as a .okscene file (JSON).
+ * Objects reference OK cards and OK base library models only.
+ */
+UCLASS(BlueprintType)
+class OKSTUDIO_API UOKSceneDocument : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	static constexpr int32 FormatVersion = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	TArray<FOKSceneObject> Objects;
+
+	/** Camera object the scene is viewed through (-1: the free camera). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	int32 ActiveCamera = -1;
+
+	/** Studio map of the scene (catalogue no; -1: none). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	int32 Map = -1;
+
+	/** Post-processing of the scene's view. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	FOKScenePost Post;
+
+	/** Timeline: keyframe tracks of objects and the length (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	TArray<FOKSceneTrack> Tracks;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float Duration = 10.f;
+
+	/** Keys the object's current transform and value at Time (replacing a key within 1/60 s). */
+	void SetKey(int32 Id, float Time);
+	/** Removes the object's key within 1/60 s of Time. */
+	bool RemoveKey(int32 Id, float Time);
+	/** The key of the object at the time (within the key tolerance), or null. */
+	FOKSceneKey* KeyAt(int32 Id, float Time);
+	/** The eased blend (0..1) between two keys at fraction U of the way. */
+	static float EaseAlpha(EOKSceneEase Ease, float U);
+	/** Poses every keyed object at Time (between keys: linear position and scale, slerped rotation). */
+	void EvaluateTimeline(float Time);
+	const FOKSceneTrack* TrackOf(int32 Id) const;
+	FOKSceneTrack* TrackOf(int32 Id) { return const_cast<FOKSceneTrack*>(static_cast<const UOKSceneDocument*>(this)->TrackOf(Id)); }
+
+	/** Next id handed out by AddObject. */
+	UPROPERTY()
+	int32 NextId = 1;
+
+	/** Broadcast after any change made through this API. */
+	FOKSceneChanged OnChanged;
+
+	/** A new object under Parent (-1: root); returns its id. */
+	UFUNCTION(BlueprintCallable, Category = "OK Studio")
+	int32 AddObject(EOKSceneObjectKind Kind, const FString& Name, int32 Parent = -1);
+
+	/** Removes the object and everything under it. */
+	UFUNCTION(BlueprintCallable, Category = "OK Studio")
+	bool RemoveObject(int32 Id);
+
+	/** Moves an object under another (-1: root), keeping its world transform. Refuses cycles. */
+	UFUNCTION(BlueprintCallable, Category = "OK Studio")
+	bool Reparent(int32 Id, int32 NewParent);
+
+	/** A copy of the object and its subtree next to it; returns the new id. */
+	UFUNCTION(BlueprintCallable, Category = "OK Studio")
+	int32 Duplicate(int32 Id);
+
+	FOKSceneObject* Find(int32 Id);
+	const FOKSceneObject* Find(int32 Id) const;
+	TArray<int32> Children(int32 Parent) const;
+
+	/** Transform in scene space (parents applied). */
+	UFUNCTION(BlueprintCallable, Category = "OK Studio")
+	FTransform WorldTransform(int32 Id) const;
+	/** Posed frame of a character bone relative to the character (set by the actor showing the scene; without it attached
+	 * objects sit at the character root). */
+	TFunction<bool(int32 Character, const FString& Bone, FTransform& OutBone)> BoneFrame;
+	/** The frame children of `Parent` are placed in: its world, and for a catalogue item its child point (子の接続先). */
+	FTransform ChildFrame(int32 Parent) const;
+	/** The frame an object's Transform is relative to: its parent's child frame, and the posed bone it hangs on. */
+	FTransform ParentFrame(int32 Id) const;
+
+	/** Visible unless it or a parent is hidden. */
+	bool IsShown(int32 Id) const;
+
+	FString ToJson() const;
+	bool FromJson(const FString& Json, FString& OutError);
+	bool SaveToFile(const FString& Path, FString& OutError) const;
+	bool LoadFromFile(const FString& Path, FString& OutError);
+
+	void NotifyChanged() { OnChanged.Broadcast(); }
+};

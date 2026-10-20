@@ -1,0 +1,3166 @@
+{
+	"format": "okscene",
+	"version": 1,
+	"active_camera": -1,
+	"next_id": 52,
+	"map": 27,
+	"duration": 10,
+	"post":
+	{
+		"bBloom": false,
+		"bloomIntensity": 0.67500001192092896,
+		"bDepthOfField": false,
+		"focalDistance": 300,
+		"aperture": 2.7999999523162842,
+		"bVignette": false,
+		"vignetteIntensity": 0.40000000596046448,
+		"exposure": 0
+	},
+	"tracks": [],
+	"objects": [
+		{
+			"id": 1,
+			"parent": -1,
+			"name": "大型大剣",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 2,
+			"parent": 1,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 22.245359420776367
+				},
+				"scale3D":
+				{
+					"x": 0.43240514397621155,
+					"y": 0.43000000715255737,
+					"z": 3.7874569892883301
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 0.68687093257904053,
+						"g": 0.68687093257904053,
+						"b": 0.68687093257904053,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 3,
+			"parent": 1,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 43.826210498809814
+				},
+				"scale3D":
+				{
+					"x": 2.7915050983428955,
+					"y": 0.86357218027114868,
+					"z": 0.62991446256637573
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0.45548266172409058,
+						"g": 0.45548266172409058,
+						"b": 0.45548266172409058,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 4,
+			"parent": 1,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.61124658584595
+				},
+				"scale3D":
+				{
+					"x": 1.4388353824615479,
+					"y": 0.76098966598510742,
+					"z": 15.593829154968262
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 5,
+			"parent": 1,
+			"name": "六角形(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.60744380950928
+				},
+				"scale3D":
+				{
+					"x": 2.4516229629516602,
+					"y": 15.54106330871582,
+					"z": 0.86733216047286987
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 479,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 6,
+			"parent": 1,
+			"name": "角なし三角(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 206.12685680389404
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1.0295435190200806,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1186,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 7,
+			"parent": 1,
+			"name": "三角(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 208.40742588043213
+				},
+				"scale3D":
+				{
+					"x": 2.4603595733642578,
+					"y": 2.1668791770935059,
+					"z": 4.4261894226074219
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 453,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 8,
+			"parent": 1,
+			"name": "台形1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 419,
+				"colors": [
+					{
+						"r": 0.42530149221420288,
+						"g": 0.42530149221420288,
+						"b": 0.42530149221420288,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 9,
+			"parent": -1,
+			"name": "Character 1",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 2154.1730880737305,
+					"y": -28.482842445373535,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0002850_cards/char_1.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1,
+				"time": 1623.561767578125,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 0,
+				"studioAnimeCategory": 0,
+				"studioAnimeNo": 0,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": -1,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 10,
+			"parent": -1,
+			"name": "大型大剣",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 2055.2900314331055,
+					"y": -28.482842445373535,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 11,
+			"parent": 10,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 22.245359420776367
+				},
+				"scale3D":
+				{
+					"x": 0.43240514397621155,
+					"y": 0.43000000715255737,
+					"z": 3.7874569892883301
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 0.68687093257904053,
+						"g": 0.68687093257904053,
+						"b": 0.68687093257904053,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 12,
+			"parent": 10,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 43.826210498809814
+				},
+				"scale3D":
+				{
+					"x": 2.7915050983428955,
+					"y": 0.86357218027114868,
+					"z": 0.62991446256637573
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0.45548266172409058,
+						"g": 0.45548266172409058,
+						"b": 0.45548266172409058,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 13,
+			"parent": 10,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.61124658584595
+				},
+				"scale3D":
+				{
+					"x": 1.4388353824615479,
+					"y": 0.76098966598510742,
+					"z": 15.593829154968262
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 14,
+			"parent": 10,
+			"name": "六角形(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.60744380950928
+				},
+				"scale3D":
+				{
+					"x": 2.4516229629516602,
+					"y": 15.54106330871582,
+					"z": 0.86733216047286987
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 479,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 15,
+			"parent": 10,
+			"name": "角なし三角(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 206.12685680389404
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1.0295435190200806,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1186,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 16,
+			"parent": 10,
+			"name": "三角(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 208.40742588043213
+				},
+				"scale3D":
+				{
+					"x": 2.4603595733642578,
+					"y": 2.1668791770935059,
+					"z": 4.4261894226074219
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 453,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 17,
+			"parent": 10,
+			"name": "台形1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 419,
+				"colors": [
+					{
+						"r": 0.42530149221420288,
+						"g": 0.42530149221420288,
+						"b": 0.42530149221420288,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 18,
+			"parent": -1,
+			"name": "Character 176",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.72499818197056298,
+					"w": 0.68875077941108598
+				},
+				"translation":
+				{
+					"x": 2580.9839248657227,
+					"y": 811.85636520385742,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0002850_cards/char_176.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1,
+				"time": 1623.561767578125,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 7,
+				"studioAnimeCategory": 65,
+				"studioAnimeNo": 0,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": 5,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 19,
+			"parent": 18,
+			"name": "大型大剣",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.50086381809439817,
+					"y": -0.16415328566510054,
+					"z": 0.0036444950624864303,
+					"w": 0.84980930342341698
+				},
+				"translation":
+				{
+					"x": 3.5109084099531174,
+					"y": -10.247590392827988,
+					"z": -4.4565878808498383
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 20,
+			"parent": 19,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 22.245359420776367
+				},
+				"scale3D":
+				{
+					"x": 0.43240514397621155,
+					"y": 0.43000000715255737,
+					"z": 3.7874569892883301
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 0.68687093257904053,
+						"g": 0.68687093257904053,
+						"b": 0.68687093257904053,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 21,
+			"parent": 19,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 43.826210498809814
+				},
+				"scale3D":
+				{
+					"x": 2.7915050983428955,
+					"y": 0.86357218027114868,
+					"z": 0.62991446256637573
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0.45548266172409058,
+						"g": 0.45548266172409058,
+						"b": 0.45548266172409058,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 22,
+			"parent": 19,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.61124658584595
+				},
+				"scale3D":
+				{
+					"x": 1.4388353824615479,
+					"y": 0.76098966598510742,
+					"z": 15.593829154968262
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 23,
+			"parent": 19,
+			"name": "六角形(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.60744380950928
+				},
+				"scale3D":
+				{
+					"x": 2.4516229629516602,
+					"y": 15.54106330871582,
+					"z": 0.86733216047286987
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 479,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 24,
+			"parent": 19,
+			"name": "角なし三角(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 206.12685680389404
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1.0295435190200806,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1186,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 25,
+			"parent": 19,
+			"name": "三角(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 208.40742588043213
+				},
+				"scale3D":
+				{
+					"x": 2.4603595733642578,
+					"y": 2.1668791770935059,
+					"z": 4.4261894226074219
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 453,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 26,
+			"parent": 19,
+			"name": "台形1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 419,
+				"colors": [
+					{
+						"r": 0.42530149221420288,
+						"g": 0.42530149221420288,
+						"b": 0.42530149221420288,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 27,
+			"parent": -1,
+			"name": "Character 344",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": 2368.6908721923828,
+					"y": 2080.9499740600586,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0002850_cards/char_344.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1.2000000476837158,
+				"time": 1948.289794921875,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 1,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 1,
+				"studioAnimeGroup": 4,
+				"studioAnimeCategory": 142,
+				"studioAnimeNo": 4,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": 5,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": 3,
+				"blush": -1,
+				"nipStand": 1,
+				"skinGloss": -1,
+				"fluids": [
+					2,
+					2,
+					2,
+					2,
+					2
+				],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 28,
+			"parent": -1,
+			"name": "Character 503",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": 2368.6908721923828,
+					"y": 2080.9499740600586,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0002850_cards/char_503.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1.2000000476837158,
+				"time": 1948.289794921875,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 1,
+				"studioAnimeGroup": 5,
+				"studioAnimeCategory": 142,
+				"studioAnimeNo": 4,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": -1,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 29,
+			"parent": -1,
+			"name": "大型大剣",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.58867805193828926,
+					"y": 0.77895496479917525,
+					"z": 0.13027453181749243,
+					"w": 0.17238288876970817
+				},
+				"translation":
+				{
+					"x": 2229.8320770263672,
+					"y": 2099.342155456543,
+					"z": 115.11327028274536
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 30,
+			"parent": 29,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 22.245359420776367
+				},
+				"scale3D":
+				{
+					"x": 0.43240514397621155,
+					"y": 0.43000000715255737,
+					"z": 3.7874569892883301
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 0.68687093257904053,
+						"g": 0.68687093257904053,
+						"b": 0.68687093257904053,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 31,
+			"parent": 29,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 43.826210498809814
+				},
+				"scale3D":
+				{
+					"x": 2.7915050983428955,
+					"y": 0.86357218027114868,
+					"z": 0.62991446256637573
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0.45548266172409058,
+						"g": 0.45548266172409058,
+						"b": 0.45548266172409058,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 32,
+			"parent": 29,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.61124658584595
+				},
+				"scale3D":
+				{
+					"x": 1.4388353824615479,
+					"y": 0.76098966598510742,
+					"z": 15.593829154968262
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 33,
+			"parent": 29,
+			"name": "六角形(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.60744380950928
+				},
+				"scale3D":
+				{
+					"x": 2.4516229629516602,
+					"y": 15.54106330871582,
+					"z": 0.86733216047286987
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 479,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 34,
+			"parent": 29,
+			"name": "角なし三角(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 206.12685680389404
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1.0295435190200806,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1186,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 35,
+			"parent": 29,
+			"name": "三角(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 208.40742588043213
+				},
+				"scale3D":
+				{
+					"x": 2.4603595733642578,
+					"y": 2.1668791770935059,
+					"z": 4.4261894226074219
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 453,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 36,
+			"parent": 29,
+			"name": "台形1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 419,
+				"colors": [
+					{
+						"r": 0.42530149221420288,
+						"g": 0.42530149221420288,
+						"b": 0.42530149221420288,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 37,
+			"parent": -1,
+			"name": "Character 642",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 1,
+					"w": 6.123233995736766e-17
+				},
+				"translation":
+				{
+					"x": 2539.6806716918945,
+					"y": 2561.161994934082,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0002850_cards/char_642.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 0,
+				"time": 209.14457702636719,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 1,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 0,
+				"studioAnimeCategory": 0,
+				"studioAnimeNo": 3,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": 19,
+				"fk": [
+					{
+						"bone": "cf_j_hips",
+						"euler":
+						{
+							"x": 355.30789184570312,
+							"y": 347.20010375976562,
+							"z": 0.08772798627614975
+						}
+					},
+					{
+						"bone": "cf_j_head",
+						"euler":
+						{
+							"x": 23.498935699462891,
+							"y": 340.11026000976562,
+							"z": 358.35003662109375
+						}
+					},
+					{
+						"bone": "cf_j_neck",
+						"euler":
+						{
+							"x": 358.58364868164062,
+							"y": 356.7584228515625,
+							"z": 5.4554719924926758
+						}
+					},
+					{
+						"bone": "cf_j_spine02",
+						"euler":
+						{
+							"x": -0.00010099041537614539,
+							"y": 359.29617309570312,
+							"z": 358.90982055664062
+						}
+					},
+					{
+						"bone": "cf_j_spine01",
+						"euler":
+						{
+							"x": -0.00010099041537614539,
+							"y": 359.29617309570312,
+							"z": 358.90982055664062
+						}
+					},
+					{
+						"bone": "cf_j_waist01",
+						"euler":
+						{
+							"x": 359.85772705078125,
+							"y": 0.0048026992008090019,
+							"z": 358.06643676757812
+						}
+					},
+					{
+						"bone": "cf_j_thigh00_R",
+						"euler":
+						{
+							"x": 358.63980102539062,
+							"y": 8.1825456619262695,
+							"z": 7.3252334594726562
+						}
+					},
+					{
+						"bone": "cf_j_leg01_R",
+						"euler":
+						{
+							"x": 20.182376861572266,
+							"y": 1.4124447261565365e-05,
+							"z": 4.3868672946700826e-05
+						}
+					},
+					{
+						"bone": "cf_j_leg03_R",
+						"euler":
+						{
+							"x": 1.2491917610168457,
+							"y": 0.71699202060699463,
+							"z": 359.71600341796875
+						}
+					},
+					{
+						"bone": "cf_j_toes_R",
+						"euler":
+						{
+							"x": 355.2498779296875,
+							"y": 357.13363647460938,
+							"z": 355.54855346679688
+						}
+					},
+					{
+						"bone": "cf_j_thigh00_L",
+						"euler":
+						{
+							"x": 1.6139082908630371,
+							"y": 14.871251106262207,
+							"z": 357.32427978515625
+						}
+					},
+					{
+						"bone": "cf_j_leg01_L",
+						"euler":
+						{
+							"x": 14.129810333251953,
+							"y": 8.0445650382898748e-05,
+							"z": 0.00035408695111982524
+						}
+					},
+					{
+						"bone": "cf_j_leg03_L",
+						"euler":
+						{
+							"x": 358.75125122070312,
+							"y": 359.42803955078125,
+							"z": 0.3768446147441864
+						}
+					},
+					{
+						"bone": "cf_j_toes_L",
+						"euler":
+						{
+							"x": 356.02420043945312,
+							"y": 4.868314266204834,
+							"z": 5.1145424842834473
+						}
+					},
+					{
+						"bone": "cf_j_shoulder_R",
+						"euler":
+						{
+							"x": 357.8333740234375,
+							"y": 2.2530326843261719,
+							"z": 8.6264581680297852
+						}
+					},
+					{
+						"bone": "cf_j_arm00_R",
+						"euler":
+						{
+							"x": 338.37921142578125,
+							"y": 330.64877319335938,
+							"z": 319.38226318359375
+						}
+					},
+					{
+						"bone": "cf_j_forearm01_R",
+						"euler":
+						{
+							"x": 25.642417907714844,
+							"y": 343.77801513671875,
+							"z": 92.796440124511719
+						}
+					},
+					{
+						"bone": "cf_j_hand_R",
+						"euler":
+						{
+							"x": 8.3678855895996094,
+							"y": 345.52862548828125,
+							"z": 314.76953125
+						}
+					},
+					{
+						"bone": "cf_j_shoulder_L",
+						"euler":
+						{
+							"x": 4.0541863441467285,
+							"y": 354.86996459960938,
+							"z": 356.38983154296875
+						}
+					},
+					{
+						"bone": "cf_j_arm00_L",
+						"euler":
+						{
+							"x": 50.756549835205078,
+							"y": 68.205818176269531,
+							"z": 89.122047424316406
+						}
+					},
+					{
+						"bone": "cf_j_forearm01_L",
+						"euler":
+						{
+							"x": 1.3835796149454325e-14,
+							"y": 103.63060760498047,
+							"z": 1.6535667082015308e-15
+						}
+					},
+					{
+						"bone": "cf_j_hand_L",
+						"euler":
+						{
+							"x": 76.378753662109375,
+							"y": 3.2074027061462402,
+							"z": 70.777679443359375
+						}
+					},
+					{
+						"bone": "cm_J_dan101_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cm_J_dan109_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					}
+				],
+				"ik": [],
+				"tearsLevel": 3,
+				"blush": -1,
+				"nipStand": 1,
+				"skinGloss": -1,
+				"fluids": [
+					2,
+					2,
+					2,
+					2,
+					2
+				],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 38,
+			"parent": -1,
+			"name": "Character 802",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.77041759341664773,
+					"w": -0.63753959230317692
+				},
+				"translation":
+				{
+					"x": 2507.71484375,
+					"y": 2910.0181579589844,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0002850_cards/char_802.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1.2000000476837158,
+				"time": 1565.651611328125,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 1,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 0,
+				"studioAnimeCategory": 60,
+				"studioAnimeNo": 23,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": -1,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1,
+					1
+				]
+			}
+		},
+		{
+			"id": 39,
+			"parent": -1,
+			"name": "大型大剣",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": 0.00071726010976756076,
+					"y": 0.99910371830502398,
+					"z": 0.018935816062670467,
+					"w": -0.037850765871396276
+				},
+				"translation":
+				{
+					"x": 2582.8071594238281,
+					"y": 2528.9203643798828,
+					"z": 180.47600984573364
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 40,
+			"parent": 39,
+			"name": "シリンダー(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 22.245359420776367
+				},
+				"scale3D":
+				{
+					"x": 0.43240514397621155,
+					"y": 0.43000000715255737,
+					"z": 3.7874569892883301
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 4,
+				"colors": [
+					{
+						"r": 0.68687093257904053,
+						"g": 0.68687093257904053,
+						"b": 0.68687093257904053,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 41,
+			"parent": 39,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 43.826210498809814
+				},
+				"scale3D":
+				{
+					"x": 2.7915050983428955,
+					"y": 0.86357218027114868,
+					"z": 0.62991446256637573
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0.45548266172409058,
+						"g": 0.45548266172409058,
+						"b": 0.45548266172409058,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 42,
+			"parent": 39,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.61124658584595
+				},
+				"scale3D":
+				{
+					"x": 1.4388353824615479,
+					"y": 0.76098966598510742,
+					"z": 15.593829154968262
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 43,
+			"parent": 39,
+			"name": "六角形(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 124.60744380950928
+				},
+				"scale3D":
+				{
+					"x": 2.4516229629516602,
+					"y": 15.54106330871582,
+					"z": 0.86733216047286987
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 479,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 44,
+			"parent": 39,
+			"name": "角なし三角(通常)",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 206.12685680389404
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1.0295435190200806,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1186,
+				"colors": [
+					{
+						"r": 0,
+						"g": 0,
+						"b": 0,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 45,
+			"parent": 39,
+			"name": "三角(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": 0.70710678118654757
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 208.40742588043213
+				},
+				"scale3D":
+				{
+					"x": 2.4603595733642578,
+					"y": 2.1668791770935059,
+					"z": 4.4261894226074219
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 453,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 46,
+			"parent": 39,
+			"name": "台形1(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 419,
+				"colors": [
+					{
+						"r": 0.42530149221420288,
+						"g": 0.42530149221420288,
+						"b": 0.42530149221420288,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 47,
+			"parent": -1,
+			"name": "液溜まり",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.53578533049412136,
+					"w": -0.84435423823612399
+				},
+				"translation":
+				{
+					"x": 2507.71484375,
+					"y": 2910.0181579589844,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 2.7284607887268066,
+					"y": 4.0380039215087891,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 13,
+				"category": 26,
+				"no": 496,
+				"colors": [
+					{
+						"r": 0.77741420269012451,
+						"g": 0.28377401828765869,
+						"b": 0.28377401828765869,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 48,
+			"parent": -1,
+			"name": "ウォーハンマー",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": -0.70710678118654746
+				},
+				"translation":
+				{
+					"x": -59.431374073028564,
+					"y": 0,
+					"z": 65.651053190231323
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 12,
+				"category": 79,
+				"no": 1058,
+				"colors": [
+					{
+						"r": 0.56617641448974609,
+						"g": 0.56617641448974609,
+						"b": 0.56617641448974609,
+						"a": 1
+					},
+					{
+						"r": 0.94117647409439087,
+						"g": 0.94117647409439087,
+						"b": 0.94117647409439087,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 49,
+			"parent": -1,
+			"name": "クレイモア",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": -0.70710678118654746
+				},
+				"translation":
+				{
+					"x": -109.1392993927002,
+					"y": 0,
+					"z": 28.126147389411926
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 12,
+				"category": 79,
+				"no": 1060,
+				"colors": [
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": 1
+					},
+					{
+						"r": 0.7352941632270813,
+						"g": 0.7352941632270813,
+						"b": 0.7352941632270813,
+						"a": 1
+					},
+					{
+						"r": 0.52941179275512695,
+						"g": 0.52941179275512695,
+						"b": 0.52941179275512695,
+						"a": 1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 50,
+			"parent": -1,
+			"name": "鬼神の金棒",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.70710678118654757,
+					"y": 0,
+					"z": 0,
+					"w": -0.70710678118654746
+				},
+				"translation":
+				{
+					"x": 61.970490217208862,
+					"y": 0,
+					"z": 12.255170196294785
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 12,
+				"category": 28,
+				"no": 963,
+				"colors": [
+					{
+						"r": 0.68382352590560913,
+						"g": 0.68382352590560913,
+						"b": 0.68382352590560913,
+						"a": 1
+					},
+					{
+						"r": 0.625,
+						"g": 0.5600278377532959,
+						"b": 0.51011031866073608,
+						"a": 1
+					},
+					{
+						"r": 0.55882352590560913,
+						"g": 0.55882352590560913,
+						"b": 0.55882352590560913,
+						"a": 1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 51,
+			"parent": -1,
+			"name": "水柱",
+			"kind": "Effect",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.29681254296250548,
+					"y": 0.68862327560242653,
+					"z": 0.47510679454894439,
+					"w": -0.46040616026736925
+				},
+				"translation":
+				{
+					"x": 2519.3401336669922,
+					"y": 2899.6730804443359,
+					"z": 6.1311349272727966
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"effect":
+			{
+				"effect": "water",
+				"speed": 1,
+				"intensity": 1,
+				"color":
+				{
+					"r": 1,
+					"g": 1,
+					"b": 1,
+					"a": -1
+				}
+			}
+		}
+	]
+}

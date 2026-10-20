@@ -1,0 +1,1130 @@
+{
+  "shader": "xukmi/SkinPlus",
+  "programs": [
+    {
+      "label": "OutlineVertex",
+      "blob": 0,
+      "sha256": "b0a829c2b3cae46ca57896e9296a20522b86abd1a186f084fe57581815cf988d",
+      "hlsl_sha256": "11201d0668ffe3fb010e4de1a28de78c621d9806506ffd36259e177707832545",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TANGENT",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "xy",
+          "register": 7
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "zw",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "zw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 5,
+          "mask": "xyzw",
+          "register": 4
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 52,
+          "declared_vectors": 43
+        },
+        {
+          "register": 1,
+          "vectors": 9,
+          "declared_vectors": 5
+        },
+        {
+          "register": 2,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 3,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_DetailMask_ST",
+          "cb": 0,
+          "offset": 368,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_LineWidthS",
+          "cb": 0,
+          "offset": 644,
+          "type": 0,
+          "dim": 1,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_linewidthG",
+          "cb": 0,
+          "offset": 672,
+          "type": 0,
+          "dim": 1,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "_WorldSpaceCameraPos",
+          "cb": 1,
+          "offset": 64,
+          "type": 0,
+          "dim": 3,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 2,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 2,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 3,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [
+        {
+          "name": "_DetailMask",
+          "index": 0,
+          "sampler": 0,
+          "dim": 2
+        }
+      ],
+      "samplers": [
+        0
+      ],
+      "keywords": []
+    },
+    {
+      "label": "ForwardVertex",
+      "blob": 2,
+      "sha256": "1dbcf7cecb9c56485e6f4936538816591b27446c116a5c138e3a6474c6f094a4",
+      "hlsl_sha256": "136eb382f0c8b58b99b79c98393efe2381220ab6aebdeaf9d41c0edd3952c7e5",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TANGENT",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "xy",
+          "register": 7
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "zw",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "zw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 5,
+          "mask": "xyzw",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 6,
+          "mask": "xyz",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 7,
+          "mask": "xyzw",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 8,
+          "mask": "xyz",
+          "register": 7
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 1,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 0,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 0,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 1,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [],
+      "samplers": [],
+      "keywords": []
+    },
+    {
+      "label": "ForwardShadowVertex",
+      "blob": 3,
+      "sha256": "9122b4b14ae00af561ce71d8605b87195be55e685b0ca4b341a20e09e8fb0569",
+      "hlsl_sha256": "d53f15f5793d08a69ec8912cb56d1b7b9abb657162686b1b1fc4ff9cc9963abd",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TANGENT",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "xy",
+          "register": 7
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "zw",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "zw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 4,
+          "mask": "xyzw",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 5,
+          "mask": "xyzw",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 6,
+          "mask": "xyz",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 7,
+          "mask": "xyzw",
+          "register": 7
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 8,
+          "mask": "xyz",
+          "register": 8
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 9,
+          "declared_vectors": 6
+        },
+        {
+          "register": 1,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 2,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_ProjectionParams",
+          "cb": 0,
+          "offset": 80,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 1,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 1,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 2,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [],
+      "samplers": [],
+      "keywords": [
+        "SHADOWS_SCREEN"
+      ]
+    },
+    {
+      "label": "ForwardLightsVertex",
+      "blob": 4,
+      "sha256": "1dbcf7cecb9c56485e6f4936538816591b27446c116a5c138e3a6474c6f094a4",
+      "hlsl_sha256": "136eb382f0c8b58b99b79c98393efe2381220ab6aebdeaf9d41c0edd3952c7e5",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TANGENT",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "xy",
+          "register": 7
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "zw",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "zw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 5,
+          "mask": "xyzw",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 6,
+          "mask": "xyz",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 7,
+          "mask": "xyzw",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 8,
+          "mask": "xyz",
+          "register": 7
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 1,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 0,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 0,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 1,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [],
+      "samplers": [],
+      "keywords": [
+        "VERTEXLIGHT_ON"
+      ]
+    },
+    {
+      "label": "ForwardShadowLightsVertex",
+      "blob": 5,
+      "sha256": "9122b4b14ae00af561ce71d8605b87195be55e685b0ca4b341a20e09e8fb0569",
+      "hlsl_sha256": "d53f15f5793d08a69ec8912cb56d1b7b9abb657162686b1b1fc4ff9cc9963abd",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TANGENT",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "xy",
+          "register": 7
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "COLOR",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xy",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "zw",
+          "register": 2
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 2,
+          "mask": "xy",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 3,
+          "mask": "zw",
+          "register": 3
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 4,
+          "mask": "xyzw",
+          "register": 4
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 5,
+          "mask": "xyzw",
+          "register": 5
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 6,
+          "mask": "xyz",
+          "register": 6
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 7,
+          "mask": "xyzw",
+          "register": 7
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 8,
+          "mask": "xyz",
+          "register": 8
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 9,
+          "declared_vectors": 6
+        },
+        {
+          "register": 1,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 2,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_ProjectionParams",
+          "cb": 0,
+          "offset": 80,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 1,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 1,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 2,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [],
+      "samplers": [],
+      "keywords": [
+        "SHADOWS_SCREEN",
+        "VERTEXLIGHT_ON"
+      ]
+    },
+    {
+      "label": "ShadowCasterDepthVertex",
+      "blob": 10,
+      "sha256": "24e0453a78dadd63fd230824b9e8839992ec5a53fed166fd7f27b1a9aca26870",
+      "hlsl_sha256": "5872f38f501e551bd4e867aafca4b0b328b8b680e19401cb45b4b6ef070ab7d5",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 0
+        },
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 48,
+          "declared_vectors": 1
+        },
+        {
+          "register": 1,
+          "vectors": 26,
+          "declared_vectors": 6
+        },
+        {
+          "register": 2,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 3,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_WorldSpaceLightPos0",
+          "cb": 0,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_LightShadowBias",
+          "cb": 1,
+          "offset": 80,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 2,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 2,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 3,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [],
+      "samplers": [],
+      "keywords": [
+        "SHADOWS_DEPTH"
+      ]
+    },
+    {
+      "label": "ShadowCasterCubeVertex",
+      "blob": 11,
+      "sha256": "0ca8575d6994d0a6766b169086e7057ca894502436fb32aee7a54b7eade879ec",
+      "hlsl_sha256": "653d9aae5a7d2da57b49cfab0780d85fa06097c706ea76afe3340987262b36c2",
+      "inputs": [
+        {
+          "semantic": "POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 0
+        },
+        {
+          "semantic": "NORMAL",
+          "index": 0,
+          "mask": "xyz",
+          "register": 1
+        },
+        {
+          "semantic": "TEXCOORD",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 2
+        }
+      ],
+      "outputs": [
+        {
+          "semantic": "TEXCOORD",
+          "index": 1,
+          "mask": "xy",
+          "register": 0
+        },
+        {
+          "semantic": "SV_POSITION",
+          "index": 0,
+          "mask": "xyzw",
+          "register": 1
+        }
+      ],
+      "buffers": [
+        {
+          "register": 0,
+          "vectors": 48,
+          "declared_vectors": 1
+        },
+        {
+          "register": 1,
+          "vectors": 26,
+          "declared_vectors": 6
+        },
+        {
+          "register": 2,
+          "vectors": 11,
+          "declared_vectors": 7
+        },
+        {
+          "register": 3,
+          "vectors": 23,
+          "declared_vectors": 21
+        }
+      ],
+      "uniforms": [
+        {
+          "name": "_WorldSpaceLightPos0",
+          "cb": 0,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_LightShadowBias",
+          "cb": 1,
+          "offset": 80,
+          "type": 0,
+          "dim": 4,
+          "rows": 0,
+          "array_size": 0
+        },
+        {
+          "name": "unity_ObjectToWorld",
+          "cb": 2,
+          "offset": 0,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_WorldToObject",
+          "cb": 2,
+          "offset": 64,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        },
+        {
+          "name": "unity_MatrixVP",
+          "cb": 3,
+          "offset": 272,
+          "type": 0,
+          "dim": 4,
+          "rows": 4,
+          "array_size": 0
+        }
+      ],
+      "textures": [],
+      "samplers": [],
+      "keywords": [
+        "SHADOWS_CUBE"
+      ]
+    }
+  ],
+  "source_manifest_sha256": "be6c0de06213966a6f16c86e928a2ca7f64959036d186c9f3b768d77af12c803",
+  "source_parsed_sha256": "1b3f42293579e6a0533bbaefa0c653b21e3fcefb1f24c343b5aa55ceb8dbf488",
+  "scope": "Native vertex arithmetic/bindings; scene geometry and renderer integration remain separate"
+}

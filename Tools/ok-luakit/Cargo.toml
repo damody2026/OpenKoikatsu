@@ -1,0 +1,31 @@
+[package]
+name = "ok-luakit"
+version = "0.1.0"
+edition = "2021"
+description = "Heavy helpers for OpenKoikatsu Lua scripts (images, Unity bundles, codecs)"
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+indexmap = "2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "tga", "tiff"] }
+zstd = "0.13"
+lz4_flex = "0.11"
+flate2 = "1"
+sha2 = "0.10"
+md-5 = "0.10"
+rmpv = "1"
+ab_glyph = "0.2"
+unity-asset-binary = "0.2.0"
+unity-asset-core = "0.2.0"
+rusqlite = { version = "0.32", features = ["bundled"] }
+pdf-extract = "0.7"
+encoding_rs = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Foundation", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
+
+[patch.crates-io]
+unity-asset-binary = { path = "../vendor/unity-asset-binary" }
+
+[profile.release]
+opt-level = 3

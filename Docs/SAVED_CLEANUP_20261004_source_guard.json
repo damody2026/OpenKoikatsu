@@ -1,0 +1,13 @@
+{
+  "unique_data_would_be_lost": false,
+  "all_source_files_have_retained_links": true,
+  "cache_names": [
+    ".ok_cache.sqlite",
+    ".ok_cache.sqlite-shm",
+    ".ok_cache.sqlite-wal",
+    ".ok_guid_index.txt",
+    ".ok_override_index.tsv",
+    "com.deathweasel.bepinex.uncensorselector.cfg",
+    "require_complete_mods"
+  ]
+}

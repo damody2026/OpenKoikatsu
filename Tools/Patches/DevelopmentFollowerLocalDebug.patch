@@ -1,0 +1,38 @@
+diff --git a/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp b/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
+index eb2086527..02dcf5297 100644
+--- a/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
++++ b/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
+@@ -3009,7 +3009,25 @@ void FDynamicSkelMeshObjectDataGPUSkin::InitDynamicSkelMeshObjectDataGPUSkin(
+ #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+ 		check(!MeshComponentSpaceTransforms.Num());
+ 		// append instead of equals to avoid alloc
+-		MeshComponentSpaceTransforms.Append(InDynamicData.GetComponentSpaceTransforms());
++		// A follower's dynamic transform view belongs to its leader. Debug data
++		// is indexed by this mesh's reference skeleton, so retain only mapped
++		// local bones rather than copying the entire leader rig for every part.
++		if (InDynamicData.HasLeaderPoseComponent())
++		{
++			const auto LeaderTransforms = InDynamicData.GetComponentSpaceTransforms();
++			const auto BoneMap = InDynamicData.GetLeaderBoneMap();
++			MeshComponentSpaceTransforms.AddUninitialized(BoneMap.Num());
++			for (int32 BoneIndex = 0; BoneIndex < BoneMap.Num(); ++BoneIndex)
++			{
++				const int32 LeaderIndex = BoneMap[BoneIndex];
++				MeshComponentSpaceTransforms[BoneIndex] = LeaderTransforms.IsValidIndex(LeaderIndex)
++					? LeaderTransforms[LeaderIndex] : FTransform::Identity;
++			}
++		}
++		else
++		{
++			MeshComponentSpaceTransforms.Append(InDynamicData.GetComponentSpaceTransforms());
++		}
+ 
+ 		const bool bCalculateComponentSpaceTransformsFromLeader = MeshComponentSpaceTransforms.IsEmpty(); // This will be empty for follower components.
+ 		TArray<FTransform>* const LeaderBoneMappedMeshComponentSpaceTransforms = bCalculateComponentSpaceTransformsFromLeader ? &MeshComponentSpaceTransforms : nullptr;
+@@ -3144,4 +3162,4 @@ bool FDynamicSkelMeshObjectDataGPUSkin::ActiveMorphTargetsEqual(
+ 		}
+ 	}
+ 	return true;
+-}
+\ No newline at end of file
++}

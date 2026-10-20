@@ -1,0 +1,61 @@
+# 女主彼此的好感度與性向（Tools/ok-rules/src/bonds.rs 讀這個檔）。
+# 遊戲執行中改完存檔，按 ok.StreetRules.Reload（或 control 的 rules_reload）即生效。
+# 檔案不存在時用編進 ok_rules.dll 的同一份內容。
+
+# 沒有紀錄時她對另一位女主的好感
+start_favor = 10.0
+# 好感下限；朋友以上的上限
+min_favor = -100.0
+friend_cap = 200.0
+# 不熟階段的上限：用她本身的「不熟」上限；沒有設定時用這個
+stranger_cap_default = 100.0
+# 兩人都到上限前這麼多就算到了（不熟 -> 朋友）
+cap_slack = 0.5
+# 朋友 -> 戀人：兩人都至少這麼多好感，而且兩人都是雙性戀
+lover_favor = 180.0
+
+[together]
+# 每 15 遊戲分鐘結算一次；一次最多算 1 小時
+tick_minutes = 15
+max_hours = 1.0
+# 同一個地方：水平距離與高度差（公分）
+max_distance = 1500.0
+max_height = 150.0
+# 一起跟著他時每小時
+with_him_rate = 1.0
+with_him_why = "一起跟著他"
+# 嫉妒超過這個值，同處反而互相扣分（每小時扣 rate * jealous_loss_scale）
+jealous_limit = 60.0
+jealous_loss_scale = 0.5
+
+# 同地點、同活動時每遊戲小時增加的好感
+[together.rates]
+work = 2.0
+class = 1.5
+study = 1.5
+social = 2.0
+meal = 1.0
+leisure = 1.0
+rest = 0.5
+sleep = 0.3
+
+# 單次事件：ab 是 a 對 b 的變化，ba 是 b 對 a 的變化
+[events.encounter]
+ab = 1.0
+ba = 1.0
+why = "偶遇聊天"
+
+[events.encounter_rivals]
+ab = -2.0
+ba = -2.0
+why = "偶遇，彼此是情敵"
+
+[events.stood_up]
+ab = -5.0
+ba = 0.0
+why = "他放我鴿子時和她在一起"
+
+[events.bluff_game]
+ab = 2.0
+ba = 2.0
+why = "一起玩吹牛"

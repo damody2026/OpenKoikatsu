@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "id": "apng-7b700a6420cf8c9ae5d80eed6e9a7b4e0d6db1cb2cf7daa3fb64716b4e880575",
+  "display_name": "安可",
+  "age_in_setting": 20,
+  "archetype": "G",
+  "personality_core": {
+    "catchphrase": "嗯……好像也不错。",
+    "pride": "对文字的品味和选书的眼光",
+    "fear": "被误解成冷漠或难相处的人",
+    "desire": "找到能一起安静看书、偶尔聊聊天的人"
+  },
+  "orientation": "Monogamous",
+  "material": "Romantic",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "",
+    "job_id": "",
+    "competence": 60,
+    "pride": 50
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "bookstore",
+    "cafe",
+    "library"
+  ],
+  "birthday": "1990-03-14",
+  "department": "afl",
+  "intelligence": 75,
+  "money": {
+    "cash": 500,
+    "bank": 2500,
+    "income": [
+      {
+        "source": "家里给的零用钱",
+        "amount": 1300,
+        "cycle": "monthly",
+        "payday": 1
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机月租费",
+        "amount": 99,
+        "due_day": 10
+      },
+      {
+        "name": "宿舍网络分摊",
+        "amount": 200,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "frugal",
+    "treat_pride": 40,
+    "expects_treat": 50,
+    "reciprocity": 50,
+    "saving_goals": [
+      {
+        "item": "一套二手《红楼梦》",
+        "amount": 800,
+        "why": "想收藏一套有几十年历史的版本"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "逛二手书店",
+      "老电影"
+    ],
+    "dislikes": [
+      "太吵的地方",
+      "油炸食物"
+    ],
+    "allergies": [
+      "花生"
+    ],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "去冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7,
+      14
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 40,
+    "jealousy_proneness": 40,
+    "possessiveness": 40,
+    "insecurity": 45,
+    "competitiveness": 30,
+    "self_esteem": 60,
+    "tsundere": 10,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 70,
+    "public_boldness": 30,
+    "charm_resistance": 60,
+    "money_resistance": 60
+  },
+  "bio": "安可是在台北公馆一带长大的女孩，目前就读台大外文系三年级。她喜欢在午后到茉莉书店翻翻二手书，或是在校园里找张长椅坐着读小说。外表看起来有点安静，但其实很随和，熟了之后话会变多。对流行文化有点兴趣，但更爱老电影和独立音乐。最近在考虑要不要去学校的咖啡馆打工，赚点零用钱。",
+  "source": "llm"
+}

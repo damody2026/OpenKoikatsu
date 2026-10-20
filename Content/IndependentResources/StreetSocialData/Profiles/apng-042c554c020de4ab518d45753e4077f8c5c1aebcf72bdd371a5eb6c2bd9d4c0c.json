@@ -1,0 +1,120 @@
+{
+  "schema": 1,
+  "id": "apng-042c554c020de4ab518d45753e4077f8c5c1aebcf72bdd371a5eb6c2bd9d4c0c",
+  "display_name": "小惠",
+  "age_in_setting": 20,
+  "archetype": "S",
+  "personality_core": {
+    "catchphrase": "真的假的？",
+    "pride": "对朋友很讲义气，从不说谎",
+    "fear": "一成不变、没有成长的生活",
+    "desire": "找到自己真正想做的事"
+  },
+  "orientation": "Monogamous",
+  "material": "Mixed",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "cafe",
+    "job_id": "cafe_pt",
+    "competence": 65,
+    "pride": 50
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "bookstore",
+    "drinkshop"
+  ],
+  "birthday": "1990-08-12",
+  "department": "afl",
+  "intelligence": 68,
+  "money": {
+    "cash": 500,
+    "bank": 12000,
+    "income": [
+      {
+        "source": "打工",
+        "amount": 4000,
+        "cycle": "monthly",
+        "payday": 1
+      },
+      {
+        "source": "家里零用钱",
+        "amount": 2000,
+        "cycle": "monthly",
+        "payday": 15
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机费",
+        "amount": 300,
+        "due_day": 10
+      },
+      {
+        "name": "宿舍房租",
+        "amount": 1500,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "normal",
+    "treat_pride": 45,
+    "expects_treat": 30,
+    "reciprocity": 55,
+    "saving_goals": [
+      {
+        "item": "去看夏日烟火大会的车票和住宿",
+        "amount": 3000,
+        "why": "想亲眼看最大的那一发烟火"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "bk_used_book",
+      "cf_latte"
+    ],
+    "dislikes": [
+      "香菜",
+      "苦瓜"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "少冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7,
+      12
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 40,
+    "jealousy_proneness": 40,
+    "possessiveness": 45,
+    "insecurity": 45,
+    "competitiveness": 40,
+    "self_esteem": 55,
+    "tsundere": 0,
+    "mask_axes": [],
+    "shyness": 50,
+    "public_boldness": 60,
+    "charm_resistance": 55,
+    "money_resistance": 50
+  },
+  "bio": "在公馆一带长大的台北女孩，目前就读台大外文系三年级。父母在公馆经营一家小面摊，从小就在街头巷尾帮忙，因此个性随和、很会跟人聊天。喜欢看书和逛二手书店，也爱跟朋友去喝珍奶。生活单纯，对未来还没有太具体的规划，觉得能开开心心过每一天就好。",
+  "source": "llm"
+}

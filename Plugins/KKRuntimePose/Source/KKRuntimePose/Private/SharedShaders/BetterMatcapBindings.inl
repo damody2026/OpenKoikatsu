@@ -1,0 +1,47 @@
+// Installed BetterMatcap: pass 0, blob 4, ['DIRECTIONAL']
+static const int32 GBetterMatcapCBSize[]={7,5,46,8,13,8,7};
+static const FOKAdditionalUniform GBetterMatcapUniforms[]={
+{TEXT("_LightColor0"),0,32,4,0,0},
+{TEXT("_alpha_a"),0,64,1,1,0},
+{TEXT("_AlphaMask_ST"),0,80,4,0,0},
+{TEXT("_alpha_b"),0,96,1,1,0},
+{TEXT("_Metallic"),0,100,1,0,0},
+{TEXT("_Smoothness"),0,104,1,0,0},
+{TEXT("_Cutoff"),0,108,1,0,0},
+{TEXT("_WorldSpaceCameraPos"),1,64,3,0,0},
+{TEXT("_WorldSpaceLightPos0"),2,0,4,0,0},
+{TEXT("unity_OcclusionMaskSelector"),2,720,4,0,0},
+{TEXT("unity_ObjectToWorld"),3,0,4,0,4},
+{TEXT("unity_WorldToObject"),3,64,4,0,4},
+{TEXT("unity_MatrixV"),4,144,4,0,4},
+{TEXT("unity_SpecCube0_BoxMax"),5,0,4,0,0},
+{TEXT("unity_SpecCube0_BoxMin"),5,16,4,0,0},
+{TEXT("unity_SpecCube0_ProbePosition"),5,32,4,0,0},
+{TEXT("unity_SpecCube0_HDR"),5,48,4,0,0},
+{TEXT("unity_SpecCube1_BoxMax"),5,64,4,0,0},
+{TEXT("unity_SpecCube1_BoxMin"),5,80,4,0,0},
+{TEXT("unity_SpecCube1_ProbePosition"),5,96,4,0,0},
+{TEXT("unity_SpecCube1_HDR"),5,112,4,0,0},
+{TEXT("unity_ProbeVolumeParams"),6,0,4,0,0},
+{TEXT("unity_ProbeVolumeSizeInv"),6,80,3,0,0},
+{TEXT("unity_ProbeVolumeMin"),6,96,3,0,0},
+{TEXT("unity_ProbeVolumeWorldToObject"),6,16,4,0,4},
+};
+static const FOKAdditionalTexture GBetterMatcapTextures[]={
+{TEXT("_AlphaMask"),0,2,2},
+{TEXT("_Matcap"),1,3,2},
+{TEXT("unity_SpecCube0"),2,0,4},
+{TEXT("unity_SpecCube1"),3,-1,4},
+{TEXT("unity_ProbeVolumeSH"),4,1,3},
+};
+static const FOKAdditionalProperty GBetterMatcapProperties[]={
+{TEXT("_Cutoff"),2,false,FLinearColor(0.5f,0.0f,0.0f,0.0f),TEXT("")},
+{TEXT("_alpha_a"),2,false,FLinearColor(1.0f,0.0f,0.0f,0.0f),TEXT("")},
+{TEXT("_alpha_b"),2,false,FLinearColor(1.0f,0.0f,0.0f,0.0f),TEXT("")},
+{TEXT("_Matcap"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("_AlphaMask"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("_Metallic"),3,false,FLinearColor(0.0f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_Smoothness"),3,false,FLinearColor(0.0f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_texcoord"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("__dirty"),2,false,FLinearColor(1.0f,0.0f,0.0f,0.0f),TEXT("")},
+};

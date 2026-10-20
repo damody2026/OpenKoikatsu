@@ -1,0 +1,24 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "OK Studio",
+  "Description": "Scene studio on OK cards and the OK base library: a shared object tree (folders, characters, items, lights, cameras) in .okscene files, spawned in any world, with an in-game and an Unreal editor UI.",
+  "Category": "OpenKoikatsu",
+  "CreatedBy": "OpenKoikatsu",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "SupportedTargetPlatforms": [ "Win64" ],
+  "Plugins": [
+    { "Name": "KKUnityBundle", "Enabled": true },
+    { "Name": "KKCard", "Enabled": true },
+    { "Name": "OKAnimation", "Enabled": true },
+    { "Name": "OKHGShading", "Enabled": true },
+    { "Name": "KKRuntimePose", "Enabled": true }
+  ],
+  "Modules": [
+    { "Name": "OKStudio", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "OKStudioEditor", "Type": "Editor", "LoadingPhase": "Default" }
+  ]
+}

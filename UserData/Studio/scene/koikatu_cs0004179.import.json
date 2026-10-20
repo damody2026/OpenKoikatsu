@@ -1,0 +1,18 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/Official/koikatu_cs0004179.png",
+	"version": "1.0.4.2",
+	"characters": 0,
+	"character_cards": 0,
+	"items": 1178,
+	"catalog_items": 1177,
+	"lights": 1,
+	"cameras": 0,
+	"folders": 597,
+	"routes": 0,
+	"texts": 0,
+	"map": 15,
+	"notes": [
+		"particle items become OK Niagara effects (1)",
+		"light intensities are converted approximately (1)"
+	]
+}

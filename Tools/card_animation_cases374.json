@@ -1,0 +1,18 @@
+[
+  {
+    "Id": "Male02",
+    "Card": "C:/portable/KoikatuSunshine/DefaultData/chara/male/ill_male_02.png",
+    "GameRoot": "C:/portable/OpenKoikatsu/Saved/NativeImportSources/89C279124EDF8E20DE5B0592EA695C70",
+    "Source": "studio/anime/00.unity3d",
+    "Clips": "mc_m_walk_00_00_01;m_tachi_00_02",
+    "Outfit": 0
+  },
+  {
+    "Id": "Female",
+    "Card": "C:/portable/KoikatuSunshine/UserData/chara/female/KK_398530.png",
+    "GameRoot": "C:/portable/OpenKoikatsu/Saved/NativeImportSources/617B75DC43FC1807EF87FFAA5F6B166A",
+    "Source": "studio/anime/00.unity3d",
+    "Clips": "f_aruki_00_00_01;f_tachi_00_00",
+    "Outfit": 0
+  }
+]

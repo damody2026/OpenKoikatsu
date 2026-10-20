@@ -1,0 +1,118 @@
+--- a/Engine/Source/Runtime/Engine/Private/SkeletalRender.cpp
++++ b/Engine/Source/Runtime/Engine/Private/SkeletalRender.cpp
+@@ -104,6 +104,40 @@
+ 		return Slot.Matrix;
+ 	}
+ };
++}
++
++
++// Exact temporal memoization of native CPU fallback palettes. GPU pose clocks
++// still publish revisions/history; this only avoids recomputing equal inputs.
++static TAutoConsoleVariable<int32> CVarFullRefMatrixCache(TEXT("r.SkeletalMesh.ReuseRefToLocalMatrices"), 0,
++ TEXT("0 native;1 bounded exact-input palette cache. Debug mapped-pose outputs bypass cache."), ECVF_RenderThreadSafe);
++static TAutoConsoleVariable<int32> CVarVerifyFullRefMatrixCache(TEXT("r.SkeletalMesh.VerifyRefToLocalMatrices"), 0,
++ TEXT("Independently recompute every full-palette cache hit and compare float32 bytes."), ECVF_RenderThreadSafe);
++static FThreadSafeCounter64 GFullRefHits, GFullRefMisses, GFullRefVerified, GFullRefMismatches;
++static TAtomic<bool> GFullRefFailed{false};
++ENGINE_API void GetSkeletalFullRefMatrixCacheStats(uint64& Hits,uint64& Misses,uint64& Verified,uint64& Mismatches,bool& Failed)
++{
++ Hits=GFullRefHits.GetValue();Misses=GFullRefMisses.GetValue();Verified=GFullRefVerified.GetValue();Mismatches=GFullRefMismatches.GetValue();Failed=GFullRefFailed.Load();
++}
++namespace {
++struct FFullRefMatrixMemo {
++ struct FEntry { TArray<uint8> Input;TArray<FMatrix44f> Output; };
++ TUniquePtr<FEntry> Slots[8192];TArray<uint8> Input;uint64 Bytes=0;
++};
++struct FFullRefInputCapture {
++ FFullRefMatrixMemo& Cache;const TArray<uint8>* Old;int32 Offset=0;bool Matched;
++ FFullRefInputCapture(FFullRefMatrixMemo& In,const TArray<uint8>* Previous):Cache(In),Old(Previous),Matched(Previous!=nullptr){Cache.Input.Reset();}
++ void Append(const void* Data,int32 Size){
++  if(Matched&&(int64(Offset)+Size>Old->Num()||(Size>0&&FMemory::Memcmp(Old->GetData()+Offset,Data,Size)!=0))){
++   if(Offset>0)Cache.Input.Append(Old->GetData(),Offset);Matched=false;
++  }
++  if(!Matched&&Size>0){const int32 Start=Cache.Input.AddUninitialized(Size);FMemory::Memcpy(Cache.Input.GetData()+Start,Data,Size);}Offset+=Size;
++ }
++ template<class T> void Array(TConstArrayView<T> Values){const int32 Count=Values.Num();Append(&Count,sizeof(Count));Append(Values.GetData(),Count*sizeof(T));}
++ void Transform(const FTransform& Value){const FQuat Rotation=Value.GetRotation();const FVector Translation=Value.GetTranslation(),Scale=Value.GetScale3D();Append(&Rotation,sizeof(Rotation));Append(&Translation,sizeof(Translation));Append(&Scale,sizeof(Scale));}
++ bool Finish(){if(Matched&&Offset!=Old->Num()){Cache.Input.Append(Old->GetData(),Offset);Matched=false;}return Matched;}
++};
++
+ }
+ 
+ /*-----------------------------------------------------------------------------
+@@ -471,7 +505,7 @@
+ Global functions
+ -----------------------------------------------------------------------------*/
+ 
+-void UpdateRefToLocalMatricesInner(
++static void ComputeRefToLocalMatricesNative(
+ 	const TArrayView<const FTransform> ComponentTransform,
+ 	const TArrayView<const uint8> BoneVisibilityStates,
+ 	TArray<FMatrix44f>& ReferenceToLocal,
+@@ -649,6 +683,65 @@
+ 		}
+ 	}
+ }
++
++void UpdateRefToLocalMatricesInner(
++ const TArrayView<const FTransform> ComponentTransform,const TArrayView<const uint8> BoneVisibilityStates,
++ TArray<FMatrix44f>& ReferenceToLocal,const FSkinnedMeshSceneProxyDynamicData& DynamicData,
++ const USkinnedAsset* SkinnedAsset,const FSkeletalMeshRenderData* RenderData,int32 LODIndex,
++ const TArray<FBoneIndexType>* ExtraRequiredBoneIndices,TArray<FTransform>* LeaderMapped)
++{
++ const auto Native=[&](TArray<FMatrix44f>& Out){ComputeRefToLocalMatricesNative(ComponentTransform,BoneVisibilityStates,Out,DynamicData,SkinnedAsset,RenderData,LODIndex,ExtraRequiredBoneIndices,LeaderMapped);};
++ if(CVarFullRefMatrixCache.GetValueOnAnyThread()!=1||GFullRefFailed.Load()||LeaderMapped||!RenderData->LODRenderData.IsValidIndex(LODIndex)){Native(ReferenceToLocal);return;}
++ TRACE_CPUPROFILER_EVENT_SCOPE(SkelMeshFullRefMatrixCache);
++ static thread_local TUniquePtr<FFullRefMatrixMemo> Memo;
++ if(!Memo)Memo=MakeUnique<FFullRefMatrixMemo>();
++ auto& C=*Memo;
++ const uint32 SlotIndex=HashCombineFast(PointerHash(SkinnedAsset),HashCombineFast(PointerHash(ComponentTransform.GetData()),uint32(LODIndex)))&8191;
++ auto& Slot=C.Slots[SlotIndex];FFullRefInputCapture Capture(C,Slot?&Slot->Input:nullptr);
++ const auto& Ref=SkinnedAsset->GetRefSkeleton();const auto& LOD=RenderData->LODRenderData[LODIndex];
++ const auto* Inverse=&SkinnedAsset->GetRefBasesInvMatrix();
++ if(DynamicData.GetRefPoseOverride()&&DynamicData.GetRefPoseOverride()->RefBasesInvMatrix.Num()==Inverse->Num())Inverse=&DynamicData.GetRefPoseOverride()->RefBasesInvMatrix;
++ const bool LeaderValid=DynamicData.HasLeaderPoseComponent()&&DynamicData.GetLeaderBoneMap().Num()==Ref.GetNum();
++ const bool SafeLeader=UE::Anim::bUseSafeMeshPoseIndices&&LeaderValid&&!DynamicData.GetLeaderValidMeshPoseTransforms()->IsEmpty();
++ const int32 SourceCount=ComponentTransform.Num(),VisibilityCount=BoneVisibilityStates.Num(),RefCount=Ref.GetNum(),InverseCount=Inverse->Num();
++ Capture.Append(&SourceCount,sizeof(SourceCount));Capture.Append(&VisibilityCount,sizeof(VisibilityCount));Capture.Append(&RefCount,sizeof(RefCount));Capture.Append(&InverseCount,sizeof(InverseCount));Capture.Append(&LeaderValid,sizeof(LeaderValid));Capture.Append(&SafeLeader,sizeof(SafeLeader));
++ const auto Gather=[&](const TArray<FBoneIndexType>& Bones){
++  Capture.Array<FBoneIndexType>(Bones);
++  for(int32 Bone:Bones){
++   if(!Inverse->IsValidIndex(Bone))continue;
++   Capture.Append(&(*Inverse)[Bone],sizeof(FMatrix44f));
++   const int32 Parent=Ref.GetParentIndex(Bone);Capture.Append(&Parent,sizeof(Parent));
++   const int32 Source=LeaderValid?DynamicData.GetLeaderBoneMap()[Bone]:Bone;
++   Capture.Append(&Source,sizeof(Source));
++   if(ComponentTransform.IsValidIndex(Source)){
++    Capture.Transform(ComponentTransform[Source]);
++    if(LeaderValid||VisibilityCount==SourceCount)Capture.Append(&BoneVisibilityStates[Source],sizeof(uint8));
++    if(SafeLeader){const bool Valid=(*DynamicData.GetLeaderValidMeshPoseTransforms())[Source];Capture.Append(&Valid,sizeof(Valid));if(!Valid)Capture.Transform(Ref.GetRefBonePose()[Bone]);}
++   }else if(LeaderValid){Capture.Transform(Ref.GetRefBonePose()[Bone]);}
++  }
++ };
++ Gather(LOD.ActiveBoneIndices);const bool HasExtra=ExtraRequiredBoneIndices!=nullptr;Capture.Append(&HasExtra,sizeof(HasExtra));if(HasExtra)Gather(*ExtraRequiredBoneIndices);
++ // Select by pointer, authorize only through exact native numeric dependencies.
++ if(Capture.Finish()){
++  GFullRefHits.Increment();
++  if(CVarVerifyFullRefMatrixCache.GetValueOnAnyThread()!=0){
++   GFullRefVerified.Increment();Native(ReferenceToLocal);
++   if(ReferenceToLocal.Num()!=Slot->Output.Num()||FMemory::Memcmp(ReferenceToLocal.GetData(),Slot->Output.GetData(),ReferenceToLocal.Num()*sizeof(FMatrix44f))!=0){GFullRefMismatches.Increment();GFullRefFailed.Store(true);}
++  }else{ReferenceToLocal=Slot->Output;}
++  return;
++ }
++ GFullRefMisses.Increment();Native(ReferenceToLocal);
++ const uint64 Payload=C.Input.GetAllocatedSize()+ReferenceToLocal.GetAllocatedSize();
++ constexpr uint64 MaxPayload=32ull*1024*1024;
++ // Never flush thousands of allocations on one hot-path miss. If the
++ // bounded working set is full, compute natively without admitting an entry.
++ const uint64 PreviousPayload=Slot?Slot->Input.GetAllocatedSize()+Slot->Output.GetAllocatedSize():0;
++ if(Payload>MaxPayload||C.Bytes-PreviousPayload+Payload>MaxPayload)return;
++ C.Bytes-=PreviousPayload;
++ Slot=MakeUnique<FFullRefMatrixMemo::FEntry>();
++ Slot->Input=C.Input;Slot->Output=ReferenceToLocal;C.Bytes+=Slot->Input.GetAllocatedSize()+Slot->Output.GetAllocatedSize();
++}
++
+ /**
+  * Utility function that fills in the array of ref-pose to local-space matrices using 
+  * the mesh component's updated space bases

@@ -1,0 +1,59 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "KKUnityBundle",
+	"Description": "Load converted Unity meshes into Unreal",
+	"Category": "OpenKoikatsu",
+	"CreatedBy": "OpenKoikatsu",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Plugins": [
+		{
+			"Name": "KKImportedAssets",
+			"Enabled": true
+		},
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "KKCard",
+			"Enabled": true
+		},
+		{
+			"Name": "KKSideloader",
+			"Enabled": true
+		},
+		{
+			"Name": "KKRuntimePose",
+			"Enabled": true
+		},
+		{
+			"Name": "KKCrowdGpuPacking",
+			"Enabled": true
+		},
+		{
+			"Name": "OKPhysXSecondary",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "KKUnityBundle",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "KKCardImporterEditor",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "OKModelEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}

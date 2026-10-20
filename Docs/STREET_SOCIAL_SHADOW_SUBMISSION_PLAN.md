@@ -1,0 +1,8 @@
+# Runtime shadow submission plan
+2026-10-07. Five-APNG StreetSocial is functionally complete; VSM marking overflow persists after verified conservative animation-envelope correction. Root will not alter hardware queue capacities, camera/shadow quality or character geometry.
+
+1. Grok examines runtime sections/material shadow compatibility and existing main/source/depth mesh layout. Build a general runtime shadow-only mesh with fewer opaque shadow sections if exact silhouette semantics can be preserved. Keep alpha-tested/transparent sections and shader vertex-displacement requirements intact; preserve all private bones/weights, accessory attachments, animation and facial deformation.
+2. Prepare plain section/index/weight data in background using existing runtime partitioning/palette limits, bounded memory; create Unreal objects on the game thread. No per-card Cook or card exceptions.
+3. Integrate one shadow-only GPU component per admitted character, sharing the existing private pose bank; it casts only under the existing near-camera policy. Main material/render sections stay intact; CPU/GPU toggle, stream install, bounds updates, teardown and 3-second appearance must remain correct.
+4. Add honest original/proxy shadow-section reporting and pure compatibility/mesh integrity tests. Root independently reviews, compiles and runs the five-NPC functional suite, then measures VSM warnings and mean/P95 frame times. If proxy cannot preserve semantics, return the exact blocker rather than merging incompatible materials.
+5. Publish CMD only after functional checks pass; log errors to STREET_SOCIAL_ERRORS.md. Full multi-angle visual acceptance remains a separate final step; do not claim warning resolution unless actual runtime evidence is clean.

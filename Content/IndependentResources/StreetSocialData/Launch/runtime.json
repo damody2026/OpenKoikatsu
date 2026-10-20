@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "note": "What StreetSocial.cmd needs to start, kept in Content so Saved/ can be wiped at any time. Paths are relative to the project root. The game executable and the optional patch are build outputs: when no Saved/StreetSocial/Build/*.stage exists the launcher rebuilds one with Tools/rebuild_street_social_runtime.lua.",
+  "catalogue": "Content/IndependentResources/StreetSocialData/RuntimeV5/catalogue.json",
+  "materials": "Content/IndependentResources/StreetSocialData/Launch/materials.json",
+  "roster": "Content/IndependentResources/StreetSocialData/Launch/heroines.json",
+  "male_card": "output/StreetSocialAPNG/Male01.png",
+  "patch": "Saved/StreetSocial/Build/StreetDisplay24HG.patch",
+  "render_quality": {"antialiasing_method": 1, "screen_percentage": 150}
+}

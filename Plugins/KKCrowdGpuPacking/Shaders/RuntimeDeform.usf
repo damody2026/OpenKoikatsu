@@ -1,0 +1,110 @@
+#include "/Plugin/KKCrowdGpuPacking/RuntimeDeformCommon.ush"
+struct FSource {float4 Position,Normal,Tangent,Weights;uint4 Bones;};
+struct FDraw {uint4 Binding;float4 Offset,SectionNormal,RestNormal;};
+StructuredBuffer<FSource> Sources;
+StructuredBuffer<FDraw> Draws;
+StructuredBuffer<float4> PaletteRows;
+RWStructuredBuffer<FOutput> Output;
+uint DrawCount;
+uint PaletteCount;
+uint FallbackSlot;
+uint HasPostSkinCorrection;
+uint NativeUnitySpace;
+float4 PostSkinRow0;
+float4 PostSkinRow1;
+float4 PostSkinRow2;
+
+float3 Transform(uint Bone,float3 V,float W){
+ uint I=Bone*3;float4 P=float4(V,W);
+ return float3(dot(PaletteRows[I],P),dot(PaletteRows[I+1],P),dot(PaletteRows[I+2],P));
+}
+float3 NativeNormal(float3 V){float L=length(V);return L>1.e-8?V/L:float3(0,0,1);}
+float3 PostTransform(float3 V,float W){float4 P=float4(V,W);return float3(dot(PostSkinRow0,P),dot(PostSkinRow1,P),dot(PostSkinRow2,P));}
+float3 PostNormal(float3 V){float3 Transformed=PostTransform(V,0);float L=length(Transformed);return L>1.e-8?Transformed/L:V;}
+float4 NormalMotion(float3 A,float3 B){
+ A=SafeNormal(A);B=SafeNormal(B);
+ if(all(abs(A)<=1.e-4)||all(abs(B)<=1.e-4))return float4(0,0,0,1);
+ float W=1+dot(A,B);float3 Axis;
+ // Unit-vector identity avoids cancellation near the engine's opposite-normal
+ // threshold: 1 + dot(A,B) = |A+B|^2 / 2.
+ if(W<1.e-4){float3 Sum=A+B;W=0.5*dot(Sum,Sum);}
+ if(W>=1.e-6)Axis=cross(A,B);
+ else {W=0;float3 Basis=(abs(A.x)>abs(A.y)&&abs(A.x)>abs(A.z))?float3(0,1,0):float3(-1,0,0);Axis=cross(A,Basis);}
+ return normalize(float4(Axis,W));
+}
+float3 Rotate(float4 Q,float3 V){float3 T=2*cross(Q.xyz,V);return V+Q.w*T+cross(Q.xyz,T);}
+FOutput EvaluateDeform(uint Index){
+ FDraw D=Draws[Index];FSource S=Sources[D.Binding.x];
+ float3 P=0,N=0,T=0;float Total=0;
+ [unroll]for(uint K=0;K<4;++K){
+  float W=S.Weights[K];uint B=S.Bones[K];if(abs(W)<1.e-6||B>=PaletteCount)continue;
+  P+=Transform(B,S.Position.xyz,1)*W;N+=Transform(B,S.Normal.xyz,0)*W;T+=Transform(B,S.Tangent.xyz,0)*W;Total+=W;
+ }
+ if(Total>1.e-5){P/=Total;N/=Total;T/=Total;}
+ else {P=Transform(FallbackSlot,S.Position.xyz,1);N=Transform(FallbackSlot,S.Normal.xyz,0);T=Transform(FallbackSlot,S.Tangent.xyz,0);}
+ N=NativeNormal(N);T=NativeNormal(T);
+ if(HasPostSkinCorrection!=0){P=PostTransform(P,1);N=PostNormal(N);T=PostNormal(T);}
+ // Keep both native normalization fallbacks in Unity space, including a
+ // collapsed post that retains the incoming vector. Convert only afterwards.
+ // Secondary draw offsets/rest normals already use component UE coordinates.
+ if(NativeUnitySpace!=0){P=float3(-P.x,P.z,P.y)*100;N=SafeNormal(float3(-N.x,N.z,N.y));T=SafeNormal(float3(-T.x,T.z,T.y));}
+ float4 Q=NormalMotion(D.RestNormal.xyz,N);
+ FOutput V;
+ V.Position=float4(P+Rotate(Q,D.Offset.xyz),1);
+ V.Normal=float4(D.Binding.y==0?N:Rotate(Q,D.SectionNormal.xyz),0);
+ V.Tangent=float4(T,S.Tangent.w);
+ return V;
+}
+[numthreads(64,1,1)]
+void MainCS(uint3 Id:SV_DispatchThreadID){
+ if(Id.x>=DrawCount)return;
+ Output[Id.x]=EvaluateDeform(Id.x);
+}
+
+StructuredBuffer<FOutput> Deformed;
+RWByteAddressBuffer PositionBytes;
+RWByteAddressBuffer TangentBytes;
+uint PackDrawCount;
+int3 QuantizeNormal(float3 V){return int3(clamp(floor(V*127+0.5),-128,127));}
+uint PackedNormal(int3 V,int W){return (uint(V.x)&255)|((uint(V.y)&255)<<8)|((uint(V.z)&255)<<16)|((uint(W)&255)<<24);}
+// Exact product of two unpacked normal floats. The nonzero values are normal
+// IEEE floats (magnitude >= 1/127); compare their 48-bit significand products
+// using 12-bit limbs, without requiring GPU doubles or fused multiply-add.
+uint4 NormalProduct(float A,float B){
+ uint U=asuint(A),V=asuint(B);
+ if((U&0x7fffffff)==0||(V&0x7fffffff)==0)return uint4(0,0,0,0);
+ uint M=(U&0x7fffff)|0x800000,N=(V&0x7fffff)|0x800000;
+ uint Low=(M&4095)*(N&4095),Middle=(M&4095)*(N>>12)+(M>>12)*(N&4095),High=(M>>12)*(N>>12);
+ uint Before=Low;Low+=Middle<<12;uint Carry=Low<Before?1:0;
+ Before=Low;Low+=High<<24;Carry+=Low<Before?1:0;
+ High=(Middle>>20)+(High>>8)+Carry;
+ uint Exponent=((U>>23)&255)+((V>>23)&255);
+ if((High&0x8000)==0){High=(High<<1)|(Low>>31);Low<<=1;Exponent-=1;}
+ return uint4(Low,High,Exponent,(U^V)&0x80000000);
+}
+bool NormalProductsEqual(float A,float B,float C,float D){return all(NormalProduct(A,B)==NormalProduct(C,D));}
+void WritePacked(uint Index,FOutput V){
+ int3 X=QuantizeNormal(V.Tangent.xyz),Z=QuantizeNormal(V.Normal.xyz);
+ // DynamicMeshVertex first quantizes X/Z, then StaticMeshVertexBuffer
+ // determines handedness from the resulting basis. Degenerate bases are +1.
+ int3 Cross=int3(Z.y*X.z-Z.z*X.y,Z.z*X.x-Z.x*X.z,Z.x*X.y-Z.y*X.x);
+ bool Nondegenerate=any(Cross!=0);
+ if(!Nondegenerate&&V.Tangent.w<0){
+  float3 XF=float3(X)*(1.0/127.0),ZF=float3(Z)*(1.0/127.0);
+  Nondegenerate=!NormalProductsEqual(XF.y,ZF.z,XF.z,ZF.y)
+   ||!NormalProductsEqual(XF.z,ZF.x,XF.x,ZF.z)||!NormalProductsEqual(XF.x,ZF.y,XF.y,ZF.x);
+ }
+ int Sign=(V.Tangent.w<0&&Nondegenerate)?-127:127;
+ PositionBytes.Store3(Index*12,asuint(V.Position.xyz));
+ TangentBytes.Store2(Index*8,uint2(PackedNormal(X,127),PackedNormal(Z,Sign)));
+}
+[numthreads(64,1,1)]
+void PackCS(uint3 Id:SV_DispatchThreadID){
+ if(Id.x>=PackDrawCount)return;
+ WritePacked(Id.x,Deformed[Id.x]);
+}
+[numthreads(64,1,1)]
+void DeformPackedCS(uint3 Id:SV_DispatchThreadID){
+ if(Id.x>=DrawCount)return;
+ WritePacked(Id.x,EvaluateDeform(Id.x));
+}

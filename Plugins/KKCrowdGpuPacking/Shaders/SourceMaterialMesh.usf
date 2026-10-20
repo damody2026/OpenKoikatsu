@@ -1,0 +1,42 @@
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Generated/Material.ush"
+#include "/Engine/Generated/VertexFactory.ush"
+
+struct FSourceMeshOutput {
+ FVertexFactoryInterpolantsVSToPS FactoryInterpolants;
+ INVARIANT_OUTPUT float4 Position : SV_POSITION;
+};
+#if VERTEXSHADER
+void MainVS(FVertexFactoryInput Input,out FSourceMeshOutput Output,out FStereoVSOutput StereoOutput){
+ StereoSetupVF(Input,StereoOutput);
+ FVertexFactoryIntermediates Intermediate=GetVertexFactoryIntermediates(Input);
+ float4 WorldPos=VertexFactoryGetWorldPosition(Input,Intermediate);
+ float3x3 TangentToLocal=VertexFactoryGetTangentToLocal(Input,Intermediate);
+ FMaterialVertexParameters Parameters=GetMaterialVertexParameters(Input,Intermediate,WorldPos.xyz,TangentToLocal);
+ // Match the engine depth/base-pass isolation. Flattening these expressions
+ // lets the optimizer reassociate skinning/WPO and causes self depth rejection.
+ {
+  WorldPos.xyz+=GetMaterialWorldPositionOffset(Parameters);
+  ApplyMaterialFirstPersonTransform(Parameters,WorldPos.xyz);
+ }
+ {
+  float4 RasterizedWorldPosition=VertexFactoryGetRasterizedWorldPosition(Input,Intermediate,WorldPos);
+  Output.Position=INVARIANT(mul(RasterizedWorldPosition,ResolvedView.TranslatedWorldToClip));
+ }
+ Output.FactoryInterpolants=VertexFactoryGetInterpolantsVSToPS(Input,Intermediate,Parameters);
+}
+#endif
+#if PIXELSHADER
+void MainPS(FSourceMeshOutput Input,in FStereoPSInput StereoInput OPTIONAL_IsFrontFace,out float4 Color:SV_Target0){
+ StereoSetupPS(StereoInput);
+ FMaterialPixelParameters Parameters=GetMaterialPixelParameters(Input.FactoryInterpolants,Input.Position);
+ FPixelMaterialInputs PixelInputs;
+ CalcMaterialParameters(Parameters,PixelInputs,Input.Position,bIsFrontFace);
+ // The shared native program evaluates once, including its original discard.
+ float3 Emissive=GetMaterialEmissive(PixelInputs);
+ #if MATERIALBLENDING_MASKED
+ clip(GetMaterialMask(PixelInputs));
+ #endif
+ Color=float4(Emissive*ResolvedView.PreExposure,GetMaterialOpacity(PixelInputs));
+}
+#endif

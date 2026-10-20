@@ -1,0 +1,20 @@
+[package]
+name = "ok-rules"
+version = "0.1.0"
+edition = "2021"
+description = "StreetSocial game rules (stateless: Unreal passes the facts, the rules return what changes), loaded in-process as ok_rules.dll"
+
+[lib]
+name = "ok_rules"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+zhconv = "0.4"
+
+[profile.release]
+debug = 1
+# Panics must unwind so every FFI entry can catch them; abort would take Unreal down with it.
+panic = "unwind"

@@ -1,0 +1,4696 @@
+{
+ "version": 2,
+ "currency": "CNY",
+ "places": {
+  "restaurant": {
+   "open": [
+    [
+     11,
+     22
+    ]
+   ]
+  },
+  "snack": {
+   "open": [
+    [
+     10,
+     22
+    ]
+   ]
+  },
+  "drinkshop": {
+   "open": [
+    [
+     10,
+     23
+    ]
+   ]
+  },
+  "cafe": {
+   "open": [
+    [
+     8,
+     22
+    ]
+   ],
+   "min_charge": 1
+  },
+  "conveni": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ],
+   "serve_s": 3
+  },
+  "cafeteria": {
+   "open": [
+    [
+     7,
+     19
+    ]
+   ],
+   "weekend_open": [
+    [
+     11,
+     14
+    ]
+   ]
+  },
+  "fruitshop": {
+   "open": [
+    [
+     9,
+     21
+    ]
+   ],
+   "serve_s": 3
+  },
+  "bookstore": {
+   "open": [
+    [
+     10,
+     22
+    ]
+   ]
+  },
+  "department": {
+   "open": [
+    [
+     11,
+     21.5
+    ]
+   ],
+   "service_floor10": 10
+  },
+  "petshop": {
+   "open": [
+    [
+     11,
+     21
+    ]
+   ]
+  },
+  "aquarium": {
+   "open": [
+    [
+     9,
+     18
+    ]
+   ],
+   "entry": 96,
+   "entry_student": 74
+  },
+  "hotel": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ],
+   "service": 10
+  },
+  "lodge": {
+   "open": [
+    [
+     10,
+     26
+    ]
+   ]
+  },
+  "minshuku": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ]
+  },
+  "onsen": {
+   "open": [
+    [
+     6,
+     24
+    ]
+   ],
+   "entry": 74
+  },
+  "library": {
+   "open": [
+    [
+     8,
+     21
+    ]
+   ],
+   "closed_weekdays": [
+    0
+   ]
+  },
+  "lecture": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "school": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "playground": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ]
+  },
+  "park": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ]
+  },
+  "shrine": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ]
+  },
+  "girls_dorm": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ],
+   "curfew": [
+    23,
+    6
+   ]
+  },
+  "boys_dorm": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ],
+   "curfew": [
+    23,
+    6
+   ]
+  },
+  "lottery": {
+   "open": [
+    [
+     9,
+     23
+    ]
+   ]
+  },
+  "campus_t1": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_rb": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_ib": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_t4": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_e1": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_ma": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_t2": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_ee": {
+   "open": [
+    [
+     7,
+     22
+    ]
+   ]
+  },
+  "campus_ad": {
+   "open": [
+    [
+     8,
+     17
+    ]
+   ]
+  },
+  "campus_gate": {
+   "open": [
+    [
+     0,
+     24
+    ]
+   ]
+  },
+  "campus_sports": {
+   "open": [
+    [
+     6,
+     22
+    ]
+   ]
+  }
+ },
+ "items": [
+  {
+   "id": "rest_porkcutlet",
+   "place": "restaurant",
+   "name": "日式豬排定食",
+   "category": "meal",
+   "price": {
+    "": 47
+   },
+   "season": null,
+   "tags": [
+    "hot",
+    "filling"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_teriyaki",
+   "place": "restaurant",
+   "name": "照燒雞腿排餐",
+   "category": "meal",
+   "price": {
+    "": 51
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_hamburg",
+   "place": "restaurant",
+   "name": "漢堡排定食",
+   "category": "meal",
+   "price": {
+    "": 49
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_omurice",
+   "place": "restaurant",
+   "name": "咖哩蛋包飯",
+   "category": "meal",
+   "price": {
+    "": 43
+   },
+   "season": null,
+   "tags": [
+    "hot",
+    "cute"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_carbonara",
+   "place": "restaurant",
+   "name": "奶油培根義大利麵",
+   "category": "meal",
+   "price": {
+    "": 47
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_seafood_pasta",
+   "place": "restaurant",
+   "name": "海鮮番茄義大利麵",
+   "category": "meal",
+   "price": {
+    "": 55
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_steak",
+   "place": "restaurant",
+   "name": "菲力牛排套餐",
+   "category": "meal",
+   "price": {
+    "": 100
+   },
+   "season": null,
+   "tags": [
+    "hot",
+    "luxury"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_caesar",
+   "place": "restaurant",
+   "name": "凱薩沙拉",
+   "category": "light",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [
+    "healthy",
+    "cold"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_corn_soup",
+   "place": "restaurant",
+   "name": "玉米濃湯",
+   "category": "light",
+   "price": {
+    "": 13
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_pumpkin_soup",
+   "place": "restaurant",
+   "name": "南瓜濃湯",
+   "category": "light",
+   "price": {
+    "": 15
+   },
+   "season": null,
+   "tags": [
+    "hot",
+    "healthy"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_fries",
+   "place": "restaurant",
+   "name": "薯條",
+   "category": "light",
+   "price": {
+    "": 17
+   },
+   "season": null,
+   "tags": [
+    "shareable"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_nuggets",
+   "place": "restaurant",
+   "name": "炸雞塊",
+   "category": "light",
+   "price": {
+    "": 26
+   },
+   "season": null,
+   "tags": [
+    "shareable"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_tiramisu",
+   "place": "restaurant",
+   "name": "提拉米蘇",
+   "category": "dessert",
+   "price": {
+    "": 26
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_pudding",
+   "place": "restaurant",
+   "name": "焦糖布丁",
+   "category": "dessert",
+   "price": {
+    "": 13
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cute"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_blacktea",
+   "place": "restaurant",
+   "name": "紅茶／綠茶",
+   "category": "drink",
+   "price": {
+    "": 9
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_oj",
+   "place": "restaurant",
+   "name": "柳橙汁",
+   "category": "drink",
+   "price": {
+    "": 15
+   },
+   "season": null,
+   "tags": [
+    "cold",
+    "healthy"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_coffee",
+   "place": "restaurant",
+   "name": "熱咖啡",
+   "category": "coffee",
+   "price": {
+    "": 17
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_couple_set",
+   "place": "restaurant",
+   "name": "包廂雙人套餐",
+   "category": "meal",
+   "price": {
+    "": 270
+   },
+   "season": null,
+   "tags": [
+    "romantic",
+    "luxury",
+    "shareable",
+    "for_two"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "rest_bbq_platter",
+   "place": "restaurant",
+   "name": "中秋烤肉拼盤（兩人份）",
+   "category": "meal",
+   "price": {
+    "": 58
+   },
+   "season": [
+    9
+   ],
+   "tags": [
+    "shareable",
+    "hot",
+    "for_two"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 15
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_waffle",
+   "place": "snack",
+   "name": "鬆餅",
+   "category": "dessert",
+   "price": {
+    "": 26
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "shareable"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_strawberry_cake",
+   "place": "snack",
+   "name": "草莓鮮奶油蛋糕",
+   "category": "dessert",
+   "price": {
+    "": 19
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cute"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_cheesecake",
+   "place": "snack",
+   "name": "重乳酪蛋糕",
+   "category": "dessert",
+   "price": {
+    "": 18
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_puff",
+   "place": "snack",
+   "name": "泡芙",
+   "category": "dessert",
+   "price": {
+    "": 10
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_yolk_pastry",
+   "place": "snack",
+   "name": "蛋黃酥",
+   "category": "dessert",
+   "price": {
+    "": 6
+   },
+   "season": [
+    9
+   ],
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_dorayaki",
+   "place": "snack",
+   "name": "銅鑼燒",
+   "category": "dessert",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_redbean_cake",
+   "place": "snack",
+   "name": "紅豆餅（2 個）",
+   "category": "dessert",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_egg_cake",
+   "place": "snack",
+   "name": "雞蛋糕（一袋）",
+   "category": "dessert",
+   "price": {
+    "": 9
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "shareable"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_douhua",
+   "place": "snack",
+   "name": "豆花",
+   "category": "dessert",
+   "price": {
+    "": 9
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "healthy"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_grass_jelly",
+   "place": "snack",
+   "name": "燒仙草",
+   "category": "dessert",
+   "price": {
+    "": 10
+   },
+   "season": [
+    11,
+    12,
+    1,
+    2,
+    3
+   ],
+   "tags": [
+    "sweet",
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_mango_ice",
+   "place": "snack",
+   "name": "芒果冰",
+   "category": "dessert",
+   "price": {
+    "": 26
+   },
+   "season": [
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "tags": [
+    "sweet",
+    "cold",
+    "shareable"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_shaved_ice",
+   "place": "snack",
+   "name": "八寶冰",
+   "category": "dessert",
+   "price": {
+    "": 15
+   },
+   "season": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tags": [
+    "sweet",
+    "cold",
+    "shareable"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_bubble_tea",
+   "place": "snack",
+   "name": "珍珠奶茶",
+   "category": "drink",
+   "price": {
+    "": 11
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cold"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_lemon_tea",
+   "place": "snack",
+   "name": "檸檬紅茶",
+   "category": "drink",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [
+    "cold"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_cocoa",
+   "place": "snack",
+   "name": "熱可可",
+   "category": "drink",
+   "price": {
+    "": 13
+   },
+   "season": [
+    10,
+    11,
+    12,
+    1,
+    2,
+    3,
+    4
+   ],
+   "tags": [
+    "sweet",
+    "hot"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "snk_bday_cake",
+   "place": "snack",
+   "name": "6 吋生日蛋糕（預訂，隔天取）",
+   "category": "gift",
+   "price": {
+    "": 96
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "romantic"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "snk_gift_box",
+   "place": "snack",
+   "name": "手工餅乾禮盒",
+   "category": "gift",
+   "price": {
+    "": 60
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "snk_mooncake_box",
+   "place": "snack",
+   "name": "中秋月餅禮盒",
+   "category": "gift",
+   "price": {
+    "": 68
+   },
+   "season": [
+    9
+   ],
+   "tags": [
+    "gift",
+    "shareable"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "dk_black",
+   "place": "drinkshop",
+   "name": "紅茶",
+   "category": "drink",
+   "price": {
+    "M": 4,
+    "L": 5
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_green",
+   "place": "drinkshop",
+   "name": "綠茶",
+   "category": "drink",
+   "price": {
+    "M": 4,
+    "L": 5
+   },
+   "season": null,
+   "tags": [
+    "healthy"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_oolong",
+   "place": "drinkshop",
+   "name": "烏龍青茶",
+   "category": "drink",
+   "price": {
+    "M": 5,
+    "L": 6
+   },
+   "season": null,
+   "tags": [
+    "healthy"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_milk_tea",
+   "place": "drinkshop",
+   "name": "奶茶",
+   "category": "drink",
+   "price": {
+    "M": 7,
+    "L": 10
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_pearl_milk",
+   "place": "drinkshop",
+   "name": "珍珠奶茶",
+   "category": "drink",
+   "price": {
+    "M": 9,
+    "L": 11
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_boba_green",
+   "place": "drinkshop",
+   "name": "波霸奶綠",
+   "category": "drink",
+   "price": {
+    "M": 10,
+    "L": 12
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_pudding_milk",
+   "place": "drinkshop",
+   "name": "布丁奶茶",
+   "category": "drink",
+   "price": {
+    "M": 11,
+    "L": 13
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cute"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_fresh_milk",
+   "place": "drinkshop",
+   "name": "鮮奶茶",
+   "category": "drink",
+   "price": {
+    "M": 12,
+    "L": 14
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_yakult_green",
+   "place": "drinkshop",
+   "name": "多多綠",
+   "category": "drink",
+   "price": {
+    "M": 9,
+    "L": 11
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_passion_green",
+   "place": "drinkshop",
+   "name": "百香綠",
+   "category": "drink",
+   "price": {
+    "M": 10,
+    "L": 12
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_lemon_green",
+   "place": "drinkshop",
+   "name": "檸檬綠",
+   "category": "drink",
+   "price": {
+    "M": 9,
+    "L": 11
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_wintermelon_lemon",
+   "place": "drinkshop",
+   "name": "冬瓜檸檬",
+   "category": "drink",
+   "price": {
+    "M": 9,
+    "L": 11
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_grapefruit_green",
+   "place": "drinkshop",
+   "name": "葡萄柚綠",
+   "category": "drink",
+   "price": {
+    "M": 12,
+    "L": 14
+   },
+   "season": null,
+   "tags": [
+    "healthy"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_mango_smoothie",
+   "place": "drinkshop",
+   "name": "芒果冰沙",
+   "category": "drink",
+   "price": {
+    "M": 13
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cold"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "dk_strawberry_smoothie",
+   "place": "drinkshop",
+   "name": "草莓冰沙",
+   "category": "drink",
+   "price": {
+    "M": 13
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cold",
+    "cute"
+   ],
+   "prop": "cup",
+   "options": [
+    "sweetness",
+    "ice",
+    "topping"
+   ],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_americano",
+   "place": "cafe",
+   "name": "美式咖啡",
+   "category": "coffee",
+   "price": {
+    "": 17
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_latte",
+   "place": "cafe",
+   "name": "拿鐵",
+   "category": "coffee",
+   "price": {
+    "": 23
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_cappuccino",
+   "place": "cafe",
+   "name": "卡布奇諾",
+   "category": "coffee",
+   "price": {
+    "": 23
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_caramel",
+   "place": "cafe",
+   "name": "焦糖瑪奇朵",
+   "category": "coffee",
+   "price": {
+    "": 28
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_mocha",
+   "place": "cafe",
+   "name": "摩卡",
+   "category": "coffee",
+   "price": {
+    "": 28
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_matcha_latte",
+   "place": "cafe",
+   "name": "抹茶拿鐵",
+   "category": "drink",
+   "price": {
+    "": 26
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_cocoa",
+   "place": "cafe",
+   "name": "熱可可",
+   "category": "drink",
+   "price": {
+    "": 21
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_earl_grey",
+   "place": "cafe",
+   "name": "伯爵茶",
+   "category": "drink",
+   "price": {
+    "": 21
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_fruit_tea",
+   "place": "cafe",
+   "name": "熱帶水果茶（壺）",
+   "category": "drink",
+   "price": {
+    "": 38
+   },
+   "season": null,
+   "tags": [
+    "shareable"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_tiramisu",
+   "place": "cafe",
+   "name": "提拉米蘇",
+   "category": "dessert",
+   "price": {
+    "": 28
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_lemon_tart",
+   "place": "cafe",
+   "name": "檸檬塔",
+   "category": "dessert",
+   "price": {
+    "": 23
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_scone",
+   "place": "cafe",
+   "name": "司康佐果醬",
+   "category": "light",
+   "price": {
+    "": 15
+   },
+   "season": null,
+   "tags": [],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_panini",
+   "place": "cafe",
+   "name": "帕尼尼",
+   "category": "meal",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [
+    "hot",
+    "filling"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cf_waffle",
+   "place": "cafe",
+   "name": "冰淇淋鬆餅",
+   "category": "dessert",
+   "price": {
+    "": 34
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "shareable"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_water",
+   "place": "conveni",
+   "name": "礦泉水",
+   "category": "drink",
+   "price": {
+    "": 4
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_tea",
+   "place": "conveni",
+   "name": "瓶裝茶",
+   "category": "drink",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_coffee",
+   "place": "conveni",
+   "name": "現煮咖啡",
+   "category": "coffee",
+   "price": {
+    "": 10
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "energy": 20,
+    "mood": 4
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_milk",
+   "place": "conveni",
+   "name": "鮮奶",
+   "category": "drink",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_yogurt",
+   "place": "conveni",
+   "name": "優酪乳",
+   "category": "drink",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [
+    "healthy"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_beer",
+   "place": "conveni",
+   "name": "啤酒",
+   "category": "alcohol",
+   "price": {
+    "": 10
+   },
+   "season": null,
+   "tags": [
+    "alcohol"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "mood": 10,
+    "energy": -5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_tea_egg",
+   "place": "conveni",
+   "name": "茶葉蛋",
+   "category": "light",
+   "price": {
+    "": 2
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_mooncake",
+   "place": "conveni",
+   "name": "月餅（單顆）",
+   "category": "dessert",
+   "price": {
+    "": 8
+   },
+   "season": [
+    9
+   ],
+   "tags": [
+    "sweet",
+    "shareable"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 12
+   },
+   "giftable": true,
+   "consumable": true
+  },
+  {
+   "id": "cv_oden",
+   "place": "conveni",
+   "name": "關東煮（一份）",
+   "category": "light",
+   "price": {
+    "": 13
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_hotdog",
+   "place": "conveni",
+   "name": "大亨堡",
+   "category": "light",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_onigiri",
+   "place": "conveni",
+   "name": "御飯糰",
+   "category": "light",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_bento",
+   "place": "conveni",
+   "name": "微波便當",
+   "category": "meal",
+   "price": {
+    "": 14
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_noodle",
+   "place": "conveni",
+   "name": "泡麵",
+   "category": "meal",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_chips",
+   "place": "conveni",
+   "name": "洋芋片",
+   "category": "dessert",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [
+    "shareable"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_choco",
+   "place": "conveni",
+   "name": "巧克力",
+   "category": "dessert",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "gift"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": true,
+   "consumable": true
+  },
+  {
+   "id": "cv_icebar",
+   "place": "conveni",
+   "name": "冰棒",
+   "category": "dessert",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "cold"
+   ],
+   "prop": "cone",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "cv_umbrella",
+   "place": "conveni",
+   "name": "雨傘",
+   "category": "goods",
+   "price": {
+    "": 21
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "cv_medicine",
+   "place": "conveni",
+   "name": "成藥、喉糖",
+   "category": "goods",
+   "price": {
+    "": 17
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "cv_magazine",
+   "place": "conveni",
+   "name": "雜誌",
+   "category": "goods",
+   "price": {
+    "": 17
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "cv_topup",
+   "place": "conveni",
+   "name": "手機儲值",
+   "category": "service",
+   "price": {
+    "": 64
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "cv_claw",
+   "place": "conveni",
+   "name": "娃娃機（一次）",
+   "category": "game",
+   "price": {
+    "": 2
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "fun": 10
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "caf_buffet",
+   "place": "cafeteria",
+   "name": "自助餐",
+   "category": "meal",
+   "price": {
+    "": 16
+   },
+   "season": null,
+   "tags": [
+    "filling"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_luroufan",
+   "place": "cafeteria",
+   "name": "滷肉飯",
+   "category": "meal",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_drumstick",
+   "place": "cafeteria",
+   "name": "雞腿飯",
+   "category": "meal",
+   "price": {
+    "": 16
+   },
+   "season": null,
+   "tags": [
+    "filling"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_porkchop",
+   "place": "cafeteria",
+   "name": "排骨飯",
+   "category": "meal",
+   "price": {
+    "": 15
+   },
+   "season": null,
+   "tags": [
+    "filling"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_beef_noodle",
+   "place": "cafeteria",
+   "name": "牛肉麵",
+   "category": "meal",
+   "price": {
+    "": 19
+   },
+   "season": null,
+   "tags": [
+    "hot",
+    "filling"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_plain_noodle",
+   "place": "cafeteria",
+   "name": "陽春麵",
+   "category": "meal",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_dumplings",
+   "place": "cafeteria",
+   "name": "水餃 10 顆",
+   "category": "meal",
+   "price": {
+    "": 11
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_soup",
+   "place": "cafeteria",
+   "name": "貢丸湯",
+   "category": "light",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "caf_blacktea",
+   "place": "cafeteria",
+   "name": "紅茶",
+   "category": "drink",
+   "price": {
+    "": 3
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_cut_box",
+   "place": "fruitshop",
+   "name": "綜合水果盒",
+   "category": "fruit",
+   "price": {
+    "S": 11,
+    "L": 17
+   },
+   "season": null,
+   "tags": [
+    "healthy",
+    "shareable"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 12,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_juice",
+   "place": "fruitshop",
+   "name": "現打果汁",
+   "category": "drink",
+   "price": {
+    "": 13
+   },
+   "season": null,
+   "tags": [
+    "healthy"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_watermelon",
+   "place": "fruitshop",
+   "name": "西瓜半顆",
+   "category": "fruit",
+   "price": {
+    "": 26
+   },
+   "season": [
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "tags": [
+    "shareable"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 12,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_mango",
+   "place": "fruitshop",
+   "name": "愛文芒果 3 顆",
+   "category": "fruit",
+   "price": {
+    "": 21
+   },
+   "season": [
+    5,
+    6,
+    7,
+    8
+   ],
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {
+    "satiety": 12,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_strawberry",
+   "place": "fruitshop",
+   "name": "大湖草莓一盒",
+   "category": "fruit",
+   "price": {
+    "": 32
+   },
+   "season": [
+    12,
+    1,
+    2,
+    3
+   ],
+   "tags": [
+    "cute",
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {
+    "satiety": 12,
+    "mood": 6
+   },
+   "giftable": true,
+   "consumable": true
+  },
+  {
+   "id": "fr_grape",
+   "place": "fruitshop",
+   "name": "巨峰葡萄一串",
+   "category": "fruit",
+   "price": {
+    "": 21
+   },
+   "season": [
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {
+    "satiety": 12,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_banana",
+   "place": "fruitshop",
+   "name": "香蕉一串",
+   "category": "fruit",
+   "price": {
+    "": 9
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {
+    "satiety": 12,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "fr_gift_box",
+   "place": "fruitshop",
+   "name": "水果禮盒",
+   "category": "gift",
+   "price": {
+    "S": 130,
+    "L": 255
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "dept_lipstick",
+   "place": "department",
+   "name": "口紅",
+   "category": "gift",
+   "price": {
+    "": 215
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "luxury"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 1
+  },
+  {
+   "id": "dept_perfume",
+   "place": "department",
+   "name": "香水",
+   "category": "gift",
+   "price": {
+    "": 530
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "luxury",
+    "romantic"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 1
+  },
+  {
+   "id": "dept_skincare",
+   "place": "department",
+   "name": "保養組",
+   "category": "gift",
+   "price": {
+    "": 385
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 1
+  },
+  {
+   "id": "dept_handcream",
+   "place": "department",
+   "name": "護手霜",
+   "category": "gift",
+   "price": {
+    "": 74
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 1
+  },
+  {
+   "id": "dept_top",
+   "place": "department",
+   "name": "女裝上衣",
+   "category": "gift",
+   "price": {
+    "": 145
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 2
+  },
+  {
+   "id": "dept_skirt",
+   "place": "department",
+   "name": "裙子",
+   "category": "gift",
+   "price": {
+    "": 210
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 2
+  },
+  {
+   "id": "dept_dress",
+   "place": "department",
+   "name": "洋裝",
+   "category": "gift",
+   "price": {
+    "": 420
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "cute"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 2
+  },
+  {
+   "id": "dept_coat",
+   "place": "department",
+   "name": "女裝外套",
+   "category": "gift",
+   "price": {
+    "": 635
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 2
+  },
+  {
+   "id": "dept_men_shirt",
+   "place": "department",
+   "name": "男裝襯衫",
+   "category": "goods",
+   "price": {
+    "": 210
+   },
+   "season": null,
+   "tags": [
+    "wear"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 3
+  },
+  {
+   "id": "dept_men_coat",
+   "place": "department",
+   "name": "男裝外套",
+   "category": "goods",
+   "price": {
+    "": 700
+   },
+   "season": null,
+   "tags": [
+    "wear"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 3
+  },
+  {
+   "id": "dept_sneakers",
+   "place": "department",
+   "name": "帆布鞋",
+   "category": "gift",
+   "price": {
+    "": 335
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_heels",
+   "place": "department",
+   "name": "高跟鞋",
+   "category": "gift",
+   "price": {
+    "": 570
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_wallet",
+   "place": "department",
+   "name": "錢包",
+   "category": "gift",
+   "price": {
+    "": 355
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_necklace",
+   "place": "department",
+   "name": "項鍊",
+   "category": "gift",
+   "price": {
+    "": 270
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "romantic"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_watch",
+   "place": "department",
+   "name": "手錶",
+   "category": "gift",
+   "price": {
+    "": 810
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "wear"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_bag",
+   "place": "department",
+   "name": "包包",
+   "category": "gift",
+   "price": {
+    "": 635
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_brand_bag",
+   "place": "department",
+   "name": "名牌包",
+   "category": "gift",
+   "price": {
+    "": 2700
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "luxury"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 4
+  },
+  {
+   "id": "dept_cushion",
+   "place": "department",
+   "name": "抱枕",
+   "category": "gift",
+   "price": {
+    "": 105
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "cute"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 5
+  },
+  {
+   "id": "dept_mug",
+   "place": "department",
+   "name": "馬克杯",
+   "category": "gift",
+   "price": {
+    "": 62
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 5
+  },
+  {
+   "id": "dept_candle",
+   "place": "department",
+   "name": "香氛蠟燭",
+   "category": "gift",
+   "price": {
+    "": 96
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "romantic"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 5
+  },
+  {
+   "id": "dept_iphone4",
+   "place": "department",
+   "name": "iPhone 4 16G",
+   "category": "goods",
+   "price": {
+    "": 4650
+   },
+   "season": null,
+   "tags": [
+    "luxury"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 7
+  },
+  {
+   "id": "dept_htc",
+   "place": "department",
+   "name": "HTC Desire",
+   "category": "goods",
+   "price": {
+    "": 3400
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 7
+  },
+  {
+   "id": "dept_camera",
+   "place": "department",
+   "name": "數位相機",
+   "category": "gift",
+   "price": {
+    "": 1900
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 7
+  },
+  {
+   "id": "dept_headphones",
+   "place": "department",
+   "name": "耳機",
+   "category": "gift",
+   "price": {
+    "": 275
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 7
+  },
+  {
+   "id": "dept_small_bear",
+   "place": "department",
+   "name": "小熊布偶",
+   "category": "gift",
+   "price": {
+    "": 83
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "cute"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 8
+  },
+  {
+   "id": "dept_big_bear",
+   "place": "department",
+   "name": "大熊布偶",
+   "category": "gift",
+   "price": {
+    "": 270
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "cute",
+    "romantic"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false,
+   "floor": 8
+  },
+  {
+   "id": "dept_ramen",
+   "place": "department",
+   "name": "豚骨拉麵",
+   "category": "meal",
+   "price": {
+    "": 38
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 9
+  },
+  {
+   "id": "dept_bibimbap",
+   "place": "department",
+   "name": "石鍋拌飯",
+   "category": "meal",
+   "price": {
+    "": 34
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "bowl",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 9
+  },
+  {
+   "id": "dept_curry",
+   "place": "department",
+   "name": "日式咖哩飯",
+   "category": "meal",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 9
+  },
+  {
+   "id": "dept_teppanyaki",
+   "place": "department",
+   "name": "鐵板燒",
+   "category": "meal",
+   "price": {
+    "": 47
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 9
+  },
+  {
+   "id": "dept_donut",
+   "place": "department",
+   "name": "甜甜圈",
+   "category": "dessert",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 9
+  },
+  {
+   "id": "dept_view_set",
+   "place": "department",
+   "name": "雙人景觀套餐（10F）",
+   "category": "meal",
+   "price": {
+    "": 510
+   },
+   "season": null,
+   "tags": [
+    "romantic",
+    "luxury",
+    "shareable",
+    "for_two"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 10
+  },
+  {
+   "id": "dept_view_steak",
+   "place": "department",
+   "name": "單點牛排（10F）",
+   "category": "meal",
+   "price": {
+    "": 210
+   },
+   "season": null,
+   "tags": [
+    "luxury"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 45,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 10
+  },
+  {
+   "id": "dept_view_wine",
+   "place": "department",
+   "name": "杯裝紅酒（10F）",
+   "category": "alcohol",
+   "price": {
+    "": 60
+   },
+   "season": null,
+   "tags": [
+    "alcohol",
+    "romantic"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "mood": 10,
+    "energy": -5
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 10
+  },
+  {
+   "id": "dept_view_coffee",
+   "place": "department",
+   "name": "熱咖啡（10F）",
+   "category": "drink",
+   "price": {
+    "": 38
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 10
+  },
+  {
+   "id": "dept_view_tea",
+   "place": "department",
+   "name": "熱紅茶（10F）",
+   "category": "drink",
+   "price": {
+    "": 34
+   },
+   "season": null,
+   "tags": [
+    "hot"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 10
+  },
+  {
+   "id": "dept_view_dessert",
+   "place": "department",
+   "name": "景觀甜點（10F）",
+   "category": "dessert",
+   "price": {
+    "": 47
+   },
+   "season": null,
+   "tags": [
+    "sweet",
+    "romantic"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true,
+   "floor": 10
+  },
+  {
+   "id": "hotel_room",
+   "place": "hotel",
+   "name": "景觀雙人房（一晚）",
+   "category": "stay",
+   "price": {
+    "": 1000
+   },
+   "season": null,
+   "tags": [
+    "romantic",
+    "luxury",
+    "for_two"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 60,
+    "hygiene": 20
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "hotel_rest",
+   "place": "hotel",
+   "name": "休息 3 小時",
+   "category": "stay",
+   "price": {
+    "": 385
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 60,
+    "hygiene": 20
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "hotel_spa",
+   "place": "hotel",
+   "name": "SPA 90 分",
+   "category": "spa",
+   "price": {
+    "": 595
+   },
+   "season": null,
+   "tags": [
+    "luxury"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 25,
+    "hygiene": 30,
+    "fun": 15,
+    "mood": 10
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "hotel_pool",
+   "place": "hotel",
+   "name": "泳池日券",
+   "category": "leisure",
+   "price": {
+    "": 105
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "fun": 30,
+    "mood": 8
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "hotel_cocktail",
+   "place": "hotel",
+   "name": "雞尾酒",
+   "category": "alcohol",
+   "price": {
+    "": 68
+   },
+   "season": null,
+   "tags": [
+    "alcohol",
+    "romantic"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "mood": 10,
+    "energy": -5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "hotel_beer",
+   "place": "hotel",
+   "name": "啤酒",
+   "category": "alcohol",
+   "price": {
+    "": 38
+   },
+   "season": null,
+   "tags": [
+    "alcohol"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 3,
+    "mood": 10,
+    "energy": -5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "hotel_mocktail",
+   "place": "hotel",
+   "name": "無酒精特調",
+   "category": "drink",
+   "price": {
+    "": 47
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "hotel_cheese",
+   "place": "hotel",
+   "name": "起司拼盤",
+   "category": "light",
+   "price": {
+    "": 81
+   },
+   "season": null,
+   "tags": [
+    "shareable"
+   ],
+   "prop": "plate",
+   "options": [],
+   "effects": {
+    "satiety": 20,
+    "mood": 5
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "lodge_rest",
+   "place": "lodge",
+   "name": "休息房 2 小時",
+   "category": "stay",
+   "price": {
+    "": 130
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 60,
+    "hygiene": 20
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "lodge_aroma",
+   "place": "lodge",
+   "name": "精油護理 60 分",
+   "category": "spa",
+   "price": {
+    "": 320
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 25,
+    "hygiene": 30,
+    "fun": 15,
+    "mood": 10
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "lodge_night",
+   "place": "lodge",
+   "name": "過夜",
+   "category": "stay",
+   "price": {
+    "": 255
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 60,
+    "hygiene": 20
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "inn_stay",
+   "place": "minshuku",
+   "name": "一泊二食（一房）",
+   "category": "stay",
+   "price": {
+    "": 510
+   },
+   "season": null,
+   "tags": [
+    "romantic"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 60,
+    "hygiene": 20
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "inn_matcha",
+   "place": "minshuku",
+   "name": "抹茶配和菓子",
+   "category": "dessert",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [
+    "sweet"
+   ],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 15,
+    "mood": 12
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "onsen_bath",
+   "place": "onsen",
+   "name": "入浴",
+   "category": "bath",
+   "price": {
+    "": 74
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 20,
+    "hygiene": 50,
+    "mood": 8
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "onsen_towel",
+   "place": "onsen",
+   "name": "浴巾租借",
+   "category": "service",
+   "price": {
+    "": 11
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "onsen_milk",
+   "place": "onsen",
+   "name": "瓶裝牛奶",
+   "category": "drink",
+   "price": {
+    "": 7
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "onsen_family",
+   "place": "onsen",
+   "name": "家族湯包場 50 分",
+   "category": "bath",
+   "price": {
+    "": 255
+   },
+   "season": null,
+   "tags": [
+    "romantic"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "energy": 20,
+    "hygiene": 50,
+    "mood": 8
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "aq_dolphin",
+   "place": "aquarium",
+   "name": "海豚布偶",
+   "category": "gift",
+   "price": {
+    "": 96
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "cute"
+   ],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "aq_keyring",
+   "place": "aquarium",
+   "name": "鑰匙圈",
+   "category": "gift",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "cute"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "pet_play",
+   "place": "petshop",
+   "name": "互動區 30 分",
+   "category": "leisure",
+   "price": {
+    "": 21
+   },
+   "season": null,
+   "tags": [
+    "cute"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "fun": 30,
+    "mood": 8
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "pet_treat",
+   "place": "petshop",
+   "name": "寵物零食",
+   "category": "goods",
+   "price": {
+    "": 11
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "pet_toy",
+   "place": "petshop",
+   "name": "逗貓棒",
+   "category": "goods",
+   "price": {
+    "": 17
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "shrine_fortune",
+   "place": "shrine",
+   "name": "抽籤",
+   "category": "game",
+   "price": {
+    "": 4
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "fun": 10
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "shrine_charm",
+   "place": "shrine",
+   "name": "御守",
+   "category": "gift",
+   "price": {
+    "": 43
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "shrine_ema",
+   "place": "shrine",
+   "name": "繪馬",
+   "category": "goods",
+   "price": {
+    "": 21
+   },
+   "season": null,
+   "tags": [
+    "romantic"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "park_fishfood",
+   "place": "park",
+   "name": "魚飼料",
+   "category": "game",
+   "price": {
+    "": 2
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {
+    "fun": 10
+   },
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "dorm_laundry",
+   "place": "boys_dorm",
+   "name": "洗衣",
+   "category": "service",
+   "price": {
+    "": 4
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "dorm_vending",
+   "place": "boys_dorm",
+   "name": "販賣機飲料",
+   "category": "drink",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "gdorm_vending",
+   "place": "girls_dorm",
+   "name": "販賣機飲料",
+   "category": "drink",
+   "price": {
+    "": 5
+   },
+   "season": null,
+   "tags": [],
+   "prop": "cup",
+   "options": [],
+   "effects": {
+    "satiety": 5,
+    "mood": 6
+   },
+   "giftable": false,
+   "consumable": true
+  },
+  {
+   "id": "bk_comic",
+   "place": "bookstore",
+   "name": "漫畫",
+   "category": "goods",
+   "price": {
+    "": 19
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "bk_magazine",
+   "place": "bookstore",
+   "name": "雜誌",
+   "category": "goods",
+   "price": {
+    "": 26
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "bk_novel",
+   "place": "bookstore",
+   "name": "小說",
+   "category": "gift",
+   "price": {
+    "": 60
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "bk_textbook",
+   "place": "bookstore",
+   "name": "考試參考書",
+   "category": "goods",
+   "price": {
+    "": 74
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "bk_notebook",
+   "place": "bookstore",
+   "name": "筆記本",
+   "category": "goods",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "bk_pen",
+   "place": "bookstore",
+   "name": "原子筆",
+   "category": "goods",
+   "price": {
+    "": 3
+   },
+   "season": null,
+   "tags": [],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false
+  },
+  {
+   "id": "bk_stationery",
+   "place": "bookstore",
+   "name": "文具組",
+   "category": "gift",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [
+    "gift"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  },
+  {
+   "id": "bk_postcard",
+   "place": "bookstore",
+   "name": "明信片",
+   "category": "gift",
+   "price": {
+    "": 4
+   },
+   "season": null,
+   "tags": [
+    "gift",
+    "romantic"
+   ],
+   "prop": "none",
+   "options": [],
+   "effects": {},
+   "giftable": true,
+   "consumable": false
+  }
+ ],
+ "jobs": [
+  {
+   "id": "conveni_clerk",
+   "place": "conveni",
+   "title": "店員",
+   "wage": 20,
+   "shifts": [
+    [
+     7,
+     15
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     23,
+     31
+    ]
+   ],
+   "stations": [
+    "counter",
+    "aisle"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "drinkshop_clerk",
+   "place": "drinkshop",
+   "title": "店員",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     17
+    ],
+    [
+     17,
+     23
+    ]
+   ],
+   "stations": [
+    "counter"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "cafe_barista",
+   "place": "cafe",
+   "title": "咖啡師",
+   "wage": 21,
+   "shifts": [
+    [
+     8,
+     14
+    ],
+    [
+     14,
+     22
+    ]
+   ],
+   "stations": [
+    "counter"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "cafe_floor",
+   "place": "cafe",
+   "title": "外場",
+   "wage": 21,
+   "shifts": [
+    [
+     8,
+     14
+    ],
+    [
+     14,
+     22
+    ]
+   ],
+   "stations": [
+    "seat",
+    "counter"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "restaurant_floor",
+   "place": "restaurant",
+   "title": "外場",
+   "wage": 21,
+   "shifts": [
+    [
+     11,
+     15
+    ],
+    [
+     17,
+     22
+    ]
+   ],
+   "stations": [
+    "table"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "restaurant_kitchen",
+   "place": "restaurant",
+   "title": "內場助手",
+   "wage": 21,
+   "shifts": [
+    [
+     11,
+     15
+    ],
+    [
+     17,
+     22
+    ]
+   ],
+   "stations": [
+    "table"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "snack_clerk",
+   "place": "snack",
+   "title": "店員",
+   "wage": 20,
+   "shifts": [
+    [
+     10,
+     16
+    ],
+    [
+     16,
+     22
+    ]
+   ],
+   "stations": [
+    "counter",
+    "table"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "cafeteria_worker",
+   "place": "cafeteria",
+   "title": "學餐工讀",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     14
+    ],
+    [
+     17,
+     19
+    ]
+   ],
+   "stations": [
+    "table"
+   ],
+   "student_only": true
+  },
+  {
+   "id": "fruit_clerk",
+   "place": "fruitshop",
+   "title": "店員",
+   "wage": 20,
+   "shifts": [
+    [
+     9,
+     15
+    ],
+    [
+     15,
+     21
+    ]
+   ],
+   "stations": [
+    "stand"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "bookstore_clerk",
+   "place": "bookstore",
+   "title": "店員",
+   "wage": 20,
+   "shifts": [
+    [
+     10,
+     16
+    ],
+    [
+     16,
+     22
+    ]
+   ],
+   "stations": [
+    "shelf"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "petshop_clerk",
+   "place": "petshop",
+   "title": "店員",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21
+    ]
+   ],
+   "stations": [
+    "pets"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_beauty",
+   "place": "department",
+   "title": "化妝品專櫃",
+   "wage": 22,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "beauty"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_women",
+   "place": "department",
+   "title": "女裝店員",
+   "wage": 21,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "mirror2"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_men",
+   "place": "department",
+   "title": "男裝店員",
+   "wage": 21,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "mirror3"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_shoes",
+   "place": "department",
+   "title": "鞋包店員",
+   "wage": 21,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "shoes"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_home",
+   "place": "department",
+   "title": "家居店員",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "sofa"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_books",
+   "place": "department",
+   "title": "書店店員",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "books"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_phones",
+   "place": "department",
+   "title": "電器店員",
+   "wage": 22,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "phones"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_toys",
+   "place": "department",
+   "title": "玩具店員",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     16
+    ],
+    [
+     16,
+     21.5
+    ]
+   ],
+   "stations": [
+    "bear"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_food",
+   "place": "department",
+   "title": "美食街店員",
+   "wage": 20,
+   "shifts": [
+    [
+     11,
+     15
+    ],
+    [
+     17,
+     21.5
+    ]
+   ],
+   "stations": [
+    "food"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "dept_view",
+   "place": "department",
+   "title": "景觀餐廳服務生",
+   "wage": 23,
+   "shifts": [
+    [
+     17,
+     21.5
+    ]
+   ],
+   "stations": [
+    "view"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "aquarium_staff",
+   "place": "aquarium",
+   "title": "售票、導覽",
+   "wage": 21,
+   "shifts": [
+    [
+     9,
+     14
+    ],
+    [
+     13,
+     18
+    ]
+   ],
+   "stations": [
+    "tank"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "hotel_front",
+   "place": "hotel",
+   "title": "櫃台",
+   "wage": 23,
+   "shifts": [
+    [
+     7,
+     15
+    ],
+    [
+     15,
+     23
+    ],
+    [
+     23,
+     31
+    ]
+   ],
+   "stations": [
+    "lobby"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "hotel_bar",
+   "place": "hotel",
+   "title": "酒吧服務生",
+   "wage": 26,
+   "shifts": [
+    [
+     18,
+     26
+    ]
+   ],
+   "stations": [
+    "bar"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "hotel_pool",
+   "place": "hotel",
+   "title": "泳池救生、服務",
+   "wage": 23,
+   "shifts": [
+    [
+     9,
+     18
+    ]
+   ],
+   "stations": [
+    "pool"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "hotel_spa",
+   "place": "hotel",
+   "title": "SPA 助理",
+   "wage": 26,
+   "shifts": [
+    [
+     12,
+     22
+    ]
+   ],
+   "stations": [
+    "lobby"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "lodge_front",
+   "place": "lodge",
+   "title": "會館櫃台",
+   "wage": 21,
+   "shifts": [
+    [
+     10,
+     18
+    ],
+    [
+     18,
+     26
+    ]
+   ],
+   "stations": [
+    "seat"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "inn_helper",
+   "place": "minshuku",
+   "title": "民宿幫手",
+   "wage": 20,
+   "shifts": [
+    [
+     7,
+     11
+    ],
+    [
+     15,
+     21
+    ]
+   ],
+   "stations": [
+    "seat"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "onsen_staff",
+   "place": "onsen",
+   "title": "溫泉櫃台",
+   "wage": 20,
+   "shifts": [
+    [
+     6,
+     14
+    ],
+    [
+     14,
+     24
+    ]
+   ],
+   "stations": [
+    "pool"
+   ],
+   "student_only": false
+  },
+  {
+   "id": "library_worker",
+   "place": "library",
+   "title": "圖書館工讀",
+   "wage": 20,
+   "shifts": [
+    [
+     8,
+     13
+    ],
+    [
+     13,
+     21
+    ]
+   ],
+   "stations": [
+    "shelf",
+    "seat"
+   ],
+   "student_only": true
+  },
+  {
+   "id": "campus_assistant",
+   "place": "school",
+   "title": "系辦工讀",
+   "wage": 20,
+   "shifts": [
+    [
+     9,
+     12
+    ],
+    [
+     13,
+     17
+    ]
+   ],
+   "stations": [
+    "seat"
+   ],
+   "student_only": true
+  },
+  {
+   "id": "lottery_clerk",
+   "place": "lottery",
+   "title": "彩券行店員",
+   "wage": 20,
+   "shifts": [
+    [
+     9,
+     16
+    ],
+    [
+     16,
+     23
+    ]
+   ],
+   "stations": [
+    "counter"
+   ],
+   "student_only": false
+  }
+ ]
+}

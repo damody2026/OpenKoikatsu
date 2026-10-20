@@ -1,0 +1,18 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/ill_ss_sample_03.png",
+	"version": "1.1.2.1",
+	"characters": 5,
+	"character_cards": 5,
+	"items": 9,
+	"catalog_items": 4,
+	"lights": 0,
+	"cameras": 0,
+	"folders": 0,
+	"routes": 0,
+	"texts": 0,
+	"map": 70,
+	"notes": [
+		"objects on accessory slots are parented to the character (2)",
+		"particle items become OK Niagara effects (5)"
+	]
+}

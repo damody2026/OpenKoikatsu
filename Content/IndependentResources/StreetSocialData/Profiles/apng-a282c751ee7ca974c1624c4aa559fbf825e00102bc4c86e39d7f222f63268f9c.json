@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "id": "apng-a282c751ee7ca974c1624c4aa559fbf825e00102bc4c86e39d7f222f63268f9c",
+  "display_name": "早濑优香",
+  "age_in_setting": 20,
+  "archetype": "S",
+  "personality_core": {
+    "catchphrase": "慢慢来，比较快。",
+    "pride": "答应别人的事情一定会做到。",
+    "fear": "因为太过犹豫而错过重要的人或机会。",
+    "desire": "在忙碌的课业之余，拥有属于自己的小小悠闲时光。"
+  },
+  "orientation": "Monogamous",
+  "material": "Romantic",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "campus_t2",
+    "job_id": "campus_parttime",
+    "competence": 70,
+    "pride": 65
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "library",
+    "bookstore",
+    "drinkshop"
+  ],
+  "birthday": "1990-11-03",
+  "department": "csie",
+  "intelligence": 78,
+  "money": {
+    "cash": 450,
+    "bank": 3200,
+    "income": [
+      {
+        "source": "家里给的零用钱",
+        "amount": 1500,
+        "cycle": "monthly",
+        "payday": 1
+      },
+      {
+        "source": "系上工读",
+        "amount": 500,
+        "cycle": "monthly",
+        "payday": 15
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机月租费",
+        "amount": 99,
+        "due_day": 10
+      },
+      {
+        "name": "宿舍杂支分摊",
+        "amount": 300,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "normal",
+    "treat_pride": 45,
+    "expects_treat": 30,
+    "reciprocity": 55,
+    "saving_goals": [
+      {
+        "item": "一台新的工程计算机",
+        "amount": 1200,
+        "why": "旧的按键快坏了，算账要快又准"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "书店里便宜的二手小说",
+      "小动物"
+    ],
+    "dislikes": [
+      "太油腻的食物",
+      "苦瓜"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "去冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 0,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 30,
+    "jealousy_proneness": 35,
+    "possessiveness": 40,
+    "insecurity": 45,
+    "competitiveness": 40,
+    "self_esteem": 60,
+    "tsundere": 10,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 65,
+    "public_boldness": 35,
+    "charm_resistance": 55,
+    "money_resistance": 60
+  },
+  "bio": "在公馆一带的大学城里长大的女孩，目前就读台大资工系三年级。个性温和有礼，初次见面时有点慢熟，但熟悉后会展现出喜欢照顾人的一面。平时喜欢在校园和街区之间闲晃，对于手摇饮和甜点毫无抵抗力。虽然课业不轻，但她把生活安排得井井有条，偶尔会去二手书店挖宝。",
+  "source": "llm"
+}

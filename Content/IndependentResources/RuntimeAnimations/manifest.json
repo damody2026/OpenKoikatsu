@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "clips": [
+    {
+      "id": "studio/anime/00.unity3d|f_tachi_00_02",
+      "file": "idle_02.okanim",
+      "sha256": "762a5616b0832ab4b4e4d5835828b8857e55cd5384e03b788217b8e85ff9859c",
+      "duration_seconds": 5.0
+    },
+    {
+      "id": "studio/anime/00.unity3d|f_aruki_00_00_01",
+      "file": "walk_01.okanim",
+      "sha256": "a98180071cd5e6ef10e79d985016ae9bfd2933d1d36a97b81ff878ae34a1bdf4",
+      "duration_seconds": 2.066666841506958
+    }
+  ],
+  "purpose": "Common authored animation input; each APNG generates its own private pose data at runtime."
+}

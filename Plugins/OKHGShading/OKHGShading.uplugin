@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1",
+  "FriendlyName": "OK HG Shading",
+  "Description": "HG toon render style: relights the Koikatsu runtime material families (ramp shadow, rim, hair anisotropy) and owns the ok.RenderStyle switch.",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "Modules": [
+    {
+      "Name": "OKHGShading",
+      "Type": "Runtime",
+      "LoadingPhase": "PostConfigInit"
+    }
+  ],
+  "Plugins": [
+    {"Name": "KKRuntimePose", "Enabled": true}
+  ]
+}

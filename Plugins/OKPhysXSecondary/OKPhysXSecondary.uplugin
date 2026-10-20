@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "OK PhysX Secondary Dynamics",
+  "Description": "Drives Koikatsu DynamicBone chains (hair, breasts, skirts, accessories) with PhysX 5.11 rigid bodies, spring drives and distance joints instead of the built-in Verlet solver.",
+  "Category": "Physics",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "SupportedTargetPlatforms": [ "Win64" ],
+  "Plugins": [
+    { "Name": "KawaiiPhysics", "Enabled": true }
+  ],
+  "Modules": [
+    { "Name": "OKPhysXSecondary", "Type": "Runtime", "LoadingPhase": "PostConfigInit" }
+  ]
+}

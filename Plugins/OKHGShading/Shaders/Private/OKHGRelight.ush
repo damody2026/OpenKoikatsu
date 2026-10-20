@@ -1,0 +1,53 @@
+// HG relight. Statements, not functions: PrepareRuntimeSharedMaterial -HGShading
+// inlines this right before the family program returns o0 (so this file must
+// never contain that return statement itself).
+//
+// In scope there:
+//   o0               float4  the Koikatsu program's result, self-shadow removed
+//                            (the binder runs it with EnableShadows off)
+//   Normal, Tangent, Bitangent, Position, CameraPosition   UE world space, cm
+//   FaceSign         two-sided sign
+//   HGLightUnity     float3  _WorldSpaceLightPos0 (Unity space) or the default key
+//   HGSkin, HGHair   float   surface class constants of this parent
+//   HGPremultiplied  float   1 when o0.rgb is premultiplied (AlphaComposite)
+//   HG_*             the __OK_HG_* material parameters (OKHGParameters)
+//
+// Own formulas, not taken from any game: half-Lambert into a narrow smoothstep
+// (two tones), a tinted shadow instead of a darkened one, a light-side Fresnel
+// rim, and a Kajiya-Kay band on hair. Faces lean their normal toward the
+// character's forward axis so the nose and cheeks do not cut patchy shadows.
+if(HG_Enable>.5)
+{
+ float3 hg_N=normalize(Normal)*(FaceSign<0?-1.0:1.0);
+ const float3 hg_V=normalize(CameraPosition-Position);
+ // Unity (x,y,z) is UE (-x,z,y). The street feeds most families a fixed key
+ // and skin a light from the camera (fully lit, no terminator), so by default
+ // HG uses its own key held relative to the view: HG_KeyDir is (right, up,
+ // toward the camera), the usual toon framing that reads the same from any side.
+ float3 hg_L=normalize(float3(-HGLightUnity.x,HGLightUnity.z,HGLightUnity.y)+float3(0,0,1e-5));
+ if(HG_ViewKey>.5)hg_L=normalize(ResolvedView.ViewRight*HG_KeyDir.x+ResolvedView.ViewUp*HG_KeyDir.y-ResolvedView.ViewForward*HG_KeyDir.z+float3(0,0,1e-5));
+ if(HGSkin>.5&&HG_Face>.5)
+ {
+  // Unity +Z (the character's front) is local UE +Y.
+  const float3 hg_F=normalize(DFMultiplyVector(float3(0,1,0),GetLocalToWorldDF(Parameters)));
+  hg_N=normalize(lerp(hg_N,hg_F,saturate(HG_FaceFlatten)));
+ }
+ const float hg_half=dot(hg_N,hg_L)*.5+.5;
+ const float hg_lit=smoothstep(HG_ShadowThreshold-HG_ShadowSoftness,HG_ShadowThreshold+HG_ShadowSoftness,hg_half);
+ const float3 hg_tint=HGSkin>.5?HG_SkinShadowTint.rgb:HG_ShadowTint.rgb;
+ const float3 hg_base=o0.rgb;
+ float3 hg_add=0;
+ // Rim on the lit side and a little past the terminator.
+ const float hg_fres=pow(saturate(1-saturate(dot(hg_N,hg_V))),max(HG_RimPower,.5));
+ hg_add+=hg_fres*HG_RimStrength*saturate(hg_half*1.6-.3)*HG_RimColor.rgb*(hg_base*.55+.45);
+ if(HGHair>.5)
+ {
+  const float3 hg_T=normalize(normalize(Bitangent)+hg_N*HG_HairShift);
+  const float3 hg_H=normalize(hg_L+hg_V);
+  const float hg_th=dot(hg_T,hg_H);
+  const float hg_band=pow(sqrt(saturate(1-hg_th*hg_th)),max(HG_HairSpecPower,1));
+  hg_add+=hg_band*HG_HairSpec*hg_lit*(hg_base*.6+.4);
+ }
+ if(HGPremultiplied>.5)hg_add*=saturate(o0.a);
+ o0.rgb=hg_base*lerp(hg_tint,1,hg_lit)+hg_add;
+}

@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "cycle_seconds": 3.3333334922790527,
+  "source_path_ids": {
+    "male_throw": -6848927244226674305,
+    "male_receive": 8394969697529558644,
+    "female_throw": 5863301320968985774,
+    "female_receive": 3247649526348432186
+  },
+  "card_specific": false,
+  "runtime_private_pose_required": true,
+  "male_throw": "splash_male_throw.okanim",
+  "male_receive": "splash_male_receive.okanim",
+  "female_throw": "splash_female_throw.okanim",
+  "female_receive": "splash_female_receive.okanim",
+  "actions": [
+    {
+      "id": "splash_male_throw.okanim",
+      "file": "splash_male_throw.okanim",
+      "source": "studio/anime/00.unity3d|m_action_02",
+      "loop": true,
+      "sha256": "607b500948a181b23b927f2154876a5203d7170378e0accdaaa1d48197cc9067",
+      "bytes": 353555,
+      "source_sha256": "8eb1757c8b7a565a16a0e1b5415599472cd718bcdd7a7378b23c394d1e8a1377"
+    },
+    {
+      "id": "splash_male_receive.okanim",
+      "file": "splash_male_receive.okanim",
+      "source": "studio/anime/00.unity3d|m_action_03",
+      "loop": true,
+      "sha256": "e4d477c7d691e15f006096b42ebbbe3a3593e58de1f7f924da05543e8dbab321",
+      "bytes": 337623,
+      "source_sha256": "8eb1757c8b7a565a16a0e1b5415599472cd718bcdd7a7378b23c394d1e8a1377"
+    },
+    {
+      "id": "splash_female_throw.okanim",
+      "file": "splash_female_throw.okanim",
+      "source": "studio/anime/00.unity3d|f_action_00 [summer]",
+      "loop": true,
+      "sha256": "f9fcf3e9a159ff86a9a74262f0b51489e46abdced5d8ae17a0a895bbb95c5cd1",
+      "bytes": 385443,
+      "source_sha256": "8eb1757c8b7a565a16a0e1b5415599472cd718bcdd7a7378b23c394d1e8a1377"
+    },
+    {
+      "id": "splash_female_receive.okanim",
+      "file": "splash_female_receive.okanim",
+      "source": "studio/anime/00.unity3d|f_action_01 [summer]",
+      "loop": true,
+      "sha256": "9fc1c20c2d820b3403bb1b7c634e4eafc60015788c00234249022d373b6b3b8a",
+      "bytes": 388523,
+      "source_sha256": "8eb1757c8b7a565a16a0e1b5415599472cd718bcdd7a7378b23c394d1e8a1377"
+    }
+  ],
+  "provenance": "Studio Anime_06_11_10 original male/female water throw and receive curves; private APNG poses prepared at runtime. Authored interaction placement/effect timing, not a complete original invitation event."
+}

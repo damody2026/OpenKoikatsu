@@ -1,0 +1,17 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/ill_ss_sample_01.png",
+	"version": "1.1.2.1",
+	"characters": 3,
+	"character_cards": 3,
+	"items": 27,
+	"catalog_items": 24,
+	"lights": 0,
+	"cameras": 0,
+	"folders": 1,
+	"routes": 0,
+	"texts": 0,
+	"map": 62,
+	"notes": [
+		"particle items become OK Niagara effects (3)"
+	]
+}

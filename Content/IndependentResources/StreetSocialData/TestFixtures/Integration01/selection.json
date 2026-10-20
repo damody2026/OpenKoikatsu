@@ -1,0 +1,101 @@
+{
+  "cards": [
+    "C:\\portable\\OpenKoikatsu\\output\\StreetSocialAPNG\\Male01.png",
+    "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C000.png",
+    "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C019.png",
+    "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C044.png",
+    "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C022.png",
+    "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C068.png"
+  ],
+  "characters": [
+    {
+      "id": "apng-2ba8ef039fb0f2f3254a0135e54f97ba77ff3ba1a8d686781eb59f5fd40d8ff1",
+      "path": "C:\\portable\\OpenKoikatsu\\output\\StreetSocialAPNG\\Male01.png",
+      "name": "柏木 壮亮",
+      "personality": 0,
+      "sex": 0,
+      "voice_rate": 0.5
+    },
+    {
+      "id": "apng-5cc2803291465fe9d5ab68cff110f8d436a9c45b8c7a7905db7a66f8bf6fae3f",
+      "path": "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C000.png",
+      "name": "fin 爱莉希雅1.1",
+      "personality": 0,
+      "sex": 1,
+      "voice_rate": 0.7032248973846436
+    },
+    {
+      "id": "apng-3bbb232f1ae4ef420d22053d18fcf5fa7118a2e802ba85e700ad03736f06932b",
+      "path": "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C019.png",
+      "name": "九十九 過子",
+      "personality": 18,
+      "sex": 1,
+      "voice_rate": 0.8529032468795776
+    },
+    {
+      "id": "apng-ba493e6455719e37c063a64a25b3f015cbb1388c37d73aa7b19154b87bf3cd2a",
+      "path": "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C044.png",
+      "name": "C044",
+      "personality": 17,
+      "sex": 1,
+      "voice_rate": 0.38736778497695923
+    },
+    {
+      "id": "apng-689f7ebe9cafa74a9ee9396ef512b016fd6bd4eb99b956cd0f7aa210c754eb0a",
+      "path": "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C022.png",
+      "name": "凶鳥 狂死香",
+      "personality": 27,
+      "sex": 1,
+      "voice_rate": 0.3974190652370453
+    },
+    {
+      "id": "apng-a5da77cf339016175b8300ba77e0e6dc989918c7f749e35c880e3d326954f7f4",
+      "path": "C:\\portable\\OpenKoikatsu\\output\\CrowdAPNG\\C068.png",
+      "name": "Hishiro Chizuru",
+      "personality": 37,
+      "sex": 1,
+      "voice_rate": -0.30000001192092896
+    }
+  ],
+  "curves": [
+    "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\RuntimeAnimations\\idle_02.okanim",
+    "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\RuntimeAnimations\\walk_01.okanim"
+  ],
+  "actions": [
+    {
+      "curve": "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\RuntimeAnimations\\talk_gesture_00.okanim",
+      "loop": false
+    },
+    {
+      "curve": "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\RuntimeAnimations\\talk_gesture_03.okanim",
+      "loop": false
+    },
+    {
+      "curve": "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\RuntimeAnimations\\talk_gesture_07.okanim",
+      "loop": false
+    },
+    {
+      "curve": "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\RuntimeAnimations\\talk_gesture_12.okanim",
+      "loop": false
+    }
+  ],
+  "material_root": "/Game/IndependentResources/RuntimeMaterials/R1145",
+  "material_library": "RuntimeMaterialBake",
+  "external_control": true,
+  "dialogue_catalogue": "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\StreetSocialData\\TestFixtures\\Integration01\\dialogue.runtime.json",
+  "voice_root": "C:\\portable\\OpenKoikatsu\\Content\\IndependentResources\\StreetSocialData\\zh_ogg",
+  "save_path": "C:\\portable\\OpenKoikatsu\\Saved\\StreetSocial\\relationships.json",
+  "social_report": "C:\\portable\\OpenKoikatsu\\Saved\\StreetSocial\\Integration01\\social.validation.json",
+  "report": "C:\\portable\\OpenKoikatsu\\Saved\\StreetSocial\\Integration01\\runtime.json",
+  "progressive_loading": true,
+  "loading_cpu_preview": false,
+  "parallel_loading_poses": true,
+  "auto_blink": true,
+  "auto_action_streaming": false,
+  "npc_action_preload_count": 0,
+  "background_prepare_concurrency": 8,
+  "diagnostic_load_deadline_seconds": 180,
+  "profile_seconds": 0,
+  "exit_after_report": false,
+  "depth_prepass_enabled": true
+}

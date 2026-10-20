@@ -1,0 +1,2 @@
+1	UNMEMOIZED ParsedBundle::with_serialized 5: <ok_extract::unity::ParsedBundle>::prefab_directory_unity <- 7: <ok_extract::unity::ParsedBundle>::prefab_directory <- 8: <ok_extract::unity::ParsedBundle>::contains_prefab <- 9: ok_extract::accessory_bundle_shared <- 10: ok_extract::accessory_bundle_shared
+1	prefab_directory ae7b25000000000084ed435d4f4b4331 

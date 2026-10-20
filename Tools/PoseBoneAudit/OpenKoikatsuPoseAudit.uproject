@@ -1,0 +1,1 @@
+{"FileVersion":3,"DisableEnginePluginsByDefault":true,"Modules":[{"Name":"PoseBoneAudit","Type":"Editor","LoadingPhase":"Default"}],"Plugins":[{"Name":"KKImportedAssets","Enabled":true},{"Name":"ACLPlugin","Enabled":true},{"Name":"AnimationData","Enabled":true},{"Name":"ControlRig","Enabled":true}]}

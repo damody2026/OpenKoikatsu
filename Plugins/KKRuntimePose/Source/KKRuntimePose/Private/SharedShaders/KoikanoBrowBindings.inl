@@ -1,0 +1,33 @@
+// Installed Koikano/main_eyeb: pass 0, blob 8, ['DIRECTIONAL']
+static const int32 GKoikanoBrowCBSize[]={9,47,7};
+static const FOKAdditionalUniform GKoikanoBrowUniforms[]={
+{TEXT("_LightColor0"),0,32,4,0,0},
+{TEXT("_MainTex_ST"),0,64,4,0,0},
+{TEXT("_Color"),0,80,4,0,0},
+{TEXT("_shadowcolor"),0,96,4,0,0},
+{TEXT("_ambientshadowG"),0,112,4,0,0},
+{TEXT("_KanoVerShift"),0,128,1,0,0},
+{TEXT("_Cutoff"),0,132,1,0,0},
+{TEXT("_WorldSpaceLightPos0"),1,0,4,0,0},
+{TEXT("unity_SHAr"),1,624,4,0,0},
+{TEXT("unity_SHAg"),1,640,4,0,0},
+{TEXT("unity_SHAb"),1,656,4,0,0},
+{TEXT("unity_OcclusionMaskSelector"),1,736,4,0,0},
+{TEXT("unity_ProbeVolumeParams"),2,0,4,0,0},
+{TEXT("unity_ProbeVolumeSizeInv"),2,80,3,0,0},
+{TEXT("unity_ProbeVolumeMin"),2,96,3,0,0},
+{TEXT("unity_ProbeVolumeWorldToObject"),2,16,4,0,4},
+};
+static const FOKAdditionalTexture GKoikanoBrowTextures[]={
+{TEXT("_MainTex"),0,1,2},
+{TEXT("_RampG"),1,2,2},
+{TEXT("unity_ProbeVolumeSH"),2,0,3},
+};
+static const FOKAdditionalProperty GKoikanoBrowProperties[]={
+{TEXT("_Cutoff"),2,false,FLinearColor(0.5f,0.0f,0.0f,0.0f),TEXT("")},
+{TEXT("_MainTex"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("black")},
+{TEXT("_Color"),0,false,FLinearColor(1.0f,1.0f,1.0f,1.0f),TEXT("")},
+{TEXT("_shadowcolor"),0,false,FLinearColor(0.90196079015731812f,0.94117647409439087f,1.0f,1.0f),TEXT("")},
+{TEXT("_texcoord"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("__dirty"),2,false,FLinearColor(1.0f,0.0f,0.0f,0.0f),TEXT("")},
+};

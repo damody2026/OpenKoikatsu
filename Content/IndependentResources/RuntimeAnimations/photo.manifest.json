@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "animator_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e",
+  "card_specific": false,
+  "runtime_private_pose_required": true,
+  "male": "photo_male.okanim",
+  "groups": [
+    {
+      "personalities": [
+        3,
+        7,
+        9,
+        13,
+        15,
+        22,
+        28,
+        34,
+        35,
+        39
+      ],
+      "state": "Twoshot_00",
+      "clip": "photo_female_00.okanim",
+      "source": "action/animator/00.unity3d|f_twoshot_00_00"
+    },
+    {
+      "personalities": [
+        0,
+        2,
+        4,
+        12,
+        14,
+        16,
+        17,
+        27,
+        29,
+        30,
+        31,
+        33,
+        36
+      ],
+      "state": "Twoshot_03",
+      "clip": "photo_female_03.okanim",
+      "source": "action/animator/00.unity3d|f_twoshot_00_03"
+    },
+    {
+      "personalities": [
+        1,
+        5,
+        6,
+        8,
+        10,
+        11,
+        18,
+        19,
+        20,
+        21,
+        23,
+        24,
+        25,
+        26,
+        32,
+        37,
+        38
+      ],
+      "state": "Twoshot_06",
+      "clip": "photo_female_06.okanim",
+      "source": "action/animator/00.unity3d|f_twoshot_00_06"
+    }
+  ],
+  "actions": [
+    {
+      "id": "photo_male.okanim",
+      "file": "photo_male.okanim",
+      "source": "action/animator/00.unity3d|m_twoshot_00_00",
+      "loop": true,
+      "sha256": "fed28be2dedddc9e305b127648b3d257497b995beda5269e2bdf712edb302c23",
+      "bytes": 157071
+    },
+    {
+      "id": "photo_female_00.okanim",
+      "file": "photo_female_00.okanim",
+      "source": "action/animator/00.unity3d|f_twoshot_00_00",
+      "loop": true,
+      "sha256": "3a0b4d4ec8b5b6a1c16eecc59b1eb2d3660d43c9cc1a582ce4d2cb6d6d1f7e0d",
+      "bytes": 157267
+    },
+    {
+      "id": "photo_female_03.okanim",
+      "file": "photo_female_03.okanim",
+      "source": "action/animator/00.unity3d|f_twoshot_00_03",
+      "loop": true,
+      "sha256": "d8dcaa583ed91f1f0a46b40dfadd2dc7a701b6deeeef161388e6dda881191939",
+      "bytes": 163711
+    },
+    {
+      "id": "photo_female_06.okanim",
+      "file": "photo_female_06.okanim",
+      "source": "action/animator/00.unity3d|f_twoshot_00_06",
+      "loop": true,
+      "sha256": "9036949f670bb8da3be892b2e711d5959fe2d10e90720360c0266f5c329bf276",
+      "bytes": 156799
+    }
+  ],
+  "source": "C:\\portable\\KoikatuSunshine\\abdata\\twoshot\\list\\00.unity3d",
+  "source_sha256": "8bb27b050fb4d32e6421d946475a27f37ba59f0ffb077dcd3ff25ed9f3cb2929",
+  "height_policy": "middle source clip; private APNG shape preserved; full source height blend pending",
+  "ik": "MotionInfo abIK/IK empty for non-kiss photo groups"
+}

@@ -1,0 +1,568 @@
+{
+  "bytes": 188015424343,
+  "GB": 188.015424343,
+  "GiB": 175.10300906654447,
+  "files": 289424,
+  "logical_bytes_removed": 733514806628,
+  "below_200_decimal_GB": true,
+  "retained_native_views": [
+    "617B75DC43FC1807EF87FFAA5F6B166A",
+    "89C279124EDF8E20DE5B0592EA695C70"
+  ],
+  "skipped_reparse_points": [
+    "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentHost\\Content"
+  ],
+  "verification": {
+    "missing": [],
+    "selected_character_and_animation_packages": 200,
+    "native_catalog_entries": 1146,
+    "APNG_and_independent_cards_sizes_unchanged": true
+  },
+  "directories": [
+    {
+      "path": "Crowd",
+      "bytes": 70112089967,
+      "GiB": 65.297
+    },
+    {
+      "path": "NativeImportSources",
+      "bytes": 62193518920,
+      "GiB": 57.922
+    },
+    {
+      "path": "Tests",
+      "bytes": 44405538114,
+      "GiB": 41.356
+    },
+    {
+      "path": "DebugShots",
+      "bytes": 5059541847,
+      "GiB": 4.712
+    },
+    {
+      "path": "Logs",
+      "bytes": 1589081722,
+      "GiB": 1.48
+    },
+    {
+      "path": "IndependentCards",
+      "bytes": 1113383554,
+      "GiB": 1.037
+    },
+    {
+      "path": "APNGCards",
+      "bytes": 627609079,
+      "GiB": 0.585
+    },
+    {
+      "path": "UltimateCoPilot",
+      "bytes": 330496524,
+      "GiB": 0.308
+    },
+    {
+      "path": "ShaderDebugInfo",
+      "bytes": 228944330,
+      "GiB": 0.213
+    },
+    {
+      "path": "Shaders",
+      "bytes": 172589370,
+      "GiB": 0.161
+    },
+    {
+      "path": "ShaderDiag",
+      "bytes": 137728873,
+      "GiB": 0.128
+    },
+    {
+      "path": "Converted",
+      "bytes": 134235840,
+      "GiB": 0.125
+    },
+    {
+      "path": "ShotInputThree",
+      "bytes": 120620988,
+      "GiB": 0.112
+    },
+    {
+      "path": "Handoff2Shot",
+      "bytes": 120620988,
+      "GiB": 0.112
+    },
+    {
+      "path": "Crashes",
+      "bytes": 100582724,
+      "GiB": 0.094
+    },
+    {
+      "path": "(root files)",
+      "bytes": 93437282,
+      "GiB": 0.087
+    },
+    {
+      "path": "TposeOne",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "ShotAlice",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "ShadowShot",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "Handoff2One",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "Handoff2Alice",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "OneCardMarch",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchShotCard",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchShot",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "Handoff2March",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchKsoxRawProbe",
+      "bytes": 29298040,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxOrder",
+      "bytes": 29298040,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxSrgb",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxColorFlag",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "YuukaShot",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "TposeYuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "ShotYuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "Handoff2Yuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "YuukaColorFlagFinal",
+      "bytes": 20460441,
+      "GiB": 0.019
+    },
+    {
+      "path": "YuukaKsoxSrgb",
+      "bytes": 20460435,
+      "GiB": 0.019
+    },
+    {
+      "path": "anim_export",
+      "bytes": 20265490,
+      "GiB": 0.019
+    },
+    {
+      "path": "YuukaRefBoneCheck",
+      "bytes": 19821045,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaQuadCheck",
+      "bytes": 19821045,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender9",
+      "bytes": 19459186,
+      "GiB": 0.018
+    },
+    {
+      "path": "BodyTexProbe2026",
+      "bytes": 19459186,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender5",
+      "bytes": 19432568,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender4",
+      "bytes": 19416403,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender6",
+      "bytes": 19404386,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender8",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender7",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender3",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender2",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaDiag2",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaCurrent",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "DiagYuukaExtract",
+      "bytes": 18373893,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaMask2",
+      "bytes": 18365839,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaPushup",
+      "bytes": 18354414,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaMask",
+      "bytes": 18354414,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaTpose",
+      "bytes": 18354305,
+      "GiB": 0.017
+    },
+    {
+      "path": "MarchAccScale12",
+      "bytes": 14906541,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoHeadAbm6",
+      "bytes": 14902729,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoAbmGeom",
+      "bytes": 14899927,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchSkin9",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchRdiag11",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchQuick3",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchQuick",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchPose8",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchDisabled5",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoFBS7",
+      "bytes": 14899402,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchFresh13",
+      "bytes": 14899181,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAllRenderers",
+      "bytes": 14899181,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAbmGeom",
+      "bytes": 14897113,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchVariants19",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchVariants18",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchParentScale17",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNew16",
+      "bytes": 14889515,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchFreshNoPose14",
+      "bytes": 14889515,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoPose",
+      "bytes": 14888688,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAccDiag15",
+      "bytes": 14888688,
+      "GiB": 0.014
+    },
+    {
+      "path": "AliceOverlayGeom",
+      "bytes": 13157757,
+      "GiB": 0.012
+    },
+    {
+      "path": "AliceColorFlagFinal",
+      "bytes": 13051697,
+      "GiB": 0.012
+    },
+    {
+      "path": "ShaderDxbcKKS",
+      "bytes": 11204130,
+      "GiB": 0.01
+    },
+    {
+      "path": "DiagAliceShader",
+      "bytes": 9697242,
+      "GiB": 0.009
+    },
+    {
+      "path": "AliceFreshGeom",
+      "bytes": 9451245,
+      "GiB": 0.009
+    },
+    {
+      "path": "ShaderReference",
+      "bytes": 7325018,
+      "GiB": 0.007
+    },
+    {
+      "path": "MaterialStats",
+      "bytes": 4088066,
+      "GiB": 0.004
+    },
+    {
+      "path": "ShaderDxbcCoBot",
+      "bytes": 3942097,
+      "GiB": 0.004
+    },
+    {
+      "path": "EditedCards",
+      "bytes": 3315787,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShader",
+      "bytes": 3037826,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcOo",
+      "bytes": 3030672,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcEC278",
+      "bytes": 2940906,
+      "GiB": 0.003
+    },
+    {
+      "path": "MarchPose4",
+      "bytes": 2808086,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcME",
+      "bytes": 2760191,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbc",
+      "bytes": 2612030,
+      "GiB": 0.002
+    },
+    {
+      "path": "MarchRdiag10",
+      "bytes": 2520510,
+      "GiB": 0.002
+    },
+    {
+      "path": "MarchQuick2",
+      "bytes": 1493894,
+      "GiB": 0.001
+    },
+    {
+      "path": "BpGeneratorUltimate",
+      "bytes": 1346638,
+      "GiB": 0.001
+    },
+    {
+      "path": "DiagYuuka",
+      "bytes": 740397,
+      "GiB": 0.001
+    },
+    {
+      "path": "ShaderDxbcVanillaPlus310",
+      "bytes": 550178,
+      "GiB": 0.001
+    },
+    {
+      "path": "Config",
+      "bytes": 345497,
+      "GiB": 0.0
+    },
+    {
+      "path": "spike",
+      "bytes": 287492,
+      "GiB": 0.0
+    },
+    {
+      "path": "Reports",
+      "bytes": 225104,
+      "GiB": 0.0
+    },
+    {
+      "path": "External",
+      "bytes": 221010,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderSource",
+      "bytes": 186690,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards",
+      "bytes": 63915,
+      "GiB": 0.0
+    },
+    {
+      "path": "MultiOutfitReport",
+      "bytes": 28968,
+      "GiB": 0.0
+    },
+    {
+      "path": "MultiOutfitSkinnedReport",
+      "bytes": 28967,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGCardReport",
+      "bytes": 28286,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGEditedReport",
+      "bytes": 23850,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGCodecReport",
+      "bytes": 23829,
+      "GiB": 0.0
+    },
+    {
+      "path": "SourceControl",
+      "bytes": 226,
+      "GiB": 0.0
+    },
+    {
+      "path": "UnrealBuildTool",
+      "bytes": 132,
+      "GiB": 0.0
+    },
+    {
+      "path": "Autosaves",
+      "bytes": 96,
+      "GiB": 0.0
+    }
+  ]
+}

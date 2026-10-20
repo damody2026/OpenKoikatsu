@@ -1,0 +1,900 @@
+{
+	"format": "okscene",
+	"version": 1,
+	"active_camera": -1,
+	"next_id": 14,
+	"map": 54,
+	"duration": 10,
+	"post":
+	{
+		"bBloom": false,
+		"bloomIntensity": 0.67500001192092896,
+		"bDepthOfField": false,
+		"focalDistance": 300,
+		"aperture": 2.7999999523162842,
+		"bVignette": false,
+		"vignetteIntensity": 0.40000000596046448,
+		"exposure": 0
+	},
+	"tracks": [],
+	"objects": [
+		{
+			"id": 1,
+			"parent": -1,
+			"name": "Character 0",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/ill_ss_sample_04_cards/char_0.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 0,
+				"time": 0,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0.55000019073486328,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 17,
+				"studioAnimeCategory": 1,
+				"studioAnimeNo": 14,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": -1,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 2,
+			"parent": -1,
+			"name": "身長78",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 3,
+			"parent": -1,
+			"name": "Character 171",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.030293752228679922,
+					"y": -0.0036707819751947038,
+					"z": -0.12024346750351612,
+					"w": 0.99227532593445511
+				},
+				"translation":
+				{
+					"x": 33.427542448043823,
+					"y": -11.38797253370285,
+					"z": 4.5046448707580566
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/ill_ss_sample_04_cards/char_171.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1,
+				"time": 1097.3336181640625,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0.60000002384185791,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 7,
+				"studioAnimeCategory": 61,
+				"studioAnimeNo": 0,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": 16,
+				"handRight": 22,
+				"fk": [],
+				"ik": [
+					{
+						"effector": 0,
+						"position":
+						{
+							"x": 1.0710209608078003e-06,
+							"y": 8.8331297039985657,
+							"z": 105.81883192062378
+						}
+					},
+					{
+						"effector": 1,
+						"position":
+						{
+							"x": 11.379747837781906,
+							"y": 1.4131003990769386,
+							"z": 131.82740211486816
+						}
+					},
+					{
+						"effector": 9,
+						"position":
+						{
+							"x": 14.792832732200623,
+							"y": 20.182257890701294,
+							"z": 124.85963106155396
+						}
+					},
+					{
+						"effector": 5,
+						"position":
+						{
+							"x": 8.2030355930328369,
+							"y": 34.151247143745422,
+							"z": 134.77426767349243
+						}
+					},
+					{
+						"effector": 2,
+						"position":
+						{
+							"x": -9.6065253019332886,
+							"y": 1.6713762655854225,
+							"z": 129.22015190124512
+						}
+					},
+					{
+						"effector": 10,
+						"position":
+						{
+							"x": -11.904467642307281,
+							"y": -8.4988094866275787,
+							"z": 107.14398622512817
+						}
+					},
+					{
+						"effector": 6,
+						"position":
+						{
+							"x": -18.929578363895416,
+							"y": 7.5504496693611145,
+							"z": 103.11834812164307
+						}
+					},
+					{
+						"effector": 3,
+						"position":
+						{
+							"x": 3.6481138318777084,
+							"y": 7.6319329440593719,
+							"z": 88.85532021522522
+						}
+					},
+					{
+						"effector": 11,
+						"position":
+						{
+							"x": 14.297947287559509,
+							"y": 8.1859849393367767,
+							"z": 45.774835348129272
+						}
+					},
+					{
+						"effector": 7,
+						"position":
+						{
+							"x": 25.32401978969574,
+							"y": -3.8401853293180466,
+							"z": 7.1073852479457855
+						}
+					},
+					{
+						"effector": 4,
+						"position":
+						{
+							"x": -12.042929232120514,
+							"y": 8.7569870054721832,
+							"z": 91.881519556045532
+						}
+					},
+					{
+						"effector": 12,
+						"position":
+						{
+							"x": -17.180614173412323,
+							"y": 4.3100696057081223,
+							"z": 48.02381694316864
+						}
+					},
+					{
+						"effector": 8,
+						"position":
+						{
+							"x": -21.738436818122864,
+							"y": -3.840203583240509,
+							"z": 7.1070849895477295
+						}
+					}
+				],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 4,
+			"parent": -1,
+			"name": "Character 332",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -56.375211477279663,
+					"y": -3.5129547119140625,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/ill_ss_sample_04_cards/char_332.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1,
+				"time": 1387.7010498046875,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 1,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 17,
+				"studioAnimeCategory": 1,
+				"studioAnimeNo": 4,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": 15,
+				"handRight": 15,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 5,
+			"parent": -1,
+			"name": "Character 504",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0.027006483833784917,
+					"y": 0.0010617162533623306,
+					"z": -0.075619567122509293,
+					"w": 0.99677038662760098
+				},
+				"translation":
+				{
+					"x": -25.002795457839966,
+					"y": -3.9540261030197144,
+					"z": 3.1425952911376953
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/ill_ss_sample_04_cards/char_504.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 0,
+				"time": 91.238357543945312,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 0.075000189244747162,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 11,
+				"studioAnimeCategory": 1,
+				"studioAnimeNo": 0,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": -1,
+				"handRight": -1,
+				"fk": [],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		},
+		{
+			"id": 6,
+			"parent": -1,
+			"name": "線",
+			"kind": "Folder",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true
+		},
+		{
+			"id": 7,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -59.418743848800659,
+					"y": 13.722209632396698,
+					"z": 82.789158821105957
+				},
+				"scale3D":
+				{
+					"x": 5.3619823455810547,
+					"y": 0.10400004684925079,
+					"z": 0.23757903277873993
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 8,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 0.6316453218460083,
+					"y": 14.238420128822327,
+					"z": 162.5210165977478
+				},
+				"scale3D":
+				{
+					"x": 18.925813674926758,
+					"y": 0.10400004684925079,
+					"z": 0.23757903277873993
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 9,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -5.6079789996147156,
+					"y": 14.970007538795471,
+					"z": 105.1544189453125
+				},
+				"scale3D":
+				{
+					"x": 18.925813674926758,
+					"y": 0.10400004684925079,
+					"z": 0.23757903277873993
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 10,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": -4.9004420638084412,
+					"y": 6.1128426343202591,
+					"z": 82.193446159362793
+				},
+				"scale3D":
+				{
+					"x": 18.925813674926758,
+					"y": 0.10400004684925079,
+					"z": 0.23757903277873993
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 11,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 1.066628098487854,
+					"y": 11.374571174383163,
+					"z": 119.99225616455078
+				},
+				"scale3D":
+				{
+					"x": 18.925813674926758,
+					"y": 0.10400004684925079,
+					"z": 0.32410138845443726
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 12,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 1.4279678463935852,
+					"y": 12.11751252412796,
+					"z": 134.57509279251099
+				},
+				"scale3D":
+				{
+					"x": 18.925813674926758,
+					"y": 0.10400004684925079,
+					"z": 0.23757903277873993
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		},
+		{
+			"id": 13,
+			"parent": 6,
+			"name": "キューブ(通常）",
+			"kind": "Item",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0,
+					"w": 1
+				},
+				"translation":
+				{
+					"x": 33.074319362640381,
+					"y": 10.892920196056366,
+					"z": 82.525140047073364
+				},
+				"scale3D":
+				{
+					"x": 3.7353529930114746,
+					"y": 0.10400004684925079,
+					"z": 0.23757903277873993
+				}
+			},
+			"bVisible": true,
+			"item":
+			{
+				"model": "",
+				"prefab": "",
+				"group": 0,
+				"category": 0,
+				"no": 1,
+				"colors": [
+					{
+						"r": 1,
+						"g": 0.67857146263122559,
+						"b": 0.97704088687896729,
+						"a": 1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					},
+					{
+						"r": 1,
+						"g": 1,
+						"b": 1,
+						"a": -1
+					}
+				],
+				"fk": []
+			}
+		}
+	]
+}

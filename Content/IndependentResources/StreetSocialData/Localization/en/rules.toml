@@ -1,0 +1,89 @@
+# Words the rules (ok-rules) write for the player or a heroine. Keys are used by the code: do not rename them.
+# {name} is an argument; key.one / key.other pick by the count.
+
+[test]
+hello = "Hello, {name}"
+"cards.one" = "{n} card"
+"cards.other" = "{n} cards"
+
+[bluff]
+you = "You"
+need_players = "Cheat needs 3 to 6 players (you and 2 to 5 girls)"
+dealt = "Dealt: {players} players, about {each} cards each. {first} goes first and names the rank."
+opening = "Sure, bring it on!|I'm a pretty good liar, you know.|No sulking if you lose, okay?|Hmph. As if I'd lose."
+wait_window = "Hold on, everyone's still deciding whether to call the last play"
+not_your_turn = "It's {who}'s turn"
+one_to_four = "Play 1 to 4 cards"
+not_in_hand = "Those cards aren't in your hand"
+must_claim = "This round is {rank}s (say \"pass\" if you don't want to follow)"
+name_rank = "You lead: which rank are you claiming?"
+name_rank_example = "You lead: which rank are you claiming? (e.g. \"two sevens\")"
+leading = "starting a round, "
+played = "{who} put down {n}, {lead}claiming {n} × {rank} ({left} left)"
+claim = "{count} {rank}"
+count_words = "One|Two|Three|Four"
+claim_ends = ".|!"
+cannot_pass = "You're leading, you can't pass"
+passed = "{who}: pass"
+pass_lines = "Pass.|I'm out.|I'll pass this round."
+my_pass = "Pass."
+all_passed = "Everyone passed: the pile of {n} is set aside, {who} starts a new round."
+nothing_to_call = "There's nothing to call right now"
+own_play = "You can't call your own play"
+called = "{who}: \"Cheat!\" The cards are {shown} → {verdict}, {loser} takes {took}"
+lie = "caught lying"
+truth = "it was true"
+my_call = "Cheat!"
+call_lines = "Cheat!|Liar, show them!|No way. Cheat!"
+caught_lines = "Tch, you got me...|Ugh, how could you tell?!"
+truth_lines = "Heh, it's true.|See? I wasn't lying!"
+leads = "{who} starts a new round."
+won = "Game over: {who} wins! {most}"
+most_caught = "(Caught lying most: {who}, {n} times)"
+my_win = "I'm out of cards, I win!"
+win_lines = "I win!|Yay, all gone!"
+bad_table = "The table data is incomplete"
+over = "The game is over"
+no_seat = "No such seat"
+not_her_turn = "It's not her turn"
+hear_call = "cheat|bluff|liar|no way|show me|call"
+hear_pass = "pass|i'm out|skip"
+hear_card_word = ""
+hear_counts = "one,1,a single:1|two,2,a pair of:2|three,3:3|four,4:4"
+hear_ranks = "ten,10:10|ace,aces:1|twos,deuce:2|threes:3|fours:4|five,fives,5:5|six,sixes,6:6|seven,sevens,7:7|eight,eights,8:8|nine,nines,9:9|jack,jacks,j:11|queen,queens,q:12|king,kings,k:13"
+
+# What the player says that the rules listen for (any of the words, "|" between; matched in lower case).
+[hear]
+# A piece of a message naming a control: it goes behind the "?" (message_hint).
+control_hint = "Esc|WASD|Shift|Ctrl|F9|Press E|E: talk|Tab to switch|Press N|P or|on the right|Choose a topic:"
+offer_pay = "my treat|i'll pay|i've got this|i got this|on me|i'll get it|let me pay|i'm paying|i'll buy you|i'll cover|a gift for you|don't you dare pay|let me get it|i owe you a|still owe you"
+ask_split = "split|go dutch|dutch|each pay|pay for ourselves|separate checks|half and half|fifty-fifty"
+decline_treat = "i'll pay for mine|i'll pay my own|pay for myself|no need to treat|you don't have to pay|i can pay|not your treat"
+# He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
+self_order = "i'll have|i will have|i want|i'll get|i'll take|for me|i'd like"
+order_for_her = "for you|you want|your|get you|you'd like"
+# A clock time said for a meeting (shop.rs time_said): words that are one, and what follows a number.
+time_words = "noon|midnight|minutes|in an hour|half an hour|right away|in a bit"
+# Which day the words name, word:days from today, longer words first (shop.rs day_said; the last one said counts).
+day_words = "day after tomorrow:2|tomorrow:1|tonight:0|today:0|this evening:0"
+# Words that name some day at all (shop.rs day_said "dated"): without any, a time still ahead is today.
+date_words = "monday|tuesday|wednesday|thursday|friday|saturday|sunday|next time|someday|weekend|week"
+time_marks = ":|pm|am|p.m.|a.m.|o'clock|o’clock"
+invite = "join us|come with|come along|come over|together|come on|hang out with us|follow me|let's talk"
+# A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
+invite_strong = "join us|come with|come along|come over|come on|hang out with us|follow me"
+you_words = "you"
+refuse = "don't come|no thanks|not now|no need|don't|leave us"
+# A goodbye said (social.rs farewell_heard; compared in Simplified for Chinese).
+goodbye = "bye|goodbye|see you|good night|i'm off|i'll go|i should go|i have to go|heading home|later|take care on the way|i'll be off|talk later|catch you later|see you later|go on, then"
+# His own offer to go somewhere with her (social.rs her_proposal_open: he wants it).
+he_offer = "i'll walk you|walk you home|i'll take you|i'll go with you|let me take you|my treat"
+# A place in a clause about the past is not where they go now (social.rs named_place_id).
+past_ref = "yesterday|last night|last time|the other day|that day|before"
+# He offers to lend her money (social.rs lend_offered): her own "lend" act needs this in his line.
+lend_offer = "lend you|i'll lend|take this|here, take|i'll cover|i'll front|i'll pay for you|here you go|keep it for now|here's the money"
+# Words before a name that make her someone talked about, not called (social.rs misnamed: "跟千鹤").
+name_about = "with |and |for |to |by |it's|it was|that was|that's"
+# Her reply proposing something, and his words agreeing (social.rs her_proposal_open).
+propose = "want to|shall we|how about|why don't we|wanna|let's go to"
+agree = "sure|ok|okay|yes|yeah|let's go|sounds good|alright|deal|it's a date|see you then|see you tomorrow|see you in the morning"

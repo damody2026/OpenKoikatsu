@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "id": "apng-3b7b3da6b3835e3b165e61f6bfc3e8ebc23842cc06ada5a8e756ac95f31c8e08",
+  "display_name": "刻晴",
+  "age_in_setting": 20,
+  "archetype": "S",
+  "personality_core": {
+    "catchphrase": "这样做比较有效率吧？",
+    "pride": "对自己的能力和判断力很有自信",
+    "fear": "害怕失败、被人看不起",
+    "desire": "成为一个独立自主、事业有成的女性"
+  },
+  "orientation": "Monogamous",
+  "material": "Mixed",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "",
+    "job_id": "tutor",
+    "competence": 70,
+    "pride": 60
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "library",
+    "drinkshop"
+  ],
+  "birthday": "1990-11-20",
+  "department": "ee",
+  "intelligence": 85,
+  "money": {
+    "cash": 800,
+    "bank": 5000,
+    "income": [
+      {
+        "source": "零用钱",
+        "amount": 1500,
+        "cycle": "monthly",
+        "payday": 1
+      },
+      {
+        "source": "家教打工",
+        "amount": 2000,
+        "cycle": "monthly",
+        "payday": 5
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机费",
+        "amount": 99,
+        "due_day": 10
+      },
+      {
+        "name": "宿舍费",
+        "amount": 300,
+        "due_day": 15
+      }
+    ],
+    "spending_style": "frugal",
+    "treat_pride": 40,
+    "expects_treat": 50,
+    "reciprocity": 50,
+    "saving_goals": [
+      {
+        "item": "笔记型电脑",
+        "amount": 3000,
+        "why": "课业需要"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte"
+    ],
+    "dislikes": [
+      "太甜的食物",
+      "浪费时间"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "去冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 20,
+    "jealousy_proneness": 30,
+    "possessiveness": 40,
+    "insecurity": 40,
+    "competitiveness": 70,
+    "self_esteem": 70,
+    "tsundere": 20,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 30,
+    "public_boldness": 60,
+    "charm_resistance": 60,
+    "money_resistance": 60
+  },
+  "bio": "刻晴是台湾大学城附近长大的女孩，目前就读于台大电机系。她个性认真负责，对自己要求很高，但有时会显得有点固执。平时喜欢在咖啡馆读书，也喜欢喝珍珠奶茶。家境小康，生活节俭，偶尔会打工赚零用钱。",
+  "source": "llm"
+}

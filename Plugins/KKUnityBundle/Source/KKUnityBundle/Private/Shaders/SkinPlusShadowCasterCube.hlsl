@@ -1,0 +1,12 @@
+precise float4 r0=0.0;
+precise float4 o0=0.0;
+r0.xy=mad(v0.xy,cb0[12].xy,cb0[12].zw);
+r0.xyzw=(Texture0.Sample(Sampler0,float2((r0.xy).x,lerp((r0.xy).y,1.0-(r0.xy).y,UVFlip)))).xyzw;
+r0.zw=(-cb0[34].xy+float2(asfloat(0x3f800000u),asfloat(0x3f800000u)));
+r0.xy=max(r0.xy,r0.zw);
+r0.x=min(r0.x,r0.y);
+r0.x=(r0.x+asfloat(0xbf000000u));
+r0.x=asfloat((r0.x<asfloat(0x00000000u))?0xffffffffu:0u);
+if(asuint(r0.x)!=0u) clip(-1.0);
+o0.xyzw=float4(asfloat(0x00000000u),asfloat(0x00000000u),asfloat(0x00000000u),asfloat(0x00000000u));
+return o0;

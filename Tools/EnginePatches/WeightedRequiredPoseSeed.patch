@@ -1,0 +1,46 @@
+--- a/Engine/Source/Runtime/Engine/Private/Components/SkeletalMeshComponent.cpp
++++ b/Engine/Source/Runtime/Engine/Private/Components/SkeletalMeshComponent.cpp
+@@ -5,6 +5,29 @@
+ =============================================================================*/
+ 
+ #include "Components/SkeletalMeshComponent.h"
++#include "Misc/ScopeLock.h"
++
++// Explicit game-component opt-in. No class layout or shared mesh data changes.
++namespace {
++struct FWeightedPoseSeed { TWeakObjectPtr<USkeletalMesh> Mesh; TArray<FBoneIndexType> Bones; };
++FCriticalSection GWeightedPoseSeedLock;
++TMap<TWeakObjectPtr<USkeletalMeshComponent>,FWeightedPoseSeed> GWeightedPoseSeeds;
++TAtomic<bool> GHasWeightedPoseSeeds{false};
++}
++ENGINE_API bool SetSkeletalWeightedPoseSeed(USkeletalMeshComponent* Component,const TArray<FBoneIndexType>* Bones)
++{
++ if(!Component)return false;
++ auto* Mesh=Component->GetSkeletalMeshAsset();
++ if(Bones){
++  if(!Mesh||Mesh->GetLODNum()!=1||Component->LeaderPoseComponent.IsValid()||Component->GetAnimationMode()!=EAnimationMode::AnimationSingleNode||Bones->IsEmpty())return false;
++  const auto& Ref=Mesh->GetRefSkeleton();TSet<int32> Present;int32 Previous=-1;
++  for(FBoneIndexType Bone:*Bones){if(Bone<=Previous||Bone>=Ref.GetNum())return false;const int32 Parent=Ref.GetParentIndex(Bone);if(Parent>=0&&!Present.Contains(Parent))return false;Present.Add(Bone);Previous=Bone;}
++ }
++ {FScopeLock Lock(&GWeightedPoseSeedLock);for(auto It=GWeightedPoseSeeds.CreateIterator();It;++It)if(!It.Key().IsValid())It.RemoveCurrent();
++  if(Bones){auto& Entry=GWeightedPoseSeeds.FindOrAdd(Component);Entry.Mesh=Mesh;Entry.Bones=*Bones;}else GWeightedPoseSeeds.Remove(Component);GHasWeightedPoseSeeds.Store(!GWeightedPoseSeeds.IsEmpty());
++ }
++ Component->RecalcRequiredBones(Component->GetPredictedLODLevel());return true;
++}
+ #include "Animation/AnimStats.h"
+ #include "Animation/AnimMontage.h"
+ #include "Animation/AnimSequence.h"
+@@ -2229,6 +2252,13 @@
+ 	// The list of bones we want is taken from the predicted LOD level.
+ 	FSkeletalMeshLODRenderData& LODData = SkelMeshRenderData->LODRenderData[LODIndex];
+ 	OutRequiredBones = LODData.RequiredBones;
++ // A validated import-time weighted hierarchy replaces only the initial mesh
++ // seed. Preserve all existing follower, virtual, physics, socket, shadow and
++ // parent requirements below. Mesh/mode changes fall back to the engine seed.
++ if(GHasWeightedPoseSeeds.Load()&&GetAnimationMode()==EAnimationMode::AnimationSingleNode&&!LeaderPoseComponent.IsValid()){
++  FScopeLock Lock(&GWeightedPoseSeedLock);
++  if(const auto* Seed=GWeightedPoseSeeds.Find(const_cast<USkeletalMeshComponent*>(this)))if(Seed->Mesh.Get()==SkelMesh){OutRequiredBones=Seed->Bones;MergeInBoneIndexArrays(OutRequiredBones,LODData.ActiveBoneIndices);}
++ }
+ 
+ 	// Add virtual bones
+ 	GetRequiredVirtualBones(SkelMesh, OutRequiredBones);

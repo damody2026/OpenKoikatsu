@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "card_specific": false,
+  "runtime_private_pose_required": true,
+  "male": "drink_standing.okanim",
+  "female": "drink_standing.okanim",
+  "actions": [
+    {
+      "id": "drink_standing.okanim",
+      "file": "drink_standing.okanim",
+      "source": "action/animator/00.unity3d|f_tachi_00_10",
+      "loop": true,
+      "sha256": "307bfac856489dc4f6bb913a3df1d3d112484d00aac102c13d7777076ff1df04",
+      "bytes": 305035,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    }
+  ],
+  "provenance": "Original standing drink curve independently evaluated on male and female APNG skeletons; not an original male drink clip or source paired event"
+}

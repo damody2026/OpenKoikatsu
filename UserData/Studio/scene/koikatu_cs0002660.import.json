@@ -1,0 +1,18 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/Official/koikatu_cs0002660.png",
+	"version": "1.0.4.2",
+	"characters": 12,
+	"character_cards": 12,
+	"items": 2029,
+	"catalog_items": 2029,
+	"lights": 0,
+	"cameras": 0,
+	"folders": 526,
+	"routes": 3,
+	"texts": 0,
+	"map": 20,
+	"notes": [
+		"objects on accessory slots are parented to the character (9)",
+		"route paths become folders (no movement) (3)"
+	]
+}

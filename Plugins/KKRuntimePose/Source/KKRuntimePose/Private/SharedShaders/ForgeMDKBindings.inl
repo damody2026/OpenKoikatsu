@@ -1,0 +1,47 @@
+// Installed Shader Forge/main_StandardMDK_studio: pass 0, blob 8, ['DIRECTIONAL']
+static const int32 GForgeMDKCBSize[]={17,5,1,1};
+static const FOKAdditionalUniform GForgeMDKUniforms[]={
+{TEXT("_LightColor0"),0,32,4,0,0},
+{TEXT("_Color"),0,64,4,0,0},
+{TEXT("_MainTex_ST"),0,80,4,0,0},
+{TEXT("_BumpMap_ST"),0,96,4,0,0},
+{TEXT("_Specular"),0,112,1,0,0},
+{TEXT("_Glossiness"),0,116,1,0,0},
+{TEXT("_MetallicGlossMap_ST"),0,128,4,0,0},
+{TEXT("_EmissionPower"),0,144,1,0,0},
+{TEXT("_BumpScale"),0,148,1,0,0},
+{TEXT("_EmissionMap_ST"),0,160,4,0,0},
+{TEXT("_LightCancel"),0,176,1,0,0},
+{TEXT("_ParallaxMap_ST"),0,192,4,0,0},
+{TEXT("_Parallax"),0,208,1,0,0},
+{TEXT("_ambientshadowG"),0,224,4,0,0},
+{TEXT("_EmissionColor"),0,240,4,0,0},
+{TEXT("_Cutoff"),0,256,1,0,0},
+{TEXT("_WorldSpaceCameraPos"),1,64,3,0,0},
+{TEXT("_WorldSpaceLightPos0"),2,0,4,0,0},
+{TEXT("glstate_lightmodel_ambient"),3,0,4,0,0},
+};
+static const FOKAdditionalTexture GForgeMDKTextures[]={
+{TEXT("_ParallaxMap"),0,4,2},
+{TEXT("_BumpMap"),1,1,2},
+{TEXT("_MainTex"),2,0,2},
+{TEXT("_EmissionMap"),3,3,2},
+{TEXT("_MetallicGlossMap"),4,2,2},
+};
+static const FOKAdditionalProperty GForgeMDKProperties[]={
+{TEXT("_Color"),0,false,FLinearColor(1.0f,1.0f,1.0f,1.0f),TEXT("")},
+{TEXT("_MainTex"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("_Cutoff"),3,false,FLinearColor(0.5f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_MetallicGlossMap"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("_Specular"),3,false,FLinearColor(0.0f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_Glossiness"),3,false,FLinearColor(0.0f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_BumpMap"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("bump")},
+{TEXT("_BumpScale"),3,false,FLinearColor(1.0f,-1.0f,3.0f,0.0f),TEXT("")},
+{TEXT("_EmissionMap"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("white")},
+{TEXT("_EmissionColor"),0,false,FLinearColor(1.0f,1.0f,1.0f,1.0f),TEXT("")},
+{TEXT("_EmissionPower"),3,false,FLinearColor(0.0f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_LightCancel"),3,false,FLinearColor(0.0f,0.0f,1.0f,0.0f),TEXT("")},
+{TEXT("_ParallaxMap"),4,false,FLinearColor(0.0f,0.0f,0.0f,0.0f),TEXT("gray")},
+{TEXT("_Parallax"),3,false,FLinearColor(0.0f,0.0f,0.079999998211860657f,0.0f),TEXT("")},
+{TEXT("_Cutoff"),3,false,FLinearColor(0.5f,0.0f,1.0f,0.0f),TEXT("")},
+};

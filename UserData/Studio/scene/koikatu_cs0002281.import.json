@@ -1,0 +1,19 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/Official/koikatu_cs0002281.png",
+	"version": "1.0.4.2",
+	"characters": 17,
+	"character_cards": 17,
+	"items": 1863,
+	"catalog_items": 1843,
+	"lights": 1,
+	"cameras": 0,
+	"folders": 245,
+	"routes": 0,
+	"texts": 0,
+	"map": 28,
+	"notes": [
+		"light intensities are converted approximately (1)",
+		"particle items become OK Niagara effects (20)",
+		"objects on accessory slots are parented to the character (4)"
+	]
+}

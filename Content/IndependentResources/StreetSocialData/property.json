@@ -1,0 +1,362 @@
+{
+  "comment": "His company's property (Docs/STREET_COMPANY_PLAN_20261012.md). Units are spaces in existing buildings; lots are vacant land found with -StreetSocialFindLots (re-run it when the map changes). Money in RMB.",
+  "units": [
+    {
+      "id": "dept_office",
+      "name": "大學城百貨 辦公樓層",
+      "place": "department",
+      "kind": "office",
+      "area": 90,
+      "capacity": 10,
+      "rent": 4200,
+      "price": 520000,
+      "traffic": 0.6
+    },
+    {
+      "id": "hotel_business",
+      "name": "溫泉SPA飯店 商務辦公室",
+      "place": "hotel",
+      "kind": "office",
+      "area": 70,
+      "capacity": 8,
+      "rent": 5200,
+      "price": 0,
+      "traffic": 0.5
+    },
+    {
+      "id": "lodge_office",
+      "name": "會館二樓 小辦公室",
+      "place": "lodge",
+      "kind": "office",
+      "area": 45,
+      "capacity": 5,
+      "rent": 2600,
+      "price": 300000,
+      "traffic": 0.3
+    },
+    {
+      "id": "school_club",
+      "name": "舊校舍 社團教室（共用工作室）",
+      "place": "school",
+      "kind": "office",
+      "area": 35,
+      "capacity": 4,
+      "rent": 1500,
+      "price": 0,
+      "traffic": 0.2
+    }
+  ],
+  "lots": [
+    {
+      "id": "lot_02",
+      "name": "東區空地 A",
+      "center": [
+        7000,
+        -1100
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 0,
+      "rent": 1450,
+      "price": 259000,
+      "traffic": 0.36,
+      "area": 154
+    },
+    {
+      "id": "lot_03",
+      "name": "東南區空地 B",
+      "center": [
+        3800,
+        2500
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 0,
+      "rent": 1850,
+      "price": 305000,
+      "traffic": 0.57,
+      "area": 154
+    },
+    {
+      "id": "lot_04",
+      "name": "北區空地 C",
+      "center": [
+        -1000,
+        -3100
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 270,
+      "rent": 2000,
+      "price": 330000,
+      "traffic": 0.68,
+      "area": 154
+    },
+    {
+      "id": "lot_05",
+      "name": "南區空地 D",
+      "center": [
+        1000,
+        3700
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 180,
+      "rent": 1950,
+      "price": 319000,
+      "traffic": 0.63,
+      "area": 154
+    },
+    {
+      "id": "lot_06",
+      "name": "東北區空地 E",
+      "center": [
+        2600,
+        -3900
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 180,
+      "rent": 1800,
+      "price": 303000,
+      "traffic": 0.56,
+      "area": 154
+    },
+    {
+      "id": "lot_08",
+      "name": "西北區空地 F",
+      "center": [
+        -4200,
+        -3100
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 90,
+      "rent": 1700,
+      "price": 292000,
+      "traffic": 0.51,
+      "area": 154
+    },
+    {
+      "id": "lot_09",
+      "name": "南區空地 G",
+      "center": [
+        -1400,
+        5700
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 0,
+      "rent": 1650,
+      "price": 281000,
+      "traffic": 0.46,
+      "area": 154
+    },
+    {
+      "id": "lot_12",
+      "name": "東區空地 H",
+      "center": [
+        6200,
+        1700
+      ],
+      "size": [
+        1400,
+        1100
+      ],
+      "yaw": 180,
+      "rent": 1550,
+      "price": 270000,
+      "traffic": 0.41,
+      "area": 154
+    }
+  ],
+  "buildings": [
+    {
+      "id": "office_s",
+      "name": "兩層辦公樓",
+      "kind": "office",
+      "cost": 150000,
+      "days": 14,
+      "capacity": 12,
+      "floors": 2
+    },
+    {
+      "id": "shop_s",
+      "name": "臨街店舖",
+      "kind": "shop",
+      "cost": 90000,
+      "days": 10,
+      "capacity": 6,
+      "floors": 1
+    },
+    {
+      "id": "cafe_s",
+      "name": "小咖啡館",
+      "kind": "cafe",
+      "cost": 120000,
+      "days": 12,
+      "capacity": 6,
+      "floors": 1
+    }
+  ],
+  "roles": [
+    {
+      "id": "staff",
+      "name": "一般職員",
+      "weight": 1.0,
+      "base_pay": 2400
+    },
+    {
+      "id": "sales",
+      "name": "業務",
+      "weight": 1.3,
+      "base_pay": 2800
+    },
+    {
+      "id": "engineer",
+      "name": "工程師",
+      "weight": 1.6,
+      "base_pay": 3600
+    },
+    {
+      "id": "clerk",
+      "name": "店員",
+      "weight": 0.9,
+      "base_pay": 2200
+    }
+  ],
+  "names": {
+    "family": [
+      "王",
+      "李",
+      "陳",
+      "張",
+      "林",
+      "黃",
+      "劉",
+      "吳",
+      "周",
+      "徐",
+      "孫",
+      "胡",
+      "朱",
+      "高",
+      "郭",
+      "何",
+      "羅",
+      "鄭",
+      "梁",
+      "謝"
+    ],
+    "given": [
+      "小明",
+      "雅婷",
+      "家豪",
+      "怡君",
+      "志偉",
+      "淑芬",
+      "建宏",
+      "佳穎",
+      "俊傑",
+      "美玲",
+      "冠宇",
+      "詩涵",
+      "宗翰",
+      "欣怡",
+      "承恩",
+      "婉婷",
+      "柏翰",
+      "思妤",
+      "子軒",
+      "宜蓁"
+    ]
+  },
+  "economy": {
+    "deposit_months": 2,
+    "land_growth_monthly": 0.004,
+    "property_tax_yearly": 0.012,
+    "resale_ratio": 0.92,
+    "closing_cost": 0.03,
+    "severance_months": 1,
+    "mortgage_down": 0.3,
+    "mortgage_rate": 0.05,
+    "mortgage_months": 240,
+    "foreclosure_ratio": 0.85,
+    "building_resale": 0.7
+  },
+  "china": {
+    "comment": "五險一金 and taxes as in mainland China (2010s rules, simplified). Base: the pay, clamped to [base_min, base_max].",
+    "employee": {
+      "pension": 0.08,
+      "medical": 0.02,
+      "unemployment": 0.005,
+      "housing_fund": 0.07
+    },
+    "employer": {
+      "pension": 0.16,
+      "medical": 0.08,
+      "unemployment": 0.005,
+      "injury": 0.004,
+      "maternity": 0.008,
+      "housing_fund": 0.07
+    },
+    "base_min": 1500,
+    "base_max": 30000,
+    "iit_threshold_monthly": 5000,
+    "iit_brackets_yearly": [
+      [
+        36000,
+        0.03,
+        0
+      ],
+      [
+        144000,
+        0.1,
+        2520
+      ],
+      [
+        300000,
+        0.2,
+        16920
+      ],
+      [
+        420000,
+        0.25,
+        31920
+      ],
+      [
+        660000,
+        0.3,
+        52920
+      ],
+      [
+        960000,
+        0.35,
+        85920
+      ],
+      [
+        999999999999,
+        0.45,
+        181920
+      ]
+    ],
+    "vat_small": 0.01,
+    "cit_small_rate": 0.05,
+    "cit_rate": 0.25,
+    "cit_small_limit_yearly": 3000000
+  }
+}

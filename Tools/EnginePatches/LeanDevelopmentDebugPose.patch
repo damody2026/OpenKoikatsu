@@ -1,0 +1,48 @@
+--- a/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
++++ b/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
+@@ -26,6 +26,13 @@
+ 
+ DEFINE_LOG_CATEGORY_STATIC(LogSkeletalGPUSkinMesh, Warning, All);
+ 
++// Normal raster skinning uses ReferenceToLocal, not this Development-only
++// copy consumed by bone/physics debug drawing. Preserve authoring defaults.
++static TAutoConsoleVariable<int32> CVarSkeletalMeshCopyDebugPose(
++	TEXT("r.SkeletalMesh.CopyDebugPose"), 1,
++	TEXT("Copy component-space poses for bone/physics debug drawing. 0 skips the copy in game only; Editor always retains it. Normal skinning is unchanged."),
++	ECVF_RenderThreadSafe);
++
+ // 0/1
+ #define UPDATE_PER_BONE_DATA_ONLY_FOR_OBJECT_BEEN_VISIBLE 1
+ 
+@@ -2698,7 +2705,7 @@
+ TArray<FTransform>* FSkeletalMeshObjectGPUSkin::GetComponentSpaceTransforms() const
+ {
+ #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+-	if(DynamicData)
++	if(DynamicData && !DynamicData->MeshComponentSpaceTransforms.IsEmpty())
+ 	{
+ 		return &(DynamicData->MeshComponentSpaceTransforms);
+ 	}
+@@ -3008,6 +3015,10 @@
+ 
+ #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+ 		check(!MeshComponentSpaceTransforms.Num());
++		const bool bCopyDebugPose = GIsEditor || CVarSkeletalMeshCopyDebugPose.GetValueOnAnyThread() != 0;
++		if (bCopyDebugPose)
++		{
++		TRACE_CPUPROFILER_EVENT_SCOPE(SkelMeshCopyDebugPose);
+ 		// append instead of equals to avoid alloc
+ 		// A follower's dynamic transform view belongs to its leader. Debug data
+ 		// is indexed by this mesh's reference skeleton, so retain only mapped
+@@ -3028,8 +3039,9 @@
+ 		{
+ 			MeshComponentSpaceTransforms.Append(InDynamicData.GetComponentSpaceTransforms());
+ 		}
+-
+-		const bool bCalculateComponentSpaceTransformsFromLeader = MeshComponentSpaceTransforms.IsEmpty(); // This will be empty for follower components.
++		}
++
++		const bool bCalculateComponentSpaceTransformsFromLeader = bCopyDebugPose && MeshComponentSpaceTransforms.IsEmpty();
+ 		TArray<FTransform>* const LeaderBoneMappedMeshComponentSpaceTransforms = bCalculateComponentSpaceTransformsFromLeader ? &MeshComponentSpaceTransforms : nullptr;
+ #else
+ 		TArray<FTransform>* const LeaderBoneMappedMeshComponentSpaceTransforms = nullptr;

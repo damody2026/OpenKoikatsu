@@ -1,0 +1,54 @@
+# 女主的需求（0..100）：隨遊戲時間衰減，她正在做的事（生活排程的區塊）會補回來（Tools/ok-rules/src/needs.rs）。
+# 刻意溫和：不是生存遊戲，需求只影響心情與安排，很少主導她的一天。
+# 遊戲執行中改完存檔，按 ok.StreetRules.Reload（或 street_play.py rules reload）即生效。
+
+# 每 15 遊戲分鐘結算一次；時鐘跳躍或長時間中斷最多算 6 小時
+tick_minutes = 15
+max_hours = 6.0
+# 白天（醒著）：7 點到 23 點；晚上衰減較慢
+day_start_hour = 7
+day_end_hour = 23
+
+# 每遊戲小時減少
+[decay]
+satiety_day = 4.5
+satiety_night = 1.5
+energy_day = 2.0
+energy_night = 1.0
+fun = 1.5
+social = 1.25
+hygiene = 1.0
+
+# 每遊戲小時增加，依她正在做的事（排程區塊的種類）。
+# hygiene_home：在自己家（或宿舍）時的清潔增加，取 hygiene 與 hygiene_home 較大者。
+[gain.meal]
+satiety = 25.0   # 吃飯要一段時間；點的餐點效果另外加
+energy = 2.0
+social = 2.0
+
+[gain.sleep]
+energy = 12.0
+hygiene_home = 3.0
+
+[gain.rest]
+energy = 14.0
+hygiene_home = 3.0
+
+[gain.bath]
+hygiene = 60.0
+
+[gain.leisure]
+fun = 7.0
+
+[gain.social]
+fun = 6.0
+social = 10.0
+
+[gain.encounter]
+social = 10.0
+
+[gain.class]
+social = 3.0
+
+[gain.work]
+social = 3.0

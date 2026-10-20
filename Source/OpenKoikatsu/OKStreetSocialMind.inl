@@ -1,0 +1,651 @@
+// Included by OKStreetSocialScene.cpp: the 2010 calendar (plan §5) and the in-process heroine mind (plan §3).
+
+// Called once the relationship save is loaded. A saved game continues at its saved minute; a new game starts at
+// 08:00 on 2010-09-01. -StreetSocialClock= still overrides the time of day (self-tests and captures).
+void AOKStreetSocialScene::StartCalendarAndMind(){
+ auto& S=*State;
+ // The game rules (ok_rules.dll) are required: without them the error is shown and the game quits.
+ {S.Rules=MakeUnique<FOKStreetRules>();FString Error;
+  if(S.Rules->Open(Error)){OKStreetSetActiveRules(S.Rules.Get());OKRulesSyncDefaults(S);
+   UE_LOG(LogTemp,Display,TEXT("StreetSocial rules: %s (tuning %s)"),*S.Rules->DllPath(),*FOKStreetRules::TuningDir());}
+  else{S.Rules.Reset();OKStreetRulesFatal(Error);return;}}
+ LoadCatalog();
+ // A saved game continues where he was (the start place below, a development switch, still wins).
+ if(S.Store.HasPlayerSpot&&!S.SelfTest){S.Male=S.Store.PlayerSpot;if(S.Rotations.IsValidIndex(0))S.Rotations[0]=FRotator(0,S.Store.PlayerYaw,0);S.Yaw=S.Store.ViewYaw;S.SpotSavedMale=S.Male;
+  UE_LOG(LogTemp,Display,TEXT("Street start: where he was saved, %s yaw %.0f"),*S.Male.ToCompactString(),S.Store.PlayerYaw);}
+ // Development: OK_STREET_START_PLACE=<place id> starts the player inside that place (first anchor, else room, else door).
+ {FString Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE")),Anchor;Start.Split(TEXT("@"),&Start,&Anchor);if(Start.IsEmpty())Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE"));
+  if(!Start.IsEmpty()&&!S.SelfTest)if(const auto* P=OKStreetFindPlace(Start)){const FOKStreetModelAnchor* A=Anchor.IsEmpty()?(P->Anchors.Num()?&P->Anchors[0]:nullptr):P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& X){return X.Name==Anchor;});
+   S.Male=A?A->Position:P->Rooms.Num()?P->Rooms[0].GetCenter():P->Door;if(!A)S.Male.Z=0;UE_LOG(LogTemp,Display,TEXT("Street start place: %s %s"),*Start,A?*A->Name:TEXT("(room)"));}}
+ {FString Body;TSharedPtr<FJsonObject> Player;double Base=50;const FString PlayerFile=FPaths::GetPath(S.Manifest.SavePath)/TEXT("player.json");
+  if(FFileHelper::LoadFileToString(Body,*PlayerFile)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Body),Player)&&Player.IsValid()){
+   if(Player->TryGetNumberField(TEXT("appearance_base"),Base))S.PlayerLookBase=FMath::Clamp(float(Base),0.f,100.f);
+   FString Mode;if(Player->TryGetStringField(TEXT("drama_mode"),Mode)&&(Mode==TEXT("A")||Mode==TEXT("B")||Mode==TEXT("C")))S.DramaMode=Mode[0];
+   FString Locale;if(Player->TryGetStringField(TEXT("locale"),Locale)&&(Locale==TEXT("zh-TW")||Locale==TEXT("zh-CN")||Locale==TEXT("en")))S.Lang=Locale;
+   // Before any character loads: their materials follow it (SetRenderStyle).
+   FString Style;if(Player->TryGetStringField(TEXT("render_style"),Style))ApplyRenderStyleSetting(Style);}}
+ LoadUiTexts();
+ // Development: OK_STREET_START_DAY=YYYY-MM-DD and OK_STREET_START_CLOCK=HH:MM start the save on that day and time
+ // (e.g. a class day on campus). They move the save's calendar, so use them on a test save.
+ if(!S.SelfTest){
+  const FString Day=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_DAY")),At=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_CLOCK"));
+  TArray<FString> P;Day.ParseIntoArray(P,TEXT("-"));
+  if(P.Num()==3){const FDateTime D(FCString::Atoi(*P[0]),FCString::Atoi(*P[1]),FCString::Atoi(*P[2]));S.Store.CalendarDay=FMath::Max(0,int32((D-OKStreetCalendarEpoch()).GetDays()));
+   // A jump is not days without food or sleep: start everyone rested, not decayed over the skipped days.
+   for(auto& R:S.Store.Relations){R.NeedsMinute=-1;R.Energy=FMath::Max(R.Energy,95.f);R.Satiety=FMath::Max(R.Satiety,70.f);R.Hygiene=FMath::Max(R.Hygiene,90.f);}UE_LOG(LogTemp,Display,TEXT("Street start day: %s (day %d)"),*Day,S.Store.CalendarDay);}
+  // OK_STREET_TEST_DEBT=<yuan>: start owing that much on the card (the broke-rescue check).
+  {const FString Debt=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_TEST_DEBT"));if(!Debt.IsEmpty()){auto& Cd=S.Store.Banking.Card;Cd.Issued=true;Cd.Limit=FMath::Max<int64>(Cd.Limit,FCString::Atoi64(*Debt));Cd.Balance=FCString::Atoi64(*Debt);}}
+  FString H,M;if(At.Split(TEXT(":"),&H,&M))S.Store.CalendarMinute=FMath::Clamp(FCString::Atoi(*H),0,23)*60+FMath::Clamp(FCString::Atoi(*M),0,59);
+ }
+ FString Clock;
+ if(!FParse::Value(FCommandLine::Get(),TEXT("StreetSocialClock="),Clock)){
+  S.ClockStartHours=S.Store.CalendarMinute>=0?S.Store.CalendarMinute/60.0:OKStreetNewGameHour;
+  S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;
+ }
+ S.CalendarLastHours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);
+ S.CalendarSavedHour=FMath::FloorToInt32(S.CalendarLastHours);
+ UE_LOG(LogTemp,Display,TEXT("StreetSocial calendar: %s (game day %d)"),*OKStreetCalendarLabel(S.Store.CalendarDay,S.CalendarLastHours),S.Store.CalendarDay);
+ // The mind is optional: without ok_mind.dll everything works as before.
+ if(FParse::Param(FCommandLine::Get(),TEXT("StreetSocialNoMind")))return;
+ const FString Settings=OKStreetFreeTalkSettingsPath(); // the project's, or the user's copy when Saved/ was wiped
+ const FString SaveDir=FPaths::GetPath(S.Manifest.SavePath.IsEmpty()?FPaths::ProjectSavedDir()/TEXT("StreetSocial/x"):S.Manifest.SavePath)/(S.SelfTest?TEXT("mind-selftest"):TEXT("mind"));
+ S.Mind=MakeUnique<FOKStreetMind>();FString Error;
+ if(S.Mind->Open(SaveDir,Settings,S.SelfTest,Error,FPaths::GetPath(FPaths::GetPath(OKStreetPlaceModelDir())))){
+  OKStreetSetActiveMind(S.Mind.Get());
+  for(int32 I=1;I<S.Manifest.Characters.Num();++I)UE_LOG(LogTemp,Display,TEXT("StreetSocial mind heroine %d: %s %s"),I,*S.Manifest.Characters[I].Name,*OKStreetStableId(S.Manifest.Characters[I]));
+  MindRequestProfiles();
+  FString Status;S.Mind->Query(TEXT("{\"kind\":\"status\"}"),Status,Error);
+  UE_LOG(LogTemp,Display,TEXT("StreetSocial mind: %s %s"),*S.Mind->DllPath(),*Status);
+ }else{
+  UE_LOG(LogTemp,Display,TEXT("StreetSocial mind unavailable, keeping the old behaviour: %s"),*Error);
+  S.Mind.Reset();
+ }
+}
+
+// N key: skip to 07:00 of the next game day (plan §5 replaces "next day" with a jump to the morning).
+bool AOKStreetSocialScene::SkipToNextMorning(){
+ auto& S=*State;
+ const double Was=S.ClockStartHours,WasWall=S.ClockStartWall,WasLast=S.CalendarLastHours;
+ const double Wake=double(SkipWakeMinute()%1440)/60.0; // 07:00, earlier for a morning meeting
+ S.ClockStartHours=Wake;S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;S.CalendarLastHours=Wake;
+ if(NextDay())return true;
+ S.ClockStartHours=Was;S.ClockStartWall=WasWall;S.CalendarLastHours=WasLast;
+ return false;
+}
+
+// Writes the clock into the save without touching anything else, so a quit keeps the time of day.
+void AOKStreetSocialScene::SaveCalendar(){
+ if(!State||State->SelfTest||State->Manifest.SavePath.IsEmpty())return;auto& S=*State;
+ auto Candidate=S.Store;
+ // Where he stands: outside the room of a facility he is in (it puts him in a set), not while riding an elevator.
+ if(ElevatorWithMale()==INDEX_NONE&&S.LiftRide.Elevator==INDEX_NONE){Candidate.HasPlayerSpot=true;Candidate.PlayerSpot=S.FacilityEntered?S.FacilitySavedMale:S.Male;Candidate.PlayerYaw=S.FacilityEntered?S.FacilitySavedMaleRotation.Yaw:S.Rotations[0].Yaw;Candidate.ViewYaw=S.FacilityEntered?S.FacilitySavedYaw:S.Yaw;S.SpotSavedMale=Candidate.PlayerSpot;S.SpotSavedAt=FPlatformTime::Seconds();}
+ Candidate.CalendarMinute=FMath::Clamp(FMath::FloorToInt32(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),0,24*60-1);
+ FString Error;if(OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error))S.Store=MoveTemp(Candidate);
+ else UE_LOG(LogTemp,Warning,TEXT("StreetSocial calendar save failed: %s"),*Error);
+}
+
+void AOKStreetSocialScene::TickCalendarAndMind(){
+ auto& S=*State;
+ const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);
+ if(S.CalendarLastHours>=0&&!S.ClockPaused&&OKStreetDayStartsPassed(S.CalendarLastHours,Hours)>0){
+  // 04:00: a new game day, the same as sleeping through it (talks reset, topic stock refreshes).
+  if(NextDay()){S.Message=OKMsg(TEXT("ui.mind.new_day_label"), {{TEXT("calendar_label"), *OKStreetCalendarLabel(S.Store.CalendarDay,Hours)}});RefreshUI();}
+ }
+ S.CalendarLastHours=Hours;
+ // Once per game hour (2.5 real minutes) the clock is saved, so quitting loses at most an hour.
+ const int32 Hour=FMath::FloorToInt32(Hours);
+ if(Hour!=S.CalendarSavedHour){S.CalendarSavedHour=Hour;SaveCalendar();}
+ // He walked somewhere else: saved too (at most every 20 s), so a game closed any way continues near where he was.
+ else if(!S.SelfTest&&FVector::Dist2D(S.Male,S.SpotSavedMale)>500.f&&FPlatformTime::Seconds()-S.SpotSavedAt>20.0)SaveCalendar();
+ TickChoices();
+ TickNeeds();TickBonds();
+ TickApproach();
+ TickIntimacy();
+ TickAppointments();
+ TickAutoFriendship();
+ TickSchedules();
+ TickJobs();
+ TickEncounters();
+ TickInitiative();
+ TickDirector();
+ TickFinance();
+ if(S.Mind){
+  // Talk moved on from her (another partner, or none for a while): summarise the meeting into her memories.
+  const int32 Partner=FreeTalkPartner();
+  if(S.MindTalkPartner!=INDEX_NONE&&Partner!=S.MindTalkPartner&&!S.FreeTalkBusy){MindSummarize(S.MindTalkPartner);S.MindTalkPartner=INDEX_NONE;}
+  TArray<TSharedPtr<FJsonObject>> Results;S.Mind->Poll(Results);
+  for(const auto& R:Results){
+   FString Kind;R->TryGetStringField(TEXT("kind"),Kind);
+   // A chat job someone is waiting for (SubmitMindChat).
+   {double JobId=0;if(R->TryGetNumberField(TEXT("id"),JobId))if(auto* Done=S.MindChats.Find(uint64(JobId))){
+    auto Call=MoveTemp(*Done);S.MindChats.Remove(uint64(JobId));bool Ok=false;FString Content,Error;R->TryGetBoolField(TEXT("ok"),Ok);R->TryGetStringField(TEXT("content"),Content);R->TryGetStringField(TEXT("error"),Error);
+    Call(Ok&&!Content.TrimStartAndEnd().IsEmpty(),Content,Ok&&Content.TrimStartAndEnd().IsEmpty()?FString(TEXT("empty content")):Error);continue;}}
+   if(Kind==TEXT("talk")){HandleMindTalk(R);continue;}
+   if(Kind==TEXT("reflect")){HandleReflect(R);continue;}
+   if(Kind==TEXT("note"))continue;
+   {FString Tag;if(Kind==TEXT("chat")&&R->TryGetStringField(TEXT("tag"),Tag)&&Tag.StartsWith(TEXT("overheard:"))){TArray<FString> P;Tag.ParseIntoArray(P,TEXT(":"));if(P.Num()==3){HandleOverheard(R,FCString::Atoi(*P[1]),FCString::Atoi(*P[2]));continue;}}}
+   if(Kind==TEXT("profile")){const TSharedPtr<FJsonObject>* Profile=nullptr;FString Heroine;if(R->TryGetStringField(TEXT("heroine"),Heroine)&&R->TryGetObjectField(TEXT("profile"),Profile)){S.MindProfiles.Add(Heroine,*Profile);InitWalletFromProfile(Heroine,*Profile);InitStrangerCap(Heroine,*Profile);}}
+   if(Kind==TEXT("profile")){bool Generated=false;R->TryGetBoolField(TEXT("generated"),Generated);FString Who,Why;R->TryGetStringField(TEXT("heroine"),Who);R->TryGetStringField(TEXT("error"),Why);UE_LOG(LogTemp,Display,TEXT("StreetSocial mind profile %s: %s%s"),*Who,Why.IsEmpty()?(Generated?TEXT("generated"):TEXT("loaded")):TEXT("failed "),*Why);continue;}
+   FString Text;FJsonSerializer::Serialize(R.ToSharedRef(),TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text));
+   UE_LOG(LogTemp,Display,TEXT("StreetSocial mind result: %s"),*Text.Left(600));
+  }
+ }
+}
+
+// FreeTalk through the mind: her persistent context lives in Rust (Saved/StreetSocial/mind/context), this turn's
+// message carries the full state. False when the mind is not open (nothing is posted around it).
+bool AOKStreetSocialScene::SubmitFreeTalkToMind(int32 Character,const FString& Id,const FString& System,const FString& UserMessage,const FString& Text){
+ auto& S=*State;if(!S.Mind)return false;
+ TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();
+ Job->SetStringField(TEXT("kind"),TEXT("talk"));Job->SetStringField(TEXT("tag"),TEXT("freetalk"));Job->SetStringField(TEXT("priority"),TEXT("dialogue"));
+ Job->SetStringField(TEXT("heroine"),Id);Job->SetStringField(TEXT("system"),System);Job->SetStringField(TEXT("user"),UserMessage);
+ Job->SetNumberField(TEXT("max_tokens"),400);Job->SetNumberField(TEXT("temperature"),1.0); /* 1.2 drifted into word salad over long talks (DeepSeek: 1.0 for conversation) */ Job->SetBoolField(TEXT("json"),true);
+ // Only used the first time she talks through the mind: her conversation so far comes along.
+ TArray<TSharedPtr<FJsonValue>> Legacy;
+ for(const auto& Turn:S.FreeTalkMemory.FindOrAdd(Id)){auto M=MakeShared<FJsonObject>();M->SetStringField(TEXT("role"),Turn.Role);M->SetStringField(TEXT("content"),Turn.Content);Legacy.Add(MakeShared<FJsonValueObject>(M));}
+ Job->SetArrayField(TEXT("legacy_history"),Legacy);
+ FString Json,Error;FJsonSerializer::Serialize(Job,TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json));
+ const uint64 JobId=S.Mind->Submit(Json,Error);
+ if(!JobId){UE_LOG(LogTemp,Warning,TEXT("StreetSocial mind refused the talk: %s"),*Error);return false;}
+ FOKStreetMindTalk Pending;Pending.Character=Character;Pending.Id=Id;Pending.Text=Text;S.MindTalks.Add(JobId,Pending);
+ return true;
+}
+
+void AOKStreetSocialScene::HandleMindTalk(const TSharedPtr<FJsonObject>& R){
+ auto& S=*State;
+ FOKStreetMindTalk Pending;
+ if(!S.MindTalks.RemoveAndCopyValue(uint64(R->GetNumberField(TEXT("id"))),Pending))return;
+ if(!S.Manifest.Characters.IsValidIndex(Pending.Character)){S.FreeTalkBusy=false;return;}
+ FString Content,Failure;bool Ok=false,Retry=false;R->TryGetBoolField(TEXT("ok"),Ok);
+ FOKFreeTalkReply Reply;
+ if(!Ok){FString Why;R->TryGetStringField(TEXT("error"),Why);Failure=OKT(TEXT("ui.mind.deepseek_error_prefix"))+Why;}
+ else if(!R->TryGetStringField(TEXT("content"),Content)||!OKStreetFreeTalkParseContent(Content,Reply,Failure,Retry)){if(Failure.IsEmpty())Failure=OKT(TEXT("ui.mind.deepseek_empty_reply"));}
+ const TSharedPtr<FJsonObject>* Usage=nullptr;double Hit=0,Miss=0,Chars=0;
+ if(R->TryGetObjectField(TEXT("usage"),Usage)){(*Usage)->TryGetNumberField(TEXT("cache_hit_tokens"),Hit);(*Usage)->TryGetNumberField(TEXT("cache_miss_tokens"),Miss);}
+ R->TryGetNumberField(TEXT("context_chars"),Chars);
+ UE_LOG(LogTemp,Display,TEXT("Street free talk (mind): actor=%d ok=%d cache_hit=%.0f cache_miss=%.0f context_chars=%.0f"),Pending.Character,Failure.IsEmpty()?1:0,Hit,Miss,Chars);
+ if(Failure.IsEmpty()){S.InteractedToday.Add(Pending.Character);S.MindTalkPartner=Pending.Character;TMap<FString,float> Talked;Talked.Add(TEXT("social"),6.f);FeedHer(Pending.Character,Talked);}
+ FinishFreeTalk(Pending.Character,Pending.Id,Pending.Text,Failure.IsEmpty()?&Reply:nullptr,Failure);
+}
+
+static int64 OKStreetMindNow(const FOKStreetSceneState& S){
+ return int64(S.Store.CalendarDay)*1440+FMath::Clamp(FMath::FloorToInt64(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),int64(0),int64(1439));
+}
+
+static FString OKStreetMindJson(const TSharedRef<FJsonObject>& Object){
+ FString Json;FJsonSerializer::Serialize(Object,TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json));return Json;
+}
+
+// A rule-written memory for one heroine (plan §6.0: no LLM). Kind picks the default importance in Rust.
+void AOKStreetSocialScene::MindObserve(int32 Character,const FString& Kind,const FString& Summary,const FString& Place,float Importance,const TCHAR* Type){
+ HistoryAdd(Character,Kind,TEXT("world"),Summary,Place); // every event also goes into her own history (OKStreetSocialPhoneInbox.inl)
+ MindRemember(Character,Kind,Summary,Place,Importance,Type);
+}
+
+// Her memory only (the history line written elsewhere): stamped with the game day and minute.
+void AOKStreetSocialScene::MindRemember(int32 Character,const FString& Kind,const FString& Summary,const FString& Place,float Importance,const TCHAR* Type){
+ if(!State||!State->Mind||!State->Manifest.Characters.IsValidIndex(Character)||Character==0)return;auto& S=*State;
+ const int64 Now=OKStreetMindNow(S);
+ TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();
+ Job->SetStringField(TEXT("kind"),TEXT("observe"));Job->SetStringField(TEXT("heroine"),OKStreetStableId(S.Manifest.Characters[Character]));
+ Job->SetStringField(TEXT("memory_kind"),Kind);Job->SetStringField(TEXT("memory_type"),Type);Job->SetStringField(TEXT("summary"),Summary);Job->SetStringField(TEXT("place"),Place);
+ Job->SetNumberField(TEXT("day"),double(Now/1440));Job->SetNumberField(TEXT("minute"),double(Now%1440));
+ TArray<TSharedPtr<FJsonValue>> Entities;Entities.Add(MakeShared<FJsonValueString>(TEXT("player")));if(!Place.IsEmpty())Entities.Add(MakeShared<FJsonValueString>(Place));Job->SetArrayField(TEXT("entities"),Entities);
+ if(Importance>=0)Job->SetNumberField(TEXT("importance"),Importance);
+ FString Error;if(!S.Mind->Submit(OKStreetMindJson(Job),Error))UE_LOG(LogTemp,Warning,TEXT("StreetSocial mind observe failed: %s"),*Error);
+}
+
+// Top memories for this moment, as lines for the 【你記得的事】 block. Sync: the memory stream is in memory.
+FString AOKStreetSocialScene::MindRecallText(const FString& Id,const FString& PlayerText){
+ if(!State||!State->Mind)return FString();auto& S=*State;
+ TSharedRef<FJsonObject> Q=MakeShared<FJsonObject>();
+ Q->SetStringField(TEXT("kind"),TEXT("recall"));Q->SetStringField(TEXT("heroine"),Id);Q->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));Q->SetNumberField(TEXT("k"),5);
+ TArray<TSharedPtr<FJsonValue>> Entities;Entities.Add(MakeShared<FJsonValueString>(TEXT("player")));
+ for(const auto* Place:NearbyPlaces(1500))if(Place)Entities.Add(MakeShared<FJsonValueString>(Place->Id));
+ Q->SetArrayField(TEXT("entities"),Entities);
+ // Chinese has no spaces: the player's line cut at punctuation gives phrases a memory may contain.
+ TArray<TSharedPtr<FJsonValue>> Words;FString Chunk;
+ auto Flush=[&](){if(Chunk.Len()>=2)Words.Add(MakeShared<FJsonValueString>(Chunk.Left(8)));Chunk.Reset();};
+ for(const TCHAR C:PlayerText){if(FChar::IsWhitespace(C)||FChar::IsPunct(C)||C==TEXT('，')||C==TEXT('。')||C==TEXT('？')||C==TEXT('！')||C==TEXT('、'))Flush();else Chunk.AppendChar(C);}
+ Flush();
+ Q->SetArrayField(TEXT("keywords"),Words);
+ FString Out,Error;if(!S.Mind->Query(OKStreetMindJson(Q),Out,Error))return FString();
+ TSharedPtr<FJsonObject> Root;if(!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Out),Root)||!Root.IsValid())return FString();
+ const TArray<TSharedPtr<FJsonValue>>* Rows=nullptr;if(!Root->TryGetArrayField(TEXT("memories"),Rows))return FString();
+ TArray<FString> Lines;
+ for(const auto& Row:*Rows){const auto M=Row->AsObject();if(!M)continue;FString MemId,Summary;M->TryGetStringField(TEXT("id"),MemId);M->TryGetStringField(TEXT("summary"),Summary);
+  const int64 T=int64(M->GetNumberField(TEXT("t")));const FDateTime When=OKStreetCalendarDateTime(int32(T/1440),(T%1440)/60.0);
+  Lines.Add(FString::Printf(TEXT("- (%s) %d/%d %02d:%02d %s"),*MemId,When.GetMonth(),When.GetDay(),When.GetHour(),When.GetMinute(),*Summary));} // with the clock time: she knows when it happened
+ return FString::Join(Lines,TEXT("\n"));
+}
+
+// First launch: each heroine gets a profile written from her card (plan §3.1); existing files are kept.
+void AOKStreetSocialScene::MindRequestProfiles(){
+ if(!State||!State->Mind)return;auto& S=*State;
+ TArray<TSharedPtr<FJsonValue>> Places;for(const auto& Place:OKStreetPlaces())Places.Add(MakeShared<FJsonValueString>(Place.Id));
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  const auto& C=S.Manifest.Characters[I];
+  TSharedRef<FJsonObject> Card=MakeShared<FJsonObject>();
+  Card->SetStringField(TEXT("name"),C.Name);Card->SetNumberField(TEXT("personality_id"),C.PersonalityId);Card->SetStringField(TEXT("sex"),C.Sex);
+  TArray<TSharedPtr<FJsonValue>> Interests;for(int32 N:C.InterestCategories)Interests.Add(MakeShared<FJsonValueNumber>(N));Card->SetArrayField(TEXT("interest_categories"),Interests);
+  FOKFreeTalkPersona Persona;FString Error;if(OKStreetFreeTalkLoadPersona(C.Name,Persona,Error))Card->SetStringField(TEXT("persona"),Persona.Profile);
+  TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();
+  Job->SetStringField(TEXT("kind"),TEXT("profile"));Job->SetStringField(TEXT("heroine"),OKStreetStableId(C));Job->SetObjectField(TEXT("card"),Card);Job->SetArrayField(TEXT("places"),Places);
+  if(!S.Mind->Submit(OKStreetMindJson(Job),Error))UE_LOG(LogTemp,Warning,TEXT("StreetSocial mind profile request failed: %s"),*Error);
+ }
+}
+
+// End of a meeting: she writes it into her memory stream (plan §6.5), a branch on her cached context.
+void AOKStreetSocialScene::MindSummarize(int32 Character){
+ if(!State||!State->Mind||!State->Manifest.Characters.IsValidIndex(Character))return;auto& S=*State;
+ const int64 Now=OKStreetMindNow(S);
+ TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();
+ Job->SetStringField(TEXT("kind"),TEXT("summarize"));Job->SetStringField(TEXT("heroine"),OKStreetStableId(S.Manifest.Characters[Character]));
+ Job->SetNumberField(TEXT("day"),double(Now/1440));Job->SetNumberField(TEXT("minute"),double(Now%1440));
+ FString Error;if(!S.Mind->Submit(OKStreetMindJson(Job),Error))UE_LOG(LogTemp,Warning,TEXT("StreetSocial mind summary request failed: %s"),*Error);
+}
+
+// Her bias right now from the rules (mind.rs mind_bias, or mind_status with her needs and money stress too). Alone with
+// him: a private facility, or sleeping together; everything else counts as in public.
+TSharedPtr<FJsonObject> AOKStreetSocialScene::MindBiasAnswer(int32 Character,bool bStatus) const{
+ const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character))return nullptr;
+ const bool Public=!(S.PrivateGirl==Character||S.Facility!=INDEX_NONE||S.SleepGirl==Character);
+ auto Request=OKRulesHeroineRequest(S,bStatus?TEXT("mind_status"):TEXT("mind_bias"),OKStreetStableId(S.Manifest.Characters[Character]));
+ Request->SetBoolField(TEXT("public"),Public);Request->SetBoolField(TEXT("mask_broken"),MaskBroken(Character,Public));Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));
+ return OKRulesEval(S,Request);
+}
+
+// Plan §4.2 / §10 in the FreeTalk state block: exact axis numbers and the fixed-phrase inner line.
+void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Status){
+ if(!State||!State->Manifest.Characters.IsValidIndex(Character))return;auto& S=*State;
+ const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
+ const TSharedPtr<FJsonObject> Mind=MindBiasAnswer(Character,true);
+ const FOKStreetBias Bias=OKRulesBiasFrom(Mind);
+ TArray<FString> Axes;
+ static const TMap<FString,FString> Names={{TEXT("trust"),TEXT("信任")},{TEXT("admiration"),TEXT("崇拜")},{TEXT("attraction"),TEXT("吸引")},{TEXT("dependency"),TEXT("依賴")},{TEXT("mystique"),TEXT("神秘感")},{TEXT("jealousy"),TEXT("忌妒")},{TEXT("greed"),TEXT("物慾")},{TEXT("lifestyle_desire"),TEXT("生活欲望")},{TEXT("respect"),TEXT("尊重")},{TEXT("resentment"),TEXT("怨懟")}};
+ for(const auto& A:OKStreetAxisFields(const_cast<FOKStreetRelation&>(R)))Axes.Add(FString::Printf(TEXT("%s %.0f"),OKT(*Names.FindRef(A.Key)),*A.Value));
+ Axes.Add(OKMsg(TEXT("ui.mind.admiration_stage_label"), {{TEXT("stage"), Mind.IsValid()?int32(Mind->GetNumberField(TEXT("admiration_stage"))):0}}));
+ Status.Axes=FString::Join(Axes,OKT(TEXT("ui.bank.list_separator")));
+ Status.Inner=Bias.InnerLine;
+ Status.Menu=MenuText(R.Satiety);
+ Status.Scene=SceneLine(Character);
+ if(S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
+ Status.Invite=RollInviteStance(Character);
+ Status.Heard=HeardText(Character);
+ // The meetings the game really has with him: she must not remember others (a time she said once is not a promise).
+ {TArray<FString> Lines;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id){const int32 Minute=int32(A.Start%1440);
+   Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), *A.Label}}));}
+  // The one they are keeping right now (met in the last two hours): it is not gone, they are in it.
+  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("done")&&A.Heroine==Id&&A.Kind==TEXT("date")&&FMath::Abs(OKStreetMindNow(S)-A.Start)<120){const int32 Minute=int32(A.Start%1440);
+   Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), A.Label+OKT(TEXT("ui.mind.promise_being_kept"))}}));}
+  Status.Promises=Lines.IsEmpty()?FString(OKT(TEXT("ui.mind.no_pending_promises"))):FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));}
+ Status.Today=TodayText(Character);
+ if(Mind.IsValid())Status.Needs=Mind->GetStringField(TEXT("needs_text"));
+ if(const FString* Recent=S.MindRecent.Find(Id)){Status.Recent=*Recent;S.MindRecent.Remove(Id);}
+ TArray<FOKStreetPendingChoice> Mine;for(const auto& C:S.Choices)if(C.Heroine==Character)Mine.Add(C);
+ Status.Choices=OKStreetChoiceBlock(Mine,SceneTime());
+}
+
+// The model's rel_delta and emotion for this turn, through the rules (plan §7 Validator) and saved.
+void AOKStreetSocialScene::ApplyMindRelation(int32 Character,const TSharedPtr<FJsonObject>& RelDelta,const FString& Emotion){
+ if(!State||!State->Manifest.Characters.IsValidIndex(Character))return;auto& S=*State;
+ if(!RelDelta.IsValid()&&Emotion.IsEmpty())return;
+ const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ auto Candidate=S.Store;
+ const int32 Index=OKStreetRelationIndex(Candidate,Id,S.Manifest.TalkBudget,true);
+ if(!Candidate.Relations.IsValidIndex(Index))return;
+ auto& R=Candidate.Relations[Index];
+ // The validator (mind.rs rel_delta): known axes only, at most +-5 a turn scaled by her traits, emotions from the list.
+ auto Request=OKRulesRelationRequest(TEXT("rel_delta"),R,S.MindProfiles.FindRef(Id));
+ if(RelDelta.IsValid())Request->SetObjectField(TEXT("delta"),RelDelta.ToSharedRef());Request->SetStringField(TEXT("emotion"),Emotion);Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
+ TArray<FString> Applied;for(const auto& V:Out->GetArrayField(TEXT("applied")))Applied.Add(V->AsString());
+ OKRulesPatchRelation(R,*Out->GetObjectField(TEXT("relation")));
+ FString Error;
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()&&!OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error)){UE_LOG(LogTemp,Warning,TEXT("StreetSocial relation save failed: %s"),*Error);return;}
+ S.Store=MoveTemp(Candidate);
+ if(!Applied.IsEmpty()){S.FreeTalkNotice+=TEXT("　")+FString::Join(Applied,TEXT(" "));UE_LOG(LogTemp,Display,TEXT("Street relation: actor=%d %s emotion=%s"),Character,*FString::Join(Applied,TEXT(" ")),*Emotion);}
+}
+
+// Opens a choice for the menu and the chat (plan §7.1). OnResolve runs once with the final option.
+FString AOKStreetSocialScene::OpenChoice(int32 Heroine,const FString& Kind,const FString& Label,const TArray<FString>& Options,const FString& HerLean,float HerInsist,double Seconds,TFunction<void(const FString&)> OnResolve){
+ auto& S=*State;
+ FOKStreetPendingChoice C;C.Id=FString::Printf(TEXT("c%d"),S.NextChoice++);C.Kind=Kind;C.Label=Label;C.Options=Options;C.Heroine=Heroine;
+ C.HerLean=Options.Contains(HerLean)?HerLean:FString();C.HerInsist=FMath::Clamp(HerInsist,0.f,1.f);C.Deadline=Seconds>0?SceneTime()+Seconds:0;C.OnResolve=MoveTemp(OnResolve);C.HisLinesAtOpen=S.HisLines;
+ S.Choices.Add(MoveTemp(C));
+ UE_LOG(LogTemp,Display,TEXT("Street choice open: %s %s %s lean=%s"),*S.Choices.Last().Id,*Kind,*Label,*HerLean);
+ return S.Choices.Last().Id;
+}
+
+bool AOKStreetSocialScene::ResolveChoice(const FString& Id,const FString& Option,float PlayerInsist){
+ auto& S=*State;
+ const int32 Index=S.Choices.IndexOfByPredicate([&](const FOKStreetPendingChoice& C){return C.Id==Id;});
+ if(Index==INDEX_NONE)return false;
+ // Her pushback and who wins are the rules' (mind.rs negotiate).
+ auto& C=S.Choices[Index];auto Request=OKRulesRequest(TEXT("negotiate"));
+ TArray<TSharedPtr<FJsonValue>> Options;for(const FString& O:C.Options)Options.Add(MakeShared<FJsonValueString>(O));Request->SetArrayField(TEXT("options"),Options);
+ Request->SetStringField(TEXT("lean"),C.HerLean);Request->SetNumberField(TEXT("insist"),C.HerInsist);Request->SetNumberField(TEXT("round"),C.Round);
+ Request->SetStringField(TEXT("option"),Option);Request->SetNumberField(TEXT("player_insist"),PlayerInsist);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return false;
+ const FString Outcome=Out->GetStringField(TEXT("outcome")),Final=Out->GetStringField(TEXT("final"));
+ C.Round=int32(Out->GetNumberField(TEXT("round")));C.HerInsist=float(Out->GetNumberField(TEXT("insist")));
+ if(Outcome==TEXT("rejected"))return false;
+ if(Outcome==TEXT("pushback")){
+  S.FreeTalkNotice=OKMsg(TEXT("ui.mind.she_disagrees_persuade"), {{TEXT("label"), *C.Label}});RefreshUI();
+  UE_LOG(LogTemp,Display,TEXT("Street choice pushback: %s round=%d"),*Id,C.Round);
+  return true;
+ }
+ FOKStreetPendingChoice Done=MoveTemp(S.Choices[Index]);S.Choices.RemoveAt(Index);
+ UE_LOG(LogTemp,Display,TEXT("Street choice resolved: %s %s -> %s"),*Done.Id,*Done.Kind,*Final);
+ if(Done.OnResolve)Done.OnResolve(Final);
+ RefreshUI();
+ return true;
+}
+
+// Past the deadline her lean is taken (or the first option when she has none).
+void AOKStreetSocialScene::TickChoices(){
+ auto& S=*State;const double Now=SceneTime();
+ for(int32 I=S.Choices.Num()-1;I>=0;--I){
+  if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
+  FOKStreetPendingChoice Done=MoveTemp(S.Choices[I]);S.Choices.RemoveAt(I);
+  FString Final=!Done.HerLean.IsEmpty()?Done.HerLean:(Done.Options.IsEmpty()?FString():Done.Options[0]);
+  // The bill is his to decide: what he said since it opened, read by the rules (shop.rs checkout_timeout).
+  if(Done.Kind==TEXT("checkout")){const int32 Since=FMath::Clamp(S.HisLines-Done.HisLinesAtOpen,0,S.SaidToHer.Num());TArray<FString> Said;for(int32 K=S.SaidToHer.Num()-Since;K<S.SaidToHer.Num();++K)Said.Add(S.SaidToHer[K]);
+   auto Request=OKRulesRequest(TEXT("checkout_timeout"));Request->SetStringField(TEXT("lean"),Done.HerLean);Request->SetStringField(TEXT("said"),FString::Join(Said,TEXT("\n")));
+   if(const TSharedPtr<FJsonObject> A=OKRulesEval(S,Request)){const FString O=A->GetStringField(TEXT("option"));if(Done.Options.Contains(O))Final=O;}}
+  UE_LOG(LogTemp,Display,TEXT("Street choice timed out: %s -> %s"),*Done.Id,*Final);
+  if(Done.OnResolve&&!Final.IsEmpty())Done.OnResolve(Final);
+ }
+}
+
+// What the model read from the player (resolve) and what she proposes (propose); outcomes stay with the rules.
+void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkReply& Reply){
+ auto& S=*State;
+ // She turned his treat down ("不用请，我自己付"): the next bill with her is each paying their own, also when what she
+ // orders is placed later (carried to the shop she is walking him to).
+ if(BillSplitHeard(FString(),Reply.Reply))S.SplitAgreedWith=Character;
+ // Every decision of hers is logged, and the screen is captured a moment later (TickFreeTalkTrace) so what she
+ // did can be seen: the activity she agreed to, her act, what she ordered, and what they were doing at the time.
+ UE_LOG(LogTemp,Display,TEXT("Street decision: actor=%d action=%s act=%s arg=%s orders=%d resolve=%s/%s emotion=%s pair=%d meal=%d seated=%d phase=%d target=%d companion=%d outing=%d lines=%d"),
+  Character,*Reply.Action,*Reply.ActKind,*Reply.ActArg,Reply.Orders.Num(),*Reply.ResolveId,*Reply.ResolveOption,*Reply.Emotion,S.Pair.Partner,S.Pair.Meal?1:0,S.Pair.Seated?1:0,S.Pair.Phase,S.Target,S.Companion,S.OutingGirl,Reply.Lines.Num());
+ // Goodbye or a treat she promised, when she says so in her structured fields (act end_talk / promise_treat). Whether his
+ // goodbye ended the talk, or her words promised to pay, is judged by DeepSeek after the reply (JudgeFreeTalk).
+ // A goodbye while he is still walking her somewhere waits for the door (the walk's end resumes the talk); walking off
+ // ("leave") does not.
+ const bool OnTheWay=S.OutingGirl==Character&&Reply.ActKind!=TEXT("leave");
+ if(OnTheWay&&(Reply.ActKind==TEXT("end_talk")||Reply.Action==TEXT("end_talk")||Reply.Action==TEXT("farewell")||Reply.Action==TEXT("goodbye"))){UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d not on the way; the outing reaches %s first"),Character,*S.OutingPlace);}
+ else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.Action==TEXT("end_talk")||Reply.Action==TEXT("farewell")||Reply.Action==TEXT("goodbye")){
+  S.FarewellPending=true;S.FarewellFromTalk=true;S.FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (act=%s)"),Character,*Reply.ActKind);
+ }
+ if(Reply.ActKind==TEXT("promise_treat")){S.HerTreatPromise.Add(Character,OKStreetMindNow(S)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (act)"),Character);}
+ // Only when asked for (-DecisionShots): the engine's window readback behind them crashed the game once (E: UE5.8,
+ // ConvertDXGIToFColor writing to null), a debugging aid must not take the play down with it.
+ static const bool Shots=FParse::Param(FCommandLine::Get(),TEXT("DecisionShots"));
+ if(Shots&&S.DecisionShots<200){S.DecisionShotAt=FPlatformTime::Seconds()+1.5;S.DecisionShotTag=!Reply.ActKind.IsEmpty()?Reply.ActKind:!Reply.Action.IsEmpty()?Reply.Action:Reply.Orders.Num()>0?FString(TEXT("order")):FString(TEXT("talk"));}
+ if(!Reply.ProposeId.IsEmpty())for(auto& C:S.Choices)if(C.Id==Reply.ProposeId&&C.Heroine==Character&&C.Options.Contains(Reply.ProposeOption)){
+  // She may change her mind; her insistence never jumps past what her rules allow by more than a step.
+  C.HerLean=Reply.ProposeOption;C.HerInsist=FMath::Clamp(FMath::Max(C.HerInsist,Reply.ProposeInsist*0.8f),0.f,1.f);
+ }
+ // What she read from him: only from a line he said after the choice opened (her own reply does not decide the bill for him).
+ if(!Reply.ResolveId.IsEmpty()){const auto* C=S.Choices.FindByPredicate([&](const FOKStreetPendingChoice& X){return X.Id==Reply.ResolveId;});
+  if(C&&C->Kind==TEXT("checkout")&&S.HisLines==C->HisLinesAtOpen){UE_LOG(LogTemp,Display,TEXT("Street choice: %s not resolved by her reply, he has not answered it yet"),*C->Id);}
+  else ResolveChoice(Reply.ResolveId,Reply.ResolveOption,Reply.ResolveInsist);}
+ if(!Reply.PromisePlace.IsEmpty())AddPromiseFromChat(Character,Reply.PromiseDay,Reply.PromiseTime,Reply.PromisePlace,Reply.PromiseWhat,S.LastPlayerSaid+TEXT("\n")+Reply.Reply,S.LastPlayerSaid);
+ HandleFinanceReply(Character,Reply.Predict,Reply.Trade,Reply.Bet);
+ // Ordering by chat (plan §8.2): only items this place sells; then checkout when asked.
+ const FString Place=ShopPlaceHere();
+ int32 Added=0;
+ // What he said he wants for himself ("我要排骨饭") is his, whoever's name her reply put on it (shop.rs his_items).
+ const TArray<FString> His=HisOwnItems(S.LastPlayerSaid,Place.IsEmpty()?OutingShop(Character):Place);
+ for(auto O:Reply.Orders){
+  O.Id=ResolveItemId(O.Id,Place.IsEmpty()?OutingShop(Character):Place);
+  const auto* Item=S.Catalog.Find(O.Id);
+  const bool ForHer=O.ForHer&&!His.Contains(O.Id);if(O.ForHer&&!ForHer)UE_LOG(LogTemp,Display,TEXT("Street order: %s is his (he asked for it), not hers"),*O.Id);
+  // He said what he wants: for him, only that (a drumstick rice she added for him pushed his beef noodles out).
+  if(!ForHer&&His.Num()>0&&!His.Contains(O.Id)){UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s for him, not what he asked for"),*O.Id);continue;}
+  // Ordered on the way to that shop ("let's go to the store: a tea egg and water"): carried until they get there.
+  const FOKStreetActivity* Going=OKStreetFindActivity(Reply.Action);
+  const bool ShopAhead=Item&&Item->Place!=Place&&(Reply.Action==TEXT("go:")+Item->Place||(Going&&Going->Place&&Item->Place==Going->Place));
+  if(ShopAhead){FOKStreetCartLine Carry;Carry.ItemId=O.Id;Carry.ForHer=ForHer;Carry.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
+   if(!Item->Options.IsEmpty()){Carry.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Carry.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
+   S.CarriedOrders.FindOrAdd(Character).Add(Carry);S.CarriedOrderSaid.Add(Character,Reply.Reply);UE_LOG(LogTemp,Display,TEXT("Street order carried: %s until they reach %s"),*O.Id,*Item->Place);continue;}
+  if(!Item||!SoldHere(*Item,Place)){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s at %s"),*O.Id,*Place);continue;}
+  // Whoever it is for still has one of these on the table or on its way ("then a tea" again, the tea she ordered a
+  // moment ago still coming): not a second one (as for the judge's orders).
+  if(HasDishLike(ForHer?Character:0,*Item)||S.Cart.ContainsByPredicate([&](const FOKStreetCartLine& C){return C.ItemId==O.Id&&C.ForHer==ForHer;})){
+   UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, %s still has one"),*O.Id,ForHer?TEXT("she"):TEXT("he"));continue;}
+  // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
+  if(ForHer&&TooFullFor(Character,*Item)){
+   S.TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is full"),*O.Id);continue;}
+  FOKStreetCartLine Line;Line.ItemId=O.Id;Line.ForHer=ForHer;Line.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
+  if(!Item->Options.IsEmpty()){Line.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Line.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
+  S.ShopPlace=Place;S.Cart.Add(Line);++Added;
+ }
+ S.LastPlayerSaid.Reset();
+ // Ordered in conversation (his words, or hers): straight to the kitchen, he pays unless she insists.
+ if(Added>0)PlaceChatOrder(Character,Reply.Reply);
+ if(Reply.ActKind==TEXT("checkout"))StartCheckout();
+ else if(Reply.ActKind==TEXT("intimacy"))RequestIntimacy(Character,false);
+ else if(Reply.ActKind==TEXT("cancel_promise"))CancelPromiseWith(Character);
+ else if(Reply.ActKind==TEXT("entrust")){FString A,D;if(!Reply.ActArg.Split(TEXT("|"),&A,&D))A=Reply.ActArg;StartEntrust(Character,TEXT("entrust"),FCString::Atoi64(*A),D.IsEmpty()?30:FCString::Atoi(*D));}
+ else if(Reply.ActKind==TEXT("follow_mode"))SetFollowMode(Reply.ActArg==TEXT("her_lead")?1:Reply.ActArg==TEXT("side_by_side")?2:0);
+ else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.ActKind==TEXT("promise_treat")){} // handled above (the goodbye, the promise)
+ else if(!Reply.ActKind.IsEmpty()&&EatActBlocked(Character,Reply.ActKind)){}
+ else if(!Reply.ActKind.IsEmpty()&&HandleWorldAct(Character,Reply.ActKind,Reply.ActArg)){} // gift, lend, photo, sleep, elevator (OKStreetSocialLover.inl)
+ else if(!Reply.ActKind.IsEmpty()&&DoActHers(Character,Reply.ActKind)){}
+ else if(!Reply.ActKind.IsEmpty()&&Reply.ActKind!=TEXT("none"))UnknownAct(Character,Reply.ActKind);
+ else if(!Reply.ActKind.IsEmpty())UE_LOG(LogTemp,Display,TEXT("Street act (not yet handled): %s %s"),*Reply.ActKind,*Reply.ActArg);
+ // She asked for a loan a moment ago and he has now handed it over: her "收下了" carried no act of its own.
+ if((Reply.ActKind.IsEmpty()||Reply.ActKind==TEXT("none"))&&S.LendAskGirl==Character&&OKStreetMindNow(S)-S.LendAskMinute<=30&&S.SaidToHer.Num()){
+  auto Ask=OKRulesRequest(TEXT("lend_offered"));Ask->SetStringField(TEXT("his"),S.SaidToHer.Last());
+  if(const TSharedPtr<FJsonObject> Offered=OKRulesEval(S,Ask);Offered.IsValid()&&Offered->GetBoolField(TEXT("offered"))){
+   UE_LOG(LogTemp,Display,TEXT("Street act: the loan she asked for (%d), handed over now"),S.LendAskAmount);S.LendAskGirl=INDEX_NONE;StartLoan(S.LendAskAmount);}}
+}
+
+// What he orders for himself in these words, among what the shop sells (shop.rs his_items).
+TArray<FString> AOKStreetSocialScene::HisOwnItems(const FString& Said,const FString& Shop) const{
+ TArray<FString> Ids;if(Said.IsEmpty()||Shop.IsEmpty())return Ids;
+ auto Request=OKRulesRequest(TEXT("his_items"));Request->SetStringField(TEXT("said"),Said);TArray<TSharedPtr<FJsonValue>> Menu;
+ for(const auto* I:OKStreetItemsAt(State->Catalog,Shop,StreetNow().GetMonth())){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),I->Id);O->SetStringField(TEXT("name"),I->Name);Menu.Add(MakeShared<FJsonValueObject>(O));}
+ Request->SetArrayField(TEXT("menu"),Menu);
+ if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(*State,Request))for(const auto& V:Answer->GetArrayField(TEXT("ids")))Ids.Add(V->AsString());
+ return Ids;
+}
+
+// The stats panel (plan §10.3): exact numbers, the band names, every jealousy target, mood and the tsundere mask.
+FString AOKStreetSocialScene::MindPanelText(int32 Character) const{
+ if(!State||!State->Manifest.Characters.IsValidIndex(Character))return FString();const auto& S=*State;
+ const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
+ const TSharedPtr<FJsonObject> Mind=MindBiasAnswer(Character,false);if(!Mind.IsValid())return FString();
+ const FOKStreetBias Bias=OKRulesBiasFrom(Mind);const float Mood=Bias.Mood;
+ const TSharedPtr<FJsonObject> Bands=Mind->GetObjectField(TEXT("rival_bands"));
+ FString Out=OKMsg(TEXT("ui.mind.admiration_jealousy_summary"), {{TEXT("admiration"), R.Admiration}, {TEXT("admiration_band"), *Mind->GetStringField(TEXT("admiration_band"))}, {TEXT("admiration_stage"), int32(Mind->GetNumberField(TEXT("admiration_stage")))}, {TEXT("jealousy"), R.Jealousy}, {TEXT("jealousy_band"), *Mind->GetStringField(TEXT("jealousy_band"))}});
+ for(const auto& Pair:R.JealousyToward){
+  FString Name=Pair.Key;for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(OKStreetStableId(S.Manifest.Characters[I])==Pair.Key)Name=S.Manifest.Characters[I].Name;
+  Out+=OKMsg(TEXT("ui.mind.jealousy_target_line"), {{TEXT("name"), *Name}, {TEXT("value"), Pair.Value}, {TEXT("band"), *Bands->GetStringField(Pair.Key)}});
+ }
+ Out+=OKMsg(TEXT("ui.mind.stat_breakdown_line"), {{TEXT("trust"), R.Trust}, {TEXT("attraction"), R.Attraction}, {TEXT("dependency"), R.Dependency}, {TEXT("mystique"), R.Mystique}, {TEXT("greed"), R.Greed}, {TEXT("lifestyle_desire"), R.LifestyleDesire}, {TEXT("respect"), R.Respect}, {TEXT("resentment"), R.Resentment}});
+ if(Bias.Masked)Out+=OKMsg(TEXT("ui.mind.tsundere_stat_line"), {{TEXT("true_liking"), Bias.TrueLiking}, {TEXT("shown_affection"), Bias.ShownAffection}, {TEXT("admiration"), R.Admiration}, {TEXT("shown_admiration"), Bias.ShownAdmiration}, {TEXT("peak_jealousy"), Bias.PeakJealousy}, {TEXT("shown_jealousy"), Bias.ShownJealousy}});
+ if(Mood>0.05f)Out+=OKMsg(TEXT("ui.mind.mood_line"), {{TEXT("emotion"), *R.Emotion}, {TEXT("mood_percent"), Mood*100.f}});
+ if(!Bias.Combos.IsEmpty())Out+=OKT(TEXT("ui.mind.status_header"))+FString::Join(Bias.Combos,OKT(TEXT("ui.bank.list_separator")));
+ Out+=OKMsg(TEXT("ui.mind.needs_wallet_line"), {{TEXT("satiety"), R.Satiety}, {TEXT("energy"), R.Energy}, {TEXT("fun"), R.Fun}, {TEXT("social"), R.Social}, {TEXT("hygiene"), R.Hygiene}, {TEXT("cash"), R.Cash}, {TEXT("debt_suffix"), R.Debt>0?*OKMsg(TEXT("ui.mind.debt_amount_note"), {{TEXT("debt"), R.Debt}}):TEXT("")}, {TEXT("appeal"), AppealOf(Character)}});
+ {auto Request=OKRulesHeroineRequest(S,TEXT("heroine_private"),Id);Request->SetNumberField(TEXT("charm"),PlayerLook());
+  if(const TSharedPtr<FJsonObject> P=OKRulesEval(S,Request)){const float Chance=float(P->GetNumberField(TEXT("chance"))),Resistance=float(P->GetNumberField(TEXT("resistance")));
+   Out+=OKMsg(TEXT("ui.mind.chastity_charm_line"), {{TEXT("chastity"), P->GetNumberField(TEXT("chastity"))}, {TEXT("charm_resistance"), int32(P->GetNumberField(TEXT("charm_resistance")))}, {TEXT("player_appeal"), PlayerLook()}, {TEXT("alone_chance_text"), Chance<0.f?OKT(TEXT("ui.mind.lover_by_invite")):Chance<=0.f?*OKMsg(TEXT("ui.mind.no_chance_resistance"), {{TEXT("resistance"), Resistance}}):*OKMsg(TEXT("ui.mind.chance_resistance_label"), {{TEXT("chance_percent"), Chance*100.f}, {TEXT("resistance"), Resistance}})}});}}
+ const FString Plan=PlanText(Character);if(!Plan.IsEmpty())Out+=TEXT("\n")+Plan;
+ return Out;
+}
+
+// Her emotion on her face (plan §4.3), using the source expression catalogue every personality shares. A masked
+// tsundere who answers angrily or mockingly blushes instead (plan §10.4 "嘴硬，臉卻紅了").
+// Her own "face" of the reply goes further (plan §4.3 表情): any expression of the catalogue, tears, cheek blush, sweat,
+// where her eyes are and how open; what the reply leaves out comes from the expression's own sheet.
+void AOKStreetSocialScene::ApplyMindExpression(int32 Character,const FString& Emotion,const FOKFreeTalkReply* Reply){
+ if(!State||(Emotion.IsEmpty()&&!(Reply&&Reply->FaceGiven))||!State->Manifest.Characters.IsValidIndex(Character)||State->Expressions.Items.IsEmpty())return;auto& S=*State;
+ static const TMap<FString,FString> Faces={{TEXT("驚訝"),TEXT("驚き")},{TEXT("崇拜"),TEXT("見つめながらドキドキ")},{TEXT("曖昧"),TEXT("ドキドキ笑顔")},{TEXT("害羞"),TEXT("照れ顔")},
+  {TEXT("生氣"),TEXT("怒り１")},{TEXT("吃醋"),TEXT("ちょっと膨れる感じ")},{TEXT("感動"),TEXT("涙目笑顔")},{TEXT("興奮"),TEXT("興奮気味の笑顔")},
+  {TEXT("低落"),TEXT("落胆")},{TEXT("疲倦"),TEXT("困り顔")},{TEXT("嘲諷"),TEXT("呆れ")},{TEXT("平常"),TEXT("微笑")},
+  // A Simplified game's mood words (the prompt lists them in its own script).
+  {TEXT("惊讶"),TEXT("驚き")},{TEXT("暧昧"),TEXT("ドキドキ笑顔")},{TEXT("生气"),TEXT("怒り１")},{TEXT("感动"),TEXT("涙目笑顔")},{TEXT("兴奋"),TEXT("興奮気味の笑顔")},{TEXT("嘲讽"),TEXT("呆れ")}};
+ const int32 Personality=S.Manifest.Characters[Character].PersonalityId;
+ const FString* Face=Faces.Find(Emotion);
+ FString Name=Face?*Face:FString(TEXT("微笑"));
+ if((Emotion==OKT(TEXT("ui.life.angry_mood"))||Emotion==OKT(TEXT("ui.mind.mockery_label")))&&BiasOf(Character).Masked)Name=OKT(TEXT("ui.mind.serious_face_shy"));
+ // The prompt reaches her in the game's script, the catalogue's Japanese names with it (笑顔 -> 笑颜, 驚き -> 惊き): her
+ // answer is read back through the same conversion (locale.rs script_texts), built once per language.
+ FString Asked=Reply?Reply->FaceExpr:FString();
+ if(!Asked.IsEmpty()&&!S.Expressions.Find(Personality,Asked)){
+  static TMap<FString,FString> Alias;static FString AliasLang;
+  if(AliasLang!=S.Lang){AliasLang=S.Lang;Alias.Reset();TArray<FString> Own;TArray<TSharedPtr<FJsonValue>> Texts;
+   for(const auto& It:S.Expressions.Items){FString Pid,N;if(It.Key.Split(TEXT("\t"),&Pid,&N)&&!Own.Contains(N)){Own.Add(N);Texts.Add(MakeShared<FJsonValueString>(N));}}
+   auto Request=OKRulesRequest(TEXT("script_texts"));Request->SetArrayField(TEXT("texts"),Texts);
+   if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){const auto& Out=Answer->GetArrayField(TEXT("texts"));for(int32 I=0;I<Out.Num()&&I<Own.Num();++I)if(Out[I]->AsString()!=Own[I])Alias.Add(Out[I]->AsString(),Own[I]);}}
+  if(const FString* Back=Alias.Find(Asked))Asked=*Back;}
+ if(!Asked.IsEmpty()&&S.Expressions.Find(Personality,Asked))Name=Asked;
+ else if(Reply&&!Reply->FaceExpr.IsEmpty())UE_LOG(LogTemp,Display,TEXT("Street mind face: actor=%d no expression named %s, %s instead"),Character,*Reply->FaceExpr,*Name);
+ // Tears she sheds: a tearful expression when the one chosen has none (warm tears for a moved or happy heart).
+ const int32 Tears=Reply?Reply->FaceTears:-1;
+ if(Tears>0){const auto* Chosen=S.Expressions.Find(Personality,Name);
+  if(!Chosen||Chosen->Tears==0){static const TSet<FString> Warm={TEXT("感動"),TEXT("興奮"),TEXT("曖昧"),TEXT("崇拜"),TEXT("害羞"),TEXT("感动"),TEXT("兴奋"),TEXT("暧昧")};Name=Tears>=2?TEXT("泣き顔"):Warm.Contains(Emotion)?TEXT("涙目笑顔"):TEXT("見つめ合い（ちょっと涙目）");}}
+ const auto* Expression=S.Expressions.Find(Personality,Name);if(!Expression)return;
+ FKKRuntimeFaceState State2=Expression->Face;bool Blink=Expression->Blink;
+ // Where she looks, in her words ("away", "look away", "down at her feet"): the first direction it names.
+ FString Gaze=Reply?Reply->FaceGaze.ToLower():FString();
+ for(const TCHAR* Word:{TEXT("closed"),TEXT("away"),TEXT("down"),TEXT("up"),TEXT("him")})if(Gaze.Contains(Word)){Gaze=Word;break;}
+ if(Gaze==TEXT("closed")){State2.EyeOpening=0.f;Blink=false;}
+ else if(Reply&&Reply->FaceEyesOpen>=0.f)State2.EyeOpening=State2.EyeOpening<0.f?Reply->FaceEyesOpen:FMath::Min(State2.EyeOpening,Reply->FaceEyesOpen);
+ FString Error;
+ if(OKSetCrowdRuntimeFaceExpression(this,Character,State2,Blink,Error))UE_LOG(LogTemp,Display,TEXT("Street mind expression: actor=%d emotion=%s face=%s"),Character,*Emotion,*Name);
+ FOKRuntimeFaceLook Look;Look.Blush=Reply&&Reply->FaceBlush>=0.f?Reply->FaceBlush:Expression->Blush;
+ // Her tears on her face: welling up shows the small drops, crying the large streams (the source's tearsLv 1 / 3);
+ // without a word on it, what the expression itself carries.
+ Look.Tears=Tears>=0?(Tears>=2?3:Tears):Expression->Tears;Look.Sweat=Reply&&Reply->FaceSweat>=0.f?Reply->FaceSweat:0.f;
+ // Looking away goes to one side or the other by turn, not always the same.
+ static int32 Side=1;
+ if(Gaze==TEXT("away")||(Gaze.IsEmpty()&&Expression->EyesLook>=2)){Side=-Side;Look.Gaze=FVector2D(0.7f*Side,0.15f);}
+ else if(Gaze==TEXT("down"))Look.Gaze=FVector2D(0.f,0.6f);else if(Gaze==TEXT("up"))Look.Gaze=FVector2D(0.f,-0.5f);
+ if(!OKSetCrowdRuntimeFaceLook(this,Character,Look,Error)){UE_LOG(LogTemp,Display,TEXT("Street mind face look: actor=%d %s"),Character,*Error);}
+ else if(Reply&&Reply->FaceGiven)UE_LOG(LogTemp,Display,TEXT("Street mind face: actor=%d expr=%s blush=%.2f tears=%d sweat=%.2f gaze=%s"),Character,*Name,Look.Blush,Tears,Look.Sweat,*Gaze);
+}
+
+// What this place sells, for the 【這裡的菜單】 line (empty outside a shop or when it is closed).
+// Food for her that she could not finish: her satiety, what she still has coming (her dishes on the table not yet
+// eaten, and in the cart) and this dish together over OKStreetOverfullSatiety. A drink always fits.
+bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Item) const{
+ const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl))return false;
+ float Coming=0.f;
+ for(const auto& D:S.Table)if(D.ForHer&&D.Percent>0.f)if(const auto* I=S.Catalog.Find(D.ItemId))Coming+=OKStreetItemFill(*I)*D.Percent/100.f;
+ for(const auto& C:S.Cart)if(C.ForHer)if(const auto* I=S.Catalog.Find(C.ItemId))Coming+=OKStreetItemFill(*I);
+ return OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Satiety+Coming+OKStreetItemFill(Item)>OKStreetOverfullSatiety;
+}
+
+FString AOKStreetSocialScene::MenuText(float Satiety) const{
+ const FString Place=ShopPlaceHere();if(Place.IsEmpty())return FString();
+ FString Why;if(PlaceClosedNow(Place,Why))return Why;
+ TArray<FString> Lines;
+ // How much she can still eat (she stops at OKStreetFullSatiety): a dish that fills more than that is marked, so she
+ // does not order a whole meal and leave it after a bite.
+ const float Room=Satiety>=0.f?OKStreetOverfullSatiety-Satiety:1000.f;
+ // In words, not the number: a model given "satiety 98/100" says "satiety 98, I'm not hungry" aloud.
+ if(Satiety>=0.f&&ItemsHere(Place).ContainsByPredicate([](const FOKStreetCatalogItem* I){return I&&I->Consumable;}))Lines.Add(OKMsg(TEXT("ui.mind.menu_room"),{{TEXT("band"),Satiety>=OKStreetFullSatiety-15.f?TEXT("full"):Satiety>=45.f?TEXT("some"):TEXT("hungry")}}));
+ for(const auto* I:ItemsHere(Place)){
+  TArray<FString> Prices;for(const auto& P:I->Price)Prices.Add(P.Key.IsEmpty()?FString::FromInt(P.Value):P.Key+FString::FromInt(P.Value));
+  const float Fills=OKStreetItemFill(*I); // a drink fits even when full
+  Lines.Add(FString::Printf(TEXT("%s %s %s"),*I->Id,*I->Name,*FString::Join(Prices,TEXT("/")))+(Fills>Room?OKT(TEXT("ui.mind.menu_too_much")):FString()));
+ }
+ if(!State->Cart.IsEmpty()){TArray<FString> Cart;for(const auto& L:State->Cart)if(const auto* I=State->Catalog.Find(L.ItemId))Cart.Add((L.ForHer?OKT(TEXT("ui.economy.she_speaker_label")):OKT(TEXT("ui.mind.he_label")))+I->Name);Lines.Add(OKT(TEXT("ui.mind.ordered_label"))+FString::Join(Cart,OKT(TEXT("ui.bank.list_separator"))));}
+ return FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));
+}
+
+// The place a point stands in (walk-in places only), or empty on the street.
+FString AOKStreetSocialScene::PlaceHere(const FVector& Where) const{
+ for(const auto& Place:OKStreetPlaces())if(OKStreetInsidePlace(Place,Where))return Place.Id;
+ return FString();
+}
+
+// Plan §7 [場景]: where they are, the place's norms, how crowded, and who they know is near.
+FString AOKStreetSocialScene::SceneLine(int32 Character) const{
+ const auto& S=*State;
+ const FString Place=PlaceHere(S.Male);const FOKStreetPlaceNorms N=OKStreetNormsOf(Place);
+ const FDateTime Now=StreetNow();const float Crowd=OKRulesCrowdAt(S,Place,Now.GetHour()+Now.GetMinute()/60.0);
+ const auto* P=Place.IsEmpty()?nullptr:OKStreetFindPlace(Place);
+ int32 Floor=0;if(P)for(int32 I=0;I<P->Rooms.Num();++I)if(P->Rooms[I].IsInsideOrOn(S.Male)&&P->RoomLevels.IsValidIndex(I))Floor=P->RoomLevels[I];
+ static const TCHAR* Privacy[]={TEXT("公共"),TEXT("半公共"),TEXT("可上鎖"),TEXT("私密")};
+ FString Line=OKMsg(TEXT("ui.mind.location_info_line"), {{TEXT("place_name_or_street"), P?P->Name:OKT(TEXT("ui.etiquette.street_location"))}, {TEXT("floor_suffix"), Floor>1?*FString::Printf(TEXT(" %dF"),Floor):TEXT("")}, {TEXT("location_label"), *N.Label}, {TEXT("privacy_label"), OKT(Privacy[FMath::Clamp(N.Privacy,0,3)])}, {TEXT("privacy_level"), N.Privacy}, {TEXT("quiet_label"), N.Quiet>=0.7f?OKT(TEXT("ui.mind.quiet_required")):N.Quiet<=0.2f?OKT(TEXT("ui.mind.busy_label")):OKT(TEXT("ui.mind.normal_volume_label"))}, {TEXT("food_label"), N.FoodAllowed?OKT(TEXT("ui.mind.food_allowed_tag")):OKT(TEXT("ui.mind.food_banned_tag"))}, {TEXT("staff_label"), N.Staff?OKT(TEXT("ui.mind.has_staff_tag")):TEXT("")}, {TEXT("crowd_label"), Crowd>=0.7f?OKT(TEXT("ui.mind.crowd_many")):Crowd>=0.35f?OKT(TEXT("ui.mind.normal_label")):OKT(TEXT("ui.mind.crowd_few"))}});
+ TArray<FString> Known;
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=Character&&S.Agents.IsValidIndex(I-1)){const float D=FVector::Dist2D(S.Agents[I-1].Position,S.Male)/100.f;if(D<25.f)Known.Add(OKMsg(TEXT("ui.mind.nearby_person_distance"), {{TEXT("name"), *S.Manifest.Characters[I].Name}, {TEXT("distance"), D}}));}
+ if(!Known.IsEmpty())Line+=OKT(TEXT("ui.mind.known_people_label"))+FString::Join(Known,OKT(TEXT("ui.bank.list_separator")));
+ return Line+FinanceSceneText();
+}
+
+// Catalogue effects on her needs (eating, drinking, a spa...), and mood.
+void AOKStreetSocialScene::FeedHer(int32 Character,const TMap<FString,float>& Effects){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character))return;
+ const int32 I=OKStreetRelationIndex(S.Store,OKStreetStableId(S.Manifest.Characters[Character]),S.Manifest.TalkBudget,true);if(!S.Store.Relations.IsValidIndex(I))return;
+ auto& R=S.Store.Relations[I];
+ for(const auto& E:Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("social")?&R.Social:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;if(V)*V=FMath::Clamp(*V+E.Value,0.f,100.f);}
+}
+
+// Money stress (plan §4.3): a week's spending by her style against her cash, and urgent needs she cannot cover.
+float AOKStreetSocialScene::MoneyStressOf(const FOKStreetRelation& R,const TSharedPtr<FJsonObject>& Profile,bool& Secret) const{
+ return OKRulesMoneyStress(*State,R,Profile,Secret); // mind.rs money_stress: style, urgent needs, debt
+}
+
+// An action asked for in chat or the menu (plan §9.3): the place decides how awkward it is, she reacts by her
+// shyness, staff may speak up, and it becomes a memory. Returns false for unknown acts.
+bool AOKStreetSocialScene::DoAct(int32 Character,const FString& Act){
+ const FOKHeroineAct* A=OKHeroineFind(Act);
+ if(!A||A->Cat!=TEXT("act")||!State->Manifest.Characters.IsValidIndex(Character))return false;
+ FOKHeroineArgs Args;Args.Hers=State->ActIsHers;Interact(Character,Act,Args);
+ return true;
+}
+
+// Food carried from a shop (plan §11 "在圖書館吃洋芋片"): eaten wherever they are, with the place's reaction.
+void AOKStreetSocialScene::EatFromBag(const FString& ItemId,bool Feed){
+ auto& S=*State;const auto* Item=S.Catalog.Find(ItemId);const int32 Her=FreeTalkPartner();
+ if(!Item||!S.Store.Inventory.Contains(ItemId))return;
+ auto Candidate=S.Store;Candidate.Inventory.RemoveSingle(ItemId);CommitStore(MoveTemp(Candidate));
+ if(Her!=INDEX_NONE){FeedHer(Her,Item->Effects);DoAct(Her,Feed?TEXT("feed"):Item->Tags.Contains(TEXT("shareable"))?TEXT("share_food"):TEXT("eat"));}
+ else{S.FreeTalkNotice=OKMsg(TEXT("ui.mind.you_ate_item"), {{TEXT("item_name"), *Item->Name}});RefreshUI();}
+}
+
+// The end of a game day (plan §6.5), before the calendar moves on: heroines who spent time with him reflect through
+// DeepSeek on their own context; the others get a rule-written summary and a money check. Runs once per day.
+void AOKStreetSocialScene::MindEndOfDay(){
+ auto& S=*State;if(!S.Mind||S.ReflectedDay==S.Store.CalendarDay)return;S.ReflectedDay=S.Store.CalendarDay;
+ CheckBirthdays();S.InitiativesToday=0;
+ const int64 Now=OKStreetMindNow(S);
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  const FString Id=OKStreetStableId(S.Manifest.Characters[I]);
+  // Her day from her plan, in words (both paths use it).
+  TArray<FString> Parts;if(const auto* Plan=S.Plans.Find(I))for(const auto& B:*Plan)if(B.Kind!=TEXT("sleep")&&B.Kind!=TEXT("leisure")){const auto* P=OKStreetFindPlace(B.Place);Parts.Add(FString::Printf(TEXT("%s%s"),B.Kind==TEXT("work")?OKT(TEXT("ui.mind.work_activity_label")):B.Kind==TEXT("class")?OKT(TEXT("ui.mind.class_activity_label")):B.Kind==TEXT("meal")?OKT(TEXT("ui.mind.meal_activity_label")):TEXT(""),P?P->Name:OKT(TEXT("ui.etiquette.street_location"))));}
+  const FString Today=FString::Join(Parts,OKT(TEXT("ui.bank.list_separator")));
+  if(S.InteractedToday.Contains(I)){
+   TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();Job->SetStringField(TEXT("kind"),TEXT("reflect"));Job->SetStringField(TEXT("heroine"),Id);
+   Job->SetNumberField(TEXT("day"),double(Now/1440));Job->SetNumberField(TEXT("minute"),double(Now%1440));Job->SetStringField(TEXT("today"),Today);
+   FString Error;if(!S.Mind->Submit(OKStreetMindJson(Job),Error))UE_LOG(LogTemp,Warning,TEXT("StreetSocial reflect request failed: %s"),*Error);
+   continue;
+  }
+  if(!Today.IsEmpty())MindObserve(I,TEXT("summary"),OKT(TEXT("ui.mind.today_label"))+Today,FString(),0.25f,TEXT("summary"));
+  const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);bool Secret=false;
+  const float Stress=MoneyStressOf(R,S.MindProfiles.FindRef(Id),Secret);
+  if(Stress>60){MindObserve(I,TEXT("reflection"),OKT(TEXT("ui.mind.month_tight_more_shifts")),FString(),0.6f,TEXT("reflection"));S.Intents.Add(Id,TEXT("more_shifts"));}
+  else if(R.Social<30)S.Intents.Add(Id,TEXT("seek_player"));
+  else S.Intents.Remove(Id);
+ }
+ S.InteractedToday.Reset();
+}
+
+// Her reflection came back: long-term changes (at most +-3 per axis, plan §6.5) and what she wants tomorrow.
+void AOKStreetSocialScene::HandleReflect(const TSharedPtr<FJsonObject>& R){
+ auto& S=*State;FString Id;bool Ok=false;R->TryGetStringField(TEXT("heroine"),Id);R->TryGetBoolField(TEXT("ok"),Ok);if(!Ok||Id.IsEmpty())return;
+ FString Intent;if(R->TryGetStringField(TEXT("intent"),Intent)&&Intent!=TEXT("none"))S.Intents.Add(Id,Intent);else S.Intents.Remove(Id);
+ const TSharedPtr<FJsonObject>* Adjust=nullptr;
+ if(R->TryGetObjectField(TEXT("rel_adjust"),Adjust)){
+  // Her reflection nudges her axes, at most 3 each way (talk.rs reflect_adjust).
+  auto Request=OKRulesHeroineRequest(S,TEXT("reflect_adjust"),Id);Request->SetObjectField(TEXT("adjust"),*Adjust);
+  if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request)){ApplyRulesRelation(Id,*Out);UE_LOG(LogTemp,Display,TEXT("Street reflection %s: %s intent=%s"),*Id,*Out->GetStringField(TEXT("applied")),*Intent);}
+ }
+}

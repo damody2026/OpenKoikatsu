@@ -1,0 +1,17 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/ill_ss_sample_02.png",
+	"version": "1.1.2.1",
+	"characters": 1,
+	"character_cards": 1,
+	"items": 3,
+	"catalog_items": 3,
+	"lights": 0,
+	"cameras": 0,
+	"folders": 0,
+	"routes": 0,
+	"texts": 0,
+	"map": 73,
+	"notes": [
+		"objects on accessory slots are parented to the character (1)"
+	]
+}

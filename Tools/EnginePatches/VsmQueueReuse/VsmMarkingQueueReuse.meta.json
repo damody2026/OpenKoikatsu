@@ -1,0 +1,14 @@
+{
+  "original_sha256": "71eb11cb6277cd8d298a9808601b517922bd2ae65492fc3b408bec86c4429c11",
+  "candidate_sha256": "7db463d6a89199f67b3a0674beeac7ecdd09207d5337fe481221c73bc09530f1",
+  "OriginalPath": "D:/UE5.8/Engine/Shaders/Private/VirtualShadowMaps/VirtualShadowMapBuildPerPageDrawCommands.usf",
+  "OriginalSHA256": "71eb11cb6277cd8d298a9808601b517922bd2ae65492fc3b408bec86c4429c11",
+  "CandidateSHA256": "7db463d6a89199f67b3a0674beeac7ecdd09207d5337fe481221c73bc09530f1",
+  "Candidate": ".ai-collab/VsmMarkingQueueReuse.usf",
+  "Patch": ".ai-collab/VsmMarkingQueueReuse.patch",
+  "EngineBytesUnchanged": 20043,
+  "DiffTouchLines": 394,
+  "BarrierCountInCull": 6,
+  "ScheduleMaxJobs": 64,
+  "InterfaceMissing": []
+}

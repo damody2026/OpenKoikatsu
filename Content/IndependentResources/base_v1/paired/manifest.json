@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "purpose": "Common authored pair and editor demo controllers; no character poses",
+  "files": [
+    {
+      "sha256": "629F36D0A511472B6967CACAB8DE6712507AEB9C111959845EAA3795FADC2D39",
+      "bytes": 41568676,
+      "path": "abdata/chara/oo_base.unity3d"
+    },
+    {
+      "path": "abdata/custom/custompose.unity3d",
+      "sha256": "52CE280FD6FBD2B4D10F2B88BBE4712158462086E47CDBABDF4A9006BF90C5AA",
+      "bytes": 8688865
+    },
+    {
+      "sha256": "3D3EA672FD483057A23CFB3E601AC309C04DDE0C5CB2845D52DD342B95F559BD",
+      "bytes": 101250426,
+      "path": "abdata/h/anim/female/00_01_00.unity3d"
+    },
+    {
+      "sha256": "C8D27ABFDB212CDE8EA93523F65A2439FC44702B9ECE2F5B4A5AEBE7D35401D8",
+      "bytes": 361305062,
+      "path": "abdata/h/anim/female/01_01_00.unity3d"
+    },
+    {
+      "sha256": "F6DDE6332184D9277E85DDB985CB9B5C01A144B105C8EA164E4BEF77FFA9A9F6",
+      "bytes": 625450978,
+      "path": "abdata/h/anim/female/02_01_00.unity3d"
+    },
+    {
+      "path": "abdata/h/anim/female/03_01_00.unity3d",
+      "sha256": "FB80C2881334643130389A875A1E0AC3A959F44A10155F8CBBA8C0FEDF3DC187",
+      "bytes": 44238482
+    },
+    {
+      "sha256": "88086A972E5870E73B25018977E50665C8FDD312EE726AD9DB1BA4FFD3DDFF48",
+      "bytes": 35360722,
+      "path": "abdata/h/anim/female/04_01_00.unity3d"
+    },
+    {
+      "path": "abdata/h/anim/female/05_01_00.unity3d",
+      "sha256": "6E759855D63E23D48535A4FFC4DC39A7EC56906110967FB20E45775FB03812DD",
+      "bytes": 68233530
+    },
+    {
+      "path": "abdata/h/anim/female/06_01_00.unity3d",
+      "sha256": "4D9AC26523D4BD236EB5F35D4978EB11ADF4C8E152B68D195277A7F9029CBB09",
+      "bytes": 56667282
+    },
+    {
+      "sha256": "4ECC86F6A7539854117EB0A103191587AEC80E5786CAB6E74D06FF7C42F4E8BE",
+      "bytes": 148426034,
+      "path": "abdata/h/anim/female/07_01_00.unity3d"
+    },
+    {
+      "path": "abdata/h/anim/male/01_01_00.unity3d",
+      "sha256": "44E843AF435BC30D2417691E61CE6B8D1DA1504D013561A8FB2E0B3437E35662",
+      "bytes": 239596054
+    },
+    {
+      "path": "abdata/h/anim/male/02_01_00.unity3d",
+      "sha256": "E5D02E645B8A469F4082BDC36405B67E357418F5BD7AB119EBD0855FB919881B",
+      "bytes": 586769406
+    },
+    {
+      "path": "abdata/h/anim/male/06_01_00.unity3d",
+      "sha256": "FFBA97F48AFBC11D993E19D10412468FB5FCF144AC92616CC83AAFDD69A3C290",
+      "bytes": 27909682
+    },
+    {
+      "path": "abdata/h/anim/male/07_01_00.unity3d",
+      "sha256": "354FD0350BB0EF2FDED98733A45A22675D486C1479FC37D4933022B97BB58CF2",
+      "bytes": 49905506
+    },
+    {
+      "sha256": "A0764F23F5C5DB31855494E66D1A5521E281489B2B6267FB714815C7AECA5B61",
+      "bytes": 6093361,
+      "path": "abdata/h/anim/parts/01_00.unity3d"
+    },
+    {
+      "sha256": "6BBC3432B0CE3D18502EFF50A0E07A02042090CBA8E73FDC7D5B586436EE0A44",
+      "bytes": 56320,
+      "path": "abdata/h/list/00.unity3d"
+    },
+    {
+      "sha256": "03E28BB02F65AC8BDB662A91BA7CAB6E681AAE1C3D0E11D7BB484B8825E643E0",
+      "bytes": 81403794,
+      "path": "abdata/h/list/01.unity3d"
+    },
+    {
+      "sha256": "23FDA4AD44BF543C40B6993B981D3D4CD4DBF68A9E5BAF2F654B182B5AC4A849",
+      "bytes": 12896,
+      "path": "abdata/h/list/30.unity3d"
+    },
+    {
+      "sha256": "3F20476420C10041E7A2E1C346CF80D5993774E17B9FCC9CDD9E1FCC2A97466B",
+      "bytes": 12832,
+      "path": "abdata/h/list/31.unity3d"
+    },
+    {
+      "sha256": "F75E4739F335000B2DBD388463F6914478A5A85BFEC2A449C78908472274C6DD",
+      "bytes": 56744,
+      "path": "abdata/h/list/60.unity3d"
+    },
+    {
+      "sha256": "2A80BAD4F1D6E4B75C34D4AF0376121D2A213162B0DC12C0D890CD6434A05638",
+      "bytes": 9400,
+      "path": "abdata/h/list/81.unity3d"
+    },
+    {
+      "path": "abdata/studio/anime/00.unity3d",
+      "sha256": "8EB1757C8B7A565A16A0E1B5415599472CD718BCDD7A7378B23C394D1E8A1377",
+      "bytes": 810218774
+    },
+    {
+      "path": "abdata/studio/anime/01.unity3d",
+      "sha256": "6FD0FEA5567E9CA179D5E55DE633CDB2FFD478EAB7DACD147C1B66314251F4D5",
+      "bytes": 87209402
+    },
+    {
+      "sha256": "CAB350FC492457CABDFBF1D893B82A49D993474FAA2BDE9E805E591C5EFE234A",
+      "bytes": 51855920,
+      "path": "abdata/studio/base/00.unity3d"
+    }
+  ]
+}

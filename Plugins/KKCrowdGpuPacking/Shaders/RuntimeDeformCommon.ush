@@ -1,0 +1,6 @@
+#ifndef OK_RUNTIME_DEFORM_COMMON
+#define OK_RUNTIME_DEFORM_COMMON
+#include "/Engine/Public/Platform.ush"
+struct FOutput {float4 Position,Normal,Tangent;};
+float3 SafeNormal(float3 V){float L=dot(V,V);return L>1.e-8?V/sqrt(L):0;}
+#endif

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "actions": [
+    {
+      "id": "facility_eat.okanim",
+      "file": "facility_eat.okanim",
+      "source": "action/animator/00.unity3d|f_eat_00_00_M",
+      "sha256": "9c119ca1ad6a307574c7eab0ee4e333b5e0fe9b8b7ba9c9d3ebb0575fec02541",
+      "bytes": 308419,
+      "loop": true,
+      "source_duration_seconds": 5.3,
+      "status": "curve_exported_runtime_placement_pending"
+    },
+    {
+      "id": "facility_sleep.okanim",
+      "file": "facility_sleep.okanim",
+      "source": "action/animator/00.unity3d|f_sleep_00_00",
+      "sha256": "f1505e5d6bf8717840216072e0f5bbee1d6fc147c15143668cf768c574bb2ba8",
+      "bytes": 354031,
+      "loop": true,
+      "source_duration_seconds": 7.533334,
+      "status": "curve_exported_runtime_placement_pending"
+    },
+    {
+      "id": "facility_esthetic.okanim",
+      "file": "facility_esthetic.okanim",
+      "source": "action/animator/00.unity3d|ks_f_esthetic_00_00",
+      "sha256": "9992f4569ea3fb4a5bab0e6ccdbec06fccd35a6917b1c2c9bd152e1647eae87c",
+      "bytes": 205779,
+      "loop": true,
+      "source_duration_seconds": 1.333333,
+      "status": "curve_exported_runtime_placement_pending"
+    }
+  ],
+  "card_specific": false,
+  "runtime_private_pose_required": true
+}

@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "card_specific": false,
+  "runtime_private_pose_required": true,
+  "female": "selfie_standing.okanim",
+  "actions": [
+    {
+      "id": "selfie_standing.okanim",
+      "file": "selfie_standing.okanim",
+      "source": "action/animator/00.unity3d|f_tachi_00_07_00",
+      "loop": true,
+      "sha256": "40fb6666ea3343dadff5fa95e1dce89d793dc2f24fcb5a1f2cc74dd3b5c492d2",
+      "bytes": 307587,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    }
+  ],
+  "prop": {
+    "source": "action/mapitem/00.unity3d|p_o_koi_ei_smaho00",
+    "parent_type": 8,
+    "parent": "k_f_handL_00",
+    "dimensions_cm": [
+      6.358756,
+      13.567981,
+      0.703464
+    ],
+    "source_offset_angle": [
+      0,
+      180,
+      180
+    ],
+    "self_authored_geometry": true
+  },
+  "provenance": "Original Shooting state standing selfie curve, left-hand prop (EasyLoader.Item type8), evaluated independently on each female APNG skeleton at runtime; source standing loop only, not the entire original selfie controller"
+}

@@ -1,0 +1,27 @@
+--- a/Engine/Source/Runtime/Engine/Private/Animation/AnimCompress.cpp
++++ b/Engine/Source/Runtime/Engine/Private/Animation/AnimCompress.cpp
+@@ -707,14 +707,21 @@
+ {
+ 	const FUECompressedAnimData& AnimData = static_cast<const FUECompressedAnimData&>(DecompContext.CompressedAnimData);
+ 
+-	AnimData.TranslationCodec->GetPoseTranslations(OutAtoms, TranslationPairs, DecompContext);
+-
+-	AnimData.RotationCodec->GetPoseRotations(OutAtoms, RotationPairs, DecompContext);
++	{
++		TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseDecodeTranslations);
++		AnimData.TranslationCodec->GetPoseTranslations(OutAtoms, TranslationPairs, DecompContext);
++	}
++
++	{
++		TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseDecodeRotations);
++		AnimData.RotationCodec->GetPoseRotations(OutAtoms, RotationPairs, DecompContext);
++	}
+ 
+ 	// Scale can be stripped when it is trivial and equal to the bind pose
+ 	// When this is the case, we assume that the output pose has already been populated with the bind pose
+ 	if (AnimData.CompressedScaleOffsets.IsValid())
+ 	{
++		TRACE_CPUPROFILER_EVENT_SCOPE(BitwiseDecodeScales);
+ 		AnimData.ScaleCodec->GetPoseScales(OutAtoms, ScalePairs, DecompContext);
+ 	}
+ }

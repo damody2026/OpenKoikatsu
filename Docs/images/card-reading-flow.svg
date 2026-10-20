@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" font-family="Segoe UI, Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="15">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #555; stroke-width: 1.5; rx: 8; }
+      .card { fill: #fff4e5; stroke: #d9822b; stroke-width: 1.5; rx: 8; }
+      .src { fill: #eaf3ff; stroke: #3b7dd8; stroke-width: 1.5; rx: 8; }
+      .core { fill: #eefbf0; stroke: #2f9e44; stroke-width: 2; rx: 10; }
+      .out { fill: #f4f0ff; stroke: #7048e8; stroke-width: 1.5; rx: 8; }
+      .t { fill: #222; }
+      .s { fill: #555; font-size: 13px; }
+      .h { font-weight: 600; }
+      .ln { stroke: #555; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+      .dash { stroke-dasharray: 5 4; }
+    </style>
+  </defs>
+  <rect width="980" height="560" fill="#fafafa"/>
+
+  <!-- inputs -->
+  <text x="20" y="32" class="t h" font-size="17">你提供的卡片</text>
+  <rect class="card" x="20" y="48" width="230" height="70"/>
+  <text x="36" y="76" class="t h">原作 KKS 人物卡（PNG）</text>
+  <text x="36" y="100" class="s">身形、服裝、飾品、ME 設定</text>
+  <rect class="card" x="20" y="134" width="230" height="70"/>
+  <text x="36" y="162" class="t h">OK 卡（APNG）</text>
+  <text x="36" y="186" class="s">卡內附 okLc：卡片用到的 mod 資料</text>
+
+  <!-- sources -->
+  <text x="20" y="252" class="t h" font-size="17">資源來源（依序）</text>
+  <rect class="src" x="20" y="268" width="230" height="64"/>
+  <text x="36" y="294" class="t h">① 基礎庫 base_v1</text>
+  <text x="36" y="316" class="s">倉庫內：原作＋共用 mod</text>
+  <rect class="src" x="20" y="344" width="230" height="64"/>
+  <text x="36" y="370" class="t h">② 卡片旁的 zipmod</text>
+  <text x="36" y="392" class="s">自備；卡片指名的 mod</text>
+  <rect class="src" x="20" y="420" width="230" height="78"/>
+  <text x="36" y="446" class="t h">③ 遊戲安裝（選用）</text>
+  <text x="36" y="468" class="s">mods/、system.xml、</text>
+  <text x="36" y="488" class="s">UncensorSelector 設定</text>
+
+  <!-- core -->
+  <rect class="core" x="330" y="120" width="320" height="330"/>
+  <text x="350" y="152" class="t h" font-size="17">ok-extract（Rust）</text>
+  <text x="350" y="186" class="t">1. 解析卡片資料與 GUID</text>
+  <text x="350" y="214" class="t">2. 找每個部件的資源：</text>
+  <text x="368" y="238" class="s">基礎庫有模型 → 直接用</text>
+  <text x="368" y="260" class="s">沒有 → 讀 ② 或 ③ 的實體 zipmod</text>
+  <text x="368" y="282" class="s">都沒有 → 列出缺少的 zipmod</text>
+  <text x="350" y="314" class="t">3. 組出 Session：網格、骨架、</text>
+  <text x="368" y="336" class="t">材質、貼圖、表情、動態骨骼</text>
+  <text x="350" y="370" class="t">4. 經 C ABI 交給 Unreal</text>
+  <text x="350" y="404" class="s">也能把原作卡轉成 OK 卡</text>
+  <text x="350" y="426" class="s">（--oklib card，資料錄進 okLc）</text>
+
+  <!-- outputs -->
+  <text x="730" y="32" class="t h" font-size="17">畫面</text>
+  <rect class="out" x="730" y="48" width="230" height="96"/>
+  <text x="746" y="76" class="t h">讀卡器</text>
+  <text x="746" y="100" class="s">CardReaderDevelopment.cmd</text>
+  <text x="746" y="122" class="s">卡片清單、3D 人物編輯器</text>
+  <rect class="out" x="730" y="164" width="230" height="96"/>
+  <text x="746" y="192" class="t h">街區交流 demo</text>
+  <text x="746" y="216" class="s">StreetSocial.cmd</text>
+  <text x="746" y="238" class="s">一男五女、對話、約會、互動</text>
+  <rect class="out" x="730" y="280" width="230" height="78"/>
+  <text x="746" y="308" class="t h">OK Studio、百人房間</text>
+  <text x="746" y="332" class="s">Studio 場景、群眾顯示</text>
+
+  <!-- arrows -->
+  <path class="ln" d="M250,83 C290,83 300,170 330,190"/>
+  <path class="ln" d="M250,169 C290,169 300,200 330,206"/>
+  <path class="ln" d="M250,300 L330,300"/>
+  <path class="ln" d="M250,376 C290,376 300,330 330,320"/>
+  <path class="ln dash" d="M250,459 C295,459 305,350 330,340"/>
+  <path class="ln" d="M650,200 C690,200 700,96 730,96"/>
+  <path class="ln" d="M650,240 C690,240 700,212 730,212"/>
+  <path class="ln" d="M650,280 C690,280 700,319 730,319"/>
+  <path class="ln dash" d="M490,450 V520 H8 V169 H18"/>
+  <text x="300" y="545" class="s">轉成的 OK 卡：之後只要 ① 基礎庫就能還原</text>
+</svg>

@@ -1,0 +1,50 @@
+# United States (a college town), 2010 (Docs/STREET_I18N_PLAN_20261014.md, P2). Amounts here are dollars; the game
+# keeps cents (digits = 2: $1.99 is 199). The game's numbers are written in yuan (Regions/CN); they become American by
+# these factors (a 2010 basket, not the exchange rate) and are rounded to the prices people see here; [fixed] gives the
+# ones the US has its own number for.
+code = "US"
+currency = "USD"
+symbol = "$"
+digits = 2
+
+# 2010 shelf prices.
+ladder = [0.49, 0.79, 0.99, 1.19, 1.29, 1.49, 1.79, 1.99, 2.29, 2.49, 2.79, 2.99, 3.29, 3.49, 3.79, 3.99, 4.49, 4.99, 5.49, 5.99, 6.49, 6.99, 7.49, 7.99, 8.49, 8.99, 9.49, 9.99, 10.99, 11.99, 12.99, 13.99, 14.99, 16.99, 19.99, 22.99, 24.99, 29.99, 34.99, 39.99, 44.99, 49.99, 59.99, 69.99, 79.99, 89.99, 99.99, 119.99, 149.99, 199.99, 249.99, 299.99, 399.99, 499.99, 599.99, 799.99, 999.99, 1299.99, 1499.99, 1999.99]
+
+# Yuan -> dollars (2010): an onigiri ¥4 / $1.49, a soda ¥3 / $1.29, a latte ¥23 / $3.65, a set meal ¥25 / $8, a movie
+# ¥60 / $10; an hour of part-time work ¥10 / $7.25-9; a starting salary ¥2,400 / $2,600 a month; a room ¥800 / $550.
+[factor]
+goods = 0.25
+wage = 0.45
+salary = 1.08
+rent = 0.7
+property = 0.55
+cash = 0.4
+
+[fixed]
+phone_fee = 49.99
+tuition = 3800
+dorm = 2600
+card_limit = 1000
+loan_year_cap = 5000
+allowance = 600
+
+# FICA (Social Security and Medicare), federal unemployment, the 2010 federal income tax for a single filer (yearly
+# brackets with the quick deduction; standard deduction and exemption as the monthly threshold); no VAT (sales tax is
+# added at the register, left out here); federal corporate tax 15% on the first $50,000, 34% above (2010).
+[tax]
+comment = "United States 2010, simplified: FICA, FUTA and the federal income tax."
+employee = { social_security = 0.062, medicare = 0.0145 }
+employer = { social_security = 0.062, medicare = 0.0145, unemployment = 0.006 }
+base_min = 0
+base_max = 8900
+iit_threshold_monthly = 779
+iit_brackets_yearly = [[8375, 0.10, 0], [34000, 0.15, 418.75], [82400, 0.25, 3818.75], [171850, 0.28, 6290.75], [373650, 0.33, 14883.25], [999999999999, 0.35, 22356.25]]
+vat_small = 0.0
+cit_small_rate = 0.15
+cit_rate = 0.34
+cit_small_limit_yearly = 50000
+
+# The names his company's staff are given here.
+[names]
+family = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson", "Martinez", "Anderson", "Taylor", "Thomas", "Moore", "Jackson", "Martin", "Lee", "Thompson", "White"]
+given = ["Emily", "Michael", "Jessica", "Chris", "Ashley", "Matt", "Sarah", "Josh", "Amanda", "Daniel", "Megan", "Andrew", "Lauren", "Ryan", "Rachel", "Tyler", "Hannah", "Kevin", "Brittany", "Justin"]

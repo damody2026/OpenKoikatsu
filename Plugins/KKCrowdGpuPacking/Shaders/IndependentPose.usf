@@ -1,0 +1,118 @@
+#include "/Engine/Public/Platform.ush"
+StructuredBuffer<float4> Keys;
+StructuredBuffer<uint4> Tracks;
+StructuredBuffer<uint4> Actors;
+StructuredBuffer<float4> Times;
+StructuredBuffer<uint4> Tasks;
+StructuredBuffer<float4> InverseBindRows;
+RWStructuredBuffer<float4> OutputRows;
+uint TaskCount;
+float4 QuaternionMix(float4 a,float4 b,float t) {
+ float d=dot(a,b); if(d<0){b=-b;d=-d;}
+ d=clamp(d,0,1);
+ if(d>0.9995) return normalize(lerp(a,b,t));
+ float angle=acos(d),den=sin(angle);
+ return normalize((sin((1-t)*angle)*a+sin(t*angle)*b)/den);
+}
+float3 ColumnVector(float4 q,float3 scale,uint axis){
+ float3 basis=0;basis[axis]=scale[axis];float3 t=2*cross(q.xyz,basis);return basis+q.w*t+cross(q.xyz,t);
+}
+void ColumnTRS(float3 column,uint axis,out float4 q,out float3 sc){
+ float3 basis=0;basis[axis]=1;float len=length(column);sc=0;sc[axis]=len;q=float4(0,0,0,1);
+ if(len>1e-12){float3 direction=column/len;float dotAxis=dot(basis,direction);
+ if(dotAxis < -0.999999){float3 perpendicular=axis==0?float3(0,0,-1):axis==1?float3(0,0,1):float3(0,-1,0);q=float4(perpendicular,0);}
+ else q=normalize(float4(cross(basis,direction),1+dotAxis));}
+}
+void Sample(uint index,float time,out float3 tr,out float4 q,out float3 sc) {
+ uint4 track=Tracks[index]; uint lo=0,hi=track.y-1;
+ bool packed=(track.w&16)!=0,vectorKeys=(track.w&256)!=0;uint first=vectorKeys?track.x+(packed?1:0):packed?track.x+2:track.x*3,stride=packed?1:vectorKeys?2:3;
+ while(lo+1<hi){uint mid=(lo+hi)/2;if(Keys[first+mid*stride].w<=time)lo=mid;else hi=mid;}
+ uint a=first+lo*stride,b=first+hi*stride;
+ float ta=Keys[a].w,tb=Keys[b].w;
+ float t=tb>ta?saturate((time-ta)/(tb-ta)):0;
+ tr=lerp(Keys[a].xyz,Keys[b].xyz,t);
+ if(vectorKeys){ColumnTRS(lerp(Keys[packed?track.x:a+1].xyz,Keys[packed?track.x:b+1].xyz,t),(track.w>>6)&3,q,sc);return;}
+ float4 qa=Keys[packed?track.x:a+1],qb=Keys[packed?track.x:b+1];
+ if((track.w&32)!=0){uint axis=(track.w>>6)&3;ColumnTRS(lerp(ColumnVector(qa,Keys[packed?track.x+1:a+2].xyz,axis),ColumnVector(qb,Keys[packed?track.x+1:b+2].xyz,axis),t),axis,q,sc);return;}
+ if((track.w&1)==1){if(dot(qa,qb)<0)qb=-qb;q=normalize(lerp(qa,qb,t));}
+ else q=QuaternionMix(qa,qb,t);
+ sc=lerp(Keys[packed?track.x+1:a+2].xyz,Keys[packed?track.x+1:b+2].xyz,t);
+}
+void LocalTRS(uint bone,uint4 actor,float4 times,out float3 tr,out float4 q,out float3 s) {
+ float3 ta,sa,tb,sb;float4 qa,qb;
+ Sample(actor.x+bone,times.x,ta,qa,sa);Sample(actor.y+bone,times.y,tb,qb,sb);
+ tr=lerp(ta,tb,times.z);uint4 track=Tracks[actor.x+bone];if((track.w&32)!=0){uint axis=(track.w>>6)&3;ColumnTRS(lerp(ColumnVector(qa,sa,axis),ColumnVector(qb,sb,axis),times.z),axis,q,s);return;}s=lerp(sa,sb,times.z);q=QuaternionMix(qa,qb,times.z);
+}
+float4x4 MatrixTRS(float3 tr,float4 q,float3 s) {
+ float x=q.x,y=q.y,z=q.z,w=q.w;
+ return float4x4((1-2*(y*y+z*z))*s.x,2*(x*y-z*w)*s.y,2*(x*z+y*w)*s.z,tr.x,
+  2*(x*y+z*w)*s.x,(1-2*(x*x+z*z))*s.y,2*(y*z-x*w)*s.z,tr.y,
+  2*(x*z-y*w)*s.x,2*(y*z+x*w)*s.y,(1-2*(x*x+y*y))*s.z,tr.z,
+  0,0,0,1);
+}
+float4x4 Local(uint bone,uint4 actor,float4 times) {
+ float3 tr,s;float4 q;LocalTRS(bone,actor,times,tr,q,s);return MatrixTRS(tr,q,s);
+}
+// Affine helper columns have no meaningful quaternion twist. Retain the column
+// directly when matrix composition applies, or the native parent is identity.
+// Round each lerp step consistently with the CPU column sampler (no contraction).
+void SampleColumn(uint index,float time,out float3 tr,out float3 column){
+ uint4 t=Tracks[index];bool packed=(t.w&16)!=0,vectorKeys=(t.w&256)!=0;
+ uint first=vectorKeys?t.x+(packed?1:0):packed?t.x+2:t.x*3,stride=packed?1:vectorKeys?2:3;
+ uint lo=0,hi=t.y-1;while(lo+1<hi){uint mid=(lo+hi)/2;if(Keys[first+mid*stride].w<=time)lo=mid;else hi=mid;}
+ uint a=first+lo*stride,b=first+hi*stride;float w=Keys[b].w>Keys[a].w?saturate((time-Keys[a].w)/(Keys[b].w-Keys[a].w)):0;
+ float3 ca=vectorKeys?Keys[packed?t.x:a+1].xyz:ColumnVector(Keys[packed?t.x:a+1],Keys[packed?t.x+1:a+2].xyz,(t.w>>6)&3);
+ float3 cb=vectorKeys?Keys[packed?t.x:b+1].xyz:ColumnVector(Keys[packed?t.x:b+1],Keys[packed?t.x+1:b+2].xyz,(t.w>>6)&3);
+ precise float3 delta=cb-ca;precise float3 scaled=w*delta;precise float3 value=ca+scaled;column=value;
+ precise float3 pd=Keys[b].xyz-Keys[a].xyz;precise float3 ps=w*pd;precise float3 p=Keys[a].xyz+ps;tr=p;
+}
+float4x4 ColumnLocal(uint bone,uint4 actor,float4 times){
+ float3 ta,tb,ca,cb;SampleColumn(actor.x+bone,times.x,ta,ca);SampleColumn(actor.y+bone,times.y,tb,cb);
+ precise float3 d=cb-ca;precise float3 s=times.z*d;precise float3 c=ca+s;
+ precise float3 pd=tb-ta;precise float3 ps=times.z*pd;precise float3 p=ta+ps;
+ float4x4 m=0;m[0][3]=p.x;m[1][3]=p.y;m[2][3]=p.z;m[3][3]=1;uint axis=(Tracks[actor.x+bone].w>>6)&3;m[0][axis]=c.x;m[1][axis]=c.y;m[2][axis]=c.z;return m;
+}
+float4 QuatProduct(float4 a,float4 b){return float4(a.w*b.xyz+b.w*a.xyz+cross(a.xyz,b.xyz),a.w*b.w-dot(a.xyz,b.xyz));}
+float3 QuatRotate(float4 q,float3 v){float3 t=2*cross(q.xyz,v);return v+q.w*t+cross(q.xyz,t);}
+float4 MatrixQuaternion(float3x3 r){
+ // Unreal reconstructs identity when a normalized matrix axis is zero.
+ if(all(abs(float3(r[0][0],r[1][0],r[2][0]))<=0.0001)||all(abs(float3(r[0][1],r[1][1],r[2][1]))<=0.0001)||all(abs(float3(r[0][2],r[1][2],r[2][2]))<=0.0001))return float4(0,0,0,1);
+ float4 q;float tr=r[0][0]+r[1][1]+r[2][2];
+ if(tr>0){float inv=rsqrt(tr+1),k=.5*inv;q=float4((r[2][1]-r[1][2])*k,(r[0][2]-r[2][0])*k,(r[1][0]-r[0][1])*k,.5/inv);}
+ else{uint i=0;if(r[1][1]>r[0][0])i=1;if(r[2][2]>r[i][i])i=2;uint j=(i+1)%3,k=(j+1)%3;float inv=rsqrt(r[i][i]-r[j][j]-r[k][k]+1),f=.5*inv;
+  q=float4(0,0,0,0);q[i]=.5/inv;q.w=(r[k][j]-r[j][k])*f;q[j]=(r[j][i]+r[i][j])*f;q[k]=(r[k][i]+r[i][k])*f;}
+ return dot(q,q)>1e-8?normalize(q):float4(0,0,0,1);
+}
+float4 ReconstructRotation(float4x4 m,float3 desired){
+ float3x3 r=(float3x3)m;
+ for(uint c=0;c<3;++c){float3 axis=float3(r[0][c],r[1][c],r[2][c]);float n=dot(axis,axis);if(n>0)axis*=rsqrt(n);axis*=desired[c]>=0?1:-1;r[0][c]=axis.x;r[1][c]=axis.y;r[2][c]=axis.z;}
+ return MatrixQuaternion(r);
+}
+float4x4 NativeTRS(uint bone,uint4 actor,float4 times){
+ uint path[256];uint count=0,node=bone;
+ while(node!=0xffffffff){path[count++]=node;node=Tracks[actor.x+node].z;}
+ float3 tr,s;float4 q;LocalTRS(path[--count],actor,times,tr,q,s);
+ while(count){float3 lt,ls;float4 lq;LocalTRS(path[--count],actor,times,lt,lq,ls);
+  if(any(s<0)||any(ls<0)){float4x4 m=mul(MatrixTRS(tr,q,s),MatrixTRS(lt,lq,ls));s=s*ls;tr=float3(m[0][3],m[1][3],m[2][3]);q=ReconstructRotation(m,s);}
+  else{tr=QuatRotate(q,s*lt)+tr;q=QuatProduct(q,lq);s=s*ls;}
+ }
+ return MatrixTRS(tr,q,s);
+}
+[numthreads(64,1,1)]
+void MainCS(uint3 id:SV_DispatchThreadID) {
+ if(id.x>=TaskCount)return;
+ uint4 task=Tasks[id.x],actor=Actors[task.y];float4 times=Times[task.y];
+ uint bone=task.x;float4x4 component=Local(bone,actor,times);
+ uint parent=Tracks[actor.x+bone].z;
+ // No inter-thread dependency or fixed shared-skeleton assumption.
+ // CPU validation guarantees an acyclic, bounded hierarchy.
+ if(actor.w==1){
+  bool column=(Tracks[actor.x+bone].w&32)!=0;
+  if(column&&parent!=0xffffffff){float4x4 p=NativeTRS(parent,actor,times);bool identity=all(p[0]==float4(1,0,0,0))&&all(p[1]==float4(0,1,0,0))&&all(p[2]==float4(0,0,1,0))&&all(p[3]==float4(0,0,0,1));component=identity?ColumnLocal(bone,actor,times):NativeTRS(bone,actor,times);}
+  else component=column?ColumnLocal(bone,actor,times):NativeTRS(bone,actor,times);
+ }
+ else {if((Tracks[actor.x+bone].w&32)!=0)component=ColumnLocal(bone,actor,times);while(parent!=0xffffffff){component=mul(Local(parent,actor,times),component);parent=Tracks[actor.x+parent].z;}}
+ float4x4 bind=float4x4(InverseBindRows[task.z],InverseBindRows[task.z+1],InverseBindRows[task.z+2],float4(0,0,0,1));
+ float4x4 skin=mul(component,bind);
+ OutputRows[id.x*3]=skin[0];OutputRows[id.x*3+1]=skin[1];OutputRows[id.x*3+2]=skin[2];
+}

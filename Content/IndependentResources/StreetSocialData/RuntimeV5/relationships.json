@@ -1,0 +1,3986 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "personality": 0,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……君のことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あ……その目、本気の言葉なのね？」",
+          "text_zh": "「啊……那個眼神，是認真的話語呢？」",
+          "voices": [
+            "ja_ogg/c00/adv/sun_ev_00_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c00/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、冗談でこんなこと言ったりしない。本当に[H名]のことが好きなんだ」",
+          "text_zh": "「嗯，我不會拿這種事開玩笑。我是真的喜歡[H名]。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c00/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……好きな人から気持ちを伝えてもらえるのって、こんなに嬉しいことだったのね」",
+          "text_zh": "「……能從喜歡的人口中聽到心意，原來是這麼令人開心的事啊。」",
+          "voices": [
+            "ja_ogg/c00/adv/sun_ev_00_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c00/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「え？　それって……」",
+          "text_zh": "「咦？ 那是說……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c00/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ええ、私も君のことが好きよ。これからは彼氏彼女として仲良くしましょ」",
+          "text_zh": "「嗯，我也喜歡你。從今以後就當男女朋友，好好相處吧。」",
+          "voices": [
+            "ja_ogg/c00/adv/sun_ev_00_002.ogg"
+          ],
+          "face": "笑顔（目閉じ）",
+          "source": "adv/scenario/c00/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……君のことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「その……気持ちは嬉しいんだけど……考える時間をもらえるかしら？　……ごめんなさい」",
+          "text_zh": "「那個……心意我很高興……可以給我一點時間想嗎？　……對不起」",
+          "voices": [
+            "ja_ogg/c00/adv/sun_com_00_039.ogg"
+          ],
+          "face": "思わず目を逸らす",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c00/00.unity3d",
+      "scenario_sha256": "1c1ae817ec9c5b7c8942f0685da5bab9ab5faead5ccdbeaff64ba3d2a9e52e58"
+    },
+    {
+      "personality": 1,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……君のことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「へ……？　い、今、私のことを好きだと、仰いましたか？」",
+          "text_zh": "「咦……？ 你、你剛才說喜歡我嗎？」",
+          "voices": [
+            "ja_ogg/c01/adv/sun_ev_01_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c01/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん……そうだよ。俺は君のことが好きなんだ」",
+          "text_zh": "「嗯……是啊。我喜歡你。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c01/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「はぅっ！？……わ、私の聞き間違いではなかったんですね」",
+          "text_zh": "「啊嗚！？……不、不是我聽錯了呢。」",
+          "voices": [
+            "ja_ogg/c01/adv/sun_ev_01_001.ogg"
+          ],
+          "face": "恥ずかしくて真っ赤",
+          "source": "adv/scenario/c01/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっと、その……私も、あなたのことが……好きです」",
+          "text_zh": "「呃，那個……我也……喜歡你。」",
+          "voices": [
+            "ja_ogg/c01/adv/sun_ev_01_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c01/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「本当に？　あぁ、嬉しいよ。俺たち両想いだったんだね」",
+          "text_zh": "「真的嗎？啊啊，好開心。原來我們是兩情相悅的。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c01/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私も嬉しいです。えっと……改めまして、これから恋人としてよろしくお願いいたします」",
+          "text_zh": "「我也很開心。那個……重新說一次，今後也請以戀人的身分多多指教。」",
+          "voices": [
+            "ja_ogg/c01/adv/sun_ev_01_003.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c01/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……君のことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えぇと……考える時間を頂けませんか？　すみません……」",
+          "text_zh": "「呃……可以給我一點時間想嗎？　抱歉……」",
+          "voices": [
+            "ja_ogg/c01/adv/sun_com_01_038.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c01/00.unity3d",
+      "scenario_sha256": "ed6a26131bf35a78805e03424ae70dfc3dc8ec64c071cfea9912ab491ff45c8b"
+    },
+    {
+      "personality": 2,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……君のことが好きなんだ！」",
+          "text_zh": "「我……喜歡你！」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「おーっほっほっほ！　その心意気、よくってよ！」",
+          "text_zh": "「哦～呵呵呵呵！ 那份幹勁，很好！」",
+          "voices": [
+            "ja_ogg/c02/adv/sun_ev_02_000.ogg"
+          ],
+          "face": "笑顔",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……えっと、返事はどうなのかな？」",
+          "text_zh": "「……呃，答覆是怎樣呢？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うふふ、今の告白を受けて、あなたの気持ちを無下にすることなんて出来ませんわ」",
+          "text_zh": "「呵呵，接受了你剛才的告白，我可不能辜負你的心意呢。」",
+          "voices": [
+            "ja_ogg/c02/adv/sun_ev_02_001.ogg"
+          ],
+          "face": "微笑",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わたくしも、あなたの事が気になっていましたの。これから、よろしくお願いいたしますわね」",
+          "text_zh": "「我也一直對你很在意。今後，請多多指教。」",
+          "voices": [
+            "ja_ogg/c02/adv/sun_ev_02_002.ogg"
+          ],
+          "face": "微笑",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 14
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「やった！　こちらこそよろしくね」",
+          "text_zh": "「太好了！ 彼此彼此，請多指教。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「でも油断はなさらないように。わたくしに相応しくないと思ったら、即刻関係を解消いたしますわ」",
+          "text_zh": "「不過可別大意了。要是我覺得你配不上我，就會立刻解除關係喔。」",
+          "voices": [
+            "ja_ogg/c02/adv/sun_ev_02_003.ogg"
+          ],
+          "face": "真剣（目閉じ）",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 19
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、[H名]さんに相応しい男になれるように頑張るよ」",
+          "text_zh": "「嗯，我會努力成為配得上[H名]小姐的男人。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c02/00.unity3d",
+          "row": 20
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……君のことが好きなんだ！」",
+          "text_zh": "「我……喜歡你！」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……少し焦り過ぎですわ。わたくし、まだ距離をはかりかねていますの」",
+          "text_zh": "「……有點太著急了。本小姐還沒摸清距離」",
+          "voices": [
+            "ja_ogg/c02/adv/sun_com_02_038.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c02/00.unity3d",
+      "scenario_sha256": "92958128370e74016b05c65a577acb7deaab2cb7829dbec7ebd759ec2710ee13"
+    },
+    {
+      "personality": 3,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺さ、きみのことが好きなんだ」",
+          "text_zh": "「我啊，喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「へ？　あなたが……私のことを……ですか？」",
+          "text_zh": "「咦？ 你……對我……嗎？」",
+          "voices": [
+            "ja_ogg/c03/adv/sun_ev_03_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、そうだよ。その……一応言っておくと、ライクじゃなくてラブの方だからね？」",
+          "text_zh": "「嗯，是啊。那個……先說一下，不是喜歡，是愛喔？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「はわっ、今まさに聞こうと思っていたことをなぜ！？　え、エスパーなのですっ！」",
+          "text_zh": "「哇，我正想問的為什麼你先說了！？ 你、你是超能力者嗎！」",
+          "voices": [
+            "ja_ogg/c03/adv/sun_ev_03_001.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「いや、何となくそういうことを言いそうだなと思ったから」",
+          "text_zh": "「不，只是覺得你好像會說那種話。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「それで……返事はどう、かな？」",
+          "text_zh": "「所以……答覆如何呢？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 14
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、私も……あなたのこと……好きです……大好きですよ」",
+          "text_zh": "「我、我也……喜歡你……最喜歡你了。」",
+          "voices": [
+            "ja_ogg/c03/adv/sun_ev_03_002.ogg"
+          ],
+          "face": "恥ずかしくて真っ赤",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 18
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「あ……良かった。それじゃ……これからも、よろしくお願いね」",
+          "text_zh": "「啊……太好了。那……今後也請多多指教。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 19
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「は、はいですっ！　こちらこそなのですっ！」",
+          "text_zh": "「好、好的！ 彼此彼此！」",
+          "voices": [
+            "ja_ogg/c03/adv/sun_ev_03_003.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c03/00.unity3d",
+          "row": 22
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺さ、きみのことが好きなんだ」",
+          "text_zh": "「我啊，喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふぇっ……あ、その……考える時間が、ほしいです……」",
+          "text_zh": "「咦……啊、那個……想要一點時間想……」",
+          "voices": [
+            "ja_ogg/c03/adv/sun_com_03_040.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_63.unity3d",
+      "table_sha256": "1bd8c45de3599924c2c36ec21c941b708c001ae12b270f853e5fbb5926fbefdb",
+      "scenario_source": "adv/scenario/c03/00.unity3d",
+      "scenario_sha256": "eb093d40d22b0f4bec7ba801732fc843e143ec18916baff2c52668fcc0ee8cdc"
+    },
+    {
+      "personality": 4,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが……好きなんだ」",
+          "text_zh": "「我喜歡你……」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「冗談じゃ……ないのよね？」",
+          "text_zh": "「不是開玩笑……對吧？」",
+          "voices": [
+            "ja_ogg/c04/adv/sun_ev_04_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、本気だよ。本気で好きなんだ」",
+          "text_zh": "「嗯，是認真的。我是真的喜歡你。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そ、そう……ごめんなさい、突然のことで頭が混乱していて……」",
+          "text_zh": "「是、是嗎……對不起，事情太突然，我腦子一片混亂……」",
+          "voices": [
+            "ja_ogg/c04/adv/sun_ev_04_001.ogg"
+          ],
+          "face": "思わず目を逸らす",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「こっちこそ、急にごめんね。その……返事はいつでもいいから」",
+          "text_zh": "「是我才抱歉，這麼突然。那個……答覆什麼時候都可以。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……大丈夫、気持ちの整理がついたわ。私も、あなたのことが好きよ」",
+          "text_zh": "「……沒關係，我整理好心情了。我也喜歡你。」",
+          "voices": [
+            "ja_ogg/c04/adv/sun_ev_04_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ほ、本当？　それじゃ……」",
+          "text_zh": "「真、真的？那麼……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 17
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん。これからは、彼氏彼女としてよろしくね？」",
+          "text_zh": "「嗯。今後，請以男女朋友的身分多多指教？」",
+          "voices": [
+            "ja_ogg/c04/adv/sun_ev_04_003.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c04/00.unity3d",
+          "row": 20
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが……好きなんだ」",
+          "text_zh": "「我喜歡你……」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……ご、ごめんなさい……嫌いなわけじゃないんだけど、考える時間がほしいの……」",
+          "text_zh": "「……對、對不起……不是討厭，只是想要一點時間想……」",
+          "voices": [
+            "ja_ogg/c04/adv/sun_com_04_039.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_60.unity3d",
+      "table_sha256": "2e5429df99c7d43b08602d81d6d0fb104284e9628182afa1e17c1d13fd86aa1d",
+      "scenario_source": "adv/scenario/c04/00.unity3d",
+      "scenario_sha256": "fda34984679fbd1787cb62639754f09fa3d8e72e98403fafb37f7d26615ee795"
+    },
+    {
+      "personality": 5,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみのことが好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「す、好きって……告白、だよね？　わたしに……？」",
+          "text_zh": "「喜、喜歡……是告白，對吧？ 對、對我……？」",
+          "voices": [
+            "ja_ogg/c05/adv/sun_ev_05_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c05/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん……好きなんだ。付き合って欲しいんだけど、ダメかな？」",
+          "text_zh": "「嗯……喜歡你。希望你能跟我交往，不行嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c05/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ううん！　わたしも、あなたのことが好きなの！」",
+          "text_zh": "「不！ 我也喜歡你！」",
+          "voices": [
+            "ja_ogg/c05/adv/sun_ev_05_001.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c05/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えへへ……なんだか夢みたい。すっごく幸せだなぁ」",
+          "text_zh": "「嘿嘿……總覺得像做夢一樣。好幸福喔。」",
+          "voices": [
+            "ja_ogg/c05/adv/sun_ev_05_002.ogg"
+          ],
+          "face": "デレ顔(目閉じ)",
+          "source": "adv/scenario/c05/00.unity3d",
+          "row": 15
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみのことが好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっと……あなたには、わたしなんかより良い相手がいると思うから……」",
+          "text_zh": "「呃……我覺得你有比我更好的對象……」",
+          "voices": [
+            "ja_ogg/c05/adv/sun_com_05_039.ogg"
+          ],
+          "face": "苦笑",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_60.unity3d",
+      "table_sha256": "2e5429df99c7d43b08602d81d6d0fb104284e9628182afa1e17c1d13fd86aa1d",
+      "scenario_source": "adv/scenario/c05/00.unity3d",
+      "scenario_sha256": "46607f0aa521a7a9fd00c59961939dd97e04ccc42052eb80ddca554c61a94f3c"
+    },
+    {
+      "personality": 6,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが、好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……私も、何時からか貴方に惹かれていました」",
+          "text_zh": "「……我也，不知何時起被你吸引了。」",
+          "voices": [
+            "ja_ogg/c06/adv/sun_ev_06_000.ogg"
+          ],
+          "face": "デレ顔(目閉じ)",
+          "source": "adv/scenario/c06/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「へ？　そ、それじゃあ……」",
+          "text_zh": "「咦？ 那、那麼……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c06/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「はい。私も、貴方の事を愛しております」",
+          "text_zh": "「是的。我也愛您。」",
+          "voices": [
+            "ja_ogg/c06/adv/sun_ev_06_001.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c06/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ありがとう。何だか夢みたいだ……夢じゃないよね？」",
+          "text_zh": "「謝謝。總覺得像做夢……不是夢吧？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c06/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「この胸の奥底から熱くなる気持ちは、紛れもなく現実です。改めて、よろしくお願いいたしますね」",
+          "text_zh": "「這股從心底湧上來的熱意，毫無疑問是真實的。今後也請多多指教。」",
+          "voices": [
+            "ja_ogg/c06/adv/sun_ev_06_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c06/00.unity3d",
+          "row": 15
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが、好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「お気持ちは大変嬉しいのですが……申し訳ございません、お時間をいただけないでしょうか」",
+          "text_zh": "「心意非常高興……十分抱歉，可以給我一點時間嗎」",
+          "voices": [
+            "ja_ogg/c06/adv/sun_com_06_041.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c06/00.unity3d",
+      "scenario_sha256": "2b755bdacbf37ae853deb96c29e1df6b783e5dccd1954c226197dae7a7e82be3"
+    },
+    {
+      "personality": 7,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「あのさ……俺と付き合ってくれない？」",
+          "text_zh": "「那個……能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「お……お前と、付き合う……？　そ、それってあれか？　恋人的なこと……なのか？」",
+          "text_zh": "「跟……跟你交往……？那、那是那個嗎？戀人之類的……意思嗎？」",
+          "voices": [
+            "ja_ogg/c07/adv/sun_ev_07_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c07/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、そういう意味だよ」",
+          "text_zh": "「嗯，就是那個意思。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c07/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「どこかへ行くのに付き合ってくれ～とか、そういう意味じゃないんだな？」",
+          "text_zh": "「不是「陪我去哪裡～」那種意思吧？」",
+          "voices": [
+            "ja_ogg/c07/adv/sun_ev_07_001.ogg"
+          ],
+          "face": "疑問2",
+          "source": "adv/scenario/c07/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「当たり前だよ。俺の……彼女になって欲しいんだ」",
+          "text_zh": "「當然啊。我希望妳……當我的女朋友。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c07/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「彼女っ……！？　夢でも私の勘違いでもなくて、本気で言ってるんだな……」",
+          "text_zh": "「女、女朋友……！？ 不是夢也不是我會錯意，是認真的吧……」",
+          "voices": [
+            "ja_ogg/c07/adv/sun_ev_07_002.ogg"
+          ],
+          "face": "見つめながらドキドキ",
+          "source": "adv/scenario/c07/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私みたいな女でいいなら……えっと、その……よろしく頼む」",
+          "text_zh": "「如果是像我這樣的女人也可以……呃，那個……請多指教。」",
+          "voices": [
+            "ja_ogg/c07/adv/sun_ev_07_003.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c07/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「あのさ……俺と付き合ってくれない？」",
+          "text_zh": "「那個……能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……も、もう少し、考える時間をくれないか？　悪いな……」",
+          "text_zh": "「……能、能不能再給我一點時間想？　抱歉……」",
+          "voices": [
+            "ja_ogg/c07/adv/sun_com_07_038.ogg"
+          ],
+          "face": "焦り",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c07/00.unity3d",
+      "scenario_sha256": "03e10075e47ba800feab431dcdb0e0db8f34a2a7fcd9c2970844ee207b36e517"
+    },
+    {
+      "personality": 8,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「あのさ……俺と付き合って欲しいんだ」",
+          "text_zh": "「那個……我想和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっ？　あなたは、私のことが好き……なの？」",
+          "text_zh": "「咦？ 你喜歡……我嗎？」",
+          "voices": [
+            "ja_ogg/c08/adv/sun_ev_08_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c08/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そうだよ。[H名]を見てるとドキドキするし、ずっと傍にいたいなって思うんだ」",
+          "text_zh": "「是啊。看著[H名]就會心跳加速，想一直待在你身邊。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c08/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、私もね……あなたを見てるとドキドキして、もっと傍にいられたらなぁって……思うよ」",
+          "text_zh": "「我、我也是……看著你就會心跳加速，想說能再靠近一點就好了……」",
+          "voices": [
+            "ja_ogg/c08/adv/sun_ev_08_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c08/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「じゃあ、俺たち……両想いだったってこと？」",
+          "text_zh": "「那，我們……是兩情相悅嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c08/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うんっ！　えへへ……嬉しいなぁ。恋人として、これからもよろしくねっ」",
+          "text_zh": "「嗯！嘿嘿……好開心喔。今後作為戀人，也請多多指教喔。」",
+          "voices": [
+            "ja_ogg/c08/adv/sun_ev_08_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c08/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「あのさ……俺と付き合って欲しいんだ」",
+          "text_zh": "「那個……我想和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「気持ちは嬉しいけど……ごめんね。もう少し考えさせてほしいの……」",
+          "text_zh": "「心意很高興……抱歉。希望再讓我想一下……」",
+          "voices": [
+            "ja_ogg/c08/adv/sun_com_08_040.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c08/00.unity3d",
+      "scenario_sha256": "c3e4d80d3013b22caade4178005252c59fbbee0dc1f3ab2e3897671a80cbe374"
+    },
+    {
+      "personality": 9,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「あのさ……俺と付き合ってくれないかな」",
+          "text_zh": "「那個……能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ん？　どこに付き合えばいいわけ？」",
+          "text_zh": "「嗯？ 要去哪裡陪妳？」",
+          "voices": [
+            "ja_ogg/c09/adv/sun_ev_09_000.ogg"
+          ],
+          "face": "思案2",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「えぇと、そういう意味じゃなくて……」",
+          "text_zh": "「呃，不是那個意思……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……君のことが好きなんだ。だから、俺と付き合ってほしい」",
+          "text_zh": "「……我喜歡妳。所以，希望妳跟我交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 9
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「なんだ、勘違いしてたわ。分かった、あたし達付き合いましょう」",
+          "text_zh": "「什麼啊，我搞錯了。知道了，我們交往吧」",
+          "voices": [
+            "ja_ogg/c09/adv/sun_ev_09_001.ogg"
+          ],
+          "face": "微笑",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「って、えぇぇぇ！？　あんた、あたしのこと好きなの！？」",
+          "text_zh": "「等、欸欸欸欸！？ 你，喜歡我！？」",
+          "voices": [
+            "ja_ogg/c09/adv/sun_ev_09_002.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 17
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「リアクションが遅いよ……さっき言った通り、俺は君のことが好きだよ」",
+          "text_zh": "「反應好慢……就像剛才說的，我喜歡妳」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 18
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「それで、結局ＯＫなのかな？」",
+          "text_zh": "「那，結果是OK嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 19
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっと……うん。あたしも、あんたのこと……好きよ。だから、その……よろしく……」",
+          "text_zh": "「那個……嗯。我也，喜歡……你。所以，那個……請多指教……」",
+          "voices": [
+            "ja_ogg/c09/adv/sun_ev_09_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c09/00.unity3d",
+          "row": 22
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「あのさ……俺と付き合ってくれないかな」",
+          "text_zh": "「那個……能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ごめん……今はまだ、恋とかよくわかんなくて……あんたとは友達でいさせてほしいわ」",
+          "text_zh": "「對不起……我現在還不太懂什麼是戀愛……希望我們能繼續當朋友。」",
+          "voices": [
+            "ja_ogg/c09/adv/sun_com_09_039.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c09/00.unity3d",
+      "scenario_sha256": "6b1168e898a739ae8e9a67e2e53d71d26eef1f29a66dda84a9a5909575766f9f"
+    },
+    {
+      "personality": 10,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「その……好きなんだ。だから、俺と付き合ってほしい」",
+          "text_zh": "「那個……我喜歡你。所以，希望你能和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふぇっ？　わ、我のことが好きなのか！？」",
+          "text_zh": "「呼欸？ 你、你喜歡吾嗎！？」",
+          "voices": [
+            "ja_ogg/c10/adv/sun_ev_10_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん。実はずっと惹かれていてさ……俺が相手じゃダメかな？」",
+          "text_zh": "「嗯。其實一直被吸引……我當對象不行嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ダメなはずないよ……むしろ、私が彼女でいいの……？」",
+          "text_zh": "「不可能不行……倒是，我當女朋友可以嗎……？」",
+          "voices": [
+            "ja_ogg/c10/adv/sun_ev_10_001.ogg"
+          ],
+          "face": "困り顔",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「もちろん。[H名]以外、考えられないよ」",
+          "text_zh": "「當然。[H名]以外想都想不到」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、我で良いのなら……汝と契約を交わそう」",
+          "text_zh": "「若、若吾可以的話……就跟汝締結契約吧」",
+          "voices": [
+            "ja_ogg/c10/adv/sun_ev_10_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 17
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「この契りは不滅だからな？　もう我から離れられると思わないことだ！」",
+          "text_zh": "「這契約是不滅的哦？ 別以為還能離開吾！」",
+          "voices": [
+            "ja_ogg/c10/adv/sun_ev_10_003.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 20
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん！　ずっと傍にいるよ。改めてよろしくね」",
+          "text_zh": "「嗯！ 會一直在身邊。再次請多指教」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c10/00.unity3d",
+          "row": 21
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「その……好きなんだ。だから、俺と付き合ってほしい」",
+          "text_zh": "「那個……我喜歡你。所以，希望你能和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、私は……その……もっと関係を深めてからの方が……いいと思う……」",
+          "text_zh": "「我、我……那個……關係再深一點再……比較好……」",
+          "voices": [
+            "ja_ogg/c10/adv/sun_com_10_041.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c10/00.unity3d",
+      "scenario_sha256": "706147d5f6bdfb556fa2d6eb6eee72b456d58eb24dc26b2165110bd0cbd9b113"
+    },
+    {
+      "personality": 11,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「好きなんだ……俺と付き合ってくれないかな？」",
+          "text_zh": "「我喜歡你……能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「付き合ってほしいってことは……お友達としての好きじゃなくて、男女の仲で……という意味よね？」",
+          "text_zh": "「想交往的意思是……不是當朋友喜歡，而是男女之間……對吧？」",
+          "voices": [
+            "ja_ogg/c11/adv/sun_ev_11_000.ogg"
+          ],
+          "face": "微笑",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……そうだよ。俺のことをひとりの男として見て欲しいんだ」",
+          "text_zh": "「……對。希望你把我當一個男人看」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あなたの気持ちは分かったわ。でも、そんなお願いなんてする必要なんてないの」",
+          "text_zh": "「你的心意我明白了。但根本不必那樣拜託」",
+          "voices": [
+            "ja_ogg/c11/adv/sun_ev_11_001.ogg"
+          ],
+          "face": "微笑み（目閉じ）",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私はずっと……あなたのことをひとりの男の子として意識してたんだから」",
+          "text_zh": "「我一直……把你當一個男孩子意識著」",
+          "voices": [
+            "ja_ogg/c11/adv/sun_ev_11_002.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「本当？　俺、てっきり子供扱いされてるとばっかり……」",
+          "text_zh": "「真的嗎？我還以為妳一直把我當小孩子……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あなたは可愛いけれど、それ以上にカッコイイわ。だから……告白してくれてありがとう。私もあなたのことが好きよ」",
+          "text_zh": "「你很可愛，但更帥氣。所以……謝謝你告白。我也喜歡你」",
+          "voices": [
+            "ja_ogg/c11/adv/sun_ev_11_003.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 18
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「あぁ……嬉しいよ！　これからよろしくね！」",
+          "text_zh": "「啊……好開心！ 今後請多指教！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c11/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「好きなんだ……俺と付き合ってくれないかな？」",
+          "text_zh": "「我喜歡你……能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……あなたを思う気持ちが恋なのか、まだ分からなくて……ごめんね」",
+          "text_zh": "「……我還不知道想著你的這份心情是不是戀愛……對不起。」",
+          "voices": [
+            "ja_ogg/c11/adv/sun_com_11_042.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c11/00.unity3d",
+      "scenario_sha256": "294b01c6d70dd29997fab44c506b802750094214f627feeb8048ab3f3a89f899"
+    },
+    {
+      "personality": 12,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「……好き、なんだ。俺と付き合ってくれないかな？」",
+          "text_zh": "「……喜歡，什麼？能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「へっ……ぁ……その……ありが、とう……？」",
+          "text_zh": "「嘿……啊……那個……謝、謝謝……？」",
+          "voices": [
+            "ja_ogg/c12/adv/sun_ev_12_000.ogg"
+          ],
+          "face": "焦り",
+          "source": "adv/scenario/c12/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「どういたしまして……って、そうじゃないよ！　返事を……聞かせてくれないかな？」",
+          "text_zh": "「不客氣……不對，不是那樣！ 回覆……能讓我聽嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c12/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、分かってるよ。返事な、返事……」",
+          "text_zh": "「知、知道。回覆，回覆……」",
+          "voices": [
+            "ja_ogg/c12/adv/sun_ev_12_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c12/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……おまえの大胆な告白にドキドキして、すごく嬉しくなって……そんな自分の気持ちに……嘘は付けないな」",
+          "text_zh": "「……你大膽的告白讓我心跳加速，好開心……我沒辦法對自己的心情說謊呢。」",
+          "voices": [
+            "ja_ogg/c12/adv/sun_ev_12_002.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c12/00.unity3d",
+          "row": 14
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あたしも、おまえのことが好きだよ。だから……えと……よ、よろしく？」",
+          "text_zh": "「我也喜歡你。所以……呃……請、請多指教？」",
+          "voices": [
+            "ja_ogg/c12/adv/sun_ev_12_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c12/00.unity3d",
+          "row": 17
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「……好き、なんだ。俺と付き合ってくれないかな？」",
+          "text_zh": "「……喜歡，什麼？能和我交往嗎？」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……すまん。おまえといて楽しんだが、それが恋なのかあたしには、まだ分からなくて……」",
+          "text_zh": "「……抱歉。跟你在一起很開心，但那是不是戀愛，我還不明白……」",
+          "voices": [
+            "ja_ogg/c12/adv/sun_com_12_038.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c12/00.unity3d",
+      "scenario_sha256": "c4448d376498f338d395b8c1318684659658b1c3bab1170e85f4299f0d3621a2"
+    },
+    {
+      "personality": 13,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そ、それってつまり、アタシに彼女になって欲しいって事？」",
+          "text_zh": "「那、那意思是，希望我當女朋友？」",
+          "voices": [
+            "ja_ogg/c13/adv/sun_ev_13_000.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c13/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、俺と付き合って欲しい」",
+          "text_zh": "「嗯，希望跟我交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c13/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん！　分かった！　アタシで良かったら、キミとその……付き合うからっ」",
+          "text_zh": "「嗯！ 知道了！ 我可以的話，就跟你那個……交往！」",
+          "voices": [
+            "ja_ogg/c13/adv/sun_ev_13_001.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c13/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ありがとう。[H名]と付き合えるなんて、俺、すごく嬉しいよ」",
+          "text_zh": "「謝謝。能跟[H名]交往，我超開心」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c13/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「アタシも、アタシも嬉しい……えっと、これからも、宜しくね」",
+          "text_zh": "「我也、我也很開心……那個，今後也請多指教」",
+          "voices": [
+            "ja_ogg/c13/adv/sun_ev_13_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c13/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そっか……それは嬉しいけど…まだ、友達でいたいかな……」",
+          "text_zh": "「這樣啊……很高興但…還想當朋友……」",
+          "voices": [
+            "ja_ogg/c13/adv/sun_com_13_039.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c13/00.unity3d",
+      "scenario_sha256": "5fb83ac735e2b0c92bc114b7ce86e93990b264979ab3ffa5112468654f3555d3"
+    },
+    {
+      "personality": 14,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「お、お前……本気なのか！？　本気で、私と、その……」",
+          "text_zh": "「你、你……是認真的嗎！？ 認真地，跟我，那個……」",
+          "voices": [
+            "ja_ogg/c14/adv/sun_ev_14_000.ogg"
+          ],
+          "face": "焦り",
+          "source": "adv/scenario/c14/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「本気だ、本気で俺と付き合って欲しいんだ」",
+          "text_zh": "「認真的，認真想跟你交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c14/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、分かった……私だって、その……お前の事……す、好きだ！　私なんかで良かったら……お前と付き合ってやるよ」",
+          "text_zh": "「我、我知道了……我也，那個……喜歡你……！ 不嫌棄我的話……就跟你交往吧」",
+          "voices": [
+            "ja_ogg/c14/adv/sun_ev_14_001.ogg"
+          ],
+          "face": "TRUE",
+          "source": "adv/scenario/c14/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ありがとう。でも、私なんかなんて言わないでくれよ…俺は[H名]の事、すごくいい子だって思ってるから」",
+          "text_zh": "「謝謝。可是別再說什麼不嫌棄……我覺得[H名]是個非常好的女孩」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c14/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ぅ……あ、ありがと……えっと、それじゃあ……宜しく、頼むぞ……」",
+          "text_zh": "「唔……謝、謝謝……那個，那就……請多、指教……」",
+          "voices": [
+            "ja_ogg/c14/adv/sun_ev_14_002.ogg"
+          ],
+          "face": "真剣な顔（照れ）",
+          "source": "adv/scenario/c14/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……気持ちは、嬉しいんだけど……すまん、考える時間をくれ」",
+          "text_zh": "「……心意很高興……抱歉，給我時間想」",
+          "voices": [
+            "ja_ogg/c14/adv/sun_com_14_042.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c14/00.unity3d",
+      "scenario_sha256": "3b8cf2204f85fe1d18660b5d12f667c6eb53789f7a4b1f5f414893d7b60ead62"
+    },
+    {
+      "personality": 15,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そ、そうだったのか……あたしの事、本気で好きなのか？」",
+          "text_zh": "「原、原來是這樣……真的喜歡我？」",
+          "voices": [
+            "ja_ogg/c15/adv/sun_ev_15_000.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c15/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「もちろん、本気で好きだ。俺と付き合って欲しい」",
+          "text_zh": "「當然，認真喜歡。希望跟我交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c15/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、わかった、あたしも……その、キミの事好きだから、大丈夫だぞ」",
+          "text_zh": "「我、我知道了，我也……那個，喜歡你，沒問題」",
+          "voices": [
+            "ja_ogg/c15/adv/sun_ev_15_001.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c15/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ありがとう、嬉しいよ。これで俺たち、恋人同士だね」",
+          "text_zh": "「謝謝，我好開心。這樣我們就是戀人了呢。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c15/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「こ、恋人同士か……う、うん、宜しくな」",
+          "text_zh": "「戀、戀人啊……嗯、嗯，請多指教。」",
+          "voices": [
+            "ja_ogg/c15/adv/sun_ev_15_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c15/00.unity3d",
+          "row": 15
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うぅ～、ごめんなー……キミにまだ、そういう気持ちは持ってないんだー」",
+          "text_zh": "「嗚～，抱歉～……對你還沒有那種感覺啦～」",
+          "voices": [
+            "ja_ogg/c15/adv/sun_com_15_038.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c15/00.unity3d",
+      "scenario_sha256": "11c934499ce0148cc43046e0adeebe94534c078f248a7f6df6d09297c3c0b426"
+    },
+    {
+      "personality": 16,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「冗談にしては……質が悪いと思うのだけど……」",
+          "text_zh": "「就算是玩笑……品質也很差……」",
+          "voices": [
+            "ja_ogg/c16/adv/sun_ev_16_000.ogg"
+          ],
+          "face": "不安",
+          "source": "adv/scenario/c16/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「冗談なんかじゃないよ。俺は本気でキミの事が好きなんだ」",
+          "text_zh": "「不是玩笑。我認真喜歡你」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c16/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、私は……アナタの事、友人だと、その……少し待って、なんだか混乱して……」",
+          "text_zh": "「我、我是把你當朋友的，那個……等一下，我有點混亂……」",
+          "voices": [
+            "ja_ogg/c16/adv/sun_ev_16_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c16/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ごめん、困らせるつもりはなかったんだけど……」",
+          "text_zh": "「抱歉，沒想讓你為難……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c16/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「謝らないで。……私も自分の気持ちに気づいたわ」",
+          "text_zh": "「別道歉。……我也察覺到自己的心情了」",
+          "voices": [
+            "ja_ogg/c16/adv/sun_ev_16_002.ogg"
+          ],
+          "face": "デレ顔(目閉じ)",
+          "source": "adv/scenario/c16/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私も……アナタが好きよ。だから、これから宜しくお願いします」",
+          "text_zh": "「我也……喜歡你。所以，今後請多指教」",
+          "voices": [
+            "ja_ogg/c16/adv/sun_ev_16_003.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c16/00.unity3d",
+          "row": 20
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「君のことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……ごめんなさい、今はまだ、アナタの気持ちに応えられないわ」",
+          "text_zh": "「……抱歉，現在還無法回應你的心意」",
+          "voices": [
+            "ja_ogg/c16/adv/sun_com_16_039.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c16/00.unity3d",
+      "scenario_sha256": "7a423b666fe53c01b14a7606d92152816d4877c9cb50960160a8dd8697d5241d"
+    },
+    {
+      "personality": 17,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……きみのことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「それは……男と女としてって事？」",
+          "text_zh": "「那是……作為男女的意思？」",
+          "voices": [
+            "ja_ogg/c17/adv/sun_ev_17_000.ogg"
+          ],
+          "face": "不安",
+          "source": "adv/scenario/c17/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、そうだよ。俺は本気できみが好きなんだ。だから、俺と付き合って欲しい」",
+          "text_zh": "「嗯，對。我認真喜歡你。所以希望跟我交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c17/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そう、だったのね。本気で私の事を……」",
+          "text_zh": "「是、那樣啊。認真地對我……」",
+          "voices": [
+            "ja_ogg/c17/adv/sun_ev_17_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c17/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ダメ、かな……？」",
+          "text_zh": "「不行，嗎……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c17/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ダメじゃ、ないわ。私もあなたの事が……好きよ」",
+          "text_zh": "「不是不行。我也……喜歡你。」",
+          "voices": [
+            "ja_ogg/c17/adv/sun_ev_17_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c17/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「だから、その……これからよろしくね」",
+          "text_zh": "「所以，那個……今後請多指教」",
+          "voices": [
+            "ja_ogg/c17/adv/sun_ev_17_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c17/00.unity3d",
+          "row": 18
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……きみのことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「困ったわ……あなたの事、まだそんな風に見れないのよ」",
+          "text_zh": "「傷腦筋……現在還無法那樣看你」",
+          "voices": [
+            "ja_ogg/c17/adv/sun_com_17_038.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c17/00.unity3d",
+      "scenario_sha256": "3aa28811114d6c37b12c7890390e462a9841317a86f477e4b6cfb66a56bdf19b"
+    },
+    {
+      "personality": 18,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「へ？　それって……私のことが、ですか？」",
+          "text_zh": "「蛤？那是……說我嗎？」",
+          "voices": [
+            "ja_ogg/c18/adv/sun_ev_18_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c18/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……うん、そうだよ。俺と付き合って欲しい」",
+          "text_zh": "「……嗯，是的。請跟我交往。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c18/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「び、びっくりしました……ど、どうしましょう」",
+          "text_zh": "「嚇、嚇到了……該、該怎麼辦。」",
+          "voices": [
+            "ja_ogg/c18/adv/sun_ev_18_001.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c18/00.unity3d",
+          "row": 10
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ごめん、驚かせるつもりはなかったんだけど」",
+          "text_zh": "「抱歉，沒想嚇你的。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c18/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あ、謝らないで下さいっ！　……幸せ過ぎて、驚いただけですから」",
+          "text_zh": "「請、請不要道歉！……只是幸福過頭，嚇到而已。」",
+          "voices": [
+            "ja_ogg/c18/adv/sun_ev_18_002.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c18/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私で良ければ、よろしくお願いしますっ」",
+          "text_zh": "「如果我可以的話，請多指教。」",
+          "voices": [
+            "ja_ogg/c18/adv/sun_ev_18_003.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c18/00.unity3d",
+          "row": 17
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ご、ごめんなさい……今はまだ、あなたの気持ちに応えることができません」",
+          "text_zh": "「對、對不起……現在還無法回應你的心意」",
+          "voices": [
+            "ja_ogg/c18/adv/sun_com_18_038.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c18/00.unity3d",
+      "scenario_sha256": "cf9e390d790c13b2d05d46c5b84d62c780d654fd8f8974f484e83913f0609fbc"
+    },
+    {
+      "personality": 19,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ま、待って……私の事、好きって……どういう意味？」",
+          "text_zh": "「等、等一下……說喜歡我……是什麼意思？」",
+          "voices": [
+            "ja_ogg/c19/adv/sun_ev_19_000.ogg"
+          ],
+          "face": "困り顔",
+          "source": "adv/scenario/c19/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「意味なんて一つしかないよ……好きだから、俺と付き合って欲しいんだ……理解、してくれた？」",
+          "text_zh": "「意思只有一個……因為喜歡，想跟我交往……理解了嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c19/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「う、うん……理解した」",
+          "text_zh": "「嗯、嗯……理解了。」",
+          "voices": [
+            "ja_ogg/c19/adv/sun_ev_19_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c19/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ごめんね、小説みたいにあんまりうまい告白思いつかなくて」",
+          "text_zh": "「抱歉，想不出像小說那樣漂亮的告白。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c19/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ううん、大丈夫……小説より、衝撃的だったから……」",
+          "text_zh": "「不，沒關係……比小說更有衝擊……」",
+          "voices": [
+            "ja_ogg/c19/adv/sun_ev_19_002.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c19/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あの……いいよ、私もあなたが好きだから……付き合って下さい」",
+          "text_zh": "「那個……好，我也喜歡你……請跟我交往。」",
+          "voices": [
+            "ja_ogg/c19/adv/sun_ev_19_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c19/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっと、ごめんなさい……あなたの事、嫌いじゃないけど……今は難しいかな」",
+          "text_zh": "「那個，抱歉……不是討厭你……只是現在有點難」",
+          "voices": [
+            "ja_ogg/c19/adv/sun_com_19_043.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c19/00.unity3d",
+      "scenario_sha256": "b119ffe2a72b4be93a6de4b27198eea92a28487c9f50ca10dc349b1f497d419f"
+    },
+    {
+      "personality": 20,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……きみのことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「す、好きって……あの、どういう意味ですか？」",
+          "text_zh": "「喜、喜歡……那個，是什麼意思？」",
+          "voices": [
+            "ja_ogg/c20/adv/sun_ev_20_000.ogg"
+          ],
+          "face": "困り顔",
+          "source": "adv/scenario/c20/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……好きだから、付き合って欲しいってこと」",
+          "text_zh": "「……因為喜歡，想跟我交往的意思。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c20/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ほ……本当なんですか？」",
+          "text_zh": "「真……真的嗎？」",
+          "voices": [
+            "ja_ogg/c20/adv/sun_ev_20_001.ogg"
+          ],
+          "face": "困り顔",
+          "source": "adv/scenario/c20/00.unity3d",
+          "row": 10
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「本当だよ、本気できみが好きなんだ」",
+          "text_zh": "「是真的，我是真心喜歡妳。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c20/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ……わかりました……私も、あなただったら大丈夫ですから……」",
+          "text_zh": "「我……我明白了……如果是你的話，沒問題……」",
+          "voices": [
+            "ja_ogg/c20/adv/sun_ev_20_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c20/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あの……これからも、よろしくお願いします」",
+          "text_zh": "「那個……今後也請多指教。」",
+          "voices": [
+            "ja_ogg/c20/adv/sun_ev_20_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c20/00.unity3d",
+          "row": 17
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……きみのことが好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ご、ごめんなさい……今はまだ、あなたをそんな風に見れないです……」",
+          "text_zh": "「對、對不起……現在還無法那樣看你……」",
+          "voices": [
+            "ja_ogg/c20/adv/sun_com_20_040.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c20/00.unity3d",
+      "scenario_sha256": "9c5776d5c5a150c173cae27d175d4d238b31d046e349d798ad7790276316b36f"
+    },
+    {
+      "personality": 21,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみのことが好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えぇっ？　きみの事って、私の事？　本気で言ってるの？」",
+          "text_zh": "「咦？你的事，是我的事？認真說的？」",
+          "voices": [
+            "ja_ogg/c21/adv/sun_ev_21_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c21/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「もちろん本気だよ…本気で、きみの事が好きなんだ」",
+          "text_zh": "「當然認真……認真喜歡你。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c21/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そうなんだ……びっくりしちゃった……あ、あのね、私もキミの事、好きなんだけど」",
+          "text_zh": "「這樣啊……嚇到了……那、那個，我也喜歡你。」",
+          "voices": [
+            "ja_ogg/c21/adv/sun_ev_21_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c21/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そうだったのか……俺たち、両想いだったんだ」",
+          "text_zh": "「原來如此……我們是兩情相悅。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c21/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん、そうみたい……だから、キミと付き合ってもいいよ」",
+          "text_zh": "「嗯，好像是……所以，可以跟你交往。」",
+          "voices": [
+            "ja_ogg/c21/adv/sun_ev_21_002.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c21/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ううん……ぜひ、付き合って、下さい」",
+          "text_zh": "「不……務必，請跟我交往。」",
+          "voices": [
+            "ja_ogg/c21/adv/sun_ev_21_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c21/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみのことが好きなんだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっと、ちょっと待って……気持ちは嬉しいけど、今はそんな風に考えらんないよ」",
+          "text_zh": "「那個，等一下……心意我很高興，但現在還沒法那樣想」",
+          "voices": [
+            "ja_ogg/c21/adv/sun_com_21_039.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c21/00.unity3d",
+      "scenario_sha256": "4229c9c1e2d6526103839eae9434bd6792d7ffa5167bc22e53e59120497eebbe"
+    },
+    {
+      "personality": 22,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみのことが好きだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ウソ……私の事、好きなの？」",
+          "text_zh": "「騙人……你喜歡我？」",
+          "voices": [
+            "ja_ogg/c22/adv/sun_ev_22_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c22/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ウソじゃないよ。本当にきみのことが好きなんだ……俺と、付き合って欲しい」",
+          "text_zh": "「我沒有說謊。我真的喜歡妳……請跟我交往。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c22/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん……いいよ」",
+          "text_zh": "「嗯……好啊。」",
+          "voices": [
+            "ja_ogg/c22/adv/sun_ev_22_001.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c22/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「いいの？」",
+          "text_zh": "「可以嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c22/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん、だって……私も、君の事好きだから……」",
+          "text_zh": "「嗯，因為……我也喜歡你……」",
+          "voices": [
+            "ja_ogg/c22/adv/sun_ev_22_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c22/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「だから……ぜひ、お付き合い、して下さい」",
+          "text_zh": "「所以……請務必，跟我交往。」",
+          "voices": [
+            "ja_ogg/c22/adv/sun_ev_22_003.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c22/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみのことが好きだ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「気持ちは嬉しいけど……今は君の事、友達としか思えないから……」",
+          "text_zh": "「心意我很高興……但現在只能把你當朋友……」",
+          "voices": [
+            "ja_ogg/c22/adv/sun_com_22_040.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c22/00.unity3d",
+      "scenario_sha256": "64216e6a7ca16267890716f2d7edc6c5a48876b9f1528323ca888eb1781cc96a"
+    },
+    {
+      "personality": 23,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「い、今のってまるで……こ、こここ、こくはくぅぅぅぅ、みたいな感じだけど？」",
+          "text_zh": "「剛、剛才簡直像……告、告告、告白一樣？」",
+          "voices": [
+            "ja_ogg/c23/adv/sun_ev_23_000.ogg"
+          ],
+          "face": "焦り",
+          "source": "adv/scenario/c23/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そう、告白だよ……きみが好きなんだ。俺と、付き合って欲しい」",
+          "text_zh": "「對，就是告白……我喜歡你。希望你跟我交往。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c23/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「冗談とかでは……ないんだよね？」",
+          "text_zh": "「不是開玩笑……對吧？」",
+          "voices": [
+            "ja_ogg/c23/adv/sun_ev_23_001.ogg"
+          ],
+          "face": "不安",
+          "source": "adv/scenario/c23/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「冗談でこんな事言わないよ……ちゃんと、本気だから」",
+          "text_zh": "「不會開玩笑說這種話……是認真的。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c23/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そっか……あのね、ワタシもあなたの事、好きなんだなぁ」",
+          "text_zh": "「這樣啊……那個，我也喜歡你呢。」",
+          "voices": [
+            "ja_ogg/c23/adv/sun_ev_23_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c23/00.unity3d",
+          "row": 17
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「嬉しいなぁ……これからも、よろしくね」",
+          "text_zh": "「好開心……今後也請多指教。」",
+          "voices": [
+            "ja_ogg/c23/adv/sun_ev_23_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c23/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「え、えぇっと……ワタシ、今はあなたの事、友達だなぁって思ってるから……」",
+          "text_zh": "「那、那個……我現在把你當朋友……」",
+          "voices": [
+            "ja_ogg/c23/adv/sun_com_23_039.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c23/00.unity3d",
+      "scenario_sha256": "e87a9a54b0f75ad851f40f3000551e4400cbf5f1495b4435e35a9b347dc57162"
+    },
+    {
+      "personality": 24,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私の事が……好き？　好きとはどういう意味ですか……？」",
+          "text_zh": "「我的事……喜歡？喜歡是什麼意思……？」",
+          "voices": [
+            "ja_ogg/c24/adv/sun_ev_24_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c24/50.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そのままの意味だよ。きみが好きだから付き合いたいって事」",
+          "text_zh": "「就是字面上的意思。喜歡你所以想交往。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c24/50.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「わ、私は……自分でもわかってるんです……あなたに好かれる資格がないって、だって重たいし、それに……」",
+          "text_zh": "「我、我……自己也知道……沒有被你喜歡的資格，因為很沉重，而且……」",
+          "voices": [
+            "ja_ogg/c24/adv/sun_ev_24_001.ogg"
+          ],
+          "face": "落胆",
+          "source": "adv/scenario/c24/50.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「いいんだよ。そういう所も全部ひっくるめて、可愛いなって思ってるから」",
+          "text_zh": "「沒關係。連那樣的地方全部包含，都覺得可愛。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c24/50.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私、嬉しいです……あなたが、あのあなたが私を好きだと言ってくれて……」",
+          "text_zh": "「我好開心……你，那個你說喜歡我……」",
+          "voices": [
+            "ja_ogg/c24/adv/sun_ev_24_002.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c24/50.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「私も……きちんとあなたとお付き合いしたいです……よろしく、お願いします♡」",
+          "text_zh": "「我也……想好好跟你交往……請多、指教♡」",
+          "voices": [
+            "ja_ogg/c24/adv/sun_ev_24_003.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c24/50.unity3d",
+          "row": 18
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うふふ♡　だめですよ、私を騙そうとしても……簡単には引っかかりませんから」",
+          "text_zh": "「呵呵♡　不行喔，就算想騙我也……沒那麼容易上當」",
+          "voices": [
+            "ja_ogg/c24/adv/sun_com_24_046.ogg"
+          ],
+          "face": "微笑",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c24/50.unity3d",
+      "scenario_sha256": "4c3889801b2311ecf39b32bc2d7f216b2273e2d3573c5eb6a6ac7a1351eb6e8e"
+    },
+    {
+      "personality": 25,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「今のって……こ、告白だったり、するの……？」",
+          "text_zh": "「剛才那個……是、是告白嗎……？」",
+          "voices": [
+            "ja_ogg/c25/adv/sun_ev_25_000.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c25/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そうだよ……きみが好きだ、俺と付き合って欲しい」",
+          "text_zh": "「對……我喜歡你，希望你跟我交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c25/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「すごいよ～……私、告白されちゃってる～」",
+          "text_zh": "「好厲害～……我被告白了～」",
+          "voices": [
+            "ja_ogg/c25/adv/sun_ev_25_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c25/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「それで、返事は……？」",
+          "text_zh": "「那，回覆是……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c25/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「もちろん、キミならＯＫだよ～……私も、キミの事好きだったから～」",
+          "text_zh": "「當然，是你的話就ＯＫ～……我也喜歡你～」",
+          "voices": [
+            "ja_ogg/c25/adv/sun_ev_25_002.ogg"
+          ],
+          "face": "見つめながらドキドキ",
+          "source": "adv/scenario/c25/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「嬉しいな～……キミと恋人同士になれるなんて……これからもよろしくね～」",
+          "text_zh": "「好開心喔～……能跟你成為戀人……今後也請多指教喔～」",
+          "voices": [
+            "ja_ogg/c25/adv/sun_ev_25_003.ogg"
+          ],
+          "face": "見つめながらドキドキ",
+          "source": "adv/scenario/c25/00.unity3d",
+          "row": 18
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「きみのことが好きだ」",
+          "text_zh": "「我喜歡你」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「キミと私は友達だよね～……今はそれ以上には思えないっすよ～」",
+          "text_zh": "「你跟我是朋友吧～……現在沒法想得更多～」",
+          "voices": [
+            "ja_ogg/c25/adv/sun_com_25_038.ogg"
+          ],
+          "face": "苦笑",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c25/00.unity3d",
+      "scenario_sha256": "82b467f13df29b4dcdb7c72ef6269b5f997761a5a33546e7de34e885b22c6c8b"
+    },
+    {
+      "personality": 26,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺と付き合ってくれないか？　……きみの事が、好きなんだ」",
+          "text_zh": "「能和我交往嗎？……我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「え……私、と……？」",
+          "text_zh": "「欸……我、嗎……？」",
+          "voices": [
+            "ja_ogg/c26/adv/sun_ev_26_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、きみと付き合いたい……好きなんだ……っ」",
+          "text_zh": "「嗯，想跟你交往……喜歡你……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「………………」",
+          "text_zh": "「………………」",
+          "voices": [
+            "ja_ogg/c26/adv/sun_ev_26_001.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 10
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……勿論、嫌なら断ってくれても構わないから……」",
+          "text_zh": "「……當然，如果妳不願意，拒絕也沒關係……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あ……違う、の……その、こんな私に……好きって言ってくれて、嬉しくて……」",
+          "text_zh": "「啊……不是、的……那個，對這樣的我……說喜歡，好開心……」",
+          "voices": [
+            "ja_ogg/c26/adv/sun_ev_26_002.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「それじゃぁ……！」",
+          "text_zh": "「那就……！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん……私も、好きだから……これからも、よろしくお願いします……」",
+          "text_zh": "「嗯……我也喜歡……以後也請多指教……」",
+          "voices": [
+            "ja_ogg/c26/adv/sun_ev_26_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c26/00.unity3d",
+          "row": 19
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺と付き合ってくれないか？　……きみの事が、好きなんだ」",
+          "text_zh": "「能和我交往嗎？……我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「え、と……ちょっと、考えさせて……」",
+          "text_zh": "「那、個……讓我，想想……」",
+          "voices": [
+            "ja_ogg/c26/adv/sun_com_26_040.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c26/00.unity3d",
+      "scenario_sha256": "3c81204b9010d54ec1060d468a4b8e9f65191f287016e484306ae62038143418"
+    },
+    {
+      "personality": 27,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……きみの事が、好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「なっ！？　す、すす好きって、私を……？　」",
+          "text_zh": "「什麼！？ 喜、喜歡，是喜歡我……？ 」",
+          "voices": [
+            "ja_ogg/c27/adv/sun_ev_27_000.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c27/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「あぁ。だから、俺と付き合ってほしいんだ」",
+          "text_zh": "「對。所以，希望你跟我交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c27/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふ、ふーん？　まぁ、あんたがどーーしてもって言うなら、考えてあげなくもないわよ？」",
+          "text_zh": "「哼、哼～？ 嘛，你非——要這樣說，也不是不能考慮？」",
+          "voices": [
+            "ja_ogg/c27/adv/sun_ev_27_001.ogg"
+          ],
+          "face": "見つめながらドキドキ",
+          "source": "adv/scenario/c27/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ああ、きみがいい。きみじゃなきゃダメなんだ」",
+          "text_zh": "「啊啊，就是你。非你不可」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c27/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「――っ、し、仕方ないわね、そんなに私が好きなら、つ、付き合ってあげるわっ」",
+          "text_zh": "「——，沒、沒辦法，這麼喜歡我的話，就、就跟你交往」",
+          "voices": [
+            "ja_ogg/c27/adv/sun_ev_27_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c27/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……きみの事が、好きなんだ」",
+          "text_zh": "「我……喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ちょ、ちょっと待って……考える時間、頂戴……」",
+          "text_zh": "「等、等一下……給我想想的時間……」",
+          "voices": [
+            "ja_ogg/c27/adv/sun_com_27_041.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c27/00.unity3d",
+      "scenario_sha256": "d1d2fb88f10f7c7a320f8ee45dc6c296abb5da8a7ff259f66946954bf5d36f69"
+    },
+    {
+      "personality": 28,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「好きだ、俺と付き合ってほしい」",
+          "text_zh": "「我喜歡你，希望你能和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そ、その言葉、本気なんじゃな……？」",
+          "text_zh": "「那、那句話，是認真的……？」",
+          "voices": [
+            "ja_ogg/c28/adv/sun_ev_28_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c28/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「あぁ、もちろん本気だ。本気で、きみの事が好きなんだ」",
+          "text_zh": "「啊啊，當然認真。認真地，喜歡你」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c28/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そう、か……ならばわしも、お主の本気に応えてやらねばな」",
+          "text_zh": "「這樣、啊……那本座也得回應汝的認真」",
+          "voices": [
+            "ja_ogg/c28/adv/sun_ev_28_001.ogg"
+          ],
+          "face": "真剣（目閉じ）",
+          "source": "adv/scenario/c28/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ってことは……！」",
+          "text_zh": "「意思是……！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c28/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あぁ、わしもお主の事は好いておるからの……これからもよろしく頼むぞ？」",
+          "text_zh": "「啊啊，本座也喜歡汝……以後也請多指教？」",
+          "voices": [
+            "ja_ogg/c28/adv/sun_ev_28_002.ogg"
+          ],
+          "face": "見つめながらドキドキ",
+          "source": "adv/scenario/c28/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「好きだ、俺と付き合ってほしい」",
+          "text_zh": "「我喜歡你，希望你能和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「う、むぅ……すまぬが、返事は後にさせてくれ……」",
+          "text_zh": "「唔、唔……抱歉，讓我之後再答……」",
+          "voices": [
+            "ja_ogg/c28/adv/sun_com_28_038.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c28/00.unity3d",
+      "scenario_sha256": "d8251c9b779f38f100a966fb8dc3dca36a16ea62b3137da802a7848cb8533d02"
+    },
+    {
+      "personality": 29,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみと付き合いたい。きみの事が好きなんだ」",
+          "text_zh": "「我想和你交往，我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そう、ですか……あなたの気持ち、わかりました」",
+          "text_zh": "「這、樣啊……你的心情，我明白了」",
+          "voices": [
+            "ja_ogg/c29/adv/sun_ev_29_000.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "source": "adv/scenario/c29/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「………………」",
+          "text_zh": "「………………」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c29/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「その気持ちに、私も答えたい思います」",
+          "text_zh": "「那份心情，我也想回應」",
+          "voices": [
+            "ja_ogg/c29/adv/sun_ev_29_001.ogg"
+          ],
+          "face": "真剣な顔（照れ）",
+          "source": "adv/scenario/c29/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ってことは……！」",
+          "text_zh": "「意思是……！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c29/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「はい、不束者では御座いますが……これからもよろしくお願いします」",
+          "text_zh": "「是，不才之身……今後也請多指教」",
+          "voices": [
+            "ja_ogg/c29/adv/sun_ev_29_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c29/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみと付き合いたい。きみの事が好きなんだ」",
+          "text_zh": "「我想和你交往，我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……すみません、考える時間を下さい」",
+          "text_zh": "「……抱歉，請給我想想的時間」",
+          "voices": [
+            "ja_ogg/c29/adv/sun_com_29_042.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c29/00.unity3d",
+      "scenario_sha256": "e5a833b9ef5c3d2b03d74c7c38cc83d9d7af4fa4ce35ee7d9cb92d3bb21222da"
+    },
+    {
+      "personality": 30,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、[H名]の事が好きなんだ」",
+          "text_zh": "「我喜歡[H名]。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふーん？　そんなに私の事、好きなんだ」",
+          "text_zh": "「哼？這麼喜歡我啊」",
+          "voices": [
+            "ja_ogg/c30/adv/sun_ev_30_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「あぁ、勿論本気だよ」",
+          "text_zh": "「啊，當然是認真的」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふふっ、大丈夫よ。キミの本気、ちゃんと伝わってるから」",
+          "text_zh": "「呵呵，沒問題。你的認真，有好好傳達到」",
+          "voices": [
+            "ja_ogg/c30/adv/sun_ev_30_001.ogg"
+          ],
+          "face": "ちょっと照れた笑顔",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「………………」",
+          "text_zh": "「………………」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「答えは……うん、いいよ。これからもよろしくお願いね？」",
+          "text_zh": "「答案是……嗯，好啊。今後也請多指教喔？」",
+          "voices": [
+            "ja_ogg/c30/adv/sun_ev_30_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「っ！　ありがとう……！」",
+          "text_zh": "「！謝謝……！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 17
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「こらこらはしゃがないの。これからもっと楽しいことしていくんだし、ね？」",
+          "text_zh": "「喂喂別太興奮。接下來還有更開心的事要做，對吧？」",
+          "voices": [
+            "ja_ogg/c30/adv/sun_ev_30_003.ogg"
+          ],
+          "face": "ウィンク(右閉じ)",
+          "source": "adv/scenario/c30/00.unity3d",
+          "row": 20
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、[H名]の事が好きなんだ」",
+          "text_zh": "「我喜歡[H名]。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「んー、困ったわね……ごめんなさい、返事はちょっと待ってくれるかしら？」",
+          "text_zh": "「嗯——傷腦筋呢……對不起，回覆能再等我一下嗎？」",
+          "voices": [
+            "ja_ogg/c30/adv/sun_com_30_041.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c30/00.unity3d",
+      "scenario_sha256": "11f93359c1821a4d5ce9b8a53aedab0657fd383333528bcb31ccbfac646e0d50"
+    },
+    {
+      "personality": 31,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、[H名]のことが好きだよ」",
+          "text_zh": "「我喜歡[H名]喔。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「なっ……それは、冗談で……い、いや、おまえはそんなことをする奴じゃない」",
+          "text_zh": "「什……那是，開玩笑……不、不，你不是會做那種事的人」",
+          "voices": [
+            "ja_ogg/c31/adv/sun_ev_31_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c31/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……ほ、本気、なんだな？」",
+          "text_zh": "「……是、認真的，對吧？」",
+          "voices": [
+            "ja_ogg/c31/adv/sun_ev_31_001.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c31/00.unity3d",
+          "row": 10
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん。本気で[H名]のことが好きだし、本気で付き合いたいって思ってる」",
+          "text_zh": "「嗯。認真喜歡[H名]，認真想交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c31/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そうか……おまえの気持ちは充分伝わったよ」",
+          "text_zh": "「這樣啊……你的心意充分傳達到了」",
+          "voices": [
+            "ja_ogg/c31/adv/sun_ev_31_002.ogg"
+          ],
+          "face": "デレ顔(目閉じ)",
+          "source": "adv/scenario/c31/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「じゃあ、その……付き合うことにするか。実は私も、おまえのことが、ずっと気になっていたんだ」",
+          "text_zh": "「那就，那個……交往吧。其實我也，一直在意你」",
+          "voices": [
+            "ja_ogg/c31/adv/sun_ev_31_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c31/00.unity3d",
+          "row": 18
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、[H名]のことが好きだよ」",
+          "text_zh": "「我喜歡[H名]喔。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「すまん。おまえが勇気を出してくれたのに申し訳ないが、考える時間が欲しいんだ。本当に悪いな」",
+          "text_zh": "「抱歉。你鼓起勇氣說了，我卻……可是我需要時間想想。真的很對不起。」",
+          "voices": [
+            "ja_ogg/c31/adv/sun_com_31_038.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c31/00.unity3d",
+      "scenario_sha256": "a6e9de849ae66030e065ab5d12b9ef7d97520f3b4f2f1c1babfad57f7ce9688f"
+    },
+    {
+      "personality": 32,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、君のことが好きだ。よかったら付き合ってほしい」",
+          "text_zh": "「我喜歡你，如果可以的話希望你能和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「はい、私でよければ、よろしくお願いします」",
+          "text_zh": "「好的，如果我可以的話，請多指教」",
+          "voices": [
+            "ja_ogg/c32/adv/sun_ev_32_004.ogg"
+          ],
+          "face": "見つめながらドキドキ",
+          "source": "adv/scenario/c32/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「本当！？　ありがとう……っ！」",
+          "text_zh": "「真的！？謝謝妳……！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c32/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「感謝されるようなことではありません。私も同じ気持ちでしたから」",
+          "text_zh": "「不是什麼該被感謝的事。我也是同樣的心情」",
+          "voices": [
+            "ja_ogg/c32/adv/sun_ev_32_005.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c32/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そっか、本当によかった……」",
+          "text_zh": "「這樣啊，真是太好了……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c32/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「それに、ここで終わりではありません。ここから、改めて始まるのですから……」",
+          "text_zh": "「而且，這裡不是結束。從這裡才重新開始……」",
+          "voices": [
+            "ja_ogg/c32/adv/sun_ev_32_006.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c32/00.unity3d",
+          "row": 15
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、君のことが好きだ。よかったら付き合ってほしい」",
+          "text_zh": "「我喜歡你，如果可以的話希望你能和我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……少し、心を整理する時間を下さい」",
+          "text_zh": "「……請給我一點整理心情的時間」",
+          "voices": [
+            "ja_ogg/c32/adv/sun_com_32_168.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c32/00.unity3d",
+      "scenario_sha256": "36991e9a807404fc49b554de07382be50a44f12698fe40995a2fea2c9cba7f98"
+    },
+    {
+      "personality": 33,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……[H名]さんの事が本気で好きなんだ」",
+          "text_zh": "「我……是真心喜歡[H名]的。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふーん……？　そんなに私の事が好きなのね？」",
+          "text_zh": "「哼嗯……？這麼喜歡我啊？」",
+          "voices": [
+            "ja_ogg/c33/adv/sun_ev_33_000.ogg"
+          ],
+          "face": "少し驚き",
+          "source": "adv/scenario/c33/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、この気持ちに嘘はないよ」",
+          "text_zh": "「嗯，這份心意沒有半點虛假。」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c33/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ふふっ、熱いのね。……その熱さに、私もやられちゃいそうね」",
+          "text_zh": "「呵呵，好熱呢。……那份熱度，好像也要把我擊沉了」",
+          "voices": [
+            "ja_ogg/c33/adv/sun_ev_33_001.ogg"
+          ],
+          "face": "微笑み（目閉じ）",
+          "source": "adv/scenario/c33/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「ってことは……」",
+          "text_zh": "「也就是說……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c33/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えぇ、お付き合いしてあげる。私の事、もっともっと熱くさせて頂戴ね……？」",
+          "text_zh": "「是啊，跟你交往。把我弄得越來越熱吧……？」",
+          "voices": [
+            "ja_ogg/c33/adv/sun_ev_33_002.ogg"
+          ],
+          "face": "デレ顔",
+          "source": "adv/scenario/c33/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……[H名]さんの事が本気で好きなんだ」",
+          "text_zh": "「我……是真心喜歡[H名]的。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「んー……ごめんなさい、返事は保留にさせてもらえるかしら？」",
+          "text_zh": "「嗯——……對不起，回覆能讓我保留嗎？」",
+          "voices": [
+            "ja_ogg/c33/adv/sun_com_33_044.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c33/00.unity3d",
+      "scenario_sha256": "3c67a7819e25048b9f9aabe9c3ab291a3942ffa7001046c7ec48a0e36c792da8"
+    },
+    {
+      "personality": 34,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「[H名]のことが好きなんだ。俺と付き合ってほしい」",
+          "text_zh": "「我喜歡[H名]。請跟我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「Ｏｈ，ｒｅａｌｌｙ！?　ワタシと付き合うデスカ？」",
+          "text_zh": "「Oh, really!? 要跟我交往嗎？」",
+          "voices": [
+            "ja_ogg/c34/adv/sun_ev_34_000.ogg"
+          ],
+          "face": "驚き",
+          "source": "adv/scenario/c34/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「本当だよ。どうかな……？」",
+          "text_zh": "「是真的。妳覺得呢……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c34/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……ワタシ、こんなデスガ……それでもイイノ？」",
+          "text_zh": "「……我是這樣……也沒關係嗎？」",
+          "voices": [
+            "ja_ogg/c34/adv/sun_ev_34_001.ogg"
+          ],
+          "face": "不安",
+          "source": "adv/scenario/c34/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「勿論、いや、[H名]がいいんだ」",
+          "text_zh": "「當然，不，就是[H名]才好」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c34/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……ワカリマシタ。ワタシ、アナタのＬｏｖｅｒなりマス！　ガンバリマス！」",
+          "text_zh": "「……知道了。我，要當你的Lover！會加油！」",
+          "voices": [
+            "ja_ogg/c34/adv/sun_ev_34_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c34/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「[H名]のことが好きなんだ。俺と付き合ってほしい」",
+          "text_zh": "「我喜歡[H名]。請跟我交往。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「……Ｓｏｒｒｙ、心の準備が出来てナイヨ」",
+          "text_zh": "「……Sorry，我還沒做好心理準備啦。」",
+          "voices": [
+            "ja_ogg/c34/adv/sun_com_34_039.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c34/00.unity3d",
+      "scenario_sha256": "d353559df47e356ed7ca29e09db02f8240803fe23cbbf2c00d87f987e7276836"
+    },
+    {
+      "personality": 35,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺さ……[H名]の事、好きなんだ」",
+          "text_zh": "「我啊……喜歡[H名]。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そ、そうなんや……私の事、好いとっちゃん……」",
+          "text_zh": "「這、這樣啊……喜歡我……」",
+          "voices": [
+            "ja_ogg/c35/adv/sun_ev_35_000.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c35/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、もちろん本気だよ」",
+          "text_zh": "「嗯，當然是真心」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c35/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あ、当たり前やん、本気やなかったら困るし……」",
+          "text_zh": "「當、當然啊，不是認真的話我會很困擾的……」",
+          "voices": [
+            "ja_ogg/c35/adv/sun_ev_35_001.ogg"
+          ],
+          "face": "真剣な顔（照れ）",
+          "source": "adv/scenario/c35/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「え、ってことは……？」",
+          "text_zh": "「咦，也就是說……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c35/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「うん……ええよ、君と付き合うちゃる」",
+          "text_zh": "「嗯……好，跟你交往」",
+          "voices": [
+            "ja_ogg/c35/adv/sun_ev_35_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c35/00.unity3d",
+          "row": 16
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺さ……[H名]の事、好きなんだ」",
+          "text_zh": "「我啊……喜歡[H名]。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あー……んんー……ごめん、返事、もう少し待ってくれん……？」",
+          "text_zh": "「啊——……嗯——……抱歉，回覆，再等我一下……？」",
+          "voices": [
+            "ja_ogg/c35/adv/sun_com_35_039.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c35/00.unity3d",
+      "scenario_sha256": "deb4f3edd6510d0bf5c8fc49300d5c042027054ccd07ee7886cb5aa64093d1e2"
+    },
+    {
+      "personality": 36,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……[H名]さんのことが好きだ！」",
+          "text_zh": "「我……喜歡[H名]！」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「へぇ……家畜から、私の下僕になりたいのね」",
+          "text_zh": "「欸……從家畜，想當我的下僕」",
+          "voices": [
+            "ja_ogg/c36/adv/sun_ev_36_000.ogg"
+          ],
+          "face": "ドヤ顔",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そうじゃなくて、恋人に…………」",
+          "text_zh": "「不是那個意思，是戀人…………」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「寝言を言ってるの？　家畜と人が付き合えるわけないじゃない」",
+          "text_zh": "「你在說夢話嗎？家畜怎麼可能和人交往。」",
+          "voices": [
+            "ja_ogg/c36/adv/sun_ev_36_001.ogg"
+          ],
+          "face": "思案",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そっか……時間をとらせてごめん」",
+          "text_zh": "「這樣……抱歉佔用時間」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「待ちなさい。貴方は家畜から下僕になるチャンスを与えられているのよ？　それを逃すなんて馬鹿のすることだわ」",
+          "text_zh": "「給我等等。你現在得到了從家畜升格為僕人的機會喔？放掉這種機會可是笨蛋才會做的事。」",
+          "voices": [
+            "ja_ogg/c36/adv/sun_ev_36_002.ogg"
+          ],
+          "face": "思案2",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「それって……下僕になれば、最終的に対等な関係で付き合える可能性があるってこと……？」",
+          "text_zh": "「那是……當下僕的話，最終有可能對等交往……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 17
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「じゃ、じゃあ、俺は[H名]さんの下僕になるよ！」",
+          "text_zh": "「那、那就，我當[H名]小姐的下僕！」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 18
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「フフッ、いいわ。契約成立ね。これから、私の下僕としてたくさん躾けてあげる。感謝しなさい」",
+          "text_zh": "「呵呵，好。契約成立。今後作為我的下僕多多調教。感謝吧」",
+          "voices": [
+            "ja_ogg/c36/adv/sun_ev_36_003.ogg"
+          ],
+          "face": "微笑",
+          "source": "adv/scenario/c36/00.unity3d",
+          "row": 22
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺……[H名]さんのことが好きだ！」",
+          "text_zh": "「我……喜歡[H名]！」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「家畜に好意を持たれても、鬱陶しいだけね」",
+          "text_zh": "「被家畜喜歡也只覺得煩」",
+          "voices": [
+            "ja_ogg/c36/adv/sun_com_36_038.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_50.unity3d",
+      "table_sha256": "e9062d6789e6de6cd790eb563a64774dd7e5690e4673bc64754b339568f1a153",
+      "scenario_source": "adv/scenario/c36/00.unity3d",
+      "scenario_sha256": "fd1b34210cc99efe9428580b583db3319512b6a7ecd7292536163e9ad343884a"
+    },
+    {
+      "personality": 37,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみの事、好きだよ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そうですか、わかりました」",
+          "text_zh": "「這樣啊，知道了」",
+          "voices": [
+            "ja_ogg/c37/adv/sun_ev_37_000.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "source": "adv/scenario/c37/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……えっと、返事は……？」",
+          "text_zh": "「……那個，回覆是……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c37/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「？　わかりました、と言ったはずですが？」",
+          "text_zh": "「？ 我應該說過知道了吧？」",
+          "voices": [
+            "ja_ogg/c37/adv/sun_ev_37_001.ogg"
+          ],
+          "face": "疑問",
+          "source": "adv/scenario/c37/00.unity3d",
+          "row": 11
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「……えっと、一応、付き合ってくれるって事でいいのかな？」",
+          "text_zh": "「……那個，姑且，是答應交往的意思嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c37/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「はい。お互い、恋人同士という事でこれからもよろしくお願いします」",
+          "text_zh": "「是的。今後我們就是戀人了，請多指教。」",
+          "voices": [
+            "ja_ogg/c37/adv/sun_ev_37_002.ogg"
+          ],
+          "face": "標準",
+          "source": "adv/scenario/c37/00.unity3d",
+          "row": 16
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「う、うん、よろしくね……？」",
+          "text_zh": "「嗯、嗯，請多指教……？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c37/00.unity3d",
+          "row": 17
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺、きみの事、好きだよ」",
+          "text_zh": "「我喜歡你。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「そうですか」",
+          "text_zh": "「是嗎」",
+          "voices": [
+            "ja_ogg/c37/adv/sun_com_37_030.ogg"
+          ],
+          "face": "標準（目閉じ）",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c37/00.unity3d",
+      "scenario_sha256": "b54607fbf8d302033f340fd1a429da416fcd5e1b8adebd267e51980e2e0f86f2"
+    },
+    {
+      "personality": 38,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「[H名]のことが好きだ」",
+          "text_zh": "「我喜歡[H名]。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あの……今のは、もしかして……私に対しての告白、なのでしょうか？」",
+          "text_zh": "「那個……剛才那個，該不會……是對我的告白嗎？」",
+          "voices": [
+            "ja_ogg/c38/adv/sun_ev_38_000.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c38/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そうだよ、俺は[H名]と付き合いたいと思ってる」",
+          "text_zh": "「對，我想跟[H名]交往」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c38/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ありがとう、御座います……私も、貴方の事が好きです」",
+          "text_zh": "「謝謝，你……我也喜歡你」",
+          "voices": [
+            "ja_ogg/c38/adv/sun_ev_38_001.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c38/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「そうなんだね、良かった……それじゃあ、返事は……」",
+          "text_zh": "「這樣啊，太好了……那，回覆是……」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c38/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「もちろん、お受けします。ぜひ、お付き合いさせて下さい」",
+          "text_zh": "「當然，我接受。務必請讓我交往」",
+          "voices": [
+            "ja_ogg/c38/adv/sun_ev_38_002.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c38/00.unity3d",
+          "row": 15
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あぁ、貴方と恋人同士になれるなんて、夢みたいです」",
+          "text_zh": "「啊啊，能和你成為戀人，簡直像做夢一樣。」",
+          "voices": [
+            "ja_ogg/c38/adv/sun_ev_38_003.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c38/00.unity3d",
+          "row": 18
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「[H名]のことが好きだ」",
+          "text_zh": "「我喜歡[H名]。」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「その……今すぐには気持ちに応えるができなくて……申し訳御座いません」",
+          "text_zh": "「那個……現在沒辦法立刻回應心意……非常抱歉」",
+          "voices": [
+            "ja_ogg/c38/adv/sun_com_38_041.ogg"
+          ],
+          "face": "不安",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_31.unity3d",
+      "table_sha256": "a9033e7465112be8106f26af742c29e7d3288321cfb3be552edfd0a0aa8f1ada",
+      "scenario_source": "adv/scenario/c38/00.unity3d",
+      "scenario_sha256": "4e0aac5dacb73d28ffe11a650e11ff9e489abd21dc81518f4b34f7516c8b9ac2"
+    },
+    {
+      "personality": 39,
+      "accept": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺さ……[H名]のことが好きなんだ。付き合って欲しい！」",
+          "text_zh": "「我啊……喜歡[H名]。請跟我交往！」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「えっ……それはつまり、自分と恋人になりたいって……そういうことでいいのー？」",
+          "text_zh": "「咦……這就是說，你想和我成為戀人……是這個意思嗎？」",
+          "voices": [
+            "ja_ogg/c39/adv/sun_ev_39_004.ogg"
+          ],
+          "face": "ドキドキ",
+          "source": "adv/scenario/c39/00.unity3d",
+          "row": 7
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「うん、そういうこと。俺と付き合うのは考えられない？」",
+          "text_zh": "「嗯，就是那樣。跟我交往想都不敢想嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c39/00.unity3d",
+          "row": 8
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ううん！　真逆さー！　キミに好きって言われてからドキドキが凄くて……ゆたしく、うにげーさびら」",
+          "text_zh": "「才不是！ 完全相反！ 被你說喜歡之後心跳超厲害……請多指教，請多關照」",
+          "voices": [
+            "ja_ogg/c39/adv/sun_ev_39_005.ogg"
+          ],
+          "face": "照れ顔",
+          "source": "adv/scenario/c39/00.unity3d",
+          "row": 12
+        },
+        {
+          "speaker": "male",
+          "text_jp": "「えっと……ＯＫってことでいいのかな？」",
+          "text_zh": "「那個……是OK的意思嗎？」",
+          "voices": [],
+          "face": "",
+          "source": "adv/scenario/c39/00.unity3d",
+          "row": 13
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「あ、うん！　今のはね、よろしくおねがいしますーって意味……えへへ」",
+          "text_zh": "「啊，嗯！ 剛才那個，是請多多指教的意思……欸嘿嘿」",
+          "voices": [
+            "ja_ogg/c39/adv/sun_ev_39_006.ogg"
+          ],
+          "face": "ドキドキ笑顔",
+          "source": "adv/scenario/c39/00.unity3d",
+          "row": 17
+        }
+      ],
+      "refuse": [
+        {
+          "speaker": "male",
+          "text_jp": "「俺さ……[H名]のことが好きなんだ。付き合って欲しい！」",
+          "text_zh": "「我啊……喜歡[H名]。請跟我交往！」",
+          "voices": [],
+          "row": 222
+        },
+        {
+          "speaker": "female",
+          "text_jp": "「ごめんねぇ……今はあんまり、キミとそういう関係になるのは考えられないかも……」",
+          "text_zh": "「抱歉……現在可能還想不了跟你變成那種關係……」",
+          "voices": [
+            "ja_ogg/c39/adv/sun_com_39_168.ogg"
+          ],
+          "face": "困り顔",
+          "row": 224
+        }
+      ],
+      "table_source": "communication/info_00.unity3d",
+      "table_sha256": "3a443927bc73e7bddec355255f97aba2e8c7fc7103df42db61e5ba630fda3f57",
+      "scenario_source": "adv/scenario/c39/00.unity3d",
+      "scenario_sha256": "68a974c0d4019d82783c270443612d8a69014fcaacd9306277fccf29f54af0a2"
+    }
+  ],
+  "source_voice_sha256": {
+    "ja_ogg/c00/adv/sun_ev_00_000.ogg": "d58b983d655f84fe8c9b06e5e3e625d7b6a4a9502850002d5ad57f2eda1eeb64",
+    "ja_ogg/c00/adv/sun_ev_00_001.ogg": "cbb1596028af0ffaf7ea6e3b9789cb1e387185287368982f8919ad3da9293c93",
+    "ja_ogg/c00/adv/sun_ev_00_002.ogg": "c3fdcf36fcfd602be135cadc931e7886522b7d24a5defb578c41bd2d88fb8732",
+    "ja_ogg/c00/adv/sun_com_00_039.ogg": "b30205fd01d1d6f32e291aa0cde7cb5a4161e663b11b9d6c81f7b01b6f1a3025",
+    "ja_ogg/c01/adv/sun_ev_01_000.ogg": "c0ee42d7e5ed0f9bbe584c5c738eb1f2f8112cfc7f882789746b708a2818cce5",
+    "ja_ogg/c01/adv/sun_ev_01_001.ogg": "88bfe8ec751fcb1302f5ca86fad3260b5eab21e0996bdf6c3229f8cf3ae631f7",
+    "ja_ogg/c01/adv/sun_ev_01_002.ogg": "1869c7b8e09d929c9734ff0dc069ee299923c98346dcc223016b733a141f6cb2",
+    "ja_ogg/c01/adv/sun_ev_01_003.ogg": "399de20793d8e876e54ec6af02ba2a930b4aebc2cb5376b3402840ecb2013133",
+    "ja_ogg/c01/adv/sun_com_01_038.ogg": "292e1392dc082b4b7a480683db3b0432a6091c0f6e8a0a1a1bcd3815cce581b1",
+    "ja_ogg/c02/adv/sun_ev_02_000.ogg": "04590a36c1a63b3e38c887c1f114a6225e7270696590585962cfcb37c99a14d8",
+    "ja_ogg/c02/adv/sun_ev_02_001.ogg": "9807d55d9938753e485db0c6134d436e88529d67c65e4a4b5da4d098fc847f6c",
+    "ja_ogg/c02/adv/sun_ev_02_002.ogg": "39d47e2d8f5989954ec3d1f44ba7b13cccc1d8cad03803e4336d217230c7d978",
+    "ja_ogg/c02/adv/sun_ev_02_003.ogg": "88600f49ed61dc681cb1eafd92178ecea44df546fcc0410d508ac1e69b7115b6",
+    "ja_ogg/c02/adv/sun_com_02_038.ogg": "e4ad6bf176b57db2559d6973986aef97a7e34a53476badd246208286cd23f1c1",
+    "ja_ogg/c03/adv/sun_ev_03_000.ogg": "4b416928847da02e41598bc5391b1a0d37030874d77940d187d96ed2fe5fbc22",
+    "ja_ogg/c03/adv/sun_ev_03_001.ogg": "4b409a3287b983a7d5389f8af2806beae22333280647e1177274193b10337836",
+    "ja_ogg/c03/adv/sun_ev_03_002.ogg": "6131f8acd4b27103f825f0d019201b080e45e7697bd5d0ef9fc687cd13a75ff0",
+    "ja_ogg/c03/adv/sun_ev_03_003.ogg": "f8154140101892ebbf1d1b3a7cde6f2dbbf928bb92cbb7b56303c97ffa832ff6",
+    "ja_ogg/c03/adv/sun_com_03_040.ogg": "21c16a34b7abd5a646445b4dc447d9603657ebe33877a461c964776ef97b7744",
+    "ja_ogg/c04/adv/sun_ev_04_000.ogg": "101945b35e42d20269218fc15d588c9a27878ed1bf7878c271556e08b191ce37",
+    "ja_ogg/c04/adv/sun_ev_04_001.ogg": "f0399a963b5eaac5ecc7c6245181006c7c0945edb538dace3c3656e53ceba985",
+    "ja_ogg/c04/adv/sun_ev_04_002.ogg": "c2af52eaf31708f51317e1b5930b340079f226bcd012adc04f4fb3049290caa9",
+    "ja_ogg/c04/adv/sun_ev_04_003.ogg": "e4b44b138d496c625e027045bb11c686c8c4ae8e1ecb2639ddd20004c993b2a8",
+    "ja_ogg/c04/adv/sun_com_04_039.ogg": "78ef71e1a84ad35fc37280cdaf9fb541a7f90ec7770a44bc4eeb53b292843a31",
+    "ja_ogg/c05/adv/sun_ev_05_000.ogg": "7420d95c240f785ffa8212279253fdbcc323236488329af722eaea7a905b6881",
+    "ja_ogg/c05/adv/sun_ev_05_001.ogg": "603cb9f0560646c27036ffdbc8e898eceb220478bc1605bf36ad5ac30631a048",
+    "ja_ogg/c05/adv/sun_ev_05_002.ogg": "5fd88aad4e208a33548777b6dac5fb74b3a4f55638c7ffb9dac2720373d2afbe",
+    "ja_ogg/c05/adv/sun_com_05_039.ogg": "c5835baada86f533365774a423109c9d1fe798b25c1787325852801b7f670d58",
+    "ja_ogg/c06/adv/sun_ev_06_000.ogg": "e638930cbb3a3903542db8f7bb88dc3cea2c3064b7d350ddfa7daae0f2222e7b",
+    "ja_ogg/c06/adv/sun_ev_06_001.ogg": "52ff7d277efab7d0beb34d742fb4de981105e86ca94068ad24936583e1767fb1",
+    "ja_ogg/c06/adv/sun_ev_06_002.ogg": "4548db68d92b1365c52b09bfa4f055d75b6ea4c030d686be4861435e91cc88b8",
+    "ja_ogg/c06/adv/sun_com_06_041.ogg": "565d3e4d8dedb8b394ae49db70f3363ba6ca2d9d8c68819c90c91e84c9c4d5a2",
+    "ja_ogg/c07/adv/sun_ev_07_000.ogg": "5a6762edd8f411fbd851ad497cedb31b188215b9898e729f9e14c11a5938b2ba",
+    "ja_ogg/c07/adv/sun_ev_07_001.ogg": "456583469f44faafb8e35551c568ef44c6712350d1c00e09de2b9bf506c2bb37",
+    "ja_ogg/c07/adv/sun_ev_07_002.ogg": "94d8cf2ea645c5501d104d536487fba280621f618b03f2e19e4f2fe88b811c2f",
+    "ja_ogg/c07/adv/sun_ev_07_003.ogg": "a2e2e285cd3c29b019d11efa7d67be8a8bfe6f5c2b13f03dc1fa02bd90f78995",
+    "ja_ogg/c07/adv/sun_com_07_038.ogg": "5c97016740833a519dadf7bd80e1ca40fd6044c26d258217bfa04e1d20fef2ff",
+    "ja_ogg/c08/adv/sun_ev_08_000.ogg": "476af9d7ad78d0397b19d93f9d7475b496d7dbd2542b6d20c0c27d8fe98bf30e",
+    "ja_ogg/c08/adv/sun_ev_08_001.ogg": "16ff87f56d2636d300c5b7ac6790517cb2339ae9d5c3f9d1dd30fe6342c791e7",
+    "ja_ogg/c08/adv/sun_ev_08_002.ogg": "1bc502cdac5dc2d0089f1ed716d497e1ecba403d9c12e0e425f44dd7574dc92d",
+    "ja_ogg/c08/adv/sun_com_08_040.ogg": "975cc2648a600d53a3e85bd1dc7503637246089d4ec8639b2402207c41e567db",
+    "ja_ogg/c09/adv/sun_ev_09_000.ogg": "9a18267b469692c7b2d47ab426684b77c087d5f6bf182e4024f34322f2247b47",
+    "ja_ogg/c09/adv/sun_ev_09_001.ogg": "e3ea8d250ee1a5036f346f4cbd8d93b8bbedfa884c7725a4dd12a4180d863531",
+    "ja_ogg/c09/adv/sun_ev_09_002.ogg": "f9bf8a8ed1c2e389046c91bda90467b5b2045055b0964320b9ff4f11b7ce4071",
+    "ja_ogg/c09/adv/sun_ev_09_003.ogg": "d37a8cd98b4aee170cc19172f798d8c84525c1b9c586625a25d68245d527f572",
+    "ja_ogg/c09/adv/sun_com_09_039.ogg": "184779bfc6e4583c94a98f1848970dbcf3f98acc9e658cb0c7d952b188ce62c6",
+    "ja_ogg/c10/adv/sun_ev_10_000.ogg": "bd8e56bd1e6a5a6ebcd2cdce5440ccc3bf2b4cdcc8a6f2dfb84910b8b3dae881",
+    "ja_ogg/c10/adv/sun_ev_10_001.ogg": "8fe4b550e2896e17e8f3058946f48b1c7e358d382928ec5952e35d3301293e49",
+    "ja_ogg/c10/adv/sun_ev_10_002.ogg": "1c195003ca28a5f01eea3b14a8c4ee64c8d8c96f6d23dade566349dbe6026747",
+    "ja_ogg/c10/adv/sun_ev_10_003.ogg": "83ca53e7e6efff461949d0857d4aa09668850ba8d9d0ec8ca5aa5d5bb5c149cb",
+    "ja_ogg/c10/adv/sun_com_10_041.ogg": "a12a8720e80b3cadc78ba939ddf10ff170e74588b9dd891dc6bbf7052cf970e1",
+    "ja_ogg/c11/adv/sun_ev_11_000.ogg": "9840887a1310d74922640294cdc99ddfa84c04e888fb543feb619762a75d9ba5",
+    "ja_ogg/c11/adv/sun_ev_11_001.ogg": "773c85a32b2cef570b0537dd2754b383fd5b97269fc7ca257e37ac07165ee6f1",
+    "ja_ogg/c11/adv/sun_ev_11_002.ogg": "12aea609e636e6e6320326a921371c640d68f8e67577a5be2c03d22ca091337f",
+    "ja_ogg/c11/adv/sun_ev_11_003.ogg": "8e5c6e52d22e9c0579e4df9d52f78be52d0e924bcee20a789b4d8735d67a222f",
+    "ja_ogg/c11/adv/sun_com_11_042.ogg": "bf65cc9f99fe1798812ebf376b1c6e810f61aac2decdd13c34a512eec3b8a7b0",
+    "ja_ogg/c12/adv/sun_ev_12_000.ogg": "6b8bfe47793b1228b8f3f9114a1eb4ff593ad504aa3d51c21367c3b4fb17a82d",
+    "ja_ogg/c12/adv/sun_ev_12_001.ogg": "15fc511512a4b8c8d1617a07d72fe30c22591156ba7d69cfc88af7cf8e57ddea",
+    "ja_ogg/c12/adv/sun_ev_12_002.ogg": "67852d2f421afb3c1071a5c01e6563115cfae4584130c55587751107efae980a",
+    "ja_ogg/c12/adv/sun_ev_12_003.ogg": "7a1fb9e8622ef4200930ab8f95464b57d263551e03f72fae94788bdda5e6a03a",
+    "ja_ogg/c12/adv/sun_com_12_038.ogg": "dc10d838e53db70db8b8e7d9a4f677cd0e38cd5f5d3c7619cb67d1e74997446e",
+    "ja_ogg/c13/adv/sun_ev_13_000.ogg": "ec145eda32bb3e0957c0b57a4ff22468cb24bf500eb2e9227aef0e2fd14bed95",
+    "ja_ogg/c13/adv/sun_ev_13_001.ogg": "4f0476d4d500d85815b0c8d307ad802bd05d9350a0743721d86c9cf59c73f0cb",
+    "ja_ogg/c13/adv/sun_ev_13_002.ogg": "64e254da59089d16f7306c7c307f129f3383e82531748afad279272b1cbcc0cc",
+    "ja_ogg/c13/adv/sun_com_13_039.ogg": "22c20c4f49449eca453878aba0c02a8c57833cdf49dd2954d962fb366dbd95b8",
+    "ja_ogg/c14/adv/sun_ev_14_000.ogg": "4569ee40257fe5bfde6db5fee777fb083cfeed27947fe3e12d5d2abc1bcb3378",
+    "ja_ogg/c14/adv/sun_ev_14_001.ogg": "8fda8106dc19a5ed6ef834b379099784f29c160b7f00391c876dd4f153488b39",
+    "ja_ogg/c14/adv/sun_ev_14_002.ogg": "be5e8faad9f707a19e95273f16d3f9d88670367772c976414fd6be20436d1c8d",
+    "ja_ogg/c14/adv/sun_com_14_042.ogg": "3170025b9364d864347fdc51bc2547019f6e08a5c775d0dd6705c7f588cfa6b4",
+    "ja_ogg/c15/adv/sun_ev_15_000.ogg": "00eeba20cbc54f88fae0d60d578f6fe9353282af913a61130624220aa4174caf",
+    "ja_ogg/c15/adv/sun_ev_15_001.ogg": "3c76f67f0329b63ca91c592833f2dc285b586131d6c21ddd9c28a440d7202d5f",
+    "ja_ogg/c15/adv/sun_ev_15_002.ogg": "bd21789aa4c77801023e718a957c85564668452a55ef908633acd8f6c796ebbc",
+    "ja_ogg/c15/adv/sun_com_15_038.ogg": "026e28dd33ab811baab601841db34997538702ba23fa2e4632868cba7ce79cc9",
+    "ja_ogg/c16/adv/sun_ev_16_000.ogg": "a6afd0ca6115c18db42ba1ce7c971dc12b0beddef570d358d50fd9c2b917be21",
+    "ja_ogg/c16/adv/sun_ev_16_001.ogg": "0e4e9058716dd499b3df07c74351fc6a45a468d55fa1e14e2958c358321b8b4c",
+    "ja_ogg/c16/adv/sun_ev_16_002.ogg": "cd7cfe89eb70742fd4bda49deec460a261a19d4bb8445b2702df9ef999917647",
+    "ja_ogg/c16/adv/sun_ev_16_003.ogg": "ce57b816784508388f7dcfabf61ddd914320271d19a2af16df99ee426345c735",
+    "ja_ogg/c16/adv/sun_com_16_039.ogg": "a4302c5f32b14106e110a6ad205862bccc84f293f3973618c421f135a92c8302",
+    "ja_ogg/c17/adv/sun_ev_17_000.ogg": "de3cbb7aa2761194bf28da940cac2f9d32c9d4f53b01a624f72cdbecd65c1356",
+    "ja_ogg/c17/adv/sun_ev_17_001.ogg": "b9c9ac4c27ed9ff0a1926a3672e273c633abeca230b366c5afad9fba058bc95f",
+    "ja_ogg/c17/adv/sun_ev_17_002.ogg": "c5537e10f98f1babc34c9086c4471ccfc015366d8f06a82e14ad2d434cf4a28e",
+    "ja_ogg/c17/adv/sun_ev_17_003.ogg": "d71032ebe6b3d54017f5a9d5440fe0230898aaae6a49ba4afdc08994602e6dd1",
+    "ja_ogg/c17/adv/sun_com_17_038.ogg": "e436dfd928a33cd4d6a811cdc24b0d4c4b20166cdda6d3a4cb714594acf5e6e3",
+    "ja_ogg/c18/adv/sun_ev_18_000.ogg": "5a754408d12a419f5dd2c411c2ec3ccb31ed224439f1c2f1b1fa4c5b7ffdd17d",
+    "ja_ogg/c18/adv/sun_ev_18_001.ogg": "df0e68103f57b09c82dbd193e8d2e903951a73856e39a368e0888372cc4af05b",
+    "ja_ogg/c18/adv/sun_ev_18_002.ogg": "547708562679c5bff6174da6c67a14c57781e80058294d153ed04959e1488955",
+    "ja_ogg/c18/adv/sun_ev_18_003.ogg": "0bd3ab14d200cf40ba16c3a419d71e8909020ae656c0f60d584dd00bd2e99240",
+    "ja_ogg/c18/adv/sun_com_18_038.ogg": "3554026ad03f624d0613970467a5862dc942dd4a100c1289e61651c579a5810f",
+    "ja_ogg/c19/adv/sun_ev_19_000.ogg": "5195e6526d53d17b7d439bfd44dee9cdeb8e436d3fc2ba5a8bc80aa7f5436aec",
+    "ja_ogg/c19/adv/sun_ev_19_001.ogg": "5f2d05c39ae97791405cc7e159d29493ae6ba4947352138d40c0cd14cedc6719",
+    "ja_ogg/c19/adv/sun_ev_19_002.ogg": "73d1b62eef6a4e50d090103c6ca73ae9e4c058e935cbb5f65497b122238cc88b",
+    "ja_ogg/c19/adv/sun_ev_19_003.ogg": "0f5e18d925005d8c915d9dc00bc3c8ddb500caa045a5d9b6da5b7250a83f9587",
+    "ja_ogg/c19/adv/sun_com_19_043.ogg": "9b99b4924174e0f5a1fa071c38c5202e363b926e63a4071d08dd5a41c2343799",
+    "ja_ogg/c20/adv/sun_ev_20_000.ogg": "1e68a1f130de7bbf617124a88fda0e6bc7fc7f4f0b9d88165a4f5d825e5281c2",
+    "ja_ogg/c20/adv/sun_ev_20_001.ogg": "5489771837a74929115396cff55bc60bc0336c0fa1626c848173241ef112e4fb",
+    "ja_ogg/c20/adv/sun_ev_20_002.ogg": "c4c024968176dc566481bf433dc39371a85300f41187f2307d847489eee9b98b",
+    "ja_ogg/c20/adv/sun_ev_20_003.ogg": "387faf6416a618cb36f089119b71655ad9a4a8d3bb2a8ac3de4aa51672a01be0",
+    "ja_ogg/c20/adv/sun_com_20_040.ogg": "06afc8bfb355fca82edf85d9888850458245f1248475f6f24567a3394604ab19",
+    "ja_ogg/c21/adv/sun_ev_21_000.ogg": "7dfe1ecea14691bf320a9645df8310853de2bd459d52e3b9325b8127590764f9",
+    "ja_ogg/c21/adv/sun_ev_21_001.ogg": "2203bfa548228f4a9e2a7b548db0f09118a88ef57b866e203888294c2838874c",
+    "ja_ogg/c21/adv/sun_ev_21_002.ogg": "09ddedd90f6ae4215bd0c36a7af7316410864bbce424c10427afd1fea0baf715",
+    "ja_ogg/c21/adv/sun_ev_21_003.ogg": "32ddbf589ec4be962d4bb9f584f52bc792cd50b08abd970f6d33aa037008c1b5",
+    "ja_ogg/c21/adv/sun_com_21_039.ogg": "b6adef24dfa77f7c80f5bbbc2ef979587ed5a62a414d48b7ed2035f728e014f1",
+    "ja_ogg/c22/adv/sun_ev_22_000.ogg": "0d157371ddf7a712caf6b8e102a813e82fea7d982d1512242854d089d9e97644",
+    "ja_ogg/c22/adv/sun_ev_22_001.ogg": "9d08f2f54e7f5db73f2591c094d6cbe02c194fa9be381e7044ad6412d46a3b28",
+    "ja_ogg/c22/adv/sun_ev_22_002.ogg": "5463f69228fc977963c1638f497b9946a39ec6bb0c4fda04e8dd110d3224d5a5",
+    "ja_ogg/c22/adv/sun_ev_22_003.ogg": "d06f2787957d6dad41b9591daeffa29665592df74a9c5ffd2a52728935cea44d",
+    "ja_ogg/c22/adv/sun_com_22_040.ogg": "0dd103c640a9704632d82a1e615b1bb0ee9de1881af401e6fa24b9a086922030",
+    "ja_ogg/c23/adv/sun_ev_23_000.ogg": "5501ff3e131d3774d83fec93071745475ce50944b1d1577e9fe776d59323537e",
+    "ja_ogg/c23/adv/sun_ev_23_001.ogg": "ee8e24c0f98ebf8507becfe9c1b78b6562943fc8f78b8885b807d115f1e81045",
+    "ja_ogg/c23/adv/sun_ev_23_002.ogg": "a28eeca8eb664ff63f5777579306f74d3106791bdfbf9c80b3249f6fe659acdd",
+    "ja_ogg/c23/adv/sun_ev_23_003.ogg": "95f1f849380e13b7d555c82bc1c3e51023cdd84f2773b6da46f58e8de0cde8ca",
+    "ja_ogg/c23/adv/sun_com_23_039.ogg": "3079407f2ad1e5b43bcf36adad459f6abe91f59ddca02998f19a4ea966383e35",
+    "ja_ogg/c24/adv/sun_ev_24_000.ogg": "624c5bb3410c1d74ecccdfe6cef8e67de001d5ef003312dd78c5604728b86587",
+    "ja_ogg/c24/adv/sun_ev_24_001.ogg": "062fce241562604888d3b52604aeaac5d68e8a90cb3d021b7796d914d4dd8c59",
+    "ja_ogg/c24/adv/sun_ev_24_002.ogg": "c7a2553ddbc6c0b034935f9ad4e4e03616805043edad4e2006475cc30109bb4b",
+    "ja_ogg/c24/adv/sun_ev_24_003.ogg": "02e79ea78c31c9dcb98dc1d192d0bfc018acd1025acd91870390dcebc3268a41",
+    "ja_ogg/c24/adv/sun_com_24_046.ogg": "72bfa51bc22ddb8c7410bd0cdb397bb8940428cfb6583deb0d77d526407f6b40",
+    "ja_ogg/c25/adv/sun_ev_25_000.ogg": "fc9544373033ab62197c099b9df5807c51b406a6293ed69fd8ded05d7ff2d914",
+    "ja_ogg/c25/adv/sun_ev_25_001.ogg": "40fe895f5364e5893be4e9a3c4a47ac5a7c2ae36eaef67de015068fc59914796",
+    "ja_ogg/c25/adv/sun_ev_25_002.ogg": "bd620e4f1c56e465219afe83f93e0e2562e06462fbbe31a5991049a917c4efb5",
+    "ja_ogg/c25/adv/sun_ev_25_003.ogg": "3350cf932bebcf589363399a836f1ae61dbd69a1ee69feab77760d1b64b2ea46",
+    "ja_ogg/c25/adv/sun_com_25_038.ogg": "ac9cee54112bfcb69e85ea061ee51423727158d6f2bade71927e20507074b9d6",
+    "ja_ogg/c26/adv/sun_ev_26_000.ogg": "7e94a48fb2bd1fafcf858cc2d509ada4bcd42a679ceff7395e05eda31639505e",
+    "ja_ogg/c26/adv/sun_ev_26_001.ogg": "4466721b12edfb6e9ab56d00cf0b1159e5924141dc53e98ac0e75d8f3e787496",
+    "ja_ogg/c26/adv/sun_ev_26_002.ogg": "58ca380a9102e4d41d56953789c0120563c8474490fcb5ccb63523e4129684c4",
+    "ja_ogg/c26/adv/sun_ev_26_003.ogg": "0db4da10a9ab62d8277a7a1ba9b49c81fc17b9aa76d6f42d7e7ed45ffce538c5",
+    "ja_ogg/c26/adv/sun_com_26_040.ogg": "b961fbce764b1bb1b56d4f713f7377908ecd0afde5e2d40b07ea2db49f5feb75",
+    "ja_ogg/c27/adv/sun_ev_27_000.ogg": "1cc956022c5607a5bc963d49596861af7347bb3adfc478cbef06d5182ab1a170",
+    "ja_ogg/c27/adv/sun_ev_27_001.ogg": "abf14b40d003bfc4f783c5f518e4d7474121c22f4e687276cad2faeb6643c6ca",
+    "ja_ogg/c27/adv/sun_ev_27_002.ogg": "fbaf789a67daebbdf92705ad5f87e7a550fa6aa63ba532d54d3b2b230e06d068",
+    "ja_ogg/c27/adv/sun_com_27_041.ogg": "c1f23f9685a3729c74a69ff6092a228ad3396d8f1ea57af6f3c6677cab6d99b9",
+    "ja_ogg/c28/adv/sun_ev_28_000.ogg": "3b8fdc5a4bda60317b15bbbb25be7e8d06d4213cb6e91233b961d01cdf57efe1",
+    "ja_ogg/c28/adv/sun_ev_28_001.ogg": "8c4544f64893f52731bf11248ad9629fe566229e315ae1b5beaa7fb439ed6796",
+    "ja_ogg/c28/adv/sun_ev_28_002.ogg": "0301dbbbfb91e5f0761e49bd7fc57fe3da1774918ff955a70185080de3bee8bb",
+    "ja_ogg/c28/adv/sun_com_28_038.ogg": "cab154fcd3bc3cc6e3d4649b1131706750b28a6ec6951ad5af36bb70d171c3d2",
+    "ja_ogg/c29/adv/sun_ev_29_000.ogg": "983477d83e239c99684e3c549d9f14b2dad7697f02e90ba34af3e8df5185cd58",
+    "ja_ogg/c29/adv/sun_ev_29_001.ogg": "f2cc0f3463aefd1be45957d7fa17d54e683cd14e3033822f6715a12de64869ff",
+    "ja_ogg/c29/adv/sun_ev_29_002.ogg": "685b19b2cfbbf1c050d0b2a21ff8710961bba0782b1ba0fecf49621ccb26d376",
+    "ja_ogg/c29/adv/sun_com_29_042.ogg": "0fed134138a663144e3c5680c85912a0797e800078c7a448d4ace5baaa073ae7",
+    "ja_ogg/c30/adv/sun_ev_30_000.ogg": "13c8ca69e91fe82adbb2911f9b29fa4c29c5ac062758335e3744555afa9daf0f",
+    "ja_ogg/c30/adv/sun_ev_30_001.ogg": "30e25751c07ea0aff4ef2b70bfe2cb093967dd4029f5cba28ede3f15d3ced19f",
+    "ja_ogg/c30/adv/sun_ev_30_002.ogg": "895ad1f8b0bbdb7d44b4866d77573dce5db3e39b30440ebf85fe52ab3b71c848",
+    "ja_ogg/c30/adv/sun_ev_30_003.ogg": "81b02954a10f2c1fdd5aea3c31ff2dfa759e98b0a083dc6330ed044399c80d7b",
+    "ja_ogg/c30/adv/sun_com_30_041.ogg": "2f480cf351a776b39b637613f606da708a4821e41923d05e8cf6961ada2034f1",
+    "ja_ogg/c31/adv/sun_ev_31_000.ogg": "55246481952d6229128ae8745f37034637d158ad9a92324b1f41ba52ca3bcfad",
+    "ja_ogg/c31/adv/sun_ev_31_001.ogg": "3a59358c7ffc8225c906d2558c7c6edbc9e9432524a3fd90fe14e9008b408afa",
+    "ja_ogg/c31/adv/sun_ev_31_002.ogg": "57a2d775f8e6f3dc3d997c405a779aba890761e93b8e19ca5babfeaaf085dfa7",
+    "ja_ogg/c31/adv/sun_ev_31_003.ogg": "6c694c0c756e421c48a6e433eb7a87e95840a221c3518f06b1370fe583cfa810",
+    "ja_ogg/c31/adv/sun_com_31_038.ogg": "4ece91766ffb1ba80637bf9c5e942a04acd99b1ea5dd03117b3ec5910890638b",
+    "ja_ogg/c32/adv/sun_ev_32_004.ogg": "b564f355275af5663250272134c1fd9d5bd5e9fabbcec808552ddae3dc4f20ad",
+    "ja_ogg/c32/adv/sun_ev_32_005.ogg": "4e9d32f3394ed12bf47520dd82af249cd464759a68011105e95785c3b965184d",
+    "ja_ogg/c32/adv/sun_ev_32_006.ogg": "43c2888952845824fe27480d56612b91be61a882f441525f8189f4205779234e",
+    "ja_ogg/c32/adv/sun_com_32_168.ogg": "3f36348b6472df940f1900cf4a11e4c92074dab68a1d5fcc9fa51302f3d74800",
+    "ja_ogg/c33/adv/sun_ev_33_000.ogg": "da2e0b0f984a9887cd1f8d83b848aa669b31f399cd850f39127885e3bc0c2cc9",
+    "ja_ogg/c33/adv/sun_ev_33_001.ogg": "9c0fc1c3b07a956dbc93bd272a354ea7eec0e7adf03f7339d706e82461aa667f",
+    "ja_ogg/c33/adv/sun_ev_33_002.ogg": "b7e555c08d3f0af3e2ea7da3ee1fea01c0435c9ee84369fc3525933de4c1a4c9",
+    "ja_ogg/c33/adv/sun_com_33_044.ogg": "5a395293cef1be868bb8857b5d7c78742c178516748116deac78f1be7fb27a1d",
+    "ja_ogg/c34/adv/sun_ev_34_000.ogg": "2b80d96378b3f5062e51b5647d81e60533ea1a56a1ded7e4131920c65ce090d4",
+    "ja_ogg/c34/adv/sun_ev_34_001.ogg": "d8f676ed64e310ffd8596c143afb644056415a44f820d2b707aa0a43523325a2",
+    "ja_ogg/c34/adv/sun_ev_34_002.ogg": "74d957252653425a696dfd7269fbccf6aea8ee5b155093b361ef4d96925b53f4",
+    "ja_ogg/c34/adv/sun_com_34_039.ogg": "c7d6a91129e845636c6949cf335b5a82d0f5f280c16da922e6ba17cc9ca0c431",
+    "ja_ogg/c35/adv/sun_ev_35_000.ogg": "54b93d0cc27e6427155f50a28033127b82206c5c5654c97d122671d7934c5095",
+    "ja_ogg/c35/adv/sun_ev_35_001.ogg": "2328f7a9da02416d9447f5e9f6490626f4003ec6fbbd535874d58fd39410fa6a",
+    "ja_ogg/c35/adv/sun_ev_35_002.ogg": "12d2b34c23825a9d90895c8b5e76b0b110870997d3d89c5d7c223f3dbc54ad11",
+    "ja_ogg/c35/adv/sun_com_35_039.ogg": "9d6a0f2482006df1c13405724c886a41e6025f1744fdf8331873dbbef39892e2",
+    "ja_ogg/c36/adv/sun_ev_36_000.ogg": "d3b3b1f14611d590e3c300e65c29a66b76b7e3dbbb223152eb6b14ea17a9aa01",
+    "ja_ogg/c36/adv/sun_ev_36_001.ogg": "4600308eda53a180d68ae2d3a82e66edadc92c88ac476b761549b782fa619cc7",
+    "ja_ogg/c36/adv/sun_ev_36_002.ogg": "c23fd1f1ddff0bf703e5f02d87fa215fc0ef9dd74053030171b708e7ea87ef70",
+    "ja_ogg/c36/adv/sun_ev_36_003.ogg": "f1e78d7fef17ab03a2bc8575ec4be487e9794409e1a6ab73569b88e626f4a1d1",
+    "ja_ogg/c36/adv/sun_com_36_038.ogg": "cc8dd7934e6adffb62e596f85acd610908e909d3a97b7c27cfd0e7d640ae5cfd",
+    "ja_ogg/c37/adv/sun_ev_37_000.ogg": "b119c0c2ed88dc2329e7d2b7676363e07b3dc1987317565b2e10225487a83175",
+    "ja_ogg/c37/adv/sun_ev_37_001.ogg": "df1f6b44d9587d94e8b8b7d7a1bab4763431b6acf7080b181bf8aec760a6a380",
+    "ja_ogg/c37/adv/sun_ev_37_002.ogg": "44c1ad591d2fd43119e896a0e7ac1f4cb43ccaf2240cf36832ef1d0bb4cb67eb",
+    "ja_ogg/c37/adv/sun_com_37_030.ogg": "fd3f095aa01809f75eeda7a5275d82b9c451bbef97ef6f52ee8a698da9098d82",
+    "ja_ogg/c38/adv/sun_ev_38_000.ogg": "ab3f8fe9eb9144e940cdf7546532ef19d36b37dab71933c641a6bb8c9f826b5b",
+    "ja_ogg/c38/adv/sun_ev_38_001.ogg": "540a0c379d53a791b05d1561e7a3d1e8e383bc595ea60b55702a7d583e881582",
+    "ja_ogg/c38/adv/sun_ev_38_002.ogg": "9bb1b3519961b460367415ad977c8c33fa4fc1fbf3b0de12102c19fe72c6d298",
+    "ja_ogg/c38/adv/sun_ev_38_003.ogg": "1b64718ed6485841bb72b36a6abab00713ded9b6aad9874f39e0156f436a684e",
+    "ja_ogg/c38/adv/sun_com_38_041.ogg": "fa070c79a2e0403a6a54606e88bb9290705b078b32725981b26901ce2192d647",
+    "ja_ogg/c39/adv/sun_ev_39_004.ogg": "81517cee4abc0d73a5d99ef9aab1c03dd2dd49ccf2dea69be4c875c07d6817a1",
+    "ja_ogg/c39/adv/sun_ev_39_005.ogg": "b2f8c2cfddfccf9e8a782ece75074b9a3e8de2a2835caafb0c4044e34fde1c10",
+    "ja_ogg/c39/adv/sun_ev_39_006.ogg": "6eebf64f31fc4243643c5a0a6b44c5b19448370a1869a7d7983c2dad1b1eeef3",
+    "ja_ogg/c39/adv/sun_com_39_168.ogg": "6af6487cd8175358bb875d94c5ea8cbcd8be5891b88eeba79c4470787126e63e"
+  },
+  "policy": "Source ordered ADV dialogue; street favor >=100 guarantees acceptance without the friend gate"
+}

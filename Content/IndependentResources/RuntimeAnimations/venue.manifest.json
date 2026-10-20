@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "card_specific": false,
+  "runtime_private_pose_required": true,
+  "actions": [
+    {
+      "id": "venue_read_seated.okanim",
+      "file": "venue_read_seated.okanim",
+      "source": "action/animator/00.unity3d|f_suwari_00_04_00_M",
+      "loop": true,
+      "sha256": "d6fb86ca0721f0296555bc4a173b8a3473f216741f5475095349c96f2d096db4",
+      "bytes": 288803,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_study_seated.okanim",
+      "file": "venue_study_seated.okanim",
+      "source": "action/animator/00.unity3d|f_suwari_00_03_00_M",
+      "loop": true,
+      "sha256": "06f006d65f23adc4047ea746a4103c63f060ebf50f2afe04ed9b5807af1a10ea",
+      "bytes": 378099,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_drink_seated.okanim",
+      "file": "venue_drink_seated.okanim",
+      "source": "action/animator/00.unity3d|f_suwari_00_08_00_M",
+      "loop": true,
+      "sha256": "f257017398df31d16835cc4c5d35fa7d45e8c18d73e39a072594e1500258cc4c",
+      "bytes": 270543,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_phone_seated.okanim",
+      "file": "venue_phone_seated.okanim",
+      "source": "action/animator/00.unity3d|f_suwari_00_09_00_M",
+      "loop": true,
+      "sha256": "fd25299ca6490092de6bbe70c470923f21f7a702ce9d52f623c8d663743cdc2e",
+      "bytes": 290459,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_onsen.okanim",
+      "file": "venue_onsen.okanim",
+      "source": "action/animator/00.unity3d|ks_f_onsen_00_00",
+      "loop": true,
+      "sha256": "13ca4e468e2224e2e8f6c29c1c2a568736f6c9a6e8161425f3794e053bef6734",
+      "bytes": 625663,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_shopping.okanim",
+      "file": "venue_shopping.okanim",
+      "source": "action/animator/00.unity3d|ks_f_shopping_00_00",
+      "loop": true,
+      "sha256": "70fe3e1648bd92af4aeef81acfe35f301ca4e41912f0e5e37deb918895f2c0b6",
+      "bytes": 765375,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_observe.okanim",
+      "file": "venue_observe.okanim",
+      "source": "action/animator/00.unity3d|ks_f_kansatsu_00_00",
+      "loop": true,
+      "sha256": "3e6b85fcf3e45a2c286d726855ae08cc17201f6d69fd8a620944a34213730602",
+      "bytes": 781519,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_sky.okanim",
+      "file": "venue_sky.okanim",
+      "source": "action/animator/00.unity3d|ks_f_sora_00_00_A_loop",
+      "loop": true,
+      "sha256": "7066aa45b4eb14c6ad4a9c6e8b4dd6378a032bc748625c8b4ba863a56e5067e0",
+      "bytes": 312219,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_stretch.okanim",
+      "file": "venue_stretch.okanim",
+      "source": "action/animator/00.unity3d|f_undou_00_00",
+      "loop": true,
+      "sha256": "5981e7b5a98f423b0ba746ed055bfd6ad29f2f729472405ba56e46f1a160eccd",
+      "bytes": 623379,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_pray_male.okanim",
+      "file": "venue_pray_male.okanim",
+      "source": "action/animator/00.unity3d|ks_m_action_03",
+      "loop": true,
+      "sha256": "14dc403214022624df369ade4f7e192f7a9799b604ad31b300bd29c83d4f0111",
+      "bytes": 448931,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_vending_male.okanim",
+      "file": "venue_vending_male.okanim",
+      "source": "action/animator/00.unity3d|ks_m_action_02",
+      "loop": true,
+      "sha256": "436b885338f79ad284dc5a6c33302e8be4ca106fb3ab82f2e54421eaadcfe7dc",
+      "bytes": 407219,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "venue_soine_female.okanim",
+      "file": "venue_soine_female.okanim",
+      "source": "adv/motion/controller/adv/00.unity3d|f_soine_00_02_M",
+      "loop": true,
+      "sha256": "bc1700d1cf44b41ef23a9e4eb1d0fa82a55af415024693787973fe2a5d96fc94",
+      "bytes": 375103,
+      "source_sha256": "8a7c4a143afc7665b7347a658a6c30f58ac4d568d9f3fcf877d8b38d07facee1"
+    },
+    {
+      "id": "venue_soine_male.okanim",
+      "file": "venue_soine_male.okanim",
+      "source": "adv/motion/controller/adv/00.unity3d|m_soine_00_02_M",
+      "loop": true,
+      "sha256": "039378876a708dfebe938c19975be73d62bb92fab7ef2db190ce15deb201b37e",
+      "bytes": 333783,
+      "source_sha256": "8a7c4a143afc7665b7347a658a6c30f58ac4d568d9f3fcf877d8b38d07facee1"
+    }
+  ],
+  "provenance": "Original NPC / studio / ADV curves independently evaluated on male and female APNG skeletons for venue activities"
+}

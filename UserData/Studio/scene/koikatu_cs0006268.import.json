@@ -1,0 +1,19 @@
+{
+	"source": "D:/KoikatuSunshine/UserData/Studio/scene/Official/koikatu_cs0006268.png",
+	"version": "1.0.4.2",
+	"characters": 1,
+	"character_cards": 1,
+	"items": 10,
+	"catalog_items": 7,
+	"lights": 0,
+	"cameras": 0,
+	"folders": 1,
+	"routes": 1,
+	"texts": 0,
+	"map": 34,
+	"notes": [
+		"objects on accessory slots are parented to the character (2)",
+		"particle items become OK Niagara effects (3)",
+		"route paths become folders (no movement) (1)"
+	]
+}

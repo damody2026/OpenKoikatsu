@@ -1,0 +1,10 @@
+{
+  "asset_id": "COMMON-CITY-study_desk",
+  "geometry_signature": "477c66a816784f107f5670965e59fb642febca9cb3b744b0ef0810d970eb33e3",
+  "max_repair_displacement_m": 0.001,
+  "material_origin": "本機製作木紋與金屬材質；不冒稱Tripo原始貼圖。",
+  "materials": [
+    {"name":"pale-oak","pattern":"oak_grain","base_color_linear":[0.62,0.43,0.24],"roughness":0.55,"metallic":0,"height_min_ratio":0.9},
+    {"name":"charcoal-steel","pattern":"plain","base_color_linear":[0.045,0.055,0.065],"roughness":0.38,"metallic":0.8,"height_max_ratio":0.8999999999999999}
+  ]
+}

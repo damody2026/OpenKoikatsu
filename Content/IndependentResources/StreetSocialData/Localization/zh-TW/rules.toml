@@ -1,0 +1,90 @@
+# 規則（ok-rules）寫給玩家或女主看的文字。key 由程式使用，不要改；值可以改。
+# {名稱} 是參數；英文表可以用 .one / .other 分單複數。
+
+[test]
+hello = "你好，{name}"
+cards = "{n} 張"
+only_tw = "只有繁中"
+
+[bluff]
+you = "你"
+need_players = "吹牛要 3 到 6 個人（你和 2 到 5 位女生）"
+dealt = "發牌：{players} 個人，每人約 {each} 張。{first} 先出，點數自己喊。"
+opening = "好啊，來吧！|我可是很會騙人的喔。|先說好，輸了不准生氣。|哼，誰怕誰。"
+wait_window = "等一下，大家還在決定要不要抓上一手"
+not_your_turn = "現在輪到 {who}"
+one_to_four = "一次出 1 到 4 張"
+not_in_hand = "出的牌不在手上"
+must_claim = "這輪要喊 {rank}（不想跟就「過」）"
+name_rank = "你先出：要喊什麼點數？"
+name_rank_example = "你先出：要喊什麼點數？（例如「兩張 7」）"
+leading = "開新一輪，"
+played = "{who} 蓋了 {n} 張，{lead}說是 {n} 張 {rank}（剩 {left} 張）"
+claim = "{count}張{rank}"
+count_words = "一|兩|三|四"
+claim_ends = "。|喔。"
+cannot_pass = "你先出，不能過"
+passed = "{who}：過"
+pass_lines = "過。|我不要。|這輪我過。"
+my_pass = "過。"
+all_passed = "大家都過了：牌堆 {n} 張收掉，{who} 開新一輪。"
+nothing_to_call = "現在沒有可以抓的牌"
+own_play = "不能抓自己出的牌"
+called = "{who}：「吹牛！」翻開是 {shown} → {verdict}，{loser} 收走 {took} 張"
+lie = "說謊被抓"
+truth = "是真的"
+my_call = "吹牛！"
+call_lines = "吹牛！|騙人，翻開來！|我不信，吹牛！"
+caught_lines = "嘖，被抓到了……|唔，怎麼看出來的啦！"
+truth_lines = "哼哼，是真的喔。|你看，我才沒騙人！"
+leads = "{who} 開新一輪。"
+won = "吹牛結束：{who} 贏了！{most}"
+most_caught = "（最常被抓包的是 {who}，{n} 次）"
+my_win = "我出完了，我贏了！"
+win_lines = "我贏了！|耶，全部出完了！"
+bad_table = "牌局資料不完整"
+over = "牌局已經結束"
+no_seat = "沒有這個座位"
+not_her_turn = "不是她的回合"
+# 聽懂他說的話：| 分隔的詞，出現任一個就算。counts / ranks 是「詞,詞:值」；hear_card_word 是量詞（中文用「張」把張數和點數分開，英文留空就依字的順序）。
+hear_call = "吹牛|騙人|不信|翻開"
+hear_pass = "過|不要|pass"
+hear_card_word = "張"
+hear_counts = "1,一:1|2,二,兩,两:2|3,三:3|4,四:4"
+hear_ranks = "10,十:10|A,尖:1|2,二:2|3,三:3|4,四:4|5,五:5|6,六:6|7,七:7|8,八:8|9,九:9|J,勾:11|Q,圈:12|K:13"
+
+# What the player says that the rules listen for (any of the words, "|" between; matched in lower case).
+[hear]
+# A piece of a message naming a control: it goes behind the "?" (message_hint).
+control_hint = "Esc|WASD|Shift|Ctrl|F9|按 E|E 交談|E 與|Tab 切換|N 開始|P 或|按右側|選擇話題："
+offer_pay = "我請|請你|我付|我來付|我出|算我的|我買單|我買給你|我请|请你|我来付|我买单|我买给你|送你|不准搶著付|別搶著付|不准搶|我買單|這次我來|還沒請|沒請到|还没请|没请到|欠你一杯|欠你一頓"
+ask_split = "各付各的|各付各|AA|各自付|分開付|分开付"
+decline_treat = "不用請|不用你請|別請|我自己付|自己付|我付我的|不用你付|我自己來付|不用请|不用你请|别请"
+# He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
+self_order = "我要|我點|給我來|給我一|我來一|我想吃|我想喝|我吃|我喝"
+order_for_her = "給你|幫你|你要|你想|請你吃|請你喝|你的|妳要|妳想|給妳|幫妳|妳的"
+# A clock time said for a meeting (shop.rs time_said): words that are one, and what follows a number.
+time_words = "中午|正午|午夜十二點|半夜十二點|分鐘後|分鐘以後|小時後|半小時後|馬上|待會|待會兒|等一下|等下|一會兒|分钟后|小时后|马上|待会"
+# Which day the words name, word:days from today, longer words first (shop.rs day_said; the last one said counts).
+day_words = "大後天:3|大后天:3|後天:2|后天:2|明天:1|明早:1|明晚:1|今天:0|今晚:0|今早:0"
+# Words that name some day at all (shop.rs day_said "dated"): without any, a time still ahead is today.
+date_words = "週|周|星期|禮拜|號|下次|改天|以後|週末|月"
+time_marks = "點|點鐘|時|时|:|：|点"
+invite = "一起|過來|來吧|加入|也來|跟我們|跟著我|來聊|过来|来吧|也来|跟我们|跟着我|来聊"
+# A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
+invite_strong = "一起来|一起來|過來|來吧|加入|也來|跟我們|跟著我|來聊|过来|来吧|也来|跟我们|跟着我|来聊"
+you_words = "你|妳"
+refuse = "不要|別來|不用|不必|别来"
+# A goodbye said (social.rs farewell_heard; compared in Simplified for Chinese).
+goodbye = "再见|拜拜|掰掰|先走|走了|我走啦|回去了|先回|回宿舍|明天见|下次见|改天见|晚上见|待会见|晚安|告辞|先去忙|我先去|不打扰你|周一见|周二见|周三见|周四见|周五见|周六见|周日见|周末见|星期一见|星期二见|星期三见|星期四见|星期五见|星期六见|星期天见|后天见|中午见|下午见|傍晚见|一会见|一会儿见|回头见|一点见|两点见|三点见|四点见|五点见|六点见|七点见|八点见|九点见|十点见|十一点见|十二点见|点半见|路上小心|这就走|我先回去|那我走了|bye|晚點見|晚點聊|晚些見|去忙吧|你去忙|先這樣|先忙了|不送了|晚点见|去忙吧|先这样"
+# His own offer to go somewhere with her (social.rs her_proposal_open: he wants it).
+he_offer = "我送你|送你回|陪你去|陪你走|帶你去|我陪你|我們去|我請你|带你去|我们去|我请你"
+# A place in a clause about the past is not where they go now (social.rs named_place_id).
+past_ref = "昨天|昨晚|前天|前晚|上次|上回|那天|那次|以前|之前那|昨天|昨晚"
+# He offers to lend her money (social.rs lend_offered): her own "lend" act needs this in his line.
+lend_offer = "借你|借給你|我借|先拿去|拿去用|給你用|我墊|我先墊|幫你墊|轉給你|借给你|给你用|你拿著|拿著吧|收著|你收下|收下吧|給你，|錢給你"
+# Words before a name that make her someone talked about, not called (social.rs misnamed: "跟千鹤").
+name_about = "跟|和|與|同|陪|找|給|對|被|讓|是|就是|那是|叫"
+# Her reply proposing something, and his words agreeing (social.rs her_proposal_open).
+propose = "要不要|好不好|怎么样|如何|好吗|我们去|一起去|走吧？|陪我|跟我去|跟我走"
+agree = "好啊|好呀|好的|好喔|可以|行啊|没问题|走吧|走啊|就这么办|当然|一言为定|说定了|就这样|嗯嗯|那就这样|沒問題|就這麼辦|當然|一言為定|說定了|就這樣|那就這樣|明早見|明天見|明晚見|到時候見|到時見|不見不散|明早见|明天见"

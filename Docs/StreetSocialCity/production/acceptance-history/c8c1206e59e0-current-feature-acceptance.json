@@ -1,0 +1,40 @@
+{
+  "status": "current_features_passed",
+  "scope": "compact_world_geography_and_complete_floor_design_with_actual_control_GLB_acceptance",
+  "source_manifest_sha256": "c8c1206e59e0ab5d86d5bf5674a86f61d1ac5cfbf7425d60e9ce4cd1eb2545dd",
+  "unit_tests": 41,
+  "world_size_m": [
+    1100,
+    1100
+  ],
+  "linear_scale_ratio": 0.5,
+  "area_scale_ratio": 0.25,
+  "buildings": 74,
+  "floors": 283,
+  "indoor_units": 1136,
+  "outdoor_units": 20,
+  "main_interactive_units": 1156,
+  "shops": 48,
+  "office_towers": 3,
+  "mall_footprint_m": [
+    150,
+    100
+  ],
+  "site_checks": 5632,
+  "control_glb_checks": 790102,
+  "catalog_and_csv_dimensions_verified": 1156,
+  "reports": {
+    "site-acceptance.json": "passed",
+    "layout-acceptance.json": "passed",
+    "functional-acceptance.json": "passed",
+    "scale-audit.json": "passed",
+    "modular-acceptance.json": "passed",
+    "modular-geometry-acceptance.json": "passed",
+    "asset-library-acceptance.json": "passed",
+    "control-assemblies-acceptance.json": "passed",
+    "control-glb-acceptance.json": "passed"
+  },
+  "full_city_models_complete": false,
+  "actual_tripo_models_approved": 0,
+  "runtime_navigation_verified": false
+}

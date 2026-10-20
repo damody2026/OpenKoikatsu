@@ -1,0 +1,16 @@
+{
+ "bad_frames": 0,
+ "duration_seconds": 10.366666666666667,
+ "frames": 312,
+ "seconds": 3.6023988,
+ "name": "網球示範",
+ "video": "GVHMR 範例影片 tennis.mp4（不在倉庫內）",
+ "static_cam": true,
+ "work": "網球示範",
+ "params": {
+  "arm_reach": 1.0,
+  "collar_scale": 0.5,
+  "smooth": 1.0,
+  "f_mm": null
+ }
+}

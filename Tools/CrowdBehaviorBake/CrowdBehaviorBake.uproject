@@ -1,0 +1,1 @@
+{"FileVersion": 3, "Modules": [{"Name": "CrowdBehaviorBake", "Type": "Editor", "LoadingPhase": "Default"}], "Plugins": [{"Name": "KKUnityBundle", "Enabled": true}, {"Name": "KKImportedAssets", "Enabled": true}, {"Name": "KKCrowdGpuPacking", "Enabled": false}]}

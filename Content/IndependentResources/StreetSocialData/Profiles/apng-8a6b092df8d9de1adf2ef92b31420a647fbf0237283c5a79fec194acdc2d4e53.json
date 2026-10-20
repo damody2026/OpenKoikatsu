@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "id": "apng-8a6b092df8d9de1adf2ef92b31420a647fbf0237283c5a79fec194acdc2d4e53",
+  "display_name": "Raiden",
+  "age_in_setting": 20,
+  "archetype": "S",
+  "personality_core": {
+    "catchphrase": "先坐下来再说吧。",
+    "pride": "不管心情如何，客人杯里的饮料从不马虎",
+    "fear": "被人当成难亲近而默默疏远",
+    "desire": "找到能安静相处、不必时时说话也不会尴尬的人"
+  },
+  "orientation": "Monogamous",
+  "material": "Mixed",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "shop_staff",
+    "role": "staff",
+    "workplace_place_id": "cafe",
+    "job_id": "",
+    "competence": 72,
+    "pride": 60
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "park",
+    "bookstore",
+    "drinkshop"
+  ],
+  "birthday": "1990-07-23",
+  "department": "",
+  "intelligence": 68,
+  "money": {
+    "cash": 420,
+    "bank": 8500,
+    "income": [
+      {
+        "source": "咖啡店打工",
+        "amount": 1600,
+        "cycle": "monthly",
+        "payday": 15
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机月租",
+        "amount": 120,
+        "due_day": 10
+      },
+      {
+        "name": "房租分担",
+        "amount": 300,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "frugal",
+    "treat_pride": 45,
+    "expects_treat": 30,
+    "reciprocity": 55,
+    "saving_goals": [
+      {
+        "item": "智能手机",
+        "amount": 2800,
+        "why": "想要能随时上网查资料跟拍照"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "公园旁的红豆饼"
+    ],
+    "dislikes": [
+      "太吵的场合",
+      "香菜"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "去冰",
+      "toppings": []
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7,
+      23
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 30,
+    "jealousy_proneness": 30,
+    "possessiveness": 35,
+    "insecurity": 35,
+    "competitiveness": 40,
+    "self_esteem": 60,
+    "tsundere": 20,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 70,
+    "public_boldness": 35,
+    "charm_resistance": 65,
+    "money_resistance": 60
+  },
+  "bio": "在街区住了两年的女孩，一头紫色长发绑成高马尾，看起来有点冷淡，其实只是慢热。白天在街角的咖啡店帮忙，对常客的饮料记得比谁都清楚。喜欢在傍晚绕去公园散步，观察别人遛狗。2010 年的夏天她刚满二十岁，正认真考虑要不要把存款拿出来换一支能上网的新手机。",
+  "source": "llm"
+}

@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "id": "apng-91e6c5c55f77add610edd982472f7a857d0b61fe97eb93d41039fb21d0b969ba",
+  "display_name": "贞德",
+  "age_in_setting": 20,
+  "archetype": "Q",
+  "personality_core": {
+    "catchphrase": "随便啦，反正又不是世界末日。",
+    "pride": "从不为讨好别人而改自己的歌单",
+    "fear": "被当成很随便、没原则的人",
+    "desire": "找到能一起听团、一起写歌的人"
+  },
+  "orientation": "Monogamous",
+  "material": "Romantic",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "cafe",
+    "job_id": "livehouse_staff",
+    "competence": 60,
+    "pride": 45
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "bookstore",
+    "park",
+    "library"
+  ],
+  "birthday": "1990-03-18",
+  "department": "afl",
+  "intelligence": 68,
+  "money": {
+    "cash": 450,
+    "bank": 3200,
+    "income": [
+      {
+        "source": "家里给的生活费",
+        "amount": 1500,
+        "cycle": "monthly",
+        "payday": 3
+      },
+      {
+        "source": "live house 打工",
+        "amount": 300,
+        "cycle": "monthly",
+        "payday": 20
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机预付卡",
+        "amount": 120,
+        "due_day": 15
+      },
+      {
+        "name": "宿舍网路分摊",
+        "amount": 80,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "normal",
+    "treat_pride": 40,
+    "expects_treat": 30,
+    "reciprocity": 55,
+    "saving_goals": [
+      {
+        "item": "二手 bass 吉他",
+        "amount": 1200,
+        "why": "想自己写歌录 demo"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "逛二手书店",
+      "听 1976 和甜梅号"
+    ],
+    "dislikes": [
+      "香菜",
+      "过度甜腻的奶盖"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "微冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 2,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      3,
+      18
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 30,
+    "jealousy_proneness": 40,
+    "possessiveness": 35,
+    "insecurity": 55,
+    "competitiveness": 35,
+    "self_esteem": 55,
+    "tsundere": 25,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 60,
+    "public_boldness": 40,
+    "charm_resistance": 45,
+    "money_resistance": 60
+  },
+  "bio": "在公馆商圈出没的台大外文系二年级生，留着及腰黑直发、总戴着随声听耳机。她其实读的是外文系，但对街舞和独立乐团更有兴趣，下课后常泡在附近咖啡店写歌词。说话直来直去、不太修饰，熟一点会发现她其实怕生。周末偶尔在 live house 帮忙卖票换免费入场。",
+  "source": "llm"
+}

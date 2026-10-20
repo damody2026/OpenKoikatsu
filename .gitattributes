@@ -1,0 +1,8 @@
+Content/CharacterCards/CrowdAPNG/*.png filter=lfs diff=lfs merge=lfs -text
+Content/CharacterCards/StreetHeroines/*.png filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/models/**/*.okmodel filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/sources.okidx filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/anims/**/*.okanim filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/paired/cache/pack.bin filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/paired/okpaired.json filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/studio/**/*.png filter=lfs diff=lfs merge=lfs -text

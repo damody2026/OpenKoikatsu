@@ -1,0 +1,11 @@
+{
+  "voices": [
+    {
+      "id": "sun_tk_32_000.ogg",
+      "sha256": "3a60aa7491632975153812e3e8d08c865df028bf539830c21b33903d2c2e9f03",
+      "purpose": "Shared demonstration recording, not a per-card voice assignment or text-to-speech engine.",
+      "file": "sun_tk_32_000.ogg"
+    }
+  ],
+  "schema": 1
+}

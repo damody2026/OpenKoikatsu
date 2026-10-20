@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "id": "apng-21399fbfa2934a968bc860ceb708190e63183e5a451b1d5d9e701e4d65485427",
+  "display_name": "胡桃",
+  "age_in_setting": 20,
+  "archetype": "G",
+  "personality_core": {
+    "catchphrase": "嗯……真的吗？",
+    "pride": "对朋友很讲义气，答应的事一定会做到。",
+    "fear": "被忽略或被当成理所当然，也怕自己做不好让别人失望。",
+    "desire": "能有一段安稳而真诚的关系，被人好好珍惜。"
+  },
+  "orientation": "Monogamous",
+  "material": "Romantic",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "",
+    "job_id": "",
+    "competence": 60,
+    "pride": 55
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "cafe",
+    "bookstore",
+    "library",
+    "drinkshop"
+  ],
+  "birthday": "1990-03-18",
+  "department": "ba",
+  "intelligence": 68,
+  "money": {
+    "cash": 500,
+    "bank": 3200,
+    "income": [
+      {
+        "source": "家里给的生活费",
+        "amount": 1500,
+        "cycle": "monthly",
+        "payday": 1
+      },
+      {
+        "source": "图书馆工读",
+        "amount": 300,
+        "cycle": "monthly",
+        "payday": 15
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机费",
+        "amount": 99,
+        "due_day": 10
+      },
+      {
+        "name": "宿舍水电分摊",
+        "amount": 250,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "normal",
+    "treat_pride": 45,
+    "expects_treat": 40,
+    "reciprocity": 55,
+    "saving_goals": [
+      {
+        "item": "新手机",
+        "amount": 2000,
+        "why": "旧手机电池已经不太行了，想换一支可以听音乐的手机。"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "逛书店",
+      "听流行音乐"
+    ],
+    "dislikes": [
+      "香菜",
+      "太吵的地方"
+    ],
+    "allergies": [],
+    "diet": "none",
+    "drink": {
+      "sweetness": "半糖",
+      "ice": "去冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "social",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      7,
+      18
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 40,
+    "jealousy_proneness": 55,
+    "possessiveness": 45,
+    "insecurity": 60,
+    "competitiveness": 35,
+    "self_esteem": 50,
+    "tsundere": 10,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 70,
+    "public_boldness": 35,
+    "charm_resistance": 55,
+    "money_resistance": 50
+  },
+  "bio": "在台湾大学城长大的女孩，目前就读大学二年级。她喜欢在午后带着一杯珍奶逛书店，对2010年流行的乐团与偶像剧如数家珍。个性温和但有点怕生，熟了之后会露出爱开玩笑的一面。她习惯把生活安排得有条有理，对未来有一点小小的焦虑，却总能在散步时找到平静。",
+  "source": "llm"
+}

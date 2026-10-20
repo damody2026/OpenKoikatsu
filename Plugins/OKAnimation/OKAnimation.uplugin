@@ -1,0 +1,24 @@
+﻿{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "OK Animation",
+  "Description": "Skeleton-agnostic OK animations: KK / Unreal / 3ds Max sources, 1..N role groups with contacts, 1D/2D blend spaces, montages, an OK animation editor and AnimGraph / Blueprint players.",
+  "Category": "OpenKoikatsu",
+  "CreatedBy": "OpenKoikatsu",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "SupportedTargetPlatforms": [ "Win64" ],
+  "Plugins": [
+    { "Name": "KKUnityBundle", "Enabled": true },
+    { "Name": "KKCard", "Enabled": true },
+    { "Name": "KKSideloader", "Enabled": true }
+  ],
+  "Modules": [
+    { "Name": "OKAnimation", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "OKAnimationGraph", "Type": "UncookedOnly", "LoadingPhase": "Default" },
+    { "Name": "OKAnimationEditor", "Type": "Editor", "LoadingPhase": "Default" }
+  ]
+}
+

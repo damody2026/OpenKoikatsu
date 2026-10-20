@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "card_specific": false,
+  "runtime_private_pose_required": true,
+  "actions": [
+    {
+      "id": "conversation_neutral.okanim",
+      "file": "conversation_neutral.okanim",
+      "source": "action/animator/00.unity3d|f_tachi_00_00",
+      "loop": true,
+      "sha256": "43847ea25ca68d993ca872c27b6fbfdec112b74680c651d87857715dbcc62383",
+      "bytes": 923291,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "conversation_open.okanim",
+      "file": "conversation_open.okanim",
+      "source": "action/animator/00.unity3d|f_talk_00_03_00",
+      "loop": true,
+      "sha256": "df3c9d3b4d0ca96f28773b83118fb5d8bc4545b637668d6a3de4c508233ffe33",
+      "bytes": 202767,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "conversation_reserved.okanim",
+      "file": "conversation_reserved.okanim",
+      "source": "action/animator/00.unity3d|f_talk_00_07_00",
+      "loop": true,
+      "sha256": "16c60a3087a5de1716a575c4aafd7d6def9546976adebfe26ececed63425a0bb",
+      "bytes": 176691,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "conversation_male.okanim",
+      "file": "conversation_male.okanim",
+      "source": "action/animator/00.unity3d|mc_m_stand_00_00",
+      "loop": true,
+      "sha256": "dd525d8fb8ad5ba4d7b8eb99687330197e9cbdf10e110d11234f60e36d8ceb9f",
+      "bytes": 268963,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "run_female.okanim",
+      "file": "run_female.okanim",
+      "source": "action/animator/00.unity3d|f_aruki_00_01_01",
+      "loop": true,
+      "sha256": "ffe01eb3bc4dd90e956f977b51b023f6b2ef22979780671055887c47ada8d654",
+      "bytes": 173187,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    },
+    {
+      "id": "run_male.okanim",
+      "file": "run_male.okanim",
+      "source": "action/animator/00.unity3d|ks_m_run",
+      "loop": true,
+      "sha256": "68ce06df0e5d0b98d31c01dd705a3f0e9a1cdcdfc6db7c30cdf8b0d5b56af8ed",
+      "bytes": 203139,
+      "source_sha256": "1f254ffc5a72b31881d2163a7c0cc9bf4952a36772e8b19fdfc47e73c796a77e"
+    }
+  ],
+  "provenance": "Common source standing, standing conversation gestures and running curves; personality grouping is project-defined; private APNG poses prepared at runtime"
+}

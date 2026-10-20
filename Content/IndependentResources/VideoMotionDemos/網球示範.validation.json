@@ -1,0 +1,46 @@
+{
+  "duration_seconds": 10.366666666666667,
+  "fps": 30.0,
+  "frames": 312,
+  "repair": {
+    "clamped_end_frames": 50,
+    "clamped_torso_frames": 28,
+    "contact_frames": {
+      "L": 86,
+      "R": 78
+    },
+    "helper_tracks": 346,
+    "scale": 1.1527584973556793
+  },
+  "rounds": [
+    {
+      "bad_frames": 5,
+      "by_kind": {
+        "jitter": 5
+      },
+      "params": "Params { fps: 30.0, fix: true, arm_reach: 1.0, collar_scale: 0.5, smooth: 1.0, lock_h: 0.04, lock_v: 0.35, lock_blend: 3, extra_lift: None }",
+      "round": 0
+    },
+    {
+      "bad_frames": 3,
+      "by_kind": {
+        "jitter": 3
+      },
+      "params": "Params { fps: 30.0, fix: true, arm_reach: 1.0, collar_scale: 0.5, smooth: 1.5, lock_h: 0.04, lock_v: 0.35, lock_blend: 6, extra_lift: None }",
+      "round": 1
+    },
+    {
+      "bad_frames": 0,
+      "by_kind": {},
+      "params": "Params { fps: 30.0, fix: true, arm_reach: 1.0, collar_scale: 0.5, smooth: 1.5, lock_h: 0.04, lock_v: 0.35, lock_blend: 9, extra_lift: None }",
+      "round": 2
+    }
+  ],
+  "seconds": 3.6023988,
+  "validation": {
+    "bad_frames": 0,
+    "by_kind": {},
+    "frames": 312,
+    "issues": {}
+  }
+}

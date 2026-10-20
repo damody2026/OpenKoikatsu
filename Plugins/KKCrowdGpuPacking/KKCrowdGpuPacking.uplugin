@@ -1,0 +1,9 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Crowd GPU Matrix Packing",
+  "EnabledByDefault": false,
+  "CanContainContent": false,
+  "Modules": [{"Name":"KKCrowdGpuPacking","Type":"Runtime","LoadingPhase":"PostConfigInit"}]
+}

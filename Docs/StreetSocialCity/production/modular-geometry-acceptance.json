@@ -1,0 +1,1 @@
+{"status":"passed","source_manifest_sha256":"fdb35f1e1c44491ef9131fd24ff9cf30f4f1c37036d01037d068dacc95b4cbb0","checks":{"current_revision":1,"part_dimensions":158656,"true_aperture":248006,"slab_area":173,"exterior_alignment":39241,"shared_geometry_owner":282},"errors":[],"scope":"structural control geometry; not actual Tripo meshes or runtime navigation"}

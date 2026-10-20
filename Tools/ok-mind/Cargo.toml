@@ -1,0 +1,24 @@
+[package]
+name = "ok-mind"
+version = "0.1.0"
+edition = "2021"
+description = "StreetSocial heroine mind: memory, DeepSeek queue and planning, loaded in-process by Unreal as ok_mind.dll"
+
+[lib]
+name = "ok_mind"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+ruzstd = "0.7"
+rusqlite = { version = "0.32", features = ["bundled"] }
+zhconv = "0.4"
+# The text tables and their ICU messages (Localization/<lang>/*.toml).
+ok-rules = { path = "../ok-rules" }
+
+[profile.release]
+debug = 1
+# Panics must unwind so every FFI entry can catch them; abort would take Unreal down with it.
+panic = "unwind"

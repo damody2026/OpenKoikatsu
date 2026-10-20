@@ -1,0 +1,52 @@
+diff --git a/Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.cpp b/Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.cpp
+index d1f152d..54aa01b 100644
+--- a/Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.cpp
++++ b/Engine/Source/Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapArray.cpp
+@@ -634,6 +634,12 @@ static TAutoConsoleVariable<int32> CVarShadowsVirtualForceFullHZBUpdate(
+ 	ECVF_RenderThreadSafe);
+ 
+ 
++static TAutoConsoleVariable<int32> CVarVirtualShadowParallelNonNaniteDraw(
++	TEXT("r.Shadow.Virtual.NonNanite.ParallelDraw"),
++	0,
++	TEXT("Split non-Nanite virtual shadow mesh draw commands across Task Graph workers. Retains the same VSM pages and geometry."),
++	ECVF_RenderThreadSafe);
++
+ static TAutoConsoleVariable<int32> CVarVirtualShadowSinglePassBatched(
+ 	TEXT("r.Shadow.Virtual.NonNanite.SinglePassBatched"),
+ 	1,
+@@ -4161,6 +4167,25 @@ static void AddRasterPass(
+ 	FIntRect ViewRect;
+ 	ViewRect.Max = FVirtualShadowMap::VirtualMaxResolutionXY;
+ 
++	if (CVarVirtualShadowParallelNonNaniteDraw.GetValueOnRenderThread() != 0 && GRHICommandList.UseParallelAlgorithms())
++	{
++		GraphBuilder.AddDispatchPass(
++			MoveTemp(PassName), PassParameters,
++			ERDGPassFlags::Raster | ERDGPassFlags::SkipRenderPass,
++			[&MeshCommandPass, PassParameters, ViewRect](FRDGDispatchPassBuilder& DispatchPassBuilder)
++			{
++				MeshCommandPass.Dispatch(DispatchPassBuilder, &PassParameters->InstanceCullingDrawParams,
++					[ViewRect](FRHICommandList& RHICmdList)
++					{
++						FRHIRenderPassInfo RPInfo;
++						RPInfo.ResolveRect = FResolveRect(ViewRect);
++						RHICmdList.BeginRenderPass(RPInfo, TEXT("RasterizeVirtualShadowMapsParallel(Non-Nanite)"));
++						RHICmdList.SetViewport(ViewRect.Min.X, ViewRect.Min.Y, 0.0f, FMath::Min(ViewRect.Max.X, 32767), FMath::Min(ViewRect.Max.Y, 32767), 1.0f);
++					});
++			});
++		return;
++	}
++
+ 	GraphBuilder.AddPass(
+ 		MoveTemp(PassName),
+ 		PassParameters,
+@@ -4594,7 +4619,7 @@ void FVirtualShadowMapArray::RenderVirtualShadowMapsNonNanite(FRDGBuilder& Graph
+ 
+ 		if(!BatchedVirtualSmMeshCommandPasses.IsEmpty())
+ 		{
+-			if (CVarVirtualShadowSinglePassBatched.GetValueOnRenderThread() != 0)
++			if (CVarVirtualShadowSinglePassBatched.GetValueOnRenderThread() != 0 && CVarVirtualShadowParallelNonNaniteDraw.GetValueOnRenderThread() == 0)
+ 			{
+ 				FVirtualShadowDepthPassParameters* PassParameters = GraphBuilder.AllocParameters<FVirtualShadowDepthPassParameters>();
+ 				FProjectedShadowInfo* ProjectedShadowInfo0 = BatchedVirtualSmMeshCommandPasses[0];

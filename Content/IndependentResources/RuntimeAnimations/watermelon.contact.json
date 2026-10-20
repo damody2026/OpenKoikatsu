@@ -1,0 +1,78 @@
+{
+  "start": 0.28,
+  "peak": 0.52,
+  "end": 0.78,
+  "constraints": [
+    {
+      "effector": "k_f_handR_00",
+      "tip": [
+        0,
+        0,
+        0.5099748
+      ],
+      "target": [
+        0,
+        0.12832,
+        0.8
+      ],
+      "chain": [
+        {
+          "name": "cf_j_hand_R",
+          "max_degrees": 90
+        },
+        {
+          "name": "cf_j_forearm01_R",
+          "max_degrees": 150
+        },
+        {
+          "name": "cf_j_arm00_R",
+          "max_degrees": 150
+        },
+        {
+          "name": "cf_j_shoulder_R",
+          "max_degrees": 90
+        },
+        {
+          "name": "cf_j_spine03",
+          "max_degrees": 45
+        },
+        {
+          "name": "cf_j_spine02",
+          "max_degrees": 45
+        },
+        {
+          "name": "cf_j_spine01",
+          "max_degrees": 45
+        }
+      ]
+    },
+    {
+      "effector": "k_f_handL_00",
+      "tip": [
+        0,
+        0,
+        0
+      ],
+      "target": [
+        0,
+        0,
+        0.04
+      ],
+      "target_bone": "k_f_handR_00",
+      "chain": [
+        {
+          "name": "cf_j_forearm01_L",
+          "max_degrees": 150
+        },
+        {
+          "name": "cf_j_arm00_L",
+          "max_degrees": 150
+        },
+        {
+          "name": "cf_j_shoulder_L",
+          "max_degrees": 90
+        }
+      ]
+    }
+  ]
+}

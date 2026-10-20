@@ -1,0 +1,26 @@
+# Mainland China, 2010 (Docs/STREET_I18N_PLAN_20261014.md, P2). The game's own numbers are written in this region's
+# money (yuan): catalog.json, property.json and the rules' constants. This region is the base, so nothing is converted.
+code = "CN"
+currency = "CNY"
+symbol = "¥"
+digits = 0
+base = true
+
+# The usual shelf prices (yuan), what other regions' prices are snapped to when they are converted from here.
+ladder = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 20, 22, 25, 28, 30, 35, 38, 45, 48, 58, 68, 78, 88, 98, 128, 168, 198, 238, 298, 398, 498, 598, 698, 898, 998, 1288, 1598, 1998, 2998, 3998, 4998, 5998, 6998, 8888, 9999]
+
+[factor]
+goods = 1.0
+wage = 1.0
+salary = 1.0
+rent = 1.0
+property = 1.0
+cash = 1.0
+
+[fixed]
+phone_fee = 58
+tuition = 2500
+dorm = 600
+card_limit = 3000
+loan_year_cap = 6000
+allowance = 1700

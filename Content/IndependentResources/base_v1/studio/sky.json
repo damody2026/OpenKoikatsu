@@ -1,0 +1,5345 @@
+{
+  "format": "ok-studio-sky-1",
+  "patterns": [
+    {
+      "no": 0,
+      "name": "晴れた空",
+      "profile": "SkyProfile_morning_stu",
+      "material": "SkyboxMaterial",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "material_keywords": [
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.243,
+        "_CloudDirection": 2.03,
+        "_CloudFadeAmount": 0.301,
+        "_CloudFadePosition": 0.827,
+        "_CloudHeight": 0.74,
+        "_CloudSpeed": 0.088,
+        "_CloudTextureTiling": 0.6,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.5,
+        "_GradientFadeEnd": 1.0,
+        "_GradientFadeMiddlePosition": 1.0,
+        "_HorizonFogDensity": 0.0,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.01,
+        "_MoonEdgeFade": 0.0001,
+        "_MoonHDRBoost": 4.2,
+        "_MoonRadius": 0.05,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -1.0,
+        "_StarFadeEnd": -1.0,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.0039,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 5.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.0054,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 5.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.4,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.005,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 5.0,
+        "_SunEdgeFade": 0.58,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.035,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.48584908,
+          0.88805264,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          0.495283,
+          0.8597405,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0,
+          0.33673477,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65574396,
+          0.6878293,
+          0.752,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.769483,
+          0.36161545,
+          0.5264316,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9955375,
+          1.0,
+          0.6764706,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.46323532,
+          0.6668357,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.99848866,
+          1.0,
+          0.41176468,
+          1.0
+        ],
+        "_SunPosition": [
+          -0.3300331,
+          0.60913205,
+          0.72113544,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          0.5646425,
+          -0.2984541,
+          0.769483,
+          0.0,
+          -0.0,
+          0.9323274,
+          0.36161545,
+          0.0,
+          -0.8253356,
+          -0.20418344,
+          0.5264316,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          0.9092974,
+          0.2534884,
+          -0.3300331,
+          0.0,
+          -0.0,
+          0.7930688,
+          0.60913205,
+          0.0,
+          0.41614684,
+          -0.5538822,
+          0.72113544,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1,
+      "name": "昼の空",
+      "profile": "SkyProfile_daytime_stu",
+      "material": "SkyboxMaterial_daytime",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.5,
+        "_CloudDirection": 0.18,
+        "_CloudFadeAmount": 1.0,
+        "_CloudFadePosition": 0.978,
+        "_CloudHeight": 0.9,
+        "_CloudSpeed": 0.067,
+        "_CloudTextureTiling": 0.55,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.092,
+        "_GradientFadeEnd": 0.541,
+        "_GradientFadeMiddlePosition": 0.437,
+        "_HorizonFogDensity": 0.0,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.0001,
+        "_MoonHDRBoost": 4.2,
+        "_MoonRadius": 0.05,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.114,
+        "_StarFadeEnd": 0.937,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.0039,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 5.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.0054,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 5.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.4,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.005,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 5.0,
+        "_SunEdgeFade": 1.0,
+        "_SunHDRBoost": 25.0,
+        "_SunRadius": 0.03,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.89705884,
+          0.89705884,
+          0.89705884,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          0.495283,
+          0.8597405,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.80544674,
+          0.90230495,
+          0.9433962,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.23113209,
+          0.4919178,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65574396,
+          0.6878293,
+          0.752,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.769483,
+          0.36161545,
+          0.5264316,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9955375,
+          1.0,
+          0.6764706,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.46323532,
+          0.6668357,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.99848866,
+          1.0,
+          0.41176468,
+          1.0
+        ],
+        "_SunPosition": [
+          0.40756717,
+          0.6816388,
+          0.60766566,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          0.5646425,
+          -0.2984541,
+          0.769483,
+          0.0,
+          -0.0,
+          0.9323274,
+          0.36161545,
+          0.0,
+          -0.8253356,
+          -0.20418344,
+          0.5264316,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          0.8304973,
+          -0.37968814,
+          0.40756717,
+          0.0,
+          -0.0,
+          0.7316888,
+          0.6816388,
+          0.0,
+          -0.5570225,
+          -0.56609917,
+          0.60766566,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 2,
+      "name": "夕暮れの空",
+      "profile": "SkyProfile_evening_stu",
+      "material": "SkyboxMaterial_evening",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.7,
+        "_CloudDirection": 0.18,
+        "_CloudFadeAmount": 1.0,
+        "_CloudFadePosition": 0.978,
+        "_CloudHeight": 0.7,
+        "_CloudSpeed": 0.067,
+        "_CloudTextureTiling": 0.55,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": 0.0,
+        "_GradientFadeEnd": 0.5,
+        "_GradientFadeMiddlePosition": 0.315,
+        "_HorizonFogDensity": 0.181,
+        "_HorizonFogLength": 0.141,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.1,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.114,
+        "_StarFadeEnd": 0.93599993,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.645,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.008,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 5.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 1.0,
+        "_SunHDRBoost": 14.4,
+        "_SunRadius": 0.04,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          0.92549026,
+          0.6745098,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.5372549,
+          0.27058825,
+          0.3803922,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.9333334,
+          0.64705884,
+          0.26666668,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          1.0,
+          0.7254902,
+          0.5764706,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.5882353,
+          0.7568628,
+          0.94117653,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.97794116,
+          0.8656244,
+          0.49616134,
+          1.0
+        ],
+        "_MoonPosition": [
+          -0.99999875,
+          0.0,
+          0.001592548,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          1.0,
+          0.42352945,
+          0.0,
+          1.0
+        ],
+        "_SunPosition": [
+          -0.99156064,
+          0.12963414,
+          -0.0015791099,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_StarLayer1DataTex": {
+          "file": "studio/sky/StarData1_54dcc92f69608a8d.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          0.001592548,
+          0.0,
+          -0.99999875,
+          0.0,
+          -0.0,
+          1.0,
+          -0.0,
+          0.0,
+          0.99999875,
+          0.0,
+          0.001592548,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.001592548,
+          0.12963398,
+          -0.99156064,
+          0.0,
+          -0.0,
+          0.9915619,
+          0.12963414,
+          0.0,
+          0.99999875,
+          0.00020644859,
+          -0.0015791099,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 3,
+      "name": "夜空",
+      "profile": "SkyProfile_night_stu",
+      "material": "SkyboxMaterial_night",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.1,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.1,
+        "_CloudCubemapRotationSpeed": 0.1,
+        "_CloudDensity": 0.532,
+        "_CloudDirection": 1.27,
+        "_CloudFadeAmount": 1.0,
+        "_CloudFadePosition": 0.937,
+        "_CloudHeight": 0.728,
+        "_CloudSpeed": 0.0,
+        "_CloudTextureTiling": 0.7,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.092,
+        "_GradientFadeEnd": 0.37,
+        "_GradientFadeMiddlePosition": 0.5,
+        "_HorizonFogDensity": 0.007,
+        "_HorizonFogLength": 0.134,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.263,
+        "_MoonHDRBoost": 2.0,
+        "_MoonRadius": 0.04,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.467,
+        "_StarFadeEnd": 0.584,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.0039,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 3.29,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.003,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 5.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.4,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.006,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 5.0,
+        "_SunEdgeFade": 0.615,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.254,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          0.4575472,
+          0.75858927,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.3066038,
+          0.82779694,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.5,
+          0.5,
+          0.5,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          -0.6865951,
+          0.34636816,
+          -0.6392311,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.05896227,
+          0.16319917,
+          0.23584908,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.075694196,
+          0.356043,
+          0.5943396,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.2979708,
+          0.5079189,
+          0.6792453,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.9113007,
+          0.990566,
+          0.75226945,
+          1.0
+        ],
+        "_MoonPosition": [
+          -0.6865951,
+          0.34636816,
+          -0.6392311,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9955375,
+          1.0,
+          0.6764706,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.46323532,
+          0.6668357,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0007962743,
+          -0.9999997,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_StarLayer1DataTex": {
+          "file": "studio/sky/StarData1_9c0ede85bb37d204.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        },
+        "_StarLayer2DataTex": {
+          "file": "studio/sky/StarData2_c60cf94e805533f5.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        },
+        "_StarLayer3DataTex": {
+          "file": "studio/sky/StarData3_c8a7633d0d395293.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.6814113,
+          0.2535071,
+          -0.6865951,
+          0.0,
+          -0.0,
+          0.9380987,
+          0.34636816,
+          0.0,
+          0.7319007,
+          0.2360192,
+          -0.6392311,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.9999997,
+          0.0007962743,
+          0.0,
+          -0.0,
+          0.0007962743,
+          -0.9999997,
+          0.0,
+          -1.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1004,
+      "name": "map 50 ホテル",
+      "profile": "SkyProfile_morning",
+      "material": "SkyboxMaterial_morning",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.243,
+        "_CloudDirection": 2.03,
+        "_CloudFadeAmount": 0.301,
+        "_CloudFadePosition": 0.827,
+        "_CloudHeight": 0.74,
+        "_CloudSpeed": 0.088,
+        "_CloudTextureTiling": 0.6,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.2,
+        "_GradientFadeEnd": 0.27999997,
+        "_GradientFadeMiddlePosition": 0.256,
+        "_HorizonFogDensity": 0.0,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.585,
+        "_MoonEdgeFade": 0.0001,
+        "_MoonHDRBoost": 4.2,
+        "_MoonRadius": 0.05,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.62,
+        "_StarFadeEnd": 0.15999997,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.0039,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 5.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.0054,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 5.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.4,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.005,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 5.0,
+        "_SunEdgeFade": 0.58,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.035,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.48584908,
+          0.88805264,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          0.495283,
+          0.8597405,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.7913849,
+          0.92604417,
+          0.9811321,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.33088237,
+          0.5569981,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65574396,
+          0.6878293,
+          0.752,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.769483,
+          0.36161545,
+          0.5264316,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9955375,
+          1.0,
+          0.6764706,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.46323532,
+          0.6668357,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.99848866,
+          1.0,
+          0.41176468,
+          1.0
+        ],
+        "_SunPosition": [
+          -0.3300331,
+          0.60913205,
+          0.72113544,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          0.5646425,
+          -0.2984541,
+          0.769483,
+          0.0,
+          -0.0,
+          0.9323274,
+          0.36161545,
+          0.0,
+          -0.8253356,
+          -0.20418344,
+          0.5264316,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          0.9092974,
+          0.2534884,
+          -0.3300331,
+          0.0,
+          -0.0,
+          0.7930688,
+          0.60913205,
+          0.0,
+          0.41614684,
+          -0.5538822,
+          0.72113544,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1005,
+      "name": "map 50 ホテル",
+      "profile": "SkyProfile-evening",
+      "material": "m_skybox_simple_evening2",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "SUN"
+      ],
+      "floats": {
+        "_Ambient": 0.1,
+        "_Amplitude": 0.3,
+        "_BumpScale": 1.0,
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.25,
+        "_CloudDirection": 1.0,
+        "_CloudFadeAmount": 0.5,
+        "_CloudFadePosition": 0.74,
+        "_CloudHeight": 0.5,
+        "_CloudSpeed": 0.1,
+        "_CloudTextureTiling": 2.0,
+        "_Cutoff": 0.5,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_DetailNormalMapScale": 1.0,
+        "_DstBlend": 0.0,
+        "_Exposure": 1.0,
+        "_Frequency": 10.0,
+        "_GlossMapScale": 1.0,
+        "_Glossiness": 0.5,
+        "_GlossyReflections": 1.0,
+        "_GradientFadeBegin": -0.5,
+        "_GradientFadeEnd": 1.0,
+        "_GradientFadeMiddlePosition": 1.0,
+        "_HorizonFogDensity": 0.12,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.01,
+        "_LightIntensity": 0.8,
+        "_Metallic": 0.0,
+        "_Mode": 0.0,
+        "_MoonEdgeFade": 0.3,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_OcclusionStrength": 1.0,
+        "_Parallax": 0.02,
+        "_Rotation": 0.0,
+        "_SmoothnessTextureChannel": 0.0,
+        "_SpecularHighlights": 1.0,
+        "_Speed": 2.0,
+        "_SrcBlend": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -1.0,
+        "_StarFadeEnd": -1.0,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.2,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.007,
+        "_StarLayer1RotationSpeed": 2.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.775,
+        "_StarLayer1TwinkleSpeed": 2.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 0.3,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.1,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0,
+        "_UVSec": 0.0,
+        "_VerticalDisplacement": 0.5,
+        "_ZWrite": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.6,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_EmissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0,
+          0.33673477,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_Tint": [
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ]
+      },
+      "textures": {},
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1006,
+      "name": "map 50 ホテル",
+      "profile": "SkyProfile-night2",
+      "material": "m_skybox_simple_night3",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "floats": {
+        "_Ambient": 0.1,
+        "_Amplitude": 0.3,
+        "_BumpScale": 1.0,
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.25,
+        "_CloudDirection": 1.0,
+        "_CloudFadeAmount": 0.5,
+        "_CloudFadePosition": 0.74,
+        "_CloudHeight": 0.5,
+        "_CloudSpeed": 0.1,
+        "_CloudTextureTiling": 2.0,
+        "_Cutoff": 0.5,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_DetailNormalMapScale": 1.0,
+        "_DstBlend": 0.0,
+        "_Exposure": 1.0,
+        "_Frequency": 10.0,
+        "_GlossMapScale": 1.0,
+        "_Glossiness": 0.5,
+        "_GlossyReflections": 1.0,
+        "_GradientFadeBegin": -0.5,
+        "_GradientFadeEnd": 1.0,
+        "_GradientFadeMiddlePosition": 1.0,
+        "_HorizonFogDensity": 0.12,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.01,
+        "_LightIntensity": 0.8,
+        "_Metallic": 0.0,
+        "_Mode": 0.0,
+        "_MoonEdgeFade": 0.3,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_OcclusionStrength": 1.0,
+        "_Parallax": 0.02,
+        "_Rotation": 0.0,
+        "_SmoothnessTextureChannel": 0.0,
+        "_SpecularHighlights": 1.0,
+        "_Speed": 2.0,
+        "_SrcBlend": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -1.0,
+        "_StarFadeEnd": -1.0,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.2,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.007,
+        "_StarLayer1RotationSpeed": 2.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.775,
+        "_StarLayer1TwinkleSpeed": 2.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 0.3,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.1,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0,
+        "_UVSec": 0.0,
+        "_VerticalDisplacement": 0.5,
+        "_ZWrite": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.6,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_EmissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0,
+          0.33673477,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_Tint": [
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ]
+      },
+      "textures": {},
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1007,
+      "name": "map 52 合宿所",
+      "profile": "SkyProfile_daytime",
+      "material": "SkyboxMaterial_daytime",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.5,
+        "_CloudDirection": 0.18,
+        "_CloudFadeAmount": 1.0,
+        "_CloudFadePosition": 0.978,
+        "_CloudHeight": 0.9,
+        "_CloudSpeed": 0.067,
+        "_CloudTextureTiling": 0.55,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.092,
+        "_GradientFadeEnd": 0.541,
+        "_GradientFadeMiddlePosition": 0.437,
+        "_HorizonFogDensity": 0.0,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.0001,
+        "_MoonHDRBoost": 4.2,
+        "_MoonRadius": 0.05,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.114,
+        "_StarFadeEnd": 0.937,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.0039,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 5.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.0054,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 5.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.4,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.005,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 5.0,
+        "_SunEdgeFade": 1.0,
+        "_SunHDRBoost": 25.0,
+        "_SunRadius": 0.03,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.89705884,
+          0.89705884,
+          0.89705884,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          0.495283,
+          0.8597405,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.80544674,
+          0.90230495,
+          0.9433962,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.23113209,
+          0.4919178,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65574396,
+          0.6878293,
+          0.752,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.769483,
+          0.36161545,
+          0.5264316,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9955375,
+          1.0,
+          0.6764706,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.46323532,
+          0.6668357,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.99848866,
+          1.0,
+          0.41176468,
+          1.0
+        ],
+        "_SunPosition": [
+          0.40756717,
+          0.6816388,
+          0.60766566,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          0.5646425,
+          -0.2984541,
+          0.769483,
+          0.0,
+          -0.0,
+          0.9323274,
+          0.36161545,
+          0.0,
+          -0.8253356,
+          -0.20418344,
+          0.5264316,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          0.8304973,
+          -0.37968814,
+          0.40756717,
+          0.0,
+          -0.0,
+          0.7316888,
+          0.6816388,
+          0.0,
+          -0.5570225,
+          -0.56609917,
+          0.60766566,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1008,
+      "name": "map 53 船着き場",
+      "profile": "SkyProfile_evening",
+      "material": "SkyboxMaterial_evening",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "SUN"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.7,
+        "_CloudDirection": 0.18,
+        "_CloudFadeAmount": 1.0,
+        "_CloudFadePosition": 0.978,
+        "_CloudHeight": 0.7,
+        "_CloudSpeed": 0.067,
+        "_CloudTextureTiling": 0.55,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": 0.0,
+        "_GradientFadeEnd": 0.5,
+        "_GradientFadeMiddlePosition": 0.315,
+        "_HorizonFogDensity": 0.181,
+        "_HorizonFogLength": 0.141,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.1,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.114,
+        "_StarFadeEnd": 0.93599993,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.645,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.008,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 5.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 1.0,
+        "_SunHDRBoost": 14.4,
+        "_SunRadius": 0.04,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          0.92549026,
+          0.6745098,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.5372549,
+          0.27058825,
+          0.3803922,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.9333334,
+          0.64705884,
+          0.26666668,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          1.0,
+          0.7254902,
+          0.5764706,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.5882353,
+          0.7568628,
+          0.94117653,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.97794116,
+          0.8656244,
+          0.49616134,
+          1.0
+        ],
+        "_MoonPosition": [
+          -0.99999875,
+          0.0,
+          0.001592548,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          1.0,
+          0.42352945,
+          0.0,
+          1.0
+        ],
+        "_SunPosition": [
+          -0.99156064,
+          0.12963414,
+          -0.0015791099,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_StarLayer1DataTex": {
+          "file": "studio/sky/StarData1_54dcc92f69608a8d.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          0.001592548,
+          0.0,
+          -0.99999875,
+          0.0,
+          -0.0,
+          1.0,
+          -0.0,
+          0.0,
+          0.99999875,
+          0.0,
+          0.001592548,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.001592548,
+          0.12963398,
+          -0.99156064,
+          0.0,
+          -0.0,
+          0.9915619,
+          0.12963414,
+          0.0,
+          0.99999875,
+          0.00020644859,
+          -0.0015791099,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1009,
+      "name": "map 53 船着き場",
+      "profile": "SkyProfile_night",
+      "material": "SkyboxMaterial_night",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.1,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.1,
+        "_CloudCubemapRotationSpeed": 0.1,
+        "_CloudDensity": 0.532,
+        "_CloudDirection": 1.27,
+        "_CloudFadeAmount": 1.0,
+        "_CloudFadePosition": 0.937,
+        "_CloudHeight": 0.728,
+        "_CloudSpeed": 0.0,
+        "_CloudTextureTiling": 0.7,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.092,
+        "_GradientFadeEnd": 0.37,
+        "_GradientFadeMiddlePosition": 0.5,
+        "_HorizonFogDensity": 0.007,
+        "_HorizonFogLength": 0.134,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.263,
+        "_MoonHDRBoost": 2.0,
+        "_MoonRadius": 0.04,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -0.467,
+        "_StarFadeEnd": 0.584,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.0039,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 3.29,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.003,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 5.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.4,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.006,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 5.0,
+        "_SunEdgeFade": 0.615,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.254,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          0.4575472,
+          0.75858927,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.3066038,
+          0.82779694,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.5,
+          0.5,
+          0.5,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          -0.6865951,
+          0.34636816,
+          -0.6392311,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.05896227,
+          0.16319917,
+          0.23584908,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.075694196,
+          0.356043,
+          0.5943396,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.2979708,
+          0.5079189,
+          0.6792453,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.9113007,
+          0.990566,
+          0.75226945,
+          1.0
+        ],
+        "_MoonPosition": [
+          -0.6865951,
+          0.34636816,
+          -0.6392311,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9955375,
+          1.0,
+          0.6764706,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.46323532,
+          0.6668357,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0007962743,
+          -0.9999997,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_StarLayer1DataTex": {
+          "file": "studio/sky/StarData1_9c0ede85bb37d204.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        },
+        "_StarLayer2DataTex": {
+          "file": "studio/sky/StarData2_c60cf94e805533f5.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        },
+        "_StarLayer3DataTex": {
+          "file": "studio/sky/StarData3_c8a7633d0d395293.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.6814113,
+          0.2535071,
+          -0.6865951,
+          0.0,
+          -0.0,
+          0.9380987,
+          0.34636816,
+          0.0,
+          0.7319007,
+          0.2360192,
+          -0.6392311,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.9999997,
+          0.0007962743,
+          0.0,
+          -0.0,
+          0.0007962743,
+          -0.9999997,
+          0.0,
+          -1.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1010,
+      "name": "map 59 シークレットビーチ",
+      "profile": "SkyProfile",
+      "material": "SkyboxMaterial",
+      "keywords": [
+        "CLOUDS",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "material_keywords": [
+        "CLOUDS",
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "MOON",
+        "MOON_CUSTOM_TEXTURE",
+        "NOISE_CLOUDS",
+        "STAR_LAYER_1",
+        "STAR_LAYER_2",
+        "STAR_LAYER_3"
+      ],
+      "floats": {
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.1,
+        "_CloudDensity": 0.463,
+        "_CloudDirection": 1.79,
+        "_CloudFadeAmount": 0.966,
+        "_CloudFadePosition": 1.0,
+        "_CloudHeight": 1.0,
+        "_CloudSpeed": 0.0,
+        "_CloudTextureTiling": 0.1,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_GradientFadeBegin": -0.24,
+        "_GradientFadeEnd": 0.77,
+        "_GradientFadeMiddlePosition": 0.395,
+        "_HorizonFogDensity": 0.187,
+        "_HorizonFogLength": 0.052,
+        "_HorizonScaleFactor": 0.7,
+        "_MoonEdgeFade": 0.205,
+        "_MoonHDRBoost": 2.3,
+        "_MoonRadius": 0.035,
+        "_MoonSpriteAnimationSpeed": 15.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": 0.0,
+        "_StarFadeEnd": 0.4,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.4,
+        "_StarLayer1HDRBoost": 3.9,
+        "_StarLayer1MaxRadius": 0.0003,
+        "_StarLayer1RotationSpeed": 0.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.7,
+        "_StarLayer1TwinkleSpeed": 2.91,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.4,
+        "_StarLayer2HDRBoost": 2.5,
+        "_StarLayer2MaxRadius": 0.001,
+        "_StarLayer2RotationSpeed": 0.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.7,
+        "_StarLayer2TwinkleSpeed": 3.86,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 1.0,
+        "_StarLayer3HDRBoost": 25.0,
+        "_StarLayer3MaxRadius": 0.004,
+        "_StarLayer3RotationSpeed": 0.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.549,
+        "_StarLayer3TwinkleSpeed": 0.23,
+        "_SunEdgeFade": 0.3,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.1,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          0.0,
+          0.662745,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.0,
+          0.5364933,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          0.3213332,
+          0.39114496,
+          0.8207547,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.06421324,
+          0.19805208,
+          0.3679245,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0073424703,
+          0.037477195,
+          0.103773594,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          0.29411763,
+          0.29411763,
+          0.29411763,
+          1.0
+        ],
+        "_MoonColor": [
+          0.8254717,
+          0.9289864,
+          1.0,
+          1.0
+        ],
+        "_MoonPosition": [
+          -0.348212,
+          0.22651063,
+          -0.90963805,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          0.9992612,
+          1.0,
+          0.9386792,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.0990566,
+          0.4410206,
+          1.0,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "textures": {
+        "_CloudNoiseTexture": {
+          "file": "studio/sky/CloudNoiseBasicUncompressed_28e2416085aa0fc7.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_MoonTex": {
+          "file": "studio/sky/Moon-1_93623ccf8e3f8b23.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": false,
+          "clamp": false
+        },
+        "_StarLayer1DataTex": {
+          "file": "studio/sky/StarData1_87b2880a8b581499.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        },
+        "_StarLayer2DataTex": {
+          "file": "studio/sky/StarData2_ea34f7df87b561cb.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        },
+        "_StarLayer3DataTex": {
+          "file": "studio/sky/StarData3_5795445abba7b77e.png",
+          "st": [
+            1.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "srgb": true,
+          "point": true,
+          "clamp": true
+        }
+      },
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.93391156,
+          0.08097845,
+          -0.348212,
+          0.0,
+          -0.0,
+          0.9740087,
+          0.22651063,
+          0.0,
+          0.35750398,
+          0.2115409,
+          -0.90963805,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1011,
+      "name": "map 60 自室（ホテル）",
+      "profile": "SkyProfile-daytime-simple",
+      "material": "m_skybox_simple_daytime",
+      "keywords": [
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "material_keywords": [
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "floats": {
+        "_Ambient": 0.1,
+        "_Amplitude": 0.3,
+        "_BumpScale": 1.0,
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.25,
+        "_CloudDirection": 1.0,
+        "_CloudFadeAmount": 0.5,
+        "_CloudFadePosition": 0.74,
+        "_CloudHeight": 0.5,
+        "_CloudSpeed": 0.1,
+        "_CloudTextureTiling": 2.0,
+        "_Cutoff": 0.5,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_DetailNormalMapScale": 1.0,
+        "_DstBlend": 0.0,
+        "_Exposure": 1.0,
+        "_Frequency": 10.0,
+        "_GlossMapScale": 1.0,
+        "_Glossiness": 0.5,
+        "_GlossyReflections": 1.0,
+        "_GradientFadeBegin": -0.5,
+        "_GradientFadeEnd": 1.0,
+        "_GradientFadeMiddlePosition": 1.0,
+        "_HorizonFogDensity": 0.12,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.01,
+        "_LightIntensity": 0.8,
+        "_Metallic": 0.0,
+        "_Mode": 0.0,
+        "_MoonEdgeFade": 0.3,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_OcclusionStrength": 1.0,
+        "_Parallax": 0.02,
+        "_Rotation": 0.0,
+        "_SmoothnessTextureChannel": 0.0,
+        "_SpecularHighlights": 1.0,
+        "_Speed": 2.0,
+        "_SrcBlend": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -1.0,
+        "_StarFadeEnd": -1.0,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.2,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.007,
+        "_StarLayer1RotationSpeed": 2.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.775,
+        "_StarLayer1TwinkleSpeed": 2.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 0.3,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.1,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0,
+        "_UVSec": 0.0,
+        "_VerticalDisplacement": 0.5,
+        "_ZWrite": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.6,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_EmissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0,
+          0.33673477,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_Tint": [
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ]
+      },
+      "textures": {},
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1012,
+      "name": "map 60 自室（ホテル）",
+      "profile": "SkyProfile-evening-simple",
+      "material": "m_skybox_simple_evening",
+      "keywords": [
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "material_keywords": [
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "floats": {
+        "_Ambient": 0.1,
+        "_Amplitude": 0.3,
+        "_BumpScale": 1.0,
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.25,
+        "_CloudDirection": 1.0,
+        "_CloudFadeAmount": 0.5,
+        "_CloudFadePosition": 0.74,
+        "_CloudHeight": 0.5,
+        "_CloudSpeed": 0.1,
+        "_CloudTextureTiling": 2.0,
+        "_Cutoff": 0.5,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_DetailNormalMapScale": 1.0,
+        "_DstBlend": 0.0,
+        "_Exposure": 1.0,
+        "_Frequency": 10.0,
+        "_GlossMapScale": 1.0,
+        "_Glossiness": 0.5,
+        "_GlossyReflections": 1.0,
+        "_GradientFadeBegin": -0.5,
+        "_GradientFadeEnd": 1.0,
+        "_GradientFadeMiddlePosition": 1.0,
+        "_HorizonFogDensity": 0.12,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.01,
+        "_LightIntensity": 0.8,
+        "_Metallic": 0.0,
+        "_Mode": 0.0,
+        "_MoonEdgeFade": 0.3,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_OcclusionStrength": 1.0,
+        "_Parallax": 0.02,
+        "_Rotation": 0.0,
+        "_SmoothnessTextureChannel": 0.0,
+        "_SpecularHighlights": 1.0,
+        "_Speed": 2.0,
+        "_SrcBlend": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -1.0,
+        "_StarFadeEnd": -1.0,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.2,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.007,
+        "_StarLayer1RotationSpeed": 2.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.775,
+        "_StarLayer1TwinkleSpeed": 2.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 0.3,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.1,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0,
+        "_UVSec": 0.0,
+        "_VerticalDisplacement": 0.5,
+        "_ZWrite": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.6,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_EmissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0,
+          0.33673477,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_Tint": [
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ]
+      },
+      "textures": {},
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "no": 1013,
+      "name": "map 60 自室（ホテル）",
+      "profile": "SkyProfile-night-simple",
+      "material": "m_skybox_simple_night",
+      "keywords": [
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "material_keywords": [
+        "CUBEMAP_CLOUD_FORMAT_RGBA",
+        "GRADIENT_BACKGROUND",
+        "VERTEX_GRADIENT_BACKGROUND"
+      ],
+      "floats": {
+        "_Ambient": 0.1,
+        "_Amplitude": 0.3,
+        "_BumpScale": 1.0,
+        "_CloudCubemapDoubleLayerHeight": 0.0,
+        "_CloudCubemapDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapHeight": 0.0,
+        "_CloudCubemapNormalAmbientIntensity": 0.2,
+        "_CloudCubemapNormalDoubleLayerHeight": 0.0,
+        "_CloudCubemapNormalDoubleLayerRotationSpeed": 0.02,
+        "_CloudCubemapNormalHeight": 0.0,
+        "_CloudCubemapNormalRotationSpeed": 0.01,
+        "_CloudCubemapRotationSpeed": 0.01,
+        "_CloudDensity": 0.25,
+        "_CloudDirection": 1.0,
+        "_CloudFadeAmount": 0.5,
+        "_CloudFadePosition": 0.74,
+        "_CloudHeight": 0.5,
+        "_CloudSpeed": 0.1,
+        "_CloudTextureTiling": 2.0,
+        "_Cutoff": 0.5,
+        "_DebugPointRadius": 0.03,
+        "_DebugPointsCount": 0.0,
+        "_DetailNormalMapScale": 1.0,
+        "_DstBlend": 0.0,
+        "_Exposure": 1.0,
+        "_Frequency": 10.0,
+        "_GlossMapScale": 1.0,
+        "_Glossiness": 0.5,
+        "_GlossyReflections": 1.0,
+        "_GradientFadeBegin": -0.5,
+        "_GradientFadeEnd": 1.0,
+        "_GradientFadeMiddlePosition": 1.0,
+        "_HorizonFogDensity": 0.12,
+        "_HorizonFogLength": 0.1,
+        "_HorizonScaleFactor": 0.01,
+        "_LightIntensity": 0.8,
+        "_Metallic": 0.0,
+        "_Mode": 0.0,
+        "_MoonEdgeFade": 0.3,
+        "_MoonHDRBoost": 1.0,
+        "_MoonRadius": 0.1,
+        "_MoonSpriteAnimationSpeed": 1.0,
+        "_MoonSpriteItemCount": 1.0,
+        "_OcclusionStrength": 1.0,
+        "_Parallax": 0.02,
+        "_Rotation": 0.0,
+        "_SmoothnessTextureChannel": 0.0,
+        "_SpecularHighlights": 1.0,
+        "_Speed": 2.0,
+        "_SrcBlend": 1.0,
+        "_StarBasicExponent": 1.2,
+        "_StarBasicOpacity": 1.0,
+        "_StarBasicTwinkleAmount": 0.75,
+        "_StarBasicTwinkleSpeed": 5.0,
+        "_StarFadeBegin": -1.0,
+        "_StarFadeEnd": -1.0,
+        "_StarLayer1Density": 0.01,
+        "_StarLayer1EdgeFade": 0.2,
+        "_StarLayer1HDRBoost": 1.0,
+        "_StarLayer1MaxRadius": 0.007,
+        "_StarLayer1RotationSpeed": 2.0,
+        "_StarLayer1SpriteAnimationSpeed": 1.0,
+        "_StarLayer1SpriteItemCount": 1.0,
+        "_StarLayer1TwinkleAmount": 0.775,
+        "_StarLayer1TwinkleSpeed": 2.0,
+        "_StarLayer2Density": 0.01,
+        "_StarLayer2EdgeFade": 0.2,
+        "_StarLayer2HDRBoost": 1.0,
+        "_StarLayer2MaxRadius": 0.014,
+        "_StarLayer2RotationSpeed": 2.0,
+        "_StarLayer2SpriteAnimationSpeed": 1.0,
+        "_StarLayer2SpriteItemCount": 1.0,
+        "_StarLayer2TwinkleAmount": 0.875,
+        "_StarLayer2TwinkleSpeed": 3.0,
+        "_StarLayer3Density": 0.01,
+        "_StarLayer3EdgeFade": 0.2,
+        "_StarLayer3HDRBoost": 1.0,
+        "_StarLayer3MaxRadius": 0.01,
+        "_StarLayer3RotationSpeed": 2.0,
+        "_StarLayer3SpriteAnimationSpeed": 1.0,
+        "_StarLayer3SpriteItemCount": 1.0,
+        "_StarLayer3TwinkleAmount": 0.7,
+        "_StarLayer3TwinkleSpeed": 1.0,
+        "_SunEdgeFade": 0.3,
+        "_SunHDRBoost": 1.0,
+        "_SunRadius": 0.1,
+        "_SunSpriteAnimationSpeed": 1.0,
+        "_SunSpriteItemCount": 1.0,
+        "_UVSec": 0.0,
+        "_VerticalDisplacement": 0.5,
+        "_ZWrite": 1.0
+      },
+      "colors": {
+        "_CloudColor1": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudColor2": [
+          0.6,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "_CloudCubemapDoubleLayerTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalDoubleShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalLitColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_CloudCubemapNormalShadowColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_CloudCubemapNormalToLight": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "_CloudCubemapTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_EmissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_GradientSkyLowerColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyMiddleColor": [
+          0.36320752,
+          0.7392635,
+          1.0,
+          1.0
+        ],
+        "_GradientSkyUpperColor": [
+          0.0,
+          0.33673477,
+          1.0,
+          1.0
+        ],
+        "_HorizonFogColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_MoonColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_MoonPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_MoonSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarBasicTintColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1Color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_StarLayer1SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer2Color": [
+          1.0,
+          0.5,
+          0.96,
+          1.0
+        ],
+        "_StarLayer2SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_StarLayer3Color": [
+          0.21999997,
+          1.0,
+          0.54999995,
+          1.0
+        ],
+        "_StarLayer3SpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunColor": [
+          0.65999997,
+          0.65,
+          0.54999995,
+          1.0
+        ],
+        "_SunPosition": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_SunSpriteDimensions": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "_Tint": [
+          0.0,
+          0.0,
+          0.0,
+          0.5
+        ]
+      },
+      "textures": {},
+      "matrices": {
+        "_MoonWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ],
+        "_SunWorldToLocalMat": [
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -10000.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "maps": [
+    {
+      "map": 50,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 51,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 52,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1007,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 53,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1007,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1008,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1009,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 54,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 55,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1007,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 56,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1007,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 57,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1007,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 58,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1004,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1007,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1005,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1006,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 59,
+      "sun_types": [
+        0,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1010,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 60,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 61,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 62,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 63,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 65,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 67,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 68,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 69,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 70,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 72,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 74,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 75,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 76,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 77,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    },
+    {
+      "map": 79,
+      "sun_types": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "skies": [
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1011,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1012,
+          "actives": [],
+          "inactives": []
+        },
+        {
+          "pattern": 1013,
+          "actives": [],
+          "inactives": []
+        }
+      ]
+    }
+  ]
+}

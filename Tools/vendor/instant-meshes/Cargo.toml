@@ -1,0 +1,15 @@
+[package]
+name = "instant-meshes"
+version = "0.1.0"
+edition = "2021"
+description = "Rust port of Instant Field-Aligned Meshes (Jakob et al., SIGGRAPH Asia 2015)"
+license = "BSD-3-Clause"
+publish = false
+
+[dependencies]
+fbxcel-dom = { version = "0.0.10", optional = true }
+rayon = "1.10"
+
+[features]
+default = ["fbx"]
+fbx = ["dep:fbxcel-dom"]

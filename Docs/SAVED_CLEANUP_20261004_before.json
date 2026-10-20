@@ -1,0 +1,8397 @@
+{
+  "root": "C:\\portable\\OpenKoikatsu\\Saved",
+  "bytes": 921530230971,
+  "GB": 921.530230971,
+  "GiB": 858.2419072939083,
+  "files": 320004,
+  "directories": [
+    {
+      "path": "NativeImportSources",
+      "bytes": 787275791730,
+      "GiB": 733.208
+    },
+    {
+      "path": "Crowd",
+      "bytes": 78544623785,
+      "GiB": 73.15
+    },
+    {
+      "path": "Tests",
+      "bytes": 44405538114,
+      "GiB": 41.356
+    },
+    {
+      "path": "DebugShots",
+      "bytes": 5059541847,
+      "GiB": 4.712
+    },
+    {
+      "path": "Logs",
+      "bytes": 1589081722,
+      "GiB": 1.48
+    },
+    {
+      "path": "IndependentCards",
+      "bytes": 1113383554,
+      "GiB": 1.037
+    },
+    {
+      "path": "APNGCards",
+      "bytes": 627609079,
+      "GiB": 0.585
+    },
+    {
+      "path": "UltimateCoPilot",
+      "bytes": 330496524,
+      "GiB": 0.308
+    },
+    {
+      "path": "ShaderDebugInfo",
+      "bytes": 228944330,
+      "GiB": 0.213
+    },
+    {
+      "path": "Shaders",
+      "bytes": 172589370,
+      "GiB": 0.161
+    },
+    {
+      "path": "ShaderDiag",
+      "bytes": 137728873,
+      "GiB": 0.128
+    },
+    {
+      "path": "Converted",
+      "bytes": 134235840,
+      "GiB": 0.125
+    },
+    {
+      "path": "ShotInputThree",
+      "bytes": 120620988,
+      "GiB": 0.112
+    },
+    {
+      "path": "Handoff2Shot",
+      "bytes": 120620988,
+      "GiB": 0.112
+    },
+    {
+      "path": "Crashes",
+      "bytes": 100582724,
+      "GiB": 0.094
+    },
+    {
+      "path": "(root files)",
+      "bytes": 93437282,
+      "GiB": 0.087
+    },
+    {
+      "path": "TposeOne",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "ShotAlice",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "ShadowShot",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "Handoff2One",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "Handoff2Alice",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "OneCardMarch",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchShotCard",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchShot",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "Handoff2March",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchKsoxRawProbe",
+      "bytes": 29298040,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxOrder",
+      "bytes": 29298040,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxSrgb",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxColorFlag",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "YuukaShot",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "TposeYuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "ShotYuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "Handoff2Yuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "YuukaColorFlagFinal",
+      "bytes": 20460441,
+      "GiB": 0.019
+    },
+    {
+      "path": "YuukaKsoxSrgb",
+      "bytes": 20460435,
+      "GiB": 0.019
+    },
+    {
+      "path": "anim_export",
+      "bytes": 20265490,
+      "GiB": 0.019
+    },
+    {
+      "path": "YuukaRefBoneCheck",
+      "bytes": 19821045,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaQuadCheck",
+      "bytes": 19821045,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender9",
+      "bytes": 19459186,
+      "GiB": 0.018
+    },
+    {
+      "path": "BodyTexProbe2026",
+      "bytes": 19459186,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender5",
+      "bytes": 19432568,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender4",
+      "bytes": 19416403,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender6",
+      "bytes": 19404386,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender8",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender7",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender3",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender2",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaDiag2",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaCurrent",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "DiagYuukaExtract",
+      "bytes": 18373893,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaMask2",
+      "bytes": 18365839,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaPushup",
+      "bytes": 18354414,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaMask",
+      "bytes": 18354414,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaTpose",
+      "bytes": 18354305,
+      "GiB": 0.017
+    },
+    {
+      "path": "MarchAccScale12",
+      "bytes": 14906541,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoHeadAbm6",
+      "bytes": 14902729,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoAbmGeom",
+      "bytes": 14899927,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchSkin9",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchRdiag11",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchQuick3",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchQuick",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchPose8",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchDisabled5",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoFBS7",
+      "bytes": 14899402,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchFresh13",
+      "bytes": 14899181,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAllRenderers",
+      "bytes": 14899181,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAbmGeom",
+      "bytes": 14897113,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchVariants19",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchVariants18",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchParentScale17",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNew16",
+      "bytes": 14889515,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchFreshNoPose14",
+      "bytes": 14889515,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoPose",
+      "bytes": 14888688,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAccDiag15",
+      "bytes": 14888688,
+      "GiB": 0.014
+    },
+    {
+      "path": "AliceOverlayGeom",
+      "bytes": 13157757,
+      "GiB": 0.012
+    },
+    {
+      "path": "AliceColorFlagFinal",
+      "bytes": 13051697,
+      "GiB": 0.012
+    },
+    {
+      "path": "ShaderDxbcKKS",
+      "bytes": 11204130,
+      "GiB": 0.01
+    },
+    {
+      "path": "DiagAliceShader",
+      "bytes": 9697242,
+      "GiB": 0.009
+    },
+    {
+      "path": "AliceFreshGeom",
+      "bytes": 9451245,
+      "GiB": 0.009
+    },
+    {
+      "path": "ShaderReference",
+      "bytes": 7325018,
+      "GiB": 0.007
+    },
+    {
+      "path": "MaterialStats",
+      "bytes": 4088066,
+      "GiB": 0.004
+    },
+    {
+      "path": "ShaderDxbcCoBot",
+      "bytes": 3942097,
+      "GiB": 0.004
+    },
+    {
+      "path": "EditedCards",
+      "bytes": 3315787,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShader",
+      "bytes": 3037826,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcOo",
+      "bytes": 3030672,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcEC278",
+      "bytes": 2940906,
+      "GiB": 0.003
+    },
+    {
+      "path": "MarchPose4",
+      "bytes": 2808086,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcME",
+      "bytes": 2760191,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbc",
+      "bytes": 2612030,
+      "GiB": 0.002
+    },
+    {
+      "path": "MarchRdiag10",
+      "bytes": 2520510,
+      "GiB": 0.002
+    },
+    {
+      "path": "MarchQuick2",
+      "bytes": 1493894,
+      "GiB": 0.001
+    },
+    {
+      "path": "BpGeneratorUltimate",
+      "bytes": 1346638,
+      "GiB": 0.001
+    },
+    {
+      "path": "DiagYuuka",
+      "bytes": 740397,
+      "GiB": 0.001
+    },
+    {
+      "path": "ShaderDxbcVanillaPlus310",
+      "bytes": 550178,
+      "GiB": 0.001
+    },
+    {
+      "path": "Config",
+      "bytes": 345497,
+      "GiB": 0.0
+    },
+    {
+      "path": "spike",
+      "bytes": 287492,
+      "GiB": 0.0
+    },
+    {
+      "path": "Reports",
+      "bytes": 225104,
+      "GiB": 0.0
+    },
+    {
+      "path": "External",
+      "bytes": 221010,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderSource",
+      "bytes": 186690,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards",
+      "bytes": 63915,
+      "GiB": 0.0
+    },
+    {
+      "path": "MultiOutfitReport",
+      "bytes": 28968,
+      "GiB": 0.0
+    },
+    {
+      "path": "MultiOutfitSkinnedReport",
+      "bytes": 28967,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGCardReport",
+      "bytes": 28286,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGEditedReport",
+      "bytes": 23850,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGCodecReport",
+      "bytes": 23829,
+      "GiB": 0.0
+    },
+    {
+      "path": "SourceControl",
+      "bytes": 226,
+      "GiB": 0.0
+    },
+    {
+      "path": "UnrealBuildTool",
+      "bytes": 132,
+      "GiB": 0.0
+    },
+    {
+      "path": "Autosaves",
+      "bytes": 96,
+      "GiB": 0.0
+    }
+  ],
+  "subdirectories": [
+    {
+      "path": "NativeImportSources/147151CE45EAE64B0668C286F24D35DB",
+      "bytes": 147352554693,
+      "GiB": 137.233
+    },
+    {
+      "path": "Crowd/DevelopmentHost",
+      "bytes": 38190011339,
+      "GiB": 35.567
+    },
+    {
+      "path": "NativeImportSources/617B75DC43FC1807EF87FFAA5F6B166A",
+      "bytes": 31641988335,
+      "GiB": 29.469
+    },
+    {
+      "path": "NativeImportSources/E79FBCF3471D002BE2A7988855238B57",
+      "bytes": 30972037423,
+      "GiB": 28.845
+    },
+    {
+      "path": "NativeImportSources/BF5C00C942C9074E6305C091444FD846",
+      "bytes": 30972033327,
+      "GiB": 28.845
+    },
+    {
+      "path": "NativeImportSources/944D1D87401D117D2AA833BFE19EFDCE",
+      "bytes": 30972029231,
+      "GiB": 28.845
+    },
+    {
+      "path": "NativeImportSources/AE3E3FB746DC8634723224B9E6916D18",
+      "bytes": 30972021039,
+      "GiB": 28.845
+    },
+    {
+      "path": "NativeImportSources/304BAB7349410341D6622C9ABCD77FB5",
+      "bytes": 30971044175,
+      "GiB": 28.844
+    },
+    {
+      "path": "NativeImportSources/B9EAAA3940E61DFD3CAA1F92537B1A4C",
+      "bytes": 30970958111,
+      "GiB": 28.844
+    },
+    {
+      "path": "NativeImportSources/8264508F41EB24B985B743A13D2CCEEA",
+      "bytes": 30919516495,
+      "GiB": 28.796
+    },
+    {
+      "path": "NativeImportSources/89C279124EDF8E20DE5B0592EA695C70",
+      "bytes": 30551530585,
+      "GiB": 28.453
+    },
+    {
+      "path": "NativeImportSources/E4D7066E42DA9204A64E1ABC5D27C52D",
+      "bytes": 30098177305,
+      "GiB": 28.031
+    },
+    {
+      "path": "NativeImportSources/B0C6AD304EA94872E0D452AA4A07E418",
+      "bytes": 30098177305,
+      "GiB": 28.031
+    },
+    {
+      "path": "NativeImportSources/089684434CDF48C965C65A830DF4CA24",
+      "bytes": 30098177305,
+      "GiB": 28.031
+    },
+    {
+      "path": "NativeImportSources/53001B6945255509B8BA16B7A42A2CAB",
+      "bytes": 30098132153,
+      "GiB": 28.031
+    },
+    {
+      "path": "NativeImportSources/AE9C653D47A53A1512BFD8A2857CECC2",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/7092432F4F23EE9D2F5173A9751FDA8D",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/6BF9CFBC409C66E2F9A905BFDEA176A4",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/421C722A45BED88B20211B916323CE1A",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/31F0F4E9468A9D30149124A98F9A63E7",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/261BABC746BCE5D4BC4EF2865AA98C10",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/107675E343ADF262360CA3B5A0F8C634",
+      "bytes": 30079609153,
+      "GiB": 28.014
+    },
+    {
+      "path": "NativeImportSources/B051251A40E2B7CAFD7A8986955545E4",
+      "bytes": 30030150177,
+      "GiB": 27.968
+    },
+    {
+      "path": "Crowd",
+      "bytes": 17705579857,
+      "GiB": 16.49
+    },
+    {
+      "path": "Crowd/Blender",
+      "bytes": 8210189817,
+      "GiB": 7.646
+    },
+    {
+      "path": "Crowd/Normalized",
+      "bytes": 3960956717,
+      "GiB": 3.689
+    },
+    {
+      "path": "Tests/CardWarm380",
+      "bytes": 3437215289,
+      "GiB": 3.201
+    },
+    {
+      "path": "Crowd/ResourceWorkers",
+      "bytes": 2957782577,
+      "GiB": 2.755
+    },
+    {
+      "path": "Tests/HPlayback335",
+      "bytes": 2870167816,
+      "GiB": 2.673
+    },
+    {
+      "path": "Tests/AssetImport378",
+      "bytes": 2732638166,
+      "GiB": 2.545
+    },
+    {
+      "path": "Tests/AssetImport376",
+      "bytes": 1941432227,
+      "GiB": 1.808
+    },
+    {
+      "path": "Tests/FaceCreate346",
+      "bytes": 1796074369,
+      "GiB": 1.673
+    },
+    {
+      "path": "Tests/AssetImport358",
+      "bytes": 1772575914,
+      "GiB": 1.651
+    },
+    {
+      "path": "Crowd/Portable",
+      "bytes": 1642489348,
+      "GiB": 1.53
+    },
+    {
+      "path": "Tests/AssetImport365",
+      "bytes": 1490706909,
+      "GiB": 1.388
+    },
+    {
+      "path": "Tests/AssetImport372",
+      "bytes": 1440704866,
+      "GiB": 1.342
+    },
+    {
+      "path": "Tests/AssetImport377",
+      "bytes": 1416906421,
+      "GiB": 1.32
+    },
+    {
+      "path": "Logs",
+      "bytes": 1344423974,
+      "GiB": 1.252
+    },
+    {
+      "path": "Tests/AssetImport362",
+      "bytes": 1098115201,
+      "GiB": 1.023
+    },
+    {
+      "path": "Tests/Clothes331ShirtOracleR2",
+      "bytes": 991617403,
+      "GiB": 0.924
+    },
+    {
+      "path": "Tests/AssetImport373",
+      "bytes": 989907225,
+      "GiB": 0.922
+    },
+    {
+      "path": "Tests/AssetImport359",
+      "bytes": 861842840,
+      "GiB": 0.803
+    },
+    {
+      "path": "Tests/Hair322Sources",
+      "bytes": 832610112,
+      "GiB": 0.775
+    },
+    {
+      "path": "Tests/Animator290",
+      "bytes": 729955661,
+      "GiB": 0.68
+    },
+    {
+      "path": "IndependentCards",
+      "bytes": 716926670,
+      "GiB": 0.668
+    },
+    {
+      "path": "Tests/AssetImport361",
+      "bytes": 670658838,
+      "GiB": 0.625
+    },
+    {
+      "path": "Tests/AssetImport360",
+      "bytes": 668140839,
+      "GiB": 0.622
+    },
+    {
+      "path": "Tests/FaceDraw345",
+      "bytes": 664032746,
+      "GiB": 0.618
+    },
+    {
+      "path": "Tests/Png334Native",
+      "bytes": 540736580,
+      "GiB": 0.504
+    },
+    {
+      "path": "Tests/Clothes331JacketOracleR4",
+      "bytes": 477071499,
+      "GiB": 0.444
+    },
+    {
+      "path": "Tests/Clothes331ShirtOracle",
+      "bytes": 440757139,
+      "GiB": 0.41
+    },
+    {
+      "path": "Crowd/MatrixRenderer-MatrixDebugR3",
+      "bytes": 411557129,
+      "GiB": 0.383
+    },
+    {
+      "path": "Crowd/MatrixRenderer-MatrixDebugR2",
+      "bytes": 411553520,
+      "GiB": 0.383
+    },
+    {
+      "path": "Crowd/MatrixRenderer-MatrixR3",
+      "bytes": 411513387,
+      "GiB": 0.383
+    },
+    {
+      "path": "APNGCards/NeckHairCompare",
+      "bytes": 411113746,
+      "GiB": 0.383
+    },
+    {
+      "path": "Crowd/RendererBuild-ReproR2",
+      "bytes": 408092462,
+      "GiB": 0.38
+    },
+    {
+      "path": "IndependentCards/Release",
+      "bytes": 396323513,
+      "GiB": 0.369
+    },
+    {
+      "path": "Crowd/RejectedAssets",
+      "bytes": 385703473,
+      "GiB": 0.359
+    },
+    {
+      "path": "Crowd/FailedNormalize",
+      "bytes": 383734608,
+      "GiB": 0.357
+    },
+    {
+      "path": "Crowd/ParallelRendererR1",
+      "bytes": 383002112,
+      "GiB": 0.357
+    },
+    {
+      "path": "Tests/AssetImport374",
+      "bytes": 368000660,
+      "GiB": 0.343
+    },
+    {
+      "path": "Tests/AssetImport370",
+      "bytes": 354461365,
+      "GiB": 0.33
+    },
+    {
+      "path": "UltimateCoPilot/Diagnostics",
+      "bytes": 330464939,
+      "GiB": 0.308
+    },
+    {
+      "path": "Crowd/Views",
+      "bytes": 324065311,
+      "GiB": 0.302
+    },
+    {
+      "path": "Tests/NativeTexture342FinalRuntime",
+      "bytes": 300357775,
+      "GiB": 0.28
+    },
+    {
+      "path": "Tests/Overlay343FinalRuntime",
+      "bytes": 300197179,
+      "GiB": 0.28
+    },
+    {
+      "path": "Tests/Overlay343Runtime",
+      "bytes": 300194434,
+      "GiB": 0.28
+    },
+    {
+      "path": "Tests/NormalBody342RowsFinalRuntime",
+      "bytes": 299727322,
+      "GiB": 0.279
+    },
+    {
+      "path": "Tests/NativeNormal342SourceViewsRuntime",
+      "bytes": 299719345,
+      "GiB": 0.279
+    },
+    {
+      "path": "Tests/NativeNormalBody342FinalRuntime",
+      "bytes": 299637098,
+      "GiB": 0.279
+    },
+    {
+      "path": "Tests/PhoebeComponent341FinalRuntime",
+      "bytes": 299610029,
+      "GiB": 0.279
+    },
+    {
+      "path": "Tests/PhoebeOpaque340Runtime",
+      "bytes": 299605747,
+      "GiB": 0.279
+    },
+    {
+      "path": "Tests/NormalSampler342FixedRuntime",
+      "bytes": 299604117,
+      "GiB": 0.279
+    },
+    {
+      "path": "Tests/Body342LinearFinalRuntime",
+      "bytes": 298689207,
+      "GiB": 0.278
+    },
+    {
+      "path": "Tests/PhoebeSampler342Runtime",
+      "bytes": 298632766,
+      "GiB": 0.278
+    },
+    {
+      "path": "Tests/PhoebeComponent341Runtime",
+      "bytes": 298563986,
+      "GiB": 0.278
+    },
+    {
+      "path": "Tests/AssetImport363",
+      "bytes": 275328437,
+      "GiB": 0.256
+    },
+    {
+      "path": "Tests/AnimationPerf389",
+      "bytes": 255773034,
+      "GiB": 0.238
+    },
+    {
+      "path": "Tests/Animator289",
+      "bytes": 246888056,
+      "GiB": 0.23
+    },
+    {
+      "path": "Tests/PhoebeOutfitDump339Final",
+      "bytes": 245663812,
+      "GiB": 0.229
+    },
+    {
+      "path": "Tests/PhoebeOutfitDump339Fixed",
+      "bytes": 245615160,
+      "GiB": 0.229
+    },
+    {
+      "path": "Tests/PhoebeOutfitDump339",
+      "bytes": 245203216,
+      "GiB": 0.228
+    },
+    {
+      "path": "Tests/PhoebeME340Runtime",
+      "bytes": 244174495,
+      "GiB": 0.227
+    },
+    {
+      "path": "Tests/PhoebeOutfitDump338",
+      "bytes": 243055122,
+      "GiB": 0.226
+    },
+    {
+      "path": "ShaderDebugInfo/PCD3D_SM6",
+      "bytes": 228857253,
+      "GiB": 0.213
+    },
+    {
+      "path": "Tests/Clothes331SamplerNativeR3",
+      "bytes": 216935493,
+      "GiB": 0.202
+    },
+    {
+      "path": "Tests/TextureMips308NativeR6",
+      "bytes": 215909408,
+      "GiB": 0.201
+    },
+    {
+      "path": "Tests/TextureMips308NativeR3",
+      "bytes": 215907122,
+      "GiB": 0.201
+    },
+    {
+      "path": "Tests/TextureMips308NativeR2",
+      "bytes": 215906672,
+      "GiB": 0.201
+    },
+    {
+      "path": "Tests/TextureMips308Native",
+      "bytes": 215904371,
+      "GiB": 0.201
+    },
+    {
+      "path": "Tests/TextureMips308NativeR4",
+      "bytes": 215885358,
+      "GiB": 0.201
+    },
+    {
+      "path": "Tests/Male330PatternNative",
+      "bytes": 213884212,
+      "GiB": 0.199
+    },
+    {
+      "path": "Tests/Clothes331SamplerNative",
+      "bytes": 213678113,
+      "GiB": 0.199
+    },
+    {
+      "path": "Tests/Clothes331SamplerNativeR2",
+      "bytes": 212978575,
+      "GiB": 0.198
+    },
+    {
+      "path": "Tests/Clothes331ShirtNativeQuality",
+      "bytes": 212978562,
+      "GiB": 0.198
+    },
+    {
+      "path": "Tests/Male330PatternNativeControls",
+      "bytes": 212978486,
+      "GiB": 0.198
+    },
+    {
+      "path": "Tests/AssetImport375",
+      "bytes": 210485680,
+      "GiB": 0.196
+    },
+    {
+      "path": "Tests/NanamiHairMipsNative",
+      "bytes": 195166593,
+      "GiB": 0.182
+    },
+    {
+      "path": "Tests/AnimatorParallelFade303",
+      "bytes": 172447860,
+      "GiB": 0.161
+    },
+    {
+      "path": "Tests/AnimatorLayerFade302",
+      "bytes": 172404341,
+      "GiB": 0.161
+    },
+    {
+      "path": "Tests/Resolve334Siesta",
+      "bytes": 168625074,
+      "GiB": 0.157
+    },
+    {
+      "path": "Shaders/PCD3D_SM6-PCD3D_SM6",
+      "bytes": 155822193,
+      "GiB": 0.145
+    },
+    {
+      "path": "Logs/WorldPartition",
+      "bytes": 149426126,
+      "GiB": 0.139
+    },
+    {
+      "path": "Tests/Clothes331ArgbNative",
+      "bytes": 146057351,
+      "GiB": 0.136
+    },
+    {
+      "path": "Tests/Resolve334Native",
+      "bytes": 142567086,
+      "GiB": 0.133
+    },
+    {
+      "path": "Tests/AnimatorAdditive297",
+      "bytes": 142215331,
+      "GiB": 0.132
+    },
+    {
+      "path": "Tests/Png334NativeR2",
+      "bytes": 140114018,
+      "GiB": 0.13
+    },
+    {
+      "path": "Tests/AnimationMenus391",
+      "bytes": 135731789,
+      "GiB": 0.126
+    },
+    {
+      "path": "Crowd/BaselineAssets",
+      "bytes": 131541743,
+      "GiB": 0.123
+    },
+    {
+      "path": "Tests/AnimationPerf383",
+      "bytes": 128811078,
+      "GiB": 0.12
+    },
+    {
+      "path": "Tests/AnimationPerf388",
+      "bytes": 128059679,
+      "GiB": 0.119
+    },
+    {
+      "path": "Tests/AnimationPerf387",
+      "bytes": 128006041,
+      "GiB": 0.119
+    },
+    {
+      "path": "Tests/AnimationPerf386",
+      "bytes": 127930897,
+      "GiB": 0.119
+    },
+    {
+      "path": "Tests/AnimationPerf384",
+      "bytes": 127677984,
+      "GiB": 0.119
+    },
+    {
+      "path": "Tests/CameraInput390",
+      "bytes": 127574517,
+      "GiB": 0.119
+    },
+    {
+      "path": "Tests/AnimationPerf385",
+      "bytes": 127535056,
+      "GiB": 0.119
+    },
+    {
+      "path": "Crowd/NoClothDynamicsNativeR2",
+      "bytes": 121815648,
+      "GiB": 0.113
+    },
+    {
+      "path": "ShotInputThree",
+      "bytes": 120620988,
+      "GiB": 0.112
+    },
+    {
+      "path": "Handoff2Shot",
+      "bytes": 120620988,
+      "GiB": 0.112
+    },
+    {
+      "path": "Tests/Male330OtherClothesNative",
+      "bytes": 115789559,
+      "GiB": 0.108
+    },
+    {
+      "path": "Tests/NewCards309Renderer165",
+      "bytes": 114077321,
+      "GiB": 0.106
+    },
+    {
+      "path": "Tests/NewCards309Renderer166",
+      "bytes": 114077319,
+      "GiB": 0.106
+    },
+    {
+      "path": "Tests/NewCards309Renderer164",
+      "bytes": 110805617,
+      "GiB": 0.103
+    },
+    {
+      "path": "Tests/NewCards309Renderer163",
+      "bytes": 110804749,
+      "GiB": 0.103
+    },
+    {
+      "path": "Tests/AnimatorLayerClock299",
+      "bytes": 110758015,
+      "GiB": 0.103
+    },
+    {
+      "path": "Tests/GenericIkScale350",
+      "bytes": 101640081,
+      "GiB": 0.095
+    },
+    {
+      "path": "Tests/AnimatorRestart300",
+      "bytes": 100285723,
+      "GiB": 0.093
+    },
+    {
+      "path": "Tests/NewCards309Renderer161",
+      "bytes": 96599858,
+      "GiB": 0.09
+    },
+    {
+      "path": "(root files)",
+      "bytes": 93437282,
+      "GiB": 0.087
+    },
+    {
+      "path": "Tests/MainItem316InputsCounter",
+      "bytes": 85609016,
+      "GiB": 0.08
+    },
+    {
+      "path": "Tests/MainItem315SamplingInputsCounter",
+      "bytes": 85609012,
+      "GiB": 0.08
+    },
+    {
+      "path": "Tests/MainItem315FinalInputsCounter",
+      "bytes": 85608872,
+      "GiB": 0.08
+    },
+    {
+      "path": "APNGCards/UiExport",
+      "bytes": 84412153,
+      "GiB": 0.079
+    },
+    {
+      "path": "Crowd/SlowAPNG",
+      "bytes": 81525181,
+      "GiB": 0.076
+    },
+    {
+      "path": "Tests/PartialHair915NativeExact",
+      "bytes": 80706732,
+      "GiB": 0.075
+    },
+    {
+      "path": "Tests/Shore332Native",
+      "bytes": 79428134,
+      "GiB": 0.074
+    },
+    {
+      "path": "Tests/SkinHsv307BootGpuHook",
+      "bytes": 79399770,
+      "GiB": 0.074
+    },
+    {
+      "path": "Tests/Studio295",
+      "bytes": 77652540,
+      "GiB": 0.072
+    },
+    {
+      "path": "Logs/old",
+      "bytes": 74503047,
+      "GiB": 0.069
+    },
+    {
+      "path": "Tests/AnimatorMultiLayer298",
+      "bytes": 68630319,
+      "GiB": 0.064
+    },
+    {
+      "path": "Tests/AnimationFilter395",
+      "bytes": 68326375,
+      "GiB": 0.064
+    },
+    {
+      "path": "DebugShots/old",
+      "bytes": 65121494,
+      "GiB": 0.061
+    },
+    {
+      "path": "Tests",
+      "bytes": 63501875,
+      "GiB": 0.059
+    },
+    {
+      "path": "Tests/Eyeline320Native",
+      "bytes": 60010332,
+      "GiB": 0.056
+    },
+    {
+      "path": "Tests/MotionTimeScale296",
+      "bytes": 59960864,
+      "GiB": 0.056
+    },
+    {
+      "path": "APNGCards/ColdFiles",
+      "bytes": 54800102,
+      "GiB": 0.051
+    },
+    {
+      "path": "Tests/Hair322SamplingControlsNative",
+      "bytes": 54621683,
+      "GiB": 0.051
+    },
+    {
+      "path": "Tests/Skin325",
+      "bytes": 52873128,
+      "GiB": 0.049
+    },
+    {
+      "path": "Tests/NewCards306Overlays",
+      "bytes": 52404785,
+      "GiB": 0.049
+    },
+    {
+      "path": "Tests/Male330Native",
+      "bytes": 52169979,
+      "GiB": 0.049
+    },
+    {
+      "path": "TposeOne",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "ShotAlice",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "ShadowShot",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "Handoff2One",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "Handoff2Alice",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "DebugShots/AliceSpecCard",
+      "bytes": 51772714,
+      "GiB": 0.048
+    },
+    {
+      "path": "DebugShots/Resolve334All37Final",
+      "bytes": 47961759,
+      "GiB": 0.045
+    },
+    {
+      "path": "DebugShots/ForgeAlpha333All37",
+      "bytes": 47919660,
+      "GiB": 0.045
+    },
+    {
+      "path": "DebugShots/ForgeItem332All37R2",
+      "bytes": 47739781,
+      "GiB": 0.044
+    },
+    {
+      "path": "DebugShots/ForgeItem332All37",
+      "bytes": 47738750,
+      "GiB": 0.044
+    },
+    {
+      "path": "DebugShots/Clothes331All37R2",
+      "bytes": 47663520,
+      "GiB": 0.044
+    },
+    {
+      "path": "Tests/Male330SailorNative",
+      "bytes": 46749286,
+      "GiB": 0.044
+    },
+    {
+      "path": "APNGCards",
+      "bytes": 45542258,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Hair322FinalAll34",
+      "bytes": 45093225,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Hair323GpuFinalAll34",
+      "bytes": 45084307,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Hair323FinalAll34",
+      "bytes": 45083546,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Hair323ViewGpuFinalAll34",
+      "bytes": 45083290,
+      "GiB": 0.042
+    },
+    {
+      "path": "Tests/AnimatorCrossFade301",
+      "bytes": 45050492,
+      "GiB": 0.042
+    },
+    {
+      "path": "Tests/Brow319Native",
+      "bytes": 44934142,
+      "GiB": 0.042
+    },
+    {
+      "path": "Tests/BodyUnder342RowsRuntime",
+      "bytes": 44731481,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Hair323ShadowFinalAll34",
+      "bytes": 44638465,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Hair323ShoesFinalAll34",
+      "bytes": 44581181,
+      "GiB": 0.042
+    },
+    {
+      "path": "DebugShots/Texture324FinalAll34",
+      "bytes": 44578829,
+      "GiB": 0.042
+    },
+    {
+      "path": "Tests/HPlayback337",
+      "bytes": 43612589,
+      "GiB": 0.041
+    },
+    {
+      "path": "Tests/AnimationAutoSource393",
+      "bytes": 41409628,
+      "GiB": 0.039
+    },
+    {
+      "path": "DebugShots/Hair322ExpandedSamplerR2",
+      "bytes": 41287393,
+      "GiB": 0.038
+    },
+    {
+      "path": "DebugShots/Hair322ExpandedFinal",
+      "bytes": 41199292,
+      "GiB": 0.038
+    },
+    {
+      "path": "OneCardMarch",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchShotCard",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "MarchShot",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "Handoff2March",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "DebugShots/ClothesSpecCard",
+      "bytes": 41098526,
+      "GiB": 0.038
+    },
+    {
+      "path": "Tests/AnimationSource392",
+      "bytes": 40039239,
+      "GiB": 0.037
+    },
+    {
+      "path": "Tests/PhoebeSubpart339Uncached",
+      "bytes": 39768317,
+      "GiB": 0.037
+    },
+    {
+      "path": "Tests/NewCards306FiveRenderer",
+      "bytes": 39761113,
+      "GiB": 0.037
+    },
+    {
+      "path": "Tests/PhoebeSubpart339",
+      "bytes": 39713226,
+      "GiB": 0.037
+    },
+    {
+      "path": "Tests/NewCards309Identities161",
+      "bytes": 38772235,
+      "GiB": 0.036
+    },
+    {
+      "path": "Tests/MainItem316InputsHat",
+      "bytes": 37890147,
+      "GiB": 0.035
+    },
+    {
+      "path": "Tests/MainItem315FinalInputsHat",
+      "bytes": 37890144,
+      "GiB": 0.035
+    },
+    {
+      "path": "Tests/HPlayback336",
+      "bytes": 37712977,
+      "GiB": 0.035
+    },
+    {
+      "path": "Tests/GalleryReload381",
+      "bytes": 37561398,
+      "GiB": 0.035
+    },
+    {
+      "path": "Tests/HPlaybackAudit20261001",
+      "bytes": 37252158,
+      "GiB": 0.035
+    },
+    {
+      "path": "Tests/MouthMaterial278",
+      "bytes": 37228328,
+      "GiB": 0.035
+    },
+    {
+      "path": "Tests/Male330ClothesNative",
+      "bytes": 36805979,
+      "GiB": 0.034
+    },
+    {
+      "path": "Tests/Animator292",
+      "bytes": 36287810,
+      "GiB": 0.034
+    },
+    {
+      "path": "Crowd/ReductionCache",
+      "bytes": 35801651,
+      "GiB": 0.033
+    },
+    {
+      "path": "Tests/AnimationFilter394",
+      "bytes": 34979675,
+      "GiB": 0.033
+    },
+    {
+      "path": "Tests/CardWarm379",
+      "bytes": 34411634,
+      "GiB": 0.032
+    },
+    {
+      "path": "Tests/Hair322PekoraClothesNativeR2",
+      "bytes": 34327084,
+      "GiB": 0.032
+    },
+    {
+      "path": "Tests/CameraControls382",
+      "bytes": 34279408,
+      "GiB": 0.032
+    },
+    {
+      "path": "Tests/HeadFbs280",
+      "bytes": 34173767,
+      "GiB": 0.032
+    },
+    {
+      "path": "Tests/MainItem316NativeTextureAPIR2",
+      "bytes": 34148253,
+      "GiB": 0.032
+    },
+    {
+      "path": "Tests/PhoebeME340Native",
+      "bytes": 34123611,
+      "GiB": 0.032
+    },
+    {
+      "path": "Tests/NewCards306SourceWorld",
+      "bytes": 33547685,
+      "GiB": 0.031
+    },
+    {
+      "path": "Tests/MainItem315NativeScene074",
+      "bytes": 32857937,
+      "GiB": 0.031
+    },
+    {
+      "path": "Tests/MainItem315GpuOracleR2",
+      "bytes": 31955523,
+      "GiB": 0.03
+    },
+    {
+      "path": "Tests/MainItem315GpuOracle",
+      "bytes": 31955277,
+      "GiB": 0.03
+    },
+    {
+      "path": "DebugShots/Resolve334All37",
+      "bytes": 31888213,
+      "GiB": 0.03
+    },
+    {
+      "path": "Tests/Shore332HoodNative",
+      "bytes": 31470099,
+      "GiB": 0.029
+    },
+    {
+      "path": "Tests/FaceCreate346Controls",
+      "bytes": 31276052,
+      "GiB": 0.029
+    },
+    {
+      "path": "DebugShots/MarchCurrentHeadRoot",
+      "bytes": 29876960,
+      "GiB": 0.028
+    },
+    {
+      "path": "Crowd/GpuModule-PresentSubmissionProbeR1",
+      "bytes": 29381818,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-SubmissionBatchProbeR1",
+      "bytes": 29381137,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-RhiLongCaptureR1",
+      "bytes": 29380074,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-ReportIdleProbeR1",
+      "bytes": 29379346,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-ReportCostProbeR1",
+      "bytes": 29378215,
+      "GiB": 0.027
+    },
+    {
+      "path": "Tests/NewCards306Runtime",
+      "bytes": 29374915,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-TransientCacheAuditR1",
+      "bytes": 29374409,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-DrawBatchWarmTraceR2",
+      "bytes": 29371329,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-DrawBatchAnchorR1",
+      "bytes": 29371196,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-ShadowPolicyProfileR1",
+      "bytes": 29368872,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MeshAuditFinal_Card_March_7th_keiyuu",
+      "bytes": 29323214,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchExtractP46",
+      "bytes": 29311586,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchExtractP55",
+      "bytes": 29309348,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxRawProbe",
+      "bytes": 29298040,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxOrder",
+      "bytes": 29298040,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchLineDiagExtract",
+      "bytes": 29295329,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchCurrentBodyAtlas",
+      "bytes": 29295326,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxSrgb",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "MarchKsoxColorFlag",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchAlphaDiagExtract",
+      "bytes": 29295302,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-RTGpuFollowerGuardR1",
+      "bytes": 29289097,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-FocusShadow20261004R1",
+      "bytes": 29273038,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-FrameCapAudit20261004R1",
+      "bytes": 29272511,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-BalancedPoseSeriesEditor20261004T1832",
+      "bytes": 29272219,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-PrewarmShot20261004R1",
+      "bytes": 29271821,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchBodyCreateCandidate",
+      "bytes": 29265408,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/OvertexUvDiag",
+      "bytes": 29262095,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchNoFakeNippleCandidate",
+      "bytes": 29262095,
+      "GiB": 0.027
+    },
+    {
+      "path": "DebugShots/MarchOvertexCandidate",
+      "bytes": 29262091,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-FullFrameMeasurementEditor20261004T1826",
+      "bytes": 29123141,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-StaggerPose60Editor20261004T1800",
+      "bytes": 29118255,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-FinalPose60CullEditor20261004T1757",
+      "bytes": 29116616,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-RenderUploadPose60Editor20261004T1751",
+      "bytes": 29115107,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-FocusedHighEditor20261004T1823",
+      "bytes": 29113778,
+      "GiB": 0.027
+    },
+    {
+      "path": "Tests/Hair322SamplingNative",
+      "bytes": 29106645,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-OutlineRadiusEditor20261004T1819",
+      "bytes": 29100677,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-ShadowRadiusEditor20261004T1814",
+      "bytes": 29093314,
+      "GiB": 0.027
+    },
+    {
+      "path": "Tests/Hair322ClothingInputs",
+      "bytes": 28992222,
+      "GiB": 0.027
+    },
+    {
+      "path": "Tests/BodyArticulation347Native",
+      "bytes": 28949796,
+      "GiB": 0.027
+    },
+    {
+      "path": "APNGCards/AllOutfitViews",
+      "bytes": 28606971,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-ThirdPersonSectionEditor20261004T1729",
+      "bytes": 28542741,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-SectionLODBindCacheEditor20261004T1724",
+      "bytes": 28504706,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-SectionLODSelection20261004T1705",
+      "bytes": 28463540,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-SectionLODProjectionEditor20261004T1722",
+      "bytes": 28459966,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-SectionBoundsCompressionFix20261004T1707",
+      "bytes": 28459231,
+      "GiB": 0.027
+    },
+    {
+      "path": "Crowd/GpuModule-SectionLODPolicyEditor20261004T1713",
+      "bytes": 28459009,
+      "GiB": 0.027
+    },
+    {
+      "path": "Tests/EyeRim320Isolation",
+      "bytes": 28338649,
+      "GiB": 0.026
+    },
+    {
+      "path": "Tests/NewCards306Renderer149",
+      "bytes": 27928162,
+      "GiB": 0.026
+    },
+    {
+      "path": "YuukaShot",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "TposeYuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "ShotYuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "Handoff2Yuuka",
+      "bytes": 27749748,
+      "GiB": 0.026
+    },
+    {
+      "path": "Crowd/GpuModule-SectionBoundsPilot20261004T1700",
+      "bytes": 27706930,
+      "GiB": 0.026
+    },
+    {
+      "path": "Tests/Studio293",
+      "bytes": 27524331,
+      "GiB": 0.026
+    },
+    {
+      "path": "Crowd/GpuModule-SelectiveSRTNormalGuard20261004T1550",
+      "bytes": 27100094,
+      "GiB": 0.025
+    },
+    {
+      "path": "Crowd/GpuModule-SelectiveSRTFinalSource20261004T1660",
+      "bytes": 27089734,
+      "GiB": 0.025
+    },
+    {
+      "path": "Crowd/GpuModule-SelectiveSRTVerify20261004T1510",
+      "bytes": 27085613,
+      "GiB": 0.025
+    },
+    {
+      "path": "Crowd/GpuModule-SelectiveSRTPilot20261004T1450",
+      "bytes": 27021398,
+      "GiB": 0.025
+    },
+    {
+      "path": "DebugShots/SkinHsv307Final158R2",
+      "bytes": 26566309,
+      "GiB": 0.025
+    },
+    {
+      "path": "Tests/NewCards306BodyMaskNative",
+      "bytes": 26514438,
+      "GiB": 0.025
+    },
+    {
+      "path": "DebugShots/NewCards309Regression166",
+      "bytes": 26501484,
+      "GiB": 0.025
+    },
+    {
+      "path": "Tests/FacePaint320NativeR2",
+      "bytes": 26498098,
+      "GiB": 0.025
+    },
+    {
+      "path": "DebugShots/TextureMips308Final161",
+      "bytes": 26491070,
+      "GiB": 0.025
+    },
+    {
+      "path": "DebugShots/MainItem310Regression172",
+      "bytes": 26473594,
+      "GiB": 0.025
+    },
+    {
+      "path": "DebugShots/MainItem310Regression170",
+      "bytes": 26469820,
+      "GiB": 0.025
+    },
+    {
+      "path": "Tests/MainItem315InputsCounter",
+      "bytes": 26372630,
+      "GiB": 0.025
+    },
+    {
+      "path": "DebugShots/SkinHsv307Final",
+      "bytes": 26236074,
+      "GiB": 0.024
+    },
+    {
+      "path": "Crowd/GpuModule-AffineRigAudit20261004T1430",
+      "bytes": 26212720,
+      "GiB": 0.024
+    },
+    {
+      "path": "Crowd/GpuModule-MaskLowPilot20261004T1040",
+      "bytes": 26060363,
+      "GiB": 0.024
+    },
+    {
+      "path": "Crowd/GpuModule-MaskLowBatchSupport20261004T1130",
+      "bytes": 26059900,
+      "GiB": 0.024
+    },
+    {
+      "path": "Crowd/GpuModule-CompactLowPoseAuditFix20261004T0640",
+      "bytes": 25866581,
+      "GiB": 0.024
+    },
+    {
+      "path": "Crowd/GpuModule-CompactLowCommandlet20261004T0616",
+      "bytes": 25844268,
+      "GiB": 0.024
+    },
+    {
+      "path": "Tests/MouthShapes276",
+      "bytes": 25652627,
+      "GiB": 0.024
+    },
+    {
+      "path": "Tests/FacePaint320Native",
+      "bytes": 24986879,
+      "GiB": 0.023
+    },
+    {
+      "path": "Tests/PartialHair915Export",
+      "bytes": 24850763,
+      "GiB": 0.023
+    },
+    {
+      "path": "Tests/Hair322NativeR2",
+      "bytes": 24776415,
+      "GiB": 0.023
+    },
+    {
+      "path": "Tests/BrowOrientation198FixedMarch",
+      "bytes": 24562185,
+      "GiB": 0.023
+    },
+    {
+      "path": "Tests/Tatsumaki333Native",
+      "bytes": 24386263,
+      "GiB": 0.023
+    },
+    {
+      "path": "Tests/FaceCreate346MipsR3",
+      "bytes": 24149186,
+      "GiB": 0.022
+    },
+    {
+      "path": "Tests/PhoebeState342Native",
+      "bytes": 24088567,
+      "GiB": 0.022
+    },
+    {
+      "path": "ShaderDiag/AllCurrent",
+      "bytes": 24067533,
+      "GiB": 0.022
+    },
+    {
+      "path": "Tests/FaceCreate346MipsR2",
+      "bytes": 23626187,
+      "GiB": 0.022
+    },
+    {
+      "path": "Tests/FaceCreate346Mips",
+      "bytes": 22561971,
+      "GiB": 0.021
+    },
+    {
+      "path": "Tests/Accessory318NativeR3",
+      "bytes": 22463811,
+      "GiB": 0.021
+    },
+    {
+      "path": "Tests/Accessory318NativeR2",
+      "bytes": 22456620,
+      "GiB": 0.021
+    },
+    {
+      "path": "Tests/Accessory318Native",
+      "bytes": 22456615,
+      "GiB": 0.021
+    },
+    {
+      "path": "Tests/BrowOrientation198Controls",
+      "bytes": 22352644,
+      "GiB": 0.021
+    },
+    {
+      "path": "Tests/Hair322PekoraClothesNative",
+      "bytes": 22179711,
+      "GiB": 0.021
+    },
+    {
+      "path": "Crowd/GpuModule-BlenderWeightedRecoveryR2",
+      "bytes": 22064216,
+      "GiB": 0.021
+    },
+    {
+      "path": "Crowd/GpuModule-CompactLowPoseAudit20261004T0630",
+      "bytes": 22014976,
+      "GiB": 0.021
+    },
+    {
+      "path": "Crowd/GpuModule-CompactLowSkeleton20261004T0605",
+      "bytes": 21998007,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-DefaultOutlineExposure20261004T0500",
+      "bytes": 21993409,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-BlenderSurfaces10kR1",
+      "bytes": 21986206,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-KeepSmall20261004T0325",
+      "bytes": 21978030,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-RecoverFailedOnly20261004T0310",
+      "bytes": 21962342,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-AuthoredReserve20261004T0303",
+      "bytes": 21962282,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-KeepAuthoredScope20261004T0255",
+      "bytes": 21941048,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-KeepProblemSurface20261004T0249",
+      "bytes": 21941014,
+      "GiB": 0.02
+    },
+    {
+      "path": "Tests/PhoebeBody342NativeR3",
+      "bytes": 21878391,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-ProtectedMinimum20261004T0242",
+      "bytes": 21862960,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-ProtectedBudgetR1",
+      "bytes": 21854387,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-RetainStubbornSurfacesR1",
+      "bytes": 21853110,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-SmallPartFloorR1",
+      "bytes": 21852870,
+      "GiB": 0.02
+    },
+    {
+      "path": "Crowd/GpuModule-ReuseReductionBudgetR1",
+      "bytes": 21848443,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/EyeRim320FinalAllCards",
+      "bytes": 21037802,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/MainItem315FinalAllCardsR2",
+      "bytes": 21035502,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/MainItem316FinalAllCards",
+      "bytes": 21034859,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/Neck317FinalAllCards",
+      "bytes": 21033988,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/Neck317FinalAllCardsR2",
+      "bytes": 21033651,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/Brow319FinalAllCardsR2",
+      "bytes": 21033469,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/MainItem315AllCards",
+      "bytes": 21032304,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/Accessory318FinalAllCards",
+      "bytes": 21031578,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/MainItem316FinalAllCardsR2",
+      "bytes": 21031142,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/TextureMipFloorAllCards",
+      "bytes": 21030770,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/Brow321FinalAllCards",
+      "bytes": 21030116,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/HairRim314AllCards",
+      "bytes": 20974550,
+      "GiB": 0.02
+    },
+    {
+      "path": "DebugShots/DumpOutfit0FourViews",
+      "bytes": 20915969,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/ExternalBody288_open",
+      "bytes": 20882294,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CanonicalReductionCacheR1",
+      "bytes": 20834419,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SmallCoverageDiagnosticsR1",
+      "bytes": 20715858,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SmallSurfaceCoverageR1",
+      "bytes": 20710204,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/PhoebeBody342NativeR2",
+      "bytes": 20685688,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-FinalReductionDisabledR1",
+      "bytes": 20657202,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SurfaceWeightDiagnosticsR1",
+      "bytes": 20657019,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-StableMaterialBindingsR2",
+      "bytes": 20635050,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SmallSurfaceBudgetR1",
+      "bytes": 20584461,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SmallSurfaceBindingR1",
+      "bytes": 20583756,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SmallSurfaceBudgetR2",
+      "bytes": 20583739,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/MainItem315InputsHat",
+      "bytes": 20575735,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaAccDiagOn3",
+      "bytes": 20551314,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/FaceMeMaskYuukaExtract",
+      "bytes": 20551071,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaNoDboneCheck",
+      "bytes": 20550951,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaAccDiagOff2",
+      "bytes": 20550951,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaAccDiagOff",
+      "bytes": 20550951,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaNeutralPoseCheck",
+      "bytes": 20550818,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaDuplicateRootOn",
+      "bytes": 20550818,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaCardFlags",
+      "bytes": 20550818,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaAccDiagOn2",
+      "bytes": 20550818,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaAccDiagOn",
+      "bytes": 20550818,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaPrefabRootCache",
+      "bytes": 20550812,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaCacheDiffNoCache",
+      "bytes": 20550668,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaCacheDiffCached",
+      "bytes": 20550668,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaDuplicateRootOff",
+      "bytes": 20550455,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaAccDiagOff3",
+      "bytes": 20550455,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaEmblemAudit",
+      "bytes": 20550401,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaDboneInitAudit",
+      "bytes": 20550382,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaNoDeferredA",
+      "bytes": 20550181,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/DrawClothesYuukaMesh",
+      "bytes": 20549916,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaMoveTrace",
+      "bytes": 20549886,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/MeshAuditFinal_Hayase_yuuka_keiyuu_V1_02_For_KKS",
+      "bytes": 20549819,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaBodyCreateCandidate",
+      "bytes": 20523829,
+      "GiB": 0.019
+    },
+    {
+      "path": "YuukaColorFlagFinal",
+      "bytes": 20460441,
+      "GiB": 0.019
+    },
+    {
+      "path": "YuukaKsoxSrgb",
+      "bytes": 20460435,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaExtractP46",
+      "bytes": 20455938,
+      "GiB": 0.019
+    },
+    {
+      "path": "DebugShots/YuukaExtractForComparison",
+      "bytes": 20453554,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-LowOnlyGenericR1",
+      "bytes": 20408568,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-LowOnlyEntryR1",
+      "bytes": 20382008,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/Skin328Native",
+      "bytes": 20358215,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/Skin328NativeR2",
+      "bytes": 20342621,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdMaterialUsageOutlineR1",
+      "bytes": 20341101,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SingleLowRuntimeR1",
+      "bytes": 20305092,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-SingleLowBudgetR1",
+      "bytes": 20299100,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdAcceptanceMetricsR1",
+      "bytes": 20245655,
+      "GiB": 0.019
+    },
+    {
+      "path": "anim_export",
+      "bytes": 20227594,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdLoadingGateR1",
+      "bytes": 20218336,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdMonotoneFallbackR1",
+      "bytes": 20200368,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdGeometryCleanupR1",
+      "bytes": 20200066,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdWeightDiagnosticR1",
+      "bytes": 20195800,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/MinaseMaterialInputs",
+      "bytes": 20193421,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-CrowdLoadEvidenceR1",
+      "bytes": 20191842,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-DetailTransferR2",
+      "bytes": 20167933,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-GeometryTransferR1",
+      "bytes": 20147570,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/PhoebeBody342Native",
+      "bytes": 20082317,
+      "GiB": 0.019
+    },
+    {
+      "path": "Tests/Shore332Source",
+      "bytes": 19917149,
+      "GiB": 0.019
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowAuthoredBindingsR1",
+      "bytes": 19846914,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaRefBoneCheck",
+      "bytes": 19821045,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaQuadCheck",
+      "bytes": 19821045,
+      "GiB": 0.018
+    },
+    {
+      "path": "Tests/NewCards309Geometry162",
+      "bytes": 19719265,
+      "GiB": 0.018
+    },
+    {
+      "path": "Tests/Hair322PekoraOtherNativeR2",
+      "bytes": 19645300,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowSafeSurfacesFinalR1",
+      "bytes": 19516010,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowSafeSurfacesR3",
+      "bytes": 19514266,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowSafeSurfacesR2",
+      "bytes": 19512130,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowSafeSurfacesR1",
+      "bytes": 19502920,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender9",
+      "bytes": 19459186,
+      "GiB": 0.018
+    },
+    {
+      "path": "BodyTexProbe2026",
+      "bytes": 19459186,
+      "GiB": 0.018
+    },
+    {
+      "path": "ShaderDiag/YuukaCurrent",
+      "bytes": 19459025,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender5",
+      "bytes": 19432568,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender4",
+      "bytes": 19416403,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender6",
+      "bytes": 19404386,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender8",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender7",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender3",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender2",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaMeRender",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaDiag2",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "YuukaCurrent",
+      "bytes": 19382599,
+      "GiB": 0.018
+    },
+    {
+      "path": "DebugShots/SkinRampMarchK384Inputs",
+      "bytes": 19353572,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowStageGeometryR1",
+      "bytes": 19233661,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowSurfaceAuditR1",
+      "bytes": 19212005,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowRigidClothR3",
+      "bytes": 19126919,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowRigidClothR2",
+      "bytes": 19107242,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowCornerBindingsR1",
+      "bytes": 19101183,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowRigidClothR5",
+      "bytes": 19099780,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowRigidClothR1",
+      "bytes": 19099168,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowRigidClothR4",
+      "bytes": 19079209,
+      "GiB": 0.018
+    },
+    {
+      "path": "Tests/Studio294",
+      "bytes": 19019315,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR15",
+      "bytes": 18869707,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR14",
+      "bytes": 18869675,
+      "GiB": 0.018
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR13",
+      "bytes": 18869006,
+      "GiB": 0.018
+    },
+    {
+      "path": "Tests/DynamicScale354",
+      "bytes": 18766006,
+      "GiB": 0.017
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR11",
+      "bytes": 18760670,
+      "GiB": 0.017
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR10",
+      "bytes": 18611071,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaExtract",
+      "bytes": 18373893,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaMask2",
+      "bytes": 18365839,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaPushup",
+      "bytes": 18354414,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaMask",
+      "bytes": 18354414,
+      "GiB": 0.017
+    },
+    {
+      "path": "DiagYuukaTpose",
+      "bytes": 18354305,
+      "GiB": 0.017
+    },
+    {
+      "path": "Tests/Hair322PekoraCoverageNative",
+      "bytes": 18067404,
+      "GiB": 0.017
+    },
+    {
+      "path": "DebugShots/HairNormal312Final176",
+      "bytes": 17804373,
+      "GiB": 0.017
+    },
+    {
+      "path": "Converted/_nude",
+      "bytes": 17764937,
+      "GiB": 0.017
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR9",
+      "bytes": 17762906,
+      "GiB": 0.017
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR8",
+      "bytes": 17722833,
+      "GiB": 0.017
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR7",
+      "bytes": 17722141,
+      "GiB": 0.017
+    },
+    {
+      "path": "Tests/PartialHair915Layers",
+      "bytes": 17552705,
+      "GiB": 0.016
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR6",
+      "bytes": 17537931,
+      "GiB": 0.016
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR5",
+      "bytes": 17537898,
+      "GiB": 0.016
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR4",
+      "bytes": 17527802,
+      "GiB": 0.016
+    },
+    {
+      "path": "Tests/MainItem310HatTexturesFull171",
+      "bytes": 17338740,
+      "GiB": 0.016
+    },
+    {
+      "path": "Tests/MainItem310HatTexture171",
+      "bytes": 17090970,
+      "GiB": 0.016
+    },
+    {
+      "path": "Tests/SkinHsv307BootSession",
+      "bytes": 17078297,
+      "GiB": 0.016
+    },
+    {
+      "path": "ShaderDiag/K384Fixed",
+      "bytes": 17052654,
+      "GiB": 0.016
+    },
+    {
+      "path": "DebugShots/EyeShader286_Walk_open",
+      "bytes": 17050767,
+      "GiB": 0.016
+    },
+    {
+      "path": "Tests/NewCards306CollarNative",
+      "bytes": 16809207,
+      "GiB": 0.016
+    },
+    {
+      "path": "Shaders/PCD3D_SM5-PCD3D_SM5",
+      "bytes": 16767177,
+      "GiB": 0.016
+    },
+    {
+      "path": "DebugShots/YuukaNoDboneRender",
+      "bytes": 16639722,
+      "GiB": 0.015
+    },
+    {
+      "path": "Tests/PartialHair915Isolation",
+      "bytes": 16562250,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairRim312Final191",
+      "bytes": 16512949,
+      "GiB": 0.015
+    },
+    {
+      "path": "Tests/NanamiSpeckleExtract",
+      "bytes": 16436333,
+      "GiB": 0.015
+    },
+    {
+      "path": "Tests/FaceDraw345Native",
+      "bytes": 16283257,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairRamp312Final186",
+      "bytes": 15985221,
+      "GiB": 0.015
+    },
+    {
+      "path": "ShaderDiag/Yuuka",
+      "bytes": 15972444,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/ShaderProperty194",
+      "bytes": 15953571,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/ShaderProperty194Final",
+      "bytes": 15952424,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/DetailMask195Final",
+      "bytes": 15949678,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairRim312Final192",
+      "bytes": 15949512,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairOutline312Final188",
+      "bytes": 15948345,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairRim312Final193",
+      "bytes": 15947334,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots",
+      "bytes": 15921779,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairAnotherRamp200Final",
+      "bytes": 15904340,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/BrowOrientation198Final",
+      "bytes": 15902920,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairRampUV202Final",
+      "bytes": 15901768,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairAnotherRamp201Final",
+      "bytes": 15899993,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/MaskSource197Final",
+      "bytes": 15899920,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairAnotherRamp199Final",
+      "bytes": 15898776,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairColor312Final187",
+      "bytes": 15836949,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairGloss312Final182",
+      "bytes": 15805082,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairLight312Final184",
+      "bytes": 15800106,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairDefaults312Final183",
+      "bytes": 15799387,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/HairBasis312Final180",
+      "bytes": 15794708,
+      "GiB": 0.015
+    },
+    {
+      "path": "DebugShots/StudioAmbient312Final179",
+      "bytes": 15789043,
+      "GiB": 0.015
+    },
+    {
+      "path": "Tests/MainItem315AmbientControls",
+      "bytes": 15687008,
+      "GiB": 0.015
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR3",
+      "bytes": 15475525,
+      "GiB": 0.014
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR2",
+      "bytes": 15346803,
+      "GiB": 0.014
+    },
+    {
+      "path": "Tests/ExternalScripts273",
+      "bytes": 15079093,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAccScale12",
+      "bytes": 14906541,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoHeadAbm6",
+      "bytes": 14902729,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoAbmGeom",
+      "bytes": 14899927,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchSkin9",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchRdiag11",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchQuick3",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchQuick",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchPose8",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchDisabled5",
+      "bytes": 14899475,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoFBS7",
+      "bytes": 14899402,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchFresh13",
+      "bytes": 14899181,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAllRenderers",
+      "bytes": 14899181,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAbmGeom",
+      "bytes": 14897113,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchVariants19",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchVariants18",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchParentScale17",
+      "bytes": 14894623,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNew16",
+      "bytes": 14889515,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchFreshNoPose14",
+      "bytes": 14889515,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchNoPose",
+      "bytes": 14888688,
+      "GiB": 0.014
+    },
+    {
+      "path": "MarchAccDiag15",
+      "bytes": 14888688,
+      "GiB": 0.014
+    },
+    {
+      "path": "Tests/EyeRim320OverlayNativeFinalR2",
+      "bytes": 14875203,
+      "GiB": 0.014
+    },
+    {
+      "path": "Tests/EyeRim320OverlayNativeFinal",
+      "bytes": 14875186,
+      "GiB": 0.014
+    },
+    {
+      "path": "Tests/EyeRim320OverlayNativeFinalR3",
+      "bytes": 14858412,
+      "GiB": 0.014
+    },
+    {
+      "path": "Crowd/GpuModule-StableMaterialBindingsR1",
+      "bytes": 14800822,
+      "GiB": 0.014
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR12",
+      "bytes": 14610851,
+      "GiB": 0.014
+    },
+    {
+      "path": "Converted/_user_check5",
+      "bytes": 14602556,
+      "GiB": 0.014
+    },
+    {
+      "path": "Tests/MainItem315Isolation",
+      "bytes": 14421934,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/MainItem316NativeTextureAPIFinal",
+      "bytes": 14413880,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/MainItem316NativeTextureAPIR3",
+      "bytes": 14403177,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/PartialHair915FaceNative",
+      "bytes": 14340160,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/MainItem315Controls",
+      "bytes": 14311641,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards306Final154",
+      "bytes": 14256461,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards306Final155",
+      "bytes": 14252835,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/Animator289_Walk_open",
+      "bytes": 14163218,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards306Final151",
+      "bytes": 14153754,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/Eyeline320KK226176Native",
+      "bytes": 14136775,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards306Final157",
+      "bytes": 13889264,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/MinaseColorNative",
+      "bytes": 13885187,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards306Final156",
+      "bytes": 13839691,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards305",
+      "bytes": 13722795,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/FacePaint320NativeR3",
+      "bytes": 13640526,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/Brow320KK226176Native",
+      "bytes": 13595806,
+      "GiB": 0.013
+    },
+    {
+      "path": "DebugShots/NewCards306Slots148",
+      "bytes": 13524436,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/Neck317NativeR2",
+      "bytes": 13488468,
+      "GiB": 0.013
+    },
+    {
+      "path": "Tests/Neck317YuukaNative",
+      "bytes": 13315202,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/Clothes331All37",
+      "bytes": 13262840,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/Brow319FinalAllCards",
+      "bytes": 13243572,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/ParsedShaderCli",
+      "bytes": 13174087,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceGeomCurrentP57",
+      "bytes": 13174087,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceRendererPivotApplied",
+      "bytes": 13174067,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/FrontFlagCli2",
+      "bytes": 13174064,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/FrontFlagCli",
+      "bytes": 13174064,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceCacheHitVerify",
+      "bytes": 13174062,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceCachedPivotVerify",
+      "bytes": 13174062,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceSkinDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceRendererPivotMatched",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceRendererPivotDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceRendererIdDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AlicePrefabDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModUncachedDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModSourceDiag2",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModSourceDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModSerialDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModRendererDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModPrefabAll",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceModEntryDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceLengthBaseFixed",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceHeadHairDiag",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceActualModPivot",
+      "bytes": 13173834,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceExtractP55",
+      "bytes": 13173808,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceCurrentGeom",
+      "bytes": 13173804,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceExtractP46",
+      "bytes": 13173550,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceTransformOrderFixed",
+      "bytes": 13170831,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceMaskExtractDiag",
+      "bytes": 13160233,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceSingleScaleDiag",
+      "bytes": 13160219,
+      "GiB": 0.012
+    },
+    {
+      "path": "AliceOverlayGeom",
+      "bytes": 13157757,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceMaskFlipDiag",
+      "bytes": 13148198,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceFaceCheekProbe",
+      "bytes": 13148194,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceFaceGuidProbe",
+      "bytes": 13141958,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/CardLoadProfile20261001Isolated",
+      "bytes": 13127901,
+      "GiB": 0.012
+    },
+    {
+      "path": "AliceColorFlagFinal",
+      "bytes": 13051697,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceFaceMeFinal",
+      "bytes": 13051683,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/AliceBodyCreateCandidate",
+      "bytes": 13039155,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/MeshAuditFinal_Alice_keiyuu",
+      "bytes": 12997260,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/MeshAuditAliceCurrent",
+      "bytes": 12997117,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/MeshAuditAliceMoveFallback",
+      "bytes": 12996996,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/MeshAuditAlicePureLbs",
+      "bytes": 12996993,
+      "GiB": 0.012
+    },
+    {
+      "path": "Tests/Tatsumaki333Load",
+      "bytes": 12912229,
+      "GiB": 0.012
+    },
+    {
+      "path": "Tests/Tatsumaki333Inputs",
+      "bytes": 12909635,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/DrawClothesAlice1112",
+      "bytes": 12548493,
+      "GiB": 0.012
+    },
+    {
+      "path": "Tests/Neck317Native",
+      "bytes": 12544239,
+      "GiB": 0.012
+    },
+    {
+      "path": "ShaderDiag/MarchCurrent",
+      "bytes": 12454374,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/NewCards306Regression148",
+      "bytes": 12431032,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/NewCards306Regression157",
+      "bytes": 12366261,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/NewCards306Regression155",
+      "bytes": 12366048,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/NewCards309Final166",
+      "bytes": 12356018,
+      "GiB": 0.012
+    },
+    {
+      "path": "DebugShots/NewCards309Final163",
+      "bytes": 12340641,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/NewCards309Final165",
+      "bytes": 12339969,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/MainItem310Final170",
+      "bytes": 12234160,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/PartialHair915Effects",
+      "bytes": 12231804,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/EyeShader286_Tpose_open",
+      "bytes": 12211898,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/HairRamp312Extract186",
+      "bytes": 12204473,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/HairInputs312Extract185R2",
+      "bytes": 12204301,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/NewCards309Final162",
+      "bytes": 12155359,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/SkinHsv307BootGpuInputs",
+      "bytes": 12051902,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/SkinHsv307BootNative",
+      "bytes": 12051894,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/MainItem310Final172",
+      "bytes": 12049689,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/NewCards309Baseline161",
+      "bytes": 11979584,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/MarchKsoxRawOverlays",
+      "bytes": 11962125,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/EyeLook285_open",
+      "bytes": 11954737,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/CardLoadProfile20261001",
+      "bytes": 11908006,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/NewCards306Final",
+      "bytes": 11832253,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/MaskColorSpace196Extract",
+      "bytes": 11794103,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/HairColorRows204Extract",
+      "bytes": 11787286,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/PartialHair915TopNative",
+      "bytes": 11732512,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/Brow322CounterNative",
+      "bytes": 11705230,
+      "GiB": 0.011
+    },
+    {
+      "path": "ShaderDiag/MarchUvTangent",
+      "bytes": 11655890,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/PartialHair915RimNative",
+      "bytes": 11628543,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/K091BodyFullMaskInputs",
+      "bytes": 11625256,
+      "GiB": 0.011
+    },
+    {
+      "path": "ShaderDiag/MarchUvTangentConverted",
+      "bytes": 11577534,
+      "GiB": 0.011
+    },
+    {
+      "path": "Logs/AnimatorLayerClock299BeforeActorClockGuard",
+      "bytes": 11523124,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/K091ShaderInputsCurrent",
+      "bytes": 11511743,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/HairInputs312Native185",
+      "bytes": 11433118,
+      "GiB": 0.011
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskK384Inputs",
+      "bytes": 11356002,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/MinaseColorExtract",
+      "bytes": 11332236,
+      "GiB": 0.011
+    },
+    {
+      "path": "Tests/MainItem316LargestDeltaNative",
+      "bytes": 11115708,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/HairGloss312Native181",
+      "bytes": 11090658,
+      "GiB": 0.01
+    },
+    {
+      "path": "ShaderDiag/K384",
+      "bytes": 11030636,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/MainItem310NativeLights169",
+      "bytes": 10944603,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/MaskColorSpace196NativeR2",
+      "bytes": 10896963,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/PartialHair915LutNative",
+      "bytes": 10894666,
+      "GiB": 0.01
+    },
+    {
+      "path": "Converted/_user_check6",
+      "bytes": 10849222,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/NewCards306Slots147",
+      "bytes": 10799846,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/Clothes331ArgbNativeR2",
+      "bytes": 10610445,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/Neck317AfterSource",
+      "bytes": 10578578,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/Neck317BeforeSource",
+      "bytes": 10578254,
+      "GiB": 0.01
+    },
+    {
+      "path": "Converted/KK_091207",
+      "bytes": 10461873,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/Hair322SiestaNative",
+      "bytes": 10398709,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/NewCards306Renderer152",
+      "bytes": 10348986,
+      "GiB": 0.01
+    },
+    {
+      "path": "Tests/BrowOrientation198Native",
+      "bytes": 10186739,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/PartialHair915Native",
+      "bytes": 10130654,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/HairRamp312Native186",
+      "bytes": 10088544,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/MaskColorSpace196Native",
+      "bytes": 10087442,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/HairGlobals312Native177",
+      "bytes": 10079767,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/NewCards311PekoNative173",
+      "bytes": 9960484,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/FaceCreate346Final",
+      "bytes": 9906426,
+      "GiB": 0.009
+    },
+    {
+      "path": "DebugShots/Animator290_Layer_open",
+      "bytes": 9718842,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/SkinHsv307",
+      "bytes": 9717292,
+      "GiB": 0.009
+    },
+    {
+      "path": "DiagAliceShader",
+      "bytes": 9697242,
+      "GiB": 0.009
+    },
+    {
+      "path": "DebugShots/TextureMips308Final160",
+      "bytes": 9650419,
+      "GiB": 0.009
+    },
+    {
+      "path": "Tests/DynamicScale353",
+      "bytes": 9502623,
+      "GiB": 0.009
+    },
+    {
+      "path": "AliceFreshGeom",
+      "bytes": 9451245,
+      "GiB": 0.009
+    },
+    {
+      "path": "DebugShots/NewCards311Initial173",
+      "bytes": 9400560,
+      "GiB": 0.009
+    },
+    {
+      "path": "DebugShots/NewCards311StudioLight174",
+      "bytes": 9352812,
+      "GiB": 0.009
+    },
+    {
+      "path": "Crowd/GpuModule-InstancingMetricsR1",
+      "bytes": 9139596,
+      "GiB": 0.009
+    },
+    {
+      "path": "DebugShots/Resolve334All37R2",
+      "bytes": 9109668,
+      "GiB": 0.008
+    },
+    {
+      "path": "ShaderDxbcKKS/KK_Plugins.Resources.KKS_Shaders",
+      "bytes": 9019182,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/DBoneEndOffsetK091",
+      "bytes": 9015436,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/NormalDetailCli",
+      "bytes": 9015425,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091ShaderCli",
+      "bytes": 9015419,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091InspectExtractDebug",
+      "bytes": 9015419,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091InspectExtract",
+      "bytes": 9015419,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091AttachedDynamic",
+      "bytes": 9014962,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091InitTransforms",
+      "bytes": 9014865,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091FinalAttached",
+      "bytes": 9014858,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091DirectionQuaternion",
+      "bytes": 9014827,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091NoShakeDiag",
+      "bytes": 9014812,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091AttachedNormalized",
+      "bytes": 9014812,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091DbDiag",
+      "bytes": 9014739,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091ComponentScale",
+      "bytes": 9014739,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091CardShake",
+      "bytes": 9014712,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091CacheShake",
+      "bytes": 9014712,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091BoneTrace",
+      "bytes": 9014712,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091PrefabColliders",
+      "bytes": 9014697,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091GravityDirection",
+      "bytes": 9014697,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091DbParams",
+      "bytes": 9014697,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091DbColliderRefs",
+      "bytes": 9014697,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091ColliderLayout",
+      "bytes": 9014697,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditK091GlobalMoves",
+      "bytes": 9014600,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditK091AccDiag",
+      "bytes": 9014600,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditFinal_KK_091207",
+      "bytes": 9014600,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091Frame30",
+      "bytes": 9014553,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091NoDbBoneTrace",
+      "bytes": 9014499,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K091Frame1",
+      "bytes": 9014436,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditK091NoDb",
+      "bytes": 9014416,
+      "GiB": 0.008
+    },
+    {
+      "path": "Tests/Resolve334Source",
+      "bytes": 8975236,
+      "GiB": 0.008
+    },
+    {
+      "path": "Crowd/GpuModule-InstancingResumeR1",
+      "bytes": 8962677,
+      "GiB": 0.008
+    },
+    {
+      "path": "Crowd/GpuModule-InstancingOnlyR1",
+      "bytes": 8945513,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384HeadBoneAttachCandidate",
+      "bytes": 8766803,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384HairAccDiag",
+      "bytes": 8754706,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditK384Fixed",
+      "bytes": 8752673,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384HairScaleRoot",
+      "bytes": 8751276,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384HairAlphaFixed",
+      "bytes": 8750327,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384TintInspect",
+      "bytes": 8750320,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384BoneCompare",
+      "bytes": 8750320,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditK384Snap",
+      "bytes": 8749887,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384ForeheadShaderDump",
+      "bytes": 8749393,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384ForeheadDiagExtract",
+      "bytes": 8749393,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MeshAuditK384BoneMoves",
+      "bytes": 8749022,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/StateCacheK384Worn",
+      "bytes": 8748700,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/DrawClothesK384Normal",
+      "bytes": 8748685,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/ExtraDumpCardsExtract",
+      "bytes": 8734863,
+      "GiB": 0.008
+    },
+    {
+      "path": "Crowd/GpuModule-MatrixPartsR3",
+      "bytes": 8674938,
+      "GiB": 0.008
+    },
+    {
+      "path": "Tests/MouthWorld277",
+      "bytes": 8552029,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/K384FaceSkinExtract",
+      "bytes": 8432806,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/StateSelectionK384Half",
+      "bytes": 8359357,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/StateCacheK384HalfSqlRepeat",
+      "bytes": 8359353,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/StateCacheK384HalfSql",
+      "bytes": 8359353,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/StateCacheK384Half",
+      "bytes": 8359353,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/ClothesStateK384",
+      "bytes": 8350372,
+      "GiB": 0.008
+    },
+    {
+      "path": "Converted/_user_check1",
+      "bytes": 8210783,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/MaskColorSpace196Final",
+      "bytes": 8200402,
+      "GiB": 0.008
+    },
+    {
+      "path": "Converted/_user_check0",
+      "bytes": 8195275,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/DrawClothesK384Alt",
+      "bytes": 8131549,
+      "GiB": 0.008
+    },
+    {
+      "path": "Converted/_user_check3",
+      "bytes": 8070896,
+      "GiB": 0.008
+    },
+    {
+      "path": "Crowd/GpuModule-DetailTransferR1",
+      "bytes": 8055513,
+      "GiB": 0.008
+    },
+    {
+      "path": "DebugShots/StateSelectionK384Cycled",
+      "bytes": 7984612,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/Clothes331Source",
+      "bytes": 7772572,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/Hair322CachedInputs",
+      "bytes": 7747727,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/AssetImport368",
+      "bytes": 7672522,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/Male330ClothesSource",
+      "bytes": 7623642,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/EyeGaze284",
+      "bytes": 7179519,
+      "GiB": 0.007
+    },
+    {
+      "path": "ShaderReference/HLSLDecompiler3",
+      "bytes": 7138328,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/ClothesCoordinator271",
+      "bytes": 7117665,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/ExternalScripts273",
+      "bytes": 7115312,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/SourceSibling272",
+      "bytes": 7115280,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/MixedClothes270",
+      "bytes": 7114141,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/OrdinaryRuntime267",
+      "bytes": 7113585,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/SkinHsv307Final158",
+      "bytes": 7079623,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/BrowOrientation198Extract",
+      "bytes": 7063671,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/BrowOrientation198FixedAndroid",
+      "bytes": 7063614,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/HairInputs312Extract185",
+      "bytes": 7052201,
+      "GiB": 0.007
+    },
+    {
+      "path": "ShaderDiag/Alice",
+      "bytes": 7034013,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/HairUV203Extract",
+      "bytes": 7032379,
+      "GiB": 0.007
+    },
+    {
+      "path": "Tests/HairColorRows204Diagnostic",
+      "bytes": 7032375,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/SkinNormalFive",
+      "bytes": 6997353,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskActiveFive",
+      "bytes": 6996331,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/RawMaskSourceFive",
+      "bytes": 6981952,
+      "GiB": 0.007
+    },
+    {
+      "path": "DebugShots/GameAnimMouthFinalFive",
+      "bytes": 6967182,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/LegacyTangentValidatedFive",
+      "bytes": 6964671,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskDecodedFive",
+      "bytes": 6964457,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/GameAnimMouthSkinFinalFive",
+      "bytes": 6962370,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/DBoneEndOffsetFive",
+      "bytes": 6939866,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/DBoneComponentScaleFive",
+      "bytes": 6939295,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/CardShakeFive",
+      "bytes": 6937658,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/PoseKeyFinalFive",
+      "bytes": 6937557,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/DBoneInitPlacedFiveFixed",
+      "bytes": 6936502,
+      "GiB": 0.006
+    },
+    {
+      "path": "Converted/_profile_load",
+      "bytes": 6936408,
+      "GiB": 0.006
+    },
+    {
+      "path": "Converted/_profile_fast",
+      "bytes": 6936408,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/DBoneMirrorFive",
+      "bytes": 6932667,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/ClothesStateFive",
+      "bytes": 6931979,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/PrefabRootsFive",
+      "bytes": 6929937,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/ModInventoryFinalFive",
+      "bytes": 6901247,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/DBoneInitPlacedFive",
+      "bytes": 6897855,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/FaceMeMaskFive",
+      "bytes": 6889160,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/DrawClothesDefaultFive",
+      "bytes": 6888658,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/HeadGpuSpaceLinkedFive",
+      "bytes": 6884167,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/HeadGpuSpaceFive",
+      "bytes": 6857903,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/ClothesStateNormalFive",
+      "bytes": 6852629,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/Neck317FinalAllCardsR2",
+      "bytes": 6845660,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/Resolve334All37Final",
+      "bytes": 6840858,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/ForgeAlpha333All37",
+      "bytes": 6834321,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/ForgeItem332All37R2",
+      "bytes": 6813043,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/ForgeItem332All37",
+      "bytes": 6810492,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/NewCards306",
+      "bytes": 6761397,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/ForgeAlpha333",
+      "bytes": 6564507,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/Studio295_OneD_open",
+      "bytes": 6551183,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/Studio294_OneD_open",
+      "bytes": 6472991,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/MotionTimeScale296_Sync73_open",
+      "bytes": 6438827,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorAdditive297_Layer8_open",
+      "bytes": 6438578,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorMultiLayer298_Layers7_8_73_open",
+      "bytes": 6436861,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorLayerClock299_Layers7_8_73_open",
+      "bytes": 6430188,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorParallelFade303_Layers7_8_73_open",
+      "bytes": 6406293,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorRestart300_Layers7_8_73_open",
+      "bytes": 6374020,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorLayerFade302_Layers7_8_73_open",
+      "bytes": 6367908,
+      "GiB": 0.006
+    },
+    {
+      "path": "Converted/_user_check2",
+      "bytes": 6289696,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/Animator291_Layer_open",
+      "bytes": 6231989,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/BadShotInput",
+      "bytes": 6205058,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/NewCards309Regression166",
+      "bytes": 6148159,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimatorCrossFade301_BaseCrossFade_open",
+      "bytes": 6097071,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/Animator291_OneD_open",
+      "bytes": 6093697,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/SkelOutlineTrialAlice",
+      "bytes": 6052224,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/Studio293_OneD_open",
+      "bytes": 6041589,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/Animator292_OneD_open",
+      "bytes": 6011776,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/RendererPivotWideDiag",
+      "bytes": 6006847,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/BodyDynamics287_Walk_open",
+      "bytes": 5981632,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/AnimationCatalog274",
+      "bytes": 5970056,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/HandShapes275",
+      "bytes": 5967420,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/MouthFbs276",
+      "bytes": 5966487,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/MouthBasis277",
+      "bytes": 5959529,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/SkinOutline281",
+      "bytes": 5959174,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/MouthMaterial278",
+      "bytes": 5956648,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/EyeClamp279",
+      "bytes": 5956445,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/HeadFbs280",
+      "bytes": 5955978,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/MainItem316NativeTextureAPI",
+      "bytes": 5954494,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/FaceControls282",
+      "bytes": 5941992,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/EyeGaze284_open",
+      "bytes": 5939475,
+      "GiB": 0.006
+    },
+    {
+      "path": "DebugShots/FaceTime283_half",
+      "bytes": 5925092,
+      "GiB": 0.006
+    },
+    {
+      "path": "Tests/Brow321Review",
+      "bytes": 5901356,
+      "GiB": 0.005
+    },
+    {
+      "path": "DebugShots/FaceControls282",
+      "bytes": 5886515,
+      "GiB": 0.005
+    },
+    {
+      "path": "Tests/NewCards306AccessoryBody",
+      "bytes": 5785772,
+      "GiB": 0.005
+    },
+    {
+      "path": "Logs/EyeShader286",
+      "bytes": 5785550,
+      "GiB": 0.005
+    },
+    {
+      "path": "Converted/_card",
+      "bytes": 5776160,
+      "GiB": 0.005
+    },
+    {
+      "path": "DebugShots/HPlayback335RhiWarmR3",
+      "bytes": 5697575,
+      "GiB": 0.005
+    },
+    {
+      "path": "DebugShots/HPlayback335RhiFinal017",
+      "bytes": 5696765,
+      "GiB": 0.005
+    },
+    {
+      "path": "Tests/Collider355",
+      "bytes": 5696580,
+      "GiB": 0.005
+    },
+    {
+      "path": "Tests/NewCards306Accessory",
+      "bytes": 5643648,
+      "GiB": 0.005
+    },
+    {
+      "path": "Converted/_profile_shape",
+      "bytes": 5605713,
+      "GiB": 0.005
+    },
+    {
+      "path": "Converted/_user_check_o3",
+      "bytes": 5458823,
+      "GiB": 0.005
+    },
+    {
+      "path": "Converted/_user_check4",
+      "bytes": 5458725,
+      "GiB": 0.005
+    },
+    {
+      "path": "Converted/_user_check",
+      "bytes": 5458725,
+      "GiB": 0.005
+    },
+    {
+      "path": "DebugShots/NewCards309Regression165",
+      "bytes": 5344744,
+      "GiB": 0.005
+    },
+    {
+      "path": "DebugShots/MaskOrientationAll",
+      "bytes": 5339173,
+      "GiB": 0.005
+    },
+    {
+      "path": "Converted/_slot_test",
+      "bytes": 5315060,
+      "GiB": 0.005
+    },
+    {
+      "path": "ShaderDiag/March",
+      "bytes": 5313353,
+      "GiB": 0.005
+    },
+    {
+      "path": "DebugShots/NewCards306Regression154",
+      "bytes": 5210055,
+      "GiB": 0.005
+    },
+    {
+      "path": "Tests/Studio293Identity",
+      "bytes": 5094155,
+      "GiB": 0.005
+    },
+    {
+      "path": "Tests/Studio293Sampler",
+      "bytes": 5093985,
+      "GiB": 0.005
+    },
+    {
+      "path": "Tests/NewCards306EyeNative",
+      "bytes": 4782749,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/ClothesComponent341Final",
+      "bytes": 4682980,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/NativeNormalBody342Final",
+      "bytes": 4676008,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/Overlay343Final",
+      "bytes": 4671941,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/NativeTexture342Final",
+      "bytes": 4670476,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskFive",
+      "bytes": 4524863,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskFinalFive",
+      "bytes": 4522500,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/Clothes331All37R2",
+      "bytes": 4513010,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/Animator292Schema",
+      "bytes": 4512135,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairAlphaMaskAllCards",
+      "bytes": 4502343,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairShaderDefaultsAllCards",
+      "bytes": 4501251,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BodyOvertexAlignedThree",
+      "bytes": 4497712,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/NoFakeNippleAllCards",
+      "bytes": 4497087,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HeadSingleScaleThree",
+      "bytes": 4497053,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairPassStateAllCards",
+      "bytes": 4496643,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BodyCreateColorsAllCards",
+      "bytes": 4495486,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HeadIsotropicThree",
+      "bytes": 4493875,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairPassOutlineAllCards",
+      "bytes": 4493657,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/Male330FemaleRegression",
+      "bytes": 4466905,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairRim312AB191",
+      "bytes": 4435817,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/GpuSkinFaceCenteredAllCards",
+      "bytes": 4398024,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairCameraLightAllCards",
+      "bytes": 4386549,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/FinalHairLightStudioCullFresh",
+      "bytes": 4364656,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/NewCards306Renderer150",
+      "bytes": 4349325,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/AlignedColorMaskAllCards",
+      "bytes": 4344690,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/FaceMeAllCards",
+      "bytes": 4339288,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/FaceKsoxSrgbAllCards",
+      "bytes": 4334199,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/FaceKsoxRuntimeOrder",
+      "bytes": 4333761,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairRim312AB190",
+      "bytes": 4325809,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairDefaults312AB189",
+      "bytes": 4324910,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairDefaults312AB183",
+      "bytes": 4277296,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HPlayback335RhiCold",
+      "bytes": 4270027,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairBasis312AB180",
+      "bytes": 4267382,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/GpuSkinFinalAllCards",
+      "bytes": 4177395,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/NewCards306EyeNative2",
+      "bytes": 4176478,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HeadResolveTintValidation",
+      "bytes": 4158673,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/Neck317Controls",
+      "bytes": 4135070,
+      "GiB": 0.004
+    },
+    {
+      "path": "MaterialStats",
+      "bytes": 4088066,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeHeadAccessoryFraming",
+      "bytes": 3980066,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeKoikanoCull",
+      "bytes": 3976621,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeKoikanoCameraLight",
+      "bytes": 3973972,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/UvTangentNormalMapFailed",
+      "bytes": 3951857,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/UvTangentNormalConvertedFailed",
+      "bytes": 3945807,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeSkinOutlineDetail",
+      "bytes": 3941597,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeSkinLineDepth",
+      "bytes": 3939295,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeSkinOutlineFragment",
+      "bytes": 3938128,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeForgeOpaqueFaceNormal",
+      "bytes": 3937919,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeUvTangentNormalMap",
+      "bytes": 3937172,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeForgeLightDirectionDiag",
+      "bytes": 3937172,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeSkinOutlineCamera",
+      "bytes": 3936193,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeMakerClothesLight",
+      "bytes": 3934891,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeForgeSkinCull",
+      "bytes": 3934476,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/AfterFaceNormalMask",
+      "bytes": 3933739,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/Skin327",
+      "bytes": 3933088,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeClothesOcclusionRamp",
+      "bytes": 3932679,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeIBLOpaque",
+      "bytes": 3932465,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeMakerSkinLightDirection",
+      "bytes": 3931576,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeIBLDirectDiffuse",
+      "bytes": 3931576,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/MakerSkinFixedFront",
+      "bytes": 3931276,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/FaceTime283",
+      "bytes": 3929739,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeForgeNormalBlend",
+      "bytes": 3928211,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeFaceAtlasNormalize",
+      "bytes": 3924789,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeMainOpaqueNormal",
+      "bytes": 3923534,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeFaceNormalMask",
+      "bytes": 3922875,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeSkinLineBlue",
+      "bytes": 3916865,
+      "GiB": 0.004
+    },
+    {
+      "path": "Tests/EyeLook285",
+      "bytes": 3909746,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/AfterLineMaskST",
+      "bytes": 3901443,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinOutlineWithoutMask",
+      "bytes": 3897386,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SourceTangentFinal",
+      "bytes": 3874611,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeClothesSpec",
+      "bytes": 3869751,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeTposeFrame",
+      "bytes": 3865330,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/ClothesBaseNormalOn",
+      "bytes": 3863936,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeMaterialCopyFinal",
+      "bytes": 3861022,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/MaterialEditorNormalFinal",
+      "bytes": 3851424,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/StableRendererFinal",
+      "bytes": 3848628,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeTextureST",
+      "bytes": 3848592,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/RuntimeLimbFinal",
+      "bytes": 3847754,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeCameraLight",
+      "bytes": 3847754,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeReferenceBasis",
+      "bytes": 3847638,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/ExactPropsFinal",
+      "bytes": 3847524,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/NativeMaskUVFinal",
+      "bytes": 3847309,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/RendererMaterialFinal",
+      "bytes": 3847286,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeMaterialEditorCopy",
+      "bytes": 3846427,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/ClothesNormalBefore",
+      "bytes": 3845277,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeKanoRampFloor",
+      "bytes": 3844413,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/AuthTangent",
+      "bytes": 3844413,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/RestNormalAB",
+      "bytes": 3843513,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/ClothesOutlineAfter",
+      "bytes": 3843375,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/Accessory318Controls",
+      "bytes": 3842296,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeRendererPivot",
+      "bytes": 3842249,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinLineBefore",
+      "bytes": 3842151,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinSpecularBefore",
+      "bytes": 3839917,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/FrontHairAllCards",
+      "bytes": 3826877,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinOutlineBefore",
+      "bytes": 3826631,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeFrontHairBlendFix",
+      "bytes": 3826607,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/SkinDiffuseBefore",
+      "bytes": 3822623,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/BeforeMaterialEditorShader",
+      "bytes": 3803398,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/FrontHairCopyOnlyFinal",
+      "bytes": 3802842,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/Hair322LegacyControls",
+      "bytes": 3792173,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/MainItem316FaceLayerReverse",
+      "bytes": 3772184,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/MainItem316FaceLayerForward",
+      "bytes": 3771334,
+      "GiB": 0.004
+    },
+    {
+      "path": "DebugShots/HairGlossFallbackBefore",
+      "bytes": 3755677,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/ClothesRampBefore",
+      "bytes": 3755677,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/EyeShader286",
+      "bytes": 3696507,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/FaceOverlayCopyOnly",
+      "bytes": 3651221,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/GameRuntimeYuuka",
+      "bytes": 3628469,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Hair323ShoesOutdoorControls",
+      "bytes": 3627557,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Hair323TextureInitOrder",
+      "bytes": 3626875,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Hair323InputOrderControls",
+      "bytes": 3625633,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crashes/UECC-Windows-2799017F4D09AEF32EE505818010B87F_0000",
+      "bytes": 3604497,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/GameSitMouthRigidK384",
+      "bytes": 3517865,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/StaticBodyBefore",
+      "bytes": 3501439,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/RefBoneBefore",
+      "bytes": 3492052,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/SkinOriginYuuka",
+      "bytes": 3474910,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/QuadBefore",
+      "bytes": 3468669,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairNormalBefore",
+      "bytes": 3468669,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/PartialHair915RimGeneral",
+      "bytes": 3371186,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Hair323ShadowControls",
+      "bytes": 3350054,
+      "GiB": 0.003
+    },
+    {
+      "path": "EditedCards",
+      "bytes": 3315787,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairRamp312AB186",
+      "bytes": 3313559,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairColorRows204AB",
+      "bytes": 3312145,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairShadowDirection203AB",
+      "bytes": 3308678,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairOutline312AB188",
+      "bytes": 3306230,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairLight312AB184",
+      "bytes": 3283159,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Texture324FinalAll34Contacts",
+      "bytes": 3263133,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Hair323ShoesFinalAll34Contacts",
+      "bytes": 3262873,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Hair323GpuFinalAll34Contacts",
+      "bytes": 3261250,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Hair322FinalAll34Contacts",
+      "bytes": 3261133,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Hair323FinalAll34Contacts",
+      "bytes": 3260462,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/HairColor312AB187",
+      "bytes": 3248648,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Emblem343Native",
+      "bytes": 3227179,
+      "GiB": 0.003
+    },
+    {
+      "path": "APNGCards/SkinnedViews",
+      "bytes": 3133849,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/NewCards306AddedNative2",
+      "bytes": 3117349,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Male330FinalR4",
+      "bytes": 3115940,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Male330FinalR5",
+      "bytes": 3115065,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/DumpOutfit0FourViews",
+      "bytes": 3096933,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/K384FaceMaskFixed",
+      "bytes": 3077494,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/SkinHsv307Final158R2",
+      "bytes": 3074556,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/MainItem310Regression172",
+      "bytes": 3072760,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/TextureMips308Final161",
+      "bytes": 3072517,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/MainItem310Regression170",
+      "bytes": 3050982,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/AssetImport366",
+      "bytes": 3033490,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/NewCards306AddedNative",
+      "bytes": 3031060,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/SkinHsv307Final",
+      "bytes": 3028314,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcCoBot",
+      "bytes": 3020023,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke170",
+      "bytes": 3009869,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crashes/UECC-Windows-FA759BF441DC38B467A1F5802602CAE9_0000",
+      "bytes": 2999879,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/StudioAmbient312AB178",
+      "bytes": 2989356,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcOo/oo_base",
+      "bytes": 2984152,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Hair322ExpandedSamplerR2Contacts",
+      "bytes": 2958837,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/Hair322ExpandedFinalContacts",
+      "bytes": 2957422,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/SexFaces46Two",
+      "bytes": 2947550,
+      "GiB": 0.003
+    },
+    {
+      "path": "Tests/NewCards306Native",
+      "bytes": 2942415,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/MainItem316EyeOrderRepro",
+      "bytes": 2939368,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Texture324ControlsR2",
+      "bytes": 2920113,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Texture324Controls",
+      "bytes": 2919546,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crowd/GpuModule-GameLowR1",
+      "bytes": 2911494,
+      "GiB": 0.003
+    },
+    {
+      "path": "ShaderDxbcEC278/KK_Plugins.Resources.EC_Shaders",
+      "bytes": 2849554,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Male330FinalR3",
+      "bytes": 2820168,
+      "GiB": 0.003
+    },
+    {
+      "path": "MarchPose4",
+      "bytes": 2808086,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/ClipIdentityShortFrameCentered",
+      "bytes": 2791797,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crashes/UECC-Windows-6E0692FA4A1490726E9CEA8EE193766A_0001",
+      "bytes": 2787576,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/NewCards306Cull152",
+      "bytes": 2783228,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crashes/UECC-Windows-A6D60A1A415CE44130613CB714920CBF_0000",
+      "bytes": 2773005,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/FaceKsoxOrderAllCards",
+      "bytes": 2772682,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/ForgeOpaque340Final",
+      "bytes": 2747761,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/MaterialCopyAB",
+      "bytes": 2745263,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/DenseClockWalkTwo",
+      "bytes": 2730665,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/StudioAlphaCullBackOtherCards",
+      "bytes": 2730139,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/StudioAlphaMaskLerpOtherCards",
+      "bytes": 2728261,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crashes/UECC-Windows-36DE45B941522970488373BD423E79F3_0000",
+      "bytes": 2711377,
+      "GiB": 0.003
+    },
+    {
+      "path": "Crashes/UECC-Windows-7339C0C1486080700E060D81F27A8EC2_0000",
+      "bytes": 2695330,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/Male330FinalR2",
+      "bytes": 2691704,
+      "GiB": 0.003
+    },
+    {
+      "path": "DebugShots/SkinRampMarchK384",
+      "bytes": 2674680,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/MainItemPlus310",
+      "bytes": 2674351,
+      "GiB": 0.002
+    },
+    {
+      "path": "ShaderDxbcME/KK_Plugins.Resources.EC_Shaders",
+      "bytes": 2670303,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/MainItem315FinalScene074",
+      "bytes": 2609447,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/MainItem315SamplingScene074",
+      "bytes": 2608474,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/MainItem315SceneDepth074",
+      "bytes": 2607798,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/ControllerSceneFixed",
+      "bytes": 2601332,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/BodyVer02Colliders264",
+      "bytes": 2601242,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/ControllerOverrideC33",
+      "bytes": 2600575,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/BodyVer02Controller262",
+      "bytes": 2599755,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/BodyVer02GameFix263",
+      "bytes": 2598896,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/Male330Final",
+      "bytes": 2547943,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/PartialHairColor313",
+      "bytes": 2545106,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-10606D6946E1C1A9C4DEEF944C100E9A_0000",
+      "bytes": 2533538,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/SkinNormalTwo",
+      "bytes": 2529442,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/SkinBitangentTwo",
+      "bytes": 2527151,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-02870FCB4EA2D8ADB38B95B23CD9D427_0000",
+      "bytes": 2521162,
+      "GiB": 0.002
+    },
+    {
+      "path": "MarchRdiag10",
+      "bytes": 2520510,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/FrameClockFixed",
+      "bytes": 2500913,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/RuntimeDoubleFollowFixed",
+      "bytes": 2499745,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/ClipIdentityPose04V2",
+      "bytes": 2487120,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskTwo",
+      "bytes": 2473801,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/SkinNormalAlphaFixedTwo",
+      "bytes": 2473020,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/GameMouthSourceTwo",
+      "bytes": 2461188,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/UnrealSharedWarmup260",
+      "bytes": 2454041,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/RuntimeDoubleFollowBefore",
+      "bytes": 2452650,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-F2004E414F0C5A59A9F56081D26A70E6_0000",
+      "bytes": 2450998,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/Hair322ProgressContacts",
+      "bytes": 2445776,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/FaceTime283_open",
+      "bytes": 2442240,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/SkinBitangentNoCacheTwo",
+      "bytes": 2441442,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/FaceTime283_closed",
+      "bytes": 2407121,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-7997FE6C454FA09F187AD186001C76AB_0000",
+      "bytes": 2404053,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-379F67C345246C35A57D2EBB463787DA_0000",
+      "bytes": 2403577,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-DB04492B46BD112C0D3722A300929CA7_0000",
+      "bytes": 2402897,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/ExtraDumpCards",
+      "bytes": 2393084,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/BodyDynamics287",
+      "bytes": 2373082,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/NewCards309NoOutline161",
+      "bytes": 2359494,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-F9BAD89842070621B66E89B3BE8C15D6_0000",
+      "bytes": 2354750,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/MainItem316Smoke",
+      "bytes": 2353951,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HPlayback337Gallery",
+      "bytes": 2348393,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-39195ABF4C51FC0A9373C5AB64CA481A_0000",
+      "bytes": 2344901,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/ClipIdentityGravure",
+      "bytes": 2331991,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-D7595AB14CF6F83653F542844EEEBBAC_0000",
+      "bytes": 2307812,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/PartialHair915NoLut",
+      "bytes": 2224530,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/Skin329Resources",
+      "bytes": 2196685,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShader/NormCompare",
+      "bytes": 2183181,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/Hair323LutDisabledCounter",
+      "bytes": 2169198,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-4671A6F74D8226AEAC2A3C924C278DA0_0000",
+      "bytes": 2161443,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-E0965D36412F637A09BA5194A804D142_0000",
+      "bytes": 2154940,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-3E0C89FB438D96D243F9E3AF4D006CED_0000",
+      "bytes": 2154002,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-A91840DA4FB5E16CA52FC0AE5A047BDE_0000",
+      "bytes": 2148035,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-AFA314DF461170DE57BFDEAB739B681C_0000",
+      "bytes": 2139644,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairNormal312Final176",
+      "bytes": 2138559,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-091908BE4E405F0B050063918BD19F8D_0000",
+      "bytes": 2069123,
+      "GiB": 0.002
+    },
+    {
+      "path": "Logs/EyeLook285",
+      "bytes": 2065574,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-B05181824837AC8BBF2B9880D9701FCF_0000",
+      "bytes": 2064362,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-6954CAC44E073F72C0782899139E1D5D_0000",
+      "bytes": 2063009,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairRim312Final191",
+      "bytes": 2057695,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-0EE647194B3002989E0E5FA21A43AFAE_0000",
+      "bytes": 2048088,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/Hair322Controls",
+      "bytes": 2047634,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/Hair322ControlsR2",
+      "bytes": 2040083,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-496A47E74811DAECB0378BA33E3221AE_0000",
+      "bytes": 2035524,
+      "GiB": 0.002
+    },
+    {
+      "path": "ShaderDiag/LUT",
+      "bytes": 2022032,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-685581B74E23EF196E88D0B85979555A_0000",
+      "bytes": 2018146,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/NewCards306Claws",
+      "bytes": 2015415,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-794BAE284B8523DF541721B5A99A62FC_0000",
+      "bytes": 2015343,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/ShaderProperty194Final",
+      "bytes": 2010305,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/ShaderProperty194",
+      "bytes": 2010284,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairOutline312Final188",
+      "bytes": 2010015,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/DetailMask195Final",
+      "bytes": 2009873,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairRim312Final193",
+      "bytes": 2009782,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairRampUV202Final",
+      "bytes": 2007952,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/BrowOrientation198Final",
+      "bytes": 2007632,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairAnotherRamp201Final",
+      "bytes": 2007544,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairAnotherRamp199Final",
+      "bytes": 2007383,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/MaskSource197Final",
+      "bytes": 2003004,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairBasis312Final180",
+      "bytes": 2001884,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairColor312Final187",
+      "bytes": 2001574,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairGloss312Final182",
+      "bytes": 2001420,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairRamp312Final186",
+      "bytes": 1998801,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/GameSitResetK384",
+      "bytes": 1997695,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairLight312Final184",
+      "bytes": 1997469,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/StudioAmbient312Final179",
+      "bytes": 1995044,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairAnotherRamp200Final",
+      "bytes": 1994249,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairDefaults312Final183",
+      "bytes": 1991833,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/HairRim312Final192",
+      "bytes": 1989687,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-EF5D0E2F426113811B258CB0912EBC86_0000",
+      "bytes": 1975566,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-EC1EEF7B47A74F9D118C7E9733DF23AC_0000",
+      "bytes": 1974406,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-B2F3CAFF45254CF4C29CE0AA4AAD5942_0000",
+      "bytes": 1971491,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-ECD7EAFA4C971D0A3072E4A9D1A6C88C_0000",
+      "bytes": 1961255,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/Animator291",
+      "bytes": 1958424,
+      "GiB": 0.002
+    },
+    {
+      "path": "ShaderDxbc/mm_base",
+      "bytes": 1918307,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-28D0646D4884127E878F44AA1BA4F27D_0000",
+      "bytes": 1901515,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-8D599B9B45D0792D8D2F98BFF19982F6_0000",
+      "bytes": 1890762,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-00AD62714501D9F34D16589C52358B83_0000",
+      "bytes": 1873416,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/Brow321SlotInputs",
+      "bytes": 1858979,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/Brow321CachedSlots",
+      "bytes": 1840905,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/AliceStudioMaskInputs",
+      "bytes": 1830532,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/NewCards306CollarSource",
+      "bytes": 1747404,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-414682E448039F6488FADEA7AB2A224C_0000",
+      "bytes": 1731700,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/NewCards309Baseline161",
+      "bytes": 1724406,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/MainItem316LargestDeltaRepeat",
+      "bytes": 1715826,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/EyeRim320Inputs",
+      "bytes": 1701048,
+      "GiB": 0.002
+    },
+    {
+      "path": "Crashes/UECC-Windows-1B2816854B0D304A7595A181426E2005_0000",
+      "bytes": 1675298,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/NewCards306Base153",
+      "bytes": 1674490,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/StudioAlphaMaskLerpAlice",
+      "bytes": 1637639,
+      "GiB": 0.002
+    },
+    {
+      "path": "Converted/_ffi_vanilla",
+      "bytes": 1636527,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/StudioAlphaCullBackAlice",
+      "bytes": 1636019,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/AliceSideFaceCenter",
+      "bytes": 1629778,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/AliceAlignedColorMaskShot",
+      "bytes": 1618230,
+      "GiB": 0.002
+    },
+    {
+      "path": "DebugShots/StudioAlphaForwardBaseAlice",
+      "bytes": 1617702,
+      "GiB": 0.002
+    },
+    {
+      "path": "Tests/NewCards306Final154",
+      "bytes": 1606763,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ForgeOpaque340Deployed",
+      "bytes": 1602312,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/PhoebeOpaque340",
+      "bytes": 1601736,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Final155",
+      "bytes": 1598247,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/GameSitHeadFollowK384",
+      "bytes": 1596025,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/PoseKeyYuuka",
+      "bytes": 1592267,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Animator290UI",
+      "bytes": 1591180,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Final157",
+      "bytes": 1588765,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Animator289UI",
+      "bytes": 1586943,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/PhoebeDraw339Final",
+      "bytes": 1585813,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Eyeline320Inputs",
+      "bytes": 1580484,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/PhoebeDraw339",
+      "bytes": 1578097,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/MainItem316FinalAllCards",
+      "bytes": 1575759,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/TextureMipFloorAllCards",
+      "bytes": 1575627,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/MainItem315FinalAllCardsR2",
+      "bytes": 1575522,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/EyeRim320FinalAllCards",
+      "bytes": 1575448,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/MainItem316FinalAllCardsR2",
+      "bytes": 1575251,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Neck317FinalAllCards",
+      "bytes": 1574910,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Brow321FinalContacts",
+      "bytes": 1574827,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke168",
+      "bytes": 1570170,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke169",
+      "bytes": 1567196,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceMeMaskYuukaNoCache",
+      "bytes": 1552540,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke167R3",
+      "bytes": 1529876,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceMeMaskYuukaNoFace",
+      "bytes": 1524093,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310StudioLight169",
+      "bytes": 1510216,
+      "GiB": 0.001
+    },
+    {
+      "path": "ShaderDxbcKKS/ibl_alpha_props",
+      "bytes": 1505274,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchNoLutProbe",
+      "bytes": 1498080,
+      "GiB": 0.001
+    },
+    {
+      "path": "MarchQuick2",
+      "bytes": 1493894,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Hair322Shader",
+      "bytes": 1485391,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/ExternalBody288",
+      "bytes": 1485334,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Shore332FullProgram",
+      "bytes": 1472652,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/YuukaTripleP48",
+      "bytes": 1462841,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Regression157",
+      "bytes": 1457634,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Clothes331All37",
+      "bytes": 1455584,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Resolve334All37",
+      "bytes": 1445233,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Regression155",
+      "bytes": 1437138,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-57C2EA8540D492B464DE70BDC9A36FC1_0001",
+      "bytes": 1431016,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-57C2EA8540D492B464DE70BDC9A36FC1_0000",
+      "bytes": 1430508,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AliceGpuSkinNoScaleNoOverlay",
+      "bytes": 1425915,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/RendererStates343",
+      "bytes": 1419452,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-0372AE6D4CD68B27C7E9D7A255B5FB8D_0000",
+      "bytes": 1416155,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceMeMaskYuukaNoOutline",
+      "bytes": 1411241,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-8D87585E4B089910C3223591D12833B5_0000",
+      "bytes": 1410526,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-F027B32648E2D532205EEA9BFE1890C9_0000",
+      "bytes": 1410442,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-5BD905554F32A8453269BD875D44D4DE_0000",
+      "bytes": 1410247,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Shore332NullNormal",
+      "bytes": 1406257,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Shore332SceneRampR3",
+      "bytes": 1405666,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-AE9852BA47444AD27EC9939743E471C7_0000",
+      "bytes": 1404370,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/BeforeIBLSHGamma",
+      "bytes": 1398364,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-4BB4806B47F9A37F53252DB1BD2E4AC4_0000",
+      "bytes": 1397223,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-DEDC509F4D4C4C2CC08328B51B77DA41_0000",
+      "bytes": 1396826,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-6E0692FA4A1490726E9CEA8EE193766A_0000",
+      "bytes": 1394759,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Tatsumaki333Fixed",
+      "bytes": 1393940,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-8C8573A24D2B37421A7FB38D2BD90829_0000",
+      "bytes": 1392236,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/BeforeIBLRenderState",
+      "bytes": 1391320,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-A364A7124FA49CC0996C92A707A4930B_0000",
+      "bytes": 1386756,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AliceGpuSkinNoScaleStandardCamera",
+      "bytes": 1386334,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NanamiHideHair103",
+      "bytes": 1385259,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/EyeNoZAllOffAlice",
+      "bytes": 1376771,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/BeforeEyeDepthAB",
+      "bytes": 1375530,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceOverlayV4",
+      "bytes": 1372980,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ControllerOverrideC33Cpu",
+      "bytes": 1367915,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AliceGpuSkinNoScale",
+      "bytes": 1362767,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchPortraitOrtho",
+      "bytes": 1361646,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/LegacyTangentFive",
+      "bytes": 1349281,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MinaseItemMaskUvAB",
+      "bytes": 1346648,
+      "GiB": 0.001
+    },
+    {
+      "path": "BpGeneratorUltimate",
+      "bytes": 1346638,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceOverlayV2",
+      "bytes": 1344126,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceOverlayV1",
+      "bytes": 1343910,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/MainItem310Final170",
+      "bytes": 1343848,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceOverlayV3",
+      "bytes": 1342898,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NoAuthTangent",
+      "bytes": 1342161,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards309Final166",
+      "bytes": 1335429,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards309Final163",
+      "bytes": 1332806,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskActiveK091",
+      "bytes": 1330044,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskLoadedK091",
+      "bytes": 1328741,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ExpressionBustK091",
+      "bytes": 1327409,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ExpressionHandWorldK091",
+      "bytes": 1327338,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchOvertexShot",
+      "bytes": 1327211,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/MainItem310Final172",
+      "bytes": 1326812,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ExpressionElbowCameraLockedK091",
+      "bytes": 1326720,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem315Baseline",
+      "bytes": 1326461,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Shore332NoOutline",
+      "bytes": 1326279,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchHairScaleDiag",
+      "bytes": 1325539,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchOverlayAligned",
+      "bytes": 1324720,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards309Final165",
+      "bytes": 1324164,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/HairNoZ",
+      "bytes": 1323766,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchHairGameOutlineWpo",
+      "bytes": 1321303,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchHairPassThinOutline",
+      "bytes": 1310792,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair322PekoraDefaultR3",
+      "bytes": 1308396,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceGreen",
+      "bytes": 1307060,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards309Final162",
+      "bytes": 1301425,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/YuukaShadowBefore",
+      "bytes": 1298738,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/ForgeOpaque340",
+      "bytes": 1298413,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AdvSourceStandMarch",
+      "bytes": 1295555,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AdvSourceStandMarchFinal",
+      "bytes": 1293667,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryCorrectedK091",
+      "bytes": 1293026,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchBodyOverlayVisible",
+      "bytes": 1291057,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyDxRamp",
+      "bytes": 1289326,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyNoNormal",
+      "bytes": 1275294,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyLineInputsShot",
+      "bytes": 1271530,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyFullMaskFix",
+      "bytes": 1270129,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyNoDetail",
+      "bytes": 1268755,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AliceMakerCameraMatch",
+      "bytes": 1262728,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/DefaultFromWrongShotCards",
+      "bytes": 1256639,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/ForgeItem332",
+      "bytes": 1242119,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/YuukaFaceCreateRuntime",
+      "bytes": 1237380,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306EyeOracle",
+      "bytes": 1230983,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091MaskFlip",
+      "bytes": 1230983,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyNoLine",
+      "bytes": 1218602,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke167R2",
+      "bytes": 1216432,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke167",
+      "bytes": 1216171,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/StreamedCubicWalkMarch",
+      "bytes": 1213082,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyNoMasks",
+      "bytes": 1210515,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-FD6FC9954C58578A75B05ABA08547116_0000",
+      "bytes": 1208014,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/AssetImport371",
+      "bytes": 1203078,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NanamiMipFloor",
+      "bytes": 1198081,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards311StudioLight174",
+      "bytes": 1194869,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K091BodyAlbedoOnly",
+      "bytes": 1194465,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/TextureMips308Final159",
+      "bytes": 1191655,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ExpressionElbowWalkK091",
+      "bytes": 1189568,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchNoHairShaderKind",
+      "bytes": 1187514,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair322PekoraReadinessNoOutline",
+      "bytes": 1186375,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ExpressionNeckAnchorK091",
+      "bytes": 1184531,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards311Initial173",
+      "bytes": 1182032,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/EyeClamp279",
+      "bytes": 1178228,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryFixedOffK384",
+      "bytes": 1178057,
+      "GiB": 0.001
+    },
+    {
+      "path": "Crashes/UECC-Windows-3FB30442433ECF97DFF8098A0EBB7AB3_0000",
+      "bytes": 1171226,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceKsoxUvMarch",
+      "bytes": 1164929,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AliceFaceCreateRuntime",
+      "bytes": 1161799,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryFixedK384",
+      "bytes": 1161728,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ModSigK384UEHalf",
+      "bytes": 1161359,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/DrawClothesK384HalfShot",
+      "bytes": 1160927,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/StateCacheK384UEHalf",
+      "bytes": 1160129,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryCorrectedK384",
+      "bytes": 1158120,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Ver01SplitK384",
+      "bytes": 1157703,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384FaceSkinIsolation",
+      "bytes": 1157213,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskK384Half",
+      "bytes": 1155752,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384NoDetailIsolation",
+      "bytes": 1152901,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AliceOutlineBefore",
+      "bytes": 1152461,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384FaceAlbedoIsolation",
+      "bytes": 1151848,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryWalkK091",
+      "bytes": 1150148,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384ShaderInputDumpShot",
+      "bytes": 1148695,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/StateCacheK384UEWorn",
+      "bytes": 1148520,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Albedo167",
+      "bytes": 1147870,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem310Smoke167NoOutline",
+      "bytes": 1146514,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/SkinAlphaMaskDecodedK384Half",
+      "bytes": 1141233,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair322PekoraFinalColor",
+      "bytes": 1139841,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair322PekoraNoOutline",
+      "bytes": 1132000,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair322PekoraPreLight",
+      "bytes": 1131050,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384MaskFlip",
+      "bytes": 1129063,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/HPlayback336GalleryFinal",
+      "bytes": 1128695,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Alice_keiyuuFaceCreateRuntime",
+      "bytes": 1125767,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchSolidSkinShaderProbe",
+      "bytes": 1125573,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384HairAlphaShot",
+      "bytes": 1119852,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MainItem315FinalAllCards",
+      "bytes": 1115542,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/[Card] March_7th_keiyuuFaceCreateRuntime",
+      "bytes": 1108229,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchFaceCreateRuntime",
+      "bytes": 1108229,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NanamiSpecklesOutlineAB",
+      "bytes": 1105481,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NanamiNoHairMips",
+      "bytes": 1102432,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/K384NoFaceIsolation",
+      "bytes": 1101617,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ForgeCameraNormalComboMarch",
+      "bytes": 1097702,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Neck317First12",
+      "bytes": 1080036,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryOffK384",
+      "bytes": 1079481,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NoMainOpaqueNormal",
+      "bytes": 1079174,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair323MeguminControl",
+      "bytes": 1078848,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NoShadowMap",
+      "bytes": 1077544,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair322PekoraAlbedo",
+      "bytes": 1077131,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NoShadowNoDetailNoNormal",
+      "bytes": 1077010,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/UnityBitangentSignDiag",
+      "bytes": 1072382,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MakerClothesLightFailed",
+      "bytes": 1071545,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ClothesBaseNormalOff",
+      "bytes": 1071481,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ForgeFixedFrontLightDiag",
+      "bytes": 1067139,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceOutlineAB",
+      "bytes": 1063582,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NewCards311RevertSmoke175",
+      "bytes": 1062771,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Male330MipsCandidate",
+      "bytes": 1060622,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchLineSTCacheHit",
+      "bytes": 1052736,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NoShadowNoDetail",
+      "bytes": 1051695,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/BeforeFaceNormals",
+      "bytes": 1051620,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/RuntimeAccessoryWalkK384",
+      "bytes": 1045433,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair323TextureInitControl",
+      "bytes": 1045020,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchNoHairAtlasProbe",
+      "bytes": 1043652,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair323InputSingleControl",
+      "bytes": 1041590,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair323ShoesIndoorControl",
+      "bytes": 1041318,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Hair323ForceLutCounter",
+      "bytes": 1036149,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/GameClipMouthK384",
+      "bytes": 1030905,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/DumpFourViewsSmoke",
+      "bytes": 1027647,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/MultiCharacter344",
+      "bytes": 1019369,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceOutlineOff",
+      "bytes": 1012902,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Final151",
+      "bytes": 994788,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Resolve334SiestaFrozenR2",
+      "bytes": 978575,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Resolve334SiestaFrozen",
+      "bytes": 978402,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Slots148",
+      "bytes": 977829,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/HairRows205Restored",
+      "bytes": 972184,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/NewCards306NoOutline152",
+      "bytes": 961379,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Neck317R2Partial",
+      "bytes": 936080,
+      "GiB": 0.001
+    },
+    {
+      "path": "ShaderDxbcCoBot/co_bot_01",
+      "bytes": 922074,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/AnimationCatalog274UI",
+      "bytes": 914328,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/HandShapes275UI",
+      "bytes": 901449,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/SkinOutline281",
+      "bytes": 897764,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards306Regression148",
+      "bytes": 895591,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/HairGloss312AB182",
+      "bytes": 877348,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/WardrobeHeight351",
+      "bytes": 864646,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShader/ClothesSpec",
+      "bytes": 854645,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ChinInput",
+      "bytes": 854264,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ClipIdentityShortFrame",
+      "bytes": 815066,
+      "GiB": 0.001
+    },
+    {
+      "path": "Logs/ExternalBody288",
+      "bytes": 812579,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/PhoebeStates343Outfit0",
+      "bytes": 811518,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Neck317First8",
+      "bytes": 760104,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/PhoebeStates343Outfit2",
+      "bytes": 744214,
+      "GiB": 0.001
+    },
+    {
+      "path": "DiagYuuka",
+      "bytes": 740397,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/GalleryPanels304",
+      "bytes": 711449,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceMaskSource",
+      "bytes": 699551,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Hair323GlossUv",
+      "bytes": 691094,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceControls282UI",
+      "bytes": 690274,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/FaceTime283UI",
+      "bytes": 689474,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/EyeLook285UI",
+      "bytes": 687218,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Animator292UI_OneD",
+      "bytes": 686975,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Studio293UI_OneD",
+      "bytes": 685282,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/EyeGaze284UI",
+      "bytes": 682643,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/PhoebeStates343Outfit5",
+      "bytes": 681009,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Animator291UI_OneD",
+      "bytes": 679615,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/Animator291UI_Layer",
+      "bytes": 670740,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/PhoebeStates343Outfit6",
+      "bytes": 667956,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/PhoebeStates343Outfit3",
+      "bytes": 650515,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Male330FemaleRegression",
+      "bytes": 613783,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchTelephoto25Diag",
+      "bytes": 599771,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchTelephoto25",
+      "bytes": 598995,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/MarchTelephoto25FovDiag",
+      "bytes": 598945,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/PhoebeStates343Outfit1",
+      "bytes": 585212,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Skin324NativeShader",
+      "bytes": 571690,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/Brow322Shader",
+      "bytes": 567266,
+      "GiB": 0.001
+    },
+    {
+      "path": "ShaderDxbcVanillaPlus310/MainItemPlus",
+      "bytes": 550178,
+      "GiB": 0.001
+    },
+    {
+      "path": "DebugShots/ExpressionElbowK091",
+      "bytes": 543103,
+      "GiB": 0.001
+    },
+    {
+      "path": "Logs/BodyDynamics287",
+      "bytes": 541748,
+      "GiB": 0.001
+    },
+    {
+      "path": "Tests/NewCards305",
+      "bytes": 510213,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/NewCards306",
+      "bytes": 505071,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/GameSitModHeadsTwo",
+      "bytes": 496464,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/ScaleSitTwo",
+      "bytes": 496460,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/FaceSkinBefore",
+      "bytes": 491907,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/Hair322PekoraLightFactor",
+      "bytes": 478449,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/TextureMips308",
+      "bytes": 463043,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbc",
+      "bytes": 445425,
+      "GiB": 0.0
+    },
+    {
+      "path": "Converted/_face_raw",
+      "bytes": 442249,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Male330FinalR5",
+      "bytes": 438185,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow321CachedBrows",
+      "bytes": 429541,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Male330FinalR3",
+      "bytes": 398543,
+      "GiB": 0.0
+    },
+    {
+      "path": "Converted/_vanilla",
+      "bytes": 383005,
+      "GiB": 0.0
+    },
+    {
+      "path": "Converted",
+      "bytes": 382799,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/GameRuntimeAlice",
+      "bytes": 367881,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/NewCards305Solo",
+      "bytes": 351784,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Neck317First4",
+      "bytes": 349977,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/AssetImport364",
+      "bytes": 342754,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Speech356",
+      "bytes": 330558,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow319CachedInputs",
+      "bytes": 322826,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow319FixedInputs",
+      "bytes": 322783,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/EyeRim320BrowInputs",
+      "bytes": 322729,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow319FixedInputsR2",
+      "bytes": 322729,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Hair322LegacyContacts",
+      "bytes": 302315,
+      "GiB": 0.0
+    },
+    {
+      "path": "spike",
+      "bytes": 287492,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Body342AuthoredSources",
+      "bytes": 280200,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Hair323ShadowControlsContacts",
+      "bytes": 253694,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/DumpFourViewsSmoke",
+      "bytes": 252922,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS/ibl_alpha_v2",
+      "bytes": 244667,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Skin326",
+      "bytes": 241010,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/HandShapes275",
+      "bytes": 237610,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Eyeline320KK226176Inputs",
+      "bytes": 228942,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbc/EC_Shaders",
+      "bytes": 226362,
+      "GiB": 0.0
+    },
+    {
+      "path": "Reports",
+      "bytes": 225104,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/HairOutlineBefore",
+      "bytes": 224780,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS",
+      "bytes": 203564,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Png334Source",
+      "bytes": 202901,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/ExpressionHandUnityEulerMarch",
+      "bytes": 189988,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/ExpressionHandWorldMarch",
+      "bytes": 189796,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/SceneModeHOverrideMarch",
+      "bytes": 189562,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS/EC_Shaders",
+      "bytes": 187477,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderSource/KKShadersRecreated",
+      "bytes": 186690,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderReference/KKShadersRecreated",
+      "bytes": 186690,
+      "GiB": 0.0
+    },
+    {
+      "path": "External/KKShadersRecreated",
+      "bytes": 186690,
+      "GiB": 0.0
+    },
+    {
+      "path": "Config/CrashReportClient",
+      "bytes": 186420,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/NewCards306ClothesColor157",
+      "bytes": 182939,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/SkinHueApprox",
+      "bytes": 172062,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/AssetImport369",
+      "bytes": 167005,
+      "GiB": 0.0
+    },
+    {
+      "path": "Config/WindowsEditor",
+      "bytes": 159023,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow319ResolvedInputs",
+      "bytes": 136931,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/AssetImport367",
+      "bytes": 113126,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/MainItem315Generated",
+      "bytes": 106950,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcEC278",
+      "bytes": 91352,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcME",
+      "bytes": 89888,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDiag",
+      "bytes": 89385,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDebugInfo/PCD3D_SM5",
+      "bytes": 87077,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow320KK226176Inputs",
+      "bytes": 85785,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow322CounterCached",
+      "bytes": 83693,
+      "GiB": 0.0
+    },
+    {
+      "path": "DebugShots/HairFrontAsm",
+      "bytes": 68835,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/MatrixRenderer-MatrixR2",
+      "bytes": 57305,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Eyeline320Asm",
+      "bytes": 54586,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcOo",
+      "bytes": 46520,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/ModulePins",
+      "bytes": 45845,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/MatrixRenderer-MatrixDebugR1",
+      "bytes": 40642,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow320KK226176Resolved",
+      "bytes": 39353,
+      "GiB": 0.0
+    },
+    {
+      "path": "anim_export/__pycache__",
+      "bytes": 37896,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow319Provenance",
+      "bytes": 37761,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Texture324SourceIdentity",
+      "bytes": 34577,
+      "GiB": 0.0
+    },
+    {
+      "path": "External/KKShadersPlus",
+      "bytes": 29786,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/PairedHeight349",
+      "bytes": 29056,
+      "GiB": 0.0
+    },
+    {
+      "path": "MultiOutfitReport",
+      "bytes": 28968,
+      "GiB": 0.0
+    },
+    {
+      "path": "MultiOutfitSkinnedReport",
+      "bytes": 28967,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGCardReport",
+      "bytes": 28286,
+      "GiB": 0.0
+    },
+    {
+      "path": "IndependentCards/AutomationReport-BuiltinV2-346095",
+      "bytes": 27568,
+      "GiB": 0.0
+    },
+    {
+      "path": "IndependentCards/AutomationReport-Builtin346095",
+      "bytes": 27568,
+      "GiB": 0.0
+    },
+    {
+      "path": "IndependentCards/AutomationReport-346095",
+      "bytes": 27193,
+      "GiB": 0.0
+    },
+    {
+      "path": "IndependentCards/AutomationReport",
+      "bytes": 27192,
+      "GiB": 0.0
+    },
+    {
+      "path": "IndependentCards/AutomationReport-BuiltinV2-Edited346095",
+      "bytes": 23850,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGEditedReport",
+      "bytes": 23850,
+      "GiB": 0.0
+    },
+    {
+      "path": "APNGCodecReport",
+      "bytes": 23829,
+      "GiB": 0.0
+    },
+    {
+      "path": "UltimateCoPilot/Learning",
+      "bytes": 23436,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/HairShade199Asm",
+      "bytes": 23017,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbc/Composite306",
+      "bytes": 21936,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS/mod1",
+      "bytes": 21158,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Hair322PekoraOtherNative",
+      "bytes": 19728,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/NewCards306Verification",
+      "bytes": 18908,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceCollision273-77416",
+      "bytes": 18754,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceCollision273-50480",
+      "bytes": 18754,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceCollision273-38316",
+      "bytes": 18754,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/WardrobePhysics352",
+      "bytes": 17292,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/SpeechDisplay357",
+      "bytes": 15041,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS/ibl_alpha",
+      "bytes": 14015,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Brow320KK226176Provenance",
+      "bytes": 11993,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/NativeTexture342Final",
+      "bytes": 11985,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/MatrixRenderer-MatrixR1",
+      "bytes": 11102,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/Build420Manifests",
+      "bytes": 8759,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/NoClothDynamicsNativeR1",
+      "bytes": 8290,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ClothesComponent341",
+      "bytes": 7720,
+      "GiB": 0.0
+    },
+    {
+      "path": "UltimateCoPilot/Subagents",
+      "bytes": 7466,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/BodyArticulation347",
+      "bytes": 6953,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Clothes331ArgbSource",
+      "bytes": 6335,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS/normal_convert",
+      "bytes": 5516,
+      "GiB": 0.0
+    },
+    {
+      "path": "External/KKShadersPlusMaintainer310",
+      "bytes": 4534,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/D4C90FF64D4E2034F214D485DBE130D0",
+      "bytes": 4372,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/9F337B10499A742882266CBA6995AA3C",
+      "bytes": 4140,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/Manifests731",
+      "bytes": 3789,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/ManifestBefore743Pinned",
+      "bytes": 3789,
+      "GiB": 0.0
+    },
+    {
+      "path": "ShaderDxbcKKS/mod0",
+      "bytes": 3277,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/E9A247A44B8EB90997E676957C8660AD",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/E1E552BF47DA6404C1D240BEA6D20CE7",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/DC301B294F0F179C8C8F0FB57CF404BE",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/BA448696455F9FAC6FC547BDE8D73942",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/9F1055F948340236645FDB8ADC7A56CD",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/60F6BBC04D82737F39B7FB8372402052",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/164A7F144C568EB6B2447493A025A136",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/15BF38BF4C8C1FB0CC4E0F83C45663B0",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/108435734E4F1317A5DEA7BF068FB091",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/06F57BFA45C01BB992090E82EEDA5FF2",
+      "bytes": 3276,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/88B28ACD427897CE11978EAE9F1C2E0C",
+      "bytes": 3196,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/BodyRebind348",
+      "bytes": 2496,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards",
+      "bytes": 1801,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/NativeResourceNames",
+      "bytes": 1587,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/11CF6D354B332FA5EDE415B6B3EDC500",
+      "bytes": 1566,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/F1F85484469D41D44940178BBEAA37C1",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/C6C7D63144467C6DD60DF9ACA12B61F9",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/B8FC3D454C8864077514C4AF1837DC8F",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/A763DB1A457F369E9E93DFAD67172880",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/9EB5FB844FA5435A3AD4048D58683588",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/9E7824A14058CC2200AAE7B7A410376B",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/8E67E069454B450F53F8A6AD3F53EF96",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/8CBFBE7C4F41E1DF9651549A7E8730A0",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/7B6323B54A9CA4685469C6963B4652C1",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/51702E634BFF66B107BEBB8A7CF41A77",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/22DE95A340FCF0422EE34FA4563510CC",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "TestCards/2260CA2B41A8EA8092E71D83DD6B3578",
+      "bytes": 1340,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/TextureMips308NativeR5",
+      "bytes": 1066,
+      "GiB": 0.0
+    },
+    {
+      "path": "UltimateCoPilot/Conversations",
+      "bytes": 683,
+      "GiB": 0.0
+    },
+    {
+      "path": "Crowd/BlenderSmoke",
+      "bytes": 394,
+      "GiB": 0.0
+    },
+    {
+      "path": "SourceControl",
+      "bytes": 226,
+      "GiB": 0.0
+    },
+    {
+      "path": "UnrealBuildTool",
+      "bytes": 132,
+      "GiB": 0.0
+    },
+    {
+      "path": "Autosaves",
+      "bytes": 96,
+      "GiB": 0.0
+    },
+    {
+      "path": "Config",
+      "bytes": 54,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-9152",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-77416",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-75332",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-74632",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-70828",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-58028",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-50480",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-39028",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-38316",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/ReferenceEpoch273-31320",
+      "bytes": 26,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Clothes331JacketOracleR3",
+      "bytes": 4,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Clothes331JacketOracleR2",
+      "bytes": 4,
+      "GiB": 0.0
+    },
+    {
+      "path": "Tests/Clothes331JacketOracle",
+      "bytes": 4,
+      "GiB": 0.0
+    }
+  ],
+  "largest": [
+    {
+      "bytes": 2574578048,
+      "path": "Tests\\CardWarm380\\BuildHostR1\\Intermediate\\Build\\Win64\\x64\\WarmAuditEditor\\Development\\UnrealEd\\SharedPCH.UnrealEd.Project.ValApi.ValExpApi.Cpp20.h.pch",
+      "GiB": 2.398
+    },
+    {
+      "bytes": 2153054176,
+      "path": "Crowd\\DevelopmentHost\\Intermediate\\Build\\Win64\\x64\\OpenKoikatsu\\Development\\Engine\\SharedPCH.Engine.Project.ValApi.ValExpApi.Cpp20.h.pch",
+      "GiB": 2.005
+    },
+    {
+      "bytes": 2152857592,
+      "path": "Crowd\\DevelopmentHost\\Intermediate\\Build\\Win64\\x64\\OpenKoikatsu\\Development\\Engine\\SharedPCH.Engine.Cpp20.h.pch",
+      "GiB": 2.005
+    },
+    {
+      "bytes": 1917844520,
+      "path": "Crowd\\DevelopmentHost\\Intermediate\\Build\\Win64\\x64\\OpenKoikatsu\\Development\\Engine\\PCH.Engine.h.pch",
+      "GiB": 1.786
+    },
+    {
+      "bytes": 1852505040,
+      "path": "Crowd\\Profile-WarmPilotEvents20261004T0342-CPUEvents.csv",
+      "GiB": 1.725
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\E79FBCF3471D002BE2A7988855238B57\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\E4D7066E42DA9204A64E1ABC5D27C52D\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\BF5C00C942C9074E6305C091444FD846\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\B9EAAA3940E61DFD3CAA1F92537B1A4C\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\B0C6AD304EA94872E0D452AA4A07E418\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\B051251A40E2B7CAFD7A8986955545E4\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\AE9C653D47A53A1512BFD8A2857CECC2\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\AE3E3FB746DC8634723224B9E6916D18\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\944D1D87401D117D2AA833BFE19EFDCE\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\89C279124EDF8E20DE5B0592EA695C70\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\8264508F41EB24B985B743A13D2CCEEA\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\7092432F4F23EE9D2F5173A9751FDA8D\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\6BF9CFBC409C66E2F9A905BFDEA176A4\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\617B75DC43FC1807EF87FFAA5F6B166A\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\53001B6945255509B8BA16B7A42A2CAB\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\421C722A45BED88B20211B916323CE1A\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\31F0F4E9468A9D30149124A98F9A63E7\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\304BAB7349410341D6622C9ABCD77FB5\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\261BABC746BCE5D4BC4EF2865AA98C10\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\107675E343ADF262360CA3B5A0F8C634\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001573,
+      "path": "NativeImportSources\\089684434CDF48C965C65A830DF4CA24\\abdata\\studio\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\E79FBCF3471D002BE2A7988855238B57\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\E4D7066E42DA9204A64E1ABC5D27C52D\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\BF5C00C942C9074E6305C091444FD846\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\B9EAAA3940E61DFD3CAA1F92537B1A4C\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\B0C6AD304EA94872E0D452AA4A07E418\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\B051251A40E2B7CAFD7A8986955545E4\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\AE9C653D47A53A1512BFD8A2857CECC2\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\AE3E3FB746DC8634723224B9E6916D18\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\944D1D87401D117D2AA833BFE19EFDCE\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\89C279124EDF8E20DE5B0592EA695C70\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\8264508F41EB24B985B743A13D2CCEEA\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\7092432F4F23EE9D2F5173A9751FDA8D\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\6BF9CFBC409C66E2F9A905BFDEA176A4\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\617B75DC43FC1807EF87FFAA5F6B166A\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\53001B6945255509B8BA16B7A42A2CAB\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\421C722A45BED88B20211B916323CE1A\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\31F0F4E9468A9D30149124A98F9A63E7\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\304BAB7349410341D6622C9ABCD77FB5\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\261BABC746BCE5D4BC4EF2865AA98C10\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\107675E343ADF262360CA3B5A0F8C634\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1824001341,
+      "path": "NativeImportSources\\089684434CDF48C965C65A830DF4CA24\\abdata\\map\\materials\\00.unity3d",
+      "GiB": 1.699
+    },
+    {
+      "bytes": 1682556996,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\mods\\002244_[DarkSoldier27][KKS]More H-Maps v1.4.zipmod",
+      "GiB": 1.567
+    },
+    {
+      "bytes": 1510551552,
+      "path": "Crowd\\DevelopmentHost\\Binaries\\Win64\\OpenKoikatsu.pdb",
+      "GiB": 1.407
+    },
+    {
+      "bytes": 1510191104,
+      "path": "Crowd\\DevelopmentHost\\Saved\\StagedBuilds\\Windows\\OpenKoikatsu\\Binaries\\Win64\\OpenKoikatsu.pdb",
+      "GiB": 1.406
+    },
+    {
+      "bytes": 1508765696,
+      "path": "Crowd\\DevelopmentHost\\Saved\\StagedLoose\\Windows\\OpenKoikatsu\\Binaries\\Win64\\OpenKoikatsu.pdb",
+      "GiB": 1.405
+    },
+    {
+      "bytes": 1277804583,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\mods\\002262_[Reverie][KKS] School Buildings v2.4.zipmod",
+      "GiB": 1.19
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\E79FBCF3471D002BE2A7988855238B57\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\E4D7066E42DA9204A64E1ABC5D27C52D\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\BF5C00C942C9074E6305C091444FD846\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\B9EAAA3940E61DFD3CAA1F92537B1A4C\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\B0C6AD304EA94872E0D452AA4A07E418\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\B051251A40E2B7CAFD7A8986955545E4\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\AE9C653D47A53A1512BFD8A2857CECC2\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\AE3E3FB746DC8634723224B9E6916D18\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\944D1D87401D117D2AA833BFE19EFDCE\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\89C279124EDF8E20DE5B0592EA695C70\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\8264508F41EB24B985B743A13D2CCEEA\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\7092432F4F23EE9D2F5173A9751FDA8D\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\6BF9CFBC409C66E2F9A905BFDEA176A4\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\617B75DC43FC1807EF87FFAA5F6B166A\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\53001B6945255509B8BA16B7A42A2CAB\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\421C722A45BED88B20211B916323CE1A\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\31F0F4E9468A9D30149124A98F9A63E7\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\304BAB7349410341D6622C9ABCD77FB5\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\261BABC746BCE5D4BC4EF2865AA98C10\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\107675E343ADF262360CA3B5A0F8C634\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1203917264,
+      "path": "NativeImportSources\\089684434CDF48C965C65A830DF4CA24\\abdata\\chara\\co_top_00.unity3d",
+      "GiB": 1.121
+    },
+    {
+      "bytes": 1178758343,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\mods\\002709_[DarkSoldier27] Vanilla_Maps v1.0.zipmod",
+      "GiB": 1.098
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\E79FBCF3471D002BE2A7988855238B57\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\E4D7066E42DA9204A64E1ABC5D27C52D\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\BF5C00C942C9074E6305C091444FD846\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\B9EAAA3940E61DFD3CAA1F92537B1A4C\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\B0C6AD304EA94872E0D452AA4A07E418\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\B051251A40E2B7CAFD7A8986955545E4\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\AE9C653D47A53A1512BFD8A2857CECC2\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\AE3E3FB746DC8634723224B9E6916D18\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\944D1D87401D117D2AA833BFE19EFDCE\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\89C279124EDF8E20DE5B0592EA695C70\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\8264508F41EB24B985B743A13D2CCEEA\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\7092432F4F23EE9D2F5173A9751FDA8D\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\6BF9CFBC409C66E2F9A905BFDEA176A4\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\617B75DC43FC1807EF87FFAA5F6B166A\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\53001B6945255509B8BA16B7A42A2CAB\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\421C722A45BED88B20211B916323CE1A\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\31F0F4E9468A9D30149124A98F9A63E7\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\304BAB7349410341D6622C9ABCD77FB5\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\261BABC746BCE5D4BC4EF2865AA98C10\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\107675E343ADF262360CA3B5A0F8C634\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1139881160,
+      "path": "NativeImportSources\\089684434CDF48C965C65A830DF4CA24\\abdata\\studio\\map\\00\\tex.unity3d",
+      "GiB": 1.062
+    },
+    {
+      "bytes": 1078240474,
+      "path": "NativeImportSources\\147151CE45EAE64B0668C286F24D35DB\\mods\\002248_[DarkSoldier27][KKS]Project DIVA H-Map v2.3.zipmod",
+      "GiB": 1.004
+    }
+  ],
+  "skipped_reparse_points": [
+    "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentHost\\Content"
+  ],
+  "errors": []
+}

@@ -1,0 +1,104 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "{7A2A60EB-4330-A41B-0900-5BBEFDA5A0A5}",
+	"Category": "",
+	"Description": "Open-source Koikatsu Sunshine character maker and viewer",
+	"Modules": [
+		{
+			"Name": "OpenKoikatsu",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "KKRuntimePose",
+			"Enabled": true
+		},
+		{
+			"Name": "Niagara",
+			"Enabled": true
+		},
+		{
+			"Name": "KKCard",
+			"Enabled": true
+		},
+		{
+			"Name": "KKSideloader",
+			"Enabled": true
+		},
+		{
+			"Name": "KKUnityBundle",
+			"Enabled": true
+		},
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "BpGeneratorUltimate",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Enabled": true,
+			"Name": "KKCrowdGpuPacking"
+		},
+		{
+			"Name": "OKHGShading",
+			"Enabled": true
+		},
+		{
+			"Name": "OKPhysXSecondary",
+			"Enabled": true
+		},
+		{
+			"Name": "KawaiiPhysics",
+			"Enabled": true
+		},
+		{
+			"Name": "OKAnimation",
+			"Enabled": true
+		},
+		{
+			"Name": "OKStudio",
+			"Enabled": true
+		},
+		{
+			"Name": "ControlRig",
+			"Enabled": true
+		},
+		{
+			"Name": "LevelSequenceEditor",
+			"Enabled": true
+		},
+		{
+			"Name": "ACLPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "PropertyAccessNode",
+			"Enabled": true
+		}
+	]
+}

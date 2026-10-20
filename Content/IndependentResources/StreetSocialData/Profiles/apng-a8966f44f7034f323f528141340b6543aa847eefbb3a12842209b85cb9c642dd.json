@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "id": "apng-a8966f44f7034f323f528141340b6543aa847eefbb3a12842209b85cb9c642dd",
+  "display_name": "小珍",
+  "age_in_setting": 20,
+  "archetype": "G",
+  "personality_core": {
+    "catchphrase": "嗯…我想一下喔。",
+    "pride": "自己的阅读品味和独立思考",
+    "fear": "被误解或被讨厌",
+    "desire": "找到能理解自己内心世界的人"
+  },
+  "orientation": "Monogamous",
+  "material": "Romantic",
+  "drama_mode_override": "",
+  "occupation": {
+    "primary": "student",
+    "role": "staff",
+    "workplace_place_id": "bookstore",
+    "job_id": "bookstore_clerk",
+    "competence": 65,
+    "pride": 55
+  },
+  "home_place_id": "girls_dorm",
+  "favorite_places": [
+    "bookstore",
+    "cafe",
+    "library"
+  ],
+  "birthday": "1990-11-03",
+  "department": "afl",
+  "intelligence": 72,
+  "money": {
+    "cash": 300,
+    "bank": 1500,
+    "income": [
+      {
+        "source": "零用钱",
+        "amount": 1200,
+        "cycle": "monthly",
+        "payday": 1
+      },
+      {
+        "source": "书店工读",
+        "amount": 800,
+        "cycle": "monthly",
+        "payday": 10
+      }
+    ],
+    "fixed_costs": [
+      {
+        "name": "手机费",
+        "amount": 100,
+        "due_day": 15
+      },
+      {
+        "name": "书籍文具",
+        "amount": 200,
+        "due_day": 5
+      }
+    ],
+    "spending_style": "frugal",
+    "treat_pride": 40,
+    "expects_treat": 30,
+    "reciprocity": 60,
+    "saving_goals": [
+      {
+        "item": "二手mp3播放器",
+        "amount": 500,
+        "why": "想随时随地听音乐"
+      }
+    ],
+    "money_needs": [],
+    "currency": "CNY"
+  },
+  "tastes": {
+    "likes": [
+      "dk_pearl_milk",
+      "cf_latte",
+      "独立音乐",
+      "老电影"
+    ],
+    "dislikes": [
+      "吵闹的地方",
+      "太辣的食物"
+    ],
+    "allergies": [
+      "花生"
+    ],
+    "diet": "none",
+    "drink": {
+      "sweetness": "微糖",
+      "ice": "去冰",
+      "toppings": [
+        "珍珠"
+      ]
+    },
+    "spice": 1,
+    "alcohol": "never",
+    "gift_style": "cute",
+    "lucky_numbers": [
+      3,
+      11
+    ],
+    "favorite_teams": []
+  },
+  "traits": {
+    "worship_proneness": 35,
+    "jealousy_proneness": 40,
+    "possessiveness": 45,
+    "insecurity": 60,
+    "competitiveness": 30,
+    "self_esteem": 45,
+    "tsundere": 10,
+    "mask_axes": [
+      "affection",
+      "admiration",
+      "jealousy"
+    ],
+    "shyness": 75,
+    "public_boldness": 30,
+    "charm_resistance": 55,
+    "money_resistance": 70
+  },
+  "bio": "在台北大学城出生长大的女孩，目前就读大学二年级，主修外文。个性温和内向，喜欢阅读和逛书店，对流行文化不太热衷，反而喜欢老电影和独立音乐。平时生活单纯，除了上课就是打工和看书。对陌生人有点害羞，但熟了之后会变得很健谈。",
+  "source": "llm"
+}

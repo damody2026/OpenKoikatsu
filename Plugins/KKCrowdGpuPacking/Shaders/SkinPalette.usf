@@ -1,0 +1,41 @@
+#include "/Engine/Public/Platform.ush"
+StructuredBuffer<float4> CurrentPose;
+StructuredBuffer<float4> PreviousPose;
+StructuredBuffer<float4> InverseBindRows;
+StructuredBuffer<uint4> Items;
+RWBuffer<uint4> OutputTransforms;
+uint ItemCount;
+uint CurrentRowOffset;
+uint PreviousRowOffset;
+// Component pose * inverse bind in column-vector convention. Affine rows are
+// retained directly: private rank-deficient/sheared matrices must not be TRS
+// decomposed or encoded as half precision.
+float4 ComposeRow(float4 P,float4 A,float4 B,float4 C){
+ return P.x*A+P.y*B+P.z*C+float4(0,0,0,P.w);
+}
+// One group handles up to 64 bones of one independently bound component.
+StructuredBuffer<uint4> Jobs; // catalog first/count, current/previous output row
+StructuredBuffer<uint4> WorkGroups; // job index, first local item, reset history
+[numthreads(64,1,1)]
+void BatchCS(uint3 Group:SV_GroupID,uint3 Lane:SV_GroupThreadID){
+ uint4 Work=WorkGroups[Group.x],Job=Jobs[Work.x];
+ uint K=Work.y+Lane.x;if(K>=Job.y)return;
+ uint4 W=Items[Job.x+K];uint S=W.x*3,D=W.z*3;
+ float4 A=InverseBindRows[W.y],B=InverseBindRows[W.y+1],C=InverseBindRows[W.y+2];
+ [unroll]for(uint R=0;R<3;++R){
+  float4 Now=CurrentPose[S+R];
+  float4 Old=Work.z!=0?Now:PreviousPose[S+R];
+  OutputTransforms[Job.z+D+R]=asuint(ComposeRow(Now,A,B,C));
+  OutputTransforms[Job.w+D+R]=asuint(ComposeRow(Old,A,B,C));
+ }
+}
+[numthreads(64,1,1)]
+void MainCS(uint3 Id:SV_DispatchThreadID){
+ if(Id.x>=ItemCount)return;
+ uint4 W=Items[Id.x];uint S=W.x*3,D=W.z*3;
+ float4 A=InverseBindRows[W.y],B=InverseBindRows[W.y+1],C=InverseBindRows[W.y+2];
+ [unroll]for(uint R=0;R<3;++R){
+  OutputTransforms[CurrentRowOffset+D+R]=asuint(ComposeRow(CurrentPose[S+R],A,B,C));
+  OutputTransforms[PreviousRowOffset+D+R]=asuint(ComposeRow(PreviousPose[S+R],A,B,C));
+ }
+}

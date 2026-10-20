@@ -1,0 +1,25 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "KKSideloader",
+	"Description": "GameRoot path, zipmod GUID index, UAR resolve",
+	"Category": "OpenKoikatsu",
+	"CreatedBy": "OpenKoikatsu",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Plugins": [
+		{
+			"Name": "KKCard",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "KKSideloader",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}

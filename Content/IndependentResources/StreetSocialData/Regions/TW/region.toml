@@ -1,0 +1,44 @@
+# Taiwan, 2010 (Docs/STREET_I18N_PLAN_20261014.md, P2). Amounts here are New Taiwan dollars. The game's numbers are
+# written in yuan (Regions/CN); they become Taiwan's by these factors (a 2010 basket, not the exchange rate) and are
+# rounded to the prices people see here; [fixed] gives the ones Taiwan has its own number for.
+code = "TW"
+currency = "TWD"
+symbol = "NT$"
+digits = 0
+
+# 2010 shelf prices (convenience store, drink stand, eatery, department store).
+ladder = [5, 10, 15, 20, 25, 30, 35, 39, 45, 49, 55, 59, 65, 69, 75, 79, 85, 89, 95, 99, 109, 120, 129, 139, 150, 169, 180, 199, 220, 249, 280, 299, 350, 399, 450, 499, 599, 699, 799, 899, 999, 1290, 1490, 1690, 1990, 2490, 2990, 3490, 3990, 4990, 5990, 6990, 7990, 8990, 9990, 12900, 14900, 19900, 24900, 29900, 39900, 49900]
+
+# Yuan -> NT$ (2010): an onigiri ¥4 / NT$25, a bottled drink ¥3 / NT$20, a latte ¥23 / NT$120, a set meal ¥25 / NT$100,
+# a movie ¥60 / NT$250; an hour of part-time work ¥10 / NT$95-110; a starting salary ¥2,400 / NT$26,000; a room ¥800 /
+# NT$5,000-6,000; property by the same ratio as rent.
+[factor]
+goods = 5.0
+wage = 5.5
+salary = 10.8
+rent = 6.0
+property = 6.0
+cash = 5.0
+
+[fixed]
+phone_fee = 599
+tuition = 25000
+dorm = 9000
+card_limit = 20000
+loan_year_cap = 60000
+allowance = 8000
+
+# Labor and health insurance, labor pension, and the 2010 consolidated income tax (yearly brackets with the quick
+# deduction); business tax 5%, profit-seeking enterprise income tax 17% (2010).
+[tax]
+comment = "Taiwan 2010, simplified: 勞保、健保、勞退 and 綜合所得稅."
+employee = { labor_insurance = 0.02, health_insurance = 0.0151 }
+employer = { labor_insurance = 0.07, health_insurance = 0.0469, pension = 0.06 }
+base_min = 17880
+base_max = 43900
+iit_threshold_monthly = 21500
+iit_brackets_yearly = [[500000, 0.05, 0], [1130000, 0.12, 35000], [2260000, 0.20, 125400], [4230000, 0.30, 351400], [999999999999, 0.40, 774400]]
+vat_small = 0.05
+cit_small_rate = 0.17
+cit_rate = 0.17
+cit_small_limit_yearly = 120000

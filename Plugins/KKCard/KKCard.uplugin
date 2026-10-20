@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "KKCard",
+	"Description": "Koikatsu / Koikatsu Sunshine PNG character card reader",
+	"Category": "OpenKoikatsu",
+	"CreatedBy": "OpenKoikatsu",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Modules": [
+		{
+			"Name": "KKCard",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}

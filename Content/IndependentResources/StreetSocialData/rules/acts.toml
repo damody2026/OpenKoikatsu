@@ -1,0 +1,376 @@
+# 和女主的每一種互動（Tools/ok-rules/src/heroine.rs）。Unreal 的 Interact 照同一套步驟處理：
+# 能不能發生（gate）→ 她同不同意（consent）→ 在這裡她怎麼接受（reaction，看地點規範與人潮）→ 數值 → 她的紀錄與記憶 → 傳聞 → 呈現。
+#
+# id：互動代號；cat：talk / touch / act / activity / gift / money / phone / relation / campus
+# name：她紀錄裡的稱呼；stage：最少要 0 陌生、1 朋友、2 戀人；affection / attraction / trust：還需要的情感門檻
+# （affection 比的是由階段與好感換算的「喜歡程度」0–100：陌生 0–35、朋友 35–65、戀人 65–100；沒有另外的喜愛值）
+# wanted：關係還不到時，她記得他想做什麼；face_to_face：只能當面（電話中只是說說）；awkward：地點與人潮會影響她的反應
+# consent：他提出時要走的邀約規則；history：紀錄種類；text：紀錄文字（%s = 細節）；memory：也成為她的記憶時的重要度
+#   （0 = 只寫紀錄，-1 = 讓記憶系統自己判斷）
+# rumor：none / public（傳開）/ secret（只在兩人之間，被發現才會傳）；rumor_text：別人聽到的（%n = 她的名字，%s = 細節）
+# rumor_heat：傳聞熱度；button：她面板上的按鈕文字（沒有就不是面板動作）
+
+# 舉動（陌生人做這些會被拒絕，並扣尊重與信任）
+[[act]]
+id = "hold_hands"
+cat = "act"
+name = "牽手"
+stage = 1
+affection = 40
+wanted = "牽你的手"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "牽手"
+
+[[act]]
+id = "head_pat"
+cat = "act"
+name = "摸頭"
+stage = 1
+affection = 40
+wanted = "摸你的頭"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "摸頭"
+
+[[act]]
+id = "feed"
+cat = "act"
+name = "餵食"
+stage = 1
+wanted = "餵你吃東西"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+
+[[act]]
+id = "share_food"
+cat = "act"
+name = "分食"
+stage = 1
+wanted = "和你分食"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+
+[[act]]
+id = "hug"
+cat = "act"
+name = "擁抱"
+stage = 1
+affection = 55
+attraction = 40
+wanted = "抱你"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "擁抱"
+
+[[act]]
+id = "kiss"
+cat = "act"
+name = "接吻"
+stage = 2
+wanted = "親你"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "親吻"
+
+[[act]]
+id = "lap_pillow"
+cat = "act"
+name = "膝枕"
+stage = 2
+wanted = "躺在你腿上"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "膝枕"
+
+[[act]]
+id = "lie_down"
+cat = "act"
+name = "一起躺下"
+stage = 2
+wanted = "和你躺在一起"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "一起躺下"
+
+[[act]]
+id = "eat"
+cat = "act"
+name = "一起吃東西"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+
+[[act]]
+id = "alcohol"
+cat = "act"
+name = "一起喝酒"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+button = "一起喝酒"
+
+[[act]]
+id = "loud"
+cat = "act"
+name = "大聲說笑"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+
+[[act]]
+id = "phone_call"
+cat = "act"
+name = "講電話"
+face_to_face = true
+awkward = true
+history = "act"
+text = "他和你%s"
+
+# 談話：原本的語音話題、收集的話題、觸碰反應。數值由原本的規則決定，這裡只負責紀錄。
+[[act]]
+id = "topic"
+cat = "talk"
+history = "topic"
+text = "他和你聊了%s"
+
+[[act]]
+id = "topic_collected"
+cat = "talk"
+history = "topic"
+text = "你們聊到了「%s」"
+
+[[act]]
+id = "touch"
+cat = "touch"
+history = "touch"
+text = "他%s"
+memory = 0.45
+
+[[act]]
+id = "friendship"
+cat = "relation"
+history = "stage"
+text = "你們成為朋友了%s"
+memory = 0.7
+
+[[act]]
+id = "confession"
+cat = "relation"
+history = "confession"
+text = "他向你告白%s"
+memory = 0.9
+
+[[act]]
+id = "breakup"
+cat = "relation"
+history = "breakup"
+text = "%s"
+memory = 0.9
+rumor = "public"
+rumor_text = "聽說%n和他分手了"
+rumor_heat = 60
+
+# 金錢（付了什麼、送了什麼、借了、托付、建議、預測、一起下注）。文字是呼叫端的句子（%s）。
+[[act]]
+id = "treat"
+cat = "money"
+history = "treat"
+text = "%s"
+memory = -1
+rumor = "public"
+rumor_text = "他和%n在%s吃東西"
+rumor_heat = 35
+
+[[act]]
+id = "treat_disliked"
+cat = "money"
+history = "treat"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "taste"
+cat = "money"
+history = "remembered_taste"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "gift"
+cat = "gift"
+history = "gift"
+text = "%s"
+memory = -1
+rumor = "public"
+rumor_text = "他送了%n%s"
+rumor_heat = 45
+
+[[act]]
+id = "gift_declined"
+cat = "gift"
+history = "gift"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "loan"
+cat = "money"
+history = "loan"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "entrust"
+cat = "money"
+history = "entrust"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "stock_advice"
+cat = "money"
+history = "stock_advice"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "stock_order"
+cat = "money"
+history = "stock"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "watch_market"
+cat = "money"
+history = "watch_market"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "prediction"
+cat = "money"
+history = "prediction"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "sports_bet"
+cat = "money"
+history = "sports_bet"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "lottery_together"
+cat = "money"
+history = "lottery"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "company_job"
+cat = "money"
+history = "company"
+text = "%s"
+memory = -1
+
+# 活動與邀約：她答不答應在別處決定，這裡是她記得的事。
+[[act]]
+id = "activity"
+cat = "activity"
+history = "activity"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "invite_refused"
+cat = "activity"
+history = "invite"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "pestered"
+cat = "activity"
+history = "insult"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "outing"
+cat = "activity"
+history = "outing"
+text = "%s"
+memory = -1
+rumor = "public"
+rumor_text = "他和%n一起去%s"
+rumor_heat = 50
+
+[[act]]
+id = "nap_together"
+cat = "activity"
+history = "sleep_together"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "sleep_together"
+cat = "activity"
+history = "sleep_together"
+text = "%s"
+memory = -1
+rumor = "secret"
+rumor_text = "%n和他在%s過夜"
+rumor_heat = 70
+
+[[act]]
+id = "intimacy"
+cat = "activity"
+history = "intimacy"
+text = "%s"
+memory = -1
+rumor = "secret"
+rumor_text = "%n和他好像在交往"
+rumor_heat = 50
+
+[[act]]
+id = "promise"
+cat = "activity"
+history = "promise"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "date"
+cat = "activity"
+history = "date"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "stood_up"
+cat = "activity"
+history = "betrayal"
+text = "%s"
+memory = -1

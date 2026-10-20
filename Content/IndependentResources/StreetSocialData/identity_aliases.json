@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "about": "Replaced heroine cards: old card id (apng-<sha256>) -> new. Tools/street_identity_migrate.lua moves saved games to the new id (the launcher runs it before each start); rename the Profile and name override with the card.",
+  "aliases": {
+    "apng-f046319ccd5e850ba329c2086e88cd188eab9aaa94c90aa3052e43d1bcc45e29": "apng-5ffa1374a7341d07a427c45d0d6f8e0f14e24c94982f94690db8e327597bffd4",
+    "apng-8585b344b0fa30b89acee20047da8c23e523a87344f414cef3d7e68eaae0b7a9": "apng-fcf4c3688e90da71a4d7e0d66a5edef516fa1d4d2222331028eb8841f59d84df"
+  }
+}

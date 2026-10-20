@@ -1,0 +1,72 @@
+# 地點的規範（Tools/ok-rules/src/places.rs）：什麼事在哪裡做會尷尬。
+# privacy：0 公共、1 半公共、2 可上鎖、3 私密；quiet：要多安靜（圖書館 1、操場 0）；formality：正式程度；
+# food：可否飲食；staff：有沒有會出聲的店員或管理員；label：給模型看的描述。
+# 表上沒有的地點用 [default]（街上）。
+
+[default]
+privacy = 0
+quiet = 0.3
+formality = 0.2
+food = true
+staff = false
+label = "街上"
+
+[norms]
+library = { privacy = 0, quiet = 1.0, formality = 0.3, food = false, staff = true, label = "室內、安靜、禁止飲食" }
+lecture = { privacy = 0, quiet = 0.7, formality = 0.3, food = false, staff = true, label = "教室" }
+school = { privacy = 0, quiet = 0.6, formality = 0.3, food = true, staff = true, label = "舊校舍，社團活動和自習用" }
+cafeteria = { privacy = 0, quiet = 0.1, formality = 0.0, food = true, staff = true, label = "學生餐廳，熱鬧" }
+restaurant = { privacy = 0, quiet = 0.3, formality = 0.4, food = true, staff = true, label = "餐廳" }
+cafe = { privacy = 0, quiet = 0.5, formality = 0.3, food = true, staff = true, label = "咖啡廳" }
+snack = { privacy = 0, quiet = 0.3, formality = 0.1, food = true, staff = true, label = "點心店" }
+drinkshop = { privacy = 0, quiet = 0.2, formality = 0.0, food = true, staff = true, label = "飲料店" }
+conveni = { privacy = 0, quiet = 0.2, formality = 0.0, food = true, staff = true, label = "便利商店" }
+lottery = { privacy = 0, quiet = 0.2, formality = 0.0, food = true, staff = true, label = "彩券行，牆上有開獎螢幕" }
+campus_t1 = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_rb = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_ib = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_t4 = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_e1 = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_ma = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_t2 = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_ee = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學教學大樓，上課時要安靜" }
+campus_ad = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "大學行政大樓，辦公中要安靜" }
+campus_gate = { privacy = 0, quiet = 0.1, formality = 0.2, food = true, staff = true, label = "大學校門口，人來人往" }
+campus_sports = { privacy = 0, quiet = 0.0, formality = 0.0, food = true, staff = true, label = "大學運動場，可以大聲" }
+fruitshop = { privacy = 0, quiet = 0.2, formality = 0.0, food = true, staff = true, label = "水果店" }
+bookstore = { privacy = 0, quiet = 0.7, formality = 0.2, food = false, staff = true, label = "書局，安靜" }
+department = { privacy = 0, quiet = 0.4, formality = 0.5, food = true, staff = true, label = "百貨公司" }
+petshop = { privacy = 0, quiet = 0.3, formality = 0.1, food = false, staff = true, label = "寵物店" }
+aquarium = { privacy = 0, quiet = 0.6, formality = 0.3, food = false, staff = true, label = "水族館，展區禁止飲食" }
+hotel = { privacy = 1, quiet = 0.5, formality = 0.8, food = true, staff = true, label = "飯店" }
+lodge = { privacy = 2, quiet = 0.5, formality = 0.3, food = true, staff = true, label = "會館" }
+minshuku = { privacy = 2, quiet = 0.6, formality = 0.4, food = true, staff = true, label = "民宿" }
+onsen = { privacy = 1, quiet = 0.5, formality = 0.3, food = true, staff = true, label = "露天溫泉" }
+park = { privacy = 0, quiet = 0.2, formality = 0.0, food = true, staff = false, label = "公園" }
+playground = { privacy = 0, quiet = 0.0, formality = 0.0, food = true, staff = false, label = "操場" }
+shrine = { privacy = 0, quiet = 0.7, formality = 0.5, food = false, staff = true, label = "神社" }
+girls_dorm = { privacy = 1, quiet = 0.4, formality = 0.1, food = true, staff = true, label = "校外女生宿舍交誼廳" }
+boys_dorm = { privacy = 2, quiet = 0.3, formality = 0.0, food = true, staff = false, label = "校外男生宿舍" }
+
+# 一個舉動需要什麼：min_privacy、max_crowd（人多過這個會尷尬）、需要可飲食、會吵、是親密舉動、名稱。
+[act_default]
+min_privacy = 0
+max_crowd = 1.0
+food = false
+loud = false
+intimate = false
+name = "互動"
+
+[acts]
+eat = { min_privacy = 0, max_crowd = 1.0, food = true, loud = false, intimate = false, name = "吃東西" }
+feed = { min_privacy = 0, max_crowd = 0.4, food = true, loud = false, intimate = true, name = "餵食" }
+share_food = { min_privacy = 0, max_crowd = 0.6, food = true, loud = false, intimate = false, name = "分著吃" }
+loud = { min_privacy = 0, max_crowd = 1.0, food = false, loud = true, intimate = false, name = "大聲說笑" }
+phone_call = { min_privacy = 0, max_crowd = 1.0, food = false, loud = true, intimate = false, name = "講電話" }
+hold_hands = { min_privacy = 0, max_crowd = 1.0, food = false, loud = false, intimate = true, name = "牽手" }
+head_pat = { min_privacy = 0, max_crowd = 0.7, food = false, loud = false, intimate = true, name = "摸頭" }
+hug = { min_privacy = 1, max_crowd = 0.4, food = false, loud = false, intimate = true, name = "擁抱" }
+kiss = { min_privacy = 1, max_crowd = 0.2, food = false, loud = false, intimate = true, name = "親吻" }
+lap_pillow = { min_privacy = 1, max_crowd = 0.4, food = false, loud = false, intimate = true, name = "膝枕" }
+lie_down = { min_privacy = 2, max_crowd = 0.2, food = false, loud = false, intimate = false, name = "躺下" }
+alcohol = { min_privacy = 0, max_crowd = 1.0, food = true, loud = false, intimate = false, name = "喝酒" }

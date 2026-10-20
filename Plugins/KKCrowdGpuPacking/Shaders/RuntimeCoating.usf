@@ -1,0 +1,21 @@
+#include "/Plugin/KKCrowdGpuPacking/RuntimeDeformCommon.ush"
+struct FCoatingBinding {uint4 Vertices;float4 Offset,Normal;};
+ByteAddressBuffer CoatingSourcePositions;
+StructuredBuffer<FCoatingBinding> CoatingBindings;
+RWStructuredBuffer<FOutput> CoatingOutput;
+uint CoatingCount;
+float4 CoatingRow0;
+float4 CoatingRow1;
+float4 CoatingRow2;
+float3 CoatingPosition(uint Index){return asfloat(CoatingSourcePositions.Load3(Index*12));}
+float3 CoatingTransform(float3 V,float W){float4 P=float4(V,W);return float3(dot(CoatingRow0,P),dot(CoatingRow1,P),dot(CoatingRow2,P));}
+[numthreads(64,1,1)]
+void CoatingCS(uint3 Id:SV_DispatchThreadID){
+ if(Id.x>=CoatingCount)return;
+ FCoatingBinding B=CoatingBindings[Id.x];
+ FOutput V;
+ V.Position=float4(CoatingTransform(CoatingPosition(B.Vertices.x),1)+B.Offset.xyz,1);
+ V.Normal=float4(B.Normal.xyz,0);
+ V.Tangent=float4(SafeNormal(CoatingTransform(CoatingPosition(B.Vertices.z)-CoatingPosition(B.Vertices.y),0)),1);
+ CoatingOutput[Id.x]=V;
+}

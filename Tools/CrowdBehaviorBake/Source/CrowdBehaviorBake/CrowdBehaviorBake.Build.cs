@@ -1,0 +1,2 @@
+using UnrealBuildTool;
+public class CrowdBehaviorBake:ModuleRules {public CrowdBehaviorBake(ReadOnlyTargetRules T):base(T){PCHUsage=PCHUsageMode.UseExplicitOrSharedPCHs;PublicDependencyModuleNames.AddRange(new[]{"Core","CoreUObject","Engine","UnrealEd","KKUnityBundle","KKRuntimePose","KKImportedAssets","Json","KKCrowdGpuPacking","RenderCore","RHI"});PrivateIncludePaths.Add("C:/portable/OpenKoikatsu/Tools/ok-extract/include");}}

@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "card_specific": false,
+  "actions": [
+    {
+      "id": "touch_head.okanim",
+      "file": "touch_head.okanim",
+      "region": "head",
+      "loop": false,
+      "play_seconds": 0.75,
+      "source": "adv/motion/controller/adv/00.unity3d|f_reaction_00_02_M",
+      "source_sha256": "8a7c4a143afc7665b7347a658a6c30f58ac4d568d9f3fcf877d8b38d07facee1",
+      "sha256": "94ea0a2a97210009dfd3a2fa2f6a372843f25dea4451979d75e2a28702254ebf"
+    },
+    {
+      "id": "touch_cheek.okanim",
+      "file": "touch_cheek.okanim",
+      "region": "cheek",
+      "loop": false,
+      "play_seconds": 0.75,
+      "source": "adv/motion/controller/adv/00.unity3d|f_reaction_00_08_M",
+      "source_sha256": "8a7c4a143afc7665b7347a658a6c30f58ac4d568d9f3fcf877d8b38d07facee1",
+      "sha256": "306367c62cddb67d98df5a778a01aa153d03cf2b34b2878203568d94d3ff4f58"
+    },
+    {
+      "id": "touch_hand.okanim",
+      "file": "touch_hand.okanim",
+      "region": "hand",
+      "loop": false,
+      "play_seconds": 0.75,
+      "source": "adv/motion/controller/adv/00.unity3d|f_reaction_00_09_M",
+      "source_sha256": "8a7c4a143afc7665b7347a658a6c30f58ac4d568d9f3fcf877d8b38d07facee1",
+      "sha256": "f9c92c962aa8707bdf280c4103dec558a7eb37826eb76d4d9ee831eb58ea3b26"
+    },
+    {
+      "id": "touch_chest.okanim",
+      "file": "touch_chest.okanim",
+      "region": "chest",
+      "loop": false,
+      "play_seconds": 0.75,
+      "source": "adv/motion/controller/adv/00.unity3d|f_reaction_00_05_M",
+      "source_sha256": "8a7c4a143afc7665b7347a658a6c30f58ac4d568d9f3fcf877d8b38d07facee1",
+      "sha256": "27a752430183e7d4baa5a3869dd0dd8fd6b9c0cc96fa5d4fa2a79953209f7587"
+    }
+  ],
+  "source_contract": "Original TalkScene uses TouchFunc -> LoadVoice -> AnimePlay; street uses the first .75 s of shared regional reactions with original personality-specific voice/expression/effects",
+  "height_policy": "Original M height-blend clips retargeted to each private APNG rig; no per-card assets"
+}

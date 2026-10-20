@@ -1,0 +1,457 @@
+{
+  "saved": "C:\\portable\\OpenKoikatsu\\Saved",
+  "original_bytes": 921530230971,
+  "planned_logical_bytes_removed": 733514806628.0,
+  "expected_logical_bytes_after": 188015424343,
+  "hard_link_note": "Logical directory bytes are not physical disk space; shared originals remain",
+  "retained_native_views": [
+    "89C279124EDF8E20DE5B0592EA695C70",
+    "617B75DC43FC1807EF87FFAA5F6B166A"
+  ],
+  "targets": [
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\089684434CDF48C965C65A830DF4CA24",
+      "kind": "directory",
+      "bytes": 30098177305,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\107675E343ADF262360CA3B5A0F8C634",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\147151CE45EAE64B0668C286F24D35DB",
+      "kind": "directory",
+      "bytes": 147352554693,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\261BABC746BCE5D4BC4EF2865AA98C10",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\304BAB7349410341D6622C9ABCD77FB5",
+      "kind": "directory",
+      "bytes": 30971044175,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\31F0F4E9468A9D30149124A98F9A63E7",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\421C722A45BED88B20211B916323CE1A",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\53001B6945255509B8BA16B7A42A2CAB",
+      "kind": "directory",
+      "bytes": 30098132153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\6BF9CFBC409C66E2F9A905BFDEA176A4",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\7092432F4F23EE9D2F5173A9751FDA8D",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\8264508F41EB24B985B743A13D2CCEEA",
+      "kind": "directory",
+      "bytes": 30919516495,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\944D1D87401D117D2AA833BFE19EFDCE",
+      "kind": "directory",
+      "bytes": 30972029231,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\AE3E3FB746DC8634723224B9E6916D18",
+      "kind": "directory",
+      "bytes": 30972021039,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\AE9C653D47A53A1512BFD8A2857CECC2",
+      "kind": "directory",
+      "bytes": 30079609153,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\B051251A40E2B7CAFD7A8986955545E4",
+      "kind": "directory",
+      "bytes": 30030150177,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\B0C6AD304EA94872E0D452AA4A07E418",
+      "kind": "directory",
+      "bytes": 30098177305,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\B9EAAA3940E61DFD3CAA1F92537B1A4C",
+      "kind": "directory",
+      "bytes": 30970958111,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\BF5C00C942C9074E6305C091444FD846",
+      "kind": "directory",
+      "bytes": 30972033327,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\E4D7066E42DA9204A64E1ABC5D27C52D",
+      "kind": "directory",
+      "bytes": 30098177305,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\NativeImportSources\\E79FBCF3471D002BE2A7988855238B57",
+      "kind": "directory",
+      "bytes": 30972037423,
+      "reason": "Unused regenerable import view; original hard-linked resources retained"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Base16G20261004T1750-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 329870717,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRenderBase16G20261004T1749.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Base16G20261004T1750-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1726734,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRenderBase16G20261004T1749.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-BoneBuffersScene20261004T1410-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 233163376,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentBoneBuffersSceneA20261004T1330.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-BoneBuffersScene20261004T1410-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1074327,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentBoneBuffersSceneA20261004T1330.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-BoneBuffersVertex20261004T1410-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 286212429,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentBoneBuffersVertexB20261004T1340.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-BoneBuffersVertex20261004T1410-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 829688,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentBoneBuffersVertexB20261004T1340.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Cull16E220261004T1750-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 330628791,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRenderCull16E220261004T1748.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Cull16E220261004T1750-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1989303,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRenderCull16E220261004T1748.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-DrawBatch512CpuCountsR1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 2370512,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentDrawBatch512WarmProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-DrawBatch512CpuCountsR1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 15876602,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentDrawBatch512WarmProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-DrawBatch64CpuCountsR2-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 7089834,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentDrawBatch64WarmProfileR2.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-DrawBatch64CpuCountsR2-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 17514215,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentDrawBatch64WarmProfileR2.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-DrawBatch64HitchR1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 21586330,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentDrawBatch64ProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-DrawBatch64HitchR1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 155437,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentDrawBatch64ProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-FullCookWarmWindow20261004T0545-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 223992900,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentFullCookWarmFinal20261004T0540.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-FullCookWarmWindow20261004T0545-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1033401,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentFullCookWarmFinal20261004T0540.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-LeaderDrivenOff20261004T1000-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 201393756,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentLeaderDriven100Off20261004T0940.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-LeaderDrivenOff20261004T1000-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 932116,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentLeaderDriven100Off20261004T0940.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-LeaderDrivenOn20261004T1000-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 124118405,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentLeaderDriven100On20261004T0950.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-LeaderDrivenOn20261004T1000-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 596645,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentLeaderDriven100On20261004T0950.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Low100WarmWindow20261004T0400-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 216744079,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentLow100Warm20261004T0355.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Low100WarmWindow20261004T0400-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1005106,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentLow100Warm20261004T0355.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-NoOcc16H20261004T1753-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 379289245,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRenderNoOcc16H20261004T1752.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-NoOcc16H20261004T1753-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 2346856,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRenderNoOcc16H20261004T1752.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-PresentSubmissionHitchR1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 24182223,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentPresentSubmissionLongProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-PresentSubmissionHitchR1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 183856,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentPresentSubmissionLongProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-PrewarmBalanced8R1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 753669577,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentPrewarmBalanced8ProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-PrewarmBalanced8R1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 5830851,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentPrewarmBalanced8ProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirst10020261004T1630-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 256997406,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstCurrent10020261004T1620.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirst10020261004T1630-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1183160,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstCurrent10020261004T1620.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirstMask20261004T1650-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 322504604,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstMaskC00120261004T1640.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirstMask20261004T1650-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 10680643,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstMaskC00120261004T1640.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirstSRTBase20261004T1630-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 328452766,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstSRTBaselineC00120261004T1600.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirstSRTBase20261004T1630-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 10764502,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstSRTBaselineC00120261004T1600.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirstSRTNew20261004T1630-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 316661953,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstSRTCandidateC00120261004T1610.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-ProfileFirstSRTNew20261004T1630-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 10387413,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentProfileFirstSRTCandidateC00120261004T1610.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RhiHitch2512R1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 20539590,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRhiLongQuietProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RhiHitch2512R1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 147463,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRhiLongQuietProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RhiHitchSubmissionR1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 20831880,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRhiLongQuietProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RhiHitchSubmissionR1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 147463,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRhiLongQuietProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RTGpuStudy160R1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 531765697,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRTGpuStudy160ProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RTGpuStudy160R1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 3704298,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRTGpuStudy160ProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RTGpuStudyFollower60R1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 483230086,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRTGpuStudyFollower60R1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-RTGpuStudyFollower60R1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 3708480,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentRTGpuStudyFollower60R1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-SectionLOD4pxB220261004T1720-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 286513867,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentSectionLOD4px100B220261004T1717.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-SectionLOD4pxB220261004T1720-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1326451,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentSectionLOD4px100B220261004T1717.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-SectionLODBaseA220261004T1720-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 256760646,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentSectionLODBase100A220261004T1718.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-SectionLODBaseA220261004T1720-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 1182760,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentSectionLODBase100A220261004T1718.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Stagger16B20261004T1804-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 437917985,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentStaggerNoOcc16B20261004T1802.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-Stagger16B20261004T1804-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 2896261,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentStaggerNoOcc16B20261004T1802.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-TransientPoolCpuCountsR1-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 7230064,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentTransientPoolWarmProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-TransientPoolCpuCountsR1-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 18284766,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentTransientPoolWarmProfileR1.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-WarmPilotEvents20261004T0342-CPUEvents.csv",
+      "kind": "file",
+      "bytes": 1852505040,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentWarmTrace20261004T0326.utrace"
+    },
+    {
+      "path": "C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\Profile-WarmPilotEvents20261004T0342-GPUEvents.csv",
+      "kind": "file",
+      "bytes": 60801263,
+      "reason": "Regenerable event export; trace and export commands retained: C:\\portable\\OpenKoikatsu\\Saved\\Crowd\\DevelopmentWarmTrace20261004T0326.utrace"
+    }
+  ]
+}

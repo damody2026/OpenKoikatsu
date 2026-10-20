@@ -1,0 +1,313 @@
+{
+	"format": "okscene",
+	"version": 1,
+	"active_camera": -1,
+	"next_id": 2,
+	"map": 20,
+	"duration": 10,
+	"post":
+	{
+		"bBloom": false,
+		"bloomIntensity": 0.67500001192092896,
+		"bDepthOfField": false,
+		"focalDistance": 300,
+		"aperture": 2.7999999523162842,
+		"bVignette": false,
+		"vignetteIntensity": 0.40000000596046448,
+		"exposure": 0
+	},
+	"tracks": [],
+	"objects": [
+		{
+			"id": 1,
+			"parent": -1,
+			"name": "Character 37",
+			"kind": "Character",
+			"transform":
+			{
+				"rotation":
+				{
+					"x": -0,
+					"y": 0,
+					"z": 0.93969262078590854,
+					"w": 0.34202014332566888
+				},
+				"translation":
+				{
+					"x": -132.63593912124634,
+					"y": -2492.7589416503906,
+					"z": -71.7926025390625
+				},
+				"scale3D":
+				{
+					"x": 1,
+					"y": 1,
+					"z": 1
+				}
+			},
+			"bVisible": true,
+			"character":
+			{
+				"card": "C:/portable/OpenKoikatsu/UserData/Studio/scene/koikatu_cs0003800_cards/char_37.png",
+				"outfit": 0,
+				"animation": "None",
+				"speed": 1,
+				"time": 8165.15576171875,
+				"clothesStates": [
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0,
+					0
+				],
+				"eyebrowPattern": -1,
+				"eyesPattern": -1,
+				"mouthPattern": -1,
+				"mouthOpen": 1,
+				"eyesLook": "Animation",
+				"studioAnimeKind": 0,
+				"studioAnimeGroup": 0,
+				"studioAnimeCategory": 0,
+				"studioAnimeNo": 0,
+				"neckLook": "Animation",
+				"lookPoint":
+				{
+					"x": 0,
+					"y": 100,
+					"z": 140
+				},
+				"handLeft": 0,
+				"handRight": 1,
+				"fk": [
+					{
+						"bone": "cf_j_hips",
+						"euler":
+						{
+							"x": -0,
+							"y": 323.78857421875,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_head",
+						"euler":
+						{
+							"x": 4.6806435585021973,
+							"y": 8.7029609680175781,
+							"z": 342.85140991210938
+						}
+					},
+					{
+						"bone": "cf_j_neck",
+						"euler":
+						{
+							"x": -0,
+							"y": 22.899248123168945,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_spine02",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_spine01",
+						"euler":
+						{
+							"x": -0,
+							"y": 40.408554077148438,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_waist01",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_thigh00_R",
+						"euler":
+						{
+							"x": 18.714197158813477,
+							"y": 2.17116379737854,
+							"z": 6.0324549674987793
+						}
+					},
+					{
+						"bone": "cf_j_leg01_R",
+						"euler":
+						{
+							"x": 355.03643798828125,
+							"y": 4.7213228526743478e-07,
+							"z": -5.456777671497548e-06
+						}
+					},
+					{
+						"bone": "cf_j_leg03_R",
+						"euler":
+						{
+							"x": 8.1010017395019531,
+							"y": -6.6656990384217352e-05,
+							"z": 0.00016625037824269384
+						}
+					},
+					{
+						"bone": "cf_j_toes_R",
+						"euler":
+						{
+							"x": -1.0408248568571921e-10,
+							"y": -3.5438133636489511e-05,
+							"z": -0.00016827881336212158
+						}
+					},
+					{
+						"bone": "cf_j_thigh00_L",
+						"euler":
+						{
+							"x": 3.7380435466766357,
+							"y": 359.29049682617188,
+							"z": 353.421142578125
+						}
+					},
+					{
+						"bone": "cf_j_leg01_L",
+						"euler":
+						{
+							"x": 1,
+							"y": -1.2961260774098051e-24,
+							"z": -1.2196089917824749e-16
+						}
+					},
+					{
+						"bone": "cf_j_leg03_L",
+						"euler":
+						{
+							"x": -1.0654770221663057e-07,
+							"y": -0.0014908966841176152,
+							"z": 1.3374430636758916e-05
+						}
+					},
+					{
+						"bone": "cf_j_toes_L",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_shoulder_R",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_arm00_R",
+						"euler":
+						{
+							"x": 14.658802032470703,
+							"y": 314.441650390625,
+							"z": 358.23284912109375
+						}
+					},
+					{
+						"bone": "cf_j_forearm01_R",
+						"euler":
+						{
+							"x": 0.0052022868767380714,
+							"y": 357.57205200195312,
+							"z": -0.00061138177989050746
+						}
+					},
+					{
+						"bone": "cf_j_hand_R",
+						"euler":
+						{
+							"x": -0.0051839533261954784,
+							"y": 0.0018195782322436571,
+							"z": 46.976428985595703
+						}
+					},
+					{
+						"bone": "cf_j_shoulder_L",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cf_j_arm00_L",
+						"euler":
+						{
+							"x": -0,
+							"y": 0,
+							"z": 36.825695037841797
+						}
+					},
+					{
+						"bone": "cf_j_forearm01_L",
+						"euler":
+						{
+							"x": 14.78407096862793,
+							"y": 340.37579345703125,
+							"z": 88.458145141601562
+						}
+					},
+					{
+						"bone": "cf_j_hand_L",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cm_J_dan101_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					},
+					{
+						"bone": "cm_J_dan109_00",
+						"euler":
+						{
+							"x": 0,
+							"y": 0,
+							"z": 0
+						}
+					}
+				],
+				"ik": [],
+				"tearsLevel": -1,
+				"blush": -1,
+				"nipStand": 0,
+				"skinGloss": -1,
+				"fluids": [],
+				"accessoriesShown": []
+			}
+		}
+	]
+}
