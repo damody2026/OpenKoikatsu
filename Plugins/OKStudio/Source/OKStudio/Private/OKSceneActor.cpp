@@ -431,7 +431,7 @@ void AOKSceneActor::Sync()
 				UE_LOG(LogTemp, Warning, TEXT("OK studio: %s (%d) not shown: %s"), *Object.Name, Object.Id, *Error);
 			}
 			Item = &Shown.Add(Object.Id, Fresh);
-			if (Object.Kind == EOKSceneObjectKind::Character) ApplyCharacterState(Object, *Item);
+			if (Object.Kind == EOKSceneObjectKind::Character) { ApplyCharacterState(Object, *Item); SetAnimationTime(Object.Id, 0.f); }
 		}
 		else if (Object.Kind == EOKSceneObjectKind::Character) ApplyCharacterState(Object, *Item);
 		if (Object.Kind == EOKSceneObjectKind::Camera)
@@ -614,14 +614,13 @@ int32 AOKSceneActor::MapPartCount() const
 void AOKSceneActor::AdvanceAnimations(float DeltaSeconds)
 {
 	if (!Document) return;
+    Document->ItemAnimationSeconds += DeltaSeconds;
 	for (auto& Pair : Shown)
 	{
 		AKKPreviewActor* Actor = Pair.Value.Preview.Get();
 		const FOKSceneObject* Object = Document->Find(Pair.Key);
 		if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character || !Actor->OkPlayer) continue;
-		const UOKAnimationAsset* Anim = Pair.Value.StudioAnim.IsValid() ? Cast<UOKAnimationAsset>(Pair.Value.StudioAnim.Get()) : Cast<UOKAnimationAsset>(Object->Character.Animation.ResolveObject());
-		const float Length = Anim ? FMath::Max(Anim->GetPlayLength(), 0.01f) : 1.f;
-		Pair.Value.Time = FMath::Fmod(Pair.Value.Time + DeltaSeconds * Object->Character.Speed, Length);
+		Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
 		Actor->AnimPhase = Pair.Value.Time;
 		Actor->ApplyPoseFrame(0.f, false);
 	}
@@ -635,9 +634,7 @@ void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
 	if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) return;
 	if (Actor->OkPlayer)
 	{
-		const UOKAnimationAsset* Anim = Item->StudioAnim.IsValid() ? Cast<UOKAnimationAsset>(Item->StudioAnim.Get()) : Cast<UOKAnimationAsset>(Object->Character.Animation.ResolveObject());
-		const float Length = Anim ? FMath::Max(Anim->GetPlayLength(), 0.01f) : 1.f;
-		Item->Time = FMath::Fmod(Object->Character.Time + Time * Object->Character.Speed, Length);
+		Item->Time = Object->Character.Time + Time * Object->Character.Speed;
 		Actor->AnimPhase = Item->Time;
 	}
 	Actor->ApplyPoseFrame(0.f, false);
@@ -710,7 +707,7 @@ void AOKSceneActor::Tick(float DeltaSeconds)
 	if (bBuildsPending && Document) Sync();
 	// A sequence-driven scene shows SequenceTime instead of playing on its own.
 	if (!SceneJson.IsEmpty()) ShowSequenceTime();
-	else AdvanceAnimations(DeltaSeconds);
+	else if (!bPauseAnimations) AdvanceAnimations(DeltaSeconds);
 	UpdateLooks(DeltaSeconds);
 	PlaceAttached();
 	UpdateItemLighting();
@@ -777,7 +774,7 @@ void AOKSceneActor::PlaceAttached()
 		{
 			const FOKSceneObject* O = Document->Find(Cur);
 			if (!O) break;
-			bAttached = !O->AttachBone.IsEmpty();
+			bAttached = !O->AttachBone.IsEmpty() || O->Kind == EOKSceneObjectKind::Item;
 			Cur = O->Parent;
 		}
 		const FShown* Item = bAttached ? Shown.Find(Object.Id) : nullptr;
@@ -925,6 +922,7 @@ void AOKSceneActor::ShowSequenceTime()
 	}
 	if (ShownSequenceTime == SequenceTime) return;
 	ShownSequenceTime = SequenceTime;
+	Document->ItemAnimationSeconds = SequenceTime;
 	Document->EvaluateTimeline(SequenceTime);
 	Sync();
 	// Characters built this frame keep their first pose until the next one (posed once per frame, like the game).

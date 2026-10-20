@@ -2156,6 +2156,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             crate::studio_items::write(&lib, &studio)?;
             println!("OKCONVERT studio items={} with components={} unresolved={unresolved}", studio.items.len(), studio.items.iter().filter(|i| i.line_width.is_some()).count());
         }
+        "studio-child-anims" => crate::studio_child_animation::convert(game, &lib.ok_or("library directory required")?)?,
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
         "studio-sky" => println!("OKCONVERT studio sky patterns={}", crate::studio_sky::convert(game, &lib.ok_or("library directory required")?)?),

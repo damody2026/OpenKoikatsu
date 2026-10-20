@@ -96,7 +96,7 @@ FTransform UOKSceneDocument::WorldTransform(int32 Id) const
 		if (!O) break;
 		World = World * O->Transform;
 		const FOKSceneObject* P = Find(O->Parent);
-		if (P && P->Kind == EOKSceneObjectKind::Item) World = World * FOKStudioCatalog::Get().ItemChildPoint(P->Item.Group, P->Item.Category, P->Item.No);
+		if (P && P->Kind == EOKSceneObjectKind::Item) World = World * FOKStudioCatalog::Get().AnimatedItemChildPoint(P->Item.Group, P->Item.Category, P->Item.No, P->Item.AnimePattern, P->Item.AnimeTime, ItemAnimationSeconds, P->Item.AnimeSpeed);
 		FTransform Bone;
 		if (P && P->Kind == EOKSceneObjectKind::Character && !O->AttachBone.IsEmpty() && BoneFrame && BoneFrame(P->Id, O->AttachBone, Bone)) World = World * Bone;
 		Cur = O->Parent;
@@ -109,7 +109,7 @@ FTransform UOKSceneDocument::ChildFrame(int32 Parent) const
 	const FOKSceneObject* P = Find(Parent);
 	if (!P) return FTransform::Identity;
 	const FTransform World = WorldTransform(Parent);
-	return P->Kind == EOKSceneObjectKind::Item ? FOKStudioCatalog::Get().ItemChildPoint(P->Item.Group, P->Item.Category, P->Item.No) * World : World;
+	return P->Kind == EOKSceneObjectKind::Item ? FOKStudioCatalog::Get().AnimatedItemChildPoint(P->Item.Group, P->Item.Category, P->Item.No, P->Item.AnimePattern, P->Item.AnimeTime, ItemAnimationSeconds, P->Item.AnimeSpeed) * World : World;
 }
 
 FTransform UOKSceneDocument::ParentFrame(int32 Id) const
@@ -171,6 +171,7 @@ FString UOKSceneDocument::ToJson() const
 
 bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 {
+    ItemAnimationSeconds = 0.f;
 	TSharedPtr<FJsonObject> Root;
 	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Root) || !Root) { OutError = TEXT("not JSON"); return false; }
 	if (Root->GetStringField(TEXT("format")) != TEXT("okscene")) { OutError = TEXT("not an .okscene file"); return false; }

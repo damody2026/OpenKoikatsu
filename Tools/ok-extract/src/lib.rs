@@ -69,6 +69,7 @@ pub mod okmodel_view;
 pub mod okmodel_edit;
 mod oklib_convert;
 mod studio_items;
+mod studio_child_animation;
 mod studio_pose;
 mod studio_scene;
 mod studio_anims;

@@ -49,7 +49,7 @@ pub enum Object {
         colors: Vec<Color>,
         /// The three pattern slots (OIItemInfo.pattern; their colours are colors[3..6]).
         patterns: Vec<Pattern>,
-        anime_speed: f32, alpha: f32, enable_fk: bool,
+        anime_speed: f32, anime_pattern: i32, anime_time: f32, alpha: f32, enable_fk: bool,
         /// Outline (OIItemInfo.lineColor／lineWidth), emission (emissionColor／emissionPower) and lightCancel.
         line_color: Color, line_width: f32, emission_color: Color, emission_power: f32, light_cancel: f32,
         /// Item FK: bone name and its change (rotation) when `enable_fk`.
@@ -353,7 +353,7 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
         1 => {
             let (key, change, visible) = base(r, true)?;
             let (group, category, no) = (r.i32()?, r.i32()?, r.i32()?);
-            if v.at_least("1.1.1.0") { r.i32()?; }
+            let anime_pattern = if v.at_least("1.1.1.0") { r.i32()? } else { 0 };
             let anime_speed = r.f32()?;
             let mut colors = Vec::new();
             for _ in 0..if v.at_least("0.0.3") { 8 } else { 7 } { colors.push(r.json_color()?); }
@@ -369,9 +369,9 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let mut fk = Vec::with_capacity(n);
             for _ in 0..n { let name = r.string()?; let (_, c, _) = base(r, false)?; fk.push((name, c)); }
             if v.at_least("1.0.1") { r.bool()?; }
-            r.f32()?; // anime normalized time
+            let anime_time = r.f32()?;
             let children = children(r, v, depth)?;
-            Ok(Object::Item { key, change, visible, group, category, no, colors, patterns, anime_speed, alpha, line_color, line_width, emission_color, emission_power, light_cancel, enable_fk, fk, children })
+            Ok(Object::Item { key, change, visible, group, category, no, colors, patterns, anime_speed, anime_pattern, anime_time, alpha, line_color, line_width, emission_color, emission_power, light_cancel, enable_fk, fk, children })
         }
         2 => {
             let (key, change, visible) = base(r, true)?;
@@ -648,5 +648,22 @@ mod import_tests {
         let v = super::export(&lib.join("studio/samples").join(format!("{name}.png")), &out).unwrap();
         for k in ["effects", "camera", "map"] { if let Some(x) = v.get(k) { let s = x.to_string(); println!("{k}: {}", &s[..s.len().min(3000)]); } }
         if let Ok(path) = std::env::var("OK_SCENE_DUMP") { std::fs::write(path, serde_json::to_string_pretty(&v).unwrap()).unwrap(); }
+    }
+}
+
+#[cfg(test)]
+mod item_animation_tests {
+    #[test]
+    #[ignore = "base library sample scenes: source item clock fields"]
+    fn rotating_parent_keeps_saved_phase() {
+        let path=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1/studio/samples/koikatu_cs0001268.png");
+        let scene=super::read(&std::fs::read(path).unwrap()).unwrap();
+        let item=scene.objects.iter().find(|o|matches!(o,super::Object::Item{key:424,..})).unwrap();
+        match item {super::Object::Item{anime_pattern,anime_time,anime_speed,children,..}=>{
+            assert_eq!(*anime_pattern,0);
+            assert!((*anime_time-311.40283203125).abs()<0.00001);
+            assert!((*anime_speed-0.2197189331).abs()<0.000001);
+            assert_eq!(children.len(),2);
+        },_=>unreachable!()}
     }
 }

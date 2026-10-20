@@ -256,6 +256,14 @@ struct OKSTUDIO_API FOKSceneItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	int32 No = -1;
 
+    /** Source Animator state, normalized start time and playback rate. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+    int32 AnimePattern = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+    float AnimeTime = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+    float AnimeSpeed = 1.f;
+
 	/** Item colours 1..4 (sRGB); empty or alpha < 0: the model colour. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	TArray<FLinearColor> Colors;
@@ -679,6 +687,8 @@ public:
 	/** Transform in scene space (parents applied). */
 	UFUNCTION(BlueprintCallable, Category = "OK Studio")
 	FTransform WorldTransform(int32 Id) const;
+    /** Runtime item clock; source normalized start times remain unchanged when saving. */
+    float ItemAnimationSeconds = 0.f;
 	/** Posed frame of a character bone relative to the character (set by the actor showing the scene; without it attached
 	 * objects sit at the character root). */
 	TFunction<bool(int32 Character, const FString& Bone, FTransform& OutBone)> BoneFrame;

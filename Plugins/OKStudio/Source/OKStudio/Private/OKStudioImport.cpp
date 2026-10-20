@@ -134,6 +134,13 @@ namespace
 					++Report->CatalogItems;
 					FOKSceneItem& I = Doc->Find(Id)->Item;
 					I.Group = Group; I.Category = Category; I.No = No;
+                    double ItemTime=0., ItemSpeed=1.; int32 ItemPattern=0;
+                    O->TryGetNumberField(TEXT("anime_time"), ItemTime); O->TryGetNumberField(TEXT("anime_speed"), ItemSpeed); O->TryGetNumberField(TEXT("anime_pattern"), ItemPattern);
+                    I.AnimeTime=float(ItemTime);
+                    I.AnimeSpeed=float(ItemSpeed);
+                    I.AnimePattern=ItemPattern;
+                    if (Entry->bAnime && (ItemPattern != 0 || !FOKStudioCatalog::Get().ChildAnimations.Contains(FIntVector(Group, Category, No))))
+                        Note(TEXT("animated item attachment has no converted track for its selected pattern"));
 					// Item FK of an enabled item: its bones' local rotations.
 					const TArray<TSharedPtr<FJsonValue>>* Bones = nullptr;
 					if (O->GetBoolField(TEXT("enable_fk")) && O->TryGetArrayField(TEXT("fk"), Bones))
@@ -363,6 +370,7 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 	Report.Version = Scene->GetStringField(TEXT("version"));
 	Report.Map = int32(Scene->GetNumberField(TEXT("map")));
 	Document->Objects.Reset();
+    Document->ItemAnimationSeconds=0.f;
 	Document->NextId = 1;
 	Document->ActiveCamera = -1;
 	Document->Map = FOKStudioCatalog::Get().FindMap(Report.Map) ? Report.Map : -1;

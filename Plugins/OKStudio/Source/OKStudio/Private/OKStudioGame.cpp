@@ -1621,7 +1621,7 @@ void UOKStudioGame::TickExport()
 	}
 	SetTimelineTime(ExportFrame / ExportFps);
 	SyncNow();
-	SceneActor->AdvanceAnimations(ExportFrame == 0 ? 0.f : 1.f / ExportFps);
+	for (const FOKSceneObject& O : Document->Objects) if (O.Kind == EOKSceneObjectKind::Character) SceneActor->SetAnimationTime(O.Id, ExportFrame / ExportFps);
 	FString Error;
 	if (!CaptureToPng(ExportDir / FString::Printf(TEXT("frame_%05d.png"), ExportFrame), ExportWidth, ExportHeight, Error))
 	{
@@ -1643,6 +1643,7 @@ void UOKStudioGame::SyncNow()
 void UOKStudioGame::SetTimelineTime(float Time)
 {
 	TimelineTime = FMath::Clamp(Time, 0.f, FMath::Max(Document->Duration, 0.01f));
+    Document->ItemAnimationSeconds = TimelineTime;
 	Document->EvaluateTimeline(TimelineTime);
 }
 
@@ -1776,6 +1777,23 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 										UE_LOG(LogTemp, Display, TEXT("OK studio compare dump: %s %s slot %d %s blend=%d base=%s visible=%d"), *O.Name, *Mesh->GetName(), Slot, *M->GetName(),
 											int32(M->GetBlendMode()), *M->GetMaterial()->GetName(), Mesh->IsVisible() ? 1 : 0);
 						}
+                if (!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POSE_DUMP")).IsEmpty())
+                    for (const FOKSceneObject& O : Self->Document->Objects)
+                        if (AKKPreviewActor* P = Self->SceneActor->PreviewOf(O.Id))
+                        {
+                            UE_LOG(LogTemp, Display, TEXT("OK studio pose: %s world=%s anime=%d/%d/%d time=%.6f"), *O.Name, *P->GetActorTransform().ToString(), O.Character.StudioAnimeGroup, O.Character.StudioAnimeCategory, O.Character.StudioAnimeNo, O.Character.Time);
+                            for (const FOKSceneIkTarget& T : O.Character.Ik)
+                            {
+                                FVector Actual;
+                                if (P->Session.IkEffectorPosition(T.Effector, Actual))
+                                    UE_LOG(LogTemp, Display, TEXT("OK studio pose: %s effector=%d target=%s actual=%s"), *O.Name, T.Effector, *AKKPreviewActor::ActorLocalToUnity(T.Position).ToString(), *Actual.ToString());
+                            }
+                            for (const TCHAR* B : { TEXT("cf_j_hips"), TEXT("cf_j_spine03"), TEXT("cf_j_head") })
+                            {
+                                float M[16];
+                                if (P->Session.BoneWorldMatrix(B, M)) UE_LOG(LogTemp, Display, TEXT("OK studio pose: %s bone=%s xyz=(%.6f,%.6f,%.6f)"), *O.Name, B, M[3], M[7], M[11]);
+                            }
+                        }
 				// OK_STUDIO_COMPARE_WIDE=<factor>: the same view pulled back along its direction (what lies outside the frame).
 				const float Wide = FCString::Atof(*FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_WIDE")));
 				if (Wide > 1.f)
@@ -1821,7 +1839,9 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));
 		for (FOKSceneObject& O : Self->Document->Objects)
 			if (O.Kind == EOKSceneObjectKind::Item && Hide.Contains(FString::Printf(TEXT("%d/%d/%d"), O.Item.Group, O.Item.Category, O.Item.No))) O.bVisible = false;
-		Self->SyncNow();
+		Self->SceneActor->bPauseAnimations = true;
+        Self->Document->ItemAnimationSeconds = 0.f;
+        Self->SyncNow();
 		Self->UpdateViewer();
 		State->Frame = 0;
 		return true;
