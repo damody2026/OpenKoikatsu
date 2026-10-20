@@ -56,6 +56,8 @@ struct FOKFreeTalkReply {
  FString ResolveId, ResolveOption, ProposeId, ProposeOption, ActKind, ActArg;
  // Plan §13.3 a new promise: day ("+1" or YYYY-MM-DD), time HH:MM, place id, what.
  FString PromiseDay, PromiseTime, PromisePlace, PromiseWhat;
+ // Who pays, as she reads what they settled ("him" | "her" | "split"; empty: not talked about).
+ FString Payer;
  // Plan §15: a prediction he made, a trade he asked for at the computer, a bet at the lottery shop (raw objects).
  TSharedPtr<class FJsonObject> Predict, Trade, Bet;
  float ResolveInsist = 0.5f, ProposeInsist = 0.5f;

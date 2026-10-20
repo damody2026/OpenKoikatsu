@@ -401,17 +401,12 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
                     l = "she_pays";
                     i = 1.0;
                 }
-                // He said he is buying when they set off ("我请", she: "水你请"), and she did not turn it down: his.
-                let (said, her_said) = (s(r, "said").to_lowercase(), s(r, "her_said").to_lowercase());
-                if crate::tr::heard(&said, "hear.offer_pay") && !crate::tr::heard(&said, "hear.ask_split") && !crate::tr::heard(&her_said, "hear.decline_treat") && n(r, "player_cash") >= price as f64 {
-                    l = "player_pays";
-                    i = 1.0;
-                }
-                // They agreed to pay their own ("门票各付各的", she: "好，说定了"; or she turned his treat down): halves,
-                // not "his treat" (the aquarium tickets went on him).
-                else if crate::tr::heard(&said, "hear.ask_split") || crate::tr::heard(&her_said, "hear.decline_treat") {
-                    l = "split";
-                    i = 1.0;
+                // What they settled when they set off ("门票各付各的", "我请"): the AI's reading of it.
+                if let Some(o) = agreed(r) {
+                    if o != "player_pays" || n(r, "player_cash") >= price as f64 {
+                        l = o;
+                        i = 1.0;
+                    }
                 }
                 (l, i)
             };
@@ -512,71 +507,46 @@ fn intimacy_after(r: &Value) -> Result<Value, String> {
     Ok(json!({"effects": fx.into_value()}))
 }
 
-/// Who pays for what she ordered in conversation (request: lean, insist, said = his last line). He pays when he offered
-/// to (the words of hear.offer_pay; hear.ask_split, said once in a conversation, holds for its orders); otherwise her own inclination (split, she pays, or he pays), and a strong wish to pay herself opens the choice.
-/// Answer: option (player_pays | split | she_pays | choice).
+/// Who pays for what she ordered in conversation. Request: agreed (what the AI read they settled: "him" | "her" |
+/// "split" | ""), promise (she promised to treat him), lean and insist (her own inclination), has_hers.
+/// Answer: option (player_pays | split | she_pays | choice). Who offered what is the AI's reading, not words looked up.
 pub fn chat_order_payer(r: &Value) -> Value {
     let lean = r.get("lean").and_then(Value::as_str).unwrap_or("player_pays");
     let insist = r.get("insist").and_then(Value::as_f64).unwrap_or(0.0);
-    let said = r.get("said").and_then(Value::as_str).unwrap_or("");
-    let her_said = r.get("her_said").and_then(Value::as_str).unwrap_or("");
-    // He offered and she turned it down in this reply ("不用请，我自己付"): each pays their own.
-    let split_agreed = r.get("split_agreed").and_then(Value::as_bool).unwrap_or(false) || crate::tr::heard(said, "hear.ask_split") || crate::tr::heard(her_said, "hear.decline_treat");
-    // She promised to treat him (this time or "later"): hers to pay, unless he now insists on paying himself ("I'm buying
-    // you this, don't fight me for it") — then both want to pay, and the checkout choice settles it.
     let promise = r.get("promise").and_then(Value::as_bool).unwrap_or(false);
-    let option = if promise && !split_agreed {
-        if crate::tr::heard(said, "hear.offer_pay") { "choice" } else { "she_pays" }
-    } else if crate::tr::heard(said, "hear.offer_pay") && !split_agreed {
-        "player_pays"
-    } else if split_agreed {
-        "split"
-    } else if crate::tr::heard(her_said, "hear.offer_pay") {
-        // Her own words offer it ("我请你吃甜甜圈"): her treat, before the judge has even answered.
-        "she_pays"
-    } else if lean == "she_pays" && insist > 0.6 {
-        "choice"
-    } else if lean == "split" || lean == "she_pays" {
-        lean
-    } else if r.get("has_hers").and_then(Value::as_bool).unwrap_or(false) {
-        // She expects him to pay for what she ordered, but he never offered: his to decide (the checkout choice), not
-        // charged to him unasked.
-        "choice"
-    } else {
-        "player_pays"
+    let option = match agreed(r) {
+        Some(o) => o,
+        None if promise => "she_pays",
+        None if lean == "she_pays" && insist > 0.6 => "choice",
+        None if lean == "split" || lean == "she_pays" => lean,
+        // She expects him to pay for what she ordered, but nothing was settled: his to decide (the checkout choice).
+        None if r.get("has_hers").and_then(Value::as_bool).unwrap_or(false) => "choice",
+        None => "player_pays",
     };
     json!({"option": option})
 }
 
-/// Whether a line settles the next bill as each paying their own: he asks to split ("各付各的"), or she turns down his
-/// treat ("不用请，我自己付"). Request: his, her (either may be empty).
-pub fn bill_split_heard(r: &Value) -> Value {
-    let his = r.get("his").and_then(Value::as_str).unwrap_or("");
-    let her = r.get("her").and_then(Value::as_str).unwrap_or("");
-    json!({"split": crate::tr::heard(his, "hear.ask_split") || crate::tr::heard(her, "hear.decline_treat")})
+/// What they settled about paying, as a checkout option: request "agreed" from the AI (her reply's payer, the judge's).
+fn agreed(r: &Value) -> Option<&'static str> {
+    match r.get("agreed").and_then(Value::as_str).unwrap_or("") {
+        "him" => Some("player_pays"),
+        "her" => Some("she_pays"),
+        "split" => Some("split"),
+        _ => None,
+    }
 }
 
-/// The bill's choice ran out with no button pressed: what he said since it opened decides ("my treat", "let's split");
-/// said nothing about it, nobody treats anybody when she only expected him to pay (each pays their own).
+/// The bill's choice ran out with no button pressed: what they settled decides; nothing settled, nobody treats anybody
+/// when she only expected him to pay (each pays their own).
 pub fn checkout_timeout(r: &Value) -> Value {
     let lean = r.get("lean").and_then(Value::as_str).unwrap_or("");
-    let said = r.get("said").and_then(Value::as_str).unwrap_or("");
-    let option = if crate::tr::heard(said, "hear.offer_pay") && !crate::tr::heard(said, "hear.ask_split") {
-        "player_pays"
-    } else if crate::tr::heard(said, "hear.ask_split") {
-        "split"
-    } else if lean == "player_pays" || lean.is_empty() {
-        "split"
-    } else {
-        lean
-    };
+    let option = agreed(r).unwrap_or(if lean == "player_pays" || lean.is_empty() { "split" } else { lean });
     json!({"option": option})
 }
 
 pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
         "checkout_timeout" => Ok(checkout_timeout(r)),
-        "bill_split_heard" => Ok(bill_split_heard(r)),
         "checkout_lean" => lean(r),
         "chat_order_payer" => Ok(chat_order_payer(r)),
         "checkout" => checkout(c, r),
@@ -586,14 +556,7 @@ pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>>
         "loan_settle" => loan_settle(r),
         "give_money_settle" => give_money_settle(r),
         "activity_end" => activity_end(c, r),
-        "time_said" => Ok(json!({"said": time_said(s(r, "words"))})),
         "his_items" => Ok(his_items(r)),
-        // A meeting needs his yes too: in his own line a time, or plain agreement ("好啊", "说定了"). Her "see you
-        // tomorrow at five" alone, while he talks about the sunset, is only her proposal.
-        // dated: the words name some day at all (a weekday, "next time"): without any, a time still ahead is today.
-        "day_said" => Ok(json!({"days": day_said(s(r, "words")), "dated": crate::tr::heard(&s(r, "words").to_lowercase(), "hear.date_words")})),
-        // Or he asked her himself ("傍晚要不要去公园看夕阳？" — "五点半，喷水池"): his invitation, her time.
-        "he_agrees_to_meet" => Ok(json!({"agrees": time_said(s(r, "his")) || crate::tr::heard(&s(r, "his").to_lowercase(), "hear.agree") || crate::tr::heard(&s(r, "his").to_lowercase(), "hear.propose")})),
         // How long it takes (game minutes): a solo activity (praying, watching the fish) ends on its own after this.
         "activity_minutes" => Ok(json!({"minutes": activity_minutes(s(r, "id"), s(r, "kind"), n(r, "code") as i32)})),
         "errand" => errand(c, r),
@@ -630,66 +593,8 @@ pub fn his_items(r: &Value) -> Value {
     json!({"ids": ids})
 }
 
-/// The day the words name, in days from today ("后天四点" → 2; "明天公休，那改后天" → 2: the last one said), or None.
-/// The judge's own day count is arithmetic it sometimes gets wrong ("后天" booked three days out).
-pub fn day_said(words: &str) -> Option<i64> {
-    let w = words.to_lowercase();
-    let table: Vec<(String, i64)> = crate::tr::t("hear.day_words").split('|')
-        .filter_map(|p| p.rsplit_once(':').and_then(|(k, d)| Some((k.trim().to_lowercase(), d.trim().parse().ok()?))))
-        .filter(|(k, _)| !k.is_empty()).collect();
-    let days_in = |c: &str| {
-        let mut said: Vec<i64> = Vec::new();
-        let mut i = 0;
-        while i < c.len() {
-            if let Some((k, d)) = table.iter().find(|(k, _)| c[i..].starts_with(k.as_str())) {
-                said.push(*d);
-                i += k.len();
-            } else {
-                i += c[i..].chars().next().map_or(1, char::len_utf8);
-            }
-        }
-        said
-    };
-    // The day said with the meeting's time ("那改后天下午四点" after "明天公休"): the clause that names a time decides.
-    // A weekday there ("周三四点") is the judge's to count; two days and no time ("今天没法去，明天见") are too.
-    let clauses: Vec<&str> = w.split(['。', '！', '？', '!', '?', '，', ',', '；', ';', '\n']).filter(|c| !c.trim().is_empty()).collect();
-    let mut timed: Vec<i64> = Vec::new();
-    for c in clauses.iter().filter(|c| time_said(c)) {
-        if crate::tr::heard(c, "hear.date_words") {
-            return None;
-        }
-        timed.extend(days_in(c));
-    }
-    let mut all = if timed.is_empty() { days_in(&w) } else { timed };
-    all.dedup();
-    all.sort();
-    all.dedup();
-    if all.len() == 1 { all.first().copied() } else { None }
-}
 
-/// Whether the words name a clock time for a meeting ("三点", "3:30", "下午两点半", "7 pm", "中午"): an appointment is
-/// made only for a time somebody said, not one the model filled in ("tomorrow" alone has no time).
-pub fn time_said(words: &str) -> bool {
-    let w = words.to_lowercase();
-    if crate::tr::heard(&w, "hear.time_words") {
-        return true;
-    }
-    let numeral = |c: char| c.is_ascii_digit() || "零一二三四五六七八九十两兩".contains(c);
-    let chars: Vec<char> = w.chars().collect();
-    let marks = crate::tr::t("hear.time_marks");
-    for i in 1..chars.len() {
-        if !numeral(chars[i - 1]) {
-            continue;
-        }
-        // "3点", "三點", "15:00", "3 pm"
-        let rest: String = chars[i..].iter().collect::<String>();
-        let rest = rest.trim_start();
-        if marks.split('|').map(str::trim).filter(|m| !m.is_empty()).any(|m| rest.starts_with(m)) {
-            return true;
-        }
-    }
-    false
-}
+
 
 #[cfg(test)]
 mod tests {
@@ -703,24 +608,6 @@ mod tests {
         assert_eq!(ids("我幫你點紅茶"), json!([]));
     }
 
-    #[test]
-    fn a_time_must_be_said() {
-        // The built-in zh-TW table.
-        assert_eq!(super::day_said("後天下午四點圖書館門口"), Some(2));
-        assert_eq!(super::day_said("等等，圖書館明天公休。那改後天下午四點吧"), Some(2), "the last one said");
-        assert_eq!(super::day_said("明天晚上七點"), Some(1));
-        assert_eq!(super::day_said("大後天見"), Some(3));
-        assert_eq!(super::day_said("四點門口見"), None);
-        assert_eq!(super::day_said("週三四點，守到人來為止。今天我自己回去"), None, "a weekday and a today: the judge reads which");
-        assert_eq!(super::day_said("今天沒法去接你，明天見"), None, "two days in one line");
-        assert!(super::time_said("明天下午三點公園見"));
-        assert!(super::time_said("那就 15:30 吧"));
-        assert!(super::time_said("明天中午學生餐廳"));
-        assert!(!super::time_said("好啊，明天我也有空"));
-        // A part of the day both agreed to is a time (the judge reads it as 19:00, 17:30...): "傍晚公園見" was dropped.
-        assert!(super::time_said("晚上見") && super::time_said("明天傍晚要不要再一起去公园"));
-        assert!(super::time_said("那十分钟后餐厅门口见"), "a time from now is a time");
-    }
 
     use super::*;
     use crate::tuning::Tuning;
@@ -776,15 +663,15 @@ mod tests {
         assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(60), Some(true)));
         let bench = activity_end(&c, &json!({"id": "aquarium_bench", "kind": "pair", "code": 11, "name": "長椅", "admitted": true, "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!((bench["price"].as_i64(), bench["admission"].as_bool()), (Some(0), Some(false)), "{bench}");
-        // He said he is buying when they set off: his, however rich she is and whatever the dice say.
+        // They settled that he pays (the AI's reading): his, however rich she is and whatever the dice say.
         for seed in 1..20 {
-            let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "player_cash": 1000, "said": "水我请", "her_said": "水你请，那就走",
+            let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "player_cash": 1000, "agreed": "him",
                 "relation": rel(json!({"cash": 5000, "affection": 10, "treat_balance": -3})), "profile": {}, "seed": seed})).unwrap();
             assert_eq!(v["payer"].as_str(), Some("你請客"), "seed {seed}");
         }
-        // They agreed to pay their own when they went in: halves, not his treat.
+        // They settled to pay their own: halves, not his treat.
         for seed in 1..20 {
-            let v = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "said": "那我们进去一起看鱼吧，门票各付各的。", "her_said": "好，说定了。",
+            let v = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "agreed": "split",
                 "relation": rel(json!({"cash": 2000, "treat_balance": 3})), "profile": {}, "seed": seed})).unwrap();
             assert_eq!(v["payer"].as_str(), Some("各付一半"), "seed {seed}: {v}");
         }
@@ -793,29 +680,18 @@ mod tests {
     }
     #[test]
     fn who_pays_for_her_chat_order() {
-        let o = |lean: &str, insist: f64, said: &str| chat_order_payer(&json!({"lean": lean, "insist": insist, "said": said}))["option"].as_str().unwrap().to_string();
-        assert_eq!(o("split", 0.4, "千鶴，下午念得順利嗎？"), "split", "a greeting is not an offer to pay");
-        assert_eq!(o("split", 0.4, "今天我請你"), "player_pays");
-        assert_eq!(o("she_pays", 0.3, ""), "she_pays");
-        assert_eq!(o("she_pays", 0.9, ""), "choice");
-        assert_eq!(o("player_pays", 0.0, ""), "player_pays");
-        assert_eq!(o("player_pays", 0.0, "去咖啡廳吧，各付各的"), "split", "asking to split beats her wish that he pays");
-        assert_eq!(chat_order_payer(&json!({"lean": "player_pays", "insist": 0.0, "said": "喝完就先走", "split_agreed": true}))["option"], "split", "agreed earlier in the talk");
-        assert_eq!(chat_order_payer(&json!({"lean": "player_pays", "insist": 0.0, "said": "你来美食街找什么", "her_said": "算了，我请你吃甜甜圈。"}))["option"], "she_pays", "her words offer it");
-        assert_ne!(chat_order_payer(&json!({"lean": "she_pays", "insist": 0.75, "said": "那我点杯热的就好", "her_said": "你要喝什么自己点，我陪着坐。"}))["option"], "she_pays", "she did not offer");
-        assert_eq!(chat_order_payer(&json!({"lean": "player_pays", "insist": 0.4, "said": "", "her_said": "我点伯爵茶。再加一个司康。", "has_hers": true}))["option"], "choice", "her own order, he never offered: he decides");
-        assert_eq!(chat_order_payer(&json!({"lean": "player_pays", "insist": 0.4, "said": "我请你", "has_hers": true}))["option"], "player_pays", "he offered");
-        assert_eq!(chat_order_payer(&json!({"lean": "split", "insist": 0.4, "said": "好啊，那现在就去吧，我请你一杯", "her_said": "不用请，我自己付。那走吧，我带路。", "has_hers": true}))["option"], "split", "he offered, she turned it down");
-        assert_eq!(chat_order_payer(&json!({"lean": "split", "promise": true, "said": "你挑吧"}))["option"], "she_pays", "her promise");
-        assert_eq!(chat_order_payer(&json!({"lean": "split", "promise": true, "said": "是我說要送你的，不准搶著付"}))["option"], "choice", "both want to pay");
-        assert_eq!(chat_order_payer(&json!({"lean": "split", "insist": 0.4, "said": "刚才在公园说好的冰红茶还没请到，我们现在就在这边一起喝饮料吧？", "has_hers": true}))["option"], "player_pays", "the treat he still owes her");
-        assert_eq!(chat_order_payer(&json!({"lean": "player_pays", "insist": 0.5, "said": "那就去餐厅，我请你吃好吃的！", "her_said": "你要请我？那我不客气了！不过这回让我付一半吧，总让你出钱我过意不去。", "has_hers": true}))["option"], "split", "she asks to pay half");
-        assert_eq!(bill_split_heard(&json!({"her": "不用请，我自己付。"}))["split"], true);
-        assert_eq!(bill_split_heard(&json!({"his": "那就各付各的"}))["split"], true);
-        assert_eq!(bill_split_heard(&json!({"his": "我请你一杯", "her": "好啊，谢谢。"}))["split"], false);
-        assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays", "said": "昨晚回去冷不冷？"}))["option"], "split", "he talked of something else");
-        assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays", "said": "这顿我请"}))["option"], "player_pays");
-        assert_eq!(super::checkout_timeout(&json!({"lean": "she_pays", "said": ""}))["option"], "she_pays");
+        let o = |v: Value| chat_order_payer(&v)["option"].as_str().unwrap().to_string();
+        assert_eq!(o(json!({"lean": "split", "insist": 0.4})), "split", "nothing settled: her own way");
+        assert_eq!(o(json!({"lean": "split", "insist": 0.4, "agreed": "him"})), "player_pays");
+        assert_eq!(o(json!({"lean": "she_pays", "insist": 0.9})), "choice");
+        assert_eq!(o(json!({"lean": "player_pays", "agreed": "split"})), "split", "settled beats her wish that he pays");
+        assert_eq!(o(json!({"lean": "player_pays", "agreed": "her"})), "she_pays");
+        assert_eq!(o(json!({"lean": "player_pays", "insist": 0.4, "has_hers": true})), "choice", "her own order, nothing settled: he decides");
+        assert_eq!(o(json!({"lean": "split", "promise": true})), "she_pays", "her promise");
+        assert_eq!(o(json!({"lean": "split", "promise": true, "agreed": "him"})), "player_pays", "he insisted and she let him");
+        assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays"}))["option"], "split", "nothing settled");
+        assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays", "agreed": "him"}))["option"], "player_pays");
+        assert_eq!(super::checkout_timeout(&json!({"lean": "she_pays"}))["option"], "she_pays");
     }
 
 }

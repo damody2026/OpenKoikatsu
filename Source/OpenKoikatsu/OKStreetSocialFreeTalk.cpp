@@ -242,6 +242,7 @@ bool OKStreetFreeTalkParseContent(const FString& Content, FOKFreeTalkReply& Out,
   ReadChoice(TEXT("resolve"), Out.ResolveId, Out.ResolveOption, Out.ResolveInsist);
   ReadChoice(TEXT("propose"), Out.ProposeId, Out.ProposeOption, Out.ProposeInsist);
   const TSharedPtr<FJsonObject>* Promise = nullptr;
+  Reply->TryGetStringField(TEXT("payer"), Out.Payer);
   if (Reply->TryGetObjectField(TEXT("promise"), Promise)) { (*Promise)->TryGetStringField(TEXT("day"), Out.PromiseDay); (*Promise)->TryGetStringField(TEXT("time"), Out.PromiseTime); (*Promise)->TryGetStringField(TEXT("place"), Out.PromisePlace); (*Promise)->TryGetStringField(TEXT("what"), Out.PromiseWhat); }
   for (const auto& F : {TPair<const TCHAR*, TSharedPtr<FJsonObject>*>(TEXT("predict"), &Out.Predict), TPair<const TCHAR*, TSharedPtr<FJsonObject>*>(TEXT("trade"), &Out.Trade), TPair<const TCHAR*, TSharedPtr<FJsonObject>*>(TEXT("bet"), &Out.Bet)}) {
    const TSharedPtr<FJsonObject>* O = nullptr;

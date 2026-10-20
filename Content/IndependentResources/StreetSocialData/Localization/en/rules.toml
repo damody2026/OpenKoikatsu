@@ -56,21 +56,9 @@ hear_ranks = "ten,10:10|ace,aces:1|twos,deuce:2|threes:3|fours:4|five,fives,5:5|
 [hear]
 # A piece of a message naming a control: it goes behind the "?" (message_hint).
 control_hint = "Esc|WASD|Shift|Ctrl|F9|Press E|E: talk|Tab to switch|Press N|P or|on the right|Choose a topic:"
-offer_pay = "my treat|i'll pay|i've got this|i got this|on me|i'll get it|let me pay|i'm paying|i'll buy you|i'll cover|a gift for you|don't you dare pay|let me get it|i owe you a|still owe you"
-# Phrases with a word of offer_pay that do not offer to pay ("我送你回宿舍" walks her home).
-offer_pay_not = "count on me|rely on me|on meeting|on mention"
-ask_split = "split|go dutch|dutch|each pay|pay for ourselves|separate checks|half and half|fifty-fifty"
-decline_treat = "i'll pay for mine|i'll pay my own|pay for myself|no need to treat|you don't have to pay|i can pay|not your treat|half and half|fifty-fifty|split it"
 # He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
 self_order = "i'll have|i will have|i want|i'll get|i'll take|for me|i'd like"
 order_for_her = "for you|you want|your|get you|you'd like"
-# A clock time said for a meeting (shop.rs time_said): words that are one, and what follows a number.
-time_words = "noon|midnight|minutes|in an hour|half an hour|right away|in a bit|morning|afternoon|evening|tonight"
-# Which day the words name, word:days from today, longer words first (shop.rs day_said; the last one said counts).
-day_words = "day after tomorrow:2|tomorrow:1|tonight:0|today:0|this evening:0"
-# Words that name some day at all (shop.rs day_said "dated"): without any, a time still ahead is today.
-date_words = "monday|tuesday|wednesday|thursday|friday|saturday|sunday|next time|someday|weekend|week"
-time_marks = ":|pm|am|p.m.|a.m.|o'clock|o’clock"
 invite = "join us|come with|come along|come over|together|come on|hang out with us|follow me|let's talk"
 # A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
 invite_strong = "join us|come with|come along|come over|come on|hang out with us|follow me"

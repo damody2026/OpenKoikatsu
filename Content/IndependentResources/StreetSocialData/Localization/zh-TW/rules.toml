@@ -57,21 +57,9 @@ hear_ranks = "10,十:10|A,尖:1|2,二:2|3,三:3|4,四:4|5,五:5|6,六:6|7,七:7|
 [hear]
 # A piece of a message naming a control: it goes behind the "?" (message_hint).
 control_hint = "Esc|WASD|Shift|Ctrl|F9|按 E|E 交談|E 與|Tab 切換|N 開始|P 或|按右側|選擇話題："
-offer_pay = "我請|請你|我付|我來付|我出|算我的|我買單|我買給你|我请|请你|我来付|我买单|我买给你|送你|不准搶著付|別搶著付|不准搶|我買單|這次我來|還沒請|沒請到|还没请|没请到|欠你一杯|欠你一頓"
-# Phrases with a word of offer_pay that do not offer to pay ("我送你回宿舍" walks her home).
-offer_pay_not = "送你回|送你到|送你去|送你一程|送你上|送你下|送你出|送你過去|請你幫|請你等|請你原諒|請你相信|請你聽|請你別|請你放心"
-ask_split = "各付各的|各付各|AA|各自付|分開付|分开付|付一半|一人一半|各付一半|平分|對半|对半"
-decline_treat = "不用請|不用你請|別請|我自己付|自己付|我付我的|不用你付|我自己來付|不用请|不用你请|别请|付一半|一人一半|各付一半|平分|對半|对半|AA"
 # He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
 self_order = "我要|我點|給我來|給我一|我來一|我想吃|我想喝|我吃|我喝"
 order_for_her = "給你|幫你|你要|你想|請你吃|請你喝|你的|妳要|妳想|給妳|幫妳|妳的"
-# A clock time said for a meeting (shop.rs time_said): words that are one, and what follows a number.
-time_words = "中午|正午|午夜十二點|半夜十二點|分鐘後|分鐘以後|小時後|半小時後|馬上|待會|待會兒|等一下|等下|一會兒|分钟后|小时后|马上|待会|一早|早上|上午|下午|傍晚|晚上|今晚|明早|明晚|清晨|黃昏"
-# Which day the words name, word:days from today, longer words first (shop.rs day_said; the last one said counts).
-day_words = "大後天:3|大后天:3|後天:2|后天:2|明天:1|明早:1|明晚:1|今天:0|今晚:0|今早:0"
-# Words that name some day at all (shop.rs day_said "dated"): without any, a time still ahead is today.
-date_words = "週|周|星期|禮拜|號|下次|改天|以後|週末|月"
-time_marks = "點|點鐘|時|时|:|：|点"
 invite = "一起|過來|來吧|加入|也來|跟我們|跟著我|來聊|过来|来吧|也来|跟我们|跟着我|来聊"
 # A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
 invite_strong = "一起来|一起來|過來|來吧|加入|也來|跟我們|跟著我|來聊|过来|来吧|也来|跟我们|跟着我|来聊"
