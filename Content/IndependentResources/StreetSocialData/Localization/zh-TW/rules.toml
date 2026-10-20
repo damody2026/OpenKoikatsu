@@ -58,8 +58,8 @@ hear_ranks = "10,十:10|A,尖:1|2,二:2|3,三:3|4,四:4|5,五:5|6,六:6|7,七:7|
 # A piece of a message naming a control: it goes behind the "?" (message_hint).
 control_hint = "Esc|WASD|Shift|Ctrl|F9|按 E|E 交談|E 與|Tab 切換|N 開始|P 或|按右側|選擇話題："
 offer_pay = "我請|請你|我付|我來付|我出|算我的|我買單|我買給你|我请|请你|我来付|我买单|我买给你|送你|不准搶著付|別搶著付|不准搶|我買單|這次我來|還沒請|沒請到|还没请|没请到|欠你一杯|欠你一頓"
-ask_split = "各付各的|各付各|AA|各自付|分開付|分开付"
-decline_treat = "不用請|不用你請|別請|我自己付|自己付|我付我的|不用你付|我自己來付|不用请|不用你请|别请"
+ask_split = "各付各的|各付各|AA|各自付|分開付|分开付|付一半|一人一半|各付一半|平分|對半|对半"
+decline_treat = "不用請|不用你請|別請|我自己付|自己付|我付我的|不用你付|我自己來付|不用请|不用你请|别请|付一半|一人一半|各付一半|平分|對半|对半|AA"
 # He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
 self_order = "我要|我點|給我來|給我一|我來一|我想吃|我想喝|我吃|我喝"
 order_for_her = "給你|幫你|你要|你想|請你吃|請你喝|你的|妳要|妳想|給妳|幫妳|妳的"

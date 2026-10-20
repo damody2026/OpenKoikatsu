@@ -783,6 +783,7 @@ mod tests {
         assert_eq!(chat_order_payer(&json!({"lean": "split", "promise": true, "said": "你挑吧"}))["option"], "she_pays", "her promise");
         assert_eq!(chat_order_payer(&json!({"lean": "split", "promise": true, "said": "是我說要送你的，不准搶著付"}))["option"], "choice", "both want to pay");
         assert_eq!(chat_order_payer(&json!({"lean": "split", "insist": 0.4, "said": "刚才在公园说好的冰红茶还没请到，我们现在就在这边一起喝饮料吧？", "has_hers": true}))["option"], "player_pays", "the treat he still owes her");
+        assert_eq!(chat_order_payer(&json!({"lean": "player_pays", "insist": 0.5, "said": "那就去餐厅，我请你吃好吃的！", "her_said": "你要请我？那我不客气了！不过这回让我付一半吧，总让你出钱我过意不去。", "has_hers": true}))["option"], "split", "she asks to pay half");
         assert_eq!(bill_split_heard(&json!({"her": "不用请，我自己付。"}))["split"], true);
         assert_eq!(bill_split_heard(&json!({"his": "那就各付各的"}))["split"], true);
         assert_eq!(bill_split_heard(&json!({"his": "我请你一杯", "her": "好啊，谢谢。"}))["split"], false);

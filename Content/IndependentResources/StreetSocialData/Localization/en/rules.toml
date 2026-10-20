@@ -58,7 +58,7 @@ hear_ranks = "ten,10:10|ace,aces:1|twos,deuce:2|threes:3|fours:4|five,fives,5:5|
 control_hint = "Esc|WASD|Shift|Ctrl|F9|Press E|E: talk|Tab to switch|Press N|P or|on the right|Choose a topic:"
 offer_pay = "my treat|i'll pay|i've got this|i got this|on me|i'll get it|let me pay|i'm paying|i'll buy you|i'll cover|a gift for you|don't you dare pay|let me get it|i owe you a|still owe you"
 ask_split = "split|go dutch|dutch|each pay|pay for ourselves|separate checks|half and half|fifty-fifty"
-decline_treat = "i'll pay for mine|i'll pay my own|pay for myself|no need to treat|you don't have to pay|i can pay|not your treat"
+decline_treat = "i'll pay for mine|i'll pay my own|pay for myself|no need to treat|you don't have to pay|i can pay|not your treat|half and half|fifty-fifty|split it"
 # He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
 self_order = "i'll have|i will have|i want|i'll get|i'll take|for me|i'd like"
 order_for_her = "for you|you want|your|get you|you'd like"
