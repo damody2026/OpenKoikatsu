@@ -27,16 +27,23 @@ if defined SDKVER (
 )
 
 echo [ok-extract] using %CARGO%
-rem --lib: the editor links ok_extract.lib. The bin target needs kernel32.lib and
-rem fails inside the VS 18 prompt. --cap-lints allow: rustc warnings on stderr
-rem are reported by MSBuild as EXEC : warning.
+rem --lib: the editor links ok_extract.lib. --cap-lints allow: rustc warnings
+rem on stderr are reported by MSBuild as EXEC : warning.
+rem Cargo discovers .cargo/config.toml from the working directory, not --manifest-path.
+pushd "%~dp0"
+if errorlevel 1 exit /b 1
 set "CARGO_TERM_COLOR=never"
-set "RUSTFLAGS=%RUSTFLAGS% --cap-lints allow"
+rem RUSTFLAGS overrides target rustflags, so preserve the required Windows flags here.
+rem No +crt-static: Unreal links ok_extract.lib with the dynamic CRT (/MD); crt-static made cc build clothes_gpu.cpp as /MT
+rem and the game link failed with LNK2038 (RuntimeLibrary MT_StaticRelease vs MD_DynamicRelease).
+set "RUSTFLAGS=%RUSTFLAGS% -C linker-flavor=lld-link --cap-lints allow"
 "%CARGO%" build --release --lib --quiet --manifest-path "%~dp0Cargo.toml"
 if errorlevel 1 (
+	popd
 	echo [ok-extract] cargo build --release --lib failed
 	exit /b 1
 )
+popd
 
 set "OK_LIB=%~dp0target\release\ok_extract.lib"
 if not exist "%OK_LIB%" (

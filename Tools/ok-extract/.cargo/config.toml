@@ -1,0 +1,5 @@
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+# No +crt-static: ok_extract.lib is linked into Unreal, which uses the dynamic CRT (/MD). With crt-static, cc built
+# clothes_gpu.cpp as /MT and the game link failed (LNK2038 RuntimeLibrary MT_StaticRelease vs MD_DynamicRelease).
+rustflags = ["-C", "linker-flavor=lld-link"]

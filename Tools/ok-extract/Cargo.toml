@@ -40,3 +40,11 @@ cc = "1"
 
 [patch.crates-io]
 unity-asset-binary = { path = "../vendor/unity-asset-binary" }
+
+[profile.dev]
+lto = "off"
+incremental = true
+
+[profile.release]
+lto = "off"
+incremental = true
