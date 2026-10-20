@@ -40,4 +40,6 @@ GPU 驗收使用正式綁定器、已知不透明與常數 alpha 控制，以及
 
 最終複驗日期：2026-10-21。實作提交 `df6fd755c`，附圖驗收工具提交 `84f9952b3`。獨立檢查再次完整解碼所有 101 張 PNG，核對 hash、IEND 結尾及 13 張 Markdown 嵌圖；六個測試程序皆退出 0。
 
+推送前另合併遠端街頭規則提交 `eb42d766f`（合併 `d123057c1`）。`alpha-merged-editor-build.log`、`alpha-merged-game-build.log` 皆 Succeeded；`Saved/OKStudio/Verify-AlphaMergedFinal/` 再次通過 48 組 GPU 混合、101 張圖檔驗證與 13 張嵌圖。Studio 修正程式未因該次合併改動。
+
 這些結果限於本輪透明材質修正，不代表全部原作場景完全還原。場景整體色調、明暗與景深仍有既有差異。
