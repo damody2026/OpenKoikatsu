@@ -41,3 +41,13 @@ Compare 必須同時滿足程序 exit code 0、14／14 完成訊息、最後場�
 測試在新的 `Saved/Tests/StudioEvidence/` 子目錄使用普通文件截圖，不改動正式輸出；涵蓋缺失／重複／損壞／目錄外圖片、卡片附加資料與跨語言連結。
 
 需要提交圖文紀錄時，只提交普通截圖與文件，仍須通過 `Tools/check_no_cards.lua`。不提交原作卡、OK 卡、含角色的 Studio 場景或整個 Saved 目錄。既有實例見 [HANDOFF_E 圖文驗收紀錄](OK_STUDIO_HANDOFF_E_ACCEPTANCE_20261020.md)。
+
+## 2026-10-20 實際驗收
+
+`HandoffEAutoEvidence` 完整執行通過：GameSelfTest、PatternTest、EyeSetTest、EditorSelfTest 均 PASS；CompareKStudio 14／14 出圖，且 14 張圖片均通過完整解碼、尺寸、雜湊與具名紀錄核對。最後再以已提交的收集器重讀同輪 log／圖片，並用另一個 PNG 解碼器及 SHA-256 實作核對，全部一致。Editor／一般遊戲 Development 建置成功；工具 fixture 13 PASS，Lua 靜態檢查 0 problems。不存在引擎的負向案例另確認非零結束、最終 FAIL 與錯誤原因保存。
+
+本輪擷取峰值 20.6 GB，最後卸載 12.2 GB；仍不代表回到啟動基準，也未將與前輪的差異歸因於此次工具修改。完整的自動報告、14 張圖與逐項 log 保留在本機 `Saved/OKStudio/Verify-HandoffEAutoEvidence/`。執行時程式尚未提交，故報告保留 `08d73ebfd+worktree`；實作整理為 `35344d0ec`。
+
+下面是這輪實際產生的 0010 對照圖，已與自動報告內的原檔核對位元組一致。左原作縮圖，右 Unreal 結果；圖中的明暗／色調差異仍然存在。這次驗收確認自動保存與報告功能成功，沒有改變既有的視覺差異判定。
+
+![本輪自動保存的 0010：左原作縮圖、右 Unreal 結果](images/OKStudio/AutoEvidence20261020/koikatu_cs0000010.png)
