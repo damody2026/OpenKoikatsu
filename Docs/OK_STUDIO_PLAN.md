@@ -175,6 +175,7 @@
       - 0010 電扇：`main_StandardMDK_studio` 安裝的程式是沒有 `_ALPHATEST_ON` 的變體，護網 `m_koi_stu_senpu05_00`（`_ALPHATEST_ON`）改走自建圖（Masked，貼圖 alpha 裁切），機身 `senpu04` 仍走 `M_ForgeMDK`。護網貼圖（RGBA）裁切正常，但前景圓盤仍和原作不同（原作前板白色，我們暗綠），問題在機身 MDK 的光照或發光遮罩，還沒查
       - 母材質退路：配方 62 一開始只烘進 `StudioDisplay25`，街區根目錄缺它就退出（`Docs/ERROR_LOG.md`）。C 組另外烘了 `StreetDisplay25`／`StreetHG04`；E 加了 `OKRuntimeSharedMaterialFallback`（62 → 61）與 `OKLoadRuntimeSharedMaterialParent`，舊根目錄缺新配方時預覽端改用同程式的 61（半透明，不寫深度），`OKCreateRuntimeSharedMaterial` 依實際母材質的 family 核對。街區 gate 維持「出貨根目錄必須齊全」
       - 地圖 Animator 材質值改套 clip 第一格（之前只套整段不變的值）：ライブステージ的 volumeLight 光錐 `vl_center_intensity` 前 80% 是 0，原作載入時光錐幾乎看不見；只套 renderer 的材質綁定，GameObject 可見度（雷射光束）不套。`OKLIB_REFRESH=prefab_animated_materials` 重錄 studio-nodes，`SESSION_CACHE_REVISION` 12
+      - EyeSetTest 卡住：C／E 同步後，有 morph 的部件（臉、眼白、護目眼）改由 mouth slot 的骨架元件畫，原本的 `Part.Comp` 被藏起來且沒有幾何、材質，測試量不到臉的位置，拍照失敗後在 23 號樣式無限重試。測試改讀實際畫出來的元件（`MouthSlots` 的 `Comp`），拍照失敗時記失敗並往下走；GameSelfTest、PatternTest、EyeSetTest RESULT PASS
       - 診斷：`OK_PART_PNG_DUMP=<部件名片段>`（部件主貼圖寫到 `Saved/OKStudio/partpng`）、`item_open_timing` 探針加 `OK_ITEM_MATERIALS=1`（印每個部件的材質、shader、keyword）。注意：這台機器的 `C:/portable/KoikatuSunshine` 已沒有 abdata，原作在 `D:/KoikatuSunshine`
     - 還沒修：
       - 廁所色調：亮度已接近（後方牆 156 vs 149），但原作整體偏暖黃，我們的粉紫磁磚 × 桃色光照貼圖仍偏粉；暖色來自 reflection probe（見第九輪），但照 Unity 公式加上後過亮，待查 KKS 的 Standard 實際程式

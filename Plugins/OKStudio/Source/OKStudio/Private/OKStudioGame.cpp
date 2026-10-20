@@ -1841,7 +1841,7 @@ void UOKStudioGame::RunEyeSetTest(bool bExit)
 	const int32 Id = Add(EOKSceneObjectKind::Character);
 	Document->Find(Id)->Character.Card = TEXT("Content/CharacterCards/CrowdAPNG/C002.png");
 	Document->Find(Id)->Character.EyesPattern = 0;
-	struct FState { int32 Frame = 0; int32 Step = 0; TArray<FColor> Plain; TArray<FColor> Swirl; TArray<FString> Lines; int32 Failures = 0; TOptional<FTransform> View; };
+	struct FState { int32 Frame = 0; int32 Step = 0; TArray<FColor> Plain; TArray<FColor> Swirl; bool bSwirlTaken = false; TArray<FString> Lines; int32 Failures = 0; TOptional<FTransform> View; };
 	TSharedRef<FState> State = MakeShared<FState>();
 	TWeakObjectPtr<UOKStudioGame> Self(this);
 	Document->NotifyChanged();
@@ -1859,21 +1859,26 @@ void UOKStudioGame::RunEyeSetTest(bool bExit)
 		int32 GagShown = 0, PupilShown = 0;
 		if (Preview)
 		{
-			// Parts by their session name (components are named Part_n / Skel_n): shown ones are built.
+			// Parts by their session name (components are named Part_n / Skel_n): shown ones are built. A part with
+			// morphs (face, eyes, gag eyes) draws through its mouth slot's skeletal component; its own one is hidden.
+			TMap<int32, UPrimitiveComponent*> Drawn;
+			for (const AKKPreviewActor::FOkMouthSlot& Slot : Preview->MouthSlots) if (Slot.Comp) Drawn.Add(Slot.SessionPartIndex, Slot.Comp);
 			for (const FKKLoadedPart& Part : Preview->Parts)
 			{
 				OkMeshView View;
 				FMemory::Memzero(View);
 				if (Part.SessionIndex == INDEX_NONE || !Preview->Session.PartAt(Part.SessionIndex, View) || !View.name || !View.render_visible) continue;
 				const FString N = FString(UTF8_TO_TCHAR(View.name)).ToLower();
-				const FBox Bounds = Part.Comp ? Part.Comp->Bounds.GetBox() : FBox(ForceInit);
+				UPrimitiveComponent* Comp = Drawn.FindRef(Part.SessionIndex);
+				if (!Comp) Comp = Part.Comp;
+				const FBox Bounds = Comp ? Comp->Bounds.GetBox() : FBox(ForceInit);
 				if (N == TEXT("cf_o_face")) Face += Bounds;
 				// Both eye whites: their middle is in front of the face's centre.
 				if (N.StartsWith(TEXT("cf_ohitomi_")) && !N.Contains(TEXT("02"))) Eye += Bounds;
 				if (N.Contains(TEXT("gag_eye")))
 				{
 					++GagShown;
-					UMaterialInterface* M = Part.Comp ? Part.Comp->GetMaterial(0) : nullptr;
+					UMaterialInterface* M = Comp ? Comp->GetMaterial(0) : nullptr;
 					UE_LOG(LogTemp, Display, TEXT("OK studio eye set test: gag part %s material %s (base %s)"), *N, M ? *M->GetName() : TEXT("none"),
 						M && M->GetBaseMaterial() ? *M->GetBaseMaterial()->GetName() : TEXT("none"));
 				}
@@ -1904,9 +1909,11 @@ void UOKStudioGame::RunEyeSetTest(bool bExit)
 		const int32 Ptn = Patterns[State->Step];
 		const int32 Blend = FOKStudioCatalog::Get().EyeSet(Ptn).BlendPattern;
 		if (Ptn == 0) { State->Plain = Pixels; Check(Pixels.Num() > 0 && GagShown == 0 && PupilShown > 0, FString::Printf(TEXT("eyes 0: face pictured, gag eyes %d, pupils %d"), GagShown, PupilShown)); }
-		else if (Ptn == 23 && State->Swirl.IsEmpty())
+		else if (Ptn == 23 && !State->bSwirlTaken)
 		{
-			// The swirl turns (its gag material's _AngleSpeed -0.5): pictured again a second later.
+			// The swirl turns (its gag material's _AngleSpeed -0.5): pictured again a second later. Taken once even when
+			// the picture failed (no view), so the test ends with a failure instead of retrying forever.
+			State->bSwirlTaken = true;
 			State->Swirl = Pixels;
 			const int32 D = Differs();
 			Check(GagShown == 1 && PupilShown == 0 && D > 50, FString::Printf(TEXT("eyes 23 (swirl): gag eyes %d, pupils %d, %d pixels changed"), GagShown, PupilShown, D));
