@@ -153,9 +153,14 @@ FString OKStudioScenePostMaterialState()
 	if (Base->IsCompiling()) return TEXT("compiling");
 	const FMaterialResource* Resource = Base->GetMaterialResource(GMaxRHIShaderPlatform);
 	if (!Resource) return TEXT("no resource");
+#if WITH_EDITOR
+	// Compile errors and compile progress are editor-only on FMaterialResource (a packaged game did not build).
 	if (Resource->GetCompileErrors().Num()) return FString::Join(Resource->GetCompileErrors(), TEXT(" | "));
+#endif
 	if (!Resource->GetGameThreadShaderMap()) return TEXT("no shader map");
+#if WITH_EDITOR
 	if (!Resource->IsCompilationFinished()) return TEXT("shaders compiling");
+#endif
 	if (!Resource->IsGameThreadShaderMapComplete()) return TEXT("shader map incomplete");
 	return TEXT("ready");
 }
@@ -171,12 +176,16 @@ void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettin
 		static bool bReported = false;
 		const FMaterialResource* Resource = Base->GetMaterialResource(GMaxRHIShaderPlatform);
 		if (Base->IsCompiling()) return;
+#if WITH_EDITOR
+		// FMaterialResource::GetCompileErrors is editor-only: a packaged game (StreetSocial) did not build.
 		if (!bReported && Resource && Resource->GetCompileErrors().Num())
 		{
 			bReported = true;
-			for (const FString& E : Resource->GetCompileErrors()) UE_LOG(LogTemp, Warning, TEXT("OK studio: the scene post material did not compile: %s"), *E);
+			for (const FString& Message : Resource->GetCompileErrors()) UE_LOG(LogTemp, Warning, TEXT("OK studio: the scene post material did not compile: %s"), *Message);
 		}
-		if (Base->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform) || (Resource && Resource->GetCompileErrors().Num())) return;
+		if (Resource && Resource->GetCompileErrors().Num()) return;
+#endif
+		if (Base->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform)) return;
 		const FString State = OKStudioScenePostMaterialState();
 		if (State == TEXT("shader map incomplete"))
 		{
