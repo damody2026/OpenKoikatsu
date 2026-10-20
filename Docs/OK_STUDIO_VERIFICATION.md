@@ -6,7 +6,7 @@
 .\Tools\lua\lua.exe Tools/verify_ok_studio.lua --tag <新的名稱> --editor --compare
 ```
 
-`--editor` 加跑 EditorSelfTest；`--compare` 加跑 14 張原作樣本對照。不帶兩個旗標時執行 GameSelfTest、PatternTest、EyeSetTest、BloomTest。可用 `--only BloomTest` 單獨重跑泛光 GPU 檢查。每個測試使用獨立的受控 UE 子程序，保留 PID 與逾時限制；啟動引擎前必須完成建置。
+`--editor` 加跑 EditorSelfTest；`--compare` 加跑 14 張原作樣本對照。不帶兩個旗標時執行 GameSelfTest、PatternTest、EyeSetTest、BloomTest、TransparencyTest。可用 `--only BloomTest` 或 `--only TransparencyTest` 單獨重跑對應 GPU 檢查。每個測試使用獨立的受控 UE 子程序，保留 PID 與逾時限制；啟動引擎前必須完成建置。
 
 ## 每輪獨立保存
 

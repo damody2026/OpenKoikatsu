@@ -25,7 +25,7 @@ Those solid sections are not drawn with `M_ForgeOpaque`. That parent clips on te
 - two-sided solid sections use `M_IBLOpaque` (family 47)
 - one-sided solid sections use `M_IBLDepth` (family 26)
 
-No current body, clothes, or hair recipe is solid and one-sided. `M_IBLDepth` is reserved for that case. Glasses (`KoikanoGlasses0`–`11`), `IBLOpaque`, and `OilPainting` are the solid two-sided recipes. Everything else that still casts keeps its original material, UVs, and bone weights. Same-material original sections may be packed together even when they are not adjacent, still under the 256-bone limit.
+No current body, clothes, or hair recipe is solid and one-sided. `M_IBLDepth` is reserved for that case. `IBLOpaque` and `OilPainting` are the solid two-sided recipes. As corrected on 2026-10-20, glasses (`KoikanoGlasses0`–`11`) use source alpha blending and are excluded from solid shadow proxies. Everything else that still casts keeps its original material, UVs, and bone weights. Same-material original sections may be packed together even when they are not adjacent, still under the 256-bone limit.
 
 Translucent recipes do not cast a virtual shadow map today, because the cooked parents do not set cast-dynamic-shadow-as-masked. Those sections are left out of the shadow mesh. They stay on the displayed mesh.
 

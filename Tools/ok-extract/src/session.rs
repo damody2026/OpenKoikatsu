@@ -789,6 +789,10 @@ impl SessionPart {
                         && !textures.contains_key("_MainTex") {
                         if let Some(png)=crate::unity::solid_png([1.;4],1,1) {textures.insert("_MainTex".into(),png);}
                     }
+                } else if mesh.mat.as_ref().is_some_and(|m| matches!(m.shader.to_ascii_lowercase().as_str(),
+                    "koikano/main_clothes_item_glasses" | "shader forge/toon_glasses_lod0")) {
+                    // The exact draw consumes native texture / Color4 separately.
+                    textures.retain(|name, _| matches!(name.as_str(), "_MainTex" | "_GlassRamp" | "_NormalMap"));
                 } else if mesh.mat.as_ref().is_some_and(|m| m.shader == "Shader Forge/main_StandardMDK_studio") {
                     // MDK reads emission regardless of Standard's _EMISSION
                     // keyword, and its normal slot is _BumpMap.
@@ -4150,6 +4154,26 @@ mod tests {
                 assert_eq!(restored.shader_textures.get(name),Some(&bytes),"{role}/{name}");
             }
             assert_eq!(restored.source_material.as_ref().unwrap().color("_ShadowColor"),Some([0.,0.,0.,1.]));
+        }
+    }
+
+    #[test]
+    fn accessory_glasses_keep_unbaked_inputs_across_session_cache() {
+        for shader in ["Koikano/main_clothes_item_glasses", "Shader Forge/toon_glasses_lod0"] {
+            let native = crate::unity::solid_png([1.;4],1,1).unwrap();
+            let baked = crate::unity::solid_png([0.,0.16,0.19,0.197],1,1).unwrap();
+            let mesh = ExtractedMesh {
+                mat:Some(crate::unity::MeshMaterial {shader:shader.into(),
+                    colors:[("_Color4".into(),[0.,0.16,0.19,0.197])].into(),..Default::default()}),
+                texture_png:Some(baked.clone()),
+                shader_extra_textures:[("_MainTex".into(),native.clone()),("_GlassRamp".into(),vec![1,2,3])].into(),
+                ..Default::default()};
+            let part=SessionPart::from_mesh("accessory",&mesh,"translucent",true);
+            let restored=bincode::deserialize::<PartBlob>(&bincode::serialize(&PartBlob::from_part(&part)).unwrap()).unwrap().into_part();
+            assert_eq!(restored.shader_textures.get("_MainTex"),Some(&native));
+            assert_eq!(restored.shader_textures.get("_GlassRamp"),Some(&vec![1,2,3]));
+            assert_eq!(restored.png,Some(baked));
+            assert_eq!(restored.source_material.unwrap().color("_Color4").unwrap()[3],0.197);
         }
     }
 

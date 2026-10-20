@@ -3706,3 +3706,12 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-20｜單包 cook 未命中目標卻納入編輯器啟動資源**：首次用 CookDir／CookSinglePackage 的診斷 cook 實際處理 301 個啟動套件，沒有八個 SourceBloom 材質，且 Landmass 引用 NeverCook EditorMaterials 而退出 1。保留原 log，改依該引擎 CookCommandlet 的明確 `PACKAGE` 清單、`cooksinglepackage`、`CookSkipRequests` 與 `SkipZenStore`，輸出新目錄；驗收必須逐一確認八個目標的 cooked 產物，不能只看到 Done 或 result 0 訊息就算通過。
 
 - **2026-10-20｜Windows 搜尋路徑的萬用字元與 UE 標頭位置**：直接把帶 `*.usf` 的路徑交給 rg 在 PowerShell 下不會展開，出現 os error 123；UE5.8 材質標頭也已移到 Public/Materials。後續先 `rg --files` 定位，再用父目錄配合 `-g` 篩選，不沿用猜測的 Classes 路徑反覆搜尋。
+
+- **2026-10-20｜新檔未追蹤時通過、提交後 Unity build 發生名稱遮蔽**：自適應建置先把工作中 Bloom.cpp 單獨編譯；提交後它進入 Unity 分組，匿名 namespace 的全域 Cache 讓同組 Sky.cpp 的局部 Cache 觸發 C4459。私有狀態與 helper 改用 SourceBloom 前綴，並避開 Base／Instance 等同組全域名稱；保留 Unity build，不用關閉分組或讓檔案持續留在 working set 來規避。最終驗收必須包含已追蹤檔案的 Unity 分組建置。
+
+- **2026-10-20｜3167 鏡片被共用材質強制不透明**：KoikanoGlasses0–11 未列入 OKRuntimeSharedMaterialTranslucent，baker 因此改寫原始 pixel shader 的 alpha 為 1，約 0.197 的鏡片變為黑色實心。按既有來源 Forward 的 SrcAlpha/OneMinusSrcAlpha 修正完整家族，三個出貨根以新版本重烘；不能只改 PNG alpha、只修單張卡或只烘 Studio。診斷腳本一度誤用不存在的 ok.path.read/write，改用既有 path.copy/read_text/write_text；Saved 臨時腳本沒有提交。
+
+- **2026-10-20｜透明度驗證前置錯誤**：第一次 Python 編輯未指定 UTF-8，cp950 解碼 Rust 檔案失敗，沒有套用修改；改用 apply_patch。第一次篩選 accessory_glass 只找到 ignored 原作 oracle，不能當回歸通過；加入快取 round-trip 測試後以 --include-ignored 執行，又因漏設 OK_TEST_GAME_ROOT 使 oracle 正確 FAIL，補齊明確的 D:/KoikatuSunshine 測試環境再執行。
+- **2026-10-20｜鏡片第四組顏色漏寫，被誤判為較晚的 ME 覆寫**：嚴格原作卡 oracle 要求 alpha 0.1254902，實際原生材質卻是 0.197。曾改用量化值並猜測是 MaterialEditor 較晚覆寫；直接檢查序列化卡片後證實沒有該 ME Color4，這個推論錯誤。根因是 color_key 只有三組，zip(cols) 沒有寫回第四組顏色；已明確 set_material_color(_Color4, cols[3])，恢復原嚴格斷言，不放寬容差。快取版本提升到 17，避免重用修正中產生的舊結果。
+- **2026-10-21｜透明度測試同一影格切換材質，誤讀尚未更新的繪製資料**：首輪 48 組透射率全部為 1，一度猜測 Plane 朝向、綁定、Nanite 或 SceneCapture 的 SeparateTranslucency／UnlitViewmode 預設。新增不透明與常數 alpha 雙控制後，不透明控制 PASS、常數 alpha 仍消失，證明尚不能歸因於來源 shader。SceneCapture 旗標修改本身也沒有修好。最終改成跨影格設材質、下一個 ticker 才擷取，常數 alpha 及全部 48 組皆 PASS；保留先前 FAIL，沒有放寬單層 .5／雙層 .25 的容差。正式 Capture 不保留未經證實必要的旗標變更。測試沿用正式綁定器初始化來源燈光／probe 等輸入。
+- **2026-10-21｜GPU fixture 混用舊眼白父材質與新 selector**：還原正式擷取預設後，45 組 PASS、三個根的 ForgeEyeWhite 失敗。檢查 selector 確認該 shader 現在選 ForgeEyeWhiteLod（family 56），不是舊 ForgeEyeWhite（family 8）；先前手動覆蓋 family 曾掩蓋 fixture 混搭。移除冗餘手動 family，改測真正的現行父材質，48 組與兩個控制均 PASS。沒有變更正式 shader selector 或以錯誤 family 規避契約。

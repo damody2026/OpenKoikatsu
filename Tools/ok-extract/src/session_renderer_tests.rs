@@ -960,6 +960,10 @@ fn native_accessory_glass_material() {
     let image=crate::teximg::load_from_memory(png).unwrap().to_rgba8();
     // SourceWorld Card2 material TSV records Color4=(0,.163623989,.19607836,.1254902).
     assert!(image.pixels().all(|p|p.0==[0,42,50,32]),"native base colour and alpha must both survive null MainTex");
+    let native=crate::teximg::load_from_memory(&part.shader_textures["_MainTex"]).unwrap().to_rgba8();
+    assert!(native.pixels().all(|p|p.0==[255;4]),"exact shader must receive the untinted white default");
+    assert!((part.source_material.as_ref().unwrap().color("_Color4").unwrap()[3]-0.1254902).abs()<1e-6,
+        "native Color4 must receive the card's accessory alpha rather than keeping the prefab alpha");
 }
 
 #[test]

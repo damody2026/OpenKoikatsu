@@ -18,18 +18,18 @@
 
 namespace
 {
-TAutoConsoleVariable<int32> SourceBloom(TEXT("ok.Studio.SourceBloom"), 1,
+TAutoConsoleVariable<int32> CVarStudioSourceBloom(TEXT("ok.Studio.SourceBloom"), 1,
     TEXT("Studio's installed HDR BloomAndFlares passes (0: legacy UE Gaussian approximation)."));
-constexpr int32 PassCount = 8;
-TStrongObjectPtr<UMaterial> Bases[PassCount];
-bool Submitted[PassCount] = {};
-const TCHAR* Inputs[] = { nullptr, TEXT("OKBloomHalf"), TEXT("OKBloomQuarter"), TEXT("OKBloomBright"),
+constexpr int32 SourceBloomPassCount = 8;
+TStrongObjectPtr<UMaterial> GSourceBloomParents[SourceBloomPassCount];
+bool GSourceBloomSubmitted[SourceBloomPassCount] = {};
+const TCHAR* GSourceBloomInputs[] = { nullptr, TEXT("OKBloomHalf"), TEXT("OKBloomQuarter"), TEXT("OKBloomBright"),
     TEXT("OKBloomV0"), TEXT("OKBloomH0"), TEXT("OKBloomV1"), TEXT("OKBloomFinal") };
-const TCHAR* Outputs[] = { TEXT("OKBloomHalf"), TEXT("OKBloomQuarter"), TEXT("OKBloomBright"), TEXT("OKBloomV0"),
+const TCHAR* GSourceBloomOutputs[] = { TEXT("OKBloomHalf"), TEXT("OKBloomQuarter"), TEXT("OKBloomBright"), TEXT("OKBloomV0"),
     TEXT("OKBloomH0"), TEXT("OKBloomV1"), TEXT("OKBloomFinal"), nullptr };
-const TCHAR* AssetRoot = TEXT("/Game/OKStudio/Post/SourceBloom1");
+const TCHAR* GSourceBloomAssetRoot = TEXT("/Game/OKStudio/Post/SourceBloom1");
 
-UMaterial* BuildPass(int32 Pass, UObject* Outer = GetTransientPackage(), FName Name = NAME_None, EObjectFlags Flags = RF_Transient)
+UMaterial* BuildSourceBloomPass(int32 Pass, UObject* Outer = GetTransientPackage(), FName Name = NAME_None, EObjectFlags Flags = RF_Transient)
 {
 #if WITH_EDITORONLY_DATA
     UMaterial* Mat = NewObject<UMaterial>(Outer, Name, Flags);
@@ -39,9 +39,9 @@ UMaterial* BuildPass(int32 Pass, UObject* Outer = GetTransientPackage(), FName N
     Mat->bIsBlendable = false; // Separate graph inputs / outputs, never interpolate different passes together.
     // Carry pre-exposed HDR between passes. Bright-pass alone scales its threshold into that space.
     Mat->bDisablePreExposureScale = true;
-    if (Outputs[Pass])
+    if (GSourceBloomOutputs[Pass])
     {
-        Mat->UserSceneTexture = Outputs[Pass];
+        Mat->UserSceneTexture = GSourceBloomOutputs[Pass];
         Mat->UserTextureDivisor = Pass == 0 ? FIntPoint(2, 2) : FIntPoint(4, 4);
     }
     auto Add = [Mat](UMaterialExpression* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
@@ -57,14 +57,14 @@ UMaterial* BuildPass(int32 Pass, UObject* Outer = GetTransientPackage(), FName N
         auto* P = NewObject<UMaterialExpressionScalarParameter>(Mat); P->ParameterName = Name; Add(P); Input(Name, P);
     };
     FString Id = TEXT("PPI_PostProcessInput0");
-    if (Inputs[Pass])
+    if (GSourceBloomInputs[Pass])
     {
         auto* Texture = NewObject<UMaterialExpressionUserSceneTexture>(Mat);
-        Texture->UserSceneTexture = Inputs[Pass]; Texture->bFiltered = true; Texture->bClamped = true;
+        Texture->UserSceneTexture = GSourceBloomInputs[Pass]; Texture->bFiltered = true; Texture->bClamped = true;
         Add(Texture); Input(TEXT("Source"), Texture); Input(TEXT("SourceSize"), Texture, 1);
-        Id = FString(TEXT("PPIUser_")) + Inputs[Pass];
+        Id = FString(TEXT("PPIUser_")) + GSourceBloomInputs[Pass];
     }
-    if (!Inputs[Pass] || Pass == 7)
+    if (!GSourceBloomInputs[Pass] || Pass == 7)
     {
         auto* Scene = NewObject<UMaterialExpressionSceneTexture>(Mat);
         Scene->SceneTextureId = PPI_PostProcessInput0; Add(Scene); Input(TEXT("Scene"), Scene);
@@ -110,28 +110,28 @@ UMaterial* BuildPass(int32 Pass, UObject* Outer = GetTransientPackage(), FName N
 }
 
 // Settings own the instances. An immutable parameter tuple lets different cameras retain their own values.
-struct FInstances
+struct FSourceBloomInstances
 {
     float Threshold, Spread, Intensity;
-    TWeakObjectPtr<UMaterialInstanceDynamic> Passes[PassCount];
+    TWeakObjectPtr<UMaterialInstanceDynamic> Passes[SourceBloomPassCount];
 };
-TArray<FInstances> Cache;
+TArray<FSourceBloomInstances> GSourceBloomInstances;
 
 #if WITH_EDITOR
 void BakeBloom(const TArray<FString>& Args)
 {
     bool Passed = true;
-    for (int32 I = 0; I < PassCount; ++I)
+    for (int32 I = 0; I < SourceBloomPassCount; ++I)
     {
         const FString Name = FString::Printf(TEXT("M_SourceBloom%d"), I);
-        const FString PackageName = FString(AssetRoot) / Name;
+        const FString PackageName = FString(GSourceBloomAssetRoot) / Name;
         if (FPackageName::DoesPackageExist(PackageName))
         {
             UE_LOG(LogTemp, Error, TEXT("OK studio bake bloom: refusing to overwrite %s; use a new asset root version"), *PackageName);
             Passed = false; break;
         }
         UPackage* Package = CreatePackage(*PackageName);
-        UMaterial* Material = BuildPass(I, Package, FName(*Name), RF_Public | RF_Standalone);
+        UMaterial* Material = BuildSourceBloomPass(I, Package, FName(*Name), RF_Public | RF_Standalone);
         FSavePackageArgs Save; Save.TopLevelFlags = RF_Public | RF_Standalone;
         const FString File = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
         if (!Material || !UPackage::SavePackage(Package, Material, *File, Save)) { Passed = false; break; }
@@ -146,9 +146,9 @@ FAutoConsoleCommand BakeBloomCommand(TEXT("OKStudio.BakeBloom"), TEXT("OKStudio.
 
 FString OKStudioSourceBloomState()
 {
-    for (int32 I = 0; I < PassCount; ++I)
+    for (int32 I = 0; I < SourceBloomPassCount; ++I)
     {
-        UMaterial* Mat = Bases[I].Get();
+        UMaterial* Mat = GSourceBloomParents[I].Get();
         if (!Mat) return TEXT("not made");
         const FMaterialResource* Resource = Mat->GetMaterialResource(GMaxRHIShaderPlatform);
 #if WITH_EDITOR
@@ -157,7 +157,7 @@ FString OKStudioSourceBloomState()
         if (Mat->IsCompiling() || !Resource || !Resource->GetGameThreadShaderMap()) return TEXT("compiling");
         if (!Resource->IsGameThreadShaderMapComplete())
         {
-            if (!Submitted[I]) { Submitted[I] = true; Mat->CacheShaders(EMaterialShaderPrecompileMode::Default); }
+            if (!GSourceBloomSubmitted[I]) { GSourceBloomSubmitted[I] = true; Mat->CacheShaders(EMaterialShaderPrecompileMode::Default); }
             return TEXT("compiling");
         }
     }
@@ -168,40 +168,40 @@ bool OKStudioApplySourceBloom(const FOKScenePost& Post, FPostProcessSettings& Se
 {
     Settings.WeightedBlendables.Array.RemoveAll([](const FWeightedBlendable& B)
     {
-        if (const auto* Instance = Cast<UMaterialInstanceDynamic>(B.Object))
-            for (const auto& Base : Bases) if (Base && Instance->Parent == Base.Get()) return true;
+        if (const auto* BloomInstance = Cast<UMaterialInstanceDynamic>(B.Object))
+            for (const auto& BloomParent : GSourceBloomParents) if (BloomParent && BloomInstance->Parent == BloomParent.Get()) return true;
         return false;
     });
-    if (!Post.bBloom || SourceBloom.GetValueOnGameThread() == 0) return false;
-    for (int32 I = 0; I < PassCount; ++I) if (!Bases[I])
+    if (!Post.bBloom || CVarStudioSourceBloom.GetValueOnGameThread() == 0) return false;
+    for (int32 I = 0; I < SourceBloomPassCount; ++I) if (!GSourceBloomParents[I])
     {
         const FString Name = FString::Printf(TEXT("M_SourceBloom%d"), I);
-        UMaterial* Parent = LoadObject<UMaterial>(nullptr, *(FString(AssetRoot) / Name + TEXT(".") + Name));
-        Bases[I].Reset(Parent ? Parent : BuildPass(I));
+        UMaterial* Parent = LoadObject<UMaterial>(nullptr, *(FString(GSourceBloomAssetRoot) / Name + TEXT(".") + Name));
+        GSourceBloomParents[I].Reset(Parent ? Parent : BuildSourceBloomPass(I));
     }
     if (OKStudioSourceBloomState() != TEXT("ready")) return false;
     const float Threshold = Post.BloomThreshold;
     const float Spread = 4.f * FMath::Clamp(Post.BloomSize, 0.1f, 8.f);
     const float Intensity = FMath::Max(Post.BloomIntensity, 0.f);
-    Cache.RemoveAll([](const FInstances& Entry) { return !Entry.Passes[0].IsValid(); });
-    FInstances* Found = Cache.FindByPredicate([&](const FInstances& Entry)
+    GSourceBloomInstances.RemoveAll([](const FSourceBloomInstances& Entry) { return !Entry.Passes[0].IsValid(); });
+    FSourceBloomInstances* Found = GSourceBloomInstances.FindByPredicate([&](const FSourceBloomInstances& Entry)
     {
         if (Entry.Threshold != Threshold || Entry.Spread != Spread || Entry.Intensity != Intensity) return false;
-        for (const auto& Instance : Entry.Passes) if (!Instance.IsValid()) return false;
+        for (const auto& BloomInstance : Entry.Passes) if (!BloomInstance.IsValid()) return false;
         return true;
     });
     if (!Found)
     {
-        if (Cache.Num() >= 32) Cache.RemoveAt(0);
-        FInstances& Entry = Cache.AddDefaulted_GetRef();
+        if (GSourceBloomInstances.Num() >= 32) GSourceBloomInstances.RemoveAt(0);
+        FSourceBloomInstances& Entry = GSourceBloomInstances.AddDefaulted_GetRef();
         Entry.Threshold = Threshold; Entry.Spread = Spread; Entry.Intensity = Intensity;
-        for (int32 I = 0; I < PassCount; ++I)
+        for (int32 I = 0; I < SourceBloomPassCount; ++I)
         {
-            auto* Instance = UMaterialInstanceDynamic::Create(Bases[I].Get(), GetTransientPackage());
-            Instance->SetScalarParameterValue(TEXT("Threshold"), Threshold);
-            Instance->SetScalarParameterValue(TEXT("Spread"), Spread);
-            Instance->SetScalarParameterValue(TEXT("Intensity"), Intensity);
-            Entry.Passes[I] = Instance;
+            auto* BloomInstance = UMaterialInstanceDynamic::Create(GSourceBloomParents[I].Get(), GetTransientPackage());
+            BloomInstance->SetScalarParameterValue(TEXT("Threshold"), Threshold);
+            BloomInstance->SetScalarParameterValue(TEXT("Spread"), Spread);
+            BloomInstance->SetScalarParameterValue(TEXT("Intensity"), Intensity);
+            Entry.Passes[I] = BloomInstance;
         }
         Found = &Entry;
     }

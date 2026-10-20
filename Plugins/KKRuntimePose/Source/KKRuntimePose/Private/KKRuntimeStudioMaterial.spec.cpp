@@ -18,4 +18,18 @@ bool FOKStudioMdkCoverage::RunTest(const FString&)
     }
     return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOKStudioGlassesBlend,
+    "OpenKoikatsu.RuntimeMaterial.GlassesBlend",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FOKStudioGlassesBlend::RunTest(const FString&)
+{
+    for (int32 I = int32(EKKRuntimeMaterialRecipe::KoikanoGlasses0);
+         I <= int32(EKKRuntimeMaterialRecipe::KoikanoGlasses11); ++I)
+    {
+        const auto Recipe = EKKRuntimeMaterialRecipe(I);
+        TestTrue(TEXT("all native glasses variants preserve shader alpha"), OKRuntimeSharedMaterialTranslucent(Recipe));
+        TestEqual(TEXT("source SrcAlpha / OneMinusSrcAlpha"), int32(OKRuntimeSharedMaterialBlendMode(Recipe)), int32(BLEND_Translucent));
+    }
+    return true;
+}
 #endif
