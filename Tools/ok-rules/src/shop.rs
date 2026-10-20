@@ -717,7 +717,8 @@ mod tests {
         assert!(super::time_said("那就 15:30 吧"));
         assert!(super::time_said("明天中午學生餐廳"));
         assert!(!super::time_said("好啊，明天我也有空"));
-        assert!(!super::time_said("晚上見"));
+        // A part of the day both agreed to is a time (the judge reads it as 19:00, 17:30...): "傍晚公園見" was dropped.
+        assert!(super::time_said("晚上見") && super::time_said("明天傍晚要不要再一起去公园"));
         assert!(super::time_said("那十分钟后餐厅门口见"), "a time from now is a time");
     }
 

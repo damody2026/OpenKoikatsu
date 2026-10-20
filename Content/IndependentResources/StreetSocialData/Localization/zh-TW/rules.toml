@@ -66,7 +66,7 @@ decline_treat = "不用請|不用你請|別請|我自己付|自己付|我付我�
 self_order = "我要|我點|給我來|給我一|我來一|我想吃|我想喝|我吃|我喝"
 order_for_her = "給你|幫你|你要|你想|請你吃|請你喝|你的|妳要|妳想|給妳|幫妳|妳的"
 # A clock time said for a meeting (shop.rs time_said): words that are one, and what follows a number.
-time_words = "中午|正午|午夜十二點|半夜十二點|分鐘後|分鐘以後|小時後|半小時後|馬上|待會|待會兒|等一下|等下|一會兒|分钟后|小时后|马上|待会"
+time_words = "中午|正午|午夜十二點|半夜十二點|分鐘後|分鐘以後|小時後|半小時後|馬上|待會|待會兒|等一下|等下|一會兒|分钟后|小时后|马上|待会|一早|早上|上午|下午|傍晚|晚上|今晚|明早|明晚|清晨|黃昏"
 # Which day the words name, word:days from today, longer words first (shop.rs day_said; the last one said counts).
 day_words = "大後天:3|大后天:3|後天:2|后天:2|明天:1|明早:1|明晚:1|今天:0|今晚:0|今早:0"
 # Words that name some day at all (shop.rs day_said "dated"): without any, a time still ahead is today.
