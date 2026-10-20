@@ -76,6 +76,27 @@ fn assign_reflection_probes(meshes: &mut [ExtractedMesh], probes: &crate::unity:
 /// (Unity axes, metres): `_OKRTCamPos` (position, vertical fov), `_OKRTCamFwd` (+Z, near), `_OKRTCamUp` (+Y, far),
 /// `_OKRTCamSize` (RenderTexture width, height, orthographic 0/1, orthographic size), `_OKRTCamClear` (background
 /// colour, clear flags). A camera Unity never runs (disabled or inactive) is left out.
+/// The times of day (a bit per SunLightInfo.Info.Type) whose `visibleList` holds this node or one above it; 0: shown
+/// whatever the time.
+fn sun_mask(sun: &crate::unity::PrefabSunLight, h: &crate::pose::PrefabHierarchy, node: i32) -> u32 {
+    let mut mask = 0;
+    for info in &sun.infos {
+        let mut i = node;
+        while i >= 0 {
+            if info.visible.contains(&i) { mask |= 1 << info.kind.clamp(0, 7); break; }
+            i = h.nodes.get(i as usize).map_or(-1, |n| n.parent);
+        }
+    }
+    mask
+}
+
+/// A part shown only at some times of day (SunLightInfo.Set hides every list, then shows the current time's):
+/// `_OKSunVisible` = sun_mask.
+fn mark_sun_visible(m: &mut ExtractedMesh, sun: &crate::unity::PrefabSunLight, h: &crate::pose::PrefabHierarchy, node: i32) {
+    let mask = sun_mask(sun, h, node);
+    if mask != 0 { if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKSunVisible".into(), mask as f32); } }
+}
+
 fn mark_render_texture(m: &mut ExtractedMesh, rt: &crate::unity::PrefabRenderTextures, node: i32, h: &crate::pose::PrefabHierarchy, worlds: &[crate::pose::Mat4]) {
     let Some(mat) = m.mat.as_mut() else { return; };
     let Some(&(_, _, _, c)) = rt.users.iter().find(|(n, name, _, _)| *n == node && *name == mat.name) else { return; };
@@ -275,6 +296,8 @@ impl ModelView {
     pub fn hierarchy(&self, prefab: &str) -> crate::pose::PrefabHierarchy { self.parsed.prefab_hierarchy(prefab) }
     /// Baked lightmaps of a prefab (recorded by `studio-nodes`).
     pub fn prefab_lightmaps(&self, prefab: &str) -> crate::unity::PrefabLightmaps { self.parsed.prefab_lightmaps(prefab) }
+    /// A map's SunLightInfo (recorded by `studio-nodes`).
+    pub fn parsed_sun_light(&self, prefab: &str) -> crate::unity::PrefabSunLight { self.parsed.prefab_sun_light(prefab) }
 
     /// Bones a prefab's shown skinned meshes follow: what Studio item FK can turn.
     pub fn fk_bones(&self, prefab: &str) -> Vec<String> {
@@ -301,6 +324,17 @@ impl ModelView {
         let profile = std::env::var_os("OK_PROFILE").is_some();
         let t = std::time::Instant::now();
         let mut meshes = self.prefab_meshes(prefab, include_disabled);
+        // Studio map times of day (SunLightInfo): what a time shows may be inactive in the prefab, so those meshes come in
+        // too; every part under a time's list is marked with the times it shows at (mark_sun_visible).
+        let sun = self.parsed.prefab_sun_light(prefab);
+        if !include_disabled && sun.infos.iter().any(|i| !i.visible.is_empty()) {
+            let h = self.hierarchy(prefab);
+            let have: BTreeSet<(i64, usize)> = meshes.iter().map(|m| (m.path_id, m.submesh_index)).collect();
+            for m in self.prefab_meshes(prefab, true) {
+                if have.contains(&(m.path_id, m.submesh_index)) { continue; }
+                if h.mesh_nodes.iter().any(|(id, n)| *id == m.path_id && sun_mask(&sun, &h, *n) != 0) { meshes.push(m); }
+            }
+        }
         if profile { eprintln!("ok-extract: PROFILE okmodel meshes {:.1}ms", t.elapsed().as_secs_f64() * 1000.0); }
         if meshes.is_empty() { return Err(format!("prefab {prefab} has no meshes")); }
         // Rendered with the role the game gives the part (shader paths depend on it) and the textures the
@@ -343,13 +377,25 @@ impl ModelView {
                 bake_lightmap(&mut extra, &lightmaps, *node);
                 mark_render_texture(&mut extra, &render_textures, *node, &h, &worlds);
                 apply_animated_materials(&mut extra, &animated, *node);
+                mark_sun_visible(&mut extra, &sun, &h, *node);
                 instances.push(extra);
             }
-            if let Some((node, _)) = nodes.first() { bake_lightmap(m, &lightmaps, *node); mark_render_texture(m, &render_textures, *node, &h, &worlds); apply_animated_materials(m, &animated, *node); }
+            if let Some((node, _)) = nodes.first() { bake_lightmap(m, &lightmaps, *node); mark_render_texture(m, &render_textures, *node, &h, &worlds); apply_animated_materials(m, &animated, *node); mark_sun_visible(m, &sun, &h, *node); }
             let Some(w) = nodes.first().map(|(_, w)| *w).or(m.prefab_local) else { continue; };
             place(m, &w);
         }
         meshes.extend(instances);
+        // The map's sun for each time of day (Unity Euler angle, colour, intensity) and its culling mask, on every part
+        // (the renderer reads them from any part of the map).
+        if !sun.infos.is_empty() {
+            for mat in meshes.iter_mut().filter_map(|m| m.mat.as_mut()) {
+                for i in &sun.infos {
+                    mat.colors.insert(format!("_OKSun{}Color", i.kind), [i.color[0], i.color[1], i.color[2], i.intensity]);
+                    mat.colors.insert(format!("_OKSun{}Angle", i.kind), [i.angle[0], i.angle[1], i.angle[2], 1.]);
+                }
+                mat.floats.insert("_OKSunCulling".into(), (sun.culling_mask & 0x00FF_FFFF) as f32);
+            }
+        }
         // Each lightmap texture rides on the first part that uses it; the others name it by index (no copies).
         for (index, png) in lightmaps.textures.iter().enumerate() {
             if png.is_empty() { continue; }

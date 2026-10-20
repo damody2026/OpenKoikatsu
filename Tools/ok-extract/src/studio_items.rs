@@ -339,7 +339,7 @@ pub fn record_hierarchies(game: &Path, lib: &Path, threads: usize) -> Result<(),
             let parsed = crate::unity::parse_bundle_cached(bytes);
             parsed.configure_game_references(game);
             let (mut n, mut l, mut empty) = (0, 0, 0);
-            for p in prefabs { let h = parsed.prefab_hierarchy(p); n += h.nodes.len(); l += h.lights.len(); if h.nodes.is_empty() { empty += 1; } parsed.prefab_lightmaps(p); parsed.prefab_render_textures(p); parsed.prefab_reflection_probes(p); parsed.prefab_animated_materials(p); }
+            for p in prefabs { let h = parsed.prefab_hierarchy(p); n += h.nodes.len(); l += h.lights.len(); if h.nodes.is_empty() { empty += 1; } parsed.prefab_lightmaps(p); parsed.prefab_render_textures(p); parsed.prefab_reflection_probes(p); parsed.prefab_animated_materials(p); parsed.prefab_sun_light(p); }
             (n, l, empty)
         }));
         crate::unity::clear_bundle_cache();
@@ -977,6 +977,7 @@ mod scene_camera_probe {
         crate::pose::apply_mat(&mut v, &crate::pose::trs([0.; 3], q, [1.; 3]));
         let at = [v[0][0] + cam.pos[0], v[0][1] + cam.pos[1], v[0][2] + cam.pos[2]];
         println!("map={} camera at={},{},{} dir={},{},{} fov={}", scene.map, at[0], at[1], at[2], v[1][0], v[1][1], v[1][2], cam.fov);
+        if let Some(e) = &scene.effects { println!("map transform pos={:?} rot={:?} sun={}", e.map_pos, e.map_rot, e.sun_light_type); }
         let json = serde_json::to_value(&scene.objects).unwrap();
         fn walk(v: &serde_json::Value) { match v {
             serde_json::Value::Object(m) => { if m.get("kind").and_then(|k| k.as_str()) == Some("Character") { println!("character change={:?} anime={:?}", m.get("change"), m.get("anime")); } for (_, x) in m { walk(x); } }
@@ -1092,6 +1093,15 @@ mod map_animator_probe {
                 for i in ser.objects_of_type(4) { if let Ok(o) = UnityObject::from_serialized_file(ser, i) { let p = o.class.properties();
                     let go = p.get("m_GameObject").map(pid).unwrap_or(0); tf_go.insert(i.path_id, go); go_tf.insert(go, i.path_id);
                     if let Some(unity_asset_core::UnityValue::Array(c)) = p.get("m_Children") { kids.insert(i.path_id, c.iter().map(pid).collect()); } } }
+                // OK_ANIM_LAYERS=1: renderers (MeshRenderer, SkinnedMeshRenderer) per GameObject layer.
+                if std::env::var("OK_ANIM_LAYERS").is_ok() {
+                    let layers: std::collections::HashMap<i64, i64> = ser.objects_of_type(1).into_iter().filter_map(|i| UnityObject::from_serialized_file(ser, i).ok().map(|o| (i.path_id, o.class.properties().get("m_Layer").and_then(|v| v.as_i64()).unwrap_or(-1)))).collect();
+                    let mut hist = std::collections::BTreeMap::<i64, usize>::new();
+                    for class in [23, 137] { for i in ser.objects_of_type(class) { if let Ok(o) = UnityObject::from_serialized_file(ser, i) {
+                        let go = o.class.properties().get("m_GameObject").map(pid).unwrap_or(0);
+                        *hist.entry(layers.get(&go).copied().unwrap_or(-1)).or_default() += 1; } } }
+                    if !hist.is_empty() { println!("renderer layers {hist:?}"); }
+                }
                 // OK_ANIM_GO=<name>: that GameObject's Transform chain (local pos / rot / scale, active) and its MeshFilter mesh.
                 if let Ok(want) = std::env::var("OK_ANIM_GO") {
                     for (go, name) in names.iter().filter(|(_, n)| **n == want) {
@@ -1129,6 +1139,14 @@ mod map_animator_probe {
                         let (v0, dur) = crate::anim::generic_clip_values(&c, 0.0);
                         let (vm, _) = crate::anim::generic_clip_values(&c, dur * 0.5);
                         println!("animator on {} controller {} default clip {} duration {dur:.2} bindings {}", names.get(&go).cloned().unwrap_or_default(), ctrl.name().unwrap_or_default(), c.name().unwrap_or_default(), v0.len());
+                        // OK_ANIM_CLIP=<clip>: every binding of that clip at ten even times.
+                        if std::env::var("OK_ANIM_CLIP").is_ok_and(|w| c.name().is_some_and(|n| n == w)) {
+                            for k in 0..10 {
+                                let t = dur * k as f32 / 10.;
+                                let (v, _) = crate::anim::generic_clip_values(&c, t);
+                                println!("   t={t:.1} {}", v.iter().map(|(p, a, ty, x)| format!("{}:{a:#x}/{ty}={x:.2?}", paths.get(p).cloned().unwrap_or_else(|| format!("#{p:08x}")))).collect::<Vec<_>>().join(" "));
+                            }
+                        }
                         for ((path, attr, ty, a), (_, _, _, b)) in v0.iter().zip(&vm) {
                             if !(*ty == 4 && (1..=4).contains(attr)) && *ty != 1 && std::env::var_os("OK_ANIM_ALL").is_none() { continue; }
                             let moved = a.iter().zip(b).any(|(x, y)| (x - y).abs() > 1e-4);
@@ -1267,11 +1285,18 @@ mod sun_light_info_probe {
                     let p = obj.class.properties();
                     if let Some(infos) = p.get("_infos") {
                         println!("SunLightInfo targetLight={:?} bgParam={:?}", p.get("_targetLight"), p.get("_bgParam"));
+                        // The target Light component: type, mode (m_Lightmapping 4 realtime, 1 mixed, 2 baked), culling, enabled.
+                        let light_id = match p.get("_targetLight") { Some(unity_asset_core::UnityValue::Object(o)) => match o.get("m_PathID") { Some(unity_asset_core::UnityValue::Integer(x)) => *x, _ => 0 }, _ => 0 };
+                        if let Some(l) = sers.iter().find_map(|s| s.objects_of_type(108).into_iter().find(|i| i.path_id == light_id).and_then(|i| UnityObject::from_serialized_file(s, i).ok())) {
+                            let lp = l.class.properties();
+                            println!("  light type={:?} lightmapping={:?} bakingOutput={:?} cull={:?} enabled={:?} shadows={:?}", lp.get("m_Type"), lp.get("m_Lightmapping"), lp.get("m_BakingOutput"), lp.get("m_CullingMask"), lp.get("m_Enabled"), lp.get("m_Shadows").and_then(|s| match s { unity_asset_core::UnityValue::Object(o) => o.get("m_Type").cloned(), _ => None }));
+                        }
                         let unity_asset_core::UnityValue::Array(list) = infos else { continue };
                         for i in list {
                             let unity_asset_core::UnityValue::Object(m) = i else { continue };
                             let pid = |k: &str| match m.get(k) { Some(unity_asset_core::UnityValue::Object(o)) => match o.get("m_PathID") { Some(unity_asset_core::UnityValue::Integer(x)) => *x, _ => 0 }, _ => 0 };
                             let vis = match m.get("visibleList") { Some(unity_asset_core::UnityValue::Array(a)) => a.len(), _ => 0 };
+                            if std::env::var("OK_SUN_VISIBLE").is_ok() { println!("  visibleList {:?}", m.get("visibleList")); }
                             println!("  type {:?} back {:?} visible {} angle {:?} color {:?} intensity {:?} sky {:?}", m.get("type"), name_of(pid("backTexture")), vis, m.get("angle"), m.get("color"), m.get("intensity"), m.get("ambientSkyColor"));
                         }
                     }
@@ -1358,5 +1383,88 @@ mod prefab_nodes_probe {
         println!("mesh nodes {:?}", h.mesh_nodes);
         let s = view.prefab_session(&prefab, false).unwrap();
         for p in &s.parts { println!("part {} tris {}", p.name, p.indices.len() / 3); }
+    }
+}
+
+#[cfg(test)]
+mod scene_tree_probe {
+    /// A scene's object tree (OK_SCENE): kind, name / item no, transform, nesting.
+    #[test]
+    #[ignore = "OK base library: a sample scene's object tree"]
+    fn scene_object_tree() {
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let path = std::env::var("OK_SCENE").map(std::path::PathBuf::from).unwrap_or_else(|_| lib.join("studio/samples/koikatu_cs0006964.png"));
+        let scene = crate::studio_scene::read(&std::fs::read(&path).unwrap()).unwrap();
+        let json = serde_json::to_value(&scene.objects).unwrap();
+        fn walk(v: &serde_json::Value, depth: usize) {
+            let Some(a) = v.as_array() else { return };
+            for o in a {
+                let kind = o.get("kind").and_then(|k| k.as_str()).unwrap_or("?");
+                let id = ["name", "no", "group", "category"].iter().filter_map(|k| o.get(*k).map(|v| format!("{k}={v}"))).collect::<Vec<_>>().join(" ");
+                println!("{}{kind} {id} change={}", "  ".repeat(depth), o.get("change").map(|c| c.to_string()).unwrap_or_default());
+                if kind == "Character" {
+                    let f = |k: &str| o.get(k).map(|v| { let s = v.to_string(); s[..s.len().min(160)].to_string() }).unwrap_or_default();
+                    println!("{}  anime={} speed={} time={} enable_fk={} active_fk={} enable_ik={} active_ik={} fk_count={} ik_count={}", "  ".repeat(depth),
+                        f("anime"), f("anime_speed"), f("anime_time"), f("enable_fk"), f("active_fk"), f("enable_ik"), f("active_ik"),
+                        o.get("fk").and_then(|v| v.as_array()).map_or(0, |a| a.len()), o.get("ik").and_then(|v| v.as_array()).map_or(0, |a| a.len()));
+                }
+                if let Some(c) = o.get("children") {
+                    if c.is_array() { walk(c, depth + 1); }
+                    else if let Some(m) = c.as_array().or(None) { walk(&serde_json::Value::Array(m.clone()), depth + 1); }
+                    // Characters keep children per accessory slot: [[slot, [objects]], ...].
+                    if let Some(slots) = c.as_array() { for s in slots { if let Some(inner) = s.as_array().and_then(|p| p.get(1)) { walk(inner, depth + 1); } } }
+                }
+            }
+        }
+        walk(&json, 0);
+    }
+}
+
+#[cfg(test)]
+mod map_sun_light_parts {
+    /// A library map's SunLightInfo (OK_SUN_MODEL / OK_SUN_PREFAB, default the 2F corridor): its times of day and the
+    /// parts each shows (`_OKSunVisible`), with the meshes the prefab has only inactive.
+    #[test]
+    #[ignore = "OK base library: a map's times of day"]
+    fn library_map_sun_parts() {
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let model = std::env::var("OK_SUN_MODEL").unwrap_or_else(|_| "1624d20100000000a99759b74f4b4331".into());
+        let prefab = std::env::var("OK_SUN_PREFAB").unwrap_or_else(|_| "Map".into());
+        let id = crate::oklib::id_from_hex_pub(&model).unwrap();
+        crate::okmodel_view::with_library(&lib, || {
+            let view = crate::okmodel_view::ModelView::open(&lib, id)?;
+            let sun = view.parsed_sun_light(&prefab);
+            println!("sun light node={} type={} culling={:#x} lightmapping={}", sun.light_node, sun.light_type, sun.culling_mask, sun.lightmapping);
+            for i in &sun.infos { println!("  time {} visible nodes {:?} angle {:?} color {:?} intensity {}", i.kind, i.visible, i.angle, i.color, i.intensity); }
+            println!("meshes active {} with inactive {}", view.prefab_meshes(&prefab, false).len(), view.prefab_meshes(&prefab, true).len());
+            let session = view.prefab_session(&prefab, false)?;
+            let mut by_mask = std::collections::BTreeMap::<i32, Vec<String>>::new();
+            for p in &session.parts { if let Some(m) = p.source_material.as_ref().and_then(|m| m.floats.get("_OKSunVisible")) { by_mask.entry(*m as i32).or_default().push(p.name.clone()); } }
+            for (m, names) in &by_mask { println!("  mask {m:#b}: {} parts {:?}", names.len(), &names[..names.len().min(6)]); }
+            println!("parts {}", session.parts.len());
+            Ok::<(), String>(())
+        }).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod flare_material_probe {
+    /// The Studio lens flare items' material (Legacy Shaders/Particles/Additive): its values and texture (OK_FLARE_OUT).
+    #[test]
+    #[ignore = "OK base library: lens flare material"]
+    fn flare_material() {
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let id = crate::oklib::id_from_hex_pub("1496300600000000d8e3d4984f4b4331").unwrap();
+        crate::okmodel_view::with_library(&lib, || {
+            let view = crate::okmodel_view::ModelView::open(&lib, id)?;
+            for (prefab, mat) in [("p_koi_stu_flare00_02", "m_koi_stu_flare00_02"), ("p_koi_stu_flare01_02", "m_koi_stu_flare01_02")] {
+                let m = view.material(mat);
+                println!("{mat}: {:?}", m.as_ref().map(|m| (&m.shader, &m.colors, &m.tex_slots)));
+                if let Ok(dir) = std::env::var("OK_FLARE_OUT") {
+                    for mesh in view.prefab_meshes(prefab, false) { if let Some(png) = &mesh.texture_png { std::fs::write(std::path::Path::new(&dir).join(format!("{prefab}.png")), png).unwrap(); } }
+                }
+            }
+            Ok::<(), String>(())
+        }).unwrap();
     }
 }

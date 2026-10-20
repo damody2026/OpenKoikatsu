@@ -160,15 +160,22 @@
       - 修法：新配方 `ForgeStudioOpaque`（62）＝同一個原作程式（`main_item_studio`）的 Masked 母材質 `M_ForgeStudioOpaque`，寫深度；`main_item_studio` 的部件一律用它（Rust 給它的 Blend 一向是 translucent，不能拿來分），只有 OK Studio 淡出的道具（`_OKItemAlpha` < 1）用半透明的 `M_ForgeStudio`。母材質重新烘焙到新根目錄 `StudioDisplay25`（`prepare_runtime_shared_material.lua --tag StudioDisplay25`，90 個 parent，不含街頭另外產生的 `_Fg` 臉部母材質），`AKKPreviewActor::SharedMaterialRootOverride` 讓 OK Studio 的道具用它；角色與街頭仍用 `StreetDisplay24`（不動）。HG 風格的根目錄沒有這個母材質，HG 下道具退回自建圖
       - 結果：0001 機器人回到白色為主、紫色點綴；火箭筒砲管是受光的橄欖綠、榴彈的白環出現；公車亭站牌的紅白藍也出現。PatternTest、GameSelfTest、EyeSetTest、EditorSelfTest PASS
       - `main_item_studio_alpha`（`M_ForgeStudioAlpha`）維持半透明（原作本來就是透明道具）
+    - 第十一輪（2026-10-20，地圖：位移、時段、太陽燈、2D 效果）：
+      - 地圖位移：KKS 場景存地圖的位置／旋轉（`SceneInfo.caMap`，`MapCtrl.Reflect` 設到地圖根物件），以前 `studio_scene.rs` 讀了就丟。現在 `SceneEffects.map_pos`／`map_rot` → 匯入 `UOKSceneDocument::MapTransform`（okscene 存 `map_transform`）→ `AOKSceneActor::SyncMap` 擺地圖。1901 是 (0, 0, −15)：舞台往後 15 m，角色站在中島舞台上、背後是愛心／禮物／熊的佈景（之前以為背後是大螢幕，查 Animator 也是白查）
+      - 2D 效果「レンズフレアA／B」（9/5/387、388，`Legacy Shaders/Particles/Additive`）：以前畫成不透明的黑方塊，擋住 1901 整個背景。`blend_for_mesh` 把 `particles/additive` 判成 additive；UE 不走 Studio 光效道具的三色遮罩，改用 `OKParticleAdditiveMaterial`（貼圖 × (2·_TintColor)^2.2，加法、雙面）
+      - 舞台特效的加法輸出先 saturate 再 pow 2.2：KKS 的畫面是 LDR，一個片段最多加 1；之前 `_brightness` 5 的光束一片加 5^2.2，配上場景泛光整張白
+      - 時段顯示物件：`SunLightInfo`（地圖根物件上）每個時段有 `visibleList`（原作 `Set`：先把所有時段的清單藏起來，再顯示目前時段的）。大部分地圖每時段 1–3 個（例如 2F：早上雲、傍晚雲、晚上星星、各時段的窗玻璃）。`ParsedBundle::prefab_sun_light`（新 memo，`studio-nodes` 錄製）記清單節點、太陽燈節點、類型、cullingMask、m_Lightmapping 與各時段的角度／顏色／強度；`okmodel_view` 把 prefab 裡 inactive、只在清單裡的網格也帶進來，部件標 `_OKSunVisible`（時段位元），UE 端元件加 tag `OKSunVisible<mask>`，`AOKSceneActor::ApplyMapTime` 依場景時段（`Post.SunType`，沒有該時段時照 `Map.RangeTimeZone` 取第一個）顯示／隱藏。驗證：2F 的 `library_map_sun_parts` 三個時段各 3–8 個部件、prefab 多帶 4 個 inactive 網格
+      - 地圖太陽燈：每張地圖都有自己的太陽（`_targetLight`，平行光、即時光 m_Lightmapping 4、cullingMask 2048＝圖層 11，地圖的 renderer 幾乎都在圖層 11）。`ApplyMapTime` 放一盞 `UDirectionalLightComponent`（`MapSun`，光照通道 2＝只照地圖，世界角度照時段、顏色、強度 ×4，投影；開燈時地圖部件也投影）。比對結果好壞參半，預設關（見「還沒修」）
+      - 背景圖：`SunLightInfo` 的 `_bgParam`／`backTexture`（2D 背景）全部 Studio 地圖都沒有，不用做
+      - 除錯：`OK_RT_VIEW_NOFX=1`（`OK_RT_VIEW` 拍照不畫粒子）、`scene_camera_probe` 印 `caMap`、`scene_tree_probe`（物件樹、角色動畫與 FK 開關）、`map_sun_light_info` 印太陽燈的 Light 設定與 `OK_SUN_VISIBLE`、`map_animator_probe` 的 `OK_ANIM_LAYERS`（renderer 圖層統計）與 `OK_ANIM_CLIP`（某 clip 十個時間點）、`flare_material_probe`
+      - 測試：GameSelfTest、PatternTest、EditorSelfTest（先 `OKStudio.Open`）RESULT PASS
     - 還沒修：
       - 廁所色調：亮度已接近（後方牆 156 vs 149），但原作整體偏暖黃，我們的粉紫磁磚 × 桃色光照貼圖仍偏粉；暖色來自 reflection probe（見第九輪），但照 Unity 公式加上後過亮，待查 KKS 的 Standard 實際程式
       - 6964：相機構圖不同（我們拍到桌子在前、原作看得到女孩），可能是物件的父子關係或位置
       - 0010 電風扇的護網（MDK 共用母材質缺 alpha 裁切）、0001 劍光（`main_item_studio_add` 三色混合）
-      - 1901 角色背後：原作是滿版的愛心、禮物、熊（構圖和舞台攝影機的畫面一致，像是大螢幕的畫面）；我們從主相機（z≈1.5、高 1.14 m、看 −Z、垂直 fov 23°）清楚拍到的是黑色，大螢幕（高 3.96–9.73 m、z −9.75）的下緣剛好在畫面上緣（約 3.98 m）之外。要填滿背景，螢幕得低 3–5 m，原因還沒找到
-        - 已排除：地圖的 Animator（2026-10-19 查過 ライブステージ全部 50 多個：`anim::controller_default_clips`＋`generic_clip_values`，Rust `map_animator_probe`）。會動 Transform 的只有燈具（雷射 18 支與光錐的旋轉）；`SpotLaser_beam_visibility` 讓 `spotBeam_active` 在 t=0 隱藏（181 秒的 clip 裡之後才出現）；`kaidanParts`／`stage_floor_geo`／`dai_geo*` 等的 `stageModel_emission` 是材質數值；`LightPanel_*`、`ElectricLight`、`Cyalume` 沒有 clip。舞台、樓梯、螢幕沒有被 Animator 移動，所以套預設狀態不會改變 1901 的背景，也就沒做（套 t=0 反而會藏起全部雷射光束）
-        - 也排除：側螢幕 `PlaneLeft`／`PlaneRight`（材質 `moniter` → `mainmoniter`，bundle 裡沒有攝影機寫它）用的是 Unity 內建的 Plane 網格（`unity default resources`），我們轉不出來；它們在 x≈±19 的側邊，不在角色背後
-        - 還可以查：Studio 載入地圖時是否改了 `LiveStage (1)`／`monitor_main` 的位置（遊戲程式，ILSpy）、原作 RenderTexture 在 D3D 下取樣是否上下顛倒（決定大螢幕顯示攝影機畫面的哪一段）
-      - 地圖天空的太陽燈（SunLightInfo，交給道具色差 session）
+      - 1901 整張泛白：背景已有佈景（見第十一輪），剩下兩個 `volumeLight` 光錐太亮。原作的 Animator `vl_center_intensity`（106 秒）把光錐材質值（renderer binding `0x8a3d269b`）前 80% 的時間設 0、最後才到 0.43，載入時第一格是 0；`prefab_animated_materials` 只套整段不變的值，所以我們用材質原值。要改成套「大多數時間的值」或「t=0」（材質 session 決定）
+      - 6964：場景沒有地圖。主相機在第三組課桌下往上拍；原作看得到抬腿的女孩，我們拍到桌子底面和腿。角色都開了 FK（`active_fk` 含 body），匯入照 `FkPart` 套用，和 OKStudioPose 一致；還沒定位是 FK 姿勢不同還是桌子／相機的相對位置不同（`scene_tree_probe` 印出物件樹與 FK 開關）
+      - 地圖太陽燈預設關（`ok.Studio.MapSun 1` 開）：3167 教室開了有原作桌面的暖光、地板有影子；6331 地板被橘色日光照到，原作是灰的，原因未明
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918

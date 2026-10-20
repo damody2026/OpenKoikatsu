@@ -3367,6 +3367,8 @@ UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, in
 			return true;
 		}), Interval);
 	}
+				// OK_RT_VIEW_NOFX=1: without particle systems (Niagara), to tell them from geometry.
+				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RT_VIEW_NOFX")) == TEXT("1")) View->ShowFlags.SetParticles(false);
 	return Target;
 }
 
@@ -3400,6 +3402,47 @@ static UMaterialInterface* OKStageEffectMaterial(int32 Kind)
 	Mat->SetShadingModel(MSM_Unlit);
 	Mat->TwoSided = true;
 	UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
+// Unity's built-in additive particle shaders (Legacy Shaders/Particles/Additive: Studio's 2D lens flares): Blend One One,
+// colour 2 x _TintColor x texture in gamma space, i.e. linear texture x (2 _TintColor)^2.2 in "Tint". Unlit, two-sided.
+static UMaterialInterface* OKParticleAdditiveMaterial()
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (Cached) return Cached.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = BLEND_Additive;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TwoSided = true;
+	UMaterialExpressionTextureSampleParameter2D* Samp = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
+	Samp->Material = Mat;
+	Samp->ParameterName = TEXT("Tex");
+	Samp->SamplerType = SAMPLERTYPE_Color;
+	Samp->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/Black.Black")); // an sRGB default
+	Mat->GetExpressionCollection().AddExpression(Samp);
+	UMaterialExpressionVectorParameter* Tint = NewObject<UMaterialExpressionVectorParameter>(Mat);
+	Tint->Material = Mat;
+	Tint->ParameterName = TEXT("Tint");
+	Tint->DefaultValue = FLinearColor::White;
+	Mat->GetExpressionCollection().AddExpression(Tint);
+	UMaterialExpressionMultiply* Mul = NewObject<UMaterialExpressionMultiply>(Mat);
+	Mul->Material = Mat;
+	Mul->A.Expression = Samp;
+	Mul->B.Expression = Tint;
+	Mat->GetExpressionCollection().AddExpression(Mul);
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Mul;
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Cached.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
 	Code->Material = Mat;
 	Code->OutputType = CMOT_Float3;
 	Mat->GetExpressionCollection().AddExpression(Code);
@@ -3452,8 +3495,9 @@ static UMaterialInterface* OKStageEffectMaterial(int32 Kind)
 	default:
 		Hlsl += TEXT("r=col*Mask.Sample(MaskSampler,S(u0,MaskST)).rgb;"); break;
 	}
-	// Unity works in gamma space: the textures are read raw and the result goes to linear for Unreal.
-	Hlsl += TEXT("\n#undef S\nreturn pow(max(r,0.0),2.2);");
+	// Unity works in gamma space: the textures are read raw and the result goes to linear for Unreal. Its target is LDR,
+	// so a fragment adds at most 1 (_brightness 5 beams unclamped added 5^2.2 each and bloomed the stage white).
+	Hlsl += TEXT("\n#undef S\nreturn pow(saturate(r),2.2);");
 	Code->Code = Hlsl;
 	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
 	Mat->UpdateCachedExpressionData();
@@ -5521,6 +5565,25 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// interior mouth triangles are not part of its visible silhouette.
 		const bool bFace = bFaceSkin;
 		// Studio's additive light effects have no Outline pass (their shell would paint the black of the texture).
+		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor added, not the Studio light
+		// effect's three-colour mix the additive part graph draws.
+		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))
+			if (UMaterialInterface* ParticleMat = OKParticleAdditiveMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(ParticleMat, Comp))
+				{
+					FLinearColor TintColor(0.5f, 0.5f, 0.5f, 0.5f);
+					Source.MaterialValue(i, "_TintColor", TintColor);
+					auto Linear2 = [](float V) { return FMath::Pow(FMath::Max(2.f * V, 0.f), 2.2f); };
+					Dynamic->SetTextureParameterValue(TEXT("Tex"), Tex);
+					Dynamic->SetVectorParameterValue(TEXT("Tint"), FLinearColor(Linear2(TintColor.R), Linear2(TintColor.G), Linear2(TintColor.B), 1.f));
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+				}
+		// A Studio map part shown only at some times of day (okmodel_view::mark_sun_visible): its mask as a tag, for the
+		// scene to show or hide it with the scene's time (SunLightInfo.Set).
+		FLinearColor SunVisible;
+		if (Comp && Source.MaterialValue(i, "_OKSunVisible", SunVisible))
+			Comp->ComponentTags.Add(FName(*FString::Printf(TEXT("OKSunVisible%d"), FMath::RoundToInt(SunVisible.R))));
 		if (bOutlinable && Comp && !bStageEffect && !Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase))
 		{
 			AddOutlineSection(

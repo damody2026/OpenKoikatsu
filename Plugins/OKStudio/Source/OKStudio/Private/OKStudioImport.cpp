@@ -411,6 +411,8 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		if (E.TryGetNumberField(TEXT("ramp_g"), Value)) Document->Post.RampG = int32(Value);
 		// SceneInfo.sunLightType: the map's time of day (its own sky, when it has one, follows it).
 		if (E.TryGetNumberField(TEXT("sun_light_type"), Value)) Document->Post.SunType = int32(Value);
+		// SceneInfo.caMap: Studio's map position / rotation (MapCtrl.Reflect sets the map root's local transform).
+		Document->MapTransform = UnityToUe(Vec3(*Effects, TEXT("map_pos")), Vec3(*Effects, TEXT("map_rot")), FVector::OneVector);
 		// Fog, ambient occlusion and sun shafts (SystemButtonCtrl FogInfo, AmplifyOcculusionEffectInfo, SunShaftsInfo).
 		const TSharedPtr<FJsonObject>* Field = nullptr;
 		if (E.TryGetBoolField(TEXT("fog"), bOn)) Document->Post.bFog = bOn;

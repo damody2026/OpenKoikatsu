@@ -621,6 +621,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
 	int32 Map = -1;
 
+	/** Where the map stands in the scene (Studio's map position / rotation, SceneInfo.caMap; MapCtrl.Reflect). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	FTransform MapTransform;
+
 	/** Post-processing of the scene's view. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
 	FOKScenePost Post;
