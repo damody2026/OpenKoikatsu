@@ -207,6 +207,18 @@
 
 ![HANDOFF_E 最後 14 張場景對照總覽](images/OKStudio/HandoffE20261020/overview.png)
 
+### S5 第十三輪：自動保存圖文驗收（2026-10-20）
+
+- **每輪圖片獨立**：Compare 支援 `-OKStudioCompareOutput=<目錄>`；runner 傳入新建的 `Verify-<tag>/images`，不再讓後續場景驗收覆蓋前輪圖片。不帶參數的手動比較保留原輸出行為。
+- **自動產生可攜報告**：`Tools/verify_ok_studio.lua --tag <新名稱> --editor --compare` 會逐項更新 `ACCEPTANCE.md`／`results.json`，直接嵌入本輪圖片並記錄雜湊、尺寸及記憶體；中文／日文及特殊字元檔名的圖片連結會正確編碼。`--editor` 納入 EditorSelfTest。
+- **證據不完整即失敗**：除 14／14 與 final-release 外，逐張驗證 log 中的唯一檔名、本輪 PNG 可解碼、1280×360 與無卡片附加資料；缺圖、重複、損壞、目錄外舊圖不會當作成功。原作縮圖與 Unreal 結果的視覺差異仍須目視判讀，不由出圖計數宣稱完全吻合。
+- **工具檢查**：`Tools/test_ok_studio_evidence.lua` 13 項 PASS；三個 Lua 檔靜態檢查 0 problems；Editor 與一般遊戲 Development 建置成功。操作與輸出契約見 [OK Studio 驗收工具](OK_STUDIO_VERIFICATION.md)。
+- **完整重跑**：`Verify-HandoffEAutoEvidence` 四項自測與 14／14 場景出圖全部 PASS；14 張圖由最終收集器重新核對，並獨立確認全部圖片連結、解碼與 SHA-256。擷取峰值 20.6 GB，最後卸載 12.2 GB，沒有宣稱回到啟動基準或畫面完全一致。完整自動嵌圖報告在本機該目錄的 `ACCEPTANCE.md`；下圖是本輪實際保存的 0010，與報告原圖位元組一致。
+
+![第十三輪實際自動驗收圖：左原作縮圖、右 Unreal 結果](images/OKStudio/AutoEvidence20261020/koikatu_cs0000010.png)
+- **最終整合檢查**：整合主線 `fdf43e943` 後，Editor／一般遊戲 Development 再次建置成功，`Verify-HandoffEAutoEvidenceMerged` 三項遊戲自測全 PASS；新增街區規則的 `shop::tests` 6 PASS，規則 DLL 已重建。這次主線更新沒有變更 Studio 擷取／材質程式，完整 14 圖證據仍對應前述本輪執行。
+
+
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
 - [x] 轉成 OK 動畫：`ok-extract <game> --oklib anim-convert <lib> <card> [filter] [threads]`，5,805 個全部轉換、0 失敗（8 執行緒約 4 分鐘，目錄建立約 16 分鐘），寫進 `base_v1/anims/studio/*.okanim`（224 MB）與 `base_v1/studio_anims.json`

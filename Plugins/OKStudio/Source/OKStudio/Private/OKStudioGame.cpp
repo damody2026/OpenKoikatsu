@@ -21,6 +21,8 @@
 #include "ShaderCompiler.h"
 #include "KKRustExtract.h"
 #include "Misc/FileHelper.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "OKSceneActor.h"
 #include "OKStudioCatalog.h"
@@ -1724,7 +1726,11 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 	struct FState { int32 Index = -1; int32 Frame = 0; int32 Done = 0; bool bLoaded = false; };
 	TSharedRef<FState> State = MakeShared<FState>();
 	TWeakObjectPtr<UOKStudioGame> Self(this);
-	const FString Out = FPaths::ProjectSavedDir() / TEXT("OKStudio/compare");
+	// Acceptance runs own their images: another run must not overwrite their evidence.
+	FString Out;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("OKStudioCompareOutput="), Out) || Out.IsEmpty())
+		Out = FPaths::ProjectSavedDir() / TEXT("OKStudio/compare");
+	Out = FPaths::ConvertRelativePathToFull(Out);
 	IFileManager::Get().MakeDirectory(*Out, true);
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Self, State, Scenes, Out, WaitFrames, bExit](float)
 	{
