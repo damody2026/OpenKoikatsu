@@ -69,6 +69,7 @@ pub mod okmodel_view;
 pub mod okmodel_edit;
 mod oklib_convert;
 mod studio_items;
+mod studio_child_animation;
 mod studio_pose;
 mod studio_scene;
 mod studio_anims;
@@ -5389,6 +5390,15 @@ fn color_accessory_meshes(
         let is_glasses = shader == "koikano/main_clothes_item_glasses"
             || shader == "shader forge/toon_glasses_lod0";
         if is_glasses && role == 2 {
+            // Preserve native inputs separately from the legacy preview bake.
+            for (key, color) in color_key.iter().zip(cols.iter()) {
+                set_material_color(&mut m, key, *color);
+            }
+            set_material_color(&mut m, "_Color4", cols[3]);
+            let null_main = m.mat.as_ref().is_some_and(|mat| mat.slot("_MainTex").is_none_or(str::is_empty));
+            let native_main = if null_main && !main_from_me { crate::unity::solid_png([1.;4], 1, 1) }
+                else { m.texture_png.clone().or_else(|| crate::unity::solid_png([1.;4], 1, 1)) };
+            if let Some(png) = native_main { m.shader_extra_textures.insert("_MainTex".into(), png); }
             let png = m.texture_png.as_deref();
             m.texture_png = bake_accessory_glass_color(png, cols[3]);
             kept.push(m);
@@ -10763,6 +10773,7 @@ pub(crate) fn extract_session_from_info(
         user_fk: Vec::new(),
         studio_ik_solver: None,
         studio_ik: Vec::new(),
+            studio_ik_rotations: Vec::new(),
         correct,
         sex,
         type_bone,

@@ -42,6 +42,7 @@ public:
  /** OK card at Out from an original KKS card (zipmods from the KKS installation) or an edited OK card (made again so
   *  its models list and pack match the card data). Summary gets "digest parts pack" or the error. */
  static bool MakeOkCard(const FString& Card,const FString& Out,FString& Summary);
+ static bool MakeOkCardForOutfit(const FString& Card,const FString& Out,int32 Outfit,FString& Summary);
  static bool CopyPortableClothingStates(const FString& Source,const FString& Output,FString& Error);
  static TArray<FString> AnimationSourceNames(const FString& Root,const FString& Source);
  static bool PrepareStudioAnimation(const FString& Root,const FString& Key,const FString& Source,const FString& Owner);
@@ -150,6 +151,8 @@ public:
 	 *  Positions are skeleton space (Unity metres). */
 	bool PrepareStudioIk(FString& OutError);
 	bool SetStudioIk(const TArray<int32>& Effectors,const TArray<FVector>& UnityPositions);
+    bool SetStudioIkPose(const TArray<int32>& Effectors,const TArray<FVector>& UnityPositions,const TArray<FQuat>& UnityRotations,const TArray<uint8>& UseRotations);
+    bool SetStudioFixedNeck(const TArray<FQuat>& UnityRotations);
 	bool IkEffectorPosition(int32 Effector,FVector& OutUnity) const;
 	// Last head-look check in degrees: face vs its limited goal, goal vs the target. False when not looking.
 	bool HeadLookError(float& Residual,float& Excess) const;

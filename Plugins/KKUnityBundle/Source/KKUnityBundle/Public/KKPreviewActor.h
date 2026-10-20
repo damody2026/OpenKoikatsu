@@ -239,7 +239,7 @@ public:
  /** Studio FK (bone -> Unity local Euler degrees; empty clears) and re-poses the character. */
  bool SetUserFk(const TArray<FString>& Bones, const TArray<FVector>& UnityEuler);
  /** Studio IK targets (effector index, skeleton-space Unity metres; empty clears) and re-poses the character. */
- bool SetStudioIk(const TArray<int32>& Effectors, const TArray<FVector>& UnityPositions, FString& OutError);
+ bool SetStudioIk(const TArray<int32>& Effectors, const TArray<FVector>& UnityPositions, FString& OutError, const TArray<FQuat>& UnityRotations = {}, const TArray<uint8>& UseRotations = {});
  bool bStudioIkReady=false;
  /** Unity skeleton space (metres) <-> this actor's local space (cm), as the skeleton converter maps positions. */
  static FVector UnityToActorLocal(const FVector& U) { return FVector(-U.X, U.Z, U.Y) * 100.0; }

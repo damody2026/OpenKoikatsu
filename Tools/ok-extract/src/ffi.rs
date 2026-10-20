@@ -58,11 +58,22 @@ fn remake_card_in_place(card:&std::path::Path)->Result<(),String> {
 /// edited OK card made again. Uses the configured base library. Returns 0 and "digest parts pack-bytes" in `msg`.
 #[no_mangle]
 pub unsafe extern "C" fn ok_okcard_make(game:*const c_char,card:*const c_char,out:*const c_char,msg:*mut c_char,cap:i32)->i32 {
+    okcard_make_impl(game,card,out,None,msg,cap)
+}
+/// Scene-selected outfit; preserve all original coordinate indices.
+#[no_mangle]
+pub unsafe extern "C" fn ok_okcard_make_outfit(game:*const c_char,card:*const c_char,out:*const c_char,outfit:i32,msg:*mut c_char,cap:i32)->i32 {
+    okcard_make_impl(game,card,out,Some(outfit),msg,cap)
+}
+unsafe fn okcard_make_impl(game:*const c_char,card:*const c_char,out:*const c_char,outfit:Option<i32>,msg:*mut c_char,cap:i32)->i32 {
     let result=std::panic::catch_unwind(||{
         let (Some(card),Some(out))=(cstr_opt(card),cstr_opt(out)) else{return Err("okcard: path missing".to_string());};
         let lib=crate::oklib::configured_library().ok_or("OK base library not configured")?;
         let game=cstr_opt(game).filter(|g|!g.is_empty()).map(std::path::PathBuf::from).unwrap_or_else(installed_game_root);
-        let (digest,parts,bytes,pack)=crate::oklib::remake_ok_card(&lib,&game,std::path::Path::new(&card))?;
+        let (digest,parts,bytes,pack)=match outfit {
+            Some(index)=>crate::oklib::remake_ok_card_for_outfit(&lib,&game,std::path::Path::new(&card),index)?,
+            None=>crate::oklib::remake_ok_card(&lib,&game,std::path::Path::new(&card))?,
+        };
         std::fs::write(&out,&bytes).map_err(|e|format!("{out}: {e}"))?;
         Ok(format!("{digest} parts={parts} pack={pack}"))
     }).unwrap_or_else(|_|Err("okcard: panic".into()));
@@ -158,8 +169,88 @@ pub unsafe extern "C" fn ok_session_set_studio_ik(s:*mut OkSession,effectors:*co
         if !(0..crate::session::STUDIO_IK_TARGETS as i32).contains(&e) || !p.iter().all(|v|v.is_finite()) {return -1;}
         targets.push((e as usize,[p[0],p[1],p[2]]));
     }
-    s.studio_ik=targets;0
+    s.studio_ik=targets;s.studio_ik_rotations.clear();0
 }
+/// Full Studio IK targets. Rotations are Unity skeleton-space quaternions; disabled targets retain position-only semantics.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_studio_ik_pose(
+    s: *mut OkSession,
+    effectors: *const i32,
+    positions: *const f32,
+    rotations: *const f32,
+    enabled: *const u8,
+    count: i32,
+) -> i32 {
+    let Some(s) = sess_ref(s) else {
+        return -1;
+    };
+    if !(0..=crate::session::STUDIO_IK_TARGETS as i32).contains(&count)
+        || count > 0
+            && (effectors.is_null()
+                || positions.is_null()
+                || rotations.is_null()
+                || enabled.is_null())
+    {
+        return -1;
+    }
+    let mut targets = Vec::new();
+    let mut angles = Vec::new();
+    for i in 0..count as usize {
+        let e = *effectors.add(i);
+        let p = std::slice::from_raw_parts(positions.add(i * 3), 3);
+        let q = std::slice::from_raw_parts(rotations.add(i * 4), 4);
+        if !(0..crate::session::STUDIO_IK_TARGETS as i32).contains(&e)
+            || !p.iter().all(|v| v.is_finite())
+        {
+            return -1;
+        }
+        targets.push((e as usize, [p[0], p[1], p[2]]));
+        if *enabled.add(i) != 0 {
+            let n = q.iter().map(|v| v * v).sum::<f32>();
+            if !(5..=8).contains(&e)
+                || !q.iter().all(|v| v.is_finite())
+                || !n.is_finite()
+                || n < 1e-12
+            {
+                return -1;
+            }
+            angles.push((e as usize, crate::finalik::qnorm([q[0], q[1], q[2], q[3]])));
+        }
+    }
+    s.studio_ik = targets;
+    s.studio_ik_rotations = angles;
+    0
+}
+/// Saved NeckLookControllerVer2 FIX locals (native aBones order), count 0 clears; validates before mutation.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_studio_fixed_neck(
+    s: *mut OkSession,
+    rotations: *const f32,
+    count: i32,
+) -> i32 {
+    let Some(s) = sess_ref(s) else {
+        return -1;
+    };
+    if count == 0 {
+        s.head_look.fixed = None;
+        return 0;
+    }
+    if count != 2 || rotations.is_null() {
+        return -1;
+    }
+    let mut result = [[0.; 4]; 2];
+    for (i, q) in result.iter_mut().enumerate() {
+        q.copy_from_slice(std::slice::from_raw_parts(rotations.add(i * 4), 4));
+        let n = q.iter().map(|v| v * v).sum::<f32>();
+        if !q.iter().all(|v| v.is_finite()) || !n.is_finite() || n < 1e-12 {
+            return -1;
+        }
+        *q = crate::finalik::qnorm(*q);
+    }
+    s.head_look.fixed = Some(result);
+    0
+}
+
 /// Skeleton-space position (Unity metres) of an IK effector's bone in the current pose; -1 before prepare.
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_ik_effector_position(s:*mut OkSession,effector:i32,out:*mut f32)->i32 {

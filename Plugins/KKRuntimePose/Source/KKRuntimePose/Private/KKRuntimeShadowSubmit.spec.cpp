@@ -44,7 +44,7 @@ bool FKKRuntimeShadowCoverageTest::RunTest(const FString&){
  auto Blocked=[&](const TCHAR* Name,FOKRuntimeShadowMaterialFacts Facts,const TCHAR* Reason){const auto Got=OKRuntimeShadowCoverage(Facts);return TestEqual(Name,int32(Got.Coverage),int32(EOKRuntimeShadowCoverage::OriginalMaterial))&&TestEqual(Name,FString(Got.Reason),FString(Reason));};
  FOKRuntimeShadowMaterialFacts Offset=Fact(EKKRuntimeMaterialRecipe::IBLOpaque);Offset.WorldPositionOffset=true;
  FOKRuntimeShadowMaterialFacts DepthOffset=Fact(EKKRuntimeMaterialRecipe::OilPainting);DepthOffset.PixelDepthOffset=true;
- FOKRuntimeShadowMaterialFacts Displaced=Fact(EKKRuntimeMaterialRecipe::KoikanoGlasses0);Displaced.Displacement=true;
+ FOKRuntimeShadowMaterialFacts Displaced=Fact(EKKRuntimeMaterialRecipe::IBLOpaque);Displaced.Displacement=true;
  FOKRuntimeShadowMaterialFacts Sides=Fact(EKKRuntimeMaterialRecipe::IBLOpaque);Sides.TwoSidedObserved=true;Sides.TwoSided=false;
  FOKRuntimeShadowMaterialFacts Blend=Fact(EKKRuntimeMaterialRecipe::IBLOpaque);Blend.BlendObserved=true;Blend.Blend=BLEND_Translucent;
  FOKRuntimeShadowMaterialFacts MaskedCast=Fact(EKKRuntimeMaterialRecipe::ForgeAlphaTranslucent);MaskedCast.CastShadowAsMasked=true;

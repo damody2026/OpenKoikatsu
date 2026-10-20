@@ -134,6 +134,13 @@ namespace
 					++Report->CatalogItems;
 					FOKSceneItem& I = Doc->Find(Id)->Item;
 					I.Group = Group; I.Category = Category; I.No = No;
+                    double ItemTime=0., ItemSpeed=1.; int32 ItemPattern=0;
+                    O->TryGetNumberField(TEXT("anime_time"), ItemTime); O->TryGetNumberField(TEXT("anime_speed"), ItemSpeed); O->TryGetNumberField(TEXT("anime_pattern"), ItemPattern);
+                    I.AnimeTime=float(ItemTime);
+                    I.AnimeSpeed=float(ItemSpeed);
+                    I.AnimePattern=ItemPattern;
+                    if (Entry->bAnime && (ItemPattern != 0 || !FOKStudioCatalog::Get().ChildAnimations.Contains(FIntVector(Group, Category, No))))
+                        Note(TEXT("animated item attachment has no converted track for its selected pattern"));
 					// Item FK of an enabled item: its bones' local rotations.
 					const TArray<TSharedPtr<FJsonValue>>* Bones = nullptr;
 					if (O->GetBoolField(TEXT("enable_fk")) && O->TryGetArrayField(TEXT("fk"), Bones))
@@ -196,7 +203,13 @@ namespace
 				const int32 Key = int32(O->GetNumberField(TEXT("key")));
 				const FString OkCard = CardDirectory / FString::Printf(TEXT("char_%d.png"), Key);
 				FString Summary;
-				const bool bCard = !KksCard.IsEmpty() && FOkSession::MakeOkCard(KksCard, OkCard, Summary);
+				// A Studio scene names a coordinate explicitly. Keep its numbering and record that outfit's resources;
+				// the Gallery's automatic display outfit selection would exchange the saved outfit with another one.
+				const TSharedPtr<FJsonObject>* SavedStatus = nullptr;
+				int32 SavedOutfit = 0;
+				if (O->TryGetObjectField(TEXT("status"), SavedStatus)) (*SavedStatus)->TryGetNumberField(TEXT("coordinate"), SavedOutfit);
+				SavedOutfit = FMath::Max(0, SavedOutfit);
+				const bool bCard = !KksCard.IsEmpty() && FOkSession::MakeOkCardForOutfit(KksCard, OkCard, SavedOutfit, Summary);
 				if (bCard) ++Report->CharacterCards; else Report->Notes.Add(FString::Printf(TEXT("character %d: no OK card (%s)"), Key, *Summary));
 				IFileManager::Get().Delete(*KksCard);
 				const int32 Id = Add(EOKSceneObjectKind::Character, FString::Printf(TEXT("Character %d"), Key), Parent, O);
@@ -241,6 +254,21 @@ namespace
 						for (int32 Slot = 0; Slot < FMath::Min(Shown->Num(), 20); ++Slot) C.AccessoriesShown[Slot] = (*Shown)[Slot]->AsBool() ? 1 : 0;
 					}
 				}
+                const TSharedPtr<FJsonObject>* Neck = nullptr;
+                int32 SavedNeckPattern = -1;
+                if (Status) (*Status)->TryGetNumberField(TEXT("neck_look_ptn"), SavedNeckPattern);
+                if (SavedNeckPattern == 4 && O->TryGetObjectField(TEXT("neck"), Neck) && (*Neck)->GetIntegerField(TEXT("pattern")) == 4)
+                {
+                    const TArray<TSharedPtr<FJsonValue>>* Rotations = nullptr;
+                    if ((*Neck)->TryGetArrayField(TEXT("rotations"), Rotations) && Rotations->Num() == 2)
+                        for (const auto& Value : *Rotations)
+                        {
+                            const auto& Q = Value->AsArray();
+                            if (Q.Num() == 4) C.FixedNeck.Add(FQuat(Q[0]->AsNumber(), Q[1]->AsNumber(), Q[2]->AsNumber(), Q[3]->AsNumber()).GetNormalized());
+                        }
+                    if (C.FixedNeck.Num() == 2) C.NeckLook = EOKSceneLook::Fixed;
+                    else Note(TEXT("saved FIX neck requires the native neck/head bone pair"));
+                }
 				C.EyesLook = EOKSceneLook::Animation;
 				// FK of the enabled parts.
 				const TArray<TSharedPtr<FJsonValue>>* Active = nullptr;
@@ -275,7 +303,12 @@ namespace
 						const int32 No = int32(Pair[0]->AsNumber());
 						if (No < 0 || No >= 13 || !ActiveIk->IsValidIndex(Map[No].Part) || !(*ActiveIk)[Map[No].Part]->AsBool()) continue;
 						const FVector P = Vec3(Pair[1]->AsObject(), TEXT("pos"));
-						C.Ik.Add({ Map[No].Effector, FVector(-P.X, P.Z, P.Y) * 100.0 });
+						FOKSceneIkTarget Target;
+                        Target.Effector = Map[No].Effector;
+                        Target.Position = FVector(-P.X, P.Z, P.Y) * 100.0;
+                        Target.bUseRotation = No == 3 || No == 6 || No == 9 || No == 12;
+                        Target.Euler = Vec3(Pair[1]->AsObject(), TEXT("rot"));
+                        C.Ik.Add(Target);
 					}
 				}
 				// Hand shapes: 0 follows the animation, n is the game's shape n (OCIChar.ChangeHandAnime: SetShapeHandValue(side, n, 0, 0)).
@@ -363,6 +396,7 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 	Report.Version = Scene->GetStringField(TEXT("version"));
 	Report.Map = int32(Scene->GetNumberField(TEXT("map")));
 	Document->Objects.Reset();
+    Document->ItemAnimationSeconds=0.f;
 	Document->NextId = 1;
 	Document->ActiveCamera = -1;
 	Document->Map = FOKStudioCatalog::Get().FindMap(Report.Map) ? Report.Map : -1;

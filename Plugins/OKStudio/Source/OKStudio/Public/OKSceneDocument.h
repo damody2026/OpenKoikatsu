@@ -14,6 +14,8 @@ enum class EOKSceneLook : uint8
 	Camera,
 	/** Look at the character's look point. */
 	Point,
+    /** The neck locals saved with the imported pose. */
+    Fixed,
 };
 
 /** How a timeline key blends into the next one. */
@@ -66,7 +68,7 @@ struct OKSTUDIO_API FOKSceneFkBone
 	bool operator==(const FOKSceneFkBone& O) const = default;
 };
 
-/** One Studio IK target of a character: an effector and where it should be (cm, in the character object's space). */
+/** A Studio IK target: position in character-local cm and optional native hand/foot orientation. */
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneIkTarget
 {
@@ -80,6 +82,12 @@ struct OKSTUDIO_API FOKSceneIkTarget
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	FVector Position = FVector::ZeroVector;
 
+    /** Native hand/foot IK target orientation, in Unity Euler degrees. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+    bool bUseRotation = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+    FVector Euler = FVector::ZeroVector;
+
 	bool operator==(const FOKSceneIkTarget& O) const = default;
 };
 
@@ -87,6 +95,11 @@ USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneCharacter
 {
 	GENERATED_BODY()
+
+    /** Saved FIX locals from NeckLookControllerVer2: source aBones order (neck, head), Unity quaternions. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+    TArray<FQuat> FixedNeck;
+
 
 	/** Card PNG: absolute, or relative to the project directory. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character")
@@ -255,6 +268,14 @@ struct OKSTUDIO_API FOKSceneItem
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	int32 No = -1;
+
+    /** Source Animator state, normalized start time and playback rate. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+    int32 AnimePattern = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+    float AnimeTime = 0.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+    float AnimeSpeed = 1.f;
 
 	/** Item colours 1..4 (sRGB); empty or alpha < 0: the model colour. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
@@ -679,6 +700,8 @@ public:
 	/** Transform in scene space (parents applied). */
 	UFUNCTION(BlueprintCallable, Category = "OK Studio")
 	FTransform WorldTransform(int32 Id) const;
+    /** Runtime item clock; source normalized start times remain unchanged when saving. */
+    float ItemAnimationSeconds = 0.f;
 	/** Posed frame of a character bone relative to the character (set by the actor showing the scene; without it attached
 	 * objects sit at the character root). */
 	TFunction<bool(int32 Character, const FString& Bone, FTransform& OutBone)> BoneFrame;

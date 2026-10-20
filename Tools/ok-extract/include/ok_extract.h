@@ -37,6 +37,8 @@ int32_t ok_clothing_transition(const char* root,const char* card,int32_t outfit,
 /* OK clothes (.okclothes). op 0 import coordinate card a; 1 export outfit of card a; 2 wear okclothes b as outfit of card a. Writes out; summary or error in msg. */
 int32_t ok_clothes_file(int32_t op,const char* a,const char* b,int32_t outfit,const char* out,char* msg,int32_t msg_cap);
 int32_t ok_okcard_make(const char* game, const char* card, const char* out, char* msg, int32_t cap);
+/* Preserve coordinate numbering and record resources for the explicitly selected outfit. */
+int32_t ok_okcard_make_outfit(const char* game, const char* card, const char* out, int32_t outfit, char* msg, int32_t cap);
 /* Additive exact private-renderer palette. Matrices are row-major Unity
    world*bind transforms, including live sockets/implants/destroyed slots.
    Query with matrices=null, capacity=0 returns required matrix count.
@@ -79,6 +81,8 @@ int32_t ok_session_bone_euler(OkSession* s,const char* name,float* out3);
    shoulder, L/R thigh, L/R hand, L/R foot) with skeleton-space positions (Unity metres); count 0 clears. */
 int32_t ok_session_prepare_studio_ik(OkSession* s,const char* root,char* err,int32_t cap);
 int32_t ok_session_set_studio_ik(OkSession* s,const int32_t* effectors,const float* positions,int32_t count);
+int32_t ok_session_set_studio_ik_pose(OkSession* s,const int32_t* effectors,const float* positions,const float* rotations,const uint8_t* enabled,int32_t count);
+int32_t ok_session_set_studio_fixed_neck(OkSession* s,const float* rotations,int32_t count);
 int32_t ok_session_ik_effector_position(OkSession* s,int32_t effector,float* out3);
 /* KK Studio pose files (UserData/Studio/pose/*.dat) as JSON: read 0 ok / 1 error (message in out); write from JSON. */
 int32_t ok_studio_pose_read(const char* path,char* out,int32_t cap);

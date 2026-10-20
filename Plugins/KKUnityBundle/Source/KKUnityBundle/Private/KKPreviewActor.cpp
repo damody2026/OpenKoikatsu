@@ -10633,7 +10633,7 @@ bool AKKPreviewActor::SetUserFk(const TArray<FString>& Bones, const TArray<FVect
 	return true;
 }
 
-bool AKKPreviewActor::SetStudioIk(const TArray<int32>& Effectors, const TArray<FVector>& UnityPositions, FString& OutError)
+bool AKKPreviewActor::SetStudioIk(const TArray<int32>& Effectors, const TArray<FVector>& UnityPositions, FString& OutError, const TArray<FQuat>& UnityRotations, const TArray<uint8>& UseRotations)
 {
 	if (!Session.IsOpen()) { OutError = TEXT("no session"); return false; }
 	if (!bStudioIkReady && Effectors.Num())
@@ -10646,7 +10646,8 @@ bool AKKPreviewActor::SetStudioIk(const TArray<int32>& Effectors, const TArray<F
 		}
 		bStudioIkReady = true;
 	}
-	if (!Session.SetStudioIk(Effectors, UnityPositions)) { OutError = TEXT("bad IK targets"); return false; }
+	const bool bApplied = UnityRotations.IsEmpty() && UseRotations.IsEmpty() ? Session.SetStudioIk(Effectors, UnityPositions) : Session.SetStudioIkPose(Effectors, UnityPositions, UnityRotations, UseRotations);
+    if (!bApplied) { OutError = TEXT("bad IK targets"); return false; }
 	bUserPoseDirty = true;
 	ApplyPoseFrame(0.f, false);
 	return true;

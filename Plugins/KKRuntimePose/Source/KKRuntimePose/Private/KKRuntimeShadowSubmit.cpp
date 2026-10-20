@@ -6,9 +6,8 @@ bool RuntimeShadowCasts(EBlendMode Blend,bool AsMasked){
  return Blend==BLEND_Opaque||Blend==BLEND_Masked||AsMasked;
 }
 bool RuntimeShadowSolidRecipe(EKKRuntimeMaterialRecipe Recipe){
- const int32 Id=int32(Recipe);
  return Recipe==EKKRuntimeMaterialRecipe::IBLDepth||Recipe==EKKRuntimeMaterialRecipe::IBLOpaque
-  ||Recipe==EKKRuntimeMaterialRecipe::OilPainting||(Id>=35&&Id<=46);
+  ||Recipe==EKKRuntimeMaterialRecipe::OilPainting;
 }
 void AddShadowReason(TArray<FString>& Reasons,const TCHAR* Reason){
  if(!Reason||!*Reason)return;

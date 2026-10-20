@@ -1,0 +1,23 @@
+[
+  {
+    "file": "after.png",
+    "width": 1280,
+    "height": 360,
+    "bytes": 719659,
+    "sha256": "e2593bd19481283c582389cf9e7bd02109efbd593ddbfbb77a0d2b15b8680ed8"
+  },
+  {
+    "file": "before.png",
+    "width": 1280,
+    "height": 360,
+    "bytes": 703304,
+    "sha256": "56b86b757fd4f69a870520d65c61dd689f1225fcd74507d43f22099f63eb85a3"
+  },
+  {
+    "file": "comparison.png",
+    "width": 1280,
+    "height": 776,
+    "bytes": 1162171,
+    "sha256": "797910b74cd1cf4d88cdb9a5d95545a1ec26e1c61025aeaa7b1c291bf4176553"
+  }
+]

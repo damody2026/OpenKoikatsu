@@ -3694,3 +3694,50 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-20｜補圖只做單次整理，驗收工具仍可能遺失證據**：原工具只保存 log／JSON，Compare 圖片仍寫入共用目錄；手動補好一份報告無法避免下次漏圖或後續重跑覆蓋。增加每輪獨立擷取輸出與自動 Markdown 嵌圖；以具名成功紀錄逐張核對本輪 PNG、尺寸與雜湊，缺圖／重複／損壞／目錄外舊圖均判失敗，保留完整資料夾即可重看同輪結果。驗收自動化必須產生可攜的圖片證據，不只輸出「14／14」。
 
 - **2026-10-20｜驗收啟動失敗不能留下「執行中」**：新增自動報告後檢查啟動例外路徑，發現只寫部分結果再拋錯會留下 `finished=false`。已在啟動失敗時保存最終 FAIL 與完整原因；以不存在的引擎路徑做負向驗收，確認非零結束碼、`finished=true`、`passed=false`。這是預期失敗案例，不列為功能通過。
+
+- **2026-10-20｜未核對主相機 HDR 就套 LDR 泛光換算**：早期以 `1/(1-threshold)` 與七點高斯近似 Studio 泛光；重新核對 level2 的 Main Camera（2794）確認 HDR=true，安裝版 BrightPassFilter 的 PS 只逐通道減 threshold.x，沒有該倍率；SeparableBlurPlus 實為九點，最外側 ±6.5。修正依實際 DXBC 與執行順序，不以場景專用強度係數修圖。UnityPy 對 stripped MonoBehaviour 的完整讀取長度檢查會失敗；僅以基礎 header 的 `check_read=False` 取 script 引用，再依對應類別與實際長度核對欄位，不把不完整 typetree 當完整資料。
+
+- **2026-10-20｜GPU 測試片因 Static Mobility 沒有幾何**：在已註冊的 AStaticMeshActor 上直接 SetStaticMesh，被引擎以 Static Mobility 拒絕，畫面成黑；基準色檢查使測試正確 FAIL，沒有把黑對黑的泛光計算算成成功。測試元件先改 Movable 再設定幾何，並保留已知 RGB 的基準檢查。
+
+- **2026-10-20｜只關 ToneCurveAmount 仍留下 UE BlueCorrection**：已知 RGB 顯示截圖出現色差，追引擎 PostProcessCombineLUTs 確認 BlueCorrection 在 tone-curve 混合前後仍各執行一次，部分矩陣混合不會互相消除；Studio 明確將 BlueCorrection 設 0。但修改後顯示截圖的紅色仍約 0.074，不能將全部差異歸因於它或宣稱基準色已恢復。泛光 GPU 測試改用線性 HDR float readback，避免把顯示 LUT／sRGB 量化當作被測運算；不放寬原測試容差。
+
+- **2026-10-20｜GPU 捕捉器未保留 ViewState，後製材質被略過**：線性 HDR 捕捉器起初未設 `bAlwaysPersistRenderingState`，泛光開／關結果相同，測試正確 FAIL。核對引擎 `UMaterialInterface::OverrideBlendableSettings` 確認沒有 View.State 即直接 return；與正式場景擷取路徑一樣啟用持久 rendering state 後，逐通道門檻、常數場、相機參數隔離與關閉回復檢查 PASS。不能只依材質編譯 ready 推論 GPU 已執行。
+
+- **2026-10-20｜單包 cook 未命中目標卻納入編輯器啟動資源**：首次用 CookDir／CookSinglePackage 的診斷 cook 實際處理 301 個啟動套件，沒有八個 SourceBloom 材質，且 Landmass 引用 NeverCook EditorMaterials 而退出 1。保留原 log，改依該引擎 CookCommandlet 的明確 `PACKAGE` 清單、`cooksinglepackage`、`CookSkipRequests` 與 `SkipZenStore`，輸出新目錄；驗收必須逐一確認八個目標的 cooked 產物，不能只看到 Done 或 result 0 訊息就算通過。
+
+- **2026-10-20｜Windows 搜尋路徑的萬用字元與 UE 標頭位置**：直接把帶 `*.usf` 的路徑交給 rg 在 PowerShell 下不會展開，出現 os error 123；UE5.8 材質標頭也已移到 Public/Materials。後續先 `rg --files` 定位，再用父目錄配合 `-g` 篩選，不沿用猜測的 Classes 路徑反覆搜尋。
+
+- **2026-10-20｜新檔未追蹤時通過、提交後 Unity build 發生名稱遮蔽**：自適應建置先把工作中 Bloom.cpp 單獨編譯；提交後它進入 Unity 分組，匿名 namespace 的全域 Cache 讓同組 Sky.cpp 的局部 Cache 觸發 C4459。私有狀態與 helper 改用 SourceBloom 前綴，並避開 Base／Instance 等同組全域名稱；保留 Unity build，不用關閉分組或讓檔案持續留在 working set 來規避。最終驗收必須包含已追蹤檔案的 Unity 分組建置。
+
+- **2026-10-20｜3167 鏡片被共用材質強制不透明**：KoikanoGlasses0–11 未列入 OKRuntimeSharedMaterialTranslucent，baker 因此改寫原始 pixel shader 的 alpha 為 1，約 0.197 的鏡片變為黑色實心。按既有來源 Forward 的 SrcAlpha/OneMinusSrcAlpha 修正完整家族，三個出貨根以新版本重烘；不能只改 PNG alpha、只修單張卡或只烘 Studio。診斷腳本一度誤用不存在的 ok.path.read/write，改用既有 path.copy/read_text/write_text；Saved 臨時腳本沒有提交。
+
+- **2026-10-20｜透明度驗證前置錯誤**：第一次 Python 編輯未指定 UTF-8，cp950 解碼 Rust 檔案失敗，沒有套用修改；改用 apply_patch。第一次篩選 accessory_glass 只找到 ignored 原作 oracle，不能當回歸通過；加入快取 round-trip 測試後以 --include-ignored 執行，又因漏設 OK_TEST_GAME_ROOT 使 oracle 正確 FAIL，補齊明確的 D:/KoikatuSunshine 測試環境再執行。
+- **2026-10-20｜鏡片第四組顏色漏寫，被誤判為較晚的 ME 覆寫**：嚴格原作卡 oracle 要求 alpha 0.1254902，實際原生材質卻是 0.197。曾改用量化值並猜測是 MaterialEditor 較晚覆寫；直接檢查序列化卡片後證實沒有該 ME Color4，這個推論錯誤。根因是 color_key 只有三組，zip(cols) 沒有寫回第四組顏色；已明確 set_material_color(_Color4, cols[3])，恢復原嚴格斷言，不放寬容差。快取版本提升到 17，避免重用修正中產生的舊結果。
+- **2026-10-21｜透明度測試同一影格切換材質，誤讀尚未更新的繪製資料**：首輪 48 組透射率全部為 1，一度猜測 Plane 朝向、綁定、Nanite 或 SceneCapture 的 SeparateTranslucency／UnlitViewmode 預設。新增不透明與常數 alpha 雙控制後，不透明控制 PASS、常數 alpha 仍消失，證明尚不能歸因於來源 shader。SceneCapture 旗標修改本身也沒有修好。最終改成跨影格設材質、下一個 ticker 才擷取，常數 alpha 及全部 48 組皆 PASS；保留先前 FAIL，沒有放寬單層 .5／雙層 .25 的容差。正式 Capture 不保留未經證實必要的旗標變更。測試沿用正式綁定器初始化來源燈光／probe 等輸入。
+- **2026-10-21｜GPU fixture 混用舊眼白父材質與新 selector**：還原正式擷取預設後，45 組 PASS、三個根的 ForgeEyeWhite 失敗。檢查 selector 確認該 shader 現在選 ForgeEyeWhiteLod（family 56），不是舊 ForgeEyeWhite（family 8）；先前手動覆蓋 family 曾掩蓋 fixture 混搭。移除冗餘手動 family，改測真正的現行父材質，48 組與兩個控制均 PASS。沒有變更正式 shader selector 或以錯誤 family 規避契約。
+
+- **2026-10-21｜1268 把動畫道具的子接點當成靜態骨架**：原作兩個小角色掛在「回転（obj無し）」道具下，父物件的 guide rotation 為零仍不代表子接點沒有旋轉。舊解析器丟棄 OIItemInfo.animePattern／animeNormalizedTime，WorldTransform 只讀靜態 N_setuzoku，造成子角色位置與朝向錯誤。保留來源相位／速度，離線轉出共用庫 32 種 Animator 接點動畫，依原作相位取樣；後續先檢查完整父子鏈及來源 Animator，不能對子角色加場景專用旋轉。
+- **2026-10-21｜1268 診斷曾先懷疑 IK／動畫時間，未先查父道具動畫**：實際播放骨架的九個 IK effector 位置已接近來源目標；缺手腳旋轉是既有支援邊界，不能當成本次角度根因。根因由來源 ItemList anime=true、OCIItem.OnSave／AddObjectItem 的 normalizedTime，以及父道具 N_studio_kaiten clip 交叉確認。未針對此場景改 IK 解算、角色根旋轉或相機。
+- **2026-10-21｜旋轉接點烘焙須正規化四元數**：generic clip 讀出的四元數曲線逐分量插值，離鍵值位置可能不是單位長度。直接用於有平移子節點的 TRS 會扭曲接點位置；在組合階層之前正規化，並以離開烘焙影格網格的原作 clip 取樣做角度 oracle。
+- **2026-10-21｜診斷矩陣與 Windows 搜尋路徑錯誤**：骨架 C ABI 為 row-major，最初診斷讀 M[12..14] 印出零位置，改讀 M[3],M[7],M[11]；此錯只在新診斷日誌，未用來改角色。rg 路徑不可寫 src/studio* 或 Private/KKPreview*（Windows os error 123），應給父目錄加 -g 或先 rg --files。map_animator_defaults 的 OK_ANIM_BUNDLE 要完整檔案路徑，第一次給相對遊戲 bundle 名稱造成探針失敗，補完整路徑後成功。
+
+- **2026-10-21｜乾淨資源驗收不可只相信舊 clone 的檔名**：新建稀疏 checkout 從舊驗收庫 hydrate LFS 時，第一個不符 HEAD 的模型雜湊被嚴格檢查攔下；改逐檔核對追蹤 LFS OID，只在雜湊相符時建立 hard link，90 個舊來源不符者使用主工作庫中符合 HEAD 的內容。665 個追蹤 payload 共約 8.62 GB 全部核對，不提交或覆寫舊驗收庫的 missing.txt。稀疏 checkout 必須包括根 .gitattributes，否則 hydrated LFS payload 暫呈修改；重新套用 attributes 後刷新 index（不新增 commit），確認資源無實際 diff。sparse-checkout add 不接受 --no-cone，該模式只在 set 時指定。
+
+- **2026-10-21｜嚴格乾淨庫回歸必須保留 gaps 失敗**：本輪真正只含 HEAD 追蹤共用資源的新 checkout 中，March_7th 的 OKCHECK recorded／closed／live 三個 digest 一致、game_reads=0，但 gaps=1，嚴格結果為 DIFFERENT；其餘四張 gaps=0 MATCH。完整庫五張皆 MATCH。新增接點資料之外沒有改 base_v1 舊資源，故不以本次角色角度已正確而掩蓋這個既有依賴缺口，也不把私有 mod 模型加入共用版控來湊綠。okcard-check 有 DIFFERENT 仍 exit 0，驗收必須解析 verdict／gaps，不能只看退出碼。
+
+- **2026-10-21｜6331 遺失保存的手腕方向與 FIX 頭部姿勢**：原作左側角色 555 的左手啟用 IK，保存 hand target 的 pos／rot；頸部則為 neckLookPtn=4。舊匯入器只傳 IK 位置並丟掉 NeckLookControllerVer2 的 neckByteData，導致手腕方向與低頭姿勢錯誤。依 AddObjectAssist 的 usedRot（僅手／腳）與實際 prefab 的 aBones（cf_j_neck、cf_j_head）保存並套用來源四元數，FIX 在動畫與 IK 之後、動態骨之前生效，不替場景加角度或移動相機。
+- **2026-10-21｜未使用的頸部四元數可能為零**：初版新解碼對所有 neck pattern 驗證四元數，會把非 FIX 模式下無效但未使用的零值誤當場景損壞。只對 FIX 資料解碼／驗證；非 FIX 保留原動畫流程。FIX 模式仍嚴格檢查長度、有限值與非零 norm，錯誤不可寫入目前狀態。
+- **2026-10-21｜Rust 測試誤用 C++ 小數語法**：新斷言寫成 >.9999，Rust 需要 >0.9999，第一輪測試未編譯；已修正後重跑，沒有把編譯失敗列為通過。首次診斷不應列印整個場景全部道具／隱藏角色，6331 輸出過多；改為只讀有效可見角色與需要的骨架欄位。
+
+- **2026-10-21｜保存的固定頭部不能藏在「照動畫」模式下**：初版以 FixedNeck 陣列覆蓋 Animation 模式，畫面雖正確，但 UI「照動畫」不能真正還原動畫頭部。改用獨立 Fixed enum（附加於既有值之後），匯入時明確設為「固定姿勢」；只有有保存頸部資料的角色提供此選項。切回 Animation／Camera／Point 時清除 runtime FIX，保存資料仍可切回使用，避免為單張圖隱藏控制狀態。
+
+- **2026-10-21｜大型 SelfTest 函式新增 Before 變數撞名**：固定頭部切換整合測試使用 FVector Before，遮蔽同一函式前面的 FString Before，Windows 編譯將 C4456 視為錯誤。改成 SavedNeckBefore／SavedNeckFixed／SavedNeckRestored 等用途前綴。保留失敗 build log，以重建後結果驗收；在大型既有函式加測試時先檢查外層名稱，避免重複使用 Before／After／Fixed 這類名稱。
+
+- **2026-10-21｜FIX 頭部也必須保留於直接身形重建**：一般動畫／static interaction 的 finishing pass 已重套 FIX，但 apply_shape／apply_shape_live 的直接顯示路徑也會還原骨架，不能只靠第一次載入 setter。於身體 shape baseline 保存之後、IK 之後重套固定 locals，僅在 FIX 存在且非 deferred frame 時執行，不推進追視或物理時鐘。回歸測試實際修改身形數值並驗證兩條路徑的頸／頭 locals；固定資料不能烘進 shaped baseline，否則切回動畫會殘留。
+
+- **2026-10-21｜Studio 不可套用展示服裝自動排序**：1268 天使來源第0套為白色浴巾（top28），通用 OK 卡轉換的 shown_outfit_first 依外出鞋與部件數選中第1套並交換到0，Studio卻仍按來源coordinate=0載入，變成校服。新增明確服裝轉換API，保留全部coordinate／Status／plugin編號，並將明確選中非0套的資源一起錄入；Gallery預設展示規則維持原行為。驗收必須檢查轉卡後服裝資料與實際renderer，不能只看角度正確或程序成功。
+- **2026-10-21｜診斷需區分現代OK卡與舊快照**：ok-appearance inspect只適用okPv快照，對okLb卡會回報PNG has no portable snapshot；本輪誤用後改用來源資料塊與實際Session比對。Python讀舊MessagePack binary字串需raw=True，再針對文字欄位解碼；rg在Windows不可將1268*當成目錄參數，應給父目錄搭配-g。初期白色簡化模式／材質猜測均經來源資料排除，不以猜測改渲染。
+
+- **2026-10-21｜Session open 已負責掛載卡片資源包**：1268 新來源回歸測試先手動 mount_card_pack 再呼叫 session::open，對含pack的卡重複取得 PACK_OPEN 非重入鎖，測試停住。移除外層手動掛載，讓既有Session生命週期處理；停止本輪測試PID後重跑，未修改正式鎖或跳過pack。
+
+- **2026-10-21｜錄製卡內資源時不可用最終Session快取代替來源走訪**：明確指定非0套服裝時，其zipmod模型與query也必須錄入okLc；已暖載入的Session不能提供完整來源依賴。錄製card pack期間略過Session／baked快取，正常遊戲載入快取不受影響。來源回歸先暖載入再轉卡，檢查模型清單非空與closed reopen，避免只有冷快取成功。

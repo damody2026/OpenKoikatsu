@@ -844,7 +844,7 @@ pub fn session_cache_location() -> Option<PathBuf> {
 ///     Directional lightmaps carry the direction/rebalancing texture separately.
 /// 14: Studio Standard/MDK/particle Texture2D and baked lightmap rows follow rendering UVs.
 /// 15: Studio renderers carry their native shadow casting mode, layer and enabled state.
-const SESSION_CACHE_REVISION: u32 = 15;
+const SESSION_CACHE_REVISION: u32 = 17;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {
@@ -1048,6 +1048,18 @@ pub fn remake_ok_card(lib: &Path, game: &Path, card: &Path) -> Result<(String, u
     make_ok_card(lib, game, source.as_ref().map_or(card, |t| &t.0))
 }
 
+/// Convert an explicitly selected outfit without renumbering coordinates or plugin references.
+/// Studio's saved coordinate is authoritative; the single-character display heuristic is not.
+pub fn remake_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) -> Result<(String, usize, Vec<u8>, usize), String> {
+    let bytes = std::fs::read(card).map_err(|e| e.to_string())?;
+    let info = crate::card::parse_card_bytes_mode(&bytes, outfit, false)?;
+    if outfit < 0 || outfit as usize >= info.coordinate_count {
+        return Err(format!("outfit {outfit} outside {} saved coordinates", info.coordinate_count));
+    }
+    let source = card_as_made_with_policy(card, false)?;
+    make_ok_card_for_outfit(lib, game, source.as_ref().map_or(card, |t| &t.0), outfit)
+}
+
 /// A temporary card next to the original, so zipmods kept in the card's folder are still the card's own; removed on drop.
 struct TempCard(PathBuf);
 impl Drop for TempCard { fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); } }
@@ -1055,9 +1067,14 @@ impl Drop for TempCard { fn drop(&mut self) { let _ = std::fs::remove_file(&self
 /// The card an OK card is made from: OK chunks stripped, and the outfit shown moved to outfit 0
 /// (okclothes::shown_outfit_first). None when that is the card itself.
 fn card_as_made(card: &Path) -> Result<Option<TempCard>, String> {
+    card_as_made_with_policy(card, true)
+}
+fn card_as_made_with_policy(card: &Path, choose_display_outfit: bool) -> Result<Option<TempCard>, String> {
     let bytes = std::fs::read(card).map_err(|e| format!("{}: {e}", card.display()))?;
     let plain = strip_ok_chunks(&bytes)?;
-    let shown = crate::okclothes::shown_outfit_first(&plain).map_err(|e| format!("{}: shown outfit: {e}", card.display()))?;
+    let shown = if choose_display_outfit {
+        crate::okclothes::shown_outfit_first(&plain).map_err(|e| format!("{}: shown outfit: {e}", card.display()))?
+    } else { None };
     if shown.is_none() && plain.len() == bytes.len() { return Ok(None); }
     if let Some((_, k)) = &shown { eprintln!("OKCARD {} shows outfit {k} as outfit 0", card.display()); }
     let temp = TempCard(card.with_file_name(format!(".okremake-{}-{}.png", std::process::id(),
@@ -1237,6 +1254,9 @@ pub static LAST_UNNAMED_ZIPMOD_BYTES: std::sync::atomic::AtomicU64 = std::sync::
 pub static LAST_ABSENT_ZIPMODS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 pub fn make_ok_card(lib: &Path, game: &Path, card: &Path) -> Result<(String, usize, Vec<u8>, usize), String> {
+    make_ok_card_for_outfit(lib, game, card, 0)
+}
+fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) -> Result<(String, usize, Vec<u8>, usize), String> {
     let original = std::fs::read(card).map_err(|e| e.to_string())?;
     if is_library_card(card) { return Err(format!("{} is already an OK card", card.display())); }
     let work = lib.join("work").join(format!("pack_{}", std::process::id()));
@@ -1253,7 +1273,13 @@ pub fn make_ok_card(lib: &Path, game: &Path, card: &Path) -> Result<(String, usi
             store.forget_models();
             begin_card_pack(&work)?;
             let t = std::time::Instant::now();
-            let opened = session_digest(lib, card);
+            // The card format's digest still describes coordinate 0. Also record an explicitly
+            // selected nonzero coordinate into the same pack, without exchanging either slot.
+            let opened = (|| {
+                let first = session_digest(lib, card)?;
+                if outfit != 0 { session_digest_outfit(lib, card, outfit)?; }
+                Ok::<_, String>(first)
+            })();
             if std::env::var_os("OK_TIMING").is_some() { eprintln!("OKTIME session {:.2}s", t.elapsed().as_secs_f64()); }
             let pack = end_card_pack();
             let (digest, parts, preview) = opened?;
@@ -1518,7 +1544,10 @@ pub fn card_memory_line(phase: &str, card: &Path, start: u64) -> String {
 }
 
 fn session_digest(game: &Path, card: &Path) -> Result<(String, usize, Vec<u8>), String> {
-    let session = crate::session::open(game, Some(card), 0)?;
+    session_digest_outfit(game, card, 0)
+}
+fn session_digest_outfit(game: &Path, card: &Path, outfit: i32) -> Result<(String, usize, Vec<u8>), String> {
+    let session = crate::session::open(game, Some(card), outfit)?;
     let bytes = session.to_preview_bytes()?;
     Ok((hex(&hash16(&bytes)), session.parts.len(), bytes))
 }
@@ -2156,6 +2185,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             crate::studio_items::write(&lib, &studio)?;
             println!("OKCONVERT studio items={} with components={} unresolved={unresolved}", studio.items.len(), studio.items.iter().filter(|i| i.line_width.is_some()).count());
         }
+        "studio-child-anims" => crate::studio_child_animation::convert(game, &lib.ok_or("library directory required")?)?,
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
         "studio-sky" => println!("OKCONVERT studio sky patterns={}", crate::studio_sky::convert(game, &lib.ok_or("library directory required")?)?),

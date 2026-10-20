@@ -37,6 +37,7 @@ const FOKStudioCatalog& FOKStudioCatalog::Get()
 		GCatalog->Load(AOKSceneActor::LibraryDirectory() / TEXT("studio_items.json"));
 		GCatalog->LoadAnims(AOKSceneActor::LibraryDirectory() / TEXT("studio_anims.json"));
 		GCatalog->LoadEffects(EffectsFile());
+        GCatalog->LoadChildAnimations(AOKSceneActor::LibraryDirectory() / TEXT("studio_child_animations.json"));
 	}
 	return *GCatalog;
 }
@@ -290,4 +291,45 @@ TArray<const FOKStudioCatalogGroup*> FOKStudioCatalog::CategoriesOf(int32 Group)
 	TArray<const FOKStudioCatalogGroup*> Out;
 	for (const FOKStudioCatalogGroup& C : Categories) if (C.Group == Group) Out.Add(&C);
 	return Out;
+}
+
+void FOKStudioCatalog::LoadChildAnimations(const FString& File)
+{
+    FString Text;
+    TSharedPtr<FJsonObject> Root;
+    if (!FFileHelper::LoadFileToString(Text, *File) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root) return;
+    for (const auto& Value : Array(Root, TEXT("animations")))
+    {
+        const auto O = Value->AsObject();
+        if (!O || Int(O, TEXT("pattern")) != 0) continue;
+        FOKStudioChildAnimation A;
+        double D = 0.;
+        O->TryGetNumberField(TEXT("duration"), D);
+        A.Duration = float(D);
+        O->TryGetBoolField(TEXT("looping"), A.bLooping);
+        for (const auto& Frame : Array(O, TEXT("frames")))
+        {
+            const auto F = Frame->AsObject();
+            const auto& P = Array(F, TEXT("pos"));
+            const auto& R = Array(F, TEXT("rot"));
+            const auto& S = Array(F, TEXT("scale"));
+            if (P.Num()!=3 || R.Num()!=4 || S.Num()!=3) { A.Frames.Reset(); break; }
+            A.Frames.Add(FTransform(FQuat(-R[0]->AsNumber(), R[2]->AsNumber(), R[1]->AsNumber(), R[3]->AsNumber()).GetNormalized(),
+                FVector(-P[0]->AsNumber(), P[2]->AsNumber(), P[1]->AsNumber()) * 100., FVector(S[0]->AsNumber(), S[2]->AsNumber(), S[1]->AsNumber())));
+        }
+        if (A.Duration > 0.f && A.Frames.Num() >= 2) ChildAnimations.Add(FIntVector(Int(O,TEXT("group")),Int(O,TEXT("category")),Int(O,TEXT("no"))), MoveTemp(A));
+    }
+}
+
+FTransform FOKStudioCatalog::AnimatedItemChildPoint(int32 Group, int32 Category, int32 No, int32 Pattern, float NormalizedTime, float ElapsedSeconds, float Speed) const
+{
+    const FOKStudioChildAnimation* A = Pattern == 0 ? ChildAnimations.Find(FIntVector(Group, Category, No)) : nullptr;
+    if (!A || !FMath::IsFinite(NormalizedTime) || !FMath::IsFinite(ElapsedSeconds) || !FMath::IsFinite(Speed)) return ItemChildPoint(Group, Category, No);
+    const double Clock = double(NormalizedTime) + double(ElapsedSeconds) * double(Speed) / double(A->Duration);
+    const double Phase = A->bLooping ? Clock - FMath::FloorToDouble(Clock) : FMath::Clamp(Clock, 0., 1.);
+    const double Index = Phase * (A->Frames.Num() - 1);
+    const int32 Lo = FMath::Clamp(FMath::FloorToInt(Index), 0, A->Frames.Num() - 1), Hi = FMath::Min(Lo + 1, A->Frames.Num() - 1);
+    FTransform Out;
+    Out.Blend(A->Frames[Lo], A->Frames[Hi], float(Index - Lo));
+    return Out;
 }

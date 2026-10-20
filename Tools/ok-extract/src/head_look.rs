@@ -1,10 +1,12 @@
-//! Bounded additive head tracking, applied to fresh animation locals before dynamics.
+//! Saved Studio FIX locals and bounded additive head tracking, applied before dynamics.
 use crate::finalik::*;
 use crate::pose::Skeleton;
 
 #[derive(Default)]
 pub(crate) struct HeadLook {
     pub target: Option<V3>,
+    /// Native NeckLookControllerVer2 aBones order: neck, head; independent of camera tracking.
+    pub fixed: Option<[Quat;2]>,
     yaw: f32,
     pitch: f32,
     /// Last check (degrees): face to the limited desired direction, and desired to the target (beyond the limits).
@@ -13,6 +15,14 @@ pub(crate) struct HeadLook {
 
 impl HeadLook {
     pub fn apply(&mut self, skeleton: &mut Skeleton, dt: f32) {
+        if let Some(rotations)=self.fixed {
+            for (name,rotation) in ["cf_j_neck","cf_j_head"].into_iter().zip(rotations) {
+                if let Some(tf)=skeleton.tfs.values_mut().find(|tf|tf.name.eq_ignore_ascii_case(name)) {tf.rot=rotation;}
+            }
+            skeleton.rebuild_worlds();
+            self.last_error=None;
+            return;
+        }
         let Some(target) = self.target else { return; };
         let mut state = [self.yaw, self.pitch];
         self.last_error = crate::dbone::head_look_world(skeleton, target, &mut state, dt);

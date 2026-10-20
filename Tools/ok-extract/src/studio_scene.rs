@@ -25,6 +25,43 @@ impl Version {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Color { pub r: f32, pub g: f32, pub b: f32, pub a: f32 }
 
+/// NeckLookControllerVer2.SaveNeckLookCtrl: pattern and absolute local rotations, in source aBones order.
+#[derive(Clone, Debug, Serialize)]
+pub struct StudioNeck {
+    pub pattern: i32,
+    pub rotations: Vec<[f32; 4]>,
+}
+
+fn read_neck(bytes: &[u8]) -> Result<Option<StudioNeck>, String> {
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    if bytes.len() < 8 {
+        return Err("truncated Studio neck data".into());
+    }
+    let pattern = i32::from_le_bytes(bytes[0..4].try_into().unwrap());
+    if pattern != 4 {
+        return Ok(None);
+    }
+    let count = i32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    if !(0..=64).contains(&count) || bytes.len() != 8 + count as usize * 16 {
+        return Err("invalid Studio neck data length".into());
+    }
+    let mut rotations = Vec::new();
+    for chunk in bytes[8..].chunks_exact(16) {
+        let mut q = [0.; 4];
+        for (i, v) in q.iter_mut().enumerate() {
+            *v = f32::from_le_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap());
+        }
+        let norm = q.iter().map(|x| x * x).sum::<f32>();
+        if !norm.is_finite() || norm < 1e-12 {
+            return Err("invalid Studio neck quaternion".into());
+        }
+        rotations.push(crate::finalik::qnorm(q));
+    }
+    Ok(Some(StudioNeck { pattern, rotations }))
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind")]
 pub enum Object {
@@ -38,6 +75,7 @@ pub enum Object {
         ext_offset: usize, ext_len: usize,
         fk: Vec<(i32, ChangeAmount)>, ik: Vec<(i32, ChangeAmount)>,
         enable_fk: bool, active_fk: [bool; 7], enable_ik: bool, active_ik: [bool; 5],
+        neck: Option<StudioNeck>,
         anime: [i32; 3], anime_speed: f32, anime_time: f32, hand: [i32; 2], mouth_open: f32,
         /// OICharInfo nipple (0..1) and siru levels (face, chest front, chest back, lower front, lower back).
         nipple: f32, siru: [u8; 5],
@@ -49,7 +87,7 @@ pub enum Object {
         colors: Vec<Color>,
         /// The three pattern slots (OIItemInfo.pattern; their colours are colors[3..6]).
         patterns: Vec<Pattern>,
-        anime_speed: f32, alpha: f32, enable_fk: bool,
+        anime_speed: f32, anime_pattern: i32, anime_time: f32, alpha: f32, enable_fk: bool,
         /// Outline (OIItemInfo.lineColor／lineWidth), emission (emissionColor／emissionPower) and lightCancel.
         line_color: Color, line_width: f32, emission_color: Color, emission_power: f32, light_cancel: f32,
         /// Item FK: bone name and its change (rotation) when `enable_fk`.
@@ -344,16 +382,17 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             r.bool()?; r.f32()?; r.bool()?; // son visible / length, simple
             r.json_color()?;
             r.f32()?; r.f32()?; // anime option params
-            let neck = r.bytes_len("neck data")?; r.take(neck)?;
+            let neck_len = r.bytes_len("neck data")?;
+            let neck = read_neck(r.take(neck_len)?)?;
             let eyes = r.bytes_len("eyes data")?; r.take(eyes)?;
             let anime_time = r.f32()?;
             for _ in 0..2 { let n = r.count("access")?; r.take(n * 8)?; }
-            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
+            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
         }
         1 => {
             let (key, change, visible) = base(r, true)?;
             let (group, category, no) = (r.i32()?, r.i32()?, r.i32()?);
-            if v.at_least("1.1.1.0") { r.i32()?; }
+            let anime_pattern = if v.at_least("1.1.1.0") { r.i32()? } else { 0 };
             let anime_speed = r.f32()?;
             let mut colors = Vec::new();
             for _ in 0..if v.at_least("0.0.3") { 8 } else { 7 } { colors.push(r.json_color()?); }
@@ -369,9 +408,9 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let mut fk = Vec::with_capacity(n);
             for _ in 0..n { let name = r.string()?; let (_, c, _) = base(r, false)?; fk.push((name, c)); }
             if v.at_least("1.0.1") { r.bool()?; }
-            r.f32()?; // anime normalized time
+            let anime_time = r.f32()?;
             let children = children(r, v, depth)?;
-            Ok(Object::Item { key, change, visible, group, category, no, colors, patterns, anime_speed, alpha, line_color, line_width, emission_color, emission_power, light_cancel, enable_fk, fk, children })
+            Ok(Object::Item { key, change, visible, group, category, no, colors, patterns, anime_speed, anime_pattern, anime_time, alpha, line_color, line_width, emission_color, emission_power, light_cancel, enable_fk, fk, children })
         }
         2 => {
             let (key, change, visible) = base(r, true)?;
@@ -649,4 +688,137 @@ mod import_tests {
         for k in ["effects", "camera", "map"] { if let Some(x) = v.get(k) { let s = x.to_string(); println!("{k}: {}", &s[..s.len().min(3000)]); } }
         if let Ok(path) = std::env::var("OK_SCENE_DUMP") { std::fs::write(path, serde_json::to_string_pretty(&v).unwrap()).unwrap(); }
     }
+}
+
+#[cfg(test)]
+mod item_animation_tests {
+    #[test]
+    #[ignore = "base library sample scenes: source item clock fields"]
+    fn rotating_parent_keeps_saved_phase() {
+        let path=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1/studio/samples/koikatu_cs0001268.png");
+        let scene=super::read(&std::fs::read(path).unwrap()).unwrap();
+        let item=scene.objects.iter().find(|o|matches!(o,super::Object::Item{key:424,..})).unwrap();
+        match item {super::Object::Item{anime_pattern,anime_time,anime_speed,children,..}=>{
+            assert_eq!(*anime_pattern,0);
+            assert!((*anime_time-311.40283203125).abs()<0.00001);
+            assert!((*anime_speed-0.2197189331).abs()<0.000001);
+            assert_eq!(children.len(),2);
+        },_=>unreachable!()}
+    }
+}
+
+#[cfg(test)]
+mod fixed_neck_tests {
+    fn data(pattern: i32, qs: &[[f32; 4]]) -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend(pattern.to_le_bytes());
+        b.extend((qs.len() as i32).to_le_bytes());
+        for q in qs {
+            for v in q {
+                b.extend(v.to_le_bytes());
+            }
+        }
+        b
+    }
+    #[test]
+    fn fixed_neck_payload_validation() {
+        let b = data(4, &[[0., 0., 0., 1.], [0.1, 0., 0., 1.]]);
+        let n = super::read_neck(&b).unwrap().unwrap();
+        assert_eq!(n.pattern, 4);
+        assert_eq!(n.rotations.len(), 2);
+        assert!((n.rotations[1].iter().map(|v| v * v).sum::<f32>() - 1.).abs() < 1e-6);
+        assert!(super::read_neck(&b[..b.len() - 1]).is_err());
+        assert!(super::read_neck(&data(4, &[[0.; 4]])).is_err());
+        assert!(super::read_neck(&data(4, &[[f32::NAN, 0., 0., 1.]])).is_err());
+        assert!(super::read_neck(&data(3, &[[0.; 4]])).unwrap().is_none());
+    }
+    #[test]
+    #[ignore = "base library scene: saved FIX neck of 6331"]
+    fn scene_6331_fixed_neck() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../Content/IndependentResources/base_v1/studio/samples/koikatu_cs0006331.png",
+        );
+        let scene = super::read(&std::fs::read(path).unwrap()).unwrap();
+        fn find(objects: &[super::Object]) -> Option<&super::StudioNeck> {
+            for o in objects {
+                match o {
+                    super::Object::Character {
+                        key: 555,
+                        neck: Some(n),
+                        ..
+                    } => return Some(n),
+                    super::Object::Folder { children, .. }
+                    | super::Object::Item { children, .. }
+                    | super::Object::Route { children, .. } => {
+                        if let Some(n) = find(children) {
+                            return Some(n);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None
+        }
+        let neck = find(&scene.objects).unwrap();
+        assert_eq!(neck.pattern, 4);
+        assert_eq!(neck.rotations.len(), 2);
+        println!("6331 source FIX locals {:?}", neck.rotations);
+        assert!(neck
+            .rotations
+            .iter()
+            .any(|q| q[0].abs() + q[1].abs() + q[2].abs() > 0.1));
+    }
+}
+
+#[cfg(test)]
+#[test]
+#[ignore = "base library: 1268 source outfit conversion and closed reopen"]
+fn scene_1268_clothing_source() {
+    let lib = std::env::var_os("OK_BASE_LIBRARY").map(std::path::PathBuf::from).unwrap_or_else(||
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1"));
+    let samples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1/studio/samples");
+    let bytes = std::fs::read(samples.join("koikatu_cs0001268.png")).unwrap();
+    let scene = read(&bytes).unwrap();
+    fn collect<'a>(objects: &'a [Object], out: &mut Vec<&'a Object>) {
+        for o in objects {
+            match o {
+                Object::Character {key, children, ..} => {
+                    if *key == 136 || *key == 280 { out.push(o); }
+                    for (_, c) in children { collect(c, out); }
+                }
+                Object::Item{children,..}|Object::Folder{children,..}|Object::Route{children,..} => collect(children, out),
+                _ => {}
+            }
+        }
+    }
+    let mut angels=Vec::new(); collect(&scene.objects, &mut angels); assert_eq!(angels.len(),2);
+    let source=card_bytes(&bytes,angels[0]).unwrap();
+    assert_eq!(source,card_bytes(&bytes,angels[1]).unwrap());
+    assert_eq!(crate::okclothes::shown_outfit(&source).unwrap(),1,"display heuristic would select the uniform");
+    let source_blocks=crate::appearance::blocks_from_card(&source).unwrap();
+    let root=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Saved/OKStudio/1268-clothes-oracle");
+    std::fs::create_dir_all(&root).unwrap(); let path=root.join("source.png");std::fs::write(&path,&source).unwrap();
+    assert!(crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&path,-1).is_err());
+    assert!(crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&path,7).is_err());
+    for outfit in [0,1] {
+        let info=crate::card::parse_card_bytes_mode(&source,outfit,false).unwrap();
+        assert_eq!(info.clothes_ids[0],if outfit==0 {28} else {2});
+        crate::oklib::ensure_library(&lib).unwrap();
+        crate::session::open(&lib,Some(&path),outfit).unwrap(); // warm the original-card cache first
+        let (_,_,card,_)=crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&path,outfit).unwrap();
+        let payload:serde_json::Value=serde_json::from_slice(crate::oklib::png_chunk(&card,b"okLb").unwrap()).unwrap();
+        assert!(!payload["models"].as_array().unwrap().is_empty(),"pack recording must visit dependencies even after a warm open");
+        assert_eq!(crate::appearance::blocks_from_card(&card).unwrap(),source_blocks,"all source coordinates/status/plugins retain their exact bytes");
+        let converted=root.join(format!("outfit{outfit}.png"));std::fs::write(&converted,&card).unwrap();
+        let session=crate::session::open(&lib,Some(&converted),outfit).unwrap();
+        let top:Vec<_>=session.parts.iter().filter(|p| p.role=="clothes_top"&&p.render_visible).map(|p|p.name.as_str()).collect();
+        eprintln!("CLOTHING closed outfit={outfit} top={top:?} game_reads={}",crate::gamefs::fallback_used());
+        assert!(!top.is_empty());
+        if outfit==0 {assert!(top.iter().all(|n|n.contains("bathtowel")));}
+        else {assert!(top.iter().any(|n|n.contains("jacket")));}
+        assert!(!crate::gamefs::fallback_used());
+        let reopened=crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&converted,outfit).unwrap().2;
+        assert_eq!(crate::appearance::blocks_from_card(&reopened).unwrap(),source_blocks,"reconversion must not exchange coordinates");
+    }
+    assert_eq!(std::fs::read(path).unwrap(),source,"conversion never edits the source file");
 }

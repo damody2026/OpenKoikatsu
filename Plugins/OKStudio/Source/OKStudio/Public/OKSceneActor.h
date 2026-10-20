@@ -56,6 +56,8 @@ public:
 	/** Advances character animations (seconds). */
 	UFUNCTION(BlueprintCallable, Category = "OK Studio")
 	void AdvanceAnimations(float DeltaSeconds);
+    /** Evidence capture holds the saved animation phase while rendering settles. */
+    bool bPauseAnimations = false;
 	/** Poses a character's animation at `Time` seconds of the scene timeline (its own start time and speed applied). */
 	void SetAnimationTime(int32 Id, float Time);
 	/** The next Sync builds the object again (after something changed its preview outside the document). */
@@ -146,6 +148,7 @@ private:
 		/** FK bones the preview currently has. */
 		TArray<FOKSceneFkBone> AppliedFk;
 		TArray<FOKSceneIkTarget> AppliedIk;
+        TArray<FQuat> AppliedFixedNeck;
 		/** Studio animation loaded from the OK animation library (kept alive while shown). */
 		TStrongObjectPtr<UObject> StudioAnim;
 		int32 AppliedHands[2] = { -1, -1 };

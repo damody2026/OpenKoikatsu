@@ -3,6 +3,41 @@ local ok = require "ok"
 local path = ok.path
 local M = {}
 
+local function inspect(root, rel, width, height)
+  local file = path.join(root, rel)
+  local data = path.read_bytes(file)
+  assert(data:sub(1, 8) == "\137PNG\r\n\26\n", "not a PNG")
+  local pos, ended = 9, false
+  while pos + 11 <= #data do
+    local length = string.unpack(">I4", data, pos)
+    local kind = data:sub(pos + 4, pos + 7)
+    pos = pos + length + 12
+    assert(pos <= #data + 1, "truncated PNG chunk")
+    assert(kind ~= "okPv" and kind ~= "okLc", "card data in PNG")
+    if kind == "IEND" then ended = length == 0; break end
+  end
+  assert(ended and pos == #data + 1, "missing IEND or trailing payload")
+  local decoded = ok.image.load(file)
+  assert(decoded.width == width and decoded.height == height, ("expected %dx%d image"):format(width, height))
+  return { file = rel, sha256 = ok.hash.sha256_file(file), bytes = #data, width = width, height = height }
+end
+
+function M.collect_transparency(root)
+  local images, errors = {}, {}
+  local names = { "background-low", "background-high", "opaque-control", "alpha-control-low", "alpha-control-high" }
+  for i = 0, 47 do for _, background in ipairs({ "low", "high" }) do names[#names + 1] = ("%02d-%s"):format(i, background) end end
+  for _, name in ipairs(names) do
+    local valid, result = pcall(inspect, root, "images/TransparencyTest/" .. name .. ".png", 64, 64)
+    if valid then
+      local index = tonumber(name:match("^(%d+)"))
+      result.embed = not index or index == 0 or index == 6 or index == 12 or index == 15
+      result.caption = "透明度 GPU 測試：" .. name
+      images[#images + 1] = result
+    else errors[#errors + 1] = name .. ": " .. tostring(result) end
+  end
+  return images, errors
+end
+
 local function link(file)
   return (file:gsub("[^%w%-%._~/]", function(c) return ("%%%02X"):format(c:byte()) end))
 end
@@ -63,6 +98,7 @@ function M.write(root, results)
     "對照圖左側為原作場景的預覽縮圖，右側為本輪 Unreal 擷取結果。成功出圖只驗證載入／擷取流程，不代表畫面完全吻合；色調、景深、bloom 與角色顯示仍須目視判定。",
     "",
     "使用 --compare 時，圖片保存在本輪 images 目錄，圖與 log／JSON 可整個目錄一起搬移。SHA-256、尺寸與場景記憶體記錄在 [results.json](results.json)。",
+    "透明度 GPU 測試另驗證 101 張色塊擷取，並嵌入低／高背景、不透明與固定 alpha 控制、代表性鏡片及眼睛結果；這些是數值測試圖，不是場景對照圖。",
     "",
     "| 測試 | 結果 | 執行紀錄 |",
     "|---|---|---|",
@@ -78,8 +114,10 @@ function M.write(root, results)
     end
     for _, err in ipairs(test.evidence_errors or {}) do lines[#lines + 1] = "\n證據檢查失敗：`" .. err:gsub("`", "'") .. "`。" end
     for _, img in ipairs(test.images or {}) do
-      lines[#lines + 1] = "\n## " .. path.stem(img.file)
-      lines[#lines + 1] = "\n![左原作縮圖、右本輪 Unreal 結果](" .. link(img.file) .. ")"
+      if img.embed ~= false then
+        lines[#lines + 1] = "\n## " .. path.stem(img.file)
+        lines[#lines + 1] = "\n![" .. (img.caption or "左原作縮圖、右本輪 Unreal 結果") .. "](" .. link(img.file) .. ")"
+      end
     end
   end
   path.write_text(path.join(root, "ACCEPTANCE.md"), table.concat(lines, "\n") .. "\n")

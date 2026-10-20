@@ -219,6 +219,17 @@
 - **最終整合檢查**：整合主線 `fdf43e943` 後，Editor／一般遊戲 Development 再次建置成功，`Verify-HandoffEAutoEvidenceMerged` 三項遊戲自測全 PASS；新增街區規則的 `shop::tests` 6 PASS，規則 DLL 已重建。這次主線更新沒有變更 Studio 擷取／材質程式，完整 14 圖證據仍對應前述本輪執行。
 
 
+### S5 第十四輪：來源 HDR 泛光（2026-10-20）
+
+- **來源契約**：核對 Main Camera HDR 與安裝版三個 image-effect DXBC，改以每通道 bright-pass、半／四分之一降採樣、九點兩輪分離模糊及景深前加法混合，取代套用 LDR 強度倍率的 UE 近似。門檻依 PreExposure 換算，模糊按實際畫面高度與長寬比，沒有場景專用係數。
+- **共用資源**：八個後製父材質保存於 `/Game/OKStudio/Post/SourceBloom1` 並納入 AlwaysCook；Runtime 直接載入。版本化烘材質拒絕覆寫，不新增角色材質配方。參數組合採不可變 MID 與弱參照快取，避免跨相機覆寫。
+- **色彩與 GPU 檢查**：Studio 明確關閉 UE BlueCorrection。新增線性 HDR GPU 測試，確認通道門檻、常數場、相機參數隔離、關閉回復與大於 1 的值；藍色輸出 1.5117／預期 1.5152，PASS。預設驗收納入 BloomTest，`--only BloomTest` 可單獨重跑。
+- **驗收**：兩種 Development 建置成功；五項自測 PASS，14／14 出圖且 PNG／雜湊／連結全通過；峰值 22.2 GB，卸載 12.0 GB。精確 cook 八個目標、SM5／SM6 成功；新 Lua cook 工具逐檔檢查與記錄 SHA-256。不將單包 cook 當作完整打包遊玩驗收。
+- **圖文與邊界**：[來源泛光完整紀錄](OK_STUDIO_SOURCE_BLOOM_20261020.md) 包含原作／本輪圖與 GPU 數據。1901 光暈、角色明暗及其他畫面差異仍保留，未因演算法通過而宣稱整張畫面完全還原。前述調查與測試錯誤均已寫入 ERROR_LOG。
+
+![第十四輪 1901：左原作縮圖、右來源泛光結果](images/OKStudio/SourceBloom20261020/koikatu_cs0001901.png)
+
+
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
 - [x] 轉成 OK 動畫：`ok-extract <game> --oklib anim-convert <lib> <card> [filter] [threads]`，5,805 個全部轉換、0 失敗（8 執行緒約 4 分鐘，目錄建立約 16 分鐘），寫進 `base_v1/anims/studio/*.okanim`（224 MB）與 `base_v1/studio_anims.json`
@@ -415,3 +426,29 @@
 - KStudio 匯入：Studio 存的乳首、汁，加上卡片 Status 的淚等級與飾品顯示。臉紅、光澤卡片本身已帶。
 - 自測：Rust `studio_status` 兩項（`OK_NOCACHE=1`）；遊戲內 `OKStudio.GameSelfTest` 的 character state。
 - 未做：汁的貼花渲染，等「新渲染模式」的材質介面；SkinEffects、ClothingBlendShape、MaterialEditor。
+- 2026-10-21 透明材質專項：3167 的 KoikanoGlasses0–11 改為來源 alpha blending，保存未套色 MainTex 與卡片 Color4，重烘 StreetDisplay26／StudioDisplay26／StreetHG05，48 組真實 GPU 混合回歸通過。前後圖與驗收見 [透明材質修正](OK_STUDIO_TRANSPARENCY_20261020.md)。
+
+
+### S5：1268 動畫父道具接點（2026-10-21）
+
+使用者回報天使角度錯誤。來源證據確認兩個角色掛在旋轉道具 10/3/397 下，缺的是 Animator 接點相位，不是場景相機；`ff1cd4ffa` 保留道具 pattern／time／speed，轉出 32 種共用動畫接點，統一套用於子物件、gizmo parent frame、播放與 timeline。`2d3284930` 恢復比較工具擷取前的播放狀態。
+
+實際前後圖、來源 oracle、建置／自測與支援邊界見 [動畫接點圖文驗收](OK_STUDIO_ANIMATED_ATTACHMENTS_20261021.md)。417 Rust PASS；兩個具名來源測試 PASS；已提交版本六項 Studio 自測 PASS；普通庫與純追蹤資源 clone 的接點 Automation PASS。乾淨／完整庫原卡各五張 MATCH，完整庫 OK 卡五張 MATCH；乾淨庫 OK 卡四張 MATCH，March_7th 保留 gaps=1 DIFFERENT（雜湊一致、game_reads=0），不寫成全通過。
+
+![1268 動畫接點修正：上排修正前、下排修正後；各排左原作右 Unreal](images/OKStudio/AnimatedAttachments20261021/comparison.png)
+
+### S5：6331 手腕方向與固定頭部（2026-10-21）
+
+來源手部 IK 的旋轉與 FIX 頸部資料原本沒有傳入。現在依來源手／腳目標保存旋轉，保留頸、頭局部四元數；固定模式可切回動畫再選回，身形重建也保留 FIX。沒有場景專用 offset，沒有修改相機或角色 root。
+
+最新 Editor／Game 建置成功，418 Rust PASS，7 項 Automation Success；真實角色旋轉／位置／身形重建 oracle PASS。核心版本六項 Studio 自測 PASS，1268／6331 連續擷取 2/2，最後版本 6331 重拍 1/1。來源、版本與完整驗收見 [6331 圖文驗收](OK_STUDIO_SAVED_POSE_6331_20261021.md)。舊 .okscene 需重新匯入原作 PNG 取得新資料。
+
+![6331 修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/SavedPose6331_20261021/comparison.png)
+
+### S5：1268 天使服裝（2026-10-21）
+
+`d1996aa6e`：Studio 的轉卡保留來源 Coordinate／Status／plugin 編號，依場景指定的服裝記錄資源，避免一般展示規則把白色浴巾與校服交換。非第0套也記錄依賴，錄製期間略過最終Session快取，正常載入快取保留。
+
+實際來源／暖快取／非0套／closed reopen 與乾淨共用庫回歸見 [1268 服裝圖文驗收](OK_STUDIO_CLOTHES_1268_20261021.md)。舊場景及角色卡需重新匯入原作場景PNG。
+
+![1268 服裝修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Clothes1268_20261021/comparison.png)

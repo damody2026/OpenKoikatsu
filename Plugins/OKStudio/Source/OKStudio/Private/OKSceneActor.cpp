@@ -1,5 +1,6 @@
 #include "OKSceneActor.h"
 #include "OKStudioImport.h"
+#include "OKStudioImport.h"
 #include "Camera/CameraComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
@@ -146,7 +147,7 @@ namespace
 		Actor->bStudioItemShading = Item != nullptr;
 		// Items draw from the Studio root: the street's parents plus M_ForgeStudioOpaque, the depth-writing variant of the
 		// game's item program (opaque items overlapping each other sort by depth, not by distance).
-		if (Item) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay25");
+		if (Item) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay26");
 		// The scene's shading globals (Studio's _ambientshadowG, _LineColorG, _linewidthG): Studio sets them for everything
 		// it draws, characters as well as items.
 		if (!bMap) Actor->StudioShaderGlobals = ShaderGlobals;
@@ -374,11 +375,31 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	{
 		TArray<int32> Effectors;
 		TArray<FVector> Positions;
-		for (const FOKSceneIkTarget& T : C.Ik) { Effectors.Add(T.Effector); Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position)); }
+		TArray<FQuat> Rotations;
+        TArray<uint8> UseRotations;
+        for (const FOKSceneIkTarget& T : C.Ik)
+        {
+            Effectors.Add(T.Effector);
+            Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position));
+            const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector,T.Euler,FVector::OneVector).GetRotation();
+            Rotations.Add(FQuat(-U.X,U.Z,U.Y,U.W));
+            UseRotations.Add(T.bUseRotation ? 1 : 0);
+        }
 		FString Error;
-		if (Actor->SetStudioIk(Effectors, Positions, Error)) Item.AppliedIk = C.Ik;
+		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations)) Item.AppliedIk = C.Ik;
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);
 	}
+    const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Fixed ? C.FixedNeck : TArray<FQuat>();
+    if (Neck != Item.AppliedFixedNeck)
+    {
+        if (Actor->Session.SetStudioFixedNeck(Neck))
+        {
+            Item.AppliedFixedNeck = Neck;
+            Actor->bUserPoseDirty = true;
+            Actor->ApplyPoseFrame(0.f,false);
+        }
+        else Errors.Add(Object.Id,TEXT("fixed neck not applied"));
+    }
 }
 
 void AOKSceneActor::Sync()
@@ -431,7 +452,7 @@ void AOKSceneActor::Sync()
 				UE_LOG(LogTemp, Warning, TEXT("OK studio: %s (%d) not shown: %s"), *Object.Name, Object.Id, *Error);
 			}
 			Item = &Shown.Add(Object.Id, Fresh);
-			if (Object.Kind == EOKSceneObjectKind::Character) ApplyCharacterState(Object, *Item);
+			if (Object.Kind == EOKSceneObjectKind::Character) { ApplyCharacterState(Object, *Item); SetAnimationTime(Object.Id, 0.f); }
 		}
 		else if (Object.Kind == EOKSceneObjectKind::Character) ApplyCharacterState(Object, *Item);
 		if (Object.Kind == EOKSceneObjectKind::Camera)
@@ -614,14 +635,13 @@ int32 AOKSceneActor::MapPartCount() const
 void AOKSceneActor::AdvanceAnimations(float DeltaSeconds)
 {
 	if (!Document) return;
+    Document->ItemAnimationSeconds += DeltaSeconds;
 	for (auto& Pair : Shown)
 	{
 		AKKPreviewActor* Actor = Pair.Value.Preview.Get();
 		const FOKSceneObject* Object = Document->Find(Pair.Key);
 		if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character || !Actor->OkPlayer) continue;
-		const UOKAnimationAsset* Anim = Pair.Value.StudioAnim.IsValid() ? Cast<UOKAnimationAsset>(Pair.Value.StudioAnim.Get()) : Cast<UOKAnimationAsset>(Object->Character.Animation.ResolveObject());
-		const float Length = Anim ? FMath::Max(Anim->GetPlayLength(), 0.01f) : 1.f;
-		Pair.Value.Time = FMath::Fmod(Pair.Value.Time + DeltaSeconds * Object->Character.Speed, Length);
+		Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
 		Actor->AnimPhase = Pair.Value.Time;
 		Actor->ApplyPoseFrame(0.f, false);
 	}
@@ -635,9 +655,7 @@ void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
 	if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) return;
 	if (Actor->OkPlayer)
 	{
-		const UOKAnimationAsset* Anim = Item->StudioAnim.IsValid() ? Cast<UOKAnimationAsset>(Item->StudioAnim.Get()) : Cast<UOKAnimationAsset>(Object->Character.Animation.ResolveObject());
-		const float Length = Anim ? FMath::Max(Anim->GetPlayLength(), 0.01f) : 1.f;
-		Item->Time = FMath::Fmod(Object->Character.Time + Time * Object->Character.Speed, Length);
+		Item->Time = Object->Character.Time + Time * Object->Character.Speed;
 		Actor->AnimPhase = Item->Time;
 	}
 	Actor->ApplyPoseFrame(0.f, false);
@@ -710,7 +728,7 @@ void AOKSceneActor::Tick(float DeltaSeconds)
 	if (bBuildsPending && Document) Sync();
 	// A sequence-driven scene shows SequenceTime instead of playing on its own.
 	if (!SceneJson.IsEmpty()) ShowSequenceTime();
-	else AdvanceAnimations(DeltaSeconds);
+	else if (!bPauseAnimations) AdvanceAnimations(DeltaSeconds);
 	UpdateLooks(DeltaSeconds);
 	PlaceAttached();
 	UpdateItemLighting();
@@ -777,7 +795,7 @@ void AOKSceneActor::PlaceAttached()
 		{
 			const FOKSceneObject* O = Document->Find(Cur);
 			if (!O) break;
-			bAttached = !O->AttachBone.IsEmpty();
+			bAttached = !O->AttachBone.IsEmpty() || O->Kind == EOKSceneObjectKind::Item;
 			Cur = O->Parent;
 		}
 		const FShown* Item = bAttached ? Shown.Find(Object.Id) : nullptr;
@@ -925,6 +943,7 @@ void AOKSceneActor::ShowSequenceTime()
 	}
 	if (ShownSequenceTime == SequenceTime) return;
 	ShownSequenceTime = SequenceTime;
+	Document->ItemAnimationSeconds = SequenceTime;
 	Document->EvaluateTimeline(SequenceTime);
 	Sync();
 	// Characters built this frame keep their first pose until the next one (posed once per frame, like the game).

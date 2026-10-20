@@ -2,6 +2,14 @@
 
 #include "CoreMinimal.h"
 
+/** A source Animator clip baked in item-root space for the child attachment point. */
+struct FOKStudioChildAnimation
+{
+    float Duration = 0.f;
+    bool bLooping = false;
+    TArray<FTransform> Frames;
+};
+
 /** One vanilla Studio item of the OK base library (`studio_items.json`, written by `ok-extract --oklib convert`). */
 struct FOKStudioCatalogItem
 {
@@ -149,6 +157,9 @@ public:
 	const FOKStudioCatalogItem* FindItem(int32 Group, int32 Category, int32 No) const;
 	/** Where an item's children attach (its 子の接続先 node, item space, UE units); identity without one. Cached. */
 	FTransform ItemChildPoint(int32 Group, int32 Category, int32 No) const;
+    FTransform AnimatedItemChildPoint(int32 Group, int32 Category, int32 No, int32 Pattern, float NormalizedTime, float ElapsedSeconds, float Speed) const;
+    void LoadChildAnimations(const FString& File);
+    TMap<FIntVector, FOKStudioChildAnimation> ChildAnimations;
 	const FOKStudioCatalogMap* FindMap(int32 No) const;
 	TArray<const FOKStudioCatalogItem*> ItemsIn(int32 Group, int32 Category) const;
 	TArray<const FOKStudioCatalogGroup*> CategoriesOf(int32 Group) const;
