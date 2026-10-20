@@ -436,3 +436,11 @@
 實際前後圖、來源 oracle、建置／自測與支援邊界見 [動畫接點圖文驗收](OK_STUDIO_ANIMATED_ATTACHMENTS_20261021.md)。417 Rust PASS；兩個具名來源測試 PASS；已提交版本六項 Studio 自測 PASS；普通庫與純追蹤資源 clone 的接點 Automation PASS。乾淨／完整庫原卡各五張 MATCH，完整庫 OK 卡五張 MATCH；乾淨庫 OK 卡四張 MATCH，March_7th 保留 gaps=1 DIFFERENT（雜湊一致、game_reads=0），不寫成全通過。
 
 ![1268 動畫接點修正：上排修正前、下排修正後；各排左原作右 Unreal](images/OKStudio/AnimatedAttachments20261021/comparison.png)
+
+### S5：6331 手腕方向與固定頭部（2026-10-21）
+
+來源手部 IK 的旋轉與 FIX 頸部資料原本沒有傳入。現在依來源手／腳目標保存旋轉，保留頸、頭局部四元數；固定模式可切回動畫再選回，身形重建也保留 FIX。沒有場景專用 offset，沒有修改相機或角色 root。
+
+最新 Editor／Game 建置成功，418 Rust PASS，7 項 Automation Success；真實角色旋轉／位置／身形重建 oracle PASS。核心版本六項 Studio 自測 PASS，1268／6331 連續擷取 2/2，最後版本 6331 重拍 1/1。來源、版本與完整驗收見 [6331 圖文驗收](OK_STUDIO_SAVED_POSE_6331_20261021.md)。舊 .okscene 需重新匯入原作 PNG 取得新資料。
+
+![6331 修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/SavedPose6331_20261021/comparison.png)
