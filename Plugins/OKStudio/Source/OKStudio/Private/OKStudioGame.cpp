@@ -28,6 +28,7 @@
 #include "OKStudioCatalog.h"
 #include "OKStudioSky.h"
 #include "OKStudioPost.h"
+#include "OKStudioBloom.h"
 #include "OKStudioPose.h"
 #include "OKStudioImport.h"
 #include "OKSceneCard.h"
@@ -3001,8 +3002,8 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		Document->Post.bDepthOfField = true; Document->Post.FocalDistance = 250.f;
 		Tick(0.f);
 		const FPostProcessSettings& S = Viewer->GetCameraComponent()->PostProcessSettings;
-		// Bloom intensity is converted to UE (x 2 / (1 - threshold), FOKScenePost::ApplyTo): at least the scene value.
-		Check(S.bOverride_BloomIntensity && S.BloomIntensity >= 2.5f && FMath::IsNearlyEqual(S.VignetteIntensity, 0.7f) && S.bOverride_DepthOfFieldFocalDistance && FMath::IsNearlyEqual(S.DepthOfFieldFocalDistance, 250.f),
+		const bool bSourceBloom = OKStudioSourceBloomState() == TEXT("ready") && S.BloomIntensity == 0.f && S.WeightedBlendables.Array.Num() >= 8;
+		Check(S.bOverride_BloomIntensity && (bSourceBloom || S.BloomIntensity >= 2.5f) && FMath::IsNearlyEqual(S.VignetteIntensity, 0.7f) && S.bOverride_DepthOfFieldFocalDistance && FMath::IsNearlyEqual(S.DepthOfFieldFocalDistance, 250.f),
 			TEXT("scene post-processing reaches the view (bloom, vignette, depth of field)"));
 		UOKSceneDocument* PostCopy = NewObject<UOKSceneDocument>();
 		FString PostError;

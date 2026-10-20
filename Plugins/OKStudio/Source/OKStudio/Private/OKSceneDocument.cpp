@@ -2,6 +2,7 @@
 #include "Engine/Scene.h"
 #include "OKStudioCatalog.h"
 #include "OKStudioPost.h"
+#include "OKStudioBloom.h"
 #include "ok_extract.h"
 #include "Dom/JsonObject.h"
 #include "JsonObjectConverter.h"
@@ -397,6 +398,8 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 	S.ToneCurveAmount = 0.f;
 	S.bOverride_ExpandGamut = true;
 	S.ExpandGamut = 0.f;
+	S.bOverride_BlueCorrection = true;
+	S.BlueCorrection = 0.f;
 	S.bOverride_AutoExposureMethod = true;
 	S.AutoExposureMethod = AEM_Manual;
 	S.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
@@ -405,13 +408,9 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 	S.AutoExposureMinBrightness = 1.f;
 	S.bOverride_AutoExposureMaxBrightness = true;
 	S.AutoExposureMaxBrightness = 1.f;
-	// Studio's bloom is Standard Assets BloomAndFlares (3.5): a quarter-size copy, bright-passed per channel
-	// ((c - t) / (1 - t), linear values in Studio's linear colour space), blurred twice by a 7-tap separable kernel with
-	// spreads s and 1.5 s (s = sepBlurSpread, taps 2/1024 of the height apart: variance 6.5 s^2, sigma 0.00498 s of the
-	// height), then intensity times that added to the picture. Unreal's Gaussian bloom stage n has sigma = Size% of the
-	// width / 2 / 5.78 (NormalDistributionUnscaled) and weight Tint / 6 x BloomIntensity: one stage (Bloom3, an 1/8
-	// downsample, so the radius stays within the sample limit) of that sigma at a 16:9 view, tint 6. Unreal's bright pass
-	// is 0.5 (luminance - t) instead of (c - t) / (1 - t): the intensity carries 2 / (1 - t).
+	// Legacy Gaussian fallback / diagnostic mode only. The installed HDR source does not use a luminance gate
+	// or 1/(1-threshold) normalization. OKStudioApplySourceBloom below replaces this approximation with the
+	// quarter-resolution, per-channel, nine-tap source chain and disables UE bloom once its parents are ready.
 	const float Threshold = BloomThreshold >= 0.f ? FMath::Clamp(BloomThreshold, 0.f, 0.95f) : 0.f;
 	const float Spread = 4.f * FMath::Clamp(BloomSize, 0.1f, 8.f);
 	const float SigmaOfWidth = 0.00498f * Spread * 9.f / 16.f;
@@ -446,4 +445,5 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 	S.ColorGradingIntensity = Lut ? FMath::Clamp(ColorFilterIntensity, 0.f, 1.f) : 0.f;
 	// Fog, ambient occlusion and sun shafts: Studio's own formulas in one post-process material.
 	OKStudioApplyScenePostMaterial(*this, S);
+	if (OKStudioApplySourceBloom(*this, S)) S.BloomIntensity = 0.f;
 }

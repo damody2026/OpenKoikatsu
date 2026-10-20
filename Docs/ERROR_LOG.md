@@ -3694,3 +3694,15 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-20｜補圖只做單次整理，驗收工具仍可能遺失證據**：原工具只保存 log／JSON，Compare 圖片仍寫入共用目錄；手動補好一份報告無法避免下次漏圖或後續重跑覆蓋。增加每輪獨立擷取輸出與自動 Markdown 嵌圖；以具名成功紀錄逐張核對本輪 PNG、尺寸與雜湊，缺圖／重複／損壞／目錄外舊圖均判失敗，保留完整資料夾即可重看同輪結果。驗收自動化必須產生可攜的圖片證據，不只輸出「14／14」。
 
 - **2026-10-20｜驗收啟動失敗不能留下「執行中」**：新增自動報告後檢查啟動例外路徑，發現只寫部分結果再拋錯會留下 `finished=false`。已在啟動失敗時保存最終 FAIL 與完整原因；以不存在的引擎路徑做負向驗收，確認非零結束碼、`finished=true`、`passed=false`。這是預期失敗案例，不列為功能通過。
+
+- **2026-10-20｜未核對主相機 HDR 就套 LDR 泛光換算**：早期以 `1/(1-threshold)` 與七點高斯近似 Studio 泛光；重新核對 level2 的 Main Camera（2794）確認 HDR=true，安裝版 BrightPassFilter 的 PS 只逐通道減 threshold.x，沒有該倍率；SeparableBlurPlus 實為九點，最外側 ±6.5。修正依實際 DXBC 與執行順序，不以場景專用強度係數修圖。UnityPy 對 stripped MonoBehaviour 的完整讀取長度檢查會失敗；僅以基礎 header 的 `check_read=False` 取 script 引用，再依對應類別與實際長度核對欄位，不把不完整 typetree 當完整資料。
+
+- **2026-10-20｜GPU 測試片因 Static Mobility 沒有幾何**：在已註冊的 AStaticMeshActor 上直接 SetStaticMesh，被引擎以 Static Mobility 拒絕，畫面成黑；基準色檢查使測試正確 FAIL，沒有把黑對黑的泛光計算算成成功。測試元件先改 Movable 再設定幾何，並保留已知 RGB 的基準檢查。
+
+- **2026-10-20｜只關 ToneCurveAmount 仍留下 UE BlueCorrection**：已知 RGB 顯示截圖出現色差，追引擎 PostProcessCombineLUTs 確認 BlueCorrection 在 tone-curve 混合前後仍各執行一次，部分矩陣混合不會互相消除；Studio 明確將 BlueCorrection 設 0。但修改後顯示截圖的紅色仍約 0.074，不能將全部差異歸因於它或宣稱基準色已恢復。泛光 GPU 測試改用線性 HDR float readback，避免把顯示 LUT／sRGB 量化當作被測運算；不放寬原測試容差。
+
+- **2026-10-20｜GPU 捕捉器未保留 ViewState，後製材質被略過**：線性 HDR 捕捉器起初未設 `bAlwaysPersistRenderingState`，泛光開／關結果相同，測試正確 FAIL。核對引擎 `UMaterialInterface::OverrideBlendableSettings` 確認沒有 View.State 即直接 return；與正式場景擷取路徑一樣啟用持久 rendering state 後，逐通道門檻、常數場、相機參數隔離與關閉回復檢查 PASS。不能只依材質編譯 ready 推論 GPU 已執行。
+
+- **2026-10-20｜單包 cook 未命中目標卻納入編輯器啟動資源**：首次用 CookDir／CookSinglePackage 的診斷 cook 實際處理 301 個啟動套件，沒有八個 SourceBloom 材質，且 Landmass 引用 NeverCook EditorMaterials 而退出 1。保留原 log，改依該引擎 CookCommandlet 的明確 `PACKAGE` 清單、`cooksinglepackage`、`CookSkipRequests` 與 `SkipZenStore`，輸出新目錄；驗收必須逐一確認八個目標的 cooked 產物，不能只看到 Done 或 result 0 訊息就算通過。
+
+- **2026-10-20｜Windows 搜尋路徑的萬用字元與 UE 標頭位置**：直接把帶 `*.usf` 的路徑交給 rg 在 PowerShell 下不會展開，出現 os error 123；UE5.8 材質標頭也已移到 Public/Materials。後續先 `rg --files` 定位，再用父目錄配合 `-g` 篩選，不沿用猜測的 Classes 路徑反覆搜尋。

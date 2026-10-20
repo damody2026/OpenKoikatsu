@@ -219,6 +219,17 @@
 - **最終整合檢查**：整合主線 `fdf43e943` 後，Editor／一般遊戲 Development 再次建置成功，`Verify-HandoffEAutoEvidenceMerged` 三項遊戲自測全 PASS；新增街區規則的 `shop::tests` 6 PASS，規則 DLL 已重建。這次主線更新沒有變更 Studio 擷取／材質程式，完整 14 圖證據仍對應前述本輪執行。
 
 
+### S5 第十四輪：來源 HDR 泛光（2026-10-20）
+
+- **來源契約**：核對 Main Camera HDR 與安裝版三個 image-effect DXBC，改以每通道 bright-pass、半／四分之一降採樣、九點兩輪分離模糊及景深前加法混合，取代套用 LDR 強度倍率的 UE 近似。門檻依 PreExposure 換算，模糊按實際畫面高度與長寬比，沒有場景專用係數。
+- **共用資源**：八個後製父材質保存於 `/Game/OKStudio/Post/SourceBloom1` 並納入 AlwaysCook；Runtime 直接載入。版本化烘材質拒絕覆寫，不新增角色材質配方。參數組合採不可變 MID 與弱參照快取，避免跨相機覆寫。
+- **色彩與 GPU 檢查**：Studio 明確關閉 UE BlueCorrection。新增線性 HDR GPU 測試，確認通道門檻、常數場、相機參數隔離、關閉回復與大於 1 的值；藍色輸出 1.5117／預期 1.5152，PASS。預設驗收納入 BloomTest，`--only BloomTest` 可單獨重跑。
+- **驗收**：兩種 Development 建置成功；五項自測 PASS，14／14 出圖且 PNG／雜湊／連結全通過；峰值 22.2 GB，卸載 12.0 GB。精確 cook 八個目標、SM5／SM6 成功；新 Lua cook 工具逐檔檢查與記錄 SHA-256。不將單包 cook 當作完整打包遊玩驗收。
+- **圖文與邊界**：[來源泛光完整紀錄](OK_STUDIO_SOURCE_BLOOM_20261020.md) 包含原作／本輪圖與 GPU 數據。1901 光暈、角色明暗及其他畫面差異仍保留，未因演算法通過而宣稱整張畫面完全還原。前述調查與測試錯誤均已寫入 ERROR_LOG。
+
+![第十四輪 1901：左原作縮圖、右來源泛光結果](images/OKStudio/SourceBloom20261020/koikatu_cs0001901.png)
+
+
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
 - [x] 轉成 OK 動畫：`ok-extract <game> --oklib anim-convert <lib> <card> [filter] [threads]`，5,805 個全部轉換、0 失敗（8 執行緒約 4 分鐘，目錄建立約 16 分鐘），寫進 `base_v1/anims/studio/*.okanim`（224 MB）與 `base_v1/studio_anims.json`

@@ -9,6 +9,7 @@ p:opt("--tag", { required = true })
 p:opt("--engine", { default = ok.engine_root() })
 p:flag("--compare")
 p:flag("--editor")
+p:opt("--only")
 local a = p:parse(arg)
 assert(a.tag:match("^[%w_%-]+$"), "Invalid evidence tag")
 local evidence = path.join(ok.root, "Saved/OKStudio/Verify-" .. a.tag)
@@ -20,12 +21,19 @@ local tests = {
   { "GameSelfTest", "OKStudio.GameSelfTest exit", "RESULT PASS", 600 },
   { "PatternTest", "OKStudio.PatternTest exit", "OK studio pattern test: RESULT PASS", 300 },
   { "EyeSetTest", "OKStudio.EyeSetTest exit", "OK studio eye set test: RESULT PASS", 300 },
+  { "BloomTest", "OKStudio.BloomTest exit", "OK studio bloom test: RESULT PASS", 300 },
 }
 if a.editor then
   tests[#tests + 1] = { "EditorSelfTest", "OKStudio.Open,OKStudio.EditorSelfTest exit", "RESULT PASS", 600, true }
 end
 if a.compare then
   tests[#tests + 1] = { "CompareKStudio", "OKStudio.CompareKStudio samples 14 120 exit", "RESULT 14 / 14", 1800 }
+end
+if a.only then
+  local selected = {}
+  for _, test in ipairs(tests) do if test[1] == a.only then selected[#selected + 1] = test end end
+  assert(#selected == 1, "Unknown or disabled test: " .. a.only)
+  tests = selected
 end
 local failed = 0
 local results = {}
