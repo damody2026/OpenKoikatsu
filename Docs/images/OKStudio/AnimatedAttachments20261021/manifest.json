@@ -1,0 +1,23 @@
+{
+  "after.png": {
+    "sha256": "2c2f56e89f6cab96aaf3d439028a79c398582c0d2b283add39fe575402dfeb57",
+    "size": [
+      1280,
+      360
+    ]
+  },
+  "before.png": {
+    "sha256": "d7e7d4d22ddfce54ec261f3b34802a7461f66f8a4b8400e58095d79ffbef08c1",
+    "size": [
+      1280,
+      360
+    ]
+  },
+  "comparison.png": {
+    "sha256": "2651ea816c8a99ac962771669fcc5e8baef1023fe1fa59aafcb6f40fdd4dedba",
+    "size": [
+      1280,
+      776
+    ]
+  }
+}

@@ -3720,3 +3720,7 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜1268 診斷曾先懷疑 IK／動畫時間，未先查父道具動畫**：實際播放骨架的九個 IK effector 位置已接近來源目標；缺手腳旋轉是既有支援邊界，不能當成本次角度根因。根因由來源 ItemList anime=true、OCIItem.OnSave／AddObjectItem 的 normalizedTime，以及父道具 N_studio_kaiten clip 交叉確認。未針對此場景改 IK 解算、角色根旋轉或相機。
 - **2026-10-21｜旋轉接點烘焙須正規化四元數**：generic clip 讀出的四元數曲線逐分量插值，離鍵值位置可能不是單位長度。直接用於有平移子節點的 TRS 會扭曲接點位置；在組合階層之前正規化，並以離開烘焙影格網格的原作 clip 取樣做角度 oracle。
 - **2026-10-21｜診斷矩陣與 Windows 搜尋路徑錯誤**：骨架 C ABI 為 row-major，最初診斷讀 M[12..14] 印出零位置，改讀 M[3],M[7],M[11]；此錯只在新診斷日誌，未用來改角色。rg 路徑不可寫 src/studio* 或 Private/KKPreview*（Windows os error 123），應給父目錄加 -g 或先 rg --files。map_animator_defaults 的 OK_ANIM_BUNDLE 要完整檔案路徑，第一次給相對遊戲 bundle 名稱造成探針失敗，補完整路徑後成功。
+
+- **2026-10-21｜乾淨資源驗收不可只相信舊 clone 的檔名**：新建稀疏 checkout 從舊驗收庫 hydrate LFS 時，第一個不符 HEAD 的模型雜湊被嚴格檢查攔下；改逐檔核對追蹤 LFS OID，只在雜湊相符時建立 hard link，90 個舊來源不符者使用主工作庫中符合 HEAD 的內容。665 個追蹤 payload 共約 8.62 GB 全部核對，不提交或覆寫舊驗收庫的 missing.txt。稀疏 checkout 必須包括根 .gitattributes，否則 hydrated LFS payload 暫呈修改；重新套用 attributes 後刷新 index（不新增 commit），確認資源無實際 diff。sparse-checkout add 不接受 --no-cone，該模式只在 set 時指定。
+
+- **2026-10-21｜嚴格乾淨庫回歸必須保留 gaps 失敗**：本輪真正只含 HEAD 追蹤共用資源的新 checkout 中，March_7th 的 OKCHECK recorded／closed／live 三個 digest 一致、game_reads=0，但 gaps=1，嚴格結果為 DIFFERENT；其餘四張 gaps=0 MATCH。完整庫五張皆 MATCH。新增接點資料之外沒有改 base_v1 舊資源，故不以本次角色角度已正確而掩蓋這個既有依賴缺口，也不把私有 mod 模型加入共用版控來湊綠。okcard-check 有 DIFFERENT 仍 exit 0，驗收必須解析 verdict／gaps，不能只看退出碼。

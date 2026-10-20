@@ -427,3 +427,12 @@
 - 自測：Rust `studio_status` 兩項（`OK_NOCACHE=1`）；遊戲內 `OKStudio.GameSelfTest` 的 character state。
 - 未做：汁的貼花渲染，等「新渲染模式」的材質介面；SkinEffects、ClothingBlendShape、MaterialEditor。
 - 2026-10-21 透明材質專項：3167 的 KoikanoGlasses0–11 改為來源 alpha blending，保存未套色 MainTex 與卡片 Color4，重烘 StreetDisplay26／StudioDisplay26／StreetHG05，48 組真實 GPU 混合回歸通過。前後圖與驗收見 [透明材質修正](OK_STUDIO_TRANSPARENCY_20261020.md)。
+
+
+### S5：1268 動畫父道具接點（2026-10-21）
+
+使用者回報天使角度錯誤。來源證據確認兩個角色掛在旋轉道具 10/3/397 下，缺的是 Animator 接點相位，不是場景相機；`ff1cd4ffa` 保留道具 pattern／time／speed，轉出 32 種共用動畫接點，統一套用於子物件、gizmo parent frame、播放與 timeline。`2d3284930` 恢復比較工具擷取前的播放狀態。
+
+實際前後圖、來源 oracle、建置／自測與支援邊界見 [動畫接點圖文驗收](OK_STUDIO_ANIMATED_ATTACHMENTS_20261021.md)。417 Rust PASS；兩個具名來源測試 PASS；已提交版本六項 Studio 自測 PASS；普通庫與純追蹤資源 clone 的接點 Automation PASS。乾淨／完整庫原卡各五張 MATCH，完整庫 OK 卡五張 MATCH；乾淨庫 OK 卡四張 MATCH，March_7th 保留 gaps=1 DIFFERENT（雜湊一致、game_reads=0），不寫成全通過。
+
+![1268 動畫接點修正：上排修正前、下排修正後；各排左原作右 Unreal](images/OKStudio/AnimatedAttachments20261021/comparison.png)
