@@ -488,6 +488,31 @@ fn appointment_cancel(r: &Value) -> Result<Value, String> {
 /// Three times a day (07-12, 12-18, 18-) each heroine weighs acting first; the strongest reason (40+) wins, one heroine a
 /// slot. Request: minute, day, last_slot, rain, holiday, names {id: name}, heroines [{actor, id, relation, profile, busy,
 /// near (within 30 m of him), birthday_tomorrow}]. Answer: slot (key), and when one acts: actor, id, score, why, intent.
+/// He named the girl she is jealous of himself ("yes, I'm going out with 三月七"): she has heard it from him, so that
+/// news no longer sends her to have it out with him (initiative's confront_j, at least the 61 it takes), until new
+/// news raises her jealousy again. 胡桃 was told face to face and still came an hour later "to ask about the rumour".
+/// Request: relation, said (his line), names {id: name}. Answer: effects (the relation's flag), named.
+fn rival_named(r: &Value) -> Result<Value, String> {
+    let mut rel = rel_of(r.get("relation"))?;
+    let before = rel.clone();
+    let said = s(r, "said");
+    let (j, rival) = bias::peak_jealousy(&rel);
+    let names = r.get("names").cloned().unwrap_or(json!({}));
+    let who = names.get(&rival).and_then(Value::as_str).unwrap_or("");
+    let mut fx = Effects::default();
+    let named = !rival.is_empty() && !who.is_empty() && said.contains(who);
+    if named {
+        let mark = j.max(61.0).round();
+        let had = rel.flags.iter().find_map(|f| f.strip_prefix("confront_j:").and_then(|v| v.parse::<f32>().ok())).unwrap_or(0.0);
+        if mark > had {
+            rel.flags.retain(|f| !f.starts_with("confront_j:"));
+            rel.flags.push(format!("confront_j:{mark}"));
+            fx.relation(&rel, &before);
+        }
+    }
+    Ok(json!({"effects": fx.into_value(), "named": named}))
+}
+
 fn initiative(r: &Value) -> Result<Value, String> {
     let minute = n(r, "minute") as i32;
     let hour = minute / 60;
@@ -966,6 +991,7 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
         "appointments_tick" => appointments_tick(r),
         "appointment_cancel" => appointment_cancel(r),
         "initiative" => initiative(r),
+        "rival_named" => rival_named(r),
         "director" => director(r),
         "bias_actions" => bias_actions(r),
         "bias_defer" => bias_defer(r),
@@ -1117,6 +1143,21 @@ mod tests {
                 later["jealousy_toward"] = json!({"b": 80});
         let news = initiative(&h(later)).unwrap();
         assert!(news["why"].as_str().unwrap_or("").contains('B'), "new news: {news}");
+    }
+
+    #[test]
+    fn told_face_to_face_is_not_a_rumour_to_ask_about() {
+        let jealous = rel(json!({"stage": "friend", "favor": 30, "jealousy": 60, "jealousy_toward": {"b": 70}}));
+        let told = rival_named(&json!({"relation": jealous.clone(), "said": "是，我跟B在交往了，你还是我很珍惜的朋友", "names": {"b": "B"}})).unwrap();
+        assert_eq!(told["named"], true);
+        let patch = told["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").cloned().unwrap().to_string();
+        assert!(patch.contains("confront_j:70"), "{patch}");
+        let other = rival_named(&json!({"relation": jealous.clone(), "said": "今天天气真好", "names": {"b": "B"}})).unwrap();
+        assert_eq!(other["named"], false);
+        let mut after = jealous.clone();
+        after["flags"] = json!(["confront_j:70"]);
+        let v = initiative(&json!({"minute": 13 * 60, "day": 4, "last_slot": 0, "names": {"b": "B"}, "heroines": [{"actor": 1, "id": "a", "relation": after, "profile": {}}]})).unwrap();
+        assert!(!v["why"].as_str().unwrap_or("").contains('B'), "{v}");
     }
 
     #[test]
