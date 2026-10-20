@@ -256,6 +256,14 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;
 		Out.Preview = Actor;
+		FVector RootPosition, RootScale;
+		FQuat RootRotation;
+		if (FOkSession::OkModelNodeWorld(LibraryDirectory(), Model, Prefab, Prefab, RootPosition, RootRotation, RootScale))
+		{
+			const FTransform Root(FQuat(-RootRotation.X, RootRotation.Z, RootRotation.Y, RootRotation.W).GetNormalized(),
+				FVector(-RootPosition.X, RootPosition.Z, RootPosition.Y) * 100.0, FVector(RootScale.X, RootScale.Z, RootScale.Y));
+			Out.RenderCorrection = Root.Inverse();
+		}
 		return true;
 	}
 	case EOKSceneObjectKind::Light:
@@ -459,7 +467,7 @@ void AOKSceneActor::Sync()
 		const bool bShown = Document->IsShown(Object.Id);
 		if (AKKPreviewActor* Preview = Item->Preview.Get())
 		{
-			Preview->SetActorTransform(World);
+			Preview->SetActorTransform(Item->RenderCorrection * World);
 			Preview->SetActorHiddenInGame(!bShown);
 			if (USceneComponent* Root = Preview->GetRootComponent()) Root->SetVisibility(bShown, true);
 		}
@@ -514,16 +522,16 @@ void AOKSceneActor::SyncMap()
 		Actor->SetActorTransform(MapPlace);
 		// The map is on its own lighting channel: Studio's character light (it turns with the camera) does not light it.
 		TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
-		for (UPrimitiveComponent* P : Primitives) P->SetLightingChannels(false, false, true);
+		for (UPrimitiveComponent* P : Primitives) P->SetLightingChannels(false, false, !P->ComponentHasTag(TEXT("OKSunExcluded")));
 		ShownMapPreviews.Add(Actor);
 	}
 	if (ShownMapPreviews.IsEmpty()) MapError = FString::Join(Failed, TEXT("; "));
 	ApplyMapTime(MapPlace);
 }
 
-// Off by default: with it 3167's classroom gets the original's warm light on the desk, but 6331's floor turns orange
-// where the original stays grey (not understood yet).
-static TAutoConsoleVariable<int32> CVarOkStudioMapSun(TEXT("ok.Studio.MapSun"), 0,
+// Preserve the source renderer shadow policy, including invisible room occluders,
+// before applying the authored sun. Fully baked lights do not add a dynamic term.
+static TAutoConsoleVariable<int32> CVarOkStudioMapSun(TEXT("ok.Studio.MapSun"), 1,
 	TEXT("1: light a Studio map with its own sun (SunLightInfo._targetLight at the scene's time of day, casting shadows); 0: maps show only their lightmaps and emission."));
 
 void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
@@ -543,7 +551,9 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 	for (int32 T = 0; T < 4 && Time < 0; ++T) if (Value(TEXT("Color"), T, Color)) Time = T;
 	int32 Components = 0;
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) Components += P->GetComponents().Num();
-	const bool bSun = Time >= 0 && CVarOkStudioMapSun.GetValueOnGameThread() != 0;
+	FLinearColor Lightmapping;
+	const bool bBakedSun = Map && Map->Session.MaterialValue(0, "_OKSunLightmapping", Lightmapping) && FMath::RoundToInt(Lightmapping.R) == 2;
+	const bool bSun = Time >= 0 && !bBakedSun && CVarOkStudioMapSun.GetValueOnGameThread() != 0;
 	if (Time == ShownMapTime && Components == ShownMapComponents && (MapSun != nullptr) == bSun && (!bSun || ShownMapSunPlace.Equals(GetActorTransform()))) return;
 	ShownMapTime = Time;
 	ShownMapComponents = Components;
@@ -561,7 +571,8 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 				if (S.StartsWith(TEXT("OKSunVisible"))) C->SetVisibility(Time >= 0 && ((FCString::Atoi(*S.Mid(12)) >> Time) & 1) != 0);
 			}
 			// The sun casts shadows (Unity: soft shadows), so the map shades itself: indoors it comes in by the windows.
-			C->SetCastShadow(bSun);
+			C->SetCastShadow(bSun && !C->ComponentHasTag(TEXT("OKShadowOff")));
+			if (C->ComponentHasTag(TEXT("OKRendererDisabled"))) C->SetVisibility(false);
 		}
 	}
 	if (!bSun)
@@ -583,11 +594,13 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 		MapSun->RegisterComponent();
 	}
 	// SetLight: the light's world Euler angles (Unity's light shines along its +Z, an Unreal light along +X), colour,
-	// intensity (Unity directional intensity x4, as Studio's own lights).
+	// intensity. Unity Standard's Lambert diffuse is light * albedo; UE's physical
+	// Lambert BRDF divides irradiance by pi. Authored Unity light Color is sRGB.
 	const FQuat Turn(FVector::UpVector, UE_HALF_PI);
 	MapSun->SetWorldRotation(GetActorQuat() * FOKStudioImport::UnityToUe(FVector::ZeroVector, FVector(Angle.R, Angle.G, Angle.B), FVector::OneVector).GetRotation() * Turn);
-	MapSun->SetLightColor(FLinearColor(Color.R, Color.G, Color.B, 1.f));
-	MapSun->SetIntensity(Color.A * 4.f);
+	const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+	MapSun->SetLightColor(FLinearColor(Linear(Color.R), Linear(Color.G), Linear(Color.B), 1.f));
+	MapSun->SetIntensity(Color.A * UE_PI);
 	UE_LOG(LogTemp, Display, TEXT("OK studio: map time %d sun angle=(%.1f,%.1f,%.1f) colour=(%.2f,%.2f,%.2f) intensity=%.2f"), Time, Angle.R, Angle.G, Angle.B, Color.R, Color.G, Color.B, Color.A);
 }
 
@@ -770,7 +783,7 @@ void AOKSceneActor::PlaceAttached()
 		const FShown* Item = bAttached ? Shown.Find(Object.Id) : nullptr;
 		if (!Item) continue;
 		const FTransform World = Document->WorldTransform(Object.Id) * GetActorTransform();
-		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(World);
+		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Item->RenderCorrection * World);
 		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(World);
 	}
 }
@@ -919,10 +932,37 @@ void AOKSceneActor::ShowSequenceTime()
 	for (const FOKSceneObject& O : Document->Objects) if (O.Kind == EOKSceneObjectKind::Character) SetAnimationTime(O.Id, SequenceTime);
 }
 
-void AOKSceneActor::Destroyed()
+void AOKSceneActor::ReleaseScene()
 {
 	for (auto& Pair : Shown) Release(Pair.Value);
 	Shown.Reset();
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) P->Destroy();
+	ShownMapPreviews.Reset();
+	ShownMap = -1;
+	ShownMapTime = -2;
+	ShownMapComponents = 0;
+	if (MapSun) { MapSun->DestroyComponent(); MapSun = nullptr; }
+	for (FScenePicture* Picture : { &Background, &Frame })
+	{
+		if (Picture->Plane) Picture->Plane->DestroyComponent();
+		Picture->Plane.Reset();
+		Picture->Texture.Reset();
+		Picture->Shown.Reset();
+	}
+	if (SkyDome) SkyDome->DestroyComponent();
+	SkyDome.Reset();
+	SkyShown = -1;
+	ItemsLit.Reset();
+	AmbientLit.Reset();
+	AmbientSky = -1;
+	Errors.Reset();
+	MapError.Reset();
+	bBuildsPending = false;
+	ReleasedSinceCollect = 0;
+}
+
+void AOKSceneActor::Destroyed()
+{
+	ReleaseScene();
 	Super::Destroyed();
 }

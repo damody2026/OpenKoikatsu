@@ -113,6 +113,7 @@ bool FOkSession::Prewarm(const FString& GameRoot){
  return bOk;
 }
 void FOkSession::SetThreadBackground(bool bBackground){if(InitBindings())ok_set_thread_background(bBackground?1:0);}
+void FOkSession::ReleaseSourceCaches(){if(InitBindings())ok_release_source_caches();}
 int32 FOkSession::CacheReady(const FString& CardPath,int32 Outfit,const uint8* Clothes){
  OKPrepareCardEnvironment();
  if(!InitBindings())return -1;

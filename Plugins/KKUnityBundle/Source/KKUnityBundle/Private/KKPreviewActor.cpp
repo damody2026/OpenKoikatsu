@@ -65,7 +65,16 @@
 #include "Modules/ModuleManager.h"
 #include "Engine/Texture2D.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionDepthFade.h"
+#include "Materials/MaterialExpressionScalarParameter.h"
 #include "MaterialShared.h"
+
+void AKKPreviewActor::ReleaseSceneCaches()
+{
+    check(IsInGameThread());
+    OKClearRuntimePngCache();
+    FOkSession::ReleaseSourceCaches();
+}
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #if WITH_DEV_AUTOMATION_TESTS
@@ -669,10 +678,13 @@ struct FOKToonShadowParameters
 	// later parts of the same load (only the first part using a lightmap carries it).
 	UTexture2D* LightmapTex = nullptr;
 	TMap<int32, UTexture2D*> Lightmaps;
+	UTexture2D* LightmapDirectionTex = nullptr;
+	TMap<int32, UTexture2D*> LightmapDirections;
 	// What the lightmap lights: Unity Standard's diffuse colour is albedo x oneMinusReflectivity (gamma space
 	// 0.779 x (1 - metallic), or 1 - max(_SpecColor) for the specular setup); 1 for other shaders. With a
 	// _MetallicGlossMap (keyword _METALLICGLOSSMAP) its red channel is the metallic, on the _MainTex UVs.
 	float LightmapDiffuse = 1.f;
+	bool bStandardLinear = false;
 	UTexture2D* LightmapMetallicTex = nullptr;
 	// Unity Standard's indirect specular from the baked reflection probe the part sits in (okmodel_view::
 	// assign_reflection_probes): the probe's cubemap atlas (faces side by side, mips below; display values), its mips,
@@ -2389,8 +2401,11 @@ return Base.rgb * sh;
 			Mat->GetExpressionCollection().AddExpression(Effect);
 			Ed->EmissiveColor.Expression = Effect;
 		}
-		else
+		else if (!(Shadow && Shadow->bStandardLinear))
 		{
+			// The generic preview carries an unlit albedo floor. Standard already
+			// gets indirect diffuse from its baked lightmap and specular from its
+			// probe; an extra albedo emission lights every wall twice.
 			Ed->EmissiveColor.Expression = ColorOut;
 		}
 		Ed->BaseColor.Expression = ColorOut;
@@ -2548,11 +2563,10 @@ return Base.rgb * sh;
 	}
 	if (Shadow && (Shadow->LightmapTex || Shadow->ReflectionTex))
 	{
-		// Unity Standard's indirect light in gamma space (display values), summed before the one conversion to linear:
-		// - lightmap: albedo x DecodeLightmapRGBM (5 a rgb) x oneMinusReflectivity (ShadowParams.LightmapDiffuse, times
-		//   1 - metallic from the _MetallicGlossMap red channel when the material has one);
+		// Installed Unity Standard uses linear indirect light: the colour lightmap is sRGB, its RGBM alpha decodes with
+		// (5^2.2,2.2); indirect diffuse multiplies albedo and oneMinusReflectivity (0.96 for dielectric).
 		// - baked reflection probe (UnityStandardBRDF BRDF1 indirect specular): surfaceReduction x probe(reflection,
-		//   perceptualRoughness mip) x FresnelLerp(specColor, grazingTerm, n.v), specColor = lerp(dielectric 0.2209, albedo,
+		//   perceptualRoughness mip) x FresnelLerp(specColor, grazingTerm, n.v), specColor = lerp(dielectric 0.04, albedo,
 		//   metallic). The probe is the cubemap atlas (okmodel_view::assign_reflection_probes): faces +X..-Z side by side,
 		//   mip k at row size x (2 - 2^(1-k)); directions turn from Unreal (x, y, z) to Unity (-x, z, y).
 		if (UMaterialEditorOnlyData* LmEd = Mat->GetEditorOnlyData(); LmEd && LmEd->BaseColor.Expression)
@@ -2572,16 +2586,46 @@ return Base.rgb * sh;
 			};
 			FCustomInput AlbedoIn; AlbedoIn.InputName = TEXT("Albedo"); AlbedoIn.Input.Expression = LmEd->BaseColor.Expression; AlbedoIn.Input.OutputIndex = LmEd->BaseColor.OutputIndex; Decode->Inputs.Add(AlbedoIn);
 			const bool bMetalMap = Shadow->LightmapMetallicTex != nullptr;
+			UMaterialExpressionTextureSample* Metal = nullptr;
 			if (bMetalMap)
 			{
-				UMaterialExpressionTextureSample* Metal = NewObject<UMaterialExpressionTextureSample>(Mat);
+				Metal = NewObject<UMaterialExpressionTextureSample>(Mat);
 				Metal->Texture = Shadow->LightmapMetallicTex;
 				Metal->SamplerType = SAMPLERTYPE_LinearColor;
 				Metal->Coordinates.Expression = MakeUnityMaskUV(Mat, Shadow->MainTexST);
 				Input(TEXT("Metal"), Metal, 5);
 			}
 			const FString Metallic = bMetalMap ? FString(TEXT("Metal.r")) : FString::SanitizeFloat(Shadow->StandardMetallic);
-			FString Code = TEXT("float3 a = pow(max(Albedo, 0.0), 1.0 / 2.2);\nfloat3 total = 0;\n");
+			const bool bStandardLinear = Shadow->bStandardLinear;
+			if (bStandardLinear)
+			{
+				// The map sun also needs the authored Standard metallic/smoothness surface.
+				if (Metal)
+				{
+					LmEd->Metallic.Expression = Metal;
+					LmEd->Metallic.OutputIndex = 1;
+				}
+				else
+				{
+					auto* MetallicValue = NewObject<UMaterialExpressionConstant>(Mat);
+					MetallicValue->R = Shadow->StandardMetallic;
+					Mat->GetExpressionCollection().AddExpression(MetallicValue);
+					LmEd->Metallic.Expression = MetallicValue;
+				}
+				auto* Roughness = NewObject<UMaterialExpressionCustom>(Mat);
+				Roughness->OutputType = CMOT_Float1;
+				Roughness->Code = TEXT("return 1.0 - saturate(") + FString::SanitizeFloat(Shadow->StandardSmoothness)
+					+ (Shadow->bStandardSmoothnessFromMap ? TEXT(" * Metal.a);") : TEXT(");"));
+				if (Metal)
+				{
+					FCustomInput In; In.InputName = TEXT("Metal"); In.Input.Expression = Metal; In.Input.OutputIndex = 5;
+					Roughness->Inputs.Add(In);
+				}
+				Mat->GetExpressionCollection().AddExpression(Roughness);
+				LmEd->Roughness.Expression = Roughness;
+			}
+			FString Code = bStandardLinear ? TEXT("float3 a = max(Albedo, 0.0);\nfloat3 total = 0;\n")
+				: TEXT("float3 a = pow(max(Albedo, 0.0), 1.0 / 2.2);\nfloat3 total = 0;\n");
 			Code += FString::Printf(TEXT("float metallic = %s;\n"), *Metallic);
 			if (Shadow->LightmapTex)
 			{
@@ -2590,8 +2634,26 @@ return Base.rgb * sh;
 				LmSample->SamplerType = SAMPLERTYPE_LinearColor;
 				LmSample->ConstCoordinate = 1;
 				Input(TEXT("Lm"), LmSample, 5); // RGBA output
-				Code += FString::Printf(TEXT("total += 5.0 * Lm.a * Lm.rgb * a * %s;\n"),
-					*(FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT(""))));
+				FString DirectionFactor;
+				if (Shadow->LightmapDirectionTex)
+				{
+					UMaterialExpressionTextureSample* Direction = NewObject<UMaterialExpressionTextureSample>(Mat);
+					Direction->Texture = Shadow->LightmapDirectionTex;
+					Direction->SamplerType = SAMPLERTYPE_LinearColor;
+					Direction->ConstCoordinate = 1;
+					Input(TEXT("LmDirection"), Direction, 5);
+					Input(TEXT("LmNormal"), NewObject<UMaterialExpressionVertexNormalWS>(Mat));
+					// Installed Standard PS 112 (DIRLIGHTMAP_COMBINED): hemisphere
+					// dot product and the baked directionality rebalancing divisor.
+					Code += TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, LmNormal.y));\nfloat lmDirection = (dot(lmN, LmDirection.rgb - 0.5) + 0.5) / max(LmDirection.a, 1e-4);\n");
+					DirectionFactor = TEXT(" * lmDirection");
+				}
+				// Installed Standard uses linear light, an sRGB colour lightmap sampler,
+				// and RGBM DecodeLightmap with unity_Lightmap_HDR=(5^2.2,2.2).
+				if (bStandardLinear)
+					Code += TEXT("float3 lmRgb = lerp(Lm.rgb / 12.92, pow((Lm.rgb + 0.055) / 1.055, 2.4), step(0.04045, Lm.rgb));\ntotal += pow(5.0 * Lm.a, 2.2) * lmRgb * a * ");
+				else Code += TEXT("total += 5.0 * Lm.a * Lm.rgb * a * ");
+				Code += FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) + DirectionFactor + TEXT(";\n");
 			}
 			if (Shadow->ReflectionTex)
 			{
@@ -2628,15 +2690,16 @@ for (int k = 0; k < 2; ++k)
 	float2 auv = float2((face * Size + p.x) / (6.0 * Size), (row + p.y) / (2.0 * Size));
 	env += (k == 0 ? 1.0 - frac(lod) : frac(lod)) * Texture2DSampleLevel(Atlas, AtlasSampler, auv, 0).rgb;
 }
-float3 specColor = lerp(float3(0.2209163, 0.2209163, 0.2209163), a, metallic);
-float omr = 0.779083699 * (1.0 - metallic);
-float surfaceReduction = 1.0 - 0.28 * pr * pr * pr;
+float3 specColor = lerp(float3(0.04, 0.04, 0.04), a, metallic);
+float omr = 0.96 * (1.0 - metallic);
+float roughness = max(pr * pr, 0.002);
+float surfaceReduction = 1.0 / (1.0 + roughness * roughness);
 float grazing = saturate(smooth + (1.0 - omr));
-float nv = saturate(dot(N, V));
+float nv = saturate(abs(dot(N, V)));
 total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1.0 - nv, 5.0));
 )");
 			}
-			Decode->Code = Code + TEXT("return pow(max(total, 0.0), 2.2);");
+			Decode->Code = Code + (bStandardLinear ? TEXT("return max(total, 0.0);") : TEXT("return pow(max(total, 0.0), 2.2);"));
 			Mat->GetExpressionCollection().AddExpression(Decode);
 			if (LmEd->EmissiveColor.Expression)
 			{
@@ -3402,8 +3465,9 @@ void AKKPreviewActor::StopRenderTextureCaptures()
 	RenderTextureCaptures.Reset();
 }
 
-// Unity's built-in additive particle shaders (Legacy Shaders/Particles/Additive: Studio's 2D lens flares): Blend One One,
-// colour 2 x _TintColor x texture in gamma space, i.e. linear texture x (2 _TintColor)^2.2 in "Tint". Unlit, two-sided.
+// Unity's built-in additive particle shaders (Legacy Shaders/Particles/Additive: Studio's 2D lens flares): SrcAlpha One,
+// colour 2 x vertex x _TintColor x texture in linear space. All installed quality levels enable SOFTPARTICLES_ON:
+// alpha also fades by saturate(_InvFade * (sceneEyeDepth - particleEyeDepth)), with Unity depths in metres.
 static UMaterialInterface* OKParticleAdditiveMaterial()
 {
 #if WITH_EDITOR
@@ -3413,6 +3477,9 @@ static UMaterialInterface* OKParticleAdditiveMaterial()
 	Mat->MaterialDomain = MD_Surface;
 	Mat->BlendMode = BLEND_Additive;
 	Mat->SetShadingModel(MSM_Unlit);
+	// Unity renders transparent particles before camera image effects, including DOF.
+	// UE defaults a new translucent material to AfterDOF, leaving sharp white flares.
+	Mat->TranslucencyPass = MTP_BeforeDOF;
 	Mat->TwoSided = true;
 	UMaterialExpressionTextureSampleParameter2D* Samp = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
 	Samp->Material = Mat;
@@ -3425,12 +3492,41 @@ static UMaterialInterface* OKParticleAdditiveMaterial()
 	Tint->ParameterName = TEXT("Tint");
 	Tint->DefaultValue = FLinearColor::White;
 	Mat->GetExpressionCollection().AddExpression(Tint);
-	UMaterialExpressionMultiply* Mul = NewObject<UMaterialExpressionMultiply>(Mat);
-	Mul->Material = Mat;
-	Mul->A.Expression = Samp;
-	Mul->B.Expression = Tint;
-	Mat->GetExpressionCollection().AddExpression(Mul);
-	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Mul;
+	UMaterialExpressionVertexColor* Vertex = NewObject<UMaterialExpressionVertexColor>(Mat);
+	Vertex->Material = Mat;
+	Mat->GetExpressionCollection().AddExpression(Vertex);
+	auto* Distance = NewObject<UMaterialExpressionScalarParameter>(Mat);
+	Distance->Material = Mat;
+	Distance->ParameterName = TEXT("FadeDistance");
+	Distance->DefaultValue = 100.f;
+	Mat->GetExpressionCollection().AddExpression(Distance);
+	auto* Fade = NewObject<UMaterialExpressionDepthFade>(Mat);
+	Fade->Material = Mat;
+	Fade->OpacityDefault = 1.f;
+	Fade->FadeDistance.Expression = Distance;
+	Mat->GetExpressionCollection().AddExpression(Fade);
+	UMaterialExpressionCustom* Program = NewObject<UMaterialExpressionCustom>(Mat);
+	Program->Material = Mat;
+	Program->OutputType = CMOT_Float3;
+	auto Input = [&](const TCHAR* Name, UMaterialExpression* Expression, int32 Output)
+	{
+		FCustomInput In;
+		In.InputName = Name;
+		In.Input.Expression = Expression;
+		In.Input.OutputIndex = Output;
+		Program->Inputs.Add(In);
+	};
+	Input(TEXT("Tex"), Samp, 5);
+	Input(TEXT("Tint"), Tint, 0);
+	Input(TEXT("TintAlpha"), Tint, 4);
+	Input(TEXT("Vertex"), Vertex, 0);
+	Input(TEXT("VertexAlpha"), Vertex, 4);
+	Input(TEXT("SoftFade"), Fade, 0);
+	// Installed PS: rgb=2*vertex*tint*texture; alpha=saturate(2*v.a*tint.a*tex.a).
+	// The sRGB texture sampler and the authored Color tint are already linear.
+	Program->Code = TEXT("float3 rgb = 2.0 * Vertex * Tint * Tex.rgb;\nfloat alpha = saturate(2.0 * VertexAlpha * SoftFade * TintAlpha * Tex.a);\nreturn max(rgb * alpha, 0.0);");
+	Mat->GetExpressionCollection().AddExpression(Program);
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Program;
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -4888,6 +4984,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		}
 		// Baked lightmap (okmodel_view::bake_lightmap): lightmap UVs in Unity uv4 (TEXCOORD1), index in _OKLightmapIndex.
 		ShadowParams.LightmapTex = nullptr;
+		ShadowParams.LightmapDirectionTex = nullptr;
 		FLinearColor LightmapIndex;
 		if (View.uv4 && !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKLightmapIndex", LightmapIndex))
 		{
@@ -4902,31 +4999,45 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					ShadowParams.Lightmaps.Add(Index, Lightmap);
 				}
 			ShadowParams.LightmapTex = ShadowParams.Lightmaps.FindRef(Index);
+			if (!ShadowParams.LightmapDirections.Contains(Index) && Source.ShaderTexture(i, "_OKLightmapDirection", Bytes, Length))
+				if (UTexture2D* Direction = LinearTextureFromPngBytes(Bytes, Length))
+				{
+					Direction->AddToRoot();
+					Output.Textures.Add(Direction);
+					ShadowParams.LightmapDirections.Add(Index, Direction);
+				}
+			ShadowParams.LightmapDirectionTex = ShadowParams.LightmapDirections.FindRef(Index);
 		}
-		// Unity Standard (gamma space): indirect diffuse = lightmap x albedo x oneMinusReflectivity
+		// Unity Standard (linear space): indirect diffuse = lightmap x albedo x oneMinusReflectivity
 		// (UnityStandardUtils OneMinusReflectivityFromMetallic: unity_ColorSpaceDielectricSpec.a x (1 - metallic)).
 		ShadowParams.LightmapDiffuse = 1.f;
+		ShadowParams.bStandardLinear = false;
 		ShadowParams.LightmapMetallicTex = nullptr;
 		ShadowParams.ReflectionTex = nullptr;
 		ShadowParams.StandardMetallic = 0.f;
 		ShadowParams.StandardSmoothness = 0.5f;
 		ShadowParams.bStandardSmoothnessFromMap = false;
-		FLinearColor ReflectionIndex;
+		FLinearColor ReflectionIndex = FLinearColor::Black;
 		const bool bReflected = !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKReflectionIndex", ReflectionIndex);
 		if (ShadowParams.LightmapTex || bReflected)
 		{
 			const FString Shader = Source.MaterialShaderName(i);
 			if (Shader.StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase))
 			{
-				constexpr float GammaDielectricOneMinus = 0.779083699f;
+				ShadowParams.bStandardLinear = true;
+				constexpr float LinearDielectricOneMinus = 0.96f;
 				FLinearColor Value;
 				ShadowParams.StandardSmoothness = Source.MaterialValue(i, "_Glossiness", Value) ? FMath::Clamp(Value.R, 0.f, 1.f) : 0.5f;
 				if (Shader.Contains(TEXT("Specular"), ESearchCase::IgnoreCase))
-					ShadowParams.LightmapDiffuse = Source.MaterialValue(i, "_SpecColor", Value) ? 1.f - FMath::Max3(Value.R, Value.G, Value.B) : 1.f - 0.2f;
+				{
+					const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+					if (!Source.MaterialValue(i, "_SpecColor", Value)) Value = FLinearColor(.2f, .2f, .2f, 1.f);
+					ShadowParams.LightmapDiffuse = 1.f - FMath::Max3(Linear(Value.R), Linear(Value.G), Linear(Value.B));
+				}
 				else
 				{
 					ShadowParams.StandardMetallic = Source.MaterialValue(i, "_Metallic", Value) ? FMath::Clamp(Value.R, 0.f, 1.f) : 0.f;
-					ShadowParams.LightmapDiffuse = GammaDielectricOneMinus * (1.f - ShadowParams.StandardMetallic);
+					ShadowParams.LightmapDiffuse = LinearDielectricOneMinus * (1.f - ShadowParams.StandardMetallic);
 					const uint8* Bytes = nullptr;
 					int32 Length = 0;
 					if (Source.MaterialKeyword(i, "_METALLICGLOSSMAP") && Source.ShaderTexture(i, "_MetallicGlossMap", Bytes, Length))
@@ -4934,7 +5045,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 						{
 							ShadowParams.LightmapMetallicTex->AddToRoot();
 							Output.Textures.Add(ShadowParams.LightmapMetallicTex);
-							ShadowParams.LightmapDiffuse = GammaDielectricOneMinus;
+							ShadowParams.LightmapDiffuse = LinearDielectricOneMinus;
 							// UnityStandardInput MetallicGloss: smoothness is the map's alpha x _GlossMapScale (channel 0).
 							FLinearColor Channel, Scale;
 							const bool bAlbedoAlpha = Source.MaterialValue(i, "_SmoothnessTextureChannel", Channel) && Channel.R > .5f;
@@ -4942,9 +5053,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							ShadowParams.bStandardSmoothnessFromMap = !bAlbedoAlpha;
 						}
 				}
-				// OK_STANDARD_REFLECTION=1: the baked reflection probe term. Off by default until it matches the game: with it
-				// the 1F toilet's walls came out far brighter than Studio's own picture (2026-10-19, OK_STUDIO_PLAN S5).
-				static const bool bProbeReflections = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STANDARD_REFLECTION")) == TEXT("1");
+				// Standard indirect specular is enabled after removing the generic albedo
+				// emission floor. Set OK_STANDARD_REFLECTION=0 to isolate baked diffuse.
+				static const bool bProbeReflections = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STANDARD_REFLECTION")) != TEXT("0");
 				if (bReflected && bProbeReflections)
 				{
 					const int32 Index = FMath::RoundToInt(ReflectionIndex.R);
@@ -5565,7 +5676,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							if (It.Value && It.Value->TextureTarget == Screen) It.Value->HideComponent(Comp);
 						UE_LOG(LogTemp, Display, TEXT("OK render texture screen part=%s bounds=%s"), *Name, *Comp->Bounds.GetBox().ToString());
 					}
-		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor added, not the Studio light
+		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor, with source alpha, not the Studio light
 		// effect's three-colour mix the additive part graph draws.
 		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))
 			if (UMaterialInterface* ParticleMat = OKParticleAdditiveMaterial())
@@ -5573,12 +5684,45 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				{
 					FLinearColor TintColor(0.5f, 0.5f, 0.5f, 0.5f);
 					Source.MaterialValue(i, "_TintColor", TintColor);
-					auto Linear2 = [](float V) { return FMath::Pow(FMath::Max(2.f * V, 0.f), 2.2f); };
+					const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+					TintColor = FLinearColor(Linear(TintColor.R), Linear(TintColor.G), Linear(TintColor.B), TintColor.A);
+					FLinearColor InvFade(1.f, 0.f, 0.f, 0.f);
+					Source.MaterialValue(i, "_InvFade", InvFade);
 					Dynamic->SetTextureParameterValue(TEXT("Tex"), Tex);
-					Dynamic->SetVectorParameterValue(TEXT("Tint"), FLinearColor(Linear2(TintColor.R), Linear2(TintColor.G), Linear2(TintColor.B), 1.f));
+					Dynamic->SetVectorParameterValue(TEXT("Tint"), TintColor);
+					Dynamic->SetScalarParameterValue(TEXT("FadeDistance"), 100.f / FMath::Max(InvFade.R, 1e-8f));
 					Comp->SetMaterial(0, Dynamic);
 					Part.SurfaceMat = Dynamic;
+					UE_LOG(LogTemp, Display, TEXT("OK native particle part=%s tint_linear=(%.4f,%.4f,%.4f,%.4f) inverse_fade=%.4f material=%s"), *Name, TintColor.R, TintColor.G, TintColor.B, TintColor.A, InvFade.R, *Dynamic->GetPathName());
 				}
+		FLinearColor RendererMode;
+		if (Comp && Source.MaterialValue(i, "_OKRendererShadowMode", RendererMode))
+		{
+			const int32 Mode = FMath::Clamp(FMath::RoundToInt(RendererMode.R), 0, 3);
+			if (Mode == 0) Comp->ComponentTags.Add(TEXT("OKShadowOff"));
+			if (Mode == 3)
+			{
+				Comp->SetRenderInMainPass(false);
+				Comp->SetRenderInDepthPass(false);
+			}
+			Comp->bCastShadowAsTwoSided = Mode == 2;
+			Comp->SetCastShadow(Mode != 0);
+			FLinearColor Layer = FLinearColor::Black, Culling = FLinearColor::Black, Enabled = FLinearColor::Black, CullingLo = FLinearColor::Black, CullingHi = FLinearColor::Black;
+			if (Source.MaterialValue(i, "_OKRendererLayer", Layer) && Source.MaterialValue(i, "_OKSunCulling", Culling))
+			{
+				const int32 Bit = FMath::Clamp(FMath::RoundToInt(Layer.R), 0, 31);
+				const bool bFullMask = Source.MaterialValue(i, "_OKSunCullingLo", CullingLo) && Source.MaterialValue(i, "_OKSunCullingHi", CullingHi);
+				const uint32 Mask = bFullMask ? uint32(FMath::RoundToInt(CullingLo.R)) | (uint32(FMath::RoundToInt(CullingHi.R)) << 16)
+					: uint32(FMath::RoundToInt(Culling.R));
+				if ((bFullMask || Bit < 24) && (Mask & (1u << Bit)) == 0)
+					Comp->ComponentTags.Add(TEXT("OKSunExcluded"));
+			}
+			if (Source.MaterialValue(i, "_OKRendererEnabled", Enabled) && Enabled.R == 0.f)
+			{
+				Comp->ComponentTags.Add(TEXT("OKRendererDisabled"));
+				Comp->SetVisibility(false);
+			}
+		}
 		// A Studio map part shown only at some times of day (okmodel_view::mark_sun_visible): its mask as a tag, for the
 		// scene to show or hide it with the scene's time (SunLightInfo.Set).
 		FLinearColor SunVisible;

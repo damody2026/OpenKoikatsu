@@ -62,6 +62,8 @@ public:
  /** Whether opening this OK card (outfit, 9 clothes states or null = all worn) is served by the open cache:
   *  1 yes, 0 no, -1 not an OK library card (no open cache). Cheap: hashes the card, opens nothing. */
  static int32 CacheReady(const FString& CardPath,int32 Outfit,const uint8* Clothes);
+  /** Call between scene loads with no source open/prepare jobs running. Keeps live sessions and disk caches. */
+  static void ReleaseSourceCaches();
  static FString CommonInteractionPoses();
  bool PrepareBodyReaction(const TArray<uint8>& Definition,FString& Error);
  bool BodyReactionHit(int32 Id,TConstArrayView<FVector3f> Forces,float Weight,uint8 ReleaseMask=0);

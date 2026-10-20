@@ -197,6 +197,12 @@ fn convert_source(game: &Path, source: &Source, bytes: &[u8], prefab_hints: &BTr
     let mut prefabs: BTreeSet<String> = dir.top.iter().cloned().collect();
     for roots in dir.roots.iter().flatten() { prefabs.extend(roots.iter().cloned()); }
     prefabs.extend(prefab_hints.iter().cloned());
+    // An explicit prefab list limits an offline memo refresh to its affected
+    // renderers. It never changes an ordinary complete conversion.
+    let selected: Option<BTreeSet<String>> = std::env::var("OKLIB_PREFABS").ok()
+        .map(|file| std::fs::read_to_string(&file).unwrap_or_else(|e| panic!("{file}: {e}"))
+            .lines().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect());
+    if let Some(selected) = &selected { prefabs.retain(|name| selected.contains(name)); }
     let mut meshes = 0;
     let mut skeletons: Vec<crate::pose::Skeleton> = Vec::new();
     for name in &prefabs {
@@ -229,6 +235,7 @@ fn convert_source(game: &Path, source: &Source, bytes: &[u8], prefab_hints: &BTr
     // (lists can name a child object, e.g. a hair part).
     let components = parsed.library_component_objects();
     for name in &components {
+        if selected.as_ref().is_some_and(|selected| !selected.contains(name)) { continue; }
         if prefabs.contains(name) { continue; }
         let _ = parsed.accessory_color_use(name);
         let _ = parsed.accessory_body_binding(name);

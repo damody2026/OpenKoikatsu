@@ -234,7 +234,7 @@ pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> 
             return ("additive".into(), true);
         }
         // Unity's built-in additive particle shaders (Studio's 2D lens flares: Legacy Shaders/Particles/Additive) blend
-        // One One too: the black around the glow adds nothing (drawn opaque it hid 1901's whole backdrop).
+        // SrcAlpha One: the renderer folds source alpha and soft-particle fade into the contribution.
         if shader.contains("particles/additive") {
             return ("additive".into(), true);
         }
@@ -1218,6 +1218,37 @@ pub(crate) fn preview_session_parts(game_root: &Path, role: &str, meshes: Vec<Ex
     // No character skeleton: the posed meshes carry no weights and stay static (not bound to a body).
     for p in &mut session_parts { if p.weights.is_empty() { p.skel_kind = 0; } }
     Ok(session_parts)
+}
+
+#[cfg(test)]
+#[test]
+fn studio_mdk_preview_normalizes_source_rows_once() {
+    let mut image = image::RgbaImage::new(1, 2);
+    // Unity's first source row is the bottom row. UE's PNG row zero is top.
+    image.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+    image.put_pixel(0, 1, image::Rgba([0, 0, 255, 255]));
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(image).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    for (role, shader) in [("part", "Shader Forge/main_StandardMDK_studio"), ("accessory", "Shader Forge/main_StandardMDK_studio"), ("part", "Standard"), ("part", "Legacy Shaders/Particles/Additive")] {
+        let mesh = ExtractedMesh {
+            name: "mdk_row_probe".into(),
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            normals: vec![[0., 0., 1.]; 3],
+            uvs: vec![[0., 0.], [1., 0.], [0., 1.]],
+            indices: vec![0, 1, 2],
+            mat: Some(crate::unity::MeshMaterial { shader: shader.into(), keywords: vec!["_EMISSION".into()], ..Default::default() }),
+            texture_png: Some(png.clone()),
+            shader_extra_textures: [("_EmissionMap".into(), png.clone()), ("_OKLightmap".into(), png.clone()), ("_OKLightmapDirection".into(), png.clone())].into(),
+            ..Default::default()
+        };
+        let parts = preview_session_parts(Path::new(""), role, vec![mesh], None).unwrap();
+        assert_eq!(parts.len(), 1);
+        for bytes in [parts[0].png.as_ref().unwrap(), &parts[0].shader_textures["_EmissionMap"], &parts[0].shader_textures["_OKLightmap"], &parts[0].shader_textures["_OKLightmapDirection"]] {
+            let decoded = crate::teximg::load_from_memory(bytes).unwrap().to_rgba8();
+            assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 255, 255], "{role}: source top row");
+            assert_eq!(decoded.get_pixel(0, 1).0, [255, 0, 0, 255], "{role}: source bottom row");
+        }
+    }
 }
 
 fn apply_clothes_create_textures(
@@ -4374,6 +4405,21 @@ impl<'a, 's> PushCtx<'a, 's> {
                     }
                 }
                 if mesh.texture_png.is_none() {mesh.texture_png=crate::unity::solid_png([1.;4],8,8);}
+            } else if mesh.mat.as_ref().is_some_and(|mat| matches!(mat.shader.as_str(), "Shader Forge/main_StandardMDK_studio" | "Standard" | "Standard (Specular setup)" | "Legacy Shaders/Particles/Additive")) {
+                // Like MainTex above, every MDK slot follows the native mesh's
+                // (u, 1-v) rendering UV convention. Keep their rows aligned.
+                // Studio props have role "part", so the accessory-only MainTex
+                // normalization above did not run for them.
+                if !role.contains("acc") && me_maintex(me_tex, outfit, role, property.as_deref(), &mesh).is_none() {
+                    if let Some(png) = mesh.texture_png.take() {
+                        mesh.texture_png = Some(flip_png_v(&png).unwrap_or(png));
+                    }
+                }
+                for name in ["_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
+                    if let Some(png) = mesh.shader_extra_textures.remove(name) {
+                        mesh.shader_extra_textures.insert(name.into(), flip_png_v(&png).unwrap_or(png));
+                    }
+                }
             } else if mesh.hair_shader_hint || mesh.mat.as_ref().is_some_and(|mat| is_native_hair_shader(&mat.shader)) {
                 // Forge hair samples _AnotherRamp with N dot view. Preserve a
                 // MaterialEditor replacement and the original texture's sampling
@@ -4387,6 +4433,13 @@ impl<'a, 's> PushCtx<'a, 's> {
                     if replaced { mesh.runtime_textures.remove("_AnotherRamp"); }
                     let data = if replaced { data } else { flip_png_v(&data).unwrap_or(data) };
                     mesh.shader_extra_textures.insert("_AnotherRamp".into(), data);
+                }
+            }
+            // Baked atlases use the same (u, 1-v) UV convention as main textures.
+            // Reflection atlases are constructed in sampling order, not source Texture2D order.
+            for name in ["_OKLightmap", "_OKLightmapDirection"] {
+                if let Some(png) = mesh.shader_extra_textures.remove(name) {
+                    mesh.shader_extra_textures.insert(name.into(), flip_png_v(&png).unwrap_or(png));
                 }
             }
             let material_mask = if role.starts_with("clothes") {

@@ -339,7 +339,14 @@ pub fn record_hierarchies(game: &Path, lib: &Path, threads: usize) -> Result<(),
             let parsed = crate::unity::parse_bundle_cached(bytes);
             parsed.configure_game_references(game);
             let (mut n, mut l, mut empty) = (0, 0, 0);
-            for p in prefabs { let h = parsed.prefab_hierarchy(p); n += h.nodes.len(); l += h.lights.len(); if h.nodes.is_empty() { empty += 1; } parsed.prefab_lightmaps(p); parsed.prefab_render_textures(p); parsed.prefab_reflection_probes(p); parsed.prefab_animated_materials(p); parsed.prefab_sun_light(p); }
+            for p in prefabs {
+                let h = parsed.prefab_hierarchy(p);
+                n += h.nodes.len(); l += h.lights.len();
+                if h.nodes.is_empty() { empty += 1; }
+                if !parsed.prefab_lightmaps(p).textures.is_empty() { parsed.prefab_lightmap_directions(p); }
+                parsed.prefab_renderer_settings(p);
+                parsed.prefab_render_textures(p); parsed.prefab_reflection_probes(p); parsed.prefab_animated_materials(p); parsed.prefab_sun_light(p);
+            }
             (n, l, empty)
         }));
         crate::unity::clear_bundle_cache();
@@ -1012,6 +1019,55 @@ mod lut_probe {
 
 #[cfg(test)]
 mod lightmap_probe {
+    #[test]
+    #[ignore = "installed map and OK library: renderer shadow policy provenance"]
+    fn studio_renderer_shadow_policy_matches_source() {
+        let game = crate::test_support::game_path("");
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let bytes = std::fs::read(game.join("abdata/studio/map/bushitu.unity3d")).unwrap();
+        let id = crate::oklib::content_id(&bytes);
+        let parsed = crate::unity::parse_bundle_cached(bytes);
+        parsed.configure_game_references(&game);
+        let expected = parsed.prefab_renderer_settings("Map");
+        assert!(expected.iter().any(|r| r.1 == 3), "fixture has a ShadowsOnly occluder");
+        assert!(expected.iter().any(|r| r.1 == 0), "fixture also has a non-casting wall");
+        crate::okmodel_view::with_library(&lib, || {
+            let view = crate::okmodel_view::ModelView::open(&lib, id)?;
+            assert_eq!(view.prefab_renderer_settings("Map"), expected);
+            let session = view.prefab_session("Map", false)?;
+            let mode = |name: &str| session.parts.iter().find(|p| p.name == name)
+                .and_then(|p| p.source_material.as_ref()).and_then(|m| m.floats.get("_OKRendererShadowMode")).copied();
+            assert_eq!(mode("mo_koi_stu_map49_shadow00"), Some(3.));
+            assert_eq!(mode("mo_koi_stu_map49_wall00_00"), Some(0.));
+            println!("Renderer shadow policy source/library exact: {} renderers, ShadowsOnly preserved", expected.len());
+            Ok::<_, String>(())
+        }).unwrap();
+    }
+
+    #[test]
+    #[ignore = "installed map and OK library: directional lightmap provenance"]
+    fn studio_directional_lightmap_matches_source() {
+        let game = crate::test_support::game_path("");
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let bytes = std::fs::read(game.join("abdata/studio/map/1ftoilet.unity3d")).unwrap();
+        let id = crate::oklib::content_id(&bytes);
+        let parsed = crate::unity::parse_bundle_cached(bytes);
+        parsed.configure_game_references(&game);
+        let expected = parsed.prefab_lightmap_directions("Map");
+        assert_eq!(expected.textures.len(), 1);
+        assert!(!expected.textures[0].is_empty());
+        crate::okmodel_view::with_library(&lib, || {
+            let view = crate::okmodel_view::ModelView::open(&lib, id)?;
+            let session = view.prefab_session("Map", false)?;
+            let carried: Vec<_> = session.parts.iter().filter_map(|p| p.shader_textures.get("_OKLightmapDirection")).collect();
+            assert_eq!(carried.len(), 1, "one shared direction atlas, not one copy per renderer");
+            let normalized = crate::flip_png_v(&expected.textures[0]).unwrap();
+            assert!(*carried[0] == normalized, "library direction atlas differs from installed source after rendering row normalization");
+            println!("Directional lightmap source/library exact: {} bytes", carried[0].len());
+            Ok::<_, String>(())
+        }).unwrap();
+    }
+
     /// Alpha and colour statistics of a library map's lightmaps (OK_LM_MODEL / OK_LM_PREFAB, default the 1F toilet):
     /// RGBM keeps a varying alpha (colour = 5·a·rgb), dLDR a constant one (colour = 2·rgb).
     #[test]
@@ -1161,6 +1217,35 @@ mod map_animator_probe {
 
 #[cfg(test)]
 mod item_open_timing_probe {
+    #[test]
+    #[ignore = "installed game and OK library: MDK renderer inputs must match"]
+    fn studio_mdk_library_matches_source_inputs() {
+        let game = crate::test_support::game_path("");
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let prefab = "p_koi_stu_senpu01_00";
+        let bytes = std::fs::read(game.join("abdata/studio/00.unity3d")).unwrap();
+        let id = crate::oklib::content_id(&bytes);
+        let parsed = crate::unity::parse_bundle_cached(bytes);
+        parsed.configure_game_references(&game);
+        let meshes = parsed.meshes_for_maindata(prefab).0;
+        let raw = crate::preview_session_parts(&game, "part", meshes, None).unwrap();
+        assert_eq!(raw.len(), 2);
+        crate::okmodel_view::with_library(&lib, || {
+            let view = crate::okmodel_view::ModelView::open(&lib, id)?;
+            let session = view.prefab_session_fk(prefab, false, &[])?;
+            assert_eq!(session.parts.len(), raw.len());
+            for expected in &raw {
+                let material = &expected.source_material.as_ref().unwrap().name;
+                let actual = session.parts.iter().find(|p| p.source_material.as_ref().is_some_and(|m| &m.name == material)).unwrap();
+                assert_eq!(actual.png, expected.png, "{material} MainTex");
+                assert_eq!(actual.shader_textures, expected.shader_textures, "{material} native slots");
+                assert_eq!(actual.runtime_textures, expected.runtime_textures, "{material} sampler provenance");
+                println!("MDK source/library exact: {material}, {} native slots", actual.shader_textures.len());
+            }
+            Ok::<_, String>(())
+        }).unwrap();
+    }
+
     /// How long opening the same Studio item (OK_ITEM_MODEL / OK_ITEM_PREFAB, default the plain cube) as a preview
     /// session takes, first and repeated (a scene of a thousand copies opens it a thousand times).
     #[test]
@@ -1177,9 +1262,30 @@ mod item_open_timing_probe {
             let t_open = t.elapsed();
             let s = view.prefab_session_fk(&prefab, false, &[]).unwrap();
             println!("round {round}: view {:.1} ms, session {:.1} ms, parts {}", t_open.as_secs_f64() * 1e3, t.elapsed().as_secs_f64() * 1e3, s.parts.len());
+            if round == 0 {
+                if let Ok(directory) = std::env::var("OK_ITEM_GEOMETRY_OUT") {
+                    let directory = std::path::Path::new(&directory);
+                    std::fs::create_dir_all(directory).unwrap();
+                    for (index, part) in s.parts.iter().enumerate() {
+                        let data = serde_json::json!({"name":part.name,"positions":part.positions,"uvs":part.uvs,"indices":part.indices,"material":part.source_material});
+                        std::fs::write(directory.join(format!("part{index}.json")), serde_json::to_vec(&data).unwrap()).unwrap();
+                        if let Some(png) = &part.png { std::fs::write(directory.join(format!("part{index}.png")), png).unwrap(); }
+                    }
+                }
+            }
             // OK_ITEM_MATERIALS=1: each part's source material (shader, keywords, queue) as the UE recipe choice sees it.
             if round == 0 && std::env::var_os("OK_ITEM_MATERIALS").is_some() {
-                for p in &s.parts { println!("  {} blend={} material={:?}", p.name, p.blend, p.source_material.as_ref().map(|m| (&m.name, &m.shader, &m.keywords, m.render_queue))); }
+                for p in &s.parts {
+                    println!("  {} blend={} material={:?}", p.name, p.blend, p.source_material);
+                    println!("    delivered textures: {:?}", p.shader_textures.keys().collect::<Vec<_>>());
+                    if let Some(mat) = p.source_material.as_ref().filter(|m| m.shader == "Shader Forge/main_StandardMDK_studio") {
+                        for property in ["_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
+                            if mat.slot(property).is_some() {
+                                assert!(p.shader_textures.contains_key(property), "{} lost authored {property}", mat.name);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

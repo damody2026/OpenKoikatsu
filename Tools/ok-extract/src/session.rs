@@ -789,6 +789,10 @@ impl SessionPart {
                         && !textures.contains_key("_MainTex") {
                         if let Some(png)=crate::unity::solid_png([1.;4],1,1) {textures.insert("_MainTex".into(),png);}
                     }
+                } else if mesh.mat.as_ref().is_some_and(|m| m.shader == "Shader Forge/main_StandardMDK_studio") {
+                    // MDK reads emission regardless of Standard's _EMISSION
+                    // keyword, and its normal slot is _BumpMap.
+                    textures.retain(|name, _| matches!(name.as_str(), "_BumpMap" | "_ParallaxMap" | "_MetallicGlossMap" | "_EmissionMap" | "_OKLightmap" | "_OKLightmapDirection" | "_OKReflection"));
                 } else if is_hair_shader {
                     textures.retain(|name, _| name == "_AnotherRamp");
                 } else if role == "head" && matches!(hair_shader_name.as_str(), "koikano/main_skin" | "shader forge/main_skin" | "xukmi/skinplus") {
@@ -804,7 +808,7 @@ impl SessionPart {
                     // okmodel_view::assign_reflection_probes).
                     let stage=mesh.mat.as_ref().is_some_and(|m|m.floats.contains_key("_OKStageEffect"));
                     let metal_map=mesh.mat.as_ref().is_some_and(|m|m.keywords.iter().any(|k|k=="_METALLICGLOSSMAP"));
-                    textures.retain(|name,_|(emits && name=="_EmissionMap") || (metal_map && name=="_MetallicGlossMap") || name=="_OKLightmap" || name=="_OKReflection" || name=="_expression"
+                    textures.retain(|name,_|(emits && name=="_EmissionMap") || (metal_map && name=="_MetallicGlossMap") || name=="_OKLightmap" || name=="_OKLightmapDirection" || name=="_OKReflection" || name=="_expression"
                         || (stage && matches!(name.as_str(),"_color"|"_mask"|"_Emission"|"_MaskFast"|"_MaskSlow"|"_MaskFull")));
                 }
                 textures
@@ -1666,8 +1670,10 @@ impl OkSession {
             }
             self.hand_shapes.apply(sk);
             apply_user_fk(sk, &self.user_fk);
+            // OCIChar.ActiveKinematicMode disables Preparation.pvCopy for all
+            // limbs while FK is enabled, even when only fingers are selected.
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
-                if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk);}
+                if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
                 crate::pose::apply_expression_bone(sk);
             }
             let names: Vec<String> = self.abm.iter().map(|b| b.name.clone()).collect();
@@ -1925,7 +1931,7 @@ impl OkSession {
             self.hand_shapes.apply(sk);
             apply_user_fk(sk, &self.user_fk);
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
-                if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk);}
+                if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
                 crate::pose::apply_expression_bone(sk);
             }
             let base = crate::pose::capture_abm_baseline(sk,&self.abm);
@@ -4078,6 +4084,25 @@ mod tests {
                 _=>{changed.removed_accessory_bones.insert(5);}};
             assert_ne!(baseline,changed.skin_contract().unwrap());
         }
+    }
+
+    #[test]
+    fn studio_mdk_keeps_native_slots_without_emission_keyword() {
+        let mesh = ExtractedMesh {
+            mat: Some(crate::unity::MeshMaterial {
+                shader: "Shader Forge/main_StandardMDK_studio".into(),
+                keywords: vec!["_NORMALMAP".into()],
+                ..Default::default()
+            }),
+            shader_extra_textures: ["_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"]
+                .into_iter().map(|name| (name.into(), vec![1, 2, 3])).collect(),
+            ..Default::default()
+        };
+        let part = SessionPart::from_mesh("part", &mesh, "masked", false);
+        let restored = bincode::deserialize::<PartBlob>(
+            &bincode::serialize(&PartBlob::from_part(&part)).unwrap()
+        ).unwrap().into_part();
+        assert_eq!(restored.shader_textures, mesh.shader_extra_textures);
     }
 
     #[test]

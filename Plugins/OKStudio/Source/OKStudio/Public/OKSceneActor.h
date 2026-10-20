@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "OK Studio")
 	void Sync();
 
+	/** Releases the complete previous scene before a replacement is built. */
+	void ReleaseScene();
+
 	/** Objects built per Sync (one frame); the rest are built on the following Ticks. */
 	int32 BuildsPerFrame = 24;
 
@@ -136,6 +139,8 @@ private:
 		/** The shown effect's id (another id rebuilds it; speed, intensity and colour apply in place). */
 		FString Effect;
 		TWeakObjectPtr<AKKPreviewActor> Preview;
+		/** Studio's guide replaces the prefab root TRS; undo the root baked into model vertices. */
+		FTransform RenderCorrection = FTransform::Identity;
 		TWeakObjectPtr<USceneComponent> Component;
 		float Time = 0.f;
 		/** FK bones the preview currently has. */

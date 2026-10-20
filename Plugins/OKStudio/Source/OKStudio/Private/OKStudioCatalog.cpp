@@ -261,7 +261,14 @@ FTransform FOKStudioCatalog::ItemChildPoint(int32 Group, int32 Category, int32 N
 	FVector P = FVector::ZeroVector, S = FVector::OneVector; FQuat Q = FQuat::Identity;
 	// Unity prefab space to UE (the converter's basis change: x -> -x, y <-> z; metres to cm).
 	if (I && !I->Child.IsEmpty() && FOkSession::OkModelNodeWorld(AOKSceneActor::LibraryDirectory(), I->Model, I->Prefab, I->Child, P, Q, S))
+	{
 		Point = FTransform(FQuat(-Q.X, Q.Z, Q.Y, Q.W).GetNormalized(), FVector(-P.X, P.Z, P.Y) * 100.0, FVector(S.X, S.Z, S.Y));
+		if (FOkSession::OkModelNodeWorld(AOKSceneActor::LibraryDirectory(), I->Model, I->Prefab, I->Prefab, P, Q, S))
+		{
+			const FTransform Root(FQuat(-Q.X, Q.Z, Q.Y, Q.W).GetNormalized(), FVector(-P.X, P.Z, P.Y) * 100.0, FVector(S.X, S.Z, S.Y));
+			Point = Point.GetRelativeTransform(Root);
+		}
+	}
 	ChildPoints.Add(Key, Point);
 	return Point;
 }

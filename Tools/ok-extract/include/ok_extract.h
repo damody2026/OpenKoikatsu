@@ -352,6 +352,9 @@ int32_t ok_prewarm(const char* root);
 void ok_set_thread_background(int32_t on);
 /* Whether opening this OK card (outfit, 9 clothes states or null = all worn) is in the open cache: 1 yes, 0 no, -1 not an OK library card. */
 int32_t ok_session_cache_ready(const char* card, int32_t outfit, const uint8_t* clothes);
+/* Between scene loads, with no open/prepare job in progress: drop decoded source caches on all workers.
+ * Existing sessions keep their owned data. Does not delete disk caches or change library configuration. */
+void ok_release_source_caches(void);
 int32_t ok_common_animation_pair_clip(const char* root,const char* key,int32_t layer,char* out,int32_t cap);
 int32_t ok_select_common_animation(OkSession* s,const char* root,const char* key);
 /* Two distinct handles, one shared elapsed clock; returns 0 on success. */

@@ -799,6 +799,13 @@ pub unsafe extern "C" fn ok_session_cache_ready(card:*const c_char,outfit:i32,cl
     match crate::oklib_session_cache_key_states(&lib,&card,outfit,states) {Some(key)=>i32::from(crate::oklib::session_cache_has(&key)),None=>-1}
 }
 
+/// Called between independent scene loads, outside open/prepare jobs.
+#[no_mangle]
+pub extern "C" fn ok_release_source_caches() {
+    crate::unity::release_bundle_caches();
+    if let Some(store) = crate::oklib::active() { store.forget_models(); }
+}
+
 /// 1: this thread's opens are background work that gives way to foreground opens (stops at a stage boundary with an
 /// error while one runs); 0: foreground (default).
 #[no_mangle]
@@ -1493,7 +1500,7 @@ pub(crate) unsafe extern "C" fn set_studio_pv(s:*mut OkSession,mask:i32,fk:i32)-
 }
 pub(crate) unsafe extern "C" fn studio_pv_flag(s:*mut OkSession,index:i32)->i32 {
     let Some(s)=sess_ref(s) else {return -1;};
-    if !(0..=3).contains(&index) {return -1;}((s.pv_mask&(1<<index))!=0&&!s.pv_fk) as i32
+    if !(0..=3).contains(&index) {return -1;}((s.pv_mask&(1<<index))!=0&&!s.pv_fk&&s.user_fk.is_empty()) as i32
 }
 pub(crate) unsafe extern "C" fn studio_pv_bone(s:*mut OkSession,index:i32,source:i32)->i32 {
     let Some(s)=sess_ref(s) else {return -1;};if !(0..=3).contains(&index)||!(0..=1).contains(&source) {return -1;}
@@ -2047,6 +2054,24 @@ mod tests {
     use super::*;
     use std::ffi::CString;
     use std::ptr;
+
+    #[test]
+    fn user_fk_disables_studio_pv_and_clear_restores_mask() {
+        let mut s = crate::session::preview_session(&[], std::path::Path::new(""));
+        s.pv_mask = 5;
+        let name = CString::new("cf_j_hand_L").unwrap();
+        let euler = [10.0f32, 20., 30.];
+        unsafe {
+            assert_eq!(studio_pv_flag(&mut s, 0), 1);
+            assert_eq!(studio_pv_flag(&mut s, 1), 0);
+            assert_eq!(ok_session_set_fk(&mut s, name.as_ptr(), euler.as_ptr(), 1), 0);
+            for index in 0..4 { assert_eq!(studio_pv_flag(&mut s, index), 0); }
+            assert_eq!(ok_session_set_fk(&mut s, ptr::null(), ptr::null(), 0), 0);
+            for index in 0..4 { assert_eq!(studio_pv_flag(&mut s, index), (5 >> index) & 1); }
+            assert_eq!(set_studio_pv(&mut s, 5, 1), 0);
+            assert_eq!(studio_pv_flag(&mut s, 0), 0, "explicit host FK gate still applies");
+        }
+    }
 
     #[test]
     fn source_material_api_invalid_inputs_leave_output_untouched() {
