@@ -3686,3 +3686,7 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-20｜粒子景深順序**：UE 新材質預設 TranslucencyPass=AfterDOF；Unity 透明粒子在攝影機景深／bloom 前已混入 scene color。只改 alpha 公式仍留下銳利白塊。Legacy Additive 明確設 BeforeDOF，避免把後處理差異誤當材質亮度再加場景係數。
 
 - **2026-10-20｜UE 自測與 UBT 共用鎖**：一般遊戲版編譯持有 UBT mutex，UE 啟動時的 ValidatePlatforms 也呼叫 UBT，使 Pattern／Editor 自測停在啟動並可能逾時。查引擎 TargetPlatformManagerModule 確認既有 `UE_SKIP_UBT_SDK_SETUP=1`；已建好 Editor 的純執行驗收以 child-scoped 環境跳過重複 SDK discovery，立即恢復 parent 環境，不改引擎或全域設定。舊等待中的 owned 驗收停止並用新 tag 重跑，不能記作功能失敗／通過。
+
+- **2026-10-20｜驗收紀錄只有文字與路徑，未嵌圖**：已完成擷取與目視檢查，卻只在計畫列出本機 Saved 路徑，讀者無法直接從紀錄核對畫面。補上可攜的 14 張普通對照 PNG、總覽與圖文驗收報告；主計畫亦直接嵌圖。後續涉及畫面的驗收必須同時提供圖片、左右／前後意義、修正結果與剩餘差異；確認所有 Markdown 圖片路徑存在、圖片可解碼且不含卡片 payload，不能以「已目視」或出圖數量取代可檢視證據。
+
+- **2026-10-20｜Windows 圖片路徑大小寫掩蓋 Git 漏收**：現有資料夾為 `Docs/images`，補圖時使用 `Docs/Images`，Windows 可正常讀取，但 Git 指定路徑暫存未收進圖片，跨平台文件連結也會失效。已統一採用實際小寫 `images`，並檢查 staged 清單包含 15 張 PNG 與雜湊清單，不能只檢查本機路徑存在。
