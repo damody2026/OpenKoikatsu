@@ -201,6 +201,11 @@
 - **最後連續場景驗收**：三項遊戲自測 PASS，`CompareKStudio` 14／14 PASS；每張擷取時峰值由修正前同批 30.4 GB 降到 23.6 GB，Windows 程序 PeakWorkingSet 為 23.709 GB，最後完整卸載後 13.0 GB（已低於原本後半段，但仍高於啟動約 4.4 GB，不能宣稱完全回到啟動基準）。`results.json` 與 `release-process-memory.json` 分別保存擷取／卸載與程序峰值。已目視 14 張聯絡表與 0010／0633／1901／3167／6331／6964 個別圖，沒有把輸出成功等同畫面完全一致。
 - **仍存在的畫面邊界**：Standard reflection 與日照已預設啟用並確認修正路徑生效；1901 的 bloom、角色明暗、3167 的整體色調與其他畫面細節仍有差異。本輪的來源、構圖、日照、生命週期修正已分別驗證，不把「14 張成功輸出」當作所有畫面完全匹配。MRQ／SkinEffects 等仍按既有 roadmap，不因本輪測試通過改成完成。
 
+#### 本輪圖片驗收
+
+每張圖左側為原作預覽縮圖，右側為 Unreal 實作結果；14／14 是成功出圖，畫面尚有差異。完整單張圖、逐項判定與驗收界線見 [HANDOFF_E 圖文驗收紀錄](OK_STUDIO_HANDOFF_E_ACCEPTANCE_20261020.md)。
+
+![HANDOFF_E 最後 14 張場景對照總覽](images/OKStudio/HandoffE20261020/overview.png)
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918

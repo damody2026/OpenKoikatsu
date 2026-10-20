@@ -1,0 +1,146 @@
+{
+  "source_run": "Verify-HandoffERelease",
+  "layout": "left: original thumbnail; right: Unreal result",
+  "images": [
+    {
+      "file": "koikatu_cs0000001.png",
+      "sha256": "7f60627dd47db343918862449abf51668bd5b803a91c5fc2e19b6d9b560044fc",
+      "bytes": 829386,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 102,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0000010.png",
+      "sha256": "d7054a15a70ca108d8f1818f54bdf190d9404d34b82df729bb6b25f0c621fb2d",
+      "bytes": 833388,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 102,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0000059.png",
+      "sha256": "de51e0568254089240d221d61ec01654a6ab87356e0935ce3f56bb3d78f87fbb",
+      "bytes": 545858,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 67,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0000633.png",
+      "sha256": "bfb66ee5f65b7d2d8fdff24baec33eabaead3c6dffd14b71bd9d505f8ecaa8e6",
+      "bytes": 747941,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 92,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0001268.png",
+      "sha256": "8299b7f070f1e6ea85ff1d92a95fbb2f09ab0c4cad60a68a275796432c42b67e",
+      "bytes": 732048,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 90,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0001901.png",
+      "sha256": "b7de22388f52300890947233bdcaf6e37c29cc316b53c746d8ce1dc544fbef17",
+      "bytes": 843245,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 103,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0002534.png",
+      "sha256": "c6f17b01831b9f46186ca890cde172efc0491eefc5accfac26e61860da68cd9f",
+      "bytes": 415095,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 51,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0003167.png",
+      "sha256": "0186b368ac6c39e0cc5833184e56640e157ed18033b67407ec93e99015dfdd70",
+      "bytes": 706804,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 87,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0003800.png",
+      "sha256": "bf59f4a6debbd3d94456182c63ca9f0088bab015ae2b2d351dd0182b0404a4c2",
+      "bytes": 678922,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 83,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0004432.png",
+      "sha256": "872718074a502fd1ffeca2f19fca970158cc0feb03f1205c8c81798f549df8c7",
+      "bytes": 745359,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 91,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0005065.png",
+      "sha256": "a1d15a57aa787461ab5737ad0174a3629aaf0061ced55480baf9101e3eb7decc",
+      "bytes": 794574,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 97,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0005698.png",
+      "sha256": "bcba9579720a34c7c67d81c26dc56e584f4908bb53aecce61cefab82a6b09b8f",
+      "bytes": 437511,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 54,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0006331.png",
+      "sha256": "c1cf80c69ece3a569caa8c71ea016967d886837ab1006c68948dfe77d9d1e031",
+      "bytes": 702050,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 86,
+        "IEND": 1
+      }
+    },
+    {
+      "file": "koikatu_cs0006964.png",
+      "sha256": "645697a662b7eaee0a7f24be6a57b9e7008f5a00f6213837b42926a850b4535f",
+      "bytes": 397200,
+      "png_chunks": {
+        "IHDR": 1,
+        "IDAT": 49,
+        "IEND": 1
+      }
+    }
+  ]
+}
