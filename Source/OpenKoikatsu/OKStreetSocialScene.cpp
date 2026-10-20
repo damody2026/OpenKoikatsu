@@ -1018,6 +1018,8 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  FreeTalkEnsureLog();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  auto Status=OKStreetFreeTalkStatusOf(S,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget));
+ // His name as the game has it (the group prompt says it too): without it she only knew what he told her.
+ if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty())Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *S.Manifest.Characters[0].Name}});
  // Apart (a phone message or call): what they are doing face to face does not apply (OKStreetSocialPhoneInbox.inl).
  Status.Doing=RemoteWith(Character)?RemoteDoing(Character):FreeTalkDoing()+FreeTalkExtras();Status.Nearby=RemoteWith(Character)?FString(OKT(TEXT("ui.free_talk.remote_nearby_unknown"))):FreeTalkNearby(); // the places around him are not around her on the phone
  {const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);Status.Now=OKStreetFreeTalkDateTime(OKStreetCalendarDateTime(S.Store.CalendarDay,Hours));Status.StreetTime=OKStreetFreeTalkClock(Hours);}
@@ -1152,7 +1154,7 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
     else if(!Known&&EatActBlocked(Character,Action))Handled=true;
     else if(!Known&&OKHeroineFind(Action)){Handled=DoActHers(Character,Action);UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s done as an act (%d)"),*Action,Handled?1:0);}
    }
-   if(!Handled&&Known&&Known->Kind==EOKStreetActivityKind::Photo&&S.Pair.Partner==Character&&(S.Pair.Meal||S.Pair.Seated||S.Pair.Drink||S.Pair.PhoneUse||S.Pair.Read)){
+   if(!Handled&&Known&&Known->Kind==EOKStreetActivityKind::Photo&&S.Pair.Partner==Character&&(S.Pair.Meal||S.Pair.Drink||S.Pair.PhoneUse||S.Pair.Read)){ // just sitting and talking is no reason: they get up for it
     Handled=true;S.FreeTalkNotice=OKT(TEXT("ui.scene.other_activity_no_photo"));S.MindRecent.Add(Id,OKT(TEXT("ui.scene.photo_later_eating")));
     S.TellHer.Add(OKT(TEXT("ui.scene.no_photo_eating_note")));
     UE_LOG(LogTemp,Display,TEXT("Street free talk action: photo held back during meal=%d seated=%d drink=%d"),S.Pair.Meal?1:0,S.Pair.Seated?1:0,S.Pair.Drink?1:0);
@@ -1178,7 +1180,10 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
    if(Error==OKT(TEXT("ui.scene.wait_her_finish_line"))){S.RetryAction=Action;S.RetryGirl=Character;S.RetryUntil=SceneTime()+25.0;UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s waits for her line to end"),*Action);}
    else{
     S.FreeTalkNotice=OKT(TEXT("ui.live_talk.she_agreed_but"))+Error;
-    S.TellHer.Add(OKMsg(TEXT("ui.live_talk.promise_failed_explain"), {{TEXT("action"), *OKStreetActivityName(Action)}, {TEXT("error"), *Error}}));
+    // Which place it was ("there is closed" at the cafeteria door was taken for the cafeteria, not the restaurant).
+    FString PlaceName=TEXT("none");{const FOKStreetActivity* A=OKStreetFindActivity(Action);const FString PlaceId=A&&A->Place&&*A->Place?FString(A->Place):FString(); // going somewhere: its name is the action already
+     if(const FOKStreetPlace* P=PlaceId.IsEmpty()?nullptr:OKStreetFindPlace(PlaceId))PlaceName=P->Name;}
+    S.TellHer.Add(OKMsg(TEXT("ui.live_talk.promise_failed_explain"), {{TEXT("action"), *OKStreetActivityName(Action)}, {TEXT("place"), *PlaceName}, {TEXT("error"), *Error}}));
    }UE_LOG(LogTemp,Display,TEXT("Street free talk action refused: %s (%s)"),*Action,*Error);}
   // "leave" ends the activity they are in: not an outing she agreed to ("he went to leave with her" in the rumours).
   else if(Action!=TEXT("leave"))HeroineNote(Character,TEXT("outing"),OKMsg(TEXT("ui.scene.accepted_date_activity"), {{TEXT("activity"), *OKStreetActivityName(Action)}}),TEXT(""),-1.f,OKStreetActivityName(Action)); // words, not the id (rumours repeat it)
@@ -1191,10 +1196,12 @@ static int64 OKStreetMindNow(const FOKStreetSceneState& S);
 void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const FString& Said,const FString& Her,const FString& HerAction,const TArray<FString>& HerOrders){
  auto& S=*State;FOKFreeTalkSettings Settings;FString Error;
  if(!OKStreetFreeTalkLoadSettings(Settings,Error)){ExecuteFreeTalkAction(Character,Id,HerAction);return;}
- // Built once per language (it is the cached prefix of every judge request); a language switch builds it again.
- static FString System,SystemLang;
- if(System.IsEmpty()||SystemLang!=S.Lang){
-  SystemLang=S.Lang;System=OKT(TEXT("ui.scene.ai_judge_prompt"));
+ // Built once per language (it is the cached prefix of every judge request); a language switch builds it again, and so
+ // does a rules reload (the text tables are read again: a prompt edit applies without a restart).
+ static FString System,SystemLang;static int32 SystemGeneration=-1;
+ const TCHAR* JudgePrompt=OKT(TEXT("ui.scene.ai_judge_prompt"));
+ if(System.IsEmpty()||SystemLang!=S.Lang||SystemGeneration!=OKStreetCppText().Generation){
+  SystemLang=S.Lang;SystemGeneration=OKStreetCppText().Generation;System=JudgePrompt;
   System+=OKT(TEXT("ui.scene.activity_id_label"));for(const auto& A:OKStreetActivities())System+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), A.Id}, {TEXT("name"), A.Name}});
   System+=OKT(TEXT("ui.scene.place_id_list_header"));for(const auto& P:OKStreetPlaces())System+=OKMsg(TEXT("ui.scene.id_name_about"), {{TEXT("id"), P.Id}, {TEXT("name"), P.Name}, {TEXT("about"), *FString(P.About).Left(28)}});
  }

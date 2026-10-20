@@ -122,7 +122,9 @@ void AOKStreetSocialScene::TickOrderNotice(){
  auto& S=*State;
  // Things that happened at the till (checkout opened, paid, advanced) wait here until she is free to answer.
  if(!S.TellHer.IsEmpty()){
-  if(FreeTalkPartner()==INDEX_NONE)S.TellHer.Reset();
+  // Nobody to tell, or they are saying goodbye (her "good night" said, the talk ends after it): a note now would start
+  // the talk again ("all eaten — so what shall we do next?" after the goodbye).
+  if(FreeTalkPartner()==INDEX_NONE||S.FarewellPending){if(S.FarewellPending)UE_LOG(LogTemp,Display,TEXT("Street till notice dropped (%d): they are saying goodbye"),S.TellHer.Num());S.TellHer.Reset();}
   else if(S.FreeTalkOpen&&!S.FreeTalkBusy){S.SystemNote=true;S.FreeTalkDraft=S.TellHer[0];S.TellHer.RemoveAt(0);UE_LOG(LogTemp,Display,TEXT("Street till notice sent: %s"),*S.FreeTalkDraft.Left(120));SendFreeTalk();return;}
  }
  if(S.OrderNoticeDue<=0)return;
@@ -484,7 +486,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  }
  UE_LOG(LogTemp,Display,TEXT("Street order placed: %d lines, served in %.0f s"),S.Cart.Num(),ServeIn);
  UE_LOG(LogTemp,Display,TEXT("Street checkout: total=%d player=%lld her=%lld advanced=%lld option=%s"),Total,PlayerPays,HerPays,Advanced,*Option);
- {const FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty())S.TellHer.Add(ServeIn<10?Tell:Tell.Replace(OKT(TEXT("ui.economy.please_naturally")),*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})));} // handed over at once: no "it comes in 3 seconds" for her to say
+ {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
+ if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();
 }
 
