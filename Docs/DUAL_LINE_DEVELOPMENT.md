@@ -37,7 +37,7 @@ E 那邊做好一段，就把 `duo` 合併進 `master`。
 
 ## 二、Git 流程
 
-0. 遠端（2026-10-20 起）：`origin` 是 `https://github.com/damody2026/OpenKoikatsu.git`，歷史從一個單一 commit 重新開始。版控只放共用資源，角色卡與第三方 mod 的模型只留本機（[BASE_LIBRARY_SHARED_RESOURCES_PLAN.md](BASE_LIBRARY_SHARED_RESOURCES_PLAN.md)）。E 的 `local` 仍指向 C。
+0. 遠端（2026-10-20 起）：`origin` 是 `https://github.com/damody2026/OpenKoikatsu.git`，歷史從一個單一 commit 重新開始，之後照一般方式 commit 與推送。版控只放共用資源，角色卡與第三方 mod 的模型只留本機（[BASE_LIBRARY_SHARED_RESOURCES_PLAN.md](BASE_LIBRARY_SHARED_RESOURCES_PLAN.md)）。E 的 `local` 仍指向 C。
 1. C 一律在 `master` 上 commit，並且常 push。
 2. E 在 `duo` 上開發。**定期把 `master` 合併進 `duo`**（至少每天一次，或 C 推了大改動之後），衝突在 E 這邊解決。
 3. E 完成一段時：

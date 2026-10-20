@@ -7,10 +7,11 @@
 - **回覆語言**：一律用繁體中文；程式碼、識別名稱、路徑、指令保持原文。
 - **版控只放共用資源**（[Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md](Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md)）：
   - 角色卡（`Content/CharacterCards/`、`UserData/Studio/scene/*_cards/`、含角色的 Studio 樣本場景）與第三方 mod 轉出的模型只留本機，不要 `git add -f`。
+  - commit 前的 hook 會擋下角色卡、OK 卡與含角色的 Studio 場景（`Tools/check_no_cards.lua`；新 checkout 先執行 `Tools/lua/lua.exe Tools/install_git_hooks.lua`，`--all` 可檢查全部已追蹤檔）。私有卡與測試卡只留本機。
   - 共用 mod 清單在 `Tools/base_library_shared_mods.txt`。轉換新 mod 後執行 `ok-extract <遊戲> --oklib shared-ignore <base_v1>` 重新產生 `Content/IndependentResources/base_v1/models/.gitignore` 再提交。
   - 改動基礎庫或 `gamefs`／`oklib` 後，在乾淨 clone 跑 `kks-verify` 與 `okcard-check ... live`，並和完整本機基礎庫的結果對照。
 - **StreetSocialCity**：`StreetSocialCity/` 是使用者建模中的另一個 UE 專案，不進版控，也不要去動它。
-- **遠端**：`origin` 是 `https://github.com/damody2026/OpenKoikatsu.git`；引擎分支 `UE5.8-physX-5.11-ok` 在 `https://github.com/damody2026/UnrealEngineOK.git`（引擎 checkout 的 remote `ok`，推送用 damody2026 帳號）；歷史從 2026-10-20 的單一 commit 開始。單次推送超過 2 GB 會被 GitHub 拒絕。
+- **遠端**：`origin` 是 `https://github.com/damody2026/OpenKoikatsu.git`；引擎分支 `UE5.8-physX-5.11-ok` 在 `https://github.com/damody2026/UnrealEngineOK.git`（引擎 checkout 的 remote `ok`，推送用 damody2026 帳號）；歷史從 2026-10-20 的單一 commit 開始，之後照一般方式 commit 與推送，不再壓 commit。單次推送超過 2 GB 會被 GitHub 拒絕。
 - **雙線開發**：C（`C:\portable\OpenKoikatsu`，`master`，引擎 `D:\PhysX\UE5.8`）做大世界；E（`E:\OpenKoikatsu`，`duo2`，引擎 `E:\PhysX\UE5.8`）做 1 對 1 互動與 OK Studio。規則見 [Docs/DUAL_LINE_DEVELOPMENT.md](Docs/DUAL_LINE_DEVELOPMENT.md)。
 - **腳本與工具**：專案腳本用 Lua（`Tools\lua\lua.exe`），不新增 `.py`／`.ps1`；交付的工具用 Rust。
 - **錯誤紀錄**：做錯的事與修正寫進 `Docs/ERROR_LOG.md`（街頭相關寫 `Docs/STREET_ERRORS.md`），兩邊合併時兩邊的列都保留。
