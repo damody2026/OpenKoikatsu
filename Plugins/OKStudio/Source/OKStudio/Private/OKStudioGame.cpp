@@ -1725,8 +1725,9 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 {
 	// Each KStudio scene, imported and pictured from its Studio camera after some real frames, beside the picture the
 	// original Studio saved in the scene card: Saved/OKStudio/compare/<scene>.png (left original, right OK Studio).
-	struct FState { int32 Index = -1; int32 Frame = 0; int32 Done = 0; bool bLoaded = false; };
+	struct FState { int32 Index = -1; int32 Frame = 0; int32 Done = 0; bool bLoaded = false; bool bPreviousPause = false; };
 	TSharedRef<FState> State = MakeShared<FState>();
+    State->bPreviousPause = SceneActor && SceneActor->bPauseAnimations;
 	TWeakObjectPtr<UOKStudioGame> Self(this);
 	// Acceptance runs own their images: another run must not overwrite their evidence.
 	FString Out;
@@ -1816,6 +1817,7 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		if (++State->Index >= Scenes.Num())
 		{
 			UE_LOG(LogTemp, Display, TEXT("OK studio compare: RESULT %d / %d pictured into %s"), State->Done, Scenes.Num(), *Out);
+            if (Self->SceneActor) Self->SceneActor->bPauseAnimations = State->bPreviousPause;
 			if (bExit)
 			{
 				Self->ReleaseSceneResources();
