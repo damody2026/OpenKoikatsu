@@ -1,0 +1,101 @@
+{
+  "scene": "koikatu_cs0006964",
+  "screen_sources": {
+    "before": "Saved/OKStudio/Verify-Shadow6964Before/images/koikatu_cs0006964.png",
+    "after": "Saved/OKStudio/Verify-Shadow6964FinalCompare/images/koikatu_cs0006964.png"
+  },
+  "crop_source": [
+    100,
+    0,
+    300,
+    160
+  ],
+  "crop_unreal": [
+    740,
+    0,
+    940,
+    160
+  ],
+  "editing": "Plain crop, resize and labels only; actual rendered pixels, no generated content",
+  "iris_metrics": [
+    {
+      "side": "L",
+      "before_rgb_mae_255": 40.4162797959821,
+      "before_coverage_diff": 0,
+      "after_rgb_mae_255": 0.08477846015058464,
+      "after_coverage_diff": 0
+    },
+    {
+      "side": "R",
+      "before_rgb_mae_255": 40.4162797959821,
+      "before_coverage_diff": 0,
+      "after_rgb_mae_255": 0.08477846015058464,
+      "after_coverage_diff": 0
+    }
+  ],
+  "files": [
+    {
+      "file": "after.png",
+      "size": [
+        200,
+        160
+      ],
+      "bytes": 40296,
+      "sha256": "91e146421668828586a88783f7fb4831ffd47986ac81c8d432933c618b87103f",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "before.png",
+      "size": [
+        200,
+        160
+      ],
+      "bytes": 42013,
+      "sha256": "0a2219f924cbaa75bc13a6d94a4c5269e46c69edce308077a1c55629df8c862c",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "comparison.png",
+      "size": [
+        1200,
+        344
+      ],
+      "bytes": 311335,
+      "sha256": "946702521dc0f9b4b7910f1f00faea511f33af745adae89d551493f9ad6b6bd0",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "iris.png",
+      "size": [
+        768,
+        280
+      ],
+      "bytes": 36526,
+      "sha256": "5eb95f6fb64ffb2d892d2dd31d1c4d806dda09a886b2f85766834af7cce73d4f",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "source.png",
+      "size": [
+        200,
+        160
+      ],
+      "bytes": 34623,
+      "sha256": "4bb6605d970e792298465dd2b50c08ab8715037df2158441d20344fae11b8a90",
+      "no_payload_after_iend": true
+    }
+  ],
+  "validation": {
+    "checks": 62,
+    "passed": true,
+    "rust_passed": 420,
+    "rust_ignored": 469,
+    "native_oracle_passed": 1,
+    "studio_selftests": 6,
+    "posttest_passed": true,
+    "automation_success": 7,
+    "scenes_captured": 14,
+    "camera_before_after_equal": true,
+    "log": "Saved/OKStudio/6964-final-validation.json"
+  }
+}

@@ -634,17 +634,28 @@ int32 AOKSceneActor::MapPartCount() const
 
 void AOKSceneActor::AdvanceAnimations(float DeltaSeconds)
 {
-	if (!Document) return;
-    Document->ItemAnimationSeconds += DeltaSeconds;
-	for (auto& Pair : Shown)
-	{
-		AKKPreviewActor* Actor = Pair.Value.Preview.Get();
-		const FOKSceneObject* Object = Document->Find(Pair.Key);
-		if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character || !Actor->OkPlayer) continue;
-		Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
-		Actor->AnimPhase = Pair.Value.Time;
-		Actor->ApplyPoseFrame(0.f, false);
-	}
+    AdvanceCharacterFrames(DeltaSeconds, true);
+}
+
+void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase)
+{
+    if (!Document || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
+    if (bAdvancePhase) Document->ItemAnimationSeconds += DeltaSeconds;
+    for (auto& Pair : Shown)
+    {
+        AKKPreviewActor* Actor = Pair.Value.Preview.Get();
+        const FOKSceneObject* Object = Document->Find(Pair.Key);
+        if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) continue;
+        if (Actor->OkPlayer)
+        {
+            if (bAdvancePhase) Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
+            Actor->AnimPhase = Pair.Value.Time;
+        }
+        // Scene actors have their own Tick disabled. A static FK pose still needs
+        // a finishing pass so cloth receives the current limb pose and elapsed time.
+        if (Actor->PoseMode == 0) Actor->bUserPoseDirty = true;
+        Actor->ApplyPoseFrame(DeltaSeconds, false);
+    }
 }
 
 void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
@@ -690,7 +701,7 @@ UCameraComponent* AOKSceneActor::ActiveCamera() const
 	return Document ? Cast<UCameraComponent>(ComponentOf(Document->ActiveCamera)) : nullptr;
 }
 
-void AOKSceneActor::UpdateLooks(float DeltaSeconds)
+void AOKSceneActor::UpdateLooks(float DeltaSeconds, bool bApplyStaticPose)
 {
 	if (!Document) return;
 	for (auto& Pair : Shown)
@@ -717,7 +728,7 @@ void AOKSceneActor::UpdateLooks(float DeltaSeconds)
 			Actor->Session.SetHeadLook(AKKPreviewActor::ActorLocalToUnity(Local), bNeck);
 			Pair.Value.bNeckLooking = bNeck;
 			Actor->bHeadLookPoseDirty = true;
-			if (Actor->PoseMode == 0) Actor->ApplyPoseFrame(DeltaSeconds, false);
+			if (bApplyStaticPose && Actor->PoseMode == 0) Actor->ApplyPoseFrame(DeltaSeconds, false);
 		}
 	}
 }
@@ -727,9 +738,11 @@ void AOKSceneActor::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (bBuildsPending && Document) Sync();
 	// A sequence-driven scene shows SequenceTime instead of playing on its own.
-	if (!SceneJson.IsEmpty()) ShowSequenceTime();
-	else if (!bPauseAnimations) AdvanceAnimations(DeltaSeconds);
-	UpdateLooks(DeltaSeconds);
+    if (!SceneJson.IsEmpty()) ShowSequenceTime();
+    // Prepare targets before the single pose/physics frame; UpdateLooks' direct
+    // callers retain its standalone behavior without double-stepping static cloth.
+    UpdateLooks(DeltaSeconds, false);
+    AdvanceCharacterFrames(DeltaSeconds, SceneJson.IsEmpty() && !bPauseAnimations);
 	PlaceAttached();
 	UpdateItemLighting();
 }

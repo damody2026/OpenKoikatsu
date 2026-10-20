@@ -1095,6 +1095,18 @@ pub struct PrefabReflectionProbes { pub probes: Vec<PrefabReflectionProbe> }
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PrefabAnimatedMaterials { pub values: Vec<(i32, u32, u8, f32)> }
 
+/// Per-instance activeInHierarchy: a child cannot override a disabled ancestor.
+/// Time-of-day roots are normalized by the caller because SunLightInfo switches them at runtime.
+fn prefab_active_in_hierarchy(h: &crate::pose::PrefabHierarchy, active: &[bool], overrides: &HashMap<usize, bool>, node: i32) -> Option<bool> {
+    let mut n = node; let mut visible = true;
+    while n >= 0 {
+        let i = n as usize; let entry = h.nodes.get(i)?;
+        let value = if let Some(v) = overrides.get(&i) { *v } else { *active.get(i)? };
+        visible &= value; n = entry.parent;
+    }
+    Some(visible)
+}
+
 /// A cubemap's faces and mips (Unity Texture2D payload of a Cubemap: six faces one after another, each with its mip
 /// chain) as the atlas `PrefabReflectionProbe::atlas` describes; None for formats it does not decode.
 fn cubemap_atlas(tex: &unity_asset_decode::texture::Texture2D) -> Option<(u32, u32, Vec<u8>)> {
@@ -1665,6 +1677,75 @@ impl ParsedBundle {
     pub fn prefab_reflection_probes(&self,prefab:&str)->PrefabReflectionProbes {self.memo_prefab("prefab_reflection_probes",prefab,prefab,||self.prefab_reflection_probes_unity(prefab))}
     /// Material values of a prefab's settled Animators (recorded by `studio-nodes`).
     pub fn prefab_animated_materials(&self,prefab:&str)->PrefabAnimatedMaterials {self.memo_prefab("prefab_animated_materials",prefab,prefab,||self.prefab_animated_materials_unity(prefab))}
+    /// Per-renderer-instance activeInHierarchy, including static activeSelf and settled Animator curves.
+    /// SunLightInfo list roots remain eligible and are gated separately by the selected time of day.
+    pub fn prefab_renderer_visibility(&self, prefab: &str) -> Vec<(i32, bool)> {
+        self.memo_prefab("prefab_renderer_visibility", prefab, prefab, || {
+            for (gi, graph) in self.transform_graphs().iter().enumerate() {
+                let (h, go_node) = crate::pose::prefab_hierarchy_in(graph, prefab);
+                if h.nodes.is_empty() { continue; }
+                return self.with_serialized(|sers| {
+                    let Some(ser) = sers.get(gi) else { return Vec::new(); };
+                    let names = self.serialized_names.borrow();
+                    let file_key = |name: &str| name.replace('\\', "/").rsplit('/').next().unwrap_or(name).to_ascii_lowercase();
+                    let resolve = |from: usize, value: &unity_asset_core::UnityValue, class: i32| {
+                        let ptr = references::PPtr::read(value)?;
+                        let file = if ptr.file == 0 { from } else {
+                            let path = &sers.get(from)?.externals.get(ptr.file as usize - 1)?.path;
+                            let key = file_key(path); names.iter().position(|n| file_key(n) == key)?
+                        };
+                        let ser = sers.get(file)?;
+                        let info = ser.objects_of_type(class).into_iter().find(|i| i.path_id == ptr.path)?;
+                        Some((file, UnityObject::from_serialized_file(ser, info).ok()?))
+                    };
+                    let mut active = vec![true; h.nodes.len()];
+                    for info in ser.objects_of_type(1) {
+                        if let Some(&node) = go_node.get(&info.path_id) {
+                            if let Ok(o) = UnityObject::from_serialized_file(ser, info) {
+                                active[node as usize] = o.class.properties().get("m_IsActive").map(uv_bool).unwrap_or(true);
+                            }
+                        }
+                    }
+                    // Source SunLightInfo.Set changes these activeSelf flags for the chosen time.
+                    // Keep each listed root eligible here; _OKSunVisible gates it in the renderer.
+                    for info in self.prefab_sun_light(prefab).infos {
+                        for node in info.visible { if let Some(v) = active.get_mut(node as usize) { *v = true; } }
+                    }
+                    let mut overrides = HashMap::new();
+                    for info in ser.objects_of_type(95) {
+                        let Ok(a) = UnityObject::from_serialized_file(ser, info) else { continue; };
+                        let p = a.class.properties();
+                        if !p.get("m_Enabled").map(uv_bool).unwrap_or(true) { continue; }
+                        let Some(&anim_node) = p.get("m_GameObject").and_then(uv_pptr).and_then(|id| go_node.get(&id)) else { continue; };
+                        if prefab_active_in_hierarchy(&h, &active, &overrides, anim_node) != Some(true) { continue; }
+                        let Some((ctrl_file, ctrl)) = p.get("m_Controller").and_then(|v| resolve(gi, v, 91)) else { continue; };
+                        let below: HashMap<u32, usize> = (0..h.nodes.len()).filter_map(|node| {
+                            let mut names = Vec::new(); let mut n = node;
+                            while n != anim_node as usize {
+                                names.push(h.nodes[n].name.as_str());
+                                let parent = h.nodes[n].parent; if parent < 0 { return None; } n = parent as usize;
+                            }
+                            names.reverse(); Some((crate::anim::unity_string_to_hash(&names.join("/")) as u32, node))
+                        }).collect();
+                        for clip in crate::anim::controller_steady_clips(&ctrl) {
+                            let Some((_, c)) = resolve(ctrl_file, &clip, 74) else { continue; };
+                            for (path, attr, ty, values) in crate::anim::generic_clip_values(&c, 0.).0 {
+                                if ty == 1 && attr == crate::anim::unity_string_to_hash("m_IsActive") as u32 {
+                                    if let (Some(&node), Some(&value)) = (below.get(&path), values.first()) {
+                                        overrides.insert(node, value >= 0.5);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    h.mesh_nodes.iter().filter_map(|(_, node)| {
+                        prefab_active_in_hierarchy(&h, &active, &overrides, *node).map(|v| (*node, v))
+                    }).collect()
+                });
+            }
+            Vec::new()
+        })
+    }
     pub(crate) fn studio_pv_config(&self,prefab:&str)->Option<crate::pv::Config> {let _spot=crate::profile::spot("studio_pv_config");self.memo_prefab("studio_pv_config",prefab,prefab,||self.studio_pv_config_unity(prefab))}
     pub(crate) fn eye_look_config(&self,prefab:&str)->Option<crate::eye_look::Config> {let _spot=crate::profile::spot("eye_look_config");self.memo_prefab("eye_look_config",prefab,prefab,||self.eye_look_config_unity(prefab))}
     pub fn eye_material_settings(&self,main_data:&str)->HashMap<String,[f32;14]> {self.memo_prefab("eye_material_settings",main_data,main_data,||self.eye_material_settings_unity(main_data))}
@@ -2329,8 +2410,8 @@ impl ParsedBundle {
                         let Some(c)=uv_pptr(&clip).and_then(|id|find(74,id)) else {continue;};
                         // The clip's first frame: Studio loads the map with its Animators entering their default states,
                         // so a material curve that changes later (the live stage's volume-light cones stay at 0 brightness
-                        // for most of vl_center_intensity) shows its start. Only renderer material bindings: GameObject
-                        // visibility curves (the laser beams' spotBeam_active) are not applied.
+                        // for most of vl_center_intensity) shows its start. GameObject visibility is evaluated separately
+                        // by prefab_renderer_visibility and inherited by descendant renderer instances.
                         let (v0,_)=crate::anim::generic_clip_values(&c,0.);
                         for (path,attr,ty,v) in v0 {
                             if ty!=23&&ty!=137 {continue;}
@@ -10562,5 +10643,23 @@ mod shader_dxbc_probe {
             } }
             println!("{name}: {n} programs, form {} bytes", form.len());
         } });
+    }
+}
+
+#[cfg(test)]
+mod prefab_renderer_visibility_tests {
+    use super::*;
+    #[test]
+    fn active_curves_inherit_without_overriding_disabled_ancestors() {
+        let h = crate::pose::PrefabHierarchy { nodes: [-1, 0, 1, 0].iter().map(|p| crate::pose::PrefabNode { parent: *p, ..Default::default() }).collect(), ..Default::default() };
+        let active = [true, true, true, true];
+        let mut overrides = HashMap::from([(1, false)]);
+        assert_eq!(prefab_active_in_hierarchy(&h, &active, &overrides, 2), Some(false));
+        assert_eq!(prefab_active_in_hierarchy(&h, &active, &overrides, 3), Some(true));
+        overrides.insert(2, true);
+        assert_eq!(prefab_active_in_hierarchy(&h, &active, &overrides, 2), Some(false));
+        overrides.insert(1, true);
+        assert_eq!(prefab_active_in_hierarchy(&h, &[true, false, true, true], &overrides, 2), Some(true));
+        assert_eq!(prefab_active_in_hierarchy(&h, &[false, true, true, true], &overrides, 2), Some(false));
     }
 }

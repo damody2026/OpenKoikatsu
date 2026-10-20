@@ -1838,6 +1838,11 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 			UE_LOG(LogTemp, Warning, TEXT("OK studio compare: %s not opened: %s"), *Scenes[State->Index], *LoadError);
 			return true;
 		}
+		// Diagnostic ablations change only this comparison's in-memory document.
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_BLOOM")) == TEXT("0")) Self->Document->Post.bBloom = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_DEPTH")) == TEXT("0")) Self->Document->Post.bDepthOfField = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FILTER")) == TEXT("0")) Self->Document->Post.ColorFilterIntensity = 0.f;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_AO")) == TEXT("0")) Self->Document->Post.bAmbientOcclusion = false;
 		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover).
 		TArray<FString> Hide;
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));
@@ -2195,7 +2200,7 @@ void UOKStudioGame::RunPostTest(bool bExit)
 		}
 		auto Check = [&State](bool bOk, const FString& What) { State->Lines.Add(FString::Printf(TEXT("%s  %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), *What)); if (!bOk) ++State->Failures; };
 		FOKScenePost& Post = Self->Document->Post;
-		auto Picture = [&](const FTransform& View, float Fov, const TCHAR* Name)
+		auto Picture = [&](const FTransform& View, float Fov, const TCHAR* Name, TArray<FColor>* OutPixels = nullptr)
 		{
 			Self->SceneActor->PlaceBackground(View, Fov);
 			FPostProcessSettings Settings = Self->Viewer->GetCameraComponent()->PostProcessSettings;
@@ -2209,6 +2214,7 @@ void UOKStudioGame::RunPostTest(bool bExit)
 				FImageUtils::PNGCompressImageArray(320, 180, TArrayView64<const FColor>(Pixels.GetData(), Pixels.Num()), Png);
 				FFileHelper::SaveArrayToFile(Png, *(FPaths::ProjectSavedDir() / FString::Printf(TEXT("OKStudio/post_%s.png"), Name)));
 			}
+			if (OutPixels) *OutPixels = Pixels;
 			FLinearColor M(0, 0, 0, 0);
 			for (const FColor& C : Pixels) M += FLinearColor(C.R, C.G, C.B, 0);
 			return Pixels.Num() ? M / float(Pixels.Num()) : M;
@@ -2217,12 +2223,21 @@ void UOKStudioGame::RunPostTest(bool bExit)
 		// with the same view right after one another; the effect is in the post-process material (no render state).
 		const FTransform Far(FRotator(0.f, 0.f, 0.f), FVector(-4000.f, 0.f, 100.f));
 		Post.bFog = false;
-		const FLinearColor FogOff = Picture(Far, 4.f, TEXT("fog_off"));
+		TArray<FColor> FogOffPixels, FogOnPixels;
+		const FLinearColor FogOff = Picture(Far, 4.f, TEXT("fog_off"), &FogOffPixels);
 		Post.bFog = true;
 		Post.FogColor = FLinearColor(1.f, 0.f, 0.f, 1.f);
-		const FLinearColor FogOn = Picture(Far, 4.f, TEXT("fog_on"));
+		const FLinearColor FogOn = Picture(Far, 4.f, TEXT("fog_on"), &FogOnPixels);
 		Post.bFog = false;
-		Check(FogOn.R > FogOff.R + 3.f && FogOn.G < FogOff.G, FString::Printf(TEXT("fog: red rises (%.0f -> %.0f), green falls (%.0f -> %.0f)"), FogOff.R, FogOn.R, FogOff.G, FogOn.G));
+        // The sky is intentionally exempt from distance fog. Whole-image means
+        // dilute the actual geometry response when the fixture covers little of the view.
+        int32 FogGeometryPixels = 0;
+        if (FogOffPixels.Num() == 320 * 180 && FogOnPixels.Num() == FogOffPixels.Num())
+            for (int32 Pixel = 0; Pixel < FogOffPixels.Num(); ++Pixel)
+                if (int32(FogOnPixels[Pixel].R) - FogOffPixels[Pixel].R >= 5
+                    && int32(FogOnPixels[Pixel].G) - FogOffPixels[Pixel].G <= -5) ++FogGeometryPixels;
+        Check(FogGeometryPixels >= 100, FString::Printf(TEXT("fog: at least 100 geometry pixels gain red and lose green by 5; actual=%d, means R %.0f -> %.0f G %.0f -> %.0f"),
+            FogGeometryPixels, FogOff.R, FogOn.R, FogOff.G, FogOn.G));
 		const FTransform Near(FRotator(-10.f, 0.f, 0.f), FVector(-120.f, 0.f, 140.f));
 		Post.bAmbientOcclusion = false;
 		const FLinearColor AoOff = Picture(Near, 40.f, TEXT("ao_off"));
@@ -2230,6 +2245,25 @@ void UOKStudioGame::RunPostTest(bool bExit)
 		Post.AmbientOcclusionTint = FLinearColor::Black;
 		Post.AmbientOcclusionRadius = 0.3f;
 		const FLinearColor AoOn = Picture(Near, 40.f, TEXT("ao_on"));
+        Post.AmbientOcclusionTint = FLinearColor(.53125f, .5280878f, .5280878f, 1.f);
+        FPostProcessSettings TintSettings;
+        Post.ApplyTo(TintSettings);
+        bool bTintBound = false;
+        for (const FWeightedBlendable& Blendable : TintSettings.WeightedBlendables.Array)
+            if (auto* Material = Cast<UMaterialInstanceDynamic>(Blendable.Object))
+            {
+                FLinearColor Tint;
+                if (Material->GetVectorParameterValue(FMaterialParameterInfo(TEXT("AOTint")), Tint))
+                    bTintBound = Tint.Equals(Post.AmbientOcclusionTint, 1e-6f);
+            }
+        Check(bTintBound, TEXT("AO global tint preserves native raw shader RGB without a second gamma decode"));
+        const FLinearColor AoTinted = Picture(Near, 40.f, TEXT("ao_tinted"));
+        Check(AoTinted.R + AoTinted.G + AoTinted.B > AoOn.R + AoOn.G + AoOn.B + 1.f
+            && AoTinted.R + AoTinted.G + AoTinted.B < AoOff.R + AoOff.G + AoOff.B - 1.f,
+            TEXT("native mid-gray AO tint retains contact shading between black AO and disabled AO"));
+        Post.AmbientOcclusionTint = FLinearColor::White;
+        const FLinearColor AoWhite = Picture(Near, 40.f, TEXT("ao_white"));
+        Check(AoWhite.Equals(AoOff, 1.f), TEXT("white AO tint is the neutral multiplicative limit"));
 		Post.bAmbientOcclusion = false;
 		Check(AoOn.R + AoOn.G + AoOn.B < AoOff.R + AoOff.G + AoOff.B - 3.f, FString::Printf(TEXT("ambient occlusion: darker (%.0f -> %.0f)"), AoOff.R + AoOff.G + AoOff.B, AoOn.R + AoOn.G + AoOn.B));
 		const FTransform Up(FRotator(35.f, 0.f, 0.f), FVector(-150.f, 0.f, 120.f));
@@ -3058,6 +3092,7 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		Document->Post.bBloom = true; Document->Post.BloomIntensity = 2.5f;
 		Document->Post.bVignette = true; Document->Post.VignetteIntensity = 0.7f;
 		Document->Post.bDepthOfField = true; Document->Post.FocalDistance = 250.f;
+		Document->Post.ShaderType = 0;
 		Tick(0.f);
 		const FPostProcessSettings& S = Viewer->GetCameraComponent()->PostProcessSettings;
 		const bool bSourceBloom = OKStudioSourceBloomState() == TEXT("ready") && S.BloomIntensity == 0.f && S.WeightedBlendables.Array.Num() >= 8;
@@ -3066,6 +3101,13 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		UOKSceneDocument* PostCopy = NewObject<UOKSceneDocument>();
 		FString PostError;
 		Check(PostCopy->FromJson(Document->ToJson(), PostError) && PostCopy->Post.bBloom && FMath::IsNearlyEqual(PostCopy->Post.VignetteIntensity, 0.7f), TEXT("post-processing is saved with the scene"));
+        Check(PostCopy->Post.ShaderType == 0 && PostCopy->Post.ShaderGlobals().FindRef(TEXT("_KanoVerShift")).R == 0.f,
+            TEXT("saved Studio mode zero overrides a card's Koikano mode"));
+        PostCopy->Post.ShaderType = 2;
+        Check(PostCopy->Post.ShaderGlobals().FindRef(TEXT("_KanoVerShift")).R == 1.f,
+            TEXT("nonzero Studio shader modes follow ChaShader.ChangeShaderType"));
+        Check(!FOKScenePost().ShaderGlobals().Contains(TEXT("_KanoVerShift")),
+            TEXT("legacy scenes without a shader mode preserve the card default"));
 		Document->Post = FOKScenePost();
 		Tick(0.f);
 		const float SavedDuration = Document->Duration;
@@ -3129,6 +3171,36 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		const bool bMoved = PA2 && PA2->PoseMode == 3 && PA2->Session.BoneEuler(TEXT("cf_j_arm00_L"), E1) && !E1.Equals(E0, 0.5f);
 		Check(bPicked && bE0 && bMoved && !SceneActor->Errors.Contains(A), FString::Printf(TEXT("library Studio animation %s plays (%d animations, arm %s -> %s) %s"),
 			Walk != INDEX_NONE ? *Catalog.Anims[Walk].Name : TEXT("?"), Catalog.Anims.FilterByPredicate([](const FOKStudioAnim& X) { return !X.File.IsEmpty(); }).Num(), *E0.ToString(), *E1.ToString(), SceneActor->Errors.Contains(A) ? *SceneActor->Errors[A] : TEXT("")));
+        if (PA2)
+        {
+            const bool ClockPreviousPause = SceneActor->bPauseAnimations;
+            const float ClockPreviousSpeed = Document->Find(A)->Character.Speed;
+            const float ClockHeldPhase = PA2->AnimPhase;
+            const double ClockHeldItems = Document->ItemAnimationSeconds;
+            SceneActor->bPauseAnimations = true;
+            for (int32 FrameIndex = 0; FrameIndex < 12; ++FrameIndex) SceneActor->Tick(1.f / 60.f);
+            Check(PA2->AnimPhase == ClockHeldPhase && Document->ItemAnimationSeconds == ClockHeldItems,
+                TEXT("paused Studio character frames preserve clip and item clocks"));
+            Document->Find(A)->Character.Speed = 0.f;
+            SceneActor->bPauseAnimations = false;
+            SceneActor->Tick(1.f / 60.f);
+            Check(PA2->AnimPhase == ClockHeldPhase && Document->ItemAnimationSeconds > ClockHeldItems,
+                TEXT("zero character speed holds its clip while the scene frame continues"));
+            // A native FK setter only queues the source change. A static actor
+            // without an animation player must still receive the finishing frame.
+            PA2->SetPoseMode(0);
+            const FVector ClockStaticFk(12.f, 18.f, -35.f);
+            const bool ClockFkQueued = PA2->Session.SetFk({ TEXT("cf_j_arm00_L") }, { ClockStaticFk });
+            PA2->bUserPoseDirty = false;
+            SceneActor->AdvanceCharacterFrames(1.f / 60.f, false);
+            FVector ClockStaticActual;
+            Check(ClockFkQueued && PA2->Session.BoneEuler(TEXT("cf_j_arm00_L"), ClockStaticActual)
+                && ClockStaticActual.Equals(ClockStaticFk, .01f),
+                TEXT("held static Studio character receives the native pose and physics finishing pass"));
+            PA2->Session.SetFk({}, {});
+            Document->Find(A)->Character.Speed = ClockPreviousSpeed;
+            SceneActor->bPauseAnimations = ClockPreviousPause;
+        }
 		Document->Find(A)->Character.StudioAnimeNo = -1;
 		Document->NotifyChanged();
 		SyncNow();

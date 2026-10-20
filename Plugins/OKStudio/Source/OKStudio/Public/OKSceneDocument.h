@@ -462,6 +462,10 @@ struct OKSTUDIO_API FOKScenePost
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
 	int32 RampG = -1;
 
+	/** SceneInfo.shaderType: 0 selects Koikatsu, nonzero Koikano; < 0 preserves the card setting. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
+	int32 ShaderType = -1;
+
 	/** Studio's shader globals for these settings (SystemButtonCtrl.SetAmbientShadow / SetLineColor / SetLineWidth). */
 	TMap<FName, FLinearColor> ShaderGlobals() const;
 
@@ -528,7 +532,7 @@ struct OKSTUDIO_API FOKScenePost
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
 	FLinearColor FogColor = FLinearColor(0.9f, 0.9f, 0.9f, 1.f);
 
-	/** Studio's ambient occlusion (SceneInfo.enableAOE: Amplify Occlusion, its Tint sRGB and Radius in metres). */
+	/** Studio's ambient occlusion (SceneInfo.enableAOE: Amplify Occlusion, raw shader Tint and Radius in metres). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
 	bool bAmbientOcclusion = false;
 

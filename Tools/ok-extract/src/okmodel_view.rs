@@ -352,15 +352,16 @@ impl ModelView {
         // too; every part under a time's list is marked with the times it shows at (mark_sun_visible).
         let sun = self.parsed.prefab_sun_light(prefab);
         let renderers = self.parsed.prefab_renderer_settings(prefab);
+        let renderer_visibility = self.parsed.prefab_renderer_visibility(prefab);
         let has_time_parts = sun.infos.iter().any(|i| !i.visible.is_empty());
         let has_shadow_only = renderers.iter().any(|r| r.1 == 3 && r.3);
-        if !include_disabled && (has_time_parts || has_shadow_only) {
+        if !include_disabled && (has_time_parts || has_shadow_only || renderer_visibility.iter().any(|(_, v)| *v)) {
             let h = self.hierarchy(prefab);
             let have: BTreeSet<(i64, usize)> = meshes.iter().map(|m| (m.path_id, m.submesh_index)).collect();
             for m in self.prefab_meshes(prefab, true) {
                 if have.contains(&(m.path_id, m.submesh_index)) { continue; }
                 if h.mesh_nodes.iter().any(|(id, n)| *id == m.path_id &&
-                    (sun_mask(&sun, &h, *n) != 0 || renderers.iter().any(|r| r.0 == *n && r.1 == 3 && r.3))) { meshes.push(m); }
+                    (renderer_visibility.iter().any(|(node, v)| node == n && *v) || sun_mask(&sun, &h, *n) != 0 || renderers.iter().any(|r| r.0 == *n && r.1 == 3 && r.3))) { meshes.push(m); }
             }
         }
         if profile { eprintln!("ok-extract: PROFILE okmodel meshes {:.1}ms", t.elapsed().as_secs_f64() * 1000.0); }
@@ -398,7 +399,7 @@ impl ModelView {
             if let (Some(mat), Some((_, casting, layer, enabled))) = (m.mat.as_mut(), renderers.iter().find(|r| r.0 == node)) {
                 mat.floats.insert("_OKRendererShadowMode".into(), *casting as f32);
                 mat.floats.insert("_OKRendererLayer".into(), *layer as f32);
-                mat.floats.insert("_OKRendererEnabled".into(), u8::from(*enabled) as f32);
+                mat.floats.insert("_OKRendererEnabled".into(), u8::from(*enabled && renderer_visibility.iter().find(|(n, _)| *n == node).is_none_or(|(_, v)| *v)) as f32);
             }
         };
         let mut instances: Vec<ExtractedMesh> = Vec::new();
@@ -594,4 +595,28 @@ mod item_fk_tests {
             Ok::<(), String>(())
         }).unwrap();
     }
+}
+
+#[cfg(test)]
+#[test]
+#[ignore = "installed game and base library: settled map visibility source oracle"]
+fn stage_1901_renderer_visibility_matches_source() {
+    let lib = std::env::var_os("OK_TEST_LIBRARY").map(PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1"));
+    let source = crate::unity::parse_bundle_cached(std::fs::read(crate::test_support::game_path("abdata/studio/map/livestage_s.unity3d")).unwrap());
+    let expected = source.prefab_renderer_visibility("Map");
+    assert!(expected.iter().any(|(_, visible)| *visible));
+    assert!(expected.iter().filter(|(_, visible)| !visible).count() >= 114);
+    with_library(&lib, || {
+        let model = ModelView::open(&lib, crate::oklib::id_from_hex_pub("6eb3180200000000fb5732f44f4b4331").unwrap())?;
+        assert_eq!(model.parsed.prefab_renderer_visibility("Map"), expected);
+        let session = model.prefab_session("Map", false)?;
+        let beam_parts: Vec<_> = session.parts.iter().filter(|p| p.source_material.as_ref().is_some_and(|m| m.shader == "Custom/StandardDouble")).collect();
+        let disabled_beams = beam_parts.iter().filter(|p| p.source_material.as_ref().unwrap().floats.get("_OKRendererEnabled") == Some(&0.)).count();
+        assert!(disabled_beams >= 6, "inactive beam instances are hidden");
+        assert!(disabled_beams < beam_parts.len(), "shared shader is not globally disabled");
+        println!("beam material parts={} disabled={disabled_beams}", beam_parts.len());
+        assert!(session.parts.iter().any(|p| p.source_material.as_ref().is_some_and(|m| m.floats.get("_OKRendererEnabled") == Some(&1.))));
+        println!("visibility source MATCH instances={} white-beam-parts={}", expected.len(), beam_parts.len());
+        Ok(())
+    }).unwrap();
 }

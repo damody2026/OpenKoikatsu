@@ -3748,3 +3748,38 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜新增身形回歸需先查現有API**：3800測試誤將apply_shape／apply_shape_live當成單一參數且回傳Result，導致測試E0061／E0599未編譯。實際需同時傳body與face且回傳()；修正後重跑，失敗log保留，不以正式lib建置成功代替測試通過。
 
 - **2026-10-21｜直接啟動測試binary要等新編譯完成**：3800第一輪6331回歸在cargo更新測試binary前啟動，log仍顯示883 filtered而新版本應885。等待最新419項suite建完後重跑具名測試，使用3800-latest-6331-pose-regression.log，避免將舊binary結果列為新版本驗收。
+
+- **2026-10-21｜1901 後製排除要作用於實際SceneCapture設定**：ShowFlag.PostProcessing 0沒有關掉比較器另建SceneCapture的自有後製，圖片近乎相同不能當作無後製結果；改用只影響比較文件的BLOOM／DEPTH／FILTER診斷開關。隱藏Legacy粒子、volumeLight、spotLight各次診斷未移除右下白光，不能據此關閉正式場景特效當修正。
+- **2026-10-21｜Unity path_id僅在各serialized file內有效**：1901 Python探針把bundle所有物件按path_id放同一字典，Shader引用誤對到同ID mesh；改從material所屬assets_file.objects解析。同bundle可能含多個serialized file，不能用全域path_id表。
+
+- **2026-10-21｜地圖顯示根不一定等於清單prefab名**：1901 ray probe以清單LiveStage開模型，回報no meshes；該地圖實際root為Map。改取模型已記錄的shown prefab，不將清單名稱直接當渲染root，也不把探針失敗當成場景缺模型。
+
+- **2026-10-21｜1901 原作動畫開關遺漏**：舊版只取 Renderer 材質曲線，註解明確略過 GameObject m_IsActive，導致六組光束父物件原作為0仍顯示。改以完整 FileID／PathID 解析控制器與clip，套用 activeSelf 並沿父鏈取 activeInHierarchy，逐renderer instance保留；重新記錄90個共用Studio模型並提高session cache revision。不能改曝光或依shader名稱全隱藏，因為同shader可能也用於正常顯示的其他光束。
+- **2026-10-21｜原作oracle不可猜測測試環境或部件數**：第一輪用OK_GAME_ROOT啟動依賴test_support的oracle，實際契約是OK_TEST_GAME_ROOT，因而找不到來源檔。第二輪把六組父開關誤當成六個材質部件；原作有114個子renderer，Custom/StandardDouble也被其他光束共用。改核對完整來源／共用庫node可見性向量，另驗受影響材質instance確實隱藏且正常部件仍顯示；保留失敗log，不把不同shader共用部件數硬套成父物件數。
+
+- **2026-10-21｜動畫開關通過不能代替正式出圖驗收**：1901初版補齊六組Animator父開關後，正式圖片右下白塊仍存在。來源檢查確認共用mesh的spotBeam_geo接點activeSelf=False；ModelView卻把已載入的共享mesh複製到所有hierarchy接點。修正可見性需同時保留每個instance的靜態activeSelf與祖先狀態，不能只管動畫覆寫；SunLightInfo控制的root另保持可切換資格。初版出圖保留在Verify-Light1901Accepted，不能當最終成功圖。
+
+- **2026-10-21｜同名node與同shader都不是renderer身份**：額外map_animated_materials探針曾以spotBeam_geo名稱斷言全部關閉；原作存在同名接點及不同材質的正常啟用光束，該斷言失敗並非最終1375個node向量來源比對失敗。移除這項名稱猜測，保留專項逐node完整向量oracle與真實前後圖；後續不可把name／shader當唯一renderer identity。
+
+- **2026-10-21｜LFS純追蹤副本更新須核對payload與索引**：更新Clean1268的90個模型後，payload已符合新HEAD的SHA-256，但skip-smudge checkout的stat/index仍將它們列為modified，最初clean斷言失敗。先逐檔核對新commit的LFS OID，再只對這90條既有追蹤路徑重新套用LFS clean filter更新索引；確認cached diff及git status皆空，再核對全部共用庫LFS payload。不能用assume-unchanged或忽略dirty狀態假裝乾淨。
+
+- **2026-10-21｜4432探針必須先篩選物件型別**：初版JSON探針用「含fk欄位」當角色條件，把大量道具也輸出，且把某些children的陣列誤當dict而失敗。改為遞迴處理dict／list，只選kind=Character，僅輸出服裝、啟用群組與計數，完整資料留本機檔。不得用截斷的大量輸出當角色資料驗收。
+- **2026-10-21｜Studio不能把動畫相位暫停當成物理dt=0**：原AdvanceAnimations固定傳ApplyPoseFrame(0,false)，比較暫停更完全略過角色更新；固定FK腿部後衣物碰撞因此沒有收到經過時間。改由場景每tick統一送一次真實dt，動畫相位可獨立保持；static FK同樣求解，頭部追視先準備target，避免static角色額外步進第二次。需實拍驗證衣物，不可只驗動畫phase有變。
+
+- **2026-10-21｜6964調查重複誤用Windows rg路徑萬用字元**：數次把KKForge*／KKRuntime*直接寫在路徑參數而報os error 123，也曾猜測不存在的檔案位置。改用既有父目錄配合-g篩選；先以rg --files確認精確路徑再讀取。失敗搜尋不能當成程式不存在。
+
+- **2026-10-21｜6964場景shaderType遺漏**：來源SceneInfo.shaderType=0，但角色卡依遊戲system.xml的shaderType=1建立；Studio匯入只處理ramp／陰影色，未把SetShaderType對應的_KanoVerShift帶入，因而繼續用錯的渲染模式。補保存場景ShaderType並透過既有全域材質binding覆寫；缺省=-1保留舊檔／普通卡設定。須以實際前後圖確認影響，不預先將此單一修正當成全部暗部根因。
+
+- **2026-10-21｜6964診斷編譯C4335**：直接decode含CRLF的bytes再以Windows text mode寫回，產生CRCRLF而被編譯器視為Mac格式。修正為原始bytes去除重複CR；後續文字編輯先統一換行或維持bytes，不能把未正規化的CRLF再套系統換行轉換。
+
+- **2026-10-21｜6964環境遮蔽Tint錯誤解碼**：AO後製對保存的Tint再次做sRGB→linear，將6964約0.53錯壓成約0.24，暗部乘色過黑。原作AmplifyOcclusionBase將Tint直接送Shader.SetGlobalColor(_AO_Levels)，同版UnityEngine.Shader可見它直接轉呼叫SetGlobalVectorImpl，沒有色彩轉換。修正只取消這一次錯誤解碼，保留AO強度、半徑與開關；停用AO只是診斷，不能當正式修復。
+
+- **2026-10-21｜6964虹膜來源Linear標記遺失**：原作探針的create_eye RenderTexture與直接mip0讀回一致；舊抽取虹膜有效區RGB誤差約40/255。虹膜先翻列再用PNG bytes重新核對來源，導致Linear旗標失配、以sRGB再次解碼。改讓虹膜與眼白共用「來源bytes＋列方向＋color_space」一次解析，先保留metadata再翻列合成；Session cache revision提升19。先前只有AO／模式修正的圖與14景中途執行不能當最終虹膜驗收，已終止自己持有的過期比較程序。
+
+- **2026-10-21｜6964具名oracle新增檔案路徑需隨工作目錄調整**：在Tools/ok-extract執行時仍以專案根相對路徑寫lib.rs，導致FileNotFound且測試尚未新增就啟動cargo。修正使用絕對路徑，重新編譯並要求具名測試實際1 passed；不能把0 tests或舊binary當作驗收。來源貼圖探針亦先列實際產物，原始Texture2D不可讀時使用linear float readback，不假設source.png必存在。
+
+- **2026-10-21｜6964驗收不應把既有問題混成新修正失敗**：PostTest舊霧斷言以全畫面平均紅色上升3判斷，天空佔大面積使均值僅+1；實際1736個幾何像素紅升／綠降至少5。改以至少100個受影響像素驗證方向與幅度，不改霧正式公式。全庫轉卡首輪則沿用本機未追蹤私有模型，pack未含該mod，乾淨庫gaps=2；依既有共用庫政策改由純追蹤庫轉卡，pack記錄1個私有模型／3查詢與實體zip條目，CLI容量25.2%通過。不能提交私有模型填補乾淨庫，也不能把首輪容量失敗或DIFFERENT記為PASS。
+
+- **2026-10-21｜6964乾淨庫檢查會寫入追蹤的missing.txt**：LFS payload全核對後git clean斷言因前輪失敗CLI更新missing.txt而失敗。先將該輪缺口檔原樣留存Saved/OKStudio/6964-clean-missing-before-restoration.txt，再只還原自己測試寫入的該追蹤檔並重新核對。不可忽略dirty或把失敗證據刪掉。
+
+- **2026-10-21｜6964乾淨庫是sparse checkout**：提交後的驗證器假設Clean1268有Plugins實體來源檔而FileNotFound；該副本刻意只展開共用資源。改以git物件核對來源blob，並以git hash-object套用同一clean filter核對目前工作檔，而非將稀疏路徑不存在判成程式遺漏。多指令shell也須檢查每一步退出碼，不以最後一個git status的0掩蓋前面Python失敗。

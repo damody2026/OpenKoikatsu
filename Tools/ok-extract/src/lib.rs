@@ -3165,7 +3165,7 @@ fn resolve_head_detail_texture(
     }
     let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
     let direct = ln.contains("mayuge") || ln.contains("eyebrow") || ln.contains("eyeline");
-    let texture = if ln.contains("hitomi")&&!ln.contains("02") {
+    let texture = if ln.contains("hitomi") {
             // Compose directly from decoded source rows. Re-encoding a 4K/8K
             // flipped PNG before writing a 512 RT duplicates the costly work.
             runtime_row_source_with_color_space(game_root,&entry,&entry.main_ab,&name_refs)
@@ -3180,7 +3180,7 @@ fn resolve_head_detail_texture(
             png_in_runtime_row_order(game_root,&entry,&entry.main_ab,&name_refs).unwrap_or(png)
         }else{png},false,None))
     };
-    if let Some((png,white_flip,white_color_space)) = texture {
+    if let Some((png,source_flip,source_color_space)) = texture {
         if ln.contains("nose")
             || ln.contains("eyeline")
             || ln.contains("mayuge")
@@ -3209,9 +3209,9 @@ fn resolve_head_detail_texture(
             // Blits into the RT (ChaControl.cs:10758 / CustomTextureCreate.cs:186).
             // The source `cw_t_sirome_kage_*` keeps the white oval at the top; the
             // RT the sclera mesh samples has it at the bottom. Same V flip as face.
-            let source_linear=white_color_space==Some(0);
+            let source_linear=source_color_space==Some(0);
             let bake_start=Instant::now();
-            let baked = bake_eye_white_create_rt(&png, card.white_base_color, card.white_sub_color, source_linear,white_flip)
+            let baked = bake_eye_white_create_rt(&png, card.white_base_color, card.white_sub_color, source_linear,source_flip)
                 .or_else(|| white_on_black_alpha(&png, tint));
             if std::env::var_os("OK_APPEARANCE_PROFILE").is_some(){eprintln!("APPEARANCE_PROFILE phase=eye_white_bake part={} png_bytes={} source_size={:?} ms={:.3}",mesh.name,png.len(),png.get(16..24).map(|b|(u32::from_be_bytes(b[..4].try_into().unwrap()),u32::from_be_bytes(b[4..].try_into().unwrap()))),bake_start.elapsed().as_secs_f64()*1000.);}
             mesh.texture_png = baked;
@@ -3292,10 +3292,13 @@ fn resolve_head_detail_texture(
                     );
                 }
             }
-            let base_name=bases.first().unwrap_or(&entry.main_tex);
             if std::env::var_os("OK_APPEARANCE_PROFILE").is_some(){eprintln!("APPEARANCE_PROFILE phase=iris_inputs part={} ms={:.3}",mesh.name,iris_started.elapsed().as_secs_f64()*1000.);}
             let color_started=Instant::now();
-            let mut source_linear=face_base_color_space(game_root,Some(&entry),base_name,&png)==Some(0);
+            // Carry the selected Texture2D import flag with its bytes. The iris
+            // rows below are flipped for the create RT, so a second byte-identity
+            // lookup after that flip cannot recover the source colour space.
+            let mut source_linear=source_color_space==Some(0);
+            let png=if source_flip {flip_runtime_blit_v(png)} else {png};
             if std::env::var_os("OK_APPEARANCE_PROFILE").is_some(){eprintln!("APPEARANCE_PROFILE phase=iris_color_space part={} ms={:.3}",mesh.name,color_started.elapsed().as_secs_f64()*1000.);}
             let png=if let Some(overlay)=ksox_overlay_png(card,outfit,if right {9}else{7}) {
                 let encoded=if source_linear {linear_texture_to_srgb_png(&png).unwrap_or(png)}else{png};
@@ -15704,6 +15707,44 @@ mod tests {
         let output=bake_iris(&input,&pupil,Some(&grad),None,None,[1.0;4],[1.0;4],0.5,0.5).unwrap();
         let image=crate::teximg::load_from_memory(&output).unwrap().to_rgba8();let pixel=image.get_pixel(256,256).0;
         for (actual,expected) in pixel.iter().zip([85u8,185,42,204]) {assert!((*actual as i16-expected as i16).abs()<=2,"native shader {pixel:?}");}
+    }
+
+    #[test]
+    #[ignore="native selected-card create_eye readback: OK_IRIS_CARD and OK_IRIS_NATIVE_PREFIX"]
+    fn selected_iris_create_rt_matches_native() {
+        let game=crate::test_support::game_path("");
+        let card=std::path::PathBuf::from(std::env::var("OK_IRIS_CARD").expect("OK_IRIS_CARD"));
+        let prefix=std::env::var("OK_IRIS_NATIVE_PREFIX").expect("OK_IRIS_NATIVE_PREFIX");
+        let session=crate::session::open(&game,Some(&card),0).unwrap();
+        let mut rows=Vec::new();
+        for part in session.parts.iter().filter(|p|p.eye_draw.as_ref().is_some_and(|d|d.kind==1)) {
+            let side=usize::from(part.name.to_ascii_lowercase().contains("_r"));
+            let native=image::open(format!("{prefix}.eye{side}.pure.png")).unwrap().to_rgba8();
+            let actual=crate::teximg::load_from_memory(part.png.as_ref().expect("resolved iris RT")).unwrap().to_rgba8();
+            assert_eq!(native.dimensions(),actual.dimensions());
+            let mut error=0u64;
+            let mut count=0u64;
+            let mut coverage=0u64;
+            for (n,a) in native.pixels().zip(actual.pixels()) {
+                if (n[3]>=128)!=(a[3]>=128){
+                    coverage+=1;
+                }
+                if n[3]>=128 {
+                    for c in 0..3{
+                        error+=n[c].abs_diff(a[c]) as u64;
+                        count+=1;
+                    }
+                }
+            }
+            let mae=error as f64/count.max(1) as f64;
+            eprintln!("IRIS_NATIVE part={} rgb_mae_255={mae:.6} coverage_differences={coverage}",part.name);
+            rows.push(serde_json::json!({"part":part.name,"rgb_mae_255":mae,"coverage_differences":coverage}));
+            assert!(count>1000 && mae<2.0 && coverage<32,"selected iris RT differs from native: {} mae={mae} coverage={coverage}",part.name);
+        }
+        assert_eq!(rows.len(),2,"both actual iris renderers required");
+        if let Ok(path)=std::env::var("OK_IRIS_REPORT"){
+            std::fs::write(path,serde_json::to_vec_pretty(&rows).unwrap()).unwrap();
+        }
     }
 
     #[test]
