@@ -495,12 +495,14 @@ fn appointment_cancel(r: &Value) -> Result<Value, String> {
 fn rival_named(r: &Value) -> Result<Value, String> {
     let mut rel = rel_of(r.get("relation"))?;
     let before = rel.clone();
-    let said = s(r, "said");
+    // The girl he told her about himself, as the judge read his line (told_about); the rules only compare names.
+    let told = s(r, "told");
     let (j, rival) = bias::peak_jealousy(&rel);
     let names = r.get("names").cloned().unwrap_or(json!({}));
     let who = names.get(&rival).and_then(Value::as_str).unwrap_or("");
     let mut fx = Effects::default();
-    let named = !rival.is_empty() && !who.is_empty() && said.contains(who);
+    let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
+    let named = !rival.is_empty() && !who.is_empty() && !told.is_empty() && (one(&told) == one(who) || one(who).contains(&one(&told)) || one(&told).contains(&one(who)));
     if named {
         let mark = j.max(61.0).round();
         let had = rel.flags.iter().find_map(|f| f.strip_prefix("confront_j:").and_then(|v| v.parse::<f32>().ok())).unwrap_or(0.0);
@@ -720,56 +722,8 @@ fn birthday_end(r: &Value) -> Result<Value, String> {
     Ok(json!({"effects": fx.into_value()}))
 }
 
-/// Words that ask someone over: "Alter，妳也過來一起聊吧", "叫九十九一起來".
 
-/// He calls a girl nearby by name and asks her over: she is invited, whatever the girl he is talking to thinks of it
-/// (her reply is her feelings; the invitation is his). Names match by any part of two or more letters ("Alter" for
-/// "Alter Arthuria", "狂死香" for "凶鳥 狂死香") or a given alias. Request: said, nearby [{name, aliases []}]. Answer:
-/// invite [name].
-/// The ways a girl can be called: her name's words, aliases, and for a Chinese name of three letters or more its given
-/// and family parts (日代千鶴: 千鶴, 日代), all in one script.
-fn called_by(girl: &Value) -> Vec<String> {
-    let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
-    let name = s(girl, "name");
-    let aliases = girl.get("aliases").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str);
-    let parts: Vec<String> = name.split_whitespace().chain(aliases).chain(std::iter::once(name)).map(|p| one(p)).collect();
-    let mut called_by: Vec<String> = parts.clone();
-    for p in &parts {
-        let chars: Vec<char> = p.chars().collect();
-        if chars.len() >= 3 && !chars.iter().any(char::is_ascii) {
-            for n in 2..chars.len() {
-                called_by.push(chars[chars.len() - n..].iter().collect());
-                called_by.push(chars[..n].iter().collect());
-            }
-        }
-    }
-    called_by.retain(|p| p.chars().count() >= 2);
-    called_by
-}
 
-/// He addresses the girl he is talking to by another girl's name ("爱莉希雅，你也在这里吃饭啊" to Arthuria): the name
-/// another girl is called by, at the start of his line as a call (in the first clause, little more than the name, or
-/// right after a greeting), and not her own. Request: said, her {name, aliases}, others [{name, aliases}].
-/// Answer: called (the other girl's name, "" when none).
-fn misnamed(r: &Value) -> Result<Value, String> {
-    let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
-    let said = one(s(r, "said"));
-    let mine = r.get("her").map(called_by).unwrap_or_default();
-    let clauses: Vec<&str> = said.split(['。', '！', '？', '!', '?', '，', ',', '；', ';', '…', '\n', '、']).map(str::trim).filter(|c| !c.is_empty()).collect();
-    // The call: the first clause, or the second after a short greeting ("嗨，爱莉希雅").
-    let calls: Vec<&str> = clauses.iter().take(2).enumerate().filter(|(i, _c)| *i == 0 || clauses[0].chars().count() <= 3).map(|(_, c)| *c).collect();
-    for girl in r.get("others").and_then(Value::as_array).into_iter().flatten() {
-        let theirs = called_by(girl);
-        // A call is little more than the name ("爱莉希雅", "爱莉希雅呀", "嗨，过子"): "千鹤是朋友" talks about her.
-        // "跟千鹤。" (with whom? with 千鹤) names her after a word that makes her someone talked about, not a call.
-        let about = |c: &str| crate::tr::t("hear.name_about").split('|').map(str::trim).filter(|w| !w.is_empty()).any(|w| c.starts_with(w));
-        let hit = calls.iter().any(|c| !about(c) && theirs.iter().any(|n| c.contains(n.as_str()) && c.chars().count() <= n.chars().count() + 1 && !mine.iter().any(|m| c.contains(m.as_str()))));
-        if hit {
-            return Ok(json!({"called": s(girl, "name")}));
-        }
-    }
-    Ok(json!({"called": ""}))
-}
 
 /// She broke up with him in her own words just now. Request: relation. Answer: effects (her stage back to friend, or
 /// stranger when her resentment is past 90; favor from zero; the breakup remembered).
@@ -788,64 +742,7 @@ fn breakup_said(r: &Value) -> Result<Value, String> {
     Ok(json!({"effects": fx.into_value()}))
 }
 
-/// She proposes something in her reply ("要不要一起喝杯咖啡？") that he has not asked for or agreed to in his line: it
-/// waits for his answer instead of starting now. Request: his, her. Answer: open (true: wait for his yes).
-fn her_proposal_open(r: &Value) -> Result<Value, String> {
-    let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
-    let (his, her) = (one(s(r, "his")), one(s(r, "her")));
-    let asks = crate::tr::heard(&her, "hear.propose");
-    // His own offer counts as wanting it: "我送你回宿舍吧" is him proposing the walk (and "回宿舍" in it is not a goodbye).
-    let he_wants = crate::tr::heard(&his, "hear.invite") || crate::tr::heard(&his, "hear.agree") || crate::tr::heard(&his, "hear.he_offer") || crate::tr::heard(&his, "hear.propose");
-    // He was saying goodbye ("go to work, see you tomorrow") and she answers "walk with me first": whatever she
-    // starts now is her idea; it waits for his yes (it set off for the park while he was leaving).
-    let he_leaves = crate::tr::heard(&his, "hear.goodbye");
-    Ok(json!({"open": (asks || he_leaves) && !he_wants}))
-}
 
-fn invite_named(r: &Value) -> Result<Value, String> {
-    // Either script on either side (he types Simplified, her card name is Traditional): compared in one.
-    let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
-    let said = one(s(r, "said"));
-    if !crate::tr::heard(&said, "hear.invite") || crate::tr::heard(&said, "hear.refuse") {
-        return Ok(json!({"invite": []}));
-    }
-    let mut invite = Vec::new();
-    for girl in r.get("nearby").and_then(Value::as_array).into_iter().flatten() {
-        let name = s(girl, "name");
-        let aliases = girl.get("aliases").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str);
-        let parts: Vec<String> = name.split_whitespace().chain(aliases).chain(std::iter::once(name)).map(|p| one(p)).collect();
-        // A Chinese name without spaces is also called by its given or family part (日代千鶴: 千鶴, 日代).
-        let mut called_by: Vec<String> = parts.clone();
-        for p in &parts {
-            let chars: Vec<char> = p.chars().collect();
-            if chars.len() >= 3 && !chars.iter().any(char::is_ascii) {
-                for n in 2..chars.len() {
-                    called_by.push(chars[chars.len() - n..].iter().collect());
-                    called_by.push(chars[..n].iter().collect());
-                }
-            }
-        }
-        // Called over: her name and the invitation in the same clause ("千鶴，妳也過來"), not just named somewhere in a
-        // line that also asks someone else along ("我是來向日代道歉的……想跟妳一起走").
-        // Or called just before it ("Alter，妳也過來"): the clause before is little more than her name.
-        let clauses: Vec<&str> = said.split(['。', '！', '？', '!', '?', '，', ',', '；', ';', '…', '\n']).collect();
-        let names = |clause: &str| called_by.iter().any(|part| part.chars().count() >= 2 && clause.contains(part.as_str()));
-        let vocative = |clause: &str| {
-            let c = clause.trim();
-            called_by.iter().any(|part| part.chars().count() >= 2 && c.contains(part.as_str()) && c.chars().count() <= part.chars().count() + 2)
-        };
-        let called = clauses.iter().enumerate().any(|(i, clause)| {
-            // Her name in the clause with only a soft "一起" is talk about her ("千鹤那边是约好一起看书"), not a call:
-            // a call says come ("过来", "也来") or speaks to her ("你也……").
-            let call = crate::tr::heard(clause, "hear.invite_strong") || crate::tr::heard(clause, "hear.you_words");
-            crate::tr::heard(clause, "hear.invite") && ((names(clause) && call) || (i > 0 && vocative(clauses[i - 1])))
-        });
-        if called {
-            invite.push(name.to_string());
-        }
-    }
-    Ok(json!({"invite": invite}))
-}
 
 #[cfg(test)]
 mod invite_tests {
@@ -860,16 +757,6 @@ mod invite_tests {
         assert!(none["effects"].as_array().unwrap().is_empty(), "not his girlfriend: nothing to end");
     }
 
-    #[test]
-    fn her_proposal_waits_for_him() {
-        let o = |his: &str, her: &str| super::her_proposal_open(&json!({"his": his, "her": her})).unwrap()["open"].as_bool().unwrap();
-        assert!(o("漫畫看到哪裡了？", "剛看完第三卷。要不要一起喝杯咖啡，坐下來聊？"));
-        assert!(!o("要不要一起去喝咖啡？", "好啊，走吧。"));
-        assert!(!o("好啊", "要不要去公園走走？"));
-        assert!(o("吃饱了。你去打工吧，加油，明早七点见。", "不急着走，先陪我走走。中央公园就在北边。"), "he was leaving");
-        assert!(o("那我走了", "等等，陪我去便利店。"));
-        assert!(!o("好，下次你请。雨小了，我送你回宿舍吧。", "送到楼下就行。别上楼，规矩你懂。走吧，趁雨小。"), "he offered to walk her home");
-    }
 
     #[test]
     fn whole_name_before_a_longer_one() {
@@ -881,18 +768,6 @@ mod invite_tests {
         assert_eq!(super::named_place_id("昨天去過公園了，今天去學生餐廳吧", &more).as_deref(), Some("cafeteria"));
     }
 
-    #[test]
-    fn misnamed_calls() {
-        let r = |said: &str| super::misnamed(&json!({"said": said, "her": {"name": "Alter Arthuria", "aliases": ["Alter", "亞爾托莉雅"]}, "others": [{"name": "fin 愛莉希雅1.1", "aliases": ["愛莉希雅"]}, {"name": "九十九 過子", "aliases": ["九十九過子"]}]})).unwrap()["called"].as_str().unwrap().to_string();
-        assert_eq!(r("爱莉希雅，你也在这里吃饭啊。"), "fin 愛莉希雅1.1");
-        assert_eq!(r("嗨，过子！今天好吗"), "九十九 過子");
-        assert_eq!(r("亚尔托莉雅，你好"), "");
-        assert_eq!(r("我刚跟过子吃完饭，你呢？"), "", "talking about her, not calling");
-        assert_eq!(r("过子是朋友，我们约好一起看书的。"), "", "her name as the subject is not a call");
-        assert_eq!(r("跟过子。我不想对你说谎。"), "", "answering with whom is not a call");
-        assert_eq!(r("是爱莉希雅，今晚本来就约好的。"), "", "answering who it was is not a call");
-        assert_eq!(r("你好"), "");
-    }
 
     #[test]
     fn place_named_prefers_her_home() {
@@ -902,28 +777,8 @@ mod invite_tests {
         assert_eq!(super::named_place_id_preferring("去男生宿舍拿东西", &places, &["girls_dorm".to_string()]).as_deref(), Some("boys_dorm"), "named in full beats the preference");
     }
 
-    #[test]
-    fn named_in_another_clause_is_not_called() {
-        let nearby = json!([{"name": "Hishiro Chizuru", "aliases": ["日代", "千鶴"]}]);
-        let r = super::invite_named(&json!({"said": "過子，等等。我是來向日代道歉的。想跟妳一起走回宿舍", "nearby": nearby})).unwrap();
-        assert_eq!(r["invite"].as_array().unwrap().len(), 0);
-        let r = super::invite_named(&json!({"said": "日代，妳也過來一起聊吧", "nearby": nearby})).unwrap();
-        assert_eq!(r["invite"].as_array().unwrap().len(), 1);
-        let r2 = super::invite_named(&json!({"said": "没有啦，千鹤那边是约好一起看书。我不想瞒你", "nearby": nearby})).unwrap();
-        assert_eq!(r2["invite"], json!([]), "talking about her is not calling her over");
-        let r = super::invite_named(&json!({"said": "千鹤，你也过来一起聊吧", "nearby": nearby})).unwrap();
-        assert_eq!(r["invite"].as_array().unwrap().len(), 1, "Simplified words, Traditional alias");
-    }
 }
 
-/// The place he names in what he said ("去公園散步" -> 中央公園): the whole name (without its note in brackets), else the
-/// end of it (two letters or more: 公園, 咖啡廳), the nearest when several fit. Request: said, places [{id, name, dist}].
-/// Answer: id ("" when none).
-fn place_named(r: &Value) -> Result<Value, String> {
-    let places: Vec<Value> = r.get("places").and_then(Value::as_array).cloned().unwrap_or_default();
-    let prefer: Vec<String> = r.get("prefer").and_then(Value::as_array).into_iter().flatten().filter_map(|v| v.as_str().map(str::to_string)).collect();
-    Ok(json!({"id": named_place_id_preferring(s(r, "said"), &places, &prefer).unwrap_or_default()}))
-}
 
 /// The id of the place named in what he said, among these places ({id, name, dist}); see place_named.
 pub fn named_place_id(said: &str, places: &[Value]) -> Option<String> {
@@ -965,22 +820,8 @@ pub fn named_place_id_preferring(said: &str, places: &[Value], prefer: &[String]
 
 pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
-        "place_named" => place_named(r),
-        "invite_named" => invite_named(r),
-        "misnamed" => misnamed(r),
-        "her_proposal_open" => her_proposal_open(r),
         // She ends it in her own words ("we're done"): no longer his girlfriend (the nightly dice only knew favor 0).
         "breakup_said" => breakup_said(r),
-        // He lends only when he offered it ("借你五百", "拿去用"); "I only have about a thousand" is not an offer.
-        "lend_offered" => {
-            let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
-            Ok(json!({"offered": crate::tr::heard(&one(s(r, "his")), "hear.lend_offer")}))
-        }
-        // The talk ends only on a goodbye somebody said ("明天见", "我先走了"); "that's enough practice for today" is not one.
-        "farewell_heard" => {
-            let one = |t: &str| zhconv::zhconv(&t.to_lowercase(), zhconv::Variant::ZhCN);
-            Ok(json!({"heard": crate::tr::heard(&one(s(r, "his")), "hear.goodbye") || crate::tr::heard(&one(s(r, "her")), "hear.goodbye")}))
-        }
         "drama_cast" => drama_cast(r),
         "bond_heat_daily" => bond_heat_daily(r),
         "jealousy_news" => jealousy_kind(r),
@@ -1052,13 +893,6 @@ mod tests {
         assert_eq!(r.jealousy_toward["b"], 18.0, "mode A stays out of it");
     }
 
-    #[test]
-    fn handing_money_over_is_a_lend_offer() {
-        let offered = |his: &str| eval("lend_offered", &json!({"his": his})).unwrap().unwrap()["offered"].clone();
-        assert_eq!(offered("给，三百块，你拿着。不急着还。"), true);
-        assert_eq!(offered("借你三百"), true);
-        assert_eq!(offered("我只有一千块左右"), false);
-    }
 
     #[test]
     fn stood_up_and_kept() {
@@ -1148,11 +982,11 @@ mod tests {
     #[test]
     fn told_face_to_face_is_not_a_rumour_to_ask_about() {
         let jealous = rel(json!({"stage": "friend", "favor": 30, "jealousy": 60, "jealousy_toward": {"b": 70}}));
-        let told = rival_named(&json!({"relation": jealous.clone(), "said": "是，我跟B在交往了，你还是我很珍惜的朋友", "names": {"b": "B"}})).unwrap();
+        let told = rival_named(&json!({"relation": jealous.clone(), "told": "B", "names": {"b": "B"}})).unwrap();
         assert_eq!(told["named"], true);
         let patch = told["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").cloned().unwrap().to_string();
         assert!(patch.contains("confront_j:70"), "{patch}");
-        let other = rival_named(&json!({"relation": jealous.clone(), "said": "今天天气真好", "names": {"b": "B"}})).unwrap();
+        let other = rival_named(&json!({"relation": jealous.clone(), "told": "C", "names": {"b": "B"}})).unwrap();
         assert_eq!(other["named"], false);
         let mut after = jealous.clone();
         after["flags"] = json!(["confront_j:70"]);
@@ -1176,24 +1010,5 @@ mod tests {
         assert!((phone_answer(&r, "sleep") - 0.135).abs() < 1e-6);
     }
 
-    #[test]
-    fn calling_a_girl_over_by_name() {
-        let nearby = json!([{"name": "Alter Arthuria"}, {"name": "凶鳥 狂死香"}, {"name": "Hishiro Chizuru", "aliases": ["日代千鶴"]}]);
-        let ask = |said: &str| invite_named(&json!({"said": said, "nearby": nearby})).unwrap()["invite"].clone();
-        assert_eq!(ask("Alter，妳也過來一起聊吧"), json!(["Alter Arthuria"]));
-        assert_eq!(ask("alter 一起來"), json!(["Alter Arthuria"]), "any case");
-        assert_eq!(ask("狂死香和千鶴也來吧"), json!(["凶鳥 狂死香", "Hishiro Chizuru"]));
-        assert_eq!(ask("Alter 今天好可愛"), json!([]), "a name without asking her over");
-        assert_eq!(ask("不要叫 Alter 過來"), json!([]));
-    }
 
-    #[test]
-    fn the_place_he_names() {
-        let places = json!([{"id": "park", "name": "中央公園", "dist": 900}, {"id": "cafe", "name": "咖啡廳", "dist": 300}, {"id": "toilet_a", "name": "公廁（大學講堂旁）", "dist": 100}, {"id": "park2", "name": "河濱公園", "dist": 2000}]);
-        let named = |said: &str| place_named(&json!({"said": said, "places": places})).unwrap()["id"].clone();
-        assert_eq!(named("大家一起去公園散步吧"), "park", "the nearer park");
-        assert_eq!(named("去河濱公園走走"), "park2", "the whole name beats the end of a nearer one");
-        assert_eq!(named("去咖啡廳坐坐"), "cafe");
-        assert_eq!(named("我們到處走走"), "");
-    }
 }

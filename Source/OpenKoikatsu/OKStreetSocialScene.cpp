@@ -1038,28 +1038,7 @@ void AOKStreetSocialScene::SendFreeTalk(){
  const bool His=!OKStreetFreeTalkIsNudge(Text)&&!S.SystemNote;S.SystemNote=false;
  if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;}
  if(His){++S.HisLines;{const int64 Now=OKStreetMindNow(S);if(S.SaidToHerWith!=Character||Now-S.SaidToHerAt>45){S.SaidToHer.Reset();S.SaidToHerWith=Character;}S.SaidToHerAt=Now;}S.SaidToHer.Add(Text);if(S.SaidToHer.Num()>4)S.SaidToHer.RemoveAt(0);}
- // He calls her by another girl's name ("爱莉希雅，…" to Arthuria): she notices, after answering (social.rs misnamed).
- if(His){auto Girl=[&S](int32 G){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("name"),S.Manifest.Characters[G].Name);TArray<TSharedPtr<FJsonValue>> Aliases;
-   FOKFreeTalkPersona Persona;FString Ignored;if(OKStreetFreeTalkLoadPersona(S.Manifest.Characters[G].Name,Persona,Ignored)&&!Persona.DisplayName.IsEmpty())Aliases.Add(MakeShared<FJsonValueString>(Persona.DisplayName));
-   O->SetArrayField(TEXT("aliases"),Aliases);return O;};
-  auto Request=OKRulesRequest(TEXT("misnamed"));Request->SetStringField(TEXT("said"),Text);Request->SetObjectField(TEXT("her"),Girl(Character));
-  // A girl who is right here (in the group, or a few steps away) is spoken to by her own name, not mistaken for her: "千鹤，
-  // 谢谢你" with 千鹤 beside them told fin he had called her 千鹤.
-  TArray<TSharedPtr<FJsonValue>> Others;for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(G!=Character&&!S.Party.Contains(G)&&!(S.Agents.IsValidIndex(G-1)&&FVector::Dist2D(S.Agents[G-1].Position,S.Male)<600.f))Others.Add(MakeShared<FJsonValueObject>(Girl(G)));Request->SetArrayField(TEXT("others"),Others);
-  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request))if(const FString Called=Answer->GetStringField(TEXT("called"));!Called.IsEmpty()){
-   UE_LOG(LogTemp,Display,TEXT("Street talk: he called actor=%d by %s's name"),Character,*Called);
-   S.TellHer.Add(OKMsg(TEXT("ui.scene.he_called_you_other_name"),{{TEXT("other_name"),Called}}));}}
- // He calls a girl nearby over by name ("Alter，妳也過來一起聊吧"): she joins now, so the reply is the group's (social.rs
- // invite_named). Not left to the judge, which reads it through the reply of the girl he is talking to.
- if(!OKStreetFreeTalkIsNudge(Text)&&RemoteKind(Character)==0){
-  auto Request=OKRulesRequest(TEXT("invite_named"));Request->SetStringField(TEXT("said"),Text);TArray<TSharedPtr<FJsonValue>> Nearby;
-  for(int32 G=1;G<S.Manifest.Characters.Num();++G){if(G==Character||!PartyCanJoin(G))continue;auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("name"),S.Manifest.Characters[G].Name);
-   TArray<TSharedPtr<FJsonValue>> Aliases;FOKFreeTalkPersona Persona;FString Ignored;if(OKStreetFreeTalkLoadPersona(S.Manifest.Characters[G].Name,Persona,Ignored)&&!Persona.DisplayName.IsEmpty())Aliases.Add(MakeShared<FJsonValueString>(Persona.DisplayName));
-   O->SetArrayField(TEXT("aliases"),Aliases);Nearby.Add(MakeShared<FJsonValueObject>(O));}
-  Request->SetArrayField(TEXT("nearby"),Nearby);
-  if(!Nearby.IsEmpty())if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request))for(const auto& V:Answer->GetArrayField(TEXT("invite")))
-   for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(S.Manifest.Characters[G].Name==V->AsString()){UE_LOG(LogTemp,Display,TEXT("Street party: he calls %s over by name"),*V->AsString());PartyJoin(G);}
- }
+ // Called by another girl's name: she sees his words and her own name, and notices it herself (no name lookup here).
  if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(Text);return;} // several of them: one reply for all (OKStreetSocialParty.inl)
  FOKFreeTalkSettings Settings;FString Error,System,UserMessage;
  if(!PrepareFreeTalk(Character,Text,Settings,System,UserMessage,Error)){S.FreeTalkNotice=Error;RefreshUI();return;}
@@ -1223,7 +1202,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  FString OnTable;for(const auto& D:S.Table)if(D.ForHer&&D.Her==Character&&D.Percent>0)OnTable+=OKMsg(TEXT("ui.scene.dish_entry"), {{TEXT("dish_name"), *D.Name}, {TEXT("served_suffix"), D.Served?TEXT(""):OKT(TEXT("ui.scene.preparing_food"))}});
  FString Menu;{const FString Here=OrderShopHere(Character);const FString Shop=Here.IsEmpty()?OutingShop(Character):Here;FString Closed;if(!Shop.IsEmpty()&&!PlaceClosedNow(Shop,Closed))for(const auto* I:Here.IsEmpty()?OKStreetItemsAt(S.Catalog,Shop,StreetNow().GetMonth()):ItemsHere(Shop))Menu+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), *I->Id}, {TEXT("name"), *I->Name}});}
  // Meetings with her the game already has, so the same plan is not booked twice.
- FString Booked;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==HerId)Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("day"), *OKStreetCalendarLabel(int32(A.Start/1440),0.0)}, {TEXT("hour"), int32(A.Start%1440)/60}, {TEXT("minute"), int32(A.Start%1440)%60}, {TEXT("label"), *A.Label}});}
+ FString Booked;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==HerId)Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("when"), *OKStreetCalendarLabel(int32(A.Start/1440),double(A.Start%1440)/60.0)}, {TEXT("label"), *A.Label}});}
  FString Nearby;for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(PartyCanJoin(G))Nearby+=S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.semicolon_mark"));
  const FDateTime Now=StreetNow();
  const FString User=OKMsg(TEXT("ui.scene.llm_context_prompt"), {{TEXT("year"), Now.GetYear()}, {TEXT("month"), Now.GetMonth()}, {TEXT("day"), Now.GetDay()}, {TEXT("weekday"), OKMsg(TEXT("ui.calendar.weekday_name"), {{TEXT("d"), int32(Now.GetDayOfWeek())}})}, {TEXT("hour"), Now.GetHour()}, {TEXT("minute"), Now.GetMinute()}, {TEXT("together_state"), RemoteWith(Character)?OKT(TEXT("ui.scene.apart_phone")):OKT(TEXT("ui.scene.face_to_face"))}, {TEXT("her_location"), *PlaceHere(S.Agents.IsValidIndex(Character-1)?S.Agents[Character-1].Position:S.Male)}, {TEXT("his_said"), *Said}, {TEXT("her_reply"), *Her}, {TEXT("her_action"), HerAction.IsEmpty()?OKT(TEXT("ui.scene.empty_label")):*HerAction}, {TEXT("doing_now"), S.ActGirl==Character&&!S.ActId.IsEmpty()?*S.ActId:S.OutingGirl==Character?*OKMsg(TEXT("ui.scene.walking_to_place"), {{TEXT("place"), *S.OutingPlace}, {TEXT("activity"), *S.OutingActivity}}):OKT(TEXT("ui.scene.none_label"))}, {TEXT("promise"), Booked.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Booked}, {TEXT("nearby_girls"), Nearby.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Nearby}, {TEXT("menu"), Menu.IsEmpty()?OKT(TEXT("ui.scene.not_in_shop")):*Menu}, {TEXT("her_ordered"), HerOrders.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*FString::Join(HerOrders,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("on_table"), OnTable.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*OnTable}});
@@ -1249,22 +1228,6 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // "go:路口" (walking him to the corner): no place of the map, nothing to start. Dropped quietly: a failed outing told
   // her "it did not work" and she took her words back ("I mixed up the way").
   if(DoNow.StartsWith(TEXT("go:"))&&!OKStreetFindPlace(DoNow.Mid(3))){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s is no place; nothing to start"),*DoNow);DoNow.Reset();}
-  // Going to a place nobody named ("it's past seven, let's walk over" read as the campus gate): not that place. Her own
-  // field, when it names one, or nothing.
-  if(DoNow.StartsWith(TEXT("go:"))&&DoNow!=HerAction){const FString To=DoNow.Mid(3);const FOKStreetPlace* P=OKStreetFindPlace(To);
-   if(P&&Weak->PlaceNamedIn(Said+TEXT("\n")+Her+TEXT("\n")+Earlier,Character)!=To&&Weak->PlaceNamedAmong(Said+Her+Earlier,{To})!=To){
-    UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s dropped, nobody named %s"),*DoNow,P->Name);DoNow=HerAction;}}
-  // An activity somewhere nobody named while another place was named ("let's watch the sunset at the playground" judged
-  // as the stands of the sports ground): the named place's activity of the same kind, else just going there.
-  if(const FOKStreetActivity* Act=OKStreetFindActivity(DoNow);Act&&Act->Place&&*Act->Place){
-   // Only these two lines (a cafe mentioned three lines back is not where they go now), and not when the activity itself
-   // was named ("let's sit in the stands": the stands are the sports ground's).
-   const FString ActWords=Said+TEXT("\n")+Her;const FString ActNamed=Weak->PlaceNamedIn(ActWords,Character);
-   const FString ActName=OKStreetActivityName(Act->Id);int32 ActScore=0;for(int32 Ci=0;Ci+1<ActName.Len();++Ci)if(ActWords.Contains(ActName.Mid(Ci,2)))++ActScore;
-   if(!ActNamed.IsEmpty()&&ActNamed!=Act->Place&&ActScore<2&&Weak->PlaceNamedAmong(ActWords,{FString(Act->Place)})!=Act->Place&&Weak->PlaceHere(L->Male)!=Act->Place){
-    const FOKStreetActivity* Same=nullptr;for(const auto& A:OKStreetActivities())if(A.Place&&ActNamed==A.Place&&A.Kind==Act->Kind&&A.Code==Act->Code){Same=&A;break;}
-    UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s is at %s, but %s was named"),*DoNow,Act->Place,*ActNamed);
-    DoNow=Same?FString(Same->Id):TEXT("go:")+ActNamed;}}
   const TSharedPtr<FJsonObject>* Promise=nullptr;FString Day,Time,Place,What;
   if(Verdict->TryGetObjectField(TEXT("promise"),Promise)&&Promise&&(*Promise).IsValid()){(*Promise)->TryGetStringField(TEXT("day"),Day);(*Promise)->TryGetStringField(TEXT("time"),Time);(*Promise)->TryGetStringField(TEXT("place"),Place);(*Promise)->TryGetStringField(TEXT("what"),What);}
   UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d do_now=\"%s\" (her field \"%s\") promise=%s %s %s %s; %s"),Character,*DoNow,*HerAction,*Day,*Time,*Place,*What,*Why);
@@ -1276,52 +1239,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    const bool MeetToday=Day.IsEmpty()||Day==TEXT("+0")||Day==TEXT("0");
    const int64 MindNow=OKStreetMindNow(*L);const int64 MeetAt=(MindNow/1440)*1440+MeetHour*60+MeetMinute;
    if(NowPlace==Place&&(!MeetToday||(MeetHour>=0&&MeetAt-MindNow>30))){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s dropped, it is the promise for %s %s"),*DoNow,*Day,*Time);DoNow.Reset();}}
-  // "Let's walk to the park": the place he named, not a loop nearby (social.rs place_named); else the one she named
-  // ("first the campus gate, follow me").
-  if(DoNow==TEXT("walk")||DoNow==TEXT("stroll")){FString Named=Weak->PlaceNamedIn(Said,Character);if(Named.IsEmpty())Named=Weak->PlaceNamedIn(Her,Character);
-   // Already there ("let's walk around the shrine" at the shrine): the walk around it, not going there (nothing happened).
-   if(!Named.IsEmpty()&&Weak->AtPlace(Named)){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s stays a walk, they are at %s already"),*DoNow,*Named);Named.Reset();}
-   // The place of a later meeting he mentioned ("lunch with Arthuria at the cafeteria at noon"): not where the walk goes now.
-   if(!Named.IsEmpty()){const int64 MindNow=OKStreetMindNow(*L);
-    if(L->Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return A.Status==TEXT("pending")&&A.Place==Named&&A.Start-MindNow>30;})){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s stays a walk, %s is a later meeting's place"),*DoNow,*Named);Named.Reset();}}
-   if(!Named.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s -> %s, the place he named"),*DoNow,*Named);DoNow=Named;}}
-  // "Up to the tenth floor for the view" said inside the department store: going where they already are means one of its
-  // activities; the one whose name shares the most with what they said (two letters at a time).
-  const FString Words=Said+Her;
-  auto NamedScore=[&Words](const FString& Name){int32 Score=0;for(int32 I=0;I+1<Name.Len();++I)if(Words.Contains(Name.Mid(I,2)))++Score;return Score;};
-  if(DoNow.StartsWith(TEXT("go:"))&&DoNow.Mid(3)==Weak->PlaceHere(L->Male)){
-   const FOKStreetActivity* Best=nullptr;int32 BestScore=0;
-   for(const auto& A:OKStreetActivities())if(A.Place&&DoNow.Mid(3)==A.Place){
-    const int32 Score=NamedScore(OKStreetActivityName(A.Id));
-    if(Score>BestScore){BestScore=Score;Best=&A;}}
-   if(Best&&BestScore>=2){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s -> %s, the activity they named inside"),*DoNow,Best->Id);DoNow=Best->Id;}
-  }
-  // "Lunch? Let's go into this café": a meal or a drink is had at the place named (his words, else hers), when that place
-  // has one (the café's seats rather than the restaurant the plain "meal" means). An activity they named themselves ("the
-  // 10F view restaurant") stays: "餐厅" in it is not the student cafeteria.
-  if(const FOKStreetActivity* Plain=OKStreetFindActivity(DoNow))if(Plain->Kind==EOKStreetActivityKind::Pair&&(Plain->Code==5||Plain->Code==1||Plain->Code==2||Plain->Code==11)&&NamedScore(OKStreetActivityName(Plain->Id))<3
-   // where they already are ("read here in the library", while he talks about yesterday's aquarium): it stays
-   &&!(Plain->Place&&(Weak->PlaceHere(L->Male)==Plain->Place||[&]{const FOKStreetPlace* Own=OKStreetFindPlace(Plain->Place);return Own&&FVector::Dist2D(Own->Door,L->Male)<1500.f;}())) // or right by it (a park has no inside)
-   // nor when its own place is named too ("we'll go to the convenience store instead", said at the closed snack shop)
-   // (among all places, the longest name wins: "学生餐厅" names the cafeteria, not the restaurant's "餐厅" inside it)
-   &&!(Plain->Place&&Weak->PlaceNamedIn(Said+Her,Character)==Plain->Place)){
-   FString Named=Weak->PlaceNamedIn(Said,Character);if(Named.IsEmpty())Named=Weak->PlaceNamedIn(Her,Character);
-   // Only a place they are at or right beside ("this café"): a place named for later ("then the library") is not now —
-   // unless the judge's own reason for going now names it too ("she agreed to go to the snack shop now", the drink
-   // shop's activity picked by mistake).
-   const FOKStreetPlace* NamedPlace=Named.IsEmpty()?nullptr:OKStreetFindPlace(Named);
-   const bool GoingThere=NamedPlace&&Weak->PlaceNamedIn(Why,Character)==Named;
-   // Or the plain one's place is closed and the named one is open ("breakfast? the cafeteria should be open by now" at
-   // seven: the restaurant opens at eleven) — the named place is the only one that can be meant now.
-   FString ClosedWhy;const bool OnlyNamedOpen=NamedPlace&&Plain->Place&&Weak->PlaceClosedNow(Plain->Place,ClosedWhy)&&!Weak->PlaceClosedNow(Named,ClosedWhy);
-   const bool AtNamed=NamedPlace&&(GoingThere||OnlyNamedOpen||Weak->PlaceHere(L->Male)==Named||FVector::Dist2D(NamedPlace->Door,L->Male)<1500.f);
-   if(!Named.IsEmpty()&&!AtNamed)UE_LOG(LogTemp,Display,TEXT("Street judge: %s kept; %s is named but not where they are"),*DoNow,*Named);
-   if(AtNamed&&Named!=Plain->Place){const int32 Prefer[]={Plain->Code,5,1,11,2};const FOKStreetActivity* There=nullptr;
-    for(const int32 Code:Prefer){for(const auto& A:OKStreetActivities())if(A.Kind==EOKStreetActivityKind::Pair&&A.Code==Code&&A.Place&&Named==A.Place){There=&A;break;}if(There)break;}
-    if(There){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s -> %s, at the place named"),*DoNow,There->Id);DoNow=There->Id;}}}
-  // Her own idea ("shall we have a coffee?") that he has not said yes to: it waits for his answer (social.rs her_proposal_open).
-  if(!DoNow.IsEmpty()){auto Ask=OKRulesRequest(TEXT("her_proposal_open"));Ask->SetStringField(TEXT("his"),Said);Ask->SetStringField(TEXT("her"),Her);
-   if(const TSharedPtr<FJsonObject> Open=OKRulesEval(*L,Ask);Open.IsValid()&&Open->GetBoolField(TEXT("open"))){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s waits; it is her proposal, he has not agreed yet"),*DoNow);DoNow.Reset();}}
+  // Which activity and which place is the judge's reading (ui.scene.ai_judge_prompt): place names looked up in the
+  // words kept overruling it and could never cover every way of saying it.
   // "Not today, tomorrow" / "make it six": the meeting with her they had moves (the judge says it replaces it).
   if(!Place.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);Weak->MovePromiseWith(Character);}}
   if(!Place.IsEmpty())Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said);
@@ -1331,13 +1250,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    if(Ends&&DoNow.IsEmpty()&&L->OutingGirl==Character)UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d not on the way; the outing reaches %s first"),Character,*L->OutingPlace);
    // "I'll go once I've finished my tea" with her food still on the table: not now; the meal ends first (she does not
    // walk off from a full plate). He can still leave himself.
-   // Nobody said goodbye ("enough practice for today, put the sword away"): the talk goes on (social.rs farewell_heard).
-   if(Ends){auto Bye=OKRulesRequest(TEXT("farewell_heard"));Bye->SetStringField(TEXT("his"),Said);Bye->SetStringField(TEXT("her"),Her);
-    if(const TSharedPtr<FJsonObject> Heard=OKRulesEval(*L,Bye);Heard.IsValid()&&!Heard->GetBoolField(TEXT("heard"))){UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d judged as ending, but nobody said goodbye; the talk goes on"),Character);Ends=false;}}
    if(Ends&&DoNow.IsEmpty()&&L->Table.ContainsByPredicate([Character](const FOKStreetDish& D){return D.Her==Character&&D.ForHer&&D.Percent>0.f;})){
     UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d still has food on the table; the talk goes on until the meal ends"),Character);Ends=false;}
    if(Ends&&DoNow.IsEmpty()&&!L->FarewellPending&&L->OutingGirl!=Character){L->FarewellPending=true;L->FarewellFromTalk=true;L->FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (judged)"),Character);}
-   {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name))for(int32 G=1;G<L->Manifest.Characters.Num();++G)if(OKStreetNameMatches(Name,L->Manifest.Characters[G].Name)){UE_LOG(LogTemp,Display,TEXT("Street judge: he invites %s to join"),*Name);Weak->PartyJoin(G);break;}}}
+   {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name)){int32 Who=INDEX_NONE;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(Name.Equals(L->Manifest.Characters[G].Name,ESearchCase::IgnoreCase))Who=G;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(OKStreetNameMatches(Name,L->Manifest.Characters[G].Name))Who=G;if(Who!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street judge: he invites %s to join"),*Name);Weak->PartyJoin(Who);}}}}
    // He confessed in his own words: the confession the rules decide (the same roll as the button), when she is the one he
    // is talking to face to face and nothing else is being settled.
    {bool Confessed=false;Verdict->TryGetBoolField(TEXT("confessed"),Confessed);
@@ -1371,8 +1287,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     ItemId=Weak->ResolveItemId(ItemId,Shop);
     const auto* Item=L->Catalog.Find(ItemId);if(!Item||(OnTheWay?Item->Place!=Shop:!Weak->SoldHere(*Item,Shop))||HerOrders.Contains(ItemId))continue; // her reply already ordered it
     // Whoever it is for still has one of these (a meal, or a drink) in front of them or on its way: not a second one.
-    const TArray<FString> HisAsked=Weak->HisOwnItems(Said,Shop);const bool ForHer=For==TEXT("her")&&!HisAsked.Contains(ItemId);
-    if(!ForHer&&HisAsked.Num()>0&&!HisAsked.Contains(ItemId)){UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s for him, not what he asked for"),*Item->Name);continue;}
+    const bool ForHer=For==TEXT("her");
     // Already on the table or on its way first: "too full, the braised pork rice was not ordered" about the bowl in
     // front of her made her say it never came.
     if(Weak->HasDishLike(ForHer?Character:0,*Item)){
@@ -1385,6 +1300,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    if(Added>0)Weak->PlaceChatOrder(Character,Her);}
   // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请").
   {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())Weak->RecordPayAgreed(Character,Payer);}
+  // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
+  {double Lend=0;if(Verdict->TryGetNumberField(TEXT("he_lends"),Lend)&&Lend>0){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f"),Character,Lend);L->LendAskGirl=INDEX_NONE;Weak->StartLoan(int32(Lend));}}
+  // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).
+  {TArray<FString> Told;FString One;const TArray<TSharedPtr<FJsonValue>>* List=nullptr;if(Verdict->TryGetArrayField(TEXT("told_about"),List))for(const auto& V:*List){FString N;if(V.IsValid()&&V->TryGetString(N)&&!N.IsEmpty())Told.Add(N);}else if(Verdict->TryGetStringField(TEXT("told_about"),One)&&!One.IsEmpty())Told.Add(One);for(const FString& N:Told)Weak->ToldAboutRival(Character,N);}
   Weak->ExecuteFreeTalkAction(Character,Id,DoNow);
   Weak->RefreshUI();
  });

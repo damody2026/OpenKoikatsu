@@ -556,7 +556,6 @@ pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>>
         "loan_settle" => loan_settle(r),
         "give_money_settle" => give_money_settle(r),
         "activity_end" => activity_end(c, r),
-        "his_items" => Ok(his_items(r)),
         // How long it takes (game minutes): a solo activity (praying, watching the fish) ends on its own after this.
         "activity_minutes" => Ok(json!({"minutes": activity_minutes(s(r, "id"), s(r, "kind"), n(r, "code") as i32)})),
         "errand" => errand(c, r),
@@ -568,45 +567,12 @@ pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>>
     })
 }
 
-/// What he orders for himself in his own words ("我要排骨饭", "I'll have a latte"): a menu item named in a clause that
-/// says "I want / I'll have" and is not about her ("你要不要排骨饭" / "给你点"). Request: said, menu [{id, name}].
-/// Answer: ids. An order for "her" of one of these is his, whoever wrote it down.
-pub fn his_items(r: &Value) -> Value {
-    let said = s(r, "said").to_lowercase();
-    let menu: Vec<(String, String)> = r.get("menu").and_then(Value::as_array).into_iter().flatten()
-        .map(|i| (s(i, "id").to_string(), s(i, "name").split(['（', '(']).next().unwrap_or("").trim().to_lowercase()))
-        .filter(|(_, n)| n.chars().count() >= 2).collect();
-    let mut ids = Vec::new();
-    for clause in said.split(['。', '！', '？', '!', '?', '，', ',', '；', ';', '…', '\n']) {
-        if !crate::tr::heard(clause, "hear.self_order") || crate::tr::heard(clause, "hear.order_for_her") {
-            continue;
-        }
-        for (id, name) in &menu {
-            // the whole name, or its last two letters (排骨饭 → "排骨饭"; 汉堡排定食 said as "汉堡排")
-            let chars: Vec<char> = name.chars().collect();
-            let named = clause.contains(name.as_str()) || (chars.len() > 3 && clause.contains(&chars[..3].iter().collect::<String>()));
-            if named && !ids.contains(id) {
-                ids.push(id.clone());
-            }
-        }
-    }
-    json!({"ids": ids})
-}
 
 
 
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn what_he_orders_for_himself() {
-        let m = json!([{"id": "caf_porkchop", "name": "排骨飯"}, {"id": "caf_blacktea", "name": "紅茶"}, {"id": "rest_hamburg", "name": "漢堡排定食"}]);
-        let ids = |said: &str| super::his_items(&json!({"said": said, "menu": m}))["ids"].clone();
-        assert_eq!(ids("學生餐廳也好！我要排骨飯。你想吃什麼盡管點"), json!(["caf_porkchop"]));
-        assert_eq!(ids("我點個漢堡排"), json!(["rest_hamburg"]));
-        assert_eq!(ids("你要不要紅茶？"), json!([]));
-        assert_eq!(ids("我幫你點紅茶"), json!([]));
-    }
 
 
     use super::*;

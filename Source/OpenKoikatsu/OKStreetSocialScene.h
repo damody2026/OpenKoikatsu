@@ -135,6 +135,7 @@ private:
  bool MindProfilesReady() const; // OKStreetSocialSchedule.inl
  int32 ShiftUntil(int32 Character) const; // OKStreetSocialInvite.inl
  void MovePromiseWith(int32 Character); // OKStreetSocialAppointments.inl
+ void ToldAboutRival(int32 Character,const FString& Name); // OKStreetSocialMind.inl
  bool PlaceClosedAt(const FString& PlaceId,const FDateTime& When,FString& Why) const; // OKStreetSocialEconomy.inl
  int32 FloorHere(const FString& Place) const; // OKStreetSocialEconomy.inl
  TArray<const struct FOKStreetCatalogItem*> ItemsHere(const FString& Place) const;
@@ -149,9 +150,6 @@ private:
  void FinishCheckout(const FString& Option,int32 Her,const FString& AsGirl=FString()); // AsGirl: settle that girl's dishes as hers (a group table)
  void SettleGroupOrder(int32 Partner);
  bool HasDishLike(int32 Who,const struct FOKStreetCatalogItem& Item) const;
- TArray<FString> HisOwnItems(const FString& Said,const FString& Shop) const; // OKStreetSocialMind.inl
- FString PlaceNamedIn(const FString& Said,int32 Girl=0) const; // Girl: her home wins a tie
- FString PlaceNamedAmong(const FString& Said,const TArray<FString>& Ids) const;
  // Languages and regions (OKStreetSocialLocale.inl).
  FString T(const TCHAR* Key,const FStringFormatNamedArguments& Args=FStringFormatNamedArguments()) const;
  FString Money(int64 Amount) const;

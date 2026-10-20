@@ -56,24 +56,5 @@ hear_ranks = "ten,10:10|ace,aces:1|twos,deuce:2|threes:3|fours:4|five,fives,5:5|
 [hear]
 # A piece of a message naming a control: it goes behind the "?" (message_hint).
 control_hint = "Esc|WASD|Shift|Ctrl|F9|Press E|E: talk|Tab to switch|Press N|P or|on the right|Choose a topic:"
-# He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
-self_order = "i'll have|i will have|i want|i'll get|i'll take|for me|i'd like"
-order_for_her = "for you|you want|your|get you|you'd like"
-invite = "join us|come with|come along|come over|together|come on|hang out with us|follow me|let's talk"
-# A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
-invite_strong = "join us|come with|come along|come over|come on|hang out with us|follow me"
-you_words = "you"
-refuse = "don't come|no thanks|not now|no need|don't|leave us"
-# A goodbye said (social.rs farewell_heard; compared in Simplified for Chinese).
-goodbye = "bye|goodbye|see you|good night|i'm off|i'll go|i should go|i have to go|heading home|later|take care on the way|i'll be off|talk later|catch you later|see you later|go on, then"
-# His own offer to go somewhere with her (social.rs her_proposal_open: he wants it).
-he_offer = "i'll walk you|walk you home|i'll take you|i'll go with you|let me take you|my treat"
 # A place in a clause about the past is not where they go now (social.rs named_place_id).
 past_ref = "yesterday|last night|last time|the other day|that day|before"
-# He offers to lend her money (social.rs lend_offered): her own "lend" act needs this in his line.
-lend_offer = "lend you|i'll lend|take this|here, take|i'll cover|i'll front|i'll pay for you|here you go|keep it for now|here's the money"
-# Words before a name that make her someone talked about, not called (social.rs misnamed: "跟千鹤").
-name_about = "with |and |for |to |by |it's|it was|that was|that's"
-# Her reply proposing something, and his words agreeing (social.rs her_proposal_open).
-propose = "want to|shall we|how about|why don't we|wanna|let's go to"
-agree = "sure|ok|okay|yes|yeah|let's go|sounds good|alright|deal|it's a date|see you then|see you tomorrow|see you in the morning"

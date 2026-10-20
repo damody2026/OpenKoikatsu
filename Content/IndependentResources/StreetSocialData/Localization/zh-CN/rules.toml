@@ -54,24 +54,5 @@ hear_ranks = "10,十:10|A,尖:1|2,二:2|3,三:3|4,四:4|5,五:5|6,六:6|7,七:7|
 [hear]
 # A piece of a message naming a control: it goes behind the "?" (message_hint).
 control_hint = "Esc|WASD|Shift|Ctrl|F9|按 E|E 交谈|E 与|Tab 切换|N 开始|P 或|按右侧|选择话题："
-# He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
-self_order = "我要|我点|给我来|给我一|我来一|我想吃|我想喝|我吃|我喝"
-order_for_her = "给你|帮你|你要|你想|请你吃|请你喝|你的"
-invite = "一起|过来|来吧|加入|也来|跟我们|跟着我|来聊|過來|來吧|也來|跟我們|跟著我|來聊"
-# A real call over (social.rs invite_named): come-words, or speaking to her; a bare "一起" with her name is talk about her.
-invite_strong = "一起来|一起來|过来|来吧|加入|也来|跟我们|跟着我|来聊|過來|來吧|也來|跟我們|跟著我|來聊"
-you_words = "你|妳"
-refuse = "不要|别来|不用|不必|別來"
-# A goodbye said (social.rs farewell_heard; compared in Simplified for Chinese).
-goodbye = "再见|拜拜|掰掰|先走|走了|我走啦|回去了|先回|回宿舍|明天见|下次见|改天见|晚上见|待会见|晚安|告辞|先去忙|我先去|不打扰你|周一见|周二见|周三见|周四见|周五见|周六见|周日见|周末见|星期一见|星期二见|星期三见|星期四见|星期五见|星期六见|星期天见|后天见|中午见|下午见|傍晚见|一会见|一会儿见|回头见|一点见|两点见|三点见|四点见|五点见|六点见|七点见|八点见|九点见|十点见|十一点见|十二点见|点半见|路上小心|这就走|我先回去|那我走了|bye|晚点见|晚点聊|晚些见|去忙吧|你去忙|先这样|先忙了|不送了"
-# His own offer to go somewhere with her (social.rs her_proposal_open: he wants it).
-he_offer = "我送你|送你回|陪你去|陪你走|带你去|我陪你|我们去|我请你"
 # A place in a clause about the past is not where they go now (social.rs named_place_id).
 past_ref = "昨天|昨晚|前天|前晚|上次|上回|那天|那次|以前|之前那"
-# He offers to lend her money (social.rs lend_offered): her own "lend" act needs this in his line.
-lend_offer = "借你|借给你|我借|先拿去|拿去用|给你用|我垫|我先垫|帮你垫|我出这钱|转给你|你拿着|拿着吧|收着|你收下|收下吧|给你，|钱给你"
-# Words before a name that make her someone talked about, not called (social.rs misnamed: "跟千鹤").
-name_about = "跟|和|与|同|陪|找|给|对|被|让|是|就是|那是|叫"
-# Her reply proposing something, and his words agreeing (social.rs her_proposal_open).
-propose = "要不要|好不好|怎么样|如何|好吗|我们去|一起去|走吧？|陪我|跟我去|跟我走"
-agree = "好啊|好呀|好的|好喔|可以|行啊|没问题|走吧|走啊|就这么办|当然|一言为定|说定了|就这样|嗯嗯|那就这样|明早见|明天见|明晚见|明早七点见|到时候见|到时见|不见不散"
