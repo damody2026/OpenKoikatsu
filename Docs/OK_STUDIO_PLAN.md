@@ -197,6 +197,7 @@
 - **比較與驗收工具**：載入失敗不拍上一場景，每張先刪該張舊圖，寫檔成功才計數。`Tools/verify_ok_studio.lua --tag <新名稱> [--compare]` 每項各用有逾時的 owned UE，保存 PID、log、結果 JSON、14 張場景峰值與最後釋放量。缺 final-release 證據也判失敗。
 - **驗收證據**：`Saved/OKStudio/Verify-HandoffERelease` 保存最後三項遊戲自測與 14 場景紀錄；`Saved/OKStudio/handoff_e/editor-selftest-release.log` 的編輯器自測 PASS。Rust default suite 416 PASS／461 ignored，三項原作 oracle（MDK、方向圖、renderer shadow policy）各 1 PASS；Automation 的材質弱參照生命週期與 MDK 配方各 PASS。完整庫與乾淨已追蹤共用庫快照分別驗證原作卡與 OK 卡：兩邊各 5 張女角 MATCH、2 張男角仍為既有 `_Texture2` sampler DIFFERENT（結果一致，沒有列為通過）；兩邊各 5 張 OK 卡 live／closed 全部 MATCH、gaps=0、game_reads=0。乾淨 clone 本身保持 clean，私有卡僅在 Saved。
 - **建置與整合**：`E:/PhysX/UE5.8` 的 Editor／一般遊戲 Development 都建置成功；合併至 `e1ca97a76` 後的兩種目標與三項自測均通過；再合併至 `origin/master` 的 `4c7272f10` 後兩種目標再次建置成功，最後三項自測均 PASS，記於 `Verify-HandoffEMergedFinal`。未新增材質配方，不需要另烘出貨根目錄。
+- **推送前主線再整合**：遠端更新至 `8f9415203`，已保留其街頭詞表／規則更新並合併；Editor／一般遊戲再次建置成功，`Verify-HandoffEPushRetry` 三項自測全 PASS，新增的 `ok-rules tr::tests::messages_by_id` 也 1 PASS，規則 DLL 已重建。
 - **最後連續場景驗收**：三項遊戲自測 PASS，`CompareKStudio` 14／14 PASS；每張擷取時峰值由修正前同批 30.4 GB 降到 23.6 GB，Windows 程序 PeakWorkingSet 為 23.709 GB，最後完整卸載後 13.0 GB（已低於原本後半段，但仍高於啟動約 4.4 GB，不能宣稱完全回到啟動基準）。`results.json` 與 `release-process-memory.json` 分別保存擷取／卸載與程序峰值。已目視 14 張聯絡表與 0010／0633／1901／3167／6331／6964 個別圖，沒有把輸出成功等同畫面完全一致。
 - **仍存在的畫面邊界**：Standard reflection 與日照已預設啟用並確認修正路徑生效；1901 的 bloom、角色明暗、3167 的整體色調與其他畫面細節仍有差異。本輪的來源、構圖、日照、生命週期修正已分別驗證，不把「14 張成功輸出」當作所有畫面完全匹配。MRQ／SkinEffects 等仍按既有 roadmap，不因本輪測試通過改成完成。
 
