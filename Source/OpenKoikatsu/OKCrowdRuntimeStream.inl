@@ -76,7 +76,7 @@ void ServiceStream(){
    }
    E.BaseClips=MoveTemp(E.Clips);E.BaseKeys=E.CpuKeys;E.BaseSource=E.ClipSources[2];
    E.Clips=MoveTemp(Slot.Prepared->Clips);E.CpuKeys=MoveTemp(Slot.Prepared->Packed.CpuKeys);E.ClipSources[2]=Slot.Source;
-   const int32 SlotIndex=Index;const int32 Actor=Slot.Actor;const uint64 Epoch=Slot.Epoch;auto Install=Slot.Install;
+   const int32 SlotIndex=Index;const int32 Actor=E.BankActor;const uint64 Epoch=Slot.Epoch;auto Install=Slot.Install;
    ENQUEUE_RENDER_COMMAND(ActivateAcknowledgedRuntimeAction)([R=Render,S=Install,SlotIndex,Actor,Epoch](FRHICommandListImmediate&){
     auto& Gpu=R->Streams[SlotIndex];Gpu.Stream=S;Gpu.Actor=Actor;Gpu.Session=Epoch;Gpu.Reset=true;
    });
