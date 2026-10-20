@@ -3651,3 +3651,9 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **`FString::Printf` 的格式字串用了執行期的 TCHAR\***（2026-10-20）：UE 的 Printf 要編譯期常數格式，傳變數編不過，連帶後面的呼叫也報錯，擋住了別人的建置。預防：格式固定、變的部分當參數（`TEXT("_OKSun%d%s")`）；改完先自己建置，不要留給下一個排建置的人
 - **執行期材質的 TextureSampleParameter2D 預設貼圖是線性的，取樣器卻設 Color**（2026-10-20）：材質編譯失敗、畫成預設格紋。預防：Color 取樣器配 sRGB 預設貼圖（`/Engine/EngineResources/Black`），LinearColor 配 `OKExposureWhiteTexture`；看到格紋先 grep log 的 `Failed to compile Material`
 - **gamma 空間的加法輸出沒先夾到 1 就 pow 2.2**（2026-10-20）：舞台光束 `_brightness` 5 的片段加 5^2.2≈34，加上場景泛光整張白。預防：模擬 KKS（gamma、LDR 畫面）的輸出一律 `pow(saturate(x), 2.2)`
+
+## 共用母材質配方與出貨根目錄（2026-10-20）
+
+- **新增配方只烘進一個根目錄，街區一開就退出**：E 組為 OK Studio 新增第 62 個配方 `ForgeStudioOpaque`，母材質只烘進 `StudioDisplay25`；街區的 `StreetDisplay24`／`StreetHG03` 與 patch 都沒有，而 `OKCrowdRuntimeScene` 啟動時要求每個配方都有母材質，Conquest107 啟動即退出（`Common runtime material parent missing: M_ForgeStudioOpaque`）。街區角色也會用到它：`main_item_studio` 的配件沒淡出時就選這個配方（例如被 Material Editor 換 shader 的頭髮）。修正：烘新根目錄 `StreetDisplay25`（`prepare_runtime_shared_material.lua --tag`）與 `StreetHG04`（`--hg-shading`），`prepare_face_materials.lua` 補淚水與 `_Fg`，`Launch/materials.json`、`runtime.json` 的 patch（`StreetDisplay25HG.patch`）與編輯器讀卡器的預設根目錄改指新根目錄，`rebuild_street_social_patch.lua` 重建 patch。新根目錄＝舊的全部檔案＋`M_ForgeStudioOpaque`。
+- **檢查只報第一個缺的母材質**：看不出缺在哪個根目錄、還缺幾個。現在 `OKCrowdRuntimeScene` 先掃完全部配方，錯誤訊息列出根目錄、缺幾個與缺哪些，並附修法。
+- **規則**：新增或改動配方（`EKKRuntimeMaterialRecipe`、`OKRuntimeSharedMaterialRecipes`）時，同一次就把母材質烘進所有會出貨的根目錄：`Launch/materials.json` 的 `root` 與 `hg_root`，加上 OK Studio 用的根目錄。根目錄一律用新 tag 重烘（工具不覆寫舊根目錄），接著跑 `prepare_face_materials.lua`、改 `materials.json`／`runtime.json` 的 patch 名稱、`rebuild_street_social_patch.lua`，並通知會打包街區的 session。

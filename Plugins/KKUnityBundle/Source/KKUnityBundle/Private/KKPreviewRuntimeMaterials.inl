@@ -19,7 +19,7 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
     }
 #if WITH_EDITOR
     // The card reader in the editor / -game: the street's display root (the HG one is next to it, below).
-    if(Root.IsEmpty())Root=TEXT("/Game/IndependentResources/RuntimeMaterials/StreetDisplay24");
+    if(Root.IsEmpty())Root=TEXT("/Game/IndependentResources/RuntimeMaterials/StreetDisplay25");
 #endif
     // The host's root for this actor (OK Studio items: the one with the depth-writing ForgeStudioOpaque parent).
     if(!Actor->SharedMaterialRootOverride.IsEmpty())Root=Actor->SharedMaterialRootOverride;
@@ -48,7 +48,7 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
         FString HGRoot;FParse::Value(FCommandLine::Get(),TEXT("HGMaterialRoot="),HGRoot);
         if(HGRoot.IsEmpty()){FString Json;TSharedPtr<FJsonObject> Object;if(FFileHelper::LoadFileToString(Json,*Manifest)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),Object)&&Object)Object->TryGetStringField(TEXT("hg_material_root"),HGRoot);}
 #if WITH_EDITOR
-        if(HGRoot.IsEmpty())HGRoot=TEXT("/Game/IndependentResources/RuntimeMaterials/StreetHG03");
+        if(HGRoot.IsEmpty())HGRoot=TEXT("/Game/IndependentResources/RuntimeMaterials/StreetHG04");
 #endif
         if(HGRoot.IsEmpty()){UE_LOG(LogTemp,Warning,TEXT("HG render style: no hg_material_root, keeping %s"),*Root);HG=false;}else Root=HGRoot;
     }

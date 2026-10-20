@@ -256,7 +256,9 @@ struct FEntry {
  FRenderCommandFence RevealFence;bool RevealQueued=false;
  TUniquePtr<FKKRuntimeRenderMeshData> CommitData;TArray<int32> CommitQueues,CommitCanonical;TArray<TArray<uint8>> CommitIdentities;int32 MaterialCursor=0;bool CommitReady=false;double CommitWorkMs=0;
  uint32 OriginalSections=0,MergedSections=0,UniqueMaterialBindings=0;
- FString Path,Id,Error;int32 Stage=0,TextureCursor=0,WalkIndex=1,SelectionIndex=0;bool ReducedBudget=false,SourceGeometryPreserved=false;
+ FString Path,Id,Error;int32 Stage=0,TextureCursor=0,WalkIndex=1,SelectionIndex=0;
+ // Her actor in the composed animation bank: entries are composed in order, skipping the ones that failed to load.
+ int32 BankActor=INDEX_NONE;bool ReducedBudget=false,SourceGeometryPreserved=false;
  uint64 SourceVertices=0,SourceTriangles=0;
  double StageStarted=0;double StageMs[5]={};double SnapshotMs[4]={};
  TFuture<FKKRuntimeSnapshotResult> Snapshot;
@@ -674,10 +676,10 @@ struct FScene : TSharedFromThis<FScene> {
   auto Verified=PendingComposition;const auto* Bank=Verified.IsValid()?&Verified->Get():nullptr;if(!Bank){UE_LOG(LogTemp,Error,TEXT("Runtime private GPU bank composition rejected"));VisualError=TEXT("Runtime private GPU bank composition rejected");WriteReport();Stopped=true;return;}
   for(auto& E:Entries){if(E->LoadingGpuInstalled){if(auto* G=E->Gpu.Get())G->DestroyComponent();if(auto* G=E->DepthGpu.Get())G->DestroyComponent();if(auto* G=E->ShadowGpu.Get())G->DestroyComponent();E->Gpu.Reset();E->DepthGpu.Reset();E->ShadowGpu.Reset();RetireProgressiveGpu(*E);}}
   auto* O=Owner.Get();auto* Renderer=static_cast<::FScene*>(O->GetWorld()->Scene->GetRenderScene());TMap<const USkinnedAsset*,int32> MeshActors;TMap<const USkinnedAsset*,FPrimitiveComponentId> References;TArray<FOKGpuSkinPaletteData> Palettes;TArray<FPrimitiveComponentId> DepthProxies;TSet<FPrimitiveComponentId> CpuSourceProxies;TSet<const FMaterialRenderProxy*> SourceIblMaterials;for(const auto& Entry:Entries)for(const auto& Material:Entry->Materials)if(Material.IsValid()&&Material->GetMaterial()->GetName()==TEXT("M_IBLAlpha"))SourceIblMaterials.Add(Material->GetRenderProxy());
-  for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];BeginReveal(E);FString Error;FOKGpuSkinPaletteData P;if(!OKBuildGpuMeshPalette(Bank->Manifest.Actors[A],E.Mesh->GetRefSkeleton(),E.Mesh->GetRefBasesInvMatrix(),Bank->Data.Pose.Tasks.Num(),P,Error)){UE_LOG(LogTemp,Error,TEXT("APNG aggregate palette: %s"),*Error);Stopped=true;return;}Palettes.Add(MoveTemp(P));MeshActors.Add(E.Mesh.Get(),A);References.Add(E.Mesh.Get(),E.Cpu->GetPrimitiveSceneId());
+  for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];if(E.BankActor==INDEX_NONE)continue;BeginReveal(E);FString Error;FOKGpuSkinPaletteData P;if(!OKBuildGpuMeshPalette(Bank->Manifest.Actors[E.BankActor],E.Mesh->GetRefSkeleton(),E.Mesh->GetRefBasesInvMatrix(),Bank->Data.Pose.Tasks.Num(),P,Error)){UE_LOG(LogTemp,Error,TEXT("APNG aggregate palette: %s"),*Error);Stopped=true;return;}MeshActors.Add(E.Mesh.Get(),Palettes.Num());Palettes.Add(MoveTemp(P));References.Add(E.Mesh.Get(),E.Cpu->GetPrimitiveSceneId());
    auto* Gpu=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(Gpu);Gpu->SetSkinnedAssetAndUpdate(E.Mesh.Get());auto* Provider=NewObject<UOKIndependentTransformProvider>(Gpu);Provider->SetRuntimeProviderId(Render->ProviderId);Provider->SetDiagnosticBounds(E.AnimationBounds);Gpu->SetTransformProvider(Provider);Gpu->SetAnimationMinScreenSize(-1);Gpu->SetCollisionEnabled(ECollisionEnabled::NoCollision);Gpu->SetCastShadow(false);Gpu->SetLightingChannels(true,false,true); /* channel 2: the street catch light, read by the lit tears */Gpu->SetVisibility(false);Gpu->AddInstance(FTransform::Identity,0);Gpu->RegisterComponent();Gpu->SetComponentTickEnabled(false);E.Gpu=Gpu;AttachFrontHair(E,Render->ProviderId);
   }
-  for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];if(!E.DepthMesh.IsValid())continue;FString Error;FOKGpuSkinPaletteData P;if(!OKBuildGpuMeshPalette(Bank->Manifest.Actors[A],E.DepthMesh->GetRefSkeleton(),E.DepthMesh->GetRefBasesInvMatrix(),Bank->Data.Pose.Tasks.Num(),P,Error)){UE_LOG(LogTemp,Error,TEXT("APNG depth palette: %s"),*Error);Stopped=true;return;}MeshActors.Add(E.DepthMesh.Get(),Palettes.Num());References.Add(E.DepthMesh.Get(),E.Cpu->GetPrimitiveSceneId());Palettes.Add(MoveTemp(P));auto* Gpu=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(Gpu);Gpu->SetSkinnedAssetAndUpdate(E.DepthMesh.Get());auto* Provider=NewObject<UOKIndependentTransformProvider>(Gpu);Provider->SetRuntimeProviderId(Render->ProviderId);Provider->SetDiagnosticBounds(E.AnimationBounds);Gpu->SetTransformProvider(Provider);Gpu->SetAnimationMinScreenSize(-1);Gpu->SetCollisionEnabled(ECollisionEnabled::NoCollision);Gpu->SetRenderInMainPass(false);Gpu->SetRenderInDepthPass(false);Gpu->SetCastShadow(false);Gpu->SetVisibility(false);Gpu->AddInstance(FTransform::Identity,0);Gpu->RegisterComponent();Gpu->SetComponentTickEnabled(false);E.DepthGpu=Gpu;if(DepthPrepassEnabled){DepthProxies.Add(Gpu->GetPrimitiveSceneId());}}
+  for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];if(!E.DepthMesh.IsValid()||E.BankActor==INDEX_NONE)continue;FString Error;FOKGpuSkinPaletteData P;if(!OKBuildGpuMeshPalette(Bank->Manifest.Actors[E.BankActor],E.DepthMesh->GetRefSkeleton(),E.DepthMesh->GetRefBasesInvMatrix(),Bank->Data.Pose.Tasks.Num(),P,Error)){UE_LOG(LogTemp,Error,TEXT("APNG depth palette: %s"),*Error);Stopped=true;return;}MeshActors.Add(E.DepthMesh.Get(),Palettes.Num());References.Add(E.DepthMesh.Get(),E.Cpu->GetPrimitiveSceneId());Palettes.Add(MoveTemp(P));auto* Gpu=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(Gpu);Gpu->SetSkinnedAssetAndUpdate(E.DepthMesh.Get());auto* Provider=NewObject<UOKIndependentTransformProvider>(Gpu);Provider->SetRuntimeProviderId(Render->ProviderId);Provider->SetDiagnosticBounds(E.AnimationBounds);Gpu->SetTransformProvider(Provider);Gpu->SetAnimationMinScreenSize(-1);Gpu->SetCollisionEnabled(ECollisionEnabled::NoCollision);Gpu->SetRenderInMainPass(false);Gpu->SetRenderInDepthPass(false);Gpu->SetCastShadow(false);Gpu->SetVisibility(false);Gpu->AddInstance(FTransform::Identity,0);Gpu->RegisterComponent();Gpu->SetComponentTickEnabled(false);E.DepthGpu=Gpu;if(DepthPrepassEnabled){DepthProxies.Add(Gpu->GetPrimitiveSceneId());}}
   ENQUEUE_RENDER_COMMAND(InstallApngProvider)([Renderer,R=Render,Bank,Verified,MeshActors=MoveTemp(MeshActors),References=MoveTemp(References),DepthProxies=MoveTemp(DepthProxies),CpuSourceProxies=MoveTemp(CpuSourceProxies),SourceIblMaterials=MoveTemp(SourceIblMaterials),Palettes=MoveTemp(Palettes)](FRHICommandListImmediate&)mutable{R->CpuSourceProxies=MoveTemp(CpuSourceProxies);R->SourceIblMaterials=MoveTemp(SourceIblMaterials);R->Bank=Bank;R->Scene=Renderer;R->LateDepthProxies=MoveTemp(DepthProxies);R->CpuReferences=MoveTemp(References);R->MeshActors=MoveTemp(MeshActors);R->Sources=MoveTemp(Palettes);R->Validated=Verified;R->Initialized=true;R->Palettes.SetNum(R->Sources.Num());R->BoneMaps.SetNum(R->Sources.Num());R->StorageModes.SetNum(R->Sources.Num());if(auto* P=Renderer->GetExtensionPtr<FSkinningTransformProvider>()){P->RegisterProvider(R->ProviderId,FSkinningTransformProvider::FOnProvideTransforms::CreateLambda([R](auto& C){R->Provide(C);}),false);R->ProviderRegistered=true;}else R->Fail(TEXT("Skinning scene provider unavailable"));});if(!LateDepthExtension.IsValid()){LateDepthExtension=FSceneViewExtensions::NewExtension<FLateSourceDepth>(Render,O->GetWorld()->Scene);ENQUEUE_RENDER_COMMAND(RegisterApngComposite)([Extension=LateDepthExtension](FRHICommandListImmediate&){Extension->Register();});}Installed=true;for(auto& E:Entries){if(auto* C=E->LoadingMain.Get()){C->DestroyComponent();E->LoadingMain.Reset();}if(auto* C=E->Cpu.Get()){C->SetRenderInMainPass(false);C->SetRenderInDepthPass(false);}}
  }
  // Her front hair once more, into custom depth / stencil only (stencil = her ForegroundStencil), when any of her eyes /
@@ -799,8 +801,13 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
   }
   if(Submitted){LoadingUploadFence.BeginFence(FRenderCommandFence::ESyncDepth::RHIThread);LoadingUploadPending=true;}
   for(auto& E:Entries)if(E->Stage==6&&E->PackedBank.IsReady()&&E->RevealQueued&&E->RevealFence.IsFenceComplete()){auto Prepared=E->PackedBank.Consume();E->Bank=MoveTemp(Prepared.Validated);if(!E->Bank){Fail(*E,Prepared.Error.IsEmpty()?TEXT("Background private GPU bank packing failed"):Prepared.Error);continue;}E->AnimationBounds=Prepared.Bounds;E->CpuKeys=MoveTemp(Prepared.CpuKeys);for(int32 I=0;I<E->Clips.Num();++I)E->Clips[I].Tracks=MoveTemp(Prepared.CpuTracks[I]);E->Stage=5;--Active;++Complete;ShowLoadingCharacter(*E);}
-  if(Complete==Entries.Num()&&!Installed&&!Composition.IsValid()&&!PendingComposition.IsValid()){
-   auto Banks=MakeShared<TArray<TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe>>,ESPMode::ThreadSafe>();for(auto& E:Entries)Banks->Add(E->Bank);Composition=Async(EAsyncExecution::ThreadPool,[Banks]{auto Result=MakeUnique<FOKGpuAnimationBundle>();TArray<const FOKGpuAnimationCacheData*> Data;TArray<const FOKGpuAnimationManifest*> Metadata;FString Error;for(const auto& B:*Banks){UE_LOG(LogTemp,Display,TEXT("APNG packed private bank %d: key bytes=%llu bones=%d"),Data.Num(),uint64(B->Get().Data.Pose.Keys.Num())*16,B->Get().Data.Pose.Tasks.Num());Data.Add(&B->Get().Data);Metadata.Add(&B->Get().Manifest);}if(!OKComposeGpuAnimationCaches(Data,Metadata,Result->Data,Result->Manifest,Error)){UE_LOG(LogTemp,Error,TEXT("APNG composition: %s"),*Error);return TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe>{};}auto Verified=FOKValidatedGpuBank::Create(MoveTemp(Result),Error);if(!Verified)UE_LOG(LogTemp,Error,TEXT("APNG immutable GPU admission: %s"),*Error);return Verified;});
+  // One character that failed to load must not hold back the others (R3-11): once every entry has either loaded or
+  // failed, the loaded ones are composed and installed; a failed one keeps no actor and refuses actions.
+  int32 Failed=0;for(const auto& E:Entries)Failed+=E->Stage==-1;
+  if(Complete>0&&Complete+Failed==Entries.Num()&&!Installed&&!Composition.IsValid()&&!PendingComposition.IsValid()){
+   auto Banks=MakeShared<TArray<TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe>>,ESPMode::ThreadSafe>();
+   for(auto& E:Entries){E->BankActor=E->Stage==5&&E->Bank?Banks->Num():INDEX_NONE;if(E->BankActor!=INDEX_NONE)Banks->Add(E->Bank);}
+   if(Failed)UE_LOG(LogTemp,Warning,TEXT("APNG installing %d of %d characters; %d failed to load"),Banks->Num(),Entries.Num(),Failed);Composition=Async(EAsyncExecution::ThreadPool,[Banks]{auto Result=MakeUnique<FOKGpuAnimationBundle>();TArray<const FOKGpuAnimationCacheData*> Data;TArray<const FOKGpuAnimationManifest*> Metadata;FString Error;for(const auto& B:*Banks){UE_LOG(LogTemp,Display,TEXT("APNG packed private bank %d: key bytes=%llu bones=%d"),Data.Num(),uint64(B->Get().Data.Pose.Keys.Num())*16,B->Get().Data.Pose.Tasks.Num());Data.Add(&B->Get().Data);Metadata.Add(&B->Get().Manifest);}if(!OKComposeGpuAnimationCaches(Data,Metadata,Result->Data,Result->Manifest,Error)){UE_LOG(LogTemp,Error,TEXT("APNG composition: %s"),*Error);return TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe>{};}auto Verified=FOKValidatedGpuBank::Create(MoveTemp(Result),Error);if(!Verified)UE_LOG(LogTemp,Error,TEXT("APNG immutable GPU admission: %s"),*Error);return Verified;});
   }
   if(!Installed&&Composition.IsValid()&&Composition.IsReady()){
    PendingComposition=Composition.Consume();if(!PendingComposition){VisualError=TEXT("Immutable GPU bank validation failed");Stopped=true;WriteReport();return false;}
@@ -959,6 +966,12 @@ bool OKStartCrowdRuntimeScene(AActor* Owner,const FString& Manifest,FString& Err
   if(!State->EditorCommonMaterials){Error=TEXT("Common runtime shader library unavailable");return false;}
   UE_LOG(LogTemp,Display,TEXT("APNG diagnostic uses editor common material resources; cooked library gate remains required in game builds"));
  }
+ // Every recipe needs its parent in the root this scene draws with. A recipe added later (a new parent baked into
+ // another root only) must name the root and every parent it lacks, not stop at the first one: bake a fresh root
+ // (Tools/prepare_runtime_shared_material.lua --tag, then Tools/prepare_face_materials.lua) and point
+ // StreetSocialData/Launch/materials.json at it (Docs/ERROR_LOG.md).
+ {TArray<FString> Missing;for(auto R:OKRuntimeSharedMaterialRecipes()){const FString Name=OKRuntimeSharedMaterialParentName(R);if(!StaticLoadObject(UMaterialInterface::StaticClass(),nullptr,*(Root/Name+TEXT(".")+Name),nullptr,LOAD_NoWarn|LOAD_Quiet))Missing.Add(Name);}
+  if(!Missing.IsEmpty()){Error=FString::Printf(TEXT("Common runtime material root %s lacks %d of %d recipe parents: %s (bake a fresh root with Tools/prepare_runtime_shared_material.lua and Tools/prepare_face_materials.lua, then point Launch/materials.json at it)"),*Root,Missing.Num(),OKRuntimeSharedMaterialRecipes().Num(),*FString::Join(Missing,TEXT(", ")));return false;}}
  for(auto R:OKRuntimeSharedMaterialRecipes()){const FString Name=OKRuntimeSharedMaterialParentName(R);auto* Parent=LoadObject<UMaterialInterface>(nullptr,*(Root/Name+TEXT(".")+Name));if(!Parent){Error=TEXT("Common runtime material parent missing: ")+Name;return false;}float RevealStart=0;if(!Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_RuntimeRevealStart")),RevealStart)){Error=TEXT("Common runtime material lacks reveal support: ")+Name;return false;}State->Parents.Emplace(Parent);UMaterialInterface* Outline=nullptr;if(OKRuntimeOutlineLayout(R)){const FString OutlineName=Name+TEXT("_Outline");Outline=LoadObject<UMaterialInterface>(nullptr,*(Root/OutlineName+TEXT(".")+OutlineName));}State->OutlineParents.Emplace(Outline);}
  {UMaterialInterface* Tear=Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(),nullptr,*(Root/TEXT("M_OKTearLit.M_OKTearLit")),nullptr,LOAD_NoWarn|LOAD_Quiet));
   State->TearParent.Reset(Tear);UE_LOG(LogTemp,Display,TEXT("Runtime tear parent: %s"),Tear?TEXT("lit (M_OKTearLit)"):TEXT("source glasses program"));}
@@ -1020,7 +1033,7 @@ bool OKSuspendCrowdRuntimeScene(AActor* Owner,bool Suspended){
 
 bool OKPlayCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipId,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  auto& E=*State->Entries[Character];const int32 Source=State->ClipIds.Find(ClipId),Slot=E.ClipSources.Find(Source);
  if(Source<State->WalkSources||Source==INDEX_NONE){Error=TEXT("Action must be a declared common action curve");return false;}
  if(Slot<2){
@@ -1031,7 +1044,7 @@ bool OKPlayCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipI
 }
 bool OKConfigureCrowdRuntimeActionContact(AActor* Owner,int32 Character,const FString& ClipId,const FString& Recipe,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||Recipe.IsEmpty()||Recipe.Len()>16384){Error=TEXT("Invalid runtime contact request");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE||Recipe.IsEmpty()||Recipe.Len()>16384){Error=TEXT("Invalid runtime contact request");return false;}
  const int32 Source=State->ClipIds.Find(ClipId);auto& E=*State->Entries[Character];
  if(Source<State->WalkSources){Error=TEXT("Contact action must be an admitted common curve");return false;}
  if(const auto* Existing=E.ContactRecipes.Find(Source)){if(*Existing==Recipe){Error.Reset();return true;}Error=TEXT("Contact recipe is immutable for an admitted action");return false;}
@@ -1040,7 +1053,7 @@ bool OKConfigureCrowdRuntimeActionContact(AActor* Owner,int32 Character,const FS
 }
 bool OKPrewarmCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipId,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  auto& E=*State->Entries[Character];const int32 Source=State->ClipIds.Find(ClipId);
  if(Source<State->WalkSources||Source==INDEX_NONE){Error=TEXT("Action must be a declared common action curve");return false;}
  if(E.ClipSources.Find(Source)>=2){E.StreamHold=true;Error.Reset();return true;}
@@ -1049,27 +1062,27 @@ bool OKPrewarmCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& Cl
 }
 bool OKCancelCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  auto& E=*State->Entries[Character];E.ActionOverride=INDEX_NONE;E.PendingAction=INDEX_NONE;E.PendingEpoch=0;E.StreamHold=false;
  if(E.SpeechPaired||E.LinkedActionEpoch!=0)E.CancelSpeech();
  Error.Reset();return true;
 }
 bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  auto& E=*State->Entries[Character];E.ActionOverride=INDEX_NONE;E.PendingAction=INDEX_NONE;E.PendingEpoch=0;E.StreamHold=false;E.CancelSpeech();Error.Reset();return true;
 }
 
 bool OKSpeakCrowdRuntimeLine(AActor* Owner,int32 Character,const FString& VoiceId,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  const int32 Voice=State->VoiceIds.Find(VoiceId);if(Voice==INDEX_NONE){Error=TEXT("Voice must be an admitted common resource");return false;}
  auto& E=*State->Entries[Character];if(E.SpeechJob.IsValid()){Error=TEXT("Runtime voice preparation already pending");return false;}
  E.PendingSpeechAction.Reset();E.LinkedActionEpoch=0;E.SpeechPaired=false;E.SpeechEpoch=++E.SpeechEpochClock;E.SpeechJob=OKPrepareRuntimeSpeechAsync(State->VoicePaths[Voice]);E.SpeechRequestedAt=FPlatformTime::Seconds();E.SpeechState=EOKRuntimeSpeechState::Preparing;E.SpeechError.Reset();++E.SpeechRequests;Error.Reset();return true;
 }
 bool OKSpeakCrowdRuntimeStream(AActor* Owner,int32 Character,TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe> Stream,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  if(!Stream||Stream->Channels<1||Stream->Channels>2||Stream->SampleRate<8000||Stream->SampleRate>96000){Error=TEXT("Invalid runtime speech stream");return false;}
  auto& E=*State->Entries[Character];if(E.SpeechJob.IsValid()){Error=TEXT("Runtime voice preparation already pending");return false;}
  // Already "prepared": the next tick starts playback, which then waits on the stream's samples.
@@ -1078,7 +1091,7 @@ bool OKSpeakCrowdRuntimeStream(AActor* Owner,int32 Character,TSharedPtr<FKKRunti
 }
 bool OKSpeakCrowdRuntimeActionLine(AActor* Owner,int32 Character,const FString& VoiceId,const FString& ActionId,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  auto& E=*State->Entries[Character];FString Action=ActionId;uint64 Linked=0;
  if(Action.IsEmpty()){const int32 Slot=E.ActionOverride>=2?E.ActionOverride:(E.ClipSources.Num()>2?2:INDEX_NONE);if(Slot!=INDEX_NONE){const int32 Source=E.ClipSources[Slot]!=INDEX_NONE?E.ClipSources[Slot]:State->WalkSources+(E.SelectionIndex%(State->Curves.Num()-State->WalkSources));Action=State->ClipIds[Source];}}
  if(!Action.IsEmpty()){
@@ -1092,13 +1105,13 @@ bool OKSpeakCrowdRuntimeActionLine(AActor* Owner,int32 Character,const FString& 
 }
 bool OKStopCrowdRuntimeSpeech(AActor* Owner,int32 Character,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime character not ready");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  auto& E=*State->Entries[Character];if(!E.PendingSpeechAction.IsEmpty()&&E.PendingAction==State->ClipIds.Find(E.PendingSpeechAction)){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;}
  E.CancelSpeech();Error.Reset();return true;
 }
 bool OKSetCrowdRuntimeBlink(AActor* Owner,int32 Character,float Closure,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
- if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||!FMath::IsFinite(Closure)||Closure< -1||Closure>1){Error=TEXT("Runtime blink character/value invalid");return false;}
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE||!FMath::IsFinite(Closure)||Closure< -1||Closure>1){Error=TEXT("Runtime blink character/value invalid");return false;}
  auto& E=*State->Entries[Character];if(!E.MouthStream||!E.MouthStream->BlinkVertices){Error=TEXT("APNG has no native eyelid morphs");return false;}
  E.BlinkOverride=Closure;Error.Reset();return true;
 }
