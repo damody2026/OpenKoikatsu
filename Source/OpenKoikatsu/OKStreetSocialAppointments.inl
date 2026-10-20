@@ -224,7 +224,7 @@ void AOKStreetSocialScene::TickAppointments(){
    // Time to walk the route, with room to spare (a fixed 90 s gave up halfway across the map).
    float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
    S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);
-   S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.Agents[Girl-1].Held=true;
+   S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
    UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
   }else if(S.Target==Girl){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
   else{UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d)"),Girl,S.ApproachGirl);}

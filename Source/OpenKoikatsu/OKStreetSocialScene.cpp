@@ -228,7 +228,7 @@ struct FOKStreetSceneState {
  // the heroine walking over on her own, and a second sleeper.
  float PlayerLookBase=50.f;TMap<FString,TArray<bool>> InviteStance;TMap<FString,double> InviteRefusedAt;TMap<FString,int32> InviteRefusals;
  int32 FollowMode=0,LedReplans=0;double LedBlockedSince=0;FVector LedLastPos=FVector::ZeroVector;float FollowGirlWalk=0;FVector FollowLead=FVector::ZeroVector;bool FollowLeadInit=false;
- TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;
+ TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false;int32 ApproachRetries=0;
  int32 SleepGirl2=INDEX_NONE;FVector SleepGirl2Bed=FVector::ZeroVector;float SleepGirl2Yaw=0;
  // Plan §12.4 level 4: she agreed, and they are on the way to a lockable room (or already in the private mode).
  int32 PendingIntimacy=INDEX_NONE,IntimacyGirl=INDEX_NONE;

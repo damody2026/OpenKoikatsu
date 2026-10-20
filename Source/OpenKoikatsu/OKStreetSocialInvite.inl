@@ -122,7 +122,7 @@ void AOKStreetSocialScene::TickApproach(){
   auto Path=ContactRoute(S.Agents[I-1].Position,S.Male);if(Path.IsEmpty())continue;
   if(S.ScheduleHeld.Contains(I))ReleaseFromSchedule(I);
   S.ApproachLastMinute=OKStreetMindNow(S);
-  S.ApproachGirl=I;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=Now;S.ApproachLimit=90.0;S.ApproachLast=Now;S.Agents[I-1].Held=true;
+  S.ApproachGirl=I;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=Now;S.ApproachLimit=90.0;S.ApproachLast=Now;S.ApproachAppointment=false;S.ApproachRetries=0;S.Agents[I-1].Held=true;
   // Charmed enough: she comes to ask him out, and will lead the way (plan §12.3).
   S.ApproachInvite=Approach->GetBoolField(TEXT("invites"));
   S.FreeTalkNotice=OKMsg(TEXT("ui.invite.walks_toward_you"), {{TEXT("name"), *S.Manifest.Characters[I].Name}});RefreshUI();
@@ -133,8 +133,22 @@ void AOKStreetSocialScene::TickApproach(){
 void AOKStreetSocialScene::StepApproach(){
  auto& S=*State;const int32 I=S.ApproachGirl;auto& A=S.Agents[I-1];
  auto Stop=[&](){A.Held=false;S.ApproachGirl=INDEX_NONE;S.ApproachPath.Reset();S.ApproachBlockedNear=false;};
+ // On her way to a meeting she was held up step after step (a park exit: 40 cm every 8 s) and ran out of time: the meeting
+ // used to vanish. Once more on a fresh route; out of his sight (25 m) she is already further along it.
+ if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit&&S.ApproachAppointment&&S.ApproachRetries==0&&S.Target==INDEX_NONE){
+  TArray<FVector> Path=ContactRoute(A.Position,S.Male);int32 From=0;
+  if(FVector::Dist2D(A.Position,S.Male)>2500.f)for(int32 K=0;K<Path.Num();++K)if(FVector::Dist2D(Path[K],S.Male)<=1500.f){From=FMath::Max(0,K-1);break;}
+  if(Path.Num()>=2){
+   ++S.ApproachRetries;if(From>0){A.Position=FVector(Path[From].X,Path[From].Y,A.Position.Z);Path.RemoveAt(0,From);}
+   float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
+   S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachPath=MoveTemp(Path);S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;
+   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d held up on the way to the meeting; she goes on from %s on a fresh route (route points=%d%s)"),I,*A.Position.ToCompactString(),S.ApproachPath.Num(),From>0?TEXT(", out of his sight further along"):TEXT(""));
+   return;
+  }
+ }
  if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit||(S.Target!=INDEX_NONE&&S.Target!=I)){
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d gave up (%s) at %s, he is at %s, distance %.0f"),I,FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit?*FString::Printf(TEXT("%.0f s"),S.ApproachLimit):TEXT("he talks to someone else"),*A.Position.ToCompactString(),*S.Male.ToCompactString(),FVector::Dist2D(A.Position,S.Male));
+  if(S.ApproachAppointment&&S.Target==INDEX_NONE&&S.Manifest.Characters.IsValidIndex(I)){S.FreeTalkNotice=OKMsg(TEXT("ui.invite.meeting_walk_blocked"),{{TEXT("name"),*S.Manifest.Characters[I].Name}});RefreshUI();}
   Stop();return;
  }
  // Arrived: beside him, or held up (a shelf, someone standing there) a couple of steps away; she stood at 176 cm for
