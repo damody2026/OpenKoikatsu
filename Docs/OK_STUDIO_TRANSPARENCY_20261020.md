@@ -26,14 +26,18 @@ GPU 驗收使用正式綁定器、已知不透明與常數 alpha 控制，以及
 
 | 項目 | 結果與本機紀錄 |
 |---|---|
-| GPU 真正混合 | `Saved/OKStudio/Verify-AlphaGPUAccepted/`：48 / 48 PASS；不透明控制約 .1007，常數 alpha 控制透射率 .493659；101 張 PNG 保留在該輪 images/TransparencyTest |
-| Rust 一般回歸 | `Saved/OKStudio/handoff_e/alpha-rust-suite.log`：417 PASS、461 ignored |
+| GPU 真正混合 | `Saved/OKStudio/Verify-AlphaTrackedAcceptance/`：48 / 48 PASS；不透明控制約 .101，常數 alpha 控制透射率約 .494；101 張 PNG 保留在該輪 images/TransparencyTest |
+| Rust 一般回歸 | `Saved/OKStudio/handoff_e/alpha-tracked-rust-suite.log`：417 PASS、461 ignored |
 | 嚴格原作鏡片＋快取保存 | `alpha-rust-oracle-corrected.log`：2 PASS，`OK_NOCACHE=1`；原生白色 MainTex 與卡片 alpha 0.1254902 各自核對 |
 | 材質／陰影 Automation | `Saved/OKStudio/Verify-AlphaAutomation/console.log`：GlassesBlend、StudioMdkCoverage、ShadowSubmit Coverage／FaceChannels／Mesh，五項 Success |
 | 三個共用根 | `Saved/Crowd/RuntimeSharedMaterial-{StreetDisplay26,StudioDisplay26,StreetHG05}.json`：來源網格 shader permutations 通過；一般／HG 另完成眼睛 foreground 與淚材質 |
 | 原卡：乾淨與完整基礎庫 | `alpha-{clean,full}-kks.log`：兩邊各五張 MATCH |
 | OK 卡封閉／live 重開 | `alpha-{clean,full}-okcards.log`：兩邊各五張 MATCH，gaps=0、game_reads=0 |
-| 既有功能 | `Saved/OKStudio/Verify-AlphaFinal-{GameSelfTest,PatternTest,EyeSetTest,BloomTest}/`：四項 PASS |
-| Editor／Development 遊戲建置 | `alpha-default-capture-build.log`、`alpha-final-game-build.log`：Succeeded |
+| 完整本輪自測 | `Saved/OKStudio/Verify-AlphaTrackedAcceptance/`：GameSelfTest、PatternTest、EyeSetTest、BloomTest、TransparencyTest、EditorSelfTest，六項 PASS；自動 ACCEPTANCE.md 內嵌 13 張代表圖，JSON 記錄 101 張圖片的尺寸與 SHA-256 |
+| 已提交版本的 Unity 建置 | `alpha-tracked-editor-build.log`、`alpha-tracked-game-build.log`：Editor／Development 遊戲均 Succeeded，包含 Module.OKStudio.cpp 分組編譯 |
+| 最終 3167 擷取 | `Saved/OKStudio/Verify-Alpha3167Accepted/`：1 / 1 出圖，本文 after／comparison 使用該次結果 |
+| 圖片驗收工具 | `Tools/test_ok_studio_evidence.lua`：16 PASS；三個 Lua 檔靜態檢查無問題 |
+
+最終複驗日期：2026-10-21。實作提交 `df6fd755c`，附圖驗收工具提交 `84f9952b3`。獨立檢查再次完整解碼所有 101 張 PNG，核對 hash、IEND 結尾及 13 張 Markdown 嵌圖；六個測試程序皆退出 0。
 
 這些結果限於本輪透明材質修正，不代表全部原作場景完全還原。場景整體色調、明暗與景深仍有既有差異。
