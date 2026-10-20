@@ -253,6 +253,21 @@ bool FOkSession::SetStudioIk(const TArray<int32>& Effectors,const TArray<FVector
 	for(const FVector& V:Positions)P.Append({float(V.X),float(V.Y),float(V.Z)});
 	return ok_session_set_studio_ik(Handle,Effectors.GetData(),P.GetData(),Effectors.Num())==0;
 }
+bool FOkSession::SetStudioIkPose(const TArray<int32>& Effectors,const TArray<FVector>& Positions,const TArray<FQuat>& Rotations,const TArray<uint8>& UseRotations)
+{
+    if(!Handle || Effectors.Num()!=Positions.Num() || Effectors.Num()!=Rotations.Num() || Effectors.Num()!=UseRotations.Num()) return false;
+    TArray<float> P;
+    TArray<float> Q;
+    for(const FVector& V:Positions) P.Append({float(V.X),float(V.Y),float(V.Z)});
+    for(const FQuat& V:Rotations) Q.Append({float(V.X),float(V.Y),float(V.Z),float(V.W)});
+    return ok_session_set_studio_ik_pose(Handle,Effectors.GetData(),P.GetData(),Q.GetData(),UseRotations.GetData(),Effectors.Num())==0;
+}
+bool FOkSession::SetStudioFixedNeck(const TArray<FQuat>& Rotations)
+{
+    TArray<float> Q;
+    for(const FQuat& V:Rotations) Q.Append({float(V.X),float(V.Y),float(V.Z),float(V.W)});
+    return Handle && ok_session_set_studio_fixed_neck(Handle,Q.GetData(),Rotations.Num())==0;
+}
 bool FOkSession::IkEffectorPosition(int32 Effector,FVector& Out) const
 {
 	float P[3]={};

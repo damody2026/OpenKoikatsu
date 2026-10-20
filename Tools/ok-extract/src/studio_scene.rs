@@ -25,6 +25,43 @@ impl Version {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Color { pub r: f32, pub g: f32, pub b: f32, pub a: f32 }
 
+/// NeckLookControllerVer2.SaveNeckLookCtrl: pattern and absolute local rotations, in source aBones order.
+#[derive(Clone, Debug, Serialize)]
+pub struct StudioNeck {
+    pub pattern: i32,
+    pub rotations: Vec<[f32; 4]>,
+}
+
+fn read_neck(bytes: &[u8]) -> Result<Option<StudioNeck>, String> {
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    if bytes.len() < 8 {
+        return Err("truncated Studio neck data".into());
+    }
+    let pattern = i32::from_le_bytes(bytes[0..4].try_into().unwrap());
+    if pattern != 4 {
+        return Ok(None);
+    }
+    let count = i32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    if !(0..=64).contains(&count) || bytes.len() != 8 + count as usize * 16 {
+        return Err("invalid Studio neck data length".into());
+    }
+    let mut rotations = Vec::new();
+    for chunk in bytes[8..].chunks_exact(16) {
+        let mut q = [0.; 4];
+        for (i, v) in q.iter_mut().enumerate() {
+            *v = f32::from_le_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap());
+        }
+        let norm = q.iter().map(|x| x * x).sum::<f32>();
+        if !norm.is_finite() || norm < 1e-12 {
+            return Err("invalid Studio neck quaternion".into());
+        }
+        rotations.push(crate::finalik::qnorm(q));
+    }
+    Ok(Some(StudioNeck { pattern, rotations }))
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind")]
 pub enum Object {
@@ -38,6 +75,7 @@ pub enum Object {
         ext_offset: usize, ext_len: usize,
         fk: Vec<(i32, ChangeAmount)>, ik: Vec<(i32, ChangeAmount)>,
         enable_fk: bool, active_fk: [bool; 7], enable_ik: bool, active_ik: [bool; 5],
+        neck: Option<StudioNeck>,
         anime: [i32; 3], anime_speed: f32, anime_time: f32, hand: [i32; 2], mouth_open: f32,
         /// OICharInfo nipple (0..1) and siru levels (face, chest front, chest back, lower front, lower back).
         nipple: f32, siru: [u8; 5],
@@ -344,11 +382,12 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             r.bool()?; r.f32()?; r.bool()?; // son visible / length, simple
             r.json_color()?;
             r.f32()?; r.f32()?; // anime option params
-            let neck = r.bytes_len("neck data")?; r.take(neck)?;
+            let neck_len = r.bytes_len("neck data")?;
+            let neck = read_neck(r.take(neck_len)?)?;
             let eyes = r.bytes_len("eyes data")?; r.take(eyes)?;
             let anime_time = r.f32()?;
             for _ in 0..2 { let n = r.count("access")?; r.take(n * 8)?; }
-            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
+            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
         }
         1 => {
             let (key, change, visible) = base(r, true)?;
@@ -665,5 +704,68 @@ mod item_animation_tests {
             assert!((*anime_speed-0.2197189331).abs()<0.000001);
             assert_eq!(children.len(),2);
         },_=>unreachable!()}
+    }
+}
+
+#[cfg(test)]
+mod fixed_neck_tests {
+    fn data(pattern: i32, qs: &[[f32; 4]]) -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend(pattern.to_le_bytes());
+        b.extend((qs.len() as i32).to_le_bytes());
+        for q in qs {
+            for v in q {
+                b.extend(v.to_le_bytes());
+            }
+        }
+        b
+    }
+    #[test]
+    fn fixed_neck_payload_validation() {
+        let b = data(4, &[[0., 0., 0., 1.], [0.1, 0., 0., 1.]]);
+        let n = super::read_neck(&b).unwrap().unwrap();
+        assert_eq!(n.pattern, 4);
+        assert_eq!(n.rotations.len(), 2);
+        assert!((n.rotations[1].iter().map(|v| v * v).sum::<f32>() - 1.).abs() < 1e-6);
+        assert!(super::read_neck(&b[..b.len() - 1]).is_err());
+        assert!(super::read_neck(&data(4, &[[0.; 4]])).is_err());
+        assert!(super::read_neck(&data(4, &[[f32::NAN, 0., 0., 1.]])).is_err());
+        assert!(super::read_neck(&data(3, &[[0.; 4]])).unwrap().is_none());
+    }
+    #[test]
+    #[ignore = "base library scene: saved FIX neck of 6331"]
+    fn scene_6331_fixed_neck() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../Content/IndependentResources/base_v1/studio/samples/koikatu_cs0006331.png",
+        );
+        let scene = super::read(&std::fs::read(path).unwrap()).unwrap();
+        fn find(objects: &[super::Object]) -> Option<&super::StudioNeck> {
+            for o in objects {
+                match o {
+                    super::Object::Character {
+                        key: 555,
+                        neck: Some(n),
+                        ..
+                    } => return Some(n),
+                    super::Object::Folder { children, .. }
+                    | super::Object::Item { children, .. }
+                    | super::Object::Route { children, .. } => {
+                        if let Some(n) = find(children) {
+                            return Some(n);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None
+        }
+        let neck = find(&scene.objects).unwrap();
+        assert_eq!(neck.pattern, 4);
+        assert_eq!(neck.rotations.len(), 2);
+        println!("6331 source FIX locals {:?}", neck.rotations);
+        assert!(neck
+            .rotations
+            .iter()
+            .any(|q| q[0].abs() + q[1].abs() + q[2].abs() > 0.1));
     }
 }

@@ -248,6 +248,19 @@ namespace
 						for (int32 Slot = 0; Slot < FMath::Min(Shown->Num(), 20); ++Slot) C.AccessoriesShown[Slot] = (*Shown)[Slot]->AsBool() ? 1 : 0;
 					}
 				}
+                const TSharedPtr<FJsonObject>* Neck = nullptr;
+                int32 SavedNeckPattern = -1;
+                if (Status) (*Status)->TryGetNumberField(TEXT("neck_look_ptn"), SavedNeckPattern);
+                if (SavedNeckPattern == 4 && O->TryGetObjectField(TEXT("neck"), Neck) && (*Neck)->GetIntegerField(TEXT("pattern")) == 4)
+                {
+                    const TArray<TSharedPtr<FJsonValue>>* Rotations = nullptr;
+                    if ((*Neck)->TryGetArrayField(TEXT("rotations"), Rotations) && Rotations->Num() == 2)
+                        for (const auto& Value : *Rotations)
+                        {
+                            const auto& Q = Value->AsArray();
+                            if (Q.Num() == 4) C.FixedNeck.Add(FQuat(Q[0]->AsNumber(), Q[1]->AsNumber(), Q[2]->AsNumber(), Q[3]->AsNumber()).GetNormalized());
+                        }
+                }
 				C.EyesLook = EOKSceneLook::Animation;
 				// FK of the enabled parts.
 				const TArray<TSharedPtr<FJsonValue>>* Active = nullptr;
@@ -282,7 +295,12 @@ namespace
 						const int32 No = int32(Pair[0]->AsNumber());
 						if (No < 0 || No >= 13 || !ActiveIk->IsValidIndex(Map[No].Part) || !(*ActiveIk)[Map[No].Part]->AsBool()) continue;
 						const FVector P = Vec3(Pair[1]->AsObject(), TEXT("pos"));
-						C.Ik.Add({ Map[No].Effector, FVector(-P.X, P.Z, P.Y) * 100.0 });
+						FOKSceneIkTarget Target;
+                        Target.Effector = Map[No].Effector;
+                        Target.Position = FVector(-P.X, P.Z, P.Y) * 100.0;
+                        Target.bUseRotation = No == 3 || No == 6 || No == 9 || No == 12;
+                        Target.Euler = Vec3(Pair[1]->AsObject(), TEXT("rot"));
+                        C.Ik.Add(Target);
 					}
 				}
 				// Hand shapes: 0 follows the animation, n is the game's shape n (OCIChar.ChangeHandAnime: SetShapeHandValue(side, n, 0, 0)).

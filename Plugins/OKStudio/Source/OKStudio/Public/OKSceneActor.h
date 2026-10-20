@@ -148,6 +148,7 @@ private:
 		/** FK bones the preview currently has. */
 		TArray<FOKSceneFkBone> AppliedFk;
 		TArray<FOKSceneIkTarget> AppliedIk;
+        TArray<FQuat> AppliedFixedNeck;
 		/** Studio animation loaded from the OK animation library (kept alive while shown). */
 		TStrongObjectPtr<UObject> StudioAnim;
 		int32 AppliedHands[2] = { -1, -1 };

@@ -1,5 +1,6 @@
 #include "OKSceneActor.h"
 #include "OKStudioImport.h"
+#include "OKStudioImport.h"
 #include "Camera/CameraComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
@@ -374,11 +375,31 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	{
 		TArray<int32> Effectors;
 		TArray<FVector> Positions;
-		for (const FOKSceneIkTarget& T : C.Ik) { Effectors.Add(T.Effector); Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position)); }
+		TArray<FQuat> Rotations;
+        TArray<uint8> UseRotations;
+        for (const FOKSceneIkTarget& T : C.Ik)
+        {
+            Effectors.Add(T.Effector);
+            Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position));
+            const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector,T.Euler,FVector::OneVector).GetRotation();
+            Rotations.Add(FQuat(-U.X,U.Z,U.Y,U.W));
+            UseRotations.Add(T.bUseRotation ? 1 : 0);
+        }
 		FString Error;
-		if (Actor->SetStudioIk(Effectors, Positions, Error)) Item.AppliedIk = C.Ik;
+		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations)) Item.AppliedIk = C.Ik;
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);
 	}
+    const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Animation ? C.FixedNeck : TArray<FQuat>();
+    if (Neck != Item.AppliedFixedNeck)
+    {
+        if (Actor->Session.SetStudioFixedNeck(Neck))
+        {
+            Item.AppliedFixedNeck = Neck;
+            Actor->bUserPoseDirty = true;
+            Actor->ApplyPoseFrame(0.f,false);
+        }
+        else Errors.Add(Object.Id,TEXT("fixed neck not applied"));
+    }
 }
 
 void AOKSceneActor::Sync()

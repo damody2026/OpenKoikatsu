@@ -158,8 +158,88 @@ pub unsafe extern "C" fn ok_session_set_studio_ik(s:*mut OkSession,effectors:*co
         if !(0..crate::session::STUDIO_IK_TARGETS as i32).contains(&e) || !p.iter().all(|v|v.is_finite()) {return -1;}
         targets.push((e as usize,[p[0],p[1],p[2]]));
     }
-    s.studio_ik=targets;0
+    s.studio_ik=targets;s.studio_ik_rotations.clear();0
 }
+/// Full Studio IK targets. Rotations are Unity skeleton-space quaternions; disabled targets retain position-only semantics.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_studio_ik_pose(
+    s: *mut OkSession,
+    effectors: *const i32,
+    positions: *const f32,
+    rotations: *const f32,
+    enabled: *const u8,
+    count: i32,
+) -> i32 {
+    let Some(s) = sess_ref(s) else {
+        return -1;
+    };
+    if !(0..=crate::session::STUDIO_IK_TARGETS as i32).contains(&count)
+        || count > 0
+            && (effectors.is_null()
+                || positions.is_null()
+                || rotations.is_null()
+                || enabled.is_null())
+    {
+        return -1;
+    }
+    let mut targets = Vec::new();
+    let mut angles = Vec::new();
+    for i in 0..count as usize {
+        let e = *effectors.add(i);
+        let p = std::slice::from_raw_parts(positions.add(i * 3), 3);
+        let q = std::slice::from_raw_parts(rotations.add(i * 4), 4);
+        if !(0..crate::session::STUDIO_IK_TARGETS as i32).contains(&e)
+            || !p.iter().all(|v| v.is_finite())
+        {
+            return -1;
+        }
+        targets.push((e as usize, [p[0], p[1], p[2]]));
+        if *enabled.add(i) != 0 {
+            let n = q.iter().map(|v| v * v).sum::<f32>();
+            if !(5..=8).contains(&e)
+                || !q.iter().all(|v| v.is_finite())
+                || !n.is_finite()
+                || n < 1e-12
+            {
+                return -1;
+            }
+            angles.push((e as usize, crate::finalik::qnorm([q[0], q[1], q[2], q[3]])));
+        }
+    }
+    s.studio_ik = targets;
+    s.studio_ik_rotations = angles;
+    0
+}
+/// Saved NeckLookControllerVer2 FIX locals (native aBones order), count 0 clears; validates before mutation.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_studio_fixed_neck(
+    s: *mut OkSession,
+    rotations: *const f32,
+    count: i32,
+) -> i32 {
+    let Some(s) = sess_ref(s) else {
+        return -1;
+    };
+    if count == 0 {
+        s.head_look.fixed = None;
+        return 0;
+    }
+    if count != 2 || rotations.is_null() {
+        return -1;
+    }
+    let mut result = [[0.; 4]; 2];
+    for (i, q) in result.iter_mut().enumerate() {
+        q.copy_from_slice(std::slice::from_raw_parts(rotations.add(i * 4), 4));
+        let n = q.iter().map(|v| v * v).sum::<f32>();
+        if !q.iter().all(|v| v.is_finite()) || !n.is_finite() || n < 1e-12 {
+            return -1;
+        }
+        *q = crate::finalik::qnorm(*q);
+    }
+    s.head_look.fixed = Some(result);
+    0
+}
+
 /// Skeleton-space position (Unity metres) of an IK effector's bone in the current pose; -1 before prepare.
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_ik_effector_position(s:*mut OkSession,effector:i32,out:*mut f32)->i32 {

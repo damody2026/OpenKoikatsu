@@ -150,6 +150,8 @@ public:
 	 *  Positions are skeleton space (Unity metres). */
 	bool PrepareStudioIk(FString& OutError);
 	bool SetStudioIk(const TArray<int32>& Effectors,const TArray<FVector>& UnityPositions);
+    bool SetStudioIkPose(const TArray<int32>& Effectors,const TArray<FVector>& UnityPositions,const TArray<FQuat>& UnityRotations,const TArray<uint8>& UseRotations);
+    bool SetStudioFixedNeck(const TArray<FQuat>& UnityRotations);
 	bool IkEffectorPosition(int32 Effector,FVector& OutUnity) const;
 	// Last head-look check in degrees: face vs its limited goal, goal vs the target. False when not looking.
 	bool HeadLookError(float& Residual,float& Excess) const;

@@ -3724,3 +3724,7 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜乾淨資源驗收不可只相信舊 clone 的檔名**：新建稀疏 checkout 從舊驗收庫 hydrate LFS 時，第一個不符 HEAD 的模型雜湊被嚴格檢查攔下；改逐檔核對追蹤 LFS OID，只在雜湊相符時建立 hard link，90 個舊來源不符者使用主工作庫中符合 HEAD 的內容。665 個追蹤 payload 共約 8.62 GB 全部核對，不提交或覆寫舊驗收庫的 missing.txt。稀疏 checkout 必須包括根 .gitattributes，否則 hydrated LFS payload 暫呈修改；重新套用 attributes 後刷新 index（不新增 commit），確認資源無實際 diff。sparse-checkout add 不接受 --no-cone，該模式只在 set 時指定。
 
 - **2026-10-21｜嚴格乾淨庫回歸必須保留 gaps 失敗**：本輪真正只含 HEAD 追蹤共用資源的新 checkout 中，March_7th 的 OKCHECK recorded／closed／live 三個 digest 一致、game_reads=0，但 gaps=1，嚴格結果為 DIFFERENT；其餘四張 gaps=0 MATCH。完整庫五張皆 MATCH。新增接點資料之外沒有改 base_v1 舊資源，故不以本次角色角度已正確而掩蓋這個既有依賴缺口，也不把私有 mod 模型加入共用版控來湊綠。okcard-check 有 DIFFERENT 仍 exit 0，驗收必須解析 verdict／gaps，不能只看退出碼。
+
+- **2026-10-21｜6331 遺失保存的手腕方向與 FIX 頭部姿勢**：原作左側角色 555 的左手啟用 IK，保存 hand target 的 pos／rot；頸部則為 neckLookPtn=4。舊匯入器只傳 IK 位置並丟掉 NeckLookControllerVer2 的 neckByteData，導致手腕方向與低頭姿勢錯誤。依 AddObjectAssist 的 usedRot（僅手／腳）與實際 prefab 的 aBones（cf_j_neck、cf_j_head）保存並套用來源四元數，FIX 在動畫與 IK 之後、動態骨之前生效，不替場景加角度或移動相機。
+- **2026-10-21｜未使用的頸部四元數可能為零**：初版新解碼對所有 neck pattern 驗證四元數，會把非 FIX 模式下無效但未使用的零值誤當場景損壞。只對 FIX 資料解碼／驗證；非 FIX 保留原動畫流程。FIX 模式仍嚴格檢查長度、有限值與非零 norm，錯誤不可寫入目前狀態。
+- **2026-10-21｜Rust 測試誤用 C++ 小數語法**：新斷言寫成 >.9999，Rust 需要 >0.9999，第一輪測試未編譯；已修正後重跑，沒有把編譯失敗列為通過。首次診斷不應列印整個場景全部道具／隱藏角色，6331 輸出過多；改為只讀有效可見角色與需要的骨架欄位。

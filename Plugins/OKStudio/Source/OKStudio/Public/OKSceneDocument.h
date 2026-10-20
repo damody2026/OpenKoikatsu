@@ -66,7 +66,7 @@ struct OKSTUDIO_API FOKSceneFkBone
 	bool operator==(const FOKSceneFkBone& O) const = default;
 };
 
-/** One Studio IK target of a character: an effector and where it should be (cm, in the character object's space). */
+/** A Studio IK target: position in character-local cm and optional native hand/foot orientation. */
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneIkTarget
 {
@@ -80,6 +80,12 @@ struct OKSTUDIO_API FOKSceneIkTarget
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	FVector Position = FVector::ZeroVector;
 
+    /** Native hand/foot IK target orientation, in Unity Euler degrees. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+    bool bUseRotation = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+    FVector Euler = FVector::ZeroVector;
+
 	bool operator==(const FOKSceneIkTarget& O) const = default;
 };
 
@@ -87,6 +93,11 @@ USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneCharacter
 {
 	GENERATED_BODY()
+
+    /** Saved FIX locals from NeckLookControllerVer2: source aBones order (neck, head), Unity quaternions. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+    TArray<FQuat> FixedNeck;
+
 
 	/** Card PNG: absolute, or relative to the project directory. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character")

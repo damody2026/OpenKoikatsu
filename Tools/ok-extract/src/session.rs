@@ -1105,6 +1105,7 @@ pub struct OkSession {
     /// shoulders, 3/4 thighs, 5/6 hands, 7/8 feet; skeleton space). Solved after FK.
     pub(crate) studio_ik_solver: Option<crate::finalik::IKSolverFullBodyBiped>,
     pub(crate) studio_ik: Vec<(usize, [f32; 3])>,
+    pub(crate) studio_ik_rotations: Vec<(usize, [f32;4])>,
     pub correct: Vec<CorrectInfo>,
     pub sex: i32,
     pub type_bone: i32,
@@ -1684,7 +1685,7 @@ impl OkSession {
             let base = crate::pose::capture_baseline(sk, &names);
             crate::pose::apply_abm(sk, &self.abm, 0, &base);
             // Studio IK after the bone modifiers: a target is where the limb ends up.
-            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik);
+            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations);
             if !self.game_root.as_os_str().is_empty() && std::env::var("OK_FINALIK").is_ok() {
                 crate::finalik::apply_final_ik(
                     &self.game_root,
@@ -1941,7 +1942,7 @@ impl OkSession {
             let base = crate::pose::capture_abm_baseline(sk,&self.abm);
             crate::pose::apply_abm(sk, &self.abm, 0, &base);
             // Studio IK after the bone modifiers: a target is where the limb ends up.
-            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik);
+            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations);
         }
     }
     /// Builds the Studio IK solver from the shared resources (FullBodyBipedIK config and body-bone prefab).
@@ -3103,6 +3104,7 @@ impl SessionBlob {
             user_fk: Vec::new(),
             studio_ik_solver: None,
             studio_ik: Vec::new(),
+            studio_ik_rotations: Vec::new(),
             correct: self.correct,
             sex: self.sex,
             type_bone: self.type_bone,
@@ -6286,7 +6288,7 @@ mod user_fk_card_tests {
 pub(crate) const STUDIO_BEND_FIRST: usize = 9;
 pub(crate) const STUDIO_IK_TARGETS: usize = 13;
 
-pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Option<crate::finalik::IKSolverFullBodyBiped>, targets: &[(usize, [f32; 3])]) {
+pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Option<crate::finalik::IKSolverFullBodyBiped>, targets: &[(usize, [f32; 3])], rotations: &[(usize,[f32;4])]) {
     let Some(solver) = solver.as_mut() else { return; };
     if targets.is_empty() { return; }
     let mut ik = crate::finalik::IkSkeleton::new_batched(sk);
@@ -6298,6 +6300,9 @@ pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Optio
         if *index >= STUDIO_BEND_FIRST {
             if let Some(bend) = solver.bend_constraints.get_mut(*index - STUDIO_BEND_FIRST + 1) { bend.goal_position = Some(*position); bend.weight = 1.; }
         } else if let Some(effector) = solver.effectors.get_mut(*index) { effector.position = *position; effector.position_weight = 1.; }
+    }
+    for (index, rotation) in rotations {
+        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=1.; }
     }
     solver.update(&mut ik);
     ik.sk.rebuild_worlds();
@@ -6362,5 +6367,104 @@ mod hair_parent_chain_tests {
             if checked > 0 { break; }
         }
         assert!(checked > 0, "no crowd card with ChaFileHair hair under cf_J_FaceUp_ty");
+    }
+}
+
+#[cfg(test)]
+mod studio_pose_rotation_tests {
+    #[test]
+    #[ignore = "OK base library and C002 card: wrist orientation and saved neck"]
+    fn rotations_survive_pose_and_clear() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut s = crate::oklib::open_test_card(
+            &manifest.join("../../Content/CharacterCards/CrowdAPNG/C002.png"),
+            0,
+        )
+        .unwrap();
+        s.refresh_static_interaction(0.);
+        s.prepare_studio_ik(&manifest.join("../../Content/IndependentResources/base_v1/paired"))
+            .unwrap();
+        let target = s.ik_effector_position(5).unwrap();
+        let q = crate::pose::euler_deg_to_quat([34., -55., 72.]);
+        s.studio_ik = vec![(5, target)];
+        s.studio_ik_rotations = vec![(5, q)];
+        s.refresh_static_interaction(0.);
+        let mut ik = crate::finalik::IkSkeleton::new(s.body_skel.as_mut().unwrap());
+        let got = ik.world_rot("cf_j_hand_L").unwrap();
+        let dot = |a: [f32; 4], b: [f32; 4]| (0..4).map(|i| a[i] * b[i]).sum::<f32>().abs();
+        println!("wrist expected {q:?} actual {got:?}");
+        assert!(dot(q, got) > 0.9999);
+        let reached = s.ik_effector_position(5).unwrap();
+        assert!(
+            (0..3)
+                .map(|i| (reached[i] - target[i]).powi(2))
+                .sum::<f32>()
+                .sqrt()
+                < 0.01
+        );
+        let fixed = [
+            crate::pose::euler_deg_to_quat([-15., 25., 8.]),
+            crate::pose::euler_deg_to_quat([12., -18., -7.]),
+        ];
+        s.head_look.fixed = Some(fixed);
+        s.refresh_static_interaction(0.);
+        for (name, q) in ["cf_j_neck", "cf_j_head"].into_iter().zip(fixed) {
+            assert!(
+                dot(
+                    q,
+                    s.body_skel
+                        .as_ref()
+                        .unwrap()
+                        .tfs
+                        .values()
+                        .find(|tf| tf.name == name)
+                        .unwrap()
+                        .rot
+                ) > 0.99999
+            );
+        }
+        let before = s.studio_ik.clone();
+        let s_ptr = &mut s as *mut _;
+        let bad = [0.; 4];
+        let enabled = [1u8];
+        let index = [5i32];
+        assert_eq!(
+            unsafe {
+                crate::ffi::ok_session_set_studio_ik_pose(
+                    s_ptr,
+                    index.as_ptr(),
+                    target.as_ptr(),
+                    bad.as_ptr(),
+                    enabled.as_ptr(),
+                    1,
+                )
+            },
+            -1
+        );
+        assert_eq!(s.studio_ik, before);
+        assert_eq!(s.studio_ik_rotations, vec![(5, q)]);
+        assert_eq!(
+            unsafe { crate::ffi::ok_session_set_studio_fixed_neck(s_ptr, std::ptr::null(), 0) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                crate::ffi::ok_session_set_studio_ik(s_ptr, std::ptr::null(), std::ptr::null(), 0)
+            },
+            0
+        );
+        assert!(s.studio_ik_rotations.is_empty());
+        s.refresh_static_interaction(0.);
+        assert!(s.head_look.fixed.is_none());
+        let head = s
+            .body_skel
+            .as_ref()
+            .unwrap()
+            .tfs
+            .values()
+            .find(|tf| tf.name == "cf_j_head")
+            .unwrap()
+            .rot;
+        assert!(dot(head, fixed[1]) < 0.999);
     }
 }
