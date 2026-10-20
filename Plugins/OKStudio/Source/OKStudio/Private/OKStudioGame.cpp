@@ -1838,6 +1838,10 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 			UE_LOG(LogTemp, Warning, TEXT("OK studio compare: %s not opened: %s"), *Scenes[State->Index], *LoadError);
 			return true;
 		}
+		// Diagnostic ablations change only this comparison's in-memory document.
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_BLOOM")) == TEXT("0")) Self->Document->Post.bBloom = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_DEPTH")) == TEXT("0")) Self->Document->Post.bDepthOfField = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FILTER")) == TEXT("0")) Self->Document->Post.ColorFilterIntensity = 0.f;
 		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover).
 		TArray<FString> Hide;
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));

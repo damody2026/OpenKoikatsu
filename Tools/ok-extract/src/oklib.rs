@@ -844,7 +844,8 @@ pub fn session_cache_location() -> Option<PathBuf> {
 ///     Directional lightmaps carry the direction/rebalancing texture separately.
 /// 14: Studio Standard/MDK/particle Texture2D and baked lightmap rows follow rendering UVs.
 /// 15: Studio renderers carry their native shadow casting mode, layer and enabled state.
-const SESSION_CACHE_REVISION: u32 = 17;
+/// 18: static and settled Animator activeSelf gate each prefab renderer instance through its ancestors.
+const SESSION_CACHE_REVISION: u32 = 18;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {

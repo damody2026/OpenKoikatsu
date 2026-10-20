@@ -3748,3 +3748,15 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜新增身形回歸需先查現有API**：3800測試誤將apply_shape／apply_shape_live當成單一參數且回傳Result，導致測試E0061／E0599未編譯。實際需同時傳body與face且回傳()；修正後重跑，失敗log保留，不以正式lib建置成功代替測試通過。
 
 - **2026-10-21｜直接啟動測試binary要等新編譯完成**：3800第一輪6331回歸在cargo更新測試binary前啟動，log仍顯示883 filtered而新版本應885。等待最新419項suite建完後重跑具名測試，使用3800-latest-6331-pose-regression.log，避免將舊binary結果列為新版本驗收。
+
+- **2026-10-21｜1901 後製排除要作用於實際SceneCapture設定**：ShowFlag.PostProcessing 0沒有關掉比較器另建SceneCapture的自有後製，圖片近乎相同不能當作無後製結果；改用只影響比較文件的BLOOM／DEPTH／FILTER診斷開關。隱藏Legacy粒子、volumeLight、spotLight各次診斷未移除右下白光，不能據此關閉正式場景特效當修正。
+- **2026-10-21｜Unity path_id僅在各serialized file內有效**：1901 Python探針把bundle所有物件按path_id放同一字典，Shader引用誤對到同ID mesh；改從material所屬assets_file.objects解析。同bundle可能含多個serialized file，不能用全域path_id表。
+
+- **2026-10-21｜地圖顯示根不一定等於清單prefab名**：1901 ray probe以清單LiveStage開模型，回報no meshes；該地圖實際root為Map。改取模型已記錄的shown prefab，不將清單名稱直接當渲染root，也不把探針失敗當成場景缺模型。
+
+- **2026-10-21｜1901 原作動畫開關遺漏**：舊版只取 Renderer 材質曲線，註解明確略過 GameObject m_IsActive，導致六組光束父物件原作為0仍顯示。改以完整 FileID／PathID 解析控制器與clip，套用 activeSelf 並沿父鏈取 activeInHierarchy，逐renderer instance保留；重新記錄90個共用Studio模型並提高session cache revision。不能改曝光或依shader名稱全隱藏，因為同shader可能也用於正常顯示的其他光束。
+- **2026-10-21｜原作oracle不可猜測測試環境或部件數**：第一輪用OK_GAME_ROOT啟動依賴test_support的oracle，實際契約是OK_TEST_GAME_ROOT，因而找不到來源檔。第二輪把六組父開關誤當成六個材質部件；原作有114個子renderer，Custom/StandardDouble也被其他光束共用。改核對完整來源／共用庫node可見性向量，另驗受影響材質instance確實隱藏且正常部件仍顯示；保留失敗log，不把不同shader共用部件數硬套成父物件數。
+
+- **2026-10-21｜動畫開關通過不能代替正式出圖驗收**：1901初版補齊六組Animator父開關後，正式圖片右下白塊仍存在。來源檢查確認共用mesh的spotBeam_geo接點activeSelf=False；ModelView卻把已載入的共享mesh複製到所有hierarchy接點。修正可見性需同時保留每個instance的靜態activeSelf與祖先狀態，不能只管動畫覆寫；SunLightInfo控制的root另保持可切換資格。初版出圖保留在Verify-Light1901Accepted，不能當最終成功圖。
+
+- **2026-10-21｜同名node與同shader都不是renderer身份**：額外map_animated_materials探針曾以spotBeam_geo名稱斷言全部關閉；原作存在同名接點及不同材質的正常啟用光束，該斷言失敗並非最終1375個node向量來源比對失敗。移除這項名稱猜測，保留專項逐node完整向量oracle與真實前後圖；後續不可把name／shader當唯一renderer identity。
