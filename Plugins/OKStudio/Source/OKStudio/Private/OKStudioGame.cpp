@@ -1749,6 +1749,8 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 			FString Error;
 			Self->UpdateViewer();
 			const UCameraComponent* Cam = Self->Viewer->GetCameraComponent();
+			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POSE_DUMP")).IsEmpty())
+				UE_LOG(LogTemp, Display, TEXT("OK studio camera: view=%s horizontal_fov=%.9f aspect=%.9f active=%d"), *Cam->GetComponentTransform().ToString(), Cam->FieldOfView, Cam->AspectRatio, Self->Document->ActiveCamera);
 			FImage Original;
 			if (FOKSceneCard::Capture(Self->SceneActor, Self->Viewer->GetActorTransform(), Cam->FieldOfView, &Cam->PostProcessSettings, W, H, false, Pixels, Error) && FImageUtils::LoadImage(*Path, Original))
 			{

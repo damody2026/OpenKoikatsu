@@ -15,8 +15,14 @@ pub(crate) struct HeadLook {
 
 impl HeadLook {
     pub fn apply(&mut self, skeleton: &mut Skeleton, dt: f32) {
+        self.apply_preserving_fk(skeleton,dt,&[]);
+    }
+    /// Studio's Neck FK forces look pattern FIX to freeze tracking, but its explicit
+    /// bone rotations remain authoritative over the saved tracking locals.
+    pub fn apply_preserving_fk(&mut self, skeleton: &mut Skeleton, dt: f32, fk: &[(String,[f32;3])]) {
         if let Some(rotations)=self.fixed {
             for (name,rotation) in ["cf_j_neck","cf_j_head"].into_iter().zip(rotations) {
+                if fk.iter().any(|(bone,_)|bone.eq_ignore_ascii_case(name)) {continue;}
                 if let Some(tf)=skeleton.tfs.values_mut().find(|tf|tf.name.eq_ignore_ascii_case(name)) {tf.rot=rotation;}
             }
             skeleton.rebuild_worlds();
@@ -69,4 +75,22 @@ mod tests {
         look.target=Some([0.,0.,-10.]);skeleton=base;look.apply(&mut skeleton,0.);
         assert!(skeleton.worlds.iter().flatten().flatten().all(|v|v.is_finite()));assert!(look.yaw.abs()<=65.&&look.pitch.abs()<=35.);
     }
+}
+
+#[cfg(test)]
+#[test]
+fn saved_fix_respects_explicit_neck_fk_per_bone() {
+    use crate::pose::{Skeleton,Tf};
+    let tf=|name:&str,parent|Tf{name:name.into(),parent,sibling_index:None,pos:[0.;3],rot:[0.,0.,0.,1.],scale:[1.;3]};
+    let mut sk=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:2,
+        tfs:[(1,tf("cf_j_neck",None)),(2,tf("cf_j_head",Some(1)))].into(),bone_ids:vec![1,2],source_mesh:0};
+    let fixed=[crate::pose::euler_deg_to_quat([10.,0.,0.]),crate::pose::euler_deg_to_quat([0.,15.,0.])];
+    let fk=vec![("cf_j_neck".into(),[0.,22.899248,0.]),("cf_j_head".into(),[4.6806436,8.702961,342.8514])];
+    let mut look=HeadLook::default();look.fixed=Some(fixed);
+    crate::session::apply_user_fk(&mut sk,&fk);look.apply_preserving_fk(&mut sk,0.,&fk);
+    for (id,(_,euler)) in [1,2].into_iter().zip(&fk) {assert_eq!(sk.tfs[&id].rot,crate::pose::euler_deg_to_quat(*euler));}
+    look.apply_preserving_fk(&mut sk,0.,&fk[1..]);
+    assert_eq!(sk.tfs[&1].rot,fixed[0]);assert_eq!(sk.tfs[&2].rot,crate::pose::euler_deg_to_quat(fk[1].1));
+    look.apply_preserving_fk(&mut sk,0.,&[]);
+    assert_eq!(sk.tfs[&1].rot,fixed[0]);assert_eq!(sk.tfs[&2].rot,fixed[1]);
 }

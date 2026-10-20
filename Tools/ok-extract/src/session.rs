@@ -1696,7 +1696,7 @@ impl OkSession {
                 );
             }
             // Static shape rebuilds also publish a pose; retain saved FIX locals without advancing a tracking clock.
-            if self.head_look.fixed.is_some() { self.head_look.apply(sk,0.); }
+            if self.head_look.fixed.is_some() { self.head_look.apply_preserving_fk(sk,0.,&self.user_fk); }
             }
         }
         // Live sliders do not mutate source keys, typeBone, correct or ABMX.
@@ -1983,7 +1983,7 @@ impl OkSession {
     pub(crate) fn finish_paired_dynamics_filtered(&mut self,delta_seconds:f32,observer:Option<crate::ffi::PrivateSkinObserver>,excluded:&[usize]){
         let profiling=std::env::var("OK_ANIM_PROFILE").ok().as_deref()==Some("1");let start=std::time::Instant::now();
         {let _trace=crate::native_profile::Scope::new(4);
-        if let Some(body)=self.body_skel.as_mut() { self.head_look.apply(body,delta_seconds); crate::dbone::apply_head_tilt(body, crate::px::debug_head_tilt()); }
+        if let Some(body)=self.body_skel.as_mut() { self.head_look.apply_preserving_fk(body,delta_seconds,&self.user_fk); crate::dbone::apply_head_tilt(body, crate::px::debug_head_tilt()); }
         self.update_body_dynamics(delta_seconds);}
         let body=start.elapsed();
         {let _trace=crate::native_profile::Scope::new(5);self.update_clothes_dynamics(delta_seconds);}
@@ -6502,5 +6502,43 @@ mod studio_pose_rotation_tests {
             .unwrap()
             .rot;
         assert!(dot(head, fixed[1]) < 0.999);
+    }
+}
+
+#[cfg(test)]
+#[test]
+#[ignore="base library: 3800 saved neck FK and source camera"]
+fn scene_3800_neck_fk_overrides_saved_fix() {
+    let root=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../");
+    let lib=root.join("Content/IndependentResources/base_v1");
+    let bytes=std::fs::read(lib.join("studio/samples/koikatu_cs0003800.png")).unwrap();
+    let scene=crate::studio_scene::read(&bytes).unwrap();
+    let camera=scene.camera.as_ref().unwrap();
+    assert!((camera.fov-27.3473415).abs()<0.00001);
+    assert!((camera.rotate[2]-55.250511).abs()<0.00001);
+    let object=scene.objects.iter().find(|o|matches!(o,crate::studio_scene::Object::Character{key:37,..})).unwrap();
+    let crate::studio_scene::Object::Character{fk,neck,active_fk,enable_fk,..}=object else{unreachable!()};
+    assert!(*enable_fk&&active_fk[1]);
+    let fixed:&[[f32;4]]= &neck.as_ref().unwrap().rotations;
+    let path=root.join("Saved/OKStudio/3800-neck-source.png");std::fs::write(&path,crate::studio_scene::card_bytes(&bytes,object).unwrap()).unwrap();
+    let mut s=open(&lib,Some(&path),0).unwrap();
+    s.head_look.fixed=Some(fixed.try_into().unwrap());
+    s.user_fk=[(1,"cf_j_head"),(2,"cf_j_neck")].into_iter().map(|(id,name)|
+        (name.to_owned(),fk.iter().find(|(n,_)|*n==id).unwrap().1.rot)).collect();
+    let expected=s.user_fk.clone();
+    for mode in 0..3 {
+        if mode==0{s.refresh_static_interaction(0.);}
+        else {let mut values=s.shape_body.clone();values[0]=(values[0]+0.03).min(0.99);let face=s.shape_face.clone();if mode==1{s.apply_shape(&values,&face);}else{s.apply_shape_live(&values,&face);}}
+        let sk=s.body_skel.as_ref().unwrap();
+        for (name,euler) in &expected {
+            let actual=sk.tfs.values().find(|t|t.name==*name).unwrap().rot;let q=crate::pose::euler_deg_to_quat(*euler);
+            assert!(actual.iter().zip(q).map(|(a,b)|a*b).sum::<f32>().abs()>0.99999,"mode={mode} {name}");
+            println!("3800 mode={mode} {name} expected={q:?} actual={actual:?}");
+        }
+    }
+    s.user_fk.clear();s.refresh_static_interaction(0.);
+    for (name,q) in ["cf_j_neck","cf_j_head"].into_iter().zip(fixed) {
+        let actual=s.body_skel.as_ref().unwrap().tfs.values().find(|t|t.name==name).unwrap().rot;
+        assert!(actual.iter().zip(q).map(|(a,b)|a*b).sum::<f32>().abs()>0.99999,"FIX resumes after clearing FK");
     }
 }

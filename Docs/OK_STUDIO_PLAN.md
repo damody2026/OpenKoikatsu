@@ -452,3 +452,11 @@
 實際來源／暖快取／非0套／closed reopen 與乾淨共用庫回歸見 [1268 服裝圖文驗收](OK_STUDIO_CLOTHES_1268_20261021.md)。舊場景及角色卡需重新匯入原作場景PNG。
 
 ![1268 服裝修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Clothes1268_20261021/comparison.png)
+
+### S5：3800 鏡頭核對與頸部 FK（2026-10-21）
+
+使用者回報鏡頭參數；來源及實際camera trace確認位置、含roll旋轉、vertical→horizontal FOV換算均正確。`304d10724` 修正保存FIX無條件覆蓋頸／頭FK：依原作Neck FK強制FIX停止追視的語義，逐骨保留明確FK，未接管骨頭仍套FIX，清除FK後自然接回。一般／live身形重建共用此規則。
+
+來源與完整驗收見 [3800 圖文紀錄](OK_STUDIO_CAMERA_3800_20261021.md)。419 Rust PASS；3800真實骨架三條路徑與6331固定頸部／手腕回歸PASS；相機數值修正前後完全一致，3800／6331重拍2/2。
+
+![3800 頸部 FK 修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Camera3800_20261021/comparison.png)
