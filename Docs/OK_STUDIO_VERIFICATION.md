@@ -51,3 +51,5 @@ Compare 必須同時滿足程序 exit code 0、14／14 完成訊息、最後場�
 下面是這輪實際產生的 0010 對照圖，已與自動報告內的原檔核對位元組一致。左原作縮圖，右 Unreal 結果；圖中的明暗／色調差異仍然存在。這次驗收確認自動保存與報告功能成功，沒有改變既有的視覺差異判定。
 
 ![本輪自動保存的 0010：左原作縮圖、右 Unreal 結果](images/OKStudio/AutoEvidence20261020/koikatu_cs0000010.png)
+
+整合主線 `fdf43e943` 後，Editor／一般遊戲 Development 再次建置成功，`Verify-HandoffEAutoEvidenceMerged` 三項遊戲自測全 PASS；新增街區規則的 `shop::tests` 6 PASS，規則 DLL 已重建。這次主線更新沒有變更 Studio 擷取／材質程式，完整 14 圖證據仍對應前述本輪執行。

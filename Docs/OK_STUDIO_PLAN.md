@@ -216,6 +216,8 @@
 - **完整重跑**：`Verify-HandoffEAutoEvidence` 四項自測與 14／14 場景出圖全部 PASS；14 張圖由最終收集器重新核對，並獨立確認全部圖片連結、解碼與 SHA-256。擷取峰值 20.6 GB，最後卸載 12.2 GB，沒有宣稱回到啟動基準或畫面完全一致。完整自動嵌圖報告在本機該目錄的 `ACCEPTANCE.md`；下圖是本輪實際保存的 0010，與報告原圖位元組一致。
 
 ![第十三輪實際自動驗收圖：左原作縮圖、右 Unreal 結果](images/OKStudio/AutoEvidence20261020/koikatu_cs0000010.png)
+- **最終整合檢查**：整合主線 `fdf43e943` 後，Editor／一般遊戲 Development 再次建置成功，`Verify-HandoffEAutoEvidenceMerged` 三項遊戲自測全 PASS；新增街區規則的 `shop::tests` 6 PASS，規則 DLL 已重建。這次主線更新沒有變更 Studio 擷取／材質程式，完整 14 圖證據仍對應前述本輪執行。
+
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
