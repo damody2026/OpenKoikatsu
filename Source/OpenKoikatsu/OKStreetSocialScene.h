@@ -131,6 +131,8 @@ private:
  bool BillSplitHeard(const FString& His,const FString& Her) const; // OKStreetSocialEconomy.inl
  FString OutingShop(int32 Girl) const; // OKStreetSocialEconomy.inl
  FString OrderShopHere(int32 Girl) const; // OKStreetSocialEconomy.inl
+ bool MindProfilesReady() const; // OKStreetSocialSchedule.inl
+ int32 ShiftUntil(int32 Character) const; // OKStreetSocialInvite.inl
  bool PlaceClosedAt(const FString& PlaceId,const FDateTime& When,FString& Why) const; // OKStreetSocialEconomy.inl
  int32 FloorHere(const FString& Place) const; // OKStreetSocialEconomy.inl
  TArray<const struct FOKStreetCatalogItem*> ItemsHere(const FString& Place) const;

@@ -235,7 +235,7 @@ struct FOKStreetSceneState {
  int64 AppointmentTickMinute=-1;
  // Plan §6: today's plans per heroine, the block each is in, walks in progress, meals eaten this block, who the
  // schedule is holding in place, and where he spends his time.
- TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
+ TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;
  // Plan §8.6: the shift he is working now (appointment id, job, window in game minutes), early-leave tracking, fast-forward.
  // Plan §6.5: who spent time with him today, the day already reflected on, and tomorrow's intents.
@@ -1188,6 +1188,13 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
   if(!Handled){const FString Her=OKStreetStableId(S.Manifest.Characters[Character]);const int32 Kind=OKRulesInviteKind(S,Action);const TArray<bool>* Stance=S.InviteStance.Find(Her);
    if(Stance&&Stance->IsValidIndex(Kind)&&!(*Stance)[Kind])UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s agreed aloud although her rolled stance was no; going"),*Action);
    S.InviteRefusals.Remove(Her);}
+  // On her shift (making drinks at the shop): a spoken yes does not take her off work; she is told so, and so is he.
+  if(!Handled)if(const int32 Until=ShiftUntil(Character);Until>0){Handled=true;
+   const FOKStreetPlanBlock* B=BlockNow(Character,int32(OKStreetMindNow(S)%1440));const FOKStreetPlace* P=B?OKStreetFindPlace(B->Place):nullptr;
+   const FString Place=P?FString(P->Name):B?B->Place:FString();const FString At=FString::Printf(TEXT("%d:%02d"),Until/60,Until%60);
+   S.TellHer.Add(OKMsg(TEXT("ui.invite.on_shift_tell_her"),{{TEXT("place"),Place},{TEXT("until"),At}}));
+   S.Message=OKMsg(TEXT("ui.invite.on_shift_player"),{{TEXT("name"),S.Manifest.Characters[Character].Name},{TEXT("place"),Place},{TEXT("until"),At}});RefreshUI();
+   UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s not started, actor=%d is on shift until %s"),*Action,Character,*At);}
   if(Handled){}
   else if(!BeginOuting(Character,Action,Error)){
    // Only because her scripted line is still playing: she said yes, so it starts as soon as the line ends (TickRetryAction).

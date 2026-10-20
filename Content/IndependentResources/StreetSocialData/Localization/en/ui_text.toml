@@ -942,6 +942,8 @@ refuses_sleep_together = "{name} doesn't want to sleep with {first_name}."
 she_pulls_toward = "She pulls you toward {place}."
 walks_toward_you = "{name} is walking toward you."
 meeting_walk_blocked = "{name} was held up on her way to your meeting and could not reach you; go and find her."
+on_shift_tell_her = "(You are still on shift at {place} until {until}; you cannot walk off with him or sit down to do something together. If you just said yes, take it back naturally: after your shift.)"
+on_shift_player = "{name} is on shift at {place} until {until}; ask her again after work."
 
 [ui.jobs]
 apply_job_label = "Apply for {job_title} ({wage, number, ::currency}/hr)"

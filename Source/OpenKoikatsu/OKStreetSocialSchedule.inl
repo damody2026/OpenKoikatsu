@@ -87,10 +87,23 @@ const FOKStreetPlanBlock* AOKStreetSocialScene::BlockNow(int32 I,int32 Minute,in
  return nullptr;
 }
 
+bool AOKStreetSocialScene::MindProfilesReady() const{
+ const auto& S=*State;for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(!S.MindProfiles.Contains(OKStreetStableId(S.Manifest.Characters[I])))return false;return true;
+}
+
 void AOKStreetSocialScene::TickSchedules(){
  auto& S=*State;if(S.SelfTest||!S.Mind)return;
  const double Wall=FPlatformTime::Seconds();if(Wall<S.ScheduleTickAt)return;S.ScheduleTickAt=Wall+0.5;
- if(S.PlanDay!=S.Store.CalendarDay)PlanAll();
+ // The day is planned from the heroines' profiles (student: classes, the cafeteria at noon), which the mind sends a
+ // moment after the map starts: planned before they came, every heroine had a day of "leisure street" and lunch in
+ // the department store, all ten at once, the whole day after a load. Wait for them (30 s at most).
+ if(S.PlanDay!=S.Store.CalendarDay){
+  const bool Ready=MindProfilesReady();
+  if(!Ready&&S.PlanWaitSince==0)S.PlanWaitSince=Wall;
+  if(!Ready&&Wall-S.PlanWaitSince<30)return;
+  if(!Ready)UE_LOG(LogTemp,Warning,TEXT("Street plan: profiles still missing after 30 s; planning without them"));
+  S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;PlanAll();
+ }
  const int64 Now=OKStreetMindNow(S);const int32 Minute=int32(Now%1440);
  if(Now!=S.PlaceCountMinute){S.PlaceCountMinute=Now;const FString Here=PlaceHere(S.Male);if(!Here.IsEmpty())++S.PlayerPlaceMinutes.FindOrAdd(Here);}
  // Urgent needs (hungry, worn out, grimy) cut in before the plan: the rules decide (plan.rs schedule_tick).

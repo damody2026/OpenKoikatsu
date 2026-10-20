@@ -942,6 +942,8 @@ refuses_sleep_together = "{name} 不想和 {first_name} 一起睡。"
 she_pulls_toward = "她拉著你往{place}走。"
 walks_toward_you = "{name} 朝你走過來了。"
 meeting_walk_blocked = "{name} 往約好的地方走，路上被擋住了，沒能走到你身邊；去她那邊找她吧。"
+on_shift_tell_her = "（你還在{place}上班，{until} 才下班，不能跟他走開或坐下來一起做事；剛才答應的話，請自然地改口說等下班再說。）"
+on_shift_player = "{name} 還在{place}上班（到 {until}），下班後再約她吧。"
 
 [ui.jobs]
 apply_job_label = "應徵{job_title}（時薪 {wage, number, ::currency}）"
