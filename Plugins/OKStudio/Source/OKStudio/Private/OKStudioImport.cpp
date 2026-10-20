@@ -260,6 +260,8 @@ namespace
                             const auto& Q = Value->AsArray();
                             if (Q.Num() == 4) C.FixedNeck.Add(FQuat(Q[0]->AsNumber(), Q[1]->AsNumber(), Q[2]->AsNumber(), Q[3]->AsNumber()).GetNormalized());
                         }
+                    if (C.FixedNeck.Num() == 2) C.NeckLook = EOKSceneLook::Fixed;
+                    else Note(TEXT("saved FIX neck requires the native neck/head bone pair"));
                 }
 				C.EyesLook = EOKSceneLook::Animation;
 				// FK of the enabled parts.

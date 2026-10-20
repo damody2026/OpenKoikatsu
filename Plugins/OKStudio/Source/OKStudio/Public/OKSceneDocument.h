@@ -14,6 +14,8 @@ enum class EOKSceneLook : uint8
 	Camera,
 	/** Look at the character's look point. */
 	Point,
+    /** The neck locals saved with the imported pose. */
+    Fixed,
 };
 
 /** How a timeline key blends into the next one. */

@@ -389,7 +389,7 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations)) Item.AppliedIk = C.Ik;
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);
 	}
-    const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Animation ? C.FixedNeck : TArray<FQuat>();
+    const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Fixed ? C.FixedNeck : TArray<FQuat>();
     if (Neck != Item.AppliedFixedNeck)
     {
         if (Actor->Session.SetStudioFixedNeck(Neck))

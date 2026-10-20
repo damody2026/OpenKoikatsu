@@ -545,9 +545,9 @@ public:
 			Float(TEXT("眼"), [](FOKSceneObject& X) { return float(X.Character.EyesPattern); }, [](FOKSceneObject& X, float V) { X.Character.EyesPattern = FMath::RoundToInt(V); }, -1.f, 40.f, 1.f);
 			Float(TEXT("嘴"), [](FOKSceneObject& X) { return float(X.Character.MouthPattern); }, [](FOKSceneObject& X, float V) { X.Character.MouthPattern = FMath::RoundToInt(V); }, -1.f, 40.f, 1.f);
 			Float(TEXT("張嘴"), [](FOKSceneObject& X) { return X.Character.MouthOpen; }, [](FOKSceneObject& X, float V) { X.Character.MouthOpen = V; }, -1.f, 1.f, 0.05f);
-			auto LookName = [](EOKSceneLook L) { return FString(L == EOKSceneLook::Camera ? TEXT("看鏡頭") : L == EOKSceneLook::Point ? TEXT("看注視點") : TEXT("照動畫")); };
+			auto LookName = [](EOKSceneLook L) { return FString(L == EOKSceneLook::Fixed ? TEXT("固定姿勢") : L == EOKSceneLook::Camera ? TEXT("看鏡頭") : L == EOKSceneLook::Point ? TEXT("看注視點") : TEXT("照動畫")); };
 			Cycle(TEXT("眼睛"), [LookName](FOKSceneObject& X) { return LookName(X.Character.EyesLook); }, [](FOKSceneObject& X) { X.Character.EyesLook = EOKSceneLook((uint8(X.Character.EyesLook) + 1) % 3); });
-			Cycle(TEXT("脖子"), [LookName](FOKSceneObject& X) { return LookName(X.Character.NeckLook); }, [](FOKSceneObject& X) { X.Character.NeckLook = EOKSceneLook((uint8(X.Character.NeckLook) + 1) % 3); });
+			Cycle(TEXT("脖子"), [LookName](FOKSceneObject& X) { return LookName(X.Character.NeckLook); }, [](FOKSceneObject& X) { X.Character.NeckLook = EOKSceneLook((uint8(X.Character.NeckLook) + 1) % (X.Character.FixedNeck.Num() == 2 ? 4 : 3)); });
 			Label(TEXT("注視點（cm，角色空間）"));
 			for (int32 Axis = 0; Axis < 3; ++Axis)
 				Float(FString(TEXT("XYZ")).Mid(Axis, 1), [Axis](FOKSceneObject& X) { return float(X.Character.LookPoint[Axis]); }, [Axis](FOKSceneObject& X, float V) { X.Character.LookPoint[Axis] = V; }, -1000.f, 1000.f, 1.f);
@@ -3017,6 +3017,40 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		const bool bH2 = PL && PL->Session.BoneEuler(TEXT("cf_j_neck"), Head2) && Head2.Equals(Head0, 0.5f);
 		Check(bH2, FString::Printf(TEXT("back to the animation's neck: %s"), *Head2.ToString()));
 	}
+    Step(TEXT("saved fixed neck"));
+    {
+        AKKPreviewActor* Preview = SceneActor->PreviewOf(A);
+        FVector Before;
+        const bool bBefore = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Before);
+        auto NativeQuat = [](const FVector& Euler)
+        {
+            const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector, Euler, FVector::OneVector).GetRotation();
+            return FQuat(-U.X, U.Z, U.Y, U.W);
+        };
+        FOKSceneCharacter& Character = Document->Find(A)->Character;
+        Character.FixedNeck = { NativeQuat(FVector(9,-12,3)), NativeQuat(FVector(18,-27,7)) };
+        Character.NeckLook = EOKSceneLook::Fixed;
+        Document->NotifyChanged();
+        SyncNow();
+        FVector Fixed;
+        const bool bFixed = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Fixed);
+        Check(bFixed && FMath::Abs(NativeQuat(Fixed) | Character.FixedNeck[1]) > .99999, TEXT("saved FIX mode applies the source head local"));
+        Character.NeckLook = EOKSceneLook::Animation;
+        Document->NotifyChanged();
+        SyncNow();
+        FVector Restored;
+        const bool bRestored = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Restored);
+        Check(bBefore && bRestored && FMath::Abs(NativeQuat(Restored) | NativeQuat(Before)) > .99999, TEXT("animation mode clears runtime FIX and restores the animated head"));
+        Character.NeckLook = EOKSceneLook::Fixed;
+        Document->NotifyChanged();
+        SyncNow();
+        const bool bAgain = Preview && Preview->Session.BoneEuler(TEXT("cf_j_head"), Fixed);
+        Check(bAgain && FMath::Abs(NativeQuat(Fixed) | Character.FixedNeck[1]) > .99999, TEXT("saved FIX can be selected again without reimport"));
+        Character.FixedNeck.Reset();
+        Character.NeckLook = EOKSceneLook::Animation;
+        Document->NotifyChanged();
+        SyncNow();
+    }
 	Step(TEXT("post and frames"));
 	{
 		Document->Post.bBloom = true; Document->Post.BloomIntensity = 2.5f;

@@ -17,6 +17,7 @@ bool FOKStudioSavedPoseTest::RunTest(const FString &Parameters)
 	Hand.Euler = FVector(34, 305, 72);
 	Character.Ik.Add(Hand);
 	Character.FixedNeck = {FQuat(FVector::UpVector, .3), FQuat(FVector::RightVector, -.2)};
+	Character.NeckLook = EOKSceneLook::Fixed;
 	const TArray<FQuat> ExpectedNeck = Character.FixedNeck;
 	FString Error;
 	UOKSceneDocument *Loaded = NewObject<UOKSceneDocument>();
@@ -25,6 +26,7 @@ bool FOKStudioSavedPoseTest::RunTest(const FString &Parameters)
 	if (!TestNotNull(TEXT("character survives roundtrip"), Object))
 		return false;
 	TestTrue(TEXT("IK position and source Euler orientation survive roundtrip"), Object->Character.Ik == Character.Ik);
+	TestTrue(TEXT("FIX mode survives roundtrip"), Object->Character.NeckLook == EOKSceneLook::Fixed);
 	TestEqual(TEXT("saved FIX neck keeps both source bones"), Object->Character.FixedNeck.Num(), 2);
 	if (Object->Character.FixedNeck.Num() == 2)
 		for (int32 Index = 0; Index < 2; ++Index)

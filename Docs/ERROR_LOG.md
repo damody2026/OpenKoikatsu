@@ -3728,3 +3728,5 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜6331 遺失保存的手腕方向與 FIX 頭部姿勢**：原作左側角色 555 的左手啟用 IK，保存 hand target 的 pos／rot；頸部則為 neckLookPtn=4。舊匯入器只傳 IK 位置並丟掉 NeckLookControllerVer2 的 neckByteData，導致手腕方向與低頭姿勢錯誤。依 AddObjectAssist 的 usedRot（僅手／腳）與實際 prefab 的 aBones（cf_j_neck、cf_j_head）保存並套用來源四元數，FIX 在動畫與 IK 之後、動態骨之前生效，不替場景加角度或移動相機。
 - **2026-10-21｜未使用的頸部四元數可能為零**：初版新解碼對所有 neck pattern 驗證四元數，會把非 FIX 模式下無效但未使用的零值誤當場景損壞。只對 FIX 資料解碼／驗證；非 FIX 保留原動畫流程。FIX 模式仍嚴格檢查長度、有限值與非零 norm，錯誤不可寫入目前狀態。
 - **2026-10-21｜Rust 測試誤用 C++ 小數語法**：新斷言寫成 >.9999，Rust 需要 >0.9999，第一輪測試未編譯；已修正後重跑，沒有把編譯失敗列為通過。首次診斷不應列印整個場景全部道具／隱藏角色，6331 輸出過多；改為只讀有效可見角色與需要的骨架欄位。
+
+- **2026-10-21｜保存的固定頭部不能藏在「照動畫」模式下**：初版以 FixedNeck 陣列覆蓋 Animation 模式，畫面雖正確，但 UI「照動畫」不能真正還原動畫頭部。改用獨立 Fixed enum（附加於既有值之後），匯入時明確設為「固定姿勢」；只有有保存頸部資料的角色提供此選項。切回 Animation／Camera／Point 時清除 runtime FIX，保存資料仍可切回使用，避免為單張圖隱藏控制狀態。
