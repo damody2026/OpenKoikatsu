@@ -55,6 +55,8 @@ hear_ranks = "10,十:10|A,尖:1|2,二:2|3,三:3|4,四:4|5,五:5|6,六:6|7,七:7|
 # A piece of a message naming a control: it goes behind the "?" (message_hint).
 control_hint = "Esc|WASD|Shift|Ctrl|F9|按 E|E 交谈|E 与|Tab 切换|N 开始|P 或|按右侧|选择话题："
 offer_pay = "我请|请你|我付|我来付|我出|算我的|我买单|我买给你|我請|請你|我來付|我買單|我買給你|送你|不准抢着付|别抢着付|不准抢|我买单|这次我来|还没请|没请到|还没請|沒請到|欠你一杯|欠你一顿"
+# Phrases with a word of offer_pay that do not offer to pay ("我送你回宿舍" walks her home).
+offer_pay_not = "送你回|送你到|送你去|送你一程|送你上|送你下|送你出|送你过去|请你帮|请你等|请你原谅|请你相信|请你听|请你别|请你放心"
 ask_split = "各付各的|各付各|AA|各自付|分开付|分開付|付一半|一人一半|各付一半|平分|对半|對半"
 decline_treat = "不用请|不用你请|别请|我自己付|自己付|我付我的|不用你付|我自己来付|不用請|不用你請|別請|我付我的|付一半|一人一半|各付一半|平分|对半|對半|AA"
 # He orders for himself (shop.rs his_items): the words that say so, and those that make it hers.
