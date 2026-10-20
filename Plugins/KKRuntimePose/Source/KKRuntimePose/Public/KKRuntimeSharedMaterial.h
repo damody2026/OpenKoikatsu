@@ -32,6 +32,12 @@ KKRUNTIMEPOSE_API UMaterialInstanceDynamic* OKCreateRuntimeSharedMaterial(const 
 
 KKRUNTIMEPOSE_API TConstArrayView<EKKRuntimeMaterialRecipe> OKRuntimeSharedMaterialRecipes();
 KKRUNTIMEPOSE_API FString OKRuntimeSharedMaterialParentName(EKKRuntimeMaterialRecipe);
+// The recipe whose parent stands in when a material root was baked before this recipe existed (ForgeStudioOpaque →
+// ForgeStudio, same program and layout); None for a recipe every root has. Loaders that require every parent should
+// accept the stand-in instead of failing on an older root.
+KKRUNTIMEPOSE_API EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRuntimeMaterialRecipe);
+// Root/<parent>, or the fallback recipe's parent when the root lacks it; null when neither is there.
+KKRUNTIMEPOSE_API UMaterialInterface* OKLoadRuntimeSharedMaterialParent(const FString& Root,EKKRuntimeMaterialRecipe,bool Outline=false);
 
 KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialTranslucent(EKKRuntimeMaterialRecipe);
 KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialTwoSided(EKKRuntimeMaterialRecipe);

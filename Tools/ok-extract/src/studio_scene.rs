@@ -84,6 +84,8 @@ pub struct StudioCamera { pub pos: [f32; 3], pub rotate: [f32; 3], pub distance:
 /// frame.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct SceneEffects {
+    /// SceneInfo.caMap: the map root's local position and Euler rotation (Unity), set by MapCtrl.Reflect.
+    pub map_pos: [f32; 3], pub map_rot: [f32; 3],
     /// SceneInfo.sunLightType: the map's time of day (SunLightInfo.Info.Type 0 morning, 1 day, 2 evening, 3 night).
     pub sun_light_type: i32,
     pub ace_no: i32, pub ace_blend: f32,
@@ -105,7 +107,8 @@ pub struct SceneEffects {
 /// sound and the background.
 fn main_camera(r: &mut Reader, v: &Version) -> Result<(StudioCamera, SceneEffects), String> {
     let mut e = SceneEffects::default();
-    r.change()?; // caMap
+    let map = r.change()?; // caMap
+    (e.map_pos, e.map_rot) = (map.pos, map.rot);
     e.sun_light_type = r.i32()?;
     r.bool()?; // mapOption
     e.ace_no = r.i32()?;

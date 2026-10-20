@@ -1055,6 +1055,17 @@ pub struct PrefabRenderCamera {
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PrefabRenderTextures { pub cameras: Vec<PrefabRenderCamera>, pub users: Vec<(i32, String, String, i32)> }
 
+/// One time of day of a Studio map's SunLightInfo (on the map root): the GameObjects shown then (`visibleList`, by
+/// `prefab_hierarchy` node; every list is hidden first, then the current one shown) and the sun (`_targetLight`'s Euler
+/// angle in degrees, colour, intensity).
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabSunInfo { pub kind: i32, pub visible: Vec<i32>, pub angle: [f32; 3], pub color: [f32; 4], pub intensity: f32 }
+
+/// A Studio map's SunLightInfo: the sun Light's node, type, culling mask and baking mode (m_Lightmapping 4 realtime),
+/// and the times of day it has (SunLightInfo.Info.Type 0 morning, 1 day, 2 evening, 3 night).
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabSunLight { pub light_node: i32, pub light_type: i32, pub culling_mask: u32, pub lightmapping: i32, pub infos: Vec<PrefabSunInfo> }
+
 /// A baked ReflectionProbe of a prefab (a Studio map scene): what Unity Standard's indirect specular samples. `node` is
 /// the probe's GameObject (`prefab_hierarchy` numbering; -1 for the scene's skybox reflection, used outside every probe);
 /// the box (Unity metres, around the node) picks the renderers it reflects for.
@@ -1623,6 +1634,8 @@ impl ParsedBundle {
     pub fn prefab_lightmaps(&self,prefab:&str)->PrefabLightmaps {self.memo_prefab("prefab_lightmaps",prefab,prefab,||self.prefab_lightmaps_unity(prefab))}
     /// Cameras rendering into RenderTextures and the materials sampling them (recorded by `studio-nodes`).
     pub fn prefab_render_textures(&self,prefab:&str)->PrefabRenderTextures {self.memo_prefab("prefab_render_textures",prefab,prefab,||self.prefab_render_textures_unity(prefab))}
+    /// A map's SunLightInfo: times of day, what each shows, the sun (recorded by `studio-nodes`).
+    pub fn prefab_sun_light(&self,prefab:&str)->PrefabSunLight {self.memo_prefab("prefab_sun_light",prefab,prefab,||self.prefab_sun_light_unity(prefab))}
     /// Baked reflection probes of a prefab and the scene's skybox reflection (recorded by `studio-nodes`).
     pub fn prefab_reflection_probes(&self,prefab:&str)->PrefabReflectionProbes {self.memo_prefab("prefab_reflection_probes",prefab,prefab,||self.prefab_reflection_probes_unity(prefab))}
     /// Material values of a prefab's settled Animators (recorded by `studio-nodes`).
@@ -2284,20 +2297,56 @@ impl ParsedBundle {
                     let below:HashMap<u32,usize>=(0..h.nodes.len()).filter_map(|n|path_of(anim_node as usize,n).map(|s|(crate::anim::unity_string_to_hash(&s) as u32,n))).collect();
                     for clip in crate::anim::controller_steady_clips(&ctrl) {
                         let Some(c)=uv_pptr(&clip).and_then(|id|find(74,id)) else {continue;};
-                        // Only values the clip holds throughout (the same at its start and middle): a curve that changes
-                        // over time (the live stage's laser beams switch on well after t = 0) depends on when the picture is
-                        // taken, so it keeps the material's own value.
-                        let (v0,duration)=crate::anim::generic_clip_values(&c,0.);
-                        let later:Vec<_>=[0.25f32,0.5,0.75,0.99].iter().map(|f|crate::anim::generic_clip_values(&c,duration*f).0).collect();
-                        for (k,(path,attr,ty,v)) in v0.into_iter().enumerate() {
+                        // The clip's first frame: Studio loads the map with its Animators entering their default states,
+                        // so a material curve that changes later (the live stage's volume-light cones stay at 0 brightness
+                        // for most of vl_center_intensity) shows its start. Only renderer material bindings: GameObject
+                        // visibility curves (the laser beams' spotBeam_active) are not applied.
+                        let (v0,_)=crate::anim::generic_clip_values(&c,0.);
+                        for (path,attr,ty,v) in v0 {
                             if ty!=23&&ty!=137 {continue;}
                             let (Some(&node),Some(&x))=(below.get(&path),v.first()) else {continue;};
-                            if later.iter().any(|l|l.get(k).and_then(|b|b.3.first()).is_none_or(|y|(x-y).abs()>1e-4)) {continue;}
                             values.push((node as i32,attr&0x0FFF_FFFF,(attr>>28) as u8,x));
                         }
                     }
                 }
                 PrefabAnimatedMaterials{values}
+            });
+        }
+        Default::default()
+    }
+    /// A Studio map's SunLightInfo (the MonoBehaviour with `_infos` and `_targetLight`, on the map root): the sun Light
+    /// and each time of day's shown GameObjects and sun. Nodes are `prefab_hierarchy` numbering (inactive ones too).
+    fn prefab_sun_light_unity(&self, prefab:&str)->PrefabSunLight {
+        let graphs=self.transform_graphs();
+        for (gi,graph) in graphs.iter().enumerate() {
+            let (h,go_node)=crate::pose::prefab_hierarchy_in(graph,prefab);
+            if h.nodes.is_empty() {continue;}
+            return self.with_serialized(|sers| {
+                let Some(ser)=sers.get(gi) else {return Default::default();};
+                for info in ser.objects_of_type(114) {
+                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let p=obj.class.properties();
+                    let (Some(unity_asset_core::UnityValue::Array(list)),Some(target))=(p.get("_infos"),p.get("_targetLight")) else {continue;};
+                    if !p.get("m_GameObject").and_then(uv_pptr).is_some_and(|go|go_node.contains_key(&go)) {continue;}
+                    let mut sun=PrefabSunLight{light_node:-1,light_type:1,culling_mask:u32::MAX,lightmapping:4,infos:Vec::new()};
+                    let light_id=uv_pptr(target).unwrap_or(0);
+                    if let Some(l)=ser.objects_of_type(108).into_iter().find(|i|i.path_id==light_id).and_then(|i|UnityObject::from_serialized_file(ser,i).ok()) {
+                        let lp=l.class.properties();
+                        sun.light_node=lp.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied().unwrap_or(-1);
+                        sun.light_type=lp.get("m_Type").map(uv_i32).unwrap_or(1);
+                        sun.lightmapping=lp.get("m_Lightmapping").map(uv_i32).unwrap_or(4);
+                        sun.culling_mask=lp.get("m_CullingMask").and_then(|m|uv_obj(m,"m_Bits")).and_then(|v|v.as_i64()).map(|v|v as u32).unwrap_or(u32::MAX);
+                    }
+                    let v3=|v:Option<&unity_asset_core::UnityValue>|v.map(|v|["x","y","z"].map(|k|uv_obj(v,k).map(uv_f32).unwrap_or(0.))).unwrap_or([0.;3]);
+                    for i in list {
+                        let visible=uv_obj(i,"visibleList").map(uv_arr).unwrap_or(&[]).iter().filter_map(uv_pptr).filter_map(|go|go_node.get(&go).copied()).collect();
+                        let color=uv_obj(i,"color").map(|c|["r","g","b","a"].map(|k|uv_obj(c,k).map(uv_f32).unwrap_or(1.))).unwrap_or([1.;4]);
+                        sun.infos.push(PrefabSunInfo{kind:uv_obj(i,"type").map(uv_i32).unwrap_or(0),visible,angle:v3(uv_obj(i,"angle")),color,
+                            intensity:uv_obj(i,"intensity").map(uv_f32).unwrap_or(1.)});
+                    }
+                    return sun;
+                }
+                Default::default()
             });
         }
         Default::default()

@@ -838,7 +838,9 @@ pub fn session_cache_location() -> Option<PathBuf> {
 /// 10: C master and E duo merged (both 8s together); above either line's own number.
 /// 11: Standard materials keep their _MetallicGlossMap (with _METALLICGLOSSMAP) and Studio map parts their reflection
 ///     probe atlas (`_OKReflection`).
-const SESSION_CACHE_REVISION: u32 = 11;
+/// 12: (E duo) Studio map parts take their Animators' material values at the clip's first frame, not only the steady
+///     ones; inactive time-of-day parts (SunLightInfo visibleList) come with the map.
+const SESSION_CACHE_REVISION: u32 = 12;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {

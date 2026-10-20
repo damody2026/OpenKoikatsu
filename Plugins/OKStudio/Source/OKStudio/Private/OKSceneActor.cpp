@@ -1,4 +1,5 @@
 #include "OKSceneActor.h"
+#include "OKStudioImport.h"
 #include "Camera/CameraComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
@@ -484,15 +485,24 @@ void AOKSceneActor::Sync()
 
 void AOKSceneActor::SyncMap()
 {
-	if (Document->Map == ShownMap) return;
+	// The map stands at the scene's map transform (Studio's map position / rotation).
+	const FTransform MapPlace = Document->MapTransform * GetActorTransform();
+	if (Document->Map == ShownMap)
+	{
+		for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews)
+			if (P.IsValid() && !P->GetActorTransform().Equals(MapPlace)) P->SetActorTransform(MapPlace);
+		ApplyMapTime(MapPlace);
+		return;
+	}
+	ShownMapTime = -2;
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) { P->Destroy(); ReleasedSinceCollect += 32; }
 	ShownMapPreviews.Reset();
 	ShownMap = Document->Map;
 	MapError.Reset();
-	if (ShownMap < 0) return;
+	if (ShownMap < 0) { ApplyMapTime(MapPlace); return; }
 	const FOKStudioCatalogMap* Entry = FOKStudioCatalog::Get().FindMap(ShownMap);
 	if (!Entry) { MapError = FString::Printf(TEXT("no studio map %d (%s)"), ShownMap, *FOKStudioCatalog::Get().Error); return; }
-	UE_LOG(LogTemp, Display, TEXT("OK studio: building map %s (%d)"), *Entry->Name, ShownMap);
+	UE_LOG(LogTemp, Display, TEXT("OK studio: building map %s (%d) at %s"), *Entry->Name, ShownMap, *Document->MapTransform.ToString());
 	// A scene map shows each scene root that has meshes (controllers without renderers are skipped).
 	TArray<FString> Failed;
 	for (const FString& Root : Entry->Roots)
@@ -501,13 +511,84 @@ void AOKSceneActor::SyncMap()
 		FString Error;
 		AKKPreviewActor* Actor = Session.OpenOkModel(LibraryDirectory(), Entry->Model, Root, false, Error) ? SpawnPreview(GetWorld(), MoveTemp(Session), Error, {}, {}, nullptr, true) : nullptr;
 		if (!Actor) { Failed.Add(Root + TEXT(": ") + Error); continue; }
-		Actor->SetActorTransform(GetActorTransform());
+		Actor->SetActorTransform(MapPlace);
 		// The map is on its own lighting channel: Studio's character light (it turns with the camera) does not light it.
 		TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
 		for (UPrimitiveComponent* P : Primitives) P->SetLightingChannels(false, false, true);
 		ShownMapPreviews.Add(Actor);
 	}
 	if (ShownMapPreviews.IsEmpty()) MapError = FString::Join(Failed, TEXT("; "));
+	ApplyMapTime(MapPlace);
+}
+
+// Off by default: with it 3167's classroom gets the original's warm light on the desk, but 6331's floor turns orange
+// where the original stays grey (not understood yet).
+static TAutoConsoleVariable<int32> CVarOkStudioMapSun(TEXT("ok.Studio.MapSun"), 0,
+	TEXT("1: light a Studio map with its own sun (SunLightInfo._targetLight at the scene's time of day, casting shadows); 0: maps show only their lightmaps and emission."));
+
+void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
+{
+	AKKPreviewActor* Map = MapPreview();
+	// The map's times (okmodel_view: `_OKSun<t>Color` on its parts). Map.RangeTimeZone: the scene's time when the map
+	// has it, else its first.
+	FLinearColor Color, Angle;
+	auto Value = [&](const TCHAR* Suffix, int32 T, FLinearColor& Out)
+	{
+		if (!Map || Map->Session.PartCount() <= 0) return false;
+		const FTCHARToUTF8 Name(*FString::Printf(TEXT("_OKSun%d%s"), T, Suffix));
+		return Map->Session.MaterialValue(0, Name.Get(), Out);
+	};
+	int32 Time = -1;
+	if (Value(TEXT("Color"), Document->Post.SunType, Color)) Time = Document->Post.SunType;
+	for (int32 T = 0; T < 4 && Time < 0; ++T) if (Value(TEXT("Color"), T, Color)) Time = T;
+	int32 Components = 0;
+	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) Components += P->GetComponents().Num();
+	const bool bSun = Time >= 0 && CVarOkStudioMapSun.GetValueOnGameThread() != 0;
+	if (Time == ShownMapTime && Components == ShownMapComponents && (MapSun != nullptr) == bSun && (!bSun || ShownMapSunPlace.Equals(GetActorTransform()))) return;
+	ShownMapTime = Time;
+	ShownMapComponents = Components;
+	ShownMapSunPlace = GetActorTransform();
+	// SunLightInfo.Set: every time's visibleList hidden, then the current time's shown (okmodel_view::mark_sun_visible).
+	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews)
+	{
+		if (!P.IsValid()) continue;
+		TInlineComponentArray<UPrimitiveComponent*> Primitives(P.Get());
+		for (UPrimitiveComponent* C : Primitives)
+		{
+			for (const FName& Tag : C->ComponentTags)
+			{
+				const FString S = Tag.ToString();
+				if (S.StartsWith(TEXT("OKSunVisible"))) C->SetVisibility(Time >= 0 && ((FCString::Atoi(*S.Mid(12)) >> Time) & 1) != 0);
+			}
+			// The sun casts shadows (Unity: soft shadows), so the map shades itself: indoors it comes in by the windows.
+			C->SetCastShadow(bSun);
+		}
+	}
+	if (!bSun)
+	{
+		if (MapSun) { MapSun->DestroyComponent(); MapSun = nullptr; }
+		return;
+	}
+	Value(TEXT("Color"), Time, Color);
+	Value(TEXT("Angle"), Time, Angle);
+	if (!MapSun)
+	{
+		MapSun = NewObject<UDirectionalLightComponent>(this, TEXT("MapSun"));
+		MapSun->SetMobility(EComponentMobility::Movable);
+		MapSun->SetupAttachment(RootComponent);
+		MapSun->SetCastShadows(true);
+		// The sun's culling mask is the map's layer: it lights the map (lighting channel 2), not the characters.
+		MapSun->LightingChannels.bChannel0 = false;
+		MapSun->LightingChannels.bChannel2 = true;
+		MapSun->RegisterComponent();
+	}
+	// SetLight: the light's world Euler angles (Unity's light shines along its +Z, an Unreal light along +X), colour,
+	// intensity (Unity directional intensity x4, as Studio's own lights).
+	const FQuat Turn(FVector::UpVector, UE_HALF_PI);
+	MapSun->SetWorldRotation(GetActorQuat() * FOKStudioImport::UnityToUe(FVector::ZeroVector, FVector(Angle.R, Angle.G, Angle.B), FVector::OneVector).GetRotation() * Turn);
+	MapSun->SetLightColor(FLinearColor(Color.R, Color.G, Color.B, 1.f));
+	MapSun->SetIntensity(Color.A * 4.f);
+	UE_LOG(LogTemp, Display, TEXT("OK studio: map time %d sun angle=(%.1f,%.1f,%.1f) colour=(%.2f,%.2f,%.2f) intensity=%.2f"), Time, Angle.R, Angle.G, Angle.B, Color.R, Color.G, Color.B, Color.A);
 }
 
 int32 AOKSceneActor::MapPartCount() const

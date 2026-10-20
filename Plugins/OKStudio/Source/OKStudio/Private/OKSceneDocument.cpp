@@ -142,6 +142,7 @@ FString UOKSceneDocument::ToJson() const
 	Root->SetNumberField(TEXT("active_camera"), ActiveCamera);
 	Root->SetNumberField(TEXT("next_id"), NextId);
 	Root->SetNumberField(TEXT("map"), Map);
+	if (!MapTransform.Equals(FTransform::Identity)) Root->SetStringField(TEXT("map_transform"), MapTransform.ToString());
 	Root->SetNumberField(TEXT("duration"), Duration);
 	if (TSharedPtr<FJsonObject> PostJson = FJsonObjectConverter::UStructToJsonObject(Post)) Root->SetObjectField(TEXT("post"), PostJson);
 	TArray<TSharedPtr<FJsonValue>> TrackJson;
@@ -197,6 +198,9 @@ bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 	Objects = MoveTemp(Loaded);
 	ActiveCamera = Root->HasField(TEXT("active_camera")) ? int32(Root->GetNumberField(TEXT("active_camera"))) : -1;
 	Map = Root->HasField(TEXT("map")) ? int32(Root->GetNumberField(TEXT("map"))) : -1;
+	MapTransform = FTransform::Identity;
+	FString MapTransformText;
+	if (Root->TryGetStringField(TEXT("map_transform"), MapTransformText)) MapTransform.InitFromString(MapTransformText);
 	Duration = Root->HasField(TEXT("duration")) ? float(Root->GetNumberField(TEXT("duration"))) : 10.f;
 	Post = FOKScenePost();
 	const TSharedPtr<FJsonObject>* PostJson = nullptr;

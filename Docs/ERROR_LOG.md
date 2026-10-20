@@ -3646,6 +3646,11 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **已知差異（未修）**：預設男卡 ill_male_01／02 在完整基礎庫上也是 DIFFERENT：只差身體 `runtime_textures._Texture2` 的取樣資訊（skin shader 的 liquid 貼圖），幾何與貼圖本身相同。`Default Female Penis = Random` 的 Random 選擇仍未解析，`o_dankon` 頂點數與遊戲不同。
 - **把「本機沒有模型的 zip 項目」一律當缺失**：項目目錄掃描每張卡會碰到所有 zipmod 的 bundle（約 8,850 個），全部變成缺口；轉 OK 卡的缺口迴圈把幾十個無關 zipmod 當成卡片要的，超過 64 個就停，`okLc` 不完整。改成只在真的用到模型內容時記 `absent-model <id>`。防止重犯：新增缺口來源前，先在一張卡上數缺口數量，確認只指向那張卡用到的東西。
 - **轉 OK 卡重試時沿用了上一輪的行程內快取**：找到卡片沒指名的 zipmod 後重試，那一輪的項目與 bundle 全從快取來，zip 項目沒被讀，pack 的 `zips=0`，封閉重開時卡片自己的 zipmod 變成缺口（60 張樣本 25 張退步）。完整基礎庫掩蓋了這個問題，因為那些模型本來就在庫裡。修正：模型不在本機的 zipmod，`library_zip_memo` 依後備世代重算，重試前釋放 bundle 快取。防止重犯：改動後要拿「乾淨 clone」與「完整庫」各跑一次同樣的卡，比對兩邊結果。
+- **新增共用母材質配方只烘進自己的根目錄，街區啟動就退出**（2026-10-20，OK Studio）：配方 62 `ForgeStudioOpaque` 只烘進 OK Studio 用的 `StudioDisplay25`。街區的 `OKCrowdRuntimeScene` 啟動時要求每個配方都有母材質，所以在 `StreetDisplay24`／`StreetHG03` 找不到 `M_ForgeStudioOpaque` 就退出。修正：新增 `OKRuntimeSharedMaterialFallback`／`OKLoadRuntimeSharedMaterialParent`（舊根目錄缺新配方時改用同程式的舊配方 61 `M_ForgeStudio`），`OKCreateRuntimeSharedMaterial` 依實際母材質的 family 核對；C 組另外把新配方烘進街區根目錄。預防：新增配方時同時處理所有出貨的根目錄（StudioDisplay*、StreetDisplay24、StreetHG03），或事先通知 C 組；新配方一律要給退路配方。
+- **1901 背景黑，先後猜成大螢幕偏高、地圖 Animator、LED 面板**（2026-10-20，OK Studio 地圖）：真正原因是場景存的地圖位移 `SceneInfo.caMap`（1901 是 z −15）被 `studio_scene.rs` 讀了就丟，以及兩個 2D 效果（`Legacy Shaders/Particles/Additive` 的レンズフレア）被畫成不透明黑方塊。我照「原作背景像大螢幕」的推測查了一整輪 Animator。預防：畫面和原作差很多時，先確認場景檔的每個欄位都有被使用（解析器裡 `r.change()?; // xxx` 這種讀了就丟的值要逐一檢查），再用 `OK_RT_VIEW` 拍清楚的圖、`OK_STUDIO_COMPARE_HIDE`／`OK_HIDE_SHADER` 逐一藏候選，確認是哪個物件擋住
+- **`FString::Printf` 的格式字串用了執行期的 TCHAR\***（2026-10-20）：UE 的 Printf 要編譯期常數格式，傳變數編不過，連帶後面的呼叫也報錯，擋住了別人的建置。預防：格式固定、變的部分當參數（`TEXT("_OKSun%d%s")`）；改完先自己建置，不要留給下一個排建置的人
+- **執行期材質的 TextureSampleParameter2D 預設貼圖是線性的，取樣器卻設 Color**（2026-10-20）：材質編譯失敗、畫成預設格紋。預防：Color 取樣器配 sRGB 預設貼圖（`/Engine/EngineResources/Black`），LinearColor 配 `OKExposureWhiteTexture`；看到格紋先 grep log 的 `Failed to compile Material`
+- **gamma 空間的加法輸出沒先夾到 1 就 pow 2.2**（2026-10-20）：舞台光束 `_brightness` 5 的片段加 5^2.2≈34，加上場景泛光整張白。預防：模擬 KKS（gamma、LDR 畫面）的輸出一律 `pow(saturate(x), 2.2)`
 
 ## 共用母材質配方與出貨根目錄（2026-10-20）
 

@@ -151,6 +151,13 @@ private:
 	int32 ShownMap = -1;
 	TArray<TWeakObjectPtr<AKKPreviewActor>> ShownMapPreviews;
 	void SyncMap();
+	// The map's time of day (SunLightInfo.Set): which time its parts show and its own sun light then.
+	UPROPERTY(Transient)
+	TObjectPtr<class UDirectionalLightComponent> MapSun;
+	int32 ShownMapTime = -2;
+	int32 ShownMapComponents = 0;
+	FTransform ShownMapSunPlace;
+	void ApplyMapTime(const FTransform& MapPlace);
 
 	bool Build(const FOKSceneObject& Object, FShown& Out, FString& OutError);
 	void Release(FShown& Item);

@@ -233,6 +233,11 @@ pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> 
         if shader.contains("main_item_studio_add") {
             return ("additive".into(), true);
         }
+        // Unity's built-in additive particle shaders (Studio's 2D lens flares: Legacy Shaders/Particles/Additive) blend
+        // One One too: the black around the glow adds nothing (drawn opaque it hid 1901's whole backdrop).
+        if shader.contains("particles/additive") {
+            return ("additive".into(), true);
+        }
         // Native glasses use SrcAlpha/OneMinusSrcAlpha even when their
         // Material stores a default queue (-1), before Unity resolves it.
         if shader == "koikano/main_clothes_item_glasses"

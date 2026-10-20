@@ -658,6 +658,8 @@ struct FOKToonShadowParameters
 	FLinearColor LineMaskST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	FLinearColor HairGlossST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	bool bHairFrontProgram = false;
+	// Shader Forge/main_item_studio_add: its additive light effects mix the item colours by the texture's channel masks.
+	bool bStudioAddProgram = false;
 	FLinearColor RampGST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	FLinearColor AnotherRampST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	UTexture2D* AnotherRampTex = nullptr;
@@ -2357,19 +2359,35 @@ return Base.rgb * sh;
 			Mat->GetExpressionCollection().AddExpression(ProbeAmbient);
 			Ed->EmissiveColor.Expression = ProbeAmbient;
 		}
-		else if (bAdditive)
+		else if (bAdditive && Shadow && Shadow->bStudioAddProgram)
 		{
-			// Studio's light effects add their texture tinted by the item's first colour.
-			UMaterialExpressionConstant3Vector* Tint = NewObject<UMaterialExpressionConstant3Vector>(Mat);
-			Tint->Material = Mat;
-			Tint->Constant = Shadow ? Shadow->ItemColors[0] : FLinearColor::White;
-			Mat->GetExpressionCollection().AddExpression(Tint);
-			UMaterialExpressionMultiply* Tinted = NewObject<UMaterialExpressionMultiply>(Mat);
-			Tinted->Material = Mat;
-			Tinted->A.Expression = ColorOut;
-			Tinted->B.Expression = Tint;
-			Mat->GetExpressionCollection().AddExpression(Tinted);
-			Ed->EmissiveColor.Expression = Tinted;
+			// Studio's light effects (Shader Forge/main_item_studio_add, installed pixel program in abdata/studio/mat/00):
+			// the texture's channels are three layered masks, each tinting one item colour, and the brightest wins (in
+			// display values): max(saturate(r - max(g,b)^8) _Color, saturate(g - b^8) _Color2, b _Color3) x _alpha.
+			UMaterialExpressionCustom* Effect = NewObject<UMaterialExpressionCustom>(Mat);
+			Effect->Material = Mat;
+			Effect->OutputType = CMOT_Float3;
+			Effect->Inputs.Empty();
+			FCustomInput& TexIn = Effect->Inputs.AddDefaulted_GetRef();
+			TexIn.InputName = TEXT("Tex");
+			TexIn.Input.Expression = ColorOut;
+			auto Gamma = [](const FLinearColor& C) { return FLinearColor(FMath::Pow(FMath::Max(C.R, 0.f), 1.f / 2.2f), FMath::Pow(FMath::Max(C.G, 0.f), 1.f / 2.2f), FMath::Pow(FMath::Max(C.B, 0.f), 1.f / 2.2f), 1.f); };
+			const FLinearColor C1 = Gamma(Shadow ? Shadow->ItemColors[0] : FLinearColor::White);
+			const FLinearColor C2 = Gamma(Shadow ? Shadow->ItemColors[1] : FLinearColor::White);
+			const FLinearColor C3 = Gamma(Shadow ? Shadow->ItemColors[2] : FLinearColor::White);
+			Effect->Code = FString::Printf(TEXT("float3 t = pow(max(Tex.rgb, 0.0), 1.0 / 2.2);\n")
+				TEXT("float m = max(t.b, t.g); m *= m; m *= m;\n")
+				TEXT("float3 c1 = saturate(t.r - m * m) * float3(%s, %s, %s);\n")
+				TEXT("float b4 = t.b * t.b; b4 *= b4;\n")
+				TEXT("float3 c2 = saturate(t.g - b4 * b4) * float3(%s, %s, %s);\n")
+				TEXT("float3 c3 = t.b * float3(%s, %s, %s);\n")
+				TEXT("return pow(max(max(c3, max(c1, c2)) * %s, 0.0), 2.2);"),
+				*FString::SanitizeFloat(C1.R), *FString::SanitizeFloat(C1.G), *FString::SanitizeFloat(C1.B),
+				*FString::SanitizeFloat(C2.R), *FString::SanitizeFloat(C2.G), *FString::SanitizeFloat(C2.B),
+				*FString::SanitizeFloat(C3.R), *FString::SanitizeFloat(C3.G), *FString::SanitizeFloat(C3.B),
+				*FString::SanitizeFloat(Shadow ? Shadow->ItemAlpha : 1.f));
+			Mat->GetExpressionCollection().AddExpression(Effect);
+			Ed->EmissiveColor.Expression = Effect;
 		}
 		else
 		{
@@ -3349,6 +3367,8 @@ UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, in
 				View->SetRelativeLocation(OkToUe(P[0], P[1], P[2]));
 				View->SetRelativeRotation(OkToUeDir(P[3], P[4], P[5]).Rotation());
 				View->FOVAngle = FMath::RadiansToDegrees(2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(P[6]) * 0.5f) * 16.f / 9.f));
+				// OK_RT_VIEW_NOFX=1: without particle systems (Niagara), to tell them from geometry.
+				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RT_VIEW_NOFX")) == TEXT("1")) View->ShowFlags.SetParticles(false);
 				View->CaptureSource = SCS_FinalColorLDR;
 				View->bCaptureEveryFrame = false;
 				View->TextureTarget = Shot;
@@ -3380,6 +3400,47 @@ void AKKPreviewActor::StopRenderTextureCaptures()
 	for (const TPair<int32, TObjectPtr<USceneCaptureComponent2D>>& It : RenderTextureCaptures)
 		if (It.Value) It.Value->DestroyComponent();
 	RenderTextureCaptures.Reset();
+}
+
+// Unity's built-in additive particle shaders (Legacy Shaders/Particles/Additive: Studio's 2D lens flares): Blend One One,
+// colour 2 x _TintColor x texture in gamma space, i.e. linear texture x (2 _TintColor)^2.2 in "Tint". Unlit, two-sided.
+static UMaterialInterface* OKParticleAdditiveMaterial()
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (Cached) return Cached.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = BLEND_Additive;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TwoSided = true;
+	UMaterialExpressionTextureSampleParameter2D* Samp = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
+	Samp->Material = Mat;
+	Samp->ParameterName = TEXT("Tex");
+	Samp->SamplerType = SAMPLERTYPE_Color;
+	Samp->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/Black.Black")); // an sRGB default
+	Mat->GetExpressionCollection().AddExpression(Samp);
+	UMaterialExpressionVectorParameter* Tint = NewObject<UMaterialExpressionVectorParameter>(Mat);
+	Tint->Material = Mat;
+	Tint->ParameterName = TEXT("Tint");
+	Tint->DefaultValue = FLinearColor::White;
+	Mat->GetExpressionCollection().AddExpression(Tint);
+	UMaterialExpressionMultiply* Mul = NewObject<UMaterialExpressionMultiply>(Mat);
+	Mul->Material = Mat;
+	Mul->A.Expression = Samp;
+	Mul->B.Expression = Tint;
+	Mat->GetExpressionCollection().AddExpression(Mul);
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Mul;
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Cached.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
 }
 
 // Studio map stage effects (unity::stage_effect_kind, `_OKStageEffect`), from the live stage's Shader Forge DXBC: every
@@ -3452,8 +3513,9 @@ static UMaterialInterface* OKStageEffectMaterial(int32 Kind)
 	default:
 		Hlsl += TEXT("r=col*Mask.Sample(MaskSampler,S(u0,MaskST)).rgb;"); break;
 	}
-	// Unity works in gamma space: the textures are read raw and the result goes to linear for Unreal.
-	Hlsl += TEXT("\n#undef S\nreturn pow(max(r,0.0),2.2);");
+	// Unity works in gamma space: the textures are read raw and the result goes to linear for Unreal. Its target is LDR,
+	// so a fragment adds at most 1 (_brightness 5 beams unclamped added 5^2.2 each and bloomed the stage white).
+	Hlsl += TEXT("\n#undef S\nreturn pow(saturate(r),2.2);");
 	Code->Code = Hlsl;
 	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
 	Mat->UpdateCachedExpressionData();
@@ -4410,6 +4472,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// Render queue / alpha mode does not identify a shader program. Material
 		// Editor can retain main_hair_front while changing its render state.
 		ShadowParams.bHairFrontProgram = Source.MaterialShaderName(i).EndsWith(TEXT("_front"), ESearchCase::IgnoreCase);
+		ShadowParams.bStudioAddProgram = Source.MaterialShaderName(i).Equals(TEXT("Shader Forge/main_item_studio_add"), ESearchCase::IgnoreCase);
 		ShadowParams.AnotherRampTex = Output.WhiteRamp;
 		ShadowParams.AnotherRampST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 		ShadowParams.RampGST = FLinearColor(1.f, 1.f, 0.f, 0.f);
@@ -5112,6 +5175,12 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		UE_LOG(LogTemp, Display, TEXT("OK part png name=%s len=%d detail=%d line=%d normal=%d normalMask=%d faceNormal=%.3f shader=%d shadow=(%.3f,%.3f,%.3f) extend=%.3f"),
 			*Name, View.png_len, View.detail_mask_len, View.line_mask_len, View.normal_map_len, View.normal_mask_len, View.face_normal, Part.ShaderKind, Part.ShadowColor.R, Part.ShadowColor.G,
 			Part.ShadowColor.B, Part.ShadowExtend);
+		// OK_PART_PNG_DUMP=<part name part>: that part's main texture as delivered (Saved/OKStudio/partpng/<name>_<index>.png).
+		{
+			static const FString PngDump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_PART_PNG_DUMP"));
+			if (!PngDump.IsEmpty() && Name.Contains(PngDump) && View.png && View.png_len > 0)
+				FFileHelper::SaveArrayToFile(TArrayView<const uint8>(View.png, View.png_len), *(FPaths::ProjectSavedDir() / TEXT("OKStudio/partpng") / FString::Printf(TEXT("%s_%d.png"), *Name, int32(i))));
+		}
 		if (bFaceSkin && !Tex)
 		{
 			Tex = SolidColorTexture(FColor(220, 140, 94, 255));
@@ -5496,6 +5565,25 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							if (It.Value && It.Value->TextureTarget == Screen) It.Value->HideComponent(Comp);
 						UE_LOG(LogTemp, Display, TEXT("OK render texture screen part=%s bounds=%s"), *Name, *Comp->Bounds.GetBox().ToString());
 					}
+		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor added, not the Studio light
+		// effect's three-colour mix the additive part graph draws.
+		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))
+			if (UMaterialInterface* ParticleMat = OKParticleAdditiveMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(ParticleMat, Comp))
+				{
+					FLinearColor TintColor(0.5f, 0.5f, 0.5f, 0.5f);
+					Source.MaterialValue(i, "_TintColor", TintColor);
+					auto Linear2 = [](float V) { return FMath::Pow(FMath::Max(2.f * V, 0.f), 2.2f); };
+					Dynamic->SetTextureParameterValue(TEXT("Tex"), Tex);
+					Dynamic->SetVectorParameterValue(TEXT("Tint"), FLinearColor(Linear2(TintColor.R), Linear2(TintColor.G), Linear2(TintColor.B), 1.f));
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+				}
+		// A Studio map part shown only at some times of day (okmodel_view::mark_sun_visible): its mask as a tag, for the
+		// scene to show or hide it with the scene's time (SunLightInfo.Set).
+		FLinearColor SunVisible;
+		if (Comp && Source.MaterialValue(i, "_OKSunVisible", SunVisible))
+			Comp->ComponentTags.Add(FName(*FString::Printf(TEXT("OKSunVisible%d"), FMath::RoundToInt(SunVisible.R))));
 		// A Studio map stage effect (light cone, beam, laser, LED panel): OK's version of its Shader Forge program.
 		if (Comp && bStageEffect)
 		{

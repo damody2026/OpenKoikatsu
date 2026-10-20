@@ -75,7 +75,7 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
 #endif
         }
         const auto Recipe=OKRuntimeSharedMaterialRecipe(Part);const FString Name=OKRuntimeSharedMaterialParentName(Recipe);
-        auto* Parent=Name.IsEmpty()?nullptr:LoadObject<UMaterialInterface>(nullptr,*(Root/Name+TEXT(".")+Name));
+        auto* Parent=Name.IsEmpty()?nullptr:OKLoadRuntimeSharedMaterialParent(Root,Recipe);
         if(!Parent&&Name.IsEmpty()){
 #if WITH_EDITOR
             ++Uncovered;continue; // no shared family: ApplyPartMaterial builds this part's own graph
@@ -96,7 +96,7 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
         Actor->CookedRoleMaterials[Part.NativePart]=Material;
         if(Part.Outline&&OKRuntimeOutlineLayout(Recipe)){
             const FString OutlineName=Name+TEXT("_Outline");
-            auto* OutlineParent=LoadObject<UMaterialInterface>(nullptr,*(Root/OutlineName+TEXT(".")+OutlineName));
+            auto* OutlineParent=OKLoadRuntimeSharedMaterialParent(Root,Recipe,true);
             auto* Outline=OKCreateRuntimeSharedMaterial(Part,Textures,OutlineParent,Scene,Error,true);
 #if WITH_EDITOR
             if(!Outline){UE_LOG(LogTemp,Warning,TEXT("Shared outline for part %d (%s): %s"),Part.NativePart,*OutlineName,*Error);Error.Reset();}

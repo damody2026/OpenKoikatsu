@@ -150,7 +150,7 @@
       - 大場景載入：同一道具重複開啟每次約 160 ms（方塊）。`ModelView::open` 每次讀整個 okmodel 檔取紀錄清單（約 100 ms）→ 改成用到才讀（`records` OnceLock）；`prefab_list_entry` 每次掃整份角色清單（約 17 ms）→ 每行程記一次。重複開啟降到約 12 ms，公車亭 5065 從約 413 秒降到 161 秒、記憶體增量 16 → 12.3 GB（`item_open_timing` 探針）
       - 廁所暖色的來源：地圖的烘焙 reflection probe（ReflectionProbe-0，各面平均 (236,193,170)、(242,232,198)…，正是原作的暖黃）。Standard 的間接鏡面反射沒做。已做：`prefab_reflection_probes`（新 memo：probe 節點、box、強度、cubemap 解成 PNG 圖集，六面並排、mip 往下排；BC6H 用 texture2ddecoder，截在 0..1）、`okmodel_view::assign_reflection_probes`（部件中心在哪個 box，否則用天空反射）、UE 端照 UnityStandardBRDF 的公式（specColor、FresnelLerp、roughness 對應 mip）和光照貼圖在 gamma 空間一起加總。但加上後廁所整體偏白（後方牆 156 → 211，原作 149），比沒加更偏離，原因未明（KKS 的 Standard 可能不是 Unity 內建版）；所以預設關閉，`OK_STANDARD_REFLECTION=1` 才開
       - Standard 的 `_MetallicGlossMap`（`_METALLICGLOSSMAP`）之前在 session 裡被丟掉，金屬貼圖那條路徑從沒生效；`session.rs` 保留它和 `_OKReflection`，`SESSION_CACHE_REVISION` 11
-      - 地圖 Animator 的材質值：`prefab_animated_materials`（新 memo）。`anim::controller_steady_clips` 從預設狀態沿無條件的 exit-time 轉移走到有 clip 的狀態；renderer 材質曲線的屬性值 = (分量 4..7 << 28) | CRC(屬性名) 的低 28 位元。只套整段 clip 都不變的值（取 0、¼、½、¾、結尾前五點都相同）：ライブステージ的 `stageModel_emission`（164 秒）與雷射可見度都是隨時間變的燈光秀，所以沒有值被套用，1901 不變
+      - 地圖 Animator 的材質值：`prefab_animated_materials`（新 memo）。`anim::controller_steady_clips` 從預設狀態沿無條件的 exit-time 轉移走到有 clip 的狀態；renderer 材質曲線的屬性值 = (分量 4..7 << 28) | CRC(屬性名) 的低 28 位元。原本只套整段 clip 都不變的值；2026-10-20 改成套第一格（t=0：Studio 載入地圖時 Animator 進入預設狀態），只限 renderer 的材質曲線（class 23／137），GameObject 的 m_IsActive 曲線不套（雷射光束 `spotBeam_active` 在 t=0 是關的，套了會全部消失）。ライブステージ的 `vl_center_intensity` 讓兩個 `volumeLight` 光錐在 t=0 是 0（106 秒裡前 80% 都是 0），之前用材質原值把 1901 刷成整片白；`OKLIB_REFRESH=prefab_animated_materials` 重錄 `studio-nodes`
       - 1901 也排除：`SunLightInfo`（ライブステージ沒有 2D 背景 bgParam、沒有 backTexture／visibleList，只有太陽燈）、場景根物件（Studio `Map.LoadMap` 載入整個場景，但ライブステージ只有 `Map` 一個根）
       - 0010 的「綠色圓盤」是レトロな扇風機正面：護網／扇葉 `m_koi_stu_senpu05_00`（`_ALPHATEST_ON`）沒畫出來，看到的是後面機身；機身的綠是 Studio 的道具發光（`_EmissionMap` agreen）。共用 MDK 母材質（`main_StandardMDK_studio`）沒有處理 alpha 裁切的部件
       - 火箭筒砲管是「輪(キャラ)」沿軸拉長 27.85 倍；`OK_OUTLINE=0` 一樣暗，不是外框。同一個圓環接近等比縮放時是正常的橄欖綠，問題跟非等比縮放有關（法線），未定位
@@ -160,15 +160,31 @@
       - 修法：新配方 `ForgeStudioOpaque`（62）＝同一個原作程式（`main_item_studio`）的 Masked 母材質 `M_ForgeStudioOpaque`，寫深度；`main_item_studio` 的部件一律用它（Rust 給它的 Blend 一向是 translucent，不能拿來分），只有 OK Studio 淡出的道具（`_OKItemAlpha` < 1）用半透明的 `M_ForgeStudio`。母材質重新烘焙到新根目錄 `StudioDisplay25`（`prepare_runtime_shared_material.lua --tag StudioDisplay25`，90 個 parent，不含街頭另外產生的 `_Fg` 臉部母材質），`AKKPreviewActor::SharedMaterialRootOverride` 讓 OK Studio 的道具用它；角色與街頭仍用 `StreetDisplay24`（不動）。HG 風格的根目錄沒有這個母材質，HG 下道具退回自建圖
       - 結果：0001 機器人回到白色為主、紫色點綴；火箭筒砲管是受光的橄欖綠、榴彈的白環出現；公車亭站牌的紅白藍也出現。PatternTest、GameSelfTest、EyeSetTest、EditorSelfTest PASS
       - `main_item_studio_alpha`（`M_ForgeStudioAlpha`）維持半透明（原作本來就是透明道具）
+    - 第十一輪（2026-10-20，地圖：位移、時段、太陽燈、2D 效果）：
+      - 地圖位移：KKS 場景存地圖的位置／旋轉（`SceneInfo.caMap`，`MapCtrl.Reflect` 設到地圖根物件），以前 `studio_scene.rs` 讀了就丟。現在 `SceneEffects.map_pos`／`map_rot` → 匯入 `UOKSceneDocument::MapTransform`（okscene 存 `map_transform`）→ `AOKSceneActor::SyncMap` 擺地圖。1901 是 (0, 0, −15)：舞台往後 15 m，角色站在中島舞台上、背後是愛心／禮物／熊的佈景（之前以為背後是大螢幕，查 Animator 也是白查）
+      - 2D 效果「レンズフレアA／B」（9/5/387、388，`Legacy Shaders/Particles/Additive`）：以前畫成不透明的黑方塊，擋住 1901 整個背景。`blend_for_mesh` 把 `particles/additive` 判成 additive；UE 不走 Studio 光效道具的三色遮罩，改用 `OKParticleAdditiveMaterial`（貼圖 × (2·_TintColor)^2.2，加法、雙面）
+      - 舞台特效的加法輸出先 saturate 再 pow 2.2：KKS 的畫面是 LDR，一個片段最多加 1；之前 `_brightness` 5 的光束一片加 5^2.2，配上場景泛光整張白
+      - 時段顯示物件：`SunLightInfo`（地圖根物件上）每個時段有 `visibleList`（原作 `Set`：先把所有時段的清單藏起來，再顯示目前時段的）。大部分地圖每時段 1–3 個（例如 2F：早上雲、傍晚雲、晚上星星、各時段的窗玻璃）。`ParsedBundle::prefab_sun_light`（新 memo，`studio-nodes` 錄製）記清單節點、太陽燈節點、類型、cullingMask、m_Lightmapping 與各時段的角度／顏色／強度；`okmodel_view` 把 prefab 裡 inactive、只在清單裡的網格也帶進來，部件標 `_OKSunVisible`（時段位元），UE 端元件加 tag `OKSunVisible<mask>`，`AOKSceneActor::ApplyMapTime` 依場景時段（`Post.SunType`，沒有該時段時照 `Map.RangeTimeZone` 取第一個）顯示／隱藏。驗證：2F 的 `library_map_sun_parts` 三個時段各 3–8 個部件、prefab 多帶 4 個 inactive 網格
+      - 地圖太陽燈：每張地圖都有自己的太陽（`_targetLight`，平行光、即時光 m_Lightmapping 4、cullingMask 2048＝圖層 11，地圖的 renderer 幾乎都在圖層 11）。`ApplyMapTime` 放一盞 `UDirectionalLightComponent`（`MapSun`，光照通道 2＝只照地圖，世界角度照時段、顏色、強度 ×4，投影；開燈時地圖部件也投影）。比對結果好壞參半，預設關（見「還沒修」）
+      - 背景圖：`SunLightInfo` 的 `_bgParam`／`backTexture`（2D 背景）全部 Studio 地圖都沒有，不用做
+      - 除錯：`OK_RT_VIEW_NOFX=1`（`OK_RT_VIEW` 拍照不畫粒子）、`scene_camera_probe` 印 `caMap`、`scene_tree_probe`（物件樹、角色動畫與 FK 開關）、`map_sun_light_info` 印太陽燈的 Light 設定與 `OK_SUN_VISIBLE`、`map_animator_probe` 的 `OK_ANIM_LAYERS`（renderer 圖層統計）與 `OK_ANIM_CLIP`（某 clip 十個時間點）、`flare_material_probe`
+      - 測試：GameSelfTest、PatternTest、EditorSelfTest（先 `OKStudio.Open`）RESULT PASS
+    - 第十一輪（2026-10-20，材質）：
+      - 14 張驗收（`CompareKStudio samples 14 120`）14／14 出圖，12.9 分鐘；記憶體一路漲到峰值 29 GB（5065 公車亭後 28.7 GB），每張場景後沒有釋放到基準，待查
+      - 0001 劍光：`main_item_studio_add`（`abdata/studio/mat/00` 的 pixel program）照原作公式做成自建圖的 Custom 節點：t = 主貼圖（顯示值），max(saturate(t.r − max(t.g,t.b)^8)·_Color, saturate(t.g − t.b^8)·_Color2, t.b·_Color3)·_alpha，加法。劍身出現彩虹。三色公式只給這個 shader（`bStudioAddProgram`），其他加法部件（地圖的 Particles/Additive）不套
+      - 0010 電扇：`main_StandardMDK_studio` 安裝的程式是沒有 `_ALPHATEST_ON` 的變體，護網 `m_koi_stu_senpu05_00`（`_ALPHATEST_ON`）改走自建圖（Masked，貼圖 alpha 裁切），機身 `senpu04` 仍走 `M_ForgeMDK`。護網貼圖（RGBA）裁切正常，但前景圓盤仍和原作不同（原作前板白色，我們暗綠），問題在機身 MDK 的光照或發光遮罩，還沒查
+      - 母材質退路：配方 62 一開始只烘進 `StudioDisplay25`，街區根目錄缺它就退出（`Docs/ERROR_LOG.md`）。C 組另外烘了 `StreetDisplay25`／`StreetHG04`；E 加了 `OKRuntimeSharedMaterialFallback`（62 → 61）與 `OKLoadRuntimeSharedMaterialParent`，舊根目錄缺新配方時預覽端改用同程式的 61（半透明，不寫深度），`OKCreateRuntimeSharedMaterial` 依實際母材質的 family 核對。街區 gate 維持「出貨根目錄必須齊全」
+      - 地圖 Animator 材質值改套 clip 第一格（之前只套整段不變的值）：ライブステージ的 volumeLight 光錐 `vl_center_intensity` 前 80% 是 0，原作載入時光錐幾乎看不見；只套 renderer 的材質綁定，GameObject 可見度（雷射光束）不套。`OKLIB_REFRESH=prefab_animated_materials` 重錄 studio-nodes，`SESSION_CACHE_REVISION` 12
+      - EyeSetTest 卡住：C／E 同步後，有 morph 的部件（臉、眼白、護目眼）改由 mouth slot 的骨架元件畫，原本的 `Part.Comp` 被藏起來且沒有幾何、材質，測試量不到臉的位置，拍照失敗後在 23 號樣式無限重試。測試改讀實際畫出來的元件（`MouthSlots` 的 `Comp`），拍照失敗時記失敗並往下走；GameSelfTest、PatternTest、EyeSetTest RESULT PASS
+      - 診斷：`OK_PART_PNG_DUMP=<部件名片段>`（部件主貼圖寫到 `Saved/OKStudio/partpng`）、`item_open_timing` 探針加 `OK_ITEM_MATERIALS=1`（印每個部件的材質、shader、keyword）。注意：這台機器的 `C:/portable/KoikatuSunshine` 已沒有 abdata，原作在 `D:/KoikatuSunshine`
     - 還沒修：
       - 廁所色調：亮度已接近（後方牆 156 vs 149），但原作整體偏暖黃，我們的粉紫磁磚 × 桃色光照貼圖仍偏粉；暖色來自 reflection probe（見第九輪），但照 Unity 公式加上後過亮，待查 KKS 的 Standard 實際程式
       - 6964：相機構圖不同（我們拍到桌子在前、原作看得到女孩），可能是物件的父子關係或位置
-      - 0010 電風扇的護網（MDK 共用母材質缺 alpha 裁切）、0001 劍光（`main_item_studio_add` 三色混合）
-      - 1901 角色背後：原作是滿版的愛心、禮物、熊（構圖和舞台攝影機的畫面一致，像是大螢幕的畫面）；我們從主相機（z≈1.5、高 1.14 m、看 −Z、垂直 fov 23°）清楚拍到的是黑色，大螢幕（高 3.96–9.73 m、z −9.75）的下緣剛好在畫面上緣（約 3.98 m）之外。要填滿背景，螢幕得低 3–5 m，原因還沒找到
-        - 已排除：地圖的 Animator（2026-10-19 查過 ライブステージ全部 50 多個：`anim::controller_default_clips`＋`generic_clip_values`，Rust `map_animator_probe`）。會動 Transform 的只有燈具（雷射 18 支與光錐的旋轉）；`SpotLaser_beam_visibility` 讓 `spotBeam_active` 在 t=0 隱藏（181 秒的 clip 裡之後才出現）；`kaidanParts`／`stage_floor_geo`／`dai_geo*` 等的 `stageModel_emission` 是材質數值；`LightPanel_*`、`ElectricLight`、`Cyalume` 沒有 clip。舞台、樓梯、螢幕沒有被 Animator 移動，所以套預設狀態不會改變 1901 的背景，也就沒做（套 t=0 反而會藏起全部雷射光束）
-        - 也排除：側螢幕 `PlaneLeft`／`PlaneRight`（材質 `moniter` → `mainmoniter`，bundle 裡沒有攝影機寫它）用的是 Unity 內建的 Plane 網格（`unity default resources`），我們轉不出來；它們在 x≈±19 的側邊，不在角色背後
-        - 還可以查：Studio 載入地圖時是否改了 `LiveStage (1)`／`monitor_main` 的位置（遊戲程式，ILSpy）、原作 RenderTexture 在 D3D 下取樣是否上下顛倒（決定大螢幕顯示攝影機畫面的哪一段）
-      - 地圖天空的太陽燈（SunLightInfo，交給道具色差 session）
+      - 0010 電風扇前板：護網已裁切、劍光已修（第十一輪）；前板仍暗綠（原作白），要查 `main_StandardMDK_studio` 的光照與 `_EmissionMap`
+      - 大量場景連續拍照的記憶體增長（14 張峰值 29 GB）
+      - 1901：背景佈景、光錐都已和原作一致（見第十一輪與第九輪的動畫材質）；右下的レンズフレア光暈比原作亮一些
+      - 6964：場景沒有地圖。主相機在第三組課桌下往上拍；原作看得到抬腿的女孩，我們拍到桌子底面和腿。角色都開了 FK（`active_fk` 含 body），匯入照 `FkPart` 套用，和 OKStudioPose 一致；還沒定位是 FK 姿勢不同還是桌子／相機的相對位置不同（`scene_tree_probe` 印出物件樹與 FK 開關）
+      - 地圖太陽燈預設關（`ok.Studio.MapSun 1` 開）：3167 教室開了有原作桌面的暖光、地板有影子；6331 地板被橘色日光照到，原作是灰的，原因未明
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
