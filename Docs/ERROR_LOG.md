@@ -3741,3 +3741,10 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜Session open 已負責掛載卡片資源包**：1268 新來源回歸測試先手動 mount_card_pack 再呼叫 session::open，對含pack的卡重複取得 PACK_OPEN 非重入鎖，測試停住。移除外層手動掛載，讓既有Session生命週期處理；停止本輪測試PID後重跑，未修改正式鎖或跳過pack。
 
 - **2026-10-21｜錄製卡內資源時不可用最終Session快取代替來源走訪**：明確指定非0套服裝時，其zipmod模型與query也必須錄入okLc；已暖載入的Session不能提供完整來源依賴。錄製card pack期間略過Session／baked快取，正常遊戲載入快取不受影響。來源回歸先暖載入再轉卡，檢查模型清單非空與closed reopen，避免只有冷快取成功。
+
+- **2026-10-21｜3800 構圖差異不能先歸因鏡頭**：來源camera位置、完整含roll旋轉及vertical FOV均已正確傳入，實際horizontal FOV=46.777942657，背景窗框投影亦吻合；真正差異是FK頸部被保存的FIX locals覆蓋。原作OCIChar.ActiveFKGroup(Neck)會強制FIX以停止追視，但FKCtrl仍控制頸／頭。修正FIX只套用未被明確FK接管的骨頭，不能用改FOV或相機offset掩蓋姿勢錯誤；並回歸6331未啟用頸部FK的固定低頭。
+- **2026-10-21｜診斷工具與檔案需先確認存在**：本輪誤查不存在的OKStudioCompare.cpp、studio/maps.json與非firstpass的DepthOfField.cs；比較器實際在OKStudioGame.cpp，先rg --files再讀。系統Python沒有cv2，改用既有numpy梯度相關與實際camera trace，沒有為診斷安裝套件。
+
+- **2026-10-21｜新增身形回歸需先查現有API**：3800測試誤將apply_shape／apply_shape_live當成單一參數且回傳Result，導致測試E0061／E0599未編譯。實際需同時傳body與face且回傳()；修正後重跑，失敗log保留，不以正式lib建置成功代替測試通過。
+
+- **2026-10-21｜直接啟動測試binary要等新編譯完成**：3800第一輪6331回歸在cargo更新測試binary前啟動，log仍顯示883 filtered而新版本應885。等待最新419項suite建完後重跑具名測試，使用3800-latest-6331-pose-regression.log，避免將舊binary結果列為新版本驗收。
