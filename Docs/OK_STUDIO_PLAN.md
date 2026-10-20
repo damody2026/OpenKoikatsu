@@ -150,7 +150,7 @@
       - 大場景載入：同一道具重複開啟每次約 160 ms（方塊）。`ModelView::open` 每次讀整個 okmodel 檔取紀錄清單（約 100 ms）→ 改成用到才讀（`records` OnceLock）；`prefab_list_entry` 每次掃整份角色清單（約 17 ms）→ 每行程記一次。重複開啟降到約 12 ms，公車亭 5065 從約 413 秒降到 161 秒、記憶體增量 16 → 12.3 GB（`item_open_timing` 探針）
       - 廁所暖色的來源：地圖的烘焙 reflection probe（ReflectionProbe-0，各面平均 (236,193,170)、(242,232,198)…，正是原作的暖黃）。Standard 的間接鏡面反射沒做。已做：`prefab_reflection_probes`（新 memo：probe 節點、box、強度、cubemap 解成 PNG 圖集，六面並排、mip 往下排；BC6H 用 texture2ddecoder，截在 0..1）、`okmodel_view::assign_reflection_probes`（部件中心在哪個 box，否則用天空反射）、UE 端照 UnityStandardBRDF 的公式（specColor、FresnelLerp、roughness 對應 mip）和光照貼圖在 gamma 空間一起加總。但加上後廁所整體偏白（後方牆 156 → 211，原作 149），比沒加更偏離，原因未明（KKS 的 Standard 可能不是 Unity 內建版）；所以預設關閉，`OK_STANDARD_REFLECTION=1` 才開
       - Standard 的 `_MetallicGlossMap`（`_METALLICGLOSSMAP`）之前在 session 裡被丟掉，金屬貼圖那條路徑從沒生效；`session.rs` 保留它和 `_OKReflection`，`SESSION_CACHE_REVISION` 11
-      - 地圖 Animator 的材質值：`prefab_animated_materials`（新 memo）。`anim::controller_steady_clips` 從預設狀態沿無條件的 exit-time 轉移走到有 clip 的狀態；renderer 材質曲線的屬性值 = (分量 4..7 << 28) | CRC(屬性名) 的低 28 位元。只套整段 clip 都不變的值（取 0、¼、½、¾、結尾前五點都相同）：ライブステージ的 `stageModel_emission`（164 秒）與雷射可見度都是隨時間變的燈光秀，所以沒有值被套用，1901 不變
+      - 地圖 Animator 的材質值：`prefab_animated_materials`（新 memo）。`anim::controller_steady_clips` 從預設狀態沿無條件的 exit-time 轉移走到有 clip 的狀態；renderer 材質曲線的屬性值 = (分量 4..7 << 28) | CRC(屬性名) 的低 28 位元。原本只套整段 clip 都不變的值；2026-10-20 改成套第一格（t=0：Studio 載入地圖時 Animator 進入預設狀態），只限 renderer 的材質曲線（class 23／137），GameObject 的 m_IsActive 曲線不套（雷射光束 `spotBeam_active` 在 t=0 是關的，套了會全部消失）。ライブステージ的 `vl_center_intensity` 讓兩個 `volumeLight` 光錐在 t=0 是 0（106 秒裡前 80% 都是 0），之前用材質原值把 1901 刷成整片白；`OKLIB_REFRESH=prefab_animated_materials` 重錄 `studio-nodes`
       - 1901 也排除：`SunLightInfo`（ライブステージ沒有 2D 背景 bgParam、沒有 backTexture／visibleList，只有太陽燈）、場景根物件（Studio `Map.LoadMap` 載入整個場景，但ライブステージ只有 `Map` 一個根）
       - 0010 的「綠色圓盤」是レトロな扇風機正面：護網／扇葉 `m_koi_stu_senpu05_00`（`_ALPHATEST_ON`）沒畫出來，看到的是後面機身；機身的綠是 Studio 的道具發光（`_EmissionMap` agreen）。共用 MDK 母材質（`main_StandardMDK_studio`）沒有處理 alpha 裁切的部件
       - 火箭筒砲管是「輪(キャラ)」沿軸拉長 27.85 倍；`OK_OUTLINE=0` 一樣暗，不是外框。同一個圓環接近等比縮放時是正常的橄欖綠，問題跟非等比縮放有關（法線），未定位
@@ -173,7 +173,7 @@
       - 廁所色調：亮度已接近（後方牆 156 vs 149），但原作整體偏暖黃，我們的粉紫磁磚 × 桃色光照貼圖仍偏粉；暖色來自 reflection probe（見第九輪），但照 Unity 公式加上後過亮，待查 KKS 的 Standard 實際程式
       - 6964：相機構圖不同（我們拍到桌子在前、原作看得到女孩），可能是物件的父子關係或位置
       - 0010 電風扇的護網（MDK 共用母材質缺 alpha 裁切）、0001 劍光（`main_item_studio_add` 三色混合）
-      - 1901 整張泛白：背景已有佈景（見第十一輪），剩下兩個 `volumeLight` 光錐太亮。原作的 Animator `vl_center_intensity`（106 秒）把光錐材質值（renderer binding `0x8a3d269b`）前 80% 的時間設 0、最後才到 0.43，載入時第一格是 0；`prefab_animated_materials` 只套整段不變的值，所以我們用材質原值。要改成套「大多數時間的值」或「t=0」（材質 session 決定）
+      - 1901：背景佈景、光錐都已和原作一致（見第十一輪與第九輪的動畫材質）；右下的レンズフレア光暈比原作亮一些
       - 6964：場景沒有地圖。主相機在第三組課桌下往上拍；原作看得到抬腿的女孩，我們拍到桌子底面和腿。角色都開了 FK（`active_fk` 含 body），匯入照 `FkPart` 套用，和 OKStudioPose 一致；還沒定位是 FK 姿勢不同還是桌子／相機的相對位置不同（`scene_tree_probe` 印出物件樹與 FK 開關）
       - 地圖太陽燈預設關（`ok.Studio.MapSun 1` 開）：3167 教室開了有原作桌面的暖光、地板有影子；6331 地板被橘色日光照到，原作是灰的，原因未明
 

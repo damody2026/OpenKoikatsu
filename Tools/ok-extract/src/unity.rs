@@ -2297,15 +2297,14 @@ impl ParsedBundle {
                     let below:HashMap<u32,usize>=(0..h.nodes.len()).filter_map(|n|path_of(anim_node as usize,n).map(|s|(crate::anim::unity_string_to_hash(&s) as u32,n))).collect();
                     for clip in crate::anim::controller_steady_clips(&ctrl) {
                         let Some(c)=uv_pptr(&clip).and_then(|id|find(74,id)) else {continue;};
-                        // Only values the clip holds throughout (the same at its start and middle): a curve that changes
-                        // over time (the live stage's laser beams switch on well after t = 0) depends on when the picture is
-                        // taken, so it keeps the material's own value.
-                        let (v0,duration)=crate::anim::generic_clip_values(&c,0.);
-                        let later:Vec<_>=[0.25f32,0.5,0.75,0.99].iter().map(|f|crate::anim::generic_clip_values(&c,duration*f).0).collect();
-                        for (k,(path,attr,ty,v)) in v0.into_iter().enumerate() {
+                        // The clip's first frame: Studio loads the map with its Animators entering their default states,
+                        // so a material curve that changes later (the live stage's volume-light cones stay at 0 brightness
+                        // for most of vl_center_intensity) shows its start. Only renderer material bindings: GameObject
+                        // visibility curves (the laser beams' spotBeam_active) are not applied.
+                        let (v0,_)=crate::anim::generic_clip_values(&c,0.);
+                        for (path,attr,ty,v) in v0 {
                             if ty!=23&&ty!=137 {continue;}
                             let (Some(&node),Some(&x))=(below.get(&path),v.first()) else {continue;};
-                            if later.iter().any(|l|l.get(k).and_then(|b|b.3.first()).is_none_or(|y|(x-y).abs()>1e-4)) {continue;}
                             values.push((node as i32,attr&0x0FFF_FFFF,(attr>>28) as u8,x));
                         }
                     }
