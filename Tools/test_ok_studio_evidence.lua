@@ -54,5 +54,22 @@ evidence.write(root, { tag = "fixture", revision = "fixture", finished = true, p
 md = path.read_text(path.join(root, "ACCEPTANCE.md"))
 check(md:find("%20", 1, true) and md:find("%28", 1, true) and md:find("%23%25.png", 1, true),
   "Markdown links percent-encode Unicode, spaces, parentheses, fragment and percent characters")
+local fixture_dir = path.join(root, "images/TransparencyTest")
+path.mkdir(fixture_dir, true)
+local pixel = ok.image.new(64, 64, "RGB", { 100, 100, 100 })
+local names = { "background-low", "background-high", "opaque-control", "alpha-control-low", "alpha-control-high" }
+for i = 0, 47 do for _, bg in ipairs({ "low", "high" }) do names[#names + 1] = ("%02d-%s"):format(i, bg) end end
+for _, name in ipairs(names) do pixel:save(path.join(fixture_dir, name .. ".png")) end
+local probes, probe_errors = evidence.collect_transparency(root)
+check(#probes == 101 and #probe_errors == 0, "all 101 transparency screenshots validated")
+evidence.write(root, { tag = "fixture", revision = "fixture", finished = true, passed = true,
+  tests = { { name = "TransparencyTest", passed = true, log = "fixture.log", images = probes } } })
+md = path.read_text(path.join(root, "ACCEPTANCE.md"))
+local _, embeds = md:gsub("!%[", "")
+check(embeds == 13 and md:find("透明度 GPU 測試", 1, true), "transparency report embeds 13 labeled representative images")
+local altered = path.join(fixture_dir, "47-high.png")
+path.write_bytes(altered, path.read_bytes(altered) .. "KoiKatuChara")
+local _, invalid_probes = evidence.collect_transparency(root)
+check(#invalid_probes == 1 and invalid_probes[1]:find("trailing payload", 1, true), "unembedded transparency image payload is rejected too")
 path.write_text(path.join(root, "fixture-results.json"), ok.json.encode({ passed = passed, fixture = root }, { indent = 2 }) .. "\n")
 print(("%d PASS; %s"):format(passed, root))

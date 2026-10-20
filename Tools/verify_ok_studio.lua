@@ -72,6 +72,10 @@ for _, test in ipairs(tests) do
     and not text:find("RESULT FAIL", 1, true)
     and not text:find("Fatal error:", 1, true)
   local memory, images, evidence_errors
+  if test[1] == "TransparencyTest" then
+    images, evidence_errors = evidence_report.collect_transparency(evidence)
+    if #evidence_errors > 0 then passed = false end
+  end
   if test[1] == "CompareKStudio" then
     local peak = 0
     for gb in text:gmatch("pictured  %(memory ([%d.]+) GB%)") do peak = math.max(peak, tonumber(gb)) end
