@@ -3646,3 +3646,9 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **已知差異（未修）**：預設男卡 ill_male_01／02 在完整基礎庫上也是 DIFFERENT：只差身體 `runtime_textures._Texture2` 的取樣資訊（skin shader 的 liquid 貼圖），幾何與貼圖本身相同。`Default Female Penis = Random` 的 Random 選擇仍未解析，`o_dankon` 頂點數與遊戲不同。
 - **把「本機沒有模型的 zip 項目」一律當缺失**：項目目錄掃描每張卡會碰到所有 zipmod 的 bundle（約 8,850 個），全部變成缺口；轉 OK 卡的缺口迴圈把幾十個無關 zipmod 當成卡片要的，超過 64 個就停，`okLc` 不完整。改成只在真的用到模型內容時記 `absent-model <id>`。防止重犯：新增缺口來源前，先在一張卡上數缺口數量，確認只指向那張卡用到的東西。
 - **轉 OK 卡重試時沿用了上一輪的行程內快取**：找到卡片沒指名的 zipmod 後重試，那一輪的項目與 bundle 全從快取來，zip 項目沒被讀，pack 的 `zips=0`，封閉重開時卡片自己的 zipmod 變成缺口（60 張樣本 25 張退步）。完整基礎庫掩蓋了這個問題，因為那些模型本來就在庫裡。修正：模型不在本機的 zipmod，`library_zip_memo` 依後備世代重算，重試前釋放 bundle 快取。防止重犯：改動後要拿「乾淨 clone」與「完整庫」各跑一次同樣的卡，比對兩邊結果。
+
+## 共用母材質配方與出貨根目錄（2026-10-20）
+
+- **新增配方只烘進一個根目錄，街區一開就退出**：E 組為 OK Studio 新增第 62 個配方 `ForgeStudioOpaque`，母材質只烘進 `StudioDisplay25`；街區的 `StreetDisplay24`／`StreetHG03` 與 patch 都沒有，而 `OKCrowdRuntimeScene` 啟動時要求每個配方都有母材質，Conquest107 啟動即退出（`Common runtime material parent missing: M_ForgeStudioOpaque`）。街區角色也會用到它：`main_item_studio` 的配件沒淡出時就選這個配方（例如被 Material Editor 換 shader 的頭髮）。修正：烘新根目錄 `StreetDisplay25`（`prepare_runtime_shared_material.lua --tag`）與 `StreetHG04`（`--hg-shading`），`prepare_face_materials.lua` 補淚水與 `_Fg`，`Launch/materials.json`、`runtime.json` 的 patch（`StreetDisplay25HG.patch`）與編輯器讀卡器的預設根目錄改指新根目錄，`rebuild_street_social_patch.lua` 重建 patch。新根目錄＝舊的全部檔案＋`M_ForgeStudioOpaque`。
+- **檢查只報第一個缺的母材質**：看不出缺在哪個根目錄、還缺幾個。現在 `OKCrowdRuntimeScene` 先掃完全部配方，錯誤訊息列出根目錄、缺幾個與缺哪些，並附修法。
+- **規則**：新增或改動配方（`EKKRuntimeMaterialRecipe`、`OKRuntimeSharedMaterialRecipes`）時，同一次就把母材質烘進所有會出貨的根目錄：`Launch/materials.json` 的 `root` 與 `hg_root`，加上 OK Studio 用的根目錄。根目錄一律用新 tag 重烘（工具不覆寫舊根目錄），接著跑 `prepare_face_materials.lua`、改 `materials.json`／`runtime.json` 的 patch 名稱、`rebuild_street_social_patch.lua`，並通知會打包街區的 session。

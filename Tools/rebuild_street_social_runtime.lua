@@ -6,7 +6,7 @@
 --      Running stages link to their base, so a different engine build goes to a new --base-dir (old stages keep working).
 --   4. A stage under Saved/StreetSocial/Build/<Tag>.stage (stage_interaction_runtime.lua links Paks/Engine from Base)
 --
--- The StreetSocial/material/audio patch (Launch/runtime.json patch, e.g. Saved/StreetSocial/Build/StreetDisplay24HG.patch)
+-- The StreetSocial/material/audio patch (Launch/runtime.json patch, e.g. Saved/StreetSocial/Build/StreetDisplay25HG.patch)
 -- is mounted on top; the base pak carries the map and the older StreetDisplay23 materials only, so the current material
 -- roots (Launch/materials.json) come from the patch, which the launcher rebuilds when it is missing.
 --

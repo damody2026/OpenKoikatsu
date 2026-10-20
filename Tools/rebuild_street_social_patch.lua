@@ -2,7 +2,7 @@
 -- so Saved/ can be wiped:
 --
 --   1. RuntimeMaterialPatch-<tag>_P.pak: cooks the shared runtime materials already in Content
---      (Launch/materials.json root, e.g. Content/IndependentResources/RuntimeMaterials/StreetDisplay24) together with
+--      (Launch/materials.json root, e.g. Content/IndependentResources/RuntimeMaterials/StreetDisplay25) together with
 --      their shader library. The materials are not regenerated, so Content stays untouched.
 --   2. RuntimeAudioPatch-<tag>_P.pak: the engine audio settings packages (Tools/cook_runtime_audio_patch.lua).
 --

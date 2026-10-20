@@ -966,6 +966,12 @@ bool OKStartCrowdRuntimeScene(AActor* Owner,const FString& Manifest,FString& Err
   if(!State->EditorCommonMaterials){Error=TEXT("Common runtime shader library unavailable");return false;}
   UE_LOG(LogTemp,Display,TEXT("APNG diagnostic uses editor common material resources; cooked library gate remains required in game builds"));
  }
+ // Every recipe needs its parent in the root this scene draws with. A recipe added later (a new parent baked into
+ // another root only) must name the root and every parent it lacks, not stop at the first one: bake a fresh root
+ // (Tools/prepare_runtime_shared_material.lua --tag, then Tools/prepare_face_materials.lua) and point
+ // StreetSocialData/Launch/materials.json at it (Docs/ERROR_LOG.md).
+ {TArray<FString> Missing;for(auto R:OKRuntimeSharedMaterialRecipes()){const FString Name=OKRuntimeSharedMaterialParentName(R);if(!StaticLoadObject(UMaterialInterface::StaticClass(),nullptr,*(Root/Name+TEXT(".")+Name),nullptr,LOAD_NoWarn|LOAD_Quiet))Missing.Add(Name);}
+  if(!Missing.IsEmpty()){Error=FString::Printf(TEXT("Common runtime material root %s lacks %d of %d recipe parents: %s (bake a fresh root with Tools/prepare_runtime_shared_material.lua and Tools/prepare_face_materials.lua, then point Launch/materials.json at it)"),*Root,Missing.Num(),OKRuntimeSharedMaterialRecipes().Num(),*FString::Join(Missing,TEXT(", ")));return false;}}
  for(auto R:OKRuntimeSharedMaterialRecipes()){const FString Name=OKRuntimeSharedMaterialParentName(R);auto* Parent=LoadObject<UMaterialInterface>(nullptr,*(Root/Name+TEXT(".")+Name));if(!Parent){Error=TEXT("Common runtime material parent missing: ")+Name;return false;}float RevealStart=0;if(!Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_RuntimeRevealStart")),RevealStart)){Error=TEXT("Common runtime material lacks reveal support: ")+Name;return false;}State->Parents.Emplace(Parent);UMaterialInterface* Outline=nullptr;if(OKRuntimeOutlineLayout(R)){const FString OutlineName=Name+TEXT("_Outline");Outline=LoadObject<UMaterialInterface>(nullptr,*(Root/OutlineName+TEXT(".")+OutlineName));}State->OutlineParents.Emplace(Outline);}
  {UMaterialInterface* Tear=Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(),nullptr,*(Root/TEXT("M_OKTearLit.M_OKTearLit")),nullptr,LOAD_NoWarn|LOAD_Quiet));
   State->TearParent.Reset(Tear);UE_LOG(LogTemp,Display,TEXT("Runtime tear parent: %s"),Tear?TEXT("lit (M_OKTearLit)"):TEXT("source glasses program"));}
