@@ -1695,6 +1695,8 @@ impl OkSession {
                     "p_cf_body_bone",
                 );
             }
+            // Static shape rebuilds also publish a pose; retain saved FIX locals without advancing a tracking clock.
+            if self.head_look.fixed.is_some() { self.head_look.apply(sk,0.); }
             }
         }
         // Live sliders do not mutate source keys, typeBone, correct or ABMX.
@@ -6422,6 +6424,37 @@ mod studio_pose_rotation_tests {
                         .rot
                 ) > 0.99999
             );
+        }
+        for live in [false, true] {
+            let mut body = s.shape_body.clone();
+            let face = s.shape_face.clone();
+            assert!(!body.is_empty());
+            body[0] = if body[0] > 0.5 {
+                body[0] - 0.02
+            } else {
+                body[0] + 0.02
+            };
+            if live {
+                s.apply_shape_live(&body, &face);
+            } else {
+                s.apply_shape(&body, &face);
+            }
+            for (name, q) in ["cf_j_neck", "cf_j_head"].into_iter().zip(fixed) {
+                assert!(
+                    dot(
+                        q,
+                        s.body_skel
+                            .as_ref()
+                            .unwrap()
+                            .tfs
+                            .values()
+                            .find(|tf| tf.name == name)
+                            .unwrap()
+                            .rot
+                    ) > 0.99999,
+                    "shape rebuild lost FIX for {name}, live={live}"
+                );
+            }
         }
         let before = s.studio_ik.clone();
         let s_ptr = &mut s as *mut _;
