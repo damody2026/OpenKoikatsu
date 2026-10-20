@@ -379,14 +379,6 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   S.FarewellPending=true;S.FarewellFromTalk=true;S.FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (act=%s)"),Character,*Reply.ActKind);
  }
  if(Reply.ActKind==TEXT("promise_treat")){S.HerTreatPromise.Add(Character,OKStreetMindNow(S)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (act)"),Character);}
- // He named the girl she is jealous of himself ("yes, I'm going out with 三月七"): she has heard it from him, and that
- // news no longer sends her to have it out with him as a rumour (social.rs rival_named).
- if(S.SaidToHer.Num()&&S.Manifest.Characters.IsValidIndex(Character)){
-  auto Ask=OKRulesHeroineRequest(S,TEXT("rival_named"),OKStreetStableId(S.Manifest.Characters[Character]));Ask->SetStringField(TEXT("said"),S.SaidToHer.Last());
-  auto Names=MakeShared<FJsonObject>();for(int32 I=1;I<S.Manifest.Characters.Num();++I)Names->SetStringField(OKStreetStableId(S.Manifest.Characters[I]),S.Manifest.Characters[I].Name);Ask->SetObjectField(TEXT("names"),Names);
-  if(const TSharedPtr<FJsonObject> Named=OKRulesEval(S,Ask);Named.IsValid()&&Named->GetBoolField(TEXT("named"))){
-   auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Named);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
-   UE_LOG(LogTemp,Display,TEXT("Street rival named: actor=%d heard it from him; no rumour confrontation for it"),Character);}}
  // Only when asked for (-DecisionShots): the engine's window readback behind them crashed the game once (E: UE5.8,
  // ConvertDXGIToFColor writing to null), a debugging aid must not take the play down with it.
  static const bool Shots=FParse::Param(FCommandLine::Get(),TEXT("DecisionShots"));
@@ -404,14 +396,10 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  // Ordering by chat (plan §8.2): only items this place sells; then checkout when asked.
  const FString Place=OrderShopHere(Character);
  int32 Added=0;
- // What he said he wants for himself ("我要排骨饭") is his, whoever's name her reply put on it (shop.rs his_items).
- const TArray<FString> His=HisOwnItems(S.LastPlayerSaid,Place.IsEmpty()?OutingShop(Character):Place);
  for(auto O:Reply.Orders){
   O.Id=ResolveItemId(O.Id,Place.IsEmpty()?OutingShop(Character):Place);
   const auto* Item=S.Catalog.Find(O.Id);
-  const bool ForHer=O.ForHer&&!His.Contains(O.Id);if(O.ForHer&&!ForHer)UE_LOG(LogTemp,Display,TEXT("Street order: %s is his (he asked for it), not hers"),*O.Id);
-  // He said what he wants: for him, only that (a drumstick rice she added for him pushed his beef noodles out).
-  if(!ForHer&&His.Num()>0&&!His.Contains(O.Id)){UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s for him, not what he asked for"),*O.Id);continue;}
+  const bool ForHer=O.ForHer; // whose it is: the AI's "for"
   // Ordered on the way to that shop ("let's go to the store: a tea egg and water"): carried until they get there.
   const FOKStreetActivity* Going=OKStreetFindActivity(Reply.Action);
   const bool ShopAhead=Item&&Item->Place!=Place&&(Reply.Action==TEXT("go:")+Item->Place||(Going&&Going->Place&&Item->Place==Going->Place));
@@ -444,22 +432,8 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  else if(!Reply.ActKind.IsEmpty()&&DoActHers(Character,Reply.ActKind)){}
  else if(!Reply.ActKind.IsEmpty()&&Reply.ActKind!=TEXT("none"))UnknownAct(Character,Reply.ActKind);
  else if(!Reply.ActKind.IsEmpty())UE_LOG(LogTemp,Display,TEXT("Street act (not yet handled): %s %s"),*Reply.ActKind,*Reply.ActArg);
- // She asked for a loan a moment ago and he has now handed it over: her "收下了" carried no act of its own.
- if((Reply.ActKind.IsEmpty()||Reply.ActKind==TEXT("none"))&&S.LendAskGirl==Character&&OKStreetMindNow(S)-S.LendAskMinute<=30&&S.SaidToHer.Num()){
-  auto Ask=OKRulesRequest(TEXT("lend_offered"));Ask->SetStringField(TEXT("his"),S.SaidToHer.Last());
-  if(const TSharedPtr<FJsonObject> Offered=OKRulesEval(S,Ask);Offered.IsValid()&&Offered->GetBoolField(TEXT("offered"))){
-   UE_LOG(LogTemp,Display,TEXT("Street act: the loan she asked for (%d), handed over now"),S.LendAskAmount);S.LendAskGirl=INDEX_NONE;StartLoan(S.LendAskAmount);}}
 }
 
-// What he orders for himself in these words, among what the shop sells (shop.rs his_items).
-TArray<FString> AOKStreetSocialScene::HisOwnItems(const FString& Said,const FString& Shop) const{
- TArray<FString> Ids;if(Said.IsEmpty()||Shop.IsEmpty())return Ids;
- auto Request=OKRulesRequest(TEXT("his_items"));Request->SetStringField(TEXT("said"),Said);TArray<TSharedPtr<FJsonValue>> Menu;
- for(const auto* I:OKStreetItemsAt(State->Catalog,Shop,StreetNow().GetMonth())){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),I->Id);O->SetStringField(TEXT("name"),I->Name);Menu.Add(MakeShared<FJsonValueObject>(O));}
- Request->SetArrayField(TEXT("menu"),Menu);
- if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(*State,Request))for(const auto& V:Answer->GetArrayField(TEXT("ids")))Ids.Add(V->AsString());
- return Ids;
-}
 
 // The stats panel (plan §10.3): exact numbers, the band names, every jealousy target, mood and the tsundere mask.
 FString AOKStreetSocialScene::MindPanelText(int32 Character) const{
@@ -656,4 +630,15 @@ void AOKStreetSocialScene::HandleReflect(const TSharedPtr<FJsonObject>& R){
   auto Request=OKRulesHeroineRequest(S,TEXT("reflect_adjust"),Id);Request->SetObjectField(TEXT("adjust"),*Adjust);
   if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request)){ApplyRulesRelation(Id,*Out);UE_LOG(LogTemp,Display,TEXT("Street reflection %s: %s intent=%s"),*Id,*Out->GetStringField(TEXT("applied")),*Intent);}
  }
+}
+
+// He told her himself about another girl (the judge's told_about): if that is the girl she is jealous of, she heard it
+// from him and it no longer sends her to have it out with him as a rumour (social.rs rival_named compares the names).
+void AOKStreetSocialScene::ToldAboutRival(int32 Character,const FString& Name){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character))return;
+ auto Ask=OKRulesHeroineRequest(S,TEXT("rival_named"),OKStreetStableId(S.Manifest.Characters[Character]));Ask->SetStringField(TEXT("told"),Name);
+ auto Names=MakeShared<FJsonObject>();for(int32 I=1;I<S.Manifest.Characters.Num();++I)Names->SetStringField(OKStreetStableId(S.Manifest.Characters[I]),S.Manifest.Characters[I].Name);Ask->SetObjectField(TEXT("names"),Names);
+ if(const TSharedPtr<FJsonObject> Named=OKRulesEval(S,Ask);Named.IsValid()&&Named->GetBoolField(TEXT("named"))){
+  auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Named);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
+  UE_LOG(LogTemp,Display,TEXT("Street rival named: actor=%d heard about %s from him; no rumour confrontation for it"),Character,*Name);}
 }

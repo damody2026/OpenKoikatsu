@@ -207,6 +207,10 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
   // turn's own message below.
   System+=OKMsg(TEXT("ui.party.girl_profile_static"), {{TEXT("name"), *SpokenName(G)}, {TEXT("also"), *Also}, {TEXT("profile"), *P.Profile.Left(500)}});
   States+=OKMsg(TEXT("ui.party.girl_state_line"), {{TEXT("name"), *SpokenName(G)}, {TEXT("stage"), Stage}, {TEXT("favor"), R.Favor}, {TEXT("hunger"), Hunger}});
+  // The meetings she already has with him ("lunch at the cafeteria at half past twelve"), as the one-on-one judge is
+  // told: "we agreed to eat together" otherwise went to the restaurant.
+  {FString Booked;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id)Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("when"), *OKStreetCalendarLabel(int32(A.Start/1440),double(A.Start%1440)/60.0)}, {TEXT("label"), *A.Label}});
+   if(!Booked.IsEmpty())States+=OKMsg(TEXT("ui.party.booked_with_him"), {{TEXT("name"), *SpokenName(G)}, {TEXT("meetings"), *Booked}});}
  }
  {const FString Bonds=BondText(Members);if(!Bonds.IsEmpty())States+=OKT(TEXT("ui.party.girls_relations_label"))+Bonds+TEXT("\n");}
  System+=OKT(TEXT("ui.party.ai_party_prompt"));
@@ -245,7 +249,9 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
 
 void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int32>& Members,const TSharedPtr<FJsonObject>& Reply){
  auto& S=*State;
- auto Find=[&](const FString& Name)->int32{for(const int32 G:Members)if(S.Manifest.Characters.IsValidIndex(G)&&OKStreetNameMatches(Name,SpokenName(G)))return G;for(const int32 G:Members)if(S.Manifest.Characters.IsValidIndex(G)&&OKStreetNameMatches(Name,S.Manifest.Characters[G].Name))return G;return INDEX_NONE;};
+ // The exact name first ("贞德" is Jeanne, not "贞德·Alter" that also holds it), then the looser match.
+ auto Find=[&](const FString& Name)->int32{for(const int32 G:Members)if(S.Manifest.Characters.IsValidIndex(G)&&(Name.Equals(SpokenName(G),ESearchCase::IgnoreCase)||Name.Equals(S.Manifest.Characters[G].Name,ESearchCase::IgnoreCase)))return G;
+  for(const int32 G:Members)if(S.Manifest.Characters.IsValidIndex(G)&&OKStreetNameMatches(Name,SpokenName(G)))return G;for(const int32 G:Members)if(S.Manifest.Characters.IsValidIndex(G)&&OKStreetNameMatches(Name,S.Manifest.Characters[G].Name))return G;return INDEX_NONE;};
  TArray<int32> Speakers;TArray<FString> Lines,Caption;TMap<int32,TArray<FString>> Said;
  const TArray<TSharedPtr<FJsonValue>>* Arr=nullptr;
  // Their lines in the order the model wrote them: who answers, and who keeps quiet, is its call from the situation.
@@ -290,15 +296,13 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
    if(Keep){S.PartyLeaving.Remove(G);S.Message=OKMsg(TEXT("ui.party.left_behind"), {{TEXT("girl_name"), *S.Manifest.Characters[G].Name}});MindObserve(G,TEXT("party"),OKT(TEXT("ui.party.stay_after_retain")),PlaceHere(S.Male),0.3f);}
    else{S.PartyLeaving[G]=FPlatformTime::Seconds()+3.0;S.Message=OKMsg(TEXT("ui.party.refused_to_stay"), {{TEXT("girl_name"), *S.Manifest.Characters[G].Name}});}
    UE_LOG(LogTemp,Display,TEXT("Street party: actor %d kept -> %s"),G,Keep?TEXT("stays"):TEXT("refuses, goes now"));}}
+ // He told them himself about another girl (told_about, the AI's reading): every girl here heard it from him.
+ {TArray<FString> Told;FString One;const TArray<TSharedPtr<FJsonValue>>* List=nullptr;if(Reply->TryGetArrayField(TEXT("told_about"),List))for(const auto& V:*List){FString N;if(V.IsValid()&&V->TryGetString(N)&&!N.IsEmpty())Told.Add(N);}else if(Reply->TryGetStringField(TEXT("told_about"),One)&&!One.IsEmpty())Told.Add(One);for(const FString& N:Told){if(Partner!=INDEX_NONE)ToldAboutRival(Partner,N);for(const int32 G:S.Party)if(G!=Partner)ToldAboutRival(G,N);}}
  FString DoNow,Why;Reply->TryGetStringField(TEXT("do_now"),DoNow);Reply->TryGetStringField(TEXT("why"),Why);
  UE_LOG(LogTemp,Display,TEXT("Street party talk: %d lines, do_now=\"%s\"; %s"),Lines.Num(),*DoNow,*Why);
  // Something to do now starts from what he said: a turn that was only the situation (his silence, the end of a game)
  // cannot start one by itself ("let's play again!" with no word from him dealt a new game).
  if(!DoNow.IsEmpty()&&OKStreetFreeTalkIsNudge(Text)){UE_LOG(LogTemp,Display,TEXT("Street party: do_now %s ignored, he did not say anything this turn"),*DoNow);DoNow.Reset();}
- // "Let's walk to the park": the place he named, not a loop nearby (the model keeps answering walk).
- if(DoNow==TEXT("walk")||DoNow==TEXT("stroll")){const FString Named=PlaceNamedIn(Text);const int64 MindNow=OKStreetMindNow(S);
-  const bool LaterMeeting=!Named.IsEmpty()&&S.Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return A.Status==TEXT("pending")&&A.Place==Named&&A.Start-MindNow>30;}); // a later meeting's place, not the walk's
-  if(!Named.IsEmpty()&&!AtPlace(Named)&&!LaterMeeting){UE_LOG(LogTemp,Display,TEXT("Street party: do_now %s -> %s, the place he named"),*DoNow,*Named);DoNow=Named;}}
  // Orders: each girl's to her own plate and bill (whatever he was putting in the basket stays there).
  {const FString Shop=ShopPlaceHere();
   if(!Shop.IsEmpty()&&Partner!=INDEX_NONE&&Reply->TryGetArrayField(TEXT("orders"),Arr)&&!Arr->IsEmpty()){
@@ -308,9 +312,6 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
     if(!Item)for(const auto* I:ItemsHere(Shop))if(I->Name==ItemId||ItemId.Contains(I->Name)){Item=I;break;} // by name
     if(!Item||!SoldHere(*Item,Shop)||!Item->Consumable)continue;ItemId=Item->Id;
     {const int32 For=Find(Who);const int32 Eater=For==INDEX_NONE?0:For;
-     // For him only what he said he wants now (shop.rs his_items): the model put a coffee on his tab while he was
-     // explaining something else.
-     if(For==INDEX_NONE&&!HisOwnItems(Text,Shop).Contains(ItemId)){UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s for him, he did not ask for it"),*Item->Name);continue;}
      if(HasDishLike(Eater,*Item)){UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s still has one"),*Item->Name,Eater==0?TEXT("he"):*S.Manifest.Characters[Eater].Name);continue;}}
     FOKStreetCartLine Line;Line.ItemId=ItemId;Line.Size=Item->DefaultSize();if(!Item->Options.IsEmpty()){Line.Sweetness=OKT(TEXT("ui.mind.full_sugar_label"));Line.Ice=OKT(TEXT("ui.mind.normal_state_label"));}
     const int32 G=Find(Who);if(G==Partner)Line.ForHer=true;else if(G!=INDEX_NONE)Line.Girl=G;

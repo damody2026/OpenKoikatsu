@@ -133,23 +133,17 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
  if(!State)return false;auto& S=*State;
  if(Kind==TEXT("gift")){
   // By id or by (part of) the name, among what he carries that can be given.
-  // Her "gift" without naming it ("收下了" to his "这套文具给你"): what his words name, else the one thing he carries.
-  // His line this turn: LastPlayerSaid is already cleared when her act runs (the orders took it), the talk's own record is not.
-  if(Arg.IsEmpty()){FString Pick;const FString Said=S.SaidToHer.Num()?S.SaidToHer.Last():S.LastPlayerSaid;
-   for(const FString& Id:S.Store.Inventory)if(const auto* Item=S.Catalog.Find(Id);Item&&Said.Contains(Item->Name)){Pick=Id;break;}
-   if(Pick.IsEmpty())for(const FString& Id:S.Store.Inventory)if(const auto* Item=S.Catalog.Find(Id);Item&&Item->Name.Len()>=2&&Said.Contains(Item->Name.Left(2))){Pick=Id;break;}
+  // Her "gift" without naming it ("收下了"): which thing is the judge's to read (its gift field); only when he carries
+  // a single thing is it that one.
+  if(Arg.IsEmpty()){FString Pick;
    if(Pick.IsEmpty()&&S.Store.Inventory.Num()==1)Pick=S.Store.Inventory[0];
-   if(!Pick.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street gift: her act named nothing; %s from his words"),*Pick);StartGift(Pick);return true;}}
+   if(!Pick.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street gift: her act named nothing; %s is all he carries"),*Pick);StartGift(Pick);return true;}}
   for(const FString& Id:S.Store.Inventory){const auto* Item=S.Catalog.Find(Id);if(!Item)continue;
    if(Id==Arg||(!Arg.IsEmpty()&&(Item->Name.Contains(Arg)||Arg.Contains(Item->Name)))){StartGift(Id);return true;}}
   S.FreeTalkNotice=OKT(TEXT("ui.lover.not_in_backpack"))+Arg+OKT(TEXT("ui.contacts.full_stop"));RefreshUI();return true;
  }
- // Lending is his to offer: her act alone (he said he only has about a thousand) opened a loan he never offered.
- if(Kind==TEXT("lend")){auto Ask=OKRulesRequest(TEXT("lend_offered"));const FString His=S.SaidToHer.Num()?S.SaidToHer.Last():S.LastPlayerSaid;Ask->SetStringField(TEXT("his"),His);
-  if(const TSharedPtr<FJsonObject> Offered=OKRulesEval(S,Ask);Offered.IsValid()&&!Offered->GetBoolField(TEXT("offered"))){UE_LOG(LogTemp,Display,TEXT("Street act: lend skipped, he did not offer (%s)"),*His.Left(60));
-   S.LendAskGirl=Girl;S.LendAskAmount=int32(FMath::Clamp<int64>(Arg.IsEmpty()?Local(TEXT("cash"),200):MoneyIn(Arg),1,Local(TEXT("cash"),100000)));S.LendAskMinute=OKStreetMindNow(S);return true;}}
- if(Kind==TEXT("lend"))S.LendAskGirl=INDEX_NONE;
- if(Kind==TEXT("lend")){const int32 Amount=int32(FMath::Clamp<int64>(Arg.IsEmpty()?Local(TEXT("cash"),200):MoneyIn(Arg),1,Local(TEXT("cash"),100000)));StartLoan(Amount);return true;}
+ // Lending is his to offer: her act asks for it; he hands it over when the judge reads that he does (he_lends).
+ if(Kind==TEXT("lend")){S.LendAskGirl=Girl;S.LendAskAmount=int32(FMath::Clamp<int64>(Arg.IsEmpty()?Local(TEXT("cash"),200):MoneyIn(Arg),1,Local(TEXT("cash"),100000)));S.LendAskMinute=OKStreetMindNow(S);UE_LOG(LogTemp,Display,TEXT("Street act: she asks to borrow %d; his to hand over"),S.LendAskAmount);return true;}
  // He hands her money to keep (pays her back what she paid for him): her "I'll take it" used to move nothing.
  if(Kind==TEXT("give_money")){const int64 Amount=Arg.IsEmpty()?0:MoneyIn(Arg);
   if(Amount<=0){UE_LOG(LogTemp,Display,TEXT("Street act: give_money without an amount (%s)"),*Arg);return true;}

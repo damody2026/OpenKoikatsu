@@ -714,23 +714,6 @@ void AOKStreetSocialScene::ResumeTalkQuiet(int32 Girl){
 }
 
 // What the pair is doing right now, for the model.
-FString AOKStreetSocialScene::PlaceNamedIn(const FString& Said,int32 Girl) const{
- const auto& S=*State;auto Request=OKRulesRequest(TEXT("place_named"));Request->SetStringField(TEXT("said"),Said);
- // Her home first when two names fit as well ("送你回宿舍": hers, not his).
- if(Girl>0&&S.Manifest.Characters.IsValidIndex(Girl)){const FString Home=OKStreetProfileString(S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Girl])),nullptr,TEXT("home_place_id"));
-  if(!Home.IsEmpty())Request->SetArrayField(TEXT("prefer"),{MakeShared<FJsonValueString>(Home)});}
- TArray<TSharedPtr<FJsonValue>> Places;for(const auto& P:OKStreetPlaces()){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),P.Id);O->SetStringField(TEXT("name"),P.Name);O->SetNumberField(TEXT("dist"),FVector::Dist2D(P.Door,S.Male));Places.Add(MakeShared<FJsonValueObject>(O));}
- Request->SetArrayField(TEXT("places"),Places);
- const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);return Answer.IsValid()?Answer->GetStringField(TEXT("id")):FString();
-}
-
-// Which of these places the words name (place_named over just them); empty when none.
-FString AOKStreetSocialScene::PlaceNamedAmong(const FString& Said,const TArray<FString>& Ids) const{
- const auto& S=*State;auto Request=OKRulesRequest(TEXT("place_named"));Request->SetStringField(TEXT("said"),Said);
- TArray<TSharedPtr<FJsonValue>> Places;for(const FString& Id:Ids)if(const auto* P=OKStreetFindPlace(Id)){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),P->Id);O->SetStringField(TEXT("name"),P->Name);O->SetNumberField(TEXT("dist"),0);Places.Add(MakeShared<FJsonValueObject>(O));}
- Request->SetArrayField(TEXT("places"),Places);const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);return Answer.IsValid()?Answer->GetStringField(TEXT("id")):FString();
-}
-
 FString AOKStreetSocialScene::FreeTalkDoing() const{
  if(State){const int32 Lift=ElevatorWithMale();if(Lift!=INDEX_NONE){const auto& E=State->Elevators[Lift];return OKMsg(TEXT("ui.outing.in_elevator_at_place"), {{TEXT("place_name"), OKStreetPlaces()[E.Place].Name}, {TEXT("floor_label"), E.Phase==4?OKT(TEXT("ui.outing.elevator_moving_label")):*E.Labels[E.Floor]}});}}
  const auto& S=*State;

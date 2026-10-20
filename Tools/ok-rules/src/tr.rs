@@ -119,7 +119,7 @@ pub fn m(id: &'static str, args: &[(&str, Arg)]) -> String {
     icu::format(pattern, lang(), &map)
 }
 
-/// Whether what the player said has one of the words of a hear list ("hear.invite": "join us|come over|..."), in the
+/// Whether what the player said has one of the words of a hear list ("hear.control_hint": "Esc|WASD|..."), in the
 /// current language; matched in lower case.
 pub fn heard(said: &str, id: &'static str) -> bool {
     // One script on both sides: callers hand in Simplified text, the Traditional table writes 你拿著.
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(m("no.such.message", &[("x", a(&1))]), "no.such.message");
         let args: icu::Args = [("p", Arg::Int(129900))].into_iter().collect();
         assert_eq!(icu::format("{p, number, ::currency}", "en", &args), "$1,299.00");
-        assert!(heard("Come over here", "hear.invite") && !heard("hello", "hear.invite"));
+        assert!(heard("press Esc to leave", "hear.control_hint") && !heard("hello", "hear.control_hint"));
         let _t = scope("zh-TW", "TW");
         assert_eq!(icu::format("{p, number, ::currency}", "zh-TW", &args), "NT$129,900");
     }
