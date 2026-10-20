@@ -67,7 +67,8 @@ FString AOKStreetSocialScene::HeardText(int32 Character) const{
  const auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  TArray<const FOKStreetRumor*> Known;for(const auto& R:S.Store.Rumors)if(R.KnownBy.Contains(Id)&&R.About!=Id)Known.Add(&R);
  Known.Sort([](const FOKStreetRumor& A,const FOKStreetRumor& B){return A.Heat>B.Heat;});
- TArray<FString> Lines;for(int32 N=0;N<Known.Num()&&N<3;++N)Lines.Add(OKMsg(TEXT("ui.company_app.unit_ownership_label"), {{TEXT("unit_name"), *Known[N]->Text}, {TEXT("ownership_detail"), Known[N]->SureOf(Id)>0.8f?OKT(TEXT("ui.encounter.confirm_button")):Known[N]->SureOf(Id)>0.5f?OKT(TEXT("ui.encounter.heard_label")):OKT(TEXT("ui.encounter.unsure_option"))}}));
+ // When she heard it happened: without it "today at the dorm" came out as "yesterday you went to the dorm with Megumin".
+ TArray<FString> Lines;for(int32 N=0;N<Known.Num()&&N<3;++N)Lines.Add(OKMsg(TEXT("ui.encounter.heard_item"), {{TEXT("days"), FMath::Max(0,S.Store.CalendarDay-Known[N]->Day)}, {TEXT("text"), *Known[N]->Text}, {TEXT("sure"), Known[N]->SureOf(Id)>0.8f?OKT(TEXT("ui.encounter.confirm_button")):Known[N]->SureOf(Id)>0.5f?OKT(TEXT("ui.encounter.heard_label")):OKT(TEXT("ui.encounter.unsure_option"))}}));
  return FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));
 }
 

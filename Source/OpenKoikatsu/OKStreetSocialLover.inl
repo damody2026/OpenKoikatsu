@@ -179,7 +179,11 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
   return true;
  }
  if(Kind==TEXT("elevator")){
-  const int32 Lift=ElevatorWithMale();if(Lift==INDEX_NONE){S.FreeTalkNotice=OKT(TEXT("ui.lover.enter_elevator_first"));RefreshUI();return true;}
+  // Not in the car yet but in a building with one ("let's take the lift to 9F" in the lobby): the outing she agreed to
+  // walks him to it and rides (StepLiftRide); "step into the elevator first" there read as if they could not go.
+  const int32 Lift=ElevatorWithMale();
+  if(Lift==INDEX_NONE){const bool InLiftBuilding=OKStreetPlaces().ContainsByPredicate([&](const FOKStreetPlace& P){return OKStreetInsidePlace(P,S.Male)&&OKStreetPlaceLifts(P).Num()>=2;});
+   if(!InLiftBuilding){S.FreeTalkNotice=OKT(TEXT("ui.lover.enter_elevator_first"));RefreshUI();}else UE_LOG(LogTemp,Display,TEXT("Street act elevator: he is not in the car; the outing takes the lift"));return true;}
   const auto& E=S.Elevators[Lift];
   // "3", "3F", "三樓", "third floor" or part of a stop's label: the rules read it (locale.rs floor_named).
   int32 Floor=INDEX_NONE;
