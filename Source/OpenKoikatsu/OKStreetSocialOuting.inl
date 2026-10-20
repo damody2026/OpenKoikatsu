@@ -422,7 +422,7 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  const FOKStreetModelAnchor* Spot=Place&&Activity?OKStreetPlaceAnchor(*Place,Activity->Anchor):nullptr;
  // Already there: at the activity's spot, or for a building inside it (at its door is still outside the shop: the route
  // below goes in), for a place without rooms at its door.
- const bool There=!Place||(Spot?FVector::Dist2D(S.Male,Spot->Position)<80:Place->Rooms.IsEmpty()?FVector::Dist2D(S.Male,Place->Door)<200:OKStreetInsidePlace(*Place,S.Male));
+ const bool There=!Place||(Spot?FVector::Dist2D(S.Male,Spot->Position)<80&&FMath::Abs(S.Male.Z-Spot->Position.Z)<150.f:Place->Rooms.IsEmpty()?FVector::Dist2D(S.Male,Place->Door)<200:OKStreetInsidePlace(*Place,S.Male));
  if(There)return StartOutingActivity(Girl,ActivityId,Error);
  // Upstairs in a building with an elevator and going elsewhere: to the car on this floor and down to the street
  // first (StepLiftRide), then the way there from the ground floor. A route straight from upstairs runs into walls.
@@ -440,7 +440,19 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
   RefreshUI();return true;
  }
  TArray<FVector> Route;
- if(Spot&&OKStreetInsidePlace(*Place,S.Male))Route={S.Male,Spot->Position}; // already inside: walk straight over
+ // Already inside: walk over on this floor; the spot on another floor (the food court on 9F from the ground floor) is
+ // up (or down) by the elevator: to its landing here, the ride (StepLiftRide), then on to the spot. Walking straight at
+ // it "arrived" under it and the activity put them on 9F without the ride.
+ const TArray<const FOKStreetModelAnchor*> InLifts=Spot&&OKStreetInsidePlace(*Place,S.Male)?OKStreetPlaceLifts(*Place):TArray<const FOKStreetModelAnchor*>();
+ const int32 InElevator=InLifts.IsEmpty()?INDEX_NONE:ElevatorOfPlace(OKStreetPlaces().IndexOfByPredicate([Place](const FOKStreetPlace& P){return &P==Place;}));
+ if(Spot&&InElevator!=INDEX_NONE&&FMath::Abs(S.Male.Z-Spot->Position.Z)>=150.f){
+  auto FloorAt=[&](float Z){int32 Best=0;for(int32 F=0;F<InLifts.Num();++F)if(FMath::Abs(InLifts[F]->Position.Z-Z)<FMath::Abs(InLifts[Best]->Position.Z-Z))Best=F;return Best;};
+  const int32 From=FloorAt(S.Male.Z),To=FloorAt(Spot->Position.Z);
+  Route=GridRoute(S.Male,InLifts[From]->Position);if(Route.Num()<2)Route={S.Male,InLifts[From]->Position};
+  S.LiftRide=FOKStreetLiftRide();S.LiftRide.Elevator=InElevator;S.LiftRide.Floor=To;S.LiftRide.Spot=Spot->Position;
+  UE_LOG(LogTemp,Display,TEXT("Street outing: %s is on another floor of %s: by the elevator (%d -> %d)"),*ActivityId,Place->Name,From,To);
+ }
+ else if(Spot&&OKStreetInsidePlace(*Place,S.Male))Route={S.Male,Spot->Position}; // already inside, same floor: walk straight over
  else{
   Route=FVector::Dist2D(S.Male,Place->Door)<200?TArray<FVector>{S.Male,Place->Door}:PlaceRoute(S.Male,Place->Door);
   if(Route.Num()<2){Error=OKMsg(TEXT("ui.outing.no_route_to_place"), {{TEXT("place_name"), Place->Name}});return false;}
