@@ -260,6 +260,10 @@ bool OKStreetFreeTalkParseContent(const FString& Content, FOKFreeTalkReply& Out,
   }
   Out.Action.TrimStartAndEndInline();
   if (Out.Action.Equals(TEXT("none"), ESearchCase::IgnoreCase)) Out.Action.Reset();
+  // An act word in the action field ({"action": "hold_hands"} to "let's walk hand in hand"): it is the act. The judge then
+  // starts the walk, and the hand holding she agreed to used to be dropped. (eat / feed / share_food keep their own path.)
+  if (Out.ActKind.IsEmpty()) for (const TCHAR* Word : {TEXT("hold_hands"), TEXT("head_pat"), TEXT("hug"), TEXT("kiss"), TEXT("lap_pillow"), TEXT("loud"), TEXT("phone_call"), TEXT("lie_down"), TEXT("alcohol")})
+   if (Out.Action == Word) { Out.ActKind = Out.Action; Out.Action.Reset(); break; }
   if (Reply->TryGetNumberField(TEXT("favor_delta"), Delta)) Out.FavorDelta = FMath::Clamp(FMath::RoundToInt(Delta), -OKFreeTalkFavorStep, OKFreeTalkFavorStep);
  } else {
   OKStreetFreeTalkSplitLines(Content, Out.Lines);

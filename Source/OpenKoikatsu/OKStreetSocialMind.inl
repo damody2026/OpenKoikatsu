@@ -379,6 +379,14 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   S.FarewellPending=true;S.FarewellFromTalk=true;S.FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (act=%s)"),Character,*Reply.ActKind);
  }
  if(Reply.ActKind==TEXT("promise_treat")){S.HerTreatPromise.Add(Character,OKStreetMindNow(S)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (act)"),Character);}
+ // He named the girl she is jealous of himself ("yes, I'm going out with 三月七"): she has heard it from him, and that
+ // news no longer sends her to have it out with him as a rumour (social.rs rival_named).
+ if(S.SaidToHer.Num()&&S.Manifest.Characters.IsValidIndex(Character)){
+  auto Ask=OKRulesHeroineRequest(S,TEXT("rival_named"),OKStreetStableId(S.Manifest.Characters[Character]));Ask->SetStringField(TEXT("said"),S.SaidToHer.Last());
+  auto Names=MakeShared<FJsonObject>();for(int32 I=1;I<S.Manifest.Characters.Num();++I)Names->SetStringField(OKStreetStableId(S.Manifest.Characters[I]),S.Manifest.Characters[I].Name);Ask->SetObjectField(TEXT("names"),Names);
+  if(const TSharedPtr<FJsonObject> Named=OKRulesEval(S,Ask);Named.IsValid()&&Named->GetBoolField(TEXT("named"))){
+   auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Named);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
+   UE_LOG(LogTemp,Display,TEXT("Street rival named: actor=%d heard it from him; no rumour confrontation for it"),Character);}}
  // Only when asked for (-DecisionShots): the engine's window readback behind them crashed the game once (E: UE5.8,
  // ConvertDXGIToFColor writing to null), a debugging aid must not take the play down with it.
  static const bool Shots=FParse::Param(FCommandLine::Get(),TEXT("DecisionShots"));

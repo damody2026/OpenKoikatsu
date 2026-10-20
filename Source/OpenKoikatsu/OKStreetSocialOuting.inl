@@ -551,7 +551,11 @@ float AOKStreetSocialScene::StepOuting(float Dt){
  if(Candidate==S.Male){
   // His own way is blocked: plan the route again from where he stands, every 4 s, until it opens. Esc ends it.
   if(Now-S.OutingProgressAt>4){
-   S.OutingProgressAt=Now;TArray<FVector> Again=PlaceRoute(S.Male,S.OutingRoute.Last());
+   // Round the obstacle to the next point and on along the rest of the route: planned straight to the last point, a
+   // stroll's loop (it ends near where it began) collapsed into two points and the walk was over in seconds.
+   S.OutingProgressAt=Now;TArray<FVector> Again=PlaceRoute(S.Male,S.OutingRoute[S.OutingStep]);
+   if(Again.Num()>=2)for(int32 K=S.OutingStep+1;K<S.OutingRoute.Num();++K)Again.Add(S.OutingRoute[K]);
+   else Again=PlaceRoute(S.Male,S.OutingRoute.Last()); // the next point itself is out of reach: straight on to the end
    // Inside a building (just down from the elevator) the street routes do not reach him: out by its door first.
    if(Again.Num()<2)if(const FOKStreetPlace* In=OKStreetFindPlace(PlaceHere(S.Male));In&&!In->Door.IsNearlyZero()){
     TArray<FVector> Out=PlaceRoute(In->Door,S.OutingRoute.Last());
