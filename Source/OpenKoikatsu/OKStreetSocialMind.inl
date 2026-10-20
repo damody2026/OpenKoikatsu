@@ -350,9 +350,9 @@ void AOKStreetSocialScene::TickChoices(){
   if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
   FOKStreetPendingChoice Done=MoveTemp(S.Choices[I]);S.Choices.RemoveAt(I);
   FString Final=!Done.HerLean.IsEmpty()?Done.HerLean:(Done.Options.IsEmpty()?FString():Done.Options[0]);
-  // The bill is his to decide: what he said since it opened, read by the rules (shop.rs checkout_timeout).
-  if(Done.Kind==TEXT("checkout")){const int32 Since=FMath::Clamp(S.HisLines-Done.HisLinesAtOpen,0,S.SaidToHer.Num());TArray<FString> Said;for(int32 K=S.SaidToHer.Num()-Since;K<S.SaidToHer.Num();++K)Said.Add(S.SaidToHer[K]);
-   auto Request=OKRulesRequest(TEXT("checkout_timeout"));Request->SetStringField(TEXT("lean"),Done.HerLean);Request->SetStringField(TEXT("said"),FString::Join(Said,TEXT("\n")));
+  // The bill is his to decide: what they settled, as the AI read it (shop.rs checkout_timeout).
+  if(Done.Kind==TEXT("checkout")){
+   auto Request=OKRulesRequest(TEXT("checkout_timeout"));Request->SetStringField(TEXT("lean"),Done.HerLean);Request->SetStringField(TEXT("agreed"),PayAgreed(Done.Heroine));
    if(const TSharedPtr<FJsonObject> A=OKRulesEval(S,Request)){const FString O=A->GetStringField(TEXT("option"));if(Done.Options.Contains(O))Final=O;}}
   UE_LOG(LogTemp,Display,TEXT("Street choice timed out: %s -> %s"),*Done.Id,*Final);
   if(Done.OnResolve&&!Final.IsEmpty())Done.OnResolve(Final);
@@ -364,7 +364,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  auto& S=*State;
  // She turned his treat down ("不用请，我自己付"): the next bill with her is each paying their own, also when what she
  // orders is placed later (carried to the shop she is walking him to).
- if(BillSplitHeard(FString(),Reply.Reply))S.SplitAgreedWith=Character;
+ if(!Reply.Payer.IsEmpty())RecordPayAgreed(Character,Reply.Payer);
  // Every decision of hers is logged, and the screen is captured a moment later (TickFreeTalkTrace) so what she
  // did can be seen: the activity she agreed to, her act, what she ordered, and what they were doing at the time.
  UE_LOG(LogTemp,Display,TEXT("Street decision: actor=%d action=%s act=%s arg=%s orders=%d resolve=%s/%s emotion=%s pair=%d meal=%d seated=%d phase=%d target=%d companion=%d outing=%d lines=%d"),
@@ -399,7 +399,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  if(!Reply.ResolveId.IsEmpty()){const auto* C=S.Choices.FindByPredicate([&](const FOKStreetPendingChoice& X){return X.Id==Reply.ResolveId;});
   if(C&&C->Kind==TEXT("checkout")&&S.HisLines==C->HisLinesAtOpen){UE_LOG(LogTemp,Display,TEXT("Street choice: %s not resolved by her reply, he has not answered it yet"),*C->Id);}
   else ResolveChoice(Reply.ResolveId,Reply.ResolveOption,Reply.ResolveInsist);}
- if(!Reply.PromisePlace.IsEmpty())AddPromiseFromChat(Character,Reply.PromiseDay,Reply.PromiseTime,Reply.PromisePlace,Reply.PromiseWhat,S.LastPlayerSaid+TEXT("\n")+Reply.Reply,S.LastPlayerSaid);
+ // Meetings are booked by the judge, which reads his line and hers (her own promise field cannot tell whether he said yes).
  HandleFinanceReply(Character,Reply.Predict,Reply.Trade,Reply.Bet);
  // Ordering by chat (plan §8.2): only items this place sells; then checkout when asked.
  const FString Place=OrderShopHere(Character);

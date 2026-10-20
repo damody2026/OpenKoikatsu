@@ -178,11 +178,13 @@ void AOKStreetSocialScene::TickServes(){
 // An order made in conversation goes straight to the kitchen. Who pays (shop.rs chat_order_payer): he does when he
 // offered to in what he just said; otherwise her own inclination (split, she pays, he pays), and a strong wish to pay
 // herself opens the usual checkout choice, as for the buttons.
-// A line that settles the next bill as each paying their own (shop.rs bill_split_heard): his "let's split", her "no
-// need to treat me".
-bool AOKStreetSocialScene::BillSplitHeard(const FString& His,const FString& Her) const{
- auto Request=OKRulesRequest(TEXT("bill_split_heard"));Request->SetStringField(TEXT("his"),His);Request->SetStringField(TEXT("her"),Her);
- const TSharedPtr<FJsonObject> Answer=OKRulesEval(*State,Request);bool Split=false;if(Answer.IsValid())Answer->TryGetBoolField(TEXT("split"),Split);return Split;
+// Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
+void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How){
+ auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
+ S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s"),Girl,*How);
+}
+FString AOKStreetSocialScene::PayAgreed(int32 Girl) const{
+ const auto& S=*State;return S.PayAgreedWith==Girl&&Girl!=INDEX_NONE&&OKStreetMindNow(S)-S.PayAgreedAt<=180?S.PayAgreedHow:FString();
 }
 
 void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
@@ -190,9 +192,9 @@ void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
  // She promised to treat him: it is hers to pay (what she cannot cover he fronts and she owes him).
  // She promised to treat him: hers to pay, unless he insists now (chat_order_payer, promise).
  FString Lean;float Insist=0;HeroineCheckoutLean(Her,CartTotal(),Lean,Insist);
- auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("her_said"),HerSaid);Request->SetBoolField(TEXT("has_hers"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return L.ForHer;}));Request->SetNumberField(TEXT("insist"),Insist);Request->SetStringField(TEXT("said"),S.SaidToHer.Num()?FString::Join(S.SaidToHer,TEXT("\n")):S.LastPlayerSaid);Request->SetBoolField(TEXT("split_agreed"),S.SplitAgreedWith==Her);Request->SetBoolField(TEXT("promise"),S.HerTreatPromise.Contains(Her));
+ auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Her));Request->SetBoolField(TEXT("has_hers"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return L.ForHer;}));Request->SetNumberField(TEXT("insist"),Insist);Request->SetBoolField(TEXT("promise"),S.HerTreatPromise.Contains(Her));
  const TSharedPtr<FJsonObject> Payer=OKRulesEval(S,Request);const FString Option=Payer.IsValid()?Payer->GetStringField(TEXT("option")):Lean;
- UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d lines=%d lean=%s insist=%.2f split_agreed=%d promise=%d -> %s (he: %s | she: %s)"),Her,S.Cart.Num(),*Lean,Insist,S.SplitAgreedWith==Her,S.HerTreatPromise.Contains(Her),*Option,*Request->GetStringField(TEXT("said")).Left(120),*HerSaid.Left(80));
+ UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d lines=%d lean=%s insist=%.2f agreed=%s promise=%d -> %s"),Her,S.Cart.Num(),*Lean,Insist,*PayAgreed(Her),S.HerTreatPromise.Contains(Her),*Option);
  if(Option==TEXT("choice"))StartCheckout(Her);else FinishCheckout(Option,Her);
 }
 
@@ -227,7 +229,7 @@ void AOKStreetSocialScene::SettleGroupOrder(int32 Partner){
   FString Option=TEXT("she_pays");
   if(!S.HerTreatPromise.Contains(G)){
    FString Lean;float Insist=0;HeroineCheckoutLean(G,CartTotal(),Lean,Insist);
-   auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("her_said"),FString());Request->SetNumberField(TEXT("insist"),Insist);Request->SetStringField(TEXT("said"),S.SaidToHer.Num()?FString::Join(S.SaidToHer,TEXT("\n")):S.LastPlayerSaid);Request->SetBoolField(TEXT("split_agreed"),S.SplitAgreedWith==Partner);
+   auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Partner));Request->SetNumberField(TEXT("insist"),Insist);
    const TSharedPtr<FJsonObject> Payer=OKRulesEval(S,Request);Option=Payer.IsValid()?Payer->GetStringField(TEXT("option")):Lean;
    if(Option==TEXT("choice"))Option=TEXT("she_pays");
   }

@@ -51,28 +51,13 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
  auto& S=*State;if(!OKStreetFindPlace(Place)){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: %s is not a place"),*Place);return;}
  // No clear time, no appointment (it used to become 19:00 by default, a time nobody said).
  {FString H,M;if(!Time.Split(TEXT(":"),&H,&M)||!H.IsNumeric()||!M.IsNumeric()){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: no clear time (\"%s\") for %s"),*Time,*Place);return;}}
- // A time somebody said ("three o'clock", "noon"), not one the model filled in for "see you tomorrow" (shop.rs time_said).
- // He said yes to it (a time in his words, or "好啊"/"说定了"): her proposal alone is not a meeting yet (shop.rs).
- {auto Request=OKRulesRequest(TEXT("he_agrees_to_meet"));Request->SetStringField(TEXT("his"),His);const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);
-  if(Answer.IsValid()&&!Answer->GetBoolField(TEXT("agrees"))){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: %s %s at %s is her proposal, he has not said yes"),*Day,*Time,*Place);return;}}
- {auto Request=OKRulesRequest(TEXT("time_said"));Request->SetStringField(TEXT("words"),Words);const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);
-  if(Answer.IsValid()&&!Answer->GetBoolField(TEXT("said"))){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: %s at %s, but no time was said"),*Time,*Place);return;}}
+ // Whether both agreed, which day and which time are the judge's reading of both lines (the model sees what was said);
+ // keyword guards on top of it (time_said, day_said, "no day said, so today") kept overruling it and could never cover
+ // every way of saying it ("今天中午有约，明天中午十二点？" was booked for today).
  int32 GameDay=S.Store.CalendarDay;
  if(Day.StartsWith(TEXT("+")))GameDay+=FMath::Clamp(FCString::Atoi(*Day.Mid(1)),0,60);
  else{FDateTime Date;if(FDateTime::ParseIso8601(*Day,Date))GameDay=int32((Date-OKStreetCalendarEpoch()).GetTotalDays());}
- // The day the words name ("后天四点": two days on) over the judge's own count, which once made "后天" three days out
- // and booked the meeting twice (shop.rs day_said: her words first, then his).
- bool DaySaid=false,Dated=false;
- for(const FString* Source:{&Words,&His}){auto Request=OKRulesRequest(TEXT("day_said"));Request->SetStringField(TEXT("words"),*Source);
-  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);double Days=0;bool D=false;if(Answer.IsValid()&&Answer->TryGetBoolField(TEXT("dated"),D)&&D)Dated=true;
-  if(Answer.IsValid()&&Answer->TryGetNumberField(TEXT("days"),Days)){const int32 Said=S.Store.CalendarDay+int32(Days);
-   if(Said!=GameDay)UE_LOG(LogTemp,Display,TEXT("Street promise: day %s read as %d days from today, the words say %d"),*Day,GameDay-S.Store.CalendarDay,int32(Days));
-   GameDay=Said;DaySaid=true;break;}}
  FString H,M;int32 Minute=19*60;if(Time.Split(TEXT(":"),&H,&M))Minute=FMath::Clamp(FCString::Atoi(*H),0,23)*60+FMath::Clamp(FCString::Atoi(*M),0,59);
- // No day in the words at all ("五点半到旧校舍接你" at seven in the morning): a time still ahead today is today, not the
- // judge's "+1".
- if(!DaySaid&&!Dated&&GameDay!=S.Store.CalendarDay&&int64(S.Store.CalendarDay)*1440+Minute+(Minute<240?1440:0)>OKStreetMindNow(S)){
-  UE_LOG(LogTemp,Display,TEXT("Street promise: no day said and %02d:%02d is still ahead today; today, not day %s"),Minute/60,Minute%60,*Day);GameDay=S.Store.CalendarDay;}
  // Before 04:00 belongs to the previous game day's night.
  const int64 Start=int64(GameDay)*1440+Minute+(Minute<240?1440:0);
  if(Start<=OKStreetMindNow(S))return;
@@ -130,6 +115,16 @@ void AOKStreetSocialScene::CancelPromiseWith(int32 Character){
  const FOKStreetAppointment* Soonest=nullptr;
  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&(A.Kind==TEXT("date")||A.Kind==TEXT("pickup"))&&(!Soonest||A.Start<Soonest->Start))Soonest=&A;
  if(Soonest)CancelAppointment(Soonest->Id);
+}
+
+// The meeting with her moves to the time just agreed (the judge's "replaces"): the old one goes quietly, it was not
+// called off ("又取消了？" for a day moved, and the cost of a cancellation). What she feels about it is in her reply.
+void AOKStreetSocialScene::MovePromiseWith(int32 Character){
+ auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ auto Candidate=S.Store;FOKStreetAppointment* Soonest=nullptr;
+ for(auto& A:Candidate.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&(A.Kind==TEXT("date")||A.Kind==TEXT("pickup"))&&(!Soonest||A.Start<Soonest->Start))Soonest=&A;
+ if(!Soonest)return;Soonest->Status=TEXT("moved");const FString Label=Soonest->Label;const int32 Moved=Soonest->Id;
+ if(CommitStore(MoveTemp(Candidate))){PlanPromisesToday(Character);UE_LOG(LogTemp,Display,TEXT("Street appointment %d moved (a new time follows): %s"),Moved,*Label);}
 }
 
 void AOKStreetSocialScene::CancelAppointment(int32 AppointmentId){
