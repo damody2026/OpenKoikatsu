@@ -1,0 +1,76 @@
+{
+  "source": "actual Unreal SceneCapture comparison; left original thumbnail, right Unreal",
+  "before_run": "Verify-Light1901Before",
+  "after_run": "Verify-Light1901Release",
+  "comparison_rows": [
+    "before",
+    "after"
+  ],
+  "floor_roi_in_640x360_render": [
+    505,
+    320,
+    545,
+    350
+  ],
+  "metrics": {
+    "source": {
+      "mean_rgb": [
+        0.682,
+        1.721,
+        5.598
+      ],
+      "white_fraction": 0.0
+    },
+    "before": {
+      "mean_rgb": [
+        254.978,
+        254.981,
+        254.973
+      ],
+      "white_fraction": 0.9991666666666666
+    },
+    "after": {
+      "mean_rgb": [
+        5.049,
+        12.417,
+        20.175
+      ],
+      "white_fraction": 0.0
+    }
+  },
+  "files": [
+    {
+      "path": "after.png",
+      "bytes": 694414,
+      "sha256": "0a94be04bda745330a80eef4622847693f057551253368b89a412b67241e918d",
+      "size": [
+        1280,
+        360
+      ],
+      "png_end_equals_file_end": true
+    },
+    {
+      "path": "before.png",
+      "bytes": 680421,
+      "sha256": "6d308fd322f665278906909ab41a1c0744d5395169caf37a015f85abe15e7c3c",
+      "size": [
+        1280,
+        360
+      ],
+      "png_end_equals_file_end": true
+    },
+    {
+      "path": "comparison.png",
+      "bytes": 1374783,
+      "sha256": "98a8521f2d0366912910d482bed6a9387e5c5c504fc83d9254e882d3ef2b0388",
+      "size": [
+        1280,
+        720
+      ],
+      "png_end_equals_file_end": true
+    }
+  ],
+  "release_revision": "e6299a4a4f939be8ca71691b6f2a4e9c5e933d21",
+  "camera_trace_before_after_equal": true,
+  "camera_trace": "view=10.337060,152.904865,113.514642|2.650445,-90.537794,0.000000|1.000000,1.000000,1.000000 horizontal_fov=39.769401550 aspect=1.777778029 active=10"
+}

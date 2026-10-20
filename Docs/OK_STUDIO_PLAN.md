@@ -460,3 +460,12 @@
 來源與完整驗收見 [3800 圖文紀錄](OK_STUDIO_CAMERA_3800_20261021.md)。419 Rust PASS；3800真實骨架三條路徑與6331固定頸部／手腕回歸PASS；相機數值修正前後完全一致，3800／6331重拍2/2。
 
 ![3800 頸部 FK 修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Camera3800_20261021/comparison.png)
+
+
+### S5：1901 舞台過亮與逐實例可見性（2026-10-21）
+
+修正共用網格複製到停用接點時遺漏 GameObject.activeSelf／祖先 activeInHierarchy，以及地圖 Animator.m_IsActive 曲線。逐實例保存來源狀態，SunLightInfo 時段根另依既有時段政策切換；90個共用模型更新，session cache revision 18。沒有調暗曝光、停用 Bloom 或依場景／shader 名稱全隱藏。
+
+來源1375個接點完整／純追蹤庫向量 MATCH；原卡與OK卡兩庫回歸 MATCH。實際圖與完整驗收見 [1901 燈光紀錄](OK_STUDIO_LIGHTING_1901_20261021.md)。
+
+![1901：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Lighting1901_20261021/comparison.png)
