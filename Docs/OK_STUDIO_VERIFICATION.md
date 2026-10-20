@@ -1,0 +1,43 @@
+# OK Studio 驗收與圖片證據
+
+使用 E 線已建置成功的 Editor，從專案根目錄執行：
+
+```powershell
+.\Tools\lua\lua.exe Tools/verify_ok_studio.lua --tag <新的名稱> --editor --compare
+```
+
+`--editor` 加跑 EditorSelfTest；`--compare` 加跑 14 張原作樣本對照。不帶兩個旗標時執行 GameSelfTest、PatternTest、EyeSetTest。每個測試使用獨立的受控 UE 子程序，保留 PID 與逾時限制；啟動引擎前必須完成建置。
+
+## 每輪獨立保存
+
+輸出位於 `Saved/OKStudio/Verify-<名稱>/`，名稱不能重複：
+
+| 檔案 | 用途 |
+|---|---|
+| `ACCEPTANCE.md` | 自動產生測試表、記憶體結果與完整單張嵌圖 |
+| `results.json` | 結果、程式版本、圖片 SHA-256、尺寸、檔案大小與記憶體 |
+| `images/*.png` | 本輪生成的 1280×360 左右對照圖 |
+| `<測試名稱>.log`／`.pid` | 每個子程序的執行紀錄與 PID |
+
+工具以 `-OKStudioCompareOutput=<本輪 images 絕對路徑>` 指定實際擷取輸出，直接寫入本輪目錄，不再從共用 `Saved/OKStudio/compare` 撈圖。手動執行 `OKStudio.CompareKStudio` 未指定輸出時，仍使用既有共用目錄。
+
+Markdown 以相對路徑嵌圖，整個驗收資料夾可一同搬移。中文、日文、空白、括號與 `#`／`%` 檔名會轉成合法的圖片連結。JSON 的 `revision` 如帶 `+worktree`，表示執行時含尚未提交的已追蹤變更；不能當成純 HEAD 的測試。
+
+## 失敗判定
+
+Compare 必須同時滿足程序 exit code 0、14／14 完成訊息、最後場景釋放紀錄，以及 14 張具名成功擷取紀錄。每個紀錄必須有本輪目錄內可完整解碼的 1280×360 PNG，並記錄雜湊。缺圖、重複檔名、路徑穿越、PNG 截斷、IEND 後附加資料或 OK 卡 chunks 都會讓本輪失敗；只在共用目錄找到舊圖不算通過。
+
+報告在每項測試後更新，整套跑完才設定 `finished=true`。尚未結束時 Markdown 顯示「執行中」，不會先宣告整套通過。
+
+**PASS 僅代表功能測試與圖片證據完整，不代表逐像素吻合。** 對照圖左側為原作場景卡內預覽縮圖，右側為本輪 Unreal 擷取；仍要逐圖判讀構圖、材質、光照、角色與後製差異。記憶體最終卸載值也不能直接稱為回到啟動基準。
+
+## 工具回歸測試
+
+```powershell
+.\Tools\lua\lua.exe Tools/test_ok_studio_evidence.lua
+.\Tools\lua\lua.exe Tools/lua/lint.lua Tools/verify_ok_studio.lua Tools/ok_studio_evidence.lua Tools/test_ok_studio_evidence.lua
+```
+
+測試在新的 `Saved/Tests/StudioEvidence/` 子目錄使用普通文件截圖，不改動正式輸出；涵蓋缺失／重複／損壞／目錄外圖片、卡片附加資料與跨語言連結。
+
+需要提交圖文紀錄時，只提交普通截圖與文件，仍須通過 `Tools/check_no_cards.lua`。不提交原作卡、OK 卡、含角色的 Studio 場景或整個 Saved 目錄。既有實例見 [HANDOFF_E 圖文驗收紀錄](OK_STUDIO_HANDOFF_E_ACCEPTANCE_20261020.md)。
