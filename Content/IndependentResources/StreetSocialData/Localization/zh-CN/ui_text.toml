@@ -940,6 +940,7 @@ private_interaction_unavailable = "私密互动目前无法开始。"
 refuses_sleep_together = "{name} 不想和 {first_name} 一起睡。"
 she_pulls_toward = "她拉着你往{place}走。"
 walks_toward_you = "{name} 朝你走过来了。"
+meeting_walk_blocked = "{name} 往约好的地方走，路上被挡住了，没能走到你身边；去她那边找她吧。"
 
 [ui.jobs]
 apply_job_label = "应征{job_title}（时薪 {wage, number, ::currency}）"
