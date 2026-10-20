@@ -17,6 +17,12 @@ float AOKStreetSocialScene::AppealOf(int32 Character) const{
 
 // This turn's answers to every kind of invitation (plan §12.2), rolled once so her words and the rules agree.
 // The rules roll every kind (invite.rs stance); a kind she refused less than ten minutes ago stays a no.
+// The minute of the day her shift ends while she is working now (her plan's work block), else 0.
+int32 AOKStreetSocialScene::ShiftUntil(int32 Character) const{
+ const int32 Minute=int32(OKStreetMindNow(*State)%1440);const FOKStreetPlanBlock* B=BlockNow(Character,Minute);
+ return B&&B->Kind==TEXT("work")?B->End:0;
+}
+
 FString AOKStreetSocialScene::RollInviteStance(int32 Character){
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  const FString Place=PlaceHere(S.Male);const FDateTime Now=StreetNow();const double T=SceneTime();
@@ -24,7 +30,7 @@ FString AOKStreetSocialScene::RollInviteStance(int32 Character){
  for(int32 C=0;C<int32(EOKStreetInvite::Count);++C){const double* At=S.InviteRefusedAt.Find(Id+FString::Printf(TEXT("|%d"),C));Cooling.Add(MakeShared<FJsonValueBoolean>(At&&T-*At<600));}
  auto Request=OKRulesHeroineRequest(S,TEXT("invite_stance"),Id);
  Request->SetNumberField(TEXT("look"),PlayerLook());Request->SetStringField(TEXT("place"),Place);Request->SetNumberField(TEXT("hours"),Now.GetHour()+Now.GetMinute()/60.0);
- Request->SetArrayField(TEXT("cooling"),Cooling);Request->SetNumberField(TEXT("seed"),FMath::Rand());
+ Request->SetArrayField(TEXT("cooling"),Cooling);Request->SetNumberField(TEXT("seed"),FMath::Rand());Request->SetNumberField(TEXT("shift_until"),ShiftUntil(Character));
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return FString();
  TArray<bool> Accept;for(const auto& V:Out->GetArrayField(TEXT("accept")))Accept.Add(V->AsBool());
  S.InviteStance.Add(Id,Accept);
@@ -41,7 +47,7 @@ bool AOKStreetSocialScene::InviteAllowed(int32 Character,const FString& Action,F
  const FString Key=Id+FString::Printf(TEXT("|%d"),C);const bool Again=S.InviteRefusedAt.Contains(Key)&&SceneTime()-S.InviteRefusedAt[Key]<600;
  S.InviteRefusedAt.Add(Key,SceneTime());
  // Her reason, and what asking again and again after a no costs (invite.rs invite_refused).
- auto Request=OKRulesHeroineRequest(S,TEXT("invite_refused"),Id);Request->SetStringField(TEXT("action"),Action);Request->SetBoolField(TEXT("again"),Again);Request->SetNumberField(TEXT("refusals"),S.InviteRefusals.FindRef(Id));
+ auto Request=OKRulesHeroineRequest(S,TEXT("invite_refused"),Id);Request->SetStringField(TEXT("action"),Action);Request->SetNumberField(TEXT("shift_until"),ShiftUntil(Character));Request->SetBoolField(TEXT("again"),Again);Request->SetNumberField(TEXT("refusals"),S.InviteRefusals.FindRef(Id));
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid()){Why=OKT(TEXT("ui.invite.not_in_mood"));return false;}
  Why=Out->GetStringField(TEXT("why"));S.InviteRefusals.Add(Id,int32(Out->GetNumberField(TEXT("refusals"))));
  ApplyRulesRelation(Id,*Out);

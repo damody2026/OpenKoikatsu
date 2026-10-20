@@ -165,6 +165,12 @@ pub fn stance(r: &Relation, appeal: f32, awkward: f32, cooling: &[bool], seed: i
     (accept, lines.join(crate::tr::t("academics.semicolon_sep")))
 }
 
+/// She is working now (her plan's work block; request: shift_until, minute of the day it ends): the reason she gives.
+fn on_shift(request: &Value) -> Option<String> {
+    let until = request.get("shift_until").and_then(Value::as_i64).filter(|m| *m > 0)?;
+    Some(crate::tr::m("invite.on_shift_until", &[("until", crate::tr::a(&format!("{}:{:02}", until / 60, until % 60)))]))
+}
+
 pub fn eval(places: &crate::places::PlacesTuning, kind: &str, request: &Value) -> Option<Result<Value, String>> {
     match kind {
         "invite_kind" | "appeal" | "invite_stance" | "invite_refused" | "approach_score" => Some(handle(places, kind, request)),
@@ -191,14 +197,22 @@ fn handle(places: &crate::places::PlacesTuning, kind: &str, request: &Value) -> 
             let place = text("place");
             let crowd = crate::places::crowd_at(&place, request.get("hours").and_then(Value::as_f64).unwrap_or(12.0));
             let awkward = crate::places::awkwardness(places.norms(&place), crowd, places.act("loud")) * 0.3;
-            let (accept, line) = stance(&c.rel, appeal, awkward, &cooling, seed);
+            let (mut accept, mut line) = stance(&c.rel, appeal, awkward, &cooling, seed);
+            // On her shift (serving drinks at the shop): no sitting down with him, no going off until it ends.
+            if let Some(why) = on_shift(request) {
+                accept = vec![false; accept.len()];
+                line = (0..accept.len())
+                    .map(|k| crate::tr::m("invite.will_refuse_with_reason", &[("name", crate::tr::a(crate::tr::t(NAMES[k]))), ("reason", crate::tr::a(&why))]))
+                    .collect::<Vec<_>>()
+                    .join(crate::tr::t("academics.semicolon_sep"));
+            }
             json!({"accept": accept, "text": line, "appeal": appeal})
         }
         "invite_refused" => {
             // A refused invitation (her rolled stance said no): her reason; when he keeps asking after a no within ten
             // minutes, the third time costs respect and she remembers being pestered.
             let k = kind_of(&text("action"));
-            let why = refusal_reason(k, &c.rel);
+            let why = on_shift(request).unwrap_or_else(|| refusal_reason(k, &c.rel).to_string());
             let count = request.get("refusals").and_then(Value::as_i64).unwrap_or(0) as i32 + if flag("again") { 1 } else { 0 };
             let mut notes = vec![json!({"act": "invite_refused", "text": crate::tr::m("invite.refused_his_invite", &[("activity", crate::tr::a(crate::tr::t(NAMES[k]))), ("reason", crate::tr::a(&why))]), "importance": 0.35})];
             let mut rel = c.rel.clone();
@@ -268,6 +282,19 @@ mod tests {
         let req = serde_json::json!({"relation": {"id": "a"}, "profile": {}, "action": "meal", "again": false, "refusals": 0});
         let v = eval(&crate::tuning::Tuning::builtin().places, "invite_refused", &req).unwrap().unwrap();
         assert_eq!((v["refusals"].as_i64(), v["notes"].as_array().unwrap().len()), (Some(0), 1));
+    }
+
+    #[test]
+    fn on_her_shift_she_goes_nowhere() {
+        let places = crate::tuning::Tuning::builtin().places;
+        let lover = serde_json::json!({"id": "a", "stage": "lover", "affection": 100, "trust": 90, "energy": 100});
+        let req = serde_json::json!({"relation": lover, "profile": {}, "seed": 3, "shift_until": 900});
+        let v = eval(&places, "invite_stance", &req).unwrap().unwrap();
+        assert!(v["accept"].as_array().unwrap().iter().all(|a| a == false), "{v}");
+        assert!(v["text"].as_str().unwrap().contains("15:00"), "{v}");
+        let req = serde_json::json!({"relation": {"id": "a"}, "profile": {}, "action": "drink_shop", "shift_until": 900});
+        let v = eval(&places, "invite_refused", &req).unwrap().unwrap();
+        assert!(v["why"].as_str().unwrap().contains("15:00"), "{v}");
     }
 
     #[test]
