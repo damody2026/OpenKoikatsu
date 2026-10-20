@@ -3781,3 +3781,5 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜6964驗收不應把既有問題混成新修正失敗**：PostTest舊霧斷言以全畫面平均紅色上升3判斷，天空佔大面積使均值僅+1；實際1736個幾何像素紅升／綠降至少5。改以至少100個受影響像素驗證方向與幅度，不改霧正式公式。全庫轉卡首輪則沿用本機未追蹤私有模型，pack未含該mod，乾淨庫gaps=2；依既有共用庫政策改由純追蹤庫轉卡，pack記錄1個私有模型／3查詢與實體zip條目，CLI容量25.2%通過。不能提交私有模型填補乾淨庫，也不能把首輪容量失敗或DIFFERENT記為PASS。
 
 - **2026-10-21｜6964乾淨庫檢查會寫入追蹤的missing.txt**：LFS payload全核對後git clean斷言因前輪失敗CLI更新missing.txt而失敗。先將該輪缺口檔原樣留存Saved/OKStudio/6964-clean-missing-before-restoration.txt，再只還原自己測試寫入的該追蹤檔並重新核對。不可忽略dirty或把失敗證據刪掉。
+
+- **2026-10-21｜6964乾淨庫是sparse checkout**：提交後的驗證器假設Clean1268有Plugins實體來源檔而FileNotFound；該副本刻意只展開共用資源。改以git物件核對來源blob，並以git hash-object套用同一clean filter核對目前工作檔，而非將稀疏路徑不存在判成程式遺漏。多指令shell也須檢查每一步退出碼，不以最後一個git status的0掩蓋前面Python失敗。
