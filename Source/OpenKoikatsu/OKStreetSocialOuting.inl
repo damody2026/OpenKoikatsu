@@ -415,6 +415,9 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  if(S.Pair.Partner!=INDEX_NONE||S.Facility!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE){Error=OKT(TEXT("ui.outing.other_activity_ongoing"));return false;}
  if(OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive)){Error=OKT(TEXT("ui.outing.wait_she_finish_speaking"));return false;}
  if(FVector::Dist2D(S.Male,S.Agents[Girl-1].Position)>400){Error=OKT(TEXT("ui.outing.she_not_beside_you"));return false;}
+ // He walks with her now: where the navigation was taking him is over (met on the way to the park, it resumed after
+ // the walk to the sports ground and pulled him off her stretching spot 3 s in).
+ if(S.NavGirl!=INDEX_NONE||S.NavPointActive){UE_LOG(LogTemp,Display,TEXT("Street outing: navigation to %s ends, he goes with actor=%d"),*S.NavPointName,Girl);StopNavigation(FString());}
  if(S.OutingGirl!=INDEX_NONE)CancelOuting(FString());
  if(S.Companion!=INDEX_NONE)FinishCompanion();
  if(Stroll){BeginStroll(Girl,Error);return Error.IsEmpty();}
