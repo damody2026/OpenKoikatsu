@@ -58,11 +58,22 @@ fn remake_card_in_place(card:&std::path::Path)->Result<(),String> {
 /// edited OK card made again. Uses the configured base library. Returns 0 and "digest parts pack-bytes" in `msg`.
 #[no_mangle]
 pub unsafe extern "C" fn ok_okcard_make(game:*const c_char,card:*const c_char,out:*const c_char,msg:*mut c_char,cap:i32)->i32 {
+    okcard_make_impl(game,card,out,None,msg,cap)
+}
+/// Scene-selected outfit; preserve all original coordinate indices.
+#[no_mangle]
+pub unsafe extern "C" fn ok_okcard_make_outfit(game:*const c_char,card:*const c_char,out:*const c_char,outfit:i32,msg:*mut c_char,cap:i32)->i32 {
+    okcard_make_impl(game,card,out,Some(outfit),msg,cap)
+}
+unsafe fn okcard_make_impl(game:*const c_char,card:*const c_char,out:*const c_char,outfit:Option<i32>,msg:*mut c_char,cap:i32)->i32 {
     let result=std::panic::catch_unwind(||{
         let (Some(card),Some(out))=(cstr_opt(card),cstr_opt(out)) else{return Err("okcard: path missing".to_string());};
         let lib=crate::oklib::configured_library().ok_or("OK base library not configured")?;
         let game=cstr_opt(game).filter(|g|!g.is_empty()).map(std::path::PathBuf::from).unwrap_or_else(installed_game_root);
-        let (digest,parts,bytes,pack)=crate::oklib::remake_ok_card(&lib,&game,std::path::Path::new(&card))?;
+        let (digest,parts,bytes,pack)=match outfit {
+            Some(index)=>crate::oklib::remake_ok_card_for_outfit(&lib,&game,std::path::Path::new(&card),index)?,
+            None=>crate::oklib::remake_ok_card(&lib,&game,std::path::Path::new(&card))?,
+        };
         std::fs::write(&out,&bytes).map_err(|e|format!("{out}: {e}"))?;
         Ok(format!("{digest} parts={parts} pack={pack}"))
     }).unwrap_or_else(|_|Err("okcard: panic".into()));

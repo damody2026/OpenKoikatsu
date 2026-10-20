@@ -3734,3 +3734,10 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜大型 SelfTest 函式新增 Before 變數撞名**：固定頭部切換整合測試使用 FVector Before，遮蔽同一函式前面的 FString Before，Windows 編譯將 C4456 視為錯誤。改成 SavedNeckBefore／SavedNeckFixed／SavedNeckRestored 等用途前綴。保留失敗 build log，以重建後結果驗收；在大型既有函式加測試時先檢查外層名稱，避免重複使用 Before／After／Fixed 這類名稱。
 
 - **2026-10-21｜FIX 頭部也必須保留於直接身形重建**：一般動畫／static interaction 的 finishing pass 已重套 FIX，但 apply_shape／apply_shape_live 的直接顯示路徑也會還原骨架，不能只靠第一次載入 setter。於身體 shape baseline 保存之後、IK 之後重套固定 locals，僅在 FIX 存在且非 deferred frame 時執行，不推進追視或物理時鐘。回歸測試實際修改身形數值並驗證兩條路徑的頸／頭 locals；固定資料不能烘進 shaped baseline，否則切回動畫會殘留。
+
+- **2026-10-21｜Studio 不可套用展示服裝自動排序**：1268 天使來源第0套為白色浴巾（top28），通用 OK 卡轉換的 shown_outfit_first 依外出鞋與部件數選中第1套並交換到0，Studio卻仍按來源coordinate=0載入，變成校服。新增明確服裝轉換API，保留全部coordinate／Status／plugin編號，並將明確選中非0套的資源一起錄入；Gallery預設展示規則維持原行為。驗收必須檢查轉卡後服裝資料與實際renderer，不能只看角度正確或程序成功。
+- **2026-10-21｜診斷需區分現代OK卡與舊快照**：ok-appearance inspect只適用okPv快照，對okLb卡會回報PNG has no portable snapshot；本輪誤用後改用來源資料塊與實際Session比對。Python讀舊MessagePack binary字串需raw=True，再針對文字欄位解碼；rg在Windows不可將1268*當成目錄參數，應給父目錄搭配-g。初期白色簡化模式／材質猜測均經來源資料排除，不以猜測改渲染。
+
+- **2026-10-21｜Session open 已負責掛載卡片資源包**：1268 新來源回歸測試先手動 mount_card_pack 再呼叫 session::open，對含pack的卡重複取得 PACK_OPEN 非重入鎖，測試停住。移除外層手動掛載，讓既有Session生命週期處理；停止本輪測試PID後重跑，未修改正式鎖或跳過pack。
+
+- **2026-10-21｜錄製卡內資源時不可用最終Session快取代替來源走訪**：明確指定非0套服裝時，其zipmod模型與query也必須錄入okLc；已暖載入的Session不能提供完整來源依賴。錄製card pack期間略過Session／baked快取，正常遊戲載入快取不受影響。來源回歸先暖載入再轉卡，檢查模型清單非空與closed reopen，避免只有冷快取成功。

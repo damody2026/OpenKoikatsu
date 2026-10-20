@@ -769,3 +769,56 @@ mod fixed_neck_tests {
             .any(|q| q[0].abs() + q[1].abs() + q[2].abs() > 0.1));
     }
 }
+
+#[cfg(test)]
+#[test]
+#[ignore = "base library: 1268 source outfit conversion and closed reopen"]
+fn scene_1268_clothing_source() {
+    let lib = std::env::var_os("OK_BASE_LIBRARY").map(std::path::PathBuf::from).unwrap_or_else(||
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1"));
+    let samples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1/studio/samples");
+    let bytes = std::fs::read(samples.join("koikatu_cs0001268.png")).unwrap();
+    let scene = read(&bytes).unwrap();
+    fn collect<'a>(objects: &'a [Object], out: &mut Vec<&'a Object>) {
+        for o in objects {
+            match o {
+                Object::Character {key, children, ..} => {
+                    if *key == 136 || *key == 280 { out.push(o); }
+                    for (_, c) in children { collect(c, out); }
+                }
+                Object::Item{children,..}|Object::Folder{children,..}|Object::Route{children,..} => collect(children, out),
+                _ => {}
+            }
+        }
+    }
+    let mut angels=Vec::new(); collect(&scene.objects, &mut angels); assert_eq!(angels.len(),2);
+    let source=card_bytes(&bytes,angels[0]).unwrap();
+    assert_eq!(source,card_bytes(&bytes,angels[1]).unwrap());
+    assert_eq!(crate::okclothes::shown_outfit(&source).unwrap(),1,"display heuristic would select the uniform");
+    let source_blocks=crate::appearance::blocks_from_card(&source).unwrap();
+    let root=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Saved/OKStudio/1268-clothes-oracle");
+    std::fs::create_dir_all(&root).unwrap(); let path=root.join("source.png");std::fs::write(&path,&source).unwrap();
+    assert!(crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&path,-1).is_err());
+    assert!(crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&path,7).is_err());
+    for outfit in [0,1] {
+        let info=crate::card::parse_card_bytes_mode(&source,outfit,false).unwrap();
+        assert_eq!(info.clothes_ids[0],if outfit==0 {28} else {2});
+        crate::oklib::ensure_library(&lib).unwrap();
+        crate::session::open(&lib,Some(&path),outfit).unwrap(); // warm the original-card cache first
+        let (_,_,card,_)=crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&path,outfit).unwrap();
+        let payload:serde_json::Value=serde_json::from_slice(crate::oklib::png_chunk(&card,b"okLb").unwrap()).unwrap();
+        assert!(!payload["models"].as_array().unwrap().is_empty(),"pack recording must visit dependencies even after a warm open");
+        assert_eq!(crate::appearance::blocks_from_card(&card).unwrap(),source_blocks,"all source coordinates/status/plugins retain their exact bytes");
+        let converted=root.join(format!("outfit{outfit}.png"));std::fs::write(&converted,&card).unwrap();
+        let session=crate::session::open(&lib,Some(&converted),outfit).unwrap();
+        let top:Vec<_>=session.parts.iter().filter(|p| p.role=="clothes_top"&&p.render_visible).map(|p|p.name.as_str()).collect();
+        eprintln!("CLOTHING closed outfit={outfit} top={top:?} game_reads={}",crate::gamefs::fallback_used());
+        assert!(!top.is_empty());
+        if outfit==0 {assert!(top.iter().all(|n|n.contains("bathtowel")));}
+        else {assert!(top.iter().any(|n|n.contains("jacket")));}
+        assert!(!crate::gamefs::fallback_used());
+        let reopened=crate::oklib::remake_ok_card_for_outfit(&lib,std::path::Path::new(""),&converted,outfit).unwrap().2;
+        assert_eq!(crate::appearance::blocks_from_card(&reopened).unwrap(),source_blocks,"reconversion must not exchange coordinates");
+    }
+    assert_eq!(std::fs::read(path).unwrap(),source,"conversion never edits the source file");
+}

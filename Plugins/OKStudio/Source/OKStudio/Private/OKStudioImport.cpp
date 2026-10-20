@@ -203,7 +203,13 @@ namespace
 				const int32 Key = int32(O->GetNumberField(TEXT("key")));
 				const FString OkCard = CardDirectory / FString::Printf(TEXT("char_%d.png"), Key);
 				FString Summary;
-				const bool bCard = !KksCard.IsEmpty() && FOkSession::MakeOkCard(KksCard, OkCard, Summary);
+				// A Studio scene names a coordinate explicitly. Keep its numbering and record that outfit's resources;
+				// the Gallery's automatic display outfit selection would exchange the saved outfit with another one.
+				const TSharedPtr<FJsonObject>* SavedStatus = nullptr;
+				int32 SavedOutfit = 0;
+				if (O->TryGetObjectField(TEXT("status"), SavedStatus)) (*SavedStatus)->TryGetNumberField(TEXT("coordinate"), SavedOutfit);
+				SavedOutfit = FMath::Max(0, SavedOutfit);
+				const bool bCard = !KksCard.IsEmpty() && FOkSession::MakeOkCardForOutfit(KksCard, OkCard, SavedOutfit, Summary);
 				if (bCard) ++Report->CharacterCards; else Report->Notes.Add(FString::Printf(TEXT("character %d: no OK card (%s)"), Key, *Summary));
 				IFileManager::Get().Delete(*KksCard);
 				const int32 Id = Add(EOKSceneObjectKind::Character, FString::Printf(TEXT("Character %d"), Key), Parent, O);

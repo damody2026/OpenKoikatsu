@@ -1357,6 +1357,11 @@ bool FOkSession::MakeOkCard(const FString& Card,const FString& Out,FString& Summ
  const int32 Result=ok_okcard_make(nullptr,TCHAR_TO_UTF8(*FPaths::ConvertRelativePathToFull(Card)),TCHAR_TO_UTF8(*FPaths::ConvertRelativePathToFull(Out)),Buffer,UE_ARRAY_COUNT(Buffer));
  Summary=UTF8_TO_TCHAR(Buffer);return Result==0;
 }
+bool FOkSession::MakeOkCardForOutfit(const FString& Card,const FString& Out,int32 Outfit,FString& Summary){
+ OKPrepareCardEnvironment();char Buffer[2048]{};
+ const int32 Result=ok_okcard_make_outfit(nullptr,TCHAR_TO_UTF8(*FPaths::ConvertRelativePathToFull(Card)),TCHAR_TO_UTF8(*FPaths::ConvertRelativePathToFull(Out)),Outfit,Buffer,UE_ARRAY_COUNT(Buffer));
+ Summary=UTF8_TO_TCHAR(Buffer);return Result==0;
+}
 static FAutoConsoleCommand GOKMakeOkCardCommand(TEXT("OK.MakeOkCard"),
  TEXT("OK.MakeOkCard <card.png> [out.png]: converts an original KKS card (with its zipmods from the KKS installation) or an edited OK card into an OK card for the OK base library; default output <card>.ok.png."),
  FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args){

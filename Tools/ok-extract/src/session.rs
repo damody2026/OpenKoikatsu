@@ -3340,7 +3340,10 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
     // later feature (animation, pairing) treats it like an okPv card.
     if crate::oklib::ensure_library(game)? {
         crate::gamefs::reset_fallback_used();
-        let key = card.and_then(|c| crate::oklib::session_cache_key(game, c, outfit));
+        // Recording a card pack must visit source models/queries, including an explicitly
+        // selected nonzero outfit. A cached final session cannot record those dependencies.
+        let key = if crate::oklib::recording_card_pack() { None }
+            else { card.and_then(|c| crate::oklib::session_cache_key(game, c, outfit)) };
         crate::oklib::LAST_FROM_CACHE.store(false, std::sync::atomic::Ordering::Relaxed);
         // A card that carries this open baked in (okBk, OK_CARD_BAKED=1) needs neither its pack nor the cache.
         if crate::cardbake::enabled() {
