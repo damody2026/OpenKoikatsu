@@ -444,3 +444,11 @@
 最新 Editor／Game 建置成功，418 Rust PASS，7 項 Automation Success；真實角色旋轉／位置／身形重建 oracle PASS。核心版本六項 Studio 自測 PASS，1268／6331 連續擷取 2/2，最後版本 6331 重拍 1/1。來源、版本與完整驗收見 [6331 圖文驗收](OK_STUDIO_SAVED_POSE_6331_20261021.md)。舊 .okscene 需重新匯入原作 PNG 取得新資料。
 
 ![6331 修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/SavedPose6331_20261021/comparison.png)
+
+### S5：1268 天使服裝（2026-10-21）
+
+`d1996aa6e`：Studio 的轉卡保留來源 Coordinate／Status／plugin 編號，依場景指定的服裝記錄資源，避免一般展示規則把白色浴巾與校服交換。非第0套也記錄依賴，錄製期間略過最終Session快取，正常載入快取保留。
+
+實際來源／暖快取／非0套／closed reopen 與乾淨共用庫回歸見 [1268 服裝圖文驗收](OK_STUDIO_CLOTHES_1268_20261021.md)。舊場景及角色卡需重新匯入原作場景PNG。
+
+![1268 服裝修正：上排修正前、下排修正後；每排左原作右 Unreal](images/OKStudio/Clothes1268_20261021/comparison.png)
