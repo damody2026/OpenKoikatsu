@@ -357,7 +357,10 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // Cut short (the place closed on them): the minutes that really went by, not the activity's whole length.
  if(S.ActCutShort)Request->SetNumberField(TEXT("spent"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));Request->SetNumberField(TEXT("menu_seed"),int32(StartMinute)+Girl*31);Request->SetStringField(TEXT("said"),S.ActSaid.FindRef(Girl));Request->SetStringField(TEXT("her_said"),S.ActHerSaid.FindRef(Girl));S.ActSaid.Remove(Girl);S.ActHerSaid.Remove(Girl);Request->SetNumberField(TEXT("elapsed"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));
  Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("seed"),FMath::Rand());
+ // The ticket of a place with an admission (aquarium, pool, onsen) is paid once a day there (shop.rs activity_end).
+ Request->SetBoolField(TEXT("admitted"),S.AdmittedDay==S.Store.CalendarDay&&S.AdmittedPlace==PlaceId);
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
+ {bool Admission=false;if(Answer->TryGetBoolField(TEXT("admission"),Admission)&&Admission){S.AdmittedPlace=PlaceId;S.AdmittedDay=S.Store.CalendarDay;}}
  // Time: what the activity takes beyond the minutes that already went by while it played, never past an appointment.
  const int32 Want=int32(Answer->GetNumberField(TEXT("minutes")));const int64 Spent=OKStreetMindNow(S)-StartMinute;
  int64 Room=MAX_int64;for(const auto& X:S.Store.Appointments)if(X.Status==TEXT("pending")&&X.Kind!=TEXT("entrust")&&X.Start>OKStreetMindNow(S))Room=FMath::Min(Room,X.Start-5-OKStreetMindNow(S));

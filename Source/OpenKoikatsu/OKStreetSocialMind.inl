@@ -402,7 +402,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  if(!Reply.PromisePlace.IsEmpty())AddPromiseFromChat(Character,Reply.PromiseDay,Reply.PromiseTime,Reply.PromisePlace,Reply.PromiseWhat,S.LastPlayerSaid+TEXT("\n")+Reply.Reply,S.LastPlayerSaid);
  HandleFinanceReply(Character,Reply.Predict,Reply.Trade,Reply.Bet);
  // Ordering by chat (plan §8.2): only items this place sells; then checkout when asked.
- const FString Place=ShopPlaceHere();
+ const FString Place=OrderShopHere(Character);
  int32 Added=0;
  // What he said he wants for himself ("我要排骨饭") is his, whoever's name her reply put on it (shop.rs his_items).
  const TArray<FString> His=HisOwnItems(S.LastPlayerSaid,Place.IsEmpty()?OutingShop(Character):Place);

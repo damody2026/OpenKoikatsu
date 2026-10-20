@@ -364,8 +364,15 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
             price += i.price_of(&i.default_size());
         }
     }
+    // An admission (the aquarium, the pool, the onsen) is paid once a day there: watching the tank and then the bench
+    // in front of it charged the ticket twice. Request: admitted (already paid at this place today).
+    let mut admission = false;
     for cst in COSTS.iter().filter(|cst| id.starts_with(cst.0)) {
-        price += crate::region::price(cst.1 as i64) as i32;
+        let ticket = matches!(cst.0, "aquarium" | "pool" | "onsen");
+        if !(ticket && b(r, "admitted")) {
+            price += crate::region::price(cst.1 as i64) as i32;
+            admission |= ticket;
+        }
         add(&mut feed, cst.3, cst.4);
     }
     if feed.is_empty() {
@@ -396,8 +403,14 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
                 }
                 // He said he is buying when they set off ("我请", she: "水你请"), and she did not turn it down: his.
                 let (said, her_said) = (s(r, "said").to_lowercase(), s(r, "her_said").to_lowercase());
-                if crate::tr::heard(&said, "hear.offer_pay") && !crate::tr::heard(&her_said, "hear.decline_treat") && n(r, "player_cash") >= price as f64 {
+                if crate::tr::heard(&said, "hear.offer_pay") && !crate::tr::heard(&said, "hear.ask_split") && !crate::tr::heard(&her_said, "hear.decline_treat") && n(r, "player_cash") >= price as f64 {
                     l = "player_pays";
+                    i = 1.0;
+                }
+                // They agreed to pay their own ("门票各付各的", she: "好，说定了"; or she turned his treat down): halves,
+                // not "his treat" (the aquarium tickets went on him).
+                else if crate::tr::heard(&said, "hear.ask_split") || crate::tr::heard(&her_said, "hear.decline_treat") {
+                    l = "split";
                     i = 1.0;
                 }
                 (l, i)
@@ -447,7 +460,7 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
     // Said as long as it really went on: they sat 50 minutes, not the activity's 35 (elapsed: the minutes that went by).
     let shown = minutes.max(r.get("elapsed").and_then(Value::as_f64).unwrap_or(0.0).round() as i32);
     let notice = crate::tr::m("shop.date_ended_summary", &[("name", crate::tr::a(&name)), ("minutes", crate::tr::a(&shown)), ("payment_note", crate::tr::a(&(if price > 0 { crate::tr::m("shop.price_payer_suffix", &[("price", crate::tr::a(&crate::tr::money(price))), ("payer", crate::tr::a(&payer))]) } else { String::new() })))]);
-    Ok(json!({"minutes": minutes, "price": price, "payer": payer, "bought": bought, "feed": feed, "effects": fx.into_value(), "notice": notice, "treat_kept": treat_kept}))
+    Ok(json!({"minutes": minutes, "price": price, "payer": payer, "bought": bought, "feed": feed, "effects": fx.into_value(), "notice": notice, "treat_kept": treat_kept, "admission": admission}))
 }
 
 /// Her errand buys something there within the budget and her wallet. Request: place, month, budget, cash, seed.
@@ -756,11 +769,23 @@ mod tests {
         let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "again": 1, "player_cash": 1000, "relation": rel(json!({"cash": 0, "affection": 10})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!((v["price"].as_i64(), v["payer"].as_str()), (Some(80), Some("你請客")));
         assert_eq!(v["feed"]["hygiene"], 15.0, "half again the same day");
+        assert_eq!(v["admission"], true);
+        // Watching the tank and then sitting on the bench before it: one ticket for the visit.
+        let tank = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(60), Some(true)));
+        let bench = activity_end(&c, &json!({"id": "aquarium_bench", "kind": "pair", "code": 11, "name": "長椅", "admitted": true, "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!((bench["price"].as_i64(), bench["admission"].as_bool()), (Some(0), Some(false)), "{bench}");
         // He said he is buying when they set off: his, however rich she is and whatever the dice say.
         for seed in 1..20 {
             let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "player_cash": 1000, "said": "水我请", "her_said": "水你请，那就走",
                 "relation": rel(json!({"cash": 5000, "affection": 10, "treat_balance": -3})), "profile": {}, "seed": seed})).unwrap();
             assert_eq!(v["payer"].as_str(), Some("你請客"), "seed {seed}");
+        }
+        // They agreed to pay their own when they went in: halves, not his treat.
+        for seed in 1..20 {
+            let v = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "said": "那我们进去一起看鱼吧，门票各付各的。", "her_said": "好，说定了。",
+                "relation": rel(json!({"cash": 2000, "treat_balance": 3})), "profile": {}, "seed": seed})).unwrap();
+            assert_eq!(v["payer"].as_str(), Some("各付一半"), "seed {seed}: {v}");
         }
         let v = shift_end(&json!({"wage": 120, "worked": 90, "early": true, "chats": 5, "rating": 20})).unwrap();
         assert_eq!((v["pay"].as_i64(), v["rating"].as_i64(), v["fired"].as_bool()), (Some(180), Some(8), Some(true)));

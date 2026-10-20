@@ -52,6 +52,15 @@ FString AOKStreetSocialScene::OutingShop(int32 Girl) const{
  return !Place.IsEmpty()&&S.Catalog.Items.ContainsByPredicate([&](const FOKStreetCatalogItem& I){return I.Place==Place;})?Place:FString();
 }
 
+// The shop her orders go to: the one here, unless she is walking with him to somewhere else (passing the park on the
+// way to lunch, "shall we buy fish food?" bought it at once); then none here, and OutingShop carries them there.
+FString AOKStreetSocialScene::OrderShopHere(int32 Girl) const{
+ const auto& S=*State;const FString Here=ShopPlaceHere();if(Here.IsEmpty()||S.OutingGirl!=Girl||Girl==INDEX_NONE)return Here;
+ FString Dest=S.OutingActivity.StartsWith(TEXT("go:"))?S.OutingActivity.Mid(3):FString();
+ if(Dest.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(S.OutingActivity))Dest=A->Place?A->Place:TEXT("");
+ return Dest.IsEmpty()||Dest==Here?Here:FString();
+}
+
 FString AOKStreetSocialScene::ShopPlaceHere() const{
  const auto& S=*State;
  // In a facility (the restaurant's private room) he is in its own room, away from the place's floor: that place's menu.

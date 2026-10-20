@@ -228,7 +228,7 @@ struct FOKStreetSceneState {
  // the heroine walking over on her own, and a second sleeper.
  float PlayerLookBase=50.f;TMap<FString,TArray<bool>> InviteStance;TMap<FString,double> InviteRefusedAt;TMap<FString,int32> InviteRefusals;
  int32 FollowMode=0,LedReplans=0;double LedBlockedSince=0;FVector LedLastPos=FVector::ZeroVector;float FollowGirlWalk=0;FVector FollowLead=FVector::ZeroVector;bool FollowLeadInit=false;
- TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false;int32 ApproachRetries=0;
+ TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false;int32 ApproachRetries=0;FString AdmittedPlace;int32 AdmittedDay=-1;
  int32 SleepGirl2=INDEX_NONE;FVector SleepGirl2Bed=FVector::ZeroVector;float SleepGirl2Yaw=0;
  // Plan §12.4 level 4: she agreed, and they are on the way to a lockable room (or already in the private mode).
  int32 PendingIntimacy=INDEX_NONE,IntimacyGirl=INDEX_NONE;
@@ -1216,7 +1216,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  }
  // The menu where they stand (empty elsewhere or when closed) and what her reply already ordered.
  FString OnTable;for(const auto& D:S.Table)if(D.ForHer&&D.Her==Character&&D.Percent>0)OnTable+=OKMsg(TEXT("ui.scene.dish_entry"), {{TEXT("dish_name"), *D.Name}, {TEXT("served_suffix"), D.Served?TEXT(""):OKT(TEXT("ui.scene.preparing_food"))}});
- FString Menu;{const FString Here=ShopPlaceHere();const FString Shop=Here.IsEmpty()?OutingShop(Character):Here;FString Closed;if(!Shop.IsEmpty()&&!PlaceClosedNow(Shop,Closed))for(const auto* I:Here.IsEmpty()?OKStreetItemsAt(S.Catalog,Shop,StreetNow().GetMonth()):ItemsHere(Shop))Menu+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), *I->Id}, {TEXT("name"), *I->Name}});}
+ FString Menu;{const FString Here=OrderShopHere(Character);const FString Shop=Here.IsEmpty()?OutingShop(Character):Here;FString Closed;if(!Shop.IsEmpty()&&!PlaceClosedNow(Shop,Closed))for(const auto* I:Here.IsEmpty()?OKStreetItemsAt(S.Catalog,Shop,StreetNow().GetMonth()):ItemsHere(Shop))Menu+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), *I->Id}, {TEXT("name"), *I->Name}});}
  // Meetings with her the game already has, so the same plan is not booked twice.
  FString Booked;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==HerId)Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("day"), *OKStreetCalendarLabel(int32(A.Start/1440),0.0)}, {TEXT("hour"), int32(A.Start%1440)/60}, {TEXT("minute"), int32(A.Start%1440)%60}, {TEXT("label"), *A.Label}});}
  FString Nearby;for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(PartyCanJoin(G))Nearby+=S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.semicolon_mark"));
@@ -1355,7 +1355,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
      for(const FString& Item:L->Store.Inventory)if(const auto* Known=L->Catalog.Find(Item);Known&&(Item==Gift||OKStreetNameMatches(Gift,Known->Name))){ // either script: "月饼" for the catalogue's 月餅（單顆）
       UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he gives her %s"),Character,*Item);Weak->HandleWorldAct(Character,TEXT("gift"),Item);break;}}}
   // Orders he (or she) asked for that her reply left out: to the kitchen like any chat order.
-  {const TArray<TSharedPtr<FJsonValue>>* Orders=nullptr;int32 Added=0;const FString Here=Weak->ShopPlaceHere();FString Shop=Here.IsEmpty()?Weak->OutingShop(Character):Here;const bool OnTheWay=Here.IsEmpty();
+  {const TArray<TSharedPtr<FJsonValue>>* Orders=nullptr;int32 Added=0;const FString Here=Weak->OrderShopHere(Character);FString Shop=Here.IsEmpty()?Weak->OutingShop(Character):Here;const bool OnTheWay=Here.IsEmpty();
    // Outside, about to go in ("let's go in, I'll have a latte"): the outing starts below, after the orders; its shop is
    // where the orders go (an empty shop dropped his latte).
    if(Shop.IsEmpty()&&!DoNow.IsEmpty()){if(const FOKStreetActivity* Going=OKStreetFindActivity(DoNow);Going&&Going->Place&&*Going->Place)Shop=Going->Place;else if(DoNow.StartsWith(TEXT("go:")))Shop=DoNow.Mid(3);}
