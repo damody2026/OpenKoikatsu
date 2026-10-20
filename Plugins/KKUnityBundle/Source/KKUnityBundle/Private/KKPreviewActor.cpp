@@ -658,6 +658,8 @@ struct FOKToonShadowParameters
 	FLinearColor LineMaskST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	FLinearColor HairGlossST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	bool bHairFrontProgram = false;
+	// Shader Forge/main_item_studio_add: its additive light effects mix the item colours by the texture's channel masks.
+	bool bStudioAddProgram = false;
 	FLinearColor RampGST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	FLinearColor AnotherRampST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	UTexture2D* AnotherRampTex = nullptr;
@@ -2357,19 +2359,35 @@ return Base.rgb * sh;
 			Mat->GetExpressionCollection().AddExpression(ProbeAmbient);
 			Ed->EmissiveColor.Expression = ProbeAmbient;
 		}
-		else if (bAdditive)
+		else if (bAdditive && Shadow && Shadow->bStudioAddProgram)
 		{
-			// Studio's light effects add their texture tinted by the item's first colour.
-			UMaterialExpressionConstant3Vector* Tint = NewObject<UMaterialExpressionConstant3Vector>(Mat);
-			Tint->Material = Mat;
-			Tint->Constant = Shadow ? Shadow->ItemColors[0] : FLinearColor::White;
-			Mat->GetExpressionCollection().AddExpression(Tint);
-			UMaterialExpressionMultiply* Tinted = NewObject<UMaterialExpressionMultiply>(Mat);
-			Tinted->Material = Mat;
-			Tinted->A.Expression = ColorOut;
-			Tinted->B.Expression = Tint;
-			Mat->GetExpressionCollection().AddExpression(Tinted);
-			Ed->EmissiveColor.Expression = Tinted;
+			// Studio's light effects (Shader Forge/main_item_studio_add, installed pixel program in abdata/studio/mat/00):
+			// the texture's channels are three layered masks, each tinting one item colour, and the brightest wins (in
+			// display values): max(saturate(r - max(g,b)^8) _Color, saturate(g - b^8) _Color2, b _Color3) x _alpha.
+			UMaterialExpressionCustom* Effect = NewObject<UMaterialExpressionCustom>(Mat);
+			Effect->Material = Mat;
+			Effect->OutputType = CMOT_Float3;
+			Effect->Inputs.Empty();
+			FCustomInput& TexIn = Effect->Inputs.AddDefaulted_GetRef();
+			TexIn.InputName = TEXT("Tex");
+			TexIn.Input.Expression = ColorOut;
+			auto Gamma = [](const FLinearColor& C) { return FLinearColor(FMath::Pow(FMath::Max(C.R, 0.f), 1.f / 2.2f), FMath::Pow(FMath::Max(C.G, 0.f), 1.f / 2.2f), FMath::Pow(FMath::Max(C.B, 0.f), 1.f / 2.2f), 1.f); };
+			const FLinearColor C1 = Gamma(Shadow ? Shadow->ItemColors[0] : FLinearColor::White);
+			const FLinearColor C2 = Gamma(Shadow ? Shadow->ItemColors[1] : FLinearColor::White);
+			const FLinearColor C3 = Gamma(Shadow ? Shadow->ItemColors[2] : FLinearColor::White);
+			Effect->Code = FString::Printf(TEXT("float3 t = pow(max(Tex.rgb, 0.0), 1.0 / 2.2);\n")
+				TEXT("float m = max(t.b, t.g); m *= m; m *= m;\n")
+				TEXT("float3 c1 = saturate(t.r - m * m) * float3(%s, %s, %s);\n")
+				TEXT("float b4 = t.b * t.b; b4 *= b4;\n")
+				TEXT("float3 c2 = saturate(t.g - b4 * b4) * float3(%s, %s, %s);\n")
+				TEXT("float3 c3 = t.b * float3(%s, %s, %s);\n")
+				TEXT("return pow(max(max(c3, max(c1, c2)) * %s, 0.0), 2.2);"),
+				*FString::SanitizeFloat(C1.R), *FString::SanitizeFloat(C1.G), *FString::SanitizeFloat(C1.B),
+				*FString::SanitizeFloat(C2.R), *FString::SanitizeFloat(C2.G), *FString::SanitizeFloat(C2.B),
+				*FString::SanitizeFloat(C3.R), *FString::SanitizeFloat(C3.G), *FString::SanitizeFloat(C3.B),
+				*FString::SanitizeFloat(Shadow ? Shadow->ItemAlpha : 1.f));
+			Mat->GetExpressionCollection().AddExpression(Effect);
+			Ed->EmissiveColor.Expression = Effect;
 		}
 		else
 		{
@@ -4454,6 +4472,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// Render queue / alpha mode does not identify a shader program. Material
 		// Editor can retain main_hair_front while changing its render state.
 		ShadowParams.bHairFrontProgram = Source.MaterialShaderName(i).EndsWith(TEXT("_front"), ESearchCase::IgnoreCase);
+		ShadowParams.bStudioAddProgram = Source.MaterialShaderName(i).Equals(TEXT("Shader Forge/main_item_studio_add"), ESearchCase::IgnoreCase);
 		ShadowParams.AnotherRampTex = Output.WhiteRamp;
 		ShadowParams.AnotherRampST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 		ShadowParams.RampGST = FLinearColor(1.f, 1.f, 0.f, 0.f);
@@ -5156,6 +5175,12 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		UE_LOG(LogTemp, Display, TEXT("OK part png name=%s len=%d detail=%d line=%d normal=%d normalMask=%d faceNormal=%.3f shader=%d shadow=(%.3f,%.3f,%.3f) extend=%.3f"),
 			*Name, View.png_len, View.detail_mask_len, View.line_mask_len, View.normal_map_len, View.normal_mask_len, View.face_normal, Part.ShaderKind, Part.ShadowColor.R, Part.ShadowColor.G,
 			Part.ShadowColor.B, Part.ShadowExtend);
+		// OK_PART_PNG_DUMP=<part name part>: that part's main texture as delivered (Saved/OKStudio/partpng/<name>_<index>.png).
+		{
+			static const FString PngDump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_PART_PNG_DUMP"));
+			if (!PngDump.IsEmpty() && Name.Contains(PngDump) && View.png && View.png_len > 0)
+				FFileHelper::SaveArrayToFile(TArrayView<const uint8>(View.png, View.png_len), *(FPaths::ProjectSavedDir() / TEXT("OKStudio/partpng") / FString::Printf(TEXT("%s_%d.png"), *Name, int32(i))));
+		}
 		if (bFaceSkin && !Tex)
 		{
 			Tex = SolidColorTexture(FColor(220, 140, 94, 255));

@@ -1177,6 +1177,10 @@ mod item_open_timing_probe {
             let t_open = t.elapsed();
             let s = view.prefab_session_fk(&prefab, false, &[]).unwrap();
             println!("round {round}: view {:.1} ms, session {:.1} ms, parts {}", t_open.as_secs_f64() * 1e3, t.elapsed().as_secs_f64() * 1e3, s.parts.len());
+            // OK_ITEM_MATERIALS=1: each part's source material (shader, keywords, queue) as the UE recipe choice sees it.
+            if round == 0 && std::env::var_os("OK_ITEM_MATERIALS").is_some() {
+                for p in &s.parts { println!("  {} blend={} material={:?}", p.name, p.blend, p.source_material.as_ref().map(|m| (&m.name, &m.shader, &m.keywords, m.render_queue))); }
+            }
         }
     }
 }

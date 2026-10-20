@@ -4,6 +4,7 @@
 #include "Engine/VolumeTexture.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Json.h"
+#include "Misc/PackageName.h"
 struct FOKForgeOpaqueUniform {const TCHAR* Name;int32 CB,Offset,Dim,Type,Rows;};
 struct FOKForgeOpaqueTexture {const TCHAR* Name;int32 Index,Sampler,Dim;};
 struct FOKForgeOpaqueProperty {const TCHAR* Name;int32 Type;bool Gamma;FLinearColor Default;const TCHAR* ForgeOpaqueDefaultTexture;};
@@ -221,7 +222,9 @@ EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialRecipe(const FKKRuntimeMaterialP
   if(AdditionalShader==TEXT("KKUSSitem"))return EKKRuntimeMaterialRecipe::KKUSSItem;
   if(AdditionalShader==TEXT("xukmi/MainItemPlus"))return EKKRuntimeMaterialRecipe::XukmiItem;
   if(AdditionalShader==TEXT("Shader Forge/toon_glasses_lod0"))return EKKRuntimeMaterialRecipe::ForgeGlasses;
-  if(AdditionalShader==TEXT("Shader Forge/main_StandardMDK_studio"))return EKKRuntimeMaterialRecipe::ForgeMDK;
+  // The installed MDK program is the variant without _ALPHATEST_ON: an alpha-tested material (the retro fan's guard and
+  // blades) has no parent that cuts it out, so it keeps its own graph (masked by its texture alpha).
+  if(AdditionalShader==TEXT("Shader Forge/main_StandardMDK_studio"))return Enabled.Contains(TEXT("_ALPHATEST_ON"))?EKKRuntimeMaterialRecipe::None:EKKRuntimeMaterialRecipe::ForgeMDK;
   // main_item_studio blends but writes depth: every item draws with the depth-writing parent (its P.Blend is always
   // "translucent" for the shader's blend state), except one the host fades (_OKItemAlpha < 1: OK Studio's item alpha),
   // which keeps the blending parent.
@@ -330,8 +333,14 @@ bool OKPrepareRuntimeSharedMaterialBinding(const FKKRuntimeMaterialPart& P,const
 UMaterialInstanceDynamic* OKCreateRuntimeSharedMaterial(const FKKRuntimeMaterialPart& P,TConstArrayView<UTexture2D*> Textures,UMaterialInterface* Parent,const FKKRuntimeMaterialScene& Scene,FString& Error,bool Outline){
  check(IsInGameThread());FKKRuntimeMaterialBinding B;if(!OKPrepareRuntimeSharedMaterialBinding(P,Scene,B,Error,Outline))return nullptr;
  auto Fail=[&](const TCHAR* Why)->UMaterialInstanceDynamic*{Error=Why;return nullptr;};if(!Parent)return Fail(TEXT("Shared cooked material parent missing"));
- const auto Recipe=OKRuntimeSharedMaterialRecipe(P);const auto* Layout=Outline?OKRuntimeOutlineLayout(Recipe):OKRuntimeSharedMaterialLayout(Recipe);float Family=0;
- if(!Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_RuntimeMaterialFamily")),Family)||Family!=float(Recipe)+(Outline?128:0))return Fail(TEXT("Shared material parent family differs"));
+ auto Recipe=OKRuntimeSharedMaterialRecipe(P);float Family=0;
+ if(!Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_RuntimeMaterialFamily")),Family))return Fail(TEXT("Shared material parent family differs"));
+ // A root baked before this recipe gives its fallback's parent (OKLoadRuntimeSharedMaterialParent): that parent's
+ // recipe is checked and named instead (same program and layout).
+ for(auto Fallback=OKRuntimeSharedMaterialFallback(Recipe);Family!=float(Recipe)+(Outline?128:0)&&Fallback!=EKKRuntimeMaterialRecipe::None;Fallback=OKRuntimeSharedMaterialFallback(Fallback))
+  if(Family==float(Fallback)+(Outline?128:0)){Recipe=Fallback;B.Scalars.Add(TEXT("__OK_RuntimeMaterialFamily"),Family);}
+ if(Family!=float(Recipe)+(Outline?128:0))return Fail(TEXT("Shared material parent family differs"));
+ const auto* Layout=Outline?OKRuntimeOutlineLayout(Recipe):OKRuntimeSharedMaterialLayout(Recipe);
  float Schema=0;if(!Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_RuntimeMaterialSchema")),Schema)||Schema!=1||Parent->GetBlendMode()!=(Outline?BLEND_Masked:OKRuntimeSharedMaterialBlendMode(Recipe))||Parent->IsTwoSided()!=(Outline?true:OKRuntimeSharedMaterialTwoSided(Recipe)))return Fail(TEXT("Shared material parent schema/render state differs"));
  // Outline parents authored before the installed outline vertex program (StreetDisplay23 and older) have neither its
  // inputs nor __OK_OutlineApprox; they extrude by the approximate width and never read them, so those are skipped.
@@ -360,6 +369,19 @@ UMaterialInstanceDynamic* OKCreateRuntimeForgeOpaqueMaterial(const FKKRuntimeMat
 
 TConstArrayView<EKKRuntimeMaterialRecipe> OKRuntimeSharedMaterialRecipes(){
  static const TArray<EKKRuntimeMaterialRecipe> Recipes=[](){TArray<EKKRuntimeMaterialRecipe> R;for(int32 I=1;I<=62;++I)R.Add(EKKRuntimeMaterialRecipe(I));return R;}();return MakeArrayView(Recipes);
+}
+EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRuntimeMaterialRecipe R){
+ return R==EKKRuntimeMaterialRecipe::ForgeStudioOpaque?EKKRuntimeMaterialRecipe::ForgeStudio:EKKRuntimeMaterialRecipe::None;
+}
+UMaterialInterface* OKLoadRuntimeSharedMaterialParent(const FString& Root,EKKRuntimeMaterialRecipe R,bool Outline){
+ for(EKKRuntimeMaterialRecipe Try=R;Try!=EKKRuntimeMaterialRecipe::None;Try=OKRuntimeSharedMaterialFallback(Try)){
+  const FString Base=OKRuntimeSharedMaterialParentName(Try);if(Base.IsEmpty())break;
+  const FString Name=Base+(Outline?TEXT("_Outline"):TEXT(""));
+  const FString Path=Root/Name+TEXT(".")+Name;
+  if(!FPackageName::DoesPackageExist(Root/Name))continue;
+  if(auto* Parent=LoadObject<UMaterialInterface>(nullptr,*Path))return Parent;
+ }
+ return nullptr;
 }
 FString OKRuntimeSharedMaterialParentName(EKKRuntimeMaterialRecipe R){
  if(int32(R)>=13){static const TCHAR* Names[]={TEXT("M_KoikanoSkin"),TEXT("M_ForgeSkin"),TEXT("M_KoikanoNose"),TEXT("M_KoikanoBrow"),TEXT("M_KoikanoClothesOpaque"),TEXT("M_KoikanoClothesColor"),TEXT("M_KoikanoClothesItem"),TEXT("M_KoikanoClothesItemAlpha"),TEXT("M_KoikanoClothesAlphaCull"),TEXT("M_KoikanoClothesAlpha"),TEXT("M_IBLAlpha"),TEXT("M_KoikanoClothesItemTranslucent"),TEXT("M_KoikanoClothesItemAlphaTranslucent"),TEXT("M_IBLDepth"),TEXT("M_KoikanoHairSun0"),TEXT("M_KoikanoHairSun1"),TEXT("M_KoikanoHairSun2"),TEXT("M_KoikanoHairSun3"),TEXT("M_KoikanoHairSun4"),TEXT("M_KoikanoHairSun5"),TEXT("M_KoikanoHairSun6"),TEXT("M_KoikanoHairSun7"),TEXT("M_KoikanoGlasses0"),TEXT("M_KoikanoGlasses1"),TEXT("M_KoikanoGlasses2"),TEXT("M_KoikanoGlasses3"),TEXT("M_KoikanoGlasses4"),TEXT("M_KoikanoGlasses5"),TEXT("M_KoikanoGlasses6"),TEXT("M_KoikanoGlasses7"),TEXT("M_KoikanoGlasses8"),TEXT("M_KoikanoGlasses9"),TEXT("M_KoikanoGlasses10"),TEXT("M_KoikanoGlasses11"),TEXT("M_IBLOpaque"),TEXT("M_KKUSSItem"),TEXT("M_XukmiItem"),TEXT("M_ForgeGlasses"),TEXT("M_ForgeMDK"),TEXT("M_Goo"),TEXT("M_ForgeDither"),TEXT("M_ForgeEmission"),TEXT("M_KKUSS"),TEXT("M_ForgeEyeWhiteLod"),TEXT("M_OilPainting"),TEXT("M_BetterMatcap"),TEXT("M_KoikanoLowAlphaCull"),TEXT("M_KoikanoLowAlpha"),TEXT("M_ForgeStudio"),TEXT("M_ForgeStudioOpaque")};return int32(R)<=62?FString(Names[int32(R)-13]):FString();}

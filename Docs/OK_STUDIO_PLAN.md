@@ -169,10 +169,18 @@
       - 背景圖：`SunLightInfo` 的 `_bgParam`／`backTexture`（2D 背景）全部 Studio 地圖都沒有，不用做
       - 除錯：`OK_RT_VIEW_NOFX=1`（`OK_RT_VIEW` 拍照不畫粒子）、`scene_camera_probe` 印 `caMap`、`scene_tree_probe`（物件樹、角色動畫與 FK 開關）、`map_sun_light_info` 印太陽燈的 Light 設定與 `OK_SUN_VISIBLE`、`map_animator_probe` 的 `OK_ANIM_LAYERS`（renderer 圖層統計）與 `OK_ANIM_CLIP`（某 clip 十個時間點）、`flare_material_probe`
       - 測試：GameSelfTest、PatternTest、EditorSelfTest（先 `OKStudio.Open`）RESULT PASS
+    - 第十一輪（2026-10-20，材質）：
+      - 14 張驗收（`CompareKStudio samples 14 120`）14／14 出圖，12.9 分鐘；記憶體一路漲到峰值 29 GB（5065 公車亭後 28.7 GB），每張場景後沒有釋放到基準，待查
+      - 0001 劍光：`main_item_studio_add`（`abdata/studio/mat/00` 的 pixel program）照原作公式做成自建圖的 Custom 節點：t = 主貼圖（顯示值），max(saturate(t.r − max(t.g,t.b)^8)·_Color, saturate(t.g − t.b^8)·_Color2, t.b·_Color3)·_alpha，加法。劍身出現彩虹。三色公式只給這個 shader（`bStudioAddProgram`），其他加法部件（地圖的 Particles/Additive）不套
+      - 0010 電扇：`main_StandardMDK_studio` 安裝的程式是沒有 `_ALPHATEST_ON` 的變體，護網 `m_koi_stu_senpu05_00`（`_ALPHATEST_ON`）改走自建圖（Masked，貼圖 alpha 裁切），機身 `senpu04` 仍走 `M_ForgeMDK`。護網貼圖（RGBA）裁切正常，但前景圓盤仍和原作不同（原作前板白色，我們暗綠），問題在機身 MDK 的光照或發光遮罩，還沒查
+      - 母材質退路：配方 62 一開始只烘進 `StudioDisplay25`，街區根目錄缺它就退出（`Docs/ERROR_LOG.md`）。C 組另外烘了 `StreetDisplay25`／`StreetHG04`；E 加了 `OKRuntimeSharedMaterialFallback`（62 → 61）與 `OKLoadRuntimeSharedMaterialParent`，舊根目錄缺新配方時預覽端改用同程式的 61（半透明，不寫深度），`OKCreateRuntimeSharedMaterial` 依實際母材質的 family 核對。街區 gate 維持「出貨根目錄必須齊全」
+      - 地圖 Animator 材質值改套 clip 第一格（之前只套整段不變的值）：ライブステージ的 volumeLight 光錐 `vl_center_intensity` 前 80% 是 0，原作載入時光錐幾乎看不見；只套 renderer 的材質綁定，GameObject 可見度（雷射光束）不套。`OKLIB_REFRESH=prefab_animated_materials` 重錄 studio-nodes，`SESSION_CACHE_REVISION` 12
+      - 診斷：`OK_PART_PNG_DUMP=<部件名片段>`（部件主貼圖寫到 `Saved/OKStudio/partpng`）、`item_open_timing` 探針加 `OK_ITEM_MATERIALS=1`（印每個部件的材質、shader、keyword）。注意：這台機器的 `C:/portable/KoikatuSunshine` 已沒有 abdata，原作在 `D:/KoikatuSunshine`
     - 還沒修：
       - 廁所色調：亮度已接近（後方牆 156 vs 149），但原作整體偏暖黃，我們的粉紫磁磚 × 桃色光照貼圖仍偏粉；暖色來自 reflection probe（見第九輪），但照 Unity 公式加上後過亮，待查 KKS 的 Standard 實際程式
       - 6964：相機構圖不同（我們拍到桌子在前、原作看得到女孩），可能是物件的父子關係或位置
-      - 0010 電風扇的護網（MDK 共用母材質缺 alpha 裁切）、0001 劍光（`main_item_studio_add` 三色混合）
+      - 0010 電風扇前板：護網已裁切、劍光已修（第十一輪）；前板仍暗綠（原作白），要查 `main_StandardMDK_studio` 的光照與 `_EmissionMap`
+      - 大量場景連續拍照的記憶體增長（14 張峰值 29 GB）
       - 1901：背景佈景、光錐都已和原作一致（見第十一輪與第九輪的動畫材質）；右下的レンズフレア光暈比原作亮一些
       - 6964：場景沒有地圖。主相機在第三組課桌下往上拍；原作看得到抬腿的女孩，我們拍到桌子底面和腿。角色都開了 FK（`active_fk` 含 body），匯入照 `FkPart` 套用，和 OKStudioPose 一致；還沒定位是 FK 姿勢不同還是桌子／相機的相對位置不同（`scene_tree_probe` 印出物件樹與 FK 開關）
       - 地圖太陽燈預設關（`ok.Studio.MapSun 1` 開）：3167 教室開了有原作桌面的暖光、地板有影子；6331 地板被橘色日光照到，原作是灰的，原因未明
