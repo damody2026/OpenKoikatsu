@@ -57,6 +57,8 @@ public:
 	void Select(int32 Id);
 	bool Save(const FString& Path, FString& OutError);
 	bool Load(const FString& Path, FString& OutError);
+	/** Drop the current scene and its source/image caches before another independent load. */
+	void ReleaseSceneResources();
 	/** Cards the character picker offers (Content/CharacterCards). */
 	static TArray<FString> AvailableCards();
 	/** Scene files of the in-game list: UserData/Studio/scene/*.okscene, newest first. */

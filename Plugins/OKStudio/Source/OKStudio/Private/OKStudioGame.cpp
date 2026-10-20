@@ -50,6 +50,8 @@
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/SListView.h"
+#include "UObject/GarbageCollection.h"
+#include "RenderingThread.h"
 
 namespace
 {
@@ -1296,8 +1298,25 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 	UE_LOG(LogTemp, Display, TEXT("OK studio: opened %s: %s"), *Path, *Note);
 	// A KStudio scene is imported, not edited in place: saving writes an OK scene card beside it.
 	File = FOKSceneCard::Kind(Path) == FOKSceneCard::EKind::KStudio ? FString() : Path;
-	Select(-1);
+	ReleaseSceneResources();
 	return true;
+}
+
+void UOKStudioGame::ReleaseSceneResources()
+{
+	Select(-1);
+	// Release the old scene as one unit, including ids also present in the new
+	// document. A budgeted Sync otherwise retains old actors until their turn,
+	// and only schedules GC after the replacement map has already been built.
+	if (SceneActor)
+	{
+		SceneActor->ReleaseScene();
+		FlushRenderingCommands();
+		CollectGarbage(RF_NoFlags, true);
+		FlushRenderingCommands();
+		AKKPreviewActor::ReleaseSceneCaches();
+		UE_LOG(LogTemp, Display, TEXT("OK studio: previous scene released (memory %.1f GB)"), FPlatformMemory::GetStats().UsedPhysical / double(1 << 30));
+	}
 }
 
 namespace
@@ -1702,7 +1721,7 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 {
 	// Each KStudio scene, imported and pictured from its Studio camera after some real frames, beside the picture the
 	// original Studio saved in the scene card: Saved/OKStudio/compare/<scene>.png (left original, right OK Studio).
-	struct FState { int32 Index = -1; int32 Frame = 0; int32 Done = 0; };
+	struct FState { int32 Index = -1; int32 Frame = 0; int32 Done = 0; bool bLoaded = false; };
 	TSharedRef<FState> State = MakeShared<FState>();
 	TWeakObjectPtr<UOKStudioGame> Self(this);
 	const FString Out = FPaths::ProjectSavedDir() / TEXT("OKStudio/compare");
@@ -1710,10 +1729,10 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Self, State, Scenes, Out, WaitFrames, bExit](float)
 	{
 		if (!Self.IsValid()) { if (bExit) FPlatformMisc::RequestExit(false); return false; }
-		if (State->Index >= 0 && ++State->Frame < WaitFrames) return true;
+		if (State->bLoaded && ++State->Frame < WaitFrames) return true;
 		// Runtime materials still compiling draw nothing yet: wait for them (at most ten times the frames asked for).
-		if (State->Index >= 0 && Self->MaterialsPending() && State->Frame < WaitFrames * 10) return true;
-		if (State->Index >= 0)
+		if (State->bLoaded && Self->MaterialsPending() && State->Frame < WaitFrames * 10) return true;
+		if (State->bLoaded)
 		{
 			const FString& Path = Scenes[State->Index];
 			const int32 W = 640, H = 360;
@@ -1734,8 +1753,9 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 				for (FColor& C : Side) C.A = 255;
 				TArray64<uint8> Png;
 				FImageUtils::PNGCompressImageArray(W * 2, H, TArrayView64<const FColor>(Side.GetData(), Side.Num()), Png);
-				FFileHelper::SaveArrayToFile(Png, *(Out / (FPaths::GetBaseFilename(Path) + TEXT(".png"))));
-				++State->Done;
+				const FString Output = Out / (FPaths::GetBaseFilename(Path) + TEXT(".png"));
+				if (FFileHelper::SaveArrayToFile(Png, *Output)) ++State->Done;
+				else Error = TEXT("cannot write ") + Output;
 				// OK_STUDIO_COMPARE_DUMP=<text>: the materials (blend mode, parent) of the mesh components whose name contains it.
 				const FString Dump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_DUMP"));
 				if (!Dump.IsEmpty())
@@ -1771,11 +1791,24 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		if (++State->Index >= Scenes.Num())
 		{
 			UE_LOG(LogTemp, Display, TEXT("OK studio compare: RESULT %d / %d pictured into %s"), State->Done, Scenes.Num(), *Out);
-			if (bExit) FPlatformMisc::RequestExit(false);
+			if (bExit)
+			{
+				Self->ReleaseSceneResources();
+				UE_LOG(LogTemp, Display, TEXT("OK studio compare: final scene released (memory %.1f GB)"), FPlatformMemory::GetStats().UsedPhysical / double(1 << 30));
+				FPlatformMisc::RequestExit(false);
+			}
 			return false;
 		}
 		FString LoadError;
-		if (!Self->Load(Scenes[State->Index], LoadError)) UE_LOG(LogTemp, Warning, TEXT("OK studio compare: %s not opened: %s"), *Scenes[State->Index], *LoadError);
+		// Remove only this run's named output: a failed import must never leave
+		// an older picture looking like a successful comparison.
+		IFileManager::Get().Delete(*(Out / (FPaths::GetBaseFilename(Scenes[State->Index]) + TEXT(".png"))), false, true);
+		State->bLoaded = Self->Load(Scenes[State->Index], LoadError);
+		if (!State->bLoaded)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("OK studio compare: %s not opened: %s"), *Scenes[State->Index], *LoadError);
+			return true;
+		}
 		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover).
 		TArray<FString> Hide;
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));
@@ -2667,10 +2700,10 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		// Opened again: the same scene (character cards from inside the card), characters rebuilt.
 		auto WithoutCards = [](UOKSceneDocument* D) { UOKSceneDocument* C = DuplicateObject(D, GetTransientPackage()); for (FOKSceneObject& O : C->Objects) O.Character.Card.Reset(); return C->ToJson(); };
 		const FString Expected = WithoutCards(Document);
-		Document->Objects.Reset();
-		Document->NotifyChanged();
-		SyncNow();
+		const TWeakObjectPtr<AKKPreviewActor> PreviousPreview = SceneActor->PreviewOf(A);
+		const bool bHadPreviousPreview = PreviousPreview.IsValid();
 		const bool bOpened = Load(CardPath, CardError);
+		Check(bHadPreviousPreview && bOpened && !PreviousPreview.IsValid(), TEXT("opening a replacement releases the old preview before rebuilding"));
 		SyncNow();
 		const FOKSceneObject* Reopened = Document->Find(A);
 		Check(bOpened && WithoutCards(Document) == Expected && Reopened && FPaths::FileExists(Reopened->Character.Card) && SceneActor->PreviewOf(A) && SceneActor->PreviewOf(A)->Session.PartCount() > 0,
@@ -2697,6 +2730,21 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 	{
 		const FOKStudioCatalog& Catalog = FOKStudioCatalog::Get();
 		Check(Catalog.bLoaded && Catalog.Items.Num() >= 2000 && Catalog.Maps.Num() >= 70, FString::Printf(TEXT("studio catalogue: %d items, %d maps %s"), Catalog.Items.Num(), Catalog.Maps.Num(), *Catalog.Error));
+		{
+			// Installed classroom desk root: Unity z=-0.306 m. AddObjectItem's
+			// guide overwrites that root with the scene TRS, rather than adding it.
+			AOKSceneActor* RootTest = SceneActor->GetWorld()->SpawnActor<AOKSceneActor>();
+			RootTest->Document = NewObject<UOKSceneDocument>(RootTest);
+			const int32 Id = RootTest->Document->AddObject(EOKSceneObjectKind::Item, TEXT("root placement test"), -1);
+			FOKSceneObject* Desk = RootTest->Document->Find(Id);
+			Desk->Item.Group = 2; Desk->Item.Category = 12; Desk->Item.No = 681;
+			Desk->Transform = FTransform(FRotator(0, 35, 0), FVector(110, 220, 330));
+			RootTest->Sync();
+			const AKKPreviewActor* Preview = RootTest->PreviewOf(Id);
+			Check(Preview && Preview->GetActorTransform().TransformPosition(FVector(0, -30.6, 0)).Equals(Desk->Transform.GetLocation(), 0.05),
+				TEXT("Studio item placement replaces the authored prefab root"));
+			RootTest->Destroy();
+		}
 		const FOKStudioCatalogItem* Balloon = Catalog.Items.FindByPredicate([](const FOKStudioCatalogItem& I) { return I.Prefab == TEXT("p_acs_waterbaloon_stu"); });
 		Select(-1);
 		const int32 Picked = Add(EOKSceneObjectKind::Item);

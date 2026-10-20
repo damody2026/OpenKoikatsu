@@ -840,7 +840,11 @@ pub fn session_cache_location() -> Option<PathBuf> {
 ///     probe atlas (`_OKReflection`).
 /// 12: (E duo) Studio map parts take their Animators' material values at the clip's first frame, not only the steady
 ///     ones; inactive time-of-day parts (SunLightInfo visibleList) come with the map.
-const SESSION_CACHE_REVISION: u32 = 12;
+/// 13: Studio MDK keeps its authored normal, parallax, metallic and emission slots.
+///     Directional lightmaps carry the direction/rebalancing texture separately.
+/// 14: Studio Standard/MDK/particle Texture2D and baked lightmap rows follow rendering UVs.
+/// 15: Studio renderers carry their native shadow casting mode, layer and enabled state.
+const SESSION_CACHE_REVISION: u32 = 15;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {

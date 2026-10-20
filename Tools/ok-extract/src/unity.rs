@@ -1632,6 +1632,31 @@ impl ParsedBundle {
     pub fn prefab_hierarchy(&self,prefab:&str)->crate::pose::PrefabHierarchy {self.memo_prefab("prefab_hierarchy",prefab,prefab,||self.prefab_hierarchy_unity(prefab))}
     /// Baked lightmaps of a prefab's renderers (recorded into the library with the model by `studio-nodes`).
     pub fn prefab_lightmaps(&self,prefab:&str)->PrefabLightmaps {self.memo_prefab("prefab_lightmaps",prefab,prefab,||self.prefab_lightmaps_unity(prefab))}
+    pub fn prefab_lightmap_directions(&self,prefab:&str)->PrefabLightmaps {self.memo_prefab("prefab_lightmap_directions",prefab,prefab,||self.prefab_lightmaps_slot_unity(prefab,"m_DirLightmap"))}
+    /// Renderer node, Unity shadow casting mode (Off/On/TwoSided/ShadowsOnly), layer and enabled state.
+    pub fn prefab_renderer_settings(&self,prefab:&str)->Vec<(i32,i32,i32,bool)> {
+        self.memo_prefab("prefab_renderer_settings",prefab,prefab,|| {
+            for (gi,graph) in self.transform_graphs().iter().enumerate() {
+                let (h,go_node)=crate::pose::prefab_hierarchy_in(graph,prefab);
+                if h.nodes.is_empty() {continue;}
+                return self.with_serialized(|sers| {
+                    let Some(ser)=sers.get(gi) else {return Vec::new();};
+                    ser.objects_of_type(23).into_iter().chain(ser.objects_of_type(137)).filter_map(|info| {
+                        let obj=UnityObject::from_serialized_file(ser,info).ok()?;
+                        let props=obj.class.properties();
+                        let go=props.get("m_GameObject").and_then(uv_pptr)?;
+                        let node=*go_node.get(&go)?;
+                        let layer=ser.objects_of_type(1).into_iter().find(|i|i.path_id==go)
+                            .and_then(|i|UnityObject::from_serialized_file(ser,i).ok())
+                            .and_then(|o|o.class.properties().get("m_Layer").map(uv_i32)).unwrap_or(0);
+                        Some((node,props.get("m_CastShadows").map(uv_i32).unwrap_or(1),layer,
+                            props.get("m_Enabled").map(uv_bool).unwrap_or(true)))
+                    }).collect()
+                });
+            }
+            Vec::new()
+        })
+    }
     /// Cameras rendering into RenderTextures and the materials sampling them (recorded by `studio-nodes`).
     pub fn prefab_render_textures(&self,prefab:&str)->PrefabRenderTextures {self.memo_prefab("prefab_render_textures",prefab,prefab,||self.prefab_render_textures_unity(prefab))}
     /// A map's SunLightInfo: times of day, what each shows, the sun (recorded by `studio-nodes`).
@@ -2177,6 +2202,10 @@ impl ParsedBundle {
     /// Baked lighting of a prefab (a Studio map scene): each MeshRenderer's lightmap (index, scale-offset) by hierarchy
     /// node (`prefab_hierarchy` numbering), and the scene's lightmap textures (LightmapSettings.m_Lightmaps, RGBM PNG).
     fn prefab_lightmaps_unity(&self, prefab:&str)->PrefabLightmaps {
+        self.prefab_lightmaps_slot_unity(prefab, "m_Lightmap")
+    }
+
+    fn prefab_lightmaps_slot_unity(&self, prefab:&str, slot:&str)->PrefabLightmaps {
         let graphs=self.transform_graphs();
         for (gi,graph) in graphs.iter().enumerate() {
             let (h,go_node)=crate::pose::prefab_hierarchy_in(graph,prefab);
@@ -2213,9 +2242,10 @@ impl ParsedBundle {
                 let mut names=Vec::new();
                 for info in ser.objects_of_type(157) {
                     let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    if slot == "m_DirLightmap" && obj.class.properties().get("m_LightmapsMode").map(uv_i32) != Some(1) { continue; }
                     let Some(unity_asset_core::UnityValue::Array(maps))=obj.class.properties().get("m_Lightmaps").cloned() else {continue;};
                     for m in &maps {
-                        let id=uv_obj(m,"m_Lightmap").and_then(uv_pptr).unwrap_or(0);
+                        let id=uv_obj(m,slot).and_then(uv_pptr).unwrap_or(0);
                         let name=sers.iter().find_map(|s| s.objects_of_type(28).into_iter().find(|i|i.path_id==id)
                             .and_then(|i|UnityObject::from_serialized_file(s,i).ok()).and_then(|o|o.name())).unwrap_or_default();
                         names.push(name);
@@ -2827,7 +2857,8 @@ impl ParsedBundle {
     }
 
     fn texture_sampling_named_unity(&self,name:&str)->Option<TextureSampling> {
-        self.exact_texture_location(name)?.sampling
+        self.exact_texture_location(name).and_then(|location| location.sampling)
+            .or_else(|| self.dependency_texture_bundle(name)?.texture_sampling_named(name))
     }
 
     /// A library model has no Unity internals: reaching them during replay
@@ -3452,9 +3483,9 @@ impl ParsedBundle {
     /// A texture a material takes from another serialized file (`dependency_texture_source`), by name. An OK model
     /// records its texel payload once per name (the PNG is derived, as for the bundle's own textures), so mesh
     /// records keep the name only.
-    fn dependency_texture_png(&self, name: &str) -> Option<Vec<u8>> {
+    fn dependency_texture_bundle(&self, name: &str) -> Option<Arc<ParsedBundle>> {
         let key = name.to_ascii_lowercase();
-        let png = if crate::oklib::active().is_some() {
+        if crate::oklib::active().is_some() {
             // Only names a material took from outside are recorded (others stay unanswered, as in Unity).
             if !self.library_model() && !self.dependency_texture_source.borrow().contains_key(&key) { return None; }
             // The dependency bundle is a library model of its own (its textures recorded there): record which one,
@@ -3474,11 +3505,20 @@ impl ParsedBundle {
                 parse_bundle_cached(crate::gamefs::read(&path).ok()?)
             };
             if std::ptr::eq(dependency.as_ref(), self) { return None; }
-            dependency.decode_tex(name)?
+            Some(dependency)
         } else {
             let source = self.dependency_texture_source.borrow().get(&key).cloned()?;
-            self.external_texture_png(&source, name)?
-        };
+            let root = self.script_root.borrow().clone()?;
+            let path = references::external_source_path(&root, &source, self.script_origin.borrow().as_deref())?;
+            let dependency = parse_bundle_cached(crate::gamefs::read(&path).ok()?);
+            if std::ptr::eq(dependency.as_ref(), self) { return None; }
+            Some(dependency)
+        }
+    }
+
+    fn dependency_texture_png(&self, name: &str) -> Option<Vec<u8>> {
+        let key = name.to_ascii_lowercase();
+        let png = self.dependency_texture_bundle(name)?.decode_tex(name)?;
         self.remember_texture(key, png.clone());
         Some(png)
     }
@@ -4191,6 +4231,21 @@ impl ParsedBundle {
                 if let Some(mat)=m.mat.as_mut() { mat.floats.insert("_OKStageEffect".into(),kind as f32); }
             }
             let Some(mat) = m.mat.as_ref() else { continue; };
+            // MDK's Standard-style slots are not character _NormalMap slots.
+            // Record dependency-model identities and sampler provenance along
+            // with the PNG so base-library playback can resolve them alone.
+            if mat.shader == "Shader Forge/main_StandardMDK_studio" {
+                for property in ["_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
+                    if let Some(name) = mat.slot(property) {
+                        if let Some(png) = self.decode_tex(name) {
+                            m.shader_extra_textures.insert(property.into(), png);
+                            if let Some(s) = self.texture_sampling_named(name) {
+                                m.runtime_textures.insert(property.into(), [s.filter, s.wrap_u, s.wrap_v, i32::from(s.srgb), s.mip_count]);
+                            }
+                        }
+                    }
+                }
+            }
             // Capture the whole material for downstream tint/blend/slot use.
             for property in ["_NormalMapDetail","_AnotherRamp","_EmissionMask","_EmissionMap","_ReflectionMapCap","_ReflectMapDetail","_Texture2","_Texture3","_liquidmask","_overtex1","_overtex2","_overtex3"] {
                 if let Some(name)=mat.slot(property) {

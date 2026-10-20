@@ -3654,6 +3654,35 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 
 ## 共用母材質配方與出貨根目錄（2026-10-20）
 
+- **把 Legacy 粒子加法誤記成 One/One，忽略 alpha**（2026-10-20，HANDOFF_E 接手）：安裝的 `studio/mat/00.unity3d` 中 `Legacy Shaders/Particles/Additive` 實際是 SrcAlpha/One（5/1），pixel program 為 `2*vertex*tint*texture`，alpha 另 saturate；舊圖只乘 RGB，丟掉 tint alpha、texture alpha 與 vertex colour，1901 光暈因此偏亮。改按安裝程式算出 gamma 空間的來源加法貢獻，再轉成 UE 線性輸出；保留來源 `_TintColor.a`。
+
+- **Studio 道具把 prefab 根節點位移加了兩次**（2026-10-20，HANDOFF_E 接手）：`prefab_session_fk` 會把根 TRS 烘進頂點；顯示時又直接套場景的道具 TRS。原作 `AddObjectItem.Load` 最後呼叫 `changeAmount.OnChange`，`GuideObject.CalcPosition/CalcRotation` 是覆寫根節點。6964 的教室机 prefab 原有 z=-0.306 m，重複位移讓桌面遮住人物。修正：顯示道具時先消除已烘入的 prefab 根 TRS；子物件接點也改為相對根節點。重拍 6964 後人物與桌子構圖已恢復，另補 GameSelfTest 的根節點定位回歸檢查。
+- **只傳 RGBM lightmap，遺漏方向貼圖**（2026-10-20，HANDOFF_E 接手）：1F 廁所 `m_LightmapsMode=1`，`m_DirLightmap` 非空；安裝的 Standard PS 112 以 `(dot(N, direction.rgb - 0.5) + 0.5) / max(direction.a, 0.0001)` 解碼，舊實作只算 `5*a*rgb`。新增獨立 memo（不更動既有 bincode 結構）、每張方向圖只由第一個部件攜帶，顯示端以同一份 lightmap UV 套方向重平衡。數值與畫面驗收另記在 OK_STUDIO_PLAN。
+
+- **新增 Rust 測試把浮點型別後綴寫成 `10.f32`**（2026-10-20，HANDOFF_E 接手）：編譯器將它視為整數欄位存取，報 E0610。改為 `10.0f32` 並重新跑測試；編譯失敗的那次不算驗收。
+- **Studio 的使用者 FK 沒有關閉 PV 複製**（2026-10-20，HANDOFF_E 接手）：`apply_user_fk` 之後仍用預設 `pv_fk=false` 呼叫 `Config::apply`，手腳會被 PV 節點重新覆寫。原作 `OCIChar.ActiveKinematicMode` 明確以 `!enableFK && enablePV[k]` 設定四個 PV 開關。修正：兩個 Session 姿態分支與 `studio_pv_flag` 都把非空 user FK 視為 FK 模式；清空 FK 恢復原先 mask，保留 host 明確設定的 FK gate。新增 FFI 回歸測試，畫面影響另以 6964 重拍確認。
+
+- **僅依 shader keyword 推斷 MDK 的程式與貼圖需求**（2026-10-20，HANDOFF_E 接手）：`main_StandardMDK_studio` 沒有 `_EMISSION`，但安裝的程式仍讀 `_EmissionMap`；舊 Session 的一般分支將它丟掉，也沒有輸出 `_BumpMap`。先前又因產生器註解列出的變體沒有 `_ALPHATEST_ON`，把護網退回近似材質圖；實際 DXBC 已無條件執行 `_Cutoff` 裁切。修正：記錄 MDK 的完整來源貼圖與採樣資訊、保留到 Session、統一貼圖行方向，護網和機身均走既有 Masked 母材質。驗收必須同時檢查實際傳入的 texture slots 與畫面，不能只看配方名稱。
+- **查 Windows 路徑時誤用 Bash 的 brace expansion 與未展開檔名 glob**（2026-10-20，HANDOFF_E 接手）：PowerShell 無法解析 `{Private/...,Public/...}`，`rg` 也不會替不存在的 `Tools/*lua` 路徑展開。改成列出實際路徑，檔名篩選交給 `rg -g`；查詢失敗後重新執行並核對輸出。
+
 - **新增配方只烘進一個根目錄，街區一開就退出**：E 組為 OK Studio 新增第 62 個配方 `ForgeStudioOpaque`，母材質只烘進 `StudioDisplay25`；街區的 `StreetDisplay24`／`StreetHG03` 與 patch 都沒有，而 `OKCrowdRuntimeScene` 啟動時要求每個配方都有母材質，Conquest107 啟動即退出（`Common runtime material parent missing: M_ForgeStudioOpaque`）。街區角色也會用到它：`main_item_studio` 的配件沒淡出時就選這個配方（例如被 Material Editor 換 shader 的頭髮）。修正：烘新根目錄 `StreetDisplay25`（`prepare_runtime_shared_material.lua --tag`）與 `StreetHG04`（`--hg-shading`），`prepare_face_materials.lua` 補淚水與 `_Fg`，`Launch/materials.json`、`runtime.json` 的 patch（`StreetDisplay25HG.patch`）與編輯器讀卡器的預設根目錄改指新根目錄，`rebuild_street_social_patch.lua` 重建 patch。新根目錄＝舊的全部檔案＋`M_ForgeStudioOpaque`。
 - **檢查只報第一個缺的母材質**：看不出缺在哪個根目錄、還缺幾個。現在 `OKCrowdRuntimeScene` 先掃完全部配方，錯誤訊息列出根目錄、缺幾個與缺哪些，並附修法。
 - **規則**：新增或改動配方（`EKKRuntimeMaterialRecipe`、`OKRuntimeSharedMaterialRecipes`）時，同一次就把母材質烘進所有會出貨的根目錄：`Launch/materials.json` 的 `root` 與 `hg_root`，加上 OK Studio 用的根目錄。根目錄一律用新 tag 重烘（工具不覆寫舊根目錄），接著跑 `prepare_face_materials.lua`、改 `materials.json`／`runtime.json` 的 patch 名稱、`rebuild_street_social_patch.lua`，並通知會打包街區的 session。
+
+- **依交接名稱追錯 0010 的前景物件**（2026-10-20，HANDOFF_E 接手）：把前景白色圓盤當成 `レトロな扇風機`，多次只追 `senpu` 材質。逐項核對原作場景與地圖 renderer 後，確認它是地圖內的 `mo_koi_mi_meter00_00` 儀表，使用 Standard；電扇是另一個場景道具。修正必須依 renderer 身分與實際貼圖定位，不能只沿用交接中的物件稱呼。
+- **Studio 原作貼圖只在 accessory 路徑統一行方向**（2026-10-20）：Studio 的角色為 `part`，Standard／MDK／粒子主貼圖與 lightmap 仍保留 Unity 的 bottom-up rows，Unreal 卻傳入 `(u,1-v)`。補上各原作材質與 lightmap 的行方向轉換，保留 Material Editor 已為 top-down 的輸入，並用不對稱兩行貼圖測試單次翻轉；Session 快取版號提升到 14。
+- **強引用材質去重快取延長場景生命週期**（2026-10-20）：即使先釋放舊場景並 GC，768 個材質的強引用 LRU 仍持有地圖貼圖。改成弱引用，只共用仍由場景擁有的材質；新增 Automation 測試確認共用有效且 Owner 釋放後材質可回收。
+- **乾淨庫 hardlink 快照包含會被驗收改寫的診斷檔**（2026-10-20）：`kks-verify`／`okcard-check` 的 `flush()` 會寫 `missing.txt`，連帶修改乾淨 clone 的同 inode。已核對只變更此診斷檔，解除連結後由該 clone 的 HEAD 還原，並恢復主工作樹的生成清單；後續快照中可寫的診斷與 work 檔不得共用 hardlink。
+- **Git 的非 ASCII 路徑與原作測試環境**（2026-10-20）：建立快照時未設 `core.quotepath=false`，日文檔名被當成帶引號的 escape 字串；改用未 quote 路徑後完成 6480 個檔案的快照。執行 `item_open_timing` 模組篩選又同時選到需原作的 MDK 探針，未設定 `OK_TEST_GAME_ROOT` 而失敗；改用完整測試名稱及明確 D: 原作根目錄，保留失敗紀錄而不將其算成通過。
+
+- **2026-10-20｜Studio Linear 色彩與粒子混合**：曾沿用 Gamma 的 Standard 常數與 RGBM 解碼，並把 Legacy 粒子當 One/One。安裝的 PlayerSettings 與既有原生擷取均為 Linear；Standard PS 112 使用 dielectric .04/.96、abs(NdotV)、線性 RGBM，粒子 PS 使用 SrcAlpha/One 與 soft-depth alpha。依來源修正，不用個別場景亮度係數；反射仍須另外目視驗收，公式／資料測試不等於畫面吻合。
+- **2026-10-20｜漏掉 ShadowsOnly 遮光模型**：來源 meshes 的一般可見分支會略過 shadow-only renderer；只保留燈與光照貼圖仍使室內被太陽直照。新增 renderer provenance 測試先失敗，補回只投影的 geometry、shadow mode、enabled 與 32 位 layer mask 後通過；6331 地板恢復灰色。不得刪掉不可見模型後才猜光照強度。
+- **2026-10-20｜建置與驗收證據**：一次 DepthFade 圖建置漏 include ScalarParameter，補齊後編譯成功。另一次增量建置雖成功，DLL 尚無剛新增的 compare 最後釋放字串；更新來源時間重編，並檢查實際 DLL／執行 log 確認新路徑。驗收 runner 現在要求 final-release 訊息並保存記憶體數值，不能僅依建置成功推論已執行最新程式。
+- **2026-10-20｜測試模式與零測試陷阱**：一般 Rust suite 設定原作 oracle 環境時出現 portable clothing fixture 失敗；移除原作環境、單執行緒完整重跑 416 PASS。原作環境只供 ignored oracle 使用。方向圖／遮光測試曾用錯 module filter 得到 0 tests，已改 exact 完整名稱並確認各 1 PASS，不以 exit 0 當成有執行測試。
+- **2026-10-20｜EyeSet 偶發引擎 assertion**：一輪 EyeSet 在首次擷取前觸發 SkeletalRenderGPUSkin 的 FMorphVertexBufferPool reading-index assertion；單獨重跑通過，尚無證據確認根因。保留 Verify-HandoffELinear/EyeSetTest.log 與 eye-linear-recheck.log，最終再跑整套；不得把重跑通過寫成已修好引擎問題。
+
+- **2026-10-20｜Standard 重複 albedo emission**：只核對光照貼圖／反射公式仍過亮，原因是通用預覽圖原先無條件把 albedo 接進 Emissive；再加 Standard 的 baked diffuse／probe 會多照一層。Standard 路徑移除這個通用底色項，保留來源 `_EmissionColor`／`_EmissionMap`。在判斷 BRDF／RGBM 錯誤前，必須追完整材質圖的所有 Emissive 輸入。發現後中止僅屬本輪的舊驗收與一般遊戲建置，重建新圖再驗收。
+
+- **2026-10-20｜粒子景深順序**：UE 新材質預設 TranslucencyPass=AfterDOF；Unity 透明粒子在攝影機景深／bloom 前已混入 scene color。只改 alpha 公式仍留下銳利白塊。Legacy Additive 明確設 BeforeDOF，避免把後處理差異誤當材質亮度再加場景係數。
+
+- **2026-10-20｜UE 自測與 UBT 共用鎖**：一般遊戲版編譯持有 UBT mutex，UE 啟動時的 ValidatePlatforms 也呼叫 UBT，使 Pattern／Editor 自測停在啟動並可能逾時。查引擎 TargetPlatformManagerModule 確認既有 `UE_SKIP_UBT_SDK_SETUP=1`；已建好 Editor 的純執行驗收以 child-scoped 環境跳過重複 SDK discovery，立即恢復 parent 環境，不改引擎或全域設定。舊等待中的 owned 驗收停止並用新 tag 重跑，不能記作功能失敗／通過。

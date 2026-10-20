@@ -174,6 +174,8 @@ class KKUNITYBUNDLE_API AKKPreviewActor : public AActor
 	GENERATED_BODY()
 
 public:
+    /** Between scene loads with source jobs stopped: drop decoded CPU image/source caches, retaining live actor data. */
+    static void ReleaseSceneCaches();
 	AKKPreviewActor();
 
 	UFUNCTION(BlueprintCallable, Category = "OpenKoikatsu")

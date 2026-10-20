@@ -7,7 +7,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "KKTextureRuntime.h"
 #include "Misc/SecureHash.h"
-#include "UObject/StrongObjectPtr.h"
 #include "UObject/UnrealType.h"
 
 namespace OKMaterialDedupePrivate
@@ -56,7 +55,9 @@ void ExportProperties(UObject* Object, FString& Out)
 	Out += TEXT("}");
 }
 
-struct FEntry { TStrongObjectPtr<UMaterial> Material; uint64 LastUse = 0; };
+// Sharing must not own a scene's graph/textures after its components are gone.
+// A strong LRU of 768 materials retained entire map atlases across scene loads.
+struct FEntry { TWeakObjectPtr<UMaterial> Material; uint64 LastUse = 0; };
 TMap<FString, FEntry> Cache;
 uint64 Clock = 0;
 FOKMaterialDedupeStats Stats;
@@ -158,6 +159,10 @@ UMaterialInterface* OKFindEqualMaterialGraph(UMaterial* Mat, const FString& Extr
 void OKRememberMaterial(const FString& Key, UMaterial* Mat)
 {
 	if (Key.IsEmpty() || !Mat || !OKMaterialDedupePrivate::DedupeEnabled()) return;
+	for (auto It = OKMaterialDedupePrivate::Cache.CreateIterator(); It; ++It)
+	{
+		if (!It.Value().Material.IsValid()) It.RemoveCurrent();
+	}
 	while (OKMaterialDedupePrivate::Cache.Num() >= OKMaterialDedupePrivate::MaxEntries)
 	{
 		FString Oldest;
@@ -166,7 +171,7 @@ void OKRememberMaterial(const FString& Key, UMaterial* Mat)
 		OKMaterialDedupePrivate::Cache.Remove(Oldest);
 	}
 	OKMaterialDedupePrivate::FEntry& Entry = OKMaterialDedupePrivate::Cache.FindOrAdd(Key);
-	Entry.Material.Reset(Mat);
+	Entry.Material = Mat;
 	Entry.LastUse = ++OKMaterialDedupePrivate::Clock;
 }
 

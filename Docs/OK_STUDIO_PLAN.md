@@ -177,7 +177,7 @@
       - 地圖 Animator 材質值改套 clip 第一格（之前只套整段不變的值）：ライブステージ的 volumeLight 光錐 `vl_center_intensity` 前 80% 是 0，原作載入時光錐幾乎看不見；只套 renderer 的材質綁定，GameObject 可見度（雷射光束）不套。`OKLIB_REFRESH=prefab_animated_materials` 重錄 studio-nodes，`SESSION_CACHE_REVISION` 12
       - EyeSetTest 卡住：C／E 同步後，有 morph 的部件（臉、眼白、護目眼）改由 mouth slot 的骨架元件畫，原本的 `Part.Comp` 被藏起來且沒有幾何、材質，測試量不到臉的位置，拍照失敗後在 23 號樣式無限重試。測試改讀實際畫出來的元件（`MouthSlots` 的 `Comp`），拍照失敗時記失敗並往下走；GameSelfTest、PatternTest、EyeSetTest RESULT PASS
       - 診斷：`OK_PART_PNG_DUMP=<部件名片段>`（部件主貼圖寫到 `Saved/OKStudio/partpng`）、`item_open_timing` 探針加 `OK_ITEM_MATERIALS=1`（印每個部件的材質、shader、keyword）。注意：這台機器的 `C:/portable/KoikatuSunshine` 已沒有 abdata，原作在 `D:/KoikatuSunshine`
-    - 還沒修：
+    - 第十一輪結束時尚未修正（後續狀態見下方第十二輪）：
       - 廁所色調：亮度已接近（後方牆 156 vs 149），但原作整體偏暖黃，我們的粉紫磁磚 × 桃色光照貼圖仍偏粉；暖色來自 reflection probe（見第九輪），但照 Unity 公式加上後過亮，待查 KKS 的 Standard 實際程式
       - 6964：相機構圖不同（我們拍到桌子在前、原作看得到女孩），可能是物件的父子關係或位置
       - 0010 電風扇前板：護網已裁切、劍光已修（第十一輪）；前板仍暗綠（原作白），要查 `main_StandardMDK_studio` 的光照與 `_EmissionMap`
@@ -185,6 +185,21 @@
       - 1901：背景佈景、光錐都已和原作一致（見第十一輪與第九輪的動畫材質）；右下的レンズフレア光暈比原作亮一些
       - 6964：場景沒有地圖。主相機在第三組課桌下往上拍；原作看得到抬腿的女孩，我們拍到桌子底面和腿。角色都開了 FK（`active_fk` 含 body），匯入照 `FkPart` 套用，和 OKStudioPose 一致；還沒定位是 FK 姿勢不同還是桌子／相機的相對位置不同（`scene_tree_probe` 印出物件樹與 FK 開關）
       - 地圖太陽燈預設關（`ok.Studio.MapSun 1` 開）：3167 教室開了有原作桌面的暖光、地板有影子；6331 地板被橘色日光照到，原作是灰的，原因未明
+
+### S5 第十二輪：HANDOFF_E 接手（2026-10-20）
+
+- **0010 白色儀表與 MDK**：交接把前景白色圓盤誤認為電扇前板；實際是地圖內 `mo_koi_mi_meter00_00`（Standard）。Studio `part` 沒走 accessory 的 Texture2D 行方向正規化，導致 UV 取到錯區。現在 Standard／MDK／Legacy Additive 的來源主貼圖、對應額外貼圖與 lightmap 只翻一次，MaterialEditor 已正規化主圖不再翻；重拍可見白色錶面、刻度與紅指針。MDK 補 normal／parallax／metallic／emission 的依賴與 sampler，不要求不存在的 `_EMISSION` keyword；安裝程式無條件 alpha clip，沿用現有 Masked `ForgeMDK`，沒有新增母材質配方。
+- **6964 桌子構圖**：`p_koi_stu_desk00_01` 根位置 Unity z=-0.306 m 已烘入 geometry，原作 GuideObject 會用場景 TRS 覆寫根；舊流程卻再疊一次。道具現在消除烘入的根 TRS，子物件接點也相對根節點，地圖仍保留自己的根。重拍後人物不再被桌面遮住；GameSelfTest 用旋轉＋位移測覆寫語義。另補使用者 FK 停用 PV 手腳複製、清空 FK 恢復原 mask 的 FFI 回歸。
+- **場景生命週期**：成功讀新文件後先完整釋放舊 actor、map、picture、sky、材質與貼圖，再 full GC／render flush。材質圖 dedupe 改弱參照，活著的元件仍共享，卸載後不由 768 個強參照保留整張地圖。換場景同時清 CPU PNG cache 與 Rust bundle／model cache，磁碟快取及 live Session 自有資料保留。Compare 最後也執行相同釋放路徑。
+- **日照與遮光**：補 renderer shadow mode／enabled／layer memo，保留原本被略過的 ShadowsOnly geometry；遵守不投影、雙面投影、只投影與 32 位 culling mask。Baked 燈不再重加動態項，其他 SunLightInfo 燈依 authored sRGB 色轉 linear、Lambert 的 pi 單位換算。已分別重拍 3167 與 6331，6331 地板恢復灰色；`ok.Studio.MapSun` 預設啟用，可設 0 診斷。
+- **方向光照圖／Standard**：來源 `m_LightmapsMode=1`，新增獨立 memo，方向 atlas 每 index 只帶一份。依原生 PS 112 做方向性重平衡與 Linear RGBM 解碼，使用 .04/.96、abs(NdotV) 與 Linear roughness reduction。追完整圖後發現通用 albedo emission 與 baked diffuse／probe 重複，Standard 移除該底色項並保留真正 source emission；重拍廁所恢復暖色、不再整面白化，反射預設啟用（`OK_STANDARD_REFLECTION=0` 可隔離）。不是依場景調係數。共用庫更新 90 個已追蹤原作 bundle（含 18 個 MDK 道具 bundle），Session cache revision 15。
+- **粒子**：Legacy Additive 原生是 SrcAlpha/One，補 vertex／texture／tint alpha、Linear Color、soft particle 深度淡出（Unity metres → UE cm）與 BeforeDOF 混合順序。1901 的實際部件已確認掛上新材質，畫面仍有 bloom／渲染差異；不能只依公式正確宣稱與縮圖逐像素相同。
+- **比較與驗收工具**：載入失敗不拍上一場景，每張先刪該張舊圖，寫檔成功才計數。`Tools/verify_ok_studio.lua --tag <新名稱> [--compare]` 每項各用有逾時的 owned UE，保存 PID、log、結果 JSON、14 張場景峰值與最後釋放量。缺 final-release 證據也判失敗。
+- **驗收證據**：`Saved/OKStudio/Verify-HandoffERelease` 保存最後三項遊戲自測與 14 場景紀錄；`Saved/OKStudio/handoff_e/editor-selftest-release.log` 的編輯器自測 PASS。Rust default suite 416 PASS／461 ignored，三項原作 oracle（MDK、方向圖、renderer shadow policy）各 1 PASS；Automation 的材質弱參照生命週期與 MDK 配方各 PASS。完整庫與乾淨已追蹤共用庫快照分別驗證原作卡與 OK 卡：兩邊各 5 張女角 MATCH、2 張男角仍為既有 `_Texture2` sampler DIFFERENT（結果一致，沒有列為通過）；兩邊各 5 張 OK 卡 live／closed 全部 MATCH、gaps=0、game_reads=0。乾淨 clone 本身保持 clean，私有卡僅在 Saved。
+- **建置與整合**：`E:/PhysX/UE5.8` 的 Editor／一般遊戲 Development 都建置成功；合併至 `e1ca97a76` 後再次建置兩種目標成功，合併後三項自測記於 `Verify-HandoffEIntegrated`。未新增材質配方，不需要另烘出貨根目錄。
+- **最後連續場景驗收**：三項遊戲自測 PASS，`CompareKStudio` 14／14 PASS；每張擷取時峰值由修正前同批 30.4 GB 降到 23.6 GB，Windows 程序 PeakWorkingSet 為 23.709 GB，最後完整卸載後 13.0 GB（已低於原本後半段，但仍高於啟動約 4.4 GB，不能宣稱完全回到啟動基準）。`results.json` 與 `release-process-memory.json` 分別保存擷取／卸載與程序峰值。已目視 14 張聯絡表與 0010／0633／1901／3167／6331／6964 個別圖，沒有把輸出成功等同畫面完全一致。
+- **仍存在的畫面邊界**：Standard reflection 與日照已預設啟用並確認修正路徑生效；1901 的 bloom、角色明暗、3167 的整體色調與其他畫面細節仍有差異。本輪的來源、構圖、日照、生命週期修正已分別驗證，不把「14 張成功輸出」當作所有畫面完全匹配。MRQ／SkinEffects 等仍按既有 roadmap，不因本輪測試通過改成完成。
+
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
@@ -368,6 +383,7 @@
 
 - 完成（2026-10-17）：手肘／膝蓋目標＝FBBIK 四肢的彎曲目標（`IKConstraintBend::goal_position`，Studio IK 目標 9 左肘、10 右肘、11 左膝、12 右膝），匯入帶入、遊戲內 IK 面板可選。Rust 測試：手肘彎曲目標讓手肘移 11 cm、手仍到位（誤差 0）；自測匯入 4 個角色各 13 個目標，左手全到位
 - 部位開關：官方場景有 1,700 多個角色只開部分 IK（例如只開 3、4 號 423 個、只開 1、2 號 230 個），1/2、3/4 各是成對的左右部位；目前照「身體、右腿、左腿、右臂、左臂」，是哪一對手、哪一對腳還要在原作裡實際比對才能確定
+- 2026-10-20 接手核對安裝的原作 `OIBoneInfo.BoneGroup` 與 `OCIChar.ActiveIK/ActiveIKGroup`：body=1、right leg=2、left leg=4、right arm=8、left arm=16；`activeIK[i]` 使用 `1 << i`。現有左右部位順序正確，未改 mapping。
 - mod 動作：匯入報告列出缺的動作編號（例 2/114/8），裝了 mod 後跑 anim-convert 就會補進來
 ### R8 角色狀態（和「新渲染模式」協調）
 - 飾品顯示（每個欄位開關）、淚／汗／臉紅（臉部貼圖層的強度）、體液（貼花）

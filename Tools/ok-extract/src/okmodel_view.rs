@@ -180,6 +180,14 @@ impl ModelView {
         names.into_iter().collect()
     }
 
+    /// Recorded prefabs using a source shader, without retaining an entire
+    /// bundle's geometry as `contents` does. Suitable for selective refreshes.
+    pub fn prefabs_with_shader(&self, shader: &str) -> Vec<String> {
+        let names: BTreeSet<String> = self.args_of::<(String, bool)>("meshes_for_maindata").into_iter().map(|(n, _)| n).collect();
+        names.into_iter().filter(|name| self.prefab_meshes(name, true).iter()
+            .any(|mesh| mesh.mat.as_ref().is_some_and(|mat| mat.shader == shader))).collect()
+    }
+
     pub fn prefab_meshes(&self, prefab: &str, include_disabled: bool) -> Vec<ExtractedMesh> {
         if include_disabled { self.parsed.meshes_for_maindata_including_disabled(prefab).0 } else { self.parsed.meshes_for_maindata(prefab).0 }
     }
@@ -296,6 +304,7 @@ impl ModelView {
     pub fn hierarchy(&self, prefab: &str) -> crate::pose::PrefabHierarchy { self.parsed.prefab_hierarchy(prefab) }
     /// Baked lightmaps of a prefab (recorded by `studio-nodes`).
     pub fn prefab_lightmaps(&self, prefab: &str) -> crate::unity::PrefabLightmaps { self.parsed.prefab_lightmaps(prefab) }
+    pub fn prefab_renderer_settings(&self, prefab: &str) -> Vec<(i32,i32,i32,bool)> { self.parsed.prefab_renderer_settings(prefab) }
     /// A map's SunLightInfo (recorded by `studio-nodes`).
     pub fn parsed_sun_light(&self, prefab: &str) -> crate::unity::PrefabSunLight { self.parsed.prefab_sun_light(prefab) }
 
@@ -324,15 +333,34 @@ impl ModelView {
         let profile = std::env::var_os("OK_PROFILE").is_some();
         let t = std::time::Instant::now();
         let mut meshes = self.prefab_meshes(prefab, include_disabled);
+        // MDK uses Standard-style slot names, not the character shader's
+        // _NormalMap. Older model memos keep these bindings but omit their PNGs.
+        // Resolve through the library's named-texture records at session time.
+        for mesh in &mut meshes {
+            let Some(mat) = mesh.mat.as_ref().filter(|m| m.shader == "Shader Forge/main_StandardMDK_studio") else { continue };
+            for property in ["_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
+                let Some(name) = mat.slot(property) else { continue };
+                if let Some(png) = self.parsed.texture_png_named(name) {
+                    mesh.shader_extra_textures.insert(property.into(), png);
+                    if let Some(s) = self.parsed.texture_sampling_named(name) {
+                        mesh.runtime_textures.insert(property.into(), [s.filter, s.wrap_u, s.wrap_v, i32::from(s.srgb), s.mip_count]);
+                    }
+                }
+            }
+        }
         // Studio map times of day (SunLightInfo): what a time shows may be inactive in the prefab, so those meshes come in
         // too; every part under a time's list is marked with the times it shows at (mark_sun_visible).
         let sun = self.parsed.prefab_sun_light(prefab);
-        if !include_disabled && sun.infos.iter().any(|i| !i.visible.is_empty()) {
+        let renderers = self.parsed.prefab_renderer_settings(prefab);
+        let has_time_parts = sun.infos.iter().any(|i| !i.visible.is_empty());
+        let has_shadow_only = renderers.iter().any(|r| r.1 == 3 && r.3);
+        if !include_disabled && (has_time_parts || has_shadow_only) {
             let h = self.hierarchy(prefab);
             let have: BTreeSet<(i64, usize)> = meshes.iter().map(|m| (m.path_id, m.submesh_index)).collect();
             for m in self.prefab_meshes(prefab, true) {
                 if have.contains(&(m.path_id, m.submesh_index)) { continue; }
-                if h.mesh_nodes.iter().any(|(id, n)| *id == m.path_id && sun_mask(&sun, &h, *n) != 0) { meshes.push(m); }
+                if h.mesh_nodes.iter().any(|(id, n)| *id == m.path_id &&
+                    (sun_mask(&sun, &h, *n) != 0 || renderers.iter().any(|r| r.0 == *n && r.1 == 3 && r.3))) { meshes.push(m); }
             }
         }
         if profile { eprintln!("ok-extract: PROFILE okmodel meshes {:.1}ms", t.elapsed().as_secs_f64() * 1000.0); }
@@ -366,6 +394,13 @@ impl ModelView {
         let lightmaps = self.parsed.prefab_lightmaps(prefab);
         let render_textures = self.parsed.prefab_render_textures(prefab);
         let animated = self.parsed.prefab_animated_materials(prefab);
+        let mark_renderer = |m: &mut ExtractedMesh, node: i32| {
+            if let (Some(mat), Some((_, casting, layer, enabled))) = (m.mat.as_mut(), renderers.iter().find(|r| r.0 == node)) {
+                mat.floats.insert("_OKRendererShadowMode".into(), *casting as f32);
+                mat.floats.insert("_OKRendererLayer".into(), *layer as f32);
+                mat.floats.insert("_OKRendererEnabled".into(), u8::from(*enabled) as f32);
+            }
+        };
         let mut instances: Vec<ExtractedMesh> = Vec::new();
         for m in meshes.iter_mut().filter(|m| !m.uses_skin_renderer()) {
             let nodes: Vec<(i32, crate::pose::Mat4)> = h.mesh_nodes.iter().filter(|(id, _)| *id == m.path_id)
@@ -378,11 +413,15 @@ impl ModelView {
                 mark_render_texture(&mut extra, &render_textures, *node, &h, &worlds);
                 apply_animated_materials(&mut extra, &animated, *node);
                 mark_sun_visible(&mut extra, &sun, &h, *node);
+                mark_renderer(&mut extra, *node);
                 instances.push(extra);
             }
-            if let Some((node, _)) = nodes.first() { bake_lightmap(m, &lightmaps, *node); mark_render_texture(m, &render_textures, *node, &h, &worlds); apply_animated_materials(m, &animated, *node); mark_sun_visible(m, &sun, &h, *node); }
+            if let Some((node, _)) = nodes.first() { bake_lightmap(m, &lightmaps, *node); mark_render_texture(m, &render_textures, *node, &h, &worlds); apply_animated_materials(m, &animated, *node); mark_sun_visible(m, &sun, &h, *node); mark_renderer(m, *node); }
             let Some(w) = nodes.first().map(|(_, w)| *w).or(m.prefab_local) else { continue; };
             place(m, &w);
+        }
+        for m in meshes.iter_mut().filter(|m| m.uses_skin_renderer()) {
+            if let Some((_, node)) = h.mesh_nodes.iter().find(|(id, _)| *id == m.path_id) { mark_renderer(m, *node); }
         }
         meshes.extend(instances);
         // The map's sun for each time of day (Unity Euler angle, colour, intensity) and its culling mask, on every part
@@ -394,6 +433,9 @@ impl ModelView {
                     mat.colors.insert(format!("_OKSun{}Angle", i.kind), [i.angle[0], i.angle[1], i.angle[2], 1.]);
                 }
                 mat.floats.insert("_OKSunCulling".into(), (sun.culling_mask & 0x00FF_FFFF) as f32);
+                mat.floats.insert("_OKSunCullingLo".into(), (sun.culling_mask & 0xFFFF) as f32);
+                mat.floats.insert("_OKSunCullingHi".into(), (sun.culling_mask >> 16) as f32);
+                mat.floats.insert("_OKSunLightmapping".into(), sun.lightmapping as f32);
             }
         }
         // Each lightmap texture rides on the first part that uses it; the others name it by index (no copies).
@@ -402,6 +444,14 @@ impl ModelView {
             if let Some(m) = meshes.iter_mut().find(|m| m.mat.as_ref().and_then(|x| x.floats.get("_OKLightmapIndex")).is_some_and(|v| *v as usize == index)) {
                 m.shader_extra_textures.insert("_OKLightmap".into(), png.clone());
             }
+        }
+        if !lightmaps.textures.is_empty() {
+        for (index, png) in self.parsed.prefab_lightmap_directions(prefab).textures.iter().enumerate() {
+            if png.is_empty() { continue; }
+            if let Some(m) = meshes.iter_mut().find(|m| m.mat.as_ref().and_then(|x| x.floats.get("_OKLightmapIndex")).is_some_and(|v| *v as usize == index)) {
+                m.shader_extra_textures.insert("_OKLightmapDirection".into(), png.clone());
+            }
+        }
         }
         assign_reflection_probes(&mut meshes, &self.parsed.prefab_reflection_probes(prefab), &worlds);
         let parts = crate::preview_session_parts(&self.lib, &role, meshes, entry.as_ref())?;
@@ -483,6 +533,9 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
     let id = oklib::id_from_hex_pub(which).or_else(|| locate(Path::new(which)).ok().map(|x| x.1)).ok_or("model id or path required")?;
     let view = ModelView::open(lib, id)?;
     match prefab {
+        Some(p) if p.starts_with("shader:") => {
+            for name in view.prefabs_with_shader(&p[7..]) { println!("{name}"); }
+        }
         None => println!("{}", serde_json::to_string_pretty(&view.contents()).unwrap()),
         Some(p) => for m in view.prefab_meshes(p, true) {
             let shown = posed_static(&m);

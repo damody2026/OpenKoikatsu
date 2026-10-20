@@ -222,9 +222,10 @@ EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialRecipe(const FKKRuntimeMaterialP
   if(AdditionalShader==TEXT("KKUSSitem"))return EKKRuntimeMaterialRecipe::KKUSSItem;
   if(AdditionalShader==TEXT("xukmi/MainItemPlus"))return EKKRuntimeMaterialRecipe::XukmiItem;
   if(AdditionalShader==TEXT("Shader Forge/toon_glasses_lod0"))return EKKRuntimeMaterialRecipe::ForgeGlasses;
-  // The installed MDK program is the variant without _ALPHATEST_ON: an alpha-tested material (the retro fan's guard and
-  // blades) has no parent that cuts it out, so it keeps its own graph (masked by its texture alpha).
-  if(AdditionalShader==TEXT("Shader Forge/main_StandardMDK_studio"))return Enabled.Contains(TEXT("_ALPHATEST_ON"))?EKKRuntimeMaterialRecipe::None:EKKRuntimeMaterialRecipe::ForgeMDK;
+  // The installed MDK pixel program clips MainTex.a against _Cutoff
+  // unconditionally, and ForgeMDK already uses a masked parent. Its keyword
+  // list does not disable that instruction: guard and body share the program.
+  if(AdditionalShader==TEXT("Shader Forge/main_StandardMDK_studio"))return EKKRuntimeMaterialRecipe::ForgeMDK;
   // main_item_studio blends but writes depth: every item draws with the depth-writing parent (its P.Blend is always
   // "translucent" for the shader's blend state), except one the host fades (_OKItemAlpha < 1: OK Studio's item alpha),
   // which keeps the blending parent.
