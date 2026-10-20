@@ -3349,6 +3349,8 @@ UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, in
 				View->SetRelativeLocation(OkToUe(P[0], P[1], P[2]));
 				View->SetRelativeRotation(OkToUeDir(P[3], P[4], P[5]).Rotation());
 				View->FOVAngle = FMath::RadiansToDegrees(2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(P[6]) * 0.5f) * 16.f / 9.f));
+				// OK_RT_VIEW_NOFX=1: without particle systems (Niagara), to tell them from geometry.
+				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RT_VIEW_NOFX")) == TEXT("1")) View->ShowFlags.SetParticles(false);
 				View->CaptureSource = SCS_FinalColorLDR;
 				View->bCaptureEveryFrame = false;
 				View->TextureTarget = Shot;
@@ -3367,8 +3369,6 @@ UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, in
 			return true;
 		}), Interval);
 	}
-				// OK_RT_VIEW_NOFX=1: without particle systems (Niagara), to tell them from geometry.
-				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RT_VIEW_NOFX")) == TEXT("1")) View->ShowFlags.SetParticles(false);
 	return Target;
 }
 
@@ -3384,24 +3384,6 @@ void AKKPreviewActor::StopRenderTextureCaptures()
 	RenderTextureCaptures.Reset();
 }
 
-// Studio map stage effects (unity::stage_effect_kind, `_OKStageEffect`), from the live stage's Shader Forge DXBC: every
-// kind tints by the hue of its scrolling `color` texture (rgb→hsv→hsv(h,1,1)), lerp(1, hue, _saturation)·_brightness.
-// 1 volumeLight: ·saturate(_mask·_multiplier)·N·V, additive, front faces culled; 2 spotLight_beam: ·_mask·N·V (normal
-// turned to the viewer), additive; 3 spotLaser / 4 spotLight_glow: ·_mask, additive; 5 electricLight (LED panels):
-// ·the scrolling fast/slow masks squared (min 1) lerped to _MaskFull, opaque. Colour UVs are Unity uv2 (TEXCOORD2
-// here), masks uv; Unity _Time is (t/20, t). One graph per kind; each part is a MID with its textures and values.
-static UMaterialInterface* OKStageEffectMaterial(int32 Kind)
-{
-#if WITH_EDITOR
-	static TStrongObjectPtr<UMaterial> Cached[6];
-	if (Kind < 1 || Kind > 5) return nullptr;
-	if (Cached[Kind]) return Cached[Kind].Get();
-	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
-	Mat->MaterialDomain = MD_Surface;
-	Mat->BlendMode = Kind == 5 ? BLEND_Opaque : BLEND_Additive;
-	Mat->SetShadingModel(MSM_Unlit);
-	Mat->TwoSided = true;
-	UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
 // Unity's built-in additive particle shaders (Legacy Shaders/Particles/Additive: Studio's 2D lens flares): Blend One One,
 // colour 2 x _TintColor x texture in gamma space, i.e. linear texture x (2 _TintColor)^2.2 in "Tint". Unlit, two-sided.
 static UMaterialInterface* OKParticleAdditiveMaterial()
@@ -3443,6 +3425,24 @@ static UMaterialInterface* OKParticleAdditiveMaterial()
 #endif
 }
 
+// Studio map stage effects (unity::stage_effect_kind, `_OKStageEffect`), from the live stage's Shader Forge DXBC: every
+// kind tints by the hue of its scrolling `color` texture (rgb→hsv→hsv(h,1,1)), lerp(1, hue, _saturation)·_brightness.
+// 1 volumeLight: ·saturate(_mask·_multiplier)·N·V, additive, front faces culled; 2 spotLight_beam: ·_mask·N·V (normal
+// turned to the viewer), additive; 3 spotLaser / 4 spotLight_glow: ·_mask, additive; 5 electricLight (LED panels):
+// ·the scrolling fast/slow masks squared (min 1) lerped to _MaskFull, opaque. Colour UVs are Unity uv2 (TEXCOORD2
+// here), masks uv; Unity _Time is (t/20, t). One graph per kind; each part is a MID with its textures and values.
+static UMaterialInterface* OKStageEffectMaterial(int32 Kind)
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached[6];
+	if (Kind < 1 || Kind > 5) return nullptr;
+	if (Cached[Kind]) return Cached[Kind].Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = Kind == 5 ? BLEND_Opaque : BLEND_Additive;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TwoSided = true;
+	UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
 	Code->Material = Mat;
 	Code->OutputType = CMOT_Float3;
 	Mat->GetExpressionCollection().AddExpression(Code);
@@ -5540,6 +5540,25 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							if (It.Value && It.Value->TextureTarget == Screen) It.Value->HideComponent(Comp);
 						UE_LOG(LogTemp, Display, TEXT("OK render texture screen part=%s bounds=%s"), *Name, *Comp->Bounds.GetBox().ToString());
 					}
+		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor added, not the Studio light
+		// effect's three-colour mix the additive part graph draws.
+		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))
+			if (UMaterialInterface* ParticleMat = OKParticleAdditiveMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(ParticleMat, Comp))
+				{
+					FLinearColor TintColor(0.5f, 0.5f, 0.5f, 0.5f);
+					Source.MaterialValue(i, "_TintColor", TintColor);
+					auto Linear2 = [](float V) { return FMath::Pow(FMath::Max(2.f * V, 0.f), 2.2f); };
+					Dynamic->SetTextureParameterValue(TEXT("Tex"), Tex);
+					Dynamic->SetVectorParameterValue(TEXT("Tint"), FLinearColor(Linear2(TintColor.R), Linear2(TintColor.G), Linear2(TintColor.B), 1.f));
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+				}
+		// A Studio map part shown only at some times of day (okmodel_view::mark_sun_visible): its mask as a tag, for the
+		// scene to show or hide it with the scene's time (SunLightInfo.Set).
+		FLinearColor SunVisible;
+		if (Comp && Source.MaterialValue(i, "_OKSunVisible", SunVisible))
+			Comp->ComponentTags.Add(FName(*FString::Printf(TEXT("OKSunVisible%d"), FMath::RoundToInt(SunVisible.R))));
 		// A Studio map stage effect (light cone, beam, laser, LED panel): OK's version of its Shader Forge program.
 		if (Comp && bStageEffect)
 		{
@@ -5565,25 +5584,6 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// interior mouth triangles are not part of its visible silhouette.
 		const bool bFace = bFaceSkin;
 		// Studio's additive light effects have no Outline pass (their shell would paint the black of the texture).
-		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor added, not the Studio light
-		// effect's three-colour mix the additive part graph draws.
-		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))
-			if (UMaterialInterface* ParticleMat = OKParticleAdditiveMaterial())
-				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(ParticleMat, Comp))
-				{
-					FLinearColor TintColor(0.5f, 0.5f, 0.5f, 0.5f);
-					Source.MaterialValue(i, "_TintColor", TintColor);
-					auto Linear2 = [](float V) { return FMath::Pow(FMath::Max(2.f * V, 0.f), 2.2f); };
-					Dynamic->SetTextureParameterValue(TEXT("Tex"), Tex);
-					Dynamic->SetVectorParameterValue(TEXT("Tint"), FLinearColor(Linear2(TintColor.R), Linear2(TintColor.G), Linear2(TintColor.B), 1.f));
-					Comp->SetMaterial(0, Dynamic);
-					Part.SurfaceMat = Dynamic;
-				}
-		// A Studio map part shown only at some times of day (okmodel_view::mark_sun_visible): its mask as a tag, for the
-		// scene to show or hide it with the scene's time (SunLightInfo.Set).
-		FLinearColor SunVisible;
-		if (Comp && Source.MaterialValue(i, "_OKSunVisible", SunVisible))
-			Comp->ComponentTags.Add(FName(*FString::Printf(TEXT("OKSunVisible%d"), FMath::RoundToInt(SunVisible.R))));
 		if (bOutlinable && Comp && !bStageEffect && !Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase))
 		{
 			AddOutlineSection(

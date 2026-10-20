@@ -2314,6 +2314,7 @@ impl ParsedBundle {
             });
         }
         Default::default()
+    }
     /// A Studio map's SunLightInfo (the MonoBehaviour with `_infos` and `_targetLight`, on the map root): the sun Light
     /// and each time of day's shown GameObjects and sun. Nodes are `prefab_hierarchy` numbering (inactive ones too).
     fn prefab_sun_light_unity(&self, prefab:&str)->PrefabSunLight {
@@ -2350,7 +2351,6 @@ impl ParsedBundle {
             });
         }
         Default::default()
-    }
     }
     /// Render-to-texture of a prefab (a Studio map scene, e.g. the live stage's big screens): every Camera whose
     /// m_TargetTexture is a RenderTexture, and every MeshRenderer/SkinnedMeshRenderer material slot sampling one of
