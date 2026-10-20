@@ -235,7 +235,7 @@ struct FOKStreetSceneState {
  int64 AppointmentTickMinute=-1;
  // Plan §6: today's plans per heroine, the block each is in, walks in progress, meals eaten this block, who the
  // schedule is holding in place, and where he spends his time.
- TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
+ TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;
  // Plan §8.6: the shift he is working now (appointment id, job, window in game minutes), early-leave tracking, fast-forward.
  // Plan §6.5: who spent time with him today, the day already reflected on, and tomorrow's intents.

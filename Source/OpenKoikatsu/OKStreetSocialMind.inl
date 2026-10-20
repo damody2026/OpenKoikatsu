@@ -124,7 +124,7 @@ void AOKStreetSocialScene::TickCalendarAndMind(){
    if(Kind==TEXT("reflect")){HandleReflect(R);continue;}
    if(Kind==TEXT("note"))continue;
    {FString Tag;if(Kind==TEXT("chat")&&R->TryGetStringField(TEXT("tag"),Tag)&&Tag.StartsWith(TEXT("overheard:"))){TArray<FString> P;Tag.ParseIntoArray(P,TEXT(":"));if(P.Num()==3){HandleOverheard(R,FCString::Atoi(*P[1]),FCString::Atoi(*P[2]));continue;}}}
-   if(Kind==TEXT("profile")){const TSharedPtr<FJsonObject>* Profile=nullptr;FString Heroine;if(R->TryGetStringField(TEXT("heroine"),Heroine)&&R->TryGetObjectField(TEXT("profile"),Profile)){S.MindProfiles.Add(Heroine,*Profile);InitWalletFromProfile(Heroine,*Profile);InitStrangerCap(Heroine,*Profile);}}
+   if(Kind==TEXT("profile")){const TSharedPtr<FJsonObject>* Profile=nullptr;FString Heroine;if(R->TryGetStringField(TEXT("heroine"),Heroine)&&R->TryGetObjectField(TEXT("profile"),Profile)){S.MindProfiles.Add(Heroine,*Profile);InitWalletFromProfile(Heroine,*Profile);InitStrangerCap(Heroine,*Profile);if(S.PlannedWithoutProfiles&&MindProfilesReady()){S.PlannedWithoutProfiles=false;S.PlanDay=-1;UE_LOG(LogTemp,Display,TEXT("Street plan: the profiles came; today planned again"));}}}
    if(Kind==TEXT("profile")){bool Generated=false;R->TryGetBoolField(TEXT("generated"),Generated);FString Who,Why;R->TryGetStringField(TEXT("heroine"),Who);R->TryGetStringField(TEXT("error"),Why);UE_LOG(LogTemp,Display,TEXT("StreetSocial mind profile %s: %s%s"),*Who,Why.IsEmpty()?(Generated?TEXT("generated"):TEXT("loaded")):TEXT("failed "),*Why);continue;}
    FString Text;FJsonSerializer::Serialize(R.ToSharedRef(),TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text));
    UE_LOG(LogTemp,Display,TEXT("StreetSocial mind result: %s"),*Text.Left(600));

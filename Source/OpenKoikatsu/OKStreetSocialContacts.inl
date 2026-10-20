@@ -135,9 +135,12 @@ FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Dire
 FVector AOKStreetSocialScene::NavApproachSpot(const FVector& Her) const{
  if(!OKStreetBlockedPoint(Her,30))return Her;
  const FVector Male=State->Male;FVector Best=Her;float BestDistance=TNumericLimits<float>::Max();
+ // On her side of the walls: reading by a shelf in the bookstore, the free spot nearest him was the pavement outside its
+ // wall, and the navigation said "beside her" there.
+ const FString HerPlace=PlaceHere(Her);
  for(const float R:{120.f,160.f,200.f})for(int32 A=0;A<18;++A){
   const float Angle=A*20.f*PI/180.f;const FVector P=Her+FVector(FMath::Cos(Angle),FMath::Sin(Angle),0)*R;
-  if(OKStreetBlockedPoint(P,30))continue;const float D=FVector::Dist2D(P,Male);if(D<BestDistance){BestDistance=D;Best=P;}}
+  if(OKStreetBlockedPoint(P,30)||PlaceHere(P)!=HerPlace)continue;const float D=FVector::Dist2D(P,Male);if(D<BestDistance){BestDistance=D;Best=P;}}
  return Best;
 }
 
