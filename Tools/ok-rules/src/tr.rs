@@ -124,7 +124,15 @@ pub fn m(id: &'static str, args: &[(&str, Arg)]) -> String {
 pub fn heard(said: &str, id: &'static str) -> bool {
     // One script on both sides: callers hand in Simplified text, the Traditional table writes 你拿著.
     let cn = |x: &str| zhconv::zhconv(&x.to_lowercase(), zhconv::Variant::ZhCN);
-    let said = cn(said);
+    let mut said = cn(said);
+    // Phrases that hold a word of the list but mean something else ("我送你回宿舍" walks her home, it buys nothing):
+    // <id>_not, taken out before the words are looked for.
+    let not = format!("{id}_not");
+    if let Some(except) = with_table(|t| t.get(not.as_str()).map(|m| m.1)) {
+        for w in except.split('|').map(str::trim).filter(|w| !w.is_empty()) {
+            said = said.replace(&cn(w), "\u{1}");
+        }
+    }
     t(id).split('|').map(str::trim).filter(|w| !w.is_empty()).any(|w| said.contains(&cn(w)))
 }
 
@@ -219,6 +227,8 @@ mod tests {
         assert!(heard("No no, it's my treat!", "hear.offer_pay") && heard("Let's go Dutch", "hear.ask_split") && !heard("hello", "hear.invite"));
         let _t = scope("zh-TW", "TW");
         assert!(heard("這次我請", "hear.offer_pay") && heard("我们各付各的吧", "hear.ask_split"), "either script is heard");
+        // Walking her home is not paying for her drink; a gift still is.
+        assert!(!heard("很晚了，我送你回宿舍吧？", "hear.offer_pay") && heard("这个送你", "hear.offer_pay") && heard("我送你回去，饮料我请", "hear.offer_pay"));
         assert_eq!(icu::format("{p, number, ::currency}", "zh-TW", &args), "NT$129,900");
     }
 }
