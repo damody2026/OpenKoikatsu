@@ -3762,3 +3762,6 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜同名node與同shader都不是renderer身份**：額外map_animated_materials探針曾以spotBeam_geo名稱斷言全部關閉；原作存在同名接點及不同材質的正常啟用光束，該斷言失敗並非最終1375個node向量來源比對失敗。移除這項名稱猜測，保留專項逐node完整向量oracle與真實前後圖；後續不可把name／shader當唯一renderer identity。
 
 - **2026-10-21｜LFS純追蹤副本更新須核對payload與索引**：更新Clean1268的90個模型後，payload已符合新HEAD的SHA-256，但skip-smudge checkout的stat/index仍將它們列為modified，最初clean斷言失敗。先逐檔核對新commit的LFS OID，再只對這90條既有追蹤路徑重新套用LFS clean filter更新索引；確認cached diff及git status皆空，再核對全部共用庫LFS payload。不能用assume-unchanged或忽略dirty狀態假裝乾淨。
+
+- **2026-10-21｜4432探針必須先篩選物件型別**：初版JSON探針用「含fk欄位」當角色條件，把大量道具也輸出，且把某些children的陣列誤當dict而失敗。改為遞迴處理dict／list，只選kind=Character，僅輸出服裝、啟用群組與計數，完整資料留本機檔。不得用截斷的大量輸出當角色資料驗收。
+- **2026-10-21｜Studio不能把動畫相位暫停當成物理dt=0**：原AdvanceAnimations固定傳ApplyPoseFrame(0,false)，比較暫停更完全略過角色更新；固定FK腿部後衣物碰撞因此沒有收到經過時間。改由場景每tick統一送一次真實dt，動畫相位可獨立保持；static FK同樣求解，頭部追視先準備target，避免static角色額外步進第二次。需實拍驗證衣物，不可只驗動畫phase有變。

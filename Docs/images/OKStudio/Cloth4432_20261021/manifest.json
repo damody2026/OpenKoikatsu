@@ -1,0 +1,58 @@
+{
+  "scene": "koikatu_cs0004432",
+  "sources": {
+    "before.png": "Saved/OKStudio/Verify-Cloth4432Before/images/koikatu_cs0004432.png",
+    "after.png": "Saved/OKStudio/Verify-Cloth4432AcceptedCompare/images/koikatu_cs0004432.png"
+  },
+  "files": [
+    {
+      "file": "after.png",
+      "size": [
+        1280,
+        360
+      ],
+      "bytes": 754472,
+      "sha256": "11501f4b5b9fbb2e15bd2a361cd226171b82a2d9c9af4ba0356e8d9cd9025b50",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "before.png",
+      "size": [
+        1280,
+        360
+      ],
+      "bytes": 755165,
+      "sha256": "9bf980995878fdceccc013c659cd0716c1d231a9906faf8ec6d4010a2fed0f36",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "comparison.png",
+      "size": [
+        1280,
+        768
+      ],
+      "bytes": 1231792,
+      "sha256": "daf60b48ed0569f18a3ed2ed0609d42f053a75f654ee6e5b48feaf1b350fbbe7",
+      "no_payload_after_iend": true
+    },
+    {
+      "file": "detail.png",
+      "size": [
+        900,
+        424
+      ],
+      "bytes": 308841,
+      "sha256": "4406a36a806841390103097e3be099b253c480e67ab2525331c97b8d7a8dd9d6",
+      "no_payload_after_iend": true
+    }
+  ],
+  "validation": {
+    "checks": 38,
+    "all_passed": true,
+    "selftests": 6,
+    "automation_success": 7,
+    "captures": 14,
+    "camera_before_after_equal": true,
+    "log": "Saved/OKStudio/4432-final-validation.json"
+  }
+}

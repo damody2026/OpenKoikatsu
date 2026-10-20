@@ -56,6 +56,8 @@ public:
 	/** Advances character animations (seconds). */
 	UFUNCTION(BlueprintCallable, Category = "OK Studio")
 	void AdvanceAnimations(float DeltaSeconds);
+    /** Evaluates character poses and secondary motion once; holding the clip phase does not freeze cloth. */
+    void AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase);
     /** Evidence capture holds the saved animation phase while rendering settles. */
     bool bPauseAnimations = false;
 	/** Poses a character's animation at `Time` seconds of the scene timeline (its own start time and speed applied). */
@@ -89,7 +91,7 @@ public:
 	FVector ViewLocation = FVector::ZeroVector;
 	bool bHasViewLocation = false;
 	/** Eyes and neck of every shown character towards the view or their look point (each tick). */
-	void UpdateLooks(float DeltaSeconds);
+	void UpdateLooks(float DeltaSeconds, bool bApplyStaticPose = true);
 	/** Moves objects hung on character bones (and what hangs under them) to the bones' current pose. */
 	void PlaceAttached();
 	/** Studio's character light (it turns with the camera) as the items' light: their shared parent instances'

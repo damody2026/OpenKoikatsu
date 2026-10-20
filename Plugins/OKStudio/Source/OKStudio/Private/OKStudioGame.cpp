@@ -3133,6 +3133,36 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		const bool bMoved = PA2 && PA2->PoseMode == 3 && PA2->Session.BoneEuler(TEXT("cf_j_arm00_L"), E1) && !E1.Equals(E0, 0.5f);
 		Check(bPicked && bE0 && bMoved && !SceneActor->Errors.Contains(A), FString::Printf(TEXT("library Studio animation %s plays (%d animations, arm %s -> %s) %s"),
 			Walk != INDEX_NONE ? *Catalog.Anims[Walk].Name : TEXT("?"), Catalog.Anims.FilterByPredicate([](const FOKStudioAnim& X) { return !X.File.IsEmpty(); }).Num(), *E0.ToString(), *E1.ToString(), SceneActor->Errors.Contains(A) ? *SceneActor->Errors[A] : TEXT("")));
+        if (PA2)
+        {
+            const bool ClockPreviousPause = SceneActor->bPauseAnimations;
+            const float ClockPreviousSpeed = Document->Find(A)->Character.Speed;
+            const float ClockHeldPhase = PA2->AnimPhase;
+            const double ClockHeldItems = Document->ItemAnimationSeconds;
+            SceneActor->bPauseAnimations = true;
+            for (int32 FrameIndex = 0; FrameIndex < 12; ++FrameIndex) SceneActor->Tick(1.f / 60.f);
+            Check(PA2->AnimPhase == ClockHeldPhase && Document->ItemAnimationSeconds == ClockHeldItems,
+                TEXT("paused Studio character frames preserve clip and item clocks"));
+            Document->Find(A)->Character.Speed = 0.f;
+            SceneActor->bPauseAnimations = false;
+            SceneActor->Tick(1.f / 60.f);
+            Check(PA2->AnimPhase == ClockHeldPhase && Document->ItemAnimationSeconds > ClockHeldItems,
+                TEXT("zero character speed holds its clip while the scene frame continues"));
+            // A native FK setter only queues the source change. A static actor
+            // without an animation player must still receive the finishing frame.
+            PA2->SetPoseMode(0);
+            const FVector ClockStaticFk(12.f, 18.f, -35.f);
+            const bool ClockFkQueued = PA2->Session.SetFk({ TEXT("cf_j_arm00_L") }, { ClockStaticFk });
+            PA2->bUserPoseDirty = false;
+            SceneActor->AdvanceCharacterFrames(1.f / 60.f, false);
+            FVector ClockStaticActual;
+            Check(ClockFkQueued && PA2->Session.BoneEuler(TEXT("cf_j_arm00_L"), ClockStaticActual)
+                && ClockStaticActual.Equals(ClockStaticFk, .01f),
+                TEXT("held static Studio character receives the native pose and physics finishing pass"));
+            PA2->Session.SetFk({}, {});
+            Document->Find(A)->Character.Speed = ClockPreviousSpeed;
+            SceneActor->bPauseAnimations = ClockPreviousPause;
+        }
 		Document->Find(A)->Character.StudioAnimeNo = -1;
 		Document->NotifyChanged();
 		SyncNow();
