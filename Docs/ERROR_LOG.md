@@ -3860,3 +3860,10 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - 6331 的 OK shared dump 顯示卡片預備 ramp 平均值228，曾懷疑場景 RampG=4 未生效；追查發現 dump 在 Actor 的 ToonRampTex 覆寫之前。正式建立時 RampOverride 優先，MID 後續明確綁 _RampG，不能把預備輸入當成最終 renderer 證據。原作 gt_ramp_04 GPU raw 與 kk_4.png RGBA 逐 byte 相同；未以此假說修改 ramp 或調色。
 - 原生 face RT 的 DXGI RGBA8_TYPELESS(27)、ramp R8_TYPELESS(60) 是合法讀回格式，探針補相同 byte-size 處理；失敗輸出不計成功。
 - 本輪再次使用 rg 的字面 wildcard 路徑及猜測圖片子目錄，造成無效讀取；改查實際檔案清單與 -g 篩選，無效讀取不當驗收證據。
+
+### 2026-10-21 LFS驗證命令的參數語義
+- git lfs ls-files的裸位置參數是Git ref，不是目錄；把base_v1當參數造成invalid object name。改取 --json 後依name前綴篩選，對實體payload逐檔SHA-256與HEAD OID／size核對，最後716檔通過。
+
+### 2026-10-21 6331最終材質與色彩空間排除
+- 關閉濾鏡的實際A/B仍偏灰，不把濾鏡關閉交付成修正。擴充實際MID稽核至face及ramp：54材質全部指向場景RampOverride，SRGB=false；7組SH對原作誤差0；三個相同女角face的lip／cheek對nativecb最大誤差<1e-6。先前prebinding dump不代表最終值的推論現已實測排除。
+- 原作face MainTex RenderTexture rt_srgb=True／activeTextureColorSpace=Gamma，與UE載入相同；native hair ColorMask BC7解碼後與三個來源卡RGBA輸入的RGB逐byte相同，且Linear旗標一致。未再次改貼圖gamma來補償整體色差。

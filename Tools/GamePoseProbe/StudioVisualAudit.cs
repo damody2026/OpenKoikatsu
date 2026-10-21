@@ -1,4 +1,4 @@
-﻿// Read-only native Studio scene inputs, captured after Studio applies its saved settings.
+// Read-only native Studio scene inputs, captured after Studio applies its saved settings.
 using System;
 using System.Collections;
 using System.IO;
@@ -106,6 +106,7 @@ public sealed partial class GamePoseProbe {
                     foreach (string key in new[] { "_texcoord", "_texcoord2", "_MainTex", "_ColorMask", "_HairGloss", "_DetailMask", "_NormalMap" }) {
                         if (!material.HasProperty(key)) continue;
                         Texture texture = material.GetTexture(key);
+                        if (texture != null) { var cs = typeof(Texture).GetProperty("activeTextureColorSpace", BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic); var rt = texture as RenderTexture; writer.WriteLine("texture_space\t"+prefix+"\t"+key+"\t"+(cs==null?"unknown":cs.GetValue(texture,null).ToString())+"\trt_srgb="+(rt==null?"n/a":rt.sRGB.ToString())); }
                         writer.WriteLine("texture\t" + prefix + "\t" + key + "\t" + (texture == null ? "null" : texture.name + ":" + texture.width + ":" + texture.height) + "\t" + material.GetTextureScale(key).ToString("R") + "\t" + material.GetTextureOffset(key).ToString("R"));
                     }
                 }

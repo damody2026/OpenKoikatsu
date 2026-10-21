@@ -1,4 +1,4 @@
-﻿#include "OKStudioGame.h"
+#include "OKStudioGame.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -1766,12 +1766,12 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 					for (const FKKLoadedPart& Part : Actor->Parts)
 					{
 						OkMeshView View{};
-						if (!Part.SurfaceMat || !Actor->Session.PartAt(Part.SessionIndex, View) || (View.shader_kind != 1 && View.shader_kind != 10)) continue;
+						if (!Part.SurfaceMat || !Actor->Session.PartAt(Part.SessionIndex, View) || (View.shader_kind != 1 && View.shader_kind != 10 && View.shader_kind != 5 && View.shader_kind != 7)) continue;
 						auto Row = MakeShared<FJsonObject>();
 						Row->SetNumberField(TEXT("object"), Object.Id);
 						Row->SetStringField(TEXT("mesh"), UTF8_TO_TCHAR(View.name));
 						Row->SetStringField(TEXT("material"), Part.SurfaceMat->GetPathName());
-						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST") })
+						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST"), TEXT("_overcolor1"), TEXT("_overcolor2") })
 						{
 							FLinearColor Value;
 							if (!Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(Key), Value)) continue;
@@ -1782,7 +1782,7 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 							const FString AlphaKey = FString(Key) + TEXT("__A");
 							if (Part.SurfaceMat->GetScalarParameterValue(FMaterialParameterInfo(*AlphaKey), Alpha)) Row->SetNumberField(AlphaKey, Alpha);
 						}
-						for (const TCHAR* Key : { TEXT("unity_SpecCube0"), TEXT("unity_SpecCube1") })
+						for (const TCHAR* Key : { TEXT("unity_SpecCube0"), TEXT("unity_SpecCube1"), TEXT("_RampG") })
 						{
 							UTexture* Texture = nullptr;
 							if (Part.SurfaceMat->GetTextureParameterValue(FMaterialParameterInfo(Key), Texture) && Texture)
@@ -1790,6 +1790,8 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 								Row->SetStringField(Key, Texture->GetPathName());
 								Row->SetNumberField(FString(Key)+TEXT("_width"), Texture->GetSurfaceWidth());
 								Row->SetStringField(FString(Key)+TEXT("_class"), Texture->GetClass()->GetName());
+								Row->SetBoolField(FString(Key)+TEXT("_srgb"), Texture->SRGB);
+								if (FString(Key)==TEXT("_RampG")) Row->SetBoolField(TEXT("ramp_matches_scene_override"),Texture==Actor->RampOverride);
 							}
 						}
 						Rows.Add(MakeShared<FJsonValueObject>(Row));
