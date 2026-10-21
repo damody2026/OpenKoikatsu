@@ -1853,6 +1853,40 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 						Row->SetNumberField(TEXT("object"), Object.Id);
 						Row->SetStringField(TEXT("mesh"), UTF8_TO_TCHAR(View.name));
 						Row->SetStringField(TEXT("material"), Part.SurfaceMat->GetPathName());
+						if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_MATERIAL_AUDIT_ALL")) == TEXT("1"))
+						{
+							auto Scalars = MakeShared<FJsonObject>();
+							auto Vectors = MakeShared<FJsonObject>();
+							auto Textures = MakeShared<FJsonObject>();
+							TArray<FMaterialParameterInfo> Infos;
+							TArray<FGuid> Ids;
+							Part.SurfaceMat->GetAllScalarParameterInfo(Infos, Ids);
+							for (const auto& Info : Infos) { float V; if (Part.SurfaceMat->GetScalarParameterValue(Info, V)) Scalars->SetNumberField(Info.Name.ToString(), V); }
+							Part.SurfaceMat->GetAllVectorParameterInfo(Infos, Ids);
+							for (const auto& Info : Infos)
+							{
+								FLinearColor V;
+								if (!Part.SurfaceMat->GetVectorParameterValue(Info, V)) continue;
+								TArray<TSharedPtr<FJsonValue>> Components;
+								for (int32 C = 0; C < 4; ++C) Components.Add(MakeShared<FJsonValueNumber>((&V.R)[C]));
+								Vectors->SetArrayField(Info.Name.ToString(), Components);
+							}
+							Part.SurfaceMat->GetAllTextureParameterInfo(Infos, Ids);
+							for (const auto& Info : Infos)
+							{
+								UTexture* T = nullptr;
+								if (!Part.SurfaceMat->GetTextureParameterValue(Info, T) || !T) continue;
+								auto Texture = MakeShared<FJsonObject>();
+								Texture->SetStringField(TEXT("path"), T->GetPathName());
+								Texture->SetBoolField(TEXT("srgb"), T->SRGB);
+								Texture->SetNumberField(TEXT("width"), T->GetSurfaceWidth());
+								Texture->SetNumberField(TEXT("height"), T->GetSurfaceHeight());
+								Textures->SetObjectField(Info.Name.ToString(), Texture);
+							}
+							Row->SetObjectField(TEXT("all_scalars"), Scalars);
+							Row->SetObjectField(TEXT("all_vectors"), Vectors);
+							Row->SetObjectField(TEXT("all_textures"), Textures);
+						}
 						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST"), TEXT("_overcolor1"), TEXT("_overcolor2") })
 						{
 							FLinearColor Value;

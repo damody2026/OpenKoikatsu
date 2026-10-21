@@ -39,11 +39,20 @@ public sealed partial class GamePoseProbe {
                 normals=source.normals,bakedNormals=baked.normals,tangents=source.tangents,
                 colors=source.colors,colors32=source.colors32,
                 uv0=source.uv,uv1=source.uv2,uv2=source.uv3,uv3=source.uv4,
-                blendShapeNames=new string[source.blendShapeCount],blendShapeWeights=new float[source.blendShapeCount]
+                blendShapeNames=new string[source.blendShapeCount],blendShapeWeights=new float[source.blendShapeCount],
+                blendShapeNormalCounts=new int[source.blendShapeCount],blendShapeNormalMax=new float[source.blendShapeCount]
             };
             for(int i=0;i<source.blendShapeCount;i++){
                 snapshot.blendShapeNames[i]=source.GetBlendShapeName(i);
                 snapshot.blendShapeWeights[i]=skin==null?0:skin.GetBlendShapeWeight(i);
+                for(int frame=0;frame<source.GetBlendShapeFrameCount(i);frame++){
+                    var positions=new Vector3[source.vertexCount];var normals=new Vector3[source.vertexCount];var tangents=new Vector3[source.vertexCount];
+                    source.GetBlendShapeFrameVertices(i,frame,positions,normals,tangents);
+                    for(int vertex=0;vertex<normals.Length;vertex++)if(normals[vertex].sqrMagnitude>0){
+                        snapshot.blendShapeNormalCounts[i]++;
+                        snapshot.blendShapeNormalMax[i]=Mathf.Max(snapshot.blendShapeNormalMax[i],normals[vertex].magnitude);
+                    }
+                }
             }
             var cha=renderer.GetComponentInParent<ChaControl>();
             if(cha!=null && cha.fbsCtrl!=null && cha.eyeLookCtrl!=null){

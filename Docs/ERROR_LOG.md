@@ -3894,3 +3894,7 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 ### 2026-10-21 驗收 Lua wrapper 的 CLI 參數來源
 - 曾用 dofile 呼叫 verify_ok_studio.lua 並重設 arg；底層參數器仍讀到原程序 argv，將 wrapper 路徑當成多餘參數，首輪未啟動任何UE。保留 capture-all-console.log，改由設好環境的 wrapper 啟動獨立 Lua CLI，使用正式參數來源；沒有把錯誤輪改寫為PASS。
 - D3D11 vertex-buffer 探針確實讀到4個綁定stream，但沒有 input-layout 解碼，不先替20-byte缺省stream指定COLOR欄位。CommandBuffer單獨DrawRenderer的輸出也不是場景相機的視覺金標；其形狀／骨架時點尚未核對，不把它拿來宣稱原作幾何吻合。reference-normal／UV驗證使用有明確座標標籤的sharedMesh與UE reference stream。
+
+### 2026-10-21 shader 假說必須核對最終 MID
+- 原作6331臉部87個morph（含啟用表情）的normal delta全為0，沒有因此新增模型格式／重建基礎庫。統計保存在NativeFaceNormalMorphs6331，不能把「parser沒有讀normal」直接當成該景色差根因。
+- 看到靜態貼圖fallback後曾懷疑頭髮DetailMask以Linear讀取；完整最終MID確認其SRGB=true，與原作Gamma相符。另確認頭髮MainTex雖1024²，所有RGBA都是255，是缺省白圖，不是重複烘焙髮色。兩者都未改動生產路徑。比較最終綁定，不能只看fallback分支或尺寸。
