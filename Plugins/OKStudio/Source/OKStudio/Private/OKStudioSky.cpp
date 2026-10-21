@@ -116,6 +116,12 @@ const TArray<FOKStudioSkyPattern>& OKStudioSkyPatterns()
 
 bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb, TArray<FLinearColor>* OutHigher)
 {
+    if (Map < 0)
+    {
+        OutSHAr = OutSHAg = OutSHAb = FLinearColor(0,0,0,0);
+        if (OutHigher) *OutHigher = { FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,1) };
+        return true;
+    }
 	static FString LoadedFile;
 	static TMap<int32, TArray<FLinearColor>> Probes;
 	const FString File = AOKSceneActor::LibraryDirectory() / TEXT("studio/map_environments.json");

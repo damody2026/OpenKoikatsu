@@ -772,7 +772,8 @@ void AOKSceneActor::UpdateItemLighting()
 			if (const FShown* S = Shown.Find(Object.Id); S && S->Component.IsValid())
 				if ((Light = Cast<ULightComponent>(S->Component.Get()))) { Intensity = Object.Light.Intensity / 4.f; SourceLight = &Object.Light; break; }
 	// The sky's ambient (Studio's ambient mode is Skybox: the sky controller updates the ambient probe) on the
-	// characters' unity_SHA*; without a sky, the character display's own ambient.
+	// scene renderers' unity_SHA*. Without a map or sky, native Studio's
+	// empty environment is zero, rather than the Maker display environment.
 	if (SkyShown != AmbientSky || Document->Map != AmbientMap) { AmbientSky = SkyShown; AmbientMap = Document->Map; AmbientLit.Reset(); }
 	FLinearColor SH[3];
 	TArray<FLinearColor> Higher = { FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,1) };
@@ -786,7 +787,9 @@ void AOKSceneActor::UpdateItemLighting()
 		SH[2] = Maker.Uniforms.FindRef(TEXT("unity_SHAb"));
 	}
     TArray<AKKPreviewActor*> AmbientPreviews;
-    for (const TPair<int32,FShown>& It:Shown) if(It.Value.Kind==EOKSceneObjectKind::Character && It.Value.Preview.IsValid()) AmbientPreviews.Add(It.Value.Preview.Get());
+    for (const TPair<int32,FShown>& It:Shown)
+        if ((It.Value.Kind==EOKSceneObjectKind::Character || It.Value.Kind==EOKSceneObjectKind::Item) && It.Value.Preview.IsValid())
+            AmbientPreviews.Add(It.Value.Preview.Get());
     for (const auto& MapPreview:ShownMapPreviews) if(MapPreview.IsValid()) AmbientPreviews.Add(MapPreview.Get());
     for (AKKPreviewActor* Preview:AmbientPreviews)
     {

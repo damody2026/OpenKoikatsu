@@ -9,6 +9,7 @@
 #include "OKSceneActor.h"
 #include "OKStudioGame.h"
 #include "OKStudioPose.h"
+#include "OKStudioImportSettings.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -501,15 +502,15 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		};
 		Document->Post.Background = Picture(TEXT("background"), TEXT("bg"));
 		Document->Post.Frame = Picture(TEXT("frame"), TEXT("frame"));
-		// Without a map, background picture or sky Studio's camera clears to its colour (Map.ReflectMapInfo: clearFlags
-		// Color). Measured from scene cards: sRGB (139, 180, 222) before the default filter.
+		// StudioScene initializes the colour-clearing main camera from EstData.BackColor.
+		// Its depth-only child camera's blue colour never clears the scene.
 		bool bSky = false;
 		E.TryGetBoolField(TEXT("sky"), bSky);
 		// SceneInfo.skyInfo: Studio's sky dome and its StudioSky pattern.
 		Document->Post.bSky = bSky;
 		Document->Post.SkyPattern = int32(E.GetNumberField(TEXT("sky_pattern")));
 		if (int32(Scene->GetNumberField(TEXT("map"))) < 0 && Document->Post.Background.IsEmpty() && !bSky)
-			Document->Post.BackgroundColor = FLinearColor(139.f / 255.f, 180.f / 255.f, 222.f / 255.f, 1.f);
+			Document->Post.BackgroundColor = OKStudioConfiguredClearColor();
 	}
 	// The Studio view the scene was saved with: a camera object, the active view unless a camera object is.
 	const TSharedPtr<FJsonObject>* Camera = nullptr;
