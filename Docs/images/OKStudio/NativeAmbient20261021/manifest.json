@@ -1,0 +1,119 @@
+{
+  "render_revision": "29f9ee3a0 (capture label 321c2e755+worktree; identical production sources)",
+  "kind": "actual UE capture; left source thumbnail / right UE",
+  "image_count": 14,
+  "images": [
+    {
+      "file": "koikatu_cs0000001.png",
+      "bytes": 848148,
+      "width": 1280,
+      "height": 360,
+      "sha256": "3cf6886baadc99fb10aad2c5e9082e81717cf034e17373bd6119a6e5e400b25f",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0000001.png"
+    },
+    {
+      "file": "koikatu_cs0000010.png",
+      "bytes": 833627,
+      "width": 1280,
+      "height": 360,
+      "sha256": "c9ea4b726d3bed6806d65b0ebcc1441d7ef75657a7b6586f21c8a91d67d37659",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0000010.png"
+    },
+    {
+      "file": "koikatu_cs0000059.png",
+      "bytes": 507625,
+      "width": 1280,
+      "height": 360,
+      "sha256": "1334f4c7dc6d40faa915023a094800c17159268acc6023b9b8d101d9a8c2c486",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0000059.png"
+    },
+    {
+      "file": "koikatu_cs0000633.png",
+      "bytes": 749234,
+      "width": 1280,
+      "height": 360,
+      "sha256": "a616382bf78e0e0004fb3057d41f801bd24c42b859a4c4af01afbed287e0294d",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0000633.png"
+    },
+    {
+      "file": "koikatu_cs0001268.png",
+      "bytes": 736220,
+      "width": 1280,
+      "height": 360,
+      "sha256": "e184a213f4ee0cc4301ac4b1fc4d1e89c3d8c0198e51b1e84a047681fde584ab",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0001268.png"
+    },
+    {
+      "file": "koikatu_cs0001901.png",
+      "bytes": 886507,
+      "width": 1280,
+      "height": 360,
+      "sha256": "2ad176d7ae778563b512b71e1cce0ab40c7d032a83545dc87aef142003359503",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0001901.png"
+    },
+    {
+      "file": "koikatu_cs0002534.png",
+      "bytes": 408697,
+      "width": 1280,
+      "height": 360,
+      "sha256": "21f078235944490be526d190da19d7fbab13dd8c860c580458eca1d2654e2819",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0002534.png"
+    },
+    {
+      "file": "koikatu_cs0003167.png",
+      "bytes": 718909,
+      "width": 1280,
+      "height": 360,
+      "sha256": "48930745c312fdab5a645c7cde3ea354f6eb2e09b146e7269efd99170a7f7604",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0003167.png"
+    },
+    {
+      "file": "koikatu_cs0003800.png",
+      "bytes": 744281,
+      "width": 1280,
+      "height": 360,
+      "sha256": "834cf2bf158651808a8ff307c17b1191d2cc6f55d1db33fed520056ecf7aa84d",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0003800.png"
+    },
+    {
+      "file": "koikatu_cs0004432.png",
+      "bytes": 747718,
+      "width": 1280,
+      "height": 360,
+      "sha256": "1ba0d62282bdc52200e4cc20e30eb99418f1a372c7d57b2f58bce7536f141132",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0004432.png"
+    },
+    {
+      "file": "koikatu_cs0005065.png",
+      "bytes": 802875,
+      "width": 1280,
+      "height": 360,
+      "sha256": "21f61f034fa6ec9647447fc86703aabd76a6f73b866aca89a1075855a03a174b",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0005065.png"
+    },
+    {
+      "file": "koikatu_cs0005698.png",
+      "bytes": 430507,
+      "width": 1280,
+      "height": 360,
+      "sha256": "29b6b5fa13a3997f91573ac503cfdba1265137e5ab55bbc508045a655c796dd2",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0005698.png"
+    },
+    {
+      "file": "koikatu_cs0006331.png",
+      "bytes": 741962,
+      "width": 1280,
+      "height": 360,
+      "sha256": "1745a4ccaa15f2ac9f49e77038c399bbf52e80515345db20b3ac3a76a43cad5b",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0006331.png"
+    },
+    {
+      "file": "koikatu_cs0006964.png",
+      "bytes": 429610,
+      "width": 1280,
+      "height": 360,
+      "sha256": "0d822b6397b69cc6e2bf95db8c93e32d5cf651dcd9961e0373b963a90daca693",
+      "source": "Saved/OKStudio/Verify-NativeFaceColorAcceptedAll/images/koikatu_cs0006964.png"
+    }
+  ]
+}
