@@ -333,12 +333,15 @@ public:
 	bool FollowEyeLookCamera(int32 Pattern = 1);
 	bool AdvanceEyeLook(float DeltaSeconds);
 	bool FollowHeadLookCamera(bool Enabled);
-	/** PhysX secondary dynamics is for the one-to-one interaction only. Each user (the interaction scene, a paired
-	 *  playback) adds itself while this character takes part and removes itself after; with no user the character
-	 *  keeps the built-in DynamicBone solver (crowd, street NPCs, gallery). */
+	/** Host solver (OKPhysXSecondary) for this character. Each user adds itself and removes itself after; with no
+	 *  user the character keeps the built-in DynamicBone solver. Users: the interaction scene, a paired playback,
+	 *  and the gallery physics menu (UseGalleryPhysics). Crowd and street NPCs never register. */
 	void AddPairPhysics();
 	void RemovePairPhysics();
+	/** One permanent user so the gallery physics menu applies to this character. Idempotent. */
+	void UseGalleryPhysics();
 	int32 PairPhysicsUsers=0;
+	bool bGalleryPhysics=false;
 	void UpdateHeadLookTarget();
 	bool bHeadLookFollowCamera=false;
     bool bHeadLookPoseDirty=false;

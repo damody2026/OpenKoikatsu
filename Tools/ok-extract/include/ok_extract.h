@@ -95,7 +95,7 @@ int32_t ok_unity_euler_rotate(const float* euler3,int32_t axis,float degrees,flo
 /* Timeline FK: Unity Euler degrees t (0..1) of the way from a3 to b3 along the shortest arc. */
 int32_t ok_unity_euler_slerp(const float* a3,const float* b3,float t,float* out3);
 int32_t ok_studio_pose_write(const char* path,const char* json,char* err,int32_t cap);
-/* PhysX secondary dynamics for this character: 1 = on (one-to-one interaction), 0 = built-in solver (default). */
+/* PhysX secondary dynamics for this character: 1 = host solver (gallery menu, one-to-one, paired playback), 0 = built-in (default). */
 int32_t ok_session_set_physx_secondary(OkSession* s,int32_t enabled);
 int32_t ok_head_look_error(OkSession* s,float* out);
 int32_t ok_static_interaction_frame(OkSession* s,float dt);

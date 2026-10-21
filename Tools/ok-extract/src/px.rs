@@ -225,9 +225,9 @@ pub(crate) fn solve(
 }
 
 thread_local! { static GROUP: Cell<u64> = const { Cell::new(0) }; }
-/// Whether the character being updated on this thread uses the host solver at all. PhysX secondary dynamics is for
-/// the one-to-one interaction only: every other character (crowd, street NPCs, gallery) keeps the built-in solver
-/// even while the host is registered and OKPhysXSecondary.Enabled is on. Set per session (`ok_session_set_physx_secondary`).
+/// Whether the character being updated on this thread uses the host solver at all. Set per session
+/// (`ok_session_set_physx_secondary`): the gallery physics menu, one-to-one interaction and paired playback turn it
+/// on. Crowd and street NPCs leave it off and keep the built-in solver even while OKPhysXSecondary.Enabled is on.
 thread_local! { static ALLOWED: Cell<bool> = const { Cell::new(false) }; }
 fn allowed() -> bool {
     // Diagnostic: OK_PHYSX_ALL_CHARACTERS=1 lets every character use the host solver (OK_Demo's global behaviour).
@@ -264,8 +264,8 @@ impl VerletTuning {
     /// Extra gravity displacement for one reference step of `step` seconds.
     pub fn gravity_step(&self, step: f32) -> [f32; 3] { [0.0, -self.gravity * step * step, 0.0] }
 }
-/// The tuning for hair/cloth/accessory chains of the character updated on this thread; identity for every character
-/// outside the one-to-one interaction (crowd, street NPCs, gallery stay as authored).
+/// The tuning for hair/cloth/accessory chains of the character updated on this thread; identity unless this session
+/// allows the host solver (gallery, one-to-one). Crowd and street NPCs stay as authored.
 pub(crate) fn verlet_tuning() -> VerletTuning {
     let get = TUNING.load(Ordering::Acquire);
     if get.is_null() || !allowed() { return VerletTuning::NONE; }

@@ -389,8 +389,9 @@ TSharedRef<SWidget> UOKGalleryWidget::RebuildWidget()
 	TimelineButton->OnClicked.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnEnterStudio);ShapeCol->AddChild(TimelineButton);
 	UButton* ModelApngSave=WidgetTree->ConstructWidget<UButton>();
 	UTextBlock* ModelApngLabel=WidgetTree->ConstructWidget<UTextBlock>();
-	ModelApngLabel->SetText(FText::FromString(TEXT("另存 APNG 新卡（原卡圖＋T-pose 三視圖）")));
+	ModelApngLabel->SetText(FText::FromString(TEXT("另存新檔")));
 	ModelApngSave->AddChild(ModelApngLabel);StylePoseButton(ModelApngSave);
+	ModelApngSave->SetToolTipText(FText::FromString(TEXT("另存 APNG 新卡：原卡圖 3 秒，加上 T-pose 三視圖各 1 秒。")));
 	ModelApngSave->OnClicked.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnSaveApng);
 	ShapeCol->AddChild(ModelApngSave);
 	OutfitCombo = WidgetTree->ConstructWidget<UOKComboBoxString>(UOKComboBoxString::StaticClass(), TEXT("OutfitCombo"));
@@ -678,8 +679,9 @@ TSharedRef<SWidget> UOKGalleryWidget::RebuildWidget()
 	Right->AddChild(Save);
 	UButton* ApngSave = WidgetTree->ConstructWidget<UButton>();
 	UTextBlock* ApngSaveText = WidgetTree->ConstructWidget<UTextBlock>();
-	ApngSaveText->SetText(FText::FromString(TEXT("另存 APNG 新卡（原卡圖＋T-pose 三視圖）")));
+	ApngSaveText->SetText(FText::FromString(TEXT("另存新檔")));
 	ApngSave->AddChild(ApngSaveText);
+	ApngSave->SetToolTipText(FText::FromString(TEXT("另存 APNG 新卡：原卡圖 3 秒，加上 T-pose 三視圖各 1 秒。")));
 	ApngSave->OnClicked.AddDynamic(static_cast<UOKCharacterController*>(this), &UOKCharacterController::OnSaveApng);
 	Right->AddChild(ApngSave);
 	Right->AddChild(OutfitNav);
@@ -1779,6 +1781,7 @@ void UOKCharacterController::FinishLoad3D(int32 Generation, FOkSession Session, 
  if(!Actor){SetLoadBusy(false);PreviewActor=StalePreview;StalePreview=nullptr;if(InspectorText)InspectorText->SetText(FText::FromString(TEXT("載入立體角色失敗：無法建立預覽")));return;}
  Actor->SetActorHiddenInGame(true);Actor->SetActorTickEnabled(false);
  Actor->Session=MoveTemp(Session);
+ Actor->UseGalleryPhysics();
  if(PreparedPhysics!=FVector2D(Selected.Body.BustSoftness,Selected.Body.BustWeight))Actor->Session.ApplyBodyPhysics(Selected.Body.BustSoftness,Selected.Body.BustWeight);
  const FString LoadedMods=EditorModsJson();if(LoadedMods!=PreparedMods)Actor->Session.ApplyEditorMods(LoadedMods,OutfitIndex);
  bEditorModsDirty=false;
@@ -2530,7 +2533,7 @@ void UOKCharacterController::LoadPartnerFromPath(const FString& Path){
                 G->bPartnerLoadInFlight=false;
                 if(!Job->bOk){G->ShowPairStatus(Job->Err.IsEmpty()?TEXT("請選擇有效的男性角色卡片"):Job->Err,true);return;}
                 auto* Partner=G->GetWorld()->SpawnActor<AKKPreviewActor>();if(!Partner){G->ShowPairStatus(TEXT("無法生成男性角色"),true);return;}
-                Partner->bPreserveSourceWorld=Female->bPreserveSourceWorld;Partner->SetActorTransform(Female->GetActorTransform());Partner->Session=MoveTemp(Job->Session);Partner->bShareIdenticalPose=bool(G->InteractionWidget);Partner->bUsePrivateGpuPlayback=bool(G->InteractionWidget);
+                Partner->bPreserveSourceWorld=Female->bPreserveSourceWorld;Partner->SetActorTransform(Female->GetActorTransform());Partner->Session=MoveTemp(Job->Session);Partner->UseGalleryPhysics();Partner->bShareIdenticalPose=bool(G->InteractionWidget);Partner->bUsePrivateGpuPlayback=bool(G->InteractionWidget);
                 FString Error;if(!Partner->LoadSession(Error)){Partner->Destroy();G->ShowPairStatus(Error,true);return;}
                 Partner->PreparePlaybackMaterials(false);
                 if(G->bStudioMode&&IsValid(G->PartnerActor))G->PartnerActor->Destroy();  // studio OnStopPair keeps partners
