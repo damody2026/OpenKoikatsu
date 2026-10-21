@@ -28,6 +28,7 @@ struct FOKStreetCartLine {
  FString ItemId, Size, Sweetness, Ice;
  bool ForHer = false;
  int32 Girl = INDEX_NONE; // ordered by another girl with them (the party): hers to eat, his to pay
+ bool HerOwn = false; // she ordered it for herself (her reply): hers to keep, never his gift to her
 };
 
 // A paid order the kitchen is preparing: it reaches the table OKStreetServeSeconds after the till (Economy.inl).
