@@ -135,7 +135,10 @@ pub struct SceneEffects {
     pub sun_shafts: bool, pub sun_threshold_color: Color, pub sun_color: Color,
     pub shadow: bool, pub face_normal: bool, pub face_shadow: bool,
     pub line_color_g: f32, pub ambient_shadow: Color, pub line_width_g: f32, pub ramp_g: i32, pub ambient_shadow_g: f32,
-    pub shader_type: i32,
+    // SceneInfo only serializes this field from 1.1.0.0. Older scenes
+    // retain the installed graphic setting; absence must not become mode 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shader_type: Option<i32>,
     /// SceneInfo.skyInfo (≥ 1.1.2.0, MessagePack {Enable, Pattern}): Studio's sky dome and its pattern.
     pub sky: bool, pub sky_pattern: i32,
     pub background: String, pub frame: String,
@@ -167,7 +170,7 @@ fn main_camera(r: &mut Reader, v: &Version) -> Result<(StudioCamera, SceneEffect
     if v.at_least("0.0.2") { e.shadow = r.bool()?; }
     if v.at_least("0.0.4") { e.face_normal = r.bool()?; e.face_shadow = r.bool()?; e.line_color_g = r.f32()?; e.ambient_shadow = r.json_color()?; }
     if v.at_least("0.0.5") { e.line_width_g = r.f32()?; e.ramp_g = r.i32()?; e.ambient_shadow_g = r.f32()?; }
-    if v.at_least("1.1.0.0") { e.shader_type = r.i32()?; }
+    if v.at_least("1.1.0.0") { e.shader_type = Some(r.i32()?); }
     if v.at_least("1.1.2.0") {
         let n = r.bytes_len("sky info")?;
         let bytes = r.take(n)?;
@@ -583,6 +586,25 @@ mod tests {
         assert!(Version::parse("1.1.2.1").at_least("1.1.1.0"));
         assert!(!Version::parse("0.0.8").at_least("0.0.9"));
         assert!(Version::parse("0.0.10") > Version::parse("0.0.9"));
+    }
+    #[test]
+    #[ignore = "base library: reads all fourteen Studio sample scene cards"]
+    fn sample_shader_mode_presence_matches_source_version() {
+        let samples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../Content/IndependentResources/base_v1/studio/samples");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(samples).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|s|s.to_str()) != Some("png") { continue; }
+            let scene = read(&std::fs::read(&path).unwrap()).unwrap();
+            let effects = scene.effects.as_ref().expect("sample has complete effect settings");
+            let saved = Version::parse(&scene.version).at_least("1.1.0.0");
+            assert_eq!(effects.shader_type.is_some(), saved, "{}", path.display());
+            let json = serde_json::to_value(effects).unwrap();
+            assert_eq!(json.get("shader_type").is_some(), saved, "{}", path.display());
+            checked += 1;
+        }
+        assert_eq!(checked, 14);
     }
     #[test]
     #[ignore = "installed game: parses the official scenes"]

@@ -3783,3 +3783,25 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜6964乾淨庫檢查會寫入追蹤的missing.txt**：LFS payload全核對後git clean斷言因前輪失敗CLI更新missing.txt而失敗。先將該輪缺口檔原樣留存Saved/OKStudio/6964-clean-missing-before-restoration.txt，再只還原自己測試寫入的該追蹤檔並重新核對。不可忽略dirty或把失敗證據刪掉。
 
 - **2026-10-21｜6964乾淨庫是sparse checkout**：提交後的驗證器假設Clean1268有Plugins實體來源檔而FileNotFound；該副本刻意只展開共用資源。改以git物件核對來源blob，並以git hash-object套用同一clean filter核對目前工作檔，而非將稀疏路徑不存在判成程式遺漏。多指令shell也須檢查每一步退出碼，不以最後一個git status的0掩蓋前面Python失敗。
+
+- **2026-10-21｜全場景畫面盤點不能以出圖成功代替畫面驗收**：前輪14/14代表載入及PNG完整性，3800連續載入景深模糊、6331材質及其他樣本色調差異仍存在。新輪先逐張檢視14圖並建立獨立問題清單。調查時數次猜測shader／spec／Saved路徑造成找不到檔案，應先用rg --files或Get-ChildItem確認實際位置，避免重複無效讀取。
+
+- **2026-10-21｜Studio匯入重用文件會沿用前景後製狀態**：Import只清Objects，遇3800的depth_aperture=0時略過啟用分支，前一景的DOF仍為true；背景色等中性／缺省值也可能沿用。修正於成功解析新來源後重設Post、MapTransform、Tracks、Duration與動畫時鐘，再套用新來源；加入污染文件與全新文件匯入結果一致的整合測試。不能用固定關景深或場景ID修補。
+
+- **2026-10-21｜舊Studio場景沒有shaderType欄位，不可把Rust預設0當成來源值**：前輪6964把SceneEffects的Default零值誤認為場景保存模式0。原作SceneInfo從1.1.0.0才讀取shaderType，舊版本初始化自Manager.Config.GraphicData.shaderType；3800原作實際讀回_KanoVerShift=1。改為Option並在未保存時省略JSON欄位，UE沿用卡片已錄的系統設定；新增14樣本版本與欄位存在性oracle。明確保存0仍必須保留。前輪虹膜色彩及AO修正證據有效，但shaderType來源判斷需以本輪更正為準。
+
+- **2026-10-21｜Studio錯套Gallery無陰影展示政策**：Config/DefaultGame.ini的CharacterDisplay.EnableShadows=False由AKKPreviewActor::LoadSession覆寫到Studio角色，共用材質綁定因此把來源_ShadowColor改白。原作3800實際材質為(0.8304498,0.8662278,0.9411765)，Rust來源資料也正確，故不能以改原始卡、材質色或調曝光修補。新增host層的可選照明覆寫，由Studio選擇保留來源材質照明，Gallery照舊使用自己的設定。
+
+- **2026-10-21｜頭髮UV通道修正不能冒充整體shader還原完成**：骨架／程序顯示路徑將原作UV1只留在UE通道2，共用父材質卻從通道1取樣；補上通道1，保留舊路徑通道2。實拍後3800變化很小，因目前顯示還有其他渲染路徑；不能只看程式接線就宣稱髮絲光澤完整恢復。另具名原作貼圖oracle確認3800光澤PNG誤差僅0.008689/255、最大6，來源取樣為Gamma，排除任意翻列／提高光澤貼圖亮度的猜測。
+
+- **2026-10-21｜CameraLightCtrl名稱不代表角色燈掛在相機下**：舊匯入器把charaLight旋轉直接套到相機子燈，且漏掉level2原生Directional Chara的固定local quaternion(0,0.939692676,-0.342020094,0)，即Euler(40,180,0)。原作LightCalc.Reflect旋轉的是場景根Light Chara；以3800保存旋轉獨立計算towards=(-0.30333951,0.19080912,-0.93358302)，和新Rust D3D11探針讀回GPU常數一致。修正為world-root及root*child，加入光向及改相機不帶動燈的整合測試；並依Unity HDR尾段線性化光源色／強度。未靠場景專用offset或曝光補償。中間VisualAuditAllScenes回歸在9張後由本輪確定PID中止，以建置該根因修正；保留部分圖與FAIL紀錄，不能報成14/14。
+
+- **2026-10-21｜Studio地圖環境光不是人物編輯器環境光，也不是單一空場景常數**：原作3800／6331實際AmbientProbe分別來自courtyard／bushitu場景的RenderSettings.m_AmbientProbe，與GPU／renderer讀回27係數各最大差約8.21e-10／1.01e-9。空Studio初始化反而是Funly天空且probe為零，不能複製一張場景的量測值到全部場景。新增Rust通用轉換，從共用清單所有地圖的原始場景讀取27係數，輸出72筆map_environments.json；依地圖選用，保留顯式天空原有流程。既有shader讀SHAr/g/b的路徑先修正，不宣稱所有SH高階／反射細節都已還原。
+
+- **2026-10-21｜共用float4更新不能只送Vector**：烘焙材質以Vector的RGB與獨立__A scalar組成float4；SetSharedVectorParameter只更新Vector，使角色燈alpha與環境光常數分量可能停留舊值。一起更新有宣告的__A，並驗證實際角色材質的四分量同步。Native GPU常數與UE最終材質snapshot分開保存，不能把建立時的預設光向log當成最後顯示的光向。
+
+- **2026-10-21｜完整Rust測試的並行失敗需隔離查證**：本輪預設並行跑出418 PASS／2 FAIL，分別為bundle path cache的Arc identity及portable clothing rules的not_bot；兩項在獨立程序各PASS，完整單執行緒重跑420 PASS／0 FAIL／472 ignored。保留三組log，不把首輪失敗改寫為全過，也不為Studio修正擅改無關功能。現有測試會碰程序環境／共用來源快取，完整驗收採明確的單執行緒執行方式；不能只重跑失敗兩項就宣稱整套通過。
+
+- **2026-10-21｜乾淨庫命令須以實際cwd解析**：已在Clean1268工作目錄內又指定git -C Saved/OKStudio/Clean1268，造成路徑重複且fetch未執行。改為該目錄內直接git fetch／merge並檢查每一步退出碼。CLI寫入的missing.txt先留存本輪證據，再只還原自己的測試輸出；不可讓後續status掩蓋前面操作失敗。
+
+- **2026-10-21｜保留來源材質陰影不可為每個Studio道具分配角色陰影RT**：初版把CharacterDisplayShadowsOverride=true套到所有非map Actor。4432大量道具因此各分配2個1024² RGBA32f（約32MiB），完整回歸升到50GB且每幀約5秒。道具既有bStudioItemShading已能保留材質陰影，不應因此啟用角色擷取。修正由Studio明確選擇角色true／道具false，讓道具共用既有4×4中性depth；新增實際載入道具的RT尺寸及陰影政策整合檢查。該輪只完成10張後核對PID中止，保留FAIL與50GB證據；必須重建後重新跑全14景，不能把前輪結果當成最終通過。

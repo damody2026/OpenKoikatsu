@@ -36,6 +36,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "Components/PoseableMeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "ok_extract.h"
 #include "KKOkAnimation.h"
 #include "OKAnimationAssets.h"
@@ -55,6 +56,8 @@
 #include "Widgets/Views/SListView.h"
 #include "UObject/GarbageCollection.h"
 #include "RenderingThread.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 namespace
 {
@@ -1749,6 +1752,41 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 			FString Error;
 			Self->UpdateViewer();
 			const UCameraComponent* Cam = Self->Viewer->GetCameraComponent();
+			const FString MaterialAudit = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_MATERIAL_AUDIT"));
+			if (!MaterialAudit.IsEmpty())
+			{
+				TArray<TSharedPtr<FJsonValue>> Rows;
+				for (const FOKSceneObject& Object : Self->Document->Objects)
+				{
+					const AKKPreviewActor* Actor = Self->SceneActor->PreviewOf(Object.Id);
+					if (!Actor || Object.Kind != EOKSceneObjectKind::Character) continue;
+					for (const FKKLoadedPart& Part : Actor->Parts)
+					{
+						OkMeshView View{};
+						if (!Part.SurfaceMat || !Actor->Session.PartAt(Part.SessionIndex, View) || (View.shader_kind != 1 && View.shader_kind != 10)) continue;
+						auto Row = MakeShared<FJsonObject>();
+						Row->SetNumberField(TEXT("object"), Object.Id);
+						Row->SetStringField(TEXT("mesh"), UTF8_TO_TCHAR(View.name));
+						Row->SetStringField(TEXT("material"), Part.SurfaceMat->GetPathName());
+						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST") })
+						{
+							FLinearColor Value;
+							if (!Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(Key), Value)) continue;
+							TArray<TSharedPtr<FJsonValue>> Components;
+							for (int32 C = 0; C < 4; ++C) Components.Add(MakeShared<FJsonValueNumber>((&Value.R)[C]));
+							Row->SetArrayField(Key, Components);
+							float Alpha = 0.f;
+							const FString AlphaKey = FString(Key) + TEXT("__A");
+							if (Part.SurfaceMat->GetScalarParameterValue(FMaterialParameterInfo(*AlphaKey), Alpha)) Row->SetNumberField(AlphaKey, Alpha);
+						}
+						Rows.Add(MakeShared<FJsonValueObject>(Row));
+					}
+				}
+				FString Json;
+				FJsonSerializer::Serialize(Rows, TJsonWriterFactory<>::Create(&Json));
+				IFileManager::Get().MakeDirectory(*MaterialAudit, true);
+				FFileHelper::SaveStringToFile(Json, *(MaterialAudit / (FPaths::GetBaseFilename(Path) + TEXT(".materials.json"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+			}
 			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POSE_DUMP")).IsEmpty())
 				UE_LOG(LogTemp, Display, TEXT("OK studio camera: view=%s horizontal_fov=%.9f aspect=%.9f active=%d"), *Cam->GetComponentTransform().ToString(), Cam->FieldOfView, Cam->AspectRatio, Self->Document->ActiveCamera);
 			FImage Original;
@@ -3208,6 +3246,47 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 	Step(TEXT("kstudio import"));
 	{
 		const FString Samples = AOKSceneActor::LibraryDirectory() / TEXT("studio/samples");
+		// Import into an existing document must equal a fresh import, including
+		// neutral source values that do not enter the positive-effect branches.
+		const FString NeutralPng = Samples / TEXT("koikatu_cs0003800.png");
+		if (FPaths::FileExists(NeutralPng))
+		{
+			UOKSceneDocument* Fresh = NewObject<UOKSceneDocument>(this);
+			UOKSceneDocument* Reused = NewObject<UOKSceneDocument>(this);
+			Reused->Post.bDepthOfField = true;
+			Reused->Post.FocalDistance = 10.f;
+			Reused->Post.BackgroundColor = FLinearColor::Red;
+			Reused->Post.Exposure = -3.f;
+			Reused->Duration = 99.f;
+			Reused->Tracks.AddDefaulted();
+			Reused->MapTransform.SetLocation(FVector(100.f));
+			FOKStudioImport::FReport FreshReport, ReusedReport;
+			FString ImportError;
+			const FString CardDir = FPaths::ProjectSavedDir() / TEXT("OKStudio/import_reset_selftest_cards");
+			const bool bFresh = FOKStudioImport::Import(NeutralPng, Fresh, CardDir, FreshReport, ImportError);
+			const bool bReused = FOKStudioImport::Import(NeutralPng, Reused, CardDir, ReusedReport, ImportError);
+			Check(bFresh && bReused && Fresh->ToJson() == Reused->ToJson() && !Reused->Post.bDepthOfField,
+				TEXT("scene import clears previous DOF, background, exposure and timeline state"));
+			const FOKSceneObject* SourceLight = Fresh->Objects.FindByPredicate([](const FOKSceneObject& O) {
+				return O.Kind == EOKSceneObjectKind::Light && O.Light.bCharactersOnly;
+			});
+			if (bFresh && SourceLight)
+			{
+				const FVector F = Fresh->WorldTransform(SourceLight->Id).GetRotation().GetForwardVector();
+				const FVector Towards(F.X, -F.Z, -F.Y);
+				const FTransform LightBefore = Fresh->WorldTransform(SourceLight->Id);
+				Fresh->Find(Fresh->ActiveCamera)->Transform.SetRotation(FQuat(FVector::UpVector, 1.f));
+				Check(SourceLight->Parent == -1 && Towards.Equals(FVector(-0.3033395, 0.190809235, -0.9335829), 0.00001)
+					&& Fresh->WorldTransform(SourceLight->Id).Equals(LightBefore),
+					TEXT("native Studio light direction includes authored child rotation and is independent of camera"));
+			}
+			else Check(false, TEXT("native Studio character light fixture exists"));
+			FLinearColor Red, Green, Blue;
+			Check(OKStudioMapAmbient(20, Red, Green, Blue)
+				&& Red.Equals(FLinearColor(0.007252015f, -0.00568231149f, -0.0125606805f, 0.169953629f), 0.000001f)
+				&& Green.Equals(FLinearColor(0.0114032608f, 0.04134383f, -0.0197532624f, 0.211334154f), 0.000001f),
+				TEXT("map ambient packed coefficients match the native renderer GPU buffer"));
+		}
 		const FString Png = Samples / TEXT("koikatu_cs0000059.png");
 		if (FPaths::FileExists(Png))
 		{
@@ -3218,12 +3297,54 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 			const bool bImported = FOKStudioImport::Import(Png, Document, CardDir, Report, ImportError);
 			SyncNow();
 			int32 Built = 0, Chars = 0, Items = 0, ItemsBuilt = 0;
+			int32 AuthoredHairMaterials = 0;
+			bool bStudioLighting = true;
+			float HairShadowError = 0.f;
+			float LightAlphaError = 0.f;
+			bool bItemsUseSharedNeutralDepth = true;
 			for (const FOKSceneObject& O : Document->Objects)
 			{
 				const AKKPreviewActor* PO = SceneActor->PreviewOf(O.Id);
 				if (O.Kind == EOKSceneObjectKind::Character) { ++Chars; if (PO && PO->Session.PartCount() > 0) ++Built; }
-				if (O.Kind == EOKSceneObjectKind::Item) { ++Items; if (PO && PO->Session.PartCount() > 0) ++ItemsBuilt; }
+				if (O.Kind == EOKSceneObjectKind::Character && PO)
+				{
+					bStudioLighting &= PO->bCharacterDisplayShadows && PO->CharacterDisplayShadowsOverride.IsSet();
+					for (const FKKLoadedPart& Part : PO->Parts)
+					{
+						OkMeshView V{};
+						if (!Part.SurfaceMat || !PO->Session.PartAt(Part.SessionIndex, V) || (V.shader_kind != 1 && V.shader_kind != 10)) continue;
+						FLinearColor Actual;
+						if (!Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(TEXT("_ShadowColor")), Actual)) continue;
+						++AuthoredHairMaterials;
+						FLinearColor LightColor;
+						float LightAlpha = 0.f;
+						if (Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(TEXT("_LightColor0")), LightColor)
+							&& Part.SurfaceMat->GetScalarParameterValue(FMaterialParameterInfo(TEXT("_LightColor0__A")), LightAlpha))
+							LightAlphaError = FMath::Max(LightAlphaError, FMath::Abs(LightColor.A - LightAlpha));
+						for (int32 C = 0; C < 3; ++C)
+						{
+							const float S = V.shadow_color[C];
+							const float Expected = S <= 0.04045f ? S / 12.92f : FMath::Pow((S + 0.055f) / 1.055f, 2.4f);
+							HairShadowError = FMath::Max(HairShadowError, FMath::Abs((&Actual.R)[C] - Expected));
+						}
+					}
+				}
+				if (O.Kind == EOKSceneObjectKind::Item)
+				{
+					++Items;
+					if (PO && PO->Session.PartCount() > 0)
+					{
+						++ItemsBuilt;
+						bItemsUseSharedNeutralDepth &= !PO->bCharacterDisplayShadows && PO->bStudioItemShading;
+						for (const auto& Target : PO->ToonShadowTargets)
+							bItemsUseSharedNeutralDepth &= Target && Target->SizeX == 4 && Target->SizeY == 4;
+					}
+				}
 			}
+			Check(bStudioLighting && AuthoredHairMaterials > 0 && HairShadowError < 0.0001f,
+				FString::Printf(TEXT("Studio retains native hair shadow colours independently of Gallery: %d materials, error %.7f"), AuthoredHairMaterials, HairShadowError));
+			Check(AuthoredHairMaterials > 0 && LightAlphaError < 0.0001f, TEXT("shared float4 lighting updates keep shader alpha synchronized"));
+			Check(ItemsBuilt > 0 && bItemsUseSharedNeutralDepth, TEXT("Studio items retain authored shading without per-item character depth targets"));
 			Check(bImported && Chars == Report.Characters && Report.CharacterCards == Report.Characters && Built == Chars && Chars > 0,
 				FString::Printf(TEXT("KStudio import: %d characters, %d OK cards, %d shown %s"), Chars, Report.CharacterCards, Built, *ImportError));
 			Check(bImported && Items == Report.CatalogItems && ItemsBuilt == Items, FString::Printf(TEXT("KStudio import: %d of %d items from the catalogue, %d shown; map %d"), Report.CatalogItems, Report.Items, ItemsBuilt, Report.Map));

@@ -38,6 +38,10 @@ UMaterialInterface* OKStudioSkyMaterial(int32 No, FString& OutError);
  */
 bool OKStudioSkyAmbient(int32 No, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb);
 
+/** Baked RenderSettings.m_AmbientProbe of a map scene, packed as Unity's
+ * SHAr/g/b. Independent of the character maker's display environment. */
+bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb);
+
 /** A sky body's direction (`_SunPosition`, `_MoonPosition` of pattern `No`) in UE axes; false when unknown. */
 bool OKStudioSkyBodyDirection(int32 No, const FString& Body, FVector& OutDirection);
 

@@ -15710,6 +15710,28 @@ mod tests {
     }
 
     #[test]
+    #[ignore="native hair texture readback: OK_HAIR_CARD, OK_HAIR_MESH, OK_HAIR_NATIVE_GLOSS"]
+    fn selected_hair_gloss_matches_native_input() {
+        let game=crate::test_support::game_path("");
+        let card=std::path::PathBuf::from(std::env::var("OK_HAIR_CARD").expect("OK_HAIR_CARD"));
+        let mesh=std::env::var("OK_HAIR_MESH").expect("OK_HAIR_MESH");
+        let native=std::env::var("OK_HAIR_NATIVE_GLOSS").expect("OK_HAIR_NATIVE_GLOSS");
+        let session=crate::session::open(&game,Some(&card),0).unwrap();
+        let part=session.parts.iter().find(|p|p.name==mesh).expect("selected native renderer");
+        let ours=crate::teximg::load_from_memory(part.hair_gloss.as_ref().expect("selected gloss texture")).unwrap().to_rgba8();
+        let theirs=image::open(native).unwrap().to_rgba8();
+        assert_eq!(ours.dimensions(),theirs.dimensions());
+        let mut total=0u64;
+        let mut maximum=0u8;
+        for (a,b) in ours.pixels().zip(theirs.pixels()) {
+            for c in 0..3 {let d=a[c].abs_diff(b[c]);total+=u64::from(d);maximum=maximum.max(d);}
+        }
+        let mae=total as f64/(ours.width() as f64*ours.height() as f64*3.);
+        eprintln!("native hair gloss mesh={} RGB MAE={mae} max={maximum} UV0={} UV1={}",part.name,part.uvs.len(),part.uv2.len());
+        assert!(mae<2. && maximum<=8,"native gloss input differs: MAE={mae} max={maximum}");
+    }
+
+    #[test]
     #[ignore="native selected-card create_eye readback: OK_IRIS_CARD and OK_IRIS_NATIVE_PREFIX"]
     fn selected_iris_create_rt_matches_native() {
         let game=crate::test_support::game_path("");

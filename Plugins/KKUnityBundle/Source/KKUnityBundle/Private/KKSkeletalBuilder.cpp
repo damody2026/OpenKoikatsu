@@ -769,8 +769,9 @@ static USkeletalMesh* OKBuildSkeletalMeshUncached(FOkSession& Session, const OkM
 	RD->CurrentFirstLODIdx = 0;
 	RD->PendingFirstLODIdx = 0;
 
-	// Skin uses independent UV1/UV2/UV3; face retains all four streams. Hair gloss
-	// keeps Unity UV1 independently at UE TEXCOORD2.
+	// Skin uses independent UV1/UV2/UV3; face retains all four streams. Shared
+	// hair parents read Unity UV1 at TEXCOORD1; legacy preview also uses TEXCOORD2.
+	const bool bHairGloss = View.shader_kind == 1 || View.shader_kind == 10;
 	const bool bBodyOverlay = View.role && FCStringAnsi::Stricmp(View.role, "body") == 0;
 	const bool bFaceOverlay=View.name && FCStringAnsi::Stricmp(View.name,"cf_O_face")==0 && (View.shader_kind==5 || View.shader_kind==7);
 	// main_eye samples the two authored highlight coordinates at TEXCOORD1/2.
@@ -873,7 +874,8 @@ static USkeletalMesh* OKBuildSkeletalMeshUncached(FOkSession& Session, const OkM
 		LOD->StaticVertexBuffers.StaticMeshVertexBuffer.SetVertexUV(v, 0, UV);
 		if (NumUV > 1)
 		{
-			const float* Source = (bBodyOverlay || bFaceOverlay || bEyeOverlay) ? View.uv2 : View.uv4;
+			const float* Source = (bBodyOverlay || bFaceOverlay || bEyeOverlay || bHairGloss) ? View.uv2 : View.uv4;
+			if (!Source && bHairGloss) Source = View.uvs;
 			const float* U4 = Source ? Source + v * 2 : nullptr;
 			LOD->StaticVertexBuffers.StaticMeshVertexBuffer.SetVertexUV(
 				v, 1, U4 ? FVector2f(U4[0], 1.0f - U4[1]) : FVector2f(0, 0));

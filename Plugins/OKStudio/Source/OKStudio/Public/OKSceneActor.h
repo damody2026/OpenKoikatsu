@@ -102,6 +102,7 @@ public:
 	/** The sky's ambient light on the characters (unity_SHAr/g/b): the sky pattern it was written for (-1: the
 	 *  character display's own) and the characters that have it. */
 	int32 AmbientSky = -1;
+	int32 AmbientMap = -1;
 	TSet<TWeakObjectPtr<AKKPreviewActor>> AmbientLit;
 	/** Stands the scene's background image (Post.Background) behind everything in the view `View` with horizontal field of
 	 * view `Fov` (degrees), filling it like Studio's BackgroundCtrl; hidden without a background. */

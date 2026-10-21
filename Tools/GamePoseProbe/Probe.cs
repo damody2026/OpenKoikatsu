@@ -43,7 +43,11 @@ public sealed partial class GamePoseProbe : BaseUnityPlugin
         elapsed += Time.unscaledDeltaTime;
         if (!started && elapsed > 10f) {
             Studio.Studio studio = UnityEngine.Object.FindObjectOfType<Studio.Studio>();
-            if (studio != null) { started = true; StartCoroutine(Run()); }
+            if (studio != null) {
+                started = true;
+                string auditScene = Environment.GetEnvironmentVariable("OK_PROBE_STUDIO_SCENE");
+                StartCoroutine(String.IsNullOrEmpty(auditScene) ? Run() : AuditStudioScene(studio, auditScene));
+            }
         }
         if (!finished && elapsed > 180f) {
             finished = true; Save(new Dump { error = "timeout before probe completion" }); Application.Quit();
