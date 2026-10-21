@@ -3917,3 +3917,4 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - 2026-10-21：地圖貼圖補錄仍經過完整 mesh 路徑，且外部貼圖逐名重讀相同來源 bundle；多次中止的全量日誌不算通過。改成只走原生 renderer/material PPtr，外部貼圖使用既有 size/mtime 路徑快取。驗收聚焦全部14樣本使用的8張地圖；工具省略清單仍可處理完整 catalogue。
 - 2026-10-21：新增 sampler fallback 直接把不存在的本地名稱當外部貼圖，舊 OK 卡雜湊雖相同，完整／乾淨庫仍各報 gaps=5，不能當成通過。改為重播時先確認有已記錄的 dependency_texture_model，沒有則保留來源 None；加入不存在名稱不增加 misses 的回歸斷言，再重跑兩庫 cardcheck。失敗日誌保留 full-cardcheck.log／clean-cardcheck.log。
 - 2026-10-21：補負向 sampler 斷言時直接存取 ModelView 私有 parsed 欄位，Rust 測試編譯 E0616；改用既有 library token parser API，不放寬欄位可見度。保留 rust-card-compat-serial.log，修正後再跑。
+- 2026-10-21：LFS 批次驗證首輪未用 `git ls-files -z`，含非 ASCII 路徑被 Git 引號轉義，cat-file 回傳 missing；改用 NUL 分隔原始 UTF-8 路徑，716 個 payload 全核 SHA。進度更新亦曾誤報12景，實際只有10個PNG；已更正，後續僅按PNG及 pictured 記錄計數。

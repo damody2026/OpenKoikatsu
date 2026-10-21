@@ -43,3 +43,11 @@ ok-extract D:/KoikatuSunshine --oklib studio-standard-textures Content/Independe
 最新 Rust 全套 422 PASS／0 FAIL／477 ignored；另跑上述來源重播斷言 1 PASS。7 項 Studio 整合測試、9 項 Automation 全通過，LUT 父材質 Windows cook 通過。完整庫與乾淨資源 checkout 的原卡 `kks-verify` 各 MATCH；既有 OK 卡的 recorded／closed／live digest 兩庫皆相同，均 1 MATCH／0 DIFFERENT、gaps=0、game_reads=0。原卡驗證仍使用來源 fallback，不宣稱原卡完全離線。
 
 首次舊卡檢查雖 digest 相同但 gaps=5，已保留失敗證據；修正為只有已記錄外部依賴的名稱才走 sampler fallback 後重驗通過。
+
+14 景最新出圖全部通過 PNG 解碼／CRC、尺寸及 SHA 檢查，已目視以下總覽。每格左為歷史保存縮圖，右為最新 UE；歷史縮圖與目前原生重載可能不同，不能用總覽證明逐像素還原。4432 天空與 6331 色調等既存差異仍保留，`all_visual_differences_resolved=false`。
+
+![14 景實拍總覽](images/OKStudio/LightingLut20261021/all-14-scenes.png)
+
+最後 Editor／Game 建置分別 31.08／42.67 秒成功。乾淨資源 checkout 的 617 個模型及全部 716 個 LFS payload（8,649,622,250 bytes）逐一核對提交 SHA，最後 clean。驗證期間寫出的 missing.txt 先留存證據，再還原本輪原值。
+
+完整測試與數值清單見 [驗收資料](images/OKStudio/LightingLut20261021/validation.json)；色票參照與原生輸入檔雜湊見 [來源紀錄](images/OKStudio/LightingLut20261021/native-grade-reference.json)。

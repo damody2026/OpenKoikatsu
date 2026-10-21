@@ -20,5 +20,26 @@
       "Saved\\OKStudio\\LightingLut20261021\\StaticSamplerFinal\\images\\koikatu_cs0001268.png"
     ],
     "note": "native and UE animation phases may differ; background/color comparison only"
+  },
+  {
+    "scene": "all14",
+    "image": "Docs/images/OKStudio/LightingLut20261021/all-14-scenes.png",
+    "sha256": "a13ca678b3e3a985175611253560fd28473b1eb93d2639b92c6fa75043e424b5",
+    "sources": [
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0000001.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0000010.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0000059.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0000633.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0001268.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0001901.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0002534.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0003167.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0003800.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0004432.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0005065.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0005698.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0006331.png",
+      "Saved/OKStudio/Verify-LightingLutAccepted/images/koikatu_cs0006964.png"
+    ]
   }
 ]

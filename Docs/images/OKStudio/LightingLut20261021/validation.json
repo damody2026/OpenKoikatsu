@@ -1,0 +1,152 @@
+{
+  "scope": "native capture timing, display gamma, source 32-cube LUT and Standard map lighting inputs",
+  "implementation_commit": "7a0c11021970bc529f18da0bb309c8bd981561b2",
+  "all_required_checks_passed": true,
+  "all_visual_differences_resolved": false,
+  "rust": {
+    "passed": 422,
+    "failed": 0,
+    "ignored": 477
+  },
+  "studio_integration_passed": 7,
+  "automation_passed": 9,
+  "grade": {
+    "samples": 43,
+    "max_linear_error": 0.0166015625,
+    "max_display_error_bytes": 4,
+    "native_grid_fixture_max_error": 4.871711783982491e-10,
+    "final_editor_runtime_passed": true
+  },
+  "standard_maps": {
+    "bundles": 8,
+    "texture_names": 616,
+    "normal_parts_gymnasium": 78,
+    "normal_parts_lockerroom": 54,
+    "absence_query_regression_passed": true
+  },
+  "cook": {
+    "source_grade_parent": "Windows",
+    "passed": true
+  },
+  "builds": {
+    "Editor": true,
+    "Game": true
+  },
+  "resources": {
+    "clean_checkout": true,
+    "models": 617,
+    "lfs_payloads": 716,
+    "lfs_bytes": 8649622250
+  },
+  "card_regression": {
+    "full": "MATCH gaps=0 game_reads=0",
+    "clean": "MATCH gaps=0 game_reads=0",
+    "original_cards": "MATCH both; source fallback still used"
+  },
+  "images": [
+    {
+      "scene": "koikatu_cs0000001",
+      "bytes": 835037,
+      "width": 1280,
+      "height": 360,
+      "sha256": "d14a258240444f486a2e0c904ed2f2a889d44db7e0955201f035618b65e000f9"
+    },
+    {
+      "scene": "koikatu_cs0000010",
+      "bytes": 810682,
+      "width": 1280,
+      "height": 360,
+      "sha256": "a3147edb8444fdb4b0d9e827e04e389f39f92c9678bdf26308dbb4bbcd95b7e5"
+    },
+    {
+      "scene": "koikatu_cs0000059",
+      "bytes": 496523,
+      "width": 1280,
+      "height": 360,
+      "sha256": "0fc741ffb94b6109ca6f4904192064205338aab1d74fe6afe808ca26c0f6ab38"
+    },
+    {
+      "scene": "koikatu_cs0000633",
+      "bytes": 745896,
+      "width": 1280,
+      "height": 360,
+      "sha256": "d02409e37b30faed4918e63cd66c7f2063e2b612abaa576bf00c62b0cb8881a5"
+    },
+    {
+      "scene": "koikatu_cs0001268",
+      "bytes": 780345,
+      "width": 1280,
+      "height": 360,
+      "sha256": "a86a4b455e2c4d8ded26e03ed3cf77a9df4e7f4456f8536d0b3d02a23694c49a"
+    },
+    {
+      "scene": "koikatu_cs0001901",
+      "bytes": 871328,
+      "width": 1280,
+      "height": 360,
+      "sha256": "9a42c9858c37f6d514e1edb6f95eabc2b4a9770035bdc6ffb6e17ca2ebe034d1"
+    },
+    {
+      "scene": "koikatu_cs0002534",
+      "bytes": 250869,
+      "width": 1280,
+      "height": 360,
+      "sha256": "e7d371a8f56942980e7edcdbf6a5199ddd848d7733026a82a42219ee2b265adf"
+    },
+    {
+      "scene": "koikatu_cs0003167",
+      "bytes": 692748,
+      "width": 1280,
+      "height": 360,
+      "sha256": "b27523486f4d04a3f6659fb9229222a78ddb3a934d7b58952cf4df62fa487437"
+    },
+    {
+      "scene": "koikatu_cs0003800",
+      "bytes": 761190,
+      "width": 1280,
+      "height": 360,
+      "sha256": "0368f7cb4da75b1fef34eb25b0fbbe732f67f3e9c658d3336bee88318ea438f4"
+    },
+    {
+      "scene": "koikatu_cs0004432",
+      "bytes": 738462,
+      "width": 1280,
+      "height": 360,
+      "sha256": "97336b42690f10f3378dc73506db58f9782f267a84b15b5ed7d896fc75f54def"
+    },
+    {
+      "scene": "koikatu_cs0005065",
+      "bytes": 790746,
+      "width": 1280,
+      "height": 360,
+      "sha256": "082b4549de67343756cfe15ad0ec94af19f8110c4483ea877013fcab7bbf74e8"
+    },
+    {
+      "scene": "koikatu_cs0005698",
+      "bytes": 281709,
+      "width": 1280,
+      "height": 360,
+      "sha256": "b4e6bffb240d20d01f4f1ae4013568dfa2dd3ba849962581ec5e8ef1c422ef96"
+    },
+    {
+      "scene": "koikatu_cs0006331",
+      "bytes": 704838,
+      "width": 1280,
+      "height": 360,
+      "sha256": "96ca81b1196239d51a49d043992400f1e376404153979f1e65ba5079a7b673e7"
+    },
+    {
+      "scene": "koikatu_cs0006964",
+      "bytes": 471489,
+      "width": 1280,
+      "height": 360,
+      "sha256": "3643ff02fe78b9d38082da19bf756f2d5a13c0cc4ef24b568a2d85193c65f237"
+    }
+  ],
+  "native_reference_limit": "0059 native reload is black, excluded as a valid visual golden",
+  "remaining_visual_differences": [
+    "4432 sky",
+    "6331 color/shader differences",
+    "native versus UE background brightness and texture filtering"
+  ]
+}
