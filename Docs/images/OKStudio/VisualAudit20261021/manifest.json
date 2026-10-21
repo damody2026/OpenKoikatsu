@@ -1,0 +1,66 @@
+{
+  "format": "actual-render-comparison-1",
+  "notes": "Actual source thumbnail/native camera and UE renders. Only crop, proportional resizing, placement and labels. No synthetic images or retouching.",
+  "images": [
+    {
+      "scene": "3800",
+      "file": "3800-comparison.png",
+      "sha256": "5b8469c3dd68bcf0006a374b3b1d2fcfc824172bf726d8aa2725468b00846d4e",
+      "dimensions": [
+        1920,
+        410
+      ],
+      "iend_at_eof": true,
+      "inputs": [
+        {
+          "path": "Saved/OKStudio/VisualAudit20261021/Baseline/images/koikatu_cs0003800.png",
+          "sha256": "87f1cc628faf4811b58a03451b03b7b4f4aae8081b39e61653c514e542753bcc"
+        },
+        {
+          "path": "Saved/OKStudio/Verify-VisualAuditAcceptedAll/images/koikatu_cs0003800.png",
+          "sha256": "314092d27ed9519f0625c4b662add9d2a5151382b214cc610581e2f1b222337d"
+        }
+      ]
+    },
+    {
+      "scene": "6331",
+      "file": "6331-comparison.png",
+      "sha256": "84dc0653d632f1a3f7f2ac69c3245a35ed43ad5859b205580e26623997385c9f",
+      "dimensions": [
+        1920,
+        410
+      ],
+      "iend_at_eof": true,
+      "inputs": [
+        {
+          "path": "Saved/OKStudio/VisualAudit20261021/Baseline/images/koikatu_cs0006331.png",
+          "sha256": "aee3b9e537cc6c7b7669eb7d25d33106a2caab2ee4c46c691eaa620255ac43e0"
+        },
+        {
+          "path": "Saved/OKStudio/Verify-VisualAuditAcceptedAll/images/koikatu_cs0006331.png",
+          "sha256": "0228ca0ab3e3c2db8b503ce126190a8cacb1d74cf93ef087742d4fd52d2870e7"
+        }
+      ]
+    },
+    {
+      "scene": "3800",
+      "file": "3800-native-runtime.png",
+      "sha256": "c1810443950ed3acd96e212d9f57f213e4c1c3c40856c7fc22333f8f640552a4",
+      "dimensions": [
+        1280,
+        410
+      ],
+      "iend_at_eof": true,
+      "inputs": [
+        {
+          "path": "Saved/Tests/VisualAuditNativeFinal/Scene1.png",
+          "sha256": "3724827911879b479bad1c82028daf9cef3ef9b9c410f1233e063b2de82e7adc"
+        },
+        {
+          "path": "Saved/OKStudio/Verify-VisualAuditAcceptedAll/images/koikatu_cs0003800.png",
+          "sha256": "314092d27ed9519f0625c4b662add9d2a5151382b214cc610581e2f1b222337d"
+        }
+      ]
+    }
+  ]
+}
