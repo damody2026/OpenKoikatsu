@@ -1846,7 +1846,13 @@ impl ParsedBundle {
         // names. Follow the recorded dependency outside that local guard,
         // just as decode_tex does for the image itself.
         self.memo_texture("texture_sampling_named",name,||self.texture_sampling_named_unity(name))
-            .or_else(||self.dependency_texture_bundle(name)?.texture_sampling_named(name))
+            .or_else(|| {
+                // A missing local sampler is not evidence of an external
+                // texture. Older cards deliberately omit queries for names
+                // proven absent by their texture directory.
+                if self.library_model() && !crate::oklib::has_record(self.lib.as_ref(),"dependency_texture_model",name.to_ascii_lowercase().as_str()) {return None;}
+                self.dependency_texture_bundle(name)?.texture_sampling_named(name)
+            })
     }
     pub fn skeleton(&self,path_id:i64)->Option<crate::pose::Skeleton> {self.memo("skeleton",&path_id,||self.skeleton_unity(path_id))}
     pub fn skeleton_full_named(&self,probe:&str)->Option<crate::pose::Skeleton> {self.memo("skeleton_full_named",probe,||self.skeleton_full_named_unity(probe))}

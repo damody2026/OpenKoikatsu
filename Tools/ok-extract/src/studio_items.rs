@@ -1058,6 +1058,11 @@ mod lightmap_probe {
         for (label,model) in [("gymnasium","f69bcc0100000000c9ccf38a4f4b4331"),("lockerroom","c6fe700000000000a318018f4f4b4331")] {
             crate::okmodel_view::with_library(&lib,||{
                 let view=crate::okmodel_view::ModelView::open(&lib,crate::oklib::id_from_hex_pub(model).unwrap())?;
+                let store=crate::oklib::active().unwrap();
+                let missing_before=store.misses.load(std::sync::atomic::Ordering::Relaxed);
+                let parsed=crate::unity::parse_bundle_cached(crate::oklib::token(&crate::oklib::id_from_hex_pub(model).unwrap()));
+                assert!(parsed.texture_sampling_named("__absent_source_sampler__").is_none());
+                assert_eq!(store.misses.load(std::sync::atomic::Ordering::Relaxed),missing_before,"proven-absent sampler must not fabricate a dependency query");
                 let session=view.prefab_session("Map",false)?;
                 assert!(session.parts.iter().any(|p|p.shader_textures.contains_key("_BumpMap")),"{label}: source normals absent");
                 for p in &session.parts {

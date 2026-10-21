@@ -37,3 +37,9 @@ ok-extract D:/KoikatuSunshine --oklib studio-standard-textures Content/Independe
 ```
 
 補錄工具適用任意來源地圖 bundle；省略清單會處理完整 catalogue。本輪完整實拍回歸範圍是既有 14 場景樣本，涉及 8 張地圖，不宣稱已目視原遊戲全部場景。
+
+來源補錄 8 張地圖共 616 個貼圖名稱。重播測試確認體育館 78 個、置物櫃室 54 個部件具有 Standard 法線貼圖，來源 sampler 存在且靜態 mip policy 為 0；不存在的 sampler 名稱不增加 library misses。
+
+最新 Rust 全套 422 PASS／0 FAIL／477 ignored；另跑上述來源重播斷言 1 PASS。7 項 Studio 整合測試、9 項 Automation 全通過，LUT 父材質 Windows cook 通過。完整庫與乾淨資源 checkout 的原卡 `kks-verify` 各 MATCH；既有 OK 卡的 recorded／closed／live digest 兩庫皆相同，均 1 MATCH／0 DIFFERENT、gaps=0、game_reads=0。原卡驗證仍使用來源 fallback，不宣稱原卡完全離線。
+
+首次舊卡檢查雖 digest 相同但 gaps=5，已保留失敗證據；修正為只有已記錄外部依賴的名稱才走 sampler fallback 後重驗通過。

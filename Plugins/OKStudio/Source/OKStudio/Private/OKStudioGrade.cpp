@@ -97,4 +97,3 @@ bool OKStudioApplySourceGrade(const FOKScenePost& Post,FPostProcessSettings& Set
  auto* M=UMaterialInstanceDynamic::Create(GradeParent.Get(),GetTransientPackage());M->SetTextureParameterValue(TEXT("Lut"),Lut);M->SetScalarParameterValue(TEXT("Strength"),Strength);M->SetScalarParameterValue(TEXT("Exposure"),Post.Exposure);E.Material=M;Found=&E;}
  Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f,Found->Material.Get()));return true;
 }
-
