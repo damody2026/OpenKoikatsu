@@ -510,6 +510,11 @@ bool AOKStreetSocialScene::InviteAllowedBiased(int32 Character,const FString& Ac
 // another heroine close, she takes his hand (social.rs bias_actions). Suspicion colours what she writes.
 void AOKStreetSocialScene::TickBiasActions(){
  auto& S=*State;const double Now=SceneTime();if(Now<S.BiasCheckAt||S.SelfTest)return;S.BiasCheckAt=Now+30.0;
+ // Why she would come to him goes stale: "you saw him with March 7th" at noon was her text to him at 18:43. A reason
+ // is dated when first seen here and dropped after an hour of game time; a used one forgets its date.
+ {const int64 Minute=OKStreetMindNow(S);for(auto It=S.InitiativeSince.CreateIterator();It;++It)if(!S.InitiativeReason.Contains(It.Key()))It.RemoveCurrent();
+  for(auto It=S.InitiativeReason.CreateIterator();It;++It){const int64& Since=S.InitiativeSince.FindOrAdd(It.Key(),Minute);
+   if(Minute-Since>60){UE_LOG(LogTemp,Display,TEXT("Street initiative: actor %d no longer (%s)"),It.Key(),*It.Value());S.InitiativeSince.Remove(It.Key());It.RemoveCurrent();}}}
  // Who he is with in person (not someone on the phone).
  const int32 With=S.Target!=INDEX_NONE?S.Target:S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;
  auto Request=OKRulesRequest(TEXT("bias_actions"));Request->SetNumberField(TEXT("seed"),FMath::Rand());

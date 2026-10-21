@@ -209,7 +209,7 @@ struct FOKStreetSceneState {
  TMap<FString,FString> MindRecent;int64 NeedsTickMinute=-1,BondTickMinute=-1;
  // OKStreetSocialLife.inl
  int32 LifeWishDay=-1;TArray<FOKLifePose> LifePoses;double LifeCheckAt=0,LifeFaceAt=0,LifeWishAt=0;TMap<int32,double> LifeCooldown;TMap<int32,FVector> LifeRestore;
- TMap<int32,FString> LifeUrgent,InitiativeReason;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
+ TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
  // OKStreetSocialPhoneInbox.inl: her history, the phone (messages, calls), and what is apart.
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
@@ -235,7 +235,7 @@ struct FOKStreetSceneState {
  int64 AppointmentTickMinute=-1;
  // Plan §6: today's plans per heroine, the block each is in, walks in progress, meals eaten this block, who the
  // schedule is holding in place, and where he spends his time.
- TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
+ TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int64> ConfessionPending;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;
  // Plan §8.6: the shift he is working now (appointment id, job, window in game minutes), early-leave tracking, fast-forward.
  // Plan §6.5: who spent time with him today, the day already reflected on, and tomorrow's intents.
@@ -773,8 +773,10 @@ bool AOKStreetSocialScene::BeginTalk(int32 Character){
  bool Meeting=false;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);const int64 Now=OKStreetMindNow(S);
   for(const auto& A:S.Store.Appointments)if(A.Heroine==HerId&&A.Kind==TEXT("date")&&!S.MeetingGreeted.Contains(A.Id)&&((A.Status==TEXT("done")&&Now-A.Start<120&&Now-A.Start>-90)||(A.Status==TEXT("pending")&&A.Start-Now<=60))){Meeting=true;S.MeetingGreeted.Add(A.Id);}}
  if(S.QuietTalk)S.QuietTalk=false;
+ // She walked over herself: her own opening is already asked for (it knows the meeting from the promises); a second
+ // "you met as agreed, greet him" made her greet twice ("you are two minutes early" and then "sit down, I ordered").
+ else if(S.SkipGreeting){S.SkipGreeting=false;UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d came over; she opens in her own words%s"),Character,Meeting?TEXT(" (the meeting)"):TEXT(""));}
  else if(Meeting){S.TellHer.Add(OKT(TEXT("ui.scene.meeting_greet_note")));UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d met as agreed; she greets him in her own words"),Character);}
- else if(S.SkipGreeting){S.SkipGreeting=false;UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d came over; she opens in her own words"),Character);}
  else Topic(TEXT("greeting"));
  // Whoever starts the conversation (E, she walks up to him, an invitation), it is a free talk with the microphone open.
  if(!Quiet&&!S.SelfTest&&!S.RetargetSelfTest){S.FreeTalkOpen=true;FreeTalkLiveSet(true);}
@@ -1212,7 +1214,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  FString Booked;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==HerId)Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("when"), *OKStreetCalendarLabel(int32(A.Start/1440),double(A.Start%1440)/60.0)}, {TEXT("label"), *A.Label}});}
  FString Nearby;for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(PartyCanJoin(G))Nearby+=S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.semicolon_mark"));
  const FDateTime Now=StreetNow();
- const FString User=OKMsg(TEXT("ui.scene.llm_context_prompt"), {{TEXT("year"), Now.GetYear()}, {TEXT("month"), Now.GetMonth()}, {TEXT("day"), Now.GetDay()}, {TEXT("weekday"), OKMsg(TEXT("ui.calendar.weekday_name"), {{TEXT("d"), int32(Now.GetDayOfWeek())}})}, {TEXT("hour"), Now.GetHour()}, {TEXT("minute"), Now.GetMinute()}, {TEXT("together_state"), RemoteWith(Character)?OKT(TEXT("ui.scene.apart_phone")):OKT(TEXT("ui.scene.face_to_face"))}, {TEXT("her_location"), *PlaceHere(S.Agents.IsValidIndex(Character-1)?S.Agents[Character-1].Position:S.Male)}, {TEXT("his_said"), *Said}, {TEXT("her_reply"), *Her}, {TEXT("her_action"), HerAction.IsEmpty()?OKT(TEXT("ui.scene.empty_label")):*HerAction}, {TEXT("doing_now"), S.ActGirl==Character&&!S.ActId.IsEmpty()?*S.ActId:S.OutingGirl==Character?*OKMsg(TEXT("ui.scene.walking_to_place"), {{TEXT("place"), *S.OutingPlace}, {TEXT("activity"), *S.OutingActivity}}):OKT(TEXT("ui.scene.none_label"))}, {TEXT("promise"), Booked.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Booked}, {TEXT("nearby_girls"), Nearby.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Nearby}, {TEXT("menu"), Menu.IsEmpty()?OKT(TEXT("ui.scene.not_in_shop")):*Menu}, {TEXT("her_ordered"), HerOrders.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*FString::Join(HerOrders,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("on_table"), OnTable.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*OnTable}});
+ FString User=OKMsg(TEXT("ui.scene.llm_context_prompt"), {{TEXT("year"), Now.GetYear()}, {TEXT("month"), Now.GetMonth()}, {TEXT("day"), Now.GetDay()}, {TEXT("weekday"), OKMsg(TEXT("ui.calendar.weekday_name"), {{TEXT("d"), int32(Now.GetDayOfWeek())}})}, {TEXT("hour"), Now.GetHour()}, {TEXT("minute"), Now.GetMinute()}, {TEXT("together_state"), RemoteWith(Character)?OKT(TEXT("ui.scene.apart_phone")):OKT(TEXT("ui.scene.face_to_face"))}, {TEXT("her_location"), *PlaceHere(S.Agents.IsValidIndex(Character-1)?S.Agents[Character-1].Position:S.Male)}, {TEXT("his_said"), *Said}, {TEXT("her_reply"), *Her}, {TEXT("her_action"), HerAction.IsEmpty()?OKT(TEXT("ui.scene.empty_label")):*HerAction}, {TEXT("doing_now"), S.ActGirl==Character&&!S.ActId.IsEmpty()?*S.ActId:S.OutingGirl==Character?*OKMsg(TEXT("ui.scene.walking_to_place"), {{TEXT("place"), *S.OutingPlace}, {TEXT("activity"), *S.OutingActivity}}):OKT(TEXT("ui.scene.none_label"))}, {TEXT("promise"), Booked.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Booked}, {TEXT("nearby_girls"), Nearby.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Nearby}, {TEXT("menu"), Menu.IsEmpty()?OKT(TEXT("ui.scene.not_in_shop")):*Menu}, {TEXT("her_ordered"), HerOrders.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*FString::Join(HerOrders,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("on_table"), OnTable.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*OnTable}});
+ // He asked her out and she said she would think it over ("let me think"): her later "I've decided, yes" answers that,
+ // although he did not ask again in this line (it left Keqing his friend after she said yes the next day).
+ if(const int64* Asked=S.ConfessionPending.Find(Character)){if(OKStreetMindNow(S)-*Asked<=3*1440)User+=OKT(TEXT("ui.scene.judge_pending_confession"));else S.ConfessionPending.Remove(Character);}
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and
@@ -1266,7 +1271,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    {bool Confessed=false;Verdict->TryGetBoolField(TEXT("confessed"),Confessed);
     // Her own words turned him down ("I want to be the only one; you can't give that, so don't ask"): that is her
     // answer, not a dice roll that made her his girlfriend anyway (accepts: false).
-    bool Accepts=true;if(Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts)&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;}
+    bool Accepts=true;if(Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts)&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;
+     // Not a yes yet ("let me think about it"): her answer may come later in another talk (the judge is told).
+     if(!L->ConfessionPending.Contains(Character))L->ConfessionPending.Add(Character,OKStreetMindNow(*L));}
+    if(Confessed)L->ConfessionPending.Remove(Character);
     if(Confessed&&!Ends&&L->Target==Character&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
      &&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage!=TEXT("lover")){
      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words"),Character);Weak->RelationshipEvent(TEXT("confession"));}}

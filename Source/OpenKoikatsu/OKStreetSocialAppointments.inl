@@ -47,7 +47,9 @@ int32 AOKStreetSocialScene::PatienceOf(int32 Character) const{
 }
 
 // From chat (plan §13.3 "new_promise"): {"day": "+1" | "2010-09-05", "time": "19:00", "place": id, "what": text}.
-void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His){
+void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His){
+ // An activity id in "what" ("meal") is said by its name in the label and her memory ("約meal" on the list).
+ const FString What=OKStreetFindActivity(WhatSaid)?OKStreetActivityName(WhatSaid):WhatSaid;
  auto& S=*State;if(!OKStreetFindPlace(Place)){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: %s is not a place"),*Place);return;}
  // No clear time, no appointment (it used to become 19:00 by default, a time nobody said).
  {FString H,M;if(!Time.Split(TEXT(":"),&H,&M)||!H.IsNumeric()||!M.IsNumeric()){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: no clear time (\"%s\") for %s"),*Time,*Place);return;}}
