@@ -406,7 +406,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   // Ordered on the way to that shop ("let's go to the store: a tea egg and water"): carried until they get there.
   const FOKStreetActivity* Going=OKStreetFindActivity(Reply.Action);
   const bool ShopAhead=Item&&Item->Place!=Place&&(Reply.Action==TEXT("go:")+Item->Place||(Going&&Going->Place&&Item->Place==Going->Place));
-  if(ShopAhead){FOKStreetCartLine Carry;Carry.ItemId=O.Id;Carry.ForHer=ForHer;Carry.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
+  if(ShopAhead){FOKStreetCartLine Carry;Carry.ItemId=O.Id;Carry.ForHer=ForHer;Carry.HerOwn=ForHer;Carry.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
    if(!Item->Options.IsEmpty()){Carry.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Carry.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
    S.CarriedOrders.FindOrAdd(Character).Add(Carry);S.CarriedOrderSaid.Add(Character,Reply.Reply);UE_LOG(LogTemp,Display,TEXT("Street order carried: %s until they reach %s"),*O.Id,*Item->Place);continue;}
   if(!Item||!SoldHere(*Item,Place)){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s at %s"),*O.Id,*Place);continue;}
@@ -417,7 +417,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
   if(ForHer&&TooFullFor(Character,*Item)){
    S.TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is full"),*O.Id);continue;}
-  FOKStreetCartLine Line;Line.ItemId=O.Id;Line.ForHer=ForHer;Line.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
+  FOKStreetCartLine Line;Line.ItemId=O.Id;Line.ForHer=ForHer;Line.HerOwn=ForHer;Line.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
   if(!Item->Options.IsEmpty()){Line.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Line.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
   S.ShopPlace=Place;S.Cart.Add(Line);++Added;
  }

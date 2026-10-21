@@ -473,7 +473,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // What is not eaten (a plush, a keyring, a notebook) is his to carry: into the backpack. Bought for her and giftable:
  // he gives it to her next, the gift as the gift rules take it (StartGift), not a dish served.
  TArray<FString> GiveHer;
- for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId);I&&!I->Consumable){Candidate.Inventory.Add(L.ItemId);if(L.ForHer&&I->Giftable&&WithHer)GiveHer.Add(L.ItemId);}
+ // What she picked for herself is hers to keep (the postcard she chose at the bookstore came back as "his gift").
+ for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId);I&&!I->Consumable&&!L.HerOwn){Candidate.Inventory.Add(L.ItemId);if(L.ForHer&&I->Giftable&&WithHer)GiveHer.Add(L.ItemId);}
  if(!CommitStore(MoveTemp(Candidate)))return;
  FlushRulesEffects();
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
