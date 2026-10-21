@@ -1804,11 +1804,12 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 								for (const FName Name : Slot.MorphNames)
 									MorphWeights->SetNumberField(Name.ToString(), Slot.BaselineWeights.FindRef(Name) + Slot.Comp->GetMorphTarget(Name) * 100.f);
 						Row->SetObjectField(TEXT("effective_morph_percent"), MorphWeights);
-						TInlineComponentArray<UPoseableMeshComponent*> Components;
+						TInlineComponentArray<USkinnedMeshComponent*> Components;
 						Actor->GetComponents(Components);
-						for (const UPoseableMeshComponent* Component : Components)
+						for (const USkinnedMeshComponent* Component : Components)
 						{
-							if (!Component->ComponentHasTag(FName(*FString::Printf(TEXT("KKSessionPart_%d"), Part.SessionIndex)))) continue;
+							const bool IsFaceSurface = Actor->MouthSlots.ContainsByPredicate([&](const auto& Slot) { return Slot.SessionPartIndex == Part.SessionIndex && Slot.Comp == Component; });
+							if ((!IsFaceSurface && !Component->ComponentHasTag(FName(*FString::Printf(TEXT("KKSessionPart_%d"), Part.SessionIndex)))) || !Component->IsVisible() || Component->bHiddenInGame) continue;
 							const USkinnedAsset* Asset = Component->GetSkinnedAsset();
 							const FSkeletalMeshRenderData* Data = Asset ? Asset->GetResourceForRendering() : nullptr;
 							if (!Data || Data->LODRenderData.IsEmpty()) continue;
@@ -1828,6 +1829,31 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 							FloatArray(TEXT("gpu_reference_normals_unity"), Normals.GetData(), Normals.Num());
 							FloatArray(TEXT("gpu_reference_positions_unity"), Positions.GetData(), Positions.Num());
 							FloatArray(TEXT("gpu_uv0"), UVs.GetData(), UVs.Num());
+							TArray<FMatrix44f> RefToLocal;
+							Component->GetCurrentRefToLocalMatrices(RefToLocal, 0);
+							TArray<float> WorldNormals;
+							WorldNormals.SetNumZeroed(LOD.GetNumVertices() * 3);
+							FMatrix LocalToWorld = Component->GetComponentTransform().ToMatrixWithScale();
+							// GpuSkinVertexFactory::CalcTangentToWorld removes primitive scale.
+							LocalToWorld.RemoveScaling();
+							for (const auto& Section : LOD.RenderSections)
+								for (uint32 Vertex = Section.BaseVertexIndex; Vertex < Section.BaseVertexIndex + Section.NumVertices; ++Vertex)
+								{
+									const FVector3f N = LOD.StaticVertexBuffers.StaticMeshVertexBuffer.VertexTangentZ(Vertex);
+									FVector4f Sum(0, 0, 0, 0);
+									for (uint32 Influence = 0; Influence < LOD.SkinWeightVertexBuffer.GetMaxBoneInfluences(); ++Influence)
+									{
+										const uint32 Bone = LOD.SkinWeightVertexBuffer.GetBoneIndex(Vertex, Influence);
+										const uint16 Weight = LOD.SkinWeightVertexBuffer.GetBoneWeight(Vertex, Influence);
+										if (!Weight || !Section.BoneMap.IsValidIndex(Bone) || !RefToLocal.IsValidIndex(Section.BoneMap[Bone])) continue;
+										Sum += RefToLocal[Section.BoneMap[Bone]].TransformFVector4(FVector4f(N.X, N.Y, N.Z, 0)) * (float(Weight) / 65535.f);
+									}
+									const FVector World = FVector(LocalToWorld.TransformVector(FVector(Sum.X, Sum.Y, Sum.Z))).GetSafeNormal();
+									WorldNormals[Vertex * 3] = -World.X;
+									WorldNormals[Vertex * 3 + 1] = World.Z;
+									WorldNormals[Vertex * 3 + 2] = World.Y;
+								}
+							FloatArray(TEXT("cpu_reference_to_local_world_normals_unity"), WorldNormals.GetData(), WorldNormals.Num());
 						}
 						Rows.Add(MakeShared<FJsonValueObject>(Row));
 					}

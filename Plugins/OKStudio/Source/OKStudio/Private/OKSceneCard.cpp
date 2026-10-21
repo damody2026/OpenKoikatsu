@@ -124,6 +124,12 @@ bool FOKSceneCard::Capture(AOKSceneActor* Scene, const FTransform& View, float F
 	{
 		UTextureRenderTarget2D* Target = NewObject<UTextureRenderTarget2D>(Scene);
 		Target->RenderTargetFormat = Format;
+		// FinalColorLDR already contains the device transfer function. Store
+		// those encoded bytes in a linear RTV, with the display gamma supplied
+		// explicitly: an sRGB RTV would encode again, while gamma=1 adds an
+		// unwanted 2.2 shadow curve inside the SDR tonemapper.
+		Target->bForceLinearGamma = true;
+		Target->TargetGamma = Source == SCS_FinalColorLDR ? 2.2f : 0.f;
 		Target->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
 		Target->InitAutoFormat(W, H);
 		Target->UpdateResourceImmediate(true);
@@ -142,7 +148,7 @@ bool FOKSceneCard::Capture(AOKSceneActor* Scene, const FTransform& View, float F
 		C->DestroyComponent();
 		return Target;
 	};
-	FTextureRenderTargetResource* Resource = Shot(SCS_FinalColorLDR, RTF_RGBA8_SRGB)->GameThread_GetRenderTargetResource();
+	FTextureRenderTargetResource* Resource = Shot(SCS_FinalColorLDR, RTF_RGBA8)->GameThread_GetRenderTargetResource();
 	if (!Resource || !Resource->ReadPixels(OutPixels) || OutPixels.Num() != W * H) { OutError = TEXT("could not read the capture"); return false; }
 	if (bTransparent)
 	{

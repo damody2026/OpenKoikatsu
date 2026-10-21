@@ -3910,3 +3910,8 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - 使用者指出 LightingLutNativeGrade/Scene2.png 的頭髮沒有跟著人物。原因是 AuditStudioScene 的 yield null continuation 在 Studio 完成 LateUpdate 的 FK、臉部與附件跟隨前呼叫 Camera.Render，混用了 Animator 中間姿態與前一階段的附件狀態。
 - 暖機後與最後手動渲染前改為 WaitForEndOfFrame；LightingLutEndOfFrame0010 實拍確認頭髮、頭部、身體及後方角色姿態恢復一致。先前這類錯位圖不得用作角色幾何／完整外觀的視覺金標；純 GPU 輸入色票不含角色骨架，另依數值驗證。
 - 圖文證據 Docs/OK_STUDIO_NATIVE_CAPTURE_20261021.md。這是擷取時序修正，沒有對 UE 頭髮加 offset。
+- 舊 map mesh memo 還原時不會重建外部材質貼圖的來源對應，直接追加 named BumpMap 查詢會得到空值；首次來源補錄在 mt_koi_map00_desk00 明確失敗，未當成成功。改由重新計算 meshes_for_maindata 取得真正外部來源，再補錄貼圖與 sampler。逐地圖清除全部解析快取會反覆重建8427份來源索引，已改為有界程序快取與可選 bundle 清單，結束時再清除。中止的全量輪日誌保留，後續重新驗證實際封包。
+- 2026-10-21：Studio 截圖偏暗：只驗證 HDR 色票，漏驗實際 PNG 顯示路徑；嘗試單改 sRGB target gamma 後反而雙重編碼。改為線性 RGBA8 render target、LDR TargetGamma=2.2，由 tonemapper 執行一次顯示編碼；加入實際 SceneCard PNG 色票驗證。43 色最大顯示差由 32/255 降至 4/255。失敗 CSV 留在 Saved/OKStudio/LightingLut20261021。
+- 2026-10-21：把來源靜態貼圖 mip_count 當成 runtime mip_policy；policy=1 實際代表 encoded RenderTexture 生成 mip，造成球場白線 alpha coverage 消失。靜態來源貼圖使用 policy=0，保留來源 sampler 與 mip0，不冒稱已傳遞原生完整 mip chain。StaticSamplerFinal 實拍確認球場白線恢復。
+- 2026-10-21：原生 0059 重載後為黑畫面，saved animation phase 重試仍黑；PNG 存在並不代表可用的視覺基準。留存原生 TSV 與圖，不納入有效原生光影 golden；不得把 14 個 PNG 檔案通過誤寫為 14 場景原生視覺通過。撤去無效果的 saved-phase 選項。
+- 2026-10-21：地圖貼圖補錄仍經過完整 mesh 路徑，且外部貼圖逐名重讀相同來源 bundle；多次中止的全量日誌不算通過。改成只走原生 renderer/material PPtr，外部貼圖使用既有 size/mtime 路徑快取。驗收聚焦全部14樣本使用的8張地圖；工具省略清單仍可處理完整 catalogue。

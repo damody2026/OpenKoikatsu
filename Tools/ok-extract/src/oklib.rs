@@ -2193,6 +2193,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         "studio-environments" => println!("OKCONVERT studio map environments={}", crate::studio_sky::convert_map_environments(game, &lib.ok_or("library directory required")?)?),
         "studio-reflections" => println!("OKCONVERT studio map reflections={}", crate::studio_sky::convert_map_reflections(game,&lib.ok_or("library directory required")?)?),
         "studio-nodes" => crate::studio_items::record_hierarchies(game, &lib.ok_or("library directory required")?, args.get(2).and_then(|t| t.parse().ok()).unwrap_or(6))?,
+        "studio-standard-textures" => crate::studio_items::record_standard_map_textures(game, &lib.ok_or("library directory required")?, args.get(2).map(String::as_str))?,
         "anim-convert" => {
             let card = std::path::PathBuf::from(args.get(2).ok_or("character card required (sampling skeleton)")?);
             let filter = args.get(3).map(String::as_str).filter(|f| !f.is_empty() && *f != "all");

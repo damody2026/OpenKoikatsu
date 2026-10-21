@@ -339,13 +339,16 @@ impl ModelView {
         // _NormalMap. Older model memos keep these bindings but omit their PNGs.
         // Resolve through the library's named-texture records at session time.
         for mesh in &mut meshes {
-            let Some(mat) = mesh.mat.as_ref().filter(|m| m.shader == "Shader Forge/main_StandardMDK_studio") else { continue };
-            for property in ["_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
+            let Some(mat) = mesh.mat.as_ref().filter(|m| m.shader == "Shader Forge/main_StandardMDK_studio" || m.shader.starts_with("Standard")) else { continue };
+            for property in ["_MainTex", "_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
                 let Some(name) = mat.slot(property) else { continue };
                 if let Some(png) = self.parsed.texture_png_named(name) {
-                    mesh.shader_extra_textures.insert(property.into(), png);
+                    if property!="_MainTex" {mesh.shader_extra_textures.insert(property.into(), png);}
                     if let Some(s) = self.parsed.texture_sampling_named(name) {
-                        mesh.runtime_textures.insert(property.into(), [s.filter, s.wrap_u, s.wrap_v, i32::from(s.srgb), s.mip_count]);
+                        // Policy 1 means generated encoded RenderTexture mips,
+                        // not the source asset's authored mip count. Do not
+                        // synthesize RT mips for static alpha-tested textures.
+                        mesh.runtime_textures.insert(property.into(), [s.filter, s.wrap_u, s.wrap_v, i32::from(s.srgb), 0]);
                     }
                 }
             }

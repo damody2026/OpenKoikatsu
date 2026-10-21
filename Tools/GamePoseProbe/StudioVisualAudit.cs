@@ -106,6 +106,7 @@ public sealed partial class GamePoseProbe {
         yield return new WaitForEndOfFrame();
         using (var writer = new StreamWriter(output + ".scene.tsv")) {
             writer.WriteLine("scene\t" + scene);
+            writer.WriteLine("capture_phase\tend_of_frame\trunning_animation");
             foreach (Shader shader in Resources.FindObjectsOfTypeAll<Shader>())
                 if (shader.name.StartsWith("Koikano/")) writer.WriteLine("shader_object\t" + shader.name + "\t" + shader.GetInstanceID());
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies()) {

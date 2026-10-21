@@ -1841,7 +1841,13 @@ impl ParsedBundle {
         self.memo_texture("texture_gpu_named",name,||self.texture_gpu_named_unity(name))
     }
     pub(crate) fn shader_pixel_dxbc_named(&self,name:&str)->Option<Vec<u8>> {self.memo("shader_pixel_dxbc_named",name,||self.shader_pixel_dxbc_named_unity(name))}
-    pub(crate) fn texture_sampling_named(&self,name:&str)->Option<TextureSampling> {self.memo_texture("texture_sampling_named",name,||self.texture_sampling_named_unity(name))}
+    pub(crate) fn texture_sampling_named(&self,name:&str)->Option<TextureSampling> {
+        // Replay's local-texture directory intentionally excludes external
+        // names. Follow the recorded dependency outside that local guard,
+        // just as decode_tex does for the image itself.
+        self.memo_texture("texture_sampling_named",name,||self.texture_sampling_named_unity(name))
+            .or_else(||self.dependency_texture_bundle(name)?.texture_sampling_named(name))
+    }
     pub fn skeleton(&self,path_id:i64)->Option<crate::pose::Skeleton> {self.memo("skeleton",&path_id,||self.skeleton_unity(path_id))}
     pub fn skeleton_full_named(&self,probe:&str)->Option<crate::pose::Skeleton> {self.memo("skeleton_full_named",probe,||self.skeleton_full_named_unity(probe))}
     pub fn skeleton_for_prefab_name(&self,prefab_name:&str)->Option<crate::pose::Skeleton> {let _spot=crate::profile::spot("skeleton_for_prefab_name");self.memo_prefab("skeleton_for_prefab_name",prefab_name,prefab_name,||self.skeleton_for_prefab_name_unity(prefab_name))}
@@ -3642,15 +3648,17 @@ impl ParsedBundle {
                 let source = self.dependency_texture_source.borrow().get(&key).cloned()?;
                 let root = self.script_root.borrow().clone()?;
                 let path = references::external_source_path(&root, &source, self.script_origin.borrow().as_deref())?;
-                let bytes = crate::gamefs::read(&path).ok()?;
-                Some(crate::oklib::id_hex(&crate::oklib::content_id(&bytes)))
+                // Each texture name records the same dependency identity.
+                // Reuse the validated path parser instead of reading and
+                // hashing that whole source again for every material slot.
+                Some(crate::oklib::id_hex(&parse_bundle_path_cached(&path)?.lib?))
             });
             let id = crate::oklib::id_from_hex_pub(&model?)?;
             let dependency = if crate::oklib::replaying() { parse_bundle_cached(crate::oklib::token(&id)) } else {
                 let source = self.dependency_texture_source.borrow().get(&key).cloned()?;
                 let root = self.script_root.borrow().clone()?;
                 let path = references::external_source_path(&root, &source, self.script_origin.borrow().as_deref())?;
-                parse_bundle_cached(crate::gamefs::read(&path).ok()?)
+                parse_bundle_path_cached(&path)?
             };
             if std::ptr::eq(dependency.as_ref(), self) { return None; }
             Some(dependency)
@@ -3658,7 +3666,7 @@ impl ParsedBundle {
             let source = self.dependency_texture_source.borrow().get(&key).cloned()?;
             let root = self.script_root.borrow().clone()?;
             let path = references::external_source_path(&root, &source, self.script_origin.borrow().as_deref())?;
-            let dependency = parse_bundle_cached(crate::gamefs::read(&path).ok()?);
+            let dependency = parse_bundle_path_cached(&path)?;
             if std::ptr::eq(dependency.as_ref(), self) { return None; }
             Some(dependency)
         }
@@ -4234,10 +4242,7 @@ impl ParsedBundle {
     }
 
     /// Bind `_MainTex` / `_ColorMask` from the SMR/MeshRenderer material.
-    fn attach_material_texs(&self, picked: &mut Vec<ExtractedMesh>) {
-        if picked.is_empty() {
-            return;
-        }
+    fn resolved_material_maps(&self) -> std::rc::Rc<MaterialMaps> {
         let cached = self.material_maps.borrow().clone();
         let maps = match cached { Some(m) => m, None => {
             let m = std::rc::Rc::new(self.with_serialized(|sers| {
@@ -4336,6 +4341,19 @@ impl ParsedBundle {
         }));
             self.dependency_texture_source.borrow_mut().extend(m.2.iter().map(|(k, v)| (k.clone(), v.clone())));
             *self.material_maps.borrow_mut() = Some(m.clone()); m } };
+        maps
+    }
+
+    pub(crate) fn standard_material_texture_dependencies(&self) -> std::collections::BTreeSet<String> {
+        let maps=self.resolved_material_maps();
+        maps.1.values().flatten().filter(|m|m.shader.starts_with("Standard"))
+            .flat_map(|m|["_MainTex","_BumpMap","_MetallicGlossMap","_EmissionMap"].into_iter().filter_map(|slot|m.slot(slot).map(str::to_owned)))
+            .collect()
+    }
+
+    fn attach_material_texs(&self, picked: &mut Vec<ExtractedMesh>) {
+        if picked.is_empty() { return; }
+        let maps = self.resolved_material_maps();
         let (mesh_mats, renderer_mats) = (&maps.0, &maps.1);
 
         let mut expanded = Vec::with_capacity(picked.len());

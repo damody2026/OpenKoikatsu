@@ -312,10 +312,41 @@ mod tests {
 
 
 
-/// `--oklib studio-nodes <lib>` (with the game root): records the prefab hierarchy (transform tree, mesh nodes, lights)
-/// of every catalogue item, light and map root into its library model, for child points, rigid item FK, rigid meshes
-/// at their GameObjects (every instance of a shared Mesh) and lamp items, with the baked lightmaps and render-to-texture
-/// cameras (`prefab_lightmaps`, `prefab_render_textures`). `OKLIB_REFRESH=<query>` re-records.
+/// Record Standard map texture dependencies and sampler provenance omitted by
+/// old character-oriented mesh snapshots. Source map identities stay unchanged.
+pub fn record_standard_map_textures(game: &Path, lib: &Path, filter: Option<&str>) -> Result<(), String> {
+    let text=std::fs::read_to_string(lib.join(FILE_NAME)).map_err(|e|e.to_string())?;
+    let catalog:Catalog=serde_json::from_str(&text).map_err(|e|e.to_string())?;
+    let store=crate::oklib::activate(lib,crate::oklib::Mode::Record)?;
+    crate::gamefs::activate(crate::gamefs::Mode::Record,game,lib)?;
+    let was_converting=crate::oklib::CONVERTING.swap(true,std::sync::atomic::Ordering::Relaxed);
+    let result=(||{
+        let mut bundles:BTreeMap<String,BTreeSet<String>>=BTreeMap::new();
+        for map in &catalog.maps {
+            if filter.is_some_and(|f|!f.split(',').any(|name|map.bundle.ends_with(name))) {continue;}
+            for root in &map.roots {bundles.entry(map.bundle.clone()).or_default().insert(root.clone());}
+        }
+        if bundles.is_empty(){return Err("no matching source map bundles".into());}
+        let mut total=0;
+        for (bundle,_roots) in bundles {
+            let bytes=crate::gamefs::read(game.join(&bundle)).map_err(|e|format!("{bundle}: {e}"))?;
+            let id=crate::oklib::content_id(&bytes);let parsed=crate::unity::parse_bundle_cached(bytes);parsed.configure_game_references(game);
+            // Resolve native material PPtrs without rebuilding vertex/skin
+            // streams or decoding every old mesh texture during metadata work.
+            let names=parsed.standard_material_texture_dependencies();
+            let mut found=0;
+            for name in names {if parsed.texture_png_named(&name).is_some(){parsed.texture_sampling_named(&name);found+=1;}else{return Err(format!("Standard map texture missing: {bundle} / {name}"));}}
+            println!("STANDARD MAP TEXTURES {bundle}: {found}");total+=found;
+            store.forget_model(&id);
+        }
+        println!("STANDARD MAP TEXTURES total={total}");Ok(())
+    })();
+    store.flush();let saved=crate::gamefs::save(lib);crate::unity::clear_bundle_cache();crate::oklib::deactivate();crate::gamefs::deactivate();
+    crate::oklib::CONVERTING.store(was_converting,std::sync::atomic::Ordering::Relaxed);
+    result.and(saved)
+}
+
+/// Record prefab hierarchy, lightmaps and renderer policies for Studio assets.
 pub fn record_hierarchies(game: &Path, lib: &Path, threads: usize) -> Result<(), String> {
     use rayon::prelude::*;
     let text = std::fs::read_to_string(lib.join(FILE_NAME)).map_err(|e| format!("{FILE_NAME}: {e}"))?;
@@ -1019,6 +1050,39 @@ mod lut_probe {
 
 #[cfg(test)]
 mod lightmap_probe {
+    #[test]
+    #[ignore = "installed source map lighting input diagnostics"]
+    fn dark_scene_lighting_inputs() {
+        let lib=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let out=lib.join("../../../Saved/OKStudio/LightingLut20261021/MapInputs");std::fs::create_dir_all(&out).unwrap();
+        for (label,model) in [("gymnasium","f69bcc0100000000c9ccf38a4f4b4331"),("lockerroom","c6fe700000000000a318018f4f4b4331")] {
+            crate::okmodel_view::with_library(&lib,||{
+                let view=crate::okmodel_view::ModelView::open(&lib,crate::oklib::id_from_hex_pub(model).unwrap())?;
+                let session=view.prefab_session("Map",false)?;
+                assert!(session.parts.iter().any(|p|p.shader_textures.contains_key("_BumpMap")),"{label}: source normals absent");
+                for p in &session.parts {
+                    if let Some(m)=p.source_material.as_ref().filter(|m|m.shader.starts_with("Standard")) {
+                        for slot in ["_MainTex","_BumpMap"] {
+                            if m.slot(slot).is_some() {
+                                let sampler=p.runtime_textures.get(slot).unwrap_or_else(||panic!("{label} {} {slot}: source sampler absent",p.name));
+                                assert_eq!(sampler[4],0,"static map textures must not generate encoded RenderTexture mips");
+                            }
+                        }
+                    }
+                }
+                println!("{label}: Standard bump textures {}",session.parts.iter().filter(|p|p.shader_textures.contains_key("_BumpMap")).count());
+                let mut rows=Vec::new();
+                for (i,p) in session.parts.iter().enumerate(){
+                    let m=p.source_material.as_ref();
+                    if let Some(png)=&p.png {std::fs::write(out.join(format!("{label}-{i}-main.png")),png).unwrap();}
+                    for slot in ["_OKLightmap","_OKLightmapDirection"] {if let Some(png)=p.shader_textures.get(slot){let index=m.and_then(|m|m.floats.get("_OKLightmapIndex")).unwrap();std::fs::write(out.join(format!("{label}-{index}-{slot}.png")),png).unwrap();}}
+                    rows.push(serde_json::json!({"part":i,"name":p.name,"uv0":p.uvs,"uv4":p.uv4,"normals":p.normals,"material":m,"runtime_textures":p.runtime_textures}));
+                }
+                std::fs::write(out.join(format!("{label}.json")),serde_json::to_vec(&rows).unwrap()).unwrap();
+                Ok::<_,String>(())
+            }).unwrap();
+        }
+    }
     #[test]
     #[ignore = "installed map and OK library: renderer shadow policy provenance"]
     fn studio_renderer_shadow_policy_matches_source() {

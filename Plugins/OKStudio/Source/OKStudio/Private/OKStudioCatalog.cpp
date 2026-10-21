@@ -191,6 +191,31 @@ FOKStudioCatalog::FEyeSet FOKStudioCatalog::EyeSet(int32 Ptn) const
 	return Set;
 }
 
+UTexture* FOKStudioCatalog::SourceFilterLut(int32 No) const
+{
+	static TMap<int32, TStrongObjectPtr<UTexture2D>> Cache;
+	if (const auto* Hit = Cache.Find(No)) return Hit->Get();
+	UTexture2D* Lut = nullptr;
+	if (const FOKStudioFilter* F = FindFilter(No))
+	{
+		const FTCHARToUTF8 Lib(*AOKSceneActor::LibraryDirectory()), Bundle(*F->Bundle), File(*F->File);
+		const int32 Size = ok_studio_texture_png(Lib.Get(), Bundle.Get(), File.Get(), nullptr, 0);
+		TArray<uint8> Png; FImage Source;
+		if (Size > 0) { Png.SetNumUninitialized(Size); ok_studio_texture_png(Lib.Get(), Bundle.Get(), File.Get(), Png.GetData(), Size); }
+		if (Size > 0 && FImageUtils::DecompressImage(Png.GetData(), Png.Num(), Source) && Source.SizeX == 1024 && Source.SizeY == 32)
+		{
+			FImage Src; Source.CopyTo(Src, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+			Lut = UTexture2D::CreateTransient(1024, 32, PF_B8G8R8A8);
+			void* Out = Lut->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+			FMemory::Memcpy(Out, Src.RawData.GetData(), Src.RawData.Num());
+			Lut->GetPlatformData()->Mips[0].BulkData.Unlock();
+			Lut->SRGB = false; Lut->NeverStream = true; Lut->Filter = TF_Bilinear;
+			Lut->AddressX = Lut->AddressY = TA_Clamp; Lut->UpdateResource();
+		}
+	}
+	Cache.Add(No, TStrongObjectPtr<UTexture2D>(Lut)); return Lut;
+}
+
 UTexture* FOKStudioCatalog::FilterLut(int32 No) const
 {
 	static TMap<int32, TStrongObjectPtr<UTexture2D>> Cache;

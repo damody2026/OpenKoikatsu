@@ -442,9 +442,19 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 	S.AutoExposureBias = Exposure;
 	UTexture* Lut = ColorFilter >= 0 ? FOKStudioCatalog::Get().FilterLut(ColorFilter) : nullptr;
 	S.bOverride_ColorGradingLUT = true;
-	S.ColorGradingLUT = Lut;
+	const float FilterStrength = Lut ? FMath::Clamp(ColorFilterIntensity, 0.f, 1.f) : 0.f;
+	S.ColorGradingLUT = FilterStrength > 0.f ? Lut : OKStudioIdentityGradeLut();
 	S.bOverride_ColorGradingIntensity = true;
-	S.ColorGradingIntensity = Lut ? FMath::Clamp(ColorFilterIntensity, 0.f, 1.f) : 0.f;
+	S.ColorGradingIntensity = FilterStrength > 0.f ? FilterStrength : 1.f;
+	if (OKStudioApplySourceGrade(*this, S))
+	{
+		// Exposure is applied to linear light inside the source grading pass.
+		S.AutoExposureBias = 0.f;
+		// A null/zero LUT does not clear a volume's earlier LUT in SceneView:
+		// IF_PP rejects null and LerpTo(...,0) leaves the prior blend intact.
+		S.ColorGradingLUT = OKStudioIdentityGradeLut();
+		S.ColorGradingIntensity = 1.f;
+	}
 	// Fog, ambient occlusion and sun shafts: Studio's own formulas in one post-process material.
 	OKStudioApplyScenePostMaterial(*this, S);
 	if (OKStudioApplySourceBloom(*this, S)) S.BloomIntensity = 0.f;

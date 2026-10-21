@@ -22,6 +22,7 @@ local tests = {
   { "PatternTest", "OKStudio.PatternTest exit", "OK studio pattern test: RESULT PASS", 300 },
   { "EyeSetTest", "OKStudio.EyeSetTest exit", "OK studio eye set test: RESULT PASS", 300 },
   { "BloomTest", "OKStudio.BloomTest exit", "OK studio bloom test: RESULT PASS", 300 },
+  { "GradeTest", "OKStudio.GradeTest exit", "OK studio grade test: RESULT PASS", 300 },
   { "TransparencyTest", "OKStudio.TransparencyTest exit", "OK studio transparency test: RESULT PASS", 300 },
 }
 if a.editor then

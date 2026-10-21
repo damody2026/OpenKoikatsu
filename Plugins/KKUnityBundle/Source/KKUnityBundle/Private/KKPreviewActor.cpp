@@ -699,6 +699,7 @@ struct FOKToonShadowParameters
 	float ReflectionIntensity = 1.f;
 	float StandardMetallic = 0.f;
 	float StandardSmoothness = 0.5f;
+	float StandardNormalScale = 1.f;
 	bool bStandardSmoothnessFromMap = false;
 	FLinearColor Texcoord2ST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 	FLinearColor Texcoord3ST = FLinearColor(1.f, 1.f, 0.f, 0.f);
@@ -1056,7 +1057,7 @@ static UMaterialInterface* MakePartMaterial(UTexture2D* Tex, const FString& Blen
 	auto* Samp = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
 	Samp->ParameterName=TEXT("KKAppearanceMain");
 	Samp->Material = Mat;
-	Samp->SamplerType = SAMPLERTYPE_Color;
+	Samp->SamplerType = Tex && !Tex->SRGB ? SAMPLERTYPE_LinearColor : SAMPLERTYPE_Color;
 	Samp->ConstCoordinate = 0;
 	Samp->Texture = Tex;
 	// The Unity fragment samples t0 with _MainTex_ST (main_clothes_opaque
@@ -1104,6 +1105,8 @@ static UMaterialInterface* MakePartMaterial(UTexture2D* Tex, const FString& Blen
 				: (bHairShader || ShaderKind == 2 || ShaderKind == 3 || ShaderKind == 8 || bSkinShader)
 					? TEXT("float2 xy = float2(PackedAlpha * Packed.r, Packed.g) * 2.0 - 1.0; return float3(xy, sqrt(saturate(1.0 - dot(xy, xy))));")
 					: TEXT("float2 xy = float2(PackedAlpha, Packed.g) * 2.0 - 1.0; return float3(xy, sqrt(saturate(1.0 - dot(xy, xy))));");
+			if (Shadow && Shadow->bStandardLinear)
+				Unpack->Code = FString::Printf(TEXT("float2 xy=(float2(Packed.r*PackedAlpha,Packed.g)*2.0-1.0)*%.9g;return float3(xy,sqrt(saturate(1.0-dot(xy,xy))));"), Shadow->StandardNormalScale);
 			FCustomInput& Input = Unpack->Inputs.AddDefaulted_GetRef();
 			Input.InputName = TEXT("Packed");
 			Input.Input.Expression = Packed;
@@ -2645,7 +2648,7 @@ return Base.rgb * sh;
 					Direction->SamplerType = SAMPLERTYPE_LinearColor;
 					Direction->ConstCoordinate = 1;
 					Input(TEXT("LmDirection"), Direction, 5);
-					Input(TEXT("LmNormal"), NewObject<UMaterialExpressionVertexNormalWS>(Mat));
+					Input(TEXT("LmNormal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
 					// Installed Standard PS 112 (DIRLIGHTMAP_COMBINED): hemisphere
 					// dot product and the baked directionality rebalancing divisor.
 					Code += TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, LmNormal.y));\nfloat lmDirection = (dot(lmN, LmDirection.rgb - 0.5) + 0.5) / max(LmDirection.a, 1e-4);\n");
@@ -5087,7 +5090,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// Baked lightmap (okmodel_view::bake_lightmap): lightmap UVs in Unity uv4 (TEXCOORD1), index in _OKLightmapIndex.
 		ShadowParams.LightmapTex = nullptr;
 		ShadowParams.LightmapDirectionTex = nullptr;
-		FLinearColor LightmapIndex;
+		FLinearColor LightmapIndex(-1.f, 0.f, 0.f, 0.f);
 		if (View.uv4 && !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKLightmapIndex", LightmapIndex))
 		{
 			const int32 Index = FMath::RoundToInt(LightmapIndex.R);
@@ -5110,6 +5113,12 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				}
 			ShadowParams.LightmapDirectionTex = ShadowParams.LightmapDirections.FindRef(Index);
 		}
+		if (bSourceMapShading && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+		{
+			UE_LOG(LogTemp, Display, TEXT("OK map lighting part=%d mesh=%s shader=%s uv4=%d lightmap=%g color=%d direction=%d cached=%d"),
+				i, UTF8_TO_TCHAR(View.name), *Source.MaterialShaderName(i), View.uv4 != nullptr, LightmapIndex.R,
+				ShadowParams.LightmapTex != nullptr, ShadowParams.LightmapDirectionTex != nullptr, ShadowParams.Lightmaps.Num());
+		}
 		// Unity Standard (linear space): indirect diffuse = lightmap x albedo x oneMinusReflectivity
 		// (UnityStandardUtils OneMinusReflectivityFromMetallic: unity_ColorSpaceDielectricSpec.a x (1 - metallic)).
 		ShadowParams.LightmapDiffuse = 1.f;
@@ -5119,6 +5128,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		ShadowParams.ReflectionTex = nullptr;
 		ShadowParams.StandardMetallic = 0.f;
 		ShadowParams.StandardSmoothness = 0.5f;
+		ShadowParams.StandardNormalScale = 1.f;
 		ShadowParams.bStandardSmoothnessFromMap = false;
 		FLinearColor ReflectionIndex = FLinearColor::Black;
 		const bool bReflected = !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKReflectionIndex", ReflectionIndex);
@@ -5129,6 +5139,8 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			if (Shader.StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase))
 			{
 				ShadowParams.bStandardLinear = true;
+				FLinearColor BumpScale;
+				if (Source.MaterialValue(i, "_BumpScale", BumpScale)) ShadowParams.StandardNormalScale = BumpScale.R;
 				constexpr float LinearDielectricOneMinus = 0.96f;
 				FLinearColor Value;
 				ShadowParams.StandardSmoothness = Source.MaterialValue(i, "_Glossiness", Value) ? FMath::Clamp(Value.R, 0.f, 1.f) : 0.5f;
@@ -5141,6 +5153,10 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				else
 				{
 					ShadowParams.StandardMetallic = Source.MaterialValue(i, "_Metallic", Value) ? FMath::Clamp(Value.R, 0.f, 1.f) : 0.f;
+					// Standard declares [Gamma] _Metallic. Native map32 meta00's
+					// saved .25 reaches the pixel CB as .05087608844, not .25.
+					const float MetallicGamma = ShadowParams.StandardMetallic;
+					ShadowParams.StandardMetallic = MetallicGamma <= .04045f ? MetallicGamma / 12.92f : FMath::Pow((MetallicGamma + .055f) / 1.055f, 2.4f);
 					ShadowParams.LightmapDiffuse = LinearDielectricOneMinus * (1.f - ShadowParams.StandardMetallic);
 					const uint8* Bytes = nullptr;
 					int32 Length = 0;
@@ -5299,6 +5315,20 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		{
 			NormalTex = LinearTextureFromPngBytes(View.normal_map, View.normal_map_len);
 			if (NormalTex) { NormalTex->AddToRoot(); Output.Textures.Add(NormalTex); }
+		}
+		if (!bCookedTextures && ShadowParams.bStandardLinear && Source.MaterialKeyword(i, "_NORMALMAP"))
+		{
+			const uint8* Bytes = nullptr; int32 Length = 0;
+			if (Source.ShaderTexture(i, "_BumpMap", Bytes, Length))
+			{
+				OkTextureSettings BumpSettings{1, 0, 0, 0, 0};
+				Source.TextureSettings(i, "_BumpMap", BumpSettings);
+				BumpSettings.srgb = 0;
+				NormalTex = TextureFromPngBytes(Bytes, Length, false, &BumpSettings, true);
+				if (NormalTex) { NormalTex->AddToRoot(); Output.Textures.Add(NormalTex); }
+				ShadowParams.NormalMapST = FLinearColor(1.f, 1.f, 0.f, 0.f);
+				Source.MaterialValue(i, "_BumpMap_ST", ShadowParams.NormalMapST);
+			}
 		}
 		if (Source.MaterialShaderName(i) == TEXT("OpenKoikatsu/TripoPBR"))
 		{
