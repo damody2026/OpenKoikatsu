@@ -278,6 +278,8 @@ void AOKStreetSocialScene::TickPlaceClosing(){
  const FString Place=PlaceHere(S.Male);
  if(Place.IsEmpty()){S.ClosedNoticePlace.Reset();return;}
  FString Why;if(!PlaceClosedNow(Place,Why)){S.ClosedNoticePlace.Reset();return;}
+ // Staff early for a shift here (within the hour): he waits inside for the doors to open, not shown out as a customer.
+ {const int64 NowMinute=OKStreetMindNow(S);if(S.Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return A.Kind==TEXT("shift")&&A.Place==Place&&A.Start>=NowMinute&&A.Start-NowMinute<=60;}))return;}
  // Not open yet but opening within a quarter of an hour (they came for breakfast at 6:56): they wait, nothing closes.
  if(!PlaceClosedAt(Place,StreetNow()+FTimespan::FromMinutes(15),Why))return;
  const auto* Where=OKStreetFindPlace(Place);const FString Name=Where?FString(Where->Name):Place;

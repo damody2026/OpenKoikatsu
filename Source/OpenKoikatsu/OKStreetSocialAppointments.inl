@@ -165,6 +165,32 @@ const FOKStreetAppointment* AOKStreetSocialScene::AppointmentBefore(int64 UntilM
 void AOKStreetSocialScene::TickAppointments(){
  auto& S=*State;const int64 Now=OKStreetMindNow(S);
  if(Now==S.AppointmentTickMinute)return;S.AppointmentTickMinute=Now;
+ // She walks over to him at the meeting place and opens the talk.
+ auto ArriveNow=[this,&S](int32 Girl){
+   if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&S.Target!=Girl){
+    // On another floor (upstairs in the department store, he is down on the street): she comes down first and sets out
+    // from the building's door. A straight line from the upper floor kept her walking into the wall.
+    // Or inside another building (at work in the restaurant): from its door too; the street routes do not reach inside.
+    {auto& A=S.Agents[Girl-1];const FString HerPlace=PlaceHere(A.Position);
+     if(FMath::Abs(A.Position.Z-S.Male.Z)>100.f||(!HerPlace.IsEmpty()&&HerPlace!=PlaceHere(S.Male)))if(const auto* P=OKStreetFindPlace(HerPlace);P&&!P->Door.IsNearlyZero()){
+     UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is on another floor of %s (z %.0f, he %.0f); she sets out from its door"),Girl,P->Id,A.Position.Z,S.Male.Z);
+     A.Position=FVector(P->Door.X,P->Door.Y,S.Male.Z);S.Commutes.Remove(Girl);S.CommuteFinal.Remove(Girl);}}
+    auto Path=ContactRoute(S.Agents[Girl-1].Position,S.Male);
+    if(Path.IsEmpty())Path={S.Agents[Girl-1].Position,S.Male}; // no planned route (indoors): walk straight to him
+    // Out of his sight (as the schedule does): she is already on her way, the last stretch along the route away; only that
+    // part is walked where he can see it.
+    if(FVector::Dist2D(S.Agents[Girl-1].Position,S.Male)>4000.f&&Path.Num()>=2){
+     int32 From=0;for(int32 K=0;K<Path.Num();++K)if(FVector::Dist2D(Path[K],S.Male)<=2500.f){From=FMath::Max(0,K-1);break;}
+     if(From>0){S.Agents[Girl-1].Position=Path[From];Path.RemoveAt(0,From);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d was out of sight; already on her way, at %s"),Girl,*Path[0].ToCompactString());}}
+    // Time to walk the route, with room to spare (a fixed 90 s gave up halfway across the map).
+    float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
+    S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);
+    S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
+    UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
+   }else if(S.Target==Girl){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
+   else{UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d)"),Girl,S.ApproachGirl);}
+ };
+ for(auto It=S.ArriveLater.CreateIterator();It;++It)if(Now>=It.Value()){const int32 Girl=It.Key();It.RemoveCurrent();ArriveNow(Girl);}
  if(!S.Store.Appointments.ContainsByPredicate([](const FOKStreetAppointment& A){return A.Status==TEXT("pending");})&&!S.Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return Now-A.Start>2*1440;}))return;
  auto IdOf=[&](int32 I){return I>0&&S.Manifest.Characters.IsValidIndex(I)?OKStreetStableId(S.Manifest.Characters[I]):FString();};
  auto Request=OKRulesRequest(TEXT("appointments_tick"));Request->SetNumberField(TEXT("now"),double(Now));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
@@ -203,28 +229,12 @@ void AOKStreetSocialScene::TickAppointments(){
  // She comes to him at the meeting place and opens the talk.
  for(const auto& V:Answer->GetArrayField(TEXT("arrive"))){
   const int32 Girl=CharacterOf(V->AsObject()->GetStringField(TEXT("heroine")));if(Girl==INDEX_NONE)continue;
-  if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&S.Target!=Girl){
-   // On another floor (upstairs in the department store, he is down on the street): she comes down first and sets out
-   // from the building's door. A straight line from the upper floor kept her walking into the wall.
-   // Or inside another building (at work in the restaurant): from its door too; the street routes do not reach inside.
-   {auto& A=S.Agents[Girl-1];const FString HerPlace=PlaceHere(A.Position);
-    if(FMath::Abs(A.Position.Z-S.Male.Z)>100.f||(!HerPlace.IsEmpty()&&HerPlace!=PlaceHere(S.Male)))if(const auto* P=OKStreetFindPlace(HerPlace);P&&!P->Door.IsNearlyZero()){
-    UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is on another floor of %s (z %.0f, he %.0f); she sets out from its door"),Girl,P->Id,A.Position.Z,S.Male.Z);
-    A.Position=FVector(P->Door.X,P->Door.Y,S.Male.Z);S.Commutes.Remove(Girl);S.CommuteFinal.Remove(Girl);}}
-   auto Path=ContactRoute(S.Agents[Girl-1].Position,S.Male);
-   if(Path.IsEmpty())Path={S.Agents[Girl-1].Position,S.Male}; // no planned route (indoors): walk straight to him
-   // Out of his sight (as the schedule does): she is already on her way, the last stretch along the route away; only that
-   // part is walked where he can see it.
-   if(FVector::Dist2D(S.Agents[Girl-1].Position,S.Male)>4000.f&&Path.Num()>=2){
-    int32 From=0;for(int32 K=0;K<Path.Num();++K)if(FVector::Dist2D(Path[K],S.Male)<=2500.f){From=FMath::Max(0,K-1);break;}
-    if(From>0){S.Agents[Girl-1].Position=Path[From];Path.RemoveAt(0,From);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d was out of sight; already on her way, at %s"),Girl,*Path[0].ToCompactString());}}
-   // Time to walk the route, with room to spare (a fixed 90 s gave up halfway across the map).
-   float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
-   S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);
-   S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
-   UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
-  }else if(S.Target==Girl){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
-  else{UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d)"),Girl,S.ApproachGirl);}
+  // Still at work (or in class) until the meeting: she comes at its time, not half an hour early off her shift ("I am still
+  // working, 25 more minutes" when she had already walked over).
+  {const int32 Id=int32(V->AsObject()->GetNumberField(TEXT("id")));const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==Id;});
+   const FOKStreetPlanBlock* B=BlockNow(Girl,int32(Now%1440));
+   if(A&&Now<A->Start&&B&&(B->Kind==TEXT("work")||B->Kind==TEXT("class"))){S.ArriveLater.Add(Girl,A->Start);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is at %s until %02d:%02d; she comes then"),Girl,*B->Kind,int32(A->Start%1440)/60,int32(A->Start%60));continue;}}
+  ArriveNow(Girl);
  }
  RefreshUI();
 }
