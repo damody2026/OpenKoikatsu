@@ -1095,7 +1095,13 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.economy.colon_mark"))+Reply->Reply;
  ApplyFreeTalkFavor(Character,Reply->FavorDelta,Reply->Reason);
  ApplyMindRelation(Character,Reply->RelDelta,Reply->Emotion);
- ApplyChoiceReply(Character,*Reply);
+ // Who pays is what they settled: a game note ("you just walked in, order something") is no talk between them, so her
+ // "payer" on it is a guess ("him" on entering the cafe, nobody had said a word). Not dropped while a checkout
+ // choice is open: then the note asks her exactly that. "her" stays: her own money is hers to offer ("到啦。要不要喝罐饮料？
+ // 我请你" at the dorm, and he was charged the ¥5).
+ {FOKFreeTalkReply Applied=*Reply;if(OKStreetFreeTalkIsNudge(Text)&&!Applied.Payer.IsEmpty()&&Applied.Payer!=TEXT("her")&&!S.Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("checkout");})){
+   UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d payer \"%s\" on a game note, not settled by them"),Character,*Applied.Payer);Applied.Payer.Reset();}
+  ApplyChoiceReply(Character,Applied);}
  ApplyMindExpression(Character,Reply->Emotion,Reply);
  // Free-talk replies have no recorded clip, so they always go to the TTS server (independent of the
  // V voice-mode toggle, which only chooses for scripted lines); the text stays on screen either way.
