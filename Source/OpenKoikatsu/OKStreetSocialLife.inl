@@ -356,6 +356,7 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  Request->SetBoolField(TEXT("menu"),!S.ActCutShort&&A&&(A->Code==5||A->Code==2)&&A->Kind==EOKStreetActivityKind::Pair&&P&&S.LastCheckoutMinute<StartMinute-30&&S.OrderDroppedMinute<StartMinute-30);
  // Cut short (the place closed on them): the minutes that really went by, not the activity's whole length.
  if(S.ActCutShort)Request->SetNumberField(TEXT("spent"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));Request->SetNumberField(TEXT("menu_seed"),int32(StartMinute)+Girl*31);Request->SetStringField(TEXT("agreed"),PayAgreed(Girl)); // who pays, as they settled it (the AI's reading)
+ if(!PayAgreed(Girl).IsEmpty()&&S.PayAgreedShop.IsEmpty())S.PayAgreedShop=PlaceId; // used here (the vending machine): not for her drink at the next shop
  Request->SetNumberField(TEXT("elapsed"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));
  Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("seed"),FMath::Rand());
  // The ticket of a place with an admission (aquarium, pool, onsen) is paid once a day there (shop.rs activity_end).
