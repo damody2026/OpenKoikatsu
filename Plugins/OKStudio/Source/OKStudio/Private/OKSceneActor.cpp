@@ -147,7 +147,9 @@ namespace
 		Actor->bStudioItemShading = Item != nullptr;
 		// Gallery's unshadowed display replaces material shadow colours with
 		// white. Studio must retain its authored material lighting instead.
-		if (!bMap) Actor->CharacterDisplayShadowsOverride = true;
+		// Items already retain their material shadows through bStudioItemShading;
+		// they must not allocate a character depth capture per scene object.
+		if (!bMap) Actor->CharacterDisplayShadowsOverride = Item == nullptr;
 		// Items draw from the Studio root: the street's parents plus M_ForgeStudioOpaque, the depth-writing variant of the
 		// game's item program (opaque items overlapping each other sort by depth, not by distance).
 		if (Item) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay26");

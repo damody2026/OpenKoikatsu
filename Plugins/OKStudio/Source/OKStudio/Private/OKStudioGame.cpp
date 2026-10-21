@@ -3301,6 +3301,7 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 			bool bStudioLighting = true;
 			float HairShadowError = 0.f;
 			float LightAlphaError = 0.f;
+			bool bItemsUseSharedNeutralDepth = true;
 			for (const FOKSceneObject& O : Document->Objects)
 			{
 				const AKKPreviewActor* PO = SceneActor->PreviewOf(O.Id);
@@ -3328,11 +3329,22 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 						}
 					}
 				}
-				if (O.Kind == EOKSceneObjectKind::Item) { ++Items; if (PO && PO->Session.PartCount() > 0) ++ItemsBuilt; }
+				if (O.Kind == EOKSceneObjectKind::Item)
+				{
+					++Items;
+					if (PO && PO->Session.PartCount() > 0)
+					{
+						++ItemsBuilt;
+						bItemsUseSharedNeutralDepth &= !PO->bCharacterDisplayShadows && PO->bStudioItemShading;
+						for (const auto& Target : PO->ToonShadowTargets)
+							bItemsUseSharedNeutralDepth &= Target && Target->SizeX == 4 && Target->SizeY == 4;
+					}
+				}
 			}
 			Check(bStudioLighting && AuthoredHairMaterials > 0 && HairShadowError < 0.0001f,
 				FString::Printf(TEXT("Studio retains native hair shadow colours independently of Gallery: %d materials, error %.7f"), AuthoredHairMaterials, HairShadowError));
 			Check(AuthoredHairMaterials > 0 && LightAlphaError < 0.0001f, TEXT("shared float4 lighting updates keep shader alpha synchronized"));
+			Check(ItemsBuilt > 0 && bItemsUseSharedNeutralDepth, TEXT("Studio items retain authored shading without per-item character depth targets"));
 			Check(bImported && Chars == Report.Characters && Report.CharacterCards == Report.Characters && Built == Chars && Chars > 0,
 				FString::Printf(TEXT("KStudio import: %d characters, %d OK cards, %d shown %s"), Chars, Report.CharacterCards, Built, *ImportError));
 			Check(bImported && Items == Report.CatalogItems && ItemsBuilt == Items, FString::Printf(TEXT("KStudio import: %d of %d items from the catalogue, %d shown; map %d"), Report.CatalogItems, Report.Items, ItemsBuilt, Report.Map));
