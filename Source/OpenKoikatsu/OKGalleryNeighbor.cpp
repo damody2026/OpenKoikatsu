@@ -52,7 +52,7 @@ void UOKCharacterController::TickNeighborPreload(){
   AKKPreviewActor* Actor=Job->Actor.Get();
   if(!Actor){
    Actor=GetWorld()->SpawnActor<AKKPreviewActor>(PreviewActor->GetActorLocation(),PreviewActor->GetActorRotation());
-   if(Actor){Job->Actor=Actor;Actor->SetActorHiddenInGame(true);Actor->SetActorTickEnabled(false);Actor->Session=MoveTemp(Job->Session);Ok=Actor->BeginSessionLoad(Error);}
+   if(Actor){Job->Actor=Actor;Actor->SetActorHiddenInGame(true);Actor->SetActorTickEnabled(false);Actor->Session=MoveTemp(Job->Session);Actor->UseGalleryPhysics();Ok=Actor->BeginSessionLoad(Error);}
   }else Ok=Actor->ContinueSessionLoad(Error);
   if(Actor)Actor->SuspendDisplayTicks(true);
   if(!Ok){if(Actor)Actor->Destroy();Job->Actor=nullptr;NeighborJob.Reset();UE_LOG(LogTemp,Warning,TEXT("OK neighbor preload display %s: %s"),*Job->Path,*Error);}

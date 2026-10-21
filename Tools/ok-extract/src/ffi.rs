@@ -269,7 +269,7 @@ pub unsafe extern "C" fn ok_session_bone_euler(s:*mut OkSession,name:*const c_ch
 }
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_set_physx_secondary(s:*mut OkSession,enabled:i32)->i32 {
-    // PhysX secondary dynamics for this character (one-to-one interaction only; off for everyone else).
+    // PhysX secondary dynamics for this character (gallery menu, one-to-one, paired playback; off for crowd and street).
     let Some(s)=sess_ref(s) else{return -1;};
     s.physx_secondary=enabled!=0;0
 }

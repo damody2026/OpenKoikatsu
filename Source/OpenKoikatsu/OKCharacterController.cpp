@@ -1,4 +1,5 @@
 #include "OKCharacterController.h"
+#include "KKPreviewActor.h"
 #include "OKComboBox.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/VerticalBox.h"
@@ -101,4 +102,8 @@ void UOKCharacterController::OnPhysicsBackendSelected(FString Item,ESelectInfo::
     const int32 Chosen=PhysicsBackendOptions[Index].Backend;
     if(Chosen>=-1)Backend->Set(Chosen,ECVF_SetByConsole);
     Enabled->Set(Chosen>=-1?1:0,ECVF_SetByConsole);
+    // The CVars only reach a character whose session allows the host solver. Arm the ones this menu is showing.
+    if(IsValid(PreviewActor))PreviewActor->UseGalleryPhysics();
+    if(IsValid(PartnerActor))PartnerActor->UseGalleryPhysics();
+    UE_LOG(LogTemp,Display,TEXT("Gallery physics backend %d (%s)"),Chosen,*Item);
 }

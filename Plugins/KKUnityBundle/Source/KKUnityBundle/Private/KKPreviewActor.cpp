@@ -7766,6 +7766,12 @@ bool AKKPreviewActor::FollowEyeLookCamera(int32 Pattern)
     if(!StudioCam || !SetEyeLookTarget(StudioCam->GetActorLocation(),Pattern,true)) return false;
     bEyeLookFollowCamera=true;return true;
 }
+void AKKPreviewActor::UseGalleryPhysics()
+{
+    if(bGalleryPhysics)return;
+    bGalleryPhysics=true;
+    AddPairPhysics();
+}
 void AKKPreviewActor::AddPairPhysics()
 {
     if(PairPhysicsUsers++==0)Session.SetPhysXSecondary(true);

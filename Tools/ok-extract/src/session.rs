@@ -1072,8 +1072,9 @@ pub struct OkSession {
     pub(crate) eye_look_config:Option<crate::eye_look::Config>,
     pub(crate) eye_look_runtime:Option<crate::eye_look::Runtime>,
     pub(crate) head_look:crate::head_look::HeadLook,
-    /// PhysX secondary dynamics (OKPhysXSecondary) for this character: on only for the one-to-one interaction
-    /// (`ok_session_set_physx_secondary`); every other character keeps the built-in DynamicBone solver.
+    /// PhysX secondary dynamics (OKPhysXSecondary) for this character (`ok_session_set_physx_secondary`).
+    /// On for the gallery physics menu, one-to-one interaction and paired playback; crowd and street NPCs stay off
+    /// and keep the built-in DynamicBone solver.
     pub(crate) physx_secondary:bool,
     /// The card's per-component solvers (`okPh`); read from the card at open, not cached.
     pub(crate) physics:crate::okphysics::CardPhysics,

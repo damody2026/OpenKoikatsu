@@ -130,7 +130,7 @@ void UOKCharacterController::TickClothingPreviews(){
    Actor=GetWorld()->SpawnActor<AKKPreviewActor>(PreviewActor->GetActorLocation(),PreviewActor->GetActorRotation());
    if(Actor){Job->Actor=Actor;Actor->SetActorHiddenInGame(true);Actor->SetActorTickEnabled(false);
     FMemory::Memcpy(Actor->DisplayClothesStates,Job->States,sizeof(Job->States));
-    Actor->Session=MoveTemp(Job->Session);if(Job->Physics!=FVector2D(Selected.Body.BustSoftness,Selected.Body.BustWeight))Actor->Session.ApplyBodyPhysics(Selected.Body.BustSoftness,Selected.Body.BustWeight);const FString Mods=EditorModsJson();if(Mods!=Job->Mods)Actor->Session.ApplyEditorMods(Mods,OutfitIndex);
+    Actor->Session=MoveTemp(Job->Session);Actor->UseGalleryPhysics();if(Job->Physics!=FVector2D(Selected.Body.BustSoftness,Selected.Body.BustWeight))Actor->Session.ApplyBodyPhysics(Selected.Body.BustSoftness,Selected.Body.BustWeight);const FString Mods=EditorModsJson();if(Mods!=Job->Mods)Actor->Session.ApplyEditorMods(Mods,OutfitIndex);
     Ok=Actor->BeginSessionLoad(Error);
    }
   }else Ok=Actor->ContinueSessionLoad(Error);

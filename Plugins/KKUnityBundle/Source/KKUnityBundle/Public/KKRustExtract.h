@@ -107,9 +107,9 @@ public:
 	bool IsPortable() const { return bPortable; }
 	/** Identity of this native session for the PhysX secondary-dynamics groups (the native session address). */
 	uint64 PhysicsGroup() const { return reinterpret_cast<uint64>(Handle); }
-	/** PhysX secondary dynamics (OKPhysXSecondary) for this character. Off by default: only the one-to-one interaction
-	 *  turns it on (AKKPreviewActor::AddPairPhysics); crowd, street NPCs and the gallery keep the built-in solver.
-	 *  Kept across reopening the card (outfit change, snapshot, clone). */
+	/** PhysX secondary dynamics (OKPhysXSecondary) for this character. Off by default. The gallery physics menu,
+	 *  one-to-one interaction and paired playback turn it on (AKKPreviewActor::AddPairPhysics); crowd and street
+	 *  NPCs keep the built-in solver. Kept across reopening the card (outfit change, snapshot, clone). */
 	bool SetPhysXSecondary(bool bOn);
 	bool IsPhysXSecondary() const { return bPhysXSecondary; }
 
