@@ -100,3 +100,8 @@ Tools/lua/lua.exe Tools/verify_ok_studio.lua --engine E:/PhysX/UE5.8 --tag Audit
 ## 後續實作：原生高階環境光、反射與來源顏色
 
 詳見 [本輪圖文驗收](OK_STUDIO_NATIVE_AMBIENT_20261021.md)：27係數／原作vertex插值、Standard間接光、HDR map sun、無損default及局部probe、髮gloss與臉部overlay通道均有來源oracle。最新421 Rust、6 Studio、8 Automation與14景實拍通過；6331色調／表情等差異仍未結案，原逐景表保留為後續清單。
+
+
+## 後續實作：無地圖背景與零環境
+
+[最新圖文驗收](OK_STUDIO_EMPTY_ENVIRONMENT_20261021.md)修正5698固定藍色背景，改從原作Est設定讀色並保存；無map／sky時使用原生零SH，包含道具。6Studio／9Automation及14景實拍通過。2534當前原作重載也為黑色，歷史縮圖藍色來自未存於SceneInfo的安裝設定，不加單景補償。原逐景表的其他材質、後製與表情差異仍保留。

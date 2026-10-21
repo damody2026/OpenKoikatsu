@@ -3879,3 +3879,6 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 ### 2026-10-21 零環境整合斷言不能要求未使用的L2參數
 - 首輪GameSelfTest的69個材質檢查FAIL，原因為眼睛／眉毛／部分鏡片原生program只有L1，卻被強制要求4組L2。實際資產也確認這些parent不宣告unity_SHBr。補測只核對有宣告的高階參數，L1仍必須存在，並加驗float4 alpha及__A scalar，不放寬非零誤差。最終PASS：69材質、112個unused L2項缺省、nonzero=0。首輪FAIL與其餘5 PASS保留，另跑新的完整6項輪次，不把舊輪改寫成成功。
 - 調查ForgeStudio front-face時，僅看特化varying片段曾懷疑v6未設定；完整caller已先用FaceSign初始化v6，未修改正確程式，也沒有重烘焙或用這個假說解釋尚存道具明暗。
+
+### 2026-10-21 6331 AO對照不是修正
+- 以現有比較診斷開關只關AO重拍，整體灰棕髮／灰白臉仍存在。該1/1只證明診斷擷取完成，不是6331 shader修復；正式AO設定未變，也未以常駐關閉AO掩蓋差異。

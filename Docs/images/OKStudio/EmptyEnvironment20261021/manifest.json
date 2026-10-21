@@ -1,0 +1,127 @@
+{
+  "source_render_revision": "1eee55d5c+worktree; final production sources; subsequent GameSelfTest-only correction",
+  "capture_count": 14,
+  "native_captures": 2,
+  "before_captures": 1,
+  "images": [
+    {
+      "file": "2534-native.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 174761,
+      "sha256": "2e6b555914461f582b579fd90225413195f7b57728125f1aeb56c2fc16b0477e"
+    },
+    {
+      "file": "5698-before.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 430507,
+      "sha256": "29b6b5fa13a3997f91573ac503cfdba1265137e5ab55bbc508045a655c796dd2"
+    },
+    {
+      "file": "5698-native.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 280012,
+      "sha256": "ed1e14449d13f6884f4e079ec69f5f437e5d46b40d322615b93ff4f04b47ee7b"
+    },
+    {
+      "file": "koikatu_cs0000001.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 848148,
+      "sha256": "3cf6886baadc99fb10aad2c5e9082e81717cf034e17373bd6119a6e5e400b25f"
+    },
+    {
+      "file": "koikatu_cs0000010.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 833442,
+      "sha256": "c6908036ea10271bf41a91e1f08cbc3e45cb8ca8f4e1272431dba5f96c6f6550"
+    },
+    {
+      "file": "koikatu_cs0000059.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 506587,
+      "sha256": "56a11d28f4b2d5177f1c02387274efd201131f5fbea231fcaa58853540d4736a"
+    },
+    {
+      "file": "koikatu_cs0000633.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 748753,
+      "sha256": "7bea079b823098edf3b22705d344b412c4ec6fcdb20b6c7b4b3baaa2a7315eb0"
+    },
+    {
+      "file": "koikatu_cs0001268.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 736369,
+      "sha256": "fb0f2bc33509698fe749e2318d34972a47e368d88308e66905f53c632c954fc2"
+    },
+    {
+      "file": "koikatu_cs0001901.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 886327,
+      "sha256": "903900fa64a6076224fb9f7e9906551b512682aa77008e1a539459ca29247fed"
+    },
+    {
+      "file": "koikatu_cs0002534.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 253108,
+      "sha256": "d450f1bc9584a7ba6742bdc964c6d3ba96f171a497cc621670b73ee2123a02a4"
+    },
+    {
+      "file": "koikatu_cs0003167.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 718946,
+      "sha256": "a16e4b90619e1d46ff3798bcc87ce0f16c2dd15ae912757e137b8d3bc2517f2d"
+    },
+    {
+      "file": "koikatu_cs0003800.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 744328,
+      "sha256": "fd1114158272df0fe1cd51f73e131b05296473d3f5032f231dd12d4689e8fea6"
+    },
+    {
+      "file": "koikatu_cs0004432.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 742821,
+      "sha256": "b5d6dbf968a78e1d8f37553530dbc77e4ec68789ee9f6fba7f20cc0590c8729a"
+    },
+    {
+      "file": "koikatu_cs0005065.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 797223,
+      "sha256": "ba2a7ddba18174ba5f96a759fb190b117304a729430e382f2b4d03b8b58605a7"
+    },
+    {
+      "file": "koikatu_cs0005698.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 285142,
+      "sha256": "25f4df53186a79060911ec90a7a0734f07b12e88b3d73595ca2a9435c5c04355"
+    },
+    {
+      "file": "koikatu_cs0006331.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 742017,
+      "sha256": "bb64fc53122cbb8704da62bbfd2e4ce5062373acc8297969037a9ac3b7a1c4cb"
+    },
+    {
+      "file": "koikatu_cs0006964.png",
+      "width": 1280,
+      "height": 360,
+      "bytes": 431755,
+      "sha256": "ee38958593423f7e67f0ca08c11cf288c4075c406c16165ab56c702a8bfe9242"
+    }
+  ]
+}
