@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "KKRuntimeMaterial.h"
 #include "Engine/EngineTypes.h"
 class UMaterialInterface;class UMaterialInstanceDynamic;
@@ -48,6 +48,8 @@ KKRUNTIMEPOSE_API FString OKRuntimeSharedMaterialVaryings(EKKRuntimeMaterialReci
 KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialUsesVertexAmbient(EKKRuntimeMaterialRecipe);
 class UMaterial;class UMaterialExpression;
 KKRUNTIMEPOSE_API UMaterialExpression* OKMakeRuntimeVertexAmbient(UMaterial*,const FKKRuntimeMaterialScene&);
+// Standard indirect diffuse: native vertex L2 plus pixel normal L0/L1.
+KKRUNTIMEPOSE_API UMaterialExpression* OKMakeRuntimeProbeAmbient(UMaterial*);
 
 KKRUNTIMEPOSE_API EBlendMode OKRuntimeSharedMaterialBlendMode(EKKRuntimeMaterialRecipe);
 

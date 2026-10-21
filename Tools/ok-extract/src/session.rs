@@ -736,6 +736,15 @@ fn studio_alpha_texture(role: &str, mesh: &ExtractedMesh) -> Option<Vec<u8>> {
 }
 
 impl SessionPart {
+    /// Native face overlays are already customized in source_material. Legacy
+    /// body overlay fields retain neutral defaults on old face snapshots.
+    /// Resolve at the view boundary so existing portable cards are corrected too.
+    pub(crate) fn draw_overlay_color(&self, slot:usize)->[f32;4] {
+        let (key,fallback)=if slot==0{("_overcolor1",self.overcolor)}else{("_overcolor2",self.overcolor2)};
+        if self.role=="head" && matches!(self.shader_kind,5|7) {
+            self.source_material.as_ref().and_then(|m|m.color(key)).unwrap_or(fallback)
+        }else{fallback}
+    }
     pub fn from_mesh(role: &str, mesh: &ExtractedMesh, blend: &str, unlit: bool) -> Self {
         let rest = if mesh.rest_positions.len() == mesh.positions.len() {
             mesh.rest_positions.clone()
@@ -6540,5 +6549,25 @@ fn scene_3800_neck_fk_overrides_saved_fix() {
     for (name,q) in ["cf_j_neck","cf_j_head"].into_iter().zip(fixed) {
         let actual=s.body_skel.as_ref().unwrap().tfs.values().find(|t|t.name==name).unwrap().rot;
         assert!(actual.iter().zip(q).map(|(a,b)|a*b).sum::<f32>().abs()>0.99999,"FIX resumes after clearing FK");
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn native_face_overlay_colors_survive_legacy_snapshot_transport() {
+    let lip=[0.8864779,0.6661562,0.7498654,0.08616342];let cheek=[1.,0.6862745,0.6862745,0.12];
+    for shader in ["Koikano/main_skin","Shader Forge/main_skin"] {
+        let mesh=ExtractedMesh{name:"cf_O_face".into(),mat:Some(crate::unity::MeshMaterial{shader:shader.into(),
+            colors:[("_overcolor1".into(),lip),("_overcolor2".into(),cheek)].into(),..Default::default()}),..Default::default()};
+        let part=SessionPart::from_mesh("head",&mesh,"opaque",false);
+        assert_eq!(part.overcolor,[1.,1.,1.,0.]);
+        assert_eq!(part.draw_overlay_color(0),lip);assert_eq!(part.draw_overlay_color(1),cheek);
+        let bytes=bincode::serialize(&PartBlob::from_part(&part)).unwrap();
+        let mut restored=bincode::deserialize::<PartBlob>(&bytes).unwrap().into_part();
+        assert_eq!(restored.draw_overlay_color(0),lip);assert_eq!(restored.draw_overlay_color(1),cheek);
+        restored.source_material.as_mut().unwrap().colors.remove("_overcolor1");
+        assert_eq!(restored.draw_overlay_color(0),restored.overcolor);
+        let mut body=SessionPart::from_mesh("body",&mesh,"opaque",false);body.overcolor=[0.4,0.2,0.1,0.3];
+        assert_eq!(body.draw_overlay_color(0),body.overcolor,"body nipple transport remains authoritative");
     }
 }

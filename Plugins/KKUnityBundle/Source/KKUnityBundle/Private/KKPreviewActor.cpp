@@ -64,6 +64,7 @@
 #include "ok_raw_texture.h"
 #include "Modules/ModuleManager.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureCube.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionDepthFade.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
@@ -83,6 +84,7 @@ void AKKPreviewActor::ReleaseSceneCaches()
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionWorldPosition.h"
+#include "Materials/MaterialExpressionPixelNormalWS.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionSubtract.h"
@@ -685,6 +687,7 @@ struct FOKToonShadowParameters
 	// _MetallicGlossMap (keyword _METALLICGLOSSMAP) its red channel is the metallic, on the _MainTex UVs.
 	float LightmapDiffuse = 1.f;
 	bool bStandardLinear = false;
+    bool bNativeReflection = false;
 	UTexture2D* LightmapMetallicTex = nullptr;
 	// Unity Standard's indirect specular from the baked reflection probe the part sits in (okmodel_view::
 	// assign_reflection_probes): the probe's cubemap atlas (faces side by side, mips below; display values), its mips,
@@ -2561,7 +2564,7 @@ return Base.rgb * sh;
 			else EmitEd->EmissiveColor.Expression = Emission;
 		}
 	}
-	if (Shadow && (Shadow->LightmapTex || Shadow->ReflectionTex))
+	if (Shadow && (Shadow->LightmapTex || Shadow->ReflectionTex || Shadow->bStandardLinear))
 	{
 		// Installed Unity Standard uses linear indirect light: the colour lightmap is sRGB, its RGBM alpha decodes with
 		// (5^2.2,2.2); indirect diffuse multiplies albedo and oneMinusReflectivity (0.96 for dielectric).
@@ -2655,20 +2658,37 @@ return Base.rgb * sh;
 				else Code += TEXT("total += 5.0 * Lm.a * Lm.rgb * a * ");
 				Code += FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) + DirectionFactor + TEXT(";\n");
 			}
-			if (Shadow->ReflectionTex)
+            if (bStandardLinear && !Shadow->LightmapTex)
+            {
+                FCustomInput Probe;Probe.InputName=TEXT("ProbeDiffuse");Probe.Input.Expression=OKMakeRuntimeProbeAmbient(Mat);Decode->Inputs.Add(Probe);
+                Code += TEXT("total += ProbeDiffuse * a * ") + FString::SanitizeFloat(Shadow->LightmapDiffuse)
+                    + (bMetalMap ? TEXT(" * (1.0 - Metal.r);\n") : TEXT(";\n"));
+            }
+			if (Shadow->ReflectionTex || Shadow->bNativeReflection)
 			{
-				UMaterialExpressionTextureObject* Atlas = NewObject<UMaterialExpressionTextureObject>(Mat);
-				Atlas->Texture = Shadow->ReflectionTex;
-				Atlas->SamplerType = SAMPLERTYPE_LinearColor;
-				Input(TEXT("Atlas"), Atlas);
+                if(Shadow->bNativeReflection)
+                {
+                    static TStrongObjectPtr<UTextureCube> BlackDefaultCube;
+                    if(!BlackDefaultCube.IsValid())
+                    {
+                        auto* Black=NewObject<UTextureCube>();uint8 Pixels[24]={};Black->Source.Init(1,1,6,1,TSF_BGRA8,Pixels);Black->SRGB=false;Black->PostEditChange();BlackDefaultCube.Reset(Black);
+                    }
+                    UTextureCube* Cube=BlackDefaultCube.Get();
+                    auto* Parameter=NewObject<UMaterialExpressionTextureObjectParameter>(Mat);Parameter->ParameterName=TEXT("unity_SpecCube0");Parameter->Texture=Cube;Parameter->SamplerType=SAMPLERTYPE_LinearColor;Input(TEXT("NativeCube"),Parameter);
+                    auto* HDR=NewObject<UMaterialExpressionVectorParameter>(Mat);HDR->ParameterName=TEXT("unity_SpecCube0_HDR");HDR->DefaultValue=FLinearColor(1,1,0,0);Input(TEXT("NativeHDR"),HDR);
+                }
+                else
+                {
+                    auto* Atlas=NewObject<UMaterialExpressionTextureObject>(Mat);Atlas->Texture=Shadow->ReflectionTex;Atlas->SamplerType=SAMPLERTYPE_LinearColor;Input(TEXT("Atlas"),Atlas);
+                }
 				Input(TEXT("Position"), NewObject<UMaterialExpressionWorldPosition>(Mat));
 				Input(TEXT("Camera"), NewObject<UMaterialExpressionCameraPositionWS>(Mat));
-				Input(TEXT("Normal"), NewObject<UMaterialExpressionVertexNormalWS>(Mat));
-				const float Size = float(Shadow->ReflectionTex->GetSizeX()) / 6.f;
+				Input(TEXT("Normal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
+				const float Size = Shadow->ReflectionTex ? float(Shadow->ReflectionTex->GetSizeX()) / 6.f : 128.f;
 				Code += FString::Printf(TEXT("float smooth = %s;\nfloat Size = %s;\nfloat Mips = %s;\nfloat Intensity = %s;\n"),
 					*(FString::SanitizeFloat(Shadow->StandardSmoothness) + (Shadow->bStandardSmoothnessFromMap ? TEXT(" * Metal.a") : TEXT(""))),
 					*FString::SanitizeFloat(Size), *FString::SanitizeFloat(Shadow->ReflectionMips), *FString::SanitizeFloat(Shadow->ReflectionIntensity));
-				Code += TEXT(R"(float3 V = normalize(Camera - Position);
+				FString ReflectionCode = TEXT(R"(float3 V = normalize(Camera - Position);
 float3 N = normalize(Normal);
 float3 Rw = reflect(-V, N);
 float3 d = float3(-Rw.x, Rw.z, Rw.y);
@@ -2698,6 +2718,13 @@ float grazing = saturate(smooth + (1.0 - omr));
 float nv = saturate(abs(dot(N, V)));
 total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1.0 - nv, 5.0));
 )");
+                if(Shadow->bNativeReflection)
+                {
+                    const int32 Begin=ReflectionCode.Find(TEXT("float3 ad = abs(d);"));
+                    const int32 End=ReflectionCode.Find(TEXT("float3 specColor ="));
+                    ReflectionCode=ReflectionCode.Left(Begin)+TEXT("float pr=1.0-smooth;float lod=pr*(1.7-.7*pr)*6.0;float3 env=TextureCubeSampleLevel(NativeCube,NativeCubeSampler,d,lod).rgb;Intensity=NativeHDR.r;\n")+ReflectionCode.Mid(End);
+                }
+                Code+=ReflectionCode;
 			}
 			Decode->Code = Code + (bStandardLinear ? TEXT("return max(total, 0.0);") : TEXT("return pow(max(total, 0.0), 2.2);"));
 			Mat->GetExpressionCollection().AddExpression(Decode);
@@ -4111,6 +4138,26 @@ void AKKPreviewActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AKKPreviewActor::SetSharedVectorParameter(FName Name, const FLinearColor& Value)
 {
+    // Own-graph map materials expose the same probe parameters. Bind a MID per
+    // renderer so changing maps/skies never mutates a shared material graph.
+    if (!bUseSharedParents)
+    {
+        TInlineComponentArray<UMeshComponent*> Meshes(this);
+        for (UMeshComponent* Mesh:Meshes) for(int32 Slot=0;Slot<Mesh->GetNumMaterials();++Slot)
+        {
+            UMaterialInterface* Parent=Mesh->GetMaterial(Slot);FLinearColor Existing;
+            if(!Parent||!Parent->GetVectorParameterValue(FMaterialParameterInfo(Name),Existing))continue;
+            auto* Dynamic=Cast<UMaterialInstanceDynamic>(Parent);
+            if(!Dynamic)
+            {
+                Dynamic=UMaterialInstanceDynamic::Create(Parent,this);Mesh->SetMaterial(Slot,Dynamic);
+                for(FKKLoadedPart& Part:Parts)if(Part.SurfaceMat==Parent && Part.Comp==Mesh)Part.SurfaceMat=Dynamic;
+            }
+            Dynamic->SetVectorParameterValue(Name,Value);
+            Dynamic->SetScalarParameterValue(FName(Name.ToString()+TEXT("__A")),Value.A);
+        }
+    }
+
 	for (const TArray<TObjectPtr<UMaterialInstanceDynamic>>* List : { &CookedRoleMaterials, &CookedRoleOutlines })
 		for (UMaterialInstanceDynamic* M : *List)
 		{
@@ -4126,6 +4173,20 @@ void AKKPreviewActor::SetSharedVectorParameter(FName Name, const FLinearColor& V
 
 void AKKPreviewActor::SetSharedTextureParameter(FName Name,UTexture* Value)
 {
+    if(!bUseSharedParents)
+    {
+        TInlineComponentArray<UMeshComponent*> Meshes(this);
+        for(UMeshComponent* Mesh:Meshes)for(int32 Slot=0;Slot<Mesh->GetNumMaterials();++Slot)
+        {
+            UMaterialInterface* Parent=Mesh->GetMaterial(Slot);UTexture* Current=nullptr;
+            if(!Parent||!Parent->GetTextureParameterValue(FMaterialParameterInfo(Name),Current))continue;
+            auto* M=Cast<UMaterialInstanceDynamic>(Parent);
+            if(!M){M=UMaterialInstanceDynamic::Create(Parent,this);Mesh->SetMaterial(Slot,M);for(FKKLoadedPart& Part:Parts)if(Part.SurfaceMat==Parent && Part.Comp==Mesh)Part.SurfaceMat=M;}
+            UTexture* Target=Value;if(!Target && M->Parent)M->Parent->GetTextureParameterValue(FMaterialParameterInfo(Name),Target);
+            if(Target && Target!=Current)M->SetTextureParameterValue(Name,Target);
+        }
+    }
+
     for(const TArray<TObjectPtr<UMaterialInstanceDynamic>>* List:{&CookedRoleMaterials,&CookedRoleOutlines})
         for(UMaterialInstanceDynamic* M:*List)
         {
@@ -4134,6 +4195,28 @@ void AKKPreviewActor::SetSharedTextureParameter(FName Name,UTexture* Value)
             if(!Target&&M->Parent)M->Parent->GetTextureParameterValue(FMaterialParameterInfo(Name),Target);
             if(Target&&Target!=Current)M->SetTextureParameterValue(Name,Target);
         }
+}
+
+void AKKPreviewActor::BindSourceReflectionProbes(TFunctionRef<UTexture*(int32,FLinearColor&)> Resolve)
+{
+    TInlineComponentArray<UMeshComponent*> Meshes(this);
+    for(UMeshComponent* Mesh:Meshes)
+    {
+        int32 Node=-1;
+        for(const FName Tag:Mesh->ComponentTags){const FString T=Tag.ToString();const FString Prefix=TEXT("OKReflectionProbe=");if(T.StartsWith(Prefix))Node=FCString::Atoi(*T.Mid(Prefix.Len()));}
+        FLinearColor HDR(1,1,0,0);UTexture* Texture=nullptr;bool Resolved=false;
+        for(int32 Slot=0;Slot<Mesh->GetNumMaterials();++Slot)
+        {
+            UMaterialInterface* Parent=Mesh->GetMaterial(Slot);UTexture* Current=nullptr;
+            if(!Parent||!Parent->GetTextureParameterValue(FMaterialParameterInfo(TEXT("unity_SpecCube0")),Current))continue;
+            if(!Resolved){Texture=Resolve(Node,HDR);Resolved=true;}
+            auto* M=Cast<UMaterialInstanceDynamic>(Parent);
+            if(!M){M=UMaterialInstanceDynamic::Create(Parent,this);Mesh->SetMaterial(Slot,M);for(FKKLoadedPart& Part:Parts)if(Part.SurfaceMat==Parent&&Part.Comp==Mesh)Part.SurfaceMat=M;}
+            UTexture* Target=Texture;if(!Target&&M->Parent)M->Parent->GetTextureParameterValue(FMaterialParameterInfo(TEXT("unity_SpecCube0")),Target);
+            if(Target&&Current!=Target)M->SetTextureParameterValue(TEXT("unity_SpecCube0"),Target);
+            M->SetVectorParameterValue(TEXT("unity_SpecCube0_HDR"),HDR);
+        }
+    }
 }
 
 void AKKPreviewActor::Destroyed()
@@ -5031,6 +5114,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// (UnityStandardUtils OneMinusReflectivityFromMetallic: unity_ColorSpaceDielectricSpec.a x (1 - metallic)).
 		ShadowParams.LightmapDiffuse = 1.f;
 		ShadowParams.bStandardLinear = false;
+        ShadowParams.bNativeReflection=false;
 		ShadowParams.LightmapMetallicTex = nullptr;
 		ShadowParams.ReflectionTex = nullptr;
 		ShadowParams.StandardMetallic = 0.f;
@@ -5038,7 +5122,8 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		ShadowParams.bStandardSmoothnessFromMap = false;
 		FLinearColor ReflectionIndex = FLinearColor::Black;
 		const bool bReflected = !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKReflectionIndex", ReflectionIndex);
-		if (ShadowParams.LightmapTex || bReflected)
+        ShadowParams.bNativeReflection=bSourceMapShading;
+		if (ShadowParams.LightmapTex || bReflected || (bSourceMapShading))
 		{
 			const FString Shader = Source.MaterialShaderName(i);
 			if (Shader.StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase))
@@ -5714,6 +5799,11 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					Part.SurfaceMat = Dynamic;
 					UE_LOG(LogTemp, Display, TEXT("OK native particle part=%s tint_linear=(%.4f,%.4f,%.4f,%.4f) inverse_fade=%.4f material=%s"), *Name, TintColor.R, TintColor.G, TintColor.B, TintColor.A, InvFade.R, *Dynamic->GetPathName());
 				}
+        if(Comp && bSourceMapShading)
+        {
+            FLinearColor ProbeNode(-1,0,0,0);Source.MaterialValue(i,"_OKReflectionNode",ProbeNode);
+            Comp->ComponentTags.Add(FName(*FString::Printf(TEXT("OKReflectionProbe=%d"),FMath::RoundToInt(ProbeNode.R))));
+        }
 		FLinearColor RendererMode;
 		if (Comp && Source.MaterialValue(i, "_OKRendererShadowMode", RendererMode))
 		{

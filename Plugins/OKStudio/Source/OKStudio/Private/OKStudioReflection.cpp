@@ -8,11 +8,11 @@
 #include "Serialization/JsonSerializer.h"
 #include "UObject/StrongObjectPtr.h"
 
-UTextureCube* OKStudioMapReflection(int32 Map,FLinearColor& OutHDR)
+UTextureCube* OKStudioMapReflection(int32 Map,FLinearColor& OutHDR,const FString& Prefab,int32 Node)
 {
     static FString Loaded;
-    static TMap<int32,FString> Files;
-    static TMap<int32,FLinearColor> Decode;
+    static TMap<FString,FString> Files;
+    static TMap<FString,FLinearColor> Decode;
     static TMap<FString,TStrongObjectPtr<UTextureCube>> Cubes;
     const FString Root=AOKSceneActor::LibraryDirectory();
     if(Loaded!=Root)
@@ -23,21 +23,29 @@ UTextureCube* OKStudioMapReflection(int32 Map,FLinearColor& OutHDR)
             && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Document) && Document
             && Document->TryGetStringField(TEXT("format"),Format) && Format==TEXT("ok-studio-map-reflections-1") && Document->TryGetArrayField(TEXT("maps"),Maps))
         {
+            auto Binding=[&](const FString& Key,const TSharedPtr<FJsonObject>& Row){
+                FString File;const TArray<TSharedPtr<FJsonValue>>* HDR=nullptr;
+                if(!Row||!Row->TryGetStringField(TEXT("texture"),File)||!File.StartsWith(TEXT("studio/reflections/"))||File.Contains(TEXT(".."))||!File.EndsWith(TEXT(".okcube"))||!Row->TryGetArrayField(TEXT("hdr"),HDR)||HDR->Num()!=4)return;
+                FLinearColor H;for(int32 C=0;C<4;++C){double N=0;if(!(*HDR)[C]->TryGetNumber(N)||!FMath::IsFinite(N))return;(&H.R)[C]=float(N);}
+                Files.Add(Key,File);Decode.Add(Key,H);
+            };
             for(const auto& V:*Maps)
             {
-                const auto Row=V->AsObject();double Id=0;FString File;const TArray<TSharedPtr<FJsonValue>>* HDR=nullptr;
-                if(!Row||!Row->TryGetNumberField(TEXT("map"),Id)||!Row->TryGetStringField(TEXT("texture"),File)
-                    ||!File.StartsWith(TEXT("studio/reflections/"))||File.Contains(TEXT(".."))||!File.EndsWith(TEXT(".okcube"))
-                    ||!Row->TryGetArrayField(TEXT("hdr"),HDR)||HDR->Num()!=4)continue;
-                FLinearColor H;bool Valid=true;
-                for(int32 C=0;C<4;++C){double N=0;if(!(*HDR)[C]->TryGetNumber(N)||!FMath::IsFinite(N)){Valid=false;break;}(&H.R)[C]=float(N);}
-                if(Valid){Files.Add(int32(Id),File);Decode.Add(int32(Id),H);}
+                const auto Row=V->AsObject();double Id=0;if(!Row||!Row->TryGetNumberField(TEXT("map"),Id))continue;
+                Binding(FString::Printf(TEXT("%d||-1"),int32(Id)),Row);
+                const TSharedPtr<FJsonObject>* Roots=nullptr;
+                if(Row->TryGetObjectField(TEXT("roots"),Roots))for(const auto& RootRow:(*Roots)->Values)
+                {
+                    const TArray<TSharedPtr<FJsonValue>>* Probes=nullptr;if(!RootRow.Value->TryGetArray(Probes))continue;
+                    for(const auto& Probe:*Probes){const auto Object=Probe->AsObject();double ProbeNode=0;if(Object&&Object->TryGetNumberField(TEXT("node"),ProbeNode))Binding(FString::Printf(TEXT("%d|%s|%d"),int32(Id),*RootRow.Key,int32(ProbeNode)),Object);}
+                }
             }
         }
     }
     OutHDR=FLinearColor(1,1,0,0);
-    const FString* File=Files.Find(Map);if(!File)return nullptr;
-    OutHDR=Decode.FindRef(Map);
+    const FString Key=Node<0?FString::Printf(TEXT("%d||-1"),Map):FString::Printf(TEXT("%d|%s|%d"),Map,*Prefab,Node);
+    const FString* File=Files.Find(Key);if(!File)return nullptr;
+    OutHDR=Decode.FindRef(Key);
     if(const auto* Found=Cubes.Find(*File))return Found->Get();
     auto Fail=[&]()->UTextureCube*{UE_LOG(LogTemp,Warning,TEXT("OK Studio reflection invalid: %s"),**File);Cubes.Add(*File,TStrongObjectPtr<UTextureCube>());return nullptr;};
     TArray<uint8> Bytes;if(!FFileHelper::LoadFileToArray(Bytes,*(Root/(*File)))||Bytes.Num()<32||FMemory::Memcmp(Bytes.GetData(),"OKCUBE01",8)!=0)return Fail();

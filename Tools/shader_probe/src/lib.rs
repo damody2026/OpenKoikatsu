@@ -35,7 +35,7 @@ unsafe fn capture_texture(request:&Request)->Result<serde_json::Value,String>{
     let texture=resource.cast::<ID3D11Texture2D>().map_err(|e|e.to_string())?;
     let device=texture.GetDevice().map_err(|e|e.to_string())?;let context=device.GetImmediateContext().map_err(|e|e.to_string())?;
     let mut d=D3D11_TEXTURE2D_DESC::default();texture.GetDesc(&mut d);
-    let(format_bytes,compressed)=match d.Format.0{70..=72|79..=81=>(8,true),73..=78|82..=84|94..=99=>(16,true),9|10=>(8,false),1|2=>(16,false),28|29|87|91=>(4,false),v=>return Err(format!("unsupported raw texture format {v}"))};
+    let(format_bytes,compressed)=match d.Format.0{70..=72|79..=81=>(8,true),73..=78|82..=84|94..=99=>(16,true),9|10=>(8,false),1|2=>(16,false),27|28|29|87|91=>(4,false),60|61=>(1,false),v=>return Err(format!("unsupported raw texture format {v}"))};
     let staging_desc=D3D11_TEXTURE2D_DESC{Usage:D3D11_USAGE_STAGING,BindFlags:0,CPUAccessFlags:D3D11_CPU_ACCESS_READ.0 as u32,MiscFlags:0,..d};
     let mut staging=None;device.CreateTexture2D(&staging_desc,None,Some(&mut staging)).map_err(|e|e.to_string())?;let staging=staging.ok_or("texture staging absent")?;context.CopyResource(&staging,&texture);
     let mut subresources=Vec::new();

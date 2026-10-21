@@ -24,23 +24,31 @@ pub const REFLECTION_FILE_NAME: &str = "studio/map_reflections.json";
 pub fn convert_map_reflections(game:&Path,lib:&Path)->Result<usize,String>{
     use sha2::{Digest,Sha256};
     let catalog:crate::studio_items::Catalog=serde_json::from_slice(&std::fs::read(lib.join(crate::studio_items::FILE_NAME)).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
-    let directory=lib.join("studio/reflections");std::fs::create_dir_all(&directory).map_err(|e|e.to_string())?;
+    std::fs::create_dir_all(lib.join("studio/reflections")).map_err(|e|e.to_string())?;
+    let write=|cube:&crate::unity::SceneReflectionCube|->Result<serde_json::Value,String>{
+        let mut bytes=b"OKCUBE01".to_vec();for v in [cube.size,cube.mips,cube.dxgi_format,0]{bytes.extend_from_slice(&v.to_le_bytes());}
+        bytes.extend_from_slice(&(cube.bytes.len() as u64).to_le_bytes());bytes.extend_from_slice(&cube.bytes);
+        let file=format!("studio/reflections/{:x}.okcube",Sha256::digest(&bytes));std::fs::write(lib.join(&file),bytes).map_err(|e|e.to_string())?;
+        Ok(serde_json::json!({"texture":file,"name":cube.name,"hdr":[cube.intensity,1.,0.,0.]}))
+    };
     let mut rows=Vec::new();let mut count=0;
     for map in &catalog.maps{
         let bundle=map.bundle.strip_prefix("abdata/").unwrap_or(&map.bundle);
         let source=Sources::open(game,bundle).ok_or_else(||format!("map {} source missing",map.no))?;
-        let cube=source.bundles[0].scene_default_reflection_cube().map_err(|e|format!("map {}: {e}",map.no))?;
-        if let Some(cube)=cube{
-            let mut bytes=b"OKCUBE01".to_vec();
-            for v in [cube.size,cube.mips,cube.dxgi_format,0]{bytes.extend_from_slice(&v.to_le_bytes());}
-            bytes.extend_from_slice(&(cube.bytes.len() as u64).to_le_bytes());bytes.extend_from_slice(&cube.bytes);
-            let hash=format!("{:x}",Sha256::digest(&bytes));let file=format!("studio/reflections/{hash}.okcube");
-            std::fs::write(lib.join(&file),bytes).map_err(|e|e.to_string())?;
-            rows.push(serde_json::json!({"map":map.no,"texture":file,"name":cube.name,"hdr":[cube.intensity,1.,0.,0.]}));count+=1;
-        }else{rows.push(serde_json::json!({"map":map.no,"texture":null}));}
+        let mut row=match source.bundles[0].scene_default_reflection_cube().map_err(|e|format!("map {}: {e}",map.no))?{
+            Some(cube)=>{count+=1;write(&cube)?},None=>serde_json::json!({"texture":null})
+        };
+        row["map"]=map.no.into();let mut roots=serde_json::Map::new();
+        for root in &map.roots{
+            let mut probes=Vec::new();
+            for(node,cube) in source.bundles[0].prefab_lossless_reflections(root).map_err(|e|format!("map {} root {root}: {e}",map.no))?{
+                if node<0{continue;}let mut probe=write(&cube)?;probe["node"]=node.into();probes.push(probe);
+            }
+            if !probes.is_empty(){roots.insert(root.clone(),probes.into());}
+        }
+        row["roots"]=roots.into();rows.push(row);
     }
-    std::fs::write(lib.join(REFLECTION_FILE_NAME),serde_json::to_vec_pretty(&serde_json::json!({"format":"ok-studio-map-reflections-1","maps":rows})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
-    Ok(count)
+    std::fs::write(lib.join(REFLECTION_FILE_NAME),serde_json::to_vec_pretty(&serde_json::json!({"format":"ok-studio-map-reflections-1","maps":rows})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;Ok(count)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -479,7 +487,11 @@ mod tests {
         assert_eq!(native["passed"], true);
         let lib = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
         let catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(lib.join(REFLECTION_FILE_NAME)).unwrap()).unwrap();
-        let row = catalog["maps"].as_array().unwrap().iter().find(|v| v["map"].as_i64()==Some(map)).unwrap();
+        let map_row = catalog["maps"].as_array().unwrap().iter().find(|v| v["map"].as_i64()==Some(map)).unwrap();
+        let row=if let Ok(root)=std::env::var("OK_STUDIO_PROBE_ROOT") {
+            let node:i64=std::env::var("OK_STUDIO_PROBE_NODE").unwrap().parse().unwrap();
+            map_row["roots"][root].as_array().unwrap().iter().find(|v|v["node"].as_i64()==Some(node)).unwrap()
+        }else{map_row};
         let bytes = std::fs::read(lib.join(row["texture"].as_str().unwrap())).unwrap();
         assert_eq!(&bytes[..8], b"OKCUBE01");
         let number = |at| u32::from_le_bytes(bytes[at..at+4].try_into().unwrap());

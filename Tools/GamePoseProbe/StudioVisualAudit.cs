@@ -56,6 +56,10 @@ public sealed partial class GamePoseProbe {
                 if (!light.enabled || !light.gameObject.activeInHierarchy) continue;
                 writer.WriteLine("light\t" + PathOf(light.transform) + "\t" + light.type + "\t" + light.color.ToString("R") + "\t" + light.intensity.ToString("R") + "\t" + light.transform.rotation.ToString("R") + "\t" + light.cullingMask + "\t" + light.shadows + "\t" + light.shadowStrength.ToString("R"));
             }
+            foreach(string key in new[]{"_RampG"}){
+                Texture texture=Shader.GetGlobalTexture(key);var property=typeof(Texture).GetProperty("activeTextureColorSpace",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
+                writer.WriteLine("global_texture\t"+key+"\t"+(texture==null?"null":texture.name+":"+texture.width+":"+texture.height+":"+texture.GetType().Name)+"\t"+(texture==null||property==null?"unknown":property.GetValue(texture,null).ToString()));
+            }
             Material sky = RenderSettings.skybox;
             if (sky != null) {
                 writer.WriteLine("skybox\t" + sky.name + "\t" + sky.shader.name);
@@ -81,7 +85,7 @@ public sealed partial class GamePoseProbe {
                     string prefix = rendererPath + "\t" + material.name;
                     writer.WriteLine("material\t" + prefix + "\t" + material.shader.name + "\t" + String.Join(",", material.shaderKeywords));
                     writer.WriteLine("material_shader_id\t" + prefix + "\t" + material.shader.GetInstanceID());
-                    if (material.shader.name.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) {
+                    if (material.shader.name.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0 || renderer.name == Environment.GetEnvironmentVariable("OK_PROBE_GPU_MESH")) {
                         var closest = new System.Collections.Generic.List<UnityEngine.Rendering.ReflectionProbeBlendInfo>();
                         renderer.GetClosestReflectionProbes(closest);
                         writer.WriteLine("reflection_usage\t" + prefix + "\t" + renderer.reflectionProbeUsage + "\t" + closest.Count);
@@ -137,6 +141,15 @@ public sealed partial class GamePoseProbe {
                     Marshal.Copy(bytes, 0, text, bytes.Length);
                     if (configure(target.GetNativeTexturePtr(), text) != 0) throw new InvalidOperationException("GPU probe configuration failed");
                 } finally { Marshal.FreeHGlobal(text); }
+                var selectedProbes=new System.Collections.Generic.List<UnityEngine.Rendering.ReflectionProbeBlendInfo>();selected.GetClosestReflectionProbes(selectedProbes);
+                for(int pi=0;pi<selectedProbes.Count;++pi){
+                    var probe=selectedProbes[pi].probe;Texture texture=probe.bakedTexture;
+                    if(texture==null)continue;
+                    byte[] probeName=System.Text.Encoding.UTF8.GetBytes(output+".selected-probe"+pi+"\0");IntPtr probeText=Marshal.AllocHGlobal(probeName.Length);
+                    try{Marshal.Copy(probeName,0,probeText,probeName.Length);if(addTexture(texture.GetNativeTexturePtr(),probeText)!=0)throw new InvalidOperationException("Probe texture capture failed");}finally{Marshal.FreeHGlobal(probeText);}
+                }
+                Texture globalRamp=Shader.GetGlobalTexture("_RampG");
+                if(globalRamp!=null){byte[] rampName=System.Text.Encoding.UTF8.GetBytes(output+".global-ramp\0");IntPtr rampText=Marshal.AllocHGlobal(rampName.Length);try{Marshal.Copy(rampName,0,rampText,rampName.Length);if(addTexture(globalRamp.GetNativeTexturePtr(),rampText)!=0)throw new InvalidOperationException("Global ramp readback failed");}finally{Marshal.FreeHGlobal(rampText);}}
                 Texture reflection = ReflectionProbe.defaultTexture;
                 if (reflection != null) {
                     byte[] nameBytes = System.Text.Encoding.UTF8.GetBytes(output + ".default-reflection\0");

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -214,6 +214,8 @@ public:
  /** An OK Studio item (set before LoadSession): its shared parent instances (the game's own item program) shade with
   *  the toon shadow and its _ShadowColor, as Studio does, whatever the character display-shadow setting. */
  bool bStudioItemShading=false;
+    /** Native map material environment; independent of Gallery world/camera ownership. */
+    bool bSourceMapShading=false;
  /** Shared parent root this actor's instances come from instead of the default one (set before LoadSession; empty: the
   *  command line / manifest / editor default). OK Studio items use a root that also has M_ForgeStudioOpaque. */
  FString SharedMaterialRootOverride;
@@ -635,6 +637,7 @@ public:
      *  actor, outlines included; instances without it are left alone. */
     void SetSharedVectorParameter(FName Name, const FLinearColor& Value);
     void SetSharedTextureParameter(FName Name,UTexture* Value);
+    void BindSourceReflectionProbes(TFunctionRef<UTexture*(int32,FLinearColor&)> Resolve);
 
 	UPROPERTY()
 	TObjectPtr<USceneCaptureComponent2D> ToonShadowCapture;

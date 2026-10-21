@@ -1,4 +1,4 @@
-#include "OKStudioSky.h"
+﻿#include "OKStudioSky.h"
 
 #include "OKSceneActor.h"
 #include "Dom/JsonObject.h"
@@ -383,4 +383,10 @@ UMaterialInterface* OKStudioSkyMaterial(int32 No, FString& OutError)
 	OutError = TEXT("the sky material is built in editor builds only");
 	return nullptr;
 #endif
+}
+
+FLinearColor OKStudioLinearLightColor(const FLinearColor& Color,float Intensity)
+{
+    const auto Linear=[](float V){return V<=.04045f?V/12.92f:V<1.f?FMath::Pow((V+.055f)/1.055f,2.4f):FMath::Pow(V,2.2f);};
+    return FLinearColor(Linear(Color.R*Intensity),Linear(Color.G*Intensity),Linear(Color.B*Intensity),Color.A*Intensity);
 }

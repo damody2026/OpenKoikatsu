@@ -1,4 +1,4 @@
-#include "KKRuntimeSharedMaterial.h"
+﻿#include "KKRuntimeSharedMaterial.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureCube.h"
 #include "Engine/VolumeTexture.h"
@@ -339,7 +339,9 @@ bool OKPrepareRuntimeSharedMaterialBinding(const FKKRuntimeMaterialPart& P,const
  }
  if(!Outline&&OKRuntimeSharedMaterialUsesVertexAmbient(Recipe))
   for(const TCHAR* Name:{TEXT("unity_SHBr"),TEXT("unity_SHBg"),TEXT("unity_SHBb"),TEXT("unity_SHC")}){
-   const FLinearColor V=Scene.Uniforms.FindRef(Name);B.Vectors.Add(Name,V);B.Scalars.Add(FName(FString(Name)+TEXT("__A")),V.A);
+   // Older maker/street parents predate vertex ambient. Only explicit scene
+   // overrides require these parameters; new parents keep zero defaults otherwise.
+   if(const FLinearColor* V=Scene.Uniforms.Find(Name)){B.Vectors.Add(Name,*V);B.Scalars.Add(FName(FString(Name)+TEXT("__A")),V->A);}
   }
  Out=MoveTemp(B);Error.Reset();return true;
 }
