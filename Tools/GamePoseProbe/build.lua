@@ -19,7 +19,7 @@ end
 args[#args + 1] = "/reference:" .. win(game .. "/BepInEx/core/BepInEx.dll")
 args[#args + 1] = "/reference:" .. win(game .. "/BepInEx/core/0Harmony.dll")
 for _, source in ipairs({ "Probe.cs", "AccessoryPhysicsControl.cs", "HPairControl.cs", "GenericIkScaleControl.cs",
-  "GenericDynamicScaleControl.cs", "GenericColliderControl.cs" }) do
+    "GenericDynamicScaleControl.cs", "GenericColliderControl.cs", "StudioVisualAudit.cs" }) do
   args[#args + 1] = win(path.join(here, source))
 end
 local res = ok.proc.run(args)

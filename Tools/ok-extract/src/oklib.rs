@@ -2190,6 +2190,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
         "studio-sky" => println!("OKCONVERT studio sky patterns={}", crate::studio_sky::convert(game, &lib.ok_or("library directory required")?)?),
+        "studio-environments" => println!("OKCONVERT studio map environments={}", crate::studio_sky::convert_map_environments(game, &lib.ok_or("library directory required")?)?),
         "studio-nodes" => crate::studio_items::record_hierarchies(game, &lib.ok_or("library directory required")?, args.get(2).and_then(|t| t.parse().ok()).unwrap_or(6))?,
         "anim-convert" => {
             let card = std::path::PathBuf::from(args.get(2).ok_or("character card required (sampling skeleton)")?);

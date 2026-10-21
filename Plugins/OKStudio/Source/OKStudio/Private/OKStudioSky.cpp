@@ -114,6 +114,54 @@ const TArray<FOKStudioSkyPattern>& OKStudioSkyPatterns()
 	return Patterns;
 }
 
+bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb)
+{
+	static FString LoadedFile;
+	static TMap<int32, TArray<FLinearColor>> Probes;
+	const FString File = AOKSceneActor::LibraryDirectory() / TEXT("studio/map_environments.json");
+	if (LoadedFile != File)
+	{
+		LoadedFile = File;
+		Probes.Reset();
+		FString Text, Format;
+		TSharedPtr<FJsonObject> Root;
+		const TArray<TSharedPtr<FJsonValue>>* Maps = nullptr;
+		if (FFileHelper::LoadFileToString(Text, *File) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root)
+			&& Root && Root->TryGetStringField(TEXT("format"), Format) && Format == TEXT("ok-studio-map-environments-1") && Root->TryGetArrayField(TEXT("maps"), Maps))
+		{
+			for (const auto& Entry : *Maps)
+			{
+				const auto Row = Entry->AsObject();
+				const TArray<TSharedPtr<FJsonValue>>* Channels = nullptr;
+				double No = -1;
+				if (!Row || !Row->TryGetNumberField(TEXT("map"), No) || !Row->TryGetArrayField(TEXT("probe"), Channels) || Channels->Num() != 3) continue;
+				TArray<FLinearColor> Packed;
+				for (const auto& Channel : *Channels)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* Coefficients = nullptr;
+					if (!Channel->TryGetArray(Coefficients) || Coefficients->Num() != 9) break;
+					float C[9];
+					bool Valid = true;
+					for (int32 I = 0; I < 9; ++I)
+					{
+						double V = 0;
+						if (!(*Coefficients)[I]->TryGetNumber(V) || !FMath::IsFinite(V)) { Valid = false; break; }
+						C[I] = float(V);
+					}
+					if (!Valid) break;
+					Packed.Add(FLinearColor(C[3], C[1], C[2], C[0] - C[6]));
+				}
+				if (Packed.Num() == 3) Probes.Add(int32(No), MoveTemp(Packed));
+			}
+		}
+		else UE_LOG(LogTemp, Warning, TEXT("OK Studio map environment missing or invalid: %s"), *File);
+	}
+	const auto* Probe = Probes.Find(Map);
+	if (!Probe) return false;
+	OutSHAr = (*Probe)[0]; OutSHAg = (*Probe)[1]; OutSHAb = (*Probe)[2];
+	return true;
+}
+
 bool OKStudioSkyAmbient(int32 No, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb)
 {
 	const TSharedPtr<FJsonObject> Pattern = FindPattern(No);

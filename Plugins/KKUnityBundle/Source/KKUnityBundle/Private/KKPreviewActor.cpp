@@ -4116,6 +4116,11 @@ void AKKPreviewActor::SetSharedVectorParameter(FName Name, const FLinearColor& V
 		{
 			FLinearColor Current;
 			if (M && M->GetVectorParameterValue(FMaterialParameterInfo(Name), Current) && !Current.Equals(Value)) M->SetVectorParameterValue(Name, Value);
+			// Shared shader graphs transport float4 alpha through a separate
+			// scalar parameter; update it along with the RGB vector.
+			float Alpha = 0.f;
+			const FName AlphaName(*(Name.ToString() + TEXT("__A")));
+			if (M && M->GetScalarParameterValue(FMaterialParameterInfo(AlphaName), Alpha) && Alpha != Value.A) M->SetScalarParameterValue(AlphaName, Value.A);
 		}
 }
 
@@ -4729,7 +4734,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			}
 		}
 		// Skin draw overlays preserve Unity UV1/UV2/UV3 at UE TEXCOORD1/2/3.
-		const float* OverlayUv1 = (bBody || bFaceDraw || View.eye_draw) ? View.uv2 : View.uv4;
+		const bool bHairGlossUv = View.shader_kind == 1 || View.shader_kind == 10;
+		const float* OverlayUv1 = (bBody || bFaceDraw || View.eye_draw || bHairGlossUv) ? View.uv2 : View.uv4;
+		if (!OverlayUv1 && bHairGlossUv) OverlayUv1 = View.uvs;
 		if (OverlayUv1 && View.n_verts > 0)
 		{
 			Part.UV4.Reserve(View.n_verts);
@@ -6055,7 +6062,8 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
 		return false;
 	}
 	SessionLoadState = MakeShared<FSessionLoadState>();
-    bCharacterDisplayShadows=OKCharacterDisplayShadowsEnabled();
+    bCharacterDisplayShadows=CharacterDisplayShadowsOverride.IsSet()
+        ? CharacterDisplayShadowsOverride.GetValue() : OKCharacterDisplayShadowsEnabled();
 	// Unity SHADOWS_SCREEN multiplies the toon-ramp lookup by a scene shadow
 	// attenuation sample. Two render targets avoid sampling the one currently
 	// being written while the animated character captures its own depth.

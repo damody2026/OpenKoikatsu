@@ -145,6 +145,9 @@ namespace
 		// own item program (the shared parents), with their colours as material overrides and Studio's toon shading.
 		Actor->bUseSharedParents = !bMap;
 		Actor->bStudioItemShading = Item != nullptr;
+		// Gallery's unshadowed display replaces material shadow colours with
+		// white. Studio must retain its authored material lighting instead.
+		if (!bMap) Actor->CharacterDisplayShadowsOverride = true;
 		// Items draw from the Studio root: the street's parents plus M_ForgeStudioOpaque, the depth-writing variant of the
 		// game's item program (opaque items overlapping each other sort by depth, not by distance).
 		if (Item) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay26");
@@ -750,20 +753,22 @@ void AOKSceneActor::Tick(float DeltaSeconds)
 void AOKSceneActor::UpdateItemLighting()
 {
 	if (!Document) return;
-	// Studio's character light (CameraLightCtrl: a child of the camera, turned by charaLight.rot) lights the Chara layer,
+	// Studio's character light (CameraLightCtrl: a scene-root light, turned by charaLight.rot) lights the Chara layer,
 	// where Studio's characters and items are: its direction towards the light in Unity space, and its colour times
 	// intensity (a dim character light leaves the characters in their toon shadow, as in Studio).
 	const ULightComponent* Light = nullptr;
+	const FOKSceneLight* SourceLight = nullptr;
 	float Intensity = 1.f;
 	for (const FOKSceneObject& Object : Document->Objects)
 		if (Object.Kind == EOKSceneObjectKind::Light && Object.Light.bCharactersOnly && Object.Light.Type == EOKSceneLightType::Directional)
 			if (const FShown* S = Shown.Find(Object.Id); S && S->Component.IsValid())
-				if ((Light = Cast<ULightComponent>(S->Component.Get()))) { Intensity = Object.Light.Intensity / 4.f; break; }
+				if ((Light = Cast<ULightComponent>(S->Component.Get()))) { Intensity = Object.Light.Intensity / 4.f; SourceLight = &Object.Light; break; }
 	// The sky's ambient (Studio's ambient mode is Skybox: the sky controller updates the ambient probe) on the
 	// characters' unity_SHA*; without a sky, the character display's own ambient.
-	if (SkyShown != AmbientSky) { AmbientSky = SkyShown; AmbientLit.Reset(); }
+	if (SkyShown != AmbientSky || Document->Map != AmbientMap) { AmbientSky = SkyShown; AmbientMap = Document->Map; AmbientLit.Reset(); }
 	FLinearColor SH[3];
-	if (AmbientSky < 0 || !OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
+	if (!(AmbientSky >= 0 && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
+		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2]))
 	{
 		FKKRuntimeMaterialScene Maker;
 		OKApplyCharacterMakerLighting(Maker);
@@ -785,7 +790,13 @@ void AOKSceneActor::UpdateItemLighting()
 	// Unreal (x, y, z) is Unity (-x, z, y); towards the light is against the light's forward.
 	const FVector Towards = FVector(F.X, -F.Z, -F.Y).GetSafeNormal();
 	const FLinearColor Direction(Towards.X, Towards.Y, Towards.Z, 0.f);
-	const FLinearColor Color = Light->GetLightColor() * Intensity;
+	// Unity's linear renderer converts the final gamma-space light colour,
+	// including intensity; values above one use its GammaToLinearSpace HDR tail.
+	const auto LinearLight = [](float V) {
+		return V <= 0.04045f ? V / 12.92f : V < 1.f ? FMath::Pow((V + 0.055f) / 1.055f, 2.4f) : FMath::Pow(V, 2.2f);
+	};
+	const FLinearColor Raw = SourceLight->Color * Intensity;
+	const FLinearColor Color(LinearLight(Raw.R), LinearLight(Raw.G), LinearLight(Raw.B), Raw.A);
 	if (!Direction.Equals(ItemLightDirection, 1e-4f) || !Color.Equals(ItemLightColor, 1e-4f)) { ItemLightDirection = Direction; ItemLightColor = Color; ItemsLit.Reset(); }
 	for (const TPair<int32, FShown>& It : Shown)
 	{
@@ -987,6 +998,7 @@ void AOKSceneActor::ReleaseScene()
 	ItemsLit.Reset();
 	AmbientLit.Reset();
 	AmbientSky = -1;
+	AmbientMap = -1;
 	Errors.Reset();
 	MapError.Reset();
 	bBuildsPending = false;

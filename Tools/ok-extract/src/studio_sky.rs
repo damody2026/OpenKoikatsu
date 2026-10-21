@@ -18,6 +18,58 @@ use unity_asset_binary::object::UnityObject;
 use unity_asset_core::UnityValue;
 
 pub const FILE_NAME: &str = "studio/sky.json";
+pub const ENVIRONMENT_FILE_NAME: &str = "studio/map_environments.json";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MapEnvironment {
+    pub map: i32,
+    pub model: String,
+    pub ambient_mode: i32,
+    pub ambient_intensity: f32,
+    /// Unity's baked RenderSettings.m_AmbientProbe, in RGB groups of nine.
+    /// These are already the coefficients the renderer receives; do not multiply intensity again.
+    pub probe: [[f32; 9]; 3],
+}
+
+/// Export map scene lighting independently of character-maker preferences.
+/// No mesh/model memo or bincode structure is changed by this converter.
+pub fn convert_map_environments(game: &Path, lib: &Path) -> Result<usize, String> {
+    let catalog: crate::studio_items::Catalog = serde_json::from_slice(
+        &std::fs::read(lib.join(crate::studio_items::FILE_NAME)).map_err(|e|e.to_string())?
+    ).map_err(|e|e.to_string())?;
+    let mut maps = Vec::new();
+    for map in &catalog.maps {
+        let bundle = map.bundle.strip_prefix("abdata/").unwrap_or(&map.bundle);
+        let Some(src) = Sources::open(game, bundle) else { return Err(format!("map {}: source bundle missing",map.no)); };
+        let mut environments = Vec::new();
+        src.bundles[0].with_serialized(|files| for file in files {
+            for info in file.objects_of_type(104) {
+                let Ok(object) = UnityObject::from_serialized_file(file, &info) else { continue; };
+                let p = object.class.properties();
+                let Some(UnityValue::Object(coefficients)) = p.get("m_AmbientProbe") else { continue; };
+                let mut probe = [[0.;9];3];
+                let mut seen = [false;27];
+                for (key,value) in coefficients {
+                    let Some(index) = key.strip_prefix("sh[").and_then(|s|s.strip_suffix(']')).and_then(|s|s.trim().parse::<usize>().ok()).filter(|i|*i<27) else {continue;};
+                    let Some(value) = value.as_f64().filter(|v|v.is_finite()) else {continue;};
+                    probe[index/9][index%9] = value as f32;
+                    seen[index] = true;
+                }
+                if seen.iter().all(|v|*v) {
+                    environments.push(MapEnvironment {map:map.no,model:map.model.clone(),probe,
+                        ambient_mode:p.get("m_AmbientMode").and_then(|v|v.as_i64()).unwrap_or(0) as i32,
+                        ambient_intensity:p.get("m_AmbientIntensity").and_then(|v|v.as_f64()).unwrap_or(1.) as f32});
+                }
+            }
+        });
+        if environments.len()>1 { return Err(format!("map {}: ambiguous scene RenderSettings",map.no)); }
+        if let Some(environment) = environments.pop() { maps.push(environment); }
+    }
+    let count = maps.len();
+    let document = serde_json::json!({"format":"ok-studio-map-environments-1","maps":maps});
+    std::fs::write(lib.join(ENVIRONMENT_FILE_NAME),serde_json::to_vec_pretty(&document).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+    Ok(count)
+}
 pub const TEXTURE_DIR: &str = "studio/sky";
 
 /// A texture of a sky material: the PNG (relative to the library), its `_ST`, and how Unity samples it.
@@ -395,6 +447,32 @@ pub fn convert(game: &Path, lib: &Path) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "native Studio ambient probe: OK_STUDIO_MAP and OK_STUDIO_NATIVE_SCENE_TSV"]
+    fn map_baked_ambient_matches_native_probe() {
+        let map: i32 = std::env::var("OK_STUDIO_MAP").unwrap().parse().unwrap();
+        let native = std::fs::read_to_string(std::env::var("OK_STUDIO_NATIVE_SCENE_TSV").unwrap()).unwrap();
+        let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1").join(ENVIRONMENT_FILE_NAME);
+        let catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+        let entry = catalog["maps"].as_array().unwrap().iter().find(|m|m["map"].as_i64()==Some(i64::from(map))).unwrap();
+        let mut checked = [[false;9];3];
+        let mut maximum = 0f64;
+        for line in native.lines() {
+            let fields: Vec<_> = line.split('\t').collect();
+            if fields.first()!=Some(&"ambient_sh") {continue;}
+            let c:usize=fields[1].parse().unwrap();
+            let k:usize=fields[2].parse().unwrap();
+            assert!(c<3 && k<9);
+            let expected:f64=fields[3].parse().unwrap();
+            let difference=(entry["probe"][c][k].as_f64().unwrap()-expected).abs();
+            maximum=maximum.max(difference);
+            checked[c][k]=true;
+        }
+        assert!(checked.into_iter().flatten().all(|v|v));
+        eprintln!("native map {map} 27 ambient coefficients maximum error {maximum}");
+        assert!(maximum<0.000001);
+    }
 
     /// A body straight up (0,1,0): the orbit faces down, Position sits at the body; a direction towards it maps to
     /// local (0,0,~0) after the 10000 shift, and the matrix is a rotation (orthonormal 3x3) with that translation.

@@ -396,6 +396,12 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 	Report.Version = Scene->GetStringField(TEXT("version"));
 	Report.Map = int32(Scene->GetNumberField(TEXT("map")));
 	Document->Objects.Reset();
+    // Import replaces the scene. Optional/neutral settings must not inherit
+    // the previous scene (e.g. aperture 0 left the previous DOF enabled).
+    Document->Post = FOKScenePost();
+    Document->MapTransform = FTransform::Identity;
+    Document->Tracks.Reset();
+    Document->Duration = 10.f;
     Document->ItemAnimationSeconds=0.f;
 	Document->NextId = 1;
 	Document->ActiveCamera = -1;
@@ -522,8 +528,9 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		Cam->Camera.Fov = float(FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(VerticalFov * 0.5) * 16.0 / 9.0)));
 		if (Document->ActiveCamera < 0) Document->ActiveCamera = Id;
 		++Report.Cameras;
-		// Studio's own light: the character light (CameraLightCtrl.lightChara) turns with the camera (a child of it) and
-		// lights the characters and items. The scene file also keeps SceneInfo.mapLight, but Studio only saves and loads
+		// CameraLightCtrl.LightCalc rotates the scene-root "Light Chara", not
+		// the camera. Its Directional Chara child retains its authored (40,180,0)
+		// rotation (CharaStudio_Data/level2). The scene file also keeps mapLight, but Studio only saves and loads
 		// it: CameraLightCtrl has no map light, nothing in the game lights the map with it (the map shows its baked
 		// lightmaps). Made a light, it washed lightmapped maps out (the 1F toilet's partitions drew white).
 		const TArray<TSharedPtr<FJsonValue>>* StudioLights = nullptr;
@@ -537,10 +544,11 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 				if (L->TryGetArrayField(TEXT("rot"), Rot) && Rot->Num() == 2) Euler = FVector((*Rot)[0]->AsNumber(), (*Rot)[1]->AsNumber(), 0.);
 				// Unity's light shines along +Z, an Unreal light along +X.
 				const FQuat Turn(FVector::UpVector, UE_HALF_PI);
-				const FQuat Shine = UnityToUe(FVector::ZeroVector, Euler, FVector::OneVector).GetRotation() * Turn;
-				const int32 LightId = Document->AddObject(EOKSceneObjectKind::Light, TEXT("Studio character light"), Id);
+				const FQuat Child = UnityToUe(FVector::ZeroVector, FVector(40.f, 180.f, 0.f), FVector::OneVector).GetRotation();
+				const FQuat Shine = UnityToUe(FVector::ZeroVector, Euler, FVector::OneVector).GetRotation() * Child * Turn;
+				const int32 LightId = Document->AddObject(EOKSceneObjectKind::Light, TEXT("Studio character light"), -1);
 				FOKSceneObject* Obj = Document->Find(LightId);
-				Obj->Transform = FTransform(Turn.Inverse() * Shine);
+				Obj->Transform = FTransform(Shine);
 				FOKSceneLight& Light = Obj->Light;
 				Light.Type = int32(L->GetNumberField(TEXT("kind"))) == 1 ? EOKSceneLightType::Directional : EOKSceneLightType::Point;
 				const TSharedPtr<FJsonObject>* C = nullptr;

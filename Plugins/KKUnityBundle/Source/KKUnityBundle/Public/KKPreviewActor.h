@@ -468,6 +468,9 @@ public:
 	UPROPERTY()
 	TObjectPtr<UTexture2D> ToonRampTex;
     bool bCharacterDisplayShadows=true;
+    // A scene host can preserve authored shading independently of Gallery's
+    // display preference. Unset keeps the normal character viewer policy.
+    TOptional<bool> CharacterDisplayShadowsOverride;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UProceduralMeshComponent> BodyMesh;
