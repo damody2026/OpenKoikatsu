@@ -221,6 +221,33 @@ pub unsafe extern "C" fn ok_session_set_studio_ik_pose(
     s.studio_ik_rotations = angles;
     0
 }
+/// EyeLookCalc.LoadAngle for a source NO_LOOK pattern; validate before publishing runtime state.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_studio_fixed_eyes(
+    s: *mut OkSession, values: *const f32, count: i32, pattern: i32, out_rates: *mut f32,
+) -> i32 {
+    if values.is_null() || out_rates.is_null() || count != 12 || pattern < 0 { return -1; }
+    let input = std::slice::from_raw_parts(values, 12);
+    if input.iter().any(|v| !v.is_finite()) { return -1; }
+    let Some(session) = sess_ref(s) else { return -1; };
+    let Some(config) = session.eye_look_config.as_ref() else { return -1; };
+    if !config.patterns.get(pattern as usize).is_some_and(|p| p.kind == 0) { return -1; }
+    let Some(basis) = crate::eye_look::Basis::from_session(session, config) else { return -1; };
+    let Some(mut runtime) = crate::eye_look::Runtime::from_session(session, config) else { return -1; };
+    for i in 0..2 {
+        let q: [f32;4] = input[i*4..i*4+4].try_into().unwrap();
+        let n = q.iter().map(|v|v*v).sum::<f32>();
+        if !n.is_finite() || n < 1e-12 { return -1; }
+        runtime.fixed[i] = crate::finalik::qnorm(q);
+        runtime.angles[i] = [input[8+i],input[10+i]];
+    }
+    if !runtime.step(config,&basis,[0.;3],pattern as usize,1.,true,None) { return -1; }
+    session.eye_look_runtime = Some(runtime);
+    let Some(rates) = session.step_eye_look([0.;3],pattern as usize,1.,true) else { return -1; };
+    std::ptr::copy_nonoverlapping(rates.as_ptr(),out_rates,3);
+    set_eye_gaze(s,rates[0],rates[1],rates[2])
+}
+
 /// Saved NeckLookControllerVer2 FIX locals (native aBones order), count 0 clears; validates before mutation.
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_set_studio_fixed_neck(

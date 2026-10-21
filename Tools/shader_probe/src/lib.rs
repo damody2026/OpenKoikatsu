@@ -100,7 +100,24 @@ unsafe fn capture(request: &Request) -> Result<serde_json::Value, String> {
             resources.push(serde_json::json!({"slot":slot,"dimension":description.ViewDimension.0,"format":description.Format.0,"width":d.Width,"height":d.Height,"mips":d.MipLevels,"array_size":d.ArraySize,"misc_flags":d.MiscFlags}));
         }
     }
-    Ok(serde_json::json!({"passed":true,"buffers":rows,"resources":resources}))
+    let mut vertex_buffers=Vec::new();
+    if std::env::var("OK_PROBE_GPU_INPUT_STREAMS").as_deref()==Ok("1") {
+        let mut buffers:[Option<ID3D11Buffer>;32]=Default::default();
+        let mut strides=[0u32;32];let mut offsets=[0u32;32];
+        context.IAGetVertexBuffers(0,32,Some(buffers.as_mut_ptr()),Some(strides.as_mut_ptr()),Some(offsets.as_mut_ptr()));
+        for(slot,buffer)in buffers.into_iter().enumerate(){
+            let Some(buffer)=buffer else{continue;};let mut desc=D3D11_BUFFER_DESC::default();buffer.GetDesc(&mut desc);
+            if desc.ByteWidth==0||desc.ByteWidth>64*1024*1024{return Err("Unexpected vertex buffer size".into());}
+            let staging_desc=D3D11_BUFFER_DESC{ByteWidth:desc.ByteWidth,Usage:D3D11_USAGE_STAGING,CPUAccessFlags:D3D11_CPU_ACCESS_READ.0 as u32,..Default::default()};
+            let mut staging=None;device.CreateBuffer(&staging_desc,None,Some(&mut staging)).map_err(|e|e.to_string())?;
+            let staging=staging.ok_or("vertex staging buffer absent")?;context.CopyResource(&staging,&buffer);
+            let mut mapped=D3D11_MAPPED_SUBRESOURCE::default();context.Map(&staging,0,D3D11_MAP_READ,0,Some(&mut mapped)).map_err(|e|e.to_string())?;
+            let bytes=std::slice::from_raw_parts(mapped.pData as *const u8,desc.ByteWidth as usize).to_vec();context.Unmap(&staging,0);
+            let file=suffixed(&request.output,&format!(".vertex-buffer{slot}.bin"));std::fs::write(&file,&bytes).map_err(|e|e.to_string())?;
+            vertex_buffers.push(serde_json::json!({"slot":slot,"stride":strides[slot],"offset":offsets[slot],"bytes":desc.ByteWidth,"file":file}));
+        }
+    }
+    Ok(serde_json::json!({"passed":true,"buffers":rows,"resources":resources,"vertex_buffers":vertex_buffers}))
 }
 
 unsafe extern "system" fn render_event(_: i32) {

@@ -62,6 +62,10 @@
 #include "RenderingThread.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
+#include "Engine/SkinnedAsset.h"
+#include "Components/SkeletalMeshComponent.h"
 
 namespace
 {
@@ -553,7 +557,7 @@ public:
 			Float(TEXT("嘴"), [](FOKSceneObject& X) { return float(X.Character.MouthPattern); }, [](FOKSceneObject& X, float V) { X.Character.MouthPattern = FMath::RoundToInt(V); }, -1.f, 40.f, 1.f);
 			Float(TEXT("張嘴"), [](FOKSceneObject& X) { return X.Character.MouthOpen; }, [](FOKSceneObject& X, float V) { X.Character.MouthOpen = V; }, -1.f, 1.f, 0.05f);
 			auto LookName = [](EOKSceneLook L) { return FString(L == EOKSceneLook::Fixed ? TEXT("固定姿勢") : L == EOKSceneLook::Camera ? TEXT("看鏡頭") : L == EOKSceneLook::Point ? TEXT("看注視點") : TEXT("照動畫")); };
-			Cycle(TEXT("眼睛"), [LookName](FOKSceneObject& X) { return LookName(X.Character.EyesLook); }, [](FOKSceneObject& X) { X.Character.EyesLook = EOKSceneLook((uint8(X.Character.EyesLook) + 1) % 3); });
+			Cycle(TEXT("眼睛"), [LookName](FOKSceneObject& X) { return LookName(X.Character.EyesLook); }, [](FOKSceneObject& X) { X.Character.EyesLook = EOKSceneLook((uint8(X.Character.EyesLook) + 1) % (X.Character.FixedEyes.Num() == 12 ? 4 : 3)); });
 			Cycle(TEXT("脖子"), [LookName](FOKSceneObject& X) { return LookName(X.Character.NeckLook); }, [](FOKSceneObject& X) { X.Character.NeckLook = EOKSceneLook((uint8(X.Character.NeckLook) + 1) % (X.Character.FixedNeck.Num() == 2 ? 4 : 3)); });
 			Label(TEXT("注視點（cm，角色空間）"));
 			for (int32 Axis = 0; Axis < 3; ++Axis)
@@ -1756,6 +1760,83 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 			FString Error;
 			Self->UpdateViewer();
 			const UCameraComponent* Cam = Self->Viewer->GetCameraComponent();
+			// Opt-in, read-only capture of the source view and the actual GPU reference stream.
+			const FString GeometryAudit = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_GEOMETRY_AUDIT"));
+			if (!GeometryAudit.IsEmpty())
+			{
+				FString Filter = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_GEOMETRY_MESH"));
+				if (Filter.IsEmpty()) Filter = TEXT("cf_O_face");
+				TArray<TSharedPtr<FJsonValue>> Rows;
+				for (const FOKSceneObject& Object : Self->Document->Objects)
+				{
+					const AKKPreviewActor* Actor = Self->SceneActor->PreviewOf(Object.Id);
+					if (!Actor || Object.Kind != EOKSceneObjectKind::Character) continue;
+					for (const FKKLoadedPart& Part : Actor->Parts)
+					{
+						OkMeshView View{};
+						if (!Actor->Session.PartAt(Part.SessionIndex, View) || !FString(UTF8_TO_TCHAR(View.name)).Contains(Filter)) continue;
+						auto Row = MakeShared<FJsonObject>();
+						Row->SetNumberField(TEXT("object"), Object.Id);
+						Row->SetNumberField(TEXT("part"), Part.SessionIndex);
+						Row->SetNumberField(TEXT("skel_kind"), View.skel_kind);
+						Row->SetNumberField(TEXT("eyes_mode"), int32(Object.Character.EyesLook));
+						Row->SetNumberField(TEXT("fixed_eyes_count"), Object.Character.FixedEyes.Num());
+						Row->SetStringField(TEXT("mesh"), UTF8_TO_TCHAR(View.name));
+						Row->SetBoolField(TEXT("procedural_sphere_normals"), Part.bFaceSphereNormals);
+						auto FloatArray = [&](const TCHAR* Key, const float* Data, int32 Count)
+						{
+							if (!Data) return;
+							TArray<TSharedPtr<FJsonValue>> Values;
+							Values.Reserve(Count);
+							for (int32 I = 0; I < Count; ++I) Values.Add(MakeShared<FJsonValueNumber>(Data[I]));
+							Row->SetArrayField(Key, Values);
+						};
+						FloatArray(TEXT("source_positions"), View.positions, View.n_verts * 3);
+						FloatArray(TEXT("source_normals"), View.normals, View.n_verts * 3);
+						FloatArray(TEXT("source_reference_normals"), View.reference_normals, View.n_verts * 3);
+						FloatArray(TEXT("source_rest_positions"), View.rest_positions, View.n_verts * 3);
+						FloatArray(TEXT("source_uv0"), View.uvs, View.n_verts * 2);
+						FloatArray(TEXT("source_uv1"), View.uv2, View.n_verts * 2);
+						FloatArray(TEXT("eye_gaze"), Actor->EyeGaze, 3);
+						auto MorphWeights = MakeShared<FJsonObject>();
+						for (const auto& Slot : Actor->MouthSlots)
+							if (Slot.SessionPartIndex == Part.SessionIndex && Slot.Comp)
+								for (const FName Name : Slot.MorphNames)
+									MorphWeights->SetNumberField(Name.ToString(), Slot.BaselineWeights.FindRef(Name) + Slot.Comp->GetMorphTarget(Name) * 100.f);
+						Row->SetObjectField(TEXT("effective_morph_percent"), MorphWeights);
+						TInlineComponentArray<UPoseableMeshComponent*> Components;
+						Actor->GetComponents(Components);
+						for (const UPoseableMeshComponent* Component : Components)
+						{
+							if (!Component->ComponentHasTag(FName(*FString::Printf(TEXT("KKSessionPart_%d"), Part.SessionIndex)))) continue;
+							const USkinnedAsset* Asset = Component->GetSkinnedAsset();
+							const FSkeletalMeshRenderData* Data = Asset ? Asset->GetResourceForRendering() : nullptr;
+							if (!Data || Data->LODRenderData.IsEmpty()) continue;
+							const auto& LOD = Data->LODRenderData[0];
+							TArray<float> Normals, Positions, UVs;
+							for (uint32 I = 0; I < LOD.GetNumVertices(); ++I)
+							{
+								const FVector3f N = LOD.StaticVertexBuffers.StaticMeshVertexBuffer.VertexTangentZ(I);
+								const FVector3f P = LOD.StaticVertexBuffers.PositionVertexBuffer.VertexPosition(I);
+								const FVector2f UV = LOD.StaticVertexBuffers.StaticMeshVertexBuffer.GetVertexUV(I, 0);
+								// Return the reference stream to Unity coordinates; these are not posed normals.
+								Normals.Append({-N.X, N.Z, N.Y});
+								Positions.Append({-P.X * .01f, P.Z * .01f, P.Y * .01f});
+								UVs.Append({UV.X, UV.Y});
+							}
+							Row->SetStringField(TEXT("component"), Component->GetName());
+							FloatArray(TEXT("gpu_reference_normals_unity"), Normals.GetData(), Normals.Num());
+							FloatArray(TEXT("gpu_reference_positions_unity"), Positions.GetData(), Positions.Num());
+							FloatArray(TEXT("gpu_uv0"), UVs.GetData(), UVs.Num());
+						}
+						Rows.Add(MakeShared<FJsonValueObject>(Row));
+					}
+				}
+				FString Json;
+				FJsonSerializer::Serialize(Rows, TJsonWriterFactory<>::Create(&Json));
+				IFileManager::Get().MakeDirectory(*GeometryAudit, true);
+				FFileHelper::SaveStringToFile(Json, *(GeometryAudit / (FPaths::GetBaseFilename(Path) + TEXT(".geometry.json"))), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+			}
 			const FString MaterialAudit = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_MATERIAL_AUDIT"));
 			if (!MaterialAudit.IsEmpty())
 			{
@@ -1772,6 +1853,40 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 						Row->SetNumberField(TEXT("object"), Object.Id);
 						Row->SetStringField(TEXT("mesh"), UTF8_TO_TCHAR(View.name));
 						Row->SetStringField(TEXT("material"), Part.SurfaceMat->GetPathName());
+						if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_MATERIAL_AUDIT_ALL")) == TEXT("1"))
+						{
+							auto Scalars = MakeShared<FJsonObject>();
+							auto Vectors = MakeShared<FJsonObject>();
+							auto Textures = MakeShared<FJsonObject>();
+							TArray<FMaterialParameterInfo> Infos;
+							TArray<FGuid> Ids;
+							Part.SurfaceMat->GetAllScalarParameterInfo(Infos, Ids);
+							for (const auto& Info : Infos) { float V; if (Part.SurfaceMat->GetScalarParameterValue(Info, V)) Scalars->SetNumberField(Info.Name.ToString(), V); }
+							Part.SurfaceMat->GetAllVectorParameterInfo(Infos, Ids);
+							for (const auto& Info : Infos)
+							{
+								FLinearColor V;
+								if (!Part.SurfaceMat->GetVectorParameterValue(Info, V)) continue;
+								TArray<TSharedPtr<FJsonValue>> Components;
+								for (int32 C = 0; C < 4; ++C) Components.Add(MakeShared<FJsonValueNumber>((&V.R)[C]));
+								Vectors->SetArrayField(Info.Name.ToString(), Components);
+							}
+							Part.SurfaceMat->GetAllTextureParameterInfo(Infos, Ids);
+							for (const auto& Info : Infos)
+							{
+								UTexture* T = nullptr;
+								if (!Part.SurfaceMat->GetTextureParameterValue(Info, T) || !T) continue;
+								auto Texture = MakeShared<FJsonObject>();
+								Texture->SetStringField(TEXT("path"), T->GetPathName());
+								Texture->SetBoolField(TEXT("srgb"), T->SRGB);
+								Texture->SetNumberField(TEXT("width"), T->GetSurfaceWidth());
+								Texture->SetNumberField(TEXT("height"), T->GetSurfaceHeight());
+								Textures->SetObjectField(Info.Name.ToString(), Texture);
+							}
+							Row->SetObjectField(TEXT("all_scalars"), Scalars);
+							Row->SetObjectField(TEXT("all_vectors"), Vectors);
+							Row->SetObjectField(TEXT("all_textures"), Textures);
+						}
 						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST"), TEXT("_overcolor1"), TEXT("_overcolor2") })
 						{
 							FLinearColor Value;

@@ -1,0 +1,125 @@
+{
+  "images": [
+    {
+      "file": "6331-before-after.png",
+      "bytes": 774784,
+      "width": 1920,
+      "height": 396,
+      "sha256": "1973825e6ed286daf97029675d42e6498b04b4fd5ab00cf30900733c5bf93455"
+    },
+    {
+      "file": "6331-before.png",
+      "bytes": 741493,
+      "width": 1280,
+      "height": 360,
+      "sha256": "8d3fd615626e79f27ce3e5f6bbe866979d7844ae55716d588ac449e25cc12c2f"
+    },
+    {
+      "file": "all-scenes.png",
+      "bytes": 2405884,
+      "width": 1280,
+      "height": 1428,
+      "sha256": "d28e4e2dd5195d4d4a22d120243234ea53735f50620088c7e167861580583a8e"
+    },
+    {
+      "file": "koikatu_cs0000001.png",
+      "bytes": 848148,
+      "width": 1280,
+      "height": 360,
+      "sha256": "3cf6886baadc99fb10aad2c5e9082e81717cf034e17373bd6119a6e5e400b25f"
+    },
+    {
+      "file": "koikatu_cs0000010.png",
+      "bytes": 834205,
+      "width": 1280,
+      "height": 360,
+      "sha256": "edd219cebdf155dcc477d16421951ffda46bcae4b4e195690a55c3c930daa055"
+    },
+    {
+      "file": "koikatu_cs0000059.png",
+      "bytes": 508591,
+      "width": 1280,
+      "height": 360,
+      "sha256": "77d8a7b54ecc47146abb67de792f4f11992921b10390fdf5223d113e928cabdb"
+    },
+    {
+      "file": "koikatu_cs0000633.png",
+      "bytes": 749187,
+      "width": 1280,
+      "height": 360,
+      "sha256": "3360cbadba14817859b88a0bd190d859f0245d79b3e123373185e530aa863e99"
+    },
+    {
+      "file": "koikatu_cs0001268.png",
+      "bytes": 736542,
+      "width": 1280,
+      "height": 360,
+      "sha256": "641c7c4c9fd44377eb3cbe7020ef23865901f32dd1b159ab9de57dcd30106b45"
+    },
+    {
+      "file": "koikatu_cs0001901.png",
+      "bytes": 885292,
+      "width": 1280,
+      "height": 360,
+      "sha256": "6927b1d6c4a325002bb8a063c9d199ae3860f7c007782c6c6ec3e572d3f50304"
+    },
+    {
+      "file": "koikatu_cs0002534.png",
+      "bytes": 253108,
+      "width": 1280,
+      "height": 360,
+      "sha256": "d450f1bc9584a7ba6742bdc964c6d3ba96f171a497cc621670b73ee2123a02a4"
+    },
+    {
+      "file": "koikatu_cs0003167.png",
+      "bytes": 718894,
+      "width": 1280,
+      "height": 360,
+      "sha256": "a206dbb2bb62189499ad8118b8ff052922ac93cc664a88c6d42155f8dc6f4a0e"
+    },
+    {
+      "file": "koikatu_cs0003800.png",
+      "bytes": 744281,
+      "width": 1280,
+      "height": 360,
+      "sha256": "834cf2bf158651808a8ff307c17b1191d2cc6f55d1db33fed520056ecf7aa84d"
+    },
+    {
+      "file": "koikatu_cs0004432.png",
+      "bytes": 742972,
+      "width": 1280,
+      "height": 360,
+      "sha256": "21f8d99adf42724d75421f4bde4143a8f98f6cd0c35cdd38552c2e248503e53a"
+    },
+    {
+      "file": "koikatu_cs0005065.png",
+      "bytes": 797396,
+      "width": 1280,
+      "height": 360,
+      "sha256": "1f5c592f3dfb404bd998c4d70a42aae4e3ee69de0dd265dd1de75791a6a7996b"
+    },
+    {
+      "file": "koikatu_cs0005698.png",
+      "bytes": 285142,
+      "width": 1280,
+      "height": 360,
+      "sha256": "25f4df53186a79060911ec90a7a0734f07b12e88b3d73595ca2a9435c5c04355"
+    },
+    {
+      "file": "koikatu_cs0006331.png",
+      "bytes": 741243,
+      "width": 1280,
+      "height": 360,
+      "sha256": "160fe99530576fea7f15f0a5f6104dc3f7a5fdb4ae8490311e838f2fcbf5dbcb"
+    },
+    {
+      "file": "koikatu_cs0006964.png",
+      "bytes": 431649,
+      "width": 1280,
+      "height": 360,
+      "sha256": "4ec7688b5302b1eb8d4eb1d575d5ab22d5e3d24218efb10858dfce6048be3ee7"
+    }
+  ],
+  "source": "Verify-FixedEyesAcceptedAll",
+  "all_visual_differences_resolved": false
+}

@@ -18,6 +18,52 @@ public sealed partial class GamePoseProbe {
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int ConfigureProbeTexture(IntPtr texture, IntPtr output);
 
+    private static void WriteStudioSelectedMesh(Renderer renderer, string output) {
+        var skin=renderer as SkinnedMeshRenderer;
+        var filter=renderer.GetComponent<MeshFilter>();
+        Mesh source=skin!=null?skin.sharedMesh:filter!=null?filter.sharedMesh:null;
+        if(source==null)throw new InvalidOperationException("Selected renderer has no mesh: "+renderer.name);
+        Mesh baked=source;
+        try {
+            if(skin!=null){baked=new Mesh();skin.BakeMesh(baked);}
+            var world=baked.vertices;
+            for(int i=0;i<world.Length;i++)world[i]=renderer.transform.TransformPoint(world[i]);
+            var palette=new System.Collections.Generic.List<Bone>();
+            if(skin!=null)foreach(var bone in skin.bones)if(bone!=null)palette.Add(PVTransform(bone));
+            var snapshot=new RendererMeshSnapshot {
+                path=PathOf(renderer.transform),name=source.name,vertices=source.vertices,
+                worldVertices=world,rendererWorld=renderer.transform.localToWorldMatrix,
+                quality=skin==null?"rigid":skin.quality.ToString(),bindposes=source.bindposes,
+                weights=source.boneWeights,bones=palette.ToArray(),
+                boneWorlds=skin==null?new Matrix4x4[0]:Array.ConvertAll(skin.bones,delegate(Transform bone){return bone==null?Matrix4x4.identity:bone.localToWorldMatrix;}),
+                normals=source.normals,bakedNormals=baked.normals,tangents=source.tangents,
+                colors=source.colors,colors32=source.colors32,
+                uv0=source.uv,uv1=source.uv2,uv2=source.uv3,uv3=source.uv4,
+                blendShapeNames=new string[source.blendShapeCount],blendShapeWeights=new float[source.blendShapeCount],
+                blendShapeNormalCounts=new int[source.blendShapeCount],blendShapeNormalMax=new float[source.blendShapeCount]
+            };
+            for(int i=0;i<source.blendShapeCount;i++){
+                snapshot.blendShapeNames[i]=source.GetBlendShapeName(i);
+                snapshot.blendShapeWeights[i]=skin==null?0:skin.GetBlendShapeWeight(i);
+                for(int frame=0;frame<source.GetBlendShapeFrameCount(i);frame++){
+                    var positions=new Vector3[source.vertexCount];var normals=new Vector3[source.vertexCount];var tangents=new Vector3[source.vertexCount];
+                    source.GetBlendShapeFrameVertices(i,frame,positions,normals,tangents);
+                    for(int vertex=0;vertex<normals.Length;vertex++)if(normals[vertex].sqrMagnitude>0){
+                        snapshot.blendShapeNormalCounts[i]++;
+                        snapshot.blendShapeNormalMax[i]=Mathf.Max(snapshot.blendShapeNormalMax[i],normals[vertex].magnitude);
+                    }
+                }
+            }
+            var cha=renderer.GetComponentInParent<ChaControl>();
+            if(cha!=null && cha.fbsCtrl!=null && cha.eyeLookCtrl!=null){
+                var calc=cha.eyeLookCtrl.eyeLookScript;
+                snapshot.eyeLookRates=new[]{calc.GetAngleHRate(EYE_LR.EYE_L),calc.GetAngleHRate(EYE_LR.EYE_R),calc.GetAngleVRate()};
+                snapshot.eyesOpenMax=cha.fileStatus.eyesOpenMax;snapshot.eyesBlink=cha.fileStatus.eyesBlink;
+            }
+            File.WriteAllText(output+".selected-mesh.json",ProbeJson(snapshot));
+        }finally{if(skin!=null)UnityEngine.Object.Destroy(baked);}
+    }
+
     private IEnumerator AuditStudioScene(Studio.Studio studio, string scene) {
         string output = Environment.GetEnvironmentVariable("OK_GAME_POSE_OUTPUT");
         if (String.IsNullOrEmpty(output)) throw new InvalidOperationException("Scene audit requires OK_GAME_POSE_OUTPUT");
@@ -125,6 +171,7 @@ public sealed partial class GamePoseProbe {
             foreach (var renderer in UnityEngine.Object.FindObjectsOfType<Renderer>())
                 if (renderer.name == meshName && renderer.enabled && renderer.gameObject.activeInHierarchy) { selected = renderer; break; }
             if (selected == null) throw new InvalidOperationException("GPU probe renderer missing: " + meshName);
+            if (Environment.GetEnvironmentVariable("OK_PROBE_GPU_MESH_SNAPSHOT") == "1") WriteStudioSelectedMesh(selected,output);
             Vector3 savedPosition=main.transform.position; Quaternion savedRotation=main.transform.rotation;
             float savedNear=main.nearClipPlane;
             if (Environment.GetEnvironmentVariable("OK_PROBE_GPU_FRAME") == "1") {

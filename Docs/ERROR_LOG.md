@@ -3882,3 +3882,19 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 
 ### 2026-10-21 6331 AO對照不是修正
 - 以現有比較診斷開關只關AO重拍，整體灰棕髮／灰白臉仍存在。該1/1只證明診斷擷取完成，不是6331 shader修復；正式AO設定未變，也未以常駐關閉AO掩蓋差異。
+
+### 2026-10-21 幾何快照不能直接輸出 minified JSON 或混淆座標
+- 曾對 1.4 MB 的單行 selected-mesh.json 使用 Get-Content -TotalCount，造成巨量終端輸出；改用 JSON parser，只輸出指定欄位、數量與誤差。也曾猜測 Private/KKSkeletalBuilder.h、verify_okstudio.lua 等路徑及把 wildcard 直接傳給 rg；後續應先 rg --files，再用 -g 過濾。
+- 原作 sharedMesh normals 與 CPU posed normals 不在同一座標／階段；本輪另匯出真正 GPU reference stream。6331女角2739頂點的 reference normals 最大誤差1.4928e-7，UV0最大2.9755e-8。UE GPU UV有既定V翻轉及half量化，不能將未反轉的0.9699差異誤報UV錯誤。GPU packed normals最大0.00394，符合8-bit tangent壓縮，不足以證明本次整體色差根因。
+
+### 2026-10-21 Studio 保存的 FIX 視線被略過
+- Rust parser 原先只取 eyes data 長度後直接略過；但原作 AddObjectAssist.ChangeChara 會 EyeLookCalc.LoadAngle，還原兩眼 local quaternion及H0/H1/V0/V1。6331原作眼睛rate=(0.340582967,-0.09320921,-0.343585044)，不是零視線。眼皮開合也依該rate修正，不可將此差異都算成shader或直接調眼睛大小。
+- Import 另有一行無條件把剛讀取的 EyesLook 設回Animation，會破壞相機追視。修正為只在建立匯入角色時設Animation缺省，保存的Camera或FIX政策保留。FIX資料經來源NO_LOOK row驗證後才提交，不為6331加入眼角offset。
+
+### 2026-10-21 驗收 Lua wrapper 的 CLI 參數來源
+- 曾用 dofile 呼叫 verify_ok_studio.lua 並重設 arg；底層參數器仍讀到原程序 argv，將 wrapper 路徑當成多餘參數，首輪未啟動任何UE。保留 capture-all-console.log，改由設好環境的 wrapper 啟動獨立 Lua CLI，使用正式參數來源；沒有把錯誤輪改寫為PASS。
+- D3D11 vertex-buffer 探針確實讀到4個綁定stream，但沒有 input-layout 解碼，不先替20-byte缺省stream指定COLOR欄位。CommandBuffer單獨DrawRenderer的輸出也不是場景相機的視覺金標；其形狀／骨架時點尚未核對，不把它拿來宣稱原作幾何吻合。reference-normal／UV驗證使用有明確座標標籤的sharedMesh與UE reference stream。
+
+### 2026-10-21 shader 假說必須核對最終 MID
+- 原作6331臉部87個morph（含啟用表情）的normal delta全為0，沒有因此新增模型格式／重建基礎庫。統計保存在NativeFaceNormalMorphs6331，不能把「parser沒有讀normal」直接當成該景色差根因。
+- 看到靜態貼圖fallback後曾懷疑頭髮DetailMask以Linear讀取；完整最終MID確認其SRGB=true，與原作Gamma相符。另確認頭髮MainTex雖1024²，所有RGBA都是255，是缺省白圖，不是重複烘焙髮色。兩者都未改動生產路徑。比較最終綁定，不能只看fallback分支或尺寸。

@@ -141,6 +141,13 @@ struct OKSTUDIO_API FOKSceneCharacter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
 	EOKSceneLook EyesLook = EOKSceneLook::Camera;
 
+	/** EyeLookCalc.SaveAngle: QL, QR, H0,H1,V0,V1, in source units. Empty in legacy OK scenes. */
+	UPROPERTY()
+	TArray<float> FixedEyes;
+
+	UPROPERTY()
+	int32 FixedEyesPattern = -1;
+
 	/** Studio animation of the OK animation library (studio_anims.json): kind 0 Studio motion, 1 H motion; No < 0: none
 	 *  (Animation, an OK animation asset, is used instead). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")

@@ -62,6 +62,23 @@ fn read_neck(bytes: &[u8]) -> Result<Option<StudioNeck>, String> {
     Ok(Some(StudioNeck { pattern, rotations }))
 }
 
+/// EyeLookCalc.SaveAngle: two local quaternions, followed (since 0.0.8) by H0,H1,V0,V1.
+fn read_eyes(bytes: &[u8], version: &Version) -> Result<Option<Vec<f32>>, String> {
+    if bytes.is_empty() { return Ok(None); }
+    let expected = if version.at_least("0.0.8") { 48 } else { 32 };
+    if bytes.len() != expected { return Err("invalid Studio eyes data length".into()); }
+    let mut values: Vec<f32> = bytes.chunks_exact(4)
+        .map(|v| f32::from_le_bytes(v.try_into().unwrap())).collect();
+    if values.iter().any(|v| !v.is_finite()) { return Err("invalid Studio eyes value".into()); }
+    for q in values[..8].chunks_exact_mut(4) {
+        let n = q.iter().map(|v| v*v).sum::<f32>();
+        if !n.is_finite() || n < 1e-12 { return Err("invalid Studio eyes quaternion".into()); }
+        for v in q { *v /= n.sqrt(); }
+    }
+    values.resize(12, 0.);
+    Ok(Some(values))
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind")]
 pub enum Object {
@@ -76,6 +93,7 @@ pub enum Object {
         fk: Vec<(i32, ChangeAmount)>, ik: Vec<(i32, ChangeAmount)>,
         enable_fk: bool, active_fk: [bool; 7], enable_ik: bool, active_ik: [bool; 5],
         neck: Option<StudioNeck>,
+        eyes: Option<Vec<f32>>,
         anime: [i32; 3], anime_speed: f32, anime_time: f32, hand: [i32; 2], mouth_open: f32,
         /// OICharInfo nipple (0..1) and siru levels (face, chest front, chest back, lower front, lower back).
         nipple: f32, siru: [u8; 5],
@@ -387,10 +405,11 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             r.f32()?; r.f32()?; // anime option params
             let neck_len = r.bytes_len("neck data")?;
             let neck = read_neck(r.take(neck_len)?)?;
-            let eyes = r.bytes_len("eyes data")?; r.take(eyes)?;
+            let eyes_len = r.bytes_len("eyes data")?;
+            let eyes = read_eyes(r.take(eyes_len)?, v)?;
             let anime_time = r.f32()?;
             for _ in 0..2 { let n = r.count("access")?; r.take(n * 8)?; }
-            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
+            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
         }
         1 => {
             let (key, change, visible) = base(r, true)?;
@@ -731,6 +750,44 @@ mod item_animation_tests {
 
 #[cfg(test)]
 mod fixed_neck_tests {
+    #[test]
+    fn saved_eyes_layout_and_validation() {
+        let values = [0f32,0.,0.,2.,0.,0.,0.,1.,-12.,8.,6.,7.];
+        let bytes: Vec<u8> = values.iter().flat_map(|v|v.to_le_bytes()).collect();
+        let latest = super::Version::parse("1.1.0.0");
+        let decoded = super::read_eyes(&bytes,&latest).unwrap().unwrap();
+        assert_eq!(decoded,[0.,0.,0.,1.,0.,0.,0.,1.,-12.,8.,6.,7.]);
+        assert_eq!(super::read_eyes(&bytes[..32],&super::Version::parse("0.0.7")).unwrap().unwrap()[8..],[0.;4]);
+        assert!(super::read_eyes(&bytes[..47],&latest).is_err());
+        assert!(super::read_eyes(&[],&latest).unwrap().is_none());
+        let mut invalid=bytes.clone();invalid[8..12].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(super::read_eyes(&invalid,&latest).is_err());
+        assert!(super::read_eyes(&[0;48],&latest).is_err());
+    }
+    #[test]
+    #[ignore = "native scene FIX eyes oracle: requires the local game and NativeFixedEyes6331 probe"]
+    fn saved_fixed_eyes_match_native_6331() {
+        let root=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let scene=super::export(&root.join("Content/IndependentResources/base_v1/studio/samples/koikatu_cs0006331.png"),&root.join("Saved/OKStudio/GeometryInputs20261021/source-cards")).unwrap();
+        fn find(v:&serde_json::Value)->Option<&serde_json::Value>{
+            if v["key"].as_i64()==Some(555) && v["kind"].as_str()==Some("Character") {return Some(v);}
+            match v {serde_json::Value::Array(a)=>a.iter().find_map(find),serde_json::Value::Object(m)=>m.values().find_map(find),_=>None}
+        }
+        let object=find(&scene).expect("source character 555");
+        let values:Vec<f32>=object["eyes"].as_array().unwrap().iter().map(|v|v.as_f64().unwrap() as f32).collect();
+        let mut session=crate::session::open(&crate::test_support::game_path(""),Some(std::path::Path::new(object["card"].as_str().unwrap())),0).unwrap();
+        let native:serde_json::Value=serde_json::from_slice(&std::fs::read(root.join("Saved/Tests/NativeFixedEyes6331/Scene1.selected-mesh.json")).unwrap()).unwrap();
+        let mut rates=[0f32;3];
+        let pattern=object["status"]["eyes_look_ptn"].as_i64().unwrap() as i32;
+        assert_eq!(pattern,3);
+        let code=unsafe{crate::ffi::ok_session_set_studio_fixed_eyes(&mut session,values.as_ptr(),12,pattern,rates.as_mut_ptr())};
+        assert_eq!(code,0);
+        for i in 0..3 {assert!((rates[i]-native["eyeLookRates"][i].as_f64().unwrap() as f32).abs()<1e-5,"rate{i}: {} != {}",rates[i],native["eyeLookRates"][i]);}
+        let before=session.eye_look_runtime.as_ref().unwrap().rates;
+        assert_ne!(unsafe{crate::ffi::ok_session_set_studio_fixed_eyes(&mut session,values.as_ptr(),12,1,rates.as_mut_ptr())},0);
+        assert_eq!(session.eye_look_runtime.as_ref().unwrap().rates,before,"target row rejection preserves FIX state");
+        eprintln!("saved FIX eyes native match rates={before:?} source angles={:?}",&values[8..]);
+    }
     fn data(pattern: i32, qs: &[[f32; 4]]) -> Vec<u8> {
         let mut b = Vec::new();
         b.extend(pattern.to_le_bytes());

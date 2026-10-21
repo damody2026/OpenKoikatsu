@@ -268,6 +268,13 @@ bool FOkSession::SetStudioFixedNeck(const TArray<FQuat>& Rotations)
     for(const FQuat& V:Rotations) Q.Append({float(V.X),float(V.Y),float(V.Z),float(V.W)});
     return Handle && ok_session_set_studio_fixed_neck(Handle,Q.GetData(),Rotations.Num())==0;
 }
+bool FOkSession::SetStudioFixedEyes(const TArray<float>& Values, int32 Pattern, FVector& Rates)
+{
+    float Output[3] = {};
+    if (!Handle || ok_session_set_studio_fixed_eyes(Handle, Values.GetData(), Values.Num(), Pattern, Output) != 0) return false;
+    Rates = FVector(Output[0], Output[1], Output[2]);
+    return true;
+}
 bool FOkSession::IkEffectorPosition(int32 Effector,FVector& Out) const
 {
 	float P[3]={};

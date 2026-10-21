@@ -1657,6 +1657,9 @@ public sealed partial class GamePoseProbe : BaseUnityPlugin
         // evidence of a missing stream, not evidence of the GPU default COLOR.
         public Vector3[] normals;public Vector4[] tangents;public Color[] colors;
         public Color32[] colors32;public Vector2[] uv0,uv1,uv2,uv3;
+        public Vector3[] bakedNormals;public float[] blendShapeWeights;public string[] blendShapeNames;
+        public float[] eyeLookRates;public float eyesOpenMax;public bool eyesBlink;
+        public int[] blendShapeNormalCounts;public float[] blendShapeNormalMax;
     }
     [StructLayout(LayoutKind.Sequential)] private struct D3DTexture2DDesc {
         public uint width,height,mipLevels,arraySize,format,sampleCount,sampleQuality,usage,bindFlags,cpuAccessFlags,miscFlags;

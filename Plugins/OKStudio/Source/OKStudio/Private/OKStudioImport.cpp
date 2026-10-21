@@ -215,6 +215,7 @@ namespace
 				IFileManager::Get().Delete(*KksCard);
 				const int32 Id = Add(EOKSceneObjectKind::Character, FString::Printf(TEXT("Character %d"), Key), Parent, O);
 				FOKSceneCharacter& C = Doc->Find(Id)->Character;
+				C.EyesLook = EOKSceneLook::Animation;
 				C.Card = bCard ? OkCard : FString();
 				double Mouth = -1.;
 				if (O->TryGetNumberField(TEXT("mouth_open"), Mouth)) C.MouthOpen = float(Mouth);
@@ -270,7 +271,16 @@ namespace
                     if (C.FixedNeck.Num() == 2) C.NeckLook = EOKSceneLook::Fixed;
                     else Note(TEXT("saved FIX neck requires the native neck/head bone pair"));
                 }
-				C.EyesLook = EOKSceneLook::Animation;
+				int32 SavedEyesPattern = -1;
+				if (Status) (*Status)->TryGetNumberField(TEXT("eyes_look_ptn"), SavedEyesPattern);
+				const TArray<TSharedPtr<FJsonValue>>* SavedEyes = nullptr;
+				// The source FIX row is NO_LOOK: retain its saved angles instead of aiming at a target.
+				if (SavedEyesPattern == 3 && O->TryGetArrayField(TEXT("eyes"), SavedEyes) && SavedEyes->Num() == 12)
+				{
+					for (const auto& Value : *SavedEyes) C.FixedEyes.Add(float(Value->AsNumber()));
+					C.FixedEyesPattern = SavedEyesPattern;
+					C.EyesLook = EOKSceneLook::Fixed;
+				}
 				// FK of the enabled parts.
 				const TArray<TSharedPtr<FJsonValue>>* Active = nullptr;
 				const TArray<TSharedPtr<FJsonValue>>* Bones = nullptr;

@@ -343,6 +343,9 @@ void AOKSceneActor::Release(FShown& Item)
 	if (Item.Preview.IsValid()) { Item.Preview->Destroy(); ++ReleasedSinceCollect; }
 	if (Item.Component.IsValid()) Item.Component->DestroyComponent();
 	Item.Preview = nullptr;
+	Item.bFixedEyesApplied = false;
+	Item.AppliedFixedEyes.Reset();
+	Item.AppliedFixedEyesPattern = -1;
 	Item.Component = nullptr;
 }
 
@@ -728,6 +731,23 @@ void AOKSceneActor::UpdateLooks(float DeltaSeconds, bool bApplyStaticPose)
 			return false;
 		};
 		FVector Look;
+		if (C.EyesLook == EOKSceneLook::Fixed && (!Pair.Value.bFixedEyesApplied || Pair.Value.AppliedFixedEyes != C.FixedEyes || Pair.Value.AppliedFixedEyesPattern != C.FixedEyesPattern))
+		{
+			FVector Rates;
+			if (Actor->Session.SetStudioFixedEyes(C.FixedEyes, C.FixedEyesPattern, Rates))
+			{
+				Actor->SetEyeGaze(Rates.X, Rates.Y, Rates.Z);
+				Pair.Value.bFixedEyesApplied = true;
+				Pair.Value.AppliedFixedEyes = C.FixedEyes;
+				Pair.Value.AppliedFixedEyesPattern = C.FixedEyesPattern;
+			}
+			else Errors.Add(Pair.Key, TEXT("fixed eyes not applied"));
+		}
+		else if (C.EyesLook != EOKSceneLook::Fixed && Pair.Value.bFixedEyesApplied)
+		{
+			Actor->SetEyeGaze(0.f, 0.f, 0.f);
+			Pair.Value.bFixedEyesApplied = false;
+		}
 		if (Target(C.EyesLook, Look)) { Actor->SetEyeLookTarget(Look, 1, true); Pair.Value.bEyesTracking = true; }
 		else if (Pair.Value.bEyesTracking) { Actor->StopEyeLookTracking(); Pair.Value.bEyesTracking = false; }
 		Actor->AdvanceEyeLook(DeltaSeconds);
