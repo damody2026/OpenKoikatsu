@@ -3882,3 +3882,11 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 
 ### 2026-10-21 6331 AO對照不是修正
 - 以現有比較診斷開關只關AO重拍，整體灰棕髮／灰白臉仍存在。該1/1只證明診斷擷取完成，不是6331 shader修復；正式AO設定未變，也未以常駐關閉AO掩蓋差異。
+
+### 2026-10-21 幾何快照不能直接輸出 minified JSON 或混淆座標
+- 曾對 1.4 MB 的單行 selected-mesh.json 使用 Get-Content -TotalCount，造成巨量終端輸出；改用 JSON parser，只輸出指定欄位、數量與誤差。也曾猜測 Private/KKSkeletalBuilder.h、verify_okstudio.lua 等路徑及把 wildcard 直接傳給 rg；後續應先 rg --files，再用 -g 過濾。
+- 原作 sharedMesh normals 與 CPU posed normals 不在同一座標／階段；本輪另匯出真正 GPU reference stream。6331女角2739頂點的 reference normals 最大誤差1.4928e-7，UV0最大2.9755e-8。UE GPU UV有既定V翻轉及half量化，不能將未反轉的0.9699差異誤報UV錯誤。GPU packed normals最大0.00394，符合8-bit tangent壓縮，不足以證明本次整體色差根因。
+
+### 2026-10-21 Studio 保存的 FIX 視線被略過
+- Rust parser 原先只取 eyes data 長度後直接略過；但原作 AddObjectAssist.ChangeChara 會 EyeLookCalc.LoadAngle，還原兩眼 local quaternion及H0/H1/V0/V1。6331原作眼睛rate=(0.340582967,-0.09320921,-0.343585044)，不是零視線。眼皮開合也依該rate修正，不可將此差異都算成shader或直接調眼睛大小。
+- Import 另有一行無條件把剛讀取的 EyesLook 設回Animation，會破壞相機追視。修正為只在建立匯入角色時設Animation缺省，保存的Camera或FIX政策保留。FIX資料經來源NO_LOOK row驗證後才提交，不為6331加入眼角offset。

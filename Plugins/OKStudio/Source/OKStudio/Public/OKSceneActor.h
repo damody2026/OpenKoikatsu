@@ -156,6 +156,9 @@ private:
 		TStrongObjectPtr<UObject> StudioAnim;
 		int32 AppliedHands[2] = { -1, -1 };
 		bool bEyesTracking = false;
+		bool bFixedEyesApplied = false;
+		TArray<float> AppliedFixedEyes;
+		int32 AppliedFixedEyesPattern = -1;
 		bool bNeckLooking = false;
 	};
 	TMap<int32, FShown> Shown;

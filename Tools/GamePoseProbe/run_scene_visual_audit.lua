@@ -11,7 +11,9 @@ parser:opt("--gpu-probe")
 parser:opt("--mesh")
 parser:opt("--pass", { default = "1" })
 parser:flag("--frame-mesh")
+parser:flag("--mesh-snapshot")
 local a = parser:parse(arg)
+assert(not a.mesh_snapshot or a.gpu_probe, "Mesh snapshots need --gpu-probe and --mesh")
 if a.gpu_probe then assert(a.mesh and path.is_file(a.gpu_probe), "GPU capture needs --mesh and a built probe DLL") end
 assert(a.tag:match("^[%w_%-]+$"), "Invalid audit tag")
 local game = ok.game_root()
@@ -49,6 +51,7 @@ local success, err = xpcall(function()
             fs.setenv("OK_PROBE_GPU_MESH", a.mesh)
             fs.setenv("OK_PROBE_GPU_PASS", a.pass)
             if a.frame_mesh then fs.setenv("OK_PROBE_GPU_FRAME", "1") end
+            if a.mesh_snapshot then fs.setenv("OK_PROBE_GPU_MESH_SNAPSHOT", "1") end
         end
         local arguments = { path.join(game, "CharaStudio.exe"), "-windowed",
             "-screen-width", "1280", "-screen-height", "720" }
