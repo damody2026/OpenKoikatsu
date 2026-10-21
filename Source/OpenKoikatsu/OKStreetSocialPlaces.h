@@ -301,12 +301,17 @@ inline const FOKStreetActivity* OKStreetFindActivity(const FString& Id) {
 // brackets or a leading 一起 ("一起散步（你帶路）" -> "散步"); an unknown id stays as it is.
 inline const FOKStreetPlace* OKStreetFindPlace(const FString& Id); // below
 inline FString OKStreetActivityName(const FString& Id) {
+ // "stroll" (walking around nearby) is no menu activity: said as the walk ("went to stroll" in the rumours).
+ if (Id == TEXT("stroll")) return OKStreetActivityName(TEXT("walk"));
  const FOKStreetActivity* A = OKStreetFindActivity(Id);
  // Going somewhere ("go:playground", or a bare place id): the place's name, never the id (a rumour said "went to
  // go:playground" and the listener made it a watermelon game there).
  if (!A) { const FOKStreetPlace* P = OKStreetFindPlace(Id.StartsWith(TEXT("go:")) ? Id.Mid(3) : Id); return P ? FString(P->Name) : Id; }
  FString Name = A->Name; int32 Bracket = INDEX_NONE; if (Name.FindChar(TCHAR(0xFF08), Bracket)) Name.LeftInline(Bracket);
- Name.RemoveFromStart(TEXT("一起")); Name.TrimStartAndEndInline(); return Name.IsEmpty() ? FString(A->Name) : Name;
+ Name.RemoveFromStart(TEXT("就地")); Name.RemoveFromStart(TEXT("一起")); // "就地坐下聊天" -> "坐下聊天"
+ // "在学生餐厅一起吃饭" -> "学生餐厅吃饭": after "一起去" the place comes first ("一起去在学生餐厅一起吃饭" in the rumours).
+ if (Name.RemoveFromStart(TEXT("在"))) { const int32 Together = Name.Find(TEXT("一起")); if (Together != INDEX_NONE) Name.RemoveAt(Together, 2); }
+ Name.TrimStartAndEndInline(); return Name.IsEmpty() ? FString(A->Name) : Name;
 }
 // The facility activity (restaurant room, hotel room, spa) of a facility index: its Code.
 inline const FOKStreetActivity* OKStreetFacilityActivity(int32 Facility) {

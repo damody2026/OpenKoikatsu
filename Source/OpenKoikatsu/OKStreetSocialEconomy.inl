@@ -122,7 +122,9 @@ void AOKStreetSocialScene::TickOrderNotice(){
  auto& S=*State;
  // Things that happened at the till (checkout opened, paid, advanced) wait here until she is free to answer.
  if(!S.TellHer.IsEmpty()){
-  if(FreeTalkPartner()==INDEX_NONE)S.TellHer.Reset();
+  // Nobody to tell, or they are saying goodbye (her "good night" said, the talk ends after it): a note now would start
+  // the talk again ("all eaten — so what shall we do next?" after the goodbye).
+  if(FreeTalkPartner()==INDEX_NONE||S.FarewellPending){if(S.FarewellPending)UE_LOG(LogTemp,Display,TEXT("Street till notice dropped (%d): they are saying goodbye"),S.TellHer.Num());S.TellHer.Reset();}
   else if(S.FreeTalkOpen&&!S.FreeTalkBusy){S.SystemNote=true;S.FreeTalkDraft=S.TellHer[0];S.TellHer.RemoveAt(0);UE_LOG(LogTemp,Display,TEXT("Street till notice sent: %s"),*S.FreeTalkDraft.Left(120));SendFreeTalk();return;}
  }
  if(S.OrderNoticeDue<=0)return;
@@ -181,10 +183,13 @@ void AOKStreetSocialScene::TickServes(){
 // Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
 void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How){
  auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
- S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s"),Girl,*How);
+ S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);S.PayAgreedShop.Reset();UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s"),Girl,*How);
 }
 FString AOKStreetSocialScene::PayAgreed(int32 Girl) const{
- const auto& S=*State;return S.PayAgreedWith==Girl&&Girl!=INDEX_NONE&&OKStreetMindNow(S)-S.PayAgreedAt<=180?S.PayAgreedHow:FString();
+ const auto& S=*State;
+ // For the place where it was first used: "my treat" at dinner does not pay for her own drink at the dorm later.
+ if(!S.PayAgreedShop.IsEmpty()&&!S.ShopPlace.IsEmpty()&&S.PayAgreedShop!=S.ShopPlace)return FString();
+ return S.PayAgreedWith==Girl&&Girl!=INDEX_NONE&&OKStreetMindNow(S)-S.PayAgreedAt<=180?S.PayAgreedHow:FString();
 }
 
 void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
@@ -194,6 +199,7 @@ void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
  FString Lean;float Insist=0;HeroineCheckoutLean(Her,CartTotal(),Lean,Insist);
  auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Her));Request->SetBoolField(TEXT("has_hers"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return L.ForHer;}));Request->SetNumberField(TEXT("insist"),Insist);Request->SetBoolField(TEXT("promise"),S.HerTreatPromise.Contains(Her));
  const TSharedPtr<FJsonObject> Payer=OKRulesEval(S,Request);const FString Option=Payer.IsValid()?Payer->GetStringField(TEXT("option")):Lean;
+ if(!PayAgreed(Her).IsEmpty()&&S.PayAgreedShop.IsEmpty())S.PayAgreedShop=S.ShopPlace; // used here: this shop's agreement from now on
  UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d lines=%d lean=%s insist=%.2f agreed=%s promise=%d -> %s"),Her,S.Cart.Num(),*Lean,Insist,*PayAgreed(Her),S.HerTreatPromise.Contains(Her),*Option);
  if(Option==TEXT("choice"))StartCheckout(Her);else FinishCheckout(Option,Her);
 }
@@ -231,6 +237,7 @@ void AOKStreetSocialScene::SettleGroupOrder(int32 Partner){
    FString Lean;float Insist=0;HeroineCheckoutLean(G,CartTotal(),Lean,Insist);
    auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Partner));Request->SetNumberField(TEXT("insist"),Insist);
    const TSharedPtr<FJsonObject> Payer=OKRulesEval(S,Request);Option=Payer.IsValid()?Payer->GetStringField(TEXT("option")):Lean;
+   if(!PayAgreed(Partner).IsEmpty()&&S.PayAgreedShop.IsEmpty())S.PayAgreedShop=S.ShopPlace;
    if(Option==TEXT("choice"))Option=TEXT("she_pays");
   }
   UE_LOG(LogTemp,Display,TEXT("Street group order: actor=%d lines=%d -> %s"),G,S.Cart.Num(),*Option);
@@ -431,7 +438,7 @@ void AOKStreetSocialScene::StartCheckout(int32 ForHer){
  OpenChoice(Her,TEXT("checkout"),Label,{TEXT("player_pays"),TEXT("split"),TEXT("she_pays"),TEXT("let_her_decide")},Lean,Insist,20,[Weak,Her](const FString& Option){if(Weak.IsValid())Weak->FinishCheckout(Option,Her);});
  S.FreeTalkNotice=Label+OKT(TEXT("ui.economy.pay_hint_text"));
  {const FOKStreetRelation Mine=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
-  S.TellHer.Add(OKMsg(TEXT("ui.economy.checkout_decision_prompt"), {{TEXT("total"), Total}, {TEXT("names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("wallet_cash"), FMath::Max<int64>(0,Mine.Cash)}}));}
+  S.TellHer.Add(OKMsg(TEXT("ui.economy.checkout_decision_prompt"), {{TEXT("total"), Total}, {TEXT("names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("wallet_cash"), FMath::Max<int64>(0,Mine.Cash)}, {TEXT("affordable"), Mine.Cash>=Total?TEXT("yes"):TEXT("no")}}));} // what she has, a fact: "not enough" said for 2 out of 235
  if(S.HerTreatPromise.Contains(Her)&&Insist>=1.f)S.FreeTalkNotice+=OKT(TEXT("ui.economy.she_treats_this_time"));
  else if(Lean==TEXT("she_pays")&&Insist>0.6f)S.FreeTalkNotice+=OKT(TEXT("ui.economy.she_wants_to_pay_suffix"));
  RefreshUI();
@@ -484,7 +491,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  }
  UE_LOG(LogTemp,Display,TEXT("Street order placed: %d lines, served in %.0f s"),S.Cart.Num(),ServeIn);
  UE_LOG(LogTemp,Display,TEXT("Street checkout: total=%d player=%lld her=%lld advanced=%lld option=%s"),Total,PlayerPays,HerPays,Advanced,*Option);
- {const FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty())S.TellHer.Add(ServeIn<10?Tell:Tell.Replace(OKT(TEXT("ui.economy.please_naturally")),*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})));} // handed over at once: no "it comes in 3 seconds" for her to say
+ {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
+ if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();
 }
 

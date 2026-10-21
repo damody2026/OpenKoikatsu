@@ -114,9 +114,8 @@ FString AOKStreetSocialScene::RemoteDoing(int32 Character) const{
  const auto& S=*State;const bool Call=RemoteKind(Character)==2;
  FString Her=S.Agents.IsValidIndex(Character-1)?PlaceHere(S.Agents[Character-1].Position):FString();
  if(const auto* P=Her.IsEmpty()?nullptr:OKStreetFindPlace(Her))Her=P->Name;
- FString His=PlaceHere(S.Male);if(const auto* P=His.IsEmpty()?nullptr:OKStreetFindPlace(His))His=P->Name;
  const FOKStreetPlanBlock* B=LifeBlock(Character,int32(OKStreetMindNow(S)%1440));
- return OKMsg(TEXT("ui.phone_inbox.apart_status_prompt"), {{TEXT("mode_hint"), Call?OKT(TEXT("ui.phone_inbox.call_style_hint")):OKT(TEXT("ui.phone_inbox.text_style_hint"))}, {TEXT("your_place"), Her.IsEmpty()?OKT(TEXT("ui.etiquette.street_location")):*Her}, {TEXT("your_doing"), B?OKPhoneDoingWord(B->Kind):OKT(TEXT("ui.phone_inbox.activity_wander"))}, {TEXT("his_place"), His.IsEmpty()?OKT(TEXT("ui.etiquette.street_location")):*His}});
+ return OKMsg(TEXT("ui.phone_inbox.apart_status_prompt"), {{TEXT("mode_hint"), Call?OKT(TEXT("ui.phone_inbox.call_style_hint")):OKT(TEXT("ui.phone_inbox.text_style_hint"))}, {TEXT("your_place"), Her.IsEmpty()?OKT(TEXT("ui.etiquette.street_location")):*Her}, {TEXT("your_doing"), B?OKPhoneDoingWord(B->Kind):OKT(TEXT("ui.phone_inbox.activity_wander"))}}); // not where he is: over the phone she knows that only if he says it (or somebody saw him)
 }
 
 // ---------------------------------------------------------------------------------------------------- phone

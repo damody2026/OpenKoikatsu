@@ -268,9 +268,12 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  Axes.Add(OKMsg(TEXT("ui.mind.admiration_stage_label"), {{TEXT("stage"), Mind.IsValid()?int32(Mind->GetNumberField(TEXT("admiration_stage"))):0}}));
  Status.Axes=FString::Join(Axes,OKT(TEXT("ui.bank.list_separator")));
  Status.Inner=Bias.InnerLine;
- Status.Menu=MenuText(R.Satiety);
- Status.Scene=SceneLine(Character);
- if(S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
+ // Apart (a message or a call) the place, menu and people around him are not around her: she knows where he is only if
+ // he says so or somebody saw him (what she heard).
+ const bool Apart=RemoteWith(Character);
+ Status.Menu=Apart?FString():MenuText(R.Satiety);
+ Status.Scene=Apart?FString():SceneLine(Character);
+ if(!Apart&&S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
  Status.Invite=RollInviteStance(Character);
  Status.Heard=HeardText(Character);
  // The meetings the game really has with him: she must not remember others (a time she said once is not a promise).
