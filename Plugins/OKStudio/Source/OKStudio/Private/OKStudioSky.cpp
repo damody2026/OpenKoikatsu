@@ -1,4 +1,4 @@
-#include "OKStudioSky.h"
+﻿#include "OKStudioSky.h"
 
 #include "OKSceneActor.h"
 #include "Dom/JsonObject.h"
@@ -114,7 +114,7 @@ const TArray<FOKStudioSkyPattern>& OKStudioSkyPatterns()
 	return Patterns;
 }
 
-bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb)
+bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb, TArray<FLinearColor>* OutHigher)
 {
 	static FString LoadedFile;
 	static TMap<int32, TArray<FLinearColor>> Probes;
@@ -136,6 +136,8 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
 				double No = -1;
 				if (!Row || !Row->TryGetNumberField(TEXT("map"), No) || !Row->TryGetArrayField(TEXT("probe"), Channels) || Channels->Num() != 3) continue;
 				TArray<FLinearColor> Packed;
+				TArray<FLinearColor> Higher;
+				FLinearColor Last(0,0,0,1);
 				for (const auto& Channel : *Channels)
 				{
 					const TArray<TSharedPtr<FJsonValue>>* Coefficients = nullptr;
@@ -150,8 +152,10 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
 					}
 					if (!Valid) break;
 					Packed.Add(FLinearColor(C[3], C[1], C[2], C[0] - C[6]));
+					Higher.Add(FLinearColor(C[4], C[5], 3.f*C[6], C[7]));
+					(&Last.R)[Packed.Num()-1] = C[8];
 				}
-				if (Packed.Num() == 3) Probes.Add(int32(No), MoveTemp(Packed));
+				if (Packed.Num() == 3) { Packed.Append(Higher); Packed.Add(Last); Probes.Add(int32(No), MoveTemp(Packed)); }
 			}
 		}
 		else UE_LOG(LogTemp, Warning, TEXT("OK Studio map environment missing or invalid: %s"), *File);
@@ -159,6 +163,7 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
 	const auto* Probe = Probes.Find(Map);
 	if (!Probe) return false;
 	OutSHAr = (*Probe)[0]; OutSHAg = (*Probe)[1]; OutSHAb = (*Probe)[2];
+	if (OutHigher) { OutHigher->Reset(); for (int32 I=3; I<7; ++I) OutHigher->Add((*Probe)[I]); }
 	return true;
 }
 
@@ -378,4 +383,10 @@ UMaterialInterface* OKStudioSkyMaterial(int32 No, FString& OutError)
 	OutError = TEXT("the sky material is built in editor builds only");
 	return nullptr;
 #endif
+}
+
+FLinearColor OKStudioLinearLightColor(const FLinearColor& Color,float Intensity)
+{
+    const auto Linear=[](float V){return V<=.04045f?V/12.92f:V<1.f?FMath::Pow((V+.055f)/1.055f,2.4f):FMath::Pow(V,2.2f);};
+    return FLinearColor(Linear(Color.R*Intensity),Linear(Color.G*Intensity),Linear(Color.B*Intensity),Color.A*Intensity);
 }

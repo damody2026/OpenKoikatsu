@@ -1227,7 +1227,7 @@ pub(crate) unsafe extern "C" fn part_at(s: *mut OkSession, i: i32, out: *mut OkM
             .map(|b| b.as_ptr())
             .unwrap_or(ptr::null()),
         overtex_png_len: p.overtex_png.as_ref().map(|b| b.len() as i32).unwrap_or(0),
-        overcolor: p.overcolor,
+        overcolor: p.draw_overlay_color(0),
         shadow_color: p.shadow_color,
         line_color: p.line_color,
         shadow_extend: p.shadow_extend,
@@ -1277,7 +1277,7 @@ pub(crate) unsafe extern "C" fn part_at(s: *mut OkSession, i: i32, out: *mut OkM
         vertex_colors: if p.vertex_colors.len() == p.positions.len() { p.vertex_colors.as_ptr() as *const u8 } else { ptr::null() },
         overtex2_png: p.overtex2_png.as_ref().map(|b| b.as_ptr()).unwrap_or(ptr::null()),
         overtex2_png_len: p.overtex2_png.as_ref().map(|b| b.len() as i32).unwrap_or(0),
-        overcolor2: p.overcolor2,
+        overcolor2: p.draw_overlay_color(1),
         nip_size: p.nip_size,
         nip_specular: p.nip_specular,
         nip_toggle: p.nip_toggle,

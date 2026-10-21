@@ -1,8 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 
 class UMaterialInterface;
+class UTextureCube;
+/** Lossless baked default reflection of a map (BC6H / RGBA16F). */
+UTextureCube* OKStudioMapReflection(int32 Map,FLinearColor& OutHDR,const FString& Root=FString(),int32 Node=-1);
 
 /** Studio's sky patterns (StudioSky list): number and name, from the OK base library's studio/sky.json. */
 struct FOKStudioSkyPattern
@@ -40,10 +43,14 @@ bool OKStudioSkyAmbient(int32 No, FLinearColor& OutSHAr, FLinearColor& OutSHAg, 
 
 /** Baked RenderSettings.m_AmbientProbe of a map scene, packed as Unity's
  * SHAr/g/b. Independent of the character maker's display environment. */
-bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb);
+bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb,
+    TArray<FLinearColor>* OutHigher = nullptr);
 
 /** A sky body's direction (`_SunPosition`, `_MoonPosition` of pattern `No`) in UE axes; false when unknown. */
 bool OKStudioSkyBodyDirection(int32 No, const FString& Body, FVector& OutDirection);
 
 /** Unity sky direction of a UE direction (OK Studio's Unity→UE mapping: UE = (-x, z, y)). */
 inline FVector OKStudioSkyUnityDirection(const FVector& D) { return FVector(-D.X, D.Z, D.Y); }
+
+// Unity legacy light pipeline (lightsUseLinearIntensity=false), including HDR tail.
+FLinearColor OKStudioLinearLightColor(const FLinearColor& Color,float Intensity);

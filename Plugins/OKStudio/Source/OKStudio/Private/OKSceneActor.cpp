@@ -18,6 +18,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureCube.h"
 #include "Misc/Paths.h"
 #include "OKAnimationAssets.h"
 #include "OKStudioCatalog.h"
@@ -144,6 +145,7 @@ namespace
 		// Maps draw with their own material graphs (their lightmaps and emission are there). Items draw with the game's
 		// own item program (the shared parents), with their colours as material overrides and Studio's toon shading.
 		Actor->bUseSharedParents = !bMap;
+        Actor->bSourceMapShading=bMap;
 		Actor->bStudioItemShading = Item != nullptr;
 		// Gallery's unshadowed display replaces material shadow colours with
 		// white. Studio must retain its authored material lighting instead.
@@ -152,7 +154,7 @@ namespace
 		if (!bMap) Actor->CharacterDisplayShadowsOverride = Item == nullptr;
 		// Items draw from the Studio root: the street's parents plus M_ForgeStudioOpaque, the depth-writing variant of the
 		// game's item program (opaque items overlapping each other sort by depth, not by distance).
-		if (Item) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay26");
+		if (!bMap) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay28");
 		// The scene's shading globals (Studio's _ambientshadowG, _LineColorG, _linewidthG): Studio sets them for everything
 		// it draws, characters as well as items.
 		if (!bMap) Actor->StudioShaderGlobals = ShaderGlobals;
@@ -546,6 +548,7 @@ void AOKSceneActor::SyncMap()
 		AKKPreviewActor* Actor = Session.OpenOkModel(LibraryDirectory(), Entry->Model, Root, false, Error) ? SpawnPreview(GetWorld(), MoveTemp(Session), Error, {}, {}, nullptr, true) : nullptr;
 		if (!Actor) { Failed.Add(Root + TEXT(": ") + Error); continue; }
 		Actor->SetActorTransform(MapPlace);
+        Actor->Tags.Add(FName(*(TEXT("OKStudioMapRoot=")+Root)));
 		// The map is on its own lighting channel: Studio's character light (it turns with the camera) does not light it.
 		TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
 		for (UPrimitiveComponent* P : Primitives) P->SetLightingChannels(false, false, !P->ComponentHasTag(TEXT("OKSunExcluded")));
@@ -624,9 +627,12 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 	// Lambert BRDF divides irradiance by pi. Authored Unity light Color is sRGB.
 	const FQuat Turn(FVector::UpVector, UE_HALF_PI);
 	MapSun->SetWorldRotation(GetActorQuat() * FOKStudioImport::UnityToUe(FVector::ZeroVector, FVector(Angle.R, Angle.G, Angle.B), FVector::OneVector).GetRotation() * Turn);
-	const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
-	MapSun->SetLightColor(FLinearColor(Linear(Color.R), Linear(Color.G), Linear(Color.B), 1.f));
-	MapSun->SetIntensity(Color.A * UE_PI);
+    const FLinearColor Irradiance=OKStudioLinearLightColor(FLinearColor(Color.R,Color.G,Color.B,1),Color.A);
+    // ULightComponent stores an sRGB FColor; move HDR energy into intensity
+    // before that quantization, preserving the source spectral ratios.
+    const float Energy=FMath::Max3(Irradiance.R,Irradiance.G,Irradiance.B);
+    MapSun->SetLightColor(Energy>0 ? FLinearColor(Irradiance.R/Energy,Irradiance.G/Energy,Irradiance.B/Energy,1) : FLinearColor::Black);
+    MapSun->SetIntensity(Energy*UE_PI);
 	UE_LOG(LogTemp, Display, TEXT("OK studio: map time %d sun angle=(%.1f,%.1f,%.1f) colour=(%.2f,%.2f,%.2f) intensity=%.2f"), Time, Angle.R, Angle.G, Angle.B, Color.R, Color.G, Color.B, Color.A);
 }
 
@@ -769,8 +775,9 @@ void AOKSceneActor::UpdateItemLighting()
 	// characters' unity_SHA*; without a sky, the character display's own ambient.
 	if (SkyShown != AmbientSky || Document->Map != AmbientMap) { AmbientSky = SkyShown; AmbientMap = Document->Map; AmbientLit.Reset(); }
 	FLinearColor SH[3];
+	TArray<FLinearColor> Higher = { FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,1) };
 	if (!(AmbientSky >= 0 && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
-		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2]))
+		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2], &Higher))
 	{
 		FKKRuntimeMaterialScene Maker;
 		OKApplyCharacterMakerLighting(Maker);
@@ -778,13 +785,28 @@ void AOKSceneActor::UpdateItemLighting()
 		SH[1] = Maker.Uniforms.FindRef(TEXT("unity_SHAg"));
 		SH[2] = Maker.Uniforms.FindRef(TEXT("unity_SHAb"));
 	}
-	for (const TPair<int32, FShown>& It : Shown)
-	{
-		AKKPreviewActor* Preview = It.Value.Kind == EOKSceneObjectKind::Character ? It.Value.Preview.Get() : nullptr;
-		if (!Preview || AmbientLit.Contains(Preview)) continue;
+    TArray<AKKPreviewActor*> AmbientPreviews;
+    for (const TPair<int32,FShown>& It:Shown) if(It.Value.Kind==EOKSceneObjectKind::Character && It.Value.Preview.IsValid()) AmbientPreviews.Add(It.Value.Preview.Get());
+    for (const auto& MapPreview:ShownMapPreviews) if(MapPreview.IsValid()) AmbientPreviews.Add(MapPreview.Get());
+    for (AKKPreviewActor* Preview:AmbientPreviews)
+    {
+        if (AmbientLit.Contains(Preview)) continue;
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAr"), SH[0]);
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAg"), SH[1]);
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAb"), SH[2]);
+		const FName Names[] = { TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC") };
+		for (int32 I=0; I<4; ++I) Preview->SetSharedVectorParameter(Names[I], Higher[I]);
+		FLinearColor ReflectionHDR(1,1,0,0);
+		UTextureCube* Reflection = AmbientSky<0 ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
+		for(const FName Name:{FName(TEXT("unity_SpecCube0")),FName(TEXT("unity_SpecCube1"))})Preview->SetSharedTextureParameter(Name,Reflection);
+		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube0_HDR"),ReflectionHDR);
+		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube1_HDR"),ReflectionHDR);
+        if(!Preview->bUseSharedParents)
+        {
+            FString Root;
+            for(const FName Tag:Preview->Tags){const FString T=Tag.ToString();const FString Prefix=TEXT("OKStudioMapRoot=");if(T.StartsWith(Prefix))Root=T.Mid(Prefix.Len());}
+            Preview->BindSourceReflectionProbes([&](int32 Node,FLinearColor& HDR)->UTexture*{return Node<0&&AmbientSky>=0?nullptr:OKStudioMapReflection(Document->Map,HDR,Root,Node);});
+        }
 		AmbientLit.Add(Preview);
 	}
 	if (!Light) return;
@@ -794,11 +816,7 @@ void AOKSceneActor::UpdateItemLighting()
 	const FLinearColor Direction(Towards.X, Towards.Y, Towards.Z, 0.f);
 	// Unity's linear renderer converts the final gamma-space light colour,
 	// including intensity; values above one use its GammaToLinearSpace HDR tail.
-	const auto LinearLight = [](float V) {
-		return V <= 0.04045f ? V / 12.92f : V < 1.f ? FMath::Pow((V + 0.055f) / 1.055f, 2.4f) : FMath::Pow(V, 2.2f);
-	};
-	const FLinearColor Raw = SourceLight->Color * Intensity;
-	const FLinearColor Color(LinearLight(Raw.R), LinearLight(Raw.G), LinearLight(Raw.B), Raw.A);
+	const FLinearColor Color=OKStudioLinearLightColor(SourceLight->Color,Intensity);
 	if (!Direction.Equals(ItemLightDirection, 1e-4f) || !Color.Equals(ItemLightColor, 1e-4f)) { ItemLightDirection = Direction; ItemLightColor = Color; ItemsLit.Reset(); }
 	for (const TPair<int32, FShown>& It : Shown)
 	{

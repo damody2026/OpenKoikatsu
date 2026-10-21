@@ -1,0 +1,1051 @@
+{
+  "format": "ok-studio-map-reflections-1",
+  "maps": [
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 0,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/bc1c37ae53c893ace5d883880df212c1fe600497cafe664f8a0c01bdbcee6671.okcube"
+    },
+    {
+      "map": 1,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 2,
+            "texture": "studio/reflections/00c87db0267aa53f11a6462f84b31cb50609ca009808e28d51c3db37e926309a.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 2,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.559999942779541,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 2,
+            "texture": "studio/reflections/15dcac04a55fb7ce8a9b0e3c42b87ced4b962f58788f29445e02ee78ca80ea33.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 3,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/8f55824acc27ccc08aa241d844f4549b2f138d69d93519ee92dcf7047099a5ed.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/9e084f38421470b02ddb9b6ab6002822d50ddb387f08f07c51953af402e18725.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 4,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 2,
+            "texture": "studio/reflections/17512c281eca107683337bf6015c168c9e4594e32f31ce3d41a6974409b83196.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/1ec6bfa02f6b142680a6ea360ddc0102d1b65ff5c57523c8c836e935f5b03fa7.okcube"
+    },
+    {
+      "map": 5,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 4,
+            "texture": "studio/reflections/6debff48324349a238b2e88320ae013c23961efe77318d151a7776822791f7cc.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 6,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 9,
+            "texture": "studio/reflections/a59629d343979abffa4d26a983fc4b9e6a0f599bb3a5ae6a91f6b0a6fc5d30b5.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/1ec6bfa02f6b142680a6ea360ddc0102d1b65ff5c57523c8c836e935f5b03fa7.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 7,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 9,
+            "texture": "studio/reflections/189a518fac12c06c1ce7b67c25ac7ebd9211fe74b7a152d65355dd7d85764871.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/1ec6bfa02f6b142680a6ea360ddc0102d1b65ff5c57523c8c836e935f5b03fa7.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 8,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/539ac1a9a2280bbeba1408e2bb1a6da277b1cb9818db9781925919bedb6c3b8e.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/e1fb9530ce092ae908344c6298e4b887b4f7c65cd06e38ecbbefcadfd89a2063.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 9,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/539ac1a9a2280bbeba1408e2bb1a6da277b1cb9818db9781925919bedb6c3b8e.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/e1fb9530ce092ae908344c6298e4b887b4f7c65cd06e38ecbbefcadfd89a2063.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 10,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/539ac1a9a2280bbeba1408e2bb1a6da277b1cb9818db9781925919bedb6c3b8e.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/e1fb9530ce092ae908344c6298e4b887b4f7c65cd06e38ecbbefcadfd89a2063.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 11,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 20,
+            "texture": "studio/reflections/e4166203881b1b717c592818bb40b91a5061104e0322f14a14cc4fab77170452.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/e21010d25db2cf4e782456dc5b9f8cfaaf5264052c3cdc4b09f86ba197b1260d.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 12,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/0e084311120d1542d90ad959f7b1e4129f733cdbac8322bcac91f48125a04fb8.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/3fc66ae749eff0db2fc8d7f43eeecc10280b3b40fc65b06484d0a15daaf01f35.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 13,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/cdfaf4fe5967076bdb979961e6465d1ad5b3c362ba34294b97aedee091d1faa1.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 14,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/8f457e9dd138f409df89364c4221adee3f8cc3c6516343e1c5a4f3520c4980dd.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 15,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b228d4e23cd97d05ebbb0351ccda7b2ff4cad3497d0402f872564556a3df3409.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 16,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/a84ea720fec8f326d77c5f4bf6a1b8c4c5b4b121795fbd01160681a55f9d2712.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/030da7aed223686a25d4a42d01072109d624a22c25cb589db3c59c54ac86fe81.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 17,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/3c909a8879b9a1b86a936ccf9e43e09cc22849e8e85dc15f6ccfdb787b5757a6.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 18,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/1e48d5cc41fd7db20b368c0bbfe573de803394ec970c1cdd5b86555f5fd80d8e.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 19,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/75b68ac0e2eb2b560e0cc7b270450f63c1df33e2a703da42be5ab7d2b15f3a77.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 20,
+      "name": "ReflectionProbe-2",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-1",
+            "node": 1,
+            "texture": "studio/reflections/2b091879ae3516d9c287b5c6f8c7c75d2afb2c0f57b473d589012c54b574f7f5.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/27212f382387a90c411de9212d5a5213091951b62823faa5ad207405e74e4029.okcube"
+    },
+    {
+      "map": 21,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/6466174438e5fbe7b532359cedaf4776836617d92e1a254df419f828700c917c.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 22,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-1",
+            "node": 1,
+            "texture": "studio/reflections/a7276e6cc7ac852e91ccabb6d2b69e198824bdeaf00a718a869c0f08819e0a42.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "hdr": [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 23,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/a8394462b21463a58fbac795cd4a0199f3ec2dafb9c2f407b947013cb8093e97.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 24,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/f8eed66337ed9e9fdd3ed4173579523a45c2fc20523d1802d1409222bb952339.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 25,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/1f4098979daf1528dfe8f6eb2008a4bc4d495d3f23207c51e0739580fc5275f9.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 26,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 1,
+            "texture": "studio/reflections/17dea4863d74be99385db2b0c8f4e02f7d2eb3de0ab3e71f417e651b98b9c45d.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/0f815c9d2a13632f0ce3172ce957e9a8d7dcaff8972ff4de8a8944ba7e573366.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 27,
+      "name": "ReflectionProbe-2",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              0.5,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-1",
+            "node": 2,
+            "texture": "studio/reflections/9ec3549cf418476c71ad6f51ec7130cceca42e2d7f1dc62d42fd8d540c408962.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/dbf6d3f7e743fb7a75aba45561fed8ae02764d97dbaa13be298d9e2b45d7c2e1.okcube"
+    },
+    {
+      "map": 28,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 29,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 30,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/14b8bf90a3139143bf0eb476c7ea4d73125c11896ee240c4ce93233428c47752.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 31,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/1f4098979daf1528dfe8f6eb2008a4bc4d495d3f23207c51e0739580fc5275f9.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 32,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 33,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/4d46fe01abb75e1c2dd7b3926c67d76c2b9f14f37733e3a8beedbe059bbc3041.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 34,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 7,
+            "texture": "studio/reflections/a16ba62f1adcad9b5530b5ad6bedbb9dea6c5501a84848f043268883bc126d14.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/1ec6bfa02f6b142680a6ea360ddc0102d1b65ff5c57523c8c836e935f5b03fa7.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 35,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/0f815c9d2a13632f0ce3172ce957e9a8d7dcaff8972ff4de8a8944ba7e573366.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 36,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 37,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 38,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 39,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 40,
+      "name": "ReflectionProbe-0",
+      "roots": {},
+      "texture": "studio/reflections/b5352db2120ec8aa856c9f3daecb4b6afb68cc2a847d60f677d067c55f3c1c11.okcube"
+    },
+    {
+      "hdr": [
+        1.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "map": 41,
+      "name": "ReflectionProbe-1",
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ReflectionProbe-0",
+            "node": 3,
+            "texture": "studio/reflections/cf2bd82d41bc88f478f02b4beeb3e4f1d2b49d11c4f89450e3be3c113a193661.okcube"
+          }
+        ]
+      },
+      "texture": "studio/reflections/2d6280e3a9012f4162c7b26de5909690ec2dcb40197919e18dad1aa4402613e5.okcube"
+    },
+    {
+      "map": 50,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 51,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 52,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 53,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 54,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 55,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 56,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 57,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 58,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 59,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 60,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 61,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r01",
+            "node": 4,
+            "texture": "studio/reflections/6ce27e60b458251826d873e7fe446440b4f8c22634fe1cf0f95a8eef59aba836.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 62,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 63,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r04",
+            "node": 1,
+            "texture": "studio/reflections/8778a85cff14de30735d0bcb82d313dbba50cde6c23e5913bcf3ff6b4ba0907f.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 64,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r04",
+            "node": 4,
+            "texture": "studio/reflections/8778a85cff14de30735d0bcb82d313dbba50cde6c23e5913bcf3ff6b4ba0907f.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 65,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r06",
+            "node": 1,
+            "texture": "studio/reflections/aaee63a5c0ec73f70f0a87fe937977a93cb6fde738f27d298b7a4f50a84aa74e.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 66,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "ks_r06_Reflection Probe",
+            "node": 3,
+            "texture": "studio/reflections/6a5e786ce86296ef7c2af45ffed93760c1c7b20b2bb79ddb9f3e5773808f0b8d.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 67,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 68,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r08",
+            "node": 2,
+            "texture": "studio/reflections/9dc38b7a4ea0cac5f8f70b99e8b28e7bc3885fd5f0f24f45fa66d6a9cc792de5.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 69,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r10",
+            "node": 2,
+            "texture": "studio/reflections/de5fce68bed8829bdddca70d1a5b32fc144923233ea2bb5bb76e5842759d7d77.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 70,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 71,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 72,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 73,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 74,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 75,
+      "roots": {},
+      "texture": null
+    },
+    {
+      "map": 76,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r19",
+            "node": 3,
+            "texture": "studio/reflections/2a59e8d7e2414e518f71fac8983adb341c59a32f1b818049a7732943b14b4dc9.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 77,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe-ks_r14",
+            "node": 2,
+            "texture": "studio/reflections/f56c2db6d3e3ad5878a7fd01558fdd3a3f4c32dada14c60078ee492e377971ce.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 78,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r15",
+            "node": 4,
+            "texture": "studio/reflections/a6208d9287f9941cddc63e634192bc69f58357d877b06784486759c3eee4c827.okcube"
+          }
+        ]
+      },
+      "texture": null
+    },
+    {
+      "map": 79,
+      "roots": {
+        "Map": [
+          {
+            "hdr": [
+              1.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            "name": "Reflection Probe_ks_r20",
+            "node": 2,
+            "texture": "studio/reflections/2492f29d9fb28efd55b235383999730d42a2eb5124474450f3e128fff449325e.okcube"
+          }
+        ]
+      },
+      "texture": null
+    }
+  ]
+}

@@ -845,7 +845,7 @@ pub fn session_cache_location() -> Option<PathBuf> {
 /// 14: Studio Standard/MDK/particle Texture2D and baked lightmap rows follow rendering UVs.
 /// 15: Studio renderers carry their native shadow casting mode, layer and enabled state.
 /// 18: static and settled Animator activeSelf gate each prefab renderer instance through its ancestors.
-const SESSION_CACHE_REVISION: u32 = 19;
+const SESSION_CACHE_REVISION: u32 = 20;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {
@@ -2191,6 +2191,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
         "studio-sky" => println!("OKCONVERT studio sky patterns={}", crate::studio_sky::convert(game, &lib.ok_or("library directory required")?)?),
         "studio-environments" => println!("OKCONVERT studio map environments={}", crate::studio_sky::convert_map_environments(game, &lib.ok_or("library directory required")?)?),
+        "studio-reflections" => println!("OKCONVERT studio map reflections={}", crate::studio_sky::convert_map_reflections(game,&lib.ok_or("library directory required")?)?),
         "studio-nodes" => crate::studio_items::record_hierarchies(game, &lib.ok_or("library directory required")?, args.get(2).and_then(|t| t.parse().ok()).unwrap_or(6))?,
         "anim-convert" => {
             let card = std::path::PathBuf::from(args.get(2).ok_or("character card required (sampling skeleton)")?);

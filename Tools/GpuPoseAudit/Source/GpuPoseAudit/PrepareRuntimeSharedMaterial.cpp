@@ -109,7 +109,13 @@ bool PrepareRuntimeSharedMaterial(const FString& AssetRoot,const FString& Root,c
   Code+=FString::Printf(TEXT("const float3 HGLightUnity=%s;const float HGSkin=%d;const float HGHair=%d;const float HGPremultiplied=%d;\n"),*Light,HGSurface==EOKHGSurface::Skin?1:0,HGSurface==EOKHGSurface::Hair?1:0,Mat->BlendMode==BLEND_AlphaComposite?1:0);
  }
 #endif
- if(!Outline)Code+=OKRuntimeSharedMaterialVaryings(Recipe);
+ if(!Outline){
+  if(OKRuntimeSharedMaterialUsesVertexAmbient(Recipe)){
+   auto& AmbientInput=PS->Inputs.AddDefaulted_GetRef();AmbientInput.InputName=TEXT("VertexAmbient");
+   AmbientInput.Input.Expression=OKMakeRuntimeVertexAmbient(Mat,FKKRuntimeMaterialScene());
+  }
+  Code+=OKRuntimeSharedMaterialVaryings(Recipe);
+ }
  else {Code+=TEXT("clip(-FaceSign);\n");if(Recipe==EKKRuntimeMaterialRecipe::ForgeSkin)Code+=TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y);v2=float4(ThirdUV.x,1-ThirdUV.y,FourthUV.x,1-FourthUV.y);v4=VertexColor;\n");if(Recipe==EKKRuntimeMaterialRecipe::KoikanoSkin)Code+=TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y);v2=float4(ThirdUV.x,1-ThirdUV.y,FourthUV.x,1-FourthUV.y);v5=VertexColor;\n");}
  if(Outline&&Recipe==EKKRuntimeMaterialRecipe::KoikanoSkin){const TCHAR* Names[]={TEXT("_texcoord_ST"),TEXT("_texcoord2_ST"),TEXT("_texcoord3_ST"),TEXT("_texcoord4_ST")};const TCHAR* Dest[]={TEXT("v1.xy"),TEXT("v1.zw"),TEXT("v2.xy"),TEXT("v2.zw")};for(int32 I=0;I<4;++I)for(const auto& U:L.Uniforms)if(U.Name==Names[I])Code+=FString::Printf(TEXT("%s=%s*cb%d[%d].xy+cb%d[%d].zw;\n"),Dest[I],Dest[I],U.CB,U.Offset/16,U.CB,U.Offset/16);}
  if(Outline&&int32(Recipe)>=17&&int32(Recipe)<=25){for(int32 I=0;I<2;++I){if(I==1&&(Recipe==EKKRuntimeMaterialRecipe::KoikanoClothesItem||Recipe==EKKRuntimeMaterialRecipe::KoikanoClothesItemAlpha||Recipe==EKKRuntimeMaterialRecipe::KoikanoClothesItemTranslucent||Recipe==EKKRuntimeMaterialRecipe::KoikanoClothesItemAlphaTranslucent))continue;for(const auto& U:L.Uniforms)if(U.Name==(I?TEXT("_texcoord2_ST"):TEXT("_texcoord_ST")))Code+=FString::Printf(TEXT("v1.%s=float2(%s.x,1-%s.y)*cb%d[%d].xy+cb%d[%d].zw;\n"),I?TEXT("zw"):TEXT("xy"),I?TEXT("SecondaryUV"):TEXT("UV"),I?TEXT("SecondaryUV"):TEXT("UV"),U.CB,U.Offset/16,U.CB,U.Offset/16);}}

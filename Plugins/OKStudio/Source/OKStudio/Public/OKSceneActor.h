@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -94,12 +94,12 @@ public:
 	void UpdateLooks(float DeltaSeconds, bool bApplyStaticPose = true);
 	/** Moves objects hung on character bones (and what hangs under them) to the bones' current pose. */
 	void PlaceAttached();
-	/** Studio's character light (it turns with the camera) as the items' light: their shared parent instances'
+	/** Studio's scene-root character light as the items' light: their shared parent instances'
 	 *  _WorldSpaceLightPos0 and _LightColor0, written when the light changes. */
 	void UpdateItemLighting();
 	FLinearColor ItemLightDirection = FLinearColor(0.f, 0.f, 0.f, -1.f), ItemLightColor = FLinearColor(0.f, 0.f, 0.f, -1.f);
 	TSet<TWeakObjectPtr<AKKPreviewActor>> ItemsLit;
-	/** The sky's ambient light on the characters (unity_SHAr/g/b): the sky pattern it was written for (-1: the
+	/** The map/sky's full probe on characters and unlightmapped Standard surfaces: the sky pattern it was written for (-1: the
 	 *  character display's own) and the characters that have it. */
 	int32 AmbientSky = -1;
 	int32 AmbientMap = -1;

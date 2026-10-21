@@ -307,7 +307,7 @@ impl Default for HairPart {
             start_color: [1.0, 1.0, 1.0, 1.0],
             end_color: [1.0, 1.0, 1.0, 1.0],
             outline_color: [0.0, 0.0, 0.0, 1.0],
-            gloss_color: [0.8490566, 0.8490566, 0.8490566, 1.0],
+            gloss_color: [217.0 / 255.0, 217.0 / 255.0, 217.0 / 255.0, 1.0],
         }
     }
 }

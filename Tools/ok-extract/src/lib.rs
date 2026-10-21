@@ -4710,6 +4710,16 @@ fn display_hair(c: [f32; 4]) -> [f32; 4] {
     c
 }
 
+// ChaControl.ChangeSettingHairOutlineColor / ChangeSettingHairGlossColor.
+fn set_hair_part_materials(meshes:&mut [ExtractedMesh], hair:&crate::card::HairPart) {
+    for mesh in meshes {
+        set_material_color(mesh,"_LineColor",hair.outline_color);
+        if mesh.mat.as_ref().is_some_and(|m|is_native_hair_shader(&m.shader.to_ascii_lowercase())) || mesh.hair_shader_hint {
+            set_material_color(mesh,"_GlossColor",hair.gloss_color);
+        }
+    }
+}
+
 fn hair_cols_for(card: &CardInfo, cat: i32) -> [[f32; 4]; 3] {
     let i = (cat - 101) as usize;
     if (101..=104).contains(&cat) && i < 4 {
@@ -5289,6 +5299,7 @@ fn color_accessory_meshes(
                 // bundle value can be a placeholder (red on some mod hairs).
                 let outline = if info.color_match { hair0.outline_color } else { info.outline_color };
                 set_material_color(&mut m, "_LineColor", outline);
+                set_material_color(&mut m,"_GlossColor",if info.color_match {hair0.gloss_color} else {info.gloss_color});
                 if !info.hair_gloss {
                     m.hair_gloss_png = None;
                 }
@@ -5308,6 +5319,7 @@ fn color_accessory_meshes(
         if let Some(c) = me_shader_color(card, outfit, property, &m, "_LineColor") {
             set_material_color(&mut m, "_LineColor", c);
         }
+        if let Some(c)=me_shader_color(card,outfit,property,&m,"_GlossColor"){set_material_color(&mut m,"_GlossColor",c);}
         if let Some(c) = me_shader_color(card, outfit, property, &m, "_Color4") {
             cols[3] = c;
         }
@@ -9974,6 +9986,7 @@ pub(crate) fn extract_session_from_info(
                         game_root, zip_path.map(|p| p.as_path()), &dummy, shake_enabled);
                     if role.contains("hair") && !role.contains("acc") {
                         set_selected_hair_gloss(&mut meshes, selected_hair_gloss.as_ref().map(|g|g.0.as_slice()));
+                        if (101..=104).contains(&resolve.category_no) {set_hair_part_materials(&mut meshes,&card.hair_parts[(resolve.category_no-101) as usize]);}
                     }
                     let pk = parent_for_part(card, &resolve.property, "", role);
                     let acc_local = acc_local_for(card, &resolve.property);
@@ -10041,10 +10054,7 @@ pub(crate) fn extract_session_from_info(
                 None
             };
             if (101..=104).contains(&resolve.category_no) && role.contains("hair") {
-                let outline = card.hair_parts[(resolve.category_no - 101) as usize].outline_color;
-                for mesh in &mut meshes {
-                    set_material_color(mesh, "_LineColor", outline);
-                }
+                set_hair_part_materials(&mut meshes,&card.hair_parts[(resolve.category_no - 101) as usize]);
             }
             let assignment=if role.contains("acc") {accessory_assignment(game_root,zip_path.map(|p|p.as_path()),&entry)} else {None};
             push_meshes(
@@ -10138,9 +10148,7 @@ pub(crate) fn extract_session_from_info(
             let (mut meshes, part_skel) = meshes_for_entry_shake(
                 game_root, zip_path.as_deref(), &entry, !card.hair_parts[i].no_shake);
             set_selected_hair_gloss(&mut meshes, selected_hair_gloss.as_ref().map(|g|g.0.as_slice()));
-            for mesh in &mut meshes {
-                set_material_color(mesh, "_LineColor", card.hair_parts[i].outline_color);
-            }
+            set_hair_part_materials(&mut meshes,&card.hair_parts[i]);
             let name = if display.is_empty() {
                 entry.name.clone()
             } else {
@@ -15707,6 +15715,36 @@ mod tests {
         let output=bake_iris(&input,&pupil,Some(&grad),None,None,[1.0;4],[1.0;4],0.5,0.5).unwrap();
         let image=crate::teximg::load_from_memory(&output).unwrap().to_rgba8();let pixel=image.get_pixel(256,256).0;
         for (actual,expected) in pixel.iter().zip([85u8,185,42,204]) {assert!((*actual as i16-expected as i16).abs()<=2,"native shader {pixel:?}");}
+    }
+
+    #[test]
+    #[ignore="native face GPU buffer: OK_SKIN_CARD and OK_SKIN_NATIVE_GPU_JSON"]
+    fn native_face_overlay_colors_reach_c_abi() {
+        let game=crate::test_support::game_path("");let card=std::path::PathBuf::from(std::env::var("OK_SKIN_CARD").unwrap());
+        let native:serde_json::Value=serde_json::from_slice(&std::fs::read(std::env::var("OK_SKIN_NATIVE_GPU_JSON").unwrap()).unwrap()).unwrap();
+        let cb=native["buffers"].as_array().unwrap().iter().find(|b|b["stage"]=="ps"&&b["slot"]==0).unwrap()["float4"].as_array().unwrap();
+        let mut session=crate::session::open(&game,Some(&card),0).unwrap();
+        let index=session.parts.iter().position(|p|p.role=="head"&&p.name=="cf_O_face").unwrap();
+        let mut view=std::mem::MaybeUninit::<crate::ffi::OkMeshView>::uninit();
+        assert_eq!(unsafe{crate::ffi::part_at(&mut session,index as i32,view.as_mut_ptr())},0);let view=unsafe{view.assume_init()};
+        for (ours,row) in [(view.overcolor,7usize),(view.overcolor2,9usize)]{
+            for c in 0..4{let value=if c<3{srgb_channel_to_linear(ours[c])}else{ours[c]};let expected=cb[row][c].as_f64().unwrap() as f32;
+                assert!((value-expected).abs()<0.000001,"native face overlay {row}/{c}: {value} != {expected}");}
+        }
+    }
+
+    #[test]
+    #[ignore="native hair material color: OK_HAIR_CARD, OK_HAIR_MESH, OK_HAIR_NATIVE_COLOR"]
+    fn resolved_hair_gloss_color_matches_native_material() {
+        let game=crate::test_support::game_path("");
+        let card=std::path::PathBuf::from(std::env::var("OK_HAIR_CARD").unwrap());
+        let mesh=std::env::var("OK_HAIR_MESH").unwrap();
+        let expected:Vec<f32>=serde_json::from_str(&std::env::var("OK_HAIR_NATIVE_COLOR").unwrap()).unwrap();
+        assert_eq!(expected.len(),4);
+        let session=crate::session::open(&game,Some(&card),0).unwrap();
+        let part=session.parts.iter().find(|p|p.name==mesh).expect("native renderer absent");
+        let color=part.source_material.as_ref().unwrap().colors.get("_GlossColor").expect("resolved gloss absent");
+        for c in 0..4{assert!((color[c]-expected[c]).abs()<0.000001,"native gloss channel {c}: {} != {}",color[c],expected[c]);}
     }
 
     #[test]

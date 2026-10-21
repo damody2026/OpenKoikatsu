@@ -73,6 +73,8 @@ UMaterial* OKMakeNativeSkinMaterial(const FKKRuntimeMaterialPart& Part,
             Code+=FString::Printf(TEXT("cb%d[%d].%c=%s;\n"),U.CB,(U.Offset/4+C)/4,TEXT("xyzw")[(U.Offset/4+C)%4],*Value);
         }
     }
+    auto& AmbientInput=PS->Inputs.AddDefaulted_GetRef();AmbientInput.InputName=TEXT("VertexAmbient");
+    AmbientInput.Input.Expression=OKMakeRuntimeVertexAmbient(Mat,Scene);
     Code+=OKRuntimeSharedMaterialVaryings(Recipe);
     FString Program=OKRuntimeSharedMaterialProgram(Recipe);
     static TMap<FString,UTexture*> Defaults;

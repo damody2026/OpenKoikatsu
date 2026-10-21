@@ -62,6 +62,8 @@ fn assign_reflection_probes(meshes: &mut [ExtractedMesh], probes: &crate::unity:
         let probe = &probes.probes[index];
         let Some(mat) = m.mat.as_mut() else { continue };
         mat.floats.insert("_OKReflectionIndex".into(), index as f32);
+        mat.floats.insert("_OKReflectionDefault".into(), if probe.node<0 {1.} else {0.});
+        mat.floats.insert("_OKReflectionNode".into(),probe.node as f32);
         mat.floats.insert("_OKReflectionMips".into(), probe.mips as f32);
         mat.floats.insert("_OKReflectionIntensity".into(), probe.intensity);
         if !carried[index] {

@@ -3805,3 +3805,65 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜乾淨庫命令須以實際cwd解析**：已在Clean1268工作目錄內又指定git -C Saved/OKStudio/Clean1268，造成路徑重複且fetch未執行。改為該目錄內直接git fetch／merge並檢查每一步退出碼。CLI寫入的missing.txt先留存本輪證據，再只還原自己的測試輸出；不可讓後續status掩蓋前面操作失敗。
 
 - **2026-10-21｜保留來源材質陰影不可為每個Studio道具分配角色陰影RT**：初版把CharacterDisplayShadowsOverride=true套到所有非map Actor。4432大量道具因此各分配2個1024² RGBA32f（約32MiB），完整回歸升到50GB且每幀約5秒。道具既有bStudioItemShading已能保留材質陰影，不應因此啟用角色擷取。修正由Studio明確選擇角色true／道具false，讓道具共用既有4×4中性depth；新增實際載入道具的RT尺寸及陰影政策整合檢查。該輪只完成10張後核對PID中止，保留FAIL與50GB證據；必須重建後重新跑全14景，不能把前輪結果當成最終通過。
+
+- **2026-10-21｜不能把所有Koikano的頂點環境光寫到相同varying**：原作forward VS證實髮／一般衣服用o5、皮膚用o7，而clothes_item用o6；其o5是螢幕座標。初稿以同一v5處理衣物，在正式驗收前逐族讀回DXBC時查出。修正逐族採原作語義，並將首輪StudioDisplay27僅留作原型，不計入最終材質驗收；正式根改用重新建置後的新版本。不可只看pixel shader的SHAr輸入一致，便忽略原生vertex輸出的高階SH項；也不可用pixel normal直接計算二次項取代原作頂點計算後插值。
+
+- **2026-10-21｜新GPU頂點oracle須按實際windows-rs版本宣告**：初版漏啟用Win32_Graphics_Direct3D，且把SOSetTargets誤寫成切片API；0.58版實際為數量＋buffer pointer＋offset pointer。核對本機binding後修正，原作六族／地圖20及33各2048頂點皆PASS。額外自測診斷曾以float Error遮蔽RunSelfTest外層FString Error，C4456建置拒絕；改為SampleError。保留失敗建置log，不以舊DLL冒稱新測試通過。
+
+- **2026-10-21｜環境光整合測試也須尊重地圖自帶天空**：新增測試最初直接拿map 0烘焙probe當期望，但該圖由MapSkyInfo選天空，正式路徑採天空環境，故讀到的高階SH為零。診斷保留52個實際向量與失敗witness；改由同一來源規則選擇map／sky期望，並不要求原作未使用的SHC.w。另以地圖20／33原作DXBC直接GPU執行及正式場景snapshot獨立驗證非零高階SH，不能把所有期望改成零來讓測試通過。
+
+### 2026-10-21 Studio 高階環境光測試時序
+- GameSelfTest 在 SyncNow 建完 renderer 後立即讀 MID；正式照明在下一個 SceneActor Tick 提交，導致讀到 parent 缺省零值。先前只修正 sky 期望值仍失敗。測試現在明確執行零秒場景 frame 再驗證，保留兩次失敗記錄。不能靠放寬誤差宣稱成功。
+- Unity plugin event 的 SRV inventory 可能已被 Unity 清空，空清單不能證明 draw 未綁貼圖。紋理改由明確 native pointer staging 讀回，完成標記必須最後寫出。
+
+### 2026-10-21 原作 GPU 貼圖探針 typeless 資源
+- ARGBFloat target 的 resource descriptor 是 DXGI R32G32B32A32_TYPELESS(1)，不是 typed FLOAT(2)。初版 raw readback 拒絕它，未產生有效影像；補相同 16-byte payload 格式並使任一 queued texture 失敗時整體 capture 明確 FAIL，不能只看 constant buffer PASS。失敗 JSON 保留。
+
+### 2026-10-21 Studio 地圖未烘焙表面的間接光
+- 原作 3800 窗牆的 lightmapIndex=-1、lightProbeUsage=BlendProbes；舊 Standard 圖只加 lightmap/reflection，漏掉無 lightmap 的 SH diffuse。補 native vertex L2 + pixel L0/L1，逐 renderer MID 套用，避免修改共用父材質。
+- 地圖太陽此前把色彩先轉 Linear 再乘強度，與 lightsUseLinearIntensity=false 的原生 GPU 常數不同。現在與角色燈共用最後 gamma/HDR 轉換，原生 (0.964627564,1.11674428,0.959291399) 作明確 oracle；不加場景曝光補償。
+- 原作選定後髮在來源相機下的 target 為全零，不能當 shader 顏色證據。可選 frame-mesh 僅在探針暫時取景，結束還原相機；有效 framed draw 有128574個像素，另留原場景圖而不冒作縮圖同鏡頭對照。
+- 引擎 SetLightColor 內部存 8-bit sRGB FColor，直接送 HDR RGB 會截斷。地圖燈先把最大通道能量移到 intensity，再量化正規化色彩；整合檢查保留 UE 量化容許誤差，不能把純函式的1e-6當成實際燈光逐像素誤差。
+
+### 2026-10-21 卡片髮光澤與地圖 HDR fallback
+- 再查來源後確認髮卡 glossColor 雖有解析，沒有提交到原生材質；改為一般／mod／缺清單的頭髮來源一致套用。ChaFileHair 缺省是217/255；HairAccessoryCustomizer 缺省確實為0.8490566，不能一起改。HAC colour-match繼承主髮光澤，否則用自身值，Material Editor覆寫最後優先。session cache revision20避免暖快取沿用舊值。
+- 地圖的舊 reflection atlas經PNG，無法完整保留HDR；default probe改標明來源身分並走已驗過byte的原始cube；局部probe維持原有路徑，沒有宣稱局部probe／box projection全修。
+
+### 2026-10-21 建置中繼續改源碼的驗收風險
+- native-default build尚在執行時補寫了cube整合斷言；後續log沒有該斷言，不能以RESULT PASS冒稱檢查已執行。凍結實作後重新完整建置，確認具名斷言出現在新log，再跑最終實拍。中間輪保留，沒有計入最終cube綁定驗收。
+- default black cube改為共用一份，避免每張自建圖產生不同texture identity破壞材質去重。
+
+### 2026-10-21 驗收資產的儲存類型
+- 原先假定90個StudioDisplay28父材質是LFS payload，實際 .gitattributes 對此目錄未設filter，故LFS篩選數量為0，驗證斷言失敗。改先查git check-attr，逐檔比對普通Git blob OID並另存SHA-256；沒有把普通blob錯報成LFS，也沒有修改資產儲存政策。
+
+### 2026-10-21 舊共用父材質相容性
+- 程式審查發現初版無條件要求四個新vertex-only參數，會讓未重烘焙的StreetDisplay26原生髮／皮膚binding失敗。只對明確提供的高階SH覆寫要求參數；Maker無高階項時沿用舊父材質，新父材質採明確零缺省。非零SH配舊父材質仍明確拒絕，不能悄悄丟掉照明。新增使用兩代實際資產的Automation相容性檢查。
+
+### 2026-10-21 局部 reflection probe 的來源身分
+- 新的最終斷言得到0個default cube材質，該輪GameSelfTest FAIL，不計通過。原作再測證明3800窗牆的GetClosestReflectionProbes選中Map/Reflection Probe（ReflectionProbe-1、weight1），不是RenderSettings default。擴充無損輸出至逐prefab root／probe node，保留原始FileID身分；runtime逐renderer綁所選局部cube，不以default硬套所有表面。
+- 新raw-reader closure首次編譯漏限定UnityValue所在crate，E0425已修為unity_asset_core::UnityValue，失敗build log保留。
+
+### 2026-10-21 地圖材質環境旗標不可借用世界生命週期旗標
+- 繼續追查0個cube後發現第二個根因：之前假設Studio設bPreserveSourceWorld=true，實際factory從未設定，它是Gallery世界／相機生命週期旗標，不能拿來決定map shader分支。新增明確bSourceMapShading，在載入前依map角色設定；不改世界生命週期行為。native reflection、無lightmap Standard與probe身分tag共用此材質語義。原作局部probe修正仍必要，兩個原因都記錄，不把先前假設當事實。
+
+### 2026-10-21 材質相容性測試 fixture 的 schema
+- 新Automation兩次Bind都null，實作API先驗證source metadata schema=1，初版fixture只填material而漏掉schema，故尚未走到新舊父材質相容性。補合法schema並輸出Error診斷；保留7 Success／1 Fail的原log，不能把預期舊父材質拒絕當作整體測試成功。
+
+### 2026-10-21 6331臉部差異排除證據
+- 原作face renderer MainTex 1024×1024 raw mip0，依明確讀回列方向與三個相同臉卡的CPU建立結果RGBA逐byte相同，RGB MAE=0。不能再猜作CreateFaceTexture色彩空間或重新調色。
+- 用現有OK_NO_FACE_SPHERE進行純診斷A/B，6331整體灰白色差沒有修復，眼睛影格不同不能當成照明改善；未把此環境變數交付成修正，也未修改法線政策。
+
+### 2026-10-21 原生臉部化妝色被舊中性通道覆蓋
+- MainTex RGBA零差異後，逐uniform追到原作 _overcolor1=(0.760919,0.401296,0.522312,0.0861634)，UE卻是white／alpha0。Rust source_material已有正確lip／cheek，C ABI仍讀face snapshot的舊body overcolor缺省，後續binding蓋掉來源值。改在view邊界按native face角色讀canonical material colour；不改body nipple通道，來源欄位缺失仍保留舊fallback。舊portable snapshots不需重轉即可取得已存的正確face欄位，未增加會破壞封包的struct欄位。
+
+### 2026-10-21 預備材質 dump 與最終覆寫不可混用
+- 6331 的 OK shared dump 顯示卡片預備 ramp 平均值228，曾懷疑場景 RampG=4 未生效；追查發現 dump 在 Actor 的 ToonRampTex 覆寫之前。正式建立時 RampOverride 優先，MID 後續明確綁 _RampG，不能把預備輸入當成最終 renderer 證據。原作 gt_ramp_04 GPU raw 與 kk_4.png RGBA 逐 byte 相同；未以此假說修改 ramp 或調色。
+- 原生 face RT 的 DXGI RGBA8_TYPELESS(27)、ramp R8_TYPELESS(60) 是合法讀回格式，探針補相同 byte-size 處理；失敗輸出不計成功。
+- 本輪再次使用 rg 的字面 wildcard 路徑及猜測圖片子目錄，造成無效讀取；改查實際檔案清單與 -g 篩選，無效讀取不當驗收證據。
+
+### 2026-10-21 LFS驗證命令的參數語義
+- git lfs ls-files的裸位置參數是Git ref，不是目錄；把base_v1當參數造成invalid object name。改取 --json 後依name前綴篩選，對實體payload逐檔SHA-256與HEAD OID／size核對，最後716檔通過。
+
+### 2026-10-21 6331最終材質與色彩空間排除
+- 關閉濾鏡的實際A/B仍偏灰，不把濾鏡關閉交付成修正。擴充實際MID稽核至face及ramp：54材質全部指向場景RampOverride，SRGB=false；7組SH對原作誤差0；三個相同女角face的lip／cheek對nativecb最大誤差<1e-6。先前prebinding dump不代表最終值的推論現已實測排除。
+- 原作face MainTex RenderTexture rt_srgb=True／activeTextureColorSpace=Gamma，與UE載入相同；native hair ColorMask BC7解碼後與三個來源卡RGBA輸入的RGB逐byte相同，且Linear旗標一致。未再次改貼圖gamma來補償整體色差。

@@ -2,6 +2,7 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/TextureCube.h"
 #include "ImageUtils.h"
 #include "TextureResource.h"
 #include "UnrealClient.h"
@@ -36,6 +37,8 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "Components/PoseableMeshComponent.h"
+#include "Components/MeshComponent.h"
+#include "Components/DirectionalLightComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "ok_extract.h"
 #include "KKOkAnimation.h"
@@ -1763,12 +1766,12 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 					for (const FKKLoadedPart& Part : Actor->Parts)
 					{
 						OkMeshView View{};
-						if (!Part.SurfaceMat || !Actor->Session.PartAt(Part.SessionIndex, View) || (View.shader_kind != 1 && View.shader_kind != 10)) continue;
+						if (!Part.SurfaceMat || !Actor->Session.PartAt(Part.SessionIndex, View) || (View.shader_kind != 1 && View.shader_kind != 10 && View.shader_kind != 5 && View.shader_kind != 7)) continue;
 						auto Row = MakeShared<FJsonObject>();
 						Row->SetNumberField(TEXT("object"), Object.Id);
 						Row->SetStringField(TEXT("mesh"), UTF8_TO_TCHAR(View.name));
 						Row->SetStringField(TEXT("material"), Part.SurfaceMat->GetPathName());
-						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST") })
+						for (const TCHAR* Key : { TEXT("_LightColor0"), TEXT("_WorldSpaceLightPos0"), TEXT("_ambientshadowG"), TEXT("unity_SHAr"), TEXT("unity_SHAg"), TEXT("unity_SHAb"), TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC"), TEXT("_Color"), TEXT("_ShadowColor"), TEXT("_GlossColor"), TEXT("_HairGloss_ST"), TEXT("_texcoord2_ST"), TEXT("_overcolor1"), TEXT("_overcolor2") })
 						{
 							FLinearColor Value;
 							if (!Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(Key), Value)) continue;
@@ -1778,6 +1781,18 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 							float Alpha = 0.f;
 							const FString AlphaKey = FString(Key) + TEXT("__A");
 							if (Part.SurfaceMat->GetScalarParameterValue(FMaterialParameterInfo(*AlphaKey), Alpha)) Row->SetNumberField(AlphaKey, Alpha);
+						}
+						for (const TCHAR* Key : { TEXT("unity_SpecCube0"), TEXT("unity_SpecCube1"), TEXT("_RampG") })
+						{
+							UTexture* Texture = nullptr;
+							if (Part.SurfaceMat->GetTextureParameterValue(FMaterialParameterInfo(Key), Texture) && Texture)
+							{
+								Row->SetStringField(Key, Texture->GetPathName());
+								Row->SetNumberField(FString(Key)+TEXT("_width"), Texture->GetSurfaceWidth());
+								Row->SetStringField(FString(Key)+TEXT("_class"), Texture->GetClass()->GetName());
+								Row->SetBoolField(FString(Key)+TEXT("_srgb"), Texture->SRGB);
+								if (FString(Key)==TEXT("_RampG")) Row->SetBoolField(TEXT("ramp_matches_scene_override"),Texture==Actor->RampOverride);
+							}
 						}
 						Rows.Add(MakeShared<FJsonValueObject>(Row));
 					}
@@ -3281,6 +3296,8 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 					TEXT("native Studio light direction includes authored child rotation and is independent of camera"));
 			}
 			else Check(false, TEXT("native Studio character light fixture exists"));
+            const FLinearColor Sun=OKStudioLinearLightColor(FLinearColor(.8948067f,.9558824f,.892625451f,1),1.1f);
+            Check(Sun.Equals(FLinearColor(.964627564f,1.11674428f,.959291399f,1.1f),.000001f),TEXT("map light gamma and HDR intensity match native Standard GPU constants"));
 			FLinearColor Red, Green, Blue;
 			Check(OKStudioMapAmbient(20, Red, Green, Blue)
 				&& Red.Equals(FLinearColor(0.007252015f, -0.00568231149f, -0.0125606805f, 0.169953629f), 0.000001f)
@@ -3296,12 +3313,26 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 			const FString CardDir = FPaths::ProjectSavedDir() / TEXT("OKStudio/import_selftest_cards");
 			const bool bImported = FOKStudioImport::Import(Png, Document, CardDir, Report, ImportError);
 			SyncNow();
+			// Lighting is submitted by the scene frame after building the renderers.
+			if (SceneActor) SceneActor->Tick(0.f);
 			int32 Built = 0, Chars = 0, Items = 0, ItemsBuilt = 0;
 			int32 AuthoredHairMaterials = 0;
 			bool bStudioLighting = true;
 			float HairShadowError = 0.f;
 			float LightAlphaError = 0.f;
 			bool bItemsUseSharedNeutralDepth = true;
+			TArray<FLinearColor> ExpectedHigher;
+			FLinearColor AmbientR, AmbientG, AmbientB;
+			bool bMapAmbient = OKStudioMapAmbient(Document->Map, AmbientR, AmbientG, AmbientB, &ExpectedHigher);
+			int32 AmbientPattern = -1;
+			if (!OKStudioMapSky(Document->Map, Document->Post.SunType, AmbientPattern) && Document->Post.bSky) AmbientPattern=Document->Post.SkyPattern;
+			if (AmbientPattern >= 0 && OKStudioSkyAmbient(AmbientPattern, AmbientR, AmbientG, AmbientB))
+			{
+				ExpectedHigher.Init(FLinearColor(0,0,0,0),4); bMapAmbient=true;
+			}
+			int32 HigherSamples = 0;
+			float HigherError = 0.f;
+			FString HigherWitness;
 			for (const FOKSceneObject& O : Document->Objects)
 			{
 				const AKKPreviewActor* PO = SceneActor->PreviewOf(O.Id);
@@ -3316,6 +3347,22 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 						FLinearColor Actual;
 						if (!Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(TEXT("_ShadowColor")), Actual)) continue;
 						++AuthoredHairMaterials;
+						if (bMapAmbient)
+						{
+							const FName Names[] = { TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC") };
+							for (int32 I=0; I<4; ++I)
+							{
+								FLinearColor Value;
+								if (!Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(Names[I]), Value)) continue;
+								++HigherSamples;
+								float Alpha = 0.f;
+								const bool bAlpha = Part.SurfaceMat->GetScalarParameterValue(FMaterialParameterInfo(FName(Names[I].ToString()+TEXT("__A"))), Alpha);
+								// SHC.w is not read by the native vertex program.
+								float SampleError = I==3 ? 0.f : bAlpha ? FMath::Abs(Alpha-ExpectedHigher[I].A) : 1.f;
+								for (int32 C=0; C<3; ++C) SampleError = FMath::Max(SampleError, FMath::Abs((&Value.R)[C]-(&ExpectedHigher[I].R)[C]));
+								if (SampleError > HigherError) { HigherError=SampleError; HigherWitness=FString::Printf(TEXT("map=%d %s actual=%s expected=%s alpha=%d/%.6f"),Document->Map,*Names[I].ToString(),*Value.ToString(),*ExpectedHigher[I].ToString(),bAlpha,Alpha); }
+							}
+						}
 						FLinearColor LightColor;
 						float LightAlpha = 0.f;
 						if (Part.SurfaceMat->GetVectorParameterValue(FMaterialParameterInfo(TEXT("_LightColor0")), LightColor)
@@ -3345,10 +3392,55 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 				FString::Printf(TEXT("Studio retains native hair shadow colours independently of Gallery: %d materials, error %.7f"), AuthoredHairMaterials, HairShadowError));
 			Check(AuthoredHairMaterials > 0 && LightAlphaError < 0.0001f, TEXT("shared float4 lighting updates keep shader alpha synchronized"));
 			Check(ItemsBuilt > 0 && bItemsUseSharedNeutralDepth, TEXT("Studio items retain authored shading without per-item character depth targets"));
+			Check(bMapAmbient && HigherSamples > 0 && HigherError < 0.000001f,
+				FString::Printf(TEXT("Studio vertex ambient matches selected map or sky lighting: %d vectors, error %.9f %s"), HigherSamples, HigherError,*HigherWitness));
 			Check(bImported && Chars == Report.Characters && Report.CharacterCards == Report.Characters && Built == Chars && Chars > 0,
 				FString::Printf(TEXT("KStudio import: %d characters, %d OK cards, %d shown %s"), Chars, Report.CharacterCards, Built, *ImportError));
 			Check(bImported && Items == Report.CatalogItems && ItemsBuilt == Items, FString::Printf(TEXT("KStudio import: %d of %d items from the catalogue, %d shown; map %d"), Report.CatalogItems, Report.Items, ItemsBuilt, Report.Map));
 			for (const FString& N : Report.Notes) UE_LOG(LogTemp, Display, TEXT("OK studio import note: %s"), *N);
+            // Unlightmapped Standard renderers must receive native probe diffuse,
+            // with per-renderer instances retaining their immutable graph defaults.
+            Document->Map=20;Document->Post.bSky=false;Document->Post.SunType=0;Document->NotifyChanged();SyncNow();
+            SceneActor->PlaceBackground(FTransform::Identity,45.f);SceneActor->Tick(0.f);
+            TInlineComponentArray<UDirectionalLightComponent*> MapLights(SceneActor);
+            bool NativeSun=false;
+            for(const auto* L:MapLights)if(L->GetName()==TEXT("MapSun"))
+                NativeSun=(L->GetColoredLightBrightness()/UE_PI).Equals(FLinearColor(.964627564f,1.11674428f,.959291399f,1.11674428f),.006f);
+            Check(NativeSun,TEXT("map sun retains native HDR irradiance through UE FColor quantization"));
+            int32 ProbeMaterials=0,NativeCubeMaterials=0;float ProbeError=0.f;bool ProbeInstances=true,NativeCubesBound=true;
+
+            FLinearColor ProbeA[3];TArray<FLinearColor> ProbeB;
+            const bool ProbeAvailable=OKStudioMapAmbient(20,ProbeA[0],ProbeA[1],ProbeA[2],&ProbeB);
+            if(auto* MapActor=SceneActor->MapPreview())
+            {
+                TInlineComponentArray<UMeshComponent*> Meshes(MapActor);
+                const FName Keys[]={TEXT("unity_SHAr"),TEXT("unity_SHAg"),TEXT("unity_SHAb"),TEXT("unity_SHBr"),TEXT("unity_SHBg"),TEXT("unity_SHBb"),TEXT("unity_SHC")};
+                for(UMeshComponent* Mesh:Meshes)for(int32 Slot=0;Slot<Mesh->GetNumMaterials();++Slot)
+                {
+                    auto* M=Mesh->GetMaterial(Slot);FLinearColor Value;UTexture* BoundCube=nullptr;
+                    if(M&&M->GetTextureParameterValue(FMaterialParameterInfo(TEXT("unity_SpecCube0")),BoundCube))
+                    {
+                        FString Root;int32 Node=-1;
+                        for(const FName Tag:MapActor->Tags){const FString T=Tag.ToString(),Prefix=TEXT("OKStudioMapRoot=");if(T.StartsWith(Prefix))Root=T.Mid(Prefix.Len());}
+                        for(const FName Tag:Mesh->ComponentTags){const FString T=Tag.ToString(),Prefix=TEXT("OKReflectionProbe=");if(T.StartsWith(Prefix))Node=FCString::Atoi(*T.Mid(Prefix.Len()));}
+                        FLinearColor HDR;UTextureCube* ExpectedCube=OKStudioMapReflection(20,HDR,Root,Node);
+                        ++NativeCubeMaterials;NativeCubesBound&=BoundCube==ExpectedCube && ExpectedCube && ExpectedCube->GetSizeX()>1;
+                    }
+                    if(!M||!M->GetVectorParameterValue(FMaterialParameterInfo(Keys[0]),Value))continue;
+                    ++ProbeMaterials;auto* MID=Cast<UMaterialInstanceDynamic>(M);ProbeInstances&=MID!=nullptr;
+                    for(int32 K=0;K<7;++K)
+                    {
+                        const FLinearColor Expected=K<3?ProbeA[K]:ProbeB[K-3];
+                        if(!M->GetVectorParameterValue(FMaterialParameterInfo(Keys[K]),Value)){ProbeError=1;continue;}
+                        for(int32 C=0;C<3;++C)ProbeError=FMath::Max(ProbeError,FMath::Abs((&Value.R)[C]-(&Expected.R)[C]));
+                        float Alpha=0;const FName AlphaKey(Keys[K].ToString()+TEXT("__A"));
+                        if(K!=6)ProbeError=FMath::Max(ProbeError,M->GetScalarParameterValue(FMaterialParameterInfo(AlphaKey),Alpha)?FMath::Abs(Alpha-Expected.A):1.f);
+                        if(MID&&MID->Parent){FLinearColor Default;ProbeInstances&=MID->Parent->GetVectorParameterValue(FMaterialParameterInfo(Keys[K]),Default)&&Default.R==0&&Default.G==0&&Default.B==0;}
+                    }
+                }
+            }
+            Check(NativeCubeMaterials>0&&NativeCubesBound,FString::Printf(TEXT("Standard map native HDR cube bound on %d renderer materials"),NativeCubeMaterials));
+            Check(ProbeAvailable&&ProbeMaterials>0&&ProbeInstances&&ProbeError<.000001f,FString::Printf(TEXT("unlightmapped Standard map probe: %d renderer MIDs, immutable parents, error %.9f"),ProbeMaterials,ProbeError));
 			// A scene posed with Studio IK: its characters get the 9 effector targets and their hands reach them.
 			const FString IkPng = Samples / TEXT("koikatu_cs0000010.png");
 			FOKStudioImport::FReport IkReport;

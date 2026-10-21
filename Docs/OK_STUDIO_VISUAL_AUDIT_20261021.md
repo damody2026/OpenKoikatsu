@@ -95,3 +95,8 @@ Tools/lua/lua.exe Tools/verify_ok_studio.lua --engine E:/PhysX/UE5.8 --tag Audit
 舊`.okscene`保存的是先前的相機子燈階層與shader模式覆寫，需重新匯入原作PNG取得本輪正確資料；不對使用者自製場景猜測遷移，也不要求刪除全域快取。尚待還原的高階SH／頂點varying、反射、地圖shader、後製及表情列入後續問題，不能以本輪輸入值吻合當成完整shader逐像素吻合。
 
 後續可重現的小差異：原作`ChaFileHair.PartsInfo.GlossInitColor`為`Color32(217,217,217,255)`，Rust缺省仍為`0.8490566`；3800實際`_GlossColor`線性值分別為`0.693871915`與`0.690340936`。這項來源缺省差異尚未修改，也不能用它解釋整個6331的灰棕髮色。前述GPU吻合特指已列出的燈色／光向／SHAr/g/b／底色／陰影色，不代表所有uniform都一致。
+
+
+## 後續實作：原生高階環境光、反射與來源顏色
+
+詳見 [本輪圖文驗收](OK_STUDIO_NATIVE_AMBIENT_20261021.md)：27係數／原作vertex插值、Standard間接光、HDR map sun、無損default及局部probe、髮gloss與臉部overlay通道均有來源oracle。最新421 Rust、6 Studio、8 Automation與14景實拍通過；6331色調／表情等差異仍未結案，原逐景表保留為後續清單。
