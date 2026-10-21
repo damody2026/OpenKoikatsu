@@ -3890,3 +3890,7 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 ### 2026-10-21 Studio 保存的 FIX 視線被略過
 - Rust parser 原先只取 eyes data 長度後直接略過；但原作 AddObjectAssist.ChangeChara 會 EyeLookCalc.LoadAngle，還原兩眼 local quaternion及H0/H1/V0/V1。6331原作眼睛rate=(0.340582967,-0.09320921,-0.343585044)，不是零視線。眼皮開合也依該rate修正，不可將此差異都算成shader或直接調眼睛大小。
 - Import 另有一行無條件把剛讀取的 EyesLook 設回Animation，會破壞相機追視。修正為只在建立匯入角色時設Animation缺省，保存的Camera或FIX政策保留。FIX資料經來源NO_LOOK row驗證後才提交，不為6331加入眼角offset。
+
+### 2026-10-21 驗收 Lua wrapper 的 CLI 參數來源
+- 曾用 dofile 呼叫 verify_ok_studio.lua 並重設 arg；底層參數器仍讀到原程序 argv，將 wrapper 路徑當成多餘參數，首輪未啟動任何UE。保留 capture-all-console.log，改由設好環境的 wrapper 啟動獨立 Lua CLI，使用正式參數來源；沒有把錯誤輪改寫為PASS。
+- D3D11 vertex-buffer 探針確實讀到4個綁定stream，但沒有 input-layout 解碼，不先替20-byte缺省stream指定COLOR欄位。CommandBuffer單獨DrawRenderer的輸出也不是場景相機的視覺金標；其形狀／骨架時點尚未核對，不把它拿來宣稱原作幾何吻合。reference-normal／UV驗證使用有明確座標標籤的sharedMesh與UE reference stream。
