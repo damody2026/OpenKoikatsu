@@ -3867,3 +3867,18 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 ### 2026-10-21 6331最終材質與色彩空間排除
 - 關閉濾鏡的實際A/B仍偏灰，不把濾鏡關閉交付成修正。擴充實際MID稽核至face及ramp：54材質全部指向場景RampOverride，SRGB=false；7組SH對原作誤差0；三個相同女角face的lip／cheek對nativecb最大誤差<1e-6。先前prebinding dump不代表最終值的推論現已實測排除。
 - 原作face MainTex RenderTexture rt_srgb=True／activeTextureColorSpace=Gamma，與UE載入相同；native hair ColorMask BC7解碼後與三個來源卡RGBA輸入的RGB逐byte相同，且Linear旗標一致。未再次改貼圖gamma來補償整體色差。
+
+### 2026-10-21 無地圖背景誤用固定藍色
+- 5698原作實跑主相機SolidColor=(0,0,0,1)，子相機雖保存藍色卻只clear Depth。匯入器先前以量到的藍色硬編碼所有無地圖／無圖／無天空場景，沒有核對相機clearFlags及StudioScene初始化。反編譯證明StudioScene設Camera.main.backgroundColor=Config.EstData.BackColor，ConfigCtrl背景色也改同一設定；system.xml的System/Est/BackColor才是來源，缺省Color.black，不能讀H/BackColor。
+- 修正為讀目前安裝的Est設定並保存到.okscene，不需原作時用來源黑色缺省；不在每幀覆蓋已存或使用者編輯的背景。保留圖片／天空優先權。之前6331與5698來源縮圖差異不可一律歸因缺失的歷史設定，本輪5698確實有可修的共用根因。
+
+### 2026-10-21 空場景與道具環境光的Maker污染
+- 原作空場景、2534、5698共81個SH係數全0；舊Studio無map／sky時卻用Maker環境光，並且只對character／map更新SH，漏掉道具。明確支援map=-1的原生零環境，所有角色及道具共用場景SH提交，保留有map與sky的來源分支。source oracle為native-empty-environment-verification.json，不用縮圖估環境亮度。
+- 2534保存縮圖是藍背景，但目前原作重載主相機為黑色；背景色是安裝設定而非SceneInfo內保存，不能為了縮圖替該景加藍色特例。5698原作重載與縮圖均黑；新匯入讀Est/BackColor並保存，所以無遊戲重開也不會回頭改色。
+
+### 2026-10-21 零環境整合斷言不能要求未使用的L2參數
+- 首輪GameSelfTest的69個材質檢查FAIL，原因為眼睛／眉毛／部分鏡片原生program只有L1，卻被強制要求4組L2。實際資產也確認這些parent不宣告unity_SHBr。補測只核對有宣告的高階參數，L1仍必須存在，並加驗float4 alpha及__A scalar，不放寬非零誤差。最終PASS：69材質、112個unused L2項缺省、nonzero=0。首輪FAIL與其餘5 PASS保留，另跑新的完整6項輪次，不把舊輪改寫成成功。
+- 調查ForgeStudio front-face時，僅看特化varying片段曾懷疑v6未設定；完整caller已先用FaceSign初始化v6，未修改正確程式，也沒有重烘焙或用這個假說解釋尚存道具明暗。
+
+### 2026-10-21 6331 AO對照不是修正
+- 以現有比較診斷開關只關AO重拍，整體灰棕髮／灰白臉仍存在。該1/1只證明診斷擷取完成，不是6331 shader修復；正式AO設定未變，也未以常駐關閉AO掩蓋差異。

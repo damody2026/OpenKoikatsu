@@ -32,6 +32,7 @@
 #include "OKStudioBloom.h"
 #include "OKStudioPose.h"
 #include "OKStudioImport.h"
+#include "OKStudioImportSettings.h"
 #include "OKSceneCard.h"
 #include "KKAnimatedPng.h"
 #include "NiagaraComponent.h"
@@ -3261,6 +3262,20 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 	Step(TEXT("kstudio import"));
 	{
 		const FString Samples = AOKSceneActor::LibraryDirectory() / TEXT("studio/samples");
+		const FString ClearPng = Samples / TEXT("koikatu_cs0005698.png");
+		if (FPaths::FileExists(ClearPng))
+		{
+			UOKSceneDocument* Clear = NewObject<UOKSceneDocument>(this);
+			Clear->Post.BackgroundColor = FLinearColor::Red;
+			FOKStudioImport::FReport ClearReport; FString ClearError;
+			Check(FOKStudioImport::Import(ClearPng, Clear, FPaths::ProjectSavedDir() / TEXT("OKStudio/clear_color_selftest_cards"), ClearReport, ClearError)
+				&& Clear->Map < 0 && !Clear->Post.bSky && Clear->Post.Background.IsEmpty()
+				&& Clear->Post.BackgroundColor.Equals(OKStudioConfiguredClearColor()),
+				TEXT("unmapped source scene preserves the installation main camera clear colour"));
+			UOKSceneDocument* SavedClear = NewObject<UOKSceneDocument>(this);
+			Check(SavedClear->FromJson(Clear->ToJson(), ClearError) && SavedClear->Post.BackgroundColor.Equals(Clear->Post.BackgroundColor),
+				TEXT("source clear colour survives scene save and reopen"));
+		}
 		// Import into an existing document must equal a fresh import, including
 		// neutral source values that do not enter the positive-effect branches.
 		const FString NeutralPng = Samples / TEXT("koikatu_cs0003800.png");
@@ -3441,6 +3456,31 @@ void UOKStudioGame::RunSelfTest(bool bExit)
             }
             Check(NativeCubeMaterials>0&&NativeCubesBound,FString::Printf(TEXT("Standard map native HDR cube bound on %d renderer materials"),NativeCubeMaterials));
             Check(ProbeAvailable&&ProbeMaterials>0&&ProbeInstances&&ProbeError<.000001f,FString::Printf(TEXT("unlightmapped Standard map probe: %d renderer MIDs, immutable parents, error %.9f"),ProbeMaterials,ProbeError));
+            Document->Map=-1;Document->NotifyChanged();SyncNow();SceneActor->Tick(0.f);
+            int32 EmptyProbeMaterials=0,EmptyAbsentHigher=0,EmptyNonzero=0;bool EmptyProbeZero=true;
+            for(const auto& Object:Document->Objects)if(auto* Actor=SceneActor->PreviewOf(Object.Id))
+            {
+                TInlineComponentArray<UMeshComponent*> Meshes(Actor);
+                for(auto* Mesh:Meshes)for(int32 Slot=0;Slot<Mesh->GetNumMaterials();++Slot)
+                {
+                    auto* M=Mesh->GetMaterial(Slot);FLinearColor Value;
+                    if(!M||!M->GetVectorParameterValue(FMaterialParameterInfo(TEXT("unity_SHAr")),Value))continue;
+                    ++EmptyProbeMaterials;
+                    const FName Keys[]={TEXT("unity_SHAr"),TEXT("unity_SHAg"),TEXT("unity_SHAb"),TEXT("unity_SHBr"),TEXT("unity_SHBg"),TEXT("unity_SHBb"),TEXT("unity_SHC")};
+                    for(int32 K=0;K<UE_ARRAY_COUNT(Keys);++K)
+                    {
+                        const bool Found=M->GetVectorParameterValue(FMaterialParameterInfo(Keys[K]),Value);
+                        if(!Found&&K>=3){++EmptyAbsentHigher;continue;} // Eyes/legacy programs do not consume vertex L2.
+                        const float ExpectedAlpha=K==6?1.f:0.f;
+                        float Alpha=ExpectedAlpha;
+                        if(Found)M->GetScalarParameterValue(FMaterialParameterInfo(FName(Keys[K].ToString()+TEXT("__A"))),Alpha);
+                        const bool Zero=Found&&Value.R==0&&Value.G==0&&Value.B==0&&Value.A==ExpectedAlpha&&Alpha==ExpectedAlpha;
+                        if(!Zero&&EmptyNonzero++<8)UE_LOG(LogTemp,Warning,TEXT("OK empty probe nonzero actor=%d material=%s key=%s found=%d value=%s"),Object.Id,*M->GetPathName(),*Keys[K].ToString(),Found,*Value.ToString());
+                        EmptyProbeZero&=Zero;
+                    }
+                }
+            }
+            Check(EmptyProbeMaterials>0&&EmptyProbeZero,FString::Printf(TEXT("empty native environment zeroes SH on %d character and item materials (absent unused L2=%d, nonzero=%d)"),EmptyProbeMaterials,EmptyAbsentHigher,EmptyNonzero));
 			// A scene posed with Studio IK: its characters get the 9 effector targets and their hands reach them.
 			const FString IkPng = Samples / TEXT("koikatu_cs0000010.png");
 			FOKStudioImport::FReport IkReport;

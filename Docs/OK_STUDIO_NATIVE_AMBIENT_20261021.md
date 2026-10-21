@@ -79,3 +79,6 @@
 盤點仍以 [全樣本逐景表](OK_STUDIO_VISUAL_AUDIT_20261021.md) 為準。6331色調／表情、動態天空反射、Unity probe blending／box projection、其他 vertex varying 與完整後製尚未全部核對；局部probe沿用既有renderer選定規則，不宣稱涵蓋全部混合探針。動態天空的ambient仍為既有L1近似，沒有假稱所有天空都完成高階SH。掃描7656場景中7652可解析，不等於7652景逐圖驗收；四個結構失敗與885個清單外道具引用仍列在盤點中。
 
 舊場景若缺少先前新增的來源資料需重匯原作PNG；本輪臉色view修正可直接讀舊封包已有canonical資料。沒有提交私有角色卡、含角色場景或第三方mod模型。`all_visual_differences_resolved=false`。
+
+
+後續 [無地圖背景與環境光](OK_STUDIO_EMPTY_ENVIRONMENT_20261021.md)已補原生空環境與Est清屏色，並將場景SH提交到道具；最新14景圖片在該篇。本文圖片保留本輪歷史證據。
