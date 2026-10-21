@@ -1,0 +1,15 @@
+{
+  "capture_fix": "WaitForEndOfFrame",
+  "images": [
+    {
+      "file": "0010-after.png",
+      "bytes": 1095678,
+      "sha256": "b629aeace57dc2e91817ad7ff2a510d4d40b09ee066590a7c5b1794aa84fcd27"
+    },
+    {
+      "file": "0010-before.png",
+      "bytes": 1113976,
+      "sha256": "97e252095f9d4a53054b3b34c3c7c77372f79b009ea43ad19a03916a4548c3da"
+    }
+  ]
+}

@@ -3898,3 +3898,15 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 ### 2026-10-21 shader 假說必須核對最終 MID
 - 原作6331臉部87個morph（含啟用表情）的normal delta全為0，沒有因此新增模型格式／重建基礎庫。統計保存在NativeFaceNormalMorphs6331，不能把「parser沒有讀normal」直接當成該景色差根因。
 - 看到靜態貼圖fallback後曾懷疑頭髮DetailMask以Linear讀取；完整最終MID確認其SRGB=true，與原作Gamma相符。另確認頭髮MainTex雖1024²，所有RGBA都是255，是缺省白圖，不是重複烘焙髮色。兩者都未改動生產路徑。比較最終綁定，不能只看fallback分支或尺寸。
+
+### 2026-10-21 光影／LUT 隔離驗證的界線
+- 再次直接向 rg 傳入含 wildcard 的完整 Windows 路徑，造成 os error 123；也猜測了不存在的 OKStudioPostProcess.cpp 與 catalog.json。應先用 rg --files 或已知目錄清單定位，後續使用 -g 過濾。沒有修改資產來迴避搜尋失敗。
+- 原作 1268／0010 實跑都是 Lut_Amount、BlendAmount=0、Exposure=1、Tonemapper=Disabled。不能因關閉 LUT 圖較亮就當成修正；關閉 AO 也沒有消除地圖過暗。保留 Baseline／NoAO／NoFilter 實拍作為排除證據。
+- UnityPy 的顯示 PNG 行方向與 Rust texture_png 的原始像素方向相反；原作 GPU 色票對前者須反轉 G 行後才可比對。不得直接把 UnityPy 圖當成 UE LUT 行方向錯誤的證據。正在以原生 HDR/Linear GPU 色票檢驗最終 UE 後製。
+- 新 32³ LUT 後製 shader 首輪使用 linear 作為區域變數，但 linear 是 HLSL 插值修飾字，GPU 編譯失敗；改名 gradedLinear。保留 GradeSourceCompileFailed.log；只停止已核對路徑與 GradeTest 命令列的本輪程序，沒有把 fallback 當新 shader 通過。
+- 32³ LUT 第二輪 GPU 測試誤差0.1645來自測試 SceneCapture 沒有 bAlwaysPersistRenderingState，View.State 為空時引擎直接略過 custom post blendables；並非 native LUT 失效。補上持續 ViewState 後43組最大Linear誤差0.0110272通過（舊16³為0.0424901）。保留失敗CSV，不提高門檻掩蓋錯誤。
+
+### 2026-10-21 原作探針在 LateUpdate 前手動渲染，造成頭髮離體
+- 使用者指出 LightingLutNativeGrade/Scene2.png 的頭髮沒有跟著人物。原因是 AuditStudioScene 的 yield null continuation 在 Studio 完成 LateUpdate 的 FK、臉部與附件跟隨前呼叫 Camera.Render，混用了 Animator 中間姿態與前一階段的附件狀態。
+- 暖機後與最後手動渲染前改為 WaitForEndOfFrame；LightingLutEndOfFrame0010 實拍確認頭髮、頭部、身體及後方角色姿態恢復一致。先前這類錯位圖不得用作角色幾何／完整外觀的視覺金標；純 GPU 輸入色票不含角色骨架，另依數值驗證。
+- 圖文證據 Docs/OK_STUDIO_NATIVE_CAPTURE_20261021.md。這是擷取時序修正，沒有對 UE 頭髮加 offset。
