@@ -4124,6 +4124,18 @@ void AKKPreviewActor::SetSharedVectorParameter(FName Name, const FLinearColor& V
 		}
 }
 
+void AKKPreviewActor::SetSharedTextureParameter(FName Name,UTexture* Value)
+{
+    for(const TArray<TObjectPtr<UMaterialInstanceDynamic>>* List:{&CookedRoleMaterials,&CookedRoleOutlines})
+        for(UMaterialInstanceDynamic* M:*List)
+        {
+            UTexture* Current=nullptr;if(!M||!M->GetTextureParameterValue(FMaterialParameterInfo(Name),Current))continue;
+            UTexture* Target=Value;
+            if(!Target&&M->Parent)M->Parent->GetTextureParameterValue(FMaterialParameterInfo(Name),Target);
+            if(Target&&Target!=Current)M->SetTextureParameterValue(Name,Target);
+        }
+}
+
 void AKKPreviewActor::Destroyed()
 {
 	// Editor actors may be destroyed before BeginPlay. Keep cleanup idempotent

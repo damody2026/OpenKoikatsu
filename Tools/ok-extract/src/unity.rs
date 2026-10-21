@@ -1087,6 +1087,13 @@ pub struct PrefabReflectionProbe {
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PrefabReflectionProbes { pub probes: Vec<PrefabReflectionProbe> }
 
+/// Lossless default environment used by renderers without a local reflection probe.
+/// Cube faces retain native D3D order, each followed by its authored mip chain.
+pub struct SceneReflectionCube {
+    pub name: String, pub size: u32, pub mips: u32, pub dxgi_format: u32,
+    pub bytes: Vec<u8>, pub intensity: f32,
+}
+
 /// Material values a prefab's Animators hold once their controllers have settled (anim::controller_steady_clips at
 /// t = 0): (renderer node, material property name hash (CRC32, low 28 bits), component (Unity binding attribute's top
 /// four bits: 4..7 = r, g, b, a of a colour, others a float), value). Unity's renderer animation sets every material of
@@ -1675,6 +1682,41 @@ impl ParsedBundle {
     pub fn prefab_sun_light(&self,prefab:&str)->PrefabSunLight {self.memo_prefab("prefab_sun_light",prefab,prefab,||self.prefab_sun_light_unity(prefab))}
     /// Baked reflection probes of a prefab and the scene's skybox reflection (recorded by `studio-nodes`).
     pub fn prefab_reflection_probes(&self,prefab:&str)->PrefabReflectionProbes {self.memo_prefab("prefab_reflection_probes",prefab,prefab,||self.prefab_reflection_probes_unity(prefab))}
+    /// Converter-only read, independent of model/session memo formats.
+    pub fn scene_default_reflection_cube(&self)->Result<Option<SceneReflectionCube>,String>{
+        self.serialized_files(|sers| {
+            let names=self.serialized_names.borrow();
+            let key=|name:&str|name.replace('\\',"/").rsplit('/').next().unwrap_or(name).to_ascii_lowercase();
+            let mut result=None;
+            for (from,ser) in sers.iter().enumerate(){for info in ser.objects_of_type(104){
+                let object=UnityObject::from_serialized_file(ser,info).map_err(|e|e.to_string())?;
+                let p=object.class.properties();
+                let Some(ptr)=p.get("m_GeneratedSkyboxReflection").and_then(references::PPtr::read) else{continue;};
+                let target=if ptr.file==0{from}else{
+                    let external=ser.externals.get(ptr.file as usize-1).ok_or("reflection external file index invalid")?;
+                    let matches:Vec<_>=names.iter().enumerate().filter(|(_,n)|key(n)==key(&external.path)).map(|(i,_)|i).collect();
+                    if matches.len()!=1{return Err("reflection external file absent or ambiguous".into());}
+                    matches[0]
+                };
+                let target=sers.get(target).ok_or("reflection file absent")?;
+                let info=target.objects_of_type(89).into_iter().find(|i|i.path_id==ptr.path).ok_or("reflection cubemap absent")?;
+                let cube=UnityObject::from_serialized_file(target,info).map_err(|e|e.to_string())?;
+                let texture=read_texture_payload(&cube,&self.files,None).ok_or("reflection payload absent")?;
+                use unity_asset_decode::texture::TextureFormat;
+                let format=match texture.format{TextureFormat::BC6H=>95,TextureFormat::RGBAHalf=>10,other=>return Err(format!("unsupported lossless reflection format {other:?}"))};
+                let size=texture.width as u32;let mips=texture.mip_count as u32;
+                let intensity=p.get("m_ReflectionIntensity").map(uv_f32).unwrap_or(1.);
+                if !intensity.is_finite() || intensity<0. {return Err("invalid reflection intensity".into());}
+                if size<4||size>4096||!size.is_power_of_two()||texture.height as u32!=size||mips==0||mips>size.ilog2()+1{return Err("invalid reflection dimensions/mips".into());}
+                let face_bytes:usize=(0..mips).map(|m|{let w=(size>>m).max(1) as usize;if format==95{w.div_ceil(4).pow(2)*16}else{w*w*8}}).sum();
+                if texture.image_data.len()!=face_bytes*6{return Err(format!("reflection payload length {} != {}",texture.image_data.len(),face_bytes*6));}
+                if result.is_some(){return Err("ambiguous scene default reflection".into());}
+                result=Some(SceneReflectionCube{name:cube.class.properties().get("m_Name").and_then(|v|v.as_str()).unwrap_or("").into(),size,mips,dxgi_format:format,
+                    bytes:texture.image_data,intensity});
+            }}
+            Ok(result)
+        })
+    }
     /// Material values of a prefab's settled Animators (recorded by `studio-nodes`).
     pub fn prefab_animated_materials(&self,prefab:&str)->PrefabAnimatedMaterials {self.memo_prefab("prefab_animated_materials",prefab,prefab,||self.prefab_animated_materials_unity(prefab))}
     /// Per-renderer-instance activeInHierarchy, including static activeSelf and settled Animator curves.

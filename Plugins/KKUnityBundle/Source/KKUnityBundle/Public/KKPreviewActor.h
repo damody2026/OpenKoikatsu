@@ -634,6 +634,7 @@ public:
     /** Sets a vector parameter (a Unity uniform such as _WorldSpaceLightPos0) on every shared parent instance of this
      *  actor, outlines included; instances without it are left alone. */
     void SetSharedVectorParameter(FName Name, const FLinearColor& Value);
+    void SetSharedTextureParameter(FName Name,UTexture* Value);
 
 	UPROPERTY()
 	TObjectPtr<USceneCaptureComponent2D> ToonShadowCapture;

@@ -18,6 +18,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureCube.h"
 #include "Misc/Paths.h"
 #include "OKAnimationAssets.h"
 #include "OKStudioCatalog.h"
@@ -152,7 +153,7 @@ namespace
 		if (!bMap) Actor->CharacterDisplayShadowsOverride = Item == nullptr;
 		// Items draw from the Studio root: the street's parents plus M_ForgeStudioOpaque, the depth-writing variant of the
 		// game's item program (opaque items overlapping each other sort by depth, not by distance).
-		if (Item) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay26");
+		if (!bMap) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay28");
 		// The scene's shading globals (Studio's _ambientshadowG, _LineColorG, _linewidthG): Studio sets them for everything
 		// it draws, characters as well as items.
 		if (!bMap) Actor->StudioShaderGlobals = ShaderGlobals;
@@ -769,8 +770,9 @@ void AOKSceneActor::UpdateItemLighting()
 	// characters' unity_SHA*; without a sky, the character display's own ambient.
 	if (SkyShown != AmbientSky || Document->Map != AmbientMap) { AmbientSky = SkyShown; AmbientMap = Document->Map; AmbientLit.Reset(); }
 	FLinearColor SH[3];
+	TArray<FLinearColor> Higher = { FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,1) };
 	if (!(AmbientSky >= 0 && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
-		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2]))
+		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2], &Higher))
 	{
 		FKKRuntimeMaterialScene Maker;
 		OKApplyCharacterMakerLighting(Maker);
@@ -785,6 +787,13 @@ void AOKSceneActor::UpdateItemLighting()
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAr"), SH[0]);
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAg"), SH[1]);
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAb"), SH[2]);
+		const FName Names[] = { TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC") };
+		for (int32 I=0; I<4; ++I) Preview->SetSharedVectorParameter(Names[I], Higher[I]);
+		FLinearColor ReflectionHDR(1,1,0,0);
+		UTextureCube* Reflection = AmbientSky<0 ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
+		for(const FName Name:{FName(TEXT("unity_SpecCube0")),FName(TEXT("unity_SpecCube1"))})Preview->SetSharedTextureParameter(Name,Reflection);
+		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube0_HDR"),ReflectionHDR);
+		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube1_HDR"),ReflectionHDR);
 		AmbientLit.Add(Preview);
 	}
 	if (!Light) return;

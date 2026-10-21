@@ -43,6 +43,11 @@ KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialTranslucent(EKKRuntimeMaterialReci
 KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialTwoSided(EKKRuntimeMaterialRecipe);
 // Additional installed shader families construct their own native varyings.
 KKRUNTIMEPOSE_API FString OKRuntimeSharedMaterialVaryings(EKKRuntimeMaterialRecipe);
+// Installed Koikano forward vertex programs supply the L2 probe term as an
+// interpolated varying; it must be evaluated before rasterization.
+KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialUsesVertexAmbient(EKKRuntimeMaterialRecipe);
+class UMaterial;class UMaterialExpression;
+KKRUNTIMEPOSE_API UMaterialExpression* OKMakeRuntimeVertexAmbient(UMaterial*,const FKKRuntimeMaterialScene&);
 
 KKRUNTIMEPOSE_API EBlendMode OKRuntimeSharedMaterialBlendMode(EKKRuntimeMaterialRecipe);
 

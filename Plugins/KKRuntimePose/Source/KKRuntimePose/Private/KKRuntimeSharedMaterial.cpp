@@ -337,6 +337,10 @@ bool OKPrepareRuntimeSharedMaterialBinding(const FKKRuntimeMaterialPart& P,const
   Audit+=FString::Printf(TEXT(" _KanoVerShift=%.3f"),B.Scalars.FindRef(TEXT("_KanoVerShift")));
   UE_LOG(LogTemp,Display,TEXT("OK material binding part=%s recipe=%d%s"),*P.Name,int32(Recipe),*Audit);
  }
+ if(!Outline&&OKRuntimeSharedMaterialUsesVertexAmbient(Recipe))
+  for(const TCHAR* Name:{TEXT("unity_SHBr"),TEXT("unity_SHBg"),TEXT("unity_SHBb"),TEXT("unity_SHC")}){
+   const FLinearColor V=Scene.Uniforms.FindRef(Name);B.Vectors.Add(Name,V);B.Scalars.Add(FName(FString(Name)+TEXT("__A")),V.A);
+  }
  Out=MoveTemp(B);Error.Reset();return true;
 }
 UMaterialInstanceDynamic* OKCreateRuntimeSharedMaterial(const FKKRuntimeMaterialPart& P,TConstArrayView<UTexture2D*> Textures,UMaterialInterface* Parent,const FKKRuntimeMaterialScene& Scene,FString& Error,bool Outline){
@@ -408,7 +412,7 @@ FString OKRuntimeSharedMaterialVaryings(EKKRuntimeMaterialRecipe R){
  if(R==EKKRuntimeMaterialRecipe::ForgeSkin)return Common+TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y);v2=float4(ThirdUV.x,1-ThirdUV.y,FourthUV.x,1-FourthUV.y);v3=float4(wp,1);v4=float4(wn,0);v5=float4(normalize(t),0);v6=float4(normalize(b),0);v7=VertexColor;\n");
  if(R==EKKRuntimeMaterialRecipe::KoikanoNose)return Common+TEXT("v2=float4(wn,0);v3=float4(wp,1);\n");
  if(R==EKKRuntimeMaterialRecipe::IBLAlpha||R==EKKRuntimeMaterialRecipe::IBLOpaque){const int32 CB=AdditionalLayout(R)->Sizes.Num()-1;FString Code=Common;const TCHAR* Dest[]={TEXT("v1.xy"),TEXT("v1.zw"),TEXT("v2.xy"),TEXT("v2.zw"),TEXT("v3.xy"),TEXT("v3.zw")};for(int32 I=0;I<6;++I)Code+=FString::Printf(TEXT("%s=float2(UV.x,1-UV.y)*cb%d[%d].xy+cb%d[%d].zw;\n"),Dest[I],CB,I,CB,I);return Code+TEXT("v4=float4(t.x,b.x,wn.x,wp.x);v5=float4(t.y,b.y,wn.y,wp.y);v6=float4(t.z,b.z,wn.z,wp.z);v7=0;\n");}
- if(int32(R)>=27&&int32(R)<=46){const int32 CB=AdditionalLayout(R)->Sizes.Num()-1;FString Code=Common+TEXT("v2=float4(t.x,b.x,wn.x,wp.x);v3=float4(t.y,b.y,wn.y,wp.y);v4=float4(t.z,b.z,wn.z,wp.z);v5=0;v6=0;\n");Code+=FString::Printf(TEXT("v1.xy=float2(UV.x,1-UV.y)*cb%d[0].xy+cb%d[0].zw;\n"),CB,CB);if(int32(R)<=34)Code+=FString::Printf(TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y)*cb%d[1].xy+cb%d[1].zw;\n"),CB,CB);return Code;}
+ if(int32(R)>=27&&int32(R)<=46){const int32 CB=AdditionalLayout(R)->Sizes.Num()-1;FString Code=Common+TEXT("v2=float4(t.x,b.x,wn.x,wp.x);v3=float4(t.y,b.y,wn.y,wp.y);v4=float4(t.z,b.z,wn.z,wp.z);v5=0;v6=0;\n");Code+=FString::Printf(TEXT("v1.xy=float2(UV.x,1-UV.y)*cb%d[0].xy+cb%d[0].zw;\n"),CB,CB);if(int32(R)<=34)Code+=FString::Printf(TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y)*cb%d[1].xy+cb%d[1].zw;\n"),CB,CB);if(OKRuntimeSharedMaterialUsesVertexAmbient(R))Code+=TEXT("v5.xyz=VertexAmbient;\n");return Code;}
  if(R==EKKRuntimeMaterialRecipe::KKUSSItem){const int32 CB=AdditionalLayout(R)->Sizes.Num()-1;FString Code=Common;const TCHAR* Inputs[]={TEXT("UV"),TEXT("SecondaryUV"),TEXT("ThirdUV"),TEXT("FourthUV")};const TCHAR* Dest[]={TEXT("v1.xy"),TEXT("v1.zw"),TEXT("v2.xy"),TEXT("v2.zw")};for(int32 I=0;I<4;++I)Code+=FString::Printf(TEXT("%s=float2(%s.x,1-%s.y)*cb%d[%d].xy+cb%d[%d].zw;\n"),Dest[I],Inputs[I],Inputs[I],CB,I,CB,I);return Code+TEXT("v3=float4(t.x,b.x,wn.x,wp.x);v4=float4(t.y,b.y,wn.y,wp.y);v5=float4(t.z,b.z,wn.z,wp.z);v6=VertexColor;v7=0;v8=0;v9=0;\n");}
  if(R==EKKRuntimeMaterialRecipe::XukmiItem||R==EKKRuntimeMaterialRecipe::ForgeMDK)return Common+TEXT("v2=float4(wp,1);v3=float4(wn,0);v4=float4(normalize(t),sign(dot(cross(wn,t),b)));v5=float4(normalize(b),0);v6=0;\n");
  if(R==EKKRuntimeMaterialRecipe::Goo||R==EKKRuntimeMaterialRecipe::BetterMatcap){const int32 CB=AdditionalLayout(R)->Sizes.Num()-1;return Common+FString::Printf(TEXT("v1.xy=float2(UV.x,1-UV.y)*cb%d[0].xy+cb%d[0].zw;v2=float4(wn,0);v3=float4(wp,1);v4=0;v5=0;\n"),CB,CB);}
@@ -422,6 +426,7 @@ FString OKRuntimeSharedMaterialVaryings(EKKRuntimeMaterialRecipe R){
  FString Packed=Common+TEXT("v2=float4(t.x,b.x,wn.x,wp.x);v3=float4(t.y,b.y,wn.y,wp.y);v4=float4(t.z,b.z,wn.z,wp.z);v5=0;v6=0;\n");
  if(R==EKKRuntimeMaterialRecipe::KoikanoSkin)Packed=Common+TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y);v2=float4(ThirdUV.x,1-ThirdUV.y,FourthUV.x,1-FourthUV.y);v3=float4(t.x,b.x,wn.x,wp.x);v4=float4(t.y,b.y,wn.y,wp.y);v5=float4(t.z,b.z,wn.z,wp.z);v6=VertexColor;v7=0;\n");
  if((int32(R)>=17&&int32(R)<=22)||R==EKKRuntimeMaterialRecipe::KoikanoLowAlphaCull||R==EKKRuntimeMaterialRecipe::KoikanoLowAlpha){const int32 CB=AdditionalLayout(R)->Sizes.Num()-1;Packed+=FString::Printf(TEXT("v1.xy=float2(UV.x,1-UV.y)*cb%d[0].xy+cb%d[0].zw;\n"),CB,CB);if(R!=EKKRuntimeMaterialRecipe::KoikanoClothesItem&&R!=EKKRuntimeMaterialRecipe::KoikanoClothesItemAlpha)Packed+=FString::Printf(TEXT("v1.zw=float2(SecondaryUV.x,1-SecondaryUV.y)*cb%d[1].xy+cb%d[1].zw;\n"),CB,CB);}
+ if(OKRuntimeSharedMaterialUsesVertexAmbient(R))Packed+=R==EKKRuntimeMaterialRecipe::KoikanoSkin?TEXT("v7.xyz=VertexAmbient;\n"):(R==EKKRuntimeMaterialRecipe::KoikanoClothesItem||R==EKKRuntimeMaterialRecipe::KoikanoClothesItemAlpha)?TEXT("v6.xyz=VertexAmbient;\n"):TEXT("v5.xyz=VertexAmbient;\n");
  return Packed;
 }
 

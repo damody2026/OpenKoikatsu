@@ -3805,3 +3805,16 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **2026-10-21｜乾淨庫命令須以實際cwd解析**：已在Clean1268工作目錄內又指定git -C Saved/OKStudio/Clean1268，造成路徑重複且fetch未執行。改為該目錄內直接git fetch／merge並檢查每一步退出碼。CLI寫入的missing.txt先留存本輪證據，再只還原自己的測試輸出；不可讓後續status掩蓋前面操作失敗。
 
 - **2026-10-21｜保留來源材質陰影不可為每個Studio道具分配角色陰影RT**：初版把CharacterDisplayShadowsOverride=true套到所有非map Actor。4432大量道具因此各分配2個1024² RGBA32f（約32MiB），完整回歸升到50GB且每幀約5秒。道具既有bStudioItemShading已能保留材質陰影，不應因此啟用角色擷取。修正由Studio明確選擇角色true／道具false，讓道具共用既有4×4中性depth；新增實際載入道具的RT尺寸及陰影政策整合檢查。該輪只完成10張後核對PID中止，保留FAIL與50GB證據；必須重建後重新跑全14景，不能把前輪結果當成最終通過。
+
+- **2026-10-21｜不能把所有Koikano的頂點環境光寫到相同varying**：原作forward VS證實髮／一般衣服用o5、皮膚用o7，而clothes_item用o6；其o5是螢幕座標。初稿以同一v5處理衣物，在正式驗收前逐族讀回DXBC時查出。修正逐族採原作語義，並將首輪StudioDisplay27僅留作原型，不計入最終材質驗收；正式根改用重新建置後的新版本。不可只看pixel shader的SHAr輸入一致，便忽略原生vertex輸出的高階SH項；也不可用pixel normal直接計算二次項取代原作頂點計算後插值。
+
+- **2026-10-21｜新GPU頂點oracle須按實際windows-rs版本宣告**：初版漏啟用Win32_Graphics_Direct3D，且把SOSetTargets誤寫成切片API；0.58版實際為數量＋buffer pointer＋offset pointer。核對本機binding後修正，原作六族／地圖20及33各2048頂點皆PASS。額外自測診斷曾以float Error遮蔽RunSelfTest外層FString Error，C4456建置拒絕；改為SampleError。保留失敗建置log，不以舊DLL冒稱新測試通過。
+
+- **2026-10-21｜環境光整合測試也須尊重地圖自帶天空**：新增測試最初直接拿map 0烘焙probe當期望，但該圖由MapSkyInfo選天空，正式路徑採天空環境，故讀到的高階SH為零。診斷保留52個實際向量與失敗witness；改由同一來源規則選擇map／sky期望，並不要求原作未使用的SHC.w。另以地圖20／33原作DXBC直接GPU執行及正式場景snapshot獨立驗證非零高階SH，不能把所有期望改成零來讓測試通過。
+
+### 2026-10-21 Studio 高階環境光測試時序
+- GameSelfTest 在 SyncNow 建完 renderer 後立即讀 MID；正式照明在下一個 SceneActor Tick 提交，導致讀到 parent 缺省零值。先前只修正 sky 期望值仍失敗。測試現在明確執行零秒場景 frame 再驗證，保留兩次失敗記錄。不能靠放寬誤差宣稱成功。
+- Unity plugin event 的 SRV inventory 可能已被 Unity 清空，空清單不能證明 draw 未綁貼圖。紋理改由明確 native pointer staging 讀回，完成標記必須最後寫出。
+
+### 2026-10-21 原作 GPU 貼圖探針 typeless 資源
+- ARGBFloat target 的 resource descriptor 是 DXGI R32G32B32A32_TYPELESS(1)，不是 typed FLOAT(2)。初版 raw readback 拒絕它，未產生有效影像；補相同 16-byte payload 格式並使任一 queued texture 失敗時整體 capture 明確 FAIL，不能只看 constant buffer PASS。失敗 JSON 保留。

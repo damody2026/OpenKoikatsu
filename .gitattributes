@@ -6,3 +6,4 @@ Content/IndependentResources/base_v1/anims/**/*.okanim filter=lfs diff=lfs merge
 Content/IndependentResources/base_v1/paired/cache/pack.bin filter=lfs diff=lfs merge=lfs -text
 Content/IndependentResources/base_v1/paired/okpaired.json filter=lfs diff=lfs merge=lfs -text
 Content/IndependentResources/base_v1/studio/**/*.png filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/studio/**/*.okcube filter=lfs diff=lfs merge=lfs -text

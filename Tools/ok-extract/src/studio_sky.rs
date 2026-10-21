@@ -19,6 +19,29 @@ use unity_asset_core::UnityValue;
 
 pub const FILE_NAME: &str = "studio/sky.json";
 pub const ENVIRONMENT_FILE_NAME: &str = "studio/map_environments.json";
+pub const REFLECTION_FILE_NAME: &str = "studio/map_reflections.json";
+
+pub fn convert_map_reflections(game:&Path,lib:&Path)->Result<usize,String>{
+    use sha2::{Digest,Sha256};
+    let catalog:crate::studio_items::Catalog=serde_json::from_slice(&std::fs::read(lib.join(crate::studio_items::FILE_NAME)).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+    let directory=lib.join("studio/reflections");std::fs::create_dir_all(&directory).map_err(|e|e.to_string())?;
+    let mut rows=Vec::new();let mut count=0;
+    for map in &catalog.maps{
+        let bundle=map.bundle.strip_prefix("abdata/").unwrap_or(&map.bundle);
+        let source=Sources::open(game,bundle).ok_or_else(||format!("map {} source missing",map.no))?;
+        let cube=source.bundles[0].scene_default_reflection_cube().map_err(|e|format!("map {}: {e}",map.no))?;
+        if let Some(cube)=cube{
+            let mut bytes=b"OKCUBE01".to_vec();
+            for v in [cube.size,cube.mips,cube.dxgi_format,0]{bytes.extend_from_slice(&v.to_le_bytes());}
+            bytes.extend_from_slice(&(cube.bytes.len() as u64).to_le_bytes());bytes.extend_from_slice(&cube.bytes);
+            let hash=format!("{:x}",Sha256::digest(&bytes));let file=format!("studio/reflections/{hash}.okcube");
+            std::fs::write(lib.join(&file),bytes).map_err(|e|e.to_string())?;
+            rows.push(serde_json::json!({"map":map.no,"texture":file,"name":cube.name,"hdr":[cube.intensity,1.,0.,0.]}));count+=1;
+        }else{rows.push(serde_json::json!({"map":map.no,"texture":null}));}
+    }
+    std::fs::write(lib.join(REFLECTION_FILE_NAME),serde_json::to_vec_pretty(&serde_json::json!({"format":"ok-studio-map-reflections-1","maps":rows})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+    Ok(count)
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MapEnvironment {
@@ -447,6 +470,33 @@ pub fn convert(game: &Path, lib: &Path) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "native cubemap readback: OK_STUDIO_MAP and OK_STUDIO_NATIVE_CUBE_JSON"]
+    fn map_default_reflection_matches_native_gpu_bytes() {
+        let map: i64 = std::env::var("OK_STUDIO_MAP").unwrap().parse().unwrap();
+        let native: serde_json::Value = serde_json::from_slice(&std::fs::read(std::env::var("OK_STUDIO_NATIVE_CUBE_JSON").unwrap()).unwrap()).unwrap();
+        assert_eq!(native["passed"], true);
+        let lib = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(lib.join(REFLECTION_FILE_NAME)).unwrap()).unwrap();
+        let row = catalog["maps"].as_array().unwrap().iter().find(|v| v["map"].as_i64()==Some(map)).unwrap();
+        let bytes = std::fs::read(lib.join(row["texture"].as_str().unwrap())).unwrap();
+        assert_eq!(&bytes[..8], b"OKCUBE01");
+        let number = |at| u32::from_le_bytes(bytes[at..at+4].try_into().unwrap());
+        assert_eq!(u64::from(number(8)), native["width"].as_u64().unwrap());
+        assert_eq!(u64::from(number(12)), native["mips"].as_u64().unwrap());
+        assert_eq!(u64::from(number(16)), native["format"].as_u64().unwrap());
+        assert_eq!(number(20), 0);
+        assert_eq!(u64::from_le_bytes(bytes[24..32].try_into().unwrap()), (bytes.len()-32) as u64);
+        let mut raw=Vec::new(); let mut seen=std::collections::BTreeSet::new();
+        for sub in native["subresources"].as_array().unwrap() {
+            assert!(seen.insert((sub["face"].as_u64().unwrap(),sub["mip"].as_u64().unwrap())));
+            raw.extend(std::fs::read(sub["file"].as_str().unwrap()).unwrap());
+        }
+        assert_eq!(seen.len(), 6 * number(12) as usize);
+        assert_eq!(raw, bytes[32..]);
+        eprintln!("native map {map}: {} cubemap subresources / {} identical GPU bytes",seen.len(),raw.len());
+    }
 
     #[test]
     #[ignore = "native Studio ambient probe: OK_STUDIO_MAP and OK_STUDIO_NATIVE_SCENE_TSV"]
