@@ -2036,8 +2036,9 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		// Diagnostic ablations change only this comparison's in-memory document.
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_BLOOM")) == TEXT("0")) Self->Document->Post.bBloom = false;
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_DEPTH")) == TEXT("0")) Self->Document->Post.bDepthOfField = false;
-		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FILTER")) == TEXT("0")) Self->Document->Post.ColorFilterIntensity = 0.f;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FILTER")) == TEXT("0")) Self->Document->Post.ColorFilter = -1;
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_AO")) == TEXT("0")) Self->Document->Post.bAmbientOcclusion = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_VIGNETTE")) == TEXT("0")) Self->Document->Post.bVignette = false;
 		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover).
 		TArray<FString> Hide;
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));
