@@ -267,6 +267,13 @@ namespace
 					double Alpha = 1., LineWidth = 1.;
 					if (O->TryGetNumberField(TEXT("alpha"), Alpha)) I.Alpha = FMath::Clamp(float(Alpha), 0.f, 1.f);
 					if (O->TryGetNumberField(TEXT("line_width"), LineWidth)) I.LineWidth = FMath::Max(0.f, float(LineWidth));
+					// Light cancel, emission and outline colour (OIItemInfo, scene version 0.0.7 on).
+					double LightCancel = -1., EmissionPower = -1.;
+					if (O->TryGetNumberField(TEXT("light_cancel"), LightCancel) && LightCancel >= 0.) I.LightCancel = float(LightCancel);
+					if (O->TryGetNumberField(TEXT("emission_power"), EmissionPower) && EmissionPower >= 0.) I.EmissionPower = float(EmissionPower);
+					const TSharedPtr<FJsonObject>* ItemColor = nullptr;
+					if (O->TryGetObjectField(TEXT("emission_color"), ItemColor)) I.EmissionColor = Color(*ItemColor);
+					if (O->TryGetObjectField(TEXT("line_color"), ItemColor)) I.LineColor = Color(*ItemColor);
 					// Pattern slots the item offers (ItemList 柄 flags): mask, colour (colors[3..5]), UV, rotation, clamp.
 					const TArray<TSharedPtr<FJsonValue>>* Patterns = nullptr;
 					if (O->TryGetArrayField(TEXT("patterns"), Patterns))

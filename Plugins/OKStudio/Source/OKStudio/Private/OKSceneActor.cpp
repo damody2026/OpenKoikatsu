@@ -192,7 +192,7 @@ namespace
 		}
 		FString Json;
 		const auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json);
-		if (Shaders.IsEmpty() && Renderers.IsEmpty())
+		if (Shaders.IsEmpty() && Renderers.IsEmpty() && Item.LightCancel < 0.f)
 		{
 			if (Fk.IsEmpty()) return FString();
 			FJsonSerializer::Serialize(Fk, Writer);
@@ -201,6 +201,8 @@ namespace
 		const TSharedRef<FJsonObject> Material = MakeShared<FJsonObject>();
 		Material->SetArrayField(TEXT("shaders"), Shaders);
 		Material->SetArrayField(TEXT("renderers"), Renderers);
+		// Studio's per-item light cancel overrides _LightCancel on the materials that have it (ItemComponent.SetLineAndEmission).
+		if (Item.LightCancel >= 0.f) Material->SetNumberField(TEXT("light_cancel"), Item.LightCancel);
 		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetArrayField(TEXT("fk"), Fk);
 		Root->SetObjectField(TEXT("material"), Material);
