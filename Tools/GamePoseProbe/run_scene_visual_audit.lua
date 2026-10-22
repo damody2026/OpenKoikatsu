@@ -17,6 +17,7 @@ parser:flag("--stages")
 parser:flag("--lightmaps")
 parser:opt("--hide")
 parser:opt("--white")
+parser:opt("--mesh-dump")
 local a = parser:parse(arg)
 assert(not a.mesh_snapshot or a.gpu_probe, "Mesh snapshots need --gpu-probe and --mesh")
 assert(not a.input_streams or a.gpu_probe, "Input streams need --gpu-probe and --mesh")
@@ -56,6 +57,7 @@ local success, err = xpcall(function()
         if a.lightmaps then fs.setenv("OK_PROBE_LIGHTMAPS", "1") end
         if a.hide then fs.setenv("OK_PROBE_HIDE", a.hide) end
         if a.white then fs.setenv("OK_PROBE_WHITE", a.white) end
+        if a.mesh_dump then fs.setenv("OK_PROBE_MESH", a.mesh_dump) end
         if a.gpu_probe then
             fs.setenv("OK_PROBE_GPU_LIBRARY", path.abs(a.gpu_probe))
             fs.setenv("OK_PROBE_GPU_MESH", a.mesh)

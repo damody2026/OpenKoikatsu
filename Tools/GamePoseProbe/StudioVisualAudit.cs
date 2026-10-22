@@ -165,6 +165,9 @@ public sealed partial class GamePoseProbe {
             }
             var ambient = RenderSettings.ambientProbe;
             writer.WriteLine("lightmaps_mode\t" + LightmapSettings.lightmapsMode);
+            // Built-in forward fog (applied inside each shader, not a post effect).
+            writer.WriteLine("render_fog\t" + RenderSettings.fog + "\t" + RenderSettings.fogMode + "\t" + RenderSettings.fogColor.ToString("R") + "\t"
+                + RenderSettings.fogDensity.ToString("R") + "\t" + RenderSettings.fogStartDistance.ToString("R") + "\t" + RenderSettings.fogEndDistance.ToString("R"));
             for (int lm = 0; lm < LightmapSettings.lightmaps.Length; ++lm) {
                 var data = LightmapSettings.lightmaps[lm];
                 // OK_PROBE_LIGHTMAPS=1: each lightmap texture as the GPU samples it (sRGB colour decoded to linear,
@@ -211,7 +214,23 @@ public sealed partial class GamePoseProbe {
             foreach (Renderer renderer in UnityEngine.Object.FindObjectsOfType<Renderer>()) {
                 if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
                 string rendererPath = PathOf(renderer.transform);
-                writer.WriteLine("renderer_lighting\t" + rendererPath + "\t" + renderer.lightmapIndex + "\t" + renderer.lightProbeUsage + "\t" + renderer.bounds.center.ToString("R") + "\t" + renderer.lightmapScaleOffset.ToString("R"));
+                // OK_PROBE_MESH=<path part>: that renderer's mesh vertices, uv0 and triangles (mesh_vertex / mesh_triangle rows).
+                {
+                    string meshPart = Environment.GetEnvironmentVariable("OK_PROBE_MESH");
+                    var filter = renderer.GetComponent<MeshFilter>();
+                    Mesh mesh = filter != null ? filter.sharedMesh : renderer is SkinnedMeshRenderer ? ((SkinnedMeshRenderer)renderer).sharedMesh : null;
+                    if (!String.IsNullOrEmpty(meshPart) && rendererPath.Contains(meshPart))
+                        writer.WriteLine("mesh_info\t" + rendererPath + "\t" + renderer.GetType().Name + "\t" + (mesh == null ? "null" : mesh.name + "\treadable=" + mesh.isReadable + "\tbounds=" + mesh.bounds.ToString("R")));
+                    if (!String.IsNullOrEmpty(meshPart) && rendererPath.Contains(meshPart) && mesh != null && mesh.isReadable) {
+                        Vector3[] verts = mesh.vertices; Vector2[] uvs = mesh.uv; int[] tris = mesh.triangles;
+                        writer.WriteLine("mesh\t" + rendererPath + "\t" + mesh.name + "\t" + verts.Length + "\t" + tris.Length / 3 + "\t" + renderer.transform.localToWorldMatrix.ToString("R").Replace("\n", " "));
+                        for (int v = 0; v < verts.Length && v < 2000; ++v)
+                            writer.WriteLine("mesh_vertex\t" + v + "\t" + verts[v].ToString("R") + "\t" + (v < uvs.Length ? uvs[v].ToString("R") : "-"));
+                        for (int t = 0; t + 2 < tris.Length && t < 6000; t += 3)
+                            writer.WriteLine("mesh_triangle\t" + tris[t] + "\t" + tris[t + 1] + "\t" + tris[t + 2]);
+                    }
+                }
+                writer.WriteLine("renderer_lighting\t" + rendererPath + "\t" + renderer.lightmapIndex + "\t" + renderer.lightProbeUsage + "\t" + renderer.bounds.center.ToString("R") + "\t" + renderer.lightmapScaleOffset.ToString("R") + "\t" + renderer.realtimeLightmapIndex + "\t" +renderer.realtimeLightmapScaleOffset.ToString("R"));
                 // The reflection probes Unity blends for this renderer (none: the default/skybox reflection).
                 {
                     var blend = new System.Collections.Generic.List<UnityEngine.Rendering.ReflectionProbeBlendInfo>();
@@ -239,11 +258,11 @@ public sealed partial class GamePoseProbe {
                         for (int c = 0; c < 3; ++c) for (int k = 0; k < 9; ++k)
                             writer.WriteLine("renderer_sh\t" + prefix + "\t" + c + "\t" + k + "\t" + sh[c, k].ToString("R"));
                     }
-                    foreach (string key in new[] { "_Color", "_Color2", "_Color3", "_Color4", "_GlossColor", "_ShadowColor", "_LineColor", "_SpecularColor" })
+                    foreach (string key in new[] { "_Color", "_Color2", "_Color3", "_Color4", "_GlossColor", "_ShadowColor", "_LineColor", "_SpecularColor", "_EmissionColor" })
                         if (material.HasProperty(key)) writer.WriteLine("color\t" + prefix + "\t" + key + "\t" + material.GetColor(key).ToString("R"));
-                    foreach (string key in new[] { "_oldhair", "_GlossinShadowonoff", "_SpeclarHeight", "_ShadowExtend", "_rimpower", "_rimV" })
+                    foreach (string key in new[] { "_oldhair", "_GlossinShadowonoff", "_SpeclarHeight", "_ShadowExtend", "_rimpower", "_rimV", "_Glossiness", "_GlossMapScale", "_Metallic", "_OcclusionStrength", "_BumpScale", "_Mode", "_SmoothnessTextureChannel" })
                         if (material.HasProperty(key)) writer.WriteLine("float\t" + prefix + "\t" + key + "\t" + material.GetFloat(key).ToString("R"));
-                    foreach (string key in new[] { "_texcoord", "_texcoord2", "_MainTex", "_ColorMask", "_HairGloss", "_DetailMask", "_NormalMap" }) {
+                    foreach (string key in new[] { "_texcoord", "_texcoord2", "_MainTex", "_ColorMask", "_HairGloss", "_DetailMask", "_NormalMap", "_EmissionMap", "_OcclusionMap", "_MetallicGlossMap", "_DetailAlbedoMap", "_BumpMap" }) {
                         if (!material.HasProperty(key)) continue;
                         Texture texture = material.GetTexture(key);
                         if (texture != null) { var cs = typeof(Texture).GetProperty("activeTextureColorSpace", BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic); var rt = texture as RenderTexture; writer.WriteLine("texture_space\t"+prefix+"\t"+key+"\t"+(cs==null?"unknown":cs.GetValue(texture,null).ToString())+"\trt_srgb="+(rt==null?"n/a":rt.sRGB.ToString())); }
@@ -412,7 +431,34 @@ public sealed partial class GamePoseProbe {
                                 black.Apply();
                                 RenderSettings.defaultReflectionMode = UnityEngine.Rendering.DefaultReflectionMode.Custom;
                                 RenderSettings.customReflection = black;
-                                try { CaptureMain(main, output + ".post-off.white-noreflect.png"); }
+                                try {
+                                    CaptureMain(main, output + ".post-off.white-noreflect.png");
+                                    // Also without the map's own lights: the baked light alone.
+                                    var bakedOff = new System.Collections.Generic.List<Light>();
+                                    foreach (Light light in UnityEngine.Object.FindObjectsOfType<Light>())
+                                        if (light.enabled && light.gameObject.activeInHierarchy && PathOf(light.transform).StartsWith("Map/")) { light.enabled = false; bakedOff.Add(light); }
+                                    try {
+                                        CaptureMain(main, output + ".post-off.white-baked.png");
+                                        // Black lightmap colours (still lightmapped): whatever remains is not from the lightmap.
+                                        LightmapData[] savedMaps = LightmapSettings.lightmaps;
+                                        var blackMap = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                                        blackMap.SetPixels(new Color[16]); blackMap.Apply();
+                                        var blackMaps = new LightmapData[savedMaps.Length];
+                                        for (int i = 0; i < savedMaps.Length; ++i)
+                                            blackMaps[i] = new LightmapData { lightmapColor = blackMap, lightmapDir = savedMaps[i].lightmapDir, shadowMask = savedMaps[i].shadowMask };
+                                        LightmapSettings.lightmaps = blackMaps;
+                                        try {
+                                            CaptureMain(main, output + ".post-off.white-blacklightmap.png");
+                                            // And without light probes and ambient SH: what remains then is neither.
+                                            var savedProbes = LightmapSettings.lightProbes; var savedAmbient = RenderSettings.ambientProbe;
+                                            LightmapSettings.lightProbes = null; RenderSettings.ambientProbe = new UnityEngine.Rendering.SphericalHarmonicsL2();
+                                            try { CaptureMain(main, output + ".post-off.white-blacklightmap-nosh.png"); }
+                                            finally { LightmapSettings.lightProbes = savedProbes; RenderSettings.ambientProbe = savedAmbient; }
+                                        }
+                                        finally { LightmapSettings.lightmaps = savedMaps; UnityEngine.Object.Destroy(blackMap); }
+                                    }
+                                    finally { foreach (Light light in bakedOff) light.enabled = true; }
+                                }
                                 finally {
                                     RenderSettings.defaultReflectionMode = savedMode; RenderSettings.customReflection = savedCube;
                                     foreach (ReflectionProbe probe in probes) probe.enabled = true;

@@ -103,7 +103,19 @@ void RunGradeTest(bool Exit) {
    const float DisplayError=FMath::Max3(FMath::Abs(int(Display.R)-int(Expected.R)),FMath::Abs(int(Display.G)-int(Expected.G)),FMath::Abs(int(Display.B)-int(Expected.B)))/255.f;MaxDisplayError=FMath::Max(MaxDisplayError,DisplayError);
    Report+=FString::Printf(TEXT("%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%d,%.9g\n"),I,V[0],V[1],V[2],V[3],V[4],V[5],A.R,A.G,A.B,E,Display.R,Display.G,Display.B,DisplayError);Swatches.Add(Display);
   }
-  Capture->DestroyComponent();Pass &= MaxError<.02f && MaxDisplayError<.04f;
+  // Without a filter (and no vignette) Studio's picture is ungraded: the capture must return its input.
+  FOKScenePost Plain=Post;Plain.ColorFilter=-1;Plain.bVignette=false;FPostProcessSettings PlainSettings;Plain.ApplyTo(PlainSettings);
+  float IdentityError=0,IdentityDisplayError=0;
+  for(int I=0;I<UE_ARRAY_COUNT(NativeGrade);++I){const float* V=NativeGrade[I];State->Surface->SetVectorParameterValue(TEXT("Color"),FLinearColor(V[0],V[1],V[2]));
+   TArray<FColor> Captured;FString Error;
+   Pass &= FOKSceneCard::Capture(State->Scene.Get(),FTransform::Identity,60,&PlainSettings,32,18,false,Captured,Error);
+   const FColor Display=Captured.Num()==32*18?Captured[9*32+16]:FColor::Black;const FColor Expected=FLinearColor(V[0],V[1],V[2]).ToFColorSRGB();
+   const float E=FMath::Max3(FMath::Abs(int(Display.R)-int(Expected.R)),FMath::Abs(int(Display.G)-int(Expected.G)),FMath::Abs(int(Display.B)-int(Expected.B)))/255.f;
+   IdentityDisplayError=FMath::Max(IdentityDisplayError,E);
+   Report+=FString::Printf(TEXT("identity %d,%.9g,%.9g,%.9g,,,,,,,,%d,%d,%d,%.9g\n"),I,V[0],V[1],V[2],Display.R,Display.G,Display.B,E);
+  }
+  UE_LOG(LogTemp,Display,TEXT("OK studio grade test: unfiltered_capture_max_display_error=%.9g"),IdentityDisplayError);
+  Capture->DestroyComponent();Pass &= MaxError<.02f && MaxDisplayError<.04f && IdentityDisplayError<.04f;
   const FString Out=FPaths::ProjectSavedDir()/TEXT("OKStudio/GradeTest");IFileManager::Get().MakeDirectory(*Out,true);FFileHelper::SaveStringToFile(Report,*(Out/TEXT("native-comparison.csv")));
   UE_LOG(LogTemp,Display,TEXT("OK studio grade test: samples=%d max_linear_error=%.9g RESULT %s"),UE_ARRAY_COUNT(NativeGrade),MaxError,Pass?TEXT("PASS"):TEXT("FAIL"));
   UE_LOG(LogTemp,Display,TEXT("OK studio grade test: actual_capture_max_display_error=%.9g"),MaxDisplayError);

@@ -2668,6 +2668,8 @@ return Base.rgb * sh;
 				Code += FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) + DirectionFactor + TEXT(";\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dir")) Code += TEXT("return LmDirection.rgb;\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dirw")) Code += TEXT("return LmDirection.aaa;\n");
+				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("normal")) Code += TEXT("return float3(lmN * 0.5 + 0.5);\n");
+				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("halflambert")) Code += TEXT("return (dot(lmN, LmDirection.rgb - 0.5) + 0.5).xxx;\n");
 				if (LightmapDiag == TEXT("uv"))
 				{
 					auto* LmUV = NewObject<UMaterialExpressionTextureCoordinate>(Mat);
@@ -2764,7 +2766,12 @@ total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1
 			else LmEd->EmissiveColor.Expression = Decode;
 			// The uv diagnostic shows only the coordinate: no lit base colour on top of it.
 			if (LightmapDiag == TEXT("uv") || LightmapDiag.StartsWith(TEXT("dir")))
-			{ LmEd->BaseColor.Expression = nullptr; LmEd->EmissiveColor.Expression = Decode; }
+			{
+				// No Unreal lighting on top of the coded colour: no base colour and no specular.
+				LmEd->BaseColor.Expression = nullptr; LmEd->Metallic.Expression = nullptr; LmEd->EmissiveColor.Expression = Decode;
+				auto* NoSpecular = NewObject<UMaterialExpressionConstant>(Mat); NoSpecular->R = 0.f; NoSpecular->Material = Mat;
+				Mat->GetExpressionCollection().AddExpression(NoSpecular); LmEd->Specular.Expression = NoSpecular;
+			}
 		}
 	}
 	// An equal graph finalized before (OK_MATERIAL_DEDUPE=1) is used as is.
@@ -4748,6 +4755,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			auto Linear = [](float V) { return V <= 0.04045f ? V / 12.92f : FMath::Pow((V + 0.055f) / 1.055f, 2.4f); };
 			ShadowParams.ItemColors[ColorIndex] = FLinearColor(Linear(C[0]), Linear(C[1]), Linear(C[2]), C[3]);
 		}
+		if (ShadowParams.bStudioAddProgram && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+			UE_LOG(LogTemp, Display, TEXT("OK studio add part=%d blend=%s c1=%s c2=%s c3=%s alpha=%.3f item_draw=%d"), int32(i), View.blend ? ANSI_TO_TCHAR(View.blend) : TEXT("?"),
+				*ShadowParams.ItemColors[0].ToString(), *ShadowParams.ItemColors[1].ToString(), *ShadowParams.ItemColors[2].ToString(), ShadowParams.ItemAlpha, int32(View.item_draw));
 		if (!Output.Ramp && View.ramp_png && View.ramp_png_len > 16)
 		{
 			// Native Studio _RampG is a linear 256x4 Texture2D with nine mips,
@@ -4854,6 +4864,13 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				const float* Uv = (View.eye_draw && View.eye_sample_uvs ? View.eye_sample_uvs : View.uvs) + v * 2;
 				Part.UVs.Add(FVector2D(Uv[0], 1.0f - Uv[1]));
 			}
+		}
+		{
+			static const FString MeshDump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_PART_MESH_DUMP"));
+			if (!MeshDump.IsEmpty() && Name.Contains(MeshDump))
+				for (int32 v = 0; v < FMath::Min(View.n_verts, 16); ++v)
+					UE_LOG(LogTemp, Display, TEXT("OK part mesh %s v%d pos=(%.4f,%.4f,%.4f) uv=(%.4f,%.4f)"), *Name, v, View.positions[v * 3], View.positions[v * 3 + 1], View.positions[v * 3 + 2],
+						View.uvs ? View.uvs[v * 2] : -1.f, View.uvs ? View.uvs[v * 2 + 1] : -1.f);
 		}
 		// Skin draw overlays preserve Unity UV1/UV2/UV3 at UE TEXCOORD1/2/3.
 		const bool bHairGlossUv = View.shader_kind == 1 || View.shader_kind == 10;

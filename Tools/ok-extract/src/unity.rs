@@ -1919,6 +1919,8 @@ thread_local! {
 /// its own caches the next time it uses them after the generation moved.
 static BUNDLE_CACHE_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 thread_local! { static BUNDLE_CACHE_SEEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
+// The old main-UV scan also tried offset+8 inside interleaved records; set only by the scan that lists what it changed.
+thread_local! { pub(crate) static UV_LEGACY_PADDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 fn sync_bundle_cache() {
     let current = BUNDLE_CACHE_GENERATION.load(std::sync::atomic::Ordering::Acquire);
     if BUNDLE_CACHE_SEEN.with(|seen| seen.replace(current)) != current {
@@ -4910,6 +4912,10 @@ fn decode_uvs(mesh: &unity_asset_decode::mesh::Mesh) -> Vec<[f32; 2]> {
         // reading with fewer untouched (exactly zero) vertices.
         let mut local_best: Option<(usize, usize, [f32; 2], Vec<[f32; 2]>)> = None;
         for extra in [0usize, 8usize] {
+            // In an interleaved record, offset+8 is the next channel (uv0 at 40 reads uv1 at 48), not padding.
+            if extra != 0 && off + extra + 2 * format_size(c.format) <= stride && !UV_LEGACY_PADDING.with(|f| f.get()) {
+                continue;
+            }
             if base + extra + (n.saturating_sub(1)) * stride + off + 2*format_size(c.format) > data.len() {
                 continue;
             }
@@ -10286,6 +10292,17 @@ mod tests {
             "body texture missing name={}",
             body.texture_name
         );
+    }
+
+    // Studio's 色影 (p_koi_stu_marukage00_00) quad: Unity reads mesh.uv as 0..1 (native probe); uv2 is its lightmap atlas.
+    #[test]
+    #[ignore="game oracle: reads the original KKS installation (set OK_TEST_GAME_ROOT)"]
+    fn studio_marukage_quad_keeps_uv0() {
+        let path = crate::test_support::game_path(r"\abdata\studio\00.unity3d");
+        let meshes = meshes_from_bundle_path(&path);
+        let quad = pick_named(&meshes, "o_koi_stu_marukage00_00").expect("marukage mesh");
+        eprintln!("uvs={:?}\nuv2={:?}", quad.uvs, quad.uv2);
+        assert!(quad.uvs.iter().all(|uv| (uv[0] == 0.0 || uv[0] == 1.0) && (uv[1] == 0.0 || uv[1] == 1.0)), "uv0 {:?}", quad.uvs);
     }
 
     #[test]

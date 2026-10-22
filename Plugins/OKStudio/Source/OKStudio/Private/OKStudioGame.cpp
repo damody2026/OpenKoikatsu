@@ -2039,6 +2039,8 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FILTER")) == TEXT("0")) Self->Document->Post.ColorFilter = -1;
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_AO")) == TEXT("0")) Self->Document->Post.bAmbientOcclusion = false;
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_VIGNETTE")) == TEXT("0")) Self->Document->Post.bVignette = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FOG")) == TEXT("0")) Self->Document->Post.bFog = false;
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_SUNSHAFTS")) == TEXT("0")) Self->Document->Post.bSunShafts = false;
 		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover).
 		TArray<FString> Hide;
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));
