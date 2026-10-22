@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "OKStoryCapture.h"
 #include "Tickable.h"
 #include "UObject/Object.h"
 #include "UObject/StrongObjectPtr.h"
@@ -47,7 +48,7 @@ public:
 	TSharedPtr<FJsonObject> Frame;
 	FString StoryFile;
 	/** The live portrait's picture (what the view draws), or null. */
-	UMaterialInstanceDynamic* PortraitMaterial() const { return PortraitMid.Get(); }
+	UMaterialInstanceDynamic* PortraitMaterial() const { return PortraitCapture.Material(); }
 	/** Save thumbnails, loaded once per file and time. */
 	class UTexture2D* Thumbnail(const FString& Path);
 
@@ -83,14 +84,10 @@ private:
 	double VoiceStart = 0.0, VoiceLength = 0.0;
 	bool bVoiceSeen = false;
 
-	TStrongObjectPtr<USceneCaptureComponent2D> PortraitColor, PortraitDepth;
-	TStrongObjectPtr<UTextureRenderTarget2D> PortraitColorTarget, PortraitDepthTarget;
-	TStrongObjectPtr<UMaterialInstanceDynamic> PortraitMid;
+	FOKStoryPortraitCapture PortraitCapture;
 	TMap<FString, TStrongObjectPtr<class UTexture2D>> Thumbnails;
 	/** Lines of sight the director asked for: a narrow depth capture each, answered in the next facts. */
-	TStrongObjectPtr<USceneCaptureComponent2D> Probe;
-	TStrongObjectPtr<UTextureRenderTarget2D> ProbeTarget;
-	TArray<TPair<uint64, double>> ProbeAnswers;
+	FOKStoryProbes ProbeRunner;
 	void RunProbes(const TArray<TSharedPtr<class FJsonValue>>& Probes);
 	/** Requests of tools (ok-story-mcp) in UserData/Story/control: <id>.json in, <id>.out.json back. */
 	void PollControl();

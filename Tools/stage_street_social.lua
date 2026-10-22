@@ -60,6 +60,9 @@ function M.stage(executable, destination, base_dir)
   else
     io.stderr:write("WARNING: Game rules not built (cargo build --release in Tools/ok-rules): StreetSocial from this stage quits unless OK_RULES_DLL is set\n")
   end
+  -- Conversation presentation (Tools/ok-story): optional; without it the old dialogue box is used.
+  local story = path.join(root, "Tools/ok-story/target/release/ok_story.dll")
+  if path.exists(story) then path.copy(story, path.join(path.parent(exe), "ok_story.dll")) end
   return win(exe)
 end
 

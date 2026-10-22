@@ -2209,6 +2209,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let mut top: Vec<_> = s.fk_item_ids.iter().collect(); top.sort_by(|a, b| b.1.cmp(a.1));
             println!("SCENES fk_items={} distinct={} top={:?}", s.fk_items, top.len(), &top[..top.len().min(12)]);
             println!("SCENES main_cameras={}", s.main_cameras);
+            println!("SCENES routes_moving={} routes_moved_start={}", s.routes_moving, s.routes_moved_start);
             println!("SCENES files={} parsed={} characters={} items={} vanilla_items={} mod_items={} lights={} folders={} routes={} cameras={} texts={}", s.files, s.parsed, s.characters, s.items, s.vanilla_items, s.mod_items, s.lights, s.folders, s.routes, s.cameras, s.texts);
             println!("SCENES maps {:?}", s.maps);
             for (f, e) in &s.failed { println!("SCENES FAILED {f}: {e}"); }

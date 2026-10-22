@@ -4,19 +4,30 @@
 #include "Styling/SlateBrush.h"
 #include "Widgets/SLeafWidget.h"
 
-class UOKStoryPlayer;
 class FJsonObject;
+class UMaterialInstanceDynamic;
+class UTexture2D;
+
+/** Where a story view gets what it shows and sends what the player does (a story player, or the street's live
+ *  conversations). */
+struct FOKStoryViewSource
+{
+	TFunction<TSharedPtr<FJsonObject>()> Frame;
+	TFunction<UMaterialInstanceDynamic*()> Portrait;
+	TFunction<UTexture2D*(const FString&)> Thumbnail;
+	TFunction<void(const FString&)> Input;
+};
 
 /**
  * The story's screen: draws the director's frame (dialog box, name plate, typed text, live portrait, choices, act
  * title, quick buttons, menu / save / load / backlog / settings panels) and turns every click, key and wheel into the
  * director's input events. It decides nothing itself.
  */
-class SOKStoryView : public SLeafWidget
+class OKSTUDIO_API SOKStoryView : public SLeafWidget
 {
 public:
 	SLATE_BEGIN_ARGS(SOKStoryView) {}
-		SLATE_ARGUMENT(UOKStoryPlayer*, Player)
+		SLATE_ARGUMENT(FOKStoryViewSource, Source)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -33,7 +44,7 @@ public:
 	virtual FReply OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
 
 private:
-	TWeakObjectPtr<UOKStoryPlayer> Player;
+	FOKStoryViewSource Source;
 
 	/** What a click on a drawn element sends (the last painted frame's elements, topmost last). */
 	struct FHit

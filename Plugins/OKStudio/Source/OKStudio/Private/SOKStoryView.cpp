@@ -1,5 +1,4 @@
 #include "SOKStoryView.h"
-#include "OKStoryPlayer.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Texture2D.h"
 #include "Fonts/FontMeasure.h"
@@ -115,13 +114,13 @@ namespace
 
 void SOKStoryView::Construct(const FArguments& InArgs)
 {
-	Player = InArgs._Player;
+	Source = InArgs._Source;
 	SetCanTick(false);
 }
 
 void SOKStoryView::Send(const FString& Json) const
 {
-	if (UOKStoryPlayer* P = Player.Get()) P->Input(Json);
+	if (Source.Input) Source.Input(Json);
 }
 
 const FSlateBrush* SOKStoryView::BrushFor(UObject* Resource, const FVector2D& Size) const
@@ -138,8 +137,7 @@ int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const 
 {
 	Hits.Reset();
 	bPanelOpen = false;
-	UOKStoryPlayer* P = Player.Get();
-	const TSharedPtr<FJsonObject> Frame = P ? P->Frame : nullptr;
+	const TSharedPtr<FJsonObject> Frame = Source.Frame ? Source.Frame() : nullptr;
 	if (!Frame) return Layer;
 	const FVector2D Size = Geo.GetLocalSize();
 	const double W = Size.X, H = Size.Y;
@@ -192,7 +190,7 @@ int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const 
 		{
 			const FVector2D Pos(R[0]->AsNumber() * W, R[1]->AsNumber() * H), Ext(R[2]->AsNumber() * W, R[3]->AsNumber() * H);
 			const float Alpha = float(OKStoryNum(Portrait, TEXT("alpha"), 1.0));
-			if (UMaterialInstanceDynamic* Mid = P->PortraitMaterial())
+			if (UMaterialInstanceDynamic* Mid = Source.Portrait ? Source.Portrait() : nullptr)
 				FSlateDrawElement::MakeBox(Out, L, Geo.ToPaintGeometry(FVector2f(Ext), FSlateLayoutTransform(FVector2f(Pos))), BrushFor(Mid, Ext), ESlateDrawEffect::None, FLinearColor::White);
 			const double From = OKStoryNum(Portrait, TEXT("fade_from"), 0.5);
 			const FVector2D GPos(Pos.X, Pos.Y + Ext.Y * From), GExt(Ext.X, Ext.Y * (1.0 - From));
@@ -365,7 +363,7 @@ int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const 
 				Box(L, Pos, FVector2D(SW, SH), bUsable ? ButtonColor : ButtonDisabled);
 				const double ThumbH = FMath::Min(SH * 0.62, SW * 9.0 / 16.0), ThumbW = ThumbH * 16.0 / 9.0;
 				const FVector2D TPos = Pos + FVector2D((SW - ThumbW) * 0.5, Px * 0.4);
-				if (UTexture2D* T = P->Thumbnail(OKStoryStr(S, TEXT("thumb"))))
+				if (UTexture2D* T = Source.Thumbnail ? Source.Thumbnail(OKStoryStr(S, TEXT("thumb"))) : nullptr)
 					FSlateDrawElement::MakeBox(Out, L + 1, Geo.ToPaintGeometry(FVector2f(float(ThumbW), float(ThumbH)), FSlateLayoutTransform(FVector2f(TPos))), BrushFor(T, FVector2D(ThumbW, ThumbH)), ESlateDrawEffect::None, FLinearColor::White);
 				else Box(L + 1, TPos, FVector2D(ThumbW, ThumbH), FLinearColor(0, 0, 0, 0.5f));
 				double Y = TPos.Y + ThumbH + Px * 0.3;
@@ -491,8 +489,8 @@ FReply SOKStoryView::OnMouseButtonDown(const FGeometry& Geo, const FPointerEvent
 
 FReply SOKStoryView::OnMouseWheel(const FGeometry& Geo, const FPointerEvent& E)
 {
-	UOKStoryPlayer* P = Player.Get();
-	const FString Screen = P && P->Frame ? OKStoryStr(P->Frame, TEXT("screen")) : FString();
+	const TSharedPtr<FJsonObject> Frame = Source.Frame ? Source.Frame() : nullptr;
+	const FString Screen = Frame ? OKStoryStr(Frame, TEXT("screen")) : FString();
 	if (Screen == TEXT("backlog"))
 	{
 		// Scrolling the log is the view's own business.
@@ -518,8 +516,8 @@ FReply SOKStoryView::OnMouseMove(const FGeometry& Geo, const FPointerEvent& E)
 		const FVector2D N(At.X / Size.X, At.Y / Size.Y);
 		if (FVector2D::Distance(N, LastPointer) > 0.002) { LastPointer = N; Send(FString::Printf(TEXT("{\"type\":\"mouse\",\"x\":%.4f,\"y\":%.4f}"), N.X, N.Y)); }
 	}
-	UOKStoryPlayer* P = Player.Get();
-	if (P && P->Frame && !OKStoryStr(P->Frame, TEXT("camera_edit")).IsEmpty() && !E.GetCursorDelta().IsNearlyZero())
+	const TSharedPtr<FJsonObject> Frame = Source.Frame ? Source.Frame() : nullptr;
+	if (Frame && !OKStoryStr(Frame, TEXT("camera_edit")).IsEmpty() && !E.GetCursorDelta().IsNearlyZero())
 		Send(FString::Printf(TEXT("{\"type\":\"mouse_delta\",\"dx\":%g,\"dy\":%g}"), E.GetCursorDelta().X, E.GetCursorDelta().Y));
 	return FReply::Unhandled();
 }

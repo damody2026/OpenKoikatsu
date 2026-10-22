@@ -1196,6 +1196,39 @@ bool OKGetCrowdRuntimeSpeechState(AActor* Owner,int32 Character,EOKRuntimeSpeech
  Status=State->Entries[Character]->SpeechState;Error=State->Entries[Character]->SpeechError;return true;
 }
 
+void OKGetCrowdRuntimeCharacterComponents(AActor* Owner,int32 Character,TArray<UPrimitiveComponent*>& Out)
+{
+ check(IsInGameThread());
+ const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);
+ const auto State=Weak?Weak->Pin():nullptr;
+ if(!State||State->Stopped||!State->Entries.IsValidIndex(Character))return;
+ const auto& E=*State->Entries[Character];
+ // What draws her in the view: the GPU mesh (and its front layer) or, while loading, the CPU pose mesh.
+ for(UPrimitiveComponent* C:{static_cast<UPrimitiveComponent*>(E.Gpu.Get()),static_cast<UPrimitiveComponent*>(E.FrontGpu.Get()),static_cast<UPrimitiveComponent*>(E.Cpu.Get())})
+ {
+  if(C&&C->IsVisible())Out.Add(C);
+ }
+}
+
+bool OKGetCrowdRuntimeSpeechPlayback(AActor* Owner,int32 Character,double& Played,double& Total)
+{
+ check(IsInGameThread());
+ const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);
+ const auto State=Weak?Weak->Pin():nullptr;
+ if(!State||State->Stopped||!State->Entries.IsValidIndex(Character))return false;
+ const auto& E=*State->Entries[Character];
+ const UKKRuntimeSpeechWave* Wave=E.SpeechWave.Get();
+ UWorld* World=Owner?Owner->GetWorld():nullptr;
+ if(!Wave||!Wave->Meter||!World||!World->GetAudioDevice().IsValid())return false;
+ const double Rate=FMath::Max(1,World->GetAudioDevice()->GetSampleRate());
+ Played=double(Wave->Meter->Frames.Load())/Rate;
+ Total=-1.;
+ if(Wave->Pcm&&Wave->Pcm->SampleRate>0&&Wave->Pcm->Channels>0)Total=double(Wave->Pcm->Samples.Num())/Wave->Pcm->Channels/Wave->Pcm->SampleRate;
+ // A stream's length is known once all of it has arrived.
+ else if(Wave->Stream&&Wave->Stream->IsComplete()&&Wave->Stream->SampleRate>0&&Wave->Stream->Channels>0)Total=double(Wave->Stream->Num())/Wave->Stream->Channels/Wave->Stream->SampleRate;
+ return true;
+}
+
 bool OKSetCrowdRuntimeFaceExpression(AActor* Owner,int32 Character,const FKKRuntimeFaceState& Face,bool AllowBlink,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Entries.IsValidIndex(Character)){Error=TEXT("Runtime expression character unavailable");return false;}

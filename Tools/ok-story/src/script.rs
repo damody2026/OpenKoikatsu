@@ -363,7 +363,7 @@ impl Story {
         let camera = |e: &mut Vec<String>, path: String, c: &Option<CameraSpec>| {
             let Some(c) = c else { return };
             if let Some(shot) = &c.shot {
-                let ok = matches!(shot.as_str(), "speaker" | "two" | "wide" | "studio")
+                let ok = matches!(shot.as_str(), "speaker" | "two" | "wide" | "studio" | "over")
                     || shot.strip_prefix("studio:").is_some_and(|n| n.parse::<i32>().is_ok());
                 if !ok {
                     e.push(format!("{path}.shot: \"{shot}\" is not speaker, two, wide, studio or studio:<id>"));
