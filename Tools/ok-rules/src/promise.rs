@@ -40,7 +40,8 @@ fn game_day_of(day: &str, today: i64) -> i64 {
 /// Request: heroine, day, time, place, place_known, now (game minute), today (game day), pending [{id, heroine, kind,
 /// place, start, label, booked_ago (real seconds since booked from chat, -1 unknown)}].
 /// Answer: action ignore | book | move | keep | closed; reason; start; minute (of the day said); id (the meeting moved or
-/// kept); place_changed; why (closed); clash (another girl's meeting near it, its label).
+/// kept); place_changed; why (closed); clash (another girl's meeting near it, its label); replaces_id (with replaces: the
+/// meeting with her this new one takes the place of, 0 for none).
 fn promise(c: &Catalog, r: &Value) -> Value {
     let ignore = |reason: &str| json!({"action": "ignore", "reason": reason});
     if !r.get("place_known").and_then(Value::as_bool).unwrap_or(true) {
@@ -63,8 +64,10 @@ fn promise(c: &Catalog, r: &Value) -> Value {
     for a in &pending {
         let ago = a.get("booked_ago").and_then(Value::as_f64).unwrap_or(-1.0) as i64;
         if s(a, "heroine") == her && s(a, "kind") == "date" && s(a, "place") == place && (i(a, "start") - start).abs() == 1440 && (0..90).contains(&ago) {
-            let at = i(a, "start").min(start);
-            return json!({"action": if at != i(a, "start") { "move" } else { "keep" }, "reason": "same_exchange_day_apart", "id": i(a, "id"), "start": at, "minute": minute, "place_changed": false});
+            // Unless the judge says this line moves it ("tomorrow I can't, the day after"): then the day said now.
+            let replaces = r.get("replaces").and_then(Value::as_bool).unwrap_or(false);
+            let at = if replaces { start } else { i(a, "start").min(start) };
+            return json!({"action": if at != i(a, "start") { "move" } else { "keep" }, "reason": if replaces { "moved_a_day" } else { "same_exchange_day_apart" }, "id": i(a, "id"), "start": at, "minute": minute, "place_changed": false});
         }
     }
     // One meeting with her at a time: the same hour already has one, or the same place on the same day is the same
@@ -93,8 +96,20 @@ fn promise(c: &Catalog, r: &Value) -> Value {
         return json!({"action": "closed", "reason": "closed", "start": start, "minute": minute, "why": c.closed_why(place, d.weekday as i32)});
     }
     // Another girl already booked near that time: he is told (both stay booked; it is his to sort out).
+    // "Not today, tomorrow" (the judge's replaces) when it is not the same meeting said again: her meeting at the same
+    // place first, else the nearest in time (the soonest one was taken: the pickup tonight went for a walk moved to 4 pm).
+    let replaces_id = if r.get("replaces").and_then(Value::as_bool).unwrap_or(false) {
+        pending
+            .iter()
+            .filter(|a| s(a, "heroine") == her && matches!(s(a, "kind"), "date" | "pickup"))
+            .min_by_key(|a| (s(a, "place") != place, (i(a, "start") - start).abs()))
+            .map(|a| i(a, "id"))
+            .unwrap_or(0)
+    } else {
+        0
+    };
     let clash = pending.iter().find(|a| s(a, "heroine") != her && s(a, "kind") != "entrust" && (i(a, "start") - start).abs() < 90).map(|a| s(a, "label").to_string()).unwrap_or_default();
-    json!({"action": "book", "reason": "new", "start": start, "minute": minute, "clash": clash})
+    json!({"action": "book", "reason": "new", "start": start, "minute": minute, "clash": clash, "replaces_id": replaces_id})
 }
 
 pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>> {
@@ -155,8 +170,24 @@ mod tests {
         // Booked from the same exchange a day apart: the nearer day.
         let d = ask(json!({"day": "+0", "pending": pend(at, "park", 20.0)}));
         assert_eq!((d["action"].as_str(), d["start"].as_i64()), (Some("move"), Some(10 * 1440 + 19 * 60)));
+        // "Tomorrow I can't, the day after" right after booking it (the judge's replaces): it moves to the later day.
+        let later = ask(json!({"day": "+2", "replaces": true, "pending": pend(at, "park", 9.0)}));
+        assert_eq!((later["action"].as_str(), later["start"].as_i64()), (Some("move"), Some(at + 1440)));
         // Long after (another day's talk), a day apart is another meeting.
         assert_eq!(ask(json!({"day": "+0", "pending": pend(at, "park", 500.0)}))["action"], "book");
+    }
+
+    #[test]
+    fn replaces_the_meeting_it_is_about_not_the_soonest() {
+        let pend = json!([{"id": 1, "heroine": "a", "kind": "pickup", "place": "cafe", "start": 10 * 1440 + 22 * 60},
+                          {"id": 2, "heroine": "a", "kind": "date", "place": "park", "start": 10 * 1440 + 19 * 60 + 600}]);
+        // Said again (same place, same day): moved, nothing else replaced.
+        let m = ask(json!({"time": "16:00", "replaces": true, "pending": pend.clone()}));
+        assert_eq!((m["action"].as_str(), m["id"].as_i64()), (Some("move"), Some(2)));
+        // "Not tomorrow, the day after": a new day; the park meeting goes, not tonight's pickup.
+        let d = ask(json!({"day": "+2", "replaces": true, "pending": pend.clone()}));
+        assert_eq!((d["action"].as_str(), d["replaces_id"].as_i64()), (Some("book"), Some(2)));
+        assert_eq!(ask(json!({"day": "+2", "pending": pend}))["replaces_id"], 0);
     }
 
     #[test]

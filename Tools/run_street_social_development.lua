@@ -5,7 +5,7 @@
 --
 --   Tools\lua\lua.exe Tools\run_street_social_development.lua [-Control [-ControlPort N]] [-Clock HH:MM] [-SelfTest]
 --     [-ValidateOnly] [-Strict] [-Executable EXE] [-SelectionFile JSON] [-MaleCard PNG] [-RetargetFile JSON]
---     [-RenderScale 100..200]
+--     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
 -- Option names are case-insensitive and may also be written --control, --control-port, ... (StreetSocial.cmd passes
 -- its arguments here unchanged).
 --
@@ -18,7 +18,7 @@ local instance = require "ok_instance"
 
 local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
-  controlport = true, clock = true }
+  controlport = true, clock = true, window = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -333,7 +333,9 @@ local function main()
     else fs.setenv(k, (v:gsub("/", "\\"))) end
   end
 
-  local game = { build.executable, "/Game/Scenes/StreetSocial/StreetSocial", "-D3D12", "-SM6", "-windowed", "-ResX=1920", "-ResY=1080",
+  local win_w, win_h = (o.window or "1920x1080"):match("^(%d+)[xX](%d+)$")
+  if not win_w then error("-Window takes WxH, e.g. 1280x720", 0) end
+  local game = { build.executable, "/Game/Scenes/StreetSocial/StreetSocial", "-D3D12", "-SM6", "-windowed", "-ResX=" .. win_w, "-ResY=" .. win_h, "-WinX=40", "-WinY=40",
     "-StreetSocialManifest=" .. manifest }
   if path.exists(build.patch) then game[#game + 1] = "-pakdir=" .. build.patch end
   game[#game + 1] = "-abslog=" .. path.join(output, "game.log")

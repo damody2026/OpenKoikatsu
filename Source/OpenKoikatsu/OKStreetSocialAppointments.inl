@@ -47,14 +47,14 @@ int32 AOKStreetSocialScene::PatienceOf(int32 Character) const{
 }
 
 // From chat (plan §13.3 "new_promise"): {"day": "+1" | "2010-09-05", "time": "19:00", "place": id, "what": text}.
-void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His){
+void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces){
  // An activity id in "what" ("meal") is said by its name in the label and her memory ("約meal" on the list).
  const FString What=OKStreetFindActivity(WhatSaid)?OKStreetActivityName(WhatSaid):WhatSaid;
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);const FOKStreetPlace* P=OKStreetFindPlace(Place);
  // Whether it is a meeting at all, a new one or the same one said again, and where and when, is promise.rs
  // (promise_from_chat); the judge's reading of both lines gives day, time and place.
  auto Request=OKRulesRequest(TEXT("promise_from_chat"));Request->SetStringField(TEXT("heroine"),Id);Request->SetStringField(TEXT("day"),Day);
- Request->SetStringField(TEXT("time"),Time);Request->SetStringField(TEXT("place"),Place);Request->SetBoolField(TEXT("place_known"),P!=nullptr);
+ Request->SetStringField(TEXT("time"),Time);Request->SetStringField(TEXT("place"),Place);Request->SetBoolField(TEXT("place_known"),P!=nullptr);Request->SetBoolField(TEXT("replaces"),bReplaces);
  Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));Request->SetNumberField(TEXT("today"),S.Store.CalendarDay);
  {const double Wall=FPlatformTime::Seconds();TArray<TSharedPtr<FJsonValue>> Pending;
   for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("heroine"),A.Heroine);
@@ -82,6 +82,8 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
   S.TellHer.Add(OKMsg(TEXT("ui.appointments.closed_then_note"), {{TEXT("place_name"), P->Name}, {TEXT("why"), *Why}}));S.FreeTalkNotice=Why;
   UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld not booked, closed then (%s)"),*Place,Start,*Why);RefreshUI();return;}
  const FString Label=OKMsg(TEXT("ui.appointments.meet_with_summary"), {{TEXT("character_name"), *S.Manifest.Characters[Character].Name}, {TEXT("what"), What.IsEmpty()?OKT(TEXT("ui.appointments.meeting_label")):*What}, {TEXT("person_name"), P->Name}});
+ // The meeting this one takes the place of goes quietly (promise.rs replaces_id).
+ {const int32 Old=int32(Out->GetNumberField(TEXT("replaces_id")));if(Old>0)MovePromiseWith(Old);}
  AddAppointment(TEXT("date"),Character,Place,Start,PatienceOf(Character),Label);
  // Another girl is already booked near that time: he is told (both stay booked; it is his to sort out).
  {const FString Clash=Out->GetStringField(TEXT("clash"));if(!Clash.IsEmpty()){S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.clash_notice"), {{TEXT("label"), *Clash}});UE_LOG(LogTemp,Display,TEXT("Street appointment: clashes with %s"),*Clash);RefreshUI();}}
@@ -141,12 +143,10 @@ void AOKStreetSocialScene::CancelPromiseWith(int32 Character,const FString& Scop
 
 // The meeting with her moves to the time just agreed (the judge's "replaces"): the old one goes quietly, it was not
 // called off ("又取消了？" for a day moved, and the cost of a cancellation). What she feels about it is in her reply.
-void AOKStreetSocialScene::MovePromiseWith(int32 Character){
- auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
- auto Candidate=S.Store;FOKStreetAppointment* Soonest=nullptr;
- for(auto& A:Candidate.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&(A.Kind==TEXT("date")||A.Kind==TEXT("pickup"))&&(!Soonest||A.Start<Soonest->Start))Soonest=&A;
- if(!Soonest)return;Soonest->Status=TEXT("moved");const FString Label=Soonest->Label;const int32 Moved=Soonest->Id;
- if(CommitStore(MoveTemp(Candidate))){PlanPromisesToday(Character);UE_LOG(LogTemp,Display,TEXT("Street appointment %d moved (a new time follows): %s"),Moved,*Label);}
+void AOKStreetSocialScene::MovePromiseWith(int32 AppointmentId){
+ auto& S=*State;auto Candidate=S.Store;FOKStreetAppointment* Old=Candidate.Appointments.FindByPredicate([&](const FOKStreetAppointment& A){return A.Id==AppointmentId&&A.Status==TEXT("pending");});
+ if(!Old)return;Old->Status=TEXT("moved");const FString Label=Old->Label;const int32 Moved=Old->Id;const int32 Character=CharacterOf(Old->Heroine);
+ if(CommitStore(MoveTemp(Candidate))){if(Character!=INDEX_NONE)PlanPromisesToday(Character);UE_LOG(LogTemp,Display,TEXT("Street appointment %d moved (a new time follows): %s"),Moved,*Label);}
 }
 
 void AOKStreetSocialScene::CancelAppointment(int32 AppointmentId){
