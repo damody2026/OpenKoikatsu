@@ -25,6 +25,7 @@ local DOC = [[Development client for the StreetSocial control channel (game star
   street_play.lua wait SECONDS           just wait (the game keeps its own real-time clock)
   street_play.lua rules [reload | eval JSON]  the game rules DLL: status, hot reload, or ask it directly
   street_play.lua mic off|on               off: what the room microphone hears is ignored (testing with people nearby)
+  street_play.lua song [ACTION] [GIRL]     her song: state | prepare [girl: override] | play | later | decline | skip | cancel | enable | disable
   street_play.lua money AMOUNT           development money (through the books; negative takes it away)
 
 Lua is a development convenience here; the game side is C++ (Source/OpenKoikatsu/OKStreetSocialControl.inl).
@@ -337,6 +338,8 @@ local function main(argv)
     else
       print(json.encode(call("/rules", json.object({ { "action", "status" } })), { ensure_ascii = false, indent = 1 }))
     end
+  elseif cmd == "song" then
+    print(json.encode(call("/song", json.object({ { "action", rest[1] or "state" }, { "girl", tonumber(rest[2] or "0") or 0 } })), { ensure_ascii = false, indent = 1 }))
   elseif cmd == "mind" then
     -- mind [reload]: the heroine mind's status; reload = a new ok-mind build, or deepseek.json read again (idle only)
     print(json.encode(call("/mind", json.object({ { "action", rest[1] or "status" } })), { ensure_ascii = false, indent = 1 }))

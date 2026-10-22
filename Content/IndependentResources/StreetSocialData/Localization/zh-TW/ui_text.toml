@@ -1929,3 +1929,24 @@ she_sent_photo = "{name}傳來一張照片：{caption}"
 
 [ui.reading]
 read_hour_button = "讀{book}一小時"
+
+# Heroine songs (OKStreetSocialSong.inl).
+[ui.song]
+enabled = "女主唱歌：開（她會在背景準備歌曲）"
+disabled = "女主唱歌：關"
+preparing = "{name} 正在準備一首歌（{stage}）…"
+ready = "{name} 準備好一首歌了，和她聊天時她會唱給你聽。"
+offer = "{name} 想唱一首歌給你聽。"
+accept = "好啊，唱吧"
+later = "等一下"
+decline = "下次吧"
+singing = "{name} 正在唱歌"
+skip = "跳過歌曲"
+intro_line = "那個……我練了一首歌，想唱給你聽，你要聽嗎？"
+outro_line = "唱完了……有點害羞呢。謝謝你聽我唱。"
+later_notice = "她說好，那等一下再唱。"
+declined_notice = "她有點失落，不過說下次再唱。"
+interrupted = "歌唱被打斷了，之後還能再聽。"
+completed = "她唱完了。"
+singer_changed = "現在最喜歡你的人變了，這首歌先留著。"
+failed = "歌曲準備失敗："

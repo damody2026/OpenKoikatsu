@@ -4,7 +4,7 @@
 // or starting a new game happens on the next start of the map (Saves/pending.json), when nothing has a file open.
 // Settings (player.json: language; voice, ASR and DeepSeek settings) belong to the player, not to a game.
 
-static const TCHAR* OKStreetSaveFiles[]={TEXT("relationships.json"),TEXT("relationships.json.bak"),TEXT("phone.json"),TEXT("free-talk-log.json"),TEXT("free-talk-memory.json")};
+static const TCHAR* OKStreetSaveFiles[]={TEXT("relationships.json"),TEXT("relationships.json.bak"),TEXT("phone.json"),TEXT("free-talk-log.json"),TEXT("free-talk-memory.json"),TEXT("songs.json")};
 static const TCHAR* OKStreetSaveDirs[]={TEXT("accounts"),TEXT("history"),TEXT("mind"),TEXT("Photos")};
 static constexpr int32 OKStreetSaveSlotCount=8;
 static constexpr double OKStreetAutoSaveSeconds=600;

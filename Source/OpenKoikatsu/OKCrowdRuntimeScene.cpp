@@ -276,6 +276,9 @@ struct FEntry {
  int32 ActionOverride=INDEX_NONE;uint64 ActionRequests=0,ActionCompletions=0,SpeechRequests=0,SpeechFrames=0,LastSpeechFrames=0;float SpeechMouth=0,SpeechPeak=0;double SpeechProgressAt=0;
  TFuture<FKKRuntimeSpeechResult> SpeechJob;TWeakObjectPtr<UAudioComponent> SpeechAudio;TStrongObjectPtr<UKKRuntimeSpeechWave> SpeechWave;
  FString PendingSpeechAction;uint64 SpeechEpoch=0,SpeechEpochClock=0;
+ // A song (OKSpeakCrowdRuntimeSong): the mouth follows this envelope of her vocal alone, read at the audio render clock
+ // (hop seconds per value), not the mix's RMS; played at pitch 1.
+ TArray<float> MouthEnvelope;float EnvelopeHop=.01f,EnvelopeRate=48000.f;
  double SpeechRequestedAt=0;uint64 SpeechCancellations=0;float BlinkOverride=-1,LastBlinkClosure=0,BlinkPeak=0;uint64 BlinkUpdates=0;
  TSharedPtr<const FKKRuntimeMouthStream,ESPMode::ThreadSafe> MouthStream;float LastMouthOpening=0,LastMouthGain=0;uint64 MouthUpdates=0;float MouthPeak=0;int64 LastMouthBucket=-1;double ActionSpeechSeconds=0,ActionSpeechGpuSeconds=0;
  FOKRuntimeFacePlayback FacePlay;
@@ -335,7 +338,7 @@ struct FEntry {
   SpeechJob=TFuture<FKKRuntimeSpeechResult>();SpeechEpoch=0;LinkedActionEpoch=0;SpeechPaired=false;
   if(auto* Audio=SpeechAudio.Get()){Audio->Stop();Audio->SetSound(nullptr);}
   if(SpeechWave.IsValid()){const uint64 Frames=SpeechWave->Meter->Frames.Load();SpeechFrames+=Frames>=LastSpeechFrames?Frames-LastSpeechFrames:0;}
-  SpeechWave.Reset();LastSpeechFrames=0;SpeechMouth=0;SpeechRequestedAt=0;PendingSpeechAction.Reset();
+  SpeechWave.Reset();LastSpeechFrames=0;SpeechMouth=0;SpeechRequestedAt=0;PendingSpeechAction.Reset();MouthEnvelope.Reset();
  }
 };
 // Writes E.LookNow into her face materials; eases LookNow toward LookGoal (defined beside OKSetCrowdRuntimeFaceLook).
@@ -853,12 +856,14 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(A==DemoCharacter&&DemoSpeechStarted&&!DemoSpeechCancelled&&DemoCancelAfter>=0&&Now-E.SpeechRequestedAt>=DemoCancelAfter){FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);DemoSpeechCancelled=true;}
    if(E.SpeechJob.IsValid()&&E.SpeechEpoch!=0&&E.SpeechJob.IsReady()&&(E.PendingSpeechAction.IsEmpty()||E.ClipSources.Find(ClipIds.Find(E.PendingSpeechAction))>=2)){const uint64 SpeechEpoch=E.SpeechEpoch;auto Prepared=E.SpeechJob.Consume();if(E.SpeechEpoch!=SpeechEpoch){UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped stale session"));}else if(!Prepared.Error.IsEmpty()){UE_LOG(LogTemp,Warning,TEXT("Runtime voice: %s"),*Prepared.Error);FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=Prepared.Error;}else if(auto Device=Owner->GetWorld()->GetAudioDevice();Device.IsValid()){
     auto* Audio=E.SpeechAudio.Get();if(!Audio){Audio=NewObject<UAudioComponent>(Owner.Get());Owner->AddInstanceComponent(Audio);Audio->bAutoActivate=false;Audio->bAutoDestroy=false;Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->bAllowSpatialization=true;Audio->bOverrideAttenuation=true;Audio->AttenuationOverrides.bAttenuate=true;Audio->AttenuationOverrides.bSpatialize=true;Audio->AttenuationOverrides.FalloffDistance=2000;Audio->RegisterComponent();E.SpeechAudio=Audio;}
-    Audio->Stop();auto* Wave=NewObject<UKKRuntimeSpeechWave>(Owner.Get());if(Prepared.Stream)Wave->InitializeStream(Prepared.Stream,Device->GetSampleRate());else Wave->Initialize(Prepared.Pcm,Device->GetSampleRate());E.SpeechWave.Reset(Wave);E.LastSpeechFrames=0;E.SpeechProgressAt=Now;Audio->SetSound(Wave);
-    if(!E.PendingSpeechAction.IsEmpty()){FString ActionError;if(!OKPlayCrowdRuntimeAction(Owner.Get(),A,E.PendingSpeechAction,ActionError))UE_LOG(LogTemp,Warning,TEXT("Runtime speech action: %s"),*ActionError);}E.PendingSpeechAction.Reset();Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->SetPitchMultiplier(E.VoicePitch);Audio->Play();E.SpeechState=EOKRuntimeSpeechState::Playing;
+    Audio->Stop();auto* Wave=NewObject<UKKRuntimeSpeechWave>(Owner.Get());if(Prepared.Stream)Wave->InitializeStream(Prepared.Stream,Device->GetSampleRate());else Wave->Initialize(Prepared.Pcm,Device->GetSampleRate());E.SpeechWave.Reset(Wave);E.EnvelopeRate=float(Device->GetSampleRate());E.LastSpeechFrames=0;E.SpeechProgressAt=Now;Audio->SetSound(Wave);
+    if(!E.PendingSpeechAction.IsEmpty()){FString ActionError;if(!OKPlayCrowdRuntimeAction(Owner.Get(),A,E.PendingSpeechAction,ActionError))UE_LOG(LogTemp,Warning,TEXT("Runtime speech action: %s"),*ActionError);}E.PendingSpeechAction.Reset();Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->SetPitchMultiplier(E.MouthEnvelope.Num()?1.f:E.VoicePitch);Audio->Play();E.SpeechState=EOKRuntimeSpeechState::Playing;
    }else {FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=TEXT("Runtime voice has no audio device");UE_LOG(LogTemp,Warning,TEXT("Runtime voice has no audio device"));}}
    // Instanced skinned mesh component transforms do not follow their actor instances.
    if(E.SpeechAudio.IsValid())E.SpeechAudio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));
-   if(E.SpeechWave.IsValid()){const float Rms=E.SpeechWave->Meter->Rms.Load();E.SpeechMouth=FMath::FInterpTo(E.SpeechMouth,FMath::Clamp(Rms*3.f,0.f,1.f),Dt,18.f);E.SpeechPeak=FMath::Max(E.SpeechPeak,Rms);const uint64 Frames=E.SpeechWave->Meter->Frames.Load();if(Frames!=E.LastSpeechFrames)E.SpeechProgressAt=Now;E.SpeechFrames+=Frames>=E.LastSpeechFrames?Frames-E.LastSpeechFrames:0;E.LastSpeechFrames=Frames;
+   if(E.SpeechWave.IsValid()){const float Rms=E.SpeechWave->Meter->Rms.Load();
+   const int32 EnvelopeAt=E.MouthEnvelope.Num()?FMath::Clamp(int32(double(E.SpeechWave->Meter->Frames.Load())/FMath::Max(1.f,E.EnvelopeRate)/E.EnvelopeHop),0,E.MouthEnvelope.Num()-1):INDEX_NONE;
+   E.SpeechMouth=EnvelopeAt!=INDEX_NONE?FMath::FInterpTo(E.SpeechMouth,FMath::Clamp(E.MouthEnvelope[EnvelopeAt],0.f,1.f),Dt,30.f):FMath::FInterpTo(E.SpeechMouth,FMath::Clamp(Rms*3.f,0.f,1.f),Dt,18.f);E.SpeechPeak=FMath::Max(E.SpeechPeak,Rms);const uint64 Frames=E.SpeechWave->Meter->Frames.Load();if(Frames!=E.LastSpeechFrames)E.SpeechProgressAt=Now;E.SpeechFrames+=Frames>=E.LastSpeechFrames?Frames-E.LastSpeechFrames:0;E.LastSpeechFrames=Frames;
    // A voice whose playback stops advancing (e.g. the output device was swapped under it) would stay "speaking" forever;
    // a stream still waiting on TTS gets longer before it counts as stuck.
    const bool Starving=E.SpeechWave->Stream&&!E.SpeechWave->Stream->IsComplete();const bool Stalled=Now-E.SpeechProgressAt>(Starving?15.:3.);
@@ -1079,6 +1084,11 @@ bool OKSpeakCrowdRuntimeLine(AActor* Owner,int32 Character,const FString& VoiceI
  const int32 Voice=State->VoiceIds.Find(VoiceId);if(Voice==INDEX_NONE){Error=TEXT("Voice must be an admitted common resource");return false;}
  auto& E=*State->Entries[Character];if(E.SpeechJob.IsValid()){Error=TEXT("Runtime voice preparation already pending");return false;}
  E.PendingSpeechAction.Reset();E.LinkedActionEpoch=0;E.SpeechPaired=false;E.SpeechEpoch=++E.SpeechEpochClock;E.SpeechJob=OKPrepareRuntimeSpeechAsync(State->VoicePaths[Voice]);E.SpeechRequestedAt=FPlatformTime::Seconds();E.SpeechState=EOKRuntimeSpeechState::Preparing;E.SpeechError.Reset();++E.SpeechRequests;Error.Reset();return true;
+}
+bool OKSpeakCrowdRuntimeSong(AActor* Owner,int32 Character,const FString& VoiceId,const TArray<float>& MouthEnvelope,float HopSeconds,FString& Error){
+ if(MouthEnvelope.IsEmpty()||HopSeconds<=0){Error=TEXT("A song needs a mouth envelope");return false;}
+ if(!OKSpeakCrowdRuntimeLine(Owner,Character,VoiceId,Error))return false;
+ const auto State=OKRuntimeScene::ActiveScenes.Find(Owner)->Pin();auto& E=*State->Entries[Character];E.MouthEnvelope=MouthEnvelope;E.EnvelopeHop=HopSeconds;return true;
 }
 bool OKSpeakCrowdRuntimeStream(AActor* Owner,int32 Character,TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe> Stream,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;

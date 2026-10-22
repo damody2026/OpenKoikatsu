@@ -1928,3 +1928,24 @@ she_sent_photo = "{name} sent a photo: {caption}"
 
 [ui.reading]
 read_hour_button = "Read {book} for an hour"
+
+# Heroine songs (OKStreetSocialSong.inl).
+[ui.song]
+enabled = "Heroine songs: on (she prepares a song in the background)"
+disabled = "Heroine songs: off"
+preparing = "{name} is preparing a song ({stage})…"
+ready = "{name} has a song ready; she will sing it when you talk with her."
+offer = "{name} wants to sing you a song."
+accept = "Sure, sing it"
+later = "In a bit"
+decline = "Next time"
+singing = "{name} is singing"
+skip = "Skip the song"
+intro_line = "Um… I practised a song. Would you like to hear it?"
+outro_line = "That's it… a little embarrassing. Thank you for listening."
+later_notice = "She says okay, later then."
+declined_notice = "She looks a little let down, but says next time."
+interrupted = "The song was interrupted; you can hear it later."
+completed = "She finished her song."
+singer_changed = "Someone else likes you most now; this song is kept for later."
+failed = "The song could not be prepared: "

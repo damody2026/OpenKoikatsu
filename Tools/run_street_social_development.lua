@@ -6,7 +6,7 @@
 --   Tools\lua\lua.exe Tools\run_street_social_development.lua [-Control [-ControlPort N]] [-Clock HH:MM] [-SelfTest]
 --     [-ValidateOnly] [-Strict] [-Executable EXE] [-SelectionFile JSON] [-MaleCard PNG] [-RetargetFile JSON]
 --     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
---     [-Sandbox NAME [-PortBase N]]
+--     [-Sandbox NAME [-PortBase N] [-RulesDll DLL]]
 -- -Sandbox runs a second game beside one already playing from this checkout without touching it: its own ports
 -- (-PortBase, default 48060: TTS N, ASR N+1, control N+10), its own save, voice settings and free-talk logs in
 -- Saved/StreetSocial/Sandbox/NAME/ (copied from the main save the first time), voice servers started for it only (the
@@ -24,7 +24,7 @@ local instance = require "ok_instance"
 
 local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
-  controlport = true, clock = true, window = true, sandbox = true, portbase = true }
+  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -303,6 +303,11 @@ local function main()
       if path.is_file(asr_settings) then args[#args + 1] = "--settings"; args[#args + 1] = asr_settings end
       servers[#servers + 1] = { name = "ASR", file = asr, args = args }
     else say("ASR server not found; voice input unavailable: " .. asr) end
+    -- Heroine songs (Tools/ok-song; its ok-song.json beside the exe says where the model stages run). Optional: without
+    -- it the game simply never offers a song.
+    local song = path.join(root, "Build/ok-song/ok-song.exe")
+    if path.is_file(song) then servers[#servers + 1] = { name = "Song", file = song, args = { "serve", "--port", tostring(ports.song) } }
+    else say("Song server not found; heroines will not sing: " .. song) end
   end
 
   -- Heroine mind (Tools/ok-mind, cargo build --release): the game loads a copy, so cargo can rebuild while it runs.
@@ -317,7 +322,9 @@ local function main()
   -- Game rules (Tools/ok-rules): required. Built here when cargo is available (a no-op when up to date); the game loads
   -- a copy so cargo can rebuild while it runs, and ok.StreetRules.Reload (or street_play.lua rules reload) swaps it in.
   local rules_crate = path.join(root, "Tools/ok-rules")
-  local rules_source = path.join(rules_crate, "target/release/ok_rules.dll")
+  -- -RulesDll (sandbox): a rules build of its own (e.g. made with another CARGO_TARGET_DIR), so testing new rules never
+  -- swaps the DLL the other game hot-reloads.
+  local rules_source = (sandbox and o.rulesdll) and path.abs(o.rulesdll) or path.join(rules_crate, "target/release/ok_rules.dll")
   local rules_dll = path.join(sandbox or path.join(root, "Saved/StreetSocial/Build"), "ok-rules/ok_rules.dll")
   if proc.which("cargo") and not sandbox then
     local r = proc.run({ "cargo", "build", "--release", "--quiet" }, { cwd = rules_crate, capture = true })
@@ -356,6 +363,7 @@ local function main()
     OK_ASR_ENDPOINT = asr_endpoint,
     -- The launcher started ok-tts on this checkout's port; it wins over an endpoint saved in voice-settings.json.
     OK_TTS_ENDPOINT = tts_endpoint,
+    OK_SONG_ENDPOINT = "http://127.0.0.1:" .. ports.song,
     -- The game saves the microphone chosen in its settings here; the next launch passes it to ok-asr.
     OK_ASR_SETTINGS = asr_settings,
     OK_ASR_SERVER = path.join(root, "Build/ok-asr/ok-asr.exe"),

@@ -43,6 +43,9 @@ bool OKGetCrowdRuntimeActionStatus(AActor* Owner,int32 Character,FOKRuntimeActio
 
 // Asynchronous common OGG playback; mouth rate follows the audio render clock.
 bool OKSpeakCrowdRuntimeLine(AActor* Owner,int32 Character,const FString& VoiceId,FString& Error);
+// A song: an admitted OGG like a line, but the mouth follows MouthEnvelope (her vocal alone, one value per HopSeconds,
+// read at the audio render clock) instead of the mix, and it plays at pitch 1. Stop / active / state as a line.
+bool OKSpeakCrowdRuntimeSong(AActor* Owner,int32 Character,const FString& VoiceId,const TArray<float>& MouthEnvelope,float HopSeconds,FString& Error);
 // Plays PCM that is still arriving (a streamed TTS response); same speech state, mouth and stop as a line.
 bool OKSpeakCrowdRuntimeStream(AActor* Owner,int32 Character,TSharedPtr<struct FKKRuntimeSpeechStream,ESPMode::ThreadSafe> Stream,FString& Error);
 // Prepare audio in the background, then start the admitted action and voice together.
