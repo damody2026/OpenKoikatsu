@@ -6,6 +6,12 @@
 --   Tools\lua\lua.exe Tools\run_street_social_development.lua [-Control [-ControlPort N]] [-Clock HH:MM] [-SelfTest]
 --     [-ValidateOnly] [-Strict] [-Executable EXE] [-SelectionFile JSON] [-MaleCard PNG] [-RetargetFile JSON]
 --     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
+--     [-Sandbox NAME [-PortBase N]]
+-- -Sandbox runs a second game beside one already playing from this checkout without touching it: its own ports
+-- (-PortBase, default 48060: TTS N, ASR N+1, control N+10), its own save, voice settings and free-talk logs in
+-- Saved/StreetSocial/Sandbox/NAME/ (copied from the main save the first time), voice servers started for it only (the
+-- other game's are not stopped), and its own copies of the rules / mind DLLs (no cargo build of Tools/ok-rules, which
+-- the other game hot-reloads). Identity migration of the shared saves is skipped.
 -- Option names are case-insensitive and may also be written --control, --control-port, ... (StreetSocial.cmd passes
 -- its arguments here unchanged).
 --
@@ -18,7 +24,7 @@ local instance = require "ok_instance"
 
 local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
-  controlport = true, clock = true, window = true }
+  controlport = true, clock = true, window = true, sandbox = true, portbase = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -250,10 +256,26 @@ local function main()
   if o.retargetfile then retarget("inject", o.retargetfile, manifest) end
   -- Replaced heroine cards (StreetSocialData/identity_aliases.json): the live game and every save slot move to the new
   -- ids before the game opens them (a no-op when no save names an old id).
-  if not o.selftest and not tool("street_identity_migrate.lua", {}).ok then error("Identity alias migration failed", 0) end
+  if not o.selftest and not o.sandbox and not tool("street_identity_migrate.lua", {}).ok then error("Identity alias migration failed", 0) end
+  -- Sandbox: the save (and what lives beside it: voice settings, free-talk logs) moves to the sandbox folder.
+  local sandbox
+  if o.sandbox then
+    if not o.sandbox:match("^[%w_%-]+$") then error("-Sandbox takes a name of letters, digits, - and _", 0) end
+    sandbox = path.join(root, "Saved/StreetSocial/Sandbox", o.sandbox)
+    path.mkdir(sandbox, true)
+    for _, name in ipairs({ "relationships.json", "voice-settings.json", "player.json", "phone.json", "free-talk-log.json", "free-talk-memory.json" }) do
+      local main_file, own = path.join(root, "Saved/StreetSocial", name), path.join(sandbox, name)
+      if not path.exists(own) and path.is_file(main_file) then path.copy(main_file, own) end
+    end
+    local m = json.decode(path.read_text(manifest))
+    m.save_path = (path.join(sandbox, "relationships.json"):gsub("/", "\\"))
+    path.write_text(manifest, json.encode(m, { ensure_ascii = false, indent = 2 }))
+    say("Sandbox " .. o.sandbox .. ": save and settings in " .. sandbox)
+  end
 
   -- This checkout's ports and voice servers (local-instance.json, Tools/ok_instance.lua).
   local ports = instance.ports(root)
+  if sandbox then ports = instance.ports_at(math.tointeger(tonumber(o.portbase or "48060")) or error("-PortBase takes a number", 0), ports.voice) end
   local control_port = tonumber(o.controlport) or ports.street_control
   -- Voice servers (ok-tts speech, ok-asr voice input) live and die with the game: a copy this checkout left from an
   -- earlier run is stopped here, and the fresh ones start after the game with --parent-pid so they exit when it does.
@@ -263,7 +285,7 @@ local function main()
   local asr_endpoint, tts_endpoint = "http://127.0.0.1:" .. ports.asr, "http://127.0.0.1:" .. ports.tts
   local asr_settings = path.join(root, "Saved/StreetSocial/asr-settings.json")
   if voice then
-    instance.stop_own_voice_servers(root)
+    if not sandbox then instance.stop_own_voice_servers(root) end
     local vs = path.join(root, "Saved/StreetSocial/voice-settings.json")
     local okv, v = pcall(read_json, vs)
     if path.is_file(vs) and okv and v.tts_server_command then say("tts_server_command is ignored: the server is tied to the game process (Build/ok-tts/ok-tts.exe)") end
@@ -286,7 +308,7 @@ local function main()
   -- Heroine mind (Tools/ok-mind, cargo build --release): the game loads a copy, so cargo can rebuild while it runs.
   -- Without the DLL the street keeps its old behaviour.
   local mind_source = path.join(root, "Tools/ok-mind/target/release/ok_mind.dll")
-  local mind_dll = path.join(root, "Saved/StreetSocial/Build/ok-mind/ok_mind.dll")
+  local mind_dll = path.join(sandbox or path.join(root, "Saved/StreetSocial/Build"), "ok-mind/ok_mind.dll")
   if path.is_file(mind_source) then
     path.mkdir(path.parent(mind_dll), true)
     local copied, err = pcall(path.copy, mind_source, mind_dll)
@@ -296,8 +318,8 @@ local function main()
   -- a copy so cargo can rebuild while it runs, and ok.StreetRules.Reload (or street_play.lua rules reload) swaps it in.
   local rules_crate = path.join(root, "Tools/ok-rules")
   local rules_source = path.join(rules_crate, "target/release/ok_rules.dll")
-  local rules_dll = path.join(root, "Saved/StreetSocial/Build/ok-rules/ok_rules.dll")
-  if proc.which("cargo") then
+  local rules_dll = path.join(sandbox or path.join(root, "Saved/StreetSocial/Build"), "ok-rules/ok_rules.dll")
+  if proc.which("cargo") and not sandbox then
     local r = proc.run({ "cargo", "build", "--release", "--quiet" }, { cwd = rules_crate, capture = true })
     if not r.ok then say("Game rules build failed; using the previous build if there is one") end
   end
