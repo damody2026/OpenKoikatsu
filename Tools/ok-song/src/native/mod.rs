@@ -37,5 +37,6 @@ pub fn device(index: usize) -> Result<gpu::Gpu> {
     let names: Vec<&'static str> = gpu::KERNEL_NAMES.iter().chain(SONG_KERNEL_NAMES).copied().collect();
     let g = gpu::Gpu::with_kernels(index, &source, &names)?;
     g.bind()?;
+    g.keep_pool()?;
     Ok(g)
 }
