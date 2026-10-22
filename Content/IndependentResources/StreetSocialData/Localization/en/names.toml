@@ -61,6 +61,7 @@ lie_down = "lie down with you"
 share_food = "share food with you"
 
 [ui.name.activity]
+megumin_explosion = "Watch Megumin cast her Explosion on the playground"
 photo_walk = "Walk and take photos together (a photo walk)"
 help_her_work = "Help her with her own work (e.g. hand out flyers at the campus gate)"
 park_sketch = "Sketch in the park (she draws, you keep her company)"

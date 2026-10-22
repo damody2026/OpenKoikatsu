@@ -813,3 +813,19 @@ code = 2
 weather = "dry"
 minutes = 45
 feed = { fun = 15, social = 8 }
+
+# 惠惠的爆裂魔法：只有她會做（who 是她的 stable id），晴天、一天一次；放完體力用光。
+[[activity]]
+id = "megumin_explosion"
+name = "看惠惠在操場放爆裂魔法"
+place = "playground"
+kind = "solo"
+code = 0
+anchor = "field"
+female_clip = "venue_sky.okanim"
+who = ["apng-042c554c020de4ab518d45753e4077f8c5c1aebcf72bdd371a5eb6c2bd9d4c0c"]
+weather = "dry"
+once_per_day = true
+effect = "explosion"
+minutes = 20
+feed = { energy = -95, fun = 30 }

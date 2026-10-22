@@ -59,7 +59,9 @@ fn find<'a>(c: &Catalog, held: &'a [Value], said: &str) -> Option<usize> {
     }
     held.iter().position(|h| {
         let name = norm(&name_of(c, s(h, "item"), s(h, "name")));
-        !name.is_empty() && (name.contains(&want) || want.contains(&name))
+        // Her drawing is "the drawing" too, whatever its title says (the words for it in every language).
+        let drawing = s(h, "item").starts_with("drawing:") && crate::tr::t("items.drawing_words").split('|').any(|w| !w.is_empty() && want.contains(&norm(w)));
+        drawing || (!name.is_empty() && (name.contains(&want) || want.contains(&name)))
     })
 }
 
@@ -338,7 +340,7 @@ mod tests {
         let c = cat();
         let d = crate::photos::eval("drawing_made", &json!({"ext": {}, "girl": "a", "girl_name": "貞德", "day": 3, "minute": 900, "place": "park", "place_name": "中央公園", "file": "d.png"})).unwrap().unwrap();
         assert_eq!(d["item"], "drawing:1");
-        let g = judge(&c, &json!({"ext": d["ext"], "girl": "a", "day": 3, "she_gives": {"item": "畫"}}));
+        let g = judge(&c, &json!({"ext": d["ext"], "girl": "a", "day": 3, "she_gives": {"item": "那張畫"}}));
         assert_eq!(g["his_add"], json!(["drawing:1"]));
         assert_eq!(g["ext"]["photos"][0]["shared_with"], json!(["him"]));
         assert!(!g["notice"].as_str().unwrap().contains("drawing:"), "said by its name");

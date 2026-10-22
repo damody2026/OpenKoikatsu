@@ -201,12 +201,13 @@ struct FOKStreetActivity {
  const TCHAR* FemaleClip = nullptr;
  const TCHAR* MaleClip = nullptr;
  const TCHAR* ZhName = nullptr; // the data's own name, kept when the language swaps Name
+ const TCHAR* Effect = nullptr; // shown while it runs (activities.toml effect: "explosion")
 };
 
 // The activities come from the rules (rules/activities.toml, activities.rs `activities_table`), read with the other
 // tables (OKRulesReadTables) and again when the language changes. The rows' text lives in OKStreetActivityTexts so the
 // TCHAR pointers stay valid; a reload keeps the old text alive (a pointer taken before it still reads).
-struct FOKStreetActivityText { FString Id, Name, ZhName, Place, Anchor, FemaleClip, MaleClip; };
+struct FOKStreetActivityText { FString Id, Name, ZhName, Place, Anchor, FemaleClip, MaleClip, Effect; };
 inline TArray<TUniquePtr<FOKStreetActivityText>>& OKStreetActivityTexts() { static TArray<TUniquePtr<FOKStreetActivityText>> Texts; return Texts; }
 inline TArray<FOKStreetActivity>& OKStreetActivitiesMutable() { static TArray<FOKStreetActivity> All; return All; }
 inline const TArray<FOKStreetActivity>& OKStreetActivities() { return OKStreetActivitiesMutable(); }

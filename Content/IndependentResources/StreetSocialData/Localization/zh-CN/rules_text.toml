@@ -552,6 +552,7 @@ only_some = "这不是她会做的事"
 needs_item = "需要{item}（{place}有卖），你们手上都没有"
 
 [items]
+drawing_words = "畫|画|寫生|写生|素描|drawing|sketch|painting"
 separator = "、"
 fact_separator = "；"
 she_gives = "她把{item}送给你了"
@@ -584,3 +585,18 @@ fact_both_finished = "你们都读完了{books}，可以聊读后感"
 [work]
 helped_fact = "他陪你{task}：在{place}{weather}发出去 {handed} 份，有 {stopped} 个人停下来看"
 in_rain = "（下着雨）"
+
+[series]
+weekly_label = "{label}（每{weekday}）"
+mon = "周一"
+tue = "周二"
+wed = "周三"
+thu = "周四"
+fri = "周五"
+sat = "周六"
+sun = "周日"
+
+[weather]
+under_his_umbrella = "外面在下雨，你们两个挤在他的伞下走"
+each_umbrella = "外面在下雨，你们各撑一把伞"
+no_umbrella = "外面在下雨，你们都没带伞"

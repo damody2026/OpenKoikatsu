@@ -552,6 +552,7 @@ only_some = "This is not something she does"
 needs_item = "It needs {item} (sold at {place}); neither of you has one"
 
 [items]
+drawing_words = "畫|画|寫生|写生|素描|drawing|sketch|painting"
 separator = ", "
 fact_separator = "; "
 she_gives = "She gave you {item}"
@@ -584,3 +585,18 @@ fact_both_finished = "You have both finished {books} and can talk about it"
 [work]
 helped_fact = "He helped you with {task}: at {place}{weather} you two handed out {handed}, and {stopped} people stopped to look"
 in_rain = " (in the rain)"
+
+[series]
+weekly_label = "{label} (every {weekday})"
+mon = "Monday"
+tue = "Tuesday"
+wed = "Wednesday"
+thu = "Thursday"
+fri = "Friday"
+sat = "Saturday"
+sun = "Sunday"
+
+[weather]
+under_his_umbrella = "It is raining; the two of you walk close under his umbrella"
+each_umbrella = "It is raining; you each hold an umbrella"
+no_umbrella = "It is raining and neither of you has an umbrella"

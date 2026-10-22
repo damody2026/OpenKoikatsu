@@ -426,7 +426,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  if(Added>0)PlaceChatOrder(Character,Reply.Reply);
  if(Reply.ActKind==TEXT("checkout"))StartCheckout();
  else if(Reply.ActKind==TEXT("intimacy"))RequestIntimacy(Character,false);
- else if(Reply.ActKind==TEXT("cancel_promise"))CancelPromiseWith(Character);
+ else if(Reply.ActKind==TEXT("cancel_promise"))CancelPromiseWith(Character,TEXT("her")); // a weekly one: the judge says which ("her" defers)
  else if(Reply.ActKind==TEXT("entrust")){FString A,D;if(!Reply.ActArg.Split(TEXT("|"),&A,&D))A=Reply.ActArg;StartEntrust(Character,TEXT("entrust"),FCString::Atoi64(*A),D.IsEmpty()?30:FCString::Atoi(*D));}
  else if(Reply.ActKind==TEXT("follow_mode"))SetFollowMode(Reply.ActArg==TEXT("her_lead")?1:Reply.ActArg==TEXT("side_by_side")?2:0);
  else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.ActKind==TEXT("promise_treat")){} // handled above (the goodbye, the promise)
@@ -582,7 +582,7 @@ void AOKStreetSocialScene::ReturnBorrowed(int32 Her,const FString& ItemId){
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
  auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;
  const FString Notice=Out->GetStringField(TEXT("notice"));
- if(!Notice.IsEmpty()){S.FreeTalkNotice=Notice;S.TellHer.Add(Notice);} // she hears it as a fact of the moment, and answers it
+ if(!Notice.IsEmpty()){S.FreeTalkNotice=Notice;S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Notice}}));} // she hears it as a fact of the moment, and answers it
  UE_LOG(LogTemp,Display,TEXT("Street things: he returns %s to actor=%d (%s)"),*ItemId,Her,*Notice);RefreshUI();
 }
 

@@ -42,6 +42,9 @@ pub struct Activity {
     pub yields: Vec<String>,
     #[serde(default)]
     pub once_per_day: bool,
+    /// What Unreal shows while it runs, beyond the poses ("explosion": Megumin's spell, far off).
+    #[serde(default)]
+    pub effect: String,
     #[serde(default)]
     pub minutes: i32,
     /// Her needs at the end (fun, energy, social, satiety, hygiene).
@@ -186,7 +189,7 @@ fn table(t: &ActivitiesTuning, own: &ActivitiesTuning) -> Value {
         .map(|a| {
             let own_name = own.find(&a.id).map(|o| o.name.clone()).unwrap_or_else(|| a.name.clone());
             json!({"id": a.id, "name": a.name, "own_name": own_name, "place": a.place, "kind": a.kind, "code": a.code,
-                   "anchor": a.anchor, "female_clip": a.female_clip, "male_clip": a.male_clip})
+                   "anchor": a.anchor, "female_clip": a.female_clip, "male_clip": a.male_clip, "effect": a.effect})
         })
         .collect();
     json!({"activities": rows})

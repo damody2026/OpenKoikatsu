@@ -117,7 +117,11 @@ void AOKStreetSocialScene::BuildJobRows(const TSharedRef<SVerticalBox>& Panel){
  auto Row=SNew(SWrapBox).UseAllottedSize(true);bool Any=false;
  for(const auto& Job:S.Catalog.Jobs){if(Job.Place!=Place)continue;Any=true;const FString Id=Job.Id;
   if(!S.Store.PlayerJobs.Contains(Id)){Row->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.jobs.apply_job_label"), {{TEXT("job_title"), *Job.Title}, {TEXT("wage"), Job.Wage}}),[Weak,Id](){Weak->ApplyJob(Id);})];continue;}
-  for(int32 Shift=0;Shift<Job.Shifts.Num();++Shift)Row->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.jobs.schedule_tomorrow_shift"), {{TEXT("job_title"), *Job.Title}, {TEXT("start_hour"), Job.Shifts[Shift].X}, {TEXT("end_hour"), Job.Shifts[Shift].Y}}),[Weak,Id,Shift](){Weak->BookShift(Id,Shift);})];
+  for(int32 Shift=0;Shift<Job.Shifts.Num();++Shift){
+   // Over one of his classes: said on the button (academics.rs class_clash); booking it is still his choice.
+   FString Clash;{auto Ask=OKRulesRequest(TEXT("class_clash"));Ask->SetObjectField(TEXT("player"),OKStreetAcademicJson(S.Store.PlayerAcademic));Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay+1);Ask->SetNumberField(TEXT("from"),Job.Shifts[Shift].X);Ask->SetNumberField(TEXT("to"),Job.Shifts[Shift].Y);
+    if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask)){const FString Course=Out->GetStringField(TEXT("course"));if(!Course.IsEmpty())Clash=OKMsg(TEXT("ui.jobs.class_clash_suffix"),{{TEXT("course"),Course}});}}
+   Row->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.jobs.schedule_tomorrow_shift"), {{TEXT("job_title"), *Job.Title}, {TEXT("start_hour"), Job.Shifts[Shift].X}, {TEXT("end_hour"), Job.Shifts[Shift].Y}})+Clash,[Weak,Id,Shift](){Weak->BookShift(Id,Shift);})];}
  }
  if(S.ShiftAppointment)Row->AddSlot().Padding(1)[Button(S.ShiftFast?OKT(TEXT("ui.jobs.chat_while_working")):OKT(TEXT("ui.jobs.work_focus_fast_forward")),[Weak](){Weak->State->ShiftFast=!Weak->State->ShiftFast;Weak->RefreshUI();})];
  if(Any||S.ShiftAppointment)Panel->AddSlot().AutoHeight()[Row];

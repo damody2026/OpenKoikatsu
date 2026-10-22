@@ -47,6 +47,14 @@ impl Item {
     }
 }
 
+/// A weekday in the data: a name ("mon" .. "sun"; which day is plain to whoever writes it) or a number (0 = Monday).
+pub fn weekday_of(v: &Value) -> Option<i32> {
+    if let Some(n) = v.as_i64() {
+        return Some(n as i32);
+    }
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].iter().position(|d| v.as_str().is_some_and(|s| s.eq_ignore_ascii_case(d))).map(|k| k as i32)
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Catalog {
     pub places: BTreeMap<String, Place>,
@@ -72,7 +80,7 @@ impl Catalog {
                 Place {
                     open: ranges(o, "open"),
                     weekend_open: ranges(o, "weekend_open"),
-                    closed_weekdays: o.get("closed_weekdays").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_i64).map(|d| d as i32).collect()).unwrap_or_default(),
+                    closed_weekdays: o.get("closed_weekdays").and_then(Value::as_array).map(|a| a.iter().filter_map(weekday_of).collect()).unwrap_or_default(),
                 },
             );
         }

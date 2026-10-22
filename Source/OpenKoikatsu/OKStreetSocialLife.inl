@@ -136,7 +136,7 @@ void AOKStreetSocialScene::SpawnLifeProps(FOKLifePose& Pose){
 void AOKStreetSocialScene::TickLife(float Dt){
  if(!State)return;auto& S=*State;const double Now=SceneTime();
  if(FParse::Param(FCommandLine::Get(),TEXT("StreetSocialFindLots")))RunFindLots();
- StopStrayPoses();TickBooks();TickPhone();TickPhotos();TickStageTest();TickCompany();TickCompanyWorld();TickCompanyTest();TickHeroCompanyTest();TickAccountsTest();TickActivityWatch();TickLifeBlocks();TickNpcLifts();TickBiasActions();TickIntroFriend();
+ StopStrayPoses();TickBooks();TickPhone();TickPhotos();TickEffect();TickUmbrella();TickStageTest();TickCompany();TickCompanyWorld();TickCompanyTest();TickHeroCompanyTest();TickAccountsTest();TickActivityWatch();TickLifeBlocks();TickNpcLifts();TickBiasActions();TickIntroFriend();
  const int32 Minute=int32(OKStreetMindNow(S)%1440);
  // How far she is from where her schedule block puts her. After an outing or a walk she is wherever it ended, and
  // a seated loop there would put a chair in the middle of the street.

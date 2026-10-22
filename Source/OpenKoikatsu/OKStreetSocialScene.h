@@ -211,7 +211,7 @@ private:
  int32 CharacterOf(const FString& Id) const;
  int32 PatienceOf(int32 Character) const;
  void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His);
- void CancelPromiseWith(int32 Character);
+ void CancelPromiseWith(int32 Character,const FString& Scope=FString());
  void CancelAppointment(int32 AppointmentId); // one pending appointment, from the list (the cost: social.rs appointment_cancel)
  void BuildAppointmentRows(const TSharedRef<class SVerticalBox>& Panel);
  bool Blacklisted(const FString& Place,int32* DaysLeft=nullptr) const;
@@ -647,6 +647,12 @@ private:
  void ReadBooks(int32 Girl,int32 Minutes,const FString& OnlyBook);
  FString ReadingFacts(int32 Character) const;
  void HelpedHerWork(int32 Girl,const FString& Place,int32 Minutes); // OKStreetSocialPhotos.inl (work.rs help_work_end)
+ // OKStreetSocialAppointments.inl (series.rs): a meeting that repeats every week, the next one booked, calling it off.
+ void StartSeries(int32 Character,const FString& Place,const TSharedPtr<FJsonValue>& Repeat);
+ void TickSeries();
+ void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)
+ void TickEffect();
+ void TickUmbrella(); // OKStreetSocialPhotos.inl: the umbrella on a rainy walk (weather.rs walk_style)
  void FinishPhoto(bool bKeepTalking=true); // false: the conversation ends with the activity (goodbye, Esc)
  void TickPhoto(double Now);
  void RunPhotoProbe(double Now);

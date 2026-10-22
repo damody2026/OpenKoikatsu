@@ -818,8 +818,17 @@ pub fn named_place_id_preferring(said: &str, places: &[Value], prefer: &[String]
     best.map(|b| b.4)
 }
 
+/// Who opens when he walks up and speaks to her (E): her own words from her persona when the AI is there (the card's
+/// stock lines, picked by the original game's personality, made Raiden say "come closer"), the stock line when not.
+/// Request: ai_ready. Answer: route ("ai" or "catalog").
+fn greeting_route(r: &Value) -> Value {
+    let ai = r.get("ai_ready").and_then(Value::as_bool).unwrap_or(false);
+    json!({"route": if ai { "ai" } else { "catalog" }})
+}
+
 pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
+        "greeting_route" => Ok(greeting_route(r)),
         // She ends it in her own words ("we're done"): no longer his girlfriend (the nightly dice only knew favor 0).
         "breakup_said" => breakup_said(r),
         "drama_cast" => drama_cast(r),

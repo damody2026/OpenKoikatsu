@@ -94,7 +94,7 @@ inline FOKStreetCatalog OKStreetLoadCatalog(const FString& Path) {
  if (Root->TryGetObjectField(TEXT("places"), Places)) for (const auto& P : (*Places)->Values) {
   const TSharedPtr<FJsonObject> O = P.Value->AsObject(); if (!O) continue;
   FOKStreetCatalogPlace Place; Ranges(O, TEXT("open"), Place.Open); Ranges(O, TEXT("weekend_open"), Place.WeekendOpen);
-  const TArray<TSharedPtr<FJsonValue>>* Closed = nullptr; if (O->TryGetArrayField(TEXT("closed_weekdays"), Closed)) for (const auto& D : *Closed) Place.ClosedWeekdays.Add(int32(D->AsNumber()));
+  const TArray<TSharedPtr<FJsonValue>>* Closed = nullptr; if (O->TryGetArrayField(TEXT("closed_weekdays"), Closed)) for (const auto& D : *Closed) { /* a name ("mon") or a number (0 = Monday), as the rules read it (catalog.rs weekday_of) */ static const TCHAR* Days[] = {TEXT("mon"),TEXT("tue"),TEXT("wed"),TEXT("thu"),TEXT("fri"),TEXT("sat"),TEXT("sun")}; FString Name; double N = 0; if (D->TryGetString(Name)) { for (int32 K = 0; K < 7; ++K) if (Name.Equals(Days[K], ESearchCase::IgnoreCase)) Place.ClosedWeekdays.Add(K); } else if (D->TryGetNumber(N)) Place.ClosedWeekdays.Add(int32(N)); }
   double V = 0; if (O->TryGetNumberField(TEXT("entry"), V)) Place.Entry = int32(V); if (O->TryGetNumberField(TEXT("service"), V)) Place.Service = int32(V); if (O->TryGetNumberField(TEXT("serve_s"), V)) Place.ServeSeconds = V;
   Out.Places.Add(FString(*P.Key), Place);
  }
