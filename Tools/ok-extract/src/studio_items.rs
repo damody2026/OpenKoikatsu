@@ -568,11 +568,17 @@ mod sky_dome_tests {
         let parsed = crate::unity::parse_bundle_cached(std::fs::read(root.join("abdata/studio/00.unity3d")).unwrap());
         parsed.configure_game_references(root);
         let meshes = parsed.meshes_for_maindata("p_koi_stu_skyhiru00_01").0;
+        let h = parsed.prefab_hierarchy(&std::env::var("OK_SKY_PREFAB").unwrap_or("p_koi_stu_skyhiru00_01".into()));
+        for (i, n) in h.nodes.iter().enumerate() { println!("node {i} {} parent={} pos={:?} rot={:?} scale={:?}", n.name, n.parent, n.pos, n.rot, n.scale); }
+        println!("mesh_nodes {:?}", h.mesh_nodes);
+        for m in &meshes { println!("mesh {} path_id={} prefab_local={:?} v0={:?}", m.name, m.path_id, m.prefab_local.is_some(), m.positions.first()); }
         for m in &meshes { println!("{} verts={} shader={:?} extra={:?} slots={:?}", m.name, m.positions.len(), m.mat.as_ref().map(|x| &x.shader), m.shader_extra_textures.keys().collect::<Vec<_>>(), m.mat.as_ref().map(|x| &x.tex_slots)); }
         let dome = meshes.iter().find(|m| m.mat.as_ref().is_some_and(|x| x.shader == "Skybox/Cubemap")).expect("sky dome part");
         assert_eq!(dome.name, "Sphere");
         assert!(dome.positions.iter().all(|p| ((p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt() - 0.5).abs() < 1e-4));
-        let atlas = crate::teximg::load_from_memory(dome.shader_extra_textures.get("_OKSkyCube").expect("cube atlas")).unwrap();
+        let png = dome.shader_extra_textures.get("_OKSkyCube").expect("cube atlas");
+        if let Ok(out) = std::env::var("OK_SKY_ATLAS_OUT") { std::fs::write(out, png).unwrap(); }
+        let atlas = crate::teximg::load_from_memory(png).unwrap();
         assert_eq!(atlas.width(), atlas.height() * 3);
         assert_eq!(dome.mat.as_ref().unwrap().floats.get("_OKSkybox"), Some(&1.0));
     }

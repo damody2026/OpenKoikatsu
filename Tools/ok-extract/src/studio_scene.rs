@@ -127,6 +127,56 @@ pub struct Scene {
     /// Screen settings and background (SceneInfo), if the file has them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effects: Option<SceneEffects>,
+    /// Material Editor's scene data (its SceneController, in the scene's trailing ExtendedSave block): the material
+    /// colour and value edits of Studio items, by object key.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub material_edits: Vec<MaterialEdit>,
+}
+
+/// One Material Editor property edit of a Studio object (MaterialColorPropertyList / MaterialFloatPropertyList).
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct MaterialEdit {
+    /// The object's scene key (ObjectInfo.dicKey).
+    pub id: i32,
+    /// Material name as Material Editor keys it (without " (Instance)").
+    pub material: String,
+    /// Shader property (`_Color`, `_Glossiness` ...).
+    pub property: String,
+    /// "color" (RGBA, gamma as authored) or "float" (value in x).
+    pub kind: String,
+    pub value: [f32; 4],
+}
+
+/// Material Editor edits in the scene's trailing ExtendedSave block ("KKEx", version, length, msgpack of
+/// plugin id -> PluginData), the last block of the file.
+fn scene_material_edits(bytes: &[u8]) -> Vec<MaterialEdit> {
+    use crate::card::{map_get, me_plugin_data, parse_color};
+    let marker = b"\x04KKEx";
+    let Some(at) = bytes.windows(marker.len()).rposition(|w| w == marker) else { return Vec::new() };
+    let p = at + marker.len();
+    let Some(len) = bytes.get(p + 4..p + 8).map(|b| i32::from_le_bytes([b[0], b[1], b[2], b[3]])) else { return Vec::new() };
+    let Some(data) = usize::try_from(len).ok().and_then(|l| bytes.get(p + 8..p + 8 + l)) else { return Vec::new() };
+    let Ok(blocks) = rmpv::decode::read_value(&mut std::io::Cursor::new(data)) else { return Vec::new() };
+    let Some(plugin) = map_get(&blocks, "com.deathweasel.bepinex.materialeditor") else { return Vec::new() };
+    let Some(inner) = me_plugin_data(plugin) else { return Vec::new() };
+    let mut out = Vec::new();
+    for (list, kind) in [("MaterialColorPropertyList", "color"), ("MaterialFloatPropertyList", "float")] {
+        let Some(bin) = map_get(inner, list).and_then(rmpv::Value::as_slice) else { continue };
+        let Ok(items) = rmpv::decode::read_value(&mut std::io::Cursor::new(bin)) else { continue };
+        for item in items.as_array().into_iter().flatten() {
+            let id = map_get(item, "ID").and_then(rmpv::Value::as_i64).unwrap_or(-1) as i32;
+            let material = map_get(item, "MaterialName").and_then(rmpv::Value::as_str).unwrap_or("").trim_end_matches(" (Instance)").to_string();
+            let property = map_get(item, "Property").and_then(rmpv::Value::as_str).unwrap_or("").to_string();
+            let value = match (kind, map_get(item, "Value")) {
+                ("color", Some(v)) => parse_color(v),
+                ("float", Some(v)) => match v.as_str().and_then(|s| s.parse::<f32>().ok()).or_else(|| v.as_f64().map(|f| f as f32)) { Some(f) => [f, 0.0, 0.0, 0.0], None => continue },
+                _ => continue,
+            };
+            if id < 0 || material.is_empty() || property.is_empty() { continue; }
+            out.push(MaterialEdit { id, material, property, kind: kind.into(), value });
+        }
+    }
+    out
 }
 
 /// Studio main camera (CameraControl.CameraData): the camera sits at `rotation(rotate) * distance + pos`, looking along
@@ -509,7 +559,7 @@ fn read_nested(bytes: &[u8]) -> Result<Scene, String> {
     let map = r.i32()?;
     // Older or damaged tails leave the camera out rather than failing the scene.
     let (camera, effects) = main_camera(&mut r, &v).ok().map(|(c, e)| (Some(c), Some(e))).unwrap_or((None, None));
-    Ok(Scene { version, objects, map, camera, effects })
+    Ok(Scene { version, objects, map, camera, effects, material_edits: scene_material_edits(bytes) })
 }
 
 /// The KKS card a scene character was saved from: its face thumbnail as the card image, its card data, and the
@@ -606,6 +656,8 @@ mod tests {
         let Ok(path) = std::env::var("OK_SCENE") else { return };
         let scene = read(&std::fs::read(path).unwrap()).unwrap();
         eprintln!("version={} map={} effects={}", scene.version, scene.map, serde_json::to_string(&scene.effects).unwrap());
+        for e in scene.material_edits.iter().take(40) { eprintln!("me {:?}", e); }
+        eprintln!("material edits {}", scene.material_edits.len());
     }
     #[test]
     fn versions_compare_like_dotnet() {

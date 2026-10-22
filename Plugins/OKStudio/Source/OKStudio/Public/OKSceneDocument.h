@@ -252,6 +252,30 @@ struct OKSTUDIO_API FOKSceneItemPattern
 	bool operator==(const FOKSceneItemPattern& O) const = default;
 };
 
+/** A Material Editor style edit of one material property of an item (Material Editor's scene data). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneMaterialEdit
+{
+	GENERATED_BODY()
+
+	/** Source material name (without " (Instance)"); empty: every material of the item. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
+	FString Material;
+
+	/** Shader property, as Unity names it (`_Color`, `_Glossiness` ...). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
+	FString Property;
+
+	/** A colour (Value, sRGB as authored) rather than a number (Value.R). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
+	bool bColor = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
+	FLinearColor Value = FLinearColor::White;
+
+	bool operator==(const FOKSceneMaterialEdit& O) const = default;
+};
+
 /** A model of the OK base library, shown like a character part. */
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneItem
@@ -307,6 +331,10 @@ struct OKSTUDIO_API FOKSceneItem
 	/** Pattern slots 1..3 (empty: none); changing them rebuilds the item (the material takes them when it is made). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	TArray<FOKSceneItemPattern> Patterns;
+
+	/** Material property edits (Material Editor); changing them rebuilds the item (the materials take them when made). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	TArray<FOKSceneMaterialEdit> MaterialEdits;
 
 	bool operator==(const FOKSceneItem& O) const = default;
 };

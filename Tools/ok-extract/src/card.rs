@@ -475,7 +475,7 @@ pub(crate) fn read_i64_le(cur: &mut Cursor<&[u8]>) -> Result<i64, String> {
     Ok(i64::from_le_bytes(b))
 }
 
-fn map_get<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
+pub(crate) fn map_get<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
     let map = v.as_map()?;
     for (k, val) in map {
         if k.as_str() == Some(key) {
@@ -637,7 +637,7 @@ fn parse_dynamic_bone_editor(data: &Value) -> Vec<crate::dbone::DynamicBoneEdit>
     })).collect()
 }
 
-fn me_plugin_data<'a>(plugin: &'a Value) -> Option<&'a Value> {
+pub(crate) fn me_plugin_data<'a>(plugin: &'a Value) -> Option<&'a Value> {
     let data = if let Some(arr) = plugin.as_array() {
         arr.get(1)
     } else {
@@ -1808,7 +1808,7 @@ fn apply_body(body: &Value, info: &mut CardInfo) {
     }
 }
 
-fn parse_color(v: &Value) -> [f32; 4] {
+pub(crate) fn parse_color(v: &Value) -> [f32; 4] {
     let mut c = [1.0f32, 1.0, 1.0, 1.0];
     if let Some(arr) = v.as_array() {
         for (i, x) in arr.iter().take(4).enumerate() {
