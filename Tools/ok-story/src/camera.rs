@@ -61,21 +61,80 @@ fn looking(pos: V3, at: V3, fov: f64) -> Pose {
     Pose { pos, rot: Quat::look(math::sub(at, pos), [0.0, 0.0, 1.0]), fov }
 }
 
+/// One place a shot could be taken from; `from` is the point it looks at (a probe from there to the camera tells
+/// whether a wall stands between).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Candidate {
+    pub pose: Pose,
+    pub from: V3,
+}
+
 /// The pose of a camera spec; None keeps the current view (a shot of nobody, a missing scene camera).
 pub fn resolve(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, current: &Pose) -> Option<Pose> {
-    let fov_or = |d: f64| spec.fov.unwrap_or(d);
-    let Some(shot) = spec.shot.as_deref() else {
-        let rot = spec.fixed_rotation()?;
-        return Some(Pose { pos: spec.pos?, rot, fov: fov_or(current.fov) });
+    candidates(t, spec, ctx, current).first().map(|c| c.pose)
+}
+
+/// The places a camera spec can be seen from, best first: a fixed pose is one place, a shot several around its
+/// subject (turned further and closer in) so one without a wall in between can be picked.
+pub fn candidates(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, current: &Pose) -> Vec<Candidate> {
+    let around = |aim: V3, dir: V3, distance: f64, fov: f64, angles: &[f64], closer: &[f64]| -> Vec<Candidate> {
+        let mut out = Vec::new();
+        for (k, f) in closer.iter().enumerate() {
+            for (i, a) in angles.iter().enumerate() {
+                // Closer in only for the first few angles: the near ones are the fallbacks.
+                if k > 0 && i >= 3 {
+                    break;
+                }
+                let d = Quat::yaw_deg(*a).rotate(dir);
+                out.push(Candidate { pose: looking(math::add(aim, math::scale(d, distance * f)), aim, fov), from: aim });
+            }
+        }
+        out
     };
+    match shot_pose(t, spec, ctx, current) {
+        Some((aim, dir, distance, fov)) if spec.shot.as_deref().is_some_and(|s| !s.starts_with("studio")) => {
+            around(aim, dir, distance, fov, &t.probe_angles, &t.probe_closer)
+        }
+        Some((aim, dir, distance, fov)) => vec![Candidate { pose: looking(math::add(aim, math::scale(dir, distance)), aim, fov), from: aim }],
+        None => fixed(spec, ctx, current).map(|p| vec![Candidate { pose: p, from: p.pos }]).unwrap_or_default(),
+    }
+}
+
+/// A fixed pose or a scene camera.
+fn fixed(spec: &CameraSpec, ctx: &ShotContext, current: &Pose) -> Option<Pose> {
+    let fov_or = |d: f64| spec.fov.unwrap_or(d);
+    match spec.shot.as_deref() {
+        None => {
+            let rot = spec.fixed_rotation()?;
+            Some(Pose { pos: spec.pos?, rot, fov: fov_or(current.fov) })
+        }
+        Some(studio) => {
+            let id = match studio.strip_prefix("studio:") {
+                Some(n) => n.parse::<i32>().ok()?,
+                None if studio == "studio" => ctx.active_camera.or_else(|| ctx.cameras.first().map(|c| c.id))?,
+                None => return None,
+            };
+            let c = ctx.cameras.iter().find(|c| c.id == id)?;
+            Some(Pose { pos: c.pos, rot: Quat::from_array(c.rot), fov: fov_or(c.fov) })
+        }
+    }
+}
+
+/// A shot as aim point, direction from it to the camera, distance and field of view.
+fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &Pose) -> Option<(V3, V3, f64, f64)> {
+    let fov_or = |d: f64| spec.fov.unwrap_or(d);
+    let shot = spec.shot.as_deref()?;
+    // Only people on stage are framed (an offstage speaker's portrait copy stands far away).
+    let actor = |who: &str| ctx.actors.get(who).filter(|a| (a.ready || !a.bones.is_empty()) && ctx.present.contains(&who));
     let subject = spec.on.as_deref().unwrap_or(ctx.speaker);
-    let actor = |who: &str| ctx.actors.get(who).filter(|a| a.ready || !a.bones.is_empty());
+    // A two shot without its subject on stage frames the first two who are.
+    let subject = if actor(subject).is_none() && shot == "two" { ctx.present.iter().copied().find(|w| actor(w).is_some()).unwrap_or(subject) } else { subject };
     match shot {
         "speaker" => {
             let a = actor(subject)?;
             let aim = math::sub(a.head(), [0.0, 0.0, t.speaker_aim_drop * a.root.scale]);
             let dir = Quat::yaw_deg(t.speaker_side_deg).rotate(a.facing());
-            Some(looking(math::add(aim, math::scale(dir, t.speaker_distance * a.root.scale)), aim, fov_or(t.speaker_fov)))
+            Some((aim, dir, t.speaker_distance * a.root.scale, fov_or(t.speaker_fov)))
         }
         "two" => {
             let a = actor(subject)?;
@@ -102,7 +161,7 @@ pub fn resolve(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, current: 
             let width = math::len([across[0], across[1], 0.0]) / t.two_fill.max(0.05);
             let distance = (width * 0.5 / half).max(120.0);
             let aim = math::sub(mid, [0.0, 0.0, t.speaker_aim_drop]);
-            Some(looking(math::add(aim, math::scale(side, distance)), aim, fov))
+            Some((aim, side, distance, fov))
         }
         "wide" => {
             let all: Vec<&ActorFacts> = ctx.present.iter().filter_map(|w| actor(w)).collect();
@@ -126,16 +185,9 @@ pub fn resolve(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, current: 
             let distance = (extent / (fov.to_radians() * 0.5).tan()).max(250.0);
             let dir = math::normalize(if math::len(facing) < 1e-6 { [0.0, -1.0, 0.0] } else { facing });
             let aim = math::add(center, [0.0, 0.0, 10.0]);
-            Some(looking(math::add(aim, math::scale(dir, distance)), aim, fov))
+            Some((aim, dir, distance, fov))
         }
-        studio => {
-            let id = match studio.strip_prefix("studio:") {
-                Some(n) => n.parse::<i32>().ok()?,
-                None => ctx.active_camera.or_else(|| ctx.cameras.first().map(|c| c.id))?,
-            };
-            let c = ctx.cameras.iter().find(|c| c.id == id)?;
-            Some(Pose { pos: c.pos, rot: Quat::from_array(c.rot), fov: fov_or(c.fov) })
-        }
+        _ => None,
     }
 }
 
@@ -204,7 +256,7 @@ impl Rig {
             math::scale(up, self.parallax[1] * t.parallax_cm[1] * strength),
         );
         let turn = Quat::from_rotator(self.parallax[1] * t.parallax_deg[1] * strength, -self.parallax[0] * t.parallax_deg[0] * strength, 0.0);
-        Pose { pos: math::add(p.pos, offset), rot: p.rot.mul(turn).normalized(), fov: p.fov }
+        Pose { pos: math::add(p.pos, offset), rot: p.rot.times(turn).normalized(), fov: p.fov }
     }
 
     pub fn start_fly(&mut self) {
@@ -354,5 +406,32 @@ mod tests {
         let shown = rig.shown(&t, 0.5);
         assert!(math::len(math::sub(shown.pos, rig.current.pos)) > 1.0);
         assert_eq!(rig.current, Pose::default());
+    }
+}
+
+#[cfg(test)]
+mod offstage_tests {
+    use super::*;
+    use crate::io::Xf;
+
+    fn actor(pos: V3) -> ActorFacts {
+        let mut a = ActorFacts { ready: true, ..Default::default() };
+        a.root = Xf { pos, rot: Quat::IDENTITY.to_array(), scale: 1.0 };
+        a.bones.insert("head".into(), Xf { pos: math::add(pos, [0.0, 0.0, 150.0]), ..Default::default() });
+        a
+    }
+
+    #[test]
+    fn offstage_speakers_are_not_framed() {
+        let t = CameraTuning::default();
+        let mut actors = BTreeMap::new();
+        actors.insert("a".to_string(), actor([-60.0, 0.0, 0.0]));
+        actors.insert("b".to_string(), actor([60.0, 0.0, 0.0]));
+        // Her portrait copy far away.
+        actors.insert("far".to_string(), actor([0.0, 50000.0, 0.0]));
+        let ctx = ShotContext { speaker: "far", present: vec!["a", "b"], actors: &actors, cameras: &[], active_camera: None };
+        let two = resolve(&t, &CameraSpec { shot: Some("two".into()), ..Default::default() }, &ctx, &Pose::default()).unwrap();
+        assert!(math::len(two.pos) < 1000.0, "{:?}", two.pos);
+        assert!(resolve(&t, &CameraSpec { shot: Some("speaker".into()), ..Default::default() }, &ctx, &Pose::default()).is_none());
     }
 }

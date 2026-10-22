@@ -53,8 +53,9 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum Phase {
+    #[default]
     Start,
     /// Waiting for the scene and the cast; then the act title (or not) and the line.
     Loading { since: f64, title: bool, effects: bool },
@@ -63,20 +64,14 @@ pub enum Phase {
     Ended,
 }
 
-impl Default for Phase {
-    fn default() -> Self {
-        Phase::Start
-    }
-}
-
 /// What Unreal was told to show for one story character.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Shown {
     pub visible: bool,
     pub offstage: bool,
-    pub pos: V3,
-    pub yaw: f64,
-    pub scale: f64,
+    pub pos: Option<V3>,
+    pub yaw: Option<f64>,
+    pub scale: Option<f64>,
     pub motion: Option<Motion>,
     pub face: Option<String>,
     pub look: Option<(String, Option<V3>)>,
@@ -91,6 +86,16 @@ pub enum Pending {
     Voice,
     Thumbnail,
     Other,
+}
+
+/// A shot's places waiting for the probe answers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProbeJob {
+    pub ids: Vec<u64>,
+    pub candidates: Vec<camera::Candidate>,
+    pub cut: bool,
+    pub chosen: Option<usize>,
+    pub asked: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -138,6 +143,7 @@ pub struct State {
     pub personalities: BTreeMap<String, i32>,
     pub settings: Settings,
     pub end_sent: bool,
+    pub probe: Option<ProbeJob>,
 }
 
 pub struct Director {
@@ -150,6 +156,7 @@ pub struct Director {
     pub st: State,
     inbox: Vec<Input>,
     out: Vec<Command>,
+    probes_out: Vec<Probe>,
     log: Vec<String>,
     facts: Facts,
 }
@@ -193,7 +200,7 @@ impl Director {
         let mut st = State { screen: "play".into(), next_id: 1, ..Default::default() };
         st.rng = Some(Rng::new(cfg.seed));
         st.settings = Self::read_settings(&cfg);
-        let mut d = Director { cfg, story, story_hash: hash(&bytes), tuning, expressions, words, st, inbox: Vec::new(), out: Vec::new(), log: Vec::new(), facts: Facts::default() };
+        let mut d = Director { cfg, story, story_hash: hash(&bytes), tuning, expressions, words, st, inbox: Vec::new(), out: Vec::new(), probes_out: Vec::new(), log: Vec::new(), facts: Facts::default() };
         if let Some(read) = d.read_file().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|t| serde_json::from_str::<std::collections::BTreeSet<String>>(&t).ok()) {
             d.st.progress.read = read;
         }
@@ -359,15 +366,14 @@ impl Director {
         }
         // The act's camera (or the scene's) before the first line moves it.
         let act = &self.story.acts[self.st.progress.act];
-        let ctx_pose = self.st.rig.current;
-        let pose = act
-            .camera
-            .as_ref()
-            .and_then(|c| self.resolve_camera(c, "", &ctx_pose))
-            .or_else(|| self.resolve_camera(&script::CameraSpec { shot: Some("studio".into()), ..Default::default() }, "", &ctx_pose));
-        if let Some(p) = pose {
-            self.st.rig.go(&self.tuning.camera, p, true, 1.0);
+        let mut candidates = act.camera.as_ref().map(|c| self.camera_candidates(c, "")).unwrap_or_default();
+        if candidates.is_empty() {
+            candidates = self.camera_candidates(&script::CameraSpec { shot: Some("studio".into()), ..Default::default() }, "");
+        }
+        if let Some(first) = candidates.first().copied() {
+            self.st.rig.go(&self.tuning.camera, first.pose, true, 1.0);
             self.st.camera_set = true;
+            self.probe(candidates, true);
         }
         if effects && self.st.progress.line == 0 {
             self.save_slot(SLOT_AUTO, false);
@@ -692,7 +698,7 @@ impl Director {
                 Op::SpawnOffstage { who: line.who.clone(), card: self.path(&def.card), outfit: def.outfit, pos: at },
                 Some(Pending::Offstage(line.who.clone())),
             );
-            s = Shown { offstage: true, visible: true, pos: at, scale: 1.0, ..Default::default() };
+            s = Shown { offstage: true, visible: true, pos: Some(at), scale: Some(1.0), ..Default::default() };
             self.cmd(Op::AutoBlink { who: line.who.clone(), on: false }, None);
             s.blink_taken = true;
         }
@@ -712,7 +718,7 @@ impl Director {
         self.st.shown.iter().filter(|(_, s)| s.visible && !s.offstage).map(|(w, _)| w.clone()).collect()
     }
 
-    fn resolve_camera(&self, spec: &script::CameraSpec, speaker: &str, current: &Pose) -> Option<Pose> {
+    fn camera_candidates(&self, spec: &script::CameraSpec, speaker: &str) -> Vec<camera::Candidate> {
         let present = self.present();
         let ctx = ShotContext {
             speaker,
@@ -721,29 +727,75 @@ impl Director {
             cameras: &self.st.cameras,
             active_camera: self.st.active_camera,
         };
-        camera::resolve(&self.tuning.camera, spec, &ctx, current)
+        camera::candidates(&self.tuning.camera, spec, &ctx, &self.st.rig.current)
     }
 
     fn line_camera(&mut self, line: &Line) {
         let act = &self.story.acts[self.st.progress.act];
         let Some((_, spec)) = script::camera_at(act, self.st.progress.line) else { return };
         let spec = spec.clone();
-        let current = self.st.rig.current;
         let cut = self.st.cut || spec.cut == Some(true) || self.skipping() || !self.st.camera_set;
         self.st.rig.waiting = None;
-        let Some(pose) = self.resolve_camera(&spec, &line.who, &current) else {
+        self.st.probe = None;
+        let shot = spec.shot.as_deref().is_some_and(|s| !s.starts_with("studio"));
+        let candidates = self.camera_candidates(&spec, &line.who);
+        let Some(first) = candidates.first().copied() else {
             // The people of the shot are still being placed: framed when they are there.
-            if spec.shot.as_deref().is_some_and(|s| !s.starts_with("studio")) {
+            if shot {
                 self.st.rig.waiting = Some(cut);
                 self.st.rig.reframe_for = 2.0;
                 self.st.cut = false;
             }
             return;
         };
-        self.st.rig.go(&self.tuning.camera, pose, cut, 1.0);
-        self.st.rig.reframe_for = if spec.shot.as_deref().is_some_and(|s| !s.starts_with("studio")) { 0.6 } else { 0.0 };
+        self.st.rig.go(&self.tuning.camera, first.pose, cut, 1.0);
+        self.st.rig.reframe_for = if shot { 0.6 } else { 0.0 };
         self.st.camera_set = true;
         self.st.cut = false;
+        self.probe(candidates, cut);
+    }
+
+    /// Asks Unreal which of a shot's places sees its subject without a wall in between.
+    fn probe(&mut self, candidates: Vec<camera::Candidate>, cut: bool) {
+        if candidates.len() < 2 {
+            return;
+        }
+        let mut ids = Vec::new();
+        for c in &candidates {
+            let id = self.st.next_id.max(1);
+            self.st.next_id = id + 1;
+            self.probes_out.push(Probe { id, from: c.from, to: c.pose.pos });
+            ids.push(id);
+        }
+        self.st.probe = Some(ProbeJob { ids, candidates, cut, chosen: None, asked: self.st.time });
+    }
+
+    /// The probe answers: the first place with a clear view (else the clearest), taken at once.
+    fn probe_answers(&mut self) {
+        let margin = self.tuning.camera.probe_margin;
+        let Some(job) = self.st.probe.as_mut().filter(|j| j.chosen.is_none()) else { return };
+        let clear: Vec<Option<f64>> = job.ids.iter().map(|id| self.facts.probes.iter().find(|p| p.id == *id).map(|p| p.clear)).collect();
+        if clear.iter().any(Option::is_none) {
+            // Unreal that cannot probe: the first place stays.
+            if self.st.time - job.asked > 1.0 {
+                job.chosen = Some(0);
+            }
+            return;
+        }
+        let reach: Vec<(f64, f64)> =
+            job.candidates.iter().zip(&clear).map(|(c, r)| (r.unwrap_or(0.0), math::len(math::sub(c.pose.pos, c.from)))).collect();
+        let pick = reach.iter().position(|(c, d)| *c >= d - margin).unwrap_or_else(|| {
+            (0..reach.len()).max_by(|a, b| (reach[*a].0 / reach[*a].1.max(1.0)).total_cmp(&(reach[*b].0 / reach[*b].1.max(1.0)))).unwrap_or(0)
+        });
+        job.chosen = Some(pick);
+        let (pose, cut) = (job.candidates[pick].pose, job.cut);
+        if pick != 0 {
+            if self.st.rig.moving() {
+                self.st.rig.retarget(pose);
+            } else {
+                self.st.rig.go(&self.tuning.camera, pose, cut, 1.0);
+            }
+        }
     }
 
     /// A shot is framed again while the people it frames are still being built or posed.
@@ -756,16 +808,22 @@ impl Director {
         let act = &self.story.acts[self.st.progress.act];
         let Some((_, spec)) = script::camera_at(act, self.st.progress.line) else { return };
         let spec = spec.clone();
-        let current = self.st.rig.current;
-        let Some(p) = self.resolve_camera(&spec, &line.who, &current) else { return };
+        let candidates = self.camera_candidates(&spec, &line.who);
+        if candidates.is_empty() {
+            return;
+        }
         match self.st.rig.waiting.take() {
             Some(cut) => {
                 let cut = cut || !self.st.camera_set;
-                self.st.rig.go(&self.tuning.camera, p, cut, 1.0);
+                self.st.rig.go(&self.tuning.camera, candidates[0].pose, cut, 1.0);
                 self.st.rig.reframe_for = 0.6;
                 self.st.camera_set = true;
+                self.probe(candidates, cut);
             }
-            None => self.st.rig.retarget(p),
+            None => {
+                let pick = self.st.probe.as_ref().and_then(|j| j.chosen).unwrap_or(0).min(candidates.len() - 1);
+                self.st.rig.retarget(candidates[pick].pose);
+            }
         }
     }
 
@@ -1054,7 +1112,7 @@ impl Director {
         match slot {
             SLOT_QUICK => self.words.t("ui.quick"),
             SLOT_AUTO => self.words.t("ui.auto_save"),
-            n => n.trim_start_matches('0').to_string(),
+            n => self.words.m("ui.slot", &[("n", Arg::Str(n.trim_start_matches('0').to_string()))]),
         }
     }
 
@@ -1104,10 +1162,7 @@ impl Director {
                 let dir = self.slot_dir(&slot);
                 let data = dir.as_ref().and_then(|d| std::fs::read_to_string(d.join("state.json")).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok());
                 let thumb = dir.as_ref().map(|d| d.join("thumb.jpg")).filter(|p| p.is_file()).map(|p| p.to_string_lossy().replace('\\', "/"));
-                let label = match slot.as_str() {
-                    SLOT_QUICK | SLOT_AUTO => self.slot_label(&slot),
-                    n => self.words.m("ui.slot", &[("n", Arg::Str(n.trim_start_matches('0').to_string()))]),
-                };
+                let label = self.slot_label(&slot);
                 match data {
                     Some(d) => json!({
                         "id": slot, "label": label, "empty": false, "thumb": thumb,
@@ -1250,6 +1305,7 @@ impl Director {
                 self.st.toast = None;
             }
         }
+        self.probe_answers();
         let paused = self.paused();
         match self.st.phase.clone() {
             Phase::Start => {
@@ -1388,6 +1444,7 @@ impl Director {
         if self.st.rig.fly.is_some() {
             f.camera_edit = Some(self.words.t("ui.camera_edit"));
         }
+        f.probes = std::mem::take(&mut self.probes_out);
         f.commands = std::mem::take(&mut self.out);
         f.log = std::mem::take(&mut self.log);
         f
@@ -1441,6 +1498,7 @@ impl Director {
     pub fn query(&self, q: &Value) -> Value {
         match q["q"].as_str().unwrap_or("state") {
             "saves" => json!({"slots": self.slots()}),
+            "facts" => json!({"facts": self.facts, "camera": self.st.rig.current, "cameras": self.st.cameras, "shown": self.st.shown}),
             "backlog" => json!(self.st.progress.backlog),
             "validate" => {
                 let errors = std::fs::read_to_string(&self.cfg.story)

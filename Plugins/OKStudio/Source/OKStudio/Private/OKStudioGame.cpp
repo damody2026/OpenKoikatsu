@@ -1591,10 +1591,25 @@ void UOKStudioGame::Zoom(float Steps)
 	Document->ActiveCamera = -1;
 }
 
+void UOKStudioGame::SetStoryMode(bool bOn)
+{
+	if (bOn == bStoryMode) return;
+	bStoryMode = bOn;
+	if (!PanelHost) return;
+	if (bOn) { PanelVisibility = PanelHost->GetVisibility(); PanelHost->SetVisibility(EVisibility::Collapsed); }
+	else PanelHost->SetVisibility(PanelVisibility);
+}
+
 void UOKStudioGame::UpdateViewer()
 {
 	if (!Viewer) return;
 	UCameraComponent* ViewerCamera = Viewer->GetCameraComponent();
+	// The story places the viewer itself.
+	if (bStoryMode)
+	{
+		if (SceneActor) SceneActor->PlaceBackground(Viewer->GetActorTransform(), ViewerCamera->FieldOfView);
+		return;
+	}
 	if (const UCameraComponent* Active = SceneActor ? SceneActor->ActiveCamera() : nullptr)
 	{
 		Viewer->SetActorTransform(Active->GetComponentTransform());

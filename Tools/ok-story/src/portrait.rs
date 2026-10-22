@@ -111,7 +111,7 @@ impl Portrait {
         let (Some(pivot), true) = (a.bone(&r.pivot), self.alpha > 0.0) else { return out };
         // Heading: how far the hips turned since the reference, applied to the facing then.
         let hips_now = a.bone("hips").map(|h| h.q()).unwrap_or(a.root.q());
-        let turn = hips_now.mul(Quat::from_array(r.hips).inverse());
+        let turn = hips_now.times(Quat::from_array(r.hips).inverse());
         let f = turn.rotate(r.facing);
         let yaw = if f[0] * f[0] + f[1] * f[1] > 1e-6 { yaw_of(f) } else { *self.yaw.get(&who).unwrap_or(&yaw_of(r.facing)) };
         self.yaw.insert(who.clone(), yaw);
@@ -136,7 +136,7 @@ impl Portrait {
         out.pos = pos;
         out.rot = rot.to_array();
         out.ortho_width = width;
-        out.capture = self.frame % t.every.max(1) as u64 == 0;
+        out.capture = self.frame.is_multiple_of(t.every.max(1) as u64);
         out
     }
 }
@@ -162,7 +162,7 @@ mod tests {
         a.bones.insert("spine03".into(), Xf { pos: [0.0, 0.0, 125.0], rot: q.to_array(), scale: 1.0 });
         // Turning or nodding the head moves it a little around the neck.
         let neck = [0.0, 0.0, 140.0];
-        let head_local = Quat::yaw_deg(head_turn).mul(Quat::from_rotator(nod, 0.0, 0.0)).rotate(q.rotate([0.0, 3.0, 12.0]));
+        let head_local = Quat::yaw_deg(head_turn).times(Quat::from_rotator(nod, 0.0, 0.0)).rotate(q.rotate([0.0, 3.0, 12.0]));
         a.bones.insert("head".into(), Xf { pos: math::add(neck, head_local), rot: q.to_array(), scale: 1.0 });
         a
     }

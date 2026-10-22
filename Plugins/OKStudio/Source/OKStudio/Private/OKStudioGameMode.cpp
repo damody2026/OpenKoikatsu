@@ -1,5 +1,6 @@
 #include "OKStudioGameMode.h"
 #include "OKStudioGame.h"
+#include "OKStoryPlayer.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/HUD.h"
@@ -38,5 +39,16 @@ void AOKStudioGameMode::StartPlay()
 		// Nothing to return to: closing the studio closes the editor.
 		Game->OnStopped.AddLambda([] { FPlatformMisc::RequestExit(false); });
 		UE_LOG(LogTemp, Display, TEXT("OK scene editor: started %s"), File.IsEmpty() ? TEXT("(new scene)") : *File);
+		// A galgame story on the studio (SceneEditor.cmd -Story): the editor closes with it.
+		FString Story;
+		if (FParse::Value(FCommandLine::Get(), TEXT("OKStory="), Story))
+		{
+			if (UOKStoryPlayer* Player = UOKStoryPlayer::Start(GetWorld(), Story, Error))
+			{
+				Player->bQuitOnEnd = true;
+				if (FParse::Param(FCommandLine::Get(), TEXT("OKStorySelfTest"))) Player->StartSelfTest(true);
+			}
+			else { UE_LOG(LogTemp, Error, TEXT("OK story: %s"), *Error); FPlatformMisc::RequestExit(false); }
+		}
 	});
 }

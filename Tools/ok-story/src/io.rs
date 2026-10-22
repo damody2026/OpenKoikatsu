@@ -83,6 +83,24 @@ pub struct Facts {
     pub voice: VoiceFacts,
     /// The view camera Unreal shows (to look at it).
     pub view: Option<Xf>,
+    /// Results of the probes the last frame asked for.
+    pub probes: Vec<ProbeResult>,
+}
+
+/// How far a probe could see from its start towards its end (cm; past the end: nothing in between).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProbeResult {
+    pub id: u64,
+    pub clear: f64,
+}
+
+/// A line of sight to measure: from a point towards another (the scene's characters do not block it).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Probe {
+    pub id: u64,
+    pub from: V3,
+    pub to: V3,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -116,9 +134,10 @@ pub enum Op {
         card: String,
         outfit: i32,
         scene_object: Option<i32>,
-        pos: V3,
-        yaw: f64,
-        scale: f64,
+        /// None: keep the scene's.
+        pos: Option<V3>,
+        yaw: Option<f64>,
+        scale: Option<f64>,
         visible: bool,
     },
     Motion { who: String, kind: i32, group: i32, category: i32, no: i32, blend: f64 },
@@ -249,6 +268,8 @@ pub struct Frame {
     pub toast: Option<String>,
     /// Free camera editing: its hint.
     pub camera_edit: Option<String>,
+    /// Lines of sight to measure this frame (answered in the next facts).
+    pub probes: Vec<Probe>,
     pub commands: Vec<Command>,
     pub log: Vec<String>,
 }
