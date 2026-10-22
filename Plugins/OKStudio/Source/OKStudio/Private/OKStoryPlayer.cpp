@@ -1205,6 +1205,8 @@ void UOKStoryPlayer::TickSelfTest()
 		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
 		{ TEXT("{\"type\":\"button\",\"id\":\"settings\"}"), TEXT("panel_settings") },
 		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"key\",\"key\":\"F7\"}"), TEXT("panel_outline") },
+		{ TEXT("{\"type\":\"key\",\"key\":\"F7\"}"), nullptr },
 		{ TEXT("{\"type\":\"key\",\"key\":\"Escape\"}"), TEXT("panel_menu") },
 		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
 	};

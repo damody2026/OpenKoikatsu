@@ -47,6 +47,7 @@ Tools/lua/lua.exe Tools/run_scene_editor.lua -Story Content/IndependentResources
 | 滾輪往上 | 回顧紀錄（Backlog） |
 | Esc | 選單，再按一次關閉 |
 | F5／F9 | 快速存檔／快速讀檔 |
+| F7 | 劇本目錄：列出所有幕與句（目前這句會標示出來），點一句就從那句開始播（不套用那句的效果）。選單裡也有入口 |
 | F8 | 相機編輯：WASD／QE 移動，滑鼠轉向，Shift 加速，Alt 減速，Enter 把目前視角存進這一句，Esc 取消 |
 
 ## 劇本格式 `.okstory.json`（schema 1）

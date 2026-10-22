@@ -407,6 +407,33 @@ int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const 
 				}
 			}
 		}
+		else if (Screen == TEXT("outline"))
+		{
+			// Acts and their lines from the top (scrolled by the wheel); a click on a line plays from it.
+			const TArray<TSharedPtr<FJsonValue>> Entries = OKStoryArr(Panel, TEXT("entries"));
+			const double RowH = Px * 1.35;
+			double Y = Body.Y - OutlineScroll;
+			for (const TSharedPtr<FJsonValue>& V : Entries)
+			{
+				const TSharedPtr<FJsonObject> E = V->AsObject();
+				if (Y + RowH > Body.Y && Y < PanelMax.Y - Px)
+				{
+					if (OKStoryFlag(E, TEXT("header")))
+						Text(L, OKStoryStr(E, TEXT("act")) + TEXT("  ") + OKStoryStr(E, TEXT("title")), FVector2D(Body.X, Y), float(Px * 0.9), Accent, true);
+					else
+					{
+						const bool bCurrent = OKStoryFlag(E, TEXT("current"));
+						if (bCurrent) Box(L, FVector2D(Body.X, Y - Px * 0.1), FVector2D(BodySize.X, RowH), FLinearColor(0.42f, 0.22f, 0.34f, 0.7f));
+						const FString Name = OKStoryStr(E, TEXT("name"));
+						const FString Row = FString::Printf(TEXT("%s  %s%s%s"), *OKStoryStr(E, TEXT("id")), *Name, Name.IsEmpty() ? TEXT("") : TEXT("："), *OKStoryStr(E, TEXT("text")))
+							+ (OKStoryNum(E, TEXT("choices")) > 0 ? TEXT("  ◆") : TEXT(""));
+						Text(L + 1, Row, FVector2D(Body.X + Px, Y), float(Px * 0.8), OKStoryFlag(E, TEXT("read")) || bCurrent ? TextColor : DimText);
+						Hits.Add({ FVector2D(Body.X, Y), FVector2D(Body.X + BodySize.X, Y + RowH), FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"jump:%s\"}"), *OKStoryStr(E, TEXT("id"))) });
+					}
+				}
+				Y += RowH;
+			}
+		}
 		else if (Screen == TEXT("settings"))
 		{
 			const TArray<TSharedPtr<FJsonValue>> Items = OKStoryArr(Panel, TEXT("items"));
@@ -470,6 +497,11 @@ FReply SOKStoryView::OnMouseWheel(const FGeometry& Geo, const FPointerEvent& E)
 	{
 		// Scrolling the log is the view's own business.
 		BacklogScroll = FMath::Max(0.f, BacklogScroll + E.GetWheelDelta() * float(Geo.GetLocalSize().Y) * 0.05f);
+		return FReply::Handled();
+	}
+	if (Screen == TEXT("outline"))
+	{
+		OutlineScroll = FMath::Max(0.f, OutlineScroll - E.GetWheelDelta() * float(Geo.GetLocalSize().Y) * 0.05f);
 		return FReply::Handled();
 	}
 	BacklogScroll = 0.f;

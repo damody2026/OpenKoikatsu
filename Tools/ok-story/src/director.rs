@@ -958,6 +958,13 @@ impl Director {
                     "H" if self.st.screen == "play" => self.st.hide_ui = !self.st.hide_ui,
                     "A" if self.st.screen == "play" => self.st.auto = !self.st.auto,
                     "F8" if self.st.screen == "play" && self.st.phase == Phase::Line => self.st.rig.start_fly(),
+                    "F7" => {
+                        if self.st.screen == "outline" {
+                            self.st.screen = "play".into();
+                        } else {
+                            self.open_screen("outline");
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1016,7 +1023,8 @@ impl Director {
             "auto" => self.st.auto = !self.st.auto,
             "skip" => self.st.skip = !self.st.skip,
             "hide" => self.st.hide_ui = true,
-            "menu" | "backlog" | "settings" => self.open_screen(head),
+            "menu" | "backlog" | "settings" | "outline" => self.open_screen(head),
+            "jump" => self.jump(arg),
             "save" | "load" => self.open_screen(head),
             "close" => self.st.screen = "play".into(),
             "page" => self.st.page = arg.parse().unwrap_or(0),
@@ -1493,7 +1501,7 @@ impl Director {
         match self.st.screen.as_str() {
             "menu" => json!({"items": [
                 {"id": "save", "label": w.t("ui.save")}, {"id": "load", "label": w.t("ui.load")},
-                {"id": "backlog", "label": w.t("ui.backlog")}, {"id": "settings", "label": w.t("ui.settings")},
+                {"id": "backlog", "label": w.t("ui.backlog")}, {"id": "outline", "label": w.t("ui.outline")}, {"id": "settings", "label": w.t("ui.settings")},
                 {"id": "close", "label": w.t("ui.close")}, {"id": "quit", "label": w.t("ui.quit")},
             ]}),
             "save" | "load" => {
@@ -1503,6 +1511,22 @@ impl Director {
                 let page = self.st.page.min(pages - 1);
                 let slots: Vec<Value> = all.into_iter().skip(page * per).take(per).collect();
                 json!({"mode": self.st.screen, "title": w.t(if self.st.screen == "save" { "ui.save" } else { "ui.load" }), "page": page, "pages": pages, "slots": slots, "close": w.t("ui.close")})
+            }
+            "outline" => {
+                // Every line of the story; a click plays from it (an editor's jump, effects not applied).
+                let current = self.line().map(|l| l.id.clone()).unwrap_or_default();
+                let mut entries = Vec::new();
+                for act in &self.story.acts {
+                    let title = act.title.as_ref().map(|t| t.get(&w.lang)).unwrap_or_default();
+                    entries.push(json!({"act": act.id, "title": title, "header": true}));
+                    for l in &act.lines {
+                        let name = self.story.characters.get(&l.who).map(|c| c.name.get(&w.lang)).unwrap_or_default();
+                        let text: String = text::graphemes(&l.text.get(&w.lang)).into_iter().take(36).collect();
+                        entries.push(json!({"id": l.id, "name": name, "text": text, "current": l.id == current,
+                            "read": self.st.progress.read.contains(&l.id), "choices": l.choices.len()}));
+                    }
+                }
+                json!({"title": w.t("ui.outline"), "close": w.t("ui.close"), "entries": entries})
             }
             "backlog" => {
                 let entries: Vec<Value> = self

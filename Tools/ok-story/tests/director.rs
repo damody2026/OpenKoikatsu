@@ -517,3 +517,20 @@ fn offstage_speakers_are_built_a_line_early() {
     assert!(s.ops("spawn_offstage").iter().any(|c| matches!(&c.op, Op::SpawnOffstage { who, .. } if who == "rin")));
     assert_eq!(s.line(), "a2.l2");
 }
+
+#[test]
+fn outline_lists_lines_and_jumps() {
+    let mut s = Stage::new("outline", |_| {});
+    s.run(0.2);
+    s.reach("a1.l2");
+    s.input(json!({"type": "key", "key": "F7"}));
+    s.tick(0.0);
+    assert_eq!(s.frame.screen, "outline");
+    let entries = s.frame.panel["entries"].as_array().unwrap().clone();
+    assert!(entries.iter().any(|e| e["id"] == "a1.l2" && e["current"] == true));
+    assert!(entries.iter().any(|e| e["header"] == true && e["act"] == "a3"));
+    s.input(json!({"type": "button", "id": "jump:a2.l1"}));
+    s.run(0.3);
+    assert_eq!(s.frame.screen, "play");
+    assert_eq!(s.line(), "a2.l1");
+}

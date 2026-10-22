@@ -19,7 +19,7 @@
 | G6 幕標題、表情、眨眼與視線 | 完成（換動作直接切換，沒有 crossfade） | 20 人 5 分鐘模擬測試 |
 | G7 存讀檔、Backlog、設定 | 完成（縮圖用場景擷取，不含 UI） | 自測依序打開存檔、讀檔、紀錄、設定、選單並截圖 |
 | G8 編輯 API 與 MCP | 完成：`edit.rs`、`ok-story-mcp`（劇本工具，加上透過 control 資料夾操作執行中的遊戲） | 單元測試；`game_state`／`game_screenshot` 對執行中的遊戲實測 |
-| G8 Scene Editor 劇本面板 | 未做：目前用 F8 相機編輯加 MCP 代替 | — |
+| G8 劇本面板 | 改做在播放器裡：F7 劇本目錄（點一句就跳過去播）、F8 存相機；Studio 編輯面板本身沒有加劇本頁 | `outline_lists_lines_and_jumps` 測試；自測截圖 |
 
 以下是原始計畫內容。
 
