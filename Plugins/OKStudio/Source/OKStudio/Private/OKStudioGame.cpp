@@ -63,6 +63,10 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "JsonObjectConverter.h"
+#include "EngineUtils.h"
+#include "Engine/PostProcessVolume.h"
+#include "GameFramework/HUD.h"
+#include "GameFramework/WorldSettings.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 #include "Engine/SkinnedAsset.h"
@@ -1284,6 +1288,25 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 		Game->bSyncPending = true;
 		if (!Game->bHistoryRestoring && !Game->bTimelinePlaying) { Game->bHistoryDirty = true; Game->LastChangeSeconds = FPlatformTime::Seconds(); }
 	});
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (APostProcessVolume* Volume = Cast<APostProcessVolume>(Actor))
+		{
+			if (Volume->bEnabled) { Volume->bEnabled = false; Game->DisabledWorldVolumes.Add(Volume); }
+		}
+		// Sky light, sky atmosphere and height fog are AInfo actors too: only the world settings, controllers and HUD stay.
+		else if (!Actor->IsHidden() && !Actor->IsA<AWorldSettings>() && !Actor->IsA<AController>() && !Actor->IsA<AHUD>())
+		{
+			UE_LOG(LogTemp, Display, TEXT("OK studio: world actor %s (%s) hidden while the studio runs"), *Actor->GetName(), *Actor->GetClass()->GetName());
+			Actor->SetActorHiddenInGame(true);
+			Game->HiddenWorldActors.Add(Actor);
+			// Lights, sky atmosphere, sky light and fog go by their component's visibility, not the actor's.
+			TInlineComponentArray<USceneComponent*> Components(Actor);
+			for (USceneComponent* Component : Components)
+				if (Component->IsVisible()) { Component->SetVisibility(false); Game->HiddenWorldComponents.Add(Component); }
+		}
+	}
 	FActorSpawnParameters Params;
 	Params.ObjectFlags = RF_Transient;
 	Game->SceneActor = World->SpawnActor<AOKSceneActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
@@ -1390,6 +1413,12 @@ void UOKStudioGame::Stop()
 	if (Viewer) Viewer->Destroy();
 	SceneActor = nullptr;
 	Viewer = nullptr;
+	for (const TWeakObjectPtr<AActor>& Actor : HiddenWorldActors) if (Actor.IsValid()) Actor->SetActorHiddenInGame(false);
+	for (const TWeakObjectPtr<USceneComponent>& Component : HiddenWorldComponents) if (Component.IsValid()) Component->SetVisibility(true);
+	HiddenWorldComponents.Reset();
+	for (const TWeakObjectPtr<APostProcessVolume>& Volume : DisabledWorldVolumes) if (Volume.IsValid()) Volume->bEnabled = true;
+	HiddenWorldActors.Reset();
+	DisabledWorldVolumes.Reset();
 	if (GRunning.Get() == this) GRunning = nullptr;
 	FSimpleMulticastDelegate Stopped = MoveTemp(OnStopped);
 	OnStopped.Clear();

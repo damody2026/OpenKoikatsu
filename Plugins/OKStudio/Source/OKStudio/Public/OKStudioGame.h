@@ -185,6 +185,11 @@ private:
 	bool bExportShotPending = false;
 	void TickExport();
 	TWeakObjectPtr<AActor> PreviousViewTarget;
+	/** The world's own actors (the gallery's floor, sky, lights, character) hidden and its post-process volumes off while
+	 *  the studio runs: a scene shows only itself, as in Studio and on the empty Entry map. Restored on Stop. */
+	TArray<TWeakObjectPtr<AActor>> HiddenWorldActors;
+	TArray<TWeakObjectPtr<USceneComponent>> HiddenWorldComponents;
+	TArray<TWeakObjectPtr<class APostProcessVolume>> DisabledWorldVolumes;
 	void UpdateViewer();
 	void SyncNow();
 	/** Whether a shown preview still draws stand-in materials or runtime shaders are compiling (pictures would miss it). */
