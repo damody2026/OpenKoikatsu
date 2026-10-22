@@ -224,6 +224,7 @@ private:
  const struct FOKStreetAppointment* AppointmentBefore(int64 UntilMinute) const;
  void TickAppointments();
  void SetAsideAbsentMeetings(); // OKStreetSocialAppointments.inl (series.rs appointments_cast)
+ bool PayEntry(const FString& Place,int32 MinutesInside); // OKStreetSocialEconomy.inl (shop.rs entry_fee); false: ask again next minute
  FString TaskListText() const;
  struct FSlateColor TaskListColor() const;
  void NavigateToNextAppointment();

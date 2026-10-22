@@ -12,6 +12,9 @@ pub struct Place {
     pub weekend_open: Vec<(f64, f64)>,
     /// Monday 0.
     pub closed_weekdays: Vec<i32>,
+    /// Admission (yuan), and the student price when there is one (0: none).
+    pub entry: i64,
+    pub entry_student: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -81,6 +84,8 @@ impl Catalog {
                     open: ranges(o, "open"),
                     weekend_open: ranges(o, "weekend_open"),
                     closed_weekdays: o.get("closed_weekdays").and_then(Value::as_array).map(|a| a.iter().filter_map(weekday_of).collect()).unwrap_or_default(),
+                    entry: o.get("entry").and_then(Value::as_i64).unwrap_or(0),
+                    entry_student: o.get("entry_student").and_then(Value::as_i64).unwrap_or(0),
                 },
             );
         }
@@ -273,7 +278,7 @@ mod tests {
     #[test]
     fn hours_overnight_and_closed_days() {
         let mut c = Catalog::default();
-        c.places.insert("bar".into(), Place { open: vec![(18.0, 26.0)], weekend_open: vec![], closed_weekdays: vec![0] });
+        c.places.insert("bar".into(), Place { open: vec![(18.0, 26.0)], weekend_open: vec![], closed_weekdays: vec![0], ..Default::default() });
         assert!(c.place_open("bar", 20.0, 2) && c.place_open("bar", 1.5, 2) && !c.place_open("bar", 3.0, 2));
         assert!(!c.place_open("bar", 20.0, 0), "closed on Mondays");
         assert!(c.place_open("nowhere", 3.0, 0));

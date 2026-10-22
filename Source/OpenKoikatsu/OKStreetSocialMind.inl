@@ -536,11 +536,16 @@ void AOKStreetSocialScene::ApplyMindExpression(int32 Character,const FString& Em
 // Food for her that she could not finish: her satiety, what she still has coming (her dishes on the table not yet
 // eaten, and in the cart) and this dish together over OKStreetOverfullSatiety. A drink always fits.
 bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Item) const{
+ // Whether she could still finish it is the rules' (shop.rs order_too_full): here only what she has coming.
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl))return false;
- float Coming=0.f;
- for(const auto& D:S.Table)if(D.ForHer&&D.Percent>0.f)if(const auto* I=S.Catalog.Find(D.ItemId))Coming+=OKStreetItemFill(*I)*D.Percent/100.f;
- for(const auto& C:S.Cart)if(C.ForHer)if(const auto* I=S.Catalog.Find(C.ItemId))Coming+=OKStreetItemFill(*I);
- return OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Satiety+Coming+OKStreetItemFill(Item)>OKStreetOverfullSatiety;
+ auto Dish=[](const FOKStreetCatalogItem& I,double Left){auto O=MakeShared<FJsonObject>();const float* V=I.Effects.Find(TEXT("satiety"));
+  O->SetNumberField(TEXT("fill"),V?*V:0.f);O->SetStringField(TEXT("category"),I.Category);O->SetBoolField(TEXT("drink"),I.IsDrink());O->SetNumberField(TEXT("left"),Left);return O;};
+ TArray<TSharedPtr<FJsonValue>> Coming;
+ for(const auto& D:S.Table)if(D.ForHer&&D.Percent>0.f)if(const auto* I=S.Catalog.Find(D.ItemId))Coming.Add(MakeShared<FJsonValueObject>(Dish(*I,D.Percent/100.f)));
+ for(const auto& C:S.Cart)if(C.ForHer)if(const auto* I=S.Catalog.Find(C.ItemId))Coming.Add(MakeShared<FJsonValueObject>(Dish(*I,1.0)));
+ auto Request=OKRulesRequest(TEXT("order_too_full"));Request->SetArrayField(TEXT("coming"),Coming);Request->SetObjectField(TEXT("item"),Dish(Item,1.0));
+ Request->SetNumberField(TEXT("satiety"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Satiety);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);return Out.IsValid()&&Out->GetBoolField(TEXT("too_full"));
 }
 
 FString AOKStreetSocialScene::MenuText(float Satiety) const{

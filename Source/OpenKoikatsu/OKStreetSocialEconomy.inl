@@ -634,3 +634,22 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
  if(Her!=INDEX_NONE)BuildHeroinePanel(Panel,Her); // the heroine module (OKStreetSocialHeroine.inl)
  Box->AddSlot().AutoHeight().Padding(4)[Panel];
 }
+// Admission as he walks in (the aquarium, the onsen): how much and who pays are the rules' (shop.rs entry_fee); she is
+// the girl walking with him. He cannot pay: back out of the door.
+bool AOKStreetSocialScene::PayEntry(const FString& Place,int32 MinutesInside){
+ auto& S=*State;const int32 Her=S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;const bool With=S.Manifest.Characters.IsValidIndex(Her)&&Her>0;
+ const FString HerId=With?OKStreetStableId(S.Manifest.Characters[Her]):FString();
+ auto Request=With?OKRulesHeroineRequest(S,TEXT("entry_fee"),HerId):OKRulesRequest(TEXT("entry_fee"));OKRulesPutExt(S,Request);
+ Request->SetStringField(TEXT("place"),Place);Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("minutes_inside"),MinutesInside);
+ Request->SetStringField(TEXT("him_dept"),S.Store.PlayerAcademic.Dept);Request->SetStringField(TEXT("him_status"),S.Store.PlayerAcademic.Status);
+ if(With){const auto* A=S.Store.Academics.Find(HerId);Request->SetStringField(TEXT("her_status"),A?A->Status:FString());Request->SetStringField(TEXT("payer"),PayAgreed(Her));}
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return true;
+ bool bWait=false;if(Out->TryGetBoolField(TEXT("wait"),bWait)&&bWait)return false;if(Out->GetNumberField(TEXT("fee"))<=0)return true;
+ const FString Notice=Out->GetStringField(TEXT("notice"));
+ if(!Out->GetBoolField(TEXT("ok"))){
+  if(const FOKStreetPlace* P=OKStreetFindPlace(Place)){S.Male=P->Door;S.EntryPlace.Reset();}
+  S.FreeTalkNotice=Notice;S.Message=Notice;UE_LOG(LogTemp,Display,TEXT("Street entry: %s refused (%s)"),*Place,*Notice);RefreshUI();return true;}
+ auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);ApplyRulesEffects(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return true;FlushRulesEffects();
+ if(With)S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Notice}}));
+ S.FreeTalkNotice=Notice;UE_LOG(LogTemp,Display,TEXT("Street entry: %s %s"),*Place,*Notice);RefreshUI();return true;
+}

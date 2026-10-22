@@ -126,7 +126,7 @@ mod tests {
 
     fn cat() -> Catalog {
         let mut c = Catalog::default();
-        c.places.insert("cafe".into(), Place { open: vec![(10.0, 22.0)], weekend_open: vec![], closed_weekdays: vec![] });
+        c.places.insert("cafe".into(), Place { open: vec![(10.0, 22.0)], weekend_open: vec![], closed_weekdays: vec![], ..Default::default() });
         c
     }
 
