@@ -454,6 +454,8 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 		// IF_PP rejects null and LerpTo(...,0) leaves the prior blend intact.
 		S.ColorGradingLUT = OKStudioIdentityGradeLut();
 		S.ColorGradingIntensity = 1.f;
+		// The vignette is Studio's own formula inside the grading pass.
+		S.VignetteIntensity = 0.f;
 	}
 	// Fog, ambient occlusion and sun shafts: Studio's own formulas in one post-process material.
 	OKStudioApplyScenePostMaterial(*this, S);

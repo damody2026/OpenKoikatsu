@@ -143,7 +143,7 @@ public sealed partial class GamePoseProbe {
                     writer.WriteLine("registered_shader\t" + item.Key + "\t" + (shader == null ? 0 : shader.GetInstanceID()));
                 }
             }
-            foreach (string key in new[] { "_ambientshadowG", "_LineColorG", "_LightColor0", "_WorldSpaceLightPos0" })
+            foreach (string key in new[] { "_ambientshadowG", "_LineColorG", "_LightColor0", "_WorldSpaceLightPos0", "unity_Lightmap_HDR", "unity_DynamicLightmap_HDR", "unity_SpecCube0_HDR", "unity_ColorSpaceDouble", "unity_ColorSpaceDielectricSpec", "unity_ColorSpaceLuminance" })
                 writer.WriteLine("global_color\t" + key + "\t" + Shader.GetGlobalVector(key).ToString("R"));
             foreach (string key in new[] { "_KanoVerShift", "_linewidthG", "_FaceNormalG", "_FaceShadowG" })
                 writer.WriteLine("global_float\t" + key + "\t" + Shader.GetGlobalFloat(key).ToString("R"));
@@ -167,10 +167,31 @@ public sealed partial class GamePoseProbe {
             writer.WriteLine("lightmaps_mode\t" + LightmapSettings.lightmapsMode);
             for (int lm = 0; lm < LightmapSettings.lightmaps.Length; ++lm) {
                 var data = LightmapSettings.lightmaps[lm];
+                // OK_PROBE_LIGHTMAPS=1: each lightmap texture as the GPU samples it (sRGB colour decoded to linear,
+                // RGBM alpha as stored), blitted into a float target: <output>.lightmap<i>.<color|direction>.rgba32f.
+                if (Environment.GetEnvironmentVariable("OK_PROBE_LIGHTMAPS") == "1")
+                    foreach (var slot in new[] { data.lightmapColor, data.lightmapDir }) {
+                        if (slot == null) continue;
+                        var rt = RenderTexture.GetTemporary(slot.width, slot.height, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+                        var read = new Texture2D(slot.width, slot.height, TextureFormat.RGBAFloat, false, true);
+                        var previous = RenderTexture.active;
+                        try {
+                            Graphics.Blit(slot, rt);
+                            RenderTexture.active = rt;
+                            read.ReadPixels(new Rect(0, 0, slot.width, slot.height), 0, 0);
+                            read.Apply();
+                            File.WriteAllBytes(output + ".lightmap" + lm + "." + (slot == data.lightmapColor ? "color" : "direction") + ".rgba32f", read.GetRawTextureData());
+                        } finally {
+                            RenderTexture.active = previous;
+                            RenderTexture.ReleaseTemporary(rt);
+                            UnityEngine.Object.Destroy(read);
+                        }
+                    }
                 foreach (var slot in new[] { data.lightmapColor, data.lightmapDir }) {
                     if (slot == null) continue;
                     var colorSpaceProperty = typeof(Texture).GetProperty("activeTextureColorSpace", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    writer.WriteLine("lightmap_texture\t" + lm + "\t" + (slot == data.lightmapColor ? "color" : "direction") + "\t" + slot.name + "\t" + slot.format + "\t" + slot.width + "\t" + slot.height + "\t" + (colorSpaceProperty == null ? "unknown" : colorSpaceProperty.GetValue(slot, null).ToString()));
+                    writer.WriteLine("lightmap_texture\t" + lm + "\t" + (slot == data.lightmapColor ? "color" : "direction") + "\t" + slot.name + "\t" + slot.format + "\t" + slot.width + "\t" + slot.height + "\t" + (colorSpaceProperty == null ? "unknown" : colorSpaceProperty.GetValue(slot, null).ToString())
+                        + "\tmips=" + slot.mipmapCount + "\tfilter=" + slot.filterMode + "\taniso=" + slot.anisoLevel + "\tbias=" + slot.mipMapBias.ToString("R") + "\twrap=" + slot.wrapMode);
                 }
             }
             Texture defaultProbe = ReflectionProbe.defaultTexture;
@@ -190,7 +211,15 @@ public sealed partial class GamePoseProbe {
             foreach (Renderer renderer in UnityEngine.Object.FindObjectsOfType<Renderer>()) {
                 if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
                 string rendererPath = PathOf(renderer.transform);
-                writer.WriteLine("renderer_lighting\t" + rendererPath + "\t" + renderer.lightmapIndex + "\t" + renderer.lightProbeUsage + "\t" + renderer.bounds.center.ToString("R"));
+                writer.WriteLine("renderer_lighting\t" + rendererPath + "\t" + renderer.lightmapIndex + "\t" + renderer.lightProbeUsage + "\t" + renderer.bounds.center.ToString("R") + "\t" + renderer.lightmapScaleOffset.ToString("R"));
+                // The reflection probes Unity blends for this renderer (none: the default/skybox reflection).
+                {
+                    var blend = new System.Collections.Generic.List<UnityEngine.Rendering.ReflectionProbeBlendInfo>();
+                    renderer.GetClosestReflectionProbes(blend);
+                    var names = new System.Collections.Generic.List<string>();
+                    foreach (var entry in blend) names.Add(PathOf(entry.probe.transform) + "@" + entry.weight.ToString("R"));
+                    writer.WriteLine("renderer_reflection\t" + rendererPath + "\t" + renderer.reflectionProbeUsage + "\t" + renderer.bounds.min.ToString("R") + "\t" + renderer.bounds.max.ToString("R") + "\t" + String.Join(";", names.ToArray()));
+                }
                 foreach (Material material in renderer.sharedMaterials) {
                     if (material == null) continue;
                     string prefix = rendererPath + "\t" + material.name;
@@ -334,6 +363,72 @@ public sealed partial class GamePoseProbe {
                     try { CaptureMain(main, output + ".no-" + e.GetType().Name + ".png"); }
                     finally { e.enabled = true; }
                 }
+                // Lighting stages, every image effect off: without the map's own lights (its sun), then without
+                // Studio's character light, so baked/indirect light can be told from realtime light.
+                foreach (Behaviour e in enabled) e.enabled = false;
+                try {
+                    foreach (string group in new[] { "Map/", "StudioScene/Light Chara/" }) {
+                        var lights = new System.Collections.Generic.List<Light>();
+                        foreach (Light light in UnityEngine.Object.FindObjectsOfType<Light>())
+                            if (light.enabled && light.gameObject.activeInHierarchy && PathOf(light.transform).StartsWith(group)) lights.Add(light);
+                        foreach (Light light in lights) light.enabled = false;
+                        try { CaptureMain(main, output + ".post-off.no-" + (group.StartsWith("Map") ? "maplights" : "charalight") + ".png"); }
+                        finally { foreach (Light light in lights) light.enabled = true; }
+                    }
+                    // OK_PROBE_HIDE=<path part>[,...]: those renderers hidden (which pixels they cover).
+                    // OK_PROBE_WHITE=<path part>[,...]: their materials' _MainTex and _Color white (the light they receive).
+                    foreach (string mode in new[] { "HIDE", "WHITE" }) {
+                        string list = Environment.GetEnvironmentVariable("OK_PROBE_" + mode);
+                        if (String.IsNullOrEmpty(list)) continue;
+                        var parts = list.Split(',');
+                        var restore = new System.Collections.Generic.List<Action>();
+                        foreach (Renderer renderer in UnityEngine.Object.FindObjectsOfType<Renderer>()) {
+                            if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+                            string rendererPath = PathOf(renderer.transform);
+                            if (!Array.Exists(parts, p => rendererPath.Contains(p))) continue;
+                            Renderer target = renderer;
+                            if (mode == "HIDE") { target.enabled = false; restore.Add(() => target.enabled = true); continue; }
+                            Material[] saved = target.sharedMaterials;
+                            var white = new Material[saved.Length];
+                            for (int m = 0; m < saved.Length; ++m) {
+                                if (saved[m] == null) continue;
+                                white[m] = new Material(saved[m]);
+                                if (white[m].HasProperty("_MainTex")) white[m].SetTexture("_MainTex", Texture2D.whiteTexture);
+                                if (white[m].HasProperty("_Color")) white[m].SetColor("_Color", Color.white);
+                            }
+                            target.sharedMaterials = white;
+                            restore.Add(() => { target.sharedMaterials = saved; foreach (Material m in white) if (m != null) UnityEngine.Object.Destroy(m); });
+                        }
+                        try {
+                            CaptureMain(main, output + ".post-off." + mode.ToLowerInvariant() + ".png");
+                            // The same without environment reflections (probes off, a black default reflection).
+                            if (mode == "WHITE") {
+                                var probes = new System.Collections.Generic.List<ReflectionProbe>();
+                                foreach (ReflectionProbe probe in UnityEngine.Object.FindObjectsOfType<ReflectionProbe>()) if (probe.enabled) { probe.enabled = false; probes.Add(probe); }
+                                var savedMode = RenderSettings.defaultReflectionMode; var savedCube = RenderSettings.customReflection;
+                                var black = new Cubemap(4, TextureFormat.RGBA32, false);
+                                foreach (CubemapFace face in new[] { CubemapFace.PositiveX, CubemapFace.NegativeX, CubemapFace.PositiveY, CubemapFace.NegativeY, CubemapFace.PositiveZ, CubemapFace.NegativeZ })
+                                    black.SetPixels(new Color[16], face);
+                                black.Apply();
+                                RenderSettings.defaultReflectionMode = UnityEngine.Rendering.DefaultReflectionMode.Custom;
+                                RenderSettings.customReflection = black;
+                                try { CaptureMain(main, output + ".post-off.white-noreflect.png"); }
+                                finally {
+                                    RenderSettings.defaultReflectionMode = savedMode; RenderSettings.customReflection = savedCube;
+                                    foreach (ReflectionProbe probe in probes) probe.enabled = true;
+                                    UnityEngine.Object.Destroy(black);
+                                }
+                                // White and without the map's own lights: baked light alone (plus reflections).
+                                var mapLights = new System.Collections.Generic.List<Light>();
+                                foreach (Light light in UnityEngine.Object.FindObjectsOfType<Light>())
+                                    if (light.enabled && light.gameObject.activeInHierarchy && PathOf(light.transform).StartsWith("Map/")) { light.enabled = false; mapLights.Add(light); }
+                                try { CaptureMain(main, output + ".post-off.white-nomaplights.png"); }
+                                finally { foreach (Light light in mapLights) light.enabled = true; }
+                            }
+                        }
+                        finally { foreach (Action undo in restore) undo(); }
+                    }
+                } finally { foreach (Behaviour e in enabled) e.enabled = true; }
             }
         }
         File.WriteAllText(output, "PASS: native scene audit completed");

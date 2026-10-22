@@ -14,6 +14,9 @@ parser:flag("--frame-mesh")
 parser:flag("--mesh-snapshot")
 parser:flag("--input-streams")
 parser:flag("--stages")
+parser:flag("--lightmaps")
+parser:opt("--hide")
+parser:opt("--white")
 local a = parser:parse(arg)
 assert(not a.mesh_snapshot or a.gpu_probe, "Mesh snapshots need --gpu-probe and --mesh")
 assert(not a.input_streams or a.gpu_probe, "Input streams need --gpu-probe and --mesh")
@@ -50,6 +53,9 @@ local success, err = xpcall(function()
         fs.setenv("OK_PROBE_STUDIO_SCENE", scene)
         fs.setenv("OK_GAME_POSE_OUTPUT", prefix)
         if a.stages then fs.setenv("OK_PROBE_CAPTURE_STAGES", "1") end
+        if a.lightmaps then fs.setenv("OK_PROBE_LIGHTMAPS", "1") end
+        if a.hide then fs.setenv("OK_PROBE_HIDE", a.hide) end
+        if a.white then fs.setenv("OK_PROBE_WHITE", a.white) end
         if a.gpu_probe then
             fs.setenv("OK_PROBE_GPU_LIBRARY", path.abs(a.gpu_probe))
             fs.setenv("OK_PROBE_GPU_MESH", a.mesh)

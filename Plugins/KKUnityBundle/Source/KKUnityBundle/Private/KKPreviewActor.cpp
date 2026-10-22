@@ -2632,6 +2632,12 @@ return Base.rgb * sh;
 			}
 			FString Code = bStandardLinear ? TEXT("float3 a = max(Albedo, 0.0);\nfloat3 total = 0;\n")
 				: TEXT("float3 a = pow(max(Albedo, 0.0), 1.0 / 2.2);\nfloat3 total = 0;\n");
+			// OK_LIGHTMAP_DIAG (diagnostic, Standard map parts), compared against the native probe's --white stages:
+			//   white = white albedo (the light the surface receives), whitenoenv = also no environment reflection,
+			//   env = the sampled environment alone, uv = lightmap coordinate (r, g) and (index + 1) / 4 (b),
+			//   dir / dirw = the sampled direction texture's rgb / alpha.
+			const FString LightmapDiag = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LIGHTMAP_DIAG"));
+			if (LightmapDiag.StartsWith(TEXT("white"))) Code += TEXT("a = 1.0;\n");
 			Code += FString::Printf(TEXT("float metallic = %s;\n"), *Metallic);
 			if (Shadow->LightmapTex)
 			{
@@ -2660,6 +2666,18 @@ return Base.rgb * sh;
 					Code += TEXT("float3 lmRgb = lerp(Lm.rgb / 12.92, pow((Lm.rgb + 0.055) / 1.055, 2.4), step(0.04045, Lm.rgb));\ntotal += pow(5.0 * Lm.a, 2.2) * lmRgb * a * ");
 				else Code += TEXT("total += 5.0 * Lm.a * Lm.rgb * a * ");
 				Code += FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) + DirectionFactor + TEXT(";\n");
+				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dir")) Code += TEXT("return LmDirection.rgb;\n");
+				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dirw")) Code += TEXT("return LmDirection.aaa;\n");
+				if (LightmapDiag == TEXT("uv"))
+				{
+					auto* LmUV = NewObject<UMaterialExpressionTextureCoordinate>(Mat);
+					LmUV->CoordinateIndex = 1;
+					Input(TEXT("LmUV"), LmUV);
+					// Blue: (lightmap index + 1) / 4, which lightmap the texel is in.
+					int32 LightmapIndexValue = -1;
+					for (const TPair<int32, UTexture2D*>& Entry : Shadow->Lightmaps) if (Entry.Value == Shadow->LightmapTex) LightmapIndexValue = Entry.Key;
+					Code += FString::Printf(TEXT("return float3(saturate(LmUV.x), saturate(LmUV.y), %s);\n"), *FString::SanitizeFloat((LightmapIndexValue + 1) / 4.f));
+				}
 			}
             if (bStandardLinear && !Shadow->LightmapTex)
             {
@@ -2727,7 +2745,8 @@ total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1
                     const int32 End=ReflectionCode.Find(TEXT("float3 specColor ="));
                     ReflectionCode=ReflectionCode.Left(Begin)+TEXT("float pr=1.0-smooth;float lod=pr*(1.7-.7*pr)*6.0;float3 env=TextureCubeSampleLevel(NativeCube,NativeCubeSampler,d,lod).rgb;Intensity=NativeHDR.r;\n")+ReflectionCode.Mid(End);
                 }
-                Code+=ReflectionCode;
+				if (LightmapDiag != TEXT("whitenoenv")) Code+=ReflectionCode;
+				if (LightmapDiag == TEXT("env")) Code += TEXT("total = env * Intensity;\n");
 			}
 			Decode->Code = Code + (bStandardLinear ? TEXT("return max(total, 0.0);") : TEXT("return pow(max(total, 0.0), 2.2);"));
 			Mat->GetExpressionCollection().AddExpression(Decode);
@@ -2743,6 +2762,9 @@ total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1
 				LmEd->EmissiveColor.OutputIndex = 0;
 			}
 			else LmEd->EmissiveColor.Expression = Decode;
+			// The uv diagnostic shows only the coordinate: no lit base colour on top of it.
+			if (LightmapDiag == TEXT("uv") || LightmapDiag.StartsWith(TEXT("dir")))
+			{ LmEd->BaseColor.Expression = nullptr; LmEd->EmissiveColor.Expression = Decode; }
 		}
 	}
 	// An equal graph finalized before (OK_MATERIAL_DEDUPE=1) is used as is.
@@ -4218,6 +4240,8 @@ void AKKPreviewActor::BindSourceReflectionProbes(TFunctionRef<UTexture*(int32,FL
             UTexture* Target=Texture;if(!Target&&M->Parent)M->Parent->GetTextureParameterValue(FMaterialParameterInfo(TEXT("unity_SpecCube0")),Target);
             if(Target&&Current!=Target)M->SetTextureParameterValue(TEXT("unity_SpecCube0"),Target);
             M->SetVectorParameterValue(TEXT("unity_SpecCube0_HDR"),HDR);
+            static const bool bAudit=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT"))==TEXT("1");
+            if(bAudit)UE_LOG(LogTemp,Display,TEXT("OK reflection probe bind mesh=%s slot=%d node=%d cube=%s"),*Mesh->GetName(),Slot,Node,Target?*Target->GetName():TEXT("none"));
         }
     }
 }
