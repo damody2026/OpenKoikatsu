@@ -147,10 +147,10 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
  // He hands her money to keep (pays her back what she paid for him): her "I'll take it" used to move nothing.
  if(Kind==TEXT("give_money")){const int64 Amount=Arg.IsEmpty()?0:MoneyIn(Arg);
   if(Amount<=0){UE_LOG(LogTemp,Display,TEXT("Street act: give_money without an amount (%s)"),*Arg);return true;}
-  if(S.Store.PlayerCash<Amount){S.FreeTalkNotice=OKT(TEXT("ui.economy.not_enough_cash_you"));RefreshUI();return true;}
-  auto Settle=OKRulesHeroineRequest(S,TEXT("give_money_settle"),OKStreetStableId(S.Manifest.Characters[Girl]));Settle->SetNumberField(TEXT("amount"),double(Amount));Settle->SetStringField(TEXT("name"),S.Manifest.Characters[Girl].Name);
-  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Settle)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
-  UE_LOG(LogTemp,Display,TEXT("Street act: give_money %lld to actor=%d"),Amount,Girl);RefreshUI();return true;}
+  // What his money does is the judge's reading of both lines: "I'll lend you fifty" was her give_money and the judge's
+  // he_lends at once, and he paid a hundred. It waits for the verdict (GiveMoneyNow, or dropped for a loan).
+  S.PendingGiveMoney.Add(Girl,TPair<int64,double>(Amount,FPlatformTime::Seconds()));
+  UE_LOG(LogTemp,Display,TEXT("Street act: give_money %lld to actor=%d waits for the judge"),Amount,Girl);return true;}
  // Only a posing session takes a photo: not in the middle of a meal, a drink, a book or the phone.
  if(Kind==TEXT("take_photo")){
   if(S.Pair.Partner!=INDEX_NONE&&S.Pair.Phase==1&&!S.Pair.Seated&&!S.Pair.Drink&&!S.Pair.Meal&&!S.Pair.PhoneUse&&!S.Pair.Watermelon&&!S.Pair.Splash&&!S.Pair.Read&&!S.Pair.Bath&&!S.Pair.NoProps){if(!S.Pair.CapturePending)CapturePhoto();}
@@ -215,4 +215,12 @@ void AOKStreetSocialScene::BreakUpSaid(int32 Character){
  ApplyRulesEffects(Candidate,*Answer);
  if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
  UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d broke up with him in her own words"),Character);RefreshUI();
+}
+// He hands her money to keep (pays her back what she paid for him), once the judge has not read it as a loan.
+void AOKStreetSocialScene::GiveMoneyNow(int32 Girl,int64 Amount){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl)||Amount<=0)return;
+ if(S.Store.PlayerCash<Amount){S.FreeTalkNotice=OKT(TEXT("ui.economy.not_enough_cash_you"));RefreshUI();return;}
+ auto Settle=OKRulesHeroineRequest(S,TEXT("give_money_settle"),OKStreetStableId(S.Manifest.Characters[Girl]));Settle->SetNumberField(TEXT("amount"),double(Amount));Settle->SetStringField(TEXT("name"),S.Manifest.Characters[Girl].Name);
+ if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Settle)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
+ UE_LOG(LogTemp,Display,TEXT("Street act: give_money %lld to actor=%d"),Amount,Girl);RefreshUI();
 }
