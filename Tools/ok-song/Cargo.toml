@@ -1,0 +1,17 @@
+[package]
+name = "ok-song"
+version = "0.1.0"
+edition = "2021"
+description = "Heroine singing for OpenKoikatsu: song jobs (generate, separate, convert to her voice, mix), cache and local HTTP service"
+
+[dependencies]
+anyhow = "1"
+hound = "3.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tiny_http = "0.12"
+vorbis_rs = "0.5"
+
+[profile.release]
+debug = 1
