@@ -68,7 +68,13 @@ bool AOKStreetSocialScene::SkipToNextMorning(){
  const double Was=S.ClockStartHours,WasWall=S.ClockStartWall,WasLast=S.CalendarLastHours;
  const double Wake=double(SkipWakeMinute()%1440)/60.0; // 07:00, earlier for a morning meeting
  S.ClockStartHours=Wake;S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;S.CalendarLastHours=Wake;
- if(NextDay())return true;
+ if(NextDay()){
+  // He slept somewhere: where there is no bed for him (the street outside her dorm, a shop) he wakes in his own dorm,
+  // not standing the whole night at the girls' dorm door he walked her to.
+  static const TSet<FString> Beds={TEXT("boys_dorm"),TEXT("hotel"),TEXT("lodge"),TEXT("minshuku"),TEXT("onsen")};
+  if(!Beds.Contains(PlaceHere(S.Male)))if(const FOKStreetPlace* Dorm=OKStreetFindPlace(TEXT("boys_dorm"))){
+   S.Male=PlaceInsideSpot(*Dorm);UE_LOG(LogTemp,Display,TEXT("Street skip: he wakes in his dorm (%s)"),*S.Male.ToCompactString());}
+  return true;}
  S.ClockStartHours=Was;S.ClockStartWall=WasWall;S.CalendarLastHours=WasLast;
  return false;
 }
