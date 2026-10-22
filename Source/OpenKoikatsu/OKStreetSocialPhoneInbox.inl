@@ -408,7 +408,9 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
    .OnTextCommitted_Lambda([Weak](const FText& T,ETextCommit::Type How){if(Weak.IsValid()&&How==ETextCommit::OnEnter){Weak->State->PhoneDraft=T.ToString();Weak->PhoneSend();}})]
   +SHorizontalBox::Slot().AutoWidth().Padding(4,0)[OKFinButton(Weak,S.FreeTalkBusy&&S.RemotePeer==Girl?FString(OKT(TEXT("ui.phone_inbox.peer_typing"))):FString(OKT(TEXT("ui.phone_inbox.send_button"))),[Weak](){Weak->PhoneSend();},!S.FreeTalkBusy)];
  // The thread opens at its newest message. The album tab shows his photos instead (send one to her from there).
- TSharedRef<SScrollBox> Scroll=SNew(SScrollBox).ScrollBarAlwaysVisible(true)+SScrollBox::Slot()[S.PhoneTab==TEXT("album")?BuildPhotoAlbum(Girl):StaticCastSharedRef<SWidget>(Lines)];if(!Log&&S.PhoneTab!=TEXT("album"))Scroll->ScrollToEnd();
+ TSharedRef<SScrollBox> Scroll=SNew(SScrollBox).ScrollBarAlwaysVisible(true)+SScrollBox::Slot()[S.PhoneTab==TEXT("album")?BuildPhotoAlbum(Girl):StaticCastSharedRef<SWidget>(Lines)];if(!Log&&S.PhoneTab!=TEXT("album")){Scroll->ScrollToEnd();
+  // Once more after the first layout: the bubbles wrap only then, and the newest one was left below the fold.
+  TWeakPtr<SScrollBox> WeakScroll=Scroll;Scroll->RegisterActiveTimer(0.05f,FWidgetActiveTimerDelegate::CreateLambda([WeakScroll](double,float){if(const auto P=WeakScroll.Pin())P->ScrollToEnd();return EActiveTimerReturnType::Stop;}));}
  return SNew(SHorizontalBox)
   +SHorizontalBox::Slot().AutoWidth().Padding(0,0,10,0)[SNew(SBox).WidthOverride(220)[SNew(SScrollBox)+SScrollBox::Slot()[People]]]
   +SHorizontalBox::Slot().FillWidth(1)[SNew(SVerticalBox)
