@@ -1,0 +1,20 @@
+{
+  "reference": "Native Amplify Color HDR/Linear; Lut_Amount, blend=0, exposure=1, tone mapper disabled",
+  "samples": 43,
+  "native_grid_samples": 4096,
+  "native_inputs": [
+    {
+      "path": "Saved\\Tests\\LightingLutNativeGrade\\Scene1.grade-linear-input.rgba32f",
+      "bytes": 65536,
+      "sha256": "bb330cbedf2ca0720e6d575dc0e23ce6015b1c9b0aade7c928dec3a82b94bf9f"
+    },
+    {
+      "path": "Saved\\Tests\\LightingLutNativeGrade\\Scene1.grade-linear-output.rgba32f",
+      "bytes": 65536,
+      "sha256": "794db7bf1e00edd2211e5a660b4f19802b50d898e01c41eeb0ff7b71421ecff9"
+    }
+  ],
+  "csv": "native-grade-comparison.csv",
+  "actual_capture_max_display_error": 0.01568627450980392,
+  "max_linear_error": 0.0166015625
+}

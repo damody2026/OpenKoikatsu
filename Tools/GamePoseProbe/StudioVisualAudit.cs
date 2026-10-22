@@ -7,6 +7,31 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 public sealed partial class GamePoseProbe {
+    // Exercise the installed post shader with known linear-light inputs. This is a
+    // numeric oracle, independent of scene geometry, camera pose and screenshots.
+    private static void WriteStudioGradeSamples(AmplifyColorBase grade, string output) {
+        const int size = 16, width = size * size, height = size;
+        var input = new Texture2D(width, height, TextureFormat.RGBAFloat, false, true);
+        var source = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+        var target = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+        var readback = new Texture2D(width, height, TextureFormat.RGBAFloat, false, true);
+        var active = RenderTexture.active; bool write = GL.sRGBWrite;
+        try {
+            var colors = new Color[width * height];
+            for (int g = 0; g < size; ++g) for (int b = 0; b < size; ++b) for (int r = 0; r < size; ++r)
+                colors[g * width + b * size + r] = new Color(r / 15f, g / 15f, b / 15f, 1).linear;
+            input.SetPixels(colors); input.Apply(); GL.sRGBWrite = false;
+            Graphics.Blit(input, source);
+            typeof(AmplifyColorBase).GetMethod("OnRenderImage", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(grade, new object[] { source, target });
+            RenderTexture.active = target; readback.ReadPixels(new Rect(0, 0, width, height), 0, 0); readback.Apply();
+            File.WriteAllBytes(output + ".grade-linear-input.rgba32f", input.GetRawTextureData());
+            File.WriteAllBytes(output + ".grade-linear-output.rgba32f", readback.GetRawTextureData());
+        } finally {
+            RenderTexture.active = active; GL.sRGBWrite = write;
+            RenderTexture.ReleaseTemporary(source); RenderTexture.ReleaseTemporary(target);
+            UnityEngine.Object.Destroy(input); UnityEngine.Object.Destroy(readback);
+        }
+    }
     [DllImport("kernel32", EntryPoint = "LoadLibraryW", CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadShaderProbeLibrary(string path);
     [DllImport("kernel32", EntryPoint = "GetProcAddress", CharSet = CharSet.Ansi)]
@@ -75,8 +100,13 @@ public sealed partial class GamePoseProbe {
             yield break;
         }
         for (int frame = 0; frame < 120; ++frame) yield return null;
+        // Studio's FK, face updates and attachment/dynamic-bone followers finish
+        // in LateUpdate. A manual Camera.Render from a null-yield continuation
+        // can observe the Animator's intermediate pose before those followers.
+        yield return new WaitForEndOfFrame();
         using (var writer = new StreamWriter(output + ".scene.tsv")) {
             writer.WriteLine("scene\t" + scene);
+            writer.WriteLine("capture_phase\tend_of_frame\trunning_animation");
             foreach (Shader shader in Resources.FindObjectsOfTypeAll<Shader>())
                 if (shader.name.StartsWith("Koikano/")) writer.WriteLine("shader_object\t" + shader.name + "\t" + shader.GetInstanceID());
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies()) {
@@ -113,11 +143,25 @@ public sealed partial class GamePoseProbe {
                     if (sky.HasProperty(key)) writer.WriteLine("sky_color\t" + key + "\t" + sky.GetColor(key).ToString("R"));
             }
             var ambient = RenderSettings.ambientProbe;
+            writer.WriteLine("lightmaps_mode\t" + LightmapSettings.lightmapsMode);
+            for (int lm = 0; lm < LightmapSettings.lightmaps.Length; ++lm) {
+                var data = LightmapSettings.lightmaps[lm];
+                foreach (var slot in new[] { data.lightmapColor, data.lightmapDir }) {
+                    if (slot == null) continue;
+                    var colorSpaceProperty = typeof(Texture).GetProperty("activeTextureColorSpace", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    writer.WriteLine("lightmap_texture\t" + lm + "\t" + (slot == data.lightmapColor ? "color" : "direction") + "\t" + slot.name + "\t" + slot.format + "\t" + slot.width + "\t" + slot.height + "\t" + (colorSpaceProperty == null ? "unknown" : colorSpaceProperty.GetValue(slot, null).ToString()));
+                }
+            }
             Texture defaultProbe = ReflectionProbe.defaultTexture;
             writer.WriteLine("reflection_default\t" + (defaultProbe == null ? "null" : defaultProbe.name + ":" + defaultProbe.width + ":" + defaultProbe.height) + "\t" + ReflectionProbe.defaultTextureHDRDecodeValues.ToString("R"));
             for (int c = 0; c < 3; ++c) for (int k = 0; k < 9; ++k)
                 writer.WriteLine("ambient_sh\t" + c + "\t" + k + "\t" + ambient[c, k].ToString("R"));
             foreach (Camera camera in Camera.allCameras) {
+                var grade = camera.GetComponent<AmplifyColorBase>();
+                if (grade != null) {
+                    writer.WriteLine("color_grading\t" + PathOf(camera.transform) + "\t" + grade.enabled + "\t" + camera.allowHDR + "\t" + grade.Exposure.ToString("R") + "\t" + grade.Tonemapper + "\t" + grade.BlendAmount.ToString("R") + "\t" + (grade.LutTexture == null ? "null" : grade.LutTexture.name) + "\t" + (grade.LutBlendTexture == null ? "null" : grade.LutBlendTexture.name));
+                    if (grade.enabled) WriteStudioGradeSamples(grade, output);
+                }
                 writer.WriteLine("camera\t" + PathOf(camera.transform) + "\t" + camera.enabled + "\t" + camera.transform.position.ToString("R") + "\t" + camera.transform.rotation.ToString("R") + "\t" + camera.fieldOfView.ToString("R") + "\t" + camera.backgroundColor.ToString("R") + "\t" + camera.clearFlags);
                 var dof = camera.GetComponent<UnityStandardAssets.ImageEffects.DepthOfField>();
                 if (dof != null) writer.WriteLine("dof\t" + camera.name + "\t" + dof.enabled + "\t" + dof.aperture.ToString("R") + "\t" + dof.focalSize.ToString("R") + "\t" + dof.focalLength.ToString("R") + "\t" + (dof.focalTransform != null ? PathOf(dof.focalTransform) : "null"));
@@ -232,6 +276,7 @@ public sealed partial class GamePoseProbe {
             }
         }
         if (main != null) {
+            yield return new WaitForEndOfFrame();
             RenderTexture oldTarget = main.targetTexture;
             RenderTexture oldActive = RenderTexture.active;
             var target = RenderTexture.GetTemporary(1280, 720, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);

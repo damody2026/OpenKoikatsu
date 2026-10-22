@@ -14,3 +14,7 @@ void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettin
 
 /** The post material's state: "ready", "not made", "compiling", "no shader map" or its compile errors. */
 FString OKStudioScenePostMaterialState();
+
+/** Original 32-cube Amplify grading after DOF, before UE device encoding. */
+bool OKStudioApplySourceGrade(const FOKScenePost& Post, FPostProcessSettings& Settings);
+class UTexture* OKStudioIdentityGradeLut();

@@ -142,6 +142,8 @@ public:
 	const FOKStudioFilter* FindFilter(int32 No) const;
 	/** Filter `No` as an Unreal colour-grading LUT (256x16, converted from the Amplify Color 32x32x32 LUT); cached, null without it. */
 	class UTexture* FilterLut(int32 No) const;
+	/** Original 32-cube Amplify table, with Unity's G row order and encoded texels preserved. */
+	class UTexture* SourceFilterLut(int32 No) const;
 
 	/** What a character's eyes pattern (ChaFileStatus.eyesPtn, a cha_eyeset row) does (ChaControl.ChangeEyesPtn). */
 	struct FEyeSet

@@ -3898,3 +3898,23 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 ### 2026-10-21 shader 假說必須核對最終 MID
 - 原作6331臉部87個morph（含啟用表情）的normal delta全為0，沒有因此新增模型格式／重建基礎庫。統計保存在NativeFaceNormalMorphs6331，不能把「parser沒有讀normal」直接當成該景色差根因。
 - 看到靜態貼圖fallback後曾懷疑頭髮DetailMask以Linear讀取；完整最終MID確認其SRGB=true，與原作Gamma相符。另確認頭髮MainTex雖1024²，所有RGBA都是255，是缺省白圖，不是重複烘焙髮色。兩者都未改動生產路徑。比較最終綁定，不能只看fallback分支或尺寸。
+
+### 2026-10-21 光影／LUT 隔離驗證的界線
+- 再次直接向 rg 傳入含 wildcard 的完整 Windows 路徑，造成 os error 123；也猜測了不存在的 OKStudioPostProcess.cpp 與 catalog.json。應先用 rg --files 或已知目錄清單定位，後續使用 -g 過濾。沒有修改資產來迴避搜尋失敗。
+- 原作 1268／0010 實跑都是 Lut_Amount、BlendAmount=0、Exposure=1、Tonemapper=Disabled。不能因關閉 LUT 圖較亮就當成修正；關閉 AO 也沒有消除地圖過暗。保留 Baseline／NoAO／NoFilter 實拍作為排除證據。
+- UnityPy 的顯示 PNG 行方向與 Rust texture_png 的原始像素方向相反；原作 GPU 色票對前者須反轉 G 行後才可比對。不得直接把 UnityPy 圖當成 UE LUT 行方向錯誤的證據。正在以原生 HDR/Linear GPU 色票檢驗最終 UE 後製。
+- 新 32³ LUT 後製 shader 首輪使用 linear 作為區域變數，但 linear 是 HLSL 插值修飾字，GPU 編譯失敗；改名 gradedLinear。保留 GradeSourceCompileFailed.log；只停止已核對路徑與 GradeTest 命令列的本輪程序，沒有把 fallback 當新 shader 通過。
+- 32³ LUT 第二輪 GPU 測試誤差0.1645來自測試 SceneCapture 沒有 bAlwaysPersistRenderingState，View.State 為空時引擎直接略過 custom post blendables；並非 native LUT 失效。補上持續 ViewState 後43組最大Linear誤差0.0110272通過（舊16³為0.0424901）。保留失敗CSV，不提高門檻掩蓋錯誤。
+
+### 2026-10-21 原作探針在 LateUpdate 前手動渲染，造成頭髮離體
+- 使用者指出 LightingLutNativeGrade/Scene2.png 的頭髮沒有跟著人物。原因是 AuditStudioScene 的 yield null continuation 在 Studio 完成 LateUpdate 的 FK、臉部與附件跟隨前呼叫 Camera.Render，混用了 Animator 中間姿態與前一階段的附件狀態。
+- 暖機後與最後手動渲染前改為 WaitForEndOfFrame；LightingLutEndOfFrame0010 實拍確認頭髮、頭部、身體及後方角色姿態恢復一致。先前這類錯位圖不得用作角色幾何／完整外觀的視覺金標；純 GPU 輸入色票不含角色骨架，另依數值驗證。
+- 圖文證據 Docs/OK_STUDIO_NATIVE_CAPTURE_20261021.md。這是擷取時序修正，沒有對 UE 頭髮加 offset。
+- 舊 map mesh memo 還原時不會重建外部材質貼圖的來源對應，直接追加 named BumpMap 查詢會得到空值；首次來源補錄在 mt_koi_map00_desk00 明確失敗，未當成成功。改由重新計算 meshes_for_maindata 取得真正外部來源，再補錄貼圖與 sampler。逐地圖清除全部解析快取會反覆重建8427份來源索引，已改為有界程序快取與可選 bundle 清單，結束時再清除。中止的全量輪日誌保留，後續重新驗證實際封包。
+- 2026-10-21：Studio 截圖偏暗：只驗證 HDR 色票，漏驗實際 PNG 顯示路徑；嘗試單改 sRGB target gamma 後反而雙重編碼。改為線性 RGBA8 render target、LDR TargetGamma=2.2，由 tonemapper 執行一次顯示編碼；加入實際 SceneCard PNG 色票驗證。43 色最大顯示差由 32/255 降至 4/255。失敗 CSV 留在 Saved/OKStudio/LightingLut20261021。
+- 2026-10-21：把來源靜態貼圖 mip_count 當成 runtime mip_policy；policy=1 實際代表 encoded RenderTexture 生成 mip，造成球場白線 alpha coverage 消失。靜態來源貼圖使用 policy=0，保留來源 sampler 與 mip0，不冒稱已傳遞原生完整 mip chain。StaticSamplerFinal 實拍確認球場白線恢復。
+- 2026-10-21：原生 0059 重載後為黑畫面，saved animation phase 重試仍黑；PNG 存在並不代表可用的視覺基準。留存原生 TSV 與圖，不納入有效原生光影 golden；不得把 14 個 PNG 檔案通過誤寫為 14 場景原生視覺通過。撤去無效果的 saved-phase 選項。
+- 2026-10-21：地圖貼圖補錄仍經過完整 mesh 路徑，且外部貼圖逐名重讀相同來源 bundle；多次中止的全量日誌不算通過。改成只走原生 renderer/material PPtr，外部貼圖使用既有 size/mtime 路徑快取。驗收聚焦全部14樣本使用的8張地圖；工具省略清單仍可處理完整 catalogue。
+- 2026-10-21：新增 sampler fallback 直接把不存在的本地名稱當外部貼圖，舊 OK 卡雜湊雖相同，完整／乾淨庫仍各報 gaps=5，不能當成通過。改為重播時先確認有已記錄的 dependency_texture_model，沒有則保留來源 None；加入不存在名稱不增加 misses 的回歸斷言，再重跑兩庫 cardcheck。失敗日誌保留 full-cardcheck.log／clean-cardcheck.log。
+- 2026-10-21：補負向 sampler 斷言時直接存取 ModelView 私有 parsed 欄位，Rust 測試編譯 E0616；改用既有 library token parser API，不放寬欄位可見度。保留 rust-card-compat-serial.log，修正後再跑。
+- 2026-10-21：LFS 批次驗證首輪未用 `git ls-files -z`，含非 ASCII 路徑被 Git 引號轉義，cat-file 回傳 missing；改用 NUL 分隔原始 UTF-8 路徑，716 個 payload 全核 SHA。進度更新亦曾誤報12景，實際只有10個PNG；已更正，後續僅按PNG及 pictured 記錄計數。
