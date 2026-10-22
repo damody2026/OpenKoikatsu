@@ -150,7 +150,11 @@ pub fn run(a: &ConsistencyArgs) -> Result<()> {
 }
 
 fn read_wav(path: &Path) -> Result<Vec<f32>> {
-    let b = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    wav_samples(&std::fs::read(path).with_context(|| format!("read {}", path.display()))?)
+}
+
+/// Samples of a 16-bit mono WAV as `wav_bytes` writes it.
+pub fn wav_samples(b: &[u8]) -> Result<Vec<f32>> {
     let data = b.windows(4).position(|w| w == b"data").context("no data chunk")? + 8;
     Ok(b[data..].chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0).collect())
 }

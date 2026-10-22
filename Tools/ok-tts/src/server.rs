@@ -28,12 +28,14 @@ use serde_json::{json, Value};
 use sha1_smol::Sha1;
 
 use crate::audio::{decode_ogg, encode_ogg, pcm16, peak_normalize, rms, trim_silence, write_atomic, StreamTrim};
-use crate::engine::{Engine, MODEL_ID, SAMPLE_RATE};
+use crate::engine::{Engine, BASE_MODEL_ID, MODEL_ID, SAMPLE_RATE};
+use crate::profile::profile_id;
 use crate::talker::GenConfig;
 use crate::text::{clean_line, VoiceChoice, Voices};
 
 const MAX_TEXT_CHARS: usize = 400;
 const CACHE_VERSION: &str = "ok-tts-3"; // 3: one seed per voice
+const BASE_CACHE_VERSION: &str = "ok-tts-base-1";
 const PROTOCOL: u32 = 2;
 const CAPABILITIES: &[&str] = &["stream", "stream_cache_hit", "shared_synthesis", "cancel", "request_status", "voice_while_loading"];
 /// How long a request waits for another one making the same line before it tries itself.
@@ -60,6 +62,8 @@ struct Flight {
 struct State {
     engine: Mutex<Option<Engine>>,
     voices: Voices,
+    /// Base backend: profile id -> tag of its speaker embedding (in the cache key). None: VoiceDesign.
+    profile_tags: Option<HashMap<String, String>>,
     ready: AtomicBool,
     load_error: Mutex<Option<String>>,
     stats: Stats,
@@ -146,11 +150,11 @@ impl Trace {
     }
 }
 
-pub fn serve(port: u16, workers: usize, voices: Voices, load: impl FnOnce() -> Result<Engine> + Send + 'static) -> Result<()> {
+pub fn serve(port: u16, workers: usize, voices: Voices, profile_tags: Option<HashMap<String, String>>, load: impl FnOnce() -> Result<Engine> + Send + 'static) -> Result<()> {
     let server = tiny_http::Server::http(("127.0.0.1", port)).map_err(|e| anyhow::anyhow!("bind 127.0.0.1:{port}: {e}"))?;
     let server = Arc::new(server);
     let state = Arc::new(State {
-        engine: Mutex::new(None), voices, ready: AtomicBool::new(false), load_error: Mutex::new(None), stats: Stats::default(),
+        engine: Mutex::new(None), voices, profile_tags, ready: AtomicBool::new(false), load_error: Mutex::new(None), stats: Stats::default(),
         inflight: Mutex::new(HashMap::new()), cancel_floor: Mutex::new(HashMap::new()), active: Mutex::new(HashSet::new()),
         recent: Mutex::new(VecDeque::new()), next_id: AtomicU64::new(1),
     });
@@ -188,7 +192,16 @@ pub fn serve(port: u16, workers: usize, voices: Voices, load: impl FnOnce() -> R
 
 fn warmup(engine: Engine) -> Result<Engine> {
     let t = std::time::Instant::now();
-    let s = engine.speak("这里是观光地，海边有饭店。", "-13", 25, GenConfig::default())?;
+    // A voice that has a profile (Base) — any one will do.
+    let (personality, age) = match &engine.profiles {
+        Some(p) if !p.contains_key("-13@25") => {
+            let id = p.keys().min().ok_or_else(|| anyhow::anyhow!("no voice profiles"))?;
+            let (k, a) = id.rsplit_once('@').unwrap_or((id.as_str(), "18"));
+            (k.to_string(), a.parse().unwrap_or(18))
+        }
+        _ => ("-13".to_string(), 25),
+    };
+    let s = engine.speak("这里是观光地，海边有饭店。", &personality, age, GenConfig::default())?;
     let level = rms(&s.samples);
     crate::log!("ok-tts: warmup {:.2}s audio={:.2}s rms={level:.4}", t.elapsed().as_secs_f64(), s.samples.len() as f64 / SAMPLE_RATE as f64);
     if level < 0.002 {
@@ -230,7 +243,9 @@ fn handle(state: &Arc<State>, mut req: tiny_http::Request) {
             let s = &state.stats;
             let ready = state.ready.load(Ordering::SeqCst);
             respond(req, 200, json!({
-                "ok": ready, "ready": ready, "model": MODEL_ID, "engine": "ok-tts (Rust, CUDA)",
+                "ok": ready, "ready": ready, "model": if state.profile_tags.is_some() { BASE_MODEL_ID } else { MODEL_ID }, "engine": "ok-tts (Rust, CUDA)",
+                "backend": if state.profile_tags.is_some() { "base" } else { "design" },
+                "profiles": state.profile_tags.as_ref().map(|t| t.len()),
                 "protocol": PROTOCOL, "capabilities": CAPABILITIES, "pcm": {"format": "s16le", "rate": SAMPLE_RATE, "channels": 1},
                 "error": state.load_error.lock().unwrap().clone(),
                 "requests": s.requests.load(Ordering::Relaxed), "generated": s.generated.load(Ordering::Relaxed),
@@ -251,7 +266,8 @@ fn handle(state: &Arc<State>, mut req: tiny_http::Request) {
                 }
             }
             let v = state.voices.choose(&personality, age);
-            respond(req, 200, json!({"ok": true, "personality": v.key, "age": v.age, "name": v.name, "label": v.label, "instruct": v.instruct}));
+            let profile = state.profile_tags.as_ref().map(|t| json!({"id": profile_id(&v), "present": t.contains_key(&profile_id(&v))}));
+            respond(req, 200, json!({"ok": true, "personality": v.key, "age": v.age, "name": v.name, "label": v.label, "instruct": v.instruct, "profile": profile}));
         }
         (tiny_http::Method::Get, "/requests") => {
             let id = query_pairs(&url).into_iter().find(|(k, _)| k == "id").map(|(_, v)| v);
@@ -342,7 +358,11 @@ fn prepare(state: &State, r: SynthRequest) -> Result<Job> {
     let personality = personality_string(&r.personality);
     let age = r.age.unwrap_or(18);
     let voice = state.voices.choose(&personality, age);
-    let path = cache_path(&out_dir, &voice, &text);
+    let tag = match &state.profile_tags {
+        Some(tags) => Some(tags.get(&profile_id(&voice)).cloned().ok_or_else(|| anyhow::anyhow!("no voice profile {} (run ok-tts profile)", profile_id(&voice)))?),
+        None => None,
+    };
+    let path = cache_path(&out_dir, &voice, &text, tag.as_deref());
     let id = r.request_id.filter(|s| !s.is_empty() && s.len() <= 128)
         .unwrap_or_else(|| format!("s{}", state.next_id.fetch_add(1, Ordering::Relaxed)));
     state.active.lock().unwrap().insert(id.clone());
@@ -481,10 +501,14 @@ fn synthesize_job(state: &Arc<State>, job: &Job, trace: &mut Trace) -> Result<(V
     bail!("another request for this line did not finish it")
 }
 
-/// Where a line in this voice is cached (shared by /synthesize and /synthesize_stream).
-fn cache_path(out_dir: &Path, voice: &VoiceChoice, text: &str) -> PathBuf {
+/// Where a line in this voice is cached (shared by /synthesize and /synthesize_stream). VoiceDesign keys on the
+/// description; Base on the profile's embedding, so a rebuilt profile never replays lines of the old voice.
+fn cache_path(out_dir: &Path, voice: &VoiceChoice, text: &str, profile_tag: Option<&str>) -> PathBuf {
     let mut digest = Sha1::new();
-    digest.update(format!("{CACHE_VERSION}|{MODEL_ID}|{}|{}|{text}", voice.instruct, voice.seed).as_bytes());
+    match profile_tag {
+        None => digest.update(format!("{CACHE_VERSION}|{MODEL_ID}|{}|{}|{text}", voice.instruct, voice.seed).as_bytes()),
+        Some(tag) => digest.update(format!("{BASE_CACHE_VERSION}|{BASE_MODEL_ID}|{tag}|{}|{text}", voice.seed).as_bytes()),
+    }
     out_dir.join(format!("{}.ogg", digest.digest()))
 }
 

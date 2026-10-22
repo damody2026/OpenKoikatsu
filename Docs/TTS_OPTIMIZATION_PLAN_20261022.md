@@ -1,6 +1,6 @@
 # TTS 聲線一致性與低延遲優化計畫
 
-日期：2026-10-22。狀態：P1 的伺服器部分與 P0 的伺服器端觀測已實作並在本機測過（見第 13 節）；P2 只完成 Base x-vector 複製的離線試驗與輔助指標，尚未接進伺服器，遊戲裡的聲線一致性問題還沒有解決。
+日期：2026-10-22。狀態：P0／P1 的伺服器部分已實作並在本機測過；P2 的 Base 固定聲線已接進伺服器並建好全部聲線的 profile，使用者試聽確認聲線一致（見 13.6），但遊戲使用的 ok-tts 執行檔尚未替換。
 
 ## 1. 目標與決策
 
@@ -357,3 +357,25 @@ PCM 協定需明確標示 endian、sample rate、channels。目前標頭 `audio/
 ### 13.5 UE 編譯確認
 
 以 `D:/PhysX/UE5.8` 建置 C checkout 的 `OpenKoikatsu Win64 Development` 遊戲目標：`OKStreetSocialScene.cpp`（含本輪全部改動）編譯通過，沒有新的警告。整個目標沒有建完：`Plugins/OKStudio` 的 `OKSceneDocument.h` 在遊戲目標下有既有的 C4430／C2143 錯誤，與本輪改動無關，需要負責 OK Studio 的那條線處理後才能產出遊戲執行檔。打包 StreetSocial 走 Interaction host（`rebuild_street_social_runtime.lua`），不受這個遊戲目標影響，但本輪沒有打包。
+
+### 13.6 Base 後端接進伺服器（2026-10-23）
+
+使用者試聽 13.4 的樣本後確認：Base 複製的句子聽起來都是同一個人，明顯比 VoiceDesign 好。因此照 P2 做成可部署的後端。
+
+- **聲音 profile**（`profile.rs`，`ok-tts profile`）：每個聲線（女聲性格 × 年齡 18／21／25／35／45／12，加男聲 m0～m9）由 VoiceDesign 說同一句參考句（`profile::DEFAULT_REF_TEXT`），存成 `<key>@<age>.wav`，再用 Base speaker encoder 算出 embedding 存成 `<key>@<age>.json`（schema 1：instruct／seed／參考文字／參考 WAV 的 sha1、模型 snapshot、encoder 版本、embedding）。設計或參考句變了才重做，`--force` 全部重做。profile 放在 exe 旁的 `profiles/`（`Build/` 不進版控）。本機已建好 262 份（`Build/ok-tts/profiles/`，約 106 MB），參考錄音 6～12 秒。
+- **後端選擇**（`serve`）：`profiles/` 有 profile 且找得到 Base 模型時預設用 Base；`--backend design` 強制回到 VoiceDesign，`--backend base` 強制 Base。只載入其中一個模型，不同時佔兩份顯存。Base 下的聲線沒有 profile 時回明確錯誤，不改用其他聲音（一般對話照原政策退回內建錄音，自由對話只剩字幕）。
+- **cache key**：Base 為 `ok-tts-base-1|Base 模型 ID|embedding 的 sha1 前 16 碼|seed|文字`，與 VoiceDesign 的快取分開；profile 重做後不會重播舊聲音。舊的 VoiceDesign 快取保留，切回 `--backend design` 時仍可用。
+- `/health` 回報 `backend`、`profiles`、模型 ID；`/voice` 回報該聲線的 profile id 與是否存在。
+- 回退：把 `profiles/` 改名，或啟動時加 `--backend design`。
+
+延遲（同一份 `bench/corpus_zh.txt` 19 句，未命中串流，遊戲同時在跑）：
+
+| 後端 | 次數 | 首包 P50／P95 | 模擬起播 P50／P95 | RTF P50／P95 | 斷音 |
+|---|---:|---:|---:|---:|---:|
+| Base | 54 | 0.099／0.201 s | 0.137／0.279 s | 0.155／0.234 | 0 |
+| VoiceDesign | 54 | 0.093／0.103 s | 0.169／0.261 s | 0.262／0.352 | 0 |
+| Base（第二次，兩個伺服器同時載入） | 36 | 0.167／0.320 s | 0.223／0.452 s | 0.259／0.382 | 0 |
+
+Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描述，prefill 較短），但第二次負載較重時與 VoiceDesign 相當，還不能說「比較快」。
+
+尚未完成：正式的 `Build/ok-tts/ok-tts.exe` 還是舊版（量測時正被另一個 session 的遊戲使用），所以遊戲裡還聽不到 Base；部署後要在遊戲裡實際對話確認。speaker encoder 仍未與官方數值逐項核對（使用者試聽已確認效果）。英文台詞在 Base 下用中文參考句的聲紋說，沒有另外驗證。
