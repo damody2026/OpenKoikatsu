@@ -620,3 +620,4 @@ coming = "{what} is on {date} (in {days} days)"
 
 [contacts]
 gave_number = "You gave him your number (he can call and text you now)"
+took_his_number = "You saved his number (you can call and text him now)"

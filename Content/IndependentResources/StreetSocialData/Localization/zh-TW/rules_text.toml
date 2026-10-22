@@ -620,3 +620,4 @@ coming = "{date}（再 {days} 天）是{what}"
 
 [contacts]
 gave_number = "你把自己的電話給了他（他現在能打給你、傳訊息給你）"
+took_his_number = "你存下了他的電話（你現在能打給他、傳訊息給他）"

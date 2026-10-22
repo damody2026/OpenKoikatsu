@@ -221,7 +221,7 @@ void AOKStreetSocialScene::PhoneHangUp(){
 void AOKStreetSocialScene::ReachOutByPhone(int32 Girl){
  auto& S=*State;FString Why=S.InitiativeReason.FindRef(Girl);S.InitiativeReason.Remove(Girl);if(Why.IsEmpty())Why=OKT(TEXT("ui.phone_inbox.miss_him_hint"));
  const FOKStreetRelation R=OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget);
- if(!HasHerNumber(Girl))return;
+ if(!HasHerNumber(Girl,true))return;
  if(R.Stage==TEXT("lover")&&FMath::FRand()<0.5f&&S.RingGirl==INDEX_NONE&&S.RemoteMode==0&&S.Target==INDEX_NONE&&SelfTextAllowed(Girl)){
   S.RingGirl=Girl;S.RingWhy=Why;S.RingUntil=SceneTime()+20.0;
   S.Message=OKMsg(TEXT("ui.phone_inbox.girl_calling_hint"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});RefreshUI();
@@ -248,7 +248,7 @@ void AOKStreetSocialScene::PhoneAnswer(bool Accept){
 void AOKStreetSocialScene::QueueHerText(int32 Girl,const FString& Why,const FString& Kind,double DelaySeconds){
  auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl)||Girl<=0)return;
  // Without each other's numbers she cannot write to him either (a stranger texted him after one hello).
- if(!HasHerNumber(Girl)){UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d has no number of his; her text (%s) not sent"),Girl,*Kind);return;}
+ if(!HasHerNumber(Girl,true)){UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d has no number of his; her text (%s) not sent"),Girl,*Kind);return;}
  PhoneLoadSeen();FOKStreetSceneState::FPendingText T;T.Girl=Girl;T.Why=Why;T.Kind=Kind;T.Due=SceneTime()+DelaySeconds;S.PendingTexts.Add(T);PhoneSave();
 }
 
@@ -544,22 +544,22 @@ void AOKStreetSocialScene::BuildAppointmentRows(const TSharedRef<SVerticalBox>& 
 }
 // Whose number he has (contacts.rs phone_contact): given in talk, or a friend or lover, or someone he has written or
 // called with already. The phone lists, calls and texts only them, both ways.
-bool AOKStreetSocialScene::HasHerNumber(int32 Girl){
+bool AOKStreetSocialScene::HasHerNumber(int32 Girl,bool SheReachesHim){
  auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl)||Girl<=0)return false;
  const FString Id=OKStreetStableId(S.Manifest.Characters[Girl]);
- auto Request=OKRulesRequest(TEXT("phone_contact"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);
+ auto Request=OKRulesRequest(TEXT("phone_contact"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);Request->SetStringField(TEXT("way"),SheReachesHim?TEXT("hers"):TEXT("his"));
  Request->SetStringField(TEXT("stage"),OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget).Stage);
  Request->SetBoolField(TEXT("phone_history"),HistoryOf(Id).ContainsByPredicate([](const FOKStreetHistoryEntry& E){return OKStreetHistoryIsPhone(E.Kind);}));
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);return !Out.IsValid()||Out->GetBoolField(TEXT("contact"));
 }
 
 // She gave him her number (the judge's gives_number): kept in the save; she remembers she gave it.
-void AOKStreetSocialScene::HerNumberGiven(int32 Girl){
+void AOKStreetSocialScene::HerNumberGiven(int32 Girl,const TCHAR* What){
  auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl)||Girl<=0)return;const FString Id=OKStreetStableId(S.Manifest.Characters[Girl]);
- auto Request=OKRulesRequest(TEXT("contact_add"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);
+ auto Request=OKRulesRequest(TEXT("contact_add"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);Request->SetStringField(TEXT("what"),What);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid()||!Out->GetBoolField(TEXT("added")))return;
  auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;
  HeroineNote(Girl,TEXT("contact"),Out->GetStringField(TEXT("fact")),PlaceHere(S.Male),0.6f);
- S.FreeTalkNotice=OKMsg(TEXT("ui.phone_inbox.number_saved"),{{TEXT("name"),S.Manifest.Characters[Girl].Name}});
- UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d gave her number"),Girl);RefreshUI();
+ if(FCString::Strcmp(What,TEXT("his"))!=0)S.FreeTalkNotice=OKMsg(TEXT("ui.phone_inbox.number_saved"),{{TEXT("name"),S.Manifest.Characters[Girl].Name}});
+ UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d %s"),Girl,FCString::Strcmp(What,TEXT("his"))==0?TEXT("took his number"):TEXT("gave her number"));RefreshUI();
 }

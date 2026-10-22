@@ -1339,7 +1339,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d takes a photo (%s, %s)%s"),Character,*Topic,*Subject,SendToo?TEXT(", sends it"):TEXT(""));Weak->HerPhoto(Character,Topic,Subject,SendToo);}
     else if(Sends){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d sends him a photo"),Character);Weak->SendPhoto(OKStreetStableId(L->Manifest.Characters[Character]),Character,SendField);}}
    // She gives him her number (contacts.rs): from now on in his phone.
-   {bool Gives=false;Verdict->TryGetBoolField(TEXT("gives_number"),Gives);if(Gives)Weak->HerNumberGiven(Character);}
+   {bool Gives=false;Verdict->TryGetBoolField(TEXT("gives_number"),Gives);if(Gives)Weak->HerNumberGiven(Character);
+    bool Takes=false;Verdict->TryGetBoolField(TEXT("takes_his_number"),Takes);if(Takes)Weak->HerNumberGiven(Character,TEXT("his"));}
    // Her own business at the office (errand.rs her_errand): a student loan, paying her fees.
    {FString Errand;Verdict->TryGetStringField(TEXT("her_errand"),Errand);if(!Errand.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d errand %s"),Character,*Errand);Weak->HerErrand(Character,Errand);}}
    // Her things and his given, lent or returned (items.rs: matched to what they really hold, the rest refused).
