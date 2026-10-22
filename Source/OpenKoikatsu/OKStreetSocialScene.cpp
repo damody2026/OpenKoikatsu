@@ -1365,7 +1365,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     const bool ForHer=For==TEXT("her");
     // Already on the table or on its way first: "too full, the braised pork rice was not ordered" about the bowl in
     // front of her made her say it never came.
-    if(Weak->HasDishLike(ForHer?Character:0,*Item)){
+    // Starving, another dish than the one she has goes in (as for her own orders); the same dish does not.
+    const bool Starving=ForHer&&OKStreetViewRelation(L->Store,Id,L->Manifest.TalkBudget).Satiety<40.f&&!L->Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ForHer&&D.Her==Character&&D.ItemId==ItemId&&D.Percent>0;});
+    if(!Starving&&Weak->HasDishLike(ForHer?Character:0,*Item)){
      UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, %s still has one on the table"),*Item->Name,ForHer?TEXT("she"):TEXT("he"));continue;}
     if(ForHer&&Weak->TooFullFor(Character,*Item)){L->TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, she is full"),*Item->Name);continue;}
     FOKStreetCartLine Line;Line.ItemId=ItemId;Line.ForHer=ForHer;Line.Size=Item->DefaultSize();if(!Item->Options.IsEmpty()){Line.Sweetness=OKT(TEXT("ui.mind.full_sugar_label"));Line.Ice=OKT(TEXT("ui.mind.normal_state_label"));}

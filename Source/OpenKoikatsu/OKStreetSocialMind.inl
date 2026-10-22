@@ -403,6 +403,9 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  // menu out here and writes "cafe_latte" for the cafe's cf_latte (his americano, ordered on the doorstep, was lost).
  FString Dest=Place.IsEmpty()?OutingShop(Character):Place;
  if(Dest.IsEmpty()){if(Reply.Action.StartsWith(TEXT("go:")))Dest=Reply.Action.Mid(3);else if(const FOKStreetActivity* G=OKStreetFindActivity(Reply.Action);G&&G->Place&&*G->Place)Dest=G->Place;}
+ // Two things in one order (oden and a rice ball, starving after her shift) are both ordered: "still has one" is about
+ // what was there before this reply, not the line just added from it.
+ const int32 CartBefore=S.Cart.Num();
  for(auto O:Reply.Orders){
   O.Id=ResolveItemId(O.Id,Dest);
   const auto* Item=S.Catalog.Find(O.Id);
@@ -416,7 +419,11 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   if(!Item||!SoldHere(*Item,Place)){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s at %s"),*O.Id,*Place);continue;}
   // Whoever it is for still has one of these on the table or on its way ("then a tea" again, the tea she ordered a
   // moment ago still coming): not a second one (as for the judge's orders).
-  if(HasDishLike(ForHer?Character:0,*Item)||S.Cart.ContainsByPredicate([&](const FOKStreetCartLine& C){return C.ItemId==O.Id&&C.ForHer==ForHer;})){
+  bool HadBefore=false;{const TArray<FOKStreetCartLine> Mine(S.Cart.GetData()+CartBefore,S.Cart.Num()-CartBefore);S.Cart.SetNum(CartBefore);HadBefore=HasDishLike(ForHer?Character:0,*Item);S.Cart.Append(Mine);}
+  // Starving (after a whole shift on nothing): another dish than the one she has is ordered ("one rice ball is not
+  // enough, an oden too" was skipped and never came while she said she was having it); the same dish still is not.
+  if(HadBefore&&ForHer&&OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Character]),S.Manifest.TalkBudget).Satiety<40.f&&!S.Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ForHer&&D.Her==Character&&D.ItemId==O.Id&&D.Percent>0;}))HadBefore=false;
+  if(HadBefore||S.Cart.ContainsByPredicate([&](const FOKStreetCartLine& C){return C.ItemId==O.Id&&C.ForHer==ForHer;})){
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, %s still has one"),*O.Id,ForHer?TEXT("she"):TEXT("he"));continue;}
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
   if(ForHer&&TooFullFor(Character,*Item)){
