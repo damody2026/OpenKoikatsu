@@ -345,6 +345,22 @@ struct OKSTUDIO_API FOKSceneItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item", meta = (ClampMin = "0"))
 	float LineWidth = 1.f;
 
+	/** Studio's light cancel (OIItemInfo.lightCancel; ItemComponent writes it to the materials' _LightCancel: how much of
+	 *  the unlit colour shows); < 0: the model's. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	float LightCancel = -1.f;
+
+	/** Studio's item emission colour / power and outline colour (OIItemInfo), kept for the scene; alpha / value < 0: the
+	 *  model's. Not written to the materials yet (the game writes them only to the materials an item flags). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FLinearColor EmissionColor = FLinearColor(1.f, 1.f, 1.f, -1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	float EmissionPower = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	FLinearColor LineColor = FLinearColor(1.f, 1.f, 1.f, -1.f);
+
 	/** Studio item FK: the item's bones and their local rotation (Unity Euler degrees); changing them rebuilds the item. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	TArray<FOKSceneFkBone> Fk;
