@@ -484,3 +484,53 @@ fn shots_avoid_walls() {
     let cam = s.frame.camera.clone().unwrap();
     assert!(cam.pos[0] > 60.0, "{cam:?}");
 }
+
+#[test]
+fn jump_plays_from_a_line_without_its_effects() {
+    let mut s = Stage::new("jump", |_| {});
+    s.run(0.2);
+    s.reach("a1.l1");
+    s.input(json!({"type": "jump", "line": "a1.l4"}));
+    s.run(0.2);
+    assert_eq!(s.line(), "a1.l4");
+    assert_eq!(s.state()["items"].get("key"), None, "a jump gives nothing");
+    s.input(json!({"type": "jump", "line": "a3"}));
+    s.run(0.5);
+    assert_eq!(s.line(), "a3.l1");
+}
+
+#[test]
+fn offstage_speakers_are_built_a_line_early() {
+    let mut s = Stage::new("preload", |_| {});
+    s.run(0.2);
+    s.reach("a1.l3");
+    s.input(json!({"type": "click"}));
+    s.run(0.1);
+    s.input(json!({"type": "choose", "index": 0}));
+    s.run(0.1);
+    s.reach("a1.l6");
+    s.input(json!({"type": "click"}));
+    s.input(json!({"type": "click"}));
+    s.run(0.2);
+    s.reach("a2.l2");
+    // a2.l3 is rin's offstage line: her copy is asked for while a2.l2 shows.
+    assert!(s.ops("spawn_offstage").iter().any(|c| matches!(&c.op, Op::SpawnOffstage { who, .. } if who == "rin")));
+    assert_eq!(s.line(), "a2.l2");
+}
+
+#[test]
+fn outline_lists_lines_and_jumps() {
+    let mut s = Stage::new("outline", |_| {});
+    s.run(0.2);
+    s.reach("a1.l2");
+    s.input(json!({"type": "key", "key": "F7"}));
+    s.tick(0.0);
+    assert_eq!(s.frame.screen, "outline");
+    let entries = s.frame.panel["entries"].as_array().unwrap().clone();
+    assert!(entries.iter().any(|e| e["id"] == "a1.l2" && e["current"] == true));
+    assert!(entries.iter().any(|e| e["header"] == true && e["act"] == "a3"));
+    s.input(json!({"type": "button", "id": "jump:a2.l1"}));
+    s.run(0.3);
+    assert_eq!(s.frame.screen, "play");
+    assert_eq!(s.line(), "a2.l1");
+}

@@ -133,18 +133,33 @@ pub struct Scene {
     pub material_edits: Vec<MaterialEdit>,
 }
 
-/// One Material Editor property edit of a Studio object (MaterialColorPropertyList / MaterialFloatPropertyList).
+/// One Material Editor edit of a Studio object.
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct MaterialEdit {
     /// The object's scene key (ObjectInfo.dicKey).
     pub id: i32,
-    /// Material name as Material Editor keys it (without " (Instance)").
+    /// Material name as Material Editor keys it (without " (Instance)"); the renderer's name for "renderer".
     pub material: String,
-    /// Shader property (`_Color`, `_Glossiness` ...).
+    /// Shader property (`_Color`, `_Glossiness` ...); for "renderer" the RendererProperties name (Enabled,
+    /// ShadowCastingMode, ReceiveShadows, RecalculateNormals); empty for "shader".
     pub property: String,
-    /// "color" (RGBA, gamma as authored) or "float" (value in x).
+    /// "color" (RGBA, gamma as authored), "float" (x), "texture" (`text`: the PNG, base64), "texture_st" (the texture's
+    /// scale xy and offset zw), "shader" (`text`: the shader name, x: the render queue or -1) or "renderer" (x).
     pub kind: String,
     pub value: [f32; 4],
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub text: String,
+}
+
+/// Standard base64 (with padding), for binary data carried in scene JSON.
+pub(crate) fn base64(bytes: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for c in bytes.chunks(3) {
+        let n = (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
+        for k in 0..4 { out.push(if k <= c.len() { A[(n >> (18 - 6 * k)) as usize & 63] as char } else { '=' }); }
+    }
+    out
 }
 
 /// The scene's trailing ExtendedSave block ("KKEx", version, length, msgpack of plugin id -> PluginData), the last
@@ -178,8 +193,54 @@ fn scene_material_edits(bytes: &[u8]) -> Vec<MaterialEdit> {
                 _ => continue,
             };
             if id < 0 || material.is_empty() || property.is_empty() { continue; }
-            out.push(MaterialEdit { id, material, property, kind: kind.into(), value });
+            out.push(MaterialEdit { id, material, property, kind: kind.into(), value, text: String::new() });
         }
+    }
+    let list = |name: &str| -> Vec<rmpv::Value> {
+        map_get(inner, name).and_then(rmpv::Value::as_slice)
+            .and_then(|bin| rmpv::decode::read_value(&mut std::io::Cursor::new(bin)).ok())
+            .and_then(|v| v.as_array().cloned()).unwrap_or_default()
+    };
+    let text = |item: &rmpv::Value, key: &str| map_get(item, key).and_then(rmpv::Value::as_str).unwrap_or("").to_string();
+    let id_of = |item: &rmpv::Value| map_get(item, "ID").and_then(rmpv::Value::as_i64).unwrap_or(-1) as i32;
+    let material_of = |item: &rmpv::Value| text(item, "MaterialName").trim_end_matches(" (Instance)").to_string();
+    // MaterialShaderList: the material's shader replaced (and its render queue, when set).
+    for item in list("MaterialShaderList") {
+        let (id, material, shader) = (id_of(&item), material_of(&item), text(&item, "ShaderName"));
+        if id < 0 || material.is_empty() || shader.is_empty() { continue; }
+        let queue = map_get(&item, "RenderQueue").and_then(rmpv::Value::as_i64).map_or(-1.0, |q| q as f32);
+        out.push(MaterialEdit { id, material, property: String::new(), kind: "shader".into(), value: [queue, 0.0, 0.0, 0.0], text: shader });
+    }
+    // MaterialTexturePropertyList: a texture from TextureDictionary (by TexID) and / or its offset and scale.
+    let textures: Vec<(i64, Vec<u8>)> = map_get(inner, "TextureDictionary").and_then(rmpv::Value::as_map).into_iter().flatten()
+        .filter_map(|(k, v)| Some((k.as_i64()?, v.as_slice()?.to_vec()))).collect();
+    let vec2 = |v: Option<&rmpv::Value>| -> Option<[f32; 2]> {
+        let v = v?;
+        let f = |x: &rmpv::Value| x.as_f64().map(|f| f as f32);
+        if let Some(a) = v.as_array() { return Some([f(a.first()?)?, f(a.get(1)?)?]); }
+        Some([f(map_get(v, "x")?)?, f(map_get(v, "y")?)?])
+    };
+    for item in list("MaterialTexturePropertyList") {
+        let (id, material, property) = (id_of(&item), material_of(&item), text(&item, "Property"));
+        if id < 0 || material.is_empty() || property.is_empty() { continue; }
+        let tex = map_get(&item, "TexID").and_then(rmpv::Value::as_i64).and_then(|t| textures.iter().find(|(k, _)| *k == t));
+        if let Some((_, png)) = tex {
+            out.push(MaterialEdit { id, material: material.clone(), property: property.clone(), kind: "texture".into(), value: [0.0; 4], text: base64(png) });
+        }
+        let (scale, offset) = (vec2(map_get(&item, "Scale")), vec2(map_get(&item, "Offset")));
+        if scale.is_some() || offset.is_some() {
+            let (s, o) = (scale.unwrap_or([1.0, 1.0]), offset.unwrap_or([0.0, 0.0]));
+            out.push(MaterialEdit { id, material, property, kind: "texture_st".into(), value: [s[0], s[1], o[0], o[1]], text: String::new() });
+        }
+    }
+    // RendererPropertyList: MaterialAPI.RendererProperties of a renderer (by its GameObject name).
+    const RENDERER_PROPERTIES: [&str; 4] = ["Enabled", "ShadowCastingMode", "ReceiveShadows", "RecalculateNormals"];
+    for item in list("RendererPropertyList") {
+        let (id, renderer) = (id_of(&item), text(&item, "RendererName"));
+        let Some(property) = map_get(&item, "Property").and_then(rmpv::Value::as_i64).and_then(|p| RENDERER_PROPERTIES.get(p as usize)) else { continue };
+        let Some(value) = map_get(&item, "Value").and_then(|v| v.as_str().and_then(|s| s.parse::<f32>().ok()).or_else(|| v.as_f64().map(|f| f as f32))) else { continue };
+        if id < 0 || renderer.is_empty() { continue; }
+        out.push(MaterialEdit { id, material: renderer, property: (*property).into(), kind: "renderer".into(), value: [value, 0.0, 0.0, 0.0], text: String::new() });
     }
     out
 }
@@ -704,6 +765,23 @@ mod tests {
         eprintln!("version={} map={} effects={}", scene.version, scene.map, serde_json::to_string(&scene.effects).unwrap());
         for e in scene.material_edits.iter().take(40) { eprintln!("me {:?}", e); }
         eprintln!("material edits {}", scene.material_edits.len());
+        // The other Material Editor lists, decoded (they are msgpack inside msgpack).
+        let bytes = std::fs::read(std::env::var("OK_SCENE").unwrap()).unwrap();
+        let Some(blocks) = super::scene_plugins(&bytes) else { return };
+        let Some(inner) = crate::card::map_get(&blocks, "com.deathweasel.bepinex.materialeditor").and_then(crate::card::me_plugin_data) else { return };
+        for (k, v) in inner.as_map().into_iter().flatten() {
+            let shown = v.as_slice().and_then(|b| rmpv::decode::read_value(&mut std::io::Cursor::new(b)).ok()).map(|d| d.to_string()).unwrap_or_else(|| v.to_string());
+            eprintln!("me {k}: {}", shown.chars().take(1500).collect::<String>());
+        }
+    }
+    #[test]
+    fn base64_pads_like_rfc4648() {
+        assert_eq!(super::base64(b""), "");
+        assert_eq!(super::base64(b"f"), "Zg==");
+        assert_eq!(super::base64(b"fo"), "Zm8=");
+        assert_eq!(super::base64(b"foo"), "Zm9v");
+        assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(super::base64(&[0xff, 0xee]), "/+4=");
     }
     #[test]
     fn versions_compare_like_dotnet() {

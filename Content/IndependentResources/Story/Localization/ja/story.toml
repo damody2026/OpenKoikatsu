@@ -9,6 +9,7 @@
 "ui.close" = "閉じる"
 "ui.quit" = "終了"
 "ui.menu" = "メニュー"
+"ui.outline" = "シナリオ一覧"
 "ui.empty_slot" = "（空き）"
 "ui.slot" = "No.{n}"
 "ui.quick" = "クイックセーブ"

@@ -4,7 +4,7 @@
   "characters": {
     "mio": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_0.png", "scene_object": 1,
             "name": {"zh": "澪", "ja": "澪"}, "color": "#ff8fb4"},
-    "sora": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_136.png", "scene_object": 2,
+    "sora": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_136.png", "scene_object": 2, "voice": {"tts": "card"},
              "name": {"zh": "空", "ja": "空"}, "color": "#8fc8ff"},
     "passer": {"card": "UserData/Studio/scene/koikatu_cs0003800_cards/char_37.png", "scene_object": 1, "name": {"zh": "路人", "ja": "通行人"}, "color": "#c0c0c0"},
     "alice": {"card": "Content/CharacterCards/StreetHeroines/alice.png", "name": {"zh": "愛麗絲", "ja": "アリス"}, "color": "#ffd27a",
@@ -19,6 +19,7 @@
      "lines": [
        {"id": "intro.1", "text": {"zh": "練習結束後的舞台，燈光還亮著。", "ja": "練習の終わったステージに、まだ照明が灯っている。"}},
        {"id": "intro.2", "who": "mio", "face": "smile", "camera": {"shot": "speaker"},
+        "voice": "Content/IndependentResources/StreetSocialData/ja_ogg/c00/adv/com_ev_00_090.ogg",
         "text": {"zh": "空，今天也辛苦了。要不要一起回家？", "ja": "空、今日もお疲れさま。一緒に帰らない？"}},
        {"id": "intro.3", "who": "sora", "face": "shy", "camera": {"shot": "speaker"}, "look": "mio",
         "text": {"zh": "……嗯。不過，我想先去一個地方。", "ja": "……うん。でも、先に寄りたいところがあるの。"}},

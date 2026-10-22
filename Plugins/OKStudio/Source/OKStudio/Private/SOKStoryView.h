@@ -46,6 +46,7 @@ private:
 	mutable FVector2D PanelMin, PanelMax;
 	mutable bool bPanelOpen = false;
 	mutable float BacklogScroll = 0.f;
+	mutable float OutlineScroll = 0.f;
 	mutable TMap<TWeakObjectPtr<UObject>, FSlateBrush> Brushes;
 	FVector2D LastPointer = FVector2D(-1.0, -1.0);
 

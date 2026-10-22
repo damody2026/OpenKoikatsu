@@ -16,6 +16,7 @@
 - [x] 3D 移動／旋轉／縮放把手（W／E／R，世界 X／Y／Z 軸，拖曳換算回父物件座標；自測模擬螢幕拖曳）
 - [x] 捏人畫面「進入工作室」開新的 Studio（目前角色當第一個角色，站在原位；「離開」回捏人畫面）；舊時間軸改名「動作時間軸」暫留，S7 併入。驗收 `ok.GalleryOkStudioAudit`
 - [x] 遊戲內場景清單（`UserData/Studio/scene/*.okscene`，取名存檔、點選讀取）
+- [x] 復原／重做（2026-10-22）：`UOKStudioGame::Undo`／`Redo`，按鈕與 Ctrl+Z、Ctrl+Y（Ctrl+Shift+Z）。文件改動停 0.4 秒才記成一步（拖曳把手、滑桿算一步），時間軸播放中不記；最多 100 步、約 256 MB 的狀態（.okscene JSON），讀檔重新開始。還原時沒變的物件保留原值不重建（JSON 讀回的浮點或檔案沒存的欄位會讓整個場景重建）。自測 GameSelfTest「undo」：兩步、改名與新增都能復原、重做、改名的復原只重建那一個物件
 - [x] 獨立的場景編輯器（2026-10-22）：`SceneEditor.cmd [場景檔]`（`Tools/run_scene_editor.lua`，`-Scene`、`-WindowWidth/Height`、`-NoBuild`、`-DryRun`，可把檔案拖到 cmd 上）。開 `/Engine/Maps/Entry?game=/Script/OKStudio.OKStudioGameMode`：`AOKStudioGameMode` 不建立讀卡畫面的 HUD／Gallery，啟動時開 `-OKScene=<檔案>`（.okscene、OK 場景卡或 KStudio PNG；沒有就是新場景），只顯示 Studio 面板與觀看相機；引擎畫面訊息（`GAreScreenMessagesEnabled`）關閉；「離開」關閉程式。讀卡畫面的「進入工作室」維持原樣
 
 ## S3 Studio 道具與地圖進基礎庫（進行中）
@@ -489,7 +490,9 @@
 - KStudio 匯入：Studio 存的乳首、汁，加上卡片 Status 的淚等級與飾品顯示。臉紅、光澤卡片本身已帶。
 - 自測：Rust `studio_status` 兩項（`OK_NOCACHE=1`）；遊戲內 `OKStudio.GameSelfTest` 的 character state。
 - 未做：汁的貼花渲染，等「新渲染模式」的材質介面；SkinEffects、ClothingBlendShape、角色的 MaterialEditor。
-- 2026-10-22 道具的 MaterialEditor：KStudio 場景尾端 ExtendedSave（`com.deathweasel.bepinex.materialeditor`）的 `MaterialColorPropertyList`／`MaterialFloatPropertyList` 由 Rust `studio_scene.rs` 讀成 `material_edits`（物件 key、材質名、屬性、顏色或數值），匯入時掛到對應道具的 `FOKSceneItem::MaterialEdits` 並存進 .okscene。`AOKSceneActor` 把每筆轉成材質覆寫（材質名空白代表道具的所有材質）。道具面板「材質編輯」可新增、刪除、改材質名／屬性／值（`#RRGGBB[AA]` 是顏色，數字是數值）。自測：`OKStudio.PatternTest` 第四張圖用 `_Color` 編輯把道具改紅。貼圖覆寫與角色的 MaterialEditor 尚未做。
+- 2026-10-22 道具的 MaterialEditor：KStudio 場景尾端 ExtendedSave（`com.deathweasel.bepinex.materialeditor`）的 `MaterialColorPropertyList`／`MaterialFloatPropertyList` 由 Rust `studio_scene.rs` 讀成 `material_edits`（物件 key、材質名、屬性、顏色或數值），匯入時掛到對應道具的 `FOKSceneItem::MaterialEdits` 並存進 .okscene。`AOKSceneActor` 把每筆轉成材質覆寫（材質名空白代表道具的所有材質）。道具面板「材質編輯」可新增、刪除、改材質名／屬性／值（`#RRGGBB[AA]` 是顏色，數字是數值）。自測：`OKStudio.PatternTest` 第四張圖用 `_Color` 編輯把道具改紅。
+  - 同日補上其他清單（`FOKSceneMaterialEdit::Kind`）：`MaterialTexturePropertyList`＋`TextureDictionary` 的貼圖（PNG 以 base64 存在 .okscene，UE 依材質原本貼圖的 sRGB 選 sRGB 或線性版本，`FOKMaterialOverride::TextureLinear`）與縮放／位移（`_<屬性>_ST`）；`MaterialShaderList` 換 shader（Rust `okmodel_view::ItemMaterialEdits`，開道具 session 時換掉材質的 shader，只接受目前做得出材質的 shader 家族，其他照原作 MaterialAPI 保留原 shader）；`RendererPropertyList` 的 Enabled、ShadowCastingMode（寫成 `_OKRendererEnabled`／`_OKRendererShadowMode`）。ReceiveShadows、RecalculateNormals 沒做。
+  - 驗收：匯入 `vmd/83283571_p1`（舞台的 live05/06 由 MDK 換成 main_item_studio，其上的 LightCancel、Glossiness、rimV 等數值原本 14 個部件各 4 筆套不上，換 shader 後 4／4 都套上）；只剩河流 `m_koi_stu_kawa00_00` 的 `_MainTex_ST`（該材質沒有這個參數）。角色的 MaterialEditor 由卡片處理（`card.rs`）。
 - 2026-10-22 Invisible Body：卡片 `KK_InvisibleBody` 的 `Visible = false`（Rust `CardInfo::invisible_body`）時，身體骨架下的部件（身體、臉、眼、頭髮）都不畫，只留衣服與飾品，照原作 `IterateVisible`；Studio 狀態 `invisible_body` 可覆寫（面板「隱形身體」照卡片／只顯示衣服與飾品／顯示）。SESSION_CACHE_REVISION 24。自測：GameSelfTest character state。
 - 場景插件用量（`studio_scene::tests::print_scene_plugin_usage`，本機 7,694 個場景，只計有資料的）：MaterialEditor 29（已做道具部分）、KKVMDPlay 43（要外部 VMD 檔）、kkpe 28、nodesConstraints 29（幾乎都是空的約束）、CharaLightLinkedToCamera 27（只有 1 個鎖定）、StudioSceneSettings 27（MapMasking 全是 false、裁切面沒設）、ImageEmbed 16（資料都是空的）、AnimationController 角色資料都是空的；Studio 天空只有 1 個場景開著。這些插件先不做，卡片上的 InvisibleBody 22 個場景都存 `Visible = true`（舊版也存）。
 - 2026-10-21 透明材質專項：3167 的 KoikanoGlasses0–11 改為來源 alpha blending，保存未套色 MainTex 與卡片 Color4，重烘 StreetDisplay26／StudioDisplay26／StreetHG05，48 組真實 GPU 混合回歸通過。前後圖與驗收見 [透明材質修正](OK_STUDIO_TRANSPARENCY_20261020.md)。

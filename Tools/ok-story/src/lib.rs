@@ -1,6 +1,7 @@
 //! ok_story.dll: the galgame story director (include/ok_story.h). Nothing here may unwind into Unreal.
 pub mod camera;
 pub mod director;
+pub mod edit;
 pub mod io;
 pub mod life;
 pub mod math;

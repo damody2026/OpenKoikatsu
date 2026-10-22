@@ -9,6 +9,7 @@
 "ui.close" = "Close"
 "ui.quit" = "Quit"
 "ui.menu" = "Menu"
+"ui.outline" = "Script outline"
 "ui.empty_slot" = "(empty)"
 "ui.slot" = "Slot {n}"
 "ui.quick" = "Quick save"

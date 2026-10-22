@@ -92,6 +92,9 @@ private:
 	TStrongObjectPtr<UTextureRenderTarget2D> ProbeTarget;
 	TArray<TPair<uint64, double>> ProbeAnswers;
 	void RunProbes(const TArray<TSharedPtr<class FJsonValue>>& Probes);
+	/** Requests of tools (ok-story-mcp) in UserData/Story/control: <id>.json in, <id>.out.json back. */
+	void PollControl();
+	double ControlPolled = 0.0;
 	TArray<TStrongObjectPtr<UAudioComponent>> Sounds;
 
 	/** Self test state. */
@@ -100,6 +103,10 @@ private:
 	FString SelfTestLine, SelfTestDir;
 	TArray<FString> SelfTestLog;
 	double SelfTestLineSince = 0.0;
+	/** The panel tour: next step (-1 not started), when the last step went, the screenshot it is waiting for. */
+	int32 SelfTestTour = -1;
+	double SelfTestTourAt = 0.0;
+	FString SelfTestTourShot;
 	void TickSelfTest();
 
 	bool bEndRequested = false;
@@ -120,5 +127,10 @@ private:
 	void UpdatePortrait(const TSharedPtr<FJsonObject>& Portrait);
 	AKKPreviewActor* Preview(const FString& Who) const;
 	int32 FindOrAddCharacter(const FString& Who, const FString& Card, int32 Outfit, int32 SceneObject);
-	void PlaySound(const FString& File, float Volume, AKKPreviewActor* Speaker, uint64 Id, float Pitch);
+	/** A sound effect (Ogg), not tied to a speaker. */
+	void PlaySound(const FString& File, float Volume, uint64 Id);
+	/** Speech on the speaker: its length goes back as the result; facts follow its progress. */
+	void StartVoice(uint64 Id, const FString& Who, AKKPreviewActor* Speaker, TSharedPtr<const struct FKKSpeechPcm, ESPMode::ThreadSafe> Pcm, float Pitch, float Volume);
+	/** A line spoken by ok-tts (OK_TTS_ENDPOINT, default 127.0.0.1:47860): synthesized, then StartVoice. */
+	void RequestTts(uint64 Id, const FString& Who, const FString& Text, const FString& Voice, float Pitch, float Volume);
 };

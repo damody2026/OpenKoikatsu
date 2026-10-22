@@ -84,6 +84,10 @@ local function main()
       if not copied then io.write("Story director DLL in use, keeping the previous copy: ", tostring(err), "\n") end
     end
     env.OK_STORY_DLL = (copy:gsub("/", "\\"))
+    -- Lines spoken by ok-tts go to this checkout's server when it runs one (local-instance.json voice), else the
+    -- default 127.0.0.1:47860.
+    local okp, ports = pcall(function() return require("ok_instance").ports() end)
+    if okp and ports and ports.voice and ports.tts then env.OK_TTS_ENDPOINT = "http://127.0.0.1:" .. ports.tts end
   end
 
   local project = path.join(root, "OpenKoikatsu.uproject")

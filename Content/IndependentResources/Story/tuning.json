@@ -40,11 +40,13 @@
     "speaker_distance": 165.0,
     "speaker_side_deg": 20.0,
     "speaker_fov": 30.0,
-    "speaker_aim_drop": 16.0,
+    "frame_above": 20.0,
+    "frame_below": 45.0,
     "two_fov": 35.0,
     "two_fill": 0.42,
     "wide_fov": 40.0,
     "wide_margin": 1.25,
+    "wide_free": 0.74,
     "parallax_cm": [
       4.0,
       2.5
@@ -95,7 +97,8 @@
       0.0,
       50000.0,
       0.0
-    ]
+    ],
+    "offstage_motion": "0:0:1"
   },
   "life": {
     "blink_every": [

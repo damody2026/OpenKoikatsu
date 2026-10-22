@@ -9,6 +9,7 @@
 "ui.close" = "關閉"
 "ui.quit" = "結束"
 "ui.menu" = "選單"
+"ui.outline" = "劇本目錄"
 "ui.empty_slot" = "（空）"
 "ui.slot" = "第 {n} 格"
 "ui.quick" = "快速存檔"

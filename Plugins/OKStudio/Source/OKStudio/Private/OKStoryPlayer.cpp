@@ -31,12 +31,17 @@
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UnrealClient.h"
 #include "Containers/Ticker.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
 #include "AudioDevice.h"
 
 // Must match OKS_ABI_VERSION in Tools/ok-story/include/ok_story.h.
@@ -472,23 +477,90 @@ static EOKSceneLook OKStoryLook(const FString& Mode)
 	return Mode == TEXT("point") ? EOKSceneLook::Point : Mode == TEXT("animation") ? EOKSceneLook::Animation : EOKSceneLook::Camera;
 }
 
-void UOKStoryPlayer::PlaySound(const FString& File, float Volume, AKKPreviewActor* Speaker, uint64 Id, float Pitch)
+// A 16-bit PCM WAV (what ok-tts writes) as speech samples.
+static bool OKStoryLoadWav(const FString& Path, TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe>& Out, FString& Error)
+{
+	TArray<uint8> Bytes;
+	if (!FFileHelper::LoadFileToArray(Bytes, *Path)) { Error = TEXT("cannot read ") + Path; return false; }
+	if (Bytes.Num() < 12 || FMemory::Memcmp(Bytes.GetData(), "RIFF", 4) || FMemory::Memcmp(Bytes.GetData() + 8, "WAVE", 4)) { Error = TEXT("not a WAV file: ") + Path; return false; }
+	auto U16 = [&](int32 At) { return int32(Bytes[At]) | int32(Bytes[At + 1]) << 8; };
+	auto U32 = [&](int32 At) { return int32(U16(At)) | int32(U16(At + 2)) << 16; };
+	int32 Channels = 0, Rate = 0, Bits = 0, Format = 0;
+	for (int32 At = 12; At + 8 <= Bytes.Num();)
+	{
+		const int32 Size = U32(At + 4), Body = At + 8;
+		if (!FMemory::Memcmp(Bytes.GetData() + At, "fmt ", 4) && Body + 16 <= Bytes.Num()) { Format = U16(Body); Channels = U16(Body + 2); Rate = U32(Body + 4); Bits = U16(Body + 14); }
+		else if (!FMemory::Memcmp(Bytes.GetData() + At, "data", 4))
+		{
+			if (Format != 1 || Bits != 16 || Channels < 1 || Rate <= 0) { Error = TEXT("only 16-bit PCM WAV is supported: ") + Path; return false; }
+			auto Pcm = MakeShared<FKKSpeechPcm, ESPMode::ThreadSafe>();
+			Pcm->Channels = Channels;
+			Pcm->SampleRate = Rate;
+			const int32 Count = FMath::Min(Size, Bytes.Num() - Body) / 2;
+			Pcm->Samples.SetNumUninitialized(Count);
+			FMemory::Memcpy(Pcm->Samples.GetData(), Bytes.GetData() + Body, Count * 2);
+			Out = Pcm;
+			return true;
+		}
+		At = Body + Size + (Size & 1);
+	}
+	Error = TEXT("WAV without data: ") + Path;
+	return false;
+}
+
+void UOKStoryPlayer::StartVoice(uint64 Id, const FString& Who, AKKPreviewActor* Speaker, TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe> Pcm, float Pitch, float Volume)
+{
+	FString Error;
+	if (!Speaker || !Pcm || !Speaker->PlaySpeechPcm(Pcm, Pitch, Error)) { Ack(Id, false, Error.IsEmpty() ? TEXT("speaker not shown") : Error); return; }
+	if (Speaker->SpeechAudio) Speaker->SpeechAudio->SetVolumeMultiplier(Volume);
+	const double Frames = Pcm->Channels > 0 ? double(Pcm->Samples.Num()) / Pcm->Channels : 0.0;
+	VoiceId = Id;
+	VoiceWho = Who;
+	VoiceLength = Pcm->SampleRate > 0 ? Frames / Pcm->SampleRate / FMath::Max(Pitch, 0.01f) : 0.0;
+	VoiceStart = FPlatformTime::Seconds();
+	bVoiceSeen = false;
+	Ack(Id, true, FString(), [&](FJsonObject& A) { A.SetNumberField(TEXT("duration"), VoiceLength); });
+}
+
+void UOKStoryPlayer::RequestTts(uint64 Id, const FString& Who, const FString& Text, const FString& Voice, float Pitch, float Volume)
+{
+	FString Endpoint = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_TTS_ENDPOINT"));
+	if (Endpoint.IsEmpty()) Endpoint = TEXT("http://127.0.0.1:47860");
+	TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+	Body->SetStringField(TEXT("text"), Text);
+	Body->SetStringField(TEXT("personality"), Voice);
+	Body->SetNumberField(TEXT("age"), 18);
+	Body->SetStringField(TEXT("out_dir"), FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Story/TtsCache")));
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(Endpoint / TEXT("synthesize"));
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json; charset=utf-8"));
+	Request->SetContentAsString(OKStoryJson(Body));
+	Request->SetTimeout(30.f);
+	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, Id, Who, Pitch, Volume](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+	{
+		if (!Handle) return;
+		FString Error = TEXT("ok-tts did not answer (start it with the street launcher, or set OK_TTS_ENDPOINT)"), Path;
+		TSharedPtr<FJsonObject> J = bConnected && Response.IsValid() ? OKStoryParse(Response->GetContentAsString()) : nullptr;
+		bool bOk = false;
+		if (J && J->TryGetBoolField(TEXT("ok"), bOk) && bOk && J->TryGetStringField(TEXT("path"), Path))
+		{
+			TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe> Pcm;
+			// ok-tts answers with an Ogg (or a WAV).
+			const bool bDecoded = Path.EndsWith(TEXT(".wav"), ESearchCase::IgnoreCase) ? OKStoryLoadWav(Path, Pcm, Error) : KKSpeech::DecodeOgg(Path, Pcm, Error);
+			if (bDecoded) { StartVoice(Id, Who, Preview(Who), Pcm, Pitch, Volume); return; }
+		}
+		else if (J) J->TryGetStringField(TEXT("error"), Error);
+		Ack(Id, false, Error);
+	});
+	Request->ProcessRequest();
+}
+
+void UOKStoryPlayer::PlaySound(const FString& File, float Volume, uint64 Id)
 {
 	UOKStudioGame* Game = Studio.Get();
 	UWorld* World = GetTickableGameObjectWorld();
 	FString Error;
-	if (Speaker)
-	{
-		if (!Speaker->PlaySpeechFile(File, Pitch, Error)) { Ack(Id, false, Error); return; }
-		if (Speaker->SpeechAudio) Speaker->SpeechAudio->SetVolumeMultiplier(Volume);
-		const TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe> Pcm = Speaker->SpeechWave ? Speaker->SpeechWave->Pcm : nullptr;
-		const double Frames = Pcm && Pcm->Channels > 0 ? double(Pcm->Samples.Num()) / Pcm->Channels : 0.0;
-		VoiceLength = Pcm && Pcm->SampleRate > 0 ? Frames / Pcm->SampleRate / FMath::Max(Pitch, 0.01f) : 0.0;
-		VoiceStart = FPlatformTime::Seconds();
-		bVoiceSeen = false;
-		Ack(Id, true, FString(), [&](FJsonObject& A) { A.SetNumberField(TEXT("duration"), VoiceLength); });
-		return;
-	}
 	TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe> Pcm;
 	if (!World || !KKSpeech::DecodeOgg(File, Pcm, Error)) { Ack(Id, false, Error.IsEmpty() ? TEXT("no world") : Error); return; }
 	UKKSpeechWave* Wave = NewObject<UKKSpeechWave>(Game);
@@ -664,12 +736,21 @@ void UOKStoryPlayer::Execute(const TSharedPtr<FJsonObject>& C)
 		C->TryGetNumberField(TEXT("pitch"), Pitch);
 		C->TryGetNumberField(TEXT("volume"), Volume);
 		AKKPreviewActor* P = Preview(Who);
-		if (!C->TryGetStringField(TEXT("file"), File) || File.IsEmpty()) { Ack(Id, false, TEXT("ok-tts voices are not available in OK Studio")); return; }
 		if (!P) { Ack(Id, false, TEXT("speaker not shown: ") + Who); return; }
+		if (!C->TryGetStringField(TEXT("file"), File) || File.IsEmpty())
+		{
+			FString Tts, Text;
+			C->TryGetStringField(TEXT("text"), Text);
+			if (!C->TryGetStringField(TEXT("tts"), Tts) || Tts.IsEmpty()) { Ack(Id, false, TEXT("no voice file or ok-tts voice")); return; }
+			RequestTts(Id, Who, Text, Tts, float(Pitch), float(Volume));
+			return;
+		}
 		if (FPaths::IsRelative(File)) File = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), File);
-		VoiceId = Id;
-		VoiceWho = Who;
-		PlaySound(File, float(Volume), P, Id, float(Pitch));
+		TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe> Pcm;
+		FString Error;
+		const bool bDecoded = File.EndsWith(TEXT(".wav"), ESearchCase::IgnoreCase) ? OKStoryLoadWav(File, Pcm, Error) : KKSpeech::DecodeOgg(File, Pcm, Error);
+		if (!bDecoded) { Ack(Id, false, Error); return; }
+		StartVoice(Id, Who, P, Pcm, float(Pitch), float(Volume));
 		return;
 	}
 	if (Op == TEXT("stop_voice"))
@@ -683,7 +764,7 @@ void UOKStoryPlayer::Execute(const TSharedPtr<FJsonObject>& C)
 	{
 		FString File = C->GetStringField(TEXT("file"));
 		if (FPaths::IsRelative(File)) File = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), File);
-		PlaySound(File, float(C->GetNumberField(TEXT("volume"))), nullptr, Id, 1.f);
+		PlaySound(File, float(C->GetNumberField(TEXT("volume"))), Id);
 		return;
 	}
 	if (Op == TEXT("thumbnail"))
@@ -920,6 +1001,56 @@ void UOKStoryPlayer::Tick(float DeltaTime)
 	const TArray<TSharedPtr<FJsonValue>>* Probes = nullptr;
 	if (Frame->TryGetArrayField(TEXT("probes"), Probes) && Probes->Num()) RunProbes(*Probes);
 	if (bSelfTest) TickSelfTest();
+	PollControl();
+}
+
+void UOKStoryPlayer::PollControl()
+{
+	const double Now = FPlatformTime::Seconds();
+	if (Now - ControlPolled < 0.2) return;
+	ControlPolled = Now;
+	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Story/control"));
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.json")), true, false);
+	for (const FString& Name : Files)
+	{
+		if (Name.EndsWith(TEXT(".out.json"))) continue;
+		const FString Path = Dir / Name;
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *Path)) continue;
+		IFileManager::Get().Delete(*Path);
+		const TSharedPtr<FJsonObject> Request = OKStoryParse(Text);
+		FString Answer = TEXT("{\"error\":\"unreadable request\"}");
+		const FString Cmd = Request ? Request->GetStringField(TEXT("cmd")) : FString();
+		if (Cmd == TEXT("state")) Answer = Query(TEXT("{\"q\":\"state\"}"));
+		else if (Cmd == TEXT("input"))
+		{
+			const TSharedPtr<FJsonObject>* Event = nullptr;
+			if (Request->TryGetObjectField(TEXT("event"), Event)) { Input(OKStoryJson((*Event).ToSharedRef())); Answer = TEXT("{\"ok\":true}"); }
+		}
+		else if (Cmd == TEXT("reload"))
+		{
+			FString Out, Error;
+			const bool bOk = Reload(Out, Error);
+			TSharedRef<FJsonObject> A = MakeShared<FJsonObject>();
+			A->SetBoolField(TEXT("ok"), bOk);
+			A->SetStringField(TEXT("message"), bOk ? Out : Error);
+			Answer = OKStoryJson(A);
+		}
+		else if (Cmd == TEXT("shot"))
+		{
+			const FString Shot = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Story/Shots") / FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%s.png")));
+			FScreenshotRequest::RequestScreenshot(Shot, true, false);
+			TSharedRef<FJsonObject> A = MakeShared<FJsonObject>();
+			A->SetStringField(TEXT("path"), Shot);
+			A->SetStringField(TEXT("note"), TEXT("written at the end of this frame"));
+			Answer = OKStoryJson(A);
+		}
+		// The answer appears whole (written aside, then renamed).
+		const FString Out = Path.LeftChop(5) + TEXT(".out.json");
+		FFileHelper::SaveStringToFile(Answer, *(Out + TEXT(".tmp")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		IFileManager::Get().Move(*Out, *(Out + TEXT(".tmp")));
+	}
 }
 
 void UOKStoryPlayer::RunProbes(const TArray<TSharedPtr<FJsonValue>>& Probes)
@@ -1064,11 +1195,47 @@ void UOKStoryPlayer::TickSelfTest()
 		SelfTestLineSince = Now - 2.5 + 0.5; // the screenshot is written at the end of the frame: wait a little
 		return;
 	}
+	// Once, on the third line: the panels (save into slot 1, load, backlog, settings, menu), a screenshot of each.
+	static const TCHAR* Tour[][2] = {
+		{ TEXT("{\"type\":\"button\",\"id\":\"save\"}"), TEXT("panel_save") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"slot:01\"}"), nullptr },
+		{ TEXT("{\"type\":\"button\",\"id\":\"load\"}"), TEXT("panel_load") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"button\",\"id\":\"backlog\"}"), TEXT("panel_backlog") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"button\",\"id\":\"settings\"}"), TEXT("panel_settings") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"key\",\"key\":\"F7\"}"), TEXT("panel_outline") },
+		{ TEXT("{\"type\":\"key\",\"key\":\"F7\"}"), nullptr },
+		{ TEXT("{\"type\":\"key\",\"key\":\"Escape\"}"), TEXT("panel_menu") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+	};
+	int32 LinesDone = 0;
+	for (const FString& L : SelfTestLog) LinesDone += L.StartsWith(TEXT("done ")) ? 1 : 0;
+	if (LinesDone >= 3 && SelfTestTour < int32(UE_ARRAY_COUNT(Tour)) + 1)
+	{
+		if (Now - SelfTestTourAt < 1.2) return;
+		if (!SelfTestTourShot.IsEmpty()) { Shot(SelfTestTourShot); SelfTestTourShot.Reset(); }
+		SelfTestTour = FMath::Max(SelfTestTour, 0);
+		if (SelfTestTour < int32(UE_ARRAY_COUNT(Tour)))
+		{
+			Input(Tour[SelfTestTour][0]);
+			SelfTestLog.Add(FString(TEXT("tour ")) + Tour[SelfTestTour][0]);
+			if (Tour[SelfTestTour][1]) SelfTestTourShot = Tour[SelfTestTour][1];
+		}
+		++SelfTestTour;
+		SelfTestTourAt = Now;
+		return;
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Choices = nullptr;
 	if (Frame && Frame->TryGetArrayField(TEXT("choices"), Choices) && Choices->Num())
 	{
 		int32 Pick = 0;
-		for (int32 I = 0; I < Choices->Num(); ++I) if ((*Choices)[I]->AsObject()->GetBoolField(TEXT("enabled"))) { Pick = I; break; }
+		// -OKStoryChoice=N: the Nth choice where it is enabled (other routes), else the first enabled one.
+		int32 Wanted = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("OKStoryChoice="), Wanted);
+		if (Choices->IsValidIndex(Wanted) && (*Choices)[Wanted]->AsObject()->GetBoolField(TEXT("enabled"))) Pick = Wanted;
+		else for (int32 I = 0; I < Choices->Num(); ++I) if ((*Choices)[I]->AsObject()->GetBoolField(TEXT("enabled"))) { Pick = I; break; }
 		Input(FString::Printf(TEXT("{\"type\":\"choose\",\"index\":%d}"), Pick));
 		SelfTestLog.Add(FString::Printf(TEXT("choose %d at %s"), Pick, *Line));
 		return;

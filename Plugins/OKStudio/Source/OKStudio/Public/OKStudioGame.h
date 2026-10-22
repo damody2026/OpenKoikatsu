@@ -127,6 +127,19 @@ public:
 	void Pan(float Right, float Up);
 	void Zoom(float Steps);
 
+	/** Undo history of the document: a change becomes one step once the document has been still for a moment (a drag or
+	 *  a slider is one step); loading a scene starts a new history. Not recorded while the timeline plays. */
+	void Undo();
+	void Redo();
+	bool CanUndo() const { return !UndoStack.IsEmpty() || bHistoryDirty; }
+	bool CanRedo() const { return !RedoStack.IsEmpty(); }
+	int32 UndoSteps() const { return UndoStack.Num() + (bHistoryDirty ? 1 : 0); }
+	/** Records a pending change now (otherwise done on the next still tick). */
+	void CommitHistory();
+	void ResetHistory();
+	/** Objects the last undo or redo left as they were (not rebuilt). */
+	int32 LastHistoryKept = 0;
+
 	/** Self test of the in-game studio; results in Saved/OKStudio/game_selftest.txt. */
 	void RunSelfTest(bool bExit);
 	/** Effect colour over real frames (OKStudio.EffectColorTest). */
@@ -158,6 +171,13 @@ private:
 	bool bStopRequested = false;
 	bool bStoryMode = false;
 	EVisibility PanelVisibility = EVisibility::Visible;
+	/** Earlier document states (oldest first), undone states, and the state the history last recorded. */
+	TArray<FString> UndoStack, RedoStack;
+	FString HistoryState;
+	bool bHistoryDirty = false;
+	bool bHistoryRestoring = false;
+	double LastChangeSeconds = 0.;
+	void RestoreHistory(const FString& State);
 	FString ExportDir;
 	float ExportFps = 30.f;
 	int32 ExportFrame = -1, ExportTotal = 0, ExportWidth = 1920, ExportHeight = 1080;
