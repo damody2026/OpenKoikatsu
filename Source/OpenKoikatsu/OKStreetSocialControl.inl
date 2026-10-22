@@ -353,6 +353,11 @@ void AOKStreetSocialScene::StartControlServer(){
   O->SetStringField(TEXT("dll"),S.Mind->DllPath());
   OKControlReply(Done,O);
  });
+ // Her song (OKStreetSocialSong.inl): {"action": state|prepare|play|accept|later|decline|skip|cancel|enable|disable, "girl": N}.
+ Bind(TEXT("/song"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
+  const TSharedRef<FJsonObject> Body=OKControlBody(Req);FString Action=TEXT("state");Body->TryGetStringField(TEXT("action"),Action);int32 Girl=0;Body->TryGetNumberField(TEXT("girl"),Girl);
+  OKControlReply(Done,SongControl(Action,Girl));
+ });
  Bind(TEXT("/rules"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;const TSharedRef<FJsonObject> Body=OKControlBody(Req);FString Action=TEXT("status");Body->TryGetStringField(TEXT("action"),Action);
   if(!S.Rules){OKControlReply(Done,OKControlResult(false,TEXT("rules not open")));return;}
