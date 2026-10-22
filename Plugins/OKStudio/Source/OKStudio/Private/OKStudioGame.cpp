@@ -2136,7 +2136,8 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 			if (!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POSE_DUMP")).IsEmpty())
 				UE_LOG(LogTemp, Display, TEXT("OK studio camera: view=%s horizontal_fov=%.9f aspect=%.9f active=%d"), *Cam->GetComponentTransform().ToString(), Cam->FieldOfView, Cam->AspectRatio, Self->Document->ActiveCamera);
 			FImage Original;
-			if (FOKSceneCard::Capture(Self->SceneActor, Self->Viewer->GetActorTransform(), Cam->FieldOfView, &Cam->PostProcessSettings, W, H, false, Pixels, Error) && FImageUtils::LoadImage(*Path, Original))
+			if (FOKSceneCard::Capture(Self->SceneActor, Self->Viewer->GetActorTransform(), Cam->FieldOfView, &Cam->PostProcessSettings, W, H, false, Pixels, Error)
+				&& (FImageUtils::LoadImage(*Path, Original) || (Path.EndsWith(TEXT(".okscene")) && (Original.Init(W, H, ERawImageFormat::BGRA8, EGammaSpace::sRGB), FMemory::Memzero(Original.RawData.GetData(), Original.RawData.Num()), true))))
 			{
 				FImage Left;
 				Original.ResizeTo(Left, W, H, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
@@ -2161,8 +2162,24 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 							for (UMeshComponent* Mesh : Meshes)
 								for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
 									if (UMaterialInterface* M = Mesh->GetMaterial(Slot); M && (O.Name.Contains(Dump) || Mesh->GetName().Contains(Dump)))
-										UE_LOG(LogTemp, Display, TEXT("OK studio compare dump: %s %s slot %d %s blend=%d base=%s visible=%d"), *O.Name, *Mesh->GetName(), Slot, *M->GetName(),
-											int32(M->GetBlendMode()), *M->GetMaterial()->GetName(), Mesh->IsVisible() ? 1 : 0);
+									{
+										FString Values;
+										for (const TCHAR* Name : { TEXT("_Color"), TEXT("_Color2"), TEXT("_Color3"), TEXT("_Color4"), TEXT("_ShadowColor") })
+										{
+											FLinearColor V;
+											if (M->GetVectorParameterValue(FMaterialParameterInfo(Name), V)) Values += FString::Printf(TEXT(" %s=(%.3f,%.3f,%.3f,%.3f)"), Name, V.R, V.G, V.B, V.A);
+										}
+										for (const TCHAR* Name : { TEXT("_MainTex"), TEXT("_ColorMask") })
+										{
+											UTexture* T = nullptr;
+											if (!M->GetTextureParameterValue(FMaterialParameterInfo(Name), T)) continue;
+											const UTexture2D* T2 = Cast<UTexture2D>(T);
+											Values += FString::Printf(TEXT(" %s=%s(%dx%d address %d,%d srgb %d)"), Name, T ? *T->GetName() : TEXT("none"), T2 ? T2->GetSizeX() : 0, T2 ? T2->GetSizeY() : 0,
+												T2 ? int32(T2->AddressX) : -1, T2 ? int32(T2->AddressY) : -1, T ? int32(T->SRGB) : -1);
+										}
+										UE_LOG(LogTemp, Display, TEXT("OK studio compare dump: %s %s slot %d %s blend=%d base=%s visible=%d%s"), *O.Name, *Mesh->GetName(), Slot, *M->GetName(),
+											int32(M->GetBlendMode()), *M->GetMaterial()->GetName(), Mesh->IsVisible() ? 1 : 0, *Values);
+									}
 						}
                 if (!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POSE_DUMP")).IsEmpty())
                     for (const FOKSceneObject& O : Self->Document->Objects)
@@ -4023,8 +4040,11 @@ namespace
 			if (Args.Num() < 2) { UE_LOG(LogTemp, Error, TEXT("OKStudio.CompareKStudio: folder and count required")); return; }
 			const bool bExit = Args.Contains(TEXT("exit"));
 			const FString Folder = Args[0].Equals(TEXT("samples"), ESearchCase::IgnoreCase) ? AOKSceneActor::LibraryDirectory() / TEXT("studio/samples") : Args[0];
-			TArray<FString> Names;
+			TArray<FString> Names, Scenes2;
 			IFileManager::Get().FindFiles(Names, *(Folder / TEXT("*.png")), true, false);
+			// OK scenes too (no card picture: the left half stays black), for diagnosing a part of a scene.
+			IFileManager::Get().FindFiles(Scenes2, *(Folder / TEXT("*.okscene")), true, false);
+			Names.Append(Scenes2);
 			Names.Sort();
 			const int32 Count = FMath::Clamp(FCString::Atoi(*Args[1]), 1, FMath::Max(1, Names.Num()));
 			TArray<FString> Scenes;

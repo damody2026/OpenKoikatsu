@@ -1252,6 +1252,37 @@ fn studio_mdk_preview_normalizes_source_rows_once() {
     }
 }
 
+#[cfg(test)]
+#[test]
+fn studio_item_preview_normalizes_main_and_mask_rows_once() {
+    let mut image = image::RgbaImage::new(1, 2);
+    // Unity's first source row is the bottom row. UE's PNG row zero is top.
+    image.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+    image.put_pixel(0, 1, image::Rgba([0, 0, 255, 255]));
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(image).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    for shader in ["Shader Forge/main_item_studio", "Shader Forge/main_item_studio_alpha"] {
+        let mesh = ExtractedMesh {
+            name: "item_row_probe".into(),
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            normals: vec![[0., 0., 1.]; 3],
+            uvs: vec![[0., 0.], [1., 0.], [0., 1.]],
+            indices: vec![0, 1, 2],
+            mat: Some(crate::unity::MeshMaterial { shader: shader.into(), ..Default::default() }),
+            texture_png: Some(png.clone()),
+            color_mask_png: Some(png.clone()),
+            ..Default::default()
+        };
+        let parts = preview_session_parts(Path::new(""), "part", vec![mesh], None).unwrap();
+        let mask = parts[0].item_draw.as_ref().and_then(|d| d.color_mask.as_ref()).expect("item draw colour mask");
+        for bytes in [parts[0].png.as_ref().unwrap(), mask] {
+            let decoded = crate::teximg::load_from_memory(bytes).unwrap().to_rgba8();
+            assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 255, 255], "{shader}: source top row");
+            assert_eq!(decoded.get_pixel(0, 1).0, [255, 0, 0, 255], "{shader}: source bottom row");
+        }
+    }
+}
+
 fn apply_clothes_create_textures(
     meshes: &mut [ExtractedMesh],
     map: Option<&crate::unity::ClothesRendererMap>,
@@ -4423,6 +4454,16 @@ impl<'a, 's> PushCtx<'a, 's> {
                     if let Some(png) = mesh.shader_extra_textures.remove(name) {
                         mesh.shader_extra_textures.insert(name.into(), flip_png_v(&png).unwrap_or(png));
                     }
+                }
+            } else if !role.contains("acc") && mesh.mat.as_ref().is_some_and(|mat| shader_family(&mat.shader).contains("main_item_studio")) {
+                // Studio items (role "part") drawn by main_item_studio: like the MDK slots above and the accessory MainTex,
+                // the main texture and colour mask follow the native mesh's (u, 1-v) UV convention (the parasol's canopy
+                // sampled its wood finial and ColorMask's black half before; native: the coloured canopy).
+                if me_maintex(me_tex, outfit, role, property.as_deref(), &mesh).is_none() {
+                    if let Some(png) = mesh.texture_png.take() { mesh.texture_png = Some(flip_png_v(&png).unwrap_or(png)); }
+                }
+                if me_texture(me_tex, outfit, role, property.as_deref(), &mesh, "colormask").is_none() {
+                    if let Some(png) = mesh.color_mask_png.take() { mesh.color_mask_png = Some(flip_png_v(&png).unwrap_or(png)); }
                 }
             } else if mesh.hair_shader_hint || mesh.mat.as_ref().is_some_and(|mat| is_native_hair_shader(&mat.shader)) {
                 // Forge hair samples _AnotherRamp with N dot view. Preserve a

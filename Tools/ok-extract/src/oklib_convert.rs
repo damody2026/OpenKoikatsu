@@ -373,22 +373,25 @@ pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) ->
 
 #[cfg(test)]
 mod uv_padding_scan {
-    // Lists the sources whose decoded main UV changes with the interleaved-record rule in `unity::decode_uvs`
-    // (OK_UV_SCAN_OUT=<file>: one label per line, the `convert <lib> 8 @<file>` list that re-records them).
+    // Lists the sources whose decoded main UV changes with a rule of `unity::decode_uvs`: the interleaved-record rule,
+    // or with OK_UV_SCAN_RULE=tiled the tiled-UV fallback (OK_UV_SCAN_OUT=<file>: one label per line, the
+    // `convert <lib> 8 @<file>` list that re-records them).
     #[test]
     #[ignore = "game oracle: reads every library source of the KKS installation (set OK_TEST_GAME_ROOT)"]
     fn sources_with_changed_main_uv() {
         use rayon::prelude::*;
         let game = crate::test_support::game();
         let sources = super::inventory(&game);
+        let tiled_rule = std::env::var("OK_UV_SCAN_RULE").as_deref() == Ok("tiled");
         let changed: Vec<String> = sources.par_iter().filter_map(|source| {
             let bytes = super::read_source(source)?;
             if !crate::oklib::is_unity_bundle(&bytes) { return None; }
-            let decode = |legacy: bool| {
-                crate::unity::UV_LEGACY_PADDING.with(|f| f.set(legacy));
+            let decode = |old: bool| {
+                let flag = if tiled_rule { &crate::unity::UV_NO_TILED_FALLBACK } else { &crate::unity::UV_LEGACY_PADDING };
+                flag.with(|f| f.set(old));
                 let meshes = crate::unity::meshes_from_memory(bytes.clone());
                 crate::unity::clear_bundle_cache();
-                crate::unity::UV_LEGACY_PADDING.with(|f| f.set(false));
+                flag.with(|f| f.set(false));
                 meshes.into_iter().map(|m| (m.name, m.uvs)).collect::<Vec<_>>()
             };
             let (old, new) = (decode(true), decode(false));
