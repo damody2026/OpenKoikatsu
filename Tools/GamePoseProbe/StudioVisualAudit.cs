@@ -222,8 +222,12 @@ public sealed partial class GamePoseProbe {
                     string meshPart = Environment.GetEnvironmentVariable("OK_PROBE_MESH");
                     var filter = renderer.GetComponent<MeshFilter>();
                     Mesh mesh = filter != null ? filter.sharedMesh : renderer is SkinnedMeshRenderer ? ((SkinnedMeshRenderer)renderer).sharedMesh : null;
-                    if (!String.IsNullOrEmpty(meshPart) && rendererPath.Contains(meshPart))
+                    if (!String.IsNullOrEmpty(meshPart) && rendererPath.Contains(meshPart)) {
                         writer.WriteLine("mesh_info\t" + rendererPath + "\t" + renderer.GetType().Name + "\t" + (mesh == null ? "null" : mesh.name + "\treadable=" + mesh.isReadable + "\tbounds=" + mesh.bounds.ToString("R")));
+                        // The local transform chain up to the scene root (child first).
+                        for (Transform t = renderer.transform; t != null; t = t.parent)
+                            writer.WriteLine("mesh_node\t" + rendererPath + "\t" + t.name + "\t" + t.localPosition.ToString("R") + "\t" + t.localRotation.ToString("R") + "\t" + t.localScale.ToString("R"));
+                    }
                     if (!String.IsNullOrEmpty(meshPart) && rendererPath.Contains(meshPart) && mesh != null && mesh.isReadable) {
                         Vector3[] verts = mesh.vertices; Vector2[] uvs = mesh.uv; int[] tris = mesh.triangles;
                         writer.WriteLine("mesh\t" + rendererPath + "\t" + mesh.name + "\t" + verts.Length + "\t" + tris.Length / 3 + "\t" + renderer.transform.localToWorldMatrix.ToString("R").Replace("\n", " "));
