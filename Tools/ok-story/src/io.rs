@@ -116,6 +116,8 @@ pub enum Input {
     /// Pointer movement in pixels (free camera).
     MouseDelta { dx: f64, dy: f64 },
     Choose { index: usize },
+    /// Play from this line (an editor or tool jumping there; its effects are not applied).
+    Jump { line: String },
     /// A button of the frame (its id), with a value for settings.
     Button { id: String, #[serde(default)] value: Option<serde_json::Value> },
 }

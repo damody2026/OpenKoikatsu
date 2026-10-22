@@ -920,6 +920,56 @@ void UOKStoryPlayer::Tick(float DeltaTime)
 	const TArray<TSharedPtr<FJsonValue>>* Probes = nullptr;
 	if (Frame->TryGetArrayField(TEXT("probes"), Probes) && Probes->Num()) RunProbes(*Probes);
 	if (bSelfTest) TickSelfTest();
+	PollControl();
+}
+
+void UOKStoryPlayer::PollControl()
+{
+	const double Now = FPlatformTime::Seconds();
+	if (Now - ControlPolled < 0.2) return;
+	ControlPolled = Now;
+	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Story/control"));
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.json")), true, false);
+	for (const FString& Name : Files)
+	{
+		if (Name.EndsWith(TEXT(".out.json"))) continue;
+		const FString Path = Dir / Name;
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *Path)) continue;
+		IFileManager::Get().Delete(*Path);
+		const TSharedPtr<FJsonObject> Request = OKStoryParse(Text);
+		FString Answer = TEXT("{\"error\":\"unreadable request\"}");
+		const FString Cmd = Request ? Request->GetStringField(TEXT("cmd")) : FString();
+		if (Cmd == TEXT("state")) Answer = Query(TEXT("{\"q\":\"state\"}"));
+		else if (Cmd == TEXT("input"))
+		{
+			const TSharedPtr<FJsonObject>* Event = nullptr;
+			if (Request->TryGetObjectField(TEXT("event"), Event)) { Input(OKStoryJson((*Event).ToSharedRef())); Answer = TEXT("{\"ok\":true}"); }
+		}
+		else if (Cmd == TEXT("reload"))
+		{
+			FString Out, Error;
+			const bool bOk = Reload(Out, Error);
+			TSharedRef<FJsonObject> A = MakeShared<FJsonObject>();
+			A->SetBoolField(TEXT("ok"), bOk);
+			A->SetStringField(TEXT("message"), bOk ? Out : Error);
+			Answer = OKStoryJson(A);
+		}
+		else if (Cmd == TEXT("shot"))
+		{
+			const FString Shot = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Story/Shots") / FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%s.png")));
+			FScreenshotRequest::RequestScreenshot(Shot, true, false);
+			TSharedRef<FJsonObject> A = MakeShared<FJsonObject>();
+			A->SetStringField(TEXT("path"), Shot);
+			A->SetStringField(TEXT("note"), TEXT("written at the end of this frame"));
+			Answer = OKStoryJson(A);
+		}
+		// The answer appears whole (written aside, then renamed).
+		const FString Out = Path.LeftChop(5) + TEXT(".out.json");
+		FFileHelper::SaveStringToFile(Answer, *(Out + TEXT(".tmp")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		IFileManager::Get().Move(*Out, *(Out + TEXT(".tmp")));
+	}
 }
 
 void UOKStoryPlayer::RunProbes(const TArray<TSharedPtr<FJsonValue>>& Probes)
@@ -1062,6 +1112,36 @@ void UOKStoryPlayer::TickSelfTest()
 		Shot(Line);
 		SelfTestLog.Add(TEXT("done ") + Line);
 		SelfTestLineSince = Now - 2.5 + 0.5; // the screenshot is written at the end of the frame: wait a little
+		return;
+	}
+	// Once, on the third line: the panels (save into slot 1, load, backlog, settings, menu), a screenshot of each.
+	static const TCHAR* Tour[][2] = {
+		{ TEXT("{\"type\":\"button\",\"id\":\"save\"}"), TEXT("panel_save") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"slot:01\"}"), nullptr },
+		{ TEXT("{\"type\":\"button\",\"id\":\"load\"}"), TEXT("panel_load") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"button\",\"id\":\"backlog\"}"), TEXT("panel_backlog") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"button\",\"id\":\"settings\"}"), TEXT("panel_settings") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+		{ TEXT("{\"type\":\"key\",\"key\":\"Escape\"}"), TEXT("panel_menu") },
+		{ TEXT("{\"type\":\"button\",\"id\":\"close\"}"), nullptr },
+	};
+	int32 LinesDone = 0;
+	for (const FString& L : SelfTestLog) LinesDone += L.StartsWith(TEXT("done ")) ? 1 : 0;
+	if (LinesDone >= 3 && SelfTestTour < int32(UE_ARRAY_COUNT(Tour)) + 1)
+	{
+		if (Now - SelfTestTourAt < 1.2) return;
+		if (!SelfTestTourShot.IsEmpty()) { Shot(SelfTestTourShot); SelfTestTourShot.Reset(); }
+		SelfTestTour = FMath::Max(SelfTestTour, 0);
+		if (SelfTestTour < int32(UE_ARRAY_COUNT(Tour)))
+		{
+			Input(Tour[SelfTestTour][0]);
+			SelfTestLog.Add(FString(TEXT("tour ")) + Tour[SelfTestTour][0]);
+			if (Tour[SelfTestTour][1]) SelfTestTourShot = Tour[SelfTestTour][1];
+		}
+		++SelfTestTour;
+		SelfTestTourAt = Now;
 		return;
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Choices = nullptr;

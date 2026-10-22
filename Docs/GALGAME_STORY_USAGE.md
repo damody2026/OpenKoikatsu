@@ -147,3 +147,32 @@ cargo test --release --manifest-path Tools/ok-story/Cargo.toml
 - 存讀檔、熱換；
 - 相機編輯、避開牆的鏡頭；
 - 隨附劇本檔的驗證。
+
+## AI 寫劇本：`ok-story-mcp`
+
+`Tools/ok-story/target/release/ok-story-mcp.exe` 是 MCP stdio server（`cargo build --release` 會一起建出來），讓外部 AI 編輯劇本、在執行中的 OK Studio 預覽：
+
+```bash
+claude mcp add ok-story -- E:/OpenKoikatsu/Tools/ok-story/target/release/ok-story-mcp.exe --project E:/OpenKoikatsu
+```
+
+| 工具 | 作用 |
+|---|---|
+| `story_new` | 建立新劇本（一幕，指定場景） |
+| `story_outline` | 列出幕、句（id、說話者、開頭文字、選項）與角色 |
+| `story_validate` | 列出劇本錯誤（附路徑） |
+| `story_get_line`／`story_set_line`／`story_add_line`／`story_delete_line` | 逐句讀取與編輯；`null` 代表刪除欄位 |
+| `story_add_act`／`story_set_act`／`story_set_character` | 編輯幕與角色 |
+| `game_state`／`game_jump`／`game_input`／`game_reload`／`game_screenshot` | 操作執行中的劇本：查狀態、跳到某句、送輸入、重讀劇本、截圖 |
+
+- 每次寫入前都會先驗證；不合法就不寫，並回報錯誤路徑。編輯時保留原本的欄位順序與不認得的欄位。
+- `game_*` 工具透過 `UserData/Story/control/` 交換檔案：每個請求放一個 `<id>.json`，遊戲每 0.2 秒檢查一次，答覆寫成 `<id>.out.json`。遊戲沒有在播劇本時，等 15 秒後回報。
+- 典型流程：先用 `story_add_line`／`story_set_line` 改劇本，再呼叫 `game_reload`、`game_jump` 跳到那一句，最後用 `game_screenshot` 看結果。
+
+## 已知限制
+
+- 換動作是直接切換，沒有 crossfade（`motion_blend` 目前沒有作用）。
+- OK Studio 沒有接上 `ok-tts`，只寫了 `voice.tts` 的句子沒有語音，改用固定字速打字。
+- 立繪的透明度用 HDR 擷取的反向不透明度判斷，半透明的頭髮邊緣是近似值。
+- 自動鏡頭只能用深度探測避開不透明的牆。不寫深度的東西（例如 Modulate 混合的水面）擋不住探測，鏡頭仍可能放到它後面；這時請用固定相機，或用 F8 存一個相機。
+- 示範劇本用的 Studio 場景與角色卡只在本機，不進版控。`ill_ss_sample_00` 在 UE 裡的畫面有問題（地圖 51 加上「野原」道具時，只看得到大片沒有貼圖的多邊形），這是 Studio 場景轉換的問題，與劇本播放無關；示範因此改用 1901／3800。

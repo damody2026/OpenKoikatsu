@@ -484,3 +484,17 @@ fn shots_avoid_walls() {
     let cam = s.frame.camera.clone().unwrap();
     assert!(cam.pos[0] > 60.0, "{cam:?}");
 }
+
+#[test]
+fn jump_plays_from_a_line_without_its_effects() {
+    let mut s = Stage::new("jump", |_| {});
+    s.run(0.2);
+    s.reach("a1.l1");
+    s.input(json!({"type": "jump", "line": "a1.l4"}));
+    s.run(0.2);
+    assert_eq!(s.line(), "a1.l4");
+    assert_eq!(s.state()["items"].get("key"), None, "a jump gives nothing");
+    s.input(json!({"type": "jump", "line": "a3"}));
+    s.run(0.5);
+    assert_eq!(s.line(), "a3.l1");
+}

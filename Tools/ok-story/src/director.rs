@@ -4,7 +4,7 @@
 use crate::camera::{self, Rig, ShotContext};
 use crate::io::*;
 use crate::life::{self, Gaze, Life, Present};
-use crate::math::{self, Pose, V3};
+use crate::math::{self, V3};
 use crate::portrait::Portrait;
 use crate::progress::{BacklogEntry, Progress};
 use crate::rng::Rng;
@@ -144,6 +144,7 @@ pub struct State {
     pub settings: Settings,
     pub end_sent: bool,
     pub probe: Option<ProbeJob>,
+    pub auto_save: bool,
 }
 
 pub struct Director {
@@ -375,9 +376,8 @@ impl Director {
             self.st.camera_set = true;
             self.probe(candidates, true);
         }
-        if effects && self.st.progress.line == 0 {
-            self.save_slot(SLOT_AUTO, false);
-        }
+        // The act's auto save, once its first line is on screen (its thumbnail shows the scene, not the loading).
+        self.st.auto_save = effects && self.st.progress.line == 0;
         if title {
             self.st.phase = Phase::Title { elapsed: 0.0, effects };
         } else {
@@ -965,7 +965,22 @@ impl Director {
             }
             Input::MouseDelta { .. } => {}
             Input::Choose { index } => self.choose(index),
+            Input::Jump { line } => self.jump(&line),
             Input::Button { id, value } => self.button(&id, value),
+        }
+    }
+
+    fn jump(&mut self, line: &str) {
+        let Some(at) = self.story.target(line) else { return self.log.push(format!("jump: no act or line {line}")) };
+        self.stop_voice();
+        self.st.rig.finish();
+        self.st.screen = "play".into();
+        if at.act != self.st.progress.act || matches!(self.st.phase, Phase::Ended | Phase::Start) {
+            self.st.progress.ended = false;
+            self.begin(at, false, false);
+        } else {
+            self.st.progress.line = at.line;
+            self.enter_line(false);
         }
     }
 
@@ -1241,6 +1256,10 @@ impl Director {
     fn line_tick(&mut self, dt: f64) {
         let Some(line) = self.line().cloned() else { return };
         self.st.line_age += dt;
+        if self.st.auto_save && self.st.line_age > 1.0 {
+            self.st.auto_save = false;
+            self.save_slot(SLOT_AUTO, false);
+        }
         let voice = self.facts.voice.clone();
         let mut following = false;
         if let Some(v) = &mut self.st.voice {

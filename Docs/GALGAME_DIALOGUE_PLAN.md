@@ -2,7 +2,26 @@
 
 2026-10-22，E 線（`duo2`，OK Studio）。研究對象：`https://github.com/2396846264/-vrm-galgame-editor`（three.js＋WebView2 的 VRM／FBX／MMD 視覺小說編輯器）。
 
-**該倉庫沒有授權條款，只參考做法與數值，程式碼全部依 OK 架構自己寫。** 本文件是實作計畫，尚未動工。
+**該倉庫沒有授權條款，只參考做法與數值，程式碼全部依 OK 架構自己寫。**
+
+### 實作狀態（2026-10-22）
+
+使用說明見 [GALGAME_STORY_USAGE.md](GALGAME_STORY_USAGE.md)。
+
+| 階段 | 狀態 | 驗證 |
+|---|---|---|
+| G0 模組骨架、C ABI、熱換 | 完成：`Tools/ok-story`、`UOKStoryPlayer`（`OKStory.Reload` 換 DLL 時保留狀態） | `cargo test`；UE 載入 |
+| G1 劇本、推進、選項、物品 | 完成 | `tests/director.rs`；示範劇本自測走完選項分支 |
+| G2 對話框、打字、自動、快進 | 完成（`SOKStoryView` 自繪） | 單元測試；1600×900 截圖 |
+| G3 語音同步打字 | 完成（語音檔；`ok-tts` 未接上） | 單元測試；實際 ogg 播放時截到一半的字 |
+| G4 左下即時立繪 | 完成：正交擷取 LDR 顏色加 HDR 反向不透明度，在 UI 材質裡合成 | 截圖：透明背景、場外說話者的分身立繪 |
+| G5 逐句運鏡 | 完成，另加深度探測避牆：每個自動鏡頭有多個候選位置，C++ 用 8×8 深度擷取回報視線距離 | `shots_avoid_walls` 測試；1901 場景各鏡頭截圖 |
+| G6 幕標題、表情、眨眼與視線 | 完成（換動作直接切換，沒有 crossfade） | 20 人 5 分鐘模擬測試 |
+| G7 存讀檔、Backlog、設定 | 完成（縮圖用場景擷取，不含 UI） | 自測依序打開存檔、讀檔、紀錄、設定、選單並截圖 |
+| G8 編輯 API 與 MCP | 完成：`edit.rs`、`ok-story-mcp`（劇本工具，加上透過 control 資料夾操作執行中的遊戲） | 單元測試；`game_state`／`game_screenshot` 對執行中的遊戲實測 |
+| G8 Scene Editor 劇本面板 | 未做：目前用 F8 相機編輯加 MCP 代替 | — |
+
+以下是原始計畫內容。
 
 ---
 

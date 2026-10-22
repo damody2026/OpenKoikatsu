@@ -92,6 +92,9 @@ private:
 	TStrongObjectPtr<UTextureRenderTarget2D> ProbeTarget;
 	TArray<TPair<uint64, double>> ProbeAnswers;
 	void RunProbes(const TArray<TSharedPtr<class FJsonValue>>& Probes);
+	/** Requests of tools (ok-story-mcp) in UserData/Story/control: <id>.json in, <id>.out.json back. */
+	void PollControl();
+	double ControlPolled = 0.0;
 	TArray<TStrongObjectPtr<UAudioComponent>> Sounds;
 
 	/** Self test state. */
@@ -100,6 +103,10 @@ private:
 	FString SelfTestLine, SelfTestDir;
 	TArray<FString> SelfTestLog;
 	double SelfTestLineSince = 0.0;
+	/** The panel tour: next step (-1 not started), when the last step went, the screenshot it is waiting for. */
+	int32 SelfTestTour = -1;
+	double SelfTestTourAt = 0.0;
+	FString SelfTestTourShot;
 	void TickSelfTest();
 
 	bool bEndRequested = false;
