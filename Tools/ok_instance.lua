@@ -13,6 +13,12 @@ local json, path = ok.json, ok.path
 
 local M = {}
 
+-- The ports for a given base (a sandboxed run picks its own; see run_street_social_development.lua -Sandbox).
+function M.ports_at(base, voice)
+  if base < 1024 or base > 65400 then error("port base out of range: " .. base) end
+  return { base = base, tts = base, asr = base + 1, street_control = base + 10, pair_control = base + 11, voice = voice }
+end
+
 function M.ports(root)
   root = root or ok.root
   local base, voice = 47860, true

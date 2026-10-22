@@ -33,6 +33,31 @@ local function check_hashes(files, expected, message)
   end
 end
 
+-- Her identity: the sha256 of her card without its okVo chunk (her own TTS voice, Tools/ok-tts/src/cardvoice.rs), so
+-- storing or changing a voice in a card does not make her a stranger. ok-tts puts the chunk right before IEND and
+-- removing it gives the card's bytes back exactly, so a card with a voice keeps the id it had without one.
+function M.card_identity(p)
+  local f = assert(io.open(p, "rb")); local data = f:read("a"); f:close()
+  if data:sub(1, 8) ~= "\137PNG\r\n\26\n" or not data:find("okVo", 1, true) then return ok.hash.file(p, "sha256") end
+  local parts, at, found = { data:sub(1, 8) }, 9, false
+  while at + 8 <= #data do
+    local len = string.unpack(">I4", data, at)
+    local kind, stop = data:sub(at + 4, at + 7), at + 12 + len
+    if kind == "okVo" then found = true else parts[#parts + 1] = data:sub(at, stop - 1) end
+    at = stop
+    if kind == "IEND" then break end
+  end
+  if not found then return ok.hash.file(p, "sha256") end
+  parts[#parts + 1] = data:sub(at)
+  -- Hashed as a file: the native digest (ok.hash hashes strings in plain Lua, far too slow for a card).
+  local tmp = path.join(os.getenv("TEMP") or path.parent(p), ("card-identity-%d-%s.png"):format(os.time(), path.stem(p)))
+  path.write_bytes(tmp, table.concat(parts))
+  local ok_hash, digest = pcall(ok.hash.file, tmp, "sha256")
+  path.remove(tmp)
+  if not ok_hash then error(digest, 0) end
+  return digest
+end
+
 function M.character(p)
   p = path.abs(p)
   local _, _, _, header, payload = crowd.metadata_values(crowd.card_metadata(p))
@@ -42,7 +67,7 @@ function M.character(p)
   -- The eight-byte block-data length precedes offsets in the KKS header.
   local offset = 8 + block.pos
   local parameter = ok.kit.msgpack_decode(payload:sub(offset + 1, offset + block.size))
-  local identity = ok.hash.file(p, "sha256")
+  local identity = M.card_identity(p)
   local names = {}
   for _, k in ipairs({ "lastname", "firstname" }) do names[#names + 1] = util.str(get(parameter, k, "")) end
   local name = strip(table.concat(names, " "))

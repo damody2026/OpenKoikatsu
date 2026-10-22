@@ -224,3 +224,22 @@ void AOKStreetSocialScene::GiveMoneyNow(int32 Girl,int64 Amount){
  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Settle)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
  UE_LOG(LogTemp,Display,TEXT("Street act: give_money %lld to actor=%d"),Amount,Girl);RefreshUI();
 }
+// The judge's he_lends and her pending give_money, settled by the rules (shop.rs money_handover): a loan, the gift, or
+// still waiting for the verdict.
+void AOKStreetSocialScene::SettleMoneyHandover(int32 Girl,double Lend,bool bVerdict){
+ auto& S=*State;const TPair<int64,double>* Give=S.PendingGiveMoney.Find(Girl);
+ auto Request=OKRulesRequest(TEXT("money_handover"));Request->SetNumberField(TEXT("he_lends"),Lend);Request->SetBoolField(TEXT("verdict"),bVerdict);
+ Request->SetNumberField(TEXT("give_pending"),Give?double(Give->Key):0.0);Request->SetNumberField(TEXT("waited"),Give?FPlatformTime::Seconds()-Give->Value:0.0);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;const FString Action=Out->GetStringField(TEXT("action"));
+ if(Action==TEXT("loan")){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f%s"),Girl,Lend,Give?TEXT(" (her give_money is this loan)"):TEXT(""));S.PendingGiveMoney.Remove(Girl);S.LendAskGirl=INDEX_NONE;StartLoan(int32(Lend));}
+ else if(Action==TEXT("give")&&Give){const int64 Amount=Give->Key;S.PendingGiveMoney.Remove(Girl);GiveMoneyNow(Girl,Amount);}
+}
+
+// Whether a second dish like the one she has goes in (shop.rs order_second_dish): the facts are what is on her table.
+bool AOKStreetSocialScene::SecondDishOk(int32 Her,bool bForHer,const FString& ItemId){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Her))return false;
+ auto Request=OKRulesRequest(TEXT("order_second_dish"));Request->SetBoolField(TEXT("has_like"),true);Request->SetBoolField(TEXT("for_her"),bForHer);
+ Request->SetNumberField(TEXT("satiety"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Her]),S.Manifest.TalkBudget).Satiety);
+ Request->SetBoolField(TEXT("same_dish"),S.Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ForHer==bForHer&&(!bForHer||D.Her==Her)&&D.ItemId==ItemId&&D.Percent>0;}));
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);return Out.IsValid()&&Out->GetBoolField(TEXT("order"));
+}

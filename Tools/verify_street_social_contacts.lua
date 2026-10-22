@@ -39,7 +39,7 @@ function M.verify(directory)
         local request = read(path.join(report_dir, "request.json"))
         assert(same_path(request.card, result.card) and same_path(request.partner, manifest.cards[1]))
       end
-      assert(manifest.characters[slot + 1].id == "apng-" .. ok.hash.file(result.card, "sha256"))
+      assert(manifest.characters[slot + 1].id == "apng-" .. require("prepare_street_social_selection").card_identity(result.card))
       assert(result.scene_class == "/Script/OpenKoikatsu.OKInteractionScene" and result.widget_class == "/Script/OpenKoikatsu.OKInteractionWidget")
       assert(T(result.source_geometry) and result.source_parts > 0 and T(result.partner_ready))
       assert(result.render_vertices > 0 and result.render_components > 0)
