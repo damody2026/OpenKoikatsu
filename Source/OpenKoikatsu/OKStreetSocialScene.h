@@ -135,7 +135,7 @@ private:
  bool MindProfilesReady() const; // OKStreetSocialSchedule.inl
  int32 ShiftUntil(int32 Character) const; // OKStreetSocialInvite.inl
  bool SeesHim(int32 I) const; // OKStreetSocialEncounter.inl
- void MovePromiseWith(int32 Character); // OKStreetSocialAppointments.inl
+ void MovePromiseWith(int32 AppointmentId); // OKStreetSocialAppointments.inl
  void ToldAboutRival(int32 Character,const FString& Name); // OKStreetSocialMind.inl
  bool PlaceClosedAt(const FString& PlaceId,const FDateTime& When,FString& Why) const; // OKStreetSocialEconomy.inl
  int32 FloorHere(const FString& Place) const; // OKStreetSocialEconomy.inl
@@ -211,7 +211,7 @@ private:
  int32 AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label);
  int32 CharacterOf(const FString& Id) const;
  int32 PatienceOf(int32 Character) const;
- void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His);
+ void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His,bool bReplaces=false);
  void CancelPromiseWith(int32 Character,const FString& Scope=FString());
  void CancelAppointment(int32 AppointmentId); // one pending appointment, from the list (the cost: social.rs appointment_cancel)
  void BuildAppointmentRows(const TSharedRef<class SVerticalBox>& Panel);

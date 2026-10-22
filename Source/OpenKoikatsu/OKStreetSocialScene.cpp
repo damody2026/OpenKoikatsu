@@ -1283,8 +1283,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // Which activity and which place is the judge's reading (ui.scene.ai_judge_prompt): place names looked up in the
   // words kept overruling it and could never cover every way of saying it.
   // "Not today, tomorrow" / "make it six": the meeting with her they had moves (the judge says it replaces it).
-  if(!Place.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);Weak->MovePromiseWith(Character);}}
-  if(!Place.IsEmpty())Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said);
+  // Which one it replaces is promise.rs's (the same meeting said again is moved; else hers at that place or nearest).
+  if(!Place.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces)UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);
+   Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said,Replaces);}
   // "Every Wednesday" (the judge's promise.repeat): the meeting just booked is the first of a series (series.rs).
   if(!Place.IsEmpty()&&Promise&&(*Promise).IsValid())if(const TSharedPtr<FJsonValue> Rep=(*Promise)->TryGetField(TEXT("repeat"));Rep.IsValid()&&!Rep->IsNull()&&!(Rep->Type==EJson::String&&Rep->AsString().IsEmpty()))Weak->StartSeries(Character,Place,Rep);
   {bool Ends=false,Treats=false;Verdict->TryGetBoolField(TEXT("ends"),Ends);Verdict->TryGetBoolField(TEXT("she_treats"),Treats);

@@ -318,4 +318,4 @@ Tools/lua/lua.exe Tools/character_mcp/build.lua --test
 > 使用 openkoikatsu-character MCP，依我提供的正／側／背三視圖調整目前人物，優先吻合身形。先讀 character_state，盤點參數與支援能力，建立快照。每次修改使用最新 session/revision。以固定 T-pose、正式移除服裝及隱藏衣髮配件準備身體輪廓；參考姿勢須匹配，複雜圖片先準備分割遮罩。有真實身高才加入 physical_height。先比較輪廓與敏感度，再分組調整整體比例和局部身形；背景搜尋使用 body_fit_start/status，必要時取消或續跑。不要在搜尋中重新縮放投影或覆寫人工修改。用 body_compare 和 capture_views 檢查結果，回報實際誤差與停止原因；最後 character_save 另存，重新載入並讀回參數確認。頭髮與衣服素材相似度不作為身形完成條件。
 
 
-Rust 遷移計畫與驗收：[CHARACTER_EDITOR_MCP_RUST_PLAN.md](CHARACTER_EDITOR_MCP_RUST_PLAN.md)。舊 Python server／搜尋實作已移到 `old_py/Tools/character_mcp/` 作歷史對照；`client.lua` 與 `verify_live.lua`（`Tools\lua\lua.exe` 執行）是開發驗收工具，實際啟動的是 Rust 執行檔。
+Rust 遷移計畫與驗收：[CHARACTER_EDITOR_MCP_RUST_PLAN.md](CHARACTER_EDITOR_MCP_RUST_PLAN.md)。舊 Python server／搜尋實作已刪除（2026-10-22）；`client.lua` 與 `verify_live.lua`（`Tools\lua\lua.exe` 執行）是開發驗收工具，實際啟動的是 Rust 執行檔。

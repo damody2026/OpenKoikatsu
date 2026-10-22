@@ -130,7 +130,7 @@ Unreal automation：`OpenKoikatsu.CharacterMCP.Registry`。實際渲染驗收另
 - 已有遮罩、參考對齊、敏感度與有界搜尋；任意姿勢照片的語義分割、透視反推與新增 morph 由外部 AI／其他模型處理。三張輪廓無法唯一決定所有內部參數，既有 morph／骨骼能表達的幾何與參考姿勢也限制最終誤差。
 
 
-Rust 遷移計畫與驗收：[CHARACTER_EDITOR_MCP_RUST_PLAN.md](../../Docs/CHARACTER_EDITOR_MCP_RUST_PLAN.md)。舊 Python server／搜尋實作已移到 `old_py/Tools/character_mcp/` 作歷史對照；`client.lua` 與 `verify_live.lua`（`Tools\lua\lua.exe` 執行）是開發驗收工具，實際啟動的是 Rust 執行檔。
+Rust 遷移計畫與驗收：[CHARACTER_EDITOR_MCP_RUST_PLAN.md](../../Docs/CHARACTER_EDITOR_MCP_RUST_PLAN.md)。舊 Python server／搜尋實作已刪除（2026-10-22）；`client.lua` 與 `verify_live.lua`（`Tools\lua\lua.exe` 執行）是開發驗收工具，實際啟動的是 Rust 執行檔。
 
 最終驗收：Rust 16 項測試、Registry、RustLiveR5 的 20 項實機案例全部通過。版本與證據索引：`Saved/Tests/CharacterMCP/RustValidation.json`。
 
