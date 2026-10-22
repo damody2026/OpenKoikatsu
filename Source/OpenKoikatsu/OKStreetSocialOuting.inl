@@ -398,8 +398,14 @@ TSharedRef<FJsonObject> AOKStreetSocialScene::ActivityContext(int32 Girl,const T
 
 bool AOKStreetSocialScene::ActivityCheck(int32 Girl,const FString& ActivityId,FString& Why,bool bConsume,bool bAtEnd){
  auto& S=*State;auto Request=ActivityContext(Girl,TEXT("activity_check"));Request->SetStringField(TEXT("id"),ActivityId);Request->SetBoolField(TEXT("at_end"),bAtEnd);
+ Request->SetStringField(TEXT("here"),PlaceHere(S.Male));Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer.IsValid())return true;
  if(!Answer->GetBoolField(TEXT("ok"))){Why=Answer->GetStringField(TEXT("why"));UE_LOG(LogTemp,Display,TEXT("Street activity check: %s refused (%s: %s)"),*ActivityId,*Answer->GetStringField(TEXT("reason")),*Why);return false;}
+ // What it needs and is sold right here he bought on the spot (activities.rs check: buy, effects).
+ const TArray<TSharedPtr<FJsonValue>>* Buy=nullptr;
+ if(!bAtEnd&&Answer->TryGetArrayField(TEXT("buy"),Buy)&&Buy->Num()){auto Candidate=S.Store;
+  for(const auto& V:*Buy){Candidate.Inventory.Add(V->AsObject()->GetStringField(TEXT("item")));UE_LOG(LogTemp,Display,TEXT("Street activity check: %s, bought %s here"),*ActivityId,*V->AsObject()->GetStringField(TEXT("name")));}
+  ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
  if(bConsume){const TArray<TSharedPtr<FJsonValue>>* Consume=nullptr;
   if(Answer->TryGetArrayField(TEXT("consume"),Consume)&&Consume->Num()){auto Candidate=S.Store;
    for(const auto& V:*Consume){const auto O=V->AsObject();if(O->GetStringField(TEXT("from"))==TEXT("his"))Candidate.Inventory.RemoveSingle(O->GetStringField(TEXT("item")));

@@ -147,8 +147,44 @@ fn place_name(id: &str, r: &Value) -> String {
     r.get("place_names").and_then(|m| m.get(id)).and_then(Value::as_str).unwrap_or(id).to_string()
 }
 
+/// What it needs and neither of them has, when all of it is sold right here (`here`) or where the activity is done
+/// (the fish food by the pond, asked for at the cafe) and he can pay (`player_cash`): he buys it. Else None.
+fn buy_here(a: &Activity, c: &Catalog, r: &Value) -> Option<(Vec<Value>, i64)> {
+    let (his, her, here) = (list(r, "his_items"), list(r, "her_items"), s(r, "here"));
+    let mut buy = Vec::new();
+    let mut total = 0i64;
+    for need in a.needs.iter().filter(|n| !his.contains(n) && !her.contains(n)) {
+        let item = c.items.iter().find(|i| &i.id == need).filter(|i| (!here.is_empty() && i.place == here) || (!a.place.is_empty() && i.place == a.place))?;
+        let price = item.price_of(&item.default_size()) as i64;
+        total += price;
+        buy.push(json!({"item": item.id, "name": item.name, "price": price}));
+    }
+    // Not sent (the lists for her prompt): taken as affordable; the check before starting sends his cash.
+    let cash = r.get("player_cash").and_then(Value::as_i64).unwrap_or(i64::MAX);
+    (!buy.is_empty() && total <= cash).then_some((buy, total))
+}
+
+/// What still stops it when what it needs can be bought there (the lists for her prompt: feeding the fish is not
+/// "impossible, no fish food" in the park, where it is sold).
+fn blocked_unless_bought(a: &Activity, c: &Catalog, r: &Value) -> Option<(String, String)> {
+    let b = blocked(a, c, r)?;
+    if b.0 != "needs" {
+        return Some(b);
+    }
+    let mut r2 = r.clone();
+    if s(r, "here").is_empty() {
+        r2["here"] = json!(s(r, "place"));
+    }
+    let Some((buy, _)) = buy_here(a, c, &r2) else { return Some(b) };
+    let mut his = list(r, "his_items");
+    his.extend(buy.iter().filter_map(|x| x["item"].as_str().map(String::from)));
+    r2["his_items"] = json!(his);
+    blocked(a, c, &r2)
+}
+
 /// May it start now: ok, or why not (reason: who | rain | dry | once | needs, and a fact for her in the language);
-/// when ok, the items it uses up and from whose bag (his first).
+/// when ok, the items it uses up and from whose bag (his first). What it needs and is sold where they stand he buys
+/// first (buy [{item, name, price}], effects: the cash).
 fn check(t: &ActivitiesTuning, c: &Catalog, r: &Value) -> Value {
     let Some(a) = t.find(s(r, "id")) else {
         return json!({"ok": true, "known": false});
@@ -158,6 +194,22 @@ fn check(t: &ActivitiesTuning, c: &Catalog, r: &Value) -> Value {
     let at_end = r.get("at_end").and_then(Value::as_bool).unwrap_or(false);
     if !at_end {
         if let Some((reason, why)) = blocked(a, c, r) {
+            if reason == "needs" {
+                if let Some((buy, total)) = buy_here(a, c, r) {
+                    let mut fx = crate::effects::Effects::default();
+                    let names: Vec<&str> = buy.iter().filter_map(|b| b["name"].as_str()).collect();
+                    fx.cash(-total, "shopping", &names.join("、"));
+                    // Bought: only the other conditions are left to look at.
+                    let mut r2 = r.clone();
+                    let mut his = list(r, "his_items");
+                    his.extend(buy.iter().filter_map(|b| b["item"].as_str().map(String::from)));
+                    r2["his_items"] = json!(his);
+                    if let Some((reason, why)) = blocked(a, c, &r2) {
+                        return json!({"ok": false, "known": true, "reason": reason, "why": why});
+                    }
+                    return json!({"ok": true, "known": true, "consume": [], "yields": a.yields, "buy": buy, "effects": fx.into_value()});
+                }
+            }
             return json!({"ok": false, "known": true, "reason": reason, "why": why});
         }
     }
@@ -175,7 +227,7 @@ fn blocked_here(t: &ActivitiesTuning, c: &Catalog, r: &Value) -> Value {
         .activity
         .iter()
         .filter(|a| a.place.is_empty() || a.place == place)
-        .filter_map(|a| blocked(a, c, r).filter(|(reason, _)| reason != "who" && reason != "event").map(|(reason, why)| json!({"id": a.id, "name": a.name, "reason": reason, "why": why})))
+        .filter_map(|a| blocked_unless_bought(a, c, r).filter(|(reason, _)| reason != "who" && reason != "event").map(|(reason, why)| json!({"id": a.id, "name": a.name, "reason": reason, "why": why})))
         .collect();
     json!({"blocked": out})
 }
@@ -187,7 +239,7 @@ fn here(t: &ActivitiesTuning, c: &Catalog, r: &Value) -> Value {
     if place.is_empty() {
         return json!({"here": []});
     }
-    let out: Vec<Value> = t.activity.iter().filter(|a| a.place == place && blocked(a, c, r).is_none()).map(|a| json!({"id": a.id, "name": a.name})).collect();
+    let out: Vec<Value> = t.activity.iter().filter(|a| a.place == place && blocked_unless_bought(a, c, r).is_none()).map(|a| json!({"id": a.id, "name": a.name})).collect();
     json!({"here": out})
 }
 
@@ -252,6 +304,22 @@ mod tests {
         assert_eq!(seat["female_clip"], "venue_drink_seated.okanim");
         let walk = rows.iter().find(|r| r["id"] == "walk").unwrap();
         assert_eq!(walk["place"], "");
+    }
+
+    #[test]
+    fn what_it_needs_is_bought_where_it_is_sold() {
+        let mut c = Catalog::default();
+        c.items.push(crate::catalog::Item { id: "park_fishfood".into(), place: "park".into(), name: "魚飼料".into(), price: [(String::new(), 5)].into_iter().collect(), ..Default::default() });
+        let mut t = ActivitiesTuning::default();
+        t.activity.push(Activity { id: "park_feed_fish".into(), name: "餵魚".into(), kind: "solo".into(), needs: vec!["park_fishfood".into()], consume: true, ..Default::default() });
+        let at_pond = check(&t, &c, &json!({"id": "park_feed_fish", "here": "park", "player_cash": 100}));
+        assert_eq!((at_pond["ok"].as_bool(), at_pond["buy"][0]["price"].as_i64()), (Some(true), Some(5)));
+        assert_eq!(check(&t, &c, &json!({"id": "park_feed_fish", "here": "cafe", "player_cash": 100}))["ok"], false, "not sold here");
+        t.activity[0].place = "park".into();
+        assert_eq!(check(&t, &c, &json!({"id": "park_feed_fish", "here": "cafe", "player_cash": 100}))["ok"], true, "sold where it is done");
+        assert_eq!(blocked_here(&t, &c, &json!({"place": "park"}))["blocked"].as_array().map(Vec::len), Some(0), "not listed as impossible in the park");
+        assert_eq!(check(&t, &c, &json!({"id": "park_feed_fish", "here": "park", "player_cash": 2}))["ok"], false, "cannot pay");
+        assert!(check(&t, &c, &json!({"id": "park_feed_fish", "here": "park", "his_items": ["park_fishfood"]})).get("buy").is_none());
     }
 
     #[test]
