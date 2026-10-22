@@ -260,7 +260,7 @@ public sealed partial class GamePoseProbe {
                     }
                     foreach (string key in new[] { "_Color", "_Color2", "_Color3", "_Color4", "_GlossColor", "_ShadowColor", "_LineColor", "_SpecularColor", "_EmissionColor" })
                         if (material.HasProperty(key)) writer.WriteLine("color\t" + prefix + "\t" + key + "\t" + material.GetColor(key).ToString("R"));
-                    foreach (string key in new[] { "_oldhair", "_GlossinShadowonoff", "_SpeclarHeight", "_ShadowExtend", "_rimpower", "_rimV", "_Glossiness", "_GlossMapScale", "_Metallic", "_OcclusionStrength", "_BumpScale", "_Mode", "_SmoothnessTextureChannel" })
+                    foreach (string key in new[] { "_oldhair", "_GlossinShadowonoff", "_SpeclarHeight", "_ShadowExtend", "_rimpower", "_rimV", "_Glossiness", "_GlossMapScale", "_Metallic", "_OcclusionStrength", "_BumpScale", "_Mode", "_SmoothnessTextureChannel", "_Cutoff", "_AlphaCutoff" })
                         if (material.HasProperty(key)) writer.WriteLine("float\t" + prefix + "\t" + key + "\t" + material.GetFloat(key).ToString("R"));
                     foreach (string key in new[] { "_texcoord", "_texcoord2", "_MainTex", "_ColorMask", "_HairGloss", "_DetailMask", "_NormalMap", "_EmissionMap", "_OcclusionMap", "_MetallicGlossMap", "_DetailAlbedoMap", "_BumpMap" }) {
                         if (!material.HasProperty(key)) continue;
