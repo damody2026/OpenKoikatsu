@@ -3743,7 +3743,9 @@ static UMaterialInterface* OKSkyboxMaterial()
 	if (Cached) return Cached.Get();
 	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
 	Mat->MaterialDomain = MD_Surface;
-	Mat->BlendMode = BLEND_Opaque;
+	// Unity's skybox pass writes no depth (queue 1000): the scene in front covers it, and of overlapping domes the one
+	// drawn last shows (AOKSceneActor orders them by their distance, like Unity's front-to-back opaque sort).
+	Mat->BlendMode = BLEND_Translucent;
 	Mat->SetShadingModel(MSM_Unlit);
 	Mat->TwoSided = true;
 	UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
@@ -4345,6 +4347,21 @@ void AKKPreviewActor::SetSharedVectorParameter(FName Name, const FLinearColor& V
 			const FName AlphaName(*(Name.ToString() + TEXT("__A")));
 			if (M && M->GetScalarParameterValue(FMaterialParameterInfo(AlphaName), Alpha) && Alpha != Value.A) M->SetScalarParameterValue(AlphaName, Value.A);
 		}
+}
+
+bool AKKPreviewActor::IsOutsideLayerMask(uint32 LayerMask) const
+{
+	bool bAny = false;
+	TInlineComponentArray<UMeshComponent*> Meshes(this);
+	for (const UMeshComponent* Mesh : Meshes)
+		for (const FName& Tag : Mesh->ComponentTags)
+		{
+			const FString Text = Tag.ToString();
+			if (!Text.StartsWith(TEXT("OKLayer"))) continue;
+			bAny = true;
+			if (LayerMask & (1u << FMath::Clamp(FCString::Atoi(*Text.Mid(7)), 0, 31))) return false;
+		}
+	return bAny;
 }
 
 void AKKPreviewActor::SetSharedTextureParameter(FName Name,UTexture* Value)
@@ -6036,6 +6053,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			Comp->bCastShadowAsTwoSided = Mode == 2;
 			Comp->SetCastShadow(Mode != 0);
 			FLinearColor Layer = FLinearColor::Black, Culling = FLinearColor::Black, Enabled = FLinearColor::Black, CullingLo = FLinearColor::Black, CullingHi = FLinearColor::Black;
+			// The renderer's Unity layer, for lights that light only some layers (Studio's character light: layer 10).
+			if (Source.MaterialValue(i, "_OKRendererLayer", Layer))
+				Comp->ComponentTags.Add(FName(*FString::Printf(TEXT("OKLayer%d"), FMath::Clamp(FMath::RoundToInt(Layer.R), 0, 31))));
 			if (Source.MaterialValue(i, "_OKRendererLayer", Layer) && Source.MaterialValue(i, "_OKSunCulling", Culling))
 			{
 				const int32 Bit = FMath::Clamp(FMath::RoundToInt(Layer.R), 0, 31);
@@ -6075,6 +6095,8 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			{
 				Comp->SetMaterial(0, Dynamic);
 				Comp->SetCastShadow(false);
+				Comp->ComponentTags.Add(TEXT("OKSkyDome"));
+				Comp->SetTranslucentSortPriority(-30000);
 				Part.SurfaceMat = Dynamic;
 				Output.Textures.Append(SkyTextures);
 				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))

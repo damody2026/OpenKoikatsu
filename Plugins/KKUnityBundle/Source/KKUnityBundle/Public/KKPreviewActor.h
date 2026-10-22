@@ -640,6 +640,9 @@ public:
      *  actor, outlines included; instances without it are left alone. */
     void SetSharedVectorParameter(FName Name, const FLinearColor& Value);
     void SetSharedTextureParameter(FName Name,UTexture* Value);
+    /** True when every renderer with a recorded Unity layer (component tag OKLayer<n>) is on a layer outside LayerMask
+     *  (a light with that culling mask does not reach this actor); false without recorded layers. */
+    bool IsOutsideLayerMask(uint32 LayerMask) const;
     void BindSourceReflectionProbes(TFunctionRef<UTexture*(int32,FLinearColor&)> Resolve);
 
 	UPROPERTY()

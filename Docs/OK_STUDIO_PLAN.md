@@ -279,6 +279,19 @@
 
 ![5065：原作與修正後](images/OKStudio/SkyWater20261022/5065-native-after.png)
 
+### S5 第十八輪：MDK 地景道具的光照（2026-10-22）
+
+4432 砂地與 5065 木材（`Shader Forge/main_StandardMDK_studio`）比原作亮且偏橘。
+
+- **證據**：原作探針（renderer 列新增 Unity 圖層、`render_ambient`、`glstate_lightmodel_ambient`、`_LightCancel`／`_EmissionPower`）顯示 Studio 角色燈 culling mask 是第 10 層，而地景 MDK 道具在第 11 層；關掉角色燈時它們完全不變（角色與 `main_item_studio` 道具才變暗）。MDK pixel program（`ForgeMDKProgram.inl`）的輸出是 (1−lc)·受光項 + max(自發光, 2·`glstate_lightmodel_ambient`) + saturate(albedo·lc)，lc = min(自發光貼圖.g, `_LightCancel`)；沒有燈時只剩環境項與 albedo·lc，這就是原作「洗白」的外觀。`glstate_lightmodel_ambient` = 線性 ambientSkyColor ÷ 2：無地圖 (0.0412, 0.0475, 0.0625, 0.75)，地圖 15／26／28 為 (0.0122, 0.0122, 0.0122, 0.5)。UE 之前一律送角色燈、且沒設定這個 uniform。
+- **修正**：部件依 `_OKRendererLayer` 帶元件標記 `OKLayer<n>`；`AKKPreviewActor::IsOutsideLayerMask`；`AOKSceneActor::UpdateItemLighting` 對所有部件都在第 10 層外的道具送黑色 `_LightColor0`，並對所有道具設 `glstate_lightmodel_ambient`（無地圖用 Studio 空場景值，有地圖用 0.1698 灰；其他地圖依 `SunLightInfo` 時段的值尚未錄）。天空球改為不寫深度的半透明、依球心距離排序（Unity 天空 pass 不寫深度、由近到遠畫，重疊時遠的勝出）。診斷 `OK_STUDIO_LIGHTING_AUDIT=1` 印每個道具的圖層與是否受燈。
+- **結果**：5065 超過 10% 的格子 27 → 7，木材、地面顏色與原作一致；4432 田地變成灰褐帶稻列。
+- **還沒修**：4432 天空的雲比原作大而亮（兩個天空道具重疊，雲的網格與天空球的取捨還沒對上），左側格子仍超過 10%。
+
+![5065：原作、修正前、修正後](images/OKStudio/MdkAmbient20261022/5065-native-before-after.png)
+
+![4432：原作、上一輪、這一輪](images/OKStudio/MdkAmbient20261022/4432-native-before-after.png)
+
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
