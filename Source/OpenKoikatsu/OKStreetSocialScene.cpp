@@ -290,7 +290,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool ControlMicIgnored=false; // control channel: what the room microphone hears is not his (a tester talking nearby)
  bool FreeTalkMicPausedClock=false,FreeTalkMicOpen=false,FreeTalkLiveReady=false,FreeTalkLiveStarting=false,FreeTalkLeavePending=false;double FreeTalkSilenceSince=0,FreeTalkNudgeAt=0,FreeTalkLiveTickAt=0;int32 FreeTalkSilencePenalties=0;float FreeTalkSilenceScale=1;int32 LiveTestPhase=-1,LiveTestNudges=0,LiveTestPenalties=0;float LiveTestFavor=0;bool LiveTestLeft=false,LiveTestInterrupted=false,LiveTestHerReply=false;double LiveTestAt=0;FString LiveTestWav;double FreeTalkLiveRetryAt=0;int32 FreeTalkLivePollFails=0;float FreeTalkMicLevel=0;FString FreeTalkMic;TArray<FString> FreeTalkMics;
  FString OutingActivity,OutingPlace;TArray<FVector> OutingRoute;int32 OutingStep=0;double OutingProgressAt=0;bool OutingWaitDoor=false;bool OutingRun=false;FString StrollActivity;int64 StrollStartMinute=0;bool QuietTalk=false;TArray<TWeakObjectPtr<AActor>> PlaceActors;TArray<TWeakObjectPtr<ADirectionalLight>> PlaceFills;float NextPairYaw=0;FString NextPairFemaleClip,NextPairMaleClip;int32 SoloGirl=INDEX_NONE,SoloPhase=0,SoloMinutes=0;double SoloAt=0;int64 SoloStartMinute=0;FVector SoloSpot=FVector::ZeroVector;float SoloYaw=0;FString SoloFemale,SoloMale,SoloWhat,SoloId;bool SleepPaired=false;int32 SleepPhase=0,SleepGirl=INDEX_NONE;double SleepAt=0;FVector SleepBed=FVector::ZeroVector,SleepGirlBed=FVector::ZeroVector;float SleepYaw=0,SleepGirlYaw=0;FString SleepPlace;int32 RestroomGirl=INDEX_NONE;double RestroomUntil=0;FString RestroomPlace;double RestroomBlockedAt=0;struct FPlaceLayers {int32 Place=INDEX_NONE;TWeakObjectPtr<UProceduralMeshComponent> Roof;TMap<int32,TWeakObjectPtr<UProceduralMeshComponent>> Levels;};TArray<FPlaceLayers> PlaceRoofs;FString PlaceTourDir;int32 PlaceTourIndex=-1;double PlaceTourAt=0;bool PlaceTourShot=false;TMap<int32,FVector> CommuteShown;
- TArray<FString> FreeTalkSpeechLines,FreeTalkSpeechPaths,FreeTalkReplayParts;TArray<uint8> FreeTalkSpeechReady,FreeTalkSpeechStreamed;TArray<TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe>> FreeTalkSpeechStreams;int32 FreeTalkSpeechGeneration=0,FreeTalkSpeechCharacter=INDEX_NONE,FreeTalkSpeechPlayed=0;int64 FreeTalkSpeechSerial=0;double FreeTalkSpeechNext=0;
+ TArray<FString> FreeTalkSpeechLines,FreeTalkSpeechPaths,FreeTalkReplayParts;TArray<uint8> FreeTalkSpeechReady,FreeTalkSpeechStreamed;TArray<TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe>> FreeTalkSpeechStreams;int32 FreeTalkSpeechGeneration=0,FreeTalkSpeechCharacter=INDEX_NONE,FreeTalkSpeechPlayed=0,FreeTalkSpeechFiles=0;int64 FreeTalkSpeechSerial=0;double FreeTalkSpeechNext=0,FreeTalkSpeechRepliedAt=0;FString FreeTalkSpeechChannel;TArray<double> FreeTalkSpeechSentAt;
  FString FreeTalkCaptionPlayer,FreeTalkCaptionHer;TArray<int64> FreeTalkReplay;int32 FreeTalkReplayTotal=0,FreeTalkReplaySpeaker=INDEX_NONE;double FreeTalkReplayNext=0;
  bool TopicsOpen=false;TArray<TSharedPtr<SSlider>> StatSliders;TArray<TSharedPtr<SCheckBox>> RelationChecks;int32 RelationControlsVerified=0;bool RelationControlsSync=false;TMap<int32,double> RunUntil,RunNext;
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
@@ -1414,15 +1414,26 @@ void AOKStreetSocialScene::CancelFreeTalkVoice(){
 // Her reply is spoken line by line: line i+1 is synthesized while line i plays. Each line is streamed
 // (/synthesize_stream) and starts playing once ~0.2 s has arrived, so her voice follows the text after
 // one TTS step instead of one whole line. The finished line is then fetched as a cached file for the log;
-// a server without streaming (or a failed stream) falls back to the file. Requests go out in order.
+// a server without streaming (or a failed stream) falls back to the file. Streams go out in order; line i+1 starts
+// as soon as line i has streamed (the server writes line i's file outside its synthesis lock). A new reply cancels
+// what the server still has queued or is generating for the old one (/cancel; this game's own channel).
 static constexpr int32 OKFreeTalkStreamStartSamples=4800;
 void AOKStreetSocialScene::SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial){
  if(!State||State->TtsCacheDir.IsEmpty()||!State->Manifest.Characters.IsValidIndex(Character)||Lines.IsEmpty())return;auto& S=*State;
+ if(S.FreeTalkSpeechChannel.IsEmpty())S.FreeTalkSpeechChannel=TEXT("free_talk-")+FGuid::NewGuid().ToString(EGuidFormats::Digits);
+ const bool Previous=S.FreeTalkSpeechLines.Num()>0;
  ++S.FreeTalkSpeechGeneration;
+ if(Previous){
+  auto Cancel=MakeShared<FJsonObject>();Cancel->SetStringField(TEXT("channel"),S.FreeTalkSpeechChannel);Cancel->SetNumberField(TEXT("below"),S.FreeTalkSpeechGeneration);
+  FString Payload;FJsonSerializer::Serialize(Cancel,TJsonWriterFactory<>::Create(&Payload));
+  auto Request=FHttpModule::Get().CreateRequest();Request->SetURL(S.TtsEndpoint/TEXT("cancel"));Request->SetVerb(TEXT("POST"));
+  Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(5.f);Request->ProcessRequest();
+ }
  for(const auto& Stream:S.FreeTalkSpeechStreams)if(Stream)Stream->Finish();
- S.FreeTalkSpeechCharacter=Character;S.FreeTalkSpeechSerial=Serial;S.FreeTalkSpeechLines=Lines;S.FreeTalkSpeechSpeakers.Reset();
+ S.FreeTalkSpeechCharacter=Character;S.FreeTalkSpeechSerial=Serial;S.FreeTalkSpeechLines=Lines;S.FreeTalkSpeechSpeakers.Reset();S.FreeTalkSpeechFiles=0;
  S.FreeTalkSpeechPaths.Init(FString(),Lines.Num());S.FreeTalkSpeechReady.Init(0,Lines.Num());S.FreeTalkSpeechPlayed=0;
  S.FreeTalkSpeechStreamed.Init(0,Lines.Num());S.FreeTalkSpeechStreams.Init(nullptr,Lines.Num());
+ S.FreeTalkSpeechSentAt.Init(0,Lines.Num());S.FreeTalkSpeechRepliedAt=FPlatformTime::Seconds();
  RequestFreeTalkSegment(S.FreeTalkSpeechGeneration,0);
 }
 
@@ -1432,10 +1443,15 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
  const int32 Character=S.FreeTalkSpeechSpeakers.IsValidIndex(Index)?S.FreeTalkSpeechSpeakers[Index]:S.FreeTalkSpeechCharacter;
  // Same synth request as scripted lines, keyed by the personality voice.
  auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("text"),S.FreeTalkSpeechLines[Index]);Body->SetStringField(TEXT("personality"),FString::FromInt(S.Manifest.Characters[Character].PersonalityId));Body->SetNumberField(TEXT("age"),S.TtsAge);Body->SetStringField(TEXT("out_dir"),S.TtsCacheDir);
+ // Protocol 2 fields (an older server ignores them): which reply and line this is, for /cancel and its log.
+ const bool bStreamRequest=S.FreeTalkSpeechStreamed[Index]==0;
+ Body->SetStringField(TEXT("channel"),S.FreeTalkSpeechChannel);Body->SetNumberField(TEXT("generation"),Generation);Body->SetNumberField(TEXT("segment_index"),Index);
+ Body->SetStringField(TEXT("request_id"),FString::Printf(TEXT("%s-%d-%d-%s"),*S.FreeTalkSpeechChannel.Right(8),Generation,Index,bStreamRequest?TEXT("s"):TEXT("f")));
  FString Payload;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Payload));
  auto Request=FHttpModule::Get().CreateRequest();
  Request->SetVerb(TEXT("POST"));Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(S.TtsTimeout);
- if(S.FreeTalkSpeechStreamed[Index]==0){
+ if(bStreamRequest||S.FreeTalkSpeechStreamed[Index]==2)S.FreeTalkSpeechSentAt[Index]=FPlatformTime::Seconds();
+ if(bStreamRequest){
   S.FreeTalkSpeechStreamed[Index]=1;
   auto Stream=MakeShared<FKKRuntimeSpeechStream,ESPMode::ThreadSafe>();Stream->SampleRate=24000;Stream->Channels=1;S.FreeTalkSpeechStreams[Index]=Stream;
   // 16-bit little-endian mono; HTTP pieces can split a sample, so an odd byte waits for the next piece.
@@ -1453,8 +1469,10 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
    Stream->Finish();
    if(!State||Generation!=State->FreeTalkSpeechGeneration)return;auto& L=*State;
    if(!Ok){L.FreeTalkSpeechStreamed[Index]=2;if(L.FreeTalkSpeechReady[Index]==0)L.FreeTalkSpeechStreams[Index].Reset();UE_LOG(LogTemp,Display,TEXT("Free talk: TTS stream failed (%d), using the file"),Response.IsValid()?Response->GetResponseCode():0);}
-   // The streamed line is now cached by the server: this answers at once with its file.
+   // The streamed line's file for the log (the server answers once it is written, without generating it again),
+   // and the next line's stream right away instead of after that file.
    RequestFreeTalkSegment(Generation,Index);
+   if(Ok&&L.FreeTalkSpeechStreamed.IsValidIndex(Index+1)&&L.FreeTalkSpeechStreamed[Index+1]==0)RequestFreeTalkSegment(Generation,Index+1);
   });
   Request->ProcessRequest();
   return;
@@ -1470,7 +1488,8 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
   const bool Streaming=L.FreeTalkSpeechStreams[Index].IsValid();
   if(!Streaming&&L.FreeTalkSpeechReady[Index]==0)L.FreeTalkSpeechReady[Index]=Ok?1:2;
   if(!Ok&&!Streaming)L.FreeTalkNotice=OKT(TEXT("ui.scene.tts_failed_text_only"))+Error;
-  if(Index+1<L.FreeTalkSpeechLines.Num()){RequestFreeTalkSegment(Generation,Index+1);return;}
+  if(L.FreeTalkSpeechStreamed.IsValidIndex(Index+1)&&L.FreeTalkSpeechStreamed[Index+1]==0)RequestFreeTalkSegment(Generation,Index+1);
+  if(++L.FreeTalkSpeechFiles<L.FreeTalkSpeechLines.Num())return;
   // Every line answered: keep the clips with the log line ("a.ogg|b.ogg") for the history and replay.
   TArray<FString> Clips;for(const FString& Clip:L.FreeTalkSpeechPaths)if(!Clip.IsEmpty())Clips.Add(Clip);
   const int64 Serial=L.FreeTalkSpeechSerial;
@@ -1493,6 +1512,8 @@ void AOKStreetSocialScene::TickFreeTalkSpeech(double Now){
  if(const auto& Stream=S.FreeTalkSpeechStreams[Index];Stream&&S.FreeTalkSpeechReady[Index]==0&&S.FreeTalkSpeechStreamed[Index]!=2&&(Stream->Num()>=OKFreeTalkStreamStartSamples||(Stream->IsComplete()&&Stream->Num()>0)))S.FreeTalkSpeechReady[Index]=3;
  if(S.FreeTalkSpeechReady[Index]==0)return;
  ++S.FreeTalkSpeechPlayed;FString Error;
+ // Latency as the player hears it: from her reply (all lines known) and from this line's request to its first sound.
+ UE_LOG(LogTemp,Display,TEXT("Free talk: TTS line %d plays %.3fs after its request, %.3fs after the reply (%s)"),Index,FPlatformTime::Seconds()-S.FreeTalkSpeechSentAt[Index],FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt,S.FreeTalkSpeechReady[Index]==3?TEXT("stream"):TEXT("file"));
  if(S.FreeTalkSpeechReady[Index]==3&&!OKSpeakCrowdRuntimeStream(this,Character,S.FreeTalkSpeechStreams[Index],Error))S.FreeTalkNotice=OKT(TEXT("ui.scene.voice_play_failed"));
  if(S.FreeTalkSpeechReady[Index]==1&&!FreeTalkSpeakVoice(Character,S.FreeTalkSpeechPaths[Index]))S.FreeTalkNotice=OKT(TEXT("ui.scene.voice_play_failed"));
  S.FreeTalkSpeechNext=Now+.1;

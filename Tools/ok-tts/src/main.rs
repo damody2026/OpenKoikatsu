@@ -2,6 +2,10 @@
 //!
 //!   ok-tts serve  [--port 47860] [--model DIR] [--voices voices.json] [--parent-pid N]   (exits when process N exits)
 //!   ok-tts say    --text TEXT [--personality 00] [--age 18] [--out line.ogg|line.wav] [--greedy]
+//!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
+//!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
+//!   ok-tts consistency --base BASE_DIR --corpus lines.txt --out DIR [--personality 08] [--other 00,03,m0]   (VoiceDesign vs Base clone)
+//!   ok-tts speaker-sim --base BASE_DIR a.wav b.wav[#1|#2] ...   (speaker-embedding cosine of each pair)
 //!   ok-tts parity --reference DIR      (compare against Tools/ok-tts/reference/dump_reference.py output)
 //!
 //! CUDA DLLs (cublas64_12, cublasLt64_12, nvrtc64_120_0, nvrtc-builtins) are searched next to the exe,
@@ -10,11 +14,14 @@
 mod log;
 mod parent;
 mod audio;
+mod bench;
 mod codec;
+mod consistency;
 mod engine;
 mod gpu;
 mod sampling;
 mod server;
+mod speaker;
 mod talker;
 mod text;
 mod weights;
@@ -31,6 +38,7 @@ struct Args {
     cmd: String,
     opts: HashMap<String, String>,
     flags: Vec<String>,
+    positional: Vec<String>,
 }
 
 fn parse_args() -> Args {
@@ -38,6 +46,7 @@ fn parse_args() -> Args {
     let cmd = it.next().unwrap_or_else(|| "help".into());
     let mut opts = HashMap::new();
     let mut flags = Vec::new();
+    let mut positional = Vec::new();
     let rest: Vec<String> = it.collect();
     let mut i = 0;
     while i < rest.len() {
@@ -49,10 +58,12 @@ fn parse_args() -> Args {
                 continue;
             }
             flags.push(name.to_string());
+        } else {
+            positional.push(a.clone());
         }
         i += 1;
     }
-    Args { cmd, opts, flags }
+    Args { cmd, opts, flags, positional }
 }
 
 fn exe_dir() -> PathBuf {
@@ -108,6 +119,10 @@ fn main() {
         "serve" => cmd_serve(&args),
         "say" => cmd_say(&args),
         "parity" => cmd_parity(&args),
+        "bench" => cmd_bench(&args),
+        "consistency" => cmd_consistency(&args),
+        "speaker-sim" => args.opts.get("base").context("--base is required")
+            .and_then(|b| consistency::similarity(Path::new(b), &args.positional)),
         _ => {
             crate::log!("usage: ok-tts serve|say|parity [options]  (see source header)");
             Ok(())
@@ -127,7 +142,47 @@ fn cmd_serve(args: &Args) -> Result<()> {
     let (model, voices) = resolve(args)?;
     let port: u16 = args.opts.get("port").map(|p| p.parse()).transpose()?.unwrap_or(47860);
     let positions = max_positions(args);
-    server::serve(port, 4, move || Engine::load(&model, &voices, positions))
+    let later: usize = args.opts.get("stream-later-frames").map(|v| v.parse()).transpose()?.unwrap_or(4);
+    // The server keeps its own copy of the voices, so voice lookups and cached lines never wait for the engine.
+    let voice_table = text::Voices::load(&voices)?;
+    server::serve(port, 8, voice_table, move || {
+        let mut engine = Engine::load(&model, &voices, positions)?;
+        engine.stream_later_frames = later.max(1);
+        Ok(engine)
+    })
+}
+
+fn cmd_consistency(args: &Args) -> Result<()> {
+    let (design, voices) = resolve(args)?;
+    let opt = |k: &str| args.opts.get(k).cloned();
+    consistency::run(&consistency::ConsistencyArgs {
+        design,
+        base: PathBuf::from(opt("base").context("--base <Qwen3-TTS-12Hz-1.7B-Base snapshot dir> is required")?),
+        voices,
+        corpus: PathBuf::from(opt("corpus").context("--corpus is required")?),
+        out: PathBuf::from(opt("out").context("--out is required")?),
+        personality: opt("personality").unwrap_or_else(|| "08".into()),
+        other: opt("other").unwrap_or_else(|| "00,03,m0".into()),
+        age: opt("age").map(|v| v.parse()).transpose()?.unwrap_or(18),
+        ref_text: opt("ref-text").unwrap_or_else(|| "今天的风好大，我们去那边的咖啡店坐一下吧，我请你喝热可可，然后再慢慢走回去。".into()),
+        positions: max_positions(args),
+    })
+}
+
+fn cmd_bench(args: &Args) -> Result<()> {
+    let opt = |k: &str| args.opts.get(k).cloned();
+    bench::run(&bench::BenchArgs {
+        endpoint: opt("endpoint").unwrap_or_else(|| "http://127.0.0.1:47860".into()),
+        corpus: PathBuf::from(opt("corpus").context("--corpus is required")?),
+        out_dir: PathBuf::from(opt("out-dir").context("--out-dir is required")?),
+        rounds: opt("rounds").map(|v| v.parse()).transpose()?.unwrap_or(1),
+        personality: opt("personality").unwrap_or_else(|| "08".into()),
+        age: opt("age").map(|v| v.parse()).transpose()?.unwrap_or(18),
+        stream: opt("mode").as_deref() != Some("file"),
+        fresh: args.flags.iter().any(|f| f == "fresh"),
+        json: opt("json").map(PathBuf::from),
+        later_frames: opt("later-frames").map(|v| v.split(',').map(|n| n.trim().parse()).collect::<Result<Vec<usize>, _>>()).transpose()?.unwrap_or_default(),
+    })
 }
 
 fn cmd_say(args: &Args) -> Result<()> {
@@ -214,7 +269,7 @@ fn cmd_parity(args: &Args) -> Result<()> {
     let (assistant, instruct) = (ids("assistant_ids"), ids("instruct_ids"));
 
     // 2. prompt embeddings and prefill
-    let prompt = engine.talker.build_prompt(gpu, &instruct, &assistant, text::LANGUAGE_CHINESE)?;
+    let prompt = engine.talker.build_prompt(gpu, &instruct, &assistant, text::LANGUAGE_CHINESE, None)?;
     let to_f32 = |buf: u64, n: usize| -> Result<Vec<f32>> { Ok(gpu.read::<u16>(buf, n)?.into_iter().map(talker::bf16_to_f32).collect()) };
     let h = talker::HIDDEN;
     let rel = compare("talker_input_embeds", &to_f32(prompt.prefill.ptr, prompt.prefill_len * h)?, &read_ref_f32(&dir, "talker_input_embeds")?);

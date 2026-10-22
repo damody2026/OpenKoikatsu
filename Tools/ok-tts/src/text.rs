@@ -209,11 +209,44 @@ pub fn clean_line(text: &str) -> String {
         return s;
     }
     let stripped: String = text.chars().filter(decoration).filter(|c| !c.is_whitespace()).collect();
-    let mut s = zhconv::zhconv(&stripped, zhconv::Variant::ZhCN);
+    let converted = zhconv::zhconv(&stripped, zhconv::Variant::ZhCN);
+    // A pause mark right before an end mark ("她，。" from a cut reply) is dropped, and a line ending on a pause
+    // mark ends with a full stop instead: the model read "，。" as an odd breath.
+    let mut s = String::with_capacity(converted.len() + 3);
+    for c in converted.chars() {
+        if "。！？～…!?".contains(c) {
+            while s.ends_with(is_pause_mark) {
+                s.pop();
+            }
+        }
+        s.push(c);
+    }
+    while s.ends_with(is_pause_mark) {
+        s.pop();
+    }
     if let Some(last) = s.chars().last() {
         if !"。！？～…!?".contains(last) {
             s.push('。');
         }
     }
     s
+}
+
+fn is_pause_mark(c: char) -> bool {
+    matches!(c, '，' | '、' | ',' | '；' | ';' | '：' | ':')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_line;
+
+    #[test]
+    fn pause_before_end_mark_is_dropped() {
+        assert_eq!(clean_line("哼，那干嘛非找她，。"), "哼，那干嘛非找她。");
+        assert_eq!(clean_line("到底是没听见，"), "到底是没听见。");
+        assert_eq!(clean_line("好、？"), "好？");
+        assert_eq!(clean_line("嗯"), "嗯。");
+        assert_eq!(clean_line("「還是不想理我？」"), "还是不想理我？");
+        assert_eq!(clean_line("，"), "");
+    }
 }

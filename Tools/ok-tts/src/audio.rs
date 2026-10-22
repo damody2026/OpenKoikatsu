@@ -44,15 +44,36 @@ pub fn encode_ogg(samples: &[f32], rate: u32) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Write beside the target and rename, so a reader never sees a half file.
+/// Mono samples of an OGG file (a cached line, streamed again).
+pub fn decode_ogg(bytes: &[u8]) -> Result<Vec<f32>> {
+    let mut dec = vorbis_rs::VorbisDecoder::new(std::io::Cursor::new(bytes))?;
+    let mut out = Vec::new();
+    while let Some(block) = dec.decode_audio_block()? {
+        if let Some(ch) = block.samples().first() {
+            out.extend_from_slice(ch);
+        }
+    }
+    Ok(out)
+}
+
+/// Write beside the target and rename, so a reader never sees a half file. The temporary name is unique per
+/// write, so two writers of the same file (two server threads) never share one.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_extension(format!("{}-{n}.tmp", std::process::id()));
     {
         let mut f = std::fs::File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
         f.write_all(bytes)?;
         f.sync_all()?;
     }
-    std::fs::rename(&tmp, path).with_context(|| format!("rename to {}", path.display()))?;
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        // Windows refuses to replace a file someone has open (the game playing it); the copy already there wins.
+        let _ = std::fs::remove_file(&tmp);
+        if !path.is_file() {
+            return Err(e).with_context(|| format!("rename to {}", path.display()));
+        }
+    }
     Ok(())
 }
 

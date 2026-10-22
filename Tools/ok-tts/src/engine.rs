@@ -20,6 +20,10 @@ pub struct Engine {
     pub codec: Codec,
     pub tokenizer: TextTokenizer,
     pub voices: Voices,
+    /// Frames decoded per streamed piece: the first piece, then each later one. More frames per later piece
+    /// decode the left-context frames fewer times; the first stays small so her voice starts soon.
+    pub stream_first_frames: usize,
+    pub stream_later_frames: usize,
 }
 
 pub struct Speech {
@@ -62,7 +66,7 @@ impl Engine {
         let voices = Voices::load(voices)?;
         gpu.sync()?;
         crate::log!("ok-tts: model loaded in {:.1}s from {}", t.elapsed().as_secs_f64(), model_dir.display());
-        Ok(Self { gpu, talker, codec, tokenizer, voices })
+        Ok(Self { gpu, talker, codec, tokenizer, voices, stream_first_frames: 4, stream_later_frames: 4 })
     }
 
     /// Synthesize one already-cleaned line.
@@ -77,7 +81,7 @@ impl Engine {
         let instruct = if language == LANGUAGE_ENGLISH { english_instruct(&voice.instruct) } else { voice.instruct.clone() };
         let instruct_ids = self.tokenizer.instruct(&instruct)?;
         let assistant_ids = self.tokenizer.assistant(text)?;
-        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language)?;
+        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language, None)?;
         let budget = self.talker.max_positions().saturating_sub(prompt.prefill_len + 2);
         cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
         let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
@@ -86,12 +90,29 @@ impl Engine {
         Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: voice.key, age: voice.age })
     }
 
-    /// Like `speak`, but audio is handed to `sink` while the rest is still being generated: every
-    /// STREAM_FRAMES frames (320 ms of speech) the new frames are decoded with the usual left context.
+    /// Base model, x-vector clone: the line in the voice of a speaker embedding (speaker::SpeakerEncoder), no
+    /// voice description. One seed per voice, as with `speak`.
+    pub fn speak_clone(&self, text: &str, speaker: &[f32], seed: u64, mut cfg: GenConfig) -> Result<Speech> {
+        self.gpu.bind()?;
+        let t = Instant::now();
+        cfg.seed = seed;
+        let language = language_of(text);
+        let assistant_ids = self.tokenizer.assistant(text)?;
+        let prompt = self.talker.build_prompt(&self.gpu, &[], &assistant_ids, language, Some(speaker))?;
+        let budget = self.talker.max_positions().saturating_sub(prompt.prefill_len + 2);
+        cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
+        let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
+        let samples = if frames.is_empty() { Vec::new() } else { self.codec.decode(&self.gpu, &frames)? };
+        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: "clone".into(), age: 0 })
+    }
+
+    /// Like `speak`, but audio is handed to `sink` while the rest is still being generated: the first
+    /// stream_first_frames frames, then every `later_frames` (default stream_later_frames) more (4 frames = 320 ms
+    /// of speech), are
+    /// decoded with the usual left context.
     /// Returns the whole utterance like `speak` (for the cache file).
-    pub fn speak_stream(&self, text: &str, personality: &str, age: u32, mut cfg: GenConfig,
+    pub fn speak_stream(&self, text: &str, personality: &str, age: u32, mut cfg: GenConfig, later_frames: Option<usize>,
                         sink: &mut dyn FnMut(&[f32]) -> Result<()>) -> Result<Speech> {
-        const STREAM_FRAMES: usize = 4;
         self.gpu.bind()?;
         let t = Instant::now();
         let voice = self.voices.choose(personality, age);
@@ -102,7 +123,7 @@ impl Engine {
         let instruct = if language == LANGUAGE_ENGLISH { english_instruct(&voice.instruct) } else { voice.instruct.clone() };
         let instruct_ids = self.tokenizer.instruct(&instruct)?;
         let assistant_ids = self.tokenizer.assistant(text)?;
-        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language)?;
+        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language, None)?;
         let budget = self.talker.max_positions().saturating_sub(prompt.prefill_len + 2);
         cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
         let mut frames = Vec::new();
@@ -110,7 +131,8 @@ impl Engine {
         let mut decoded = 0usize;
         self.talker.generate_stream(&self.gpu, &prompt, &cfg, &mut |new| {
             frames.extend_from_slice(new);
-            if frames.len() - decoded >= STREAM_FRAMES {
+            let want = if decoded == 0 { self.stream_first_frames } else { later_frames.unwrap_or(self.stream_later_frames) };
+            if frames.len() - decoded >= want.max(1) {
                 let pcm = self.codec.decode_tail(&self.gpu, &frames, decoded)?;
                 decoded = frames.len();
                 samples.extend_from_slice(&pcm);
