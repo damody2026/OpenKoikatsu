@@ -12,14 +12,36 @@ use super::mula::{Mula, Sampling, FRAME_MS};
 use crate::audio::Audio;
 use crate::backend::stage_error;
 
-/// Bumped when the native stage changes its output for the same inputs (part of the song cache key).
+/// Bumped when a native stage changes its output for the same inputs (part of the cache keys).
 pub const GENERATE_REVISION: &str = "heartmula-rust-1";
+pub const SEPARATE_REVISION: &str = "demucs-rust-1";
 
 pub struct GenerateOptions {
     pub cfg_scale: f32,
     pub top_k: i32,
     pub temperature: f32,
     pub seed: u64,
+}
+
+/// Demucs htdemucs_ft: (vocals, accompaniment = drums + bass + other) at 44.1 kHz, like the Python prototype.
+pub fn separate(models: &Path, song: &Audio, cancel: &AtomicBool) -> Result<(Audio, Audio, Value)> {
+    use super::demucs::{Separator, RATE};
+    let gpu = super::device(0).map_err(|e| stage_error("BACKEND_FAILED", format!("CUDA: {e:#}")))?;
+    let t = std::time::Instant::now();
+    let sep = Separator::load(&gpu, models)?;
+    let load = t.elapsed().as_secs_f64();
+    let s = song.resampled(RATE);
+    let mix: [Vec<f32>; 2] = match s.channels.len() {
+        1 => [s.channels[0].clone(), s.channels[0].clone()],
+        _ => [s.channels[0].clone(), s.channels[1].clone()],
+    };
+    let t2 = std::time::Instant::now();
+    let src = sep.separate(&gpu, &mix, &|| cancel.load(Ordering::SeqCst))
+        .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
+    let acc: Vec<Vec<f32>> = (0..2).map(|c| (0..mix[0].len()).map(|i| src[0][c][i] + src[1][c][i] + src[2][c][i]).collect()).collect();
+    let [vl, vr] = src.into_iter().nth(3).unwrap();
+    let report = json!({"revision": SEPARATE_REVISION, "load_seconds": load, "separate_seconds": t2.elapsed().as_secs_f64()});
+    Ok((Audio { rate: RATE, channels: vec![vl, vr] }, Audio { rate: RATE, channels: acc }, report))
 }
 
 pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &GenerateOptions, cancel: &AtomicBool) -> Result<(Audio, Value)> {

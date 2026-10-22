@@ -1,7 +1,7 @@
 //! The three model stages behind one boundary, so each can be swapped (a native Rust port replaces a Python
 //! prototype without touching jobs, cache or the game). Generate runs natively ("heartmula-rust": HeartMuLa + HeartCodec
-//! in Rust/CUDA, src/native); separate and convert are still prototypes that run the upstream entry points
-//! (`python -m demucs`, Seed-VC `inference.py`) in their own environments. `doctor` reports which.
+//! in Rust/CUDA, src/native) and so does separate ("demucs-rust": htdemucs_ft); convert is still a prototype that
+//! runs Seed-VC `inference.py` in its own environment. `doctor` reports which.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -145,6 +145,18 @@ impl Runner<'_> {
     /// Song -> (vocals, accompaniment), both at the separator's rate and starting at the song's first sample.
     pub fn separate(&self, song: &Path, dir: &Path) -> Result<(PathBuf, PathBuf)> {
         let st = &self.cfg.separate;
+        if st.backend == "demucs-rust" {
+            let models = st.ckpt.as_deref().context("separate.ckpt (the HTDemucs-ft safetensors folder)")?;
+            if !crate::native::demucs::BAG.iter().all(|id| models.join(format!("{id}.safetensors")).is_file()) {
+                return Err(stage_error("MODEL_MISSING", format!("no htdemucs_ft safetensors in {}", models.display())));
+            }
+            let (v, a, report) = crate::native::song::separate(models, &crate::audio::Audio::read_wav(song)?, &self.cancel)?;
+            let (vo, ao) = (dir.join("vocals.wav"), dir.join("accompaniment.wav"));
+            v.write_wav(&vo)?;
+            a.write_wav(&ao)?;
+            std::fs::write(dir.join("separate.json"), serde_json::to_vec_pretty(&report)?)?;
+            return Ok((vo, ao));
+        }
         if st.backend != "demucs-python" {
             bail!("unknown separate backend {}", st.backend);
         }
@@ -207,7 +219,11 @@ pub fn revisions(cfg: &Config) -> Value {
     let rev = |st: &StageConfig| -> Value {
         let native = st.native();
         json!({"backend": st.backend, "native_rust": native,
-               "native_revision": if st.backend == "heartmula-rust" { Some(crate::native::song::GENERATE_REVISION) } else { None },
+               "native_revision": match st.backend.as_str() {
+                   "heartmula-rust" => Some(crate::native::song::GENERATE_REVISION),
+                   "demucs-rust" => Some(crate::native::song::SEPARATE_REVISION),
+                   _ => None,
+               },
                "sampling": if native { Some(json!({"cfg_scale": st.cfg_scale, "topk": st.topk, "temperature": st.temperature, "seed": st.seed})) } else { None },
                "repo": if native { None } else { st.repo.clone() }, "repo_head": if native { None } else { st.repo.as_deref().and_then(git_head) },
                "model": st.model, "version": st.version, "diffusion_steps": st.diffusion_steps, "inference_cfg_rate": st.inference_cfg_rate})
@@ -245,7 +261,7 @@ pub fn doctor(cfg: &Config) -> Value {
         "gpu": gpu, "ok_tts": {"path": cfg.ok_tts, "exists": cfg.ok_tts.is_file()},
         "generate": {"revisions": revisions(cfg)["generate"], "weights": weights,
                      "env": if cfg.generate.native() { json!({"ok": true, "says": "native"}) } else { probe(cfg.generate.python.as_deref(), "import torch,heartlib;print(torch.__version__, torch.cuda.is_available())") }},
-        "separate": {"revisions": revisions(cfg)["separate"], "env": probe(cfg.separate.python.as_deref(), "import torch,demucs;print(torch.__version__, demucs.__version__)")},
+        "separate": {"revisions": revisions(cfg)["separate"], "env": if cfg.separate.native() { json!({"ok": true, "says": "native"}) } else { probe(cfg.separate.python.as_deref(), "import torch,demucs;print(torch.__version__, demucs.__version__)") }},
         "convert": {"revisions": revisions(cfg)["convert"], "env": probe(cfg.convert.python.as_deref(), "import torch,librosa,dac;print(torch.__version__)")},
         "dll_dirs": cfg.dll_dirs.iter().map(|d| json!({"path": d, "exists": d.is_dir()})).collect::<Vec<_>>(),
         "work_root": cfg.work_root,

@@ -10,6 +10,7 @@
 //!   ok-song mula-check --ref DIR [--ckpt E:/HeartMuLa/ckpt] [--frames 12]   native HeartMuLa vs a Python dump
 //!   ok-song mula-generate --tags T --lyrics FILE --out FRAMES.json [--seconds 30] [--cfg 3] [--topk 50] [--seed N]
 //!   ok-song codec-check --frames F.json --ref DIR [--first-draw 33]   native HeartCodec vs a Python dump
+//!   ok-song demucs-check --ref DIR [--models DIR]   native Demucs (htdemucs_ft) vs a Python dump
 //!   ok-song mix      --vocal V.wav --accompaniment A.wav --out DIR   the Rust mix + envelope alone (checks, tests)
 //!
 //! The model stages are prototypes running upstream Python entry points (backend.rs); they sit behind one boundary so
@@ -166,6 +167,13 @@ fn run() -> Result<()> {
             let t = std::time::Instant::now();
             let mut r = native::codec::check(&gpu, &codec, &frames, &PathBuf::from(args.opts.get("ref").context("--ref")?), first)?;
             r["seconds"] = t.elapsed().as_secs_f64().into();
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
+        "demucs-check" => {
+            let gpu = native::device(0)?;
+            let models = PathBuf::from(args.opts.get("models").map(String::as_str)
+                .unwrap_or("E:/OkSong/hf-cache/hub/models--adefossez--HTDemucs-ft/snapshots/d74ac89c3a1e874fc78f152555cf4d8533f06cd4"));
+            let r = native::demucs::check(&gpu, &models, &PathBuf::from(args.opts.get("ref").context("--ref")?))?;
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
         "mix" => {
