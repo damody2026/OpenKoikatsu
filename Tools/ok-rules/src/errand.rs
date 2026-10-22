@@ -71,6 +71,13 @@ fn facts(r: &Value) -> Value {
     if debt > 0 {
         parts.push(crate::tr::m("errand.fact_can_borrow", &[("debt", crate::tr::a(&crate::tr::money(debt)))]));
     }
+    // Almost nothing in hand or in the bank: said plainly (with ¥0 she kept saying "this one is my treat", and he paid).
+    let rel: Option<crate::relation::Relation> = r.get("relation").cloned().and_then(|v| serde_json::from_value(v).ok());
+    if let Some(rel) = rel.filter(|x| x.cash >= 0) {
+        if rel.funds() < crate::region::amount("cash", 30) {
+            parts.push(crate::tr::m("errand.fact_short_of_money", &[("funds", crate::tr::a(&crate::tr::money(rel.funds())))]));
+        }
+    }
     json!({"text": parts.join(crate::tr::t("items.fact_separator"))})
 }
 
@@ -109,6 +116,14 @@ mod tests {
         assert_eq!(errand(&json!({"relation": rel(74, 0), "kind": "student_loan", "place": "campus_ad"})).unwrap()["ok"], false);
         let paid = errand(&json!({"relation": rel(5000, 2600), "kind": "pay_tuition", "place": "campus_ad"})).unwrap();
         assert_eq!(paid["ok"], true);
+    }
+
+    #[test]
+    fn she_hears_when_she_has_almost_no_money() {
+        let poor = facts(&json!({"girl": "a", "relation": {"id": "a", "cash": 0}}));
+        assert!(!poor["text"].as_str().unwrap().is_empty());
+        assert_eq!(facts(&json!({"girl": "a", "relation": {"id": "a", "cash": 500}}))["text"], "");
+        assert_eq!(facts(&json!({"girl": "a", "relation": {"id": "a", "cash": -1}}))["text"], "", "unknown wallet: nothing said");
     }
 
     #[test]

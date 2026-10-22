@@ -206,6 +206,13 @@ local function main(argv)
     -- each pauses the clock at the end (MAX real seconds, 180 by default)
     local max = 180
     if cmd == "goto" then
+      -- A goodbye takes a moment to finish: navigation is refused while a conversation is still open.
+      for _ = 1, 15 do
+        local s = call("/state")
+        if s.target == -1 and s.pair.partner == -1 then break end
+        call("/clock", json.object({ { "paused", false } }))
+        sleep(1.0)
+      end
       call("/navigate", json.object({ { rest[1], rest[1] == "girl" and int(rest[2]) or rest[2] } }))
       max = rest[3] and num(rest[3]) or max
     elseif cmd == "outing" then
