@@ -2201,11 +2201,16 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_VIGNETTE")) == TEXT("0")) Self->Document->Post.bVignette = false;
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_FOG")) == TEXT("0")) Self->Document->Post.bFog = false;
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_SUNSHAFTS")) == TEXT("0")) Self->Document->Post.bSunShafts = false;
-		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover).
+		// OK_STUDIO_COMPARE_HIDE=<group>/<category>/<no>[,...]: those catalogue items hidden (what they cover); `*` matches
+		// any part ("1/6/*"), and "#<id>" hides one object.
 		TArray<FString> Hide;
 		FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_COMPARE_HIDE")).ParseIntoArray(Hide, TEXT(","));
 		for (FOKSceneObject& O : Self->Document->Objects)
-			if (O.Kind == EOKSceneObjectKind::Item && Hide.Contains(FString::Printf(TEXT("%d/%d/%d"), O.Item.Group, O.Item.Category, O.Item.No))) O.bVisible = false;
+		{
+			const FString Key = FString::Printf(TEXT("%d/%d/%d"), O.Item.Group, O.Item.Category, O.Item.No);
+			for (const FString& H : Hide)
+				if (H == FString::Printf(TEXT("#%d"), O.Id) || (O.Kind == EOKSceneObjectKind::Item && Key.MatchesWildcard(H))) O.bVisible = false;
+		}
 		Self->SceneActor->bPauseAnimations = true;
         Self->Document->ItemAnimationSeconds = 0.f;
         Self->SyncNow();

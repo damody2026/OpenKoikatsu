@@ -113,7 +113,11 @@ pub enum Object {
     },
     Light { key: i32, change: ChangeAmount, visible: bool, no: i32, color: Color, intensity: f32, range: f32, spot_angle: f32, shadow: bool, enable: bool },
     Folder { key: i32, change: ChangeAmount, visible: bool, name: String, children: Vec<Object> },
-    Route { key: i32, change: ChangeAmount, visible: bool, name: String, children: Vec<Object>, points: usize },
+    /// OIRouteInfo: its children ride the route's child root, which rests on the start point (`points[0]`) and moves
+    /// through the points when the route plays (OCIRoute.Play / Stop).
+    Route { key: i32, change: ChangeAmount, visible: bool, name: String, children: Vec<Object>, points: Vec<RoutePoint>,
+        /// Playing when saved, back to the start after the last point, the children turned along the path (0 none, 1 XY, 2 Y).
+        active: bool, looped: bool, orient: i32 },
     Camera { key: i32, change: ChangeAmount, visible: bool, name: String, active: bool },
     Text { key: i32, change: ChangeAmount, visible: bool, id: i32 },
 }
@@ -131,6 +135,22 @@ pub struct Scene {
     /// colour and value edits of Studio items, by object key.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub material_edits: Vec<MaterialEdit>,
+}
+
+/// A point of a Studio route (OIRoutePointInfo), in the route's space.
+#[derive(Clone, Debug, Serialize)]
+pub struct RoutePoint {
+    pub change: ChangeAmount,
+    /// Travel speed to the next point (units per second, iTween `speed`) and its StudioTween.EaseType.
+    pub speed: f32,
+    pub ease: i32,
+    /// Curve (through the aid point) rather than a straight line to the next point; `link`: the curve runs on through
+    /// this point from the previous one.
+    pub curve: bool,
+    /// The curve's aid point, in the point's space (None: not placed yet, half way to the next point).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aid: Option<ChangeAmount>,
+    pub link: bool,
 }
 
 /// One Material Editor edit of a Studio object.
@@ -568,18 +588,28 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let (key, change, visible) = base(r, true)?;
             let name = r.string()?;
             let children = children(r, v, depth)?;
-            let points = r.count("route point")?;
-            for _ in 0..points {
-                base(r, false)?;
-                r.f32()?; r.i32()?;
+            let count = r.count("route point")?;
+            let mut points = Vec::with_capacity(count);
+            for _ in 0..count {
+                let (_, change, _) = base(r, false)?;
+                let speed = r.f32()?;
+                let ease = r.i32()?;
                 if *v == Version::parse("1.0.3") { r.bool()?; }
-                if v.at_least("1.0.4.1") { r.i32()?; base(r, false)?; r.bool()?; }
-                if v.at_least("1.0.4.2") { r.bool()?; }
+                let (mut curve, mut aid, mut link) = (false, None, false);
+                if v.at_least("1.0.4.1") {
+                    curve = r.i32()? == 1;
+                    let (_, aid_change, _) = base(r, false)?;
+                    // An aid never placed sits half way to the next point (OCIRoutePoint.InitAidPos).
+                    aid = r.bool()?.then_some(aid_change);
+                }
+                if v.at_least("1.0.4.2") { link = r.bool()?; }
+                points.push(RoutePoint { change, speed, ease, curve, aid, link });
             }
-            if v.at_least("1.0.3") { r.bool()?; r.bool()?; r.bool()?; }
-            if v.at_least("1.0.4") { r.i32()?; }
+            let (mut active, mut looped, mut orient) = (false, true, 0);
+            if v.at_least("1.0.3") { active = r.bool()?; looped = r.bool()?; r.bool()?; }
+            if v.at_least("1.0.4") { orient = r.i32()?; }
             if v.at_least("1.0.4.1") { r.json_color()?; }
-            Ok(Object::Route { key, change, visible, name, children, points })
+            Ok(Object::Route { key, change, visible, name, children, points, active, looped, orient })
         }
         5 => {
             let (key, change, visible) = base(r, true)?;
@@ -657,6 +687,9 @@ pub struct Stats {
     /// Scenes whose main camera (SceneInfo.cameraSaveData) was read.
     pub main_cameras: usize,
     pub characters: usize, pub items: usize, pub lights: usize, pub folders: usize, pub routes: usize, pub cameras: usize, pub texts: usize,
+    /// Routes with children and at least two points (they move when played), and routes whose start point (where the
+    /// children rest) is not at the route's origin.
+    pub routes_moving: usize, pub routes_moved_start: usize,
     pub vanilla_items: usize, pub mod_items: usize,
     /// Catalogue items posed with item FK (enabled, with bones).
     pub fk_items: usize, pub fk_item_ids: std::collections::BTreeMap<(i32, i32, i32), usize>, pub maps: std::collections::BTreeMap<i32, usize>,
@@ -676,7 +709,12 @@ fn count_with(objects: &[Object], s: &mut Stats, vanilla: &dyn Fn(i32, i32, i32)
             Object::Item { group, category, no, children, enable_fk, fk, .. } => { s.items += 1; if *enable_fk && !fk.is_empty() && vanilla(*group, *category, *no) { s.fk_items += 1; *s.fk_item_ids.entry((*group, *category, *no)).or_default() += 1 } if vanilla(*group, *category, *no) { s.vanilla_items += 1 } else { s.mod_items += 1 }; count_with(children, s, vanilla, motion); }
             Object::Light { .. } => s.lights += 1,
             Object::Folder { children, .. } => { s.folders += 1; count_with(children, s, vanilla, motion); }
-            Object::Route { children, .. } => { s.routes += 1; count_with(children, s, vanilla, motion); }
+            Object::Route { children, points, .. } => {
+                s.routes += 1;
+                if points.len() > 1 && !children.is_empty() { s.routes_moving += 1; }
+                if !children.is_empty() && points.first().is_some_and(|p| p.change.pos.iter().chain(&p.change.rot).any(|v| v.abs() > 1e-3)) { s.routes_moved_start += 1; }
+                count_with(children, s, vanilla, motion);
+            }
             Object::Camera { .. } => s.cameras += 1,
             Object::Text { .. } => s.texts += 1,
         }
@@ -715,10 +753,52 @@ pub fn stats(lib: &std::path::Path, dir: &std::path::Path) -> Result<Stats, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    // OK_CMP_NATIVE=<original capture>, OK_CMP_OK=<OK Studio picture> (a CompareKStudio picture: its right half),
+    // OK_CMP_GRID=<columns>x<rows> (default 8x4): cells whose mean colour differs by more than 10 % (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: compares the pictures named by OK_CMP_NATIVE and OK_CMP_OK"]
+    fn print_picture_grid_difference() {
+        let (Ok(a), Ok(b)) = (std::env::var("OK_CMP_NATIVE"), std::env::var("OK_CMP_OK")) else { return };
+        let mut b = image::open(b).unwrap().to_rgb8();
+        // OK_CMP_NATIVE=card: the scene card's own picture, the left half of the CompareKStudio picture.
+        let a = if a == "card" { image::imageops::crop_imm(&b, 0, 0, b.width() / 2, b.height()).to_image() } else { image::open(a).unwrap().to_rgb8() };
+        if b.width() >= 2 * b.height() * 16 / 9 - 4 { b = image::imageops::crop_imm(&b, b.width() / 2, 0, b.width() / 2, b.height()).to_image(); }
+        let b = image::imageops::resize(&b, a.width(), a.height(), image::imageops::FilterType::Triangle);
+        let grid = std::env::var("OK_CMP_GRID").unwrap_or_else(|_| "8x4".into());
+        let (cols, rows) = grid.split_once('x').map(|(c, r)| (c.parse::<u32>().unwrap(), r.parse::<u32>().unwrap())).unwrap();
+        let mut over = 0;
+        for r in 0..rows {
+            let mut line = String::new();
+            for c in 0..cols {
+                let (x0, y0, x1, y1) = (c * a.width() / cols, r * a.height() / rows, (c + 1) * a.width() / cols, (r + 1) * a.height() / rows);
+                let mean = |img: &image::RgbImage| {
+                    let mut s = [0f64; 3];
+                    for y in y0..y1 { for x in x0..x1 { let p = img.get_pixel(x, y); for k in 0..3 { s[k] += p[k] as f64; } } }
+                    let n = ((x1 - x0) * (y1 - y0)) as f64;
+                    s.map(|v| v / n)
+                };
+                let (ma, mb) = (mean(&a), mean(&b));
+                // Relative difference of the cell's mean luminance, and the largest channel difference (0..255).
+                let lum = |m: [f64; 3]| 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2];
+                let rel = (lum(mb) - lum(ma)) / lum(ma).max(8.0);
+                let channel = (0..3).map(|k| (mb[k] - ma[k]).abs()).fold(0.0, f64::max);
+                let flag = rel.abs() > 0.10 || channel > 25.5;
+                over += usize::from(flag);
+                line += &format!("{}{:+4.0}%/{:3.0} ", if flag { '*' } else { ' ' }, rel * 100.0, channel);
+            }
+            println!("{line}");
+        }
+        println!("{over} of {} cells over 10 %", cols * rows);
+    }
+
     // OK_SCENE_DIR=<folder>: which scene plugins carry data, over every KStudio scene below it (diagnostic).
     #[test]
     #[ignore = "diagnostic: reads the scenes below OK_SCENE_DIR"]
     fn print_scene_plugin_usage() {
+        // Scene trees nest up to 1024 deep (parsing, walking and dropping them recurse).
+        std::thread::Builder::new().stack_size(1 << 30).spawn(scene_plugin_usage).unwrap().join().unwrap();
+    }
+    fn scene_plugin_usage() {
         fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
             for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let p = e.path();
@@ -730,6 +810,20 @@ mod tests {
         let mut used: std::collections::BTreeMap<String, (usize, String)> = Default::default();
         for f in &files {
             let Ok(bytes) = std::fs::read(f) else { continue };
+            // Scenes whose routes carry children away from the route's origin (start point moved).
+            fn moved(objects: &[super::Object]) -> bool {
+                objects.iter().any(|o| match o {
+                    super::Object::Route { children, points, .. } => !children.is_empty()
+                        && points.first().is_some_and(|p| p.change.pos.iter().any(|v| v.abs() > 0.05)) || moved(children),
+                    super::Object::Item { children, .. } | super::Object::Folder { children, .. } => moved(children),
+                    _ => false,
+                })
+            }
+            if super::read(&bytes).is_ok_and(|s| moved(&s.objects)) {
+                let e = used.entry("(route start point moved)".into()).or_default();
+                e.0 += 1;
+                if e.0 <= 6 { e.1 += &format!("{} ", f.display()); }
+            }
             if let Some(fx) = super::read_nested(&bytes).ok().and_then(|s| s.effects).filter(|e| e.sky) {
                 let e = used.entry(format!("(Studio sky pattern {})", fx.sky_pattern)).or_default();
                 e.0 += 1;
@@ -773,6 +867,26 @@ mod tests {
             let shown = v.as_slice().and_then(|b| rmpv::decode::read_value(&mut std::io::Cursor::new(b)).ok()).map(|d| d.to_string()).unwrap_or_else(|| v.to_string());
             eprintln!("me {k}: {}", shown.chars().take(1500).collect::<String>());
         }
+    }
+    #[test]
+    #[ignore = "game oracle: reads an official KStudio scene with routes (set OK_TEST_GAME_ROOT)"]
+    fn routes_keep_their_points() {
+        let bytes = std::fs::read(crate::test_support::game_path("UserData/Studio/scene/Official/koikatu_cs0004888.png")).unwrap();
+        let scene = super::read(&bytes).unwrap();
+        fn routes(objects: &[super::Object], out: &mut Vec<(usize, usize, bool)>) {
+            for o in objects {
+                match o {
+                    super::Object::Route { children, points, looped, .. } => { out.push((points.len(), children.len(), *looped)); routes(children, out); }
+                    super::Object::Item { children, .. } | super::Object::Folder { children, .. } => routes(children, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut found = Vec::new();
+        routes(&scene.objects, &mut found);
+        println!("routes (points, children, loop): {found:?}");
+        assert_eq!(found.len(), 4);
+        assert!(found.iter().all(|(points, children, _)| *points >= 10 && *children >= 2), "{found:?}");
     }
     #[test]
     fn base64_pads_like_rfc4648() {

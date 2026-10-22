@@ -49,6 +49,7 @@
 - [x] Rust `studio_scene.rs` 解析場景 PNG：版本、ObjectInfo 樹（角色、道具、燈光、資料夾、路徑、相機、文字，依版本欄位）、地圖；角色卡資料範圍、臉部縮圖、ExtendedSave 在卡後附的 KKEx（外掛資料）；`--oklib scene-stats <lib> <dir>`：官方 7,594 個場景解析 7,590 個（4 個舊版場景資料提早結束，原作也讀不了），角色 45,664、道具 4,203,784（基礎庫外的 mod 道具只有 45 個）
 - [x] 角色：臉部縮圖＋卡資料重組 KKS 卡、KKEx 併回卡片區塊，再 `make_ok_card` 轉 OK 卡（測試：轉出的 OK 卡 41 部位、可從基礎庫開啟）
 - [x] C++ `FOKStudioImport`：資料夾、角色（OK 卡、FK、張嘴）、道具（目錄、顏色）、燈光、相機、地圖；路徑→資料夾、文字略過、飾品插槽上的物件掛在角色的掛點骨頭上（AccessoryPoint 表）；Unity→UE 變換；匯入報告 `.import.json`；遊戲內「匯入」與 `OKStudio.ImportKStudio`、`OKStudio.ImportKStudioSample`
+- [x] 路徑（route，2026-10-22）：Rust 讀出路徑點（位置、速度、曲線、輔助點、連結）與循環、朝向。匯入時路徑仍是資料夾，底下多一個「(start)」資料夾放在起點（原作 OCIRoute 停止時子物件跟著起點，不是跟著路徑本身；本機 44 條路徑的起點不在原點，舊版子物件位置錯），子物件掛在它下面；起點資料夾帶時間軸關鍵幀：依各點速度（iTween 每秒公尺）算時間，曲線段加入輔助點並開平滑路徑（Catmull-Rom，和 iTween path 一樣），循環時回到起點，Orient 依路徑方向轉向；文件長度取最長的路徑。本機 1,172 條有子物件的路徑播放時間軸會動。Rust 測試 `routes_keep_their_points`（koikatu_cs0004888：4 條路徑、10–11 點）
 - [x] 角色的 Studio IK 目標：場景存的 13 個目標都是角色根空間的位置（官方場景驗證：1–3 左臂、4–6 右臂、7–9 左腿、10–12 右腿，左右和骨骼同側），對到 OK 的 9 個效果器；手肘、膝蓋是彎曲目標（之後已帶入，`STUDIO_BEND_FIRST` 9..12 對到 FBBIK 的四個彎曲限制）。部位開關照 body、右腿、左腿、右臂、左臂。自測匯入 `koikatu_cs0000010`：4 個角色各 9 個目標，左手全部到位（最大 0.08 cm）。修了匯入時體型骨架還沒算好、IK 準備失敗的時序問題（`SetStudioIk` 先算一幀再重試）
 - [x] 手型編號：場景 0＝照動畫，n＝遊戲第 n 種（`OCIChar.ChangeHandAnime` 是 `SetShapeHandValue(side, n, 0, 0)`；2026-10-19 前誤用 n−1，V 字會變成握拳）
 - [x] Studio 動畫（S6）

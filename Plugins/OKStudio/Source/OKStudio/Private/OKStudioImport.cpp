@@ -61,6 +61,99 @@ namespace
 			return Id;
 		}
 
+		/** StudioTween.EaseType as the nearest timeline curve. */
+		static EOKSceneEase Ease(int32 Type)
+		{
+			if (Type == 21) return EOKSceneEase::Linear;
+			if (Type == 22) return EOKSceneEase::EaseOut; // spring
+			const int32 Kind = Type < 21 ? Type % 3 : (Type - 23) % 3;
+			return Kind == 0 ? EOKSceneEase::EaseIn : Kind == 1 ? EOKSceneEase::EaseOut : EOKSceneEase::EaseInOut;
+		}
+
+		/** A route's start point folder and its timeline track (OCIRoute.Play): the path runs through the points (and a
+		 *  curve's aid point) at each point's speed, back to the start when the route loops, turned along the path
+		 *  with Orient. Returns the folder (-1: no points). */
+		int32 Route(const TSharedPtr<FJsonObject>& O, int32 RouteId)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+			if (!O->TryGetArrayField(TEXT("points"), Points) || Points->IsEmpty()) return -1;
+			struct FPoint { FTransform Transform; float Speed = 2.f; int32 Ease = 21; bool bCurve = false; bool bAid = false; FVector Aid = FVector::ZeroVector; };
+			TArray<FPoint> P;
+			for (const TSharedPtr<FJsonValue>& V : *Points)
+			{
+				const TSharedPtr<FJsonObject> J = V->AsObject();
+				if (!J) continue;
+				FPoint Point;
+				Point.Transform = Transform(J);
+				Point.Transform.SetScale3D(FVector::OneVector);
+				Point.Speed = FMath::Max(float(J->GetNumberField(TEXT("speed"))), 0.01f);
+				Point.Ease = int32(J->GetNumberField(TEXT("ease")));
+				Point.bCurve = J->GetBoolField(TEXT("curve"));
+				const TSharedPtr<FJsonObject>* Aid = nullptr;
+				if (J->TryGetObjectField(TEXT("aid"), Aid))
+				{
+					Point.bAid = true;
+					Point.Aid = Point.Transform.TransformPosition(FOKStudioImport::UnityToUe(Vec3(*Aid, TEXT("pos")), FVector::ZeroVector, FVector::OneVector).GetLocation());
+				}
+				P.Add(Point);
+			}
+			if (P.IsEmpty()) return -1;
+			const int32 Rider = Doc->AddObject(EOKSceneObjectKind::Folder, Doc->Find(RouteId)->Name + TEXT(" (start)"), RouteId);
+			Doc->Find(Rider)->Transform = P[0].Transform;
+			if (P.Num() < 2) return Rider;
+			bool bLoop = true;
+			O->TryGetBoolField(TEXT("looped"), bLoop);
+			int32 Orient = 0;
+			O->TryGetNumberField(TEXT("orient"), Orient);
+			// Path points with the speed and curve of the segment they start.
+			struct FStop { FVector Position; float Speed; EOKSceneEase Ease; };
+			TArray<FStop> Stops;
+			bool bSmooth = false;
+			const int32 Segments = bLoop ? P.Num() : P.Num() - 1;
+			for (int32 I = 0; I < Segments; ++I)
+			{
+				const FPoint& A = P[I];
+				const FVector Next = P[(I + 1) % P.Num()].Transform.GetLocation();
+				Stops.Add({ A.Transform.GetLocation(), A.Speed, Ease(A.Ease) });
+				if (A.bCurve)
+				{
+					bSmooth = true;
+					Stops.Add({ A.bAid ? A.Aid : (A.Transform.GetLocation() + Next) * 0.5, A.Speed, Ease(A.Ease) });
+				}
+			}
+			Stops.Add({ bLoop ? P[0].Transform.GetLocation() : P.Last().Transform.GetLocation(), 0.f, EOKSceneEase::Linear });
+			FOKSceneTrack Track;
+			Track.ObjectId = Rider;
+			Track.bSmoothPath = bSmooth;
+			float Time = 0.f;
+			for (int32 I = 0; I < Stops.Num(); ++I)
+			{
+				FOKSceneKey Key;
+				Key.Time = Time;
+				Key.Ease = Stops[I].Ease;
+				FQuat Rotation = P[0].Transform.GetRotation();
+				if (Orient != 0)
+				{
+					// Turned along the path: towards the next stop (the last one keeps the previous heading).
+					FVector Dir = I + 1 < Stops.Num() ? Stops[I + 1].Position - Stops[I].Position : Stops[I].Position - Stops[FMath::Max(I - 1, 0)].Position;
+					if (Orient == 2) Dir.Z = 0.f;
+					// Unity's LookRotation: forward (+Z, Unreal +Y) along the path, up (+Y, Unreal +Z) kept up.
+					if (!Dir.IsNearlyZero()) Rotation = FRotationMatrix::MakeFromYZ(Dir, FVector::UpVector).ToQuat();
+				}
+				Key.Transform = FTransform(Rotation, Stops[I].Position);
+				Track.Keys.Add(Key);
+				// iTween speed: Unity units (m) per second.
+				if (I + 1 < Stops.Num()) Time += float(FVector::Dist(Stops[I].Position, Stops[I + 1].Position) / 100.0) / Stops[I].Speed;
+			}
+			if (Time > 0.f)
+			{
+				Doc->Tracks.Add(MoveTemp(Track));
+				Doc->Duration = FMath::Max(Doc->Duration, Time);
+				Note(TEXT("routes move their children along the timeline"));
+			}
+			return Rider;
+		}
+
 		void Children(const TSharedPtr<FJsonObject>& O, int32 Parent)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* Kids = nullptr;
@@ -79,11 +172,12 @@ namespace
 			}
 			else if (Kind == TEXT("Route"))
 			{
-				// Route paths (objects moving along points) are not in OK Studio yet: the route becomes a folder.
+				// A route is a folder; its children ride a second folder that rests on the start point (OCIRoute's child
+				// root) and travels through the points along the timeline.
 				++Report->Routes;
-				Note(TEXT("route paths become folders (no movement)"));
 				const int32 Id = Add(EOKSceneObjectKind::Folder, TEXT("[route] ") + O->GetStringField(TEXT("name")), Parent, O);
-				Children(O, Id);
+				const int32 Rider = Route(O, Id);
+				Children(O, Rider >= 0 ? Rider : Id);
 			}
 			else if (Kind == TEXT("Text"))
 			{
