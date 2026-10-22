@@ -33,8 +33,10 @@ fn apply_animated_materials(m: &mut ExtractedMesh, animated: &crate::unity::Pref
 }
 
 /// Unity Standard's indirect specular source for each Standard-family part (meshes placed in prefab space, Unity
-/// metres): the baked reflection probe whose box holds the part's centre (highest importance, then the smallest box),
-/// else the scene's skybox reflection (probe node -1). The material names it (`_OKReflectionIndex`, with
+/// metres): Unity picks the probes whose box intersects the renderer's bounds (not its centre: a wall lying on the
+/// box's face, centre a few cm outside, still takes the room's probe), the highest importance first, then the one
+/// overlapping the bounds most, then the smallest box; with none, the scene's skybox reflection (probe node -1).
+/// The material names it (`_OKReflectionIndex`, with
 /// `_OKReflectionMips` and `_OKReflectionIntensity`); each probe's atlas rides on the first part using it
 /// (`_OKReflection`, as lightmaps do).
 fn assign_reflection_probes(meshes: &mut [ExtractedMesh], probes: &crate::unity::PrefabReflectionProbes, worlds: &[crate::pose::Mat4]) {
@@ -50,13 +52,23 @@ fn assign_reflection_probes(meshes: &mut [ExtractedMesh], probes: &crate::unity:
     let mut carried = vec![false; probes.probes.len()];
     for m in meshes.iter_mut() {
         if !m.mat.as_ref().is_some_and(|mat| mat.shader.starts_with("Standard")) || m.positions.is_empty() { continue; }
-        let n = m.positions.len() as f32;
-        let c = m.positions.iter().fold([0f32; 3], |a, p| [a[0] + p[0] / n, a[1] + p[1] / n, a[2] + p[2] / n]);
-        let inside = |(center, half): &([f32; 3], [f32; 3])| (0..3).all(|k| (c[k] - center[k]).abs() <= half[k]);
-        let chosen = boxes.iter().enumerate().filter(|(_, b)| b.as_ref().is_some_and(inside))
-            .max_by(|(a, ba), (b, bb)| {
-                let vol = |b: &Option<([f32; 3], [f32; 3])>| b.map(|(_, h)| h[0] * h[1] * h[2]).unwrap_or(f32::MAX);
-                probes.probes[*a].importance.cmp(&probes.probes[*b].importance).then(vol(bb).total_cmp(&vol(ba)))
+        let (lo, hi) = m.positions.iter().fold(([f32::MAX; 3], [f32::MIN; 3]), |(lo, hi), p|
+            ([lo[0].min(p[0]), lo[1].min(p[1]), lo[2].min(p[2])], [hi[0].max(p[0]), hi[1].max(p[1]), hi[2].max(p[2])]));
+        // Overlap of the renderer bounds with a probe box (per-axis extents multiplied; a flat part has no extent on
+        // one axis, so each axis counts at least 1 mm); None when they do not touch.
+        let overlap = |(center, half): &([f32; 3], [f32; 3])| -> Option<f32> {
+            let mut measure = 1f32;
+            for k in 0..3 {
+                let d = hi[k].min(center[k] + half[k]) - lo[k].max(center[k] - half[k]);
+                if d < 0. { return None; }
+                measure *= d.max(1e-3);
+            }
+            Some(measure)
+        };
+        let chosen = boxes.iter().enumerate().filter_map(|(i, b)| b.as_ref().and_then(|b| overlap(b)).map(|o| (i, o)))
+            .max_by(|(a, oa), (b, ob)| {
+                let vol = |i: usize| boxes[i].map(|(_, h)| h[0] * h[1] * h[2]).unwrap_or(f32::MAX);
+                probes.probes[*a].importance.cmp(&probes.probes[*b].importance).then(oa.total_cmp(ob)).then(vol(*b).total_cmp(&vol(*a)))
             }).map(|(i, _)| i).or(sky);
         let Some(index) = chosen else { continue };
         let probe = &probes.probes[index];
@@ -624,4 +636,43 @@ fn stage_1901_renderer_visibility_matches_source() {
         println!("visibility source MATCH instances={} white-beam-parts={}", expected.len(), beam_parts.len());
         Ok(())
     }).unwrap();
+}
+
+#[cfg(test)]
+mod reflection_probe_choice {
+    /// Each Standard part of a map prefab (OK_MAP_MODEL, OK_MAP_PREFAB default "Map"): its bounds centre (prefab space,
+    /// Unity metres) and the reflection probe node it took, with that node's name (-1: the skybox/default reflection).
+    /// Compared against the native `renderer_reflection` rows of `run_scene_visual_audit.lua`.
+    #[test]
+    #[ignore = "OK base library: which reflection probe each map part takes"]
+    fn map_part_reflection_probes() {
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let model = std::env::var("OK_MAP_MODEL").expect("OK_MAP_MODEL");
+        let prefab = std::env::var("OK_MAP_PREFAB").unwrap_or_else(|_| "Map".into());
+        super::with_library(&lib, || {
+            let view = super::ModelView::open(&lib, crate::oklib::id_from_hex_pub(&model).unwrap())?;
+            let h = view.parsed.prefab_hierarchy(&prefab);
+            let session = view.prefab_session(&prefab, false)?;
+            // OK_LIGHTMAP_OUT=<dir>: each lightmap and direction PNG as the parts carry them (lightmap<i>.png / dir<i>.png).
+            if let Ok(out) = std::env::var("OK_LIGHTMAP_OUT") {
+                std::fs::create_dir_all(&out).unwrap();
+                for p in &session.parts {
+                    let Some(index) = p.source_material.as_ref().and_then(|m| m.floats.get("_OKLightmapIndex")) else { continue };
+                    for (slot, file) in [("_OKLightmap", "lightmap"), ("_OKLightmapDirection", "dir")] {
+                        if let Some(png) = p.shader_textures.get(slot) { std::fs::write(std::path::Path::new(&out).join(format!("{file}{}.png", *index as i32)), png).unwrap(); }
+                    }
+                }
+            }
+            for p in &session.parts {
+                let Some(m) = p.source_material.as_ref().filter(|m| m.shader.starts_with("Standard")) else { continue };
+                let Some(node) = m.floats.get("_OKReflectionNode").map(|v| *v as i32) else { continue };
+                let (lo, hi) = p.positions.iter().fold(([f32::MAX; 3], [f32::MIN; 3]), |(lo, hi), q|
+                    ([lo[0].min(q[0]), lo[1].min(q[1]), lo[2].min(q[2])], [hi[0].max(q[0]), hi[1].max(q[1]), hi[2].max(q[2])]));
+                let name = usize::try_from(node).ok().and_then(|n| h.nodes.get(n)).map(|n| n.name.as_str()).unwrap_or("");
+                let lightmap = m.floats.get("_OKLightmapIndex").map(|v| *v as i32).unwrap_or(-1);
+                println!("PART\t{}\t{:.4}\t{:.4}\t{:.4}\t{node}\t{name}\t{lightmap}", p.name, (lo[0] + hi[0]) / 2., (lo[1] + hi[1]) / 2., (lo[2] + hi[2]) / 2.);
+            }
+            Ok::<(), String>(())
+        }).unwrap();
+    }
 }

@@ -231,6 +231,26 @@
 ![第十四輪 1901：左原作縮圖、右來源泛光結果](images/OKStudio/SourceBloom20261020/koikatu_cs0001901.png)
 
 
+### S5 第十五輪：濾鏡混合、反射探針、暗角（2026-10-22）
+
+使用者指出光影與 LUT 仍有差距，要求對照反編譯程式碼。方法：原作探針 `run_scene_visual_audit.lua` 新增 `--stages`（記錄主攝影機元件順序與參數 `post.tsv`、逐一關閉後製元件擷取、關地圖燈／角色燈擷取）、`--white <路徑片段>`（材質換白色反照率，含無反射與無地圖燈兩張）、`--hide`、`--lightmaps`（光照貼圖照 GPU 取樣輸出 float），並新增 `renderer_reflection`（每個 renderer 的 `GetClosestReflectionProbes`）與光照貼圖取樣設定；UE 端對應 `OK_STUDIO_COMPARE_VIGNETTE=0` 與 `OK_LIGHTMAP_DIAG`（white／whitenoenv／env／uv／dir／dirw）。
+
+- **後製順序**（原作主攝影機）：GlobalFog → AmplifyOcclusion → BloomAndFlares → AmplifyColor（LUT）→ SunShafts → Vignette → DepthOfField → CrossFade。
+- **濾鏡強度（6331 灰棕髮的根因）**：Amplify Color 的調色 LUT 是 lerp(LutTexture, LutBlendTexture, BlendAmount)；Studio 只換 LutTexture，LutBlendTexture 固定是攝影機 prefab 的 `Lut_Amount`。之前誤當成「往原圖混」，aceBlend ≠ 0 的場景色調錯誤。`M_SourceGrade32` 同時取樣兩張 LUT，強度 0 = `Lut_Amount`，`ColorFilter = -1` 才關閉。6331 飽和度 0.101 → 0.195（原作 0.214），頭髮回到紅棕色。
+- **反射探針選擇**：`assign_reflection_probes` 之前用部件中心判斷是否在探針盒內，置物櫃室後牆中心比盒子邊界多 7 cm 就退回天空反射；改成包圍盒相交（importance → 重疊量 → 小盒）。地圖 26／8／20 共 477 個部件逐一和原作 `GetClosestReflectionProbes` 一致。`SESSION_CACHE_REVISION` 21。0010 右側金屬門框亮度比值 0.82 → 0.98。
+- **暗角**：原作 `VignetteAndChromaticAberration`（Simple）`_Intensity = 1/(1 − 0.1) − 1`，mask = 1 − dot(c, c)·k，c = (uv − 0.5)·2，接在 LUT 之後；UE 之前用內建暗角 0.4，四角明顯過暗（UE 暗角約 −8%，原作約 −3%）。改由調色後製（新路徑 `SourceGrade3`，沒有濾鏡時只做暗角）照原作公式；文件新增 `SourceVignetteIntensity`（預設 0.1，UI「暗角強度」編輯它），舊 `VignetteIntensity` 只在後製材質未就緒時當退路。邊緣模糊（`_Blur`）未做。
+- **已排除**（逐 texel 或常數核對一致）：光照貼圖與方向貼圖資料（地圖 26、15）、`unity_Lightmap_HDR` (34.49, 2.2)、lightmapScaleOffset、光照貼圖編號（地圖 15 全部 218 個、地圖 26 69／71）、方向因子、mip 取樣、box projection（ProbePosition.w = 0）、light probe（場景沒有 light probe 群組，內插值等於 ambient）。
+- **結果**（sRGB 平均亮度，原作／修正前／修正後）：0010 141.6／119.7／129.3；6331 73.6／92.2／69.8；3167 132.3／126.3／124.2。
+- **驗收**：Rust 422 PASS／0 FAIL；`Verify-VignetteAccepted20261022` 八項自測（Game、Pattern、EyeSet、Bloom、Grade、Transparency、Editor）PASS，14／14 出圖。GameSelfTest 的暗角檢查這輪走的是退路分支（拍照時調色材質尚未編譯完成）。
+- **還沒修**：3167 的漫射在只有烘焙光時仍暗 8–26%、偏冷（藍色通道最低），光照貼圖資料、編號、探針都已確認一致，根因未定位；3800 窗戶附近反射不同；地圖 26 兩個玻璃複本實例（`#2`、`#3`）沒拿到光照貼圖；暗角邊緣模糊；0010 全開仍暗約 9%。
+
+![0010：原作、修正前、修正後](images/OKStudio/ProbeAndGrade20261022/0010-native-before-after.png)
+
+![6331：原作、修正前、修正後](images/OKStudio/ProbeAndGrade20261022/6331-native-before-after.png)
+
+![3167：原作、修正前、修正後](images/OKStudio/ProbeAndGrade20261022/3167-native-before-after.png)
+
+
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
 - [x] 轉成 OK 動畫：`ok-extract <game> --oklib anim-convert <lib> <card> [filter] [threads]`，5,805 個全部轉換、0 失敗（8 執行緒約 4 分鐘，目錄建立約 16 分鐘），寫進 `base_v1/anims/studio/*.okanim`（224 MB）與 `base_v1/studio_anims.json`

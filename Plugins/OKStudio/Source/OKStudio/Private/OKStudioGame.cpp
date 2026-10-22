@@ -998,7 +998,7 @@ private:
 		PostFloat(TEXT("對焦距離 cm"), &FOKScenePost::FocalDistance, 10.f, 5000.f, 5.f);
 		PostFloat(TEXT("光圈 f"), &FOKScenePost::Aperture, 0.7f, 32.f, 0.1f);
 		PostCheck(TEXT("暗角"), &FOKScenePost::bVignette);
-		PostFloat(TEXT("暗角強度"), &FOKScenePost::VignetteIntensity, 0.f, 1.f, 0.02f);
+		PostFloat(TEXT("暗角強度"), &FOKScenePost::SourceVignetteIntensity, 0.f, 0.9f, 0.01f);
 		PostFloat(TEXT("曝光補償 EV"), &FOKScenePost::Exposure, -5.f, 5.f, 0.1f);
 		// Studio's fog, ambient occlusion and sun shafts (OKStudioPost).
 		PostCheck(TEXT("霧"), &FOKScenePost::bFog);
@@ -3286,17 +3286,24 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 	Step(TEXT("post and frames"));
 	{
 		Document->Post.bBloom = true; Document->Post.BloomIntensity = 2.5f;
-		Document->Post.bVignette = true; Document->Post.VignetteIntensity = 0.7f;
+		Document->Post.bVignette = true; Document->Post.SourceVignetteIntensity = 0.3f;
 		Document->Post.bDepthOfField = true; Document->Post.FocalDistance = 250.f;
 		Document->Post.ShaderType = 0;
 		Tick(0.f);
 		const FPostProcessSettings& S = Viewer->GetCameraComponent()->PostProcessSettings;
 		const bool bSourceBloom = OKStudioSourceBloomState() == TEXT("ready") && S.BloomIntensity == 0.f && S.WeightedBlendables.Array.Num() >= 8;
-		Check(S.bOverride_BloomIntensity && (bSourceBloom || S.BloomIntensity >= 2.5f) && FMath::IsNearlyEqual(S.VignetteIntensity, 0.7f) && S.bOverride_DepthOfFieldFocalDistance && FMath::IsNearlyEqual(S.DepthOfFieldFocalDistance, 250.f),
-			TEXT("scene post-processing reaches the view (bloom, vignette, depth of field)"));
+		// Studio's vignette: the source grading pass with k = 1 / (1 - 0.3) - 1 and Unreal's own vignette off, or
+		// Unreal's fallback vignette while that pass is not ready.
+		float SourceVignette = -1.f;
+		for (const FWeightedBlendable& B : S.WeightedBlendables.Array)
+			if (const auto* M = Cast<UMaterialInstanceDynamic>(B.Object)) { float V = 0.f; if (M->GetScalarParameterValue(FMaterialParameterInfo(TEXT("Vignette")), V)) SourceVignette = V; }
+		const bool bVignetteReaches = (FMath::IsNearlyEqual(SourceVignette, 1.f / 0.7f - 1.f, 1e-4f) && S.VignetteIntensity == 0.f)
+			|| (SourceVignette < 0.f && FMath::IsNearlyEqual(S.VignetteIntensity, Document->Post.VignetteIntensity));
+		Check(S.bOverride_BloomIntensity && (bSourceBloom || S.BloomIntensity >= 2.5f) && bVignetteReaches && S.bOverride_DepthOfFieldFocalDistance && FMath::IsNearlyEqual(S.DepthOfFieldFocalDistance, 250.f),
+			FString::Printf(TEXT("scene post-processing reaches the view (bloom, vignette %.4f, depth of field)"), SourceVignette));
 		UOKSceneDocument* PostCopy = NewObject<UOKSceneDocument>();
 		FString PostError;
-		Check(PostCopy->FromJson(Document->ToJson(), PostError) && PostCopy->Post.bBloom && FMath::IsNearlyEqual(PostCopy->Post.VignetteIntensity, 0.7f), TEXT("post-processing is saved with the scene"));
+		Check(PostCopy->FromJson(Document->ToJson(), PostError) && PostCopy->Post.bBloom && FMath::IsNearlyEqual(PostCopy->Post.SourceVignetteIntensity, 0.3f), TEXT("post-processing is saved with the scene"));
         Check(PostCopy->Post.ShaderType == 0 && PostCopy->Post.ShaderGlobals().FindRef(TEXT("_KanoVerShift")).R == 0.f,
             TEXT("saved Studio mode zero overrides a card's Koikano mode"));
         PostCopy->Post.ShaderType = 2;

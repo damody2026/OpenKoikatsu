@@ -845,7 +845,8 @@ pub fn session_cache_location() -> Option<PathBuf> {
 /// 14: Studio Standard/MDK/particle Texture2D and baked lightmap rows follow rendering UVs.
 /// 15: Studio renderers carry their native shadow casting mode, layer and enabled state.
 /// 18: static and settled Animator activeSelf gate each prefab renderer instance through its ancestors.
-const SESSION_CACHE_REVISION: u32 = 20;
+/// 21: a Standard map part takes the reflection probe whose box intersects its bounds (was: holds its centre).
+const SESSION_CACHE_REVISION: u32 = 21;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {

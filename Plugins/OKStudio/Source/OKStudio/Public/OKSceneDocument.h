@@ -489,8 +489,14 @@ struct OKSTUDIO_API FOKScenePost
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
 	bool bVignette = false;
 
+	/** Unreal's own vignette strength: only while the source grading pass is not ready (a fallback). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
 	float VignetteIntensity = 0.4f;
+
+	/** Studio's vignette (VignetteAndChromaticAberration.intensity; Studio only toggles the component, whose value is
+	 * 0.1), applied by the source grading pass with the component's formula. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post", meta = (ClampMin = "0", ClampMax = "0.9"))
+	float SourceVignetteIntensity = 0.1f;
 
 	/** Exposure compensation (EV). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Post")
