@@ -56,7 +56,7 @@ pub struct PortraitAdjust {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct VoiceDef {
-    /// ok-tts voice name; lines without a voice file are spoken with it.
+    /// ok-tts voice (a personality number, or "card": the card's); lines without a voice file are spoken with it.
     pub tts: Option<String>,
     pub pitch: Option<f64>,
 }

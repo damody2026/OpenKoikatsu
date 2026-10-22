@@ -4,7 +4,7 @@
   "characters": {
     "mio": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_0.png", "scene_object": 1,
             "name": {"zh": "澪", "ja": "澪"}, "color": "#ff8fb4"},
-    "sora": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_136.png", "scene_object": 2,
+    "sora": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_136.png", "scene_object": 2, "voice": {"tts": "card"},
              "name": {"zh": "空", "ja": "空"}, "color": "#8fc8ff"},
     "passer": {"card": "UserData/Studio/scene/koikatu_cs0003800_cards/char_37.png", "scene_object": 1, "name": {"zh": "路人", "ja": "通行人"}, "color": "#c0c0c0"},
     "alice": {"card": "Content/CharacterCards/StreetHeroines/alice.png", "name": {"zh": "愛麗絲", "ja": "アリス"}, "color": "#ffd27a",

@@ -498,3 +498,22 @@ fn jump_plays_from_a_line_without_its_effects() {
     s.run(0.5);
     assert_eq!(s.line(), "a3.l1");
 }
+
+#[test]
+fn offstage_speakers_are_built_a_line_early() {
+    let mut s = Stage::new("preload", |_| {});
+    s.run(0.2);
+    s.reach("a1.l3");
+    s.input(json!({"type": "click"}));
+    s.run(0.1);
+    s.input(json!({"type": "choose", "index": 0}));
+    s.run(0.1);
+    s.reach("a1.l6");
+    s.input(json!({"type": "click"}));
+    s.input(json!({"type": "click"}));
+    s.run(0.2);
+    s.reach("a2.l2");
+    // a2.l3 is rin's offstage line: her copy is asked for while a2.l2 shows.
+    assert!(s.ops("spawn_offstage").iter().any(|c| matches!(&c.op, Op::SpawnOffstage { who, .. } if who == "rin")));
+    assert_eq!(s.line(), "a2.l2");
+}

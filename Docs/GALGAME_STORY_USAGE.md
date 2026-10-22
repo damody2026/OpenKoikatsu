@@ -22,7 +22,7 @@ Tools/lua/lua.exe Tools/run_scene_editor.lua -Story Content/IndependentResources
 ```
 
 - `run_scene_editor.lua` 會先 `cargo build --release` 建 `Tools/ok-story`，把 DLL 複製到 `Saved/Story/Build/`，再以 `OK_STORY_DLL` 指給編輯器。改了 Rust 之後重新 build，在遊戲主控台執行 `OKStory.Reload` 即可換上新版，播放狀態保留。
-- 加 `-StorySelfTest` 會自動點完整個劇本，每句截圖一張，報告寫在 `Saved/Story/SelfTest/<時間>/report.json`，跑完自動結束。
+- 加 `-StorySelfTest` 會自動點完整個劇本，每句截圖一張，並依序打開存檔、讀檔、紀錄、設定與選單各截一張。報告寫在 `Saved/Story/SelfTest/<時間>/report.json`，跑完自動結束。遇到選項時預設選第一個可選的；在 `--` 後面加 `-OKStoryChoice=N` 改選第 N 個（用來測其他路線）。
 - 劇本播完，或在選單選「結束」，編輯器就會關閉。從 Studio 內播放則用主控台 `OKStory.Play <檔案>`。
 
 主控台指令：
@@ -92,7 +92,8 @@ Tools/lua/lua.exe Tools/run_scene_editor.lua -Story Content/IndependentResources
 - `card`：卡片路徑（絕對路徑，或相對劇本與專案根目錄）。
 - `scene_object`：直接使用場景裡已有的角色物件，保留它的姿勢。沒填時以卡片路徑比對；都找不到就新增一個角色。
 - `personality`：表情表要用哪個 profile；沒填時讀卡片的值。
-- `offstage`：不在場說話時，立繪用分身的動作與表情。
+- `offstage`：不在場說話時，立繪用分身的動作與表情。沒寫時用 `tuning.json` 的 `portrait.offstage_motion`（預設 `0:0:1` 立ち1），分身不會停在 T 字姿勢。下一句的說話者若不在場，分身會提前一句建好。
+- `voice.tts`：沒有語音檔的句子改用 ok-tts 合成。值可以是 personality 編號，或 `"card"`（用卡片自己的 personality）。伺服器位址取環境變數 `OK_TTS_ENDPOINT`，預設 `http://127.0.0.1:47860`；`local-instance.json` 有開 voice 時，`run_scene_editor.lua` 會指向這個 checkout 自己的伺服器。
 
 **站位（`cast`）**：
 - 幕的 `cast` 是開場站位；句子上的 `cast` 只寫有變動的部分，`null` 代表退場。
@@ -172,7 +173,7 @@ claude mcp add ok-story -- E:/OpenKoikatsu/Tools/ok-story/target/release/ok-stor
 ## 已知限制
 
 - 換動作是直接切換，沒有 crossfade（`motion_blend` 目前沒有作用）。
-- OK Studio 沒有接上 `ok-tts`，只寫了 `voice.tts` 的句子沒有語音，改用固定字速打字。
+- ok-tts 要另外啟動（街區啟動器會帶起來）；連不上或合成失敗時，那一句改用固定字速打字，不會卡住。
 - 立繪的透明度用 HDR 擷取的反向不透明度判斷，半透明的頭髮邊緣是近似值。
 - 自動鏡頭只能用深度探測避開不透明的牆。不寫深度的東西（例如 Modulate 混合的水面）擋不住探測，鏡頭仍可能放到它後面；這時請用固定相機，或用 F8 存一個相機。
 - 示範劇本用的 Studio 場景與角色卡只在本機，不進版控。`ill_ss_sample_00` 在 UE 裡的畫面有問題（地圖 51 加上「野原」道具時，只看得到大片沒有貼圖的多邊形），這是 Studio 場景轉換的問題，與劇本播放無關；示範因此改用 1901／3800。

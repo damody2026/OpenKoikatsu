@@ -439,6 +439,7 @@ impl Director {
         self.stop_voice();
         self.sync_cast(Some(&line));
         self.line_camera(&line);
+        self.preload_offstage();
         let words = line.text.get(&self.words.lang);
         self.st.typing = Typing::new(&words);
         if self.skipping() && (self.st.was_read || self.st.settings.skip_unread) {
@@ -448,7 +449,9 @@ impl Director {
         if let Some(c) = &ch {
             let quiet = self.skipping() && (self.st.was_read || self.st.settings.skip_unread);
             let file = line.voice.as_ref().map(|v| self.path(v));
+            // "card": the voice of the card's own personality.
             let tts = if file.is_none() { c.voice.tts.clone() } else { None };
+            let tts = if tts.as_deref() == Some("card") { self.personality(&line.who).map(|p| p.to_string()) } else { tts };
             if !quiet && (file.is_some() || tts.is_some()) && !words.is_empty() {
                 let id = self.cmd(
                     Op::Voice {
@@ -690,19 +693,11 @@ impl Director {
             return;
         }
         let Some(def) = self.story.characters.get(&line.who).cloned() else { return };
+        self.spawn_offstage(&line.who);
         let mut s = self.st.shown.get(&line.who).cloned().unwrap_or_default();
-        if !s.offstage {
-            let index = self.st.shown.values().filter(|s| s.offstage).count() as f64;
-            let at = math::add(self.tuning.portrait.offstage_at, [index * 300.0, 0.0, 0.0]);
-            self.cmd(
-                Op::SpawnOffstage { who: line.who.clone(), card: self.path(&def.card), outfit: def.outfit, pos: at },
-                Some(Pending::Offstage(line.who.clone())),
-            );
-            s = Shown { offstage: true, visible: true, pos: Some(at), scale: Some(1.0), ..Default::default() };
-            self.cmd(Op::AutoBlink { who: line.who.clone(), on: false }, None);
-            s.blink_taken = true;
-        }
-        let motion = line.motion.as_ref().or(def.offstage.motion.as_ref()).and_then(|m| m.resolve().ok());
+        // Her line's motion, else her offstage one, else the default standing pose (a copy never stands in its bind pose).
+        let fallback = crate::script::MotionSpec::Code(self.tuning.portrait.offstage_motion.clone());
+        let motion = line.motion.as_ref().or(def.offstage.motion.as_ref()).or(Some(&fallback)).and_then(|m| m.resolve().ok());
         if let Some(m) = motion.filter(|m| Some(*m) != s.motion) {
             self.cmd(Op::Motion { who: line.who.clone(), kind: m.kind, group: m.group, category: m.category, no: m.no, blend: 0.0 }, None);
             s.motion = Some(m);
@@ -712,6 +707,29 @@ impl Director {
             s.face = Some(f);
         }
         self.st.shown.insert(line.who.clone(), s);
+    }
+
+    /// The portrait copy of a speaker not on stage (built once, kept until the act ends or she comes on stage).
+    fn spawn_offstage(&mut self, who: &str) {
+        let Some(def) = self.story.characters.get(who).cloned() else { return };
+        if self.st.shown.get(who).is_some_and(|s| s.offstage) {
+            return;
+        }
+        let index = self.st.shown.values().filter(|s| s.offstage).count() as f64;
+        let at = math::add(self.tuning.portrait.offstage_at, [index * 300.0, 0.0, 0.0]);
+        self.cmd(Op::SpawnOffstage { who: who.to_string(), card: self.path(&def.card), outfit: def.outfit, pos: at }, Some(Pending::Offstage(who.to_string())));
+        self.cmd(Op::AutoBlink { who: who.to_string(), on: false }, None);
+        self.st.shown.insert(who.to_string(), Shown { offstage: true, visible: true, pos: Some(at), scale: Some(1.0), blink_taken: true, ..Default::default() });
+    }
+
+    /// The next line's speaker, when she will speak from offstage, is built now (her portrait is ready in time).
+    fn preload_offstage(&mut self) {
+        let next = At { act: self.st.progress.act, line: self.st.progress.line + 1 };
+        let Some(who) = self.story.line(next).map(|l| l.who.clone()).filter(|w| !w.is_empty()) else { return };
+        let cast = script::cast_at(&self.story.acts[next.act], next.line);
+        if !cast.values().any(|c| c.who == who) && !self.st.shown.get(&who).is_some_and(|s| s.visible && !s.offstage) {
+            self.spawn_offstage(&who);
+        }
     }
 
     fn present(&self) -> Vec<String> {
@@ -726,6 +744,7 @@ impl Director {
             actors: &self.facts.actors,
             cameras: &self.st.cameras,
             active_camera: self.st.active_camera,
+            aspect: if self.facts.viewport[1] > 0.0 { self.facts.viewport[0] / self.facts.viewport[1] } else { 16.0 / 9.0 },
         };
         camera::candidates(&self.tuning.camera, spec, &ctx, &self.st.rig.current)
     }

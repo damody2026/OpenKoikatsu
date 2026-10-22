@@ -77,13 +77,16 @@ pub struct CameraTuning {
     pub speaker_distance: f64,
     pub speaker_side_deg: f64,
     pub speaker_fov: f64,
-    /// Where on the speaker the camera aims: this far below the head (cm).
-    pub speaker_aim_drop: f64,
+    /// Close-ups and two shots show from this far above the head to this far below it (cm).
+    pub frame_above: f64,
+    pub frame_below: f64,
     pub two_fov: f64,
     /// The pair fills this much of the width.
     pub two_fill: f64,
     pub wide_fov: f64,
     pub wide_margin: f64,
+    /// The part of the view height above the dialog box (where a wide shot puts everyone).
+    pub wide_free: f64,
     /// Parallax: offset (cm) and turn (degrees) at full strength, smoothing rate.
     pub parallax_cm: [f64; 2],
     pub parallax_deg: [f64; 2],
@@ -116,11 +119,13 @@ impl Default for CameraTuning {
             speaker_distance: 165.0,
             speaker_side_deg: 20.0,
             speaker_fov: 30.0,
-            speaker_aim_drop: 16.0,
+            frame_above: 20.0,
+            frame_below: 45.0,
             two_fov: 35.0,
             two_fill: 0.42,
             wide_fov: 40.0,
             wide_margin: 1.25,
+            wide_free: 0.74,
             parallax_cm: [4.0, 2.5],
             parallax_deg: [1.2, 0.8],
             parallax_rate: 8.0,
@@ -156,6 +161,8 @@ pub struct PortraitTuning {
     pub every: u32,
     /// Where offstage speakers stand (out of every view).
     pub offstage_at: [f64; 3],
+    /// Their motion when the story gives none (group:category:no; 0:0:1 is Studio's 立ち1).
+    pub offstage_motion: String,
 }
 
 impl Default for PortraitTuning {
@@ -172,6 +179,7 @@ impl Default for PortraitTuning {
             target: [768, 1152],
             every: 1,
             offstage_at: [0.0, 50000.0, 0.0],
+            offstage_motion: "0:0:1".into(),
         }
     }
 }

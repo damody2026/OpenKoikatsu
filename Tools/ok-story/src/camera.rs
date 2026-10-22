@@ -55,6 +55,8 @@ pub struct ShotContext<'a> {
     pub actors: &'a BTreeMap<String, ActorFacts>,
     pub cameras: &'a [SceneCamera],
     pub active_camera: Option<i32>,
+    /// View width over height.
+    pub aspect: f64,
 }
 
 fn looking(pos: V3, at: V3, fov: f64) -> Pose {
@@ -120,6 +122,15 @@ fn fixed(spec: &CameraSpec, ctx: &ShotContext, current: &Pose) -> Option<Pose> {
     }
 }
 
+/// Aim height and distance that show `top`..`bottom` in the part of the view above the dialog box (`wide_free` of its
+/// height), no closer than `least`.
+fn fit_vertical(t: &CameraTuning, aspect: f64, fov: f64, top: f64, bottom: f64, least: f64) -> (f64, f64) {
+    let tan_v = (fov.to_radians() * 0.5).tan() / aspect.max(0.1);
+    let half = (top - bottom).max(1.0) * 0.5 / t.wide_free;
+    let distance = (half / tan_v).max(least);
+    ((top + bottom) * 0.5 - distance * tan_v * (1.0 - t.wide_free), distance)
+}
+
 /// A shot as aim point, direction from it to the camera, distance and field of view.
 fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &Pose) -> Option<(V3, V3, f64, f64)> {
     let fov_or = |d: f64| spec.fov.unwrap_or(d);
@@ -132,9 +143,13 @@ fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &
     match shot {
         "speaker" => {
             let a = actor(subject)?;
-            let aim = math::sub(a.head(), [0.0, 0.0, t.speaker_aim_drop * a.root.scale]);
+            let k = a.root.scale.abs().max(0.1);
+            let fov = fov_or(t.speaker_fov);
             let dir = Quat::yaw_deg(t.speaker_side_deg).rotate(a.facing());
-            Some((aim, dir, t.speaker_distance * a.root.scale, fov_or(t.speaker_fov)))
+            let head = a.head();
+            // Hair top to chest inside the part of the view above the dialog box, at least the tuned distance.
+            let (aim, distance) = fit_vertical(t, ctx.aspect, fov, head[2] + t.frame_above * k, head[2] - t.frame_below * k, t.speaker_distance * k);
+            Some(([head[0], head[1], aim], dir, distance, fov))
         }
         "two" => {
             let a = actor(subject)?;
@@ -159,9 +174,10 @@ fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &
             let fov = fov_or(t.two_fov);
             let half = (fov.to_radians() * 0.5).tan();
             let width = math::len([across[0], across[1], 0.0]) / t.two_fill.max(0.05);
-            let distance = (width * 0.5 / half).max(120.0);
-            let aim = math::sub(mid, [0.0, 0.0, t.speaker_aim_drop]);
-            Some((aim, side, distance, fov))
+            let top = ha[2].max(hb[2]) + t.frame_above;
+            let bottom = ha[2].min(hb[2]) - t.frame_below;
+            let (aim_z, distance) = fit_vertical(t, ctx.aspect, fov, top, bottom, (width * 0.5 / half).max(120.0));
+            Some(([mid[0], mid[1], aim_z], side, distance, fov))
         }
         "wide" => {
             let all: Vec<&ActorFacts> = ctx.present.iter().filter_map(|w| actor(w)).collect();
@@ -180,11 +196,16 @@ fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &
                 facing = math::add(facing, a.facing());
             }
             let center = math::scale(math::add(lo, hi), 0.5);
-            let extent = math::len(math::sub(hi, lo)).max(150.0) * 0.5 * t.wide_margin;
             let fov = fov_or(t.wide_fov);
-            let distance = (extent / (fov.to_radians() * 0.5).tan()).max(250.0);
+            let tan_h = (fov.to_radians() * 0.5).tan();
+            let tan_v = tan_h / ctx.aspect.max(0.1);
+            // Everyone fits across, and head to foot (hair included) in the part of the view above the dialog box.
+            let half_w = (math::len([hi[0] - lo[0], hi[1] - lo[1], 0.0]) * 0.5).max(60.0) * t.wide_margin;
+            let half_h = ((hi[2] - lo[2]) * 0.5 + 15.0) * t.wide_margin / t.wide_free;
+            let distance = (half_w / tan_h).max(half_h / tan_v).max(200.0);
             let dir = math::normalize(if math::len(facing) < 1e-6 { [0.0, -1.0, 0.0] } else { facing });
-            let aim = math::add(center, [0.0, 0.0, 10.0]);
+            // Aimed below the middle, so the group stands in the free upper part of the view.
+            let aim = math::add(center, [0.0, 0.0, 7.5 - distance * tan_v * (1.0 - t.wide_free)]);
             Some((aim, dir, distance, fov))
         }
         _ => None,
@@ -365,7 +386,7 @@ mod tests {
         let t = CameraTuning::default();
         let mut actors = BTreeMap::new();
         actors.insert("ayu".to_string(), actor([0.0, 0.0, 0.0], 0.0));
-        let ctx = ShotContext { speaker: "ayu", present: vec!["ayu"], actors: &actors, cameras: &[], active_camera: None };
+        let ctx = ShotContext { speaker: "ayu", present: vec!["ayu"], actors: &actors, cameras: &[], active_camera: None, aspect: 16.0 / 9.0 };
         let spec = CameraSpec { shot: Some("speaker".into()), ..Default::default() };
         let p = resolve(&t, &spec, &ctx, &Pose::default()).unwrap();
         // Yaw 0: she faces +Y; the camera stands in front of her (+Y side) and looks back at her head.
@@ -384,7 +405,7 @@ mod tests {
         let mut actors = BTreeMap::new();
         actors.insert("a".to_string(), actor([-60.0, 0.0, 0.0], 0.0));
         actors.insert("b".to_string(), actor([60.0, 0.0, 0.0], 0.0));
-        let ctx = ShotContext { speaker: "a", present: vec!["a", "b"], actors: &actors, cameras: &[], active_camera: None };
+        let ctx = ShotContext { speaker: "a", present: vec!["a", "b"], actors: &actors, cameras: &[], active_camera: None, aspect: 16.0 / 9.0 };
         let p = resolve(&t, &CameraSpec { shot: Some("two".into()), ..Default::default() }, &ctx, &Pose::default()).unwrap();
         assert!(p.pos[0].abs() < 1e-6 && p.pos[1] > 0.0);
         // Both heads inside the horizontal field of view.
@@ -429,7 +450,7 @@ mod offstage_tests {
         actors.insert("b".to_string(), actor([60.0, 0.0, 0.0]));
         // Her portrait copy far away.
         actors.insert("far".to_string(), actor([0.0, 50000.0, 0.0]));
-        let ctx = ShotContext { speaker: "far", present: vec!["a", "b"], actors: &actors, cameras: &[], active_camera: None };
+        let ctx = ShotContext { speaker: "far", present: vec!["a", "b"], actors: &actors, cameras: &[], active_camera: None, aspect: 16.0 / 9.0 };
         let two = resolve(&t, &CameraSpec { shot: Some("two".into()), ..Default::default() }, &ctx, &Pose::default()).unwrap();
         assert!(math::len(two.pos) < 1000.0, "{:?}", two.pos);
         assert!(resolve(&t, &CameraSpec { shot: Some("speaker".into()), ..Default::default() }, &ctx, &Pose::default()).is_none());

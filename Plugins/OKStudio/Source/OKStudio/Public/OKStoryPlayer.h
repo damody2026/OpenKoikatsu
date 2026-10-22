@@ -127,5 +127,10 @@ private:
 	void UpdatePortrait(const TSharedPtr<FJsonObject>& Portrait);
 	AKKPreviewActor* Preview(const FString& Who) const;
 	int32 FindOrAddCharacter(const FString& Who, const FString& Card, int32 Outfit, int32 SceneObject);
-	void PlaySound(const FString& File, float Volume, AKKPreviewActor* Speaker, uint64 Id, float Pitch);
+	/** A sound effect (Ogg), not tied to a speaker. */
+	void PlaySound(const FString& File, float Volume, uint64 Id);
+	/** Speech on the speaker: its length goes back as the result; facts follow its progress. */
+	void StartVoice(uint64 Id, const FString& Who, AKKPreviewActor* Speaker, TSharedPtr<const struct FKKSpeechPcm, ESPMode::ThreadSafe> Pcm, float Pitch, float Volume);
+	/** A line spoken by ok-tts (OK_TTS_ENDPOINT, default 127.0.0.1:47860): synthesized, then StartVoice. */
+	void RequestTts(uint64 Id, const FString& Who, const FString& Text, const FString& Voice, float Pitch, float Volume);
 };
