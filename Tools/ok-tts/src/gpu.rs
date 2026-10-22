@@ -139,6 +139,26 @@ impl Gpu {
         Ok(())
     }
 
+    /// Keep freed memory in the device pool instead of returning it to the OS at every synchronisation (the default
+    /// threshold is 0). Loops that allocate per step then reuse pool memory instead of mapping new pages each time,
+    /// which is very slow while another process keeps the GPU busy. `trim_pool` still gives it back.
+    pub fn keep_pool(&self) -> Result<()> {
+        unsafe {
+            let mut pool: ds::CUmemoryPool = std::ptr::null_mut();
+            let r = ds::cuDeviceGetMemPool(&mut pool, self.ctx.cu_device());
+            if r != ds::CUresult::CUDA_SUCCESS {
+                bail!("cuDeviceGetMemPool: {r:?}");
+            }
+            let mut threshold: u64 = u64::MAX;
+            let r = ds::cuMemPoolSetAttribute(pool, ds::CUmemPool_attribute::CU_MEMPOOL_ATTR_RELEASE_THRESHOLD,
+                                              &mut threshold as *mut u64 as *mut std::ffi::c_void);
+            if r != ds::CUresult::CUDA_SUCCESS {
+                bail!("cuMemPoolSetAttribute: {r:?}");
+            }
+        }
+        Ok(())
+    }
+
     pub fn alloc(&self, bytes: usize) -> Result<Buf> {
         let ptr = unsafe { dr::malloc_async(self.cs, bytes.max(4)) }?;
         Ok(Buf { ptr, bytes, stream: self.cs })

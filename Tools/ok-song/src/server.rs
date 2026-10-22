@@ -172,7 +172,7 @@ fn handle(state: &Arc<State>, mut req: tiny_http::Request) {
     match (req.method(), parts.as_slice()) {
         (tiny_http::Method::Get, ["health"]) => {
             let q = state.queue.lock().unwrap().len();
-            respond(req, 200, json!({"ok": true, "schema": SCHEMA, "version": env!("CARGO_PKG_VERSION"), "native_rust_inference": false,
+            respond(req, 200, json!({"ok": true, "schema": SCHEMA, "version": env!("CARGO_PKG_VERSION"), "native_rust_inference": state.cfg.generate.native() && state.cfg.separate.native() && state.cfg.convert.native(),
                                      "backends": crate::backend::revisions(&state.cfg), "busy": state.busy.load(Ordering::SeqCst), "queue": q}));
         }
         (tiny_http::Method::Post, ["jobs"]) => {

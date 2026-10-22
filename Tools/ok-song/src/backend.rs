@@ -1,7 +1,7 @@
 //! The three model stages behind one boundary, so each can be swapped (a native Rust port replaces a Python
 //! prototype without touching jobs, cache or the game). Generate runs natively ("heartmula-rust": HeartMuLa + HeartCodec
-//! in Rust/CUDA, src/native) and so does separate ("demucs-rust": htdemucs_ft); convert is still a prototype that
-//! runs Seed-VC `inference.py` in its own environment. `doctor` reports which.
+//! in Rust/CUDA, src/native), and so do separate ("demucs-rust": htdemucs_ft) and convert ("seedvc-rust": Seed-VC
+//! f0 44 kHz). The "-python" backends remain as prototypes calling the upstream entry points. `doctor` reports which.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -179,6 +179,22 @@ impl Runner<'_> {
     /// The original vocal sung in the voice of `reference` (singing model, F0 conditioned, the same melody: no shift).
     pub fn convert(&self, vocals: &Path, reference: &Path, dir: &Path) -> Result<PathBuf> {
         let st = &self.cfg.convert;
+        if st.backend == "seedvc-rust" {
+            let models = st.ckpt.as_deref().context("convert.ckpt (the Seed-VC model folder)")?;
+            for f in ["dit.safetensors", "bigvgan.safetensors", "campplus.safetensors", "rmvpe.safetensors", "whisper-small/model.safetensors"] {
+                if !models.join(f).is_file() {
+                    return Err(stage_error("MODEL_MISSING", format!("{} missing", models.join(f).display())));
+                }
+            }
+            let o = crate::native::seedvc::ConvertOptions {
+                steps: st.diffusion_steps.unwrap_or(30) as usize, cfg_rate: st.inference_cfg_rate.unwrap_or(0.7) as f32, seed: st.seed.unwrap_or(1),
+            };
+            let (out, report) = crate::native::song::convert(models, &crate::audio::Audio::read_wav(vocals)?, &crate::audio::Audio::read_wav(reference)?, &o, &self.cancel)?;
+            let path = dir.join("converted.wav");
+            out.write_wav(&path)?;
+            std::fs::write(dir.join("convert.json"), serde_json::to_vec_pretty(&report)?)?;
+            return Ok(path);
+        }
         if st.backend != "seedvc-python" {
             bail!("unknown convert backend {}", st.backend);
         }
@@ -222,6 +238,7 @@ pub fn revisions(cfg: &Config) -> Value {
                "native_revision": match st.backend.as_str() {
                    "heartmula-rust" => Some(crate::native::song::GENERATE_REVISION),
                    "demucs-rust" => Some(crate::native::song::SEPARATE_REVISION),
+                   "seedvc-rust" => Some(crate::native::seedvc::CONVERT_REVISION),
                    _ => None,
                },
                "sampling": if native { Some(json!({"cfg_scale": st.cfg_scale, "topk": st.topk, "temperature": st.temperature, "seed": st.seed})) } else { None },
@@ -262,7 +279,7 @@ pub fn doctor(cfg: &Config) -> Value {
         "generate": {"revisions": revisions(cfg)["generate"], "weights": weights,
                      "env": if cfg.generate.native() { json!({"ok": true, "says": "native"}) } else { probe(cfg.generate.python.as_deref(), "import torch,heartlib;print(torch.__version__, torch.cuda.is_available())") }},
         "separate": {"revisions": revisions(cfg)["separate"], "env": if cfg.separate.native() { json!({"ok": true, "says": "native"}) } else { probe(cfg.separate.python.as_deref(), "import torch,demucs;print(torch.__version__, demucs.__version__)") }},
-        "convert": {"revisions": revisions(cfg)["convert"], "env": probe(cfg.convert.python.as_deref(), "import torch,librosa,dac;print(torch.__version__)")},
+        "convert": {"revisions": revisions(cfg)["convert"], "env": if cfg.convert.native() { json!({"ok": true, "says": "native"}) } else { probe(cfg.convert.python.as_deref(), "import torch,librosa,dac;print(torch.__version__)") }},
         "dll_dirs": cfg.dll_dirs.iter().map(|d| json!({"path": d, "exists": d.is_dir()})).collect::<Vec<_>>(),
         "work_root": cfg.work_root,
     })

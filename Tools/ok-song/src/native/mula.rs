@@ -312,37 +312,48 @@ impl Mula {
         let stop = gpu.zeros(4)?;
         let rng = gpu.upload(&[s.seed, 0u64])?;
         let last = gpu.alloc(b * h * 2)?;
+        // The next frame's input: the frame's audio embeddings summed (text column masked out), same for both CFG rows.
+        let next = gpu.alloc(b * h * 2)?;
         let mut frames = Vec::new();
-        let mut input = x;
         let mut n = len;
         let mut pos0 = 0;
         for f in 0..max_frames {
             if cancel() {
                 bail!("cancelled");
             }
-            let out = self.backbone.forward(gpu, input.ptr, n, pos0, None)?;
-            for bi in 0..b {
-                gpu.copy(last.ptr + (bi * h * 2) as u64, out.ptr + ((bi * n + n - 1) * h * 2) as u64, h * 2)?;
-            }
-            let logits = self.c0_logits(gpu, last.ptr)?;
-            gpu.launch("sample_cfg_bf16", (1, 1, 1), (1024, 1, 1), 0, &[
-                Arg::P(logits.ptr), Arg::I(b as i32), Arg::I(AUDIO_VOCAB as i32), Arg::F(s.cfg), Arg::F(s.temperature), Arg::I(s.top_k),
-                Arg::P(rng.ptr), Arg::I(0), Arg::P(tokens.ptr), Arg::I(AUDIO_EOS), Arg::P(stop.ptr)])?;
-            self.decode_frame(gpu, last.ptr, tokens.ptr, s, rng.ptr, stop.ptr, None, None)?;
-            gpu.launch("inc_u64", (1, 1, 1), (32, 1, 1), 0, &[Arg::P(rng.ptr + 8)])?;
+            let input = if f == 0 { x.ptr } else { next.ptr };
+            // One frame (backbone step, codebook 0, decoder for codebooks 1..7, next input) is recorded as a CUDA graph
+            // and submitted at once: ~900 small kernels launched one by one crawl while a game keeps the GPU busy.
+            let tc = std::time::Instant::now();
+            let graph = gpu.capture(|| {
+                let out = self.backbone.forward(gpu, input, n, pos0, None)?;
+                for bi in 0..b {
+                    gpu.copy(last.ptr + (bi * h * 2) as u64, out.ptr + ((bi * n + n - 1) * h * 2) as u64, h * 2)?;
+                }
+                let logits = self.c0_logits(gpu, last.ptr)?;
+                gpu.launch("sample_cfg_bf16", (1, 1, 1), (1024, 1, 1), 0, &[
+                    Arg::P(logits.ptr), Arg::I(b as i32), Arg::I(AUDIO_VOCAB as i32), Arg::F(s.cfg), Arg::F(s.temperature), Arg::I(s.top_k),
+                    Arg::P(rng.ptr), Arg::I(0), Arg::P(tokens.ptr), Arg::I(AUDIO_EOS), Arg::P(stop.ptr)])?;
+                self.decode_frame(gpu, last.ptr, tokens.ptr, s, rng.ptr, stop.ptr, None, None)?;
+                gpu.launch("inc_u64", (1, 1, 1), (32, 1, 1), 0, &[Arg::P(rng.ptr + 8)])?;
+                gpu.launch1("audio_sum_bf16", h, &[Arg::P(next.ptr), Arg::P(self.audio_emb.ptr), Arg::P(tokens.ptr), Arg::I(CODEBOOKS as i32),
+                    Arg::I(AUDIO_VOCAB as i32), Arg::I(h as i32), Arg::I(b as i32)])?;
+                Ok(())
+            })?;
+            let tr = std::time::Instant::now();
+            gpu.replay(&graph)?;
             let t: Vec<i32> = gpu.read(tokens.ptr, CODEBOOKS)?;
+            if std::env::var_os("OK_SONG_PROFILE").is_some() && f % 10 == 1 {
+                crate::log!("ok-song: frame {f}: record+instantiate {:.1} ms, run {:.1} ms", (tr - tc).as_secs_f64() * 1e3, tr.elapsed().as_secs_f64() * 1e3);
+            }
+            drop(graph);
             if t.iter().any(|&v| v >= AUDIO_EOS) {
                 break;
             }
             frames.push(t.clone().try_into().unwrap());
             on_frame(f + 1);
-            // Next input: the frame's audio embeddings summed (text column masked out), same for both CFG rows.
-            let next = gpu.alloc(b * h * 2)?;
-            gpu.launch1("audio_sum_bf16", h, &[Arg::P(next.ptr), Arg::P(self.audio_emb.ptr), Arg::P(tokens.ptr), Arg::I(CODEBOOKS as i32),
-                Arg::I(AUDIO_VOCAB as i32), Arg::I(h as i32), Arg::I(b as i32)])?;
             pos0 += n;
             n = 1;
-            input = next;
         }
         Ok(frames)
     }
@@ -463,8 +474,15 @@ pub fn npy(path: &Path) -> Result<Vec<f32>> {
     }
     let (hl, start) = if b[6] == 1 { (u16::from_le_bytes([b[8], b[9]]) as usize, 10) } else { (u32::from_le_bytes([b[8], b[9], b[10], b[11]]) as usize, 12) };
     let header = std::str::from_utf8(&b[start..start + hl])?;
-    if !header.contains("'<f4'") || header.contains("'fortran_order': True") {
+    if header.contains("'fortran_order': True") {
         bail!("{}: unsupported header {header}", path.display());
     }
-    Ok(b[start + hl..].chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect())
+    let body = &b[start + hl..];
+    if header.contains("'<f8'") {
+        return Ok(body.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap()) as f32).collect());
+    }
+    if !header.contains("'<f4'") {
+        bail!("{}: unsupported header {header}", path.display());
+    }
+    Ok(body.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect())
 }

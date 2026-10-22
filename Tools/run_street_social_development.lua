@@ -398,13 +398,16 @@ local function main()
   if o.control then say(("Control channel: http://127.0.0.1:%d (street_play.lua finds it through local-instance.json)"):format(control_port)) end
   local pid = proc.spawn(game, { cwd = root, hide = o.selftest and true or nil })
   path.write_text(path.join(output, "game.pid"), tostring(pid))
+  local server_pids = {}
   for _, s in ipairs(servers) do
     local args = { s.file }
     for _, a in ipairs(s.args) do args[#args + 1] = a end
     args[#args + 1] = "--parent-pid"; args[#args + 1] = tostring(pid)
-    proc.spawn(args, { cwd = path.parent(s.file), hide = true })
+    server_pids[#server_pids + 1] = proc.spawn(args, { cwd = path.parent(s.file), hide = true })
     say(s.name .. " server starting with the game on port " .. s.args[3] .. " (exits when the game closes; model load ~5-10s): " .. s.file)
   end
+  -- A normal launch stops this checkout's leftover servers; a running sandbox's are listed here so they are kept.
+  if sandbox then path.write_text(path.join(sandbox, "running.json"), json.encode({ game_pid = pid, server_pids = server_pids })) end
   say(output)
 end
 

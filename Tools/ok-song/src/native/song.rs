@@ -44,6 +44,27 @@ pub fn separate(models: &Path, song: &Audio, cancel: &AtomicBool) -> Result<(Aud
     Ok((Audio { rate: RATE, channels: vec![vl, vr] }, Audio { rate: RATE, channels: acc }, report))
 }
 
+/// Seed-VC: the separated vocal (44.1 kHz) sung in the voice of `reference` (ok-tts's reference audio).
+pub fn convert(models: &Path, vocals: &Audio, reference: &Audio, o: &super::seedvc::ConvertOptions, cancel: &AtomicBool) -> Result<(Audio, Value)> {
+    use super::seedvc::{SeedVc, CONVERT_REVISION, RATE};
+    let gpu = super::device(0).map_err(|e| stage_error("BACKEND_FAILED", format!("CUDA: {e:#}")))?;
+    let t = std::time::Instant::now();
+    let vc = SeedVc::load(&gpu, models)?;
+    let load = t.elapsed().as_secs_f64();
+    let mono = |a: &Audio| -> Vec<f32> {
+        let a = a.resampled(RATE);
+        let n = a.channels.len() as f32;
+        (0..a.frames()).map(|i| a.channels.iter().map(|c| c[i]).sum::<f32>() / n).collect()
+    };
+    let (src, refw) = (mono(vocals), mono(reference));
+    let t2 = std::time::Instant::now();
+    let out = vc.convert(&gpu, &src, &refw, o, &|| cancel.load(Ordering::SeqCst))
+        .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
+    let report = json!({"revision": CONVERT_REVISION, "load_seconds": load, "convert_seconds": t2.elapsed().as_secs_f64(),
+                        "steps": o.steps, "cfg_rate": o.cfg_rate, "seed": o.seed});
+    Ok((Audio { rate: RATE, channels: vec![out] }, report))
+}
+
 pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &GenerateOptions, cancel: &AtomicBool) -> Result<(Audio, Value)> {
     let gpu = super::device(0).map_err(|e| stage_error("BACKEND_FAILED", format!("CUDA: {e:#}")))?;
     let max_frames = (max_ms as usize / FRAME_MS).max(1);

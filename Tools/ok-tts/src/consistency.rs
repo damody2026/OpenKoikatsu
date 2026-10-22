@@ -153,10 +153,50 @@ fn read_wav(path: &Path) -> Result<Vec<f32>> {
     wav_samples(&std::fs::read(path).with_context(|| format!("read {}", path.display()))?)
 }
 
-/// Samples of a 16-bit mono WAV as `wav_bytes` writes it.
+/// Mono samples at 24 kHz of a PCM (16 / 24 / 32-bit) or 32-bit float WAV; channels are averaged and other rates
+/// are resampled linearly (good enough for speaker embeddings, not for listening).
 pub fn wav_samples(b: &[u8]) -> Result<Vec<f32>> {
-    let data = b.windows(4).position(|w| w == b"data").context("no data chunk")? + 8;
-    Ok(b[data..].chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0).collect())
+    let (mut fmt, mut data) = (None, None);
+    let mut at = 12;
+    while at + 8 <= b.len() {
+        let id = &b[at..at + 4];
+        let len = u32::from_le_bytes([b[at + 4], b[at + 5], b[at + 6], b[at + 7]]) as usize;
+        let body = &b[at + 8..(at + 8 + len).min(b.len())];
+        match id {
+            b"fmt " => fmt = Some(body),
+            b"data" => data = Some(body),
+            _ => {}
+        }
+        at += 8 + len + (len & 1);
+    }
+    let (fmt, data) = (fmt.context("no fmt chunk")?, data.context("no data chunk")?);
+    let mut format = u16::from_le_bytes([fmt[0], fmt[1]]);
+    let channels = u16::from_le_bytes([fmt[2], fmt[3]]).max(1) as usize;
+    let rate = u32::from_le_bytes([fmt[4], fmt[5], fmt[6], fmt[7]]);
+    let bits = u16::from_le_bytes([fmt[14], fmt[15]]);
+    if format == 0xfffe && fmt.len() >= 26 {
+        format = u16::from_le_bytes([fmt[24], fmt[25]]);
+    }
+    let frame: Vec<f32> = match (format, bits) {
+        (1, 16) => data.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0).collect(),
+        (1, 24) => data.chunks_exact(3).map(|c| (i32::from_le_bytes([0, c[0], c[1], c[2]]) >> 8) as f32 / 8_388_608.0).collect(),
+        (1, 32) => data.chunks_exact(4).map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f32 / 2_147_483_648.0).collect(),
+        (3, 32) => data.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect(),
+        _ => anyhow::bail!("unsupported WAV format {format} / {bits} bits"),
+    };
+    let mono: Vec<f32> = frame.chunks_exact(channels).map(|c| c.iter().sum::<f32>() / channels as f32).collect();
+    if rate == crate::engine::SAMPLE_RATE || mono.is_empty() {
+        return Ok(mono);
+    }
+    let step = rate as f64 / crate::engine::SAMPLE_RATE as f64;
+    let n = (mono.len() as f64 / step) as usize;
+    Ok((0..n).map(|i| {
+        let x = i as f64 * step;
+        let j = x as usize;
+        let f = (x - j as f64) as f32;
+        let b = mono.get(j + 1).copied().unwrap_or(mono[j]);
+        mono[j] * (1.0 - f) + b * f
+    }).collect())
 }
 
 /// `ok-tts speaker-sim --base DIR a.wav b.wav ...` (16-bit mono 24 kHz WAVs as `consistency` writes them): the

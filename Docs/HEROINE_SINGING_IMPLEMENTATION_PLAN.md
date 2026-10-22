@@ -1,6 +1,6 @@
 # 女主專屬歌唱功能實作計畫
 
-日期：2026-10-23。狀態：P0～P3 已實作並在遊戲中實測，結果與限制見 [HEROINE_SINGING_VALIDATION.md](HEROINE_SINGING_VALIDATION.md)；三個模型階段仍是 Python 原型，原生 Rust 推論（使用者要求遊戲成品用 Rust）與音色人工評分尚未完成。本文件其餘的介面、路徑與數值為原始設計提案。
+日期：2026-10-23。狀態：P0～P3 已實作並在遊戲中實測；三個模型階段（HeartMuLa＋HeartCodec、Demucs、Seed-VC）已改為原生 Rust + CUDA，遊戲執行不需要 Python。結果、數值核對與限制見 [HEROINE_SINGING_VALIDATION.md](HEROINE_SINGING_VALIDATION.md)；音色人工評分尚未完成。本文件其餘的介面、路徑與數值為原始設計提案。
 
 目標：玩家遊玩期間，由對玩家好感最高的女主，以她目前的角色聲線演唱一段歌曲。HeartMuLa 負責歌曲生成，歌聲轉換模型負責角色音色，遊戲負責觸發、播放、嘴型及演出。先驗證一位女主的 20～30 秒副歌，再完成可取消、可快取、可存檔的遊戲整合。
 
