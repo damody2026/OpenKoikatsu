@@ -68,6 +68,13 @@ pub fn holiday_text(game_day: i32) -> &'static str {
     on(game_day).first().map(|e| crate::tr::lookup(&e.text, "")).unwrap_or("")
 }
 
+/// An event's words by id ("" when there is none).
+pub fn name_of(id: &str) -> &'static str {
+    let Ok(g) = TABLE.read() else { return "" };
+    let t = g.as_ref().unwrap_or(&BUILTIN);
+    t.event.iter().find(|e| e.id == id).map(|e| crate::tr::lookup(&e.text, "")).unwrap_or("")
+}
+
 pub fn is_exam(game_day: i32) -> bool {
     on(game_day).iter().any(|e| e.exam)
 }

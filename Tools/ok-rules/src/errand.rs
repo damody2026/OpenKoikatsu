@@ -59,10 +59,19 @@ fn errand(r: &Value) -> Result<Value, String> {
     Ok(json!({"ok": true, "fact": fact, "effects": fx.into_value(), "ext": ext}))
 }
 
-/// For her words: the student loan she has (and that he went with her). Request: ext, girl. Answer: text.
+/// For her words: the student loan she has, and, while she owes fees, that the office can lend them (hers to bring up,
+/// or not). Request: ext, girl, relation. Answer: text.
 fn facts(r: &Value) -> Value {
     let owed = r.get("ext").and_then(|e| e.get("her_loans")).and_then(|l| l.get(s(r, "girl"))).and_then(|l| l.get("owed")).and_then(Value::as_i64).unwrap_or(0);
-    json!({"text": if owed > 0 { crate::tr::m("errand.fact_loan", &[("owed", crate::tr::a(&crate::tr::money(owed)))]) } else { String::new() }})
+    let debt = r.get("relation").and_then(|v| v.get("debt")).and_then(Value::as_i64).unwrap_or(0);
+    let mut parts = Vec::new();
+    if owed > 0 {
+        parts.push(crate::tr::m("errand.fact_loan", &[("owed", crate::tr::a(&crate::tr::money(owed)))]));
+    }
+    if debt > 0 {
+        parts.push(crate::tr::m("errand.fact_can_borrow", &[("debt", crate::tr::a(&crate::tr::money(debt)))]));
+    }
+    json!({"text": parts.join(crate::tr::t("items.fact_separator"))})
 }
 
 pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
@@ -100,5 +109,11 @@ mod tests {
         assert_eq!(errand(&json!({"relation": rel(74, 0), "kind": "student_loan", "place": "campus_ad"})).unwrap()["ok"], false);
         let paid = errand(&json!({"relation": rel(5000, 2600), "kind": "pay_tuition", "place": "campus_ad"})).unwrap();
         assert_eq!(paid["ok"], true);
+    }
+
+    #[test]
+    fn she_hears_of_the_loan_while_she_owes_fees() {
+        assert_eq!(facts(&json!({"girl": "a", "relation": {"debt": 0}}))["text"], "");
+        assert!(!facts(&json!({"girl": "a", "relation": {"debt": 311}}))["text"].as_str().unwrap().is_empty());
     }
 }

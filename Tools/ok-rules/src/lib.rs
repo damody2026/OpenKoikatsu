@@ -28,6 +28,7 @@ pub mod photos;
 pub mod places;
 pub mod reading;
 pub mod plan;
+pub mod promise;
 pub mod property;
 pub mod relation;
 pub mod rng;
@@ -181,6 +182,7 @@ impl Rules {
                     .or_else(|| reading::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| catalog::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
+                    .or_else(|| promise::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| shop::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| plan::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), tuning.places_in(locale::lang(&request)), &kind, &request))
                     .or_else(|| talk::eval(self.talk.read().ok().as_ref().and_then(|t| t.as_ref()), &kind, &request));

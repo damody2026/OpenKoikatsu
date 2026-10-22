@@ -548,6 +548,7 @@ separator = "; "
 raining = "It is raining; this cannot be done now"
 not_raining = "It is not raining; no need for this"
 done_today = "Already done today"
+not_event_day = "Today is not {what}; this is only on that day"
 only_some = "This is not something she does"
 needs_item = "It needs {item} (sold at {place}); neither of you has one"
 
@@ -610,6 +611,7 @@ loan_done = "You took out a student loan at the office: {amount} went straight t
 paid_part = "You paid {paid} of your fees at the office; {left} is still owed"
 paid_all = "You paid off your fees ({paid}) at the office"
 fact_loan = "You have a student loan of {owed} (repaid after graduating)"
+fact_can_borrow = "You owe {debt}; the fees part of it can be paid with a student loan from the student affairs office in the administration building, repaid after graduating"
 
 [events]
 today = "Today is {what}"

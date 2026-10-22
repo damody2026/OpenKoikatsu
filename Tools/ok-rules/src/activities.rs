@@ -42,6 +42,9 @@ pub struct Activity {
     pub yields: Vec<String>,
     #[serde(default)]
     pub once_per_day: bool,
+    /// Only on this festival (events.toml id): Halloween's night walk, the Christmas lights.
+    #[serde(default)]
+    pub event: String,
     /// What Unreal shows while it runs, beyond the poses ("explosion": Megumin's spell, far off).
     #[serde(default)]
     pub effect: String,
@@ -115,6 +118,12 @@ fn blocked(a: &Activity, c: &Catalog, r: &Value) -> Option<(String, String)> {
         "rain" if !raining => return Some(("dry".into(), crate::tr::t("activity.not_raining").into())),
         _ => {}
     }
+    if !a.event.is_empty() {
+        let day = r.get("day").and_then(Value::as_i64).unwrap_or(-1) as i32;
+        if !crate::events::on(day).iter().any(|e| e.id == a.event) {
+            return Some(("event".into(), crate::tr::m("activity.not_event_day", &[("what", crate::tr::a(crate::events::name_of(&a.event)))])));
+        }
+    }
     if a.once_per_day && list(r, "done_today").contains(&a.id) {
         return Some(("once".into(), crate::tr::t("activity.done_today").into()));
     }
@@ -166,7 +175,7 @@ fn blocked_here(t: &ActivitiesTuning, c: &Catalog, r: &Value) -> Value {
         .activity
         .iter()
         .filter(|a| a.place.is_empty() || a.place == place)
-        .filter_map(|a| blocked(a, c, r).filter(|(reason, _)| reason != "who").map(|(reason, why)| json!({"id": a.id, "name": a.name, "reason": reason, "why": why})))
+        .filter_map(|a| blocked(a, c, r).filter(|(reason, _)| reason != "who" && reason != "event").map(|(reason, why)| json!({"id": a.id, "name": a.name, "reason": reason, "why": why})))
         .collect();
     json!({"blocked": out})
 }
@@ -278,6 +287,21 @@ mod tests {
         assert!(ids.contains(&"park_exercise") && !ids.contains(&"field_stretch"));
         let wet = here(&park.activities, c, &json!({"place": "park", "raining": true}));
         assert!(!wet["here"].as_array().unwrap().iter().any(|v| v["id"] == "park_exercise"));
+    }
+
+    #[test]
+    fn festival_activities_open_only_on_their_day() {
+        let t = tuning();
+        crate::events::install(&t.events);
+        let c = &t.catalog;
+        // 2010-10-31 is game day 60.
+        let off = check(&t.activities, c, &json!({"id": "halloween_walk", "day": 40}));
+        assert_eq!(off["reason"], "event");
+        assert_eq!(check(&t.activities, c, &json!({"id": "halloween_walk", "day": 60}))["ok"], true);
+        let quiet = blocked_here(&t.activities, c, &json!({"place": "", "day": 40}));
+        assert!(!quiet["blocked"].as_array().unwrap().iter().any(|v| v["id"] == "halloween_walk"), "not told about it on other days");
+        let park = |day: i64| here(&t.activities, c, &json!({"place": "park", "day": day, "raining": false}))["here"].as_array().unwrap().iter().any(|v| v["id"] == "new_years_eve_countdown");
+        assert!(!park(100) && park(121), "2010-12-31 is game day 121");
     }
 
     #[test]

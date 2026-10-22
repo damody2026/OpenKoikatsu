@@ -548,6 +548,7 @@ separator = "；"
 raining = "下雨了，这件事做不了"
 not_raining = "没在下雨，用不上"
 done_today = "今天已经做过了"
+not_event_day = "今天不是{what}，这要等那天才有"
 only_some = "这不是她会做的事"
 needs_item = "需要{item}（{place}有卖），你们手上都没有"
 
@@ -610,6 +611,7 @@ loan_done = "你在学务处办好了助学贷款，{amount} 直接缴了欠的�
 paid_part = "你在学务处缴了 {paid} 学费，还欠 {left}"
 paid_all = "你在学务处缴清了 {paid} 的学费"
 fact_loan = "你有助学贷款 {owed}（毕业后才开始还）"
+fact_can_borrow = "你还欠 {debt}；其中学费的部分可以到行政大楼的学务处办助学贷款缴掉，毕业后才开始还"
 
 [events]
 today = "今天是{what}"

@@ -399,8 +399,12 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  // Ordering by chat (plan §8.2): only items this place sells; then checkout when asked.
  const FString Place=OrderShopHere(Character);
  int32 Added=0;
+ // Not in a shop yet: the one they are about to walk to (this reply's go:place or activity) reads her ids; she has no
+ // menu out here and writes "cafe_latte" for the cafe's cf_latte (his americano, ordered on the doorstep, was lost).
+ FString Dest=Place.IsEmpty()?OutingShop(Character):Place;
+ if(Dest.IsEmpty()){if(Reply.Action.StartsWith(TEXT("go:")))Dest=Reply.Action.Mid(3);else if(const FOKStreetActivity* G=OKStreetFindActivity(Reply.Action);G&&G->Place&&*G->Place)Dest=G->Place;}
  for(auto O:Reply.Orders){
-  O.Id=ResolveItemId(O.Id,Place.IsEmpty()?OutingShop(Character):Place);
+  O.Id=ResolveItemId(O.Id,Dest);
   const auto* Item=S.Catalog.Find(O.Id);
   const bool ForHer=O.ForHer; // whose it is: the AI's "for"
   // Ordered on the way to that shop ("let's go to the store: a tea egg and water"): carried until they get there.
@@ -571,7 +575,7 @@ FString AOKStreetSocialScene::ThingsFacts(int32 Character) const{
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character)||Character<=0)return FString();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Request=OKRulesHeroineRequest(S,TEXT("items_facts"),Id);OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);FString Text=Out.IsValid()?Out->GetStringField(TEXT("text")):FString();
- FString Loan;{auto Ask=OKRulesRequest(TEXT("errand_facts"));OKRulesPutExt(S,Ask);Ask->SetStringField(TEXT("girl"),Id);if(const TSharedPtr<FJsonObject> L=OKRulesEval(S,Ask))Loan=L->GetStringField(TEXT("text"));}
+ FString Loan;{auto Ask=OKRulesHeroineRequest(S,TEXT("errand_facts"),Id);OKRulesPutExt(S,Ask);Ask->SetStringField(TEXT("girl"),Id);if(const TSharedPtr<FJsonObject> L=OKRulesEval(S,Ask))Loan=L->GetStringField(TEXT("text"));}
  // Festivals today and coming soon (events.rs): hers to bring up or ask him to, or not.
  FString Events;{auto Ask=OKRulesRequest(TEXT("events_facts"));Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay);if(const TSharedPtr<FJsonObject> E=OKRulesEval(S,Ask))Events=E->GetStringField(TEXT("text"));}
  for(const FString& More:{PhotoFacts(Character),ReadingFacts(Character),Loan,Events})if(!More.IsEmpty())Text+=(Text.IsEmpty()?FString():FString(OKT(TEXT("ui.economy.semicolon_mark"))))+More; // one fact from the next: "；"

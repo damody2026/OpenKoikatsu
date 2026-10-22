@@ -389,7 +389,7 @@ TSharedRef<FJsonObject> AOKStreetSocialScene::ActivityContext(int32 Girl,const T
   TArray<TSharedPtr<FJsonValue>> Names{MakeShared<FJsonValueString>(S.Manifest.Characters[Girl].Name)};G->SetArrayField(TEXT("names"),Names);R->SetObjectField(TEXT("girl"),G);
   // Her profile: an activity may be hers only when it names a field of it (help_her_work: occupation.side_task).
   if(const TSharedPtr<FJsonObject> Profile=S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Girl])))R->SetObjectField(TEXT("profile"),Profile);}
- const int64 Now=OKStreetMindNow(S);R->SetBoolField(TEXT("raining"),RainingAt(S.Store.CalendarDay,int32(Now%1440)));
+ const int64 Now=OKStreetMindNow(S);R->SetBoolField(TEXT("raining"),RainingAt(S.Store.CalendarDay,int32(Now%1440)));R->SetNumberField(TEXT("day"),S.Store.CalendarDay); // festival-only activities (events.toml)
  TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("his_items"),His);
  TArray<TSharedPtr<FJsonValue>> Done;if(S.ActivitiesDoneDay==Now/1440)if(const auto* D=S.ActivitiesDone.Find(Girl))for(const FString& I:*D)Done.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("done_today"),Done);
  auto Names=MakeShared<FJsonObject>();for(const auto& P:OKStreetPlaces())Names->SetStringField(P.Id,P.Name);R->SetObjectField(TEXT("place_names"),Names);

@@ -59,6 +59,8 @@ pub struct Money {
     pub reciprocity: i32,
     pub saving_goals: Vec<SavingGoal>,
     pub money_needs: Vec<MoneyNeed>,
+    /// family | self: who pays her term's tuition and dorm fees. Most students' families do; missing means family.
+    pub tuition_by: String,
     /// "CNY" since 2026-10-11 (the game runs on RMB); older files held NT$ and are converted once on load.
     pub currency: String,
 }
@@ -263,6 +265,7 @@ pub fn validate(mut p: Profile, id: &str, places: &[String]) -> Result<Profile, 
     m.expects_treat = pct(m.expects_treat);
     m.reciprocity = pct(m.reciprocity);
     m.spending_style = pick(&m.spending_style, &["frugal", "normal", "generous", "lavish"], "normal");
+    m.tuition_by = pick(&m.tuition_by, &["family", "self"], "family");
     for n in &mut m.money_needs {
         n.amount = n.amount.max(0);
         n.severity = n.severity.clamp(0.0, 1.0);
@@ -302,7 +305,7 @@ pub fn generation_prompt(card: &Value, places: &[String]) -> String {
         "home_place_id": "girls_dorm", "favorite_places": ["cafe"], "birthday": "YYYY-MM-DD",
         "department": "csie", "intelligence": 60,
         "money": {"cash": 600, "bank": 2000, "income": [{"source": "allowance", "amount": 1300, "cycle": "monthly", "payday": 1}],
-                  "fixed_costs": [{"name": "手機", "amount": 99, "due_day": 10}], "spending_style": "frugal|normal|generous|lavish",
+                  "fixed_costs": [{"name": "手機", "amount": 99, "due_day": 10}], "spending_style": "frugal|normal|generous|lavish", "tuition_by": "family|self",
                   "treat_pride": 50, "expects_treat": 50, "reciprocity": 50,
                   "saving_goals": [{"item": "", "amount": 0, "why": ""}], "money_needs": [{"reason": "", "amount": 0, "deadline": "2010-10-20", "severity": 0.5, "secret": false}]},
         "tastes": {"likes": ["dk_pearl_milk"], "dislikes": [], "allergies": [], "diet": "none", "drink": {"sweetness": "半糖", "ice": "去冰", "toppings": []},

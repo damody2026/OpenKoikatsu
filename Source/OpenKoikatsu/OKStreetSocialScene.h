@@ -134,6 +134,7 @@ private:
  FString OrderShopHere(int32 Girl) const; // OKStreetSocialEconomy.inl
  bool MindProfilesReady() const; // OKStreetSocialSchedule.inl
  int32 ShiftUntil(int32 Character) const; // OKStreetSocialInvite.inl
+ bool SeesHim(int32 I) const; // OKStreetSocialEncounter.inl
  void MovePromiseWith(int32 Character); // OKStreetSocialAppointments.inl
  void ToldAboutRival(int32 Character,const FString& Name); // OKStreetSocialMind.inl
  bool PlaceClosedAt(const FString& PlaceId,const FDateTime& When,FString& Why) const; // OKStreetSocialEconomy.inl
