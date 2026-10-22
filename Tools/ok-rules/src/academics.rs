@@ -577,6 +577,10 @@ fn class_clash(r: &Value) -> Result<Value, String> {
     let day = r.get("day").and_then(Value::as_i64).unwrap_or(0) as i32;
     let (from, to) = (r.get("from").and_then(Value::as_f64).unwrap_or(0.0), r.get("to").and_then(Value::as_f64).unwrap_or(0.0));
     let weekday = crate::calendar::date(day, from.max(4.0)).weekday as i32;
+    // On leave (or not enrolled) he has no classes to miss: the shift button said "clashes with Operating Systems".
+    if me.status != "enrolled" {
+        return Ok(json!({"course": ""}));
+    }
     // Class slots: 0 is 09:00-12:00, 1 is 13:30-16:30.
     let clash = me.courses.iter().find(|c| {
         let (a, b) = if c.slot == 0 { (9.0, 12.0) } else { (13.5, 16.5) };
@@ -607,10 +611,12 @@ mod tests {
     #[test]
     fn a_shift_over_a_class_names_it_and_an_evening_one_does_not() {
         // Day 0 (2010-09-01) is a Wednesday (weekday 2).
-        let player = json!({"courses": [{"name": "OS", "weekday": 2, "slot": 0}, {"name": "DS", "weekday": 2, "slot": 1}]});
+        let player = json!({"status": "enrolled", "courses": [{"name": "OS", "weekday": 2, "slot": 0}, {"name": "DS", "weekday": 2, "slot": 1}]});
         assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 8.0, "to": 14.0})).unwrap()["course"], "OS");
         assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 17.0, "to": 22.0})).unwrap()["course"], "");
         assert_eq!(class_clash(&json!({"player": player, "day": 1, "from": 8.0, "to": 14.0})).unwrap()["course"], "");
+        let leave = json!({"status": "leave", "courses": [{"name": "OS", "weekday": 2, "slot": 0}]});
+        assert_eq!(class_clash(&json!({"player": leave, "day": 0, "from": 8.0, "to": 14.0})).unwrap()["course"], "", "on leave: no classes");
     }
 
     #[test]
