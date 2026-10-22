@@ -207,7 +207,13 @@ UOKStoryPlayer* UOKStoryPlayer::Start(UWorld* World, const FString& InFile, FStr
 	Game->SetStoryMode(true);
 	if (GEngine && GEngine->GameViewport)
 	{
-		P->View = SNew(SOKStoryView).Player(P);
+		FOKStoryViewSource Source;
+		const TWeakObjectPtr<UOKStoryPlayer> Weak(P);
+		Source.Frame = [Weak] { return Weak.IsValid() ? Weak->Frame : nullptr; };
+		Source.Portrait = [Weak] { return Weak.IsValid() ? Weak->PortraitMaterial() : nullptr; };
+		Source.Thumbnail = [Weak](const FString& Path) { return Weak.IsValid() ? Weak->Thumbnail(Path) : nullptr; };
+		Source.Input = [Weak](const FString& Json) { if (Weak.IsValid()) Weak->Input(Json); };
+		P->View = SNew(SOKStoryView).Source(Source);
 		GEngine->GameViewport->AddViewportWidgetContent(P->View.ToSharedRef(), 20);
 		FSlateApplication::Get().SetAllUserFocus(P->View, EFocusCause::SetDirectly);
 	}
@@ -270,7 +276,8 @@ void UOKStoryPlayer::Stop()
 	Close();
 	for (TStrongObjectPtr<UAudioComponent>& S : Sounds) if (S) S->Stop();
 	Sounds.Reset();
-	for (TStrongObjectPtr<USceneCaptureComponent2D>* C : { &PortraitColor, &PortraitDepth, &Probe }) { if (*C) (*C)->DestroyComponent(); C->Reset(); }
+	PortraitCapture.Release();
+	ProbeRunner.Release();
 	if (UOKStudioGame* Game = Studio.Get())
 	{
 		// The portrait copies of offstage speakers are not part of the scene.
@@ -446,16 +453,7 @@ FString UOKStoryPlayer::FactsJson(float DeltaTime)
 		Actors->SetObjectField(Pair.Key, A);
 	}
 	F->SetObjectField(TEXT("actors"), Actors);
-	TArray<TSharedPtr<FJsonValue>> Answers;
-	for (const TPair<uint64, double>& A : ProbeAnswers)
-	{
-		TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
-		P->SetNumberField(TEXT("id"), double(A.Key));
-		P->SetNumberField(TEXT("clear"), A.Value);
-		Answers.Add(MakeShared<FJsonValueObject>(P));
-	}
-	ProbeAnswers.Reset();
-	F->SetArrayField(TEXT("probes"), Answers);
+	F->SetArrayField(TEXT("probes"), ProbeRunner.TakeAnswers());
 	if (VoiceId)
 	{
 		TSharedRef<FJsonObject> V = MakeShared<FJsonObject>();
@@ -804,82 +802,6 @@ UTexture2D* UOKStoryPlayer::Thumbnail(const FString& Path)
 	return T;
 }
 
-// The live portrait's picture: the colour capture, covered where the speaker's depth is (the rest transparent).
-static UMaterialInterface* OKStoryPortraitMaterial(UTexture* Color, UTexture* Depth)
-{
-#if WITH_EDITOR
-	static TStrongObjectPtr<UMaterial> Cached;
-	if (Cached) return Cached.Get();
-	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
-	Mat->MaterialDomain = MD_UI;
-	Mat->BlendMode = BLEND_Translucent;
-	auto Sampler = [&](const TCHAR* Name, UTexture* Default)
-	{
-		UMaterialExpressionTextureSampleParameter2D* S = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
-		S->Material = Mat;
-		S->ParameterName = Name;
-		S->SamplerType = MaterialExpressionUtils::GetSamplerTypeForTexture(Default);
-		S->Texture = Default;
-		Mat->GetExpressionCollection().AddExpression(S);
-		return S;
-	};
-	auto Scalar = [&](const TCHAR* Name, float Value)
-	{
-		UMaterialExpressionScalarParameter* S = NewObject<UMaterialExpressionScalarParameter>(Mat);
-		S->Material = Mat;
-		S->ParameterName = Name;
-		S->DefaultValue = Value;
-		Mat->GetExpressionCollection().AddExpression(S);
-		return S;
-	};
-	UMaterialExpressionTextureSampleParameter2D* ColorSample = Sampler(TEXT("Color"), Color);
-	UMaterialExpressionTextureSampleParameter2D* DepthSample = Sampler(TEXT("Depth"), Depth);
-	UMaterialExpressionScalarParameter* Alpha = Scalar(TEXT("Alpha"), 1.f);
-	UMaterialExpressionScalarParameter* Gamma = Scalar(TEXT("Gamma"), 2.2f);
-	UMaterialExpressionCustom* Custom = NewObject<UMaterialExpressionCustom>(Mat);
-	Custom->Material = Mat;
-	Custom->OutputType = CMOT_Float4;
-	// The colour capture holds display-encoded bytes (FinalColorLDR into a linear target): back to linear for the UI.
-	// Coverage: the HDR capture's alpha is the inverse opacity of what it drew (1 where nothing is).
-	Custom->Code = TEXT("float Covered = saturate(1 - D.a);\nreturn float4(pow(saturate(C.rgb), G), Covered * A);");
-	Custom->Inputs.Reset();
-	auto Input = [&](const TCHAR* Name, UMaterialExpression* E)
-	{
-		FCustomInput In;
-		In.InputName = Name;
-		In.Input.Expression = E;
-		// A texture sample's output 5 is its RGBA (output 0 would be RGB only).
-		if (E->IsA<UMaterialExpressionTextureSampleParameter2D>()) In.Input.OutputIndex = 5;
-		Custom->Inputs.Add(In);
-	};
-	Input(TEXT("C"), ColorSample);
-	Input(TEXT("D"), DepthSample);
-	Input(TEXT("A"), Alpha);
-	Input(TEXT("G"), Gamma);
-	Mat->GetExpressionCollection().AddExpression(Custom);
-	auto Mask = [&](bool R, bool G, bool B, bool A)
-	{
-		UMaterialExpressionComponentMask* M = NewObject<UMaterialExpressionComponentMask>(Mat);
-		M->Material = Mat;
-		M->Input.Expression = Custom;
-		M->R = R; M->G = G; M->B = B; M->A = A;
-		Mat->GetExpressionCollection().AddExpression(M);
-		return M;
-	};
-	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData())
-	{
-		Ed->EmissiveColor.Expression = Mask(true, true, true, false);
-		Ed->Opacity.Expression = Mask(false, false, false, true);
-	}
-	Mat->UpdateCachedExpressionData();
-	Mat->PreEditChange(nullptr);
-	Mat->PostEditChange();
-	Cached.Reset(Mat);
-	return Mat;
-#else
-	return nullptr; // Editor graph creation is not a runtime rendering path: the view shows the colour capture alone.
-#endif
-}
 
 void UOKStoryPlayer::UpdatePortrait(const TSharedPtr<FJsonObject>& Portrait)
 {
@@ -890,74 +812,9 @@ void UOKStoryPlayer::UpdatePortrait(const TSharedPtr<FJsonObject>& Portrait)
 	Portrait->TryGetStringField(TEXT("who"), Who);
 	AKKPreviewActor* P = bVisible ? Preview(Who) : nullptr;
 	if (!P || !Game || !Game->SceneActor || !Game->Viewer) return;
-	UWorld* World = Game->SceneActor->GetWorld();
-	const TArray<TSharedPtr<FJsonValue>>* Target = nullptr;
-	int32 W = 768, H = 1152;
-	if (Portrait->TryGetArrayField(TEXT("target"), Target) && Target->Num() == 2) { W = FMath::Clamp(int32((*Target)[0]->AsNumber()), 16, 4096); H = FMath::Clamp(int32((*Target)[1]->AsNumber()), 16, 4096); }
-	auto MakeTarget = [&](TStrongObjectPtr<UTextureRenderTarget2D>& T, ETextureRenderTargetFormat Format, bool bEncoded)
-	{
-		if (T && T->SizeX == W && T->SizeY == H) return;
-		if (!T)
-		{
-			T.Reset(NewObject<UTextureRenderTarget2D>(GetTransientPackage()));
-			T->RenderTargetFormat = Format;
-			T->bForceLinearGamma = true;
-			T->TargetGamma = bEncoded ? 2.2f : 0.f;
-			T->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-		}
-		T->InitAutoFormat(W, H);
-		T->UpdateResourceImmediate(true);
-	};
-	MakeTarget(PortraitColorTarget, RTF_RGBA8, true);
-	MakeTarget(PortraitDepthTarget, RTF_RGBA16f, false);
-	auto MakeCapture = [&](TStrongObjectPtr<USceneCaptureComponent2D>& C, ESceneCaptureSource Source, UTextureRenderTarget2D* T)
-	{
-		if (!C || !C->IsRegistered())
-		{
-			C.Reset(NewObject<USceneCaptureComponent2D>(Game->SceneActor));
-			C->RegisterComponentWithWorld(World);
-			C->bCaptureEveryFrame = false;
-			C->bCaptureOnMovement = false;
-			C->bAlwaysPersistRenderingState = true;
-			C->ProjectionType = ECameraProjectionMode::Orthographic;
-			C->CaptureSource = Source;
-			C->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-			C->ShowFlags.SetAtmosphere(false);
-			C->ShowFlags.SetFog(false);
-			C->ShowFlags.SetTemporalAA(false);
-			C->ShowFlags.SetMotionBlur(false);
-		}
-		C->TextureTarget = T;
-	};
-	MakeCapture(PortraitColor, SCS_FinalColorLDR, PortraitColorTarget.Get());
-	MakeCapture(PortraitDepth, SCS_SceneColorHDR, PortraitDepthTarget.Get());
-	if (!PortraitMid)
-	{
-		if (UMaterialInterface* M = OKStoryPortraitMaterial(PortraitColorTarget.Get(), PortraitDepthTarget.Get()))
-			PortraitMid.Reset(UMaterialInstanceDynamic::Create(M, GetTransientPackage()));
-	}
-	if (PortraitMid)
-	{
-		PortraitMid->SetTextureParameterValue(TEXT("Color"), PortraitColorTarget.Get());
-		PortraitMid->SetTextureParameterValue(TEXT("Depth"), PortraitDepthTarget.Get());
-		PortraitMid->SetScalarParameterValue(TEXT("Alpha"), float(Portrait->GetNumberField(TEXT("alpha"))));
-	}
-	bool bCapture = false;
-	Portrait->TryGetBoolField(TEXT("capture"), bCapture);
-	FVector Pos;
-	FQuat Rot;
-	if (!bCapture || !OKStoryReadVector(Portrait, TEXT("pos"), Pos) || !OKStoryReadQuat(Portrait, TEXT("rot"), Rot)) return;
-	const float Width = float(Portrait->GetNumberField(TEXT("ortho_width")));
-	for (USceneCaptureComponent2D* C : { PortraitColor.Get(), PortraitDepth.Get() })
-	{
-		C->SetWorldLocationAndRotation(Pos, Rot);
-		C->OrthoWidth = Width;
-		C->ShowOnlyActors.Reset();
-		C->ShowOnlyActors.Add(P);
-		C->PostProcessSettings = Game->Viewer->GetCameraComponent()->PostProcessSettings;
-		C->PostProcessBlendWeight = 1.f;
-		C->CaptureScene();
-	}
+	PortraitCapture.Update(Game->SceneActor, Game->SceneActor->GetWorld(), Portrait,
+		[P](USceneCaptureComponent2D* C) { C->ShowOnlyActors.Reset(); C->ShowOnlyActors.Add(P); },
+		&Game->Viewer->GetCameraComponent()->PostProcessSettings);
 }
 
 void UOKStoryPlayer::ApplyFrame()
@@ -1057,50 +914,13 @@ void UOKStoryPlayer::RunProbes(const TArray<TSharedPtr<FJsonValue>>& Probes)
 {
 	UOKStudioGame* Game = Studio.Get();
 	if (!Game || !Game->SceneActor || !Game->Document) return;
-	UWorld* World = Game->SceneActor->GetWorld();
-	constexpr int32 Size = 8;
-	if (!ProbeTarget)
-	{
-		ProbeTarget.Reset(NewObject<UTextureRenderTarget2D>(GetTransientPackage()));
-		ProbeTarget->RenderTargetFormat = RTF_R32f;
-		ProbeTarget->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-		ProbeTarget->InitAutoFormat(Size, Size);
-		ProbeTarget->UpdateResourceImmediate(true);
-	}
-	if (!Probe || !Probe->IsRegistered())
-	{
-		Probe.Reset(NewObject<USceneCaptureComponent2D>(Game->SceneActor));
-		Probe->RegisterComponentWithWorld(World);
-		Probe->bCaptureEveryFrame = false;
-		Probe->bCaptureOnMovement = false;
-		Probe->CaptureSource = SCS_SceneDepth;
-		Probe->FOVAngle = 4.f;
-		Probe->TextureTarget = ProbeTarget.Get();
-		Probe->ShowFlags.SetPostProcessing(false);
-		Probe->ShowFlags.SetAtmosphere(false);
-		Probe->ShowFlags.SetFog(false);
-	}
 	// Characters never block a view of themselves or of each other: only the set (map, items) does.
-	Probe->HiddenActors.Reset();
-	for (const FOKSceneObject& O : Game->Document->Objects)
-		if (O.Kind == EOKSceneObjectKind::Character)
-			if (AKKPreviewActor* P = Game->SceneActor->PreviewOf(O.Id)) Probe->HiddenActors.Add(P);
-	for (const TSharedPtr<FJsonValue>& V : Probes)
+	ProbeRunner.Run(Game->SceneActor, Game->SceneActor->GetWorld(), Probes, [Game](USceneCaptureComponent2D* C)
 	{
-		const TSharedPtr<FJsonObject> P = V->AsObject();
-		FVector From, To;
-		if (!P || !OKStoryReadVector(P, TEXT("from"), From) || !OKStoryReadVector(P, TEXT("to"), To)) continue;
-		const uint64 Id = uint64(P->GetNumberField(TEXT("id")));
-		const FVector Dir = To - From;
-		Probe->SetWorldLocationAndRotation(From, Dir.Rotation());
-		Probe->CaptureScene();
-		TArray<FLinearColor> Depth;
-		double Clear = 1e9;
-		if (ProbeTarget->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(Depth))
-			for (const FLinearColor& D : Depth)
-				if (D.R > 0.f && D.R < 1e6f) Clear = FMath::Min(Clear, double(D.R));
-		ProbeAnswers.Add({ Id, Clear });
-	}
+		for (const FOKSceneObject& O : Game->Document->Objects)
+			if (O.Kind == EOKSceneObjectKind::Character)
+				if (AKKPreviewActor* A = Game->SceneActor->PreviewOf(O.Id)) C->HiddenActors.Add(A);
+	});
 }
 
 // ---- self test ------------------------------------------------------------------------------------------------------

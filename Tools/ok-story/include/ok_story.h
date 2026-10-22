@@ -49,6 +49,17 @@ const char* oks_last_error(void);
 
 void oks_close(oks_handle* handle);
 
+// ---- Live presenter: galgame presentation of conversations whose words come from the game (the street).
+// The game sends {"type":"conversation","player":..,"people":[..]}, {"type":"line","who","name","color","text","voiced"},
+// {"type":"reveal"}, {"type":"end"}; each tick it reports the same facts as above (the voice by line id) and draws the
+// returned frame: dialog, portrait, camera (null: the game's own) and probes.
+typedef struct oks_live oks_live;
+oks_live* oks_live_open(const char* config_json);
+int32_t oks_live_input(oks_live* live, const char* input_json);
+const char* oks_live_tick(oks_live* live, const char* facts_json);
+const char* oks_live_state(oks_live* live);
+void oks_live_close(oks_live* live);
+
 #ifdef __cplusplus
 }
 #endif

@@ -71,6 +71,10 @@ bool OKAdmitCrowdRuntimeVoice(AActor* Owner,const FString& Path,FString& VoiceId
 bool OKCrowdRuntimeSpeechActive(AActor* Owner,int32 Character);
 enum class EOKRuntimeSpeechState:uint8 {Idle,Preparing,Playing,Completed,Cancelled,Failed};
 bool OKGetCrowdRuntimeSpeechState(AActor* Owner,int32 Character,EOKRuntimeSpeechState& State,FString& Error);
+// The components drawing one character (a portrait capture shows only these).
+void OKGetCrowdRuntimeCharacterComponents(AActor* Owner,int32 Character,TArray<class UPrimitiveComponent*>& Out);
+// Seconds of her current speech played so far, and its length (Total < 0: a stream still arriving). False: none plays.
+bool OKGetCrowdRuntimeSpeechPlayback(AActor* Owner,int32 Character,double& Played,double& Total);
 // Refresh diagnostic evidence after external gameplay, without ending the scene.
 bool OKCaptureCrowdRuntimeSceneReport(AActor* Owner);
 

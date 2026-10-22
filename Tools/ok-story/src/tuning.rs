@@ -80,6 +80,9 @@ pub struct CameraTuning {
     /// Close-ups and two shots show from this far above the head to this far below it (cm).
     pub frame_above: f64,
     pub frame_below: f64,
+    /// Over-the-shoulder shots: turned this far off the line between the two (degrees), this far behind the speaker (cm).
+    pub over_side_deg: f64,
+    pub over_behind: f64,
     pub two_fov: f64,
     /// The pair fills this much of the width.
     pub two_fill: f64,
@@ -121,6 +124,8 @@ impl Default for CameraTuning {
             speaker_fov: 30.0,
             frame_above: 20.0,
             frame_below: 45.0,
+            over_side_deg: 18.0,
+            over_behind: 70.0,
             two_fov: 35.0,
             two_fill: 0.42,
             wide_fov: 40.0,
@@ -267,9 +272,28 @@ impl Default for FlowTuning {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct LiveTuning {
+    /// The player's own lines show his portrait too.
+    pub player_portrait: bool,
+    /// Reading speed (1..10) of lines without a voice.
+    pub text_speed: u32,
+    /// Pointer parallax of the conversation shots (0 off).
+    pub parallax: f64,
+}
+
+impl Default for LiveTuning {
+    fn default() -> Self {
+        LiveTuning { player_portrait: true, text_speed: 6, parallax: 0.15 }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct Tuning {
+    /// The live presenter (conversations whose words come from the game).
+    pub live: LiveTuning,
     pub layout: Layout,
     pub text: TextTuning,
     pub camera: CameraTuning,

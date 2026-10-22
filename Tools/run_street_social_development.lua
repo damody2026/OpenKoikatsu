@@ -306,6 +306,19 @@ local function main()
     local copied, err = pcall(path.copy, rules_source, rules_dll)
     if not copied then say("Game rules DLL in use, keeping the previous copy: " .. tostring(err)) end
   else say("Game rules DLL not built (cargo build --release in Tools/ok-rules); the game will show the error and quit: " .. rules_source) end
+  -- Conversation presentation (Tools/ok-story, galgame dialog box / portrait / shots): optional, a copy like the rules.
+  local story_crate = path.join(root, "Tools/ok-story")
+  local story_source = path.join(story_crate, "target/release/ok_story.dll")
+  local story_dll = path.join(root, "Saved/StreetSocial/Build/ok-story/ok_story.dll")
+  if proc.which("cargo") then
+    local r = proc.run({ "cargo", "build", "--release", "--quiet" }, { cwd = story_crate, capture = true })
+    if not r.ok then say("Conversation presenter build failed; using the previous build if there is one") end
+  end
+  if path.is_file(story_source) then
+    path.mkdir(path.parent(story_dll), true)
+    local copied, err = pcall(path.copy, story_source, story_dll)
+    if not copied then say("Conversation presenter DLL in use, keeping the previous copy: " .. tostring(err)) end
+  end
 
   -- The game reads these at start; set only for the processes started below (this launcher's own environment).
   local env = {
@@ -313,6 +326,8 @@ local function main()
     OK_RULES_DLL = path.is_file(rules_dll) and rules_dll or "",
     OK_RULES_SOURCE_DLL = rules_source,
     OK_RULES_TUNING = path.join(root, "Content/IndependentResources/StreetSocialData/rules"),
+    OK_STORY_DLL = path.is_file(story_dll) and story_dll or "",
+    OK_STORY_DATA = path.join(root, "Content/IndependentResources/Story"),
     -- Free talk: staged builds cannot see the project Saved/Content folders, so pass absolute paths.
     OK_FREE_TALK_SETTINGS = path.join(root, "Saved/StreetSocial/deepseek.json"),
     OK_FREE_TALK_PERSONAS = path.join(root, "Content/IndependentResources/StreetSocialData/free_talk_personas.json"),

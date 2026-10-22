@@ -83,6 +83,8 @@ pub struct Facts {
     pub voice: VoiceFacts,
     /// The view camera Unreal shows (to look at it).
     pub view: Option<Xf>,
+    /// Its horizontal field of view (degrees).
+    pub view_fov: Option<f64>,
     /// Results of the probes the last frame asked for.
     pub probes: Vec<ProbeResult>,
 }

@@ -4,6 +4,7 @@ pub mod director;
 pub mod edit;
 pub mod io;
 pub mod life;
+pub mod live;
 pub mod math;
 pub mod portrait;
 pub mod progress;
@@ -166,6 +167,63 @@ pub extern "C" fn oks_last_error() -> *const c_char {
 /// `h` comes from oks_open and is not used afterwards.
 #[no_mangle]
 pub unsafe extern "C" fn oks_close(h: *mut Director) {
+    if !h.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(Box::from_raw(h))));
+    }
+}
+
+// ---- live presenter (include/ok_story.h, "live"): conversations whose words come from the game ------------------
+
+use live::{Live, LiveConfig, LiveInput};
+
+unsafe fn live<'a>(h: *mut Live) -> Result<&'a mut Live, String> {
+    h.as_mut().ok_or_else(|| "null live handle".to_string())
+}
+
+/// # Safety
+/// `config_json` is a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn oks_live_open(config_json: *const c_char) -> *mut Live {
+    guard(std::ptr::null_mut(), || {
+        let cfg: LiveConfig = serde_json::from_str(text(config_json)?).map_err(|e| format!("config: {e}"))?;
+        Ok(Box::into_raw(Box::new(Live::open(cfg)?)))
+    })
+}
+
+/// # Safety
+/// `h` comes from oks_live_open; `input_json` is a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn oks_live_input(h: *mut Live, input_json: *const c_char) -> i32 {
+    guard(0, || {
+        let l = live(h)?;
+        let i: LiveInput = serde_json::from_str(text(input_json)?).map_err(|e| format!("live input: {e}"))?;
+        l.input(i);
+        Ok(1)
+    })
+}
+
+/// # Safety
+/// `h` comes from oks_live_open; `facts_json` is a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn oks_live_tick(h: *mut Live, facts_json: *const c_char) -> *const c_char {
+    guard(std::ptr::null(), || {
+        let l = live(h)?;
+        let facts = serde_json::from_str(text(facts_json)?).map_err(|e| format!("facts: {e}"))?;
+        Ok(give(serde_json::to_string(&l.tick(facts)).map_err(|e| e.to_string())?))
+    })
+}
+
+/// # Safety
+/// `h` comes from oks_live_open.
+#[no_mangle]
+pub unsafe extern "C" fn oks_live_state(h: *mut Live) -> *const c_char {
+    guard(std::ptr::null(), || Ok(give(live(h)?.state().to_string())))
+}
+
+/// # Safety
+/// `h` comes from oks_live_open and is not used afterwards.
+#[no_mangle]
+pub unsafe extern "C" fn oks_live_close(h: *mut Live) {
     if !h.is_null() {
         let _ = catch_unwind(AssertUnwindSafe(|| drop(Box::from_raw(h))));
     }

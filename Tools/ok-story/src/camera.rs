@@ -208,6 +208,19 @@ fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &
             let aim = math::add(center, [0.0, 0.0, 7.5 - distance * tan_v * (1.0 - t.wide_free)]);
             Some((aim, dir, distance, fov))
         }
+        // Over the speaker's shoulder onto the one listening (`on`): the street's player lines.
+        "over" => {
+            let listener = actor(spec.on.as_deref().unwrap_or_default())?;
+            let speaker = actor(ctx.speaker)?;
+            let (hl, hs) = (listener.head(), speaker.head());
+            let back = math::normalize([hs[0] - hl[0], hs[1] - hl[1], 0.0]);
+            let dir = Quat::yaw_deg(t.over_side_deg).rotate(back);
+            let gap = math::len([hs[0] - hl[0], hs[1] - hl[1], 0.0]);
+            let fov = fov_or(t.speaker_fov);
+            let k = listener.root.scale.abs().max(0.1);
+            let (aim, distance) = fit_vertical(t, ctx.aspect, fov, hl[2] + t.frame_above * k, hl[2] - t.frame_below * k, gap + t.over_behind);
+            Some(([hl[0], hl[1], aim], dir, distance, fov))
+        }
         _ => None,
     }
 }

@@ -24,6 +24,11 @@ public:
  void FinClickDone(const FString& MessageBefore);
 private:
  TSharedPtr<FOKStreetSceneState> State;
+ // Conversations as galgame scenes (OKStreetSocialGalgame.inl).
+ TSharedPtr<struct FOKStreetGalgame> Galgame;
+ void TickGalgame(float Dt);
+ bool GalgameShowsDialogue() const;
+ void EndGalgame();
  double SceneTime() const;
  void RefreshUI(); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked
  void RebuildUI();
