@@ -118,6 +118,8 @@ void AOKStreetSocialScene::AddVoicePickUI(TSharedRef<SVerticalBox> Box){
  Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.CardHasVoice?OKT(TEXT("ui.voice.voice_pick_card_voice")):OKT(TEXT("ui.voice.voice_pick_card_none")))).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Regular",11))];
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.VoicePickOpen?OKT(TEXT("ui.voice.voice_pick_close")):OKT(TEXT("ui.voice.voice_pick_open"))))
   .OnClicked_Lambda([Weak](){if(Weak.IsValid()){auto& L=*Weak->State;L.VoicePickOpen=!L.VoicePickOpen;if(L.VoicePickOpen&&L.VoicePickDescription.IsEmpty())L.VoicePickDescription=L.TtsVoiceInstruct;Weak->RefreshUI();}return FReply::Handled();})];
+ // Right under the button: the candidate list makes the panel long, and a note at its end went unseen.
+ if(!S.VoicePickNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.VoicePickNotice)).AutoWrapText(true).WrapTextAt(360)];
  if(S.VoicePickOpen){
   Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.voice.voice_pick_description_hint")))).AutoWrapText(true).WrapTextAt(360)];
   Box->AddSlot().AutoHeight().Padding(8,2)[SNew(SBox).WidthOverride(360).MaxDesiredHeight(120)[SNew(SMultiLineEditableTextBox).Text(FText::FromString(S.VoicePickDescription)).AutoWrapText(true)
@@ -138,5 +140,4 @@ void AOKStreetSocialScene::AddVoicePickUI(TSharedRef<SVerticalBox> Box){
   if(S.CardHasVoice)Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.voice.voice_pick_remove"))))
    .OnClicked_Lambda([Weak](){if(Weak.IsValid())Weak->RemoveCardVoice();return FReply::Handled();})];
  }
- if(!S.VoicePickNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.VoicePickNotice)).AutoWrapText(true).WrapTextAt(360)];
 }
