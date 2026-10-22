@@ -819,6 +819,12 @@ void AOKSceneActor::UpdateItemLighting()
 		Preview->SetSharedVectorParameter(TEXT("unity_SHAb"), SH[2]);
 		const FName Names[] = { TEXT("unity_SHBr"), TEXT("unity_SHBg"), TEXT("unity_SHBb"), TEXT("unity_SHC") };
 		for (int32 I=0; I<4; ++I) Preview->SetSharedVectorParameter(Names[I], Higher[I]);
+		// The legacy ambient (glstate_lightmodel_ambient = linear RenderSettings.ambientSkyColor / 2), which Shader Forge
+		// main_StandardMDK_studio adds twice of whatever lights it. Native probe: Studio's empty scene has the sky colour
+		// (0.318, 0.3405, 0.3885, 1.5); maps 15, 26 and 28 run with 0.1698 grey (Studio's SunLightInfo sets it per time
+		// of day; the other maps' values are not recorded yet).
+		Preview->SetSharedVectorParameter(TEXT("glstate_lightmodel_ambient"), Document->Map < 0
+			? FLinearColor(0.0412349328f, 0.0474586822f, 0.0624753758f, 0.75f) : FLinearColor(0.01223285f, 0.01223285f, 0.01223285f, 0.5f));
 		FLinearColor ReflectionHDR(1,1,0,0);
 		UTextureCube* Reflection = AmbientSky<0 ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
 		for(const FName Name:{FName(TEXT("unity_SpecCube0")),FName(TEXT("unity_SpecCube1"))})Preview->SetSharedTextureParameter(Name,Reflection);
@@ -847,7 +853,17 @@ void AOKSceneActor::UpdateItemLighting()
 		AKKPreviewActor* Preview = bLit ? It.Value.Preview.Get() : nullptr;
 		if (!Preview || (It.Value.Kind == EOKSceneObjectKind::Item && !Preview->bStudioItemShading) || ItemsLit.Contains(Preview)) continue;
 		Preview->SetSharedVectorParameter(TEXT("_WorldSpaceLightPos0"), ItemLightDirection);
-		Preview->SetSharedVectorParameter(TEXT("_LightColor0"), ItemLightColor);
+		// The character light's culling mask is the Chara layer (10) alone: items on another layer (the landscape
+		// pieces on Map, 11) get no forward light, _LightColor0 is black for them (native probe: hiding the light
+		// leaves them unchanged).
+		const bool bUnreached = It.Value.Kind == EOKSceneObjectKind::Item && Preview->IsOutsideLayerMask(1u << 10);
+		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+		{
+			FString LayerTags; TInlineComponentArray<UMeshComponent*> Meshes(Preview);
+			for (const UMeshComponent* M : Meshes) for (const FName& T : M->ComponentTags) if (T.ToString().StartsWith(TEXT("OKLayer"))) { LayerTags += T.ToString() + TEXT(" "); break; }
+			UE_LOG(LogTemp, Display, TEXT("OK studio item light %s item=%d/%d/%d unreached=%d layers=%s"), *Preview->GetName(), Document->Find(It.Key) ? Document->Find(It.Key)->Item.Group : -1, Document->Find(It.Key) ? Document->Find(It.Key)->Item.Category : -1, Document->Find(It.Key) ? Document->Find(It.Key)->Item.No : -1, int32(bUnreached), *LayerTags.Left(60));
+		}
+		Preview->SetSharedVectorParameter(TEXT("_LightColor0"), bUnreached ? FLinearColor(0.f, 0.f, 0.f, ItemLightColor.A) : ItemLightColor);
 		ItemsLit.Add(Preview);
 	}
 }
@@ -935,6 +951,16 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		P.Key->Plane->SetWorldScale3D(FVector(Width / FMath::Max(Aspect, 0.1f) / 100.0, Width / 100.0, 1.0));
 	}
 	if (Frame.Plane.IsValid()) Frame.Plane->SetTranslucentSortPriority(1000);
+	// Sky dome items (Skybox/Cubemap on a mesh) draw before everything else translucent, without depth: Unity draws them
+	// front to back by their bounds' centre, so of overlapping domes the farthest shows. Order ours the same way.
+	for (const TPair<int32, FShown>& It : Shown)
+		if (AKKPreviewActor* Preview = It.Value.Preview.Get())
+		{
+			TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
+			for (UPrimitiveComponent* P : Primitives)
+				if (P->ComponentHasTag(TEXT("OKSkyDome")))
+					P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
+		}
 	PlaceSky(View);
 }
 

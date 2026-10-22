@@ -1,4 +1,4 @@
-// Read-only native Studio scene inputs, captured after Studio applies its saved settings.
+﻿// Read-only native Studio scene inputs, captured after Studio applies its saved settings.
 using System;
 using System.Collections;
 using System.IO;
@@ -143,7 +143,7 @@ public sealed partial class GamePoseProbe {
                     writer.WriteLine("registered_shader\t" + item.Key + "\t" + (shader == null ? 0 : shader.GetInstanceID()));
                 }
             }
-            foreach (string key in new[] { "_ambientshadowG", "_LineColorG", "_LightColor0", "_WorldSpaceLightPos0", "unity_Lightmap_HDR", "unity_DynamicLightmap_HDR", "unity_SpecCube0_HDR", "unity_ColorSpaceDouble", "unity_ColorSpaceDielectricSpec", "unity_ColorSpaceLuminance" })
+            foreach (string key in new[] { "_ambientshadowG", "_LineColorG", "_LightColor0", "_WorldSpaceLightPos0", "unity_Lightmap_HDR", "unity_DynamicLightmap_HDR", "unity_SpecCube0_HDR", "unity_ColorSpaceDouble", "unity_ColorSpaceDielectricSpec", "unity_ColorSpaceLuminance", "glstate_lightmodel_ambient" })
                 writer.WriteLine("global_color\t" + key + "\t" + Shader.GetGlobalVector(key).ToString("R"));
             foreach (string key in new[] { "_KanoVerShift", "_linewidthG", "_FaceNormalG", "_FaceShadowG" })
                 writer.WriteLine("global_float\t" + key + "\t" + Shader.GetGlobalFloat(key).ToString("R"));
@@ -165,6 +165,9 @@ public sealed partial class GamePoseProbe {
             }
             var ambient = RenderSettings.ambientProbe;
             writer.WriteLine("lightmaps_mode\t" + LightmapSettings.lightmapsMode);
+            // The legacy ambient (UNITY_LIGHTMODEL_AMBIENT / glstate_lightmodel_ambient comes from these).
+            writer.WriteLine("render_ambient\t" + RenderSettings.ambientMode + "\t" + RenderSettings.ambientLight.ToString("R") + "\t" + RenderSettings.ambientSkyColor.ToString("R")
+                + "\t" + RenderSettings.ambientEquatorColor.ToString("R") + "\t" + RenderSettings.ambientGroundColor.ToString("R") + "\t" + RenderSettings.ambientIntensity.ToString("R"));
             // Built-in forward fog (applied inside each shader, not a post effect).
             writer.WriteLine("render_fog\t" + RenderSettings.fog + "\t" + RenderSettings.fogMode + "\t" + RenderSettings.fogColor.ToString("R") + "\t"
                 + RenderSettings.fogDensity.ToString("R") + "\t" + RenderSettings.fogStartDistance.ToString("R") + "\t" + RenderSettings.fogEndDistance.ToString("R"));
@@ -230,7 +233,7 @@ public sealed partial class GamePoseProbe {
                             writer.WriteLine("mesh_triangle\t" + tris[t] + "\t" + tris[t + 1] + "\t" + tris[t + 2]);
                     }
                 }
-                writer.WriteLine("renderer_lighting\t" + rendererPath + "\t" + renderer.lightmapIndex + "\t" + renderer.lightProbeUsage + "\t" + renderer.bounds.center.ToString("R") + "\t" + renderer.lightmapScaleOffset.ToString("R") + "\t" + renderer.realtimeLightmapIndex + "\t" +renderer.realtimeLightmapScaleOffset.ToString("R"));
+                writer.WriteLine("renderer_lighting\t" + rendererPath + "\t" + renderer.lightmapIndex + "\t" + renderer.lightProbeUsage + "\t" + renderer.bounds.center.ToString("R") + "\t" + renderer.lightmapScaleOffset.ToString("R") + "\t" + renderer.realtimeLightmapIndex + "\t" +renderer.realtimeLightmapScaleOffset.ToString("R") + "	" + renderer.gameObject.layer);
                 // The reflection probes Unity blends for this renderer (none: the default/skybox reflection).
                 {
                     var blend = new System.Collections.Generic.List<UnityEngine.Rendering.ReflectionProbeBlendInfo>();
@@ -258,11 +261,11 @@ public sealed partial class GamePoseProbe {
                         for (int c = 0; c < 3; ++c) for (int k = 0; k < 9; ++k)
                             writer.WriteLine("renderer_sh\t" + prefix + "\t" + c + "\t" + k + "\t" + sh[c, k].ToString("R"));
                     }
-                    foreach (string key in new[] { "_Color", "_Color2", "_Color3", "_Color4", "_GlossColor", "_ShadowColor", "_LineColor", "_SpecularColor", "_EmissionColor" })
+                    foreach (string key in new[] { "_Color", "_Color2", "_Color3", "_Color4", "_GlossColor", "_ShadowColor", "_LineColor", "_SpecularColor", "_EmissionColor", "_Tint" })
                         if (material.HasProperty(key)) writer.WriteLine("color\t" + prefix + "\t" + key + "\t" + material.GetColor(key).ToString("R"));
-                    foreach (string key in new[] { "_oldhair", "_GlossinShadowonoff", "_SpeclarHeight", "_ShadowExtend", "_rimpower", "_rimV", "_Glossiness", "_GlossMapScale", "_Metallic", "_OcclusionStrength", "_BumpScale", "_Mode", "_SmoothnessTextureChannel", "_Cutoff", "_AlphaCutoff" })
+                    foreach (string key in new[] { "_oldhair", "_GlossinShadowonoff", "_SpeclarHeight", "_ShadowExtend", "_rimpower", "_rimV", "_Glossiness", "_GlossMapScale", "_Metallic", "_OcclusionStrength", "_BumpScale", "_Mode", "_SmoothnessTextureChannel", "_Cutoff", "_AlphaCutoff", "_Exposure", "_Rotation", "_LightCancel", "_EmissionPower", "_Specular" })
                         if (material.HasProperty(key)) writer.WriteLine("float\t" + prefix + "\t" + key + "\t" + material.GetFloat(key).ToString("R"));
-                    foreach (string key in new[] { "_texcoord", "_texcoord2", "_MainTex", "_ColorMask", "_HairGloss", "_DetailMask", "_NormalMap", "_EmissionMap", "_OcclusionMap", "_MetallicGlossMap", "_DetailAlbedoMap", "_BumpMap" }) {
+                    foreach (string key in new[] { "_texcoord", "_texcoord2", "_MainTex", "_ColorMask", "_HairGloss", "_DetailMask", "_NormalMap", "_EmissionMap", "_OcclusionMap", "_MetallicGlossMap", "_DetailAlbedoMap", "_BumpMap", "_Tex" }) {
                         if (!material.HasProperty(key)) continue;
                         Texture texture = material.GetTexture(key);
                         if (texture != null) { var cs = typeof(Texture).GetProperty("activeTextureColorSpace", BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic); var rt = texture as RenderTexture; writer.WriteLine("texture_space\t"+prefix+"\t"+key+"\t"+(cs==null?"unknown":cs.GetValue(texture,null).ToString())+"\trt_srgb="+(rt==null?"n/a":rt.sRGB.ToString())); }
