@@ -824,7 +824,7 @@ void AOKStreetSocialScene::Topic(const FString& Category){
   UE_LOG(LogTemp,Display,TEXT("Street branch decision: branch=%s node=%s role=%s roll=%d reason=%s new_round=%d"),*Branch,*NodeId,*Answer->GetStringField(TEXT("role")),int32(Answer->GetNumberField(TEXT("roll"))),*Answer->GetStringField(TEXT("reason")),Answer->GetBoolField(TEXT("new_round"))?1:0);
   QueueNode(*Node,Category,Branch);return;
  }
- if(Answer->GetBoolField(TEXT("new_round"))){UE_LOG(LogTemp,Display,TEXT("Street dialogue new round: category=%s"),*Category);}
+ {bool NewRound=false;Answer->TryGetBoolField(TEXT("new_round"),NewRound);if(NewRound)UE_LOG(LogTemp,Display,TEXT("Street dialogue new round: category=%s"),*Category);} // not every answer has it (a farewell line): no warning
  QueueNode(*Node,Category);
 }
 

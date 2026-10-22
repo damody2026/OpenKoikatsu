@@ -352,6 +352,9 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
  }
  int32 Girl=S.Manifest.Characters.IsValidIndex(S.PhoneThread)&&S.PhoneThread>0?S.PhoneThread:1;
  if(!HasHerNumber(Girl))for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(HasHerNumber(I)){Girl=I;break;}
+ // Nobody's number yet (a new game): said so, without a thread, a call button or a send box for nobody.
+ if(!HasHerNumber(Girl)){auto People=SNew(SVerticalBox);if(!Fa.FatherTexts.IsEmpty())People->AddSlot().AutoHeight().Padding(2)[FatherButton(false)];
+  return SNew(SVerticalBox)+SVerticalBox::Slot().AutoHeight()[People]+SVerticalBox::Slot().AutoHeight().Padding(6)[OKFinText(OKT(TEXT("ui.phone_inbox.no_contacts")),FLinearColor(.7f,.7f,.7f),12)];}
  PhoneMarkSeen(Girl); // what is on screen is read
  // Left: everyone, with unread counts (the unknown number on top once it has written).
  auto People=SNew(SVerticalBox);

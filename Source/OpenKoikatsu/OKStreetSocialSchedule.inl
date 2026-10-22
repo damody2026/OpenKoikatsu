@@ -28,10 +28,20 @@ FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FStri
  }
  // Campus classes name their room exactly ("class3_2": floor 3, room 2).
  if(Kind.StartsWith(TEXT("class"))&&Kind.Contains(TEXT("_")))Found=P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& A){return A.Name==Kind;});
- if(!Found)if(const auto* Names=Wanted.Find(Kind.StartsWith(TEXT("class"))?FString(TEXT("class")):Kind))for(const FString& N:*Names){Found=P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& A){return A.Name.StartsWith(N);});if(Found)break;}
+ // Every anchor of the first kind the place has (all its tables, not only the first), less those by him (the table he
+ // eats at: three heroines stood pressed behind his chair), spread over the heroines.
+ if(!Found)if(const auto* Names=Wanted.Find(Kind.StartsWith(TEXT("class"))?FString(TEXT("class")):Kind))for(const FString& N:*Names){
+  TArray<const FOKStreetModelAnchor*> All,Free;for(const auto& A:P->Anchors)if(A.Name.StartsWith(N)){All.Add(&A);if(FVector::Dist2D(A.Position,State->Male)>250.f)Free.Add(&A);}
+  const auto& Use=Free.IsEmpty()?All:Free;if(!Use.IsEmpty()){Found=Use[(I-1)%Use.Num()];break;}}
  FVector Spot=Found?Found->Position:(P->Rooms.IsEmpty()?P->Door:P->Rooms[0].GetCenter());
  if(!Found&&!P->Rooms.IsEmpty())Spot.Z=P->Rooms[0].Min.Z;
  Yaw=Found?Found->Yaw:0;
+ // The only such spot is where he is (the restaurant has one table anchor, and he eats at it): three metres further
+ // from him, inside the room, instead of pressed behind his chair.
+ if(Found&&FVector::Dist2D(Spot,State->Male)<250.f&&!P->Rooms.IsEmpty()){
+  FVector Away=Spot-State->Male;Away.Z=0;if(!Away.Normalize())Away=FRotator(0,Yaw,0).Vector();
+  const FBox& Room=P->Rooms[0];Spot+=Away*300.f;
+  Spot.X=FMath::Clamp(Spot.X,Room.Min.X+60.f,FMath::Max(Room.Min.X+60.f,Room.Max.X-60.f));Spot.Y=FMath::Clamp(Spot.Y,Room.Min.Y+60.f,FMath::Max(Room.Min.Y+60.f,Room.Max.Y-60.f));}
  // Side by side in rows of five (65 cm apart), a second row behind for heroines 6..10.
  return Spot+FRotator(0,Yaw,0).RotateVector(FVector(-((I-1)/5)*70.f,(((I-1)%5)-2)*65.f,0));
 }
