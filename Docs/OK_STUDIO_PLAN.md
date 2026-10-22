@@ -16,6 +16,7 @@
 - [x] 3D 移動／旋轉／縮放把手（W／E／R，世界 X／Y／Z 軸，拖曳換算回父物件座標；自測模擬螢幕拖曳）
 - [x] 捏人畫面「進入工作室」開新的 Studio（目前角色當第一個角色，站在原位；「離開」回捏人畫面）；舊時間軸改名「動作時間軸」暫留，S7 併入。驗收 `ok.GalleryOkStudioAudit`
 - [x] 遊戲內場景清單（`UserData/Studio/scene/*.okscene`，取名存檔、點選讀取）
+- [x] 復原／重做（2026-10-22）：`UOKStudioGame::Undo`／`Redo`，按鈕與 Ctrl+Z、Ctrl+Y（Ctrl+Shift+Z）。文件改動停 0.4 秒才記成一步（拖曳把手、滑桿算一步），時間軸播放中不記；最多 100 步、約 256 MB 的狀態（.okscene JSON），讀檔重新開始。還原時沒變的物件保留原值不重建（JSON 讀回的浮點或檔案沒存的欄位會讓整個場景重建）。自測 GameSelfTest「undo」：兩步、改名與新增都能復原、重做、改名的復原只重建那一個物件
 - [x] 獨立的場景編輯器（2026-10-22）：`SceneEditor.cmd [場景檔]`（`Tools/run_scene_editor.lua`，`-Scene`、`-WindowWidth/Height`、`-NoBuild`、`-DryRun`，可把檔案拖到 cmd 上）。開 `/Engine/Maps/Entry?game=/Script/OKStudio.OKStudioGameMode`：`AOKStudioGameMode` 不建立讀卡畫面的 HUD／Gallery，啟動時開 `-OKScene=<檔案>`（.okscene、OK 場景卡或 KStudio PNG；沒有就是新場景），只顯示 Studio 面板與觀看相機；引擎畫面訊息（`GAreScreenMessagesEnabled`）關閉；「離開」關閉程式。讀卡畫面的「進入工作室」維持原樣
 
 ## S3 Studio 道具與地圖進基礎庫（進行中）

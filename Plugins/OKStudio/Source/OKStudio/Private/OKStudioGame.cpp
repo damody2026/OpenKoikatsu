@@ -62,6 +62,7 @@
 #include "RenderingThread.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "JsonObjectConverter.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
 #include "Engine/SkinnedAsset.h"
@@ -134,6 +135,11 @@ public:
 	{
 		if (!Game.IsValid()) return FReply::Unhandled();
 		const FKey Key = Event.GetKey();
+		if (Event.IsControlDown() && (Key == EKeys::Z || Key == EKeys::Y))
+		{
+			if (Key == EKeys::Y || Event.IsShiftDown()) Game->Redo(); else Game->Undo();
+			return FReply::Handled();
+		}
 		if (Key == EKeys::W) { Game->GuideMode = 0; return FReply::Handled(); }
 		if (Key == EKeys::E) { Game->GuideMode = 1; return FReply::Handled(); }
 		if (Key == EKeys::R) { Game->GuideMode = 2; return FReply::Handled(); }
@@ -205,6 +211,8 @@ public:
 		AddButton(TEXT("複製"), [this] { if (Game.IsValid()) { const int32 Id = Game->Document->Duplicate(Game->SelectedId); if (Id >= 0) Game->Select(Id); } });
 		AddButton(TEXT("移到根層"), [this] { if (Game.IsValid()) Game->Document->Reparent(Game->SelectedId, -1); });
 		AddButton(TEXT("刪除"), [this] { if (Game.IsValid()) { Game->Document->RemoveObject(Game->SelectedId); Game->Select(-1); } });
+		AddButton(TEXT("復原(Ctrl+Z)"), [this] { if (Game.IsValid()) Game->Undo(); });
+		AddButton(TEXT("重做(Ctrl+Y)"), [this] { if (Game.IsValid()) Game->Redo(); });
 		AddButton(TEXT("移動(W)"), [this] { if (Game.IsValid()) Game->GuideMode = 0; });
 		AddButton(TEXT("旋轉(E)"), [this] { if (Game.IsValid()) Game->GuideMode = 1; });
 		AddButton(TEXT("縮放(R)"), [this] { if (Game.IsValid()) Game->GuideMode = 2; });
@@ -1271,7 +1279,11 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 	Game->AddToRoot();
 	GRunning = Game;
 	Game->Document = NewObject<UOKSceneDocument>(Game);
-	Game->Document->OnChanged.AddLambda([Game] { Game->bSyncPending = true; });
+	Game->Document->OnChanged.AddLambda([Game]
+	{
+		Game->bSyncPending = true;
+		if (!Game->bHistoryRestoring && !Game->bTimelinePlaying) { Game->bHistoryDirty = true; Game->LastChangeSeconds = FPlatformTime::Seconds(); }
+	});
 	FActorSpawnParameters Params;
 	Params.ObjectFlags = RF_Transient;
 	Game->SceneActor = World->SpawnActor<AOKSceneActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
@@ -1294,7 +1306,73 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 		GEngine->GameViewport->AddViewportWidgetContent(Game->PanelHost.ToSharedRef(), 10);
 	}
 	Game->SyncNow();
+	Game->ResetHistory();
 	return Game;
+}
+
+void UOKStudioGame::ResetHistory()
+{
+	UndoStack.Reset();
+	RedoStack.Reset();
+	HistoryState = Document ? Document->ToJson() : FString();
+	bHistoryDirty = false;
+}
+
+void UOKStudioGame::CommitHistory()
+{
+	bHistoryDirty = false;
+	if (!Document) return;
+	FString State = Document->ToJson();
+	if (State == HistoryState) return;
+	UndoStack.Add(MoveTemp(HistoryState));
+	RedoStack.Reset();
+	HistoryState = MoveTemp(State);
+	// At most 100 steps and about 256 MB of states (a big imported scene is megabytes of JSON).
+	int64 Bytes = 0;
+	for (const FString& S : UndoStack) Bytes += S.Len() * sizeof(TCHAR);
+	while (UndoStack.Num() > 1 && (UndoStack.Num() > 100 || Bytes > (int64(256) << 20))) { Bytes -= UndoStack[0].Len() * sizeof(TCHAR); UndoStack.RemoveAt(0); }
+}
+
+void UOKStudioGame::RestoreHistory(const FString& State)
+{
+	const int32 Keep = SelectedId;
+	// Objects the step does not change keep their exact values: read back from JSON a float or a field the file does
+	// not hold can differ, and the scene would rebuild every character and item.
+	auto Text = [](const FOKSceneObject& O) { FString S; FJsonObjectConverter::UStructToJsonObjectString(O, S, 0, 0, 0, nullptr, false); return S; };
+	TMap<int32, TPair<FString, FOKSceneObject>> Before;
+	for (const FOKSceneObject& O : Document->Objects) Before.Add(O.Id, { Text(O), O });
+	FString Error;
+	bHistoryRestoring = true;
+	if (!Document->FromJson(State, Error)) UE_LOG(LogTemp, Warning, TEXT("OK studio: undo state not restored: %s"), *Error);
+	int32 Kept = 0;
+	for (FOKSceneObject& O : Document->Objects)
+		if (const TPair<FString, FOKSceneObject>* Old = Before.Find(O.Id); Old && Old->Key == Text(O)) { O = Old->Value; ++Kept; }
+	LastHistoryKept = Kept;
+	UE_LOG(LogTemp, Display, TEXT("OK studio: history restored, %d of %d objects unchanged"), Kept, Document->Objects.Num());
+	Document->NotifyChanged();
+	bHistoryRestoring = false;
+	bHistoryDirty = false;
+	// The selection stays when its object is still there (the panel shows the restored values).
+	Select(Document->Find(Keep) ? Keep : -1);
+	SyncNow();
+}
+
+void UOKStudioGame::Undo()
+{
+	if (bHistoryDirty) CommitHistory();
+	if (UndoStack.IsEmpty()) return;
+	RedoStack.Add(MoveTemp(HistoryState));
+	HistoryState = UndoStack.Pop();
+	RestoreHistory(HistoryState);
+}
+
+void UOKStudioGame::Redo()
+{
+	if (bHistoryDirty) CommitHistory();
+	if (RedoStack.IsEmpty()) return;
+	UndoStack.Add(MoveTemp(HistoryState));
+	HistoryState = RedoStack.Pop();
+	RestoreHistory(HistoryState);
 }
 
 void UOKStudioGame::Stop()
@@ -1378,6 +1456,7 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 	// A KStudio scene is imported, not edited in place: saving writes an OK scene card beside it.
 	File = FOKSceneCard::Kind(Path) == FOKSceneCard::EKind::KStudio ? FString() : Path;
 	ReleaseSceneResources();
+	ResetHistory();
 	return true;
 }
 
@@ -1809,6 +1888,7 @@ void UOKStudioGame::Tick(float DeltaTime)
 		SetTimelineTime(FMath::Fmod(TimelineTime + DeltaTime, Length));
 	}
 	if (bSyncPending) SyncNow();
+	if (bHistoryDirty && FPlatformTime::Seconds() - LastChangeSeconds > 0.4) CommitHistory();
 	UpdateViewer();
 }
 
@@ -2809,6 +2889,32 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		Document->Find(A)->Character.AccessoriesShown.Reset();
 		Document->NotifyChanged();
 		SyncNow();
+	}
+	// Undo history: each committed change is one step; undo restores the document, redo brings it back, and a new change
+	// drops the redo steps.
+	Step(TEXT("undo"));
+	{
+		CommitHistory();
+		const int32 Before = UndoSteps();
+		Select(-1);
+		const int32 UndoFolder = Add(EOKSceneObjectKind::Folder);
+		CommitHistory();
+		Document->Find(UndoFolder)->Name = TEXT("undo test");
+		Document->NotifyChanged();
+		CommitHistory();
+		const bool bTwoSteps = UndoSteps() == Before + 2;
+		Undo();
+		const bool bRenameUndone = Document->Find(UndoFolder) && Document->Find(UndoFolder)->Name != TEXT("undo test");
+		const int32 Kept = LastHistoryKept, Total = Document->Objects.Num();
+		Undo();
+		const bool bAddUndone = !Document->Find(UndoFolder);
+		Redo();
+		const bool bRedone = Document->Find(UndoFolder) != nullptr && CanRedo();
+		Document->RemoveObject(UndoFolder);
+		CommitHistory();
+		Check(bTwoSteps && bRenameUndone && bAddUndone && bRedone && !CanRedo(),
+			FString::Printf(TEXT("undo / redo step through the document (steps +%d, rename undone %d, add undone %d, redone %d)"), UndoSteps() - Before, bRenameUndone, bAddUndone, bRedone));
+		Check(Total > 1 && Kept == Total - 1, FString::Printf(TEXT("undoing a rename rebuilds only that object (%d of %d kept)"), Kept, Total));
 	}
 	// Item child point (R4): a child of a catalogue item with 子の接続先 sits on that node, not on the item origin.
 	Step(TEXT("child point"));
