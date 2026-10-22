@@ -50,17 +50,17 @@ def signs_map():
     if s['text'] and s['text'].startswith('building.'):result[s['text'][9:]]=s['material']
  return result
 
-def name_material(bid,existing):
- if bid in existing:return EAL.load_asset(existing[bid])
+def name_material(bid,existing,vertical=False):
+ if bid in existing and not vertical:return EAL.load_asset(existing[bid])
  # A few older source models used wall graphics instead of a building name slot.
- dest=ARCH+'/Signs/M_Name_'+bid
+ name=('M_Vertical_' if vertical else 'M_Name_')+bid;dest=ARCH+'/Signs/'+name
  if EAL.does_asset_exist(dest):return EAL.load_asset(dest)
- m=ATS.create_asset('M_Name_'+bid,ARCH+'/Signs',unreal.Material,unreal.MaterialFactoryNew());m.set_editor_property('two_sided',True)
+ m=ATS.create_asset(name,ARCH+'/Signs',unreal.Material,unreal.MaterialFactoryNew());m.set_editor_property('two_sided',True)
  col=EAL.load_asset('/Game/UniversityCity/Localization/MPC_CityLanguage');assert col,'Language collection absent'
  nodes=[]
  for locale in ['zh-Hant','zh-Hans','en']:
-  path=ROOT/'output/street-social-city-production/localization-v1/textures'/locale/('building.'+bid+'.png');assert path.exists(),str(path)
-  task=unreal.AssetImportTask();task.filename=str(path);task.destination_path=ARCH+'/Signs';task.destination_name='T_'+bid+'_'+locale.replace('-','_');task.automated=True;task.save=True;ATS.import_asset_tasks([task]);t=EAL.load_asset(task.imported_object_paths[0]);assert t
+  path=OUT/'vertical-signs'/locale/(bid+'.png') if vertical else ROOT/'output/street-social-city-production/localization-v1/textures'/locale/('building.'+bid+'.png');assert path.exists(),str(path)
+  task=unreal.AssetImportTask();task.filename=str(path);task.destination_path=ARCH+'/Signs';task.destination_name='T_'+('Vertical_' if vertical else '')+bid+'_'+locale.replace('-','_');task.automated=True;task.save=True;ATS.import_asset_tasks([task]);t=EAL.load_asset(task.imported_object_paths[0]);assert t
   n=MEL.create_material_expression(m,unreal.MaterialExpressionTextureSampleParameter2D,-700,len(nodes)*240);n.set_editor_property('parameter_name','CityText_'+locale.replace('-','_'));n.set_editor_property('texture',t);nodes.append(n)
  control=MEL.create_material_expression(m,unreal.MaterialExpressionCollectionParameter,-1000,0);control.set_editor_property('collection',col);control.set_editor_property('parameter_name','LanguageIndex')
  def choose(threshold,low,high,x):
@@ -144,7 +144,9 @@ def validate_geometry():
   if bad or court or courtyard_faces or relief<.4 or overhang>limit+.015:issues.append(dict(id=bid,occupied_vertices=bad,courtyard_vertices=court,courtyard_faces=courtyard_faces,roof_relief_m=relief,overhang_m=overhang,limit=limit))
   total+=tris;rows.append(dict(id=bid,triangles=tris,vertices=len(pts),roof_relief_m=round(relief,3),glb_sha256=sha(path)))
   board=b['sign_board']
-  assert board['placement']=='ground_floor_horizontal' and board['top_m']<spec['floors'][0]['height_m'],bid+' sign is not in the ground storey'
+  assert board['bottom_m']<spec['floors'][0]['height_m'],bid+' sign does not start in the ground storey'
+  if board['placement']=='ground_floor_horizontal':assert board['top_m']<spec['floors'][0]['height_m'],bid+' horizontal fascia exceeds ground storey'
+  else:assert board['placement']=='ground_to_upper_vertical' and board['top_m']>spec['floors'][0]['height_m'] and board['height_m']>board['width_m']*3,bid+' vertical sign dimensions'
   assert board['door_clearance_m']>=.05 and board['window_clearance_m']>=.015,bid+' sign does not clear openings'
  assert not issues,str(issues[:12]);assert total<=200000,('Triangle budget',total)
  write('geometry-review',dict(status='passed',buildings=122,original_floors=sum(len(b['floors']) for b in inputs.values()),triangles=total,issues=issues,rows=rows,scope='Independent binary GLB vertex and format checks: finite positions, baked coordinates, occupied box, minimum headroom, courtyard exclusion, roof relief and total triangle budget. Original native model comparison is separately required.'))
@@ -160,7 +162,7 @@ def import_arch():
    mat=architecture_material(bid,role,b.get('recipe',{}).get('accent'))
    assert mat,(bid,role);mesh.set_material(i,mat);mats.append(dict(slot=i,role=role,material=mat.get_path_name()))
   save_asset(mesh)
-  face=import_arch_mesh(sign_face_file(b),'Name_'+bid);mat=name_material(bid,existing);face.set_material(0,mat);save_asset(face)
+  face=import_arch_mesh(sign_face_file(b),'Name_'+bid);mat=name_material(bid,existing,b['sign_board']['placement']=='ground_to_upper_vertical');face.set_material(0,mat);save_asset(face)
   rows.append(dict(id=bid,mesh=mesh.get_path_name(),sign_mesh=face.get_path_name(),materials=mats,sign_material=mat.get_path_name(),glb_sha256=sha(path)))
   if len(rows)%12==0:unreal.log('RESORT ARCH IMPORT '+str(len(rows))+'/122')
  assert len(rows)==122
@@ -214,7 +216,7 @@ def repair_arch_transforms():
   row['geometry_mesh']=fresh['mesh'];row['sign_mesh']=fresh['sign_mesh'];row['sign_material']=fresh['sign_material']
  write('transform-diagnostic',dict(status='recorded',rows=diagnostic))
  old_scene_check();assert sha(MAPFILE)==LOAD_SHA;assert unreal.EditorLevelLibrary.save_current_level()
- receipt['map_sha256']=sha(MAPFILE);receipt['signage_revision']='Ground-floor horizontal fascia at public entrance facade; all former rooftop boards removed';receipt['revision_backup']=str(backup);write('install',receipt)
+ receipt['map_sha256']=sha(MAPFILE);receipt['signage_revision']='120 ground-floor horizontal fascias and2 upright vertical name boards starting in the ground storey; former rooftop boards removed';receipt['revision_backup']=str(backup);write('install',receipt)
 
 def install_arch():
  if (OUT/'install.json').is_file() and any(TAG in [str(t) for t in a.tags] for a in SUB.get_all_level_actors()):
@@ -253,7 +255,8 @@ def audit_arch():
  assert len([a for a in actors.values() if TAG in [str(t) for t in a.tags]])==244
  assert len([a for a in actors.values() if is_building_floor(a.get_actor_label())])==427
  assert not issues,issues
- write('audit',dict(status='passed',buildings=122,original_floors=427,geometry_actors=122,large_name_signs=122,checks=checks,issues=issues,map_sha256=sha(MAPFILE),unchanged='Every original actor transform, mesh, material slot, collision profile and instanced transform signature.'))
+ boards=[b['sign_board'] for b in jread(OUT/'geometry-manifest.json')['buildings']]
+ write('audit',dict(status='passed',buildings=122,original_floors=427,geometry_actors=122,large_name_signs=122,ground_horizontal=sum(q['placement']=='ground_floor_horizontal' for q in boards),ground_to_upper_vertical=sum(q['placement']=='ground_to_upper_vertical' for q in boards),checks=checks,issues=issues,map_sha256=sha(MAPFILE),unchanged='Every original actor transform, mesh, material slot, collision profile and instanced transform signature.'))
 
 def restore_arch():
  old_scene_check();rows=[]
@@ -267,18 +270,19 @@ def render_arch():
  baseline=jread(OUT/'baseline.json');actors={a.get_actor_label():a for a in SUB.get_all_level_actors()};groups={}
  for r in baseline['rows']:groups.setdefault(r['building_id'],[]).append(r)
  views=[]
- for bid in ['S01','S03','S09','S18','S19','E1','LI','D1','H1','M1','TR','O01']:
+ designs={b['id']:b for b in jread(OUT/'geometry-manifest.json')['buildings']}
+ for bid in ['S01','S03','S09','S18','S19','E1','LI','D1','H1','M1','TR','O01','R1','R2']:
   rows=groups[bid];boxes=[actors[r['label']].get_actor_bounds(False) for r in rows]
   lo=[min(getattr(o,k)-getattr(e,k) for o,e in boxes) for k in ('x','y','z')];hi=[max(getattr(o,k)+getattr(e,k) for o,e in boxes) for k in ('x','y','z')]
   # Derive the front from the imported sign's actual world bounds; glTF handedness
   # must not be guessed from yaw or from the symmetric footprint dimensions.
   span=max(hi[0]-lo[0],hi[1]-lo[1]);cx=(lo[0]+hi[0])*.5;cy=(lo[1]+hi[1])*.5;h=hi[2]-lo[2]
   sign=actors['RomanceName_'+bid];so,se=sign.get_actor_bounds(False)
-  dx=so.x-cx;dy=so.y-cy;ln=math.hypot(dx,dy);assert ln>20,(bid,'name face has no exterior direction')
-  dx/=ln;dy/=ln
-  target=[cx,cy,lo[2]+h*.6+200];eye=[cx+dx*span*1.5-dy*span*.4,cy+dy*span*1.5+dx*span*.4,lo[2]+h*.85+span*.25]
-  views.append(dict(name=bid,eye=eye,target=target,fov=55))
-  if bid=='E1':views.append(dict(name='E1-courtyard',eye=[cx-dx*span*1.5-dy*span*.4,cy-dy*span*1.5+dx*span*.4,lo[2]+h*.85+span*.25],target=target,fov=55))
+  board=designs[bid]['sign_board'];angle=math.radians(board['yaw_deg']);yaw=math.radians(rows[0]['xform']['rotation'][1])
+  lx,ly=math.sin(angle),math.cos(angle);dx=lx*math.cos(yaw)-ly*math.sin(yaw);dy=lx*math.sin(yaw)+ly*math.cos(yaw)
+  distance=max(650.,board['width_m']*100*.8)
+  target=[so.x,so.y,so.z];eye=[so.x+dx*distance-dy*distance*.08,so.y+dy*distance+dx*distance*.08,rows[0]['xform']['location'][2]+220.]
+  views.append(dict(name=bid,eye=eye,target=target,fov=70))
  world=unreal.EditorLevelLibrary.get_editor_world();folder=OUT/'renders';folder.mkdir(exist_ok=True);state=dict(i=0,phase='setup',wait=60,images=[],busy=False);refs=[]
  def tick_render_arch(dt):
   if state['busy']:return
