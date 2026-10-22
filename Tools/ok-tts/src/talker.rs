@@ -253,9 +253,10 @@ impl Talker {
         self.embed(gpu, self.codec_embed.ptr, ids)
     }
 
-    /// Build the voice-design prefill exactly like _build_talker_inputs_local (streaming mode, no speaker).
+    /// Build the prefill exactly like _build_talker_inputs_local (streaming mode). VoiceDesign: an instruct and no
+    /// speaker. Base (x-vector clone): no instruct and a speaker embedding, which goes after the language tags.
     /// `assistant_ids` is "<|im_start|>assistant\n{text}<|im_end|>\n<|im_start|>assistant\n".
-    pub fn build_prompt(&self, gpu: &Gpu, instruct_ids: &[u32], assistant_ids: &[u32], language_id: u32) -> Result<Prompt> {
+    pub fn build_prompt(&self, gpu: &Gpu, instruct_ids: &[u32], assistant_ids: &[u32], language_id: u32, speaker: Option<&[f32]>) -> Result<Prompt> {
         if assistant_ids.len() < 9 {
             bail!("text is empty");
         }
@@ -265,10 +266,27 @@ impl Talker {
         };
         let special = self.text_project(gpu, &[TTS_BOS, TTS_EOS, TTS_PAD])?;
         let (tts_bos, tts_eos, tts_pad) = (special.ptr, special.at(row), special.at(2 * row));
-        let codec = self.codec_rows(gpu, &[CODEC_THINK, CODEC_THINK_BOS, language_id, CODEC_THINK_EOS, CODEC_PAD, CODEC_BOS])?;
+        let tags = self.codec_rows(gpu, &[CODEC_THINK, CODEC_THINK_BOS, language_id, CODEC_THINK_EOS, CODEC_PAD, CODEC_BOS])?;
+        // codec rows: think, think_bos, language, think_eos, [speaker], pad, bos
+        let codec = match speaker {
+            None => tags,
+            Some(s) => {
+                if s.len() != HIDDEN {
+                    bail!("speaker embedding has {} values, expected {HIDDEN}", s.len());
+                }
+                let all = gpu.alloc(7 * row)?;
+                gpu.copy(all.ptr, tags.ptr, 4 * row)?;
+                let spk: Vec<u16> = s.iter().map(|v| f32_to_bf16(*v)).collect();
+                let spk = gpu.upload(&spk)?;
+                gpu.copy(all.at(4 * row), spk.ptr, row)?;
+                gpu.copy(all.at(5 * row), tags.at(4 * row), 2 * row)?;
+                all
+            }
+        };
+        let tagged = if speaker.is_some() { 6 } else { 5 };
         let instruct = if instruct_ids.is_empty() { None } else { Some(self.text_project(gpu, instruct_ids)?) };
         let li = instruct_ids.len();
-        let prefill_len = li + 3 + 5 + 1;
+        let prefill_len = li + 3 + tagged + 1;
         let prefill = gpu.alloc(prefill_len * row)?;
         let mut at = 0usize;
         if let Some(ins) = &instruct {
@@ -279,15 +297,15 @@ impl Talker {
         let role = self.text_project(gpu, &assistant_ids[..3])?;
         gpu.copy(prefill.at(at * row), role.ptr, 3 * row)?;
         at += 3;
-        // [pad, pad, pad, pad, bos] + codec[0..5]
-        for i in 0..5 {
-            let text = if i < 4 { tts_pad } else { tts_bos };
+        // [pad, .., pad, bos] + codec[0..tagged]
+        for i in 0..tagged {
+            let text = if i + 1 < tagged { tts_pad } else { tts_bos };
             add(prefill.at((at + i) * row), text, codec.at(i * row), 1)?;
         }
-        at += 5;
+        at += tagged;
         // first text token + codec bos
         let first = self.text_project(gpu, &assistant_ids[3..4])?;
-        add(prefill.at(at * row), first.ptr, codec.at(5 * row), 1)?;
+        add(prefill.at(at * row), first.ptr, codec.at(tagged * row), 1)?;
         // trailing: remaining text tokens, then tts_eos
         let text_rest = &assistant_ids[4..assistant_ids.len() - 5];
         let trailing_len = text_rest.len() + 1;
@@ -456,6 +474,12 @@ impl Talker {
         let count = if eos_at == i32::MAX { produced } else { (eos_at as usize).min(produced) };
         hand(count, &mut handed)
     }
+}
+
+/// Round to nearest even.
+pub fn f32_to_bf16(v: f32) -> u16 {
+    let b = v.to_bits();
+    ((b + 0x7fff + ((b >> 16) & 1)) >> 16) as u16
 }
 
 pub fn bf16_to_f32(h: u16) -> f32 {

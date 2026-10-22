@@ -1,6 +1,6 @@
 # TTS 聲線一致性與低延遲優化計畫
 
-日期：2026-10-22。狀態：P1 的伺服器部分與 P0 的伺服器端觀測已實作並在本機測過（見第 13 節）；固定聲線（P2，Base）尚未開始，聲線一致性問題本身還沒有解決。
+日期：2026-10-22。狀態：P1 的伺服器部分與 P0 的伺服器端觀測已實作並在本機測過（見第 13 節）；P2 只完成 Base x-vector 複製的離線試驗與輔助指標，尚未接進伺服器，遊戲裡的聲線一致性問題還沒有解決。
 
 ## 1. 目標與決策
 
@@ -325,6 +325,31 @@ PCM 協定需明確標示 endian、sample rate、channels。目前標頭 `audio/
 
 ### 13.3 未完成與下一步
 
-- UE 只完成編譯確認（見下）；尚未打包新 stage、沒有在遊戲裡實際對話驗收；`Build/ok-tts` 的正式執行檔沒有替換（遊戲當時正使用它）。部署需要在無人使用時換 exe 並重新產生 `package.json` 的 hash。
+- UE 改動（含自由對話每句「請求→開始播放」「回覆→開始播放」的 `Free talk: TTS line N plays ...` 日誌）只做了編譯確認，見 13.5；尚未打包新 stage、沒有在遊戲裡實際對話驗收；`Build/ok-tts` 的正式執行檔沒有替換（遊戲當時正使用它）。部署需要在無人使用時換 exe 並重新產生 `package.json` 的 hash。
+- 固定語料：`Tools/ok-tts/bench/corpus_zh.txt`（第 8 節文字維度）。
 - 一般腳本對話（`OKStreetSocialVoice.inl`）仍走 `/synthesize` 整句；UE 端的「收到 PCM」「首次實際播放」時間點尚未記錄，端到端延遲只量到伺服器與 HTTP 客戶端。
-- P2：Base 1.7B 權重在本機（`E:/TTS/hf-cache/.../Qwen3-TTS-12Hz-1.7B-Base`）。talker 與 code predictor 的張量組與 VoiceDesign 相同，可沿用載入；缺的是 `speaker_encoder.*`（76 個張量，ECAPA 類，輸入 24 kHz mel）與 speech tokenizer 的 `encoder.*`（225 個張量，參考音訊轉 codec tokens），兩者都要新寫 Rust 前向並對官方中間值核對，以及 Base 的 prompt 組裝（speaker embedding 插入位置、參考文字／codes 對齊）。這是下一輪的主要工作。
+- P2 只做了 x-vector 試驗（見 13.4），還沒有 profile 格式、沒有接進伺服器。ICL 模式（參考音訊＋逐字稿）需要 speech tokenizer 的 `encoder.*`（225 個張量，參考音訊轉 codec tokens），尚未實作。
+
+### 13.4 P2 試驗：Base 1.7B x-vector 複製
+
+官方 `generate` 在 `x_vector_only_mode` 下只用 speaker embedding，不需要參考 codec tokens：prefill 的 codec 列變成 `think, think_bos, 語言, think_eos, 說話者, pad, bos`，instruct 為空。本輪據此實作：
+
+- `speaker.rs`：Base 的 `speaker_encoder.*`（ECAPA-TDNN，76 個張量）在 CPU 以 f32 執行；mel 依官方 `mel_spectrogram`（n_fft 1024、hop 256、128 帶 Slaney、0～12 kHz、反射填補）。輸出 2048 維，與 talker hidden 相同。附 FFT 與濾波器的單元測試。**尚未與官方 Python 的中間值逐項核對**（下一輪先做，dump 工具放在既有 `reference/`）。
+- `talker.rs` `build_prompt` 可選擇插入 speaker 列；`engine.rs` `speak_clone`。Base 的 talker／code predictor／codec 張量與 VoiceDesign 同名同形，codec 檔逐位元組相同，直接用現有載入。
+- `ok-tts consistency`：同一聲線先由 VoiceDesign 說一句參考句與 16 句語料，再由 Base 以參考句的 embedding 說同樣 16 句；另請其他聲線（含男聲 m0）各說 3 句作「別人」對照。`ok-tts speaker-sim` 比對任意 WAV（`檔名#1`／`#2` 取前／後半）。
+
+自我檢查（聲線 08，`speaker-sim`）：同一段錄音的前後半，原始 cosine 0.988、扣除全體平均後 +0.34；男聲對參考 0.936～0.941／−0.36～−0.44。編碼器有鑑別力，但原始 cosine 全都擠在 0.93～0.99，只有扣平均後的值可讀。
+
+三個聲線的結果（扣平均後的 cosine，數字越高越像參考句的說話者）：
+
+| 聲線 | VoiceDesign 各句→參考 | Base 複製各句→參考 | VoiceDesign 句間 | Base 句間 | 其他女聲→參考 | 男聲 m0→參考 |
+|---|---:|---:|---:|---:|---:|---:|
+| 08 | −0.10 | +0.30 | +0.05 | +0.24 | −0.08～−0.23 | −0.16 |
+| 00 | −0.08 | +0.30 | +0.02 | +0.22 | −0.06（08） | −0.22 |
+| 03 | −0.05 | +0.19 | +0.05 | +0.19 | −0.04（08） | −0.13 |
+
+解讀：VoiceDesign 同一聲線的不同台詞，對參考句的相似度和「另一個女聲」差不多，句與句之間也幾乎不相關——與「換句就像換人」的症狀一致，支持第 3.1 節的推測。Base 複製的台詞明顯更接近參考、彼此也更一致。**這只是輔助指標**：編碼器未經官方數值核對、同一模型的編碼器評自己的條件有循環偏差、每聲線只有 16 句。Base 單句生成比 VoiceDesign 慢（本輪 RTF 平均 0.53～3.1，含首句 CUDA graph 擷取與 GPU 競爭，未分開量），延遲要另測。
+
+試聽樣本與 JSON（本機、不進版控）：`Saved/TTS/Consistency-20261022/`（聲線 08，`ref.wav`、`design_NN.wav`、`base_NN.wav`、`other_*.wav`，另含 bench JSON）、`Saved/TTS/Consistency-20261022-p00/`、`-p03/`。
+
+下一輪建議順序：官方數值核對 speaker encoder → 盲聽 08／00／03 的 design 與 base 樣本 → 若通過，定 profile 格式（參考音訊 hash、embedding、模型 revision），伺服器加 Base 後端（不與 VoiceDesign 同時常駐）與新 cache key → 量 Base 的串流首包與 RTF。

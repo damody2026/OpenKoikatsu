@@ -81,13 +81,29 @@ impl Engine {
         let instruct = if language == LANGUAGE_ENGLISH { english_instruct(&voice.instruct) } else { voice.instruct.clone() };
         let instruct_ids = self.tokenizer.instruct(&instruct)?;
         let assistant_ids = self.tokenizer.assistant(text)?;
-        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language)?;
+        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language, None)?;
         let budget = self.talker.max_positions().saturating_sub(prompt.prefill_len + 2);
         cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
         let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
         let samples = if frames.is_empty() { Vec::new() } else { self.codec.decode(&self.gpu, &frames)? };
         debug_assert_eq!(samples.len(), frames.len() * SAMPLES_PER_FRAME);
         Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: voice.key, age: voice.age })
+    }
+
+    /// Base model, x-vector clone: the line in the voice of a speaker embedding (speaker::SpeakerEncoder), no
+    /// voice description. One seed per voice, as with `speak`.
+    pub fn speak_clone(&self, text: &str, speaker: &[f32], seed: u64, mut cfg: GenConfig) -> Result<Speech> {
+        self.gpu.bind()?;
+        let t = Instant::now();
+        cfg.seed = seed;
+        let language = language_of(text);
+        let assistant_ids = self.tokenizer.assistant(text)?;
+        let prompt = self.talker.build_prompt(&self.gpu, &[], &assistant_ids, language, Some(speaker))?;
+        let budget = self.talker.max_positions().saturating_sub(prompt.prefill_len + 2);
+        cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
+        let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
+        let samples = if frames.is_empty() { Vec::new() } else { self.codec.decode(&self.gpu, &frames)? };
+        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: "clone".into(), age: 0 })
     }
 
     /// Like `speak`, but audio is handed to `sink` while the rest is still being generated: the first
@@ -107,7 +123,7 @@ impl Engine {
         let instruct = if language == LANGUAGE_ENGLISH { english_instruct(&voice.instruct) } else { voice.instruct.clone() };
         let instruct_ids = self.tokenizer.instruct(&instruct)?;
         let assistant_ids = self.tokenizer.assistant(text)?;
-        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language)?;
+        let prompt = self.talker.build_prompt(&self.gpu, &instruct_ids, &assistant_ids, language, None)?;
         let budget = self.talker.max_positions().saturating_sub(prompt.prefill_len + 2);
         cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
         let mut frames = Vec::new();
