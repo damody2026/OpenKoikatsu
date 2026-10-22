@@ -375,6 +375,7 @@ impl ModelView {
     pub fn hierarchy(&self, prefab: &str) -> crate::pose::PrefabHierarchy { self.parsed.prefab_hierarchy(prefab) }
     /// Baked lightmaps of a prefab (recorded by `studio-nodes`).
     pub fn prefab_lightmaps(&self, prefab: &str) -> crate::unity::PrefabLightmaps { self.parsed.prefab_lightmaps(prefab) }
+    pub fn prefab_lightmap_directions(&self, prefab: &str) -> crate::unity::PrefabLightmaps { self.parsed.prefab_lightmap_directions(prefab) }
     pub fn prefab_renderer_settings(&self, prefab: &str) -> Vec<(i32,i32,i32,bool)> { self.parsed.prefab_renderer_settings(prefab) }
     /// A map's SunLightInfo (recorded by `studio-nodes`).
     pub fn parsed_sun_light(&self, prefab: &str) -> crate::unity::PrefabSunLight { self.parsed.prefab_sun_light(prefab) }
@@ -534,6 +535,16 @@ impl ModelView {
                 m.shader_extra_textures.insert("_OKLightmapDirection".into(), png.clone());
             }
         }
+        }
+        // OK_MAP_WHITE=1 (diagnostic, as the native probe's OK_PROBE_WHITE): a lightmapped prefab's (a map's)
+        // _MainTex and _Color white, so the picture shows the light its surfaces receive.
+        if !lightmaps.textures.is_empty() && std::env::var("OK_MAP_WHITE").is_ok_and(|v| v == "1") {
+            let mut white = Vec::new();
+            image::RgbaImage::from_pixel(4, 4, image::Rgba([255; 4])).write_to(&mut std::io::Cursor::new(&mut white), image::ImageFormat::Png).ok();
+            for m in meshes.iter_mut() {
+                if m.texture_png.is_some() { m.texture_png = Some(white.clone()); }
+                if let Some(c) = m.mat.as_mut().and_then(|mat| mat.colors.get_mut("_Color")) { *c = [1.0; 4]; }
+            }
         }
         assign_reflection_probes(&mut meshes, &self.parsed.prefab_reflection_probes(prefab), &worlds);
         let parts = crate::preview_session_parts(&self.lib, &role, meshes, entry.as_ref())?;

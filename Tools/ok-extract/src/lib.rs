@@ -4455,10 +4455,12 @@ impl<'a, 's> PushCtx<'a, 's> {
                         mesh.shader_extra_textures.insert(name.into(), flip_png_v(&png).unwrap_or(png));
                     }
                 }
-            } else if !role.contains("acc") && mesh.mat.as_ref().is_some_and(|mat| shader_family(&mat.shader).contains("main_item_studio")) {
+            } else if !role.contains("acc") && mesh.mat.as_ref().is_some_and(|mat| { let family = shader_family(&mat.shader); family.contains("main_item_studio") && !family.contains("_add") }) {
                 // Studio items (role "part") drawn by main_item_studio: like the MDK slots above and the accessory MainTex,
                 // the main texture and colour mask follow the native mesh's (u, 1-v) UV convention (the parasol's canopy
-                // sampled its wood finial and ColorMask's black half before; native: the coloured canopy).
+                // sampled its wood finial and ColorMask's black half before; native: the coloured canopy). Not the light
+                // effects (main_item_studio_add): their rows were already right (0001's sword light sampled the texture's
+                // filled lower half, a yellow wash, once flipped here; native: the streaked upper half, a rainbow).
                 if me_maintex(me_tex, outfit, role, property.as_deref(), &mesh).is_none() {
                     if let Some(png) = mesh.texture_png.take() { mesh.texture_png = Some(flip_png_v(&png).unwrap_or(png)); }
                 }

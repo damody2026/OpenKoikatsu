@@ -1173,13 +1173,104 @@ mod lightmap_probe {
         let model = std::env::var("OK_LM_MODEL").unwrap_or_else(|_| "24f1460000000000ee5f45764f4b4331".into());
         let prefab = std::env::var("OK_LM_PREFAB").unwrap_or_else(|_| "Map".into());
         let id = crate::oklib::id_from_hex_pub(&model).unwrap();
-        let lm = crate::okmodel_view::with_library(&lib, || Ok::<_, String>(crate::okmodel_view::ModelView::open(&lib, id)?.prefab_lightmaps(&prefab))).unwrap();
+        let (lm, directions) = crate::okmodel_view::with_library(&lib, || {
+            let view = crate::okmodel_view::ModelView::open(&lib, id)?;
+            Ok::<_, String>((view.prefab_lightmaps(&prefab), view.prefab_lightmap_directions(&prefab)))
+        }).unwrap();
         for (i, png) in lm.textures.iter().enumerate() {
             let Ok(img) = crate::teximg::load_from_memory(png) else { continue };
             let img = img.to_rgba8();
             let (mut amin, mut amax, mut asum, mut rgbmax) = (255u8, 0u8, 0u64, 0u8);
             for p in img.pixels() { amin = amin.min(p[3]); amax = amax.max(p[3]); asum += p[3] as u64; rgbmax = rgbmax.max(p[0].max(p[1]).max(p[2])); }
             println!("lightmap {i}: {}x{} alpha min {amin} max {amax} mean {} rgb max {rgbmax}", img.width(), img.height(), asum / (img.width() as u64 * img.height() as u64));
+            // OK_LM_NATIVE=<probe output prefix> (run_scene_visual_audit --lightmaps): the GPU-sampled native lightmap
+            // <prefix>.lightmap<i>.color.rgba32f (sRGB colour decoded, RGBM alpha as stored); mean linear RGBM decode
+            // (34.49·a^2.2·rgb) of both, and of the stored colour and alpha alone.
+            if let Ok(prefix) = std::env::var("OK_LM_NATIVE") {
+                if let Ok(raw) = std::fs::read(format!("{prefix}.lightmap{i}.color.rgba32f")) {
+                    let f: Vec<f32> = raw.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+                    let lin = |c: f32| if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+                    let (mut ours, mut native, mut oa, mut na, mut orgb, mut nrgb) = ([0f64; 3], [0f64; 3], 0f64, 0f64, 0f64, 0f64);
+                    for p in img.pixels() {
+                        let a = p[3] as f32 / 255.;
+                        for c in 0..3 { ours[c] += (34.493242 * a.powf(2.2) * lin(p[c] as f32 / 255.)) as f64; orgb += lin(p[c] as f32 / 255.) as f64 / 3.; }
+                        oa += a as f64;
+                    }
+                    for p in f.chunks_exact(4) {
+                        for c in 0..3 { native[c] += (34.493242 * p[3].powf(2.2) * p[c]) as f64; nrgb += p[c] as f64 / 3.; }
+                        na += p[3] as f64;
+                    }
+                    let (n, m) = ((img.width() * img.height()) as f64, (f.len() / 4) as f64);
+                    println!("  decoded mean ours {:?} native {:?}; alpha {:.4} vs {:.4}; linear rgb {:.4} vs {:.4} ({} vs {} texels)",
+                        ours.map(|v| (v / n * 1000.).round() / 1000.), native.map(|v| (v / m * 1000.).round() / 1000.), oa / n, na / m, orgb / n, nrgb / m, n, m);
+                }
+            }
+            // And the direction texture (linear): mean rgb / alpha, and the mean texel difference as stored and with
+            // the rows flipped (which way round the two are).
+            if let (Ok(prefix), Some(dir_png)) = (std::env::var("OK_LM_NATIVE"), directions.textures.get(i)) {
+                if let (Ok(raw), Ok(ours)) = (std::fs::read(format!("{prefix}.lightmap{i}.direction.rgba32f")), crate::teximg::load_from_memory(dir_png)) {
+                    let ours = ours.to_rgba8();
+                    let f: Vec<f32> = raw.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+                    let (w, h) = (ours.width() as usize, ours.height() as usize);
+                    let (mut om, mut nm, mut same, mut flip) = ([0f64; 4], [0f64; 4], 0f64, 0f64);
+                    for y in 0..h { for x in 0..w {
+                        let p = ours.get_pixel(x as u32, y as u32);
+                        let n = &f[(y * w + x) * 4..][..4];
+                        let nf = &f[((h - 1 - y) * w + x) * 4..][..4];
+                        for c in 0..4 {
+                            let o = p[c] as f64 / 255.;
+                            om[c] += o; nm[c] += n[c] as f64;
+                            same += (o - n[c] as f64).abs(); flip += (o - nf[c] as f64).abs();
+                        }
+                    } }
+                    let n = (w * h) as f64;
+                    println!("  direction mean ours {:?} native {:?}; mean |diff| as stored {:.4}, rows flipped {:.4}",
+                        om.map(|v| (v / n * 1000.).round() / 1000.), nm.map(|v| (v / n * 1000.).round() / 1000.), same / n / 4., flip / n / 4.);
+                }
+            }
+            // OK_LM_PIXELS=<uv picture>,<normal picture>,<OK white picture>,<native white picture> (CompareKStudio pictures
+            // with OK_LIGHTMAP_DIAG=uv / normal / whitenoenv, and the native probe's white-noreflect): at sample points of
+            // this lightmap, the lightmap term computed from the textures (34.49·a^2.2·rgb·halfLambert/w, no albedo
+            // or reflectivity) beside the two pictures, all linear.
+            if let (Ok(list), Some(dir_png)) = (std::env::var("OK_LM_PIXELS"), directions.textures.get(i)) {
+                let paths: Vec<&str> = list.split(',').collect();
+                let half = |p: &str| { let m = crate::teximg::load_from_memory(&std::fs::read(p).unwrap()).unwrap().to_rgb8(); let w = m.width() / 2; image::imageops::crop_imm(&m, w, 0, w, m.height()).to_image() };
+                let (uv, normal, ok) = (half(paths[0]), half(paths[1]), half(paths[2]));
+                let native = image::imageops::resize(&crate::teximg::load_from_memory(&std::fs::read(paths[3]).unwrap()).unwrap().to_rgb8(), uv.width(), uv.height(), image::imageops::FilterType::Triangle);
+                let dir_img = crate::teximg::load_from_memory(dir_png).unwrap().to_rgba8();
+                let lin = |c: f32| if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+                let (w, h) = (img.width() as f32, img.height() as f32);
+                // Every pixel of this lightmap: quantiles of OK / native (linear green), and the mean by native brightness.
+                let mut ratios = Vec::new();
+                let mut bands = [(0f64, 0usize); 5];
+                for y in 0..uv.height() { for x in 0..uv.width() {
+                    let c = uv.get_pixel(x, y).0.map(|v| lin(v as f32 / 255.));
+                    if (c[2] - 0.25 * (i as f32 + 1.)).abs() > 0.03 { continue; }
+                    let (o, nt) = (lin(ok.get_pixel(x, y).0[1] as f32 / 255.), lin(native.get_pixel(x, y).0[1] as f32 / 255.));
+                    if nt < 0.01 { continue; }
+                    ratios.push(o / nt);
+                    let b = ((nt * 5.) as usize).min(4);
+                    bands[b].0 += (o / nt) as f64; bands[b].1 += 1;
+                } }
+                ratios.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let q = |f: f32| ratios.get(((ratios.len() as f32 - 1.) * f) as usize).copied().unwrap_or(0.);
+                println!("  OK/native over {} pixels: 10% {:.3} 25% {:.3} median {:.3} 75% {:.3} 90% {:.3}; by native linear fifths {:?}",
+                    ratios.len(), q(0.1), q(0.25), q(0.5), q(0.75), q(0.9), bands.map(|(s, n)| if n > 0 { ((s / n as f64) * 1000.).round() / 1000. } else { 0. }));
+                for sy in 1..9 { for sx in 1..9 {
+                    let (x, y) = (uv.width() * sx / 9, uv.height() * sy / 9);
+                    let c = uv.get_pixel(x, y).0.map(|v| lin(v as f32 / 255.));
+                    if (c[2] - 0.25 * (i as f32 + 1.)).abs() > 0.03 { continue; }
+                    let v = if std::env::var("OK_LM_FLIP").is_ok() { 1. - c[1] } else { c[1] };
+                    let (tx, ty) = (((c[0] * w) as u32).min(img.width() - 1), ((v * h) as u32).min(img.height() - 1));
+                    let (p, d) = (img.get_pixel(tx, ty).0, dir_img.get_pixel(tx, ty).0);
+                    let n = normal.get_pixel(x, y).0.map(|v| lin(v as f32 / 255.) * 2. - 1.);
+                    let half_lambert = (0..3).map(|k| n[k] * (d[k] as f32 / 255. - 0.5)).sum::<f32>() + 0.5;
+                    let term = (0..3).map(|k| 34.493242 * (p[3] as f32 / 255.).powf(2.2) * lin(p[k] as f32 / 255.) * half_lambert / (d[3] as f32 / 255.).max(1e-4)).collect::<Vec<_>>();
+                    let (o, nt) = (ok.get_pixel(x, y).0.map(|v| lin(v as f32 / 255.)), native.get_pixel(x, y).0.map(|v| lin(v as f32 / 255.)));
+                    println!("  ({x},{y}) texel ({tx},{ty}) normal {:?} term {:.3} ok {:.3} native {:.3}  ok/term {:.3} native/term {:.3}",
+                        n.map(|v| (v * 100.).round() / 100.), term[1], o[1], nt[1], o[1] / term[1], nt[1] / term[1]);
+                } }
+            }
             if let Ok(dir) = std::env::var("OK_LM_OUT") { let mut d = img.clone(); for p in d.pixels_mut() { let a = p[3] as f32 / 255. * 5.; for c in 0..3 { p[c] = ((p[c] as f32 / 255. * a).min(1.) * 255.) as u8; } p[3] = 255; } d.save(std::path::Path::new(&dir).join(format!("lightmap_{i}.png"))).unwrap(); }
         }
     }
