@@ -12,6 +12,7 @@ pub mod dit;
 pub mod dsp;
 pub mod rmvpe;
 pub mod seedvc;
+pub mod torchpt;
 pub mod mula;
 pub mod song;
 pub mod weights;

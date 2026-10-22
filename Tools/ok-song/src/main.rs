@@ -11,6 +11,7 @@
 //!   ok-song mula-generate --tags T --lyrics FILE --out FRAMES.json [--seconds 30] [--cfg 3] [--topk 50] [--seed N]
 //!   ok-song codec-check --frames F.json --ref DIR [--first-draw 33]   native HeartCodec vs a Python dump
 //!   ok-song demucs-check --ref DIR [--models DIR]   native Demucs (htdemucs_ft) vs a Python dump
+//!   ok-song prepare-models --seedvc SEEDVC_CHECKPOINTS --out DIR   torch checkpoints -> safetensors (no Python)
 //!   ok-song mix      --vocal V.wav --accompaniment A.wav --out DIR   the Rust mix + envelope alone (checks, tests)
 //!
 //! The model stages are prototypes running upstream Python entry points (backend.rs); they sit behind one boundary so
@@ -181,6 +182,11 @@ fn run() -> Result<()> {
             let models = PathBuf::from(args.opts.get("models").map(String::as_str).unwrap_or("E:/OkSong/models-st"));
             let parts = args.opts.get("parts").map(String::as_str).unwrap_or("mel,voc");
             let r = native::seedvc::check(&gpu, &models, &PathBuf::from(args.opts.get("ref").context("--ref")?), parts)?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
+        "prepare-models" => {
+            let r = native::seedvc::prepare(&PathBuf::from(args.opts.get("seedvc").context("--seedvc <Seed-VC checkpoints dir>")?),
+                                            &PathBuf::from(args.opts.get("out").context("--out DIR")?))?;
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
         "mix" => {

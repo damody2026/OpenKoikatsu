@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
 use super::gpu::Gpu;
@@ -179,6 +179,40 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
 
 /// Bumped when the native conversion changes its output for the same inputs (part of the artifact cache key).
 pub const CONVERT_REVISION: &str = "seedvc-rust-1";
+
+/// Build the model folder `SeedVc::load` reads from the upstream downloads (Seed-VC `checkpoints/` with its hf_cache):
+/// the torch checkpoints become f32 safetensors, Whisper-small is copied as is. No Python involved.
+pub fn prepare(checkpoints: &Path, out: &Path) -> Result<Value> {
+    fn find(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
+        for e in std::fs::read_dir(dir).ok()?.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if let Some(f) = find(&p, name) {
+                    return Some(f);
+                }
+            } else if p.file_name().and_then(|n| n.to_str()) == Some(name) {
+                return Some(p);
+            }
+        }
+        None
+    }
+    std::fs::create_dir_all(out.join("whisper-small"))?;
+    let mut report = serde_json::Map::new();
+    for (src, dst) in [("DiT_seed_v2_uvit_whisper_base_f0_44k_bigvgan_pruned_ft_ema_v2.pth", "dit.safetensors"), ("bigvgan_generator.pt", "bigvgan.safetensors"),
+                       ("campplus_cn_common.bin", "campplus.safetensors"), ("rmvpe.pt", "rmvpe.safetensors")] {
+        let p = find(checkpoints, src).with_context(|| format!("{src} not under {}", checkpoints.display()))?;
+        let t = super::torchpt::load(&p)?;
+        super::torchpt::write_safetensors(&out.join(dst), &t)?;
+        report.insert(dst.into(), json!({"from": p, "tensors": t.len()}));
+    }
+    let whisper = find(checkpoints, "preprocessor_config.json").and_then(|p| p.parent().map(Path::to_path_buf))
+        .context("whisper-small snapshot (preprocessor_config.json) not found")?;
+    for f in ["model.safetensors", "preprocessor_config.json", "config.json"] {
+        std::fs::copy(whisper.join(f), out.join("whisper-small").join(f)).with_context(|| format!("copy {f}"))?;
+    }
+    report.insert("whisper-small".into(), json!({"from": whisper}));
+    Ok(report.into())
+}
 
 /// Every Seed-VC model, loaded once per conversion.
 pub struct SeedVc {
