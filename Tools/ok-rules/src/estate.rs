@@ -1087,6 +1087,26 @@ impl<'a> World<'a> {
 
     /// Pay he earned as an employee, already in `account` ("cash" or "bank"): his 五險一金 share for the time it covers
     /// and the income tax withheld come out; the housing fund (both shares) goes to his 公積金. Returns the payslip line.
+    /// Pay for labour service (a student's part-time job on the mainland): the income tax on labour remuneration only,
+    /// per payment (labour_service_tax). No social insurance.
+    pub fn player_labour_service(&mut self, gross: i64, account: &str) -> String {
+        if gross <= 0 {
+            return String::new();
+        }
+        self.personal_year();
+        let tax = labour_service_tax(gross);
+        self.personal.ytd_income += gross;
+        self.personal.ytd_tax += tax;
+        if tax > 0 {
+            if account == "bank" {
+                self.bank_op(-tax, "iit", crate::tr::t("estate.personal_income_tax_withheld"));
+            } else {
+                self.cash_op(-tax, "iit", crate::tr::t("estate.personal_income_tax_withheld"));
+            }
+        }
+        crate::tr::m("estate.labour_service_breakdown", &[("income_tax_amount", crate::tr::a(&crate::tr::money(tax))), ("net_pay_amount", crate::tr::a(&crate::tr::money(gross - tax)))])
+    }
+
     pub fn player_payroll(&mut self, gross: i64, months: f32, account: &str) -> String {
         if gross <= 0 {
             return String::new();
@@ -1954,11 +1974,25 @@ fn action(p: &PropertyData, r: &Value) -> Result<Value, String> {
             // A part-time job's pay already in his wallet: his share and the tax withheld (EndShift).
             let gross = n("gross");
             let minutes = n("minutes");
-            w.payslip = w.player_payroll(gross, minutes as f32 / (176.0 * 60.0), "cash");
+            // On the mainland a student's part-time work (勤工助學) is labour service, not employment: no 五險一金, only the
+            // income tax on labour remuneration (none up to 800 a payment). Elsewhere a part-timer is insured like staff.
+            w.payslip = if crate::locale::region(r) == "CN" { w.player_labour_service(gross, "cash") } else { w.player_payroll(gross, minutes as f32 / (176.0 * 60.0), "cash") };
         }
         _ => return Err(format!("unknown_company_action: {act}")),
     }
     Ok(w.answer())
+}
+
+/// The mainland's income tax on one payment of labour remuneration (劳务报酬): nothing up to 800, 20% of what is over
+/// 800 up to 4000, 20% of 80% of the pay above it.
+pub fn labour_service_tax(gross: i64) -> i64 {
+    if gross <= 800 {
+        0
+    } else if gross <= 4000 {
+        round_half_from_zero((gross - 800) as f64 * 0.2)
+    } else {
+        round_half_from_zero(gross as f64 * 0.8 * 0.2)
+    }
 }
 
 /// What the company screens show: each holding's figures, his equity, what market units cost today, who uses what.
@@ -2037,6 +2071,15 @@ pub fn eval(p: &PropertyData, kind: &str, r: &Value) -> Option<Result<Value, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_students_shift_pay_is_labour_service_on_the_mainland() {
+        assert_eq!(labour_service_tax(60), 0);
+        assert_eq!(labour_service_tax(800), 0);
+        assert_eq!(labour_service_tax(1800), 200);
+        assert_eq!(labour_service_tax(5000), 800);
+    }
+
     use crate::tuning::Tuning;
 
     fn world(extra: Value) -> Value {
