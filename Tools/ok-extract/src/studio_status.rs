@@ -27,6 +27,9 @@ pub struct StatusOverride {
     /// (`eye_set::EyeSet::changes_parts`; a plain blend shape pattern is set on the live face instead).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eyes_ptn: Option<i32>,
+    /// KK_InvisibleBody's Studio switch: only clothes and accessories are drawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invisible_body: Option<bool>,
 }
 
 impl StatusOverride {
@@ -62,6 +65,7 @@ pub fn apply(info: &mut crate::card::CardInfo) {
     if let Some(v) = o.skin_tuya_rate { info.skin_tuya_rate = v.clamp(0., 1.); }
     if let Some(v) = o.siru_lv { info.siru_lv = v.map(|l| l.clamp(0, 2)); }
     if let Some(v) = &o.show_accessory { info.show_accessory = v.clone(); }
+    if let Some(v) = o.invisible_body { info.invisible_body = v; }
 }
 
 /// Whether the session being opened has the accessory slot switched off.

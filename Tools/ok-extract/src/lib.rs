@@ -10748,6 +10748,13 @@ pub(crate) fn extract_session_from_info(
             part.face_baseline_weights=baseline.into_iter().map(|w|w.unwrap_or(0.)).collect();
         }
     }
+    // KK_InvisibleBody turns off every renderer under the body and head bones (body, face, eyes, hair) but not the
+    // accessories at their attach points; the clothes hang under BodyTop and stay.
+    if parsed_card.as_ref().is_some_and(|card| card.invisible_body) {
+        for part in session_parts.iter_mut().filter(|p| !p.role.starts_with("clothes") && !p.role.starts_with("acc")) {
+            part.render_visible = false;
+        }
+    }
     Ok(crate::session::OkSession {
         accessory_context,
         editor_pregnancy:Default::default(),

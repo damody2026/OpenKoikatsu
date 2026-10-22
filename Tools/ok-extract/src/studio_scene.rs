@@ -147,16 +147,21 @@ pub struct MaterialEdit {
     pub value: [f32; 4],
 }
 
-/// Material Editor edits in the scene's trailing ExtendedSave block ("KKEx", version, length, msgpack of
-/// plugin id -> PluginData), the last block of the file.
+/// The scene's trailing ExtendedSave block ("KKEx", version, length, msgpack of plugin id -> PluginData), the last
+/// block of the file.
+fn scene_plugins(bytes: &[u8]) -> Option<rmpv::Value> {
+    let marker = b"\x04KKEx";
+    let at = bytes.windows(marker.len()).rposition(|w| w == marker)?;
+    let p = at + marker.len();
+    let len = bytes.get(p + 4..p + 8).map(|b| i32::from_le_bytes([b[0], b[1], b[2], b[3]]))?;
+    let data = usize::try_from(len).ok().and_then(|l| bytes.get(p + 8..p + 8 + l))?;
+    rmpv::decode::read_value(&mut std::io::Cursor::new(data)).ok()
+}
+
+/// Material Editor edits in the scene's plugin data.
 fn scene_material_edits(bytes: &[u8]) -> Vec<MaterialEdit> {
     use crate::card::{map_get, me_plugin_data, parse_color};
-    let marker = b"\x04KKEx";
-    let Some(at) = bytes.windows(marker.len()).rposition(|w| w == marker) else { return Vec::new() };
-    let p = at + marker.len();
-    let Some(len) = bytes.get(p + 4..p + 8).map(|b| i32::from_le_bytes([b[0], b[1], b[2], b[3]])) else { return Vec::new() };
-    let Some(data) = usize::try_from(len).ok().and_then(|l| bytes.get(p + 8..p + 8 + l)) else { return Vec::new() };
-    let Ok(blocks) = rmpv::decode::read_value(&mut std::io::Cursor::new(data)) else { return Vec::new() };
+    let Some(blocks) = scene_plugins(bytes) else { return Vec::new() };
     let Some(plugin) = map_get(&blocks, "com.deathweasel.bepinex.materialeditor") else { return Vec::new() };
     let Some(inner) = me_plugin_data(plugin) else { return Vec::new() };
     let mut out = Vec::new();
@@ -649,6 +654,47 @@ pub fn stats(lib: &std::path::Path, dir: &std::path::Path) -> Result<Stats, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    // OK_SCENE_DIR=<folder>: which scene plugins carry data, over every KStudio scene below it (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: reads the scenes below OK_SCENE_DIR"]
+    fn print_scene_plugin_usage() {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() { walk(&p, out) } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("png")) { out.push(p) }
+            }
+        }
+        let mut files = Vec::new();
+        walk(std::path::Path::new(&std::env::var("OK_SCENE_DIR").expect("OK_SCENE_DIR")), &mut files);
+        let mut used: std::collections::BTreeMap<String, (usize, String)> = Default::default();
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            if let Some(fx) = super::read_nested(&bytes).ok().and_then(|s| s.effects).filter(|e| e.sky) {
+                let e = used.entry(format!("(Studio sky pattern {})", fx.sky_pattern)).or_default();
+                e.0 += 1;
+                if e.1.is_empty() { e.1 = f.display().to_string(); }
+            }
+            let Some(blocks) = super::scene_plugins(&bytes) else { continue };
+            for (k, v) in blocks.as_map().into_iter().flatten() {
+                let data = v.as_array().and_then(|a| a.get(1)).unwrap_or(v);
+                if data.is_nil() || data.as_map().is_some_and(|m| m.is_empty()) { continue; }
+                if k.as_str() == Some("com.deathweasel.bepinex.materialeditor") {
+                    for (list, value) in data.as_map().into_iter().flatten() {
+                        if value.is_nil() { continue; }
+                        let e = used.entry(format!("(item Material Editor {})", list.as_str().unwrap_or("?"))).or_default();
+                        e.0 += 1;
+                        if e.1.is_empty() { e.1 = f.display().to_string(); }
+                    }
+                }
+                let e = used.entry(k.as_str().unwrap_or("?").to_string()).or_default();
+                e.0 += 1;
+                if e.1.is_empty() { e.1 = format!("{} {}", f.display(), format!("{data}").chars().take(300).collect::<String>()); }
+            }
+        }
+        println!("{} scenes", files.len());
+        for (k, (n, example)) in used { println!("{n:5} {k}\n      {example}"); }
+    }
+
     // OK_SCENE=<KStudio png>: print its version, map and screen settings (diagnostic).
     #[test]
     #[ignore = "diagnostic: reads the scene named by OK_SCENE"]

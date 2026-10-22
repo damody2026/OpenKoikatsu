@@ -55,6 +55,7 @@ namespace
 		if (C.Blush >= 0.f) J->SetNumberField(TEXT("hoho_aka_rate"), C.Blush);
 		if (C.NipStand >= 0.f) J->SetNumberField(TEXT("nip_stand_rate"), C.NipStand);
 		if (C.SkinGloss >= 0.f) J->SetNumberField(TEXT("skin_tuya_rate"), C.SkinGloss);
+		if (C.InvisibleBody >= 0) J->SetBoolField(TEXT("invisible_body"), C.InvisibleBody != 0);
 		if (C.Fluids.Num() == 5)
 		{
 			TArray<TSharedPtr<FJsonValue>> V;

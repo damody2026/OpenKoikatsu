@@ -48,7 +48,7 @@
 - [x] Rust `studio_scene.rs` 解析場景 PNG：版本、ObjectInfo 樹（角色、道具、燈光、資料夾、路徑、相機、文字，依版本欄位）、地圖；角色卡資料範圍、臉部縮圖、ExtendedSave 在卡後附的 KKEx（外掛資料）；`--oklib scene-stats <lib> <dir>`：官方 7,594 個場景解析 7,590 個（4 個舊版場景資料提早結束，原作也讀不了），角色 45,664、道具 4,203,784（基礎庫外的 mod 道具只有 45 個）
 - [x] 角色：臉部縮圖＋卡資料重組 KKS 卡、KKEx 併回卡片區塊，再 `make_ok_card` 轉 OK 卡（測試：轉出的 OK 卡 41 部位、可從基礎庫開啟）
 - [x] C++ `FOKStudioImport`：資料夾、角色（OK 卡、FK、張嘴）、道具（目錄、顏色）、燈光、相機、地圖；路徑→資料夾、文字略過、飾品插槽上的物件掛在角色的掛點骨頭上（AccessoryPoint 表）；Unity→UE 變換；匯入報告 `.import.json`；遊戲內「匯入」與 `OKStudio.ImportKStudio`、`OKStudio.ImportKStudioSample`
-- [x] 角色的 Studio IK 目標：場景存的 13 個目標都是角色根空間的位置（官方場景驗證：1–3 左臂、4–6 右臂、7–9 左腿、10–12 右腿，左右和骨骼同側），對到 OK 的 9 個效果器；手肘、膝蓋是彎曲目標，先不帶。部位開關照 body、右腿、左腿、右臂、左臂。自測匯入 `koikatu_cs0000010`：4 個角色各 9 個目標，左手全部到位（最大 0.08 cm）。修了匯入時體型骨架還沒算好、IK 準備失敗的時序問題（`SetStudioIk` 先算一幀再重試）
+- [x] 角色的 Studio IK 目標：場景存的 13 個目標都是角色根空間的位置（官方場景驗證：1–3 左臂、4–6 右臂、7–9 左腿、10–12 右腿，左右和骨骼同側），對到 OK 的 9 個效果器；手肘、膝蓋是彎曲目標（之後已帶入，`STUDIO_BEND_FIRST` 9..12 對到 FBBIK 的四個彎曲限制）。部位開關照 body、右腿、左腿、右臂、左臂。自測匯入 `koikatu_cs0000010`：4 個角色各 9 個目標，左手全部到位（最大 0.08 cm）。修了匯入時體型骨架還沒算好、IK 準備失敗的時序問題（`SetStudioIk` 先算一幀再重試）
 - [x] 手型編號：場景 0＝照動畫，n＝遊戲第 n 種（`OCIChar.ChangeHandAnime` 是 `SetShapeHandValue(side, n, 0, 0)`；2026-10-19 前誤用 n−1，V 字會變成握拳）
 - [x] Studio 動畫（S6）
 - [x] 道具 FK：場景解析保留道具的 FK 骨骼（名稱＋local 旋轉）；`FOKSceneItem::Fk`，道具開 session 時先把蒙皮網格骨架的這些骨頭轉好再烘網格（`ok_okmodel_open_session_fk`），可轉的骨頭由 `ok_okmodel_fk_bones` 列出；匯入帶入、遊戲內每根骨頭 XYZ 與清除。官方場景 7,161 個 FK 道具、17 種（最多 15/74/978 關節 2,638 次）。Rust 測試轉 60° 動 922／1,074 頂點、不設 FK 和原本完全相同；自測頂點中心移 1.82 cm、清除還原。剛體物件當骨頭的（如 15/74/979 `o_koi_stu_flybace_joint_*`）還不會轉：okmodel 的剛體網格沒有 prefab 層級
@@ -312,7 +312,7 @@
 - [x] 影片幀輸出：時間軸逐格渲染 PNG 序列到 `UserData/Studio/movie/<時間>/frame_00000.png`（自測 3 幀）
 - [x] 場景後製：泛光、景深（對焦距離、光圈）、暗角、曝光補償，存進 .okscene，套用到觀看相機
 - [x] 透明背景截圖：只拍場景的角色與道具（ShowOnly，不含地圖、天空、霧），同一角度再拍一次深度當覆蓋範圍，有深度的像素不透明；遊戲內「透明背景截圖 1920×1080」，檔名 `_alpha.png`。自測 640×360：19,712 不透明、210,688 透明、沒有中間值（邊緣是硬邊）
-- [ ] Movie Render Queue 影片（直接出 mp4）
+- [x] 影片直接出 mp4：遊戲內逐格＋ffmpeg（R3）；Movie Render Queue 依使用者決定擱置（2026-10-18）
 - [ ] 狀態：SkinEffects、ClothingBlendShape、ClothColliders、角色的 MaterialEditor、汁的貼花（飾品顯示、淚、臉紅、光澤、乳首、道具的 MaterialEditor 已在 R8 完成）
 - 驗收：各自自測
 
@@ -490,6 +490,8 @@
 - 自測：Rust `studio_status` 兩項（`OK_NOCACHE=1`）；遊戲內 `OKStudio.GameSelfTest` 的 character state。
 - 未做：汁的貼花渲染，等「新渲染模式」的材質介面；SkinEffects、ClothingBlendShape、角色的 MaterialEditor。
 - 2026-10-22 道具的 MaterialEditor：KStudio 場景尾端 ExtendedSave（`com.deathweasel.bepinex.materialeditor`）的 `MaterialColorPropertyList`／`MaterialFloatPropertyList` 由 Rust `studio_scene.rs` 讀成 `material_edits`（物件 key、材質名、屬性、顏色或數值），匯入時掛到對應道具的 `FOKSceneItem::MaterialEdits` 並存進 .okscene。`AOKSceneActor` 把每筆轉成材質覆寫（材質名空白代表道具的所有材質）。道具面板「材質編輯」可新增、刪除、改材質名／屬性／值（`#RRGGBB[AA]` 是顏色，數字是數值）。自測：`OKStudio.PatternTest` 第四張圖用 `_Color` 編輯把道具改紅。貼圖覆寫與角色的 MaterialEditor 尚未做。
+- 2026-10-22 Invisible Body：卡片 `KK_InvisibleBody` 的 `Visible = false`（Rust `CardInfo::invisible_body`）時，身體骨架下的部件（身體、臉、眼、頭髮）都不畫，只留衣服與飾品，照原作 `IterateVisible`；Studio 狀態 `invisible_body` 可覆寫（面板「隱形身體」照卡片／只顯示衣服與飾品／顯示）。SESSION_CACHE_REVISION 24。自測：GameSelfTest character state。
+- 場景插件用量（`studio_scene::tests::print_scene_plugin_usage`，本機 7,694 個場景，只計有資料的）：MaterialEditor 29（已做道具部分）、KKVMDPlay 43（要外部 VMD 檔）、kkpe 28、nodesConstraints 29（幾乎都是空的約束）、CharaLightLinkedToCamera 27（只有 1 個鎖定）、StudioSceneSettings 27（MapMasking 全是 false、裁切面沒設）、ImageEmbed 16（資料都是空的）、AnimationController 角色資料都是空的；Studio 天空只有 1 個場景開著。這些插件先不做，卡片上的 InvisibleBody 22 個場景都存 `Visible = true`（舊版也存）。
 - 2026-10-21 透明材質專項：3167 的 KoikanoGlasses0–11 改為來源 alpha blending，保存未套色 MainTex 與卡片 Color4，重烘 StreetDisplay26／StudioDisplay26／StreetHG05，48 組真實 GPU 混合回歸通過。前後圖與驗收見 [透明材質修正](OK_STUDIO_TRANSPARENCY_20261020.md)。
 
 
