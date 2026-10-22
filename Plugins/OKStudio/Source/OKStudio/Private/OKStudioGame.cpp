@@ -507,6 +507,21 @@ public:
 		];
 	}
 
+	/** A button that changes how many rows the object shows (adds or removes entries): the panel rebuilds after it. */
+	void Action(const FString& Name, TFunction<FString(FOKSceneObject&)> Show, TFunction<void(FOKSceneObject&)> Do)
+	{
+		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Name)).ColorAndOpacity(FLinearColor::White)]
+			+ SHorizontalBox::Slot().FillWidth(0.6f)
+			[
+				SNew(SButton).Text_Lambda([this, Show] { FOKSceneObject* O = Obj(); return FText::FromString(O ? Show(*O) : FString()); })
+				.OnClicked_Lambda([this, Do] { if (FOKSceneObject* O = Obj()) { Do(*O); Changed(); RebuildProperties(); } return FReply::Handled(); })
+			]
+		];
+	}
+
 	void RebuildProperties()
 	{
 		if (!Props) return;
@@ -640,6 +655,41 @@ public:
 				if (!Entry || Entry->bAlpha)
 					Float(TEXT("透明度"), [](FOKSceneObject& X) { return X.Item.Alpha; }, [](FOKSceneObject& X, float V) { X.Item.Alpha = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.05f);
 				Float(TEXT("描邊寬度"), [](FOKSceneObject& X) { return X.Item.LineWidth; }, [](FOKSceneObject& X, float V) { X.Item.LineWidth = FMath::Max(V, 0.f); }, 0.f, 2.f, 0.05f);
+				// Material Editor style edits: material (empty: every material), shader property, and a colour (#RRGGBB or
+				// #RRGGBBAA, sRGB) or a number. Changing them rebuilds the item.
+				Label(TEXT("材質編輯（材質名空白＝全部；值 #RRGGBB 是顏色，數字是數值）"));
+				for (int32 Index = 0; Index < O->Item.MaterialEdits.Num(); ++Index)
+				{
+					auto Edit = [Index](FOKSceneObject& X) -> FOKSceneMaterialEdit* { return X.Item.MaterialEdits.IsValidIndex(Index) ? &X.Item.MaterialEdits[Index] : nullptr; };
+					Text(FString::Printf(TEXT("%d 材質"), Index + 1), [Edit](FOKSceneObject& X) { const FOKSceneMaterialEdit* E = Edit(X); return E ? E->Material : FString(); },
+						[Edit](FOKSceneObject& X, const FString& V) { if (FOKSceneMaterialEdit* E = Edit(X)) E->Material = V.TrimStartAndEnd(); });
+					Text(FString::Printf(TEXT("%d 屬性"), Index + 1), [Edit](FOKSceneObject& X) { const FOKSceneMaterialEdit* E = Edit(X); return E ? E->Property : FString(); },
+						[Edit](FOKSceneObject& X, const FString& V) { if (FOKSceneMaterialEdit* E = Edit(X)) E->Property = V.TrimStartAndEnd(); });
+					Text(FString::Printf(TEXT("%d 值"), Index + 1),
+						[Edit](FOKSceneObject& X)
+						{
+							const FOKSceneMaterialEdit* E = Edit(X);
+							if (!E) return FString();
+							return E->bColor ? TEXT("#") + E->Value.ToFColor(false).ToHex() : FString::SanitizeFloat(E->Value.R);
+						},
+						[Edit](FOKSceneObject& X, const FString& V)
+						{
+							FOKSceneMaterialEdit* E = Edit(X);
+							if (!E) return;
+							FString S = V.TrimStartAndEnd();
+							if (S.RemoveFromStart(TEXT("#")) && (S.Len() == 6 || S.Len() == 8))
+							{
+								const FColor C = FColor::FromHex(S.Len() == 6 ? S + TEXT("FF") : S);
+								E->bColor = true;
+								E->Value = FLinearColor(C.R / 255.f, C.G / 255.f, C.B / 255.f, C.A / 255.f);
+							}
+							else if (S.IsNumeric()) { E->bColor = false; E->Value = FLinearColor(FCString::Atof(*S), 0.f, 0.f, 0.f); }
+						});
+					Action(FString::Printf(TEXT("%d 刪除"), Index + 1), [](FOKSceneObject&) { return FString(TEXT("刪除這筆")); },
+						[Index](FOKSceneObject& X) { if (X.Item.MaterialEdits.IsValidIndex(Index)) X.Item.MaterialEdits.RemoveAt(Index); });
+				}
+				Action(TEXT("材質編輯"), [](FOKSceneObject& X) { return FString::Printf(TEXT("新增（目前 %d 筆）"), X.Item.MaterialEdits.Num()); },
+					[](FOKSceneObject& X) { FOKSceneMaterialEdit E; E.Property = TEXT("_Color"); E.bColor = true; X.Item.MaterialEdits.Add(E); });
 			}
 			ItemFkProperties(*O);
 			Label(TEXT("或直接指定基礎庫模型"));
@@ -2494,7 +2544,7 @@ void UOKStudioGame::RunPatternTest(bool bExit)
 	Item.Colors = { FLinearColor(1.f, 1.f, 1.f, 1.f) };
 	Document->Find(Id)->Transform = FTransform(FRotator(0.f, 0.f, 0.f), FVector(0.f, 400.f, 100.f), FVector(3.f));
 	Focus = FVector(0.f, 400.f, 110.f); Yaw = 90.f; Pitch = -15.f; Distance = 260.f;
-	struct FState { int32 Frame = 0; int32 Step = 0; int32 ColoredChanged = 0; int32 ColoredRed = 0; TArray<FColor> Plain; };
+	struct FState { int32 Frame = 0; int32 Step = 0; int32 ColoredChanged = 0; int32 ColoredRed = 0; int32 Changed = 0; int32 Reddish = 0; TArray<FColor> Plain; };
 	TSharedRef<FState> State = MakeShared<FState>();
 	TWeakObjectPtr<UOKStudioGame> Self(this);
 	const FString Name = Patterned->Name;
@@ -2514,7 +2564,7 @@ void UOKStudioGame::RunPatternTest(bool bExit)
 		Self->UpdateViewer();
 		const UCameraComponent* Cam = Self->Viewer->GetCameraComponent();
 		FOKSceneCard::Capture(Self->SceneActor, Self->Viewer->GetActorTransform(), Cam->FieldOfView, &Cam->PostProcessSettings, 320, 180, false, Pixels, Error);
-		static const TCHAR* Shots[] = { TEXT("plain"), TEXT("colored"), TEXT("striped") };
+		static const TCHAR* Shots[] = { TEXT("plain"), TEXT("colored"), TEXT("striped"), TEXT("edited") };
 		TArray64<uint8> Png;
 		if (Pixels.Num() == 320 * 180)
 		{
@@ -2550,7 +2600,18 @@ void UOKStudioGame::RunPatternTest(bool bExit)
 			Shown.Colors = { FLinearColor(1.f, 1.f, 1.f, 1.f) };
 			Shown.Patterns = { P };
 		}
-		if (State->Step < 2)
+		else if (State->Step == 2)
+		{
+			State->Reddish = Red(Pixels, State->Changed);
+			// A MaterialEditor edit (any material of the item) makes the main colour red again; the pattern stays, so the
+			// unapplied check below covers both.
+			FOKSceneMaterialEdit Edit;
+			Edit.Property = TEXT("Color");
+			Edit.bColor = true;
+			Edit.Value = FLinearColor(1.f, 0.f, 0.f, 1.f);
+			Shown.MaterialEdits = { Edit };
+		}
+		if (State->Step < 3)
 		{
 			++State->Step;
 			State->Frame = 0;
@@ -2558,8 +2619,9 @@ void UOKStudioGame::RunPatternTest(bool bExit)
 			Self->SyncNow();
 			return true;
 		}
-		int32 Changed = 0;
-		const int32 Reddish = Red(Pixels, Changed);
+		int32 EditChanged = 0;
+		const int32 EditRed = Red(Pixels, EditChanged);
+		const int32 Changed = State->Changed, Reddish = State->Reddish;
 		TArray<FString> Unapplied;
 		if (AKKPreviewActor* Preview = Self->SceneActor->PreviewOf(Id))
 		{
@@ -2583,8 +2645,8 @@ void UOKStudioGame::RunPatternTest(bool bExit)
 						}
 			}
 		}
-		const bool bOk = State->ColoredRed > 200 && Changed > 200 && Reddish > 100 && Unapplied.IsEmpty();
-		UE_LOG(LogTemp, Display, TEXT("OK studio pattern test: RESULT %s item %s: main colour red %d of %d changed; pattern %d pixels changed, %d red; unapplied [%s]"), bOk ? TEXT("PASS") : TEXT("FAIL"), *Name, State->ColoredRed, State->ColoredChanged, Changed, Reddish, *FString::Join(Unapplied, TEXT(", ")));
+		const bool bOk = State->ColoredRed > 200 && Changed > 200 && Reddish > 100 && EditRed > 200 && Unapplied.IsEmpty();
+		UE_LOG(LogTemp, Display, TEXT("OK studio pattern test: RESULT %s item %s: main colour red %d of %d changed; pattern %d pixels changed, %d red; material edit red %d of %d changed; unapplied [%s]"), bOk ? TEXT("PASS") : TEXT("FAIL"), *Name, State->ColoredRed, State->ColoredChanged, Changed, Reddish, EditRed, EditChanged, *FString::Join(Unapplied, TEXT(", ")));
 		Self->Document->RemoveObject(Id);
 		Self->Document->NotifyChanged();
 		if (bExit) FPlatformMisc::RequestExit(false);

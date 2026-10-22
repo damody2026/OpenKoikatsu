@@ -34,6 +34,8 @@ namespace
 		FString CardDirectory;
 		FOKStudioImport::FReport* Report = nullptr;
 		TMap<FString, int32> Notes;
+		/** Material Editor's scene data: material edits by object key. */
+		TMap<int32, TArray<FOKSceneMaterialEdit>> MaterialEdits;
 
 		void Note(const FString& What) { ++Notes.FindOrAdd(What); }
 
@@ -135,6 +137,11 @@ namespace
 					++Report->CatalogItems;
 					FOKSceneItem& I = Doc->Find(Id)->Item;
 					I.Group = Group; I.Category = Category; I.No = No;
+					if (const TArray<FOKSceneMaterialEdit>* Edits = MaterialEdits.Find(int32(O->GetNumberField(TEXT("key")))))
+					{
+						I.MaterialEdits = *Edits;
+						Note(TEXT("items carry Material Editor colour and value edits"));
+					}
                     double ItemTime=0., ItemSpeed=1.; int32 ItemPattern=0;
                     O->TryGetNumberField(TEXT("anime_time"), ItemTime); O->TryGetNumberField(TEXT("anime_speed"), ItemSpeed); O->TryGetNumberField(TEXT("anime_pattern"), ItemPattern);
                     I.AnimeTime=float(ItemTime);
@@ -422,6 +429,20 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 	Importer.Doc = Document;
 	Importer.CardDirectory = CardDirectory;
 	Importer.Report = &Report;
+	const TArray<TSharedPtr<FJsonValue>>* MaterialEdits = nullptr;
+	if (Scene->TryGetArrayField(TEXT("material_edits"), MaterialEdits))
+		for (const TSharedPtr<FJsonValue>& V : *MaterialEdits)
+		{
+			const TSharedPtr<FJsonObject> E = V->AsObject();
+			const TArray<TSharedPtr<FJsonValue>>* Value = nullptr;
+			if (!E || !E->TryGetArrayField(TEXT("value"), Value) || Value->Num() < 4) continue;
+			FOKSceneMaterialEdit Edit;
+			Edit.Material = E->GetStringField(TEXT("material"));
+			Edit.Property = E->GetStringField(TEXT("property"));
+			Edit.bColor = E->GetStringField(TEXT("kind")) == TEXT("color");
+			Edit.Value = FLinearColor(float((*Value)[0]->AsNumber()), float((*Value)[1]->AsNumber()), float((*Value)[2]->AsNumber()), float((*Value)[3]->AsNumber()));
+			Importer.MaterialEdits.FindOrAdd(int32(E->GetNumberField(TEXT("id")))).Add(Edit);
+		}
 	const TArray<TSharedPtr<FJsonValue>>* Objects = nullptr;
 	if (Scene->TryGetArrayField(TEXT("objects"), Objects)) for (const TSharedPtr<FJsonValue>& O : *Objects) Importer.Object(O->AsObject(), -1);
 	const TArray<TSharedPtr<FJsonValue>>* CardErrors = nullptr;

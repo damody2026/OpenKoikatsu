@@ -129,6 +129,14 @@ namespace
 			Add(FString::Printf(TEXT("_patternclamp%d"), Slot), EOKMaterialOverrideKind::Scalar, P.bClamp ? 1.f : 0.f, FLinearColor::White, nullptr);
 			Add(FString::Printf(TEXT("_Color%d_2"), Slot), EOKMaterialOverrideKind::Color, 0.f, P.Color, nullptr);
 		}
+		// Material Editor edits: the named material's property (Material Editor drops the leading underscore).
+		for (const FOKSceneMaterialEdit& E : Item.MaterialEdits)
+		{
+			if (E.Property.IsEmpty()) continue;
+			Add(E.Property.StartsWith(TEXT("_")) ? E.Property : TEXT("_") + E.Property, E.bColor ? EOKMaterialOverrideKind::Color : EOKMaterialOverrideKind::Scalar,
+				E.Value.R, E.Value, nullptr);
+			Out.Last().Material = E.Material;
+		}
 		return Out;
 	}
 

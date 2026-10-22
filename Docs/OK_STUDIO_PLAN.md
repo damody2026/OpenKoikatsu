@@ -313,7 +313,7 @@
 - [x] 場景後製：泛光、景深（對焦距離、光圈）、暗角、曝光補償，存進 .okscene，套用到觀看相機
 - [x] 透明背景截圖：只拍場景的角色與道具（ShowOnly，不含地圖、天空、霧），同一角度再拍一次深度當覆蓋範圍，有深度的像素不透明；遊戲內「透明背景截圖 1920×1080」，檔名 `_alpha.png`。自測 640×360：19,712 不透明、210,688 透明、沒有中間值（邊緣是硬邊）
 - [ ] Movie Render Queue 影片（直接出 mp4）
-- [ ] 狀態：SkinEffects、ClothingBlendShape、ClothColliders、MaterialEditor UI、汁的貼花（飾品顯示、淚、臉紅、光澤、乳首已在 R8 完成）
+- [ ] 狀態：SkinEffects、ClothingBlendShape、ClothColliders、角色的 MaterialEditor、汁的貼花（飾品顯示、淚、臉紅、光澤、乳首、道具的 MaterialEditor 已在 R8 完成）
 - 驗收：各自自測
 
 ## 剩餘工作計畫（2026-10-17）
@@ -488,7 +488,8 @@
 - UE：`FOkSession::Open(..., StatusJson)`，`AOKSceneActor::Build` 帶入角色狀態。面板有淚、臉紅、光澤、乳首、汁、飾品（全部／逐欄）控制。
 - KStudio 匯入：Studio 存的乳首、汁，加上卡片 Status 的淚等級與飾品顯示。臉紅、光澤卡片本身已帶。
 - 自測：Rust `studio_status` 兩項（`OK_NOCACHE=1`）；遊戲內 `OKStudio.GameSelfTest` 的 character state。
-- 未做：汁的貼花渲染，等「新渲染模式」的材質介面；SkinEffects、ClothingBlendShape、MaterialEditor。
+- 未做：汁的貼花渲染，等「新渲染模式」的材質介面；SkinEffects、ClothingBlendShape、角色的 MaterialEditor。
+- 2026-10-22 道具的 MaterialEditor：KStudio 場景尾端 ExtendedSave（`com.deathweasel.bepinex.materialeditor`）的 `MaterialColorPropertyList`／`MaterialFloatPropertyList` 由 Rust `studio_scene.rs` 讀成 `material_edits`（物件 key、材質名、屬性、顏色或數值），匯入時掛到對應道具的 `FOKSceneItem::MaterialEdits` 並存進 .okscene。`AOKSceneActor` 把每筆轉成材質覆寫（材質名空白代表道具的所有材質）。道具面板「材質編輯」可新增、刪除、改材質名／屬性／值（`#RRGGBB[AA]` 是顏色，數字是數值）。自測：`OKStudio.PatternTest` 第四張圖用 `_Color` 編輯把道具改紅。貼圖覆寫與角色的 MaterialEditor 尚未做。
 - 2026-10-21 透明材質專項：3167 的 KoikanoGlasses0–11 改為來源 alpha blending，保存未套色 MainTex 與卡片 Color4，重烘 StreetDisplay26／StudioDisplay26／StreetHG05，48 組真實 GPU 混合回歸通過。前後圖與驗收見 [透明材質修正](OK_STUDIO_TRANSPARENCY_20261020.md)。
 
 
