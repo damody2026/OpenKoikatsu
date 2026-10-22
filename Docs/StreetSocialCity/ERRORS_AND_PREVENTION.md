@@ -957,3 +957,133 @@ Windows系統Python未附IANA tzdata，使用ZoneInfo('Asia/Taipei')造成模型
 - 專櫃招牌原 8×0.8m 與 2048×512 貼圖比例不符。改為 4×1m，UV 依實際寬高設定，三語文字隨精品配色產生，避免再被一般語言貼圖產生器覆蓋成統一底色。
 - 原生百貨重新匯入採內容雜湊子資料夾。AuditOnly 必須從場景中實際 Actor 取得 StaticMesh，再核對來源 SHA；不能讀舊的固定根目錄資產而誤驗舊模型。
 
+
+
+### 2026-10-18 商品交付與總覽收據同步
+百貨加入商品後，舊 localization-v1/acceptance.json 仍可能列出前版 91,663 面及舊地圖 SHA。不可將舊總覽當作本輪驗收；verify_street_city_boutique_delivery.py 現在只在當前幾何、原生地圖、三語、逐櫃圖片及商品驗收全部通過後，才更新總覽與商品 production-status.json。失敗時不寫 complete。
+
+
+### 2026-10-18 Unreal 匯入紀錄需區分來源驗收與引擎診斷
+本輪 Interchange 在各樓層匯入時記錄 `Invalid input AlphaMode for material expression node MF_Default_Body`，但匯入完成，原生碰撞驗收通過。引擎原始碼將 AlphaMode 作為 Substrate 函式輸入；這類函式資產／引擎版本診斷不得以刪除貼圖或關閉安全設定處理，也不得把碰撞通過宣稱成引擎完全無診斷。商品 PBR 以原始 GLB、組裝保留與實際 Blender 圖驗收；遊戲內特定透明材質若有視覺異常需另查函式資產相容性。
+
+
+### 2026-10-18 引擎輔助檔不能是未驗證的單點依賴
+原生重開驗收發現 Tools/ok_engine.ps1 不存在，啟動器在進入 Unreal 前就失敗。run_street_city_mall_unreal.ps1 改為先使用存在的輔助檔，否則依 OK_ENGINE_ROOT、engine.local.json、預設引擎目錄解析，並在啟動前驗證 UnrealEditor.exe。保留使用者設定，不重建或覆寫遺失的共用輔助檔；失敗的啟動不能算成本輪原生通過。
+
+
+### 2026-10-18 全城整合必須逐 Actor 核對當前來源
+原三語驗收確認了材質綁定，但不能證明所有場景模型都是磁碟上的最新版本。本輪獨立比對 419 個模型 Actor，發現商店街 223 層仍指向舊 SHA，其他分類相符。新流程以當前採用來源 inventory.json 作獨立基準，先準備變更資產，再保留位置與比例更新 Actor，重套三語並重開驗收；不能以舊匯入收據或單純 Actor 數量宣稱最新整合。
+
+原生驗收程式從 Entry 小地圖啟動，避免啟動時自動載入全城後再重載一次。在其他工作佔用大量系統記憶體時，不同全城編輯器驗收應控制同時執行數量；只結束本任務已核對 PID 與命令列的程序，不動其他使用者工作。Runtime 偏好測試採隔離 UserDir，避免控制台測試修改使用者真正的語言選擇。
+
+
+### 2026-10-18 Runtime 驗收不可假定 Blueprint 內部 API 會匯出給 Python
+USubsystemBlueprintLibrary 的 BlueprintInternalUseOnly 函式未以同名 Python 類別匯出；測試改走正式公開 CityLanguageLibrary 與真實 GameInstance，不新增只供測試使用的 runtime 入口。Unreal ExecutePythonScript 在頂層結束後會還原 __file__，非同步 callback 必須事先捕捉 SCRIPT 路徑；並設定 set_keep_python_script_alive(True)，否則下一幀會關閉。任何測試 callback 錯誤都不能拿編譯成功或舊收據當成功。
+
+
+### 2026-10-18 PIE 材質測試必須先確認 Collection 不是空值
+先前測試在 PIE callback 內使用 EditorAssetLibrary.load_asset，該編輯器介面在遊戲期間回傳 None；MaterialLibrary 對空 Collection 回傳 0，導致繁體預設值假通過、簡體看似失敗。正確作法是在 PIE 前使用通用 unreal.load_asset 取得並保留實際 MaterialParameterCollection，先斷言類型非空，再檢查三個實際值。這是測試工具的錯誤，不能憑這個結果判定 runtime 模組沒有套用。模組同時改為明確接收目標世界並記錄完整世界／Collection 路徑，方便區分多世界問題。
+
+
+## 2026-10-19 Remaining-world production
+- Reusing a type-specific adapter without replacing its research registry can leave invalid references or raise a KeyError. New adapter has an independent registry and 8-building contract; existing campus sources remain untouched.
+- fit_lines returns font, lines, step (three values); unpack all three. First sign preparation failed before writing outputs; corrected and regenerated 232 signs.
+- On Windows rg cannot expand a wildcard embedded in a directory/file argument; use rg Tools -g matching-pattern.
+- Planning status is not mesh acceptance. The new delivery remains unapproved until actual GLB reopen, routes, stair/headroom, signs, and native import pass.
+
+- H1 initial F03 reached 120,896 triangles. Production export stopped. Repeated furniture must receive independently measured reusable LODs, not a larger floor limit.
+- A remesh script may exit successfully but emit rejected_requires_repair; only street_city_remesh_gate.verify can adopt it. The first bed 800-triangle attempt failed geometry and budget; never adopted.
+- Soft bed LOD below 1,050 triangles lost more than 50mm of its cushions; the selected 1,050-triangle source has measured 41.33mm max shape change. This is a declared soft-furniture LOD tradeoff, not structural tolerance. Sanitary LOD tolerance is 15mm toilet / 20mm basin; architecture remains exact metric. The 300-triangle basin measured 15.93mm and was rejected by the initial 15mm trial; the explicit 20mm furniture tolerance is retained in its measurement, followed by the unchanged 5mm Rust remesh check against the LOD source. Visual review remains required.
+
+- The inherited campus lift car was 3.3m wide while H1 shafts have only 2.4m clear width. Remaining-building cabins now use each shaft's car_clear_size_m; distinct shaft IDs prevent duplicate A/B cabin identities. Static cabins only, no gameplay wiring.
+- New H1 north entrance initially left an inner wall 0.3m from its cut plane; move its mounting plane to the actual exterior wall centre (0.1m inset). Door ray tests caught this. A reception counter also clipped a service door approach; relocated before passing.
+- A label saying water is insufficient: water surfaces are now separate non-colliding exports, not hidden within the solid floor model. CV aquarium tanks use transparent wall assemblies with separate water and genuine Tripo fish instead of opaque cylindrical proxies.
+- PK obsolete positions predate the 50% world compaction. Use world-terrain-layout world_center_m, then sample current actual height field. Old basketball placement overlapped the expanded 400m pitch; moved to a free teaching-zone plot. PK-0103 is allowed only inside E1's explicit certified open courtyard.
+- Blender bundled Python lacks Pillow; do not import terrain authoring modules solely for a bilinear sampler. The runtime sampler is independent and uses the same numeric formula.
+- Standability probes must begin above the actual finished deck surface: wood deck planks are 0.06m above the platform datum. The first probe at +0.04m incorrectly treated the deck as an overhead obstruction; corrected to +0.10m, while retaining actual downward support and 2.16m upward clearance rays.
+- Browser input stalled on a stale Chrome tab. A fresh Tripo tab using the documented browser API restored control; no security settings changed. All four generated components downloaded to the actual Downloads folder and were checked as complete GLBs before copying.
+
+- Unreal Python has no numpy. Native asset-preparation scripts must read baked JSON contracts and stdlib paths, not import NumPy-dependent authoring modules merely for an output constant. First outdoor native attempt stopped before producing a receipt; corrected and freshly imported all34.
+- Missing-building ground foundations were never included in the original campus/shop terrain pass. Rebuilt five affected ground chunks, adding all8 footprints and actual entry slabs. H1 concept datum8m was4m below adjacent streets; corrected to12m in current model context and terrain pad, keeping every interior dimension unchanged. Avoid creating inaccessible subgrade doors or underground fake ramps.
+- Exact foundation verification found a25mm finish offset at CV west entry. Confirmed the hit object is an existing asphalt route and its designed elevation is +0.025m, then verified that explicit threshold; all other entry slabs retain3mm checks and all terrain seams retain2mm checks.
+
+- The legacy immediate sync commandlet stalled after map loading with no actor-level progress and low CPU. Verified PID100460 exact sync command and unchanged map SHA against its backup before stopping that owned commandlet. Replace immediate bulk spawning with a deferred, logged, checkpointed editor tick workflow; never terminate unrelated editors. No scene was lost.
+
+- The map-load stall was bypassed by the engine-supported -NoAsyncLoadingThread and -NoAsyncPostLoad flags (verified in installed AsyncPackageLoader.cpp); editor-only deterministic import/audit settings, no project or security preference changes. Deferred placement then exposed Slate callback reentrancy: actor spawn/save can pump nested ticks, causing duplicate placement and failed nested saves. Add a busy guard around every callback body and source-hash-proven cleanup of only this delivery's duplicate actors. Engine exit0 is not a successful task receipt; old sync.json remained stale and was never accepted.
+
+
+2026-10-19 戶外最後視覺驗收：神社舊址跨越陡坡，雖有支撐但出現不合理的高腳平台。改採附近 [85,1033] 的實際平坦森林高地，24×18m 九點地面均137m；手水盆改成有底、四壁與開口的組件。已採用模型不得原地覆寫：以建模程式雜湊建立新版本來源，再驗收與換綁。地面路網原先會穿入 CV 等建物，已以全部建物 footprint 從鋪面生成中扣除並重新 remesh。
+
+2026-10-19 驗收工具修正：Unreal 延後 callback 執行時 __file__ 已不在腳本全域環境，改於載入時保存 verifier SHA。模型檢查不能因編輯器退出0就算通過，必須讀取本次新寫入的驗收收據。渲染中的 PNG 尚未寫完不可製作縮圖；需等 render-receipt 與程序結束才讀取。
+
+2026-10-19 全城三語重開驗收：73個新房間材質共用了相同圖像快取，導致 CityTextID 指向另一房間。通用修正為 material identity 必須包含 semantic_id，不能僅比對來源材質和三語圖片SHA。維持嚴格的每房間ID驗收，不放寬成只看圖一樣；重新安裝remaining-all後再次獨立重開。
+
+2026-10-19 執行期語言回歸：舊 snapshot 將 Unreal Transform 暫存 struct 的 repr 當成幾何證據，repr可能含記憶體位址。改採明確的座標、旋轉、縮放浮點值與mesh/material路徑，比較真正資料；如仍不同輸出逐Actor前後差異，不降低實際幾何保持不變的要求。
+
+2026-10-19 Grok牆材質：CLI 1.0.24會去除提示檔結尾換行，Windows提示檔亦含CRLF，舊逐位元提示比對因此漏收真正成功的image_gen收據。比對仍先要求提示檔SHA正確，再只容許CRLF正規化及移除結尾換行，並核對唯一image_gen tool call與其原始檔SHA；禁止重新花費生成或僅憑檔名聲稱成功。
+
+2026-10-19 牆材質展示渲染：正式 floor audit 的層高欄位是 floor_to_floor_height_m，而非組裝adapter的height_m。展示程式已改讀正式欄位，失敗的展示版本保留但不採用；實際模型幾何未修改。
+
+2026-10-19 牆材質原生套用在編輯器啟動時立即load_level又停在初始化。已核對PID94996為本次owned程序、地圖SHA仍為8fc60f0e...且備份完整，僅停止該程序。改為60tick後才載入地圖，callback先解除避免save重入，並加40秒Python堆疊紀錄；其餘程式與使用者瀏覽器不動。Native法線BC5材質按RG重建Z並明確設Normal sampler，避免因RGB假設變成反向法線。
+
+2026-10-19 真實RHI驗收發現兩項牆面問題：1. glTF原材質以MF_Default_Body多輸出函式連接，僅get_material_property_input_node再連空白output會把BaseColor接回Normal，形成PixelNormalWS循環。改用GetMaterialPropertyInputNodeOutputName取得實際BaseColor／Roughness／Normal腳位，不猜第一輸出。2. UE會將偏藍的IN建物底色誤辨為NormalMap，導致sRGB被強制關閉。每張圖必須依角色明確指定TC_DEFAULT或TC_NORMALMAP，再設定sRGB；不能只信匯入器自動判斷。先前RHI輸出是黑圖且編譯失敗，未採用；改分frame建立、capture、export，並以BaseColor GBuffer核對材質實際色彩，正常PBR照明仍由Blender實際模型預覽呈現。
+# 2026-10-19 教室、百貨外牆與行政設備修訂
+
+- 第一版新功能原生驗收在load_level返回的同一tick立即射線，導致全部319外牆及全部教室踏步／地板支撐都miss，而來源與材質檢查均正確。開圖、完成資產載入與等待60tick後才執行物理查核，和既有原生碰撞驗收保持一致；保留原射線位置與命中標準，不把miss改成通過。
+
+- 後續發現直接ExecutePythonScript的NullRHI PIE也有同樣關閉例外，不能歸因於D3D12材質。將GPU擷取與PIE測試都統一改由延後、隔離runpy模組入口執行後，D3D12擷取與NullRHI的30項真正PIE測試皆重新取得退出0。預設GPU擷取恢復D3D12，D3D11保留為明確可選後端；程序退出碼與實測圖檔分開記錄。這證明目前批次路徑已恢復，未取得原生堆疊前仍不把推測的Python生命週期當成確定根因。
+
+- D3D12批次擷取兩次均完成11張圖、無材質編譯錯誤，但在引擎關閉後回傳0xC0000005存取違例；未把這些結果當成完整通過。保存失敗日誌與退出碼，批次擷取改採可選D3D11後端，不改專案遊戲RHI設定；父程序只有在引擎退出0、圖片新寫入且SM5／SM6無編譯錯誤時才將收據升格passed，出圖本身只列captured。底層D3D12關閉例外未取得原生呼叫堆疊，不能宣稱其根因已修復。
+
+- 追加社團、銀行及站務空間後，原117層批次成為舊方案。先確認地圖仍為原bd1f版本、僅停止本任務尚未寫圖的sync程序，保留已匯入資產，改以最終119層來源統一採用與重驗；其他正在執行的遊戲程序保持運行。中止收據不能列為完成證據。
+
+- 單靠functional_programme.kind=admin會漏掉社團辦公室、銀行服務、交通站售票／站務等有行政工作台的空間。追加語意盤點並做必須覆蓋的集合驗收；不能把「行政客房」誤當辦公室，也不能把洗衣機的console當工作桌。每個修訂資料夾保存實際生成器原碼與SHA，規則更新不得覆寫舊來源證據。
+
+- 大圖在ExecutePythonScript初始第2個tick直接load_level可能停在FlushAsyncLoading，即使已關閉非同步載入執行緒也會出現。統一原生批次入口先等待90個Slate tick再執行真正腳本，保留每項腳本獨立新收據門檻；不可把卡住的程序或舊收據說成成功。
+- 沒有功能變更的 IN、SP、R1、R2、TR 保留原已驗收來源。SP透明運動網的glTF重匯會改變索引分裂順序，嚴格位元幾何檢查已拒絕採用那份重存版；不為無關需求重存或放寬該檢查。
+
+- 原百貨外牆大量透明窗格會讓室外光進入，與本輪需求不符。改成有實際180mm厚度、Alpha=1且Transmission=0的實心面板，保留入口，不以只改顏色或關閉全場太陽遮掩。
+- 原普通教室有桌椅和講桌，卻缺黑板／投影幕；較大教室也沒有階梯平台。依房間用途批次補設備，階梯模型必須同時驗踏步、走道、無障礙前排與淨高，不能只抬升座椅。
+- 原行政工作站不少只有螢幕而沒有鍵盤等輸入設備；百貨管理室只有空桌。必須以實際桌面支撐驗收完整電腦，不只以programme標籤算具備設備。
+- H1接待大廳初次盤點沒有任何可用工作桌，第一版驗收因此拒絕。利用已配置的沙發包絡替換一張真正接待桌與筆電，禁止略過該空間或將電腦放在半空。
+- Blender任務包裝器將SystemExit視為失敗；續作快取判斷改到外層執行器，避免已成功的工作因腳本提前exit被誤報。失敗收據保留，不人工改為通過。
+- GLB候選素色面必須以幾何面向和part_kind複核；家具、天花板厚邊與球場標線不可當成牆面漏做。
+
+
+## 教室前牆修正：大黑板與中央垂降投影幕
+- 錯誤：把黑板與投影幕左右並排，未符合使用者指定的大學教室配置。
+- 通用修正：完整連續大黑板置中（寬 6–8m、高 1.5m），中央垂降投影幕寬 3.6m、高 1.8m；布幕朝學生方向前移 0.16m，放下遮住中央黑板，兩側保留書寫區。捲軸在布幕正上方，投影機沿中央線。
+- 驗收：重新匯入實際 GLB，依材質分離頂點檢查置中、大黑板尺寸、遮擋範圍、前後距離與捲軸位置；更新全部教室模型、Unreal 原生場景、來源雜湊與實際渲染。不能只修改示意圖。
+
+- 修正驗收結果（2026-10-20）：183 間／11 棟教室全部更新；模型 137,012 項、Unreal 原生 10,092 項、全城整合 1,023 項、PIE 三語切換 30 項皆通過。實際模型渲染已目視確認中央投影布遮住完整大黑板。最新入口：`output/street-social-city-production/functional-interiors-v1/index.html`。
+
+## 街景製作：瀏覽器下載事件與配置密度（2026-10-20）
+- Chrome下載事件可能逾時，但不代表下載失敗。事件 Promise 必須捕捉錯誤，等10–30秒後先檢查實際 Downloads 的檔名、大小、GLB檔頭；禁止因此重複生成扣點。
+- 首輪街景候選過度優先樹木，座椅與車輛被占位排除；改成樹列、燈具與停留設施交錯配置，店門前沿立面側邊設施帶，保留真實入口連接路徑。
+
+- 配置效能修正：NPZ 的陣列採惰性解壓，逐點讀取會反覆解壓同一地形。設計開始時只載入一次所需陣列並保留記憶體副本，再建立道路空間索引；不可用降低驗收密度掩蓋效能問題。
+
+- LOD不可只依比例減面：先保護外輪廓與測量誤差超標的細部，再確認面數；近景保留自行車原版本，遠景才採3,000／1,000面。最遠樹LOD以遠距畫素尺度明列容許差，不套用在建築交通幾何。
+- 樟樹低面四邊網格觸發 Rust Broken irregular face chain，保留失敗日誌後改為工具支援的真實三角求解。原始機車細部在5mm保護下無法壓到6,000面；先建立明確20mm街景LOD來源，再對該來源以5mm誤差門檻Rust remesh，原始下載與失敗候選保留。
+- 鋪面與家具不能共用固定抬高值；先查地形角點，坡地拒放平板，構件基準貼合真實地形。
+
+- LOD高度驗收抓到櫻花樹遠景縮短：減面後殘留未被面引用的極值頂點，Blender量測含它們但GLB匯出會剔除，造成假尺寸。修正為先刪除無面頂點，依實際可渲染表面維持垂直包絡，再測誤差與Rust remesh；獨立重匯入驗收不得以來源報告數字替代。
+
+- Unreal 內建Python沒有NumPy；公用契約／JSON工具不得在模組頂層匯入科學運算套件，僅配置函數需要時才載入。
+- Unreal Transform 建構函數的rotation輸入是Rotator，不能直接傳Quat；寫入前使用已確認的原生簽名，保存後再逐實例驗收位置、角度與尺寸。
+
+- 街景配置獨立外包圍驗收抓到5株旋轉後樹冠伸入建築：排除距離改用樹冠對角線半徑，而非未旋轉寬度的一半；全圖重排後43,553項幾何配置檢查通過。
+- HISM批次加入曾得到0實例：對Blueprint元件使用set_editor_property觸發PostEditChange，會重建Owner並使舊元件參照失效。改用公開runtime setter指定網格、材質、陰影與剔除設定，必要時重新取得活元件；不能只看到Blueprint Actor存在就當成擺放成功。
+
+- 街景實際渲染顯示早期樹冠像晶塊，原花店花卉仍帶金屬桶，不適合直接當花台植栽。最終樹改用原創透明葉卡＋認證枝幹，花卉裁除容器並重新Rust remesh；舊草稿圖片不得當最終視覺驗收。透明葉卡須檢查GLB MASK／雙面及原生材質繼承、alpha coverage mipmaps，避免遠景葉冠消失。
+- 原生街景替換必須同時更新場景來源契約。16個舊區域樹Actor採隱藏、無碰撞封存，8個複合設施只移出原樹並保留其餘世界三角面，再以原位HISM恢復樹木。牆面安裝的inventory SHA也需重綁，避免新模型與三語／主題牆驗收互相失配。
+
+- 全城首次D3D12擷取需建立大量貼圖快取；舊擷取在建立SceneCapture後長時間沒有進度，已只停止本任務street-render-user程序並保留失敗退出收據。擷取腳本補上逐階段日誌、先停用自動及移動擷取、明定650m視距，再重新實際擷取；不得把中止、黑圖或舊圖片當成功。
+
+- 首次真實Unreal街景抓到葉卡矩形底板：僅驗GLB MASK與原生BlendMode不足以證明Alpha有接上。新增street_city_native_foliage.py，直接匯入原創RGBA、保留alpha，RGB連BaseColor、A連OpacityMask、雙面及0.33閾值。獨立原生驗收進一步讀實際材質輸入節點與輸出通道，不以metadata或材質名稱替代。暗部同時重新指定有效天空Cubemap及補光強度；修正後必須重拍實際城市。
+
+- 原生材質槽Array的迭代struct為複本；只改slot.material_interface再寫回整個舊Array，會保留原材質。葉片改用StaticMesh.set_material(index, material)，立即讀回確認；保存後重新驗證每個HISM覆寫與網格材質相同，再查TextureSample的A輸出接OpacityMask。原生匯出TGA與來源RGBA均保留約56%透明像素，證實問題在槽寫回而非來源圖片。
+
+- 同步探測腳本未明確quit_editor，留下兩個本任務探測程序，導致後續保存同一材質發生Windows分享鎖Error32。已只關閉本專案且命令列明確為leaf-alpha probe的兩個程序，加入正常退出並串行執行。收據產生不等於程序已退出；必須確認整個程序成功結束才啟動下一個原生寫入。未停止使用者其他程序。
+
+- 成果頁的認證元件可能位於E槽，頁面在C槽；Windows relpath無法跨磁碟。連結產生器對同槽使用相對路徑、跨槽使用完整file URI，發布後逐一驗證本機href/src存在，不因網頁生成失敗而略過模型連結。
