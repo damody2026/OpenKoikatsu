@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy to ok-song.json beside ok-song.exe (or pass --config). Paths are this machine's; backends marked python are prototypes until their native Rust ports land.",
+  "work_root": "C:/portable/OpenKoikatsu/Saved/StreetSocial/Songs",
+  "ok_tts": "C:/portable/OpenKoikatsu/Build/ok-tts/ok-tts.exe",
+  "ok_tts_profiles": "C:/portable/OpenKoikatsu/Build/ok-tts/profiles",
+  "ok_tts_voices": "C:/portable/OpenKoikatsu/Build/ok-tts/voices.json",
+  "dll_dirs": ["E:/OkSong/ffmpeg-shared/ffmpeg-n8.1-latest-win64-lgpl-shared-8.1/bin"],
+  "env": {"HF_HOME": "E:/OkSong/hf-cache", "TORCH_HOME": "E:/OkSong/torch-hub", "TORCHDYNAMO_DISABLE": "1", "PYTHONIOENCODING": "utf-8"},
+  "generate": {"backend": "heartmula-python", "python": "E:/OkSong/envs/heartmula/Scripts/python.exe", "repo": "E:/HeartMuLa",
+               "ckpt": "E:/HeartMuLa/ckpt", "version": "3B", "timeout_seconds": 900},
+  "separate": {"backend": "demucs-python", "python": "E:/OkSong/envs/seedvc/Scripts/python.exe", "model": "htdemucs_ft", "timeout_seconds": 600},
+  "convert": {"backend": "seedvc-python", "python": "E:/OkSong/envs/seedvc/Scripts/python.exe", "repo": "E:/OkSong/seed-vc",
+              "diffusion_steps": 30, "inference_cfg_rate": 0.7, "timeout_seconds": 900},
+  "cache_limit_mb": 4096
+}

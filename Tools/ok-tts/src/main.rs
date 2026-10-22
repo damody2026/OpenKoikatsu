@@ -6,6 +6,9 @@
 //!       speaker embedding of its profile, so a character keeps one voice; design: VoiceDesign from the description.
 //!   ok-tts profile [--base DIR] [--profiles DIR] [--keys 08,m0] [--ages 18] [--ref-text TEXT] [--force]   (see profile.rs)
 //!   ok-tts card-voice --card CARD.png [--set VOICE.okvoice | --remove]   (a character's own voice; see cardvoice.rs)
+//!   ok-tts voice-export --personality 08 [--age 18] [--card CARD.png] [--profiles DIR] --out DIR
+//!       read only: the voice she actually speaks with (her card's okVo first, else her design's profile, the same
+//!       order as synthesis), written as reference.wav (24 kHz mono) + voice.json; prints voice.json
 //!   ok-tts say    --text TEXT [--personality 00] [--age 18] [--out line.ogg|line.wav] [--greedy]
 //!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
 //!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
@@ -131,11 +134,12 @@ fn main() {
         "consistency" => cmd_consistency(&args),
         "profile" => cmd_profile(&args),
         "card-voice" => cmd_card_voice(&args),
+        "voice-export" => cmd_voice_export(&args),
         "speaker-sim" => args.opts.get("base").context("--base is required")
             .and_then(|b| consistency::similarity(Path::new(b), &args.positional)),
         _ => {
-            crate::log!("usage: ok-tts serve|say|parity [options]  (see source header)");
-            Ok(())
+            // An unknown command fails: a caller asking for one this build lacks must not read empty output as success.
+            Err(anyhow::anyhow!("unknown command {:?}; usage: ok-tts serve|say|bench|profile|card-voice|voice-export|consistency|speaker-sim|parity (see source header)", args.cmd))
         }
     };
     if let Err(e) = result {
@@ -198,6 +202,46 @@ fn cmd_serve(args: &Args) -> Result<()> {
 
 fn profiles_dir(args: &Args) -> PathBuf {
     args.opts.get("profiles").map(PathBuf::from).unwrap_or_else(|| exe_dir().join("profiles"))
+}
+
+/// The voice a heroine actually speaks with, for other tools (ok-song): never changes the card or the profiles.
+fn cmd_voice_export(args: &Args) -> Result<()> {
+    let (_, voices_path) = resolve(args)?;
+    let voices = text::Voices::load(&voices_path)?;
+    let personality = args.opts.get("personality").context("--personality is required")?;
+    let age: u32 = args.opts.get("age").map(|v| v.parse()).transpose()?.unwrap_or(18);
+    let out = PathBuf::from(args.opts.get("out").context("--out DIR is required")?);
+    let choice = voices.choose(personality, age);
+    let id = profile::profile_id(&choice);
+    let card = args.opts.get("card").map(PathBuf::from);
+    let (voice, source, origin) = match card.as_ref().map(|c| cardvoice::read_file(c)).transpose()? {
+        Some(Some(v)) => (v, "card", card.as_ref().unwrap().display().to_string()),
+        _ => {
+            let file = profiles_dir(args).join(format!("{id}.okvoice"));
+            if !file.is_file() {
+                bail!("VOICE_MISSING: no voice in the card and no profile {}", file.display());
+            }
+            (profile::Profile::load(&file)?, "profile", file.display().to_string())
+        }
+    };
+    let samples = audio::decode_ogg(&voice.ref_ogg).context("INVALID_AUDIO: the voice's reference clip does not decode")?;
+    if samples.len() < SAMPLE_RATE as usize || audio::rms(&samples) < 0.002 {
+        bail!("INVALID_AUDIO: the voice's reference clip is shorter than a second or silent");
+    }
+    std::fs::create_dir_all(&out)?;
+    let wav = audio::wav_bytes(&samples, SAMPLE_RATE);
+    audio::write_atomic(&out.join("reference.wav"), &wav)?;
+    let report = serde_json::json!({
+        "schema": 1, "source": source, "origin": origin, "profile_id": id, "personality": choice.key, "age": choice.age,
+        "voice_schema": voice.meta.schema, "voice_source": voice.meta.source, "embedding_tag": voice.tag(),
+        "reference_ogg_sha1": profile::sha1_hex(&voice.ref_ogg), "reference_wav": out.join("reference.wav"),
+        "reference_wav_sha1": profile::sha1_hex(&wav), "sample_rate": SAMPLE_RATE, "channels": 1,
+        "seconds": samples.len() as f64 / SAMPLE_RATE as f64, "description": voice.meta.description,
+    });
+    let text = serde_json::to_string_pretty(&report)?;
+    audio::write_atomic(&out.join("voice.json"), text.as_bytes())?;
+    println!("{text}");
+    Ok(())
 }
 
 fn cmd_card_voice(args: &Args) -> Result<()> {
