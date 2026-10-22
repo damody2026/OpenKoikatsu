@@ -1,0 +1,21 @@
+[package]
+name = "ok-story"
+version = "0.1.0"
+edition = "2021"
+description = "Galgame story director for OK Studio (Docs/GALGAME_DIALOGUE_PLAN.md): every decision, clock and interpolation of a story's playback; Unreal only presents what it returns. Loaded in-process as ok_story.dll"
+
+[lib]
+name = "ok_story"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+unicode-segmentation = "1.12"
+# ICU message formatting shared with the street rules (one formatter for the whole game).
+ok-rules = { path = "../ok-rules" }
+
+[profile.release]
+debug = 1
+# Panics must unwind so every FFI entry can catch them; abort would take Unreal down with it.
+panic = "unwind"

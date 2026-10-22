@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "title": {"zh": "放課後的屋頂", "ja": "放課後の屋上"},
+  "characters": {
+    "ayu": {"card": "Content/CharacterCards/Demo/ayu.png", "name": {"zh": "小鮎", "ja": "あゆ"}, "color": "#ff7aa8", "personality": 25},
+    "rin": {"card": "Content/CharacterCards/Demo/rin.png", "name": {"zh": "凜", "ja": "りん"}, "color": "#7ab8ff",
+            "offstage": {"motion": "0:0:0", "face": "normal"}}
+  },
+  "items": {"key": {"name": {"zh": "舊鑰匙", "ja": "古い鍵"}}, "coin": {"name": {"zh": "硬幣"}}},
+  "acts": [
+    {"id": "a1", "title": {"zh": "第一幕　屋頂", "ja": "第一幕　屋上"}, "scene": "UserData/Studio/scene/story_roof.okscene",
+     "camera": {"pos": [0, -320, 150], "look_at": [0, 0, 130], "fov": 40},
+     "cast": {"c0": {"who": "ayu", "pos": [0, 0, 0], "yaw": -90, "motion": "0:0:0"}},
+     "lines": [
+       {"id": "a1.l1", "who": "ayu", "text": {"zh": "……你來了啊。", "ja": "……来てくれたんだ。"}, "face": "smile", "camera": {"shot": "speaker"}},
+       {"id": "a1.l2", "text": {"zh": "風把她的頭髮吹亂了。", "ja": "風が彼女の髪を乱した。"}},
+       {"id": "a1.l3", "who": "ayu", "text": {"zh": "要一起回去嗎？"},
+        "choices": [
+          {"text": {"zh": "好啊"}, "goto": "a1.l4", "set": {"together": 1}},
+          {"text": {"zh": "用鑰匙開門"}, "goto": "a3", "need": [{"item": "key"}], "consume": true}
+        ]},
+       {"id": "a1.l4", "who": "rin", "text": {"zh": "等等我！"}, "cast": {"c1": {"who": "rin", "pos": [120, 0, 0], "yaw": -100}},
+        "camera": {"shot": "two"}, "give": [{"item": "key"}]},
+       {"id": "a1.l5", "who": "ayu", "text": {"zh": "凜也一起來嗎？"}, "look": "rin"},
+       {"id": "a1.l6", "who": "rin", "text": {"zh": "……我先走了。"}, "cast": {"c1": null}, "camera": {"shot": "wide"}}
+     ]},
+    {"id": "a2", "title": {"zh": "第二幕　歸途"}, "scene": "UserData/Studio/scene/story_roof.okscene",
+     "cast": {"c0": {"who": "ayu", "pos": [0, 0, 0], "yaw": -90}},
+     "lines": [
+       {"id": "a2.l1", "who": "ayu", "text": {"zh": "今天謝謝你。"}, "camera": {"shot": "speaker"}},
+       {"id": "a2.l2", "who": "ayu", "text": {"zh": "下次也一起吧。"}, "when": {"flags": {"together": 1}}},
+       {"id": "a2.l3", "who": "rin", "text": {"zh": "（遠處傳來凜的聲音）喂——"}, "take": [{"item": "key"}]},
+       {"id": "a2.l4", "text": {"zh": "就這樣，一天結束了。"}, "goto": "a3"}
+     ]},
+    {"id": "a3", "scene": "UserData/Studio/scene/story_roof.okscene", "next": "",
+     "cast": {"c0": {"who": "ayu", "pos": [0, 0, 0], "yaw": -90}},
+     "lines": [
+       {"id": "a3.l1", "who": "ayu", "text": {"zh": "門打開了。"}, "camera": {"pos": [100, -250, 160], "rot": [0, 0, 0.7071068, 0.7071068], "fov": 35}},
+       {"id": "a3.l2", "text": {"zh": "（完）"}}
+     ]}
+  ]
+}
