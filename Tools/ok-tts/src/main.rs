@@ -2,6 +2,8 @@
 //!
 //!   ok-tts serve  [--port 47860] [--model DIR] [--voices voices.json] [--parent-pid N]   (exits when process N exits)
 //!   ok-tts say    --text TEXT [--personality 00] [--age 18] [--out line.ogg|line.wav] [--greedy]
+//!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
+//!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
 //!   ok-tts parity --reference DIR      (compare against Tools/ok-tts/reference/dump_reference.py output)
 //!
 //! CUDA DLLs (cublas64_12, cublasLt64_12, nvrtc64_120_0, nvrtc-builtins) are searched next to the exe,
@@ -10,6 +12,7 @@
 mod log;
 mod parent;
 mod audio;
+mod bench;
 mod codec;
 mod engine;
 mod gpu;
@@ -108,6 +111,7 @@ fn main() {
         "serve" => cmd_serve(&args),
         "say" => cmd_say(&args),
         "parity" => cmd_parity(&args),
+        "bench" => cmd_bench(&args),
         _ => {
             crate::log!("usage: ok-tts serve|say|parity [options]  (see source header)");
             Ok(())
@@ -127,7 +131,30 @@ fn cmd_serve(args: &Args) -> Result<()> {
     let (model, voices) = resolve(args)?;
     let port: u16 = args.opts.get("port").map(|p| p.parse()).transpose()?.unwrap_or(47860);
     let positions = max_positions(args);
-    server::serve(port, 4, move || Engine::load(&model, &voices, positions))
+    let later: usize = args.opts.get("stream-later-frames").map(|v| v.parse()).transpose()?.unwrap_or(4);
+    // The server keeps its own copy of the voices, so voice lookups and cached lines never wait for the engine.
+    let voice_table = text::Voices::load(&voices)?;
+    server::serve(port, 8, voice_table, move || {
+        let mut engine = Engine::load(&model, &voices, positions)?;
+        engine.stream_later_frames = later.max(1);
+        Ok(engine)
+    })
+}
+
+fn cmd_bench(args: &Args) -> Result<()> {
+    let opt = |k: &str| args.opts.get(k).cloned();
+    bench::run(&bench::BenchArgs {
+        endpoint: opt("endpoint").unwrap_or_else(|| "http://127.0.0.1:47860".into()),
+        corpus: PathBuf::from(opt("corpus").context("--corpus is required")?),
+        out_dir: PathBuf::from(opt("out-dir").context("--out-dir is required")?),
+        rounds: opt("rounds").map(|v| v.parse()).transpose()?.unwrap_or(1),
+        personality: opt("personality").unwrap_or_else(|| "08".into()),
+        age: opt("age").map(|v| v.parse()).transpose()?.unwrap_or(18),
+        stream: opt("mode").as_deref() != Some("file"),
+        fresh: args.flags.iter().any(|f| f == "fresh"),
+        json: opt("json").map(PathBuf::from),
+        later_frames: opt("later-frames").map(|v| v.split(',').map(|n| n.trim().parse()).collect::<Result<Vec<usize>, _>>()).transpose()?.unwrap_or_default(),
+    })
 }
 
 fn cmd_say(args: &Args) -> Result<()> {

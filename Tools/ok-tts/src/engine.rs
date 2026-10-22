@@ -20,6 +20,10 @@ pub struct Engine {
     pub codec: Codec,
     pub tokenizer: TextTokenizer,
     pub voices: Voices,
+    /// Frames decoded per streamed piece: the first piece, then each later one. More frames per later piece
+    /// decode the left-context frames fewer times; the first stays small so her voice starts soon.
+    pub stream_first_frames: usize,
+    pub stream_later_frames: usize,
 }
 
 pub struct Speech {
@@ -62,7 +66,7 @@ impl Engine {
         let voices = Voices::load(voices)?;
         gpu.sync()?;
         crate::log!("ok-tts: model loaded in {:.1}s from {}", t.elapsed().as_secs_f64(), model_dir.display());
-        Ok(Self { gpu, talker, codec, tokenizer, voices })
+        Ok(Self { gpu, talker, codec, tokenizer, voices, stream_first_frames: 4, stream_later_frames: 4 })
     }
 
     /// Synthesize one already-cleaned line.
@@ -86,12 +90,13 @@ impl Engine {
         Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: voice.key, age: voice.age })
     }
 
-    /// Like `speak`, but audio is handed to `sink` while the rest is still being generated: every
-    /// STREAM_FRAMES frames (320 ms of speech) the new frames are decoded with the usual left context.
+    /// Like `speak`, but audio is handed to `sink` while the rest is still being generated: the first
+    /// stream_first_frames frames, then every `later_frames` (default stream_later_frames) more (4 frames = 320 ms
+    /// of speech), are
+    /// decoded with the usual left context.
     /// Returns the whole utterance like `speak` (for the cache file).
-    pub fn speak_stream(&self, text: &str, personality: &str, age: u32, mut cfg: GenConfig,
+    pub fn speak_stream(&self, text: &str, personality: &str, age: u32, mut cfg: GenConfig, later_frames: Option<usize>,
                         sink: &mut dyn FnMut(&[f32]) -> Result<()>) -> Result<Speech> {
-        const STREAM_FRAMES: usize = 4;
         self.gpu.bind()?;
         let t = Instant::now();
         let voice = self.voices.choose(personality, age);
@@ -110,7 +115,8 @@ impl Engine {
         let mut decoded = 0usize;
         self.talker.generate_stream(&self.gpu, &prompt, &cfg, &mut |new| {
             frames.extend_from_slice(new);
-            if frames.len() - decoded >= STREAM_FRAMES {
+            let want = if decoded == 0 { self.stream_first_frames } else { later_frames.unwrap_or(self.stream_later_frames) };
+            if frames.len() - decoded >= want.max(1) {
                 let pcm = self.codec.decode_tail(&self.gpu, &frames, decoded)?;
                 decoded = frames.len();
                 samples.extend_from_slice(&pcm);
