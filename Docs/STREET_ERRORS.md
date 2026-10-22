@@ -478,3 +478,8 @@
 - 首次重開地圖驗收攔下全部 244 個新增 Actor：期望 rotation `[0,90,0]`，實際為 `[90,0,0]`，原有全部 Actor／元件比對通過。Unreal Python Rotator 的位置參數順序不能當作 `[pitch,yaw,roll]` 傳入。
 - 改為明確 `unreal.Rotator(pitch=..., yaw=..., roll=...)`，在設定 StaticMesh 之後再套 location／rotation／scale，並立即 assert；僅修正本次帶 tag 的新增 Actor，保留原有建築與室內。
 - 將實際／期望變換及 mesh 路徑記錄於 `resort-architecture-v1/transform-diagnostic.json`；保存後必須再次重開圖通過 audit 與實景檢查。
+
+### 2026-10-22 招牌樓層配置修正
+
+- 前一版把新大招牌放在屋頂上方，不符合使用者希望的一樓橫式或從一樓向上直式招牌。改為 120 棟一樓橫式、R1／R2 轉角直排，舊屋頂背板／框架／支柱全部移除。
+- 原先只按一樓橫式可用高度做 assert，R1 空間僅約 0.3m 因而中止離線建模；已改為判斷立面淨空並採直式，不拉高到屋頂或遮住窗戶。模型在 native import 前全部重建及驗證通過。
