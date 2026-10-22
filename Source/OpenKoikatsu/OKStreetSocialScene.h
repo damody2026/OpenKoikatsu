@@ -605,7 +605,7 @@ private:
  void SetSourcePlayerLine(const FString& Text);
  void AdvanceRelationshipDialogue();
  void RunDialogueContextProbe(double Now);
- void RelationshipEvent(const FString& Event);
+ void RelationshipEvent(const FString& Event,bool bHerYes=false); // bHerYes: she said yes in her own words (the judge's accepts)
  void BreakUpSaid(int32 Character); // OKStreetSocialLover.inl: she ended it in her own words
  void ApplyRelationship();
  void EndTalk();

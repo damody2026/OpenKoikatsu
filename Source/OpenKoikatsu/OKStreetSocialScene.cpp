@@ -1310,13 +1310,13 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    {bool Confessed=false;Verdict->TryGetBoolField(TEXT("confessed"),Confessed);
     // Her own words turned him down ("I want to be the only one; you can't give that, so don't ask"): that is her
     // answer, not a dice roll that made her his girlfriend anyway (accepts: false).
-    bool Accepts=true;if(Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts)&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;
+    bool Accepts=true;const bool Answered=Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts);if(Answered&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;
      // Not a yes yet ("let me think about it"): her answer may come later in another talk (the judge is told).
      if(!L->ConfessionPending.Contains(Character))L->ConfessionPending.Add(Character,OKStreetMindNow(*L));}
     if(Confessed)L->ConfessionPending.Remove(Character);
     if(Confessed&&!Ends&&L->Target==Character&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
      &&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage!=TEXT("lover")){
-     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words"),Character);Weak->RelationshipEvent(TEXT("confession"));}}
+     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words%s"),Character,Answered&&Accepts?TEXT("; she said yes"):TEXT(""));Weak->RelationshipEvent(TEXT("confession"),Answered&&Accepts);}}
    {bool BreaksUp=false;Verdict->TryGetBoolField(TEXT("breaks_up"),BreaksUp);
     if(BreaksUp&&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage==TEXT("lover"))Weak->BreakUpSaid(Character);}
    {bool Quiet=false;Verdict->TryGetBoolField(TEXT("quiet"),Quiet);
@@ -1624,7 +1624,7 @@ void AOKStreetSocialScene::ToggleLanguage(){
  State->Message=State->Japanese?OKT(TEXT("ui.scene.voice_policy_ja")):OKT(TEXT("ui.scene.voice_policy_zh_first"));RefreshUI();
 }
 
-void AOKStreetSocialScene::RelationshipEvent(const FString& Event){
+void AOKStreetSocialScene::RelationshipEvent(const FString& Event,bool bHerYes){
  if(!State)return;
  UE_LOG(LogTemp,Display,TEXT("Street relationship event requested: %s (target=%d node=%d pending=%d collected=%d)"),*Event,State->Target,State->Node,State->RelationshipPending?1:0,State->CollectedActive?1:0);
  if(State->Target==INDEX_NONE||State->Node!=INDEX_NONE||State->RelationshipPending||State->CollectedActive){
@@ -1635,7 +1635,7 @@ void AOKStreetSocialScene::RelationshipEvent(const FString& Event){
  auto& S=*State;
  // Whether it happens and how is the rules' (talk.rs talk_event).
  const auto& Meta=S.Manifest.Characters[S.Target];
- auto Ask=OKRulesTalkRequest(S,TEXT("talk_event"),OKStreetViewRelation(S.Store,OKStreetStableId(Meta),S.Manifest.TalkBudget),&Meta);Ask->SetStringField(TEXT("event"),Event);Ask->SetNumberField(TEXT("roll"),S.Random.RandRange(0,99));
+ auto Ask=OKRulesTalkRequest(S,TEXT("talk_event"),OKStreetViewRelation(S.Store,OKStreetStableId(Meta),S.Manifest.TalkBudget),&Meta);Ask->SetStringField(TEXT("event"),Event);Ask->SetNumberField(TEXT("roll"),S.Random.RandRange(0,99));Ask->SetBoolField(TEXT("her_yes"),bHerYes);
  // A very shy girl answers differently with people around (another girl within 10 m of her, or a busy place now).
  if(Event==TEXT("confession")&&S.Agents.IsValidIndex(S.Target-1)){
   const FVector Her=S.Agents[S.Target-1].Position;int32 Others=0;

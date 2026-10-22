@@ -1376,12 +1376,18 @@ pub fn eval(data: Option<&TalkData>, kind: &str, r: &Value) -> Option<Result<Val
                 let res = match r.get("event").and_then(Value::as_str) {
                     Some("friendship") => friendship(d, &rel, &who),
                     Some("confession") => {
-                        let roll = r.get("roll").and_then(Value::as_i64).unwrap_or(0) as i32;
+                        // She already said yes in her own words (the judge's accepts): that is her answer, not a dice
+                        // roll, and not taken back for the people around ("I'll be your girlfriend!", then "someone
+                        // was watching, I didn't mean it"). Only what the rules forbid (not eligible yet) still stops it.
+                        let her_yes = r.get("her_yes").and_then(Value::as_bool).unwrap_or(false);
+                        let roll = if her_yes { 0 } else { r.get("roll").and_then(Value::as_i64).unwrap_or(0) as i32 };
                         let mut res = confession(d, &rel, &who, roll);
-                        let shyness = r.get("profile").map(|p| crate::traits::Traits::from_profile(p).shyness).unwrap_or(0);
-                        let shy_roll = r.get("shy_roll").and_then(Value::as_i64).map(|v| v as i32).unwrap_or((roll * 37 + 11) % 100);
-                        let others = r.get("others_near").and_then(Value::as_i64).unwrap_or(0) as i32;
-                        shy_confession(&mut res, shyness, others, r.get("place").and_then(Value::as_str).unwrap_or(""), r.get("hours").and_then(Value::as_f64).unwrap_or(12.0), shy_roll);
+                        if !her_yes {
+                            let shyness = r.get("profile").map(|p| crate::traits::Traits::from_profile(p).shyness).unwrap_or(0);
+                            let shy_roll = r.get("shy_roll").and_then(Value::as_i64).map(|v| v as i32).unwrap_or((roll * 37 + 11) % 100);
+                            let others = r.get("others_near").and_then(Value::as_i64).unwrap_or(0) as i32;
+                            shy_confession(&mut res, shyness, others, r.get("place").and_then(Value::as_str).unwrap_or(""), r.get("hours").and_then(Value::as_f64).unwrap_or(12.0), shy_roll);
+                        }
                         res
                     }
                     other => return Err(format!("unknown_event: {other:?}")),
