@@ -367,7 +367,7 @@ private:
  void TickRetryAction();
  void TickEnsureFreeTalk();
  void TickPlaceClosing();
- void BeginStroll(int32 Girl,FString& Error);
+ void BeginStroll(int32 Girl,FString& Error,bool bRun=false);
  void TickLiveTalkTest(double Now);
  void TickFreeTalkLive(double Now);
  FString FreeTalkLiveStatus() const;
@@ -575,6 +575,12 @@ private:
  bool NavCellFree(const FIntPoint& Cell,float Z) const;
  TArray<const struct FOKStreetPlace*> NearbyPlaces(float Radius) const;
  bool BeginOuting(int32 Girl,const FString& ActivityId,FString& Error);
+ // activities.rs: whether an activity may start now (weather, who, what it uses up, once a day); bConsume takes the items.
+ bool ActivityCheck(int32 Girl,const FString& ActivityId,FString& Why,bool bConsume,bool bAtEnd=false);
+ TSharedRef<FJsonObject> ActivityContext(int32 Girl,const TCHAR* Rule) const;
+ FString ActivityBlockedLine(int32 Character) const; // OKStreetSocialOuting.inl: what cannot be done here now, for her words
+ FString ThingsFacts(int32 Character) const; // OKStreetSocialMind.inl: her things and what is lent between them (items.rs)
+ void ReturnBorrowed(int32 Her,const FString& ItemId); // OKStreetSocialMind.inl: he gives back what he borrowed from her
  void CancelOuting(const FString& Message);
  float StepOuting(float Dt);
  void ArriveOuting();
@@ -629,6 +635,18 @@ private:
  void TickReadingProps();
  void RunReadingProbe(double Now);
  void CapturePhoto();
+ // OKStreetSocialPhotos.inl (photos.rs): a picture filed, one she takes, one sent on the phone, the album.
+ void PhotoFiled(const FString& File,const FString& Taker,const TArray<FString>& People,const FString& Topic,int32 SendTo,const FString& Album=FString());
+ void PhotoWalkStop(int32 Girl); // a stop on a photo walk: he takes one of her there
+ void HerPhoto(int32 Girl,const FString& Topic,const FString& Subject,bool bSend,bool bDrawing=false);
+ void SendPhoto(const FString& From,int32 Girl,const TSharedPtr<FJsonValue>& Which);
+ void TickPhotos();
+ TSharedRef<SWidget> BuildPhotoAlbum(int32 Girl);
+ FString PhotoFacts(int32 Character) const;
+ // OKStreetSocialPhotos.inl (reading.rs): his books read alone or together with her; what she is told of them.
+ void ReadBooks(int32 Girl,int32 Minutes,const FString& OnlyBook);
+ FString ReadingFacts(int32 Character) const;
+ void HelpedHerWork(int32 Girl,const FString& Place,int32 Minutes); // OKStreetSocialPhotos.inl (work.rs help_work_end)
  void FinishPhoto(bool bKeepTalking=true); // false: the conversation ends with the activity (goodbye, Esc)
  void TickPhoto(double Now);
  void RunPhotoProbe(double Now);

@@ -562,7 +562,28 @@ FString AOKStreetSocialScene::SceneLine(int32 Character) const{
  TArray<FString> Known;
  for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=Character&&S.Agents.IsValidIndex(I-1)){const float D=FVector::Dist2D(S.Agents[I-1].Position,S.Male)/100.f;if(D<25.f)Known.Add(OKMsg(TEXT("ui.mind.nearby_person_distance"), {{TEXT("name"), *S.Manifest.Characters[I].Name}, {TEXT("distance"), D}}));}
  if(!Known.IsEmpty())Line+=OKT(TEXT("ui.mind.known_people_label"))+FString::Join(Known,OKT(TEXT("ui.bank.list_separator")));
- return Line+FinanceSceneText();
+ const FString Things=ThingsFacts(Character);
+ return Line+ActivityBlockedLine(Character)+(Things.IsEmpty()?FString():OKT(TEXT("ui.bank.list_separator"))+Things)+FinanceSceneText();
+}
+
+// Her things, and what is lent between them (items.rs items_facts): for her words and for the judge.
+FString AOKStreetSocialScene::ThingsFacts(int32 Character) const{
+ const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character)||Character<=0)return FString();
+ const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Request=OKRulesHeroineRequest(S,TEXT("items_facts"),Id);OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);FString Text=Out.IsValid()?Out->GetStringField(TEXT("text")):FString();
+ for(const FString& More:{PhotoFacts(Character),ReadingFacts(Character)})if(!More.IsEmpty())Text+=(Text.IsEmpty()?FString():FString(OKT(TEXT("ui.economy.semicolon_mark"))))+More; // one fact from the next: "；"
+ return Text;
+}
+
+// The "give it back" button: the same rule the judge's he_returns_item goes through.
+void AOKStreetSocialScene::ReturnBorrowed(int32 Her,const FString& ItemId){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Her))return;
+ auto Request=OKRulesRequest(TEXT("items_judge"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),OKStreetStableId(S.Manifest.Characters[Her]));Request->SetStringField(TEXT("he_returns_item"),ItemId);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
+ auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;
+ const FString Notice=Out->GetStringField(TEXT("notice"));
+ if(!Notice.IsEmpty()){S.FreeTalkNotice=Notice;S.TellHer.Add(Notice);} // she hears it as a fact of the moment, and answers it
+ UE_LOG(LogTemp,Display,TEXT("Street things: he returns %s to actor=%d (%s)"),*ItemId,Her,*Notice);RefreshUI();
 }
 
 // Catalogue effects on her needs (eating, drinking, a spa...), and mood.

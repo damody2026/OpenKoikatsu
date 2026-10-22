@@ -191,10 +191,12 @@ void AOKStreetSocialScene::StartControlServer(){
  });
 
  Bind(TEXT("/buttons"),EHttpServerRequestVerbs::VERB_GET,[this](const FHttpServerRequest&,const FHttpResultCallback& Done){
-  auto& S=*State;auto O=OKControlResult(true);TArray<TSharedPtr<FJsonValue>> Rows;
+  auto& S=*State;auto O=OKControlResult(true);TArray<TSharedPtr<FJsonValue>> Rows,Clipped;
   if(S.Overlay.IsValid()){TArray<TPair<FString,TSharedPtr<SWidget>>> Buttons;OKProbeCollect(S.Overlay.ToSharedRef(),nullptr,Buttons);
-   for(const auto& B:Buttons){if(B.Key.IsEmpty()||!B.Value->IsEnabled()||B.Value->GetCachedGeometry().GetLocalSize().IsNearlyZero())continue;Rows.Add(MakeShared<FJsonValueString>(B.Key));}}
-  O->SetArrayField(TEXT("buttons"),Rows);OKControlReply(Done,O);
+   // A row scrolled out of its list is listed too, its index in "clipped" (the menu has more than nine dishes).
+   for(const auto& B:Buttons){if(B.Key.IsEmpty()||!B.Value->IsEnabled())continue;const bool Out=OKProbeScrolledOut(B.Value);
+    if(!Out&&B.Value->GetCachedGeometry().GetLocalSize().IsNearlyZero())continue;if(Out)Clipped.Add(MakeShared<FJsonValueNumber>(Rows.Num()));Rows.Add(MakeShared<FJsonValueString>(B.Key));}}
+  O->SetArrayField(TEXT("buttons"),Rows);O->SetArrayField(TEXT("clipped"),Clipped);OKControlReply(Done,O);
  });
 
  // Press the button with this label (as the mouse would). The "@" development shortcuts (summon, teleport) are refused.

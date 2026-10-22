@@ -178,6 +178,11 @@ void AOKStreetSocialScene::BuildHeroinePanel(const TSharedRef<SVerticalBox>& Pan
  for(const FString& ItemId:S.Store.Inventory){if(Seen.Contains(ItemId)||!Here)continue;Seen.Add(ItemId);const auto* I=S.Catalog.Find(ItemId);if(!I)continue;
   if(I->Consumable&&!I->Giftable){Row->AddSlot().Padding(1)[Button(OKT(TEXT("ui.heroine.eat_together"))+I->Name,[Weak,ItemId](){if(Weak.IsValid())Weak->EatFromBag(ItemId,false);})];Row->AddSlot().Padding(1)[Button(OKT(TEXT("ui.heroine.feed_her"))+I->Name,[Weak,ItemId](){if(Weak.IsValid())Weak->EatFromBag(ItemId,true);})];}
   else Row->AddSlot().Padding(1)[Button(OKT(TEXT("ui.heroine.gift_her"))+I->Name,[Weak,ItemId](){if(Weak.IsValid())Weak->StartGift(ItemId);})];}
+ // What he borrowed from her: give it back (items.rs items_view).
+ if(Here){auto Request=OKRulesRequest(TEXT("items_view"));OKRulesPutExt(S,Request);
+  if(const TSharedPtr<FJsonObject> Bag=OKRulesEval(S,Request)){const FString HerId=OKStreetStableId(S.Manifest.Characters[Her]);
+   for(const auto& V:Bag->GetArrayField(TEXT("borrowed"))){const auto O=V->AsObject();if(O->GetStringField(TEXT("owner"))!=HerId)continue;const FString ItemId=O->GetStringField(TEXT("item"));
+    Row->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.heroine.return_her_item"),{{TEXT("item"),O->GetStringField(TEXT("name"))}}),[Weak,Her,ItemId](){if(Weak.IsValid())Weak->ReturnBorrowed(Her,ItemId);})];}}}
  if(S.OutingGirl==Her)for(const auto& Pair:TArray<TPair<int32,FString>>{{0,OKT(TEXT("ui.heroine.you_lead"))},{1,OKT(TEXT("ui.heroine.she_leads"))},{2,OKT(TEXT("ui.heroine.walk_side_by_side"))}}){const int32 Mode=Pair.Key;
   Row->AddSlot().Padding(1)[Button(Pair.Value,[Weak,Mode](){if(Weak.IsValid())Weak->SetFollowMode(Mode);},S.FollowMode!=Mode)];}
  if(Here)Row->AddSlot().Padding(1)[Button(OKT(TEXT("ui.heroine.more_intimate")),[Weak,Her](){if(Weak.IsValid())Weak->RequestIntimacy(Her,false);})];

@@ -473,8 +473,12 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // What is not eaten (a plush, a keyring, a notebook) is his to carry: into the backpack. Bought for her and giftable:
  // he gives it to her next, the gift as the gift rules take it (StartGift), not a dish served.
  TArray<FString> GiveHer;
- // What she picked for herself is hers to keep (the postcard she chose at the bookstore came back as "his gift").
- for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId);I&&!I->Consumable&&!L.HerOwn){Candidate.Inventory.Add(L.ItemId);if(L.ForHer&&I->Giftable&&WithHer)GiveHer.Add(L.ItemId);}
+ // Whose each thing is (items.rs items_checkout): what she picked for herself is hers to keep (the postcard she chose at
+ // the bookstore came back as "his gift"), the rest his to carry, one bought for her given next.
+ {auto Things=OKRulesRequest(TEXT("items_checkout"));OKRulesPutExt(S,Things);if(WithHer)Things->SetStringField(TEXT("girl"),Id);
+  TArray<TSharedPtr<FJsonValue>> Lines;for(const auto& L:S.Cart){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("item"),L.ItemId);O->SetBoolField(TEXT("for_her"),L.ForHer);O->SetBoolField(TEXT("her_own"),L.HerOwn);Lines.Add(MakeShared<FJsonValueObject>(O));}
+  Things->SetArrayField(TEXT("lines"),Lines);
+  if(const TSharedPtr<FJsonObject> Whose=OKRulesEval(S,Things)){OKRulesTakeExt(Candidate,*Whose);const FString Give=Whose->GetStringField(TEXT("give_her"));if(!Give.IsEmpty())GiveHer.Add(Give);}}
  if(!CommitStore(MoveTemp(Candidate)))return;
  FlushRulesEffects();
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
@@ -527,7 +531,11 @@ void AOKStreetSocialScene::FinishGift(int32 Her,const FString& ItemId,const FStr
  auto& S=*State;if(!S.Catalog.Find(ItemId))return;
  auto Request=OKRulesHeroineRequest(S,TEXT("gift_settle"),OKStreetStableId(S.Manifest.Characters[Her]));Request->SetStringField(TEXT("item"),ItemId);Request->SetStringField(TEXT("option"),Option);Request->SetNumberField(TEXT("score"),Score);
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
- auto Candidate=S.Store;if(Answer->GetBoolField(TEXT("accepted")))Candidate.Inventory.RemoveSingle(ItemId);
+ auto Candidate=S.Store;
+ // Taken: it is hers now (items.rs), she can keep, lend or give it.
+ if(Answer->GetBoolField(TEXT("accepted"))){Candidate.Inventory.RemoveSingle(ItemId);
+  auto Got=OKRulesRequest(TEXT("items_received"));OKRulesPutExt(S,Got);Got->SetStringField(TEXT("girl"),OKStreetStableId(S.Manifest.Characters[Her]));Got->SetStringField(TEXT("item"),ItemId);
+  if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Got))OKRulesTakeExt(Candidate,*Out);}
  ApplyRulesEffects(Candidate,*Answer);
  if(CommitStore(MoveTemp(Candidate))){FlushRulesEffects();S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"));}
  RefreshUI();
@@ -573,6 +581,11 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
  TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  auto Button=[&](const FString& Text,TFunction<void()> Do,bool Enabled=true){return SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsEnabled(Enabled).Text(FText::FromString(Text)).OnClicked_Lambda([Weak,Do](){if(Weak.IsValid())Do();return FReply::Handled();});};
  Panel->AddSlot().AutoHeight().Padding(2)[SNew(STextBlock).Text(FText::FromString(OKMsg(TEXT("ui.economy.wallet_line"), {{TEXT("cash"), S.Store.PlayerCash}, {TEXT("bag_part"), S.Store.Inventory.IsEmpty()?TEXT(""):*OKMsg(TEXT("ui.economy.bag_count_suffix"), {{TEXT("item_count"), S.Store.Inventory.Num()}})}})))];
+ // His books: read one for an hour (reading.rs), alone; with her it is the reading activities.
+ {TSet<FString> Seen;auto Books=SNew(SWrapBox).UseAllottedSize(true);
+  for(const FString& Id:S.Store.Inventory)if(const auto* I=S.Catalog.Find(Id);I&&I->Tags.Contains(TEXT("book"))&&!Seen.Contains(Id)){Seen.Add(Id);
+   Books->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.reading.read_hour_button"),{{TEXT("book"),I->Name}}),[Weak,Id](){Weak->ReadBooks(INDEX_NONE,60,Id);},Her==INDEX_NONE)];}
+  if(Seen.Num())Panel->AddSlot().AutoHeight().Padding(2)[Books];}
  if(!S.ShopPlace.IsEmpty()){
   FString Why;int32 BanDays=0;const bool Banned=Blacklisted(S.ShopPlace,&BanDays);if(Banned)Why=OKMsg(TEXT("ui.economy.shop_banned_notice"), {{TEXT("ban_days"), BanDays}});
   const bool Closed=Banned||PlaceClosedNow(S.ShopPlace,Why);
@@ -590,7 +603,9 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
     else if(Item->Consumable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.takeaway_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
     List->AddSlot().AutoHeight()[Row];
    }
-   Panel->AddSlot().MaxHeight(260)[SNew(SScrollBox)+SScrollBox::Slot()[List]];
+   // As tall as the screen allows (a fixed 260 px showed nine dishes of a long menu).
+   float MenuHeight=260.f;if(GEngine&&GEngine->GameViewport){FVector2D Size;GEngine->GameViewport->GetViewportSize(Size);const float Scale=FMath::Max(.5f,GEngine->GameViewport->GetDPIScale());MenuHeight=FMath::Max(MenuHeight,Size.Y/Scale*.45f);}
+   Panel->AddSlot().MaxHeight(MenuHeight)[SNew(SScrollBox)+SScrollBox::Slot()[List]];
   }
  }
  BuildJobRows(Panel);

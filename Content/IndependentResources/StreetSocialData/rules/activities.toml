@@ -1,0 +1,815 @@
+# 共同活動（Tools/ok-rules/src/activities.rs）：哪裡、怎麼演出，以及誰能做、什麼天氣、需要什麼、產出什麼。
+# Unreal 從規則取這張表（activities_table），只照 kind／code／anchor／clip 演出；能不能做由 activity_check 決定。
+# kind：pair 面對面或並坐（code 是姿勢：1 坐、2 喝、3/4 潑水、5 吃飯、6/7 打西瓜、8 手機、9 泡湯、11 店裡的長椅）、photo 合照、
+#       facility 設施（code 是設施編號）、walk 一起走、restroom 廁所、sleep 睡覺、solo 在錨點並排做 female_clip。
+# place：地點 id，空字串＝就地。anchor：地點模型裡的錨點，可用「|」列多個，取第一個存在的（場景補上新錨點後自動改用）。
+# 選填：who（只限這些女主：stable id 或任一語言的名字）、weather（any／dry／rain）、needs（需要的物品 id，
+#       他或她的背包有就行；結束時才用掉，consume = false 的不用掉）、yields（結束時的產出：photo／drawing／work_progress／book_progress）、once_per_day、
+#       minutes（時長，遊戲分鐘；0＝依 kind 的預設）、feed（結束時對她需求的影響，例：{ fun = 15, energy = -20 }）。
+
+[[activity]]
+id = "meal"
+name = "在餐廳裡一起吃飯"
+place = "restaurant"
+kind = "pair"
+code = 5
+anchor = "table"
+
+[[activity]]
+id = "restaurant_room"
+name = "進餐廳包廂用餐"
+place = "restaurant"
+kind = "facility"
+code = 0
+
+[[activity]]
+id = "dessert"
+name = "在點心店裡一起吃甜點"
+place = "snack"
+kind = "pair"
+code = 5
+anchor = "table"
+
+[[activity]]
+id = "drink"
+name = "在點心店櫃台買飲料一起喝"
+place = "snack"
+kind = "pair"
+code = 2
+anchor = "counter"
+
+[[activity]]
+id = "drink_shop"
+name = "在飲料店櫃台買手搖飲一起喝"
+place = "drinkshop"
+kind = "pair"
+code = 2
+anchor = "counter"
+
+[[activity]]
+id = "drink_seat"
+name = "在飲料店裡坐著喝飲料聊天"
+place = "drinkshop"
+kind = "pair"
+code = 1
+anchor = "seat"
+female_clip = "venue_drink_seated.okanim"
+male_clip = "venue_drink_seated.okanim"
+
+[[activity]]
+id = "cafe_drink"
+name = "在咖啡廳櫃台點咖啡一起喝"
+place = "cafe"
+kind = "pair"
+code = 2
+anchor = "counter"
+
+[[activity]]
+id = "cafe_seat"
+name = "在咖啡廳裡坐著喝咖啡聊天"
+place = "cafe"
+kind = "pair"
+code = 1
+anchor = "seat"
+female_clip = "venue_drink_seated.okanim"
+male_clip = "venue_drink_seated.okanim"
+
+[[activity]]
+id = "conveni_drink"
+name = "在便利商店買飲料一起喝"
+place = "conveni"
+kind = "pair"
+code = 2
+anchor = "aisle"
+
+[[activity]]
+id = "read_books"
+name = "在書局書架旁坐下來面對面看書"
+place = "bookstore"
+kind = "pair"
+code = 1
+anchor = "shelf"
+female_clip = "venue_read_seated.okanim"
+male_clip = "venue_read_seated.okanim"
+yields = ["book_progress"]
+
+[[activity]]
+id = "library_read"
+name = "在圖書館書架旁坐下來面對面看書"
+place = "library"
+kind = "pair"
+code = 1
+anchor = "shelf"
+female_clip = "venue_read_seated.okanim"
+male_clip = "venue_read_seated.okanim"
+yields = ["book_progress"]
+
+[[activity]]
+id = "library_seat"
+name = "在圖書館閱覽區坐著看書"
+place = "library"
+kind = "pair"
+code = 1
+anchor = "seat"
+female_clip = "venue_read_seated.okanim"
+male_clip = "venue_read_seated.okanim"
+yields = ["book_progress"]
+
+[[activity]]
+id = "pet_photo"
+name = "在寵物店和小動物一起合照"
+place = "petshop"
+kind = "photo"
+code = 0
+anchor = "pets"
+
+[[activity]]
+id = "lecture_seat"
+name = "在大學講堂裡坐著一起讀書"
+place = "lecture"
+kind = "pair"
+code = 1
+anchor = "seat"
+female_clip = "venue_study_seated.okanim"
+male_clip = "venue_study_seated.okanim"
+
+[[activity]]
+id = "cafeteria_meal"
+name = "在學生餐廳一起吃飯"
+place = "cafeteria"
+kind = "pair"
+code = 5
+anchor = "table"
+
+[[activity]]
+id = "classroom"
+name = "在學校一樓教室裡坐著聊天"
+place = "school"
+kind = "pair"
+code = 1
+anchor = "seat"
+
+[[activity]]
+id = "school_class2"
+name = "在學校二樓教室坐著一起讀書"
+place = "school"
+kind = "pair"
+code = 1
+anchor = "class2"
+female_clip = "venue_study_seated.okanim"
+male_clip = "venue_study_seated.okanim"
+
+[[activity]]
+id = "school_music"
+name = "在學校三樓音樂教室鋼琴旁合照"
+place = "school"
+kind = "photo"
+code = 0
+anchor = "music"
+
+[[activity]]
+id = "lodge_lounge2"
+name = "在會館二樓休息室坐著聊天"
+place = "lodge"
+kind = "pair"
+code = 1
+anchor = "lounge2"
+
+[[activity]]
+id = "hotel_room6"
+name = "在飯店六樓景觀客房坐著聊天"
+place = "hotel"
+kind = "pair"
+code = 1
+anchor = "room6"
+
+[[activity]]
+id = "girls_lounge"
+name = "在女生宿舍交誼廳一起滑手機"
+place = "girls_dorm"
+kind = "pair"
+code = 8
+anchor = "lounge"
+
+[[activity]]
+id = "boys_lounge"
+name = "在男生宿舍交誼廳一起滑手機"
+place = "boys_dorm"
+kind = "pair"
+code = 8
+anchor = "lounge"
+
+[[activity]]
+id = "lodge_lobby"
+name = "在會館大廳坐著滑手機聊天"
+place = "lodge"
+kind = "pair"
+code = 1
+anchor = "seat"
+female_clip = "venue_phone_seated.okanim"
+male_clip = "venue_phone_seated.okanim"
+
+[[activity]]
+id = "inn_tea"
+name = "在民宿和室坐著喝茶聊天"
+place = "minshuku"
+kind = "pair"
+code = 1
+anchor = "seat"
+
+[[activity]]
+id = "park_seat"
+name = "在公園坐著聊天"
+place = "park"
+kind = "pair"
+code = 1
+anchor = "bench"
+
+[[activity]]
+id = "park_photo"
+name = "在公園噴水池前合照"
+place = "park"
+kind = "photo"
+code = 0
+anchor = "fountain"
+
+[[activity]]
+id = "campus_gate_photo"
+name = "在大學校門的校名石柱前合照"
+place = "campus_gate"
+kind = "photo"
+code = 0
+anchor = "gate"
+
+[[activity]]
+id = "campus_stands"
+name = "坐在大學運動場的看台上聊天"
+place = "campus_sports"
+kind = "pair"
+code = 1
+anchor = "seat"
+
+[[activity]]
+id = "campus_stretch"
+name = "在大學運動場一起做伸展運動"
+place = "campus_sports"
+kind = "solo"
+code = 0
+anchor = "field"
+female_clip = "venue_stretch.okanim"
+
+[[activity]]
+id = "shrine_photo"
+name = "在神社鳥居前合照"
+place = "shrine"
+kind = "photo"
+code = 0
+anchor = "torii"
+
+[[activity]]
+id = "fruit"
+name = "在水果店裡買水果一起吃"
+place = "fruitshop"
+kind = "pair"
+code = 5
+anchor = "stand"
+
+[[activity]]
+id = "dept_beauty"
+name = "在大學城百貨1樓化妝品專櫃前合照"
+place = "department"
+kind = "photo"
+code = 0
+anchor = "beauty"
+
+[[activity]]
+id = "dept_women"
+name = "在百貨2樓女裝試衣鏡前合照"
+place = "department"
+kind = "photo"
+code = 0
+anchor = "mirror2"
+
+[[activity]]
+id = "dept_men"
+name = "在百貨3樓男裝試衣鏡前合照"
+place = "department"
+kind = "photo"
+code = 0
+anchor = "mirror3"
+
+[[activity]]
+id = "dept_shoes"
+name = "在百貨4樓坐下來試穿鞋子聊天"
+place = "department"
+kind = "pair"
+code = 11
+anchor = "shoes"
+
+[[activity]]
+id = "dept_sofa"
+name = "在百貨5樓家居區試坐沙發聊天"
+place = "department"
+kind = "pair"
+code = 11
+anchor = "sofa"
+
+[[activity]]
+id = "dept_books"
+name = "在百貨6樓書店坐下來面對面看書"
+place = "department"
+kind = "pair"
+code = 1
+anchor = "books"
+female_clip = "venue_read_seated.okanim"
+male_clip = "venue_read_seated.okanim"
+yields = ["book_progress"]
+
+[[activity]]
+id = "dept_phones"
+name = "在百貨7樓電器區一起試玩手機"
+place = "department"
+kind = "pair"
+code = 8
+anchor = "phones"
+
+[[activity]]
+id = "dept_bear"
+name = "在百貨8樓玩具區和大熊合照"
+place = "department"
+kind = "photo"
+code = 0
+anchor = "bear"
+
+[[activity]]
+id = "dept_food"
+name = "在百貨9樓美食街一起吃飯"
+place = "department"
+kind = "pair"
+code = 5
+anchor = "food"
+
+[[activity]]
+id = "dept_view"
+name = "在百貨10樓景觀餐廳靠窗坐著聊天"
+place = "department"
+kind = "pair"
+code = 1
+anchor = "view"
+
+[[activity]]
+id = "aquarium_photo"
+name = "在水族館大水槽前合照"
+place = "aquarium"
+kind = "photo"
+code = 0
+anchor = "tank"
+
+[[activity]]
+id = "aquarium_observe"
+name = "在水族館大水槽前一起觀察魚、記筆記"
+place = "aquarium"
+kind = "solo"
+code = 0
+anchor = "tank"
+female_clip = "venue_observe.okanim"
+
+[[activity]]
+id = "dept_shopping"
+name = "在百貨2樓女裝區一起挑衣服"
+place = "department"
+kind = "solo"
+code = 0
+anchor = "mirror2"
+female_clip = "venue_shopping.okanim"
+
+[[activity]]
+id = "dept_cosmetics"
+name = "在百貨1樓化妝品專櫃一起逛"
+place = "department"
+kind = "solo"
+code = 0
+anchor = "beauty"
+female_clip = "venue_shopping.okanim"
+
+[[activity]]
+id = "bookstore_browse"
+name = "在書局一起挑書"
+place = "bookstore"
+kind = "solo"
+code = 0
+anchor = "shelf"
+female_clip = "venue_shopping.okanim"
+
+[[activity]]
+id = "park_sky"
+name = "在公園噴水池旁一起看天空"
+place = "park"
+kind = "solo"
+code = 0
+anchor = "fountain"
+female_clip = "venue_sky.okanim"
+
+[[activity]]
+id = "field_stretch"
+name = "在操場一起做伸展運動"
+place = "playground"
+kind = "solo"
+code = 0
+anchor = "field"
+female_clip = "venue_stretch.okanim"
+
+[[activity]]
+id = "shrine_pray"
+name = "在神社一起參拜許願"
+place = "shrine"
+kind = "solo"
+code = 0
+anchor = "pray"
+female_clip = "venue_pray_male.okanim"
+male_clip = "venue_pray_male.okanim"
+
+[[activity]]
+id = "vending_school"
+name = "在校門口的販賣機一起買飲料"
+place = "school"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_library"
+name = "在圖書館門口的販賣機一起買飲料"
+place = "library"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_department"
+name = "在百貨公司門口的販賣機一起買飲料"
+place = "department"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_aquarium"
+name = "在水族館門口的販賣機一起買飲料"
+place = "aquarium"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_girls_dorm"
+name = "在女生宿舍門口的販賣機一起買飲料"
+place = "girls_dorm"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_boys_dorm"
+name = "在男生宿舍門口的販賣機一起買飲料"
+place = "boys_dorm"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_hotel"
+name = "在SPA飯店門廊的販賣機一起買飲料"
+place = "hotel"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_lodge"
+name = "在山莊門口的販賣機一起買飲料"
+place = "lodge"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_cafeteria"
+name = "在學生餐廳門口的販賣機一起買飲料"
+place = "cafeteria"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_park"
+name = "在公園的販賣機一起買飲料"
+place = "park"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "vending_playground"
+name = "在操場旁的販賣機一起買飲料"
+place = "playground"
+kind = "solo"
+code = 0
+anchor = "vending"
+female_clip = "venue_vending_male.okanim"
+male_clip = "venue_vending_male.okanim"
+
+[[activity]]
+id = "aquarium_bench"
+name = "在水族館大水槽前的長椅坐著聊天"
+place = "aquarium"
+kind = "pair"
+code = 11
+anchor = "bench"
+
+[[activity]]
+id = "toilet_park"
+name = "去中央公園旁的公廁上廁所（她去女廁，你在外面等）"
+place = "restroom_park"
+kind = "restroom"
+code = 0
+anchor = "wait"
+
+[[activity]]
+id = "toilet_campus"
+name = "去大學講堂旁的公廁上廁所"
+place = "restroom_campus"
+kind = "restroom"
+code = 0
+anchor = "wait"
+
+[[activity]]
+id = "toilet_north"
+name = "去學校操場旁的公廁上廁所"
+place = "restroom_north"
+kind = "restroom"
+code = 0
+anchor = "wait"
+
+[[activity]]
+id = "toilet_resort"
+name = "去度假區的公廁上廁所"
+place = "restroom_resort"
+kind = "restroom"
+code = 0
+anchor = "wait"
+
+[[activity]]
+id = "pool"
+name = "在飯店泳池玩水"
+place = "hotel"
+kind = "pair"
+code = 3
+anchor = "pool"
+
+[[activity]]
+id = "hotel_bar"
+name = "在飯店大廳酒吧喝一杯"
+place = "hotel"
+kind = "pair"
+code = 2
+anchor = "bar"
+
+[[activity]]
+id = "hotel_lobby"
+name = "在飯店大廳沙發區坐著聊天"
+place = "hotel"
+kind = "pair"
+code = 1
+anchor = "lobby"
+
+[[activity]]
+id = "hotel_spa"
+name = "去飯店做SPA護理"
+place = "hotel"
+kind = "facility"
+code = 2
+
+[[activity]]
+id = "hotel_rest"
+name = "在飯店客房休息"
+place = "hotel"
+kind = "facility"
+code = 1
+
+[[activity]]
+id = "inn_rest"
+name = "在民宿房間休息"
+place = "minshuku"
+kind = "facility"
+code = 1
+
+[[activity]]
+id = "onsen"
+name = "一起泡露天溫泉"
+place = "onsen"
+kind = "pair"
+code = 9
+anchor = "pool"
+female_clip = "venue_onsen.okanim"
+
+[[activity]]
+id = "splash"
+name = "在操場向她潑水"
+place = "playground"
+kind = "pair"
+code = 3
+anchor = "field"
+
+[[activity]]
+id = "splash_her"
+name = "在操場讓她向你潑水"
+place = "playground"
+kind = "pair"
+code = 4
+anchor = "field"
+
+[[activity]]
+id = "watermelon"
+name = "在操場一起打西瓜（你揮棒）"
+place = "playground"
+kind = "pair"
+code = 6
+anchor = "field"
+
+[[activity]]
+id = "watermelon_her"
+name = "在操場一起打西瓜（她揮棒）"
+place = "playground"
+kind = "pair"
+code = 7
+anchor = "field"
+
+[[activity]]
+id = "sleep_hotel"
+name = "在飯店六樓客房睡一晚（睡到隔天早上）"
+place = "hotel"
+kind = "sleep"
+code = 0
+anchor = "bed6_1"
+
+[[activity]]
+id = "sleep_dorm"
+name = "在男生宿舍三樓寢室睡一覺（睡到隔天早上）"
+place = "boys_dorm"
+kind = "sleep"
+code = 0
+anchor = "bed3_0"
+
+[[activity]]
+id = "sleep_lodge"
+name = "在會館二樓休息室鋪棉被睡一覺（睡到隔天早上）"
+place = "lodge"
+kind = "sleep"
+code = 0
+anchor = "bed2_0"
+
+[[activity]]
+id = "sleep_inn"
+name = "在民宿和室鋪棉被睡一晚（睡到隔天早上）"
+place = "minshuku"
+kind = "sleep"
+code = 0
+anchor = "bed1_0"
+
+[[activity]]
+id = "rest"
+name = "去會館休息房間"
+place = "lodge"
+kind = "facility"
+code = 1
+
+[[activity]]
+id = "spa"
+name = "去會館精油護理室"
+place = "lodge"
+kind = "facility"
+code = 2
+
+[[activity]]
+id = "seated"
+name = "就地坐下聊天"
+place = ""
+kind = "pair"
+code = 1
+
+[[activity]]
+id = "photo"
+name = "就地一起合照"
+place = ""
+kind = "photo"
+code = 0
+
+[[activity]]
+id = "phone"
+name = "一起用手機"
+place = ""
+kind = "pair"
+code = 8
+
+[[activity]]
+id = "walk"
+name = "一起散步（你帶路）"
+place = ""
+kind = "walk"
+code = 0
+
+# ---- 2026-10-22 攻略第三輪盤點加的活動（Docs/STREET_NEW_FEATURES_PLAN.md 第 1 批） ----
+
+[[activity]]
+id = "park_feed_fish"
+name = "在公園池邊一起餵魚"
+place = "park"
+kind = "solo"
+code = 0
+anchor = "pond|fountain"
+female_clip = "venue_observe.okanim"
+needs = ["park_fishfood"]
+minutes = 15
+feed = { fun = 12 }
+
+[[activity]]
+id = "park_exercise"
+name = "在公園一起晨練、站樁"
+place = "park"
+kind = "solo"
+code = 0
+anchor = "plaza|fountain"
+female_clip = "venue_stretch.okanim"
+weather = "dry"
+minutes = 30
+feed = { fun = 5, energy = -5 }
+
+[[activity]]
+id = "park_jog"
+name = "在公園一起跑步"
+place = "park"
+kind = "walk"
+code = 1
+weather = "dry"
+minutes = 30
+feed = { fun = 8, social = 6, energy = -15 }
+
+[[activity]]
+id = "park_sketch"
+name = "在公園寫生（她畫畫，你陪在旁邊）"
+place = "park"
+kind = "pair"
+code = 1
+anchor = "pond|bench"
+female_clip = "venue_read_seated.okanim"
+male_clip = "venue_read_seated.okanim"
+weather = "dry"
+needs = ["bk_sketchbook"]
+consume = false
+yields = ["drawing"]
+minutes = 75
+feed = { fun = 15 }
+
+[[activity]]
+id = "help_her_work"
+name = "陪她做她自己的工作（例如在校門口發傳單）"
+place = "campus_gate"
+kind = "solo"
+code = 0
+anchor = "gate"
+female_clip = "venue_shopping.okanim"
+who = ["profile:occupation.side_task"]
+yields = ["work_progress"]
+minutes = 60
+feed = { energy = -10, social = 10 }
+
+[[activity]]
+id = "photo_walk"
+name = "一起邊走邊拍照（攝影散步）"
+place = ""
+kind = "walk"
+code = 2
+weather = "dry"
+minutes = 45
+feed = { fun = 15, social = 8 }

@@ -1,10 +1,12 @@
 //! ok_rules.dll: C ABI over the StreetSocial rules (see include/ok_rules.h). Nothing here may unwind into Unreal.
 //! The rules keep no game state: every call carries the facts it needs, so the DLL can be swapped while the game runs.
 pub mod academics;
+pub mod activities;
 pub mod bank;
 pub mod bias;
 pub mod bluff;
 pub mod icu;
+pub mod items;
 pub mod locale;
 pub mod region;
 pub mod tr;
@@ -20,7 +22,9 @@ pub mod heroine;
 pub mod invite;
 pub mod mind;
 pub mod needs;
+pub mod photos;
 pub mod places;
+pub mod reading;
 pub mod plan;
 pub mod property;
 pub mod relation;
@@ -30,6 +34,7 @@ pub mod social;
 pub mod talk;
 pub mod traits;
 pub mod venture;
+pub mod work;
 pub mod tuning;
 
 use serde_json::{json, Value};
@@ -121,6 +126,12 @@ impl Rules {
         // profiles (yuan) come in in the region's money.
         let _scope = tr::scope(locale::lang(&request), locale::region(&request));
         region::localize_request(&mut request);
+        // The activities table's own minutes and needs for the end of one (activities.toml), read by shop.rs.
+        if matches!(request.get("rule").or_else(|| request.get("kind")).and_then(Value::as_str), Some("activity_end" | "activity_minutes")) {
+            if let Ok(t) = self.tuning.read() {
+                activities::table_end(&t.activities, &mut request);
+            }
+        }
         let request = request;
         // Which rule answers: `rule` (Unreal always sends it), else `kind` for hand-written requests. A request's own data
         // may then use `kind` freely (a rumour's kind, an activity's kind) without changing which rule answers it.
@@ -154,6 +165,11 @@ impl Rules {
                     .or_else(|| (kind == "property_data").then(|| Ok(tuning.property_json_in(locale::region(&request), locale::lang(&request)))))
                     .or_else(|| region::eval(&tuning.catalog, &kind, &request))
                     .or_else(|| estate::eval(tuning.property_in(locale::region(&request), locale::lang(&request)), &kind, &request))
+                    .or_else(|| activities::eval(tuning.activities_in(locale::lang(&request)), &tuning.activities, tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
+                    .or_else(|| photos::eval(&kind, &request))
+                    .or_else(|| work::eval(&kind, &request))
+                    .or_else(|| reading::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
+                    .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| catalog::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| shop::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| plan::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), tuning.places_in(locale::lang(&request)), &kind, &request))

@@ -344,6 +344,9 @@ struct FOKStreetStore {
  FOKStreetPersonal Personal;      // his payroll year (OKStreetSocialBooks.h)
  TArray<FOKBookPost> BookPending; // changes on their way to the journal (not saved; OKStreetSocialBooks.inl)
  TArray<FString> Inventory;
+ // The rules' own part of the save (ok-rules: her things and loans, photos, readings...), a JSON object kept as text: only
+ // the rules read it (OKRulesPutExt / OKRulesTakeExt).
+ FString Ext;
  TArray<FOKStreetAppointment> Appointments;
  int32 NextAppointment = 1;
  // Plan §13.3.4: shops he stood up, place id -> first game day he is welcome again.
@@ -1249,7 +1252,7 @@ inline FString OKStreetWriteSave(const FOKStreetStore& Store) {
   for(const FString& K:Keys)H->SetObjectField(K,OKStreetAcademicJson(Store.Academics[K]));Ac->SetObjectField(TEXT("heroines"),H);Root->SetObjectField(TEXT("academics"),Ac);}
  Root->SetObjectField(TEXT("banking"),OKStreetBankingJson(Store.Banking));
  {auto Jobs=MakeShared<FJsonObject>();OKStreetWriteStringArray(Jobs,TEXT("held"),Store.PlayerJobs);auto Rating=MakeShared<FJsonObject>();TArray<FString> Keys;Store.JobRating.GetKeys(Keys);Keys.Sort();for(const FString& K:Keys)Rating->SetNumberField(K,Store.JobRating[K]);Jobs->SetObjectField(TEXT("rating"),Rating);Root->SetObjectField(TEXT("jobs"),Jobs);}
- {auto Wallet=MakeShared<FJsonObject>();Wallet->SetNumberField(TEXT("cash"),double(Store.PlayerCash));Wallet->SetNumberField(TEXT("bank"),double(Store.PlayerBank));OKStreetWriteStringArray(Wallet,TEXT("inventory"),Store.Inventory);Root->SetObjectField(TEXT("wallet"),Wallet);Root->SetNumberField(TEXT("feelings_model"),2);Root->SetStringField(TEXT("currency"),Store.Region==TEXT("TW")?TEXT("TWD"):Store.Region==TEXT("US")?TEXT("USD"):TEXT("CNY"));Root->SetStringField(TEXT("region"),Store.Region);}
+ {auto Wallet=MakeShared<FJsonObject>();Wallet->SetNumberField(TEXT("cash"),double(Store.PlayerCash));Wallet->SetNumberField(TEXT("bank"),double(Store.PlayerBank));OKStreetWriteStringArray(Wallet,TEXT("inventory"),Store.Inventory);{TSharedPtr<FJsonObject> E;if(!Store.Ext.IsEmpty()&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Store.Ext),E)&&E.IsValid())Root->SetObjectField(TEXT("ext"),E);}Root->SetObjectField(TEXT("wallet"),Wallet);Root->SetNumberField(TEXT("feelings_model"),2);Root->SetStringField(TEXT("currency"),Store.Region==TEXT("TW")?TEXT("TWD"):Store.Region==TEXT("US")?TEXT("USD"):TEXT("CNY"));Root->SetStringField(TEXT("region"),Store.Region);}
  Root->SetBoolField(TEXT("talk_budget_is_kks"), false);
  Root->SetBoolField(TEXT("favor_cap_is_kks_stepup"), Store.FavorCapIsKksStepUp);
  if (Store.FavorCapIsKksStepUp) {
@@ -1368,6 +1371,7 @@ inline EOKStreetLoad OKStreetParseSave(const FString& Json, FOKStreetStore& Stor
   const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
   if ((*Wallet)->TryGetArrayField(TEXT("inventory"), Items)) for (const auto& I : *Items) { FString S; if (I.IsValid() && I->TryGetString(S)) Store.Inventory.Add(S); }
  }
+ { const TSharedPtr<FJsonObject>* E = nullptr; if (Root->TryGetObjectField(TEXT("ext"), E) && E->IsValid()) { FString Out; auto W = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out); FJsonSerializer::Serialize(E->ToSharedRef(), W); Store.Ext = Out; } }
  if (Root->HasField(TEXT("calendar"))) {
   const TSharedPtr<FJsonObject>* Calendar = nullptr;
   if (!Root->TryGetObjectField(TEXT("calendar"), Calendar) || !OKStreetJsonInt((*Calendar)->TryGetField(TEXT("day")), Store.CalendarDay) || !OKStreetJsonInt((*Calendar)->TryGetField(TEXT("minute")), Store.CalendarMinute)
