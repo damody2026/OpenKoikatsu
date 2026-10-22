@@ -51,13 +51,14 @@ pub enum Arg {
     L(i64),
 }
 
+/// Fields drop in order: cuBLAS and its workspace (freed on `stream`) before the stream and the context.
 pub struct Gpu {
-    pub ctx: Arc<CudaContext>,
-    pub stream: Arc<CudaStream>,
-    cs: ds::CUstream,
     blas: cudarc::cublas::CudaBlas,
-    funcs: HashMap<&'static str, CudaFunction>,
     _blas_workspace: Buf,
+    funcs: HashMap<&'static str, CudaFunction>,
+    cs: ds::CUstream,
+    pub stream: Arc<CudaStream>,
+    pub ctx: Arc<CudaContext>,
 }
 
 /// An instantiated CUDA graph, replayed on the engine stream.
@@ -110,6 +111,25 @@ impl Gpu {
 
     pub fn bind(&self) -> Result<()> {
         self.ctx.bind_to_thread()?;
+        Ok(())
+    }
+
+    /// Give the device's pooled free memory back. Engines share the device's memory pool, so what a dropped engine
+    /// (VoiceDesign loaded for a while beside Base) freed would otherwise stay reserved by this process.
+    pub fn trim_pool(&self) -> Result<()> {
+        self.bind()?;
+        self.sync()?;
+        unsafe {
+            let mut pool: ds::CUmemoryPool = std::ptr::null_mut();
+            let r = ds::cuDeviceGetMemPool(&mut pool, self.ctx.cu_device());
+            if r != ds::CUresult::CUDA_SUCCESS {
+                bail!("cuDeviceGetMemPool: {r:?}");
+            }
+            let r = ds::cuMemPoolTrimTo(pool, 0);
+            if r != ds::CUresult::CUDA_SUCCESS {
+                bail!("cuMemPoolTrimTo: {r:?}");
+            }
+        }
         Ok(())
     }
 

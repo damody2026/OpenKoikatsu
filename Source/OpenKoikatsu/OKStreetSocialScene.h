@@ -605,12 +605,19 @@ private:
  void LoadPlayerName();
  void SetPlayerName(const FString& Name);
  void ProbeVoiceInfo();
+ // Her own voice (OKStreetSocialVoicePick.inl).
+ void ProbeCardVoice();
+ void RequestVoiceCandidates();
+ void PlayVoiceCandidate(int32 Index,bool Reference);
+ void FixVoiceCandidate(int32 Index,bool AsDefault);
+ void RemoveCardVoice();
+ void AddVoicePickUI(TSharedRef<class SVerticalBox> Box);
  FString MaleToneLabel() const;
  bool QueueNode(int32 Node,const FString& Category,const FString& BranchId=FString());
  void SetSourcePlayerLine(const FString& Text);
  void AdvanceRelationshipDialogue();
  void RunDialogueContextProbe(double Now);
- void RelationshipEvent(const FString& Event);
+ void RelationshipEvent(const FString& Event,bool bHerYes=false); // bHerYes: she said yes in her own words (the judge's accepts)
  void BreakUpSaid(int32 Character); // OKStreetSocialLover.inl: she ended it in her own words
  void ApplyRelationship();
  void EndTalk();
@@ -658,7 +665,8 @@ private:
  void TickSeries();
  bool HasHerNumber(int32 Girl,bool SheReachesHim=false); // OKStreetSocialPhoneInbox.inl (contacts.rs): her number is in his phone
  void HerNumberGiven(int32 Girl,const TCHAR* What=TEXT("hers"));
- void HerErrand(int32 Character,const FString& Kind); // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
+ void HerErrand(int32 Character,const FString& Kind);
+ void GiveMoneyNow(int32 Girl,int64 Amount); // OKStreetSocialLover.inl: her act's give_money, once the judge has read the exchange // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
  void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)
  void TickEffect();
  void TickUmbrella(); // OKStreetSocialPhotos.inl: the umbrella on a rainy walk (weather.rs walk_style)

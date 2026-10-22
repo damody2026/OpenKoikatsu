@@ -1,6 +1,11 @@
-//! ok-tts: Qwen3-TTS 12Hz VoiceDesign for OpenKoikatsu, in Rust on CUDA (cudarc + cuBLAS + NVRTC).
+//! ok-tts: Qwen3-TTS 12Hz for OpenKoikatsu, in Rust on CUDA (cudarc + cuBLAS + NVRTC).
 //!
 //!   ok-tts serve  [--port 47860] [--model DIR] [--voices voices.json] [--parent-pid N]   (exits when process N exits)
+//!                 [--backend base|design] [--base DIR] [--profiles DIR]
+//!       base (the default when <exe>/profiles has profiles and the Base model is found): every voice is the fixed
+//!       speaker embedding of its profile, so a character keeps one voice; design: VoiceDesign from the description.
+//!   ok-tts profile [--base DIR] [--profiles DIR] [--keys 08,m0] [--ages 18] [--ref-text TEXT] [--force]   (see profile.rs)
+//!   ok-tts card-voice --card CARD.png [--set VOICE.okvoice | --remove]   (a character's own voice; see cardvoice.rs)
 //!   ok-tts say    --text TEXT [--personality 00] [--age 18] [--out line.ogg|line.wav] [--greedy]
 //!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
 //!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
@@ -13,8 +18,10 @@
 
 mod log;
 mod parent;
+mod profile;
 mod audio;
 mod bench;
+mod cardvoice;
 mod codec;
 mod consistency;
 mod engine;
@@ -24,6 +31,7 @@ mod server;
 mod speaker;
 mod talker;
 mod text;
+mod voicemgr;
 mod weights;
 
 use std::collections::HashMap;
@@ -31,7 +39,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use crate::engine::{default_model_dir, Engine, SAMPLE_RATE};
+use crate::engine::{default_base_model_dir, default_model_dir, Engine, SAMPLE_RATE};
 use crate::talker::GenConfig;
 
 struct Args {
@@ -121,6 +129,8 @@ fn main() {
         "parity" => cmd_parity(&args),
         "bench" => cmd_bench(&args),
         "consistency" => cmd_consistency(&args),
+        "profile" => cmd_profile(&args),
+        "card-voice" => cmd_card_voice(&args),
         "speaker-sim" => args.opts.get("base").context("--base is required")
             .and_then(|b| consistency::similarity(Path::new(b), &args.positional)),
         _ => {
@@ -145,10 +155,82 @@ fn cmd_serve(args: &Args) -> Result<()> {
     let later: usize = args.opts.get("stream-later-frames").map(|v| v.parse()).transpose()?.unwrap_or(4);
     // The server keeps its own copy of the voices, so voice lookups and cached lines never wait for the engine.
     let voice_table = text::Voices::load(&voices)?;
-    server::serve(port, 8, voice_table, move || {
+    let profiles_dir = profiles_dir(args);
+    let profiles = profile::load_all(&profiles_dir)?;
+    let base = args.opts.get("base").map(PathBuf::from).or_else(default_base_model_dir);
+    let backend = match args.opts.get("backend").map(String::as_str) {
+        Some("design") => "design",
+        Some("base") => "base",
+        Some(other) => bail!("--backend must be base or design, not {other}"),
+        None if !profiles.is_empty() && base.is_some() => "base",
+        None => "design",
+    };
+    if backend == "base" {
+        let base = base.context("Base model not found; pass --base <Qwen3-TTS-12Hz-1.7B-Base snapshot dir> or set OK_TTS_BASE_MODEL")?;
+        if profiles.is_empty() {
+            bail!("no voice profiles in {}; run ok-tts profile", profiles_dir.display());
+        }
+        let missing: Vec<String> = profile::all_choices(&voice_table, None).iter().map(profile::profile_id).filter(|id| !profiles.contains_key(id)).collect();
+        crate::log!("ok-tts: backend base, {} profiles from {}{}", profiles.len(), profiles_dir.display(),
+                    if missing.is_empty() { String::new() } else { format!(" (missing {}: {})", missing.len(), missing.join(" ")) });
+        let tags = profiles.iter().map(|(id, p)| (id.clone(), p.tag())).collect();
+        // The speaker encoder (CPU) turns new candidate voices into embeddings while the server runs.
+        let store = weights::Store::open(&base.join("model.safetensors"))?;
+        let encoder = speaker::SpeakerEncoder::load(&store).context("speaker encoder")?;
+        drop(store);
+        let design = Some(model.clone()).filter(|m| m.join("model.safetensors").is_file());
+        let voices_path = voices.clone();
+        let base_voices = voicemgr::BaseVoices::new(tags, profiles_dir.clone(), base.clone(), design, voices_path, positions, encoder);
+        return server::serve(port, 8, voice_table, Some(base_voices), move || {
+            let mut engine = Engine::load(&base, &voices, positions)?;
+            engine.profiles = Some(profiles);
+            engine.stream_later_frames = later.max(1);
+            Ok(engine)
+        });
+    }
+    crate::log!("ok-tts: backend design (VoiceDesign)");
+    server::serve(port, 8, voice_table, None, move || {
         let mut engine = Engine::load(&model, &voices, positions)?;
         engine.stream_later_frames = later.max(1);
         Ok(engine)
+    })
+}
+
+fn profiles_dir(args: &Args) -> PathBuf {
+    args.opts.get("profiles").map(PathBuf::from).unwrap_or_else(|| exe_dir().join("profiles"))
+}
+
+fn cmd_card_voice(args: &Args) -> Result<()> {
+    let card = PathBuf::from(args.opts.get("card").context("--card is required")?);
+    if let Some(v) = args.opts.get("set") {
+        let voice = profile::Profile::load(Path::new(v))?;
+        cardvoice::write_file(&card, Some(&voice))?;
+        println!("stored voice {} (tag {}) in {}", voice.meta.id, voice.tag(), card.display());
+    } else if args.flags.iter().any(|f| f == "remove") {
+        cardvoice::write_file(&card, None)?;
+        println!("removed the voice from {}", card.display());
+    }
+    match cardvoice::read_file(&card)? {
+        Some(p) => println!("{}", serde_json::to_string_pretty(&serde_json::json!({"tag": p.tag(), "meta": p.meta, "reference_ogg_bytes": p.ref_ogg.len()}))?),
+        None => println!("no voice in {}", card.display()),
+    }
+    Ok(())
+}
+
+fn cmd_profile(args: &Args) -> Result<()> {
+    let (design, voices) = resolve(args)?;
+    let opt = |k: &str| args.opts.get(k).cloned();
+    let list = |k: &str| opt(k).map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect::<Vec<_>>());
+    profile::build(&profile::BuildArgs {
+        design,
+        base: opt("base").map(PathBuf::from).or_else(default_base_model_dir).context("Base model not found; pass --base")?,
+        voices,
+        out: profiles_dir(args),
+        keys: list("keys"),
+        ages: list("ages").map(|a| a.iter().map(|v| v.parse()).collect::<Result<Vec<u32>, _>>()).transpose()?,
+        ref_text: opt("ref-text").unwrap_or_else(|| profile::DEFAULT_REF_TEXT.into()),
+        force: args.flags.iter().any(|f| f == "force"),
+        positions: max_positions(args),
     })
 }
 

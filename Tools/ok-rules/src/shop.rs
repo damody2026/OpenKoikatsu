@@ -245,7 +245,10 @@ fn loan_offer(r: &Value) -> Result<Value, String> {
     let p = profile(r.get("profile"));
     let amount = n(r, "amount") as i64;
     let needs = p.get("money").and_then(|m| m.get("money_needs")).and_then(Value::as_array).map(|a| !a.is_empty()).unwrap_or(false);
-    let needy = (rel.cash >= 0 && rel.cash < amount) || needs;
+    // Tight for her week (the same reading that has her ask him to lend: mind::money_stress), not only less in hand
+    // than he offers: she asked to borrow with ¥73, he offered 50, and the rule had her turn it down.
+    let tight = crate::mind::money_stress(&rel, &p).0 >= 70.0;
+    let needy = (rel.cash >= 0 && rel.cash < amount) || needs || tight;
     let pride = profile_int(&p, "money", "treat_pride", 50);
     Ok(json!({"lean": if needy && rel.trust >= 30.0 { "accept" } else { "decline" }, "insist": if needy { 0.5 } else { pride as f32 / 100.0 }}))
 }
@@ -587,6 +590,14 @@ mod tests {
 
 
     use super::*;
+
+    #[test]
+    fn short_for_her_week_she_takes_a_loan_she_asked_for() {
+        let r = json!({"amount": 50, "relation": {"id": "a", "cash": 73, "trust": 60.0}, "profile": {"money": {"spending_style": "normal"}}});
+        assert_eq!(loan_offer(&r).unwrap()["lean"], "accept");
+        let rich = json!({"amount": 50, "relation": {"id": "a", "cash": 900, "trust": 60.0}, "profile": {"money": {"spending_style": "normal"}}});
+        assert_eq!(loan_offer(&rich).unwrap()["lean"], "decline");
+    }
     use crate::tuning::Tuning;
 
     fn rel(v: Value) -> Value {

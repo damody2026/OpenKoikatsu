@@ -355,6 +355,9 @@ bool AOKStreetSocialScene::ResolveChoice(const FString& Id,const FString& Option
 // Past the deadline her lean is taken (or the first option when she has none).
 void AOKStreetSocialScene::TickChoices(){
  auto& S=*State;const double Now=SceneTime();
+ // Her give_money still waiting after half a minute: the judge never answered; it goes through as she said.
+ {const double Wall=FPlatformTime::Seconds();TArray<int32> Due;for(const auto& P:S.PendingGiveMoney)if(Wall-P.Value.Value>30.0)Due.Add(P.Key);
+  for(const int32 G:Due){const int64 Amount=S.PendingGiveMoney[G].Key;S.PendingGiveMoney.Remove(G);GiveMoneyNow(G,Amount);}}
  for(int32 I=S.Choices.Num()-1;I>=0;--I){
   if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
   FOKStreetPendingChoice Done=MoveTemp(S.Choices[I]);S.Choices.RemoveAt(I);

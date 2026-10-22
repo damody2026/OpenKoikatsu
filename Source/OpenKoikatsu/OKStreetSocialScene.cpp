@@ -255,7 +255,7 @@ struct FOKStreetSceneState {
  // NPC idles: when each last moved, how long she has stood still, and whether her current stop was lengthened.
  TMap<int32,int32> IdlePose;TMap<int32,double> LastMovedAt,StillSince;TMap<int32,float> LastWalk,PrevDwell;int32 ProbeStep=-1;double ProbeAt=0;FString ProbeWhy;TArray<TSharedPtr<FJsonValue>> ProbeRows; // OK_STREET_UI_PROBE
  // Campus (OKStreetSocialCampus.inl): upstairs commute targets, studying, stair/office proximity, attendance, exams.
- TMap<int32,FVector> CommuteFinal;TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
+ TMap<int32,FVector> CommuteFinal;TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
  // Bank app, price alerts, net worth chart and the heroines' own accounts (OKStreetSocialBank.inl).
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
@@ -419,6 +419,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool TtsEnabled=false,TtsPending=false;FString TtsEndpoint=TEXT("http://127.0.0.1:47860"),TtsCacheDir,TtsSettingsPath,TtsNotice;int32 TtsAge=18,TtsLines=0,TtsFallbacks=0;uint32 TtsSerial=0;double TtsRequestedAt=0,TtsTimeout=15;bool TtsSmoke=false,TtsSmokeStarted=false;
  // Player (male) TTS line before her reply: MalePhase 0 none, 1 waiting for the clip, 2 speaking, 3 done/skipped.
  FString PlayerCardName,PlayerNameDraft,MaleTone=TEXT("m0"),MaleVoiceId,MaleLineOverride,LastBranchId,TtsVoiceInfo;bool MaleTtsPending=false,MaleAddressed=false;int32 MalePhase=0,TtsSmokeTopics=0;double MaleRequestedAt=0;uint32 MaleSerial=0;TArray<TSharedPtr<FString>> MaleToneOptions;
+ // Her own voice (OKStreetSocialVoicePick.inl): candidates from ok-tts, whether her card holds a voice.
+ struct FVoiceCandidate {FString Tag,Reference,Preview;};TArray<FVoiceCandidate> VoicePickCandidates;bool VoicePickOpen=false,VoicePickBusy=false,CardHasVoice=false;FString VoicePickDescription,VoicePickNotice,TtsVoiceInstruct;int32 VoicePickTarget=INDEX_NONE;
  FOKStreetStore Store;
  TArray<FOKStreetAgentSim> Agents;
  TArray<FRotator> Rotations,RenderedRotations;
@@ -948,6 +950,7 @@ bool AOKStreetSocialScene::QueueNode(int32 Chosen,const FString& Category,const 
 }
 
 #include "OKStreetSocialInvitations.inl"
+#include "OKStreetSocialVoicePick.inl"
 #include "OKStreetSocialVoice.inl"
 #include "OKStreetSocialTouchReaction.inl"
 
@@ -1310,13 +1313,13 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    {bool Confessed=false;Verdict->TryGetBoolField(TEXT("confessed"),Confessed);
     // Her own words turned him down ("I want to be the only one; you can't give that, so don't ask"): that is her
     // answer, not a dice roll that made her his girlfriend anyway (accepts: false).
-    bool Accepts=true;if(Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts)&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;
+    bool Accepts=true;const bool Answered=Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts);if(Answered&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;
      // Not a yes yet ("let me think about it"): her answer may come later in another talk (the judge is told).
      if(!L->ConfessionPending.Contains(Character))L->ConfessionPending.Add(Character,OKStreetMindNow(*L));}
     if(Confessed)L->ConfessionPending.Remove(Character);
     if(Confessed&&!Ends&&L->Target==Character&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
      &&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage!=TEXT("lover")){
-     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words"),Character);Weak->RelationshipEvent(TEXT("confession"));}}
+     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words%s"),Character,Answered&&Accepts?TEXT("; she said yes"):TEXT(""));Weak->RelationshipEvent(TEXT("confession"),Answered&&Accepts);}}
    {bool BreaksUp=false;Verdict->TryGetBoolField(TEXT("breaks_up"),BreaksUp);
     if(BreaksUp&&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage==TEXT("lover"))Weak->BreakUpSaid(Character);}
    {bool Quiet=false;Verdict->TryGetBoolField(TEXT("quiet"),Quiet);
@@ -1378,7 +1381,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请").
   {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())Weak->RecordPayAgreed(Character,Payer);}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
-  {double Lend=0;if(Verdict->TryGetNumberField(TEXT("he_lends"),Lend)&&Lend>0){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f"),Character,Lend);L->LendAskGirl=INDEX_NONE;Weak->StartLoan(int32(Lend));}}
+  {double Lend=0;if(Verdict->TryGetNumberField(TEXT("he_lends"),Lend)&&Lend>0){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f"),Character,Lend);L->LendAskGirl=INDEX_NONE;
+    if(L->PendingGiveMoney.Remove(Character))UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d her give_money is this loan, not a gift too"),Character);Weak->StartLoan(int32(Lend));}
+   else if(const TPair<int64,double>* Give=L->PendingGiveMoney.Find(Character)){const int64 Amount=Give->Key;L->PendingGiveMoney.Remove(Character);Weak->GiveMoneyNow(Character,Amount);}}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).
   {TArray<FString> Told;FString One;const TArray<TSharedPtr<FJsonValue>>* List=nullptr;if(Verdict->TryGetArrayField(TEXT("told_about"),List))for(const auto& V:*List){FString N;if(V.IsValid()&&V->TryGetString(N)&&!N.IsEmpty())Told.Add(N);}else if(Verdict->TryGetStringField(TEXT("told_about"),One)&&!One.IsEmpty())Told.Add(One);for(const FString& N:Told)Weak->ToldAboutRival(Character,N);}
   Weak->ExecuteFreeTalkAction(Character,Id,DoNow);
@@ -1447,6 +1452,7 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
  const bool bStreamRequest=S.FreeTalkSpeechStreamed[Index]==0;
  Body->SetStringField(TEXT("channel"),S.FreeTalkSpeechChannel);Body->SetNumberField(TEXT("generation"),Generation);Body->SetNumberField(TEXT("segment_index"),Index);
  Body->SetStringField(TEXT("request_id"),FString::Printf(TEXT("%s-%d-%d-%s"),*S.FreeTalkSpeechChannel.Right(8),Generation,Index,bStreamRequest?TEXT("s"):TEXT("f")));
+ if(const FString Card=OKStreetCardFor(S,Character);!Card.IsEmpty())Body->SetStringField(TEXT("card"),Card);
  FString Payload;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Payload));
  auto Request=FHttpModule::Get().CreateRequest();
  Request->SetVerb(TEXT("POST"));Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(S.TtsTimeout);
@@ -1622,7 +1628,7 @@ void AOKStreetSocialScene::ToggleLanguage(){
  State->Message=State->Japanese?OKT(TEXT("ui.scene.voice_policy_ja")):OKT(TEXT("ui.scene.voice_policy_zh_first"));RefreshUI();
 }
 
-void AOKStreetSocialScene::RelationshipEvent(const FString& Event){
+void AOKStreetSocialScene::RelationshipEvent(const FString& Event,bool bHerYes){
  if(!State)return;
  UE_LOG(LogTemp,Display,TEXT("Street relationship event requested: %s (target=%d node=%d pending=%d collected=%d)"),*Event,State->Target,State->Node,State->RelationshipPending?1:0,State->CollectedActive?1:0);
  if(State->Target==INDEX_NONE||State->Node!=INDEX_NONE||State->RelationshipPending||State->CollectedActive){
@@ -1633,7 +1639,7 @@ void AOKStreetSocialScene::RelationshipEvent(const FString& Event){
  auto& S=*State;
  // Whether it happens and how is the rules' (talk.rs talk_event).
  const auto& Meta=S.Manifest.Characters[S.Target];
- auto Ask=OKRulesTalkRequest(S,TEXT("talk_event"),OKStreetViewRelation(S.Store,OKStreetStableId(Meta),S.Manifest.TalkBudget),&Meta);Ask->SetStringField(TEXT("event"),Event);Ask->SetNumberField(TEXT("roll"),S.Random.RandRange(0,99));
+ auto Ask=OKRulesTalkRequest(S,TEXT("talk_event"),OKStreetViewRelation(S.Store,OKStreetStableId(Meta),S.Manifest.TalkBudget),&Meta);Ask->SetStringField(TEXT("event"),Event);Ask->SetNumberField(TEXT("roll"),S.Random.RandRange(0,99));Ask->SetBoolField(TEXT("her_yes"),bHerYes);
  // A very shy girl answers differently with people around (another girl within 10 m of her, or a busy place now).
  if(Event==TEXT("confession")&&S.Agents.IsValidIndex(S.Target-1)){
   const FVector Her=S.Agents[S.Target-1].Position;int32 Others=0;
@@ -1940,6 +1946,7 @@ void AOKStreetSocialScene::RebuildUI(){
    .OnSelectionChanged_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](TSharedPtr<FString> Item,ESelectInfo::Type Info){if(!Weak.IsValid()||!Item.IsValid()||Info==ESelectInfo::Direct)return;const int32 I=Weak->State->MaleToneOptions.IndexOfByKey(Item);if(I!=INDEX_NONE)Weak->SetMaleTone(I);})
    [SNew(STextBlock).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(OKT(TEXT("ui.scene.his_tone_label"))+(Weak.IsValid()?Weak->MaleToneLabel():FString()));})]];
   if(S.Target!=INDEX_NONE&&!S.TtsVoiceInfo.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.TtsVoiceInfo)).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Regular",11))];
+  AddVoicePickUI(Box);
  }
  if(!S.TtsNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TtsNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.ShowDebug?OKT(TEXT("ui.scene.collapse_heroine_stats")):OKT(TEXT("ui.scene.heroine_stats_view_edit")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->ShowDebug=!Weak->State->ShowDebug;Weak->RefreshUI();}return FReply::Handled();})];

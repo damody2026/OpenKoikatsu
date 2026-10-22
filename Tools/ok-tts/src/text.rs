@@ -169,6 +169,25 @@ impl Voices {
         Ok(Self { file })
     }
 
+    /// Ages with their own design besides 12 (which is one design for everyone).
+    pub fn ages(&self) -> Vec<u32> {
+        let mut a: Vec<u32> = self.file.age_hold.keys().filter_map(|k| k.parse().ok()).collect();
+        a.sort();
+        a
+    }
+
+    pub fn female_keys(&self) -> Vec<String> {
+        let mut k: Vec<String> = self.file.voices.keys().cloned().collect();
+        k.sort();
+        k
+    }
+
+    pub fn male_keys(&self) -> Vec<String> {
+        let mut k: Vec<String> = self.file.male.keys().cloned().collect();
+        k.sort();
+        k
+    }
+
     /// Game sends ints (0, -13) or strings ("00"); prompts are keyed "00", "-13".
     /// "m0".."m9" select a male tone (the player character); age does not apply to them.
     pub fn choose(&self, personality: &str, age: u32) -> VoiceChoice {
