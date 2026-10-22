@@ -597,6 +597,20 @@ sat = "周六"
 sun = "周日"
 
 [weather]
+night_walk = "天色已晚，路上只剩你们两个人"
 under_his_umbrella = "外面在下雨，你们两个挤在他的伞下走"
 each_umbrella = "外面在下雨，你们各撑一把伞"
 no_umbrella = "外面在下雨，你们都没带伞"
+
+[errand]
+only_at_office = "这要到行政大楼的学务处才能办"
+nothing_owed = "你没有欠学费，不用办"
+no_money = "你身上和户头都没钱可以缴"
+loan_done = "你在学务处办好了助学贷款，{amount} 直接缴了欠的学费；贷款共 {owed}，毕业后半年开始还"
+paid_part = "你在学务处缴了 {paid} 学费，还欠 {left}"
+paid_all = "你在学务处缴清了 {paid} 的学费"
+fact_loan = "你有助学贷款 {owed}（毕业后才开始还）"
+
+[events]
+today = "今天是{what}"
+coming = "{date}（再 {days} 天）是{what}"

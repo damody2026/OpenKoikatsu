@@ -1330,6 +1330,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     if(Verdict->TryGetObjectField(TEXT("she_photo"),Shot)&&Shot->IsValid()){FString Topic,Subject;(*Shot)->TryGetStringField(TEXT("topic"),Topic);(*Shot)->TryGetStringField(TEXT("subject"),Subject);SendToo=Sends;
      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d takes a photo (%s, %s)%s"),Character,*Topic,*Subject,SendToo?TEXT(", sends it"):TEXT(""));Weak->HerPhoto(Character,Topic,Subject,SendToo);}
     else if(Sends){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d sends him a photo"),Character);Weak->SendPhoto(OKStreetStableId(L->Manifest.Characters[Character]),Character,SendField);}}
+   // Her own business at the office (errand.rs her_errand): a student loan, paying her fees.
+   {FString Errand;Verdict->TryGetStringField(TEXT("her_errand"),Errand);if(!Errand.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d errand %s"),Character,*Errand);Weak->HerErrand(Character,Errand);}}
    // Her things and his given, lent or returned (items.rs: matched to what they really hold, the rest refused).
    {auto Request=OKRulesRequest(TEXT("items_judge"));bool Any=false;
     for(const TCHAR* K:{TEXT("she_gives"),TEXT("she_lends_item"),TEXT("she_returns_item"),TEXT("he_lends_item"),TEXT("he_returns_item")})if(const TSharedPtr<FJsonValue> V=Verdict->TryGetField(K);V.IsValid()&&!V->IsNull()){

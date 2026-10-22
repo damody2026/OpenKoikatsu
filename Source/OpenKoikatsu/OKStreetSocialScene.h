@@ -650,6 +650,7 @@ private:
  // OKStreetSocialAppointments.inl (series.rs): a meeting that repeats every week, the next one booked, calling it off.
  void StartSeries(int32 Character,const FString& Place,const TSharedPtr<FJsonValue>& Repeat);
  void TickSeries();
+ void HerErrand(int32 Character,const FString& Kind); // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
  void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)
  void TickEffect();
  void TickUmbrella(); // OKStreetSocialPhotos.inl: the umbrella on a rainy walk (weather.rs walk_style)

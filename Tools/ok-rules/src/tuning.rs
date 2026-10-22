@@ -3,6 +3,7 @@
 use crate::activities::ActivitiesTuning;
 use crate::bonds::BondTuning;
 use crate::catalog::Catalog;
+use crate::events::EventsTuning;
 use crate::heroine::ActsTuning;
 use crate::needs::NeedsTuning;
 use crate::places::PlacesTuning;
@@ -16,6 +17,7 @@ const BONDS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/
 const NEEDS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/needs.toml");
 const PLACES_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/places.toml");
 const ACTS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/acts.toml");
+const EVENTS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/events.toml");
 const ACTIVITIES_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/activities.toml");
 // The property market lives beside the rules folder (it is game data the scene also reads for its displays).
 const CATALOG_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/catalog.json");
@@ -28,6 +30,8 @@ pub struct Tuning {
     pub acts: ActsTuning,
     /// The activities together (activities.toml), the data's own names.
     pub activities: ActivitiesTuning,
+    /// Festivals and exam weeks (events.toml).
+    pub events: EventsTuning,
     /// The base data in yuan (Regions/CN) and, per region, the same converted to its money (region.rs).
     pub property: PropertyData,
     pub catalog: Catalog,
@@ -53,6 +57,7 @@ impl Tuning {
         let places = load_into(dir, "places", PLACES_BUILTIN, &mut sources)?;
         let acts: ActsTuning = load_into(dir, "acts", ACTS_BUILTIN, &mut sources)?;
         let activities: ActivitiesTuning = load_into(dir, "activities", ACTIVITIES_BUILTIN, &mut sources)?;
+        let events: EventsTuning = load_into(dir, "events", EVENTS_BUILTIN, &mut sources)?;
         let property_json = load_property(dir, &mut sources)?;
         let property = PropertyData::parse(&property_json);
         let catalog = Catalog::parse(&load_data(dir, "catalog.json", CATALOG_BUILTIN, &mut sources)?);
@@ -96,7 +101,7 @@ impl Tuning {
             }
             bonds_by_lang.insert(lang.to_string(), b);
         }
-        Ok(Tuning { bonds, needs, places, acts, activities, activities_by_lang, property, catalog, regions, properties, catalogs, places_by_lang, property_jsons, acts_by_lang, bonds_by_lang, texts, sources })
+        Ok(Tuning { bonds, needs, places, acts, activities, events, activities_by_lang, property, catalog, regions, properties, catalogs, places_by_lang, property_jsons, acts_by_lang, bonds_by_lang, texts, sources })
     }
 
     /// The catalog / property market in a region's money (the request's region: locale::region).

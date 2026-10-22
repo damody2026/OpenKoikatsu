@@ -16,7 +16,9 @@ pub mod campus;
 pub mod catalog;
 pub mod day;
 pub mod effects;
+pub mod errand;
 pub mod estate;
+pub mod events;
 pub mod games;
 pub mod heroine;
 pub mod invite;
@@ -106,6 +108,7 @@ impl Rules {
         let tuning = Tuning::load(tuning_dir.as_deref())?;
         tr::install(&tuning.texts);
         region::install(&tuning.regions);
+        events::install(&tuning.events);
         Ok(Rules { tuning_dir, tuning: RwLock::new(tuning), talk: RwLock::new(None) })
     }
 
@@ -113,6 +116,7 @@ impl Rules {
         let fresh = Tuning::load(self.tuning_dir.as_deref())?;
         tr::install(&fresh.texts);
         region::install(&fresh.regions);
+        events::install(&fresh.events);
         *self.tuning.write().map_err(|_| "tuning_lock_poisoned")? = fresh;
         let paths = self.talk.read().map_err(|_| "talk_lock_poisoned")?.as_ref().map(|t| t.paths.clone());
         if let Some(paths) = paths {
@@ -172,6 +176,8 @@ impl Rules {
                     .or_else(|| work::eval(&kind, &request))
                     .or_else(|| series::eval(&kind, &request))
                     .or_else(|| weather::eval(&kind, &request))
+                    .or_else(|| errand::eval(&kind, &request))
+                    .or_else(|| events::eval(&kind, &request))
                     .or_else(|| reading::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| catalog::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))

@@ -571,7 +571,10 @@ FString AOKStreetSocialScene::ThingsFacts(int32 Character) const{
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character)||Character<=0)return FString();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Request=OKRulesHeroineRequest(S,TEXT("items_facts"),Id);OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);FString Text=Out.IsValid()?Out->GetStringField(TEXT("text")):FString();
- for(const FString& More:{PhotoFacts(Character),ReadingFacts(Character)})if(!More.IsEmpty())Text+=(Text.IsEmpty()?FString():FString(OKT(TEXT("ui.economy.semicolon_mark"))))+More; // one fact from the next: "；"
+ FString Loan;{auto Ask=OKRulesRequest(TEXT("errand_facts"));OKRulesPutExt(S,Ask);Ask->SetStringField(TEXT("girl"),Id);if(const TSharedPtr<FJsonObject> L=OKRulesEval(S,Ask))Loan=L->GetStringField(TEXT("text"));}
+ // Festivals today and coming soon (events.rs): hers to bring up or ask him to, or not.
+ FString Events;{auto Ask=OKRulesRequest(TEXT("events_facts"));Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay);if(const TSharedPtr<FJsonObject> E=OKRulesEval(S,Ask))Events=E->GetStringField(TEXT("text"));}
+ for(const FString& More:{PhotoFacts(Character),ReadingFacts(Character),Loan,Events})if(!More.IsEmpty())Text+=(Text.IsEmpty()?FString():FString(OKT(TEXT("ui.economy.semicolon_mark"))))+More; // one fact from the next: "；"
  return Text;
 }
 

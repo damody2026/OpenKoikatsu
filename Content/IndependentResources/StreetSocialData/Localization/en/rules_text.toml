@@ -597,6 +597,20 @@ sat = "Saturday"
 sun = "Sunday"
 
 [weather]
+night_walk = "It is late; the street is empty but for the two of you"
 under_his_umbrella = "It is raining; the two of you walk close under his umbrella"
 each_umbrella = "It is raining; you each hold an umbrella"
 no_umbrella = "It is raining and neither of you has an umbrella"
+
+[errand]
+only_at_office = "This can only be done at the student affairs office in the administration building"
+nothing_owed = "You owe no fees; there is nothing to do"
+no_money = "You have no money in hand or in the bank to pay with"
+loan_done = "You took out a student loan at the office: {amount} went straight to the fees you owed; the loan is {owed}, repaid from half a year after graduating"
+paid_part = "You paid {paid} of your fees at the office; {left} is still owed"
+paid_all = "You paid off your fees ({paid}) at the office"
+fact_loan = "You have a student loan of {owed} (repaid after graduating)"
+
+[events]
+today = "Today is {what}"
+coming = "{what} is on {date} (in {days} days)"
