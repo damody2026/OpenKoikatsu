@@ -29,11 +29,13 @@ pub mod plan;
 pub mod property;
 pub mod relation;
 pub mod rng;
+pub mod series;
 pub mod shop;
 pub mod social;
 pub mod talk;
 pub mod traits;
 pub mod venture;
+pub mod weather;
 pub mod work;
 pub mod tuning;
 
@@ -168,6 +170,8 @@ impl Rules {
                     .or_else(|| activities::eval(tuning.activities_in(locale::lang(&request)), &tuning.activities, tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| photos::eval(&kind, &request))
                     .or_else(|| work::eval(&kind, &request))
+                    .or_else(|| series::eval(&kind, &request))
+                    .or_else(|| weather::eval(&kind, &request))
                     .or_else(|| reading::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| catalog::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))

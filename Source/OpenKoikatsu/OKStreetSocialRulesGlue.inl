@@ -292,10 +292,10 @@ void OKRulesReadTables(FOKStreetSceneState& S){
   auto Kind=[](const FString& K){using E=EOKStreetActivityKind;return K==TEXT("photo")?E::Photo:K==TEXT("facility")?E::Facility:K==TEXT("walk")?E::Walk:K==TEXT("restroom")?E::Restroom:K==TEXT("sleep")?E::Sleep:K==TEXT("solo")?E::Solo:E::Pair;};
   for(const auto& V:Out->GetArrayField(TEXT("activities"))){const auto O=V->AsObject();
    auto Text=MakeUnique<FOKStreetActivityText>();Text->Id=O->GetStringField(TEXT("id"));Text->Name=O->GetStringField(TEXT("name"));Text->ZhName=O->GetStringField(TEXT("own_name"));
-   Text->Place=O->GetStringField(TEXT("place"));Text->Anchor=O->GetStringField(TEXT("anchor"));Text->FemaleClip=O->GetStringField(TEXT("female_clip"));Text->MaleClip=O->GetStringField(TEXT("male_clip"));
+   Text->Place=O->GetStringField(TEXT("place"));Text->Anchor=O->GetStringField(TEXT("anchor"));Text->FemaleClip=O->GetStringField(TEXT("female_clip"));Text->MaleClip=O->GetStringField(TEXT("male_clip"));O->TryGetStringField(TEXT("effect"),Text->Effect);
    FOKStreetActivity A;A.Id=*Text->Id;A.Name=*Text->Name;A.ZhName=*Text->ZhName;A.Place=*Text->Place;A.Kind=Kind(O->GetStringField(TEXT("kind")));A.Code=int32(O->GetNumberField(TEXT("code")));
    // Absent is a null pointer, as the code reading them expects (no clip: the pose's own).
-   A.Anchor=Text->Anchor.IsEmpty()?nullptr:*Text->Anchor;A.FemaleClip=Text->FemaleClip.IsEmpty()?nullptr:*Text->FemaleClip;A.MaleClip=Text->MaleClip.IsEmpty()?nullptr:*Text->MaleClip;
+   A.Anchor=Text->Anchor.IsEmpty()?nullptr:*Text->Anchor;A.FemaleClip=Text->FemaleClip.IsEmpty()?nullptr:*Text->FemaleClip;A.MaleClip=Text->MaleClip.IsEmpty()?nullptr:*Text->MaleClip;A.Effect=Text->Effect.IsEmpty()?nullptr:*Text->Effect;
    All.Add(A);OKStreetActivityTexts().Add(MoveTemp(Text));}
   UE_LOG(LogTemp,Display,TEXT("Street activities: %d from the rules"),All.Num());}
  // Campus tables for the displays (academics.rs).

@@ -94,7 +94,7 @@ void AOKStreetSocialScene::TickPhotos(){
     auto Request=OKRulesRequest(TEXT("drawing_made"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),HerId);Request->SetStringField(TEXT("girl_name"),S.Manifest.Characters[P.Girl].Name);
     Request->SetNumberField(TEXT("minute"),double(OKStreetMindNow(S)%1440));Request->SetStringField(TEXT("place"),Place);Request->SetStringField(TEXT("place_name"),Where?FString(Where->Name):FString());Request->SetStringField(TEXT("file"),P.Path);
     if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request)){auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);
-     if(CommitStore(MoveTemp(Candidate))){S.FreeTalkNotice=OKMsg(TEXT("ui.photos.she_finished_drawing"),{{TEXT("name"),S.Manifest.Characters[P.Girl].Name}});S.TellHer.Add(S.FreeTalkNotice);RefreshUI();}
+     if(CommitStore(MoveTemp(Candidate))){S.FreeTalkNotice=OKMsg(TEXT("ui.photos.she_finished_drawing"),{{TEXT("name"),S.Manifest.Characters[P.Girl].Name}});S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),S.FreeTalkNotice}}));RefreshUI();}
      UE_LOG(LogTemp,Display,TEXT("Street photo: actor=%d drew %s (%s)"),P.Girl,*Out->GetStringField(TEXT("item")),*P.Path);}
     continue;}
    // Who is in it: him, the two of them, or neither (the view itself).
@@ -181,7 +181,7 @@ void AOKStreetSocialScene::HelpedHerWork(int32 Girl,const FString& Place,int32 M
  Request->SetNumberField(TEXT("crowd"),OKRulesCrowdAt(S,Place,Now.GetHour()+Now.GetMinute()/60.0));Request->SetBoolField(TEXT("raining"),RainingAt(S.Store.CalendarDay,Now.GetHour()*60+Now.GetMinute()));Request->SetNumberField(TEXT("seed"),FMath::Rand());
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
  auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;
- const FString Fact=Out->GetStringField(TEXT("fact"));S.TellHer.Add(Fact);S.FreeTalkNotice=Fact;RefreshUI();
+ const FString Fact=Out->GetStringField(TEXT("fact"));S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}}));S.FreeTalkNotice=Fact;RefreshUI();
  MindRemember(Girl,TEXT("activity"),Fact,Where?FString(Where->Name):Place,0.6f);
  UE_LOG(LogTemp,Display,TEXT("Street work: actor=%d helped (%s) %d min: handed %d, stopped %d, total %d"),Girl,*Task,Minutes,int32(Out->GetNumberField(TEXT("handed"))),int32(Out->GetNumberField(TEXT("stopped"))),int32(Out->GetNumberField(TEXT("progress"))));
 }
@@ -199,4 +199,63 @@ void AOKStreetSocialScene::PhotoWalkStop(int32 Girl){
  S.HerPhotos.Add(P);++S.PhotoWalkStops; // taken next frame from his view of her (TickPhotos)
  S.FreeTalkNotice=OKMsg(TEXT("ui.photos.walk_stop"),{{TEXT("n"),S.PhotoWalkStops}});RefreshUI();
  UE_LOG(LogTemp,Display,TEXT("Street photo walk: stop %d (%s)"),S.PhotoWalkStops,*P.Topic);
+}
+
+// An activity's effect while it runs (activities.toml effect). "explosion": Megumin chants for a few seconds, then far
+// out in the direction she faces a fireball swells and fades, a hard orange flash lights the field, the camera shakes.
+void AOKStreetSocialScene::StartEffect(const FString& Kind,int32 Girl){
+ auto& S=*State;if(!S.Agents.IsValidIndex(Girl-1))return;
+ S.EffectKind=Kind;S.EffectAt=SceneTime()+4.0; // the chant first
+ const FVector Facing=FRotator(0,S.Rotations[Girl].Yaw+90.f,0).Vector();S.EffectWhere=S.Agents[Girl-1].Position+Facing*3500.f+FVector(0,0,900); // above the roofs between
+ UE_LOG(LogTemp,Display,TEXT("Street effect: %s by actor=%d at %s in 4 s"),*Kind,Girl,*S.EffectWhere.ToCompactString());
+}
+
+void AOKStreetSocialScene::TickEffect(){
+ auto& S=*State;if(S.EffectKind.IsEmpty())return;const double T=SceneTime()-S.EffectAt;if(T<0)return;
+ if(S.EffectKind==TEXT("explosion")){
+  // The fireball: three nested spheres (white core, orange, red smoke), growing for 1.5 s, gone by 4 s.
+  if(S.EffectActors.IsEmpty()){UMaterialInterface* Tint=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+   auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));if(!Mesh){S.EffectKind.Reset();return;}
+   for(const FLinearColor& C:{FLinearColor(1.f,.95f,.7f),FLinearColor(1.f,.45f,.05f),FLinearColor(.35f,.08f,.03f)}){
+    auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(S.EffectWhere,FRotator::ZeroRotator);if(!A)continue;A->SetOwner(this);
+    auto* M=A->GetStaticMeshComponent();M->SetMobility(EComponentMobility::Movable);M->SetStaticMesh(Mesh);M->SetCollisionEnabled(ECollisionEnabled::NoCollision);M->SetCastShadow(false);
+    if(Tint){auto* D=UMaterialInstanceDynamic::Create(Tint,A);D->SetVectorParameterValue(TEXT("Color"),C);M->SetMaterial(0,D);}S.EffectActors.Add(A);}
+   auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetCastShadows(false);L->SetAttenuationRadius(12000.f);L->SetLightColor(FLinearColor(1.f,.55f,.2f));
+   L->SetWorldLocation(S.EffectWhere);L->RegisterComponent();AddInstanceComponent(L);S.EffectLight=L;
+   if(APlayerController* PC=GetWorld()->GetFirstPlayerController())if(PC->PlayerCameraManager)PC->PlayerCameraManager->StartCameraFade(0.f,.6f,.25f,FLinearColor(1.f,.85f,.6f),false,false); // the flash
+   // The camera from behind and above them, looking out at it, for as long as it lasts.
+   {const FVector Toward=(S.EffectWhere-S.Male).GetSafeNormal2D();S.PhotoViewLoc=S.Male-Toward*450.f+FVector(0,0,260);S.PhotoViewRot=(S.EffectWhere-S.PhotoViewLoc).Rotation();S.PhotoViewUntil=SceneTime()+4.5;}
+   UE_LOG(LogTemp,Display,TEXT("Street effect: explosion goes off"));}
+  const float Grow=FMath::Clamp(float(T/1.5),0.f,1.f),Fade=FMath::Clamp(float((4.0-T)/2.5),0.f,1.f);
+  for(int32 K=0;K<S.EffectActors.Num();++K)if(AActor* A=S.EffectActors[K].Get()){const float R=(6.f+K*3.f)*FMath::Sqrt(Grow)*(K==2?1.f+.4f*float(T/4.0):Fade);A->SetActorScale3D(FVector(FMath::Max(R,.01f)));A->SetActorLocation(S.EffectWhere+FVector(0,0,K==2?float(T)*120.f:0.f));}
+  if(UPointLightComponent* L=S.EffectLight.Get())L->SetIntensity(5.0e7f*Fade*Fade);
+  // The ground shakes under them for the first second.
+  if(T<1.0)S.PhotoViewRot+=FRotator(FMath::FRandRange(-.6f,.6f),FMath::FRandRange(-.6f,.6f),0); // the camera looking out at it shakes
+  if(T>4.0){for(auto& A:S.EffectActors)if(A.IsValid())A->Destroy();S.EffectActors.Reset();if(UPointLightComponent* L=S.EffectLight.Get())L->DestroyComponent();S.EffectLight.Reset();S.EffectKind.Reset();}
+ }
+}
+
+// On a walk together in the rain (an outing or a stroll): the rules say whether they walk under an umbrella and whose
+// (weather.rs walk_style; asked when the walk starts); she hears it as a fact. Shown as an umbrella over him, over the two
+// of them when they share it. Gone when the walk is over or the rain stops.
+void AOKStreetSocialScene::TickUmbrella(){
+ auto& S=*State;const int32 Girl=S.OutingGirl!=INDEX_NONE?S.OutingGirl:S.Companion;
+ const int64 Now=OKStreetMindNow(S);const bool Walking=Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&PlaceHere(S.Male).IsEmpty();
+ const bool Raining=Walking&&RainingAt(S.Store.CalendarDay,int32(Now%1440));
+ if(!Raining){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();S.WalkStyle.Reset();return;}
+ if(S.WalkStyle.IsEmpty()){
+  auto Request=OKRulesRequest(TEXT("walk_style"));Request->SetBoolField(TEXT("raining"),true);
+  TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));Request->SetArrayField(TEXT("his_items"),His);
+  Request->SetStringField(TEXT("stage"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Stage);
+  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
+  S.WalkStyle=Out->GetStringField(TEXT("style"));const FString Fact=Out->GetStringField(TEXT("fact"));if(!Fact.IsEmpty())S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}})); // a note of the game, not his words
+  UE_LOG(LogTemp,Display,TEXT("Street rain walk: actor=%d %s"),Girl,*S.WalkStyle);
+  if(S.WalkStyle!=TEXT("none")){
+   // A dark canopy (a flattened sphere) on a thin shaft.
+   auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));UMaterialInterface* Tint=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+   if(Mesh)if(auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator)){A->SetOwner(this);auto* M=A->GetStaticMeshComponent();M->SetMobility(EComponentMobility::Movable);M->SetStaticMesh(Mesh);M->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    if(Tint){auto* D=UMaterialInstanceDynamic::Create(Tint,A);D->SetVectorParameterValue(TEXT("Color"),FLinearColor(.05f,.08f,.2f));M->SetMaterial(0,D);}
+    A->SetActorScale3D(S.WalkStyle==TEXT("umbrella_shared")?FVector(1.6f,1.6f,.35f):FVector(1.1f,1.1f,.3f));S.Umbrella=A;}}
+ }
+ if(AActor* U=S.Umbrella.Get()){const FVector Over=S.WalkStyle==TEXT("umbrella_shared")?(S.Male+S.Agents[Girl-1].Position)*.5f:S.Male;U->SetActorLocation(Over+FVector(0,0,180));}
 }

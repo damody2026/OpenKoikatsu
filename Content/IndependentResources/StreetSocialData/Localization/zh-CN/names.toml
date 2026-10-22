@@ -61,6 +61,7 @@ lie_down = "和你躺在一起"
 share_food = "和你分食"
 
 [ui.name.activity]
+megumin_explosion = "看惠惠在操场放爆裂魔法"
 photo_walk = "一起边走边拍照（摄影散步）"
 help_her_work = "陪她做她自己的工作（例如在校门口发传单）"
 park_sketch = "在公园写生（她画画，你陪在旁边）"

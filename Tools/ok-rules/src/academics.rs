@@ -570,8 +570,24 @@ pub fn tables() -> Value {
     json!({"colleges": colleges, "depts": depts, "slot_start": SLOT_START, "slot_end": SLOT_END})
 }
 
+/// Which of his classes a shift would clash with (a shift booked over a class: he chooses, it is only said).
+/// Request: player (academic), day (game day of the shift), from, to (hours). Answer: course (name or "").
+fn class_clash(r: &Value) -> Result<Value, String> {
+    let me: Academic = serde_json::from_value(r.get("player").cloned().unwrap_or(json!({}))).map_err(|e| format!("player: {e}"))?;
+    let day = r.get("day").and_then(Value::as_i64).unwrap_or(0) as i32;
+    let (from, to) = (r.get("from").and_then(Value::as_f64).unwrap_or(0.0), r.get("to").and_then(Value::as_f64).unwrap_or(0.0));
+    let weekday = crate::calendar::date(day, from.max(4.0)).weekday as i32;
+    // Class slots: 0 is 09:00-12:00, 1 is 13:30-16:30.
+    let clash = me.courses.iter().find(|c| {
+        let (a, b) = if c.slot == 0 { (9.0, 12.0) } else { (13.5, 16.5) };
+        c.weekday == weekday && from < b && to > a
+    });
+    Ok(json!({"course": clash.map(|c| c.name.clone()).unwrap_or_default()}))
+}
+
 pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
+        "class_clash" => class_clash(r),
         "campus_tick" => tick(r),
         "campus_study" => study_flush(r),
         "campus_office" => office(r),
@@ -587,6 +603,15 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_shift_over_a_class_names_it_and_an_evening_one_does_not() {
+        // Day 0 (2010-09-01) is a Wednesday (weekday 2).
+        let player = json!({"courses": [{"name": "OS", "weekday": 2, "slot": 0}, {"name": "DS", "weekday": 2, "slot": 1}]});
+        assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 8.0, "to": 14.0})).unwrap()["course"], "OS");
+        assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 17.0, "to": 22.0})).unwrap()["course"], "");
+        assert_eq!(class_clash(&json!({"player": player, "day": 1, "from": 8.0, "to": 14.0})).unwrap()["course"], "");
+    }
 
     #[test]
     fn timetables() {

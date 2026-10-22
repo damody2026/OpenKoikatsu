@@ -211,7 +211,7 @@ struct FOKStreetSceneState {
  TMap<FString,FString> MindRecent;int64 NeedsTickMinute=-1,BondTickMinute=-1;
  // OKStreetSocialLife.inl
  int32 LifeWishDay=-1;TArray<FOKLifePose> LifePoses;double LifeCheckAt=0,LifeFaceAt=0,LifeWishAt=0;TMap<int32,double> LifeCooldown;TMap<int32,FVector> LifeRestore;
- TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
+ TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
  // OKStreetSocialPhoneInbox.inl: her history, the phone (messages, calls), and what is apart.
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
@@ -346,6 +346,10 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  struct FHerPhoto{int32 Girl=INDEX_NONE;FString Path,Topic,Subject,Album;double At=0;bool Send=false,Drawing=false,ByHim=false,Requested=false;};
  // The camera where the one taking a photo holds the phone, for the frame it is taken in (her view, not the game's).
  double PhotoViewUntil=0;FVector PhotoViewLoc=FVector::ZeroVector;FRotator PhotoViewRot=FRotator::ZeroRotator;
+ // An activity's effect (activities.toml effect "explosion"): when it goes off, where, and what is shown of it.
+ // Walking out in the rain (weather.rs walk_style): the umbrella shown over him (and her, when they share it).
+ FString WalkStyle;TWeakObjectPtr<AActor> Umbrella;
+ double EffectAt=0;FVector EffectWhere=FVector::ZeroVector;FString EffectKind;TArray<TWeakObjectPtr<AActor>> EffectActors;TWeakObjectPtr<class UPointLightComponent> EffectLight;
  // A photo walk (photo_walk): the stops photographed so far, the album they go in, and the pause at a stop.
  int32 PhotoWalkStops=0;FString PhotoWalkAlbum;double PhotoWalkPauseUntil=0;TArray<FHerPhoto> HerPhotos;
  int32 PhotosSaved=0,PhotoProbePhase=0,PhotoActorsVerified=0;
@@ -785,7 +789,12 @@ bool AOKStreetSocialScene::BeginTalk(int32 Character){
  // "you met as agreed, greet him" made her greet twice ("you are two minutes early" and then "sit down, I ordered").
  else if(S.SkipGreeting){S.SkipGreeting=false;UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d came over; she opens in her own words%s"),Character,Meeting?TEXT(" (the meeting)"):TEXT(""));}
  else if(Meeting){S.TellHer.Add(OKT(TEXT("ui.scene.meeting_greet_note")));UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d met as agreed; she greets him in her own words"),Character);}
- else Topic(TEXT("greeting"));
+ // Otherwise who opens is the rules' (social.rs greeting_route): her own words from her persona when the AI is there,
+ // the card's stock line (by the original game's personality, not hers) only when it is not.
+ else{FOKFreeTalkSettings Ai;FString Why;auto Ask=OKRulesRequest(TEXT("greeting_route"));Ask->SetBoolField(TEXT("ai_ready"),!S.SelfTest&&!S.RetargetSelfTest&&OKStreetFreeTalkLoadSettings(Ai,Why));
+  const TSharedPtr<FJsonObject> Route=OKRulesEval(S,Ask);
+  if(Route.IsValid()&&Route->GetStringField(TEXT("route"))==TEXT("ai")){S.TellHer.Add(OKT(TEXT("ui.scene.he_comes_to_talk_note")));UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d opens in her own words (persona)"),Character);}
+  else Topic(TEXT("greeting"));}
  // Whoever starts the conversation (E, she walks up to him, an invitation), it is a free talk with the microphone open.
  if(!Quiet&&!S.SelfTest&&!S.RetargetSelfTest){S.FreeTalkOpen=true;FreeTalkLiveSet(true);}
  return true;
@@ -1249,7 +1258,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   const FString Things=ThingsFacts(Character);if(!Things.IsEmpty())Bag+=OKMsg(TEXT("ui.scene.judge_her_things"),{{TEXT("things"),Things}});}
  AddMessage(TEXT("system"),System);AddMessage(TEXT("user"),(Earlier.IsEmpty()?User:OKMsg(TEXT("ui.scene.judge_earlier_lines"),{{TEXT("lines"),Earlier}})+User)+Bag);
  TWeakPtr<FOKStreetSceneState> WeakState=State;TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
- SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,200,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier](bool Ok,const FString& Content,const FString& Failure){
+ // Room for the whole verdict: with the things, photos and series fields it runs past 200 tokens and came back cut off
+ // mid-"why" (no verdict at all: a meeting agreed was never booked).
+ SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier](bool Ok,const FString& Content,const FString& Failure){
   const auto L=WeakState.Pin();if(!L||!Weak.IsValid()||Weak->State!=L)return;
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
   if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);Weak->ExecuteFreeTalkAction(Character,Id,HerAction);return;}
@@ -1274,6 +1285,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // "Not today, tomorrow" / "make it six": the meeting with her they had moves (the judge says it replaces it).
   if(!Place.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);Weak->MovePromiseWith(Character);}}
   if(!Place.IsEmpty())Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said);
+  // "Every Wednesday" (the judge's promise.repeat): the meeting just booked is the first of a series (series.rs).
+  if(!Place.IsEmpty()&&Promise&&(*Promise).IsValid())if(const TSharedPtr<FJsonValue> Rep=(*Promise)->TryGetField(TEXT("repeat"));Rep.IsValid()&&!Rep->IsNull()&&!(Rep->Type==EJson::String&&Rep->AsString().IsEmpty()))Weak->StartSeries(Character,Place,Rep);
   {bool Ends=false,Treats=false;Verdict->TryGetBoolField(TEXT("ends"),Ends);Verdict->TryGetBoolField(TEXT("she_treats"),Treats);
    // Still walking her there ("here's the dorm, I'm home" said a street early): the walk ends at the door, and the talk
    // goes on there, so no goodbye on the way.
@@ -1303,7 +1316,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    if(Treats){L->HerTreatPromise.Add(Character,OKStreetMindNow(*L)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (judged)"),Character);}
    // "Let's skip lunch then, another day" — "fine": the meeting they had is called off (her own act field may forget it).
    {bool Cancel=false;Verdict->TryGetBoolField(TEXT("cancel_promise"),Cancel);
-    if(Cancel&&Place.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the promise is called off"),Character);Weak->CancelPromiseWith(Character);}}
+    // This one or all of a weekly meeting (cancel_scope; asked when it is not said).
+    if(Cancel&&Place.IsEmpty()){FString Scope;Verdict->TryGetStringField(TEXT("cancel_scope"),Scope);UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the promise is called off (%s)"),Character,*Scope);Weak->CancelPromiseWith(Character,Scope);}}
    // "Take it, it was for you anyway" — "thank you": the gift is given (her own act field may forget it). Only something
    // he still carries (her act may have given it already).
    {FString Gift;Verdict->TryGetStringField(TEXT("gift"),Gift);

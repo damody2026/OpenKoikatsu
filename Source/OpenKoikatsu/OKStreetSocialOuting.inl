@@ -709,6 +709,7 @@ bool AOKStreetSocialScene::StartOutingActivity(int32 Girl,const FString& Activit
   // He does the same thing beside her unless the activity names his own action.
   const TCHAR* MaleClip=A->MaleClip?A->MaleClip:A->FemaleClip;
   const bool MaleOk=OKPrewarmCrowdRuntimeAction(this,0,MaleClip,Ignore);if(!MaleOk)UE_LOG(LogTemp,Warning,TEXT("Street solo: male clip %s: %s"),MaleClip,*Ignore);
+  if(A->Effect&&*A->Effect)StartEffect(A->Effect,Girl); // her spell, far off over the field
   S.SoloGirl=Girl;S.SoloPhase=1;S.SoloSpot=S.Male;S.SoloYaw=Spot->Yaw;S.SoloFemale=A->FemaleClip;S.SoloMale=MaleOk?MaleClip:TEXT("");S.SoloWhat=A->Name;S.SoloId=A->Id;S.SoloAt=SceneTime();
   // It takes its time (game minutes, the rules' table) and then ends by itself: praying is over, the fish watched.
   S.SoloStartMinute=OKStreetMindNow(S);{auto Request=OKRulesRequest(TEXT("activity_minutes"));Request->SetStringField(TEXT("id"),A->Id);Request->SetStringField(TEXT("kind"),TEXT("solo"));Request->SetNumberField(TEXT("code"),A->Code);

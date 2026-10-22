@@ -601,6 +601,8 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
     if(Her!=INDEX_NONE&&Item->Consumable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.order_for_her_button")),[Weak,Id](){Weak->AddToCart(Id,true);})];
     if(Item->Giftable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.buy_as_gift_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
     else if(Item->Consumable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.takeaway_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
+    // Goods for himself (an umbrella, a comic, a notebook): bought into his bag. They had no button at all.
+    else if(Item->Category==TEXT("goods"))Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.buy_for_self_button")),[Weak,Id](){Weak->BuyForGift(Id);})];
     List->AddSlot().AutoHeight()[Row];
    }
    // As tall as the screen allows (a fixed 260 px showed nine dishes of a long menu).

@@ -24,13 +24,16 @@ void AOKStreetSocialScene::NavigatePoint(const FVector& Goal,const FString& Name
  if(S.Target!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.OutingGirl!=INDEX_NONE||S.Facility!=INDEX_NONE){S.Message=OKT(TEXT("ui.contacts.end_activity_before_map_nav"));RefreshUI();return;}
  // The place graph (doors and corridors) reaches the outer districts; computed once, then walked in order.
  auto Path=PlaceRoute(S.Male,Goal);
+ // A place's door: on through it into its ground floor. Stopped at the door he was outside it, and its buttons (the
+ // menu, applying for a job) were not there.
+ FVector Target=Goal;for(const auto& P:OKStreetPlaces())if(!P.Rooms.IsEmpty()&&FVector::Dist2D(P.Door,Goal)<5.f&&FMath::Abs(P.Door.Z-Goal.Z)<100.f){Target=PlaceInsideSpot(P);if(!Target.Equals(Goal,1.f)&&!Path.IsEmpty())Path.Add(Target);break;}
  UE_LOG(LogTemp,Display,TEXT("Street navigation: goal=%s name=%s points=%d"),*Goal.ToCompactString(),*Name,Path.Num());
  // On another floor (he upstairs, or the spot upstairs): the navigation takes an elevator (PlanNavLift); no street
  // route is needed from upstairs.
  const bool Floors=NavNeedsLift(Goal);
  if(Path.IsEmpty()&&!Floors){S.Message=OKT(TEXT("ui.contacts.unreachable_try_elsewhere"));RefreshUI();return;}
  if(Path.IsEmpty())Path={S.Male};
- S.NavRide=FOKStreetLiftRide();S.NavGirl=INDEX_NONE;S.NavPointActive=true;S.NavPoint=Floors?Goal:FVector(Goal.X,Goal.Y,S.Male.Z);S.NavPointName=Name;S.NavPath=MoveTemp(Path);S.NavStep=1;S.NavReplans=0;S.NavAt=SceneTime();S.NavProgressAt=S.NavAt;
+ S.NavRide=FOKStreetLiftRide();S.NavGirl=INDEX_NONE;S.NavPointActive=true;S.NavPoint=Floors?Target:FVector(Target.X,Target.Y,S.Male.Z);S.NavPointName=Name;S.NavPath=MoveTemp(Path);S.NavStep=1;S.NavReplans=0;S.NavAt=SceneTime();S.NavProgressAt=S.NavAt;
  S.Message=OKT(TEXT("ui.contacts.auto_travel_button"))+(Name.IsEmpty()?FString(OKT(TEXT("ui.contacts.map_selected_spot"))):Name)+OKT(TEXT("ui.contacts.wasd_cancel_nav_suffix"));
  if(S.BigMapOpen)ToggleBigMap();else RefreshUI();
 }

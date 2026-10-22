@@ -110,13 +110,53 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
 }
 
 // Cancelling early costs little; within two hours it counts as half a no-show (social.rs appointment_cancel).
-void AOKStreetSocialScene::CancelPromiseWith(int32 Character){
+// A meeting just booked becomes a weekly one (series.rs series_add): its label says so ("…（每週三）").
+void AOKStreetSocialScene::StartSeries(int32 Character,const FString& Place,const TSharedPtr<FJsonValue>& Repeat){
+ auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ const FOKStreetAppointment* First=nullptr;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Place==Place&&A.Kind==TEXT("date")&&(!First||A.Id>First->Id))First=&A;
+ if(!First)return;
+ auto Request=OKRulesRequest(TEXT("series_add"));OKRulesPutExt(S,Request);Request->SetStringField(TEXT("heroine"),Id);Request->SetNumberField(TEXT("start"),double(First->Start));
+ Request->SetStringField(TEXT("place"),Place);Request->SetStringField(TEXT("label"),First->Label);Request->SetField(TEXT("repeat"),Repeat);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid()||!Out->GetBoolField(TEXT("added")))return;
+ auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);const int32 FirstId=First->Id;const FString Label=Out->GetStringField(TEXT("label"));
+ for(auto& A:Candidate.Appointments)if(A.Id==FirstId)A.Label=Label;
+ if(CommitStore(MoveTemp(Candidate))){UE_LOG(LogTemp,Display,TEXT("Street series: %s"),*Label);RefreshUI();}
+}
+
+// Each weekly meeting's next one, once the last has gone by (series.rs series_due), checked every game hour.
+void AOKStreetSocialScene::TickSeries(){
+ auto& S=*State;const int64 Now=OKStreetMindNow(S);if(Now/60==S.SeriesHour)return;S.SeriesHour=Now/60;
+ if(S.Store.Ext.IsEmpty()||!S.Store.Ext.Contains(TEXT("\"series\"")))return;
+ auto Request=OKRulesRequest(TEXT("series_due"));OKRulesPutExt(S,Request);Request->SetNumberField(TEXT("now"),double(Now));
+ TArray<TSharedPtr<FJsonValue>> Pending;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("heroine"),A.Heroine);O->SetNumberField(TEXT("start"),double(A.Start));Pending.Add(MakeShared<FJsonValueObject>(O));}
+ Request->SetArrayField(TEXT("pending"),Pending);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid()||Out->GetArrayField(TEXT("book")).IsEmpty())return;
+ auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;
+ for(const auto& V:Out->GetArrayField(TEXT("book"))){const auto O=V->AsObject();const int32 Girl=CharacterOf(O->GetStringField(TEXT("heroine")));if(Girl==INDEX_NONE)continue;
+  AddAppointment(TEXT("date"),Girl,O->GetStringField(TEXT("place")),int64(O->GetNumberField(TEXT("start"))),PatienceOf(Girl),O->GetStringField(TEXT("label")));PlanPromisesToday(Girl);
+  UE_LOG(LogTemp,Display,TEXT("Street series: next %s at minute %lld"),*O->GetStringField(TEXT("label")),int64(O->GetNumberField(TEXT("start"))));}
+ RefreshUI();
+}
+
+void AOKStreetSocialScene::CancelPromiseWith(int32 Character,const FString& Scope){
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  // Her word "cancel it": the soonest meeting with her, a pickup included ("I can't come for you at five today"
  // called off Wednesday's stake-out and left today's pickup standing).
  const FOKStreetAppointment* Soonest=nullptr;
  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&(A.Kind==TEXT("date")||A.Kind==TEXT("pickup"))&&(!Soonest||A.Start<Soonest->Start))Soonest=&A;
- if(Soonest)CancelAppointment(Soonest->Id);
+ if(!Soonest)return;
+ // Part of a weekly meeting (series.rs series_cancel): all of them when that was said, this one when that was said,
+ // and asked when nobody said which ("以後每週的也取消嗎？" — yes: all; no answer: this one).
+ const int32 AppointmentId=Soonest->Id;const int64 Start=Soonest->Start;
+ auto Ask=[this,Id,Start](const FString& Said){auto& L=*State;auto Request=OKRulesRequest(TEXT("series_cancel"));OKRulesPutExt(L,Request);Request->SetStringField(TEXT("heroine"),Id);Request->SetNumberField(TEXT("start"),double(Start));Request->SetStringField(TEXT("scope"),Said);
+  const TSharedPtr<FJsonObject> Out=OKRulesEval(L,Request);if(Out.IsValid()&&!Out->GetBoolField(TEXT("ask"))){auto Candidate=L.Store;OKRulesTakeExt(Candidate,*Out);CommitStore(MoveTemp(Candidate));}return Out;};
+ const TSharedPtr<FJsonObject> First=Ask(Scope);
+ // Her own act field on a weekly meeting: the judge, a moment later, says this one or all (and asks only if it cannot tell).
+ if(First.IsValid()&&First->GetBoolField(TEXT("ask"))&&Scope==TEXT("her")){UE_LOG(LogTemp,Display,TEXT("Street series: her cancel waits for the judge (this one or all)"));return;}
+ if(First.IsValid()&&First->GetBoolField(TEXT("ask"))){TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+  OpenChoice(Character,TEXT("series_cancel"),OKT(TEXT("ui.appointments.cancel_all_weeks")),{TEXT("accept"),TEXT("decline")},TEXT("decline"),.3f,20,[Weak,Ask,AppointmentId](const FString& Option){if(!Weak.IsValid())return;Ask(Option==TEXT("accept")?TEXT("all"):TEXT("this"));Weak->CancelAppointment(AppointmentId);});
+  RefreshUI();return;}
+ CancelAppointment(AppointmentId);
 }
 
 // The meeting with her moves to the time just agreed (the judge's "replaces"): the old one goes quietly, it was not
@@ -165,6 +205,7 @@ const FOKStreetAppointment* AOKStreetSocialScene::AppointmentBefore(int64 UntilM
 void AOKStreetSocialScene::TickAppointments(){
  auto& S=*State;const int64 Now=OKStreetMindNow(S);
  if(Now==S.AppointmentTickMinute)return;S.AppointmentTickMinute=Now;
+ TickSeries();
  // She walks over to him at the meeting place and opens the talk.
  auto ArriveNow=[this,&S](int32 Girl){
    if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&S.Target!=Girl){
