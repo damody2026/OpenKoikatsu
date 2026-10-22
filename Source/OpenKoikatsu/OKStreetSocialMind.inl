@@ -71,9 +71,9 @@ bool AOKStreetSocialScene::SkipToNextMorning(){
  if(NextDay()){
   // He slept somewhere: where there is no bed for him (the street outside her dorm, a shop) he wakes in his own dorm,
   // not standing the whole night at the girls' dorm door he walked her to.
-  static const TSet<FString> Beds={TEXT("boys_dorm"),TEXT("hotel"),TEXT("lodge"),TEXT("minshuku"),TEXT("onsen")};
-  if(!Beds.Contains(PlaceHere(S.Male)))if(const FOKStreetPlace* Dorm=OKStreetFindPlace(TEXT("boys_dorm"))){
-   S.Male=PlaceInsideSpot(*Dorm);UE_LOG(LogTemp,Display,TEXT("Street skip: he wakes in his dorm (%s)"),*S.Male.ToCompactString());}
+  const FString Here=PlaceHere(S.Male);auto Ask=OKRulesRequest(TEXT("wake_place"));Ask->SetStringField(TEXT("place"),Here);
+  if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask)){const FString WakeAt=Out->GetStringField(TEXT("place"));
+   if(WakeAt!=Here)if(const FOKStreetPlace* Bed=OKStreetFindPlace(WakeAt)){S.Male=PlaceInsideSpot(*Bed);UE_LOG(LogTemp,Display,TEXT("Street skip: he wakes at %s (%s)"),*WakeAt,*S.Male.ToCompactString());}}
   return true;}
  S.ClockStartHours=Was;S.ClockStartWall=WasWall;S.CalendarLastHours=WasLast;
  return false;
@@ -356,8 +356,7 @@ bool AOKStreetSocialScene::ResolveChoice(const FString& Id,const FString& Option
 void AOKStreetSocialScene::TickChoices(){
  auto& S=*State;const double Now=SceneTime();
  // Her give_money still waiting after half a minute: the judge never answered; it goes through as she said.
- {const double Wall=FPlatformTime::Seconds();TArray<int32> Due;for(const auto& P:S.PendingGiveMoney)if(Wall-P.Value.Value>30.0)Due.Add(P.Key);
-  for(const int32 G:Due){const int64 Amount=S.PendingGiveMoney[G].Key;S.PendingGiveMoney.Remove(G);GiveMoneyNow(G,Amount);}}
+ {TArray<int32> Waiting;S.PendingGiveMoney.GetKeys(Waiting);for(const int32 G:Waiting)SettleMoneyHandover(G,0,false);}
  for(int32 I=S.Choices.Num()-1;I>=0;--I){
   if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
   FOKStreetPendingChoice Done=MoveTemp(S.Choices[I]);S.Choices.RemoveAt(I);
@@ -429,9 +428,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   // Whoever it is for still has one of these on the table or on its way ("then a tea" again, the tea she ordered a
   // moment ago still coming): not a second one (as for the judge's orders).
   bool HadBefore=false;{const TArray<FOKStreetCartLine> Mine(S.Cart.GetData()+CartBefore,S.Cart.Num()-CartBefore);S.Cart.SetNum(CartBefore);HadBefore=HasDishLike(ForHer?Character:0,*Item);S.Cart.Append(Mine);}
-  // Starving (after a whole shift on nothing): another dish than the one she has is ordered ("one rice ball is not
-  // enough, an oden too" was skipped and never came while she said she was having it); the same dish still is not.
-  if(HadBefore&&ForHer&&OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Character]),S.Manifest.TalkBudget).Satiety<40.f&&!S.Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ForHer&&D.Her==Character&&D.ItemId==O.Id&&D.Percent>0;}))HadBefore=false;
+  if(HadBefore&&SecondDishOk(Character,ForHer,O.Id))HadBefore=false; // starving, a different dish (shop.rs order_second_dish)
   if(HadBefore||S.Cart.ContainsByPredicate([&](const FOKStreetCartLine& C){return C.ItemId==O.Id&&C.ForHer==ForHer;})){
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, %s still has one"),*O.Id,ForHer?TEXT("she"):TEXT("he"));continue;}
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.

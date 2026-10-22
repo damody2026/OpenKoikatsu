@@ -558,8 +558,41 @@ pub fn checkout_timeout(r: &Value) -> Value {
     json!({"option": option})
 }
 
+/// Another dish while she still has one of its kind (a meal, a drink) in front of her or on its way: not a second one,
+/// except when she is starving and it is a different dish ("one rice ball is not enough, an oden too", after a whole
+/// shift on nothing). Request: has_like, same_dish (the very same one is there), for_her, satiety. Answer: order.
+fn order_second_dish(r: &Value) -> Value {
+    let has_like = r.get("has_like").and_then(Value::as_bool).unwrap_or(false);
+    let same = r.get("same_dish").and_then(Value::as_bool).unwrap_or(false);
+    let starving = r.get("for_her").and_then(Value::as_bool).unwrap_or(false) && r.get("satiety").and_then(Value::as_f64).unwrap_or(100.0) < 40.0;
+    json!({"order": !has_like || (starving && !same)})
+}
+
+/// Her reply's give_money and the judge's he_lends about the same exchange: a loan the judge read is the loan, not a gift
+/// as well ("I'll lend you fifty" paid twice); no loan read, the gift goes through; no verdict after 30 s, it goes
+/// through as she said. Request: he_lends, give_pending (amount), verdict (the judge answered), waited (s).
+/// Answer: action loan | give | wait | none.
+fn money_handover(r: &Value) -> Value {
+    let lends = r.get("he_lends").and_then(Value::as_f64).unwrap_or(0.0);
+    let give = r.get("give_pending").and_then(Value::as_i64).unwrap_or(0);
+    let verdict = r.get("verdict").and_then(Value::as_bool).unwrap_or(false);
+    let waited = r.get("waited").and_then(Value::as_f64).unwrap_or(0.0);
+    let action = if verdict && lends > 0.0 {
+        "loan"
+    } else if give > 0 && (verdict || waited > 30.0) {
+        "give"
+    } else if give > 0 {
+        "wait"
+    } else {
+        "none"
+    };
+    json!({"action": action})
+}
+
 pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
+        "order_second_dish" => Ok(order_second_dish(r)),
+        "money_handover" => Ok(money_handover(r)),
         "checkout_timeout" => Ok(checkout_timeout(r)),
         "checkout_lean" => lean(r),
         "chat_order_payer" => Ok(chat_order_payer(r)),
@@ -590,6 +623,22 @@ mod tests {
 
 
     use super::*;
+    #[test]
+    fn a_second_dish_only_when_starving_and_different() {
+        assert_eq!(order_second_dish(&json!({"has_like": false}))["order"], true);
+        assert_eq!(order_second_dish(&json!({"has_like": true, "for_her": true, "satiety": 80.0}))["order"], false);
+        assert_eq!(order_second_dish(&json!({"has_like": true, "for_her": true, "satiety": 20.0}))["order"], true);
+        assert_eq!(order_second_dish(&json!({"has_like": true, "same_dish": true, "for_her": true, "satiety": 20.0}))["order"], false);
+    }
+
+    #[test]
+    fn a_loan_the_judge_read_is_not_also_a_gift() {
+        assert_eq!(money_handover(&json!({"he_lends": 50, "give_pending": 50, "verdict": true}))["action"], "loan");
+        assert_eq!(money_handover(&json!({"he_lends": 0, "give_pending": 50, "verdict": true}))["action"], "give");
+        assert_eq!(money_handover(&json!({"give_pending": 50, "waited": 5.0}))["action"], "wait");
+        assert_eq!(money_handover(&json!({"give_pending": 50, "waited": 31.0}))["action"], "give");
+    }
+
 
     #[test]
     fn short_for_her_week_she_takes_a_loan_she_asked_for() {

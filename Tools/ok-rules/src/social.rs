@@ -680,7 +680,10 @@ pub fn mask_broken(r: &Relation, public: bool) -> bool {
 fn self_text(r: &Value) -> Result<Value, String> {
     let now = n(r, "now") as i64;
     let mut log: Vec<i64> = r.get("log").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_i64).filter(|m| m / 1440 == now / 1440).collect();
-    let allowed = log.len() < 3 && log.last().map(|l| now - l >= 30).unwrap_or(true);
+    // Two of her messages he has not answered (unanswered: hers since his last): she waits for him to write
+    // ("what are you doing? so bored" three times over two days, never a reply).
+    let unanswered = n(r, "unanswered") as i64;
+    let allowed = unanswered < 2 && log.len() < 3 && log.last().map(|l| now - l >= 30).unwrap_or(true);
     if allowed {
         log.push(now);
     }
@@ -1009,6 +1012,7 @@ mod tests {
         let mut sent = 0;
         for m in (600..700).step_by(10) {
             let v = self_text(&json!({"now": m, "log": log})).unwrap();
+            assert_eq!(self_text(&json!({"now": m, "log": [], "unanswered": 2})).unwrap()["allowed"], false, "two unanswered: she waits");
             if v["allowed"] == true {
                 sent += 1;
             }

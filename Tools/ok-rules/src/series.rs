@@ -95,8 +95,35 @@ fn cancel(r: &Value) -> Value {
     }
 }
 
+/// Meetings with a heroine not in this game's cast (an old save, another selection) are set aside ("away"): not listed,
+/// not late, not a no-show; back in the cast and still ahead, pending again. Request: appointments [{id, heroine,
+/// status, start}], cast [ids], now. Answer: changes [{id, status}], away, back.
+fn cast(r: &Value) -> Value {
+    let cast: Vec<&str> = r.get("cast").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect();
+    let now = r.get("now").and_then(Value::as_i64).unwrap_or(0);
+    let (mut changes, mut away, mut back) = (Vec::new(), 0, 0);
+    for a in r.get("appointments").and_then(Value::as_array).into_iter().flatten() {
+        let her = a.get("heroine").and_then(Value::as_str).unwrap_or("");
+        if her.is_empty() {
+            continue;
+        }
+        let here = cast.contains(&her);
+        let status = a.get("status").and_then(Value::as_str).unwrap_or("");
+        let start = a.get("start").and_then(Value::as_i64).unwrap_or(0);
+        if status == "pending" && !here {
+            changes.push(json!({"id": a.get("id"), "status": "away"}));
+            away += 1;
+        } else if status == "away" && here && start > now {
+            changes.push(json!({"id": a.get("id"), "status": "pending"}));
+            back += 1;
+        }
+    }
+    json!({"changes": changes, "away": away, "back": back})
+}
+
 pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(Ok(match kind {
+        "appointments_cast" => cast(r),
         "series_add" => add(r),
         "series_due" => due(r),
         "series_cancel" => cancel(r),
@@ -106,6 +133,17 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn meetings_with_someone_not_in_the_cast_are_set_aside() {
+        let r = json!({"cast": ["a"], "now": 100, "appointments": [
+            {"id": 1, "heroine": "a", "status": "pending", "start": 200},
+            {"id": 2, "heroine": "x", "status": "pending", "start": 200},
+            {"id": 3, "heroine": "a", "status": "away", "start": 300},
+            {"id": 4, "heroine": "a", "status": "away", "start": 50}]});
+        let v = cast(&r);
+        assert_eq!(v["changes"], json!([{"id": 2, "status": "away"}, {"id": 3, "status": "pending"}]));
+    }
+
     use super::*;
 
     #[test]

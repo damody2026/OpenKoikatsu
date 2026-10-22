@@ -142,8 +142,16 @@ pub fn react(awkward: f32, shyness: i32, boldness: i32, stage: &str) -> Reaction
     }
 }
 
+/// Where he wakes after skipping to the morning: where he is if there is a bed for him there (his dorm, a hotel, an
+/// inn, the onsen), else his own dorm (not standing all night at the girls' dorm door). Request: place. Answer: place.
+fn wake_place(place: &str) -> &'static str {
+    const BEDS: [&str; 5] = ["boys_dorm", "hotel", "lodge", "minshuku", "onsen"];
+    BEDS.iter().copied().find(|b| *b == place).unwrap_or("boys_dorm")
+}
+
 pub fn eval(t: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
+        "wake_place" => Ok(json!({"place": wake_place(request.get("place").and_then(Value::as_str).unwrap_or(""))})),
         "places_table" => Ok(json!({"default": t.default, "norms": t.norms})),
         "place_crowd" => {
             let place = request.get("place").and_then(Value::as_str).unwrap_or("");

@@ -617,6 +617,10 @@ void AOKStreetSocialScene::TickIntroFriend(){
 bool AOKStreetSocialScene::SelfTextAllowed(int32 Girl){
  auto& S=*State;auto& Log=S.SelfTexts.FindOrAdd(Girl);
  auto Request=OKRulesRequest(TEXT("self_text"));Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));
+ // Her messages since his last one (calls and texts): she does not keep writing into silence (social.rs self_text).
+ {int32 Unanswered=0;if(S.Manifest.Characters.IsValidIndex(Girl)){const auto& List=HistoryOf(OKStreetStableId(S.Manifest.Characters[Girl]));for(int32 K=List.Num()-1;K>=0;--K){const auto& E=List[K];
+   if(!OKStreetHistoryIsPhone(E.Kind))continue;if(E.Who==TEXT("him"))break;if(E.Who==TEXT("her")&&E.Kind==TEXT("message"))++Unanswered;}}
+  Request->SetNumberField(TEXT("unanswered"),Unanswered);}
  TArray<TSharedPtr<FJsonValue>> Rows;for(const int64 M:Log)Rows.Add(MakeShared<FJsonValueNumber>(double(M)));Request->SetArrayField(TEXT("log"),Rows);
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return false;
  Log.Reset();for(const auto& V:Answer->GetArrayField(TEXT("log")))Log.Add(int64(V->AsNumber()));

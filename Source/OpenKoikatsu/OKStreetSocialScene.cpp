@@ -255,7 +255,7 @@ struct FOKStreetSceneState {
  // NPC idles: when each last moved, how long she has stood still, and whether her current stop was lengthened.
  TMap<int32,int32> IdlePose;TMap<int32,double> LastMovedAt,StillSince;TMap<int32,float> LastWalk,PrevDwell;int32 ProbeStep=-1;double ProbeAt=0;FString ProbeWhy;TArray<TSharedPtr<FJsonValue>> ProbeRows; // OK_STREET_UI_PROBE
  // Campus (OKStreetSocialCampus.inl): upstairs commute targets, studying, stair/office proximity, attendance, exams.
- TMap<int32,FVector> CommuteFinal;TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
+ TMap<int32,FVector> CommuteFinal;bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
  // Bank app, price alerts, net worth chart and the heroines' own accounts (OKStreetSocialBank.inl).
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
@@ -709,13 +709,6 @@ void AOKStreetSocialScene::BeginPlay(){
  if(S.RetargetSelfTest&&OKStreetIsUserRelationshipSave(S.Manifest.SavePath)){S.IdentityRetargetRejected=1;S.Errors.Add(TEXT("Retarget self-test refused the user relationships save"));WriteReport(false);return;}
  ApplyPendingSave();
  if(OKStreetLoadSaveFile(S.Manifest.SavePath,S.Store,Error)==EOKStreetLoad::Invalid){S.Errors.Add(TEXT("Relationship save rejected: ")+Error);WriteReport(false);return;}
- // A meeting with a heroine who is not in this game's cast (an old save, another selection) is "away": not listed, not
- // late, not a no-show ("迟到 0:20" for a girl who was not there). Back in the cast, it is pending again if still ahead.
- {TSet<FString> Cast;for(int32 I=1;I<S.Manifest.Characters.Num();++I)Cast.Add(OKStreetStableId(S.Manifest.Characters[I]));
-  const int32 Minute=FMath::Max(0,S.Store.CalendarMinute);const int64 Now=int64(S.Store.CalendarDay)*1440+Minute+(Minute<240?1440:0);int32 Away=0,Back=0;
-  for(auto& A:S.Store.Appointments){if(A.Heroine.IsEmpty())continue;const bool Here=Cast.Contains(A.Heroine);
-   if(A.Status==TEXT("pending")&&!Here){A.Status=TEXT("away");++Away;}else if(A.Status==TEXT("away")&&Here&&A.Start>Now){A.Status=TEXT("pending");++Back;}}
-  if(Away+Back)UE_LOG(LogTemp,Display,TEXT("Street appointments: %d with heroines not in this cast set aside, %d back"),Away,Back);}
  // rules.json (favor caps, preferences, confession chance) is read by the rules with the dialogue catalogue (talk.rs).
  {TSharedPtr<FJsonObject> M;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),M)&&M)M->TryGetStringField(TEXT("topic_catalogue"),S.TopicCataloguePath);}
  StartCalendarAndMind();
@@ -1368,9 +1361,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     const bool ForHer=For==TEXT("her");
     // Already on the table or on its way first: "too full, the braised pork rice was not ordered" about the bowl in
     // front of her made her say it never came.
-    // Starving, another dish than the one she has goes in (as for her own orders); the same dish does not.
-    const bool Starving=ForHer&&OKStreetViewRelation(L->Store,Id,L->Manifest.TalkBudget).Satiety<40.f&&!L->Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ForHer&&D.Her==Character&&D.ItemId==ItemId&&D.Percent>0;});
-    if(!Starving&&Weak->HasDishLike(ForHer?Character:0,*Item)){
+    if(Weak->HasDishLike(ForHer?Character:0,*Item)&&!Weak->SecondDishOk(Character,ForHer,ItemId)){
      UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, %s still has one on the table"),*Item->Name,ForHer?TEXT("she"):TEXT("he"));continue;}
     if(ForHer&&Weak->TooFullFor(Character,*Item)){L->TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, she is full"),*Item->Name);continue;}
     FOKStreetCartLine Line;Line.ItemId=ItemId;Line.ForHer=ForHer;Line.Size=Item->DefaultSize();if(!Item->Options.IsEmpty()){Line.Sweetness=OKT(TEXT("ui.mind.full_sugar_label"));Line.Ice=OKT(TEXT("ui.mind.normal_state_label"));}
@@ -1381,9 +1372,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请").
   {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())Weak->RecordPayAgreed(Character,Payer);}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
-  {double Lend=0;if(Verdict->TryGetNumberField(TEXT("he_lends"),Lend)&&Lend>0){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f"),Character,Lend);L->LendAskGirl=INDEX_NONE;
-    if(L->PendingGiveMoney.Remove(Character))UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d her give_money is this loan, not a gift too"),Character);Weak->StartLoan(int32(Lend));}
-   else if(const TPair<int64,double>* Give=L->PendingGiveMoney.Find(Character)){const int64 Amount=Give->Key;L->PendingGiveMoney.Remove(Character);Weak->GiveMoneyNow(Character,Amount);}}
+  {double Lend=0;Verdict->TryGetNumberField(TEXT("he_lends"),Lend);Weak->SettleMoneyHandover(Character,Lend,true);}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).
   {TArray<FString> Told;FString One;const TArray<TSharedPtr<FJsonValue>>* List=nullptr;if(Verdict->TryGetArrayField(TEXT("told_about"),List))for(const auto& V:*List){FString N;if(V.IsValid()&&V->TryGetString(N)&&!N.IsEmpty())Told.Add(N);}else if(Verdict->TryGetStringField(TEXT("told_about"),One)&&!One.IsEmpty())Told.Add(One);for(const FString& N:Told)Weak->ToldAboutRival(Character,N);}
   Weak->ExecuteFreeTalkAction(Character,Id,DoNow);

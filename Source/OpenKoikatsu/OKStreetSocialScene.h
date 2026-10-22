@@ -218,6 +218,7 @@ private:
  bool Blacklisted(const FString& Place,int32* DaysLeft=nullptr) const;
  const struct FOKStreetAppointment* AppointmentBefore(int64 UntilMinute) const;
  void TickAppointments();
+ void SetAsideAbsentMeetings(); // OKStreetSocialAppointments.inl (series.rs appointments_cast)
  FString TaskListText() const;
  struct FSlateColor TaskListColor() const;
  void NavigateToNextAppointment();
@@ -661,7 +662,9 @@ private:
  bool HasHerNumber(int32 Girl,bool SheReachesHim=false); // OKStreetSocialPhoneInbox.inl (contacts.rs): her number is in his phone
  void HerNumberGiven(int32 Girl,const TCHAR* What=TEXT("hers"));
  void HerErrand(int32 Character,const FString& Kind);
- void GiveMoneyNow(int32 Girl,int64 Amount); // OKStreetSocialLover.inl: her act's give_money, once the judge has read the exchange // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
+ void GiveMoneyNow(int32 Girl,int64 Amount);
+ void SettleMoneyHandover(int32 Girl,double Lend,bool bVerdict); // OKStreetSocialLover.inl (shop.rs money_handover)
+ bool SecondDishOk(int32 Her,bool bForHer,const FString& ItemId); // OKStreetSocialLover.inl (shop.rs order_second_dish) // OKStreetSocialLover.inl: her act's give_money, once the judge has read the exchange // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
  void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)
  void TickEffect();
  void TickUmbrella(); // OKStreetSocialPhotos.inl: the umbrella on a rainy walk (weather.rs walk_style)

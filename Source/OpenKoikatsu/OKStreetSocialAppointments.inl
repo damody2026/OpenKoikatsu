@@ -182,10 +182,25 @@ const FOKStreetAppointment* AOKStreetSocialScene::AppointmentBefore(int64 UntilM
 
 // Arriving, being late, being stood up and the blacklist are rules (social.rs appointments_tick); here whether he is
 // there, who he is busy with, and her walking over to him when he arrives.
+void AOKStreetSocialScene::SetAsideAbsentMeetings(){
+ auto& S=*State;
+ // A meeting with a heroine who is not in this game's cast (an old save, another selection) is "away": not listed, not
+ // late, not a no-show ("迟到 0:20" for a girl who was not there). Back in the cast, it is pending again if still ahead.
+ {auto Request=OKRulesRequest(TEXT("appointments_cast"));TArray<TSharedPtr<FJsonValue>> Cast,Rows;
+  for(int32 I=1;I<S.Manifest.Characters.Num();++I)Cast.Add(MakeShared<FJsonValueString>(OKStreetStableId(S.Manifest.Characters[I])));
+  for(const auto& A:S.Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("status"),A.Status);O->SetNumberField(TEXT("start"),double(A.Start));Rows.Add(MakeShared<FJsonValueObject>(O));}
+  const int32 Minute=FMath::Max(0,S.Store.CalendarMinute);Request->SetArrayField(TEXT("cast"),Cast);Request->SetArrayField(TEXT("appointments"),Rows);Request->SetNumberField(TEXT("now"),double(int64(S.Store.CalendarDay)*1440+Minute+(Minute<240?1440:0)));
+  if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request)){
+   for(const auto& V:Out->GetArrayField(TEXT("changes"))){const auto C=V->AsObject();const int32 AppId=int32(C->GetNumberField(TEXT("id")));for(auto& A:S.Store.Appointments)if(A.Id==AppId)A.Status=C->GetStringField(TEXT("status"));}
+   const int32 Away=int32(Out->GetNumberField(TEXT("away"))),Back=int32(Out->GetNumberField(TEXT("back")));
+   if(Away+Back)UE_LOG(LogTemp,Display,TEXT("Street appointments: %d with heroines not in this cast set aside, %d back"),Away,Back);}}
+}
+
 void AOKStreetSocialScene::TickAppointments(){
  auto& S=*State;const int64 Now=OKStreetMindNow(S);
  if(Now==S.AppointmentTickMinute)return;S.AppointmentTickMinute=Now;
  TickSeries();
+ if(!S.bAbsentCastChecked){S.bAbsentCastChecked=true;SetAsideAbsentMeetings();} // the rules are open by now (not at load)
  // She walks over to him at the meeting place and opens the talk.
  auto ArriveNow=[this,&S](int32 Girl){
    if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&S.Target!=Girl){
