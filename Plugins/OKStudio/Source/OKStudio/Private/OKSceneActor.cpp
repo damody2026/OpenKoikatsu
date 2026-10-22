@@ -1040,8 +1040,9 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		if (!P.Key->Plane.IsValid() || !P.Key->Texture.IsValid()) continue;
 		const double Width = Span * P.Value;
 		P.Key->Plane->SetWorldLocationAndRotation(View.GetLocation() + Forward * P.Value, Facing);
-		// The plane is 100 cm square in its XY (X up, Y right here).
-		P.Key->Plane->SetWorldScale3D(FVector(Width / FMath::Max(Aspect, 0.1f) / 100.0, Width / 100.0, 1.0));
+		// The plane is 100 cm square in its XY (X up, Y right here); its texture runs right to left along Y, so Y is
+		// mirrored to show the picture as Studio does (BackgroundCtrl: the picture's left on the screen's left).
+		P.Key->Plane->SetWorldScale3D(FVector(Width / FMath::Max(Aspect, 0.1f) / 100.0, -Width / 100.0, 1.0));
 	}
 	if (Frame.Plane.IsValid()) Frame.Plane->SetTranslucentSortPriority(1000);
 	// Sky dome items (Skybox/Cubemap on a mesh) draw before everything else translucent, without depth: Unity draws them

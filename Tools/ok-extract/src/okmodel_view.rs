@@ -645,6 +645,65 @@ mod studio_item_timing {
 }
 
 #[cfg(test)]
+mod source_mesh_uvs {
+    /// OK_SOURCE_BUNDLE=<game bundle> OK_SOURCE_PREFAB=<prefab>: the meshes' UVs decoded straight from the game's bundle
+    /// (what the base library recorded for them comes from this decode) (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: game bundle named by OK_SOURCE_BUNDLE"]
+    fn print_source_mesh_uvs() {
+        let (Ok(bundle), Ok(prefab)) = (std::env::var("OK_SOURCE_BUNDLE"), std::env::var("OK_SOURCE_PREFAB")) else { return };
+        let parsed = crate::unity::parse_bundle_cached(std::fs::read(&bundle).unwrap());
+        let (meshes, _) = parsed.meshes_for_maindata(&prefab);
+        for m in &meshes {
+            println!("mesh {} vertices {} uv {:?} uv2 {:?}", m.name, m.positions.len(), &m.uvs[..m.uvs.len().min(6)], &m.uv2[..m.uv2.len().min(4)]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod item_texture_dump {
+    /// OK_ITEM_MODEL=<id hex> OK_ITEM_PREFAB=<prefab> [OK_ITEM_OUT=<dir>]: each part's main texture and colour mask as PNG
+    /// files, and its UV range (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: OK base library item named by OK_ITEM_MODEL / OK_ITEM_PREFAB"]
+    fn dump_item_textures() {
+        let (Ok(model), Ok(prefab)) = (std::env::var("OK_ITEM_MODEL"), std::env::var("OK_ITEM_PREFAB")) else { return };
+        let out = std::path::PathBuf::from(std::env::var("OK_ITEM_OUT").unwrap_or_else(|_| ".".into()));
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let id = crate::oklib::id_from_hex_pub(&model).unwrap();
+        super::with_library(&lib, || {
+            let session = super::ModelView::open(&lib, id)?.prefab_session(&prefab, false)?;
+            for (i, p) in session.parts.iter().enumerate() {
+                let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+                for uv in &p.uvs { for k in 0..2 { lo[k] = lo[k].min(uv[k]); hi[k] = hi[k].max(uv[k]); } }
+                println!("part {i} {} shader {} uv {lo:?}..{hi:?} png {} mask {}", p.name,
+                    p.source_material.as_ref().map_or("?", |m| m.shader.as_str()), p.png.as_ref().map_or(0, Vec::len),
+                    p.item_draw.as_ref().and_then(|d| d.color_mask.as_ref()).map_or(0, Vec::len));
+                // The highest and lowest vertices with their UVs (where on the textures the top and bottom of the item are).
+                let mut order: Vec<usize> = (0..p.positions.len().min(p.uvs.len())).collect();
+                order.sort_by(|a, b| p.positions[*b][1].total_cmp(&p.positions[*a][1]));
+                for k in order.iter().take(3).chain(order.iter().rev().take(3)) { println!("  pos {:?} uv {:?}", p.positions[*k], p.uvs[*k]); }
+                println!("  {} of {} vertices with u > 1; runtime textures {:?}", p.uvs.iter().filter(|uv| uv[0] > 1.0).count(), p.uvs.len(), p.runtime_textures);
+                if let Some(m) = &p.source_material {
+                    let mut floats: Vec<_> = m.floats.iter().collect(); floats.sort_by(|a, b| a.0.cmp(b.0));
+                    let mut colors: Vec<_> = m.colors.iter().collect(); colors.sort_by(|a, b| a.0.cmp(b.0));
+                    println!("  keywords {:?}\n  floats {:?}\n  colors {:?}", m.keywords, floats, colors);
+                }
+                println!("  uv2 {} uv3 {} uv4 {} first positions {:?}", p.uv2.len(), p.uv3.len(), p.uv4.len(), &p.positions[..p.positions.len().min(4)]);
+                // Each also upside down (for trying the other row direction).
+                let write = |name: String, png: &[u8]| {
+                    std::fs::write(out.join(&name), png).unwrap();
+                    if let Ok(image) = image::load_from_memory(png) { image.flipv().save(out.join(name.replace(".png", "_flipv.png"))).unwrap(); }
+                };
+                if let Some(png) = &p.png { write(format!("part{i}_main.png"), png); }
+                if let Some(mask) = p.item_draw.as_ref().and_then(|d| d.color_mask.as_ref()) { write(format!("part{i}_mask.png"), mask); }
+            }
+            Ok::<(), String>(())
+        }).unwrap();
+    }
+}
+
+#[cfg(test)]
 mod item_fk_tests {
     #[test]
     #[ignore = "OK base library: Studio item FK turns a skinned item's bone before baking"]

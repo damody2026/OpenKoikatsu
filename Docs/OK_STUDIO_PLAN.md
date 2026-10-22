@@ -296,6 +296,12 @@
 ![4432：原作、上一輪、這一輪](images/OKStudio/MdkAmbient20261022/4432-native-before-after.png)
 
 
+### S5 第十九輪：背景圖與道具貼圖方向（2026-10-23）
+
+- **背景圖左右相反**：Studio 的背景圖（`BackgroundCtrl`）是一張貼滿畫面的四邊形，圖的左邊在畫面左邊；UE 的平面貼圖沿 Y 由右往左，2840 的 `bg_09` 左上的白雲跑到右上。平面 Y 縮放取負（`AOKSceneActor::PlaceBackground`，框圖同一個平面設定）。
+- **main_item_studio 道具的主貼圖與 ColorMask 上下顛倒**：UE 以 (u, 1-v) 取樣，來源 Texture2D 的列是由下往上；Standard／MDK 與飾品的 main_item_studio 都翻過一次，Studio 道具（role `part`）的 main_item_studio 沒翻。2840 的海灘陽傘（2/87/1233）傘面取到木頭傘頂、ColorMask 取到黑色那半，綠色沒上去；原作探針（`run_scene_visual_audit.lua --scenes …2840`）是綠色。`push_meshes` 對 role `part` 的 main_item_studio 家族翻主貼圖與 ColorMask（材質編輯換過的不翻）。Rust 測試 `studio_item_preview_normalizes_main_and_mask_rows_once`；14 場景驗收 PASS，6331 手上吊飾不再出現錯位的圖。
+- 比對工具：`OKStudio.CompareKStudio` 的資料夾也讀 `.okscene`（左半黑）；`OK_STUDIO_COMPARE_DUMP` 加印 `_Color*`、`_MainTex`／`_ColorMask` 的尺寸、定址與 sRGB；Rust 診斷 `dump_item_textures`（`OK_ITEM_MODEL`／`OK_ITEM_PREFAB`：各部件 shader、UV 範圍、主貼圖與遮罩含上下翻轉版）、`print_source_mesh_uvs`（從遊戲 bundle 直接解網格 UV）、`print_picture_grid_difference`（`OK_CMP_NATIVE`／`OK_CMP_OK`，`card` 用比對圖左半）。
+
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
 - [x] 轉成 OK 動畫：`ok-extract <game> --oklib anim-convert <lib> <card> [filter] [threads]`，5,805 個全部轉換、0 失敗（8 執行緒約 4 分鐘，目錄建立約 16 分鐘），寫進 `base_v1/anims/studio/*.okanim`（224 MB）與 `base_v1/studio_anims.json`
