@@ -250,6 +250,21 @@
 
 ![3167：原作、修正前、修正後](images/OKStudio/ProbeAndGrade20261022/3167-native-before-after.png)
 
+### S5 第十六輪：3167 上半部偏暗＝色影特效沒畫出（2026-10-22）
+
+使用者要求只處理差距超過 10% 的地方。3167 上排（後牆、窗）比原作暗 11–22%。
+
+- **排查**：原作探針新增 `white-baked`（白反照率、無反射、無地圖燈）、`white-blacklightmap`（光照貼圖換全黑，仍是 LIGHTMAP_ON）、`white-blacklightmap-nosh`（再去掉 light probe 與 ambient SH），以及 `render_fog`、即時光照貼圖欄位、Standard 材質完整參數、`--mesh-dump <路徑片段>`（網格頂點、uv、三角形）。光照貼圖全黑後地圖上半部仍有一層往下變淡的橘光，去掉 SH 也還在；`--hide marukage` 證實是 Studio 道具「色影」`p_koi_stu_marukage00_00`（`Shader Forge/main_item_studio_add`：Cull Back、ZWrite Off、One One；貼圖只有 R 通道的圓形光斑，道具色 (0.857, 0.533, 0.353)），它讓原作上半部亮 5–11%。
+- **根因**：UE 有建這個加法材質（參數、位置都對），但網格 UV 是光照貼圖的 uv2（0.0039–0.99 分四象限），取到貼圖的黑邊。`unity::decode_uvs` 為舊的串流對齊問題對每個通道多試「偏移 +8」；在單一交錯串流（stride 56：uv0 在 40、uv1 在 48）裡 +8 正好讀到 uv1，而真正的 uv0 有兩個 (0,0) 角，被「(0,0) 較少」的規則判輸。
+- **修正**：+8 只在讀取會跨出同一筆頂點紀錄（獨立 UV 串流）時才試（程式在 `1cb05ea89`）。Rust 原作測試 `sources_with_changed_main_uv`（舊規則以 `UV_LEGACY_PADDING` 切換）掃描 22,008 個來源：685 個主 UV 改變，原作 34 個（Studio 道具 `studio/00`、`studio/01`，31 張 Studio 地圖的樹葉草叢 `*_kusa*`／`*_ha*` 與 `*_shadow*` 網格，`bo_hair_b_00`），共用 mod 0 個。以 `OKLIB_REFRESH=meshes_for_maindata,decode_all,base_bundle` + `convert <lib> 8 @清單` 重錄這 34 個模型（24 分鐘，2,920 筆）；`SESSION_CACHE_REVISION` 22。本機第三方 mod 另有 90 個已轉來源受影響，未重錄（不進版控）。
+- **結果**：3167 上排比值 0.85–0.89 → 0.92–0.94；超過 10% 的格子 13 → 11，剩右側紅椅區（0.77–0.85）與角色姿勢相位不同的格子。
+- **驗收**：Rust 422 PASS／0 FAIL，`studio_marukage_quad_keeps_uv0`（對照原生 `mesh.uv`）PASS；`Verify-Marukage20261022` 八項（Game、Pattern、EyeSet、Bloom、Grade、Transparency、Editor、CompareKStudio 14／14）PASS。
+- **14 場景巡檢**（原作探針 `All14b_20261022` 對 UE）：多數場景目視一致，格子差多半是構圖或動作相位。明顯超過 10% 的另有：4432 天空（原作 `m_skybox_simple_daytime` 藍色漸層，UE 黑底雲層）與稻田道具 `kusa01alfa` 變白條；5065 屋頂與植被顏色；1901 舞台背景；3800 窗邊亮區。這幾項在這輪之前就存在（10-21 的 4432 截圖相同）。0059 的原作擷取是全黑，需重拍。
+
+![3167：原作（左）與修正後 UE（右）](images/OKStudio/Marukage20261022/3167-native-after.png)
+
+![原作中色影的貢獻（有色影減去隱藏色影，×4）](images/OKStudio/Marukage20261022/3167-marukage-native-contribution.png)
+
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
