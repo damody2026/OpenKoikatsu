@@ -818,11 +818,11 @@ impl SessionPart {
                     // A Studio map stage effect (`_OKStageEffect`, unity::stage_effect_kind) keeps its colour and mask textures.
                     // A Standard material's metallic map (keyword _METALLICGLOSSMAP: metallic and smoothness of its lightmap
                     // and reflection terms) and its baked reflection probe atlas (`_OKReflection`,
-                    // okmodel_view::assign_reflection_probes).
+                    // okmodel_view::assign_reflection_probes). A sky dome's cube atlas (`_OKSkyCube`, unity: Skybox/Cubemap).
                     let stage=mesh.mat.as_ref().is_some_and(|m|m.floats.contains_key("_OKStageEffect"));
                     let metal_map=mesh.mat.as_ref().is_some_and(|m|m.keywords.iter().any(|k|k=="_METALLICGLOSSMAP"));
                     let standard_normal=mesh.mat.as_ref().is_some_and(|m|m.shader.starts_with("Standard")&&m.keywords.iter().any(|k|k=="_NORMALMAP"));
-                    textures.retain(|name,_|(standard_normal && name=="_BumpMap") || (emits && name=="_EmissionMap") || (metal_map && name=="_MetallicGlossMap") || name=="_OKLightmap" || name=="_OKLightmapDirection" || name=="_OKReflection" || name=="_expression"
+                    textures.retain(|name,_|(standard_normal && name=="_BumpMap") || (emits && name=="_EmissionMap") || (metal_map && name=="_MetallicGlossMap") || name=="_OKLightmap" || name=="_OKLightmapDirection" || name=="_OKReflection" || name=="_OKSkyCube" || name=="_expression"
                         || (stage && matches!(name.as_str(),"_color"|"_mask"|"_Emission"|"_MaskFast"|"_MaskSlow"|"_MaskFull")));
                 }
                 textures

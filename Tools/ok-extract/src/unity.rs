@@ -1114,6 +1114,68 @@ fn prefab_active_in_hierarchy(h: &crate::pose::PrefabHierarchy, active: &[bool],
     Some(visible)
 }
 
+/// Unity's built-in primitive meshes (PathID in Library/unity default resources): Cube 10202, Sphere 10207 (radius 0.5,
+/// 24 segments x 16 rings), Plane 10209 (10 x 10 in XZ), Quad 10210 (1 x 1 facing -Z). Unity-space positions.
+fn builtin_mesh(path_id: i64) -> Option<ExtractedMesh> {
+    let (name, positions, normals, uvs, indices): (&str, Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>) = match path_id {
+        10207 => {
+            let (seg, ring) = (24u32, 16u32);
+            let (mut p, mut n, mut t, mut idx) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            for r in 0..=ring {
+                let phi = std::f32::consts::PI * r as f32 / ring as f32;
+                for s in 0..=seg {
+                    let theta = 2.0 * std::f32::consts::PI * s as f32 / seg as f32;
+                    let d = [phi.sin() * theta.cos(), phi.cos(), phi.sin() * theta.sin()];
+                    p.push([d[0] * 0.5, d[1] * 0.5, d[2] * 0.5]); n.push(d);
+                    t.push([s as f32 / seg as f32, 1.0 - r as f32 / ring as f32]);
+                }
+            }
+            for r in 0..ring { for s in 0..seg {
+                let a = r * (seg + 1) + s; let b = a + seg + 1;
+                idx.extend_from_slice(&[a, a + 1, b, a + 1, b + 1, b]);
+            } }
+            ("Sphere", p, n, t, idx)
+        }
+        10210 => ("Quad", vec![[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [-0.5, 0.5, 0.0], [0.5, 0.5, 0.0]], vec![[0.0, 0.0, -1.0]; 4],
+            vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], vec![0, 3, 1, 3, 0, 2]),
+        10209 => {
+            let (mut p, mut n, mut t, mut idx) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            for z in 0..=10u32 { for x in 0..=10u32 {
+                p.push([5.0 - x as f32, 0.0, 5.0 - z as f32]); n.push([0.0, 1.0, 0.0]); t.push([x as f32 / 10.0, z as f32 / 10.0]);
+            } }
+            for z in 0..10u32 { for x in 0..10u32 {
+                let a = z * 11 + x;
+                idx.extend_from_slice(&[a, a + 11, a + 1, a + 1, a + 11, a + 12]);
+            } }
+            ("Plane", p, n, t, idx)
+        }
+        10202 => {
+            let (mut p, mut n, mut t, mut idx) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            for axis in 0..3usize { for sign in [1.0f32, -1.0] {
+                let mut normal = [0.0; 3]; normal[axis] = sign;
+                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                let base = p.len() as u32;
+                for (a, b) in [(-0.5f32, -0.5f32), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)] {
+                    let mut q = [0.0; 3]; q[axis] = 0.5 * sign; q[u] = a; q[v] = b;
+                    p.push(q); n.push(normal); t.push([a + 0.5, b + 0.5]);
+                }
+                if sign > 0.0 { idx.extend_from_slice(&[base, base + 1, base + 3, base, base + 3, base + 2]); }
+                else { idx.extend_from_slice(&[base, base + 3, base + 1, base, base + 2, base + 3]); }
+            } }
+            ("Cube", p, n, t, idx)
+        }
+        _ => return None,
+    };
+    let obj = mesh_to_obj(name, &positions, &uvs, &indices);
+    Some(ExtractedMesh {
+        name: name.into(), obj, path_id,
+        submesh_ranges: vec![(0, indices.len(), 0)],
+        source_tangents: Some(false),
+        positions, normals, uvs, indices,
+        ..Default::default()
+    })
+}
+
 /// A cubemap's faces and mips (Unity Texture2D payload of a Cubemap: six faces one after another, each with its mip
 /// chain) as the atlas `PrefabReflectionProbe::atlas` describes; None for formats it does not decode.
 fn cubemap_atlas(tex: &unity_asset_decode::texture::Texture2D) -> Option<(u32, u32, Vec<u8>)> {
@@ -3690,7 +3752,7 @@ impl ParsedBundle {
     /// The name of texture `path_id` in external file `external_path`.
     fn external_texture_name(&self, external_path: &str, path_id: i64) -> Option<String> {
         let file = self.external_file(external_path)?;
-        let info = file.0.objects_of_type(28).into_iter().find(|i| i.path_id == path_id)?;
+        let info = file.0.objects_of_type(28).into_iter().find(|i| i.path_id == path_id).or_else(|| file.0.objects_of_type(89).into_iter().find(|i| i.path_id == path_id))?;
         UnityObject::from_serialized_file(&file.0, info).ok()?.name()
     }
 
@@ -3734,6 +3796,16 @@ impl ParsedBundle {
         let mut by_file: std::collections::BTreeMap<&str, Vec<i64>> = std::collections::BTreeMap::new();
         for (id, path) in external { by_file.entry(path.as_str()).or_default().push(*id); }
         for (path, ids) in by_file {
+            // Unity's built-in primitives (Library/unity default resources) are in no bundle: OK builds them.
+            if path.to_ascii_lowercase().contains("unity default resources") {
+                for id in ids {
+                    match builtin_mesh(id) {
+                        Some(mesh) => { self.meshes.borrow_mut().entry(id).or_insert(mesh); }
+                        None => eprintln!("ok-extract: built-in mesh PathID={id} not supported"),
+                    }
+                }
+                continue;
+            }
             let Some(file) = self.external_file(path) else { continue; };
             let (ser, streams) = (&file.0, &file.1);
             for info in ser.objects_of_type(MESH_CLASS_ID) {
@@ -3839,6 +3911,22 @@ impl ParsedBundle {
         let mut class=unity_asset_core::UnityClass::new(28,"Texture2D".into(),info.path_id.to_string());
         class.update_properties(parsed.properties);
         Some(UnityObject::from_info_and_class(info.clone(),class))
+    }
+
+    /// Cubemap `name` as the reflection atlas PNG (`cubemap_atlas`): this bundle's, else a loaded dependency file's.
+    fn cubemap_atlas_named(&self, name: &str) -> Option<Vec<u8>> {
+        let find = |ser: &unity_asset_binary::asset::SerializedFile, streams: &dyn Fn(&UnityObject) -> Option<unity_asset_decode::texture::Texture2D>| {
+            ser.objects_of_type(89).into_iter().find_map(|info| {
+                let object = UnityObject::from_serialized_file(ser, info).ok()?;
+                if !object.name().is_some_and(|n| n.eq_ignore_ascii_case(name)) { return None; }
+                cubemap_atlas(&streams(&object)?).map(|(_, _, png)| png)
+            })
+        };
+        if let Some(png) = self.with_texture_sources(|sers| sers.iter().find_map(|(_, ser)| find(ser, &|o| read_texture_payload(o, &self.files, None)))) {
+            return Some(png);
+        }
+        let externals: Vec<std::rc::Rc<ExternalFile>> = self.external_files.borrow().values().flatten().cloned().collect();
+        externals.iter().find_map(|file| find(&file.0, &|o| read_texture_payload(o, &file.1, None)))
     }
 
     /// The serialized files (with their index in `files`) textures are looked up in: the parsed files' metadata,
@@ -4403,6 +4491,27 @@ impl ParsedBundle {
                     }
                 }
                 if let Some(mat)=m.mat.as_mut() { mat.floats.insert("_OKStageEffect".into(),kind as f32); }
+            }
+            // Unity's Skybox/Cubemap on a mesh (Studio's sky dome items): `_Tex` as a cube atlas (`_OKSkyCube`, the
+            // reflection atlas layout), drawn by OK's own material, which samples it along the object-space vertex.
+            if m.mat.as_ref().is_some_and(|mat| mat.shader == "Skybox/Cubemap") {
+                if let Some(png) = m.mat.as_ref().and_then(|mat| mat.slot("_Tex")).and_then(|name| self.cubemap_atlas_named(name)) {
+                    m.shader_extra_textures.insert("_OKSkyCube".into(), png);
+                    if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKSkybox".into(), 1.0); }
+                    // The object-space direction the program samples along, kept as vertex colour (d·0.5+0.5): the
+                    // positions get the renderer transform baked in later.
+                    m.vertex_colors = m.positions.iter().map(|p| {
+                        let l = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1e-6);
+                        let c = |v: f32| ((v / l * 0.5 + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8;
+                        [c(p[0]), c(p[1]), c(p[2]), 255]
+                    }).collect();
+                }
+            }
+            // Xffect/heat_distortion_t2 (Studio's 水面 items): a GrabPass then SrcAlpha/OneMinusSrcAlpha of
+            // grab·_MainTex.rgb with alpha _MainTex.a, i.e. the screen behind times lerp(1, _MainTex.rgb, _MainTex.a)
+            // (plus a small _HeatForce ripple). OK draws it as that multiply (`_OKModulate`).
+            if m.mat.as_ref().is_some_and(|mat| mat.shader.to_ascii_lowercase().starts_with("xffect/heat_distortion")) {
+                if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKModulate".into(), 1.0); }
             }
             let Some(mat) = m.mat.as_ref() else { continue; };
             // MDK's Standard-style slots are not character _NormalMap slots.
@@ -6611,6 +6720,10 @@ fn materials_in(ser: &unity_asset_binary::asset::SerializedFile, tex_id_name: &m
     let mut mat_info: HashMap<i64, MeshMaterial> = HashMap::new();
     shader_id_name.clear();
     shader_id_rim.clear();
+    // Cubemaps (Skybox/Cubemap `_Tex`) are named too; only their own readers decode them.
+    for info in ser.objects_of_type(89) {
+        if let Some(n) = UnityObject::from_serialized_file(ser, info).ok().and_then(|o| o.name()).filter(|n| !n.is_empty()) { tex_id_name.insert(info.path_id, n); }
+    }
     for info in ser.objects_of_type(28) {
         if let Ok(object) = UnityObject::from_serialized_file(ser, info) {
             let n = object.name().unwrap_or_default();

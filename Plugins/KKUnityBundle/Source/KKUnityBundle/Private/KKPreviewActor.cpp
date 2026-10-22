@@ -3731,6 +3731,150 @@ static UMaterialInstanceDynamic* OKStageEffectInstance(FOkSession& Source, int32
 	return Dynamic;
 }
 
+// Unity's Skybox/Cubemap drawn on a mesh (Studio's sky dome items, `_OKSkybox`): the cube `_Tex` (session `_OKSkyCube`,
+// the reflection atlas: six faces side by side, mip 0 on the first row) sampled along the object-space vertex direction
+// (vertex colour d·0.5+0.5: the session bakes the renderer transform into the positions), turned
+// by _Rotation about Y, times _Tint · unity_ColorSpaceDouble (linear 4.5948) · _Exposure. Unlit, both faces, no depth
+// order of its own: the dome is far behind everything it encloses.
+static UMaterialInterface* OKSkyboxMaterial()
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (Cached) return Cached.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = BLEND_Opaque;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TwoSided = true;
+	UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
+	Code->Material = Mat;
+	Code->OutputType = CMOT_Float3;
+	Mat->GetExpressionCollection().AddExpression(Code);
+	Code->Inputs.Reset();
+	auto Input = [&](const TCHAR* Name, UMaterialExpression* E, int32 Output = 0)
+	{
+		E->Material = Mat;
+		Mat->GetExpressionCollection().AddExpression(E);
+		FCustomInput& I = Code->Inputs.AddDefaulted_GetRef(); I.InputName = Name; I.Input.Expression = E; I.Input.OutputIndex = Output;
+	};
+	auto* Cube = NewObject<UMaterialExpressionTextureObjectParameter>(Mat);
+	Cube->ParameterName = TEXT("Cube"); Cube->Texture = OKExposureWhiteTexture(); Cube->SamplerType = SAMPLERTYPE_Color;
+	Input(TEXT("Cube"), Cube);
+	auto* P = NewObject<UMaterialExpressionVectorParameter>(Mat);
+	P->ParameterName = TEXT("P"); P->DefaultValue = FLinearColor(1.f, 1.f, 1.f, 0.f);
+	Input(TEXT("P"), P, 5); // rgb: _Tint (linear) · 4.5948 · _Exposure; a: _Rotation (degrees)
+	Input(TEXT("Dir"), NewObject<UMaterialExpressionVertexColor>(Mat));
+	Code->Code = TEXT(R"(float3 v = Dir.rgb * 2.0 - 1.0;
+float a = radians(P.a); float c = cos(a), s = sin(a);
+float3 d = float3(c * v.x - s * v.z, v.y, s * v.x + c * v.z);
+float3 ad = abs(d); float face; float2 st; float ma;
+if (ad.x >= ad.y && ad.x >= ad.z) { ma = ad.x; face = d.x > 0 ? 0 : 1; st = d.x > 0 ? float2(-d.z, -d.y) : float2(d.z, -d.y); }
+else if (ad.y >= ad.z) { ma = ad.y; face = d.y > 0 ? 2 : 3; st = d.y > 0 ? float2(d.x, d.z) : float2(d.x, -d.z); }
+else { ma = ad.z; face = d.z > 0 ? 4 : 5; st = d.z > 0 ? float2(d.x, -d.y) : float2(-d.x, -d.y); }
+st = st / max(ma, 1e-5) * 0.5 + 0.5;
+float2 size; Cube.GetDimensions(size.x, size.y); float w = size.y * 0.5;
+float2 p = clamp(st * w, 0.5, w - 0.5);
+return Texture2DSampleLevel(Cube, CubeSampler, float2((face * w + p.x) / size.x, p.y / size.y), 0).rgb * P.rgb;)");
+	// OK_SKY_DEBUG=1: the direction as colour, 2: the raw atlas sample, 3: P.rgb (diagnostic).
+	const FString SkyDebug = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_SKY_DEBUG"));
+	if (!SkyDebug.IsEmpty())
+		Code->Code = Code->Code.Replace(TEXT("return Texture2DSampleLevel"), SkyDebug == TEXT("1") ? TEXT("return normalize(d) * 0.5 + 0.5; //")
+			: SkyDebug == TEXT("2") ? TEXT("return Texture2DSampleLevel(Cube, CubeSampler, float2((face * w + p.x) / size.x, p.y / size.y), 0).rgb; //") : TEXT("return P.rgb; //"));
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Cached.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
+// The sky-dome MID of a session part (`_OKSkybox`), or null.
+static UMaterialInstanceDynamic* OKSkyboxInstance(FOkSession& Source, int32 Index, UObject* Outer, TArray<UTexture2D*>& OutTextures)
+{
+	FLinearColor Flag;
+	if (!Source.MaterialValue(Index, "_OKSkybox", Flag)) return nullptr;
+	const uint8* Bytes = nullptr;
+	int32 Length = 0;
+	const bool bCube = Source.ShaderTexture(Index, "_OKSkyCube", Bytes, Length);
+	if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+		UE_LOG(LogTemp, Display, TEXT("OK sky dome part=%d cube=%d bytes=%d"), Index, int32(bCube), Length);
+	if (!bCube) return nullptr;
+	UMaterialInterface* Base = OKSkyboxMaterial();
+	UMaterialInstanceDynamic* Dynamic = Base ? UMaterialInstanceDynamic::Create(Base, Outer) : nullptr;
+	UTexture2D* Atlas = Dynamic ? TextureFromPngBytes(Bytes, Length) : nullptr;
+	if (!Atlas) return nullptr;
+	Atlas->SRGB = true;
+	Atlas->UpdateResource();
+	Atlas->AddToRoot();
+	OutTextures.Add(Atlas);
+	Dynamic->SetTextureParameterValue(TEXT("Cube"), Atlas);
+	FLinearColor Tint(0.5f, 0.5f, 0.5f, 0.5f), Exposure(1.f, 0.f, 0.f, 0.f), Rotation(0.f, 0.f, 0.f, 0.f);
+	Source.MaterialValue(Index, "_Tint", Tint);
+	Source.MaterialValue(Index, "_Exposure", Exposure);
+	Source.MaterialValue(Index, "_Rotation", Rotation);
+	auto Linear = [](float V) { return V <= 0.04045f ? V / 12.92f : FMath::Pow((V + 0.055f) / 1.055f, 2.4f); };
+	const float Scale = 4.59479380f * Exposure.R;
+	Dynamic->SetVectorParameterValue(TEXT("P"), FLinearColor(Linear(Tint.R) * Scale, Linear(Tint.G) * Scale, Linear(Tint.B) * Scale, Rotation.R));
+	return Dynamic;
+}
+
+// A screen multiply (`_OKModulate`, Xffect/heat_distortion_t2): what is behind times lerp(1, _MainTex.rgb, _MainTex.a).
+static UMaterialInstanceDynamic* OKModulateInstance(FOkSession& Source, int32 Index, UTexture2D* MainTex, UObject* Outer)
+{
+	FLinearColor Flag;
+	if (!MainTex || !Source.MaterialValue(Index, "_OKModulate", Flag)) return nullptr;
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (!Cached)
+	{
+		UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+		Mat->MaterialDomain = MD_Surface;
+		Mat->BlendMode = BLEND_Modulate;
+		Mat->SetShadingModel(MSM_Unlit);
+		UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
+		Code->Material = Mat;
+		Code->OutputType = CMOT_Float3;
+		Mat->GetExpressionCollection().AddExpression(Code);
+		Code->Inputs.Reset();
+		auto Input = [&](const TCHAR* Name, UMaterialExpression* E, int32 Output = 0)
+		{
+			E->Material = Mat;
+			Mat->GetExpressionCollection().AddExpression(E);
+			FCustomInput& I = Code->Inputs.AddDefaulted_GetRef(); I.InputName = Name; I.Input.Expression = E; I.Input.OutputIndex = Output;
+		};
+		auto* Main = NewObject<UMaterialExpressionTextureObjectParameter>(Mat);
+		Main->ParameterName = TEXT("Main"); Main->Texture = OKExposureWhiteTexture(); Main->SamplerType = SAMPLERTYPE_Color;
+		Input(TEXT("Main"), Main);
+		auto* ST = NewObject<UMaterialExpressionVectorParameter>(Mat);
+		ST->ParameterName = TEXT("MainST"); ST->DefaultValue = FLinearColor(1.f, 1.f, 0.f, 0.f);
+		Input(TEXT("MainST"), ST, 5);
+		auto* UV = NewObject<UMaterialExpressionTextureCoordinate>(Mat); UV->CoordinateIndex = 0; Input(TEXT("UV"), UV);
+		// Unity v is up: UE's v is 1 - v, so the _ST applies in Unity's frame.
+		Code->Code = TEXT("float2 u = float2(UV.x, 1.0 - UV.y) * MainST.xy + MainST.zw; float4 t = Main.Sample(MainSampler, float2(u.x, 1.0 - u.y)); return lerp(float3(1, 1, 1), t.rgb, t.a);");
+		if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
+		Mat->UpdateCachedExpressionData();
+		Mat->PreEditChange(nullptr);
+		Mat->PostEditChange();
+		Mat->ForceRecompileForRendering();
+		OKEnsureSkeletalMaterialUsage(Mat);
+		Cached.Reset(Mat);
+	}
+	UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(Cached.Get(), Outer);
+	FLinearColor ST(1.f, 1.f, 0.f, 0.f);
+	Source.MaterialValue(Index, "_MainTex_ST", ST);
+	Dynamic->SetTextureParameterValue(TEXT("Main"), MainTex);
+	Dynamic->SetVectorParameterValue(TEXT("MainST"), ST);
+	return Dynamic;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
 static UMaterial* MakeOvertexMaterial(UTexture2D* Tex, FLinearColor Color)
 {
 #if WITH_EDITOR
@@ -4888,6 +5032,10 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// A Studio map stage effect (`_OKStageEffect`) samples its colour at Unity uv2 (TEXCOORD2 here; uv when absent).
 		FLinearColor StageEffectKind;
 		const bool bStageEffect = !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKStageEffect", StageEffectKind);
+		FLinearColor SkyboxFlag;
+		const bool bSkybox = !bStageEffect && !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKSkybox", SkyboxFlag);
+		FLinearColor ModulateFlag;
+		const bool bModulate = !bStageEffect && !bSkybox && !(bBody || bFaceDraw || View.eye_draw) && Source.MaterialValue(i, "_OKModulate", ModulateFlag);
 		const float* OverlayUv2 = (bBody || bFaceDraw || View.eye_draw) ? View.uv3 : ((View.shader_kind == 1 || View.shader_kind == 10) ? View.uv2
 			: bStageEffect ? (View.uv2 ? View.uv2 : View.uvs) : nullptr);
 		// Unity's hair vertex binding aliases absent UV1 to UV0. Independent
@@ -4915,7 +5063,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		Part.NormalDetailScale = View.normal_detail_scale;
 		Part.ShaderKind = View.shader_kind;
 		Part.Colors.Init(FColor::White, Part.BaseVertices.Num());
-		if ((bBody || bFaceDraw || View.shader_kind == 20) && View.vertex_colors)
+		if ((bBody || bFaceDraw || View.shader_kind == 20 || bSkybox) && View.vertex_colors)
 		{
 			for (int32 v = 0; v < View.n_verts; ++v)
 			{
@@ -5465,7 +5613,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		{
 			static const FString PngDump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_PART_PNG_DUMP"));
 			if (!PngDump.IsEmpty() && Name.Contains(PngDump) && View.png && View.png_len > 0)
-				FFileHelper::SaveArrayToFile(TArrayView<const uint8>(View.png, View.png_len), *(FPaths::ProjectSavedDir() / TEXT("OKStudio/partpng") / FString::Printf(TEXT("%s_%d.png"), *Name, int32(i))));
+				FFileHelper::SaveArrayToFile(TArrayView<const uint8>(View.png, View.png_len), *(FPaths::ProjectSavedDir() / TEXT("OKStudio/partpng") / FString::Printf(TEXT("%s_%d_%d.png"), *Name, int32(i), int32(View.png_len))));
 		}
 		if (bFaceSkin && !Tex)
 		{
@@ -5919,6 +6067,29 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				Output.Textures.Append(StageTextures);
 			}
 		}
+		// A sky dome (Skybox/Cubemap on a mesh): OK's version of the skybox program; Unity's has no shadow caster.
+		if (Comp && bSkybox)
+		{
+			TArray<UTexture2D*> SkyTextures;
+			if (UMaterialInstanceDynamic* Dynamic = OKSkyboxInstance(Source, i, Comp, SkyTextures))
+			{
+				Comp->SetMaterial(0, Dynamic);
+				Comp->SetCastShadow(false);
+				Part.SurfaceMat = Dynamic;
+				Output.Textures.Append(SkyTextures);
+				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+					UE_LOG(LogTemp, Display, TEXT("OK sky dome component %s class=%s visible=%d bounds=%s scale=%s"), *Comp->GetName(), *Comp->GetClass()->GetName(),
+						int32(Comp->IsVisible()), *Comp->Bounds.GetBox().ToString(), *Comp->GetComponentScale().ToString());
+			}
+		}
+		// A screen multiply (Xffect/heat_distortion_t2 water): no shadow, no outline.
+		if (Comp && bModulate)
+			if (UMaterialInstanceDynamic* Dynamic = OKModulateInstance(Source, i, Tex, Comp))
+			{
+				Comp->SetMaterial(0, Dynamic);
+				Comp->SetCastShadow(false);
+				Part.SurfaceMat = Dynamic;
+			}
 		// The shared parents draw the overlay in their own program (_overtex); only the per-part graph needs the extra section.
 		if (!ShadowParams.CookedMaterial && Part.Overtex && !bBody && !Part.bNativeFaceDraw && Part.UV4.Num() == Part.BaseVertices.Num())
 		{
@@ -5933,7 +6104,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// interior mouth triangles are not part of its visible silhouette.
 		const bool bFace = bFaceSkin;
 		// Studio's additive light effects have no Outline pass (their shell would paint the black of the texture).
-		if (bOutlinable && Comp && !bStageEffect && !Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase))
+		if (bOutlinable && Comp && !bStageEffect && !bSkybox && !bModulate && !Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase))
 		{
 			AddOutlineSection(
 				Comp, Part.BaseVertices, Part.Triangles, OutlineNormals,

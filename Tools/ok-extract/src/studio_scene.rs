@@ -599,6 +599,14 @@ pub fn stats(lib: &std::path::Path, dir: &std::path::Path) -> Result<Stats, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    // OK_SCENE=<KStudio png>: print its version, map and screen settings (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: reads the scene named by OK_SCENE"]
+    fn print_scene_effects() {
+        let Ok(path) = std::env::var("OK_SCENE") else { return };
+        let scene = read(&std::fs::read(path).unwrap()).unwrap();
+        eprintln!("version={} map={} effects={}", scene.version, scene.map, serde_json::to_string(&scene.effects).unwrap());
+    }
     #[test]
     fn versions_compare_like_dotnet() {
         assert!(Version::parse("1.0.4") < Version::parse("1.0.4.1"));

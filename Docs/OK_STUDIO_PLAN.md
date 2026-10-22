@@ -265,6 +265,20 @@
 
 ![原作中色影的貢獻（有色影減去隱藏色影，×4）](images/OKStudio/Marukage20261022/3167-marukage-native-contribution.png)
 
+### S5 第十七輪：4432 天空與水田（2026-10-22）
+
+4432、5065 沒有地圖也沒開 Studio 天空，原作的藍天是道具「青空」`p_koi_stu_skyhiru00_01`（1/37/900）。
+
+- **天空球**：原作是一顆 Unity 內建 `Sphere`（`Library/unity default resources`，半徑 0.5、縮放約 890）配 `Skybox/Cubemap`。bundle 裡沒有內建網格，`_Tex` 又是 Cubemap，之前整顆略過。現在 `unity::builtin_mesh` 產生內建 Cube／Sphere／Plane／Quad（PathID 10202／10207／10209／10210）；材質貼圖槽也認 Cubemap；`Skybox/Cubemap` 部件帶 `_OKSkyCube`（反射探針格式的六面圖集）、`_OKSkybox`，物件空間方向寫成頂點色。UE `OKSkyboxInstance`：無光照、雙面、依方向（轉 `_Rotation`）取圖集，乘 `_Tint`（線性）×4.5948（unity_ColorSpaceDouble）×`_Exposure`，不投影、不描邊。診斷 `OK_SKY_DEBUG=1|2|3`（方向／圖集原色／係數）。
+- **水面**：「水面(川)」`p_koi_stu_kawa00_00`（1/6/725）用 `Xffect/heat_distortion_t2`：GrabPass，再以 SrcAlpha/OneMinusSrcAlpha 輸出 背後×`_MainTex`.rgb、alpha `_MainTex`.a（DXBC 0001），等於背景乘 lerp(1, tex.rgb, tex.a)。UE 之前把淡藍平色貼圖當不透明顏色畫，稻田整片白。現在 `_OKModulate` 部件用 Modulate 混合（`OKModulateInstance`），忽略 ≤0.1 的波紋扭曲。原作與 UE 隱藏水面的亮度差都在 5% 內。
+- **重錄**：`studio/00` 以 `OKLIB_REFRESH=meshes_for_maindata` 重錄；`SESSION_CACHE_REVISION` 23。原作測試 `sky_dome_item_has_sphere_and_cube_atlas` PASS。
+- **驗收**：Rust 422 PASS／0 FAIL；`Verify-SkyWater20261022` 八項 PASS。4432 天空恢復藍天白雲，超過 10% 的格子 27 → 24。
+- **還沒修**：4432 田地在原作是暗灰土壤加整片稻葉，UE 是亮黃褐砂地（`o_koi_stu_yuka_02_01`，`main_StandardMDK_studio`），稻葉也稀疏；原作白反照率測試顯示那一帶只收到環境光，可能是野原地形的陰影或 MDK 的光照，未定位。5065 木材原作偏灰、UE 偏橘；天空色 UE 略淺。
+
+![4432：原作、修正前、修正後](images/OKStudio/SkyWater20261022/4432-native-before-after.png)
+
+![5065：原作與修正後](images/OKStudio/SkyWater20261022/5065-native-after.png)
+
 
 ## S6 動畫（進行中）
 - [x] Studio 動畫目錄：`studio_anims.rs` 讀 `studio/info` 的 Anime／HAnime（含群組、分類），依原作規則對到控制器狀態（`<控制器> / [Studio layer N] …<狀態>`，layer 0 優先）：Studio 動作 887、H 動作 4,918
