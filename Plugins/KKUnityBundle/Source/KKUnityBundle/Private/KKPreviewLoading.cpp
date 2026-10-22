@@ -304,7 +304,9 @@ int32 AKKPreviewActor::ApplyMaterialOverrides(TArray<FString>* OutUnapplied){
     Original.Kind=Override.Kind==EOKMaterialOverrideKind::Color?EOKMaterialOverrideKind::Vector:Override.Kind;
     if(Override.Kind==EOKMaterialOverrideKind::Texture){
      UTexture* Before=nullptr;Dynamic->GetTextureParameterValue(Info,Before);Original.Texture=Before;
-     Dynamic->SetTextureParameterValue(Override.Parameter,Override.Texture);
+     // Keep the material's sampler: a linear texture parameter takes the linear copy.
+     const bool bLinear=Before&&!Before->SRGB&&Override.TextureLinear;
+     Dynamic->SetTextureParameterValue(Override.Parameter,bLinear?Override.TextureLinear.Get():Override.Texture.Get());
     }else if(Override.Kind==EOKMaterialOverrideKind::Scalar){
      Dynamic->GetScalarParameterValue(Info,Original.Scalar);
      Dynamic->SetScalarParameterValue(Override.Parameter,Override.Scalar);

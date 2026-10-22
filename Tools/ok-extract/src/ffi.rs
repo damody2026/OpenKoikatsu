@@ -2443,10 +2443,16 @@ pub unsafe extern "C" fn ok_okmodel_open_session_fk(lib: *const c_char, id: *con
     *out = ptr::null_mut();
     let prefab = cstr_opt(prefab).unwrap_or_default();
     let root = cstr_opt(lib).unwrap_or_default();
-    let fk: Vec<(String, [f32; 3])> = match serde_json::from_str(&cstr_opt(fk_json).unwrap_or_else(|| "[]".into())) {
-        Ok(v) => v, Err(e) => { write_err(err, cap, &format!("item FK: {e}")); return 1; }
+    // An array is the FK alone; an object is {"fk": [...], "material": ItemMaterialEdits}.
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Options { Fk(Vec<(String, [f32; 3])>), Full { #[serde(default)] fk: Vec<(String, [f32; 3])>, #[serde(default)] material: crate::okmodel_view::ItemMaterialEdits } }
+    let (fk, edits) = match serde_json::from_str(&cstr_opt(fk_json).unwrap_or_else(|| "[]".into())) {
+        Ok(Options::Fk(fk)) => (fk, Default::default()),
+        Ok(Options::Full { fk, material }) => (fk, material),
+        Err(e) => { write_err(err, cap, &format!("item FK: {e}")); return 1; }
     };
-    match crate::run_no_panic(|| crate::okmodel_view::with_library(std::path::Path::new(&root), || okmodel_view(lib, id)?.prefab_session_fk(&prefab, include_disabled != 0, &fk))) {
+    match crate::run_no_panic(|| crate::okmodel_view::with_library(std::path::Path::new(&root), || okmodel_view(lib, id)?.prefab_session_edited(&prefab, include_disabled != 0, &fk, &edits))) {
         Ok(s) => { *out = Box::into_raw(Box::new(s)); 0 }
         Err(e) => { write_err(err, cap, &e); 1 }
     }

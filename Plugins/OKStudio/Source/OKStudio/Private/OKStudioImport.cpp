@@ -140,7 +140,7 @@ namespace
 					if (const TArray<FOKSceneMaterialEdit>* Edits = MaterialEdits.Find(int32(O->GetNumberField(TEXT("key")))))
 					{
 						I.MaterialEdits = *Edits;
-						Note(TEXT("items carry Material Editor colour and value edits"));
+						Note(TEXT("items carry Material Editor edits"));
 					}
                     double ItemTime=0., ItemSpeed=1.; int32 ItemPattern=0;
                     O->TryGetNumberField(TEXT("anime_time"), ItemTime); O->TryGetNumberField(TEXT("anime_speed"), ItemSpeed); O->TryGetNumberField(TEXT("anime_pattern"), ItemPattern);
@@ -439,7 +439,13 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 			FOKSceneMaterialEdit Edit;
 			Edit.Material = E->GetStringField(TEXT("material"));
 			Edit.Property = E->GetStringField(TEXT("property"));
-			Edit.bColor = E->GetStringField(TEXT("kind")) == TEXT("color");
+			static const TMap<FString, EOKSceneMaterialEditKind> Kinds = { { TEXT("float"), EOKSceneMaterialEditKind::Float }, { TEXT("color"), EOKSceneMaterialEditKind::Color },
+				{ TEXT("texture"), EOKSceneMaterialEditKind::Texture }, { TEXT("texture_st"), EOKSceneMaterialEditKind::TextureST },
+				{ TEXT("shader"), EOKSceneMaterialEditKind::Shader }, { TEXT("renderer"), EOKSceneMaterialEditKind::Renderer } };
+			const EOKSceneMaterialEditKind* Kind = Kinds.Find(E->GetStringField(TEXT("kind")));
+			if (!Kind) continue;
+			Edit.Kind = *Kind;
+			E->TryGetStringField(TEXT("text"), Edit.Text);
 			Edit.Value = FLinearColor(float((*Value)[0]->AsNumber()), float((*Value)[1]->AsNumber()), float((*Value)[2]->AsNumber()), float((*Value)[3]->AsNumber()));
 			Importer.MaterialEdits.FindOrAdd(int32(E->GetNumberField(TEXT("id")))).Add(Edit);
 		}

@@ -19,7 +19,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureCube.h"
+#include "Misc/Base64.h"
 #include "Misc/Paths.h"
+#include "Misc/SecureHash.h"
 #include "OKAnimationAssets.h"
 #include "OKStudioCatalog.h"
 #include "OKStudioSky.h"
@@ -104,6 +106,24 @@ namespace
 		return Texture;
 	}
 
+	/** A Material Editor texture (base64 PNG) as an sRGB and a linear texture (cached by content). */
+	TPair<UTexture2D*, UTexture2D*> EditTexture(const FString& Base64)
+	{
+		static TMap<FString, TPair<TStrongObjectPtr<UTexture2D>, TStrongObjectPtr<UTexture2D>>> Cache;
+		const FString Key = FMD5::HashAnsiString(*Base64);
+		if (const auto* Found = Cache.Find(Key)) return { Found->Key.Get(), Found->Value.Get() };
+		TArray<uint8> Png;
+		UTexture2D *Srgb = nullptr, *Linear = nullptr;
+		if (FBase64::Decode(Base64, Png) && Png.Num())
+		{
+			Srgb = FImageUtils::ImportBufferAsTexture2D(Png);
+			Linear = FImageUtils::ImportBufferAsTexture2D(Png);
+			if (Linear) { Linear->SRGB = false; Linear->UpdateResource(); }
+		}
+		Cache.Add(Key, { TStrongObjectPtr<UTexture2D>(Srgb), TStrongObjectPtr<UTexture2D>(Linear) });
+		return { Srgb, Linear };
+	}
+
 	/** Material overrides of an item's pattern slots (the item_draw / main_item_studio shader's pattern inputs). */
 	TArray<FOKMaterialOverride> PatternOverrides(const FOKSceneItem& Item)
 	{
@@ -130,15 +150,62 @@ namespace
 			Add(FString::Printf(TEXT("_patternclamp%d"), Slot), EOKMaterialOverrideKind::Scalar, P.bClamp ? 1.f : 0.f, FLinearColor::White, nullptr);
 			Add(FString::Printf(TEXT("_Color%d_2"), Slot), EOKMaterialOverrideKind::Color, 0.f, P.Color, nullptr);
 		}
-		// Material Editor edits: the named material's property (Material Editor drops the leading underscore).
+		// Material Editor edits: the named material's property (Material Editor drops the leading underscore). Shader and
+		// renderer edits change how the item is built (ItemBuildJson).
 		for (const FOKSceneMaterialEdit& E : Item.MaterialEdits)
 		{
 			if (E.Property.IsEmpty()) continue;
-			Add(E.Property.StartsWith(TEXT("_")) ? E.Property : TEXT("_") + E.Property, E.bColor ? EOKMaterialOverrideKind::Color : EOKMaterialOverrideKind::Scalar,
-				E.Value.R, E.Value, nullptr);
+			const FString Name = E.Property.StartsWith(TEXT("_")) ? E.Property : TEXT("_") + E.Property;
+			switch (E.Kind)
+			{
+			case EOKSceneMaterialEditKind::Float: Add(Name, EOKMaterialOverrideKind::Scalar, E.Value.R, E.Value, nullptr); break;
+			case EOKSceneMaterialEditKind::Color: Add(Name, EOKMaterialOverrideKind::Color, 0.f, E.Value, nullptr); break;
+			case EOKSceneMaterialEditKind::TextureST: Add(Name + TEXT("_ST"), EOKMaterialOverrideKind::Vector, 0.f, E.Value, nullptr); break;
+			case EOKSceneMaterialEditKind::Texture:
+			{
+				const TPair<UTexture2D*, UTexture2D*> Texture = EditTexture(E.Text);
+				if (!Texture.Key) continue;
+				Add(Name, EOKMaterialOverrideKind::Texture, 0.f, FLinearColor::White, Texture.Key);
+				Out.Last().TextureLinear = Texture.Value;
+				break;
+			}
+			default: continue;
+			}
 			Out.Last().Material = E.Material;
 		}
 		return Out;
+	}
+
+	/** The item open options with the edits that change how it is built: FK, Material Editor shaders and renderers. */
+	FString ItemBuildJson(const FOKSceneItem& Item)
+	{
+		TArray<TSharedPtr<FJsonValue>> Fk, Shaders, Renderers;
+		for (const FOKSceneFkBone& B : Item.Fk)
+			Fk.Add(MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueString>(B.Bone),
+				MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueNumber>(B.Euler.X), MakeShared<FJsonValueNumber>(B.Euler.Y), MakeShared<FJsonValueNumber>(B.Euler.Z) }) }));
+		for (const FOKSceneMaterialEdit& E : Item.MaterialEdits)
+		{
+			if (E.Kind == EOKSceneMaterialEditKind::Shader && !E.Text.IsEmpty())
+				Shaders.Add(MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueString>(E.Material), MakeShared<FJsonValueString>(E.Text), MakeShared<FJsonValueNumber>(FMath::RoundToInt(E.Value.R)) }));
+			else if (E.Kind == EOKSceneMaterialEditKind::Renderer && !E.Material.IsEmpty())
+				Renderers.Add(MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueString>(E.Material), MakeShared<FJsonValueString>(E.Property), MakeShared<FJsonValueNumber>(E.Value.R) }));
+		}
+		FString Json;
+		const auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Json);
+		if (Shaders.IsEmpty() && Renderers.IsEmpty())
+		{
+			if (Fk.IsEmpty()) return FString();
+			FJsonSerializer::Serialize(Fk, Writer);
+			return Json;
+		}
+		const TSharedRef<FJsonObject> Material = MakeShared<FJsonObject>();
+		Material->SetArrayField(TEXT("shaders"), Shaders);
+		Material->SetArrayField(TEXT("renderers"), Renderers);
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetArrayField(TEXT("fk"), Fk);
+		Root->SetObjectField(TEXT("material"), Material);
+		FJsonSerializer::Serialize(Root, Writer);
+		return Json;
 	}
 
 	AKKPreviewActor* SpawnPreview(UWorld* World, FOkSession&& Session, FString& OutError, const TArray<FLinearColor>& ItemColors = {}, const TArray<FOKMaterialOverride>& Overrides = {},
@@ -260,15 +327,9 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 	{
 		FString Model, Prefab;
 		if (!ItemModel(Object.Item, Model, Prefab, OutError)) return false;
-		// Item FK turns the item's bones before its meshes are baked.
-		TArray<TSharedPtr<FJsonValue>> Fk;
-		for (const FOKSceneFkBone& B : Object.Item.Fk)
-			Fk.Add(MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueString>(B.Bone),
-				MakeShared<FJsonValueArray>(TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueNumber>(B.Euler.X), MakeShared<FJsonValueNumber>(B.Euler.Y), MakeShared<FJsonValueNumber>(B.Euler.Z) }) }));
-		FString FkJson;
-		if (Fk.Num()) { const auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&FkJson); FJsonSerializer::Serialize(Fk, Writer); }
+		// Item FK turns the item's bones before its meshes are baked; Material Editor shader and renderer edits apply then too.
 		FOkSession Session;
-		if (!Session.OpenOkModelFk(LibraryDirectory(), Model, Prefab, FkJson, OutError)) return false;
+		if (!Session.OpenOkModelFk(LibraryDirectory(), Model, Prefab, ItemBuildJson(Object.Item), OutError)) return false;
 		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, false,
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;

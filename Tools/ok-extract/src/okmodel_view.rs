@@ -8,6 +8,57 @@ use std::sync::Arc;
 use crate::oklib::{self, Id};
 use crate::unity::{ExtractedMesh, ParsedBundle};
 
+/// A scene's Material Editor edits of one Studio item that change how its meshes are built (the colour, value and
+/// texture edits are material parameters, applied by the renderer).
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub struct ItemMaterialEdits {
+    /// MaterialShaderList: material (as Material Editor names it), shader, render queue (-1: unchanged).
+    #[serde(default)]
+    pub shaders: Vec<(String, String, i32)>,
+    /// RendererPropertyList: renderer (GameObject) name, property (Enabled, ShadowCastingMode), value.
+    #[serde(default)]
+    pub renderers: Vec<(String, String, f32)>,
+}
+
+impl ItemMaterialEdits {
+    /// The shaders this renderer builds a material for; Material Editor keeps the old shader when the new one is not
+    /// loaded, and so do we for the others.
+    fn shader_supported(shader: &str) -> bool {
+        let family = crate::shader_family(shader);
+        family.contains("main_item_studio") || ["shader forge/main_item", "shader forge/main_opaque", "shader forge/main_alpha",
+            "shader forge/main_standardmdk_studio", "standard"].contains(&family.as_str())
+    }
+
+    fn apply_shaders(&self, meshes: &mut [ExtractedMesh]) {
+        for mat in meshes.iter_mut().filter_map(|m| m.mat.as_mut()) {
+            let key = crate::card::me_mat_key(mat.name.trim_end_matches(" (Instance)"));
+            for (material, shader, queue) in self.shaders.iter().filter(|(material, _, _)| crate::card::me_mat_key(material) == key) {
+                if Self::shader_supported(shader) {
+                    mat.shader = shader.clone();
+                    mat.shader_has_rim = None;
+                } else {
+                    eprintln!("ok-extract: Material Editor shader {shader} of {material} not supported, kept {}", mat.shader);
+                }
+                if *queue >= 0 { mat.render_queue = *queue; }
+            }
+        }
+    }
+
+    /// Renderer properties by the renderer's GameObject name: off, or its shadow casting mode (0 off .. 3 shadows only).
+    fn apply_renderer(&self, m: &mut ExtractedMesh, node_name: &str) {
+        let Some(mat) = m.mat.as_mut() else { return };
+        for (_, property, value) in self.renderers.iter().filter(|(renderer, _, _)| renderer == node_name) {
+            // The renderer reads the renderer settings as a group, keyed by the shadow mode (Unity's default: on).
+            mat.floats.entry("_OKRendererShadowMode".into()).or_insert(1.0);
+            match property.as_str() {
+                "Enabled" => { mat.floats.insert("_OKRendererEnabled".into(), if *value != 0.0 { 1.0 } else { 0.0 }); }
+                "ShadowCastingMode" => { mat.floats.insert("_OKRendererShadowMode".into(), value.clamp(0.0, 3.0)); }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// A lightmapped renderer instance (`lightmaps` entry of its hierarchy node): its lightmap UVs (Unity uv2, else uv,
 /// times the renderer's scale-offset) go to `uv4` (free for Standard-family parts) and its material names the
 /// lightmap (`_OKLightmapIndex`).
@@ -344,9 +395,15 @@ impl ModelView {
 
     /// `prefab_session` with item FK: the listed bones (name, local Unity Euler degrees) turned before the meshes are baked.
     pub fn prefab_session_fk(&self, prefab: &str, include_disabled: bool, fk: &[(String, [f32; 3])]) -> Result<crate::session::OkSession, String> {
+        self.prefab_session_edited(prefab, include_disabled, fk, &ItemMaterialEdits::default())
+    }
+
+    /// `prefab_session_fk` with a scene's Material Editor shader and renderer edits.
+    pub fn prefab_session_edited(&self, prefab: &str, include_disabled: bool, fk: &[(String, [f32; 3])], edits: &ItemMaterialEdits) -> Result<crate::session::OkSession, String> {
         let profile = std::env::var_os("OK_PROFILE").is_some();
         let t = std::time::Instant::now();
         let mut meshes = self.prefab_meshes(prefab, include_disabled);
+        edits.apply_shaders(&mut meshes);
         // MDK uses Standard-style slot names, not the character shader's
         // _NormalMap. Older model memos keep these bindings but omit their PNGs.
         // Resolve through the library's named-texture records at session time.
@@ -418,6 +475,7 @@ impl ModelView {
                 mat.floats.insert("_OKRendererLayer".into(), *layer as f32);
                 mat.floats.insert("_OKRendererEnabled".into(), u8::from(*enabled && renderer_visibility.iter().find(|(n, _)| *n == node).is_none_or(|(_, v)| *v)) as f32);
             }
+            if let Some(n) = usize::try_from(node).ok().and_then(|i| h.nodes.get(i)) { edits.apply_renderer(m, &n.name); }
         };
         let mut instances: Vec<ExtractedMesh> = Vec::new();
         for m in meshes.iter_mut().filter(|m| !m.uses_skin_renderer()) {

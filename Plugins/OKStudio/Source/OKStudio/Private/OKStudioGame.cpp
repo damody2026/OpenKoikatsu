@@ -658,11 +658,24 @@ public:
 					Float(TEXT("透明度"), [](FOKSceneObject& X) { return X.Item.Alpha; }, [](FOKSceneObject& X, float V) { X.Item.Alpha = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.05f);
 				Float(TEXT("描邊寬度"), [](FOKSceneObject& X) { return X.Item.LineWidth; }, [](FOKSceneObject& X, float V) { X.Item.LineWidth = FMath::Max(V, 0.f); }, 0.f, 2.f, 0.05f);
 				// Material Editor style edits: material (empty: every material), shader property, and a colour (#RRGGBB or
-				// #RRGGBBAA, sRGB) or a number. Changing them rebuilds the item.
+				// #RRGGBBAA, sRGB) or a number; imported textures, texture scale/offset, shaders and renderer switches are
+				// shown and can be deleted. Changing them rebuilds the item.
 				Label(TEXT("材質編輯（材質名空白＝全部；值 #RRGGBB 是顏色，數字是數值）"));
 				for (int32 Index = 0; Index < O->Item.MaterialEdits.Num(); ++Index)
 				{
 					auto Edit = [Index](FOKSceneObject& X) -> FOKSceneMaterialEdit* { return X.Item.MaterialEdits.IsValidIndex(Index) ? &X.Item.MaterialEdits[Index] : nullptr; };
+					const FOKSceneMaterialEdit& Shown = O->Item.MaterialEdits[Index];
+					if (Shown.Kind != EOKSceneMaterialEditKind::Float && Shown.Kind != EOKSceneMaterialEditKind::Color)
+					{
+						const FString What = Shown.Kind == EOKSceneMaterialEditKind::Texture ? FString::Printf(TEXT("貼圖 %s（%d 字元）"), *Shown.Property, Shown.Text.Len())
+							: Shown.Kind == EOKSceneMaterialEditKind::TextureST ? FString::Printf(TEXT("%s 縮放 %g,%g 位移 %g,%g"), *Shown.Property, Shown.Value.R, Shown.Value.G, Shown.Value.B, Shown.Value.A)
+							: Shown.Kind == EOKSceneMaterialEditKind::Shader ? TEXT("shader ") + Shown.Text
+							: FString::Printf(TEXT("renderer %s = %g"), *Shown.Property, Shown.Value.R);
+						Label(FString::Printf(TEXT("%d %s：%s"), Index + 1, *Shown.Material, *What));
+						Action(FString::Printf(TEXT("%d 刪除"), Index + 1), [](FOKSceneObject&) { return FString(TEXT("刪除這筆")); },
+							[Index](FOKSceneObject& X) { if (X.Item.MaterialEdits.IsValidIndex(Index)) X.Item.MaterialEdits.RemoveAt(Index); });
+						continue;
+					}
 					Text(FString::Printf(TEXT("%d 材質"), Index + 1), [Edit](FOKSceneObject& X) { const FOKSceneMaterialEdit* E = Edit(X); return E ? E->Material : FString(); },
 						[Edit](FOKSceneObject& X, const FString& V) { if (FOKSceneMaterialEdit* E = Edit(X)) E->Material = V.TrimStartAndEnd(); });
 					Text(FString::Printf(TEXT("%d 屬性"), Index + 1), [Edit](FOKSceneObject& X) { const FOKSceneMaterialEdit* E = Edit(X); return E ? E->Property : FString(); },
@@ -672,7 +685,7 @@ public:
 						{
 							const FOKSceneMaterialEdit* E = Edit(X);
 							if (!E) return FString();
-							return E->bColor ? TEXT("#") + E->Value.ToFColor(false).ToHex() : FString::SanitizeFloat(E->Value.R);
+							return E->Kind == EOKSceneMaterialEditKind::Color ? TEXT("#") + E->Value.ToFColor(false).ToHex() : FString::SanitizeFloat(E->Value.R);
 						},
 						[Edit](FOKSceneObject& X, const FString& V)
 						{
@@ -682,16 +695,16 @@ public:
 							if (S.RemoveFromStart(TEXT("#")) && (S.Len() == 6 || S.Len() == 8))
 							{
 								const FColor C = FColor::FromHex(S.Len() == 6 ? S + TEXT("FF") : S);
-								E->bColor = true;
+								E->Kind = EOKSceneMaterialEditKind::Color;
 								E->Value = FLinearColor(C.R / 255.f, C.G / 255.f, C.B / 255.f, C.A / 255.f);
 							}
-							else if (S.IsNumeric()) { E->bColor = false; E->Value = FLinearColor(FCString::Atof(*S), 0.f, 0.f, 0.f); }
+							else if (S.IsNumeric()) { E->Kind = EOKSceneMaterialEditKind::Float; E->Value = FLinearColor(FCString::Atof(*S), 0.f, 0.f, 0.f); }
 						});
 					Action(FString::Printf(TEXT("%d 刪除"), Index + 1), [](FOKSceneObject&) { return FString(TEXT("刪除這筆")); },
 						[Index](FOKSceneObject& X) { if (X.Item.MaterialEdits.IsValidIndex(Index)) X.Item.MaterialEdits.RemoveAt(Index); });
 				}
 				Action(TEXT("材質編輯"), [](FOKSceneObject& X) { return FString::Printf(TEXT("新增（目前 %d 筆）"), X.Item.MaterialEdits.Num()); },
-					[](FOKSceneObject& X) { FOKSceneMaterialEdit E; E.Property = TEXT("_Color"); E.bColor = true; X.Item.MaterialEdits.Add(E); });
+					[](FOKSceneObject& X) { FOKSceneMaterialEdit E; E.Property = TEXT("_Color"); E.Kind = EOKSceneMaterialEditKind::Color; X.Item.MaterialEdits.Add(E); });
 			}
 			ItemFkProperties(*O);
 			Label(TEXT("或直接指定基礎庫模型"));
@@ -2624,7 +2637,7 @@ void UOKStudioGame::RunPatternTest(bool bExit)
 			// unapplied check below covers both.
 			FOKSceneMaterialEdit Edit;
 			Edit.Property = TEXT("Color");
-			Edit.bColor = true;
+			Edit.Kind = EOKSceneMaterialEditKind::Color;
 			Edit.Value = FLinearColor(1.f, 0.f, 0.f, 1.f);
 			Shown.MaterialEdits = { Edit };
 		}

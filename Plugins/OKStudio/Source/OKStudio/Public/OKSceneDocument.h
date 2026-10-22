@@ -257,13 +257,26 @@ struct OKSTUDIO_API FOKSceneItemPattern
 	bool operator==(const FOKSceneItemPattern& O) const = default;
 };
 
-/** A Material Editor style edit of one material property of an item (Material Editor's scene data). */
+/** What a Material Editor edit changes. */
+UENUM(BlueprintType)
+enum class EOKSceneMaterialEditKind : uint8
+{
+	Float,		// Value.R
+	Color,		// Value, sRGB as authored
+	Texture,	// Text: the PNG, base64
+	TextureST,	// the texture's scale (R, G) and offset (B, A)
+	Shader,		// Text: the shader the material switches to; Value.R: its render queue (-1: unchanged)
+	Renderer,	// Material names the renderer (GameObject); Property: Enabled / ShadowCastingMode; Value.R
+};
+
+/** A Material Editor style edit of an item's material or renderer (Material Editor's scene data). */
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneMaterialEdit
 {
 	GENERATED_BODY()
 
-	/** Source material name (without " (Instance)"); empty: every material of the item. */
+	/** Source material name (without " (Instance)"); empty: every material of the item. The renderer's name for
+	 *  Renderer edits. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
 	FString Material;
 
@@ -271,12 +284,15 @@ struct OKSTUDIO_API FOKSceneMaterialEdit
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
 	FString Property;
 
-	/** A colour (Value, sRGB as authored) rather than a number (Value.R). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
-	bool bColor = false;
+	EOKSceneMaterialEditKind Kind = EOKSceneMaterialEditKind::Float;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
 	FLinearColor Value = FLinearColor::White;
+
+	/** The texture (base64 PNG) or the shader name. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material")
+	FString Text;
 
 	bool operator==(const FOKSceneMaterialEdit& O) const = default;
 };

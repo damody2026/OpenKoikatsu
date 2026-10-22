@@ -64,6 +64,9 @@ struct FOKMaterialOverride
  UPROPERTY() float Scalar = 0.f;
  UPROPERTY() FLinearColor Vector = FLinearColor::White;
  UPROPERTY() TObjectPtr<UTexture> Texture;
+ // The same image as a linear (non-sRGB) texture, used where the material's own texture is linear (its sampler reads
+ // linear); empty: Texture everywhere.
+ UPROPERTY() TObjectPtr<UTexture> TextureLinear;
 };
 
 /** A parameter value as it was before an override wrote it, restored when the override goes away. */
