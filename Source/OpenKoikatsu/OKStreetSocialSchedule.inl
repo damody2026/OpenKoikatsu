@@ -31,7 +31,8 @@ FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FStri
  // Every anchor of the first kind the place has (all its tables, not only the first), less those by him (the table he
  // eats at: three heroines stood pressed behind his chair), spread over the heroines.
  if(!Found)if(const auto* Names=Wanted.Find(Kind.StartsWith(TEXT("class"))?FString(TEXT("class")):Kind))for(const FString& N:*Names){
-  TArray<const FOKStreetModelAnchor*> All,Free;for(const auto& A:P->Anchors)if(A.Name.StartsWith(N)){All.Add(&A);if(FVector::Dist2D(A.Position,State->Male)>250.f)Free.Add(&A);}
+  // Only anchors inside the place (the cafe's street-side counter left a heroine "on shift" out on the street).
+  TArray<const FOKStreetModelAnchor*> All,Free;for(const auto& A:P->Anchors)if(A.Name.StartsWith(N)&&OKStreetInsidePlace(*P,A.Position)){All.Add(&A);if(FVector::Dist2D(A.Position,State->Male)>250.f)Free.Add(&A);}
   const auto& Use=Free.IsEmpty()?All:Free;if(!Use.IsEmpty()){Found=Use[(I-1)%Use.Num()];break;}}
  FVector Spot=Found?Found->Position:(P->Rooms.IsEmpty()?P->Door:P->Rooms[0].GetCenter());
  if(!Found&&!P->Rooms.IsEmpty())Spot.Z=P->Rooms[0].Min.Z;
