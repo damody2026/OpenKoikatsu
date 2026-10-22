@@ -161,6 +161,8 @@ pub struct CardInfo {
     /// ABM/ABMX per-bone modifiers from `KKABMPlugin.ABMData`.
     pub abm: Vec<crate::abmx::AbmBone>,
     pub pregnancy:crate::pregnancy::Settings,
+    /// KK_InvisibleBody `Visible = false`: only clothes and accessories are drawn.
+    pub invisible_body: bool,
     /// KSOX skin overlays: (coordinate index, KoikatsuSkinOverlayType) -> PNG.
     /// Types: 1 BodyOver, 2 FaceOver, 3 BodyUnder, 4 FaceUnder (KoikatsuCard.cs).
     pub ksox: std::collections::HashMap<(i32, i32), Vec<u8>>,
@@ -635,6 +637,12 @@ fn parse_dynamic_bone_editor(data: &Value) -> Vec<crate::dbone::DynamicBoneEdit>
         inertia: number(row, "Inertia"),
         radius: number(row, "Radius"),
     })).collect()
+}
+
+/// KK_InvisibleBody's PluginData `{"Visible": bool}` (InvisibleBody 1.4 writes it only when hidden; older versions
+/// wrote `true` too).
+fn invisible_body(plugin: &Value) -> bool {
+    me_plugin_data(plugin).and_then(|d| map_get(d, "Visible")).and_then(Value::as_bool) == Some(false)
 }
 
 pub(crate) fn me_plugin_data<'a>(plugin: &'a Value) -> Option<&'a Value> {
@@ -2238,6 +2246,7 @@ pub(crate) fn parse_card_bytes_mode_cached(data:&[u8],outfit:i32,apply_shape_plu
         voice_pitch: 0.5,
         abm: Vec::new(),
         pregnancy:Default::default(),
+        invisible_body: false,
         ksox: std::collections::HashMap::new(),
         clothes_masks: std::collections::HashMap::new(),
         clothes_overlays: std::collections::HashMap::new(),
@@ -2400,6 +2409,9 @@ pub(crate) fn parse_card_bytes_mode_cached(data:&[u8],outfit:i32,apply_shape_plu
                                     if key.starts_with("inflation"){if let Some(n)=value.as_f64(){info.pregnancy.values.insert(key.to_string(),n as f32);}}
                                 }}
                             }
+                        }
+                        if k.as_str() == Some("KK_InvisibleBody") {
+                            info.invisible_body = invisible_body(kv);
                         }
                         if k.as_str() == Some("com.deathweasel.bepinex.dynamicboneeditor") {
                             if let Some(data) = me_plugin_data(kv) {
@@ -2863,6 +2875,14 @@ mod tests {
             assert!((color[0] - 0.847).abs() < 1e-4, "{color:?}");
             assert!((color[1] - 0.815).abs() < 1e-4, "{color:?}");
         }
+    }
+
+    #[test]
+    fn invisible_body_reads_visible_flag() {
+        let plugin = |visible: bool| Value::Array(vec![Value::from(0), Value::Map(vec![(Value::from("Visible"), Value::from(visible))])]);
+        assert!(super::invisible_body(&plugin(false)));
+        assert!(!super::invisible_body(&plugin(true)));
+        assert!(!super::invisible_body(&Value::Nil));
     }
 
     #[test]

@@ -93,6 +93,11 @@ pub struct CameraTuning {
     pub fly_mouse: f64,
     pub fly_fast: f64,
     pub fly_slow: f64,
+    /// Shots are tried from these turns about their subject (degrees, best first), then closer in by these factors;
+    /// the first whose view is clear (a probe from the subject reaches within probe_margin cm of it) is taken.
+    pub probe_angles: Vec<f64>,
+    pub probe_closer: Vec<f64>,
+    pub probe_margin: f64,
 }
 
 impl Default for CameraTuning {
@@ -108,12 +113,12 @@ impl Default for CameraTuning {
             still_cm: 0.1,
             still_angle: 0.001,
             still_fov: 0.01,
-            speaker_distance: 120.0,
+            speaker_distance: 165.0,
             speaker_side_deg: 20.0,
             speaker_fov: 30.0,
-            speaker_aim_drop: 8.0,
+            speaker_aim_drop: 16.0,
             two_fov: 35.0,
-            two_fill: 0.6,
+            two_fill: 0.42,
             wide_fov: 40.0,
             wide_margin: 1.25,
             parallax_cm: [4.0, 2.5],
@@ -123,6 +128,9 @@ impl Default for CameraTuning {
             fly_mouse: 0.15,
             fly_fast: 3.0,
             fly_slow: 0.25,
+            probe_angles: vec![0.0, -40.0, 35.0, -75.0, 70.0, 110.0, -110.0, 160.0],
+            probe_closer: vec![1.0, 0.6],
+            probe_margin: 15.0,
         }
     }
 }
@@ -157,8 +165,8 @@ impl Default for PortraitTuning {
             side: 85.0,
             up: 5.0,
             aim_up: 3.0,
-            width: 150.0,
-            anchor: [0.2, 0.22],
+            width: 120.0,
+            anchor: [0.2, 0.3],
             fade_out: 0.10,
             fade_in: 0.15,
             target: [768, 1152],
@@ -417,8 +425,8 @@ const BUILTIN_ZH: &[(&str, &str)] = &[
     ("ui.missing", "缺少：{items}"),
     ("ui.item_have", "{name} × {n}（現有 {have}）"),
     ("ui.story_changed", "劇本已修改，從最接近的位置繼續"),
-    ("ui.saved", "已存到第 {n} 格"),
-    ("ui.loaded", "已讀取第 {n} 格"),
+    ("ui.saved", "已存到{n}"),
+    ("ui.loaded", "已讀取{n}"),
     ("ui.end", "（完）"),
     ("ui.loading", "載入中…"),
     ("ui.replay", "重播語音"),
@@ -454,7 +462,7 @@ impl Words {
                         };
                         let v: String = serde_json::from_str(v.trim())
                             .map_err(|e| format!("{}:{}: {e}", file.display(), line_no + 1))?;
-                        table.insert(k.trim().to_string(), v);
+                        table.insert(k.trim().trim_matches('"').to_string(), v);
                     }
                 }
             }
@@ -508,5 +516,27 @@ mod tests {
     fn words_format_icu() {
         let w = Words::load(None, "zh").unwrap();
         assert_eq!(w.m("ui.slot", &[("n", ok_rules::icu::Arg::Int(3))]), "第 3 格");
+    }
+}
+
+#[cfg(test)]
+mod shipped {
+    use super::*;
+
+    #[test]
+    fn shipped_words_cover_the_builtin_ids() {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/Story");
+        if !dir.is_dir() {
+            return;
+        }
+        for lang in ["zh", "ja", "en"] {
+            let w = Words::load(Some(&dir), lang).unwrap();
+            for (id, _) in BUILTIN_ZH {
+                assert_ne!(w.t(id), *id, "{lang}: {id}");
+            }
+            if lang != "zh" {
+                assert_ne!(w.t("ui.save"), "存檔", "{lang} file read");
+            }
+        }
     }
 }

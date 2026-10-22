@@ -64,6 +64,9 @@ public:
 	void SetAnimationTime(int32 Id, float Time);
 	/** The next Sync builds the object again (after something changed its preview outside the document). */
 	void Rebuild(int32 Id);
+	/** Plays another Studio animation (OK animation library) on a shown character in place, without building it again;
+	 *  the document object follows. */
+	bool SetCharacterAnimation(int32 Id, int32 Kind, int32 Group, int32 Category, int32 No, FString& OutError);
 
 	/** The preview actor showing a character or item object. */
 	AKKPreviewActor* PreviewOf(int32 Id) const;

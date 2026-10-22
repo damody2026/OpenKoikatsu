@@ -55,6 +55,7 @@ namespace
 		if (C.Blush >= 0.f) J->SetNumberField(TEXT("hoho_aka_rate"), C.Blush);
 		if (C.NipStand >= 0.f) J->SetNumberField(TEXT("nip_stand_rate"), C.NipStand);
 		if (C.SkinGloss >= 0.f) J->SetNumberField(TEXT("skin_tuya_rate"), C.SkinGloss);
+		if (C.InvisibleBody >= 0) J->SetBoolField(TEXT("invisible_body"), C.InvisibleBody != 0);
 		if (C.Fluids.Num() == 5)
 		{
 			TArray<TSharedPtr<FJsonValue>> V;
@@ -697,6 +698,29 @@ void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
 void AOKSceneActor::Rebuild(int32 Id)
 {
 	if (FShown* Item = Shown.Find(Id)) Item->Kind = EOKSceneObjectKind::Folder == Item->Kind ? EOKSceneObjectKind::Character : EOKSceneObjectKind::Folder;
+}
+
+bool AOKSceneActor::SetCharacterAnimation(int32 Id, int32 Kind, int32 Group, int32 Category, int32 No, FString& OutError)
+{
+	FShown* Item = Shown.Find(Id);
+	FOKSceneObject* Object = Document ? Document->Find(Id) : nullptr;
+	AKKPreviewActor* Actor = Item ? Item->Preview.Get() : nullptr;
+	if (!Object || !Actor || Item->Kind != EOKSceneObjectKind::Character) { OutError = TEXT("no shown character"); return false; }
+	const FOKStudioAnim* Entry = FOKStudioCatalog::Get().FindAnim(Kind, Group, Category, No);
+	if (!Entry || Entry->File.IsEmpty()) { OutError = FString::Printf(TEXT("studio animation %d/%d/%d/%d %s"), Kind, Group, Category, No, Entry ? TEXT("not converted") : TEXT("not in the library")); return false; }
+	UOKAnimSequence* Seq = UOKAnimationLibrary::LoadOkAnimFile(LibraryDirectory() / Entry->File, nullptr, NAME_None, OutError);
+	const TSharedPtr<FOkAnimPlayer> Player = Seq ? Seq->CreatePlayer(OutError) : nullptr;
+	if (!Player || !Actor->SetOkAnimation(Player, true)) { if (OutError.IsEmpty()) OutError = TEXT("animation not playable"); return false; }
+	Actor->PoseMode = 3;
+	Item->StudioAnim.Reset(Seq);
+	Item->Time = 0.f;
+	// Both copies agree, so the next Sync keeps the character as it is.
+	for (FOKSceneCharacter* C : { &Object->Character, &Item->Character })
+	{
+		C->StudioAnimeKind = Kind; C->StudioAnimeGroup = Group; C->StudioAnimeCategory = Category; C->StudioAnimeNo = No;
+		C->Animation.Reset(); C->Time = 0.f;
+	}
+	return true;
 }
 
 TArray<AActor*> AOKSceneActor::ObjectPreviews() const

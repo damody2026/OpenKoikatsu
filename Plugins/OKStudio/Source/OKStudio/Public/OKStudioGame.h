@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "OKSceneDocument.h"
+#include "Layout/Visibility.h"
 #include "Tickable.h"
 #include "UObject/Object.h"
 #include "OKStudioGame.generated.h"
@@ -115,6 +116,13 @@ public:
 	bool IsExporting() const { return ExportFrame >= 0; }
 	int32 ExportFrameCount() const { return ExportTotal; }
 
+	/** A story plays (OKStoryPlayer): the studio panel is hidden and the view is the story's (the orbit viewer and the
+	 *  scene's active camera no longer move it). */
+	void SetStoryMode(bool bOn);
+	bool IsStoryMode() const { return bStoryMode; }
+	/** Builds what changed in the document now (small scenes complete on return). */
+	void SyncDocumentNow() { SyncNow(); }
+
 	void Orbit(float DeltaYaw, float DeltaPitch);
 	void Pan(float Right, float Up);
 	void Zoom(float Steps);
@@ -148,6 +156,8 @@ private:
 	TSharedPtr<SWidget> PanelHost;
 	bool bSyncPending = false;
 	bool bStopRequested = false;
+	bool bStoryMode = false;
+	EVisibility PanelVisibility = EVisibility::Visible;
 	FString ExportDir;
 	float ExportFps = 30.f;
 	int32 ExportFrame = -1, ExportTotal = 0, ExportWidth = 1920, ExportHeight = 1080;

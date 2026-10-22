@@ -68,7 +68,7 @@ impl Quat {
     }
     pub fn normalized(self) -> Quat {
         let l = (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
-        if !(l > 1e-12) || !l.is_finite() {
+        if l.is_nan() || l <= 1e-12 || !l.is_finite() {
             return Quat::IDENTITY;
         }
         Quat { x: self.x / l, y: self.y / l, z: self.z / l, w: self.w / l }
@@ -123,7 +123,8 @@ impl Quat {
         };
         q.normalized()
     }
-    pub fn mul(self, b: Quat) -> Quat {
+    /// self × b (b applied first).
+    pub fn times(self, b: Quat) -> Quat {
         let a = self;
         Quat {
             w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,

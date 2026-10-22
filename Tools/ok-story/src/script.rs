@@ -487,9 +487,10 @@ impl Story {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Placed {
     pub who: String,
-    pub pos: V3,
-    pub yaw: f64,
-    pub scale: f64,
+    /// None: where the scene has the character.
+    pub pos: Option<V3>,
+    pub yaw: Option<f64>,
+    pub scale: Option<f64>,
     pub motion: Option<Motion>,
     pub face: Option<String>,
 }
@@ -500,9 +501,9 @@ fn apply(slot: Option<&Placed>, p: &CastPatch) -> Option<Placed> {
     let base = if same { slot.cloned() } else { None };
     Some(Placed {
         who,
-        pos: p.pos.or(base.as_ref().map(|b| b.pos)).unwrap_or([0.0, 0.0, 0.0]),
-        yaw: p.yaw.or(base.as_ref().map(|b| b.yaw)).unwrap_or(0.0),
-        scale: p.scale.or(base.as_ref().map(|b| b.scale)).unwrap_or(1.0),
+        pos: p.pos.or(base.as_ref().and_then(|b| b.pos)),
+        yaw: p.yaw.or(base.as_ref().and_then(|b| b.yaw)),
+        scale: p.scale.or(base.as_ref().and_then(|b| b.scale)),
         motion: p.motion.as_ref().and_then(|m| m.resolve().ok()).or(base.as_ref().and_then(|b| b.motion)),
         face: p.face.clone().or(base.and_then(|b| b.face)),
     })

@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "title": {"zh": "OK Studio 對話演出示範", "ja": "OK Studio 会話演出デモ"},
+  "characters": {
+    "mio": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_0.png", "scene_object": 1,
+            "name": {"zh": "澪", "ja": "澪"}, "color": "#ff8fb4"},
+    "sora": {"card": "UserData/Studio/scene/koikatu_cs0001901_cards/char_136.png", "scene_object": 2,
+             "name": {"zh": "空", "ja": "空"}, "color": "#8fc8ff"},
+    "passer": {"card": "UserData/Studio/scene/koikatu_cs0003800_cards/char_37.png", "scene_object": 1, "name": {"zh": "路人", "ja": "通行人"}, "color": "#c0c0c0"},
+    "alice": {"card": "Content/CharacterCards/StreetHeroines/alice.png", "name": {"zh": "愛麗絲", "ja": "アリス"}, "color": "#ffd27a",
+              "offstage": {"motion": "0:5:0", "face": "smile"}}
+  },
+  "items": {"ticket": {"name": {"zh": "電影票", "ja": "映画のチケット"}}},
+  "acts": [
+    {"id": "intro", "title": {"zh": "第一幕　放學後", "ja": "第一幕　放課後"},
+     "scene": "UserData/Studio/scene/koikatu_cs0001901.okscene",
+     "camera": {"shot": "wide"},
+     "cast": {"left": {"who": "mio"}, "right": {"who": "sora"}},
+     "lines": [
+       {"id": "intro.1", "text": {"zh": "練習結束後的舞台，燈光還亮著。", "ja": "練習の終わったステージに、まだ照明が灯っている。"}},
+       {"id": "intro.2", "who": "mio", "face": "smile", "camera": {"shot": "speaker"},
+        "text": {"zh": "空，今天也辛苦了。要不要一起回家？", "ja": "空、今日もお疲れさま。一緒に帰らない？"}},
+       {"id": "intro.3", "who": "sora", "face": "shy", "camera": {"shot": "speaker"}, "look": "mio",
+        "text": {"zh": "……嗯。不過，我想先去一個地方。", "ja": "……うん。でも、先に寄りたいところがあるの。"}},
+       {"id": "intro.4", "who": "mio", "face": "surprise", "camera": {"shot": "two"},
+        "text": {"zh": "咦？要去哪裡？", "ja": "え？どこに行くの？"}},
+       {"id": "intro.5", "who": "alice", "face": "smile",
+        "text": {"zh": "（走廊傳來聲音）兩位～我拿到電影票了喔！", "ja": "（廊下から声がする）お二人さーん、映画のチケット取れたよ！"},
+        "give": [{"item": "ticket", "n": 2}]},
+       {"id": "intro.6", "who": "sora", "face": "happy", "camera": {"shot": "studio"},
+        "text": {"zh": "是愛麗絲。……怎麼辦？", "ja": "アリスだ。……どうする？"},
+        "choices": [
+          {"text": {"zh": "一起去看電影", "ja": "一緒に映画を観に行く"}, "goto": "movie", "need": [{"item": "ticket"}], "consume": true, "set": {"route": 1}},
+          {"text": {"zh": "今天先回家", "ja": "今日はまっすぐ帰る"}, "goto": "home", "set": {"route": 2}}
+        ]}
+     ]},
+    {"id": "movie", "title": {"zh": "第二幕　電影院前", "ja": "第二幕　映画館の前"},
+     "scene": "UserData/Studio/scene/koikatu_cs0001901.okscene",
+     "camera": {"shot": "speaker", "on": "alice"},
+     "cast": {"center": {"who": "alice", "pos": [9, -10, 0], "yaw": 0, "motion": "0:5:0"}},
+     "lines": [
+       {"id": "movie.1", "who": "alice", "face": "smile", "motion": "0:5:1", "camera": {"shot": "speaker"},
+        "text": {"zh": "太好了！那就說定囉，我來帶路！", "ja": "やった！じゃあ決まりね、案内するよ！"}},
+       {"id": "movie.2", "who": "alice", "face": "happy", "motion": "0:2:0",
+        "text": {"zh": "票只有兩張……不過沒關係，我再去買一張！", "ja": "チケットは二枚だけど……大丈夫、もう一枚買ってくる！"}},
+       {"id": "movie.3", "text": {"zh": "就這樣，三個人的放學時光開始了。"}, "goto": "end"}
+     ]},
+    {"id": "home", "title": {"zh": "第二幕　歸途", "ja": "第二幕　帰り道"},
+     "scene": "UserData/Studio/scene/koikatu_cs0003800.okscene",
+     "camera": {"shot": "wide"},
+     "cast": {"street": {"who": "passer"}},
+     "lines": [
+       {"id": "home.1", "who": "mio", "face": "sad",
+        "text": {"zh": "（訊息）今天的電影，下次再一起去吧。", "ja": "（メッセージ）今日の映画、また今度一緒に行こうね。"}},
+       {"id": "home.2", "text": {"zh": "回家的路上，手機亮了一下。"}, "goto": "end"}
+     ]},
+    {"id": "end", "scene": "UserData/Studio/scene/koikatu_cs0001901.okscene", "next": "",
+     "camera": {"shot": "wide"},
+     "cast": {"left": {"who": "mio"}, "right": {"who": "sora"}},
+     "lines": [
+       {"id": "end.1", "who": "mio", "face": "smile", "camera": {"shot": "two"}, "when": {"flags": {"route": 1}},
+        "text": {"zh": "電影很好看呢。下次也一起吧。", "ja": "映画、面白かったね。また一緒に行こう。"}},
+       {"id": "end.2", "text": {"zh": "（示範結束）", "ja": "（デモ終了）"}}
+     ]}
+  ]
+}

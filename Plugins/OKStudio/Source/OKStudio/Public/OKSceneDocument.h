@@ -212,9 +212,14 @@ struct OKSTUDIO_API FOKSceneCharacter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
 	TArray<uint8> AccessoriesShown;
 
+	/** Invisible Body (KK_InvisibleBody): -1 the card's, 0 shown, 1 only clothes and accessories drawn. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+	int32 InvisibleBody = -1;
+
 	bool SameState(const FOKSceneCharacter& O) const
 	{
-		return TearsLevel == O.TearsLevel && Blush == O.Blush && NipStand == O.NipStand && SkinGloss == O.SkinGloss && Fluids == O.Fluids && AccessoriesShown == O.AccessoriesShown;
+		return TearsLevel == O.TearsLevel && Blush == O.Blush && NipStand == O.NipStand && SkinGloss == O.SkinGloss && Fluids == O.Fluids && AccessoriesShown == O.AccessoriesShown
+			&& InvisibleBody == O.InvisibleBody;
 	}
 
 	bool SameContent(const FOKSceneCharacter& O) const

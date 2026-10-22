@@ -595,6 +595,8 @@ public:
 					return FString::Printf(TEXT("顯示 %d／20"), Shown);
 				},
 				[](FOKSceneObject& X) { if (X.Character.AccessoriesShown.Num() != 21) X.Character.AccessoriesShown.Init(0, 21); else X.Character.AccessoriesShown.Reset(); });
+			Cycle(TEXT("隱形身體"), [](FOKSceneObject& X) { return FString(X.Character.InvisibleBody < 0 ? TEXT("照卡片") : X.Character.InvisibleBody ? TEXT("只顯示衣服與飾品") : TEXT("顯示")); },
+				[](FOKSceneObject& X) { X.Character.InvisibleBody = X.Character.InvisibleBody < 0 ? 1 : X.Character.InvisibleBody == 1 ? 0 : -1; });
 			if (O->Character.AccessoriesShown.Num() == 21)
 				for (int32 Slot = 0; Slot < 21; ++Slot)
 					Check(Slot < 20 ? FString::Printf(TEXT("飾品 %d"), Slot + 1) : FString(TEXT("擴充飾品（MoreAccessories）")), [Slot](FOKSceneObject& X) { return X.Character.AccessoriesShown.IsValidIndex(Slot) && X.Character.AccessoriesShown[Slot] != 0; },
@@ -1591,10 +1593,25 @@ void UOKStudioGame::Zoom(float Steps)
 	Document->ActiveCamera = -1;
 }
 
+void UOKStudioGame::SetStoryMode(bool bOn)
+{
+	if (bOn == bStoryMode) return;
+	bStoryMode = bOn;
+	if (!PanelHost) return;
+	if (bOn) { PanelVisibility = PanelHost->GetVisibility(); PanelHost->SetVisibility(EVisibility::Collapsed); }
+	else PanelHost->SetVisibility(PanelVisibility);
+}
+
 void UOKStudioGame::UpdateViewer()
 {
 	if (!Viewer) return;
 	UCameraComponent* ViewerCamera = Viewer->GetCameraComponent();
+	// The story places the viewer itself.
+	if (bStoryMode)
+	{
+		if (SceneActor) SceneActor->PlaceBackground(Viewer->GetActorTransform(), ViewerCamera->FieldOfView);
+		return;
+	}
 	if (const UCameraComponent* Active = SceneActor ? SceneActor->ActiveCamera() : nullptr)
 	{
 		Viewer->SetActorTransform(Active->GetComponentTransform());
@@ -2742,28 +2759,39 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 	// Character state (R8): tears level 2 shows the medium tears, every accessory slot switched off hides them all.
 	Step(TEXT("character state"));
 	{
-		auto Count = [&](int32& Tears, int32& Accessories)
+		struct FShownParts { int32 Tears = 0, Accessories = 0, Body = 0, Clothes = 0; };
+		auto Count = [&]
 		{
-			Tears = Accessories = 0;
+			FShownParts S;
 			const AKKPreviewActor* P = SceneActor->PreviewOf(A);
 			for (int32 Part = 0; P && Part < P->Session.PartCount(); ++Part)
 			{
 				OkMeshView V;
 				if (!P->Session.PartAt(Part, V) || !V.render_visible) continue;
 				const FString Name = UTF8_TO_TCHAR(V.name ? V.name : ""), Role = UTF8_TO_TCHAR(V.role ? V.role : "");
-				Tears += Name.Contains(TEXT("cf_O_namida_M")) ? 1 : 0;
-				Accessories += Role.Contains(TEXT("acc")) ? 1 : 0;
+				S.Tears += Name.Contains(TEXT("cf_O_namida_M")) ? 1 : 0;
+				S.Accessories += Role.StartsWith(TEXT("acc")) ? 1 : 0;
+				S.Clothes += Role.StartsWith(TEXT("clothes")) ? 1 : 0;
+				S.Body += Role == TEXT("body") || Role == TEXT("head") ? 1 : 0;
 			}
+			return S;
 		};
-		int32 Tears0 = 0, Acc0 = 0, Tears1 = 0, Acc1 = 0;
-		Count(Tears0, Acc0);
+		const FShownParts Before = Count();
 		Document->Find(A)->Character.TearsLevel = 2;
 		Document->Find(A)->Character.AccessoriesShown.Init(0, 21);
+		Document->Find(A)->Character.InvisibleBody = 1;
 		Document->NotifyChanged();
 		SyncNow();
-		Count(Tears1, Acc1);
-		Check(Tears0 == 0 && Tears1 == 1, FString::Printf(TEXT("tears level 2 shows the medium tears (%d → %d)"), Tears0, Tears1));
-		Check(Acc0 > 0 && Acc1 == 0, FString::Printf(TEXT("accessories switched off (%d → %d shown)"), Acc0, Acc1));
+		const FShownParts After = Count();
+		Check(Before.Tears == 0 && After.Tears == 0, FString::Printf(TEXT("tears level 2 is under the invisible head (%d → %d)"), Before.Tears, After.Tears));
+		Check(Before.Accessories > 0 && After.Accessories == 0, FString::Printf(TEXT("accessories switched off (%d → %d shown)"), Before.Accessories, After.Accessories));
+		Check(Before.Body > 0 && After.Body == 0 && After.Clothes == Before.Clothes, FString::Printf(TEXT("invisible body hides body and head, keeps clothes (%d → %d body, %d → %d clothes)"), Before.Body, After.Body, Before.Clothes, After.Clothes));
+		Document->Find(A)->Character.InvisibleBody = -1;
+		Document->NotifyChanged();
+		SyncNow();
+		const FShownParts Visible = Count();
+		// The tears object is a head part of its own.
+		Check(Visible.Tears == 1 && Visible.Body == Before.Body + 1,FString::Printf(TEXT("tears level 2 shows the medium tears; the body is back (%d tears, %d body)"), Visible.Tears, Visible.Body));
 		Document->Find(A)->Character.TearsLevel = -1;
 		Document->Find(A)->Character.AccessoriesShown.Reset();
 		Document->NotifyChanged();

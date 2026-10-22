@@ -1,0 +1,195 @@
+{
+  "layout": {
+    "dialog_height": 0.26,
+    "text_left": 0.275,
+    "portrait_width": 0.54,
+    "portrait_height": 0.68,
+    "portrait_fade_from": 0.5,
+    "dialog_opacity": 0.86
+  },
+  "text": {
+    "speeds": [
+      8.0,
+      12.0,
+      17.0,
+      23.0,
+      30.0,
+      38.0,
+      48.0,
+      62.0,
+      85.0,
+      140.0
+    ],
+    "pause_after": "、。，．,.!?！？…―─～~♪「」『』（）",
+    "pause_chars": 3.0,
+    "auto_base": 0.8,
+    "auto_per_char": 0.06,
+    "skip_line": 0.05
+  },
+  "camera": {
+    "per_cm": 400.0,
+    "per_turn": 0.7,
+    "per_fov": 100.0,
+    "min_seconds": 0.35,
+    "max_seconds": 4.0,
+    "speed_min": 0.85,
+    "speed_max": 1.15,
+    "still_cm": 0.1,
+    "still_angle": 0.001,
+    "still_fov": 0.01,
+    "speaker_distance": 165.0,
+    "speaker_side_deg": 20.0,
+    "speaker_fov": 30.0,
+    "speaker_aim_drop": 16.0,
+    "two_fov": 35.0,
+    "two_fill": 0.42,
+    "wide_fov": 40.0,
+    "wide_margin": 1.25,
+    "parallax_cm": [
+      4.0,
+      2.5
+    ],
+    "parallax_deg": [
+      1.2,
+      0.8
+    ],
+    "parallax_rate": 8.0,
+    "fly_speed": 300.0,
+    "fly_mouse": 0.15,
+    "fly_fast": 3.0,
+    "fly_slow": 0.25,
+    "probe_angles": [
+      0.0,
+      -40.0,
+      35.0,
+      -75.0,
+      70.0,
+      110.0,
+      -110.0,
+      160.0
+    ],
+    "probe_closer": [
+      1.0,
+      0.6
+    ],
+    "probe_margin": 15.0
+  },
+  "portrait": {
+    "forward": 170.0,
+    "side": 85.0,
+    "up": 5.0,
+    "aim_up": 3.0,
+    "width": 120.0,
+    "anchor": [
+      0.2,
+      0.3
+    ],
+    "fade_out": 0.1,
+    "fade_in": 0.15,
+    "target": [
+      768,
+      1152
+    ],
+    "every": 1,
+    "offstage_at": [
+      0.0,
+      50000.0,
+      0.0
+    ]
+  },
+  "life": {
+    "blink_every": [
+      6.0,
+      12.0
+    ],
+    "blink_retry": [
+      0.2,
+      1.0
+    ],
+    "blink_max": 1,
+    "blink_length": 0.3,
+    "glance_every": [
+      8.0,
+      16.0
+    ],
+    "glance_hold": [
+      0.45,
+      1.2
+    ],
+    "glance_yaw": [
+      3.0,
+      8.0
+    ],
+    "glance_pitch": [
+      1.0,
+      4.0
+    ],
+    "look_hold": [
+      1.0,
+      1.8
+    ],
+    "look_cooldown": [
+      45.0,
+      75.0
+    ],
+    "look_cone": 70.0,
+    "look_range": 400.0,
+    "max_yaw": 13.0,
+    "max_pitch": 6.0,
+    "gaze_max": 2,
+    "gaze_stagger": 1.2,
+    "gaze_jitter": [
+      0.0,
+      0.6
+    ],
+    "glance_distance": 300.0
+  },
+  "flow": {
+    "title_enter": 0.46,
+    "title_hold": 0.8,
+    "title_exit": 0.34,
+    "title_enter_curve": [
+      0.16,
+      1.18,
+      0.3,
+      1.0
+    ],
+    "title_exit_curve": [
+      0.65,
+      0.0,
+      0.85,
+      0.35
+    ],
+    "motion_blend": 0.3,
+    "backlog_size": 200,
+    "save_slots": 12,
+    "thumbnail": [
+      320,
+      180
+    ]
+  },
+  "faces": {
+    "angry": "怒り１",
+    "blush": "恥ずかしくて真っ赤",
+    "closed": "標準（目閉じ）",
+    "cry": "泣き顔",
+    "doki": "ドキドキ",
+    "happy": "嬉しい",
+    "laugh": "スマイルA",
+    "look_away": "思わず目を逸らす",
+    "normal": "標準",
+    "pout": "不満",
+    "sad": "悲しい",
+    "serious": "真剣",
+    "shy": "照れ顔",
+    "sleepy": "半目",
+    "smile": "笑顔",
+    "smile_closed": "笑顔（目閉じ）",
+    "smug": "ドヤ顔",
+    "surprise": "驚き",
+    "tearful_smile": "涙目笑顔",
+    "think": "思案",
+    "wink": "ウインク(左閉じ)",
+    "worry": "困り顔"
+  }
+}

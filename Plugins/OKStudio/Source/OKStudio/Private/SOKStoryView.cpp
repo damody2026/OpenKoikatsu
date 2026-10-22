@@ -1,0 +1,513 @@
+#include "SOKStoryView.h"
+#include "OKStoryPlayer.h"
+#include "Dom/JsonObject.h"
+#include "Engine/Texture2D.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Rendering/DrawElements.h"
+#include "Styling/CoreStyle.h"
+
+namespace
+{
+	// The look of the story screen (layout fractions and timing come from the director).
+	const FLinearColor BoxColor(0.020f, 0.030f, 0.060f, 1.f);
+	const FLinearColor LineColor(1.f, 1.f, 1.f, 0.22f);
+	const FLinearColor TextColor(0.96f, 0.96f, 0.98f, 1.f);
+	const FLinearColor DimText(0.70f, 0.72f, 0.78f, 1.f);
+	const FLinearColor Accent(1.f, 0.62f, 0.78f, 1.f);
+	const FLinearColor ButtonColor(0.10f, 0.13f, 0.22f, 0.92f);
+	const FLinearColor ButtonDisabled(0.10f, 0.10f, 0.12f, 0.75f);
+
+	FLinearColor HexColor(const FString& Hex, const FLinearColor& Fallback)
+	{
+		if (Hex.Len() < 7 || Hex[0] != TEXT('#')) return Fallback;
+		return FLinearColor(FColor::FromHex(Hex));
+	}
+
+	FSlateFontInfo Font(float Pixels, bool bBold = false)
+	{
+		// Slate font sizes are points at 96 DPI.
+		return FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", FMath::Max(6, FMath::RoundToInt(Pixels * 0.75f)));
+	}
+
+	FVector2D Measure(const FString& Text, const FSlateFontInfo& F)
+	{
+		return FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, F);
+	}
+
+	/** Lines of `Text` no wider than `Width` (latin words kept whole where they fit, any other script by character). */
+	TArray<FString> Wrap(const FString& Text, const FSlateFontInfo& F, float Width)
+	{
+		TArray<FString> Lines;
+		FString Paragraphs = Text;
+		Paragraphs.ReplaceInline(TEXT("\r"), TEXT(""));
+		TArray<FString> Parts;
+		Paragraphs.ParseIntoArray(Parts, TEXT("\n"), false);
+		for (const FString& Part : Parts)
+		{
+			FString Line;
+			int32 LastSpace = -1;
+			for (int32 I = 0; I < Part.Len(); ++I)
+			{
+				const FString Next = Line + FString::Chr(Part[I]);
+				if (Line.Len() && Measure(Next, F).X > Width)
+				{
+					if (LastSpace > 0 && !FChar::IsWhitespace(Part[I]))
+					{
+						Lines.Add(Line.Left(LastSpace));
+						Line = Line.Mid(LastSpace + 1) + FString::Chr(Part[I]);
+					}
+					else
+					{
+						Lines.Add(Line);
+						Line = FChar::IsWhitespace(Part[I]) ? FString() : FString::Chr(Part[I]);
+					}
+					LastSpace = -1;
+					continue;
+				}
+				if (FChar::IsWhitespace(Part[I])) LastSpace = Line.Len();
+				Line = Next;
+			}
+			Lines.Add(Line);
+		}
+		return Lines;
+	}
+
+	FString Str(const TSharedPtr<FJsonObject>& O, const TCHAR* Field)
+	{
+		FString S;
+		if (O) O->TryGetStringField(Field, S);
+		return S;
+	}
+
+	double Num(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, double Default = 0.0)
+	{
+		double D = Default;
+		if (O) O->TryGetNumberField(Field, D);
+		return D;
+	}
+
+	bool Flag(const TSharedPtr<FJsonObject>& O, const TCHAR* Field)
+	{
+		bool B = false;
+		if (O) O->TryGetBoolField(Field, B);
+		return B;
+	}
+
+	TSharedPtr<FJsonObject> Obj(const TSharedPtr<FJsonObject>& O, const TCHAR* Field)
+	{
+		const TSharedPtr<FJsonObject>* Out = nullptr;
+		return O && O->TryGetObjectField(Field, Out) ? *Out : nullptr;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Arr(const TSharedPtr<FJsonObject>& O, const TCHAR* Field)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Out = nullptr;
+		return O && O->TryGetArrayField(Field, Out) ? *Out : TArray<TSharedPtr<FJsonValue>>();
+	}
+
+	FString Quote(const FString& S)
+	{
+		return TEXT("\"") + S.ReplaceCharWithEscapedChar() + TEXT("\"");
+	}
+}
+
+void SOKStoryView::Construct(const FArguments& InArgs)
+{
+	Player = InArgs._Player;
+	SetCanTick(false);
+}
+
+void SOKStoryView::Send(const FString& Json) const
+{
+	if (UOKStoryPlayer* P = Player.Get()) P->Input(Json);
+}
+
+const FSlateBrush* SOKStoryView::BrushFor(UObject* Resource, const FVector2D& Size) const
+{
+	FSlateBrush& B = Brushes.FindOrAdd(Resource);
+	B.SetResourceObject(Resource);
+	B.ImageSize = Size;
+	B.DrawAs = ESlateBrushDrawType::Image;
+	return &B;
+}
+
+int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Culling, FSlateWindowElementList& Out, int32 Layer,
+	const FWidgetStyle& Style, bool bParentEnabled) const
+{
+	Hits.Reset();
+	bPanelOpen = false;
+	UOKStoryPlayer* P = Player.Get();
+	const TSharedPtr<FJsonObject> Frame = P ? P->Frame : nullptr;
+	if (!Frame) return Layer;
+	const FVector2D Size = Geo.GetLocalSize();
+	const double W = Size.X, H = Size.Y;
+	const FSlateBrush* White = FCoreStyle::Get().GetBrush("WhiteBrush");
+	const double Now = FPlatformTime::Seconds();
+	auto Box = [&](int32 L, FVector2D Pos, FVector2D Extent, const FLinearColor& Color)
+	{
+		FSlateDrawElement::MakeBox(Out, L, Geo.ToPaintGeometry(FVector2f(Extent), FSlateLayoutTransform(FVector2f(Pos))), White, ESlateDrawEffect::None, Color);
+	};
+	auto Text = [&](int32 L, const FString& S, FVector2D Pos, float Pixels, const FLinearColor& Color, bool bBold = false)
+	{
+		const FSlateFontInfo F = Font(Pixels, bBold);
+		// A soft shadow keeps text readable over bright scenes.
+		FSlateDrawElement::MakeText(Out, L, Geo.ToPaintGeometry(FVector2f(float(W), Pixels * 1.6f), FSlateLayoutTransform(FVector2f(Pos + FVector2D(1.5, 1.5)))), S, F, ESlateDrawEffect::None, FLinearColor(0, 0, 0, 0.6f * Color.A));
+		FSlateDrawElement::MakeText(Out, L + 1, Geo.ToPaintGeometry(FVector2f(float(W), Pixels * 1.6f), FSlateLayoutTransform(FVector2f(Pos))), S, F, ESlateDrawEffect::None, Color);
+	};
+	auto Button = [&](int32 L, FVector2D Pos, FVector2D Extent, const FString& Label, const FString& Event, bool bEnabled, bool bOn, float Pixels)
+	{
+		Box(L, Pos, Extent, bEnabled ? (bOn ? FLinearColor(0.42f, 0.22f, 0.34f, 0.95f) : ButtonColor) : ButtonDisabled);
+		Box(L + 1, Pos + FVector2D(0, Extent.Y - 2), FVector2D(Extent.X, 2), bOn ? Accent : LineColor);
+		const FVector2D T = Measure(Label, Font(Pixels));
+		Text(L + 2, Label, Pos + (Extent - T) * 0.5, Pixels, bEnabled ? TextColor : DimText);
+		if (bEnabled && !Event.IsEmpty()) Hits.Add({ Pos, Pos + Extent, Event });
+	};
+	const FString Screen = Str(Frame, TEXT("screen"));
+	const bool bHide = Flag(Frame, TEXT("hide_ui"));
+	const TSharedPtr<FJsonObject> LayoutObj = Obj(Frame, TEXT("layout"));
+	const double DialogH = Num(LayoutObj, TEXT("dialog_height"), 0.26) * H;
+	const double TextLeft = Num(LayoutObj, TEXT("text_left"), 0.275) * W;
+	const TSharedPtr<FJsonObject> Dialog = Obj(Frame, TEXT("dialog"));
+	const float Opacity = float(Num(Dialog, TEXT("opacity"), Num(LayoutObj, TEXT("dialog_opacity"), 0.86)));
+	const double BoxTop = H - DialogH;
+	int32 L = Layer;
+
+	// The dialog box under the portrait.
+	const bool bDialog = Flag(Dialog, TEXT("visible")) && !bHide;
+	if (bDialog)
+	{
+		Box(L, FVector2D(0, BoxTop), FVector2D(W, DialogH), FLinearColor(BoxColor.R, BoxColor.G, BoxColor.B, Opacity));
+		Box(L + 1, FVector2D(0, BoxTop), FVector2D(W, 2), LineColor);
+	}
+	L += 2;
+
+	// The live portrait, fading into the dialog box at its foot.
+	const TSharedPtr<FJsonObject> Portrait = Obj(Frame, TEXT("portrait"));
+	if (Portrait && Flag(Portrait, TEXT("visible")) && !bHide)
+	{
+		const TArray<TSharedPtr<FJsonValue>> R = Arr(Portrait, TEXT("rect"));
+		if (R.Num() == 4)
+		{
+			const FVector2D Pos(R[0]->AsNumber() * W, R[1]->AsNumber() * H), Ext(R[2]->AsNumber() * W, R[3]->AsNumber() * H);
+			const float Alpha = float(Num(Portrait, TEXT("alpha"), 1.0));
+			if (UMaterialInstanceDynamic* Mid = P->PortraitMaterial())
+				FSlateDrawElement::MakeBox(Out, L, Geo.ToPaintGeometry(FVector2f(Ext), FSlateLayoutTransform(FVector2f(Pos))), BrushFor(Mid, Ext), ESlateDrawEffect::None, FLinearColor::White);
+			const double From = Num(Portrait, TEXT("fade_from"), 0.5);
+			const FVector2D GPos(Pos.X, Pos.Y + Ext.Y * From), GExt(Ext.X, Ext.Y * (1.0 - From));
+			if (bDialog && GExt.Y > 1)
+			{
+				// Only the part over the dialog box gets the box's colour; above it the portrait stays clear.
+				const double Start = FMath::Max(GPos.Y, BoxTop + DialogH * 0.3);
+				const FVector2D S(GPos.X, Start), E(GExt.X, Pos.Y + Ext.Y - Start);
+				TArray<FSlateGradientStop> Stops;
+				Stops.Add(FSlateGradientStop(FVector2D(0, 0), FLinearColor(BoxColor.R, BoxColor.G, BoxColor.B, 0.f)));
+				Stops.Add(FSlateGradientStop(FVector2D(0, E.Y), FLinearColor(BoxColor.R, BoxColor.G, BoxColor.B, Opacity * 0.75f * Alpha)));
+				FSlateDrawElement::MakeGradient(Out, L + 1, Geo.ToPaintGeometry(FVector2f(E), FSlateLayoutTransform(FVector2f(S))), Stops, Orient_Horizontal);
+			}
+		}
+	}
+	L += 2;
+
+	// Name plate and text.
+	if (bDialog)
+	{
+		const FString Name = Str(Dialog, TEXT("name"));
+		const double NamePx = DialogH * 0.15, TextPx = DialogH * 0.135;
+		double Y = BoxTop + DialogH * 0.10;
+		if (!Name.IsEmpty())
+		{
+			const FLinearColor C = HexColor(Str(Dialog, TEXT("name_color")), Accent);
+			Text(L, Name, FVector2D(TextLeft, Y), float(NamePx), C, true);
+			const double NameW = Measure(Name, Font(NamePx, true)).X;
+			Box(L, FVector2D(TextLeft, Y + NamePx * 1.35), FVector2D(FMath::Max(NameW + NamePx, W * 0.12), 2), C * FLinearColor(1, 1, 1, 0.8f));
+		}
+		Y += NamePx * 1.75;
+		const FSlateFontInfo F = Font(TextPx);
+		const TArray<FString> Lines = Wrap(Str(Dialog, TEXT("text_visible")), F, float(W * 0.95 - TextLeft));
+		double LastX = TextLeft, LastY = Y;
+		for (const FString& Line : Lines)
+		{
+			Text(L, Line, FVector2D(TextLeft, Y), float(TextPx), TextColor);
+			LastX = TextLeft + Measure(Line, F).X;
+			LastY = Y;
+			Y += TextPx * 1.5;
+		}
+		const FString Waiting = Str(Dialog, TEXT("waiting"));
+		if (Waiting == TEXT("click") || Waiting == TEXT("auto") || Waiting == TEXT("ended"))
+		{
+			const float Bob = float(FMath::Sin(Now * 5.0) * TextPx * 0.12);
+			Text(L, TEXT("▼"), FVector2D(LastX + TextPx * 0.4, LastY + Bob), float(TextPx * 0.7), Waiting == TEXT("auto") ? Accent : TextColor);
+		}
+	}
+	L += 3;
+
+	// Quick buttons along the bottom of the dialog box.
+	if (bDialog && Screen != TEXT("ended"))
+	{
+		const double Px = FMath::Max(12.0, DialogH * 0.075), BH = Px * 1.7;
+		double X = W - Px;
+		const TArray<TSharedPtr<FJsonValue>> Buttons = Arr(Frame, TEXT("buttons"));
+		for (int32 I = Buttons.Num() - 1; I >= 0; --I)
+		{
+			const TSharedPtr<FJsonObject> B = Buttons[I]->AsObject();
+			const FString Label = Str(B, TEXT("label"));
+			const double BW = Measure(Label, Font(Px)).X + Px * 1.4;
+			X -= BW;
+			Button(L, FVector2D(X, H - BH - Px * 0.5), FVector2D(BW, BH), Label, FString::Printf(TEXT("{\"type\":\"button\",\"id\":%s}"), *Quote(Str(B, TEXT("id")))), true, Flag(B, TEXT("on")), float(Px));
+			X -= Px * 0.4;
+		}
+	}
+	L += 3;
+
+	// Choices above the dialog box.
+	const TArray<TSharedPtr<FJsonValue>> Choices = Arr(Frame, TEXT("choices"));
+	if (Choices.Num() && !bHide)
+	{
+		const double CH = H * 0.062, Gap = H * 0.016, CW = W * 0.44, Px = CH * 0.36;
+		double Y = BoxTop - H * 0.04 - Choices.Num() * (CH + Gap);
+		for (int32 I = 0; I < Choices.Num(); ++I)
+		{
+			const TSharedPtr<FJsonObject> C = Choices[I]->AsObject();
+			const bool bEnabled = Flag(C, TEXT("enabled"));
+			Button(L, FVector2D((W - CW) * 0.5, Y), FVector2D(CW, CH), Str(C, TEXT("text")), FString::Printf(TEXT("{\"type\":\"choose\",\"index\":%d}"), I), bEnabled, false, float(Px));
+			const FString Hint = Str(C, TEXT("hint"));
+			if (!Hint.IsEmpty()) Text(L + 3, Hint, FVector2D((W - CW) * 0.5 + Px, Y + CH - Px * 0.2), float(Px * 0.6), FLinearColor(1.f, 0.6f, 0.6f, 1.f));
+			Y += CH + Gap;
+		}
+	}
+	L += 4;
+
+	// The act title sliding in from the left.
+	const TSharedPtr<FJsonObject> Title = Obj(Frame, TEXT("title"));
+	if (Title)
+	{
+		const float A = float(Num(Title, TEXT("alpha"), 1.0));
+		const double X = Num(Title, TEXT("x")) * W, Px = H * 0.06;
+		const FString S = Str(Title, TEXT("text"));
+		const double TW = Measure(S, Font(Px, true)).X + Px * 2.0;
+		Box(L, FVector2D(X, H * 0.36), FVector2D(TW + W * 0.06, Px * 1.9), FLinearColor(0.f, 0.f, 0.f, 0.55f * A));
+		Box(L + 1, FVector2D(X, H * 0.36 + Px * 1.9 - 3), FVector2D(TW + W * 0.06, 3), FLinearColor(Accent.R, Accent.G, Accent.B, A));
+		Text(L + 2, S, FVector2D(X + W * 0.06, H * 0.36 + Px * 0.35), float(Px), FLinearColor(1, 1, 1, A), true);
+	}
+	L += 4;
+
+	// Loading, toast, free camera hint.
+	if (Flag(Frame, TEXT("loading")))
+	{
+		const int32 Dots = int32(Now * 3.0) % 4;
+		Text(L, FString::ChrN(Dots + 1, TEXT('●')), FVector2D(W - H * 0.12, H - H * 0.06), float(H * 0.02), DimText);
+	}
+	const FString Toast = Str(Frame, TEXT("toast"));
+	if (!Toast.IsEmpty())
+	{
+		const double Px = H * 0.024, TW = Measure(Toast, Font(Px)).X + Px * 2;
+		Box(L, FVector2D((W - TW) * 0.5, H * 0.04), FVector2D(TW, Px * 2.2), FLinearColor(0, 0, 0, 0.7f));
+		Text(L + 1, Toast, FVector2D((W - TW) * 0.5 + Px, H * 0.04 + Px * 0.5), float(Px), TextColor);
+	}
+	const FString Edit = Str(Frame, TEXT("camera_edit"));
+	if (!Edit.IsEmpty())
+	{
+		const double Px = H * 0.022;
+		Box(L, FVector2D(Px, Px), FVector2D(Measure(Edit, Font(Px)).X + Px * 2, Px * 2.2), FLinearColor(0, 0, 0, 0.7f));
+		Text(L + 1, Edit, FVector2D(Px * 2, Px * 1.5), float(Px), FLinearColor(1.f, 0.9f, 0.4f, 1.f));
+		const double C = H * 0.02;
+		Box(L, FVector2D(W * 0.5 - C, H * 0.5 - 1), FVector2D(C * 2, 2), FLinearColor::White);
+		Box(L, FVector2D(W * 0.5 - 1, H * 0.5 - C), FVector2D(2, C * 2), FLinearColor::White);
+	}
+	L += 3;
+
+	// Panels.
+	const TSharedPtr<FJsonObject> Panel = Obj(Frame, TEXT("panel"));
+	if (Panel && Screen != TEXT("play") && Screen != TEXT("ended"))
+	{
+		Box(L, FVector2D(0, 0), Size, FLinearColor(0, 0, 0, 0.55f));
+		PanelMin = FVector2D(W * 0.14, H * 0.10);
+		PanelMax = FVector2D(W * 0.86, H * 0.90);
+		bPanelOpen = true;
+		const FVector2D PS = PanelMax - PanelMin;
+		Box(L + 1, PanelMin, PS, FLinearColor(0.045f, 0.06f, 0.10f, 0.97f));
+		Box(L + 2, PanelMin, FVector2D(PS.X, 3), Accent);
+		const double Px = H * 0.026;
+		L += 3;
+		Text(L, Str(Panel, TEXT("title")), PanelMin + FVector2D(Px, Px), float(Px * 1.3), TextColor, true);
+		const FString Close = Str(Panel, TEXT("close"));
+		if (!Close.IsEmpty())
+		{
+			const double BW = Measure(Close, Font(Px)).X + Px * 2;
+			Button(L, FVector2D(PanelMax.X - BW - Px, PanelMin.Y + Px * 0.8), FVector2D(BW, Px * 1.9), Close, TEXT("{\"type\":\"button\",\"id\":\"close\"}"), true, false, float(Px));
+		}
+		const FVector2D Body = PanelMin + FVector2D(Px, Px * 4.0);
+		const FVector2D BodySize = PanelMax - FVector2D(Px, Px) - Body;
+		if (Screen == TEXT("menu"))
+		{
+			const TArray<TSharedPtr<FJsonValue>> Items = Arr(Panel, TEXT("items"));
+			const double BH = Px * 2.4, BW = BodySize.X * 0.4;
+			for (int32 I = 0; I < Items.Num(); ++I)
+			{
+				const TSharedPtr<FJsonObject> It = Items[I]->AsObject();
+				Button(L, FVector2D(Body.X + (BodySize.X - BW) * 0.5, Body.Y + I * (BH + Px * 0.6)), FVector2D(BW, BH), Str(It, TEXT("label")),
+					FString::Printf(TEXT("{\"type\":\"button\",\"id\":%s}"), *Quote(Str(It, TEXT("id")))), true, false, float(Px));
+			}
+		}
+		else if (Screen == TEXT("save") || Screen == TEXT("load"))
+		{
+			const TArray<TSharedPtr<FJsonValue>> Slots = Arr(Panel, TEXT("slots"));
+			const int32 Cols = 3;
+			const double Gap = Px * 0.8, SW = (BodySize.X - Gap * (Cols - 1)) / Cols, SH = (BodySize.Y - Px * 3.0 - Gap) / 2.0;
+			for (int32 I = 0; I < Slots.Num(); ++I)
+			{
+				const TSharedPtr<FJsonObject> S = Slots[I]->AsObject();
+				const FVector2D Pos = Body + FVector2D((I % Cols) * (SW + Gap), (I / Cols) * (SH + Gap));
+				const bool bEmpty = Flag(S, TEXT("empty"));
+				const bool bUsable = Screen == TEXT("save") ? Str(S, TEXT("id")) != TEXT("auto") : !bEmpty;
+				Box(L, Pos, FVector2D(SW, SH), bUsable ? ButtonColor : ButtonDisabled);
+				const double ThumbH = FMath::Min(SH * 0.62, SW * 9.0 / 16.0), ThumbW = ThumbH * 16.0 / 9.0;
+				const FVector2D TPos = Pos + FVector2D((SW - ThumbW) * 0.5, Px * 0.4);
+				if (UTexture2D* T = P->Thumbnail(Str(S, TEXT("thumb"))))
+					FSlateDrawElement::MakeBox(Out, L + 1, Geo.ToPaintGeometry(FVector2f(float(ThumbW), float(ThumbH)), FSlateLayoutTransform(FVector2f(TPos))), BrushFor(T, FVector2D(ThumbW, ThumbH)), ESlateDrawEffect::None, FLinearColor::White);
+				else Box(L + 1, TPos, FVector2D(ThumbW, ThumbH), FLinearColor(0, 0, 0, 0.5f));
+				double Y = TPos.Y + ThumbH + Px * 0.3;
+				Text(L + 2, Str(S, TEXT("label")) + TEXT("  ") + Str(S, TEXT("when")), FVector2D(Pos.X + Px * 0.5, Y), float(Px * 0.75), Accent);
+				Y += Px * 1.1;
+				const FString Summary = (Str(S, TEXT("name")).IsEmpty() ? FString() : Str(S, TEXT("name")) + TEXT("：")) + Str(S, TEXT("summary"));
+				const TArray<FString> Lines = Wrap(Summary, Font(Px * 0.7), float(SW - Px));
+				for (int32 J = 0; J < Lines.Num() && Y < Pos.Y + SH - Px * 0.8; ++J, Y += Px * 1.0) Text(L + 2, Lines[J], FVector2D(Pos.X + Px * 0.5, Y), float(Px * 0.7), TextColor);
+				if (bUsable) Hits.Add({ Pos, Pos + FVector2D(SW, SH), FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"slot:%s\"}"), *Str(S, TEXT("id"))) });
+			}
+			const int32 Page = int32(Num(Panel, TEXT("page"))), Pages = int32(Num(Panel, TEXT("pages"), 1));
+			const FVector2D Foot(Body.X + BodySize.X * 0.5, PanelMax.Y - Px * 2.6);
+			Button(L, Foot - FVector2D(Px * 6, 0), FVector2D(Px * 2.4, Px * 1.9), TEXT("‹"), FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"page:%d\"}"), FMath::Max(0, Page - 1)), Page > 0, false, float(Px));
+			Text(L, FString::Printf(TEXT("%d / %d"), Page + 1, Pages), Foot - FVector2D(Px * 1.6, -Px * 0.3), float(Px), DimText);
+			Button(L, Foot + FVector2D(Px * 3.6, 0), FVector2D(Px * 2.4, Px * 1.9), TEXT("›"), FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"page:%d\"}"), Page + 1), Page + 1 < Pages, false, float(Px));
+		}
+		else if (Screen == TEXT("backlog"))
+		{
+			const TArray<TSharedPtr<FJsonValue>> Entries = Arr(Panel, TEXT("entries"));
+			const FSlateFontInfo F = Font(Px * 0.85);
+			// Laid out from the newest at the bottom, scrolled up by the wheel.
+			double Y = PanelMax.Y - Px * 1.5 + BacklogScroll;
+			for (int32 I = Entries.Num() - 1; I >= 0 && Y > Body.Y; --I)
+			{
+				const TSharedPtr<FJsonObject> E = Entries[I]->AsObject();
+				TArray<FString> Lines = Wrap(Str(E, TEXT("text")), F, float(BodySize.X - Px * 4));
+				const FString Chose = Str(E, TEXT("chose"));
+				if (!Chose.IsEmpty()) Lines.Add(TEXT("→ ") + Chose);
+				const double EH = Px * 1.2 + Lines.Num() * Px * 1.25 + Px * 0.6;
+				Y -= EH;
+				if (Y > PanelMax.Y) continue;
+				const FString Name = Str(E, TEXT("name"));
+				if (Y >= Body.Y)
+				{
+					if (!Name.IsEmpty()) Text(L, Name, FVector2D(Body.X, Y), float(Px * 0.85), HexColor(Str(E, TEXT("color")), Accent), true);
+					for (int32 J = 0; J < Lines.Num(); ++J) Text(L, Lines[J], FVector2D(Body.X + Px, Y + Px * 1.2 + J * Px * 1.25), float(Px * 0.85), J == Lines.Num() - 1 && !Chose.IsEmpty() ? Accent : TextColor);
+					if (Flag(E, TEXT("voice")))
+						Button(L, FVector2D(PanelMax.X - Px * 3.6, Y), FVector2D(Px * 2.2, Px * 1.6), TEXT("♪"), FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"replay:%d\"}"), int32(Num(E, TEXT("index")))), true, false, float(Px * 0.8));
+				}
+			}
+		}
+		else if (Screen == TEXT("settings"))
+		{
+			const TArray<TSharedPtr<FJsonValue>> Items = Arr(Panel, TEXT("items"));
+			const double RowH = Px * 2.3;
+			for (int32 I = 0; I < Items.Num(); ++I)
+			{
+				const TSharedPtr<FJsonObject> It = Items[I]->AsObject();
+				const double Y = Body.Y + I * RowH;
+				const FString Id = Str(It, TEXT("id"));
+				Text(L, Str(It, TEXT("label")), FVector2D(Body.X, Y + Px * 0.3), float(Px), TextColor);
+				const double CX = Body.X + BodySize.X * 0.55;
+				if (Str(It, TEXT("kind")) == TEXT("toggle"))
+				{
+					const bool bValue = Flag(It, TEXT("value"));
+					Button(L, FVector2D(CX, Y), FVector2D(Px * 5, Px * 1.8), bValue ? Str(Panel, TEXT("on")) : Str(Panel, TEXT("off")),
+						FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"set:%s\",\"value\":%s}"), *Id, bValue ? TEXT("false") : TEXT("true")), true, bValue, float(Px));
+				}
+				else
+				{
+					const double V = Num(It, TEXT("value")), Step = Num(It, TEXT("step"), 1), Lo = Num(It, TEXT("min")), Hi = Num(It, TEXT("max"), 1);
+					auto Set = [&](double To) { return FString::Printf(TEXT("{\"type\":\"button\",\"id\":\"set:%s\",\"value\":%g}"), *Id, FMath::Clamp(To, Lo, Hi)); };
+					Button(L, FVector2D(CX, Y), FVector2D(Px * 2, Px * 1.8), TEXT("−"), Set(V - Step), V > Lo, false, float(Px));
+					// A bar showing where the value sits.
+					const double BarX = CX + Px * 2.6, BarW = Px * 9;
+					Box(L, FVector2D(BarX, Y + Px * 0.8), FVector2D(BarW, Px * 0.25), LineColor);
+					Box(L + 1, FVector2D(BarX, Y + Px * 0.8), FVector2D(BarW * (Hi > Lo ? (V - Lo) / (Hi - Lo) : 0), Px * 0.25), Accent);
+					Text(L, Step < 1 ? FString::Printf(TEXT("%.2f"), V) : FString::Printf(TEXT("%.0f"), V), FVector2D(BarX + BarW + Px * 0.6, Y + Px * 0.3), float(Px), DimText);
+					Button(L, FVector2D(BarX + BarW + Px * 3.6, Y), FVector2D(Px * 2, Px * 1.8), TEXT("+"), Set(V + Step), V < Hi, false, float(Px));
+				}
+			}
+		}
+	}
+	return L + 4;
+}
+
+FReply SOKStoryView::OnMouseButtonDown(const FGeometry& Geo, const FPointerEvent& E)
+{
+	const FVector2D At = Geo.AbsoluteToLocal(E.GetScreenSpacePosition());
+	const bool bLeft = E.GetEffectingButton() == EKeys::LeftMouseButton;
+	if (bLeft)
+		for (int32 I = Hits.Num() - 1; I >= 0; --I)
+			if (At.X >= Hits[I].Min.X && At.Y >= Hits[I].Min.Y && At.X <= Hits[I].Max.X && At.Y <= Hits[I].Max.Y)
+			{
+				Send(Hits[I].Event);
+				return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
+			}
+	if (bPanelOpen)
+	{
+		const bool bInside = At.X >= PanelMin.X && At.Y >= PanelMin.Y && At.X <= PanelMax.X && At.Y <= PanelMax.Y;
+		if (!bInside || !bLeft) Send(TEXT("{\"type\":\"button\",\"id\":\"close\"}"));
+	}
+	else Send(FString::Printf(TEXT("{\"type\":\"click\",\"button\":\"%s\"}"), bLeft ? TEXT("left") : TEXT("right")));
+	return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
+}
+
+FReply SOKStoryView::OnMouseWheel(const FGeometry& Geo, const FPointerEvent& E)
+{
+	UOKStoryPlayer* P = Player.Get();
+	const FString Screen = P && P->Frame ? Str(P->Frame, TEXT("screen")) : FString();
+	if (Screen == TEXT("backlog"))
+	{
+		// Scrolling the log is the view's own business.
+		BacklogScroll = FMath::Max(0.f, BacklogScroll + E.GetWheelDelta() * float(Geo.GetLocalSize().Y) * 0.05f);
+		return FReply::Handled();
+	}
+	BacklogScroll = 0.f;
+	Send(FString::Printf(TEXT("{\"type\":\"wheel\",\"delta\":%g}"), E.GetWheelDelta()));
+	return FReply::Handled();
+}
+
+FReply SOKStoryView::OnMouseMove(const FGeometry& Geo, const FPointerEvent& E)
+{
+	const FVector2D Size = Geo.GetLocalSize();
+	const FVector2D At = Geo.AbsoluteToLocal(E.GetScreenSpacePosition());
+	if (Size.X > 0 && Size.Y > 0)
+	{
+		const FVector2D N(At.X / Size.X, At.Y / Size.Y);
+		if (FVector2D::Distance(N, LastPointer) > 0.002) { LastPointer = N; Send(FString::Printf(TEXT("{\"type\":\"mouse\",\"x\":%.4f,\"y\":%.4f}"), N.X, N.Y)); }
+	}
+	UOKStoryPlayer* P = Player.Get();
+	if (P && P->Frame && !Str(P->Frame, TEXT("camera_edit")).IsEmpty() && !E.GetCursorDelta().IsNearlyZero())
+		Send(FString::Printf(TEXT("{\"type\":\"mouse_delta\",\"dx\":%g,\"dy\":%g}"), E.GetCursorDelta().X, E.GetCursorDelta().Y));
+	return FReply::Unhandled();
+}
+
+FString SOKStoryView::KeyEvent(const FKeyEvent& Event, bool bDown)
+{
+	return FString::Printf(TEXT("{\"type\":\"key\",\"key\":%s,\"down\":%s}"), *Quote(Event.GetKey().GetFName().ToString()), bDown ? TEXT("true") : TEXT("false"));
+}
+
+FReply SOKStoryView::OnKeyDown(const FGeometry& Geo, const FKeyEvent& E)
+{
+	// The console stays reachable.
+	if (E.GetKey() == EKeys::Tilde) return FReply::Unhandled();
+	if (!E.IsRepeat()) Send(KeyEvent(E, true));
+	return FReply::Handled();
+}
+
+FReply SOKStoryView::OnKeyUp(const FGeometry& Geo, const FKeyEvent& E)
+{
+	if (E.GetKey() == EKeys::Tilde) return FReply::Unhandled();
+	Send(KeyEvent(E, false));
+	return FReply::Handled();
+}

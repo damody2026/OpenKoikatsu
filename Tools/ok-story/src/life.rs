@@ -179,7 +179,7 @@ fn aside(t: &LifeTuning, rng: &mut Rng, eye: V3, base: V3) -> V3 {
     let d = math::normalize(math::sub(base, eye));
     let flat = [d[0], d[1], 0.0];
     let side = math::normalize(math::cross([0.0, 0.0, 1.0], flat));
-    let turned = Quat::axis_angle(side, -pitch.to_radians()).mul(Quat::yaw_deg(yaw)).rotate(d);
+    let turned = Quat::axis_angle(side, -pitch.to_radians()).times(Quat::yaw_deg(yaw)).rotate(d);
     math::add(eye, math::scale(turned, t.glance_distance))
 }
 

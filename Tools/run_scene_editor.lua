@@ -5,6 +5,8 @@
 --     [-Engine ROOT] [-NoBuild] [-DryRun] [-- UNREAL_ARGS...]
 -- SCENE: an .okscene, an OK scene card (PNG) or a KStudio scene PNG to open (none: a new scene). Option names are
 -- case-insensitive and may also be written --window-width, ... ; -Name:value works too.
+-- STORY: a galgame story (.okstory.json, Docs/GALGAME_DIALOGUE_PLAN.md) played on the studio; the editor closes with it.
+-- -StorySelfTest clicks through it with a screenshot per line (Saved/Story/SelfTest/<time>/report.json) and exits.
 --
 -- Like the card reader, the editor build must match the shared engine (Tools/ok_editor_modules.lua): when another
 -- checkout rebuilt the engine, OpenKoikatsuEditor is rebuilt here first unless -NoBuild is given.
@@ -12,8 +14,8 @@ local ok = require "ok"
 local json, path, proc = ok.json, ok.path, ok.proc
 local editor = require "ok_editor_modules"
 
-local SWITCHES = { nobuild = true, dryrun = true }
-local VALUES = { scene = true, windowwidth = true, windowheight = true, engine = true }
+local SWITCHES = { nobuild = true, dryrun = true, storyselftest = true }
+local VALUES = { scene = true, story = true, windowwidth = true, windowheight = true, engine = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -59,8 +61,30 @@ local function main()
     scene = path.abs(scene)
     if not path.is_file(scene) then error("Scene file does not exist: " .. scene, 0) end
   end
+  local story = o.story and path.abs(o.story)
+  if story and not path.is_file(story) then error("Story file does not exist: " .. story, 0) end
 
   editor.ensure(root, engine, { build = not o.nobuild and not o.dryrun })
+
+  -- The story director (Tools/ok-story): built here when cargo is there (a no-op when up to date); the editor loads a copy
+  -- so cargo can rebuild while it runs, and OKStory.Reload swaps the new build in.
+  local env = {}
+  if story then
+    local crate = path.join(root, "Tools/ok-story")
+    local source = path.join(crate, "target/release/ok_story.dll")
+    local copy = path.join(root, "Saved/Story/Build/ok_story.dll")
+    if not o.nobuild and not o.dryrun and proc.which("cargo") then
+      local r = proc.run({ "cargo", "build", "--release", "--quiet" }, { cwd = crate, capture = true })
+      if not r.ok then io.write("Story director build failed; using the previous build if there is one\n") end
+    end
+    if not path.is_file(source) then error("ok_story.dll not built (cargo build --release in Tools/ok-story): " .. source, 0) end
+    if not o.dryrun then
+      path.mkdir(path.parent(copy), true)
+      local copied, err = pcall(path.copy, source, copy)
+      if not copied then io.write("Story director DLL in use, keeping the previous copy: ", tostring(err), "\n") end
+    end
+    env.OK_STORY_DLL = (copy:gsub("/", "\\"))
+  end
 
   local project = path.join(root, "OpenKoikatsu.uproject")
   local exe = path.join(engine, "Engine/Binaries/Win64/UnrealEditor.exe")
@@ -75,13 +99,15 @@ local function main()
   local args = { exe, project, "/Engine/Maps/Entry?game=/Script/OKStudio.OKStudioGameMode", "-game", "-windowed",
     "-ResX=" .. width, "-ResY=" .. height, "-NoSplash", "-nop4", "-abslog=" .. log }
   if scene then args[#args + 1] = "-OKScene=" .. scene end
+  if story then args[#args + 1] = "-OKStory=" .. story end
+  if story and o.storyselftest then args[#args + 1] = "-OKStorySelfTest" end
   for _, a in ipairs(o.passthrough) do args[#args + 1] = a end
   local receipt = json.object({ { "project", project }, { "executable", exe }, { "arguments", json.array({ table.unpack(args, 2) }) },
-    { "scene", scene or "" }, { "log", log } })
+    { "scene", scene or "" }, { "story", story or "" }, { "log", log } })
   if o.dryrun then io.write(json.encode(receipt, { indent = 2, ensure_ascii = false }), "\n"); return end
 
   path.mkdir(log_root, true)
-  local okv, pid = pcall(proc.spawn, args, { cwd = root })
+  local okv, pid = pcall(proc.spawn, args, { cwd = root, env = env })
   if not okv then error(pid, 0) end
   receipt.pid = pid
   path.write_text(path.join(log_root, tag .. ".json"), json.encode(receipt, { indent = 2, ensure_ascii = false }))

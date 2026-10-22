@@ -16,6 +16,9 @@ struct Stage {
     dir: PathBuf,
     /// Voice clips do not finish by themselves.
     hold_voice: bool,
+    /// A wall at this x (nothing beyond it is seen), and the probe answers for the next tick.
+    wall_x: Option<f64>,
+    answers: Vec<ProbeResult>,
 }
 
 fn actor_at(pos: [f64; 3], yaw: f64) -> ActorFacts {
@@ -43,7 +46,7 @@ impl Stage {
         let expressions = table.is_file().then_some(table);
         let cfg = Config { story: path, save_dir: Some(dir.join("save_root")), expressions, lang: "zh".into(), seed: 5, ..Default::default() };
         let d = Director::open(cfg).unwrap();
-        Stage { d, actors: BTreeMap::new(), voices: BTreeMap::new(), log: Vec::new(), frame: Frame::default(), dir, hold_voice: false }
+        Stage { d, actors: BTreeMap::new(), voices: BTreeMap::new(), log: Vec::new(), frame: Frame::default(), dir, hold_voice: false, wall_x: None, answers: Vec::new() }
     }
 
     fn execute(&mut self, c: &Command) {
@@ -56,7 +59,7 @@ impl Stage {
             }
             Op::Place { who, pos, yaw, visible, .. } => {
                 if *visible {
-                    self.actors.insert(who.clone(), actor_at(*pos, *yaw));
+                    self.actors.insert(who.clone(), actor_at(pos.unwrap_or([0.0; 3]), yaw.unwrap_or(0.0)));
                 } else {
                     self.actors.remove(who);
                 }
@@ -93,8 +96,17 @@ impl Stage {
             }
             voice = VoiceFacts { id, playing: *played < *length, progress: (*played / *length).min(1.0), done: *played >= *length };
         }
-        let facts = Facts { dt, viewport: [1920.0, 1080.0], actors: self.actors.clone(), voice, view: None };
+        let probes = std::mem::take(&mut self.answers);
+        let facts = Facts { dt, viewport: [1920.0, 1080.0], actors: self.actors.clone(), voice, view: None, probes };
         self.frame = self.d.tick(facts);
+        for p in self.frame.probes.clone() {
+            let length = ((p.to[0] - p.from[0]).powi(2) + (p.to[1] - p.from[1]).powi(2) + (p.to[2] - p.from[2]).powi(2)).sqrt();
+            let clear = match self.wall_x {
+                Some(w) if p.to[0] > w && p.from[0] < w => length * (w - p.from[0]) / (p.to[0] - p.from[0]),
+                _ => 1e9,
+            };
+            self.answers.push(ProbeResult { id: p.id, clear });
+        }
         for c in self.frame.commands.clone() {
             self.execute(&c);
         }
@@ -421,4 +433,54 @@ fn life_commands_reach_the_stage() {
     assert!(s.ops("auto_blink").iter().any(|c| matches!(&c.op, Op::AutoBlink { on: false, .. })));
     assert!(!s.ops("blink").is_empty(), "blinks");
     assert!(s.ops("look").iter().any(|c| matches!(&c.op, Op::Look { mode, .. } if mode == "point")), "glances or looks at the speaker");
+}
+
+#[test]
+fn shipped_story_files_are_valid() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/Story");
+    let samples = root.join("Samples");
+    let Ok(dir) = std::fs::read_dir(&samples) else { return };
+    for entry in dir.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "json") {
+            let text = std::fs::read_to_string(&path).unwrap();
+            if let Err(e) = ok_story::script::Story::parse(&text) {
+                panic!("{}: {e}", path.display());
+            }
+        }
+    }
+    ok_story::tuning::Tuning::load(Some(&root)).unwrap();
+}
+
+/// `OK_STORY_DUMP_TUNING=<file> cargo test dump_tuning`: writes the default tuning (the shipped tuning.json).
+#[test]
+fn dump_tuning() {
+    if let Ok(path) = std::env::var("OK_STORY_DUMP_TUNING") {
+        let mut t = ok_story::tuning::Tuning::default();
+        t.faces = ok_story::tuning::default_faces();
+        std::fs::write(path, serde_json::to_string_pretty(&t).unwrap() + "\n").unwrap();
+    }
+}
+
+#[test]
+fn shots_avoid_walls() {
+    // ayu sits at x = 0 facing +x (yaw -90: her +y turned to +x); a wall stands 60 cm in front of her.
+    let mut s = Stage::new("wall", |v| {
+        v["acts"][0]["cast"]["c0"]["yaw"] = json!(-90);
+    });
+    s.wall_x = Some(60.0);
+    s.run(0.2);
+    s.reach("a1.l1");
+    s.run(1.5);
+    let cam = s.frame.camera.clone().unwrap();
+    assert!(cam.pos[0] < 60.0, "the camera stays on her side of the wall: {cam:?}");
+    // Without the wall the first place (in front of her) is kept.
+    let mut s = Stage::new("nowall", |v| {
+        v["acts"][0]["cast"]["c0"]["yaw"] = json!(-90);
+    });
+    s.run(0.2);
+    s.reach("a1.l1");
+    s.run(1.5);
+    let cam = s.frame.camera.clone().unwrap();
+    assert!(cam.pos[0] > 60.0, "{cam:?}");
 }
