@@ -509,6 +509,7 @@ not_enough_favor = "目前的好感還不足以推進這段關係。"
 closed_now = "那裡現在沒開"
 closed_now_hours = "那裡現在沒開（營業 {from}–{to} 點）"
 closed_today = "那裡今天公休"
+closed_weekday = "那裡每{weekday}公休"
 closed_now_weekend_hours = "那裡現在沒開（週末營業 {from}–{to} 點）"
 
 [bias]
@@ -616,3 +617,6 @@ fact_can_borrow = "你還欠 {debt}；其中學費的部分可以到行政大樓
 [events]
 today = "今天是{what}"
 coming = "{date}（再 {days} 天）是{what}"
+
+[contacts]
+gave_number = "你把自己的電話給了他（他現在能打給你、傳訊息給你）"

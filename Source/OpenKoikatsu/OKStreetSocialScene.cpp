@@ -707,6 +707,13 @@ void AOKStreetSocialScene::BeginPlay(){
  if(S.RetargetSelfTest&&OKStreetIsUserRelationshipSave(S.Manifest.SavePath)){S.IdentityRetargetRejected=1;S.Errors.Add(TEXT("Retarget self-test refused the user relationships save"));WriteReport(false);return;}
  ApplyPendingSave();
  if(OKStreetLoadSaveFile(S.Manifest.SavePath,S.Store,Error)==EOKStreetLoad::Invalid){S.Errors.Add(TEXT("Relationship save rejected: ")+Error);WriteReport(false);return;}
+ // A meeting with a heroine who is not in this game's cast (an old save, another selection) is "away": not listed, not
+ // late, not a no-show ("迟到 0:20" for a girl who was not there). Back in the cast, it is pending again if still ahead.
+ {TSet<FString> Cast;for(int32 I=1;I<S.Manifest.Characters.Num();++I)Cast.Add(OKStreetStableId(S.Manifest.Characters[I]));
+  const int32 Minute=FMath::Max(0,S.Store.CalendarMinute);const int64 Now=int64(S.Store.CalendarDay)*1440+Minute+(Minute<240?1440:0);int32 Away=0,Back=0;
+  for(auto& A:S.Store.Appointments){if(A.Heroine.IsEmpty())continue;const bool Here=Cast.Contains(A.Heroine);
+   if(A.Status==TEXT("pending")&&!Here){A.Status=TEXT("away");++Away;}else if(A.Status==TEXT("away")&&Here&&A.Start>Now){A.Status=TEXT("pending");++Back;}}
+  if(Away+Back)UE_LOG(LogTemp,Display,TEXT("Street appointments: %d with heroines not in this cast set aside, %d back"),Away,Back);}
  // rules.json (favor caps, preferences, confession chance) is read by the rules with the dialogue catalogue (talk.rs).
  {TSharedPtr<FJsonObject> M;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),M)&&M)M->TryGetStringField(TEXT("topic_catalogue"),S.TopicCataloguePath);}
  StartCalendarAndMind();
@@ -1331,6 +1338,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     if(Verdict->TryGetObjectField(TEXT("she_photo"),Shot)&&Shot->IsValid()){FString Topic,Subject;(*Shot)->TryGetStringField(TEXT("topic"),Topic);(*Shot)->TryGetStringField(TEXT("subject"),Subject);SendToo=Sends;
      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d takes a photo (%s, %s)%s"),Character,*Topic,*Subject,SendToo?TEXT(", sends it"):TEXT(""));Weak->HerPhoto(Character,Topic,Subject,SendToo);}
     else if(Sends){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d sends him a photo"),Character);Weak->SendPhoto(OKStreetStableId(L->Manifest.Characters[Character]),Character,SendField);}}
+   // She gives him her number (contacts.rs): from now on in his phone.
+   {bool Gives=false;Verdict->TryGetBoolField(TEXT("gives_number"),Gives);if(Gives)Weak->HerNumberGiven(Character);}
    // Her own business at the office (errand.rs her_errand): a student loan, paying her fees.
    {FString Errand;Verdict->TryGetStringField(TEXT("her_errand"),Errand);if(!Errand.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d errand %s"),Character,*Errand);Weak->HerErrand(Character,Errand);}}
    // Her things and his given, lent or returned (items.rs: matched to what they really hold, the rest refused).
