@@ -327,7 +327,7 @@ PCM 協定需明確標示 endian、sample rate、channels。目前標頭 `audio/
 
 - UE 改動（含自由對話每句「請求→開始播放」「回覆→開始播放」的 `Free talk: TTS line N plays ...` 日誌）只做了編譯確認，見 13.5；尚未打包新 stage、沒有在遊戲裡實際對話驗收；`Build/ok-tts` 的正式執行檔沒有替換（遊戲當時正使用它）。部署需要在無人使用時換 exe 並重新產生 `package.json` 的 hash。
 - 固定語料：`Tools/ok-tts/bench/corpus_zh.txt`（第 8 節文字維度）。
-- 一般腳本對話（`OKStreetSocialVoice.inl`）仍走 `/synthesize` 整句；UE 端的「收到 PCM」「首次實際播放」時間點尚未記錄，端到端延遲只量到伺服器與 HTTP 客戶端。
+- 一般腳本對話（`OKStreetSocialVoice.inl`）仍走 `/synthesize` 整句，沒有串流、沒有新欄位與延遲日誌。自由對話的延遲日誌尚未在遊戲裡跑過。
 - P2 只做了 x-vector 試驗（見 13.4），還沒有 profile 格式、沒有接進伺服器。ICL 模式（參考音訊＋逐字稿）需要 speech tokenizer 的 `encoder.*`（225 個張量，參考音訊轉 codec tokens），尚未實作。
 
 ### 13.4 P2 試驗：Base 1.7B x-vector 複製
@@ -353,3 +353,7 @@ PCM 協定需明確標示 endian、sample rate、channels。目前標頭 `audio/
 試聽樣本與 JSON（本機、不進版控）：`Saved/TTS/Consistency-20261022/`（聲線 08，`ref.wav`、`design_NN.wav`、`base_NN.wav`、`other_*.wav`，另含 bench JSON）、`Saved/TTS/Consistency-20261022-p00/`、`-p03/`。
 
 下一輪建議順序：官方數值核對 speaker encoder → 盲聽 08／00／03 的 design 與 base 樣本 → 若通過，定 profile 格式（參考音訊 hash、embedding、模型 revision），伺服器加 Base 後端（不與 VoiceDesign 同時常駐）與新 cache key → 量 Base 的串流首包與 RTF。
+
+### 13.5 UE 編譯確認
+
+以 `D:/PhysX/UE5.8` 建置 C checkout 的 `OpenKoikatsu Win64 Development` 遊戲目標：`OKStreetSocialScene.cpp`（含本輪全部改動）編譯通過，沒有新的警告。整個目標沒有建完：`Plugins/OKStudio` 的 `OKSceneDocument.h` 在遊戲目標下有既有的 C4430／C2143 錯誤，與本輪改動無關，需要負責 OK Studio 的那條線處理後才能產出遊戲執行檔。打包 StreetSocial 走 Interaction host（`rebuild_street_social_runtime.lua`），不受這個遊戲目標影響，但本輪沒有打包。
