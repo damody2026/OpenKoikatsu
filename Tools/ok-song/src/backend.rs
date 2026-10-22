@@ -1,7 +1,7 @@
 //! The three model stages behind one boundary, so each can be swapped (a native Rust port replaces a Python
-//! prototype without touching jobs, cache or the game). Today all three are prototypes that run the upstream projects'
-//! own entry points in their own environments: HeartMuLa `examples/run_music_generation.py`, `python -m demucs`,
-//! Seed-VC `inference.py`. Nothing here is native inference yet; `doctor` says so.
+//! prototype without touching jobs, cache or the game). Generate runs natively ("heartmula-rust": HeartMuLa + HeartCodec
+//! in Rust/CUDA, src/native); separate and convert are still prototypes that run the upstream entry points
+//! (`python -m demucs`, Seed-VC `inference.py`) in their own environments. `doctor` reports which.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -98,6 +98,26 @@ impl Runner<'_> {
     /// Lyrics + tags -> a song (stereo WAV). The upstream entry has no seed; the stage cache makes a song repeatable.
     pub fn generate(&self, lyrics_model: &str, tags: &[String], max_ms: u32, dir: &Path) -> Result<PathBuf> {
         let st = &self.cfg.generate;
+        if st.backend == "heartmula-rust" {
+            let ckpt = st.ckpt.as_deref().context("generate.ckpt")?;
+            if !ckpt.join("HeartMuLa-oss-3B").is_dir() || !ckpt.join("HeartCodec-oss").is_dir() {
+                return Err(stage_error("MODEL_MISSING", format!("no HeartMuLa / HeartCodec weights in {}", ckpt.display())));
+            }
+            let tags = tags.join(",");
+            let seed = st.seed.unwrap_or_else(|| {
+                let h = crate::job::key_of(&json!({"lyrics": lyrics_model, "tags": tags, "max_ms": max_ms}));
+                u64::from_str_radix(&h[..16], 16).unwrap_or(1)
+            });
+            let o = crate::native::song::GenerateOptions {
+                cfg_scale: st.cfg_scale.unwrap_or(3.0) as f32, top_k: st.topk.unwrap_or(50) as i32,
+                temperature: st.temperature.unwrap_or(1.0) as f32, seed,
+            };
+            let (song, report) = crate::native::song::generate(ckpt, lyrics_model, &tags, max_ms, &o, &self.cancel)?;
+            let out = dir.join("song.wav");
+            song.write_wav(&out)?;
+            std::fs::write(dir.join("generate.json"), serde_json::to_vec_pretty(&report)?)?;
+            return Ok(out);
+        }
         if st.backend != "heartmula-python" {
             bail!("unknown generate backend {}", st.backend);
         }
@@ -185,7 +205,11 @@ fn git_head(repo: &Path) -> Option<String> {
 /// What each stage runs, with its revision (part of the cache keys: a new upstream commit or model makes new songs).
 pub fn revisions(cfg: &Config) -> Value {
     let rev = |st: &StageConfig| -> Value {
-        json!({"backend": st.backend, "native_rust": false, "repo": st.repo, "repo_head": st.repo.as_deref().and_then(git_head),
+        let native = st.native();
+        json!({"backend": st.backend, "native_rust": native,
+               "native_revision": if st.backend == "heartmula-rust" { Some(crate::native::song::GENERATE_REVISION) } else { None },
+               "sampling": if native { Some(json!({"cfg_scale": st.cfg_scale, "topk": st.topk, "temperature": st.temperature, "seed": st.seed})) } else { None },
+               "repo": if native { None } else { st.repo.clone() }, "repo_head": if native { None } else { st.repo.as_deref().and_then(git_head) },
                "model": st.model, "version": st.version, "diffusion_steps": st.diffusion_steps, "inference_cfg_rate": st.inference_cfg_rate})
     };
     json!({"generate": rev(&cfg.generate), "separate": rev(&cfg.separate), "convert": rev(&cfg.convert)})
@@ -215,11 +239,12 @@ pub fn doctor(cfg: &Config) -> Value {
         json!({"path": p, "exists": p.exists()})
     }).collect();
     json!({
-        "schema": 1, "native_rust_inference": false,
-        "note": "all three stages are Python prototypes calling upstream entry points; mixing, loudness, envelope, cache and service are Rust",
+        "schema": 1, "native_rust_inference": cfg.generate.native() && cfg.separate.native() && cfg.convert.native(),
+        "native_stages": {"generate": cfg.generate.native(), "separate": cfg.separate.native(), "convert": cfg.convert.native()},
+        "note": "stages marked native run in Rust/CUDA in this process; the others are Python prototypes calling upstream entry points. Mixing, loudness, envelope, cache and service are Rust.",
         "gpu": gpu, "ok_tts": {"path": cfg.ok_tts, "exists": cfg.ok_tts.is_file()},
         "generate": {"revisions": revisions(cfg)["generate"], "weights": weights,
-                     "env": probe(cfg.generate.python.as_deref(), "import torch,heartlib;print(torch.__version__, torch.cuda.is_available())")},
+                     "env": if cfg.generate.native() { json!({"ok": true, "says": "native"}) } else { probe(cfg.generate.python.as_deref(), "import torch,heartlib;print(torch.__version__, torch.cuda.is_available())") }},
         "separate": {"revisions": revisions(cfg)["separate"], "env": probe(cfg.separate.python.as_deref(), "import torch,demucs;print(torch.__version__, demucs.__version__)")},
         "convert": {"revisions": revisions(cfg)["convert"], "env": probe(cfg.convert.python.as_deref(), "import torch,librosa,dac;print(torch.__version__)")},
         "dll_dirs": cfg.dll_dirs.iter().map(|d| json!({"path": d, "exists": d.is_dir()})).collect::<Vec<_>>(),

@@ -117,7 +117,7 @@ fn sha256_file(path: &Path) -> Result<String> {
     Ok(sha256_hex(&std::fs::read(path).with_context(|| format!("read {}", path.display()))?))
 }
 
-fn key_of(v: &Value) -> String {
+pub(crate) fn key_of(v: &Value) -> String {
     sha256_hex(v.to_string().as_bytes())[..32].to_string()
 }
 

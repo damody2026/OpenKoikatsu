@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct StageConfig {
-    /// "heartmula-python", "demucs-python", "seedvc-python" (prototypes calling upstream entry points)
+    /// "heartmula-rust" (native), or "heartmula-python", "demucs-python", "seedvc-python" (prototypes calling upstream entry points)
     pub backend: String,
     #[serde(default)]
     pub python: Option<PathBuf>,
@@ -26,6 +26,22 @@ pub struct StageConfig {
     pub inference_cfg_rate: Option<f64>,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
+    /// Native HeartMuLa sampling (upstream defaults: cfg 3, top-k 50, temperature 1). The seed defaults to one derived
+    /// from the lyrics and tags, so the same request makes the same song.
+    #[serde(default)]
+    pub cfg_scale: Option<f64>,
+    #[serde(default)]
+    pub topk: Option<u32>,
+    #[serde(default)]
+    pub temperature: Option<f64>,
+    #[serde(default)]
+    pub seed: Option<u64>,
+}
+
+impl StageConfig {
+    pub fn native(&self) -> bool {
+        self.backend.ends_with("-rust")
+    }
 }
 
 fn default_timeout() -> u64 {

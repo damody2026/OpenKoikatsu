@@ -9,8 +9,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use cudarc::cublas::sys as cb;
 use cudarc::driver::{result as dr, sys as ds, CudaContext, CudaFunction, CudaStream};
 
-const KERNELS: &str = include_str!("kernels.cu");
-const KERNEL_NAMES: &[&str] = &[
+/// ok-tts kernels; ok-song includes this file and appends its own source.
+pub const KERNELS: &str = include_str!("kernels.cu");
+pub const KERNEL_NAMES: &[&str] = &[
     "embed_bf16", "rmsnorm_bf16", "add_bf16", "silu_mul_bf16", "silu_bf16", "fill_rows_bf16",
     "qk_norm_rope_bf16", "store_v_bf16", "attention_bf16", "sum_rows_bf16", "bf16_to_f32",
     "fill_rows_f32", "rvq_gather", "pad_left_f32", "depthwise_conv_f32", "overlap_add_f32", "snake_f32",
@@ -82,6 +83,11 @@ unsafe impl Send for Gpu {}
 
 impl Gpu {
     pub fn new(device: usize) -> Result<Self> {
+        Self::with_kernels(device, KERNELS, KERNEL_NAMES)
+    }
+
+    /// A device with the given NVRTC source and the kernel names to load from it.
+    pub fn with_kernels(device: usize, source: &str, names: &[&'static str]) -> Result<Self> {
         let ctx = CudaContext::new(device).context("CUDA device (driver / nvcuda.dll)")?;
         let stream = ctx.new_stream()?;
         let (major, minor) = (
@@ -90,10 +96,10 @@ impl Gpu {
         );
         let arch: &'static str = Box::leak(format!("compute_{major}{minor}").into_boxed_str());
         let opts = cudarc::nvrtc::CompileOptions { arch: Some(arch), use_fast_math: Some(false), ..Default::default() };
-        let ptx = cudarc::nvrtc::compile_ptx_with_opts(KERNELS, opts).map_err(|e| anyhow!("NVRTC: {e:?}"))?;
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(source, opts).map_err(|e| anyhow!("NVRTC: {e:?}"))?;
         let module = ctx.load_module(ptx)?;
         let mut funcs = HashMap::new();
-        for name in KERNEL_NAMES {
+        for name in names {
             funcs.insert(*name, module.load_function(name).with_context(|| format!("kernel {name}"))?);
         }
         let blas = cudarc::cublas::CudaBlas::new(stream.clone())?;

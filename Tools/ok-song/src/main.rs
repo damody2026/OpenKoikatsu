@@ -7,6 +7,9 @@
 //!   ok-song serve    [--port 47880] [--parent-pid N] [--config ...]
 //!   ok-song status   --job ID [--port 47880]
 //!   ok-song cancel   --job ID [--port 47880]
+//!   ok-song mula-check --ref DIR [--ckpt E:/HeartMuLa/ckpt] [--frames 12]   native HeartMuLa vs a Python dump
+//!   ok-song mula-generate --tags T --lyrics FILE --out FRAMES.json [--seconds 30] [--cfg 3] [--topk 50] [--seed N]
+//!   ok-song codec-check --frames F.json --ref DIR [--first-draw 33]   native HeartCodec vs a Python dump
 //!   ok-song mix      --vocal V.wav --accompaniment A.wav --out DIR   the Rust mix + envelope alone (checks, tests)
 //!
 //! The model stages are prototypes running upstream Python entry points (backend.rs); they sit behind one boundary so
@@ -17,6 +20,7 @@ mod backend;
 mod config;
 mod job;
 mod log;
+mod native;
 mod parent;
 mod server;
 
@@ -68,7 +72,23 @@ fn http(port: u16, method: &str, path: &str) -> Result<String> {
     Ok(out.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or(out))
 }
 
+/// Native stages load CUDA DLLs (cuBLAS, NVRTC) at run time: look beside the exe and in <exe>/cuda first.
+fn add_dll_dirs() {
+    let Some(exe) = std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)) else { return };
+    let mut path = std::env::var_os("PATH").unwrap_or_default();
+    for d in [exe.join("cuda"), exe] {
+        if d.is_dir() {
+            let mut p = d.into_os_string();
+            p.push(";");
+            p.push(&path);
+            path = p;
+        }
+    }
+    std::env::set_var("PATH", path);
+}
+
 fn run() -> Result<()> {
+    add_dll_dirs();
     let args = parse_args();
     let port: u16 = args.opts.get("port").map(|p| p.parse()).transpose()?.unwrap_or(47880);
     match args.cmd.as_str() {
@@ -103,6 +123,51 @@ fn run() -> Result<()> {
         }
         "status" => println!("{}", http(port, "GET", &format!("/jobs/{}", args.opts.get("job").context("--job")?))?),
         "cancel" => println!("{}", http(port, "POST", &format!("/jobs/{}/cancel", args.opts.get("job").context("--job")?))?),
+        "mula-check" => {
+            let gpu = native::device(0)?;
+            let ckpt = PathBuf::from(args.opts.get("ckpt").map(String::as_str).unwrap_or("E:/HeartMuLa/ckpt"));
+            let t = std::time::Instant::now();
+            let m = native::mula::Mula::load(&gpu, &ckpt, true, 64, 256)?;
+            crate::log!("ok-song: HeartMuLa loaded in {:.1} s", t.elapsed().as_secs_f64());
+            let frames = args.opts.get("frames").map(|v| v.parse()).transpose()?.unwrap_or(12);
+            let r = m.check(&gpu, &PathBuf::from(args.opts.get("ref").context("--ref")?), frames)?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
+        "mula-generate" => {
+            let gpu = native::device(0)?;
+            let ckpt = PathBuf::from(args.opts.get("ckpt").map(String::as_str).unwrap_or("E:/HeartMuLa/ckpt"));
+            let opt = |k: &str, d: f64| -> Result<f64> { Ok(args.opts.get(k).map(|v| v.parse()).transpose()?.unwrap_or(d)) };
+            let seconds = opt("seconds", 30.0)?;
+            let max_frames = (seconds * 1000.0 / native::mula::FRAME_MS as f64) as usize;
+            let lyrics = std::fs::read_to_string(args.opts.get("lyrics").context("--lyrics FILE")?)?;
+            let t = std::time::Instant::now();
+            let m = native::mula::Mula::load(&gpu, &ckpt, true, max_frames, 1024)?;
+            let load = t.elapsed().as_secs_f64();
+            let p = m.prompt(args.opts.get("tags").context("--tags")?, &lyrics)?;
+            let s = native::mula::Sampling { cfg: opt("cfg", 3.0)? as f32, temperature: opt("temperature", 1.0)? as f32,
+                top_k: opt("topk", 50.0)? as i32, seed: opt("seed", 1.0)? as u64 };
+            let t = std::time::Instant::now();
+            let frames = m.generate(&gpu, &p, max_frames, &s, &|| false, |_| {})?;
+            let gen = t.elapsed().as_secs_f64();
+            let out = PathBuf::from(args.opts.get("out").context("--out")?);
+            std::fs::write(&out, serde_json::to_vec(&serde_json::json!({"frames": frames}))?)?;
+            println!("{}", serde_json::json!({"frames": frames.len(), "audio_seconds": frames.len() as f64 * 0.08, "load_seconds": load,
+                "generate_seconds": gen, "ms_per_frame": gen * 1000.0 / frames.len().max(1) as f64, "prompt_tokens": p.len()}));
+        }
+        "codec-check" => {
+            let gpu = native::device(0)?;
+            let ckpt = PathBuf::from(args.opts.get("ckpt").map(String::as_str).unwrap_or("E:/HeartMuLa/ckpt"));
+            let t = std::time::Instant::now();
+            let codec = native::codec::Codec::load(&gpu, &ckpt.join("HeartCodec-oss"))?;
+            crate::log!("ok-song: HeartCodec loaded in {:.1} s", t.elapsed().as_secs_f64());
+            let v: serde_json::Value = serde_json::from_slice(&std::fs::read(args.opts.get("frames").context("--frames")?)?)?;
+            let frames: Vec<[i32; 8]> = serde_json::from_value(v["frames"].clone())?;
+            let first = args.opts.get("first-draw").map(|v| v.parse()).transpose()?.unwrap_or(33);
+            let t = std::time::Instant::now();
+            let mut r = native::codec::check(&gpu, &codec, &frames, &PathBuf::from(args.opts.get("ref").context("--ref")?), first)?;
+            r["seconds"] = t.elapsed().as_secs_f64().into();
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
         "mix" => {
             let v = audio::Audio::read_wav(&PathBuf::from(args.opts.get("vocal").context("--vocal")?))?;
             let a = audio::Audio::read_wav(&PathBuf::from(args.opts.get("accompaniment").context("--accompaniment")?))?;
