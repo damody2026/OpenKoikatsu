@@ -9,6 +9,11 @@ local DOC = [[Development client for the StreetSocial control channel (game star
 
   street_play.lua state [--raw]          what is going on (compact summary; --raw for the full JSON)
   street_play.lua phone TEXT...          type into the open phone thread and send
+  street_play.lua clock pause | run [S]  the game clock; run S real seconds, then pause
+  street_play.lua talk TEXT...           say it with the clock running until she has answered; prints her lines
+  street_play.lua goto girl N | place ID [MAX]   walk there with the clock running, then pause
+  street_play.lua outing [MAX]           let the clock run until the walk with her ends
+  street_play.lua until HH:MM [MAX]      let the clock run until that time
   street_play.lua say TEXT...            he says something to her
   street_play.lua buttons                labels of the buttons on screen
   street_play.lua click LABEL...         press the button with this label
@@ -161,6 +166,66 @@ local function main(argv)
         table.concat(flags, ","), #s.cart, #s.table, util.usub(S(orv(s.message, "")), 1, 40)))
       sleep(every)
     end
+  elseif cmd == "clock" then
+    -- clock pause | run [SECONDS]: the game clock; run with SECONDS lets it go that long (real seconds), then pauses
+    local run = rest[1] == "run"
+    pprint(call("/clock", json.object({ { "paused", not run } })))
+    if run and rest[2] then
+      sleep(num(rest[2]))
+      call("/clock", json.object({ { "paused", true } }))
+      print(summary(call("/state")))
+    end
+  elseif cmd == "talk" then
+    -- talk TEXT: say it with the clock running, wait until she has answered and stopped speaking, pause the clock;
+    -- prints each line she said meanwhile and the notice
+    local r = call("/say", json.object({ { "text", join(rest, 1) } }))
+    if not T(r.ok) then
+      pprint(r)
+      return 1
+    end
+    call("/clock", json.object({ { "paused", false } }))
+    local t0, seen, last = ok.time.time(), {}, nil
+    sleep(1.0)
+    while ok.time.time() - t0 < 120 do
+      local s = call("/state")
+      local f = s.free_talk
+      local her = S(orv(f.caption_her, ""))
+      if her ~= "" and her ~= last then seen[#seen + 1] = her; last = her end
+      local speaking = util.any(s.girls, function(g) return T(g.speaking) end)
+      if ok.time.time() - t0 > 3 and not T(f.busy) and not speaking and f.queued_events == 0 then break end
+      sleep(0.7)
+    end
+    call("/clock", json.object({ { "paused", true } }))
+    local s = call("/state")
+    for _, line in ipairs(seen) do print("  her: " .. line) end
+    print(("  %s | %s | %s"):format(S(s.time.clock), S(orv(s.message, "")), S(orv(s.notice, ""))))
+  elseif cmd == "goto" or cmd == "outing" or cmd == "until" then
+    -- goto girl N | place ID [MAX]: walk there with the clock running; stops when the walk ends or she talks to him
+    -- outing [MAX]: let the clock run until the walk with her ends
+    -- until HH:MM [MAX]: let the clock run until that time
+    -- each pauses the clock at the end (MAX real seconds, 180 by default)
+    local max = 180
+    if cmd == "goto" then
+      call("/navigate", json.object({ { rest[1], rest[1] == "girl" and int(rest[2]) or rest[2] } }))
+      max = rest[3] and num(rest[3]) or max
+    elseif cmd == "outing" then
+      max = rest[1] and num(rest[1]) or max
+    else
+      max = rest[2] and num(rest[2]) or max
+    end
+    call("/clock", json.object({ { "paused", false } }))
+    local t0 = ok.time.time()
+    sleep(2.0)
+    while ok.time.time() - t0 < max do
+      local s = call("/state")
+      local a = s.activity
+      if cmd == "goto" and ((a.nav_girl == -1 and not T(a.nav_point)) or s.target ~= -1) then break end
+      if cmd == "outing" and a.outing_girl == -1 then break end
+      if cmd == "until" and S(s.time.clock) >= rest[1] then break end
+      sleep(1.0)
+    end
+    call("/clock", json.object({ { "paused", true } }))
+    print(summary(call("/state")))
   elseif cmd == "phone" then
     pprint(call("/phone", json.object({ { "text", join(rest, 1) } })))
   elseif cmd == "mic" then
