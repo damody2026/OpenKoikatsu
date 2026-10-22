@@ -543,3 +543,44 @@ combo_curious = "you are curious what secret he is hiding"
 masked = "you really care about him ({liking, number, ::integer}), but {public, select, yes {in front of others} other {even when it is just the two of you}} you act as if you don't ({shown, number, ::integer}); act on your true feelings, only your words stay tough"
 mood = "your mood now: {emotion}"
 separator = "; "
+
+[activity]
+raining = "It is raining; this cannot be done now"
+not_raining = "It is not raining; no need for this"
+done_today = "Already done today"
+only_some = "This is not something she does"
+needs_item = "It needs {item} (sold at {place}); neither of you has one"
+
+[items]
+separator = ", "
+fact_separator = "; "
+she_gives = "She gave you {item}"
+she_lends = "She lent you {item}"
+she_returns = "She gave {item} back to you"
+he_lends = "You lent her {item}"
+he_returns = "You gave {item} back to her"
+fact_owned = "Your things: {items}"
+fact_he_borrowed = "He borrowed {item} from you ({days} days ago)"
+fact_he_borrowed_late = "He borrowed {item} from you and is {late} days past the day he said he would return it"
+fact_she_borrowed = "You borrowed {item} from him and have not returned it"
+
+[photos]
+street = "the street"
+caption_separator = ", "
+drawing_topic = "sketch: {place}"
+drawing_name = "a sketch of {place}"
+him = "you"
+caption = "{place}, {date} {time}, {people} {topic}"
+fact_hers = "Photos you took lately: {topics}"
+fact_together = "There are {count} photos of you two together"
+
+[reading]
+he_read = "Read {book} for a while ({progress}%)"
+he_finished = "Finished {book}"
+fact_she_reads = "You are reading {book} ({progress}%)"
+fact_he_reads = "He is reading {book} ({progress}%)"
+fact_both_finished = "You have both finished {books} and can talk about it"
+
+[work]
+helped_fact = "He helped you with {task}: at {place}{weather} you two handed out {handed}, and {stopped} people stopped to look"
+in_rain = " (in the rain)"

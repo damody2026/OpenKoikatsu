@@ -248,6 +248,18 @@ void OKRulesReadRumor(const FJsonObject& O,FOKStreetRumor& R){
 
 // Defaults the scene keeps at hand (start favor, tick periods), fetched again whenever the rules were opened or reloaded.
 void OKRulesReadTables(FOKStreetSceneState& S);
+// The save's ext (the rules' own state: her things, loans, photos) into a request, with today; and back from an answer,
+// with what goes into or out of his bag (his_add, his_remove).
+void OKRulesPutExt(const FOKStreetSceneState& S,const TSharedRef<FJsonObject>& Request){
+ TSharedPtr<FJsonObject> E;if(S.Store.Ext.IsEmpty()||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(S.Store.Ext),E)||!E.IsValid())E=MakeShared<FJsonObject>();
+ Request->SetObjectField(TEXT("ext"),E);Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
+}
+void OKRulesTakeExt(FOKStreetStore& Store,const FJsonObject& Answer){
+ const TSharedPtr<FJsonObject>* E=nullptr;if(Answer.TryGetObjectField(TEXT("ext"),E)&&E->IsValid()){FString Out;auto W=TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);FJsonSerializer::Serialize(E->ToSharedRef(),W);Store.Ext=Out;}
+ const TArray<TSharedPtr<FJsonValue>>* Items=nullptr;
+ if(Answer.TryGetArrayField(TEXT("his_add"),Items))for(const auto& V:*Items)Store.Inventory.Add(V->AsString());
+ if(Answer.TryGetArrayField(TEXT("his_remove"),Items))for(const auto& V:*Items)Store.Inventory.RemoveSingle(V->AsString());
+}
 void OKRulesSyncDefaults(FOKStreetSceneState& S){
  if(!S.Rules||S.RulesDefaultsGeneration==S.Rules->Generation())return;
  S.RulesDefaultsGeneration=S.Rules->Generation();
@@ -274,6 +286,18 @@ void OKRulesSyncDefaults(FOKStreetSceneState& S){
 // The tables the scene shows on its own (campus, place norms, her panel's interactions): read with the rules and again
 // when the language changes (their names are in it).
 void OKRulesReadTables(FOKStreetSceneState& S){
+ // The activities together (activities.rs): where and how each is shown; the rules decide whether one may start.
+ if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,OKRulesRequest(TEXT("activities_table")))){
+  auto& All=OKStreetActivitiesMutable();All.Reset();
+  auto Kind=[](const FString& K){using E=EOKStreetActivityKind;return K==TEXT("photo")?E::Photo:K==TEXT("facility")?E::Facility:K==TEXT("walk")?E::Walk:K==TEXT("restroom")?E::Restroom:K==TEXT("sleep")?E::Sleep:K==TEXT("solo")?E::Solo:E::Pair;};
+  for(const auto& V:Out->GetArrayField(TEXT("activities"))){const auto O=V->AsObject();
+   auto Text=MakeUnique<FOKStreetActivityText>();Text->Id=O->GetStringField(TEXT("id"));Text->Name=O->GetStringField(TEXT("name"));Text->ZhName=O->GetStringField(TEXT("own_name"));
+   Text->Place=O->GetStringField(TEXT("place"));Text->Anchor=O->GetStringField(TEXT("anchor"));Text->FemaleClip=O->GetStringField(TEXT("female_clip"));Text->MaleClip=O->GetStringField(TEXT("male_clip"));
+   FOKStreetActivity A;A.Id=*Text->Id;A.Name=*Text->Name;A.ZhName=*Text->ZhName;A.Place=*Text->Place;A.Kind=Kind(O->GetStringField(TEXT("kind")));A.Code=int32(O->GetNumberField(TEXT("code")));
+   // Absent is a null pointer, as the code reading them expects (no clip: the pose's own).
+   A.Anchor=Text->Anchor.IsEmpty()?nullptr:*Text->Anchor;A.FemaleClip=Text->FemaleClip.IsEmpty()?nullptr:*Text->FemaleClip;A.MaleClip=Text->MaleClip.IsEmpty()?nullptr:*Text->MaleClip;
+   All.Add(A);OKStreetActivityTexts().Add(MoveTemp(Text));}
+  UE_LOG(LogTemp,Display,TEXT("Street activities: %d from the rules"),All.Num());}
  // Campus tables for the displays (academics.rs).
  if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,OKRulesRequest(TEXT("campus_tables")))){
   auto& Colleges=OKStreetCollegesTable();Colleges.Reset();

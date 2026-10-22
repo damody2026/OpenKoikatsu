@@ -175,7 +175,10 @@ inline FString OKStreetLiftLabel(const FOKStreetModelAnchor& Lift) {
 
 inline const FOKStreetModelAnchor* OKStreetPlaceAnchor(const FOKStreetPlace& Place, const TCHAR* Name) {
  if (!Name || !*Name) return nullptr;
- return Place.Anchors.FindByPredicate([Name](const FOKStreetModelAnchor& A) { return A.Name == Name; });
+ // "pond|fountain": the first the model has (an activity names the spot a new scene will add, and an older one till then).
+ TArray<FString> Names; FString(Name).ParseIntoArray(Names, TEXT("|"));
+ for (const FString& N : Names) if (const FOKStreetModelAnchor* A = Place.Anchors.FindByPredicate([&N](const FOKStreetModelAnchor& X) { return X.Name == N; })) return A;
+ return nullptr;
 }
 
 // Whether a world point stands in one of the place's rooms (2D).
@@ -200,98 +203,13 @@ struct FOKStreetActivity {
  const TCHAR* ZhName = nullptr; // the data's own name, kept when the language swaps Name
 };
 
-inline const TArray<FOKStreetActivity>& OKStreetActivities() {
- using K = EOKStreetActivityKind;
- static const TArray<FOKStreetActivity> All = {
-  {TEXT("meal"), TEXT("在餐廳裡一起吃飯"), TEXT("restaurant"), K::Pair, 5, TEXT("table")},
-  {TEXT("restaurant_room"), TEXT("進餐廳包廂用餐"), TEXT("restaurant"), K::Facility, 0},
-  {TEXT("dessert"), TEXT("在點心店裡一起吃甜點"), TEXT("snack"), K::Pair, 5, TEXT("table")},
-  {TEXT("drink"), TEXT("在點心店櫃台買飲料一起喝"), TEXT("snack"), K::Pair, 2, TEXT("counter")},
-  {TEXT("drink_shop"), TEXT("在飲料店櫃台買手搖飲一起喝"), TEXT("drinkshop"), K::Pair, 2, TEXT("counter")},
-  {TEXT("drink_seat"), TEXT("在飲料店裡坐著喝飲料聊天"), TEXT("drinkshop"), K::Pair, 1, TEXT("seat"), TEXT("venue_drink_seated.okanim"), TEXT("venue_drink_seated.okanim")},
-  {TEXT("cafe_drink"), TEXT("在咖啡廳櫃台點咖啡一起喝"), TEXT("cafe"), K::Pair, 2, TEXT("counter")},
-  {TEXT("cafe_seat"), TEXT("在咖啡廳裡坐著喝咖啡聊天"), TEXT("cafe"), K::Pair, 1, TEXT("seat"), TEXT("venue_drink_seated.okanim"), TEXT("venue_drink_seated.okanim")},
-  {TEXT("conveni_drink"), TEXT("在便利商店買飲料一起喝"), TEXT("conveni"), K::Pair, 2, TEXT("aisle")},
-  {TEXT("read_books"), TEXT("在書局書架旁坐下來面對面看書"), TEXT("bookstore"), K::Pair, 1, TEXT("shelf"), TEXT("venue_read_seated.okanim"), TEXT("venue_read_seated.okanim")},
-  {TEXT("library_read"), TEXT("在圖書館書架旁坐下來面對面看書"), TEXT("library"), K::Pair, 1, TEXT("shelf"), TEXT("venue_read_seated.okanim"), TEXT("venue_read_seated.okanim")},
-  {TEXT("library_seat"), TEXT("在圖書館閱覽區坐著看書"), TEXT("library"), K::Pair, 1, TEXT("seat"), TEXT("venue_read_seated.okanim"), TEXT("venue_read_seated.okanim")},
-  {TEXT("pet_photo"), TEXT("在寵物店和小動物一起合照"), TEXT("petshop"), K::Photo, 0, TEXT("pets")},
-  {TEXT("lecture_seat"), TEXT("在大學講堂裡坐著一起讀書"), TEXT("lecture"), K::Pair, 1, TEXT("seat"), TEXT("venue_study_seated.okanim"), TEXT("venue_study_seated.okanim")},
-  {TEXT("cafeteria_meal"), TEXT("在學生餐廳一起吃飯"), TEXT("cafeteria"), K::Pair, 5, TEXT("table")},
-  {TEXT("classroom"), TEXT("在學校一樓教室裡坐著聊天"), TEXT("school"), K::Pair, 1, TEXT("seat")},
-  {TEXT("school_class2"), TEXT("在學校二樓教室坐著一起讀書"), TEXT("school"), K::Pair, 1, TEXT("class2"), TEXT("venue_study_seated.okanim"), TEXT("venue_study_seated.okanim")},
-  {TEXT("school_music"), TEXT("在學校三樓音樂教室鋼琴旁合照"), TEXT("school"), K::Photo, 0, TEXT("music")},
-  {TEXT("lodge_lounge2"), TEXT("在會館二樓休息室坐著聊天"), TEXT("lodge"), K::Pair, 1, TEXT("lounge2")},
-  {TEXT("hotel_room6"), TEXT("在飯店六樓景觀客房坐著聊天"), TEXT("hotel"), K::Pair, 1, TEXT("room6")},
-  {TEXT("girls_lounge"), TEXT("在女生宿舍交誼廳一起滑手機"), TEXT("girls_dorm"), K::Pair, 8, TEXT("lounge")},
-  {TEXT("boys_lounge"), TEXT("在男生宿舍交誼廳一起滑手機"), TEXT("boys_dorm"), K::Pair, 8, TEXT("lounge")},
-  {TEXT("lodge_lobby"), TEXT("在會館大廳坐著滑手機聊天"), TEXT("lodge"), K::Pair, 1, TEXT("seat"), TEXT("venue_phone_seated.okanim"), TEXT("venue_phone_seated.okanim")},
-  {TEXT("inn_tea"), TEXT("在民宿和室坐著喝茶聊天"), TEXT("minshuku"), K::Pair, 1, TEXT("seat")},
-  {TEXT("park_seat"), TEXT("在公園坐著聊天"), TEXT("park"), K::Pair, 1, TEXT("bench")},
-  {TEXT("park_photo"), TEXT("在公園噴水池前合照"), TEXT("park"), K::Photo, 0, TEXT("fountain")},
-  {TEXT("campus_gate_photo"), TEXT("在大學校門的校名石柱前合照"), TEXT("campus_gate"), K::Photo, 0, TEXT("gate")},
-  {TEXT("campus_stands"), TEXT("坐在大學運動場的看台上聊天"), TEXT("campus_sports"), K::Pair, 1, TEXT("seat")},
-  {TEXT("campus_stretch"), TEXT("在大學運動場一起做伸展運動"), TEXT("campus_sports"), K::Solo, 0, TEXT("field"), TEXT("venue_stretch.okanim")},
-  {TEXT("shrine_photo"), TEXT("在神社鳥居前合照"), TEXT("shrine"), K::Photo, 0, TEXT("torii")},
-  {TEXT("fruit"), TEXT("在水果店裡買水果一起吃"), TEXT("fruitshop"), K::Pair, 5, TEXT("stand")},
-  {TEXT("dept_beauty"), TEXT("在大學城百貨1樓化妝品專櫃前合照"), TEXT("department"), K::Photo, 0, TEXT("beauty")},
-  {TEXT("dept_women"), TEXT("在百貨2樓女裝試衣鏡前合照"), TEXT("department"), K::Photo, 0, TEXT("mirror2")},
-  {TEXT("dept_men"), TEXT("在百貨3樓男裝試衣鏡前合照"), TEXT("department"), K::Photo, 0, TEXT("mirror3")},
-  {TEXT("dept_shoes"), TEXT("在百貨4樓坐下來試穿鞋子聊天"), TEXT("department"), K::Pair, 11, TEXT("shoes")},
-  {TEXT("dept_sofa"), TEXT("在百貨5樓家居區試坐沙發聊天"), TEXT("department"), K::Pair, 11, TEXT("sofa")},
-  {TEXT("dept_books"), TEXT("在百貨6樓書店坐下來面對面看書"), TEXT("department"), K::Pair, 1, TEXT("books"), TEXT("venue_read_seated.okanim"), TEXT("venue_read_seated.okanim")},
-  {TEXT("dept_phones"), TEXT("在百貨7樓電器區一起試玩手機"), TEXT("department"), K::Pair, 8, TEXT("phones")},
-  {TEXT("dept_bear"), TEXT("在百貨8樓玩具區和大熊合照"), TEXT("department"), K::Photo, 0, TEXT("bear")},
-  {TEXT("dept_food"), TEXT("在百貨9樓美食街一起吃飯"), TEXT("department"), K::Pair, 5, TEXT("food")},
-  {TEXT("dept_view"), TEXT("在百貨10樓景觀餐廳靠窗坐著聊天"), TEXT("department"), K::Pair, 1, TEXT("view")},
-  {TEXT("aquarium_photo"), TEXT("在水族館大水槽前合照"), TEXT("aquarium"), K::Photo, 0, TEXT("tank")},
-  {TEXT("aquarium_observe"), TEXT("在水族館大水槽前一起觀察魚、記筆記"), TEXT("aquarium"), K::Solo, 0, TEXT("tank"), TEXT("venue_observe.okanim")},
-  {TEXT("dept_shopping"), TEXT("在百貨2樓女裝區一起挑衣服"), TEXT("department"), K::Solo, 0, TEXT("mirror2"), TEXT("venue_shopping.okanim")},
-  {TEXT("dept_cosmetics"), TEXT("在百貨1樓化妝品專櫃一起逛"), TEXT("department"), K::Solo, 0, TEXT("beauty"), TEXT("venue_shopping.okanim")},
-  {TEXT("bookstore_browse"), TEXT("在書局一起挑書"), TEXT("bookstore"), K::Solo, 0, TEXT("shelf"), TEXT("venue_shopping.okanim")},
-  {TEXT("park_sky"), TEXT("在公園噴水池旁一起看天空"), TEXT("park"), K::Solo, 0, TEXT("fountain"), TEXT("venue_sky.okanim")},
-  {TEXT("field_stretch"), TEXT("在操場一起做伸展運動"), TEXT("playground"), K::Solo, 0, TEXT("field"), TEXT("venue_stretch.okanim")},
-  {TEXT("shrine_pray"), TEXT("在神社一起參拜許願"), TEXT("shrine"), K::Solo, 0, TEXT("pray"), TEXT("venue_pray_male.okanim"), TEXT("venue_pray_male.okanim")},
-  {TEXT("vending_school"), TEXT("在校門口的販賣機一起買飲料"), TEXT("school"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_library"), TEXT("在圖書館門口的販賣機一起買飲料"), TEXT("library"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_department"), TEXT("在百貨公司門口的販賣機一起買飲料"), TEXT("department"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_aquarium"), TEXT("在水族館門口的販賣機一起買飲料"), TEXT("aquarium"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_girls_dorm"), TEXT("在女生宿舍門口的販賣機一起買飲料"), TEXT("girls_dorm"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_boys_dorm"), TEXT("在男生宿舍門口的販賣機一起買飲料"), TEXT("boys_dorm"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_hotel"), TEXT("在SPA飯店門廊的販賣機一起買飲料"), TEXT("hotel"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_lodge"), TEXT("在山莊門口的販賣機一起買飲料"), TEXT("lodge"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_cafeteria"), TEXT("在學生餐廳門口的販賣機一起買飲料"), TEXT("cafeteria"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_park"), TEXT("在公園的販賣機一起買飲料"), TEXT("park"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("vending_playground"), TEXT("在操場旁的販賣機一起買飲料"), TEXT("playground"), K::Solo, 0, TEXT("vending"), TEXT("venue_vending_male.okanim"), TEXT("venue_vending_male.okanim")},
-  {TEXT("aquarium_bench"), TEXT("在水族館大水槽前的長椅坐著聊天"), TEXT("aquarium"), K::Pair, 11, TEXT("bench")},
-  {TEXT("toilet_park"), TEXT("去中央公園旁的公廁上廁所（她去女廁，你在外面等）"), TEXT("restroom_park"), K::Restroom, 0, TEXT("wait")},
-  {TEXT("toilet_campus"), TEXT("去大學講堂旁的公廁上廁所"), TEXT("restroom_campus"), K::Restroom, 0, TEXT("wait")},
-  {TEXT("toilet_north"), TEXT("去學校操場旁的公廁上廁所"), TEXT("restroom_north"), K::Restroom, 0, TEXT("wait")},
-  {TEXT("toilet_resort"), TEXT("去度假區的公廁上廁所"), TEXT("restroom_resort"), K::Restroom, 0, TEXT("wait")},
-  {TEXT("pool"), TEXT("在飯店泳池玩水"), TEXT("hotel"), K::Pair, 3, TEXT("pool")},
-  {TEXT("hotel_bar"), TEXT("在飯店大廳酒吧喝一杯"), TEXT("hotel"), K::Pair, 2, TEXT("bar")},
-  {TEXT("hotel_lobby"), TEXT("在飯店大廳沙發區坐著聊天"), TEXT("hotel"), K::Pair, 1, TEXT("lobby")},
-  {TEXT("hotel_spa"), TEXT("去飯店做SPA護理"), TEXT("hotel"), K::Facility, 2},
-  {TEXT("hotel_rest"), TEXT("在飯店客房休息"), TEXT("hotel"), K::Facility, 1},
-  {TEXT("inn_rest"), TEXT("在民宿房間休息"), TEXT("minshuku"), K::Facility, 1},
-  {TEXT("onsen"), TEXT("一起泡露天溫泉"), TEXT("onsen"), K::Pair, 9, TEXT("pool"), TEXT("venue_onsen.okanim")},
-  {TEXT("splash"), TEXT("在操場向她潑水"), TEXT("playground"), K::Pair, 3, TEXT("field")},
-  {TEXT("splash_her"), TEXT("在操場讓她向你潑水"), TEXT("playground"), K::Pair, 4, TEXT("field")},
-  {TEXT("watermelon"), TEXT("在操場一起打西瓜（你揮棒）"), TEXT("playground"), K::Pair, 6, TEXT("field")},
-  {TEXT("watermelon_her"), TEXT("在操場一起打西瓜（她揮棒）"), TEXT("playground"), K::Pair, 7, TEXT("field")},
-  {TEXT("sleep_hotel"), TEXT("在飯店六樓客房睡一晚（睡到隔天早上）"), TEXT("hotel"), K::Sleep, 0, TEXT("bed6_1")},
-  {TEXT("sleep_dorm"), TEXT("在男生宿舍三樓寢室睡一覺（睡到隔天早上）"), TEXT("boys_dorm"), K::Sleep, 0, TEXT("bed3_0")},
-  {TEXT("sleep_lodge"), TEXT("在會館二樓休息室鋪棉被睡一覺（睡到隔天早上）"), TEXT("lodge"), K::Sleep, 0, TEXT("bed2_0")},
-  {TEXT("sleep_inn"), TEXT("在民宿和室鋪棉被睡一晚（睡到隔天早上）"), TEXT("minshuku"), K::Sleep, 0, TEXT("bed1_0")},
-  {TEXT("rest"), TEXT("去會館休息房間"), TEXT("lodge"), K::Facility, 1},
-  {TEXT("spa"), TEXT("去會館精油護理室"), TEXT("lodge"), K::Facility, 2},
-  {TEXT("seated"), TEXT("就地坐下聊天"), TEXT(""), K::Pair, 1},
-  {TEXT("photo"), TEXT("就地一起合照"), TEXT(""), K::Photo, 0},
-  {TEXT("phone"), TEXT("一起用手機"), TEXT(""), K::Pair, 8},
-  {TEXT("walk"), TEXT("一起散步（你帶路）"), TEXT(""), K::Walk, 0},
- };
- return All;
-}
+// The activities come from the rules (rules/activities.toml, activities.rs `activities_table`), read with the other
+// tables (OKRulesReadTables) and again when the language changes. The rows' text lives in OKStreetActivityTexts so the
+// TCHAR pointers stay valid; a reload keeps the old text alive (a pointer taken before it still reads).
+struct FOKStreetActivityText { FString Id, Name, ZhName, Place, Anchor, FemaleClip, MaleClip; };
+inline TArray<TUniquePtr<FOKStreetActivityText>>& OKStreetActivityTexts() { static TArray<TUniquePtr<FOKStreetActivityText>> Texts; return Texts; }
+inline TArray<FOKStreetActivity>& OKStreetActivitiesMutable() { static TArray<FOKStreetActivity> All; return All; }
+inline const TArray<FOKStreetActivity>& OKStreetActivities() { return OKStreetActivitiesMutable(); }
 
 inline const FOKStreetActivity* OKStreetFindActivity(const FString& Id) {
  for (const auto& A : OKStreetActivities()) if (Id == A.Id) return &A;

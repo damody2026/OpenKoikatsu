@@ -382,9 +382,52 @@ FVector AOKStreetSocialScene::PlaceInsideSpot(const FOKStreetPlace& Place) const
  return OKStreetInsidePlace(Place,In)?In:Place.Door;
 }
 
+// What the rules need to say whether an activity can be done now: her, the weather, the bags, what they did today.
+TSharedRef<FJsonObject> AOKStreetSocialScene::ActivityContext(int32 Girl,const TCHAR* Rule) const{
+ const auto& S=*State;auto R=OKRulesRequest(Rule);
+ if(S.Manifest.Characters.IsValidIndex(Girl)){auto G=MakeShared<FJsonObject>();G->SetStringField(TEXT("id"),OKStreetStableId(S.Manifest.Characters[Girl]));
+  TArray<TSharedPtr<FJsonValue>> Names{MakeShared<FJsonValueString>(S.Manifest.Characters[Girl].Name)};G->SetArrayField(TEXT("names"),Names);R->SetObjectField(TEXT("girl"),G);
+  // Her profile: an activity may be hers only when it names a field of it (help_her_work: occupation.side_task).
+  if(const TSharedPtr<FJsonObject> Profile=S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Girl])))R->SetObjectField(TEXT("profile"),Profile);}
+ const int64 Now=OKStreetMindNow(S);R->SetBoolField(TEXT("raining"),RainingAt(S.Store.CalendarDay,int32(Now%1440)));
+ TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("his_items"),His);
+ TArray<TSharedPtr<FJsonValue>> Done;if(S.ActivitiesDoneDay==Now/1440)if(const auto* D=S.ActivitiesDone.Find(Girl))for(const FString& I:*D)Done.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("done_today"),Done);
+ auto Names=MakeShared<FJsonObject>();for(const auto& P:OKStreetPlaces())Names->SetStringField(P.Id,P.Name);R->SetObjectField(TEXT("place_names"),Names);
+ return R;
+}
+
+bool AOKStreetSocialScene::ActivityCheck(int32 Girl,const FString& ActivityId,FString& Why,bool bConsume,bool bAtEnd){
+ auto& S=*State;auto Request=ActivityContext(Girl,TEXT("activity_check"));Request->SetStringField(TEXT("id"),ActivityId);Request->SetBoolField(TEXT("at_end"),bAtEnd);
+ const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer.IsValid())return true;
+ if(!Answer->GetBoolField(TEXT("ok"))){Why=Answer->GetStringField(TEXT("why"));UE_LOG(LogTemp,Display,TEXT("Street activity check: %s refused (%s: %s)"),*ActivityId,*Answer->GetStringField(TEXT("reason")),*Why);return false;}
+ if(bConsume){const TArray<TSharedPtr<FJsonValue>>* Consume=nullptr;
+  if(Answer->TryGetArrayField(TEXT("consume"),Consume)&&Consume->Num()){auto Candidate=S.Store;
+   for(const auto& V:*Consume){const auto O=V->AsObject();if(O->GetStringField(TEXT("from"))==TEXT("his"))Candidate.Inventory.RemoveSingle(O->GetStringField(TEXT("item")));
+    UE_LOG(LogTemp,Display,TEXT("Street activity check: %s uses %s (%s)"),*ActivityId,*O->GetStringField(TEXT("item")),*O->GetStringField(TEXT("from")));}
+   CommitStore(MoveTemp(Candidate));}}
+ return true;
+}
+
+// For her words (the scene line): what of this place's activities, or those done where they stand, cannot be done now
+// and why ("寫生（下雨了）"), so she does not offer it; she says it in her own way if he asks for it.
+FString AOKStreetSocialScene::ActivityBlockedLine(int32 Character) const{
+ const auto& S=*State;auto Request=ActivityContext(Character,TEXT("activity_blocked"));Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
+ const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer.IsValid())return FString();
+ TArray<FString> Parts;for(const auto& V:Answer->GetArrayField(TEXT("blocked"))){const auto O=V->AsObject();Parts.Add(OKMsg(TEXT("ui.mind.blocked_activity_entry"),{{TEXT("name"),O->GetStringField(TEXT("name"))},{TEXT("why"),O->GetStringField(TEXT("why"))}}));}
+ FString Line=Parts.IsEmpty()?FString():OKT(TEXT("ui.mind.blocked_activities_label"))+FString::Join(Parts,OKT(TEXT("ui.bank.list_separator")));
+ // And what this place offers now, by id: in the park the standing practice is the park's (park_exercise), not the
+ // playground's stretching both of them had picked (activities.rs activities_here).
+ Request->SetStringField(TEXT("rule"),TEXT("activities_here"));
+ if(const TSharedPtr<FJsonObject> Here=OKRulesEval(S,Request)){TArray<FString> Ids;for(const auto& V:Here->GetArrayField(TEXT("here"))){const auto O=V->AsObject();Ids.Add(OKMsg(TEXT("ui.mind.here_activity_entry"),{{TEXT("id"),O->GetStringField(TEXT("id"))},{TEXT("name"),O->GetStringField(TEXT("name"))}}));}
+  if(!Ids.IsEmpty())Line=OKT(TEXT("ui.mind.here_activities_label"))+FString::Join(Ids,OKT(TEXT("ui.bank.list_separator")))+Line;}
+ return Line;
+}
+
 bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FString& Error){
  if(!State)return false;auto& S=*State;
  const FOKStreetActivity* Activity=OKStreetFindActivity(ActivityId);
+ // Out of reach now (raining for the sketching, no fish food, someone else's thing, done today): not set off at all.
+ if(Activity&&!ActivityCheck(Girl,ActivityId,Error,false))return false;
  // The model sometimes answers a bare place id ("petshop") instead of "go:petshop": treat it as going there.
  const FOKStreetPlace* Place=ActivityId.StartsWith(TEXT("go:"))?OKStreetFindPlace(ActivityId.Mid(3)):Activity?OKStreetFindPlace(Activity->Place):OKStreetFindPlace(ActivityId);
  const bool Leave=ActivityId==TEXT("leave");
@@ -487,7 +530,7 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
 
 // A walk with no destination: five or so straight legs round where they stand, back to the start. Every point, and
 // the ground between points, keeps at least 50 cm from any obstacle; indoors-out is avoided unless they are indoors.
-void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error){
+void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error,bool bRun){
  auto& S=*State;Error.Reset();
  constexpr float StrollClearance=50.f;
  auto Clear=[&](const FVector& From,const FVector& To){
@@ -496,13 +539,14 @@ void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error){
   for(int32 K=0;K<=Steps;++K){const FVector P=From+(To-From)*(float(K)/float(Steps));if(FromTight&&FVector::Dist2D(P,From)<120.f)continue;if(OKStreetBlockedPoint(P,StrollClearance))return false;}
   return true;
  };
- TArray<FVector> Route;Route.Add(S.Male);FVector At=S.Male;const bool Indoors=!PlaceHere(S.Male).IsEmpty();
+ // A run (jogging in the park): longer legs that stay inside the place they run in.
+ TArray<FVector> Route;Route.Add(S.Male);FVector At=S.Male;const FString Here=PlaceHere(S.Male);const bool Indoors=!Here.IsEmpty()&&!bRun;
  for(int32 Leg=0;Leg<5;++Leg){
   bool Found=false;
   for(int32 Try=0;Try<(Indoors?40:16)&&!Found;++Try){
    // Indoors the rooms are small: shorter legs, more tries.
-   FVector P=At+FRotator(0,S.Random.FRandRange(0.f,360.f),0).RotateVector(FVector(Indoors?S.Random.FRandRange(150.f,600.f):S.Random.FRandRange(500.f,1400.f),0,0));P.Z=At.Z;
-   if(!Indoors&&!PlaceHere(P).IsEmpty())continue;
+   FVector P=At+FRotator(0,S.Random.FRandRange(0.f,360.f),0).RotateVector(FVector(Indoors?S.Random.FRandRange(150.f,600.f):bRun?S.Random.FRandRange(400.f,900.f):S.Random.FRandRange(500.f,1400.f),0,0));P.Z=At.Z;
+   if(bRun?PlaceHere(P)!=Here:(!Indoors&&!PlaceHere(P).IsEmpty()))continue;
    if(!Clear(At,P))continue;
    Route.Add(P);At=P;Found=true;
   }
@@ -511,7 +555,7 @@ void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error){
  if(Route.Num()>=3&&Clear(At,S.Male))Route.Add(S.Male);
  if(Route.Num()<3){Error=OKT(TEXT("ui.outing.no_walk_route_nearby"));UE_LOG(LogTemp,Display,TEXT("Street stroll: no route found around (%.0f,%.0f)"),S.Male.X,S.Male.Y);return;}
  StopAmbientActivity();EndTalk();
- S.OutingGirl=Girl;S.OutingActivity=TEXT("stroll");S.OutingPlace=OKT(TEXT("ui.outing.nearby_label"));S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=SceneTime();
+ S.OutingGirl=Girl;S.OutingActivity=TEXT("stroll");S.OutingPlace=OKT(TEXT("ui.outing.nearby_label"));S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=SceneTime();S.OutingRun=bRun;
  S.Companion=Girl;S.Agents[Girl-1].Held=true;S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;S.CompanionBlockedAt=0;S.CompanionTravel=0;S.CompanionWalk=0;
  S.Message=OKMsg(TEXT("ui.outing.stroll_nearby_together"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});
  UE_LOG(LogTemp,Display,TEXT("Street stroll: actor=%d route_points=%d"),Girl,Route.Num());
@@ -523,7 +567,7 @@ void AOKStreetSocialScene::CancelOuting(const FString& Message){
  const int32 Girl=S.OutingGirl;
  MindRemember(Girl,TEXT("outing"),OKMsg(TEXT("ui.memory.outing_cancelled"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(S.OutingPlace)},{TEXT("activity"),OKStreetActivityName(S.OutingActivity)},{TEXT("why"),Message}}),S.OutingPlace,0.25f);
  UE_LOG(LogTemp,Display,TEXT("Street outing: cancelled at %s (%s)"),*S.Male.ToCompactString(),*Message);
- S.OutingGirl=INDEX_NONE;S.OutingRoute.Reset();S.OutingActivity.Reset();S.OutingPlace.Reset();S.LiftRide=FOKStreetLiftRide();S.OutingWaitDoor=false;
+ S.OutingGirl=INDEX_NONE;S.OutingRoute.Reset();S.OutingActivity.Reset();S.OutingPlace.Reset();S.LiftRide=FOKStreetLiftRide();S.OutingWaitDoor=false;S.OutingRun=false;S.StrollActivity.Reset();S.PhotoWalkAlbum.Reset();
  if(S.Companion==Girl)FinishCompanion();
  if(!Message.IsEmpty()){S.Message=Message;ResumeTalkQuiet(Girl);}
  RefreshUI();
@@ -561,8 +605,13 @@ float AOKStreetSocialScene::StepOuting(float Dt){
  if(Gap>350){S.OutingProgressAt=Now;return 0;} // wait for her to catch up
  FVector Delta=S.OutingRoute[S.OutingStep]-S.Male;Delta.Z=0;
  const float Distance=Delta.Size();
- if(Distance<20){++S.OutingStep;return 0;}
- const FVector Candidate=StreetStep(S.Male,Delta/Distance,FMath::Min(Distance,OKStreetMaleWalkSpeed*FMath::Min(Dt,.05f)));
+ if(Distance<20){++S.OutingStep;
+  // A photo walk stops at every second point, three times, for his photo of her.
+  if(!S.PhotoWalkAlbum.IsEmpty()&&S.OutingStep%2==0&&S.PhotoWalkStops<3&&S.OutingStep<S.OutingRoute.Num()){S.PhotoWalkPauseUntil=Now+3.0;PhotoWalkStop(S.OutingGirl);}
+  return 0;}
+ if(Now<S.PhotoWalkPauseUntil){S.OutingProgressAt=Now;return 0;}
+ const float Pace=S.OutingRun?OKStreetMaleRunSpeed*.7f:OKStreetMaleWalkSpeed; // jogging: a run he can keep up
+ const FVector Candidate=StreetStep(S.Male,Delta/Distance,FMath::Min(Distance,Pace*FMath::Min(Dt,.05f)));
  if(Candidate==S.Male){
   // His own way is blocked: plan the route again from where he stands, every 4 s, until it opens. Esc ends it.
   if(Now-S.OutingProgressAt>4){
@@ -586,7 +635,7 @@ float AOKStreetSocialScene::StepOuting(float Dt){
   return 0;
  }
  S.Rotations[0]=OKStreetFacingMovement(Candidate-S.Male,S.Rotations[0]);S.Male=Candidate;S.OutingProgressAt=Now;
- return OKStreetMaleWalkSpeed/OKStreetWalkSpeed;
+ return Pace/OKStreetWalkSpeed;
 }
 
 void AOKStreetSocialScene::ArriveOuting(){
@@ -600,7 +649,11 @@ void AOKStreetSocialScene::ArriveOuting(){
   FString Error;OKResumeCrowdRuntimeBehavior(this,Girl,Error);S.Companion=INDEX_NONE;S.CompanionTrail.Reset();S.CompanionBlockedAt=0;S.CompanionWalk=0;
  }
  FString Error;
- if(Activity==TEXT("stroll")){S.Message=OKT(TEXT("ui.outing.stroll_ended"));ResumeTalkQuiet(Girl);RefreshUI();return;}
+ if(Activity==TEXT("stroll")){
+  // A run around the park (an activity of the table, not a plain stroll): its end is an activity's end (time, needs).
+  const FString Run=S.StrollActivity;S.StrollActivity.Reset();S.OutingRun=false;S.PhotoWalkAlbum.Reset();
+  if(!Run.IsEmpty()&&Girl!=INDEX_NONE)ActivityAftermath(Run,Girl,S.StrollStartMinute);
+  S.Message=OKT(TEXT("ui.outing.stroll_ended"));ResumeTalkQuiet(Girl);RefreshUI();return;}
  if(Activity.StartsWith(TEXT("go:"))){S.Message=OKMsg(TEXT("ui.outing.arrived_at_place"), {{TEXT("place"), *Place}});ResumeTalkQuiet(Girl);RefreshUI();return;}
  // Gone in to play cards: they sit down to the game, not to the place's own activity.
  if(!S.BluffOnArrival.IsEmpty()&&S.BluffOnArrival==Activity){S.BluffOnArrival.Reset();FString Why;
@@ -638,6 +691,8 @@ bool AOKStreetSocialScene::StartOutingActivity(int32 Girl,const FString& Activit
   if(Added>0){UE_LOG(LogTemp,Display,TEXT("Street order carried: %d lines ordered at %s on arrival"),Added,*Shop);PlaceChatOrder(Girl,S.CarriedOrderSaid.FindRef(Girl));}}
  const FOKStreetActivity* A=OKStreetFindActivity(ActivityId);
  if(!A){ResumeTalkQuiet(Girl);return true;}
+ // Still possible now they are here (it may have started raining on the way); what it uses up goes when it ends.
+ if(!ActivityCheck(Girl,ActivityId,Error,false))return false;
  // Closed when they arrive (the walk took them past closing time): no meal, no drink.
  if(A->Place&&*A->Place){FString Why;if(PlaceClosedNow(A->Place,Why)&&PlaceClosedAt(A->Place,StreetNow()+FTimespan::FromMinutes(15),Why)){Error=Why;return false;}}
  // Solo: at the place's spot she does its action (shopping, watching the fish, the sky, stretching) beside him;
@@ -700,7 +755,10 @@ bool AOKStreetSocialScene::StartOutingActivity(int32 Girl,const FString& Activit
   case EOKStreetActivityKind::Pair:BeginPair(Girl,A->Code);break;
   case EOKStreetActivityKind::Photo:BeginPhoto(Girl);break;
   case EOKStreetActivityKind::Facility:BeginFacility(A->Code,Girl);break;
-  case EOKStreetActivityKind::Walk:BeginCompanion(Girl);break;
+  // code 1: a run around the place they are in (jogging in the park), the rules' table says so.
+  // code 2: a photo walk (a stroll with stops where he photographs her, one album).
+  case EOKStreetActivityKind::Walk:if(A->Code==1||A->Code==2){BeginStroll(Girl,Error,A->Code==1);if(!Error.IsEmpty())return false;S.StrollActivity=A->Id;S.StrollStartMinute=OKStreetMindNow(S);
+   S.PhotoWalkStops=0;S.PhotoWalkPauseUntil=0;S.PhotoWalkAlbum=A->Code==2?FString::Printf(TEXT("walk:%lld"),OKStreetMindNow(S)):FString();return true;}BeginCompanion(Girl);break;
  }
  const bool Started=S.Pair.Partner==Girl||S.Facility!=INDEX_NONE||S.Companion==Girl;
  if(!Started)Error=S.Message.IsEmpty()?OKMsg(TEXT("ui.outing.cannot_do_action_now"), {{TEXT("action_name"), A->Name}}):S.Message;

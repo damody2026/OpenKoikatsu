@@ -543,3 +543,44 @@ combo_curious = "你很好奇他到底藏着什么秘密"
 masked = "你其实很在意他（{liking, number, ::integer}），但{public, select, yes {在旁人面前} other {就算两个人时}}你要表现得不在乎（{shown, number, ::integer}）；行动照真心做，只是嘴硬"
 mood = "现在的心情：{emotion}"
 separator = "；"
+
+[activity]
+raining = "下雨了，这件事做不了"
+not_raining = "没在下雨，用不上"
+done_today = "今天已经做过了"
+only_some = "这不是她会做的事"
+needs_item = "需要{item}（{place}有卖），你们手上都没有"
+
+[items]
+separator = "、"
+fact_separator = "；"
+she_gives = "她把{item}送给你了"
+she_lends = "她把{item}借给你了"
+she_returns = "她把{item}还给你了"
+he_lends = "你把{item}借给她了"
+he_returns = "你把{item}还给她了"
+fact_owned = "你身边的东西：{items}"
+fact_he_borrowed = "他向你借了{item}（{days} 天前借的）"
+fact_he_borrowed_late = "他向你借了{item}，说好的日子已经过了 {late} 天还没还"
+fact_she_borrowed = "你向他借了{item}还没还"
+
+[photos]
+street = "街上"
+caption_separator = "，"
+drawing_topic = "写生：{place}"
+drawing_name = "{place}的写生"
+him = "你"
+caption = "{place}，{date} {time}，{people}{topic}"
+fact_hers = "你最近拍的照片：{topics}"
+fact_together = "你和他的合照有 {count} 张"
+
+[reading]
+he_read = "读了一会儿{book}（{progress}%）"
+he_finished = "读完了{book}"
+fact_she_reads = "你正在读{book}（{progress}%）"
+fact_he_reads = "他正在读{book}（{progress}%）"
+fact_both_finished = "你们都读完了{books}，可以聊读后感"
+
+[work]
+helped_fact = "他陪你{task}：在{place}{weather}发出去 {handed} 份，有 {stopped} 个人停下来看"
+in_rain = "（下着雨）"

@@ -341,7 +341,10 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
     let p = profile(r.get("profile"));
     let mut rng = RandomStream::new(n(r, "seed") as i32);
     // Cut short (the place closed on them): only the minutes that went by.
-    let minutes = match r.get("spent").and_then(Value::as_f64) { Some(m) => m.max(0.0) as i32, None => activity_minutes(id, kind, code) };
+    let minutes = match r.get("spent").and_then(Value::as_f64) {
+        Some(m) => m.max(0.0) as i32,
+        None => r.get("table_minutes").and_then(Value::as_i64).map(|m| m as i32).unwrap_or_else(|| activity_minutes(id, kind, code)),
+    };
     // Money: the menu for a meal or a drink (one for each), else a fixed fee.
     let mut price = 0;
     let mut bought = String::new();
@@ -374,6 +377,12 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
             admission |= ticket;
         }
         add(&mut feed, cst.3, cst.4);
+    }
+    // What the activities table says it does to her (activities.toml feed: jogging tires her).
+    if let Some(t) = r.get("table_feed").and_then(Value::as_object) {
+        for (k, v) in t {
+            add(&mut feed, k, v.as_f64().unwrap_or(0.0) as f32);
+        }
     }
     if feed.is_empty() {
         if kind == "photo" {
@@ -455,7 +464,9 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
     // Said as long as it really went on: they sat 50 minutes, not the activity's 35 (elapsed: the minutes that went by).
     let shown = minutes.max(r.get("elapsed").and_then(Value::as_f64).unwrap_or(0.0).round() as i32);
     let notice = crate::tr::m("shop.date_ended_summary", &[("name", crate::tr::a(&name)), ("minutes", crate::tr::a(&shown)), ("payment_note", crate::tr::a(&(if price > 0 { crate::tr::m("shop.price_payer_suffix", &[("price", crate::tr::a(&crate::tr::money(price))), ("payer", crate::tr::a(&payer))]) } else { String::new() })))]);
-    Ok(json!({"minutes": minutes, "price": price, "payer": payer, "bought": bought, "feed": feed, "effects": fx.into_value(), "notice": notice, "treat_kept": treat_kept, "admission": admission}))
+    // What it leaves (activities.toml yields: reading moves on, a drawing, a photo): Unreal asks the rule of each.
+    let yields = r.get("table_yields").cloned().unwrap_or_else(|| json!([]));
+    Ok(json!({"minutes": minutes, "price": price, "payer": payer, "bought": bought, "feed": feed, "effects": fx.into_value(), "notice": notice, "treat_kept": treat_kept, "admission": admission, "yields": yields}))
 }
 
 /// Her errand buys something there within the budget and her wallet. Request: place, month, budget, cash, seed.
@@ -557,7 +568,7 @@ pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>>
         "give_money_settle" => give_money_settle(r),
         "activity_end" => activity_end(c, r),
         // How long it takes (game minutes): a solo activity (praying, watching the fish) ends on its own after this.
-        "activity_minutes" => Ok(json!({"minutes": activity_minutes(s(r, "id"), s(r, "kind"), n(r, "code") as i32)})),
+        "activity_minutes" => Ok(json!({"minutes": r.get("table_minutes").and_then(Value::as_i64).map(|m| m as i32).unwrap_or_else(|| activity_minutes(s(r, "id"), s(r, "kind"), n(r, "code") as i32))})),
         "errand" => errand(c, r),
         "friends_met" => friends_met(r),
         "job_apply" => job_apply(r),

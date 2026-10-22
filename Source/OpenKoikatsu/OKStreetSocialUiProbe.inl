@@ -10,6 +10,16 @@ static void OKProbeCollect(const TSharedRef<SWidget>& W,TSharedPtr<SWidget> Butt
  for(int32 I=0;I<C->Num();++I)OKProbeCollect(C->GetChildAt(I),Button,Out);
 }
 
+// Not painted yet only because its scroll box shows other rows (the menu past its ninth dish). A collapsed or hidden
+// button has no size either, but no shown scroll box holds it.
+static bool OKProbeScrolledOut(const TSharedPtr<SWidget>& W){
+ if(!W->GetCachedGeometry().GetLocalSize().IsNearlyZero())return false;
+ for(TSharedPtr<SWidget> Up=W->GetParentWidget();Up.IsValid();Up=Up->GetParentWidget()){
+  if(Up->GetVisibility()==EVisibility::Collapsed||Up->GetVisibility()==EVisibility::Hidden)return false;
+  if(Up->GetType()==FName(TEXT("SScrollBox")))return !Up->GetCachedGeometry().GetLocalSize().IsNearlyZero();}
+ return false;
+}
+
 // Development actions a probe step can name instead of a button ("@..."): bring the nearest heroine in front of him,
 // walk together, the lover touches, her watermelon swing, and a screenshot into the play folder.
 static int32 OKProbeNearestGirl(const FOKStreetSceneState& S){
@@ -80,11 +90,17 @@ bool AOKStreetSocialScene::ProbePress(const FString& Label,FString& Why,int32 Nt
  TArray<TPair<FString,TSharedPtr<SWidget>>> Buttons;OKProbeCollect(S.Overlay.ToSharedRef(),nullptr,Buttons);
  // Nth: which of several buttons with the same label (the menu has one "我要" per dish), counted from the top of the list.
  const TPair<FString,TSharedPtr<SWidget>>* Hit=nullptr;
- {int32 Seen=0;for(const auto& B:Buttons)if(B.Key==Label&&B.Value->IsEnabled()&&!B.Value->GetCachedGeometry().GetLocalSize().IsNearlyZero()&&Seen++==Nth){Hit=&B;break;}}
+ {int32 Seen=0;for(const auto& B:Buttons)if(B.Key==Label&&B.Value->IsEnabled()&&(!B.Value->GetCachedGeometry().GetLocalSize().IsNearlyZero()||OKProbeScrolledOut(B.Value))&&Seen++==Nth){Hit=&B;break;}}
  if(!Hit&&Nth==0)Hit=Buttons.FindByPredicate([&](const TPair<FString,TSharedPtr<SWidget>>& B){return B.Key==Label;});
  if(!Hit&&Nth==0)Hit=Buttons.FindByPredicate([&](const TPair<FString,TSharedPtr<SWidget>>& B){return B.Key.StartsWith(Label);});
  if(!Hit){Why=TEXT("button not found");return false;}
  const FGeometry G=Hit->Value->GetCachedGeometry();
+#if !UE_BUILD_SHIPPING
+ // Scrolled out of its list: pressed as a button all the same (no hit test needed), and brought into view for the eye.
+ if(OKProbeScrolledOut(Hit->Value)&&Hit->Value->IsEnabled()&&Hit->Value->GetType()==FName(TEXT("SButton"))){
+  for(TSharedPtr<SWidget> Up=Hit->Value->GetParentWidget();Up.IsValid();Up=Up->GetParentWidget())if(Up->GetType()==FName(TEXT("SScrollBox"))){StaticCastSharedPtr<SScrollBox>(Up)->ScrollDescendantIntoView(Hit->Value,false,EDescendantScrollDestination::Center,0.f);break;}
+  UE_LOG(LogTemp,Display,TEXT("Street control press: %s (scrolled out, clicked)"),*Label);StaticCastSharedPtr<SButton>(Hit->Value)->SimulateClick();return true;}
+#endif
  if(G.GetLocalSize().IsNearlyZero()){
   for(TSharedPtr<SWidget> Up=Hit->Value->GetParentWidget();Up.IsValid();Up=Up->GetParentWidget())
    if(Up->GetType()==FName(TEXT("SScrollBox"))){StaticCastSharedPtr<SScrollBox>(Up)->ScrollDescendantIntoView(Hit->Value,false,EDescendantScrollDestination::Center,0.f);Why=TEXT("scrolled it into view; press again");return false;}

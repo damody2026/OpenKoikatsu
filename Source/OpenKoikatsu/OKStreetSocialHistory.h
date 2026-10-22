@@ -35,4 +35,10 @@ inline bool OKStreetHistoryParse(const FString& Line, FOKStreetHistoryEntry& E) 
 }
 
 // Kinds that are phone traffic (the phone's thread view).
-inline bool OKStreetHistoryIsPhone(const FString& Kind) { return Kind == TEXT("message") || Kind == TEXT("call") || Kind == TEXT("call_missed"); }
+inline bool OKStreetHistoryIsPhone(const FString& Kind) { return Kind == TEXT("message") || Kind == TEXT("call") || Kind == TEXT("call_missed") || Kind == TEXT("photo"); }
+// A photo in the phone thread: its Text is "<photo id>|<png file>|<caption>" (photos.rs).
+inline bool OKStreetPhotoEntry(const FString& Text, FString& File, FString& Caption) {
+ TArray<FString> Parts; Text.ParseIntoArray(Parts, TEXT("|"), false);
+ if (Parts.Num() < 3) return false;
+ File = Parts[1]; Caption = FString::Join(TArrayView<const FString>(Parts).RightChop(2), TEXT("|")); return true;
+}

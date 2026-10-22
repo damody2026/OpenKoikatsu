@@ -87,6 +87,8 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSlider.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Brushes/SlateDynamicImageBrush.h"
+#include "Widgets/Images/SImage.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
@@ -209,7 +211,7 @@ struct FOKStreetSceneState {
  TMap<FString,FString> MindRecent;int64 NeedsTickMinute=-1,BondTickMinute=-1;
  // OKStreetSocialLife.inl
  int32 LifeWishDay=-1;TArray<FOKLifePose> LifePoses;double LifeCheckAt=0,LifeFaceAt=0,LifeWishAt=0;TMap<int32,double> LifeCooldown;TMap<int32,FVector> LifeRestore;
- TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
+ TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
  // OKStreetSocialPhoneInbox.inl: her history, the phone (messages, calls), and what is apart.
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
@@ -287,7 +289,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  double FreeTalkQuietUntil=0; // she asked him to keep quiet (judge): his silence is what she wanted until then
  bool ControlMicIgnored=false; // control channel: what the room microphone hears is not his (a tester talking nearby)
  bool FreeTalkMicPausedClock=false,FreeTalkMicOpen=false,FreeTalkLiveReady=false,FreeTalkLiveStarting=false,FreeTalkLeavePending=false;double FreeTalkSilenceSince=0,FreeTalkNudgeAt=0,FreeTalkLiveTickAt=0;int32 FreeTalkSilencePenalties=0;float FreeTalkSilenceScale=1;int32 LiveTestPhase=-1,LiveTestNudges=0,LiveTestPenalties=0;float LiveTestFavor=0;bool LiveTestLeft=false,LiveTestInterrupted=false,LiveTestHerReply=false;double LiveTestAt=0;FString LiveTestWav;double FreeTalkLiveRetryAt=0;int32 FreeTalkLivePollFails=0;float FreeTalkMicLevel=0;FString FreeTalkMic;TArray<FString> FreeTalkMics;
- FString OutingActivity,OutingPlace;TArray<FVector> OutingRoute;int32 OutingStep=0;double OutingProgressAt=0;bool OutingWaitDoor=false;bool QuietTalk=false;TArray<TWeakObjectPtr<AActor>> PlaceActors;TArray<TWeakObjectPtr<ADirectionalLight>> PlaceFills;float NextPairYaw=0;FString NextPairFemaleClip,NextPairMaleClip;int32 SoloGirl=INDEX_NONE,SoloPhase=0,SoloMinutes=0;double SoloAt=0;int64 SoloStartMinute=0;FVector SoloSpot=FVector::ZeroVector;float SoloYaw=0;FString SoloFemale,SoloMale,SoloWhat,SoloId;bool SleepPaired=false;int32 SleepPhase=0,SleepGirl=INDEX_NONE;double SleepAt=0;FVector SleepBed=FVector::ZeroVector,SleepGirlBed=FVector::ZeroVector;float SleepYaw=0,SleepGirlYaw=0;FString SleepPlace;int32 RestroomGirl=INDEX_NONE;double RestroomUntil=0;FString RestroomPlace;double RestroomBlockedAt=0;struct FPlaceLayers {int32 Place=INDEX_NONE;TWeakObjectPtr<UProceduralMeshComponent> Roof;TMap<int32,TWeakObjectPtr<UProceduralMeshComponent>> Levels;};TArray<FPlaceLayers> PlaceRoofs;FString PlaceTourDir;int32 PlaceTourIndex=-1;double PlaceTourAt=0;bool PlaceTourShot=false;TMap<int32,FVector> CommuteShown;
+ FString OutingActivity,OutingPlace;TArray<FVector> OutingRoute;int32 OutingStep=0;double OutingProgressAt=0;bool OutingWaitDoor=false;bool OutingRun=false;FString StrollActivity;int64 StrollStartMinute=0;bool QuietTalk=false;TArray<TWeakObjectPtr<AActor>> PlaceActors;TArray<TWeakObjectPtr<ADirectionalLight>> PlaceFills;float NextPairYaw=0;FString NextPairFemaleClip,NextPairMaleClip;int32 SoloGirl=INDEX_NONE,SoloPhase=0,SoloMinutes=0;double SoloAt=0;int64 SoloStartMinute=0;FVector SoloSpot=FVector::ZeroVector;float SoloYaw=0;FString SoloFemale,SoloMale,SoloWhat,SoloId;bool SleepPaired=false;int32 SleepPhase=0,SleepGirl=INDEX_NONE;double SleepAt=0;FVector SleepBed=FVector::ZeroVector,SleepGirlBed=FVector::ZeroVector;float SleepYaw=0,SleepGirlYaw=0;FString SleepPlace;int32 RestroomGirl=INDEX_NONE;double RestroomUntil=0;FString RestroomPlace;double RestroomBlockedAt=0;struct FPlaceLayers {int32 Place=INDEX_NONE;TWeakObjectPtr<UProceduralMeshComponent> Roof;TMap<int32,TWeakObjectPtr<UProceduralMeshComponent>> Levels;};TArray<FPlaceLayers> PlaceRoofs;FString PlaceTourDir;int32 PlaceTourIndex=-1;double PlaceTourAt=0;bool PlaceTourShot=false;TMap<int32,FVector> CommuteShown;
  TArray<FString> FreeTalkSpeechLines,FreeTalkSpeechPaths,FreeTalkReplayParts;TArray<uint8> FreeTalkSpeechReady,FreeTalkSpeechStreamed;TArray<TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe>> FreeTalkSpeechStreams;int32 FreeTalkSpeechGeneration=0,FreeTalkSpeechCharacter=INDEX_NONE,FreeTalkSpeechPlayed=0;int64 FreeTalkSpeechSerial=0;double FreeTalkSpeechNext=0;
  FString FreeTalkCaptionPlayer,FreeTalkCaptionHer;TArray<int64> FreeTalkReplay;int32 FreeTalkReplayTotal=0,FreeTalkReplaySpeaker=INDEX_NONE;double FreeTalkReplayNext=0;
  bool TopicsOpen=false;TArray<TSharedPtr<SSlider>> StatSliders;TArray<TSharedPtr<SCheckBox>> RelationChecks;int32 RelationControlsVerified=0;bool RelationControlsSync=false;TMap<int32,double> RunUntil,RunNext;
@@ -340,6 +342,12 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool SeatedChecked=false,SeatedCancelChecked=false,SeatedOnlyTest=false;
  TMap<int32,FString> PhotoPoses;
  FString PhotoMaleClip,LastPhoto,PhotoProbeSave;
+ // A photo she is taking (judge she_photo): saved by the screenshot, then filed (and sent, when she said so).
+ struct FHerPhoto{int32 Girl=INDEX_NONE;FString Path,Topic,Subject,Album;double At=0;bool Send=false,Drawing=false,ByHim=false,Requested=false;};
+ // The camera where the one taking a photo holds the phone, for the frame it is taken in (her view, not the game's).
+ double PhotoViewUntil=0;FVector PhotoViewLoc=FVector::ZeroVector;FRotator PhotoViewRot=FRotator::ZeroRotator;
+ // A photo walk (photo_walk): the stops photographed so far, the album they go in, and the pause at a stop.
+ int32 PhotoWalkStops=0;FString PhotoWalkAlbum;double PhotoWalkPauseUntil=0;TArray<FHerPhoto> HerPhotos;
  int32 PhotosSaved=0,PhotoProbePhase=0,PhotoActorsVerified=0;
  bool PhotoChecked=false,PhotoCancelChecked=false,PhotoOnlyTest=false;
  uint64 PairRestoredFrame=MAX_uint64;int32 PairRestoredActor=INDEX_NONE;
@@ -1224,6 +1232,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  // He asked her out and she said she would think it over ("let me think"): her later "I've decided, yes" answers that,
  // although he did not ask again in this line (it left Keqing his friend after she said yes the next day).
  if(const int64* Asked=S.ConfessionPending.Find(Character)){if(OKStreetMindNow(S)-*Asked<=3*1440)User+=OKT(TEXT("ui.scene.judge_pending_confession"));else S.ConfessionPending.Remove(Character);}
+ // What the place they are in offers now (and what is out of reach): the activity do_now names belongs here.
+ {const FString Here=ActivityBlockedLine(Character);if(!Here.IsEmpty())User+=TEXT("\n")+Here;}
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and
@@ -1234,7 +1244,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   if(Lines.Num())Earlier=FString::Join(Lines,TEXT("\n"));}
  // What he carries: the gift she accepts is one of these (it stayed in his bag when no field named it).
  FString Bag;{TArray<FString> Names;for(const FString& Item:S.Store.Inventory)if(const auto* Known=S.Catalog.Find(Item))Names.AddUnique(Known->Name);
-  if(Names.Num())Bag=OKMsg(TEXT("ui.scene.judge_his_bag"),{{TEXT("items"),FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});}
+  if(Names.Num())Bag=OKMsg(TEXT("ui.scene.judge_his_bag"),{{TEXT("items"),FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});
+  // Her things and the loans between them: what she_gives / she_lends_item / he_returns_item can name.
+  const FString Things=ThingsFacts(Character);if(!Things.IsEmpty())Bag+=OKMsg(TEXT("ui.scene.judge_her_things"),{{TEXT("things"),Things}});}
  AddMessage(TEXT("system"),System);AddMessage(TEXT("user"),(Earlier.IsEmpty()?User:OKMsg(TEXT("ui.scene.judge_earlier_lines"),{{TEXT("lines"),Earlier}})+User)+Bag);
  TWeakPtr<FOKStreetSceneState> WeakState=State;TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,200,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier](bool Ok,const FString& Content,const FString& Failure){
@@ -1297,7 +1309,22 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    {FString Gift;Verdict->TryGetStringField(TEXT("gift"),Gift);
     if(!Gift.IsEmpty()&&L->PendingGift.IsEmpty()&&!L->Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift");}))
      for(const FString& Item:L->Store.Inventory)if(const auto* Known=L->Catalog.Find(Item);Known&&(Item==Gift||OKStreetNameMatches(Gift,Known->Name))){ // either script: "月饼" for the catalogue's 月餅（單顆）
-      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he gives her %s"),Character,*Item);Weak->HandleWorldAct(Character,TEXT("gift"),Item);break;}}}
+      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he gives her %s"),Character,*Item);Weak->HandleWorldAct(Character,TEXT("gift"),Item);break;}}
+   // She takes a photo, or sends him one (photos.rs): the picture is taken from where they stand.
+   {const TSharedPtr<FJsonObject>* Shot=nullptr;bool SendToo=false;
+    const TSharedPtr<FJsonValue> SendField=Verdict->TryGetField(TEXT("she_sends_photo"));const bool Sends=SendField.IsValid()&&!SendField->IsNull()&&!(SendField->Type==EJson::String&&SendField->AsString().IsEmpty())&&!(SendField->Type==EJson::Boolean&&!SendField->AsBool());
+    if(Verdict->TryGetObjectField(TEXT("she_photo"),Shot)&&Shot->IsValid()){FString Topic,Subject;(*Shot)->TryGetStringField(TEXT("topic"),Topic);(*Shot)->TryGetStringField(TEXT("subject"),Subject);SendToo=Sends;
+     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d takes a photo (%s, %s)%s"),Character,*Topic,*Subject,SendToo?TEXT(", sends it"):TEXT(""));Weak->HerPhoto(Character,Topic,Subject,SendToo);}
+    else if(Sends){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d sends him a photo"),Character);Weak->SendPhoto(OKStreetStableId(L->Manifest.Characters[Character]),Character,SendField);}}
+   // Her things and his given, lent or returned (items.rs: matched to what they really hold, the rest refused).
+   {auto Request=OKRulesRequest(TEXT("items_judge"));bool Any=false;
+    for(const TCHAR* K:{TEXT("she_gives"),TEXT("she_lends_item"),TEXT("she_returns_item"),TEXT("he_lends_item"),TEXT("he_returns_item")})if(const TSharedPtr<FJsonValue> V=Verdict->TryGetField(K);V.IsValid()&&!V->IsNull()){
+     FString Named;if(V->TryGetString(Named)&&Named.IsEmpty())continue;Request->SetField(K,V);Any=true;}
+    if(Any){OKRulesPutExt(*L,Request);Request->SetStringField(TEXT("girl"),OKStreetStableId(L->Manifest.Characters[Character]));
+     TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:L->Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));Request->SetArrayField(TEXT("his_items"),His);
+     if(const TSharedPtr<FJsonObject> Out=OKRulesEval(*L,Request)){auto Candidate=L->Store;OKRulesTakeExt(Candidate,*Out);
+      if(Weak->CommitStore(MoveTemp(Candidate))){const FString Notice=Out->GetStringField(TEXT("notice"));if(!Notice.IsEmpty()){L->FreeTalkNotice=Notice;Weak->RefreshUI();}}
+      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d things: done %d, refused %d (%s)"),Character,Out->GetArrayField(TEXT("done")).Num(),Out->GetArrayField(TEXT("refused")).Num(),*Out->GetStringField(TEXT("notice")));}}}}
   // Orders he (or she) asked for that her reply left out: to the kitchen like any chat order.
   {const TArray<TSharedPtr<FJsonValue>>* Orders=nullptr;int32 Added=0;const FString Here=Weak->OrderShopHere(Character);FString Shop=Here.IsEmpty()?Weak->OutingShop(Character):Here;const bool OnTheWay=Here.IsEmpty();
    // Outside, about to go in ("let's go in, I'll have a latte"): the outing starts below, after the orders; its shop is
@@ -2208,6 +2235,7 @@ static int64 OKStreetMindNow(const FOKStreetSceneState& S);
 #include "OKStreetSocialDirector.inl"
 #include "OKStreetSocialFinance.inl"
 #include "OKStreetSocialFinanceApps.inl"
+#include "OKStreetSocialPhotos.inl" // after the finance apps (their panel widgets), before the phone (its pictures)
 #include "OKStreetSocialPhoneInbox.inl"
 #include "OKStreetSocialCompanyWorld.inl"
 #include "OKStreetSocialCompany.inl"
@@ -2440,7 +2468,9 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   for(int32 I=0;I<S.PairProps.Num();++I){if(!S.PairProps[I].IsValid()){FinishPhoto();return;}auto* Drop=S.PairProps[I].Get();const float Age=Time-1.f-I*.015f;const bool Show=Age>=0&&Age<.65f;Drop->SetActorHiddenInGame(!Show);if(Show){Drop->SetActorLocation(Hand.GetLocation()+Direction*(Age*230)+FVector((I%4-1.5f)*Age*16,0,Age*90-220*Age*Age));++S.SplashEffectSamples;}}
  }
  if(P.CapturePending){
-  if(IFileManager::Get().FileSize(*P.CapturePath)>1000&&Now-P.CaptureAt>.5){S.LastPhoto=P.CapturePath;++S.PhotosSaved;P.CapturePending=false;S.Message=OKT(TEXT("ui.scene.photo_saved_again"));RefreshUI();if(P.FinishRequested){FinishPhoto();return;}}
+  if(IFileManager::Get().FileSize(*P.CapturePath)>1000&&Now-P.CaptureAt>.5){S.LastPhoto=P.CapturePath;++S.PhotosSaved;P.CapturePending=false;
+   // Filed as his photo of the two of them (photos.rs), in his album.
+   if(S.Manifest.Characters.IsValidIndex(P.Partner))PhotoFiled(P.CapturePath,TEXT("him"),{OKStreetStableId(S.Manifest.Characters[P.Partner]),TEXT("him")},FString(),INDEX_NONE);S.Message=OKT(TEXT("ui.scene.photo_saved_again"));RefreshUI();if(P.FinishRequested){FinishPhoto();return;}}
   else if(Now-P.CaptureAt>3){P.CapturePending=false;S.Message=OKT(TEXT("ui.scene.photo_save_failed"));RefreshUI();if(P.FinishRequested){FinishPhoto();return;}}
  }
  if(!A.Playing||!B.Playing||A.ClipId!=P.MaleClip||B.ClipId!=P.FemaleClip||(!P.Conversation()&&Now-P.PlayingAt>30))FinishPhoto();
@@ -2881,7 +2911,8 @@ float AOKStreetSocialScene::StepCompanion(float Dt){
  FVector Delta=S.CompanionTrail[0]-Agent.Position;Delta.Z=0;const float Distance=Delta.Size();
  if(Distance<1)return 0;
  const float Limit=S.CompanionTrail.Num()==1?FMath::Max(0.f,Distance-85):Distance;
- const float Rate=Gap>180?OKStreetMaleRunSpeed*1.15f:OKStreetMaleWalkSpeed;const FVector Step=Delta/Distance*FMath::Min(Limit,Rate*FMath::Clamp(Dt,0.f,.05f));const FVector Candidate=Agent.Position+Step;
+ // Jogging together (a stroll at a run): she keeps running beside him, not walking until she falls 2 m behind.
+ const float Rate=Gap>180||(S.OutingRun&&Gap>110)?OKStreetMaleRunSpeed*1.15f:OKStreetMaleWalkSpeed;const FVector Step=Delta/Distance*FMath::Min(Limit,Rate*FMath::Clamp(Dt,0.f,.05f));const FVector Candidate=Agent.Position+Step;
  FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetCompanion),false,this);
  // One step is blocked by a wall, by the player, or by someone she would walk into. Stepping away from someone she
  // already overlaps is allowed, so she never gets stuck inside another heroine.
@@ -3243,6 +3274,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   if((S.Pair.Conversation()||S.Pair.Splash)&&S.Pair.Phase==1){FVector A,B;if((OKGetCrowdRuntimeBonePosition(this,0,TEXT("cm_j_head"),A)||OKGetCrowdRuntimeBonePosition(this,0,TEXT("cf_j_head"),A))&&OKGetCrowdRuntimeBonePosition(this,S.Pair.Partner,TEXT("cf_j_head"),B)&&!A.ContainsNaN()&&!B.ContainsNaN()){Focus=(A+B)*.5f-FVector(0,0,25);Pivot=Focus;}}
   if(S.Pair.Watermelon&&S.Pair.Phase==1){Focus=(S.Male+S.Agents[S.Pair.Partner-1].Position)*.5f+FVector(0,35,80);Pivot=Focus;}
   const FRotator View(S.Pitch,S.Yaw,0);const FVector Wanted=Pivot-View.Vector()*S.Distance+(S.Target!=INDEX_NONE?FRotationMatrix(View).GetUnitAxis(EAxis::Y)*(S.Pair.Conversation()?-120.f:110.f):FVector::ZeroVector);FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetCamera),false,this);const bool Blocked=GetWorld()->SweepSingleByChannel(Hit,Pivot,Wanted,FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeSphere(8),Query);S.Camera->SetActorLocation(Blocked?Hit.Location:Wanted);S.Camera->SetActorRotation((Focus-S.Camera->GetActorLocation()).Rotation());if(GControlCamera.Active&&!OKApplyControlCamera(this,S.Camera.Get()))GControlCamera.Active=false;OKUpdateCrowdRuntimeDisplayLighting(this,-S.Camera->GetActorForwardVector());}
+ if(S.Camera.IsValid()&&SceneTime()<S.PhotoViewUntil)S.Camera->SetActorLocationAndRotation(S.PhotoViewLoc,S.PhotoViewRot); // a photo being taken
  const bool AppEscape=Focused&&!S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::Escape);if(AppEscape)CloseApp();
  if(Focused&&S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::M)&&S.PrivateGirl==INDEX_NONE)ToggleBigMap();
  if(Focused&&!AppEscape&&OKKeyPressed(PC,EKeys::Escape)){if(S.BigMapOpen)ToggleBigMap();else if(S.SleepNap&&S.SleepPhase==2)S.SleepWake=true;else if(S.OutingGirl!=INDEX_NONE)CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else if(S.PrivateGirl!=INDEX_NONE)FinishPrivate();else if((S.NavGirl!=INDEX_NONE||S.NavPointActive)&&S.Target==INDEX_NONE)StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));else if(S.Pair.Partner!=INDEX_NONE)FinishPhoto();else if(S.Companion!=INDEX_NONE)FarewellCompanion();else if(S.Facility!=INDEX_NONE)FinishFacility();else EndTalk();}

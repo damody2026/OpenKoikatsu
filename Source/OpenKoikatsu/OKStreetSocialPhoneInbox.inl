@@ -372,6 +372,13 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
     static const TCHAR* Pairs[][2]={{TEXT("他打電話來，你沒有接"),TEXT("你打電話給她，她沒有接")},{TEXT("他打電話給你，你接了"),TEXT("你打電話給她，她接了")},{TEXT("你打電話給他，他按掉了"),TEXT("她打電話給你，你按掉了")},{TEXT("你打電話給他，他接了"),TEXT("她打電話給你，你接了")},{TEXT("你打電話給他，他沒有接"),TEXT("她打電話給你，你沒有接")}};
     for(const auto& P:Pairs)if(Call==P[0]||Call==OKT(P[0])){Call=OKT(P[1]);break;}
    }
+   // A photo: the picture itself (from its file), its caption under it.
+   {FString File,Caption;if(E->Kind==TEXT("photo")&&OKStreetPhotoEntry(E->Text,File,Caption)){
+    Lines->AddSlot().AutoHeight().Padding(Mine?FMargin(120,3,4,3):FMargin(4,3,120,3)).HAlign(Mine?HAlign_Right:HAlign_Left)[SNew(SBorder).BorderImage(OKFinSolid()).BorderBackgroundColor(Mine?FLinearColor(.2f,.45f,.25f):FLinearColor(.22f,.22f,.28f)).Padding(6)[SNew(SVerticalBox)
+     +SVerticalBox::Slot().AutoHeight()[SNew(SBox).WidthOverride(320).HeightOverride(180)[SNew(SImage).Image(OKStreetPhotoBrush(File))]]
+     +SVerticalBox::Slot().AutoHeight().Padding(0,4,0,0)[OKFinText(Caption,FLinearColor(.85f,.85f,.9f),10,false,true)]
+     +SVerticalBox::Slot().AutoHeight()[OKFinText(Mine?OKStreetCalendarLabel(int32(E->Minute/1440),(E->Minute%1440)/60.0):When(*E),FLinearColor(.65f,.65f,.7f),8)]]];
+    continue;}}
    const FString Text=OKPhoneShown(E->Kind==TEXT("message")?E->Text:OKT(TEXT("ui.phone_inbox.call_label"))+Call);
    Lines->AddSlot().AutoHeight().Padding(Mine?FMargin(120,3,4,3):FMargin(4,3,120,3)).HAlign(Mine?HAlign_Right:HAlign_Left)[SNew(SBorder).BorderImage(OKFinSolid()).BorderBackgroundColor(Mine?FLinearColor(.2f,.45f,.25f):FLinearColor(.22f,.22f,.28f)).Padding(8)[SNew(SVerticalBox)
     +SVerticalBox::Slot().AutoHeight()[OKFinText(Text,Mine?OKStreetPlayerLineColor():OKStreetSpeakerColor(Girl),12,false,true)]
@@ -383,6 +390,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
  auto Tabs=SNew(SHorizontalBox)
   +SHorizontalBox::Slot().AutoWidth().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.phone_inbox.messages_tab")),[Weak](){Weak->State->PhoneTab=TEXT("msg");Weak->RefreshUI();},true,Log?FLinearColor::White:FLinearColor(1,.85f,.3f))]
   +SHorizontalBox::Slot().AutoWidth().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.phone_inbox.her_record_label")),[Weak](){Weak->State->PhoneTab=TEXT("log");Weak->RefreshUI();},true,Log?FLinearColor(1,.85f,.3f):FLinearColor::White)]
+  +SHorizontalBox::Slot().AutoWidth().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.photos.album_tab")),[Weak](){Weak->State->PhoneTab=TEXT("album");Weak->RefreshUI();},true,S.PhoneTab==TEXT("album")?FLinearColor(1,.85f,.3f):FLinearColor::White)]
   +SHorizontalBox::Slot().FillWidth(1)[SNullWidget::NullWidget]
   +SHorizontalBox::Slot().AutoWidth().Padding(2)[OKFinButton(Weak,S.RemoteMode==2&&S.RemotePeer==Girl?FString(OKT(TEXT("ui.phone_inbox.hang_up_button"))):FString(OKT(TEXT("ui.phone_inbox.call_button"))),[Weak,Girl](){if(Weak->State->RemoteMode==2)Weak->PhoneHangUp();else Weak->PhoneCall(Girl);},true,FLinearColor(.5f,1,.5f))];
  auto Input=SNew(SHorizontalBox)
@@ -390,8 +398,8 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
    .OnTextChanged_Lambda([Weak](const FText& T){if(Weak.IsValid())Weak->State->PhoneDraft=T.ToString();})
    .OnTextCommitted_Lambda([Weak](const FText& T,ETextCommit::Type How){if(Weak.IsValid()&&How==ETextCommit::OnEnter){Weak->State->PhoneDraft=T.ToString();Weak->PhoneSend();}})]
   +SHorizontalBox::Slot().AutoWidth().Padding(4,0)[OKFinButton(Weak,S.FreeTalkBusy&&S.RemotePeer==Girl?FString(OKT(TEXT("ui.phone_inbox.peer_typing"))):FString(OKT(TEXT("ui.phone_inbox.send_button"))),[Weak](){Weak->PhoneSend();},!S.FreeTalkBusy)];
- // The thread opens at its newest message.
- TSharedRef<SScrollBox> Scroll=SNew(SScrollBox).ScrollBarAlwaysVisible(true)+SScrollBox::Slot()[Lines];if(!Log)Scroll->ScrollToEnd();
+ // The thread opens at its newest message. The album tab shows his photos instead (send one to her from there).
+ TSharedRef<SScrollBox> Scroll=SNew(SScrollBox).ScrollBarAlwaysVisible(true)+SScrollBox::Slot()[S.PhoneTab==TEXT("album")?BuildPhotoAlbum(Girl):StaticCastSharedRef<SWidget>(Lines)];if(!Log&&S.PhoneTab!=TEXT("album"))Scroll->ScrollToEnd();
  return SNew(SHorizontalBox)
   +SHorizontalBox::Slot().AutoWidth().Padding(0,0,10,0)[SNew(SBox).WidthOverride(220)[SNew(SScrollBox)+SScrollBox::Slot()[People]]]
   +SHorizontalBox::Slot().FillWidth(1)[SNew(SVerticalBox)

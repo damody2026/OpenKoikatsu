@@ -1,5 +1,6 @@
 //! The tuning files (numbers designers change while the game runs). Each lives in the game data folder; when the
 //! folder or a file is missing, the copy built into the DLL is used, so a staged build always has the same rules.
+use crate::activities::ActivitiesTuning;
 use crate::bonds::BondTuning;
 use crate::catalog::Catalog;
 use crate::heroine::ActsTuning;
@@ -15,6 +16,7 @@ const BONDS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/
 const NEEDS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/needs.toml");
 const PLACES_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/places.toml");
 const ACTS_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/acts.toml");
+const ACTIVITIES_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/rules/activities.toml");
 // The property market lives beside the rules folder (it is game data the scene also reads for its displays).
 const CATALOG_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/catalog.json");
 const PROPERTY_BUILTIN: &str = include_str!("../../../Content/IndependentResources/StreetSocialData/property.json");
@@ -24,6 +26,8 @@ pub struct Tuning {
     pub needs: NeedsTuning,
     pub places: PlacesTuning,
     pub acts: ActsTuning,
+    /// The activities together (activities.toml), the data's own names.
+    pub activities: ActivitiesTuning,
     /// The base data in yuan (Regions/CN) and, per region, the same converted to its money (region.rs).
     pub property: PropertyData,
     pub catalog: Catalog,
@@ -35,6 +39,7 @@ pub struct Tuning {
     property_jsons: HashMap<String, Value>,
     acts_by_lang: HashMap<String, ActsTuning>,
     bonds_by_lang: HashMap<String, BondTuning>,
+    activities_by_lang: HashMap<String, ActivitiesTuning>,
     /// The words of every language (locale.rs).
     pub texts: crate::locale::Texts,
     sources: Vec<(&'static str, String)>,
@@ -47,6 +52,7 @@ impl Tuning {
         let needs = load_into(dir, "needs", NEEDS_BUILTIN, &mut sources)?;
         let places = load_into(dir, "places", PLACES_BUILTIN, &mut sources)?;
         let acts: ActsTuning = load_into(dir, "acts", ACTS_BUILTIN, &mut sources)?;
+        let activities: ActivitiesTuning = load_into(dir, "activities", ACTIVITIES_BUILTIN, &mut sources)?;
         let property_json = load_property(dir, &mut sources)?;
         let property = PropertyData::parse(&property_json);
         let catalog = Catalog::parse(&load_data(dir, "catalog.json", CATALOG_BUILTIN, &mut sources)?);
@@ -60,6 +66,7 @@ impl Tuning {
         let mut property_jsons = HashMap::new();
         let mut acts_by_lang = HashMap::new();
         let mut bonds_by_lang = HashMap::new();
+        let mut activities_by_lang = HashMap::new();
         for lang in crate::locale::LANGS {
             for (code, reg) in &regions.by_code {
                 let json = name_property(localize_property(&property_json, reg), reg, &texts, lang);
@@ -68,6 +75,7 @@ impl Tuning {
                 catalogs.insert(format!("{code}|{lang}"), name_catalog(localize_catalog(&catalog, reg), &texts, lang));
             }
             places_by_lang.insert(lang.to_string(), name_places(&places, &texts, lang));
+            activities_by_lang.insert(lang.to_string(), activities.named(&texts, lang));
             let mut a = acts.clone();
             for act in &mut a.act {
                 for (field, value) in [("name", &mut act.name), ("wanted", &mut act.wanted), ("text", &mut act.text), ("rumor_text", &mut act.rumor_text), ("button", &mut act.button)] {
@@ -88,7 +96,7 @@ impl Tuning {
             }
             bonds_by_lang.insert(lang.to_string(), b);
         }
-        Ok(Tuning { bonds, needs, places, acts, property, catalog, regions, properties, catalogs, places_by_lang, property_jsons, acts_by_lang, bonds_by_lang, texts, sources })
+        Ok(Tuning { bonds, needs, places, acts, activities, activities_by_lang, property, catalog, regions, properties, catalogs, places_by_lang, property_jsons, acts_by_lang, bonds_by_lang, texts, sources })
     }
 
     /// The catalog / property market in a region's money (the request's region: locale::region).
@@ -108,6 +116,11 @@ impl Tuning {
     /// The interactions (acts.toml) and the girls' bond events (bonds.toml) with their words in the language.
     pub fn acts_in(&self, lang: &str) -> &ActsTuning {
         self.acts_by_lang.get(lang).unwrap_or(&self.acts)
+    }
+
+    /// The activities with their names in the language.
+    pub fn activities_in(&self, lang: &str) -> &ActivitiesTuning {
+        self.activities_by_lang.get(lang).unwrap_or(&self.activities)
     }
 
     pub fn bonds_in(&self, lang: &str) -> &BondTuning {

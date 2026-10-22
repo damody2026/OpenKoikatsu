@@ -50,7 +50,7 @@ void AOKStreetSocialScene::LoadUiTexts(){
  {auto Named=[](const FString& Key,const TCHAR* Own)->const TCHAR*{const TCHAR* N=OKT(*Key);return FCString::Strcmp(N,*Key)==0?Own:N;};
   for(const FOKStreetPlace& Const:OKStreetPlaces()){auto& P=const_cast<FOKStreetPlace&>(Const);if(!P.ZhName){P.ZhName=P.Name;P.ZhAbout=P.About;}
    P.Name=Named(FString(TEXT("ui.name.place."))+P.Id,Named(FString(TEXT("ui.name.unit."))+P.Id,P.ZhName)); /* a lot: named like its property unit */P.About=Named(FString(TEXT("ui.name.place_about."))+P.Id,FString(P.Id).StartsWith(TEXT("lot_"))?Named(TEXT("ui.name.place_about.lot"),P.ZhAbout):P.ZhAbout);}
-  for(const FOKStreetActivity& Entry:OKStreetActivities()){auto& A=const_cast<FOKStreetActivity&>(Entry);if(!A.ZhName)A.ZhName=A.Name;A.Name=Named(FString(TEXT("ui.name.activity."))+A.Id,A.ZhName);}
+  // The activities' names come with their table in this language (OKRulesReadTables, below).
   for(auto& I:S.Catalog.Items){if(I.ZhName.IsEmpty())I.ZhName=I.Name;I.Name=Named(TEXT("ui.name.item.")+I.Id,*I.ZhName);}
   for(auto& J:S.Catalog.Jobs){if(J.ZhTitle.IsEmpty())J.ZhTitle=J.Title;J.Title=Named(TEXT("ui.name.job.")+J.Id,*J.ZhTitle);}
   NameCollectedTopics();

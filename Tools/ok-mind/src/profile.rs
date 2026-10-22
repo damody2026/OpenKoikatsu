@@ -133,6 +133,9 @@ pub struct Occupation {
     pub job_id: String,
     pub competence: i32,
     pub pride: i32,
+    /// Work of her own he can help with (handing out flyers for her family shop, a club's accounts): one short phrase,
+    /// "" when she has none. The rules let him help her with it (activities.toml help_her_work).
+    pub side_task: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -295,7 +298,7 @@ pub fn generation_prompt(card: &Value, places: &[String]) -> String {
         "personality_core": {"catchphrase": "", "pride": "", "fear": "", "desire": ""},
         "orientation": "Monogamous|Open|Poly|Competitive|Indifferent|Recruiter", "material": "Romantic|Mixed|Mercenary",
         "drama_mode_override": "", "bio": "三到五句的背景",
-        "occupation": {"primary": "student|clerk|shop_staff|office|idle_rich|other", "role": "staff", "workplace_place_id": "", "job_id": "", "competence": 50, "pride": 50},
+        "occupation": {"primary": "student|clerk|shop_staff|office|idle_rich|other", "role": "staff", "workplace_place_id": "", "job_id": "", "competence": 50, "pride": 50, "side_task": "她自己的、他能幫忙的工作（例如幫家裡的店發傳單、整理社團帳目），沒有就留空"},
         "home_place_id": "girls_dorm", "favorite_places": ["cafe"], "birthday": "YYYY-MM-DD",
         "department": "csie", "intelligence": 60,
         "money": {"cash": 600, "bank": 2000, "income": [{"source": "allowance", "amount": 1300, "cycle": "monthly", "payday": 1}],

@@ -136,7 +136,7 @@ void AOKStreetSocialScene::SpawnLifeProps(FOKLifePose& Pose){
 void AOKStreetSocialScene::TickLife(float Dt){
  if(!State)return;auto& S=*State;const double Now=SceneTime();
  if(FParse::Param(FCommandLine::Get(),TEXT("StreetSocialFindLots")))RunFindLots();
- StopStrayPoses();TickBooks();TickPhone();TickStageTest();TickCompany();TickCompanyWorld();TickCompanyTest();TickHeroCompanyTest();TickAccountsTest();TickActivityWatch();TickLifeBlocks();TickNpcLifts();TickBiasActions();TickIntroFriend();
+ StopStrayPoses();TickBooks();TickPhone();TickPhotos();TickStageTest();TickCompany();TickCompanyWorld();TickCompanyTest();TickHeroCompanyTest();TickAccountsTest();TickActivityWatch();TickLifeBlocks();TickNpcLifts();TickBiasActions();TickIntroFriend();
  const int32 Minute=int32(OKStreetMindNow(S)%1440);
  // How far she is from where her schedule block puts her. After an outing or a walk she is wherever it ended, and
  // a seated loop there would put a chair in the middle of the street.
@@ -377,10 +377,18 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  if(Answer->GetBoolField(TEXT("treat_kept")))S.HerTreatPromise.Remove(Girl);
  // The activity was just billed: what is still in the basket for this meal (her chat orders) would be paid a second time.
  if(Price>0&&!S.Cart.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street activity aftermath: %d unpaid basket lines dropped, the activity bill covers them"),S.Cart.Num());S.Cart.Reset();}
+ // What the activity leaves (activities.toml yields): reading together moves both books on.
+ {const TArray<TSharedPtr<FJsonValue>>* Yields=nullptr;if(Answer->TryGetArrayField(TEXT("yields"),Yields))for(const auto& Y:*Yields)if(Y->AsString()==TEXT("book_progress"))ReadBooks(Girl,FMath::Max(Want,int32(OKStreetMindNow(S)-StartMinute)),FString());
+   else if(Y->AsString()==TEXT("drawing"))HerPhoto(Girl,FString(),TEXT("scene"),false,true); // what she drew: the view in front of her
+   else if(Y->AsString()==TEXT("work_progress"))HelpedHerWork(Girl,PlaceId,FMath::Max(Want,int32(OKStreetMindNow(S)-StartMinute)));}
  TMap<FString,float> Feed;for(const auto& E:Answer->GetObjectField(TEXT("feed"))->Values)Feed.Add(FString(*E.Key),float(E.Value->AsNumber()));
  FeedHer(Girl,Feed);
  S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"));RefreshUI();
  S.ActCutShort=false;
+ // What it used up (the fish food), now that it is over (activities.rs at_end).
+ {FString Ignore;ActivityCheck(Girl,ActivityId,Ignore,true,true);}
+ // Done with her today (activities.rs once_per_day).
+ {const int64 Day=OKStreetMindNow(S)/1440;if(S.ActivitiesDoneDay!=Day){S.ActivitiesDone.Reset();S.ActivitiesDoneDay=Day;}S.ActivitiesDone.FindOrAdd(Girl).AddUnique(ActivityId);}
  UE_LOG(LogTemp,Display,TEXT("Street activity aftermath: actor=%d %s minutes=%d price=%d payer=%s again=%d"),Girl,*ActivityId,Want,Price,*Answer->GetStringField(TEXT("payer")),Again);
 }
 
