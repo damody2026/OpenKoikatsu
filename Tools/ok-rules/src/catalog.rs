@@ -127,7 +127,9 @@ impl Catalog {
     pub fn closed_why(&self, place: &str, weekday: i32) -> String {
         let Some(p) = self.places.get(place) else { return crate::tr::t("catalog.closed_now").to_string() };
         if p.closed_weekdays.contains(&weekday) {
-            return crate::tr::t("catalog.closed_today").to_string();
+            // Its day off by name ("closed every Monday"): the job panel says it of tomorrow, where "closed today" was wrong.
+            let day = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].get(weekday as usize).copied().unwrap_or("mon");
+            return crate::tr::m("catalog.closed_weekday", &[("weekday", crate::tr::a(crate::tr::lookup(&format!("series.{day}"), day)))]);
         }
         let weekend = weekday >= 5 && !p.weekend_open.is_empty();
         let hours = if weekend { &p.weekend_open } else { &p.open };
@@ -276,7 +278,7 @@ mod tests {
         assert!(!c.place_open("bar", 20.0, 0), "closed on Mondays");
         assert!(c.place_open("nowhere", 3.0, 0));
         assert_eq!(c.closed_why("bar", 2), "那裡現在沒開（營業 18–26 點）", "zh-TW, the default language");
-        assert_eq!(c.closed_why("bar", 0), "那裡今天公休", "closed on Mondays");
+        assert_eq!(c.closed_why("bar", 0), "那裡每週一公休", "closed on Mondays, said of any day");
     }
 
     #[test]

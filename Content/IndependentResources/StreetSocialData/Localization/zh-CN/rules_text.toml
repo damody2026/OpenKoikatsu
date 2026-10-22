@@ -509,6 +509,7 @@ not_enough_favor = "目前的好感还不足以推进这段关系。"
 closed_now = "那里现在没开"
 closed_now_hours = "那里现在没开（营业 {from}–{to} 点）"
 closed_today = "那里今天公休"
+closed_weekday = "那里每{weekday}公休"
 closed_now_weekend_hours = "那里现在没开（周末营业 {from}–{to} 点）"
 
 [bias]
@@ -616,3 +617,7 @@ fact_can_borrow = "你还欠 {debt}；其中学费的部分可以到行政大楼
 [events]
 today = "今天是{what}"
 coming = "{date}（再 {days} 天）是{what}"
+
+[contacts]
+gave_number = "你把自己的电话给了他（他现在能打给你、发消息给你）"
+took_his_number = "你存下了他的电话（你现在能打给他、发消息给他）"

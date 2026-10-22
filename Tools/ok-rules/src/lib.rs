@@ -14,6 +14,7 @@ pub mod bonds;
 pub mod calendar;
 pub mod campus;
 pub mod catalog;
+pub mod contacts;
 pub mod day;
 pub mod effects;
 pub mod errand;
@@ -178,6 +179,7 @@ impl Rules {
                     .or_else(|| series::eval(&kind, &request))
                     .or_else(|| weather::eval(&kind, &request))
                     .or_else(|| errand::eval(&kind, &request))
+                    .or_else(|| contacts::eval(&kind, &request))
                     .or_else(|| events::eval(&kind, &request))
                     .or_else(|| reading::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))

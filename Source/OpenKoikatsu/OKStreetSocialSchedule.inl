@@ -28,10 +28,20 @@ FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FStri
  }
  // Campus classes name their room exactly ("class3_2": floor 3, room 2).
  if(Kind.StartsWith(TEXT("class"))&&Kind.Contains(TEXT("_")))Found=P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& A){return A.Name==Kind;});
- if(!Found)if(const auto* Names=Wanted.Find(Kind.StartsWith(TEXT("class"))?FString(TEXT("class")):Kind))for(const FString& N:*Names){Found=P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& A){return A.Name.StartsWith(N);});if(Found)break;}
+ // Every anchor of the first kind the place has (all its tables, not only the first), less those by him (the table he
+ // eats at: three heroines stood pressed behind his chair), spread over the heroines.
+ if(!Found)if(const auto* Names=Wanted.Find(Kind.StartsWith(TEXT("class"))?FString(TEXT("class")):Kind))for(const FString& N:*Names){
+  TArray<const FOKStreetModelAnchor*> All,Free;for(const auto& A:P->Anchors)if(A.Name.StartsWith(N)){All.Add(&A);if(FVector::Dist2D(A.Position,State->Male)>250.f)Free.Add(&A);}
+  const auto& Use=Free.IsEmpty()?All:Free;if(!Use.IsEmpty()){Found=Use[(I-1)%Use.Num()];break;}}
  FVector Spot=Found?Found->Position:(P->Rooms.IsEmpty()?P->Door:P->Rooms[0].GetCenter());
  if(!Found&&!P->Rooms.IsEmpty())Spot.Z=P->Rooms[0].Min.Z;
  Yaw=Found?Found->Yaw:0;
+ // The only such spot is where he is (the restaurant has one table anchor, and he eats at it): three metres further
+ // from him, inside the room, instead of pressed behind his chair.
+ if(Found&&FVector::Dist2D(Spot,State->Male)<250.f&&!P->Rooms.IsEmpty()){
+  FVector Away=Spot-State->Male;Away.Z=0;if(!Away.Normalize())Away=FRotator(0,Yaw,0).Vector();
+  const FBox& Room=P->Rooms[0];Spot+=Away*300.f;
+  Spot.X=FMath::Clamp(Spot.X,Room.Min.X+60.f,FMath::Max(Room.Min.X+60.f,Room.Max.X-60.f));Spot.Y=FMath::Clamp(Spot.Y,Room.Min.Y+60.f,FMath::Max(Room.Min.Y+60.f,Room.Max.Y-60.f));}
  // Side by side in rows of five (65 cm apart), a second row behind for heroines 6..10.
  return Spot+FRotator(0,Yaw,0).RotateVector(FVector(-((I-1)/5)*70.f,(((I-1)%5)-2)*65.f,0));
 }
@@ -149,7 +159,14 @@ void AOKStreetSocialScene::TickSchedules(){
     if(R.Cash>=0)R.Cash+=OKRulesNetPay(S,Pay,float(Pay)/float(FMath::Max(1,Wage))/176.f);MindObserve(I,TEXT("shared_shift"),OKMsg(TEXT("ui.schedule.worked_part_time"), {{TEXT("place"), OKStreetFindPlace(W.Place)?OKStreetFindPlace(W.Place)->Name:*W.Place}, {TEXT("hours"), (W.End-W.Start)/60}, {TEXT("pay"), Pay}}),W.Place,0.2f);}
    S.PlanBlock.Add(I,Index);S.PlanBlockSince.Add(I,Minute);S.PlanEaten.Remove(I);
    auto& A=S.Agents[I-1];
-   if(!Block||Block->Place.IsEmpty()){if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}continue;}
+   // Nowhere in particular (the street): let go to roam. Inside a place she first goes out of its door (she stayed in the
+   // closed library and the restaurant for hours, roaming inside them).
+   if(!Block||Block->Place.IsEmpty()){
+    const FOKStreetPlace* In=OKStreetFindPlace(PlaceHere(A.Position));
+    if(In&&!In->Rooms.IsEmpty()&&S.ScheduleHeld.Contains(I)){
+     if(FVector::Dist2D(A.Position,S.Male)<4000){auto Path=PlaceRoute(A.Position,In->Door);if(!Path.IsEmpty()){S.Commutes.Add(I,MoveTemp(Path));S.CommuteFinal.Remove(I);S.ReleaseAtDoor.Add(I);UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d leaves %s for the street"),I,In->Id);continue;}}
+     A.Position=In->Door;}
+    if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}continue;}
    FString Why;FOKStreetPlanBlock Alt;
    if(PlaceClosedNow(Block->Place,Why)&&Block->Kind!=TEXT("sleep")&&Block->Kind!=TEXT("rest")){ // closed: the nearest open place like it, else home (plan.rs plan_alternative)
     auto Request=OKRulesRequest(TEXT("plan_alternative"));Request->SetObjectField(TEXT("block"),OKRulesBlockJson(*Block));Request->SetObjectField(TEXT("doors"),OKRulesDoors());
@@ -212,5 +229,5 @@ void AOKStreetSocialScene::TickCommutes(float Dt){
   const FVector Delta=Path[1]-A.Position;const FVector Step=Delta.GetSafeNormal2D()*FMath::Min(float(Delta.Size2D()),OKStreetWalkSpeed*Dt);
   A.Position+=Step;A.Position.Z=Path[1].Z;S.Rotations[I]=OKStreetFacingMovement(Step,S.Rotations[I]);
  }
- for(const int32 I:Done){S.Commutes.Remove(I);if(const FVector* F=S.CommuteFinal.Find(I)){if(S.Agents.IsValidIndex(I-1)&&!StartNpcLift(I,*F))S.Agents[I-1].Position=*F;S.CommuteFinal.Remove(I);}} // seen: up by lift (Life.inl)
+ for(const int32 I:Done){S.Commutes.Remove(I);if(S.ReleaseAtDoor.Remove(I)&&S.Agents.IsValidIndex(I-1)){S.Agents[I-1].Held=false;S.ScheduleHeld.Remove(I);}if(const FVector* F=S.CommuteFinal.Find(I)){if(S.Agents.IsValidIndex(I-1)&&!StartNpcLift(I,*F))S.Agents[I-1].Position=*F;S.CommuteFinal.Remove(I);}} // seen: up by lift (Life.inl)
 }

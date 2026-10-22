@@ -509,6 +509,7 @@ not_enough_favor = "Favor is not yet enough to move this relationship forward."
 closed_now = "It's closed now"
 closed_now_hours = "It's closed now (open {from}–{to})"
 closed_today = "It's closed today"
+closed_weekday = "It is closed every {weekday}"
 closed_now_weekend_hours = "It's closed now (weekends {from}–{to})"
 
 [bias]
@@ -616,3 +617,7 @@ fact_can_borrow = "You owe {debt}; the fees part of it can be paid with a studen
 [events]
 today = "Today is {what}"
 coming = "{what} is on {date} (in {days} days)"
+
+[contacts]
+gave_number = "You gave him your number (he can call and text you now)"
+took_his_number = "You saved his number (you can call and text him now)"
