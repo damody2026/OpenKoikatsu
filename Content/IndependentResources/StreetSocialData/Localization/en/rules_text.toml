@@ -357,6 +357,9 @@ valentines_day = "Valentine's Day"
 white_day = "White Day"
 
 [shop]
+entry_ticket = "Admission"
+entry_paid = "Tickets bought, {fee} (you paid {his_pay}, she paid {her_pay})"
+entry_no_money = "Admission is {fee}; you do not have enough on you to go in"
 activity_with_her = "{bought} with {name}"
 all_cash_label = "{why} (short on cash, paid all the cash on hand)"
 borrowed_from_him = "Borrowed {amount, number, ::currency} from him, remember to pay it back"

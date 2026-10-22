@@ -36,6 +36,7 @@ pub mod rng;
 pub mod series;
 pub mod shop;
 pub mod social;
+pub mod song;
 pub mod talk;
 pub mod traits;
 pub mod venture;
@@ -166,6 +167,7 @@ impl Rules {
                     .or_else(|| academics::eval(&kind, &request))
                     .or_else(|| social::eval(&kind, &request))
                     .or_else(|| games::eval(&kind, &request))
+                    .or_else(|| song::eval(&kind, &request))
                     .or_else(|| (kind == "bluff_step").then(|| bluff::bluff_step(&tuning.texts, &request)))
                     .or_else(|| (kind == "card_table_place").then(|| bluff::card_table_place(tuning.places_in(locale::lang(&request)), &request)))
                     .or_else(|| locale::eval(&tuning.texts, &kind, &request))

@@ -561,6 +561,27 @@ pub fn checkout_timeout(r: &Value) -> Value {
 /// Another dish while she still has one of its kind (a meal, a drink) in front of her or on its way: not a second one,
 /// except when she is starving and it is a different dish ("one rice ball is not enough, an oden too", after a whole
 /// shift on nothing). Request: has_like, same_dish (the very same one is there), for_her, satiety. Answer: order.
+/// Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is. What is on
+/// the table (the part not eaten yet) and in the cart counts, then this dish; past 115 she could not finish it. Sweets go
+/// to "another stomach": a dessert counts half, so two small cakes on a dessert date are fine after lunch.
+/// Request: satiety, item {fill, category, drink}, coming [{fill, category, drink, left (0..1)}]. Answer: too_full.
+fn order_too_full(r: &Value) -> Value {
+    let weight = |d: &Value| {
+        if d.get("drink").and_then(Value::as_bool).unwrap_or(false) {
+            return 0.0;
+        }
+        let fill = d.get("fill").and_then(Value::as_f64).unwrap_or(0.0) * d.get("left").and_then(Value::as_f64).unwrap_or(1.0);
+        if d.get("category").and_then(Value::as_str) == Some("dessert") { fill * 0.5 } else { fill }
+    };
+    let item = r.get("item").cloned().unwrap_or_default();
+    if item.get("drink").and_then(Value::as_bool).unwrap_or(false) {
+        return json!({"too_full": false});
+    }
+    let coming: f64 = r.get("coming").and_then(Value::as_array).map(|a| a.iter().map(weight).sum()).unwrap_or(0.0);
+    let satiety = r.get("satiety").and_then(Value::as_f64).unwrap_or(0.0);
+    json!({"too_full": satiety + coming + weight(&item) > 115.0})
+}
+
 fn order_second_dish(r: &Value) -> Value {
     let has_like = r.get("has_like").and_then(Value::as_bool).unwrap_or(false);
     let same = r.get("same_dish").and_then(Value::as_bool).unwrap_or(false);
@@ -589,9 +610,67 @@ fn money_handover(r: &Value) -> Value {
     json!({"action": action})
 }
 
+/// Admission when he walks into a place that charges it (the aquarium, the onsen): his ticket and, when she is with him,
+/// hers; a student pays the student price. Who pays is what the two settled (payer: him, her, split; nothing said: he
+/// does, he brought her). Once a day per place (ext.entries). He walked in for free before: nobody ever paid.
+/// Passing by the door is not going in: only after minutes_inside (his minutes in it, in a row) reaches 2 is he asked;
+/// before that the answer is wait (ask again next minute).
+/// Request: place, day, ext, minutes_inside, him_student, relation (hers, when she is with him), her_student, payer.
+/// Answer: ok (false: he cannot pay his part), wait, fee, his_pay, her_pay, notice, effects, ext.
+fn entry_fee(c: &Catalog, r: &Value) -> Result<Value, String> {
+    let place = r.get("place").and_then(Value::as_str).unwrap_or("");
+    let mut ext = r.get("ext").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
+    let day = r.get("day").and_then(Value::as_i64).unwrap_or(0);
+    let none = |ext: Value| Ok(json!({"ok": true, "fee": 0, "his_pay": 0, "her_pay": 0, "notice": "", "effects": Effects::default().into_value(), "ext": ext}));
+    let Some(p) = c.places.get(place).filter(|p| p.entry > 0) else { return none(ext) };
+    if ext.get("entries").and_then(|e| e.get(place)).and_then(Value::as_i64) == Some(day) {
+        return none(ext);
+    }
+    if r.get("minutes_inside").and_then(Value::as_i64).unwrap_or(2) < 2 {
+        return Ok(json!({"ok": true, "wait": true, "fee": 0, "his_pay": 0, "her_pay": 0, "notice": "", "effects": Effects::default().into_value(), "ext": ext}));
+    }
+    let price = |student: bool| crate::region::amount("price", if student && p.entry_student > 0 { p.entry_student } else { p.entry });
+    // A student (enrolled or on leave: the card is still his) pays the student price; academic status as the save keeps it.
+    let student = |dept: &str, status: &str| !dept.is_empty() && status != "none" && status != "expelled";
+    let him_student = r.get("him_student").and_then(Value::as_bool).unwrap_or_else(|| student(r.get("him_dept").and_then(Value::as_str).unwrap_or(""), r.get("him_status").and_then(Value::as_str).unwrap_or("")));
+    let her_student = r.get("her_student").and_then(Value::as_bool).unwrap_or_else(|| r.get("her_status").and_then(Value::as_str) == Some("enrolled"));
+    let his_fee = price(him_student);
+    let mut fx = Effects::default();
+    let her = rel_of(r.get("relation"))?;
+    let her_fee = her.as_ref().map(|_| price(her_student)).unwrap_or(0);
+    let player_cash = r.get("player_cash").and_then(Value::as_i64).unwrap_or(i64::MAX);
+    let (mut his_pay, mut her_pay) = match r.get("payer").and_then(Value::as_str).unwrap_or("") {
+        "her" => (0, his_fee + her_fee),
+        "split" => (his_fee, her_fee),
+        _ => (his_fee + her_fee, 0),
+    };
+    if let Some(mut rel) = her.clone() {
+        // What she cannot pay of her part, he pays (she cannot stay outside).
+        let can = rel.funds().max(0).min(her_pay);
+        his_pay += her_pay - can;
+        her_pay = can;
+        if her_pay > 0 {
+            let before = rel.clone();
+            rel.pay(her_pay);
+            fx.relation(&rel, &before);
+        }
+    }
+    if his_pay > player_cash {
+        return Ok(json!({"ok": false, "fee": his_fee + her_fee, "his_pay": his_pay, "her_pay": 0, "notice": crate::tr::m("shop.entry_no_money", &[("fee", crate::tr::a(&crate::tr::money(his_pay)))]), "effects": Effects::default().into_value(), "ext": ext}));
+    }
+    if his_pay > 0 {
+        fx.cash(-his_pay, "entry", &crate::tr::t("shop.entry_ticket"));
+    }
+    ext["entries"][place] = json!(day);
+    let notice = crate::tr::m("shop.entry_paid", &[("fee", crate::tr::a(&crate::tr::money(his_fee + her_fee))), ("his_pay", crate::tr::a(&crate::tr::money(his_pay))), ("her_pay", crate::tr::a(&crate::tr::money(her_pay)))]);
+    Ok(json!({"ok": true, "fee": his_fee + her_fee, "his_pay": his_pay, "her_pay": her_pay, "notice": notice, "effects": fx.into_value(), "ext": ext}))
+}
+
 pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
+        "entry_fee" => entry_fee(c, r),
         "order_second_dish" => Ok(order_second_dish(r)),
+        "order_too_full" => Ok(order_too_full(r)),
         "money_handover" => Ok(money_handover(r)),
         "checkout_timeout" => Ok(checkout_timeout(r)),
         "checkout_lean" => lean(r),
@@ -623,6 +702,33 @@ mod tests {
 
 
     use super::*;
+
+    #[test]
+    fn two_desserts_fit_but_a_third_meal_does_not() {
+        let cake = json!({"fill": 15, "category": "dessert"});
+        assert_eq!(order_too_full(&json!({"satiety": 86, "item": cake, "coming": [cake]}))["too_full"], false, "a second cake at 86");
+        let bowl = json!({"fill": 30, "category": "meal"});
+        assert_eq!(order_too_full(&json!({"satiety": 86, "item": bowl}))["too_full"], true);
+        assert_eq!(order_too_full(&json!({"satiety": 110, "item": {"fill": 0, "drink": true}}))["too_full"], false, "a drink still");
+        assert_eq!(order_too_full(&json!({"satiety": 60, "item": bowl, "coming": [{"fill": 40, "left": 0.5}]}))["too_full"], false);
+    }
+
+    #[test]
+    fn admission_once_a_day_and_the_student_price() {
+        let mut c = Catalog::default();
+        c.places.insert("aquarium".into(), crate::catalog::Place { entry: 96, entry_student: 74, ..Default::default() });
+        let r = json!({"place": "aquarium", "day": 5, "him_student": true, "relation": {"id": "a", "cash": 500}, "her_student": true, "player_cash": 1000});
+        let v = entry_fee(&c, &r).unwrap();
+        assert_eq!((v["fee"].as_i64(), v["his_pay"].as_i64()), (Some(148), Some(148)), "he brought her: both tickets");
+        let again = entry_fee(&c, &json!({"place": "aquarium", "day": 5, "ext": v["ext"], "him_student": true})).unwrap();
+        assert_eq!(again["fee"], 0, "the same day again: already paid");
+        let split = entry_fee(&c, &json!({"place": "aquarium", "day": 6, "him_student": false, "relation": {"id": "a", "cash": 500}, "payer": "split"})).unwrap();
+        assert_eq!((split["his_pay"].as_i64(), split["her_pay"].as_i64()), (Some(96), Some(96)));
+        assert_eq!(entry_fee(&c, &json!({"place": "aquarium", "day": 7, "player_cash": 10})).unwrap()["ok"], false);
+        assert_eq!(entry_fee(&c, &json!({"place": "park", "day": 7})).unwrap()["fee"], 0);
+        let passing = entry_fee(&c, &json!({"place": "aquarium", "day": 8, "minutes_inside": 0})).unwrap();
+        assert_eq!((passing["wait"].as_bool(), passing["fee"].as_i64()), (Some(true), Some(0)), "walking past the door");
+    }
     #[test]
     fn a_second_dish_only_when_starving_and_different() {
         assert_eq!(order_second_dish(&json!({"has_like": false}))["order"], true);

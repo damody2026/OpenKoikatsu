@@ -357,6 +357,9 @@ valentines_day = "情人節"
 white_day = "白色情人節"
 
 [shop]
+entry_ticket = "門票"
+entry_paid = "買了門票 {fee}（你付 {his_pay}，她付 {her_pay}）"
+entry_no_money = "門票要 {fee}，你身上的錢不夠，進不去"
 activity_with_her = "和{name}的活動{bought}"
 all_cash_label = "{why}（錢不夠，付了身上全部）"
 borrowed_from_him = "跟他借了 {amount, number, ::currency}，要記得還"

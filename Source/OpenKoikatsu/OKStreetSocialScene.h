@@ -224,6 +224,7 @@ private:
  const struct FOKStreetAppointment* AppointmentBefore(int64 UntilMinute) const;
  void TickAppointments();
  void SetAsideAbsentMeetings(); // OKStreetSocialAppointments.inl (series.rs appointments_cast)
+ bool PayEntry(const FString& Place,int32 MinutesInside); // OKStreetSocialEconomy.inl (shop.rs entry_fee); false: ask again next minute
  FString TaskListText() const;
  struct FSlateColor TaskListColor() const;
  void NavigateToNextAppointment();
@@ -614,6 +615,21 @@ private:
  void RemoveCardVoice();
  void AddVoicePickUI(TSharedRef<class SVerticalBox> Box);
  FString MaleToneLabel() const;
+ // Her song event (OKStreetSocialSong.inl).
+ void TickSong(double Now);
+ void BuildSongRow(TSharedRef<class SVerticalBox> Box);
+ TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
+ bool SongOwnsVoice(int32 Character) const;
+ void SongLoad();
+ void SongSave();
+ void SongReset(const FString& Why,bool CancelJob);
+ TSharedPtr<class FJsonObject> SongDecide(bool Override) const;
+ bool SongPrepare(int32 Girl,bool Override,FString& Error);
+ void SongPoll();
+ void SongSay(const FString& Text);
+ bool SongMayOffer(int32 Girl) const;
+ void SongAnswer(const FString& Answer);
+ void SongSkip();
  bool QueueNode(int32 Node,const FString& Category,const FString& BranchId=FString());
  void SetSourcePlayerLine(const FString& Text);
  void AdvanceRelationshipDialogue();

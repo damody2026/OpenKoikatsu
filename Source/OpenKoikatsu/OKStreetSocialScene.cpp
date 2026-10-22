@@ -1,6 +1,7 @@
 ﻿#include "OKStreetSocialScene.h"
 #include "OKStreetSocialText.h"
 #include "OKStreetSocialSpeakerText.h"
+#include "OKStreetSocialSongState.h"
 #include "OKInteractionMode.h"
 #include "OKStreetSocialRules.h"
 #include "OKStreetHeroine.h"
@@ -255,7 +256,7 @@ struct FOKStreetSceneState {
  // NPC idles: when each last moved, how long she has stood still, and whether her current stop was lengthened.
  TMap<int32,int32> IdlePose;TMap<int32,double> LastMovedAt,StillSince;TMap<int32,float> LastWalk,PrevDwell;int32 ProbeStep=-1;double ProbeAt=0;FString ProbeWhy;TArray<TSharedPtr<FJsonValue>> ProbeRows; // OK_STREET_UI_PROBE
  // Campus (OKStreetSocialCampus.inl): upstairs commute targets, studying, stair/office proximity, attendance, exams.
- TMap<int32,FVector> CommuteFinal;bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
+ TMap<int32,FVector> CommuteFinal;FString EntryPlace;int32 EntryMinutes=0;bool bEntryPlaceKnown=false,bEntrySettled=true; /* the place he is in, minutes in a row, admission asked (PayEntry) */bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
  // Bank app, price alerts, net worth chart and the heroines' own accounts (OKStreetSocialBank.inl).
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
@@ -420,6 +421,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  // Player (male) TTS line before her reply: MalePhase 0 none, 1 waiting for the clip, 2 speaking, 3 done/skipped.
  FString PlayerCardName,PlayerNameDraft,MaleTone=TEXT("m0"),MaleVoiceId,MaleLineOverride,LastBranchId,TtsVoiceInfo;bool MaleTtsPending=false,MaleAddressed=false;int32 MalePhase=0,TtsSmokeTopics=0;double MaleRequestedAt=0;uint32 MaleSerial=0;TArray<TSharedPtr<FString>> MaleToneOptions;
  // Her own voice (OKStreetSocialVoicePick.inl): candidates from ok-tts, whether her card holds a voice.
+ FOKSongState Song; // her song event (OKStreetSocialSong.inl)
  struct FVoiceCandidate {FString Tag,Reference,Preview;};TArray<FVoiceCandidate> VoicePickCandidates;bool VoicePickOpen=false,VoicePickBusy=false,CardHasVoice=false;FString VoicePickDescription,VoicePickNotice,TtsVoiceInstruct;int32 VoicePickTarget=INDEX_NONE;
  FOKStreetStore Store;
  TArray<FOKStreetAgentSim> Agents;
@@ -1497,6 +1499,7 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
 void AOKStreetSocialScene::TickFreeTalkSpeech(double Now){
  auto& S=*State;const int32 Character=S.FreeTalkSpeechSpeakers.IsValidIndex(S.FreeTalkSpeechPlayed)?S.FreeTalkSpeechSpeakers[S.FreeTalkSpeechPlayed]:S.FreeTalkSpeechCharacter;
  if(Character==INDEX_NONE||S.FreeTalkSpeechPlayed>=S.FreeTalkSpeechLines.Num()||Now<S.FreeTalkSpeechNext)return;
+ if(SongOwnsVoice(Character))return; // she is singing (or saying its lines): her replies wait for the song
  if(FreeTalkPartner()!=Character&&!(S.FreeTalkSpeechSpeakers.Num()>0&&FreeTalkPartner()!=INDEX_NONE&&(S.Party.Contains(Character)||Character==FreeTalkPartner()))){S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();return;}
  if(S.Node!=INDEX_NONE||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty()||OKCrowdRuntimeSpeechActive(this,Character))return;
  // Several of them (a party): one at a time. The next girl waits until whoever spoke before her is done, not only
@@ -1936,6 +1939,7 @@ void AOKStreetSocialScene::RebuildUI(){
    [SNew(STextBlock).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(OKT(TEXT("ui.scene.his_tone_label"))+(Weak.IsValid()?Weak->MaleToneLabel():FString()));})]];
   if(S.Target!=INDEX_NONE&&!S.TtsVoiceInfo.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.TtsVoiceInfo)).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Regular",11))];
   AddVoicePickUI(Box);
+  BuildSongRow(Box);
  }
  if(!S.TtsNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TtsNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.ShowDebug?OKT(TEXT("ui.scene.collapse_heroine_stats")):OKT(TEXT("ui.scene.heroine_stats_view_edit")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->ShowDebug=!Weak->State->ShowDebug;Weak->RefreshUI();}return FReply::Handled();})];
@@ -2268,6 +2272,7 @@ static int64 OKStreetMindNow(const FOKStreetSceneState& S);
 #include "OKStreetSocialLover.inl"
 #include "OKStreetSocialLife.inl"
 #include "OKStreetSocialMind.inl"
+#include "OKStreetSocialSong.inl"
 #include "OKStreetSocialEconomy.inl"
 #include "OKStreetSocialInvite.inl"
 #include "OKStreetSocialAppointments.inl"
@@ -3222,6 +3227,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  TickElevators(Dt);
  TickLover();
  TickLife(Dt);
+ TickSong(SceneTime());
  TickFaceTalkPartner(true);
  auto Snapshot=S.Agents;FOKStreetAgentSim PlayerObstacle;PlayerObstacle.Slot=0;PlayerObstacle.Position=S.Male;PlayerObstacle.Held=true;Snapshot.Add(PlayerObstacle);
  for(auto& Agent:S.Agents){

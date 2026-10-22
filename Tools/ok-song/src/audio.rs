@@ -47,6 +47,19 @@ impl Audio {
         Ok(Self { rate: spec.sample_rate, channels })
     }
 
+    /// 32-bit float WAV.
+    pub fn write_wav(&self, path: &Path) -> Result<()> {
+        let spec = hound::WavSpec { channels: self.channels.len() as u16, sample_rate: self.rate, bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
+        let mut w = hound::WavWriter::create(path, spec).with_context(|| format!("create {}", path.display()))?;
+        for i in 0..self.frames() {
+            for c in &self.channels {
+                w.write_sample(c[i])?;
+            }
+        }
+        w.finalize()?;
+        Ok(())
+    }
+
     pub fn mono(&self) -> Vec<f32> {
         let n = self.channels.len() as f32;
         (0..self.frames()).map(|i| self.channels.iter().map(|c| c[i]).sum::<f32>() / n).collect()

@@ -2,7 +2,8 @@
 -- duo, Docs/DUAL_LINE_DEVELOPMENT.md) can run their games side by side. Each checkout may have a local-instance.json at
 -- its root (not in git; outside Saved/ so wiping Saved/ keeps it):
 --   {"port_base": 47960, "voice": false}
--- port_base: TTS = base, ASR = base+1, StreetSocial control = base+10, interaction pair control = base+11.
+-- port_base: TTS = base, ASR = base+1, StreetSocial control = base+10, interaction pair control = base+11,
+-- song jobs (ok-song) = base+20.
 --   Without the file the base is 47860 (47860 / 47861 / 47870 / 47871, the long-standing ports).
 -- voice false: this checkout neither starts nor stops ok-tts / ok-asr (built-in voices, no voice input).
 --
@@ -16,7 +17,7 @@ local M = {}
 -- The ports for a given base (a sandboxed run picks its own; see run_street_social_development.lua -Sandbox).
 function M.ports_at(base, voice)
   if base < 1024 or base > 65400 then error("port base out of range: " .. base) end
-  return { base = base, tts = base, asr = base + 1, street_control = base + 10, pair_control = base + 11, voice = voice }
+  return { base = base, tts = base, asr = base + 1, street_control = base + 10, pair_control = base + 11, song = base + 20, voice = voice }
 end
 
 function M.ports(root)
@@ -29,14 +30,14 @@ function M.ports(root)
     if cfg.voice ~= nil then voice = cfg.voice and true or false end
     if base < 1024 or base > 65400 then error("local-instance.json port_base out of range: " .. base) end
   end
-  return { base = base, tts = base, asr = base + 1, street_control = base + 10, pair_control = base + 11, voice = voice }
+  return { base = base, tts = base, asr = base + 1, street_control = base + 10, pair_control = base + 11, song = base + 20, voice = voice }
 end
 
--- Stop only the ok-tts / ok-asr processes started from this checkout's Build/ (another clone's servers stay up).
+-- Stop only the ok-tts / ok-asr / ok-song processes started from this checkout's Build/ (another clone's servers stay up).
 function M.stop_own_voice_servers(root)
   local own = path.abs(path.join(root or ok.root, "Build")):lower() .. "/"
   local stopped = 0
-  for _, p in ipairs(require("ok.kit").call({ "proc-list", "ok-asr", "ok-tts" })) do
+  for _, p in ipairs(require("ok.kit").call({ "proc-list", "ok-asr", "ok-tts", "ok-song" })) do
     if type(p.path) == "string" and p.path:gsub("\\", "/"):lower():sub(1, #own) == own then
       if require("ok.kit").call({ "proc-kill", tostring(p.pid) }).killed then stopped = stopped + 1 end
     end
