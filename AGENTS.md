@@ -607,6 +607,7 @@ Editor Target 的 PreBuildSteps 與 `KKUnityBundle.Build.cs` 會呼叫 `Tools/ok
 
 - `StreetSocial.cmd`：街區交流 demo。
 - `CrowdRoom100.cmd`：百人房間（GPU 開發路徑），使用每張卡的 Instant Meshes 低模，見 [APNG 低模伴隨檔](Docs/APNG_LOWPOLY.md)。
+- `SceneEditor.cmd [場景檔]`：OK Studio 場景編輯器（只有 Studio 的 UI，不含讀卡畫面）；可開 .okscene、OK 場景卡或原作 KStudio 場景 PNG，見 [OK Studio 計畫](Docs/OK_STUDIO_PLAN.md) S2。
 - 人物編輯 MCP：`Tools/lua/lua.exe Tools/character_mcp/build.lua --test`，產物 `Tools/character_mcp/bin/ok-character-mcp.exe`；使用時須以 `-CharacterMCP` 啟動編輯器。
 
 若需要 Visual Studio 專案檔：

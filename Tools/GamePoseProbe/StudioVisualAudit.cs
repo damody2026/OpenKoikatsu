@@ -7,6 +7,27 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 
 public sealed partial class GamePoseProbe {
+    // The main camera rendered into an 8-bit sRGB target (what the screen shows), saved as PNG.
+    private static void CaptureMain(Camera main, string file) {
+        RenderTexture oldTarget = main.targetTexture;
+        RenderTexture oldActive = RenderTexture.active;
+        var target = RenderTexture.GetTemporary(1280, 720, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+        var image = new Texture2D(1280, 720, TextureFormat.RGB24, false);
+        try {
+            main.targetTexture = target;
+            main.Render();
+            RenderTexture.active = target;
+            image.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0);
+            image.Apply();
+            File.WriteAllBytes(file, image.EncodeToPNG());
+        } finally {
+            main.targetTexture = oldTarget;
+            RenderTexture.active = oldActive;
+            RenderTexture.ReleaseTemporary(target);
+            UnityEngine.Object.Destroy(image);
+        }
+    }
+
     // Exercise the installed post shader with known linear-light inputs. This is a
     // numeric oracle, independent of scene geometry, camera pose and screenshots.
     private static void WriteStudioGradeSamples(AmplifyColorBase grade, string output) {
@@ -277,22 +298,42 @@ public sealed partial class GamePoseProbe {
         }
         if (main != null) {
             yield return new WaitForEndOfFrame();
-            RenderTexture oldTarget = main.targetTexture;
-            RenderTexture oldActive = RenderTexture.active;
-            var target = RenderTexture.GetTemporary(1280, 720, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            var image = new Texture2D(1280, 720, TextureFormat.RGB24, false);
-            try {
-                main.targetTexture = target;
-                main.Render();
-                RenderTexture.active = target;
-                image.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0);
-                image.Apply();
-                File.WriteAllBytes(output + ".png", image.EncodeToPNG());
-            } finally {
-                main.targetTexture = oldTarget;
-                RenderTexture.active = oldActive;
-                RenderTexture.ReleaseTemporary(target);
-                UnityEngine.Object.Destroy(image);
+            // The main camera's components in execution order (OnRenderImage effects run in this order) and the
+            // public fields of each image effect, so the post chain can be rebuilt in the same order.
+            var effects = new System.Collections.Generic.List<Behaviour>();
+            using (var writer = new StreamWriter(output + ".post.tsv")) {
+                int order = 0;
+                foreach (Component component in main.GetComponents<Component>()) {
+                    var behaviour = component as Behaviour;
+                    Type type = component.GetType();
+                    // Amplify Color / Occlusion declare OnRenderImage (or their command buffers) on a base class:
+                    // private methods are not inherited by GetMethod, so walk the hierarchy.
+                    bool imageEffect = false;
+                    for (Type t = type; t != null && t != typeof(MonoBehaviour) && !imageEffect; t = t.BaseType)
+                        imageEffect = t.GetMethod("OnRenderImage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly) != null
+                            || t.Name.StartsWith("AmplifyOcclusion");
+                    writer.WriteLine("component\t" + order++ + "\t" + type.FullName + "\t" + (behaviour == null ? "n/a" : behaviour.enabled.ToString()) + "\t" + imageEffect);
+                    if (!imageEffect || behaviour == null) continue;
+                    effects.Add(behaviour);
+                    foreach (FieldInfo field in type.GetFields(BindingFlags.Instance | BindingFlags.Public)) {
+                        object value = field.GetValue(component);
+                        if (value == null || value is UnityEngine.Object) continue;
+                        writer.WriteLine("effect_field\t" + type.Name + "\t" + field.Name + "\t" + (value is float ? ((float)value).ToString("R") : value.ToString()));
+                    }
+                }
+            }
+            CaptureMain(main, output + ".png");
+            // OK_PROBE_CAPTURE_STAGES=1: the same frame with every enabled image effect off, then with each one off alone.
+            if (Environment.GetEnvironmentVariable("OK_PROBE_CAPTURE_STAGES") == "1") {
+                var enabled = effects.FindAll(e => e.enabled);
+                foreach (Behaviour e in enabled) e.enabled = false;
+                try { CaptureMain(main, output + ".post-off.png"); }
+                finally { foreach (Behaviour e in enabled) e.enabled = true; }
+                foreach (Behaviour e in enabled) {
+                    e.enabled = false;
+                    try { CaptureMain(main, output + ".no-" + e.GetType().Name + ".png"); }
+                    finally { e.enabled = true; }
+                }
             }
         }
         File.WriteAllText(output, "PASS: native scene audit completed");

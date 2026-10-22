@@ -16,6 +16,7 @@
 - [x] 3D 移動／旋轉／縮放把手（W／E／R，世界 X／Y／Z 軸，拖曳換算回父物件座標；自測模擬螢幕拖曳）
 - [x] 捏人畫面「進入工作室」開新的 Studio（目前角色當第一個角色，站在原位；「離開」回捏人畫面）；舊時間軸改名「動作時間軸」暫留，S7 併入。驗收 `ok.GalleryOkStudioAudit`
 - [x] 遊戲內場景清單（`UserData/Studio/scene/*.okscene`，取名存檔、點選讀取）
+- [x] 獨立的場景編輯器（2026-10-22）：`SceneEditor.cmd [場景檔]`（`Tools/run_scene_editor.lua`，`-Scene`、`-WindowWidth/Height`、`-NoBuild`、`-DryRun`，可把檔案拖到 cmd 上）。開 `/Engine/Maps/Entry?game=/Script/OKStudio.OKStudioGameMode`：`AOKStudioGameMode` 不建立讀卡畫面的 HUD／Gallery，啟動時開 `-OKScene=<檔案>`（.okscene、OK 場景卡或 KStudio PNG；沒有就是新場景），只顯示 Studio 面板與觀看相機；引擎畫面訊息（`GAreScreenMessagesEnabled`）關閉；「離開」關閉程式。讀卡畫面的「進入工作室」維持原樣
 
 ## S3 Studio 道具與地圖進基礎庫（進行中）
 - [x] 轉換器：原版 `abdata/studio/`（道具、材質、天空、地圖、清單；動畫與音效除外）進基礎庫（`oklib_convert` 的 `STUDIO_PREFIX`），清單的 prefab 當提示；mod 的 Studio zip 不收（S5 按場景轉入）。Studio 地圖都在 `studio/map`，劇情用的 `abdata/map` 不需要

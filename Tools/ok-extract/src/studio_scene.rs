@@ -135,7 +135,7 @@ pub struct Scene {
 pub struct StudioCamera { pub pos: [f32; 3], pub rotate: [f32; 3], pub distance: [f32; 3], pub fov: f32, pub lights: Vec<StudioLight> }
 
 /// The scene's screen settings (SceneInfo, the System menu): Amplify Color LUT (`ace_no` in the Filter list; the
-/// picture is lerp(LUT, original, `ace_blend`)), ambient occlusion, bloom, depth of field, vignette, fog, sun shafts,
+/// grading LUT is lerp(that LUT, Lut_Amount, `ace_blend`): Studio's camera blends towards Lut_Amount), ambient occlusion, bloom, depth of field, vignette, fog, sun shafts,
 /// shadows, the global outline / ramp / ambient shadow, and the background image (a file under the game folder) and
 /// frame.
 #[derive(Clone, Debug, Default, Serialize)]

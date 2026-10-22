@@ -17,7 +17,11 @@
 #include "UObject/StrongObjectPtr.h"
 
 namespace {
-const TCHAR* GradeAsset=TEXT("/Game/OKStudio/Post/SourceGrade1/M_SourceGrade32");
+// Amplify Color grades with lerp(LutTexture, LutBlendTexture, BlendAmount) (AmplifyColorBase.OnRenderImage's blend
+// cache). Studio sets LutTexture to the scene's filter (SystemButtonCtrl.SetACE) and BlendAmount to aceBlend; its
+// camera's LutBlendTexture is the serialized Lut_Amount (filter 0) and nothing replaces it (SunLightInfo.SetACE is
+// empty). So a blend leans towards Lut_Amount, not towards the ungraded picture.
+const TCHAR* GradeAsset=TEXT("/Game/OKStudio/Post/SourceGrade2/M_SourceGrade32");
 TStrongObjectPtr<UMaterial> GradeParent;
 struct FGradeInstance { TWeakObjectPtr<UTexture> Lut; float Strength=0, Exposure=0; TWeakObjectPtr<UMaterialInstanceDynamic> Material; };
 TArray<FGradeInstance> GradeInstances;
@@ -32,10 +36,10 @@ float3 c=max(Scene.rgb*View.OneOverPreExposure*exp2(Exposure),0.0);
 float3 g=lerp(12.92*c,1.055*pow(c,1.0/2.4)-.055,step(.0031308,c));
 float3 q=saturate(g)*31.0;
 float b=floor(q.b);float2 uv=float2((q.r+b*32.0+.5)/1024.0,(q.g+.5)/32.0);
-float3 lo=Texture2DSampleLevel(Lut,LutSampler,uv,0).rgb;
-uv.x+=(min(b+1,31.0)-b)/32.0;
-float3 hi=Texture2DSampleLevel(Lut,LutSampler,uv,0).rgb;
-float3 mapped=lerp(g,lerp(lo,hi,frac(q.b)),Strength);
+float2 up=float2((min(b+1,31.0)-b)/32.0,0.0);
+float3 sel=lerp(Texture2DSampleLevel(Lut,LutSampler,uv,0).rgb,Texture2DSampleLevel(Lut,LutSampler,uv+up,0).rgb,frac(q.b));
+float3 blend=lerp(Texture2DSampleLevel(BlendLut,BlendLutSampler,uv,0).rgb,Texture2DSampleLevel(BlendLut,BlendLutSampler,uv+up,0).rgb,frac(q.b));
+float3 mapped=lerp(blend,sel,Strength);
 float3 gradedLinear=lerp(mapped/12.92,pow(max((mapped+.055)/1.055,0.0),2.4),step(.04045,mapped));
 return gradedLinear*View.PreExposure;
 )GRADE");
@@ -50,6 +54,8 @@ return gradedLinear*View.PreExposure;
   SavedLut->SRGB=false;SavedLut->NeverStream=true;SavedLut->Filter=TF_Bilinear;SavedLut->AddressX=SavedLut->AddressY=TA_Clamp;SavedLut->PostEditChange();DefaultLut=SavedLut;
  }
  Lut->Texture=DefaultLut;Add(Lut);Input(TEXT("Lut"),Lut);
+ auto* BlendLut=NewObject<UMaterialExpressionTextureObjectParameter>(Mat);BlendLut->ParameterName=TEXT("BlendLut");BlendLut->SamplerType=SAMPLERTYPE_LinearColor;
+ BlendLut->Texture=DefaultLut;Add(BlendLut);Input(TEXT("BlendLut"),BlendLut);
  for(const TCHAR* N:{TEXT("Strength"),TEXT("Exposure")}){auto* P=NewObject<UMaterialExpressionScalarParameter>(Mat);P->ParameterName=N;Add(P);Input(N,P);}
  Add(Code);Mat->GetEditorOnlyData()->EmissiveColor.Expression=Code;Mat->PreEditChange(nullptr);Mat->PostEditChange();return Mat;
 #else
@@ -86,14 +92,15 @@ UTexture* OKStudioIdentityGradeLut() {
 
 bool OKStudioApplySourceGrade(const FOKScenePost& Post,FPostProcessSettings& Settings) {
  Settings.WeightedBlendables.Array.RemoveAll([](const FWeightedBlendable& B){auto* M=Cast<UMaterialInstanceDynamic>(B.Object);return M&&GradeParent&&M->Parent==GradeParent.Get();});
- if(Post.ColorFilter<0||Post.ColorFilterIntensity<=0)return false;
- UTexture* Lut=FOKStudioCatalog::Get().SourceFilterLut(Post.ColorFilter);if(!Lut)return false;
+ // Strength = 1 - aceBlend: 0 is Lut_Amount alone (Studio's blend target), not an ungraded picture; -1 filter is none.
+ if(Post.ColorFilter<0)return false;
+ UTexture* Lut=FOKStudioCatalog::Get().SourceFilterLut(Post.ColorFilter);UTexture* BlendLut=FOKStudioCatalog::Get().SourceFilterLut(0);if(!Lut||!BlendLut)return false;
  if(!GradeParent){auto* Parent=LoadObject<UMaterial>(nullptr,*(FString(GradeAsset)+TEXT(".M_SourceGrade32")));GradeParent.Reset(Parent?Parent:BuildGrade());}
  if(!GradeReady())return false;
  GradeInstances.RemoveAll([](const FGradeInstance& E){return !E.Material.IsValid();});
  const float Strength=FMath::Clamp(Post.ColorFilterIntensity,0.f,1.f);
  auto* Found=GradeInstances.FindByPredicate([&](const FGradeInstance& E){return E.Lut==Lut&&E.Strength==Strength&&E.Exposure==Post.Exposure;});
  if(!Found){if(GradeInstances.Num()>=32)GradeInstances.RemoveAt(0);auto& E=GradeInstances.AddDefaulted_GetRef();E.Lut=Lut;E.Strength=Strength;E.Exposure=Post.Exposure;
- auto* M=UMaterialInstanceDynamic::Create(GradeParent.Get(),GetTransientPackage());M->SetTextureParameterValue(TEXT("Lut"),Lut);M->SetScalarParameterValue(TEXT("Strength"),Strength);M->SetScalarParameterValue(TEXT("Exposure"),Post.Exposure);E.Material=M;Found=&E;}
+ auto* M=UMaterialInstanceDynamic::Create(GradeParent.Get(),GetTransientPackage());M->SetTextureParameterValue(TEXT("Lut"),Lut);M->SetTextureParameterValue(TEXT("BlendLut"),BlendLut);M->SetScalarParameterValue(TEXT("Strength"),Strength);M->SetScalarParameterValue(TEXT("Exposure"),Post.Exposure);E.Material=M;Found=&E;}
  Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f,Found->Material.Get()));return true;
 }

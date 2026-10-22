@@ -426,8 +426,8 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 	if (Scene->TryGetArrayField(TEXT("objects"), Objects)) for (const TSharedPtr<FJsonValue>& O : *Objects) Importer.Object(O->AsObject(), -1);
 	const TArray<TSharedPtr<FJsonValue>>* CardErrors = nullptr;
 	if (Scene->TryGetArrayField(TEXT("card_errors"), CardErrors)) for (const TSharedPtr<FJsonValue>& E : *CardErrors) Report.Notes.Add(E->AsString());
-	// Screen settings (System menu): the Amplify Color filter (the picture is lerp(LUT, original, aceBlend)), bloom and
-	// vignette.
+	// Screen settings (System menu): the Amplify Color filter (the grading LUT is lerp(filter, Lut_Amount, aceBlend):
+	// Studio's camera blends towards its serialized Lut_Amount), bloom and vignette.
 	const TSharedPtr<FJsonObject>* Effects = nullptr;
 	if (Scene->TryGetObjectField(TEXT("effects"), Effects))
 	{
