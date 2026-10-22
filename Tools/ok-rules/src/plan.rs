@@ -727,17 +727,27 @@ pub fn schedule_tick(r: &Value) -> Result<Value, String> {
 }
 
 /// What she orders when a meal block starts and she pays for it (Request: place, month, budget, seed, relation, profile).
+/// What a meal that costs nothing fills (half of a proper one).
+const FRUGAL_MEAL_SATIETY: f32 = 25.0;
+
 pub fn meal(c: &Catalog, r: &Value) -> Result<Value, String> {
     let ctx = crate::heroine::Ctx::from_request(r)?;
     let place = r.get("place").and_then(Value::as_str).unwrap_or("");
     let mut rng = RandomStream::new(r.get("seed").and_then(Value::as_i64).unwrap_or(0) as i32);
+    // Nothing she can pay for (broke after the fees, or nothing here within her budget): a meal that costs nothing (the
+    // bread she brought, instant noodles in the dorm), not none at all: she stayed at 0 satiety for days, no money.
+    let frugal = |rel: &crate::relation::Relation| {
+        let mut fed = rel.clone();
+        fed.satiety = (fed.satiety + FRUGAL_MEAL_SATIETY).clamp(0.0, 100.0);
+        Ok(json!({"item": "frugal_meal", "name": crate::tr::t("plan.frugal_meal"), "price": 0, "frugal": true, "relation": fed.patch(rel)}))
+    };
     let Some(item) = catalog::pick_meal(c, place, r.get("month").and_then(Value::as_i64).unwrap_or(1) as i32, &ctx.profile, r.get("budget").and_then(Value::as_i64).unwrap_or(0) as i32, &mut rng) else {
-        return Ok(json!({}));
+        return frugal(&ctx.rel);
     };
     let price = item.price_of(&item.default_size());
     let mut rel = ctx.rel.clone();
     if rel.cash >= 0 && rel.cash < price as i64 {
-        return Ok(json!({}));
+        return frugal(&ctx.rel);
     }
     if rel.cash >= 0 {
         rel.cash -= price as i64;
@@ -1015,5 +1025,13 @@ mod tests {
                 assert!(w[0]["end"].as_i64() <= w[1]["start"].as_i64(), "day {day}: overlap {w:?}");
             }
         }
+    }
+    #[test]
+    fn a_broke_heroine_still_eats_something() {
+        let c = crate::tuning::Tuning::builtin().catalog;
+        let r = json!({"relation": {"id": "a", "cash": 3, "satiety": 0.0}, "profile": {}, "place": "cafeteria", "budget": 40, "month": 9, "seed": 1});
+        let v = meal(&c, &r).unwrap();
+        assert_eq!(v["frugal"], true, "{v}");
+        assert_eq!(v["price"], 0);
     }
 }

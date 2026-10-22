@@ -339,6 +339,7 @@ very_tired = "Exhausted."
 you_owe_him = "You still owe him {amount, number, ::currency} (he lent it to you, not the other way around)."
 
 [plan]
+frugal_meal = "a bun she brought and plain water (short of money)"
 christmas = "Christmas"
 class_label = "Class"
 finals_week = "Finals week"

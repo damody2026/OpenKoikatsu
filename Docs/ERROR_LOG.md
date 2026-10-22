@@ -3926,5 +3926,18 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **把原作亮出來的部分當成光照計算差**（2026-10-22）：3167 上半部偏暗時，先後懷疑光照貼圖解碼、方向項、反射、霧、SH，花了很多輪擷取。真正原因是一個 Studio 加法特效道具在 UE 沒畫出。預防：先用原作探針把光照貼圖換全黑（`white-blacklightmap`）看「不是光照貼圖的貢獻」剩什麼，再對可疑物件 `--hide` 量它的貢獻，最後才去比對著色公式。
 - **Unity 內建網格與網格上的 Skybox 沒有轉出**（2026-10-22，OK Studio）：Studio 道具「青空／夜空／夕方」是一顆 Unity 內建 `Sphere`（`Library/unity default resources`，bundle 裡沒有）配 `Skybox/Cubemap` 材質。外部網格解碼找不到檔案就略過，`_Tex` 是 Cubemap（class 89），材質貼圖槽也只認 Texture2D，所以 4432 天空整片黑（只剩雲）。修正：`unity::builtin_mesh` 產生內建 Cube／Sphere／Plane／Quad；材質貼圖槽與外部貼圖名稱也認 Cubemap；`Skybox/Cubemap` 部件帶 `_OKSkyCube`（反射探針同格式的六面圖集）與 `_OKSkybox`，物件空間方向寫進頂點色（session 會把 renderer 變換烘進位置）；UE 用自己的無光照雙面材質依方向取圖集，乘 `_Tint`（線性）×4.5948×`_Exposure`，不投影、不描邊。第一版用 `PreSkinnedPosition` 在像素著色器取不到，材質編譯失敗改用預設材質——加材質後要看日誌的 `Failed to compile Material`。
 - **水面道具畫成白色**（2026-10-22，OK Studio）：「水面(川)」用 `Xffect/heat_distortion_t2`（GrabPass 後 SrcAlpha/OneMinusSrcAlpha 輸出 背後畫面×`_MainTex`.rgb、alpha `_MainTex`.a），UE 把它的淡藍平色貼圖當不透明顏色，4432 稻田整片白。修正：Rust 標 `_OKModulate`，UE 用 Modulate 混合畫 lerp(1, tex.rgb, tex.a)（忽略 ≤0.1 的波紋扭曲）。
+
+## E392 — Yvonne 特寫錄影途中服裝預熱重開卡（2026-10-22）
+
+- 症狀：50 段臉部特寫裡，前兩段掃光時畫面突然重建，fps 從約 160 掉下去。`Saved/Tests/YvonneCloseup/editor.log`（第一輪，11:30）有兩次 `clothing warm begin`，分別花 8.2 秒與 6.3 秒再開同一張 Yvonne，並在遊戲執行緒建出隱藏的 `KKPreviewActor_1`／`_2`。開卡本身的 `t.MaxFPS=15` 只發生在前景 `OnLoad3D`，不是每段都在重開。
+- 修正：`OK_NO_CLOTHING_WARM=1` 時不排服裝預熱、也不把開卡限在 15 fps。`product_sweep` 另外呼叫 `SuspendClothingWarmForCapture`，清掉已排隊的預熱。一般畫廊沒有這個環境變數，預熱仍在。
+- 重錄：第二輪 editor pid 79540，log 只有 `OK clothing warm held for product capture`，沒有 `clothing warm begin`。`00-card.mp4` 時長 3.000 秒，`all.mp4` 149.767 秒、50 段。光線讀回 start=-0.740 mid=0.002 end=0.740 read=1/1/1 slots=28。影片與本機錄製腳本不進版控。
+
+## E-249　角色 MCP heartbeat 每 0.5 秒把遊戲執行緒卡住（2026-10-22）
+
+- **症狀**：Yvonne 特寫錄影時 `stat unitgraph` 一卡一卡。`OK_FRAME_GRAPH=1` 在材質完成、服裝預熱與動畫目錄都停掉之後，idle 與 product sweep 仍約每 0.5 秒一幀：wall 被夾在 125.0ms，game 168–212ms，draw／GPU 只有數毫秒。log：`Saved/Tests/YvonneCloseup/framegraph-editor.log`（12:31:49–12:31:57 那輪）。
+- **原因**：`-CharacterMCP` 的 heartbeat 每 0.5 秒呼叫 `State()`，而 `State()` 會 `Refresh()`：把整包 KKEx 解成 JSON，再把所有控制項（含下拉全部選項）序列化後做 CRC。這段在遊戲執行緒上，不是 GPU，也不是陰影捕捉（這次 gallery `shadows=0`）。
+- **處置**：heartbeat 仍寫 `status.json` 的忙碌、相位、運鏡等欄位，但不再做指紋。正式請求進來時仍會 `Refresh()`，版本檢查不變。超過 8ms 才記 `OK mcp heartbeat`。
+- **驗證**：同一張卡重跑 frame graph。idle n=400 wall_p50=4.65 p95=7.62 max=11.46 over16=0；sweep n=500 wall_p50=4.70 p95=7.49 max=10.65 game_p95=5.13 gpu_p95=4.31 over8=13 over16=0。沒有 125ms 週期。接著 50 段 3 秒重錄完成，第一段光線 start=-0.740 mid=0.001 end=0.740，`clothing warm held`、沒有 `clothing warm begin`。錄影中 heartbeat 超過 8ms 只有 5 次，最大 11.6ms。
 - **Studio 道具一律吃角色燈、MDK 少了舊式環境光**（2026-10-22，OK Studio）：Studio 角色燈的 culling mask 是第 10 層（Chara），但地景道具（`main_StandardMDK_studio` 的砂地、木材、野原等）在第 11 層（Map），原作關掉角色燈它們完全不變；UE 對所有道具送 `_LightColor0`。MDK 的 pixel program 還會加上 max(自發光, 2·`glstate_lightmodel_ambient`)，UE 從未設定這個 uniform（=0）。5065 木材因此偏橘偏暗、4432 砂地偏亮。修正：部件依 `_OKRendererLayer` 帶 `OKLayer<n>` 標記，所有部件都在角色燈圖層外的道具 `_LightColor0` 設為 0；`glstate_lightmodel_ambient` 依原作探針（= 線性 ambientSkyColor / 2）：無地圖 (0.318, 0.3405, 0.3885, 1.5)，地圖 15／26／28 為 0.1698 灰。5065 超過 10% 的格子 27 → 7。
 - **比對用的挑選資料夾裝了別的場景**（2026-10-22）：`pick2` 裡留著先前的 0010、3167，`CompareKStudio <資料夾> 2` 只拍了前兩個，5065 的結果其實是舊圖，誤判成「參數對 5065 沒作用」。預防：單場景比對各用自己的資料夾，複製結果前核對日誌的 `pictured` 行是哪個場景。

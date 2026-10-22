@@ -444,6 +444,9 @@ public:
     bool TryClothingPreview(const FString& Key);
     void WarmClothingPreviews();
     void TickClothingPreviews();
+    // Product close-ups must not spend the game thread building hidden outfit actors.
+    void SuspendClothingWarmForCapture();
+    bool bClothingWarmHeld=false;
     // The next card in the list, opened and built hidden while the reader is idle (OK_PRELOAD_NEIGHBOR=1), so
     // loading it only swaps the display (OKGalleryNeighbor.cpp).
     UPROPERTY() TObjectPtr<class AKKPreviewActor> NeighborActor;

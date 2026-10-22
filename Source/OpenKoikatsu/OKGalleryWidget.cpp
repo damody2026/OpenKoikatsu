@@ -20,6 +20,7 @@
 #include "KKSkeletalBuilder.h"
 #include "KKAnimationCatalog.h"
 #include "Async/Async.h"
+#include "HAL/RunnableThread.h"
 #include "Tasks/Task.h"
 #include "Misc/FileHelper.h"
 #include "KKShapeRows.h"
@@ -1452,9 +1453,74 @@ void UOKCharacterController::TickAutoSequence()
  UE_LOG(LogTemp,Warning,TEXT("OKGUI_SEQ card not found: %s"),*Step);AutoSequenceAt=0;
 }
 
+static bool OKFrameGraphEnabled()
+{
+    static int32 Enabled = -1;
+    if (Enabled < 0) Enabled = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FRAME_GRAPH")) == TEXT("1") ? 1 : 0;
+    return Enabled == 1;
+}
+
+// Wall time is the gap since the previous tick (what stat unitgraph draws as Frame).
+// Game/Draw/GPU are the engine's raw unit times for that same gap. Sampling starts
+// only after the progressive materials are in place, then again across a product sweep.
+static void OKNoteFrameGraph(UOKCharacterController* Self, float DeltaSeconds)
+{
+    if (!OKFrameGraphEnabled()) return;
+    if (!IsValid(Self->PreviewActor) || !Self->PreviewActor->Session.IsOpen() || Self->bLoadInFlight) return;
+    if (!Self->PreviewActor->PendingPreviewMaterials.IsEmpty()) return;
+    struct FSample { float Wall, Game, Draw, Gpu; };
+    static int32 Warm = 0, Phase = 0, Count = 0, Over8 = 0, Over16 = 0, Logged = 0;
+    static TArray<FSample> Samples;
+    if (Phase >= 3) return;
+    if (Phase == 0)
+    {
+        if (++Warm < 180) return;
+        Phase = 1; Count = 0; Over8 = 0; Over16 = 0; Logged = 0; Samples.Reset(); Samples.Reserve(400);
+        UE_LOG(LogTemp, Display, TEXT("OK frame graph idle begin frame=%llu"), GFrameCounter);
+    }
+    FSample S;
+    S.Wall = DeltaSeconds * 1000.f; S.Game = -1.f; S.Draw = -1.f; S.Gpu = -1.f;
+    if (UWorld* World = Self->GetWorld())
+        if (UGameViewportClient* Viewport = World->GetGameViewport())
+            if (FStatUnitData* Stat = Viewport->GetStatUnitData())
+            {
+                S.Game = Stat->RawGameThreadTime; S.Draw = Stat->RawRenderThreadTime; S.Gpu = Stat->RawGPUFrameTime[0];
+            }
+    if (S.Wall > 8.f) ++Over8;
+    if (S.Wall > 16.f) ++Over16;
+    if (S.Wall > 12.f && Logged < 12)
+    {
+        ++Logged;
+        UE_LOG(LogTemp, Display, TEXT("OK frame spike phase=%d i=%d wall=%.1f game=%.1f draw=%.1f gpu=%.1f"),
+            Phase, Count, S.Wall, S.Game, S.Draw, S.Gpu);
+    }
+    Samples.Add(S);
+    const int32 Need = Phase == 1 ? 400 : 500;
+    if (++Count < Need) return;
+    TArray<float> Wall, Game, Draw, Gpu;
+    Wall.Reserve(Samples.Num()); Game.Reserve(Samples.Num()); Draw.Reserve(Samples.Num()); Gpu.Reserve(Samples.Num());
+    for (const FSample& Item : Samples) { Wall.Add(Item.Wall); Game.Add(Item.Game); Draw.Add(Item.Draw); Gpu.Add(Item.Gpu); }
+    Wall.Sort(); Game.Sort(); Draw.Sort(); Gpu.Sort();
+    const int32 N = Wall.Num();
+    const TCHAR* Name = Phase == 1 ? TEXT("idle") : TEXT("sweep");
+    UE_LOG(LogTemp, Display, TEXT("OK frame graph %s n=%d wall_p50=%.2f wall_p95=%.2f wall_max=%.2f game_p95=%.2f draw_p95=%.2f gpu_p95=%.2f over8=%d over16=%d"),
+        Name, N, Wall[N / 2], Wall[(N * 95) / 100], Wall.Last(), Game[(N * 95) / 100], Draw[(N * 95) / 100], Gpu[(N * 95) / 100], Over8, Over16);
+    if (Phase == 1)
+    {
+        FString Error;
+        Self->PreviewActor->SetActorTickEnabled(true);
+        const bool Started = Self->PreviewActor->BeginProductCloseup(FString(), nullptr, 3.f, Error);
+        UE_LOG(LogTemp, Display, TEXT("OK frame graph sweep begin ok=%d %s"), Started ? 1 : 0, *Error);
+        Phase = 2; Count = 0; Over8 = 0; Over16 = 0; Logged = 0; Samples.Reset(); Samples.Reserve(500);
+        return;
+    }
+    Phase = 3;
+}
+
 void UOKCharacterController::NativeTick(const FGeometry& Geometry,float DeltaSeconds)
 {
 	Super::NativeTick(Geometry,DeltaSeconds);
+    OKNoteFrameGraph(this, DeltaSeconds);
  TickCharacterMCP();
  TickCardListMetadata();
  // Coalesce input within a frame, never wait for the user to stop dragging.
@@ -1766,6 +1832,8 @@ static void OKThrottleForNativeOpen(bool bThrottle)
  static float Saved=-1.f;
  IConsoleVariable* MaxFPS=IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS"));
  if(!MaxFPS)return;
+ // A capture session stays at the reader's own frame rate. The 15 fps cap is only for an idle gallery open.
+ if(bThrottle&&FPlatformMisc::GetEnvironmentVariable(TEXT("OK_NO_CLOTHING_WARM"))==TEXT("1"))return;
  if(bThrottle&&Saved<0.f){Saved=MaxFPS->GetFloat();MaxFPS->Set(15.f,ECVF_SetByCode);}
  else if(!bThrottle&&Saved>=0.f){MaxFPS->Set(Saved,ECVF_SetByCode);Saved=-1.f;}
 }
@@ -2923,6 +2991,14 @@ void UOKCharacterController::BuildAnimationLookup()
  if (StudioCategoryCombo) StudioCategoryCombo->SetVisibility(ESlateVisibility::Visible);
  if (StudioMotionCombo) StudioMotionCombo->SetVisibility(ESlateVisibility::Visible);
  PopulateGameClips({});
+ // Parsing every animation bundle here saturates disk and the allocator for minutes
+ // and shows up as stepped bars on stat unitgraph. A capture does not need the list.
+ if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_NO_CLOTHING_WARM")) == TEXT("1"))
+ {
+  bAnimationLookupBuilding = false;
+  UE_LOG(LogTemp, Display, TEXT("OK animation lookup skipped (capture)"));
+  return;
+ }
  TArray<FString> Sources = PreviewActor->Session.ClipSources();
  Sources.Sort();
  const FString Root = UKKGameRoot::Get()->Root;
@@ -2932,10 +3008,16 @@ void UOKCharacterController::BuildAnimationLookup()
  TWeakObjectPtr<UOKCharacterController> Weak(this);
  Async(EAsyncExecution::Thread, [Weak, Generation, ActorGeneration, Root, Sex, Sources = MoveTemp(Sources)]()
  {
+  if (FRunnableThread* Thread = FRunnableThread::GetRunnableThread()) Thread->SetThreadPriority(TPri_Lowest);
+  FOkSession::SetThreadBackground(true);
   TArray<TPair<FString, TArray<FString>>> Entries;
   for (const FString& Source : Sources)
    if (GameSourceMatchesSex(Source, Sex))
+   {
     Entries.Emplace(Source, FOkSession::AnimationSourceNames(Root, Source));
+    // One bundle can be hundreds of megabytes. Yield so the view's frame does not step.
+    FPlatformProcess::Sleep(0.002f);
+   }
   AsyncTask(ENamedThreads::GameThread, [Weak, Generation, ActorGeneration, Entries = MoveTemp(Entries)]()
   {
    auto* G = Weak.Get();

@@ -1652,7 +1652,7 @@ you_refused_suffix = "，你拒绝了"
 your_turn_topic = "这次换你选话题吧，我想听听你想聊什么。"
 
 [ui.schedule]
-ate_at_place = "在{place}吃了{food}（{price, number, ::currency}）"
+ate_at_place = "在{place}吃了{food}{price, plural, =0 {} other {（{price, number, ::currency}）}}"
 today_schedule_label = "今日行程："
 worked_part_time = "在{place}打工 {hours} 小时，赚了 {pay, number, ::currency}"
 

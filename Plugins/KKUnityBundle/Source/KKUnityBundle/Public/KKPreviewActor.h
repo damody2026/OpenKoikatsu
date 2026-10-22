@@ -406,6 +406,22 @@ public:
 	void UpdateCameraKeyLight();
 	bool bCameraKeyLight = false;
 	TWeakObjectPtr<class ADirectionalLight> StudioKeyLight;
+	// Face close-up: ramp (null keeps the card ramp) plus a key light that arcs from the
+	// character's left, across the front, to her right. The tick runs the arc; false if one
+	// is already running or no material exposes _RampG.
+	bool BeginProductCloseup(const FString& RampLabel, UTexture2D* Ramp, float Seconds, FString& Error);
+	void AdvanceProductSweep(float DeltaSeconds);
+	int32 SetDisplayRamp(UTexture2D* Ramp);
+	void LogProductLight(const TCHAR* Tag) const;
+	bool bProductSweep = false;
+	bool bProductLightLatched = false;
+	float ProductSweepElapsed = 0.f;
+	float ProductSweepSeconds = 5.f;
+	float ProductBaseDistance = 0.f;
+	int32 ProductRampSlots = 0;
+	int32 ProductLightStage = 0;
+	FString ProductRampLabel;
+	TMap<TWeakObjectPtr<UMaterialInstanceDynamic>, TWeakObjectPtr<UTexture>> ProductCardRamps;
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void TickActor(float DeltaSeconds, ELevelTick TickType, FActorTickFunction& ThisTickFunction) override;

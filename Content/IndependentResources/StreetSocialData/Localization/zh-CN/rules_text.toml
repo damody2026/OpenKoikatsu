@@ -339,6 +339,7 @@ very_tired = "非常累"
 you_owe_him = "你还欠他{amount, number, ::currency}（是他借给你的，不是他欠你）"
 
 [plan]
+frugal_meal = "自己带的馒头和白开水（手头紧）"
 christmas = "圣诞节"
 class_label = "上课"
 finals_week = "期末考周"
