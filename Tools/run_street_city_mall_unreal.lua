@@ -10,6 +10,7 @@ local status_path = out .. "/unreal-task.json"
 path.mkdir(out, true)
 path.write_text(status_path, json.encode({ status = "launching" }))
 local cmd = { ok.engine_root() .. "/Engine/Binaries/Win64/UnrealEditor.exe", root .. "/StreetSocialCity/StreetSocialCity.uproject",
+  "/Engine/Maps/Entry",
   "-ExecutePythonScript=" .. root .. "/Tools/assemble_street_city_unreal_mall.py", "-UserDir=E:/StreetSocialCityProduction/unreal-userdata",
   "-unattended", "-nosplash", "-nosound", "-nop4", "-NullRHI", "-abslog=" .. out .. "/unreal-editor.log" }
 if args.audit_only then cmd[#cmd + 1] = "-MallAuditOnly" end

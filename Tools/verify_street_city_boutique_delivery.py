@@ -34,6 +34,7 @@ def main():
  reviewed_goods=json.loads((GOODS/'previews/visual-acceptance.json').read_text('utf8'));check(reviewed_goods['status']=='reviewed' and reviewed_goods['source_hashes']==g['contract']['merchandise']['source_hashes'],'all current product models visually reviewed')
  check(reviewed_goods['repairs_sha256']==sha(ROOT/'Tools/street_city_product_repairs.py'),'visual review includes current certified structural repairs')
  lods=json.loads((GOODS/'lods/acceptance.json').read_text('utf8'));lod_photos=json.loads((GOODS/'lod-previews/receipt.json').read_text('utf8'));lod_review=json.loads((GOODS/'lod-previews/visual-acceptance.json').read_text('utf8'))
+ check(len(goods['components'])+len(lods['products'])<=100,'at most one hundred adopted product meshes including display variants')
  check(lods['status']=='passed' and lod_photos['status']=='complete' and set(lods['products'])==set(lod_photos['images']),'all adopted display LODs remeshed and rendered')
  check(lod_review['status']=='reviewed' and lod_review['source_hashes']==g['contract']['merchandise']['display_lod_hashes'],'all adopted display LODs visually reviewed')
  for aid,record in lods['products'].items():
@@ -82,5 +83,14 @@ def main():
  errors=[q for q in checks if not q['passed']]
  report=dict(status='failed' if errors else 'passed',completed_at=datetime.datetime.now().astimezone().isoformat(),building='M1',floors=10,tenants=80,checks=len(checks),issues=errors,results=checks,files=files,maximum_floor_triangles=max(a['floor_triangles'].values()),mesh_checks=a['checks'],native_checks=n['checks'],scope='current premium mall: geometry, collision, PBR, 80 rendered concessions, 387 floor language bindings; existing non-mall mesh transforms/collision preserved by native importer',limitations=g['contract']['limitations'])
  (OUT/'acceptance.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),'utf8');(MALL/'delivery-acceptance.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),'utf8');print(report['status'],len(checks),'delivery checks',flush=True);assert not errors,errors[:8]
+ # Refresh the human-facing aggregate only after the current native map,
+ # language bindings, product sources and every display have passed above.
+ summary_path=LANG/'acceptance.json'
+ summary=json.loads(summary_path.read_text('utf8'))
+ summary['native_map_sha256']=langs['native_map_sha256']
+ summary['mall_premium_fitout']=dict(status='passed',floors=10,tenants=80,native_lights=160,maximum_floor_triangles=report['maximum_floor_triangles'],receipt=str((OUT/'acceptance.json').relative_to(ROOT)))
+ summary['mall_merchandise']=dict(status='passed',unique_product_models=stock['unique_product_models'],instances=stock['instances'],stocked_tenants=stock['stocked_tenants'],model_sha256=a['model_sha256'],receipt=str((GOODS/'assembly-acceptance.json').relative_to(ROOT)))
+ summary_path.write_text(json.dumps(summary,ensure_ascii=False,indent=2),'utf8')
+ (GOODS/'production-status.json').write_text(json.dumps(dict(status='complete',unique_product_models=len(goods['components']),limit=100,new_tripo_models=sum(q['provider']=='Tripo Model' for q in goods['components']),reused_models=sum(q['provider']=='reuse' for q in goods['components']),adopted_display_variants=len(lods['products']),total_adopted_product_meshes=len(goods['components'])+len(lods['products']),placed_instances=stock['instances'],stocked_tenants=80,maximum_floor_triangles=report['maximum_floor_triangles'],delivery_checks=len(checks),model_sha256=a['model_sha256'],delivery_receipt=str((MALL/'delivery-acceptance.json').relative_to(ROOT))),ensure_ascii=False,indent=2),'utf8')
 
 if __name__=='__main__':main()

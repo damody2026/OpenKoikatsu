@@ -27,6 +27,9 @@ def completed(folder,expected):
    if isinstance(content,list):content='\n'.join(v.get('text','') for v in content if isinstance(v,dict))
    if '<user_query>\n' in content:content=content.split('<user_query>\n',1)[1].rsplit('\n</user_query>',1)[0]
    if hashlib.sha256(content.encode()).hexdigest()==expected:matched=True
+   else:
+    prompt=folder/'grok-prompt.txt'
+    if prompt.is_file() and digest(prompt)==expected and content.replace('\r\n','\n').rstrip('\r\n')==prompt.read_text('utf8').replace('\r\n','\n').rstrip('\r\n'):matched=True
   if not matched:continue
   calls={c['id'] for e in events for c in e.get('tool_calls',[]) if c.get('name') in ('image_gen','image_edit')}
   if len(calls)!=1:continue

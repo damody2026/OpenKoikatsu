@@ -26,6 +26,7 @@ p.add_argument('--dense-pass',type=float,default=1,help='Oversample remesh then 
 p.add_argument('--voxel-input',type=float,default=0,help='Optional metric voxel regularization before external remesh; checked against original source')
 p.add_argument('--repair-solid',type=float,default=0,help='Repair remeshed surface topology through metric voxel reconstruction then LOD')
 p.add_argument('--smooth',type=int,default=2)
+p.add_argument('--smooth-shading',action='store_true',help='Use interpolated surface normals after geometric validation; geometry and UVs remain unchanged')
 p.add_argument('--threads',type=int,default=0,help='Explicit Rust solver worker count; zero uses tool default')
 p.add_argument('--recover-source-topology',action='store_true',help='Explicit reference-topology reconstruction after failed external extraction; preserves source features, records provenance')
 p.add_argument('--pin-source-extrema',nargs='+',choices=['x','y','z'],default=[],help='During explicit recovery, retain exact source vertices at these metric extrema for modular joins')
@@ -114,7 +115,10 @@ for index,o in enumerate(objects):
             bpy.context.view_layer.objects.active=temp;temp.select_set(True)
             mod=temp.modifiers.new('Budget LOD after dense mandatory remesh','DECIMATE');mod.ratio=a.triangle_cap*.7/nt
             bpy.ops.object.modifier_apply(modifier=mod.name);newmesh=temp.data;newmesh.use_fake_user=True;bpy.data.objects.remove(temp,do_unlink=True)
-    if a.project_source:
+    # Reference recovery below rebuilds connectivity from the immutable source
+    # and samples the mandatory external field directly. Adaptive BMesh splits
+    # would be discarded, and can crash Blender on projected thin leaf fans.
+    if a.project_source and not a.recover_source_topology:
         bm=bmesh.new();bm.from_mesh(newmesh)
         bmesh.ops.remove_doubles(bm,verts=list(bm.verts),dist=1e-7)
         bmesh.ops.dissolve_degenerate(bm,edges=list(bm.edges),dist=1e-7)
@@ -266,7 +270,7 @@ for index,o in enumerate(objects):
         newmesh=bpy.data.meshes.new(o.name+'-reference-topology-recovery')
         newmesh.from_pydata(recovered,[],tris);newmesh.update()
         invalid_mesh=newmesh.validate(verbose=False,clean_customdata=False)
-        repairs.append(dict(reference_topology_recovery=True,connectivity_origin='normalized immutable source',position_field_origin='instant-meshes-rs result, bounded 1mm adoption where nearest distance <=5mm; missing features restored from source',external_extraction_coverage_before_recovery_m=before_coverage,field_supported_vertices=trusted,reference_vertices=len(verts),unchanged_original_model=False))
+        repairs.append(dict(reference_topology_recovery=True,connectivity_origin='normalized immutable source',position_field_origin=f'instant-meshes-rs result, bounded 1mm adoption where nearest distance <={a.tolerance:g}m; missing features restored from source',external_extraction_coverage_before_recovery_m=before_coverage,field_supported_vertices=trusted,reference_vertices=len(verts),unchanged_original_model=False))
         if a.pin_source_extrema:repairs.append(dict(exact_source_extrema_axes=a.pin_source_extrema,pinned_vertices=pinned,purpose='Deterministic modular seam contract; no arbitrary edge displacement'))
     newverts=[v.co.copy() for v in newmesh.vertices]
     faces=[tuple(p.vertices) for p in newmesh.polygons]
@@ -310,9 +314,11 @@ for index,o in enumerate(objects):
     ok=(max(bounds_error,max_distance,coverage)<=a.tolerance and not invalid_mesh
         and (not source_closed or nonmanifold_edges==0))
     all_ok=all_ok and ok
+    if a.smooth_shading:
+        for polygon in newmesh.polygons:polygon.use_smooth=True
     o.data=newmesh;o['remesh_tool']='instant-meshes-rs';o['remesh_part_passed']=ok
     newmesh.calc_loop_triangles();count=len(newmesh.loop_triangles);total+=count
-    records.append(dict(object=o.name,status='passed' if ok else 'geometry_check_failed',conditioning='isotropic box with exact hard-plane restoration' if a.box_panels else 'none',postprocess='source projection and small-hole/adaptive curvature repair' if a.project_source else 'none',repairs=repairs,triangles=count,bounds_error_m=bounds_error,source_to_result_max_m=coverage,result_to_source_max_m=max_distance,invalid_mesh_repaired=invalid_mesh,nonmanifold_edges=nonmanifold_edges,source_closed=source_closed,source_nonmanifold_edges=sum(n!=2 for n in source_edges.values()),command=command))
+    records.append(dict(object=o.name,status='passed' if ok else 'geometry_check_failed',conditioning='isotropic box with exact hard-plane restoration' if a.box_panels else 'none',postprocess='explicit reference topology with mandatory external field sampling' if a.recover_source_topology else ('source projection and small-hole/adaptive curvature repair' if a.project_source else 'none'),repairs=repairs,triangles=count,bounds_error_m=bounds_error,source_to_result_max_m=coverage,result_to_source_max_m=max_distance,invalid_mesh_repaired=invalid_mesh,nonmanifold_edges=nonmanifold_edges,source_closed=source_closed,source_nonmanifold_edges=sum(n!=2 for n in source_edges.values()),command=command))
 
 all_ok=all_ok and total<=a.triangle_cap
 candidate=a.output/'remeshed-candidate.glb'
