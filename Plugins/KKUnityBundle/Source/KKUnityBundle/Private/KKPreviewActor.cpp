@@ -68,6 +68,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionDepthFade.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "MaterialShared.h"
 
 void AKKPreviewActor::ReleaseSceneCaches()
@@ -1572,10 +1573,28 @@ return lerp(c, ThirdRGB * ThirdColor.rgb, ThirdAlpha * ThirdColor.a);
 				// Character maker parents its directional light to the camera.
 				// To-light is the opposite of view forward. ViewForward is
 				// constant over the draw, unlike CameraVectorWS.
+				// Default stays parented to the camera. OKKeyLightOverride selects OKKeyLightDir
+				// (world to-light) so a close-up can move the ramp without orbiting the face.
+				UMaterialExpressionScalarParameter* KeyOverride = NewObject<UMaterialExpressionScalarParameter>(Mat);
+				KeyOverride->Material = Mat;
+				KeyOverride->ParameterName = TEXT("OKKeyLightOverride");
+				KeyOverride->DefaultValue = 0.f;
+				Mat->GetExpressionCollection().AddExpression(KeyOverride);
+				UMaterialExpressionVectorParameter* KeyDir = NewObject<UMaterialExpressionVectorParameter>(Mat);
+				KeyDir->Material = Mat;
+				KeyDir->ParameterName = TEXT("OKKeyLightDir");
+				KeyDir->DefaultValue = FLinearColor(0.f, 1.f, 0.f, 0.f);
+				Mat->GetExpressionCollection().AddExpression(KeyDir);
 				UMaterialExpressionCustom* CameraLight = NewObject<UMaterialExpressionCustom>(Mat);
 				CameraLight->Material = Mat;
 				CameraLight->OutputType = CMOT_Float3;
-				CameraLight->Code = TEXT("return -normalize(ResolvedView.ViewForward);");
+				CameraLight->Code = TEXT("return Override > 0.5 ? normalize(KeyDir) : -normalize(ResolvedView.ViewForward);");
+				FCustomInput& OverrideInput = CameraLight->Inputs.AddDefaulted_GetRef();
+				OverrideInput.InputName = TEXT("Override");
+				OverrideInput.Input.Expression = KeyOverride;
+				FCustomInput& DirInput = CameraLight->Inputs.AddDefaulted_GetRef();
+				DirInput.InputName = TEXT("KeyDir");
+				DirInput.Input.Expression = KeyDir;
 				Mat->GetExpressionCollection().AddExpression(CameraLight);
 				Light = CameraLight;
 			}
@@ -1687,8 +1706,9 @@ return lerp(c, ThirdRGB * ThirdColor.rgb, ThirdAlpha * ThirdColor.a);
 				Mat->GetExpressionCollection().AddExpression(OtherRampUv);
 				RampUv = OtherRampUv;
 			}
-			UMaterialExpressionTextureSample* Ramp = NewObject<UMaterialExpressionTextureSample>(Mat);
+			UMaterialExpressionTextureSampleParameter2D* Ramp = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
 			Ramp->Material = Mat;
+			Ramp->ParameterName = TEXT("_RampG");
 			Ramp->SamplerType = SAMPLERTYPE_LinearColor;
 			Ramp->Texture = RampTex;
 			Ramp->Coordinates.Expression = RampUv;
@@ -4410,6 +4430,7 @@ void AKKPreviewActor::DestroyAllParts()
 {
 	StopRenderTextureCaptures();
  CookedRoleMaterials.Reset();CookedRoleOutlines.Reset();
+	bProductSweep = false; bProductLightLatched = false; ProductCardRamps.Reset(); ProductRampSlots = 0;
 	bSessionLoadComplete = false; SessionLoadNextPart = 0; SessionLoadWhiteRamp = nullptr;
 	SessionLoadState.Reset();
 	SessionLoadSeenHead.Reset(); SessionLoadTranslucentDepth.Reset();
@@ -8785,9 +8806,141 @@ void AKKPreviewActor::ApplyOrbitCamera()
 	const FVector CamLoc = OrbitFocus + Offset;
 	// Keep orientation continuous at distance zero and across the poles.
 	StudioCam->SetActorLocationAndRotation(CamLoc, FRotator(-OrbitPitch, -90.f-OrbitYaw, 0.f));
-	OkUpdateStudioBackdrop(GetWorld(),GetComponentsBoundingBox(true),{CamLoc});
+	// The product arc dollies every frame; rebuilding the backdrop mesh each tick hitches the shot.
+	if (!bProductSweep) OkUpdateStudioBackdrop(GetWorld(),GetComponentsBoundingBox(true),{CamLoc});
 	// MCP view captures turn actor tick off; keep the light with the camera.
 	UpdateCameraKeyLight();
+}
+
+// To-light in world space. Azimuth 0 faces the character (+Y); positive azimuth is her left (+X).
+// Elevation matches the maker key (Unity (0, .643, .766)).
+static FVector ProductLightTowards(float Phase)
+{
+	const float U = Phase * Phase * (3.f - 2.f * Phase);
+	const float Azimuth = FMath::DegreesToRadians(FMath::Lerp(75.f, -75.f, U));
+	const float Elevation = FMath::Atan2(0.6427876f, 0.7660446f);
+	const float Ce = FMath::Cos(Elevation);
+	return FVector(FMath::Sin(Azimuth) * Ce, FMath::Cos(Azimuth) * Ce, FMath::Sin(Elevation));
+}
+
+static float ProductLightPhase(float Elapsed, float Seconds)
+{
+	constexpr float Lead = 0.20f;
+	const float Span = FMath::Max(Seconds, 0.1f);
+	return FMath::Clamp((Elapsed - Lead) / Span, 0.f, 1.f);
+}
+
+static bool FrameProductFace(AKKPreviewActor* Actor, FString& Error);
+
+static void ApplyOwnKeyLight(AKKPreviewActor* Actor, const FVector& Dir, bool bOverride)
+{
+	const float Flag = bOverride ? 1.f : 0.f;
+	const FLinearColor Color(Dir.X, Dir.Y, Dir.Z, 0.f);
+	TInlineComponentArray<UMeshComponent*> Meshes(Actor);
+	for (UMeshComponent* Mesh : Meshes) for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
+	{
+		UMaterialInterface* Parent = Mesh->GetMaterial(Slot);
+		float Current = 0.f;
+		if (!Parent || !Parent->GetScalarParameterValue(FMaterialParameterInfo(TEXT("OKKeyLightOverride")), Current)) continue;
+		auto* Dynamic = Cast<UMaterialInstanceDynamic>(Parent);
+		if (!Dynamic)
+		{
+			Dynamic = UMaterialInstanceDynamic::Create(Parent, Actor);
+			Mesh->SetMaterial(Slot, Dynamic);
+			for (FKKLoadedPart& Part : Actor->Parts) if (Part.SurfaceMat == Parent && Part.Comp == Mesh) Part.SurfaceMat = Dynamic;
+		}
+		if (Current != Flag) Dynamic->SetScalarParameterValue(TEXT("OKKeyLightOverride"), Flag);
+		Dynamic->SetVectorParameterValue(TEXT("OKKeyLightDir"), Color);
+	}
+}
+
+int32 AKKPreviewActor::SetDisplayRamp(UTexture2D* Ramp)
+{
+	TSet<UMaterialInstanceDynamic*> Seen;
+	int32 Slots = 0;
+	auto Consider = [&](UMaterialInterface* Parent, UMeshComponent* Mesh, int32 Slot)
+	{
+		UTexture* Current = nullptr;
+		if (!Parent || !Parent->GetTextureParameterValue(FMaterialParameterInfo(TEXT("_RampG")), Current)) return;
+		auto* Dynamic = Cast<UMaterialInstanceDynamic>(Parent);
+		if (!Dynamic && Mesh)
+		{
+			Dynamic = UMaterialInstanceDynamic::Create(Parent, this);
+			Mesh->SetMaterial(Slot, Dynamic);
+			for (FKKLoadedPart& Part : Parts) if (Part.SurfaceMat == Parent && Part.Comp == Mesh) Part.SurfaceMat = Dynamic;
+			Current = nullptr;
+			Dynamic->GetTextureParameterValue(FMaterialParameterInfo(TEXT("_RampG")), Current);
+		}
+		if (!Dynamic || Seen.Contains(Dynamic)) return;
+		Seen.Add(Dynamic);
+		++Slots;
+		if (!ProductCardRamps.Contains(Dynamic)) ProductCardRamps.Add(Dynamic, Current);
+		UTexture* Want = Ramp ? static_cast<UTexture*>(Ramp) : ProductCardRamps[Dynamic].Get();
+		if (Want && Want != Current) Dynamic->SetTextureParameterValue(TEXT("_RampG"), Want);
+	};
+	for (UMaterialInstanceDynamic* M : CookedRoleMaterials) Consider(M, nullptr, 0);
+	for (UMaterialInstanceDynamic* M : CookedRoleOutlines) Consider(M, nullptr, 0);
+	TInlineComponentArray<UMeshComponent*> Meshes(this);
+	for (UMeshComponent* Mesh : Meshes) for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot) Consider(Mesh->GetMaterial(Slot), Mesh, Slot);
+	return Slots;
+}
+
+void AKKPreviewActor::LogProductLight(const TCHAR* Tag) const
+{
+	FLinearColor Got(0, 0, 0, 0);
+	int32 Found = 0;
+	for (UMaterialInstanceDynamic* M : CookedRoleMaterials)
+		if (M && M->GetVectorParameterValue(FMaterialParameterInfo(TEXT("_WorldSpaceLightPos0")), Got)) { Found = 1; break; }
+	UE_LOG(LogTemp, Display, TEXT("Product light %s ramp=%s elapsed=%.2f unity=(%.3f,%.3f,%.3f) read=%d slots=%d"),
+		Tag, *ProductRampLabel, ProductSweepElapsed, Got.R, Got.G, Got.B, Found, ProductRampSlots);
+}
+
+bool AKKPreviewActor::BeginProductCloseup(const FString& RampLabel, UTexture2D* Ramp, float Seconds, FString& Error)
+{
+	if (bProductSweep) { Error = TEXT("Product sweep already running"); return false; }
+	if (!FMath::IsFinite(Seconds) || Seconds < 1.f || Seconds > 20.f) { Error = TEXT("seconds must be 1..20"); return false; }
+	if (!FrameProductFace(this, Error)) return false;
+	// Gallery load leaves actor tick off until the studio view is shown. The arc
+	// only advances from Tick, so a sweep that starts first must turn it on.
+	SetActorTickEnabled(true);
+	ProductBaseDistance = OrbitDistance;
+	ProductSweepElapsed = 0.f;
+	ProductSweepSeconds = Seconds;
+	ProductRampLabel = RampLabel.IsEmpty() ? TEXT("card") : RampLabel;
+	ProductLightStage = 0;
+	bProductLightLatched = false;
+	bProductSweep = true;
+	ProductRampSlots = SetDisplayRamp(Ramp);
+	if (ProductRampSlots <= 0)
+	{
+		bProductSweep = false;
+		Error = TEXT("No material exposes _RampG");
+		return false;
+	}
+	ApplyOrbitCamera();
+	LogProductLight(TEXT("start"));
+	UE_LOG(LogTemp, Display, TEXT("Product sweep ramp=%s slots=%d seconds=%.2f dist=%.1f"),
+		*ProductRampLabel, ProductRampSlots, ProductSweepSeconds, ProductBaseDistance);
+	return true;
+}
+
+void AKKPreviewActor::AdvanceProductSweep(float DeltaSeconds)
+{
+	if (!bProductSweep) return;
+	ProductSweepElapsed += FMath::Clamp(DeltaSeconds, 0.f, 0.1f);
+	const float Phase = ProductLightPhase(ProductSweepElapsed, ProductSweepSeconds);
+	const float U = Phase * Phase * (3.f - 2.f * Phase);
+	OrbitDistance = ProductBaseDistance * (1.f - 0.10f * U);
+	ApplyOrbitCamera();
+	if (ProductLightStage < 1 && Phase >= 0.5f) { ProductLightStage = 1; LogProductLight(TEXT("mid")); }
+	// Lead + arc + a short hold on the right, so a grab that starts a frame late still ends on her right.
+	if (ProductSweepElapsed >= ProductSweepSeconds + 0.60f)
+	{
+		bProductSweep = false;
+		bProductLightLatched = true;
+		ProductLightStage = 2;
+		LogProductLight(TEXT("end"));
+	}
 }
 
 void AKKPreviewActor::UpdateCameraKeyLight()
@@ -8799,16 +8952,29 @@ void AKKPreviewActor::UpdateCameraKeyLight()
 	// The maker's directional light is a child of the camera. Keep the old
 	// fixed front light's 40 degree elevation (Unity (0,.643,.766)) relative
 	// to the camera, so the default framing looks unchanged and orbiting keeps
-	// the character's camera-facing side lit.
-	const FVector Forward = StudioCam->GetActorForwardVector();
-	const FVector Up = StudioCam->GetActorUpVector();
-	const FVector Towards = (-Forward * 0.7660446f + Up * 0.6427876f).GetSafeNormal();
+	// the character's camera-facing side lit. A product close-up overrides that
+	// with a world-space arc (character left, through the front, to her right).
+	const bool bProduct = bProductSweep || bProductLightLatched;
+	FVector Towards;
+	if (bProduct)
+	{
+		const float Elapsed = bProductSweep ? ProductSweepElapsed : ProductSweepSeconds + 1.f;
+		Towards = ProductLightTowards(ProductLightPhase(Elapsed, ProductSweepSeconds));
+	}
+	else
+	{
+		const FVector Forward = StudioCam->GetActorForwardVector();
+		const FVector Up = StudioCam->GetActorUpVector();
+		Towards = (-Forward * 0.7660446f + Up * 0.6427876f).GetSafeNormal();
+	}
 	if (Towards.IsNearlyZero())
 	{
 		return;
 	}
-	// Unreal (x, y, z) is Unity (-x, z, y).
+	// Unreal (x, y, z) is Unity (-x, z, y). Shared parents sample this uniform; own-graph
+	// materials sample OKKeyLightDir while OKKeyLightOverride is set.
 	SetSharedVectorParameter(TEXT("_WorldSpaceLightPos0"), FLinearColor(-Towards.X, Towards.Z, Towards.Y, 0.f));
+	ApplyOwnKeyLight(this, Towards, bProduct);
 	if (ADirectionalLight* Key = StudioKeyLight.Get())
 	{
 		Key->SetActorRotation((-Towards).Rotation());
@@ -8870,6 +9036,7 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
 		}
 	}
 	// FrameCurrentPose and capture rigs move StudioCam without ApplyOrbitCamera.
+	AdvanceProductSweep(DeltaSeconds);
 	UpdateCameraKeyLight();
 	if (!Session.IsOpen())
 	{
@@ -8892,10 +9059,15 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
  const double FaceDone=FPlatformTime::Seconds();
 	if (bCharacterDisplayShadows && ToonShadowCapture && ToonShadowTargets.Num() == 2)
 	{
-        BindToonShadowTarget(ToonShadowReadIndex);
-		ToonShadowCapture->TextureTarget = ToonShadowTargets[1 - ToonShadowReadIndex];
-		ToonShadowCapture->CaptureScene();
-		ToonShadowReadIndex = 1 - ToonShadowReadIndex;
+        // CaptureScene() builds and executes a renderer immediately, so the game
+        // thread stalls every frame and stat unitgraph steps. The deferred photo
+        // path already keeps one target bound and captures it before the main view.
+        const bool bStable = CVarOkStableShadowTarget.GetValueOnGameThread() != 0;
+        const int32 WriteIndex = bStable ? ToonShadowReadIndex : (1 - ToonShadowReadIndex);
+        ToonShadowCapture->TextureTarget = ToonShadowTargets[WriteIndex];
+        ToonShadowCapture->CaptureSceneDeferred();
+        BindToonShadowTarget(WriteIndex);
+        ToonShadowReadIndex = WriteIndex;
 	}
  const double TickMs=(FPlatformTime::Seconds()-Begin)*1000.;
  if(bNeedPose){AnimationTickTotalMs+=TickMs;++AnimationTickSamples;AnimationTickMaxMs=FMath::Max(AnimationTickMaxMs,TickMs);++AnimationTickHistogram[FMath::Clamp(int32(TickMs),0,255)];}
@@ -9127,6 +9299,19 @@ struct FOkCamRig
 };
 
 static FOkCamRig GStudioRig;
+
+static bool FrameProductFace(AKKPreviewActor* Actor, FString& Error)
+{
+	if (!Actor->StudioCam || GStudioRig.FaceLoc.IsNearlyZero())
+	{
+		Error = TEXT("Face camera is not framed");
+		return false;
+	}
+	Actor->StudioCam->SetActorLocationAndRotation(GStudioRig.FaceLoc, GStudioRig.FaceRot);
+	if (UCameraComponent* Lens = Actor->StudioCam->GetCameraComponent()) Lens->SetFieldOfView(50.f);
+	Actor->ResetOrbit(GStudioRig.FaceCenter, GStudioRig.FaceLoc);
+	return true;
+}
 
 // PIE starts on Template_Default's bright sky. Freezing eye adaptation there
 // (r.EyeAdaptationQuality 0) locks a near-black exposure, so the studio and

@@ -35,6 +35,9 @@ void UOKCharacterController::CancelPairCatalogue(){
 // is kept in the animation disk cache (OK_ANIM_CACHE_DIR). Parse the whole catalogue once in the background, so a pose
 // picked later only reads the cache. Process-wide and once per run: later catalogue rebuilds reuse the in-memory result.
 static void WarmPairCatalogue(const TArray<TSharedPtr<FJsonObject>>& Rows){
+    // Same capture gate as the animation-list scan: parsing 198 controllers on a
+    // worker still stalls the view (stat unitgraph steps) for several seconds.
+    if(FPlatformMisc::GetEnvironmentVariable(TEXT("OK_NO_CLOTHING_WARM"))==TEXT("1"))return;
     static std::atomic<bool> GStarted{false};
     if(GStarted.exchange(true))return;
     const FString Root=FOkSession::CommonPairRoot();if(Root.IsEmpty())return;
@@ -48,7 +51,8 @@ static void WarmPairCatalogue(const TArray<TSharedPtr<FJsonObject>>& Rows){
     }
     Sources.RemoveAll([](const FString& Source){return Source.IsEmpty();});
     Async(EAsyncExecution::Thread,[Root,Sources,Poses](){
-        if(FRunnableThread* Thread=FRunnableThread::GetRunnableThread())Thread->SetThreadPriority(TPri_BelowNormal);
+        if(FRunnableThread* Thread=FRunnableThread::GetRunnableThread())Thread->SetThreadPriority(TPri_Lowest);
+        FOkSession::SetThreadBackground(true);
         const double Start=FPlatformTime::Seconds();
         // 1. The controllers: what every selection needs before anything else.
         TMap<FString,TArray<FString>> Labels;

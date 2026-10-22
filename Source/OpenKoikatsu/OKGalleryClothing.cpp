@@ -98,7 +98,18 @@ bool UOKCharacterController::TryClothingPreview(const FString& Key){
  if(InspectorText)InspectorText->SetText(FText::FromString(Error.IsEmpty()?TEXT("已切換服裝狀態"):Error));
  bLastClothingSwitchCached=true;UE_LOG(LogTemp,Display,TEXT("OK clothing preview cache hit %s"),*Key);return true;
 }
+static bool ClothingWarmDisabled(){
+  return FPlatformMisc::GetEnvironmentVariable(TEXT("OK_NO_CLOTHING_WARM"))==TEXT("1");
+ }
+void UOKCharacterController::SuspendClothingWarmForCapture(){
+ if(!bClothingWarmHeld)UE_LOG(LogTemp,Display,TEXT("OK clothing warm held for product capture"));
+ bClothingWarmHeld=true;
+ ++ClothingWarmGeneration;ClothingWarmQueue.Reset();bClothingRulesPending=false;
+ if(ClothingWarmReady)if(auto* Actor=ClothingWarmReady->Actor.Get())Actor->Destroy();
+ ClothingWarmReady.Reset();
+}
 void UOKCharacterController::WarmClothingPreviews(){
+ if(bClothingWarmHeld||ClothingWarmDisabled())return;
  if(!IsValid(PreviewActor)||ClothingPreviewContext.IsEmpty()||!Entries.IsValidIndex(SelectedIndex))return;
  // Rule discovery reads and validates the source card/catalogue. Queue it
  // behind the same single-worker gate as native preview preparation.
@@ -106,6 +117,8 @@ void UOKCharacterController::WarmClothingPreviews(){
 }
 
 void UOKCharacterController::TickClothingPreviews(){
+ if(bClothingWarmHeld||ClothingWarmDisabled())return;
+ if(IsValid(PreviewActor)&&(PreviewActor->bProductSweep||PreviewActor->bProductLightLatched))return;
  // Hidden outfit actors allocate textures and compile materials as well as
  // opening native sessions. Give the active editor exclusive preparation
  // priority while the user browses appearance choices; retain queued jobs
