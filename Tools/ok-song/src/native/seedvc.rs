@@ -39,6 +39,35 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
         report.insert("voc_seconds".into(), t.elapsed().as_secs_f64().into());
         report.insert("voc".into(), compare(&y, &npy(&refdir.join("voc_out_2.npy"))?));
     }
+    if parts.contains("style") {
+        let (fb, frames) = super::campplus::fbank(&npy(&refdir.join("sem_in_2.npy"))?);
+        let rf = npy(&refdir.join("style_in.npy"))?;
+        report.insert("fbank".into(), compare(&fb, &rf));
+        let c = super::campplus::CamPlus::load(gpu, &models.join("campplus.safetensors"))?;
+        let e = c.embed(gpu, &rf, rf.len() / 80)?;
+        report.insert("style_from_ref_fbank".into(), compare(&e, &npy(&refdir.join("style_out.npy"))?));
+        let e2 = c.embed(gpu, &fb, frames)?;
+        report.insert("style".into(), compare(&e2, &npy(&refdir.join("style_out.npy"))?));
+    }
+    if parts.contains("sem") {
+        let w = super::whisper::Whisper::load(gpu, &models.join("whisper-small"))?;
+        let x = npy(&refdir.join("sem_in_2.npy"))?;
+        let f = w.features(&x);
+        let tm = std::time::Instant::now();
+        let (y, n) = w.encode(gpu, &x)?;
+        report.insert("sem_seconds".into(), tm.elapsed().as_secs_f64().into());
+        report.insert("sem_frames".into(), n.into());
+        report.insert("sem".into(), compare(&y, &npy(&refdir.join("sem_out_2.npy"))?));
+        report.insert("sem_features_max".into(), f.iter().cloned().fold(f32::MIN, f32::max).into());
+        if refdir.join("sem_feat.npy").is_file() {
+            let rf = npy(&refdir.join("sem_feat.npy"))?;
+            report.insert("sem_features".into(), compare(&f, &rf));
+            report.insert("sem_features_head".into(), serde_json::json!({"mine": &f[..4], "ref": &rf[..4], "mine_t100": &f[100..104], "ref_t100": &rf[100..104]}));
+        }
+        if refdir.join("sem_out32.npy").is_file() {
+            report.insert("sem_f32".into(), compare(&y, &npy(&refdir.join("sem_out32.npy"))?));
+        }
+    }
     if parts.contains("lr") || parts.contains("est") || parts.contains("cfm") {
         let dit = super::dit::Dit::load(gpu, &models.join("dit.safetensors"))?;
         if parts.contains("lr") {

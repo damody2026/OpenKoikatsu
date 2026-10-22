@@ -188,3 +188,35 @@ extern "C" __global__ void seedvc_euler_f32(float* x, const float* d, int ch, in
     float v = (1.f + r) * d[i] - r * d[n + i];
     x[i] = f < p ? 0.f : x[i] + dt * v;
 }
+
+// ---------------------------------------------------------------- CAMPPlus
+
+// out[c][j] = act(x[c][j] * s[c] + t[c]) over [c][n]; relu when `relu`, in place allowed.
+extern "C" __global__ void affine_act_f32(float* out, const float* x, const float* s, const float* t, int c, long long n, int relu) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= (long long)c * n) return;
+    int ch = i / n;
+    float v = x[i] * s[ch] + t[ch];
+    out[i] = relu ? fmaxf(v, 0.f) : v;
+}
+
+// CAMLayer context: out[c][t] = mean over all t of x[c] + mean over t's 100-frame segment (ceil mode). One block per channel.
+extern "C" __global__ void cam_context_f32(float* out, const float* x, int t_n, int seg) {
+    __shared__ float scratch[32];
+    const float* r = x + (long long)blockIdx.x * t_n;
+    float s = 0.f;
+    for (int i = threadIdx.x; i < t_n; i += blockDim.x) s += r[i];
+    float mean = block_sum(s, scratch) / t_n;
+    for (int t = threadIdx.x; t < t_n; t += blockDim.x) {
+        int a = t / seg * seg, b = min(a + seg, t_n);
+        float m = 0.f;
+        for (int j = a; j < b; ++j) m += r[j];
+        out[(long long)blockIdx.x * t_n + t] = mean + m / (b - a);
+    }
+}
+
+// y *= sigmoid(m)
+extern "C" __global__ void sigmoid_mul_f32(float* y, const float* m, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) y[i] = y[i] / (1.f + expf(-m[i]));
+}
