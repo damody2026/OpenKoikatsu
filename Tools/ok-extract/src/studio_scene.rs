@@ -785,6 +785,10 @@ mod tests {
                 let flag = rel.abs() > 0.10 || channel > 25.5;
                 over += usize::from(flag);
                 line += &format!("{}{:+4.0}%/{:3.0} ", if flag { '*' } else { ' ' }, rel * 100.0, channel);
+                // OK_CMP_MEANS=1: each cell's mean colour, original then OK.
+                if std::env::var_os("OK_CMP_MEANS").is_some() {
+                    line += &format!("[{:.0},{:.0},{:.0}|{:.0},{:.0},{:.0}] ", ma[0], ma[1], ma[2], mb[0], mb[1], mb[2]);
+                }
             }
             println!("{line}");
         }

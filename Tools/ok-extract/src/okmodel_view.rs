@@ -18,6 +18,9 @@ pub struct ItemMaterialEdits {
     /// RendererPropertyList: renderer (GameObject) name, property (Enabled, ShadowCastingMode), value.
     #[serde(default)]
     pub renderers: Vec<(String, String, f32)>,
+    /// The item's Studio light cancel (OIItemInfo.lightCancel): ItemComponent writes it to the materials with _LightCancel.
+    #[serde(default)]
+    pub light_cancel: Option<f32>,
 }
 
 impl ItemMaterialEdits {
@@ -40,6 +43,9 @@ impl ItemMaterialEdits {
                     eprintln!("ok-extract: Material Editor shader {shader} of {material} not supported, kept {}", mat.shader);
                 }
                 if *queue >= 0 { mat.render_queue = *queue; }
+            }
+            if let Some(value) = self.light_cancel {
+                if let Some(k) = mat.floats.keys().find(|k| k.eq_ignore_ascii_case("_LightCancel")).cloned() { mat.floats.insert(k, value); }
             }
         }
     }
@@ -369,6 +375,7 @@ impl ModelView {
     pub fn hierarchy(&self, prefab: &str) -> crate::pose::PrefabHierarchy { self.parsed.prefab_hierarchy(prefab) }
     /// Baked lightmaps of a prefab (recorded by `studio-nodes`).
     pub fn prefab_lightmaps(&self, prefab: &str) -> crate::unity::PrefabLightmaps { self.parsed.prefab_lightmaps(prefab) }
+    pub fn prefab_lightmap_directions(&self, prefab: &str) -> crate::unity::PrefabLightmaps { self.parsed.prefab_lightmap_directions(prefab) }
     pub fn prefab_renderer_settings(&self, prefab: &str) -> Vec<(i32,i32,i32,bool)> { self.parsed.prefab_renderer_settings(prefab) }
     /// A map's SunLightInfo (recorded by `studio-nodes`).
     pub fn parsed_sun_light(&self, prefab: &str) -> crate::unity::PrefabSunLight { self.parsed.prefab_sun_light(prefab) }
@@ -528,6 +535,16 @@ impl ModelView {
                 m.shader_extra_textures.insert("_OKLightmapDirection".into(), png.clone());
             }
         }
+        }
+        // OK_MAP_WHITE=1 (diagnostic, as the native probe's OK_PROBE_WHITE): a lightmapped prefab's (a map's)
+        // _MainTex and _Color white, so the picture shows the light its surfaces receive.
+        if !lightmaps.textures.is_empty() && std::env::var("OK_MAP_WHITE").is_ok_and(|v| v == "1") {
+            let mut white = Vec::new();
+            image::RgbaImage::from_pixel(4, 4, image::Rgba([255; 4])).write_to(&mut std::io::Cursor::new(&mut white), image::ImageFormat::Png).ok();
+            for m in meshes.iter_mut() {
+                if m.texture_png.is_some() { m.texture_png = Some(white.clone()); }
+                if let Some(c) = m.mat.as_mut().and_then(|mat| mat.colors.get_mut("_Color")) { *c = [1.0; 4]; }
+            }
         }
         assign_reflection_probes(&mut meshes, &self.parsed.prefab_reflection_probes(prefab), &worlds);
         let parts = crate::preview_session_parts(&self.lib, &role, meshes, entry.as_ref())?;
@@ -690,6 +707,15 @@ mod item_texture_dump {
                     println!("  keywords {:?}\n  floats {:?}\n  colors {:?}", m.keywords, floats, colors);
                 }
                 println!("  uv2 {} uv3 {} uv4 {} first positions {:?}", p.uv2.len(), p.uv3.len(), p.uv4.len(), &p.positions[..p.positions.len().min(4)]);
+                // Facing: the first triangle's winding normal (Unity is left-handed: clockwise seen from the front) against
+                // the vertex normal.
+                if p.indices.len() >= 3 {
+                    let [a, b, c] = [p.indices[0] as usize, p.indices[1] as usize, p.indices[2] as usize];
+                    let (pa, pb, pc) = (p.positions[a], p.positions[b], p.positions[c]);
+                    let (u, v) = ([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]]);
+                    let cross = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+                    println!("  first triangle cross {cross:?} vertex normal {:?} indices {:?}", p.normals.get(a), &p.indices[..p.indices.len().min(6)]);
+                }
                 // Each also upside down (for trying the other row direction).
                 let write = |name: String, png: &[u8]| {
                     std::fs::write(out.join(&name), png).unwrap();
