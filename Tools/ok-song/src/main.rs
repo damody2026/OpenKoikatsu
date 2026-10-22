@@ -176,6 +176,13 @@ fn run() -> Result<()> {
             let r = native::demucs::check(&gpu, &models, &PathBuf::from(args.opts.get("ref").context("--ref")?))?;
             println!("{}", serde_json::to_string_pretty(&r)?);
         }
+        "seedvc-check" => {
+            let gpu = native::device(0)?;
+            let models = PathBuf::from(args.opts.get("models").map(String::as_str).unwrap_or("E:/OkSong/models-st"));
+            let parts = args.opts.get("parts").map(String::as_str).unwrap_or("mel,voc");
+            let r = native::seedvc::check(&gpu, &models, &PathBuf::from(args.opts.get("ref").context("--ref")?), parts)?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+        }
         "mix" => {
             let v = audio::Audio::read_wav(&PathBuf::from(args.opts.get("vocal").context("--vocal")?))?;
             let a = audio::Audio::read_wav(&PathBuf::from(args.opts.get("accompaniment").context("--accompaniment")?))?;

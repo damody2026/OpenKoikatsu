@@ -113,3 +113,78 @@ extern "C" __global__ void layernorm_affine_rows_f32(float* out, const float* in
     float r = rsqrtf(block_sum(v, scratch) / d + eps);
     for (int i = threadIdx.x; i < d; i += blockDim.x) out[(long long)blockIdx.x * d + i] = (x[i] - mean) * r * w[i] + b[i];
 }
+
+// ---------------------------------------------------------------- BigVGAN anti-aliased activation (ratio 2, 12 taps)
+
+// UpSample1d: replicate pad 5, transposed depthwise conv (stride 2) times 2, crop 15 / 15: [c][t] -> [c][2t].
+extern "C" __global__ void aa_up2_f32(float* out, const float* x, const float* filt, int c, int t) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= (long long)c * 2 * t) return;
+    int m = i % (2 * t);
+    long long ch = i / (2 * t);
+    const float* row = x + ch * t;
+    int n = m + 15;
+    float acc = 0.f;
+    for (int k = n & 1; k < 12; k += 2) {
+        int pi = (n - k) / 2;           // index into the padded input
+        int src = min(max(pi - 5, 0), t - 1);
+        acc += row[src] * filt[k];
+    }
+    out[i] = 2.f * acc;
+}
+
+// DownSample1d: replicate pad 5 / 6, depthwise conv stride 2: [c][2t] -> [c][t].
+extern "C" __global__ void aa_down2_f32(float* out, const float* u, const float* filt, int c, int t) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= (long long)c * t) return;
+    int n = i % t;
+    long long ch = i / t;
+    int l = 2 * t;
+    const float* row = u + ch * l;
+    float acc = 0.f;
+    for (int k = 0; k < 12; ++k) {
+        int src = min(max(2 * n + k - 5, 0), l - 1);
+        acc += row[src] * filt[k];
+    }
+    out[i] = acc;
+}
+
+extern "C" __global__ void clamp_scale_f32(float* x, long long n, float s, float lo, float hi) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) x[i] = fminf(hi, fmaxf(lo, x[i] * s));
+}
+
+// ---------------------------------------------------------------- Seed-VC DiT / length regulator
+
+// Mish in place: x * tanh(softplus(x)) (softplus threshold 20 like torch).
+extern "C" __global__ void mish_f32(float* x, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    float v = x[i];
+    float sp = v > 20.f ? v : log1pf(expf(v));
+    x[i] = v * tanhf(sp);
+}
+
+// Adaptive RMSNorm on rows [b * t][d]: out = scale[b][c] * (x * rsqrt(mean(x^2) + eps) * w[c]) + shift[b][c],
+// where mod rows are [scale | shift] (2 d) per batch item.
+extern "C" __global__ void ada_rmsnorm_f32(float* out, const float* in, const float* w, const float* mod, int d, int t, float eps) {
+    __shared__ float scratch[32];
+    long long row = blockIdx.x;
+    int b = row / t;
+    const float* x = in + row * d;
+    float s = 0.f;
+    for (int i = threadIdx.x; i < d; i += blockDim.x) s += x[i] * x[i];
+    float r = rsqrtf(block_sum(s, scratch) / d + eps);
+    const float* m = mod + (long long)b * 2 * d;
+    for (int i = threadIdx.x; i < d; i += blockDim.x) out[row * d + i] = m[i] * (x[i] * r * w[i]) + m[d + i];
+}
+
+// CFG Euler step for Seed-VC: x += dt * ((1 + r) * c - r * u) for frames >= p, frames < p stay zero. d: [c | u], each [ch][t].
+extern "C" __global__ void seedvc_euler_f32(float* x, const float* d, int ch, int t, int p, float dt, float r) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    long long n = (long long)ch * t;
+    if (i >= n) return;
+    int f = i % t;
+    float v = (1.f + r) * d[i] - r * d[n + i];
+    x[i] = f < p ? 0.f : x[i] + dt * v;
+}
