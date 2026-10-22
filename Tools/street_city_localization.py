@@ -44,6 +44,10 @@ def inventory():
  for bid in IDS:
   for room in context(bid)['rooms'].values():
    rid=room['room_id'];add('room.'+rid,bid,room['display_name'],'room',ROOT/f'output/street-social-city-production/campus-v1/materials/{bid}/{rid}.png')
+ from street_city_remaining_contract import IDS as REMAINING_IDS,context as remaining_context
+ for bid in REMAINING_IDS:
+  for room in remaining_context(bid)['rooms'].values():
+   rid=room['room_id'];add('room.'+rid,bid,room['display_name'],'room',ROOT/f'output/street-social-city-production/world-completion-v1/materials/{bid}/{rid}.png')
  for room in contract()['rooms']:
   add('tenant.'+room['id'],'M1',room['name'],'tenant',ROOT/f'output/street-social-city-production/mall-v1/signs/{room["id"]}.png')
  for key,text in {'mall.brand':'大學城百貨','mall.campaign':'城市生活','tea.menu':'紅茶\n綠茶\n鮮奶茶\n選擇糖度與冰量\n點餐 → 調飲 → 封口 → 取餐','tea.brand':'沐茶手搖','wc':'廁所','accessible_wc':'無障礙廁所','stairs':'樓梯','lift':'電梯','exit':'出口','entrance':'入口','reception':'服務台','floor':'樓層','changing':'更衣室','shower':'淋浴間','male':'男','female':'女','staff':'員工專用','no_entry':'請勿進入','emergency':'緊急出口'}.items():
@@ -105,6 +109,9 @@ def language_group_buildings(group):
  if group.startswith('campus-'):
   from street_city_campus_contract import IDS
   n=int(group.split('-')[1]);return list(IDS[n:n+4])
+ if group=='remaining-all':
+  from street_city_remaining_contract import IDS
+  return list(IDS)
  assert group=='mall';return ['M1']
 
 def language_group_signature(group):

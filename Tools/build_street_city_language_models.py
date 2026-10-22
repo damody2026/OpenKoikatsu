@@ -72,8 +72,11 @@ def files():
   bid=f'S{n:02d}';folder=base/f'{bid}-modular-components-v1/assembly-building'
   rows.append((bid,folder/f'{bid}-complete-2k.glb'))
  for bid in IDS:rows.append((bid,context(bid)['out']/f'{bid}-complete-2k.glb'))
+ from street_city_remaining_contract import IDS as REMAINING_IDS,context as remaining_context
+ for bid in REMAINING_IDS:rows.append((bid,remaining_context(bid)['out']/f'{bid}-complete-2k.glb'))
  rows.append(('M1',base/'mall-v1/M1-complete-2k.glb'))
- return rows
+ from street_city_functional_revision import apply_buildings
+ return apply_buildings(rows)
 
 def convert(row,output_dir=None):
  bid,source=row;doc,binary=read(source);before=geometry_digest(doc,binary);bindings=[];original_count=len(doc['materials']);image_cache={}

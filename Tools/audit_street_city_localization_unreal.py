@@ -9,12 +9,13 @@ def norm(s):return re.sub('[^A-Za-z0-9_]','_',s)
 
 def main():
  (OUT/'native-reopen-task.json').write_text(json.dumps(dict(status='in_progress')),'utf8')
- groups=['campus-all','mall','shops-all'];receipts=[]
+ from street_city_remaining_contract import IDS,context
+ groups=['campus-all','mall','shops-all','remaining-all'];receipts=[]
  for group in groups:
   row=json.loads((OUT/('unreal-'+group+'.json')).read_text('utf8'))
   assert row['status']=='passed' and row['inputs_signature']==language_group_signature(group),group
   receipts.append(row)
- expected={r['actor']:r for receipt in receipts for r in receipt['actors']};assert len(expected)==387
+ expected={r['actor']:r for receipt in receipts for r in receipt['actors']};inventory=json.loads((OUT.parent/'scene-integration-v1/inventory.json').read_text('utf8'));assert set(expected)=={q['id'] for q in inventory['rows'] if q['kind'] in ('shop','campus','mall','city_building')}
  assert unreal.EditorLevelLibrary.load_level('/Game/UniversityCity/Maps/UniversityCity')
  actors={a.get_actor_label():a for a in unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors() if a.get_actor_label() in expected}
  assert set(actors)==set(expected)
@@ -31,7 +32,7 @@ def main():
   assert set(required)=={s['slot'] for s in row['slots']},(label,'Unlocalized text slot')
   for slot in row['slots']:
    mat=comp.get_material(slot['slot']);key=slot['semantic_id'];assert mat.get_path_name()==slot['material']
-   assert EAL.get_metadata_tag(mat,'CityTextID')==key
+   assert EAL.get_metadata_tag(mat,'CityTextID')==key,(label,slot['slot'],key,EAL.get_metadata_tag(mat,'CityTextID'),mat.get_path_name())
    binding=required[slot['slot']];assert slot['variants']==binding['variants']
    if mat.get_path_name() in checked:continue
    expressions=MEL.get_material_expressions(mat)

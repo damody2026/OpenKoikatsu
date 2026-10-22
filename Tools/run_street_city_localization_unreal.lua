@@ -14,8 +14,9 @@ ok.path.mkdir(ok.path.parent(log), true)
 local scratch = "E:/StreetSocialCityProduction/unreal-scratch"
 ok.path.mkdir(scratch, true)
 local r = ok.proc.run({ ok.engine_root() .. "/Engine/Binaries/Win64/UnrealEditor.exe", root .. "/StreetSocialCity/StreetSocialCity.uproject",
-  "-ExecutePythonScript=" .. script, "-UserDir=E:/StreetSocialCityProduction/unreal-userdata",
-  "-unattended", "-nosplash", "-nosound", "-nop4", "-NullRHI", "-abslog=" .. log },
-  { cwd = root, hide = true, env = { STREET_CITY_LANGUAGE_GROUP = args.group, TEMP = scratch, TMP = scratch,
+  "/Engine/Maps/Entry",
+  "-ExecutePythonScript=" .. root .. "/Tools/run_street_city_unreal_deferred.py", "-UserDir=E:/StreetSocialCityProduction/unreal-userdata",
+  "-unattended", "-nosplash", "-nosound", "-nop4", "-NullRHI", "-NoAsyncLoadingThread", "-NoAsyncPostLoad", "-abslog=" .. log },
+  { cwd = root, hide = true, env = { STREET_CITY_DEFERRED_SCRIPT = script, STREET_CITY_LANGUAGE_GROUP = args.group, TEMP = scratch, TMP = scratch,
     ["UE-LocalDataCachePath"] = "E:/StreetSocialCityProduction/unreal-ddc" } })
 if r.code ~= 0 then error("Localization editor failed: " .. tostring(r.code), 0) end
