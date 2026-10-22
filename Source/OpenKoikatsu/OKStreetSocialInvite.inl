@@ -73,14 +73,16 @@ float AOKStreetSocialScene::StepOutingLed(float Dt){
  // around what is in the way; after three tries he leads instead (his walk plans around obstacles itself).
  {const double Now=SceneTime();
   if(FVector::Dist2D(A.Position,S.LedLastPos)>5.f||S.LedBlockedSince<=0){S.LedLastPos=A.Position;S.LedBlockedSince=Now;}
-  else if(Now-S.LedBlockedSince>2.0){S.LedBlockedSince=Now;++S.LedReplans;
+  else if(Now-S.LedBlockedSince>2.0){S.LedBlockedSince=Now;++S.LedReplans;S.LedReplanPos=A.Position;
    if(S.LedReplans>3){S.LedReplans=0;UE_LOG(LogTemp,Display,TEXT("Street outing: actor=%d cannot lead past %s; he leads"),Girl,*A.Position.ToCompactString());SetFollowMode(0);return 0;}
    TArray<FVector> Way=GridRoute(A.Position,S.OutingRoute.Last());if(Way.Num()<2)Way=PlaceRoute(A.Position,S.OutingRoute.Last());
    if(Way.Num()>=2){S.OutingRoute=MoveTemp(Way);S.OutingStep=1;}
    S.FollowLead=A.Position;
    UE_LOG(LogTemp,Display,TEXT("Street outing: actor=%d leads blocked at %s, way again (%d points, try %d)"),Girl,*A.Position.ToCompactString(),S.OutingRoute.Num(),S.LedReplans);}}
  FVector Delta=S.OutingRoute[S.OutingStep]-S.FollowLead;Delta.Z=0;const float Distance=Delta.Size();
- if(Distance<20){++S.OutingStep;S.LedReplans=0;return 0;}
+ // The tries count down only once she has really got away from where she was stuck: the new way's first point is where
+ // she stands, reached at once, and reset the count every time ("try 1" for 100 minutes against the same wall).
+ if(Distance<20){++S.OutingStep;if(S.LedReplans>0&&FVector::Dist2D(A.Position,S.LedReplanPos)>200.f)S.LedReplans=0;return 0;}
  const FVector Dir=Delta/Distance;
  // The follower must keep up before the leader goes on.
  if(FVector::Dist2D(S.Male,S.FollowLead)>350)return 0;

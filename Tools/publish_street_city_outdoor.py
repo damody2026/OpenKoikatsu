@@ -42,7 +42,9 @@ def publish():
  (OUT/'interactions.json').write_text(json.dumps(dict(status='planned_gameplay_not_implemented',facilities=interactions),ensure_ascii=False,indent=2),'utf8')
  page='<!doctype html><meta charset="utf-8"><title>校園戶外運動與學生公園</title><style>body{max-width:1400px;margin:30px auto;background:#18232b;color:#eaf1ed;font:18px Microsoft JhengHei}a{color:#91e4cf}article{background:#273742;padding:24px;margin:24px 0}img{width:100%;max-height:850px;object-fit:contain}</style><h1>校園戶外運動與學生公園</h1><p>800m指第一道測量線的一圈長度；8道×1.22m，彎道內緣半徑55m，直道 '+f'{S:.3f}'+'m。這是遊戲擴充規格，不是台科大實測或官方競賽800m跑道。</p><p>4面網球、4面排球、68×105m活動草坪、閱讀公園及社團活動公園。河東擴充由既有橋梁接入，160m長步道以1:20下降8m。模型為靜態環境；球類規則、活動和互動控制另需遊戲實作。</p><p><a href="../index.html">完整校園</a> · <a href="RESEARCH.md">官方參考與尺寸依據</a> · <a href="acceptance.json">實際 remesh 幾何驗收</a> · <a href="unreal-acceptance.json">Unreal 戶外碰撞驗收</a> · <a href="programme.json">座標與完整規格</a> · <a href="interactions.json">逐設施互動規畫</a></p>'+''.join(cards)
  page=page.replace('<h1>','<p>校內操場位於運動館南側：400m一圈、8道、90×60m足球場，北側步道連到校園主路；河東800m園區保留。</p><h1>',1)
- if (OUT/'tripo-pending.json').exists():page=page.replace('<h1>','<p>公園目前以棚架遮蔭；Tripo樹木任務已送出，但Chrome斷線後尚未下載／驗收，未列入採用模型。<a href="tripo-pending.json">任務狀態</a></p><h1>',1)
+ completion=OUT.parents[1]/'world-completion-v1/acceptance.json'
+ if completion.exists() and json.loads(completion.read_text('utf8')).get('status')=='passed':page=page.replace('<h1>','<p>樟樹與櫻花已完成 Tripo Model、Rust remesh 與全城原生整合。<a href="../../world-completion-v1/index.html">完整戶外設施與植栽驗收</a></p><h1>',1)
+ elif (OUT/'tripo-pending.json').exists():page=page.replace('<h1>','<p>公園目前以棚架遮蔭；Tripo樹木任務已送出，但Chrome斷線後尚未下載／驗收，未列入採用模型。<a href="tripo-pending.json">任務狀態</a></p><h1>',1)
  (OUT/'index.html').write_text(page,'utf8')
  # Preserve the original city planning artwork and publish a separate metric
  # overlay for the actual new campus sites, without rescaling old buildings.

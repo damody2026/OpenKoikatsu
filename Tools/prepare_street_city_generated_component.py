@@ -75,7 +75,7 @@ for o in meshes:
                 protected|=bad
             assert deviation<=.005,(a.id,'LOD lost >5mm feature',deviation)
             cleaning.append(dict(operation='budgeted source LOD before mandatory remesh',before_triangles=before_count,after_triangles=len(o.data.loop_triangles),maximum_surface_deviation_m=deviation))
-    o['source_route']='Tripo Model multi-view';o['source_sha256']=hashlib.sha256(a.source.read_bytes()).hexdigest();o['target_size_m']=list(target)
+    o['source_route']=entry.get('source_route','Tripo Model');o['source_sha256']=hashlib.sha256(a.source.read_bytes()).hexdigest();o['target_size_m']=list(target)
     for mat in o.data.materials:
         if not mat or not mat.use_nodes:continue
         for n in mat.node_tree.nodes:

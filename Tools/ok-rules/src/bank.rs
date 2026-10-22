@@ -486,7 +486,11 @@ pub fn daily(request: &Value) -> Result<Value, String> {
         }
         if let (Some(a), Some(t)) = (&h.academic, &fee_term) {
             if s(a, "status") == "enrolled" && civil >= t.start && s(a, "fees_paid") != t.key {
-                charge_bill(&mut r, campus::TUITION_FEE() + campus::DORM_FEE());
+                // Her family pays the term unless her profile says she pays it herself (tuition_by "self"): charging
+                // everyone left six of ten in debt on the first day of term, borrowing from him every day.
+                if money.get("tuition_by").and_then(Value::as_str) == Some("self") {
+                    charge_bill(&mut r, campus::TUITION_FEE() + campus::DORM_FEE());
+                }
                 let mut a = a.clone();
                 a["fees_paid"] = json!(t.key);
                 academics.insert(r.id.clone(), a);
@@ -887,10 +891,14 @@ mod tests {
         assert!(v["fees_due"].as_str().unwrap_or("").contains("9/27"), "{}", v["fees_due"]);
         let v = run(json!({"day": start + 3, "player_academic": {"status": "enrolled", "fees_paid": "2010-1"}}));
         assert_eq!(v["fees_due"], "");
-        let v = run(json!({"day": start, "heroines": [{"relation": {"id": "a", "cash": 1000}, "profile": {}, "academic": {"status": "enrolled", "fees_paid": ""}}]}));
+        // She pays her own term when her profile says so; otherwise her family does (the term is settled, her money untouched).
+        let v = run(json!({"day": start, "heroines": [{"relation": {"id": "a", "cash": 1000}, "profile": {"money": {"tuition_by": "self"}}, "academic": {"status": "enrolled", "fees_paid": ""}}]}));
         assert_eq!(v["academics"]["a"]["fees_paid"], "2010-1");
         let set = &v["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").unwrap()["set"];
         assert_eq!((set["cash"].as_i64(), set["debt"].as_i64()), (Some(0), Some(2100)));
+        let v = run(json!({"day": start, "heroines": [{"relation": {"id": "a", "cash": 1000}, "profile": {}, "academic": {"status": "enrolled", "fees_paid": ""}}]}));
+        assert_eq!(v["academics"]["a"]["fees_paid"], "2010-1");
+        assert!(v["effects"].as_array().unwrap().iter().all(|e| e["op"] != "relation" || e["set"]["debt"].as_i64().unwrap_or(0) == 0), "{}", v["effects"]);
     }
 
     #[test]

@@ -2,9 +2,21 @@
 //! the two of them under his, and what she is told when neither has one. Whether to go and buy one is hers to say.
 use serde_json::{json, Value};
 
-/// Request: raining, his_items [ids], her_items [ids], stage (stranger | friend | lover). Answer: style
-/// ("none" | "umbrella_single" | "umbrella_shared"), fact (for her words, "" when there is nothing to say).
+/// Request: raining, minute (of the day), his_items [ids], her_items [ids], stage (stranger | friend | lover).
+/// Answer: style ("none" | "umbrella_single" | "umbrella_shared"), fact (for her words, "" when there is nothing to say).
 fn walk_style(r: &Value) -> Value {
+    let mut out = rain_style(r);
+    // A walk late at night (walking her home after her shift): the street is empty but for the two of them.
+    let minute = r.get("minute").and_then(Value::as_i64).unwrap_or(720);
+    if !(5 * 60..21 * 60).contains(&minute) {
+        let night = crate::tr::t("weather.night_walk");
+        let fact = out["fact"].as_str().unwrap_or("").to_string();
+        out["fact"] = json!(if fact.is_empty() { night.to_string() } else { format!("{fact}{}{night}", crate::tr::t("items.fact_separator")) });
+    }
+    out
+}
+
+fn rain_style(r: &Value) -> Value {
     let raining = r.get("raining").and_then(Value::as_bool).unwrap_or(false);
     if !raining {
         return json!({"style": "none", "fact": ""});
@@ -42,5 +54,11 @@ mod tests {
         let none = walk_style(&json!({"raining": true, "stage": "friend"}));
         assert_eq!(none["style"], "none");
         assert!(!none["fact"].as_str().unwrap().is_empty());
+    }
+
+    #[test]
+    fn late_at_night_she_is_told_the_street_is_empty() {
+        assert_eq!(walk_style(&json!({"raining": false, "minute": 15 * 60}))["fact"], "");
+        assert!(!walk_style(&json!({"raining": false, "minute": 22 * 60 + 10}))["fact"].as_str().unwrap().is_empty());
     }
 }

@@ -134,6 +134,7 @@ private:
  FString OrderShopHere(int32 Girl) const; // OKStreetSocialEconomy.inl
  bool MindProfilesReady() const; // OKStreetSocialSchedule.inl
  int32 ShiftUntil(int32 Character) const; // OKStreetSocialInvite.inl
+ bool SeesHim(int32 I) const; // OKStreetSocialEncounter.inl
  void MovePromiseWith(int32 Character); // OKStreetSocialAppointments.inl
  void ToldAboutRival(int32 Character,const FString& Name); // OKStreetSocialMind.inl
  bool PlaceClosedAt(const FString& PlaceId,const FDateTime& When,FString& Why) const; // OKStreetSocialEconomy.inl
@@ -650,6 +651,7 @@ private:
  // OKStreetSocialAppointments.inl (series.rs): a meeting that repeats every week, the next one booked, calling it off.
  void StartSeries(int32 Character,const FString& Place,const TSharedPtr<FJsonValue>& Repeat);
  void TickSeries();
+ void HerErrand(int32 Character,const FString& Kind); // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
  void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)
  void TickEffect();
  void TickUmbrella(); // OKStreetSocialPhotos.inl: the umbrella on a rainy walk (weather.rs walk_style)

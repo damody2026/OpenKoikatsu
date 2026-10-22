@@ -1,0 +1,83 @@
+# 節日與學期中的大事（Tools/ok-rules/src/events.rs）。
+# month／day：日期；year 只寫在某一年才有的（農曆節日）；days：持續幾天（預設 1）。
+# text：說明的文字 id（rules_text.toml 的 [plan]）；exam：考試週（她會去念書）。
+# announce：前幾天開始讓她知道（她自己決定要不要提起、邀約）；0 表示當天才說。
+
+[[event]]
+id = "mid_autumn"
+year = 2010
+month = 9
+day = 22
+text = "plan.mid_autumn_festival"
+announce = 5
+
+[[event]]
+id = "halloween"
+month = 10
+day = 31
+text = "plan.halloween"
+announce = 7
+
+[[event]]
+id = "christmas"
+month = 12
+day = 24
+days = 2
+text = "plan.christmas"
+announce = 10
+
+[[event]]
+id = "new_years_eve"
+month = 12
+day = 31
+text = "plan.new_years_eve"
+announce = 5
+
+[[event]]
+id = "new_year"
+month = 1
+day = 1
+text = "plan.new_year_day"
+announce = 0
+
+[[event]]
+id = "valentine"
+month = 2
+day = 14
+text = "plan.valentines_day"
+announce = 7
+
+[[event]]
+id = "white_day"
+month = 3
+day = 14
+text = "plan.white_day"
+announce = 5
+
+[[event]]
+id = "qixi"
+year = 2011
+month = 8
+day = 6
+text = "plan.qixi_festival"
+announce = 7
+
+[[event]]
+id = "midterm"
+year = 2010
+month = 11
+day = 8
+days = 5
+text = "plan.midterm_week"
+exam = true
+announce = 7
+
+[[event]]
+id = "finals"
+year = 2011
+month = 1
+day = 10
+days = 5
+text = "plan.finals_week"
+exam = true
+announce = 10

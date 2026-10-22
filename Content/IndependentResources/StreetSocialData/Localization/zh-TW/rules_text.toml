@@ -548,6 +548,7 @@ separator = "；"
 raining = "下雨了，這件事做不了"
 not_raining = "沒在下雨，用不上"
 done_today = "今天已經做過了"
+not_event_day = "今天不是{what}，這要等那天才有"
 only_some = "這不是她會做的事"
 needs_item = "需要{item}（{place}有賣），你們手上都沒有"
 
@@ -597,6 +598,21 @@ sat = "週六"
 sun = "週日"
 
 [weather]
+night_walk = "天色已晚，路上只剩你們兩個人"
 under_his_umbrella = "外面在下雨，你們兩個擠在他的傘下走"
 each_umbrella = "外面在下雨，你們各撐一把傘"
 no_umbrella = "外面在下雨，你們都沒帶傘"
+
+[errand]
+only_at_office = "這要到行政大樓的學務處才能辦"
+nothing_owed = "你沒有欠學費，不用辦"
+no_money = "你身上和戶頭都沒錢可以繳"
+loan_done = "你在學務處辦好了助學貸款，{amount} 直接繳了欠的學費；貸款共 {owed}，畢業後半年開始還"
+paid_part = "你在學務處繳了 {paid} 學費，還欠 {left}"
+paid_all = "你在學務處繳清了 {paid} 的學費"
+fact_loan = "你有助學貸款 {owed}（畢業後才開始還）"
+fact_can_borrow = "你還欠 {debt}；其中學費的部分可以到行政大樓的學務處辦助學貸款繳掉，畢業後才開始還"
+
+[events]
+today = "今天是{what}"
+coming = "{date}（再 {days} 天）是{what}"

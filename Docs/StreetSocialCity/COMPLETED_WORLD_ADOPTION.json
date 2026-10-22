@@ -1,0 +1,391 @@
+{
+  "status": "passed",
+  "receipt": "output\\street-social-city-production\\world-completion-v1\\acceptance.json",
+  "map_sha256": "916c7e5a82d340c2ea455271c390c5cbf98d689930f1c7f7d0d235e12e7d0c95",
+  "buildings": [
+    {
+      "id": "H1",
+      "footprint_m": [
+        126,
+        54
+      ],
+      "world_position_m": [
+        705.0,
+        295.0,
+        12
+      ]
+    },
+    {
+      "id": "R1",
+      "footprint_m": [
+        74,
+        64
+      ],
+      "world_position_m": [
+        125.0,
+        455.0,
+        12
+      ]
+    },
+    {
+      "id": "R2",
+      "footprint_m": [
+        74,
+        64
+      ],
+      "world_position_m": [
+        125.0,
+        335.0,
+        12
+      ]
+    },
+    {
+      "id": "O01",
+      "footprint_m": [
+        52,
+        50
+      ],
+      "world_position_m": [
+        824.0,
+        480.0,
+        12
+      ]
+    },
+    {
+      "id": "O02",
+      "footprint_m": [
+        52,
+        50
+      ],
+      "world_position_m": [
+        824.0,
+        410.0,
+        12
+      ]
+    },
+    {
+      "id": "O03",
+      "footprint_m": [
+        52,
+        50
+      ],
+      "world_position_m": [
+        824.0,
+        340.0,
+        12
+      ]
+    },
+    {
+      "id": "CV",
+      "footprint_m": [
+        76,
+        50
+      ],
+      "world_position_m": [
+        600.0,
+        315.0,
+        12
+      ]
+    },
+    {
+      "id": "TR",
+      "footprint_m": [
+        80,
+        50
+      ],
+      "world_position_m": [
+        125.0,
+        210.0,
+        12
+      ]
+    }
+  ],
+  "outdoor_nodes": [
+    {
+      "id": "PK-0101",
+      "name": "校門廣場",
+      "origin": [
+        700.0,
+        545.0,
+        18.535471038818358
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0102",
+      "name": "中央草坪",
+      "origin": [
+        572.5,
+        800.0,
+        20.119999999999997
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0103",
+      "name": "北庭院",
+      "origin": [
+        460.0,
+        820.0,
+        20.119999999999997
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0104",
+      "name": "南庭院",
+      "origin": [
+        600.0,
+        700.0,
+        20.119999999999997
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0105",
+      "name": "校園湖畔",
+      "origin": [
+        757.5,
+        852.5,
+        19.72951133728027
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0106",
+      "name": "湖畔木平台",
+      "origin": [
+        760.0,
+        875.0,
+        20.05319984436035
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0107",
+      "name": "河岸步道",
+      "origin": [
+        842.5,
+        630.0,
+        12.321471252441405
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0108",
+      "name": "河岸釣魚平台",
+      "origin": [
+        842.5,
+        280.0,
+        12.072696762084961
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0109",
+      "name": "櫻花步道",
+      "origin": [
+        815.0,
+        445.0,
+        12.019509353637694
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0110",
+      "name": "野餐草地",
+      "origin": [
+        835.0,
+        375.0,
+        12.116176719665527
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0111",
+      "name": "小神社",
+      "origin": [
+        85,
+        1033,
+        137.12
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0112",
+      "name": "戶外舞台",
+      "origin": [
+        620.0,
+        200.0,
+        12.097745056152343
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0113",
+      "name": "籃球場",
+      "origin": [
+        600,
+        635,
+        20.119999999999997
+      ],
+      "size": [
+        36,
+        23
+      ]
+    },
+    {
+      "id": "PK-0114",
+      "name": "網球場",
+      "origin": [
+        1270,
+        772,
+        12
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0115",
+      "name": "田徑場",
+      "origin": [
+        300,
+        606,
+        20.06
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0116",
+      "name": "自行車廣場",
+      "origin": [
+        50.0,
+        200.0,
+        12.12
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0117",
+      "name": "觀景亭",
+      "origin": [
+        990.0,
+        850.0,
+        20.055000381469725
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0118",
+      "name": "夜市廣場",
+      "origin": [
+        620.0,
+        355.0,
+        12.095784301757812
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0119",
+      "name": "露營營位A",
+      "origin": [
+        1040.0,
+        340.0,
+        12.11647045135498
+      ],
+      "size": [
+        24,
+        18
+      ]
+    },
+    {
+      "id": "PK-0120",
+      "name": "露營營位B",
+      "origin": [
+        1055.0,
+        295.0,
+        12.118332977294921
+      ],
+      "size": [
+        24,
+        18
+      ]
+    }
+  ],
+  "note": "Current physical-model placements override historical design illustrations; original input artwork retained as provenance.",
+  "appearance_layer": {
+    "receipt": "output\\street-social-city-production\\world-wall-grok-v1\\acceptance.json",
+    "buildings": 122,
+    "floors": 427,
+    "geometry_unchanged": true
+  },
+  "functional_interiors": {
+    "receipt": "output\\street-social-city-production\\functional-interiors-v1\\acceptance.json",
+    "sha256": "cc1ee234ba121c763e30d2b5743ca513f9016fd22bb806bc72c91e8dcd3c427d",
+    "classrooms": 183,
+    "tiered_classrooms": 139,
+    "administrative_rooms": 162
+  },
+  "streetscape": {
+    "receipt": "output\\street-social-city-production\\streetscape-v1\\acceptance.json",
+    "sha256": "3e3e120b39874d364c00d80ec5019531812109c6380e5b3b942d12da3481f36f",
+    "visible_instances": 19837,
+    "hism_clusters": 820,
+    "trees": 1475,
+    "tree_lod_triangles": [
+      1992,
+      912,
+      336
+    ]
+  }
+}

@@ -5,7 +5,7 @@
 # place：地點 id，空字串＝就地。anchor：地點模型裡的錨點，可用「|」列多個，取第一個存在的（場景補上新錨點後自動改用）。
 # 選填：who（只限這些女主：stable id 或任一語言的名字）、weather（any／dry／rain）、needs（需要的物品 id，
 #       他或她的背包有就行；結束時才用掉，consume = false 的不用掉）、yields（結束時的產出：photo／drawing／work_progress／book_progress）、once_per_day、
-#       minutes（時長，遊戲分鐘；0＝依 kind 的預設）、feed（結束時對她需求的影響，例：{ fun = 15, energy = -20 }）。
+#       event（只在 events.toml 的這個節日開放）、minutes（時長，遊戲分鐘；0＝依 kind 的預設）、feed（結束時對她需求的影響，例：{ fun = 15, energy = -20 }）。
 
 [[activity]]
 id = "meal"
@@ -829,3 +829,55 @@ once_per_day = true
 effect = "explosion"
 minutes = 20
 feed = { energy = -95, fun = 30 }
+
+# ---- 節日限定（event 寫 events.toml 的 id；只有那天開放，平常不列給她） ----
+[[activity]]
+id = "mid_autumn_moon"
+name = "中秋夜在公園一起賞月"
+place = "park"
+kind = "pair"
+code = 1
+weather = "dry"
+event = "mid_autumn"
+minutes = 60
+feed = { fun = 15, social = 10 }
+
+[[activity]]
+id = "halloween_walk"
+name = "萬聖節一起逛街看大家的裝扮、拍照"
+place = ""
+kind = "walk"
+code = 2
+event = "halloween"
+minutes = 45
+feed = { fun = 20, social = 10 }
+
+[[activity]]
+id = "christmas_lights"
+name = "聖誕節一起逛街看燈飾"
+place = ""
+kind = "walk"
+code = 2
+event = "christmas"
+minutes = 45
+feed = { fun = 18, social = 10 }
+
+[[activity]]
+id = "new_years_eve_countdown"
+name = "跨年夜在公園一起倒數"
+place = "park"
+kind = "pair"
+code = 1
+event = "new_years_eve"
+minutes = 40
+feed = { fun = 20, social = 12 }
+
+[[activity]]
+id = "valentine_dessert"
+name = "情人節在點心店一起吃巧克力甜點"
+place = "snack"
+kind = "pair"
+code = 5
+event = "valentine"
+minutes = 40
+feed = { fun = 15, satiety = 10 }

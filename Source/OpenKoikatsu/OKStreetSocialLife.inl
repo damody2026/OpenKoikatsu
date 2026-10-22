@@ -531,7 +531,7 @@ void AOKStreetSocialScene::TickBiasActions(){
  if(With>0&&S.Agents.IsValidIndex(With-1)){
   Request->SetStringField(TEXT("with_name"),S.Manifest.Characters[With].Name);
   for(int32 I=1;I<S.Manifest.Characters.Num();++I){
-   if(I==With||!S.Agents.IsValidIndex(I-1)||BusyWithPlayer(I)||S.InitiativeReason.Contains(I)||FVector::Dist2D(S.Agents[I-1].Position,S.Male)>2500.f)continue;
+   if(I==With||!S.Agents.IsValidIndex(I-1)||BusyWithPlayer(I)||S.InitiativeReason.Contains(I)||!SeesHim(I))continue; // from the same side of the walls (walking past the restaurant she "saw him with Jeanne" inside)
    const FOKStreetBias B=BiasOf(I);auto H=MakeShared<FJsonObject>();H->SetNumberField(TEXT("actor"),I);H->SetNumberField(TEXT("surveil"),B.Surveil);H->SetNumberField(TEXT("compete"),B.Compete);Near.Add(MakeShared<FJsonValueObject>(H));
   }
  }

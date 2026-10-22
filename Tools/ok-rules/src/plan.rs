@@ -60,22 +60,9 @@ pub fn raining_at(day: i32, minute: i32) -> bool {
     minute >= from && minute < from + rng.rand_range(2, 6) * 60
 }
 
-/// Holidays and school weeks on the 2010-2011 calendar.
+/// Holidays and school weeks (events.toml through events.rs).
 pub fn holiday_on(day: i32) -> &'static str {
-    let d = date(day, 12.0);
-    match (d.year, d.month, d.day) {
-        (2010, 9, 22) => crate::tr::t("plan.mid_autumn_festival"),
-        (_, 10, 31) => crate::tr::t("plan.halloween"),
-        (_, 12, 24) | (_, 12, 25) => crate::tr::t("plan.christmas"),
-        (_, 12, 31) => crate::tr::t("plan.new_years_eve"),
-        (_, 1, 1) => crate::tr::t("plan.new_year_day"),
-        (_, 2, 14) => crate::tr::t("plan.valentines_day"),
-        (_, 3, 14) => crate::tr::t("plan.white_day"),
-        (2011, 8, 6) => crate::tr::t("plan.qixi_festival"),
-        (2010, 11, 8..=12) => crate::tr::t("plan.midterm_week"),
-        (2011, 1, 10..=14) => crate::tr::t("plan.finals_week"),
-        _ => "",
-    }
+    crate::events::holiday_text(day)
 }
 
 // ------------------------------------------------------------------------------------------------ one heroine's day
@@ -415,7 +402,7 @@ pub fn plan_all(c: &Catalog, r: &Value) -> Result<Value, String> {
     let doors: BTreeMap<String, (f32, f32)> = serde_json::from_value(r.get("doors").cloned().unwrap_or(json!({}))).unwrap_or_default();
     let names: BTreeMap<String, String> = serde_json::from_value(r.get("place_names").cloned().unwrap_or(json!({}))).unwrap_or_default();
     let weekday = date(day, 8.0).weekday as i32;
-    let exam_week = holiday_on(day).contains('考');
+    let exam_week = crate::events::is_exam(day);
     let mut fx = Effects::default();
     let mut plans: Vec<(i32, Vec<Block>)> = Vec::new();
     for h in &heroines {

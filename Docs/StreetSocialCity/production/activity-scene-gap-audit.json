@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "date": "2026-10-21",
+  "scope": "Spatial/model inventory only; no gameplay implementation or native map changes in this audit.",
+  "request_source": "Docs/STREET_MISSING_ACTIVITIES.md",
+  "scope_distinction": {
+    "demo": "StreetSocial.cmd / /Game/Scenes/StreetSocial/StreetSocial; missing activities document describes this playable demo.",
+    "city": "StreetSocialCity / /Game/UniversityCity/Maps/UniversityCity; existing buildings and outdoor models are reuse candidates, not proof the demo activity is implemented."
+  },
+  "summary": {"spatial_work_packages": 10, "new_dedicated_setups": 2, "existing_space_adaptations": 8, "new_building_count_required_by_this_document": 0},
+  "evidence": [
+    "Content/IndependentResources/StreetSocialData/catalog.json",
+    "Source/OpenKoikatsu/OKStreetSocialPlaces.h",
+    "Docs/StreetSocialCity/production/building-floor-audit.json",
+    "output/street-social-city-production/world-completion-v1/outdoor/programme.json",
+    "output/street-social-city-production/world-completion-v1/outdoor/acceptance.json",
+    "output/street-social-city-production/scene-integration-v1/native-inventory.json",
+    "output/street-social-city-production/resort-streetscape-v1/catalog.json"
+  ],
+  "work_packages": [
+    {
+      "id": "ACTSPACE-01", "priority": "P0", "name": "百貨 8F 大熊合照點", "type": "existing_space_adaptation",
+      "source_activity": "dept_bear", "city_candidates": ["M1 F08", "M1-0801 模型玩具店", "M1-0804 益智玩具店"],
+      "evidence_status": "Activity explicitly names a bear; playtest reports no bear in photo. Existing toy floor does not establish a bear is correctly placed.",
+      "required": ["確認大熊模型是否已有可用資產，存在則複用", "大熊、合照背景與實體站位", "檢查黑板狀物件是缺材質、手扶梯或遮擋", "相機、角色站位與熊同框，避開手扶梯動線"],
+      "acceptance": "原生角色視角與合照畫面都看得到大熊；角色及相機不穿模。"
+    },
+    {
+      "id": "ACTSPACE-02", "priority": "P0", "name": "公園噴水池與寫生角", "type": "existing_space_adaptation",
+      "source_activity": "park_photo / 寫生", "city_candidates": ["PK-0102 中央草坪邊緣", "PK-0103 北庭院", "PK-0104 南庭院"],
+      "evidence_status": "Playtest photo shows flowerbeds rather than fountain. Fountain asset existence and shot alignment require inspection before generating another fountain.",
+      "required": ["核對噴水池既有模型與合照錨點，缺模型才補製", "噴泉主體、池緣及必要水面", "合照前景與噴泉同框", "側邊寫生座位、畫架或手持畫板、畫具小桌", "寫生位不占主通道或噴泉合照位"],
+      "acceptance": "合照實際包含噴泉；寫生者看得到題材且座位可達。合照與寫生共用公園地景，避免重造兩座公園。"
+    },
+    {
+      "id": "ACTSPACE-03", "priority": "P1", "name": "夜市完整營業區", "type": "existing_space_adaptation",
+      "city_candidates": ["PK-0118 夜市廣場"],
+      "evidence_status": "City programme already defines eight stalls and a 6m centre aisle; native inventory includes World_PK_0118. Demo catalog has no nightmarket place.",
+      "required": ["盤點八攤用途，涵蓋小吃、飲料及遊戲攤", "各攤商品、器具、攤商站位及服務面", "排隊空間、共用座位、垃圾回收及供電外觀", "夜間攤燈、入口招牌與收攤外觀"],
+      "acceptance": "不是只有空攤位；夜間角色視角可辨識販售內容及行走路線。營業時間與人潮邏輯另行實作。"
+    },
+    {
+      "id": "ACTSPACE-04", "priority": "P1", "name": "海邊日落觀景區", "type": "existing_space_adaptation",
+      "city_candidates": ["南側海灣", "Scenery-bay-01", "Scenery-bay-02", "resort bay-walk / bay-beach / bay-rest"],
+      "evidence_status": "City already has bay terrain/scenery and resort props; demo catalog has no beach place. Vegetation or a coastal label alone does not verify a usable sunset viewpoint.",
+      "required": ["可達的海岸步道與面海觀景位", "座椅、必要護欄、入口導引及照明", "檢查海面、地平線和日落方向，不被岸坡或建築遮住", "複用現有海景欄杆、躺椅與遮棚"],
+      "acceptance": "從接近動線走得到觀景位，站立及坐下都能看見海景；日落構圖另以實際光照確認。"
+    },
+    {
+      "id": "ACTSPACE-05", "priority": "P1", "name": "煙火大會觀賞會場", "type": "new_dedicated_setup",
+      "city_candidates": ["PK-0107 河岸步道周邊", "PK-0112 戶外舞台周邊", "海灣開闊水岸"],
+      "evidence_status": "Referenced promise exists in playtest; no verified dedicated fireworks venue found in reviewed scene records. Existing stage can be reused but is not itself a fireworks venue.",
+      "required": ["觀眾草地或座位帶、雙人觀賞位", "清楚的集合入口、夜間引導與退場路線", "遠方施放區的視覺背景與分隔", "確認觀眾視角不被樹冠、屋頂或橋梁擋住", "複用舞台、夜市與水岸設施，避免新造整個節慶城鎮"],
+      "acceptance": "觀眾位看得到預定施放方向；人行流線不和表演區重疊。煙火 VFX、活動日期及約定邏輯不屬本次模型盤點。"
+    },
+    {
+      "id": "ACTSPACE-06", "priority": "P1", "name": "公園池邊餵魚點", "type": "existing_space_adaptation",
+      "city_candidates": ["PK-0105 校園湖畔", "PK-0106 湖畔木平台"],
+      "evidence_status": "Demo already sells park_fishfood. City has lake/platform models, but no verified feeding station correspondence.",
+      "required": ["可接近的池邊站位、合適池緣與護欄", "水面及可供觀看的魚群視覺位置", "飼料販售小設施或現有攤位標示", "避免和釣魚平台混成同一用途"],
+      "acceptance": "雙人可並排停留，視線看得到池面與魚群位置；扣飼料和魚的反應留給後續互動。"
+    },
+    {
+      "id": "ACTSPACE-07", "priority": "P2", "name": "公園晨練區與慢跑路線", "type": "existing_space_adaptation",
+      "city_candidates": ["PK-0102 中央草坪", "PK-0107 河岸步道", "既有公園步道及校內操場"],
+      "evidence_status": "Demo only has campus_stretch at campus_sports. Park lawn and exercise grounds already exist as physical settings.",
+      "required": ["平坦、沒有座椅或樹幹占用的雙人晨練空間", "沿用步道形成可連續行走的跑步環線", "路線標示與休息補水點，缺才補道具"],
+      "acceptance": "公園內即可晨練，空間不迫使角色轉往校園；環線不穿建築、階差或交通障礙。不再新增另一座操場。"
+    },
+    {
+      "id": "ACTSPACE-08", "priority": "P2", "name": "系辦與行政服務窗口", "type": "existing_space_adaptation",
+      "city_candidates": ["AD-0101 綜合服務接待大廳", "AD-0102 教務處註冊組", "AD-0103 教務處課務組", "AD-0105 繳費與出納組", "AD-0201 學務處", "AD-0204 助學金服務組", "E1 / EE / MA 既有系辦"],
+      "evidence_status": "City floor audit already lists these rooms and ten department offices. Missing demo errands do not establish missing office buildings.",
+      "required": ["核對窗口桌面、筆電或桌電、職員位與來訪者位", "排隊等候、文件填寫及必要分隔", "清楚且三語可切換的業務標示"],
+      "acceptance": "站在服務端能辨識業務和窗口，不需新增行政大樓。選課、抵免、助學貸款及女主辦事規則另行實作。"
+    },
+    {
+      "id": "ACTSPACE-09", "priority": "P2", "name": "書局繪本暨畫具區", "type": "existing_space_adaptation",
+      "city_candidates": ["S07-0101 開放營業與顧客服務", "S07-0201 開放選書與閱讀區", "LI-0108 親子閱讀室作為閱讀補充候選"],
+      "evidence_status": "Bookshop exists; pictured-book category and art supplies missing in activity document. Library family room is not a replacement for a retail bookshop.",
+      "required": ["低書架、正面繪本展示及小型閱讀座位", "繪本、煙火科普書或圖鑑封面", "素描本、畫具及畫板展示", "沿用開放選書空間，不隔成一堆小房間"],
+      "acceptance": "店內看得見書本和畫具展示，保留既定通道與門口淨寬；具體商品文字須三語化。"
+    },
+    {
+      "id": "ACTSPACE-10", "priority": "P2", "name": "魔法表演／練習空地", "type": "new_dedicated_setup",
+      "city_candidates": ["另選遠離校舍、住宅、車道與人行主線的現有開闊地"],
+      "evidence_status": "Playtest only has dialogue. Reviewed scene register has no verified dedicated magic-performance set.",
+      "required": ["角色施法站位、同伴觀看位及遠方效果落點", "以地景或標線表達不同用途區域", "表演後休息座位", "確認鏡頭看得到角色、效果方向與休息位置"],
+      "acceptance": "空間分區和視線成立，不把效果落點放在人群或建築內；詠唱、特效、疲勞和一天一次規則留給後續互動。"
+    }
+  ],
+  "props_only_no_new_scene": ["糖果、三彩糰子", "工程計算機、跑鞋", "繪本、科普書、畫板、素描本、畫具", "雨傘", "傳單", "店員操作器具與必要更衣置物設施"],
+  "reuse_existing_space_no_new_scene": ["一起閱讀與讀後感", "既有景點之間的攝影散步路線", "校門或商街發傳單", "每週圖書館約會", "女主照片與相簿", "借物、送物與還書", "雨中散步", "咖啡廳門口接下班"],
+  "not_spatial_work": ["開場白依人設", "打工班表", "營業／公休日規則", "導航範圍判斷與錨點", "學費與金錢規則", "活動觸發、動作、VFX、背包、照片、約定與存檔"],
+  "cross_cutting_acceptance": ["活動描述承諾的主體必須出現在角色視角與照片裡", "使用既有場景及資產前核對原生擺放與可達性，不以概念圖視為完成", "保留至少 2m 既定主通道，角色站位和鏡頭不得穿模", "新增物件沿用 remesh、LOD、PBR 與三語文字規範", "不得把 StreetSocialCity 的空間模型已存在，寫成 StreetSocial.cmd 的活動已實作"]
+}

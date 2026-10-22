@@ -31,7 +31,7 @@ def collection():
  assert str(c.get_editor_property('scalar_parameters')[0].get_editor_property('parameter_name'))=='LanguageIndex';return c
 
 def material(original,binding,c):
- key=binding['semantic_id'];paths=binding['variants'];identity=hashlib.sha256(json.dumps([sha(__file__),original.get_path_name(),[(l,sha(paths[l])) for l in LOCALES]],sort_keys=True).encode()).hexdigest();cachekey=(original.get_path_name(),identity)
+ key=binding['semantic_id'];paths=binding['variants'];identity=hashlib.sha256(json.dumps([sha(__file__),key,original.get_path_name(),[(l,sha(paths[l])) for l in LOCALES]],sort_keys=True).encode()).hexdigest();cachekey=(original.get_path_name(),identity)
  if cachekey in CACHE:return CACHE[cachekey]
  name='M_'+normalized(key)+'_'+identity[:12];dest=BASE+'/Materials/'+name
  if EAL.does_asset_exist(dest):
@@ -53,6 +53,7 @@ def material(original,binding,c):
  MEL.recompile_material(result);EAL.set_metadata_tag(result,'CityLanguageIdentity',identity);EAL.set_metadata_tag(result,'CityTextID',key);EAL.set_metadata_tag(result,'CityOriginalMaterial',original.get_path_name());EAL.set_metadata_tag(result,'CityLanguageVariants',json.dumps(paths));assert EAL.save_loaded_asset(result);CACHE[cachekey]=result;return result
 
 def selected(label):
+ if GROUP=='remaining-all':return bool(re.fullmatch(r'City_[A-Z0-9]+_F\d+',label))
  if GROUP=='smoke':return label=='S01_F01'
  if GROUP=='shops-all':return bool(re.fullmatch(r'S\d+_F\d+',label))
  if GROUP=='campus-all':return bool(re.fullmatch(r'Campus_[A-Z0-9]+_F\d+',label))

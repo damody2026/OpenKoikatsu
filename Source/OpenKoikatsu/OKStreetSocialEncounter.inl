@@ -34,6 +34,17 @@ TSharedRef<FJsonObject> AOKStreetSocialScene::RulesListener(int32 I) const{
  L->SetStringField(TEXT("mode"),FString::Chr(DramaModeOf(I)));L->SetBoolField(TEXT("foil"),FoilOf()==I);return L;
 }
 
+// Heroine I can see him: within 25 m, on the same side of the walls (both in the restaurant, or both in the street)
+// and on the same floor. Walking past the restaurant was "saw it with my own eyes" of him inside with Jeanne.
+bool AOKStreetSocialScene::SeesHim(int32 I) const{
+ const auto& S=*State;if(!S.Agents.IsValidIndex(I-1))return false;const FVector& P=S.Agents[I-1].Position;
+ if(FVector::Dist2D(P,S.Male)>=2500.f||FMath::Abs(P.Z-S.Male.Z)>=150.f)return false;
+ // Out in the open (the street, the park) both can see across; a wall stands between only when one is indoors.
+ const FString Hers=PlaceHere(P),His=PlaceHere(S.Male);if(Hers==His)return true;
+ auto Indoors=[](const FString& Id){const FOKStreetPlace* Pl=Id.IsEmpty()?nullptr:OKStreetFindPlace(Id);return Pl&&!Pl->Rooms.IsEmpty();};
+ return !Indoors(Hers)&&!Indoors(His);
+}
+
 // A rumour about him (and maybe a heroine): who knows it, who saw it and grew jealous, which old ones fall away are rules
 // (social.rs rumor_make); here only who stood within 25 m.
 void AOKStreetSocialScene::MakeRumor(int32 About,const FString& Kind,const FString& Text,float Heat,bool bSecret){
@@ -42,7 +53,7 @@ void AOKStreetSocialScene::MakeRumor(int32 About,const FString& Kind,const FStri
  Request->SetStringField(TEXT("about"),HasAbout?OKStreetStableId(S.Manifest.Characters[About]):FString());Request->SetStringField(TEXT("about_mode"),HasAbout?FString::Chr(DramaModeOf(About)):FString());
  Request->SetStringField(TEXT("global_mode"),FString::Chr(S.DramaMode));Request->SetStringField(TEXT("kind"),Kind);Request->SetStringField(TEXT("text"),Text);Request->SetNumberField(TEXT("heat"),Heat);
  Request->SetBoolField(TEXT("secret"),bSecret);Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
- TArray<TSharedPtr<FJsonValue>> Near;for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=About&&S.Agents.IsValidIndex(I-1)&&FVector::Dist2D(S.Agents[I-1].Position,S.Male)<2500)Near.Add(MakeShared<FJsonValueObject>(RulesListener(I)));
+ TArray<TSharedPtr<FJsonValue>> Near;for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=About&&SeesHim(I))Near.Add(MakeShared<FJsonValueObject>(RulesListener(I)));
  Request->SetArrayField(TEXT("near"),Near);
  TArray<TSharedPtr<FJsonValue>> Old;for(const auto& R:S.Store.Rumors){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),R.Id);O->SetNumberField(TEXT("heat"),R.Heat);O->SetNumberField(TEXT("day"),R.Day);Old.Add(MakeShared<FJsonValueObject>(O));}
  Request->SetArrayField(TEXT("rumors"),Old);

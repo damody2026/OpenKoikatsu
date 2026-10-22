@@ -16,7 +16,9 @@ static bool OKProbeScrolledOut(const TSharedPtr<SWidget>& W){
  if(!W->GetCachedGeometry().GetLocalSize().IsNearlyZero())return false;
  for(TSharedPtr<SWidget> Up=W->GetParentWidget();Up.IsValid();Up=Up->GetParentWidget()){
   if(Up->GetVisibility()==EVisibility::Collapsed||Up->GetVisibility()==EVisibility::Hidden)return false;
-  if(Up->GetType()==FName(TEXT("SScrollBox")))return !Up->GetCachedGeometry().GetLocalSize().IsNearlyZero();}
+  // A scroll box inside another one (the shop menu inside the side panel) has no size either while the outer one shows
+  // other rows: the outer one decides (the whole bookstore menu was missing during a conversation).
+  if(Up->GetType()==FName(TEXT("SScrollBox"))&&!Up->GetCachedGeometry().GetLocalSize().IsNearlyZero())return true;}
  return false;
 }
 
@@ -98,7 +100,7 @@ bool AOKStreetSocialScene::ProbePress(const FString& Label,FString& Why,int32 Nt
 #if !UE_BUILD_SHIPPING
  // Scrolled out of its list: pressed as a button all the same (no hit test needed), and brought into view for the eye.
  if(OKProbeScrolledOut(Hit->Value)&&Hit->Value->IsEnabled()&&Hit->Value->GetType()==FName(TEXT("SButton"))){
-  for(TSharedPtr<SWidget> Up=Hit->Value->GetParentWidget();Up.IsValid();Up=Up->GetParentWidget())if(Up->GetType()==FName(TEXT("SScrollBox"))){StaticCastSharedPtr<SScrollBox>(Up)->ScrollDescendantIntoView(Hit->Value,false,EDescendantScrollDestination::Center,0.f);break;}
+  for(TSharedPtr<SWidget> Up=Hit->Value->GetParentWidget();Up.IsValid();Up=Up->GetParentWidget())if(Up->GetType()==FName(TEXT("SScrollBox")))StaticCastSharedPtr<SScrollBox>(Up)->ScrollDescendantIntoView(Hit->Value,false,EDescendantScrollDestination::Center,0.f); // every enclosing list (the menu, the side panel)
   UE_LOG(LogTemp,Display,TEXT("Street control press: %s (scrolled out, clicked)"),*Label);StaticCastSharedPtr<SButton>(Hit->Value)->SimulateClick();return true;}
 #endif
  if(G.GetLocalSize().IsNearlyZero()){

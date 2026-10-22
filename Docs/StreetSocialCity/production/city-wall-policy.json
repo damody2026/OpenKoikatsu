@@ -1,0 +1,7 @@
+{
+  "version": "20261021-preserve-identity",
+  "default": "preserve_original_material",
+  "reason": "City-wide beautification must not replace distinct existing wall designs with one shared palette or stripe pattern.",
+  "explicitly_preserve": ["TR", "CV", "D1", "D2", "D3", "D4", "north-shopping-street"],
+  "approved_material_overrides": []
+}

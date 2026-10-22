@@ -50,61 +50,41 @@ int32 AOKStreetSocialScene::PatienceOf(int32 Character) const{
 void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His){
  // An activity id in "what" ("meal") is said by its name in the label and her memory ("約meal" on the list).
  const FString What=OKStreetFindActivity(WhatSaid)?OKStreetActivityName(WhatSaid):WhatSaid;
- auto& S=*State;if(!OKStreetFindPlace(Place)){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: %s is not a place"),*Place);return;}
- // No clear time, no appointment (it used to become 19:00 by default, a time nobody said).
- {FString H,M;if(!Time.Split(TEXT(":"),&H,&M)||!H.IsNumeric()||!M.IsNumeric()){UE_LOG(LogTemp,Display,TEXT("Street promise ignored: no clear time (\"%s\") for %s"),*Time,*Place);return;}}
- // Whether both agreed, which day and which time are the judge's reading of both lines (the model sees what was said);
- // keyword guards on top of it (time_said, day_said, "no day said, so today") kept overruling it and could never cover
- // every way of saying it ("今天中午有约，明天中午十二点？" was booked for today).
- int32 GameDay=S.Store.CalendarDay;
- if(Day.StartsWith(TEXT("+")))GameDay+=FMath::Clamp(FCString::Atoi(*Day.Mid(1)),0,60);
- else{FDateTime Date;if(FDateTime::ParseIso8601(*Day,Date))GameDay=int32((Date-OKStreetCalendarEpoch()).GetTotalDays());}
- FString H,M;int32 Minute=19*60;if(Time.Split(TEXT(":"),&H,&M))Minute=FMath::Clamp(FCString::Atoi(*H),0,23)*60+FMath::Clamp(FCString::Atoi(*M),0,59);
- // Before 04:00 belongs to the previous game day's night.
- const int64 Start=int64(GameDay)*1440+Minute+(Minute<240?1440:0);
- if(Start<=OKStreetMindNow(S))return;
- // One meeting with her at a time: the same hour already has one (the model's promise and the judge's, or a repeat).
- // The same place on the same day is the same meeting said again at another time ("three, not two"): it moves to the
- // time said last instead of becoming a second date.
- // The same meeting booked twice from one exchange (her reply's promise and the judge's), one of them a day off ("seven
- // tonight" read as tomorrow): within a minute and a half, same place and hour a day apart is that meeting, on the
- // nearer day.
- {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);const double Wall=FPlatformTime::Seconds();
-  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Kind==TEXT("date")&&A.Place==Place&&FMath::Abs(A.Start-Start)==1440
-   &&Wall-S.PromiseBookedAt.FindRef(A.Id)<90.0){
-   if(Start<A.Start){auto Candidate=S.Store;for(auto& C:Candidate.Appointments)if(C.Id==A.Id)C.Start=Start;if(CommitStore(MoveTemp(Candidate))){PlanPromisesToday(Character);RefreshUI();}}
-   UE_LOG(LogTemp,Display,TEXT("Street appointment: %s booked again a day apart from the same exchange; one meeting, minute %lld"),*A.Label,FMath::Min(A.Start,Start));return;}}
- {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto DayOf=[](int64 M){return (M-240)/1440;};
-  // Her own "pick me up at five" is a meeting like a date: a new time for it moves it (it stayed at 17:00 next to a 17:30).
-  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&(A.Kind==TEXT("date")||A.Kind==TEXT("pickup"))&&(FMath::Abs(A.Start-Start)<60||(A.Place==Place&&DayOf(A.Start)==DayOf(Start)))){
-   // "Five o'clock, don't forget" said again without am/pm: twelve hours off is the same time; the daytime one of the two
-   // (07:00-22:00) is meant, the one already booked when both are.
-   auto Daytime=[](int64 M){const int64 Min=M%1440;return Min>=7*60&&Min<22*60;};
-   const int64 Said=FMath::Abs(A.Start-Start)!=720?Start:(Daytime(Start)&&!Daytime(A.Start)?Start:A.Start);
-   if(Said!=Start)UE_LOG(LogTemp,Display,TEXT("Street appointment: %s said again 12 h off (am/pm unsaid); stays at minute %lld"),*A.Label,Said);
-   // Said again with another time or place ("the playground, not this park"): the meeting moves there.
-   if(A.Start!=Said||A.Place!=Place){auto Candidate=S.Store;const FOKStreetPlace* To=OKStreetFindPlace(Place);
-    for(auto& C:Candidate.Appointments)if(C.Id==A.Id){
-     // A label that carries the time ("…接她（17:00）") shows the new one.
-     C.Label.ReplaceInline(*FString::Printf(TEXT("%02d:%02d"),int32(C.Start%1440)/60,int32(C.Start%1440)%60),*FString::Printf(TEXT("%02d:%02d"),int32(Said%1440)/60,int32(Said%1440)%60));
-     C.Start=Said;
-     if(C.Place!=Place&&To){C.Place=Place;C.Label=OKMsg(TEXT("ui.appointments.meet_with_summary"), {{TEXT("character_name"), *S.Manifest.Characters[Character].Name}, {TEXT("what"), What.IsEmpty()?OKT(TEXT("ui.appointments.meeting_label")):*What}, {TEXT("person_name"), To->Name}});}}
-    const FString Label=A.Label;const int64 From=A.Start;const FString FromPlace=A.Place;
-    if(CommitStore(MoveTemp(Candidate))){PlanPromisesToday(Character);UE_LOG(LogTemp,Display,TEXT("Street appointment: %s moved from minute %lld at %s to %lld at %s"),*Label,From,*FromPlace,Said,*Place);RefreshUI();}}
-   else UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld kept, the new one at %s is the same meeting"),*A.Label,A.Start,*Place);
-   return;}}
- const auto* P=OKStreetFindPlace(Place);
- // Booked for when the place is closed (breakfast at 8:00 at a shop opening at 10:00): not booked; she hears why, so the
- // two of them pick another time or place.
- {FString Why;const int64 Minute0=Start%1440;if(P&&PlaceClosedAt(Place,OKStreetCalendarDateTime(int32(Start/1440),Minute0/60.0),Why)){
+ auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);const FOKStreetPlace* P=OKStreetFindPlace(Place);
+ // Whether it is a meeting at all, a new one or the same one said again, and where and when, is promise.rs
+ // (promise_from_chat); the judge's reading of both lines gives day, time and place.
+ auto Request=OKRulesRequest(TEXT("promise_from_chat"));Request->SetStringField(TEXT("heroine"),Id);Request->SetStringField(TEXT("day"),Day);
+ Request->SetStringField(TEXT("time"),Time);Request->SetStringField(TEXT("place"),Place);Request->SetBoolField(TEXT("place_known"),P!=nullptr);
+ Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));Request->SetNumberField(TEXT("today"),S.Store.CalendarDay);
+ {const double Wall=FPlatformTime::Seconds();TArray<TSharedPtr<FJsonValue>> Pending;
+  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("heroine"),A.Heroine);
+   O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("place"),A.Place);O->SetNumberField(TEXT("start"),double(A.Start));O->SetStringField(TEXT("label"),A.Label);
+   const double* Booked=S.PromiseBookedAt.Find(A.Id);O->SetNumberField(TEXT("booked_ago"),Booked?Wall-*Booked:-1.0);Pending.Add(MakeShared<FJsonValueObject>(O));}
+  Request->SetArrayField(TEXT("pending"),Pending);}
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
+ const FString Action=Out->GetStringField(TEXT("action")),Reason=Out->GetStringField(TEXT("reason"));
+ const int64 Start=int64(Out->GetNumberField(TEXT("start")));const int32 Minute=int32(Out->GetNumberField(TEXT("minute")));
+ if(Action==TEXT("ignore")){UE_LOG(LogTemp,Display,TEXT("Street promise ignored (%s): day \"%s\" time \"%s\" at %s"),*Reason,*Day,*Time,*Place);return;}
+ if(Action==TEXT("keep")||Action==TEXT("move")){const int32 AppId=int32(Out->GetNumberField(TEXT("id")));
+  const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==AppId;});if(!A)return;
+  if(Action==TEXT("keep")){UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld kept, said again (%s)"),*A->Label,A->Start,*Reason);return;}
+  const FString Label=A->Label;const int64 From=A->Start;const FString FromPlace=A->Place;auto Candidate=S.Store;
+  for(auto& C:Candidate.Appointments)if(C.Id==AppId){
+   // A label that carries the time ("…接她（17:00）") shows the new one; another place, the label says it.
+   C.Label.ReplaceInline(*FString::Printf(TEXT("%02d:%02d"),int32(C.Start%1440)/60,int32(C.Start%1440)%60),*FString::Printf(TEXT("%02d:%02d"),int32(Start%1440)/60,int32(Start%1440)%60));
+   C.Start=Start;
+   if(Out->GetBoolField(TEXT("place_changed"))&&P){C.Place=Place;C.Label=OKMsg(TEXT("ui.appointments.meet_with_summary"), {{TEXT("character_name"), *S.Manifest.Characters[Character].Name}, {TEXT("what"), What.IsEmpty()?OKT(TEXT("ui.appointments.meeting_label")):*What}, {TEXT("person_name"), P->Name}});}}
+  if(CommitStore(MoveTemp(Candidate))){PlanPromisesToday(Character);UE_LOG(LogTemp,Display,TEXT("Street appointment: %s moved from minute %lld at %s to %lld at %s (%s)"),*Label,From,*FromPlace,Start,*Place,*Reason);RefreshUI();}
+  return;}
+ if(!P)return;
+ // Closed then (breakfast at 8:00 at a shop opening at 10:00): not booked; she hears why, so the two pick another time.
+ if(Action==TEXT("closed")){const FString Why=Out->GetStringField(TEXT("why"));
   S.TellHer.Add(OKMsg(TEXT("ui.appointments.closed_then_note"), {{TEXT("place_name"), P->Name}, {TEXT("why"), *Why}}));S.FreeTalkNotice=Why;
-  UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld not booked, closed then (%s)"),*Place,Start,*Why);RefreshUI();return;}}
+  UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld not booked, closed then (%s)"),*Place,Start,*Why);RefreshUI();return;}
  const FString Label=OKMsg(TEXT("ui.appointments.meet_with_summary"), {{TEXT("character_name"), *S.Manifest.Characters[Character].Name}, {TEXT("what"), What.IsEmpty()?OKT(TEXT("ui.appointments.meeting_label")):*What}, {TEXT("person_name"), P->Name}});
  AddAppointment(TEXT("date"),Character,Place,Start,PatienceOf(Character),Label);
  // Another girl is already booked near that time: he is told (both stay booked; it is his to sort out).
- {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
-  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine!=Id&&A.Kind!=TEXT("entrust")&&FMath::Abs(A.Start-Start)<90){
-   S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.clash_notice"), {{TEXT("label"), *A.Label}});UE_LOG(LogTemp,Display,TEXT("Street appointment: clashes with %s"),*A.Label);RefreshUI();break;}}
+ {const FString Clash=Out->GetStringField(TEXT("clash"));if(!Clash.IsEmpty()){S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.clash_notice"), {{TEXT("label"), *Clash}});UE_LOG(LogTemp,Display,TEXT("Street appointment: clashes with %s"),*Clash);RefreshUI();}}
  if(S.Store.Appointments.Num())S.PromiseBookedAt.Add(S.Store.Appointments.Last().Id,FPlatformTime::Seconds());
  HeroineNote(Character,TEXT("promise"),OKMsg(TEXT("ui.appointments.promised_meet_with_him"), {{TEXT("label"), *OKStreetCalendarLabel(int32(Start/1440)-(Minute<240?1:0),Minute/60.0)}, {TEXT("place_name"), P->Name}, {TEXT("what"), What.IsEmpty()?OKT(TEXT("ui.appointments.meeting_label")):*What}}),Place,0.7f);
 }

@@ -35,7 +35,7 @@ void AOKStreetSocialScene::ApplyJob(const FString& JobId){
 
 void AOKStreetSocialScene::Hire(const FString& JobId,bool Accepted){
  auto& S=*State;if(!Accepted){S.JobRejected.Add(JobId,S.Store.CalendarDay);if(S.FreeTalkNotice.IsEmpty())S.FreeTalkNotice=OKT(TEXT("ui.jobs.not_hired"));RefreshUI();return;}
- auto Candidate=S.Store;Candidate.PlayerJobs.AddUnique(JobId);if(!Candidate.JobRating.Contains(JobId))Candidate.JobRating.Add(JobId,60);
+ auto Candidate=S.Store;Candidate.PlayerJobs.AddUnique(JobId);{int32& Rating=Candidate.JobRating.FindOrAdd(JobId,60);Rating=FMath::Max(Rating,30);} // taken back after being let go: a fresh start on probation, above the firing line (kept at 3, the first shift let him go again)
  CommitStore(MoveTemp(Candidate));RefreshUI();
 }
 
@@ -43,6 +43,8 @@ void AOKStreetSocialScene::Hire(const FString& JobId,bool Accepted){
 void AOKStreetSocialScene::BookShift(const FString& JobId,int32 Shift){
  auto& S=*State;const auto* Job=S.Catalog.FindJob(JobId);if(!Job||!Job->Shifts.IsValidIndex(Shift))return;
  const FVector2D H=Job->Shifts[Shift];const int64 Start=int64(S.Store.CalendarDay+1)*1440+int64(H.X*60);
+ // Not on a day the place does not open (the library is closed on Mondays: he came to work at a locked door).
+ {FString Why;if(PlaceClosedAt(Job->Place,OKStreetCalendarDateTime(S.Store.CalendarDay+1,H.X+0.25),Why)){S.FreeTalkNotice=OKMsg(TEXT("ui.jobs.closed_tomorrow_note"), {{TEXT("why"), *Why}});RefreshUI();return;}}
  if(S.Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return A.Kind==TEXT("shift")&&A.Start==Start&&A.Status==TEXT("pending");}))return;
  const auto* P=OKStreetFindPlace(Job->Place);
  AddAppointment(TEXT("shift"),INDEX_NONE,Job->Place,Start,10,OKMsg(TEXT("ui.jobs.job_pay_range"), {{TEXT("place"), P?P->Name:*Job->Place}, {TEXT("min"), H.X}, {TEXT("max"), H.Y}}));
@@ -59,6 +61,8 @@ void AOKStreetSocialScene::TickJobs(){
  }
  if(!S.ShiftAppointment){
   for(const auto& A:S.Store.Appointments)if(A.Kind==TEXT("shift")&&(A.Status==TEXT("done")||A.Status==TEXT("late"))&&Now>=A.Start-30&&Now<A.Start+12*60){
+   // A locked workplace (its day off) is no shift: he was "fired for leaving early" from the closed library.
+   {FString Why;if(PlaceClosedNow(A.Place,Why))continue;}
    // A shift whose end has passed is over (paid at 12:00, it started again and ended at once: "worked 0 minutes, ¥0"
    // replaced the real payslip).
    for(const FString& J:S.Store.PlayerJobs)if(const auto* Job=S.Catalog.FindJob(J))if(Job->Place==A.Place)for(const auto& H:Job->Shifts)if(int64(H.X*60)==A.Start%1440&&Now<A.Start-A.Start%1440+int64(H.Y*60)){
@@ -71,6 +75,8 @@ void AOKStreetSocialScene::TickJobs(){
  }
  const auto* Job=S.Catalog.FindJob(S.ShiftJob);if(!Job){S.ShiftAppointment=0;return;}
  if(Now>=S.ShiftEnd){EndShift(false);return;}
+ // The place closes on him (the day off, closing time): the shift is over, not left early.
+ {FString Why;if(PlaceClosedNow(Job->Place,Why)){UE_LOG(LogTemp,Display,TEXT("Street shift: %s is closed (%s); the shift ends"),*Job->Place,*Why);EndShift(false);return;}}
  // Held at the workplace (plan §8.6.2): out of the shop for more than five game minutes is leaving early.
  if(PlaceHere(S.Male)!=Job->Place){if(S.ShiftAwaySince<0)S.ShiftAwaySince=Now;else if(Now-S.ShiftAwaySince>5)EndShift(true);}
  else S.ShiftAwaySince=-1;
@@ -117,11 +123,13 @@ void AOKStreetSocialScene::BuildJobRows(const TSharedRef<SVerticalBox>& Panel){
  auto Row=SNew(SWrapBox).UseAllottedSize(true);bool Any=false;
  for(const auto& Job:S.Catalog.Jobs){if(Job.Place!=Place)continue;Any=true;const FString Id=Job.Id;
   if(!S.Store.PlayerJobs.Contains(Id)){Row->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.jobs.apply_job_label"), {{TEXT("job_title"), *Job.Title}, {TEXT("wage"), Job.Wage}}),[Weak,Id](){Weak->ApplyJob(Id);})];continue;}
-  for(int32 Shift=0;Shift<Job.Shifts.Num();++Shift){
-   // Over one of his classes: said on the button (academics.rs class_clash); booking it is still his choice.
+  int32 Open=0;
+  for(int32 Shift=0;Shift<Job.Shifts.Num();++Shift){FString Why;if(PlaceClosedAt(Job.Place,OKStreetCalendarDateTime(S.Store.CalendarDay+1,Job.Shifts[Shift].X+0.25),Why))continue;++Open;// Over one of his classes: said on the button (academics.rs class_clash); booking it is still his choice.
    FString Clash;{auto Ask=OKRulesRequest(TEXT("class_clash"));Ask->SetObjectField(TEXT("player"),OKStreetAcademicJson(S.Store.PlayerAcademic));Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay+1);Ask->SetNumberField(TEXT("from"),Job.Shifts[Shift].X);Ask->SetNumberField(TEXT("to"),Job.Shifts[Shift].Y);
     if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask)){const FString Course=Out->GetStringField(TEXT("course"));if(!Course.IsEmpty())Clash=OKMsg(TEXT("ui.jobs.class_clash_suffix"),{{TEXT("course"),Course}});}}
    Row->AddSlot().Padding(1)[Button(OKMsg(TEXT("ui.jobs.schedule_tomorrow_shift"), {{TEXT("job_title"), *Job.Title}, {TEXT("start_hour"), Job.Shifts[Shift].X}, {TEXT("end_hour"), Job.Shifts[Shift].Y}})+Clash,[Weak,Id,Shift](){Weak->BookShift(Id,Shift);})];}
+  if(Open==0&&!Job.Shifts.IsEmpty()){FString Why;PlaceClosedAt(Job.Place,OKStreetCalendarDateTime(S.Store.CalendarDay+1,Job.Shifts[0].X+0.25),Why);
+   Row->AddSlot().Padding(4)[SNew(STextBlock).Text(FText::FromString(OKMsg(TEXT("ui.jobs.closed_tomorrow_note"), {{TEXT("why"), *Why}})))];}
  }
  if(S.ShiftAppointment)Row->AddSlot().Padding(1)[Button(S.ShiftFast?OKT(TEXT("ui.jobs.chat_while_working")):OKT(TEXT("ui.jobs.work_focus_fast_forward")),[Weak](){Weak->State->ShiftFast=!Weak->State->ShiftFast;Weak->RefreshUI();})];
  if(Any||S.ShiftAppointment)Panel->AddSlot().AutoHeight()[Row];

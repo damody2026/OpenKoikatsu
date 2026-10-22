@@ -39,7 +39,8 @@ def model(row):
  return dict(building=row['building'],localized_slots=len(row['bindings']),variant_checks=count,geometry_and_animation_preserved=True)
 
 def main():
- c=catalogue();entries=c['entries'];assert len(entries)==901
+ from street_city_localization import inventory
+ c=catalogue();entries=c['entries'];assert set(entries)=={q['id'] for q in inventory()}
  assert len([e for e in entries.values() if e['kind']=='building'])==122
  for key,e in entries.items():
   assert set(e['translations'])==set(LOCALES) and all(t.strip() for t in e['translations'].values()),key
@@ -51,8 +52,8 @@ def main():
   assert all(v.get('integrated_lettering') for v in r['variants'].values()),r['id']
   receipt=json.loads((OUT/'integrated-logos/jobs'/r['building']/'variants.json').read_text('utf8'));assert receipt['status']=='passed_visual_review'
  with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:images=sum(pool.map(pixels,assets['rows']+assets['brands']+assets['walls']))
- models=json.loads((OUT/'models.json').read_text('utf8'))['buildings'];assert len(models)==114
+ models=json.loads((OUT/'models.json').read_text('utf8'))['buildings'];assert len(models)==len([e for e in entries.values() if e['kind']=='building'])
  with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:rows=list(pool.map(model,models))
- receipt=dict(status='passed_textures_and_portable_models',locales=list(LOCALES),catalogue_entries=len(entries),planned_buildings=122,existing_3d_buildings=114,language_images=images,unique_font_glyphs=len(chars),missing_glyphs=[],portable_models=rows,native_acceptance='separate reopen audit required',catalogue_sha256=sha(OUT/'catalogue.json'),assets_sha256=sha(OUT/'assets.json'),models_sha256=sha(OUT/'models.json'))
+ receipt=dict(status='passed_textures_and_portable_models',locales=list(LOCALES),catalogue_entries=len(entries),planned_buildings=122,existing_3d_buildings=len(models),language_images=images,unique_font_glyphs=len(chars),missing_glyphs=[],portable_models=rows,native_acceptance='separate reopen audit required',catalogue_sha256=sha(OUT/'catalogue.json'),assets_sha256=sha(OUT/'assets.json'),models_sha256=sha(OUT/'models.json'))
  (OUT/'asset-acceptance.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2),'utf8');print(receipt['status'],images,'images',len(rows),'models',flush=True)
 if __name__=='__main__':main()

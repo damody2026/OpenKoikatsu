@@ -242,15 +242,17 @@ void AOKStreetSocialScene::TickUmbrella(){
  auto& S=*State;const int32 Girl=S.OutingGirl!=INDEX_NONE?S.OutingGirl:S.Companion;
  const int64 Now=OKStreetMindNow(S);const bool Walking=Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&PlaceHere(S.Male).IsEmpty();
  const bool Raining=Walking&&RainingAt(S.Store.CalendarDay,int32(Now%1440));
- if(!Raining){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();S.WalkStyle.Reset();return;}
+ // Asked once per walk (the rain, the hour); the umbrella goes when the walk ends or the rain stops.
+ if(!Walking){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();S.WalkStyle.Reset();return;}
+ if(!Raining){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();}
  if(S.WalkStyle.IsEmpty()){
-  auto Request=OKRulesRequest(TEXT("walk_style"));Request->SetBoolField(TEXT("raining"),true);
+  auto Request=OKRulesRequest(TEXT("walk_style"));Request->SetBoolField(TEXT("raining"),Raining);Request->SetNumberField(TEXT("minute"),double(Now%1440));
   TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));Request->SetArrayField(TEXT("his_items"),His);
   Request->SetStringField(TEXT("stage"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Stage);
   const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
   S.WalkStyle=Out->GetStringField(TEXT("style"));const FString Fact=Out->GetStringField(TEXT("fact"));if(!Fact.IsEmpty())S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}})); // a note of the game, not his words
   UE_LOG(LogTemp,Display,TEXT("Street rain walk: actor=%d %s"),Girl,*S.WalkStyle);
-  if(S.WalkStyle!=TEXT("none")){
+  if(Raining&&S.WalkStyle!=TEXT("none")){
    // A dark canopy (a flattened sphere) on a thin shaft.
    auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));UMaterialInterface* Tint=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
    if(Mesh)if(auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator)){A->SetOwner(this);auto* M=A->GetStaticMeshComponent();M->SetMobility(EComponentMobility::Movable);M->SetStaticMesh(Mesh);M->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -258,4 +260,17 @@ void AOKStreetSocialScene::TickUmbrella(){
     A->SetActorScale3D(S.WalkStyle==TEXT("umbrella_shared")?FVector(1.6f,1.6f,.35f):FVector(1.1f,1.1f,.3f));S.Umbrella=A;}}
  }
  if(AActor* U=S.Umbrella.Get()){const FVector Over=S.WalkStyle==TEXT("umbrella_shared")?(S.Male+S.Agents[Girl-1].Position)*.5f:S.Male;U->SetActorLocation(Over+FVector(0,0,180));}
+}
+
+// Her own business at the student affairs office (errand.rs her_errand): what it does to her money and her loan is the
+// rules'; she hears how it went as a fact and says the rest in her own words.
+void AOKStreetSocialScene::HerErrand(int32 Character,const FString& Kind){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character)||Character<=0)return;
+ const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Request=OKRulesHeroineRequest(S,TEXT("her_errand"),Id);OKRulesPutExt(S,Request);
+ Request->SetStringField(TEXT("kind"),Kind);Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
+ const FString Fact=Out->GetStringField(TEXT("fact"));
+ if(Out->GetBoolField(TEXT("ok"))){auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);ApplyRulesEffects(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;FlushRulesEffects();}
+ if(!Fact.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}}));S.FreeTalkNotice=Fact;}
+ UE_LOG(LogTemp,Display,TEXT("Street errand: actor=%d %s ok=%d (%s)"),Character,*Kind,int32(Out->GetBoolField(TEXT("ok"))),*Fact);RefreshUI();
 }
