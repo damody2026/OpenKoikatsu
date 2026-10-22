@@ -507,3 +507,7 @@
 - 歌唱面板第一版加在財務／電話那一列，面板太長時邀請按鈕在畫面外；字幕也沒顯示。新 UI 要看實際截圖確認看得到，不能只靠 `buttons` 列出按鈕名稱。
 - `OKT()` 回傳字元指標，`OKT(...)+TEXT(...)` 是兩個指標相加，編譯失敗；要先包成 `FString`。
 - 和攻略線同時用 `FreeTalk01HostD`：我的 prepare 在對方編譯中複製 Source，Build.bat 6 秒就「成功」，staging 拿到的是對方較早的 exe，新程式碼不在裡面（SongPick02）。共用 host 的建置要先等對方同意；新 stage 一律實際檢查新功能是否生效。
+- 原生 Seed-VC 移植時，Whisper 的梅爾濾波器照 transformers 內部形狀當成 [201][80] 讀，但 `preprocessor_config.json` 存的是 [80][201]，編碼輸出 cos 只有 0.56。讀外部檔案的矩陣要先印形狀與前幾個值核對，不能照程式內部的形狀猜。
+- Demucs 參考輸出的 forward hook 用 lambda 回傳 `(save(...), save(...))` 這個 tuple，PyTorch 把非 None 的回傳值當成新輸出，模型後段拿到 None 而崩潰。hook 一律回傳 None。
+- 判斷「換聲沒換成」時，先用的 `ok-tts speaker-sim` 把 32-bit float WAV 當 16-bit PCM 讀，所有 float 檔看起來都彼此相似（0.994），差點把正確的換聲當成錯誤去改。量測工具先用已知答案驗證；`wav_samples` 改成依 fmt chunk 讀 PCM／float、混成單聲道並轉 24 kHz。
+- 攻略線的重開腳本會關掉所有從 `Saved/StreetSocial/Build/` 執行的遊戲，一般啟動又會關掉這個 checkout 的全部 ok-tts／ok-asr／ok-song，沙盒遊戲與它的伺服器一起被關（日誌突然中斷、沒有當機訊息）。沙盒啟動改寫 `Sandbox/<名稱>/running.json`，一般啟動清理時跳過仍在執行的沙盒伺服器；遊戲無聲結束時先查同時間有沒有別的啟動器在清程序。

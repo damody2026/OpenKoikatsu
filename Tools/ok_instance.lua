@@ -33,12 +33,33 @@ function M.ports(root)
   return { base = base, tts = base, asr = base + 1, street_control = base + 10, pair_control = base + 11, song = base + 20, voice = voice }
 end
 
--- Stop only the ok-tts / ok-asr / ok-song processes started from this checkout's Build/ (another clone's servers stay up).
+-- Server pids of sandboxed games that are still running (Saved/StreetSocial/Sandbox/<name>/running.json, written by
+-- run_street_social_development.lua -Sandbox): a normal launch must not stop them.
+local function sandbox_servers(root)
+  local keep = {}
+  local dir = path.join(root, "Saved/StreetSocial/Sandbox")
+  if not path.is_dir(dir) then return keep end
+  local games = {}
+  for _, p in ipairs(require("ok.kit").call({ "proc-list", "OpenKoikatsu" })) do games[p.pid] = true end
+  for _, name in ipairs(path.list(dir)) do
+    local file = path.join(dir, name, "running.json")
+    local okr, r = pcall(function() return json.decode(path.read_text(file)) end)
+    if path.is_file(file) and okr and type(r) == "table" and games[r.game_pid] then
+      for _, pid in ipairs(r.server_pids or {}) do keep[pid] = true end
+    end
+  end
+  return keep
+end
+
+-- Stop only the ok-tts / ok-asr / ok-song processes started from this checkout's Build/ (another clone's servers stay
+-- up, and so do the servers of a sandboxed game that is still running).
 function M.stop_own_voice_servers(root)
-  local own = path.abs(path.join(root or ok.root, "Build")):lower() .. "/"
+  root = root or ok.root
+  local own = path.abs(path.join(root, "Build")):lower() .. "/"
+  local keep = sandbox_servers(root)
   local stopped = 0
   for _, p in ipairs(require("ok.kit").call({ "proc-list", "ok-asr", "ok-tts", "ok-song" })) do
-    if type(p.path) == "string" and p.path:gsub("\\", "/"):lower():sub(1, #own) == own then
+    if type(p.path) == "string" and p.path:gsub("\\", "/"):lower():sub(1, #own) == own and not keep[p.pid] then
       if require("ok.kit").call({ "proc-kill", tostring(p.pid) }).killed then stopped = stopped + 1 end
     end
   end

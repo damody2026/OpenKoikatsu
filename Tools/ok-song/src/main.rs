@@ -11,11 +11,13 @@
 //!   ok-song mula-generate --tags T --lyrics FILE --out FRAMES.json [--seconds 30] [--cfg 3] [--topk 50] [--seed N]
 //!   ok-song codec-check --frames F.json --ref DIR [--first-draw 33]   native HeartCodec vs a Python dump
 //!   ok-song demucs-check --ref DIR [--models DIR]   native Demucs (htdemucs_ft) vs a Python dump
+//!   ok-song seedvc-check --ref DIR [--models DIR] [--parts mel,voc,lr,est,cfm,sem,style,f0,pipe,conv]   native Seed-VC vs a dump
 //!   ok-song prepare-models --seedvc SEEDVC_CHECKPOINTS --out DIR   torch checkpoints -> safetensors (no Python)
 //!   ok-song mix      --vocal V.wav --accompaniment A.wav --out DIR   the Rust mix + envelope alone (checks, tests)
 //!
-//! The model stages are prototypes running upstream Python entry points (backend.rs); they sit behind one boundary so
-//! native Rust ports replace them. `doctor` and /health report native_rust_inference=false until then.
+//! The three model stages run natively in Rust + CUDA (src/native: HeartMuLa + HeartCodec, Demucs htdemucs_ft, Seed-VC)
+//! when ok-song.json selects the "-rust" backends; the "-python" prototypes behind the same boundary remain for
+//! comparison. `doctor` and /health report native_rust_inference. The *-check commands compare against Python dumps.
 
 mod audio;
 mod backend;
