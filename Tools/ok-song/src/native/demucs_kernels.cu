@@ -220,3 +220,79 @@ extern "C" __global__ void sigmoid_mul_f32(float* y, const float* m, long long n
     long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) y[i] = y[i] / (1.f + expf(-m[i]));
 }
+
+// ---------------------------------------------------------------- RMVPE
+
+// AvgPool2d(2): [c][h][w] -> [c][h / 2][w / 2]
+extern "C" __global__ void avgpool2_f32(float* out, const float* x, int c, int h, int w) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    int ho = h / 2, wo = w / 2;
+    if (i >= (long long)c * ho * wo) return;
+    int xo = i % wo;
+    long long r = i / wo;
+    int yo = r % ho;
+    long long ch = r / ho;
+    const float* p = x + (ch * h + 2 * yo) * w + 2 * xo;
+    out[i] = 0.25f * (p[0] + p[1] + p[w] + p[w + 1]);
+}
+
+// ConvTranspose2d k3, stride 2, padding 1, output padding 1 from the GEMM result y [(kh * 3 + kw) * co + c][hi][wi]:
+// out [co][2 hi][2 wi] (no bias).
+extern "C" __global__ void col2im2d_s2_f32(float* out, const float* y, int co, int hi, int wi) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    int ho = 2 * hi, wo = 2 * wi;
+    if (i >= (long long)co * ho * wo) return;
+    int ox = i % wo;
+    long long r = i / wo;
+    int oy = r % ho;
+    int ch = r / ho;
+    float acc = 0.f;
+    for (int kh = 0; kh < 3; ++kh) {
+        int dy = oy + 1 - kh;
+        if (dy < 0 || (dy & 1)) continue;
+        int iy = dy / 2;
+        if (iy >= hi) continue;
+        for (int kw = 0; kw < 3; ++kw) {
+            int dx = ox + 1 - kw;
+            if (dx < 0 || (dx & 1)) continue;
+            int ix = dx / 2;
+            if (ix >= wi) continue;
+            acc += y[(((long long)(kh * 3 + kw) * co + ch) * hi + iy) * wi + ix];
+        }
+    }
+    out[i] = acc;
+}
+
+// One GRU direction over a whole sequence in one block (blockDim = 3 * hidden <= 1024).
+// gi: [t][3 h] input projections (+ b_ih); whh: [3 h][h]; bhh: [3 h]; out: [t][stride] at column `col`.
+extern "C" __global__ void gru_dir_f32(const float* gi, const float* whh, const float* bhh, float* out, int t_n, int hid,
+                                       int stride, int col, int reverse) {
+    extern __shared__ float sm[];
+    float* h = sm;            // hid
+    float* gh = sm + hid;     // 3 hid
+    int j = threadIdx.x;
+    if (j < hid) h[j] = 0.f;
+    __syncthreads();
+    for (int s = 0; s < t_n; ++s) {
+        int t = reverse ? t_n - 1 - s : s;
+        if (j < 3 * hid) {
+            const float* w = whh + (long long)j * hid;
+            float acc = bhh[j];
+            for (int k = 0; k < hid; ++k) acc += w[k] * h[k];
+            gh[j] = acc;
+        }
+        __syncthreads();
+        if (j < hid) {
+            const float* g = gi + (long long)t * 3 * hid;
+            float r = 1.f / (1.f + expf(-(g[j] + gh[j])));
+            float z = 1.f / (1.f + expf(-(g[hid + j] + gh[hid + j])));
+            float n = tanhf(g[2 * hid + j] + r * gh[2 * hid + j]);
+            float hn = (1.f - z) * n + z * h[j];
+            out[(long long)t * stride + col + j] = hn;
+            gh[j] = hn;  // stage the new state (gh[j] for j < hid is no longer needed this step)
+        }
+        __syncthreads();
+        if (j < hid) h[j] = gh[j];
+        __syncthreads();
+    }
+}

@@ -463,8 +463,15 @@ pub fn npy(path: &Path) -> Result<Vec<f32>> {
     }
     let (hl, start) = if b[6] == 1 { (u16::from_le_bytes([b[8], b[9]]) as usize, 10) } else { (u32::from_le_bytes([b[8], b[9], b[10], b[11]]) as usize, 12) };
     let header = std::str::from_utf8(&b[start..start + hl])?;
-    if !header.contains("'<f4'") || header.contains("'fortran_order': True") {
+    if header.contains("'fortran_order': True") {
         bail!("{}: unsupported header {header}", path.display());
     }
-    Ok(b[start + hl..].chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect())
+    let body = &b[start + hl..];
+    if header.contains("'<f8'") {
+        return Ok(body.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap()) as f32).collect());
+    }
+    if !header.contains("'<f4'") {
+        bail!("{}: unsupported header {header}", path.display());
+    }
+    Ok(body.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect())
 }
