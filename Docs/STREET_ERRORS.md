@@ -495,3 +495,12 @@
 - 部署時重寫 `Build/ok-tts/package.json`：Lua 腳本在同一行先 `io.open(..., "wb")` 再呼叫 `json.encode`，而專案的 `json.lua` 只有 decode，結果檔案先被清空才報錯（幸好先做了備份）。另外 bash heredoc 寫進 Lua 字串的 `\\` 被吃成 `\`，產生無效跳脫。寫檔一律先在記憶體產生完整內容、成功後才開檔；含反斜線的腳本用 Write／Edit 工具寫，不經 shell heredoc。
 - ok-tts 卸下 VoiceDesign 引擎後顯存沒有歸還（約 6 GB）：Rust 結構的欄位依宣告順序釋放，`Engine` 把 `gpu`（CUDA stream）放第一個，權重緩衝區之後才在已銷毀的 stream 上 `free_async`，錯誤被 `let _ =` 吞掉。持有 GPU 資源的結構，擁有 stream／context 的欄位放最後；釋放失敗至少要記錄。另外又一次把含撇號的 Lua 腳本寫進 bash heredoc 而解析失敗——腳本一律用 Write 工具寫。
 - 聲音存進角色卡（`okVo` 區塊）後重開遊戲，三月七變成「March 7th」、好感 0：角色 ID 是整個卡片檔的 sha256，任何加進卡片的資料都會換掉她的身分。伺服器端測試只驗證了「卡片能讀回、聲音能用」，沒有重開遊戲看身分。改成 ID 不計入 `okVo`。**規則**：往角色卡寫任何東西之前，先查卡片在哪裡被當成身分（`apng-<sha256>`），並在遊戲裡重開一次確認她還是她。
+
+### 2026-10-23 女主唱歌
+
+- HeartMuLa 上游程式用 `torch.compile`，Windows 沒有 Triton 就失敗；torchaudio 2.10 存讀音訊又要 `torchcodec`（需 FFmpeg 共享 DLL，版本也要對應 torch：0.17 載入失敗，0.10 才行）。新 Python 環境先跑一次最小存讀，再跑模型；不改上游程式時用 `TORCHDYNAMO_DISABLE=1`。
+- 迴圈裡把 `"\\$2.png"` 寫進雙引號字串，bash 把 `\$` 當跳脫，路徑變成字面 `$2`。命令列路徑一律用正斜線。
+- 部署的 ok-tts 沒有新指令時「未知指令」仍以 0 結束，呼叫端讀到空輸出。未知指令改成回錯；呼叫外部工具一律檢查結束碼與輸出。
+- 歌唱面板第一版加在財務／電話那一列，面板太長時邀請按鈕在畫面外；字幕也沒顯示。新 UI 要看實際截圖確認看得到，不能只靠 `buttons` 列出按鈕名稱。
+- `OKT()` 回傳字元指標，`OKT(...)+TEXT(...)` 是兩個指標相加，編譯失敗；要先包成 `FString`。
+- 和攻略線同時用 `FreeTalk01HostD`：我的 prepare 在對方編譯中複製 Source，Build.bat 6 秒就「成功」，staging 拿到的是對方較早的 exe，新程式碼不在裡面（SongPick02）。共用 host 的建置要先等對方同意；新 stage 一律實際檢查新功能是否生效。
