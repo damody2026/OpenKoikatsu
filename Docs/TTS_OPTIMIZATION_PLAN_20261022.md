@@ -1,6 +1,6 @@
 # TTS 聲線一致性與低延遲優化計畫
 
-日期：2026-10-22。狀態：P0／P1 的伺服器部分已實作並在本機測過；P2 的 Base 固定聲線已接進伺服器並建好全部聲線的 profile，使用者試聽確認聲線一致（見 13.6），但遊戲使用的 ok-tts 執行檔尚未替換。
+日期：2026-10-22。狀態：P0／P1 的伺服器部分已實作並在本機測過；P2 的 Base 固定聲線已接進伺服器並建好全部聲線的 profile，使用者試聽確認聲線一致（見 13.6）；2026-10-23 已部署到 `Build/ok-tts`，下次啟動遊戲即使用 Base（尚未在遊戲中實測）。
 
 ## 1. 目標與決策
 
@@ -378,4 +378,6 @@ PCM 協定需明確標示 endian、sample rate、channels。目前標頭 `audio/
 
 Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描述，prefill 較短），但第二次負載較重時與 VoiceDesign 相當，還不能說「比較快」。
 
-尚未完成：正式的 `Build/ok-tts/ok-tts.exe` 還是舊版（量測時正被另一個 session 的遊戲使用），所以遊戲裡還聽不到 Base；部署後要在遊戲裡實際對話確認。speaker encoder 仍未與官方數值逐項核對（使用者試聽已確認效果）。英文台詞在 Base 下用中文參考句的聲紋說，沒有另外驗證。
+部署（2026-10-23）：`Build/ok-tts/ok-tts.exe` 換成本版（以 78796ab8 建置，sha256 前 16 碼 bd4eabf009d35bd2）；舊版改名為 `ok-tts.before-base.exe`（faa4f4bc…），舊 `package.json` 備份為 `package.before-base.json`，新的 `package.json` 記錄全部檔案雜湊與 profile 數。部署時舊版正被另一個 session 的遊戲使用：Windows 允許將執行中的 exe 改名，那個程序繼續跑舊版，下次啟動遊戲才換成 Base。以部署位置的新 exe 不帶參數啟動驗證過：自動選 Base、載入 262 份 profile、無缺漏、串流正常。回退：把 `profiles/` 改名，或把 `ok-tts.before-base.exe` 改回 `ok-tts.exe`。
+
+尚未完成：還沒在遊戲裡實際對話確認。speaker encoder 仍未與官方數值逐項核對（使用者試聽已確認效果）。英文台詞在 Base 下用中文參考句的聲紋說，沒有另外驗證。
