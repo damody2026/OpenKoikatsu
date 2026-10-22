@@ -381,3 +381,22 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
 部署（2026-10-23）：`Build/ok-tts/ok-tts.exe` 換成本版（以 78796ab8 建置，sha256 前 16 碼 bd4eabf009d35bd2）；舊版改名為 `ok-tts.before-base.exe`（faa4f4bc…），舊 `package.json` 備份為 `package.before-base.json`，新的 `package.json` 記錄全部檔案雜湊與 profile 數。部署時舊版正被另一個 session 的遊戲使用：Windows 允許將執行中的 exe 改名，那個程序繼續跑舊版，下次啟動遊戲才換成 Base。以部署位置的新 exe 不帶參數啟動驗證過：自動選 Base、載入 262 份 profile、無缺漏、串流正常。回退：把 `profiles/` 改名，或把 `ok-tts.before-base.exe` 改回 `ok-tts.exe`。
 
 尚未完成：還沒在遊戲裡實際對話確認。speaker encoder 仍未與官方數值逐項核對（使用者試聽已確認效果）。英文台詞在 Base 下用中文參考句的聲紋說，沒有另外驗證。
+
+### 13.7 壓縮的聲音檔、執行中換聲音、聲音存進角色卡（2026-10-23）
+
+使用者要求：profile 預設壓縮；玩家可在遊戲中重新產生最符合角色描述的聲音並固定存檔；聲音可以存在角色卡裡。
+
+**`.okvoice` 格式**（`profile.rs`）：一個檔案包含中繼資料 JSON（schema 2：id、來源 design／runtime、聲音描述原文、seed、參考句、參考音訊 sha1、模型 snapshot、encoder 版本、建立時間）、bf16 聲紋（2048 維，4 KB；talker 本來就以 bf16 使用，存 bf16 沒有損失）、OGG 參考錄音。schema 1 的 `<id>.json`＋`<id>.wav` 在執行 `ok-tts profile` 時自動轉換並刪除舊檔。本機 262 份從 106 MB 降到 18 MB（每份約 60 KB，其中約 55 KB 是參考錄音，保留它是為了能試聽與日後重算聲紋）。玩家在遊戲中選定的 profile（來源 runtime）不會被 `ok-tts profile` 覆蓋，除非加 `--force`。
+
+**角色卡**（`cardvoice.rs`）：同一份 `.okvoice` 位元組放在 PNG 的 `okVo` 區塊（輔助、私有、可安全複製，與 `okPv`／`okLc` 等同類），插在 IEND 前；影像不重新編碼，其他區塊與 IEND 之後的原作卡資料不變，寫入前先讀回驗證。重做 OK 卡時只會移除 `okLb`／`okLc`／`okPv`，所以 `okVo` 會被保留。移除聲音後，卡片與原檔逐位元組相同（已在 APNG 卡 `CrowdAPNG/C009.png` 的副本上驗證）。CLI：`ok-tts card-voice --card X.png [--set v.okvoice | --remove]`。
+
+**伺服器**（`voicemgr.rs`，Base 後端）：
+- 合成請求可帶 `card`（她的卡片絕對路徑）；卡裡有聲音就用它，否則用性格預設 profile。卡片依修改時間快取，讀不到時記錄並退回預設。快取鍵以實際使用的聲紋區分。`/requests` 的紀錄有 `voice: card|profile|design`。
+- `POST /voice/candidates`：VoiceDesign 只在這次呼叫中與 Base 一起載入，用（可自訂的）描述與新的 seed 產生 1～6 個參考錄音，算出聲紋，再由 Base 用每個候選說一句預覽，輸出 OGG。2 個候選約 19 秒，期間其他合成會等候。
+- `POST /voice/fix`：把候選（或目前的預設聲音）存進角色卡，及／或設為該性格的預設（舊檔保留為 `.okvoice.prev`），立即生效。`GET /voice/card`、`POST /voice/card/remove`。
+
+**修正的顯存洩漏**：`Engine` 的欄位依宣告順序釋放，`gpu`（stream）排在第一個，之後模型權重要在已銷毀的 stream 上 `free_async`，失敗被忽略，卸下的引擎整份模型（約 6 GB）留在顯存。改為 `gpu` 最後釋放（`Gpu` 內部也改成 cuBLAS 與 workspace 先於 stream 釋放）。修正前每次產生候選後多佔約 6.3 GB，修正後第一次約 +0.7 GB，之後不再增加（背景有遊戲與 Editor，數字有雜訊）。這個問題也影響 `ok-tts profile` 與 `consistency`（先後載入兩個模型）。
+
+**遊戲**（`OKStreetSocialVoicePick.inl`）：女角的語音請求（腳本台詞與自由對話）帶上她的卡片路徑（`HighCards[i]`）。右側語音面板在她的聲音描述下方顯示「卡裡是否有專屬聲音」，並有「換聲音…」：可編輯的聲音描述（預設為性格描述）、產生 3 個候選、每個候選可「試聽」（她用候選聲音說預覽句）、「聽參考句」、「存進她的角色卡」、「設為這個性格的預設」；另有「把目前的聲音存進她的角色卡」與「還原為性格預設聲音」。介面字串在三種語言的 `ui_text.toml`。玩家角色的聲音仍由男聲選單決定，不讀他的卡。
+
+尚未完成：遊戲端只做了編譯確認，沒有打包 stage、沒有在遊戲中實際操作；伺服器端流程（候選、存卡、用卡合成、存預設、移除）已用測試卡副本驗證。

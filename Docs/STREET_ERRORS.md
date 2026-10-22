@@ -493,3 +493,4 @@
 - 模型載入中的測試請求在檢查「載入中」之前就 `create_dir_all(out_dir)`，在 `C:\x\none` 建出空目錄。已改成寫入快取時才建目錄；測試請求的 `out_dir` 一律指向暫存目錄。
 - profile 檔名以 `-` 開頭（性格 `-100@18.wav`），`ls *.wav` 把它當成選項而失敗，進度看成 0；接著把這行字傳給 `lua.exe` 當參數，又因開頭的 `-` 被當成選項。以 `-` 開頭的檔名或字串，命令列一律放在 `--` 之後，或改用 Edit 工具、在 Lua／Rust 裡讀目錄。
 - 部署時重寫 `Build/ok-tts/package.json`：Lua 腳本在同一行先 `io.open(..., "wb")` 再呼叫 `json.encode`，而專案的 `json.lua` 只有 decode，結果檔案先被清空才報錯（幸好先做了備份）。另外 bash heredoc 寫進 Lua 字串的 `\\` 被吃成 `\`，產生無效跳脫。寫檔一律先在記憶體產生完整內容、成功後才開檔；含反斜線的腳本用 Write／Edit 工具寫，不經 shell heredoc。
+- ok-tts 卸下 VoiceDesign 引擎後顯存沒有歸還（約 6 GB）：Rust 結構的欄位依宣告順序釋放，`Engine` 把 `gpu`（CUDA stream）放第一個，權重緩衝區之後才在已銷毀的 stream 上 `free_async`，錯誤被 `let _ =` 吞掉。持有 GPU 資源的結構，擁有 stream／context 的欄位放最後；釋放失敗至少要記錄。另外又一次把含撇號的 Lua 腳本寫進 bash heredoc 而解析失敗——腳本一律用 Write 工具寫。

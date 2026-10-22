@@ -600,6 +600,13 @@ private:
  void LoadPlayerName();
  void SetPlayerName(const FString& Name);
  void ProbeVoiceInfo();
+ // Her own voice (OKStreetSocialVoicePick.inl).
+ void ProbeCardVoice();
+ void RequestVoiceCandidates();
+ void PlayVoiceCandidate(int32 Index,bool Reference);
+ void FixVoiceCandidate(int32 Index,bool AsDefault);
+ void RemoveCardVoice();
+ void AddVoicePickUI(TSharedRef<class SVerticalBox> Box);
  FString MaleToneLabel() const;
  bool QueueNode(int32 Node,const FString& Category,const FString& BranchId=FString());
  void SetSourcePlayerLine(const FString& Text);

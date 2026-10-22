@@ -419,6 +419,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool TtsEnabled=false,TtsPending=false;FString TtsEndpoint=TEXT("http://127.0.0.1:47860"),TtsCacheDir,TtsSettingsPath,TtsNotice;int32 TtsAge=18,TtsLines=0,TtsFallbacks=0;uint32 TtsSerial=0;double TtsRequestedAt=0,TtsTimeout=15;bool TtsSmoke=false,TtsSmokeStarted=false;
  // Player (male) TTS line before her reply: MalePhase 0 none, 1 waiting for the clip, 2 speaking, 3 done/skipped.
  FString PlayerCardName,PlayerNameDraft,MaleTone=TEXT("m0"),MaleVoiceId,MaleLineOverride,LastBranchId,TtsVoiceInfo;bool MaleTtsPending=false,MaleAddressed=false;int32 MalePhase=0,TtsSmokeTopics=0;double MaleRequestedAt=0;uint32 MaleSerial=0;TArray<TSharedPtr<FString>> MaleToneOptions;
+ // Her own voice (OKStreetSocialVoicePick.inl): candidates from ok-tts, whether her card holds a voice.
+ struct FVoiceCandidate {FString Tag,Reference,Preview;};TArray<FVoiceCandidate> VoicePickCandidates;bool VoicePickOpen=false,VoicePickBusy=false,CardHasVoice=false;FString VoicePickDescription,VoicePickNotice,TtsVoiceInstruct;int32 VoicePickTarget=INDEX_NONE;
  FOKStreetStore Store;
  TArray<FOKStreetAgentSim> Agents;
  TArray<FRotator> Rotations,RenderedRotations;
@@ -948,6 +950,7 @@ bool AOKStreetSocialScene::QueueNode(int32 Chosen,const FString& Category,const 
 }
 
 #include "OKStreetSocialInvitations.inl"
+#include "OKStreetSocialVoicePick.inl"
 #include "OKStreetSocialVoice.inl"
 #include "OKStreetSocialTouchReaction.inl"
 
@@ -1449,6 +1452,7 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
  const bool bStreamRequest=S.FreeTalkSpeechStreamed[Index]==0;
  Body->SetStringField(TEXT("channel"),S.FreeTalkSpeechChannel);Body->SetNumberField(TEXT("generation"),Generation);Body->SetNumberField(TEXT("segment_index"),Index);
  Body->SetStringField(TEXT("request_id"),FString::Printf(TEXT("%s-%d-%d-%s"),*S.FreeTalkSpeechChannel.Right(8),Generation,Index,bStreamRequest?TEXT("s"):TEXT("f")));
+ if(const FString Card=OKStreetCardFor(S,Character);!Card.IsEmpty())Body->SetStringField(TEXT("card"),Card);
  FString Payload;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Payload));
  auto Request=FHttpModule::Get().CreateRequest();
  Request->SetVerb(TEXT("POST"));Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(S.TtsTimeout);
@@ -1942,6 +1946,7 @@ void AOKStreetSocialScene::RebuildUI(){
    .OnSelectionChanged_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](TSharedPtr<FString> Item,ESelectInfo::Type Info){if(!Weak.IsValid()||!Item.IsValid()||Info==ESelectInfo::Direct)return;const int32 I=Weak->State->MaleToneOptions.IndexOfByKey(Item);if(I!=INDEX_NONE)Weak->SetMaleTone(I);})
    [SNew(STextBlock).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(OKT(TEXT("ui.scene.his_tone_label"))+(Weak.IsValid()?Weak->MaleToneLabel():FString()));})]];
   if(S.Target!=INDEX_NONE&&!S.TtsVoiceInfo.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.TtsVoiceInfo)).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Regular",11))];
+  AddVoicePickUI(Box);
  }
  if(!S.TtsNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TtsNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.ShowDebug?OKT(TEXT("ui.scene.collapse_heroine_stats")):OKT(TEXT("ui.scene.heroine_stats_view_edit")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->ShowDebug=!Weak->State->ShowDebug;Weak->RefreshUI();}return FReply::Handled();})];

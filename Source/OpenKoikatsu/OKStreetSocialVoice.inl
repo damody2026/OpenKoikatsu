@@ -98,11 +98,12 @@ void AOKStreetSocialScene::ProbeVoiceInfo(){
  Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Target](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
   if(!State||State->Target!=Target)return;auto& S=*State;TSharedPtr<FJsonObject> J;FString Key,Name,Label,Instruct;
   if(!Connected||!Response.IsValid()||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()),J)||!J.IsValid()||!J->TryGetStringField(TEXT("instruct"),Instruct))return;
-  J->TryGetStringField(TEXT("personality"),Key);J->TryGetStringField(TEXT("name"),Name);J->TryGetStringField(TEXT("label"),Label);
+  J->TryGetStringField(TEXT("personality"),Key);J->TryGetStringField(TEXT("name"),Name);J->TryGetStringField(TEXT("label"),Label);S.TtsVoiceInstruct=Instruct;
   S.TtsVoiceInfo=OKMsg(TEXT("ui.voice.heroine_voice_profile"), {{TEXT("heroine_name"), *S.Manifest.Characters[Target].Name}, {TEXT("trait_key"), *Key}, {TEXT("trait_name"), *Name}, {TEXT("trait_label"), *Label}, {TEXT("tts_hint"), *Instruct}});
   RefreshUI();
  });
  Request->ProcessRequest();
+ ProbeCardVoice();
 }
 
 // The server starts with the game and needs ~10 s to load its model, so "not ready" at launch is normal: ask again
@@ -128,6 +129,8 @@ void AOKStreetSocialScene::RequestTtsLine(const FString& Text,const FString& Voi
  auto& S=*State;const uint32 Serial=Male?++S.MaleSerial:++S.TtsSerial;
  if(Male){S.MaleTtsPending=true;S.MaleRequestedAt=SceneTime();}else{S.TtsPending=true;S.TtsRequestedAt=SceneTime();}
  auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("text"),Text);Body->SetStringField(TEXT("personality"),Voice);Body->SetNumberField(TEXT("age"),S.TtsAge);Body->SetStringField(TEXT("out_dir"),S.TtsCacheDir);
+ // Her card: a voice of her own stored there is used (the player's tone comes from the menu, not his card).
+ if(!Male)if(const FString Card=OKStreetCardFor(S,S.Target);!Card.IsEmpty())Body->SetStringField(TEXT("card"),Card);
  FString Payload;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Payload));
  auto Request=FHttpModule::Get().CreateRequest();
  Request->SetURL(S.TtsEndpoint/TEXT("synthesize"));Request->SetVerb(TEXT("POST"));Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(S.TtsTimeout);

@@ -7,7 +7,9 @@
 //!        line is written to the cache, so a following /synthesize for it answers with its path without generating.
 //!   POST /cancel {"channel", "below"} -> requests of that channel with generation < below stop (queued or generating)
 //!   GET  /requests[?id=..] -> what became of a request (complete / cancelled / hangup / failed) and its timings
-//! Optional request fields (protocol 2): "request_id", "channel", "generation", "segment_index", and for measuring
+//!   /voice/candidates, /voice/fix, /voice/card, /voice/card/remove: choosing and fixing voices (Base backend, voicemgr.rs)
+//! Optional request fields (protocol 2): "request_id", "channel", "generation", "segment_index", "card" (her card: a
+//! voice stored in it is used), and for measuring
 //! "stream_later_frames".
 //! Binds 127.0.0.1 only. The model loads in the background; /health reports ready=false until then, and cached lines
 //! are answered meanwhile.
@@ -29,7 +31,8 @@ use sha1_smol::Sha1;
 
 use crate::audio::{decode_ogg, encode_ogg, pcm16, peak_normalize, rms, trim_silence, write_atomic, StreamTrim};
 use crate::engine::{Engine, BASE_MODEL_ID, MODEL_ID, SAMPLE_RATE};
-use crate::profile::profile_id;
+use crate::profile::{profile_id, Profile};
+use crate::voicemgr::{self, BaseVoices};
 use crate::talker::GenConfig;
 use crate::text::{clean_line, VoiceChoice, Voices};
 
@@ -37,7 +40,7 @@ const MAX_TEXT_CHARS: usize = 400;
 const CACHE_VERSION: &str = "ok-tts-3"; // 3: one seed per voice
 const BASE_CACHE_VERSION: &str = "ok-tts-base-1";
 const PROTOCOL: u32 = 2;
-const CAPABILITIES: &[&str] = &["stream", "stream_cache_hit", "shared_synthesis", "cancel", "request_status", "voice_while_loading"];
+const CAPABILITIES: &[&str] = &["stream", "stream_cache_hit", "shared_synthesis", "cancel", "request_status", "voice_while_loading", "card_voice", "voice_candidates"];
 /// How long a request waits for another one making the same line before it tries itself.
 const JOIN_WAIT: Duration = Duration::from_secs(60);
 const RECENT: usize = 256;
@@ -62,8 +65,8 @@ struct Flight {
 struct State {
     engine: Mutex<Option<Engine>>,
     voices: Voices,
-    /// Base backend: profile id -> tag of its speaker embedding (in the cache key). None: VoiceDesign.
-    profile_tags: Option<HashMap<String, String>>,
+    /// Base backend: profiles, card voices, candidates (voicemgr.rs). None: VoiceDesign.
+    base: Option<BaseVoices>,
     ready: AtomicBool,
     load_error: Mutex<Option<String>>,
     stats: Stats,
@@ -94,6 +97,9 @@ struct SynthRequest {
     /// Frames per streamed piece after the first, for this request only (measuring; 1..=25).
     #[serde(default)]
     stream_later_frames: Option<usize>,
+    /// The speaker's card (absolute path): a voice stored in it (okVo) is used instead of her design's default.
+    #[serde(default)]
+    card: Option<String>,
 }
 
 /// A validated request: the cleaned line, its voice and its cache file.
@@ -109,6 +115,10 @@ struct Job {
     generation: Option<u64>,
     segment: Option<i64>,
     later_frames: Option<usize>,
+    /// Base: the card's own voice; None = the design's profile (or VoiceDesign)
+    speaker: Option<Arc<Profile>>,
+    /// "card", "profile" or "design"
+    voice_from: &'static str,
 }
 
 /// Times of one request, in seconds since the server received it (one process, one monotonic clock).
@@ -137,7 +147,7 @@ impl Trace {
                     job.segment.map(|s| s.to_string()).unwrap_or_else(|| "-".into()), times.join(" "), job.text);
         let mut record = json!({"request_id": job.id, "kind": self.kind, "status": status, "cache": cache, "text": job.text,
                                 "personality": job.voice.key, "age": job.voice.age, "channel": job.channel, "generation": job.generation,
-                                "segment_index": job.segment, "times": marks});
+                                "segment_index": job.segment, "voice": job.voice_from, "times": marks});
         if let (Some(r), Some(e)) = (record.as_object_mut(), extra.as_object()) {
             r.extend(e.clone());
         }
@@ -150,11 +160,11 @@ impl Trace {
     }
 }
 
-pub fn serve(port: u16, workers: usize, voices: Voices, profile_tags: Option<HashMap<String, String>>, load: impl FnOnce() -> Result<Engine> + Send + 'static) -> Result<()> {
+pub fn serve(port: u16, workers: usize, voices: Voices, base: Option<BaseVoices>, load: impl FnOnce() -> Result<Engine> + Send + 'static) -> Result<()> {
     let server = tiny_http::Server::http(("127.0.0.1", port)).map_err(|e| anyhow::anyhow!("bind 127.0.0.1:{port}: {e}"))?;
     let server = Arc::new(server);
     let state = Arc::new(State {
-        engine: Mutex::new(None), voices, profile_tags, ready: AtomicBool::new(false), load_error: Mutex::new(None), stats: Stats::default(),
+        engine: Mutex::new(None), voices, base, ready: AtomicBool::new(false), load_error: Mutex::new(None), stats: Stats::default(),
         inflight: Mutex::new(HashMap::new()), cancel_floor: Mutex::new(HashMap::new()), active: Mutex::new(HashSet::new()),
         recent: Mutex::new(VecDeque::new()), next_id: AtomicU64::new(1),
     });
@@ -243,9 +253,10 @@ fn handle(state: &Arc<State>, mut req: tiny_http::Request) {
             let s = &state.stats;
             let ready = state.ready.load(Ordering::SeqCst);
             respond(req, 200, json!({
-                "ok": ready, "ready": ready, "model": if state.profile_tags.is_some() { BASE_MODEL_ID } else { MODEL_ID }, "engine": "ok-tts (Rust, CUDA)",
-                "backend": if state.profile_tags.is_some() { "base" } else { "design" },
-                "profiles": state.profile_tags.as_ref().map(|t| t.len()),
+                "ok": ready, "ready": ready, "model": if state.base.is_some() { BASE_MODEL_ID } else { MODEL_ID }, "engine": "ok-tts (Rust, CUDA)",
+                "backend": if state.base.is_some() { "base" } else { "design" },
+                "profiles": state.base.as_ref().map(|b| b.tags.lock().unwrap().len()),
+                "voice_design_available": state.base.as_ref().map(|b| b.design_model.is_some()),
                 "protocol": PROTOCOL, "capabilities": CAPABILITIES, "pcm": {"format": "s16le", "rate": SAMPLE_RATE, "channels": 1},
                 "error": state.load_error.lock().unwrap().clone(),
                 "requests": s.requests.load(Ordering::Relaxed), "generated": s.generated.load(Ordering::Relaxed),
@@ -266,8 +277,38 @@ fn handle(state: &Arc<State>, mut req: tiny_http::Request) {
                 }
             }
             let v = state.voices.choose(&personality, age);
-            let profile = state.profile_tags.as_ref().map(|t| json!({"id": profile_id(&v), "present": t.contains_key(&profile_id(&v))}));
+            let profile = state.base.as_ref().map(|b| json!({"id": profile_id(&v), "present": b.tags.lock().unwrap().contains_key(&profile_id(&v))}));
             respond(req, 200, json!({"ok": true, "personality": v.key, "age": v.age, "name": v.name, "label": v.label, "instruct": v.instruct, "profile": profile}));
+        }
+        (tiny_http::Method::Get, "/voice/card") => {
+            let card = query_pairs(&url).into_iter().find(|(k, _)| k == "card").map(|(_, v)| PathBuf::from(v));
+            let result = match (&state.base, card) {
+                (None, _) => Err(anyhow::anyhow!("voices in cards need the Base backend")),
+                (_, None) => Err(anyhow::anyhow!("card is required")),
+                (Some(b), Some(c)) => voicemgr::card_info(b, &c),
+            };
+            match result {
+                Ok(v) => respond(req, 200, v),
+                Err(e) => respond(req, 400, json!({"ok": false, "error": format!("{e:#}")})),
+            }
+        }
+        (tiny_http::Method::Post, p @ ("/voice/candidates" | "/voice/fix" | "/voice/card/remove")) => {
+            let p = p.to_string();
+            let result = read_body(&mut req).and_then(|b| Ok(serde_json::from_str::<Value>(&b)?)).and_then(|body| {
+                let b = state.base.as_ref().ok_or_else(|| anyhow::anyhow!("choosing voices needs the Base backend (ok-tts profile)"))?;
+                match p.as_str() {
+                    "/voice/candidates" => voicemgr::candidates(&state.engine, b, &state.voices, &body),
+                    "/voice/fix" => voicemgr::fix(&state.engine, b, &state.voices, &body),
+                    _ => voicemgr::card_remove(b, &body),
+                }
+            });
+            match result {
+                Ok(v) => respond(req, 200, v),
+                Err(e) => {
+                    crate::log!("ok-tts: VOICE FAIL {p}: {e:#}");
+                    respond(req, error_code(&e), json!({"ok": false, "error": format!("{e:#}")}));
+                }
+            }
         }
         (tiny_http::Method::Get, "/requests") => {
             let id = query_pairs(&url).into_iter().find(|(k, _)| k == "id").map(|(_, v)| v);
@@ -358,16 +399,34 @@ fn prepare(state: &State, r: SynthRequest) -> Result<Job> {
     let personality = personality_string(&r.personality);
     let age = r.age.unwrap_or(18);
     let voice = state.voices.choose(&personality, age);
-    let tag = match &state.profile_tags {
-        Some(tags) => Some(tags.get(&profile_id(&voice)).cloned().ok_or_else(|| anyhow::anyhow!("no voice profile {} (run ok-tts profile)", profile_id(&voice)))?),
-        None => None,
+    let card = r.card.as_deref().filter(|c| !c.is_empty()).map(PathBuf::from);
+    let (tag, speaker, voice_from) = match &state.base {
+        None => (None, None, "design"),
+        Some(b) => {
+            // A voice in her card wins; a card that cannot be read falls back to the design's voice, with a note.
+            let own = match &card {
+                Some(c) => b.card_voice(c).unwrap_or_else(|e| {
+                    crate::log!("ok-tts: card voice not read ({e:#}); using the design's voice");
+                    None
+                }),
+                None => None,
+            };
+            match own {
+                Some(p) => (Some(p.tag()), Some(p), "card"),
+                None => {
+                    let tag = b.tags.lock().unwrap().get(&profile_id(&voice)).cloned()
+                        .ok_or_else(|| anyhow::anyhow!("no voice profile {} (run ok-tts profile)", profile_id(&voice)))?;
+                    (Some(tag), None, "profile")
+                }
+            }
+        }
     };
     let path = cache_path(&out_dir, &voice, &text, tag.as_deref());
     let id = r.request_id.filter(|s| !s.is_empty() && s.len() <= 128)
         .unwrap_or_else(|| format!("s{}", state.next_id.fetch_add(1, Ordering::Relaxed)));
     state.active.lock().unwrap().insert(id.clone());
     Ok(Job { id, text, chars, personality, age, voice, path, channel: r.channel, generation: r.generation, segment: r.segment_index,
-            later_frames: r.stream_later_frames.map(|n| n.clamp(1, 25)) })
+            later_frames: r.stream_later_frames.map(|n| n.clamp(1, 25)), speaker, voice_from })
 }
 
 /// The caller has moved on (a newer conversation generation was announced on /cancel).
@@ -484,7 +543,7 @@ fn synthesize_job(state: &Arc<State>, job: &Job, trace: &mut Trace) -> Result<(V
             bail!("cancelled");
         }
         let engine = lock.as_ref().ok_or_else(|| anyhow::anyhow!("model is not loaded"))?;
-        let mut speech = engine.speak(&job.text, &job.personality, job.age, GenConfig::default())?;
+        let mut speech = engine.speak_voice(&job.text, &job.personality, job.age, job.speaker.as_ref().map(|p| p.embedding.as_slice()), GenConfig::default())?;
         drop(lock);
         trace.mark("generated");
         let audio_seconds = store(&mut speech.samples, &job.path)?;
@@ -623,7 +682,8 @@ fn stream_job(state: &Arc<State>, job: &Job, tx: &std::sync::mpsc::Sender<Vec<u8
             }
             Ok(())
         };
-        let result = engine.speak_stream(&job.text, &job.personality, job.age, GenConfig::default(), job.later_frames, &mut sink);
+        let result = engine.speak_stream(&job.text, &job.personality, job.age, job.speaker.as_ref().map(|p| p.embedding.as_slice()),
+                                          GenConfig::default(), job.later_frames, &mut sink);
         drop(sink);
         let speech = match result {
             Ok(s) => s,

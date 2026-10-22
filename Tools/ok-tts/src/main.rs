@@ -5,6 +5,7 @@
 //!       base (the default when <exe>/profiles has profiles and the Base model is found): every voice is the fixed
 //!       speaker embedding of its profile, so a character keeps one voice; design: VoiceDesign from the description.
 //!   ok-tts profile [--base DIR] [--profiles DIR] [--keys 08,m0] [--ages 18] [--ref-text TEXT] [--force]   (see profile.rs)
+//!   ok-tts card-voice --card CARD.png [--set VOICE.okvoice | --remove]   (a character's own voice; see cardvoice.rs)
 //!   ok-tts say    --text TEXT [--personality 00] [--age 18] [--out line.ogg|line.wav] [--greedy]
 //!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
 //!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
@@ -20,6 +21,7 @@ mod parent;
 mod profile;
 mod audio;
 mod bench;
+mod cardvoice;
 mod codec;
 mod consistency;
 mod engine;
@@ -29,6 +31,7 @@ mod server;
 mod speaker;
 mod talker;
 mod text;
+mod voicemgr;
 mod weights;
 
 use std::collections::HashMap;
@@ -127,6 +130,7 @@ fn main() {
         "bench" => cmd_bench(&args),
         "consistency" => cmd_consistency(&args),
         "profile" => cmd_profile(&args),
+        "card-voice" => cmd_card_voice(&args),
         "speaker-sim" => args.opts.get("base").context("--base is required")
             .and_then(|b| consistency::similarity(Path::new(b), &args.positional)),
         _ => {
@@ -170,7 +174,14 @@ fn cmd_serve(args: &Args) -> Result<()> {
         crate::log!("ok-tts: backend base, {} profiles from {}{}", profiles.len(), profiles_dir.display(),
                     if missing.is_empty() { String::new() } else { format!(" (missing {}: {})", missing.len(), missing.join(" ")) });
         let tags = profiles.iter().map(|(id, p)| (id.clone(), p.tag())).collect();
-        return server::serve(port, 8, voice_table, Some(tags), move || {
+        // The speaker encoder (CPU) turns new candidate voices into embeddings while the server runs.
+        let store = weights::Store::open(&base.join("model.safetensors"))?;
+        let encoder = speaker::SpeakerEncoder::load(&store).context("speaker encoder")?;
+        drop(store);
+        let design = Some(model.clone()).filter(|m| m.join("model.safetensors").is_file());
+        let voices_path = voices.clone();
+        let base_voices = voicemgr::BaseVoices::new(tags, profiles_dir.clone(), base.clone(), design, voices_path, positions, encoder);
+        return server::serve(port, 8, voice_table, Some(base_voices), move || {
             let mut engine = Engine::load(&base, &voices, positions)?;
             engine.profiles = Some(profiles);
             engine.stream_later_frames = later.max(1);
@@ -187,6 +198,23 @@ fn cmd_serve(args: &Args) -> Result<()> {
 
 fn profiles_dir(args: &Args) -> PathBuf {
     args.opts.get("profiles").map(PathBuf::from).unwrap_or_else(|| exe_dir().join("profiles"))
+}
+
+fn cmd_card_voice(args: &Args) -> Result<()> {
+    let card = PathBuf::from(args.opts.get("card").context("--card is required")?);
+    if let Some(v) = args.opts.get("set") {
+        let voice = profile::Profile::load(Path::new(v))?;
+        cardvoice::write_file(&card, Some(&voice))?;
+        println!("stored voice {} (tag {}) in {}", voice.meta.id, voice.tag(), card.display());
+    } else if args.flags.iter().any(|f| f == "remove") {
+        cardvoice::write_file(&card, None)?;
+        println!("removed the voice from {}", card.display());
+    }
+    match cardvoice::read_file(&card)? {
+        Some(p) => println!("{}", serde_json::to_string_pretty(&serde_json::json!({"tag": p.tag(), "meta": p.meta, "reference_ogg_bytes": p.ref_ogg.len()}))?),
+        None => println!("no voice in {}", card.display()),
+    }
+    Ok(())
 }
 
 fn cmd_profile(args: &Args) -> Result<()> {
