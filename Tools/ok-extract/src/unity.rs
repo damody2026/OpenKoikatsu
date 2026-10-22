@@ -1983,6 +1983,8 @@ static BUNDLE_CACHE_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic
 thread_local! { static BUNDLE_CACHE_SEEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) }; }
 // The old main-UV scan also tried offset+8 inside interleaved records; set only by the scan that lists what it changed.
 thread_local! { pub(crate) static UV_LEGACY_PADDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+// The old rule without the tiled-UV fallback in `decode_uvs` (for listing the sources it changes).
+thread_local! { pub(crate) static UV_NO_TILED_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 fn sync_bundle_cache() {
     let current = BUNDLE_CACHE_GENERATION.load(std::sync::atomic::Ordering::Acquire);
     if BUNDLE_CACHE_SEEN.with(|seen| seen.replace(current)) != current {
@@ -5000,6 +5002,9 @@ fn decode_uvs(mesh: &unity_asset_decode::mesh::Mesh) -> Vec<[f32; 2]> {
     // (o_body_a uses TexCoord1 while TexCoord0 is garbage). Pick the channel
     // whose values look like real UVs.
     let mut best: Option<(f32, Vec<[f32; 2]>)> = None;
+    // Tiled UVs (a 10 m Studio floor quad runs 0..10) fail the narrow range below; when no channel passes it, the
+    // first channel whose every value is finite and within a wide range is the UV (it was all zeros before).
+    let mut tiled: Option<Vec<[f32; 2]>> = None;
     // The main texture UV can sit in any 2-component channel: the face uses
     // TexCoord0..3 (channels 4-7), the body uses texcoord1 (channel 4 with a
     // 4-byte offset), the pantshot uses channel 3. Scan every 2-component
@@ -5066,6 +5071,7 @@ fn decode_uvs(mesh: &unity_asset_decode::mesh::Mesh) -> Vec<[f32; 2]> {
         // Require a non-degenerate UV set (not all zeros).
         let total: f64 = uv.iter().map(|p| p[0].abs() as f64 + p[1].abs() as f64).sum();
         let not_zero = total > 1.0;
+        if tiled.is_none() && not_zero && uv.iter().all(|p| p.iter().all(|v| v.is_finite() && v.abs() <= 4096.0)) { tiled = Some(uv.clone()); }
         if not_zero && best.as_ref().map(|b| score > b.0).unwrap_or(true) {
             best = Some((score, uv));
         }
@@ -5083,6 +5089,14 @@ fn decode_uvs(mesh: &unity_asset_decode::mesh::Mesh) -> Vec<[f32; 2]> {
             mesh.name,
             info.join(" ")
         );
+        // A small mesh: every 2-component channel's raw values.
+        if n <= 8 {
+            for (ci, c) in chs.iter().enumerate().filter(|(_, c)| c.dimension == 2 && (c.stream as usize) < strides.len()) {
+                let (stride, base) = (strides[c.stream as usize], stream_off[c.stream as usize]);
+                let values: Vec<[f32; 2]> = (0..n).map(|i| { let o = base + i * stride + c.offset as usize; [read_vertex_component(data, o, c.format), read_vertex_component(data, o + format_size(c.format), c.format)] }).collect();
+                eprintln!("ok-extract: UVDIAG {} channel {ci} values {values:?}", mesh.name);
+            }
+        }
     }
     if std::env::var("OK_UVPEEK").is_ok() && mesh.name.to_ascii_lowercase().contains("hitomi") {
         let s = chs[4].stream as usize;
@@ -5107,7 +5121,7 @@ fn decode_uvs(mesh: &unity_asset_decode::mesh::Mesh) -> Vec<[f32; 2]> {
     }
     match best {
         Some((score, uv)) if score > 0.5 => uv,
-        _ => vec![[0.0, 0.0]; n],
+        _ => tiled.filter(|_| !UV_NO_TILED_FALLBACK.with(|f| f.get())).unwrap_or_else(|| vec![[0.0, 0.0]; n]),
     }
 }
 
