@@ -85,6 +85,8 @@ pub struct Facts {
     pub view: Option<Xf>,
     /// Its horizontal field of view (degrees).
     pub view_fov: Option<f64>,
+    /// Width over height of the picture that camera fills, when the story view (`viewport`) covers only part of it.
+    pub view_aspect: Option<f64>,
     /// Results of the probes the last frame asked for.
     pub probes: Vec<ProbeResult>,
 }

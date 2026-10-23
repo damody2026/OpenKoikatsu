@@ -109,7 +109,7 @@ impl Live {
             actors: &self.facts.actors,
             cameras: &[],
             active_camera: None,
-            aspect: if self.facts.viewport[1] > 0.0 { self.facts.viewport[0] / self.facts.viewport[1] } else { 16.0 / 9.0 },
+            aspect: self.facts.view_aspect.filter(|a| *a > 0.0).unwrap_or(if self.facts.viewport[1] > 0.0 { self.facts.viewport[0] / self.facts.viewport[1] } else { 16.0 / 9.0 }),
         };
         let mut out = camera::candidates(&self.tuning.camera, spec, &ctx, &self.st.rig.current);
         // A close-up never looks through the other person: views passing near their head or chest go last.
