@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ok-game": {
+      "command": "cargo",
+      "args": ["run", "--release", "--quiet", "--manifest-path", "Tools/ok-game-mcp/Cargo.toml"],
+      "env": {}
+    }
+  }
+}

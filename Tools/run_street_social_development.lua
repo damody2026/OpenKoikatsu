@@ -25,7 +25,7 @@ local instance = require "ok_instance"
 
 local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true, editor = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
-  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true }
+  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true, exec = true, trace = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -339,7 +339,7 @@ local function main()
     if not copied then say("Heroine mind DLL in use, keeping the previous copy: " .. tostring(err)) end
   end
   -- Game rules (Tools/ok-rules): required. Built here when cargo is available (a no-op when up to date); the game loads
-  -- a copy so cargo can rebuild while it runs, and ok.StreetRules.Reload (or street_play.lua rules reload) swaps it in.
+  -- a copy so cargo can rebuild while it runs, and ok.StreetRules.Reload (or ok-game-mcp game_call /rules reload) swaps it in.
   local rules_crate = path.join(root, "Tools/ok-rules")
   -- -RulesDll (sandbox): a rules build of its own (e.g. made with another CARGO_TARGET_DIR), so testing new rules never
   -- swaps the DLL the other game hot-reloads.
@@ -387,7 +387,7 @@ local function main()
     OK_ASR_SETTINGS = asr_settings,
     OK_ASR_SERVER = path.join(root, "Build/ok-asr/ok-asr.exe"),
     OK_MIND_DLL = path.is_file(mind_dll) and mind_dll or "",
-    -- The build the mind's hot reload watches (street_play.lua mind reload).
+    -- The build the mind's hot reload watches (ok-game-mcp game_call /mind reload).
     OK_MIND_SOURCE_DLL = mind_source,
   }
   -- Paths in Windows form; the voice endpoints are URLs ("http://127.0.0.1:47861") and stay as they are.
@@ -407,16 +407,25 @@ local function main()
   game[#game + 1] = "-abslog=" .. path.join(output, "game.log")
   game[#game + 1] = "-RuntimeGpuCacheMiB=4096"
   local q = build.runtime_render_quality
+  local execs = {}
   if q then
     local scale = render_scale > 0 and render_scale or q.screen_percentage
-    game[#game + 1] = ("-ExecCmds=r.AntiAliasingMethod %s,r.ScreenPercentage %s"):format(util.str(q.antialiasing_method), util.str(scale))
+    execs[#execs + 1] = ("r.AntiAliasingMethod %s,r.ScreenPercentage %s"):format(util.str(q.antialiasing_method), util.str(scale))
+  end
+  -- Profiling (development): -Exec "stat dumphitches,t.HitchFrameTimeThreshold 60" runs console commands at start;
+  -- -Trace records an Unreal Insights trace (default channels default,cpu,gpu,frame,bookmark) to trace.utrace beside game.log.
+  if o.exec then execs[#execs + 1] = o.exec end
+  if #execs > 0 then game[#game + 1] = "-ExecCmds=" .. table.concat(execs, ",") end
+  if o.trace then
+    game[#game + 1] = "-trace=" .. ((o.trace == true or o.trace == "") and "default,cpu,gpu,frame,bookmark" or o.trace)
+    game[#game + 1] = "-tracefile=" .. path.join(output, "trace.utrace"); game[#game + 1] = "-statnamedevents"
   end
   if o.selftest then for _, a in ipairs({ "-StreetSocialSelfTest", "-unattended", "-RenderOffscreen" }) do game[#game + 1] = a end end
   -- Development control channel (http://127.0.0.1:<port>: state, say, click, key, navigate, screenshot); never on by default.
   if o.control then game[#game + 1] = "-StreetSocialControl"; game[#game + 1] = "-StreetSocialControlPort=" .. control_port end
   if o.clock then game[#game + 1] = "-StreetSocialClock=" .. o.clock end
   say("StreetSocial: one male + up to ten heroines. WASD move, Shift run, mouse camera, Ctrl/middle UI cursor, wheel zoom, E talk, 1/2/3 topics, Esc cancel, L Chinese/Japanese voices, V built-in/TTS voice, N skip to 07:00 next morning; friendship/confession results save automatically after dialogue; F9 CPU/GPU; conversation buttons: shared walk/explore, photo (P save), seated talk, drinks, splash either direction; Esc ends activity. Reading uses a hand-held book.")
-  if o.control then say(("Control channel: http://127.0.0.1:%d (street_play.lua finds it through local-instance.json)"):format(control_port)) end
+  if o.control then say(("Control channel: http://127.0.0.1:%d (Tools/ok-game-mcp finds it through local-instance.json)"):format(control_port)) end
   local pid = proc.spawn(game, { cwd = root, hide = o.selftest and true or nil })
   path.write_text(path.join(output, "game.pid"), tostring(pid))
   local server_pids = {}

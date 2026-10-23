@@ -35,7 +35,7 @@ Build/ok-song/ok-song.exe generate --request E:/OkSong/test/req-march7.json
 Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox VoiceTest -PortBase 48060 -RulesDll <自建 ok_rules.dll>
 ```
 
-遊戲中測試（控制埠 48070）：`OK_CONTROL_PORT=48070 Tools/lua/lua.exe Tools/street_play.lua song state|prepare [女主編號]|play|later|decline|skip|cancel|enable|disable`。指定女主的 `prepare N` 會標示 `override`，正式自動事件不使用。
+遊戲中測試（控制埠 48070）：在 `OK_CONTROL_PORT=48070` 下用 ok-game-mcp 的 `game_call {path: "/song", body: {action: "state|prepare|play|later|decline|skip|cancel|enable|disable", girl: 女主編號}}`（[STREET_SOCIAL_GAME_MCP.md](STREET_SOCIAL_GAME_MCP.md)）。指定女主的 `prepare N` 會標示 `override`，正式自動事件不使用。
 
 數值核對（需要上游 Python 輸出的參考檔，Python 只在開發時使用）：`ok-song mula-check`、`codec-check`、`demucs-check`、`seedvc-check --parts mel,voc,lr,est,cfm,sem,style,f0,pipe,conv`。
 
@@ -75,7 +75,7 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
 - **鏡頭**：沿用交談中的鏡頭，沒有專屬的演唱鏡頭與站立動作。
 - **效能與 GPU 分享**：一個實例一次只跑一個重型工作；每個階段各自建立 CUDA context 並在結束時釋放，HeartMuLa 約占 8 GB VRAM（載入 HeartCodec 前先釋放）。遊戲的幀時間不受背景產歌影響（第 3 節），反過來是產歌被遊戲搶走 GPU 時間：HeartMuLa 逐幀生成在閒置時每幀 32 ms，一個遊戲同時執行時 127 ms（每幀錄成 CUDA graph 後；之前 190 ms），兩個不限幀率的遊戲同時全速渲染時會到每幀數秒。分離、換聲與 HeartCodec 解碼是大批次運算，只慢 1.5～3 倍。正式遊戲只有一個實例，30 秒歌估計 1.5～2 分鐘完成；在對話前預先準備，不阻塞遊戲。
 - **預設關閉**：要在面板打開「女主唱歌」，或用控制通道測試。
-- 開著房間麥克風時，喇叭聲可能被當成插話而打斷；測試時用 `street_play.lua mic off`。
+- 開著房間麥克風時，喇叭聲可能被當成插話而打斷；測試時用 `game_call {path: "/mic", body: {ignore: true}}`。
 
 ## 5. 原生移植的數值核對
 

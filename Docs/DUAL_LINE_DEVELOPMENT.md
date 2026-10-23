@@ -26,7 +26,7 @@ E 那邊做好一段，就把 `duo` 合併進 `master`。
 
 - 由 `Tools/ok_instance.lua` 讀取。下面這些工具都會自動用自己那份 clone 的埠：
   - `Tools/run_street_social_development.lua`（`StreetSocial.cmd`）
-  - `Tools/street_play.lua`
+  - `Tools/ok-game-mcp`（街區遊戲的 MCP，見 [STREET_SOCIAL_GAME_MCP.md](STREET_SOCIAL_GAME_MCP.md)）
   - `Tools/run_interaction_pair.lua`、`Tools/pair_ctl.lua`
 - 環境變數 `OK_CONTROL_PORT` 和命令列的 `-ControlPort`、`-Port` 仍然可以直接指定埠號。
 - `voice: false`：這份 clone 完全不碰 ok-tts、ok-asr，不啟動也不關閉。遊戲使用內建語音，沒有語音輸入。E 目前就是這樣設定。
