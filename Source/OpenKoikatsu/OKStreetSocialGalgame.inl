@@ -7,7 +7,7 @@
 #include "OKStoryLive.h"
 #include "SOKStoryView.h"
 
-static TAutoConsoleVariable<int32> CVarOKStreetGalgame(TEXT("ok.Street.Galgame"), 0,
+static TAutoConsoleVariable<int32> CVarOKStreetGalgame(TEXT("ok.Street.Galgame"), 1,
 	TEXT("Street conversations as galgame scenes (bottom dialog box, live portrait, a shot per line): 1 on, 0 the old dialogue box."));
 
 struct FOKStreetGalgame

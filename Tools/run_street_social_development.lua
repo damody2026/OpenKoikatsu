@@ -6,6 +6,7 @@
 --   Tools\lua\lua.exe Tools\run_street_social_development.lua [-Control [-ControlPort N]] [-Clock HH:MM] [-SelfTest]
 --     [-ValidateOnly] [-Strict] [-Executable EXE] [-SelectionFile JSON] [-MaleCard PNG] [-RetargetFile JSON]
 --     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
+--     [-Editor]  (development: runs the map in the built editor with -game instead of a staged build; no cook needed)
 --     [-Sandbox NAME [-PortBase N] [-RulesDll DLL]]
 -- -Sandbox runs a second game beside one already playing from this checkout without touching it: its own ports
 -- (-PortBase, default 48060: TTS N, ASR N+1, control N+10), its own save, voice settings and free-talk logs in
@@ -22,7 +23,7 @@ local json, path, proc, hash, util = ok.json, ok.path, ok.proc, ok.hash, ok.util
 local fs = require "okfs"
 local instance = require "ok_instance"
 
-local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true }
+local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true, editor = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
   controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true }
 
@@ -180,6 +181,7 @@ local function main()
     launch = read_json(path.join(root, "Content/IndependentResources/StreetSocialData/Launch/runtime.json"))
     build = { executable = "", patch = path.join(root, launch.patch), catalogue = path.join(root, launch.catalogue),
       material_manifest = path.join(root, launch.materials), runtime_render_quality = launch.render_quality }
+    if o.editor then o.executable = path.join(ok.engine_root(), "Engine/Binaries/Win64/UnrealEditor.exe") end
     if not o.executable then
       local latest = newest_stage(root)
       if not latest then
@@ -254,6 +256,12 @@ local function main()
     "--catalogue", build.catalogue, "--materials", materials, "--output", manifest })
   if not sel.ok then error("StreetSocial APNG selection validation failed", 0) end
   if o.retargetfile then retarget("inject", o.retargetfile, manifest) end
+  -- The editor has no cooked shader library; the crowd runtime then draws with the editor's own material resources.
+  if o.editor then
+    local m = read_json(manifest)
+    m.editor_common_materials = true
+    path.write_text(manifest, json.encode(m, { ensure_ascii = false, indent = 2 }) .. "\n", { newline = "\n" })
+  end
   -- Replaced heroine cards (StreetSocialData/identity_aliases.json): the live game and every save slot move to the new
   -- ids before the game opens them (a no-op when no save names an old id).
   if not o.selftest and not o.sandbox and not tool("street_identity_migrate.lua", {}).ok then error("Identity alias migration failed", 0) end
@@ -382,7 +390,9 @@ local function main()
   if not win_w then error("-Window takes WxH, e.g. 1280x720", 0) end
   local game = { build.executable, "/Game/Scenes/StreetSocial/StreetSocial", "-D3D12", "-SM6", "-windowed", "-ResX=" .. win_w, "-ResY=" .. win_h, "-WinX=40", "-WinY=40",
     "-StreetSocialManifest=" .. manifest }
-  if path.exists(build.patch) then game[#game + 1] = "-pakdir=" .. build.patch end
+  -- The editor reads the project's uncooked content: the project goes first, and the cooked patch is not mounted.
+  if o.editor then table.insert(game, 2, path.join(root, "OpenKoikatsu.uproject")); game[#game + 1] = "-game"
+  elseif path.exists(build.patch) then game[#game + 1] = "-pakdir=" .. build.patch end
   game[#game + 1] = "-abslog=" .. path.join(output, "game.log")
   game[#game + 1] = "-RuntimeGpuCacheMiB=4096"
   local q = build.runtime_render_quality
