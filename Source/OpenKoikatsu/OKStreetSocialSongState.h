@@ -20,4 +20,6 @@ struct FOKSongState {
  // Times: SceneTime() seconds; minutes of play for the rules' cooldowns.
  double NextCheck=0,PhaseAt=0,LaterUntil=0,LastSongAtMinutes=-1,DeclinedAtMinutes=-1;
  int32 SungDay=-1,SungToday=0;
+ // Her singing shot (SongCameraShot): when it began (-1: not on) and where the camera eased to.
+ double CameraSince=-1;FVector CameraAt=FVector::ZeroVector;
 };

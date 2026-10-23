@@ -545,3 +545,5 @@
 ### 2026-10-24 測臉部壓平時停掉了攻略 session 的遊戲
 
 - 我在共用的控制埠 47870 上用 game_launch 開街區（PID 39540），攻略 session 幾乎同時也在 47870 開了遊戲（PID 36104）。佔到埠的是對方，所以我的 game_exec、截圖和最後的 game_stop 都打到對方遊戲上，把它停了；我自己那個遊戲則一直沒被用到。規則：已經有人在用 47870 時，驗證一律用 `-Sandbox <名稱> -PortBase N`，搭配 `OK_CONTROL_PORT`，不碰 47870。
+
+- 演唱鏡頭第一版（SongCam01）在沙盒裡完全沒有作用：交談時 galgame 演出模組（OKStreetSocialGalgame.inl）每幀都會設定鏡頭，在 Tick 的街區鏡頭之後執行，把演唱鏡頭蓋掉。我只看了 Tick 裡的鏡頭程式就改，沒有先搜尋所有設定 S.Camera 的地方。修正：演唱期間 galgame 不接管鏡頭（`!SongOwnsVoice(S.Target)`）。之後改鏡頭前，先 grep 所有 `Camera->SetActorLocation`／`SetFieldOfView` 的呼叫者。

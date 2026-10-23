@@ -210,6 +210,28 @@ void AOKStreetSocialScene::SongSkip(){
  FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);G.Phase=EOKSongPhase::Outro;G.PhaseAt=SceneTime();SongSay(OKT(TEXT("ui.song.outro_line")));OKSongCaption(S,OKT(TEXT("ui.song.outro_line")));RefreshUI();
 }
 
+// While she sings (intro, song, outro), a shot from in front of her instead of the over-the-shoulder talk camera: head
+// and shoulders (40 degree lens), pushing in slowly from 2.1 m to 1.6 m and drifting 12 degrees side to side; the galgame
+// presenter leaves the camera alone meanwhile. The camera eases there
+// (and back afterwards through the normal camera), so the cut is a short move rather than a jump.
+bool AOKStreetSocialScene::SongCameraShot(double Now,float Dt,FVector& Location,FVector& Focus){
+ auto& S=*State;auto& G=S.Song;
+ FVector Head;FOKRuntimeCharacterStatus Status;
+ if(!SongOwnsVoice(G.Girl)||S.Target!=G.Girl||!OKGetCrowdRuntimeBonePosition(this,G.Girl,TEXT("cf_j_head"),Head)||Head.ContainsNaN()
+    ||!OKGetCrowdRuntimeCharacterStatus(this,G.Girl,Status)){G.CameraSince=-1;return false;}
+ const bool Fresh=G.CameraSince<0;if(Fresh)G.CameraSince=Now;
+ const float T=float(Now-G.CameraSince);
+ const FVector Facing=Status.Transform.GetRotation().RotateVector(FVector::YAxisVector).GetSafeNormal2D();
+ const FVector Toward=Facing.RotateAngleAxis(12.f*FMath::Sin(T*.18f),FVector::UpVector);
+ Focus=Head-FVector(0,0,10);
+ const FVector Wanted=Focus+Toward*FMath::Lerp(210.f,160.f,FMath::Clamp(T/25.f,0.f,1.f))+FVector(0,0,8);
+ FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetSongCamera),false,this);
+ const FVector Clear=GetWorld()->SweepSingleByChannel(Hit,Focus,Wanted,FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeSphere(8),Query)?Hit.Location:Wanted;
+ if(Fresh&&S.Camera.IsValid())G.CameraAt=S.Camera->GetActorLocation();
+ G.CameraAt=FMath::Lerp(G.CameraAt,Clear,1.f-FMath::Exp(-2.5f*FMath::Max(Dt,0.f)));
+ Location=G.CameraAt;return true;
+}
+
 void AOKStreetSocialScene::TickSong(double Now){
  if(!State||State->SelfTest)return;auto& S=*State;auto& G=S.Song;
  if(!G.Loaded)SongLoad();
@@ -219,6 +241,11 @@ void AOKStreetSocialScene::TickSong(double Now){
   FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);G.SayPending=G.SpeechStarted=false;++G.Epoch;G.Phase=EOKSongPhase::Ready;G.LaterUntil=Now+60;G.Notice=OKT(TEXT("ui.song.interrupted"));
   UE_LOG(LogTemp,Display,TEXT("Street song: interrupted (target %d, ring %d, remote %d)"),S.Target,S.RingGirl,S.RemoteMode?1:0);RefreshUI();return;
  }
+ // She sings in her standing idle with only her mouth moving: a gesture action (from the talk, the presenter or a
+ // reply) is cancelled while the song event has her voice.
+ if(SongOwnsVoice(G.Girl)){FOKRuntimeActionStreamStatus A;FString Ignore;
+  if(OKGetCrowdRuntimeActionStatus(this,G.Girl,A)&&(A.Playing||A.Pending||A.Preparing||A.QueuedRequests>0)&&OKCancelCrowdRuntimeAction(this,G.Girl,Ignore))
+   UE_LOG(LogTemp,Display,TEXT("Street song: kept idle (cancelled %s)"),*A.ClipId);}
  switch(G.Phase){
  case EOKSongPhase::Idle:{
   if(!G.Enabled||Now<G.NextCheck)return;G.NextCheck=Now+OKSongCheckSeconds;

@@ -630,6 +630,7 @@ private:
  void BuildSongRow(TSharedRef<class SVerticalBox> Box);
  TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
  bool SongOwnsVoice(int32 Character) const;
+ bool SongCameraShot(double Now,float Dt,FVector& Location,FVector& Focus);
  void SongLoad();
  void SongSave();
  void SongReset(const FString& Why,bool CancelJob);

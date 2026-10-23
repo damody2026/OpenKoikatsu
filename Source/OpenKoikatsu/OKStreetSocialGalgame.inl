@@ -325,9 +325,10 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	if (!G.Frame) { UE_LOG(LogTemp, Warning, TEXT("Street galgame presenter tick failed: %s"), *Error); return; }
 	if (G.View) G.View->SetVisibility(G.bActive ? EVisibility::HitTestInvisible : EVisibility::Collapsed);
 
-	// The shot: only while they stand talking (walking together keeps the street camera), never over a photo.
+	// The shot: only while they stand talking (walking together keeps the street camera), never over a photo, and not
+	// while she sings (SongCameraShot has the camera then).
 	const TSharedPtr<FJsonObject>* Camera = nullptr;
-	if (G.bActive && S.Target != INDEX_NONE && S.Camera.IsValid() && SceneTime() >= S.PhotoViewUntil && G.Frame->TryGetObjectField(TEXT("camera"), Camera))
+	if (G.bActive && S.Target != INDEX_NONE && !SongOwnsVoice(S.Target) && S.Camera.IsValid() && SceneTime() >= S.PhotoViewUntil && G.Frame->TryGetObjectField(TEXT("camera"), Camera))
 	{
 		const TArray<TSharedPtr<FJsonValue>>* P = nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* R = nullptr;
