@@ -123,6 +123,8 @@ static TAutoConsoleVariable<int32> CVarOkExactLeader(TEXT("ok.Animation.LeaderPo
 static TAutoConsoleVariable<int32> CVarOkFacePreparedPalette(TEXT("ok.Face.PreparedPalette"),1,TEXT("Convert immutable native palette once for all face vertices; 0 retains per-influence conversion."));
 static TAutoConsoleVariable<int32> CVarOkAnimationGeneratedStreams(
     TEXT("ok.Animation.GeneratedStreams"),1,TEXT("Fuse generated preview geometry with stream packing; 0 retains the intermediate-array oracle."));
+static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth every other frame, taking turns, so a scene renders half as many extra views; 0: every frame."));
+static TAutoConsoleVariable<int32> CVarOkShadowCaptureFullView(TEXT("ok.ShadowCaptureFullView"),0,TEXT("1: the toon shadow depth capture renders a full view (lighting, post-processing...) as before; 0 depth only. Read when a character loads."));
 static TAutoConsoleVariable<int32> CVarOkStableShadowTarget(
     TEXT("ok.Animation.StableShadowTarget"),1,TEXT("Keep the deferred scene-depth target bound while updating its contents before the main view; 0 retains ping-pong bindings."));
 static TAutoConsoleVariable<int32> CVarOkSourceRangeVertices(TEXT("ok.Animation.SourceRangeVertices"),256,TEXT("Canonical vertices per source-indexed job, bounded 64..4096; legacy conversion retains 1024."));
@@ -3766,6 +3768,9 @@ static UMaterialInterface* OKSkyboxMaterial()
 	// Unity's skybox pass writes no depth (queue 1000): the scene in front covers it, and of overlapping domes the one
 	// drawn last shows (AOKSceneActor orders them by their distance, like Unity's front-to-back opaque sort).
 	Mat->BlendMode = BLEND_Translucent;
+	// Unity's skybox is the farthest thing the camera sees: the Studio depth of field blurs it fully. Drawn after depth
+	// of field (UE's default for translucency) it stayed sharp behind a blurred scene (4432's clouds and hills).
+	Mat->TranslucencyPass = MTP_BeforeDOF;
 	Mat->SetShadingModel(MSM_Unlit);
 	Mat->TwoSided = true;
 	UMaterialExpressionCustom* Code = NewObject<UMaterialExpressionCustom>(Mat);
@@ -6528,6 +6533,21 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
 	ToonShadowCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 	ToonShadowCapture->bCaptureEveryFrame = false;
 	ToonShadowCapture->bCaptureOnMovement = false;
+	// Only the depth of the character's own parts is read: none of the lighting, shadowing, post-processing or global
+	// illumination passes a full view runs (one such capture per character each frame was most of the render thread).
+	// ok.ShadowCaptureFullView=1 keeps the full view (diagnostic).
+	if (CVarOkShadowCaptureFullView.GetValueOnGameThread() == 0)
+	{
+		FEngineShowFlags& Show = ToonShadowCapture->ShowFlags;
+		Show.SetLighting(false); Show.SetPostProcessing(false); Show.SetFog(false); Show.SetAtmosphere(false);
+		Show.SetDynamicShadows(false); Show.SetAmbientOcclusion(false); Show.SetScreenSpaceReflections(false);
+		Show.SetGlobalIllumination(false); Show.SetLumenGlobalIllumination(false); Show.SetLumenReflections(false);
+		Show.SetSkyLighting(false); Show.SetTranslucency(false); Show.SetParticles(false); Show.SetDecals(false);
+		Show.SetBloom(false); Show.SetMotionBlur(false); Show.SetAntiAliasing(false); Show.SetTemporalAA(false);
+		Show.SetVolumetricFog(false); Show.SetCloud(false); Show.SetDistanceFieldAO(false); Show.SetContactShadows(false);
+		Show.SetCapsuleShadows(false); Show.SetReflectionEnvironment(false); Show.SetLightShafts(false);
+		ToonShadowCapture->bUseRayTracingIfEnabled = false;
+	}
 	ToonShadowCapture->TextureTarget = ToonShadowTargets[1];
 	ToonShadowCapture->RegisterComponent();
 		break; }
@@ -6781,7 +6801,7 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
  // vertices. Procedural hair/accessories still need those current vertices.
  // Native skin_all honors OK_SKELMESH and skips GPU body/head mesh skinning;
  // CPU rendering also refreshes its body/head surfaces from the same pose.
- {TRACE_CPUPROFILER_EVENT_SCOPE(KK_NativeSkin);if(!bNativeSkinReady)SkinPrivateDisplay();bNativeSkinReady=false;}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_SkinPrivate);TRACE_CPUPROFILER_EVENT_SCOPE(KK_NativeSkin);if(!bNativeSkinReady)SkinPrivateDisplay();bNativeSkinReady=false;}
  const double SkinDone=FPlatformTime::Seconds();
  // Procedural CPU display consumes skinned vertices and native rigid socket
  // matrices. Build a UE bone array only when a skeletal component uses it.
@@ -6789,10 +6809,13 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
  if(BodySkel || !SkelFollowers.IsEmpty()) OKBuildSkelPose(Session,Pose);
  FKKRuntimeAffinePoseScope SharedPoseScope(Pose);
  if(auto* Leader=Cast<UKKRuntimePoseableMeshComponent>(BodySkel))for(UPoseableMeshComponent* F:SkelFollowers)if(auto* Follower=Cast<UKKRuntimePoseableMeshComponent>(F))Follower->TryUseExactLeader(bShareIdenticalPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
+ // A follower takes its leader's morph target weights too: the face parts an owner poses (OK Studio, whose expressions
+ // are morphs on these parts) keep their own pose so their expression shows.
  if(auto* Leader=Cast<UKKRuntimePoseableMeshComponent>(BodySkel))for(const auto& Slot:MouthSlots)
   for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})if(auto* Follower=Cast<UKKRuntimeSkeletalMeshComponent>(Mesh))
-   Follower->TryUseExactLeader(bShareIdenticalPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
+   Follower->TryUseExactLeader(bShareIdenticalPose&&!bSceneDrivenPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
  const double PoseBuilt=FPlatformTime::Seconds();
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplySkelPoses);
 	if (BodySkel && BodySkel->GetSkinnedAsset())
 	{
 		OKApplySkelPose(BodySkel, Pose);
@@ -6809,7 +6832,7 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
 
  const double BonesDone=FPlatformTime::Seconds();
  if(Profile)UE_LOG(LogTemp,Display,TEXT("OK animation skeleton skin_ms=%.3f build_ms=%.3f apply_ms=%.3f"),(SkinDone-Begin)*1000.,(PoseBuilt-SkinDone)*1000.,(BonesDone-PoseBuilt)*1000.);
-	RefreshRuntimeAccessories();
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_RuntimeAccessories);RefreshRuntimeAccessories();}
  const double AccessoriesDone=FPlatformTime::Seconds();
 	UpdateRigidFollowers();
  const double RigidDone=FPlatformTime::Seconds();
@@ -8545,8 +8568,8 @@ void AKKPreviewActor::ApplyPoseFrame(float DeltaSeconds,bool bAdvanceAnimation)
 		// Loop/clamp is the spec's own (per animation); the clock only advances.
 		if (!OkPlayer || !OkPlayer->IsValid() || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
 		if(bAdvanceAnimation)AnimPhase = float(FMath::Min(double(AnimPhase) + double(DeltaSeconds)*double(AnimationPlaybackSpeed), double(MAX_flt)));
-		const bool Applied=[&](){TRACE_CPUPROFILER_EVENT_SCOPE(KK_OkAnimation);return OkPlayer->ApplySessions({&Session},AnimPhase,DeltaSeconds,&OkReport);}();
-		if (Applied) { RefreshSkinnedDisplay(); OkPlayer->ApplyFaceCurves(0, AnimPhase, *this); }
+		const bool Applied=[&](){QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_OkApplySessions);TRACE_CPUPROFILER_EVENT_SCOPE(KK_OkAnimation);return OkPlayer->ApplySessions({&Session},AnimPhase,DeltaSeconds,&OkReport);}();
+		if (Applied) { {QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_RefreshSkinnedDisplay);RefreshSkinnedDisplay();} QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_OkFaceCurves);OkPlayer->ApplyFaceCurves(0, AnimPhase, *this); }
 		else UE_LOG(LogTemp,Error,TEXT("OK animation frame failed: %s"),*OkReport);
 	}
 	else if (PoseMode == 4)
@@ -8563,6 +8586,43 @@ void AKKPreviewActor::ApplyPoseFrame(float DeltaSeconds,bool bAdvanceAnimation)
 		RefreshSkinnedDisplay();
 	}
 	bHeadLookPoseDirty=false;
+}
+
+bool AKKPreviewActor::SolveScenePose(float DeltaSeconds,bool bAdvanceAnimation)
+{
+    // ApplyPoseFrame's native half for the poses an owner drives every frame (Studio animation, static FK/IK pose):
+    // only this actor's session, animation player and part records, no UObject, so distinct actors solve on worker
+    // threads at once. A shape edit and the other pose modes keep the whole ApplyPoseFrame on the game thread.
+    bPendingSceneDisplay=false;bPendingSceneFaceCurves=false;
+    if(!Session.IsOpen()||bShapeDirty||(PoseMode!=0&&PoseMode!=3))return false;
+    const double SolveBegin=FPlatformTime::Seconds();
+    ON_SCOPE_EXIT{SceneSolveTotalMs+=(FPlatformTime::Seconds()-SolveBegin)*1000.;++SceneSolveSamples;};
+    if(PoseMode==3)
+    {
+        if(!OkPlayer||!OkPlayer->IsValid()||!FMath::IsFinite(DeltaSeconds)||DeltaSeconds<0.f)return true;
+        if(bAdvanceAnimation)AnimPhase=float(FMath::Min(double(AnimPhase)+double(DeltaSeconds)*double(AnimationPlaybackSpeed),double(MAX_flt)));
+        if(!OkPlayer->ApplySessions({&Session},AnimPhase,DeltaSeconds,&OkReport)){bPendingSceneFailed=true;return true;}
+        bPendingSceneFaceCurves=true;
+    }
+    else
+    {
+        const bool ReactionWasPlaying=Session.IsBodyReactionPlaying();
+        if(bHeadLookFollowCamera||bHeadLookPoseDirty||bBodyReactionPoseDirty||ReactionWasPlaying||bUserPoseDirty)Session.StaticInteractionFrame(DeltaSeconds);
+        bUserPoseDirty=false;
+        bBodyReactionPoseDirty=ReactionWasPlaying&&!Session.IsBodyReactionPlaying();
+    }
+    // The display's native skinning (RefreshSkinnedDisplay skips it when ready).
+    SkinPrivateDisplay();bNativeSkinReady=true;
+    bPendingSceneDisplay=true;bHeadLookPoseDirty=false;
+    return true;
+}
+
+void AKKPreviewActor::FinishScenePose()
+{
+    if(bPendingSceneFailed){bPendingSceneFailed=false;UE_LOG(LogTemp,Error,TEXT("OK animation frame failed: %s"),*OkReport);}
+    if(bPendingSceneDisplay){QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_RefreshSkinnedDisplay);RefreshSkinnedDisplay();}
+    if(bPendingSceneFaceCurves&&OkPlayer){QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_OkFaceCurves);OkPlayer->ApplyFaceCurves(0,AnimPhase,*this);}
+    bPendingSceneDisplay=false;bPendingSceneFaceCurves=false;
 }
 
 bool AKKPreviewActor::SetGameAnimationTrigger(const FString& Name)
@@ -9050,6 +9110,9 @@ void AKKPreviewActor::TickActor(float DeltaSeconds,ELevelTick TickType,FActorTic
 void AKKPreviewActor::Tick(float DeltaSeconds)
 {
  TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewTick);
+	// An OK Studio item (scene-driven, no face, speech or pose of its own) has nothing to advance here: loading turns
+	// the tick on, and thousands of items ticking for nothing cost ~2 ms a frame. Setting an animation turns it back on.
+	if (bSceneDrivenPose && bStudioItemShading && PoseMode == 0 && !bShapeDirty) { SetActorTickEnabled(false); return; }
  const bool Profile=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_ANIM_PROFILE"))==TEXT("1");const double Begin=FPlatformTime::Seconds();
 	Super::Tick(DeltaSeconds);
 	PublishPhysicsFrame();
@@ -9076,7 +9139,7 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
 		return;
 	}
 	UpdateHeadLookTarget();
-	const bool bNeedPose = bShapeDirty || bHeadLookFollowCamera || bHeadLookPoseDirty || PoseMode == 1 || PoseMode == 2 || PoseMode == 3;
+	const bool bNeedPose = !bSceneDrivenPose && (bShapeDirty || bHeadLookFollowCamera || bHeadLookPoseDirty || PoseMode == 1 || PoseMode == 2 || PoseMode == 3);
 	if (bNeedPose)
 	{
         ApplyPoseFrame(bWorldPoseTick?WorldPoseDelta:DeltaSeconds);
@@ -9084,13 +9147,17 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
 	// FaceBlendShape.LateUpdate follows the character pose and uses frame time,
  const double PoseDone=FPlatformTime::Seconds();
 	// independent of clip phase, looping, pausing and short animations.
-	AdvanceEyeLook(DeltaSeconds);
+	if (!bSceneDrivenPose) AdvanceEyeLook(DeltaSeconds);
 	AdvanceFaceAnimation(DeltaSeconds);
     // No renderer consumes intermediate speech/pose/gaze/blink updates in
     // this tick. Publish their final authored state before shadow capture.
     if(BatchFace){EndFaceDisplayUpdate();BatchFace=false;}
  const double FaceDone=FPlatformTime::Seconds();
-	if (bCharacterDisplayShadows && ToonShadowCapture && ToonShadowTargets.Num() == 2)
+	// Each capture is a whole extra scene render on the render thread: characters posed by an owner take turns.
+	static uint32 GShadowCapturePhases = 0;
+	if (ShadowCapturePhase == MAX_uint32) ShadowCapturePhase = GShadowCapturePhases++;
+	const bool bShadowTurn = !bSceneDrivenPose || CVarOkShadowCaptureStagger.GetValueOnGameThread() == 0 || ((GFrameCounter + ShadowCapturePhase) & 1) == 0;
+	if (bCharacterDisplayShadows && ToonShadowCapture && ToonShadowTargets.Num() == 2 && bShadowTurn)
 	{
         // CaptureScene() builds and executes a renderer immediately, so the game
         // thread stalls every frame and stat unitgraph steps. The deferred photo

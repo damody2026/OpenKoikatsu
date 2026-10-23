@@ -570,3 +570,25 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 原作資料、前後實拍與驗收見 [6964 虹膜／陰影紀錄](OK_STUDIO_SHADING_6964_20261021.md)。沒有調曝光、關AO或針對場景染色。
 
 ![6964：左原作、中修正前、右修正後](images/OKStudio/Shading6964_20261021/comparison.png)
+
+### 效能：載入後 120 fps（2026-10-23，進行中）
+
+量測：`Tools/lua/lua.exe Tools/run_ok_studio_perf.lua --tag <名稱> [--scenes samples|<資料夾>] [--count N] [--seconds S] [--dump <幀數>] [--env NAME=VALUE ...]`。以 SceneEditor 的 `OKStudioGameMode` 開 Entry 地圖、1920×1080、不限幀率、關 VSync，場景載入且材質編譯完成後量幀時間、遊戲／渲染執行緒、GPU、繪製數（`OKStudio.PerfKStudio`，報告 `Saved/OKStudio/perf/<名稱>.json`）。另有：
+- `--dump N`：`stat dumpave` 的遊戲執行緒階層（含 `STAT_OKScene_*`、`STAT_KK_*` 計時）。
+- `OK_STUDIO_PERF_AB=<控制台變數>`：量測中每 20 幀切換 0／1，兩種狀態分開統計（機器有其他負載時仍能比較）。
+- 每個角色的原生求解時間與 Rust 各階段（`ok_okanim_profile`，新增 finish.shape／hands_fk／expression／abm／studio_ik／interaction）。
+
+起點（同一台機器，背景另有遊戲占滿 CPU）：有角色的場景 8–25 fps，遊戲執行緒 40–260 ms；GPU 只有 1–5 ms。修正：
+- 場景角色每幀被解兩次：載入與設動畫時會重開 actor 的 Tick，Tick 又解一次姿勢（物理也走兩步）。新增 `AKKPreviewActor::bSceneDrivenPose`，場景驅動時 Tick 不解姿勢、不推視線（眨眼、表情、陰影照舊）。
+- 從讀卡畫面進工作室時，被隱藏的 Gallery 角色仍每幀解動畫（約 12 ms）：被隱藏的世界 actor 一併停 Tick，結束時恢復。
+- `UOKSceneDocument::Find` 線性搜尋；`AOKSceneActor::Tick` 的唯讀階段改用 `FFindScope`（Id 索引，陣列變動時自動重建）。
+- 各角色的原生求解（`SolveScenePose`）以 `ParallelFor` 同時做，顯示更新（`FinishScenePose`）回遊戲執行緒（`ok.Studio.ParallelPose`）。
+- 骨架元件共用 body 的 leader 姿勢（`ok.Studio.SharePose`）；嘴／臉元件不共用（leader 會連 morph 一起蓋掉，表情消失）。
+- 私有骨架部件（頭髮、裙子、配件）改走 GPU 串流（`OK_STUDIO_GPU_PLAYBACK=0` 回 CPU）：遊戲執行緒的串流成本約為原本的三分之一。
+- Studio FK：`apply_user_fk` 每根骨頭都重走整棵子樹找名稱（每角色約 9 ms），改為一次建表。
+- 道具預覽 actor 沒事做時自己停 Tick；天空球元件改成場景變動後才重新收集（每幀掃上千道具的所有元件約 2.5 ms）；靜態道具的位置只在場景變動後重算。
+- 角色的 toon shadow 深度擷取每次都是一個額外的場景渲染：場景驅動的角色改為隔幀輪流擷取（`ok.ShadowCaptureStagger`），0010 的渲染執行緒 11.8 → 8.1 ms；擷取只需深度，關掉光照、後處理等顯示旗標（`ok.ShadowCaptureFullView=1` 恢復）。
+- 天空球材質改在景深之前合成（`MTP_BeforeDOF`）：之前畫在景深之後，雲不會被景深模糊。
+- 景深換算依視角與對焦距離：Unity 的景深在畫面上的遠景模糊和鏡頭無關，UE 的電影景深是焦距² ÷（光圈 ×（對焦距離 − 焦距））。之前的光圈換算只用 1901（垂直 23°、對焦 1.42 m）校準，廣角的 4432（31.5°、2.88 m）遠景模糊只剩約五分之一，雲和遠山都清楚（使用者指出）。匯入時再乘 (f/f₁₉₀₁)²·(s₁₉₀₁−f₁₉₀₁)/(s−f)，光圈下限放寬到 f/0.3，並設 `DepthOfFieldMinFstop`（UE 預設 f/1.2 會把它截掉）。1901 不變；4432、3167、6331、6964 重拍後模糊程度都和原卡一致。
+
+目前（14 個樣本的前 10 個，同樣有背景負載）：0010 8.5→39、0633 9.6→43、3167 8→42、1901 17→59、3800 51→103、4432 14→37（之後 4432 道具段落再降約 6 ms）。還沒到 120：剩下主要是每角色約 4 ms 的原生求解（配件動態 1.4、衣服 0.6、姿勢 0.5…，已跨角色平行，但取最慢的一個），每角色約 0.7 ms 的顯示更新、0.2 ms 臉部曲線，以及 Slate＋viewport 約 4 ms。

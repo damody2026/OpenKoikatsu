@@ -71,12 +71,46 @@ int32 UOKSceneDocument::Duplicate(int32 Id)
 
 FOKSceneObject* UOKSceneDocument::Find(int32 Id)
 {
+	if (FindScopes > 0) return const_cast<FOKSceneObject*>(FindIndexed(Id));
 	return Objects.FindByPredicate([Id](const FOKSceneObject& O) { return O.Id == Id; });
 }
 
 const FOKSceneObject* UOKSceneDocument::Find(int32 Id) const
 {
+	if (FindScopes > 0) return FindIndexed(Id);
 	return Objects.FindByPredicate([Id](const FOKSceneObject& O) { return O.Id == Id; });
+}
+
+const FOKSceneObject* UOKSceneDocument::FindIndexed(int32 Id) const
+{
+	// The index is built when a scope starts and belongs to that array: a resized or moved array (an object added or
+	// removed inside the scope) or an entry whose object no longer carries its id is indexed again. An id absent from a
+	// fresh index is absent (a root's parent, -1, is looked up for every object).
+	auto Rebuild = [this]
+	{
+		FindIndex.Reset();
+		FindIndex.Reserve(Objects.Num());
+		for (int32 I = 0; I < Objects.Num(); ++I) FindIndex.Add(Objects[I].Id, I);
+		FindIndexData = Objects.GetData();
+		FindIndexNum = Objects.Num();
+	};
+	if (FindIndexData != Objects.GetData() || FindIndexNum != Objects.Num()) Rebuild();
+	const int32* At = FindIndex.Find(Id);
+	if (At && (!Objects.IsValidIndex(*At) || Objects[*At].Id != Id)) { Rebuild(); At = FindIndex.Find(Id); }
+	return At && Objects.IsValidIndex(*At) && Objects[*At].Id == Id ? &Objects[*At] : nullptr;
+}
+
+UOKSceneDocument::FFindScope::FFindScope(const UOKSceneDocument* InDocument) : Document(InDocument)
+{
+	// OK_STUDIO_FIND_INDEX=0 (diagnostic): scan as before, to measure what the index saves.
+	static const bool bOff = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_FIND_INDEX")) == TEXT("0");
+	if (!Document || bOff) { Document = nullptr; return; }
+	if (Document->FindScopes++ == 0) Document->FindIndexNum = -1;
+}
+
+UOKSceneDocument::FFindScope::~FFindScope()
+{
+	if (Document) --Document->FindScopes;
 }
 
 TArray<int32> UOKSceneDocument::Children(int32 Parent) const
@@ -435,7 +469,10 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 	S.bOverride_DepthOfFieldFocalDistance = true;
 	S.bOverride_DepthOfFieldFstop = true;
 	S.DepthOfFieldFocalDistance = bDepthOfField ? FMath::Max(FocalDistance, 1.f) : 0.f;
-	S.DepthOfFieldFstop = FMath::Clamp(Aperture, 0.7f, 32.f);
+	S.DepthOfFieldFstop = FMath::Clamp(Aperture, 0.3f, 32.f);
+	// The lens opens as wide as the f-stop asks (UE's default limit, f/1.2, clamped wide Studio views' blur away).
+	S.bOverride_DepthOfFieldMinFstop = true;
+	S.DepthOfFieldMinFstop = 0.3f;
 	S.bOverride_VignetteIntensity = true;
 	S.VignetteIntensity = bVignette ? VignetteIntensity : 0.f;
 	S.bOverride_AutoExposureBias = true;

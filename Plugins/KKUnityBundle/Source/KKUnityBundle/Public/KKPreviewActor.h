@@ -287,6 +287,9 @@ public:
 	bool PlaySpeechFile(const FString& Path,float Pitch,FString& Error);
 	bool PlaySpeechPcm(TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe> Pcm,float Pitch,FString& Error);
 	bool bCoordinatedPlayback=false;
+	/** An owner (OK Studio's scene actor) solves this actor's pose and eye look once per frame itself; its own Tick
+	 *  then keeps only the rest (face clock, speech, shadow capture) instead of solving the pose a second time. */
+	bool bSceneDrivenPose=false;
     bool bUsePrivateGpuPlayback=false; // opt in only while the interaction scene owns playback
 	bool PlayHCue(FString& Error);
 	UFUNCTION(BlueprintPure, Category="Koikatsu|Speech")
@@ -619,6 +622,15 @@ public:
 	void ApplyMouth();
 	void InitializeFaceControls();
 	void ApplyPoseFrame(float DeltaSeconds,bool bAdvanceAnimation=true);
+	/** ApplyPoseFrame in two halves for an owner posing many actors: the native solve (any thread, one actor per thread;
+	 *  false: this pose needs ApplyPoseFrame on the game thread instead), then the display on the game thread. */
+	bool SolveScenePose(float DeltaSeconds,bool bAdvanceAnimation);
+	void FinishScenePose();
+	bool bPendingSceneDisplay=false,bPendingSceneFaceCurves=false,bPendingSceneFailed=false;
+	/** SolveScenePose's time so far (diagnostics: OKStudio.PerfKStudio). */
+	double SceneSolveTotalMs=0.;int32 SceneSolveSamples=0;
+	/** Which of the alternate frames this actor captures its toon shadow on (ok.ShadowCaptureStagger). */
+	uint32 ShadowCapturePhase=MAX_uint32;
 	bool AuditBodyDynamicsDisplay(const FString& TracePath, bool bExternal = false);
 	bool AuditStudioPVDisplay();
 
