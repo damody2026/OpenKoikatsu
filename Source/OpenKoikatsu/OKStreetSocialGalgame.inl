@@ -258,8 +258,11 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	F->SetNumberField(TEXT("dt"), Dt);
 	FVector2D Size(1920, 1080);
 	if (GEngine && GEngine->GameViewport) GEngine->GameViewport->GetViewportSize(Size);
-	// The whole view: the street camera's angle spans it (the right panel only covers its edge).
-	F->SetArrayField(TEXT("viewport"), { MakeShared<FJsonValueNumber>(Size.X), MakeShared<FJsonValueNumber>(Size.Y) });
+	// Where the dialog box and portrait are drawn (the right panel keeps its column), and the whole picture the
+	// street camera's angle spans (the shots are framed for it).
+	const float UiScale = GEngine && GEngine->GameViewport ? UWidgetLayoutLibrary::GetViewportScale(GEngine->GameViewport) : 1.f;
+	F->SetArrayField(TEXT("viewport"), { MakeShared<FJsonValueNumber>(FMath::Max(1.0, Size.X - OKStreetGalgameRightColumn * UiScale)), MakeShared<FJsonValueNumber>(Size.Y) });
+	if (Size.Y > 0) F->SetNumberField(TEXT("view_aspect"), Size.X / Size.Y);
 	auto Vec = [](const FVector& V) { return TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueNumber>(V.X), MakeShared<FJsonValueNumber>(V.Y), MakeShared<FJsonValueNumber>(V.Z) }; };
 	auto Quat = [](const FQuat& Q) { return TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueNumber>(Q.X), MakeShared<FJsonValueNumber>(Q.Y), MakeShared<FJsonValueNumber>(Q.Z), MakeShared<FJsonValueNumber>(Q.W) }; };
 	if (S.Camera.IsValid())

@@ -97,7 +97,7 @@ impl Stage {
             voice = VoiceFacts { id, playing: *played < *length, progress: (*played / *length).min(1.0), done: *played >= *length };
         }
         let probes = std::mem::take(&mut self.answers);
-        let facts = Facts { dt, viewport: [1920.0, 1080.0], actors: self.actors.clone(), voice, view: None, view_fov: None, probes };
+        let facts = Facts { dt, viewport: [1920.0, 1080.0], actors: self.actors.clone(), voice, view: None, view_fov: None, view_aspect: None, probes };
         self.frame = self.d.tick(facts);
         for p in self.frame.probes.clone() {
             let length = ((p.to[0] - p.from[0]).powi(2) + (p.to[1] - p.from[1]).powi(2) + (p.to[2] - p.from[2]).powi(2)).sqrt();
