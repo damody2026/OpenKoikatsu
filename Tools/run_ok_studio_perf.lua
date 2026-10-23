@@ -1,6 +1,6 @@
 -- Frame times of KStudio scenes in OK Studio once loaded (OKStudio.PerfKStudio), run as SceneEditor.cmd runs the studio.
 -- Tools/lua/lua.exe Tools/run_ok_studio_perf.lua --tag <name> [--scenes samples|<folder>] [--count 14] [--seconds 5]
---   [--settle 120] [--width 1920 --height 1080] [--dump <frames>] [--env NAME=VALUE ...]
+--   [--settle 120] [--width 1920 --height 1080] [--dump <frames>] [--env NAME=VALUE ...] [--exec "cvar value,..."]
 -- Report: Saved/OKStudio/perf/<tag>.json; log: Saved/Logs/perf_<tag>.log. --dump also prints the engine's averaged
 -- game-thread stats (stat dumpave) of the last scene's OK Studio and KK preview counters.
 local ok = require "ok"
@@ -17,6 +17,7 @@ p:opt("--width", { default = "1920" })
 p:opt("--height", { default = "1080" })
 p:opt("--dump")
 p:opt("--env", { nargs = "*", default = {} })
+p:opt("--exec") -- console commands run before the measurement (comma separated), e.g. "ok.ShadowCapturesPerFrame 9"
 p:opt("--timeout", { default = "3600" })
 local a = p:parse(arg)
 assert(a.tag:match("^[%w_%-]+$"), "Invalid tag")
@@ -25,7 +26,7 @@ local args = { path.join(a.engine, "Engine/Binaries/Win64/UnrealEditor.exe"), pa
   "/Engine/Maps/Entry?game=/Script/OKStudio.OKStudioGameMode", "-game", "-windowed",
   "-ResX=" .. a.width, "-ResY=" .. a.height, "-nosound", "-unattended", "-nosplash", "-nop4",
   "-OKStudioPerfTag=" .. a.tag, "-abslog=" .. log,
-  ("-ExecCmds=OKStudio.PerfKStudio %s %s %s %s exit"):format(a.scenes, a.count, a.settle, a.seconds) }
+  ("-ExecCmds=%sOKStudio.PerfKStudio %s %s %s %s exit"):format(a.exec and (a.exec .. ",") or "", a.scenes, a.count, a.settle, a.seconds) }
 local saved = {}
 local function setenv(name, value) saved[#saved + 1] = { name, fs.getenv(name) }; fs.setenv(name, value) end
 setenv("UE_SKIP_UBT_SDK_SETUP", "1")
