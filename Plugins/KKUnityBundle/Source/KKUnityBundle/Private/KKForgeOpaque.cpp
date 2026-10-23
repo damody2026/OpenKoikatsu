@@ -1,4 +1,5 @@
 ﻿#include "KKForgeOpaque.h"
+#include "KKToonShadowBias.h"
 #include "KKSkeletalBuilder.h"
 #include "KKMaterialDedupe.h"
 #include "KKMaterialExposure.h"
@@ -184,7 +185,7 @@ UMaterial* OKMakeForgeOpaqueMaterial(const FOKNativeItemDraw& Draw)
         auto Vector=[&](const TCHAR* Name,const FVector& V) {auto* E=NewObject<UMaterialExpressionConstant3Vector>(Mat);E->Constant=FLinearColor(V.X,V.Y,V.Z,1);Add(Name,E);};
         Vector(TEXT("ShadowCenter"),Draw.ForgeShadowCenter);Vector(TEXT("ShadowRight"),Draw.ForgeShadowRight);
         Vector(TEXT("ShadowUp"),Draw.ForgeShadowUp);Vector(TEXT("ShadowLight"),Draw.ForgeShadowLight);
-        Code+=FString::Printf(TEXT("float3 sd=Position-ShadowCenter;float2 su=float2(.5+dot(sd,ShadowRight)/%s,.5-dot(sd,ShadowUp)/%s);float receiver=%s-dot(sd,ShadowLight);float visibility=1.0;if(all(su>=0)&&all(su<=1)){float4 depths=float4(ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(-1,-1)/2048.0,0).r,ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(1,-1)/2048.0,0).r,ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(-1,1)/2048.0,0).r,ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(1,1)/2048.0,0).r);visibility=dot(step(receiver,depths+1.5),float4(.25,.25,.25,.25));}\n"),*ForgeOpaqueBits(Draw.ForgeShadowWidth),*ForgeOpaqueBits(Draw.ForgeShadowWidth),*ForgeOpaqueBits(Draw.ForgeShadowDistance));
+        Code+=FString::Printf(TEXT("float3 sd=Position-ShadowCenter;float2 su=float2(.5+dot(sd,ShadowRight)/%s,.5-dot(sd,ShadowUp)/%s);float receiver=%s-dot(sd,ShadowLight);float visibility=1.0;if(all(su>=0)&&all(su<=1)){float4 depths=float4(ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(-1,-1)/2048.0,0).r,ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(1,-1)/2048.0,0).r,ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(-1,1)/2048.0,0).r,ShadowDepth.SampleLevel(ShadowDepthSampler,su+float2(1,1)/2048.0,0).r);visibility=dot(step(receiver,depths+%s),float4(.25,.25,.25,.25));}\n"),*ForgeOpaqueBits(Draw.ForgeShadowWidth),*ForgeOpaqueBits(Draw.ForgeShadowWidth),*ForgeOpaqueBits(Draw.ForgeShadowDistance),*ForgeOpaqueBits(OKToonShadowBias()));
         const FString Sample=TEXT("Texture6.Sample(Sampler0,float2((r6.xy).x,lerp((r6.xy).y,1.0-(r6.xy).y,UVFlip)))");
         check(Program.Contains(Sample));Program.ReplaceInline(*Sample,TEXT("float4(visibility,visibility,visibility,visibility)"));
     }

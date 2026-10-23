@@ -1,4 +1,5 @@
 #include "KKPreviewActor.h"
+#include "KKToonShadowBias.h"
 #include "KKOkAnimation.h"
 #include "KKMaterialDedupe.h"
 #include "UObject/StrongObjectPtr.h"
@@ -125,6 +126,7 @@ static TAutoConsoleVariable<int32> CVarOkAnimationGeneratedStreams(
     TEXT("ok.Animation.GeneratedStreams"),1,TEXT("Fuse generated preview geometry with stream packing; 0 retains the intermediate-array oracle."));
 static TAutoConsoleVariable<int32> CVarOkDeferFacePose(TEXT("ok.Studio.DeferFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) take their pose in their own (worker) anim update after the owner; 0: evaluated at once in SyncMouthPose."));
 static TAutoConsoleVariable<int32> CVarOkShareFacePose(TEXT("ok.Studio.ShareFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) follow the body pose as exact followers, keeping their own morph targets; 0: they evaluate their own pose."));
+static TAutoConsoleVariable<int32> CVarOkSkipPosedTicks(TEXT("ok.Studio.SkipPosedTicks"),1,TEXT("1: the body and following parts of characters an owner poses (OK Studio) do not tick (their pose is applied by the owner each frame); 0: they tick as usual."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth in turns (at least every other frame, at most ok.ShadowCapturesPerFrame captures a frame for the whole scene); 0: every frame."));
 static TAutoConsoleVariable<int32> CVarOkShadowCapturesPerFrame(TEXT("ok.ShadowCapturesPerFrame"),2,TEXT("With ok.ShadowCaptureStagger: how many toon shadow captures of owner-posed characters a frame renders at most (each is a whole extra scene render); a scene with more characters updates each one's shadow less often."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureFullView(TEXT("ok.ShadowCaptureFullView"),0,TEXT("1: the toon shadow depth capture renders a full view (lighting, post-processing...) as before; 0 depth only. Read when a character loads."));
@@ -1883,7 +1885,7 @@ return lerp(c, ThirdRGB * ThirdColor.rgb, ThirdAlpha * ThirdColor.a);
 				UMaterialExpressionCustom* ShadowAttenuation = NewObject<UMaterialExpressionCustom>(Mat);
 				ShadowAttenuation->Material = Mat;
 				ShadowAttenuation->OutputType = CMOT_Float1;
-				ShadowAttenuation->Code = TEXT("float receiver = Distance - dot(Position - Center, LightDir); if (!all(UV >= 0.0) || !all(UV <= 1.0)) return 1.0; float4 depths = float4(Depth0, Depth1, Depth2, Depth3); return dot(step(receiver, depths + 1.5), float4(0.25,0.25,0.25,0.25));");
+				ShadowAttenuation->Code = FString::Printf(TEXT("float receiver = Distance - dot(Position - Center, LightDir); if (!all(UV >= 0.0) || !all(UV <= 1.0)) return 1.0; float4 depths = float4(Depth0, Depth1, Depth2, Depth3); return dot(step(receiver, depths + %.9g), float4(0.25,0.25,0.25,0.25));"), OKToonShadowBias());
 				for (const auto& Pair : { TPair<FName, UMaterialExpression*>(TEXT("Position"), WorldPos), TPair<FName, UMaterialExpression*>(TEXT("Center"), Center), TPair<FName, UMaterialExpression*>(TEXT("LightDir"), ShadowLightNode), TPair<FName, UMaterialExpression*>(TEXT("Distance"), Distance), TPair<FName, UMaterialExpression*>(TEXT("UV"), ShadowUv) })
 				{
 					FCustomInput& Input = ShadowAttenuation->Inputs.AddDefaulted_GetRef();
@@ -5531,7 +5533,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			UE_LOG(LogTemp, Display, TEXT("OK body alpha mask bytes=%d decoded=%d blend=%s"),
 				View.alpha_mask_len, AlphaMaskTex ? 1 : 0, *Part.Blend);
 		}
-		if (!bCookedTextures && View.detail_mask && View.detail_mask_len > 16)
+		// OK_SKIP_PART_MAPS=detail,line,normal: load parts without these maps (diagnostic: which map a shading artifact comes from).
+		static const FString SkipMaps = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_SKIP_PART_MAPS"));
+		if (!bCookedTextures && !SkipMaps.Contains(TEXT("detail")) && View.detail_mask && View.detail_mask_len > 16)
 		{
 			OkTextureSettings DetailSettings{};
 			const bool bNativeDetail = Source.TextureSettings(i, "_DetailMask", DetailSettings);
@@ -5540,13 +5544,13 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			if (DetailTex) { DetailTex->AddToRoot(); Output.Textures.Add(DetailTex); }
 		}
 		UTexture2D* LineTex = nullptr;
-		if (!bCookedTextures && View.line_mask && View.line_mask_len > 16)
+		if (!bCookedTextures && !SkipMaps.Contains(TEXT("line")) && View.line_mask && View.line_mask_len > 16)
 		{
 			LineTex = LinearTextureFromPngBytes(View.line_mask, View.line_mask_len);
 			if (LineTex) { LineTex->AddToRoot(); Output.Textures.Add(LineTex); }
 		}
 		UTexture2D* NormalTex = nullptr;
-		if (!bCookedTextures && View.normal_map && View.normal_map_len > 16)
+		if (!bCookedTextures && !SkipMaps.Contains(TEXT("normal")) && View.normal_map && View.normal_map_len > 16)
 		{
 			NormalTex = LinearTextureFromPngBytes(View.normal_map, View.normal_map_len);
 			if (NormalTex) { NormalTex->AddToRoot(); Output.Textures.Add(NormalTex); }
@@ -6827,6 +6831,15 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
    bFaceLeaderChanged|=bWas!=Follower->LeaderPoseComponent.IsValid();
   }
  if(bFaceLeaderChanged)ApplyMouth();
+ // An owner that poses this actor (OK Studio) applies the body pose and publishes the followers' bones and morphs here
+ // every frame: their own ticks would only refresh the same pose again (as under coordinated playback). A part that
+ // is not following keeps its tick (its own pose evaluation).
+ if(bSceneDrivenPose&&!bCoordinatedPlayback){
+  const bool Skip=CVarOkSkipPosedTicks.GetValueOnGameThread()!=0;
+  if(BodySkel)BodySkel->SetComponentTickEnabled(!Skip);
+  for(UPoseableMeshComponent* F:SkelFollowers)if(F)F->SetComponentTickEnabled(!Skip||!F->LeaderPoseComponent.IsValid());
+  for(const auto& Slot:MouthSlots)for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})if(Mesh)Mesh->SetComponentTickEnabled(!Skip||!Mesh->LeaderPoseComponent.IsValid());
+ }
  const double PoseBuilt=FPlatformTime::Seconds();
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplySkelPoses);
 	{QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplyBodyPose);
@@ -7192,7 +7205,7 @@ bool AKKPreviewActor::AreInteractionStreamsReady() const {
 
 void AKKPreviewActor::PreparePrivateGpuDisplayPoses(){
  TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuPaletteBatch);QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_PrivateGpuPoses);
- if(!bUsePrivateGpuPlayback||!CVarOkPrivateGpuStreams.GetValueOnGameThread())return;
+ if(!bUsePrivateGpuPlayback||!CVarOkPrivateGpuStreams.GetValueOnAnyThread())return;
  TArray<int32> Indices;TArray<const FKKPrivateGpuSource*> Sources;TArray<FKKPrivateGpuDisplay*> States;
  for(auto& Part:Parts)if(Part.PrivateGpuDisplay&&Part.PrivateGpuDisplay->Installed){
   auto& State=*Part.PrivateGpuDisplay;State.PreparedPoseFrame=MAX_uint64;
