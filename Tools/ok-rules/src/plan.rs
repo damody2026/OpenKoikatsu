@@ -193,8 +193,12 @@ pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
     // A lunch or dinner date with him is that meal: she does not eat it alone first (dinner at 17:30, then the 20:00
     // dinner date with him full).
     let eats_with_him = |w: (i32, i32)| i.promises.iter().any(|p| meal_with_him(c, &p.place, p.start, w));
+    // Nor a late lunch just before one: three hours at least before a meal date (lunch at 16:15 after her shift, and the
+    // 18:00 dinner date with him full).
+    let before_date = |s: i32| !i.promises.iter().any(|p| p.start > s && p.start < s + 180 && [LUNCH_WINDOW, DINNER_WINDOW].iter().any(|w| meal_with_him(c, &p.place, p.start, *w)));
     if !eats_with_him(LUNCH_WINDOW) {
-        meal(&mut day, &[720, 660, 780, 975], 60, &lunch, budget);
+        let starts: Vec<i32> = [720, 660, 780, 975].into_iter().filter(|s| before_date(*s)).collect();
+        meal(&mut day, &starts, 60, &lunch, budget);
     }
     // Dinner is not one restaurant for everybody (all ten heroines sat in it at 18:00): a student on a weekday often
     // eats at the cafeteria (open until 19:00), a small budget skips the restaurant, and the hour moves a little.
@@ -834,7 +838,7 @@ fn plan_set_promises(c: &Catalog, r: &Value) -> Result<Value, String> {
         // A lunch or dinner date: her own meal of that window goes (made at nine for noon, the 12:00 lunch stayed).
         for w in [LUNCH_WINDOW, DINNER_WINDOW] {
             if meal_with_him(c, place, start, w) {
-                day.retain(|b| !(b.kind == "meal" && b.source == "need" && b.start >= w.0 - 60 && b.start < w.1));
+                day.retain(|b| !(b.kind == "meal" && b.source == "need" && b.start > (start - 180).min(w.0 - 60) && b.start < w.1));
             }
         }
         let mut kept = Vec::with_capacity(day.len() + 2);
@@ -957,6 +961,9 @@ mod tests {
             let mut i = inputs(&p, seed, 1);
             i.promises = vec![block(1200, 1290, "restaurant", "promise", "promise", "", 0)];
             assert_eq!(dinner(&plan_day(&i, &c)), 0, "seed {seed}: she ate dinner before the 20:00 dinner date");
+            // an 18:00 dinner date: no meal from 15:00 on
+            i.promises = vec![block(1080, 1170, "restaurant", "promise", "promise", "", 0)];
+            assert!(!plan_day(&i, &c).iter().any(|x| x.kind == "meal" && x.start > 900 && x.start < 1080), "seed {seed}: a late lunch right before the dinner date");
             // a date at a place without food is not her dinner
             i.promises = vec![block(1200, 1290, "library", "promise", "promise", "", 0)];
             let _ = plan_day(&i, &c);
