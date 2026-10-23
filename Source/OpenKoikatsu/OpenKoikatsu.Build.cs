@@ -18,6 +18,8 @@ public class OpenKoikatsu : ModuleRules
 		PrivateDefinitions.Add(Patched("OK_CROWD_FULL_REF_MATRIX_CACHE","Source/Runtime/Engine/Private/SkeletalRender.cpp","GetSkeletalFullRefMatrixCacheStats"));
 		PrivateDefinitions.Add(Patched("OK_CROWD_WEIGHTED_POSE_SEED","Source/Runtime/Engine/Private/Components/SkeletalMeshComponent.cpp","SetSkeletalWeightedPoseSeed"));
 		PrivateDefinitions.Add(Patched("OK_CROWD_CONSTANT_SCALE_CACHE","Source/Runtime/Engine/Private/Animation/AnimCompress.cpp","PrepareAnimConstantScaleCache"));
+		// Coincident clothing layers draw in source order (KKPreviewActor draw_layer -> TranslucencySortPriority).
+		PrivateDefinitions.Add(Patched("OK_OPAQUE_SORT_PRIORITY","Source/Runtime/Renderer/Private/BasePassRendering.cpp","OKOpaqueSortPriority"));
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{

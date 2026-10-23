@@ -1,0 +1,113 @@
+From bbd10e61f511fb89f8a67ca9a17f0016046fb9c9 Mon Sep 17 00:00:00 2001
+From: damody <t1238142000@gmail.com>
+Date: Fri, 23 Oct 2026 12:53:36 +0800
+Subject: [PATCH] =?UTF-8?q?=E4=B8=8D=E9=80=8F=E6=98=8E=20base=20pass=20?=
+ =?UTF-8?q?=E5=8F=AF=E4=BE=9D=20primitive=20=E7=9A=84=20TranslucencySortPr?=
+ =?UTF-8?q?iority=20=E6=8E=92=E5=BA=8F=EF=BC=88r.OK.OpaqueSortPriority?=
+ =?UTF-8?q?=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+預設 0 不改變行為。設為 1 時，把 primitive 的 TranslucencySortPriority 偏移後放進 base pass 排序鍵 Masked
+欄位的高位（mesh decal pass 已用同一欄位放優先度），最低位仍是 masked 旗標。深度相等的重合面在完整深度預先
+處理下都會通過 DepthEqual，GBuffer 留最後畫的那一層；依指定順序繪製就和 Unity 的 render order + ZTest LEqual
+一致（OpenKoikatsu：Material Editor 複製材質、重複飾品的服裝貼花層不再閃爍）。無 early-Z 時重算的排序鍵只取
+bit 0 當 masked。CVar 變更時重建 render state，讓快取的 mesh draw command 換新鍵。
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../Renderer/Private/BasePassRendering.cpp    | 26 +++++++++++++++++--
+ .../Renderer/Private/MeshDrawCommands.cpp     |  4 +--
+ 2 files changed, 26 insertions(+), 4 deletions(-)
+
+diff --git a/Engine/Source/Runtime/Renderer/Private/BasePassRendering.cpp b/Engine/Source/Runtime/Renderer/Private/BasePassRendering.cpp
+index a00eed24c..a72e061f3 100644
+--- a/Engine/Source/Runtime/Renderer/Private/BasePassRendering.cpp
++++ b/Engine/Source/Runtime/Renderer/Private/BasePassRendering.cpp
+@@ -5,6 +5,7 @@
+ #include "AnisotropyRendering.h"
+ #include "BatchedElements.h"
+ #include "ClearQuad.h"
++#include "ComponentRecreateRenderStateContext.h"
+ #include "Containers/ArrayView.h"
+ #include "Containers/IndirectArray.h"
+ #include "Containers/StaticArray.h"
+@@ -130,6 +131,20 @@ static TAutoConsoleVariable<int32> CVarVertexFoggingForOpaque(
+ 	TEXT("Causes opaque materials to use per-vertex fogging, which costs less and integrates properly with MSAA.  Only supported with forward shading."),
+ 	ECVF_ReadOnly | ECVF_RenderThreadSafe);
+ 
++// OKOpaqueSortPriority: opaque/masked base pass draws ordered by the primitive's TranslucencySortPriority (lower
++// first), like the mesh decal pass. Coincident surfaces then resolve as in Unity's render order with ZTest LEqual:
++// with a full depth prepass every layer passes DepthEqual and the last one drawn keeps the GBuffer. Primitives
++// without a priority (0) keep their relative order. Not applied when the base pass re-sorts without early Z.
++static TAutoConsoleVariable<int32> CVarOKOpaqueSortPriority(
++	TEXT("r.OK.OpaqueSortPriority"),
++	0,
++	TEXT("Order opaque and masked base pass draws by the primitive's TranslucencySortPriority.\n")
++	TEXT(" 0: engine order (shader state only).\n")
++	TEXT(" 1: priority first, then the engine order."),
++	// Cached mesh draw commands keep the key they were built with: rebuild them when it changes at run time.
++	FConsoleVariableDelegate::CreateLambda([](IConsoleVariable*) { if (GIsRunning) { FGlobalComponentRecreateRenderStateContext Context; } }),
++	ECVF_RenderThreadSafe);
++
+ static TAutoConsoleVariable<int32> CVarSupportStationarySkylight(
+ 	TEXT("r.SupportStationarySkylight"),
+ 	1,
+@@ -326,7 +341,7 @@ FMeshDrawCommandSortKey CalculateTranslucentMeshStaticSortKey(const FPrimitiveSc
+ 	return SortKey;
+ }
+ 
+-static FMeshDrawCommandSortKey CalculateBasePassMeshStaticSortKey(EDepthDrawingMode EarlyZPassMode, const bool bIsMasked, const bool bBackground, const FMeshMaterialShader* VertexShader, const FMeshMaterialShader* PixelShader)
++static FMeshDrawCommandSortKey CalculateBasePassMeshStaticSortKey(EDepthDrawingMode EarlyZPassMode, const bool bIsMasked, const bool bBackground, const FMeshMaterialShader* VertexShader, const FMeshMaterialShader* PixelShader, const FPrimitiveSceneProxy* PrimitiveSceneProxy)
+ {
+ 	FMeshDrawCommandSortKey SortKey;
+ 	SortKey.BasePass.VertexShaderHash = (VertexShader ? VertexShader->GetSortKey() : 0) & 0xFFFF;
+@@ -340,6 +355,12 @@ static FMeshDrawCommandSortKey CalculateBasePassMeshStaticSortKey(EDepthDrawingM
+ 	{
+ 		SortKey.BasePass.Masked = bIsMasked ? 1 : 0;
+ 	}
++	// OKOpaqueSortPriority: the 15-bit Masked field keeps the masked flag in bit 0 and the biased priority above it.
++	if (PrimitiveSceneProxy && CVarOKOpaqueSortPriority.GetValueOnAnyThread() != 0)
++	{
++		const int32 Priority = FMath::Clamp<int32>(PrimitiveSceneProxy->GetTranslucencySortPriority(), -8192, 8191) + 8192;
++		SortKey.BasePass.Masked = (uint64(Priority) << 1) | SortKey.BasePass.Masked;
++	}
+ 
+ 	return SortKey;
+ }
+@@ -1909,7 +1930,8 @@ bool FBasePassMeshProcessor::Process(
+ 			bIsMasked,
+ 			PrimitiveSceneProxy && PrimitiveSceneProxy->TreatAsBackgroundForOcclusion(),
+ 			BasePassShaders.VertexShader.GetShader(),
+-			BasePassShaders.PixelShader.GetShader());
++			BasePassShaders.PixelShader.GetShader(),
++			PrimitiveSceneProxy);
+ 	}
+ 
+ 	BuildMeshDrawCommands(
+diff --git a/Engine/Source/Runtime/Renderer/Private/MeshDrawCommands.cpp b/Engine/Source/Runtime/Renderer/Private/MeshDrawCommands.cpp
+index 2d0cd3df4..0c102e782 100644
+--- a/Engine/Source/Runtime/Renderer/Private/MeshDrawCommands.cpp
++++ b/Engine/Source/Runtime/Renderer/Private/MeshDrawCommands.cpp
+@@ -373,7 +373,7 @@ static void UpdateMeshSortKeys(
+ 		for (int32 CmdIdx = 0; CmdIdx < NumCmds; ++CmdIdx)
+ 		{
+ 			FVisibleMeshDrawCommand& Cmd = VisibleMeshCommands[CmdIdx];
+-			bool bMasked = Cmd.SortKey.BasePass.Masked == 1;
++			bool bMasked = (Cmd.SortKey.BasePass.Masked & 1) == 1; // OKOpaqueSortPriority keeps a priority above bit 0
+ 			bool bBackground = Cmd.SortKey.BasePass.Background == 1;
+ 			float PrimitiveDistance = 0;
+ 			if (Cmd.PrimitiveIdInfo.ScenePrimitiveId < ScenePrimitiveBounds.Num())
+@@ -431,7 +431,7 @@ static void UpdateMeshSortKeys(
+ 		for (int32 CmdIdx = 0; CmdIdx < NumCmds; ++CmdIdx)
+ 		{
+ 			FVisibleMeshDrawCommand& Cmd = VisibleMeshCommands[CmdIdx];
+-			bool bMasked = Cmd.SortKey.BasePass.Masked == 1;
++			bool bMasked = (Cmd.SortKey.BasePass.Masked & 1) == 1; // OKOpaqueSortPriority keeps a priority above bit 0
+ 			bool bBackground = Cmd.SortKey.BasePass.Background == 1;
+ 			float PrimitiveDistance = 0;
+ 			if (Cmd.PrimitiveIdInfo.ScenePrimitiveId < ScenePrimitiveBounds.Num())
+-- 
+2.54.0.windows.1
+

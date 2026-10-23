@@ -5864,6 +5864,12 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				{
 					Follow->TranslucencySortPriority = 110;
 				}
+				else if (View.draw_layer > 0)
+				{
+					// A later layer of the same surface (Material Editor copy, duplicated accessory) draws after the
+					// earlier ones and keeps equal-depth pixels, as Unity's LEqual (engine r.OK.OpaqueSortPriority).
+					Follow->SetTranslucentSortPriority(FMath::Min(View.draw_layer, 99));
+				}
 				if (Comp)
 				{
 					Comp->ClearAllMeshSections();
@@ -6179,6 +6185,11 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			int32& Depth = Output.TranslucentDepth.FindOrAdd(StackKey);
 			Comp->TranslucencySortPriority = FMath::Min(Depth, 99);
 			++Depth;
+		}
+		else if (View.draw_layer > 0)
+		{
+			// Same surface, later draw: kept on top in the opaque base pass (r.OK.OpaqueSortPriority).
+			Comp->SetTranslucentSortPriority(FMath::Min(View.draw_layer, 99));
 		}
 		if (bSlotAcc && Comp && BodySkel)
 		{

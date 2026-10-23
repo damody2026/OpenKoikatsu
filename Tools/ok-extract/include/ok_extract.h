@@ -222,6 +222,7 @@ typedef struct OkMeshView {
 	float eye_color[4];
 	float eye_highlight;
 	const float* eye_sample_uvs;
+	int32_t draw_layer; /* Draw order among parts drawing the same surface (0 first); see assign_draw_layers. */
 } OkMeshView;
 
 typedef struct OkBoneView {
