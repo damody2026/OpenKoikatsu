@@ -5,6 +5,7 @@
 ## 工作規則
 
 - **回覆語言**：一律用繁體中文；程式碼、識別名稱、路徑、指令保持原文。
+- **照使用者的決定做**：使用者做出的決定或指出的錯誤，直接照辦，不質疑、不反問、不二度確認；使用者說錯就是錯。
 - **版控只放共用資源**（[Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md](Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md)）：
   - 角色卡（`Content/CharacterCards/`、`UserData/Studio/scene/*_cards/`、含角色的 Studio 樣本場景）與第三方 mod 轉出的模型只留本機，不要 `git add -f`。
   - commit 前的 hook 會擋下角色卡、OK 卡與含角色的 Studio 場景（`Tools/check_no_cards.lua`；新 checkout 先執行 `Tools/lua/lua.exe Tools/install_git_hooks.lua`，`--all` 可檢查全部已追蹤檔）。私有卡與測試卡只留本機。
