@@ -1,5 +1,6 @@
 #include "OKSceneActor.h"
 #include "Async/ParallelFor.h"
+#include "Tasks/Task.h"
 #include "HAL/IConsoleManager.h"
 #include "OKStudioImport.h"
 #include "OKStudioImport.h"
@@ -738,6 +739,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> CVarParallelPose(TEXT("ok.Studio.ParallelPose"), 1,
 		TEXT("1: OK Studio solves its characters' poses (animation, hair and cloth) on worker threads at once, then refreshes their display on the game thread. 0: one after another on the game thread."));
+	TAutoConsoleVariable<int32> CVarPipelinePose(TEXT("ok.Studio.PipelinePose"), 0,
+		TEXT("With ok.Studio.ParallelPose: 1 refreshes each character's display as soon as its own solve is done (solves as tasks); 0 solves all (ParallelFor, the game thread helping) then refreshes."));
 	TAutoConsoleVariable<int32> CVarSharePose(TEXT("ok.Studio.SharePose"), 1,
 		TEXT("1: a Studio character's skeletal parts take the body's pose as their leader instead of each copying it."));
 }
@@ -766,18 +769,47 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
     }
     // Each character's native solve touches only its own session: solved together on worker threads, then each
     // display refreshed here. A pose the split does not cover (a shape edit, other pose modes) runs whole here.
-    TArray<uint8, TInlineAllocator<16>> Split;
-    Split.SetNumZeroed(Actors.Num());
-    if (CVarParallelPose.GetValueOnGameThread() != 0 && Actors.Num() > 1)
+    // Each solve is its own task; a character's display is refreshed as soon as its solve is done, while the others
+    // are still solving (the game thread's display work overlaps the workers' solves instead of following them all).
+    if (CVarParallelPose.GetValueOnGameThread() != 0 && Actors.Num() > 0 && CVarPipelinePose.GetValueOnGameThread() == 0)
     {
         QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_ParallelSolve);
+        TArray<uint8, TInlineAllocator<16>> Split;
+        Split.SetNumZeroed(Actors.Num());
         ParallelFor(Actors.Num(), [&](int32 I) { Split[I] = Actors[I]->SolveScenePose(DeltaSeconds, false) ? 1 : 0; });
+        for (int32 I = 0; I < Actors.Num(); ++I)
+        {
+            if (Split[I]) Actors[I]->FinishScenePose();
+            else Actors[I]->ApplyPoseFrame(DeltaSeconds, false);
+        }
+        return;
     }
-    for (int32 I = 0; I < Actors.Num(); ++I)
+    if (CVarParallelPose.GetValueOnGameThread() != 0 && Actors.Num() > 0)
     {
-        if (Split[I]) Actors[I]->FinishScenePose();
-        else Actors[I]->ApplyPoseFrame(DeltaSeconds, false);
+        QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_PipelinedSolve);
+        TArray<uint8, TInlineAllocator<16>> Split;
+        Split.SetNumZeroed(Actors.Num());
+        TArray<UE::Tasks::FTask, TInlineAllocator<16>> Solves;
+        for (int32 I = 0; I < Actors.Num(); ++I)
+            Solves.Add(UE::Tasks::Launch(UE_SOURCE_LOCATION, [Actor = Actors[I], &Split, I, DeltaSeconds] { Split[I] = Actor->SolveScenePose(DeltaSeconds, false) ? 1 : 0; }));
+        TArray<bool, TInlineAllocator<16>> Done;
+        Done.SetNumZeroed(Actors.Num());
+        for (int32 Left = Actors.Num(); Left > 0;)
+        {
+            int32 Next = INDEX_NONE;
+            for (int32 I = 0; I < Actors.Num() && Next == INDEX_NONE; ++I) if (!Done[I] && Solves[I].IsCompleted()) Next = I;
+            if (Next == INDEX_NONE)
+            {
+                for (int32 I = 0; I < Actors.Num(); ++I) if (!Done[I]) { Solves[I].Wait(); Next = I; break; }
+            }
+            Done[Next] = true;
+            --Left;
+            if (Split[Next]) Actors[Next]->FinishScenePose();
+            else Actors[Next]->ApplyPoseFrame(DeltaSeconds, false);
+        }
+        return;
     }
+    for (AKKPreviewActor* Actor : Actors) Actor->ApplyPoseFrame(DeltaSeconds, false);
 }
 
 void AOKSceneActor::SetAnimationTime(int32 Id, float Time)

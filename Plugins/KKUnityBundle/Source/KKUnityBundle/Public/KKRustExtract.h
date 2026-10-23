@@ -180,6 +180,8 @@ public:
 	bool ApplyAnimTime(float Time);
 	bool ApplyAnimFrame(float Time, float DeltaSeconds);
     bool SkinDisplayExceptPrivate(TConstArrayView<int32> Parts,TConstArrayView<uint64> Revisions);
+    /** The parts drawn on the GPU from their palettes from now on: playback no longer skins them on the CPU. */
+    bool SetSceneGpuParts(TConstArrayView<int32> Parts,TConstArrayView<uint64> Revisions);
     bool QueryPrivateSkinGeometry(int32 Part);
 	bool QueryPrivateSkinGeometryBatch(TConstArrayView<int32> Parts);
 	bool ExternalBodyPoseAt(int32 Bone, OkBodyPose& Out);

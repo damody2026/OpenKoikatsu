@@ -65,6 +65,9 @@ int32_t ok_part_private_skin_stages(OkSession* s,int32_t part,OkSkinPaletteView*
  * mutation/free. Calls require a live session under the existing C ABI contract. */
 uint64_t ok_part_private_skin_source_revision(OkSession* s,int32_t part);
 int32_t ok_skin_display_except_private(OkSession* s,const int32_t* parts,const uint64_t* revisions,int32_t count);
+/* Parts an owner draws on the GPU from their skin palettes (same validation; 1 = invalid, cleared): playback still
+   solves their dynamics but no longer skins their vertices on the CPU. */
+int32_t ok_session_set_scene_gpu_parts(OkSession* s,const int32_t* parts,const uint64_t* revisions,int32_t count);
 int32_t ok_query_private_skin_geometry(OkSession* s,int32_t part);
 int32_t ok_query_private_skin_geometry_batch(OkSession* s,const int32_t* parts,int32_t count);
 int32_t ok_part_private_skin_stages_revision(OkSession* s,int32_t part,uint64_t expected_revision,OkSkinPaletteView* out,float* matrices,int32_t capacity,float* post16);

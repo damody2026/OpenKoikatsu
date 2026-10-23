@@ -935,6 +935,9 @@ pub fn session_cache_key(lib: &Path, card: &Path, outfit: i32) -> Option<String>
     }
     h.update(env!("CARGO_PKG_VERSION").as_bytes());
     h.update(SESSION_CACHE_REVISION.to_le_bytes());
+    // The extractor's own source (build.rs): the cache is shared by every checkout and build on this machine (C and E,
+    // the reader, the street, packaged stages), so an entry stored by other code is never reused, revision bump or not.
+    h.update(env!("OK_EXTRACT_SOURCE_HASH").as_bytes());
     // An OK Studio character state is another entry; without one the key stays as before.
     if let Some(status) = crate::studio_status::cache_key_bytes() { h.update(b"studio-status"); h.update(&status); }
     // Raw texture containers (OK_RAW_TEXTURES=1) are a different entry from the PNG one.

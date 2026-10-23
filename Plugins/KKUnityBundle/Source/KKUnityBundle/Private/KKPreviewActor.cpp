@@ -6810,16 +6810,24 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
  FKKRuntimeAffinePoseScope SharedPoseScope(Pose);
  if(auto* Leader=Cast<UKKRuntimePoseableMeshComponent>(BodySkel))for(UPoseableMeshComponent* F:SkelFollowers)if(auto* Follower=Cast<UKKRuntimePoseableMeshComponent>(F))Follower->TryUseExactLeader(bShareIdenticalPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
  // A follower takes its leader's morph target weights too: the face parts an owner poses (OK Studio, whose expressions
- // are morphs on these parts) keep their own pose so their expression shows.
+ // are morphs on these parts) keep their own pose so their expression shows (republishing their morphs on a switch,
+ // below, did not bring it back). A part that starts or stops following republishes its morphs at once.
+ bool bFaceLeaderChanged=false;
  if(auto* Leader=Cast<UKKRuntimePoseableMeshComponent>(BodySkel))for(const auto& Slot:MouthSlots)
-  for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})if(auto* Follower=Cast<UKKRuntimeSkeletalMeshComponent>(Mesh))
+  for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})if(auto* Follower=Cast<UKKRuntimeSkeletalMeshComponent>(Mesh)){
+   const bool bWas=Follower->LeaderPoseComponent.IsValid();
    Follower->TryUseExactLeader(bShareIdenticalPose&&!bSceneDrivenPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
+   bFaceLeaderChanged|=bWas!=Follower->LeaderPoseComponent.IsValid();
+  }
+ if(bFaceLeaderChanged)ApplyMouth();
  const double PoseBuilt=FPlatformTime::Seconds();
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplySkelPoses);
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplyBodyPose);
 	if (BodySkel && BodySkel->GetSkinnedAsset())
 	{
 		OKApplySkelPose(BodySkel, Pose);
-	}
+	}}
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplyFollowerPoses);
 	for (UPoseableMeshComponent* F : SkelFollowers)
 	{
 		if (F && F->GetSkinnedAsset())
@@ -6827,8 +6835,8 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
 			if(!F->LeaderPoseComponent.IsValid())OKApplySkelPose(F, Pose);
             else if(auto* Follower=Cast<UKKRuntimePoseableMeshComponent>(F))Follower->VerifyExactLeader(Pose);
 		}
-	}
-	SyncMouthPose();
+	}}
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_SyncMouthPose);SyncMouthPose();}
 
  const double BonesDone=FPlatformTime::Seconds();
  if(Profile)UE_LOG(LogTemp,Display,TEXT("OK animation skeleton skin_ms=%.3f build_ms=%.3f apply_ms=%.3f"),(SkinDone-Begin)*1000.,(PoseBuilt-SkinDone)*1000.,(BonesDone-PoseBuilt)*1000.);
@@ -8597,11 +8605,20 @@ bool AKKPreviewActor::SolveScenePose(float DeltaSeconds,bool bAdvanceAnimation)
     if(!Session.IsOpen()||bShapeDirty||(PoseMode!=0&&PoseMode!=3))return false;
     const double SolveBegin=FPlatformTime::Seconds();
     ON_SCOPE_EXIT{SceneSolveTotalMs+=(FPlatformTime::Seconds()-SolveBegin)*1000.;++SceneSolveSamples;};
+    {
+        // Parts already drawn on the GPU from their palettes: the solve below need not skin them on the CPU too (as
+        // SkinPrivateDisplay leaves them out); the list follows installs and fallbacks every frame.
+        TArray<int32,TInlineAllocator<64>> Gpu;TArray<uint64,TInlineAllocator<64>> Revisions;
+        for(const auto& Part:Parts)if(Part.PrivateGpuDisplay&&Part.PrivateGpuDisplay->Installed){Gpu.Add(Part.SessionIndex);Revisions.Add(Part.PrivateGpuDisplay->Source.Revision);}
+        Session.SetSceneGpuParts(Gpu,Revisions);
+    }
     if(PoseMode==3)
     {
         if(!OkPlayer||!OkPlayer->IsValid()||!FMath::IsFinite(DeltaSeconds)||DeltaSeconds<0.f)return true;
         if(bAdvanceAnimation)AnimPhase=float(FMath::Min(double(AnimPhase)+double(DeltaSeconds)*double(AnimationPlaybackSpeed),double(MAX_flt)));
         if(!OkPlayer->ApplySessions({&Session},AnimPhase,DeltaSeconds,&OkReport)){bPendingSceneFailed=true;return true;}
+        // The face curves are read (and their JSON parsed) here too; FinishScenePose only applies the values.
+        PendingSceneFaceCurves=OkPlayer->Curves(0,AnimPhase);
         bPendingSceneFaceCurves=true;
     }
     else
@@ -8621,7 +8638,7 @@ void AKKPreviewActor::FinishScenePose()
 {
     if(bPendingSceneFailed){bPendingSceneFailed=false;UE_LOG(LogTemp,Error,TEXT("OK animation frame failed: %s"),*OkReport);}
     if(bPendingSceneDisplay){QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_RefreshSkinnedDisplay);RefreshSkinnedDisplay();}
-    if(bPendingSceneFaceCurves&&OkPlayer){QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_OkFaceCurves);OkPlayer->ApplyFaceCurves(0,AnimPhase,*this);}
+    if(bPendingSceneFaceCurves){QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_OkFaceCurves);FOkAnimPlayer::ApplyFaceCurveValues(PendingSceneFaceCurves,*this);}
     bPendingSceneDisplay=false;bPendingSceneFaceCurves=false;
 }
 
