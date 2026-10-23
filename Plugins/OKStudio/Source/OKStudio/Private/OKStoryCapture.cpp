@@ -11,6 +11,8 @@
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialExpressionUtils.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "RenderingThread.h"
+#include "RHIGPUReadback.h"
 #include "TextureResource.h"
 
 static bool OKStoryCaptureVector(const TSharedPtr<FJsonObject>& O, const TCHAR* Field, FVector& Out)
@@ -126,9 +128,9 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 	const TArray<TSharedPtr<FJsonValue>>* Size = nullptr;
 	int32 W = 768, H = 1152;
 	if (Portrait->TryGetArrayField(TEXT("target"), Size) && Size->Num() == 2) { W = FMath::Clamp(int32((*Size)[0]->AsNumber()), 16, 4096); H = FMath::Clamp(int32((*Size)[1]->AsNumber()), 16, 4096); }
-	auto MakeTarget = [&](TStrongObjectPtr<UTextureRenderTarget2D>& T, ETextureRenderTargetFormat Format, bool bEncoded)
+	auto MakeTarget = [&](TStrongObjectPtr<UTextureRenderTarget2D>& T, ETextureRenderTargetFormat Format, bool bEncoded, int32 TW, int32 TH)
 	{
-		if (T && T->SizeX == W && T->SizeY == H) return;
+		if (T && T->SizeX == TW && T->SizeY == TH) return;
 		if (!T)
 		{
 			T.Reset(NewObject<UTextureRenderTarget2D>(GetTransientPackage()));
@@ -137,11 +139,16 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 			T->TargetGamma = bEncoded ? 2.2f : 0.f;
 			T->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
 		}
-		T->InitAutoFormat(W, H);
+		T->InitAutoFormat(TW, TH);
 		T->UpdateResourceImmediate(true);
 	};
-	MakeTarget(ColorTarget, RTF_RGBA8, true);
-	MakeTarget(CoverageTarget, RTF_RGBA16f, false);
+	for (int32 B = 0; B < 2; ++B)
+	{
+		MakeTarget(ColorTarget[B], RTF_RGBA8, true, W, H);
+		// The coverage only shapes the edge: half the resolution, a quarter of the pixels.
+		MakeTarget(CoverageTarget[B], RTF_RGBA16f, false, FMath::Max(16, W / 2), FMath::Max(16, H / 2));
+	}
+	const int32 Back = 1 - Front;
 	auto MakeCapture = [&](TStrongObjectPtr<USceneCaptureComponent2D>& C, ESceneCaptureSource Source, UTextureRenderTarget2D* T)
 	{
 		if (!C || !C->IsRegistered())
@@ -154,25 +161,66 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 			C->ProjectionType = ECameraProjectionMode::Orthographic;
 			C->CaptureSource = Source;
 			C->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-			C->ShowFlags.SetAtmosphere(false);
-			C->ShowFlags.SetFog(false);
-			C->ShowFlags.SetTemporalAA(false);
-			C->ShowFlags.SetMotionBlur(false);
+			// One character against nothing: the passes that gather the rest of the scene (global illumination,
+			// reflections, ambient occlusion, volumetrics) cost a full view each and add nothing to a toon portrait.
+			FEngineShowFlags& Show = C->ShowFlags;
+			Show.SetAtmosphere(false); Show.SetFog(false); Show.SetVolumetricFog(false); Show.SetCloud(false);
+			Show.SetTemporalAA(false); Show.SetMotionBlur(false);
+			Show.SetGlobalIllumination(false); Show.SetLumenGlobalIllumination(false); Show.SetLumenReflections(false);
+			Show.SetScreenSpaceReflections(false); Show.SetReflectionEnvironment(false);
+			Show.SetAmbientOcclusion(false); Show.SetDistanceFieldAO(false); Show.SetContactShadows(false);
+			Show.SetCapsuleShadows(false); Show.SetLightShafts(false); Show.SetParticles(false); Show.SetDecals(false);
+			C->bUseRayTracingIfEnabled = false;
+			if (Source == SCS_SceneColorHDR)
+			{
+				// The coverage capture only reads the scene alpha (what was drawn): no light, shadow or post at all.
+				Show.SetLighting(false); Show.SetDynamicShadows(false); Show.SetSkyLighting(false);
+				Show.SetPostProcessing(false); Show.SetBloom(false);
+			}
 		}
 		C->TextureTarget = T;
 	};
-	MakeCapture(Color, SCS_FinalColorLDR, ColorTarget.Get());
-	MakeCapture(Coverage, SCS_SceneColorHDR, CoverageTarget.Get());
+	// Both captures draw into the back picture.
+	MakeCapture(Color, SCS_FinalColorLDR, ColorTarget[Back].Get());
+	MakeCapture(Coverage, SCS_SceneColorHDR, CoverageTarget[Back].Get());
 	if (!Mid)
 	{
-		if (UMaterialInterface* M = OKStoryPortraitMaterial(ColorTarget.Get(), CoverageTarget.Get()))
+		if (UMaterialInterface* M = OKStoryPortraitMaterial(ColorTarget[Front].Get(), CoverageTarget[Front].Get()))
 			Mid.Reset(UMaterialInstanceDynamic::Create(M, GetTransientPackage()));
 	}
+	auto Show = [&]()
+	{
+		if (!Mid) return;
+		Mid->SetTextureParameterValue(TEXT("Color"), ColorTarget[Front].Get());
+		Mid->SetTextureParameterValue(TEXT("Depth"), CoverageTarget[Front].Get());
+	};
 	if (Mid)
 	{
-		Mid->SetTextureParameterValue(TEXT("Color"), ColorTarget.Get());
-		Mid->SetTextureParameterValue(TEXT("Depth"), CoverageTarget.Get());
-		Mid->SetScalarParameterValue(TEXT("Alpha"), float(Portrait->GetNumberField(TEXT("alpha"))));
+		// Nothing complete yet: nothing to see (a target's clear colour is fully transparent).
+		Mid->SetScalarParameterValue(TEXT("Alpha"), bShown ? float(Portrait->GetNumberField(TEXT("alpha"))) : 0.f);
+		Show();
+	}
+	// The portrait does not depend on the main view, so its two captures are spread over frames: the colour on the
+	// frame ok-story asks for, its coverage (same framing) on the next. Each frame renders at most one extra view, and
+	// between captures the view keeps drawing the last picture.
+	auto Render = [&](USceneCaptureComponent2D* C, const FVector& P, const FQuat& R, float Width)
+	{
+		C->SetWorldLocationAndRotation(P, R);
+		C->OrthoWidth = Width;
+		ShowOnly(C);
+		if (Post && C == Color.Get()) { C->PostProcessSettings = *Post; C->PostProcessBlendWeight = 1.f; }
+		C->CaptureScene();
+	};
+	if (bCoveragePending)
+	{
+		bCoveragePending = false;
+		Render(Coverage.Get(), PendingPos, PendingRot, PendingWidth);
+		// The back picture is whole: the view shows it from now on (both captures are queued before the view's draw).
+		Front = Back;
+		bShown = true;
+		Show();
+		if (Mid) Mid->SetScalarParameterValue(TEXT("Alpha"), float(Portrait->GetNumberField(TEXT("alpha"))));
+		return;
 	}
 	bool bCapture = false;
 	Portrait->TryGetBoolField(TEXT("capture"), bCapture);
@@ -180,14 +228,11 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 	FQuat Rot;
 	if (!bCapture || !OKStoryCaptureVector(Portrait, TEXT("pos"), Pos) || !OKStoryCaptureQuat(Portrait, TEXT("rot"), Rot)) return;
 	const float Width = float(Portrait->GetNumberField(TEXT("ortho_width")));
-	for (USceneCaptureComponent2D* C : { Color.Get(), Coverage.Get() })
-	{
-		C->SetWorldLocationAndRotation(Pos, Rot);
-		C->OrthoWidth = Width;
-		ShowOnly(C);
-		if (Post) { C->PostProcessSettings = *Post; C->PostProcessBlendWeight = 1.f; }
-		C->CaptureScene();
-	}
+	Render(Color.Get(), Pos, Rot, Width);
+	bCoveragePending = true;
+	PendingPos = Pos;
+	PendingRot = Rot;
+	PendingWidth = Width;
 }
 
 void FOKStoryPortraitCapture::Release()
@@ -197,21 +242,83 @@ void FOKStoryPortraitCapture::Release()
 		if (C->IsValid()) (*C)->DestroyComponent();
 		C->Reset();
 	}
-	ColorTarget.Reset();
-	CoverageTarget.Reset();
+	for (int32 B = 0; B < 2; ++B)
+	{
+		ColorTarget[B].Reset();
+		CoverageTarget[B].Reset();
+	}
+	Front = 0;
+	bShown = false;
+	bCoveragePending = false;
 	Mid.Reset();
+}
+
+struct FOKStoryProbeReadbacks
+{
+	struct FFlight { uint64 Id = 0; TUniquePtr<FRHIGPUTextureReadback> Readback; };
+	TArray<FFlight> Flights; // render thread only
+	FCriticalSection Lock;
+	TArray<TPair<uint64, double>> Answers;
+};
+
+namespace
+{
+	constexpr int32 OKStoryProbeSize = 8;
+	// Depth renders a frame at most: a shot's dozen candidates are spread over a few frames (ok-story waits for them).
+	constexpr int32 OKStoryProbesPerFrame = 3;
+
+	// Render thread: the readbacks that have arrived become answers (the nearest depth of the 8x8 view).
+	void OKStoryCollectProbes(FOKStoryProbeReadbacks& R)
+	{
+		for (int32 I = R.Flights.Num() - 1; I >= 0; --I)
+		{
+			FOKStoryProbeReadbacks::FFlight& F = R.Flights[I];
+			if (!F.Readback->IsReady()) continue;
+			double Clear = 1e9;
+			int32 Pitch = 0, Rows = 0;
+			if (const float* Data = static_cast<const float*>(F.Readback->Lock(Pitch, &Rows)))
+			{
+				for (int32 Y = 0; Y < FMath::Min(Rows > 0 ? Rows : OKStoryProbeSize, OKStoryProbeSize); ++Y)
+					for (int32 X = 0; X < OKStoryProbeSize; ++X)
+					{
+						const float D = Data[Y * Pitch + X];
+						if (D > 0.f && D < 1e6f) Clear = FMath::Min(Clear, double(D));
+					}
+				F.Readback->Unlock();
+			}
+			{
+				FScopeLock Guard(&R.Lock);
+				R.Answers.Add({ F.Id, Clear });
+			}
+			R.Flights.RemoveAtSwap(I);
+		}
+	}
 }
 
 void FOKStoryProbes::Run(UObject* Outer, UWorld* World, const TArray<TSharedPtr<FJsonValue>>& Probes, TFunctionRef<void(USceneCaptureComponent2D*)> Hide)
 {
-	if (!Outer || !World || Probes.IsEmpty()) return;
-	constexpr int32 Size = 8;
+	if (!Outer || !World) return;
+	for (const TSharedPtr<FJsonValue>& V : Probes)
+	{
+		const TSharedPtr<FJsonObject> P = V ? V->AsObject() : nullptr;
+		FProbeRequest Q;
+		if (!P || !OKStoryCaptureVector(P, TEXT("from"), Q.From) || !OKStoryCaptureVector(P, TEXT("to"), Q.To)) continue;
+		Q.Id = uint64(P->GetNumberField(TEXT("id")));
+		Queue.Add(Q);
+	}
+	if (!Readbacks) Readbacks = MakeShared<FOKStoryProbeReadbacks, ESPMode::ThreadSafe>();
+	// Arrived readbacks turn into answers on the render thread, in order after the copies queued earlier.
+	{
+		TSharedPtr<FOKStoryProbeReadbacks, ESPMode::ThreadSafe> R = Readbacks;
+		ENQUEUE_RENDER_COMMAND(OKStoryCollectProbes)([R](FRHICommandListImmediate&) { OKStoryCollectProbes(*R); });
+	}
+	if (Queue.IsEmpty()) return;
 	if (!Target)
 	{
 		Target.Reset(NewObject<UTextureRenderTarget2D>(GetTransientPackage()));
 		Target->RenderTargetFormat = RTF_R32f;
 		Target->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-		Target->InitAutoFormat(Size, Size);
+		Target->InitAutoFormat(OKStoryProbeSize, OKStoryProbeSize);
 		Target->UpdateResourceImmediate(true);
 	}
 	if (!Capture || !Capture->IsRegistered())
@@ -223,33 +330,48 @@ void FOKStoryProbes::Run(UObject* Outer, UWorld* World, const TArray<TSharedPtr<
 		Capture->CaptureSource = SCS_SceneDepth;
 		Capture->FOVAngle = 4.f;
 		Capture->TextureTarget = Target.Get();
-		Capture->ShowFlags.SetPostProcessing(false);
-		Capture->ShowFlags.SetAtmosphere(false);
-		Capture->ShowFlags.SetFog(false);
+		// Depth only: no light, shadow, reflection or post.
+		FEngineShowFlags& Show = Capture->ShowFlags;
+		Show.SetPostProcessing(false); Show.SetAtmosphere(false); Show.SetFog(false); Show.SetVolumetricFog(false);
+		Show.SetLighting(false); Show.SetDynamicShadows(false); Show.SetGlobalIllumination(false);
+		Show.SetLumenGlobalIllumination(false); Show.SetLumenReflections(false); Show.SetScreenSpaceReflections(false);
+		Show.SetAmbientOcclusion(false); Show.SetDistanceFieldAO(false); Show.SetTranslucency(false); Show.SetParticles(false);
+		Capture->bUseRayTracingIfEnabled = false;
 	}
 	Capture->HiddenActors.Reset();
 	Capture->HiddenComponents.Reset();
 	Hide(Capture.Get());
-	for (const TSharedPtr<FJsonValue>& V : Probes)
+	FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource();
+	for (int32 N = 0; N < OKStoryProbesPerFrame && !Queue.IsEmpty(); ++N)
 	{
-		const TSharedPtr<FJsonObject> P = V->AsObject();
-		FVector From, To;
-		if (!P || !OKStoryCaptureVector(P, TEXT("from"), From) || !OKStoryCaptureVector(P, TEXT("to"), To)) continue;
-		const uint64 Id = uint64(P->GetNumberField(TEXT("id")));
-		Capture->SetWorldLocationAndRotation(From, (To - From).Rotation());
+		const FProbeRequest Q = Queue[0];
+		Queue.RemoveAt(0);
+		Capture->SetWorldLocationAndRotation(Q.From, (Q.To - Q.From).Rotation());
 		Capture->CaptureScene();
-		TArray<FLinearColor> Depth;
-		double Clear = 1e9;
-		if (Target->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(Depth))
-			for (const FLinearColor& D : Depth)
-				if (D.R > 0.f && D.R < 1e6f) Clear = FMath::Min(Clear, double(D.R));
-		Answers.Add({ Id, Clear });
+		// Copied out right after its depth is drawn (commands run in order, so one target serves every probe).
+		TSharedPtr<FOKStoryProbeReadbacks, ESPMode::ThreadSafe> R = Readbacks;
+		const uint64 Id = Q.Id;
+		ENQUEUE_RENDER_COMMAND(OKStoryProbeCopy)([R, Resource, Id](FRHICommandListImmediate& RHICmdList)
+		{
+			FOKStoryProbeReadbacks::FFlight F;
+			F.Id = Id;
+			F.Readback = MakeUnique<FRHIGPUTextureReadback>(TEXT("OKStoryProbe"));
+			F.Readback->EnqueueCopy(RHICmdList, Resource->GetRenderTargetTexture());
+			R->Flights.Add(MoveTemp(F));
+		});
 	}
 }
 
 TArray<TSharedPtr<FJsonValue>> FOKStoryProbes::TakeAnswers()
 {
 	TArray<TSharedPtr<FJsonValue>> Out;
+	TArray<TPair<uint64, double>> Answers;
+	if (Readbacks)
+	{
+		FScopeLock Guard(&Readbacks->Lock);
+		Answers = MoveTemp(Readbacks->Answers);
+		Readbacks->Answers.Reset();
+	}
 	for (const TPair<uint64, double>& A : Answers)
 	{
 		TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
@@ -257,7 +379,6 @@ TArray<TSharedPtr<FJsonValue>> FOKStoryProbes::TakeAnswers()
 		P->SetNumberField(TEXT("clear"), A.Value);
 		Out.Add(MakeShared<FJsonValueObject>(P));
 	}
-	Answers.Reset();
 	return Out;
 }
 
@@ -265,6 +386,14 @@ void FOKStoryProbes::Release()
 {
 	if (Capture) Capture->DestroyComponent();
 	Capture.Reset();
+	// In-flight copies keep their own readbacks (the shared state lives until the render thread lets go of it); the
+	// target's resource is released after them, render commands running in order.
 	Target.Reset();
-	Answers.Reset();
+	Queue.Reset();
+	if (Readbacks)
+	{
+		// The readbacks still in flight are let go on the render thread, which owns them.
+		TSharedPtr<FOKStoryProbeReadbacks, ESPMode::ThreadSafe> R = MoveTemp(Readbacks);
+		ENQUEUE_RENDER_COMMAND(OKStoryReleaseProbes)([R](FRHICommandListImmediate&) { R->Flights.Reset(); });
+	}
 }

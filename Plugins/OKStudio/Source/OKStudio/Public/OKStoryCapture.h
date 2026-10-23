@@ -28,6 +28,10 @@ struct FPostProcessSettings;
 OKSTUDIO_API UMaterial* OKStoryBuildPortraitMaterial(UObject* Outer, FName Name, EObjectFlags Flags, UTexture* Color, UTexture* Depth);
 #endif
 
+/**
+ * Double-buffered: the view draws the front picture while the next one (colour, then its coverage, a frame apart) is
+ * rendered into the back one; the two swap once both are done. The main view never waits for a portrait.
+ */
 class OKSTUDIO_API FOKStoryPortraitCapture
 {
 public:
@@ -40,8 +44,16 @@ public:
 
 private:
 	TStrongObjectPtr<USceneCaptureComponent2D> Color, Coverage;
-	TStrongObjectPtr<UTextureRenderTarget2D> ColorTarget, CoverageTarget;
+	// [0] and [1]: Front is shown, the other one is being rendered.
+	TStrongObjectPtr<UTextureRenderTarget2D> ColorTarget[2], CoverageTarget[2];
+	int32 Front = 0;
+	bool bShown = false;
 	TStrongObjectPtr<UMaterialInstanceDynamic> Mid;
+	// The back picture's colour is rendered; its coverage (same framing) comes on the next frame, then they swap.
+	bool bCoveragePending = false;
+	FVector PendingPos = FVector::ZeroVector;
+	FQuat PendingRot = FQuat::Identity;
+	float PendingWidth = 0.f;
 };
 
 /**
@@ -51,14 +63,21 @@ private:
 class OKSTUDIO_API FOKStoryProbes
 {
 public:
-	/** `Hide` adds what must not block a view (the characters) to the capture's hidden lists. */
+	/**
+	 * Queues the frame's probes and renders a few of the queued ones; call it every frame (with no new probes too).
+	 * `Hide` adds what must not block a view (the characters) to the capture's hidden lists. Nothing here waits for the
+	 * GPU: each depth is copied back asynchronously and read on the render thread once it has arrived.
+	 */
 	void Run(UObject* Outer, UWorld* World, const TArray<TSharedPtr<FJsonValue>>& Probes, TFunctionRef<void(USceneCaptureComponent2D*)> Hide);
-	/** The answers since the last call, as the facts' "probes" array. */
+	/** The answers that arrived since the last call, as the facts' "probes" array. */
 	TArray<TSharedPtr<FJsonValue>> TakeAnswers();
 	void Release();
 
 private:
+	struct FProbeRequest { uint64 Id = 0; FVector From = FVector::ZeroVector, To = FVector::ZeroVector; };
 	TStrongObjectPtr<USceneCaptureComponent2D> Capture;
 	TStrongObjectPtr<UTextureRenderTarget2D> Target;
-	TArray<TPair<uint64, double>> Answers;
+	TArray<FProbeRequest> Queue;
+	/** Readbacks in flight (render thread) and the answers they gave (either thread, under its lock). */
+	TSharedPtr<struct FOKStoryProbeReadbacks, ESPMode::ThreadSafe> Readbacks;
 };

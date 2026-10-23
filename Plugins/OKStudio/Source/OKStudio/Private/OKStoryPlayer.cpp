@@ -856,7 +856,8 @@ void UOKStoryPlayer::Tick(float DeltaTime)
 	if (Frame->TryGetArrayField(TEXT("commands"), Commands)) for (const TSharedPtr<FJsonValue>& Cmd : *Commands) if (Cmd->AsObject()) Execute(Cmd->AsObject());
 	ApplyFrame();
 	const TArray<TSharedPtr<FJsonValue>>* Probes = nullptr;
-	if (Frame->TryGetArrayField(TEXT("probes"), Probes) && Probes->Num()) RunProbes(*Probes);
+	// Every frame, with no new probes too: queued ones render a few a frame and their answers arrive later.
+	RunProbes(Frame->TryGetArrayField(TEXT("probes"), Probes) ? *Probes : TArray<TSharedPtr<FJsonValue>>());
 	if (bSelfTest) TickSelfTest();
 	PollControl();
 }
