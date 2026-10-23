@@ -436,3 +436,51 @@ extern "C" __global__ void codec_sum_bf16(bf16* out, const unsigned long long* t
 }
 
 extern "C" __global__ void inc_u64(unsigned long long* x) { if (threadIdx.x == 0) x[0] += 1ull; }
+
+// y[r, o] = bf16(s[o] * sum_i x[r, i] * q[o, i]) for up to 4 rows (decoding a frame). The block first copies x into
+// shared memory (rows * inp bf16, given as the launch's dynamic shared memory), then each warp takes one output row,
+// 16 int8 weights per lane step. inp is a multiple of 16; x and q rows are 16-byte aligned.
+extern "C" __global__ void gemv_i8_bf16(bf16* y, const bf16* x, const signed char* q, const float* s, int rows, int inp, int out) {
+    extern __shared__ uint4 xsmem[];
+    bf16* xs = (bf16*)xsmem;
+    int n = rows * inp;
+    for (int i = threadIdx.x * 8; i < n; i += blockDim.x * 8) *(uint4*)(xs + i) = *(const uint4*)(x + i);
+    __syncthreads();
+    int o = blockIdx.x * (blockDim.x >> 5) + (threadIdx.x >> 5), lane = threadIdx.x & 31;
+    if (o >= out) return;
+    float acc[4] = {0.f, 0.f, 0.f, 0.f};
+    const int4* w = (const int4*)(q + (long long)o * inp);
+    for (int i = lane; i * 16 < inp; i += 32) {
+        int4 wv = __ldg(w + i);
+        const signed char* wb = (const signed char*)&wv;
+        float wf[16];
+#pragma unroll
+        for (int k = 0; k < 16; ++k) wf[k] = (float)wb[k];
+#pragma unroll
+        for (int r = 0; r < 4; ++r) {
+            if (r < rows) {
+                const uint4* xv = (const uint4*)(xs + r * inp + i * 16);
+                uint4 a = xv[0], b = xv[1];
+                const bf16* xa = (const bf16*)&a;
+                const bf16* xb = (const bf16*)&b;
+                float t = 0.f;
+#pragma unroll
+                for (int k = 0; k < 8; ++k) t += bf2f(xa[k]) * wf[k] + bf2f(xb[k]) * wf[8 + k];
+                acc[r] += t;
+            }
+        }
+    }
+#pragma unroll
+    for (int r = 0; r < 4; ++r) {
+        float v = acc[r];
+        for (int m = 16; m > 0; m >>= 1) v += __shfl_xor_sync(0xffffffffu, v, m);
+        if (lane == 0 && r < rows) y[(long long)r * out + o] = f2bf(v * s[o]);
+    }
+}
+
+// w[o, i] = bf16(q[o, i] * s[o]) (int8 matrix widened for a prefill GEMM).
+extern "C" __global__ void i8_to_bf16(bf16* w, const signed char* q, const float* s, int inp, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) w[i] = f2bf((float)q[i] * s[i / inp]);
+}
+

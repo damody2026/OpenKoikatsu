@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 
 use std::sync::Mutex;
 
-use crate::gpu::{ptr_bf16, Arg, Buf, Gpu, Graph};
+use crate::gpu::{ptr_bf16, Arg, Buf, Gpu, Graph, W};
 use crate::sampling::Sampler;
 use crate::weights::Store;
 
@@ -28,12 +28,27 @@ pub const TTS_PAD: u32 = 151671;
 struct Layer {
     ln1: Buf,
     ln2: Buf,
-    wqkv: Buf,
+    wqkv: W,
     q_norm: Buf,
     k_norm: Buf,
-    wo: Buf,
-    wgu: Buf,
-    wdown: Buf,
+    wo: W,
+    wgu: W,
+    wdown: W,
+}
+
+/// A layer matrix (rows of `names` stacked): bf16, or int8 (`gpu::W::int8`, about half the VRAM).
+fn load_w(gpu: &Gpu, st: &Store, names: &[String], int8: bool) -> Result<W> {
+    if !int8 {
+        return Ok(W::B(if names.len() == 1 { st.bf16(gpu, &names[0])? } else { st.bf16_cat(gpu, names)? }));
+    }
+    let mut w = Vec::new();
+    let mut inp = 0;
+    for n in names {
+        let (v, shape) = st.bf16_as_f32(n)?;
+        inp = shape[1];
+        w.extend(v);
+    }
+    W::int8(gpu, &w, inp)
 }
 
 /// A stack of Qwen3 decoder layers with its own KV cache.
@@ -55,19 +70,19 @@ pub struct Stack {
 impl Stack {
     #[allow(clippy::too_many_arguments)]
     fn load(gpu: &Gpu, st: &Store, prefix: &str, layers: usize, hidden: usize, heads: usize, kv_heads: usize,
-            head_dim: usize, inter: usize, theta: f32, cache_len: usize) -> Result<Self> {
+            head_dim: usize, inter: usize, theta: f32, cache_len: usize, int8: bool) -> Result<Self> {
         let mut out = Vec::new();
         for i in 0..layers {
             let p = format!("{prefix}.layers.{i}");
             out.push(Layer {
                 ln1: st.bf16(gpu, &format!("{p}.input_layernorm.weight"))?,
                 ln2: st.bf16(gpu, &format!("{p}.post_attention_layernorm.weight"))?,
-                wqkv: st.bf16_cat(gpu, &[format!("{p}.self_attn.q_proj.weight"), format!("{p}.self_attn.k_proj.weight"), format!("{p}.self_attn.v_proj.weight")])?,
+                wqkv: load_w(gpu, st, &[format!("{p}.self_attn.q_proj.weight"), format!("{p}.self_attn.k_proj.weight"), format!("{p}.self_attn.v_proj.weight")], int8)?,
                 q_norm: st.bf16(gpu, &format!("{p}.self_attn.q_norm.weight"))?,
                 k_norm: st.bf16(gpu, &format!("{p}.self_attn.k_norm.weight"))?,
-                wo: st.bf16(gpu, &format!("{p}.self_attn.o_proj.weight"))?,
-                wgu: st.bf16_cat(gpu, &[format!("{p}.mlp.gate_proj.weight"), format!("{p}.mlp.up_proj.weight")])?,
-                wdown: st.bf16(gpu, &format!("{p}.mlp.down_proj.weight"))?,
+                wo: load_w(gpu, st, &[format!("{p}.self_attn.o_proj.weight")], int8)?,
+                wgu: load_w(gpu, st, &[format!("{p}.mlp.gate_proj.weight"), format!("{p}.mlp.up_proj.weight")], int8)?,
+                wdown: load_w(gpu, st, &[format!("{p}.mlp.down_proj.weight")], int8)?,
             });
         }
         // Same formula as transformers' default RoPE init (float32).
@@ -107,7 +122,7 @@ impl Stack {
         let elems = (n * h) as i32;
         for (li, l) in self.layers.iter().enumerate() {
             gpu.launch("rmsnorm_bf16", (rows, 1, 1), (256, 1, 1), 0, &[Arg::P(normed.ptr), Arg::P(resid.ptr), Arg::P(l.ln1.ptr), Arg::I(h as i32), Arg::F(self.eps)])?;
-            gpu.linear_bf16(qkv.ptr, normed.ptr, l.wqkv.ptr, n, h, qkv_dim, 0.0)?;
+            l.wqkv.linear(gpu, qkv.ptr, normed.ptr, n, h, qkv_dim)?;
             gpu.launch("qk_norm_rope_bf16", (rows, nh as u32, 1), (hd as u32, 1, 1), 0, &[
                 Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::I(0), Arg::P(l.q_norm.ptr), Arg::I(hd as i32), Arg::F(self.eps),
                 Arg::P(self.inv_freq.ptr), Arg::I(pos0 as i32), Arg::P(0), Arg::I(self.cache_len as i32)])?;
@@ -122,12 +137,12 @@ impl Stack {
                 Arg::P(attn.ptr), Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::P(self.kcache[li].ptr), Arg::P(self.vcache[li].ptr),
                 Arg::I(nh as i32), Arg::I(kvh as i32), Arg::I(hd as i32), Arg::I(self.cache_len as i32), Arg::I(pos0 as i32), Arg::I(0),
                 Arg::F(1.0 / (hd as f32).sqrt())])?;
-            gpu.linear_bf16(proj.ptr, attn.ptr, l.wo.ptr, n, nh * hd, h, 0.0)?;
+            l.wo.linear(gpu, proj.ptr, attn.ptr, n, nh * hd, h)?;
             gpu.launch1("add_bf16", n * h, &[Arg::P(resid.ptr), Arg::P(resid.ptr), Arg::P(proj.ptr), Arg::I(elems)])?;
             gpu.launch("rmsnorm_bf16", (rows, 1, 1), (256, 1, 1), 0, &[Arg::P(normed.ptr), Arg::P(resid.ptr), Arg::P(l.ln2.ptr), Arg::I(h as i32), Arg::F(self.eps)])?;
-            gpu.linear_bf16(gu.ptr, normed.ptr, l.wgu.ptr, n, h, 2 * self.inter, 0.0)?;
+            l.wgu.linear(gpu, gu.ptr, normed.ptr, n, h, 2 * self.inter)?;
             gpu.launch1("silu_mul_bf16", n * self.inter, &[Arg::P(act.ptr), Arg::P(gu.ptr), Arg::I(self.inter as i32), Arg::I(n as i32)])?;
-            gpu.linear_bf16(proj.ptr, act.ptr, l.wdown.ptr, n, self.inter, h, 0.0)?;
+            l.wdown.linear(gpu, proj.ptr, act.ptr, n, self.inter, h)?;
             gpu.launch1("add_bf16", n * h, &[Arg::P(resid.ptr), Arg::P(resid.ptr), Arg::P(proj.ptr), Arg::I(elems)])?;
         }
         let out = gpu.alloc(n * h * 2)?;
@@ -139,7 +154,9 @@ impl Stack {
 pub struct Talker {
     stack: Stack,
     codec_embed: Buf,
-    text_embed: Buf,
+    /// text_embedding [vocab, HIDDEN] bf16 kept in host memory (about 0.6 GB that VRAM does not need): only a prompt's
+    /// rows are gathered and uploaded.
+    text_embed: Vec<u16>,
     fc1_w: Buf,
     fc1_b: Buf,
     fc2_w: Buf,
@@ -192,8 +209,11 @@ pub struct Prompt {
 
 impl Talker {
     pub fn load(gpu: &Gpu, st: &Store, cache_len: usize) -> Result<Self> {
-        let stack = Stack::load(gpu, st, "talker.model", 28, HIDDEN, 16, 8, 128, 6144, 1_000_000.0, cache_len)?;
-        let pred = Stack::load(gpu, st, "talker.code_predictor.model", 5, 1024, 16, 8, 128, 3072, 1_000_000.0, NUM_CODE_GROUPS + 2)?;
+        // The 28-layer talker's matrices as int8 (about 1.3 GB less VRAM); OK_TTS_WEIGHTS=bf16 keeps them bf16. The small
+        // code predictor stays bf16.
+        let int8 = std::env::var("OK_TTS_WEIGHTS").map(|v| v != "bf16").unwrap_or(true);
+        let stack = Stack::load(gpu, st, "talker.model", 28, HIDDEN, 16, 8, 128, 6144, 1_000_000.0, cache_len, int8)?;
+        let pred = Stack::load(gpu, st, "talker.code_predictor.model", 5, 1024, 16, 8, 128, 3072, 1_000_000.0, NUM_CODE_GROUPS + 2, false)?;
         let mut pred_embeds = Vec::new();
         let mut pred_heads = Vec::new();
         for i in 0..NUM_CODE_GROUPS - 1 {
@@ -203,7 +223,7 @@ impl Talker {
         Ok(Self {
             stack,
             codec_embed: st.bf16(gpu, "talker.model.codec_embedding.weight")?,
-            text_embed: st.bf16(gpu, "talker.model.text_embedding.weight")?,
+            text_embed: st.bytes("talker.model.text_embedding.weight", safetensors::Dtype::BF16)?.0.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect(),
             fc1_w: st.bf16(gpu, "talker.text_projection.linear_fc1.weight")?,
             fc1_b: st.bf16(gpu, "talker.text_projection.linear_fc1.bias")?,
             fc2_w: st.bf16(gpu, "talker.text_projection.linear_fc2.weight")?,
@@ -243,7 +263,12 @@ impl Talker {
     /// text_projection(text_embedding(ids)): [n, HIDDEN]
     pub fn text_project(&self, gpu: &Gpu, ids: &[u32]) -> Result<Buf> {
         let n = ids.len();
-        let e = self.embed(gpu, self.text_embed.ptr, ids)?;
+        let mut rows = Vec::with_capacity(n * HIDDEN);
+        for &id in ids {
+            let at = id as usize * HIDDEN;
+            rows.extend_from_slice(self.text_embed.get(at..at + HIDDEN).ok_or_else(|| anyhow::anyhow!("text id {id} out of range"))?);
+        }
+        let e = gpu.upload(&rows)?;
         let h = self.bias_linear(gpu, e.ptr, n, HIDDEN, HIDDEN, self.fc1_w.ptr, self.fc1_b.ptr)?;
         gpu.launch1("silu_bf16", n * HIDDEN, &[Arg::P(h.ptr), Arg::I((n * HIDDEN) as i32)])?;
         self.bias_linear(gpu, h.ptr, n, HIDDEN, HIDDEN, self.fc2_w.ptr, self.fc2_b.ptr)

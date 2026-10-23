@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
-use super::gpu::{Arg, Buf, Gpu};
+use super::gpu::{Arg, Buf, Gpu, W};
 use super::weights::Shards;
 
 pub const CODEBOOKS: usize = 8;
@@ -25,48 +25,17 @@ struct Layer {
     w2: W,
 }
 
-/// A layer matrix [out, inp]: bf16, or int8 with one f32 scale per output row (symmetric, max |w| / 127), which halves
-/// the backbone's VRAM. Decoding multiplies the int8 rows directly; a prefill widens the matrix to bf16 for cuBLAS.
-enum W {
-    B(Buf),
-    Q { q: Buf, s: Buf },
-}
-
-impl W {
-    fn load(gpu: &Gpu, st: &Shards, names: &[String], int8: bool) -> Result<Self> {
-        if !int8 {
-            return Ok(W::B(if names.len() == 1 { st.bf16_one(gpu, &names[0])? } else { st.bf16(gpu, names)? }));
-        }
-        let (mut q, mut s) = (Vec::new(), Vec::new());
-        for n in names {
-            let inp = st.shape(n)?[1];
-            let w = st.f32(n)?;
-            for row in w.chunks(inp) {
-                let scale = row.iter().fold(0f32, |m, v| m.max(v.abs())) / 127.0;
-                let inv = if scale > 0.0 { 1.0 / scale } else { 0.0 };
-                q.extend(row.iter().map(|v| (v * inv).round().clamp(-127.0, 127.0) as i8));
-                s.push(scale);
-            }
-        }
-        Ok(W::Q { q: gpu.upload(&q)?, s: gpu.upload(&s)? })
+/// A layer matrix from the checkpoint (rows of `names` stacked): bf16, or int8 (`gpu::W::int8`).
+fn load_w(gpu: &Gpu, st: &Shards, names: &[String], int8: bool) -> Result<W> {
+    if !int8 {
+        return Ok(W::B(if names.len() == 1 { st.bf16_one(gpu, &names[0])? } else { st.bf16(gpu, names)? }));
     }
-
-    /// y[rows, out] = x[rows, inp] W^T.
-    fn linear(&self, gpu: &Gpu, y: u64, x: u64, rows: usize, inp: usize, out: usize) -> Result<()> {
-        match self {
-            W::B(w) => gpu.linear_bf16(y, x, w.ptr, rows, inp, out, 0.0),
-            W::Q { q, s } if rows <= 4 => {
-                let blocks = (out * 32).div_ceil(256) as u32;
-                gpu.launch("gemv_i8_bf16", (blocks, 1, 1), (256, 1, 1), 0, &[Arg::P(y), Arg::P(x), Arg::P(q.ptr), Arg::P(s.ptr), Arg::I(rows as i32),
-                    Arg::I(inp as i32), Arg::I(out as i32)])
-            }
-            W::Q { q, s } => {
-                let w = gpu.alloc(out * inp * 2)?;
-                gpu.launch1("i8_to_bf16", out * inp, &[Arg::P(w.ptr), Arg::P(q.ptr), Arg::P(s.ptr), Arg::I(inp as i32), Arg::L((out * inp) as i64)])?;
-                gpu.linear_bf16(y, x, w.ptr, rows, inp, out, 0.0)
-            }
-        }
+    let inp = st.shape(&names[0])?[1];
+    let mut w = Vec::new();
+    for n in names {
+        w.extend(st.f32(n)?);
     }
+    W::int8(gpu, &w, inp)
 }
 
 /// torchtune Llama-3.2 decoder stack (no embeddings / output head) with a KV cache per batch row.
@@ -114,11 +83,11 @@ impl Llama {
             let p = format!("{prefix}.layers.{i}");
             out.push(Layer {
                 sa_norm: st.bf16_one(gpu, &format!("{p}.sa_norm.scale"))?,
-                wqkv: W::load(gpu, st, &[format!("{p}.attn.q_proj.weight"), format!("{p}.attn.k_proj.weight"), format!("{p}.attn.v_proj.weight")], int8)?,
-                wo: W::load(gpu, st, &[format!("{p}.attn.output_proj.weight")], int8)?,
+                wqkv: load_w(gpu, st, &[format!("{p}.attn.q_proj.weight"), format!("{p}.attn.k_proj.weight"), format!("{p}.attn.v_proj.weight")], int8)?,
+                wo: load_w(gpu, st, &[format!("{p}.attn.output_proj.weight")], int8)?,
                 mlp_norm: st.bf16_one(gpu, &format!("{p}.mlp_norm.scale"))?,
-                w13: W::load(gpu, st, &[format!("{p}.mlp.w1.weight"), format!("{p}.mlp.w3.weight")], int8)?,
-                w2: W::load(gpu, st, &[format!("{p}.mlp.w2.weight")], int8)?,
+                w13: load_w(gpu, st, &[format!("{p}.mlp.w1.weight"), format!("{p}.mlp.w3.weight")], int8)?,
+                w2: load_w(gpu, st, &[format!("{p}.mlp.w2.weight")], int8)?,
             });
         }
         let head_dim = hidden / heads;
