@@ -1,0 +1,397 @@
+# What the heroines' bodies do with the original game's animations (motions.rs). The clips are the street runtime
+# clips in Content/IndependentResources/RuntimeAnimations: the hand-picked ones there and library/lib_<group>_<category>_<no>
+# (Tools/export_street_animation_library.lua, every non-H Studio animation, numbered as Studio numbers them).
+#
+# [[gesture]]  A gesture she makes while she talks, chosen by the model ("gesture" in her reply, the keys and their
+#              meaning are in the free-talk prompt). Standing clips and, where the game has one, the clip for sitting on
+#              a chair. One of the clips, at random; `seconds` is how long it shows (the clip's own length when shorter).
+# [[life]]     The loop she shows while her schedule holds her in place (a meal, class, her shift, a café): one of the
+#              clips for her block's kind (and place, when given), the same one for the whole block. `seated` brings the
+#              chair (and a table with `table`).
+# [[photo]]    Two-shot poses for a photo with him: her clip and his. One at random, or the one the model names
+#              ("gesture" while they pose), and "another pose" goes to the next.
+
+[[gesture]]
+key = "wave"
+stand = ["lib_0_10_3.okanim", "lib_12_66_4.okanim"]
+seconds = 4.5
+
+[[gesture]]
+key = "talk"
+stand = ["lib_0_5_1.okanim", "lib_0_5_3.okanim", "lib_0_5_5.okanim", "lib_0_5_7.okanim", "lib_0_5_9.okanim", "lib_0_5_11.okanim", "lib_0_5_13.okanim", "lib_0_5_15.okanim", "lib_0_5_17.okanim", "lib_0_5_19.okanim", "lib_0_5_21.okanim", "lib_0_5_23.okanim", "lib_0_5_25.okanim", "lib_0_5_27.okanim"]
+seconds = 4.5
+
+[[gesture]]
+key = "happy"
+stand = ["lib_0_2_0.okanim", "lib_0_2_1.okanim", "lib_0_2_2.okanim", "lib_0_2_3.okanim", "lib_0_2_4.okanim", "lib_0_2_5.okanim", "lib_0_2_6.okanim", "lib_0_2_7.okanim", "lib_0_2_8.okanim", "lib_0_2_9.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "angry"
+stand = ["lib_0_2_10.okanim", "lib_0_2_11.okanim", "lib_0_2_12.okanim", "lib_0_2_13.okanim", "lib_0_2_14.okanim", "lib_0_2_15.okanim", "lib_0_2_16.okanim", "lib_0_2_17.okanim", "lib_0_2_18.okanim", "lib_0_2_19.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "sad"
+stand = ["lib_0_2_20.okanim", "lib_0_2_21.okanim", "lib_0_2_22.okanim", "lib_0_2_23.okanim", "lib_0_2_24.okanim", "lib_0_2_25.okanim", "lib_0_2_26.okanim", "lib_0_2_27.okanim", "lib_0_2_28.okanim", "lib_0_2_29.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "surprised"
+stand = ["lib_0_2_30.okanim", "lib_0_2_31.okanim", "lib_0_2_32.okanim", "lib_0_2_33.okanim", "lib_0_2_34.okanim", "lib_0_2_35.okanim", "lib_0_2_36.okanim", "lib_0_2_37.okanim", "lib_0_2_38.okanim", "lib_0_2_39.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "shy"
+stand = ["lib_0_11_0.okanim", "lib_0_11_1.okanim", "lib_0_11_2.okanim"]
+seconds = 5.0
+
+[[gesture]]
+key = "hide_face"
+stand = ["lib_0_11_3.okanim"]
+seconds = 5.0
+
+[[gesture]]
+key = "cover_chest"
+stand = ["lib_0_11_4.okanim", "lib_0_11_11.okanim"]
+seconds = 4.0
+
+[[gesture]]
+key = "refuse_touch"
+stand = ["lib_0_11_8.okanim", "lib_0_11_10.okanim"]
+seconds = 5.0
+
+[[gesture]]
+key = "apologize"
+stand = ["lib_12_67_20.okanim", "lib_12_67_19.okanim"]
+seconds = 5.0
+
+[[gesture]]
+key = "understand"
+stand = ["lib_12_67_17.okanim"]
+seconds = 3.0
+
+[[gesture]]
+key = "troubled"
+stand = ["lib_12_67_18.okanim"]
+seconds = 4.5
+
+[[gesture]]
+key = "proud"
+stand = ["lib_12_67_9.okanim", "lib_12_67_15.okanim", "lib_12_67_16.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "laugh_proud"
+stand = ["lib_12_66_10.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "cheer"
+stand = ["lib_12_67_4.okanim", "lib_0_10_8.okanim"]
+seconds = 5.0
+
+[[gesture]]
+key = "why"
+stand = ["lib_12_67_6.okanim"]
+seconds = 3.0
+
+[[gesture]]
+key = "salute"
+stand = ["lib_12_67_7.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "tsk"
+stand = ["lib_12_67_24.okanim", "lib_12_67_25.okanim"]
+seconds = 2.5
+
+[[gesture]]
+key = "sulk"
+stand = ["lib_12_67_0.okanim", "lib_12_67_2.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "hungry"
+stand = ["lib_12_67_22.okanim"]
+seconds = 3.5
+
+[[gesture]]
+key = "sneeze"
+stand = ["lib_0_10_0.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "yawn"
+stand = ["lib_0_10_1.okanim"]
+seconds = 7.0
+
+[[gesture]]
+key = "hot"
+stand = ["lib_0_10_2.okanim"]
+seconds = 7.0
+
+[[gesture]]
+key = "stretch"
+stand = ["lib_0_4_14.okanim"]
+chair = ["lib_0_6_9.okanim"]
+seconds = 7.0
+
+[[gesture]]
+key = "fix_hair"
+stand = ["lib_0_4_15.okanim"]
+chair = ["lib_0_6_10.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "check_look"
+stand = ["lib_0_4_16.okanim"]
+seconds = 7.0
+
+[[gesture]]
+key = "phone"
+stand = ["lib_0_4_5.okanim", "lib_0_4_6.okanim"]
+chair = ["lib_0_6_3.okanim", "lib_0_6_4.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "music"
+stand = ["lib_0_4_7.okanim"]
+chair = ["lib_0_6_6.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "cross_legs"
+chair = ["lib_0_6_13.okanim", "lib_0_6_15.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "wait"
+stand = ["lib_12_66_5.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "dance"
+stand = ["lib_12_22_1.okanim", "lib_7_22_1.okanim", "lib_7_22_2.okanim", "lib_0_10_11.okanim"]
+seconds = 6.0
+
+[[gesture]]
+key = "cool_pose"
+stand = ["lib_12_67_15.okanim", "lib_12_67_16.okanim", "lib_12_67_5.okanim"]
+seconds = 3.5
+
+# ---------------------------------------------------------------------------------------------------------------- life
+
+[[life]]
+kind = "meal"
+clips = ["facility_eat.okanim", "lib_0_9_0.okanim", "lib_0_9_3.okanim", "lib_0_9_5.okanim"]
+seated = true
+table = true
+
+[[life]]
+kind = "class"
+clips = ["venue_study_seated.okanim", "lib_0_7_4.okanim", "lib_0_7_0.okanim", "lib_0_7_2.okanim"]
+seated = true
+
+[[life]]
+kind = "study"
+clips = ["venue_study_seated.okanim", "lib_0_7_4.okanim", "lib_0_7_6.okanim", "lib_0_7_0.okanim"]
+seated = true
+
+[[life]]
+kind = "work"
+place = "cafe"
+clips = ["lib_0_4_21.okanim", "venue_shopping.okanim"]
+
+[[life]]
+kind = "work"
+place = "restaurant"
+clips = ["lib_0_4_21.okanim", "venue_shopping.okanim"]
+
+[[life]]
+kind = "work"
+place = "conveni"
+clips = ["venue_shopping.okanim", "lib_17_4_8.okanim"]
+
+[[life]]
+kind = "work"
+place = "department"
+clips = ["lib_17_4_9.okanim", "lib_17_4_10.okanim", "venue_shopping.okanim"]
+
+[[life]]
+kind = "work"
+place = "bookstore"
+clips = ["lib_0_4_3.okanim", "venue_shopping.okanim"]
+
+[[life]]
+kind = "work"
+place = "library"
+clips = ["lib_0_4_3.okanim", "lib_0_4_4.okanim"]
+
+[[life]]
+kind = "work"
+clips = ["venue_shopping.okanim", "lib_17_4_8.okanim", "lib_0_4_21.okanim"]
+
+[[life]]
+kind = "sleep"
+clips = ["facility_sleep.okanim"]
+
+[[life]]
+kind = "rest"
+clips = ["venue_phone_seated.okanim", "lib_0_6_6.okanim", "lib_0_6_5.okanim", "lib_0_6_12.okanim", "lib_0_6_16.okanim"]
+seated = true
+
+[[life]]
+kind = "leisure"
+place = "cafe"
+clips = ["venue_drink_seated.okanim", "lib_0_6_7.okanim", "lib_0_6_3.okanim", "lib_0_6_12.okanim", "lib_0_6_14.okanim", "lib_0_6_6.okanim"]
+seated = true
+
+[[life]]
+kind = "leisure"
+place = "lodge"
+clips = ["venue_drink_seated.okanim", "lib_0_6_7.okanim", "lib_0_6_16.okanim"]
+seated = true
+
+[[life]]
+kind = "leisure"
+place = "drinkshop"
+clips = ["venue_drink_seated.okanim", "lib_0_6_7.okanim", "lib_0_6_3.okanim"]
+seated = true
+
+[[life]]
+kind = "leisure"
+place = "library"
+clips = ["venue_read_seated.okanim", "lib_0_6_1.okanim", "lib_0_6_2.okanim", "lib_0_7_0.okanim", "lib_0_7_2.okanim"]
+seated = true
+
+[[life]]
+kind = "leisure"
+place = "bookstore"
+clips = ["lib_0_4_3.okanim", "lib_0_4_4.okanim", "venue_read_seated.okanim"]
+
+[[life]]
+kind = "leisure"
+place = "park"
+clips = ["lib_0_10_12.okanim", "lib_0_10_13.okanim", "lib_0_10_14.okanim", "venue_sky.okanim", "lib_17_4_5.okanim", "lib_0_4_7.okanim"]
+
+[[life]]
+kind = "leisure"
+place = "shrine"
+clips = ["venue_sky.okanim", "lib_0_4_13.okanim", "lib_0_4_7.okanim"]
+
+[[life]]
+kind = "leisure"
+place = "department"
+clips = ["lib_17_4_9.okanim", "lib_17_4_10.okanim", "lib_17_4_8.okanim"]
+
+[[life]]
+kind = "leisure"
+place = "street"
+clips = ["lib_0_4_5.okanim", "lib_0_4_6.okanim", "lib_0_4_7.okanim", "lib_0_4_23.okanim", "lib_0_4_24.okanim", "lib_0_4_1.okanim", "lib_0_4_13.okanim"]
+
+[[life]]
+kind = "leisure"
+place = "aquarium"
+clips = ["venue_observe.okanim", "lib_17_4_13.okanim", "lib_0_4_13.okanim"]
+
+[[life]]
+kind = "leisure"
+place = "pool"
+clips = ["lib_11_1_0.okanim", "lib_11_1_1.okanim", "lib_11_1_2.okanim", "lib_11_1_3.okanim"]
+
+# --------------------------------------------------------------------------------------------------------------- photo
+# The game's two-shot poses (Studio サンシャイン 立ち ツーショット1–9), all with his two-shot stand.
+
+[[photo]]
+key = "twoshot_1"
+female = "photo_female_00.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_2"
+female = "photo_female_01.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_3"
+female = "photo_female_02.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_4"
+female = "photo_female_03.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_5"
+female = "photo_female_04.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_6"
+female = "photo_female_05.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_7"
+female = "photo_female_06.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_8"
+female = "photo_female_07.okanim"
+male = "photo_male.okanim"
+
+[[photo]]
+key = "twoshot_9"
+female = "photo_female_08.okanim"
+male = "photo_male.okanim"
+
+# ------------------------------------------------------------------------------------------------------------- ambient
+# Where she stops on her own (a look point, a bench): what she does standing there, by the place she is in (none: the
+# street). Nothing in her hands: the phone, the drink and the selfie bring their own props (OKStreetSocialAmbient.inl).
+
+[[life]]
+kind = "ambient"
+clips = ["lib_0_4_23.okanim", "lib_0_4_24.okanim", "lib_0_4_25.okanim", "lib_0_4_1.okanim", "lib_0_4_13.okanim", "lib_0_4_15.okanim", "lib_0_4_16.okanim", "lib_12_66_5.okanim", "lib_0_4_7.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "park"
+clips = ["lib_0_10_12.okanim", "lib_0_10_13.okanim", "lib_0_10_14.okanim", "lib_0_4_14.okanim", "venue_sky.okanim", "lib_17_4_5.okanim", "lib_10_62_0.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "shrine"
+clips = ["venue_sky.okanim", "lib_0_4_13.okanim", "lib_17_4_5.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "aquarium"
+clips = ["venue_observe.okanim", "lib_0_4_13.okanim", "lib_17_4_11.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "department"
+clips = ["lib_17_4_8.okanim", "lib_17_4_9.okanim", "lib_17_4_10.okanim", "lib_0_4_16.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "bookstore"
+clips = ["lib_0_4_3.okanim", "lib_0_4_4.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "library"
+clips = ["lib_0_4_3.okanim", "lib_0_4_4.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "beach"
+clips = ["lib_11_1_0.okanim", "lib_11_1_1.okanim", "lib_11_1_2.okanim", "lib_11_1_3.okanim", "venue_sky.okanim", "lib_0_10_2.okanim"]
+
+[[life]]
+kind = "ambient"
+place = "pool"
+clips = ["lib_11_1_0.okanim", "lib_11_1_1.okanim", "lib_11_1_2.okanim", "lib_11_1_3.okanim"]

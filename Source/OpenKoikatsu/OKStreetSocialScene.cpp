@@ -178,7 +178,7 @@ struct FOKNpcLift {int32 Elevator=INDEX_NONE,From=0,To=0,Stage=0;double At=0;FVe
 struct FOKStreetLoverReact {int32 Girl=INDEX_NONE;FString Clip,MaleClip;int32 Phase=0;double At=0;float Seconds=0;bool WasHeld=false;};
 struct FOKStreetSceneState {
  FOKStreetPairSession Pair,PhotoProbeSession,SeatedProbeSession,PhoneUseProbeSession;
- int32 AmbientActor=INDEX_NONE,AmbientCursor=0,AmbientPhase=0,AmbientAction=0,AmbientNextAction=0;
+ int32 AmbientActor=INDEX_NONE,AmbientCursor=0,AmbientPhase=0,AmbientAction=0,AmbientNextAction=0;FString AmbientPlaceClip;
  bool AmbientDrinkOnlyTest=false,AmbientSelfieOnlyTest=false,AmbientGroomOnlyTest=false;
  double AmbientRequested=0,AmbientPlaying=0,AmbientDuration=0;FOKStreetAgentSim AmbientSaved;
  TMap<int32,double> AmbientCooldown;TArray<TWeakObjectPtr<AStaticMeshActor>> AmbientProps;
@@ -345,6 +345,9 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool SeatedChecked=false,SeatedCancelChecked=false,SeatedOnlyTest=false;
  TMap<int32,FString> PhotoPoses;
  FString PhotoMaleClip,LastPhoto,PhotoProbeSave;
+ // Motions (rules motions.toml): the two-shot pose of the photo now and one asked for; the loop each schedule block
+ // shows ("actor|kind|place|start" -> clip); the clips she sits for and the ones that bring a table.
+ FString PhotoPoseKey,NextPhotoPose;TMap<FString,FString> LifeClipChoice;TSet<FString> MotionSeated,MotionTable;bool MotionTableRead=false;
  // A photo she is taking (judge she_photo): saved by the screenshot, then filed (and sent, when she said so).
  struct FHerPhoto{int32 Girl=INDEX_NONE;FString Path,Topic,Subject,Album;double At=0;bool Send=false,Drawing=false,ByHim=false,Requested=false;};
  // The camera where the one taking a photo holds the phone, for the frame it is taken in (her view, not the game's).
@@ -1128,6 +1131,8 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
    UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d payer \"%s\" on a game note, not settled by them"),Character,*Applied.Payer);Applied.Payer.Reset();}
   ApplyChoiceReply(Character,Applied);}
  ApplyMindExpression(Character,Reply->Emotion,Reply);
+ // And her body: the gesture she makes with it (motions.toml), face to face only.
+ if(!Reply->Gesture.IsEmpty()&&Reply->Gesture!=TEXT("none")&&RemoteKind(Character)==0)PlayGesture(Character,Reply->Gesture);
  // Free-talk replies have no recorded clip, so they always go to the TTS server (independent of the
  // V voice-mode toggle, which only chooses for scripted lines); the text stays on screen either way.
  if(!S.TtsCacheDir.IsEmpty()&&RemoteKind(Character)!=1)SpeakFreeTalk(Character,Reply->Lines,Serial); // a text message is read, not heard
@@ -1984,6 +1989,7 @@ void AOKStreetSocialScene::RebuildUI(){
  if(S.Pair.Splash||S.Pair.Watermelon){Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.Pair.Watermelon?OKT(TEXT("ui.scene.end_watermelon")):OKT(TEXT("ui.scene.end_splash")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->FinishPhoto();return FReply::Handled();})];}
  if(S.Pair.Partner!=INDEX_NONE&&!S.Pair.Conversation()&&!S.Pair.Splash&&!S.Pair.Watermelon){
   Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsEnabled(S.Pair.Phase==1&&!S.Pair.CapturePending).Text(FText::FromString(OKT(TEXT("ui.scene.photo_save_button")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->CapturePhoto();return FReply::Handled();})];
+  if(!S.PhotoPoseKey.IsEmpty())Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsEnabled(S.Pair.Phase==1&&!S.Pair.CapturePending).Text(FText::FromString(OKT(TEXT("ui.scene.photo_another_pose")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->SwitchPhotoPose(FString());return FReply::Handled();})];
   Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.end_photo")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->FinishPhoto();return FReply::Handled();})];
  }
  if(S.Companion!=INDEX_NONE){
@@ -2330,6 +2336,14 @@ void AOKStreetSocialScene::BeginPair(int32 Character,int32 Kind){
  const FString Strike=TEXT("watermelon_strike.okanim"),Observe=TEXT("watermelon_observe.okanim");const FString PhoneClip=TEXT("phone_standing.okanim"),MealClip=TEXT("facility_eat.okanim");const FString ReadClip=TEXT("idle_02.okanim");const FString* Female=Read?&ReadClip:PhoneUse?&PhoneClip:Watermelon?(FemaleStrikes?&Strike:&Observe):Meal?&MealClip:Splash?(FemaleThrows?&S.SplashFemaleThrow:&S.SplashFemaleReceive):Drink?&S.DrinkFemaleClip:Seated?&S.SeatedFemaleClip:S.PhotoPoses.Find(S.Manifest.Characters[Character].PersonalityId);FString MaleClip=Read?ReadClip:PhoneUse?PhoneClip:Watermelon?(FemaleStrikes?Observe:Strike):Meal?MealClip:Splash?(FemaleThrows?S.SplashMaleReceive:S.SplashMaleThrow):Drink?S.DrinkMaleClip:Seated?S.SeatedMaleClip:S.PhotoMaleClip;// A place can ask for its own curves (venue.manifest.json), e.g. reading or drinking on the seated benches.
  FString FemaleOverride=S.NextPairFemaleClip;const FString MaleOverride=S.NextPairMaleClip;S.NextPairFemaleClip.Reset();S.NextPairMaleClip.Reset();
  if(!FemaleOverride.IsEmpty())Female=&FemaleOverride;if(!MaleOverride.IsEmpty())MaleClip=MaleOverride;
+ // A photo: one of the game's nine two-shot poses (motions.toml, photo), the one she asked for, or the next one for
+ // "another pose"; the three by personality were all there was.
+ FString PhotoFemale;S.PhotoPoseKey.Reset();
+ if(!Read&&!PhoneUse&&!Watermelon&&!Meal&&!Splash&&!Drink&&!Seated&&FemaleOverride.IsEmpty()){
+  auto Ask=OKRulesRequest(TEXT("motion_photo"));Ask->SetStringField(TEXT("pose"),S.NextPhotoPose);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));S.NextPhotoPose.Reset();
+  if(const TSharedPtr<FJsonObject> Pose=OKRulesEval(S,Ask)){PhotoFemale=Pose->GetStringField(TEXT("female"));const FString Him=Pose->GetStringField(TEXT("male"));
+   if(!PhotoFemale.IsEmpty()){Female=&PhotoFemale;S.PhotoPoseKey=Pose->GetStringField(TEXT("key"));if(!Him.IsEmpty())MaleClip=Him;}}
+ }
  if(!Female||Female->IsEmpty()||MaleClip.IsEmpty())return;
  FOKRuntimeCharacterStatus Male,Npc;if(!OKGetCrowdRuntimeCharacterStatus(this,0,Male)||!OKGetCrowdRuntimeCharacterStatus(this,Character,Npc)||!Male.Visible||!Npc.Visible||!Male.Error.IsEmpty()||!Npc.Error.IsEmpty()||FVector::Dist2D(S.Male,S.Agents[Character-1].Position)>250)return;
  StopAmbientActivity();EndTalk();auto& P=S.Pair;P=FOKStreetPairSession();P.Partner=Character;P.PhoneUse=PhoneUse;P.Watermelon=Watermelon;P.FemaleStrikes=FemaleStrikes;P.Meal=Meal;P.Seated=Seated;P.Bath=Bath;P.Read=Read;P.NoProps=NoProps;P.Yaw=S.NextPairYaw;S.NextPairYaw=0;P.Drink=Drink;P.Splash=Splash;P.FemaleThrows=FemaleThrows;P.MaleClip=MaleClip;P.FemaleClip=*Female;P.SavedAgent=S.Agents[Character-1];P.SavedMale=S.Male;P.SavedMaleRotation=S.Rotations[0];P.SavedFemaleRotation=S.Rotations[Character];P.SavedYaw=S.Yaw;P.SavedPitch=S.Pitch;P.SavedDistance=S.Distance;P.SavedMouseUI=S.MouseUI;P.RequestedAt=SceneTime();

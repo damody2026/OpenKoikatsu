@@ -151,6 +151,23 @@ fn main() {
         if let Err(error)=result {eprintln!("rest skeleton dump failed: {error}");std::process::exit(1);}
         return;
     }
+    if out == "--export-runtime-clips" {
+        // A list of "<output file>\t<qualified source|clip or states: key>" lines: all in one process (the bundles and
+        // controllers are parsed once). Existing outputs are kept; each line reports ok or why not.
+        let list=args.next().expect("list file required");
+        let text=std::fs::read_to_string(&list).expect("read list");
+        let (mut ok,mut failed)=(0,0);
+        for line in text.lines().filter(|l|!l.trim().is_empty()) {
+            let Some((output,key))=line.split_once('\t') else {eprintln!("bad line: {line}");failed+=1;continue;};
+            if std::path::Path::new(output).exists() {ok+=1;continue;}
+            match ok_extract::export_common_runtime_clip(&game,key).and_then(|bytes|std::fs::write(output,bytes).map_err(|e|e.to_string())) {
+                Ok(())=>{ok+=1;println!("ok\t{output}");}
+                Err(e)=>{failed+=1;println!("fail\t{output}\t{e}");}
+            }
+        }
+        println!("exported {ok}, failed {failed}");
+        return;
+    }
     if out == "--export-runtime-clip" {
         let key=args.next().expect("qualified source|clip required");
         let output=args.next().expect("output path required");

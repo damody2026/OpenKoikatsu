@@ -5,7 +5,10 @@ struct FOKStreetAmbientDefinition {
  double PlaybackSeconds=8,PrepareSeconds=60,CooldownSeconds=45;bool OneShot=false;
  FTransform Transform(const FTransform& Bone,int32 Part) const {const auto& P=Parts[Part];return FTransform(P.Rotation,P.Offset,P.Size/100.f)*Bone;}
 };
-static FOKStreetAmbientDefinition OKStreetAmbientDefinition(int32 Kind,const FString& DrinkClip){
+// Kind 4: what she does standing about where she stopped (motions.toml ambient rows by place: a stretch in the park,
+// leaning on a wall in the street), nothing in her hands.
+static FOKStreetAmbientDefinition OKStreetAmbientDefinition(int32 Kind,const FString& DrinkClip,const FString& PlaceClip=FString()){
+ if(Kind==4){FOKStreetAmbientDefinition D{PlaceClip,TEXT("k_f_handR_00"),nullptr,{}};D.PlaybackSeconds=12;D.CooldownSeconds=40;return D;}
  if(Kind==3){FOKStreetAmbientDefinition D{TEXT("groom_standing.okanim"),TEXT("k_f_handR_00"),nullptr,{}};D.OneShot=true;return D;}
  if(Kind==1)return {DrinkClip,TEXT("k_f_handR_00"),TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCylinder.StreetCylinder"),{
   {FVector(5.6f,5.6f,19),FVector(0,0,10),FRotator::ZeroRotator,9},
@@ -25,7 +28,7 @@ void AOKStreetSocialScene::StopAmbientActivity(){
   const FVector Position=S.Agents[Character-1].Position;S.Agents[Character-1]=S.AmbientSaved;
   auto& Agent=S.Agents[Character-1];Agent.Position=Position;Agent.Held=false;Agent.Dwell=0;Agent.DwellPoint=INDEX_NONE;Agent.Stuck=0;Agent.Mode=EOKStreetMove::Walking;
  }
- S.AmbientCooldown.Add(Character,SceneTime()+OKStreetAmbientDefinition(S.AmbientAction,S.DrinkFemaleClip).CooldownSeconds);
+ S.AmbientCooldown.Add(Character,SceneTime()+OKStreetAmbientDefinition(S.AmbientAction,S.DrinkFemaleClip,S.AmbientPlaceClip).CooldownSeconds);
 }
 void AOKStreetSocialScene::TickAmbientActivity(double Now){
  auto& S=*State;
@@ -38,14 +41,19 @@ void AOKStreetSocialScene::TickAmbientActivity(double Now){
    if(Agent.Held||Agent.Dwell<=1||(Agent.Mode!=EOKStreetMove::Resting&&Agent.Mode!=EOKStreetMove::Looking)||S.AmbientCooldown.FindRef(Agent.Slot)>Now)continue;
    FOKRuntimeCharacterStatus Status;if(!OKGetCrowdRuntimeCharacterStatus(this,Agent.Slot,Status)||!Status.Visible||!Status.ActionsReady||!Status.Error.IsEmpty())continue;
    S.AmbientAction=S.AmbientGroomOnlyTest?3:S.AmbientSelfieOnlyTest?2:S.AmbientDrinkOnlyTest?1:S.AmbientOnlyTest?0:S.AmbientNextAction;
-   const auto Definition=OKStreetAmbientDefinition(S.AmbientAction,S.DrinkFemaleClip);if(Definition.Clip.IsEmpty())continue;
-   S.AmbientNextAction=(S.AmbientAction+1)%4;
+   // Half the time what fits where she stands (the place's own idles), else the phone, a drink, a selfie, her hair.
+   S.AmbientPlaceClip.Reset();
+   if(S.AmbientAction==4){auto Ask=OKRulesRequest(TEXT("motion_life"));Ask->SetStringField(TEXT("kind"),TEXT("ambient"));Ask->SetStringField(TEXT("place"),PlaceHere(Agent.Position));Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));
+    if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask))S.AmbientPlaceClip=Out->GetStringField(TEXT("clip"));}
+   const auto Definition=OKStreetAmbientDefinition(S.AmbientAction,S.DrinkFemaleClip,S.AmbientPlaceClip);
+   S.AmbientNextAction=S.AmbientAction==4?S.Random.RandRange(0,3):4;
+   if(Definition.Clip.IsEmpty())continue;
    S.AmbientActor=Agent.Slot;S.AmbientSaved=Agent;S.AmbientRequested=Now;S.AmbientPhase=0;S.AmbientCursor=(Index+1)%S.Agents.Num();Agent.Held=true;
    FString Error;if(!OKPrewarmCrowdRuntimeAction(this,Agent.Slot,Definition.Clip,Error))StopAmbientActivity();return;
   }
   return;
  }
- const auto Definition=OKStreetAmbientDefinition(S.AmbientAction,S.DrinkFemaleClip);const auto& Clip=Definition.Clip;
+ const auto Definition=OKStreetAmbientDefinition(S.AmbientAction,S.DrinkFemaleClip,S.AmbientPlaceClip);const auto& Clip=Definition.Clip;
  const int32 Character=S.AmbientActor;FOKRuntimeCharacterStatus Status;FOKRuntimeActionStreamStatus Action;
  if(!OKGetCrowdRuntimeCharacterStatus(this,Character,Status)||!Status.Visible||!Status.Error.IsEmpty()||!OKGetCrowdRuntimeActionStatus(this,Character,Action)){StopAmbientActivity();return;}
  if(S.AmbientPhase==0){

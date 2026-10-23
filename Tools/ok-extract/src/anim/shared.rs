@@ -40,7 +40,18 @@ fn validate(r: &Resource) -> Result<(), String> {
     Ok(())
 }
 pub(crate) fn export_shared_clip(root: &Path, key: &str) -> Result<Vec<u8>, String> {
-    if !key.contains('|') || key.starts_with(controller::SOURCE_PREFIX) {
+    // A Studio controller state that plays one clip (studio_anims.json keys): that clip. Blend trees and layered
+    // states are not one clip and stay refused.
+    if key.starts_with(controller::SOURCE_PREFIX) {
+        let leaves=super::state_leaf_clips(root,key).ok_or("unknown controller state")?;
+        // The game's height variants of one motion (…_S, …_M, …_L, picked by her height): the middle one.
+        let raw=if leaves.len()==1 {leaves.into_iter().next().unwrap()}
+            else if let Some(m)=leaves.iter().find(|k|k.ends_with("_M")||k.contains("_M_")) {m.clone()}
+            else {return Err(format!("controller state plays {} clips, not one",leaves.len()));};
+        if raw.starts_with(controller::SOURCE_PREFIX) {return Err("controller state resolves to another controller".into());}
+        return export_shared_clip(root,&raw);
+    }
+    if !key.contains('|') {
         return Err("shared export requires an explicitly qualified raw AnimationClip; controller graphs are not raw clips".into());
     }
     load_clip_at(root,key,0.).ok_or("cannot load authored AnimationClip")?;

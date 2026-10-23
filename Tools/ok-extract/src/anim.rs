@@ -1139,7 +1139,7 @@ pub fn prepare_animation_clip(game:&Path,key:&str)->bool {
 
 /// The raw clips (`source|clip`) a controller state key plays: its motion's leaves (blend-tree children), its
 /// synchronized layers' and, for a layer state, its base state's. None: not a state of the source.
-fn state_leaf_clips(game:&Path,key:&str)->Option<HashSet<String>> {
+pub(crate) fn state_leaf_clips(game:&Path,key:&str)->Option<HashSet<String>> {
     let (source,label)=key.split_once('|').and_then(|(s,l)|s.strip_prefix(controller::SOURCE_PREFIX).map(|s|(s,l)))?;
     let resolved=source_path(game,source)?;let entries=controller::entries(&resolved);
     let entry=entries.iter().find(|e|e.label==label)?;

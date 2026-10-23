@@ -1,0 +1,8 @@
+{"schema": 1, "purpose": "The rest of the game's two-shot photo poses (f_twoshot_00_01..08); photo.manifest.json keeps the three by personality.", "actions": [
+  {"id": "photo_female_01.okanim", "file": "photo_female_01.okanim", "source": "action/animator/00.unity3d|f_twoshot_00_01", "loop": true, "sha256": "192b12f897fbf42c12f6891aa167ec2471e4787f0d0f9fbdd70731a35f6d1fc5"},
+  {"id": "photo_female_02.okanim", "file": "photo_female_02.okanim", "source": "action/animator/00.unity3d|f_twoshot_00_02", "loop": true, "sha256": "47329fde1b95dd5d024cee26ab6f6bd9f740c38e49def3ad3901ef7aa4947c15"},
+  {"id": "photo_female_04.okanim", "file": "photo_female_04.okanim", "source": "action/animator/00.unity3d|f_twoshot_00_04", "loop": true, "sha256": "b76a7f3a59fb54c5dc7b5fa933724c10c07fa702b1b15a83eb6cdbbeaa2fa22f"},
+  {"id": "photo_female_05.okanim", "file": "photo_female_05.okanim", "source": "action/animator/00.unity3d|f_twoshot_00_05", "loop": true, "sha256": "2d2501fc1afbd1e12a2313e313d38cd664d721ea3cb44b43a9a771fb87d01563"},
+  {"id": "photo_female_07.okanim", "file": "photo_female_07.okanim", "source": "action/animator/00.unity3d|f_twoshot_00_07", "loop": true, "sha256": "9298515ffb9f15b32cded7f13c2b796dd7eb9469fc2d684a32834a0b427f67a8"},
+  {"id": "photo_female_08.okanim", "file": "photo_female_08.okanim", "source": "action/animator/00.unity3d|f_twoshot_00_08", "loop": true, "sha256": "6efd5b8d546856f00c0b24eb4686c48e69ac92e6a8a1670a9ec70e347ef22df7"}
+]}

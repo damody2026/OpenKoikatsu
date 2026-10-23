@@ -48,6 +48,7 @@ struct FOKFreeTalkReply {
  FString Reply, Reason; // Reply = the lines joined, for captions, the log and memory
  FString Action; // activity id or "go:<place>" she agreed to start now; empty for none
  FString Emotion; // one of the TTS emotion set, empty if not given
+ FString Gesture; // a gesture key of motions.toml she makes with this reply (wave, shy, ...); empty for none
  // Her face this turn ("face": {"expr", "blush", "tears", "sweat", "gaze", "eyes_open"}): an expression of the source
  // catalogue, cheek blush / sweat 0..1 (-1 not given), tears 0..2, where she looks (him / away / down / up / closed).
  FString FaceExpr, FaceGaze;float FaceBlush=-1.f,FaceSweat=-1.f,FaceEyesOpen=-1.f;int32 FaceTears=-1;bool FaceGiven=false;
