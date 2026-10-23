@@ -72,7 +72,7 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
         let vc = SeedVc::load(gpu, models)?;
         let src = npy(&refdir.join("mel_in_1.npy"))?;
         let refw = npy(&refdir.join("mel_in_2.npy"))?;
-        let o = ConvertOptions { steps: 30, cfg_rate: 0.7, seed: 1, vibrato_cents: 0.0, glide_ms: 0.0, soft_f0: false, scoop_cents: 0.0, drift_cents: 0.0 };
+        let o = ConvertOptions { steps: 30, cfg_rate: 0.7, seed: 1, vibrato_cents: 0.0, glide_ms: 0.0, soft_f0: false, scoop_cents: 0.0, drift_cents: 0.0, jitter_cents: 0.0 };
         let tm = std::time::Instant::now();
         let y = vc.convert(gpu, &src, &refw, &o, &|| false)?;
         report.insert("conv_seconds".into(), tm.elapsed().as_secs_f64().into());
@@ -178,7 +178,7 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
 }
 
 /// Bumped when the native conversion changes its output for the same inputs (part of the artifact cache key).
-pub const CONVERT_REVISION: &str = "seedvc-rust-2";
+pub const CONVERT_REVISION: &str = "seedvc-rust-3";
 
 /// Build the model folder `SeedVc::load` reads from the upstream downloads (Seed-VC `checkpoints/` with its hf_cache):
 /// the torch checkpoints become f32 safetensors, Whisper-small is copied as is. No Python involved.
@@ -237,13 +237,16 @@ pub struct ConvertOptions {
     /// slow wander of up to `drift_cents` on held notes. 0 = off.
     pub scoop_cents: f32,
     pub drift_cents: f32,
+    /// Fast small wobble on held notes (new target every 50 ms), so the pitch is never frozen. 0 = off.
+    pub jitter_cents: f32,
 }
 
 /// The generated singing often sits exactly on the semitones and jumps between them like hard pitch correction. Real
 /// singers slide into a note from below and wander a little around it: each note (a voiced stretch within 50 cents of
 /// where it began, at least 80 ms) starts `scoop_cents` low and rises over 60 ms, and gets a smooth random offset of up
-/// to `drift_cents` (new target every 250 ms, cosine eased). Deterministic for a given `seed`.
-pub fn deautotune_f0(f0: &[f64], scoop_cents: f64, drift_cents: f64, seed: u64) -> Vec<f64> {
+/// to `drift_cents` (new target every 250 ms, cosine eased), plus a faster one of up to `jitter_cents` (every 50 ms):
+/// generated notes hold a frozen pitch, real ones never do. Deterministic for a given `seed`.
+pub fn deautotune_f0(f0: &[f64], scoop_cents: f64, drift_cents: f64, jitter_cents: f64, seed: u64) -> Vec<f64> {
     let mut out = f0.to_vec();
     let mut rng = seed ^ 0x9e37_79b9_7f4a_7c15;
     let mut rand = move || {
@@ -279,6 +282,7 @@ pub fn deautotune_f0(f0: &[f64], scoop_cents: f64, drift_cents: f64, seed: u64) 
             }
             let len = k - s;
             let points: Vec<f64> = (0..=len / 25 + 1).map(|_| rand() * drift_cents).collect();
+            let wobble: Vec<f64> = (0..=len / 5 + 1).map(|_| rand() * jitter_cents).collect();
             for (t, j) in (s..k).enumerate() {
                 let mut off = 0.0;
                 if t < 6 {
@@ -290,6 +294,11 @@ pub fn deautotune_f0(f0: &[f64], scoop_cents: f64, drift_cents: f64, seed: u64) 
                     // fade the drift in and out with the note so the note boundaries stay where they were
                     let fade = ((t as f64 / 8.0).min(1.0)) * (((len - t) as f64 / 8.0).min(1.0));
                     off += fade * (points[seg] * (1.0 - e) + points[seg + 1] * e);
+                }
+                if jitter_cents > 0.0 {
+                    let (seg, w) = (t / 5, (t % 5) as f64 / 5.0);
+                    let e = 0.5 - 0.5 * (std::f64::consts::PI * w).cos();
+                    off += wobble[seg] * (1.0 - e) + wobble[seg + 1] * e;
                 }
                 out[start + j] = 440.0 * 2f64.powf((cents[j] + off) / 1200.0);
             }
@@ -400,7 +409,9 @@ impl SeedVc {
         let f0_ori = self.rmvpe.f0(gpu, &ref16, 0.03)?;
         let f0_alt = self.rmvpe.f0(gpu, &src16, 0.03)?;
         // shifted_f0_alt = exp(log(F0_alt + 1e-5)) (no auto adjust, no semitone shift)
-        let f0_alt = if o.scoop_cents > 0.0 || o.drift_cents > 0.0 { deautotune_f0(&f0_alt, o.scoop_cents as f64, o.drift_cents as f64, o.seed) } else { f0_alt };
+        let f0_alt = if o.scoop_cents > 0.0 || o.drift_cents > 0.0 || o.jitter_cents > 0.0 {
+            deautotune_f0(&f0_alt, o.scoop_cents as f64, o.drift_cents as f64, o.jitter_cents as f64, o.seed)
+        } else { f0_alt };
         let f0_alt = if o.vibrato_cents > 0.0 || o.glide_ms > 0.0 { humanize_f0(&f0_alt, o.vibrato_cents as f64, o.glide_ms as f64) } else { f0_alt };
         let f0_alt: Vec<f64> = f0_alt.iter().map(|f| (f + 1e-5).ln().exp()).collect();
         let cond = self.dit.regulate(gpu, &s_alt, n_alt, &f0_alt, frames, o.soft_f0)?;

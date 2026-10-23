@@ -188,9 +188,10 @@ impl Runner<'_> {
             }
             let o = crate::native::seedvc::ConvertOptions {
                 steps: st.diffusion_steps.unwrap_or(50) as usize, cfg_rate: st.inference_cfg_rate.unwrap_or(0.4) as f32, seed: st.seed.unwrap_or(1),
-                vibrato_cents: st.vibrato_cents.unwrap_or(0.0) as f32, glide_ms: st.glide_ms.unwrap_or(0.0) as f32,
+                vibrato_cents: st.vibrato_cents.unwrap_or(15.0) as f32, glide_ms: st.glide_ms.unwrap_or(0.0) as f32,
                 soft_f0: st.soft_f0.unwrap_or(true),
-                scoop_cents: st.scoop_cents.unwrap_or(60.0) as f32, drift_cents: st.drift_cents.unwrap_or(20.0) as f32,
+                scoop_cents: st.scoop_cents.unwrap_or(80.0) as f32, drift_cents: st.drift_cents.unwrap_or(30.0) as f32,
+                jitter_cents: st.jitter_cents.unwrap_or(15.0) as f32,
             };
             let (out, report) = crate::native::song::convert(models, &crate::audio::Audio::read_wav(vocals)?, &crate::audio::Audio::read_wav(reference)?, &o, &self.cancel)?;
             let path = dir.join("converted.wav");
@@ -246,7 +247,8 @@ pub fn revisions(cfg: &Config) -> Value {
                },
                "sampling": if native { Some(json!({"cfg_scale": st.cfg_scale, "topk": st.topk, "temperature": st.temperature, "seed": st.seed,
                                                     "vibrato_cents": st.vibrato_cents, "glide_ms": st.glide_ms, "soft_f0": st.soft_f0,
-                                                    "scoop_cents": st.scoop_cents, "drift_cents": st.drift_cents})) } else { None },
+                                                    "scoop_cents": st.scoop_cents, "drift_cents": st.drift_cents,
+                                                    "jitter_cents": st.jitter_cents})) } else { None },
                "repo": if native { None } else { st.repo.clone() }, "repo_head": if native { None } else { st.repo.as_deref().and_then(git_head) },
                "model": st.model, "version": st.version, "diffusion_steps": st.diffusion_steps, "inference_cfg_rate": st.inference_cfg_rate})
     };
