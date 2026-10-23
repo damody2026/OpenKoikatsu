@@ -378,6 +378,35 @@ public sealed partial class GamePoseProbe {
                 }
             }
             CaptureMain(main, output + ".png");
+            // OK_PROBE_NORMALS=1: the main camera's view-space normals (Unity's DepthNormals replacement shader, its
+            // stereographic encoding kept in a float target) as <output>.normals.rgba32f, and the camera-to-world
+            // matrix as <output>.camera.tsv (row-major), to compare surface normals pixel by pixel.
+            if (Environment.GetEnvironmentVariable("OK_PROBE_NORMALS") == "1") {
+                Shader replacement = Shader.Find("Hidden/Internal-DepthNormalsTexture");
+                if (replacement != null) {
+                    RenderTexture oldTarget = main.targetTexture, oldActive = RenderTexture.active;
+                    CameraClearFlags oldFlags = main.clearFlags; Color oldBack = main.backgroundColor;
+                    var target = RenderTexture.GetTemporary(1280, 720, 24, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+                    var read = new Texture2D(1280, 720, TextureFormat.RGBAFloat, false, true);
+                    // The image effects (OnRenderImage) would run on the replacement render too: all off meanwhile.
+                    var effectsOn = effects.FindAll(e => e.enabled);
+                    foreach (Behaviour e in effectsOn) e.enabled = false;
+                    try {
+                        main.targetTexture = target; main.clearFlags = CameraClearFlags.SolidColor; main.backgroundColor = new Color(0.5f, 0.5f, 1f, 1f);
+                        main.RenderWithShader(replacement, "RenderType");
+                        RenderTexture.active = target; read.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); read.Apply();
+                        File.WriteAllBytes(output + ".normals.rgba32f", read.GetRawTextureData());
+                        Matrix4x4 m = main.cameraToWorldMatrix;
+                        var rows = new System.Text.StringBuilder();
+                        for (int r = 0; r < 4; ++r) rows.AppendLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}\t{1}\t{2}\t{3}", m[r, 0], m[r, 1], m[r, 2], m[r, 3]));
+                        File.WriteAllText(output + ".camera.tsv", rows.ToString());
+                    } finally {
+                        foreach (Behaviour e in effectsOn) e.enabled = true;
+                        main.targetTexture = oldTarget; RenderTexture.active = oldActive; main.clearFlags = oldFlags; main.backgroundColor = oldBack;
+                        RenderTexture.ReleaseTemporary(target); UnityEngine.Object.Destroy(read);
+                    }
+                }
+            }
             // OK_PROBE_CAPTURE_STAGES=1: the same frame with every enabled image effect off, then with each one off alone.
             if (Environment.GetEnvironmentVariable("OK_PROBE_CAPTURE_STAGES") == "1") {
                 var enabled = effects.FindAll(e => e.enabled);

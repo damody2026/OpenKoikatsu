@@ -15,6 +15,7 @@ parser:flag("--mesh-snapshot")
 parser:flag("--input-streams")
 parser:flag("--stages")
 parser:flag("--lightmaps")
+parser:flag("--normals")
 parser:opt("--hide")
 parser:opt("--white")
 parser:opt("--mesh-dump")
@@ -55,6 +56,7 @@ local success, err = xpcall(function()
         fs.setenv("OK_GAME_POSE_OUTPUT", prefix)
         if a.stages then fs.setenv("OK_PROBE_CAPTURE_STAGES", "1") end
         if a.lightmaps then fs.setenv("OK_PROBE_LIGHTMAPS", "1") end
+        if a.normals then fs.setenv("OK_PROBE_NORMALS", "1") end
         if a.hide then fs.setenv("OK_PROBE_HIDE", a.hide) end
         if a.white then fs.setenv("OK_PROBE_WHITE", a.white) end
         if a.mesh_dump then fs.setenv("OK_PROBE_MESH", a.mesh_dump) end
