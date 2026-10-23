@@ -44,6 +44,12 @@ pub struct StageConfig {
     /// Seed-VC: blend neighbouring pitch-bin embeddings (dit::Dit::regulate).
     #[serde(default)]
     pub soft_f0: Option<bool>,
+    /// Seed-VC: undo pitch-correction-like singing in the generated vocal (seedvc::deautotune_f0): each note slides up
+    /// from `scoop_cents` below and wanders by up to `drift_cents`. Defaults 60 / 20; 0 / 0 = off.
+    #[serde(default)]
+    pub scoop_cents: Option<f64>,
+    #[serde(default)]
+    pub drift_cents: Option<f64>,
 }
 
 impl StageConfig {

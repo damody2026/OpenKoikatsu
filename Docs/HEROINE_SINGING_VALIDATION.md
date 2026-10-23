@@ -121,3 +121,22 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 由使用者在五個試聽版本中選定。另有顫音／滑音選項（`vibrato_cents`、`glide_ms`），預設關閉。
 - **設定**：`ok-song.example.json` 的 convert 改為 `"diffusion_steps": 50, "inference_cfg_rate": 0.4, "soft_f0": true`。這些參數在快取鍵內，舊歌下次會重新換聲（歌與分軌仍沿用快取）。
 - **單獨換聲指令**：`ok-song convert --vocal V.wav --reference R.wav --out O.wav [--soft-f0] [--cfg 0.4] [--steps 50] [--vibrato N] [--glide MS]`
+
+## 8. 原聲本身的修音感（2026-10-23）
+
+- **症狀**：lover_night 換聲後電子音仍明顯。
+- **量測**：問題出在 HeartMuLa 產生的原人聲，它本身就像硬修音。指標 snap 是持續音落在半音 ±10 cent 內的比例，自然人聲約 0.2。
+
+  | 音訊 | snap | flat |
+  |---|---:|---:|
+  | lover_night 原人聲 | 0.62 | 0.30 |
+  | 換聲（soft_f0） | 0.50 | 0.21 |
+  | 去修音 scoop 40／drift 12 | 0.42 | 0.19 |
+  | 去修音 scoop 60／drift 20 | 0.36 | 0.19 |
+  | 角色 TTS 參考音 | 0.23 | 0.05 |
+
+- **改法**：換聲前先改原人聲的音高曲線（`seedvc::deautotune_f0`），以參數控制：
+  - `scoop_cents`：每個音從低多少 cent 滑上來（60 ms）。
+  - `drift_cents`：持續音的緩慢飄移幅度（每 250 ms 換一個目標，頭尾淡入淡出）。
+- **預設**：scoop 60、drift 20；0／0 為關閉。換聲版本 `seedvc-rust-2`，舊歌下次會重新換聲。scoop 60／drift 20 版本經 ASR 轉寫，歌詞完整。
+- **單獨換聲指令**：加 `--scoop 60 --drift 20`。試聽檔在 `Saved/StreetSocial/Songs/ab-lover/`。
