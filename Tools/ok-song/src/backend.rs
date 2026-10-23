@@ -110,7 +110,7 @@ impl Runner<'_> {
             });
             let o = crate::native::song::GenerateOptions {
                 cfg_scale: st.cfg_scale.unwrap_or(3.0) as f32, top_k: st.topk.unwrap_or(50) as i32,
-                temperature: st.temperature.unwrap_or(1.0) as f32, seed,
+                temperature: st.temperature.unwrap_or(1.0) as f32, seed, muq: None,
             };
             let (song, report) = crate::native::song::generate(ckpt, lyrics_model, &tags, max_ms, &o, &self.cancel)?;
             let out = dir.join("song.wav");

@@ -9,6 +9,8 @@
 //!   ok-song cancel   --job ID [--port 47880]
 //!   ok-song mula-check --ref DIR [--ckpt E:/HeartMuLa/ckpt] [--frames 12]   native HeartMuLa vs a Python dump
 //!   ok-song mula-generate --tags T --lyrics FILE --out FRAMES.json [--seconds 30] [--cfg 3] [--topk 50] [--seed N]
+//!   ok-song song-generate --tags T --lyrics FILE --out SONG.wav [--seconds 30] [--seed N] [--muq EMBED.f32]   HeartMuLa + HeartCodec alone
+//!   ok-song separate --song SONG.wav --out DIR --models DEMUCS_DIR   Demucs alone (vocals.wav, accompaniment.wav)
 //!   ok-song codec-check --frames F.json --ref DIR [--first-draw 33]   native HeartCodec vs a Python dump
 //!   ok-song demucs-check --ref DIR [--models DIR]   native Demucs (htdemucs_ft) vs a Python dump
 //!   ok-song seedvc-check --ref DIR [--models DIR] [--parts mel,voc,lr,est,cfm,sem,style,f0,pipe,conv]   native Seed-VC vs a dump
@@ -159,6 +161,22 @@ fn run() -> Result<()> {
             println!("{}", serde_json::json!({"frames": frames.len(), "audio_seconds": frames.len() as f64 * 0.08, "load_seconds": load,
                 "generate_seconds": gen, "ms_per_frame": gen * 1000.0 / frames.len().max(1) as f64, "prompt_tokens": p.len()}));
         }
+        "song-generate" => {
+            let ckpt = PathBuf::from(args.opts.get("ckpt").map(String::as_str).unwrap_or("E:/HeartMuLa/ckpt"));
+            let opt = |k: &str, d: f64| -> Result<f64> { Ok(args.opts.get(k).map(|v| v.parse()).transpose()?.unwrap_or(d)) };
+            let lyrics = std::fs::read_to_string(args.opts.get("lyrics").context("--lyrics FILE")?)?;
+            // --muq: 512 little-endian f32 (a MuQ-MuLan embedding) for HeartMuLa's reference slot
+            let muq = match args.opts.get("muq") {
+                Some(f) => Some(std::fs::read(f)?.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect::<Vec<f32>>()),
+                None => None,
+            };
+            let o = native::song::GenerateOptions { cfg_scale: opt("cfg", 3.0)? as f32, top_k: opt("topk", 50.0)? as i32,
+                temperature: opt("temperature", 1.0)? as f32, seed: args.opts.get("seed").map(|v| v.parse()).transpose()?.unwrap_or(1), muq };
+            let (song, report) = native::song::generate(&ckpt, &lyrics, args.opts.get("tags").context("--tags")?,
+                (opt("seconds", 30.0)? * 1000.0) as u32, &o, &std::sync::atomic::AtomicBool::new(false))?;
+            song.write_wav(std::path::Path::new(args.opts.get("out").context("--out")?))?;
+            println!("{report}");
+        }
         "codec-check" => {
             let gpu = native::device(0)?;
             let ckpt = PathBuf::from(args.opts.get("ckpt").map(String::as_str).unwrap_or("E:/HeartMuLa/ckpt"));
@@ -204,6 +222,16 @@ fn run() -> Result<()> {
             let (out, report) = native::song::convert(&models, &v, &r, &o, &AtomicBool::new(false))?;
             out.write_wav(&PathBuf::from(args.opts.get("out").context("--out")?))?;
             println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        "separate" => {
+            let song = audio::Audio::read_wav(&PathBuf::from(args.opts.get("song").context("--song")?))?;
+            let out = PathBuf::from(args.opts.get("out").context("--out DIR")?);
+            std::fs::create_dir_all(&out)?;
+            let models = PathBuf::from(args.opts.get("models").context("--models (the htdemucs_ft folder)")?);
+            let (v, a, report) = native::song::separate(&models, &song, &std::sync::atomic::AtomicBool::new(false))?;
+            v.write_wav(&out.join("vocals.wav"))?;
+            a.write_wav(&out.join("accompaniment.wav"))?;
+            println!("{report}");
         }
         "mix" => {
             let v = audio::Audio::read_wav(&PathBuf::from(args.opts.get("vocal").context("--vocal")?))?;

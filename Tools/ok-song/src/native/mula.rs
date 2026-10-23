@@ -167,10 +167,13 @@ pub struct Mula {
     tokenizer: tokenizers::Tokenizer,
 }
 
-/// The prompt: tags, one MuQ slot (zero reference), lyrics; all as text-column tokens.
+/// The prompt: tags, one MuQ slot, lyrics; all as text-column tokens.
 pub struct Prompt {
     pub tags: Vec<u32>,
     pub lyrics: Vec<u32>,
+    /// A MuQ-MuLan embedding (512) for the reference slot. Upstream leaves it zero ("ref_audio is not supported yet"),
+    /// but the weights have muq_linear; None = zero like upstream.
+    pub muq: Option<Vec<f32>>,
 }
 
 impl Prompt {
@@ -221,7 +224,7 @@ impl Mula {
         if !t.ends_with("</tag>") {
             t = format!("{t}</tag>");
         }
-        Ok(Prompt { tags: self.encode(&t)?, lyrics: self.encode(&lyrics.to_lowercase())? })
+        Ok(Prompt { tags: self.encode(&t)?, lyrics: self.encode(&lyrics.to_lowercase())?, muq: None })
     }
 
     /// Backbone input for the prompt, [batch * len, hidden] bf16 bits. Row 0 is conditional; row 1 (CFG) uses the
@@ -230,8 +233,16 @@ impl Mula {
         let h = self.hidden;
         let len = p.len();
         let mut out = Vec::with_capacity(self.batch * len * h);
-        // muq_linear(zero reference) is its bias, rounded to bf16.
-        let muq: Vec<u16> = self.st.f32("muq_linear.bias")?.into_iter().map(super::weights::bf16_bits).collect();
+        // muq_linear(reference): its bias alone for the zero reference, rounded to bf16.
+        let mut muq = self.st.f32("muq_linear.bias")?;
+        if let Some(e) = &p.muq {
+            let w = self.st.f32("muq_linear.weight")?;
+            anyhow::ensure!(w.len() == muq.len() * e.len(), "muq_linear.weight is {} values, the embedding {}", w.len(), e.len());
+            for (o, row) in muq.iter_mut().zip(w.chunks(e.len())) {
+                *o += row.iter().zip(e).map(|(a, b)| a * b).sum::<f32>();
+            }
+        }
+        let muq: Vec<u16> = muq.into_iter().map(super::weights::bf16_bits).collect();
         for id in &p.tags {
             out.extend(self.st.row_bf16("text_embeddings.weight", *id as usize)?);
         }
@@ -364,7 +375,7 @@ impl Mula {
         let ids = |k: &str| -> Vec<u32> { meta[k].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as u32).collect() };
         let cfg = meta["cfg"].as_f64().unwrap_or(1.5) as f32;
         let mine = self.prompt(meta["tags"].as_str().unwrap(), meta["lyrics"].as_str().unwrap())?;
-        let p = Prompt { tags: ids("tags_ids"), lyrics: ids("lyrics_ids") };
+        let p = Prompt { tags: ids("tags_ids"), lyrics: ids("lyrics_ids"), muq: None };
         let mut report = serde_json::Map::new();
         report.insert("tokenizer_match".into(), (mine.tags == p.tags && mine.lyrics == p.lyrics).into());
         let (h, b) = (self.hidden, self.batch);
