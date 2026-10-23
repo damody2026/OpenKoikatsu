@@ -386,6 +386,19 @@ void AOKStreetSocialScene::StartControlServer(){
   O->SetNumberField(TEXT("fov"),Lens->FieldOfView);O->SetNumberField(TEXT("ortho_width"),C.Ortho);OKControlReply(Done,O);
  });
 
+ // {command: "stat unit"} runs an engine console command on the game thread and returns what it printed (profiling:
+ // "stat dumphitches", "Trace.File <path> cpu,gpu,frame", "Trace.Stop"). Viewport commands (stat, HighResShot) go
+ // through the game viewport, the rest through the engine. Development only: the channel itself needs -StreetSocialControl.
+ Bind(TEXT("/exec"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
+  FString Command;OKControlBody(Req)->TryGetStringField(TEXT("command"),Command);Command.TrimStartAndEndInline();
+  if(Command.IsEmpty()){OKControlReply(Done,OKControlResult(false,TEXT("command is required")));return;}
+  FStringOutputDevice Out;Out.SetAutoEmitLineTerminator(true);bool Handled=false;
+  if(GEngine&&GEngine->GameViewport&&GetWorld())Handled=GEngine->GameViewport->Exec(GetWorld(),*Command,Out);
+  if(!Handled&&GEngine)Handled=GEngine->Exec(GetWorld(),*Command,Out);
+  UE_LOG(LogTemp,Display,TEXT("Street control exec: %s (%s)"),*Command,Handled?TEXT("handled"):TEXT("not handled"));
+  auto O=OKControlResult(Handled,Handled?FString():TEXT("not a known command"));O->SetStringField(TEXT("output"),Out);OKControlReply(Done,O);
+ });
+
  // {scale: 3}: the engine's high-resolution shot at that multiple of the window (no UI), for close looks at a face.
  Bind(TEXT("/screenshot"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;const FString Dir=FPaths::GetPath(S.Manifest.SocialReport)/TEXT("control_shots");IFileManager::Get().MakeDirectory(*Dir,true);

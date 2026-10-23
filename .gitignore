@@ -61,6 +61,7 @@ Content/IndependentResources/MarketData/
 Tools/ok-mind/target/
 Tools/ok-rules/target/
 Tools/ok-story/target/
+Tools/ok-game-mcp/target/
 Tools/engine.local.json
 Tools/.thirdparty/
 # OKModel.Open imports (rebuildable from Content/IndependentResources/base_v1)

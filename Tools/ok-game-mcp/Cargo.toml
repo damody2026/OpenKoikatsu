@@ -1,0 +1,18 @@
+[package]
+name = "ok-game-mcp"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "MCP stdio server that plays the StreetSocial game through its development control channel"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "transport-io"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "time"] }
+
+[profile.release]
+strip = true
+lto = "thin"

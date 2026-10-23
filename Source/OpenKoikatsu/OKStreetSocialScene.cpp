@@ -71,6 +71,7 @@
 #include "Misc/DateTime.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "Misc/StringOutputDevice.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"

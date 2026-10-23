@@ -735,7 +735,28 @@ fn studio_alpha_texture(role: &str, mesh: &ExtractedMesh) -> Option<Vec<u8>> {
     crate::unity::scale_png_alpha(png, alpha.max(0.0)).or_else(|| Some(png.clone()))
 }
 
+fn push_along_normals(points: &mut [[f32; 3]], normals: &[[f32; 3]], step: f32) {
+    if normals.len() != points.len() { return; }
+    for (p, n) in points.iter_mut().zip(normals) {
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if len > 1e-6 { for k in 0..3 { p[k] += n[k] / len * step; } }
+    }
+}
+
 impl SessionPart {
+    /// Moves the surface outward along its normals (metres): the draw geometry and, for an accessory on its private
+    /// rig, the source mesh every pose is skinned from.
+    pub(crate) fn push_surface(&mut self, step: f32) {
+        push_along_normals(&mut self.rest_positions, &self.rest_normals, step);
+        push_along_normals(&mut self.positions, &self.normals, step);
+        if let Some(runtime) = self.runtime_accessory.as_mut() {
+            let mut source = runtime.source.clone();
+            push_along_normals(&mut source.positions, &source.normals, step);
+            let rest_normals = if source.rest_normals.len() == source.rest_positions.len() { source.rest_normals.clone() } else { source.normals.clone() };
+            push_along_normals(&mut source.rest_positions, &rest_normals, step);
+            runtime.replace_source(source);
+        }
+    }
     /// Native face overlays are already customized in source_material. Legacy
     /// body overlay fields retain neutral defaults on old face snapshots.
     /// Resolve at the view boundary so existing portable cards are corrected too.
