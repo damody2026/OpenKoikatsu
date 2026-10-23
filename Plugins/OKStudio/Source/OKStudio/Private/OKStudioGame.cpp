@@ -1960,7 +1960,11 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		if (State->bLoaded)
 		{
 			const FString& Path = Scenes[State->Index];
-			const int32 W = 640, H = 360;
+			// -OKStudioCompareWidth=<px>: each half's width (16:9), e.g. 960 for a 1920x540 pair; the card's own picture is 320x180.
+			int32 W = 640;
+			FParse::Value(FCommandLine::Get(), TEXT("OKStudioCompareWidth="), W);
+			W = FMath::Clamp(W, 160, 3840) / 16 * 16;
+			const int32 H = W * 9 / 16;
 			TArray<FColor> Pixels;
 			FString Error;
 			Self->UpdateViewer();
