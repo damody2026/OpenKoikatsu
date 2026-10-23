@@ -1850,7 +1850,10 @@ void AOKStreetSocialScene::EndTalk(){
 void AOKStreetSocialScene::ApplyMouseMode(bool Focused){
  if(!State||!GEngine||!GEngine->GameViewport)return;auto& S=*State;
  auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;
- const bool Show=S.MouseUI||!Focused;
+ // The mouse is only taken (captured, locked, centred) while the game window is the foreground window: launched behind
+ // another window, alt-tabbed away, or driven through the control channel from elsewhere, it stays free.
+ const bool Foreground=S.SelfTest||S.RetargetSelfTest||(GEngine->GameViewport->Viewport&&GEngine->GameViewport->Viewport->IsForegroundWindow());
+ const bool Show=S.MouseUI||!Focused||!Foreground;
  PC->bShowMouseCursor=Show;PC->bEnableClickEvents=Show;PC->bEnableMouseOverEvents=Show;
  auto* Viewport=GEngine->GameViewport.Get();
  if(Show){FInputModeGameAndUI Input;Input.SetHideCursorDuringCapture(false);Input.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Input);Viewport->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);Viewport->SetMouseLockMode(EMouseLockMode::DoNotLock);}
@@ -3204,7 +3207,11 @@ void AOKStreetSocialScene::Tick(float Dt){
  if((S.SelfTest||FParse::Param(FCommandLine::Get(),TEXT("StreetSocialProfile")))&&S.AllReady&&Now-S.ReadyAt>2&&S.Frame.Num()<10000){if(S.LastWall>0){S.Frame.Add((Now-S.LastWall)*1000);S.Game.Add(FPlatformTime::ToMilliseconds(GGameThreadTime));S.Render.Add(FPlatformTime::ToMilliseconds(GRenderThreadTime));S.Rhi.Add(FPlatformTime::ToMilliseconds(GRHIThreadTime));S.Gpu.Add(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));}S.LastWall=Now;}
  const bool Focused=OKControlActive()||(GEngine&&GEngine->GameViewport&&GEngine->GameViewport->Viewport&&GEngine->GameViewport->Viewport->IsForegroundWindow());
  const bool FocusChanged=Focused!=S.ViewportFocused;
- if(FocusChanged){S.ViewportFocused=Focused;ApplyMouseMode(Focused);}
+ // The window coming to the front (or going behind) re-applies the mouse mode too, also when the control channel keeps
+ // the game input focused.
+ static bool GStreetForeground=false;const bool Foreground=GEngine&&GEngine->GameViewport&&GEngine->GameViewport->Viewport&&GEngine->GameViewport->Viewport->IsForegroundWindow();
+ const bool ForegroundChanged=Foreground!=GStreetForeground;GStreetForeground=Foreground;
+ if(FocusChanged||ForegroundChanged){S.ViewportFocused=Focused;ApplyMouseMode(Focused);}
  const bool Toggle=Focused&&S.MouseToggleRequested;S.MouseToggleRequested=false;
  if(Toggle){S.MouseUI=!S.MouseUI;ApplyMouseMode(true);RefreshUI();}
  const bool GameInput=Focused&&!S.MouseUI&&!S.SelfTest&&!S.RetargetSelfTest;
