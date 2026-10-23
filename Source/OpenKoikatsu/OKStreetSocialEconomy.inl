@@ -183,7 +183,17 @@ void AOKStreetSocialScene::TickServes(){
 // Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
 void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How){
  auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
- S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);S.PayAgreedShop.Reset();UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s"),Girl,*How);
+ S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);
+ // Settled inside a shop: for that shop at once (she paid her own book: not her own soup at the restaurant after).
+ // Settled outside ("I will treat you to a drink" on the way): for the shop where it is first used (PayAgreed).
+ S.PayAgreedShop=ShopPlaceHere();UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s"),Girl,*How);
+ // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
+ // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
+ if(How==TEXT("him")&&Girl==S.HerPaidGirl&&S.HerPaidAmount>0&&!S.HerPaidShop.IsEmpty()&&S.HerPaidShop==ShopPlaceHere()&&OKStreetMindNow(S)-S.HerPaidAt<=15&&S.Store.PlayerCash>=S.HerPaidAmount){
+  const int64 Back=S.HerPaidAmount;S.HerPaidAmount=0;GiveMoneyNow(Girl,Back);
+  S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),OKMsg(TEXT("ui.economy.treat_paid_back"),{{TEXT("amount"),Back}})}}));
+  UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d had paid %lld here; his treat pays it back"),Girl,Back);
+ }
 }
 FString AOKStreetSocialScene::PayAgreed(int32 Girl) const{
  const auto& S=*State;
@@ -498,6 +508,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  }
  UE_LOG(LogTemp,Display,TEXT("Street order placed: %d lines, served in %.0f s"),S.Cart.Num(),ServeIn);
  UE_LOG(LogTemp,Display,TEXT("Street checkout: total=%d player=%lld her=%lld advanced=%lld option=%s"),Total,PlayerPays,HerPays,Advanced,*Option);
+ // What she just paid all by herself, here (RecordPayAgreed: "my treat" right after hands it back to her).
+ if(HerPays>0&&PlayerPays==0){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
  {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
  if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();
@@ -642,7 +654,7 @@ bool AOKStreetSocialScene::PayEntry(const FString& Place,int32 MinutesInside){
  auto Request=With?OKRulesHeroineRequest(S,TEXT("entry_fee"),HerId):OKRulesRequest(TEXT("entry_fee"));OKRulesPutExt(S,Request);
  Request->SetStringField(TEXT("place"),Place);Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("minutes_inside"),MinutesInside);
  Request->SetStringField(TEXT("him_dept"),S.Store.PlayerAcademic.Dept);Request->SetStringField(TEXT("him_status"),S.Store.PlayerAcademic.Status);
- if(With){const auto* A=S.Store.Academics.Find(HerId);Request->SetStringField(TEXT("her_status"),A?A->Status:FString());Request->SetStringField(TEXT("payer"),PayAgreed(Her));}
+ if(With){const auto* A=S.Store.Academics.Find(HerId);Request->SetStringField(TEXT("her_status"),A?A->Status:FString());Request->SetStringField(TEXT("payer"),PayAgreed(Her));Request->SetNumberField(TEXT("seed"),FMath::Rand());} // nobody settled: her checkout lean (shop.rs entry_fee)
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return true;
  bool bWait=false;if(Out->TryGetBoolField(TEXT("wait"),bWait)&&bWait)return false;if(Out->GetNumberField(TEXT("fee"))<=0)return true;
  const FString Notice=Out->GetStringField(TEXT("notice"));

@@ -194,7 +194,7 @@ fn name_places(base: &PlacesTuning, texts: &crate::locale::Texts, lang: &str) ->
             norms.label = n.to_string();
         }
     }
-    // The acts' names ("吃東西"), shown in notices ("你們在咖啡廳吃東西：她很自然地配合").
+    // The acts' names ("吃東西"), shown in notices ("你們吃東西（咖啡廳）：她很自然地配合").
     if let Some(n) = texts.own(lang, "ui.name.place_act.default") {
         p.act_default.name = n.to_string();
     }

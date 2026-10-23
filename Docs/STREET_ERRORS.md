@@ -535,3 +535,7 @@
 
 - 使用者回報街區的雷電將軍胸部變小、跑出罩杯，讀卡器卻正常。一開始我猜是 crowd 的蒙皮、GPU 快取和我改的 crowd 程式，做了二分和換快取測試才排除，繞了很久。真正的原因：打包版 stage 的 `Content/IndependentResources` 是連到專案的 junction，Rust 從基礎庫路徑往上三層找 `Config/UncensorSelector.cfg`，找到的是 stage，那裡沒有這個檔。卡片沒存身體 GUID，於是不留 log 地退回原版身體（6823 頂點，應為 BP Profundis 的 9823），再寫進 C、E、讀卡器共用的 `oklib-cache`（鍵只有卡片和基礎庫）。crowd 的姿勢 bank 把身形烤進 palette，所以顯示成胸部變小。
 - 修正（通用）：設定檔從基礎庫的真實位置（canonicalize）往上找；快取項目記錄開卡時用到的 UncensorSelector 設定內容雜湊，讀取時重新解析，不符就重建（舊項目一律作廢）；GPU 姿勢快取的鍵加入第一幀實際解算的姿勢與 palette；每條退回原版身體的路徑都寫 log。Rust 測試以 stage 的 junction 路徑重現與驗證（`crowd_native_tests.rs` 的 bust／parallel 探針）。
+
+### 2026-10-23 對失敗的 stage 用了 rm -rf
+
+- 編 Conquest199 時，staging 找舊的 `Saved/StreetSocial/Base`（協調者已改成 Base1023 並刪掉舊的）而失敗。我為了重來，對 `Saved/StreetSocial/Build/Conquest199.stage` 下了 `rm -rf`。stage 裡有 junction，遞迴刪除可能刪到 junction 指向的 Base 或專案 Content。這次的 junction 指向已不存在的舊 Base，事後確認 Base1023 與 Content 都完好。規則是不要遞迴刪 .stage，換新 tag 重來；編譯腳本也改成帶 `--base-dir Saved/StreetSocial/Base1023`。

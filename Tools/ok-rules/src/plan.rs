@@ -93,6 +93,15 @@ fn pstr<'a>(p: &'a Value, section: Option<&str>, field: &str) -> &'a str {
     .unwrap_or("")
 }
 
+/// The meal windows (minute of the day): lunch, dinner.
+const LUNCH_WINDOW: (i32, i32) = (630, 870);
+const DINNER_WINDOW: (i32, i32) = (1020, 1320);
+
+/// A meeting with him at a place that serves food, starting inside a meal window: that meal is the meeting.
+fn meal_with_him(c: &Catalog, place: &str, start: i32, window: (i32, i32)) -> bool {
+    start >= window.0 && start < window.1 && c.items.iter().any(|it| it.place == place && it.consumable)
+}
+
 pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
     let mut day = Vec::new();
     let mut rng = RandomStream::new(i.seed);
@@ -181,7 +190,12 @@ pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
     let morning: &[i32] = match (rng.frand() * 3.0) as i32 { 0 => &[420, 450, 480], 1 => &[450, 480, 510], _ => &[480, 510, 450] };
     let morning: Vec<i32> = morning.iter().copied().filter(|s| breakfast != "cafe" || *s >= 480).collect();
     meal(&mut day, &morning, 30, &breakfast, budget.min(crate::region::amount("goods", 17) as i32));
-    meal(&mut day, &[720, 660, 780, 975], 60, &lunch, budget);
+    // A lunch or dinner date with him is that meal: she does not eat it alone first (dinner at 17:30, then the 20:00
+    // dinner date with him full).
+    let eats_with_him = |w: (i32, i32)| i.promises.iter().any(|p| meal_with_him(c, &p.place, p.start, w));
+    if !eats_with_him(LUNCH_WINDOW) {
+        meal(&mut day, &[720, 660, 780, 975], 60, &lunch, budget);
+    }
     // Dinner is not one restaurant for everybody (all ten heroines sat in it at 18:00): a student on a weekday often
     // eats at the cafeteria (open until 19:00), a small budget skips the restaurant, and the hour moves a little.
     let dinner = if i.money_stress > 50.0 {
@@ -204,7 +218,9 @@ pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
     let starts: &[i32] = match (rng.frand() * 3.0) as i32 { 0 => &[1050, 1080, 1020, 960, 1320], 1 => &[1080, 1110, 1020, 960, 1290], _ => &[1110, 1080, 1050, 960, 1290] };
     // The cafeteria closes at 19:00: only the starts that end by then.
     let starts: Vec<i32> = starts.iter().copied().filter(|s| dinner != "cafeteria" || s + 60 <= 1140).collect();
-    meal(&mut day, &starts, 60, dinner, budget);
+    if !eats_with_him(DINNER_WINDOW) {
+        meal(&mut day, &starts, 60, dinner, budget);
+    }
     // 4. Jealous: she turns up where he usually is.
     if !i.stalk_place.is_empty() {
         put(&mut day, block(1170, 1230, &i.stalk_place, "encounter", "jealousy", "", 0));
@@ -808,13 +824,19 @@ pub fn open_alternative(c: &Catalog, places: &PlacesTuning, r: &Value) -> Result
 /// Her day with today's meetings with him as they stand now (one made, moved or called off after the day was planned:
 /// "lunch at noon?" said at nine). Earlier promise blocks go; each meeting takes [start, start + 90) and the blocks it
 /// overlaps are cut back or dropped. Request: blocks [Block], promises [{start, place}]. Answer: blocks.
-fn plan_set_promises(r: &Value) -> Result<Value, String> {
+fn plan_set_promises(c: &Catalog, r: &Value) -> Result<Value, String> {
     let mut day: Vec<Block> = serde_json::from_value(r.get("blocks").cloned().unwrap_or(json!([]))).map_err(|e| format!("blocks: {e}"))?;
     day.retain(|b| b.kind != "promise");
     for p in r.get("promises").and_then(Value::as_array).into_iter().flatten() {
         let start = p.get("start").and_then(Value::as_i64).unwrap_or(0) as i32;
         let end = start + 90;
         let place = p.get("place").and_then(Value::as_str).unwrap_or("");
+        // A lunch or dinner date: her own meal of that window goes (made at nine for noon, the 12:00 lunch stayed).
+        for w in [LUNCH_WINDOW, DINNER_WINDOW] {
+            if meal_with_him(c, place, start, w) {
+                day.retain(|b| !(b.kind == "meal" && b.source == "need" && b.start >= w.0 - 60 && b.start < w.1));
+            }
+        }
         let mut kept = Vec::with_capacity(day.len() + 2);
         for b in day.drain(..) {
             if b.end <= start || b.start >= end {
@@ -844,7 +866,7 @@ pub fn eval(c: &Catalog, places: &PlacesTuning, kind: &str, r: &Value) -> Option
         "plan_meal" => meal(c, r),
         "meal_pick" => meal_pick(c, r),
         "plan_alternative" => open_alternative(c, places, r),
-        "plan_set_promises" => plan_set_promises(r),
+        "plan_set_promises" => plan_set_promises(c, r),
         "weather" => Ok(json!({"raining": raining_at(day(), r.get("minute").and_then(Value::as_i64).unwrap_or(0) as i32)})),
         "holiday" => Ok(json!({"holiday": holiday_on(day())})),
         _ => return None,
@@ -859,11 +881,12 @@ mod tests {
     #[test]
     fn a_meeting_made_today_goes_into_her_day() {
         let day = json!([{"start": 660, "end": 780, "place": "cafe", "kind": "leisure"}, {"start": 780, "end": 840, "place": "department", "kind": "meal"}]);
-        let out = plan_set_promises(&json!({"blocks": day, "promises": [{"start": 720, "place": "restaurant"}]})).unwrap();
+        let c = Tuning::builtin().catalog;
+        let out = plan_set_promises(&c, &json!({"blocks": day, "promises": [{"start": 720, "place": "restaurant"}]})).unwrap();
         let b: Vec<Block> = serde_json::from_value(out["blocks"].clone()).unwrap();
         assert_eq!(b.iter().map(|x| (x.start, x.end, x.kind.as_str())).collect::<Vec<_>>(), vec![(660, 720, "leisure"), (720, 810, "promise"), (810, 840, "meal")]);
         // called off: the promise block goes again
-        let out = plan_set_promises(&json!({"blocks": out["blocks"], "promises": []})).unwrap();
+        let out = plan_set_promises(&c, &json!({"blocks": out["blocks"], "promises": []})).unwrap();
         assert!(out["blocks"].as_array().unwrap().iter().all(|x| x["kind"] != "promise"));
     }
 
@@ -923,6 +946,26 @@ mod tests {
                 assert!(plan.iter().filter(|x| x.kind == "meal").count() >= 2, "she eats");
             }
         }
+    }
+
+    #[test]
+    fn a_dinner_date_is_her_dinner() {
+        let c = Tuning::builtin().catalog;
+        let p = json!({});
+        let dinner = |plan: &[Block]| plan.iter().filter(|x| x.kind == "meal" && x.start >= DINNER_WINDOW.0 - 60 && x.start < DINNER_WINDOW.1).count();
+        for seed in 1..40 {
+            let mut i = inputs(&p, seed, 1);
+            i.promises = vec![block(1200, 1290, "restaurant", "promise", "promise", "", 0)];
+            assert_eq!(dinner(&plan_day(&i, &c)), 0, "seed {seed}: she ate dinner before the 20:00 dinner date");
+            // a date at a place without food is not her dinner
+            i.promises = vec![block(1200, 1290, "library", "promise", "promise", "", 0)];
+            let _ = plan_day(&i, &c);
+        }
+        // made later the same day: her planned dinner goes
+        let day = json!([{"start": 1050, "end": 1110, "place": "cafeteria", "kind": "meal", "source": "need"}]);
+        let out = plan_set_promises(&c, &json!({"blocks": day, "promises": [{"start": 1200, "place": "restaurant"}]})).unwrap();
+        let blocks: Vec<Block> = serde_json::from_value(out["blocks"].clone()).unwrap();
+        assert!(!blocks.iter().any(|b| b.kind == "meal"), "{blocks:?}");
     }
 
     #[test]

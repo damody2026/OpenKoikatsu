@@ -371,6 +371,22 @@ const LATE_FAVOR_PER_MINUTE: f32 = 1.0 / 3.0;
 /// Minutes past the grace a shift still takes him (late: paid from when he came); later it is a no-show.
 const SHIFT_LATE_WAIT: i64 = 60;
 
+/// A date kept early: what he just did with her at the appointment's place, earlier the same day, is that date ("tonight,
+/// dinner at the restaurant"; they went to eat at 16:30). It stayed pending, and skipping to the next morning counted
+/// him a no-show. Request: heroine, place, now, appointments. Answer: done (the appointment ids).
+fn appointment_done_early(r: &Value) -> Result<Value, String> {
+    let now = n(r, "now") as i64;
+    let (her, place) = (s(r, "heroine"), s(r, "place"));
+    let list: Vec<Appointment> = serde_json::from_value(r.get("appointments").cloned().unwrap_or(json!([]))).map_err(|e| format!("appointments: {e}"))?;
+    let done: Vec<i32> = list
+        .iter()
+        .filter(|a| a.status == "pending" && a.kind == "date" && !her.is_empty() && a.heroine == her && !place.is_empty() && a.place == place)
+        .filter(|a| a.start >= now && a.start.div_euclid(1440) == now.div_euclid(1440))
+        .map(|a| a.id)
+        .collect();
+    Ok(json!({"done": done}))
+}
+
 fn appointments_tick(r: &Value) -> Result<Value, String> {
     let now = n(r, "now") as i64;
     let day = n(r, "day") as i32;
@@ -842,6 +858,7 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
         "encounters_tick" => encounters_tick(r),
         "appointment_patience" => Ok(json!({"minutes": patience(&profile(r.get("profile")))})),
         "appointments_tick" => appointments_tick(r),
+        "appointment_done_early" => appointment_done_early(r),
         "appointment_cancel" => appointment_cancel(r),
         "initiative" => initiative(r),
         "rival_named" => rival_named(r),
@@ -859,6 +876,20 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_date_done_earlier_the_same_day_is_kept() {
+        // Dinner at the restaurant promised for 19:00 (minute 1140 of day 0); they ate there at 16:30.
+        let list = json!([
+            {"id": 1, "kind": "date", "heroine": "anke", "place": "restaurant", "label": "", "start": 1140, "grace": 30, "status": "pending"},
+            {"id": 2, "kind": "date", "heroine": "anke", "place": "cafe", "label": "", "start": 1140, "grace": 30, "status": "pending"},
+            {"id": 3, "kind": "date", "heroine": "anke", "place": "restaurant", "label": "", "start": 2580, "grace": 30, "status": "pending"},
+            {"id": 4, "kind": "date", "heroine": "keqing", "place": "restaurant", "label": "", "start": 1140, "grace": 30, "status": "pending"},
+            {"id": 5, "kind": "date", "heroine": "anke", "place": "restaurant", "label": "", "start": 600, "grace": 30, "status": "pending"}
+        ]);
+        let v = appointment_done_early(&json!({"heroine": "anke", "place": "restaurant", "now": 1050, "appointments": list})).unwrap();
+        assert_eq!(v["done"], json!([1]), "only hers, there, later today: {v}");
+    }
 
     fn rel(v: Value) -> Value {
         let mut o = json!({"id": "a"});

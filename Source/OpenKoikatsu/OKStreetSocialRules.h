@@ -1587,6 +1587,12 @@ inline void OKStreetFlushSaves() {
  UE_LOG(LogTemp, Warning, TEXT("Street saves still writing after 8 s"));
 }
 
+// Her reply's acts that are not activities (act field): the model sometimes writes them in the action field.
+inline bool OKStreetReplyActOnly(const FString& Name) {
+ // (leave is also an outing word: she walks off; end_talk / farewell / goodbye are handled where they are read.)
+ return Name == TEXT("promise_treat") || Name == TEXT("checkout") || Name == TEXT("intimacy");
+}
+
 inline EOKStreetLoad OKStreetLoadSaveFile(const FString& Path, FOKStreetStore& Store, FString& Error) {
  OKStreetFlushSaves();
  if (!IFileManager::Get().FileExists(*Path)) { Store = FOKStreetStore(); Error.Reset(); return EOKStreetLoad::Missing; }

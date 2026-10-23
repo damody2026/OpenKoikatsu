@@ -188,7 +188,7 @@ impl Runner<'_> {
             }
             let o = crate::native::seedvc::ConvertOptions {
                 steps: st.diffusion_steps.unwrap_or(50) as usize, cfg_rate: st.inference_cfg_rate.unwrap_or(0.4) as f32, seed: st.seed.unwrap_or(1),
-                vibrato_cents: st.vibrato_cents.unwrap_or(15.0) as f32, glide_ms: st.glide_ms.unwrap_or(0.0) as f32,
+                vibrato_cents: st.vibrato_cents.unwrap_or(0.0) as f32, glide_ms: st.glide_ms.unwrap_or(0.0) as f32,
                 soft_f0: st.soft_f0.unwrap_or(true),
                 scoop_cents: st.scoop_cents.unwrap_or(80.0) as f32, drift_cents: st.drift_cents.unwrap_or(30.0) as f32,
                 jitter_cents: st.jitter_cents.unwrap_or(15.0) as f32,

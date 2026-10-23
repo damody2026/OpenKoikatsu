@@ -132,8 +132,11 @@ float AOKStreetSocialScene::NpcIdleTick(FOKStreetAgentSim& Agent,float Walk,doub
   }
   S.PrevDwell.Add(Slot,Agent.Dwell);
  }
- if(Walk>0||S.Commutes.Contains(Slot)){if(Walk>0){S.LastMovedAt.Add(Slot,Now);S.LastWalk.Add(Slot,Walk);}S.StillSince.Add(Slot,Now);}
- else if(!Agent.Held&&Agent.Mode==EOKStreetMove::Walking&&Now-S.LastMovedAt.FindRef(Slot)<0.4)Walk=S.LastWalk.FindRef(Slot);
+ // On her way somewhere (a commute, coming over to him) too: a step that did not move every other frame made her
+ // switch walk/stand each frame for minutes.
+ if(Walk>0){S.LastMovedAt.Add(Slot,Now);S.LastWalk.Add(Slot,Walk);S.StillSince.Add(Slot,Now);}
+ else if((S.Commutes.Contains(Slot)||(!Agent.Held&&Agent.Mode==EOKStreetMove::Walking))&&Now-S.LastMovedAt.FindRef(Slot)<0.4)Walk=S.LastWalk.FindRef(Slot);
+ else if(S.Commutes.Contains(Slot))S.StillSince.Add(Slot,Now);
  else if(!S.StillSince.Contains(Slot))S.StillSince.Add(Slot,Now);
  // Held by her schedule she may read during leisure or rest (not at work, a meal, class or in a conversation).
  bool FreeTime=!Agent.Held;
