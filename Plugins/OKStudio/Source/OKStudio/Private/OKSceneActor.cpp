@@ -739,8 +739,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> CVarParallelPose(TEXT("ok.Studio.ParallelPose"), 1,
 		TEXT("1: OK Studio solves its characters' poses (animation, hair and cloth) on worker threads at once, then refreshes their display on the game thread. 0: one after another on the game thread."));
-	TAutoConsoleVariable<int32> CVarPipelinePose(TEXT("ok.Studio.PipelinePose"), 0,
-		TEXT("With ok.Studio.ParallelPose: 1 refreshes each character's display as soon as its own solve is done (solves as tasks); 0 solves all (ParallelFor, the game thread helping) then refreshes."));
+	TAutoConsoleVariable<int32> CVarPipelinePose(TEXT("ok.Studio.PipelinePose"), 1,
+		TEXT("With ok.Studio.ParallelPose: 1 refreshes each character's display as soon as its own solve is done (solves as tasks); 0 solves all (ParallelFor, the game thread helping) then refreshes. 1 by default: 5065 (9 characters) 67 -> 74 fps in A/B, 6964 the same."));
 	TAutoConsoleVariable<int32> CVarSharePose(TEXT("ok.Studio.SharePose"), 1,
 		TEXT("1: a Studio character's skeletal parts take the body's pose as their leader instead of each copying it."));
 }

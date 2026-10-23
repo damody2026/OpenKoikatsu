@@ -605,6 +605,8 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - 6964 大腿上一塊塊明暗方塊（原作平滑）：來源是工作室後處理裡仿 Amplify Occlusion 的 AO（`OKStudioPost.cpp`）。它用相鄰 1 像素的深度差重建法線，網格每個三角面的深度是平的，法線也就逐面跳動，AO 在每個面上亮暗不同。排查方式：`OK_STUDIO_PERF_SHOT=1` 在實際遊戲視窗截圖（`OKStudio.CompareKStudio` 的擷取是另一個 scene capture，不吃 `ShowFlag.*`），`ShowFlag.PostProcessing 0` 方塊消失；UE 的 local exposure、bloom、自動曝光、KStudio bloom、陰影都不是；`OK_STUDIO_POST_AO=0`（新增的診斷開關）只關 AO 方塊就消失。試過改用 GBuffer 法線：角色是 Unlit 材質，GBuffer 法線不可靠，方塊換了形狀但沒消失，已還原。修正：法線改用左右上下各 8 像素的中央差分，任一側深度跳變（輪廓）時才用較近的一側（只選一側的版本仍有殘留）。6964 方塊消失；0010、1268、1901、3167、4432、5065 新 AO 與關掉 AO 的畫面幾乎相同，沒有新瑕疵；自測 6 項 PASS（`Verify-Ao1024a`）。
 - 沒有地圖、背景圖與天空的場景（2534 火箭筒、5698 天橋）背景是 Studio 主攝影機的清除色 `EstData.BackColor`：它是作者自己的 Studio 設定，不存在場景裡，之前一律用本機設定（黑），2534 原作是藍色。場景卡縮圖就是用那個清除色畫的：四個角落的 8×8 區塊都是同一個平坦顏色時（`OKStudioClearColorFromPicture`），取它當清除色；但縮圖已經過場景的調色與暗角，所以再用 CPU 版的同一套調色（同一張 LUT、強度、曝光、角落的暗角）反推回調色前的顏色（`OKStudioUngradeSourceColor`，固定點迭代）。2534 角落從 (42,122,221) 變成 (101,161,229)，原作 (102,162,230)；5698 仍為黑；角落有東西的場景照舊用本機設定。自測新增 2534 為藍色的檢查（`Verify-Bg1024a` 6 項 PASS）。
 - `verify_ok_studio.lua`：log 有 `Ensure condition failed` 也判為失敗。
+- `ok.Studio.PipelinePose` 預設改為 1（每個角色求解完就先刷新顯示）：2026-10-24 重新 A/B，5065（9 角色）兩次都是幀時間 −1.1～1.4 ms（67 → 74、68 → 73 fps），遊戲執行緒相同；6964 沒有差別。之前 A/B 無差別是因為當時顯示刷新還被元件 Tick 等成本蓋過。
+- 用縮圖比亮度的注意事項：場景卡縮圖比原作實際載入後的畫面亮（0010 縮圖平均約 182，原作實際渲染 141.6），用縮圖比會把地圖場景的偏暗高估成 −13～−25%；之前用原作探針量到的差距是約 9–10%。
 - `run_ok_studio_perf.lua --exec "<控制台指令>,..."`：量測前先下指令（例如比較 cvar 的兩種值）。
 - 引擎補丁 `MorphDoubleBufferRead.patch`：連跑 8 個場景時曾在載入第一個場景時斷言當機（`FMorphVertexBufferPool::GetReadingIndex`），見 ERROR_LOG。
 - 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，6964 與 9 角色的 5065 A/B 都無差別）；臉部元件共用 leader 後重新發佈 morph（原因是上述引擎行為，已改用覆寫）。
