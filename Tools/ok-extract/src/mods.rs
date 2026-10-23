@@ -754,11 +754,37 @@ pub(crate) fn uncensor_config_candidates() -> Vec<PathBuf> {
         out.push(dir.join("UncensorSelector.cfg"));
     }
     if let Some(p) = std::env::var_os("OK_UNCENSOR_CONFIG") { out.push(PathBuf::from(p)); }
-    // The library is <project>/Content/IndependentResources/base_v1.
-    if let Some(project) = crate::oklib::active_dir().as_deref().and_then(|d| d.parent()?.parent()?.parent().map(Path::to_path_buf)) {
-        out.push(project.join("Config").join("UncensorSelector.cfg"));
+    // The library is <project>/Content/IndependentResources/base_v1. A packaged game reaches it through a junction
+    // (<stage>/Content/IndependentResources -> the project's): three levels up from that path is the stage, which has
+    // no Config, and the card fell back to the censored base body. The library's real location names the project.
+    if let Some(dir) = crate::oklib::active_dir() {
+        for lib in [Some(dir.clone()), std::fs::canonicalize(&dir).ok()].into_iter().flatten() {
+            if let Some(project) = lib.parent().and_then(Path::parent).and_then(Path::parent) {
+                let config = project.join("Config").join("UncensorSelector.cfg");
+                if !out.contains(&config) { out.push(config); }
+            }
+        }
     }
     out
+}
+
+/// What a library session reads as the UncensorSelector configuration right now (the OK card's own, else the first
+/// candidate that exists): where it came from (the card, a file) and its contents, or "none". An open-cache entry stores it and counts only while it
+/// is the same, so a body chosen without the configuration (or with another one) is never reused.
+pub(crate) fn uncensor_config_identity() -> String {
+    use sha2::Digest;
+    let path = crate::oklib::active_dir().unwrap_or_default().join(UNCENSOR_CONFIG);
+    let (from, text) = match crate::gamefs::overlay_bytes(&path) {
+        Some(bytes) => ("card".to_string(), bytes),
+        None => match uncensor_config_candidates().into_iter().find_map(|p| std::fs::read(&p).ok().map(|t| (p, t))) {
+            // By contents, not path: C, E and a packaged stage find the same file at different places.
+            Some((_, t)) => ("file".to_string(), t),
+            None => return "uncensor-config:none".into(),
+        },
+    };
+    let mut text = text;
+    text.retain(|&b| b != b'\r');
+    format!("uncensor-config:{from}:{}", crate::oklib::hex(&sha2::Sha256::digest(&text)[..16]))
 }
 
 fn uncensor_config_text(game_root: &Path) -> Option<String> {let _spot=crate::profile::spot("uncensor_config_text");
@@ -770,7 +796,12 @@ fn uncensor_config_text(game_root: &Path) -> Option<String> {let _spot=crate::pr
     // An OK card carries the configuration it was made with.
     if let Some(bytes) = crate::gamefs::overlay_bytes(&path) { return String::from_utf8(bytes).ok(); }
     // An original card: the configuration of where it is opened from; recorded into the card being made.
-    let text = uncensor_config_candidates().into_iter().find_map(|p| std::fs::read_to_string(p).ok())?;
+    let candidates = uncensor_config_candidates();
+    let Some((from, text)) = candidates.iter().find_map(|p| std::fs::read_to_string(p).ok().map(|t| (p.clone(), t))) else {
+        eprintln!("ok-extract: no UncensorSelector configuration (looked in {candidates:?})");
+        return None;
+    };
+    eprintln!("ok-extract: UncensorSelector configuration from {}", from.display());
     crate::gamefs::record_overlay_bytes(&path, text.as_bytes());
     Some(text)
 }
@@ -929,17 +960,25 @@ pub(crate) fn uncensor_body_for_card(game_root:&Path,explicit:Option<&str>,sex:i
     }
     let config=uncensor_config_text(game_root);
     let default=config.as_deref().and_then(|text|uncensor_config_default(text,sex));
-    if explicit.is_none() && default.is_none() {return None;}
+    if explicit.is_none() && default.is_none() {
+        eprintln!("ok-extract: base body kept: the card names no body and the configuration none (sex {sex}, configuration {})",
+            if config.is_some() {"read"} else {"missing"});
+        return None;
+    }
     let installed=uncensor_sources(game_root);
     let sources=&installed.0;
     let Some(selected)=select_uncensor_body(sources,explicit,default.as_deref()).cloned() else {
         // Random needs the game's seeded choice and registration order. Do
         // not pretend the first installed mod or a captured mesh is that choice.
         if default.as_deref()==Some("Random") {eprintln!("ok-extract: UncensorSelector Random body choice is unresolved; keeping base mesh");}
+        else {eprintln!("ok-extract: base body kept: card body {explicit:?} / configured {default:?} not among {} installed bodies", sources.len());}
         return None;
     };
     let want=format!("abdata/{}",selected.file.replace('\\',"/")).to_ascii_lowercase();
-    let bytes=zipmod_entry_suffix(&selected.zipmod,&want)?;
+    let Some(bytes)=zipmod_entry_suffix(&selected.zipmod,&want) else {
+        eprintln!("ok-extract: base body kept: {} ({}) has no {want}", selected.guid, selected.zipmod.display());
+        return None;
+    };
     Some((selected,(*bytes).clone()))
 }
 

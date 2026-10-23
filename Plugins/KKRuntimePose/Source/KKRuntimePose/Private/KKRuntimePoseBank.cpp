@@ -17,10 +17,18 @@ TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(FKKRuntimePoseReques
   const uint64 KeyRows=uint64(R.Bones.Num())*Samples*3,Bytes=KeyRows*sizeof(FVector4f);
   if(!R.MaxKeyBytes||Bytes>R.MaxKeyBytes||KeyRows>MAX_int32)return Fail(*FString::Printf(TEXT("Runtime pose keys exceed preallocation budget: %d bones x %u samples = %llu MB (budget %llu MB), clip %s"),R.Bones.Num(),Samples,Bytes>>20,R.MaxKeyBytes>>20,*R.ClipIdentity));
   Out.PreparationIdentity=OKRuntimePoseRecipeIdentity(R);
-  if(R.PackedGpuCache&&OKLoadRuntimeGpuPoseCache(R,Out)){Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return Out;}
   FKKRuntimeNativeSession Session;if(!Session.OpenAnimationSnapshot(R.Snapshot)||!Session.InstallSharedClip(R.AuthoredCurves))return Fail(TEXT("Runtime snapshot/curve contract rejected"));
   const float AuthoredDuration=Session.AnimDuration();
   if(!FMath::IsFinite(AuthoredDuration)||AuthoredDuration<=0||(R.AuthoredPrefix?R.Duration>AuthoredDuration+1e-6f:!FMath::IsNearlyEqual(AuthoredDuration,R.Duration,1e-6f))||!Session.ApplyAnimFrame(0,0))return Fail(TEXT("Runtime snapshot/curve duration contract rejected"));
+  // The solved first frame keys the disk cache (FirstFrameDigest): the APNG's identity alone let a bank solved by
+  // another build or library, with another bust, be drawn on this mesh (a pose bank's palettes carry the shape).
+  {FSHA1 H;for(int32 B=0;B<Session.SkelBoneCount();++B){OkBoneView V{};if(!Session.SkelBoneAt(B,V))return Fail(TEXT("Runtime native pose missing"));
+    H.Update(reinterpret_cast<const uint8*>(V.pose_pos),sizeof(V.pose_pos));H.Update(reinterpret_cast<const uint8*>(V.pose_rot),sizeof(V.pose_rot));H.Update(reinterpret_cast<const uint8*>(V.pose_scl),sizeof(V.pose_scl));}
+   OkSkinPaletteView Raw{};TArray<float> Matrices;
+   for(const auto& Part:R.Parts){if(!Part.RigidFollow.IsEmpty()){float World[16];if(!Session.BoneWorldMatrix(Part.RigidFollow,World))return Fail(TEXT("Runtime rigid attachment bone missing"));H.Update(reinterpret_cast<const uint8*>(World),sizeof(World));continue;}
+    if(Session.SkinPalette(Part.NativePart,Raw,Matrices)<=0)return Fail(TEXT("Runtime native palette missing"));H.Update(reinterpret_cast<const uint8*>(Matrices.GetData()),Matrices.Num()*sizeof(float));}
+   H.Final();FSHAHash Digest;H.GetHash(Digest.Hash);R.FirstFrameDigest=Digest.ToString();}
+  if(R.PackedGpuCache&&OKLoadRuntimeGpuPoseCache(R,Out)){Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return Out;}
   struct FMapping {int32 Native=INDEX_NONE,Part=INDEX_NONE,Slot=0,Axis=0,SlotIndex=INDEX_NONE;};
   TMap<FName,int32> Native;for(int32 B=0;B<Session.SkelBoneCount();++B){OkBoneView V{};if(!Session.SkelBoneAt(B,V)||!V.name)return Fail(TEXT("Native runtime bone unavailable"));Native.Add(FName(UTF8_TO_TCHAR(V.name)),B);}
   TMap<FName,FMapping> Palettes;TSet<int32> Parts;

@@ -427,3 +427,125 @@ fn heroine_palette_slots() {
         for (_, w) in worst.iter().take(4) { eprintln!("   {w}"); }
     }
 }
+
+// Street heroines in the crowd are posed by the animation snapshot (the pose bank), the card reader and the talk
+// model by the opened session. Same clip, 3 s at 60 Hz: the bones and the parts (world, metres) must agree.
+//   OK_BODY_PROBE_CARD=<png> OK_BODY_PROBE_CLIP=<okanim> cargo test --release --lib body_snapshot_matches_session_over_time -- --ignored --nocapture
+#[test]
+#[ignore = "real-card diagnostic"]
+fn body_snapshot_matches_session_over_time() {
+    let card = std::env::var("OK_BODY_PROBE_CARD").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/CharacterCards/StreetHeroines/raiden_shogun.png".into());
+    let card_c = std::ffi::CString::new(card).unwrap();let game = std::ffi::CString::new(std::env::var("OK_BODY_PROBE_GAME").unwrap_or_default()).unwrap();
+    let mut raw: *mut crate::session::OkSession = std::ptr::null_mut();let mut err = [0i8; 2048];
+    assert_eq!(unsafe { crate::ffi::session_open(game.as_ptr(), card_c.as_ptr(), 0, &mut raw, err.as_mut_ptr(), err.len() as i32) }, 0);
+    let a = unsafe { &mut *raw };
+    let mut b = crate::session::OkSession::from_animation_bytes(&a.to_animation_bytes().unwrap()).unwrap();
+    let clip = std::fs::read(std::env::var("OK_BODY_PROBE_CLIP").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/walk_01.okanim".into())).unwrap();
+    for s in [&mut *a, &mut b] { assert_eq!(unsafe { crate::ffi::ok_session_install_shared_clip(s as *mut _, clip.as_ptr(), clip.len() as i32) }, 0); }
+    for frame in 0..=180 {
+        let t = frame as f32 / 60.;
+        for s in [&mut *a, &mut b] { s.apply_anim_frame(t, if frame == 0 { 0. } else { 1. / 60. }); s.skin_all(); }
+        if ![0, 1, 10, 60, 180].contains(&frame) { continue; }
+        let (sa, sb) = (a.body_skel.as_ref().unwrap(), b.body_skel.as_ref().unwrap());
+        let mut diffs: Vec<(f32, String)> = Vec::new();
+        for (i, n) in sa.names.iter().enumerate() {
+            let Some(j) = sb.names.iter().position(|m| m == n) else { continue };
+            if i >= sa.worlds.len() || j >= sb.worlds.len() { continue; }
+            let d = (0..4).flat_map(|r| (0..4).map(move |c| (r, c))).map(|(r, c)| (sa.worlds[i][r][c] - sb.worlds[j][r][c]).abs()).fold(0f32, f32::max);
+            if d > 1e-4 { diffs.push((d, n.clone())); }
+        }
+        diffs.sort_by(|x, y| y.0.total_cmp(&x.0));
+        eprintln!("BODY_TIME f={frame:3} bones differing={} top={:?}", diffs.len(), &diffs[..diffs.len().min(8)]);
+        for (pa, pb) in a.parts.iter().zip(&b.parts) {
+            if pa.positions.len() != pb.positions.len() || pa.positions.is_empty() { continue; }
+            let d = pa.positions.iter().zip(&pb.positions).map(|(x, y)| ((x[0]-y[0]).powi(2)+(x[1]-y[1]).powi(2)+(x[2]-y[2]).powi(2)).sqrt()).fold(0f32, f32::max);
+            if d > 1e-4 { eprintln!("BODY_TIME f={frame:3} part {:<32} role={:<14} maxdist={d:.4}", pa.name, pa.role); }
+        }
+    }
+}
+
+// The bust bones' world scale with the card's shape, then after a shared clip (the street's): a clip that keys the
+// bust bones must not undo the card's breast size.
+//   OK_BODY_PROBE_CARD=<png> OK_BODY_PROBE_CLIP=<okanim> cargo test --release --lib bust_shape_survives_shared_clip -- --ignored --nocapture
+#[test]
+#[ignore = "real-card diagnostic"]
+fn bust_shape_survives_shared_clip() {
+    let card = std::env::var("OK_BODY_PROBE_CARD").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/CharacterCards/StreetHeroines/raiden_shogun.png".into());
+    let card_c = std::ffi::CString::new(card).unwrap();let game = std::ffi::CString::new(std::env::var("OK_BODY_PROBE_GAME").unwrap_or_default()).unwrap();
+    let mut raw: *mut crate::session::OkSession = std::ptr::null_mut();let mut err = [0i8; 2048];
+    assert_eq!(unsafe { crate::ffi::session_open(game.as_ptr(), card_c.as_ptr(), 0, &mut raw, err.as_mut_ptr(), err.len() as i32) }, 0);
+    let a = unsafe { &mut *raw };
+    let col = |m: &crate::pose::Mat4, i: usize| ((m[0][i]*m[0][i]+m[1][i]*m[1][i]+m[2][i]*m[2][i]) as f64).sqrt();
+    let report = |label: &str, s: &crate::session::OkSession| {
+        let sk = s.body_skel.as_ref().unwrap();
+        for (i, n) in sk.names.iter().enumerate() {
+            if !(n.contains("bust") || n.contains("bnip")) || !n.ends_with("_L") && !n.contains("bust00") { continue; }
+            let m = &sk.worlds[i];
+            eprintln!("BUST {label:<6} {n:<16} scale=({:.3},{:.3},{:.3}) pos=({:.4},{:.4},{:.4})", col(m,0), col(m,1), col(m,2), m[0][3], m[1][3], m[2][3]);
+        }
+        for p in s.parts.iter().filter(|p| p.role == "body" || p.role.starts_with("genital") || p.name.contains("body")) { eprintln!("BUST {label:<6} part {} role={} verts={} binds={} rest_front={:.4} h_rest={:016x} h_w={:016x} h_bind={:016x} h_idx={:016x}", p.name, p.role, p.rest_positions.len(), p.bind_poses.len(),
+                p.rest_positions.iter().filter(|v| v[1] > 1.0 && v[1] < 1.4).map(|v| v[2]).fold(f32::MIN, f32::max),
+                { let mut x = 0u64; for v in &p.rest_positions { for c in v { x = x.wrapping_mul(31).wrapping_add(c.to_bits() as u64); } } x },
+                { let mut x = 0u64; for v in &p.weights { for c in v { x = x.wrapping_mul(31).wrapping_add(c.to_bits() as u64); } } x },
+                { let mut x = 0u64; for m in &p.bind_poses { for r in m { for c in r { x = x.wrapping_mul(31).wrapping_add(c.to_bits() as u64); } } } x },
+                { let mut x = 0u64; for v in &p.bone_idx { for c in v { x = x.wrapping_mul(31).wrapping_add(*c as u64); } } x }); }
+        if let Some(body) = s.parts.iter().find(|p| p.role == "body") {
+            let front = body.positions.iter().filter(|v| v[1] > 1.0 && v[1] < 1.4).map(|v| v[2]).fold(f32::MIN, f32::max);
+            eprintln!("BUST {label:<6} body front z={front:.4}");
+        }
+    };
+    a.apply_anim_frame(0., 0.); a.skin_all(); report("native", a);
+    let clip = std::fs::read(std::env::var("OK_BODY_PROBE_CLIP").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/walk_01.okanim".into())).unwrap();
+    assert_eq!(unsafe { crate::ffi::ok_session_install_shared_clip(a as *mut _, clip.as_ptr(), clip.len() as i32) }, 0);
+    a.apply_anim_frame(0., 0.); a.skin_all(); report("shared", a);
+}
+
+// The open-cache key of a card (which <key>.okpreview in %LOCALAPPDATA%\OpenKoikatsu\oklib-cache it reads).
+//   OK_BODY_PROBE_CARD=<png> cargo test --release --lib print_session_cache_key -- --ignored --nocapture
+#[test]
+#[ignore = "real-card diagnostic"]
+fn print_session_cache_key() {
+    let card = std::env::var("OK_BODY_PROBE_CARD").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/CharacterCards/StreetHeroines/raiden_shogun.png".into());
+    let lib = std::path::PathBuf::from("C:/portable/OpenKoikatsu/Content/IndependentResources/base_v1");
+    for outfit in 0..3 { eprintln!("SESSION_KEY outfit={outfit} key={:?}", crate::oklib::session_cache_key(&lib, std::path::Path::new(&card), outfit)); }
+}
+
+// The street opens its cards on several threads at once (empty game root, the base library from OK_BASE_LIBRARY).
+// Each card must open as it does alone: the same parts, the same body.
+//   OK_BASE_LIBRARY=<base_v1> OK_NOCACHE=1 cargo test --release --lib parallel_opens_match_single -- --ignored --nocapture
+#[test]
+#[ignore = "real-card diagnostic"]
+fn parallel_opens_match_single() {
+    let dir = std::path::PathBuf::from("C:/portable/OpenKoikatsu/Content/CharacterCards/StreetHeroines");
+    let cards: Vec<String> = ["jeanne_alter", "raiden_shogun", "march_7th", "keqing", "hu_tao", "hayase_yuuka", "jeanne", "alice", "megumin", "encore"]
+        .iter().map(|n| dir.join(format!("{n}.png")).to_string_lossy().into_owned()).collect();
+    let open = |card: &str| -> Vec<(String, usize)> {
+        // OK_PROBE_FIRST_GAME: the first card opens with this game root (the street opens its galgame portrait and
+        // high cards through FOkSession with the Root of DefaultGame.ini); every other open has an empty root.
+        let root = if card == std::env::var("OK_PROBE_FIRST").unwrap_or_default() { std::env::var("OK_PROBE_FIRST_GAME").unwrap_or_default() } else { String::new() };
+        let card_c = std::ffi::CString::new(card).unwrap(); let game = std::ffi::CString::new(root).unwrap();
+        let mut raw: *mut crate::session::OkSession = std::ptr::null_mut(); let mut err = [0i8; 2048];
+        let status = unsafe { crate::ffi::session_open(game.as_ptr(), card_c.as_ptr(), 0, &mut raw, err.as_mut_ptr(), err.len() as i32) };
+        assert!(status == 0 && !raw.is_null(), "{card}: {}", unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy());
+        let s = unsafe { Box::from_raw(raw) };
+        s.parts.iter().map(|p| (p.name.clone(), p.rest_positions.len())).collect()
+    };
+    // The street opens the male card first (OK_PROBE_FIRST, e.g. output/StreetSocialAPNG/Male01.png).
+    if let Ok(first) = std::env::var("OK_PROBE_FIRST") { let parts = open(&first); eprintln!("PARALLEL first {first}: {} parts", parts.len()); }
+    let alone: Vec<_> = cards.iter().map(|c| open(c)).collect();
+    for (i, card) in cards.iter().enumerate() { eprintln!("PARALLEL alone {card}: body {:?}", alone[i].iter().filter(|p| p.0.contains("body")).collect::<Vec<_>>()); }
+    for round in 0..3 {
+        let together: Vec<_> = std::thread::scope(|scope| {
+            let handles: Vec<_> = cards.iter().map(|c| scope.spawn(move || open(c))).collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        for (i, card) in cards.iter().enumerate() {
+            if together[i] != alone[i] {
+                let body = |v: &Vec<(String, usize)>| v.iter().filter(|p| p.0.contains("body")).cloned().collect::<Vec<_>>();
+                eprintln!("PARALLEL round {round} {card}: parts alone={} together={} body alone={:?} together={:?}",
+                    alone[i].len(), together[i].len(), body(&alone[i]), body(&together[i]));
+            }
+        }
+    }
+    eprintln!("PARALLEL done");
+}

@@ -25,7 +25,7 @@ local instance = require "ok_instance"
 
 local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true, editor = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
-  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true, exec = true, trace = true }
+  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true, exec = true, trace = true, gpucachedir = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -406,6 +406,8 @@ local function main()
   elseif path.exists(build.patch) then game[#game + 1] = "-pakdir=" .. build.patch end
   game[#game + 1] = "-abslog=" .. path.join(output, "game.log")
   game[#game + 1] = "-RuntimeGpuCacheMiB=4096"
+  -- -GpuCacheDir <dir>: another runtime GPU pose cache (default %LOCALAPPDATA%, shared by every checkout).
+  if o.gpucachedir then game[#game + 1] = "-RuntimeGpuCacheDir=" .. o.gpucachedir end
   local q = build.runtime_render_quality
   local execs = {}
   if q then

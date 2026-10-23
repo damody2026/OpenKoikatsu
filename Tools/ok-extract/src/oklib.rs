@@ -110,7 +110,7 @@ pub fn active() -> Option<Arc<Store>> {
 pub fn mode() -> Option<Mode> { active().map(|s| s.mode) }
 pub fn replaying() -> bool { mode() == Some(Mode::Replay) }
 
-fn hex(id: &[u8]) -> String { id.iter().map(|b| format!("{b:02x}")).collect() }
+pub(crate) fn hex(id: &[u8]) -> String { id.iter().map(|b| format!("{b:02x}")).collect() }
 pub fn id_hex(id: &Id) -> String { hex(id) }
 pub fn id_from_hex_pub(s: &str) -> Option<Id> { id_from_hex(s) }
 /// (query, args) of every record of a model.
@@ -964,8 +964,15 @@ pub fn session_cache_load(key: &str) -> Option<Vec<u8>> {
     let bytes = std::fs::read(&path).ok()?;
     if bytes.len() < 8 || &bytes[..4] != ENTRY_MAGIC { return None; }
     let n = u32::from_le_bytes(bytes[4..8].try_into().ok()?) as usize;
-    let fallback = std::str::from_utf8(bytes.get(8..8 + n)?).ok()?;
+    let inputs = std::str::from_utf8(bytes.get(8..8 + n)?).ok()?;
+    // What the open read besides the card and the library (see session_cache_store_in): both must be the same now.
+    // An entry without the configuration identity is from before it was stored and is rebuilt.
+    let (fallback, config) = inputs.split_once(ENTRY_INPUT_SEPARATOR)?;
     if !fallback.is_empty() && fallback != crate::gamefs::fallback_identity() { return None; }
+    if config != crate::mods::uncensor_config_identity() {
+        eprintln!("ok-extract: open cache {key} was built with another UncensorSelector configuration ({config}); rebuilding");
+        return None;
+    }
     let out = lz4_flex::block::decompress_size_prepended(&bytes[8 + n..]).ok()?;
     // Least recently used goes first when the cache is trimmed: a hit counts as a use.
     if let Ok(f) = std::fs::File::options().write(true).open(&path) { let _ = f.set_modified(std::time::SystemTime::now()); }
@@ -985,14 +992,19 @@ fn session_cache_budget() -> u64 {
     let gb = std::env::var("OK_LIBRARY_CACHE_GB").ok().and_then(|v| v.parse::<u64>().ok()).filter(|v| *v > 0).unwrap_or(64);
     gb << 30
 }
+/// Separates the inputs an entry records: the zipmod fallback identity, then the UncensorSelector configuration.
+const ENTRY_INPUT_SEPARATOR: char = '\u{1f}';
 fn session_cache_store_in(dir: &Path, key: &str, preview: &[u8], fallback: &str) {
     let dir = dir.to_owned();
     if std::fs::create_dir_all(&dir).is_err() { return; }
     let tmp = dir.join(format!("{key}.{}.tmp", std::process::id()));
+    // The configuration decides the body when the card names none (a packaged game that did not find it stored the
+    // censored base body here, and every reader, C and E alike, drew that). The key is only the card and the library.
+    let inputs = format!("{fallback}{ENTRY_INPUT_SEPARATOR}{}", crate::mods::uncensor_config_identity());
     let mut data = Vec::with_capacity(preview.len() / 2);
     data.extend_from_slice(ENTRY_MAGIC);
-    data.extend_from_slice(&(fallback.len() as u32).to_le_bytes());
-    data.extend_from_slice(fallback.as_bytes());
+    data.extend_from_slice(&(inputs.len() as u32).to_le_bytes());
+    data.extend_from_slice(inputs.as_bytes());
     data.extend_from_slice(&lz4_flex::block::compress_prepend_size(preview));
     if std::fs::write(&tmp, &data).is_ok() {
         if std::fs::rename(&tmp, dir.join(format!("{key}.okpreview"))).is_err() { let _ = std::fs::remove_file(&tmp); }

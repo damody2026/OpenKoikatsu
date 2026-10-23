@@ -34,7 +34,8 @@ FSHAHash Identity(const FKKRuntimePoseRequest& R){
    TArray<uint8> Bytes;const int64 Size=IFileManager::Get().FileSize(*Path);if(Size>0&&Size<=64ll*1024*1024&&FFileHelper::LoadFileToArray(Bytes,*Path))Hash.Update(Bytes.GetData(),Bytes.Num());const uint64 Count=Bytes.Num();Hash.Update(reinterpret_cast<const uint8*>(&Count),sizeof(Count));
   }Hash.Final();FSHAHash Result;Hash.GetHash(Result.Hash);return Result.ToString();
  }();
- const FString Key=OKRuntimePoseRecipeIdentity(R)+SharedIdentity+TEXT(":gpu-pose-disk-v1:")+TEXT(OK_RUNTIME_NATIVE_CACHE_BUILD)+TEXT(":")+TEXT(OK_RUNTIME_POSE_CACHE_CODE);
+ check(!R.FirstFrameDigest.IsEmpty()); // set by the pose job before it reads or writes the cache
+ const FString Key=OKRuntimePoseRecipeIdentity(R)+R.FirstFrameDigest+SharedIdentity+TEXT(":gpu-pose-disk-v1:")+TEXT(OK_RUNTIME_NATIVE_CACHE_BUILD)+TEXT(":")+TEXT(OK_RUNTIME_POSE_CACHE_CODE);
  FTCHARToUTF8 Bytes(*Key);return FSHA1::HashBuffer(Bytes.Get(),Bytes.Length());
 }
 bool OwnedName(const FString& Name){

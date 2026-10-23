@@ -530,3 +530,8 @@
 
 - 使用者回報背景載入女角時大卡、載完仍一卡一卡。用 `stat dumphitches` 加分段計時找原因：載入的網格建立、GPU bank 上傳、動作安裝擠在同一幀；相遇一輪在一幀內處理全部配對；自由對話紀錄每句寫一次檔；存檔在遊戲執行緒上寫暫存檔、.bak、改名。各自拆成一幀一件或改成背景寫入。
 - 最大來源是財務 `tick`：不論有沒有彩券、掛單或持股，每 2 秒在遊戲執行緒上同步查詢一次，而且每次都寫 finance.json 並 `sync_all`（60–250 ms）。ok-mind 的記憶、profile、context 存檔也在遊戲執行緒上 fsync（MindResult 約 200 ms）。修正：ok-mind `store::write_atomic` 改為背景執行緒寫入，讀檔前只等同一路徑（`settle`），`save`／存檔欄複製前 `flush`；finance 內容沒變就不寫；`tick` 回傳下一個可能有事的遊戲分鐘數（`due_in`），改動帳本的操作回 `due_now`，C++ 只在到期或帳本變動時於背景執行緒查詢。240 秒卡頓從 74 次降到 8 次（剩開場與渲染執行緒）。
+
+### 2026-10-23 雷電將軍胸部變小：打包版找不到 UncensorSelector 設定，原版身體被寫進共用快取
+
+- 使用者回報街區的雷電將軍胸部變小、跑出罩杯，讀卡器卻正常。一開始我猜是 crowd 的蒙皮、GPU 快取和我改的 crowd 程式，做了二分和換快取測試才排除，繞了很久。真正的原因：打包版 stage 的 `Content/IndependentResources` 是連到專案的 junction，Rust 從基礎庫路徑往上三層找 `Config/UncensorSelector.cfg`，找到的是 stage，那裡沒有這個檔。卡片沒存身體 GUID，於是不留 log 地退回原版身體（6823 頂點，應為 BP Profundis 的 9823），再寫進 C、E、讀卡器共用的 `oklib-cache`（鍵只有卡片和基礎庫）。crowd 的姿勢 bank 把身形烤進 palette，所以顯示成胸部變小。
+- 修正（通用）：設定檔從基礎庫的真實位置（canonicalize）往上找；快取項目記錄開卡時用到的 UncensorSelector 設定內容雜湊，讀取時重新解析，不符就重建（舊項目一律作廢）；GPU 姿勢快取的鍵加入第一幀實際解算的姿勢與 palette；每條退回原版身體的路徑都寫 log。Rust 測試以 stage 的 junction 路徑重現與驗證（`crowd_native_tests.rs` 的 bust／parallel 探針）。

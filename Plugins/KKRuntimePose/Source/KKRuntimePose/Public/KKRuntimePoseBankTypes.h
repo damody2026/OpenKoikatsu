@@ -33,6 +33,10 @@ struct FKKRuntimePoseRequest {
  FString PersistentSourceIdentity;
  // Optional bounded common contact recipe; never contains per-card geometry.
  FString ContactRecipe;
+ // Set by the job, not the caller: the first frame as this build solves this snapshot (every native bone's pose and
+ // every part's palette). The palettes carry the character's shape (bust, ABMX, the library, the extractor's code),
+ // so the disk cache keys on it: a bank solved from another character state is never drawn on this mesh.
+ FString FirstFrameDigest;
 };
 struct FKKRuntimePoseResult {
  // Same immutable key/track layout consumed by IndependentPose.usf.
