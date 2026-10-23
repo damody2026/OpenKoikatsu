@@ -1636,17 +1636,24 @@ pub(crate) fn apply_body_shape_keys_masked(
 /// position channels are restored every frame; all other authored helpers
 /// retain their clip values until their own component runs.
 pub(crate) fn apply_body_shape_always(skel: &mut Skeleton, shaped: &Skeleton) {
+    apply_body_shape_always_locals(skel, shaped);
+    skel.rebuild_worlds();
+}
+
+/// `apply_body_shape_always` without publishing the world matrices (the caller rebuilds them once after more local edits).
+pub(crate) fn apply_body_shape_always_locals(skel: &mut Skeleton, shaped: &Skeleton) {
     let roots = tree_ids(skel);
+    let fix_shoulders = std::env::var("OK_NOFIX").is_err();
     for (id, tf) in &mut skel.tfs {
-        if roots.as_ref().is_some_and(|ids| !ids.contains(id)) { continue; }
+        // The name first: only the three bones named here need the tree membership test.
         let axis = match tf.name.as_str() {
             "cf_d_kokan" => 2,
-            "cf_d_shoulder_L" | "cf_d_shoulder_R" if std::env::var("OK_NOFIX").is_err() => 0,
+            "cf_d_shoulder_L" | "cf_d_shoulder_R" if fix_shoulders => 0,
             _ => continue,
         };
+        if roots.as_ref().is_some_and(|ids| !ids.contains(id)) { continue; }
         if let Some(source) = shaped.tfs.get(id) { tf.pos[axis] = source.pos[axis]; }
     }
-    skel.rebuild_worlds();
 }
 
 #[cfg(test)]

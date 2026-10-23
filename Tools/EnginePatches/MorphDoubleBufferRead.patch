@@ -1,0 +1,38 @@
+From 11576da863ff7a31b0e6763e06f49180a2696023 Mon Sep 17 00:00:00 2001
+From: damody2026 <344874824+damody2026@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 17:55:51 +0800
+Subject: [PATCH] =?UTF-8?q?GPU=20=E8=92=99=E7=9A=AE=20morph=20=E9=9B=99?=
+ =?UTF-8?q?=E7=B7=A9=E8=A1=9D=EF=BC=9A=E7=9B=AE=E5=89=8D=E7=B7=A9=E8=A1=9D?=
+ =?UTF-8?q?=E5=B0=9A=E6=9C=AA=E5=AF=AB=E5=85=A5=E6=99=82=E6=94=B9=E8=AE=80?=
+ =?UTF-8?q?=E6=9C=89=E8=B3=87=E6=96=99=E7=9A=84=E7=B7=A9=E8=A1=9D=EF=BC=8C?=
+ =?UTF-8?q?=E4=B8=8D=E5=86=8D=20check=20=E5=A4=B1=E6=95=97?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp       | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp b/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
+index 1f5c4f472..ad5e0904b 100644
+--- a/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
++++ b/Engine/Source/Runtime/Engine/Private/SkeletalRenderGPUSkin.cpp
+@@ -339,9 +339,10 @@ uint32 FMorphVertexBufferPool::GetReadingIndex(bool bPrevious) const
+ 
+ 		if (!MorphVertexBuffers[Index].bHasBeenUpdated)
+ 		{
+-			// this should only happen the first time updating, in which case the previous buffer hasn't been written into yet.
+-			check(Index == 1);
+-			Index = 0;
++			// Normally only the first update, when the previous buffer hasn't been written yet. A revision
++			// flip without a morph write (weights republished on a leader change while the mesh is still
++			// being created) can also leave the current buffer unwritten: read whichever buffer has data.
++			Index = MorphVertexBuffers[Index ^ 1].bHasBeenUpdated ? (Index ^ 1) : 0;
+ 		}
+ 	}
+ 	return Index;
+-- 
+2.54.0.windows.1
+

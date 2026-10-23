@@ -2285,7 +2285,12 @@ impl BodyColliderSet {
 
 type ColliderPose=(BodyCollider,Mat4,f32);
 fn collider_pose(c:BodyCollider,skel:&Skeleton)->ColliderPose {
-    let world=world_of(c.transform,&skel.tfs,&mut HashMap::new());
+    collider_pose_cached(c,skel,&mut HashMap::new())
+}
+/// `collider_pose` sharing the world matrices of one skeleton between colliders posed in the same frame (the same
+/// products as computing each one alone; many colliders hang under the same few bones).
+fn collider_pose_cached(c:BodyCollider,skel:&Skeleton,worlds:&mut HashMap<i64,Mat4>)->ColliderPose {
+    let world=world_of(c.transform,&skel.tfs,worlds);
     let scale_z=transform_lossy_scale(c.transform,&skel.tfs,&world)[2].abs();
     (c,world,scale_z)
 }
@@ -2297,8 +2302,10 @@ pub(crate) struct CharacterColliderFrame {
 }
 impl CharacterColliderFrame {
     pub(crate) fn new(body:&Skeleton,native:&BodyColliderSet,flags:game_colliders::Flags)->Self {
-        Self {native:native.bound(body).into_iter().map(|c|collider_pose(c,body)).collect(),
-            ordinary:std::array::from_fn(|i|game_colliders::ordinary_colliders(body,flags,i==1).into_iter().map(|c|collider_pose(c,body)).collect()),flags}
+        let mut worlds=HashMap::new();
+        let native=native.bound(body).into_iter().map(|c|collider_pose_cached(c,body,&mut worlds)).collect();
+        let ordinary=std::array::from_fn(|i|game_colliders::ordinary_colliders(body,flags,i==1).into_iter().map(|c|collider_pose_cached(c,body,&mut worlds)).collect());
+        Self {native,ordinary,flags}
     }
 }
 
@@ -2764,6 +2771,7 @@ impl AttachedDynamicSet {
     pub(crate) fn configure_shared_clothes_colliders(&mut self, body: &Skeleton, native: &BodyColliderSet, flags: game_colliders::Flags) {
         let frame=CharacterColliderFrame::new(body,native,flags);
         let flags=frame.flags;
+        let mut worlds=HashMap::new();
         for chain in &mut self.chains {
             if chain.db.ver01 {continue;}
             let body_component=chain.db.component_name.is_empty()
@@ -2772,7 +2780,7 @@ impl AttachedDynamicSet {
             if body_component {
                 chain.colliders.clear();
                 chain.implanted_collider_offset=0;
-                chain.external_colliders=chain.implanted_colliders.iter().cloned().map(|c|collider_pose(c,&self.skel)).collect();
+                chain.external_colliders=chain.implanted_colliders.iter().cloned().map(|c|collider_pose_cached(c,&self.skel,&mut worlds)).collect();
                 chain.db.freeze_axis=chain.authored_freeze_axis;
                 continue;
             }
@@ -2780,7 +2788,7 @@ impl AttachedDynamicSet {
             let skirt=chain.db.component_name=="ct_clothesBot";
             chain.external_colliders.clone_from(&frame.native);
             chain.implanted_collider_offset=chain.external_colliders.len();
-            chain.external_colliders.extend(chain.implanted_colliders.iter().cloned().map(|c|collider_pose(c,&self.skel)));
+            chain.external_colliders.extend(chain.implanted_colliders.iter().cloned().map(|c|collider_pose_cached(c,&self.skel,&mut worlds)));
             chain.external_colliders.extend(frame.ordinary[usize::from(skirt)].iter().cloned());
             chain.db.freeze_axis=if flags.installed&&skirt
                 &&chain.db.source_root_name.as_deref().or_else(||self.skel.tfs.get(&chain.db.root).map(|tf|tf.name.as_str()))
@@ -2792,13 +2800,14 @@ impl AttachedDynamicSet {
 
     pub(crate) fn configure_prepared_character_colliders(&mut self,frame:&CharacterColliderFrame) {
         let flags=frame.flags;
+        let mut worlds=HashMap::new();
         for chain in &mut self.chains {
             if chain.db.ver01 {continue;}
             chain.colliders.clear();
             let skirt=chain.db.component_name=="ct_clothesBot";
             chain.external_colliders.clone_from(&frame.native);
             chain.implanted_collider_offset=chain.external_colliders.len();
-            chain.external_colliders.extend(chain.implanted_colliders.iter().cloned().map(|c|collider_pose(c,&self.skel)));
+            chain.external_colliders.extend(chain.implanted_colliders.iter().cloned().map(|c|collider_pose_cached(c,&self.skel,&mut worlds)));
             chain.external_colliders.extend(frame.ordinary[usize::from(skirt)].iter().cloned());
             chain.db.freeze_axis=if flags.installed&&skirt
                 &&chain.db.source_root_name.as_deref().or_else(||self.skel.tfs.get(&chain.db.root).map(|tf|tf.name.as_str()))
@@ -2853,9 +2862,12 @@ impl AttachedDynamicSet {
         }else{self.skel=animated.clone();}
         self.skel.tfs.insert(self.parent_id, parent);
         self.skel.tfs.extend(self.shared_component_tfs.clone());
+        // The animated bones by name (the first of a duplicated name, as a search finds it), built only when a bridge needs one.
+        let mut live_by_name:Option<HashMap<&str,&Tf>>=None;
         for tf in self.skel.tfs.values_mut() {
             if let Some(name)=tf.name.strip_prefix("__ok_body_bridge/") {
-                if let Some(live)=animated.tfs.values().find(|live|live.name==name) {
+                let by_name=live_by_name.get_or_insert_with(||{let mut m=HashMap::with_capacity(animated.tfs.len());for live in animated.tfs.values(){m.entry(live.name.as_str()).or_insert(live);}m});
+                if let Some(live)=by_name.get(name) {
                     tf.pos=live.pos; tf.rot=live.rot; tf.scale=live.scale;
                 }
             }

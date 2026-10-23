@@ -124,6 +124,7 @@ static TAutoConsoleVariable<int32> CVarOkFacePreparedPalette(TEXT("ok.Face.Prepa
 static TAutoConsoleVariable<int32> CVarOkAnimationGeneratedStreams(
     TEXT("ok.Animation.GeneratedStreams"),1,TEXT("Fuse generated preview geometry with stream packing; 0 retains the intermediate-array oracle."));
 static TAutoConsoleVariable<int32> CVarOkDeferFacePose(TEXT("ok.Studio.DeferFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) take their pose in their own (worker) anim update after the owner; 0: evaluated at once in SyncMouthPose."));
+static TAutoConsoleVariable<int32> CVarOkShareFacePose(TEXT("ok.Studio.ShareFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) follow the body pose as exact followers, keeping their own morph targets; 0: they evaluate their own pose."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth every other frame, taking turns, so a scene renders half as many extra views; 0: every frame."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureFullView(TEXT("ok.ShadowCaptureFullView"),0,TEXT("1: the toon shadow depth capture renders a full view (lighting, post-processing...) as before; 0 depth only. Read when a character loads."));
 static TAutoConsoleVariable<int32> CVarOkStableShadowTarget(
@@ -6534,6 +6535,9 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
 	ToonShadowCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 	ToonShadowCapture->bCaptureEveryFrame = false;
 	ToonShadowCapture->bCaptureOnMovement = false;
+	// Captures are issued by Tick; the component's own tick only serves bCaptureEveryFrame and tiling
+	// (a KStudio scene's item previews each carry one: ~1600 idle tick tasks a frame).
+	ToonShadowCapture->PrimaryComponentTick.bCanEverTick = false;
 	// Only the depth of the character's own parts is read: none of the lighting, shadowing, post-processing or global
 	// illumination passes a full view runs (one such capture per character each frame was most of the render thread).
 	// ok.ShadowCaptureFullView=1 keeps the full view (diagnostic).
@@ -6811,14 +6815,14 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
  if(BodySkel || !SkelFollowers.IsEmpty()) OKBuildSkelPose(Session,Pose);
  FKKRuntimeAffinePoseScope SharedPoseScope(Pose);
  if(auto* Leader=Cast<UKKRuntimePoseableMeshComponent>(BodySkel))for(UPoseableMeshComponent* F:SkelFollowers)if(auto* Follower=Cast<UKKRuntimePoseableMeshComponent>(F))Follower->TryUseExactLeader(bShareIdenticalPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
- // A follower takes its leader's morph target weights too: the face parts an owner poses (OK Studio, whose expressions
- // are morphs on these parts) keep their own pose so their expression shows (republishing their morphs on a switch,
- // below, did not bring it back). A part that starts or stops following republishes its morphs at once.
+ // The face parts follow the body too: their expressions are their own morph targets, which
+ // UKKRuntimeSkeletalMeshComponent::UpdateFollowerComponent keeps under the poseable leader. ok.Studio.ShareFacePose=0
+ // keeps OK Studio's face parts on their own pose. A part that starts or stops following republishes its morphs at once.
  bool bFaceLeaderChanged=false;
  if(auto* Leader=Cast<UKKRuntimePoseableMeshComponent>(BodySkel))for(const auto& Slot:MouthSlots)
   for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})if(auto* Follower=Cast<UKKRuntimeSkeletalMeshComponent>(Mesh)){
    const bool bWas=Follower->LeaderPoseComponent.IsValid();
-   Follower->TryUseExactLeader(bShareIdenticalPose&&!bSceneDrivenPose&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
+   Follower->TryUseExactLeader(bShareIdenticalPose&&(!bSceneDrivenPose||CVarOkShareFacePose.GetValueOnGameThread()!=0)&&CVarOkExactLeader.GetValueOnGameThread()!=0?Leader:nullptr);
    bFaceLeaderChanged|=bWas!=Follower->LeaderPoseComponent.IsValid();
   }
  if(bFaceLeaderChanged)ApplyMouth();

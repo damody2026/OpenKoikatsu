@@ -753,6 +753,12 @@ pub fn apply_hi_poly_limb_size_corrections(skel: &mut Skeleton) {
 /// ChaControl.LateUpdateForce overwrites these RefObjKey transforms after the
 /// Animator. The scene controls Character.enableCorrectArmSize/HandSize.
 pub fn apply_scene_limb_size_corrections(skel: &mut Skeleton, correct_arm: bool, correct_hand: bool) {
+    apply_scene_limb_size_corrections_locals(skel, correct_arm, correct_hand);
+    skel.rebuild_worlds();
+}
+
+/// `apply_scene_limb_size_corrections` without publishing the world matrices.
+pub fn apply_scene_limb_size_corrections_locals(skel: &mut Skeleton, correct_arm: bool, correct_hand: bool) {
     let arm_x = if correct_arm { 0.92 } else { 1.0 };
     let hand_yz = if correct_hand { 0.9 } else { 1.0 };
     for tf in skel.tfs.values_mut() {
@@ -762,7 +768,6 @@ pub fn apply_scene_limb_size_corrections(skel: &mut Skeleton, correct_arm: bool,
             _ => {}
         }
     }
-    skel.rebuild_worlds();
 }
 
 pub fn capture_baseline(

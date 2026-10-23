@@ -15,6 +15,7 @@
 | 新增非 Nanite 虛擬陰影的平行繪製開關 | `../Patches/ParallelVirtualShadowDraw.patch` | — |
 | 新增動畫庫的完整蒙皮矩陣計算著色器 | `../Patches/MatrixBank/` | — |
 | 不透明 base pass 可依 primitive 的 TranslucencySortPriority 排序（`r.OK.OpaqueSortPriority`） | 重合服裝層（Material Editor 複製材質、重複飾品）照 Unity 繪製順序，不再閃爍（`OpaqueSortPriority.patch`，見 [計畫](../../Docs/OPAQUE_DRAW_ORDER_ENGINE_PLAN.md)） | `OKOpaqueSortPriority` |
+| GPU 蒙皮 morph 雙緩衝：目前緩衝尚未寫入時改讀有資料的緩衝，不再 check 失敗 | OK Studio 載入場景時偶發 `Assertion failed: Index == 1`（`FMorphVertexBufferPool::GetReadingIndex`）當機（`MorphDoubleBufferRead.patch`） | — |
 
 不搬的項目：
 - `BitwiseDecodeScopes.patch`：只加 profiler 範圍，D: 也沒有套。
