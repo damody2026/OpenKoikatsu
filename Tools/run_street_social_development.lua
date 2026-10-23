@@ -265,6 +265,17 @@ local function main()
   -- Replaced heroine cards (StreetSocialData/identity_aliases.json): the live game and every save slot move to the new
   -- ids before the game opens them (a no-op when no save names an old id).
   if not o.selftest and not o.sandbox and not tool("street_identity_migrate.lua", {}).ok then error("Identity alias migration failed", 0) end
+  -- Saved/ is disposable: the player's own settings (microphone, voice, name) are kept at %LOCALAPPDATA%\OpenKoikatsu
+  -- too, like deepseek.json, and put back from there when Saved/ was cleared. The newer copy wins.
+  local user_dir = os.getenv("LOCALAPPDATA") and path.join(os.getenv("LOCALAPPDATA"), "OpenKoikatsu")
+  if user_dir then
+    path.mkdir(user_dir, true); path.mkdir(path.join(root, "Saved/StreetSocial"), true)
+    for _, name in ipairs({ "asr-settings.json", "voice-settings.json" }) do
+      local here, kept = path.join(root, "Saved/StreetSocial", name), path.join(user_dir, name)
+      if path.is_file(here) and (not path.is_file(kept) or (path.mtime(here) or 0) > (path.mtime(kept) or 0)) then pcall(path.copy, here, kept)
+      elseif not path.is_file(here) and path.is_file(kept) then pcall(path.copy, kept, here); say("Restored " .. name .. " from " .. user_dir) end
+    end
+  end
   -- Sandbox: the save (and what lives beside it: voice settings, free-talk logs) moves to the sandbox folder.
   local sandbox
   if o.sandbox then
