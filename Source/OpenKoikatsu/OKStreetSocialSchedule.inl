@@ -120,7 +120,12 @@ void AOKStreetSocialScene::TickSchedules(){
   // Walked into another place: its admission, if it has one (shop.rs entry_fee).
   // Where a game or a save starts him is free; elsewhere the rules ask each minute until they settle it (passing the door is not going in).
   if(Here!=S.EntryPlace){S.EntryPlace=Here;S.EntryMinutes=0;S.bEntrySettled=Here.IsEmpty()||!S.bEntryPlaceKnown;}else ++S.EntryMinutes;
-  if(!S.bEntrySettled)S.bEntrySettled=PayEntry(Here,S.EntryMinutes);S.bEntryPlaceKnown=true;}
+  // She joined him inside (he bought his ticket alone, she met him in the hall): asked again, and the rules charge
+  // only the ticket not bought yet today (R3-110).
+  const int32 WithHer=S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;
+  if(S.bEntrySettled&&!Here.IsEmpty()&&S.bEntryPlaceKnown&&WithHer>0&&WithHer!=S.EntryHer)S.bEntrySettled=false;
+  if(!S.bEntrySettled)S.bEntrySettled=PayEntry(Here,S.EntryMinutes);
+  if(S.bEntrySettled)S.EntryHer=WithHer;S.bEntryPlaceKnown=true;}
  // Urgent needs (hungry, worn out, grimy) cut in before the plan: the rules decide (plan.rs schedule_tick).
  TMap<int32,TPair<int32,FOKStreetPlanBlock>> Urgents;
  {
