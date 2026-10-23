@@ -277,6 +277,8 @@ A3 的「卡包新增檔案」路徑：從 KKS 卡轉出的 8 張新 OK 卡，�
 
 `OK_AUTO_SEQUENCE` 新增兩種步驟：`#N`／`#文字` 選動作選單第 N 項，或第一個包含該文字的項目；`#?` 列出所有選項。
 
+2026-10-23 再加兩種：`!指令` 執行主控台指令（cvar、`startfpschart`／`stopfpschart`、`HighResShot 1`；經 PlayerController，所以截圖指令有效），`^B:DX:DY` 以滑鼠按鍵 B 拖動相機（1 旋轉、2 高度／距離、4 平移；360 約轉半圈），`^0:N` 滾輪 N 格。例：`OK_AUTO_SEQUENCE="alice,#站立 02,~6,!startfpschart,~9,!stopfpschart,^1:360:0,!HighResShot 1"`，先執行 `t.FPSChart.OpenFolderOnDump 0` 免得每次開檔案總管。
+
 C030 的動作選單有 744 項。量了 Demo（基本、蹦跳、站立、坐姿、躺姿、特殊、H、男性）和 Studio 片段：
 - 每次切換從選擇到套用完成約 15–40 ms。
 - 第一次用某個控制器也一樣快：準備 4–8 ms、套用 6–11 ms。

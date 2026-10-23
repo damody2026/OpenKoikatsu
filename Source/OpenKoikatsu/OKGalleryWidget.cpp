@@ -1433,6 +1433,12 @@ void UOKCharacterController::TickAutoSequence()
  UE_LOG(LogTemp,Display,TEXT("OKGUI_SEQ step=%s"),*Step);
  // "~N": idle N seconds (a user looking at the card list) before the next step.
  if(Step.StartsWith(TEXT("~"))){AutoSequenceAt=-(Now+FCString::Atod(*Step+1)-1.5);return;}
+ // "^B:DX:DY": drag the orbit camera with mouse buttons B (1 rotate, 2 height/distance, 4 pan); "^0:N" wheel N notches.
+ if(Step.StartsWith(TEXT("^"))){TArray<FString> V;Step.Mid(1).ParseIntoArray(V,TEXT(":"));
+  if(IsValid(PreviewActor)&&V.Num()>=2){const int32 B=FCString::Atoi(*V[0]);if(B==0)PreviewActor->OrbitZoom(FCString::Atof(*V[1]));else if(V.Num()>=3)PreviewActor->OrbitMouse(uint8(B),FCString::Atof(*V[1]),FCString::Atof(*V[2]));}
+  AutoSequenceAt=-(Now-1.5);return;}
+ // "!CMD": a console command (a cvar, stat, HighResShot, startfpschart) at this point of the sequence.
+ if(Step.StartsWith(TEXT("!"))){if(APlayerController* PC=GetOwningPlayer())PC->ConsoleCommand(Step.Mid(1));else if(GEngine)GEngine->Exec(GetWorld(),*Step.Mid(1));AutoSequenceAt=-(Now-1.5);return;}
  AutoSequenceAt=Now;
  if(Step.StartsWith(TEXT("@"))){
   if(!IsValid(PreviewActor)){AutoSequenceAt=0;return;}
