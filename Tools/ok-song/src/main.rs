@@ -13,7 +13,7 @@
 //!   ok-song demucs-check --ref DIR [--models DIR]   native Demucs (htdemucs_ft) vs a Python dump
 //!   ok-song seedvc-check --ref DIR [--models DIR] [--parts mel,voc,lr,est,cfm,sem,style,f0,pipe,conv]   native Seed-VC vs a dump
 //!   ok-song prepare-models --seedvc SEEDVC_CHECKPOINTS --out DIR   torch checkpoints -> safetensors (no Python)
-//!   ok-song convert --vocal V.wav --reference R.wav --out OUT.wav [--models DIR] [--steps 30] [--vibrato 0] [--glide 0] [--cfg 0.7] [--soft-f0] [--scoop CENTS] [--drift CENTS]   Seed-VC alone
+//!   ok-song convert --vocal V.wav --reference R.wav --out OUT.wav [--models DIR] [--steps 30] [--vibrato 0] [--glide 0] [--cfg 0.7] [--soft-f0] [--scoop CENTS] [--drift CENTS] [--jitter CENTS]   Seed-VC alone
 //!   ok-song mix      --vocal V.wav --accompaniment A.wav --out DIR   the Rust mix + envelope alone (checks, tests)
 //!
 //! The three model stages run natively in Rust + CUDA (src/native: HeartMuLa + HeartCodec, Demucs htdemucs_ft, Seed-VC)
@@ -198,7 +198,7 @@ fn run() -> Result<()> {
             let o = native::seedvc::ConvertOptions { steps: opt("steps", 30.0)? as usize, cfg_rate: opt("cfg", 0.7)? as f32, seed: opt("seed", 1.0)? as u64,
                                                      vibrato_cents: opt("vibrato", 0.0)? as f32, glide_ms: opt("glide", 0.0)? as f32,
                                                      soft_f0: args.opts.contains_key("soft-f0"), scoop_cents: opt("scoop", 0.0)? as f32,
-                                                     drift_cents: opt("drift", 0.0)? as f32 };
+                                                     drift_cents: opt("drift", 0.0)? as f32, jitter_cents: opt("jitter", 0.0)? as f32 };
             let v = audio::Audio::read_wav(&PathBuf::from(args.opts.get("vocal").context("--vocal")?))?;
             let r = audio::Audio::read_wav(&PathBuf::from(args.opts.get("reference").context("--reference")?))?;
             let (out, report) = native::song::convert(&models, &v, &r, &o, &AtomicBool::new(false))?;

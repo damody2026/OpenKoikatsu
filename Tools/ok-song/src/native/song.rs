@@ -63,7 +63,7 @@ pub fn convert(models: &Path, vocals: &Audio, reference: &Audio, o: &super::seed
     let report = json!({"revision": CONVERT_REVISION, "load_seconds": load, "convert_seconds": t2.elapsed().as_secs_f64(),
                         "steps": o.steps, "cfg_rate": o.cfg_rate, "seed": o.seed,
                         "vibrato_cents": o.vibrato_cents, "glide_ms": o.glide_ms, "soft_f0": o.soft_f0,
-                        "scoop_cents": o.scoop_cents, "drift_cents": o.drift_cents});
+                        "scoop_cents": o.scoop_cents, "drift_cents": o.drift_cents, "jitter_cents": o.jitter_cents});
     Ok((Audio { rate: RATE, channels: vec![out] }, report))
 }
 
