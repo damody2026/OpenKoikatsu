@@ -27,7 +27,7 @@ private:
  // Conversations as galgame scenes (OKStreetSocialGalgame.inl).
  TSharedPtr<struct FOKStreetGalgame> Galgame;
  void TickGalgame(float Dt);
- bool GalgameShowsDialogue() const;
+ bool GalgameShowsDialogue() const; bool GalgameHidesDialogueBox() const; float GalgameDialogueLift() const;
  void EndGalgame();
  double SceneTime() const;
  void RefreshUI(); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked

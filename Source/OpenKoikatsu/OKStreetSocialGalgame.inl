@@ -2,6 +2,7 @@
 // its voice plays, the speaker's live portrait at the bottom left, and a shot per line. The ok-story live presenter
 // (Tools/ok-story/src/live.rs) decides all of it; this only tells it what the street says and shows what it answers.
 // Included by OKStreetSocialScene.cpp. ok.Street.Galgame 0 brings the old dialogue box back.
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "OKStoryCapture.h"
 #include "OKStoryLive.h"
@@ -25,10 +26,27 @@ struct FOKStreetGalgame
 	FString LastHer, LastPlayer, LastScripted, LastPlayerLine;
 	int32 LastNode = INDEX_NONE;
 	bool bHerPending = false;
+	// When his scripted line went up: hers waits a moment so his can be read (his voice may be skipped).
+	double PlayerSentAt = -1.0;
 	// Who speaks the line on screen (character slot) and whether a voice plays it.
 	int32 Speaker = INDEX_NONE;
 	bool bVoiced = false;
+	// Passers-by kept out of the shot (hidden from the main view only while they stand in it).
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> Hidden;
 };
+
+// The main view shows everyone again.
+static void OKStreetGalgameUnhide(UWorld* World, FOKStreetGalgame& G)
+{
+	if (APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr)
+		PC->HiddenPrimitiveComponents.RemoveAll([&G](const TWeakObjectPtr<UPrimitiveComponent>& P) { return G.Hidden.Contains(P); });
+	G.Hidden.Reset();
+}
+
+// The street's right panel (400 wide, 16 on each side): the scene's dialog box and framing leave its column free.
+static constexpr float OKStreetGalgameRightColumn = 432.f;
+// The scene's dialog box height, a share of the view's height (ok-story tuning `dialog_height`).
+static constexpr float OKStreetGalgameDialogShare = .26f;
 
 static FString OKStreetGalgameId(int32 Slot)
 {
@@ -52,7 +70,12 @@ static FString OKStreetGalgameWords(const FString& Line, const FString& Name)
 {
 	FString Text = Line;
 	if (!Name.IsEmpty() && Text.StartsWith(Name)) Text = Text.Mid(Name.Len());
-	for (const TCHAR* Mark : { TEXT("："), TEXT(":"), TEXT("「"), TEXT("“"), TEXT("\"") })
+	Text.TrimStartInline();
+	for (const TCHAR* Mark : { TEXT("："), TEXT(":") })
+	{
+		if (Text.StartsWith(Mark)) { Text = Text.Mid(FCString::Strlen(Mark)).TrimStart(); break; }
+	}
+	for (const TCHAR* Mark : { TEXT("「"), TEXT("“"), TEXT("\"") })
 	{
 		if (Text.StartsWith(Mark)) { Text = Text.Mid(FCString::Strlen(Mark)); break; }
 	}
@@ -63,14 +86,45 @@ static FString OKStreetGalgameWords(const FString& Line, const FString& Name)
 	return Text.TrimStartAndEnd();
 }
 
+// "……" while she thinks of her answer: not a line (his words stay on screen until hers come).
+static bool OKStreetGalgamePlaceholder(const FString& Words)
+{
+	for (const TCHAR C : Words)
+	{
+		if (C != TEXT('…') && C != TEXT('.') && C != TEXT('。') && C != TEXT('・') && !FChar::IsWhitespace(C)) return false;
+	}
+	return true;
+}
+
 bool AOKStreetSocialScene::GalgameShowsDialogue() const
 {
 	return Galgame.IsValid() && Galgame->bActive && CVarOKStreetGalgame.GetValueOnGameThread() != 0;
 }
 
+bool AOKStreetSocialScene::GalgameHidesDialogueBox() const
+{
+	if (!GalgameShowsDialogue()) return false;
+	const auto& S = *State;
+	// What the old box still shows during a scene: the dishes on the table and the words the microphone heard.
+	// Heard words stay only until they are sent (then they are his line in the scene's box).
+	const bool bHeard = S.FreeTalkOpen && S.FreeTalkLive && !S.FreeTalkHeard.IsEmpty() && !S.FreeTalkCaptionPlayer.Contains(S.FreeTalkHeard);
+	return S.Table.IsEmpty() && !bHeard;
+}
+
+float AOKStreetSocialScene::GalgameDialogueLift() const
+{
+	if (!GalgameShowsDialogue() || !GEngine || !GEngine->GameViewport) return 0.f;
+	FVector2D Size;
+	GEngine->GameViewport->GetViewportSize(Size);
+	const float Scale = FMath::Max(UWidgetLayoutLibrary::GetViewportScale(GEngine->GameViewport), .01f);
+	// Above the scene's box (its slot already keeps 24 from the bottom).
+	return FMath::Max(0.f, float(Size.Y) / Scale * OKStreetGalgameDialogShare - 16.f);
+}
+
 void AOKStreetSocialScene::EndGalgame()
 {
 	if (!Galgame) return;
+	OKStreetGalgameUnhide(GetWorld(), *Galgame);
 	if (Galgame->ViewHost && GEngine && GEngine->GameViewport) GEngine->GameViewport->RemoveViewportWidgetContent(Galgame->ViewHost.ToSharedRef());
 	Galgame->Portrait.Release();
 	Galgame->Probes.Release();
@@ -106,7 +160,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		G.View = SNew(SOKStoryView).Source(Source);
 		// It only shows: clicks and keys stay the street's. The right panel keeps its column.
 		G.View->SetVisibility(EVisibility::HitTestInvisible);
-		G.ViewHost = SNew(SBox).Padding(FMargin(0.f, 0.f, 300.f, 0.f)).Visibility(EVisibility::HitTestInvisible)[G.View.ToSharedRef()];
+		G.ViewHost = SNew(SBox).Padding(FMargin(0.f, 0.f, OKStreetGalgameRightColumn, 0.f)).Visibility(EVisibility::HitTestInvisible)[G.View.ToSharedRef()];
 		GEngine->GameViewport->AddViewportWidgetContent(G.ViewHost.ToSharedRef(), 9);
 	}
 	const TArray<FString> Names = OKStreetCharacterNames(S);
@@ -118,9 +172,11 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		L->SetStringField(TEXT("who"), OKStreetGalgameId(Slot));
 		L->SetStringField(TEXT("name"), NameOf(Slot));
 		L->SetStringField(TEXT("color"), OKStreetGalgameColor(Slot));
-		L->SetStringField(TEXT("text"), Text);
+		// The box draws its own quotes.
+		L->SetStringField(TEXT("text"), OKStreetGalgameWords(Text, FString()));
 		L->SetBoolField(TEXT("voiced"), bVoiced);
 		G.Live.Input(OKStreetGalgameJson(L));
+		UE_LOG(LogTemp, Display, TEXT("Street galgame line c%d%s: %s"), Slot, bVoiced ? TEXT(" (voiced)") : TEXT(""), *Text);
 		G.Speaker = Slot;
 		G.bVoiced = bVoiced;
 	};
@@ -165,9 +221,10 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			{
 				G.LastPlayerLine = S.PlayerLine;
 				SendLine(0, S.PlayerLine, S.MalePhase == 1 || S.MalePhase == 2);
+				G.PlayerSentAt = FPlatformTime::Seconds();
 			}
 		}
-		if (G.bHerPending && (S.ClipStarted || S.VoiceIds.IsEmpty() || S.PlayerLine.IsEmpty() || S.MalePhase == 3))
+		if (G.bHerPending && FPlatformTime::Seconds() - G.PlayerSentAt >= 1.2 && (S.ClipStarted || S.VoiceIds.IsEmpty() || S.PlayerLine.IsEmpty() || S.MalePhase == 3))
 		{
 			G.bHerPending = false;
 			SendLine(S.Target != INDEX_NONE ? S.Target : Partner, G.LastScripted, !S.VoiceIds.IsEmpty());
@@ -191,7 +248,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				int32 Slot = OKStreetLineSpeaker(Last, Names);
 				if (Slot == INDEX_NONE) Slot = Partner;
 				const FString Words = OKStreetGalgameWords(Last, NameOf(Slot));
-				if (!Words.IsEmpty()) SendLine(Slot, Words, S.TtsEnabled && Slot != 0);
+				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.TtsEnabled && Slot != 0);
 			}
 		}
 	}
@@ -201,8 +258,8 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	F->SetNumberField(TEXT("dt"), Dt);
 	FVector2D Size(1920, 1080);
 	if (GEngine && GEngine->GameViewport) GEngine->GameViewport->GetViewportSize(Size);
-	// The view the presenter draws in leaves the right panel's column.
-	F->SetArrayField(TEXT("viewport"), { MakeShared<FJsonValueNumber>(FMath::Max(1.0, Size.X - 300.0)), MakeShared<FJsonValueNumber>(Size.Y) });
+	// The whole view: the street camera's angle spans it (the right panel only covers its edge).
+	F->SetArrayField(TEXT("viewport"), { MakeShared<FJsonValueNumber>(Size.X), MakeShared<FJsonValueNumber>(Size.Y) });
 	auto Vec = [](const FVector& V) { return TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueNumber>(V.X), MakeShared<FJsonValueNumber>(V.Y), MakeShared<FJsonValueNumber>(V.Z) }; };
 	auto Quat = [](const FQuat& Q) { return TArray<TSharedPtr<FJsonValue>>{ MakeShared<FJsonValueNumber>(Q.X), MakeShared<FJsonValueNumber>(Q.Y), MakeShared<FJsonValueNumber>(Q.Z), MakeShared<FJsonValueNumber>(Q.W) }; };
 	if (S.Camera.IsValid())
@@ -277,8 +334,28 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			const FQuat Rot = FQuat((*R)[0]->AsNumber(), (*R)[1]->AsNumber(), (*R)[2]->AsNumber(), (*R)[3]->AsNumber()).GetNormalized();
 			S.Camera->SetActorLocationAndRotation(Pos, Rot);
 			S.Camera->GetCameraComponent()->SetFieldOfView(float((*Camera)->GetNumberField(TEXT("fov"))));
+			// Someone walking between the lens and the two of them is left out of the picture until they are past.
+			FOKRuntimeCharacterStatus A, B;
+			if (OKGetCrowdRuntimeCharacterStatus(this, 0, A) && OKGetCrowdRuntimeCharacterStatus(this, G.Partner, B))
+			{
+				const FVector Target = (A.Transform.GetLocation() + B.Transform.GetLocation()) * .5 + FVector(0, 0, 120);
+				TArray<UPrimitiveComponent*> Block;
+				for (int32 Slot = 1; Slot < S.Manifest.Characters.Num(); ++Slot)
+				{
+					FOKRuntimeCharacterStatus O;
+					if (Slot == G.Partner || !OKGetCrowdRuntimeCharacterStatus(this, Slot, O)) continue;
+					const FVector Body = O.Transform.GetLocation() + FVector(0, 0, 90);
+					const FVector Closest = FMath::ClosestPointOnSegment(Body, Pos, Target);
+					if (FVector::DistXY(Body, Closest) < 80.f && FVector::Dist(Pos, Closest) < FVector::Dist(Pos, Target) - 30.f)
+						OKGetCrowdRuntimeCharacterComponents(this, Slot, Block);
+				}
+				OKStreetGalgameUnhide(GetWorld(), G);
+				if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+					for (UPrimitiveComponent* Prim : Block) { PC->HiddenPrimitiveComponents.AddUnique(Prim); G.Hidden.Add(Prim); }
+			}
 		}
 	}
+	else if (G.Hidden.Num()) OKStreetGalgameUnhide(GetWorld(), G);
 	else if (S.Camera.IsValid() && S.Camera->GetCameraComponent()->FieldOfView != 65.f && !G.bActive)
 	{
 		// Back to the street's own lens.

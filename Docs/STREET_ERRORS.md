@@ -504,6 +504,7 @@
 - 部署時重寫 `Build/ok-tts/package.json`：Lua 腳本在同一行先 `io.open(..., "wb")` 再呼叫 `json.encode`，而專案的 `json.lua` 只有 decode，結果檔案先被清空才報錯（幸好先做了備份）。另外 bash heredoc 寫進 Lua 字串的 `\\` 被吃成 `\`，產生無效跳脫。寫檔一律先在記憶體產生完整內容、成功後才開檔；含反斜線的腳本用 Write／Edit 工具寫，不經 shell heredoc。
 - ok-tts 卸下 VoiceDesign 引擎後顯存沒有歸還（約 6 GB）：Rust 結構的欄位依宣告順序釋放，`Engine` 把 `gpu`（CUDA stream）放第一個，權重緩衝區之後才在已銷毀的 stream 上 `free_async`，錯誤被 `let _ =` 吞掉。持有 GPU 資源的結構，擁有 stream／context 的欄位放最後；釋放失敗至少要記錄。另外又一次把含撇號的 Lua 腳本寫進 bash heredoc 而解析失敗——腳本一律用 Write 工具寫。
 - 用 Editor `-game` 開街頭（`run_street_social_development.lua -Editor`）時，遊戲一啟動就結束，報告寫著 `Common runtime shader library unavailable`：Editor 沒有 cook 過的 shader library，crowd runtime 要在 manifest 加上 `editor_common_materials: true` 才會改用 Editor 自己的材質資源。`-Editor` 已自動加上。另外 Editor 模式下 `nav girl` 自動導航會立刻停止，測試時改成用 `look` 加 `key W` 走過去。
+- galgame 對話鏡頭固定在兩人旁邊時，路過的女角會走進鏡頭前、擋住畫面。現在鏡頭和兩人之間的路人，只在主畫面暫時隱藏（`PlayerController::HiddenPrimitiveComponents`）；不改動 crowd runtime 自己的可見度，走開後就恢復顯示。
 - 聲音存進角色卡（`okVo` 區塊）後重開遊戲，三月七變成「March 7th」、好感 0：角色 ID 是整個卡片檔的 sha256，任何加進卡片的資料都會換掉她的身分。伺服器端測試只驗證了「卡片能讀回、聲音能用」，沒有重開遊戲看身分。改成 ID 不計入 `okVo`。**規則**：往角色卡寫任何東西之前，先查卡片在哪裡被當成身分（`apng-<sha256>`），並在遊戲裡重開一次確認她還是她。
 
 ### 2026-10-23 女主唱歌
@@ -518,3 +519,5 @@
 - Demucs 參考輸出的 forward hook 用 lambda 回傳 `(save(...), save(...))` 這個 tuple，PyTorch 把非 None 的回傳值當成新輸出，模型後段拿到 None 而崩潰。hook 一律回傳 None。
 - 判斷「換聲沒換成」時，先用的 `ok-tts speaker-sim` 把 32-bit float WAV 當 16-bit PCM 讀，所有 float 檔看起來都彼此相似（0.994），差點把正確的換聲當成錯誤去改。量測工具先用已知答案驗證；`wav_samples` 改成依 fmt chunk 讀 PCM／float、混成單聲道並轉 24 kHz。
 - 攻略線的重開腳本會關掉所有從 `Saved/StreetSocial/Build/` 執行的遊戲，一般啟動又會關掉這個 checkout 的全部 ok-tts／ok-asr／ok-song，沙盒遊戲與它的伺服器一起被關（日誌突然中斷、沒有當機訊息）。沙盒啟動改寫 `Sandbox/<名稱>/running.json`，一般啟動清理時跳過仍在執行的沙盒伺服器；遊戲無聲結束時先查同時間有沒有別的啟動器在清程序。
+- galgame 鏡頭把她的頭頂切掉：為了讓出右側面板，我把傳給 ok-story 的 viewport 寬度扣掉了面板寬；可是 UE 相機的水平視角涵蓋整個畫面寬，Rust 用較窄的長寬比算垂直視角，以為上下看得比實際多。viewport 改回整個畫面。另外越肩鏡頭在兩人站得很近（約 90cm）時，固定 18° 的側角讓主角背影擋住半個畫面，改成依距離加大側角（`over_clear` 42cm）。
+- 即時對話接上 galgame 演出後，主角那句一送出就被她「……」思考中的佔位字幕蓋掉，看不到。佔位字幕不再算一句；劇本台詞裡主角那句至少顯示 1.2 秒（男聲 TTS 失敗時她的語音會立刻接上）。

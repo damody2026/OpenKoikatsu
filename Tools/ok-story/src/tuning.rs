@@ -83,6 +83,8 @@ pub struct CameraTuning {
     /// Over-the-shoulder shots: turned this far off the line between the two (degrees), this far behind the speaker (cm).
     pub over_side_deg: f64,
     pub over_behind: f64,
+    /// Sideways clearance (cm) the line of sight keeps from the near shoulder's person.
+    pub over_clear: f64,
     pub two_fov: f64,
     /// The pair fills this much of the width.
     pub two_fill: f64,
@@ -126,6 +128,7 @@ impl Default for CameraTuning {
             frame_below: 45.0,
             over_side_deg: 18.0,
             over_behind: 70.0,
+            over_clear: 42.0,
             two_fov: 35.0,
             two_fill: 0.42,
             wide_fov: 40.0,

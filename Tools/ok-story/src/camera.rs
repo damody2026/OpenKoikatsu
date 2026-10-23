@@ -214,8 +214,10 @@ fn shot_pose(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, _current: &
             let speaker = actor(ctx.speaker)?;
             let (hl, hs) = (listener.head(), speaker.head());
             let back = math::normalize([hs[0] - hl[0], hs[1] - hl[1], 0.0]);
-            let dir = Quat::yaw_deg(t.over_side_deg).rotate(back);
             let gap = math::len([hs[0] - hl[0], hs[1] - hl[1], 0.0]);
+            // Far enough to the side that the shoulder only edges into the frame: standing close, the angle opens up.
+            let clear = (t.over_clear * speaker.root.scale.abs().max(0.1) / gap.max(1.0)).min(1.0).asin().to_degrees();
+            let dir = Quat::yaw_deg(t.over_side_deg.max(clear)).rotate(back);
             let fov = fov_or(t.speaker_fov);
             let k = listener.root.scale.abs().max(0.1);
             let (aim, distance) = fit_vertical(t, ctx.aspect, fov, hl[2] + t.frame_above * k, hl[2] - t.frame_below * k, gap + t.over_behind);

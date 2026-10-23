@@ -2116,11 +2116,13 @@ void AOKStreetSocialScene::RebuildUI(){
  auto Dialogue=SNew(SVerticalBox);FreeTalkEnsureLog();
  // Free talk owns the bottom box while its captions are set and no scripted line plays. Captions are
  // bound to state so replay can change them every line without rebuilding the UI.
- auto FreeTalkOwns=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&L->FreeTalkOpen&&L->Node==INDEX_NONE&&(!L->FreeTalkCaptionPlayer.IsEmpty()||!L->FreeTalkCaptionHer.IsEmpty());};
- auto Scripted=[FreeTalkOwns](){return FreeTalkOwns()?EVisibility::Collapsed:EVisibility::Visible;};
+ // A galgame scene (OKStreetSocialGalgame.inl) shows the lines itself; this box then keeps only the table and what the microphone heard.
+ auto Gal=[Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameShowsDialogue();};
+ auto FreeTalkOwns=[Gal,Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&!Gal()&&L->FreeTalkOpen&&L->Node==INDEX_NONE&&(!L->FreeTalkCaptionPlayer.IsEmpty()||!L->FreeTalkCaptionHer.IsEmpty());};
+ auto Scripted=[Gal,FreeTalkOwns](){return Gal()||FreeTalkOwns()?EVisibility::Collapsed:EVisibility::Visible;};
  // Live free talk: the microphone level, and the words the recogniser heard (before and after they are sent).
  {
-  auto LiveShown=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&L->FreeTalkOpen&&L->FreeTalkLive?EVisibility::Visible:EVisibility::Collapsed;};
+  auto LiveShown=[Gal,Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&!Gal()&&L->FreeTalkOpen&&L->FreeTalkLive?EVisibility::Visible:EVisibility::Collapsed;};
   Dialogue->AddSlot().AutoHeight().Padding(4,0,4,4)[SNew(SHorizontalBox).Visibility_Lambda(LiveShown)
    +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[SNew(SBox).HeightOverride(10)[SNew(SProgressBar).Percent_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();const float Level=L?L->FreeTalkMicLevel:0.f;return TOptional<float>(FMath::Clamp((20.f*FMath::LogX(10.f,FMath::Max(Level,1e-5f))+60.f)/60.f,0.f,1.f));})
     .FillColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&L->FreeTalkLiveSpeaking?FSlateColor(FLinearColor(.3f,1.f,.45f)):FSlateColor(FLinearColor(.4f,.7f,1.f));})]]
@@ -2226,7 +2228,9 @@ void AOKStreetSocialScene::RebuildUI(){
   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[S.Bluff.Active?BluffHandWidget():SNullWidget::NullWidget]
   // Gal-game layout: the log button sits on the box's top-right edge; the box itself never hides.
   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0,0,8,4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKMsg(TEXT("ui.scene.history_toggle_count"), {{TEXT("toggle_label"), S.FreeTalkHistoryOpen?OKT(TEXT("ui.scene.close_log")):OKT(TEXT("ui.scene.history_label"))}, {TEXT("count"), S.FreeTalkLog.Num()}}))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->FreeTalkHistoryOpen=!Weak->State->FreeTalkHistoryOpen;Weak->RefreshUI();}return FReply::Handled();})]
-  +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MinDesiredHeight(96).Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameShowsDialogue()?EVisibility::Collapsed:EVisibility::Visible;})[SAssignNew(S.DialoguePanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(20)[Dialogue]]]]]
+  +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MinDesiredHeight_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FOptionalSize(Owner.IsValid()&&Owner->GalgameShowsDialogue()?0.f:96.f);})
+   .Padding_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FMargin(0,0,0,Owner.IsValid()?Owner->GalgameDialogueLift():0.f);})
+   .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameHidesDialogueBox()?EVisibility::Collapsed:EVisibility::Visible;})[SAssignNew(S.DialoguePanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(20)[Dialogue]]]]]
  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(356,80,0,220)[History]
  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(16,16,16,24)[SNew(SVerticalBox)
   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[SNew(SBox).MaxDesiredWidth(320).Visibility(S.HintOpen?EVisibility::Visible:EVisibility::Collapsed)[SNew(SBorder).BorderImage(OKStreetGlassPanel()).Padding(14)[SNew(STextBlock).AutoWrapText(true).Text(FText::FromString((S.HintText.IsEmpty()?FString():S.HintText+TEXT("\n"))+(S.MouseUI?OKT(TEXT("ui.scene.ui_mode_hint")):OKT(TEXT("ui.scene.camera_mode_hint")))+OKT(TEXT("ui.scene.map_hint_m"))))]]]

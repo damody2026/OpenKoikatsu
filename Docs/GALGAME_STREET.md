@@ -1,0 +1,49 @@
+# 街頭對話的 galgame 演出
+
+StreetSocial（`StreetSocial.cmd`）的交談改用 ok-story 的即時演出，和 OK Studio 的劇本播放（[使用說明](GALGAME_STORY_USAGE.md)）是同一套：
+
+- **底部對話框**：顯示說話者名字（角色色）與台詞。文字隨語音進度逐字打出；沒有語音時依固定速度打字。
+- **左下即時立繪**：拍的是說話者本人的 3D 模型（正交 SceneCapture，只拍她自己的元件），表情與嘴型與場上同步。
+- **逐句鏡頭**：她說話時在「說話者特寫」與「雙人」之間交替；主角說話時改用「越過主角肩膀看她」（`over`）。每個鏡頭先產生多個候選位置，再用深度探針避開牆壁；構圖留出底部對話框的高度。
+- **路人不擋鏡頭**：站在鏡頭與兩人之間的其他角色，只在主畫面暫時隱藏，走開後恢復。
+
+舊的街頭對話框在演出開啟時收起，只在餐桌上有菜、或麥克風剛聽到還沒送出的話時，縮小留在新對話框上方；右側面板（話題、按鈕、麥克風音量）不變，新對話框讓出右側 432px。越肩鏡頭會依兩人距離加大側角，主角只露出肩膀。
+
+## 分工
+
+| 部分 | 位置 | 做什麼 |
+|---|---|---|
+| 演出邏輯 | `Tools/ok-story/src/live.rs`（`ok_story.dll` 的 `oks_live_*`） | 收到「誰說了什麼」，決定打字進度、立繪、鏡頭與探針；C ABI 以 JSON 溝通 |
+| 街頭接線 | `Source/OpenKoikatsu/OKStreetSocialGalgame.inl` | 把街頭狀態（劇本台詞、即時對話字幕、語音進度、骨架位置、相機）轉成輸入與 facts，套用回傳的鏡頭，拍立繪、跑探針 |
+| 畫面 | `Plugins/OKStudio/.../SOKStoryView`、`OKStoryCapture`、`OKStoryLive` | 與 OK Studio 共用的對話框 widget、立繪擷取、探針與 DLL 載入 |
+
+C++ 只負責呈現；鏡頭選擇、打字速度、構圖等規則都在 Rust，調整見 `Tools/ok-story/src/tuning.rs`（`live`、`camera` 區段）。
+
+## 開關與檔案
+
+- `ok.Street.Galgame 1`（預設）開啟；`0` 恢復舊對話框。
+- `ok_story.dll`：打包時由 `Tools/stage_street_social.lua` 複製到執行檔旁；`run_street_social_development.lua` 會建置並以 `OK_STORY_DLL` 指定。找不到 DLL 時保留舊對話框，log 會寫 `Street galgame presenter unavailable`。
+- 每送出一句台詞，log 會記一行 `Street galgame line c<slot>: ...`，可用來檢查哪一句換了鏡頭。
+
+## 什麼時候會演出
+
+- 站著交談（按 E 開始、話題、告白等劇本台詞）：對話框、立繪與鏡頭都會用。
+- 即時對話（ok-mind／語音）：主角與她的字幕各自成為一句；她想回答時的「……」不算一句，主角那句會留到她真正開口。劇本台詞裡主角那句至少顯示 1.2 秒。
+- 一起散步、約會途中的對話：只換對話框與立繪，鏡頭維持街頭本來的跟隨鏡頭。
+- 拍照時不搶鏡頭。
+
+## 開發測試
+
+不用打包，直接用 Editor 開街頭：
+
+```powershell
+.\Tools\lua\lua.exe Tools\run_street_social_development.lua -Editor -Control -Window 1600x900
+```
+
+`-Editor` 以 `UnrealEditor.exe <專案> <地圖> -game` 執行，並在 manifest 加 `editor_common_materials`（Editor 沒有 cook 過的 shader library）。接著用 `Tools/street_play.lua`（`state`、`key E`、`key One`、`shot`）操作與截圖。Editor 模式下 `nav girl` 自動導航不會走，要用 `look` 加 `key W` 走到她旁邊。
+
+## 已知限制
+
+- 立繪與鏡頭以骨架位置計算，坐著、躺著等大幅姿勢的構圖還沒專門調過。
+- 路人只在擋住鏡頭時隱藏，從畫面邊緣走過的人仍會入鏡。
+- 多人對話（群聊）目前只把正在交談的那一位當成對象；其他人說話時，立繪與鏡頭都還沒專門處理。
