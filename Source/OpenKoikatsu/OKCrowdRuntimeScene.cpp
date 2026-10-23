@@ -776,6 +776,9 @@ struct FScene : TSharedFromThis<FScene> {
   auto* Cap=NewObject<USceneCaptureComponent2D>(O);O->AddInstanceComponent(Cap);Cap->CaptureSource=SCS_SceneDepth;Cap->TextureTarget=ForegroundDepth.Get();
   Cap->PrimitiveRenderMode=ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;Cap->bCaptureEveryFrame=true;Cap->bCaptureOnMovement=false;Cap->bAlwaysPersistRenderingState=true;
   Cap->ShowFlags.SetAtmosphere(false);Cap->ShowFlags.SetFog(false);Cap->ShowFlags.SetPostProcessing(false);Cap->ShowFlags.SetLighting(false);
+  // A depth pass inside the main renderer instead of a second scene renderer each frame (about 2.4 ms of the render
+  // thread with several heroines in view; Docs/STREET_ERRORS.md 2026-10-24).
+  Cap->bRenderInMainRenderer=true;
   Cap->RegisterComponent();ForegroundCapture=Cap;
   UE_LOG(LogTemp,Display,TEXT("Runtime foreground occlusion capture created"));
  }
