@@ -1590,7 +1590,7 @@ inline void OKStreetFlushSaves() {
 // Her reply's acts that are not activities (act field): the model sometimes writes them in the action field.
 inline bool OKStreetReplyActOnly(const FString& Name) {
  // (leave is also an outing word: she walks off; end_talk / farewell / goodbye are handled where they are read.)
- return Name == TEXT("promise_treat") || Name == TEXT("checkout") || Name == TEXT("intimacy");
+ return Name == TEXT("promise_treat") || Name == TEXT("checkout") || Name == TEXT("intimacy") || Name == TEXT("give_money") || Name == TEXT("lend");
 }
 
 inline EOKStreetLoad OKStreetLoadSaveFile(const FString& Path, FOKStreetStore& Store, FString& Error) {
