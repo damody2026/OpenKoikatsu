@@ -308,6 +308,9 @@ struct FEntry {
  // Per part, from creation: 1 front hair, 2 a foreground eye / brow on its _Fg parent, 0 anything else (parts of
  // different classes never share a material). FrontHairSlots: the mesh material slots of her front hair (and outlines).
  TArray<uint8> FaceClasses;TArray<int32> FrontHairSlots;
+ // The head parts on their _Flat parents (ok.FaceFlatten, OKRuntimeFlatFaceParent): per part whether it is, and the
+ // instances to give the head and the camera every frame (UpdateFaceFlatten).
+ TArray<bool> FlatParts;TArray<TWeakObjectPtr<UMaterialInstanceDynamic>> FlatMaterials;FKKFaceFlattenState FlatState;
  TWeakObjectPtr<UInstancedSkinnedMeshComponent> FrontGpu;
  // Her body without the front hair, drawn only into the foreground occlusion capture (ForegroundCapture): her face,
  // head and other hair hide her eyes / brows as in Koikatsu, where they depth-test before marking the stencil.
@@ -426,6 +429,17 @@ struct FScene : TSharedFromThis<FScene> {
  FString VoiceRoot;
  // Optional second root for voices generated at runtime (StreetSocial TTS cache).
  FString GeneratedVoiceRoot;
+ // The face pressed flat along the view (ok.FaceFlatten): every head instance gets her head and the player camera.
+ void UpdateFaceFlatten(){
+  const APlayerController* PC=Owner.IsValid()&&Owner->GetWorld()?Owner->GetWorld()->GetFirstPlayerController():nullptr;
+  if(!PC||!PC->PlayerCameraManager)return;const FVector View=PC->PlayerCameraManager->GetCameraLocation();
+  for(int32 C=0;C<Entries.Num();++C){auto& E=*Entries[C];if(E.FlatMaterials.IsEmpty()||E.Stage!=5)continue;
+   // Past 25 m a face is a few pixels: no bone sampled, nothing set (it keeps the plane it had).
+   if(FVector::DistSquared((ExternalControl?E.ExternalTransform:E.Transform).GetLocation(),View)>2500.*2500.)continue;FTransform Head;
+   if(!OKGetCrowdRuntimeBoneTransform(Owner.Get(),C,TEXT("cf_j_head"),Head)&&!OKGetCrowdRuntimeBoneTransform(Owner.Get(),C,TEXT("cf_s_head"),Head))continue;
+   if(!OKFaceFlattenChanged(E.FlatState,Head.GetLocation(),View))continue;
+   for(const auto& M:E.FlatMaterials)if(M.IsValid())OKApplyFaceFlatten(M.Get(),E.FlatState);}
+ }
  void UpdateDisplayLighting(const FVector& Light){
   if(Light.ContainsNaN()||Light.IsNearlyZero())return;
   const FVector Direction=Light.GetSafeNormal();const FLinearColor Unity(-Direction.X,Direction.Z,Direction.Y,0);
@@ -551,11 +565,13 @@ struct FScene : TSharedFromThis<FScene> {
     UMaterialInterface* ForeParent=WantFore&&ForegroundParents.IsValidIndex(int32(Recipe)-1)?ForegroundParents[int32(Recipe)-1].Get():nullptr;
     if(WantFore&&!ForeParent)UE_LOG(LogTemp,Warning,TEXT("Runtime foreground %s: %s has no %s_Fg parent, drawn behind the hair"),*E.Id,*P.Name,*OKRuntimeSharedMaterialParentName(Recipe));
     const uint8 FaceClass=OKFrontHairPart(P)?1:ForeParent?2:0;E.FaceClasses.Add(FaceClass);
+    // The head (face, eyes, brows, nose, tears) pressed flat along the view; the body keeps the plain parents.
+    UMaterialInterface* Flat=P.Role==TEXT("head")?OKRuntimeFlatFaceParent(ForeParent?ForeParent:Parents[int32(Recipe)-1].Get()):nullptr;E.FlatParts.Add(Flat!=nullptr);
     // OK_RUNTIME_MATERIAL_DUMP=1: each part's recipe, textures and values (diagnosing a part drawn unlike the reader).
     if(!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RUNTIME_MATERIAL_DUMP")).IsEmpty()){FString T;for(const auto& Slot:P.Textures)T+=FString::Printf(TEXT(" %s=%d"),*Slot.Property,Slot.Texture);FString Vals;for(const auto& KV:P.Values)Vals+=FString::Printf(TEXT(" %s=(%.3g,%.3g,%.3g,%.3g)"),*KV.Key,KV.Value.X,KV.Value.Y,KV.Value.Z,KV.Value.W);
      UE_LOG(LogTemp,Display,TEXT("Runtime material dump %s part=%d name=%s role=%s blend=%s recipe=%s shader=%d textures:%s values:%s meta=%s"),*E.Id,Part,*P.Name,*P.Role,*P.Blend,*OKRuntimeSharedMaterialParentName(Recipe),P.ShaderKind,*T,*Vals,*P.SourceMetadataJson.Left(6000));}
-    for(int32 I=0;I<Identities.Num()&&!TearLevel;++I)if(Identity==Identities[I]&&E.FaceClasses[I]==FaceClass){Match=I;break;}UMaterialInstanceDynamic* M=nullptr;if(Match>=0){const int32 ExistingCanonical=Canonical[Match];Canonical.Add(ExistingCanonical);M=E.Materials[Match].Get();}else{Canonical.Add(Part);M=OKCreateRuntimeSharedMaterial(P,Textures,ForeParent?ForeParent:Parents[int32(Recipe)-1].Get(),MaterialScene(),Error);if(!M)return false;++E.UniqueMaterialBindings;if(ForeParent)M->SetScalarParameterValue(TEXT("__OK_ForegroundStencil"),E.ForegroundStencil);float Face=0;if(HGStyle&&P.Role==TEXT("head")&&M->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_HG_Face")),Face))M->SetScalarParameterValue(TEXT("__OK_HG_Face"),1);ApplyRamp(M);}// A tear drawn lit: its own texture and tiling on the lit parent, hidden until a look shows it (TearVisible).
-    if(TearLevel&&TearParent.IsValid()){if(auto* Lit=UMaterialInstanceDynamic::Create(TearParent.Get(),GetTransientPackage())){
+    for(int32 I=0;I<Identities.Num()&&!TearLevel;++I)if(Identity==Identities[I]&&E.FaceClasses[I]==FaceClass&&E.FlatParts[I]==(Flat!=nullptr)){Match=I;break;}UMaterialInstanceDynamic* M=nullptr;if(Match>=0){const int32 ExistingCanonical=Canonical[Match];Canonical.Add(ExistingCanonical);M=E.Materials[Match].Get();}else{Canonical.Add(Part);M=OKCreateRuntimeSharedMaterial(P,Textures,Flat?Flat:ForeParent?ForeParent:Parents[int32(Recipe)-1].Get(),MaterialScene(),Error);if(!M)return false;if(Flat)E.FlatMaterials.Emplace(M);++E.UniqueMaterialBindings;if(ForeParent)M->SetScalarParameterValue(TEXT("__OK_ForegroundStencil"),E.ForegroundStencil);float Face=0;if(HGStyle&&P.Role==TEXT("head")&&M->GetScalarParameterValue(FMaterialParameterInfo(TEXT("__OK_HG_Face")),Face))M->SetScalarParameterValue(TEXT("__OK_HG_Face"),1);ApplyRamp(M);}// A tear drawn lit: its own texture and tiling on the lit parent, hidden until a look shows it (TearVisible).
+    if(TearLevel&&TearParent.IsValid()){UMaterialInterface* TearFlat=OKRuntimeFlatFaceParent(TearParent.Get());if(auto* Lit=UMaterialInstanceDynamic::Create(TearFlat?TearFlat:TearParent.Get(),GetTransientPackage())){if(TearFlat)E.FlatMaterials.Emplace(Lit);
      for(const auto& Slot:P.Textures)if(Slot.Property==TEXT("_MainTex")&&Textures.IsValidIndex(Slot.Texture)&&Textures[Slot.Texture])Lit->SetTextureParameterValue(TEXT("TearTex"),Textures[Slot.Texture]);
      if(const FLinearColor* ST=Binding.Vectors.Find(TEXT("_MainTex_ST")))Lit->SetVectorParameterValue(TEXT("TearTex_ST"),*ST);
      M=Lit;}}
@@ -581,7 +597,7 @@ struct FScene : TSharedFromThis<FScene> {
   auto MainData=D;if(DepthPrepassEnabled)MainData.Sections.RemoveAll([&](const auto& Section){return Ibl.Contains(Section.Material);});
   auto VisualData=MainData;TArray<UMaterialInterface*> VisualMaterials=Materials;TMap<int32,int32> OutlineSlots;
   for(const auto& Base:MainData.Sections){const auto& P=E.Material.Parts[Base.Material];const auto Recipe=OKRuntimeSharedMaterialRecipe(P);if(!P.Outline||OKRuntimeTearLevel(P.Name)||!OutlineParents.IsValidIndex(int32(Recipe)-1)||!OutlineParents[int32(Recipe)-1].IsValid())continue;
-   int32 Slot=INDEX_NONE;if(const auto* Existing=OutlineSlots.Find(Base.Material))Slot=*Existing;else{auto* M=OKCreateRuntimeSharedMaterial(P,Textures,OutlineParents[int32(Recipe)-1].Get(),MaterialScene(),Error,true);if(!M)return false;ApplyRamp(M);Slot=VisualMaterials.Add(M);E.OutlineMaterials.Emplace(M);E.ViewLitOutlines.Add(E.ViewLitMaterials[Base.Material]);OutlineSlots.Add(Base.Material,Slot);}
+   int32 Slot=INDEX_NONE;if(const auto* Existing=OutlineSlots.Find(Base.Material))Slot=*Existing;else{UMaterialInterface* OutlineFlat=P.Role==TEXT("head")?OKRuntimeFlatFaceParent(OutlineParents[int32(Recipe)-1].Get()):nullptr;auto* M=OKCreateRuntimeSharedMaterial(P,Textures,OutlineFlat?OutlineFlat:OutlineParents[int32(Recipe)-1].Get(),MaterialScene(),Error,true);if(!M)return false;if(OutlineFlat)E.FlatMaterials.Emplace(M);ApplyRamp(M);Slot=VisualMaterials.Add(M);E.OutlineMaterials.Emplace(M);E.ViewLitOutlines.Add(E.ViewLitMaterials[Base.Material]);OutlineSlots.Add(Base.Material,Slot);}
    auto Shell=Base;Shell.Material=Slot;Shell.BaseIndex=VisualData.Indices.Num();
    for(uint32 I=0;I<Base.Triangles*3;I+=3){const uint32 A=MainData.Indices[Base.BaseIndex+I],B=MainData.Indices[Base.BaseIndex+I+1],C=MainData.Indices[Base.BaseIndex+I+2];VisualData.Indices.Append({A,B,C});}
    VisualData.Sections.Add(MoveTemp(Shell));
@@ -855,6 +871,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    });}
   }
   if(Camera.IsValid()&&!ExternalControl)UpdateDisplayLighting(-Camera->GetActorForwardVector());
+  UpdateFaceFlatten();
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ShadowSubmission);  ServiceShadowSubmission();
  }
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Stream);  ServiceStream();

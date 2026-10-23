@@ -4,6 +4,8 @@
 --   M_OKTearLit (PrepareTearMaterial.cpp)      the lit tears (cf_O_namida_S/M/L)
 --   <Parent>_Fg (PrepareForegroundMaterial.cpp) eyes / eyebrows drawn through the front hair (the card's foreground
 --                                               setting, as Koikatsu's stencil does)
+--   <Parent>_Flat (PrepareFlatFaceMaterial.cpp) the head parts with the face pressed flat along the view
+--                                               (ok.FaceFlatten), as Wuthering Waves draws its toon faces
 --
 --   Tools\lua\lua.exe Tools\prepare_face_materials.lua
 --
@@ -90,6 +92,14 @@ for k, r in ipairs(roots) do
   say("foreground parents " .. r)
   local out = log .. "-fg" .. k
   commandlet({ "-PrepareForegroundMaterials", "-MaterialRoot=" .. r }, out, "Foreground material generation")
+  local report = json.decode(path.read_text(out .. ".json"))
+  say(("made %d, kept %d"):format(#(report.made or {}), #(report.skipped or {})))
+end
+-- The flattened-face variants of every parent above, the _Fg ones included (the body keeps the plain ones).
+for k, r in ipairs(roots) do
+  say("flat face parents " .. r)
+  local out = log .. "-flat" .. k
+  commandlet({ "-PrepareFlatFaceMaterials", "-MaterialRoot=" .. r }, out, "Flat face material generation")
   local report = json.decode(path.read_text(out .. ".json"))
   say(("made %d, kept %d"):format(#(report.made or {}), #(report.skipped or {})))
 end

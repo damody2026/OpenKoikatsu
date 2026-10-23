@@ -5,6 +5,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Json.h"
 #include "Misc/PackageName.h"
+#include "HAL/IConsoleManager.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 struct FOKForgeOpaqueUniform {const TCHAR* Name;int32 CB,Offset,Dim,Type,Rows;};
 struct FOKForgeOpaqueTexture {const TCHAR* Name;int32 Index,Sampler,Dim;};
 struct FOKForgeOpaqueProperty {const TCHAR* Name;int32 Type;bool Gamma;FLinearColor Default;const TCHAR* ForgeOpaqueDefaultTexture;};
@@ -391,6 +393,46 @@ TConstArrayView<EKKRuntimeMaterialRecipe> OKRuntimeSharedMaterialRecipes(){
 }
 EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRuntimeMaterialRecipe R){
  return R==EKKRuntimeMaterialRecipe::ForgeStudioOpaque?EKKRuntimeMaterialRecipe::ForgeStudio:EKKRuntimeMaterialRecipe::None;
+}
+static TAutoConsoleVariable<float> CVarOkFaceFlatten(TEXT("ok.FaceFlatten"),.6f,
+ TEXT("The face pressed flat along the view, as Wuthering Waves draws toon faces: 0 off .. 0.9 (the most; 1 would put the face, eyes and mouth at one depth). ")
+ TEXT("Live; a scene started at 0 draws the head with the plain parents (no vertex offset)."));
+static TAutoConsoleVariable<int32> CVarOkFaceFlattenLock(TEXT("ok.FaceFlattenLock"),0,
+ TEXT("1: the direction the face is pressed along stays where it was (turn the camera to see from the side that it is flat)."));
+static TAutoConsoleVariable<float> CVarOkFaceFlattenForward(TEXT("ok.FaceFlattenForward"),2.f,
+ TEXT("Where the face is pressed to: cm in front of the head bone, toward the camera."));
+float OKFaceFlattenStrength(){
+ static bool Parsed=false;if(!Parsed){Parsed=true;float V=0;if(FParse::Value(FCommandLine::Get(),TEXT("FaceFlatten="),V))CVarOkFaceFlatten->Set(V,ECVF_SetByCommandline);}
+ // At 1 everything in front of the head lands on one plane: face, eyes, mouth and teeth at one depth fight (black
+ // patches). Kept below it so their order survives.
+ return FMath::Clamp(CVarOkFaceFlatten.GetValueOnGameThread(),0.f,.9f);
+}
+UMaterialInterface* OKRuntimeFlatFaceParent(UMaterialInterface* Parent){
+ // Off when the program started at 0 (-FaceFlatten=0): the head keeps the plain parents. Turned to 0 later (the card
+ // reader's slider) it stays on the _Flat parents at strength 0, so turning it up again needs no reload.
+ static const bool StartedOff=OKFaceFlattenStrength()<=0;
+ if(!Parent||StartedOff)return nullptr;
+ static TMap<TWeakObjectPtr<UMaterialInterface>,TWeakObjectPtr<UMaterialInterface>> Cache;static TSet<TWeakObjectPtr<UMaterialInterface>> Absent;
+ if(const auto* Hit=Cache.Find(Parent))if(Hit->IsValid())return Hit->Get();
+ if(Absent.Contains(Parent))return nullptr;
+ const FString Package=Parent->GetOutermost()->GetName()+TEXT("_Flat");const FString Name=FPackageName::GetShortName(Package);
+ UMaterialInterface* Flat=FPackageName::DoesPackageExist(Package)?LoadObject<UMaterialInterface>(nullptr,*(Package+TEXT(".")+Name)):nullptr;
+ if(!Flat){Absent.Add(Parent);UE_LOG(LogTemp,Display,TEXT("Face flatten: %s has no %s, the head draws unflattened"),*Parent->GetName(),*Name);return nullptr;}
+ Cache.Add(Parent,Flat);return Flat;
+}
+bool OKFaceFlattenChanged(FKKFaceFlattenState& S,const FVector& Head,const FVector& Camera){
+ const float Strength=OKFaceFlattenStrength();FVector Dir=Camera-Head;if(!Dir.Normalize())Dir=FVector::ZeroVector;
+ // Locked (ok.FaceFlattenLock): the direction it had; only the head moves the plane.
+ if(CVarOkFaceFlattenLock.GetValueOnGameThread()!=0&&!S.Dir.IsZero())Dir=S.Dir;
+ const FVector Pivot=Head+Dir*CVarOkFaceFlattenForward.GetValueOnGameThread();
+ if(Strength==S.Strength&&FVector::DistSquared(Pivot,S.Pivot)<.25&&(Dir|S.Dir)>.99996f)return false;
+ S.Pivot=Pivot;S.Dir=Dir;S.Strength=Strength;return true;
+}
+void OKApplyFaceFlatten(UMaterialInstanceDynamic* M,const FKKFaceFlattenState& S){
+ if(!M)return;
+ M->SetScalarParameterValue(TEXT("__OK_FaceFlatten"),S.Strength);
+ M->SetVectorParameterValue(TEXT("__OK_FaceFlatPivot"),FLinearColor(S.Pivot.X,S.Pivot.Y,S.Pivot.Z,0));
+ M->SetVectorParameterValue(TEXT("__OK_FaceFlatDir"),FLinearColor(S.Dir.X,S.Dir.Y,S.Dir.Z,0));
 }
 UMaterialInterface* OKLoadRuntimeSharedMaterialParent(const FString& Root,EKKRuntimeMaterialRecipe R,bool Outline){
  for(EKKRuntimeMaterialRecipe Try=R;Try!=EKKRuntimeMaterialRecipe::None;Try=OKRuntimeSharedMaterialFallback(Try)){

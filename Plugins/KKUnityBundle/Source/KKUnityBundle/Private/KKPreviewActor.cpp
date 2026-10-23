@@ -9167,6 +9167,17 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
  const bool Profile=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_ANIM_PROFILE"))==TEXT("1");const double Begin=FPlatformTime::Seconds();
 	Super::Tick(DeltaSeconds);
 	PublishPhysicsFrame();
+	// The face pressed flat along the view (ok.FaceFlatten): the head and the player camera.
+	if (!FlatFaceMaterials.IsEmpty() && BodySkel)
+	{
+		const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+		const FName HeadBone = BodySkel->GetBoneIndex(TEXT("cf_j_head")) != INDEX_NONE ? FName(TEXT("cf_j_head")) : FName(TEXT("cf_s_head"));
+		if (PC && PC->PlayerCameraManager && BodySkel->GetBoneIndex(HeadBone) != INDEX_NONE)
+		{
+			const FVector Head = BodySkel->GetSocketLocation(HeadBone), View = PC->PlayerCameraManager->GetCameraLocation();
+			if (OKFaceFlattenChanged(FlatFaceState, Head, View)) for (const auto& M : FlatFaceMaterials) if (M.IsValid()) OKApplyFaceFlatten(M.Get(), FlatFaceState);
+		}
+	}
     bool BatchFace=CVarOkFaceFrameBatch.GetValueOnGameThread()!=0;
     if(BatchFace)BeginFaceDisplayUpdate();
     ON_SCOPE_EXIT{if(BatchFace)EndFaceDisplayUpdate();};

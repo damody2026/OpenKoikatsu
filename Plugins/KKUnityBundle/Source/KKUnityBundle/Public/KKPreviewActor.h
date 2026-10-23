@@ -7,6 +7,7 @@
 #include "KKSpeech.h"
 #include "KKAnimationReadyClock.h"
 #include "KKGpuStream.h"
+#include "KKRuntimeSharedMaterial.h"
 #include "RenderCommandFence.h"
 #include "ProceduralMeshComponent.h"
 #include "Containers/Ticker.h"
@@ -675,6 +676,8 @@ public:
 	TArray<TObjectPtr<UTexture2D>> LoadedTextures;
     UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> CookedRoleMaterials;
     UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> CookedRoleOutlines;
+    // The head instances on their _Flat parents (ok.FaceFlatten): given the head and the camera every tick.
+    TArray<TWeakObjectPtr<class UMaterialInstanceDynamic>> FlatFaceMaterials;FKKFaceFlattenState FlatFaceState;
     /** Sets a vector parameter (a Unity uniform such as _WorldSpaceLightPos0) on every shared parent instance of this
      *  actor, outlines included; instances without it are left alone. */
     void SetSharedVectorParameter(FName Name, const FLinearColor& Value);
