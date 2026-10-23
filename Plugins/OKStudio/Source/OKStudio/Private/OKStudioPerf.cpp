@@ -10,6 +10,7 @@
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "UnrealClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
@@ -75,6 +76,14 @@ void UOKStudioGame::RunKStudioPerf(const TArray<FString>& Scenes, int32 SettleFr
 			// OK_STUDIO_PERF_DUMP=<frames>: the engine's hierarchical stat averages over that many frames into the log.
 			const int32 Dump = FCString::Atoi(*FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_PERF_DUMP")));
 			if (Dump > 0 && GEngine) GEngine->Exec(Self->GetTickableGameObjectWorld(), *FString::Printf(TEXT("stat dumpave -num=%d -ms=0.1"), Dump));
+			// OK_STUDIO_PERF_SHOT=1: a screenshot of the game viewport itself (what a player sees, unlike CompareKStudio's
+			// own scene capture) into Saved/OKStudio/perf/<tag>_<scene>.png.
+			if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_PERF_SHOT")) == TEXT("1"))
+			{
+				FString Tag = TEXT("perf");
+				FParse::Value(FCommandLine::Get(), TEXT("OKStudioPerfTag="), Tag);
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("OKStudio/perf") / FString::Printf(TEXT("%s_%s.png"), *Tag, *FPaths::GetBaseFilename(Scenes[State->Index])), false, false);
+			}
 			State->Frames.Reset();
 			FOkAnimBridge::Profile(true); // OK playback's native phase timings from here
 			return true;

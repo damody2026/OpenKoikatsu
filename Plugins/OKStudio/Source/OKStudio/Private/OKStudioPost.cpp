@@ -50,12 +50,20 @@ if (AOOn > 0.5 && !bFar)
 	float P00 = View.ViewToClip[0][0], P11 = View.ViewToClip[1][1];
 	float2 Ndc = float2(VUV.x * 2.0 - 1.0, 1.0 - VUV.y * 2.0);
 	float3 Pos = float3(Ndc.x * DepthM / P00, Ndc.y * DepthM / P11, DepthM);
-	float2 Px = View.ViewSizeAndInvSize.zw;
-	float Dx = OK_DEPTH(VUV + float2(Px.x, 0));
-	float Dy = OK_DEPTH(VUV + float2(0, Px.y));
-	float3 PosX = float3((Ndc.x + 2.0 * Px.x) * Dx / P00, Ndc.y * Dx / P11, Dx);
-	float3 PosY = float3(Ndc.x * Dy / P00, (Ndc.y - 2.0 * Px.y) * Dy / P11, Dy);
-	float3 N = normalize(cross(PosY - Pos, PosX - Pos));
+	// The normal from depth 8 pixels to each side (central differences): next to the pixel, depth is flat per triangle
+	// and every facet of a body took its own shade (blocks on the legs). Where one side jumps (a silhouette), only the
+	// side whose depth is closer.
+	float2 Px = View.ViewSizeAndInvSize.zw * 8.0;
+	float Dr = OK_DEPTH(VUV + float2(Px.x, 0)), Dl = OK_DEPTH(VUV - float2(Px.x, 0));
+	float Dd = OK_DEPTH(VUV + float2(0, Px.y)), Du = OK_DEPTH(VUV - float2(0, Px.y));
+	float3 PosR = float3((Ndc.x + 2.0 * Px.x) * Dr / P00, Ndc.y * Dr / P11, Dr);
+	float3 PosL = float3((Ndc.x - 2.0 * Px.x) * Dl / P00, Ndc.y * Dl / P11, Dl);
+	float3 PosD = float3(Ndc.x * Dd / P00, (Ndc.y - 2.0 * Px.y) * Dd / P11, Dd);
+	float3 PosU = float3(Ndc.x * Du / P00, (Ndc.y + 2.0 * Px.y) * Du / P11, Du);
+	const float Jump = 0.02 * DepthM + 0.01;
+	float3 Ex = max(abs(Dr - DepthM), abs(Dl - DepthM)) < Jump ? (PosR - PosL) : (abs(Dr - DepthM) < abs(Dl - DepthM) ? PosR - Pos : Pos - PosL);
+	float3 Ey = max(abs(Dd - DepthM), abs(Du - DepthM)) < Jump ? (PosD - PosU) : (abs(Dd - DepthM) < abs(Du - DepthM) ? PosD - Pos : Pos - PosU);
+	float3 N = normalize(cross(Ey, Ex));
 	if (N.z > 0) N = -N;
 	float2 RadiusUV = float2(AORadius * P00 * 0.5 / DepthM, AORadius * P11 * 0.5 / DepthM);
 	float Occ = 0.0;
@@ -200,7 +208,9 @@ void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettin
 	UMaterialInstanceDynamic* M = Instance.Get();
 	M->SetScalarParameterValue(TEXT("FogOn"), Post.bFog ? 1.f : 0.f);
 	M->SetVectorParameterValue(TEXT("FogColor"), Linear(Post.FogColor));
-	M->SetScalarParameterValue(TEXT("AOOn"), Post.bAmbientOcclusion ? 1.f : 0.f);
+	// OK_STUDIO_POST_AO=0: without the occlusion pass (diagnostic).
+	static const bool bAoOff = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POST_AO")) == TEXT("0");
+	M->SetScalarParameterValue(TEXT("AOOn"), Post.bAmbientOcclusion && !bAoOff ? 1.f : 0.f);
 	// AmplifyOcclusionBase writes _AO_Levels with Shader.SetGlobalColor, which
 	// forwards directly to SetGlobalVectorImpl. Its RGB is already shader input.
 	M->SetVectorParameterValue(TEXT("AOTint"), Post.AmbientOcclusionTint);
