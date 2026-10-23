@@ -381,7 +381,18 @@ place = "department"
 kind = "solo"
 code = 0
 anchor = "mirror2"
-female_clip = "venue_shopping.okanim"
+female_clip = "lib_17_4_9.okanim"
+male_clip = "venue_shopping.okanim"
+
+[[activity]]
+id = "dept_men_shopping"
+name = "在百貨3樓男裝區幫他挑衣服"
+place = "department"
+kind = "solo"
+code = 0
+anchor = "mirror3"
+female_clip = "lib_17_4_10.okanim"
+male_clip = "venue_shopping.okanim"
 
 [[activity]]
 id = "dept_cosmetics"
@@ -822,7 +833,8 @@ place = "playground"
 kind = "solo"
 code = 0
 anchor = "field"
-female_clip = "venue_sky.okanim"
+female_clip = "lib_8_27_2.okanim"
+male_clip = "venue_sky.okanim"
 who = ["apng-042c554c020de4ab518d45753e4077f8c5c1aebcf72bdd371a5eb6c2bd9d4c0c"]
 weather = "dry"
 once_per_day = true
