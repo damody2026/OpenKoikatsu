@@ -91,13 +91,36 @@ TSharedPtr<FJsonObject> AOKStreetSocialScene::SongDecide(bool Override) const{
  return OKRulesEval(S,Request);
 }
 
-// Queue her song at ok-song: lyrics for her stage and the hour (song_lyrics), her voice from her card / design.
+// Her memories with him from ok-mind (the read-only "memories" query: recall would mark them as recalled), as the
+// fields song_lyrics ranks: kind, place, importance, t. Empty without a mind.
+static TArray<TSharedPtr<FJsonValue>> OKSongSharedMemories(FOKStreetSceneState& S,const FString& HeroineId){
+ TArray<TSharedPtr<FJsonValue>> Out;
+ if(!S.Mind)return Out;
+ auto Query=MakeShared<FJsonObject>();Query->SetStringField(TEXT("kind"),TEXT("memories"));Query->SetStringField(TEXT("heroine"),HeroineId);
+ FString QueryText,Reply,Error;auto Writer=TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&QueryText);FJsonSerializer::Serialize(Query,Writer);
+ TSharedPtr<FJsonObject> Root;const TArray<TSharedPtr<FJsonValue>>* Records=nullptr;
+ if(!S.Mind->Query(QueryText,Reply,Error)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Reply),Root)||!Root||!Root->TryGetArrayField(TEXT("memories"),Records))return Out;
+ for(const auto& V:*Records){
+  const TSharedPtr<FJsonObject>* Rec=nullptr;const TArray<TSharedPtr<FJsonValue>>* Entities=nullptr;
+  if(!V->TryGetObject(Rec)||!(*Rec)->TryGetArrayField(TEXT("entities"),Entities))continue;
+  if(!Entities->ContainsByPredicate([](const TSharedPtr<FJsonValue>& E){return E->AsString()==TEXT("player");}))continue;
+  auto Row=MakeShared<FJsonObject>();
+  Row->SetStringField(TEXT("kind"),(*Rec)->GetStringField(TEXT("kind")));Row->SetStringField(TEXT("place"),(*Rec)->GetStringField(TEXT("place")));
+  Row->SetNumberField(TEXT("importance"),(*Rec)->GetNumberField(TEXT("importance")));Row->SetNumberField(TEXT("t"),(*Rec)->GetNumberField(TEXT("t")));
+  Out.Add(MakeShared<FJsonValueObject>(Row));
+ }
+ return Out;
+}
+
+// Queue her song at ok-song: lyrics for her stage and the hour, with a verse from places they have been to together
+// (song_lyrics), her voice from her card / design.
 bool AOKStreetSocialScene::SongPrepare(int32 Girl,bool Override,FString& Error){
  auto& S=*State;auto& G=S.Song;
  if(G.Endpoint.IsEmpty()){Error=TEXT("no ok-song service (OK_SONG_ENDPOINT)");return false;}
  const FOKStreetRelation* R=OKSongRelation(S,Girl);if(!R){Error=TEXT("he has not met her");return false;}
  if(G.Phase!=EOKSongPhase::Idle)SongReset(FString(),true);
  auto LyricsRequest=OKRulesRequest(TEXT("song_lyrics"));LyricsRequest->SetStringField(TEXT("stage"),R->Stage);LyricsRequest->SetNumberField(TEXT("hour"),int32((OKStreetMindNow(S)%1440)/60));LyricsRequest->SetNumberField(TEXT("day"),S.Store.CalendarDay);
+ LyricsRequest->SetArrayField(TEXT("shared"),OKSongSharedMemories(S,R->Id));
  const auto Lyrics=OKRulesEval(S,LyricsRequest);if(!Lyrics.IsValid()){Error=TEXT("song_lyrics failed");return false;}
  ++G.Epoch;const uint32 Epoch=G.Epoch;
  G.Girl=Girl;G.Override=Override;G.HeroineId=R->Id;G.EventId=FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);G.RequestId=G.EventId;
