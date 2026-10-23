@@ -6919,6 +6919,8 @@ struct FKKPrivateGpuDisplay {
  TArray<uint64> Generations;
  FKKPrivateGpuPose CurrentPose;uint64 PoseFrame=MAX_uint64;
  FKKPrivateGpuPose PreparedPose;uint64 PreparedPoseFrame=MAX_uint64;
+ // Bounds of PreparedPose, evaluated with it off the game thread.
+ FBox PreparedBox=FBox(ForceInit);bool bPreparedBox=false;
  uint64 Epoch=0;bool HasGeneration=false,InstallQueued=false,Installed=false,QueryDirty=true,QuerySourceDirty=true,QueryNativeReady=false;
  TArray<bool> QuerySections;
  void MarkQueryDirty(){QueryDirty=QuerySourceDirty=true;QueryNativeReady=false;QuerySections.Init(true,Draw.Num());}
@@ -6946,7 +6948,7 @@ bool AKKPreviewActor::UpdatePrivateGpuDisplay(FKKLoadedPart& Part,bool AllowPrep
  if(Part.PrivateGpuDisplay&&Part.PrivateGpuDisplay->Epoch!=Epoch)Restore(FString(),false);
  if(!Epoch||Component->IsRenderStateDirty()||!Component->UsesAnimatedStreams()||Component->GetCollisionEnabled()!=ECollisionEnabled::NoCollision)return Restore(FString(),false);
  if(Part.PrivateGpuRejectedEpoch==Epoch&&Part.PrivateGpuRejectedRevision==Session.PrivateSkinSourceRevision(Part.SessionIndex))return false;
- FString Error;FKKPrivateGpuPose Pose;
+ FString Error;FKKPrivateGpuPose Pose;bool bPreparedBox=false;FBox PreparedBox(ForceInit);
  if(!Part.PrivateGpuDisplay){
   if(!AllowPrepare)return false;
   OkMeshView View{};
@@ -6982,11 +6984,12 @@ bool AKKPreviewActor::UpdatePrivateGpuDisplay(FKKLoadedPart& Part,bool AllowPrep
   if(Pending){if(Session.PrivateSkinSourceRevision(Part.SessionIndex)!=State.Source.Revision)return Restore(TEXT("Native source changed"),false);return true;} // Reserve queued publication.
   if(!State.HasGeneration)State.HasGeneration=true;
   else if(State.InstallQueued&&!State.Installed){State.Installed=true;UE_LOG(LogTemp,Display,TEXT("OK private GPU installed actor=%s part=%d source_vertices=%d sections=%d bounds_groups=%d"),*GetName(),Part.SessionIndex,State.Source.Vertices.Num(),State.Draw.Num(),State.Bounds.Groups.Num());}
-  if(State.PreparedPoseFrame==GFrameCounter){Pose=MoveTemp(State.PreparedPose);State.PreparedPoseFrame=MAX_uint64;}
+  if(State.PreparedPoseFrame==GFrameCounter){Pose=MoveTemp(State.PreparedPose);State.PreparedPoseFrame=MAX_uint64;bPreparedBox=State.bPreparedBox;PreparedBox=State.PreparedBox;}
   else if(!OKReadPrivateGpuPose(Session,Part.SessionIndex,State.Source,Pose,Error))return Restore(Error,false);
  }
  auto& State=*Part.PrivateGpuDisplay;FBox Box(ForceInit);
- if(!OKEvaluatePrivateGpuBounds(State.Bounds,Pose,Box,Error))return Restore(Error,true);
+ if(bPreparedBox)Box=PreparedBox;
+ else if(!OKEvaluatePrivateGpuBounds(State.Bounds,Pose,Box,Error))return Restore(Error,true);
  for(int32 S=0;S<State.Draw.Num();++S){
   const auto* CPU=Component->GetProcMeshSection(S);
   if(!CPU||CPU->ProcVertexBuffer.Num()!=State.Draw[S].Num())return Restore(TEXT("GPU topology changed"),true);
@@ -7228,7 +7231,10 @@ void AKKPreviewActor::PreparePrivateGpuDisplayPoses(){
  TArray<FKKPrivateGpuPose> Poses;FString Error;
  // A changing source rejects the entire read. Each display then takes its
  // existing revision-checked serial/fallback route without advancing physics.
- if(OKReadPrivateGpuPoses(Session,Indices,Sources,Poses,Error))for(int32 I=0;I<States.Num();++I){States[I]->PreparedPose=MoveTemp(Poses[I]);States[I]->PreparedPoseFrame=GFrameCounter;}
+ if(OKReadPrivateGpuPoses(Session,Indices,Sources,Poses,Error))for(int32 I=0;I<States.Num();++I){
+  States[I]->PreparedPose=MoveTemp(Poses[I]);States[I]->PreparedPoseFrame=GFrameCounter;
+  FString BoxError;States[I]->bPreparedBox=OKEvaluatePrivateGpuBounds(States[I]->Bounds,States[I]->PreparedPose,States[I]->PreparedBox,BoxError);
+ }
 }
 void AKKPreviewActor::RefreshRuntimeAccessories()
 {
