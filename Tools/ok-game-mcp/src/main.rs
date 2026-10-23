@@ -235,13 +235,20 @@ fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
             if until.is_none() && !outing && seconds.is_none() {
                 bail!("seconds, until or outing is required");
             }
+            // Someone starting to talk to him ends the wait: the clock kept running while she stood there and he said
+            // nothing (she asked why he was silent and took it badly). A talk already open (a meal) does not.
+            let talk_open = |st: &Value| st["free_talk"]["open"] == true;
+            let talking_at_start = talk_open(&game.call("/state", None)?);
             clock(game, false)?;
             let start = Instant::now();
             let limit = seconds.unwrap_or(arg_f(a, "timeout_s", 600.0));
             sleep(1.0);
             while start.elapsed().as_secs_f64() < limit {
-                if until.is_some() || outing {
+                {
                     let st = game.call("/state", None)?;
+                    if !talking_at_start && talk_open(&st) {
+                        break;
+                    }
                     if outing && st["activity"]["outing_girl"] == -1 {
                         break;
                     }

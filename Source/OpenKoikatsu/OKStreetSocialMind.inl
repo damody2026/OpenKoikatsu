@@ -370,8 +370,12 @@ void AOKStreetSocialScene::TickChoices(){
 }
 
 // What the model read from the player (resolve) and what she proposes (propose); outcomes stay with the rules.
-void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkReply& Reply){
+void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkReply& In){
  auto& S=*State;
+ // An act written in the activity field ("action":"promise_treat"): read as the act. It was run as an activity, refused,
+ // and she was told "no such activity or place"; the treat she promised was not kept.
+ FOKFreeTalkReply Reply=In;
+ if(Reply.ActKind.IsEmpty()&&OKStreetReplyActOnly(Reply.Action)){Reply.ActKind=Reply.Action;Reply.Action.Reset();}
  // She turned his treat down ("不用请，我自己付"): the next bill with her is each paying their own, also when what she
  // orders is placed later (carried to the shop she is walking him to).
  if(!Reply.Payer.IsEmpty())RecordPayAgreed(Character,Reply.Payer);

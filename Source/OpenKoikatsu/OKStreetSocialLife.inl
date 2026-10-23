@@ -360,6 +360,7 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("seed"),FMath::Rand());
  // The ticket of a place with an admission (aquarium, pool, onsen) is paid once a day there (shop.rs activity_end).
  Request->SetBoolField(TEXT("admitted"),S.AdmittedDay==S.Store.CalendarDay&&S.AdmittedPlace==PlaceId);
+ OKRulesPutExt(S,Request); // and the ticket bought at the door today (entry_fee's ext.entries)
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
  {bool Admission=false;if(Answer->TryGetBoolField(TEXT("admission"),Admission)&&Admission){S.AdmittedPlace=PlaceId;S.AdmittedDay=S.Store.CalendarDay;}}
  // Time: what the activity takes beyond the minutes that already went by while it played, never past an appointment.
@@ -368,13 +369,15 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  if(!S.ClockPaused&&Want>Spent&&Room>0){
   const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);
   const double Add=FMath::Min3(double(Want-Spent)/60.0,FMath::Max(0.0,23.75-Hours),double(FMath::Min<int64>(Room,24*60))/60.0); // never past the day's end or an appointment
-  if(Add>0){S.ClockStartHours+=Add;S.NextSunUpdate=0;}
+  // What was ordered is on the table by then: the kitchen counts seconds of play, not the skipped half hour (her
+  // cocoa came 40 minutes after she ordered it).
+  if(Add>0){S.ClockStartHours+=Add;S.NextSunUpdate=0;for(auto& Due:S.Serves)Due.At=FMath::Min(Due.At,SceneTime());}
  }
  const int32 Price=int32(Answer->GetNumberField(TEXT("price")));
  // Used here only when something was paid (the vending machine): not for her drink at the next shop. A free activity
  // (reading at the library) leaves "my treat at the drink shop afterwards" for the drink shop.
  if(Price>0&&!PayAgreed(Girl).IsEmpty()&&S.PayAgreedShop.IsEmpty())S.PayAgreedShop=PlaceId;
- auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);
+ auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Answer);ApplyRulesEffects(Candidate,*Answer);
  if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
  if(Answer->GetBoolField(TEXT("treat_kept")))S.HerTreatPromise.Remove(Girl);
  // The activity was just billed: what is still in the basket for this meal (her chat orders) would be paid a second time.
@@ -392,14 +395,37 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // Done with her today (activities.rs once_per_day).
  {const int64 Day=OKStreetMindNow(S)/1440;if(S.ActivitiesDoneDay!=Day){S.ActivitiesDone.Reset();S.ActivitiesDoneDay=Day;}S.ActivitiesDone.FindOrAdd(Girl).AddUnique(ActivityId);}
  UE_LOG(LogTemp,Display,TEXT("Street activity aftermath: actor=%d %s minutes=%d price=%d payer=%s again=%d"),Girl,*ActivityId,Want,Price,*Answer->GetStringField(TEXT("payer")),Again);
+ // A date with her there later today is kept by this (social.rs appointment_done_early): dinner promised for 19:00 and
+ // eaten at 16:30 stayed pending, and skipping to the morning counted him a no-show.
+ {const FString HerId=OKStreetStableId(S.Manifest.Characters[Girl]);auto Ask=OKRulesRequest(TEXT("appointment_done_early"));
+  Ask->SetStringField(TEXT("heroine"),HerId);Ask->SetStringField(TEXT("place"),PlaceId);Ask->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));
+  TArray<TSharedPtr<FJsonValue>> Rows;for(const auto& Ap:S.Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),Ap.Id);O->SetStringField(TEXT("kind"),Ap.Kind);
+   O->SetStringField(TEXT("heroine"),Ap.Heroine);O->SetStringField(TEXT("place"),Ap.Place);O->SetStringField(TEXT("label"),Ap.Label);O->SetNumberField(TEXT("start"),double(Ap.Start));
+   O->SetNumberField(TEXT("grace"),Ap.Grace);O->SetStringField(TEXT("status"),Ap.Status);Rows.Add(MakeShared<FJsonValueObject>(O));}
+  Ask->SetArrayField(TEXT("appointments"),Rows);
+  const TArray<TSharedPtr<FJsonValue>>* Done=nullptr;
+  if(const TSharedPtr<FJsonObject> Early=OKRulesEval(S,Ask);Early.IsValid()&&Early->TryGetArrayField(TEXT("done"),Done)&&!Done->IsEmpty()){
+   TSet<int32> Ids;for(const auto& V:*Done)Ids.Add(int32(V->AsNumber()));auto Kept=S.Store;
+   for(const auto& Ap:Kept.Appointments)if(Ids.Contains(Ap.Id))UE_LOG(LogTemp,Display,TEXT("Street appointment %d: %s kept early (%s with her there now)"),Ap.Id,*Ap.Label,*ActivityId);
+   Kept.Appointments.RemoveAll([&](const FOKStreetAppointment& Ap){return Ids.Contains(Ap.Id);});CommitStore(MoveTemp(Kept));}}
 }
 
 // Watches what is going on with him: an activity starting, and its end (whichever way it ends).
 void AOKStreetSocialScene::TickActivityWatch(){
  auto& S=*State;
  const int32 Girl=S.Pair.Partner!=INDEX_NONE?S.Pair.Partner:S.SoloGirl!=INDEX_NONE?S.SoloGirl:S.Facility!=INDEX_NONE?S.FacilityCharacter:INDEX_NONE;
+ // What kind of activity it is. One activity replaced by another with the same girl (watching the fish, then a photo
+ // in front of the tank) ends there and settles as itself, for the minutes it lasted; the new one starts. Only the
+ // girl was watched: the photo settled as forty minutes of watching the fish with its ticket, and the judge was told
+ // they were still watching the fish.
+ const FString Sig=Girl==INDEX_NONE?FString():S.Pair.Partner!=INDEX_NONE?FString::Printf(TEXT("pair:%d%d%d%d"),S.Pair.Seated?1:0,S.Pair.PhoneUse?1:0,S.Pair.Meal?1:0,S.Pair.Drink?1:0)
+  :S.SoloGirl!=INDEX_NONE?TEXT("solo:")+S.SoloId:FString::Printf(TEXT("facility:%d"),S.Facility);
+ if(Girl!=INDEX_NONE&&S.ActGirl==Girl&&!S.ActSig.IsEmpty()&&Sig!=S.ActSig){
+  UE_LOG(LogTemp,Display,TEXT("Street activity: actor=%d %s (%s) gives way to %s"),Girl,*S.ActId,*S.ActSig,*Sig);
+  S.ActGirl=INDEX_NONE;if(!S.ActLover){S.ActCutShort=true;ActivityAftermath(S.ActId,Girl,S.ActStart);}
+ }
  if(Girl!=INDEX_NONE&&S.ActGirl==INDEX_NONE){
-  S.ActGirl=Girl;S.ActStart=OKStreetMindNow(S);S.ActCutShort=false;S.ActLover=S.LoverPose.Girl!=INDEX_NONE; // a kiss or an embrace is not an outing activity
+  S.ActGirl=Girl;S.ActSig=Sig;S.ActStart=OKStreetMindNow(S);S.ActCutShort=false;S.ActLover=S.LoverPose.Girl!=INDEX_NONE; // a kiss or an embrace is not an outing activity
   if(S.LastActivityGirl==Girl&&!S.LastActivity.IsEmpty()&&SceneTime()-S.LastActivityAt<20.0)S.ActId=S.LastActivity;
   else if(const auto* F=S.Facility!=INDEX_NONE?OKStreetFacilityActivity(S.Facility):nullptr)S.ActId=F->Id;
   else if(S.Pair.Partner!=INDEX_NONE)S.ActId=S.Pair.Seated?TEXT("sit_talk"):S.Pair.PhoneUse?TEXT("phone_together"):S.Pair.Meal?TEXT("meal"):S.Pair.Drink?TEXT("drink"):TEXT("photo");

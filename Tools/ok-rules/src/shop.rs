@@ -371,13 +371,19 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
         }
     }
     // An admission (the aquarium, the pool, the onsen) is paid once a day there: watching the tank and then the bench
-    // in front of it charged the ticket twice. Request: admitted (already paid at this place today).
+    // in front of it charged the ticket twice. Request: admitted (already paid at this place today), ext and day: the
+    // ticket bought at the door (entry_fee) counts too; it was charged again at the end of the first activity inside.
     let mut admission = false;
+    let mut ext = r.get("ext").cloned().filter(Value::is_object);
+    let day = r.get("day").and_then(Value::as_i64);
     for cst in COSTS.iter().filter(|cst| id.starts_with(cst.0)) {
         let ticket = matches!(cst.0, "aquarium" | "pool" | "onsen");
-        if !(ticket && b(r, "admitted")) {
+        let paid_at_door = day.is_some() && ext.as_ref().and_then(|e| e.get("entries")).and_then(|e| e.get(cst.0)).and_then(Value::as_i64) == day;
+        if !(ticket && (b(r, "admitted") || paid_at_door)) {
             price += crate::region::price(cst.1 as i64) as i32;
             admission |= ticket;
+            // Paid here: the door does not charge it again today either.
+            if let (true, Some(e), Some(d)) = (ticket, ext.as_mut(), day) { e["entries"][cst.0] = json!(d); }
         }
         add(&mut feed, cst.3, cst.4);
     }
@@ -469,7 +475,9 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
     let notice = crate::tr::m("shop.date_ended_summary", &[("name", crate::tr::a(&name)), ("minutes", crate::tr::a(&shown)), ("payment_note", crate::tr::a(&(if price > 0 { crate::tr::m("shop.price_payer_suffix", &[("price", crate::tr::a(&crate::tr::money(price))), ("payer", crate::tr::a(&payer))]) } else { String::new() })))]);
     // What it leaves (activities.toml yields: reading moves on, a drawing, a photo): Unreal asks the rule of each.
     let yields = r.get("table_yields").cloned().unwrap_or_else(|| json!([]));
-    Ok(json!({"minutes": minutes, "price": price, "payer": payer, "bought": bought, "feed": feed, "effects": fx.into_value(), "notice": notice, "treat_kept": treat_kept, "admission": admission, "yields": yields}))
+    let mut out = json!({"minutes": minutes, "price": price, "payer": payer, "bought": bought, "feed": feed, "effects": fx.into_value(), "notice": notice, "treat_kept": treat_kept, "admission": admission, "yields": yields});
+    if let Some(e) = ext { out["ext"] = e; }
+    Ok(out)
 }
 
 /// Her errand buys something there within the budget and her wallet. Request: place, month, budget, cash, seed.
@@ -639,7 +647,22 @@ fn entry_fee(c: &Catalog, r: &Value) -> Result<Value, String> {
     let her = rel_of(r.get("relation"))?;
     let her_fee = her.as_ref().map(|_| price(her_student)).unwrap_or(0);
     let player_cash = r.get("player_cash").and_then(Value::as_i64).unwrap_or(i64::MAX);
-    let (mut his_pay, mut her_pay) = match r.get("payer").and_then(Value::as_str).unwrap_or("") {
+    // What they settled ("门票各付各的", "我请") decides. Nobody said: she leans as at any shared checkout (checkout_lean,
+    // the activities' rule): he treats unless she insists on her own ticket or both. It was always him (a proud
+    // heroine met at the aquarium door never paid her own ticket).
+    let settled = r.get("payer").and_then(Value::as_str).unwrap_or("");
+    let payer = match (settled, her.as_ref()) {
+        ("", Some(rel)) => {
+            let total = (his_fee + her_fee) as i32;
+            let (lean, insist) = checkout_lean(&profile(r.get("profile")), rel.cash, total, rel.treat_balance, &rel.stage);
+            let roll = RandomStream::new(n(r, "seed") as i32).frand();
+            if lean == "she_pays" && roll < insist && rel.cash >= total as i64 { "her" }
+            else if lean == "split" && roll < insist && rel.cash >= her_fee as i64 { "split" }
+            else { "" }
+        }
+        (s, _) => s,
+    };
+    let (mut his_pay, mut her_pay) = match payer {
         "her" => (0, his_fee + her_fee),
         "split" => (his_fee, her_fee),
         _ => (his_fee + her_fee, 0),
@@ -717,9 +740,9 @@ mod tests {
     fn admission_once_a_day_and_the_student_price() {
         let mut c = Catalog::default();
         c.places.insert("aquarium".into(), crate::catalog::Place { entry: 96, entry_student: 74, ..Default::default() });
-        let r = json!({"place": "aquarium", "day": 5, "him_student": true, "relation": {"id": "a", "cash": 500}, "her_student": true, "player_cash": 1000});
+        let r = json!({"place": "aquarium", "day": 5, "him_student": true, "relation": {"id": "a", "cash": 500}, "her_student": true, "player_cash": 1000, "payer": "him"});
         let v = entry_fee(&c, &r).unwrap();
-        assert_eq!((v["fee"].as_i64(), v["his_pay"].as_i64()), (Some(148), Some(148)), "he brought her: both tickets");
+        assert_eq!((v["fee"].as_i64(), v["his_pay"].as_i64()), (Some(148), Some(148)), "he treats her (\"我请\"): both tickets");
         let again = entry_fee(&c, &json!({"place": "aquarium", "day": 5, "ext": v["ext"], "him_student": true})).unwrap();
         assert_eq!(again["fee"], 0, "the same day again: already paid");
         let split = entry_fee(&c, &json!({"place": "aquarium", "day": 6, "him_student": false, "relation": {"id": "a", "cash": 500}, "payer": "split"})).unwrap();
@@ -728,6 +751,22 @@ mod tests {
         assert_eq!(entry_fee(&c, &json!({"place": "park", "day": 7})).unwrap()["fee"], 0);
         let passing = entry_fee(&c, &json!({"place": "aquarium", "day": 8, "minutes_inside": 0})).unwrap();
         assert_eq!((passing["wait"].as_bool(), passing["fee"].as_i64()), (Some(true), Some(0)), "walking past the door");
+    }
+    #[test]
+    fn admission_nobody_settled_follows_her_checkout_lean() {
+        // Met at the door, nobody said who pays: a proud girl who does not expect a treat pays her own (or both) at
+        // times; one who expects to be treated never does. A settled payer always wins.
+        let mut c = Catalog::default();
+        c.places.insert("aquarium".into(), crate::catalog::Place { entry: 96, entry_student: 74, ..Default::default() });
+        let fee = |profile: Value, seed: i32, payer: &str| {
+            entry_fee(&c, &json!({"place": "aquarium", "day": 5, "him_student": true, "her_student": true, "player_cash": 1000, "seed": seed,
+                "payer": payer, "relation": {"id": "a", "cash": 500, "stage": "friend"}, "profile": profile})).unwrap()
+        };
+        let proud = json!({"money": {"treat_pride": 100, "expects_treat": 0, "reciprocity": 100}});
+        let expects = json!({"money": {"treat_pride": 0, "expects_treat": 100, "reciprocity": 0}});
+        assert!((0..40).any(|seed| fee(proud.clone(), seed, "")["her_pay"].as_i64().unwrap_or(0) > 0), "a proud girl pays her ticket at times");
+        assert!((0..40).all(|seed| fee(expects.clone(), seed, "")["his_pay"].as_i64() == Some(148)), "one who expects a treat is treated");
+        assert!((0..40).all(|seed| fee(proud.clone(), seed, "him")["his_pay"].as_i64() == Some(148)), "\"我请\" settled: his");
     }
     #[test]
     fn a_second_dish_only_when_starving_and_different() {
@@ -806,6 +845,14 @@ mod tests {
         assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(60), Some(true)));
         let bench = activity_end(&c, &json!({"id": "aquarium_bench", "kind": "pair", "code": 11, "name": "長椅", "admitted": true, "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!((bench["price"].as_i64(), bench["admission"].as_bool()), (Some(0), Some(false)), "{bench}");
+        // The ticket bought at the door today (entry_fee's ext.entries): the tank is not charged again (it was, R3-76).
+        let door = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "day": 5,
+            "ext": {"entries": {"aquarium": 5}}, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!((door["price"].as_i64(), door["admission"].as_bool()), (Some(0), Some(false)), "{door}");
+        // Bought yesterday: today's ticket again, and recorded so the door does not charge it a second time.
+        let next = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "day": 6,
+            "ext": {"entries": {"aquarium": 5}}, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!((next["price"].as_i64(), next["ext"]["entries"]["aquarium"].as_i64()), (Some(60), Some(6)));
         // They settled that he pays (the AI's reading): his, however rich she is and whatever the dice say.
         for seed in 1..20 {
             let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "player_cash": 1000, "agreed": "him",

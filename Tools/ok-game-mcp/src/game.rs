@@ -116,32 +116,42 @@ impl Game {
         lines[lines.len().saturating_sub(20)..].join("\n")
     }
 
-    /// Stops only the game listening on this checkout's control port (another session's sandbox game keeps running).
-    pub fn stop(&self) -> Result<Value> {
+    /// The process listening on this checkout's control port: the game this server drives.
+    fn port_pid(&self) -> Result<Option<String>> {
         let out = Command::new("netstat").args(["-ano", "-p", "TCP"]).output()?;
         let text = String::from_utf8_lossy(&out.stdout);
         let local = format!("127.0.0.1:{}", self.port);
         let any = format!("0.0.0.0:{}", self.port);
-        let pid = text
+        Ok(text
             .lines()
             .map(|l| l.split_whitespace().collect::<Vec<_>>())
             .find(|f| f.len() >= 5 && (f[1] == local || f[1] == any) && f[3].eq_ignore_ascii_case("LISTENING"))
-            .map(|f| f[4].to_string());
-        let Some(pid) = pid else { return Ok(json!({"ok": true, "stopped": null, "note": "no game on that port"})) };
+            .map(|f| f[4].to_string()))
+    }
+
+    /// Stops only the game listening on this checkout's control port (another session's sandbox game keeps running).
+    pub fn stop(&self) -> Result<Value> {
+        let Some(pid) = self.port_pid()? else { return Ok(json!({"ok": true, "stopped": null, "note": "no game on that port"})) };
         let status = Command::new("taskkill").args(["/PID", &pid]).output()?;
         Ok(json!({"ok": status.status.success(), "stopped": pid}))
     }
 
-    /// The newest game log (Saved/StreetSocial/Play-*/game.log or a sandbox's), its last lines, optionally only those
-    /// containing a text.
+    /// The log of the game on this control port (the Play-* folder whose game.pid is that process), else the newest
+    /// game log; its last lines, optionally only those containing a text. The newest alone was another session's
+    /// sandbox game.
     pub fn log(&self, lines: usize, contains: Option<&str>) -> Result<Value> {
         let dir = self.root.join("Saved/StreetSocial");
-        let newest = std::fs::read_dir(&dir)?
+        let plays: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)?
             .flatten()
             .filter(|e| e.file_name().to_string_lossy().starts_with("Play-"))
-            .map(|e| e.path().join("game.log"))
-            .filter(|p| p.is_file())
-            .max_by_key(|p| p.metadata().and_then(|m| m.modified()).ok())
+            .map(|e| e.path())
+            .filter(|p| p.join("game.log").is_file())
+            .collect();
+        let pid = self.port_pid().ok().flatten();
+        let ours = pid.and_then(|pid| plays.iter().find(|p| std::fs::read_to_string(p.join("game.pid")).is_ok_and(|t| t.trim() == pid)).cloned());
+        let newest = ours
+            .or_else(|| plays.iter().max_by_key(|p| p.join("game.log").metadata().and_then(|m| m.modified()).ok()).cloned())
+            .map(|p| p.join("game.log"))
             .context("no Saved/StreetSocial/Play-*/game.log yet")?;
         let bytes = std::fs::read(&newest)?;
         // The tail only: logs grow to hundreds of MB.

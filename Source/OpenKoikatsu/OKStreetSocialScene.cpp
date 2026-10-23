@@ -219,7 +219,7 @@ struct FOKStreetSceneState {
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
  struct FPendingText{int32 Girl=INDEX_NONE;FString Why,Kind;double Due=0;int32 Tries=0;};TArray<FPendingText> PendingTexts;bool PhoneInFlight=false;double GateNudgeAt=-100;
- TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;bool ActCutShort=false;int64 ActStart=0,LifeBlocksMinute=-1;FString ActId,LastActivity; TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
+ TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;bool ActCutShort=false;int64 ActStart=0,LifeBlocksMinute=-1;FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
  // Round 3 (Docs/STREET_BEHAVIOR_PLAN_20261012b.md).
  TMap<int32,int32> PlanBlockSince;TMap<FString,int32> PaidShiftMinutes;bool ActIsHers=false,ActLover=false;int32 IntroFriend=INDEX_NONE;double IntroAt=0,GatePenaltyAt=-100,LastActivityAt=-100;
  TMap<int32,TArray<int64>> SelfTexts;int32 SentRemoteGirl=INDEX_NONE,SentRemoteMode=0,ReplyRemoteGirl=INDEX_NONE,ReplyRemoteMode=0;int64 LastCheckoutMinute=-1;TMap<FString,int32> JobRejected;
@@ -1079,8 +1079,9 @@ void AOKStreetSocialScene::SendFreeTalk(){
  // line decides again. Otherwise she walks off minutes later in the middle of whatever they agreed since.
  if(!OKStreetFreeTalkIsNudge(Text)&&S.FarewellPending&&S.FarewellFromTalk){S.FarewellPending=false;S.FarewellFromTalk=false;UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d called off, he goes on talking"),Character);}
  // Any line of his (typed or spoken) ends a silence: its count and a leave it led to are off.
- if(!OKStreetFreeTalkIsNudge(Text)){S.FreeTalkSilenceSince=FPlatformTime::Seconds();S.FreeTalkSilencePenalties=0;S.FreeTalkLeavePending=false;}
- if(OKStreetFreeTalkIsNudge(Text))S.FreeTalkCaptionPlayer.Reset();else S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
+ // A note the game wrote for her (a till note, "he just confessed") is neither: it is not shown as his line either.
+ if(His){S.FreeTalkSilenceSince=FPlatformTime::Seconds();S.FreeTalkSilencePenalties=0;S.FreeTalkLeavePending=false;}
+ if(!His)S.FreeTalkCaptionPlayer.Reset();else S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
  S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.scene.ellipsis_colon"));
  S.FreeTalkBusy=true;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.she_is_thinking"));
  // The heroine mind keeps her whole context and the full state of every turn (plan §7.0); without it,
@@ -1148,6 +1149,8 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
  // The model sometimes writes its act prefix in the activity field ("act:stroll", "act:eat"): the same thing without it.
  const FString ActionNow=RawAction.StartsWith(TEXT("act:"))?RawAction.Mid(4):RawAction;
  if(ActionNow.IsEmpty())return;
+ // Her acts (the treat she promised, a goodbye) are not activities: ApplyChoiceReply handles them.
+ if(OKStreetReplyActOnly(ActionNow)){UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s is her act, not an activity"),*ActionNow);return;}
  if(S.ActGirl==Character&&S.ActId==ActionNow){UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s is what they are already doing"),*ActionNow);return;}
  // On the way somewhere together, "let's walk" is what they are doing: it does not cancel the trip for a loop nearby.
  if(S.OutingGirl==Character&&(ActionNow==TEXT("walk")||ActionNow==TEXT("stroll"))){UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s while already on the way (%s)"),*ActionNow,*S.OutingActivity);return;}
@@ -1659,6 +1662,12 @@ void AOKStreetSocialScene::RelationshipEvent(const FString& Event,bool bHerYes){
   const int32 Girl=S.Target;S.RelationshipVoiceRequired=false;ApplyRelationship();
   FreeTalkLeave(OKMsg(TEXT("ui.scene.confession_ran_away"),{{TEXT("name"),*S.Manifest.Characters[Girl].Name}}));
   QueueHerText(Girl,OKT(TEXT("ui.scene.confession_ran_away_why")),TEXT("confession"),60.0);return;
+ }
+ // He already confessed in his own words and she said yes in hers (the judge): the scripted confession would make him
+ // ask again in canned lines and her act surprised. It is settled now; she is told, and the talk goes on.
+ if(Event==TEXT("confession")&&bHerYes&&!Preview.Refusal){
+  UE_LOG(LogTemp,Display,TEXT("Street confession: actor=%d answered in their own words, no scripted scene"),S.Target);
+  S.RelationshipVoiceRequired=false;ApplyRelationship();return;
  }
  if(Event==TEXT("confession")){
   const auto* Dialogue=S.RelationshipDialogues.FindByPredicate([&](const FOKStreetRelationshipDialogue& D){return D.Personality==S.Manifest.Characters[S.Target].PersonalityId;});

@@ -64,7 +64,12 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
  const FString Action=Out->GetStringField(TEXT("action")),Reason=Out->GetStringField(TEXT("reason"));
  const int64 Start=int64(Out->GetNumberField(TEXT("start")));const int32 Minute=int32(Out->GetNumberField(TEXT("minute")));
- if(Action==TEXT("ignore")){UE_LOG(LogTemp,Display,TEXT("Street promise ignored (%s): day \"%s\" time \"%s\" at %s"),*Reason,*Day,*Time,*Place);return;}
+ if(Action==TEXT("ignore")){UE_LOG(LogTemp,Display,TEXT("Street promise ignored (%s): day \"%s\" time \"%s\" at %s"),*Reason,*Day,*Time,*Place);
+  // A place the town does not have ("the cinema"): both agreed and nothing was booked. She is told, so she says so and
+  // they pick a place that exists; he sees it too.
+  if(Reason==TEXT("not_a_place")&&!Place.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_such_place_note"),{{TEXT("place_name"),*Place}}));
+   S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_such_place_notice"),{{TEXT("place_name"),*Place}});RefreshUI();}
+  return;}
  if(Action==TEXT("keep")||Action==TEXT("move")){const int32 AppId=int32(Out->GetNumberField(TEXT("id")));
   const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==AppId;});if(!A)return;
   if(Action==TEXT("keep")){UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld kept, said again (%s)"),*A->Label,A->Start,*Reason);return;}
