@@ -1,4 +1,5 @@
 #include "KKPreviewActor.h"
+#include "KKToonShadowBias.h"
 #include "KKOkAnimation.h"
 #include "KKMaterialDedupe.h"
 #include "UObject/StrongObjectPtr.h"
@@ -1884,7 +1885,7 @@ return lerp(c, ThirdRGB * ThirdColor.rgb, ThirdAlpha * ThirdColor.a);
 				UMaterialExpressionCustom* ShadowAttenuation = NewObject<UMaterialExpressionCustom>(Mat);
 				ShadowAttenuation->Material = Mat;
 				ShadowAttenuation->OutputType = CMOT_Float1;
-				ShadowAttenuation->Code = TEXT("float receiver = Distance - dot(Position - Center, LightDir); if (!all(UV >= 0.0) || !all(UV <= 1.0)) return 1.0; float4 depths = float4(Depth0, Depth1, Depth2, Depth3); return dot(step(receiver, depths + 1.5), float4(0.25,0.25,0.25,0.25));");
+				ShadowAttenuation->Code = FString::Printf(TEXT("float receiver = Distance - dot(Position - Center, LightDir); if (!all(UV >= 0.0) || !all(UV <= 1.0)) return 1.0; float4 depths = float4(Depth0, Depth1, Depth2, Depth3); return dot(step(receiver, depths + %.9g), float4(0.25,0.25,0.25,0.25));"), OKToonShadowBias());
 				for (const auto& Pair : { TPair<FName, UMaterialExpression*>(TEXT("Position"), WorldPos), TPair<FName, UMaterialExpression*>(TEXT("Center"), Center), TPair<FName, UMaterialExpression*>(TEXT("LightDir"), ShadowLightNode), TPair<FName, UMaterialExpression*>(TEXT("Distance"), Distance), TPair<FName, UMaterialExpression*>(TEXT("UV"), ShadowUv) })
 				{
 					FCustomInput& Input = ShadowAttenuation->Inputs.AddDefaulted_GetRef();
@@ -5532,7 +5533,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			UE_LOG(LogTemp, Display, TEXT("OK body alpha mask bytes=%d decoded=%d blend=%s"),
 				View.alpha_mask_len, AlphaMaskTex ? 1 : 0, *Part.Blend);
 		}
-		if (!bCookedTextures && View.detail_mask && View.detail_mask_len > 16)
+		// OK_SKIP_PART_MAPS=detail,line,normal: load parts without these maps (diagnostic: which map a shading artifact comes from).
+		static const FString SkipMaps = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_SKIP_PART_MAPS"));
+		if (!bCookedTextures && !SkipMaps.Contains(TEXT("detail")) && View.detail_mask && View.detail_mask_len > 16)
 		{
 			OkTextureSettings DetailSettings{};
 			const bool bNativeDetail = Source.TextureSettings(i, "_DetailMask", DetailSettings);
@@ -5541,13 +5544,13 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			if (DetailTex) { DetailTex->AddToRoot(); Output.Textures.Add(DetailTex); }
 		}
 		UTexture2D* LineTex = nullptr;
-		if (!bCookedTextures && View.line_mask && View.line_mask_len > 16)
+		if (!bCookedTextures && !SkipMaps.Contains(TEXT("line")) && View.line_mask && View.line_mask_len > 16)
 		{
 			LineTex = LinearTextureFromPngBytes(View.line_mask, View.line_mask_len);
 			if (LineTex) { LineTex->AddToRoot(); Output.Textures.Add(LineTex); }
 		}
 		UTexture2D* NormalTex = nullptr;
-		if (!bCookedTextures && View.normal_map && View.normal_map_len > 16)
+		if (!bCookedTextures && !SkipMaps.Contains(TEXT("normal")) && View.normal_map && View.normal_map_len > 16)
 		{
 			NormalTex = LinearTextureFromPngBytes(View.normal_map, View.normal_map_len);
 			if (NormalTex) { NormalTex->AddToRoot(); Output.Textures.Add(NormalTex); }

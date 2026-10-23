@@ -602,7 +602,7 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - 私有骨架 GPU 部件的 palette 讀取（`PreparePrivateGpuDisplayPoses`）移到 worker 的 `SolveScenePose`：0633 遊戲執行緒的角色區塊 6.9 → 5.1 ms。
 - 工作室執行時關閉遮擋查詢（`r.AllowOcclusionQueries 0`，結束時恢復）：場景通常幾乎全部可見，遮擋查詢擋不掉什麼，render thread 卻每幀等 RHI thread 的 fence 2–4 ms。同次 A/B：3167 render thread 11.8 → 8.0 ms（85 → 96.5 fps）、0633 10.1 → 8.2 ms，GPU 沒有變慢。
 - 場景驅動角色的 BodySkel 與已共用 leader 的骨架／臉部元件不再自己 Tick（`ok.Studio.SkipPosedTicks`，同配對播放的做法）：姿勢與 follower 的 morph 已由 `FinishScenePose` 每幀套用，元件 Tick 只會再算一次同樣的姿勢。5065 遊戲執行緒約 −1 ms。
-- 已知光影問題（之後處理）：6964 的大腿上有橫向條紋，關掉本節所有新改動仍相同；toon shadow 的深度比較只用固定 1.5 cm 偏移，斜照的表面容易自我遮蔽（shadow acne）。
+- 已知光影問題（未解）：6964 的大腿上有一塊塊與螢幕軸向對齊的明暗方塊（原作平滑），關掉本節所有新改動仍相同。已排除：toon shadow 深度偏移（`OK_TOON_SHADOW_BIAS=6` 不變，不是 shadow acne）、皮膚的 detail／line／normal 貼圖（`OK_SKIP_PART_MAPS=detail,line,normal` 逐一拿掉仍在）、身體顏色貼圖（2048、平滑）、襪子貼圖。注意：`OKStudio.CompareKStudio` 的擷取不吃 `ShowFlag.*`（關掉後處理後畫面仍有景深與光暈），所以用 cvar 關景深、AA、AO、Lumen 的幾次比對可能沒生效；下次要在實際遊戲視窗截圖排查。兩個診斷開關保留。
 - `verify_ok_studio.lua`：log 有 `Ensure condition failed` 也判為失敗。
 - `run_ok_studio_perf.lua --exec "<控制台指令>,..."`：量測前先下指令（例如比較 cvar 的兩種值）。
 - 引擎補丁 `MorphDoubleBufferRead.patch`：連跑 8 個場景時曾在載入第一個場景時斷言當機（`FMorphVertexBufferPool::GetReadingIndex`），見 ERROR_LOG。
