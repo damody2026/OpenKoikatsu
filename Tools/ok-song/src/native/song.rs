@@ -61,7 +61,8 @@ pub fn convert(models: &Path, vocals: &Audio, reference: &Audio, o: &super::seed
     let out = vc.convert(&gpu, &src, &refw, o, &|| cancel.load(Ordering::SeqCst))
         .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
     let report = json!({"revision": CONVERT_REVISION, "load_seconds": load, "convert_seconds": t2.elapsed().as_secs_f64(),
-                        "steps": o.steps, "cfg_rate": o.cfg_rate, "seed": o.seed});
+                        "steps": o.steps, "cfg_rate": o.cfg_rate, "seed": o.seed,
+                        "vibrato_cents": o.vibrato_cents, "glide_ms": o.glide_ms, "soft_f0": o.soft_f0});
     Ok((Audio { rate: RATE, channels: vec![out] }, report))
 }
 

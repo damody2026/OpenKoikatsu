@@ -60,7 +60,7 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
         let fa: Vec<f32> = f0_alt.iter().map(|v| *v as f32).collect();
         report.insert("f0_alt".into(), compare(&fa[..fa.len().min(f0r.len())], &f0r[..fa.len().min(f0r.len())]));
         let f0s: Vec<f64> = f0_alt.iter().map(|f| (f + 1e-5).ln().exp()).collect();
-        let cond = vc.dit.regulate(gpu, &s_alt, n_alt, &f0s, frames)?;
+        let cond = vc.dit.regulate(gpu, &s_alt, n_alt, &f0s, frames, false)?;
         let lr = npy(&refdir.join("lr_out_1.npy"))?;
         report.insert("cond".into(), compare(&gpu.read::<f32>(cond.ptr, lr.len().min(frames * 768))?, &lr[..lr.len().min(frames * 768)]));
         let (fb, fbn) = super::campplus::fbank(&ref16);
@@ -72,7 +72,7 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
         let vc = SeedVc::load(gpu, models)?;
         let src = npy(&refdir.join("mel_in_1.npy"))?;
         let refw = npy(&refdir.join("mel_in_2.npy"))?;
-        let o = ConvertOptions { steps: 30, cfg_rate: 0.7, seed: 1 };
+        let o = ConvertOptions { steps: 30, cfg_rate: 0.7, seed: 1, vibrato_cents: 0.0, glide_ms: 0.0, soft_f0: false };
         let tm = std::time::Instant::now();
         let y = vc.convert(gpu, &src, &refw, &o, &|| false)?;
         report.insert("conv_seconds".into(), tm.elapsed().as_secs_f64().into());
@@ -144,7 +144,7 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
             let x = npy(&refdir.join("lr_x_2.npy"))?;
             let f0: Vec<f64> = npy(&refdir.join("lr_f0_2.npy"))?.iter().map(|v| *v as f64).collect();
             let frames = npy(&refdir.join("lr_ylens_2.npy"))?[0] as usize;
-            let r = dit.regulate(gpu, &x, x.len() / 768, &f0, frames)?;
+            let r = dit.regulate(gpu, &x, x.len() / 768, &f0, frames, false)?;
             let refv = npy(&refdir.join("lr_out_2.npy"))?;
             report.insert("lr".into(), compare(&gpu.read::<f32>(r.ptr, refv.len())?, &refv));
         }
@@ -227,6 +227,61 @@ pub struct ConvertOptions {
     pub steps: usize,
     pub cfg_rate: f32,
     pub seed: u64,
+    /// Natural pitch motion added to the source's F0 before conversion (0 / 0 = the contour as it is): the generated
+    /// singing holds its notes dead flat and jumps between them like pitch correction, which sounds electronic.
+    pub vibrato_cents: f32,
+    pub glide_ms: f32,
+    /// Blend the two nearest pitch-bin embeddings instead of snapping to one (Dit::regulate).
+    pub soft_f0: bool,
+}
+
+/// Humanized F0 (Hz per 10 ms frame, 0 = unvoiced): within each voiced run the contour is smoothed over `glide_ms`
+/// (note changes become short slides), and notes held longer than 250 ms get a 5.5 Hz vibrato of `vibrato_cents` that
+/// fades in after 200 ms and out over the last 80 ms.
+pub fn humanize_f0(f0: &[f64], vibrato_cents: f64, glide_ms: f64) -> Vec<f64> {
+    let mut out = f0.to_vec();
+    let half = ((glide_ms / 10.0) / 2.0).round() as usize;
+    let mut i = 0;
+    while i < f0.len() {
+        if f0[i] <= 1.0 {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < f0.len() && f0[i] > 1.0 {
+            i += 1;
+        }
+        let cents: Vec<f64> = f0[start..i].iter().map(|f| 1200.0 * (f / 440.0).log2()).collect();
+        let n = cents.len();
+        let mut c: Vec<f64> = (0..n).map(|k| {
+            let (a, b) = (k.saturating_sub(half), (k + half + 1).min(n));
+            cents[a..b].iter().sum::<f64>() / (b - a) as f64
+        }).collect();
+        if vibrato_cents > 0.0 {
+            // notes: stretches that stay within 50 cents of where they began
+            let mut k = 0;
+            while k < n {
+                let (s, anchor) = (k, cents[k]);
+                while k < n && (cents[k] - anchor).abs() < 50.0 {
+                    k += 1;
+                }
+                if k - s >= 25 {
+                    for j in s..k {
+                        let t = (j - s) as f64;
+                        let fade = ((t - 20.0) / 15.0).clamp(0.0, 1.0) * ((k - j) as f64 / 8.0).clamp(0.0, 1.0);
+                        c[j] += vibrato_cents * fade * (2.0 * std::f64::consts::PI * 5.5 * t * 0.01).sin();
+                    }
+                }
+                if k == s {
+                    k += 1;
+                }
+            }
+        }
+        for (k, v) in c.iter().enumerate() {
+            out[start + k] = 440.0 * 2f64.powf(v / 1200.0);
+        }
+    }
+    out
 }
 
 impl SeedVc {
@@ -282,9 +337,10 @@ impl SeedVc {
         let f0_ori = self.rmvpe.f0(gpu, &ref16, 0.03)?;
         let f0_alt = self.rmvpe.f0(gpu, &src16, 0.03)?;
         // shifted_f0_alt = exp(log(F0_alt + 1e-5)) (no auto adjust, no semitone shift)
+        let f0_alt = if o.vibrato_cents > 0.0 || o.glide_ms > 0.0 { humanize_f0(&f0_alt, o.vibrato_cents as f64, o.glide_ms as f64) } else { f0_alt };
         let f0_alt: Vec<f64> = f0_alt.iter().map(|f| (f + 1e-5).ln().exp()).collect();
-        let cond = self.dit.regulate(gpu, &s_alt, n_alt, &f0_alt, frames)?;
-        let prompt = self.dit.regulate(gpu, &s_ori, n_ori, &f0_ori, frames2)?;
+        let cond = self.dit.regulate(gpu, &s_alt, n_alt, &f0_alt, frames, o.soft_f0)?;
+        let prompt = self.dit.regulate(gpu, &s_ori, n_ori, &f0_ori, frames2, o.soft_f0)?;
         let max_window = (RATE as usize / HOP) * 30;
         if frames2 >= max_window {
             anyhow::bail!("reference too long");

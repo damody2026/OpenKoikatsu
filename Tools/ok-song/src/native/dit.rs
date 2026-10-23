@@ -146,7 +146,9 @@ impl Dit {
     }
 
     /// InterpolateRegulator: content [n][768] + F0 (Hz, per 10 ms frame) -> condition [frames][768] (row major).
-    pub fn regulate(&self, gpu: &Gpu, content: &[f32], n: usize, f0: &[f64], frames: usize) -> Result<Buf> {
+    /// `soft_f0`: instead of the nearest of the 256 pitch bins (about 20 cents apart, so slides and vibrato become
+    /// stairs), blend the embeddings of the two bins around the exact pitch, with the pitch interpolated in time too.
+    pub fn regulate(&self, gpu: &Gpu, content: &[f32], n: usize, f0: &[f64], frames: usize, soft_f0: bool) -> Result<Buf> {
         let c = gpu.upload(content)?;
         let x = self.linear(gpu, &self.lr_in, c.ptr, n)?;
         let xh: Vec<f32> = gpu.read(x.ptr, n * D)?;
@@ -154,12 +156,39 @@ impl Dit {
         let mut cols = vec![0f32; D * frames];
         let (scale_c, scale_f) = (n as f32 / frames as f32, f0.len() as f32 / frames as f32);
         let coarse = f0_to_coarse(f0);
+        let exact = f0_bin_position(f0);
         for t in 0..frames {
             let sc = ((t as f32 * scale_c).floor() as usize).min(n - 1);
             let sf = ((t as f32 * scale_f).floor() as usize).min(f0.len() - 1);
             let e = &self.lr_f0[coarse[sf] * D..(coarse[sf] + 1) * D];
-            for k in 0..D {
-                cols[k * frames + t] = xh[sc * D + k] + e[k];
+            // soft: the exact (fractional) bin, linearly between the two neighbouring F0 frames when both are voiced
+            let pos = if soft_f0 && exact[sf].is_some() {
+                let x = t as f64 * f0.len() as f64 / frames as f64;
+                let (a, w) = ((x.floor() as usize).min(f0.len() - 1), x.fract());
+                match (exact[a], exact.get(a + 1).copied().flatten()) {
+                    (Some(p), Some(q)) => Some(p * (1.0 - w) + q * w),
+                    (Some(p), None) => Some(p),
+                    _ => exact[sf],
+                }
+            } else {
+                None
+            };
+            match pos {
+                Some(p) => {
+                    let p = p.clamp(1.0, (F0_BINS - 1) as f64);
+                    let lo = p.floor() as usize;
+                    let hi = (lo + 1).min(F0_BINS - 1);
+                    let w = (p - lo as f64) as f32;
+                    let (el, eh) = (&self.lr_f0[lo * D..(lo + 1) * D], &self.lr_f0[hi * D..(hi + 1) * D]);
+                    for k in 0..D {
+                        cols[k * frames + t] = xh[sc * D + k] + el[k] * (1.0 - w) + eh[k] * w;
+                    }
+                }
+                None => {
+                    for k in 0..D {
+                        cols[k * frames + t] = xh[sc * D + k] + e[k];
+                    }
+                }
             }
         }
         let mut h = gpu.upload(&cols)?;
@@ -335,6 +364,15 @@ impl Dit {
         }
         gpu.read(x.ptr, n)
     }
+}
+
+/// The un-rounded bin position of each voiced frame (what f0_to_coarse rounds), None for unvoiced ones.
+pub fn f0_bin_position(f0: &[f64]) -> Vec<Option<f64>> {
+    let mel_min = 1127.0 * (1.0f64 + 50.0 / 700.0).ln();
+    let mel_max = 1127.0 * (1.0f64 + 1100.0 / 700.0).ln();
+    let a = (F0_BINS as f64 - 2.0) / (mel_max - mel_min);
+    let b = mel_min * a - 1.0;
+    f0.iter().map(|f| if *f > 1.0 { Some(1127.0 * (1.0 + f / 700.0).ln() * a - b) } else { None }).collect()
 }
 
 /// length_regulator.f0_to_coarse (256 bins), in f64 like the numpy / float64 path upstream.
