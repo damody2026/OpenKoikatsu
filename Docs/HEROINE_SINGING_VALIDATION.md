@@ -208,3 +208,4 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 模型載入後 2.1 GB，推論峰值 2.7 GB（PyTorch allocated），reserved 約 3.9 GB。
   - RTX 5090 上 30 秒歌曲：30 步 13.7 秒、50 步 18.4 秒，不含載入 18 秒。
 - **試聽**：`Saved/StreetSocial/Songs/ab-ying/`（`ying-s30-song.ogg`、`ying-s50-song.ogg`、`current-seedvc-song.ogg`）。
+- **使用者試聽（2026-10-24）**：覺得效果太差，不移植。換聲維持 Seed-VC 加第 9 版的去修音設定。聲紋相似度高不代表聽感好，選模型要以試聽為準。
