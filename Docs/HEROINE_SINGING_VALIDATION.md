@@ -177,4 +177,34 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 參考音嵌入不會讓歌聲變成她的音色。聲紋相似度（ok-tts speaker-sim）九首都是 0.67，與零嵌入相同。
   - 修音感明顯下降，歌詞 ASR 轉寫完整。
   - 這些人聲再用現行換聲預設（scoop 80／drift 30／jitter 15）處理後，snap 0.23～0.29、flat 0.13。原本的 lover_night 是 0.28／0.17。TTS 參考音是 0.23／0.05。
+- **使用者試聽**：覺得效果更差，不採用；遊戲流程維持零嵌入。
 - **未做**：要進遊戲流程，需要每個聲線的 MuQ-MuLan 嵌入。目前只能用 Python 計算，成品須改成 Rust（移植 MuQ-MuLan），或預先算好嵌入檔隨聲線存放。試聽檔在 `Saved/StreetSocial/Songs/ab-muq/`。
+
+## 10. YingMusic-SVC 試跑（2026-10-23）
+
+- **目的**：使用者要求遊戲在 16 GB 顯卡上跑得動，找比 Seed-VC 更好的指定音色換聲。
+- **模型**：[YingMusic-SVC](https://github.com/GiantAILab/YingMusic-SVC)，程式 MIT，權重 0.73 GB。
+  - 以 Seed-VC 為基礎，DiT 設定相同（768 維、17 層、44.1 kHz BigVGAN、whisper-small、256 格 F0）。
+  - 推論多了 F0 感知的音色殘差（`use_style_residual`）與自動移調。
+  - 論文中的 RVC 音色轉換器只在訓練時使用。
+- **條件**：
+  - Python 試跑（`E:/OkSong/envs/ymsvc`，torch cu128）。
+  - lover_night 的分離人聲加她的 TTS 參考音，fp16，CFG 0.7。
+  - 關閉自動移調（`semi_tone_shift=0`），否則會和原伴奏不同調。
+- **結果**：
+
+  | 版本 | 聲紋相似度（對她的參考音） | snap | flat | 8 kHz 以上 |
+  |---|---:|---:|---:|---:|
+  | 分離出的原人聲 | 0.671 | 0.62 | 0.30 | 0.649 |
+  | 現行 Seed-VC（Rust，去修音預設） | 0.684 | 0.28 | 0.17 | 0.128 |
+  | YingMusic-SVC 30 步 | **0.885** | 0.44 | 0.19 | 0.258 |
+  | YingMusic-SVC 50 步 | **0.887** | 0.44 | 0.17 | 0.300 |
+
+  - **音色**：聲紋相似度大幅提高。現行 Seed-VC 的換聲在這個量測上幾乎沒有往她靠。
+  - **高頻**：高頻約為現行的兩倍。
+  - **修音感**：YingMusic 沒有套用我們的去修音，所以 snap 比現行高。
+  - **歌詞**：50 步的 ASR 轉寫完整；30 步有一句錯成「人生我們兩顆」。
+- **資源**：
+  - 模型載入後 2.1 GB，推論峰值 2.7 GB（PyTorch allocated），reserved 約 3.9 GB。
+  - RTX 5090 上 30 秒歌曲：30 步 13.7 秒、50 步 18.4 秒，不含載入 18 秒。
+- **試聽**：`Saved/StreetSocial/Songs/ab-ying/`（`ying-s30-song.ogg`、`ying-s50-song.ogg`、`current-seedvc-song.ogg`）。

@@ -509,7 +509,10 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  UE_LOG(LogTemp,Display,TEXT("Street order placed: %d lines, served in %.0f s"),S.Cart.Num(),ServeIn);
  UE_LOG(LogTemp,Display,TEXT("Street checkout: total=%d player=%lld her=%lld advanced=%lld option=%s"),Total,PlayerPays,HerPays,Advanced,*Option);
  // What she just paid all by herself, here (RecordPayAgreed: "my treat" right after hands it back to her).
- if(HerPays>0&&PlayerPays==0){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
+ // Not a bill she paid as she had promised or agreed to (her treat this time): "my treat" after it is for what comes
+ // next, and paying her back went against her own promise ("keep the money, I said it was mine").
+ bool TreatKept=false;Answer->TryGetBoolField(TEXT("treat_kept"),TreatKept);
+ if(HerPays>0&&PlayerPays==0&&!TreatKept&&PayAgreed(Her)!=TEXT("her")){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
  {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
  if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();
