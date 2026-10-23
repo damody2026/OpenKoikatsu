@@ -2681,10 +2681,17 @@ return Base.rgb * sh;
 					Direction->SamplerType = SAMPLERTYPE_LinearColor;
 					Direction->ConstCoordinate = 1;
 					Input(TEXT("LmDirection"), Direction, 5);
-					Input(TEXT("LmNormal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
+					static const FString DirMode = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LM_DIRMODE"));
+					if (DirMode == TEXT("vertex")) Input(TEXT("LmNormal"), NewObject<UMaterialExpressionVertexNormalWS>(Mat));
+					else Input(TEXT("LmNormal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
 					// Installed Standard PS 112 (DIRLIGHTMAP_COMBINED): hemisphere
 					// dot product and the baked directionality rebalancing divisor.
-					Code += TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, LmNormal.y));\nfloat lmDirection = (dot(lmN, LmDirection.rgb - 0.5) + 0.5) / max(LmDirection.a, 1e-4);\n");
+					// OK_LM_DIRMODE (diagnostic): flipx / flipz mirror that Unity axis of the normal, vertex uses the
+					// vertex normal, none drops the direction factor.
+					Code += DirMode == TEXT("flipx") ? TEXT("float3 lmN = normalize(float3(LmNormal.x, LmNormal.z, LmNormal.y));\n")
+						: DirMode == TEXT("flipz") ? TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, -LmNormal.y));\n")
+						: TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, LmNormal.y));\n");
+					Code += DirMode == TEXT("none") ? TEXT("float lmDirection = 1.0;\n") : TEXT("float lmDirection = (dot(lmN, LmDirection.rgb - 0.5) + 0.5) / max(LmDirection.a, 1e-4);\n");
 					DirectionFactor = TEXT(" * lmDirection");
 				}
 				// Installed Standard uses linear light, an sRGB colour lightmap sampler,
@@ -2692,7 +2699,9 @@ return Base.rgb * sh;
 				if (bStandardLinear)
 					Code += TEXT("float3 lmRgb = lerp(Lm.rgb / 12.92, pow((Lm.rgb + 0.055) / 1.055, 2.4), step(0.04045, Lm.rgb));\ntotal += pow(5.0 * Lm.a, 2.2) * lmRgb * a * ");
 				else Code += TEXT("total += 5.0 * Lm.a * Lm.rgb * a * ");
-				Code += FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) + DirectionFactor + TEXT(";\n");
+				// OK_LM_OMR=0 (diagnostic): the lightmap light without oneMinusReflectivity.
+				static const bool bLmOmr = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LM_OMR")) != TEXT("0");
+				Code += (bLmOmr ? FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) : FString(TEXT("1.0"))) + DirectionFactor + TEXT(";\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dir")) Code += TEXT("return LmDirection.rgb;\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dirw")) Code += TEXT("return LmDirection.aaa;\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("normal")) Code += TEXT("return float3(lmN * 0.5 + 0.5);\n");
@@ -5414,6 +5423,16 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							ShadowParams.StandardSmoothness = Source.MaterialValue(i, "_GlossMapScale", Scale) ? Scale.R : 1.f;
 							ShadowParams.bStandardSmoothnessFromMap = !bAlbedoAlpha;
 						}
+				}
+				if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+				{
+					OkTextureSettings MetalSettings{};
+					const bool bMetalSettings = Source.TextureSettings(i, "_MetallicGlossMap", MetalSettings);
+					FLinearColor RawMetallic(0.f, 0.f, 0.f, 0.f);
+					Source.MaterialValue(i, "_Metallic", RawMetallic);
+					UE_LOG(LogTemp, Display, TEXT("OK map standard part=%d mesh=%s metallic_raw=%g metallic_linear=%g metal_map=%d metal_map_srgb=%d diffuse=%g smoothness=%g"),
+						i, UTF8_TO_TCHAR(View.name), RawMetallic.R, ShadowParams.StandardMetallic, ShadowParams.LightmapMetallicTex != nullptr,
+						bMetalSettings ? MetalSettings.srgb : -1, ShadowParams.LightmapDiffuse, ShadowParams.StandardSmoothness);
 				}
 				// Standard indirect specular is enabled after removing the generic albedo
 				// emission floor. Set OK_STANDARD_REFLECTION=0 to isolate baked diffuse.

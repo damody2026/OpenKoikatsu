@@ -607,6 +607,7 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - `verify_ok_studio.lua`：log 有 `Ensure condition failed` 也判為失敗。
 - `ok.Studio.PipelinePose` 預設改為 1（每個角色求解完就先刷新顯示）：2026-10-24 重新 A/B，5065（9 角色）兩次都是幀時間 −1.1～1.4 ms（67 → 74、68 → 73 fps），遊戲執行緒相同；6964 沒有差別。之前 A/B 無差別是因為當時顯示刷新還被元件 Tick 等成本蓋過。
 - 用縮圖比亮度的注意事項：場景卡縮圖比原作實際載入後的畫面亮（0010 縮圖平均約 182，原作實際渲染 141.6），用縮圖比會把地圖場景的偏暗高估成 −13～−25%；之前用原作探針量到的差距是約 9–10%。
+- 0633 地圖偏暗（2026-10-24 再查，未解）：用原作探針 `Stages0633_20261023`／`White0633_20261023` 和 OK 同條件截圖（`OK_STUDIO_PERF_SHOT=1`）比 8×4 格。後處理前 OK 是原作的 0.90（三通道一致），差在中間兩列的隔間牆，地板接近；後處理（主要是調色）OK 再多暗約 4–7%（輸入較暗時 LUT 壓得更多）。白反照率、無環境反射（原作 `white-baked`、OK `OK_LIGHTMAP_DIAG=whitenoenv`）牆面線性值 OK 約為原作 0.83。排除：牆面材質沒有 `_MetallicGlossMap`、metallic 0.35（gamma）→ 線性 0.100、係數 0.8635 與原作一致（新增 `OK_STUDIO_LIGHTING_AUDIT=1` 的 `OK map standard` 列）；方向因子（`OK_LM_DIRMODE=none` 與預設幾乎相同，牆面方向因子約 1；flipx／flipz／vertex 都不符）；拿掉 oneMinusReflectivity（`OK_LM_OMR=0`）牆面仍暗、牆邊反而超過原作，不是單一倍率。原作光照貼圖換全黑後牆面近黑，所以牆面確實只由光照貼圖照亮。下一步：逐像素取同一面牆的光照貼圖 texel（`--lightmaps` 的 GPU 值）與 OK 實際取樣值對照，確認 UV／取樣位置。
 - `run_ok_studio_perf.lua --exec "<控制台指令>,..."`：量測前先下指令（例如比較 cvar 的兩種值）。
 - 引擎補丁 `MorphDoubleBufferRead.patch`：連跑 8 個場景時曾在載入第一個場景時斷言當機（`FMorphVertexBufferPool::GetReadingIndex`），見 ERROR_LOG。
 - 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，6964 與 9 角色的 5065 A/B 都無差別）；臉部元件共用 leader 後重新發佈 morph（原因是上述引擎行為，已改用覆寫）。
