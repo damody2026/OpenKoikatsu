@@ -106,6 +106,8 @@ public:
 	TMap<FString, float> Curves(int32 Role, float T) const;
 	/** The face curves of a role (face.eye_pattern / eye_open / brow_pattern / mouth_pattern / mouth_open) onto its character. */
 	void ApplyFaceCurves(int32 Role, float T, AKKPreviewActor& Actor) const;
+	/** The same with curve values read before (Curves may run on a worker; this applies them on the game thread). */
+	static void ApplyFaceCurveValues(const TMap<FString, float>& Curves, AKKPreviewActor& Actor);
 	/** The character's current face as constant curve values (recorded into converted animations). */
 	static TMap<FString, float> FaceCurvesOf(const AKKPreviewActor& Actor);
 	/** Same on bare sessions (no display), e.g. for validation. */

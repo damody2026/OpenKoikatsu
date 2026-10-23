@@ -10856,6 +10856,7 @@ pub(crate) fn extract_session_from_info(
         eye_look_runtime:None,
             head_look:crate::head_look::HeadLook::default(),
             physx_secondary:false,
+            scene_gpu_parts:Vec::new(),
             physics:Default::default(),
             body_interaction:None,
         game_root: game_root.to_path_buf(),

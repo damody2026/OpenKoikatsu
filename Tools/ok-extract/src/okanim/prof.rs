@@ -2,10 +2,11 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-pub const PHASES: [&str; 18] = ["pose", "placement", "walk", "posture", "ik", "feet", "finish", "finish.body_dyn", "finish.clothes", "finish.export", "finish.accessories", "apply_total",
-    "finish.shape", "finish.hands_fk", "finish.expression", "finish.abm", "finish.studio_ik", "finish.interaction"];
-static TOTAL: [AtomicU64; 18] = [const { AtomicU64::new(0) }; 18];
-static COUNT: [AtomicU64; 18] = [const { AtomicU64::new(0) }; 18];
+pub const PHASES: [&str; 22] = ["pose", "placement", "walk", "posture", "ik", "feet", "finish", "finish.body_dyn", "finish.clothes", "finish.export", "finish.accessories", "apply_total",
+    "finish.shape", "finish.hands_fk", "finish.expression", "finish.abm", "finish.studio_ik", "finish.interaction",
+    "acc.prepare", "acc.parts", "acc.cpu_skinned_parts", "acc.palette_only"];
+static TOTAL: [AtomicU64; 22] = [const { AtomicU64::new(0) }; 22];
+static COUNT: [AtomicU64; 22] = [const { AtomicU64::new(0) }; 22];
 
 pub fn add(phase: usize, since: std::time::Instant) {
     if phase < PHASES.len() {

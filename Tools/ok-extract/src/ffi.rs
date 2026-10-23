@@ -514,6 +514,14 @@ pub unsafe extern "C" fn ok_skin_display_except_private(s:*mut OkSession,indices
         (&mut *s).skin_display_except(&excluded);true
     }));if matches!(result,Ok(true)){0}else{1}
 }
+/// The parts an owner draws on the GPU from their skin palettes from now on (validated like the display exclusions;
+/// an invalid or stale list clears it): playback solves their hair/cloth but no longer skins their vertices on the CPU.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_scene_gpu_parts(s:*mut OkSession,indices:*const i32,revisions:*const u64,count:i32)->i32 {
+    if s.is_null(){return 1;}
+    let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||private_render_exclusions(&*s,indices,revisions,count)));
+    match result{Ok(Some(parts))=>{(&mut *s).scene_gpu_parts=parts;0},_=>{(&mut *s).scene_gpu_parts.clear();1}}
+}
 unsafe fn private_render_exclusions(s:&OkSession,indices:*const i32,revisions:*const u64,count:i32)->Option<Vec<usize>>{
     if count<0||count>65535||(count>0&&(indices.is_null()||revisions.is_null())){return None;}
     let mut excluded=Vec::with_capacity(count as usize);

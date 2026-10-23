@@ -316,14 +316,19 @@ TMap<FString, float> FOkAnimPlayer::Curves(int32 Role, float T) const
 
 void FOkAnimPlayer::ApplyFaceCurves(int32 Role, float T, AKKPreviewActor& Actor) const
 {
-	const TMap<FString, float> C = Curves(Role, T);
+	ApplyFaceCurveValues(Curves(Role, T), Actor);
+}
+
+void FOkAnimPlayer::ApplyFaceCurveValues(const TMap<FString, float>& C, AKKPreviewActor& Actor)
+{
 	if (C.IsEmpty()) return;
 	if (const float* V = C.Find(TEXT("face.mouth_pattern")))
 	{
 		const int32 Pattern = FMath::RoundToInt(*V);
 		if (Pattern != Actor.MouthPattern) Actor.SetMouthPattern(Pattern, true);
 	}
-	if (const float* V = C.Find(TEXT("face.mouth_open"))) Actor.SetMouthOpen(*V);
+	// An unchanged opening does not rebuild the mouth morphs.
+	if (const float* V = C.Find(TEXT("face.mouth_open"))) if (!FMath::IsNearlyEqual(FMath::Clamp(*V, 0.f, 1.f), Actor.MouthOpen01, 1.e-4f)) Actor.SetMouthOpen(*V);
 	const float* EyePattern = C.Find(TEXT("face.eye_pattern"));
 	const float* EyeOpen = C.Find(TEXT("face.eye_open"));
 	if (EyePattern || EyeOpen)

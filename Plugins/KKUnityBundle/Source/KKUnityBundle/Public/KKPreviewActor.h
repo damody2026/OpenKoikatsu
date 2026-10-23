@@ -627,6 +627,7 @@ public:
 	bool SolveScenePose(float DeltaSeconds,bool bAdvanceAnimation);
 	void FinishScenePose();
 	bool bPendingSceneDisplay=false,bPendingSceneFaceCurves=false,bPendingSceneFailed=false;
+	TMap<FString,float> PendingSceneFaceCurves;
 	/** SolveScenePose's time so far (diagnostics: OKStudio.PerfKStudio). */
 	double SceneSolveTotalMs=0.;int32 SceneSolveSamples=0;
 	/** Which of the alternate frames this actor captures its toon shadow on (ok.ShadowCaptureStagger). */

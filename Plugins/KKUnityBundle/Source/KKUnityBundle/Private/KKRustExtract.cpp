@@ -691,6 +691,9 @@ uint64 FOkSession::PrivateSkinSourceRevision(int32 Index) const {
 bool FOkSession::SkinDisplayExceptPrivate(TConstArrayView<int32> Parts,TConstArrayView<uint64> Revisions){
  return Handle&&Parts.Num()==Revisions.Num()&&ok_skin_display_except_private(Handle,Parts.GetData(),Revisions.GetData(),Parts.Num())==0;
 }
+bool FOkSession::SetSceneGpuParts(TConstArrayView<int32> Parts,TConstArrayView<uint64> Revisions){
+ return Handle&&Parts.Num()==Revisions.Num()&&ok_session_set_scene_gpu_parts(Handle,Parts.GetData(),Revisions.GetData(),Parts.Num())==0;
+}
 bool FOkSession::QueryPrivateSkinGeometry(int32 Part){return Handle&&Part>=0&&ok_query_private_skin_geometry(Handle,Part)==0;}
 bool FOkSession::QueryPrivateSkinGeometryBatch(TConstArrayView<int32> Parts){return Handle&&ok_query_private_skin_geometry_batch(Handle,Parts.GetData(),Parts.Num())==0;}
 

@@ -1081,6 +1081,9 @@ pub struct OkSession {
     /// On for the gallery physics menu, one-to-one interaction and paired playback; crowd and street NPCs stay off
     /// and keep the built-in DynamicBone solver.
     pub(crate) physx_secondary:bool,
+    /// Parts an owner draws on the GPU from their skin palettes (OK Studio): the frame's hair/cloth pass still solves
+    /// them but does not skin their vertices on the CPU (`ok_session_set_scene_gpu_parts`, sorted).
+    pub(crate) scene_gpu_parts:Vec<usize>,
     /// The card's per-component solvers (`okPh`); read from the card at open, not cached.
     pub(crate) physics:crate::okphysics::CardPhysics,
     pub(crate) body_interaction:Option<crate::hit_reaction::Interaction>,
@@ -1541,6 +1544,7 @@ impl OkSession {
         self.update_dynamic_accessories_filtered(dt,palette_only,parallel,observer,&[]);
     }
     fn update_dynamic_accessories_filtered(&mut self,dt:f32,palette_only:bool,parallel:bool,observer:Option<crate::ffi::PrivateSkinObserver>,excluded:&[usize]) {
+        let t_prepare=std::time::Instant::now();
         let policy=AccessoryFramePolicy::read();
         let studio = !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
         let flags = self.collider_settings.resolve(studio, self.collider_overrides);
@@ -1582,6 +1586,9 @@ impl OkSession {
             }
         }
         let physics=&self.physics;
+        crate::okanim::prof::add(18,t_prepare);
+        let t_parts=std::time::Instant::now();
+        let skinned=std::sync::atomic::AtomicU64::new(0);
         let update=|(index,part):(usize,&mut SessionPart)| {
             let Some(runtime) = &mut part.runtime_accessory else { return; };
             let _group = crate::px::enter_group(group, physx);
@@ -1596,6 +1603,7 @@ impl OkSession {
             let frame=if runtime.coordinated {&clothes_frame}else{&body_frame};
             let assigned=if runtime.coordinated{assigned_clothes.as_ref()}else{assigned_body.as_ref()};
             if let Some((positions, normals,tangents)) = runtime.update_render_impl(source,head,colliders,flags,dt,!palette_only&&excluded.binary_search(&index).is_err(),frame.as_ref(),policy,assigned) {
+                skinned.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
                 part.positions = positions;
                 part.normals = normals;
                 part.rest_tangents=tangents;
@@ -1606,6 +1614,9 @@ impl OkSession {
             use rayon::prelude::*;
             native_parallel_work(||self.parts.par_iter_mut().enumerate().for_each(update));
         } else {self.parts.iter_mut().enumerate().for_each(update);}
+        crate::okanim::prof::add(19,t_parts);
+        crate::okanim::prof::add_us(20,skinned.load(std::sync::atomic::Ordering::Relaxed));
+        crate::okanim::prof::add_us(21,palette_only as u64);
     }
 
     fn render_solved_accessories(&mut self) {self.render_solved_accessories_observed(None);}
@@ -2002,7 +2013,10 @@ impl OkSession {
         Some(crate::pose::quat_to_unity_euler(sk.tfs.get(&id)?.rot))
     }
     pub(crate) fn finish_paired_dynamics(&mut self,delta_seconds:f32){
-        self.finish_paired_dynamics_observed(delta_seconds,None);
+        // Parts the owner draws on the GPU (scene_gpu_parts) are solved but not skinned on the CPU.
+        let gpu=std::mem::take(&mut self.scene_gpu_parts);
+        self.finish_paired_dynamics_filtered(delta_seconds,None,&gpu);
+        self.scene_gpu_parts=gpu;
     }
 
     pub(crate) fn finish_paired_dynamics_observed(&mut self,delta_seconds:f32,observer:Option<crate::ffi::PrivateSkinObserver>){
@@ -3106,6 +3120,7 @@ impl SessionBlob {
             eye_look_runtime:None,
             head_look:crate::head_look::HeadLook::default(),
             physx_secondary:false,
+            scene_gpu_parts:Vec::new(),
             physics:Default::default(),
             body_interaction:None,
             game_root: self.game_root,
