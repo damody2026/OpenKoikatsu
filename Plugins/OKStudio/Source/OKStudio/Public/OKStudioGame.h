@@ -194,6 +194,8 @@ private:
 	TArray<TWeakObjectPtr<AActor>> PausedWorldActors;
 	TArray<TWeakObjectPtr<USceneComponent>> HiddenWorldComponents;
 	TArray<TWeakObjectPtr<class APostProcessVolume>> DisabledWorldVolumes;
+	/** r.AllowOcclusionQueries before the studio turned it off (restored on Stop; INDEX_NONE: not changed). */
+	int32 SavedOcclusionQueries = INDEX_NONE;
 	void UpdateViewer();
 	void SyncNow();
 	/** Whether a shown preview still draws stand-in materials or runtime shaders are compiling (pictures would miss it). */
