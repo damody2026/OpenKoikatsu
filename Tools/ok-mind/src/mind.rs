@@ -236,7 +236,8 @@ impl Mind {
     pub fn save(&self) -> Result<(), String> {
         self.shared.memories.save_all()?;
         let state = self.shared.state.lock().unwrap().clone();
-        store::save_state(&self.shared.cfg.save_dir, &state)
+        store::save_state(&self.shared.cfg.save_dir, &state)?;
+        store::flush()
     }
 
     /// Never blocks the game for long: idle workers stop at once; a worker stuck in an HTTP call is left to

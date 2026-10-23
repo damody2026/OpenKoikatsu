@@ -852,7 +852,8 @@ pub fn session_cache_location() -> Option<PathBuf> {
 /// texture and colour mask follow the (u, 1-v) rows. 26: not main_item_studio_add (its rows were already right).
 /// 27: coincident opaque/masked layers (Material Editor copies, duplicated accessories) step outward in draw order.
 /// 28: including an accessory's private-rig source mesh, which every pose is skinned from.
-const SESSION_CACHE_REVISION: u32 = 28;
+/// 29: the geometry stays put again; parts carry their draw layer and the engine orders them (OpaqueSortPriority).
+const SESSION_CACHE_REVISION: u32 = 29;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {

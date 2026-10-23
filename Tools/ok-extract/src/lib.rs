@@ -8142,65 +8142,53 @@ pub fn extract_card_outfit(
     Ok(out_dir.join("manifest.json"))
 }
 
-/// Normal offset per stacked layer, in metres (0.05 mm): resolves in a reverse-Z depth buffer beyond 100 m and is far
-/// below anything visible.
-const COINCIDENT_LAYER_OFFSET: f32 = 5e-5;
-
 /// Opaque and alpha-tested parts that draw the very same surface (a Material Editor copy on the renderer, a second
 /// accessory slot with the same item, a hair renderer's extra material). Unity draws them in order with ZTest LEqual,
 /// so the later material wins every equal-depth pixel: a decal layer (straps, cuffs) clipped by its alpha sits on the
-/// layer below. Unreal's base pass gives equal depths no stable order, so such layers flicker frame to frame. Each
-/// later layer of a group moves outward along its normals by one more step, in session order (the draw order).
-/// Translucent parts keep their geometry: they are ordered by sort priority on the Unreal side.
-fn separate_coincident_layers(parts: &mut [crate::session::SessionPart]) {
-    let mut layers: std::collections::HashMap<(u32, u32, usize, usize), u32> = std::collections::HashMap::new();
+/// layer below. Each part gets its place in such a group, in session order (the draw order); Unreal draws the group in
+/// that order (`r.OK.OpaqueSortPriority`, engine patch OpaqueSortPriority), so equal depths resolve the same way.
+/// Translucent parts keep layer 0: they are ordered by their own sort priority.
+pub(crate) fn assign_draw_layers(parts: &mut [crate::session::SessionPart]) {
+    let mut layers: std::collections::HashMap<(u32, u32, usize, usize), u16> = std::collections::HashMap::new();
     for part in parts.iter_mut() {
-        if !matches!(part.blend.as_str(), "opaque" | "masked") || part.rest_positions.is_empty()
-            || part.rest_normals.len() != part.rest_positions.len() {
-            continue;
-        }
+        part.draw_layer = 0;
+        if !matches!(part.blend.as_str(), "opaque" | "masked") || part.rest_positions.is_empty() { continue; }
         let mut positions = crc32fast::Hasher::new();
         for v in &part.rest_positions { for x in v { positions.update(&x.to_bits().to_le_bytes()); } }
         let mut indices = crc32fast::Hasher::new();
         for i in &part.indices { indices.update(&i.to_le_bytes()); }
         let key = (positions.finalize(), indices.finalize(), part.rest_positions.len(), part.indices.len());
         let layer = layers.entry(key).or_insert(0);
-        let step = *layer as f32 * COINCIDENT_LAYER_OFFSET;
-        *layer += 1;
-        if step == 0.0 { continue; }
-        part.push_surface(step);
-        eprintln!("ok-extract: coincident layer role={} name={} layer={} offset={step}", part.role, part.name, *layer - 1);
+        part.draw_layer = *layer;
+        *layer = layer.saturating_add(1);
     }
 }
 
 #[cfg(test)]
 #[test]
-fn coincident_layers_step_outward_in_draw_order() {
+fn coincident_layers_take_draw_order() {
     let mesh = |name: &str| ExtractedMesh {
         name: name.into(),
         positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
-        normals: vec![[0., 0., 2.]; 3],
+        normals: vec![[0., 0., 1.]; 3],
         uvs: vec![[0., 0.], [1., 0.], [0., 1.]],
         indices: vec![0, 1, 2],
         mat: Some(crate::unity::MeshMaterial { shader: "Shader Forge/main_item".into(), ..Default::default() }),
         ..Default::default()
     };
-    let mut parts = preview_session_parts(Path::new(""), "accessory", vec![mesh("base"), mesh("copy"), mesh("again")], None).unwrap();
+    let mut other = mesh("other");
+    other.positions[2] = [0., 2., 0.];
+    let mut parts = preview_session_parts(Path::new(""), "accessory", vec![mesh("base"), mesh("copy"), other, mesh("again")], None).unwrap();
     for p in &mut parts { p.blend = "masked".into(); }
     let mut glass = parts[0].clone();
     glass.blend = "translucent".into();
     parts.push(glass);
-    let before: Vec<_> = parts.iter().map(|p| p.rest_positions[0][2]).collect();
-    separate_coincident_layers(&mut parts);
-    let z: Vec<_> = parts.iter().zip(&before).map(|(p, b)| p.rest_positions[0][2] - b).collect();
-    assert_eq!(z[0], 0.0, "the first draw keeps its surface");
-    assert!((z[1] - COINCIDENT_LAYER_OFFSET).abs() < 1e-9 && (z[2] - 2.0 * COINCIDENT_LAYER_OFFSET).abs() < 1e-9, "{z:?}");
-    assert_eq!(z[3], 0.0, "translucent parts are ordered by sort priority instead");
-    assert_eq!(parts[1].rest_positions[1][0], 1.0, "only along the normal");
-    // A second pass finds no coincident group left (the cache stores the separated session).
-    let separated: Vec<_> = parts.iter().map(|p| p.rest_positions.clone()).collect();
-    separate_coincident_layers(&mut parts);
-    assert!(parts.iter().zip(&separated).all(|(p, s)| &p.rest_positions == s));
+    let before: Vec<_> = parts.iter().map(|p| p.rest_positions.clone()).collect();
+    assign_draw_layers(&mut parts);
+    assert_eq!(parts.iter().map(|p| p.draw_layer).collect::<Vec<_>>(), [0, 1, 0, 2, 0]);
+    assert!(parts.iter().zip(&before).all(|(p, b)| &p.rest_positions == b), "geometry stays as the source has it");
+    assign_draw_layers(&mut parts);
+    assert_eq!(parts.iter().map(|p| p.draw_layer).collect::<Vec<_>>(), [0, 1, 0, 2, 0], "recomputing is stable");
 }
 
 pub(crate) fn extract_session(
@@ -10859,7 +10847,7 @@ pub(crate) fn extract_session_from_info(
             part.render_visible = false;
         }
     }
-    separate_coincident_layers(&mut session_parts);
+    assign_draw_layers(&mut session_parts);
     Ok(crate::session::OkSession {
         accessory_context,
         editor_pregnancy:Default::default(),

@@ -347,7 +347,7 @@ void AOKStreetSocialScene::StartControlServer(){
   auto& S=*State;const TSharedRef<FJsonObject> Body=OKControlBody(Req);FString Action=TEXT("status");Body->TryGetStringField(TEXT("action"),Action);
   if(!S.Mind){OKControlReply(Done,OKControlResult(false,TEXT("mind not open")));return;}
   FString Out,Error;TSharedRef<FJsonObject> O=OKControlResult(true);
-  if(Action==TEXT("reload")){const bool Ok=S.Mind->Reload(Out,Error);O=OKControlResult(Ok,Error);O->SetStringField(TEXT("result"),Out);
+  if(Action==TEXT("reload")){WaitFinQuery();const bool Ok=S.Mind->Reload(Out,Error);O=OKControlResult(Ok,Error);O->SetStringField(TEXT("result"),Out);
    UE_LOG(LogTemp,Display,TEXT("StreetSocial mind reload: %s%s"),Ok?*Out:TEXT("failed: "),Ok?TEXT(""):*Error);}
   if(S.Mind->Query(TEXT("{\"kind\":\"status\"}"),Out,Error)){TSharedPtr<FJsonObject> Status;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Out),Status)&&Status.IsValid())O->SetObjectField(TEXT("status"),Status);}
   O->SetStringField(TEXT("dll"),S.Mind->DllPath());

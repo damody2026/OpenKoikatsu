@@ -750,6 +750,7 @@ pub struct OkMeshView {
     pub eye_color:[f32;4],
     pub eye_highlight:f32,
     pub eye_sample_uvs:*const f32,
+    pub draw_layer: i32,
 }
 
 #[repr(C)]
@@ -1329,6 +1330,7 @@ pub(crate) unsafe extern "C" fn part_at(s: *mut OkSession, i: i32, out: *mut OkM
         eye_color:p.eye_draw.as_ref().map_or([1.;4],|d|d.color),
         eye_highlight:p.eye_draw.as_ref().map_or(0.,|d|d.enabled),
         eye_sample_uvs:p.eye_draw.as_ref().map_or(ptr::null(),|d|d.sample_uvs.as_ptr() as *const f32),
+        draw_layer: p.draw_layer as i32,
     };
     0
 }

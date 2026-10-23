@@ -631,6 +631,9 @@ pub struct SessionPart {
     pub name: String,
     /// Source GameObject visibility; inactive targets retain their FBS data.
     pub render_visible: bool,
+    /// Draw order among parts drawing the very same surface (0 first), from `assign_draw_layers`; not stored in
+    /// snapshots: recomputed whenever a session is built or its parts change.
+    pub draw_layer: u16,
     /// Head main_clothes_item keeps draw colours separate from MainTex.
     pub item_draw: Option<ItemDrawMaterial>,
     pub(crate) eye_draw: Option<crate::eye_gaze::EyeDraw>,
@@ -735,28 +738,7 @@ fn studio_alpha_texture(role: &str, mesh: &ExtractedMesh) -> Option<Vec<u8>> {
     crate::unity::scale_png_alpha(png, alpha.max(0.0)).or_else(|| Some(png.clone()))
 }
 
-fn push_along_normals(points: &mut [[f32; 3]], normals: &[[f32; 3]], step: f32) {
-    if normals.len() != points.len() { return; }
-    for (p, n) in points.iter_mut().zip(normals) {
-        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-        if len > 1e-6 { for k in 0..3 { p[k] += n[k] / len * step; } }
-    }
-}
-
 impl SessionPart {
-    /// Moves the surface outward along its normals (metres): the draw geometry and, for an accessory on its private
-    /// rig, the source mesh every pose is skinned from.
-    pub(crate) fn push_surface(&mut self, step: f32) {
-        push_along_normals(&mut self.rest_positions, &self.rest_normals, step);
-        push_along_normals(&mut self.positions, &self.normals, step);
-        if let Some(runtime) = self.runtime_accessory.as_mut() {
-            let mut source = runtime.source.clone();
-            push_along_normals(&mut source.positions, &source.normals, step);
-            let rest_normals = if source.rest_normals.len() == source.rest_positions.len() { source.rest_normals.clone() } else { source.normals.clone() };
-            push_along_normals(&mut source.rest_positions, &rest_normals, step);
-            runtime.replace_source(source);
-        }
-    }
     /// Native face overlays are already customized in source_material. Legacy
     /// body overlay fields retain neutral defaults on old face snapshots.
     /// Resolve at the view boundary so existing portable cards are corrected too.
@@ -789,6 +771,7 @@ impl SessionPart {
         let is_studio_item = hair_shader_name.contains("main_item_studio") && !hair_shader_name.contains("_add");
         Self {
             source_property: None,
+            draw_layer: 0,
             runtime_textures: mesh.runtime_textures.clone(),
             source_material: {
                 let mut material=mesh.mat.clone();
@@ -1202,7 +1185,7 @@ impl OkSession {
         for(part,mapped)in std::mem::take(&mut self.parts).into_iter().zip(retained) {
             if mapped.is_some(){parts.push(part);}
         }
-        parts.extend(added);self.parts=parts;
+        parts.extend(added);crate::assign_draw_layers(&mut parts);self.parts=parts;
         Ok(())
     }
     /// All publication checks without taking ownership, so a C ABI candidate
@@ -3159,7 +3142,7 @@ impl SessionBlob {
             shape_body: self.shape_body,
             shape_face: self.shape_face,
             abm: self.abm,
-            parts: self.parts.into_iter().map(PartBlob::into_part).collect(),
+            parts: { let mut parts: Vec<SessionPart> = self.parts.into_iter().map(PartBlob::into_part).collect(); crate::assign_draw_layers(&mut parts); parts },
             coordinate_count: self.coordinate_count,
             skel_export: None,
             anim_time: self.anim_time,
@@ -3280,6 +3263,7 @@ impl PartBlob {
             .collect();
         SessionPart {
             source_property: None,
+            draw_layer: 0,
             runtime_textures: self.runtime_textures,
             source_material: self.source_material,
             shader_textures: self.shader_textures,

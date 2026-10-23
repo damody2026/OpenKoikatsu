@@ -236,6 +236,8 @@ pub struct Finance {
     pub ret: f64,
     /// The wallet's currency: "TWD" (shop prices) or "CNY". The finance home currency is always CNY.
     pub wallet: String,
+    /// What finance.json holds now: a save that would write the same text is skipped.
+    saved: Mutex<String>,
 }
 
 fn now_of(q: &Value) -> Result<(i32, i32), String> {
@@ -283,6 +285,7 @@ impl Finance {
 
     pub fn open_with(save_dir: &Path, data_dir: &Path, seed: u64, wallet: &str) -> Result<Finance, String> {
         let path = save_dir.join("finance.json");
+        crate::store::settle(&path);
         let book = match std::fs::read_to_string(&path) {
             Ok(text) => {
                 let b: Book = serde_json::from_str(&text).map_err(|e| format!("finance_invalid: {e}"))?;
@@ -293,7 +296,7 @@ impl Finance {
             }
             Err(_) => Book { schema: SCHEMA, seed, ..Default::default() },
         };
-        Ok(Finance { path, data: data_dir.to_path_buf(), book: Mutex::new(book), sports: OnceLock::new(), markets: [OnceLock::new(), OnceLock::new()], fx: [OnceLock::new(), OnceLock::new()], ret: 0.9, wallet: if wallet == "CNY" { "CNY".into() } else { "TWD".into() } })
+        Ok(Finance { path, data: data_dir.to_path_buf(), book: Mutex::new(book), sports: OnceLock::new(), markets: [OnceLock::new(), OnceLock::new()], fx: [OnceLock::new(), OnceLock::new()], ret: 0.9, wallet: if wallet == "CNY" { "CNY".into() } else { "TWD".into() }, saved: Mutex::new(String::new()) })
     }
 
     pub fn sports(&self) -> Result<Arc<Sports>, String> {
@@ -332,7 +335,53 @@ impl Finance {
 
     fn save(&self, b: &Book) -> Result<(), String> {
         let text = serde_json::to_string(b).map_err(|e| e.to_string())?;
-        write_atomic(&self.path, text.as_bytes())
+        let mut saved = self.saved.lock().unwrap();
+        if *saved == text {
+            return Ok(());
+        }
+        write_atomic(&self.path, text.as_bytes())?;
+        *saved = text;
+        Ok(())
+    }
+
+    /// The first game minute (day * 1440 + minute) at which a tick can find something to do: a draw (announced to
+    /// everyone), a 競技彩 ticket or prediction settling at noon, a market where someone has orders, positions,
+    /// alerts, a heroine's trade or a stock prediction (every minute of its session, else its next open), and the
+    /// day roll (finals on the screens, advice and exits due, T+1). The game asks again then, or after any change.
+    fn next_due(&self, b: &Book, day: i32, minute: i32) -> i64 {
+        let at = |d: i32, m: i32| d as i64 * 1440 + m as i64;
+        let now = at(day, minute);
+        let mut due = at(day + 1, 0);
+        for g in [Lotto::Star649, Lotto::TwinStar] {
+            let (_, d) = lottery::next_draw(g, day, minute);
+            due = due.min(at(d, lottery::DRAW_MINUTE));
+        }
+        if let Ok(sp) = self.sports() {
+            let tickets = b.tickets.iter().filter(|t| t.kind == "sports" && t.status == "open").flat_map(|t| t.sels.iter().filter(|s| s.result.is_none() && !s.void).map(|s| (s.target.as_str(), s.market.as_str())));
+            let predictions = b.predictions.iter().filter(|p| p.kind == "sports" && p.status == "open").map(|p| (p.target.as_str(), p.market.as_str()));
+            for (target, market) in tickets.chain(predictions) {
+                match sp.settle_day(target, market) {
+                    Some(sd) => due = due.min(at(sd, 12 * 60)),
+                    None => due = now + 1,
+                }
+            }
+        }
+        for m in [Mkt::Cn, Mkt::Us] {
+            let suffix = format!(":{}", m.key());
+            let of = |k: &str| k == m.key() || k.ends_with(&suffix);
+            let busy = b.accounts.iter().any(|(k, a)| of(k) && (!a.positions.is_empty() || a.orders.iter().any(|o| o.status == "open")))
+                || b.alerts.iter().any(|a| a.market == m.key())
+                || b.npc.iter().any(|n| n.market == m.key())
+                || b.predictions.iter().any(|p| p.kind == "stock" && p.status == "open" && p.market == m.key())
+                || (m == Mkt::Cn && b.advice.iter().any(|a| a.status == "open"));
+            if !busy {
+                continue;
+            }
+            let Ok(mk) = self.market(m) else { continue };
+            let clock = mk.clock(day, minute);
+            due = due.min(if clock.live.is_some() { now + 1 } else { at(clock.next_open.0, clock.next_open.1) });
+        }
+        due.max(now + 1)
     }
 
     pub fn op(&self, q: &Value) -> Result<Value, String> {
@@ -370,6 +419,15 @@ impl Finance {
         let mutating = !matches!(op, "summary" | "sports_board" | "lotto_info" | "quote" | "quotes" | "chart" | "fundamentals" | "search" | "account" | "notebook" | "tickets" | "movers" | "session" | "ledger" | "resolve" | "alerts");
         if mutating || b.next_id != before {
             self.save(&b)?;
+        }
+        // The game asks for the next tick only then (due_in game minutes), or at once after a change (due_now).
+        if let Some(o) = out.as_object_mut() {
+            if op == "tick" {
+                let (day, minute) = now_of(q)?;
+                o.insert("due_in".into(), json!(self.next_due(&b, day, minute) - (day as i64 * 1440 + minute as i64)));
+            } else if mutating {
+                o.insert("due_now".into(), json!(true));
+            }
         }
         Ok(out)
     }

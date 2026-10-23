@@ -19,17 +19,17 @@ bool InstallProgressiveGpu(FEntry& E){
  for(int32 Pass=0;Pass<2;++Pass){
   auto* Mesh=Pass?E.DepthMesh.Get():E.Mesh.Get();if(!Mesh)continue;
   FOKGpuSkinPaletteData Palette;
-  if(!OKBuildGpuMeshPalette(Bank.Manifest.Actors[0],Mesh->GetRefSkeleton(),Mesh->GetRefBasesInvMatrix(),Bank.Data.Pose.Tasks.Num(),Palette,Error)){VisualError=Error;Stopped=true;return false;}
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallPalette);if(!OKBuildGpuMeshPalette(Bank.Manifest.Actors[0],Mesh->GetRefSkeleton(),Mesh->GetRefBasesInvMatrix(),Bank.Data.Pose.Tasks.Num(),Palette,Error)){VisualError=Error;Stopped=true;return false;}}
   Actors.Add(Mesh,Palettes.Num());Palettes.Add(MoveTemp(Palette));References.Add(Mesh,E.Cpu->GetPrimitiveSceneId());
-  auto* G=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(G);G->SetSkinnedAssetAndUpdate(Mesh);
+  auto* G=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(G);{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallSetAsset);G->SetSkinnedAssetAndUpdate(Mesh);}
   auto* Provider=NewObject<UOKIndependentTransformProvider>(G);Provider->SetRuntimeProviderId(R->ProviderId);Provider->SetDiagnosticBounds(E.AnimationBounds);G->SetTransformProvider(Provider);
   G->SetAnimationMinScreenSize(-1);G->SetCollisionEnabled(ECollisionEnabled::NoCollision);G->SetCastShadow(false);G->SetVisibility(false);
   if(Pass){G->SetRenderInMainPass(false);G->SetRenderInDepthPass(false);E.DepthGpu=G;if(DepthPrepassEnabled)DepthIds.Add(G->GetPrimitiveSceneId());}else E.Gpu=G;
-  G->AddInstance(FTransform::Identity,0);G->RegisterComponent();G->SetComponentTickEnabled(false);
+  G->AddInstance(FTransform::Identity,0);{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallRegister);G->RegisterComponent();}G->SetComponentTickEnabled(false);
   // Registration assigns the actual scene primitive identity.
   if(Pass&&DepthPrepassEnabled)DepthIds.Last()=G->GetPrimitiveSceneId();
  }
- AttachFrontHair(E,R->ProviderId);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallFrontHair);AttachFrontHair(E,R->ProviderId);}
  TArray<const FMaterialRenderProxy*> SourceMaterials;
  for(const auto& M:E.Materials)if(M->GetMaterial()->GetName()==TEXT("M_IBLAlpha"))SourceMaterials.Add(M->GetRenderProxy());
  ENQUEUE_RENDER_COMMAND(RegisterPrivateLoadingProvider)([R,Scene,Verified=E.Bank,Global=Render,Actors=MoveTemp(Actors),References=MoveTemp(References),Palettes=MoveTemp(Palettes),DepthIds=MoveTemp(DepthIds),SourceMaterials=MoveTemp(SourceMaterials)](FRHICommandListImmediate&)mutable{
@@ -44,11 +44,13 @@ bool InstallProgressiveGpu(FEntry& E){
 bool ServiceProgressiveGpu(){
  if(Installed||!ProgressiveLoading||LoadingCpuPreview||!RequestedGpu)return false;
  int32 Best=INDEX_NONE;double Distance=TNumericLimits<double>::Max();bool Pending=false;
+ // One install a frame: each registers two instanced skinned components (several at once stalled loading 660 ms).
+ bool InstalledOne=false;
  for(int32 A=1;A<Entries.Num();++A){auto& E=*Entries[A];if(E.Stage!=5||E.LoadingGpuInstalled)continue;
   Pending=true;if(!E.LoadingRender){E.LoadingRender=MakeShared<FRenderState,ESPMode::ThreadSafe>();E.LoadingRender->Budget=Render->Budget;}
   const int32 Status=E.LoadingRender->UploadStatus.Load();
   if(Status<0){VisualError=TEXT("Private NPC GPU admission failed");Stopped=true;return true;}
-  if(Status==2){InstallProgressiveGpu(E);continue;}
+  if(Status==2){if(!InstalledOne){InstalledOne=true;QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallProgressive);InstallProgressiveGpu(E);}continue;}
   if(Status==1)continue;
   const double D=FVector::DistSquared(SpawnPosition(A),PlayerPosition);if(D<Distance){Distance=D;Best=A;}
  }

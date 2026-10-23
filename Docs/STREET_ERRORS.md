@@ -525,3 +525,8 @@
 - galgame 特寫在主角站在她正前方時，鏡頭跑到她背後，或被主角擋住：避牆探測沒有把主角當成障礙，可是主角的深度由 capture 藏不住的 proxy 畫出，前方候選全部被判成擋住；後備順序又先試側面、背面，最後才試「近一點的正面」。現在依序試：正面三個角度、同樣角度拉近（視角放寬，構圖不變）、最後才試側面和背面。視線離其他人頭部或胸口太近的特寫排到最後；探測從主角前方 30cm 開始。
 - 修鏡頭切頭時，把傳給 ok-story 的 viewport 改成整個畫面寬，結果左下立繪被橫向壓成約 77%：對話框與立繪畫在扣掉右側面板的區域，立繪的 render target 卻依整個畫面寬計算。現在 `viewport` 是繪製區域，另外傳 `view_aspect`（相機畫面的長寬比）給鏡頭計算。
 - E 打包 StreetSocial 在 cook 時失敗：引擎 MovieRenderPipeline 外掛（只給 Editor 用）的 UI 藍圖被拉進 cook。DefaultGame.ini 加上 `DirectoriesToNeverCook=/MovieRenderPipeline`。
+
+### 2026-10-23 街區卡頓：同步 fsync 與無事也跑的財務 tick
+
+- 使用者回報背景載入女角時大卡、載完仍一卡一卡。用 `stat dumphitches` 加分段計時找原因：載入的網格建立、GPU bank 上傳、動作安裝擠在同一幀；相遇一輪在一幀內處理全部配對；自由對話紀錄每句寫一次檔；存檔在遊戲執行緒上寫暫存檔、.bak、改名。各自拆成一幀一件或改成背景寫入。
+- 最大來源是財務 `tick`：不論有沒有彩券、掛單或持股，每 2 秒在遊戲執行緒上同步查詢一次，而且每次都寫 finance.json 並 `sync_all`（60–250 ms）。ok-mind 的記憶、profile、context 存檔也在遊戲執行緒上 fsync（MindResult 約 200 ms）。修正：ok-mind `store::write_atomic` 改為背景執行緒寫入，讀檔前只等同一路徑（`settle`），`save`／存檔欄複製前 `flush`；finance 內容沒變就不寫；`tick` 回傳下一個可能有事的遊戲分鐘數（`due_in`），改動帳本的操作回 `due_now`，C++ 只在到期或帳本變動時於背景執行緒查詢。240 秒卡頓從 74 次降到 8 次（剩開場與渲染執行緒）。

@@ -346,8 +346,12 @@ impl Profiles {
     }
     pub fn load(&self, id: &str) -> Result<Option<Profile>, String> {
         let path = self.dir.join(file_name(id));
+        crate::store::settle(&path);
         if !path.exists() {
-            match self.seed.as_ref().map(|d| d.join(file_name(id))).filter(|p| p.exists()) {
+            match self.seed.as_ref().map(|d| d.join(file_name(id))).filter(|p| {
+                crate::store::settle(p);
+                p.exists()
+            }) {
                 Some(shipped) => {
                     std::fs::create_dir_all(&self.dir).map_err(|e| format!("profile_dir: {e}"))?;
                     std::fs::copy(&shipped, &path).map_err(|e| format!("profile_seed_copy: {e}"))?;
