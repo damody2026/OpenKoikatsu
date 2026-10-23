@@ -329,3 +329,5 @@
 | R3-96 | 同一頓飯裡，安可的回覆把 give_money 寫在 action 欄，被當成活動執行失敗，她被告知「你剛才答應的“give_money”沒有成功：沒有這個活動或地點」 | 與 R3-83 同類：OKStreetReplyActOnly 只列了 promise_treat、checkout、intimacy | 已修（C++：give_money、lend 也當成她的動作讀；待重編驗證） |
 | R3-97 | 男主沒在跟人說話、站著不動時，雙手平舉在胸前，像拿著一本看不見的書 | 執行端站立待機預設是 slot 0 的 idle_02（女角的看書待機），只有對話中才換成他自己的 conversation_male（原作 mc_m_stand） | 已修（C++：男主站立時一律用 conversation_male；MotionLib03 驗證：他站著時雙手自然垂下） |
 | R3-98 | 接入 595 個動畫庫後，公園同一個視角：Int1024C 176 FPS，MotionLib03 106～125 FPS（Draw 7.7～9.3 ms，原本 5.6 ms）；把動畫庫從啟動清單拿掉則回到 151 FPS | 執行端每次查詢動作狀態都用 ClipIds.Find 線性比對字串（651 個 id），每幀被街區呼叫很多次 | 已修（C++：FScene::ClipIndex 雜湊查表 FindClip；MotionLib04 同一視角 160 FPS） |
+| R3-99 | 和愛麗絲約 18:00 在餐廳吃晚餐，她到的時候飽食度 96，只點了布丁和果汁 | 她 10:00–15:00 打工，午餐排不進正午，落到備用的 16:15（plan.rs 午餐候選 975）；R3-93 只排除午／晚餐時段內的約會，沒排除約會前不久的那一餐 | 已修（Rust plan.rs：供餐地點的約會前 3 小時內不排她自己的飯，plan_set_promises 同樣移除；測試擴充 a_dinner_date_is_her_dinner；規則已熱載） |
+| R3-100 | 和愛麗絲的晚餐約會，judge 選了 restaurant_room（餐廳包廂）：她一個人坐下吃（facility），他站在 3 公尺外；他說「找個位子坐下一起吃」，judge 判 meal，卻被擋下「點的東西還在做，等上桌再走」 | restaurant_room 在 activities.toml 是 kind = facility（她一人使用、他可走動），不是兩人同桌的 pair；從 facility 換到同店的 pair 被當成離開 | 觀察中（包廂該是兩人同桌，或同店換活動不該當成離開） |

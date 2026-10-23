@@ -23,6 +23,8 @@ pub struct GenerateOptions {
     pub seed: u64,
     /// MuQ-MuLan reference embedding for HeartMuLa's reference slot (experimental; None = zero like upstream).
     pub muq: Option<Vec<f32>>,
+    /// HeartMuLa's backbone matrices as int8 (Mula::load_with), about 2.7 GB less VRAM.
+    pub int8: bool,
 }
 
 /// Demucs htdemucs_ft: (vocals, accompaniment = drums + bass + other) at 44.1 kHz, like the Python prototype.
@@ -74,7 +76,8 @@ pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &Generate
     let max_frames = (max_ms as usize / FRAME_MS).max(1);
     let t = std::time::Instant::now();
     let frames = {
-        let m = Mula::load(&gpu, ckpt, o.cfg_scale != 1.0, max_frames, 1024)?;
+        let m = Mula::load_with(&gpu, ckpt, o.cfg_scale != 1.0, max_frames, 1024, o.int8)?;
+        super::mem_log(&gpu, "heartmula loaded");
         let load = t.elapsed().as_secs_f64();
         let mut p = m.prompt(tags, lyrics)?;
         p.muq = o.muq.clone();
@@ -85,6 +88,7 @@ pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &Generate
         let t2 = std::time::Instant::now();
         let frames = m.generate(&gpu, &p, max_frames, &s, &|| cancel.load(Ordering::SeqCst), |_| {})
             .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
+        super::mem_log(&gpu, "heartmula generated");
         (frames, load, t2.elapsed().as_secs_f64(), p.len())
     };
     gpu.trim_pool()?;
@@ -99,11 +103,13 @@ pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &Generate
     let codec = Codec::load(&gpu, &ckpt.join("HeartCodec-oss"))?;
     let codec_load = t3.elapsed().as_secs_f64();
     let t4 = std::time::Instant::now();
+    super::mem_log(&gpu, "heartcodec loaded");
     let [l, r] = codec.detokenize(&gpu, &frames, &mut SeededNoise(o.seed ^ 0x9e37_79b9_7f4a_7c15), None, |_, _| {})?;
+    super::mem_log(&gpu, "heartcodec decoded");
     let report = json!({
         "revision": GENERATE_REVISION, "frames": frames.len(), "prompt_tokens": prompt_tokens,
         "mula_load_seconds": mula_load, "mula_seconds": mula_seconds, "codec_load_seconds": codec_load, "codec_seconds": t4.elapsed().as_secs_f64(),
-        "seed": o.seed, "muq_reference": o.muq.is_some(), "cfg_scale": o.cfg_scale, "top_k": o.top_k, "temperature": o.temperature,
+        "seed": o.seed, "muq_reference": o.muq.is_some(), "int8": o.int8, "cfg_scale": o.cfg_scale, "top_k": o.top_k, "temperature": o.temperature,
     });
     Ok((Audio { rate: SAMPLE_RATE as u32, channels: vec![l, r] }, report))
 }

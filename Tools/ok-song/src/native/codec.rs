@@ -32,6 +32,7 @@ struct Proj {
     cout: usize,
 }
 
+/// The transformer blocks' matrices as IEEE halves (half the VRAM of f32); `Codec::unpack` widens one for its GEMM.
 struct Block {
     attn_norm: Buf,
     wqkv: Buf,
@@ -103,6 +104,10 @@ fn up(gpu: &Gpu, v: &[f32]) -> Result<Buf> {
     gpu.upload(v)
 }
 
+fn up16(gpu: &Gpu, v: &[f32]) -> Result<Buf> {
+    gpu.upload(&v.iter().map(|f| super::weights::f16_bits(*f)).collect::<Vec<u16>>())
+}
+
 fn lin(gpu: &Gpu, st: &Shards, p: &str, bias: bool) -> Result<Lin> {
     let shape = st.shape(&format!("{p}.weight"))?;
     Ok(Lin { w: up(gpu, &st.f32(&format!("{p}.weight"))?)?, b: if bias { Some(up(gpu, &st.f32(&format!("{p}.bias"))?)?) } else { None },
@@ -146,11 +151,11 @@ fn stage(gpu: &Gpu, st: &Shards, blocks: &str, n: usize, dim: usize, head_dim: u
         let p = format!("flow_matching.estimator.{blocks}.{i}");
         out.push(Block {
             attn_norm: up(gpu, &st.f32(&format!("{p}.attn_norm.weight"))?)?,
-            wqkv: up(gpu, &cat_rows(st, &[format!("{p}.attn.q_proj.weight"), format!("{p}.attn.k_proj.weight"), format!("{p}.attn.v_proj.weight")])?)?,
-            wo: up(gpu, &st.f32(&format!("{p}.attn.o_proj.weight"))?)?,
+            wqkv: up16(gpu, &cat_rows(st, &[format!("{p}.attn.q_proj.weight"), format!("{p}.attn.k_proj.weight"), format!("{p}.attn.v_proj.weight")])?)?,
+            wo: up16(gpu, &st.f32(&format!("{p}.attn.o_proj.weight"))?)?,
             mlp_norm: up(gpu, &st.f32(&format!("{p}.mlp_norm.weight"))?)?,
-            wgu: up(gpu, &cat_rows(st, &[format!("{p}.mlp.gate.weight"), format!("{p}.mlp.up.weight")])?)?,
-            wdown: up(gpu, &st.f32(&format!("{p}.mlp.down.weight"))?)?,
+            wgu: up16(gpu, &cat_rows(st, &[format!("{p}.mlp.gate.weight"), format!("{p}.mlp.up.weight")])?)?,
+            wdown: up16(gpu, &st.f32(&format!("{p}.mlp.down.weight"))?)?,
             table: up(gpu, &st.f32(&format!("{p}.scale_shift_table"))?)?,
         });
     }
@@ -259,6 +264,13 @@ impl Codec {
         })
     }
 
+    /// A block matrix of `n` halves widened to f32 for one GEMM.
+    fn unpack(&self, gpu: &Gpu, w: &Buf, n: usize) -> Result<Buf> {
+        let f = gpu.alloc(n * 4)?;
+        launch_n(gpu, "f16_to_f32", n, &[Arg::P(f.ptr), Arg::P(w.ptr), Arg::L(n as i64)])?;
+        Ok(f)
+    }
+
     /// y[rows, out] = x W^T (+ b).
     fn linear(&self, gpu: &Gpu, l: &Lin, x: u64, rows: usize) -> Result<Buf> {
         let y = gpu.alloc(rows * l.out * 4)?;
@@ -327,7 +339,7 @@ impl Codec {
             launch_n(gpu, "modulate_f32", n, &[Arg::P(normed.ptr), Arg::P(normed.ptr), Arg::P(blk.table.ptr), Arg::P(m.ptr), Arg::I(0),
                 Arg::I(0), Arg::I(0), Arg::I(1), Arg::I(1), Arg::I(d as i32), Arg::I(t as i32), Arg::L(rows as i64)])?;
             let qkv = gpu.alloc(rows * 3 * d * 4)?;
-            gpu.linear_f32(qkv.ptr, normed.ptr, blk.wqkv.ptr, rows, d, 3 * d, 0.0)?;
+            gpu.linear_f32(qkv.ptr, normed.ptr, self.unpack(gpu, &blk.wqkv, 3 * d * d)?.ptr, rows, d, 3 * d, 0.0)?;
             for off in [0, d] {
                 gpu.launch("rope_il_f32", (rows as u32, heads as u32, 1), ((hd / 2) as u32, 1, 1), 0, &[
                     Arg::P(qkv.ptr), Arg::I((3 * d) as i32), Arg::I(off as i32), Arg::I(hd as i32), Arg::P(s.theta.ptr), Arg::I(t as i32)])?;
@@ -346,17 +358,17 @@ impl Codec {
                 }
             }
             drop(qkv);
-            gpu.linear_f32(normed.ptr, attn.ptr, blk.wo.ptr, rows, d, d, 0.0)?;
+            gpu.linear_f32(normed.ptr, attn.ptr, self.unpack(gpu, &blk.wo, d * d)?.ptr, rows, d, d, 0.0)?;
             launch_n(gpu, "gated_add_f32", n, &[Arg::P(x.ptr), Arg::P(normed.ptr), Arg::P(blk.table.ptr), Arg::P(m.ptr), Arg::I(0), Arg::I(2),
                 Arg::I(d as i32), Arg::I(t as i32), Arg::L(rows as i64)])?;
             gpu.launch("rmsnorm_f32", (rows as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(normed.ptr), Arg::P(x.ptr), Arg::P(blk.mlp_norm.ptr), Arg::I(d as i32), Arg::F(1e-6)])?;
             launch_n(gpu, "modulate_f32", n, &[Arg::P(normed.ptr), Arg::P(normed.ptr), Arg::P(blk.table.ptr), Arg::P(m.ptr), Arg::I(0),
                 Arg::I(3), Arg::I(3), Arg::I(4), Arg::I(4), Arg::I(d as i32), Arg::I(t as i32), Arg::L(rows as i64)])?;
             let gu = gpu.alloc(rows * 2 * s.inter * 4)?;
-            gpu.linear_f32(gu.ptr, normed.ptr, blk.wgu.ptr, rows, d, 2 * s.inter, 0.0)?;
+            gpu.linear_f32(gu.ptr, normed.ptr, self.unpack(gpu, &blk.wgu, 2 * s.inter * d)?.ptr, rows, d, 2 * s.inter, 0.0)?;
             launch_n(gpu, "silu_mul_f32", rows * s.inter, &[Arg::P(act.ptr), Arg::P(gu.ptr), Arg::I(s.inter as i32), Arg::I(rows as i32)])?;
             drop(gu);
-            gpu.linear_f32(normed.ptr, act.ptr, blk.wdown.ptr, rows, s.inter, d, 0.0)?;
+            gpu.linear_f32(normed.ptr, act.ptr, self.unpack(gpu, &blk.wdown, d * s.inter)?.ptr, rows, s.inter, d, 0.0)?;
             launch_n(gpu, "gated_add_f32", n, &[Arg::P(x.ptr), Arg::P(normed.ptr), Arg::P(blk.table.ptr), Arg::P(m.ptr), Arg::I(0), Arg::I(5),
                 Arg::I(d as i32), Arg::I(t as i32), Arg::L(rows as i64)])?;
             if let Some(p) = probe.as_mut() {

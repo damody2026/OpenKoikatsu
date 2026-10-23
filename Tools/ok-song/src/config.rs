@@ -52,6 +52,9 @@ pub struct StageConfig {
     pub drift_cents: Option<f64>,
     #[serde(default)]
     pub jitter_cents: Option<f64>,
+    /// HeartMuLa: the backbone's matrices as int8 (about 2.7 GB less VRAM). Default true.
+    #[serde(default)]
+    pub int8: Option<bool>,
 }
 
 impl StageConfig {

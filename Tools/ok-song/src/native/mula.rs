@@ -18,11 +18,55 @@ pub const FRAME_MS: usize = 80;
 
 struct Layer {
     sa_norm: Buf,
-    wqkv: Buf,
-    wo: Buf,
+    wqkv: W,
+    wo: W,
     mlp_norm: Buf,
-    w13: Buf,
-    w2: Buf,
+    w13: W,
+    w2: W,
+}
+
+/// A layer matrix [out, inp]: bf16, or int8 with one f32 scale per output row (symmetric, max |w| / 127), which halves
+/// the backbone's VRAM. Decoding multiplies the int8 rows directly; a prefill widens the matrix to bf16 for cuBLAS.
+enum W {
+    B(Buf),
+    Q { q: Buf, s: Buf },
+}
+
+impl W {
+    fn load(gpu: &Gpu, st: &Shards, names: &[String], int8: bool) -> Result<Self> {
+        if !int8 {
+            return Ok(W::B(if names.len() == 1 { st.bf16_one(gpu, &names[0])? } else { st.bf16(gpu, names)? }));
+        }
+        let (mut q, mut s) = (Vec::new(), Vec::new());
+        for n in names {
+            let inp = st.shape(n)?[1];
+            let w = st.f32(n)?;
+            for row in w.chunks(inp) {
+                let scale = row.iter().fold(0f32, |m, v| m.max(v.abs())) / 127.0;
+                let inv = if scale > 0.0 { 1.0 / scale } else { 0.0 };
+                q.extend(row.iter().map(|v| (v * inv).round().clamp(-127.0, 127.0) as i8));
+                s.push(scale);
+            }
+        }
+        Ok(W::Q { q: gpu.upload(&q)?, s: gpu.upload(&s)? })
+    }
+
+    /// y[rows, out] = x[rows, inp] W^T.
+    fn linear(&self, gpu: &Gpu, y: u64, x: u64, rows: usize, inp: usize, out: usize) -> Result<()> {
+        match self {
+            W::B(w) => gpu.linear_bf16(y, x, w.ptr, rows, inp, out, 0.0),
+            W::Q { q, s } if rows <= 4 => {
+                let blocks = (out * 32).div_ceil(256) as u32;
+                gpu.launch("gemv_i8_bf16", (blocks, 1, 1), (256, 1, 1), 0, &[Arg::P(y), Arg::P(x), Arg::P(q.ptr), Arg::P(s.ptr), Arg::I(rows as i32),
+                    Arg::I(inp as i32), Arg::I(out as i32)])
+            }
+            W::Q { q, s } => {
+                let w = gpu.alloc(out * inp * 2)?;
+                gpu.launch1("i8_to_bf16", out * inp, &[Arg::P(w.ptr), Arg::P(q.ptr), Arg::P(s.ptr), Arg::I(inp as i32), Arg::L((out * inp) as i64)])?;
+                gpu.linear_bf16(y, x, w.ptr, rows, inp, out, 0.0)
+            }
+        }
+    }
 }
 
 /// torchtune Llama-3.2 decoder stack (no embeddings / output head) with a KV cache per batch row.
@@ -64,17 +108,17 @@ fn llama3_theta(dim: usize, base: f32, scale: f32) -> Vec<f32> {
 impl Llama {
     #[allow(clippy::too_many_arguments)]
     fn load(gpu: &Gpu, st: &Shards, prefix: &str, layers: usize, hidden: usize, heads: usize, kv_heads: usize,
-            inter: usize, batch: usize, cache_len: usize) -> Result<Self> {
+            inter: usize, batch: usize, cache_len: usize, int8: bool) -> Result<Self> {
         let mut out = Vec::new();
         for i in 0..layers {
             let p = format!("{prefix}.layers.{i}");
             out.push(Layer {
                 sa_norm: st.bf16_one(gpu, &format!("{p}.sa_norm.scale"))?,
-                wqkv: st.bf16(gpu, &[format!("{p}.attn.q_proj.weight"), format!("{p}.attn.k_proj.weight"), format!("{p}.attn.v_proj.weight")])?,
-                wo: st.bf16_one(gpu, &format!("{p}.attn.output_proj.weight"))?,
+                wqkv: W::load(gpu, st, &[format!("{p}.attn.q_proj.weight"), format!("{p}.attn.k_proj.weight"), format!("{p}.attn.v_proj.weight")], int8)?,
+                wo: W::load(gpu, st, &[format!("{p}.attn.output_proj.weight")], int8)?,
                 mlp_norm: st.bf16_one(gpu, &format!("{p}.mlp_norm.scale"))?,
-                w13: st.bf16(gpu, &[format!("{p}.mlp.w1.weight"), format!("{p}.mlp.w3.weight")])?,
-                w2: st.bf16_one(gpu, &format!("{p}.mlp.w2.weight"))?,
+                w13: W::load(gpu, st, &[format!("{p}.mlp.w1.weight"), format!("{p}.mlp.w3.weight")], int8)?,
+                w2: W::load(gpu, st, &[format!("{p}.mlp.w2.weight")], int8)?,
             });
         }
         let head_dim = hidden / heads;
@@ -112,7 +156,7 @@ impl Llama {
         let cache_stride = (kvh * self.cache_len * hd * 2) as u64;
         for (li, l) in self.layers.iter().enumerate() {
             gpu.launch("rmsnorm_bf16", (rows as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(normed.ptr), Arg::P(resid.ptr), Arg::P(l.sa_norm.ptr), Arg::I(h as i32), Arg::F(eps)])?;
-            gpu.linear_bf16(qkv.ptr, normed.ptr, l.wqkv.ptr, rows, h, qkv_dim, 0.0)?;
+            l.wqkv.linear(gpu, qkv.ptr, normed.ptr, rows, h, qkv_dim)?;
             for bi in 0..b {
                 let q = qkv.ptr + (bi * n * qkv_dim * 2) as u64;
                 let kc = self.kcache[li].ptr + bi as u64 * cache_stride;
@@ -130,12 +174,12 @@ impl Llama {
                     Arg::I(nh as i32), Arg::I(kvh as i32), Arg::I(hd as i32), Arg::I(self.cache_len as i32), Arg::I(pos0 as i32), Arg::I(0),
                     Arg::F(1.0 / (hd as f32).sqrt())])?;
             }
-            gpu.linear_bf16(proj.ptr, attn.ptr, l.wo.ptr, rows, nh * hd, h, 0.0)?;
+            l.wo.linear(gpu, proj.ptr, attn.ptr, rows, nh * hd, h)?;
             gpu.launch1("add_bf16", rows * h, &[Arg::P(resid.ptr), Arg::P(resid.ptr), Arg::P(proj.ptr), Arg::I(elems)])?;
             gpu.launch("rmsnorm_bf16", (rows as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(normed.ptr), Arg::P(resid.ptr), Arg::P(l.mlp_norm.ptr), Arg::I(h as i32), Arg::F(eps)])?;
-            gpu.linear_bf16(gu.ptr, normed.ptr, l.w13.ptr, rows, h, 2 * self.inter, 0.0)?;
+            l.w13.linear(gpu, gu.ptr, normed.ptr, rows, h, 2 * self.inter)?;
             gpu.launch1("silu_mul_bf16", rows * self.inter, &[Arg::P(act.ptr), Arg::P(gu.ptr), Arg::I(self.inter as i32), Arg::I(rows as i32)])?;
-            gpu.linear_bf16(proj.ptr, act.ptr, l.w2.ptr, rows, self.inter, h, 0.0)?;
+            l.w2.linear(gpu, proj.ptr, act.ptr, rows, self.inter, h)?;
             gpu.launch1("add_bf16", rows * h, &[Arg::P(resid.ptr), Arg::P(resid.ptr), Arg::P(proj.ptr), Arg::I(elems)])?;
             if let Some(p) = probe.as_mut() {
                 p(li, resid.ptr)?;
@@ -185,11 +229,16 @@ impl Prompt {
 impl Mula {
     /// `ckpt` is the HeartMuLa `ckpt` folder (`HeartMuLa-oss-3B/`, `tokenizer.json`). `max_frames` sizes the KV cache.
     pub fn load(gpu: &Gpu, ckpt: &Path, cfg: bool, max_frames: usize, max_prompt: usize) -> Result<Self> {
+        Self::load_with(gpu, ckpt, cfg, max_frames, max_prompt, false)
+    }
+
+    /// `int8`: the backbone's layer matrices as int8 (about half its VRAM; the small decoder stays bf16).
+    pub fn load_with(gpu: &Gpu, ckpt: &Path, cfg: bool, max_frames: usize, max_prompt: usize, int8: bool) -> Result<Self> {
         let st = Shards::open(&ckpt.join("HeartMuLa-oss-3B"))?;
         let tokenizer = tokenizers::Tokenizer::from_file(ckpt.join("tokenizer.json")).map_err(|e| anyhow::anyhow!("tokenizer: {e}"))?;
         let batch = if cfg { 2 } else { 1 };
-        let backbone = Llama::load(gpu, &st, "backbone", 28, 3072, 24, 8, 8192, batch, max_prompt + max_frames + 1)?;
-        let decoder = Llama::load(gpu, &st, "decoder", 3, 3072, 8, 4, 8192, batch, CODEBOOKS)?;
+        let backbone = Llama::load(gpu, &st, "backbone", 28, 3072, 24, 8, 8192, batch, max_prompt + max_frames + 1, int8)?;
+        let decoder = Llama::load(gpu, &st, "decoder", 3, 3072, 8, 4, 8192, batch, CODEBOOKS, false)?;
         Ok(Self {
             audio_emb: st.bf16_one(gpu, "audio_embeddings.weight")?,
             projection: st.bf16_one(gpu, "projection.weight")?,

@@ -15,6 +15,42 @@ pub struct Shards {
     index: HashMap<String, usize>,
 }
 
+/// IEEE half bits of `f`, rounded to nearest even (subnormals kept, overflow to infinity).
+pub fn f16_bits(f: f32) -> u16 {
+    let u = f.to_bits();
+    let sign = ((u >> 16) & 0x8000) as u16;
+    let e = ((u >> 23) & 0xff) as i32;
+    let m = u & 0x7f_ffff;
+    if e == 0xff {
+        return sign | 0x7c00 | if m != 0 { 0x200 } else { 0 };
+    }
+    let e16 = e - 127 + 15;
+    if e16 >= 0x1f {
+        return sign | 0x7c00;
+    }
+    if e16 <= 0 {
+        if e16 < -10 {
+            return sign;
+        }
+        // subnormal: shift the implicit-1 mantissa right, round to nearest even
+        let m = m | 0x80_0000;
+        let shift = (14 - e16) as u32;
+        let half = 1u32 << (shift - 1);
+        let rest = m & ((1 << shift) - 1);
+        let mut v = m >> shift;
+        if rest > half || (rest == half && (v & 1) == 1) {
+            v += 1;
+        }
+        return sign | v as u16;
+    }
+    let mut v = ((e16 as u32) << 10) | (m >> 13);
+    let rest = m & 0x1fff;
+    if rest > 0x1000 || (rest == 0x1000 && (v & 1) == 1) {
+        v += 1; // may carry into the exponent, which is still the right rounding
+    }
+    sign | v as u16
+}
+
 pub fn bf16_bits(f: f32) -> u16 {
     let u = f.to_bits();
     if (u & 0x7fff_ffff) > 0x7f80_0000 {
@@ -224,5 +260,21 @@ mod tests {
         assert_eq!(f16_value(0xc000), -2.0);
         assert_eq!(f16_value(0x0001), 2f32.powi(-24));
         assert_eq!(f16_value(0x7bff), 65504.0);
+    }
+}
+
+#[cfg(test)]
+mod f16_tests {
+    use super::f16_bits;
+
+    #[test]
+    fn halves() {
+        assert_eq!(f16_bits(1.0), 0x3c00);
+        assert_eq!(f16_bits(-2.0), 0xc000);
+        assert_eq!(f16_bits(0.1), 0x2e66);
+        assert_eq!(f16_bits(65504.0), 0x7bff);
+        assert_eq!(f16_bits(1e6), 0x7c00);
+        assert_eq!(f16_bits(1e-7), 0x0002);
+        assert_eq!(f16_bits(0.0), 0);
     }
 }

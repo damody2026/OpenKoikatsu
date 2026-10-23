@@ -110,7 +110,7 @@ impl Runner<'_> {
             });
             let o = crate::native::song::GenerateOptions {
                 cfg_scale: st.cfg_scale.unwrap_or(3.0) as f32, top_k: st.topk.unwrap_or(50) as i32,
-                temperature: st.temperature.unwrap_or(1.0) as f32, seed, muq: None,
+                temperature: st.temperature.unwrap_or(1.0) as f32, seed, muq: None, int8: st.int8.unwrap_or(true),
             };
             let (song, report) = crate::native::song::generate(ckpt, lyrics_model, &tags, max_ms, &o, &self.cancel)?;
             let out = dir.join("song.wav");
@@ -248,7 +248,7 @@ pub fn revisions(cfg: &Config) -> Value {
                "sampling": if native { Some(json!({"cfg_scale": st.cfg_scale, "topk": st.topk, "temperature": st.temperature, "seed": st.seed,
                                                     "vibrato_cents": st.vibrato_cents, "glide_ms": st.glide_ms, "soft_f0": st.soft_f0,
                                                     "scoop_cents": st.scoop_cents, "drift_cents": st.drift_cents,
-                                                    "jitter_cents": st.jitter_cents})) } else { None },
+                                                    "jitter_cents": st.jitter_cents, "int8": st.int8})) } else { None },
                "repo": if native { None } else { st.repo.clone() }, "repo_head": if native { None } else { st.repo.as_deref().and_then(git_head) },
                "model": st.model, "version": st.version, "diffusion_steps": st.diffusion_steps, "inference_cfg_rate": st.inference_cfg_rate})
     };

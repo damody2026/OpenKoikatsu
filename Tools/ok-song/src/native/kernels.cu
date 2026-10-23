@@ -4,6 +4,44 @@
 // Interleaved Llama-3 RoPE (torchtune Llama3ScaledRoPE): pairs (x[2j], x[2j+1]) rotate by pos * theta[j], all in f32,
 // one rounding. One block per (token, head), blockDim = d / 2. dst == 0 -> in place; otherwise dst is a KV cache
 // [heads, cache_len, d] written at position pos0 + token.
+// y[r, o] = bf16(s[o] * sum_i x[r, i] * q[o, i]) for up to 4 rows (decoding a frame): one warp per output row, 16 int8
+// weights per lane step. inp is a multiple of 16; x rows and q rows are 32 / 16-byte aligned.
+extern "C" __global__ void gemv_i8_bf16(bf16* y, const bf16* x, const signed char* q, const float* s, int rows, int inp, int out) {
+    int o = (blockIdx.x * blockDim.x + threadIdx.x) >> 5, lane = threadIdx.x & 31;
+    if (o >= out) return;
+    float acc[4] = {0.f, 0.f, 0.f, 0.f};
+    const signed char* w = q + (long long)o * inp;
+    for (int i = lane * 16; i < inp; i += 32 * 16) {
+        int4 wv = *(const int4*)(w + i);
+        const signed char* wb = (const signed char*)&wv;
+#pragma unroll
+        for (int r = 0; r < 4; ++r) {
+            if (r < rows) {
+                const uint4* xv = (const uint4*)(x + (long long)r * inp + i);
+                uint4 a = xv[0], b = xv[1];
+                const bf16* xa = (const bf16*)&a;
+                const bf16* xb = (const bf16*)&b;
+                float t = 0.f;
+#pragma unroll
+                for (int k = 0; k < 8; ++k) t += bf2f(xa[k]) * (float)wb[k] + bf2f(xb[k]) * (float)wb[8 + k];
+                acc[r] += t;
+            }
+        }
+    }
+#pragma unroll
+    for (int r = 0; r < 4; ++r) {
+        float v = acc[r];
+        for (int m = 16; m > 0; m >>= 1) v += __shfl_xor_sync(0xffffffffu, v, m);
+        if (lane == 0 && r < rows) y[(long long)r * out + o] = f2bf(v * s[o]);
+    }
+}
+
+// w[o, i] = bf16(q[o, i] * s[o]) (int8 matrix widened for a prefill GEMM).
+extern "C" __global__ void i8_to_bf16(bf16* w, const signed char* q, const float* s, int inp, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) w[i] = f2bf((float)q[i] * s[i / inp]);
+}
+
 extern "C" __global__ void rope_il_bf16(bf16* x, int row_stride, int head_offset, int d, const float* theta, int pos0,
                                         bf16* dst, int cache_len) {
     int token = blockIdx.x, head = blockIdx.y, j = threadIdx.x;

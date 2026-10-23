@@ -209,3 +209,27 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - RTX 5090 上 30 秒歌曲：30 步 13.7 秒、50 步 18.4 秒，不含載入 18 秒。
 - **試聽**：`Saved/StreetSocial/Songs/ab-ying/`（`ying-s30-song.ogg`、`ying-s50-song.ogg`、`current-seedvc-song.ogg`）。
 - **使用者試聽（2026-10-24）**：覺得效果太差，不移植。換聲維持 Seed-VC 加第 9 版的去修音設定。聲紋相似度高不代表聽感好，選模型要以試聽為準。
+
+## 11. 顯存預算（目標：16 GB 顯卡，2026-10-24）
+
+- **量法**：
+  - WDDM 下 nvidia-smi 看不到各程序的用量；全卡總量相減又會被其他程式的增減干擾。曾把換聲誤量成 13.7 GB，實際約 3.4 GB。
+  - 因此改用程式內統計：`OK_GPU_MEM=1` 時，`native::mem_log` 印出存活中的 GPU 緩衝、峰值與記憶體池保留量（`gpu::mem_stats`、`Gpu::pool_reserved`）。
+  - 遊戲與服務的用量取自 Windows 計數器 `\GPU Process Memory(*)\Dedicated Usage`。
+- **同時常駐的程序**（C 機，遊戲在跑時）：遊戲 6.3 GB、ok-tts 4.9 GB、ok-asr 2.7 GB，合計約 13.9 GB。
+- **ok-song 各階段**（依序執行，同時只有一個模型在顯卡上）：
+
+  | 階段 | 改前 | 改後 | 改法 |
+  |---|---:|---:|---|
+  | HeartMuLa 生成 | 7.1 GB | 4.4 GB | 主幹 28 層的矩陣改成 int8，每列一個縮放；解碼用 int8 GEMV（`gemv_i8_bf16`），提示預填時展開成 bf16 給 cuBLAS。小解碼器維持 bf16 |
+  | HeartCodec 解碼 | 6.1 GB（池 7.3） | 3.5 GB（池 5.0） | transformer 區塊的矩陣改存 fp16，每次 GEMM 前展開成 f32 |
+  | Demucs 分離 | 約 1.7～3 GB | 不變 | |
+  | Seed-VC 換聲 | 2.8 GB（池 2.85） | 不變 | |
+
+- **品質**：
+  - **HeartCodec fp16**：同一組 token 與種子下，和 f32 版的相關係數 0.99998（SNR 43 dB）。生成版本 `heartmula-rust-1` 沒有改。
+  - **HeartMuLa int8**：bf16 與 int8 各用兩個種子生成。四首分離出的人聲經 ASR 轉寫，歌詞都完整；修音感與高頻指標落在不同種子本身的變化範圍內。
+  - 試聽檔在 `Saved/StreetSocial/Songs/ab-vram/`。
+- **速度**：生成與解碼時間沒有明顯差異（GPU 同時被遊戲使用，單次量測波動大）。
+- **設定**：`generate.int8` 預設 true，並寫進範例設定。它在取樣參數的快取鍵內，所以舊歌下次會整首重新生成。
+- **還不夠的部分**：常駐程序加上 ok-song 峰值約 13.9 + 4.4 GB，仍超過 16 GB。要在 16 GB 卡上和遊戲同時產歌，還需要降低 ok-tts（4.9 GB）與 ok-asr（2.7 GB）的常駐用量，或在產歌時讓出顯存。

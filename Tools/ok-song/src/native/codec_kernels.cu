@@ -1,5 +1,17 @@
 // HeartCodec kernels (f32), appended after ok-tts's kernels and ok-song's kernels.cu.
 
+// out[i] = float(in[i]) for IEEE half bits (the transformer weights are kept as halves on the GPU).
+extern "C" __global__ void f16_to_f32(float* out, const unsigned short* in, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    unsigned int h = in[i], s = (h & 0x8000u) << 16, e = (h >> 10) & 0x1fu, m = h & 0x3ffu;
+    float v;
+    if (e == 0) v = __uint_as_float(s) + (s ? -1.f : 1.f) * (float)m * 5.9604644775390625e-8f;  // subnormal: m * 2^-24
+    else if (e == 31) v = __uint_as_float(s | 0x7f800000u | (m << 13));
+    else v = __uint_as_float(s | ((e + 112u) << 23) | (m << 13));
+    out[i] = v;
+}
+
 // out[t, d] = sum over q of tables[q][codes[q * t_len + t]][d]   (RVQ codes [Q, T] -> summed codebook vectors [T, D])
 extern "C" __global__ void rvq_rows_f32(float* out, const float* tables, const int* codes, int nq, int entries, int dim, int t_len) {
     int t = blockIdx.x;
