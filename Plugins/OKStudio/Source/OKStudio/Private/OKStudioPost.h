@@ -20,4 +20,6 @@ bool OKStudioApplySourceGrade(const FOKScenePost& Post, FPostProcessSettings& Se
 // The colour (sRGB 0..1) the source grade turns into Shown at a screen position (VignetteDistance2: squared distance
 // from the centre, 2 at a corner): a picture's colour back to what the scene drew.
 FLinearColor OKStudioUngradeSourceColor(const FOKScenePost& Post, const FLinearColor& Shown, float VignetteDistance2);
+// The CPU grade against a native probe grade dump (<prefix>.grade-linear-*.rgba32f): an error summary line.
+FString OKStudioCheckSourceGrade(const FOKScenePost& Post, const FString& Prefix);
 class UTexture* OKStudioIdentityGradeLut();

@@ -1,5 +1,6 @@
 #include "OKStudioPost.h"
 #include "OKStudioCatalog.h"
+#include "Misc/FileHelper.h"
 #include "OKSceneDocument.h"
 #include "Engine/Scene.h"
 #include "Engine/Texture2D.h"
@@ -159,4 +160,24 @@ FLinearColor OKStudioUngradeSourceColor(const FOKScenePost& Post,const FLinearCo
  const FVector3f Target(Shown.R,Shown.G,Shown.B);FVector3f X=Target;
  for(int32 Step=0;Step<48;++Step){const FVector3f D=Target-Forward(X);if(D.GetAbsMax()<.5f/255.f)break;X=FVector3f(FMath::Clamp(X.X+D.X,0.f,1.f),FMath::Clamp(X.Y+D.Y,0.f,1.f),FMath::Clamp(X.Z+D.Z,0.f,1.f));}
  return FLinearColor(X.X,X.Y,X.Z,Shown.A);
+}
+
+FString OKStudioCheckSourceGrade(const FOKScenePost& Post,const FString& Prefix)
+{
+ // A native probe's grade dump (<prefix>.grade-linear-input / -output.rgba32f: linear colours into and out of
+ // AmplifyColor, no vignette) through the CPU copy of OKStudioApplySourceGrade's LUT pass: mean and largest sRGB error.
+ TArray<uint8> In,Out;
+ if(!FFileHelper::LoadFileToArray(In,*(Prefix+TEXT(".grade-linear-input.rgba32f")))||!FFileHelper::LoadFileToArray(Out,*(Prefix+TEXT(".grade-linear-output.rgba32f")))||In.Num()!=Out.Num()||In.Num()%16)return TEXT("grade dump unreadable");
+ TArray<FColor> Lut,Blend;const bool UseLut=Post.ColorFilter>=0;
+ if(UseLut&&(!ReadGradeLut(FOKStudioCatalog::Get().SourceFilterLut(Post.ColorFilter),Lut)||!ReadGradeLut(FOKStudioCatalog::Get().SourceFilterLut(0),Blend)))return TEXT("grade LUT unreadable");
+ const float Strength=FMath::Clamp(Post.ColorFilterIntensity,0.f,1.f);
+ const float* A=reinterpret_cast<const float*>(In.GetData());const float* B=reinterpret_cast<const float*>(Out.GetData());
+ FVector3d Sum(0),Signed(0);double Max=0;const int32 N=In.Num()/16;
+ for(int32 I=0;I<N;++I){
+  const FVector3f G(LinearToSrgb(A[I*4]),LinearToSrgb(A[I*4+1]),LinearToSrgb(A[I*4+2]));
+  const FVector3f M=UseLut?FMath::Lerp(GradeLookup(Blend,G),GradeLookup(Lut,G),Strength):G;
+  const FVector3f T(LinearToSrgb(B[I*4]),LinearToSrgb(B[I*4+1]),LinearToSrgb(B[I*4+2]));
+  const FVector3f D=M-T;Sum+=FVector3d(FMath::Abs(D.X),FMath::Abs(D.Y),FMath::Abs(D.Z));Signed+=FVector3d(D);Max=FMath::Max(Max,double(D.GetAbsMax()));
+ }
+ return FString::Printf(TEXT("filter=%d strength=%.3f texels=%d mean |err| sRGB (%.4f %.4f %.4f) mean signed (%.4f %.4f %.4f) max %.4f"),Post.ColorFilter,Strength,N,Sum.X/N,Sum.Y/N,Sum.Z/N,Signed.X/N,Signed.Y/N,Signed.Z/N,Max);
 }

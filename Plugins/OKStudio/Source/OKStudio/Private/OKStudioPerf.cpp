@@ -2,6 +2,7 @@
 
 #include "OKSceneActor.h"
 #include "OKSceneDocument.h"
+#include "OKStudioPost.h"
 #include "KKPreviewActor.h"
 #include "KKOkAnimation.h"
 #include "Components/SkinnedMeshComponent.h"
@@ -76,6 +77,10 @@ void UOKStudioGame::RunKStudioPerf(const TArray<FString>& Scenes, int32 SettleFr
 			// OK_STUDIO_PERF_DUMP=<frames>: the engine's hierarchical stat averages over that many frames into the log.
 			const int32 Dump = FCString::Atoi(*FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_PERF_DUMP")));
 			if (Dump > 0 && GEngine) GEngine->Exec(Self->GetTickableGameObjectWorld(), *FString::Printf(TEXT("stat dumpave -num=%d -ms=0.1"), Dump));
+			// OK_GRADE_CHECK=<native probe prefix>: the scene's source grade on the CPU against that probe's grade dump.
+			const FString GradeCheck = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_GRADE_CHECK"));
+			if (!GradeCheck.IsEmpty() && Self->Document)
+				UE_LOG(LogTemp, Display, TEXT("OK studio perf: grade check %s"), *OKStudioCheckSourceGrade(Self->Document->Post, GradeCheck));
 			// OK_STUDIO_PERF_SHOT=1: a screenshot of the game viewport itself (what a player sees, unlike CompareKStudio's
 			// own scene capture) into Saved/OKStudio/perf/<tag>_<scene>.png.
 			if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_PERF_SHOT")) == TEXT("1"))
