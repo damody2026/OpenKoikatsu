@@ -1,4 +1,5 @@
 #include "OKCharacterController.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "OKHGShading.h"
 #include "OKCharacterMCPRegistry.h"
 #include "OKCharacterMCPGeometry.h"
@@ -145,6 +146,7 @@ static void Camera(UOKCharacterController* G,FOKCharacterMCPState& S)
 
 void UOKCharacterController::TickCharacterMCP()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryMCP);
  using namespace OKCharacterMCP;
  if(!FParse::Param(FCommandLine::Get(),TEXT("CharacterMCP"))||bInteractionOnly||!IsInViewport())return;
  if(!CharacterMCP){CharacterMCP=MakeShared<FOKCharacterMCPState>();auto& S=*CharacterMCP;if(!FParse::Value(FCommandLine::Get(),TEXT("CharacterMCPDir="),S.Root))S.Root=FPaths::ProjectSavedDir()/TEXT("CharacterMCP");S.Root=FPaths::ConvertRelativePathToFull(S.Root);for(const TCHAR* D:{TEXT("requests"),TEXT("responses"),TEXT("images"),TEXT("cards")})IFileManager::Get().MakeDirectory(*(S.Root/D),true);UE_LOG(LogTemp,Display,TEXT("Character MCP enabled: %s"),*S.Root);}

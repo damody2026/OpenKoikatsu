@@ -71,6 +71,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/Parse.h"
 #include "Misc/CommandLine.h"
+#include "Containers/Ticker.h"
 
 namespace
 {
@@ -896,6 +897,7 @@ void UOKCharacterController::ApplyClickInputMode()
 
 void UOKCharacterController::SetModelLayout(bool bEnabled)
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryModelLayout);
 	bModelLayout = bEnabled;
  if(!bEnabled)OnCloseAppearance();
 	if(auto* PC=Cast<AOpenKoikatsuPlayerController>(GetOwningPlayer()))PC->SetPaintPreviewActive(bEnabled&&IsValid(PreviewActor)&&!bLoadInFlight&&!bStudioMode);
@@ -1103,6 +1105,7 @@ void UOKCharacterController::RefreshCardList()
 
 void UOKCharacterController::TickCardListMetadata()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryCardList);
  if(bCardMetadataBusy||!CardListView||!CardListView->IsVisible()||bModelLayout)return;
  for(auto* Widget:CardListView->GetDisplayedEntryWidgets()){
   auto* Row=Cast<UOKCardListEntry>(Widget);auto* Item=Row?Row->Item.Get():nullptr;
@@ -1144,10 +1147,38 @@ static void OKRequestCardWarm(const FString& CardPath)
 	FFileHelper::SaveStringToFile(FPaths::ConvertRelativePathToFull(CardPath)+TEXT("\n"),*File,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,&IFileManager::Get(),FILEWRITE_Append);
 }
 
-static void OKThrottleForNativeOpen(bool bThrottle);
+// Background opens and warm-ups yield to the frame: the reader keeps its full frame rate while they run.
+void OKBackgroundWorkerPriority(){if(FRunnableThread* Thread=FRunnableThread::GetRunnableThread())Thread->SetThreadPriority(TPri_BelowNormal);}
+// Destroying a character at once (its ~150 renderers unregistering, 30-40 ms) was a dropped frame for every evicted or
+// replaced preview. A retired actor is hidden at once; its components unregister ~2 ms a frame, then it is destroyed.
+namespace { TArray<TWeakObjectPtr<AActor>> GRetiringActors; FTSTicker::FDelegateHandle GRetireTicker; }
+static bool OKTickRetiringActors(float){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_RetireActors);
+ const double Deadline=FPlatformTime::Seconds()+0.002;
+ while(!GRetiringActors.IsEmpty()){
+  AActor* Actor=GRetiringActors[0].Get();
+  if(!IsValid(Actor)){GRetiringActors.RemoveAt(0);continue;}
+  if(UWorld* World=Actor->GetWorld();World&&!World->bIsTearingDown){
+   TInlineComponentArray<UActorComponent*> Components(Actor);
+   for(UActorComponent* Component:Components)if(Component&&Component->IsRegistered()){Component->UnregisterComponent();if(FPlatformTime::Seconds()>=Deadline)return true;}
+  }
+  Actor->Destroy();GRetiringActors.RemoveAt(0);
+  if(FPlatformTime::Seconds()>=Deadline)return true;
+ }
+ GRetireTicker.Reset();return false;
+}
+void OKRetireActor(AActor* Actor){
+ if(!IsValid(Actor))return;
+ UWorld* World=Actor->GetWorld();if(!World||World->bIsTearingDown){Actor->Destroy();return;}
+ Actor->SetActorTickEnabled(false);Actor->SetActorHiddenInGame(true);Actor->SetActorEnableCollision(false);
+ if(auto* Preview=Cast<AKKPreviewActor>(Actor)){Preview->StopSpeech();Preview->SuspendDisplayTicks(true);}
+ GRetiringActors.AddUnique(Actor);
+ if(!GRetireTicker.IsValid())GRetireTicker=FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&OKTickRetiringActors));
+}
 
 void UOKCharacterController::SelectIndex(int32 Index)
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GallerySelect);
 	if (bLoadInFlight || bAppearanceBusy || !Entries.IsValidIndex(Index))
 	{
 		return;
@@ -1435,6 +1466,7 @@ void UOKCharacterController::FinishPortableSave(const FString& Source,const FStr
 // logging the wall time of each (load and animation-switch measurements without UI automation).
 void UOKCharacterController::TickAutoSequence()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryAutoSequence);
  if(!bAutoSequenceInit){
   bAutoSequenceInit=true;
   FPlatformMisc::GetEnvironmentVariable(TEXT("OK_AUTO_SEQUENCE")).ParseIntoArray(AutoSequence,TEXT(","));
@@ -1542,6 +1574,8 @@ static void OKNoteFrameGraph(UOKCharacterController* Self, float DeltaSeconds)
 void UOKCharacterController::NativeTick(const FGeometry& Geometry,float DeltaSeconds)
 {
 	Super::NativeTick(Geometry,DeltaSeconds);
+ // The shown character solves its next frame while this one draws; the interaction scene and paired playback pose it themselves.
+ if(IsValid(PreviewActor))PreviewActor->bAsyncNativePose=!InteractionWidget&&!InteractionScene&&!PairedPlayback;
     OKNoteFrameGraph(this, DeltaSeconds);
  TickCharacterMCP();
  TickCardListMetadata();
@@ -1671,6 +1705,7 @@ FString UOKCharacterController::PortableGallerySignature(const FString& CardPath
 
 void UOKCharacterController::OnLoad3D()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryLoad3D);
  StartLoad3D(false);
 }
 
@@ -1738,7 +1773,7 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
 		// Destroying here blanked the view for the whole extract.
 		if (StalePreview && StalePreview != PreviewActor)
 		{
-			StalePreview->Destroy();
+			OKRetireActor(StalePreview);
 		}
 		StalePreview = PreviewActor;
 		PreviewActor = nullptr;
@@ -1752,7 +1787,6 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
 	const int32 Gen = ++LoadGeneration;
 	AppearanceGeometryLoadGeneration = bAppearanceGeometryOnly ? Gen : INDEX_NONE;
 	SetLoadBusy(true);
-	OKThrottleForNativeOpen(true);
 	UE_LOG(LogTemp, Display, TEXT("OK load3d card=%s root=%s outfit=%d"), *CardPath, *GameRoot, Outfit);
 	if (InspectorText)
 	{
@@ -1784,6 +1818,7 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
 	const bool PrepareSkeleton=OKLiveGpuSkinRequested();
 	Async(EAsyncExecution::Thread, [Weak, Gen, GameRoot, CardPath, Outfit, Job, MenuSource, MenuClip, RequestedClothes, PrepareSkeleton]()
 	{
+		OKBackgroundWorkerPriority();
 		FOkSession::InitBindings();
 		const double WorkerStart=FPlatformTime::Seconds();
 		Job->bOk = Job->Session.Open(GameRoot, CardPath, Outfit, Job->Err,RequestedClothes.GetData());
@@ -1847,22 +1882,8 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
 	});
 }
 
-// While a native open runs on its worker, the reader only shows the previous character: rendering it uncapped took
-// CPU the open needed (an uncached OK card opened in ~5-7 s instead of ~8-12 s at 15 fps). Restored for the UE build.
-static void OKThrottleForNativeOpen(bool bThrottle)
-{
- static float Saved=-1.f;
- IConsoleVariable* MaxFPS=IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS"));
- if(!MaxFPS)return;
- // A capture session stays at the reader's own frame rate. The 15 fps cap is only for an idle gallery open.
- if(bThrottle&&FPlatformMisc::GetEnvironmentVariable(TEXT("OK_NO_CLOTHING_WARM"))==TEXT("1"))return;
- if(bThrottle&&Saved<0.f){Saved=MaxFPS->GetFloat();MaxFPS->Set(15.f,ECVF_SetByCode);}
- else if(!bThrottle&&Saved>=0.f){MaxFPS->Set(Saved,ECVF_SetByCode);Saved=-1.f;}
-}
-
 void UOKCharacterController::FinishLoad3D(int32 Generation, FOkSession Session, bool bOk, const FString& Err,const FString& PreparedMods,FVector2D PreparedPhysics,const FString& PreparedPairs)
 {
- OKThrottleForNativeOpen(false);
  if(Generation!=LoadGeneration)return;
  PendingLoadPairJson=PreparedPairs;PendingLoadPairGeneration=bOk?Generation:INDEX_NONE;
  UWorld* World=GetWorld();
@@ -1883,6 +1904,7 @@ void UOKCharacterController::FinishLoad3D(int32 Generation, FOkSession Session, 
 
 void UOKCharacterController::TickPreviewPreparation()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryPreparation);
  if(!IsValid(PreparingPreview))return;
  if(PreparingPreviewGeneration!=LoadGeneration){PreparingPreview->Destroy();PreparingPreview=nullptr;return;}
  FString Error;
@@ -1912,6 +1934,7 @@ void UOKCharacterController::TickPreviewPreparation()
 
 void UOKCharacterController::FinishPreparedPreview(AKKPreviewActor* Actor,bool bOk,const FString& Err)
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryFinishPreview);
  double ProfileAt=FPlatformTime::Seconds();
  const bool ProfileLoad=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOAD_PROFILE"))==TEXT("1");
  auto ProfileStep=[&](const TCHAR* Name){const double Now=FPlatformTime::Seconds();if(ProfileLoad)UE_LOG(LogTemp,Display,TEXT("OKGUI_PROFILE step=%s ms=%.3f"),Name,(Now-ProfileAt)*1000.);ProfileAt=Now;};
@@ -2106,6 +2129,7 @@ void UOKCharacterController::FinishPreparedPreview(AKKPreviewActor* Actor,bool b
 
 void UOKCharacterController::RefreshOutfitList()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryOutfits);
 	if (!OutfitCombo)
 	{
 		return;
@@ -2176,6 +2200,7 @@ void UOKCharacterController::OnOutfitNext()
 
 void UOKCharacterController::RefreshHandControls()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryHands);
 	if (HandCombos.Num() != 4 || HandBlendSliders.Num() != 2) return;
 	bSuppressHandControls = true;
 	const int32 Count = PreviewActor ? PreviewActor->GetHandShapeCount() : 0;
@@ -2239,6 +2264,7 @@ void UOKCharacterController::OnRightHandBlend(float Value)
 
 void UOKCharacterController::RefreshFaceControls()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryFace);
     bSuppressFaceControls = true;
     const bool Automatic = PreviewActor && PreviewActor->bAutomaticBlink;
     if (AutomaticBlinkCheck) { AutomaticBlinkCheck->SetIsChecked(Automatic); AutomaticBlinkCheck->SetIsEnabled(PreviewActor != nullptr); }
@@ -2367,6 +2393,7 @@ void UOKCharacterController::OnMouthPatternSelected(FString SelectedItem, ESelec
 
 void UOKCharacterController::RefreshGameAnimationParameters()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryAnimParams);
     if(!GameAnimationParameters) return;
     GameAnimationParameters->ClearChildren();
     if(!PreviewActor||PreviewActor->PoseMode!=2) return;
@@ -2441,6 +2468,7 @@ void UOKCharacterController::OnReplayPlayback(){
  }
 }
 void UOKCharacterController::RefreshPairs(){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryPairs);
     CancelPairCatalogue();ReadyPairs.Reset();CancelPairPreparation();
     NativePairs.Empty();if(!PairCombo||!PreviewActor)return;bSuppressPairControls=true;PairCombo->ClearOptions();PairCombo->AddOption(TEXT("選擇姿勢"));
     TArray<TSharedPtr<FJsonValue>> Rows;
@@ -2998,6 +3026,7 @@ void UOKCharacterController::AddDemoAnimations()
 
 void UOKCharacterController::BuildAnimationLookup()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryAnimLookup);
  if (!PreviewActor || !PreviewActor->Session.IsOpen()) return;
  const int32 Generation = ++AnimationLookupGeneration;
  const int32 ActorGeneration = LoadGeneration;
@@ -3253,6 +3282,7 @@ void UOKCharacterController::OnLoadGameSource()
 
 void UOKCharacterController::RefreshStudioCatalog()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryStudioCatalog);
 	if (!StudioCategoryCombo || !StudioMotionCombo) return;
 	StudioCategoryRows.Reset(); StudioMotionRows.Reset();GameMotionRows.Reset();GameMotionOptions.Reset();
 	StudioCategoryCombo->ClearOptions(); StudioCategoryCombo->AddOption(TEXT("工作室動作分類"));

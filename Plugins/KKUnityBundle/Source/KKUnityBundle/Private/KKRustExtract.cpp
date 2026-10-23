@@ -19,6 +19,9 @@
 #include "Misc/Parse.h"
 #include "HAL/IConsoleManager.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
+#include "Tasks/Task.h"
+#include "UObject/StrongObjectPtr.h"
+#include <atomic>
 
 DEFINE_LOG_CATEGORY_STATIC(LogOkExtract, Log, All);
 namespace { UKKSharedAnimation* FindSharedCurveAsset(const FString& Key); }
@@ -221,7 +224,8 @@ static void OkLogThunk(int32_t Level, const char* MsgUtf8)
 }
 
 bool FOkSession::SetPhysXSecondary(bool bOn) { bPhysXSecondary=bOn; return !Handle||ok_session_set_physx_secondary(Handle,bOn?1:0)==0; }
-void FOkSession::ApplyPhysXSecondary() const { if(Handle)ok_session_set_physx_secondary(Handle,bPhysXSecondary?1:0); }
+void FOkSession::ApplyPhysXSecondary() const { if(Handle){ok_session_set_physx_secondary(Handle,bPhysXSecondary?1:0);ok_session_set_external_animation(Handle,ExternalAnimation);} }
+bool FOkSession::SetExternalAnimation(bool bExternal) { ExternalAnimation=bExternal?1:0; return !Handle||ok_session_set_external_animation(Handle,ExternalAnimation)==0; }
 bool FOkSession::HeadLookError(float& Residual,float& Excess) const { float Out[2]={0.f,0.f}; if(!Handle||ok_head_look_error(Handle,Out)!=0)return false; Residual=Out[0];Excess=Out[1];return true; }
 bool FOkSession::SetHeadLook(const FVector& Target,bool Enabled) { return Handle&&ok_set_head_look(Handle,Target.X,Target.Y,Target.Z,Enabled?1:0)==0; }
 bool FOkSession::SetFk(const TArray<FString>& Bones,const TArray<FVector>& UnityEuler)
@@ -336,7 +340,7 @@ bool FOkSession::SetHandShape(int32 Side, bool Enabled, int32 A, int32 B, float 
 }
 
 FOkSession::FOkSession(FOkSession&& Other) noexcept
-	: Handle(Other.Handle), SkinPaletteCapacityHints(MoveTemp(Other.SkinPaletteCapacityHints)), PrivateSkinStageCapacityHints(MoveTemp(Other.PrivateSkinStageCapacityHints)), bPortable(Other.bPortable), bSharedAnimation(Other.bSharedAnimation), bPhysXSecondary(Other.bPhysXSecondary)
+	: Handle(Other.Handle), SkinPaletteCapacityHints(MoveTemp(Other.SkinPaletteCapacityHints)), PrivateSkinStageCapacityHints(MoveTemp(Other.PrivateSkinStageCapacityHints)), bPortable(Other.bPortable), bSharedAnimation(Other.bSharedAnimation), bPhysXSecondary(Other.bPhysXSecondary), ExternalAnimation(Other.ExternalAnimation)
 {
 	RuntimeMaterials=MoveTemp(Other.RuntimeMaterials);
 	Other.Handle = nullptr;
@@ -598,12 +602,54 @@ bool FOkModel::TexturePng(const FString& Library, const FString& ModelId, const 
 	return OkModelBytes([&](uint8* Out, int32 Cap) { return ok_okmodel_texture_png(L.Get(), I.Get(), T.Get(), Out, Cap); }, OutPng);
 }
 
+namespace { std::atomic<int32> GBackgroundCloses{0}; thread_local const FOkSessionHandle* GSolvingHandle = nullptr; }
+void FOkSessionHandle::Sync() const
+{
+	if (Async.IsValid() && GSolvingHandle != this && !Async.IsCompleted())
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(KK_SessionAsyncWait);
+		Async.Wait();
+	}
+}
+void FOkSession::LaunchAsyncAnimFrame(float Time, float DeltaSeconds)
+{
+	Handle.Sync();
+	if (!Handle.Raw) return;
+	Handle.Async = UE::Tasks::Launch(UE_SOURCE_LOCATION, [this, Time, DeltaSeconds]()
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(KK_NativeAnimationAsync);
+		TGuardValue<const FOkSessionHandle*> Solving(GSolvingHandle, &Handle);
+		return ApplyAnimFrame(Time, DeltaSeconds);
+	});
+}
+bool FOkSession::FinishAsyncAnimFrame()
+{
+	if (!Handle.Async.IsValid()) return false;
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(KK_SessionAsyncWait);
+		Handle.Async.Wait();
+	}
+	const bool Result = Handle.Async.GetResult();
+	Handle.Async = {};
+	return Result;
+}
+void FOkSession::WaitForBackgroundCloses(){while(GBackgroundCloses.load()>0)FPlatformProcess::Sleep(0.001f);}
 void FOkSession::Close()
 {
- RuntimeMaterials.Reset();
+ Handle.Sync();Handle.Async={};
+ // The prepared material data (decoded texture mips, often hundreds of MB) is freed with the session, off the frame.
+ TSharedPtr<struct FKKRuntimeMaterialData> Materials=MoveTemp(RuntimeMaterials);RuntimeMaterials.Reset();
 	if (Handle && GRust.session_free)
 	{
-		GRust.session_free(Handle);
+		// Freeing a character's native session (its meshes, textures and dynamics) took 10-35 ms; on the game thread
+		// that was a dropped frame for every replaced or evicted preview. Nothing references the handle after Close.
+		if (IsInGameThread() && !IsEngineExitRequested())
+		{
+			OkSession* Closing = Handle; auto Free = GRust.session_free;
+			++GBackgroundCloses;
+			UE::Tasks::Launch(UE_SOURCE_LOCATION, [Closing, Free, Materials = MoveTemp(Materials)]() mutable { Free(Closing); Materials.Reset(); --GBackgroundCloses; }, UE::Tasks::ETaskPriority::BackgroundNormal);
+		}
+		else GRust.session_free(Handle);
 	}
 	Handle = nullptr;
 	SkinPaletteCapacityHints.Reset();
@@ -1065,6 +1111,7 @@ int32 FOkSession::StudioPVBone(int32 Index,bool Source) {return Handle&&GRust.st
 
 bool FOkSession::ApplyAnimFrame(float Time, float DeltaSeconds)
 {
+	RegisterNativeCpuTrace();
 	if (bPortable&&!bSharedAnimation) return true;
 
 	if (!Handle || !GRust.apply_anim_frame)
@@ -1267,6 +1314,14 @@ TArray<FAssetData> SharedCurveAssets(){
  TArray<FAssetData> Assets;Registry.GetAssetsByClass(UKKSharedAnimation::StaticClass()->GetClassPathName(),Assets);
  return Assets;
 }
+// The shared clips are a few small assets, listed on every character load: collected after each listing, they were
+// loaded again every time (~55 ms of FlushAsyncLoading in the reader's load). Loaded ones are kept.
+UKKSharedAnimation* KeepSharedCurveAsset(UObject* Object){
+ auto* Asset=Cast<UKKSharedAnimation>(Object);
+ static TArray<TStrongObjectPtr<UKKSharedAnimation>> Kept;
+ if(Asset&&!Kept.ContainsByPredicate([Asset](const TStrongObjectPtr<UKKSharedAnimation>& P){return P.Get()==Asset;}))Kept.Emplace(Asset);
+ return Asset;
+}
 UKKSharedAnimation* FindSharedCurveAsset(const FString& Key){
  if(!IsInGameThread())return nullptr;
  struct FLookup {FString Key;FSoftObjectPath Path;};
@@ -1291,7 +1346,7 @@ UKKSharedAnimation* FindSharedCurveAsset(const FString& Key){
 }
 TArray<FString> FOkSession::ImportedSharedClipNames(const FString& Source){
  TArray<FString> Result;
- for(const auto& Item:SharedCurveAssets())if(auto* Asset=Cast<UKKSharedAnimation>(Item.GetAsset())){
+ for(const auto& Item:SharedCurveAssets())if(auto* Asset=KeepSharedCurveAsset(Item.GetAsset())){
   if(!Asset->AuthoredCurves.IsEmpty()&&(Source.IsEmpty()||Asset->Source==Source))Result.AddUnique(Asset->Source+TEXT("|")+Asset->Clip);
  }
  Result.Sort();return Result;

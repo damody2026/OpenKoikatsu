@@ -100,6 +100,9 @@ int32_t ok_unity_euler_slerp(const float* a3,const float* b3,float t,float* out3
 int32_t ok_studio_pose_write(const char* path,const char* json,char* err,int32_t cap);
 /* PhysX secondary dynamics for this character: 1 = host solver (gallery menu, one-to-one, paired playback), 0 = built-in (default). */
 int32_t ok_session_set_physx_secondary(OkSession* s,int32_t enabled);
+/* Whether an Unreal animation drives this body: 1 yes, 0 the session samples its game animation, -1 follow OK_UE_ANIM
+   (process-wide; another actor loading may change it). */
+int32_t ok_session_set_external_animation(OkSession* s,int32_t external);
 int32_t ok_head_look_error(OkSession* s,float* out);
 int32_t ok_static_interaction_frame(OkSession* s,float dt);
 int32_t ok_apply_shape_live(OkSession* s,const float* body,int32_t n_body,const float* face,int32_t n_face);

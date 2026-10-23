@@ -447,3 +447,20 @@ best＋C5 下，cooked 路徑還有兩段工作和 cooked 材質已準備好的�
 ## 離線 APNG 共用動畫
 
 讀取 APNG 後可以按「走路」，或在動作來源選 `studio/anime/00.unity3d` 再選 `f_aruki_00_00_01`。使用專案已匯入的共用原始曲線與卡片保留的骨架，不需要遊戲目錄。其它共用片段按相同 Source|Clip 身分列出；尚未匯入的 Animator 控制器狀態會明確提示缺資源，不會換成其它姿勢。性能续修與實測見 [PAINT_PERFORMANCE285.md](PAINT_PERFORMANCE285.md)。
+
+## 切動作／服裝不再跳回 T-pose，載入後回到 120fps（2026-10-24）
+
+**T-pose**：`OK_UE_ANIM` 是整個程序共用的環境變數，背景預熱別套服裝建 GPU 骨架時會設成 1，正在顯示的角色下一幀就被當成「由 Unreal 動畫驅動」而停止取樣原作動作。現在每個 Session 自己記住（`ok_session_set_external_animation`、`FOkSession::SetExternalAnimation`），`KKPreviewActor` 設環境變數的地方同時設自己 Session 的旗標；沒設過的 Session 才照舊讀環境變數。
+
+**穩定幀率**：讀卡器顯示中的角色把下一幀的原作動作＋物理求解放到 worker（`FOkSession::LaunchAsyncAnimFrame`，畫面晚一幀），遊戲執行緒不再等它（同一台忙碌的機器上 12 ms → 8.3–9 ms）。`FOkSession::Handle` 換成 `FOkSessionHandle`：任何取用（傳給原生函式、判斷是否為空）都先等背景求解完成，求解所在執行緒除外，所以 UI 隨時呼叫 Session 都安全。`ok.Animation.AsyncNativePose 0` 恢復同步求解；只有讀卡器的主角色開啟（互動場景、配對播放不用）。
+
+**載入卡頓**（每項都以 Unreal Insights 找到，`-OKNativeTrace` 會帶出 Rust 內部的區段）：
+- 背景開卡時的 15 fps 上限移除，改成開卡與服裝預熱的 worker 用低優先權。
+- 執行期貼圖的快取識別碼（所有 mip 的 SHA-1）原本每次查快取都在遊戲執行緒重算（大貼圖一張 20–40 ms），改在建 mip 時算好存在 `FKKRuntimePreparedTexture::PixelIdentity`。
+- 共用母材質的材質實例與貼圖改成每批最多 4 ms、分幀建立（`OKPrepareCookedRole` 回傳 1／0／-1）。
+- Session 關閉（Rust 釋放，10–35 ms）與材質資料釋放改到背景；模組卸載時等它們做完。
+- 換掉或淘汰的角色先隱藏，元件每幀反註冊約 2 ms 再銷毀（`OKRetireActor`）。
+- `EditorModsJson()` 依 KKEx 內容雜湊快取；共用動作片段資產載入後保留；`r.SkyLight.RealTimeReflectionCapture` 只在值不同時才設（每次設都會重建所有元件的 render state）。
+- 最近用過的貼圖（讀卡器 768 MB、共用材質 512 MB 上限）保留強參照，切回看過的服裝不必重建。
+
+量測（同一張 Alice、1920×1080，機器上同時有別的 session 的街頭遊戲吃約 8 核）：切服裝期間最長單幀 105–330 ms → 約 40 ms；穩定時 GT 12 ms → 8–9 ms。測試序列：`OK_AUTO_SEQUENCE="!t.HitchFrameTimeThreshold 9,!stat dumphitches,alice,~20,#站立 02,~20,@1,~20,#站立 05,~20,@0,~20"`（開卡後要先等 `~15` 讓衣服預熱換上的 Actor 就位再選動作，否則動作會套到被換掉的 Actor）。

@@ -1,4 +1,6 @@
 #include "OKGalleryWidget.h"
+#include "Hash/xxhash.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "OKComboBox.h"
 #include "OKShapeSlider.h"
 #include "OKBoneControls.h"
@@ -40,7 +42,14 @@ TSharedPtr<FJsonObject> DefaultData(){auto D=MakeShared<FJsonObject>();D->SetArr
 }
 
 FString UOKCharacterController::EditorModsJson() const {
- return FOkSession::DecodeEditorMods(Selected.RawBlocks.FindRef(TEXT("KKEx")));
+ // Decoding the card's KKEx block (ABMX, MaterialEditor, ...) took up to ~40 ms, and every load, clothing warm-up and
+ // cached preview asks for it: the last result is kept for identical bytes.
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryEditorModsJson);
+ static const TArray<uint8> Empty;const TArray<uint8>* Block=Selected.RawBlocks.Find(TEXT("KKEx"));if(!Block)Block=&Empty;
+ static FXxHash64 LastHash;static int32 LastSize=-1;static FString LastJson;
+ const FXxHash64 Hash=FXxHash64::HashBuffer(Block->GetData(),Block->Num());
+ if(Block->Num()!=LastSize||Hash!=LastHash){LastJson=FOkSession::DecodeEditorMods(*Block);LastHash=Hash;LastSize=Block->Num();}
+ return LastJson;
 }
 void UOKCharacterController::BuildBoneControls(){
  BoneSliders.Reset();

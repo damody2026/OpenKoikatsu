@@ -301,6 +301,12 @@ pub unsafe extern "C" fn ok_session_set_physx_secondary(s:*mut OkSession,enabled
     s.physx_secondary=enabled!=0;0
 }
 #[no_mangle]
+pub unsafe extern "C" fn ok_session_set_external_animation(s:*mut OkSession,external:i32)->i32 {
+    // 1: an Unreal animation drives this body, 0: the session samples its game animation, -1: follow OK_UE_ANIM.
+    let Some(s)=sess_ref(s) else{return -1;};
+    s.external_animation=if external<0 {None}else{Some(external!=0)};0
+}
+#[no_mangle]
 pub unsafe extern "C" fn ok_static_interaction_frame(s:*mut OkSession,dt:f32)->i32 {
     let Some(s)=sess_ref(s) else{return -1;};
     if !dt.is_finite()||dt<0. {return -1;}

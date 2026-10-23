@@ -21,6 +21,6 @@ void FKKUnityBundleModule::StartupModule()
  OKInstallNativeSharedAnimationDriver();
 }
 
-void FKKUnityBundleModule::ShutdownModule(){OKRegisterSharedAnimationDriver(FKKSharedDriverFactory());}
+void FKKUnityBundleModule::ShutdownModule(){OKRegisterSharedAnimationDriver(FKKSharedDriverFactory());FOkSession::WaitForBackgroundCloses();}
 
 IMPLEMENT_MODULE(FKKUnityBundleModule, KKUnityBundle);

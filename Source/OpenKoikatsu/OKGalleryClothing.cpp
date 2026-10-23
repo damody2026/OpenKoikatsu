@@ -1,4 +1,5 @@
 #include "OKGalleryWidget.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "KKPreviewActor.h"
 #include "KKSkeletalBuilder.h"
 #include "KKCardWorkspace.h"
@@ -23,6 +24,8 @@
 #include <commdlg.h>
 #include "Windows/HideWindowsPlatformTypes.h"
 #endif
+void OKBackgroundWorkerPriority(); // OKGalleryWidget.cpp
+void OKRetireActor(AActor* Actor); // OKGalleryWidget.cpp: hidden now, destroyed over the next frames
 
 struct FOKClothingWarmJob {
  FOkSession Session;FString Key,Error,Mods;FVector2D Physics;bool Ok=false;TWeakObjectPtr<AKKPreviewActor> Actor;
@@ -34,25 +37,28 @@ namespace {
 FString StatesKey(const uint8* States){return FString::Printf(TEXT("%u,%u,%u,%u,%u,%u,%u,%u,%u"),States[0],States[1],States[2],States[3],States[4],States[5],States[6],States[7],States[8]);}
 }
 void UOKCharacterController::ResetClothingPreviews(const FString& Context){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryResetClothing);
  ++ClothingWarmGeneration;ClothingWarmQueue.Reset();bClothingRulesPending=false;
- if(ClothingWarmReady)if(auto* Actor=ClothingWarmReady->Actor.Get())Actor->Destroy();
+ if(ClothingWarmReady)if(auto* Actor=ClothingWarmReady->Actor.Get())OKRetireActor(Actor);
  ClothingWarmReady.Reset();
  // Obsolete workers retain the gate until completion, bounding background
  // loads even when cards change faster than resources can be prepared.
- for(auto& Entry:ClothingPreviews)if(IsValid(Entry.Value)&&Entry.Value!=PreviewActor&&Entry.Value!=StalePreview)Entry.Value->Destroy();
+ for(auto& Entry:ClothingPreviews)if(IsValid(Entry.Value)&&Entry.Value!=PreviewActor&&Entry.Value!=StalePreview)OKRetireActor(Entry.Value);
  ClothingPreviews.Reset();ClothingPreviewOrder.Reset();ClothingPreviewMods.Reset();ClothingPreviewContext=Context;
 }
 void UOKCharacterController::CacheClothingPreview(AKKPreviewActor* Actor,const FString& Key){
- if(IsValid(Actor))Actor->SetClothingHidden(false);
- if(!IsValid(Actor)||ClothingPreviewContext.IsEmpty()||!Key.StartsWith(ClothingPreviewContext+TEXT("|clothes="))){if(IsValid(Actor))Actor->Destroy();return;}
- if(auto* Existing=ClothingPreviews.Find(Key))if(IsValid(*Existing)&&*Existing!=Actor)(*Existing)->Destroy();
- Actor->StopSpeech();Actor->SuspendDisplayTicks(true);Actor->SetActorTickEnabled(false);Actor->SetActorHiddenInGame(true);Actor->SetActorEnableCollision(false);
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryCacheClothing);
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryCacheBody);if(IsValid(Actor))Actor->SetClothingHidden(false);
+ if(!IsValid(Actor)||ClothingPreviewContext.IsEmpty()||!Key.StartsWith(ClothingPreviewContext+TEXT("|clothes="))){if(IsValid(Actor))OKRetireActor(Actor);return;}
+ if(auto* Existing=ClothingPreviews.Find(Key))if(IsValid(*Existing)&&*Existing!=Actor)OKRetireActor(*Existing);
+ {TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryHideClothing);Actor->StopSpeech();Actor->SuspendDisplayTicks(true);Actor->SetActorTickEnabled(false);Actor->SetActorHiddenInGame(true);Actor->SetActorEnableCollision(false);}
  ClothingPreviews.Add(Key,Actor);ClothingPreviewMods.Add(Key,EditorModsJson());ClothingPreviewOrder.Remove(Key);ClothingPreviewOrder.Add(Key);
  // At most three inactive native sessions and GPU displays, regardless of
  // the number of garment combinations. Oldest inactive state is evicted.
- while(ClothingPreviewOrder.Num()>3){const FString Old=ClothingPreviewOrder[0];ClothingPreviewOrder.RemoveAt(0);if(auto* Entry=ClothingPreviews.Find(Old))if(IsValid(*Entry))(*Entry)->Destroy();ClothingPreviews.Remove(Old);ClothingPreviewMods.Remove(Old);}
+ while(ClothingPreviewOrder.Num()>3){TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryEvictClothing);const FString Old=ClothingPreviewOrder[0];ClothingPreviewOrder.RemoveAt(0);if(auto* Entry=ClothingPreviews.Find(Old))if(IsValid(*Entry))OKRetireActor(*Entry);ClothingPreviews.Remove(Old);ClothingPreviewMods.Remove(Old);}
 }
 bool UOKCharacterController::TryClothingPreview(const FString& Key){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryTryClothing);
  auto* Found=ClothingPreviews.Find(Key);if(!Found||!IsValid(*Found)||!(*Found)->bPlaybackMaterialsReady||!IsValid(PreviewActor))return false;
  const bool Profile=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOAD_PROFILE"))==TEXT("1");double ProfileAt=FPlatformTime::Seconds();
  auto ProfileStep=[&](const TCHAR* Step){if(Profile){const double Now=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("OK clothing prepared switch step=%s ms=%.3f"),Step,(Now-ProfileAt)*1000.);ProfileAt=Now;}};
@@ -105,7 +111,7 @@ void UOKCharacterController::SuspendClothingWarmForCapture(){
  if(!bClothingWarmHeld)UE_LOG(LogTemp,Display,TEXT("OK clothing warm held for product capture"));
  bClothingWarmHeld=true;
  ++ClothingWarmGeneration;ClothingWarmQueue.Reset();bClothingRulesPending=false;
- if(ClothingWarmReady)if(auto* Actor=ClothingWarmReady->Actor.Get())Actor->Destroy();
+ if(ClothingWarmReady)if(auto* Actor=ClothingWarmReady->Actor.Get())OKRetireActor(Actor);
  ClothingWarmReady.Reset();
 }
 void UOKCharacterController::WarmClothingPreviews(){
@@ -117,6 +123,7 @@ void UOKCharacterController::WarmClothingPreviews(){
 }
 
 void UOKCharacterController::TickClothingPreviews(){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryClothingTick);
  if(bClothingWarmHeld||ClothingWarmDisabled())return;
  if(IsValid(PreviewActor)&&(PreviewActor->bProductSweep||PreviewActor->bProductLightLatched))return;
  // Hidden outfit actors allocate textures and compile materials as well as
@@ -161,6 +168,7 @@ void UOKCharacterController::TickClothingPreviews(){
   const int32 Generation=ClothingWarmGeneration,Outfit=OutfitIndex;
   TWeakObjectPtr<UOKCharacterController> Weak(this);
   Async(EAsyncExecution::Thread,[Weak,Game,Card,Context,Generation,Outfit](){
+   OKBackgroundWorkerPriority();
    TArray<FString> Keys;FString Errors;
    for(int32 Action:{100,101,103}){
     uint8 Base[9]{},State[9]{};FString Error;
@@ -190,6 +198,7 @@ void UOKCharacterController::TickClothingPreviews(){
  auto Job=MakeShared<FOKClothingWarmJob,ESPMode::ThreadSafe>();Job->Key=Key;for(int32 I=0;I<9;++I)Job->States[I]=States[I];Job->Mods=EditorModsJson();Job->Physics=FVector2D(Selected.Body.BustSoftness,Selected.Body.BustWeight);TWeakObjectPtr<UOKCharacterController> Weak(this);
  const bool PrepareSkeleton=OKLiveGpuSkinRequested();
  Async(EAsyncExecution::Thread,[Weak,Generation,Game,Card,Outfit,States,Job,PrepareSkeleton](){
+  OKBackgroundWorkerPriority();
   const double Begin=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("OK clothing warm begin %s"),*Job->Key);
   // With the launcher's warm processes (OK_WARM_PRIORITY), an OK card's variant that is not in the open cache is
   // requested from them and waited for here. Building it in this process would hold the process-wide card pack

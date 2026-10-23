@@ -1,4 +1,5 @@
 #include "KKTextureRuntime.h"
+#include "UObject/StrongObjectPtr.h"
 #include "ok_extract.h"
 #include "Engine/Texture2D.h"
 #include "IImageWrapper.h"
@@ -225,7 +226,21 @@ struct FReadonlyTextureEntry {
 TMap<FString,FReadonlyTextureEntry> ReadonlyTextures;
 FOKReadonlyTextureCacheStats ReadonlyStats;
 uint64 ReadonlyClock=0;
-constexpr int64 ReadonlySourceBudget=64ll*1024*1024;
+constexpr int64 ReadonlySourceBudget=192ll*1024*1024;
+// The textures of the characters just left (the other outfit, the previous card) are kept for a while: switching back
+// made each of them again (its mip upload took 35-45 ms of the game thread). Bounded by their GPU size.
+TArray<TPair<TStrongObjectPtr<UTexture2D>,int64>> RecentTextures;
+int64 RecentTextureBytes=0;
+constexpr int64 RecentTextureBudget=768ll*1024*1024;
+void KeepRecentTexture(UTexture2D* Tex)
+{
+    if(!Tex)return;
+    const int32 Index=RecentTextures.IndexOfByPredicate([Tex](const TPair<TStrongObjectPtr<UTexture2D>,int64>& E){return E.Key.Get()==Tex;});
+    if(Index!=INDEX_NONE){auto Entry=MoveTemp(RecentTextures[Index]);RecentTextures.RemoveAt(Index);RecentTextures.Add(MoveTemp(Entry));return;}
+    const int64 Bytes=int64(Tex->GetSizeX())*Tex->GetSizeY()*4*4/3;
+    RecentTextures.Emplace(TStrongObjectPtr<UTexture2D>(Tex),Bytes);RecentTextureBytes+=Bytes;
+    while(RecentTextureBytes>RecentTextureBudget&&RecentTextures.Num()>1){RecentTextureBytes-=RecentTextures[0].Value;RecentTextures.RemoveAt(0);}
+}
 void TrimReadonlyTextures(int64 IncomingBytes)
 {
     for(auto It=ReadonlyTextures.CreateIterator();It;++It) if(!It.Value().Texture.IsValid())
@@ -260,7 +275,7 @@ UTexture2D* OKAcquireReadonlyRuntimeTextureFromPng(const TArray<uint8>& Png,
         if(Tex->SRGB==SRGB&&Tex->Filter==Filter&&Tex->AddressX==U&&Tex->AddressY==V&&Tex->NeverStream
             &&Tex->GetPlatformData()&&Tex->GetPlatformData()->Mips.Num()==Entry->Mips
             &&Tex->GetSizeX()==Entry->Width&&Tex->GetSizeY()==Entry->Height)
-        {Entry->LastUse=++ReadonlyClock;++ReadonlyStats.Hits;Hit=true;return Tex;}
+        {Entry->LastUse=++ReadonlyClock;++ReadonlyStats.Hits;Hit=true;KeepRecentTexture(Tex);return Tex;}
         ++ReadonlyStats.MetadataRejections;
     }
     ++ReadonlyStats.Misses;
@@ -273,6 +288,7 @@ UTexture2D* OKAcquireReadonlyRuntimeTextureFromPng(const TArray<uint8>& Png,
         FReadonlyTextureEntry Entry;Entry.Texture=Tex;Entry.Source=Png;Entry.LastUse=++ReadonlyClock;
         Entry.Mips=Tex->GetPlatformData()->Mips.Num();Entry.Width=Tex->GetSizeX();Entry.Height=Tex->GetSizeY();
         ReadonlyStats.SourceBytes+=Entry.Source.Num();ReadonlyTextures.Add(Key,MoveTemp(Entry));
+        KeepRecentTexture(Tex);
     }
     return Tex;
 }
