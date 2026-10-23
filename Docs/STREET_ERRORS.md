@@ -554,3 +554,6 @@
 ### 2026-10-24 前髮遮擋深度擷取每幀多跑一個場景渲染器
 - 百貨 9 樓美食街 4 個角色同框只有 108～124 FPS，瓶頸在 render thread（8.1 ms）。Insights 顯示每幀有兩次 FDeferredShadingSceneRenderer_Render，較小的那次是前髮遮擋用的 SceneDepth 擷取（OKCrowdRuntimeScene ForegroundCapture），約佔 2.4 ms。改設 `bRenderInMainRenderer`，在主渲染器裡多跑一個 depth pass。
 - 先前我以為是 VSM 陰影：關陰影時 draw 從 1888 降到 586、FPS 升到 202。但改 clipmap 層數與 RadiusThreshold 都沒效果，隱藏角色也只少 200 個 draw。所以 draw 數不是 CPU 成本的來源。以後先用 trace 看 render thread 的時間花在哪裡，再決定改哪個設定。
+
+### 2026-10-24 攻略循環：等待時沒回她的話
+- 用 `game_wait {until}` 或 `{outing}` 推時間時，她在對話中問的話不會讓等待停下：胡桃 14:40 到水族館開口後，我沉默到 14:58；刻晴餵完魚開口後，我也沒回，被扣了好感。改用 scratchpad 的 `waittalk.sh`：每次只走 30 秒，她說出新的一句就停。另外，送出下一句前要先回她最後問的問題。

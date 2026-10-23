@@ -272,7 +272,10 @@ void AOKStreetSocialScene::TickLife(float Dt){
  if(S.Target!=INDEX_NONE&&S.RemoteMode==0&&!S.FreeTalkBusy&&S.PendingIntimacy==INDEX_NONE&&S.PrivateGirl==INDEX_NONE&&S.LifeWishDay!=S.Store.CalendarDay&&Now>=S.LifeWishAt){
   S.LifeWishAt=Now+30.0;const int32 I=S.Target;
   const FString Id=OKStreetStableId(S.Manifest.Characters[I]);const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
-  const bool Low=R.Emotion==OKT(TEXT("ui.life.mood_low"))||R.Emotion==OKT(TEXT("ui.life.tired_mood"))||R.Emotion==OKT(TEXT("ui.life.angry_mood"));
+  // Not while she is cross with him: jealous a moment ago ("who were you so close with today?") she whispered she wanted
+  // to be closer (R3-116).
+  const bool Low=R.Emotion==OKT(TEXT("ui.life.mood_low"))||R.Emotion==OKT(TEXT("ui.life.tired_mood"))||R.Emotion==OKT(TEXT("ui.life.angry_mood"))
+   ||R.Emotion==OKT(TEXT("ui.life.jealous_mood"))||R.Emotion==OKT(TEXT("ui.life.mocking_mood"))||R.Jealousy>=40.f||R.Resentment>=30.f;
   if(R.Stage==TEXT("lover")&&OKStreetNormsOf(PlaceHere(S.Male)).Privacy>=2&&R.Attraction>=55&&R.Energy>=30&&!Low&&FMath::FRand()<0.15f){
    S.LifeWishDay=S.Store.CalendarDay;
    S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.life.whisper_closer_scene"));SendFreeTalk();
