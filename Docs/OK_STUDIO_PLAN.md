@@ -600,6 +600,7 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - 一個髮型 prefab 拆成多個 renderer（0633 的後髮 `cf_hair_b_04` 有 8 個）時，每個 renderer 原本各自模擬同一組動態骨；原作是 prefab 的 DynamicBone 只跑一次、所有 renderer 共用骨頭。同一部件、同一掛點與擺放、同一組模擬骨頭的 renderer 現在只由第一個模擬，其餘取它解完的骨頭 local 值再蒙皮（`update_render_follow`；`OK_ACC_SHARED_SOLVE=0` 恢復各自模擬）。0633 每角色後髮從 8 次模擬變 1 次；機器空閒時並行下牆鐘時間差不多，但總 CPU 少很多（之前背景負載高時這三個角色各要 12 ms）。畫面與各自模擬相同。`OK_ACC_PART_PROFILE=<幀數>` 印出各配件部件的平均求解時間。
 - 角色陰影擷取改為整個場景每幀最多 `ok.ShadowCapturesPerFrame`（預設 2）個：角色多時每個角色的陰影更新間隔拉長（6 角色為每 3 幀）。0633 render thread 12.4 → 8.3 ms。
 - 私有骨架 GPU 部件的 palette 讀取（`PreparePrivateGpuDisplayPoses`）移到 worker 的 `SolveScenePose`：0633 遊戲執行緒的角色區塊 6.9 → 5.1 ms。
+- 工作室執行時關閉遮擋查詢（`r.AllowOcclusionQueries 0`，結束時恢復）：場景通常幾乎全部可見，遮擋查詢擋不掉什麼，render thread 卻每幀等 RHI thread 的 fence 2–4 ms。同次 A/B：3167 render thread 11.8 → 8.0 ms（85 → 96.5 fps）、0633 10.1 → 8.2 ms，GPU 沒有變慢。
 - `run_ok_studio_perf.lua --exec "<控制台指令>,..."`：量測前先下指令（例如比較 cvar 的兩種值）。
 - 引擎補丁 `MorphDoubleBufferRead.patch`：連跑 8 個場景時曾在載入第一個場景時斷言當機（`FMorphVertexBufferPool::GetReadingIndex`），見 ERROR_LOG。
 - 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，6964 與 9 角色的 5065 A/B 都無差別）；臉部元件共用 leader 後重新發佈 morph（原因是上述引擎行為，已改用覆寫）。

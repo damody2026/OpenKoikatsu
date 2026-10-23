@@ -1288,6 +1288,13 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 		Game->bSyncPending = true;
 		if (!Game->bHistoryRestoring && !Game->bTimelinePlaying) { Game->bHistoryDirty = true; Game->LastChangeSeconds = FPlatformTime::Seconds(); }
 	});
+	// A scene is a few rooms and characters in one view, nearly everything visible: occlusion queries hide little, while
+	// the render thread waited ~2–4 ms a frame on the RHI thread for their fence (3167: 11.8 -> 8.0 ms).
+	if (IConsoleVariable* Occlusion = IConsoleManager::Get().FindConsoleVariable(TEXT("r.AllowOcclusionQueries")))
+	{
+		Game->SavedOcclusionQueries = Occlusion->GetInt();
+		Occlusion->Set(0, ECVF_SetByCode);
+	}
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
@@ -1424,6 +1431,9 @@ void UOKStudioGame::Stop()
 	for (const TWeakObjectPtr<APostProcessVolume>& Volume : DisabledWorldVolumes) if (Volume.IsValid()) Volume->bEnabled = true;
 	HiddenWorldActors.Reset();
 	DisabledWorldVolumes.Reset();
+	if (SavedOcclusionQueries != INDEX_NONE)
+		if (IConsoleVariable* Occlusion = IConsoleManager::Get().FindConsoleVariable(TEXT("r.AllowOcclusionQueries"))) Occlusion->Set(SavedOcclusionQueries, ECVF_SetByCode);
+	SavedOcclusionQueries = INDEX_NONE;
 	if (GRunning.Get() == this) GRunning = nullptr;
 	FSimpleMulticastDelegate Stopped = MoveTemp(OnStopped);
 	OnStopped.Clear();
