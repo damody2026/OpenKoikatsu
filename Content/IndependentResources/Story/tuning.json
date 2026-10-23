@@ -89,9 +89,10 @@
     "fade_out": 0.1,
     "fade_in": 0.15,
     "target": [
-      768,
-      1152
+      2048,
+      2048
     ],
+    "supersample": 2.0,
     "every": 1,
     "offstage_at": [
       0.0,

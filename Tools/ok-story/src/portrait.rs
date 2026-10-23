@@ -94,9 +94,11 @@ impl Portrait {
         let rect = [0.0, 1.0 - layout.portrait_height, layout.portrait_width, layout.portrait_height];
         let (vw, vh) = (viewport[0].max(1.0), viewport[1].max(1.0));
         let px = [rect[2] * vw, rect[3] * vh];
-        // The render target follows the portrait's pixels, at most the tuned size.
-        let fit = (t.target[0] as f64 / px[0]).min(t.target[1] as f64 / px[1]).min(1.0);
-        let target = [(px[0] * fit).round().max(16.0) as u32, (px[1] * fit).round().max(16.0) as u32];
+        // The render target follows the portrait's pixels times the supersampling, at most the tuned size.
+        let ss = t.supersample.clamp(1.0, 4.0);
+        let want = [px[0] * ss, px[1] * ss];
+        let fit = (t.target[0] as f64 / want[0]).min(t.target[1] as f64 / want[1]).min(1.0);
+        let target = [(want[0] * fit).round().max(16.0) as u32, (want[1] * fit).round().max(16.0) as u32];
         let mut out = PortraitOut {
             rect,
             fade_from: layout.portrait_fade_from,

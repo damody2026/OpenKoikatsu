@@ -167,8 +167,11 @@ pub struct PortraitTuning {
     pub anchor: [f64; 2],
     pub fade_out: f64,
     pub fade_in: f64,
-    /// Render target size and how often it is captured (every N frames).
+    /// Largest render target, and how often it is captured (every N frames).
     pub target: [u32; 2],
+    /// Captured at this many times the pixels it covers on screen, then drawn smaller: the capture has no
+    /// anti-aliasing of its own, so a 1:1 target shows jagged, soft edges.
+    pub supersample: f64,
     pub every: u32,
     /// Where offstage speakers stand (out of every view).
     pub offstage_at: [f64; 3],
@@ -187,7 +190,8 @@ impl Default for PortraitTuning {
             anchor: [0.2, 0.3],
             fade_out: 0.10,
             fade_in: 0.15,
-            target: [768, 1152],
+            target: [2048, 2048],
+            supersample: 2.0,
             every: 1,
             offstage_at: [0.0, 50000.0, 0.0],
             offstage_motion: "0:0:1".into(),
