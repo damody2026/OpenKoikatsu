@@ -13,6 +13,12 @@ static FString OKFinMoney(double V){return V>=1e8?OKMsg(TEXT("ui.finance.amount_
 TSharedPtr<FJsonObject> AOKStreetSocialScene::Fin(const FString& Op,TSharedPtr<FJsonObject> Args,FString& Error){
  auto& S=*State;Error.Reset();
  if(!S.Mind){Error=OKT(TEXT("ui.finance.finance_needs_dll"));return nullptr;}
+ FString Out;if(!S.Mind->Query(FinQueryText(Op,Args),Out,Error)){Error=OKFinError(Error);return nullptr;}
+ return FinAnswer(Op,Out,Error);
+}
+
+FString AOKStreetSocialScene::FinQueryText(const FString& Op,TSharedPtr<FJsonObject> Args){
+ auto& S=*State;
  if(!Args)Args=MakeShared<FJsonObject>();
  Args=FinWallet(TEXT("to_fin"),Op,Args); // the region's money -> finance's yuan wallet
  const FDateTime Now=StreetNow();
@@ -22,9 +28,20 @@ TSharedPtr<FJsonObject> AOKStreetSocialScene::Fin(const FString& Op,TSharedPtr<F
  if(!Args->HasField(TEXT("date")))Args->SetStringField(TEXT("date"),Now.ToString(TEXT("%Y-%m-%d")));
  if(!Args->HasField(TEXT("minute")))Args->SetNumberField(TEXT("minute"),Now.GetHour()*60+Now.GetMinute());
  FString Text;FJsonSerializer::Serialize(Args.ToSharedRef(),TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text));
- FString Out;if(!S.Mind->Query(Text,Out,Error)){Error=OKFinError(Error);return nullptr;}
+ return Text;
+}
+
+TSharedPtr<FJsonObject> AOKStreetSocialScene::FinAnswer(const FString& Op,const FString& Out,FString& Error){
  TSharedPtr<FJsonObject> R;if(!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Out),R)||!R){Error=TEXT("fin_json");return nullptr;}
+ // The book changed (a ticket, an order, a transfer, her trade): the next tick may have something to do now.
+ if(R->HasField(TEXT("due_now"))){State->FinDueAt=0;State->FinBookChanged=true;}
  return FinWallet(TEXT("from_fin"),Op,R); // finance's yuan -> the region's money
+}
+
+// The tick query runs on a worker; the mind is closed (EndPlay) or reloaded only after it has returned.
+void AOKStreetSocialScene::WaitFinQuery(){
+ if(!State)return;
+ for(int32 Tries=0;*State->FinQueryRunning&&Tries<10000;++Tries)FPlatformProcess::Sleep(0.001f);
 }
 
 // The journal's category of money in or out of the wallet for the finance apps (stake, prize, broker transfer).
@@ -55,16 +72,33 @@ void AOKStreetSocialScene::FinRelation(const FString& Id,float Admiration,float 
 
 void AOKStreetSocialScene::TickFinance(){
  auto& S=*State;if(!S.Mind||S.SelfTest)return;
- const double Wall=FPlatformTime::Seconds();if(Wall<S.FinTickAt)return;S.FinTickAt=Wall+2.0;
- FString Error;const auto R=Fin(TEXT("tick"),nullptr,Error);
- if(!R){if(!S.FinTickWarned){S.FinTickWarned=true;UE_LOG(LogTemp,Warning,TEXT("Street finance tick: %s"),*Error);}return;}
+ const double Wall=FPlatformTime::Seconds();if(Wall<S.FinTickAt)return;S.FinTickAt=Wall+1.0;
+ // The finance service's tick (draws, settlements, fills, corporate actions) only when it said something can be due
+ // (due_in game minutes) or after the book changed, and off the game thread: it was a 60-250 ms stall every 2 s.
+ const int64 Now=OKStreetMindNow(S);
+ if(!S.FinTickInFlight&&Now>=S.FinDueAt){
+  S.FinTickInFlight=true;S.FinBookChanged=false;S.FinQueryRunning->AtomicSet(true);
+  FOKStreetMind* Mind=S.Mind.Get();FString Text=FinQueryText(TEXT("tick"),nullptr);
+  Async(EAsyncExecution::ThreadPool,[Mind,Text=MoveTemp(Text),Running=S.FinQueryRunning,Self=TWeakObjectPtr<AOKStreetSocialScene>(this),Now]{
+   FString Out,Error;const bool bOk=Mind->Query(Text,Out,Error);Running->AtomicSet(false);
+   AsyncTask(ENamedThreads::GameThread,[Self,bOk,Out=MoveTemp(Out),Error=MoveTemp(Error),Now]{if(auto* Scene=Self.Get())Scene->FinishFinTick(bOk,Out,Error,Now);});
+  });
+ }
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_HeroineFinance);TickHeroineFinance();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_HeroineInvest);TickHeroineInvest();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_Bankruptcy);CheckBankruptcy();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_Computer);TickComputer();}
+ if(!S.App.IsEmpty()&&Wall>=S.AppRefreshAt){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_AppRefresh);RefreshAppData(false);}
+}
+
+void AOKStreetSocialScene::FinishFinTick(bool bOk,const FString& Out,const FString& QueryError,int64 Asked){
+ if(!State)return;auto& S=*State;S.FinTickInFlight=false;
+ FString Error=QueryError;const TSharedPtr<FJsonObject> R=bOk?FinAnswer(TEXT("tick"),Out,Error):nullptr;
+ if(!R){if(!S.FinTickWarned){S.FinTickWarned=true;UE_LOG(LogTemp,Warning,TEXT("Street finance tick: %s"),*OKFinError(Error));}S.FinDueAt=Asked+10;return;}
  S.FinClaims=int64(OKFinNum(R,TEXT("claims")));
- for(const auto& V:OKFinArr(R,TEXT("events")))if(const auto E=V->AsObject())HandleFinanceEvent(E);
- TickHeroineFinance();
- TickHeroineInvest();
- CheckBankruptcy();
- TickComputer();
- if(!S.App.IsEmpty()&&Wall>=S.AppRefreshAt)RefreshAppData(false);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinEvents);for(const auto& V:OKFinArr(R,TEXT("events")))if(const auto E=V->AsObject())HandleFinanceEvent(E);}
+ // Next time: when the service said, unless the book changed meanwhile (then at once).
+ if(!S.FinBookChanged)S.FinDueAt=Asked+FMath::Max<int64>(1,int64(OKFinNum(R,TEXT("due_in"),1)));
 }
 
 void AOKStreetSocialScene::HandleFinanceEvent(const TSharedPtr<FJsonObject>& Event){

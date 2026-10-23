@@ -86,8 +86,7 @@ void AOKStreetSocialScene::SaveCalendar(){
  // Where he stands: outside the room of a facility he is in (it puts him in a set), not while riding an elevator.
  if(ElevatorWithMale()==INDEX_NONE&&S.LiftRide.Elevator==INDEX_NONE){Candidate.HasPlayerSpot=true;Candidate.PlayerSpot=S.FacilityEntered?S.FacilitySavedMale:S.Male;Candidate.PlayerYaw=S.FacilityEntered?S.FacilitySavedMaleRotation.Yaw:S.Rotations[0].Yaw;Candidate.ViewYaw=S.FacilityEntered?S.FacilitySavedYaw:S.Yaw;S.SpotSavedMale=Candidate.PlayerSpot;S.SpotSavedAt=FPlatformTime::Seconds();}
  Candidate.CalendarMinute=FMath::Clamp(FMath::FloorToInt32(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),0,24*60-1);
- FString Error;if(OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error))S.Store=MoveTemp(Candidate);
- else UE_LOG(LogTemp,Warning,TEXT("StreetSocial calendar save failed: %s"),*Error);
+ OKStreetAtomicSaveAsync(S.Manifest.SavePath,OKStreetWriteSave(Candidate));S.Store=MoveTemp(Candidate);
 }
 
 void AOKStreetSocialScene::TickCalendarAndMind(){
@@ -100,27 +99,27 @@ void AOKStreetSocialScene::TickCalendarAndMind(){
  S.CalendarLastHours=Hours;
  // Once per game hour (2.5 real minutes) the clock is saved, so quitting loses at most an hour.
  const int32 Hour=FMath::FloorToInt32(Hours);
- if(Hour!=S.CalendarSavedHour){S.CalendarSavedHour=Hour;SaveCalendar();}
+ if(Hour!=S.CalendarSavedHour){S.CalendarSavedHour=Hour;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SaveCalendar);SaveCalendar();}}
  // He walked somewhere else: saved too (at most every 20 s), so a game closed any way continues near where he was.
  else if(!S.SelfTest&&FVector::Dist2D(S.Male,S.SpotSavedMale)>500.f&&FPlatformTime::Seconds()-S.SpotSavedAt>20.0)SaveCalendar();
- TickChoices();
- TickNeeds();TickBonds();
- TickApproach();
- TickIntimacy();
- TickAppointments();
- TickAutoFriendship();
- TickSchedules();
- TickJobs();
- TickEncounters();
- TickInitiative();
- TickDirector();
- TickFinance();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickChoices);TickChoices();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickNeeds);TickNeeds();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBonds);TickBonds();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickApproach);TickApproach();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickIntimacy);TickIntimacy();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAppointments);TickAppointments();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAutoFriendship);TickAutoFriendship();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSchedules);TickSchedules();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickJobs);TickJobs();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEncounters);TickEncounters();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickInitiative);TickInitiative();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickDirector);TickDirector();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFinance);TickFinance();}
  if(S.Mind){
   // Talk moved on from her (another partner, or none for a while): summarise the meeting into her memories.
   const int32 Partner=FreeTalkPartner();
   if(S.MindTalkPartner!=INDEX_NONE&&Partner!=S.MindTalkPartner&&!S.FreeTalkBusy){MindSummarize(S.MindTalkPartner);S.MindTalkPartner=INDEX_NONE;}
-  TArray<TSharedPtr<FJsonObject>> Results;S.Mind->Poll(Results);
-  for(const auto& R:Results){
+  TArray<TSharedPtr<FJsonObject>> Results;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindPoll);S.Mind->Poll(Results);}
+  for(const auto& R:Results){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindResult);
    FString Kind;R->TryGetStringField(TEXT("kind"),Kind);
    // A chat job someone is waiting for (SubmitMindChat).
    {double JobId=0;if(R->TryGetNumberField(TEXT("id"),JobId))if(auto* Done=S.MindChats.Find(uint64(JobId))){
@@ -312,7 +311,7 @@ void AOKStreetSocialScene::ApplyMindRelation(int32 Character,const TSharedPtr<FJ
  TArray<FString> Applied;for(const auto& V:Out->GetArrayField(TEXT("applied")))Applied.Add(V->AsString());
  OKRulesPatchRelation(R,*Out->GetObjectField(TEXT("relation")));
  FString Error;
- if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()&&!OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error)){UE_LOG(LogTemp,Warning,TEXT("StreetSocial relation save failed: %s"),*Error);return;}
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveAsync(S.Manifest.SavePath,OKStreetWriteSave(Candidate));
  S.Store=MoveTemp(Candidate);
  if(!Applied.IsEmpty()){S.FreeTalkNotice+=TEXT("　")+FString::Join(Applied,TEXT(" "));UE_LOG(LogTemp,Display,TEXT("Street relation: actor=%d %s emotion=%s"),Character,*FString::Join(Applied,TEXT(" ")),*Emotion);}
 }

@@ -63,6 +63,9 @@ FString AOKStreetSocialScene::SaveSlotName(const FString& Slot) const{
 // The live game copied into a slot, with what the slot list shows (the game's day and time, money, lovers).
 bool AOKStreetSocialScene::SaveToSlot(const FString& Slot){
  auto& S=*State;if(S.SelfTest||S.Manifest.SavePath.IsEmpty())return false;
+ if(S.FreeTalkLogDirty){S.FreeTalkLogDirty=false;FreeTalkSaveLog();} // the slot copies the file
+ OKStreetFlushSaves();
+ if(S.Mind){FString MindError;if(!S.Mind->Save(MindError))UE_LOG(LogTemp,Warning,TEXT("Street saves: mind save failed: %s"),*MindError);}
  SaveCalendar();
  const FString Dir=SaveSlotDir(Slot),Temp=Dir+TEXT(".writing");auto& F=IFileManager::Get();F.DeleteDirectory(*Temp,false,true);
  if(!OKStreetCopyGame(FPaths::GetPath(S.Manifest.SavePath),Temp)){F.DeleteDirectory(*Temp,false,true);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}

@@ -2,7 +2,7 @@
 // Two slots may prepare at once. Each request carries an epoch. Cancel, a
 // failed admission, the 60-second deadline, and scene exit all make that epoch
 // unable to publish or to start paired speech.
-void ServiceStream(){
+void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
  if(!Installed||!Render->Ready.Load()||CaptureStage==1||CaptureStage==2)return;
  for(auto& Entry:Entries)if(Entry->PendingAction!=INDEX_NONE&&FPlatformTime::Seconds()-Entry->PendingActionAt>OKCrowdRuntimeActionPrepareSeconds){
   if(!Entry->PendingSpeechAction.IsEmpty()&&ClipIds.Find(Entry->PendingSpeechAction)==Entry->PendingAction)Entry->CancelSpeech();
@@ -12,6 +12,26 @@ void ServiceStream(){
  for(int32 Index=0;Index<OKCrowdRuntimeActionSlots;++Index){
   auto& Slot=ActionSlots[Index];if(Slot.Actor==INDEX_NONE||!Entries.IsValidIndex(Slot.Actor)){if(Slot.Actor!=INDEX_NONE)ClearActionSlot(Slot);continue;}
   auto& E=*Entries[Slot.Actor];
+  // A staged upload advances a chunk per frame, wanted or not (an unwanted one is dropped once it is complete).
+  if(Slot.Install&&Slot.Install->Status.Load()==0&&!Slot.Install->InFlight.Load()){
+   Slot.Install->InFlight.Store(true);const int32 SlotIndex=Index;
+   ENQUEUE_RENDER_COMMAND(AdmitRuntimeActionChunk)([R=Render,S=Slot.Install,SlotIndex](FRHICommandListImmediate& Cmd){
+    auto& Gpu=R->Streams[SlotIndex];FRDGBuilder G(Cmd);FString Error;R->Budget->Collect();
+    if(!S->Started){
+     // Same per-slot scratch charge as the previous single overlay. A second slot pays it again. Rejection keeps the
+     // pose already on screen (this slot's own pose is not shown: its clip is inactive).
+     if(!R->Budget->Reserve(uint64(R->Bank->Data.Pose.Tasks.Num())*96,S->Scratch,Error)){S->Error=Error;G.Execute();S->Status.Store(-1);S->InFlight.Store(false);return;}
+     Gpu.Pose->Release();S->Started=true;
+    }
+    bool Done=false;
+    if(!Gpu.Pose->UploadManagedChunk(G,S->Bank.ToSharedRef(),R->Budget,4ull*1024*1024,Done,Error)){
+     R->Budget->CancelUnused(S->Scratch);S->Error=Error;G.Execute();S->Status.Store(-1);S->InFlight.Store(false);return;
+    }
+    // Upload readiness is not activation. The game thread must publish the matching clip catalog and CPU keys before
+    // render playback can use this bank.
+    G.Execute();if(Done){Gpu.ScratchLease=S->Scratch;S->Status.Store(1);}S->InFlight.Store(false);
+   });
+  }
   const bool Want=Slot.Epoch!=0&&Slot.Epoch==E.PendingEpoch&&E.PendingAction==Slot.Source;
   const bool Live=E.StreamInstalled&&Slot.Epoch!=0&&Slot.Epoch==E.InstalledEpoch;
   if(!Want&&!Live){
@@ -42,22 +62,9 @@ void ServiceStream(){
    }
   }
   if(Slot.Prepared&&!Slot.Install&&!E.Clock.UsesClip(2)){
+   // The staged upload starts on the next frame's pass above (AdmitRuntimeActionChunk).
    Slot.Install=MakeShared<FStreamInstall,ESPMode::ThreadSafe>();
-   Slot.Install->Bank=TSharedPtr<FOKGpuAnimationBundle,ESPMode::ThreadSafe>(Slot.Prepared->Packed.Bank.Release());
-   const int32 SlotIndex=Index;
-   ENQUEUE_RENDER_COMMAND(AdmitRuntimeAction)([R=Render,S=Slot.Install,SlotIndex](FRHICommandListImmediate& Cmd){
-    auto& Gpu=R->Streams[SlotIndex];
-    FRDGBuilder G(Cmd);FString Error;R->Budget->Collect();uint64 Scratch=0;
-    // Same per-slot scratch charge as the previous single overlay. A second slot
-    // pays it again. Rejection keeps the pose already on screen.
-    if(!R->Budget->Reserve(uint64(R->Bank->Data.Pose.Tasks.Num())*96,Scratch,Error)){S->Error=Error;G.Execute();S->Status.Store(-1);return;}
-    if(!Gpu.Pose->InitializeManaged(G,S->Bank->Data.Pose,S->Bank->Data.OwnedClips,R->Budget,Error)){
-     R->Budget->CancelUnused(Scratch);S->Error=Error;G.Execute();S->Status.Store(-1);return;
-    }
-    // Upload readiness is not activation. The game thread must publish the
-    // matching clip catalog and CPU keys before render playback can use this bank.
-    G.Execute();Gpu.ScratchLease=Scratch;S->Status.Store(1);
-   });
+   Slot.Install->Bank=Slot.Prepared->Validated;
   }
   if(Slot.Install&&Slot.Install->Status.Load()==-1){
    ++E.StreamErrors;UE_LOG(LogTemp,Warning,TEXT("Runtime action GPU admission retained current animation: %s"),*Slot.Install->Error);
@@ -140,7 +147,11 @@ void ServiceStream(){
     Clips[Clip].Keys.Empty();Clips[Clip].Tracks.Reset();
     Clips[Clip].Tracks.Append(Bank->Data.Pose.Tracks.GetData()+Metadata.Clips[Clip].TrackOffset,Metadata.PoseCount);
    }
-   Result.Clips=MoveTemp(Clips);Result.Packed.Bank=MoveTemp(Bank);Result.Ms=(FPlatformTime::Seconds()-Begin)*1000;return Result;
+   Result.Clips=MoveTemp(Clips);
+   // Validated here, off the game and render threads (it walks every key and track).
+   Result.Validated=FOKValidatedGpuBank::Create(MoveTemp(Bank),Result.Error);
+   if(!Result.Validated&&Result.Error.IsEmpty())Result.Error=TEXT("Streamed private animation bank invalid");
+   Result.Ms=(FPlatformTime::Seconds()-Begin)*1000;return Result;
   });
  }
 }

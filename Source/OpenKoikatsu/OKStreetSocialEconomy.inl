@@ -85,7 +85,7 @@ bool AOKStreetSocialScene::CommitStore(FOKStreetStore&& Candidate){
  if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()){const FString Json=OKStreetWriteSave(Candidate);
   // A save is ~100 KB. One growing every write (a list appended to instead of replaced) is said once, before it stalls the game.
   {static int32 WarnedAt=0;const int32 Kb=Json.Len()/1024;if(Kb>2048&&Kb>WarnedAt*2){WarnedAt=Kb;UE_LOG(LogTemp,Warning,TEXT("Street save is %d KB: something in it keeps growing"),Kb);}}
-  if(!OKStreetAtomicSave(S.Manifest.SavePath,Json,Error)){S.FreeTalkNotice=OKT(TEXT("ui.economy.save_failed_prefix"))+Error;S.PendingRulesEffects.Reset();return false;}}
+  OKStreetAtomicSaveAsync(S.Manifest.SavePath,Json);}
  S.Store=MoveTemp(Candidate);FlushRulesEffects();return true;
 }
 

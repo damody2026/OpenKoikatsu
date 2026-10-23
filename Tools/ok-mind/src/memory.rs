@@ -122,6 +122,7 @@ impl Memories {
         let mut open = self.open.lock().unwrap();
         if !open.contains_key(heroine) {
             let path = self.dir.join(file_name(heroine));
+            crate::store::settle(&path);
             let file = if path.exists() {
                 let text = std::fs::read_to_string(&path).map_err(|e| format!("memory_unreadable: {e}"))?;
                 let file: MemoryFile = serde_json::from_str(&text).map_err(|e| format!("memory_invalid: {e}"))?;

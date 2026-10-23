@@ -72,6 +72,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/StringOutputDevice.h"
+#include "HAL/ThreadSafeBool.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -250,14 +251,14 @@ struct FOKStreetSceneState {
  int32 InitiativeSlot=-1,InitiativesToday=0,DirectorDay=-1;
  // Plan §15: the open full-screen app (lottery, scratch, web, notebook, atm, cn, us), its data and its inputs.
  FString App,FinMarket,FinCode,FinPeriod=TEXT("intraday"),FinSearchText,FinOrderSide=TEXT("buy"),FinOrderKind=TEXT("market"),FinOrderPrice,FinOrderQty=TEXT("100"),FinTransfer=TEXT("2000"),FinNotice;
- bool AppReadOnly=false,AppSavedMouse=false,FinTickWarned=false,PcWarned=false;double FinTickAt=0,AppRefreshAt=0,FinMoversAt=0,DrawShowAt=0,WatchStart=0;
+ bool AppReadOnly=false,AppSavedMouse=false,FinTickWarned=false,PcWarned=false;int64 FinDueAt=0;bool FinTickInFlight=false,FinBookChanged=false;TSharedRef<FThreadSafeBool,ESPMode::ThreadSafe> FinQueryRunning=MakeShared<FThreadSafeBool,ESPMode::ThreadSafe>(false); /* TickFinance */double FinTickAt=0,AppRefreshAt=0,FinMoversAt=0,DrawShowAt=0,WatchStart=0;
  int32 FinHeroDay=-1,WatchGirl=INDEX_NONE,PcPaidHours=0,LotZone2=1,LotDraws=1;int64 FinClaims=0,ScratchTicket=0,PcStartMinute=0;FString PcPlace,LotTab=TEXT("star649"),LotGame=TEXT("star649"),WebTab=TEXT("home"),ScratchTheme,BetStake=TEXT("20");
  TSharedPtr<FJsonObject> FinLotto,FinBoard,FinTickets,FinNotebook,FinQuote,FinAccount,FinWatch,FinMovers,FinSummary,FinSearch,DrawShow;
  bool NearCounter=false;
  // NPC idles: when each last moved, how long she has stood still, and whether her current stop was lengthened.
  TMap<int32,int32> IdlePose;TMap<int32,double> LastMovedAt,StillSince;TMap<int32,float> LastWalk,PrevDwell;int32 ProbeStep=-1;double ProbeAt=0;FString ProbeWhy;TArray<TSharedPtr<FJsonValue>> ProbeRows; // OK_STREET_UI_PROBE
  // Campus (OKStreetSocialCampus.inl): upstairs commute targets, studying, stair/office proximity, attendance, exams.
- TMap<int32,FVector> CommuteFinal;FString EntryPlace;int32 EntryMinutes=0;bool bEntryPlaceKnown=false,bEntrySettled=true; /* the place he is in, minutes in a row, admission asked (PayEntry) */bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
+ TMap<int32,FVector> CommuteFinal;bool FreeTalkLogDirty=false;double FreeTalkLogSavedAt=0; /* free-talk-log.json written at most once a second (Tick) */TArray<FIntVector> PendingEncounters; /* met pairs (a, b, overheard) waiting for their turn: one a frame (TickEncounters) */FString EntryPlace;int32 EntryMinutes=0;bool bEntryPlaceKnown=false,bEntrySettled=true; /* the place he is in, minutes in a row, admission asked (PayEntry) */bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
  // Bank app, price alerts, net worth chart and the heroines' own accounts (OKStreetSocialBank.inl).
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
@@ -1542,7 +1543,8 @@ int64 AOKStreetSocialScene::FreeTalkAddLine(int32 Character,bool Player,const FS
  S.FreeTalkLog.Add(MoveTemp(Line));
  HistoryAdd(Character,RemoteWith(Character)?(RemoteKind(Character)==2?TEXT("call"):TEXT("message")):TEXT("talk"),Player?TEXT("him"):TEXT("her"),Text); // her own history
  if(S.FreeTalkLog.Num()>OKFreeTalkLogLimit)S.FreeTalkLog.RemoveAt(0,S.FreeTalkLog.Num()-OKFreeTalkLogLimit);
- FreeTalkSaveLog();
+ // The whole log is rewritten on save: not once per line (an overheard chat of six lines wrote it six times in a frame).
+ S.FreeTalkLogDirty=true;
  return S.FreeTalkSerial;
 }
 
@@ -3147,16 +3149,17 @@ void AOKStreetSocialScene::Tick(float Dt){
   const FString Key=Shop.IsEmpty()?FString():Shop+(PlaceClosedNow(Shop,Why)?TEXT("|closed"):TEXT("|open"));
   if(Key!=S.UiShopKey){S.UiShopKey=Key;S.UiDirty=true;}
  }
- if(S.UiDirty){S.UiDirty=false;RebuildUI();}TickControl();
+ if(S.FreeTalkLogDirty&&FPlatformTime::Seconds()-S.FreeTalkLogSavedAt>1.0){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkSaveLog);S.FreeTalkLogDirty=false;S.FreeTalkLogSavedAt=FPlatformTime::Seconds();FreeTalkSaveLog();}
+ if(S.UiDirty){S.UiDirty=false;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_RebuildUI);RebuildUI();}}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickControl);TickControl();}
  const double Now=SceneTime();auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;
  if(!S.CatchLight.IsValid()){auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetLightingChannels(false,false,true);L->SetCastShadows(false);
   L->SetIntensityUnits(ELightUnits::Candelas);L->SetIntensity(100.f); /* 100 cd: a clear wet shine, short of glare (300 burns out) */L->SetAttenuationRadius(800.f);L->SetSourceRadius(2.f);L->RegisterComponent();AddInstanceComponent(L);S.CatchLight=L;}
  if(PC->PlayerCameraManager)S.CatchLight->SetWorldLocation(PC->PlayerCameraManager->GetCameraLocation()+FVector(0,0,25));
- TickFreeTalkReplay(Now);TickFreeTalkSpeech(Now);TickFreeTalkLive(Now);TickFreeTalkTrace(Now);TickOrderNotice();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkSpeech(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
- TickServes();TickShopArrival();TickMeal(S.ClockPaused?0.f:Dt);TickRetryAction();TickEnsureFreeTalk();TickFaceTalkPartner();TickParty(Dt);TickBluff();TickFarewell();TickPlaceClosing();TickPlaceTour(Now);TickLiveTalkTest(Now);
- TickRestroom();TickSleep();TickSolo();TickCalendarAndMind();TickSaves();TickCommutes(Dt);TickUiProbe();TickCounterProximity();TickAcademics();TickCampusProximity();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
  // Reading together ends when the player walks away from her.
  // Walk-in places: the roof and ceiling disappear while the player stands inside, so the camera sees the room.
  // Multi-storey places also hide every floor above the player's.
@@ -3175,7 +3178,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  // Once a real second is enough: the sun turns 0.1 degree per second, and each move redraws shadow maps.
  if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const auto Sun=OKStreetSunAt(OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall));S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);}}
  if(TickPrivate(Now))return;
- TickFacility(Now);TickPhoto(Now);TickContacts(Dt,Now);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFacility);TickFacility(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPhoto);TickPhoto(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickContacts);TickContacts(Dt,Now);}
  // Every actor of this roster (one male and up to OKStreetFemaleCount heroines).
  const int32 Cast=FMath::Min(S.Manifest.Characters.Num(),OKStreetCastCount);
  bool Ready=true;int32 Visible=0;FOKRuntimeCharacterStatus Statuses[OKStreetCastCount];bool Queried[OKStreetCastCount]={};
@@ -3229,11 +3232,11 @@ void AOKStreetSocialScene::Tick(float Dt){
  FString Error;OKSetCrowdRuntimeLocomotionState(this,0,S.Target!=INDEX_NONE,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
  // A girl he is with is not on her schedule walk any more (it would keep pulling her to its route, on the ground).
  for(int32 G=1;G<=S.Agents.Num();++G)if(S.Commutes.Contains(G)&&(BusyWithPlayer(G)||S.LiftWalks.Contains(G)||S.LiftPins.Contains(G)))S.Commutes.Remove(G);
- TickElevators(Dt);
- TickLover();
- TickLife(Dt);
- TickSong(SceneTime());
- TickFaceTalkPartner(true);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickElevators);TickElevators(Dt);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLover);TickLover();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLife);TickLife(Dt);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSong);TickSong(SceneTime());}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner(true);}
  auto Snapshot=S.Agents;FOKStreetAgentSim PlayerObstacle;PlayerObstacle.Slot=0;PlayerObstacle.Position=S.Male;PlayerObstacle.Held=true;Snapshot.Add(PlayerObstacle);
  for(auto& Agent:S.Agents){
   if(!S.SelfTest&&!S.RunNext.Contains(Agent.Slot))S.RunNext.Add(Agent.Slot,Now+S.Random.FRandRange(8,22));
@@ -3260,8 +3263,8 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(S.SelfTest&&Agent.Position!=Before&&!S.FacingActorsChecked.Contains(Agent.Slot)){FOKRuntimeCharacterStatus Submitted;const float BeforeError=FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousFacing.Yaw,S.Rotations[Agent.Slot].Yaw));const float AfterError=FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[Agent.Slot].Yaw,S.Rotations[Agent.Slot].Yaw));if(OKGetCrowdRuntimeCharacterStatus(this,Agent.Slot,Submitted)&&Submitted.Transform.Rotator().Equals(S.RenderedRotations[Agent.Slot],.01f)&&Turn<=OKStreetFemaleTurnDegreesPerSecond*FMath::Max(0.f,Dt)+.001f&&AfterError<=BeforeError+.001f){S.FacingActorsChecked.Add(Agent.Slot);++S.FacingChecks;}else S.Errors.Add(TEXT("NPC submitted facing exceeded turn limit or turned away from movement"));}
 
  }
- TickAmbientActivity(Now);
- TickReadingProps();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAmbientActivity);TickAmbientActivity(Now);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickReadingProps);TickReadingProps();}
  // Development: -StreetSocialNavWalk walks the auto navigation from the plaza to every place's door and logs it.
  if(S.AllReady&&FParse::Param(FCommandLine::Get(),TEXT("StreetSocialNavWalk"))){
   static int32 Index=-1,Arrived=0;static double StartedAt=0;
@@ -3333,7 +3336,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(S.Pair.Watermelon&&S.Pair.Phase==1){Focus=(S.Male+S.Agents[S.Pair.Partner-1].Position)*.5f+FVector(0,35,80);Pivot=Focus;}
   const FRotator View(S.Pitch,S.Yaw,0);const FVector Wanted=Pivot-View.Vector()*S.Distance+(S.Target!=INDEX_NONE?FRotationMatrix(View).GetUnitAxis(EAxis::Y)*(S.Pair.Conversation()?-120.f:110.f):FVector::ZeroVector);FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetCamera),false,this);const bool Blocked=GetWorld()->SweepSingleByChannel(Hit,Pivot,Wanted,FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeSphere(8),Query);S.Camera->SetActorLocation(Blocked?Hit.Location:Wanted);S.Camera->SetActorRotation((Focus-S.Camera->GetActorLocation()).Rotation());if(GControlCamera.Active&&!OKApplyControlCamera(this,S.Camera.Get()))GControlCamera.Active=false;OKUpdateCrowdRuntimeDisplayLighting(this,-S.Camera->GetActorForwardVector());}
  if(S.Camera.IsValid()&&SceneTime()<S.PhotoViewUntil)S.Camera->SetActorLocationAndRotation(S.PhotoViewLoc,S.PhotoViewRot); // a photo being taken
- TickGalgame(Dt); // conversations as galgame scenes: dialog box, portrait, a shot per line (OKStreetSocialGalgame.inl)
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickGalgame);TickGalgame(Dt);} // conversations as galgame scenes: dialog box, portrait, a shot per line (OKStreetSocialGalgame.inl)
  const bool AppEscape=Focused&&!S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::Escape);if(AppEscape)CloseApp();
  if(Focused&&S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::M)&&S.PrivateGirl==INDEX_NONE)ToggleBigMap();
  if(Focused&&!AppEscape&&OKKeyPressed(PC,EKeys::Escape)){if(S.BigMapOpen)ToggleBigMap();else if(S.SleepNap&&S.SleepPhase==2)S.SleepWake=true;else if(S.OutingGirl!=INDEX_NONE)CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else if(S.PrivateGirl!=INDEX_NONE)FinishPrivate();else if((S.NavGirl!=INDEX_NONE||S.NavPointActive)&&S.Target==INDEX_NONE)StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));else if(S.Pair.Partner!=INDEX_NONE)FinishPhoto();else if(S.Companion!=INDEX_NONE)FarewellCompanion();else if(S.Facility!=INDEX_NONE)FinishFacility();else EndTalk();}
@@ -3888,7 +3891,7 @@ void AOKStreetSocialScene::WriteReport(bool Passed){
  if(S.SelfTest||S.RetargetSelfTest||!Passed)FPlatformMisc::RequestExitWithStatus(false,Passed?0:1);
 }
 
-void AOKStreetSocialScene::EndPlay(const EEndPlayReason::Type Reason){EndGalgame();OKControlStop();if(State){SaveCalendar();if(!State->SaveRestarting&&State->Started)SaveToSlot(TEXT("auto"));if(State->Mind)OKStreetSetActiveMind(nullptr);if(State->Rules)OKStreetSetActiveRules(nullptr);}StopAmbientActivity();DestroyStreetPlaces();if(State&&State->FreeTalkLive)OKStreetFreeTalkAsrPost(TEXT("listen/stop"),TEXT("{}"),nullptr);if(State){FinishPrivate();}if(State){State->Pair.CapturePending=false;FinishPhoto();}EndTalk();if(State){for(auto& Row:State->ReadingProps)for(auto& Prop:Row.Value)if(Prop.IsValid())Prop->Destroy();State->ReadingProps.Reset();if(State->MouseInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(State->MouseInput);for(auto& Prop:State->FacilityProps)if(Prop.IsValid())Prop->Destroy();for(auto& Pickup:State->TopicPickups)if(Pickup.IsValid())Pickup->Destroy();if(State->BackgroundGround.IsValid())State->BackgroundGround->Destroy();if(State->BackgroundFog.IsValid())State->BackgroundFog->Destroy();}if(State&&State->Overlay.IsValid()&&GEngine&&GEngine->GameViewport)GEngine->GameViewport->RemoveViewportWidgetContent(State->Overlay.ToSharedRef());State.Reset();Super::EndPlay(Reason);}
+void AOKStreetSocialScene::EndPlay(const EEndPlayReason::Type Reason){EndGalgame();OKControlStop();if(State){WaitFinQuery();if(State->FreeTalkLogDirty)FreeTalkSaveLog();SaveCalendar();OKStreetFlushSaves();if(!State->SaveRestarting&&State->Started)SaveToSlot(TEXT("auto"));if(State->Mind)OKStreetSetActiveMind(nullptr);if(State->Rules)OKStreetSetActiveRules(nullptr);}StopAmbientActivity();DestroyStreetPlaces();if(State&&State->FreeTalkLive)OKStreetFreeTalkAsrPost(TEXT("listen/stop"),TEXT("{}"),nullptr);if(State){FinishPrivate();}if(State){State->Pair.CapturePending=false;FinishPhoto();}EndTalk();if(State){for(auto& Row:State->ReadingProps)for(auto& Prop:Row.Value)if(Prop.IsValid())Prop->Destroy();State->ReadingProps.Reset();if(State->MouseInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(State->MouseInput);for(auto& Prop:State->FacilityProps)if(Prop.IsValid())Prop->Destroy();for(auto& Pickup:State->TopicPickups)if(Pickup.IsValid())Pickup->Destroy();if(State->BackgroundGround.IsValid())State->BackgroundGround->Destroy();if(State->BackgroundFog.IsValid())State->BackgroundFog->Destroy();}if(State&&State->Overlay.IsValid()&&GEngine&&GEngine->GameViewport)GEngine->GameViewport->RemoveViewportWidgetContent(State->Overlay.ToSharedRef());State.Reset();Super::EndPlay(Reason);}
 
 #if WITH_EDITOR
 #include "Materials/Material.h"

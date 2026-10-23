@@ -103,6 +103,7 @@ impl Contexts {
 
     pub fn load(&self, heroine: &str) -> Result<Option<Context>, String> {
         let path = self.dir.join(file_name(heroine));
+        crate::store::settle(&path);
         if !path.exists() {
             return Ok(None);
         }

@@ -146,11 +146,18 @@ void AOKStreetSocialScene::HandleOverheard(const TSharedPtr<FJsonObject>& R,int3
 // jealous heroine near him may catch him with another one. Who stands where is here; the rules decide (encounters_tick).
 void AOKStreetSocialScene::TickEncounters(){
  auto& S=*State;if(S.SelfTest||!S.Mind)return;
- const int64 Now=OKStreetMindNow(S);if(Now-S.EncounterTick<10)return;S.EncounterTick=Now;
+ // The pairs that met play out one a frame: all of a round in one frame (gossip, memories, history, the rules for each)
+ // stalled the street 60-120 ms every ten game minutes.
+ if(!S.PendingEncounters.IsEmpty()){const FIntVector P=S.PendingEncounters[0];S.PendingEncounters.RemoveAt(0);
+  if(S.Agents.IsValidIndex(P.X-1)&&S.Agents.IsValidIndex(P.Y-1)){if(P.Z)RequestOverheard(P.X,P.Y);else Encounter(P.X,P.Y,false);}}
+ const int64 Now=OKStreetMindNow(S);if(Now-S.EncounterTick<10||!S.PendingEncounters.IsEmpty())return;S.EncounterTick=Now;
  const int32 With=S.Target!=INDEX_NONE?S.Target:S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;
  auto Request=OKRulesRequest(TEXT("encounters_tick"));Request->SetNumberField(TEXT("seed"),FMath::Rand());Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
  Request->SetStringField(TEXT("with"),With>0&&S.Manifest.Characters.IsValidIndex(With)?OKStreetStableId(S.Manifest.Characters[With]):FString());
  TArray<TSharedPtr<FJsonValue>> Pairs;TMap<FString,TPair<int32,int32>> Actors;
+ // Where each of them is, once (not twice for each of the 45 pairs).
+ TArray<FString> PlaceOf;PlaceOf.SetNum(S.Manifest.Characters.Num());for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(S.Agents.IsValidIndex(I-1))PlaceOf[I]=PlaceHere(S.Agents[I-1].Position);
+ const FString HerePlace=PlaceHere(S.Male);
  for(int32 A=1;A<S.Manifest.Characters.Num();++A)for(int32 B=A+1;B<S.Manifest.Characters.Num();++B){
   if(!S.Agents.IsValidIndex(A-1)||!S.Agents.IsValidIndex(B-1))continue;
   const FString Pair=FString::Printf(TEXT("%d|%d"),A,B);
@@ -161,11 +168,11 @@ void AOKStreetSocialScene::TickEncounters(){
    P->SetStringField(Name+TEXT("_mode"),FString::Chr(DramaModeOf(I)));P->SetBoolField(Name+TEXT("_busy"),BusyWithPlayer(I));
    P->SetBoolField(Name+TEXT("_sees"),FVector::Dist2D(S.Agents[I-1].Position,S.Male)<1500&&FMath::Abs(S.Agents[I-1].Position.Z-S.Male.Z)<300.f);
   }
-  const FString PA=PlaceHere(S.Agents[A-1].Position),PB=PlaceHere(S.Agents[B-1].Position);
+  const FString& PA=PlaceOf[A];const FString& PB=PlaceOf[B];
   P->SetBoolField(TEXT("together"),(!PA.IsEmpty()&&PA==PB)||(PA.IsEmpty()&&PB.IsEmpty()&&FVector::Dist2D(S.Agents[A-1].Position,S.Agents[B-1].Position)<400));
   // He hears them only on their floor, and not while he is in a conversation of his own (it would talk over her).
   const bool SameFloor=FMath::Abs(S.Agents[A-1].Position.Z-S.Male.Z)<300.f;
-  P->SetBoolField(TEXT("near"),SameFloor&&FreeTalkPartner()==INDEX_NONE&&S.Target==INDEX_NONE&&(FVector::Dist2D(S.Agents[A-1].Position,S.Male)<2000||(!PA.IsEmpty()&&PlaceHere(S.Male)==PA)));
+  P->SetBoolField(TEXT("near"),SameFloor&&FreeTalkPartner()==INDEX_NONE&&S.Target==INDEX_NONE&&(FVector::Dist2D(S.Agents[A-1].Position,S.Male)<2000||(!PA.IsEmpty()&&HerePlace==PA)));
   P->SetBoolField(TEXT("met_today"),S.EncounterDay.FindRef(Pair)==S.Store.CalendarDay+1);
   Actors.Add(P->GetStringField(TEXT("a"))+TEXT("|")+P->GetStringField(TEXT("b")),{A,B});
   Pairs.Add(MakeShared<FJsonValueObject>(P));
@@ -179,6 +186,6 @@ void AOKStreetSocialScene::TickEncounters(){
   S.EncounterDay.Add(FString::Printf(TEXT("%d|%d"),AB->Key,AB->Value),S.Store.CalendarDay+1);
   if(!O->GetBoolField(TEXT("met")))continue;
   bool Overheard=false;O->TryGetBoolField(TEXT("overheard"),Overheard);
-  if(Overheard)RequestOverheard(AB->Key,AB->Value);else Encounter(AB->Key,AB->Value,false);
+  S.PendingEncounters.Add(FIntVector(AB->Key,AB->Value,Overheard?1:0));
  }
 }

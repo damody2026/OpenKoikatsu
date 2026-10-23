@@ -82,9 +82,12 @@ namespace OKRuntimeScene {
 // the game thread publishes that actor's clip catalog and CPU keys first.
 // Render playback then overlays only that actor's rows. Each actor keeps a
 // private session so a cancelled prepare cannot publish on a later request.
+// The bank is validated on the preparing worker; the render thread uploads it a chunk per frame (one whole upload in a
+// single render command stalled the street 60-140 ms, "AdmitRuntimeAction"). Status 0 uploading, 1 ready, -1 failed.
 struct FStreamInstall {
- TSharedPtr<FOKGpuAnimationBundle,ESPMode::ThreadSafe> Bank;
- TAtomic<int32> Status{0};FString Error;
+ TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe> Bank;
+ TAtomic<int32> Status{0};TAtomic<bool> InFlight{false};FString Error;
+ bool Started=false;uint64 Scratch=0; // render thread only
 };
 struct FRenderState {
  FGuid ProviderId=FGuid::NewGuid();
@@ -196,7 +199,10 @@ public:
   // They must participate in the same source passes as retained GPU batches,
   // but their transient mesh addresses must never enter the persistent cache.
   for(const auto& Batch:Parameters.View->DynamicMeshElements)if(Batch.Mesh&&EligibleProxies.Contains(Batch.PrimitiveSceneProxy)&&State->SourceIblMaterials.Contains(Batch.Mesh->MaterialRenderProxy))DynamicDraws.Add({Batch.Mesh,Batch.PrimitiveSceneProxy});
-  if(View.bIsSceneCapture){int32 Candidates=0;for(const auto& Batch:Parameters.View->DynamicMeshElements)Candidates+=EligibleProxies.Contains(Batch.PrimitiveSceneProxy);UE_LOG(LogTemp,Display,TEXT("APNG source capture: eligible=%d retained=%d dynamic_candidates=%d dynamic_source=%d"),EligibleProxies.Num(),Draws.Num(),Candidates,DynamicDraws.Num());for(const auto& Draw:Draws)UE_LOG(LogTemp,Display,TEXT("APNG source mesh: component=%u vf=%s"),Draw.Proxy->GetPrimitiveComponentId().PrimIDValue,Draw.Mesh->VertexFactory->GetType()->GetName());}
+  if(View.bIsSceneCapture){int32 Candidates=0;for(const auto& Batch:Parameters.View->DynamicMeshElements)Candidates+=EligibleProxies.Contains(Batch.PrimitiveSceneProxy);
+   // Logged when it changes, not every captured frame (62,000 identical lines in ten minutes).
+   static FIntVector4 LastCapture(-1,-1,-1,-1);const FIntVector4 Capture(EligibleProxies.Num(),Draws.Num(),Candidates,DynamicDraws.Num());
+   if(Capture!=LastCapture){LastCapture=Capture;UE_LOG(LogTemp,Display,TEXT("APNG source capture: eligible=%d retained=%d dynamic_candidates=%d dynamic_source=%d"),Capture.X,Capture.Y,Capture.Z,Capture.W);for(const auto& Draw:Draws)UE_LOG(LogTemp,Display,TEXT("APNG source mesh: component=%u vf=%s"),Draw.Proxy->GetPrimitiveComponentId().PrimIDValue,Draw.Mesh->VertexFactory->GetType()->GetName());}}
   State->LateDepthDraws+=OKAddCachedSourceMaterialScenePass(G,View,Parameters.ColorTexture,Parameters.DepthTexture,Draws,Binding,Commands);
   for(const auto& Draw:DynamicDraws)if(OKAddSourceMaterialScenePass(G,View,Parameters.ColorTexture,Parameters.DepthTexture,*Draw.Mesh,Draw.Proxy,Binding))++State->LateDepthDraws;
   // Native IBL depth and alpha color share the exact same mesh, material and
@@ -235,7 +241,7 @@ struct FPrivatePackedBank {
  TArray<TArray<FUintVector4>> CpuTracks;
 };
 struct FStreamPrepared {
- FPrivatePackedBank Packed;TArray<FKKRuntimePoseResult> Clips;FBox Bounds=FBox(ForceInit);FString Error;double Ms=0;
+ FPrivatePackedBank Packed;TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe> Validated;TArray<FKKRuntimePoseResult> Clips;FBox Bounds=FBox(ForceInit);FString Error;double Ms=0;
 };
 // Koikatsu's foreground eyes / eyebrows (ChaForegroundComponent): which parts its card setting moves before the front
 // hair. 2 the eyebrows (foregroundEyebrow), 1 the eyes (foregroundEyes), 0 neither.
@@ -254,7 +260,7 @@ struct FEntry {
  TArray<bool> ViewLitMaterials,ViewLitOutlines;
  FVector DisplayLight=FVector(999,999,999);int32 DisplayMaterialCount=-1;
  FRenderCommandFence RevealFence;bool RevealQueued=false;
- TUniquePtr<FKKRuntimeRenderMeshData> CommitData;TArray<int32> CommitQueues,CommitCanonical;TArray<TArray<uint8>> CommitIdentities;int32 MaterialCursor=0;bool CommitReady=false;double CommitWorkMs=0;
+ TUniquePtr<FKKRuntimeRenderMeshData> CommitData;TArray<int32> CommitQueues,CommitCanonical;TArray<TArray<uint8>> CommitIdentities;int32 MaterialCursor=0,CommitStep=0;bool CommitReady=false;TUniquePtr<FKKRuntimeRenderMeshData> CommitMain,CommitVisual;TArray<UMaterialInterface*> CommitVisualMaterials;double CommitWorkMs=0;
  uint32 OriginalSections=0,MergedSections=0,UniqueMaterialBindings=0;
  FString Path,Id,Error;int32 Stage=0,TextureCursor=0,WalkIndex=1,SelectionIndex=0;
  // Her actor in the composed animation bank: entries are composed in order, skipping the ones that failed to load.
@@ -529,7 +535,7 @@ struct FScene : TSharedFromThis<FScene> {
   auto* O=Owner.Get();if(!O||!O->GetWorld()->Scene)return;auto* Renderer=static_cast<::FScene*>(O->GetWorld()->Scene->GetRenderScene());const FGuid Id=Render->ProviderId;
   ENQUEUE_RENDER_COMMAND(RemoveApngProvider)([Renderer,Id,R=Render,Extension=LateDepthExtension](FRHICommandListImmediate& Cmd){if(Extension)Extension->Unregister();if(R->ProviderRegistered){if(auto* P=Renderer->GetExtensionPtr<FSkinningTransformProvider>())P->UnregisterProvider(Id);R->ProviderRegistered=false;}R->Scene=nullptr;R->LateDepthProxies.Reset();R->Pose.Release();R->ReleaseStream(Cmd);R->Palettes.Reset();});
  }
- bool Commit(FEntry& E,FKKRuntimeRenderMeshData& D,FString& Error){
+ bool Commit(FEntry& E,FKKRuntimeRenderMeshData& D,FString& Error){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Commit);
   // A merged component does not sort its translucent sections by the Unity
   // render queue. Preserve authored queue order so eye white cannot cover iris.
   auto& Queues=E.CommitQueues;auto& Canonical=E.CommitCanonical;auto& Identities=E.CommitIdentities;
@@ -557,9 +563,16 @@ struct FScene : TSharedFromThis<FScene> {
     ++E.MaterialCursor;}while(E.MaterialCursor<E.Material.Parts.Num()&&FPlatformTime::Seconds()<Deadline);
    return true; // Pending: yield before mesh creation, including the last material.
   }
+  // The mesh stage takes three frames (it stalled the street 60-130 ms in one): 0 the main mesh, 1 the depth mesh,
+  // 2 the components, the skin envelope and the bank job.
   TArray<UMaterialInterface*> Materials;for(const auto& M:E.Materials)Materials.Add(M.Get());
-  E.OriginalSections=D.Sections.Num();if(!RepackCompatibleSections(D,Canonical,Error))return false;E.MergedSections=D.Sections.Num();E.MouthStream=OKPrepareRuntimeMouthStream(D);
   TSet<int32> Ibl;for(int32 I=0;I<E.Material.Parts.Num();++I)if(OKRuntimeSharedMaterialRecipe(E.Material.Parts[I])==EKKRuntimeMaterialRecipe::IBLAlpha)Ibl.Add(Canonical[I]);
+  if(E.CommitStep==0){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CommitMainMesh);
+  E.OriginalSections=D.Sections.Num();{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Repack);if(!RepackCompatibleSections(D,Canonical,Error))return false;}E.MergedSections=D.Sections.Num();E.MouthStream=OKPrepareRuntimeMouthStream(D);
+  E.CommitStep=10;return true;}
+  // The draw data (the main pass, the outline shells): plain copies of the vertex data, a frame of their own.
+  if(E.CommitStep==10){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CommitVisualData);
+  Ibl.Reset();for(int32 I=0;I<E.Material.Parts.Num();++I)if(OKRuntimeSharedMaterialRecipe(E.Material.Parts[I])==EKKRuntimeMaterialRecipe::IBLAlpha)Ibl.Add(Canonical[I]);
   auto MainData=D;if(DepthPrepassEnabled)MainData.Sections.RemoveAll([&](const auto& Section){return Ibl.Contains(Section.Material);});
   auto VisualData=MainData;TArray<UMaterialInterface*> VisualMaterials=Materials;TMap<int32,int32> OutlineSlots;
   for(const auto& Base:MainData.Sections){const auto& P=E.Material.Parts[Base.Material];const auto Recipe=OKRuntimeSharedMaterialRecipe(P);if(!P.Outline||OKRuntimeTearLevel(P.Name)||!OutlineParents.IsValidIndex(int32(Recipe)-1)||!OutlineParents[int32(Recipe)-1].IsValid())continue;
@@ -572,19 +585,26 @@ struct FScene : TSharedFromThis<FScene> {
   E.FrontHairSlots.Reset();for(int32 I=0;I<E.FaceClasses.Num()&&I<Canonical.Num();++I)if(E.FaceClasses[I]==1)E.FrontHairSlots.AddUnique(Canonical[I]);
   for(const auto& Shell:OutlineSlots)if(E.FaceClasses.IsValidIndex(Shell.Key)&&E.FaceClasses[Shell.Key]==1)E.FrontHairSlots.AddUnique(Shell.Value);
   UE_LOG(LogTemp,Display,TEXT("Runtime source outlines %s: materials=%d sections=%d"),*E.Id,E.OutlineMaterials.Num(),VisualData.Sections.Num()-MainData.Sections.Num());
-  auto* Mesh=OKCreateRuntimeRenderMesh(VisualData,VisualMaterials,Error);if(!Mesh)return false;E.Mesh.Reset(Mesh);E.Triangles=D.Indices.Num()/3;
+  E.CommitMain=MakeUnique<FKKRuntimeRenderMeshData>(MoveTemp(MainData));E.CommitVisual=MakeUnique<FKKRuntimeRenderMeshData>(MoveTemp(VisualData));E.CommitVisualMaterials=MoveTemp(VisualMaterials);
+  E.CommitStep=11;return true;}
+  if(E.CommitStep==11){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CommitCreateMesh);
+  auto& MainData=*E.CommitMain;auto& VisualData=*E.CommitVisual;auto& VisualMaterials=E.CommitVisualMaterials;
+  USkeletalMesh* Mesh=nullptr;{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CreateMainMesh);Mesh=OKCreateRuntimeRenderMesh(VisualData,VisualMaterials,Error);}if(!Mesh)return false;E.Mesh.Reset(Mesh);E.Triangles=D.Indices.Num()/3;
   TArray<FOKRuntimeShadowMaterialFacts> ShadowFacts;ShadowFacts.SetNum(E.Material.Parts.Num());const EShaderPlatform ShadowPlatform=GMaxRHIShaderPlatform;
   for(int32 Part=0;Part<E.Material.Parts.Num();++Part){auto& Fact=ShadowFacts[Part];Fact.Recipe=OKRuntimeSharedMaterialRecipe(E.Material.Parts[Part]);auto* Source=E.Materials[Part].Get();if(!Source)continue;Fact.Blend=Source->GetBlendMode();Fact.BlendObserved=true;Fact.TwoSided=Source->IsTwoSided();Fact.TwoSidedObserved=true;Fact.CastShadowAsMasked=Source->GetCastDynamicShadowAsMasked();if(!Source->GetMaterialResource(ShadowPlatform)){Fact.WorldPositionOffset=true;continue;}const FMaterialRelevance Relevance=Source->GetRelevance_Concurrent(ShadowPlatform);Fact.WorldPositionOffset=Relevance.bUsesWorldPositionOffset;Fact.PixelDepthOffset=Relevance.bUsesPixelDepthOffset;Fact.Displacement=Relevance.bUsesDisplacement;}
-  E.ShadowJob=OKPrepareRuntimeShadowMeshAsync(MoveTemp(MainData),MoveTemp(ShadowFacts));
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ShadowJobStart);E.ShadowJob=OKPrepareRuntimeShadowMeshAsync(MoveTemp(MainData),MoveTemp(ShadowFacts));}
   FOKGpuActorRecord Actor;Actor.CharacterId=E.Id;Actor.PoseCount=E.Bones.Num();
   for(const auto& B:E.Bones)Actor.PoseBones.Add({B.Name.ToString(),B.Parent,OKGpuBoneReferenceIdentity(B.Reference)});
-  FOKGpuSkinPaletteData Palette;if(!OKBuildGpuMeshPalette(Actor,Mesh->GetRefSkeleton(),Mesh->GetRefBasesInvMatrix(),Actor.PoseCount,Palette,Error))return false;
+  FOKGpuSkinPaletteData Palette;{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Palette);if(!OKBuildGpuMeshPalette(Actor,Mesh->GetRefSkeleton(),Mesh->GetRefBasesInvMatrix(),Actor.PoseCount,Palette,Error))return false;}
   FOKGpuMeshRecord MeshRecord;MeshRecord.PartId=TEXT("runtime");MeshRecord.AssetPath=TEXT("/Runtime/APNG/")+E.Id;MeshRecord.Bones={0,uint32(Palette.Items.Num())};Actor.Meshes.Add(MoveTemp(MeshRecord));
   E.ActorRecipe=Actor;E.PaletteRecipe=Palette;
   TArray<FOKRuntimeGpuPlaybackClip> Catalog;
   for(int32 I=0;I<E.Clips.Num();++I){const int32 Source=E.ClipSources[I];Catalog.Add({SourceId(Source),E.Clips[I].Duration,SourceLoop(Source)});}
   if(!E.Clock.Initialize(Catalog,1,0,Error))return false;
-
+  E.CommitMain.Reset();E.CommitVisual.Reset();E.CommitVisualMaterials.Reset();
+  E.CommitStep=1;return true;}
+  auto* Mesh=E.Mesh.Get();
+  if(E.CommitStep==1){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CommitDepthMesh);
   if(!Ibl.IsEmpty()){auto Depth=D;// Color-mask-zero depth uses the identical vertex/material permutation as its color pass.
   // A different masked parent can compile non-invariant skinned positions.
   TArray<UMaterialInterface*> DepthMaterials=Materials;auto* DepthMesh=OKCreateRuntimeRenderMesh(Depth,DepthMaterials,Error);if(!DepthMesh)return false;E.DepthMesh.Reset(DepthMesh);
@@ -595,6 +615,8 @@ struct FScene : TSharedFromThis<FScene> {
   if(MainRig.GetNum()!=DepthRig.GetNum()||MainBind.Num()!=DepthBind.Num()||(MainBind.Num()&&FMemory::Memcmp(MainBind.GetData(),DepthBind.GetData(),MainBind.Num()*sizeof(FMatrix44f)))){Error=TEXT("Runtime source pass private rig bindings differ");return false;}
   for(int32 B=0;B<MainRig.GetNum();++B)if(MainRig.GetBoneName(B)!=DepthRig.GetBoneName(B)||MainRig.GetParentIndex(B)!=DepthRig.GetParentIndex(B)){Error=TEXT("Runtime source pass private rig order differs");return false;}
   }
+  E.CommitStep=2;return true;}
+  QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CommitComponents);
   // CPU renderer matrices are evaluated only for the asset's active bones.
   // Use the full-section source asset so source-only accessory bones are present
   // even though the main draw asset excludes those source-pass sections.
@@ -607,7 +629,7 @@ struct FScene : TSharedFromThis<FScene> {
   TArray<int32> EnvelopeParents;EnvelopeParents.Reserve(E.Bones.Num());for(const auto& Bone:E.Bones)EnvelopeParents.Add(Bone.Parent);
   if(!OKBuildRuntimeSkinEnvelopeGeometry(EnvelopeParents,Mesh->GetRefBasesInvMatrix(),D.Vertices,E.SkinEnvelope,Error))return false;
   auto Envelope=E.SkinEnvelope;
-  E.PackedBank=Async(EAsyncExecution::ThreadPool,[Actor=MoveTemp(Actor),Palette=MoveTemp(Palette),Clips=MoveTemp(Clips),Envelope]()mutable{
+  E.PackedBank=Async(EAsyncExecution::ThreadPool,[Actor=E.ActorRecipe,Palette=E.PaletteRecipe,Clips=MoveTemp(Clips),Envelope]()mutable{
    FPrivatePackedBank Result;
   // Conservative envelope includes both private clips and their interpolation /
   // crossfade, without sampling every vertex on every animation frame.
@@ -636,7 +658,7 @@ struct FScene : TSharedFromThis<FScene> {
   }
   E.Material={};E.Textures.Reset();E.CommitQueues.Reset();E.CommitCanonical.Reset();E.CommitIdentities.Reset();D={};E.RevealFence.BeginFence(FRenderCommandFence::ESyncDepth::RHIThread);E.RevealQueued=true;E.CommitReady=true;return true;
  }
- void Prepare(FEntry& E){
+ void Prepare(FEntry& E){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_PrepareEntry);
   if(E.Stage==1&&E.Snapshot.IsReady()){
    auto S=E.Snapshot.Consume();E.SnapshotMs[0]=S.NativeOpenMs;E.SnapshotMs[1]=S.RigCaptureMs;E.SnapshotMs[2]=S.MeshCaptureMs;E.SnapshotMs[3]=S.MaterialCaptureMs;if(!S.Error.IsEmpty()){Fail(E,S.Error);return;}FString Error;TArray<int32> Remap;
    TArray<FName> GameplayBones;
@@ -675,7 +697,7 @@ struct FScene : TSharedFromThis<FScene> {
  TArray<double> LoadingFrames;double LoadingLastWall=0;
  #include "OKCrowdRuntimeProgressiveGpu.inl"
  #include "OKCrowdRuntimeShadow.inl"
- void Install(){
+ void Install(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Install);
   auto Verified=PendingComposition;const auto* Bank=Verified.IsValid()?&Verified->Get():nullptr;if(!Bank){UE_LOG(LogTemp,Error,TEXT("Runtime private GPU bank composition rejected"));VisualError=TEXT("Runtime private GPU bank composition rejected");WriteReport();Stopped=true;return;}
   for(auto& E:Entries){if(E->LoadingGpuInstalled){if(auto* G=E->Gpu.Get())G->DestroyComponent();if(auto* G=E->DepthGpu.Get())G->DestroyComponent();if(auto* G=E->ShadowGpu.Get())G->DestroyComponent();E->Gpu.Reset();E->DepthGpu.Reset();E->ShadowGpu.Reset();RetireProgressiveGpu(*E);}}
   auto* O=Owner.Get();auto* Renderer=static_cast<::FScene*>(O->GetWorld()->Scene->GetRenderScene());TMap<const USkinnedAsset*,int32> MeshActors;TMap<const USkinnedAsset*,FPrimitiveComponentId> References;TArray<FOKGpuSkinPaletteData> Palettes;TArray<FPrimitiveComponentId> DepthProxies;TSet<FPrimitiveComponentId> CpuSourceProxies;TSet<const FMaterialRenderProxy*> SourceIblMaterials;for(const auto& Entry:Entries)for(const auto& Material:Entry->Materials)if(Material.IsValid()&&Material->GetMaterial()->GetName()==TEXT("M_IBLAlpha"))SourceIblMaterials.Add(Material->GetRenderProxy());
@@ -759,7 +781,7 @@ struct FScene : TSharedFromThis<FScene> {
   E.PendingEpoch=++E.EpochClock;E.PendingAction=Source;E.PendingPlay=Play;E.PendingActionAt=FPlatformTime::Seconds();++E.StreamRequests;Error.Reset();return true;
  }
  #include "OKCrowdRuntimeStream.inl"
- void WriteReport(){
+ void WriteReport(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_WriteReport);
   if(ReportPath.IsEmpty())return;
 
   FOKGpuResidencyStats Residency;uint64 BankKeyBytes=0;uint64 CachedCommands=0,CachedPrimitives=0;TArray<FPrimitiveComponentId> AuditIds;for(const auto& E:Entries)if(E->Gpu.IsValid())AuditIds.Add(E->Gpu->GetPrimitiveSceneId());
@@ -785,7 +807,8 @@ TRACE_CPUPROFILER_EVENT_SCOPE_CONDITIONAL(CrowdGpuProfileAnchor,GpuWindow);
 TRACE_CPUPROFILER_EVENT_SCOPE_CONDITIONAL(CrowdCpuProfileAnchor,CpuWindow);
 auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlatformTime::ToMilliseconds(GGameThreadTime));T.Render.Add(FPlatformTime::ToMilliseconds(GRenderThreadTime));T.Rhi.Add(FPlatformTime::ToMilliseconds(GRHIThreadTime));T.Gpu.Add(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));}}LastWall=Now;
   while(Active<Concurrency&&Next<Entries.Num()){const int32 Index=NearestStage(0);if(Index==INDEX_NONE)break;LaunchOrder.Add(Index);auto& E=*Entries[Index];E.Behavior.Initialize(Index);E.StageStarted=FPlatformTime::Seconds();E.Snapshot=OKOpenRuntimeCharacterSnapshotAsync(E.Path,0,Curves[E.WalkIndex],256ull*1024*1024,CaptureFacePatterns);E.Stage=1;++Next;++Active;}
-  for(auto& E:Entries)Prepare(*E);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Prepare);  for(auto& E:Entries)Prepare(*E);
+ }
   const double LastGameMs=FPlatformTime::ToMilliseconds(GGameThreadTime);
   const double SubmitBudgetMs=FMath::Clamp(1000./120-LastGameMs-1.,.1,.75);
   const double CommitDeadline=FPlatformTime::Seconds()+SubmitBudgetMs/1000.;
@@ -815,7 +838,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
   if(!Installed&&Composition.IsValid()&&Composition.IsReady()){
    PendingComposition=Composition.Consume();if(!PendingComposition){VisualError=TEXT("Immutable GPU bank validation failed");Stopped=true;WriteReport();return false;}
   }
-  const bool PrivateUploadsPending=ServiceProgressiveGpu();
+  bool PrivateUploadsPending=false;{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ProgressiveGpu);PrivateUploadsPending=ServiceProgressiveGpu();}
   if(!Installed&&PendingComposition.IsValid()&&!PrivateUploadsPending){
    const int32 Status=Render->UploadStatus.Load();
    if(Status<0){VisualError=TEXT("Incremental GPU bank upload failed");Stopped=true;WriteReport();return false;}
@@ -827,8 +850,10 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    });}
   }
   if(Camera.IsValid()&&!ExternalControl)UpdateDisplayLighting(-Camera->GetActorForwardVector());
-  ServiceShadowSubmission();
-  ServiceStream();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ShadowSubmission);  ServiceShadowSubmission();
+ }
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Stream);  ServiceStream();
+ }
   auto* Pc=Owner->GetWorld()->GetFirstPlayerController();if(Pc&&Pc->WasInputKeyJustPressed(EKeys::F9)){RequestedGpu=!RequestedGpu;UE_LOG(LogTemp,Display,TEXT("APNG CPU/GPU requested=%s"),RequestedGpu?TEXT("GPU"):TEXT("CPU"));}
   if(Pc&&Installed&&!ExternalControl){const FKey Keys[]={EKeys::One,EKeys::Two,EKeys::Three,EKeys::Four,EKeys::Five,EKeys::Six,EKeys::Seven,EKeys::Eight};
    for(int32 I=0;I<FMath::Min(Curves.Num()-WalkSources,int32(UE_ARRAY_COUNT(Keys)));++I)if(Pc->WasInputKeyJustPressed(Keys[I])){FString ActionError;if(!OKPlayCrowdRuntimeAction(Owner.Get(),0,ClipIds[WalkSources+I],ActionError))UE_LOG(LogTemp,Warning,TEXT("Runtime action: %s"),*ActionError);}
@@ -850,7 +875,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
   TArray<FOKGpuPosePlayback> Play;
   struct FLoadingPoseJob {FEntry* Entry;FOKGpuPosePlayback Playback;int64 Bucket;TArray<FTransform> Poses;};
   TArray<FLoadingPoseJob> LoadingJobs;
-  for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];if(E.Stage!=5||(!Installed&&!ProgressiveLoading))continue;if(CaptureStage>=1&&CaptureStage<=2){const int32 Slot=FMath::Min(VisualClip,E.Clips.Num()-1);FOKGpuPosePlayback Frozen;Frozen.ClipA=0;Frozen.ClipB=Slot;Frozen.Times=FVector4f(VisualPhase*E.Clips[0].Duration,VisualPhase*E.Clips[Slot].Duration,VisualBlend,0);Play.Add(Frozen);continue;}FString Error;
+  for(int32 A=0;A<Entries.Num();++A){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFrame);auto& E=*Entries[A];if(E.Stage!=5||(!Installed&&!ProgressiveLoading))continue;if(CaptureStage>=1&&CaptureStage<=2){const int32 Slot=FMath::Min(VisualClip,E.Clips.Num()-1);FOKGpuPosePlayback Frozen;Frozen.ClipA=0;Frozen.ClipB=Slot;Frozen.Times=FVector4f(VisualPhase*E.Clips[0].Duration,VisualPhase*E.Clips[Slot].Duration,VisualBlend,0);Play.Add(Frozen);continue;}FString Error;
    if(E.SpeechJob.IsValid()&&!E.PendingSpeechAction.IsEmpty()&&E.LinkedActionEpoch!=0&&E.LinkedActionEpoch!=E.PendingEpoch&&E.LinkedActionEpoch!=E.InstalledEpoch){E.CancelSpeech();UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped cancelled action session"));}
    if(E.SpeechJob.IsValid()&&Now-E.SpeechRequestedAt>OKCrowdRuntimeActionPrepareSeconds){E.CancelSpeech();UE_LOG(LogTemp,Warning,TEXT("Runtime speech preparation exceeded 60 seconds; canceled pending audio"));}
    if(A==DemoCharacter&&DemoSpeechStarted&&!DemoSpeechCancelled&&DemoCancelAfter>=0&&Now-E.SpeechRequestedAt>=DemoCancelAfter){FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);DemoSpeechCancelled=true;}
@@ -926,7 +951,8 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    }LoadingPoseRefreshMs+=(FPlatformTime::Seconds()-RefreshBegin)*1000;
   }
   if(Installed){ENQUEUE_RENDER_COMMAND(ApngPlaybackParameters)([R=Render,Play=MoveTemp(Play),CpuSource=CaptureStage==1?true:CaptureStage==2?false:!GpuMode&&!Warm](FRHICommandListImmediate&)mutable{if(!R->Enabled||R->UseCpu!=CpuSource)R->Reset=true;R->Enabled=true;R->UseCpu=CpuSource;R->Playback=MoveTemp(Play);});}
-  CaptureLoading();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CaptureLoading);  CaptureLoading();
+ }
   if(!ExternalControl&&Camera.IsValid()&&PlayerPositionInitialized){auto* C=Camera.Get();C->SetActorRotation(FRotator(CameraPitch,CameraYaw,0));C->SetActorLocation(PlayerPosition-FRotator(0,CameraYaw,0).Vector()*300+FVector(0,0,160));}
   if(!ExternalControl&&GEngine&&SceneTime>=NextStatusTime){NextStatusTime=SceneTime+.25;GEngine->AddOnScreenDebugMessage(0x41504e47,.3,FColor::White,FString::Printf(TEXT("APNG %d/%d | %s | GPU passes %llu failures %llu | F9 CPU/GPU | WASD move | 1-8 actions | T speak | Y nearby NPC | Backspace resume"),Complete,Entries.Num(),GpuMode?TEXT("GPU"):RequestedGpu?TEXT("CPU (GPU preparing)"):TEXT("CPU"),Render->Passes.Load(),Render->Failures.Load()));}
   if(ReadyAt&&!VisualPrefix.IsEmpty()&&!Captured&&VisualError.IsEmpty()&&(StreamTest?(Entries[DemoCharacter]->StreamInstalls>0&&ActionSlotBusy(DemoCharacter)):Now-ReadyAt>4))Captured=Capture();

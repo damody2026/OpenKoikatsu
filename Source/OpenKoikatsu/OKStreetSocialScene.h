@@ -266,6 +266,10 @@ private:
  void CheckBirthdays();
  // Plan §15 money outside the wallet: OKStreetSocialFinance.inl and OKStreetSocialFinanceApps.inl.
  TSharedPtr<class FJsonObject> Fin(const FString& Op,TSharedPtr<class FJsonObject> Args,FString& Error);
+ FString FinQueryText(const FString& Op,TSharedPtr<class FJsonObject> Args);
+ TSharedPtr<class FJsonObject> FinAnswer(const FString& Op,const FString& Out,FString& Error);
+ void FinishFinTick(bool bOk,const FString& Out,const FString& Error,int64 Asked);
+ void WaitFinQuery();
  bool SpendCash(int64 Amount,const FString& Why);
  void GainCash(int64 Amount,const FString& Why);
  void FinRelation(const FString& Id,float Admiration,float Mystique,float Trust);

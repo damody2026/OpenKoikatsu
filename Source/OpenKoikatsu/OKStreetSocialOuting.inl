@@ -222,7 +222,7 @@ bool AOKStreetSocialScene::NextDay(){
   if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request))for(const auto& V:Out->GetArrayField(TEXT("bond_heat"))){const auto& P=V->AsArray();if(P.Num()==2)Candidate.BondHeat.Add(P[0]->AsString(),float(P[1]->AsNumber()));}}
  TickVentures(Candidate);
  CompanyDaily(Candidate); // buildings, morale, applicants (OKStreetSocialCompany.inl)
- FString Error;if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()&&!OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error)){S.PendingRulesEffects.Reset();return false;}
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveAsync(S.Manifest.SavePath,OKStreetWriteSave(Candidate));
  S.Store=MoveTemp(Candidate);FlushRulesEffects();return true;
 }
 
