@@ -192,7 +192,7 @@ impl Default for PortraitTuning {
             fade_in: 0.15,
             target: [2048, 2048],
             supersample: 2.0,
-            every: 2,
+            every: 3,
             offstage_at: [0.0, 50000.0, 0.0],
             offstage_motion: "0:0:1".into(),
         }

@@ -1363,6 +1363,14 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
      if(const TSharedPtr<FJsonObject> Out=OKRulesEval(*L,Request)){auto Candidate=L->Store;OKRulesTakeExt(Candidate,*Out);
       if(Weak->CommitStore(MoveTemp(Candidate))){const FString Notice=Out->GetStringField(TEXT("notice"));if(!Notice.IsEmpty()){L->FreeTalkNotice=Notice;Weak->RefreshUI();}}
       UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d things: done %d, refused %d (%s)"),Character,Out->GetArrayField(TEXT("done")).Num(),Out->GetArrayField(TEXT("refused")).Num(),*Out->GetStringField(TEXT("notice")));}}}}
+  // A menu item read as the thing to do now ("let's draw a fortune slip": do_now shrine_fortune) is bought, not an
+  // activity that fails as "no such activity or place" (R3-114).
+  if(!DoNow.IsEmpty()&&!DoNow.StartsWith(TEXT("go:"))&&DoNow!=TEXT("stroll")&&DoNow!=TEXT("leave")&&!OKStreetFindActivity(DoNow)&&!OKStreetFindPlace(DoNow)){
+   const FString Here=Weak->OrderShopHere(Character);const FString ItemId=Here.IsEmpty()?FString():Weak->ResolveItemId(DoNow,Here);
+   if(const auto* Item=ItemId.IsEmpty()?nullptr:L->Catalog.Find(ItemId);Item&&Weak->SoldHere(*Item,Here)){
+    TArray<TSharedPtr<FJsonValue>> Orders;if(const TArray<TSharedPtr<FJsonValue>>* Had=nullptr;Verdict->TryGetArrayField(TEXT("orders"),Had))Orders=*Had;
+    auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),ItemId);O->SetStringField(TEXT("for"),TEXT("him"));Orders.Add(MakeShared<FJsonValueObject>(O));
+    Verdict->SetArrayField(TEXT("orders"),Orders);UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s is on the menu here; ordered instead"),*DoNow);DoNow.Reset();}}
   // Orders he (or she) asked for that her reply left out: to the kitchen like any chat order.
   {const TArray<TSharedPtr<FJsonValue>>* Orders=nullptr;int32 Added=0;const FString Here=Weak->OrderShopHere(Character);FString Shop=Here.IsEmpty()?Weak->OutingShop(Character):Here;const bool OnTheWay=Here.IsEmpty();
    // Outside, about to go in ("let's go in, I'll have a latte"): the outing starts below, after the orders; its shop is

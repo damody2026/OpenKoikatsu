@@ -3904,7 +3904,9 @@
     "": 4
    },
    "season": null,
-   "tags": [],
+   "tags": [
+    "fortune"
+   ],
    "prop": "none",
    "options": [],
    "effects": {

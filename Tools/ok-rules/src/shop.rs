@@ -184,6 +184,12 @@ fn checkout(c: &Catalog, r: &Value) -> Result<Value, String> {
     if !remembered.is_empty() {
         notice += crate::tr::t("shop.she_notices_taste");
     }
+    // A fortune slip (tag fortune) is read as it is bought: each one's luck. Two slips paid for and none read left her
+    // saying "we didn't get one" (R3-114).
+    let drawn = draw_fortunes(c, &cart, &hers, n(r, "seed") as i32 ^ total.wrapping_mul(7919) ^ (player_pays as i32));
+    if !drawn.is_empty() {
+        notice += &crate::tr::m("shop.fortune_drawn", &[("slips", crate::tr::a(&drawn.join(crate::tr::t("bank.list_separator"))))]);
+    }
     let tell_her = if her.is_some() {
         // How she answers depends on who paid: thanks only when he paid for her.
         let how = if her_share == 0 && her_pays == 0 {
@@ -198,10 +204,26 @@ fn checkout(c: &Catalog, r: &Value) -> Result<Value, String> {
             crate::tr::t("shop.split_each_note")
         };
         crate::tr::m("shop.checkout_recap_note", &[("total", crate::tr::a(&crate::tr::money(total))), ("he_pays", crate::tr::a(&crate::tr::money(player_pays))), ("you_pay", crate::tr::a(&crate::tr::money(her_pays))), ("advance_note", crate::tr::a(&(if advanced > 0 { crate::tr::m("shop.you_short_he_advanced", &[("amount", crate::tr::a(&crate::tr::money(advanced)))]) } else { String::new() }))), ("how", crate::tr::a(&how))])
+            + &(if drawn.is_empty() { String::new() } else { crate::tr::m("shop.fortune_drawn_note", &[("slips", crate::tr::a(&drawn.join(crate::tr::t("bank.list_separator"))))]) })
     } else {
         String::new()
     };
     Ok(json!({"total": total, "player_pays": player_pays, "her_pays": her_pays, "advanced": advanced, "card": card, "effects": fx.into_value(), "notice": notice, "tell_her": tell_her, "treat_kept": her_pays > 0 || advanced > 0}))
+}
+
+/// The luck on each fortune slip in the cart (items tagged fortune), as "he: 吉" words; "you" is the girl at the table.
+fn draw_fortunes(c: &Catalog, cart: &[Line], hers: &dyn Fn(&Line) -> bool, seed: i32) -> Vec<String> {
+    // The shrine's slips, most often a plain blessing and seldom the worst.
+    const LUCK: [(&str, i32); 6] = [("shop.fortune_great", 15), ("shop.fortune_good", 30), ("shop.fortune_middle", 20), ("shop.fortune_small", 15), ("shop.fortune_end", 12), ("shop.fortune_bad", 8)];
+    let mut rng = RandomStream::new(seed);
+    let mut out = Vec::new();
+    for l in cart.iter().filter(|l| c.find(&l.item).is_some_and(|i| i.tags.iter().any(|t| t == "fortune"))) {
+        let mut roll = rng.rand_range(0, LUCK.iter().map(|x| x.1).sum::<i32>() - 1);
+        let luck = LUCK.iter().find(|x| { roll -= x.1; roll < 0 }).map(|x| x.0).unwrap_or(LUCK[1].0);
+        let who = if hers(l) { "shop.fortune_you" } else if l.girl.is_empty() { "shop.fortune_him" } else { "shop.fortune_other" };
+        out.push(crate::tr::m("shop.fortune_slip", &[("who", crate::tr::a(crate::tr::t(who))), ("luck", crate::tr::a(crate::tr::t(luck)))]));
+    }
+    out
 }
 
 // ------------------------------------------------------------------------------------------------ gifts and loans
@@ -846,6 +868,17 @@ mod tests {
         assert_eq!((v["player_pays"].as_i64(), v["her_pays"].as_i64()), (Some(0), Some(price as i64)));
         let v = checkout(&c, &json!({"option": "split", "cart": group, "player_cash": 10000, "relation": rel(json!({"cash": 1000})), "profile": {}})).unwrap();
         assert_eq!(v["player_pays"].as_i64(), Some(price as i64), "without as_girl another girl's dish is his to pay");
+    }
+
+    #[test]
+    fn fortune_slips_are_read() {
+        let c = Tuning::builtin().catalog;
+        let cart = json!([{"item": "shrine_fortune"}, {"item": "shrine_fortune", "for_her": true}]);
+        let v = checkout(&c, &json!({"option": "she_pays", "cart": cart, "player_cash": 100, "relation": rel(json!({"cash": 1000})), "profile": {}, "seed": 3})).unwrap();
+        let (him, you) = (crate::tr::t("shop.fortune_him"), crate::tr::t("shop.fortune_you"));
+        let tell = v["tell_her"].as_str().unwrap();
+        assert!(tell.contains(him) && tell.contains(you), "both slips told to her: {tell}");
+        assert!(v["notice"].as_str().unwrap().contains(you), "and shown to him: {}", v["notice"]);
     }
 
     #[test]

@@ -238,7 +238,7 @@ local ITEMS = {
   { "pet_play", "petshop", "互動區 30 分", 100, "leisure", "cute", "none", false },
   { "pet_treat", "petshop", "寵物零食", 50, "goods", "", "none", false },
   { "pet_toy", "petshop", "逗貓棒", 80, "goods", "", "none", false },
-  { "shrine_fortune", "shrine", "抽籤", 20, "game", "", "none", false },
+  { "shrine_fortune", "shrine", "抽籤", 20, "game", "fortune", "none", false },
   { "shrine_charm", "shrine", "御守", 200, "gift", "gift", "none", false },
   { "shrine_ema", "shrine", "繪馬", 100, "goods", "romantic", "none", false },
   { "park_fishfood", "park", "魚飼料", 10, "game", "", "none", false },

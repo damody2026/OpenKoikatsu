@@ -466,6 +466,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  Request->SetStringField(TEXT("option"),Option);Request->SetNumberField(TEXT("service"),S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].Service:0);
  Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetStringField(TEXT("place"),S.ShopPlace);Request->SetStringField(TEXT("place_name"),PlaceName);
  if(!AsGirl.IsEmpty())Request->SetStringField(TEXT("as_girl"),AsGirl);
+ Request->SetNumberField(TEXT("seed"),FMath::Rand()); // what a fortune slip says (shop.rs draw_fortunes)
  TArray<TSharedPtr<FJsonValue>> Cart;
  for(const auto& L:S.Cart){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("item"),L.ItemId);O->SetStringField(TEXT("size"),L.Size);O->SetStringField(TEXT("sweetness"),L.Sweetness);O->SetStringField(TEXT("ice"),L.Ice);
   O->SetBoolField(TEXT("for_her"),L.ForHer);O->SetStringField(TEXT("girl"),L.Girl!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetStableId(S.Manifest.Characters[L.Girl]):FString());Cart.Add(MakeShared<FJsonValueObject>(O));}
