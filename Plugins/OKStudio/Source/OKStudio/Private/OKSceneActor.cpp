@@ -765,6 +765,8 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         // a finishing pass so cloth receives the current limb pose and elapsed time.
         if (Actor->PoseMode == 0) Actor->bUserPoseDirty = true;
         Actor->bShareIdenticalPose = bSharePose;
+        // Its face parts tick after this actor, so their own (worker) anim update takes the pose set below this frame.
+        if (!Actor->bSceneTicksOrdered) Actor->OrderSceneTicks(this);
         Actors.Add(Actor);
     }
     // Each character's native solve touches only its own session: solved together on worker threads, then each

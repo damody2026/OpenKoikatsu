@@ -290,6 +290,11 @@ public:
 	/** An owner (OK Studio's scene actor) solves this actor's pose and eye look once per frame itself; its own Tick
 	 *  then keeps only the rest (face clock, speech, shadow capture) instead of solving the pose a second time. */
 	bool bSceneDrivenPose=false;
+	/** Set by that owner once this actor's face parts tick after it (OrderSceneTicks): their pose is then evaluated by
+	 *  their own tick (on a worker) instead of at once in SyncMouthPose. */
+	bool bSceneTicksOrdered=false;
+	/** Makes the face parts of this actor tick after `PoseOwner` (the actor posing it); true when there were any. */
+	bool OrderSceneTicks(AActor* PoseOwner);
     bool bUsePrivateGpuPlayback=false; // opt in only while the interaction scene owns playback
 	bool PlayHCue(FString& Error);
 	UFUNCTION(BlueprintPure, Category="Koikatsu|Speech")

@@ -14,6 +14,9 @@ class KKUNITYBUNDLE_API UKKCharAnimInstance : public UAnimInstance
 
 public:
 	void SetLocalPose(TArray<FTransform> InPose, TArray<uint8> InLayer);
+	/** The pose for the component's next own animation update (its tick, evaluated on a worker), without evaluating now:
+	 *  for an owner that ticks before the component (OK Studio). */
+	void SetLocalPoseDeferred(const TArray<FTransform>& InPose);
 	void SetExternalSequence(UAnimSequence* Seq, float Time = 0.f);
 
 protected:

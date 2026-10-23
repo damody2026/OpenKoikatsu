@@ -593,6 +593,7 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 
 - 走 GPU 的私有骨架部件在 Rust 的頭髮／布料階段仍被 CPU 蒙皮（每角色約 6 個部件，配件階段 1.08 ms）：新增 `ok_session_set_scene_gpu_parts`（同 `ok_skin_display_except_private` 的部件與版本核對），`SolveScenePose` 每幀告知哪些部件已在 GPU，`finish_paired_dynamics` 只解物理不蒙皮（配件階段 0.21 ms）；單一角色也走求解／顯示拆分。
 - 臉部曲線（`ok_player_curves` 的 JSON）改在工作執行緒讀取與解析，遊戲執行緒只套值；嘴巴開合值沒變就不重算嘴型 morph。
+- 臉部元件的姿勢不再當場求值：`SyncMouthPose` 原本對每個臉部元件（每角色十幾個）複製整份姿勢並立刻 `TickAnimation`＋`RefreshBoneTransforms`，元件自己的 Tick 又再求值一次。場景驅動的角色改為只交出姿勢（`UKKCharAnimInstance::SetLocalPoseDeferred`），並讓臉部元件排在場景 actor 之後 tick（`OrderSceneTicks`），由元件自己的動畫更新（UE 在工作執行緒做）取用本幀姿勢（`ok.Studio.DeferFacePose`）。A/B（0010、背景負載 5%）：遊戲執行緒 16.6 → 13.0 ms，58 → 74 fps；3800／0010／4432 表情與姿勢不變。
 - 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，A/B 無差別）；臉部元件共用 leader 後重新發佈 morph（表情仍消失）。
 
 目前（14 個樣本的前 10 個，同樣有背景負載）：0010 8.5→39、0633 9.6→43、3167 8→42、1901 17→59、3800 51→103、4432 14→37（之後 4432 道具段落再降約 6 ms）。還沒到 120：剩下主要是每角色約 4 ms 的原生求解（配件動態 1.4、衣服 0.6、姿勢 0.5…，已跨角色平行，但取最慢的一個），每角色約 0.7 ms 的顯示更新、0.2 ms 臉部曲線，以及 Slate＋viewport 約 4 ms。
