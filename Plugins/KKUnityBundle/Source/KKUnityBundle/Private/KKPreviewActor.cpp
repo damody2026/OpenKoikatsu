@@ -123,6 +123,7 @@ static TAutoConsoleVariable<int32> CVarOkExactLeader(TEXT("ok.Animation.LeaderPo
 static TAutoConsoleVariable<int32> CVarOkFacePreparedPalette(TEXT("ok.Face.PreparedPalette"),1,TEXT("Convert immutable native palette once for all face vertices; 0 retains per-influence conversion."));
 static TAutoConsoleVariable<int32> CVarOkAnimationGeneratedStreams(
     TEXT("ok.Animation.GeneratedStreams"),1,TEXT("Fuse generated preview geometry with stream packing; 0 retains the intermediate-array oracle."));
+static TAutoConsoleVariable<int32> CVarOkDeferFacePose(TEXT("ok.Studio.DeferFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) take their pose in their own (worker) anim update after the owner; 0: evaluated at once in SyncMouthPose."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth every other frame, taking turns, so a scene renders half as many extra views; 0: every frame."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureFullView(TEXT("ok.ShadowCaptureFullView"),0,TEXT("1: the toon shadow depth capture renders a full view (lighting, post-processing...) as before; 0 depth only. Read when a character loads."));
 static TAutoConsoleVariable<int32> CVarOkStableShadowTarget(
@@ -6755,14 +6756,15 @@ void AKKPreviewActor::SyncMouthPose()
 		{
 			continue;
 		}
-		if (!Slot.Comp->LeaderPoseComponent.IsValid())
-		if (UKKCharAnimInstance* Anim = Cast<UKKCharAnimInstance>(Slot.Comp->GetAnimInstance()))
-		{
-			Anim->SetLocalPose(Src->BoneSpaceTransforms, TArray<uint8>());
-		}
-		if (Slot.OutlineComp && !Slot.OutlineComp->LeaderPoseComponent.IsValid())
-			if (UKKCharAnimInstance* Anim = Cast<UKKCharAnimInstance>(Slot.OutlineComp->GetAnimInstance()))
-				Anim->SetLocalPose(Src->BoneSpaceTransforms, TArray<uint8>());
+		// An owner that ticks before these parts (bSceneDrivenPose, OK Studio orders their ticks after it) leaves the
+		// evaluation to their own tick, which runs it on a worker; else it is evaluated here, at once.
+		for (USkeletalMeshComponent* Mesh : { Slot.Comp, Slot.OutlineComp })
+			if (Mesh && !Mesh->LeaderPoseComponent.IsValid())
+				if (UKKCharAnimInstance* Anim = Cast<UKKCharAnimInstance>(Mesh->GetAnimInstance()))
+				{
+					if (bSceneDrivenPose && bSceneTicksOrdered && CVarOkDeferFacePose.GetValueOnGameThread() != 0) Anim->SetLocalPoseDeferred(Src->BoneSpaceTransforms);
+					else Anim->SetLocalPose(Src->BoneSpaceTransforms, TArray<uint8>());
+				}
 	}
 }
 
@@ -8632,6 +8634,18 @@ bool AKKPreviewActor::SolveScenePose(float DeltaSeconds,bool bAdvanceAnimation)
     SkinPrivateDisplay();bNativeSkinReady=true;
     bPendingSceneDisplay=true;bHeadLookPoseDirty=false;
     return true;
+}
+
+bool AKKPreviewActor::OrderSceneTicks(AActor* PoseOwner)
+{
+    // The face parts' anim update reads the pose SyncMouthPose leaves; ticking after the owner, they read this frame's.
+    if(!PoseOwner)return false;
+    int32 Ordered=0;
+    for(const FOkMouthSlot& Slot:MouthSlots)
+        for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})
+            if(Mesh){Mesh->AddTickPrerequisiteActor(PoseOwner);++Ordered;}
+    bSceneTicksOrdered=Ordered>0;
+    return bSceneTicksOrdered;
 }
 
 void AKKPreviewActor::FinishScenePose()

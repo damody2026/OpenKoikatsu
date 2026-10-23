@@ -102,6 +102,13 @@ void UKKCharAnimInstance::SetLocalPose(TArray<FTransform> InPose, TArray<uint8> 
 	}
 }
 
+void UKKCharAnimInstance::SetLocalPoseDeferred(const TArray<FTransform>& InPose)
+{
+	PendingPose = InPose;
+	BoneLayer.Reset();
+	bHasPose = PendingPose.Num() > 0;
+}
+
 void UKKCharAnimInstance::SetExternalSequence(UAnimSequence* Seq, float Time)
 {
 	ExternalSeq = Seq;
