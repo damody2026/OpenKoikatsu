@@ -547,3 +547,10 @@
 - 我在共用的控制埠 47870 上用 game_launch 開街區（PID 39540），攻略 session 幾乎同時也在 47870 開了遊戲（PID 36104）。佔到埠的是對方，所以我的 game_exec、截圖和最後的 game_stop 都打到對方遊戲上，把它停了；我自己那個遊戲則一直沒被用到。規則：已經有人在用 47870 時，驗證一律用 `-Sandbox <名稱> -PortBase N`，搭配 `OK_CONTROL_PORT`，不碰 47870。
 
 - 演唱鏡頭第一版（SongCam01）在沙盒裡完全沒有作用：交談時 galgame 演出模組（OKStreetSocialGalgame.inl）每幀都會設定鏡頭，在 Tick 的街區鏡頭之後執行，把演唱鏡頭蓋掉。我只看了 Tick 裡的鏡頭程式就改，沒有先搜尋所有設定 S.Camera 的地方。修正：演唱期間 galgame 不接管鏡頭（`!SongOwnsVoice(S.Target)`）。之後改鏡頭前，先 grep 所有 `Camera->SetActorLocation`／`SetFieldOfView` 的呼叫者。
+
+### 2026-10-24 攻略循環：查錢包太早，誤記一筆「口頭結帳沒下單」
+- 對刻晴說「我去結帳」後立刻看錢包沒變，就把 R3-106 記成「口頭購買不會下單」。game.log 其實有 ¥210 的結帳，扣款在她回話時才發生。以後判斷有沒有扣款，先查 game.log 的 till notice 再記問題。
+
+### 2026-10-24 前髮遮擋深度擷取每幀多跑一個場景渲染器
+- 百貨 9 樓美食街 4 個角色同框只有 108～124 FPS，瓶頸在 render thread（8.1 ms）。Insights 顯示每幀有兩次 FDeferredShadingSceneRenderer_Render，較小的那次是前髮遮擋用的 SceneDepth 擷取（OKCrowdRuntimeScene ForegroundCapture），約佔 2.4 ms。改設 `bRenderInMainRenderer`，在主渲染器裡多跑一個 depth pass。
+- 先前我以為是 VSM 陰影：關陰影時 draw 從 1888 降到 586、FPS 升到 202。但改 clipmap 層數與 RadiusThreshold 都沒效果，隱藏角色也只少 200 個 draw。所以 draw 數不是 CPU 成本的來源。以後先用 trace 看 render thread 的時間花在哪裡，再決定改哪個設定。
