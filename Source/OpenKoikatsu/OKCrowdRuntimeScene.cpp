@@ -721,7 +721,7 @@ struct FScene : TSharedFromThis<FScene> {
   G->SetRenderInMainPass(false);G->SetRenderInDepthPass(false);G->SetRenderCustomDepth(true);G->SetCustomDepthStencilValue(E.ForegroundStencil);
   for(int32 S=0;S<E.Mesh->GetMaterials().Num();++S)if(!E.FrontHairSlots.Contains(S))G->SetMaterial(S,TearParent.Get());
   G->SetVisibility(false);G->AddInstance(FTransform::Identity,0);G->RegisterComponent();G->SetComponentTickEnabled(false);E.FrontGpu=G;
-  // The stencil half of custom depth (r.CustomDepth 3) is off by default.
+  // The stencil half of custom depth (r.CustomDepth 3) is off by default; OKStartCrowdRuntimeScene sets it already.
   if(auto* V=IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth")))if(V->GetInt()!=3)V->Set(3,ECVF_SetByCode);
   UE_LOG(LogTemp,Display,TEXT("Runtime foreground %s: front hair copy slots=%d stencil=%d"),*E.Id,E.FrontHairSlots.Num(),E.ForegroundStencil);
   // Her body again for the occlusion capture only: every slot as drawn except the front hair (translucent slots, her
@@ -967,6 +967,10 @@ TMap<TWeakObjectPtr<AActor>,TWeakPtr<FScene>> ActiveScenes;
 bool OKStartCrowdRuntimeScene(AActor* Owner,const FString& Manifest,FString& Error){
  using namespace OKRuntimeScene;check(IsInGameThread());FString Text;TSharedPtr<FJsonObject> J;
  if(!Owner||IFileManager::Get().FileSize(*Manifest)>1024*1024||!FFileHelper::LoadFileToString(Text,*Manifest)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),J)||!J){Error=TEXT("Invalid runtime APNG scene manifest");return false;}
+ // The front hair copies draw into the custom depth stencil (r.CustomDepth 3, off by default). Changing it recreates the
+ // render state of every component in the world: set at the first install it stalled the street 420 ms (1834 place
+ // parts, 142 procedural meshes); here, before the world fills, it costs nothing.
+ if(auto* V=IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth")))if(V->GetInt()!=3)V->Set(3,ECVF_SetByCode);
  auto State=MakeShared<OKRuntimeScene::FScene>();State->Owner=Owner;FString Root,Library;const TArray<TSharedPtr<FJsonValue>>* Cards=nullptr;const TArray<TSharedPtr<FJsonValue>>* Curves=nullptr;
  if(!J->TryGetStringField(TEXT("material_root"),Root)||!J->TryGetStringField(TEXT("material_library"),Library)||!J->TryGetArrayField(TEXT("cards"),Cards)||Cards->IsEmpty()||Cards->Num()>100||!J->TryGetArrayField(TEXT("curves"),Curves)||Curves->Num()<2||Curves->Num()>21){Error=TEXT("Runtime manifest needs 1..100 APNGs, idle and 1..20 common walks");return false;}
  auto Resolve=[&](FString Path){return FPaths::IsRelative(Path)?FPaths::ConvertRelativePathToFull(FPaths::GetPath(Manifest)/Path):Path;};
