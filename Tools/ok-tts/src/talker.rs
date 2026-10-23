@@ -154,7 +154,9 @@ impl Stack {
 pub struct Talker {
     stack: Stack,
     codec_embed: Buf,
-    text_embed: Buf,
+    /// text_embedding [vocab, HIDDEN] bf16 kept in host memory (about 0.6 GB that VRAM does not need): only a prompt's
+    /// rows are gathered and uploaded.
+    text_embed: Vec<u16>,
     fc1_w: Buf,
     fc1_b: Buf,
     fc2_w: Buf,
@@ -221,7 +223,7 @@ impl Talker {
         Ok(Self {
             stack,
             codec_embed: st.bf16(gpu, "talker.model.codec_embedding.weight")?,
-            text_embed: st.bf16(gpu, "talker.model.text_embedding.weight")?,
+            text_embed: st.bytes("talker.model.text_embedding.weight", safetensors::Dtype::BF16)?.0.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect(),
             fc1_w: st.bf16(gpu, "talker.text_projection.linear_fc1.weight")?,
             fc1_b: st.bf16(gpu, "talker.text_projection.linear_fc1.bias")?,
             fc2_w: st.bf16(gpu, "talker.text_projection.linear_fc2.weight")?,
@@ -261,7 +263,12 @@ impl Talker {
     /// text_projection(text_embedding(ids)): [n, HIDDEN]
     pub fn text_project(&self, gpu: &Gpu, ids: &[u32]) -> Result<Buf> {
         let n = ids.len();
-        let e = self.embed(gpu, self.text_embed.ptr, ids)?;
+        let mut rows = Vec::with_capacity(n * HIDDEN);
+        for &id in ids {
+            let at = id as usize * HIDDEN;
+            rows.extend_from_slice(self.text_embed.get(at..at + HIDDEN).ok_or_else(|| anyhow::anyhow!("text id {id} out of range"))?);
+        }
+        let e = gpu.upload(&rows)?;
         let h = self.bias_linear(gpu, e.ptr, n, HIDDEN, HIDDEN, self.fc1_w.ptr, self.fc1_b.ptr)?;
         gpu.launch1("silu_bf16", n * HIDDEN, &[Arg::P(h.ptr), Arg::I((n * HIDDEN) as i32)])?;
         self.bias_linear(gpu, h.ptr, n, HIDDEN, HIDDEN, self.fc2_w.ptr, self.fc2_b.ptr)

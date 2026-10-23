@@ -232,4 +232,4 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 試聽檔在 `Saved/StreetSocial/Songs/ab-vram/`。
 - **速度**：生成與解碼時間沒有明顯差異（GPU 同時被遊戲使用，單次量測波動大）。
 - **設定**：`generate.int8` 預設 true，並寫進範例設定。它在取樣參數的快取鍵內，所以舊歌下次會整首重新生成。
-- **還不夠的部分**：ok-tts 的 talker 也改成 int8（4.5→3.5 GB，見 TTS_OPTIMIZATION_PLAN_20261022.md 第 14 節）。常駐程序約 12.9 GB，加上 ok-song 峰值 4.4 GB，仍略超過 16 GB。還能再省的地方：ok-asr 的 2.7 GB；TTS 文字嵌入表 151936×2048 約 0.6 GB，可改放主記憶體。
+- **還不夠的部分**：ok-tts 的 talker 改成 int8，文字嵌入表移到主記憶體（4.5→3.0 GB，見 TTS_OPTIMIZATION_PLAN_20261022.md 第 14 節）。常駐程序約 12.0 GB，加上 ok-song 峰值 4.4 GB，仍略超過 16 GB。下一個可省的是 ok-asr 的 2.7 GB。
