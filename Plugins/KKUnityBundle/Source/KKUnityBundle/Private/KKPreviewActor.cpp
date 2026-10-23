@@ -125,7 +125,8 @@ static TAutoConsoleVariable<int32> CVarOkAnimationGeneratedStreams(
     TEXT("ok.Animation.GeneratedStreams"),1,TEXT("Fuse generated preview geometry with stream packing; 0 retains the intermediate-array oracle."));
 static TAutoConsoleVariable<int32> CVarOkDeferFacePose(TEXT("ok.Studio.DeferFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) take their pose in their own (worker) anim update after the owner; 0: evaluated at once in SyncMouthPose."));
 static TAutoConsoleVariable<int32> CVarOkShareFacePose(TEXT("ok.Studio.ShareFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) follow the body pose as exact followers, keeping their own morph targets; 0: they evaluate their own pose."));
-static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth every other frame, taking turns, so a scene renders half as many extra views; 0: every frame."));
+static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth in turns (at least every other frame, at most ok.ShadowCapturesPerFrame captures a frame for the whole scene); 0: every frame."));
+static TAutoConsoleVariable<int32> CVarOkShadowCapturesPerFrame(TEXT("ok.ShadowCapturesPerFrame"),2,TEXT("With ok.ShadowCaptureStagger: how many toon shadow captures of owner-posed characters a frame renders at most (each is a whole extra scene render); a scene with more characters updates each one's shadow less often."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureFullView(TEXT("ok.ShadowCaptureFullView"),0,TEXT("1: the toon shadow depth capture renders a full view (lighting, post-processing...) as before; 0 depth only. Read when a character loads."));
 static TAutoConsoleVariable<int32> CVarOkStableShadowTarget(
     TEXT("ok.Animation.StableShadowTarget"),1,TEXT("Keep the deferred scene-depth target bound while updating its contents before the main view; 0 retains ping-pong bindings."));
@@ -6909,7 +6910,7 @@ void AKKPreviewActor::SkinPrivateDisplay()
 
 bool AKKPreviewActor::UpdatePrivateGpuDisplay(FKKLoadedPart& Part,bool AllowPrepare,TArray<FKKGpuStreamSectionRequest>& Requests)
 {
- TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuDisplay);
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuDisplay);QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_PrivateGpuDisplay);
  auto* Component=Cast<UKKAffineProceduralMeshComponent>(Part.Comp);
  const uint64 Epoch=Component?Component->GetGpuStreamProxyEpoch():0;
  auto Restore=[&](const FString& Reason,bool Reject){
@@ -7190,7 +7191,7 @@ bool AKKPreviewActor::AreInteractionStreamsReady() const {
 }
 
 void AKKPreviewActor::PreparePrivateGpuDisplayPoses(){
- TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuPaletteBatch);
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuPaletteBatch);QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_PrivateGpuPoses);
  if(!bUsePrivateGpuPlayback||!CVarOkPrivateGpuStreams.GetValueOnGameThread())return;
  TArray<int32> Indices;TArray<const FKKPrivateGpuSource*> Sources;TArray<FKKPrivateGpuDisplay*> States;
  for(auto& Part:Parts)if(Part.PrivateGpuDisplay&&Part.PrivateGpuDisplay->Installed){
@@ -7209,9 +7210,9 @@ void AKKPreviewActor::PreparePrivateGpuDisplayPoses(){
 void AKKPreviewActor::RefreshRuntimeAccessories()
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewStreams);
-    PreparePrivateGpuDisplayPoses();
+    if(GpuPosesPreparedFrame!=GFrameCounter)PreparePrivateGpuDisplayPoses();
     TArray<FKKGpuStreamSectionRequest> GpuRequests;
-    ON_SCOPE_EXIT {if(!GpuRequests.IsEmpty())UKKAffineProceduralMeshComponent::SubmitGpuStreamsBatch(MoveTemp(GpuRequests));};
+    ON_SCOPE_EXIT {QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_SubmitGpuStreams);if(!GpuRequests.IsEmpty())UKKAffineProceduralMeshComponent::SubmitGpuStreamsBatch(MoveTemp(GpuRequests));};
 	const bool Profile=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_ANIM_PROFILE"))==TEXT("1");
     // UpdateMeshSection retains omitted UV/color attributes and owns a copy
     // of mutable streams. Keep scratch capacity across parts AND frames.
@@ -8636,6 +8637,8 @@ bool AKKPreviewActor::SolveScenePose(float DeltaSeconds,bool bAdvanceAnimation)
     }
     // The display's native skinning (RefreshSkinnedDisplay skips it when ready).
     SkinPrivateDisplay();bNativeSkinReady=true;
+    // The GPU-drawn parts' palettes are read here too (session data only), off the game thread.
+    PreparePrivateGpuDisplayPoses();GpuPosesPreparedFrame=GFrameCounter;
     bPendingSceneDisplay=true;bHeadLookPoseDirty=false;
     return true;
 }
@@ -9189,9 +9192,20 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
     if(BatchFace){EndFaceDisplayUpdate();BatchFace=false;}
  const double FaceDone=FPlatformTime::Seconds();
 	// Each capture is a whole extra scene render on the render thread: characters posed by an owner take turns.
+	// The turn length follows how many such characters captured in the previous frame.
 	static uint32 GShadowCapturePhases = 0;
+	static uint64 GShadowCaptureFrame = 0;
+	static int32 GShadowCapturersThisFrame = 0, GShadowCapturersLastFrame = 0;
 	if (ShadowCapturePhase == MAX_uint32) ShadowCapturePhase = GShadowCapturePhases++;
-	const bool bShadowTurn = !bSceneDrivenPose || CVarOkShadowCaptureStagger.GetValueOnGameThread() == 0 || ((GFrameCounter + ShadowCapturePhase) & 1) == 0;
+	bool bShadowTurn = true;
+	if (bSceneDrivenPose && bCharacterDisplayShadows && ToonShadowCapture && CVarOkShadowCaptureStagger.GetValueOnGameThread() != 0)
+	{
+		if (GShadowCaptureFrame != GFrameCounter) { GShadowCapturersLastFrame = GShadowCapturersThisFrame; GShadowCapturersThisFrame = 0; GShadowCaptureFrame = GFrameCounter; }
+		++GShadowCapturersThisFrame;
+		const int32 Budget = FMath::Max(1, CVarOkShadowCapturesPerFrame.GetValueOnGameThread());
+		const uint64 Period = (uint64)FMath::Max(2, FMath::DivideAndRoundUp(GShadowCapturersLastFrame, Budget));
+		bShadowTurn = (GFrameCounter + ShadowCapturePhase) % Period == 0;
+	}
 	if (bCharacterDisplayShadows && ToonShadowCapture && ToonShadowTargets.Num() == 2 && bShadowTurn)
 	{
         // CaptureScene() builds and executes a renderer immediately, so the game

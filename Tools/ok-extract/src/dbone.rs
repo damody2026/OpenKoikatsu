@@ -2673,6 +2673,20 @@ impl AttachedDynamicSet {
     }
     /// Number of attachment ancestors this state was built on (0: placed without a chain).
     pub(crate) fn attachment_len(&self)->usize{self.attachment_ids.len()}
+    /// The bones this set's chains move (sorted): renderers of one prefab carry the same set.
+    pub(crate) fn particle_ids(&self)->Vec<i64>{
+        let mut ids:Vec<i64>=self.chains.iter().flat_map(|chain|chain.particles.iter().filter_map(|p|p.id)).collect();
+        ids.sort_unstable();ids.dedup();ids
+    }
+    /// The local position and rotation a step left on these bones.
+    pub(crate) fn particle_locals(&self,ids:&[i64])->Option<Vec<([f32;3],[f32;4])>>{
+        ids.iter().map(|id|self.skel.tfs.get(id).map(|tf|(tf.pos,tf.rot))).collect()
+    }
+    /// Instead of a step: another set's solved locals for the same bones (a step writes only these), then the worlds.
+    pub(crate) fn take_particle_locals(&mut self,ids:&[i64],locals:&[([f32;3],[f32;4])]){
+        for (id,(pos,rot)) in ids.iter().zip(locals) {if let Some(tf)=self.skel.tfs.get_mut(id){tf.pos=*pos;tf.rot=*rot;}}
+        self.skel.rebuild_worlds();
+    }
     pub(crate) fn set_attachment_chain_for_step(&mut self,chain:&[Tf],step_follows:bool)->bool {
         if chain.len()!=self.attachment_ids.len()||chain.is_empty(){return false;}
         let mut parent=Some(self.parent_id);

@@ -435,6 +435,33 @@ impl AccessoryRuntime {
         self.skin_palette_with_policy(&state.skel, &correction, body,policy,assigned)
     }
 
+    /// `update_render_impl` for a renderer of a prefab another renderer already solved this frame (same socket, same
+    /// simulated bones): the game runs the prefab's DynamicBones once for all its renderers. Places the rig as a step
+    /// would, takes the leader's solved bone locals and skins. None in the outer option: not followable (no settled
+    /// state, changed attachment), solve on its own instead.
+    fn update_render_follow(&mut self, body: Option<&Skeleton>, head: Option<&Skeleton>, flags: crate::dbone::game_colliders::Flags,
+        emit_geometry: bool, ids:&[i64], locals:&[([f32;3],[f32;4])], policy:AccessoryFramePolicy, assigned:Option<&AssignedWorldFrame>)
+        -> Option<Option<(Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32;4]>)>>
+    {
+        if self.state.is_none() || self.copy_weights_body {return None;}
+        let parent = crate::bone_world(body, head, &self.parent_key)?;
+        let placement = crate::pose::mat_mul_pub(&parent, &self.local_placement);
+        self.collider_flags = Some(flags);
+        if let Some(body)=body {
+            if let Some(skel)=&mut self.source.smr_skel {crate::dbone::implant::sync(skel,body,&self.body_bridges);}
+            if let Some(state)=&mut self.state {crate::dbone::implant::sync(&mut state.skel,body,&self.body_bridges);}
+        }
+        let attachment_chain=crate::attachment_transform_chain(body,head,&self.parent_key,&self.local_placement);
+        let state=self.state.as_mut()?;
+        if let Some(chain)=&attachment_chain {if state.attachment_len()!=chain.len()||!state.set_attachment_chain_for_step(chain,true){return None;}}
+        else if !state.set_placement_for_step(&placement,true) {return None;}
+        state.take_particle_locals(ids,locals);
+        if !emit_geometry {return Some(None);}
+        let state=self.state.as_ref()?;
+        let correction=state.placement_correction();
+        Some(self.skin_palette_with_policy(&state.skel,&correction,body,policy,assigned))
+    }
+
     // Both the native renderer and independent animation exporter must use
     // precisely the same AssignedWeights/implant/destroyed-slot decisions.
     fn effective_worlds<'a>(&self, private: &'a Skeleton, correction: &crate::pose::Mat4, body: Option<&Skeleton>,parity:bool,assigned:Option<&AssignedWorldFrame>,body_names:Option<&HashMap<String,i64>>) -> std::borrow::Cow<'a,[crate::pose::Mat4]> {
@@ -1596,11 +1623,31 @@ impl OkSession {
                 }
             }
         }
+        // Renderers of one prefab (same socket and placement, same simulated bones, same part) share one solve: the
+        // first solves, the others take its bone locals (update_render_follow). OK_ACC_SHARED_SOLVE=0: each solves.
+        let mut leader_of:Vec<Option<usize>>=vec![None;self.parts.len()];
+        let mut particle_ids:HashMap<usize,Vec<i64>>=HashMap::new();
+        if dt>0.0 && acc_shared_solve() {
+            let mut leaders:HashMap<(String,String,Option<String>,[u32;16],Vec<i64>),usize>=HashMap::new();
+            for (index,part) in self.parts.iter().enumerate() {
+                let Some(runtime)=&part.runtime_accessory else {continue;};
+                let Some(state)=&runtime.state else {continue;};
+                if runtime.copy_weights_body || runtime.coordinated {continue;}
+                let ids=state.particle_ids();if ids.is_empty(){continue;}
+                let placement:[u32;16]=std::array::from_fn(|i|runtime.local_placement[i/4][i%4].to_bits());
+                match leaders.entry((runtime.parent_key.clone(),part.role.clone(),part.source_property.clone(),placement,ids.clone())) {
+                    std::collections::hash_map::Entry::Occupied(leader)=>{leader_of[index]=Some(*leader.get());particle_ids.insert(index,ids);}
+                    std::collections::hash_map::Entry::Vacant(slot)=>{slot.insert(index);particle_ids.insert(index,ids);}
+                }
+            }
+        }
+        let leader_of=&leader_of;
         let physics=&self.physics;
         crate::okanim::prof::add(18,t_prepare);
         let t_parts=std::time::Instant::now();
         let skinned=std::sync::atomic::AtomicU64::new(0);
         let update=|(index,part):(usize,&mut SessionPart)| {
+            if leader_of[index].is_some() {return;}
             let Some(runtime) = &mut part.runtime_accessory else { return; };
             let _group = crate::px::enter_group(group, physx);
             // Hair and accessories are worn over the clothes: they collide with the clothed body surface. Garments
@@ -1613,7 +1660,16 @@ impl OkSession {
             let source=if runtime.coordinated {clothes_body}else{body};
             let frame=if runtime.coordinated {&clothes_frame}else{&body_frame};
             let assigned=if runtime.coordinated{assigned_clothes.as_ref()}else{assigned_body.as_ref()};
-            if let Some((positions, normals,tangents)) = runtime.update_render_impl(source,head,colliders,flags,dt,!palette_only&&excluded.binary_search(&index).is_err(),frame.as_ref(),policy,assigned) {
+            let t_part=std::time::Instant::now();
+            let rendered=runtime.update_render_impl(source,head,colliders,flags,dt,!palette_only&&excluded.binary_search(&index).is_err(),frame.as_ref(),policy,assigned);
+            // OK_ACC_PART_PROFILE=<frames>: every that many frames of a part, its solve time (diagnostic).
+            if let Some(every)=acc_part_profile_every() {
+                static TIMES:std::sync::Mutex<Option<HashMap<(u64,usize),(u32,u64)>>>=std::sync::Mutex::new(None);
+                let mut times=TIMES.lock().unwrap();let slot=times.get_or_insert_with(HashMap::new).entry((group,index)).or_insert((0,0));
+                slot.0+=1;slot.1+=t_part.elapsed().as_micros() as u64;
+                if slot.0%every==0 {eprintln!("OK acc part session={group:x} index={index} role={} name={} avg_us={}",part.role,part.name,slot.1/every as u64);slot.1=0;}
+            }
+            if let Some((positions, normals,tangents)) = rendered {
                 skinned.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
                 part.positions = positions;
                 part.normals = normals;
@@ -1625,6 +1681,44 @@ impl OkSession {
             use rayon::prelude::*;
             native_parallel_work(||self.parts.par_iter_mut().enumerate().for_each(update));
         } else {self.parts.iter_mut().enumerate().for_each(update);}
+        if leader_of.iter().any(Option::is_some) {
+            // The leaders' solved locals, then the followers; one that cannot follow solves on its own.
+            let mut solved:HashMap<usize,Vec<([f32;3],[f32;4])>>=HashMap::new();
+            for leader in leader_of.iter().flatten() {
+                if solved.contains_key(leader) {continue;}
+                let locals=self.parts[*leader].runtime_accessory.as_ref().and_then(|r|r.state.as_ref()).and_then(|s|s.particle_locals(&particle_ids[leader]));
+                if let Some(locals)=locals {solved.insert(*leader,locals);}
+            }
+            let follow=|(index,part):(usize,&mut SessionPart)| {
+                let Some(leader)=leader_of[index] else {return;};
+                let Some(runtime)=&mut part.runtime_accessory else {return;};
+                let source=if runtime.coordinated {clothes_body}else{body};
+                let assigned=if runtime.coordinated{assigned_clothes.as_ref()}else{assigned_body.as_ref()};
+                let emit=!palette_only&&excluded.binary_search(&index).is_err();
+                let followed=solved.get(&leader).and_then(|locals|runtime.update_render_follow(source,head,flags,emit,&particle_ids[&index],locals,policy,assigned));
+                let rendered=match followed {
+                    Some(rendered)=>rendered,
+                    None=>{
+                        let _group=crate::px::enter_group(group, physx);
+                        let _outer=crate::px::enter_outer(!part.role.starts_with("clothes"));
+                        let key=crate::okphysics::part_key(&part.role, part.source_property.as_deref());
+                        let _solver=crate::px::enter_solver(physics.solver(key.as_deref(), crate::px::PhysicsComponent::from_role(&part.role)));
+                        let _card=crate::px::enter_card_solver(physics.card_choice(key.as_deref()));
+                        let frame=if runtime.coordinated {&clothes_frame}else{&body_frame};
+                        runtime.update_render_impl(source,head,colliders,flags,dt,emit,frame.as_ref(),policy,assigned)
+                    }
+                };
+                if let Some((positions,normals,tangents))=rendered {
+                    skinned.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
+                    part.positions=positions;part.normals=normals;part.rest_tangents=tangents;
+                    if let Some(observer)=observer{observer.emit(index,part);}
+                }
+            };
+            if parallel&&leader_of.iter().filter(|l|l.is_some()).count()>=8 {
+                use rayon::prelude::*;
+                native_parallel_work(||self.parts.par_iter_mut().enumerate().for_each(follow));
+            } else {self.parts.iter_mut().enumerate().for_each(follow);}
+        }
         crate::okanim::prof::add(19,t_parts);
         crate::okanim::prof::add_us(20,skinned.load(std::sync::atomic::Ordering::Relaxed));
         crate::okanim::prof::add_us(21,palette_only as u64);
@@ -6657,4 +6751,16 @@ fn native_face_overlay_colors_survive_legacy_snapshot_transport() {
         let mut body=SessionPart::from_mesh("body",&mesh,"opaque",false);body.overcolor=[0.4,0.2,0.1,0.3];
         assert_eq!(body.draw_overlay_color(0),body.overcolor,"body nipple transport remains authoritative");
     }
+}
+
+/// OK_ACC_PART_PROFILE=<frames>: print each accessory part's average solve time every that many of its frames.
+fn acc_part_profile_every() -> Option<u32> {
+    static EVERY: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    *EVERY.get_or_init(|| std::env::var("OK_ACC_PART_PROFILE").ok().and_then(|v| v.parse().ok()).filter(|&n: &u32| n > 0))
+}
+
+/// OK_ACC_SHARED_SOLVE=0: every renderer of a multi-renderer prefab solves its DynamicBones on its own (diagnostic).
+fn acc_shared_solve() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("OK_ACC_SHARED_SOLVE").ok().as_deref() != Some("0"))
 }

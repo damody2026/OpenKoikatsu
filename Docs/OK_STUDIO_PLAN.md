@@ -597,7 +597,13 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - 臉部元件共用 body 的 leader 姿勢（`ok.Studio.ShareFacePose`，預設 1）：之前表情消失的原因是 UE 的 `USkeletalMeshComponent::UpdateFollowerComponent` 先清掉 follower 的 morph，只有 leader 也是 `USkeletalMeshComponent` 時才加回去；我們的 leader（BodySkel）是 Poseable，所以每次 leader 刷新 follower 表情就被清空。`UKKRuntimeSkeletalMeshComponent` 覆寫 `UpdateFollowerComponent`，leader 不是 SkeletalMesh 時用同樣的引擎函式把自己的 morph 加回去。每角色省掉十個臉部元件各自的 AnimInstance 更新：6964 同次 A/B 95 → 109 fps（遊戲執行緒 −1.3 ms），3800 表情與不共用時相同。
 - 道具預覽 actor 的 toon shadow 擷取元件（5065 有約 1600 個）每幀空跑元件 Tick：擷取一律由 actor 的 Tick 主動發出，元件本身不需要 Tick（只服務 `bCaptureEveryFrame` 與分塊），建立時關掉。
 - Rust：手型與 Studio FK 每幀重建骨骼名稱表，改為依骨架快取 id（`BoneIdCache`）；形狀、四肢尺寸、手型、FK 都只改 local transform，原本各自重建一次世界矩陣（4 次），合成 1 次。finish.hands_fk 0.47 → 0.09 ms、finish.shape 0.21 → 0.12 ms（每角色）。碰撞體每幀的世界矩陣在同一幀內共用（同樣的乘法、結果逐位元相同）；衣物的 body bridge 骨頭改用名稱表找（原本每根各掃一次整個骨架）。Rust 分項新增 clothes.sync／colliders／step／copy。
+- 一個髮型 prefab 拆成多個 renderer（0633 的後髮 `cf_hair_b_04` 有 8 個）時，每個 renderer 原本各自模擬同一組動態骨；原作是 prefab 的 DynamicBone 只跑一次、所有 renderer 共用骨頭。同一部件、同一掛點與擺放、同一組模擬骨頭的 renderer 現在只由第一個模擬，其餘取它解完的骨頭 local 值再蒙皮（`update_render_follow`；`OK_ACC_SHARED_SOLVE=0` 恢復各自模擬）。0633 每角色後髮從 8 次模擬變 1 次；機器空閒時並行下牆鐘時間差不多，但總 CPU 少很多（之前背景負載高時這三個角色各要 12 ms）。畫面與各自模擬相同。`OK_ACC_PART_PROFILE=<幀數>` 印出各配件部件的平均求解時間。
+- 角色陰影擷取改為整個場景每幀最多 `ok.ShadowCapturesPerFrame`（預設 2）個：角色多時每個角色的陰影更新間隔拉長（6 角色為每 3 幀）。0633 render thread 12.4 → 8.3 ms。
+- 私有骨架 GPU 部件的 palette 讀取（`PreparePrivateGpuDisplayPoses`）移到 worker 的 `SolveScenePose`：0633 遊戲執行緒的角色區塊 6.9 → 5.1 ms。
+- `run_ok_studio_perf.lua --exec "<控制台指令>,..."`：量測前先下指令（例如比較 cvar 的兩種值）。
 - 引擎補丁 `MorphDoubleBufferRead.patch`：連跑 8 個場景時曾在載入第一個場景時斷言當機（`FMorphVertexBufferPool::GetReadingIndex`），見 ERROR_LOG。
 - 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，6964 與 9 角色的 5065 A/B 都無差別）；臉部元件共用 leader 後重新發佈 morph（原因是上述引擎行為，已改用覆寫）。
 
-目前（14 個樣本的前 10 個，同樣有背景負載）：0010 8.5→39、0633 9.6→43、3167 8→42、1901 17→59、3800 51→103、4432 14→37（之後 4432 道具段落再降約 6 ms）。還沒到 120：剩下主要是每角色約 4 ms 的原生求解（配件動態 1.4、衣服 0.6、姿勢 0.5…，已跨角色平行，但取最慢的一個），每角色約 0.7 ms 的顯示更新、0.2 ms 臉部曲線，以及 Slate＋viewport 約 4 ms。
+2026-10-23 晚（in_rep 8 場景，背景負載較輕）：0010 96、0633 85、1268 111、1901 118、3167 84、4432 115、5065（9 角色、約 1600 個道具）63、6964 117 fps。0633、3167 受 render thread 限制（約 11.7 ms），其餘多為遊戲執行緒；5065 的遊戲執行緒 13.8 ms。
+
+更早（14 個樣本的前 10 個，同樣有背景負載）：0010 8.5→39、0633 9.6→43、3167 8→42、1901 17→59、3800 51→103、4432 14→37（之後 4432 道具段落再降約 6 ms）。還沒到 120：剩下主要是每角色約 4 ms 的原生求解（配件動態 1.4、衣服 0.6、姿勢 0.5…，已跨角色平行，但取最慢的一個），每角色約 0.7 ms 的顯示更新、0.2 ms 臉部曲線，以及 Slate＋viewport 約 4 ms。

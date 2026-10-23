@@ -635,8 +635,10 @@ public:
 	TMap<FString,float> PendingSceneFaceCurves;
 	/** SolveScenePose's time so far (diagnostics: OKStudio.PerfKStudio). */
 	double SceneSolveTotalMs=0.;int32 SceneSolveSamples=0;
-	/** Which of the alternate frames this actor captures its toon shadow on (ok.ShadowCaptureStagger). */
+	/** This actor's place in the toon shadow capture turns (ok.ShadowCaptureStagger). */
 	uint32 ShadowCapturePhase=MAX_uint32;
+	// The frame whose private GPU palettes SolveScenePose already read on its worker (RefreshRuntimeAccessories then skips the read).
+	uint64 GpuPosesPreparedFrame=MAX_uint64;
 	bool AuditBodyDynamicsDisplay(const FString& TracePath, bool bExternal = false);
 	bool AuditStudioPVDisplay();
 
