@@ -38,6 +38,19 @@ KKRUNTIMEPOSE_API FString OKRuntimeSharedMaterialParentName(EKKRuntimeMaterialRe
 KKRUNTIMEPOSE_API EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRuntimeMaterialRecipe);
 // Root/<parent>, or the fallback recipe's parent when the root lacks it; null when neither is there.
 KKRUNTIMEPOSE_API UMaterialInterface* OKLoadRuntimeSharedMaterialParent(const FString& Root,EKKRuntimeMaterialRecipe,bool Outline=false);
+// The face pressed flat along the view (Wuthering Waves' toon faces; Tools/GpuPoseAudit PrepareFlatFaceMaterial.cpp):
+// a parent's <Name>_Flat variant beside it (null when the root has none, or ok.FaceFlatten was 0 when the scene started:
+// then the head draws with the plain parent). The head parts (Role "head") draw with it.
+KKRUNTIMEPOSE_API UMaterialInterface* OKRuntimeFlatFaceParent(UMaterialInterface* Parent);
+// ok.FaceFlatten (0 off .. 0.9 the most; -FaceFlatten= on the command line): how far the face is pressed.
+KKRUNTIMEPOSE_API float OKFaceFlattenStrength();
+// Per character, every frame: the head (world cm) and the player camera give the plane the face is pressed to (only
+// the part in front of the head moves). OKFaceFlattenChanged is true when it moved enough to show (0.5 cm, ~0.5
+// degrees, or the strength): only then are the character's head instances given it (OKApplyFaceFlatten), so a still
+// scene sets no material parameters.
+struct FKKFaceFlattenState{FVector Pivot=FVector(NAN);FVector Dir=FVector::ZeroVector;float Strength=-1;};
+KKRUNTIMEPOSE_API bool OKFaceFlattenChanged(FKKFaceFlattenState& State,const FVector& Head,const FVector& Camera);
+KKRUNTIMEPOSE_API void OKApplyFaceFlatten(UMaterialInstanceDynamic* Material,const FKKFaceFlattenState& State);
 
 KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialTranslucent(EKKRuntimeMaterialRecipe);
 KKRUNTIMEPOSE_API bool OKRuntimeSharedMaterialTwoSided(EKKRuntimeMaterialRecipe);

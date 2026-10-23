@@ -785,6 +785,22 @@ TSharedRef<SWidget> UOKGalleryWidget::RebuildWidget()
 		EyeLookCameraCheck->SetContent(Label);MotionCol->AddChild(EyeLookCameraCheck);
 		EyeLookCameraCheck->OnCheckStateChanged.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnEyeLookCamera);
 	}
+	// The face pressed flat along the view (Wuthering Waves' toon faces): its strength, and the direction held still.
+	{
+		const IConsoleVariable* Strength=IConsoleManager::Get().FindConsoleVariable(TEXT("ok.FaceFlatten"));
+		const IConsoleVariable* Lock=IConsoleManager::Get().FindConsoleVariable(TEXT("ok.FaceFlattenLock"));
+		UHorizontalBox* Row=WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		FaceFlattenLabel=WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());Row->AddChild(FaceFlattenLabel);
+		USlider* Slider=WidgetTree->ConstructWidget<USlider>(USlider::StaticClass());
+		Slider->SetMinValue(0.f);Slider->SetMaxValue(.9f);Slider->SetStepSize(.05f);Slider->SetValue(Strength?Strength->GetFloat():0.f);
+		Row->AddChildToHorizontalBox(Slider)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));MotionCol->AddChild(Row);
+		Slider->OnValueChanged.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnFaceFlatten);
+		FaceFlattenLabel->SetText(FText::FromString(FString::Printf(TEXT("臉部壓扁 %.2f"),Strength?Strength->GetFloat():0.f)));
+		UCheckBox* LockCheck=WidgetTree->ConstructWidget<UCheckBox>();
+		auto* Label=WidgetTree->ConstructWidget<UTextBlock>();Label->SetText(FText::FromString(TEXT("固定壓扁方向（轉視角檢查）")));
+		LockCheck->SetContent(Label);LockCheck->SetIsChecked(Lock&&Lock->GetInt()!=0);MotionCol->AddChild(LockCheck);
+		LockCheck->OnCheckStateChanged.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnFaceFlattenLock);
+	}
 	for (int32 Index = 0; Index < 2; ++Index)
 	{
 		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
@@ -2270,6 +2286,15 @@ void UOKCharacterController::OnAutomaticBlink(bool bEnabled)
     if (bSuppressFaceControls || !PreviewActor) return;
     PreviewActor->SetAutomaticBlink(bEnabled);
     for (auto& Slider : FaceOpenSliders) Slider->SetIsEnabled(!bEnabled);
+}
+void UOKCharacterController::OnFaceFlatten(float Value)
+{
+    if(IConsoleVariable* V=IConsoleManager::Get().FindConsoleVariable(TEXT("ok.FaceFlatten")))V->Set(Value,ECVF_SetByConsole);
+    if(FaceFlattenLabel)FaceFlattenLabel->SetText(FText::FromString(FString::Printf(TEXT("臉部壓扁 %.2f"),Value)));
+}
+void UOKCharacterController::OnFaceFlattenLock(bool Locked)
+{
+    if(IConsoleVariable* V=IConsoleManager::Get().FindConsoleVariable(TEXT("ok.FaceFlattenLock")))V->Set(Locked?1:0,ECVF_SetByConsole);
 }
 void UOKCharacterController::OnEyeLookCamera(bool Enabled)
 {

@@ -55,6 +55,7 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
     const auto& Data=*Actor->Session.RuntimeMaterials;
     FKKRuntimeMaterialScene Scene;Scene.EnableShadows=(Actor->bCharacterDisplayShadows||Actor->bStudioItemShading)&&!HG;OKApplyCharacterMakerLighting(Scene);Scene.Globals=Actor->StudioShaderGlobals;
     TArray<UTexture2D*> Textures;for(const auto& Prepared:Data.Textures){auto* Texture=OKCreateRuntimePreparedTexture(Prepared,Error);if(!Texture)return false;Textures.Add(Texture);Actor->LoadedTextures.Add(Texture);}
+    Actor->FlatFaceMaterials.Reset();Actor->FlatFaceState=FKKFaceFlattenState();
     Actor->CookedRoleMaterials.SetNum(Actor->Session.PartCount());Actor->CookedRoleOutlines.SetNum(Actor->Session.PartCount());
     int32 Uncovered=0;
     for(const auto& SourcePart:Data.Parts){
@@ -83,7 +84,10 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
         }
         // OK_SHARED_DUMP=<part name part>: every value the shared parent gets for that part (diagnostic).
         {static const FString Dump=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_SHARED_DUMP"));if(!Dump.IsEmpty()&&Part.Name.Contains(Dump)){FKKRuntimeMaterialBinding B;FString E;if(OKPrepareRuntimeSharedMaterialBinding(Part,Scene,B,E)){for(const auto& V:B.Vectors)UE_LOG(LogTemp,Display,TEXT("OK shared dump %s %s=%s"),*Part.Name,*V.Key.ToString(),*V.Value.ToString());for(const auto& V:B.Scalars)UE_LOG(LogTemp,Display,TEXT("OK shared dump %s %s=%g"),*Part.Name,*V.Key.ToString(),V.Value);for(const auto& T:B.Textures)UE_LOG(LogTemp,Display,TEXT("OK shared dump %s %s=texture %d source=%d avgBGRA=%s (%dx%d srgb=%d)"),*Part.Name,*T.Key.ToString(),T.Value,Data.Textures.IsValidIndex(T.Value)?Data.Textures[T.Value].SourceWidth:-1,Data.Textures.IsValidIndex(T.Value)&&!Data.Textures[T.Value].Mips.IsEmpty()&&Data.Textures[T.Value].Mips.Last().BGRA.Num()>=4?*FString::Printf(TEXT("%d,%d,%d,%d"),Data.Textures[T.Value].Mips.Last().BGRA[0],Data.Textures[T.Value].Mips.Last().BGRA[1],Data.Textures[T.Value].Mips.Last().BGRA[2],Data.Textures[T.Value].Mips.Last().BGRA[3]):TEXT("?"),Textures.IsValidIndex(T.Value)&&Textures[T.Value]?Textures[T.Value]->GetSizeX():0,Textures.IsValidIndex(T.Value)&&Textures[T.Value]?Textures[T.Value]->GetSizeY():0,Textures.IsValidIndex(T.Value)&&Textures[T.Value]?int32(Textures[T.Value]->SRGB):-1);}UE_LOG(LogTemp,Display,TEXT("OK shared dump %s recipe=%s outline=%d"),*Part.Name,*Name,Part.Outline?1:0);FKKRuntimeMaterialBinding OB;FString OE;if(Part.Outline&&OKPrepareRuntimeSharedMaterialBinding(Part,Scene,OB,OE,true)){for(const auto& V:OB.Scalars)UE_LOG(LogTemp,Display,TEXT("OK shared outline dump %s %s=%g"),*Part.Name,*V.Key.ToString(),V.Value);for(const auto& T:OB.Textures)UE_LOG(LogTemp,Display,TEXT("OK shared outline dump %s %s=texture %d"),*Part.Name,*T.Key.ToString(),T.Value);}else if(Part.Outline)UE_LOG(LogTemp,Display,TEXT("OK shared outline dump %s failed: %s"),*Part.Name,*OE);}}
-        auto* Material=OKCreateRuntimeSharedMaterial(Part,Textures,Parent,Scene,Error);
+        // The head (face, eyes, brows, nose, tears) pressed flat along the view, as in the street (ok.FaceFlatten).
+        UMaterialInterface* Flat=Part.Role==TEXT("head")?OKRuntimeFlatFaceParent(Parent):nullptr;
+        auto* Material=OKCreateRuntimeSharedMaterial(Part,Textures,Flat?Flat:Parent,Scene,Error);
+        if(Material&&Flat)Actor->FlatFaceMaterials.Add(Material);
 #if WITH_EDITOR
         if(!Material){UE_LOG(LogTemp,Warning,TEXT("Shared material for part %d (%s): %s; its own graph instead"),Part.NativePart,*Name,*Error);Error.Reset();++Uncovered;continue;}
 #endif
@@ -97,7 +101,9 @@ static bool OKPrepareCookedRole(AKKPreviewActor* Actor,FString& Error){
         if(Part.Outline&&OKRuntimeOutlineLayout(Recipe)){
             const FString OutlineName=Name+TEXT("_Outline");
             auto* OutlineParent=OKLoadRuntimeSharedMaterialParent(Root,Recipe,true);
-            auto* Outline=OKCreateRuntimeSharedMaterial(Part,Textures,OutlineParent,Scene,Error,true);
+            UMaterialInterface* OutlineFlat=Part.Role==TEXT("head")?OKRuntimeFlatFaceParent(OutlineParent):nullptr;
+            auto* Outline=OKCreateRuntimeSharedMaterial(Part,Textures,OutlineFlat?OutlineFlat:OutlineParent,Scene,Error,true);
+            if(Outline&&OutlineFlat)Actor->FlatFaceMaterials.Add(Outline);
 #if WITH_EDITOR
             if(!Outline){UE_LOG(LogTemp,Warning,TEXT("Shared outline for part %d (%s): %s"),Part.NativePart,*OutlineName,*Error);Error.Reset();}
 #else

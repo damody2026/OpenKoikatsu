@@ -380,6 +380,14 @@ public:
 	void UpdateGaze();
 	UFUNCTION()
 	void OnEyeLookCamera(bool Enabled);
+	// The face pressed flat along the view (ok.FaceFlatten, ok.FaceFlattenLock): its strength, and the direction held
+	// still so the camera can turn round and see that it is flat.
+	UFUNCTION()
+	void OnFaceFlatten(float Value);
+	UFUNCTION()
+	void OnFaceFlattenLock(bool Locked);
+	UPROPERTY()
+	TObjectPtr<class UTextBlock> FaceFlattenLabel;
 	UPROPERTY()
 	TObjectPtr<class UCheckBox> EyeLookCameraCheck;
 	UPROPERTY()
