@@ -333,6 +333,9 @@ void AOKStreetSocialScene::TickSolo(){
 
 void AOKStreetSocialScene::EndSolo(){
  auto& S=*State;const int32 Girl=S.SoloGirl;if(Girl==INDEX_NONE)return;S.SoloGirl=INDEX_NONE;S.SoloPhase=0;
+ // Ended before its time (he spoke to her, another activity took over): settled for the minutes it lasted, not its
+ // whole length. Watching the fish two minutes and then sitting on the bench put the clock 18 minutes on (R3-112).
+ if(S.ActGirl==Girl&&OKStreetMindNow(S)-S.SoloStartMinute<S.SoloMinutes)S.ActCutShort=true;
  FString Error;OKResumeCrowdRuntimeBehavior(this,Girl,Error);if(!S.SoloMale.IsEmpty())OKResumeCrowdRuntimeBehavior(this,0,Error);
  if(S.Agents.IsValidIndex(Girl-1)){auto& Agent=S.Agents[Girl-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}
  S.Message=OKMsg(TEXT("ui.outing.solo_activity_ended"), {{TEXT("solo_activity"), *S.SoloWhat}});RefreshUI();ResumeTalkQuiet(Girl);

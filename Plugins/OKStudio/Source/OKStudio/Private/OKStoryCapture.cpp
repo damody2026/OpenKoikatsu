@@ -176,6 +176,8 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 				// The coverage capture only reads the scene alpha (what was drawn): no light, shadow or post at all.
 				Show.SetLighting(false); Show.SetDynamicShadows(false); Show.SetSkyLighting(false);
 				Show.SetPostProcessing(false); Show.SetBloom(false);
+				// Unlit anyway: drawn as passes of the main renderer, not a second scene renderer every other frame.
+				C->bRenderInMainRenderer = true;
 			}
 		}
 		C->TextureTarget = T;
