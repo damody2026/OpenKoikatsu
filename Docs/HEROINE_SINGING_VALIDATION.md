@@ -108,3 +108,16 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 刻晴有一起去咖啡廳的記憶，模板為 `sunny_day+cafe`，主歌是「還記得咖啡廳的那天／咖啡香留在窗邊／你說過的每一句話／我都悄悄記在心上」。
   - 換聲後的人聲以 Qwen3-ASR 辨識，與歌詞幾乎一字不差；在遊戲裡完整唱完，面板與字幕顯示新歌詞，嘴型跟著動。
   - 當時攻略線遊戲與沙盒遊戲都在全速渲染，產歌花了 1550 秒；沙盒限到 30 FPS 後，分離與換聲共 50 秒。
+
+## 7. 換聲的電子音（2026-10-23）
+
+- **症狀**：使用者試聽時覺得歌聲有電子音。逐段比對後，分離出的原人聲正常，換聲後才有。
+- **量測**：
+  - 原生換聲與 Python 換聲在同一輸入上的音高曲線幾乎相同（細部音高相關 0.958 對 0.970），不是移植造成的。
+  - Seed-VC 把音高分成 256 格（約每 20 cent 一格）再取嵌入，滑音與顫音會變成階梯。
+- **改法**：
+  - `soft_f0`：音高位置在時間上線性內插，再混合相鄰兩格的嵌入，不再吸附到單一格。
+  - CFG 從 0.7 降到 0.4，擴散步數從 30 提到 50。
+  - 由使用者在五個試聽版本中選定。另有顫音／滑音選項（`vibrato_cents`、`glide_ms`），預設關閉。
+- **設定**：`ok-song.example.json` 的 convert 改為 `"diffusion_steps": 50, "inference_cfg_rate": 0.4, "soft_f0": true`。這些參數在快取鍵內，舊歌下次會重新換聲（歌與分軌仍沿用快取）。
+- **單獨換聲指令**：`ok-song convert --vocal V.wav --reference R.wav --out O.wav [--soft-f0] [--cfg 0.4] [--steps 50] [--vibrato N] [--glide MS]`

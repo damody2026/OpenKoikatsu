@@ -36,6 +36,14 @@ pub struct StageConfig {
     pub temperature: Option<f64>,
     #[serde(default)]
     pub seed: Option<u64>,
+    /// Seed-VC: natural pitch motion on the generated singing (seedvc::humanize_f0); unset = none.
+    #[serde(default)]
+    pub vibrato_cents: Option<f64>,
+    #[serde(default)]
+    pub glide_ms: Option<f64>,
+    /// Seed-VC: blend neighbouring pitch-bin embeddings (dit::Dit::regulate).
+    #[serde(default)]
+    pub soft_f0: Option<bool>,
 }
 
 impl StageConfig {
