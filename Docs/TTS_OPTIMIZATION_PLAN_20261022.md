@@ -423,3 +423,28 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
 **沙盒模式**（`run_street_social_development.lua -Sandbox NAME [-PortBase N]`）：同一個 checkout 已有遊戲在跑時，另開一個不干擾它的遊戲。使用自己的連接埠（預設 48060 起），存檔、語音設定與自由對話紀錄放在 `Saved/StreetSocial/Sandbox/NAME/`（第一次從主存檔複製），不停掉別人的 ok-tts／ok-asr，也不重建 `Tools/ok-rules`（只複製現有 DLL），不做存檔 ID 遷移。
 
 **給使用者測試**：`StreetSocial.cmd` 會跑最新的 stage（`VoicePick02`）與已部署的 `Build/ok-tts`。對女角按 E 後，在右側面板她的 TTS 提示下方找「换声音…」。存進角色卡會改寫真正的卡片檔（只加 `okVo` 區塊，不影響身分與存檔）；「还原为性格默认声音」可恢復原檔。
+
+## 14. talker int8 權重（2026-10-24）
+
+- **目的**：讓遊戲在 16 GB 顯卡上能和 TTS、ASR、產歌同時執行。量到的常駐顯存：遊戲 6.3 GB、ok-tts 4.5～4.9 GB、ok-asr 2.7 GB。
+- **做法**：
+  - 28 層 talker 的 qkv、o、gate/up、down 矩陣改成 int8，每列一個 f32 縮放（對稱量化，縮放 = max |w| / 127）。
+  - 程式碼放在共用的 `gpu::W`（ok-song 的 HeartMuLa 也用它）。
+  - 逐幀解碼（列數 ≤ 4）用 `gemv_i8_bf16`：一個 block 先把輸入向量放進 shared memory，16 個 warp 各算一個輸出。
+  - 預填時先展開成 bf16，再交給 cuBLAS。
+  - 5 層的 code predictor 與嵌入表維持 bf16。
+  - 環境變數 `OK_TTS_WEIGHTS=bf16` 可切回原本的 bf16（parity 比對要用 bf16）。
+- **結果**（RTX 5090，`ok-tts bench`，語料 `bench/corpus_zh.txt`）：
+
+  | 項目 | bf16 | int8 |
+  |---|---:|---:|
+  | 常駐顯存（Windows GPU Process Memory） | 4.54 GB | 3.52 GB |
+  | 串流 RTF p50（GPU 較空閒時交替三組） | 0.353／0.338／0.339 | 0.336／0.338／0.343 |
+  | 首段音訊 p50 | 0.24～0.30 s | 0.25～0.35 s |
+
+  - GPU 被其他遊戲占用時，量測波動很大。曾經量到 int8 慢 15%，改成交替量測後兩者相同。
+  - `ok-tts gemv-bench` 在 CUDA graph 內量單一矩陣，int8 大多比 bf16 快，最多快 5 倍。
+- **品質**：
+  - 同一句、同一固定種子下，bf16 與 int8 的聲紋相似度 0.995。bf16 自己重跑是 1.000，因為有固定種子。
+  - 18 句 ASR 轉寫有 15 句相同；其餘 3 句只差語氣詞或標點，例如「不要了」對「不要啦」。
+- **部署**：`Build/ok-tts/ok-tts.exe` 已更新。正在執行的服務在下次重啟後才會換成新版。

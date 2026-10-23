@@ -33,7 +33,7 @@ const SONG_KERNELS: &str = include_str!("kernels.cu");
 const CODEC_KERNELS: &str = include_str!("codec_kernels.cu");
 const DEMUCS_KERNELS: &str = include_str!("demucs_kernels.cu");
 const SONG_KERNEL_NAMES: &[&str] = &[
-    "gemv_i8_bf16", "i8_to_bf16", "rope_il_bf16", "embed_one_bf16", "audio_sum_bf16", "sample_cfg_bf16",
+    "rope_il_bf16", "embed_one_bf16", "audio_sum_bf16", "sample_cfg_bf16",
     "f16_to_f32", "rvq_rows_f32", "repeat_rows_f32", "pad_rows_f32", "scale_f32", "silu_f32", "modulate_f32", "gated_add_f32", "rope_il_f32",
     "softmax_rows_f32", "layernorm_rows_f32", "est_input_f32", "incontext_mix_f32", "cfg_euler_f32", "latent_channel_f32", "pad_lr_f32",
     "prelu_f32", "repeat_time_f32", "add_f32", "copy_cols_f32",

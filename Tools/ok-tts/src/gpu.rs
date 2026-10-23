@@ -12,6 +12,7 @@ use cudarc::driver::{result as dr, sys as ds, CudaContext, CudaFunction, CudaStr
 /// ok-tts kernels; ok-song includes this file and appends its own source.
 pub const KERNELS: &str = include_str!("kernels.cu");
 pub const KERNEL_NAMES: &[&str] = &[
+    "gemv_i8_bf16", "i8_to_bf16",
     "embed_bf16", "rmsnorm_bf16", "add_bf16", "silu_mul_bf16", "silu_bf16", "fill_rows_bf16",
     "qk_norm_rope_bf16", "store_v_bf16", "attention_bf16", "sum_rows_bf16", "bf16_to_f32",
     "fill_rows_f32", "rvq_gather", "pad_left_f32", "depthwise_conv_f32", "overlap_add_f32", "snake_f32",
@@ -354,4 +355,80 @@ pub fn ptr_f32(base: u64, index: usize) -> u64 {
 
 pub fn ptr_bf16(base: u64, index: usize) -> u64 {
     base + (index * 2) as u64
+}
+
+/// A layer matrix [out, inp]: bf16, or int8 with one f32 scale per output row (symmetric, max |w| / 127), which halves
+/// the backbone's VRAM. Decoding multiplies the int8 rows directly; a prefill widens the matrix to bf16 for cuBLAS.
+pub enum W {
+    B(Buf),
+    Q { q: Buf, s: Buf },
+}
+
+impl W {
+    /// f32 rows of `inp` values quantized per row (symmetric, scale = max |w| / 127).
+    pub fn int8(gpu: &Gpu, w: &[f32], inp: usize) -> Result<Self> {
+        let (mut q, mut s) = (Vec::with_capacity(w.len()), Vec::with_capacity(w.len() / inp));
+        for row in w.chunks(inp) {
+            let scale = row.iter().fold(0f32, |m, v| m.max(v.abs())) / 127.0;
+            let inv = if scale > 0.0 { 1.0 / scale } else { 0.0 };
+            q.extend(row.iter().map(|v| (v * inv).round().clamp(-127.0, 127.0) as i8));
+            s.push(scale);
+        }
+        Ok(W::Q { q: gpu.upload(&q)?, s: gpu.upload(&s)? })
+    }
+
+    /// y[rows, out] = x[rows, inp] W^T.
+    pub fn linear(&self, gpu: &Gpu, y: u64, x: u64, rows: usize, inp: usize, out: usize) -> Result<()> {
+        match self {
+            W::B(w) => gpu.linear_bf16(y, x, w.ptr, rows, inp, out, 0.0),
+            W::Q { q, s } if rows <= 4 && rows * inp * 2 <= 48 << 10 => {
+                // 16 warps (outputs) per block share one copy of x in shared memory
+                let blocks = out.div_ceil(16) as u32;
+                gpu.launch("gemv_i8_bf16", (blocks, 1, 1), (512, 1, 1), (rows * inp * 2) as u32, &[Arg::P(y), Arg::P(x), Arg::P(q.ptr), Arg::P(s.ptr), Arg::I(rows as i32),
+                    Arg::I(inp as i32), Arg::I(out as i32)])
+            }
+            W::Q { q, s } => {
+                let w = gpu.alloc(out * inp * 2)?;
+                gpu.launch1("i8_to_bf16", out * inp, &[Arg::P(w.ptr), Arg::P(q.ptr), Arg::P(s.ptr), Arg::I(inp as i32), Arg::L((out * inp) as i64)])?;
+                gpu.linear_bf16(y, x, w.ptr, rows, inp, out, 0.0)
+            }
+        }
+    }
+}
+
+
+/// `ok-tts gemv-bench`: microseconds per decode-step linear (one row) for the talker's matrix shapes, bf16 vs int8.
+pub fn gemv_bench() -> Result<()> {
+    let gpu = Gpu::new(0)?;
+    for (inp, out) in [(2048usize, 4096usize), (2048, 2048), (2048, 12288), (6144, 2048), (3072, 15360), (8192, 3072)] {
+        let w: Vec<f32> = (0..inp * out).map(|i| ((i as u64).wrapping_mul(2654435761) % 2001) as f32 / 1000.0 - 1.0).collect();
+        let wb: Vec<u16> = w.iter().map(|f| ((f.to_bits() + 0x7fff + ((f.to_bits() >> 16) & 1)) >> 16) as u16).collect();
+        let b = W::B(gpu.upload(&wb)?);
+        let q = W::int8(&gpu, &w, inp)?;
+        let x = gpu.upload(&vec![0x3f80u16; 2 * inp])?;
+        let y = gpu.alloc(2 * out * 2)?;
+        let mut line = format!("{inp:>5} -> {out:>5}");
+        for rows in [1usize, 2] {
+            for (name, m) in [("bf16", &b), ("int8", &q)] {
+                // 100 calls in one CUDA graph, as a decode step runs them: no launch overhead in the time
+                m.linear(&gpu, y.ptr, x.ptr, rows, inp, out)?;
+                let g = gpu.capture(|| {
+                    for _ in 0..100 {
+                        m.linear(&gpu, y.ptr, x.ptr, rows, inp, out)?;
+                    }
+                    Ok(())
+                })?;
+                gpu.replay(&g)?;
+                gpu.sync()?;
+                let t = std::time::Instant::now();
+                for _ in 0..5 {
+                    gpu.replay(&g)?;
+                }
+                gpu.sync()?;
+                line += &format!("  r{rows} {name} {:6.1} us", t.elapsed().as_secs_f64() * 1e6 / 500.0);
+            }
+        }
+        crate::log!("{line}");
+    }
+    Ok(())
 }

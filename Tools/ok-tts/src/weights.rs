@@ -56,3 +56,11 @@ impl Store {
         Ok((bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect(), shape))
     }
 }
+
+impl Store {
+    /// A bf16 tensor widened to f32 on the host (for int8 quantization).
+    pub fn bf16_as_f32(&self, name: &str) -> Result<(Vec<f32>, Vec<usize>)> {
+        let (bytes, shape) = self.bytes(name, Dtype::BF16)?;
+        Ok((bytes.chunks_exact(2).map(|c| f32::from_bits((u16::from_le_bytes([c[0], c[1]]) as u32) << 16)).collect(), shape))
+    }
+}
