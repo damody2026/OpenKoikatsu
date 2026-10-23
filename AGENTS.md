@@ -28,6 +28,8 @@
 
 流程：建 Interaction host（`Saved/Interaction/FreeTalk01Host`，`Tools/prepare_interaction_runtime_host.lua`）與 Development 遊戲執行檔 → cook StreetSocial 地圖 → UAT 以 `-pak` staging 到 `--base-dir` → `Tools/stage_interaction_runtime.lua` 產生 `Saved/StreetSocial/Build/<名稱>.stage`。換了引擎建置要用新的 `--base-dir`（舊 stage 仍連到舊 base）。`.stage` 目錄裡有 junction，不要遞迴刪除；要換版本就用新的 tag。日誌在 `Saved/StreetSocial/Rebuild-<名稱>/`。
 
+**完整流程只在整合時跑**：平常開發可以沿用既有的 base、只重編執行檔與 stage（`--skip-cook`／`--skip-base`）。整合 C／E 時一律跑完整流程（重新 cook 與 base，新 tag），兩邊的 `CardReaderDevelopment.cmd`、`StreetSocial.cmd` 都要編過並實際啟動確認，再刪掉舊的 stage、base 與 host。
+
 **街區遊戲 MCP**：AI 操作遊戲一律用 `Tools/ok-game-mcp`（`.mcp.json` 的 `ok-game`；說明見 [Docs/STREET_SOCIAL_GAME_MCP.md](Docs/STREET_SOCIAL_GAME_MCP.md)）。它以 `-Control` 啟動遊戲，透過本機控制通道（`OKStreetSocialControl.inl`）走路、按鍵、按按鈕、對話、等時間、截圖、存讀檔，並能下主控台指令與錄 Unreal Insights trace（`game_exec`、`game_trace_start/stop`）；MCP 沒載入的 session 用 `Tools/ok-game-mcp/target/release/ok-game-mcp.exe call <工具> '<JSON>'`。以前的 `Tools/street_play.lua` 已移除。效能分析：啟動器 `-Trace <頻道>` 錄 `trace.utrace`，`-Exec "t.HitchFrameTimeThreshold 60,stat dumphitches"` 把每個卡頓幀的耗時寫進 game.log。
 
 女角清單用 `-SelectionFile <json>`（`{"cards": [OK 卡路徑...]}`）。同一個 checkout 已有遊戲在跑（例如別的 session）時，加 `-Sandbox <名稱> [-PortBase N]` 另開一個：自己的連接埠（預設 48060 起，控制埠 N+10，ok-game-mcp 用 `OK_CONTROL_PORT` 指定）、存檔在 `Saved/StreetSocial/Sandbox/<名稱>/`，不停掉別人的語音伺服器。
