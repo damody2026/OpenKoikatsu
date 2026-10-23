@@ -2682,7 +2682,12 @@ return Base.rgb * sh;
 					Direction->ConstCoordinate = 1;
 					Input(TEXT("LmDirection"), Direction, 5);
 					static const FString DirMode = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LM_DIRMODE"));
+					if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+						UE_LOG(LogTemp, Display, TEXT("OK map lightmap material normal_tex=%d mapped_normal=%d unlit=%d"), NormalTex != nullptr, MappedWorldNormal != nullptr, bUnlit);
+					// On an unlit material PixelNormalWS stays the vertex normal in Emissive even with the Normal pin
+					// connected: the normal map (Standard _NORMALMAP) comes in through the explicit TBN transform.
 					if (DirMode == TEXT("vertex")) Input(TEXT("LmNormal"), NewObject<UMaterialExpressionVertexNormalWS>(Mat));
+					else if (MappedWorldNormal && DirMode != TEXT("pixel")) Input(TEXT("LmNormal"), MappedWorldNormal);
 					else Input(TEXT("LmNormal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
 					// Installed Standard PS 112 (DIRLIGHTMAP_COMBINED): hemisphere
 					// dot product and the baked directionality rebalancing divisor.
@@ -2690,6 +2695,7 @@ return Base.rgb * sh;
 					// vertex normal, none drops the direction factor.
 					Code += DirMode == TEXT("flipx") ? TEXT("float3 lmN = normalize(float3(LmNormal.x, LmNormal.z, LmNormal.y));\n")
 						: DirMode == TEXT("flipz") ? TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, -LmNormal.y));\n")
+						: DirMode == TEXT("neg") ? TEXT("float3 lmN = -normalize(float3(-LmNormal.x, LmNormal.z, LmNormal.y));\n")
 						: TEXT("float3 lmN = normalize(float3(-LmNormal.x, LmNormal.z, LmNormal.y));\n");
 					Code += DirMode == TEXT("none") ? TEXT("float lmDirection = 1.0;\n") : TEXT("float lmDirection = (dot(lmN, LmDirection.rgb - 0.5) + 0.5) / max(LmDirection.a, 1e-4);\n");
 					DirectionFactor = TEXT(" * lmDirection");
@@ -2702,6 +2708,10 @@ return Base.rgb * sh;
 				// OK_LM_OMR=0 (diagnostic): the lightmap light without oneMinusReflectivity.
 				static const bool bLmOmr = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LM_OMR")) != TEXT("0");
 				Code += (bLmOmr ? FString::SanitizeFloat(Shadow->LightmapDiffuse) + (bMetalMap ? TEXT(" * (1.0 - Metal.r)") : TEXT("")) : FString(TEXT("1.0"))) + DirectionFactor + TEXT(";\n");
+				// lmraw: the sampled lightmap texel as stored (alpha, green, 0), for comparing with the native GPU dump.
+				if (LightmapDiag == TEXT("lmraw")) Code += TEXT("return float3(Lm.a, Lm.g, 0.0);\n");
+				// lmdecoded: the decoded lightmap light (green) at a tenth, so it stays below 1 on screen.
+				if (LightmapDiag == TEXT("lmdecoded") && bStandardLinear) Code += TEXT("return (pow(5.0 * Lm.a, 2.2) * lmRgb.g * 0.1).xxx;\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dir")) Code += TEXT("return LmDirection.rgb;\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("dirw")) Code += TEXT("return LmDirection.aaa;\n");
 				if (Shadow->LightmapDirectionTex && LightmapDiag == TEXT("normal")) Code += TEXT("return float3(lmN * 0.5 + 0.5);\n");
@@ -2742,7 +2752,8 @@ return Base.rgb * sh;
                 }
 				Input(TEXT("Position"), NewObject<UMaterialExpressionWorldPosition>(Mat));
 				Input(TEXT("Camera"), NewObject<UMaterialExpressionCameraPositionWS>(Mat));
-				Input(TEXT("Normal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
+				// The mapped normal, as for the lightmap above.
+				if (MappedWorldNormal) Input(TEXT("Normal"), MappedWorldNormal); else Input(TEXT("Normal"), NewObject<UMaterialExpressionPixelNormalWS>(Mat));
 				const float Size = Shadow->ReflectionTex ? float(Shadow->ReflectionTex->GetSizeX()) / 6.f : 128.f;
 				Code += FString::Printf(TEXT("float smooth = %s;\nfloat Size = %s;\nfloat Mips = %s;\nfloat Intensity = %s;\n"),
 					*(FString::SanitizeFloat(Shadow->StandardSmoothness) + (Shadow->bStandardSmoothnessFromMap ? TEXT(" * Metal.a") : TEXT(""))),
@@ -2801,7 +2812,7 @@ total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1
 			}
 			else LmEd->EmissiveColor.Expression = Decode;
 			// The uv diagnostic shows only the coordinate: no lit base colour on top of it.
-			if (LightmapDiag == TEXT("uv") || LightmapDiag.StartsWith(TEXT("dir")))
+			if (LightmapDiag == TEXT("uv") || LightmapDiag.StartsWith(TEXT("lm")) || LightmapDiag.StartsWith(TEXT("dir")))
 			{
 				// No Unreal lighting on top of the coded colour: no base colour and no specular.
 				LmEd->BaseColor.Expression = nullptr; LmEd->Metallic.Expression = nullptr; LmEd->EmissiveColor.Expression = Decode;
@@ -5592,6 +5603,16 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				ShadowParams.NormalMapST = FLinearColor(1.f, 1.f, 0.f, 0.f);
 				Source.MaterialValue(i, "_BumpMap_ST", ShadowParams.NormalMapST);
 			}
+		}
+		if (ShadowParams.bStandardLinear && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
+		{
+			FString MaterialName;
+			TSharedPtr<FJsonObject> Meta; const TSharedPtr<FJsonObject>* MetaMaterial = nullptr;
+			if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Source.MaterialMetadataJson(i)), Meta) && Meta && Meta->TryGetObjectField(TEXT("material"), MetaMaterial) && MetaMaterial && *MetaMaterial)
+				(*MetaMaterial)->TryGetStringField(TEXT("name"), MaterialName);
+			UE_LOG(LogTemp, Display, TEXT("OK map standard normal part=%d mesh=%s material=%s keyword=%d cooked=%d normal_tex=%d scale=%g st=(%g,%g,%g,%g)"),
+				i, UTF8_TO_TCHAR(View.name), *MaterialName, Source.MaterialKeyword(i, "_NORMALMAP"), bCookedTextures, NormalTex != nullptr, ShadowParams.StandardNormalScale,
+				ShadowParams.NormalMapST.R, ShadowParams.NormalMapST.G, ShadowParams.NormalMapST.B, ShadowParams.NormalMapST.A);
 		}
 		if (Source.MaterialShaderName(i) == TEXT("OpenKoikatsu/TripoPBR"))
 		{

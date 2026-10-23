@@ -1200,6 +1200,15 @@ mod lightmap_probe {
                         for c in 0..3 { native[c] += (34.493242 * p[3].powf(2.2) * p[c]) as f64; nrgb += p[c] as f64 / 3.; }
                         na += p[3] as f64;
                     }
+                    // Which way round the colour atlas is against the native rows (as the direction atlas below).
+                    let (w, h) = (img.width() as usize, img.height() as usize);
+                    let (mut same, mut flip) = (0f64, 0f64);
+                    if f.len() == w * h * 4 { for y in 0..h { for x in 0..w {
+                        let p = img.get_pixel(x as u32, y as u32);
+                        let a = p[3] as f64 / 255.;
+                        same += (a - f[(y * w + x) * 4 + 3] as f64).abs(); flip += (a - f[((h - 1 - y) * w + x) * 4 + 3] as f64).abs();
+                    } } }
+                    println!("  colour alpha mean |diff| as stored {:.4}, rows flipped {:.4}", same / (w * h) as f64, flip / (w * h) as f64);
                     let (n, m) = ((img.width() * img.height()) as f64, (f.len() / 4) as f64);
                     println!("  decoded mean ours {:?} native {:?}; alpha {:.4} vs {:.4}; linear rgb {:.4} vs {:.4} ({} vs {} texels)",
                         ours.map(|v| (v / n * 1000.).round() / 1000.), native.map(|v| (v / m * 1000.).round() / 1000.), oa / n, na / m, orgb / n, nrgb / m, n, m);
