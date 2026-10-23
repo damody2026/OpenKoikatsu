@@ -344,6 +344,17 @@ const TSharedPtr<FSkelMeshRefPoseOverride>& UKKRuntimeSkeletalMeshComponent::Get
  if(ExactLeader.IsValid()&&LeaderPoseComponent.Get()==ExactLeader.Get())return ExactLeader->GetRefPoseOverride();
  return AffinePalette.Snapshot.IsValid()?AffinePalette.Snapshot:Super::GetRefPoseOverride();
 }
+void UKKRuntimeSkeletalMeshComponent::UpdateFollowerComponent()
+{
+ Super::UpdateFollowerComponent();
+ // USkeletalMeshComponent clears a follower's morph targets and appends them back only under a skeletal mesh leader;
+ // under the poseable body leader the face parts' expressions (SetMorphTarget) would vanish each time the leader
+ // refreshes its followers. Append them here with the same engine semantics.
+ if(Cast<USkeletalMeshComponent>(LeaderPoseComponent.Get()))return;
+ if(const auto* Mesh=GetSkeletalMeshAsset())
+  if(MorphTargetWeights.Num()==Mesh->GetMorphTargets().Num()&&GetMorphTargetCurves().Num()>0)
+   FAnimationRuntime::AppendActiveMorphTargets(Mesh,GetMorphTargetCurves(),ActiveMorphTargets,MorphTargetWeights);
+}
 void UKKRuntimeSkeletalMeshComponent::PublishOwnedMorphTargets(){
  // UKKCharAnimInstance supplies bone poses only. Its facial curves are owned
  // by SetMorphTarget; use the same engine append/zero semantics without

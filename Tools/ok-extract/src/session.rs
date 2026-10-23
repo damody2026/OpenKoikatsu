@@ -1119,6 +1119,8 @@ pub struct OkSession {
     /// Studio FK: absolute local rotations (Unity Euler degrees, as KK Studio stores them) that replace the animated
     /// rotation of these bones of the body Animator tree after sampling.
     pub(crate) user_fk: Vec<(String, [f32; 3])>,
+    pub(crate) user_fk_ids: BoneIdCache,
+    pub(crate) hand_shape_ids: BoneIdCache,
     /// Studio IK: FullBodyBipedIK (the game's body-bone setup) and its position targets (effector index 0 body, 1/2
     /// shoulders, 3/4 thighs, 5/6 hands, 7/8 feet; skeleton space). Solved after FK.
     pub(crate) studio_ik_solver: Option<crate::finalik::IKSolverFullBodyBiped>,
@@ -1467,10 +1469,19 @@ impl OkSession {
             }
         }
         if let Some((_, state)) = &mut self.clothes_dynamic_runtime {
+            use crate::okanim::prof;
+            let t = std::time::Instant::now();
             state.sync_shared_pose(body);
+            prof::add(22, t);
+            let t = std::time::Instant::now();
             state.configure_shared_clothes_colliders(body, &self.body_colliders, flags);
+            prof::add(23, t);
+            let t = std::time::Instant::now();
             state.step_on_animated_pose(dt);
+            prof::add(24, t);
+            let t = std::time::Instant::now();
             state.copy_simulated_pose_filtered(body, dt == 0.0);
+            prof::add(25, t);
         }
     }
     /// IllusionFixes skips Ver02's phantom iteration when a frame has no
@@ -1691,16 +1702,20 @@ impl OkSession {
             crate::pose::assigned_weights_remap(sk);
             if let Some(current)=self.body_shaped.as_mut(){current.restore_from(sk);}else{self.body_shaped=Some(sk.clone());}
             if !defer_dynamics {
+            let mut locals = false;
             if !self.game_root.as_os_str().is_empty() && crate::profile::var("OK_UE_ANIM").ok().as_deref() != Some("1") {
                 crate::anim::apply_clip_at_parameters(&self.game_root, sk, &self.anim_clip, self.anim_time,&self.anim_parameters);
                 if self.sex == 1 {
-                    crate::shape::apply_body_shape_always(sk, self.body_shaped.as_ref().unwrap());
+                    crate::shape::apply_body_shape_always_locals(sk, self.body_shaped.as_ref().unwrap());
+                    locals = true;
                     let (arm, hand) = crate::anim::clip_limb_corrections_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
-                    crate::pose::apply_scene_limb_size_corrections(sk, arm, hand);
+                    crate::pose::apply_scene_limb_size_corrections_locals(sk, arm, hand);
                 }
             }
-            self.hand_shapes.apply(sk);
-            apply_user_fk(sk, &self.user_fk);
+            locals |= self.hand_shapes.apply_cached_locals(sk, &mut self.hand_shape_ids);
+            locals |= apply_user_fk_locals(sk, &self.user_fk, &mut self.user_fk_ids);
+            // Shape, limb sizes, hand shapes and FK change local transforms only: the worlds are published once.
+            if locals { sk.rebuild_worlds(); }
             // OCIChar.ActiveKinematicMode disables Preparation.pvCopy for all
             // limbs while FK is enabled, even when only fingers are selected.
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
@@ -1957,18 +1972,22 @@ impl OkSession {
     fn finish_animator_transforms(&mut self, sampled: bool) {
         use crate::okanim::prof;
         if let Some(sk) = self.body_skel.as_mut() {
+            let mut locals = false;
             let t = std::time::Instant::now();
             if sampled {
                 if self.sex == 1 {
-                    crate::shape::apply_body_shape_always(sk, self.body_shaped.as_ref().unwrap());
+                    crate::shape::apply_body_shape_always_locals(sk, self.body_shaped.as_ref().unwrap());
+                    locals = true;
                     let (arm, hand) = crate::anim::clip_limb_corrections_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
-                    crate::pose::apply_scene_limb_size_corrections(sk, arm, hand);
+                    crate::pose::apply_scene_limb_size_corrections_locals(sk, arm, hand);
                 }
             }
             prof::add(12, t);
             let t = std::time::Instant::now();
-            self.hand_shapes.apply(sk);
-            apply_user_fk(sk, &self.user_fk);
+            locals |= self.hand_shapes.apply_cached_locals(sk, &mut self.hand_shape_ids);
+            locals |= apply_user_fk_locals(sk, &self.user_fk, &mut self.user_fk_ids);
+            // Shape, limb sizes, hand shapes and FK change local transforms only: the worlds are published once.
+            if locals { sk.rebuild_worlds(); }
             prof::add(13, t);
             let t = std::time::Instant::now();
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
@@ -3147,6 +3166,8 @@ impl SessionBlob {
             head_keys: self.head_keys,
             hand_shapes,
             user_fk: Vec::new(),
+            user_fk_ids: BoneIdCache::default(),
+            hand_shape_ids: BoneIdCache::default(),
             studio_ik_solver: None,
             studio_ik: Vec::new(),
             studio_ik_rotations: Vec::new(),
@@ -6289,6 +6310,32 @@ fn part_resource_split_preserves_full_renderer_contract(){
 fn body_bone_id(sk: &crate::pose::Skeleton, name: &str) -> Option<i64> {
     let ids = crate::pose::animator_root_id(sk).map(|root| crate::pose::subtree_ids_pub(root, &sk.tfs)).unwrap_or_else(|| sk.bone_ids.clone());
     ids.into_iter().find(|id| sk.tfs.get(id).is_some_and(|t| t.name.eq_ignore_ascii_case(name)))
+}
+
+/// Bone ids looked up by name on one skeleton (a Studio FK list, the hand shapes), found once instead of every frame.
+#[derive(Default)]
+pub(crate) struct BoneIdCache { pub(crate) key: u64, pub(crate) ids: Vec<Option<i64>> }
+
+/// `apply_user_fk` with the bone lookup kept across frames (the key covers the FK names and the skeleton's bones), local
+/// rotations only: the caller rebuilds the world matrices when this returns true.
+pub(crate) fn apply_user_fk_locals(sk: &mut crate::pose::Skeleton, fk: &[(String, [f32; 3])], cache: &mut BoneIdCache) -> bool {
+    if fk.is_empty() { return false; }
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for (name, _) in fk { name.hash(&mut h); }
+    sk.bone_ids.hash(&mut h);
+    let key = h.finish();
+    if cache.key != key || cache.ids.len() != fk.len() {
+        let ids = crate::pose::animator_root_id(sk).map(|root| crate::pose::subtree_ids_pub(root, &sk.tfs)).unwrap_or_else(|| sk.bone_ids.clone());
+        let mut by_name: HashMap<String, i64> = HashMap::with_capacity(ids.len());
+        for id in ids { if let Some(t) = sk.tfs.get(&id) { by_name.entry(t.name.to_ascii_lowercase()).or_insert(id); } }
+        cache.ids = fk.iter().map(|(name, _)| by_name.get(&name.to_ascii_lowercase()).copied()).collect();
+        cache.key = key;
+    }
+    for ((_, euler), id) in fk.iter().zip(&cache.ids) {
+        if let Some(tf) = id.and_then(|id| sk.tfs.get_mut(&id)) { tf.rot = crate::pose::euler_deg_to_quat(*euler); }
+    }
+    true
 }
 
 /// Studio FK: the listed bones take these local rotations (Unity Euler degrees) instead of the animated ones.

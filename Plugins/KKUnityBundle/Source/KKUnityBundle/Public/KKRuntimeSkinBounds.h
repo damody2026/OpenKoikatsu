@@ -98,6 +98,7 @@ class KKUNITYBUNDLE_API UKKRuntimeSkeletalMeshComponent : public USkeletalMeshCo
 public:
  virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
  virtual void FinalizeBoneTransform() override;
+ virtual void UpdateFollowerComponent() override;
  virtual const TSharedPtr<FSkelMeshRefPoseOverride>& GetRefPoseOverride() const override;
  bool TryUseExactLeader(UKKRuntimePoseableMeshComponent* Leader);
  void PublishOwnedMorphTargets();

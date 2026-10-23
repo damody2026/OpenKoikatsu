@@ -10883,6 +10883,8 @@ pub(crate) fn extract_session_from_info(
         head_keys,
         hand_shapes: crate::shape::hand::HandShapes::load(game_root),
         user_fk: Vec::new(),
+        user_fk_ids: Default::default(),
+        hand_shape_ids: Default::default(),
         studio_ik_solver: None,
         studio_ik: Vec::new(),
             studio_ik_rotations: Vec::new(),

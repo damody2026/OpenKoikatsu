@@ -583,7 +583,7 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - 從讀卡畫面進工作室時，被隱藏的 Gallery 角色仍每幀解動畫（約 12 ms）：被隱藏的世界 actor 一併停 Tick，結束時恢復。
 - `UOKSceneDocument::Find` 線性搜尋；`AOKSceneActor::Tick` 的唯讀階段改用 `FFindScope`（Id 索引，陣列變動時自動重建）。
 - 各角色的原生求解（`SolveScenePose`）以 `ParallelFor` 同時做，顯示更新（`FinishScenePose`）回遊戲執行緒（`ok.Studio.ParallelPose`）。
-- 骨架元件共用 body 的 leader 姿勢（`ok.Studio.SharePose`）；嘴／臉元件不共用（leader 會連 morph 一起蓋掉，表情消失）。
+- 骨架元件共用 body 的 leader 姿勢（`ok.Studio.SharePose`）；嘴／臉元件也共用（見下方 `ok.Studio.ShareFacePose`）。
 - 私有骨架部件（頭髮、裙子、配件）改走 GPU 串流（`OK_STUDIO_GPU_PLAYBACK=0` 回 CPU）：遊戲執行緒的串流成本約為原本的三分之一。
 - Studio FK：`apply_user_fk` 每根骨頭都重走整棵子樹找名稱（每角色約 9 ms），改為一次建表。
 - 道具預覽 actor 沒事做時自己停 Tick；天空球元件改成場景變動後才重新收集（每幀掃上千道具的所有元件約 2.5 ms）；靜態道具的位置只在場景變動後重算。
@@ -594,6 +594,10 @@ Studio 原先更新動畫時固定傳入零秒，固定相位擷取時更略過�
 - 走 GPU 的私有骨架部件在 Rust 的頭髮／布料階段仍被 CPU 蒙皮（每角色約 6 個部件，配件階段 1.08 ms）：新增 `ok_session_set_scene_gpu_parts`（同 `ok_skin_display_except_private` 的部件與版本核對），`SolveScenePose` 每幀告知哪些部件已在 GPU，`finish_paired_dynamics` 只解物理不蒙皮（配件階段 0.21 ms）；單一角色也走求解／顯示拆分。
 - 臉部曲線（`ok_player_curves` 的 JSON）改在工作執行緒讀取與解析，遊戲執行緒只套值；嘴巴開合值沒變就不重算嘴型 morph。
 - 臉部元件的姿勢不再當場求值：`SyncMouthPose` 原本對每個臉部元件（每角色十幾個）複製整份姿勢並立刻 `TickAnimation`＋`RefreshBoneTransforms`，元件自己的 Tick 又再求值一次。場景驅動的角色改為只交出姿勢（`UKKCharAnimInstance::SetLocalPoseDeferred`），並讓臉部元件排在場景 actor 之後 tick（`OrderSceneTicks`），由元件自己的動畫更新（UE 在工作執行緒做）取用本幀姿勢（`ok.Studio.DeferFacePose`）。A/B（0010、背景負載 5%）：遊戲執行緒 16.6 → 13.0 ms，58 → 74 fps；3800／0010／4432 表情與姿勢不變。
-- 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，A/B 無差別）；臉部元件共用 leader 後重新發佈 morph（表情仍消失）。
+- 臉部元件共用 body 的 leader 姿勢（`ok.Studio.ShareFacePose`，預設 1）：之前表情消失的原因是 UE 的 `USkeletalMeshComponent::UpdateFollowerComponent` 先清掉 follower 的 morph，只有 leader 也是 `USkeletalMeshComponent` 時才加回去；我們的 leader（BodySkel）是 Poseable，所以每次 leader 刷新 follower 表情就被清空。`UKKRuntimeSkeletalMeshComponent` 覆寫 `UpdateFollowerComponent`，leader 不是 SkeletalMesh 時用同樣的引擎函式把自己的 morph 加回去。每角色省掉十個臉部元件各自的 AnimInstance 更新：6964 同次 A/B 95 → 109 fps（遊戲執行緒 −1.3 ms），3800 表情與不共用時相同。
+- 道具預覽 actor 的 toon shadow 擷取元件（5065 有約 1600 個）每幀空跑元件 Tick：擷取一律由 actor 的 Tick 主動發出，元件本身不需要 Tick（只服務 `bCaptureEveryFrame` 與分塊），建立時關掉。
+- Rust：手型與 Studio FK 每幀重建骨骼名稱表，改為依骨架快取 id（`BoneIdCache`）；形狀、四肢尺寸、手型、FK 都只改 local transform，原本各自重建一次世界矩陣（4 次），合成 1 次。finish.hands_fk 0.47 → 0.09 ms、finish.shape 0.21 → 0.12 ms（每角色）。碰撞體每幀的世界矩陣在同一幀內共用（同樣的乘法、結果逐位元相同）；衣物的 body bridge 骨頭改用名稱表找（原本每根各掃一次整個骨架）。Rust 分項新增 clothes.sync／colliders／step／copy。
+- 引擎補丁 `MorphDoubleBufferRead.patch`：連跑 8 個場景時曾在載入第一個場景時斷言當機（`FMorphVertexBufferPool::GetReadingIndex`），見 ERROR_LOG。
+- 試過但沒採用：每個角色求解完就先更新顯示的管線化（`ok.Studio.PipelinePose=1`，6964 與 9 角色的 5065 A/B 都無差別）；臉部元件共用 leader 後重新發佈 morph（原因是上述引擎行為，已改用覆寫）。
 
 目前（14 個樣本的前 10 個，同樣有背景負載）：0010 8.5→39、0633 9.6→43、3167 8→42、1901 17→59、3800 51→103、4432 14→37（之後 4432 道具段落再降約 6 ms）。還沒到 120：剩下主要是每角色約 4 ms 的原生求解（配件動態 1.4、衣服 0.6、姿勢 0.5…，已跨角色平行，但取最慢的一個），每角色約 0.7 ms 的顯示更新、0.2 ms 臉部曲線，以及 Slate＋viewport 約 4 ms。

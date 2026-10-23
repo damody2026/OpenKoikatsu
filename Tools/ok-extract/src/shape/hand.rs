@@ -106,6 +106,29 @@ impl HandShapes {
         true
     }
 
+    /// `apply` with the 30 finger bones looked up once per skeleton (the key is the skeleton's bone list), local
+    /// rotations only: the caller rebuilds the world matrices when this returns true.
+    pub(crate) fn apply_cached_locals(&self, skel: &mut Skeleton, cache: &mut crate::session::BoneIdCache) -> bool {
+        if self.enabled == [false, false] { return false; }
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        skel.bone_ids.hash(&mut h);
+        let key = h.finish();
+        if cache.key != key || cache.ids.len() != TARGETS.len() {
+            let ids = crate::pose::animator_root_id(skel).map(|root| crate::pose::subtree_ids_pub(root, &skel.tfs))
+                .unwrap_or_else(|| skel.bone_ids.clone());
+            let mut by_name: HashMap<&str, i64> = HashMap::new();
+            for id in ids { if let Some(tf) = skel.tfs.get(&id) { by_name.entry(tf.name.as_str()).or_insert(id); } }
+            cache.ids = TARGETS.iter().map(|name| by_name.get(*name).copied()).collect();
+            cache.key = key;
+        }
+        for (index, id) in cache.ids.iter().enumerate() {
+            if !self.enabled[index / 15] { continue; }
+            if let Some(tf) = id.and_then(|id| skel.tfs.get_mut(&id)) { tf.rot = crate::pose::euler_deg_to_quat(self.rotations[index]); }
+        }
+        true
+    }
+
     pub(crate) fn apply(&self, skel: &mut Skeleton) {
         if self.enabled == [false, false] { return; }
         // ShapeHandInfo is initialized under the actual body Animator tree.
