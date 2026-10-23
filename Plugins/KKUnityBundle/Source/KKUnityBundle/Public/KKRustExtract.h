@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Tasks/Task.h"
 
 struct OkSession;
 struct OkMeshView;
@@ -20,9 +21,31 @@ bool KKUNITYBUNDLE_API OKExtractCard(
 	FString& OutError,
 	int32 OutfitIndex = 0);
 
+/** The native session of an FOkSession. A character may solve its next game-animation frame on a worker
+ *  (FOkSession::LaunchAsyncAnimFrame) while the game thread draws the current one; every other use of the handle
+ *  (passing it to the native library, testing it) first waits for that solve, except on the solving thread itself. */
+struct KKUNITYBUNDLE_API FOkSessionHandle
+{
+	OkSession* Raw = nullptr;
+	mutable UE::Tasks::TTask<bool> Async;
+	FOkSessionHandle() = default;
+	FOkSessionHandle(OkSession* P) : Raw(P) {}
+	FOkSessionHandle(const FOkSessionHandle& Other) : Raw(Other.Get()) {}
+	FOkSessionHandle& operator=(const FOkSessionHandle& Other) { OkSession* P = Other.Get(); Sync(); Raw = P; return *this; }
+	FOkSessionHandle& operator=(OkSession* P) { Sync(); Raw = P; return *this; }
+	operator OkSession*() const { return Get(); }
+	OkSession* Get() const { Sync(); return Raw; }
+	void Sync() const;
+};
+
 class KKUNITYBUNDLE_API FOkSession
 {
 public:
+	/** Solve the game-animation frame at Time on a worker; the game thread keeps drawing meanwhile. The next use of
+	 *  this session waits for it; FinishAsyncAnimFrame takes its result (false: none pending, or the frame failed). */
+	void LaunchAsyncAnimFrame(float Time, float DeltaSeconds);
+	bool HasAsyncAnimFrame() const { return Handle.Async.IsValid(); }
+	bool FinishAsyncAnimFrame();
 	FOkSession() = default;
 	~FOkSession();
 	FOkSession(const FOkSession&) = delete;
@@ -31,6 +54,8 @@ public:
 	FOkSession& operator=(FOkSession&& Other) noexcept;
 
 	static bool InitBindings();
+	/** Close() frees native sessions on a background task when called on the game thread; module shutdown waits here. */
+	static void WaitForBackgroundCloses();
  static bool AppearanceRequest(const FString& Root,const FString& Request,const FString& Report,FString& Error);
  static bool ClothingTransition(const FString& Root,const FString& Card,int32 Outfit,const uint8 Previous[9],int32 Kind,uint8 Out[9],FString& Error);
  /** OK clothes (.okclothes): one outfit with its plugin data; the shared models stay in the OK base library.
@@ -106,12 +131,16 @@ public:
 	bool IsOpen() const { return Handle != nullptr; }
 	bool IsPortable() const { return bPortable; }
 	/** Identity of this native session for the PhysX secondary-dynamics groups (the native session address). */
-	uint64 PhysicsGroup() const { return reinterpret_cast<uint64>(Handle); }
+	uint64 PhysicsGroup() const { return reinterpret_cast<uint64>(Handle.Raw); }
 	/** PhysX secondary dynamics (OKPhysXSecondary) for this character. Off by default. The gallery physics menu,
 	 *  one-to-one interaction and paired playback turn it on (AKKPreviewActor::AddPairPhysics); crowd and street
 	 *  NPCs keep the built-in solver. Kept across reopening the card (outfit change, snapshot, clone). */
 	bool SetPhysXSecondary(bool bOn);
 	bool IsPhysXSecondary() const { return bPhysXSecondary; }
+	/** Whether an Unreal animation drives this body instead of the session's game animation. Per character: the
+	 *  OK_UE_ANIM environment switch is process-wide, and another actor loading (a clothing warm-up) flipped it under
+	 *  the visible character, which then stopped sampling its animation and showed the T-pose. Kept like the PhysX switch. */
+	bool SetExternalAnimation(bool bExternal);
 
 	int32 PartCount() const;
 	bool PartAt(int32 Index, OkMeshView& Out) const;
@@ -230,14 +259,15 @@ private:
 	friend class FOkAnimBridge;
 	friend class FOkAnimPlayer;
 	friend class FOkAnimBatch;
-	OkSession* Handle = nullptr;
+	FOkSessionHandle Handle;
 	// Capacity hints only: native validates and solves the current pose on every read.
 	mutable TMap<int32, int32> SkinPaletteCapacityHints;
 	mutable TMap<int32, int32> PrivateSkinStageCapacityHints;
 	bool bPortable = false;
  bool bSharedAnimation = false;
  bool bPhysXSecondary = false;
- /** Sends bPhysXSecondary to a newly adopted native session. */
+ int8 ExternalAnimation = -1;
+ /** Sends bPhysXSecondary and ExternalAnimation to a newly adopted native session. */
  void ApplyPhysXSecondary() const;
 };
 

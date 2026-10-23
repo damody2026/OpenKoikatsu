@@ -4339,9 +4339,9 @@ void AKKPreviewActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	SetActorTickEnabled(false);
     if(bPreserveSourceWorld&&StudioCam){StudioCam->Destroy();StudioCam=nullptr;}
-	DestroyAllParts();
-	Session.Close();
-	Super::EndPlay(EndPlayReason);
+	{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewDestroyParts);DestroyAllParts();}
+	{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewSessionClose);Session.Close();}
+	{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewEndPlaySuper);Super::EndPlay(EndPlayReason);}
 }
 
 void AKKPreviewActor::SetSharedVectorParameter(FName Name, const FLinearColor& Value)
@@ -4448,15 +4448,15 @@ void AKKPreviewActor::Destroyed()
 {
 	// Editor actors may be destroyed before BeginPlay. Keep cleanup idempotent
 	// so both that path and normal EndPlay release only this actor's resources.
-	DestroyAllParts();
-	Session.Close();
+	{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewDestroyParts);DestroyAllParts();}
+	{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewSessionClose);Session.Close();}
 	Super::Destroyed();
 }
 
 void AKKPreviewActor::DestroyAllParts()
 {
 	StopRenderTextureCaptures();
- CookedRoleMaterials.Reset();CookedRoleOutlines.Reset();
+ CookedRoleMaterials.Reset();CookedRoleOutlines.Reset();CookedRoleBuild.Reset();
 	bProductSweep = false; bProductLightLatched = false; ProductCardRamps.Reset(); ProductRampSlots = 0;
 	bSessionLoadComplete = false; SessionLoadNextPart = 0; SessionLoadWhiteRamp = nullptr;
 	SessionLoadState.Reset();
@@ -4552,7 +4552,10 @@ static void OKDisableRealtimeSky(UWorld* World)
 	{
 		return;
 	}
-	if (GEngine)
+	// Every character load came here: setting the render cvar again recreated every component's render state (10-15 ms
+	// a load, a clothing warm-up or a neighbour preload). Only a change is applied.
+	static IConsoleVariable* RealTime = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SkyLight.RealTimeReflectionCapture"));
+	if (GEngine && (!RealTime || RealTime->GetInt() != 0))
 	{
 		GEngine->Exec(World, TEXT("r.SkyLight.RealTimeReflectionCapture 0"));
 	}
@@ -4560,6 +4563,7 @@ static void OKDisableRealtimeSky(UWorld* World)
 	{
 		if (USkyLightComponent* C = It->GetLightComponent())
 		{
+			if (C->Mobility == EComponentMobility::Movable && !C->bRealTimeCapture) continue;
 			C->SetMobility(EComponentMobility::Movable);
 			C->SetRealTimeCapture(false);
 			C->SetCaptureIsDirty();
@@ -4792,6 +4796,7 @@ struct AKKPreviewActor::FPartBuildOutput {
 bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput& Output,
     int32 Begin,int32 End,FString& OutError)
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewPartRange);
     if(!Source.IsOpen()||Begin<0||End<Begin||End>Source.PartCount()){
         OutError=TEXT("Invalid renderer preparation range");return false;
     }
@@ -6621,7 +6626,7 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
 
 	if (!SessionLoadState || !Session.IsOpen() || ToonShadowTargets.Num() != 2) { OutError = TEXT("session load was cancelled"); return false; }
 	auto& ShadowParams = SessionLoadState->Shadow;
-    if(!ToonRampTex){
+    if(!ToonRampTex){TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewRampTexture);
         const FString RampPath=OKCharacterDisplayRampPath();
         if(!RampPath.IsEmpty()){
             TArray<uint8> Bytes;const OkTextureSettings Settings{1,1,1,0,1};
@@ -6632,7 +6637,10 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
     }
 	int32& Extra = SessionLoadExtra;
 	const int32 N = Session.PartCount();
- if(OKSharedParents()&&bUseSharedParents&&!OKPrepareCookedRole(this,OutError)){
+ // A progressive load makes the shared-parent instances a few milliseconds per batch before its first part.
+ int32 CookedRole=1;{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewCookedRole);if(OKSharedParents()&&bUseSharedParents)CookedRole=OKPrepareCookedRole(this,OutError,PartLimit==MAX_int32?0.:0.004);}
+ if(CookedRole==0)return true;
+ if(CookedRole<0){
 #if WITH_EDITOR
   // The editor still has every part's own graph: a card the shared parents cannot take loads as before.
   UE_LOG(LogTemp,Warning,TEXT("Shared material parents unavailable (%s): per-part material graphs"),*OutError);
@@ -6657,6 +6665,7 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
     }
 	if (SessionLoadNextPart < N) return true;
 	const double ProfileAfterParts = FPlatformTime::Seconds();
+	TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewFinalize);
 	if (BodySkel && BodySkel->GetSkinnedAsset())
 	{
 		BodySkel->SetCastShadow(false);
@@ -6746,6 +6755,7 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
 
 void AKKPreviewActor::SyncMouthPose()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewSyncMouth);
 	UPoseableMeshComponent* Src = bShareIdenticalPose&&BodySkel&&BodySkel->BoneSpaceTransforms.Num()>0?BodySkel.Get():nullptr;
 	for (UPoseableMeshComponent* F : SkelFollowers)
 	{
@@ -7469,6 +7479,7 @@ void AKKPreviewActor::RefreshRuntimeAccessories()
 
 void AKKPreviewActor::CaptureRigidFollowerNeutral()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewRigidNeutral);
 	RigidNeutralBones.Reset();
 	CpuRigidNeutralBones.Reset();
 	RigidNeutralAllBones.Reset();
@@ -7588,6 +7599,7 @@ bool AKKPreviewActor::SetOkAnimation(TSharedPtr<FOkAnimPlayer> Player,bool bPubl
 #if PLATFORM_WINDOWS
 	::SetEnvironmentVariableW(TEXT("OK_UE_ANIM"), nullptr);
 #endif
+	Session.SetExternalAnimation(false);
 	WalkSeq=nullptr;OkPlayer=MoveTemp(Player);PoseMode=3;bAnimLoop=true;AnimPhase=0.f;
 	AnimDuration=OkPlayer->Duration();bGameAnimLooping=true;
 	SetActorTickEnabled(true);
@@ -7606,6 +7618,7 @@ void AKKPreviewActor::SetExternalPoseDriver(bool bExternal)
 #if PLATFORM_WINDOWS
 	::SetEnvironmentVariableW(TEXT("OK_UE_ANIM"), nullptr);
 #endif
+	Session.SetExternalAnimation(false);
 	WalkSeq=nullptr;OkPlayer.Reset();PoseMode=4;bAnimLoop=false;AnimPhase=0.f;AnimDuration=0.f;
 	SetActorTickEnabled(true);
 }
@@ -7642,6 +7655,7 @@ void AKKPreviewActor::SetPoseMode(int32 Mode)
 #if PLATFORM_WINDOWS
 		::SetEnvironmentVariableW(TEXT("OK_UE_ANIM"), TEXT("1"));
 #endif
+		Session.SetExternalAnimation(true);
 		const TArray<float> Body = PendingBody.IsEmpty() ? Session.ShapeBody() : PendingBody;
 		const TArray<float> Face = PendingFace.IsEmpty() ? Session.ShapeFace() : PendingFace;
 		RigidNeutralBones.Reset();
@@ -7661,6 +7675,7 @@ void AKKPreviewActor::SetPoseMode(int32 Mode)
 
 bool AKKPreviewActor::PreparePlaybackMaterials(bool Wait)
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewPlaybackMaterials);
     // Final shader resources remain owned by PendingPreviewMaterials while
     // the display uses shared previews. Do not mistake previews for readiness.
     if(!TickProgressiveMaterials())return false;
@@ -7776,6 +7791,7 @@ bool AKKPreviewActor::SetGameAnimation(const FString& ClipName, bool bPublishFra
 #if PLATFORM_WINDOWS
 	::SetEnvironmentVariableW(TEXT("OK_UE_ANIM"), nullptr);
 #endif
+	Session.SetExternalAnimation(false);
 	PoseMode = 2;
 	bAnimLoop = true;
 	AnimPhase = 0.f;
@@ -7920,6 +7936,7 @@ int32 AKKPreviewActor::GetMouthPatternCount() const
 
 void AKKPreviewActor::InitializeFaceControls()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewFaceInit);
     FaceClock=0.f;
     FaceBlink=FOKFbsBlink();
     FaceBlink.Frequency=FMath::Clamp(FMath::TruncToInt(Session.FaceRuntimeSetting(0)),0,255);
@@ -8553,9 +8570,12 @@ static FAutoConsoleCommandWithWorldAndArgs GOKPartMorph(
         }
     }));
 
+static TAutoConsoleVariable<int32> CVarOkAsyncNativePose(TEXT("ok.Animation.AsyncNativePose"),1,TEXT("1: an opted-in character (the card reader's) solves its next game-animation frame on a worker while this one draws (one frame later on screen); 0 solves on the game thread."));
 void AKKPreviewActor::ApplyPoseFrame(float DeltaSeconds,bool bAdvanceAnimation)
 {
     TRACE_CPUPROFILER_EVENT_SCOPE(KK_PreviewPose);
+    // A frame solved ahead for the game animation is dropped when the pose comes from elsewhere now.
+    if(PoseMode!=2&&Session.HasAsyncAnimFrame())Session.FinishAsyncAnimFrame();
     const bool ShapeUpdate=bShapeDirty;const double ShapeBegin=FPlatformTime::Seconds();
     ON_SCOPE_EXIT {if(ShapeUpdate){const double End=FPlatformTime::Seconds();const double Ms=(End-ShapeBegin)*1000.;ShapeUpdateTotalMs+=Ms;ShapeUpdateMaxMs=FMath::Max(ShapeUpdateMaxMs,Ms);ShapeLatencyMaxMs=FMath::Max(ShapeLatencyMaxMs,(End-ShapeRequestedAt)*1000.);++ShapeUpdateSamples;}};
 	if (!Session.IsOpen())
@@ -8567,6 +8587,7 @@ void AKKPreviewActor::ApplyPoseFrame(float DeltaSeconds,bool bAdvanceAnimation)
 #if PLATFORM_WINDOWS
 		::SetEnvironmentVariableW(TEXT("OK_UE_ANIM"), PoseMode == 2 ? nullptr : TEXT("1"));
 #endif
+		Session.SetExternalAnimation(PoseMode != 2);
 		if(!Session.ApplyShapeLive(PendingBody, PendingFace,PoseMode!=0)){UE_LOG(LogTemp,Error,TEXT("OK live shape input rejected"));return;}
 		bShapeDirty = false;
 	}
@@ -8584,7 +8605,15 @@ void AKKPreviewActor::ApplyPoseFrame(float DeltaSeconds,bool bAdvanceAnimation)
 		// Rust applies the source loop/clamp to each state's own normalized clock.
 		if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
 		if(bAdvanceAnimation)AnimPhase = float(FMath::Min(double(AnimPhase) + double(DeltaSeconds)*double(AnimationPlaybackSpeed), double(MAX_flt)));
-		const bool Applied=[&](){TRACE_CPUPROFILER_EVENT_SCOPE(KK_NativeAnimation);return Session.ApplyAnimFrame(AnimPhase,DeltaSeconds);}();
+		const bool Async=bTickPose&&bAsyncNativePose&&bAdvanceAnimation&&CVarOkAsyncNativePose.GetValueOnGameThread()!=0;
+		bool Applied=false;
+		if(Async&&Session.HasAsyncAnimFrame())Applied=Session.FinishAsyncAnimFrame();
+		else{
+			if(Session.HasAsyncAnimFrame())Session.FinishAsyncAnimFrame();
+			Applied=[&](){TRACE_CPUPROFILER_EVENT_SCOPE(KK_NativeAnimation);return Session.ApplyAnimFrame(AnimPhase,DeltaSeconds);}();
+		}
+		// The next frame is solved after this tick's face, gaze and speech updates (Tick launches it).
+		if(Async){bLaunchAsyncPose=true;AsyncPoseDelta=DeltaSeconds;}
 		if (Applied)
 		{
 			AnimDuration=Session.AnimDuration();
@@ -9204,6 +9233,7 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
 	const bool bNeedPose = !bSceneDrivenPose && (bShapeDirty || bHeadLookFollowCamera || bHeadLookPoseDirty || PoseMode == 1 || PoseMode == 2 || PoseMode == 3);
 	if (bNeedPose)
 	{
+        TGuardValue<bool> TickPose(bTickPose,true);
         ApplyPoseFrame(bWorldPoseTick?WorldPoseDelta:DeltaSeconds);
 	}
 	// FaceBlendShape.LateUpdate follows the character pose and uses frame time,
@@ -9242,6 +9272,7 @@ void AKKPreviewActor::Tick(float DeltaSeconds)
         BindToonShadowTarget(WriteIndex);
         ToonShadowReadIndex = WriteIndex;
 	}
+ if(bLaunchAsyncPose){bLaunchAsyncPose=false;if(PoseMode==2&&Session.IsOpen())Session.LaunchAsyncAnimFrame(float(FMath::Min(double(AnimPhase)+double(AsyncPoseDelta)*double(AnimationPlaybackSpeed),double(MAX_flt))),AsyncPoseDelta);}
  const double TickMs=(FPlatformTime::Seconds()-Begin)*1000.;
  if(bNeedPose){AnimationTickTotalMs+=TickMs;++AnimationTickSamples;AnimationTickMaxMs=FMath::Max(AnimationTickMaxMs,TickMs);++AnimationTickHistogram[FMath::Clamp(int32(TickMs),0,255)];}
  if(Profile)UE_LOG(LogTemp,Display,TEXT("OK animation tick pose_ms=%.3f face_ms=%.3f shadow_ms=%.3f"),(PoseDone-Begin)*1000.,(FaceDone-PoseDone)*1000.,(FPlatformTime::Seconds()-FaceDone)*1000.);

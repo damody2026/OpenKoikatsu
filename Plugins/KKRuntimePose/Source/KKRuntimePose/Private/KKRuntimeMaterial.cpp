@@ -1,4 +1,5 @@
 #include "KKRuntimeMaterial.h"
+#include "UObject/StrongObjectPtr.h"
 #include "KKRuntimeNativeSession.h"
 #include "KKRuntimePoseBankTypes.h"
 #include "Engine/Texture2D.h"
@@ -62,6 +63,7 @@ bool OKBuildRuntimeTextureMips(TArray<uint8> BGRA,int32 Width,int32 Height,const
 }
 
 namespace {
+FString RuntimeTextureIdentity(const FKKRuntimePreparedTexture& T);
 bool PrepareSharedRuntimeTexture(const FString& Key,const FString& Hash,const uint8* Bytes,int32 Length,const FKKRuntimeTextureSettings& Settings,FKKRuntimePreparedTexture& Out,FString& Error){
  if(const auto Cached=FindPreparedTexture(Key,Bytes,Length)){++PreparedCacheHits;Out=Cached->Prepared;return true;}
  TSharedPtr<FTexturePreparationFlight,ESPMode::ThreadSafe> Flight;bool Owner=false,Registered=false;
@@ -102,6 +104,7 @@ bool PrepareSharedRuntimeTexture(const FString& Key,const FString& Hash,const ui
  M.Width=Width;M.Height=Height;
  auto& T=Flight->Prepared;T.SourceHash=Hash;T.Settings=Settings;T.SourceWidth=Width;T.SourceHeight=Height;
  if(!OKBuildRuntimeTextureMips(MoveTemp(M.BGRA),Width,Height,Settings,T.Mips,Error))return false;
+ T.PixelIdentity=RuntimeTextureIdentity(T);
  StorePreparedTexture(Key,Bytes,Length,T);Flight->Passed=true;Out=T;Error.Reset();return true;
 }
 }
@@ -192,6 +195,17 @@ bool OKCaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntimePale
 }
 namespace {
 TMap<FString,TWeakObjectPtr<UTexture2D>> RuntimeTextureCache;
+// Recently used textures stay alive for a while after their last material is gone: the card reader switching back to an
+// outfit or card made them all again. Bounded by their GPU size.
+TArray<TPair<TStrongObjectPtr<UTexture2D>,int64>> RecentRuntimeTextures;int64 RecentRuntimeTextureBytes=0;
+void KeepRecentRuntimeTexture(UTexture2D* Tex){
+ if(!Tex)return;
+ const int32 Index=RecentRuntimeTextures.IndexOfByPredicate([Tex](const TPair<TStrongObjectPtr<UTexture2D>,int64>& E){return E.Key.Get()==Tex;});
+ if(Index!=INDEX_NONE){auto Entry=MoveTemp(RecentRuntimeTextures[Index]);RecentRuntimeTextures.RemoveAt(Index);RecentRuntimeTextures.Add(MoveTemp(Entry));return;}
+ const int64 Bytes=int64(Tex->GetSizeX())*Tex->GetSizeY()*4*4/3;
+ RecentRuntimeTextures.Emplace(TStrongObjectPtr<UTexture2D>(Tex),Bytes);RecentRuntimeTextureBytes+=Bytes;
+ while(RecentRuntimeTextureBytes>512ll*1024*1024&&RecentRuntimeTextures.Num()>1){RecentRuntimeTextureBytes-=RecentRuntimeTextures[0].Value;RecentRuntimeTextures.RemoveAt(0);}
+}
 FKKRuntimeTextureCacheStats RuntimeTextureStats;
 FString RuntimeTextureIdentity(const FKKRuntimePreparedTexture& T){
  // Hash explicit fields, never struct padding or the source PNG identity alone:
@@ -210,8 +224,8 @@ UTexture2D* OKCreateRuntimePreparedTexture(const FKKRuntimePreparedTexture& T,FS
  int32 Expected=1;for(int32 W=Width,H=Height;W>1||H>1;W=FMath::Max(1,W/2),H=FMath::Max(1,H/2))++Expected;if(T.Mips.Num()!=Expected){Error=TEXT("Runtime texture mip count invalid");return nullptr;}
  for(const auto& M:T.Mips){if(M.Width!=Width||M.Height!=Height||Width<=0||Height<=0||Width>OKRuntimeTextureMaxDimension||Height>OKRuntimeTextureMaxDimension||int64(Width)*Height*4!=M.BGRA.Num()){Error=TEXT("Runtime texture mip chain invalid");return nullptr;}Width=FMath::Max(1,Width/2);Height=FMath::Max(1,Height/2);}
  if(T.Mips.Last().Width!=1||T.Mips.Last().Height!=1){Error=TEXT("Runtime texture mip chain incomplete");return nullptr;}
- const FString Identity=RuntimeTextureIdentity(T);++RuntimeTextureStats.Requests;
- if(auto* Existing=RuntimeTextureCache.Find(Identity))if(auto* Texture=Existing->Get()){++RuntimeTextureStats.Hits;for(const auto& M:T.Mips)RuntimeTextureStats.AvoidedPixelBytes+=M.BGRA.Num();Error.Reset();return Texture;}
+ const FString Identity=T.PixelIdentity.IsEmpty()?RuntimeTextureIdentity(T):T.PixelIdentity;++RuntimeTextureStats.Requests;
+ if(auto* Existing=RuntimeTextureCache.Find(Identity))if(auto* Texture=Existing->Get()){KeepRecentRuntimeTexture(Texture);++RuntimeTextureStats.Hits;for(const auto& M:T.Mips)RuntimeTextureStats.AvoidedPixelBytes+=M.BGRA.Num();Error.Reset();return Texture;}
  // Weak ownership permits collection after the last material leaves a scene.
  // Amortized pruning bounds stale metadata without a full scan every frame.
  if(RuntimeTextureStats.Requests%256==0)for(auto It=RuntimeTextureCache.CreateIterator();It;++It)if(!It.Value().IsValid())It.RemoveCurrent();
@@ -219,5 +233,5 @@ UTexture2D* OKCreateRuntimePreparedTexture(const FKKRuntimePreparedTexture& T,FS
  for(int32 I=0;I<T.Mips.Num();++I){auto* M=I?new FTexture2DMipMap():&Tex->GetPlatformData()->Mips[0];if(I)Tex->GetPlatformData()->Mips.Add(M);M->SizeX=T.Mips[I].Width;M->SizeY=T.Mips[I].Height;M->SizeZ=1;M->BulkData.Lock(LOCK_READ_WRITE);void* Bytes=M->BulkData.Realloc(T.Mips[I].BGRA.Num());FMemory::Memcpy(Bytes,T.Mips[I].BGRA.GetData(),T.Mips[I].BGRA.Num());M->BulkData.Unlock();}
  auto Wrap=[](int32 V){return V==1?TA_Clamp:V==2?TA_Mirror:TA_Wrap;};Tex->SRGB=T.Settings.SRGB;Tex->Filter=T.Settings.Filter==0?TF_Nearest:T.Settings.Filter==2?TF_Trilinear:TF_Bilinear;Tex->AddressX=Wrap(T.Settings.WrapU);Tex->AddressY=Wrap(T.Settings.WrapV);
  // Transient textures own their complete small mip chain; this is not cooked streaming.
- Tex->NeverStream=true;Tex->UpdateResource();RuntimeTextureCache.Add(Identity,Tex);++RuntimeTextureStats.Created;Error.Reset();return Tex;
+ Tex->NeverStream=true;Tex->UpdateResource();RuntimeTextureCache.Add(Identity,Tex);KeepRecentRuntimeTexture(Tex);++RuntimeTextureStats.Created;Error.Reset();return Tex;
 }

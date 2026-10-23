@@ -9,6 +9,9 @@ struct FKKRuntimeTextureSettings {
 struct FKKRuntimeTextureMip {int32 Width=0,Height=0;TArray<uint8> BGRA;};
 struct FKKRuntimePreparedTexture {
  FString SourceHash;FKKRuntimeTextureSettings Settings;TArray<FKKRuntimeTextureMip> Mips;
+ // Hash of the settings and every mip's pixels (the GPU texture cache key), computed where the mips are built: hashing
+ // them again on the game thread cost 20-40 ms per large texture, for every character the reader built.
+ FString PixelIdentity;
  int32 SourceWidth=0,SourceHeight=0;
 };
 struct FKKRuntimeMaterialTexture {FString Property;int32 Texture=INDEX_NONE;};

@@ -1,9 +1,11 @@
 // The next card in the list, prepared while the reader is idle (OK_PRELOAD_NEIGHBOR=1; off by default): its session
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 // opens on a background worker exactly as loading it would (the card's own editor mods, physics and shape, all
 // clothes worn, the first outfit), then its character is built hidden a step per frame. Loading that card swaps the
 // prepared character in and runs only FinishPreparedPreview. Browsing the list in order then shows each next card
 // at once; one extra character (session, textures, GPU display) stays in memory.
 #include "OKGalleryWidget.h"
+void OKRetireActor(AActor* Actor); // OKGalleryWidget.cpp
 #include "KKPreviewActor.h"
 #include "KKSkeletalBuilder.h"
 #include "KKCardReader.h"
@@ -25,13 +27,14 @@ bool NeighborEnabled(){static const bool On=FPlatformMisc::GetEnvironmentVariabl
 
 void UOKCharacterController::ResetNeighborPreload(){
  ++NeighborGeneration;
- if(NeighborJob)if(auto* Actor=NeighborJob->Actor.Get())if(Actor!=PreviewActor)Actor->Destroy();
+ if(NeighborJob)if(auto* Actor=NeighborJob->Actor.Get())if(Actor!=PreviewActor)OKRetireActor(Actor);
  NeighborJob.Reset();
- if(IsValid(NeighborActor)&&NeighborActor!=PreviewActor)NeighborActor->Destroy();
+ if(IsValid(NeighborActor)&&NeighborActor!=PreviewActor)OKRetireActor(NeighborActor);
  NeighborActor=nullptr;NeighborPath.Reset();
 }
 
 void UOKCharacterController::TickNeighborPreload(){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryNeighborTick);
  if(!NeighborEnabled())return;
  // The card after the one shown (selecting the next card and loading it are separate steps for the user).
  int32 Shown=INDEX_NONE;
@@ -121,7 +124,7 @@ bool UOKCharacterController::TryNeighborPreload(){
  AKKPreviewActor* Actor=NeighborActor;const auto Job=NeighborJob;
  NeighborActor=nullptr;NeighborJob.Reset();NeighborPath.Reset();++NeighborGeneration;
  // As StartLoad3D and FinishLoad3D would: the current character stays until FinishPreparedPreview replaces it.
- if(PreviewActor){if(StalePreview&&StalePreview!=PreviewActor)StalePreview->Destroy();StalePreview=PreviewActor;PreviewActor=nullptr;}
+ if(PreviewActor){if(StalePreview&&StalePreview!=PreviewActor)OKRetireActor(StalePreview);StalePreview=PreviewActor;PreviewActor=nullptr;}
  const int32 Generation=++LoadGeneration;AppearanceGeometryLoadGeneration=INDEX_NONE;
  SetLoadBusy(true);
  PendingLoadPairJson=Job->PairJson;PendingLoadPairGeneration=Generation;

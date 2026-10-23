@@ -297,6 +297,9 @@ public:
 	/** Makes the face parts of this actor tick after `PoseOwner` (the actor posing it); true when there were any. */
 	bool OrderSceneTicks(AActor* PoseOwner);
     bool bUsePrivateGpuPlayback=false; // opt in only while the interaction scene owns playback
+    // The card reader's shown character: its game-animation frame is solved on a worker during the previous frame
+    // (drawn one frame later), so the game thread does not wait ~4-6 ms for it (ok.Animation.AsyncNativePose).
+    bool bAsyncNativePose=false;bool bTickPose=false;bool bLaunchAsyncPose=false;float AsyncPoseDelta=0.f;
 	bool PlayHCue(FString& Error);
 	UFUNCTION(BlueprintPure, Category="Koikatsu|Speech")
 	TArray<FKKSpeechLine> GetGeneralSpeechLines() const {return SpeechLines;}
@@ -675,6 +678,8 @@ public:
 	UPROPERTY()
 	TArray<TObjectPtr<UTexture2D>> LoadedTextures;
     UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> CookedRoleMaterials;
+    // Progress of the shared-parent instances while a load builds them over several batches (KKPreviewRuntimeMaterials.inl).
+    TSharedPtr<struct FOKCookedRoleBuild> CookedRoleBuild;
     UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> CookedRoleOutlines;
     // The head instances on their _Flat parents (ok.FaceFlatten): given the head and the camera every tick.
     TArray<TWeakObjectPtr<class UMaterialInstanceDynamic>> FlatFaceMaterials;FKKFaceFlattenState FlatFaceState;

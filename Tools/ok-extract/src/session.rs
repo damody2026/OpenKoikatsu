@@ -1108,6 +1108,10 @@ pub struct OkSession {
     /// On for the gallery physics menu, one-to-one interaction and paired playback; crowd and street NPCs stay off
     /// and keep the built-in DynamicBone solver.
     pub(crate) physx_secondary:bool,
+    /// Whether an Unreal animation drives this body (`ok_session_set_external_animation`); None follows OK_UE_ANIM.
+    /// The process environment is shared: another actor loading (a clothing warm-up) set it and this character's
+    /// game animation stopped sampling and fell back to the T-pose.
+    pub(crate) external_animation:Option<bool>,
     /// Parts an owner draws on the GPU from their skin palettes (OK Studio): the frame's hair/cloth pass still solves
     /// them but does not skin their vertices on the CPU (`ok_session_set_scene_gpu_parts`, sorted).
     pub(crate) scene_gpu_parts:Vec<usize>,
@@ -1777,6 +1781,7 @@ impl OkSession {
         drop(restore_trace);
         let body_trace=crate::native_profile::Scope::new(26);
         let mut head_scale = [1.0f32; 3];
+        let external_animation=self.external_animation();
         if let Some(sk) = self.body_skel.as_mut() {
             if !self.shape_body.is_empty() && !self.body_keys.is_empty() {
                 head_scale = crate::shape::apply_body_shape_keys_masked(
@@ -1797,7 +1802,7 @@ impl OkSession {
             if let Some(current)=self.body_shaped.as_mut(){current.restore_from(sk);}else{self.body_shaped=Some(sk.clone());}
             if !defer_dynamics {
             let mut locals = false;
-            if !self.game_root.as_os_str().is_empty() && crate::profile::var("OK_UE_ANIM").ok().as_deref() != Some("1") {
+            if !self.game_root.as_os_str().is_empty() && !external_animation {
                 crate::anim::apply_clip_at_parameters(&self.game_root, sk, &self.anim_clip, self.anim_time,&self.anim_parameters);
                 if self.sex == 1 {
                     crate::shape::apply_body_shape_always_locals(sk, self.body_shaped.as_ref().unwrap());
@@ -1959,6 +1964,9 @@ impl OkSession {
         self.sample_paired_frame(t);let sampled=start.elapsed();self.apply_body_interaction(delta_seconds);self.finish_paired_dynamics(delta_seconds);
         if std::env::var("OK_ANIM_PROFILE").ok().as_deref()==Some("1") {eprintln!("OK animation frame sample_ms={:.3} dynamics_ms={:.3}",sampled.as_secs_f64()*1000.,(start.elapsed()-sampled).as_secs_f64()*1000.);}
     }
+    pub(crate) fn external_animation(&self)->bool {
+        self.external_animation.unwrap_or_else(||crate::profile::var("OK_UE_ANIM").ok().as_deref()==Some("1"))
+    }
     pub(crate) fn sample_paired_frame(&mut self, t: f32) {
         if self.game_root.as_os_str().is_empty() { return; }
         self.anim_time = t.max(0.0);
@@ -1973,7 +1981,7 @@ impl OkSession {
         {let _trace=crate::native_profile::Scope::new(15);self.reset_animator_pose();}let reset=start.elapsed();
         // OK_UE_ANIM is process-wide: another actor rebuilding its neutral pose sets
         // it, which must not freeze an installed video clip on this session.
-        let sampled = crate::anim::is_shared_root(&self.game_root) || self.anim_clip.starts_with("video|") || crate::profile::var("OK_UE_ANIM").ok().as_deref() != Some("1");
+        let sampled = crate::anim::is_shared_root(&self.game_root) || self.anim_clip.starts_with("video|") || !self.external_animation();
         if sampled {
             let _trace=crate::native_profile::Scope::new(16);
             if let Some(sk) = self.body_skel.as_mut() {
@@ -3233,6 +3241,7 @@ impl SessionBlob {
             eye_look_runtime:None,
             head_look:crate::head_look::HeadLook::default(),
             physx_secondary:false,
+            external_animation:None,
             scene_gpu_parts:Vec::new(),
             physics:Default::default(),
             body_interaction:None,

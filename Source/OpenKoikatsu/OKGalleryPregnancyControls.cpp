@@ -1,4 +1,5 @@
 #include "OKGalleryWidget.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "OKComboBox.h"
 #include "OKShapeSlider.h"
 #include "OKPregnancyPresets.h"
@@ -62,6 +63,7 @@ void UOKCharacterController::OnPregnancyPreset(FString Value,ESelectInfo::Type T
  }
 }
 void UOKCharacterController::ApplyPendingEditorMods(){
+ TRACE_CPUPROFILER_EVENT_SCOPE(KK_GalleryEditorMods);
  if(!bEditorModsDirty||!PreviewActor||!bModelLayout)return;
  PreviewActor->Session.ApplyBodyPhysics(Selected.Body.BustSoftness,Selected.Body.BustWeight);
  bool GeometryChanged=false;
