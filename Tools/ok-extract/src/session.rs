@@ -1935,7 +1935,9 @@ impl OkSession {
 
     fn finish_animator_pose(&mut self,delta_seconds:f32,sampled:bool){
         self.finish_animator_transforms(sampled);
+        let t=std::time::Instant::now();
         self.apply_body_interaction(delta_seconds);
+        crate::okanim::prof::add(17,t);
         self.finish_paired_dynamics(delta_seconds);
     }
 
@@ -1959,7 +1961,9 @@ impl OkSession {
     }
 
     fn finish_animator_transforms(&mut self, sampled: bool) {
+        use crate::okanim::prof;
         if let Some(sk) = self.body_skel.as_mut() {
+            let t = std::time::Instant::now();
             if sampled {
                 if self.sex == 1 {
                     crate::shape::apply_body_shape_always(sk, self.body_shaped.as_ref().unwrap());
@@ -1967,16 +1971,25 @@ impl OkSession {
                     crate::pose::apply_scene_limb_size_corrections(sk, arm, hand);
                 }
             }
+            prof::add(12, t);
+            let t = std::time::Instant::now();
             self.hand_shapes.apply(sk);
             apply_user_fk(sk, &self.user_fk);
+            prof::add(13, t);
+            let t = std::time::Instant::now();
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
                 if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
                 crate::pose::apply_expression_bone(sk);
             }
+            prof::add(14, t);
+            let t = std::time::Instant::now();
             let base = crate::pose::capture_abm_baseline(sk,&self.abm);
             crate::pose::apply_abm(sk, &self.abm, 0, &base);
+            prof::add(15, t);
+            let t = std::time::Instant::now();
             // Studio IK after the bone modifiers: a target is where the limb ends up.
             apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations);
+            prof::add(16, t);
         }
     }
     /// Builds the Studio IK solver from the shared resources (FullBodyBipedIK config and body-bone prefab).
@@ -6282,8 +6295,13 @@ fn body_bone_id(sk: &crate::pose::Skeleton, name: &str) -> Option<i64> {
 /// Studio FK: the listed bones take these local rotations (Unity Euler degrees) instead of the animated ones.
 pub(crate) fn apply_user_fk(sk: &mut crate::pose::Skeleton, fk: &[(String, [f32; 3])]) {
     if fk.is_empty() { return; }
+    // The bones by name as body_bone_id finds them (the first of the Animator subtree, any case), looked up once for
+    // the whole list: a Studio FK pose names dozens of bones every frame, and walking the subtree for each took ~9 ms.
+    let ids = crate::pose::animator_root_id(sk).map(|root| crate::pose::subtree_ids_pub(root, &sk.tfs)).unwrap_or_else(|| sk.bone_ids.clone());
+    let mut by_name: HashMap<String, i64> = HashMap::with_capacity(ids.len());
+    for id in ids { if let Some(t) = sk.tfs.get(&id) { by_name.entry(t.name.to_ascii_lowercase()).or_insert(id); } }
     for (name, euler) in fk {
-        if let Some(id) = body_bone_id(sk, name) { if let Some(tf) = sk.tfs.get_mut(&id) { tf.rot = crate::pose::euler_deg_to_quat(*euler); } }
+        if let Some(id) = by_name.get(&name.to_ascii_lowercase()) { if let Some(tf) = sk.tfs.get_mut(id) { tf.rot = crate::pose::euler_deg_to_quat(*euler); } }
     }
     sk.rebuild_worlds();
 }

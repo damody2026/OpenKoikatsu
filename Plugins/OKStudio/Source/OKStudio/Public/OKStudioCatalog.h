@@ -160,6 +160,8 @@ public:
 	/** Where an item's children attach (its 子の接続先 node, item space, UE units); identity without one. Cached. */
 	FTransform ItemChildPoint(int32 Group, int32 Category, int32 No) const;
     FTransform AnimatedItemChildPoint(int32 Group, int32 Category, int32 No, int32 Pattern, float NormalizedTime, float ElapsedSeconds, float Speed) const;
+    /** Whether AnimatedItemChildPoint moves with time for this item and pattern. */
+    bool HasChildAnimation(int32 Group, int32 Category, int32 No, int32 Pattern) const { return Pattern == 0 && ChildAnimations.Contains(FIntVector(Group, Category, No)); }
     void LoadChildAnimations(const FString& File);
     TMap<FIntVector, FOKStudioChildAnimation> ChildAnimations;
 	const FOKStudioCatalogMap* FindMap(int32 No) const;

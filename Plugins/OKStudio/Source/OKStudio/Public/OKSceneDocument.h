@@ -780,6 +780,18 @@ public:
 	const FOKSceneObject* Find(int32 Id) const;
 	TArray<int32> Children(int32 Parent) const;
 
+	/** While one is alive, Find looks ids up in an index instead of scanning Objects (a frame's read-only passes over a
+	 *  scene of thousands of objects); a change to the array's size or storage drops back to scanning. */
+	struct FFindScope
+	{
+		explicit FFindScope(const UOKSceneDocument* InDocument);
+		~FFindScope();
+		FFindScope(const FFindScope&) = delete;
+		FFindScope& operator=(const FFindScope&) = delete;
+	private:
+		const UOKSceneDocument* Document;
+	};
+
 	/** Transform in scene space (parents applied). */
 	UFUNCTION(BlueprintCallable, Category = "OK Studio")
 	FTransform WorldTransform(int32 Id) const;
@@ -802,4 +814,12 @@ public:
 	bool LoadFromFile(const FString& Path, FString& OutError);
 
 	void NotifyChanged() { OnChanged.Broadcast(); }
+
+private:
+	/** FFindScope's index: id -> position in Objects, valid for the array's storage and size it was built for. */
+	mutable TMap<int32, int32> FindIndex;
+	mutable const FOKSceneObject* FindIndexData = nullptr;
+	mutable int32 FindIndexNum = -1;
+	mutable int32 FindScopes = 0;
+	const FOKSceneObject* FindIndexed(int32 Id) const;
 };

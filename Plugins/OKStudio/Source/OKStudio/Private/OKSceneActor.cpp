@@ -1,4 +1,6 @@
 #include "OKSceneActor.h"
+#include "Async/ParallelFor.h"
+#include "HAL/IConsoleManager.h"
 #include "OKStudioImport.h"
 #include "OKStudioImport.h"
 #include "Camera/CameraComponent.h"
@@ -218,6 +220,9 @@ namespace
 		AKKPreviewActor* Actor = World->SpawnActor<AKKPreviewActor>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
 		if (!Actor) { OutError = TEXT("preview actor not spawned"); return nullptr; }
 		Actor->SetActorTickEnabled(false);
+		// The scene poses its characters once a frame (AdvanceCharacterFrames, UpdateLooks); loading and animation calls
+		// turn the actor's Tick back on for its face clock and shadow, which must not pose them a second time.
+		Actor->bSceneDrivenPose = true;
 		Actor->Session = MoveTemp(Session);
 		Actor->ItemColorOverrides = ItemColors;
 		// Maps draw with their own material graphs (their lightmaps and emission are there). Items draw with the game's
@@ -304,6 +309,10 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;
 		Out.Preview = Actor;
+		// Private-rig parts (hair, skirts, accessories) skinned on the GPU as in the one-to-one interaction scene: their
+		// streams cost the game thread a third of the CPU path (OK_STUDIO_GPU_PLAYBACK=0 keeps the CPU path).
+		static const bool bGpuPlayback = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_GPU_PLAYBACK")) != TEXT("0");
+		Actor->bUsePrivateGpuPlayback = bGpuPlayback;
 		if (Object.Character.StudioAnimeNo >= 0)
 		{
 			// A Studio animation of the OK animation library (no Unity bundles).
@@ -486,6 +495,8 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 
 void AOKSceneActor::Sync()
 {
+	bSkyDomesDirty = true;
+	++PlaceGeneration;
 	if (!Document) { for (auto& Pair : Shown) Release(Pair.Value); Shown.Reset(); return; }
 	SyncMap();
 	if (!Document->BoneFrame)
@@ -723,10 +734,20 @@ void AOKSceneActor::AdvanceAnimations(float DeltaSeconds)
     AdvanceCharacterFrames(DeltaSeconds, true);
 }
 
+namespace
+{
+	TAutoConsoleVariable<int32> CVarParallelPose(TEXT("ok.Studio.ParallelPose"), 1,
+		TEXT("1: OK Studio solves its characters' poses (animation, hair and cloth) on worker threads at once, then refreshes their display on the game thread. 0: one after another on the game thread."));
+	TAutoConsoleVariable<int32> CVarSharePose(TEXT("ok.Studio.SharePose"), 1,
+		TEXT("1: a Studio character's skeletal parts take the body's pose as their leader instead of each copying it."));
+}
+
 void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase)
 {
     if (!Document || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
     if (bAdvancePhase) Document->ItemAnimationSeconds += DeltaSeconds;
+    TArray<AKKPreviewActor*, TInlineAllocator<16>> Actors;
+    const bool bSharePose = CVarSharePose.GetValueOnGameThread() != 0;
     for (auto& Pair : Shown)
     {
         AKKPreviewActor* Actor = Pair.Value.Preview.Get();
@@ -740,7 +761,22 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         // Scene actors have their own Tick disabled. A static FK pose still needs
         // a finishing pass so cloth receives the current limb pose and elapsed time.
         if (Actor->PoseMode == 0) Actor->bUserPoseDirty = true;
-        Actor->ApplyPoseFrame(DeltaSeconds, false);
+        Actor->bShareIdenticalPose = bSharePose;
+        Actors.Add(Actor);
+    }
+    // Each character's native solve touches only its own session: solved together on worker threads, then each
+    // display refreshed here. A pose the split does not cover (a shape edit, other pose modes) runs whole here.
+    TArray<uint8, TInlineAllocator<16>> Split;
+    Split.SetNumZeroed(Actors.Num());
+    if (CVarParallelPose.GetValueOnGameThread() != 0 && Actors.Num() > 1)
+    {
+        QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_ParallelSolve);
+        ParallelFor(Actors.Num(), [&](int32 I) { Split[I] = Actors[I]->SolveScenePose(DeltaSeconds, false) ? 1 : 0; });
+    }
+    for (int32 I = 0; I < Actors.Num(); ++I)
+    {
+        if (Split[I]) Actors[I]->FinishScenePose();
+        else Actors[I]->ApplyPoseFrame(DeltaSeconds, false);
     }
 }
 
@@ -865,11 +901,15 @@ void AOKSceneActor::Tick(float DeltaSeconds)
 	if (bBuildsPending && Document) Sync();
 	// A sequence-driven scene shows SequenceTime instead of playing on its own.
     if (!SceneJson.IsEmpty()) ShowSequenceTime();
+    // The passes below only read the scene: its objects by id through an index (they look every object and its
+    // parents up each frame; a linear Find made that quadratic in a scene of thousands of items).
+    const UOKSceneDocument::FFindScope FindScope(Document);
     // Prepare targets before the single pose/physics frame; UpdateLooks' direct
     // callers retain its standalone behavior without double-stepping static cloth.
-    UpdateLooks(DeltaSeconds, false);
-    AdvanceCharacterFrames(DeltaSeconds, SceneJson.IsEmpty() && !bPauseAnimations);
-	PlaceAttached();
+    {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_UpdateLooks);UpdateLooks(DeltaSeconds, false);}
+    {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_CharacterFrames);AdvanceCharacterFrames(DeltaSeconds, SceneJson.IsEmpty() && !bPauseAnimations);}
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_PlaceAttached);PlaceAttached();}
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_ItemLighting);
 	UpdateItemLighting();
 }
 
@@ -966,18 +1006,28 @@ void AOKSceneActor::UpdateItemLighting()
 void AOKSceneActor::PlaceAttached()
 {
 	if (!Document) return;
+	// A placement that hangs on no character bone and under no animated item (Studio's child animations) is the same
+	// until the scene changes: placed once per placement generation (a sync, the scene actor moving) instead of every
+	// frame (a scene of thousands of items spent ~1.7 ms here).
+	if (!GetActorTransform().Equals(PlacedActorTransform, 0.)) { PlacedActorTransform = GetActorTransform(); ++PlaceGeneration; }
+	const FOKStudioCatalog& Catalog = FOKStudioCatalog::Get();
 	for (const FOKSceneObject& Object : Document->Objects)
 	{
-		bool bAttached = false;
-		for (int32 Steps = 0, Cur = Object.Id; Cur >= 0 && Steps < 256 && !bAttached; ++Steps)
+		bool bAttached = false, bMoving = false;
+		for (int32 Steps = 0, Cur = Object.Id; Cur >= 0 && Steps < 256; ++Steps)
 		{
 			const FOKSceneObject* O = Document->Find(Cur);
 			if (!O) break;
-			bAttached = !O->AttachBone.IsEmpty() || O->Kind == EOKSceneObjectKind::Item;
+			bAttached = bAttached || !O->AttachBone.IsEmpty() || O->Kind == EOKSceneObjectKind::Item;
+			const FOKSceneObject* P = Document->Find(O->Parent);
+			bMoving = bMoving || !O->AttachBone.IsEmpty() || (P && P->Kind == EOKSceneObjectKind::Character)
+				|| (P && P->Kind == EOKSceneObjectKind::Item && Catalog.HasChildAnimation(P->Item.Group, P->Item.Category, P->Item.No, P->Item.AnimePattern));
 			Cur = O->Parent;
 		}
-		const FShown* Item = bAttached ? Shown.Find(Object.Id) : nullptr;
+		FShown* Item = bAttached ? Shown.Find(Object.Id) : nullptr;
 		if (!Item) continue;
+		if (!bMoving && Item->PlacedGeneration == PlaceGeneration) continue;
+		Item->PlacedGeneration = PlaceGeneration;
 		const FTransform World = Document->WorldTransform(Object.Id) * GetActorTransform();
 		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Item->RenderCorrection * World);
 		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(World);
@@ -1048,15 +1098,23 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 	}
 	if (Frame.Plane.IsValid()) Frame.Plane->SetTranslucentSortPriority(1000);
 	// Sky dome items (Skybox/Cubemap on a mesh) draw before everything else translucent, without depth: Unity draws them
-	// front to back by their bounds' centre, so of overlapping domes the farthest shows. Order ours the same way.
-	for (const TPair<int32, FShown>& It : Shown)
-		if (AKKPreviewActor* Preview = It.Value.Preview.Get())
-		{
-			TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
-			for (UPrimitiveComponent* P : Primitives)
-				if (P->ComponentHasTag(TEXT("OKSkyDome")))
-					P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
-		}
+	// front to back by their bounds' centre, so of overlapping domes the farthest shows. Order ours the same way. The
+	// domes are found again only after the shown objects change (every component of thousands of items each frame cost
+	// ~2.5 ms).
+	if (bSkyDomesDirty)
+	{
+		bSkyDomesDirty = false;
+		SkyDomeParts.Reset();
+		for (const TPair<int32, FShown>& It : Shown)
+			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
+			{
+				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
+				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
+			}
+	}
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : SkyDomeParts)
+		if (UPrimitiveComponent* P = Part.Get())
+			P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
 	PlaceSky(View);
 }
 
@@ -1142,6 +1200,7 @@ void AOKSceneActor::ShowSequenceTime()
 
 void AOKSceneActor::ReleaseScene()
 {
+	bSkyDomesDirty = true;
 	for (auto& Pair : Shown) Release(Pair.Value);
 	Shown.Reset();
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) P->Destroy();

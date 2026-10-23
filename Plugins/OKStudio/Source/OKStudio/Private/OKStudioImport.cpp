@@ -615,7 +615,7 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		if (E.TryGetBoolField(TEXT("depth"), bOn) && bOn && Strength > 0.01)
 		{
 			Document->Post.bDepthOfField = true;
-			Document->Post.Aperture = float(FMath::Clamp(3.7 * FMath::Max(FocalSize, 0.05) / Strength, 0.7, 22.));
+			Document->Post.Aperture = float(FMath::Clamp(3.7 * FMath::Max(FocalSize, 0.05) / Strength, 0.3, 22.));
 		}
 		// Background and frame pictures (the scene names a file of UserData/bg, UserData/frame): the game's own ones are in
 		// the OK base library (studio/bg, studio/frame, kept as library-relative paths); a user's own picture is copied
@@ -664,6 +664,18 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		if (Document->Post.bDepthOfField) Document->Post.FocalDistance = float(FMath::Max(Distance.Size() * 100.0, 10.0));
 		// Unity's field of view is vertical; Studio pictures are 16:9.
 		const double VerticalFov = FMath::DegreesToRadians(FMath::Clamp((*Camera)->GetNumberField(TEXT("fov")), 1.0, 170.0));
+		// Unity's depth of field blurs the far background by an amount on screen that does not depend on the lens; UE's
+		// cinematic one by the focal length squared over f-stop times focus distance (focal length from the horizontal
+		// field of view on its 24.89 mm sensor). The f-stop above was calibrated on 1901 (vertical 23 degrees, focus
+		// 1.42 m); other views scale from there, else a wide view (4432: 31.5 degrees, 2.88 m) kept its background sharp.
+		if (Document->Post.bDepthOfField)
+		{
+			auto FocalMm = [](double Vertical) { return 24.89 / (2.0 * FMath::Tan(Vertical * 0.5) * 16.0 / 9.0); };
+			const double Focal = FocalMm(VerticalFov), FocalRef = FocalMm(FMath::DegreesToRadians(23.0));
+			const double Focus = FMath::Max(double(Document->Post.FocalDistance) * 10.0, Focal + 1.0), FocusRef = 1420.0;
+			const double Scale = FMath::Square(Focal / FocalRef) * (FocusRef - FocalRef) / (Focus - Focal);
+			Document->Post.Aperture = float(FMath::Clamp(Document->Post.Aperture * Scale, 0.3, 22.0));
+		}
 		Cam->Camera.Fov = float(FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(VerticalFov * 0.5) * 16.0 / 9.0)));
 		if (Document->ActiveCamera < 0) Document->ActiveCamera = Id;
 		++Report.Cameras;

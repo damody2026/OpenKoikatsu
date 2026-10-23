@@ -157,6 +157,8 @@ public:
 	void RunStressItems(int32 Count, const FString& Item, bool bExit);
 	/** KStudio scenes pictured from their Studio camera beside the scene card picture (OKStudio.CompareKStudio). */
 	void RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitFrames, bool bExit);
+	/** Frame times of KStudio scenes once loaded, animations playing, no frame cap (OKStudio.PerfKStudio, OKStudioPerf.cpp). */
+	void RunKStudioPerf(const TArray<FString>& Scenes, int32 SettleFrames, float Seconds, bool bExit);
 
 	// FTickableGameObject
 	virtual void Tick(float DeltaTime) override;
@@ -188,6 +190,8 @@ private:
 	/** The world's own actors (the gallery's floor, sky, lights, character) hidden and its post-process volumes off while
 	 *  the studio runs: a scene shows only itself, as in Studio and on the empty Entry map. Restored on Stop. */
 	TArray<TWeakObjectPtr<AActor>> HiddenWorldActors;
+	/** Hidden world actors whose tick was paused while the studio runs (restored on Stop). */
+	TArray<TWeakObjectPtr<AActor>> PausedWorldActors;
 	TArray<TWeakObjectPtr<USceneComponent>> HiddenWorldComponents;
 	TArray<TWeakObjectPtr<class APostProcessVolume>> DisabledWorldVolumes;
 	void UpdateViewer();

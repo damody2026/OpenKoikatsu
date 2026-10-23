@@ -131,6 +131,9 @@ private:
 	TStrongObjectPtr<UStaticMeshComponent> SkyDome;
 	int32 SkyShown = -1;
 	void PlaceSky(const FTransform& View);
+	/** The shown items' sky dome parts (OKSkyDome), found again after the shown objects change. */
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> SkyDomeParts;
+	bool bSkyDomesDirty = true;
 	bool bBuildsPending = false;
 	/** Previews destroyed since the last forced garbage collection. */
 	int32 ReleasedSinceCollect = 0;
@@ -163,7 +166,12 @@ private:
 		TArray<float> AppliedFixedEyes;
 		int32 AppliedFixedEyesPattern = -1;
 		bool bNeckLooking = false;
+		/** PlaceAttached's placement generation this object was last placed at (static placements skip until it changes). */
+		uint32 PlacedGeneration = 0;
 	};
+	/** Bumped when what static placements depend on may have changed (a sync, the scene actor moving). */
+	uint32 PlaceGeneration = 1;
+	FTransform PlacedActorTransform;
 	TMap<int32, FShown> Shown;
 	int32 ShownMap = -1;
 	TArray<TWeakObjectPtr<AKKPreviewActor>> ShownMapPreviews;

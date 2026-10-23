@@ -1073,7 +1073,7 @@ private:
 		PostFloat(TEXT("泛光大小"), &FOKScenePost::BloomSize, 0.1f, 8.f, 0.05f);
 		PostCheck(TEXT("景深"), &FOKScenePost::bDepthOfField);
 		PostFloat(TEXT("對焦距離 cm"), &FOKScenePost::FocalDistance, 10.f, 5000.f, 5.f);
-		PostFloat(TEXT("光圈 f"), &FOKScenePost::Aperture, 0.7f, 32.f, 0.1f);
+		PostFloat(TEXT("光圈 f"), &FOKScenePost::Aperture, 0.3f, 32.f, 0.1f);
 		PostCheck(TEXT("暗角"), &FOKScenePost::bVignette);
 		PostFloat(TEXT("暗角強度"), &FOKScenePost::SourceVignetteIntensity, 0.f, 0.9f, 0.01f);
 		PostFloat(TEXT("曝光補償 EV"), &FOKScenePost::Exposure, -5.f, 5.f, 0.1f);
@@ -1301,6 +1301,9 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 			UE_LOG(LogTemp, Display, TEXT("OK studio: world actor %s (%s) hidden while the studio runs"), *Actor->GetName(), *Actor->GetClass()->GetName());
 			Actor->SetActorHiddenInGame(true);
 			Game->HiddenWorldActors.Add(Actor);
+			// Hidden, it need not tick either (the gallery's character kept solving its animation and physics, ~12 ms a
+			// frame, behind the studio).
+			if (Actor->IsActorTickEnabled()) { Actor->SetActorTickEnabled(false); Game->PausedWorldActors.Add(Actor); }
 			// Lights, sky atmosphere, sky light and fog go by their component's visibility, not the actor's.
 			TInlineComponentArray<USceneComponent*> Components(Actor);
 			for (USceneComponent* Component : Components)
@@ -1414,6 +1417,8 @@ void UOKStudioGame::Stop()
 	SceneActor = nullptr;
 	Viewer = nullptr;
 	for (const TWeakObjectPtr<AActor>& Actor : HiddenWorldActors) if (Actor.IsValid()) Actor->SetActorHiddenInGame(false);
+	for (const TWeakObjectPtr<AActor>& Actor : PausedWorldActors) if (Actor.IsValid()) Actor->SetActorTickEnabled(true);
+	PausedWorldActors.Reset();
 	for (const TWeakObjectPtr<USceneComponent>& Component : HiddenWorldComponents) if (Component.IsValid()) Component->SetVisibility(true);
 	HiddenWorldComponents.Reset();
 	for (const TWeakObjectPtr<APostProcessVolume>& Volume : DisabledWorldVolumes) if (Volume.IsValid()) Volume->bEnabled = true;
@@ -1908,7 +1913,7 @@ FString UOKStudioGame::Screenshot(int32 Width, int32 Height, bool bTransparent)
 void UOKStudioGame::Tick(float DeltaTime)
 {
 	if (bStopRequested) { Stop(); return; }
-	if (Viewer && Document) Document->Post.ApplyTo(Viewer->GetCameraComponent()->PostProcessSettings);
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKStudio_ApplyPost);if (Viewer && Document) Document->Post.ApplyTo(Viewer->GetCameraComponent()->PostProcessSettings);}
 	if (Viewer && SceneActor) { SceneActor->ViewLocation = Viewer->GetActorLocation(); SceneActor->bHasViewLocation = true; }
 	TickExport();
 	if (bTimelinePlaying && Document)
@@ -1916,8 +1921,9 @@ void UOKStudioGame::Tick(float DeltaTime)
 		const float Length = FMath::Max(Document->Duration, 0.01f);
 		SetTimelineTime(FMath::Fmod(TimelineTime + DeltaTime, Length));
 	}
-	if (bSyncPending) SyncNow();
-	if (bHistoryDirty && FPlatformTime::Seconds() - LastChangeSeconds > 0.4) CommitHistory();
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKStudio_Sync);if (bSyncPending) SyncNow();}
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKStudio_History);if (bHistoryDirty && FPlatformTime::Seconds() - LastChangeSeconds > 0.4) CommitHistory();}
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_OKStudio_UpdateViewer);
 	UpdateViewer();
 }
 
