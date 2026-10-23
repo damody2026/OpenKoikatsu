@@ -84,7 +84,10 @@ void AOKStreetSocialScene::BankAction(const FString& What,int64 Amount,int32 Arg
  FString Notice;if(Out->TryGetStringField(TEXT("notice"),Notice)){S.FinNotice=Notice;PopulateApp();return;}
  FString Done;if(!Out->TryGetStringField(TEXT("done"),Done)||Done.IsEmpty())return;
  OKRulesReadBank(C,*Out);ApplyRulesEffects(C,*Out);
- if(CommitStore(MoveTemp(C))){S.FinNotice=Done;S.Message=Done;}
+ if(CommitStore(MoveTemp(C))){S.FinNotice=Done;S.Message=Done;
+  // Paid (with his money or the student loan): off the task list now, not at tomorrow's bank day ("pay tuition by
+  // 9/27" stayed on the list after the loan had paid it).
+  if(What==TEXT("fees_pay")||What==TEXT("loan_apply"))S.FeesDueText.Reset();}
  if(!S.App.IsEmpty())PopulateApp();RefreshUI();
 }
 

@@ -7,8 +7,8 @@
 
 ## 動畫庫
 
-- `Tools/export_street_animation_library.lua` 從 `base_v1/studio_anims.json`（原作 Studio 全部動畫）取出這些群組：キャラ、スタジオ、アウトドア、サマー、汎用、アフタースクール、EC、サンシャイン。不取的有：H 群組、バトル、ライブ、走路與跑步（街區有自己的移動動畫）、T-pose。
-- 每個 Studio 狀態以 `ok-extract --export-runtime-clips` 匯出成街區用的 `OKCLIP01`，放在 `Content/IndependentResources/RuntimeAnimations/library/lib_<群組>_<分類>_<編號>.okanim`。共 595 個、約 240 MB，以 Git LFS 存放。
+- `Tools/export_street_animation_library.lua` 從 `base_v1/studio_anims.json`（原作 Studio 全部動畫）取出這些群組：キャラ、スタジオ、アウトドア、サマー、汎用、アフタースクール、EC、サンシャイン、バトル（戰鬥，供惠惠詠唱這類活動用）。不取的有：H 群組、ライブ、走路與跑步（街區有自己的移動動畫）、T-pose。
+- 每個 Studio 狀態以 `ok-extract --export-runtime-clips` 匯出成街區用的 `OKCLIP01`，放在 `Content/IndependentResources/RuntimeAnimations/library/lib_<群組>_<分類>_<編號>.okanim`。共 873 個（其中バトル 278 個）、約 332 MB，以 Git LFS 存放。
 - 一個狀態若依身高有 `_S/_M/_L` 三個片段，取 `_M`；混合樹（blend tree）不匯出。目前只有 1 個沒匯出：`lib_17_14_5`，它播兩個片段。
 - `library.manifest.json` 記下每個片段的姿勢（stand / chair / floor / lie）、性別、是否循環、長度、日文名與分類。
 - `ok-extract` 的 `export_shared_clip` 現在接受 `states:` 控制器狀態鍵：狀態只播一個片段時，就匯出那個片段。

@@ -6,7 +6,7 @@
 -- category, Japanese name and controller-state key). Each kept state that plays one clip is exported with
 -- ok-extract --export-runtime-clips into Content/IndependentResources/RuntimeAnimations/library/, and
 -- library.manifest.json lists them with what the street needs to choose one: posture, sex, loop, duration, the
--- Japanese name and the category. H groups, the battle sets, the live/dance stage shows and walking/running (the street
+-- Japanese name and the category. H groups, the live/dance stage shows and walking/running (the street
 -- has its own locomotion) are left out. What each clip is used for (her gestures, idles by place, photo poses) is
 -- Content/IndependentResources/StreetSocialData/rules/animations.toml.
 
@@ -31,8 +31,8 @@ lfs.mkdir(OUT)
 local function read(path) local f = assert(io.open(path, "rb")); local s = f:read("a"); f:close(); return s end
 local studio = json.decode(read(ROOT .. "Content/IndependentResources/base_v1/studio_anims.json"))
 
--- Groups kept: キャラ, スタジオ, アウトドア, サマー, 汎用, アフタースクール, EC, サンシャイン (the rest are H or battle).
-local KEEP = { [0] = true, [7] = true, [10] = true, [11] = true, [12] = true, [14] = true, [15] = true, [17] = true }
+-- Groups kept: キャラ, スタジオ, バトル, アウトドア, サマー, 汎用, アフタースクール, EC, サンシャイン (the rest are H).
+local KEEP = { [0] = true, [7] = true, [8] = true, [10] = true, [11] = true, [12] = true, [14] = true, [15] = true, [17] = true }
 local groups, categories = {}, {}
 for _, g in ipairs(studio.groups) do groups[g.id] = g.name end
 for _, c in ipairs(studio.categories) do categories[(c.group or -1) .. ":" .. c.id] = c.name end
