@@ -35,9 +35,28 @@ impl Buf {
     }
 }
 
+/// Bytes held in live `Buf`s (pool allocations) and the highest that reached since `reset_peak` (memory budgets).
+static LIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PEAK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// (live bytes, peak bytes) of `Buf`s.
+pub fn mem_stats() -> (usize, usize) {
+    (LIVE.load(std::sync::atomic::Ordering::Relaxed), PEAK.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+pub fn reset_peak() {
+    PEAK.store(LIVE.load(std::sync::atomic::Ordering::Relaxed), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn track(bytes: usize) {
+    let live = LIVE.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed) + bytes;
+    PEAK.fetch_max(live, std::sync::atomic::Ordering::Relaxed);
+}
+
 impl Drop for Buf {
     fn drop(&mut self) {
         if self.ptr != 0 {
+            LIVE.fetch_sub(self.bytes, std::sync::atomic::Ordering::Relaxed);
             unsafe {
                 let _ = dr::free_async(self.ptr, self.stream);
             }
@@ -107,6 +126,7 @@ impl Gpu {
         // A fixed cuBLAS workspace keeps GEMMs capturable in CUDA graphs.
         const WORKSPACE: usize = 64 << 20;
         let ws = unsafe { dr::malloc_sync(WORKSPACE) }?;
+        track(WORKSPACE);
         let _blas_workspace = Buf { ptr: ws, bytes: WORKSPACE, stream: cs };
         let st = unsafe { cb::cublasSetWorkspace_v2(*blas.handle(), ws as *mut c_void, WORKSPACE) };
         if st != cb::cublasStatus_t::CUBLAS_STATUS_SUCCESS {
@@ -159,8 +179,29 @@ impl Gpu {
         Ok(())
     }
 
+    /// (reserved, reserved high-water) bytes of the device memory pool: what this process holds from the driver.
+    pub fn pool_reserved(&self) -> Result<(u64, u64)> {
+        unsafe {
+            let mut pool: ds::CUmemoryPool = std::ptr::null_mut();
+            let r = ds::cuDeviceGetMemPool(&mut pool, self.ctx.cu_device());
+            if r != ds::CUresult::CUDA_SUCCESS {
+                bail!("cuDeviceGetMemPool: {r:?}");
+            }
+            let (mut now, mut high) = (0u64, 0u64);
+            for (attr, v) in [(ds::CUmemPool_attribute::CU_MEMPOOL_ATTR_RESERVED_MEM_CURRENT, &mut now),
+                              (ds::CUmemPool_attribute::CU_MEMPOOL_ATTR_RESERVED_MEM_HIGH, &mut high)] {
+                let r = ds::cuMemPoolGetAttribute(pool, attr, v as *mut u64 as *mut std::ffi::c_void);
+                if r != ds::CUresult::CUDA_SUCCESS {
+                    bail!("cuMemPoolGetAttribute: {r:?}");
+                }
+            }
+            Ok((now, high))
+        }
+    }
+
     pub fn alloc(&self, bytes: usize) -> Result<Buf> {
         let ptr = unsafe { dr::malloc_async(self.cs, bytes.max(4)) }?;
+        track(bytes);
         Ok(Buf { ptr, bytes, stream: self.cs })
     }
 

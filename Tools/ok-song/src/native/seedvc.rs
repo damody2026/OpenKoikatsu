@@ -400,14 +400,17 @@ impl SeedVc {
         let reference = &reference[..reference.len().min(RATE as usize * 25)];
         let src16 = resample(source, RATE, 16000);
         let ref16 = resample(reference, RATE, 16000);
+        super::mem_log(gpu, "convert start");
         let (s_alt, n_alt) = self.semantic(gpu, &src16)?;
         let (s_ori, n_ori) = self.semantic(gpu, &ref16)?;
+        super::mem_log(gpu, "semantic");
         let (_, frames) = mel(source);
         let (mel2, frames2) = mel(reference);
         let (fb, fb_frames) = super::campplus::fbank(&ref16);
         let style = self.campplus.embed(gpu, &fb, fb_frames)?;
         let f0_ori = self.rmvpe.f0(gpu, &ref16, 0.03)?;
         let f0_alt = self.rmvpe.f0(gpu, &src16, 0.03)?;
+        super::mem_log(gpu, "style + f0");
         // shifted_f0_alt = exp(log(F0_alt + 1e-5)) (no auto adjust, no semitone shift)
         let f0_alt = if o.scoop_cents > 0.0 || o.drift_cents > 0.0 || o.jitter_cents > 0.0 {
             deautotune_f0(&f0_alt, o.scoop_cents as f64, o.drift_cents as f64, o.jitter_cents as f64, o.seed)
@@ -447,11 +450,13 @@ impl SeedVc {
             gpu.copy(cat.ptr + (frames2 * 768 * 4) as u64, cond.ptr + (done * 768 * 4) as u64, len * 768 * 4)?;
             let z = super::codec::Noise::draw(&mut noise, 128, t)?;
             let m = self.dit.infer(gpu, &cat, t, &mel2, frames2, &style, &z, o.steps, o.cfg_rate)?;
+            super::mem_log(gpu, "dit");
             let mut part = vec![0f32; 128 * len];
             for c in 0..128 {
                 part[c * len..(c + 1) * len].copy_from_slice(&m[c * t + frames2..(c + 1) * t]);
             }
             let wave = self.vocoder.forward(gpu, &part, len)?;
+            super::mem_log(gpu, "vocoder");
             if done == 0 {
                 if last {
                     out.extend_from_slice(&wave);

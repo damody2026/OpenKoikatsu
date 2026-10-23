@@ -9,7 +9,7 @@
 //!   ok-song cancel   --job ID [--port 47880]
 //!   ok-song mula-check --ref DIR [--ckpt E:/HeartMuLa/ckpt] [--frames 12]   native HeartMuLa vs a Python dump
 //!   ok-song mula-generate --tags T --lyrics FILE --out FRAMES.json [--seconds 30] [--cfg 3] [--topk 50] [--seed N]
-//!   ok-song song-generate --tags T --lyrics FILE --out SONG.wav [--seconds 30] [--seed N] [--muq EMBED.f32]   HeartMuLa + HeartCodec alone
+//!   ok-song song-generate --tags T --lyrics FILE --out SONG.wav [--seconds 30] [--seed N] [--muq EMBED.f32] [--int8]   HeartMuLa + HeartCodec alone
 //!   ok-song separate --song SONG.wav --out DIR --models DEMUCS_DIR   Demucs alone (vocals.wav, accompaniment.wav)
 //!   ok-song codec-check --frames F.json --ref DIR [--first-draw 33]   native HeartCodec vs a Python dump
 //!   ok-song demucs-check --ref DIR [--models DIR]   native Demucs (htdemucs_ft) vs a Python dump
@@ -171,7 +171,8 @@ fn run() -> Result<()> {
                 None => None,
             };
             let o = native::song::GenerateOptions { cfg_scale: opt("cfg", 3.0)? as f32, top_k: opt("topk", 50.0)? as i32,
-                temperature: opt("temperature", 1.0)? as f32, seed: args.opts.get("seed").map(|v| v.parse()).transpose()?.unwrap_or(1), muq };
+                temperature: opt("temperature", 1.0)? as f32, seed: args.opts.get("seed").map(|v| v.parse()).transpose()?.unwrap_or(1), muq,
+                int8: args.opts.contains_key("int8") };
             let (song, report) = native::song::generate(&ckpt, &lyrics, args.opts.get("tags").context("--tags")?,
                 (opt("seconds", 30.0)? * 1000.0) as u32, &o, &std::sync::atomic::AtomicBool::new(false))?;
             song.write_wav(std::path::Path::new(args.opts.get("out").context("--out")?))?;
