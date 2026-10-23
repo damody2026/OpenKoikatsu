@@ -19,7 +19,11 @@ int32 RuleGroup(const FKKRuntimeMeshPart& P){
 int32 Group(const FKKRuntimeMeshPart& P){
  const FString R=P.Role.ToLower(),N=P.Name.ToLower();
  if(R==TEXT("head")||R.Contains(TEXT("eye"))||R.Contains(TEXT("brow"))||R.Contains(TEXT("lash"))||N.Contains(TEXT("_mayu"))||N.Contains(TEXT("_eyeline")))return 0;
- if(R==TEXT("body"))return 1;if(R.Contains(TEXT("clothes")))return 2;return 3;
+ // The body and what lies on the skin (socks, stockings, tights, bodysuits on the panst slot) keep their source
+ // geometry, as the low-poly rules and the reader do: reduced by different amounts, the layers a few tenths of a
+ // millimetre apart cross each other and the skin shows through in patches (Alice's bodysuit).
+ if(R==TEXT("body")||R.StartsWith(TEXT("clothes_socks"))||R.StartsWith(TEXT("clothes_panst")))return 0;
+ if(R.Contains(TEXT("clothes")))return 2;return 3;
 }
 
 #if WITH_DEV_AUTOMATION_TESTS

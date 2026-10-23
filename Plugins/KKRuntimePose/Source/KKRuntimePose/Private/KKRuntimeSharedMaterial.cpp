@@ -276,6 +276,10 @@ bool OKPrepareRuntimeSharedMaterialBinding(const FKKRuntimeMaterialPart& P,const
   if((*Mat)->TryGetObjectField(TEXT("floats"),Floats))for(const auto& F:(*Floats)->Values){double X;if(!F.Value->TryGetNumber(X)||!FMath::IsFinite(X))return Fail(TEXT("Shared material scalar nonfinite"));Values.Add(FString(F.Key),FLinearColor(X,0,0,0));}
   if((*Mat)->TryGetObjectField(TEXT("colors"),Colors))for(const auto& F:(*Colors)->Values){const TArray<TSharedPtr<FJsonValue>>* A=nullptr;if(!F.Value->TryGetArray(A)||A->Num()!=4)return Fail(TEXT("Shared material color invalid"));FLinearColor V;for(int32 C=0;C<4;++C){double X;if(!(*A)[C]->TryGetNumber(X)||!FMath::IsFinite(X))return Fail(TEXT("Shared material color nonfinite"));(&V.R)[C]=X;}Values.Add(FString(F.Key),V);}
  }
+ // Koikatsu's ChaControl writes the liquid amounts (_liquid*, the character's siru state) over every material each
+ // frame, so the values saved in a material asset never show in the game. A host passes them as overrides when it has
+ // that state; otherwise the character has none (the saved values drew liquid stains over Alice's bodysuit).
+ for(const TCHAR* Liquid:{TEXT("_liquidftop"),TEXT("_liquidfbot"),TEXT("_liquidbtop"),TEXT("_liquidbbot"),TEXT("_liquidface")})Values.Add(Liquid,FLinearColor(0,0,0,0));
  // Host overrides (FKKRuntimeMaterialPart::Overrides: OK Studio item colours) replace the source material's values.
  for(const auto& O:P.Overrides){if(!FMath::IsFinite(O.Value.R)||!FMath::IsFinite(O.Value.G)||!FMath::IsFinite(O.Value.B)||!FMath::IsFinite(O.Value.A))return Fail(TEXT("Shared material override nonfinite"));Values.Add(O.Key,O.Value);}
  // Eye streams own native neutral-gaze affine transforms; do not apply
