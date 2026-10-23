@@ -21,6 +21,8 @@ pub struct GenerateOptions {
     pub top_k: i32,
     pub temperature: f32,
     pub seed: u64,
+    /// MuQ-MuLan reference embedding for HeartMuLa's reference slot (experimental; None = zero like upstream).
+    pub muq: Option<Vec<f32>>,
 }
 
 /// Demucs htdemucs_ft: (vocals, accompaniment = drums + bass + other) at 44.1 kHz, like the Python prototype.
@@ -74,7 +76,8 @@ pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &Generate
     let frames = {
         let m = Mula::load(&gpu, ckpt, o.cfg_scale != 1.0, max_frames, 1024)?;
         let load = t.elapsed().as_secs_f64();
-        let p = m.prompt(tags, lyrics)?;
+        let mut p = m.prompt(tags, lyrics)?;
+        p.muq = o.muq.clone();
         if p.len() > 1024 {
             return Err(stage_error("BAD_REQUEST", format!("lyrics and tags are {} tokens (limit 1024)", p.len())));
         }
@@ -100,7 +103,7 @@ pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &Generate
     let report = json!({
         "revision": GENERATE_REVISION, "frames": frames.len(), "prompt_tokens": prompt_tokens,
         "mula_load_seconds": mula_load, "mula_seconds": mula_seconds, "codec_load_seconds": codec_load, "codec_seconds": t4.elapsed().as_secs_f64(),
-        "seed": o.seed, "cfg_scale": o.cfg_scale, "top_k": o.top_k, "temperature": o.temperature,
+        "seed": o.seed, "muq_reference": o.muq.is_some(), "cfg_scale": o.cfg_scale, "top_k": o.top_k, "temperature": o.temperature,
     });
     Ok((Audio { rate: SAMPLE_RATE as u32, channels: vec![l, r] }, report))
 }

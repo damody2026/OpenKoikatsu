@@ -157,3 +157,24 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
 
 - **預設**：`scoop_cents` 80、`drift_cents` 30、`jitter_cents` 15。使用者不要顫音，`vibrato_cents` 維持 0（不開顫音時 snap 0.28、flat 0.17，ASR 轉寫正確）。換聲版本 `seedvc-rust-4`。jitter 8 與 15 兩版的 ASR 轉寫都與歌詞一致。
 - **剩下的限制**：Seed-VC 輸出會把加進去的音高變化又拉平一部分（輸入加 30 cent 飄移，flat 只從 0.19 降到 0.16）。換聲後高頻（8 kHz 以上）只剩原聲的五分之一，聲音偏乾淨、偏合成。這部分要從音色模型處理，不是調音高參數能解決的。
+
+## 9. HeartMuLa 參考音訊槽位實驗（2026-10-23）
+
+- **背景**：HeartMuLa 的輸入在 tags 與歌詞之間有一個 MuQ-MuLan 參考嵌入（512 維，經 `muq_linear` 進 backbone）。官方 pipeline 對 `ref_audio` 直接報 `NotImplementedError`，一律填零。
+- **做法**：
+  - 嵌入用 Python 的 `muq` 套件（`OpenMuQ/MuQ-MuLan-large`）算，屬於實驗用。
+  - Rust 端 `mula::Prompt.muq` 接受外部嵌入，`song::GenerateOptions.muq` 傳入，CFG 的無條件列照上游換成 unconditional embedding。
+  - 新增指令 `ok-song song-generate --muq EMBED.f32` 與 `ok-song separate`。遊戲流程仍填零，沒有改動。
+- **條件**：lover_night 歌詞與 tags 不變，三個種子（原曲種子、2、3）× 三種嵌入（零、角色 TTS 參考音、文字「soft breathy natural female vocal…」）。零嵌入＋原曲種子重現了原曲。
+
+  | 分離出的原人聲 | 種子 1007… | 種子 2 | 種子 3 | 平均 snap |
+  |---|---:|---:|---:|---:|
+  | 零（現況） | 0.62 | 0.54 | 0.59 | 0.58 |
+  | 角色參考音嵌入 | 0.43 | 0.40 | 0.51 | 0.45 |
+  | 文字嵌入 | 0.51 | 0.53 | 0.52 | 0.52 |
+
+- **結果**：
+  - 參考音嵌入不會讓歌聲變成她的音色。聲紋相似度（ok-tts speaker-sim）九首都是 0.67，與零嵌入相同。
+  - 修音感明顯下降，歌詞 ASR 轉寫完整。
+  - 這些人聲再用現行換聲預設（scoop 80／drift 30／jitter 15）處理後，snap 0.23～0.29、flat 0.13。原本的 lover_night 是 0.28／0.17。TTS 參考音是 0.23／0.05。
+- **未做**：要進遊戲流程，需要每個聲線的 MuQ-MuLan 嵌入。目前只能用 Python 計算，成品須改成 Rust（移植 MuQ-MuLan），或預先算好嵌入檔隨聲線存放。試聽檔在 `Saved/StreetSocial/Songs/ab-muq/`。
