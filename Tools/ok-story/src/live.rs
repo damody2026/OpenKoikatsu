@@ -111,7 +111,23 @@ impl Live {
             active_camera: None,
             aspect: if self.facts.viewport[1] > 0.0 { self.facts.viewport[0] / self.facts.viewport[1] } else { 16.0 / 9.0 },
         };
-        camera::candidates(&self.tuning.camera, spec, &ctx, &self.st.rig.current)
+        let mut out = camera::candidates(&self.tuning.camera, spec, &ctx, &self.st.rig.current);
+        // A close-up never looks through the other person: views passing near their head or chest go last.
+        if spec.shot.as_deref() == Some("speaker") {
+            let subject = spec.on.as_deref().unwrap_or(speaker);
+            let clear = self.tuning.camera.over_clear;
+            let blocked = |c: &Candidate| {
+                present.iter().filter(|w| w.as_str() != subject).filter_map(|w| self.facts.actors.get(w)).any(|a| {
+                    let k = a.root.scale.abs().max(0.1);
+                    let chest = a.bone("spine03").map(|b| b.pos).unwrap_or_else(|| math::add(a.root.pos, [0.0, 0.0, 120.0 * k]));
+                    [a.head(), chest].iter().any(|p| point_segment(*p, c.from, c.pose.pos) < clear * k)
+                })
+            };
+            let (open, behind): (Vec<Candidate>, Vec<Candidate>) = out.into_iter().partition(|c| !blocked(c));
+            out = open;
+            out.extend(behind);
+        }
+        out
     }
 
     /// The shot for a line: her close-up and a two shot in turn; over his shoulder onto her when he speaks.
@@ -139,7 +155,13 @@ impl Live {
             for c in &candidates {
                 let id = self.st.next_id;
                 self.st.next_id += 1;
-                self.probes_out.push(Probe { id, from: c.from, to: c.pose.pos });
+                // From a little way out: whoever stands face to face with the subject (the other half of the
+                // conversation, drawn by proxies a capture cannot hide) does not count as a wall.
+                let to = c.pose.pos;
+                let span = math::len(math::sub(to, c.from));
+                let skip = self.tuning.camera.probe_skip.min((span - self.tuning.camera.probe_margin * 2.0).max(0.0));
+                let from = math::add(c.from, math::scale(math::normalize(math::sub(to, c.from)), skip));
+                self.probes_out.push(Probe { id, from, to });
                 ids.push(id);
             }
             self.st.probe = Some(ProbeJob { ids, candidates, cut, chosen: None, asked: self.st.time });
@@ -156,7 +178,16 @@ impl Live {
             }
             return;
         }
-        let reach: Vec<(f64, f64)> = job.candidates.iter().zip(&clear).map(|(c, r)| (r.unwrap_or(0.0), math::len(math::sub(c.pose.pos, c.from)))).collect();
+        let skip = self.tuning.camera.probe_skip;
+        let reach: Vec<(f64, f64)> = job
+            .candidates
+            .iter()
+            .zip(&clear)
+            .map(|(c, r)| {
+                let span = math::len(math::sub(c.pose.pos, c.from));
+                (r.unwrap_or(0.0), span - skip.min((span - margin * 2.0).max(0.0)))
+            })
+            .collect();
         let pick = reach.iter().position(|(c, d)| *c >= d - margin).unwrap_or_else(|| {
             (0..reach.len()).max_by(|a, b| (reach[*a].0 / reach[*a].1.max(1.0)).total_cmp(&(reach[*b].0 / reach[*b].1.max(1.0)))).unwrap_or(0)
         });
@@ -309,6 +340,13 @@ impl Live {
             "portrait": self.st.portrait.shown,
         })
     }
+}
+
+/// Distance from `p` to the segment `a`–`b`.
+fn point_segment(p: math::V3, a: math::V3, b: math::V3) -> f64 {
+    let ab = math::sub(b, a);
+    let t = (math::dot(math::sub(p, a), ab) / math::dot(ab, ab).max(1e-9)).clamp(0.0, 1.0);
+    math::len(math::sub(p, math::add(a, math::scale(ab, t))))
 }
 
 #[cfg(test)]

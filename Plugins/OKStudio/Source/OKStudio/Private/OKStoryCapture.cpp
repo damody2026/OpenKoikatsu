@@ -30,12 +30,10 @@ static bool OKStoryCaptureQuat(const TSharedPtr<FJsonObject>& O, const TCHAR* Fi
 }
 
 // The live portrait's picture: the colour capture, covered where the speaker's depth is (the rest transparent).
-static UMaterialInterface* OKStoryPortraitMaterial(UTexture* Color, UTexture* Depth)
-{
 #if WITH_EDITOR
-	static TStrongObjectPtr<UMaterial> Cached;
-	if (Cached) return Cached.Get();
-	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+UMaterial* OKStoryBuildPortraitMaterial(UObject* Outer, FName Name, EObjectFlags Flags, UTexture* Color, UTexture* Depth)
+{
+	UMaterial* Mat = NewObject<UMaterial>(Outer, Name, Flags);
 	Mat->MaterialDomain = MD_UI;
 	Mat->BlendMode = BLEND_Translucent;
 	auto Sampler = [&](const TCHAR* Name, UTexture* Default)
@@ -99,11 +97,26 @@ static UMaterialInterface* OKStoryPortraitMaterial(UTexture* Color, UTexture* De
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
+	return Mat;
+}
+#endif
+
+// The saved material (OKStorySavePortrait commandlet); in the editor without it, one built in memory.
+static UMaterialInterface* OKStoryPortraitMaterial(UTexture* Color, UTexture* Depth)
+{
+	static TStrongObjectPtr<UMaterialInterface> Cached;
+	if (Cached) return Cached.Get();
+	UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, OK_STORY_PORTRAIT_MATERIAL, nullptr, LOAD_NoWarn | LOAD_Quiet);
+#if WITH_EDITOR
+	if (!Mat) Mat = OKStoryBuildPortraitMaterial(GetTransientPackage(), NAME_None, RF_Transient, Color, Depth);
+#endif
+	if (!Mat)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Story portrait material %s missing: no portraits (run the OKStorySavePortrait commandlet)"), OK_STORY_PORTRAIT_MATERIAL);
+		return nullptr;
+	}
 	Cached.Reset(Mat);
 	return Mat;
-#else
-	return nullptr; // Editor graph creation is not a runtime rendering path: the view shows the colour capture alone.
-#endif
 }
 
 void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TSharedPtr<FJsonObject>& Portrait, TFunctionRef<void(USceneCaptureComponent2D*)> ShowOnly,

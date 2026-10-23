@@ -8,6 +8,8 @@
 
 class FJsonObject;
 class FJsonValue;
+class UMaterial;
+class UTexture;
 class UMaterialInstanceDynamic;
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
@@ -18,6 +20,14 @@ struct FPostProcessSettings;
  * colour and its coverage, put together by a UI material whose background is transparent. Used by the OK Studio story
  * player and by the street's conversations.
  */
+/** The portrait's UI material as a saved asset (cooked games cannot build materials at run time). */
+#define OK_STORY_PORTRAIT_MATERIAL TEXT("/Game/OKStudio/Story/M_StoryPortrait.M_StoryPortrait")
+
+#if WITH_EDITOR
+/** Builds the portrait's UI material in `Outer` (sampler defaults: textures of the capture targets' formats). */
+OKSTUDIO_API UMaterial* OKStoryBuildPortraitMaterial(UObject* Outer, FName Name, EObjectFlags Flags, UTexture* Color, UTexture* Depth);
+#endif
+
 class OKSTUDIO_API FOKStoryPortraitCapture
 {
 public:

@@ -47,3 +47,13 @@ C++ 只負責呈現；鏡頭選擇、打字速度、構圖等規則都在 Rust�
 - 立繪與鏡頭以骨架位置計算，坐著、躺著等大幅姿勢的構圖還沒專門調過。
 - 路人只在擋住鏡頭時隱藏，從畫面邊緣走過的人仍會入鏡。
 - 多人對話（群聊）目前只把正在交談的那一位當成對象；其他人說話時，立繪與鏡頭都還沒專門處理。
+
+## 打包版
+
+立繪材質是 `/Game/OKStudio/Story/M_StoryPortrait`（DirectoriesToAlwaysCook）。改了 `OKStoryBuildPortraitMaterial` 之後，要重新存檔：
+
+```powershell
+& 'E:\PhysX\UE5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' OpenKoikatsu.uproject -run=OKStorySavePortrait -unattended -nullrhi
+```
+
+找不到這份資產時，log 會寫 `Story portrait material ... missing`，打包版就沒有立繪；Editor 會改用在記憶體裡建的材質。

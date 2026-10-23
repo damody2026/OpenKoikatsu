@@ -81,15 +81,26 @@ pub fn resolve(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, current: 
 pub fn candidates(t: &CameraTuning, spec: &CameraSpec, ctx: &ShotContext, current: &Pose) -> Vec<Candidate> {
     let around = |aim: V3, dir: V3, distance: f64, fov: f64, angles: &[f64], closer: &[f64]| -> Vec<Candidate> {
         let mut out = Vec::new();
-        for (k, f) in closer.iter().enumerate() {
-            for (i, a) in angles.iter().enumerate() {
-                // Closer in only for the first few angles: the near ones are the fallbacks.
-                if k > 0 && i >= 3 {
-                    break;
-                }
-                let d = Quat::yaw_deg(*a).rotate(dir);
-                out.push(Candidate { pose: looking(math::add(aim, math::scale(d, distance * f)), aim, fov), from: aim });
+        let mut push = |a: f64, f: f64| {
+            let d = Quat::yaw_deg(a).rotate(dir);
+            // Closer in with a wider lens: the same framing (the aim's offset scales with distance × tan).
+            let wide = if (f - 1.0).abs() < 1e-9 { fov } else { (2.0 * ((fov.to_radians() * 0.5).tan() / f.max(0.1)).atan()).to_degrees().min(100.0) };
+            out.push(Candidate { pose: looking(math::add(aim, math::scale(d, distance * f)), aim, wide), from: aim });
+        };
+        // The first few angles at full distance, then the same angles closer in (a wall right behind the lens
+        // indoors), and only then the wide angles round to the side and back.
+        let front = angles.len().min(3);
+        let far = closer.first().copied().unwrap_or(1.0);
+        for a in &angles[..front] {
+            push(*a, far);
+        }
+        for f in closer.iter().skip(1) {
+            for a in &angles[..front] {
+                push(*a, *f);
             }
+        }
+        for a in &angles[front..] {
+            push(*a, far);
         }
         out
     };

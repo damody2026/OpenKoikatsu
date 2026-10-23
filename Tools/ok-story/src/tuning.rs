@@ -106,6 +106,8 @@ pub struct CameraTuning {
     pub probe_angles: Vec<f64>,
     pub probe_closer: Vec<f64>,
     pub probe_margin: f64,
+    /// Probes start this far (cm) out from the subject, past the person they talk with.
+    pub probe_skip: f64,
 }
 
 impl Default for CameraTuning {
@@ -144,6 +146,7 @@ impl Default for CameraTuning {
             probe_angles: vec![0.0, -40.0, 35.0, -75.0, 70.0, 110.0, -110.0, 160.0],
             probe_closer: vec![1.0, 0.6],
             probe_margin: 15.0,
+            probe_skip: 30.0,
         }
     }
 }

@@ -521,3 +521,5 @@
 - 攻略線的重開腳本會關掉所有從 `Saved/StreetSocial/Build/` 執行的遊戲，一般啟動又會關掉這個 checkout 的全部 ok-tts／ok-asr／ok-song，沙盒遊戲與它的伺服器一起被關（日誌突然中斷、沒有當機訊息）。沙盒啟動改寫 `Sandbox/<名稱>/running.json`，一般啟動清理時跳過仍在執行的沙盒伺服器；遊戲無聲結束時先查同時間有沒有別的啟動器在清程序。
 - galgame 鏡頭把她的頭頂切掉：為了讓出右側面板，我把傳給 ok-story 的 viewport 寬度扣掉了面板寬；可是 UE 相機的水平視角涵蓋整個畫面寬，Rust 用較窄的長寬比算垂直視角，以為上下看得比實際多。viewport 改回整個畫面。另外越肩鏡頭在兩人站得很近（約 90cm）時，固定 18° 的側角讓主角背影擋住半個畫面，改成依距離加大側角（`over_clear` 42cm）。
 - 即時對話接上 galgame 演出後，主角那句一送出就被她「……」思考中的佔位字幕蓋掉，看不到。佔位字幕不再算一句；劇本台詞裡主角那句至少顯示 1.2 秒（男聲 TTS 失敗時她的語音會立刻接上）。
+- 打包版 StreetSocial（Conquest187）的 galgame 演出沒有立繪：立繪的 UI 材質是程式在執行時才建立的（Custom HLSL 節點），而 cook 過的遊戲沒有 shader 編譯器，非 Editor 版直接回傳空值。E 只用 Editor `-game` 測試，所以沒發現。現在材質由 `OKStorySavePortrait` commandlet 存成 `/Game/OKStudio/Story/M_StoryPortrait`，並加進 DirectoriesToAlwaysCook；執行時先載入這份資產。預防：用 Editor 驗證過的功能，交付前一定要在打包版跑一次。
+- galgame 特寫在主角站在她正前方時，鏡頭跑到她背後，或被主角擋住：避牆探測沒有把主角當成障礙，可是主角的深度由 capture 藏不住的 proxy 畫出，前方候選全部被判成擋住；後備順序又先試側面、背面，最後才試「近一點的正面」。現在依序試：正面三個角度、同樣角度拉近（視角放寬，構圖不變）、最後才試側面和背面。視線離其他人頭部或胸口太近的特寫排到最後；探測從主角前方 30cm 開始。
