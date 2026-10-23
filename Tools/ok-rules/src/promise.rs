@@ -24,9 +24,28 @@ fn minute_of(time: &str) -> Option<i64> {
 }
 
 /// "+1" (days from today) or "2010-09-05" as a game day.
+/// A weekday as said ("周三", "下周三", "星期日", "wed", "next wed"): the game day it falls on. "周三" is the next
+/// Wednesday from today (today when it is one); "下周三" the Wednesday of next week (Monday-based weeks). Game day 0,
+/// 2010-09-01, was a Wednesday. The model counting the days itself put "下周三" said on a Saturday on Tuesday.
+fn weekday_day(day: &str, today: i64) -> Option<i64> {
+    let d = day.trim().to_lowercase();
+    let (next, rest) = ["下周", "下週", "下星期", "下礼拜", "下禮拜", "next "]
+        .iter()
+        .find_map(|p| d.strip_prefix(p).map(|r| (true, r.to_string())))
+        .unwrap_or((false, d.clone()));
+    let rest = ["星期", "周", "週", "礼拜", "禮拜"].iter().find_map(|p| rest.strip_prefix(p)).unwrap_or(&rest).trim().to_string();
+    let names: [&[&str]; 7] = [&["一", "mon"], &["二", "tue"], &["三", "wed"], &["四", "thu"], &["五", "fri"], &["六", "sat"], &["日", "天", "sun"]];
+    let target = names.iter().position(|ns| ns.iter().any(|n| rest == *n || (n.len() == 3 && rest.starts_with(n))))? as i64;
+    let now = (today + 2).rem_euclid(7); // Monday 0
+    Some(if next { today - now + 7 + target } else { today + (target - now).rem_euclid(7) })
+}
+
 fn game_day_of(day: &str, today: i64) -> i64 {
     if let Some(n) = day.strip_prefix('+') {
         return today + n.trim().parse::<i64>().unwrap_or(0).clamp(0, 60);
+    }
+    if let Some(d) = weekday_day(day, today) {
+        return d;
     }
     let p: Vec<&str> = day.get(..10).unwrap_or(day).split('-').collect();
     if let [y, m, d] = p[..] {
@@ -148,6 +167,10 @@ mod tests {
         // 01:30 "tonight" is the night after the game day.
         assert_eq!(ask(json!({"day": "+0", "time": "01:30"}))["start"], 11 * 1440 + 90);
         assert_eq!(ask(json!({"day": "2010-09-12", "time": "12:00"}))["start"], 11 * 1440 + 720);
+        // Game day 3 is Saturday 2010-09-04: "下周三" is 09-08 (day 7), "周三" too; on Monday day 5 "下周三" is day 14.
+        assert_eq!((game_day_of("下周三", 3), game_day_of("周三", 3), game_day_of("next wed", 3)), (7, 7, 7));
+        assert_eq!((game_day_of("下周三", 5), game_day_of("周三", 5), game_day_of("星期日", 5)), (14, 7, 11));
+        assert_eq!(game_day_of("周三", 0), 0, "today when it is one");
         let closed = ask(json!({"place": "cafe", "time": "08:00"}));
         assert_eq!(closed["action"], "closed");
         assert!(!closed["why"].as_str().unwrap().is_empty());
