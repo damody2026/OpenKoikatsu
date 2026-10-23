@@ -850,7 +850,9 @@ pub fn session_cache_location() -> Option<PathBuf> {
 /// 24: KK_InvisibleBody hides the body, head and hair parts.
 /// 25: tiled main UVs (beyond ±8, a Studio floor's 0..10) are kept instead of zeroed; Studio main_item_studio main
 /// texture and colour mask follow the (u, 1-v) rows. 26: not main_item_studio_add (its rows were already right).
-const SESSION_CACHE_REVISION: u32 = 26;
+/// 27: coincident opaque/masked layers (Material Editor copies, duplicated accessories) step outward in draw order.
+/// 28: including an accessory's private-rig source mesh, which every pose is skinned from.
+const SESSION_CACHE_REVISION: u32 = 28;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {
