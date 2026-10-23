@@ -116,3 +116,47 @@ bool OKStudioApplySourceGrade(const FOKScenePost& Post,FPostProcessSettings& Set
  M->SetScalarParameterValue(TEXT("UseLut"),UseLut);M->SetScalarParameterValue(TEXT("Vignette"),Vignette);E.Material=M;Found=&E;}
  Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f,Found->Material.Get()));return true;
 }
+
+namespace
+{
+ // The 1024x32 strip of a LUT texture's pixels (BGRA), as the grade samples it.
+ bool ReadGradeLut(UTexture* Texture,TArray<FColor>& Out){
+  auto* T=Cast<UTexture2D>(Texture);if(!T||!T->GetPlatformData()||T->GetPlatformData()->Mips.IsEmpty())return false;
+  auto& Mip=T->GetPlatformData()->Mips[0];if(Mip.SizeX!=1024||Mip.SizeY!=32)return false;
+  const void* Bytes=Mip.BulkData.LockReadOnly();const bool Ok=Bytes&&Mip.BulkData.GetBulkDataSize()>=1024*32*4;
+  if(Ok){Out.SetNumUninitialized(1024*32);FMemory::Memcpy(Out.GetData(),Bytes,1024*32*4);}
+  Mip.BulkData.Unlock();return Ok;
+ }
+ FVector3f GradeTexel(const TArray<FColor>& L,float X,float Y){
+  // Bilinear with clamp at texel centres (X, Y in texels, centres at .5).
+  const float FX=FMath::Clamp(X-.5f,0.f,1023.f),FY=FMath::Clamp(Y-.5f,0.f,31.f);
+  const int32 X0=FMath::FloorToInt(FX),Y0=FMath::FloorToInt(FY),X1=FMath::Min(X0+1,1023),Y1=FMath::Min(Y0+1,31);const float AX=FX-X0,AY=FY-Y0;
+  auto P=[&](int32 PX,int32 PY){const FColor& C=L[PY*1024+PX];return FVector3f(C.R,C.G,C.B)/255.f;};
+  return FMath::Lerp(FMath::Lerp(P(X0,Y0),P(X1,Y0),AX),FMath::Lerp(P(X0,Y1),P(X1,Y1),AX),AY);
+ }
+ FVector3f GradeLookup(const TArray<FColor>& L,const FVector3f& G){
+  const FVector3f Q(FMath::Clamp(G.X,0.f,1.f)*31.f,FMath::Clamp(G.Y,0.f,1.f)*31.f,FMath::Clamp(G.Z,0.f,1.f)*31.f);
+  const float B=FMath::FloorToFloat(Q.Z);const float X=Q.X+B*32.f+.5f,Y=Q.Y+.5f,Up=(FMath::Min(B+1.f,31.f)-B)*32.f;
+  return FMath::Lerp(GradeTexel(L,X,Y),GradeTexel(L,X+Up,Y),Q.Z-B);
+ }
+ float SrgbToLinear(float V){return V<=.04045f?V/12.92f:FMath::Pow((V+.055f)/1.055f,2.4f);}
+ float LinearToSrgb(float V){V=FMath::Max(V,0.f);return V<.0031308f?12.92f*V:1.055f*FMath::Pow(V,1.f/2.4f)-.055f;}
+}
+
+FLinearColor OKStudioUngradeSourceColor(const FOKScenePost& Post,const FLinearColor& Shown,float VignetteDistance2)
+{
+ // The same pass on the CPU (OKStudioApplySourceGrade's material), then the colour it maps onto Shown, found by
+ // fixed-point steps (the grade is monotonic and near the identity).
+ const float Vignette=Post.bVignette?1.f/(1.f-FMath::Clamp(Post.SourceVignetteIntensity,0.f,.99f))-1.f:0.f;
+ TArray<FColor> Lut,Blend;const bool UseLut=Post.ColorFilter>=0;
+ if(UseLut&&(!ReadGradeLut(FOKStudioCatalog::Get().SourceFilterLut(Post.ColorFilter),Lut)||!ReadGradeLut(FOKStudioCatalog::Get().SourceFilterLut(0),Blend)))return Shown;
+ const float Strength=FMath::Clamp(Post.ColorFilterIntensity,0.f,1.f);const float Gain=FMath::Exp2(Post.Exposure);const float Vig=FMath::Max(1.f-VignetteDistance2*Vignette,0.f);
+ auto Forward=[&](const FVector3f& Srgb){
+  FVector3f G(LinearToSrgb(SrgbToLinear(Srgb.X)*Gain),LinearToSrgb(SrgbToLinear(Srgb.Y)*Gain),LinearToSrgb(SrgbToLinear(Srgb.Z)*Gain));
+  const FVector3f Mapped=UseLut?FMath::Lerp(GradeLookup(Blend,G),GradeLookup(Lut,G),Strength):FVector3f(FMath::Clamp(G.X,0.f,1.f),FMath::Clamp(G.Y,0.f,1.f),FMath::Clamp(G.Z,0.f,1.f));
+  return FVector3f(LinearToSrgb(SrgbToLinear(Mapped.X)*Vig),LinearToSrgb(SrgbToLinear(Mapped.Y)*Vig),LinearToSrgb(SrgbToLinear(Mapped.Z)*Vig));
+ };
+ const FVector3f Target(Shown.R,Shown.G,Shown.B);FVector3f X=Target;
+ for(int32 Step=0;Step<48;++Step){const FVector3f D=Target-Forward(X);if(D.GetAbsMax()<.5f/255.f)break;X=FVector3f(FMath::Clamp(X.X+D.X,0.f,1.f),FMath::Clamp(X.Y+D.Y,0.f,1.f),FMath::Clamp(X.Z+D.Z,0.f,1.f));}
+ return FLinearColor(X.X,X.Y,X.Z,Shown.A);
+}

@@ -10,6 +10,7 @@
 #include "OKStudioGame.h"
 #include "OKStudioPose.h"
 #include "OKStudioImportSettings.h"
+#include "OKStudioPost.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -647,8 +648,14 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		// SceneInfo.skyInfo: Studio's sky dome and its StudioSky pattern.
 		Document->Post.bSky = bSky;
 		Document->Post.SkyPattern = int32(E.GetNumberField(TEXT("sky_pattern")));
+		// The author's clear colour shows in the scene's own picture when nothing covers its corners (2534's blue);
+		// otherwise this installation's.
+		// The picture went through the scene's grade (and vignette, at its corners: squared distance 1.86 from the
+		// centre for the 8-pixel patches of a 320x180 picture): the colour behind is what grades to it.
+		FLinearColor Shown;
 		if (int32(Scene->GetNumberField(TEXT("map"))) < 0 && Document->Post.Background.IsEmpty() && !bSky)
-			Document->Post.BackgroundColor = OKStudioConfiguredClearColor();
+			Document->Post.BackgroundColor = OKStudioClearColorFromPicture(ScenePng, Shown)
+				? OKStudioUngradeSourceColor(Document->Post, Shown, 1.86f) : OKStudioConfiguredClearColor();
 	}
 	// The Studio view the scene was saved with: a camera object, the active view unless a camera object is.
 	const TSharedPtr<FJsonObject>* Camera = nullptr;

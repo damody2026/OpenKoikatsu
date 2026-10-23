@@ -3701,8 +3701,13 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 			FOKStudioImport::FReport ClearReport; FString ClearError;
 			Check(FOKStudioImport::Import(ClearPng, Clear, FPaths::ProjectSavedDir() / TEXT("OKStudio/clear_color_selftest_cards"), ClearReport, ClearError)
 				&& Clear->Map < 0 && !Clear->Post.bSky && Clear->Post.Background.IsEmpty()
-				&& Clear->Post.BackgroundColor.Equals(OKStudioConfiguredClearColor()),
-				TEXT("unmapped source scene preserves the installation main camera clear colour"));
+				&& Clear->Post.BackgroundColor.Equals(FLinearColor::Black),
+				TEXT("unmapped source scene takes the plain clear colour its picture shows (5698: black)"));
+			const FString BluePng = Samples / TEXT("koikatu_cs0002534.png");
+			UOKSceneDocument* Blue = NewObject<UOKSceneDocument>(this);
+			Check(FOKStudioImport::Import(BluePng, Blue, FPaths::ProjectSavedDir() / TEXT("OKStudio/clear_color_selftest_cards"), ClearReport, ClearError)
+				&& Blue->Post.BackgroundColor.B > 0.5f && Blue->Post.BackgroundColor.B > Blue->Post.BackgroundColor.R + 0.2f,
+				TEXT("unmapped source scene takes its author's clear colour from its picture (2534: blue)"));
 			UOKSceneDocument* SavedClear = NewObject<UOKSceneDocument>(this);
 			Check(SavedClear->FromJson(Clear->ToJson(), ClearError) && SavedClear->Post.BackgroundColor.Equals(Clear->Post.BackgroundColor),
 				TEXT("source clear colour survives scene save and reopen"));
