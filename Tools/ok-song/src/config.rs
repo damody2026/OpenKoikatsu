@@ -45,7 +45,7 @@ pub struct StageConfig {
     #[serde(default)]
     pub soft_f0: Option<bool>,
     /// Seed-VC: undo pitch-correction-like singing in the generated vocal (seedvc::deautotune_f0): each note slides up
-    /// from `scoop_cents` below and wanders by up to `drift_cents`. `jitter_cents` adds a faster 50 ms wobble. Defaults 80 / 30 / 15 (no vibrato); 0 = off.
+    /// from `scoop_cents` below and wanders by up to `drift_cents`. `jitter_cents` adds a faster 50 ms wobble. Defaults 80 / 30 / 15, with vibrato_cents 15; 0 = off.
     #[serde(default)]
     pub scoop_cents: Option<f64>,
     #[serde(default)]

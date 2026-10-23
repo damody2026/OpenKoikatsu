@@ -7,6 +7,6 @@
   "generate": {"backend": "heartmula-rust", "ckpt": "E:/HeartMuLa/ckpt", "version": "3B", "timeout_seconds": 900},
   "separate": {"backend": "demucs-rust", "model": "htdemucs_ft", "timeout_seconds": 600,
                "ckpt": "E:/OkSong/hf-cache/hub/models--adefossez--HTDemucs-ft/snapshots/d74ac89c3a1e874fc78f152555cf4d8533f06cd4"},
-  "convert": {"backend": "seedvc-rust", "ckpt": "E:/OkSong/models-rs", "diffusion_steps": 50, "inference_cfg_rate": 0.4, "soft_f0": true, "scoop_cents": 80, "drift_cents": 30, "jitter_cents": 15, "timeout_seconds": 900},
+  "convert": {"backend": "seedvc-rust", "ckpt": "E:/OkSong/models-rs", "diffusion_steps": 50, "inference_cfg_rate": 0.4, "soft_f0": true, "vibrato_cents": 15, "scoop_cents": 80, "drift_cents": 30, "jitter_cents": 15, "timeout_seconds": 900},
   "cache_limit_mb": 4096
 }

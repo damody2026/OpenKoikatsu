@@ -153,9 +153,9 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   | + glide 100 | 0.36 | 0.21 |
   | scoop 80／drift 30／glide 80／vibrato 15 | 0.30 | 0.19 |
   | scoop 80／drift 30／jitter 8／vibrato 15 | 0.29 | 0.17 |
-  | scoop 80／drift 30／jitter 15／vibrato 15 | 0.29 | 0.16 |
+  | scoop 80／drift 30／jitter 15／vibrato 15（預設，第 9 版） | 0.29 | 0.16 |
 
-- **預設**：`scoop_cents` 80、`drift_cents` 30、`jitter_cents` 15。使用者不要顫音，`vibrato_cents` 維持 0（不開顫音時 snap 0.28、flat 0.17，ASR 轉寫正確）。換聲版本 `seedvc-rust-4`。jitter 8 與 15 兩版的 ASR 轉寫都與歌詞一致。
+- **預設**：`vibrato_cents` 15、`scoop_cents` 80、`drift_cents` 30、`jitter_cents` 15。使用者試聽後選定第 9 版（2026-10-24），換聲版本 `seedvc-rust-5`。之前曾短暫改成不開顫音（`seedvc-rust-4`）。jitter 8 與 15 兩版的 ASR 轉寫都與歌詞一致。
 - **剩下的限制**：Seed-VC 輸出會把加進去的音高變化又拉平一部分（輸入加 30 cent 飄移，flat 只從 0.19 降到 0.16）。換聲後高頻（8 kHz 以上）只剩原聲的五分之一，聲音偏乾淨、偏合成。這部分要從音色模型處理，不是調音高參數能解決的。
 
 ## 9. HeartMuLa 參考音訊槽位實驗（2026-10-23）

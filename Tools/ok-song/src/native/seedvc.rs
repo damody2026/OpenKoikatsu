@@ -178,7 +178,7 @@ pub fn check(gpu: &Gpu, models: &Path, refdir: &Path, parts: &str) -> Result<Val
 }
 
 /// Bumped when the native conversion changes its output for the same inputs (part of the artifact cache key).
-pub const CONVERT_REVISION: &str = "seedvc-rust-4";
+pub const CONVERT_REVISION: &str = "seedvc-rust-5";
 
 /// Build the model folder `SeedVc::load` reads from the upstream downloads (Seed-VC `checkpoints/` with its hf_cache):
 /// the torch checkpoints become f32 safetensors, Whisper-small is copied as is. No Python involved.
