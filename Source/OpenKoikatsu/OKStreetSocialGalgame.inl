@@ -386,12 +386,13 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	}
 
 	// Lines of sight for the shots: the two of them never block it, the street does.
+	// Every frame, with no new probes too: queued ones render a few a frame and their answers arrive later.
 	const TArray<TSharedPtr<FJsonValue>>* Probes = nullptr;
-	if (G.Frame->TryGetArrayField(TEXT("probes"), Probes) && Probes->Num())
+	const TArray<TSharedPtr<FJsonValue>> NoProbes;
 	{
 		TArray<UPrimitiveComponent*> Hidden;
 		for (const int32 Slot : People) OKGetCrowdRuntimeCharacterComponents(this, Slot, Hidden);
-		G.Probes.Run(this, GetWorld(), *Probes, [&Hidden](USceneCaptureComponent2D* C)
+		G.Probes.Run(this, GetWorld(), G.Frame->TryGetArrayField(TEXT("probes"), Probes) ? *Probes : NoProbes, [&Hidden](USceneCaptureComponent2D* C)
 		{
 			for (UPrimitiveComponent* P : Hidden) C->HiddenComponents.Add(P);
 		});

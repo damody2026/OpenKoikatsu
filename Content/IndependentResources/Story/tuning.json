@@ -93,7 +93,7 @@
       2048
     ],
     "supersample": 2.0,
-    "every": 1,
+    "every": 2,
     "offstage_at": [
       0.0,
       50000.0,
