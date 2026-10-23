@@ -8,22 +8,39 @@
 bool OKStreetFixedBlock(const FOKStreetPlanBlock* B); // round 3, below
 
 namespace {
-// The loop she shows while her schedule holds her in place (none: her plain idle / book).
-FString OKLifeClip(const FString& Kind,const FString& Place,const FString& Drink){
- if(Kind==TEXT("meal"))return TEXT("facility_eat.okanim");
- if(Kind==TEXT("class")||Kind==TEXT("study"))return TEXT("venue_study_seated.okanim");
- if(Kind==TEXT("work"))return TEXT("venue_shopping.okanim");
- if(Kind==TEXT("sleep"))return TEXT("facility_sleep.okanim");
- if(Kind==TEXT("rest"))return TEXT("venue_phone_seated.okanim");
- if(Kind==TEXT("leisure")&&(Place==TEXT("cafe")||Place==TEXT("lodge")))return TEXT("venue_drink_seated.okanim");
- if(Kind==TEXT("leisure")&&(Place==TEXT("library")||Place==TEXT("bookstore")))return TEXT("venue_read_seated.okanim");
- return FString();
-}
-bool OKLifeSeatedClip(const FString& Clip){return Clip.Contains(TEXT("seated"))||Clip==TEXT("facility_eat.okanim");}
+// The clips she sits for and the ones that bring a table (motions.toml, read once by ReadMotionTable).
+TSet<FString>& OKLifeSeatedSet(){static TSet<FString> Clips;return Clips;}
+TSet<FString>& OKLifeTableSet(){static TSet<FString> Clips;return Clips;}
+bool OKLifeSeatedClip(const FString& Clip){return Clip.Contains(TEXT("seated"))||Clip==TEXT("facility_eat.okanim")||OKLifeSeatedSet().Contains(Clip);}
+bool OKLifeTableClip(const FString& Clip){return Clip==TEXT("facility_eat.okanim")||OKLifeTableSet().Contains(Clip);}
 constexpr float OKLifeRange=2200.f,OKRainRadius=1600.f,OKRainHeight=900.f;constexpr int32 OKRainDrops=700;
 }
 
 // What she is doing now: the plan's block, or the urgent cut-in TickSchedules put first (meal -2, rest -3, bath -4).
+// The motions table (rules motions.toml): which clips she sits for and which bring a table.
+void AOKStreetSocialScene::ReadMotionTable(){
+ auto& S=*State;if(S.MotionTableRead)return;S.MotionTableRead=true;
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,OKRulesRequest(TEXT("motion_table")));if(!Out)return;
+ const TArray<TSharedPtr<FJsonValue>>* List=nullptr;
+ if(Out->TryGetArrayField(TEXT("seated"),List))for(const auto& V:*List)OKLifeSeatedSet().Add(V->AsString());
+ if(Out->TryGetArrayField(TEXT("table"),List))for(const auto& V:*List)OKLifeTableSet().Add(V->AsString());
+ UE_LOG(LogTemp,Display,TEXT("Street motions: %d seated loops, %d with a table"),OKLifeSeatedSet().Num(),OKLifeTableSet().Num());
+}
+// The loop she shows while her schedule holds her in place (motions.toml life rows): one of the clips for the block's
+// kind and place, the same one all through the block (asked once per block; a cut-in meal or rest is one block for the
+// day). Empty: her plain idle / book.
+FString AOKStreetSocialScene::LifeClip(int32 Actor,const FOKStreetPlanBlock& B){
+ auto& S=*State;ReadMotionTable();
+ const bool CutIn=B.End-B.Start<=1;
+ const FString Key=FString::Printf(TEXT("%d|%s|%s|%d|%d"),Actor,*B.Kind,*B.Place,CutIn?-1:B.Start,S.Store.CalendarDay);
+ if(const FString* Have=S.LifeClipChoice.Find(Key))return *Have;
+ auto Ask=OKRulesRequest(TEXT("motion_life"));Ask->SetStringField(TEXT("kind"),B.Kind);Ask->SetStringField(TEXT("place"),B.Place);
+ Ask->SetNumberField(TEXT("seed"),double(GetTypeHash(Key)&0x3fffffff));
+ FString Clip;if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask))Clip=Out->GetStringField(TEXT("clip"));
+ if(S.LifeClipChoice.Num()>512)S.LifeClipChoice.Reset(); // yesterday's blocks
+ S.LifeClipChoice.Add(Key,Clip);return Clip;
+}
+
 const FOKStreetPlanBlock* AOKStreetSocialScene::LifeBlock(int32 I,int32 Minute) const{
  auto& S=*State;const int32 Index=S.PlanBlock.FindRef(I,INDEX_NONE);
  if(Index>=-4&&Index<=-2){
@@ -127,7 +144,7 @@ void AOKStreetSocialScene::SpawnLifeProps(FOKLifePose& Pose){
  };
  Part(FVector(0,-15,41),FVector(47,45,6),8);Part(FVector(0,-40,71),FVector(47,6,60),8);
  for(float X:{-19.f,19.f})for(float Y:{-33.f,3.f})Part(FVector(X,Y,19),FVector(5,5,38),8);
- if(Clip==TEXT("facility_eat.okanim")){
+ if(OKLifeTableClip(Clip)){
   Part(FVector(0,62,69),FVector(90,70,6),8);for(float X:{-38.f,38.f})for(float Y:{32.f,92.f})Part(FVector(X,Y,33),FVector(6,6,66),8);
   Part(FVector(0,60,73),FVector(30,24,3),7);
  }
@@ -149,10 +166,10 @@ void AOKStreetSocialScene::TickLife(float Dt){
   // Keep a pose while her block wants that clip and he is around; a closer heroine with something to do takes over.
   for(int32 K=S.LifePoses.Num()-1;K>=0;--K){
    auto& P=S.LifePoses[K];const int32 I=P.Actor;const FOKStreetPlanBlock* B=LifeBlock(I,Minute);
-   const FString Want=B?OKLifeClip(B->Kind,B->Place,S.DrinkFemaleClip):FString();
+   const FString Want=B?LifeClip(I,*B):FString();
    const float Dist=S.Agents.IsValidIndex(I-1)?float(FVector::Dist2D(S.Agents[I-1].Position,S.Male)):MAX_flt;
    bool Nearer=false;
-   if(Dist>800.f)for(const int32 J:S.ScheduleHeld)if(J!=I&&!InLifePose(J)&&S.Agents.IsValidIndex(J-1)&&!S.Commutes.Contains(J)&&FVector::Dist2D(S.Agents[J-1].Position,S.Male)<500.f){const auto* BJ=LifeBlock(J,Minute);if(BJ&&!OKLifeClip(BJ->Kind,BJ->Place,S.DrinkFemaleClip).IsEmpty())Nearer=true;}
+   if(Dist>800.f)for(const int32 J:S.ScheduleHeld)if(J!=I&&!InLifePose(J)&&S.Agents.IsValidIndex(J-1)&&!S.Commutes.Contains(J)&&FVector::Dist2D(S.Agents[J-1].Position,S.Male)<500.f){const auto* BJ=LifeBlock(J,Minute);if(BJ&&!LifeClip(J,*BJ).IsEmpty())Nearer=true;}
    if(Nearer){S.LifeCooldown.Add(I,Now+30.0);StopLifePose(I);continue;}
    if(!S.ScheduleHeld.Contains(I)||S.Commutes.Contains(I)||S.NpcLifts.Contains(I)||BusyWithPlayer(I)||Want!=P.Clip||Dist>OKLifeRange*1.3f||(B&&SpotDistance(I,*B)>700.f)){StopLifePose(I);continue;}
    if(P.Phase==0){
@@ -166,7 +183,7 @@ void AOKStreetSocialScene::TickLife(float Dt){
    S.LifeCheckAt=Now+2.0;int32 Best=INDEX_NONE;float BestD=OKLifeRange;FString Clip;
    for(const int32 I:S.ScheduleHeld){
     if(InLifePose(I)||!S.Agents.IsValidIndex(I-1)||S.Commutes.Contains(I)||S.NpcLifts.Contains(I)||BusyWithPlayer(I)||S.LifeCooldown.FindRef(I)>Now)continue;
-    const FOKStreetPlanBlock* B=LifeBlock(I,Minute);if(!B)continue;const FString C=OKLifeClip(B->Kind,B->Place,S.DrinkFemaleClip);if(C.IsEmpty())continue;
+    const FOKStreetPlanBlock* B=LifeBlock(I,Minute);if(!B)continue;const FString C=LifeClip(I,*B);if(C.IsEmpty())continue;
     if(SpotDistance(I,*B)>450.f){S.LifeCooldown.Add(I,Now+10.0);continue;} // not at her post: no chair here
     const float D=FVector::Dist2D(S.Agents[I-1].Position,S.Male);if(D<BestD){BestD=D;Best=I;Clip=C;}
    }
@@ -198,7 +215,7 @@ void AOKStreetSocialScene::TickLife(float Dt){
   for(const int32 I:S.ScheduleHeld)for(const int32 J:S.ScheduleHeld){
    if(J<=I||InLifePose(I)||InLifePose(J)||S.Commutes.Contains(I)||S.Commutes.Contains(J)||!S.Agents.IsValidIndex(I-1)||!S.Agents.IsValidIndex(J-1)||BusyWithPlayer(I)||BusyWithPlayer(J))continue;
    const FOKStreetPlanBlock* BI=LifeBlock(I,Minute);const FOKStreetPlanBlock* BJ=LifeBlock(J,Minute);
-   if(!BI||!BJ||BI->Place!=BJ->Place||!OKLifeClip(BI->Kind,BI->Place,S.DrinkFemaleClip).IsEmpty()||!OKLifeClip(BJ->Kind,BJ->Place,S.DrinkFemaleClip).IsEmpty())continue;
+   if(!BI||!BJ||BI->Place!=BJ->Place||!LifeClip(I,*BI).IsEmpty()||!LifeClip(J,*BJ).IsEmpty())continue;
    const FVector D=S.Agents[J-1].Position-S.Agents[I-1].Position;if(D.Size2D()>250.f||FMath::Abs(D.Z)>80.f)continue;
    // A conversation distance: a step apart, turned to each other.
    if(D.Size2D()<90.f){const FVector Push=(D.Size2D()<1.f?FVector(1,0,0):D.GetSafeNormal2D())*(90.f-float(D.Size2D()))*0.5f;FVector AtI=S.Agents[I-1].Position-Push,AtJ=S.Agents[J-1].Position+Push;if(!OKStreetBlockedPoint(AtI,25)&&!OKStreetBlockedPoint(AtJ,25)){S.Agents[I-1].Position=AtI;S.Agents[J-1].Position=AtJ;}}

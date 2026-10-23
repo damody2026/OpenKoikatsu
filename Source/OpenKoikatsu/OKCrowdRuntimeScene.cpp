@@ -378,7 +378,18 @@ struct FScene : TSharedFromThis<FScene> {
  // Shutdown when the world is cleaned up (a map load, a new game), not one ticker tick later: nothing held here may
  // keep the old world alive (UEngine::LoadMap stops the game on world leaks).
  FDelegateHandle WorldCleanup;
- TArray<TArray<uint8>> Curves;TArray<FString> ClipIds;TArray<bool> ClipLoops;TArray<float> ClipWindows;TArray<FString> VoicePaths,VoiceIds;int32 WalkSources=0;bool DemoSpeech=false,DemoSpeechStarted=false,DemoActionStarted=false;FString DemoAction;FString ReportPath,VisualPrefix,VisualError;
+ TArray<TArray<uint8>> Curves;TArray<FString> ClipPaths;TArray<FString> ClipIds;
+ // Clip id -> source, one lookup instead of a scan of hundreds of ids (status queries run many times a frame).
+ TMap<FString,int32> ClipIndex;int32 FindClip(const FString& Id) const{const int32* I=ClipIndex.Find(Id);return I?*I:INDEX_NONE;}
+ // An action's curves, read from disk the first time it is prepared (hundreds of admitted actions: the base curves only
+ // are read at start). Empty when the file cannot be read or is not a valid clip.
+ const TArray<uint8>& ClipBytes(int32 Source){
+  check(IsInGameThread());static const TArray<uint8> None;if(!Curves.IsValidIndex(Source))return None;
+  if(Curves[Source].IsEmpty()&&ClipPaths.IsValidIndex(Source)){
+   if(!FFileHelper::LoadFileToArray(Curves[Source],*ClipPaths[Source])||OKRuntimeSharedClipDuration(Curves[Source])<=0){
+    UE_LOG(LogTemp,Warning,TEXT("Runtime action %s could not be read"),*ClipPaths[Source]);Curves[Source].Reset();}}
+  return Curves[Source];
+ }TArray<bool> ClipLoops;TArray<float> ClipWindows;TArray<FString> VoicePaths,VoiceIds;int32 WalkSources=0;bool DemoSpeech=false,DemoSpeechStarted=false,DemoActionStarted=false;FString DemoAction;FString ReportPath,VisualPrefix,VisualError;
  int32 VisualClip=1,NpcActionPreload=0;double DemoDelay=1;double ReadyAt=0,LoadMs=0,ProfileSeconds=0,LastWall=0;bool Captured=false;int32 CaptureStage=0;
  struct FActionStreamSlot {int32 Actor=INDEX_NONE,Source=INDEX_NONE;uint64 Epoch=0;TFuture<FStreamPrepared> Job;TUniquePtr<FStreamPrepared> Prepared;TSharedPtr<FStreamInstall,ESPMode::ThreadSafe> Install;};
  FActionStreamSlot ActionSlots[OKCrowdRuntimeActionSlots];uint64 StaleActionDrops=0;
@@ -697,10 +708,10 @@ struct FScene : TSharedFromThis<FScene> {
    if(E.ClipSources.Num()==2&&(ActionCount>0||E.ConversationSource!=INDEX_NONE||E.RunSource!=INDEX_NONE))E.ClipSources.Add(INDEX_NONE);
    if(E.ConversationSource!=INDEX_NONE)E.ConversationSlot=E.ClipSources.Add(E.ConversationSource);
    if(E.RunSource!=INDEX_NONE)E.RunSlot=E.ClipSources.Add(E.RunSource);
-   {const int32 Stand=ClipIds.Find(TEXT("conversation_neutral.okanim"));if(Stand!=INDEX_NONE)E.StandSlot=Stand==E.ConversationSource?E.ConversationSlot:E.ClipSources.Add(Stand);}
+   {const int32 Stand=FindClip(TEXT("conversation_neutral.okanim"));if(Stand!=INDEX_NONE)E.StandSlot=Stand==E.ConversationSource?E.ConversationSlot:E.ClipSources.Add(Stand);}
    E.Clips.SetNum(E.ClipSources.Num());
    for(int32 Slot=0;Slot<E.ClipSources.Num();++Slot){const int32 Source=E.ClipSources[Slot];if(Source==INDEX_NONE)continue;
-    R.AuthoredCurves=Curves[Source];R.Duration=OKRuntimeSharedClipDuration(Curves[Source]);R.AuthoredPrefix=ClipWindows.IsValidIndex(Source)&&ClipWindows[Source]>0;if(R.AuthoredPrefix)R.Duration=FMath::Min(R.Duration,ClipWindows[Source]);R.ClipIdentity=ClipIds[Source];
+    R.AuthoredCurves=ClipBytes(Source);R.Duration=OKRuntimeSharedClipDuration(R.AuthoredCurves);R.AuthoredPrefix=ClipWindows.IsValidIndex(Source)&&ClipWindows[Source]>0;if(R.AuthoredPrefix)R.Duration=FMath::Min(R.Duration,ClipWindows[Source]);R.ClipIdentity=ClipIds[Source];
     E.PoseJobSlots.Add(Slot);E.PoseJobs.Add(OKPrepareRuntimePoseBankAsync(R));}
    for(const auto& Mesh:S.Meshes){E.SourceVertices+=Mesh.Vertices.Num();E.SourceTriangles+=Mesh.Indices.Num()/3;}
    E.StageMs[0]=(FPlatformTime::Seconds()-E.StageStarted)*1000;E.StageStarted=FPlatformTime::Seconds();E.Reduction=LowPolyRules?OKReduceRuntimeMeshesAsync(MoveTemp(S.Meshes),30000,30000,30000,PreserveSourceGeometry,true):OKReduceRuntimeMeshesAsync(MoveTemp(S.Meshes),15000,15000,30000,PreserveSourceGeometry);E.Stage=2;
@@ -901,7 +912,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(E.SpeechJob.IsValid()&&!E.PendingSpeechAction.IsEmpty()&&E.LinkedActionEpoch!=0&&E.LinkedActionEpoch!=E.PendingEpoch&&E.LinkedActionEpoch!=E.InstalledEpoch){E.CancelSpeech();UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped cancelled action session"));}
    if(E.SpeechJob.IsValid()&&Now-E.SpeechRequestedAt>OKCrowdRuntimeActionPrepareSeconds){E.CancelSpeech();UE_LOG(LogTemp,Warning,TEXT("Runtime speech preparation exceeded 60 seconds; canceled pending audio"));}
    if(A==DemoCharacter&&DemoSpeechStarted&&!DemoSpeechCancelled&&DemoCancelAfter>=0&&Now-E.SpeechRequestedAt>=DemoCancelAfter){FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);DemoSpeechCancelled=true;}
-   if(E.SpeechJob.IsValid()&&E.SpeechEpoch!=0&&E.SpeechJob.IsReady()&&(E.PendingSpeechAction.IsEmpty()||E.ClipSources.Find(ClipIds.Find(E.PendingSpeechAction))>=2)){const uint64 SpeechEpoch=E.SpeechEpoch;auto Prepared=E.SpeechJob.Consume();if(E.SpeechEpoch!=SpeechEpoch){UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped stale session"));}else if(!Prepared.Error.IsEmpty()){UE_LOG(LogTemp,Warning,TEXT("Runtime voice: %s"),*Prepared.Error);FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=Prepared.Error;}else if(auto Device=Owner->GetWorld()->GetAudioDevice();Device.IsValid()){
+   if(E.SpeechJob.IsValid()&&E.SpeechEpoch!=0&&E.SpeechJob.IsReady()&&(E.PendingSpeechAction.IsEmpty()||E.ClipSources.Find(FindClip(E.PendingSpeechAction))>=2)){const uint64 SpeechEpoch=E.SpeechEpoch;auto Prepared=E.SpeechJob.Consume();if(E.SpeechEpoch!=SpeechEpoch){UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped stale session"));}else if(!Prepared.Error.IsEmpty()){UE_LOG(LogTemp,Warning,TEXT("Runtime voice: %s"),*Prepared.Error);FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=Prepared.Error;}else if(auto Device=Owner->GetWorld()->GetAudioDevice();Device.IsValid()){
     auto* Audio=E.SpeechAudio.Get();if(!Audio){Audio=NewObject<UAudioComponent>(Owner.Get());Owner->AddInstanceComponent(Audio);Audio->bAutoActivate=false;Audio->bAutoDestroy=false;Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->bAllowSpatialization=true;Audio->bOverrideAttenuation=true;Audio->AttenuationOverrides.bAttenuate=true;Audio->AttenuationOverrides.bSpatialize=true;Audio->AttenuationOverrides.FalloffDistance=2000;Audio->RegisterComponent();E.SpeechAudio=Audio;}
     Audio->Stop();auto* Wave=NewObject<UKKRuntimeSpeechWave>(Owner.Get());if(Prepared.Stream)Wave->InitializeStream(Prepared.Stream,Device->GetSampleRate());else Wave->Initialize(Prepared.Pcm,Device->GetSampleRate());E.SpeechWave.Reset(Wave);E.EnvelopeRate=float(Device->GetSampleRate());E.LastSpeechFrames=0;E.SpeechProgressAt=Now;Audio->SetSound(Wave);
     if(!E.PendingSpeechAction.IsEmpty()){FString ActionError;if(!OKPlayCrowdRuntimeAction(Owner.Get(),A,E.PendingSpeechAction,ActionError))UE_LOG(LogTemp,Warning,TEXT("Runtime speech action: %s"),*ActionError);}E.PendingSpeechAction.Reset();Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->SetPitchMultiplier(E.MouthEnvelope.Num()?1.f:E.VoicePitch);Audio->Play();E.SpeechState=EOKRuntimeSpeechState::Playing;
@@ -1006,8 +1017,9 @@ bool OKStartCrowdRuntimeScene(AActor* Owner,const FString& Manifest,FString& Err
  double Workers=State->Concurrency;J->TryGetNumberField(TEXT("background_prepare_concurrency"),Workers);State->Concurrency=FMath::Clamp(int32(Workers),1,FMath::Clamp(FTaskGraphInterface::Get().GetNumWorkerThreads(),1,16));J->TryGetNumberField(TEXT("diagnostic_load_deadline_seconds"),State->LoadDiagnosticDeadline);State->LoadDiagnosticDeadline=FMath::Clamp(State->LoadDiagnosticDeadline,60.,300.);
  J->TryGetBoolField(TEXT("enable_face_patterns"),State->CaptureFacePatterns);J->TryGetBoolField(TEXT("external_control"),State->ExternalControl);J->TryGetStringField(TEXT("voice_root"),State->VoiceRoot);if(!State->VoiceRoot.IsEmpty())State->VoiceRoot=Resolve(State->VoiceRoot);J->TryGetStringField(TEXT("generated_voice_root"),State->GeneratedVoiceRoot);if(!State->GeneratedVoiceRoot.IsEmpty())State->GeneratedVoiceRoot=Resolve(State->GeneratedVoiceRoot);
  State->WalkSources=Curves->Num();TArray<FString> CurvePaths;for(const auto& C:*Curves)CurvePaths.Add(Resolve(C->AsString()));State->ClipLoops.Init(true,CurvePaths.Num());State->ClipWindows.Init(0,CurvePaths.Num());
- const TArray<TSharedPtr<FJsonValue>>* Actions=nullptr;if(J->TryGetArrayField(TEXT("actions"),Actions)){if(Actions->Num()>64){Error=TEXT("At most 64 explicitly admitted common runtime actions");return false;}for(const auto& V:*Actions){if(!V||V->Type!=EJson::Object){Error=TEXT("Runtime action must be an object");return false;}const auto Action=V->AsObject();FString Path;bool Loop=false;if(!Action||!Action->TryGetStringField(TEXT("curve"),Path)){Error=TEXT("Runtime action needs a common curve");return false;}Action->TryGetBoolField(TEXT("loop"),Loop);double Window=0;Action->TryGetNumberField(TEXT("play_seconds"),Window);if(!FMath::IsFinite(Window)||Window<0||Window>34||(Window>0&&Loop)){Error=TEXT("Invalid non-looping action playback window");return false;}CurvePaths.Add(Resolve(Path));State->ClipLoops.Add(Loop);State->ClipWindows.Add(Window);}}
- State->Curves.SetNum(CurvePaths.Num());State->ClipIds.SetNum(CurvePaths.Num());for(int32 I=0;I<CurvePaths.Num();++I){const FString& Path=CurvePaths[I];if(!FFileHelper::LoadFileToArray(State->Curves[I],*Path)||OKRuntimeSharedClipDuration(State->Curves[I])<=0){Error=TEXT("Common runtime curve missing/invalid");return false;}State->ClipIds[I]=FPaths::GetCleanFilename(Path);if(State->ClipIds.Find(State->ClipIds[I])!=I){Error=TEXT("Common runtime clip IDs must be unique");return false;}}
+ const TArray<TSharedPtr<FJsonValue>>* Actions=nullptr;if(J->TryGetArrayField(TEXT("actions"),Actions)){if(Actions->Num()>2048){Error=TEXT("At most 2048 explicitly admitted common runtime actions");return false;}for(const auto& V:*Actions){if(!V||V->Type!=EJson::Object){Error=TEXT("Runtime action must be an object");return false;}const auto Action=V->AsObject();FString Path;bool Loop=false;if(!Action||!Action->TryGetStringField(TEXT("curve"),Path)){Error=TEXT("Runtime action needs a common curve");return false;}Action->TryGetBoolField(TEXT("loop"),Loop);double Window=0;Action->TryGetNumberField(TEXT("play_seconds"),Window);if(!FMath::IsFinite(Window)||Window<0||Window>34||(Window>0&&Loop)){Error=TEXT("Invalid non-looping action playback window");return false;}CurvePaths.Add(Resolve(Path));State->ClipLoops.Add(Loop);State->ClipWindows.Add(Window);}}
+ // The base curves are read now; actions only exist on disk until they are first prepared (FScene::ClipBytes).
+ State->Curves.SetNum(CurvePaths.Num());State->ClipPaths=CurvePaths;State->ClipIds.SetNum(CurvePaths.Num());for(int32 I=0;I<CurvePaths.Num();++I){const FString& Path=CurvePaths[I];if(I<State->WalkSources?(!FFileHelper::LoadFileToArray(State->Curves[I],*Path)||OKRuntimeSharedClipDuration(State->Curves[I])<=0):!IFileManager::Get().FileExists(*Path)){Error=TEXT("Common runtime curve missing/invalid");return false;}State->ClipIds[I]=FPaths::GetCleanFilename(Path);if(State->ClipIndex.Contains(State->ClipIds[I])?true:(State->ClipIndex.Add(State->ClipIds[I],I),false)){Error=TEXT("Common runtime clip IDs must be unique");return false;}}
  const TArray<TSharedPtr<FJsonValue>>* Voices=nullptr;if(J->TryGetArrayField(TEXT("voices"),Voices)){if(Voices->Num()>256){Error=TEXT("Runtime voice catalogue too large");return false;}for(const auto& V:*Voices){if(!V||V->Type!=EJson::String){Error=TEXT("Runtime voice must be a common file path");return false;}const FString Path=Resolve(V->AsString()),Id=FPaths::GetCleanFilename(Path);if(State->VoiceIds.Contains(Id)||!IFileManager::Get().FileExists(*Path)){Error=TEXT("Runtime voice missing or duplicate");return false;}State->VoicePaths.Add(Path);State->VoiceIds.Add(Id);}}J->TryGetBoolField(TEXT("demo_speech"),State->DemoSpeech);J->TryGetStringField(TEXT("demo_action"),State->DemoAction);
  double VisualSlot=1;J->TryGetNumberField(TEXT("visual_clip"),VisualSlot);if(!FMath::IsFinite(VisualSlot)||VisualSlot!=FMath::FloorToDouble(VisualSlot)||VisualSlot<1||VisualSlot>=2+State->Curves.Num()-State->WalkSources){Error=TEXT("Invalid visual clip slot");return false;}State->VisualClip=int32(VisualSlot);
  double DemoDelay=1;if(J->TryGetNumberField(TEXT("demo_delay_seconds"),DemoDelay)&&(!FMath::IsFinite(DemoDelay)||DemoDelay<0||DemoDelay>120)){Error=TEXT("Invalid runtime demo delay");return false;}State->DemoDelay=DemoDelay;double CancelAfter=-1;if(J->TryGetNumberField(TEXT("demo_cancel_speech_after_seconds"),CancelAfter)&&(!FMath::IsFinite(CancelAfter)||CancelAfter<0||CancelAfter>60)){Error=TEXT("Invalid runtime speech cancel delay");return false;}State->DemoCancelAfter=CancelAfter;
@@ -1049,7 +1061,7 @@ bool OKStartCrowdRuntimeScene(AActor* Owner,const FString& Manifest,FString& Err
   const auto Meta=(*Metadata)[I]->AsObject();if(!Meta)continue;auto& E=*State->Entries[I];double Rate=.5;
   if(Meta->TryGetNumberField(TEXT("voice_rate"),Rate)&&FMath::IsFinite(Rate))E.VoicePitch=FMath::Lerp(.94f,1.06f,float(FMath::Clamp(Rate,0.,1.)));
   for(const TCHAR* Field:{TEXT("walk_clip"),TEXT("conversation_idle"),TEXT("run_clip")}){FString Name;if(!Meta->TryGetStringField(Field,Name))continue;
-   const int32 Source=State->ClipIds.Find(Name);if(Source<0||Source>=State->WalkSources){Error=TEXT("Locomotion must use declared common base curve: ")+Name;return false;}
+   const int32 Source=State->FindClip(Name);if(Source<0||Source>=State->WalkSources){Error=TEXT("Locomotion must use declared common base curve: ")+Name;return false;}
    if(FString(Field)==TEXT("walk_clip"))E.WalkIndex=Source;else if(FString(Field)==TEXT("conversation_idle"))E.ConversationSource=Source;else E.RunSource=Source;
   }
  }
@@ -1091,7 +1103,7 @@ bool OKSuspendCrowdRuntimeScene(AActor* Owner,bool Suspended){
 bool OKPlayCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipId,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
- auto& E=*State->Entries[Character];const int32 Source=State->ClipIds.Find(ClipId),Slot=E.ClipSources.Find(Source);
+ auto& E=*State->Entries[Character];const int32 Source=State->FindClip(ClipId),Slot=E.ClipSources.Find(Source);
  if(Source<State->WalkSources||Source==INDEX_NONE){Error=TEXT("Action must be a declared common action curve");return false;}
  if(Slot<2){
   if(E.Clips.Num()<3){Error=TEXT("Runtime action window requires one initial action slot");return false;}
@@ -1102,7 +1114,7 @@ bool OKPlayCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipI
 bool OKConfigureCrowdRuntimeActionContact(AActor* Owner,int32 Character,const FString& ClipId,const FString& Recipe,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE||Recipe.IsEmpty()||Recipe.Len()>16384){Error=TEXT("Invalid runtime contact request");return false;}
- const int32 Source=State->ClipIds.Find(ClipId);auto& E=*State->Entries[Character];
+ const int32 Source=State->FindClip(ClipId);auto& E=*State->Entries[Character];
  if(Source<State->WalkSources){Error=TEXT("Contact action must be an admitted common curve");return false;}
  if(const auto* Existing=E.ContactRecipes.Find(Source)){if(*Existing==Recipe){Error.Reset();return true;}Error=TEXT("Contact recipe is immutable for an admitted action");return false;}
  if(E.ClipSources.Find(Source)>=2||E.PendingAction==Source){Error=TEXT("Contact recipe must precede action preparation");return false;}
@@ -1111,7 +1123,7 @@ bool OKConfigureCrowdRuntimeActionContact(AActor* Owner,int32 Character,const FS
 bool OKPrewarmCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipId,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
- auto& E=*State->Entries[Character];const int32 Source=State->ClipIds.Find(ClipId);
+ auto& E=*State->Entries[Character];const int32 Source=State->FindClip(ClipId);
  if(Source<State->WalkSources||Source==INDEX_NONE){Error=TEXT("Action must be a declared common action curve");return false;}
  if(E.ClipSources.Find(Source)>=2){E.StreamHold=true;Error.Reset();return true;}
  if(E.Clips.Num()<3){Error=TEXT("Runtime action window requires one initial action slot");return false;}
@@ -1157,7 +1169,7 @@ bool OKSpeakCrowdRuntimeActionLine(AActor* Owner,int32 Character,const FString& 
  auto& E=*State->Entries[Character];FString Action=ActionId;uint64 Linked=0;
  if(Action.IsEmpty()){const int32 Slot=E.ActionOverride>=2?E.ActionOverride:(E.ClipSources.Num()>2?2:INDEX_NONE);if(Slot!=INDEX_NONE){const int32 Source=E.ClipSources[Slot]!=INDEX_NONE?E.ClipSources[Slot]:State->WalkSources+(E.SelectionIndex%(State->Curves.Num()-State->WalkSources));Action=State->ClipIds[Source];}}
  if(!Action.IsEmpty()){
-  const int32 Source=State->ClipIds.Find(Action);if(Source<State->WalkSources||Source==INDEX_NONE){Error=TEXT("Speech action must be a declared common curve");return false;}
+  const int32 Source=State->FindClip(Action);if(Source<State->WalkSources||Source==INDEX_NONE){Error=TEXT("Speech action must be a declared common curve");return false;}
   if(E.SpeechJob.IsValid()){Error=TEXT("Runtime voice preparation already pending");return false;}
   if(E.ClipSources.Find(Source)<2&&!OKPlayCrowdRuntimeAction(Owner,Character,Action,Error))return false;
   if(E.PendingEpoch!=0&&E.PendingAction==Source)Linked=E.PendingEpoch;
@@ -1168,7 +1180,7 @@ bool OKSpeakCrowdRuntimeActionLine(AActor* Owner,int32 Character,const FString& 
 bool OKStopCrowdRuntimeSpeech(AActor* Owner,int32 Character,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
- auto& E=*State->Entries[Character];if(!E.PendingSpeechAction.IsEmpty()&&E.PendingAction==State->ClipIds.Find(E.PendingSpeechAction)){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;}
+ auto& E=*State->Entries[Character];if(!E.PendingSpeechAction.IsEmpty()&&E.PendingAction==State->FindClip(E.PendingSpeechAction)){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;}
  E.CancelSpeech();Error.Reset();return true;
 }
 bool OKSetCrowdRuntimeBlink(AActor* Owner,int32 Character,float Closure,FString& Error){

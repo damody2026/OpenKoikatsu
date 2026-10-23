@@ -238,7 +238,7 @@ function M.main(argv)
   local photo_data, seated_data, drink_data, splash_data
   for _, common_name in ipairs({ "facilities.manifest.json", "photo.manifest.json", "seated.manifest.json", "drink.manifest.json",
     "splash.manifest.json", "watermelon.manifest.json", "phone.manifest.json", "selfie.manifest.json", "groom.manifest.json",
-    "touch.manifest.json", "venue.manifest.json", "lover.manifest.json" }) do
+    "touch.manifest.json", "venue.manifest.json", "lover.manifest.json", "photo_poses.manifest.json" }) do
     local common_path = path.join(anim_dir, common_name)
     if path.is_file(common_path) then
       local common_data = read_json(common_path)
@@ -249,6 +249,14 @@ function M.main(argv)
       if common_name == "seated.manifest.json" then seated_data = common_data end
       if common_name == "drink.manifest.json" then drink_data = common_data end
       if common_name == "splash.manifest.json" then splash_data = common_data end
+    end
+  end
+  -- The original game's non-H Studio animations (Tools/export_street_animation_library.lua): admitted, read from disk
+  -- the first time one is played (no hash pass over hundreds of files at every start).
+  local library_path = path.join(anim_dir, "library.manifest.json")
+  if path.is_file(library_path) then
+    for _, action in ipairs(read_json(library_path).actions) do
+      if path.is_file(path.join(anim_dir, action.file)) then table.insert(actions.actions, action) end
     end
   end
   local topic_path = path.with_name(catalogue_path, "topics.json")

@@ -411,6 +411,12 @@ private:
  bool NavNeedsLift(const FVector& Goal) const;
  // Lover moments (OKStreetSocialLover.inl): DoAct's kiss / embrace / hand / head pat, shown.
  void PlayLoverAct(int32 Girl,const FString& Act,int32 Reaction);
+ // OKStreetSocialLover.inl: a gesture of motions.toml with her words; her next two-shot pose (empty: the next one).
+ void PlayGesture(int32 Girl,const FString& Gesture);
+ bool SwitchPhotoPose(const FString& Pose);
+ // OKStreetSocialLife.inl: the loop her schedule block shows (motions.toml, life), the same for the whole block.
+ FString LifeClip(int32 Actor,const struct FOKStreetPlanBlock& Block);
+ void ReadMotionTable();
  void StartLoverReaction(int32 Girl,const FString& Clip,float Seconds,const FString& MaleClip=FString(),const TCHAR* FemaleRecipe=nullptr);
  void TickLover();
  bool S_ValidGirl(int32 Girl) const;
@@ -624,6 +630,7 @@ private:
  void BuildSongRow(TSharedRef<class SVerticalBox> Box);
  TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
  bool SongOwnsVoice(int32 Character) const;
+ bool SongCameraShot(double Now,float Dt,FVector& Location,FVector& Focus);
  void SongLoad();
  void SongSave();
  void SongReset(const FString& Why,bool CancelJob);

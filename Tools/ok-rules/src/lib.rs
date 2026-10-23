@@ -2,6 +2,7 @@
 //! The rules keep no game state: every call carries the facts it needs, so the DLL can be swapped while the game runs.
 pub mod academics;
 pub mod activities;
+pub mod motions;
 pub mod bank;
 pub mod bias;
 pub mod bluff;
@@ -176,6 +177,7 @@ impl Rules {
                     .or_else(|| region::eval(&tuning.catalog, &kind, &request))
                     .or_else(|| estate::eval(tuning.property_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| activities::eval(tuning.activities_in(locale::lang(&request)), &tuning.activities, tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
+                    .or_else(|| motions::eval(&tuning.motions, &kind, &request))
                     .or_else(|| photos::eval(&kind, &request))
                     .or_else(|| work::eval(&kind, &request))
                     .or_else(|| series::eval(&kind, &request))

@@ -229,6 +229,7 @@ bool OKStreetFreeTalkParseContent(const FString& Content, FOKFreeTalkReply& Out,
   Reply->TryGetStringField(TEXT("reason"), Out.Reason);
   Reply->TryGetStringField(TEXT("action"), Out.Action);
   Reply->TryGetStringField(TEXT("emotion"), Out.Emotion);
+  Reply->TryGetStringField(TEXT("gesture"), Out.Gesture);
   const TSharedPtr<FJsonObject>* Face = nullptr;
   if (Reply->TryGetObjectField(TEXT("face"), Face) && Face->IsValid()) OKStreetFreeTalkParseFace(**Face, Out);
   const TSharedPtr<FJsonObject>* Rel = nullptr;

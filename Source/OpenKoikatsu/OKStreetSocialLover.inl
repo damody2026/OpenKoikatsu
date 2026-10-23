@@ -80,6 +80,40 @@ void AOKStreetSocialScene::FarewellCompanion(){
  }
 }
 
+// A gesture with her words (the model's "gesture", motions.toml): one of its clips for how she stands, shown a few
+// seconds as her reaction. Mid-activity, on a chair or already reacting, the words go alone; during a photo
+// "another_pose" (or a pose's own key) changes her pose.
+void AOKStreetSocialScene::PlayGesture(int32 Girl,const FString& Gesture){
+ if(!State||!S_ValidGirl(Girl))return;auto& S=*State;
+ if(S.Pair.Partner==Girl){if(Gesture==TEXT("another_pose")||Gesture.StartsWith(TEXT("twoshot_")))SwitchPhotoPose(Gesture==TEXT("another_pose")?FString():Gesture);return;}
+ if(S.Pair.Partner!=INDEX_NONE||S.SoloGirl==Girl||S.LoverReact.Girl!=INDEX_NONE||S.LoverPose.Girl!=INDEX_NONE||S.TouchActive||S.Node!=INDEX_NONE)return;
+ if(FVector::Dist2D(S.Agents[Girl-1].Position,S.Male)>400.f)return;
+ auto Ask=OKRulesRequest(TEXT("motion_gesture"));Ask->SetStringField(TEXT("gesture"),Gesture);Ask->SetStringField(TEXT("posture"),TEXT("stand"));Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return;
+ const FString Clip=Out->GetStringField(TEXT("clip"));
+ if(Clip.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street gesture: actor=%d %s not shown (%s)"),Girl,*Gesture,*Out->GetStringField(TEXT("why")));return;}
+ UE_LOG(LogTemp,Display,TEXT("Street gesture: actor=%d %s -> %s"),Girl,*Gesture,*Clip);
+ StartLoverReaction(Girl,Clip,float(Out->GetNumberField(TEXT("seconds"))));
+}
+
+// Her next two-shot pose while they pose for a photo: she lets the pose go, the new one is prepared, and both start it
+// again from the shared anchor (TickPhoto's preparation phase).
+bool AOKStreetSocialScene::SwitchPhotoPose(const FString& Pose){
+ if(!State)return false;auto& S=*State;auto& P=S.Pair;
+ if(P.Partner==INDEX_NONE||P.Phase!=1||P.CapturePending||S.PhotoPoseKey.IsEmpty())return false;
+ auto Ask=OKRulesRequest(TEXT("motion_photo"));Ask->SetStringField(TEXT("pose"),Pose);Ask->SetStringField(TEXT("after"),S.PhotoPoseKey);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return false;
+ const FString Female=Out->GetStringField(TEXT("female")),Male=Out->GetStringField(TEXT("male"));
+ if(Female.IsEmpty()||Female==P.FemaleClip)return false;
+ FString Error;OKResumeCrowdRuntimeBehavior(this,P.Partner,Error);
+ if(!OKPrewarmCrowdRuntimeAction(this,P.Partner,Female,Error)){UE_LOG(LogTemp,Warning,TEXT("Street photo: pose %s: %s"),*Female,*Error);FinishPhoto(true);return false;}
+ if(!Male.IsEmpty()&&Male!=P.MaleClip){OKResumeCrowdRuntimeBehavior(this,0,Error);if(OKPrewarmCrowdRuntimeAction(this,0,Male,Error))P.MaleClip=Male;}
+ P.FemaleClip=Female;P.Phase=0;P.RequestedAt=SceneTime();S.PhotoPoseKey=Out->GetStringField(TEXT("key"));
+ S.Message=OKT(TEXT("ui.scene.photo_changing_pose"));RefreshUI();
+ UE_LOG(LogTemp,Display,TEXT("Street photo: actor=%d changes pose to %s (%s)"),P.Partner,*S.PhotoPoseKey,*Female);
+ return true;
+}
+
 bool AOKStreetSocialScene::S_ValidGirl(int32 Girl) const{return State&&Girl>0&&State->Agents.IsValidIndex(Girl-1)&&State->Manifest.Characters.IsValidIndex(Girl);}
 
 void AOKStreetSocialScene::StartLoverReaction(int32 Girl,const FString& Clip,float Seconds,const FString& MaleClip,const TCHAR* FemaleRecipe){

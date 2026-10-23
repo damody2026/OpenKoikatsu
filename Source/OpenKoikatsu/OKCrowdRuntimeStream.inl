@@ -5,7 +5,7 @@
 void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
  if(!Installed||!Render->Ready.Load()||CaptureStage==1||CaptureStage==2)return;
  for(auto& Entry:Entries)if(Entry->PendingAction!=INDEX_NONE&&FPlatformTime::Seconds()-Entry->PendingActionAt>OKCrowdRuntimeActionPrepareSeconds){
-  if(!Entry->PendingSpeechAction.IsEmpty()&&ClipIds.Find(Entry->PendingSpeechAction)==Entry->PendingAction)Entry->CancelSpeech();
+  if(!Entry->PendingSpeechAction.IsEmpty()&&FindClip(Entry->PendingSpeechAction)==Entry->PendingAction)Entry->CancelSpeech();
   Entry->PendingAction=INDEX_NONE;Entry->PendingEpoch=0;++Entry->StreamErrors;
   UE_LOG(LogTemp,Warning,TEXT("Runtime action request exceeded 60-second preparation deadline; retained current animation"));
  }
@@ -43,7 +43,7 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
   }
   if(Live){
    // A speech waiting for the replacement must not pin the old overlay.
-   const bool SpeechBlocks=!E.PendingSpeechAction.IsEmpty()&&ClipIds.Find(E.PendingSpeechAction)==Slot.Source;
+   const bool SpeechBlocks=!E.PendingSpeechAction.IsEmpty()&&FindClip(E.PendingSpeechAction)==Slot.Source;
    const bool ClipBusy=E.ActionOverride!=INDEX_NONE||E.Clock.UsesClip(2);
    const bool Supersede=E.StreamHold&&E.PendingEpoch!=0&&E.ClipSources.IsValidIndex(2)&&E.PendingAction!=E.ClipSources[2];
    if(!SpeechBlocks&&!ClipBusy&&(!E.StreamHold||Supersede)){
@@ -57,7 +57,7 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
    Slot.Prepared=MakeUnique<FStreamPrepared>(Slot.Job.Consume());E.StreamPrepareMs=Slot.Prepared->Ms;
    if(!Slot.Prepared->Error.IsEmpty()){
     ++E.StreamErrors;UE_LOG(LogTemp,Warning,TEXT("Runtime action preparation: %s"),*Slot.Prepared->Error);
-    if(!E.PendingSpeechAction.IsEmpty()&&ClipIds.Find(E.PendingSpeechAction)==Slot.Source)E.CancelSpeech();
+    if(!E.PendingSpeechAction.IsEmpty()&&FindClip(E.PendingSpeechAction)==Slot.Source)E.CancelSpeech();
     E.PendingAction=INDEX_NONE;E.PendingEpoch=0;ClearActionSlot(Slot);continue;
    }
   }
@@ -68,7 +68,7 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
   }
   if(Slot.Install&&Slot.Install->Status.Load()==-1){
    ++E.StreamErrors;UE_LOG(LogTemp,Warning,TEXT("Runtime action GPU admission retained current animation: %s"),*Slot.Install->Error);
-   if(!E.PendingSpeechAction.IsEmpty()&&ClipIds.Find(E.PendingSpeechAction)==Slot.Source)E.CancelSpeech();
+   if(!E.PendingSpeechAction.IsEmpty()&&FindClip(E.PendingSpeechAction)==Slot.Source)E.CancelSpeech();
    E.PendingAction=INDEX_NONE;E.PendingEpoch=0;ClearActionSlot(Slot);continue;
   }
   if(Slot.Install&&Slot.Install->Status.Load()==1&&Slot.Prepared&&!E.Clock.UsesClip(2)){
@@ -76,7 +76,7 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
    if(!E.Clock.ReplaceInactiveClip(2,{ClipIds[Slot.Source],Clip.Duration,ClipLoops[Slot.Source]},Error)){
     // A duplicate or invalid slot cannot succeed on retry. Drop it so the other slot stays usable.
     UE_LOG(LogTemp,Error,TEXT("Runtime inactive action slot: %s"),*Error);++E.StreamErrors;
-    if(!E.PendingSpeechAction.IsEmpty()&&ClipIds.Find(E.PendingSpeechAction)==Slot.Source)E.CancelSpeech();
+    if(!E.PendingSpeechAction.IsEmpty()&&FindClip(E.PendingSpeechAction)==Slot.Source)E.CancelSpeech();
     E.PendingAction=INDEX_NONE;E.PendingEpoch=0;
     const int32 FailedSlot=Index;ENQUEUE_RENDER_COMMAND(DiscardRejectedRuntimeAction)([R=Render,FailedSlot](FRHICommandListImmediate& Cmd){R->ReleaseStreamIndex(FailedSlot,Cmd);});
     ClearActionSlot(Slot);continue;
@@ -106,6 +106,8 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
   const int32 SlotIndex=FreeActionSlot();if(SlotIndex==INDEX_NONE)break;
   auto& E=*Entries[Actor];
   if(E.PendingAction==INDEX_NONE||E.PendingEpoch==0||E.Clips.Num()<3||E.Clock.UsesClip(2)||E.StreamInstalled||ActionSlotBusy(Actor))continue;
+  // Read from disk the first time (FScene::ClipBytes); a clip that cannot be read drops the request.
+  if(ClipBytes(E.PendingAction).IsEmpty()){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;continue;}
   auto& Slot=ActionSlots[SlotIndex];Slot.Actor=Actor;Slot.Source=E.PendingAction;Slot.Epoch=E.PendingEpoch;
   const double StreamPrepareStart=FPlatformTime::Seconds();const int32 Source=Slot.Source;
   auto Request=E.PoseRecipe;Request.AuthoredCurves=Curves[Source];if(const auto* Contact=E.ContactRecipes.Find(Source))Request.ContactRecipe=*Contact;
