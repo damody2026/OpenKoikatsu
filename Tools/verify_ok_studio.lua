@@ -72,6 +72,7 @@ for _, test in ipairs(tests) do
   local passed = code == 0 and text:find(test[3], 1, true) ~= nil
     and not text:find("RESULT FAIL", 1, true)
     and not text:find("Fatal error:", 1, true)
+    and not text:find("Ensure condition failed", 1, true)
   local memory, images, evidence_errors
   if test[1] == "TransparencyTest" then
     images, evidence_errors = evidence_report.collect_transparency(evidence)

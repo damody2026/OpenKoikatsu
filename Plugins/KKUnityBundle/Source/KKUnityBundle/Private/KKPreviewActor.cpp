@@ -125,6 +125,7 @@ static TAutoConsoleVariable<int32> CVarOkAnimationGeneratedStreams(
     TEXT("ok.Animation.GeneratedStreams"),1,TEXT("Fuse generated preview geometry with stream packing; 0 retains the intermediate-array oracle."));
 static TAutoConsoleVariable<int32> CVarOkDeferFacePose(TEXT("ok.Studio.DeferFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) take their pose in their own (worker) anim update after the owner; 0: evaluated at once in SyncMouthPose."));
 static TAutoConsoleVariable<int32> CVarOkShareFacePose(TEXT("ok.Studio.ShareFacePose"),1,TEXT("1: face parts of characters an owner poses (OK Studio) follow the body pose as exact followers, keeping their own morph targets; 0: they evaluate their own pose."));
+static TAutoConsoleVariable<int32> CVarOkSkipPosedTicks(TEXT("ok.Studio.SkipPosedTicks"),1,TEXT("1: the body and following parts of characters an owner poses (OK Studio) do not tick (their pose is applied by the owner each frame); 0: they tick as usual."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureStagger(TEXT("ok.ShadowCaptureStagger"),1,TEXT("1: characters an owner poses (OK Studio) capture their toon shadow depth in turns (at least every other frame, at most ok.ShadowCapturesPerFrame captures a frame for the whole scene); 0: every frame."));
 static TAutoConsoleVariable<int32> CVarOkShadowCapturesPerFrame(TEXT("ok.ShadowCapturesPerFrame"),2,TEXT("With ok.ShadowCaptureStagger: how many toon shadow captures of owner-posed characters a frame renders at most (each is a whole extra scene render); a scene with more characters updates each one's shadow less often."));
 static TAutoConsoleVariable<int32> CVarOkShadowCaptureFullView(TEXT("ok.ShadowCaptureFullView"),0,TEXT("1: the toon shadow depth capture renders a full view (lighting, post-processing...) as before; 0 depth only. Read when a character loads."));
@@ -6827,6 +6828,15 @@ void AKKPreviewActor::RefreshSkinnedDisplay()
    bFaceLeaderChanged|=bWas!=Follower->LeaderPoseComponent.IsValid();
   }
  if(bFaceLeaderChanged)ApplyMouth();
+ // An owner that poses this actor (OK Studio) applies the body pose and publishes the followers' bones and morphs here
+ // every frame: their own ticks would only refresh the same pose again (as under coordinated playback). A part that
+ // is not following keeps its tick (its own pose evaluation).
+ if(bSceneDrivenPose&&!bCoordinatedPlayback){
+  const bool Skip=CVarOkSkipPosedTicks.GetValueOnGameThread()!=0;
+  if(BodySkel)BodySkel->SetComponentTickEnabled(!Skip);
+  for(UPoseableMeshComponent* F:SkelFollowers)if(F)F->SetComponentTickEnabled(!Skip||!F->LeaderPoseComponent.IsValid());
+  for(const auto& Slot:MouthSlots)for(USkeletalMeshComponent* Mesh:{Slot.Comp,Slot.OutlineComp})if(Mesh)Mesh->SetComponentTickEnabled(!Skip||!Mesh->LeaderPoseComponent.IsValid());
+ }
  const double PoseBuilt=FPlatformTime::Seconds();
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplySkelPoses);
 	{QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_ApplyBodyPose);
@@ -7192,7 +7202,7 @@ bool AKKPreviewActor::AreInteractionStreamsReady() const {
 
 void AKKPreviewActor::PreparePrivateGpuDisplayPoses(){
  TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuPaletteBatch);QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_PrivateGpuPoses);
- if(!bUsePrivateGpuPlayback||!CVarOkPrivateGpuStreams.GetValueOnGameThread())return;
+ if(!bUsePrivateGpuPlayback||!CVarOkPrivateGpuStreams.GetValueOnAnyThread())return;
  TArray<int32> Indices;TArray<const FKKPrivateGpuSource*> Sources;TArray<FKKPrivateGpuDisplay*> States;
  for(auto& Part:Parts)if(Part.PrivateGpuDisplay&&Part.PrivateGpuDisplay->Installed){
   auto& State=*Part.PrivateGpuDisplay;State.PreparedPoseFrame=MAX_uint64;
