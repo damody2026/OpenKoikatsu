@@ -93,8 +93,11 @@ fn facts(r: &Value) -> Value {
             today.push(json!(e.id));
             parts.push(crate::tr::m("events.today", &[("what", crate::tr::a(what))]));
         } else if s > day as i64 && s - (day as i64) <= e.announce {
+            // With the weekday: from "9/22, in 3 days" alone she counted Thursday as the day before (R3-109).
             let d = date(s as i32, 12.0);
-            parts.push(crate::tr::m("events.coming", &[("what", crate::tr::a(what)), ("date", crate::tr::a(&format!("{}/{}", d.month, d.day))), ("days", crate::tr::a(&(s - day as i64).to_string()))]));
+            const WEEK: [&str; 7] = ["series.mon", "series.tue", "series.wed", "series.thu", "series.fri", "series.sat", "series.sun"];
+            let when = format!("{}/{} {}", d.month, d.day, crate::tr::t(WEEK[d.weekday as usize % 7]));
+            parts.push(crate::tr::m("events.coming", &[("what", crate::tr::a(what)), ("date", crate::tr::a(&when)), ("days", crate::tr::a(&(s - day as i64).to_string()))]));
         }
     }
     json!({"text": parts.join(crate::tr::t("items.fact_separator")), "today": today})
