@@ -539,3 +539,5 @@
 ### 2026-10-23 對失敗的 stage 用了 rm -rf
 
 - 編 Conquest199 時，staging 找舊的 `Saved/StreetSocial/Base`（協調者已改成 Base1023 並刪掉舊的）而失敗。我為了重來，對 `Saved/StreetSocial/Build/Conquest199.stage` 下了 `rm -rf`。stage 裡有 junction，遞迴刪除可能刪到 junction 指向的 Base 或專案 Content。這次的 junction 指向已不存在的舊 Base，事後確認 Base1023 與 Content 都完好。規則是不要遞迴刪 .stage，換新 tag 重來；編譯腳本也改成帶 `--base-dir Saved/StreetSocial/Base1023`。
+- 愛麗絲的全身緊身衣（`clothes_panst` 的 `o_body_allbodytights_top_a`）在街頭出現一塊塊白色皮膚，讀卡器卻正常。原因是街頭的減面：預設規則 `Group()` 只把身體壓到 15000 三角形，所有衣服合計再壓到 15000。緊身衣減得比身體多，曲面被拉平往內縮，胸、腰、大腿處的身體就穿出衣服。低模規則 `RuleGroup()` 早就把身體、襪子、褲襪排除在減面之外，預設規則漏了。現在預設規則也保留這三類的原始網格，和讀卡器一致。查錯過程走錯兩次：先以為是重疊層的深度衝突（白斑在不同視角位置不變，就不是深度衝突），再以為是液體貼圖（`_liquid*` 歸零沒效；這項仍保留，因為遊戲本來就由 ChaControl 覆寫液體量）。診斷用的環境變數：`OK_RUNTIME_MATERIAL_DUMP=1` 印出每個部件的材質配方與貼圖，`OK_RUNTIME_HIDE_PART=<部件名>` 讓該部件不畫。
+- 街頭啟動時不管視窗有沒有焦點，都會鎖住滑鼠並移到視窗中央；有控制通道時，也一律當成有焦點。現在只有遊戲視窗是前景視窗時才會鎖住、置中滑鼠，視窗到前景或退到背景時重新套用。
