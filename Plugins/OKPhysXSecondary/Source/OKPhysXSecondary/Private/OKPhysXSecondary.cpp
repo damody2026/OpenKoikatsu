@@ -65,6 +65,8 @@ static TAutoConsoleVariable<int32> CVarSelfCollision(
 	TEXT("OKPhysXSecondary.SelfCollision"), 1, TEXT("Bit 1: chains collide with the character's body capsules. Bit 2: chains collide with each other."), ECVF_Default);
 static TAutoConsoleVariable<int32> CVarSkinBodyCollision(
 	TEXT("OKPhysXSecondary.SkinBodyCollision"), 0, TEXT("1: skin chains of the body mesh (uncensor crotch/anus pivots) also collide with the body capsules. 0: only their own colliders, as in the game (no garment follows those bones)."), ECVF_Default);
+static TAutoConsoleVariable<int32> CVarBodySelfCollision(
+	TEXT("OKPhysXSecondary.BodySelfCollision"), 0, TEXT("1: breast/hip chains (root flag 2) also collide with the own body capsules and the other chains. 0: only their own colliders and the partner's body, as the game's DynamicBone_Ver02 (long hair behind the hips and hands on the chest pushed them in and kept them shaking)."), ECVF_Default);
 static TAutoConsoleVariable<int32> CVarProjectionPasses(
 	TEXT("OKPhysXSecondary.ProjectionPasses"), 3, TEXT("Exact position passes after the PhysX step (bone length, then push out of every collider)."), ECVF_Default);
 static TAutoConsoleVariable<int32> CVarWorldInertia(
@@ -1280,6 +1282,9 @@ namespace OKPhysXSecondary
 		// shoving them out of the rough proxies (own or partner's) pushes the skin through tights and pantyhose.
 		const bool bSkinChain = (S.Particles[0].Flags & 16u) && !CVarSkinBodyCollision.GetValueOnAnyThread();
 		const int32 SelfBits = bSkinChain ? 0 : CVarSelfCollision.GetValueOnAnyThread();
+		// Breasts and hips: the game gives their DynamicBone_Ver02 chains no body colliders; the own proxies and the hair
+		// strands hanging over them dented them and, as the hair swung, kept them shaking. The partner's body still counts.
+		const bool bBodyChain = (S.Particles[0].Flags & 2u) && !CVarBodySelfCollision.GetValueOnAnyThread();
 		if (S.Group) Chain->Group = S.Group; // released with its group even when it does not collide with it
 		if (S.Group && SelfBits)
 		{
@@ -1294,7 +1299,7 @@ namespace OKPhysXSecondary
 				// Chains worn over the clothes (hair, accessories) rest on the clothed layer; clothes on the skin.
 				const bool bOuter = (S.Particles[0].Flags & 8u) && Group->Clothed.Num() == Group->Body.Num();
 				OwnBody = bOuter ? Group->Clothed : Group->Body; // never hold two group locks at once (two solver threads would deadlock)
-				if (SelfBits & 2) for (const TPair<uint64, FSnapshot>& Pair : Group->Chains)
+				if ((SelfBits & 2) && !bBodyChain) for (const TPair<uint64, FSnapshot>& Pair : Group->Chains)
 				{
 					if (Pair.Key == S.Key) continue;
 					for (int32 SphereIndex = 0; SphereIndex < Pair.Value.Spheres.Num(); ++SphereIndex)
@@ -1444,7 +1449,7 @@ namespace OKPhysXSecondary
 					AddBody(Other.Key, OtherBody);
 				}
 			}
-			AddBody(S.Group, OwnBody);
+			if (!bBodyChain) AddBody(S.Group, OwnBody);
 			// Authored chain colliders (added before the bodies) keep their own radius for every particle.
 			const int32 K = Shapes.Num(), First = K - PerShape.Num();
 			J.PartRadius.SetNumUninitialized(int32(S.ParticleCount) * K);
