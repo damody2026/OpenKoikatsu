@@ -17,4 +17,7 @@ FString OKStudioScenePostMaterialState();
 
 /** Original 32-cube Amplify grading after DOF, before UE device encoding. */
 bool OKStudioApplySourceGrade(const FOKScenePost& Post, FPostProcessSettings& Settings);
+// The colour (sRGB 0..1) the source grade turns into Shown at a screen position (VignetteDistance2: squared distance
+// from the centre, 2 at a corner): a picture's colour back to what the scene drew.
+FLinearColor OKStudioUngradeSourceColor(const FOKScenePost& Post, const FLinearColor& Shown, float VignetteDistance2);
 class UTexture* OKStudioIdentityGradeLut();
