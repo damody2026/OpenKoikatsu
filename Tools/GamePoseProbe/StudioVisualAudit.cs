@@ -411,7 +411,18 @@ public sealed partial class GamePoseProbe {
             if (Environment.GetEnvironmentVariable("OK_PROBE_CAPTURE_STAGES") == "1") {
                 var enabled = effects.FindAll(e => e.enabled);
                 foreach (Behaviour e in enabled) e.enabled = false;
-                try { CaptureMain(main, output + ".post-off.png"); }
+                try {
+                    CaptureMain(main, output + ".post-off.png");
+                    // The same frame in a float target: the HDR values the image effects receive (bloom's bright pass).
+                    RenderTexture oldTarget = main.targetTexture, oldActive = RenderTexture.active;
+                    var hdr = RenderTexture.GetTemporary(1280, 720, 24, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+                    var hdrRead = new Texture2D(1280, 720, TextureFormat.RGBAFloat, false, true);
+                    try {
+                        main.targetTexture = hdr; main.Render();
+                        RenderTexture.active = hdr; hdrRead.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); hdrRead.Apply();
+                        File.WriteAllBytes(output + ".post-off.hdr.rgba32f", hdrRead.GetRawTextureData());
+                    } finally { main.targetTexture = oldTarget; RenderTexture.active = oldActive; RenderTexture.ReleaseTemporary(hdr); UnityEngine.Object.Destroy(hdrRead); }
+                }
                 finally { foreach (Behaviour e in enabled) e.enabled = true; }
                 foreach (Behaviour e in enabled) {
                     e.enabled = false;

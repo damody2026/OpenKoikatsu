@@ -80,7 +80,12 @@ void UOKStudioGame::RunKStudioPerf(const TArray<FString>& Scenes, int32 SettleFr
 			// OK_GRADE_CHECK=<native probe prefix>: the scene's source grade on the CPU against that probe's grade dump.
 			const FString GradeCheck = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_GRADE_CHECK"));
 			if (!GradeCheck.IsEmpty() && Self->Document)
+			{
 				UE_LOG(LogTemp, Display, TEXT("OK studio perf: grade check %s"), *OKStudioCheckSourceGrade(Self->Document->Post, GradeCheck));
+				const FOKScenePost& P = Self->Document->Post;
+				UE_LOG(LogTemp, Display, TEXT("OK studio perf: post bloom=%d intensity=%g threshold=%g size=%g vignette=%d dof=%d"),
+					P.bBloom, P.BloomIntensity, P.BloomThreshold, P.BloomSize, P.bVignette, P.bDepthOfField);
+			}
 			// OK_STUDIO_PERF_SHOT=1: a screenshot of the game viewport itself (what a player sees, unlike CompareKStudio's
 			// own scene capture) into Saved/OKStudio/perf/<tag>_<scene>.png.
 			if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_PERF_SHOT")) == TEXT("1"))
