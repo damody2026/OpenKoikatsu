@@ -3962,3 +3962,6 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **讀卡器切動作／服裝跳回 T-pose：共用環境變數被背景預熱改掉**（2026-10-24，讀卡器）：`OK_UE_ANIM` 是程序層級的環境變數，`KKSkeletalBuilder` 與 `KKPreviewActor` 在任何角色建骨架、重建中立姿勢時都會設它；背景預熱別套服裝一建角色就設成 1，正在顯示的角色下一幀停止取樣原作動作，變回 T-pose。教訓：每個角色自己的模式不能放在程序共用的環境變數；Rust 端早就為 video／共用根目錄留過特例註解，應該當時就改成每個 Session 的旗標。
 - **讀卡器開卡時刻意把幀率壓到 15 fps**（2026-10-24，讀卡器）：`OKThrottleForNativeOpen` 為了讓 worker 開卡快一點，在開卡期間設 `t.MaxFPS 15`，使用者看到的是長達數秒的 15 fps。改成 worker 降低執行緒優先權，畫面維持全速。
 - **貼圖快取每次命中都在遊戲執行緒重算整張貼圖的 SHA-1**（2026-10-24，KKRuntimePose）：`RuntimeTextureIdentity` 對所有 mip 雜湊，每個角色、每套服裝預熱都要 100 ms 以上。快取鍵要在產生資料的地方算一次、跟資料一起保存。
+- **顯存量測與 ok-asr 權重改動的兩個錯誤**（2026-10-24，ok-song／ok-asr）：
+  - 用「全卡已用顯存的峰值減去開始前的值」量 ok-song 換聲，得到 13.7 GB。實際只有約 3.4 GB，差額是同時在跑的遊戲和 Editor 的變動。WDDM 下 nvidia-smi 看不到各程序的用量；改用程式內的緩衝統計（`OK_GPU_MEM`），以及 Windows 計數器 `GPU Process Memory`。
+  - ok-asr 的 `affine` 改成「權重一律是 bf16、GEMM 前展開」時，漏改了 `proj1`／`proj2` 的載入（仍是 f32），輸出全部變成「是，是，是」或空字串。部署前用新舊版逐檔比對轉寫才抓到。改共用 helper 的參數語意後，要 grep 所有呼叫者的權重來源。

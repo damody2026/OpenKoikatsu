@@ -268,3 +268,9 @@ extern "C" __global__ void attention_window_f32(float* out, const float* qkv, in
         out[(long long)p * heads * d + head * d + i] = acc / sum;
     }
 }
+
+// out[i] = f32(in[i]): the audio encoder's matrices are kept as bf16 (as in the checkpoint) and widened per GEMM.
+extern "C" __global__ void bf16_to_f32(float* out, const bf16* in, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) out[i] = bf2f(in[i]);
+}

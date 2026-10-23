@@ -126,7 +126,8 @@ impl Stack {
 
 pub struct Decoder {
     stack: Stack,
-    embed: Buf,
+    /// embed_tokens [VOCAB, HIDDEN] bf16 in host memory (about 0.3 GB less VRAM); rows are gathered and uploaded.
+    embed: Vec<u16>,
     lm_head: Buf,
 }
 
@@ -134,7 +135,7 @@ impl Decoder {
     pub fn load(gpu: &Gpu, st: &Store, cache_len: usize) -> Result<Self> {
         Ok(Self {
             stack: Stack::load(gpu, st, "thinker.model", 28, HIDDEN, 16, 8, 128, 3072, 1_000_000.0, cache_len)?,
-            embed: st.bf16(gpu, "thinker.model.embed_tokens.weight")?,
+            embed: st.bytes("thinker.model.embed_tokens.weight", safetensors::Dtype::BF16)?.0.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect(),
             lm_head: st.bf16(gpu, "thinker.lm_head.weight")?,
         })
     }
@@ -143,8 +144,14 @@ impl Decoder {
         self.stack.cache_len
     }
 
-    fn embed_ids(&self, gpu: &Gpu, out: u64, ids: u64, n: usize) -> Result<()> {
-        gpu.launch("embed_bf16", (n as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(out), Arg::P(self.embed.ptr), Arg::P(ids), Arg::I(HIDDEN as i32)])
+    fn embed_ids(&self, gpu: &Gpu, out: u64, ids: &[u32]) -> Result<()> {
+        let mut rows = Vec::with_capacity(ids.len() * HIDDEN);
+        for &id in ids {
+            let at = id as usize * HIDDEN;
+            rows.extend_from_slice(self.embed.get(at..at + HIDDEN).ok_or_else(|| anyhow::anyhow!("token {id} out of range"))?);
+        }
+        let up = gpu.upload(&rows)?;
+        gpu.copy(out, up.ptr, rows.len() * 2)
     }
 
     /// Greedy decoding. `prompt` holds the chat-template ids; positions audio_at..audio_at+audio_rows are
@@ -153,10 +160,8 @@ impl Decoder {
         let n = prompt.len();
         let max_new = max_new.min(self.stack.cache_len.saturating_sub(n));
         let row = HIDDEN * 2;
-        let ids: Vec<i32> = prompt.iter().map(|&x| x as i32).collect();
-        let dev_ids = gpu.upload(&ids)?;
         let x = gpu.alloc(n * row)?;
-        self.embed_ids(gpu, x.ptr, dev_ids.ptr, n)?;
+        self.embed_ids(gpu, x.ptr, prompt)?;
         gpu.copy(x.at(audio_at * row), audio, audio_rows * row)?;
         let hidden = self.stack.forward(gpu, x.ptr, n, 0)?;
         let logits = gpu.alloc(VOCAB * 2)?;
@@ -176,7 +181,7 @@ impl Decoder {
             if step + 1 == max_new {
                 break;
             }
-            self.embed_ids(gpu, step_in.ptr, token.ptr, 1)?;
+            self.embed_ids(gpu, step_in.ptr, &[id])?;
             keep = self.stack.forward(gpu, step_in.ptr, 1, n + step)?;
             last = keep.ptr;
         }

@@ -76,36 +76,43 @@ impl Encoder {
             layers.push(Layer {
                 ln1_w: st.f32(gpu, &format!("{l}.self_attn_layer_norm.weight"))?,
                 ln1_b: st.f32(gpu, &format!("{l}.self_attn_layer_norm.bias"))?,
-                wqkv: st.f32_cat(gpu, &[format!("{a}.q_proj.weight"), format!("{a}.k_proj.weight"), format!("{a}.v_proj.weight")])?,
+                wqkv: st.bf16_cat(gpu, &[format!("{a}.q_proj.weight"), format!("{a}.k_proj.weight"), format!("{a}.v_proj.weight")])?,
                 bqkv: st.f32_cat(gpu, &[format!("{a}.q_proj.bias"), format!("{a}.k_proj.bias"), format!("{a}.v_proj.bias")])?,
-                wo: st.f32(gpu, &format!("{a}.out_proj.weight"))?,
+                wo: st.bf16(gpu, &format!("{a}.out_proj.weight"))?,
                 bo: st.f32(gpu, &format!("{a}.out_proj.bias"))?,
                 ln2_w: st.f32(gpu, &format!("{l}.final_layer_norm.weight"))?,
                 ln2_b: st.f32(gpu, &format!("{l}.final_layer_norm.bias"))?,
-                w1: st.f32(gpu, &format!("{l}.fc1.weight"))?,
+                w1: st.bf16(gpu, &format!("{l}.fc1.weight"))?,
                 b1: st.f32(gpu, &format!("{l}.fc1.bias"))?,
-                w2: st.f32(gpu, &format!("{l}.fc2.weight"))?,
+                w2: st.bf16(gpu, &format!("{l}.fc2.weight"))?,
                 b2: st.f32(gpu, &format!("{l}.fc2.bias"))?,
             });
         }
         Ok(Self {
             conv: [c1?, c2?, c3?],
-            conv_out: st.f32(gpu, &format!("{p}.conv_out.weight"))?,
+            conv_out: st.bf16(gpu, &format!("{p}.conv_out.weight"))?,
             positions: gpu.upload(&sinusoids(13))?,
             layers,
             ln_post_w: st.f32(gpu, &format!("{p}.ln_post.weight"))?,
             ln_post_b: st.f32(gpu, &format!("{p}.ln_post.bias"))?,
-            proj1_w: st.f32(gpu, &format!("{p}.proj1.weight"))?,
+            proj1_w: st.bf16(gpu, &format!("{p}.proj1.weight"))?,
             proj1_b: st.f32(gpu, &format!("{p}.proj1.bias"))?,
-            proj2_w: st.f32(gpu, &format!("{p}.proj2.weight"))?,
+            proj2_w: st.bf16(gpu, &format!("{p}.proj2.weight"))?,
             proj2_b: st.f32(gpu, &format!("{p}.proj2.bias"))?,
         })
     }
 
-    /// y[rows, out] = x * w^T + b
+    /// A bf16 matrix of `n` values widened to f32 for one GEMM (the layer matrices stay bf16 on the GPU, half the VRAM).
+    fn widen(&self, gpu: &Gpu, w: u64, n: usize) -> Result<Buf> {
+        let f = gpu.alloc(n * 4)?;
+        gpu.launch1("bf16_to_f32", n, &[Arg::P(f.ptr), Arg::P(w), Arg::L(n as i64)])?;
+        Ok(f)
+    }
+
+    /// y[rows, out] = x * w^T + b, w bf16.
     fn affine(&self, gpu: &Gpu, y: u64, x: u64, w: u64, b: u64, rows: usize, inp: usize, out: usize) -> Result<()> {
         gpu.launch1("fill_rows_f32", rows * out, &[Arg::P(y), Arg::P(b), Arg::I(out as i32), Arg::I(rows as i32), Arg::I(1)])?;
-        gpu.linear_f32(y, x, w, rows, inp, out, 1.0)
+        gpu.linear_f32(y, x, self.widen(gpu, w, inp * out)?.ptr, rows, inp, out, 1.0)
     }
 
     fn gelu(&self, gpu: &Gpu, x: u64, n: usize) -> Result<()> {
@@ -136,7 +143,7 @@ impl Encoder {
         let conv = src.expect("three conv layers");
         let rows = gpu.alloc(w * CONV * h * 4)?;
         gpu.launch1("cnn_rows_f32", w * CONV * h, &[Arg::P(rows.ptr), Arg::P(conv.ptr), Arg::I(CONV as i32), Arg::I(h as i32), Arg::I(w as i32)])?;
-        gpu.linear_f32(out, rows.ptr, self.conv_out.ptr, w, CONV * h, D, 0.0)?;
+        gpu.linear_f32(out, rows.ptr, self.widen(gpu, self.conv_out.ptr, CONV * h * D)?.ptr, w, CONV * h, D, 0.0)?;
         gpu.launch1("add_f32", w * D, &[Arg::P(out), Arg::P(out), Arg::P(self.positions.ptr), Arg::L((w * D) as i64)])
     }
 

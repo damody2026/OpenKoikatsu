@@ -13,7 +13,7 @@ const KERNELS: &str = include_str!("kernels.cu");
 const KERNEL_NAMES: &[&str] = &[
     "embed_bf16", "rmsnorm_bf16", "add_bf16", "silu_mul_bf16", "qk_norm_rope_bf16", "store_v_bf16",
     "attention_bf16", "argmax_bf16", "f32_to_bf16", "fill_rows_f32", "gelu_f32", "add_f32",
-    "im2col_3x3s2_f32", "cnn_rows_f32", "layernorm_rows_f32", "attention_window_f32",
+    "im2col_3x3s2_f32", "cnn_rows_f32", "layernorm_rows_f32", "attention_window_f32", "bf16_to_f32",
 ];
 
 /// Device buffer owned by the stream-ordered allocator.
