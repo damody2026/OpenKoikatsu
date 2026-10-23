@@ -3259,7 +3259,9 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(Speed==0)Speed=StepNavigation(Dt);
  // She leads or walks abreast on an outing (plan §13.2): her walk comes from that step, not the follow.
  S.CompanionWalk=S.FollowMode!=0&&S.OutingGirl!=INDEX_NONE&&S.Companion==S.OutingGirl&&SceneTime()-S.ManualMoveAt>3.0?S.FollowGirlWalk:StepCompanion(Dt);
- FString Error;OKSetCrowdRuntimeLocomotionState(this,0,S.Target!=INDEX_NONE,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
+ // Standing still he always takes his own stand (conversation_male, the game's mc_m_stand): the base idle is the
+ // heroines' book-reading loop, and alone he stood holding an invisible book.
+ FString Error;OKSetCrowdRuntimeLocomotionState(this,0,true,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
  // A girl he is with is not on her schedule walk any more (it would keep pulling her to its route, on the ground).
  for(int32 G=1;G<=S.Agents.Num();++G)if(S.Commutes.Contains(G)&&(BusyWithPlayer(G)||S.LiftWalks.Contains(G)||S.LiftPins.Contains(G)))S.Commutes.Remove(G);
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickElevators);TickElevators(Dt);}
