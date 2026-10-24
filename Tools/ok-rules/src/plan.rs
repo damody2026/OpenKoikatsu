@@ -674,11 +674,36 @@ pub fn plan_all(c: &Catalog, r: &Value) -> Result<Value, String> {
             break;
         }
     }
+    // Last, whatever moved a block (her own minutes, leaving early, the rain): it stays within the place's hours.
+    for (_, plan) in plans.iter_mut() {
+        within_hours(plan, c, weekday);
+    }
     for (actor, plan) in &plans {
         fx.log(format!("Street plan staggered day {day} actor {actor}: {}", summary(plan)));
     }
     let plans: serde_json::Map<String, Value> = plans.into_iter().map(|(a, p)| (a.to_string(), json!(p))).collect();
     Ok(json!({"plans": plans, "morning_pair": morning_pair, "pickups": pickups, "effects": fx.into_value()}))
+}
+
+/// A block at a place with hours ends when it closes and starts when it opens: her dinner at the cafeteria slid from
+/// 18:00 to 18:15-19:15 and she sat eating in it, closed at 19:00, while he was told it was closed. A block that does
+/// not overlap the hours at all is left for the day's tick (plan_alternative); one cut below 10 minutes goes, the gap
+/// is street time.
+fn within_hours(plan: &mut Vec<Block>, c: &Catalog, weekday: i32) {
+    plan.retain_mut(|b| {
+        if b.place.is_empty() || b.kind == "sleep" || b.kind == "rest" || b.kind == "promise" {
+            return true;
+        }
+        let Some(p) = c.places.get(&b.place) else { return true };
+        let hours = if weekday >= 5 && !p.weekend_open.is_empty() { &p.weekend_open } else { &p.open };
+        if hours.is_empty() || p.closed_weekdays.contains(&weekday) {
+            return true;
+        }
+        let Some((from, to)) = hours.iter().map(|(f, t)| ((f * 60.0) as i32, (t * 60.0) as i32)).find(|(f, t)| b.start < *t && b.end > *f) else { return true };
+        b.start = b.start.max(from);
+        b.end = b.end.min(to);
+        b.end - b.start >= 10
+    });
 }
 
 fn summary(plan: &[Block]) -> String {
@@ -892,6 +917,18 @@ mod tests {
         // called off: the promise block goes again
         let out = plan_set_promises(&c, &json!({"blocks": out["blocks"], "promises": []})).unwrap();
         assert!(out["blocks"].as_array().unwrap().iter().all(|x| x["kind"] != "promise"));
+    }
+
+    #[test]
+    fn a_slid_dinner_ends_when_the_cafeteria_closes() {
+        let mut c = Catalog::default();
+        c.places.insert("cafeteria".into(), crate::catalog::Place { open: vec![(7.0, 19.0)], ..Default::default() });
+        let mut plan = vec![block(1095, 1155, "cafeteria", "meal", "", "", 0), block(1135, 1200, "cafeteria", "leisure", "", "", 0), block(1155, 1270, "library", "study", "", "", 0)];
+        within_hours(&mut plan, &c, 2);
+        assert_eq!((plan[0].start, plan[0].end), (1095, 1140));
+        // Five minutes of the second before closing: it goes.
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[1].place, "library");
     }
 
     fn inputs(profile: &Value, weekday: i32, seed: i32) -> Inputs<'_> {

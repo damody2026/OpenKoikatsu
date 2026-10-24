@@ -2697,7 +2697,11 @@ void AOKStreetSocialScene::TickPhoto(double Now){
  // At a meal either of the two may be sitting with nothing to eat (MealNow): that clip is theirs too, not a pose lost.
  // (Either of the two clips, whichever is playing while the other is being streamed in.)
  auto Theirs=[&](const FOKRuntimeActionStreamStatus& X,const FString& Clip,int32 Who){return X.ClipId==Clip||(P.Meal&&X.ClipId==(Who==0?S.SeatedMaleClip:S.SeatedFemaleClip));};
- if(!A.Playing||!B.Playing||!Theirs(A,P.MaleClip,0)||!Theirs(B,P.FemaleClip,1)||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, its clips are gone (%s %s)"),*A.ClipId,*B.ClipId);FinishPhoto();}
+ // ...and while the meal's next clip is still being streamed in or blended (Jeanne's dessert ended 6 s in, the moment
+ // she sat back with nothing to eat), nothing is lost either.
+ auto Switching=[&](const FOKRuntimeActionStreamStatus& X){return P.Meal&&(X.Pending||X.Preparing||X.Ready||X.Transitioning);};
+ const bool LostA=!(A.Playing&&Theirs(A,P.MaleClip,0))&&!Switching(A),LostB=!(B.Playing&&Theirs(B,P.FemaleClip,1))&&!Switching(B);
+ if(LostA||LostB||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, its clips are gone (%s playing=%d %s playing=%d)"),*A.ClipId,A.Playing?1:0,*B.ClipId,B.Playing?1:0);FinishPhoto();}
 }
 void AOKStreetSocialScene::RunWatermelonProbe(double Now){
  auto& S=*State;auto Fail=[&](const TCHAR* Why){FinishPhoto();S.Errors.Add(Why);WriteReport(false);};
