@@ -298,6 +298,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  // The replayed line now playing, for the galgame scene (its box and portrait): bumped per line.
  // Who says it (0: him), whose conversation it belongs to, whether her voice plays it, and until when a line without a
  // voice stays up (scene time).
+ // A replayed line of several clips: how many and which one plays (the galgame typewriter follows all of them).
+ int32 FreeTalkReplayClip=0,FreeTalkReplayClips=0;
  int64 FreeTalkReplayShown=0;int32 FreeTalkReplayShownSlot=INDEX_NONE,FreeTalkReplaySceneSlot=INDEX_NONE;FString FreeTalkReplayShownText;bool FreeTalkReplayShownVoiced=false;double FreeTalkReplayHold=0;
  bool TopicsOpen=false;TArray<TSharedPtr<SSlider>> StatSliders;TArray<TSharedPtr<SCheckBox>> RelationChecks;int32 RelationControlsVerified=0;bool RelationControlsSync=false;TMap<int32,double> RunUntil,RunNext;
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
@@ -1626,7 +1628,7 @@ void AOKStreetSocialScene::TickFreeTalkReplay(double Now){
  if(S.FreeTalkReplaySpeaker!=INDEX_NONE&&OKCrowdRuntimeSpeechActive(this,S.FreeTalkReplaySpeaker))return;
  if(!S.FreeTalkReplayParts.IsEmpty()){
   const FString Clip=S.FreeTalkReplayParts[0];S.FreeTalkReplayParts.RemoveAt(0);
-  if(S.FreeTalkReplaySpeaker==INDEX_NONE||!FreeTalkSpeakVoice(S.FreeTalkReplaySpeaker,Clip))S.FreeTalkReplayParts.Reset();
+  if(S.FreeTalkReplaySpeaker==INDEX_NONE||!FreeTalkSpeakVoice(S.FreeTalkReplaySpeaker,Clip))S.FreeTalkReplayParts.Reset();else ++S.FreeTalkReplayClip;
   S.FreeTalkReplayNext=Now+.1;
   return;
  }
@@ -1638,7 +1640,7 @@ void AOKStreetSocialScene::TickFreeTalkReplay(double Now){
   bool Voiced=false;
   if(!Line->Player){
    TArray<FString> Clips;Line->Voice.ParseIntoArray(Clips,TEXT("|"));
-   if(Girl!=INDEX_NONE&&!Clips.IsEmpty()&&FreeTalkSpeakVoice(Girl,Clips[0])){S.FreeTalkReplaySpeaker=Girl;Clips.RemoveAt(0);S.FreeTalkReplayParts=MoveTemp(Clips);Voiced=true;}
+   if(Girl!=INDEX_NONE&&!Clips.IsEmpty()&&FreeTalkSpeakVoice(Girl,Clips[0])){S.FreeTalkReplaySpeaker=Girl;S.FreeTalkReplayClip=0;S.FreeTalkReplayClips=Clips.Num();Clips.RemoveAt(0);S.FreeTalkReplayParts=MoveTemp(Clips);Voiced=true;}
   }
   S.FreeTalkReplayNext=Now+.1;
   if(Girl!=INDEX_NONE&&GalgameReplays()){
