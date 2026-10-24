@@ -54,6 +54,8 @@ KKCROWDGPUPACKING_API bool OKPackConstantGpuPoseChannels(FOKGpuPoseBatch&,FStrin
 struct FOKGpuPoseBuffers {
  FRDGBufferRef Keys=nullptr, Tracks=nullptr, Actors=nullptr, Times=nullptr, Tasks=nullptr, InverseBindRows=nullptr;
  uint32 TaskCount=0;
+ // Optional per-actor look (FOKGpuPosePlayback): LookCount actors, bones as uint4 (neck, head), two rotations each.
+ FRDGBufferRef LookBones=nullptr, LookRotations=nullptr;uint32 LookCount=0;
 };
 // Render thread capability check; unsupported platforms retain the CPU path.
 KKCROWDGPUPACKING_API bool OKIndependentGpuPoseAvailable();

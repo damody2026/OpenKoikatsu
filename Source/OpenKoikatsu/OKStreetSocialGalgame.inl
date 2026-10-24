@@ -10,6 +10,8 @@
 
 static TAutoConsoleVariable<int32> CVarOKStreetGalgame(TEXT("ok.Street.Galgame"), 1,
 	TEXT("Street conversations as galgame scenes (bottom dialog box, live portrait, a shot per line): 1 on, 0 the old dialogue box."));
+static TAutoConsoleVariable<int32> CVarOKStreetGalgamePortraitOutline(TEXT("ok.Street.GalgamePortraitOutline"), 0,
+	TEXT("The portrait's outermost line (her outline shells around the silhouette): 0 cut off (its coverage is captured without them, a view of its own), 1 kept (the coverage drawn with the main view)."));
 
 struct FOKStreetGalgame
 {
@@ -469,7 +471,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			{
 				C->ShowOnlyComponents.Reset();
 				for (UPrimitiveComponent* P : Shown) C->ShowOnlyComponents.Add(P);
-			}, Post);
+			}, Post, CVarOKStreetGalgamePortraitOutline.GetValueOnGameThread() ? TFunction<void(bool)>() : TFunction<void(bool)>([this, Slot](bool bCoverage) { OKSetCrowdRuntimeOutlinesShown(this, Slot, !bCoverage); }));
 		}
 	}
 

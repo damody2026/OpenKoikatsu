@@ -16,7 +16,9 @@ private:
  FOKValidatedGpuBank();TUniquePtr<FOKGpuAnimationBundle> Owned;
 };
 
-struct FOKGpuPosePlayback {uint32 ClipA=0,ClipB=1;FVector4f Times=FVector4f(0,0,0,0);};
+// Look: two bones (neck, head; MAX_uint32 none) whose sampled local rotation is premultiplied by a rotation in their
+// parent's frame, so a girl turns her head to whom she talks to over any clip (OKSetCrowdRuntimeHeadLook).
+struct FOKGpuPosePlayback {uint32 ClipA=0,ClipB=1;FVector4f Times=FVector4f(0,0,0,0);uint32 LookNeck=MAX_uint32,LookHead=MAX_uint32;FVector4f NeckRotation=FVector4f(0,0,0,1),HeadRotation=FVector4f(0,0,0,1);};
 struct FOKResidentPoseFrame {FRDGBufferRef Current=nullptr,Previous=nullptr;bool Reused=false;uint64 Generation=0;};
 struct FOKResidentPoseStats {uint64 Generation=0,Initializations=0,ImmutableUploadBytes=0,ParameterUploadBytes=0,Evaluations=0,ReusedFrames=0,ResidentBufferBytes=0,ReservedPeakBufferBytes=0,BudgetRejections=0;};
 // All operations except construction/destruction are render-thread-only.

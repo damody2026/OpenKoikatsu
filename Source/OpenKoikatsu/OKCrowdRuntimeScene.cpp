@@ -288,6 +288,11 @@ struct FEntry {
  double SpeechRequestedAt=0;uint64 SpeechCancellations=0;float BlinkOverride=-1,LastBlinkClosure=0,BlinkPeak=0;uint64 BlinkUpdates=0;
  TSharedPtr<const FKKRuntimeMouthStream,ESPMode::ThreadSafe> MouthStream;float LastMouthOpening=0,LastMouthGain=0;uint64 MouthUpdates=0;float MouthPeak=0;int64 LastMouthBucket=-1;double ActionSpeechSeconds=0,ActionSpeechGpuSeconds=0;
  FOKRuntimeFacePlayback FacePlay;
+ // Head look (OKSetCrowdRuntimeHeadLook): the world point she looks at and whether she does, how far she turns to it
+ // (eases 0..1), her neck / head bones (-2 not looked up yet) with the face direction in the head's own frame (from the
+ // reference pose), and this frame's turns of neck and head (in their parents' frames), shared by GPU and CPU poses.
+ FVector LookAt=FVector::ZeroVector;bool Looking=false;float LookWeight=0;int32 LookNeck=-2,LookHead=-2;FVector HeadFace=FVector::ZeroVector;
+ FQuat NeckTurn=FQuat::Identity,HeadTurn=FQuat::Identity;bool Turned=false;
  // The card's own values of what OKSetCrowdRuntimeFaceLook moves (blush, gloss, iris offset, highlight), by material
  // and parameter, so every look is applied from the card and not on top of the last one.
  TMap<FString,FLinearColor> LookBase;
@@ -362,6 +367,49 @@ FTransform SampleLocal(const FKKRuntimePoseResult& R,TConstArrayView<FVector4f> 
  if(OKGpuTrackColumn(T))return OKGpuColumnTransform<FVector,FQuat,FTransform>(FVector(OKGpuColumnLerp(FVector3f(A),FVector3f(B),W)),FVector(OKGpuColumnLerp(OKGpuTrackColumnKey(Keys,T,Lo),OKGpuTrackColumnKey(Keys,T,Hi),W)),(T.W>>6)&3);
  const auto& QA=Keys[OKGpuTrackRotationRow(T,Lo)];const auto& QB=Keys[OKGpuTrackRotationRow(T,Hi)];const FQuat RA(QA.X,QA.Y,QA.Z,QA.W),RB(QB.X,QB.Y,QB.Z,QB.W);
  return FTransform(((T.W&1)?FQuat::FastLerp(RA,RB,W):FQuat::Slerp(RA,RB,W)).GetNormalized(),Position,FMath::Lerp(V(Keys[OKGpuTrackScaleRow(T,Lo)]),V(Keys[OKGpuTrackScaleRow(T,Hi)]),W));
+}
+// The component-space transform of a bone in her clip pose (no head look).
+FTransform ClipComponent(const FEntry& E,const FOKGpuPosePlayback& P,int32 Bone){
+ FTransform R=FTransform::Identity;int32 Steps=0;
+ for(int32 B=Bone;B!=INDEX_NONE&&E.Bones.IsValidIndex(B)&&++Steps<=E.Bones.Num();B=E.Bones[B].Parent){
+  auto L=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB)L=OKGpuBlendLocal(L,SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y),P.Times.Z,E.Clips[P.ClipA].Tracks[B]);R=R*L;}
+ return R;
+}
+// Her head turned to E.LookAt over the clip pose: the face direction is measured in the clip's head and turned toward the
+// point, within 60 degrees left / right and 25 down / 30 up of her body, two fifths by the neck and the rest by the head
+// (a turn in the world, written as a turn in each bone's parent frame). Most of the clip's own head motion is replaced
+// while she looks (a fifth stays, so she is not frozen); the turn eases in and out over half a second.
+static TAutoConsoleVariable<int32> CVarOKHeadLook(TEXT("ok.HeadLook"),1,TEXT("1: a girl turns her head to whom she talks to (OKSetCrowdRuntimeHeadLook); 0: her head follows the clip."));
+void ApplyHeadLook(FEntry& E,FOKGpuPosePlayback& P,float Dt){
+ E.LookWeight=FMath::FInterpConstantTo(E.LookWeight,E.Looking&&CVarOKHeadLook.GetValueOnGameThread()?1.f:0.f,Dt,2.f);E.Turned=false;
+ if(E.LookWeight<=0||!E.CpuKeys.IsValid()||!E.Clips.IsValidIndex(P.ClipA)||!E.Clips.IsValidIndex(P.ClipB))return;
+ if(E.LookNeck==-2){
+  E.LookNeck=E.Bones.IndexOfByPredicate([](const auto& B){return B.Name==FName(TEXT("cf_j_neck"))||B.Name==FName(TEXT("cm_j_neck"));});
+  E.LookHead=E.Bones.IndexOfByPredicate([](const auto& B){return B.Name==FName(TEXT("cf_j_head"))||B.Name==FName(TEXT("cm_j_head"));});
+  bool Under=false;for(int32 B=E.LookHead,Steps=0;B!=INDEX_NONE&&E.Bones.IsValidIndex(B)&&++Steps<=E.Bones.Num();B=E.Bones[B].Parent)Under|=B==E.LookNeck&&B!=E.LookHead;
+  if(!Under||OKGpuTrackColumn(E.Clips[0].Tracks[E.LookNeck])||OKGpuTrackColumn(E.Clips[0].Tracks[E.LookHead]))E.LookNeck=E.LookHead=INDEX_NONE;
+  else{FQuat Ref=FQuat::Identity;for(int32 B=E.LookHead,Steps=0;B!=INDEX_NONE&&++Steps<=E.Bones.Num();B=E.Bones[B].Parent)Ref=E.Bones[B].Reference.GetRotation()*Ref;E.HeadFace=Ref.Inverse().RotateVector(FVector(0,1,0)).GetSafeNormal();}
+  UE_LOG(LogTemp,Display,TEXT("Runtime head look %s: neck=%d head=%d face=(%.2f,%.2f,%.2f)"),*E.Id,E.LookNeck,E.LookHead,E.HeadFace.X,E.HeadFace.Y,E.HeadFace.Z);
+ }
+ if(E.LookNeck==INDEX_NONE||E.LookHead==INDEX_NONE)return;
+ const FTransform Head=ClipComponent(E,P,E.LookHead);
+ const FQuat NeckParent=ClipComponent(E,P,E.Bones[E.LookNeck].Parent).GetRotation(),HeadParent=ClipComponent(E,P,E.Bones[E.LookHead].Parent).GetRotation();
+ const FVector Face=Head.GetRotation().RotateVector(E.HeadFace).GetSafeNormal(),To=(E.Transform.InverseTransformPosition(E.LookAt)-Head.GetTranslation()).GetSafeNormal();
+ if(Face.IsNearlyZero()||To.IsNearlyZero())return;
+ // The body faces +Y in her component, up is +Z.
+ const float Yaw=FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan2(To.X,To.Y)),-60.f,60.f),Pitch=FMath::Clamp(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(To.Z,-1.f,1.f))),-25.f,30.f);
+ const float Cp=FMath::Cos(FMath::DegreesToRadians(Pitch));
+ const FVector Want(FMath::Sin(FMath::DegreesToRadians(Yaw))*Cp,FMath::Cos(FMath::DegreesToRadians(Yaw))*Cp,FMath::Sin(FMath::DegreesToRadians(Pitch)));
+ const float W=FMath::SmoothStep(0.f,1.f,E.LookWeight)*.8f;
+ const FQuat Turn=FQuat::Slerp(FQuat::Identity,FQuat::FindBetweenNormals(Face,Want),W),Neck=FQuat::Slerp(FQuat::Identity,Turn,.4f),HeadTurn=Turn*Neck.Inverse();
+ const FQuat HeadParentNow=Neck*HeadParent;
+ E.NeckTurn=(NeckParent.Inverse()*Neck*NeckParent).GetNormalized();E.HeadTurn=(HeadParentNow.Inverse()*HeadTurn*HeadParentNow).GetNormalized();E.Turned=true;
+ P.LookNeck=uint32(E.LookNeck);P.LookHead=uint32(E.LookHead);
+ P.NeckRotation=FVector4f(E.NeckTurn.X,E.NeckTurn.Y,E.NeckTurn.Z,E.NeckTurn.W);P.HeadRotation=FVector4f(E.HeadTurn.X,E.HeadTurn.Y,E.HeadTurn.Z,E.HeadTurn.W);
+}
+// The look's turn of this bone's local transform (identity for the others or while she does not look).
+void TurnLocal(const FEntry& E,int32 Bone,FTransform& Local){
+ if(!E.Turned)return;if(Bone==E.LookNeck)Local.SetRotation(E.NeckTurn*Local.GetRotation());else if(Bone==E.LookHead)Local.SetRotation(E.HeadTurn*Local.GetRotation());
 }
 struct FScene : TSharedFromThis<FScene> {
  FString DisplayLUTPath;TStrongObjectPtr<UTexture2D> DisplayLUT;
@@ -952,7 +1000,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
      OKNoteRuntimeFaceUpload(E.FacePlay,Plan);if(MouthMoved||GainChanged)++E.MouthUpdates;if(BlinkMoved)++E.BlinkUpdates;E.LastBlinkClosure=Blink;E.BlinkPeak=FMath::Max(E.BlinkPeak,Blink);E.LastMouthOpening=MouthOpening;E.LastMouthGain=MouthGain;E.LastMouthBucket=MouthBucket;E.MouthPeak=FMath::Max(E.MouthPeak,MouthOpening);
     }
    }
-   if(ExternalControl)E.Behavior.Speed=E.ExternalSpeed;else if(A==0)E.Behavior.Speed=InputMove.Size();else if(E.ActionOverride==INDEX_NONE){const bool Changed=E.Behavior.Step(Dt);if(Installed&&Changed&&E.Behavior.State==FOKCrowdBehavior::EState::Look&&E.Clips.Num()>2&&E.PendingAction==INDEX_NONE&&!ActionSlotBusy(A)&&(AutoActionStreaming||E.ClipSources[2]!=INDEX_NONE)){const int32 Source=AutoActionStreaming?WalkSources+(A+E.Behavior.Transitions)%(Curves.Num()-WalkSources):E.ClipSources[2];if(!ClipLoops[Source]){FString ActionError;OKPlayCrowdRuntimeAction(Owner.Get(),A,ClipIds[Source],ActionError);}}}const int32 Clip=E.ActionOverride!=INDEX_NONE?E.ActionOverride:(E.Behavior.Speed<.001?(E.ConversationIdle&&E.ConversationSlot!=INDEX_NONE?E.ConversationSlot:!E.ReadingAllowed&&E.StandSlot!=INDEX_NONE?E.StandSlot:0):(E.Running&&E.RunSlot!=INDEX_NONE?E.RunSlot:1));if(Clip!=E.LastClip){E.Clock.RequestClip(Clip,.3,0,Error);E.LastClip=Clip;}E.Clock.Advance(Dt,Error);auto P=E.Clock.Parameters();if(E.ActionOverride!=INDEX_NONE&&!ClipLoops[E.ClipSources[E.ActionOverride]]&&!E.Clock.IsTransitioning()&&P.ClipA==uint32(E.ActionOverride)&&P.Times.X>=E.Clips[E.ActionOverride].Duration-1e-5f){E.ActionOverride=INDEX_NONE;++E.ActionCompletions;}P.Times.X=FMath::FloorToFloat(P.Times.X*60)/60;P.Times.Y=FMath::FloorToFloat(P.Times.Y*60)/60;Play.Add(P);
+   if(ExternalControl)E.Behavior.Speed=E.ExternalSpeed;else if(A==0)E.Behavior.Speed=InputMove.Size();else if(E.ActionOverride==INDEX_NONE){const bool Changed=E.Behavior.Step(Dt);if(Installed&&Changed&&E.Behavior.State==FOKCrowdBehavior::EState::Look&&E.Clips.Num()>2&&E.PendingAction==INDEX_NONE&&!ActionSlotBusy(A)&&(AutoActionStreaming||E.ClipSources[2]!=INDEX_NONE)){const int32 Source=AutoActionStreaming?WalkSources+(A+E.Behavior.Transitions)%(Curves.Num()-WalkSources):E.ClipSources[2];if(!ClipLoops[Source]){FString ActionError;OKPlayCrowdRuntimeAction(Owner.Get(),A,ClipIds[Source],ActionError);}}}const int32 Clip=E.ActionOverride!=INDEX_NONE?E.ActionOverride:(E.Behavior.Speed<.001?(E.ConversationIdle&&E.ConversationSlot!=INDEX_NONE?E.ConversationSlot:!E.ReadingAllowed&&E.StandSlot!=INDEX_NONE?E.StandSlot:0):(E.Running&&E.RunSlot!=INDEX_NONE?E.RunSlot:1));if(Clip!=E.LastClip){E.Clock.RequestClip(Clip,.3,0,Error);E.LastClip=Clip;}E.Clock.Advance(Dt,Error);auto P=E.Clock.Parameters();if(E.ActionOverride!=INDEX_NONE&&!ClipLoops[E.ClipSources[E.ActionOverride]]&&!E.Clock.IsTransitioning()&&P.ClipA==uint32(E.ActionOverride)&&P.Times.X>=E.Clips[E.ActionOverride].Duration-1e-5f){E.ActionOverride=INDEX_NONE;++E.ActionCompletions;}P.Times.X=FMath::FloorToFloat(P.Times.X*60)/60;P.Times.Y=FMath::FloorToFloat(P.Times.Y*60)/60;ApplyHeadLook(E,P,Dt);Play.Add(P);
    const int32 Columns=FMath::CeilToInt(FMath::Sqrt(float(Entries.Num()))),Rows=FMath::DivideAndRoundUp(Entries.Num(),Columns);const double Phase=E.Behavior.RouteTime*.8+A*.47;const FVector Pos((A%Columns-(Columns-1)*.5)*210+FMath::Sin(Phase)*75,(A/Columns-(Rows-1)*.5)*210+FMath::Cos(Phase)*75,0);E.Transform=FTransform(FRotator(0,-90-FMath::RadiansToDegrees(Phase)+E.Behavior.LookYaw(),0),Pos);
    if(A==0&&!ExternalControl){if(!PlayerPositionInitialized){PlayerPosition=Pos;PlayerPositionInitialized=true;}const FRotator Rotation=InputMove.IsNearlyZero()?E.Cpu->GetComponentRotation():FRotator(0,FMath::RadiansToDegrees(FMath::Atan2(InputMove.Y,InputMove.X))-90,0);E.Transform=FTransform(Rotation,PlayerPosition);}
    if(ExternalControl){E.Transform=E.ExternalTransform;if(A==0)PlayerPosition=E.Transform.GetTranslation();}
@@ -966,7 +1014,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    const bool NearShadow=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(1600.)&&(A==0||FMath::Abs(E.Transform.GetTranslation().Z-PlayerPosition.Z)<200.);
    if(auto* C=E.Cpu.Get())C->SetCastShadow(false);if(auto* G=E.Gpu.Get())G->SetCastShadow(E.ShadowGpu.IsValid()?false:NearShadow);if(auto* S=E.ShadowGpu.Get())S->SetCastShadow(NearShadow);
    const bool EntryGpu=GpuMode||(!Installed&&E.LoadingGpuInstalled&&RequestedGpu);
-   if(Installed||E.VisibleMs>0)if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)C->SetWorldTransform(E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
+   if(Installed||E.VisibleMs>0)if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)C->SetWorldTransform(E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}if(E.Turned){TurnLocal(E,E.LookNeck,C->BoneSpaceTransforms[E.LookNeck]);TurnLocal(E,E.LookHead,C->BoneSpaceTransforms[E.LookHead]);}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
    if(!Installed&&!EntryGpu&&ProgressiveLoading&&E.VisibleMs>0){auto* Main=E.LoadingMain.IsValid()?E.LoadingMain.Get():E.Cpu.Get();Main->SetWorldTransform(E.Transform);Main->SetCastShadow(NearShadow);Main->SetVisibility(true);}
    // Her eyes through her front hair need these only up close (OKForegroundRange): farther off the detail is a few
    // pixels, and each one more girl drawn into the custom depth and the capture every frame (the dorm lounge, eight
@@ -1255,7 +1303,7 @@ bool OKGetCrowdRuntimeBoneTransform(AActor* Owner,int32 Character,FName Bone,FTr
  auto P=E.Clock.Parameters();if(!E.Clips.IsValidIndex(P.ClipA)||!E.Clips.IsValidIndex(P.ClipB))return false;
  P.Times.X=FMath::FloorToFloat(P.Times.X*60)/60;P.Times.Y=FMath::FloorToFloat(P.Times.Y*60)/60;
  FTransform Result=FTransform::Identity;int32 B=Index,Steps=0;
- while(B!=INDEX_NONE){if(!E.Bones.IsValidIndex(B)||++Steps>E.Bones.Num())return false;auto Local=OKRuntimeScene::SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB)Local=OKGpuBlendLocal(Local,OKRuntimeScene::SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y),P.Times.Z,E.Clips[P.ClipA].Tracks[B]);Result=Result*Local;B=E.Bones[B].Parent;}
+ while(B!=INDEX_NONE){if(!E.Bones.IsValidIndex(B)||++Steps>E.Bones.Num())return false;auto Local=OKRuntimeScene::SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB)Local=OKGpuBlendLocal(Local,OKRuntimeScene::SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y),P.Times.Z,E.Clips[P.ClipA].Tracks[B]);OKRuntimeScene::TurnLocal(E,B,Local);Result=Result*Local;B=E.Bones[B].Parent;}
  World=Result*E.Transform;return World.IsValid()&&!World.ContainsNaN();
 }
 bool OKAdmitCrowdRuntimeVoice(AActor* Owner,const FString& Path,FString& VoiceId,FString& Error){
@@ -1381,6 +1429,16 @@ bool OKSetCrowdRuntimeFaceLook(AActor* Owner,int32 Character,const FOKRuntimeFac
  {int32 K[5]={0,0,0,0,0};for(const uint8 X:E.LookKinds)++K[FMath::Min<int32>(X,4)];FString Trace;if(E.LookBase.IsEmpty())OKRuntimeScene::ApplyFaceLook(E,&Trace);
   UE_LOG(LogTemp,Display,TEXT("Runtime face look %s: materials face=%d skin=%d iris=%d tears=%d; goal blush=%.2f sweat=%.2f gaze=(%.2f,%.2f) tears=%d highlight=%.0f%s"),*E.Id,K[1],K[2],K[3],E.Tears.Num(),G.Blush,G.Sweat,G.Gaze.X,G.Gaze.Y,Look.Tears,G.Highlight,*Trace);}
  return true;
+}
+bool OKSetCrowdRuntimeHeadLook(AActor* Owner,int32 Character,bool Enabled,const FVector& World){
+ check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
+ if(!State||State->Stopped||!State->Entries.IsValidIndex(Character)||(Enabled&&World.ContainsNaN()))return false;
+ auto& E=*State->Entries[Character];if(Enabled)E.LookAt=World;E.Looking=Enabled;return true;
+}
+void OKSetCrowdRuntimeOutlinesShown(AActor* Owner,int32 Character,bool Shown){
+ check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
+ if(!State||State->Stopped||!State->Entries.IsValidIndex(Character))return;
+ for(const auto& M:State->Entries[Character]->OutlineMaterials)if(auto* I=M.Get())I->SetScalarParameterValue(TEXT("__OK_RuntimeRevealOverride"),Shown?-1.f:0.f);
 }
 bool OKGetCrowdRuntimeFaceLook(AActor* Owner,int32 Character,FOKRuntimeFaceLookNow& Now){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;

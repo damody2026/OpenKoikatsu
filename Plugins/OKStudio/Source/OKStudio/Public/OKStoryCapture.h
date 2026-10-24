@@ -35,9 +35,11 @@ OKSTUDIO_API UMaterial* OKStoryBuildPortraitMaterial(UObject* Outer, FName Name,
 class OKSTUDIO_API FOKStoryPortraitCapture
 {
 public:
-	/** Captures as the frame's portrait asks. `ShowOnly` fills a capture's show-only list with the speaker. */
+	/** Captures as the frame's portrait asks. `ShowOnly` fills a capture's show-only list with the speaker.
+	 *  `CoverageScope` (optional) runs with true right before the coverage capture and false right after it: what the
+	 *  coverage must not see (her outline shells, so the outermost line falls outside the cut) is hidden for it only. */
 	void Update(UObject* Outer, UWorld* World, const TSharedPtr<FJsonObject>& Portrait, TFunctionRef<void(USceneCaptureComponent2D*)> ShowOnly,
-		const FPostProcessSettings* Post);
+		const FPostProcessSettings* Post, TFunction<void(bool)> CoverageScope = nullptr);
 	/** What a story view draws (null before the first capture, or where materials cannot be made). */
 	UMaterialInstanceDynamic* Material() const { return Mid.Get(); }
 	void Release();

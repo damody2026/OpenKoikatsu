@@ -19,7 +19,10 @@ class FOKIndependentPoseCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,Tasks)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,InverseBindRows)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,OutputRows)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,LookBones)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,LookRotations)
   SHADER_PARAMETER(uint32,TaskCount)
+  SHADER_PARAMETER(uint32,LookCount)
  END_SHADER_PARAMETER_STRUCT()
  // Dynamic private hierarchy traversal requires the DXC/SM6 path. FXC/SM5
  // forces unrolling of the dynamically indexed ancestor stack and fails Cook.
@@ -63,6 +66,10 @@ FRDGBufferRef OKAddIndependentGpuPosePass(FRDGBuilder& G,const FOKGpuPoseBuffers
  P->Times=G.CreateSRV(B.Times);P->Tasks=G.CreateSRV(B.Tasks);P->InverseBindRows=G.CreateSRV(B.InverseBindRows);
  auto* Out=G.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(sizeof(FVector4f),B.TaskCount*3),TEXT("Pose.Output"));
  P->OutputRows=G.CreateUAV(Out);P->TaskCount=B.TaskCount;
+ // No look: a one-entry placeholder the shader never reads (LookCount 0).
+ FRDGBufferRef LookBones=B.LookBones,LookRotations=B.LookRotations;uint32 LookCount=B.LookCount;
+ if(!LookBones||!LookRotations){const TArray<FUintVector4> NoBones={FUintVector4(MAX_uint32,MAX_uint32,0,0)};const TArray<FVector4f> NoRotations={FVector4f(0,0,0,1),FVector4f(0,0,0,1)};LookBones=CreateStructuredBuffer(G,TEXT("Pose.NoLookBones"),NoBones);LookRotations=CreateStructuredBuffer(G,TEXT("Pose.NoLookRotations"),NoRotations);LookCount=0;}
+ P->LookBones=G.CreateSRV(LookBones);P->LookRotations=G.CreateSRV(LookRotations);P->LookCount=LookCount;
  TShaderMapRef<FOKIndependentPoseCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
  FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.IndependentPose"),Shader,P,FComputeShaderUtils::GetGroupCount(B.TaskCount,64));return Out;
 }

@@ -6,7 +6,12 @@ StructuredBuffer<float4> Times;
 StructuredBuffer<uint4> Tasks;
 StructuredBuffer<float4> InverseBindRows;
 RWStructuredBuffer<float4> OutputRows;
+StructuredBuffer<uint4> LookBones;
+StructuredBuffer<float4> LookRotations;
 uint TaskCount;
+uint LookCount;
+// The actor this thread poses (its look bones and rotations); set once in MainCS.
+static uint LookActor;
 float4 QuaternionMix(float4 a,float4 b,float t) {
  float d=dot(a,b); if(d<0){b=-b;d=-d;}
  d=clamp(d,0,1);
@@ -38,10 +43,16 @@ void Sample(uint index,float time,out float3 tr,out float4 q,out float3 sc) {
  else q=QuaternionMix(qa,qb,t);
  sc=lerp(Keys[packed?track.x+1:a+2].xyz,Keys[packed?track.x+1:b+2].xyz,t);
 }
+// Look: the neck / head local rotation premultiplied by a rotation in the parent's frame (FOKGpuPosePlayback).
+float4 LookRotation(uint bone,float4 q){
+ if(LookActor>=LookCount)return q;uint4 l=LookBones[LookActor];
+ float4 r=bone==l.x?LookRotations[LookActor*2]:bone==l.y?LookRotations[LookActor*2+1]:float4(0,0,0,1);
+ if(r.w>=1)return q;return normalize(float4(r.w*q.xyz+q.w*r.xyz+cross(r.xyz,q.xyz),r.w*q.w-dot(r.xyz,q.xyz)));
+}
 void LocalTRS(uint bone,uint4 actor,float4 times,out float3 tr,out float4 q,out float3 s) {
  float3 ta,sa,tb,sb;float4 qa,qb;
  Sample(actor.x+bone,times.x,ta,qa,sa);Sample(actor.y+bone,times.y,tb,qb,sb);
- tr=lerp(ta,tb,times.z);uint4 track=Tracks[actor.x+bone];if((track.w&32)!=0){uint axis=(track.w>>6)&3;ColumnTRS(lerp(ColumnVector(qa,sa,axis),ColumnVector(qb,sb,axis),times.z),axis,q,s);return;}s=lerp(sa,sb,times.z);q=QuaternionMix(qa,qb,times.z);
+ tr=lerp(ta,tb,times.z);uint4 track=Tracks[actor.x+bone];if((track.w&32)!=0){uint axis=(track.w>>6)&3;ColumnTRS(lerp(ColumnVector(qa,sa,axis),ColumnVector(qb,sb,axis),times.z),axis,q,s);return;}s=lerp(sa,sb,times.z);q=LookRotation(bone,QuaternionMix(qa,qb,times.z));
 }
 float4x4 MatrixTRS(float3 tr,float4 q,float3 s) {
  float x=q.x,y=q.y,z=q.z,w=q.w;
@@ -101,7 +112,7 @@ float4x4 NativeTRS(uint bone,uint4 actor,float4 times){
 [numthreads(64,1,1)]
 void MainCS(uint3 id:SV_DispatchThreadID) {
  if(id.x>=TaskCount)return;
- uint4 task=Tasks[id.x],actor=Actors[task.y];float4 times=Times[task.y];
+ uint4 task=Tasks[id.x],actor=Actors[task.y];float4 times=Times[task.y];LookActor=task.y;
  uint bone=task.x;float4x4 component=Local(bone,actor,times);
  uint parent=Tracks[actor.x+bone].z;
  // No inter-thread dependency or fixed shared-skeleton assumption.

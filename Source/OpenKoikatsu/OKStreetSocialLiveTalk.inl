@@ -293,12 +293,21 @@ void AOKStreetSocialScene::FreeTalkSilentLeave(){
 // conversation opens, when she may still be mid-stride or turned away), and her body turns toward it at its own speed.
 void AOKStreetSocialScene::TickFaceTalkPartner(bool Late){
  auto& S=*State;const int32 G=S.Target;
- if(G==INDEX_NONE||!S.Agents.IsValidIndex(G-1)||!S.Rotations.IsValidIndex(G))return;
+ if(G==INDEX_NONE||!S.Agents.IsValidIndex(G-1)||!S.Rotations.IsValidIndex(G)){if(!Late&&S.HeadLookGirl!=INDEX_NONE){OKSetCrowdRuntimeHeadLook(this,S.HeadLookGirl,false,FVector::ZeroVector);S.HeadLookGirl=INDEX_NONE;}return;}
  // Her own activity decides her direction in these states. When she is off by more than 30 degrees while one of them holds,
  // the reason is logged once in a while, so a wrong direction can be traced.
  const TCHAR* Skip=S.Pair.Partner!=INDEX_NONE?TEXT("pair"):S.Facility!=INDEX_NONE?TEXT("facility"):S.PrivateGirl!=INDEX_NONE?TEXT("private"):S.LoverPose.Girl==G?TEXT("lover pose"):S.LoverReact.Girl==G?TEXT("lover reaction"):
   (S.SleepGirl==G||S.SleepGirl2==G)?TEXT("sleep"):S.SoloGirl==G?TEXT("solo activity"):S.RestroomGirl==G?TEXT("restroom"):S.NpcLifts.Contains(G)?TEXT("lift"):nullptr;
  const FVector To=S.Male-S.Agents[G-1].Position;
+ // Face to face she also looks him in the eye: her head turns up to his (a shorter girl's idle clip looks ahead or down
+ // at his chest), over whatever clip she plays. Not while her own activity holds her (Skip), and she lets go when the
+ // talk ends.
+ if(!Late){
+  const int32 Look=!Skip&&To.Size2D()>=20.f&&To.Size2D()<400.f?G:INDEX_NONE;
+  if(S.HeadLookGirl!=INDEX_NONE&&S.HeadLookGirl!=Look)OKSetCrowdRuntimeHeadLook(this,S.HeadLookGirl,false,FVector::ZeroVector);
+  S.HeadLookGirl=Look;
+  if(Look!=INDEX_NONE){FVector Eyes;if(OKGetCrowdRuntimeBonePosition(this,0,FName(TEXT("cm_j_head")),Eyes))Eyes.Z+=6.f;else Eyes=S.Male+FVector(0,0,155);OKSetCrowdRuntimeHeadLook(this,Look,true,Eyes);}
+ }
  if(Skip||To.Size2D()<20.f){
   if(Late&&FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[G].Yaw,OKStreetFacingMovement(To,S.Rotations[G]).Yaw))>30.f&&FPlatformTime::Seconds()>S.FaceLogAt){
    S.FaceLogAt=FPlatformTime::Seconds()+3.0;

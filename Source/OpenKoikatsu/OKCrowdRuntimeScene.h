@@ -94,6 +94,12 @@ bool OKSetCrowdRuntimeFaceLook(AActor* Owner,int32 Character,const FOKRuntimeFac
 // The look drawn now (Tears: the level most shown, its visibility in TearShown) and whether it is still easing.
 struct FOKRuntimeFaceLookNow {float Blush=0.f,Sweat=0.f,Highlight=1.f,TearShown=0.f;FVector2D Gaze=FVector2D::ZeroVector;int32 Tears=0;bool Fading=false;};
 bool OKGetCrowdRuntimeFaceLook(AActor* Owner,int32 Character,FOKRuntimeFaceLookNow& Now);
+// Her head turns to a world point (her neck and head over whatever clip plays, within a natural range), easing in and
+// out; Enabled false lets her head follow the clip again.
+bool OKSetCrowdRuntimeHeadLook(AActor* Owner,int32 Character,bool Enabled,const FVector& World);
+// Her outline shells drawn or not (a capture that must not see them, e.g. the galgame portrait's coverage); the change
+// reaches the renderer in order with the captures queued between two calls.
+void OKSetCrowdRuntimeOutlinesShown(AActor* Owner,int32 Character,bool Shown);
 // Development: one material parameter on every material of a face-look kind (1 face skin, 2 skin, 3 iris, 4 tear, 5 brow);
 // answers how many materials took it.
 int32 OKSetCrowdRuntimeLookParameter(AActor* Owner,int32 Character,int32 Kind,const FString& Name,const FLinearColor& Value,bool Vector);

@@ -71,3 +71,13 @@ C++ 只負責呈現；鏡頭選擇、打字速度、構圖等規則都在 Rust�
 ## 多段語音的打字同步（2026-10-24）
 
 自由對話她的一則回覆會切成好幾段 TTS（一兩句一段），畫面上是同一句台詞；回放的一行也可能有好幾個語音檔（`a.ogg|b.ogg`）。打字進度原本只看正在播的那一段，第一段播完整句就打完了。現在進度是「這位說話者已開始的段數－1＋目前這段的進度」除以她的總段數，段與段之間等下一段時也算在說（`playing`），回放的多檔語音同理。回放結束要把對話框還原成她最後一句時，若畫面上已經是同一句就不重送（不會重打一次）。
+
+## 對話時她抬頭看著他（2026-10-24）
+
+面對面對話時（`TickFaceTalkPartner` 會把她轉向他的那些情況），她的頸與頭轉向男主的眼睛（他的 `cm_j_head` 上方 6 cm），不再跟著待機動作看前方或低頭看他的胸口。做法是人群動畫本身的頭部注視（`OKSetCrowdRuntimeHeadLook`）：每幀用 CPU 取樣她目前動作的頭部方向，算出轉向目標所需的旋轉（相對身體左右 60°、下 25°／上 30° 內），頸部分 40%、頭部分其餘，換成兩根骨在各自父骨座標下的前乘旋轉，交給 GPU 姿態 shader（`IndependentPose.usf` 的 `LookRotation`）與 CPU 姿態；保留動作原本頭部動態的 20%，開始與結束各約半秒淡入淡出。她被自己的活動占住時（同行配對、設施、睡覺、親密姿勢等）不轉頭，對話結束就放開。
+
+這改了 KKCrowdGpuPacking 的全域 shader，所以只重編執行檔的 stage 還要新的全域 shader：`Tools/rebuild_street_social_patch.lua` 現在多一步，用專案本身 cook 引擎的 Entry 地圖產生 `Engine/GlobalShaderCache-*.bin`，打成 `RuntimeGlobalShaderPatch-*_P.pak` 放進 patch 資料夾（`-pakdir` 掛載，優先於 base 裡的舊快取）。執行前 Editor 要先用目前的程式碼編過。
+
+## 立繪不畫最外層輪廓線（2026-10-24）
+
+左下角立繪的外框是角色描邊（outline 殼）在剪影外圍的那一圈。立繪的顏色照拍（臉、頭髮之間的內部線條保留），但決定透明範圍的 coverage 那一張拍攝時暫時隱藏她的 outline 殼（`OKSetCrowdRuntimeOutlinesShown`，材質的 `__OK_RuntimeRevealOverride` 設 0，拍完設回 -1），於是剪影外圍那圈描邊落在透明區、不顯示。`FOKStoryPortraitCapture::Update` 新增選用的 `CoverageScope` 回呼做這件事。coverage 原本當成主畫面的額外 pass 在幀尾才畫（`bRenderInMainRenderer`），那時 outline 早已設回顯示，所以有 scope 時 coverage 改成在 `CaptureScene` 當下自己畫一次（無光照、無後製，每兩幀一次）；`ok.Street.GalgamePortraitOutline 1` 回到保留外框、coverage 跟主畫面一起畫的舊做法。coverage 原本只有顏色的一半解析度，雙線性放大後邊緣會多透出一兩個像素，正好是那圈描邊，所以改成與顏色同解析度。對話時頭部注視可用 `ok.HeadLook 0` 關掉（A/B 比較用）。

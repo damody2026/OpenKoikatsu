@@ -567,3 +567,14 @@
 - 修正：先緩衝 `ok.Speech.StreamLead`（預設 0.5 s）才開始；播到一半斷流就重新緩衝，且每斷一次下次多等 0.5 s（最多 3 s）。每次斷流會記 `Speech stream ran dry after ... s`。
 - 驗證：E 用 C 的 ok-tts（`OK_TTS_ENDPOINT=http://127.0.0.1:47860`，`voice=false` 的 checkout 現在可用環境變數指定別的伺服器），三月七連續兩輪 11 句沒有斷流；同一場景把 StreamLead 設 0（等同舊行為）第 5 句就斷流。代價是每句開口大約晚 0.5 s。
 - 預防：串流播放要有抖動緩衝。驗收聲音時不能只看「有播出來」，要看播放中有沒有因為等資料而停下來。
+
+### 2026-10-24 立繪去外框：參數在 coverage 真正畫出來前就設回了
+- 現象：拍 coverage 前把她的 outline 殼隱藏、拍完設回，立繪外圍那圈黑框還在。
+- 原因：coverage 的 SceneCapture 設了 `bRenderInMainRenderer`，`CaptureScene()` 只登記一個 pass，等主畫面在幀尾一起畫；那時參數早已設回顯示。另外 coverage 只有半解析度，雙線性邊緣會透出顏色圖最外一兩像素的描邊。
+- 修正：有 `CoverageScope` 時 coverage 改成在 `CaptureScene()` 當下自己畫，並改成與顏色同解析度。
+- 預防：要在擷取前後切換狀態，先確認擷取是當下畫還是延後畫。驗收要把舊版、新版立繪邊緣放大並排看，不能只看整張截圖。
+
+### 2026-10-24 改了全域 shader 卻只重編執行檔
+- 現象：加了頭部注視（`IndependentPose.usf`），只重編 exe 的 stage 用的仍是 base 裡 cook 好的舊全域 shader。只換 `GlobalShaderCache-*.bin` 開不了遊戲：Could not load section 466 of the global shadermap。另外用 `cmd //c` 叫 Build.bat 的 Editor 建置根本沒執行，cook 時報 `LookCount could not be bound`（舊 Editor）。
+- 修正：`rebuild_street_social_patch.lua` 先用目前的 Editor cook 專案的 Entry 地圖，把 `GlobalShaderCache-*.bin` 和 `ShaderArchive-Global-*.ushaderbytecode` 一起打進 `RuntimeGlobalShaderPatch-*_P.pak`。Editor 改從 PowerShell 建置。
+- 預防：改 `.usf` 或 shader 參數結構後，先重建 Editor，再重建 patch；全域 shader 的 map 與 bytecode 要一起換。

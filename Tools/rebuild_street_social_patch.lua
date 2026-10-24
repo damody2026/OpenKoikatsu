@@ -5,6 +5,10 @@
 --      (Launch/materials.json root, e.g. Content/IndependentResources/RuntimeMaterials/StreetDisplay25) together with
 --      their shader library. The materials are not regenerated, so Content stays untouched.
 --   2. RuntimeAudioPatch-<tag>_P.pak: the engine audio settings packages (Tools/cook_runtime_audio_patch.lua).
+--   3. RuntimeGlobalShaderPatch-<tag>_P.pak: the project's global shader map (Engine/GlobalShaderCache-*.bin) and the
+--      library holding its code (Content/ShaderArchive-Global-*.ushaderbytecode; the map alone does not load), cooked
+--      from the project itself with no map content: a global shader changed since the base was cooked (the crowd pose,
+--      Plugins/KKCrowdGpuPacking/Shaders) reaches an exe-only stage without a new base. The editor build must be current.
 --
 -- Intermediates go under Saved/StreetSocial/PatchRebuild-<stamp>; the launcher runs this when the patch is missing.
 --
@@ -114,12 +118,37 @@ local function main()
   for l in (audio.stdout or ""):gmatch("[^\n]+") do audio_pak = l end
   if not audio.ok or not audio_pak or not path.exists(audio_pak) then error("audio patch failed", 0) end
 
-  -- --- 4. the patch folder the launcher mounts ---
+  -- --- 4. global shaders: the project's own cook of the engine's entry map writes the whole global shader cache ---
+  step("cook global shaders")
+  local shader_cooked = path.join(work, "global.cook")
+  local shader_args = { '"' .. win(path.join(root, "OpenKoikatsu.uproject")) .. '"', "-run=Cook", "-TargetPlatform=Windows", "-MAP=/Engine/Maps/Entry",
+    "-NoDefaultMaps", "-NoGameAlwaysCook", "-SkipZenStore", "-CustomConfig=CrowdCookSM6", "-unattended", "-nosound", "-NoSplash", "-corelimit=9",
+    '-OutputDir="' .. win(shader_cooked) .. '"', '-abslog="' .. win(path.join(work, "global.cook.log")) .. '"' }
+  local shader_line = '"' .. win(path.join(engine, "Engine/Binaries/Win64/UnrealEditor-Cmd.exe")) .. '"' .. " " .. table.concat(shader_args, " ")
+  local shader_cook = proc.run(shader_line, { shell = false, hide = true, quiet = true, timeout = 30 * 60 })
+  if shader_cook.error == "timeout" then error("global shader cook timeout", 0) end
+  if not shader_cook.ok then error("global shader cook failed: " .. win(path.join(work, "global.cook.log")), 0) end
+  local caches = path.glob(path.join(shader_cooked, "Engine"), "GlobalShaderCache-*.bin")
+  local libraries = path.glob(path.join(shader_cooked, "OpenKoikatsu/Content"), "ShaderArchive-Global-*.ushaderbytecode")
+  if #caches == 0 then error("cook omitted the global shader cache", 0) end
+  if #libraries == 0 then error("cook omitted the global shader library", 0) end
+  local shader_response = path.join(work, "global.response.txt")
+  local shader_lines = {}
+  for _, f in ipairs(caches) do shader_lines[#shader_lines + 1] = '"' .. win(f) .. '" "../../../Engine/' .. path.name(f) .. '"' end
+  for _, f in ipairs(libraries) do shader_lines[#shader_lines + 1] = '"' .. win(f) .. '" "../../../OpenKoikatsu/Content/' .. path.name(f) .. '"' end
+  path.write_text(shader_response, table.concat(shader_lines, "\n") .. "\n", { bom = true })
+  local shader_pak = path.join(work, "RuntimeGlobalShaderPatch-Street" .. stamp .. "_P.pak")
+  local spak = proc.run({ win(path.join(engine, "Engine/Binaries/Win64/UnrealPak.exe")), win(shader_pak), "-Create=" .. win(shader_response) },
+    { stdout_file = path.join(work, "global.pak.log"), merge = true })
+  if not spak.ok then error("global shader pak failed", 0) end
+
+  -- --- 5. the patch folder the launcher mounts ---
   step("patch -> " .. win(patch))
   path.mkdir(patch)
   for _, f in ipairs(path.glob(patch, "Runtime*Patch-*_P.pak")) do if path.is_file(f) then path.remove(f) end end
   path.copy(material_pak, path.join(patch, path.name(material_pak)))
   path.copy(audio_pak, path.join(patch, path.name(audio_pak)))
+  path.copy(shader_pak, path.join(patch, path.name(shader_pak)))
   step("done")
   io.write(win(patch), "\n")
 end

@@ -23,6 +23,7 @@ struct FOKResidentGpuPose::FState {
  TArray<FUintVector4> Layout;
  TArray<TArray<uint32>> Clips;
  TArray<FVector4f> LastTimes;
+ TArray<FUintVector4> LastLookBones;TArray<FVector4f> LastLookRotations;
  TSharedPtr<FOKGpuResidencyBudget,ESPMode::ThreadSafe> Manager;uint64 Lease=0;
  uint64 ImmutableBytes=0,OutputBytes=0,Budget=0;
  uint32 TaskCount=0;uint64 LastFrame=0;bool HasFrame=false;
@@ -127,6 +128,7 @@ bool FOKResidentGpuPose::TryReuseCurrent(FRDGBuilder& G,TConstArrayView<FOKGpuPo
  for(int A=0;A<Playback.Num();++A){const auto& P=Playback[A];
   if(P.ClipA>=uint32(S.Clips[A].Num())||P.ClipB>=uint32(S.Clips[A].Num())||S.Clips[A][P.ClipA]!=S.Layout[A].X||S.Clips[A][P.ClipB]!=S.Layout[A].Y)return false;
   for(int C=0;C<4;++C)if(!FMath::IsFinite(P.Times[C])||P.Times[C]!=S.LastTimes[A][C])return false;
+  if(!S.LastLookBones.IsValidIndex(A)||S.LastLookBones[A]!=FUintVector4(P.LookNeck,P.LookHead,0,0)||S.LastLookRotations[A*2]!=P.NeckRotation||S.LastLookRotations[A*2+1]!=P.HeadRotation)return false;
  }
  Out.Current=G.RegisterExternalBuffer(S.Current);Out.Previous=Out.Current;Out.Generation=Generation;Out.Reused=true;return true;
 }
@@ -135,24 +137,29 @@ bool FOKResidentGpuPose::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayb
  if(!OKIndependentGpuPoseAvailable()){Error=TEXT("Independent pose shader unavailable; retain CPU animation");return false;}
  if(!S.Keys||Generation!=S.Stats.Generation||Playback.Num()!=S.Layout.Num()||(S.HasFrame&&FrameIndex<=S.LastFrame)){Error=TEXT("Uninitialized/stale generation/frame or actor count");return false;}
  TArray<FUintVector4> Layout=S.Layout;TArray<FVector4f> Times;Times.Reserve(Playback.Num());
+ TArray<FUintVector4> LookBones;TArray<FVector4f> LookRotations;LookBones.Reserve(Playback.Num());LookRotations.Reserve(Playback.Num()*2);
  for(int A=0;A<Playback.Num();++A){const auto& P=Playback[A];if(P.ClipA>=uint32(S.Clips[A].Num())||P.ClipB>=uint32(S.Clips[A].Num())){Error=TEXT("Animation ID outside actor's owned clips");return false;}
   for(int C=0;C<4;++C)if(!FMath::IsFinite(P.Times[C])){Error=TEXT("Nonfinite playback parameter");return false;}
   if(P.Times.Z<0||P.Times.Z>1){Error=TEXT("Blend outside [0,1]");return false;}
   Layout[A].X=S.Clips[A][P.ClipA];Layout[A].Y=S.Clips[A][P.ClipB];Times.Add(P.Times);
+  for(int C=0;C<4;++C)if(!FMath::IsFinite(P.NeckRotation[C])||!FMath::IsFinite(P.HeadRotation[C])){Error=TEXT("Nonfinite look rotation");return false;}
+  LookBones.Add(FUintVector4(P.LookNeck,P.LookHead,0,0));LookRotations.Add(P.NeckRotation);LookRotations.Add(P.HeadRotation);
  }
  bool ChangedActors=FMemory::Memcmp(Layout.GetData(),S.Layout.GetData(),Layout.Num()*sizeof(FUintVector4))!=0;
- bool Same=S.HasFrame&&!ChangedActors&&Times.Num()==S.LastTimes.Num()&&FMemory::Memcmp(Times.GetData(),S.LastTimes.GetData(),Times.Num()*sizeof(FVector4f))==0;
+ bool Same=S.HasFrame&&!ChangedActors&&Times.Num()==S.LastTimes.Num()&&FMemory::Memcmp(Times.GetData(),S.LastTimes.GetData(),Times.Num()*sizeof(FVector4f))==0&&LookBones==S.LastLookBones&&LookRotations==S.LastLookRotations;
+ const bool AnyLook=LookBones.ContainsByPredicate([](const FUintVector4& L){return L.X!=MAX_uint32||L.Y!=MAX_uint32;});
  Out.Generation=S.Stats.Generation;Out.Reused=Same;
  if(Same){Out.Current=G.RegisterExternalBuffer(S.Current);Out.Previous=Out.Current;++S.Stats.ReusedFrames;}
  else{
   FOKGpuPoseBuffers B;B.Keys=G.RegisterExternalBuffer(S.Keys);B.Tracks=G.RegisterExternalBuffer(S.Tracks);B.Tasks=G.RegisterExternalBuffer(S.Tasks);B.InverseBindRows=G.RegisterExternalBuffer(S.Bind);B.TaskCount=S.TaskCount;
   if(ChangedActors){auto* Actors=CreateStructuredBuffer(G,TEXT("ResidentPose.ActorSelection"),Layout);S.Actors=G.ConvertToExternalBuffer(Actors);S.Stats.ParameterUploadBytes+=uint64(Layout.Num())*sizeof(FUintVector4);}
   B.Actors=G.RegisterExternalBuffer(S.Actors);B.Times=CreateStructuredBuffer(G,TEXT("ResidentPose.Playback"),Times);S.Stats.ParameterUploadBytes+=uint64(Times.Num())*sizeof(FVector4f);
+  if(AnyLook){B.LookBones=CreateStructuredBuffer(G,TEXT("ResidentPose.LookBones"),LookBones);B.LookRotations=CreateStructuredBuffer(G,TEXT("ResidentPose.LookRotations"),LookRotations);B.LookCount=LookBones.Num();}
   Out.Current=OKAddIndependentGpuPosePass(G,B);if(!Out.Current){Error=TEXT("Pose dispatch rejected");return false;}
   Out.Previous=S.HasFrame&&!Reset?G.RegisterExternalBuffer(S.Current):Out.Current;
   S.Current=G.ConvertToExternalBuffer(Out.Current);++S.Stats.Evaluations;
  }
- S.Layout=MoveTemp(Layout);S.LastTimes=MoveTemp(Times);S.LastFrame=FrameIndex;S.HasFrame=true;return true;
+ S.Layout=MoveTemp(Layout);S.LastTimes=MoveTemp(Times);S.LastLookBones=MoveTemp(LookBones);S.LastLookRotations=MoveTemp(LookRotations);S.LastFrame=FrameIndex;S.HasFrame=true;return true;
 }
 bool OKReadbackResidentGpuPose(FOKResidentGpuPose& Pose,const FOKGpuPoseBatch* Initial,const TArray<TArray<uint32>>& Clips,TConstArrayView<FOKGpuPosePlayback> Playback,uint64 FrameIndex,bool Reset,TArray<FVector4f>& Current,TArray<FVector4f>& Previous,FOKResidentPoseStats& Stats,FString& Error,TSharedPtr<FOKGpuResidencyBudget,ESPMode::ThreadSafe> Manager){
  auto A=MakeShared<FRHIGPUBufferReadback,ESPMode::ThreadSafe>(TEXT("Resident.Current"));auto B=MakeShared<FRHIGPUBufferReadback,ESPMode::ThreadSafe>(TEXT("Resident.Previous"));bool Submitted=false;uint32 Bytes=0;

@@ -122,7 +122,7 @@ static UMaterialInterface* OKStoryPortraitMaterial(UTexture* Color, UTexture* De
 }
 
 void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TSharedPtr<FJsonObject>& Portrait, TFunctionRef<void(USceneCaptureComponent2D*)> ShowOnly,
-	const FPostProcessSettings* Post)
+	const FPostProcessSettings* Post, TFunction<void(bool)> CoverageScope)
 {
 	if (!Outer || !World || !Portrait) return;
 	const TArray<TSharedPtr<FJsonValue>>* Size = nullptr;
@@ -145,8 +145,9 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 	for (int32 B = 0; B < 2; ++B)
 	{
 		MakeTarget(ColorTarget[B], RTF_RGBA8, true, W, H);
-		// The coverage only shapes the edge: half the resolution, a quarter of the pixels.
-		MakeTarget(CoverageTarget[B], RTF_RGBA16f, false, FMath::Max(16, W / 2), FMath::Max(16, H / 2));
+		// The coverage shapes the edge at the colour's own resolution: at half of it the bilinear edge let the outermost
+		// pixel or two of the colour through, which is her outline (the coverage is taken without it).
+		MakeTarget(CoverageTarget[B], RTF_RGBA16f, false, W, H);
 	}
 	const int32 Back = 1 - Front;
 	auto MakeCapture = [&](TStrongObjectPtr<USceneCaptureComponent2D>& C, ESceneCaptureSource Source, UTextureRenderTarget2D* T)
@@ -211,7 +212,13 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 		C->OrthoWidth = Width;
 		ShowOnly(C);
 		if (Post && C == Color.Get()) { C->PostProcessSettings = *Post; C->PostProcessBlendWeight = 1.f; }
+		const bool bScope = C == Coverage.Get() && CoverageScope;
+		// What the scope hides is hidden only until it ends: the coverage must render right here then, not as passes of
+		// the main renderer later in the frame (when her outlines are back).
+		if (C == Coverage.Get()) C->bRenderInMainRenderer = !bScope;
+		if (bScope) CoverageScope(true);
 		C->CaptureScene();
+		if (bScope) CoverageScope(false);
 	};
 	if (bCoveragePending)
 	{
