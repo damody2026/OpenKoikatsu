@@ -39,6 +39,9 @@ pub struct Photo {
     pub key: String,
     pub female: String,
     pub male: String,
+    /// Only with a lover (the game's kiss two-shot).
+    #[serde(default)]
+    pub lover: bool,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -99,16 +102,19 @@ impl MotionsTuning {
         if self.photo.is_empty() {
             return json!({"key": "", "female": "", "male": ""});
         }
-        let n = self.photo.len();
-        let index = if let Some(k) = self.photo.iter().position(|p| p.key == s(r, "pose")) {
+        // A lover's poses only with a lover (request: lover).
+        let lover = r.get("lover").and_then(Value::as_bool).unwrap_or(false);
+        let poses: Vec<&Photo> = self.photo.iter().filter(|p| lover || !p.lover).collect();
+        let n = poses.len();
+        let index = if let Some(k) = poses.iter().position(|p| p.key == s(r, "pose")) {
             k
-        } else if let Some(k) = self.photo.iter().position(|p| p.key == s(r, "after")) {
+        } else if let Some(k) = poses.iter().position(|p| p.key == s(r, "after")) {
             (k + 1) % n
         } else {
             let mut rng = RandomStream::new(i(r, "seed"));
             rng.rand_range(0, n as i32 - 1) as usize
         };
-        let p = &self.photo[index];
+        let p = poses[index];
         json!({"key": p.key, "female": p.female, "male": p.male})
     }
 
@@ -174,6 +180,12 @@ mod tests {
         let first = m.photo(&json!({"pose": "twoshot_9"}));
         assert_eq!(first["female"], "photo_female_08.okanim");
         assert_eq!(m.photo(&json!({"after": "twoshot_9"}))["key"], "twoshot_1");
+        // the kiss two-shot: next after the ninth with a lover, never without one (asked for by name either)
+        assert_eq!(m.photo(&json!({"after": "twoshot_9", "lover": true}))["key"], "kiss");
+        assert_ne!(m.photo(&json!({"pose": "kiss"}))["key"], "kiss");
+        for seed in 0..40 {
+            assert_ne!(m.photo(&json!({"seed": seed}))["key"], "kiss");
+        }
         assert!(m.table()["seated"].as_array().unwrap().iter().any(|c| c == "facility_eat.okanim"));
     }
 }

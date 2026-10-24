@@ -9,7 +9,7 @@
 #              clips for her block's kind (and place, when given), the same one for the whole block. `seated` brings the
 #              chair (and a table with `table`).
 # [[photo]]    Two-shot poses for a photo with him: her clip and his. One at random, or the one the model names
-#              ("gesture" while they pose), and "another pose" goes to the next.
+#              ("gesture" while they pose), and "another pose" goes to the next. lover = true: only with a lover.
 
 [[gesture]]
 key = "wave"
@@ -395,3 +395,9 @@ clips = ["lib_11_1_0.okanim", "lib_11_1_1.okanim", "lib_11_1_2.okanim", "lib_11_
 kind = "ambient"
 place = "pool"
 clips = ["lib_11_1_0.okanim", "lib_11_1_1.okanim", "lib_11_1_2.okanim", "lib_11_1_3.okanim"]
+
+[[photo]]
+key = "kiss"
+female = "photo_female_kiss.okanim"
+male = "photo_male_kiss.okanim"
+lover = true

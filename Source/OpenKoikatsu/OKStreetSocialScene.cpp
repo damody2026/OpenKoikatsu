@@ -2351,7 +2351,7 @@ void AOKStreetSocialScene::BeginPair(int32 Character,int32 Kind){
  // "another pose"; the three by personality were all there was.
  FString PhotoFemale;S.PhotoPoseKey.Reset();
  if(!Read&&!PhoneUse&&!Watermelon&&!Meal&&!Splash&&!Drink&&!Seated&&FemaleOverride.IsEmpty()){
-  auto Ask=OKRulesRequest(TEXT("motion_photo"));Ask->SetStringField(TEXT("pose"),S.NextPhotoPose);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));S.NextPhotoPose.Reset();
+  auto Ask=OKRulesRequest(TEXT("motion_photo"));Ask->SetBoolField(TEXT("lover"),ContactLover(Character));Ask->SetStringField(TEXT("pose"),S.NextPhotoPose);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));S.NextPhotoPose.Reset();
   if(const TSharedPtr<FJsonObject> Pose=OKRulesEval(S,Ask)){PhotoFemale=Pose->GetStringField(TEXT("female"));const FString Him=Pose->GetStringField(TEXT("male"));
    if(!PhotoFemale.IsEmpty()){Female=&PhotoFemale;S.PhotoPoseKey=Pose->GetStringField(TEXT("key"));if(!Him.IsEmpty())MaleClip=Him;}}
  }

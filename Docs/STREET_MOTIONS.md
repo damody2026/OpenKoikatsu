@@ -13,6 +13,7 @@
 - `library.manifest.json` 記下每個片段的姿勢（stand / chair / floor / lie）、性別、是否循環、長度、日文名與分類。
 - `ok-extract` 的 `export_shared_clip` 現在接受 `states:` 控制器狀態鍵：狀態只播一個片段時，就匯出那個片段。
 - 原作九種雙人合照姿勢（`f_twoshot_00_00..08`）都已匯出：`photo_female_00..08`，原本只有其中三種。
+- 原作的親吻合照（`f_twoshot_00_kiss`、`m_twoshot_00_kiss`）匯出成 `photo_female_kiss`、`photo_male_kiss`。`motions.toml` 裡這一列標 `lover = true`，只有和戀人合照時才會抽到或換到；原作男方的一般合照只有一種姿勢（`m_twoshot_00_00`）。
 
 ## 執行端
 

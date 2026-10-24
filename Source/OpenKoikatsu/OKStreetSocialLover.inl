@@ -101,7 +101,7 @@ void AOKStreetSocialScene::PlayGesture(int32 Girl,const FString& Gesture){
 bool AOKStreetSocialScene::SwitchPhotoPose(const FString& Pose){
  if(!State)return false;auto& S=*State;auto& P=S.Pair;
  if(P.Partner==INDEX_NONE||P.Phase!=1||P.CapturePending||S.PhotoPoseKey.IsEmpty())return false;
- auto Ask=OKRulesRequest(TEXT("motion_photo"));Ask->SetStringField(TEXT("pose"),Pose);Ask->SetStringField(TEXT("after"),S.PhotoPoseKey);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));
+ auto Ask=OKRulesRequest(TEXT("motion_photo"));Ask->SetBoolField(TEXT("lover"),ContactLover(P.Partner));Ask->SetStringField(TEXT("pose"),Pose);Ask->SetStringField(TEXT("after"),S.PhotoPoseKey);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return false;
  const FString Female=Out->GetStringField(TEXT("female")),Male=Out->GetStringField(TEXT("male"));
  if(Female.IsEmpty()||Female==P.FemaleClip)return false;
