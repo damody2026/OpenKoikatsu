@@ -323,7 +323,7 @@ refused_his_invite = "He asked me to {activity}, and I said no ({reason})."
 refused_just_now = "I just turned him down."
 still_angry_at_him = "Still mad at him."
 too_tired = "Too tired."
-on_shift_until = "On shift until {until}."
+on_shift_until = "You are on your own shift until {until}."
 will_accept = "{name}: will say yes"
 will_refuse_with_reason = "{name}: won't say yes ({reason})"
 

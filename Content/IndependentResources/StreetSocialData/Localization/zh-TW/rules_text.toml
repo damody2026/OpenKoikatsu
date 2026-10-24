@@ -323,7 +323,7 @@ refused_his_invite = "他約我{activity}，我拒絕了（{reason}）"
 refused_just_now = "剛剛才拒絕過"
 still_angry_at_him = "還在氣他"
 too_tired = "太累了"
-on_shift_until = "正在上班，{until} 才下班"
+on_shift_until = "你自己正在上班，{until} 才下班"
 will_accept = "{name}：會答應"
 will_refuse_with_reason = "{name}：不會答應（{reason}）"
 
