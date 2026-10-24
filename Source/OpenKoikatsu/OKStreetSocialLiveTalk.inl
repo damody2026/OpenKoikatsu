@@ -22,6 +22,8 @@ void AOKStreetSocialScene::FreeTalkClose(){
  auto& S=*State;
  if(S.FreeTalkLive)FreeTalkLiveSet(false);
  CancelFreeTalkVoice();
+ // Her lines not spoken yet are not wanted any more: the voice server stops working on them.
+ if(S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num())OKStreetCancelQueuedSpeech(S);
  S.FreeTalkOpen=false;S.FreeTalkNotice.Reset();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;
  S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkCaptionPlayer.Reset();S.FreeTalkCaptionHer.Reset();
  S.FreeTalkHistoryOpen=false;S.FreeTalkGirl=INDEX_NONE;
@@ -375,8 +377,15 @@ void AOKStreetSocialScene::TickFarewell(){
  auto& S=*State;if(!S.FarewellPending)return;
  const int32 G=FreeTalkPartner();if(G==INDEX_NONE){S.FarewellPending=false;return;}
  const double Wall=FPlatformTime::Seconds();
- const bool Talking=OKCrowdRuntimeSpeechActive(this,G)||S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
- if(Wall<S.FarewellAt+1.5||Talking||S.FreeTalkBusy)return;
+ const bool Voicing=OKCrowdRuntimeSpeechActive(this,G)||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
+ const bool Queued=S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num();
+ // Her goodbye is on screen already: lines the voice server has not delivered yet (a busy GPU, 15 s timeouts per line,
+ // and Yuuka stood there 50 s after "take care") do not hold the parting past the time it takes to read them. A line
+ // being spoken is let finish.
+ int32 Chars=0;for(const FString& Line:S.FreeTalkSpeechLines)Chars+=Line.Len();
+ const bool VoiceLate=Queued&&!Voicing&&Wall>S.FarewellAt+4.0+0.2*Chars;
+ if(Wall<S.FarewellAt+1.5||Voicing||(Queued&&!VoiceLate)||S.FreeTalkBusy)return;
+ if(VoiceLate)UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d parts without the voice of %d line(s) not delivered after %.1f s"),G,S.FreeTalkSpeechLines.Num()-S.FreeTalkSpeechPlayed,Wall-S.FarewellAt);
  FreeTalkLeave(OKT(TEXT("ui.live_talk.parted_she_left")));
 }
 

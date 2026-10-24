@@ -1498,17 +1498,15 @@ void AOKStreetSocialScene::CancelFreeTalkVoice(){
 // as soon as line i has streamed (the server writes line i's file outside its synthesis lock). A new reply cancels
 // what the server still has queued or is generating for the old one (/cancel; this game's own channel).
 static constexpr int32 OKFreeTalkStreamStartSamples=4800;
+// Drops what the voice server still has queued or is generating on this game's channel (a new reply, or the talk
+// closed with lines unspoken): later answers for them are ignored by the generation.
+static void OKStreetCancelQueuedSpeech(FOKStreetSceneState& S){
+ ++S.FreeTalkSpeechGeneration;if(!S.FreeTalkSpeechChannel.IsEmpty())OKStreetTtsCancel(S.TtsEndpoint,S.FreeTalkSpeechChannel,uint32(S.FreeTalkSpeechGeneration));
+}
 void AOKStreetSocialScene::SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial){
  if(!State||State->TtsCacheDir.IsEmpty()||!State->Manifest.Characters.IsValidIndex(Character)||Lines.IsEmpty())return;auto& S=*State;
  if(S.FreeTalkSpeechChannel.IsEmpty())S.FreeTalkSpeechChannel=TEXT("free_talk-")+FGuid::NewGuid().ToString(EGuidFormats::Digits);
- const bool Previous=S.FreeTalkSpeechLines.Num()>0;
- ++S.FreeTalkSpeechGeneration;
- if(Previous){
-  auto Cancel=MakeShared<FJsonObject>();Cancel->SetStringField(TEXT("channel"),S.FreeTalkSpeechChannel);Cancel->SetNumberField(TEXT("below"),S.FreeTalkSpeechGeneration);
-  FString Payload;FJsonSerializer::Serialize(Cancel,TJsonWriterFactory<>::Create(&Payload));
-  auto Request=FHttpModule::Get().CreateRequest();Request->SetURL(S.TtsEndpoint/TEXT("cancel"));Request->SetVerb(TEXT("POST"));
-  Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(5.f);Request->ProcessRequest();
- }
+ if(S.FreeTalkSpeechLines.Num()>0)OKStreetCancelQueuedSpeech(S);else ++S.FreeTalkSpeechGeneration;
  for(const auto& Stream:S.FreeTalkSpeechStreams)if(Stream)Stream->Finish();
  S.FreeTalkSpeechCharacter=Character;S.FreeTalkSpeechSerial=Serial;S.FreeTalkSpeechLines=Lines;S.FreeTalkSpeechSpeakers.Reset();S.FreeTalkSpeechFiles=0;
  S.FreeTalkSpeechPaths.Init(FString(),Lines.Num());S.FreeTalkSpeechReady.Init(0,Lines.Num());S.FreeTalkSpeechPlayed=0;
