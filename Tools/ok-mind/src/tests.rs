@@ -345,6 +345,39 @@ fn tail_start_never_splits_an_exchange() {
     assert_eq!(tail_start(&big, 100), 2, "an oversized last exchange is kept whole");
 }
 
+/// A conversation rolled back (the player scrolled back to an earlier line and says something else): her context loses
+/// the turns after that line's checkpoint and her memory the records made since; the next turn extends the shorter
+/// context.
+#[test]
+fn rollback_returns_her_context_and_memory_to_a_checkpoint() {
+    let dir = temp_dir();
+    let (url, seen) = mock_server(vec![(200, reply("{\"lines\":[\"一\"]}", 0, 10)), (200, reply("{\"lines\":[\"二\"]}", 0, 10)), (200, reply("{\"lines\":[\"三\"]}", 0, 10))]);
+    unsafe {
+        let h = okm_open(cstring(&json!({"save_dir": dir, "api_key": "k", "endpoint": url, "retry_delays_ms": []})).as_ptr());
+        let query = |q: Value| -> Value { serde_json::from_str(&take(okm_query(h, cstring(&q).as_ptr())).unwrap()).unwrap() };
+        okm_submit(h, cstring(&talk_job("g", "S", "第一句")).as_ptr());
+        wait_results(h, 1);
+        let point = query(json!({"kind": "checkpoint", "heroine": "g"}));
+        assert_eq!(point["messages"], 2, "{point}");
+        okm_submit(h, cstring(&talk_job("g", "S", "第二句")).as_ptr());
+        wait_results(h, 1);
+        okm_submit(h, cstring(&json!({"kind": "observe", "heroine": "g", "summary": "他後來說了第二句"})).as_ptr());
+        wait_results(h, 1);
+        let back = query(json!({"kind": "rollback", "heroine": "g", "messages": point["messages"], "compactions": point["compactions"], "memory_next": point["memory_next"]}));
+        assert_eq!(back["dropped_messages"], 2, "{back}");
+        assert_eq!(back["dropped_memories"], 1, "{back}");
+        let after = query(json!({"kind": "checkpoint", "heroine": "g"}));
+        assert_eq!((after["messages"].clone(), after["memory_next"].clone()), (point["messages"].clone(), point["memory_next"].clone()));
+        okm_submit(h, cstring(&talk_job("g", "S", "換一句")).as_ptr());
+        wait_results(h, 1);
+        okm_close(h);
+    }
+    let bodies = seen.lock().unwrap();
+    let (first, third) = (messages_of(&bodies[0]), messages_of(&bodies[2]));
+    assert_eq!(third.len(), first.len() + 2, "the rolled-back turn is gone: system, 1st pair, new user");
+    assert!(!third.iter().any(|(_, t)| t.contains("第二句")));
+}
+
 #[test]
 fn notes_are_appended_after_the_last_turn() {
     let dir = temp_dir();

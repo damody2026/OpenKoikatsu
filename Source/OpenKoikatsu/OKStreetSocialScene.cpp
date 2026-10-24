@@ -1084,6 +1084,9 @@ void AOKStreetSocialScene::SendFreeTalk(){
  if(His){++S.HisLines;{const int64 Now=OKStreetMindNow(S);if(S.SaidToHerWith!=Character||Now-S.SaidToHerAt>45){S.SaidToHer.Reset();S.SaidToHerWith=Character;}S.SaidToHerAt=Now;}S.SaidToHer.Add(Text);if(S.SaidToHer.Num()>4)S.SaidToHer.RemoveAt(0);}
  // Called by another girl's name: she sees his words and her own name, and notices it herself (no name lookup here).
  if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(Text);return;} // several of them: one reply for all (OKStreetSocialParty.inl)
+ // Said while the scene shows an earlier line (rolled back with the wheel): what came after it is undone first; then
+ // the point this line can be rolled back to.
+ {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);GalgameRollBack(Character,RollId);if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
  FOKFreeTalkSettings Settings;FString Error,System,UserMessage;
  if(!PrepareFreeTalk(Character,Text,Settings,System,UserMessage,Error)){S.FreeTalkNotice=Error;RefreshUI();return;}
  // The reply is handled in the mode this was sent in (phone or face to face), whatever happens meanwhile.
@@ -3282,8 +3285,9 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(Toggle){S.MouseUI=!S.MouseUI;ApplyMouseMode(true);RefreshUI();}
  const bool GameInput=Focused&&!S.MouseUI&&!S.SelfTest&&!S.RetargetSelfTest;
  if(GameInput&&!FocusChanged&&!Toggle){float X=0,Y=0;PC->GetInputMouseDelta(X,Y);S.Yaw+=X*OKStreetMouseYawSensitivity;S.Pitch=FMath::Clamp(S.Pitch+Y*OKStreetMousePitchSensitivity,-50.f,15.f);}
- if(GameInput&&OKKeyPressed(PC,EKeys::MouseScrollUp))S.Distance=FMath::Max(180.f,S.Distance-35.f);
- if(GameInput&&OKKeyPressed(PC,EKeys::MouseScrollDown))S.Distance=FMath::Min(800.f,S.Distance+35.f);
+ // In a scene the wheel rolls the conversation back and forth (TickGalgame), not the street camera.
+ if(GameInput&&!GalgameShowsDialogue()&&OKKeyPressed(PC,EKeys::MouseScrollUp))S.Distance=FMath::Max(180.f,S.Distance-35.f);
+ if(GameInput&&!GalgameShowsDialogue()&&OKKeyPressed(PC,EKeys::MouseScrollDown))S.Distance=FMath::Min(800.f,S.Distance+35.f);
  int32 NearestPickup=INDEX_NONE;float PickupDistance=150.f;
  for(int32 I=0;I<S.TopicPickups.Num();++I)if(S.TopicPickups[I].IsValid()){const bool Claimed=S.Store.TopicClaims.FindRef(S.PickupTopics[I])==S.Store.TopicDay;S.TopicPickups[I]->SetActorHiddenInGame(Claimed);const float Distance=FVector::Dist2D(S.Male,S.TopicPickups[I]->GetActorLocation());if(!Claimed&&Distance<PickupDistance){PickupDistance=Distance;NearestPickup=I;}}
  // Walking past a topic picks it up (F still works). Each pickup is tried once per visit, so a full stock or a claimed
@@ -3429,9 +3433,12 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(OKStreetWorldTouchAllowed(Focused,S.MouseUI,S.Target!=INDEX_NONE,S.TouchActive,S.WorldTouchPointerBlocked)&&OKKeyPressed(PC,EKeys::LeftMouseButton)){
   float MX=0,MY=0;FVector Origin,Ray;
   if(PC->GetMousePosition(MX,MY)&&PC->DeprojectScreenPositionToWorld(MX,MY,Origin,Ray)){
-   TouchRay(Origin,Ray);
+   // A click that touches no part of her skips the scene's line (SkipGalgameLine).
+   if(TouchRay(Origin,Ray)==INDEX_NONE)SkipGalgameLine();
   }
  }
+ // Enter or Space skips the scene's line too (the chat box keeps its Enter: the game view is not focused then).
+ if(Focused&&(OKKeyPressed(PC,EKeys::Enter)||OKKeyPressed(PC,EKeys::SpaceBar)))SkipGalgameLine();
  if(Focused&&OKKeyPressed(PC,EKeys::L))ToggleLanguage();
  if(Focused&&OKKeyPressed(PC,EKeys::V))ToggleVoiceSource();
  // -StreetSocialTtsSmoke: talk to NPC 1 once with TTS forced on; read game.log for the result.

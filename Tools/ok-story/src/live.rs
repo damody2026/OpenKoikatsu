@@ -363,6 +363,9 @@ impl Live {
                 let id = self.st.next_id;
                 self.st.next_id += 1;
                 self.st.typing = Typing::new(&text);
+                if self.tuning.live.instant_text {
+                    self.st.typing.reveal();
+                }
                 self.st.line = Some(LiveLine { id, who: who.clone(), name, color, voiced, age: 0.0, done_at: None });
                 let show_portrait = who != self.st.player || self.tuning.live.player_portrait;
                 self.st.portrait.want(if show_portrait { &who } else { "" });
@@ -525,6 +528,7 @@ mod tests {
     #[test]
     fn lines_shots_and_voice() {
         let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.tuning.live.instant_text = false;
         l.tuning.live.pov = false;
         l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
         l.input(LiveInput::Line { who: "her1".into(), name: "凜".into(), color: "#ff8".into(), text: "你好，今天天氣很好呢。".into(), voiced: true });
@@ -599,12 +603,23 @@ mod tests {
         assert!(f[1] > 0.9, "looks at her2: {:?}", f);
     }
 
+    /// By default a line shows whole at once (the voice plays over it; a click skips it).
+    #[test]
+    fn lines_show_whole_at_once() {
+        let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+        l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "今天的照片拍得真好看呢。".into(), voiced: true });
+        l.tick(facts(0.016, -1.0, 0));
+        assert!(l.st.typing.revealed && l.st.typing.shown == l.st.typing.total);
+    }
+
     /// A voiced line waits for its voice (generated speech starts seconds after the text): nothing typed meanwhile,
     /// then the words follow the voice; with no voice by `voice_wait` it types at the reading speed.
     #[test]
     fn voiced_line_waits_for_its_voice() {
         for comes in [true, false] {
             let mut l = Live::open(LiveConfig::default()).unwrap();
+            l.tuning.live.instant_text = false;
             l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
             l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "今天的照片拍得真好看呢。".into(), voiced: true });
             // 1.5 s without a voice (the game reports none playing: id 0).

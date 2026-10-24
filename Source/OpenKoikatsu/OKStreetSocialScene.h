@@ -29,6 +29,10 @@ private:
  void TickGalgame(float Dt);
  bool GalgameShowsDialogue() const; bool GalgameHidesDialogueBox() const; float GalgameDialogueLift() const;
  bool GalgameReplays() const; // replayed history lines become galgame scene lines (OKStreetSocialGalgame.inl)
+ void SkipGalgameLine(); // a click, Enter or Space during a scene: the line on screen ends now (its voice stops)
+ // Rollback of a scene (OKStreetSocialGalgame.inl): a point to come back to before each of his lines, and back to the
+ // line the wheel scrolled to once he says something there (her memory, mind, history and relation with it).
+ void GalgameCheckpoint(int32 Character,const FString& Id); void GalgameRollBack(int32 Character,const FString& Id);
  void EndGalgame();
  double SceneTime() const;
  void RefreshUI(); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked

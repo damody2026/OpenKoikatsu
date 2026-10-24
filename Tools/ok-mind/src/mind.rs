@@ -185,6 +185,46 @@ impl Mind {
                 }
                 .to_string())
             }
+            // A rollback point of her mind (a line of the conversation on screen): how long her context is, how often
+            // it was compacted and the id her next memory takes.
+            Some("checkpoint") => {
+                let heroine = text_field(&q, "heroine")?;
+                let slot = s.contexts.slot(heroine);
+                let mut guard = slot.lock().unwrap();
+                if guard.is_none() {
+                    *guard = s.contexts.load(heroine)?;
+                }
+                let (messages, compactions) = guard.as_ref().map(|c| (c.history.len(), c.compactions)).unwrap_or((0, 0));
+                Ok(json!({"heroine": heroine, "messages": messages, "compactions": compactions, "memory_next": s.memories.next(heroine)?}).to_string())
+            }
+            // Back to a checkpoint (the player rolled the conversation back and says something else): her context loses
+            // the turns after it and her memory the records made since. A context compacted since cannot be cut back
+            // exactly: it is left as it is (`context_kept`), the memories are still dropped.
+            Some("rollback") => {
+                let heroine = text_field(&q, "heroine")?;
+                let messages = q["messages"].as_u64().ok_or("query_invalid: messages is required")? as usize;
+                let compactions = q["compactions"].as_u64().unwrap_or(0) as u32;
+                let slot = s.contexts.slot(heroine);
+                let mut guard = slot.lock().unwrap();
+                if guard.is_none() {
+                    *guard = s.contexts.load(heroine)?;
+                }
+                let mut dropped_messages = 0usize;
+                let mut context_kept = false;
+                if let Some(ctx) = guard.as_mut() {
+                    if ctx.compactions == compactions && messages <= ctx.history.len() {
+                        dropped_messages = ctx.history.len() - messages;
+                        ctx.history.truncate(messages);
+                        ctx.summarized_upto = ctx.summarized_upto.min(messages);
+                        ctx.turns = ctx.turns.saturating_sub((dropped_messages / 2) as u64);
+                        s.contexts.save(ctx)?;
+                    } else {
+                        context_kept = dropped_messages == 0 && (ctx.compactions != compactions || messages > ctx.history.len());
+                    }
+                }
+                let dropped_memories = s.memories.truncate(heroine, q["memory_next"].as_u64().unwrap_or(0))?;
+                Ok(json!({"heroine": heroine, "ok": true, "dropped_messages": dropped_messages, "dropped_memories": dropped_memories, "context_kept": context_kept}).to_string())
+            }
             Some("recall") => {
                 let heroine = text_field(&q, "heroine")?;
                 let strings = |name: &str| -> Vec<String> { q[name].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default() };

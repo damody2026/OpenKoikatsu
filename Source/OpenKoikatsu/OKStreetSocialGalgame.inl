@@ -45,6 +45,25 @@ struct FOKStreetGalgame
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> Hidden;
 	// When a broken far-off shot was last written to the log (one line per two seconds).
 	double FarShotLoggedAt = -1000.0;
+	// Rollback: the lines of this conversation as shown (slot, words), the one the wheel scrolled back to (INDEX_NONE:
+	// the newest), and a point to return to taken before each of his lines (GalgameCheckpoint).
+	struct FLine { int32 Slot = INDEX_NONE; FString Words; };
+	TArray<FLine> Lines;
+	int32 ViewLine = INDEX_NONE;
+	bool bNoRecord = false;
+	struct FCheckpoint
+	{
+		int32 Lines = 0;
+		FString Id;
+		int64 LogSerial = 0;
+		int64 HistorySerial = 0;
+		TArray<FOKFreeTalkTurn> Memory;
+		bool bRelation = false;
+		FOKStreetRelation Relation;
+		bool bMind = false;
+		int64 MindMessages = 0, MindCompactions = 0, MindMemoryNext = 0;
+	};
+	TArray<FCheckpoint> Checkpoints;
 };
 
 // The main view shows everyone again.
@@ -116,6 +135,124 @@ bool AOKStreetSocialScene::GalgameShowsDialogue() const
 bool AOKStreetSocialScene::GalgameReplays() const
 {
 	return CVarOKStreetGalgame.GetValueOnGameThread() != 0 && Galgame.IsValid() && Galgame->Live.IsOpen();
+}
+
+// The line on screen is skipped (a click off her, Enter, Space): its text is shown whole anyway, so skipping means its
+// voice ends now and the conversation goes on. A replayed line: the next one of the replay. Her free-talk reply: the
+// rest of it in the same voice (the segments of this speaker in a row), as when he talks over her. A scripted line:
+// it ends and counts as said. His own voiced line: it stops.
+void AOKStreetSocialScene::SkipGalgameLine()
+{
+	if (!GalgameShowsDialogue() || !State) return;
+	auto& S = *State;
+	FString Ignore;
+	if (!S.FreeTalkReplay.IsEmpty() || !S.FreeTalkReplayParts.IsEmpty() || SceneTime() < S.FreeTalkReplayHold ||
+		(S.FreeTalkReplaySpeaker != INDEX_NONE && OKCrowdRuntimeSpeechActive(this, S.FreeTalkReplaySpeaker)))
+	{
+		if (S.FreeTalkReplaySpeaker != INDEX_NONE) OKStopCrowdRuntimeSpeech(this, S.FreeTalkReplaySpeaker, Ignore);
+		S.FreeTalkReplayParts.Reset();
+		S.FreeTalkReplayHold = 0;
+		UE_LOG(LogTemp, Display, TEXT("Street galgame: skipped a replayed line (%d left)"), S.FreeTalkReplay.Num());
+		return;
+	}
+	const int32 Speaker = Galgame->Speaker;
+	if (Speaker == 0 && (S.MalePhase == 1 || S.MalePhase == 2))
+	{
+		OKStopCrowdRuntimeSpeech(this, 0, Ignore);
+		S.MalePhase = 3;
+		UE_LOG(LogTemp, Display, TEXT("Street galgame: skipped his line"));
+		return;
+	}
+	if (Speaker == INDEX_NONE || Speaker == 0) return;
+	if (SongOwnsVoice(Speaker)) return; // her song is a performance, not a line
+	OKStopCrowdRuntimeSpeech(this, Speaker, Ignore);
+	int32 Dropped = 0;
+	while (S.FreeTalkSpeechPlayed < S.FreeTalkSpeechLines.Num())
+	{
+		const int32 Who = S.FreeTalkSpeechSpeakers.IsValidIndex(S.FreeTalkSpeechPlayed) ? S.FreeTalkSpeechSpeakers[S.FreeTalkSpeechPlayed] : S.FreeTalkSpeechCharacter;
+		if (Who != Speaker) break;
+		if (S.FreeTalkSpeechStreams.IsValidIndex(S.FreeTalkSpeechPlayed) && S.FreeTalkSpeechStreams[S.FreeTalkSpeechPlayed]) S.FreeTalkSpeechStreams[S.FreeTalkSpeechPlayed]->Finish();
+		++S.FreeTalkSpeechPlayed;
+		++Dropped;
+	}
+	if (S.Node != INDEX_NONE) S.LineInterrupted = true; // a scripted line ends here and counts as said (FinishLine)
+	UE_LOG(LogTemp, Display, TEXT("Street galgame: skipped the line of %d (%d voice segments dropped)"), Speaker, Dropped);
+}
+
+// Before each of his lines to her: the point a rollback returns to (the lines shown so far, her free-talk log and
+// memory, her history, her relation, her mind's context and memory as they are now).
+void AOKStreetSocialScene::GalgameCheckpoint(int32 Character, const FString& Id)
+{
+	if (!Galgame.IsValid() || !Galgame->bActive || !State) return;
+	auto& S = *State;
+	FOKStreetGalgame::FCheckpoint P;
+	P.Lines = Galgame->Lines.Num();
+	P.Id = Id;
+	P.LogSerial = S.FreeTalkSerial;
+	{ const auto& List = HistoryOf(Id); P.HistorySerial = List.IsEmpty() ? 0 : List.Last().Serial; }
+	if (const auto* Memory = S.FreeTalkMemory.Find(Id)) P.Memory = *Memory;
+	if (const auto* R = S.Store.Relations.FindByPredicate([&Id](const FOKStreetRelation& X) { return X.Id == Id; })) { P.bRelation = true; P.Relation = *R; }
+	if (S.Mind)
+	{
+		FString Out, Error;
+		TSharedPtr<FJsonObject> J;
+		if (S.Mind->Query(FString::Printf(TEXT("{\"kind\":\"checkpoint\",\"heroine\":\"%s\"}"), *Id.ReplaceCharWithEscapedChar()), Out, Error) &&
+			FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Out), J) && J.IsValid())
+		{
+			P.bMind = true;
+			P.MindMessages = int64(J->GetNumberField(TEXT("messages")));
+			P.MindCompactions = int64(J->GetNumberField(TEXT("compactions")));
+			P.MindMemoryNext = int64(J->GetNumberField(TEXT("memory_next")));
+		}
+	}
+	Galgame->Checkpoints.Add(MoveTemp(P));
+}
+
+// He says something while the box shows an earlier line (the wheel scrolled back): everything after that line is
+// undone, as if the conversation had stopped there. His own line on screen is undone too (he says it again, differently).
+void AOKStreetSocialScene::GalgameRollBack(int32 Character, const FString& Id)
+{
+	if (!Galgame.IsValid() || !State) return;
+	auto& G = *Galgame;
+	if (G.ViewLine == INDEX_NONE) return;
+	auto& S = *State;
+	const int32 Keep = G.ViewLine + 1;
+	G.ViewLine = INDEX_NONE;
+	int32 Pick = INDEX_NONE;
+	for (int32 I = 0; I < G.Checkpoints.Num(); ++I) if (G.Checkpoints[I].Lines <= Keep && G.Checkpoints[I].Id == Id) Pick = I;
+	if (Pick == INDEX_NONE) { UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: nothing to undo before line %d"), Keep); return; }
+	const FOKStreetGalgame::FCheckpoint P = G.Checkpoints[Pick];
+	const int32 Log = S.FreeTalkLog.RemoveAll([&P](const FOKFreeTalkLine& L) { return L.Serial > P.LogSerial; });
+	if (Log) S.FreeTalkLogDirty = true;
+	S.FreeTalkMemory.FindOrAdd(Id) = P.Memory;
+	FreeTalkSaveMemory();
+	auto& List = HistoryOf(Id);
+	const int32 History = List.RemoveAll([&P](const FOKStreetHistoryEntry& E) { return E.Serial > P.HistorySerial; });
+	if (History)
+	{
+		const FString Path = HistoryPath(Id);
+		FString Out;
+		for (const auto& E : List) Out += OKStreetHistoryLine(E) + TEXT("\n");
+		if (!Path.IsEmpty()) FFileHelper::SaveStringToFile(Out, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	}
+	if (P.bRelation)
+	{
+		FOKStreetStore Next = S.Store;
+		if (auto* R = Next.Relations.FindByPredicate([&Id](const FOKStreetRelation& X) { return X.Id == Id; })) *R = P.Relation;
+		CommitStore(MoveTemp(Next));
+	}
+	FString MindResult;
+	if (P.bMind && S.Mind)
+	{
+		FString Error;
+		S.Mind->Query(FString::Printf(TEXT("{\"kind\":\"rollback\",\"heroine\":\"%s\",\"messages\":%lld,\"compactions\":%lld,\"memory_next\":%lld}"),
+			*Id.ReplaceCharWithEscapedChar(), P.MindMessages, P.MindCompactions, P.MindMemoryNext), MindResult, Error);
+		if (MindResult.IsEmpty()) MindResult = Error;
+	}
+	G.Lines.SetNum(FMath::Min(G.Lines.Num(), P.Lines));
+	G.Checkpoints.SetNum(Pick);
+	UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: back to line %d (kept %d lines): log -%d, history -%d, favor %.1f, mind %s"),
+		Keep, P.Lines, Log, History, P.bRelation ? P.Relation.Favor : -1.f, *MindResult);
 }
 
 bool AOKStreetSocialScene::GalgameHidesDialogueBox() const
@@ -197,6 +334,13 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		G.Speaker = Slot;
 		G.bVoiced = bVoiced;
 		G.OnScreen = L->GetStringField(TEXT("text"));
+		// A line of the conversation itself (not a replay, not one scrolled back to): kept for the rollback, and the box
+		// is at the newest line again.
+		if (!G.bNoRecord && (G.Lines.IsEmpty() || G.Lines.Last().Slot != Slot || G.Lines.Last().Words != Text))
+		{
+			G.Lines.Add({ Slot, Text });
+			G.ViewLine = INDEX_NONE;
+		}
 	};
 
 	// The conversation: who he talks with (free talk follows the walk companion, the date, the pair partner too).
@@ -227,6 +371,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		G.LastPlayerLine.Reset();
 		G.LastNode = INDEX_NONE;
 		G.bHerPending = false;
+		G.Lines.Reset();
+		G.Checkpoints.Reset();
+		G.ViewLine = INDEX_NONE;
 	}
 	else if (SceneWith == INDEX_NONE && G.bActive)
 	{
@@ -267,7 +414,27 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			{
 				const int32 Slot = S.FreeTalkReplayShownSlot;
 				const FString Words = OKStreetGalgameWords(S.FreeTalkReplayShownText, NameOf(Slot));
+				G.bNoRecord = true;
 				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.FreeTalkReplayShownVoiced);
+				G.bNoRecord = false;
+			}
+		}
+		// Rollback: the wheel over the scene goes back through this conversation's lines and forward to the newest. The
+		// voice of the line on screen stops; what she remembers goes back only once he says something there.
+		if (!bReplaying && G.Lines.Num() > 1)
+		{
+			APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+			const int32 Step = PC ? (OKKeyPressed(PC, EKeys::MouseScrollUp) ? -1 : OKKeyPressed(PC, EKeys::MouseScrollDown) ? 1 : 0) : 0;
+			const int32 From = G.ViewLine == INDEX_NONE ? G.Lines.Num() - 1 : G.ViewLine;
+			const int32 To = FMath::Clamp(From + Step, 0, G.Lines.Num() - 1);
+			if (Step != 0 && To != From)
+			{
+				SkipGalgameLine();
+				G.ViewLine = To == G.Lines.Num() - 1 ? INDEX_NONE : To;
+				G.bNoRecord = true;
+				SendLine(G.Lines[To].Slot, G.Lines[To].Words, false);
+				G.bNoRecord = false;
+				UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: line %d of %d"), To + 1, G.Lines.Num());
 			}
 		}
 		// The replay is over while they still talk: back to her latest line of this conversation.

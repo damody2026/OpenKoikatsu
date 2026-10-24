@@ -170,6 +170,26 @@ impl Memories {
         })
     }
 
+    /// The id the next record will take (a rollback point: everything from it on came later).
+    pub fn next(&self, heroine: &str) -> Result<u64, String> {
+        self.with(heroine, |file| Ok(file.next))
+    }
+
+    /// Drops every record added since `next` was `next` (a conversation rolled back to that point); returns how many.
+    pub fn truncate(&self, heroine: &str, next: u64) -> Result<usize, String> {
+        self.with(heroine, |file| {
+            if next == 0 || next >= file.next {
+                return Ok(0);
+            }
+            let before = file.records.len();
+            file.records.retain(|r| r.id.strip_prefix('m').and_then(|n| n.parse::<u64>().ok()).is_none_or(|n| n < next));
+            file.next = next;
+            let dropped = before - file.records.len();
+            self.persist(file)?;
+            Ok(dropped)
+        })
+    }
+
     pub fn all(&self, heroine: &str) -> Result<Vec<MemoryRecord>, String> {
         self.with(heroine, |file| Ok(file.records.clone()))
     }
