@@ -619,6 +619,64 @@ impl Store {
 pub const CARD_CHUNK: &[u8; 4] = b"okLb";
 /// An OK card's own resources (card-specific zipmod data converted to OK form).
 pub const PACK_CHUNK: &[u8; 4] = b"okLc";
+/// The card's identity carried over when it is made again (`remake_ok_card`): 64 hex digits, the identity the card
+/// had before (Tools/prepare_street_social_selection.lua `card_identity`, `apng-<id>`). Names, profiles and the save
+/// know a heroine by it; without it a card remade with a new pack (same character, new bytes) became a stranger.
+pub const IDENTITY_CHUNK: &[u8; 4] = b"okId";
+
+/// A card's identity: its `okId` chunk when it has one, else the sha256 of its bytes without the `okVo` chunk (its
+/// own TTS voice), as `card_identity` in Tools/prepare_street_social_selection.lua computes it.
+pub fn card_identity(bytes: &[u8]) -> Option<String> {
+    use sha2::Digest;
+    if let Some(id) = png_chunk(bytes, IDENTITY_CHUNK) {
+        return std::str::from_utf8(id).ok().filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())).map(str::to_owned);
+    }
+    if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" { return None; }
+    let mut hash = sha2::Sha256::new();
+    hash.update(&bytes[..8]);
+    let mut pos = 8usize;
+    while pos + 12 <= bytes.len() {
+        let len = u32::from_be_bytes(bytes[pos..pos + 4].try_into().ok()?) as usize;
+        let end = pos.checked_add(12 + len).filter(|e| *e <= bytes.len())?;
+        let kind = &bytes[pos + 4..pos + 8];
+        if kind != b"okVo" { hash.update(&bytes[pos..end]); }
+        pos = end;
+        if kind == b"IEND" { break; }
+    }
+    hash.update(&bytes[pos..]);
+    Some(hash.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// The card with its `okId` chunk set to `id` (placed right before IEND, replacing one it had).
+pub fn with_card_identity(bytes: &[u8], id: &str) -> Result<Vec<u8>, String> {
+    if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" { return Err("not a PNG card".into()); }
+    let mut out = bytes[..8].to_vec();
+    let mut pos = 8usize;
+    while pos + 12 <= bytes.len() {
+        let len = u32::from_be_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
+        let end = pos.checked_add(12 + len).filter(|e| *e <= bytes.len()).ok_or("truncated PNG chunk")?;
+        let kind = &bytes[pos + 4..pos + 8];
+        if kind == b"IEND" {
+            let mut chunk = IDENTITY_CHUNK.to_vec();
+            chunk.extend_from_slice(id.as_bytes());
+            out.extend_from_slice(&(id.len() as u32).to_be_bytes());
+            out.extend_from_slice(&chunk);
+            out.extend_from_slice(&crc32fast::hash(&chunk).to_be_bytes());
+            out.extend_from_slice(&bytes[pos..]);
+            return Ok(out);
+        }
+        if kind != IDENTITY_CHUNK { out.extend_from_slice(&bytes[pos..end]); }
+        pos = end;
+    }
+    Err("missing PNG IEND".into())
+}
+
+/// An OK card made again keeps the identity it had; an original KKS card made into an OK card for the first time
+/// has none to keep (its identity is that of the OK card made).
+fn keep_identity(input: &[u8], made: Vec<u8>) -> Result<Vec<u8>, String> {
+    if png_chunk(input, CARD_CHUNK).is_none() && png_chunk(input, IDENTITY_CHUNK).is_none() { return Ok(made); }
+    match card_identity(input) { Some(id) => with_card_identity(&made, &id), None => Ok(made) }
+}
 
 /// `okLc` payload: zstd of this. Records are kept uncompressed inside (models compress per record with
 /// LZ4; one zstd stream over all of them is several times smaller) and rebuilt into model files on mount.
@@ -1047,7 +1105,7 @@ pub fn png_has_chunk(bytes: &[u8], kind: &[u8; 4]) -> bool {
     false
 }
 
-/// The card without OK chunks (`okLb`, `okLc`) and a legacy `okPv` snapshot: the original KKS card data.
+/// The card without OK chunks (`okLb`, `okLc`, `okId`) and a legacy `okPv` snapshot: the original KKS card data.
 pub fn strip_ok_chunks(bytes: &[u8]) -> Result<Vec<u8>, String> {
     if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" { return Err("not a PNG card".into()); }
     let mut out = bytes[..8].to_vec();
@@ -1057,7 +1115,7 @@ pub fn strip_ok_chunks(bytes: &[u8]) -> Result<Vec<u8>, String> {
         let end = pos.checked_add(12 + len).filter(|e| *e <= bytes.len()).ok_or("truncated PNG chunk")?;
         let kind = &bytes[pos + 4..pos + 8];
         if kind == b"IEND" { out.extend_from_slice(&bytes[pos..]); return Ok(out); }
-        if kind != CARD_CHUNK && kind != PACK_CHUNK && kind != b"okPv" { out.extend_from_slice(&bytes[pos..end]); }
+        if kind != CARD_CHUNK && kind != PACK_CHUNK && kind != IDENTITY_CHUNK && kind != b"okPv" { out.extend_from_slice(&bytes[pos..end]); }
         pos = end;
     }
     Err("missing PNG IEND".into())
@@ -1069,7 +1127,9 @@ pub fn strip_ok_chunks(bytes: &[u8]) -> Result<Vec<u8>, String> {
 /// list, digest and pack always match the card data.
 pub fn remake_ok_card(lib: &Path, game: &Path, card: &Path) -> Result<(String, usize, Vec<u8>, usize), String> {
     let source = card_as_made(card)?;
-    make_ok_card(lib, game, source.as_ref().map_or(card, |t| &t.0))
+    let (digest, parts, bytes, pack) = make_ok_card(lib, game, source.as_ref().map_or(card, |t| &t.0))?;
+    let input = std::fs::read(card).map_err(|e| e.to_string())?;
+    Ok((digest, parts, keep_identity(&input, bytes)?, pack))
 }
 
 /// Convert an explicitly selected outfit without renumbering coordinates or plugin references.
@@ -1081,7 +1141,8 @@ pub fn remake_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i
         return Err(format!("outfit {outfit} outside {} saved coordinates", info.coordinate_count));
     }
     let source = card_as_made_with_policy(card, false)?;
-    make_ok_card_for_outfit(lib, game, source.as_ref().map_or(card, |t| &t.0), outfit)
+    let (digest, parts, made, pack) = make_ok_card_for_outfit(lib, game, source.as_ref().map_or(card, |t| &t.0), outfit)?;
+    Ok((digest, parts, keep_identity(&bytes, made)?, pack))
 }
 
 /// A temporary card next to the original, so zipmods kept in the card's folder are still the card's own; removed on drop.
@@ -2308,5 +2369,37 @@ mod ok_card_edit_tests {
         assert_eq!(closed, live, "reopened from OK data = game mode");
         assert_eq!(library_card_digest(&ok).as_deref(), Some(live.as_str()));
         let _ = std::fs::remove_dir_all(&work);
+    }
+}
+
+#[cfg(test)]
+mod card_identity_tests {
+    use super::*;
+    fn chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+        let mut c = kind.to_vec(); c.extend_from_slice(data);
+        let mut out = (data.len() as u32).to_be_bytes().to_vec(); out.extend_from_slice(&c); out.extend_from_slice(&crc32fast::hash(&c).to_be_bytes()); out
+    }
+    fn png(parts: &[Vec<u8>], tail: &[u8]) -> Vec<u8> {
+        let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+        for p in parts { out.extend_from_slice(p); }
+        out.extend_from_slice(&chunk(b"IEND", b"")); out.extend_from_slice(tail); out
+    }
+    /// A remade card keeps the identity it had; okVo does not count; strip_ok_chunks drops okId.
+    #[test]
+    fn identity_survives_a_new_pack() {
+        let old = png(&[chunk(b"IHDR", &[0; 13]), chunk(CARD_CHUNK, b"{}"), chunk(PACK_CHUNK, b"old")], b"card data");
+        let id = card_identity(&old).unwrap();
+        assert_eq!(id.len(), 64);
+        let voiced = png(&[chunk(b"IHDR", &[0; 13]), chunk(CARD_CHUNK, b"{}"), chunk(PACK_CHUNK, b"old"), chunk(b"okVo", b"voice")], b"card data");
+        assert_eq!(card_identity(&voiced).unwrap(), id, "a voice chunk does not change her identity");
+        let remade = png(&[chunk(b"IHDR", &[0; 13]), chunk(CARD_CHUNK, b"{\"v\":2}"), chunk(PACK_CHUNK, b"new pack")], b"card data");
+        assert_ne!(card_identity(&remade).unwrap(), id);
+        let kept = keep_identity(&old, remade).unwrap();
+        assert_eq!(card_identity(&kept).unwrap(), id);
+        let again = keep_identity(&kept, png(&[chunk(b"IHDR", &[0; 13]), chunk(CARD_CHUNK, b"{\"v\":3}")], b"card data")).unwrap();
+        assert_eq!(card_identity(&again).unwrap(), id, "made again from a remade card");
+        assert!(png_chunk(&strip_ok_chunks(&kept).unwrap(), IDENTITY_CHUNK).is_none());
+        let original = png(&[chunk(b"IHDR", &[0; 13])], b"card data");
+        assert_eq!(keep_identity(&original, old.clone()).unwrap(), old, "a first conversion has no identity to keep");
     }
 }
