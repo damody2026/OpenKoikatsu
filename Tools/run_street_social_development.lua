@@ -409,7 +409,8 @@ local function main()
   -- -GpuCacheDir <dir>: another runtime GPU pose cache (default %LOCALAPPDATA%, shared by every checkout).
   if o.gpucachedir then game[#game + 1] = "-RuntimeGpuCacheDir=" .. o.gpucachedir end
   local q = build.runtime_render_quality
-  local execs = {}
+  -- The street keeps the face unflattened (the cvar defaults on for the card reader); -Exec "ok.FaceFlatten 0.6" tests it.
+  local execs = { "ok.FaceFlatten 0" }
   if q then
     local scale = render_scale > 0 and render_scale or q.screen_percentage
     execs[#execs + 1] = ("r.AntiAliasingMethod %s,r.ScreenPercentage %s"):format(util.str(q.antialiasing_method), util.str(scale))
@@ -417,7 +418,7 @@ local function main()
   -- Profiling (development): -Exec "stat dumphitches,t.HitchFrameTimeThreshold 60" runs console commands at start;
   -- -Trace records an Unreal Insights trace (default channels default,cpu,gpu,frame,bookmark) to trace.utrace beside game.log.
   if o.exec then execs[#execs + 1] = o.exec end
-  if #execs > 0 then game[#game + 1] = "-ExecCmds=" .. table.concat(execs, ",") end
+  game[#game + 1] = "-ExecCmds=" .. table.concat(execs, ",")
   if o.trace then
     game[#game + 1] = "-trace=" .. ((o.trace == true or o.trace == "") and "default,cpu,gpu,frame,bookmark" or o.trace)
     game[#game + 1] = "-tracefile=" .. path.join(output, "trace.utrace"); game[#game + 1] = "-statnamedevents"
