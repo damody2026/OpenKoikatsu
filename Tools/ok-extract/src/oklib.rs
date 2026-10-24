@@ -1297,11 +1297,20 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             store.forget_models();
             begin_card_pack(&work)?;
             let t = std::time::Instant::now();
-            // The card format's digest still describes coordinate 0. Also record an explicitly
-            // selected nonzero coordinate into the same pack, without exchanging either slot.
+            // The card format's digest still describes coordinate 0. Every other saved coordinate is opened
+            // into the same pack too: the reader changes outfits from the card alone, and what only another
+            // outfit needs (a mod top's body alpha mask the library lacks) was missing from cards made from
+            // coordinate 0 (a breast showing through the top). The explicitly selected one must open.
             let opened = (|| {
                 let first = session_digest(lib, card)?;
                 if outfit != 0 { session_digest_outfit(lib, card, outfit)?; }
+                let coordinates = crate::card::parse_card_bytes_mode(&original, 0, false).map(|c| c.coordinate_count).unwrap_or(1);
+                for other in 1..coordinates as i32 {
+                    if other == outfit { continue; }
+                    if let Err(e) = session_digest_outfit(lib, card, other) {
+                        eprintln!("ok-extract: {} outfit {other} not recorded: {e}", card.display());
+                    }
+                }
                 Ok::<_, String>(first)
             })();
             if std::env::var_os("OK_TIMING").is_some() { eprintln!("OKTIME session {:.2}s", t.elapsed().as_secs_f64()); }

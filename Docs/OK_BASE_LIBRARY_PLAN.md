@@ -103,6 +103,7 @@
   `LogOkExtract` 會記錄每張卡的資源來源（基礎庫＋幾個 zipmod／是否用到 zipmod 資料／是否掛上卡內資源包／是否來自快取）。
 - KKS 卡 → APNG 卡（`--oklib card`）：先以「基礎庫＋後備」開卡，記下由後備提供的 zipmod 來源，把它們轉成 OK 模型，
   連同所需的目錄／清單觀測打包成卡內的 `okLc`；讀 APNG 卡時掛上這包、關閉後備，只用 OK 資源。
+  卡片存的每一套服裝都會開一次錄進同一包（2026-10-24 起；以前只錄第 0 套）。只有某套服裝才用、基礎庫又沒有的資源，例如 mod 上衣給身體的 `OverBodyMask`，以前不在包裡，讀卡器換到那套就缺；這類缺口現在會印 `OverBodyMask ... not found`。舊卡用 `--oklib card`／`cards` 重轉（輸入可以是 OK 卡本身，會先剝掉 OK 區塊）。
 - 驗收：
   - KKS 卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod 的 digest（用基礎庫沒有的卡測，包含卡片專屬 mod 的卡）。
   - APNG 卡：封閉重播（無遊戲目錄、無後備）digest ＝ 遊戲模式 digest。

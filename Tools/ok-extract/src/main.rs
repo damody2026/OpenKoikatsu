@@ -168,6 +168,17 @@ fn main() {
         println!("exported {ok}, failed {failed}");
         return;
     }
+    if out == "--posed-objs" {
+        // ok-extract <game> --posed-objs <out dir> <card> (OK_OUTFIT): the session's skinned parts as OBJs.
+        let dir = PathBuf::from(args.next().expect("output dir required"));
+        let card = PathBuf::from(args.next().expect("card required"));
+        let outfit = std::env::var("OK_OUTFIT").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+        match ok_extract::export_session_posed_objs(&game, &card, outfit, &dir) {
+            Ok(n) => println!("wrote {n} parts to {}", dir.display()),
+            Err(e) => { eprintln!("ok-extract error: {e}"); std::process::exit(1); }
+        }
+        return;
+    }
     if out == "--export-runtime-clip" {
         let key=args.next().expect("qualified source|clip required");
         let output=args.next().expect("output path required");
@@ -202,7 +213,9 @@ fn main() {
         }
     }
     let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        ok_extract::extract_card(&game, card.as_deref(), &out)
+        // OK_OUTFIT picks the coordinate here too (default 0), as for OK_SESSION_ONLY.
+        let outfit = std::env::var("OK_OUTFIT").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+        ok_extract::extract_card_outfit(&game, card.as_deref(), &out, outfit)
     }));
     match run {
         Ok(Ok(manifest)) => println!("wrote {}", manifest.display()),

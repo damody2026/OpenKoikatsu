@@ -6011,7 +6011,11 @@ fn load_over_clothes_mask(game_root: &Path, e: &ListEntry, key: &str) -> Option<
             }
         }
     }
-    png_from_ab(game_root, &ab, &names, &[])
+    let found = png_from_ab(game_root, &ab, &names, &[]);
+    if found.is_none() {
+        eprintln!("ok-extract: {key} {name} not found in {ab} (zip={:?})", e.extra.get("__zip"));
+    }
+    found
 }
 
 fn set_material_color(mesh: &mut ExtractedMesh, property: &str, value: [f32; 4]) {
@@ -18330,3 +18334,28 @@ pub fn standalone_card_requirements(path:&std::path::Path,outfit:i32)->Result<se
 
 /// Authoring of common curves only; no character/card input or private bake.
 pub fn export_common_runtime_clip(root:&std::path::Path,key:&str)->Result<Vec<u8>,String>{anim::export_shared_clip(root,key)}
+
+/// Diagnostic: the card opened as the reader opens it (session, `outfit`), skinned at its opening pose, every part
+/// written as `<index>_<role>_<name>.obj` (Unity space, the session's posed positions) into `out_dir`. Compare with the
+/// game's mesh_dump of the same card/outfit to find a part that deforms differently (a top a breast pokes through).
+pub fn export_session_posed_objs(game_root: &Path, card_path: &Path, outfit: i32, out_dir: &Path) -> Result<usize, String> {
+    // OK_READER_LIB=<base library>: opened as the reader opens an original card (the library plus its zipmods).
+    let mut session = match std::env::var_os("OK_READER_LIB") {
+        Some(lib) => crate::oklib::open_with_zipmods(Path::new(&lib), game_root, card_path, outfit)?,
+        None => crate::session::open(game_root, Some(card_path), outfit)?,
+    };
+    // OK_POSED_FRAMES=N: N frames of its animation at 60 Hz first (dynamic bones and physics settle as they do live).
+    let frames: u32 = std::env::var("OK_POSED_FRAMES").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+    for frame in 0..frames { session.apply_anim_frame(frame as f32 / 60.0, 1.0 / 60.0); }
+    session.skin_all();
+    std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    for (index, part) in session.parts.iter().enumerate() {
+        let safe: String = format!("{index}_{}_{}", part.role, part.name).chars()
+            .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
+        let mut text = format!("# visible={}\n", part.render_visible);
+        for p in &part.positions { text.push_str(&format!("v {} {} {}\n", p[0], p[1], p[2])); }
+        for t in part.indices.chunks_exact(3) { text.push_str(&format!("f {} {} {}\n", t[0] + 1, t[1] + 1, t[2] + 1)); }
+        std::fs::write(out_dir.join(format!("{safe}.obj")), text).map_err(|e| e.to_string())?;
+    }
+    Ok(session.parts.len())
+}
