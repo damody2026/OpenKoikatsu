@@ -80,10 +80,15 @@ bool AOKStreetSocialScene::SaveToSlot(const FString& Slot,bool Background){
  if(S.FreeTalkLogDirty){S.FreeTalkLogDirty=false;FreeTalkSaveLog();} // the slot copies the file
  // The clock and where he stands first: SaveCalendar writes in the background, and copied before that write was done
  // the slot held the game as of the last write (an hour back, the date not in it) or failed on the file being written.
- SaveCalendar();
- OKStreetFlushSaves();
- if(S.Mind){FString MindError;if(!S.Mind->Save(MindError))UE_LOG(LogTemp,Warning,TEXT("Street saves: mind save failed: %s"),*MindError);}
+ SaveCalendar();const double Calendar=FPlatformTime::Seconds();
+ OKStreetFlushSaves();const double Written=FPlatformTime::Seconds();
+ // The mind's files: in the background only queued here (its fsyncs held the frame ~50 ms), and the worker waits
+ // for them before copying.
+ FOKStreetMind::FFlush MindFlush=nullptr;
+ if(S.Mind){FString MindError;const bool Ok=Background?S.Mind->SaveQueued(MindError):S.Mind->Save(MindError);
+  if(!Ok){UE_LOG(LogTemp,Warning,TEXT("Street saves: mind save failed: %s"),*MindError);}else if(Background){MindFlush=S.Mind->Flusher();}}
  const double Flushed=FPlatformTime::Seconds();
+ UE_LOG(LogTemp,Display,TEXT("Street saves: flush of slot %s: log+calendar %.1f ms, pending writes %.1f ms, mind %.1f ms"),*Slot,(Calendar-Began)*1000,(Written-Calendar)*1000,(Flushed-Written)*1000);
  const FString Dir=SaveSlotDir(Slot),From=FPaths::GetPath(S.Manifest.SavePath);
  auto M=MakeShared<FJsonObject>();
  M->SetStringField(TEXT("saved_at"),FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M")));
@@ -96,8 +101,9 @@ bool AOKStreetSocialScene::SaveToSlot(const FString& Slot,bool Background){
  S.NextAutoSave=FPlatformTime::Seconds()+OKStreetAutoSaveSeconds;
  if(Background){
   *S.SaveCopyRunning=true;
-  Async(EAsyncExecution::ThreadPool,[From,Dir,Out,Slot,Running=S.SaveCopyRunning,Flush=(Flushed-Began)*1000]{
-   const double Start=FPlatformTime::Seconds();FString Error;const bool Ok=OKStreetWriteSlot(From,Dir,Out,Error);
+  Async(EAsyncExecution::ThreadPool,[From,Dir,Out,Slot,MindFlush,Running=S.SaveCopyRunning,Flush=(Flushed-Began)*1000]{
+   const double Start=FPlatformTime::Seconds();FString Error;
+   if(MindFlush&&MindFlush()!=1)UE_LOG(LogTemp,Warning,TEXT("Street saves: mind writes for slot %s failed; the slot copies what is on disk"),*Slot);const bool Ok=OKStreetWriteSlot(From,Dir,Out,Error);
    if(Ok){UE_LOG(LogTemp,Display,TEXT("Street saves: saved slot %s in the background (game thread %.1f ms, copy %.1f ms)"),*Slot,Flush,(FPlatformTime::Seconds()-Start)*1000);}
    else{UE_LOG(LogTemp,Warning,TEXT("Street saves: background save of slot %s: %s"),*Slot,*Error);}
    *Running=false;});

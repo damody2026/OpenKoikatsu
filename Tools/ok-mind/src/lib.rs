@@ -114,6 +114,20 @@ pub unsafe extern "C" fn okm_save(h: *mut OkmHandle) -> i32 {
     guard(0, || handle(h)?.mind.save().map(|_| 1))
 }
 
+/// okm_save without the wait: every write is queued (memories, state) and this returns before the disk is touched.
+/// okm_flush waits for them.
+#[no_mangle]
+pub unsafe extern "C" fn okm_save_queued(h: *mut OkmHandle) -> i32 {
+    guard(0, || handle(h)?.mind.save_queued().map(|_| 1))
+}
+
+/// Waits until every queued write is on disk. No handle: the writer belongs to the process, so any thread may wait
+/// on it (the game copies a save slot on a worker after this).
+#[no_mangle]
+pub extern "C" fn okm_flush() -> i32 {
+    guard(0, || store::flush().map(|_| 1))
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn okm_close(h: *mut OkmHandle) {
     if h.is_null() {

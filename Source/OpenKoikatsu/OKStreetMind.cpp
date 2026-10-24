@@ -21,9 +21,12 @@ struct FOKStreetMind::FApi {
  using FLastError = const char* (*)();
  using FSave = int32 (*)(void*);
  using FClose = void (*)(void*);
+ using FSaveQueued = int32 (*)(void*);
  void* Dll = nullptr;
  FAbi Abi = nullptr; FOpen Open = nullptr; FSubmit Submit = nullptr; FQuery Query = nullptr; FPoll Poll = nullptr;
  FFree Free = nullptr; FLastError LastError = nullptr; FSave Save = nullptr; FClose Close = nullptr;
+ // Optional (newer DLLs): queued save and the wait for it.
+ FSaveQueued SaveQueued = nullptr; FOKStreetMind::FFlush Flush = nullptr;
 
  // Taking an owned copy of a Rust string, released immediately.
  FString Take(const char* Text) const {
@@ -53,6 +56,8 @@ static FOKStreetMind::FApi* OKStreetMindLoadApi(const FString& Path, FString& Er
  Api->LastError = (FOKStreetMind::FApi::FLastError)Get(TEXT("okm_last_error"));
  Api->Save = (FOKStreetMind::FApi::FSave)Get(TEXT("okm_save"));
  Api->Close = (FOKStreetMind::FApi::FClose)Get(TEXT("okm_close"));
+ Api->SaveQueued = (FOKStreetMind::FApi::FSaveQueued)Get(TEXT("okm_save_queued"));
+ Api->Flush = (FOKStreetMind::FFlush)Get(TEXT("okm_flush"));
  if (!Api->Abi || !Api->Open || !Api->Submit || !Api->Query || !Api->Poll || !Api->Free || !Api->LastError || !Api->Save || !Api->Close) {
   Error = TEXT("ok_mind.dll is missing exports: ") + Path;
   delete Api;
@@ -244,3 +249,13 @@ bool FOKStreetMind::Save(FString& Error) {
  Error = TakeError();
  return false;
 }
+
+bool FOKStreetMind::SaveQueued(FString& Error) {
+ if (!Handle) { Error = TEXT("ok_mind not open"); return false; }
+ if (!Api->SaveQueued || !Api->Flush) return Save(Error);
+ if (Api->SaveQueued(Handle) == 1) return true;
+ Error = TakeError();
+ return false;
+}
+
+FOKStreetMind::FFlush FOKStreetMind::Flusher() const { return Api && Api->SaveQueued ? Api->Flush : nullptr; }

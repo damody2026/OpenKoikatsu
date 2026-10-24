@@ -27,6 +27,23 @@ local function has_line(file, pattern)
   return false
 end
 
+-- Mistakes that each cost a whole stage build before, caught in seconds: `if(x)UE_LOG(...);else ...` does not compile
+-- (UE_LOG expands to a braced block, the `;` leaves the else without its if: C2181). Returns "file:line: text" rows.
+local function lint_sources(root)
+  local bad = {}
+  path.walk(path.join(root, "Source"), function(dir, _, files)
+    for _, n in ipairs(files) do
+      if n:match("%.cpp$") or n:match("%.inl$") or n:match("%.h$") then
+        local file = path.join(dir, n)
+        for i, line in ipairs(path.read_lines(file)) do
+          for call in line:gmatch("UE_LOG%s*%b()%s*;%s*else") do bad[#bad + 1] = ("%s:%d: %s"):format(file, i, call) end
+        end
+      end
+    end
+  end)
+  return bad
+end
+
 local function main()
   local p = ok.args.parser("Rebuild a runnable StreetSocial stage from Content + Source")
   p:opt("--tag", { required = true })
@@ -45,6 +62,8 @@ local function main()
   path.mkdir(logs)
 
   if not a.skip_exe then
+    local bad = lint_sources(root)
+    if #bad > 0 then error("UE_LOG before an else needs braces (C2181):\n" .. table.concat(bad, "\n"), 0) end
     step("host + game executable")
     local prep = proc.lua(path.join(root, "Tools/prepare_interaction_runtime_host.lua"), { "--host-path", host_path },
       { stdout_file = path.join(logs, "prepare.log"), merge = true })

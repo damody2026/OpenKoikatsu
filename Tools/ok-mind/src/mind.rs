@@ -274,10 +274,15 @@ impl Mind {
     }
 
     pub fn save(&self) -> Result<(), String> {
+        self.save_queued()?;
+        store::flush()
+    }
+
+    /// Every write queued on the store's writer, without waiting for the disk (store::flush waits).
+    pub fn save_queued(&self) -> Result<(), String> {
         self.shared.memories.save_all()?;
         let state = self.shared.state.lock().unwrap().clone();
-        store::save_state(&self.shared.cfg.save_dir, &state)?;
-        store::flush()
+        store::save_state(&self.shared.cfg.save_dir, &state)
     }
 
     /// Never blocks the game for long: idle workers stop at once; a worker stuck in an HTTP call is left to

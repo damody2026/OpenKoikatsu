@@ -18,6 +18,11 @@ public:
  // Finished jobs since the last call; call from the game thread.
  void Poll(TArray<TSharedPtr<FJsonObject>>& Out);
  bool Save(FString& Error);
+ // Save without waiting for the disk (an older DLL without it saves and waits). Flusher: the DLL's wait for those
+ // writes, callable from any thread and without the mind (nullptr from an older DLL, whose SaveQueued already waited).
+ bool SaveQueued(FString& Error);
+ using FFlush = int32 (*)();
+ FFlush Flusher() const;
  // Hot reload, only while no job is queued or running: a newer build of the DLL (Tools/ok-mind/target/release, or
  // OK_MIND_SOURCE_DLL) is loaded from a copy under a fresh name; either way the mind is closed (saved) and opened
  // again with the same configuration, so the settings file (endpoint, model, key) is read anew. The old one comes

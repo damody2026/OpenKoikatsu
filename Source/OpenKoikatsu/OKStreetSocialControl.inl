@@ -296,7 +296,7 @@ void AOKStreetSocialScene::StartControlServer(){
  Bind(TEXT("/saves"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;const auto Body=OKControlBody(Req);FString Op,Slot;Body->TryGetStringField(TEXT("op"),Op);Body->TryGetStringField(TEXT("slot"),Slot);
   if(Op==TEXT("open"))OpenSaveMenu(TEXT("game"));else if(Op==TEXT("start"))OpenSaveMenu(TEXT("start"));else if(Op==TEXT("close"))CloseSaveMenu();
-  else if(Op==TEXT("save")&&!Slot.IsEmpty())SaveToSlot(Slot);
+  else if(Op==TEXT("save")&&!Slot.IsEmpty()){bool Background=false;Body->TryGetBoolField(TEXT("background"),Background);SaveToSlot(Slot,Background);}
   auto O=OKControlResult(true);O->SetStringField(TEXT("menu"),S.SaveMenu);O->SetStringField(TEXT("notice"),S.SaveNotice);
   auto Slots=MakeShared<FJsonObject>();Slots->SetStringField(TEXT("auto"),SaveSlotSummary(TEXT("auto")));for(int32 I=1;I<=OKStreetSaveSlotCount;++I)Slots->SetStringField(FString::FromInt(I),SaveSlotSummary(FString::FromInt(I)));
   O->SetObjectField(TEXT("slots"),Slots);OKControlReply(Done,O);
