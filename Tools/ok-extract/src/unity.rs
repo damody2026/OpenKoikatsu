@@ -10898,3 +10898,11 @@ mod prefab_renderer_visibility_tests {
         assert_eq!(prefab_active_in_hierarchy(&h, &[false, true, true, true], &overrides, 2), Some(false));
     }
 }
+
+/// Diagnostic (`ok-extract <game> --bundle-textures <bundle file>`): every Texture2D a bundle holds, with its pixel
+/// area and whether it decodes, to tell a list entry's absent texture from one the decoder cannot read.
+pub fn bundle_texture_report(bytes: Vec<u8>) -> Vec<(String, u32, bool)> {
+    let parsed = parse_bundle_ref(&bytes);
+    let dir = parsed.texture_directory();
+    dir.catalog.iter().map(|(name, px)| (name.clone(), *px, parsed.texture_png_named(name).is_some())).collect()
+}

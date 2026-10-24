@@ -18359,3 +18359,6 @@ pub fn export_session_posed_objs(game_root: &Path, card_path: &Path, outfit: i32
     }
     Ok(session.parts.len())
 }
+
+/// `unity::bundle_texture_report` for the CLI (`--bundle-textures`).
+pub fn bundle_texture_report(bytes: Vec<u8>) -> Vec<(String, u32, bool)> { crate::unity::bundle_texture_report(bytes) }

@@ -168,6 +168,13 @@ fn main() {
         println!("exported {ok}, failed {failed}");
         return;
     }
+    if out == "--bundle-textures" {
+        let path = PathBuf::from(args.next().expect("bundle file required"));
+        for (name, px, ok) in ok_extract::bundle_texture_report(std::fs::read(&path).expect("read bundle")) {
+            println!("{name}	{px}	{}", if ok { "decodes" } else { "DOES NOT DECODE" });
+        }
+        return;
+    }
     if out == "--posed-objs" {
         // ok-extract <game> --posed-objs <out dir> <card> (OK_OUTFIT): the session's skinned parts as OBJs.
         let dir = PathBuf::from(args.next().expect("output dir required"));
