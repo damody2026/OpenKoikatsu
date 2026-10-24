@@ -364,7 +364,7 @@ void AOKStreetSocialScene::TickThenAction(){
  auto& S=*State;if(S.ThenAction.IsEmpty())return;const int32 Girl=S.ThenGirl;
  if(OKStreetMindNow(S)>S.ThenUntil||Girl==INDEX_NONE||FreeTalkPartner()!=Girl){UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d dropped (%s)"),*S.ThenAction,Girl,FreeTalkPartner()!=Girl?TEXT("they parted"):TEXT("too long"));S.ThenAction.Reset();return;}
  // Anything they sat down to (a meal, a drink, coffee and cake at the cafe) is done once what they ordered in it is eaten.
- const bool MealDone=S.Pair.Partner==Girl&&S.Table.IsEmpty()&&S.TableClearedAt>=S.Pair.PlayingAt&&S.Pair.Phase==1;
+ const bool MealDone=S.Pair.Partner==Girl&&S.TableClearedAt>=S.Pair.PlayingAt&&S.Pair.Phase==1;
  if((S.Pair.Partner==Girl&&!MealDone)||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl)||S.SoloGirl==Girl||S.OutingGirl==Girl||!S.RetryAction.IsEmpty()||S.FreeTalkBusy)return;
  if(OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive))return;
  if(S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);}))return;

@@ -181,12 +181,22 @@ void AOKStreetSocialScene::TickServes(){
 // offered to in what he just said; otherwise her own inclination (split, she pays, he pays), and a strong wish to pay
 // herself opens the usual checkout choice, as for the buttons.
 // Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
-void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How){
+void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const FString& GoingNow){
  auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
  S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);
  // Settled inside a shop: for that shop at once (she paid her own book: not her own soup at the restaurant after).
  // Settled outside ("I will treat you to a drink" on the way): for the shop where it is first used (PayAgreed).
- S.PayAgreedShop=ShopPlaceHere();UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s"),Girl,*How);
+ S.PayAgreedShop=ShopPlaceHere();
+ // Settled while setting off for somewhere else ("let's eat at the restaurant, my treat", said in the bookshop): for
+ // where they are going. Bound to the bookshop, the dinner it was about became hers to pay.
+ // Or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's then).
+ // What they set off to do with these very words comes first (the outing itself starts after this).
+ const FString Going=!GoingNow.IsEmpty()?GoingNow:S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString();
+ if(!Going.IsEmpty()){
+  FString Dest=Going.StartsWith(TEXT("go:"))?Going.Mid(3):FString();
+  if(Dest.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(Going);A&&A->Place&&*A->Place)Dest=A->Place;
+  if(!Dest.IsEmpty())S.PayAgreedShop=Dest;}
+ UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
  if(How==TEXT("him")&&Girl==S.HerPaidGirl&&S.HerPaidAmount>0&&!S.HerPaidShop.IsEmpty()&&S.HerPaidShop==ShopPlaceHere()&&OKStreetMindNow(S)-S.HerPaidAt<=15&&S.Store.PlayerCash>=S.HerPaidAmount){
@@ -399,6 +409,9 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   UE_LOG(LogTemp,Display,TEXT("Street meal: she is full (satiety %.0f) with dishes left"),Satiety);RefreshUI();
  }
  {bool Waiting=false;for(const auto& D:S.Table)if(D.Percent>0.f&&(!D.ForHer||!D.Served||CanEat(DishOwner(D),D)))Waiting=true;
+  // Nobody at the table can eat any more (she alone, full with her soup half left): the eating is over for what they
+  // do next (TickThenAction), the dishes stay.
+  if(!Waiting&&AnyLeft)S.TableClearedAt=SceneTime();
   if(!Waiting&&AnyLeft&&Eaters.Num()>1){S.Message=OKT(TEXT("ui.economy.everyone_full"));RememberMeal(Eaters);S.Table.Reset();S.TableClearedAt=SceneTime();UE_LOG(LogTemp,Display,TEXT("Street meal: everyone is full, the rest is left"));RefreshUI();return;}}
  if(!AnyLeft){
   S.Message=OKT(TEXT("ui.economy.all_dishes_eaten"));RememberMeal(Eaters);S.Table.Reset();S.TableClearedAt=SceneTime();

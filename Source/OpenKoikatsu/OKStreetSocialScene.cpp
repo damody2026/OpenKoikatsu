@@ -1345,9 +1345,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   if(Verdict->TryGetObjectField(TEXT("promise"),Promise)&&Promise&&(*Promise).IsValid()){(*Promise)->TryGetStringField(TEXT("day"),Day);(*Promise)->TryGetStringField(TEXT("time"),Time);(*Promise)->TryGetStringField(TEXT("place"),Place);(*Promise)->TryGetStringField(TEXT("what"),What);}
   UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d do_now=\"%s\" (her field \"%s\") promise=%s %s %s %s; %s"),Character,*DoNow,*HerAction,*Day,*Time,*Place,*What,*Why);
   // What they agreed to do as soon as this is over ("after we eat I'll walk you home", "eat first, then the department
-  // store"): it starts when it is over (TickThenAction), not only when he asks again.
+  // store"): it starts when it is over (TickThenAction), not only when he asks again. With a do_now as well (one more
+  // round of the fish, then lunch), after that one.
   {FString Then;Verdict->TryGetStringField(TEXT("then"),Then);if(Then.StartsWith(TEXT("act:")))Then=Then.Mid(4);
-   if(!Then.IsEmpty()&&DoNow.IsEmpty()&&(!Then.StartsWith(TEXT("go:"))||OKStreetFindPlace(Then.Mid(3)))){L->ThenAction=Then;L->ThenGirl=Character;L->ThenUntil=OKStreetMindNow(*L)+120;UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d then=%s, once what they are doing is over"),Character,*Then);}}
+   if(!Then.IsEmpty()&&Then!=DoNow&&(!Then.StartsWith(TEXT("go:"))||OKStreetFindPlace(Then.Mid(3)))){L->ThenAction=Then;L->ThenGirl=Character;L->ThenUntil=OKStreetMindNow(*L)+120;UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d then=%s, once what they are doing is over"),Character,*Then);}}
   // "Lunch at the cafeteria? — Sure, see you there at noon" judged as both a promise and going now: the meeting is later
   // (another day, or more than half an hour from now), so the same place is not gone to now.
   if(!DoNow.IsEmpty()&&!Place.IsEmpty()){
@@ -1464,7 +1465,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    }
    if(Added>0)Weak->PlaceChatOrder(Character,Her);}
   // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请").
-  {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())Weak->RecordPayAgreed(Character,Payer);}
+  {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())Weak->RecordPayAgreed(Character,Payer,DoNow);}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
   {double Lend=0;Verdict->TryGetNumberField(TEXT("he_lends"),Lend);Weak->SettleMoneyHandover(Character,Lend,true);}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).
