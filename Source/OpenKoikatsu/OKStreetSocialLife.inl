@@ -158,11 +158,13 @@ void AOKStreetSocialScene::TickLife(float Dt){
  // How far she is from where her schedule block puts her. After an outing or a walk she is wherever it ended, and
  // a seated loop there would put a chair in the middle of the street.
  auto SpotDistance=[&](int32 I,const FOKStreetPlanBlock& B){float Yaw=0;const FVector Spot=SpotFor(I,B.Place,B.Kind==TEXT("class")&&!B.Activity.IsEmpty()?B.Activity:B.Kind,Yaw);return float(FVector::Dist2D(S.Agents[I-1].Position,Spot));};
- // 1. Poses while the schedule holds them near him: the two nearest, sharing the two action slots with the ambient
- // owner (which waits while any pose plays). Anything he starts in the foreground takes the slots back at once.
+ // 1. Poses while the schedule holds them near him: the nearest ones, sharing the action slots with the ambient owner
+ // (which waits while any pose plays). What he does in the foreground keeps two slots for the two of them; the rest go on
+ // with their day (at lunch with Alice, five others stood frozen round the cafeteria instead of eating).
  const bool Foreground=S.Target!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.Facility!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE||S.SoloGirl!=INDEX_NONE||S.SleepPhase!=0||S.LoverReact.Girl!=INDEX_NONE||S.LoverPose.Girl!=INDEX_NONE;
- if(Foreground){if(!S.LifePoses.IsEmpty())StopLifePose(INDEX_NONE);}
- else{
+ const int32 LifeLimit=FMath::Min(2,FMath::Max(0,OKCrowdRuntimeActionSlots-(Foreground?2:0)));
+ while(S.LifePoses.Num()>LifeLimit)StopLifePose(S.LifePoses.Last().Actor);
+ {
   // Keep a pose while her block wants that clip and he is around; a closer heroine with something to do takes over.
   for(int32 K=S.LifePoses.Num()-1;K>=0;--K){
    auto& P=S.LifePoses[K];const int32 I=P.Actor;const FOKStreetPlanBlock* B=LifeBlock(I,Minute);
@@ -179,7 +181,7 @@ void AOKStreetSocialScene::TickLife(float Dt){
      if(OKPlayCrowdRuntimeAction(this,I,P.Clip,Error)){P.Phase=1;SpawnLifeProps(P);UE_LOG(LogTemp,Display,TEXT("Street life: actor %d %s (%s)"),I,*P.Clip,B?*B->Kind:TEXT(""));}else StopLifePose(I);}
    }
   }
-  if(S.LifePoses.Num()<2&&S.AmbientActor==INDEX_NONE&&S.AllReady&&!S.SelfTest&&Now>=S.LifeCheckAt){
+  if(S.LifePoses.Num()<LifeLimit&&S.AmbientActor==INDEX_NONE&&S.AllReady&&!S.SelfTest&&Now>=S.LifeCheckAt){
    S.LifeCheckAt=Now+2.0;int32 Best=INDEX_NONE;float BestD=OKLifeRange;FString Clip;
    for(const int32 I:S.ScheduleHeld){
     if(InLifePose(I)||!S.Agents.IsValidIndex(I-1)||S.Commutes.Contains(I)||S.NpcLifts.Contains(I)||BusyWithPlayer(I)||S.LifeCooldown.FindRef(I)>Now)continue;
