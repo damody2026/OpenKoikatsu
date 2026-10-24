@@ -202,6 +202,7 @@ struct FOKStreetActivity {
  const TCHAR* MaleClip = nullptr;
  const TCHAR* ZhName = nullptr; // the data's own name, kept when the language swaps Name
  const TCHAR* Effect = nullptr; // shown while it runs (activities.toml effect: "explosion")
+ float Turn = 0.f; // degrees added to the anchor's facing (activities.toml turn)
 };
 
 // The activities come from the rules (rules/activities.toml, activities.rs `activities_table`), read with the other
