@@ -22,6 +22,10 @@ pub struct Activity {
     /// Anchor in the place's model; "a|b" takes the first one the model has (a new scene's anchor wins once it is there).
     #[serde(default)]
     pub anchor: String,
+    /// Degrees added to the anchor's facing (the fountain's spot faces away from it for a photo with it behind them;
+    /// feeding the fish turns them round to the water).
+    #[serde(default)]
+    pub turn: f32,
     #[serde(default)]
     pub female_clip: String,
     #[serde(default)]
@@ -250,7 +254,7 @@ fn table(t: &ActivitiesTuning, own: &ActivitiesTuning) -> Value {
         .map(|a| {
             let own_name = own.find(&a.id).map(|o| o.name.clone()).unwrap_or_else(|| a.name.clone());
             json!({"id": a.id, "name": a.name, "own_name": own_name, "place": a.place, "kind": a.kind, "code": a.code,
-                   "anchor": a.anchor, "female_clip": a.female_clip, "male_clip": a.male_clip, "effect": a.effect})
+                   "anchor": a.anchor, "turn": a.turn, "female_clip": a.female_clip, "male_clip": a.male_clip, "effect": a.effect})
         })
         .collect();
     json!({"activities": rows})

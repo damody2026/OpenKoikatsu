@@ -782,6 +782,8 @@ struct FScene : TSharedFromThis<FScene> {
   Cap->RegisterComponent();ForegroundCapture=Cap;
   UE_LOG(LogTemp,Display,TEXT("Runtime foreground occlusion capture created"));
  }
+ // How near a girl must be for her eyes to show through her front hair (FrontGpu, OccluderGpu): cm.
+ static constexpr double OKForegroundRange=1000.;
  // Each frame: the capture takes the player camera's view and the viewport's size, showing every OccluderGpu.
  void UpdateForegroundCapture(const FVector& Location,const FRotator& Rotation,float Fov){
   auto* Cap=ForegroundCapture.Get();if(!Cap||!ForegroundDepth.IsValid())return;
@@ -792,7 +794,7 @@ struct FScene : TSharedFromThis<FScene> {
   // Captured only while one of them stands in front of the camera within 30 m (her eyes are a few pixels beyond).
   Cap->ShowOnlyComponents.Reset();const FVector Forward=Rotation.Vector();
   for(const auto& E:Entries)if(auto* C=E->OccluderGpu.Get()){const FVector To=E->Transform.GetTranslation()-Location;
-   if(To.SizeSquared()<FMath::Square(3000.)&&FVector::DotProduct(To,Forward)>-100.)Cap->ShowOnlyComponents.Add(C);}
+   if(To.SizeSquared()<FMath::Square(OKForegroundRange)&&FVector::DotProduct(To,Forward)>-100.)Cap->ShowOnlyComponents.Add(C);}
   Cap->bCaptureEveryFrame=!Cap->ShowOnlyComponents.IsEmpty();
  }
  bool ActionSlotBusy(int32 Actor)const{for(const auto& Slot:ActionSlots)if(Slot.Actor==Actor)return true;return false;}
@@ -959,13 +961,19 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(A==0&&ForegroundCapture.IsValid()){
     if(Pc&&Pc->PlayerCameraManager)UpdateForegroundCapture(Pc->PlayerCameraManager->GetCameraLocation(),Pc->PlayerCameraManager->GetCameraRotation(),Pc->PlayerCameraManager->GetFOVAngle());
     else if(Camera.IsValid()&&Camera->GetCameraComponent())UpdateForegroundCapture(Camera->GetActorLocation(),Camera->GetActorRotation(),Camera->GetCameraComponent()->FieldOfView);}
-   const bool NearShadow=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(1600.);
+   // Near and on the camera's floor: a girl in her room a storey up or down casts nothing anyone sees through the
+   // floor slab, yet her shadow views cost as much as hers in front of him (the dorm in the evening, 103 FPS).
+   const bool NearShadow=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(1600.)&&(A==0||FMath::Abs(E.Transform.GetTranslation().Z-PlayerPosition.Z)<200.);
    if(auto* C=E.Cpu.Get())C->SetCastShadow(false);if(auto* G=E.Gpu.Get())G->SetCastShadow(E.ShadowGpu.IsValid()?false:NearShadow);if(auto* S=E.ShadowGpu.Get())S->SetCastShadow(NearShadow);
    const bool EntryGpu=GpuMode||(!Installed&&E.LoadingGpuInstalled&&RequestedGpu);
    if(Installed||E.VisibleMs>0)if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)C->SetWorldTransform(E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
    if(!Installed&&!EntryGpu&&ProgressiveLoading&&E.VisibleMs>0){auto* Main=E.LoadingMain.IsValid()?E.LoadingMain.Get():E.Cpu.Get();Main->SetWorldTransform(E.Transform);Main->SetCastShadow(NearShadow);Main->SetVisibility(true);}
-   if(auto* F=E.FrontGpu.Get()){F->SetWorldTransform(E.Transform);F->SetVisibility(true);}
-   if(auto* C=E.OccluderGpu.Get()){C->SetWorldTransform(E.Transform);C->SetVisibility(true);}
+   // Her eyes through her front hair need these only up close (OKForegroundRange): farther off the detail is a few
+   // pixels, and each one more girl drawn into the custom depth and the capture every frame (the dorm lounge, eight
+   // girls, 56 FPS).
+   const bool Foreground=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(OKForegroundRange);
+   if(auto* F=E.FrontGpu.Get()){F->SetWorldTransform(E.Transform);F->SetVisibility(Foreground);}
+   if(auto* C=E.OccluderGpu.Get()){C->SetWorldTransform(E.Transform);C->SetVisibility(Foreground);}
    if(auto* G=E.Gpu.Get()){G->SetWorldTransform(E.Transform);G->SetVisibility(true);if((Render->Ready.Load()||(!Installed&&E.LoadingRender&&E.LoadingRender->Ready.Load()))&&E.VisibleMs<=0)E.VisibleMs=(FPlatformTime::Seconds()-Started)*1000;}
    if(auto* S=E.ShadowGpu.Get()){S->SetWorldTransform(E.Transform);S->SetVisibility(true);}
    if(!Installed&&E.LoadingGpuInstalled){ENQUEUE_RENDER_COMMAND(PrivateLoadingPlayback)([R=E.LoadingRender,P,CpuSource=!RequestedGpu](FRHICommandListImmediate&){if(R->UseCpu!=CpuSource)R->Reset=true;R->UseCpu=CpuSource;R->Playback={P};R->Enabled=true;});if(E.LoadingRender->Ready.Load()&&!E.PrivateGpuVisibleMs){E.PrivateGpuVisibleMs=(FPlatformTime::Seconds()-Started)*1000;E.PrivateGpuVisibleComplete=Complete;if(!FirstVisibleMs)FirstVisibleMs=E.PrivateGpuVisibleMs;UE_LOG(LogTemp,Display,TEXT("APNG private GPU visible: selection=%d elapsed_ms=%.3f complete=%d/%d"),A,E.PrivateGpuVisibleMs,Complete,Entries.Num());}}
@@ -1138,6 +1146,11 @@ bool OKCancelCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error){
  auto& E=*State->Entries[Character];E.ActionOverride=INDEX_NONE;E.PendingAction=INDEX_NONE;E.PendingEpoch=0;E.StreamHold=false;
  if(E.SpeechPaired||E.LinkedActionEpoch!=0)E.CancelSpeech();
  Error.Reset();return true;
+}
+bool OKReleaseCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error){
+ check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
+ if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
+ State->Entries[Character]->ActionOverride=INDEX_NONE;Error.Reset();return true;
 }
 bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;

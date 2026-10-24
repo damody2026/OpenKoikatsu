@@ -681,6 +681,9 @@ void AOKStreetSocialScene::BeginPlay(){
   for(TActorIterator<ADirectionalLight> It(GetWorld());It;++It){S.Sun=*It;It->GetLightComponent()->SetMobility(EComponentMobility::Movable);break;}}
  auto Quality=[](const TCHAR* Name,float Value){if(auto* C=IConsoleManager::Get().FindConsoleVariable(Name))C->Set(Value,ECVF_SetByConsole);};
  Quality(TEXT("r.AntiAliasingMethod"),2);Quality(TEXT("r.ScreenPercentage"),100);Quality(TEXT("r.SecondaryScreenPercentage.GameViewport"),100);Quality(TEXT("r.DynamicRes.OperationMode"),0);Quality(TEXT("r.TemporalAA.Quality"),2);Quality(TEXT("r.TemporalAA.HistoryScreenPercentage"),100);
+ // Cascaded shadow maps, not virtual ones: the same toon shadows on screen, and every scene measured ran faster with
+ // them (food court 108 -> 125, the girls' dorm 85 -> 130, the dorm lounge full of girls 56 -> 70 FPS).
+ Quality(TEXT("r.Shadow.Virtual.Enable"),0);
  int32 ResX=0,ResY=0;
  if(FParse::Value(FCommandLine::Get(),TEXT("ResX="),ResX)&&FParse::Value(FCommandLine::Get(),TEXT("ResY="),ResY)&&ResX>=640&&ResY>=360){if(auto* Settings=GEngine->GetGameUserSettings()){Settings->SetScreenResolution(FIntPoint(ResX,ResY));Settings->SetFullscreenMode(EWindowMode::Windowed);Settings->ApplyResolutionSettings(false);}}
  FString ManifestPath,Json,Error;

@@ -717,7 +717,7 @@ bool AOKStreetSocialScene::StartOutingActivity(int32 Girl,const FString& Activit
   const FOKStreetModelAnchor* Spot=Place?OKStreetPlaceAnchor(*Place,A->Anchor):nullptr;
   if(!Spot||!A->FemaleClip){Error=OKT(TEXT("ui.outing.cannot_do_here"));return false;}
   StopAmbientActivity();EndTalk();if(S.Companion==Girl)FinishCompanion();
-  const FRotator Facing(0,Spot->Yaw,0);FString Ignore;
+  const FRotator Facing(0,Spot->Yaw+A->Turn,0);FString Ignore;
   S.Male=Spot->Position;S.Rotations[0]=Facing;
   auto& Agent=S.Agents[Girl-1];Agent.Position=S.Male+Facing.RotateVector(FVector(0,110,0));Agent.Held=true;S.Rotations[Girl]=Facing;
   if(!OKPrewarmCrowdRuntimeAction(this,Girl,A->FemaleClip,Ignore)){Error=OKT(TEXT("ui.outing.action_not_ready_label"))+Ignore;Agent.Held=false;return false;}
@@ -725,13 +725,13 @@ bool AOKStreetSocialScene::StartOutingActivity(int32 Girl,const FString& Activit
   const TCHAR* MaleClip=A->MaleClip?A->MaleClip:A->FemaleClip;
   const bool MaleOk=OKPrewarmCrowdRuntimeAction(this,0,MaleClip,Ignore);if(!MaleOk)UE_LOG(LogTemp,Warning,TEXT("Street solo: male clip %s: %s"),MaleClip,*Ignore);
   if(A->Effect&&*A->Effect)StartEffect(A->Effect,Girl); // her spell, far off over the field
-  S.SoloGirl=Girl;S.SoloPhase=1;S.SoloSpot=S.Male;S.SoloYaw=Spot->Yaw;S.SoloFemale=A->FemaleClip;S.SoloMale=MaleOk?MaleClip:TEXT("");S.SoloWhat=A->Name;S.SoloId=A->Id;S.SoloAt=SceneTime();
+  S.SoloGirl=Girl;S.SoloPhase=1;S.SoloSpot=S.Male;S.SoloYaw=Facing.Yaw;S.SoloFemale=A->FemaleClip;S.SoloMale=MaleOk?MaleClip:TEXT("");S.SoloWhat=A->Name;S.SoloId=A->Id;S.SoloAt=SceneTime();
   // It takes its time (game minutes, the rules' table) and then ends by itself: praying is over, the fish watched.
   S.SoloStartMinute=OKStreetMindNow(S);{auto Request=OKRulesRequest(TEXT("activity_minutes"));Request->SetStringField(TEXT("id"),A->Id);Request->SetStringField(TEXT("kind"),TEXT("solo"));Request->SetNumberField(TEXT("code"),A->Code);
    const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);S.SoloMinutes=Answer.IsValid()?int32(Answer->GetNumberField(TEXT("minutes"))):20;}
   // In front of a machine the camera looks over their shoulders at it; elsewhere it shows their faces.
   const bool Machine=FCString::Strcmp(A->Anchor,TEXT("vending"))==0;
-  S.Yaw=Spot->Yaw+(Machine?35:150);S.Pitch=Machine?-18:-12;S.Distance=360;
+  S.Yaw=Facing.Yaw+(Machine?35:150);S.Pitch=Machine?-18:-12;S.Distance=360;
   S.Message=OKMsg(TEXT("ui.outing.speaker_line_walkaway"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}, {TEXT("speaker_name"), A->Name}});RefreshUI();
   UE_LOG(LogTemp,Display,TEXT("Street solo: actor=%d %s clip=%s male=%s"),Girl,A->Id,A->FemaleClip,A->MaleClip?A->MaleClip:TEXT("-"));
   return true;

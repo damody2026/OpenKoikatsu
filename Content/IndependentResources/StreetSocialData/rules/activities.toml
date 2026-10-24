@@ -770,6 +770,7 @@ place = "park"
 kind = "solo"
 code = 0
 anchor = "pond|fountain"
+turn = -90
 female_clip = "venue_observe.okanim"
 needs = ["park_fishfood"]
 minutes = 15
