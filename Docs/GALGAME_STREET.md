@@ -83,3 +83,7 @@ C++ 只負責呈現；鏡頭選擇、打字速度、構圖等規則都在 Rust�
 左下角立繪的外框是角色描邊（outline 殼）在剪影外圍的那一圈。立繪的顏色照拍（臉、頭髮之間的內部線條保留），但決定透明範圍的 coverage 那一張拍攝時暫時隱藏她的 outline 殼（`OKSetCrowdRuntimeOutlinesShown`，材質的 `__OK_RuntimeRevealOverride` 設 0，拍完設回 -1），於是剪影外圍那圈描邊落在透明區、不顯示。`FOKStoryPortraitCapture::Update` 新增選用的 `CoverageScope` 回呼做這件事。coverage 原本當成主畫面的額外 pass 在幀尾才畫（`bRenderInMainRenderer`），那時 outline 早已設回顯示，所以有 scope 時 coverage 改成在 `CaptureScene` 當下自己畫一次（無光照、無後製，每兩幀一次）；`ok.Street.GalgamePortraitOutline 1` 回到保留外框、coverage 跟主畫面一起畫的舊做法。coverage 原本只有顏色的一半解析度，雙線性放大後邊緣會多透出一兩個像素，正好是那圈描邊，所以改成與顏色同解析度。對話時頭部注視可用 `ok.HeadLook 0` 關掉（A/B 比較用）。
 
 走路時（她跟著他走、邊走邊說）立繪外框會閃：顏色在第 N 幀拍、coverage 在第 N+1 幀用第 N 幀的鏡頭拍，她在這一幀間已經移動，裁切邊緣就偏離剪影，一側露出描邊、另一側被切掉，每次擷取來回跳。現在隱藏描邊時，coverage 在同一幀緊接著顏色拍（反正它已經是當下自己畫），同一個姿勢，邊緣對齊。
+
+## 第一人稱被家具擋住時改用一般鏡頭（2026-10-25）
+
+兩人隔著桌子、檯燈或書架說話時，第一人稱鏡頭只拍到家具（她就在 1.2 m 外，被桌上的檯燈整個擋住）。現在每一句取景時，第一人稱的候選（她的臉 → 他的眼睛）排第一，後面接這一句一般鏡頭（特寫／雙人／過肩）的候選，一起送 probe 給遊戲量視線。第一人稱看得到她就照用；看不到就換成第一個視線暢通的一般鏡頭，該句之後的重新取景也跟著那個鏡頭（`LiveState.pov_fallback`，`Tools/ok-story/src/live.rs`）。下一句再從第一人稱開始檢查。
