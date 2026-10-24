@@ -34,6 +34,8 @@ struct FOKStreetGalgame
 	bool bReplayScene = false;
 	// A replay was on screen last frame: once it ends (or is stopped) the box shows the conversation's own last line again.
 	bool bWasReplaying = false;
+	// The words of the line on screen (a restore of the same line after a replay is not typed again).
+	FString OnScreen;
 	// Who speaks the line on screen (character slot) and whether a voice plays it.
 	int32 Speaker = INDEX_NONE;
 	bool bVoiced = false;
@@ -190,6 +192,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		UE_LOG(LogTemp, Display, TEXT("Street galgame line c%d%s: %s"), Slot, bVoiced ? TEXT(" (voiced)") : TEXT(""), *Text);
 		G.Speaker = Slot;
 		G.bVoiced = bVoiced;
+		G.OnScreen = L->GetStringField(TEXT("text"));
 	};
 
 	// The conversation: who he talks with (free talk follows the walk companion, the date, the pair partner too).
@@ -273,7 +276,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				int32 Slot = OKStreetLineSpeaker(Lines.Last(), Names);
 				if (Slot == INDEX_NONE) Slot = G.Partner;
 				const FString Words = OKStreetGalgameWords(Lines.Last(), NameOf(Slot));
-				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, false);
+				if (!OKStreetGalgamePlaceholder(Words) && OKStreetGalgameWords(Words, FString()) != G.OnScreen) SendLine(Slot, Words, false);
 			}
 		}
 		// Free talk: his words, then her (newest) line as it arrives.
@@ -361,9 +364,38 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		const bool bScripted = G.Speaker != 0 && S.Node != INDEX_NONE && S.VoiceIds.Num() > 1;
 		double Progress = bPlaying && Total > 0 ? FMath::Clamp(Played / Total, 0.0, 1.0) : -1.0;
 		if (bScripted && Progress >= 0) Progress = (FMath::Clamp(S.Voice, 0, S.VoiceIds.Num()) + Progress) / S.VoiceIds.Num();
+		// A replayed line of several clips: all of them count, and the short pause between clips is still the line.
+		const bool bReplayClips = S.FreeTalkReplaySpeaker == G.Speaker && S.FreeTalkReplayClips > 1 && G.Speaker != INDEX_NONE;
+		if (bReplayClips)
+		{
+			const bool bMore = !S.FreeTalkReplayParts.IsEmpty();
+			const double Clip = bPlaying && Total > 0 ? FMath::Clamp(Played / Total, 0.0, 1.0) : 0.0;
+			Progress = FMath::Clamp((FMath::Clamp(S.FreeTalkReplayClip, 0, S.FreeTalkReplayClips - 1) + Clip) / S.FreeTalkReplayClips, 0.0, 1.0);
+			if (!bPlaying && !bMore) Progress = 1.0;
+		}
 		TSharedRef<FJsonObject> V = MakeShared<FJsonObject>();
 		V->SetNumberField(TEXT("id"), 0);
-		V->SetBoolField(TEXT("playing"), bPlaying);
+		// Her free-talk reply is several TTS segments (a sentence or two each) under one line on screen: the typewriter
+		// follows all of hers, and the gap while the next segment loads is still her line.
+		bool bMoreSegments = false;
+		if (!bScripted && !bReplayClips && G.Speaker != 0 && S.FreeTalkSpeechLines.Num() > 1 && S.FreeTalkSpeechPlayed > 0)
+		{
+			int32 Segments = 0, Started = 0;
+			for (int32 I = 0; I < S.FreeTalkSpeechLines.Num(); ++I)
+			{
+				const int32 Who = S.FreeTalkSpeechSpeakers.IsValidIndex(I) ? S.FreeTalkSpeechSpeakers[I] : S.FreeTalkSpeechCharacter;
+				if (Who != G.Speaker) continue;
+				++Segments;
+				if (I < S.FreeTalkSpeechPlayed) ++Started;
+			}
+			if (Segments > 1 && Started > 0)
+			{
+				bMoreSegments = Started < Segments;
+				const double Clip = bPlaying && Total > 0 ? FMath::Clamp(Played / Total, 0.0, 1.0) : 1.0;
+				Progress = FMath::Clamp((Started - 1 + Clip) / Segments, 0.0, 1.0);
+			}
+		}
+		V->SetBoolField(TEXT("playing"), bPlaying || (bReplayClips && !S.FreeTalkReplayParts.IsEmpty()) || bMoreSegments);
 		V->SetNumberField(TEXT("progress"), Progress);
 		V->SetBoolField(TEXT("done"), false);
 		F->SetObjectField(TEXT("voice"), V);
