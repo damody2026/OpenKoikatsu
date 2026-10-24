@@ -219,10 +219,10 @@ private:
  void AddSecondSleeper(int32 First,const struct FOKStreetPlace* Place,const FString& FirstBed);
  void RequestIntimacy(int32 Character,bool bHerIdea);
  void TickIntimacy();
- int32 AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label);
+ int32 AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label,int32 Minutes=0);
  int32 CharacterOf(const FString& Id) const;
  int32 PatienceOf(int32 Character) const;
- void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His,bool bReplaces=false);
+ void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His,bool bReplaces=false,float Hours=0);
  void CancelPromiseWith(int32 Character,const FString& Scope=FString());
  void CancelAppointment(int32 AppointmentId); // one pending appointment, from the list (the cost: social.rs appointment_cancel)
  void BuildAppointmentRows(const TSharedRef<class SVerticalBox>& Panel);
@@ -386,6 +386,7 @@ private:
  void TickFarewell();
  void TickFaceTalkPartner(bool Late=false);
  void TickRetryAction();
+ void TickThenAction(); // the judge's then: what they agreed to do once this is over (OKStreetSocialLiveTalk.inl)
  void TickEnsureFreeTalk();
  void TickPlaceClosing();
  void BeginStroll(int32 Girl,FString& Error,bool bRun=false);

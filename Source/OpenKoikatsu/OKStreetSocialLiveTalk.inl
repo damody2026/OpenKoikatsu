@@ -357,12 +357,31 @@ void AOKStreetSocialScene::TickEnsureFreeTalk(){
  UE_LOG(LogTemp,Display,TEXT("Street free talk: opened again by itself, she is with him (partner=%d target=%d companion=%d outing=%d pair=%d)"),G,S.Target,S.Companion,S.OutingGirl,S.Pair.Partner);
 }
 
+// What they agreed to do once this is over (the judge's then): when her activity has ended (a meal: its table eaten
+// clean, or everyone full), nothing they ordered is still coming and the talk is free, they go. Given up after two game
+// hours, or when she is no longer the one he talks to.
+void AOKStreetSocialScene::TickThenAction(){
+ auto& S=*State;if(S.ThenAction.IsEmpty())return;const int32 Girl=S.ThenGirl;
+ if(OKStreetMindNow(S)>S.ThenUntil||Girl==INDEX_NONE||FreeTalkPartner()!=Girl){UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d dropped (%s)"),*S.ThenAction,Girl,FreeTalkPartner()!=Girl?TEXT("they parted"):TEXT("too long"));S.ThenAction.Reset();return;}
+ // Anything they sat down to (a meal, a drink, coffee and cake at the cafe) is done once what they ordered in it is eaten.
+ const bool MealDone=S.Pair.Partner==Girl&&S.Table.IsEmpty()&&S.TableClearedAt>=S.Pair.PlayingAt&&S.Pair.Phase==1;
+ if((S.Pair.Partner==Girl&&!MealDone)||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl)||S.SoloGirl==Girl||S.OutingGirl==Girl||!S.RetryAction.IsEmpty()||S.FreeTalkBusy)return;
+ if(OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive))return;
+ if(S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);}))return;
+ FString Error;const FString Action=S.ThenAction;S.ThenAction.Reset();
+ const bool Started=BeginOuting(Girl,Action,Error);
+ UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d %s%s"),*Action,Girl,Started?TEXT("started"):TEXT("refused: "),*Error);
+ if(!Started){S.FreeTalkNotice=OKT(TEXT("ui.live_talk.she_agreed_but"))+Error;S.TellHer.Add(OKMsg(TEXT("ui.live_talk.promise_failed_explain"),{{TEXT("action"),*OKStreetActivityName(Action)},{TEXT("place"),TEXT("none")},{TEXT("error"),*Error}}));}
+}
+
 // An outing she agreed to but could not start because her scripted line was still playing starts when it is over.
 void AOKStreetSocialScene::TickRetryAction(){
  auto& S=*State;if(S.RetryAction.IsEmpty())return;
  const double Now=SceneTime();
  if(Now>S.RetryUntil||S.RetryGirl==INDEX_NONE||FreeTalkPartner()!=S.RetryGirl){S.RetryAction.Reset();return;}
  if(OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive))return;
+ // Waiting for what they ordered (BeginOuting's wait_for_order): not before it is on the table.
+ const int32 Girl=S.RetryGirl;if(S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);}))return;
  FString Error;const FString Action=S.RetryAction;S.RetryAction.Reset();
  const bool Started=BeginOuting(S.RetryGirl,Action,Error);
  UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s retried after her line: %s%s"),*Action,Started?TEXT("started"):TEXT("refused: "),*Error);

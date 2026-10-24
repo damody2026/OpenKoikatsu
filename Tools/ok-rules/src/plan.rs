@@ -439,7 +439,8 @@ pub fn plan_all(c: &Catalog, r: &Value) -> Result<Value, String> {
         if crate::bias::peak_jealousy(&h.relation).0 >= 61.0 {
             stalk = haunt.clone();
         }
-        let promises = h.promises.iter().map(|p| block(p.start, p.start + 90, &p.place, "promise", "promise", "", 0)).collect();
+        // As long as they said ("the whole Saturday with you": she took no shift that day), else an hour and a half.
+        let promises = h.promises.iter().map(|p| block(p.start, if p.end > p.start { p.end.min(1440) } else { p.start + 90 }, &p.place, "promise", "promise", "", 0)).collect();
         let (timetable, classes) = campus_blocks(h, day);
         let inputs = Inputs {
             profile: &h.profile,
@@ -858,7 +859,7 @@ fn plan_set_promises(c: &Catalog, r: &Value) -> Result<Value, String> {
     day.retain(|b| b.kind != "promise");
     for p in r.get("promises").and_then(Value::as_array).into_iter().flatten() {
         let start = p.get("start").and_then(Value::as_i64).unwrap_or(0) as i32;
-        let end = start + 90;
+        let end = p.get("end").and_then(Value::as_i64).map(|e| (e as i32).min(1440)).filter(|e| *e > start).unwrap_or(start + 90);
         let place = p.get("place").and_then(Value::as_str).unwrap_or("");
         // A lunch or dinner date: her own meal of that window goes (made at nine for noon, the 12:00 lunch stayed).
         for w in [LUNCH_WINDOW, DINNER_WINDOW] {
@@ -914,6 +915,9 @@ mod tests {
         let out = plan_set_promises(&c, &json!({"blocks": day, "promises": [{"start": 720, "place": "restaurant"}]})).unwrap();
         let b: Vec<Block> = serde_json::from_value(out["blocks"].clone()).unwrap();
         assert_eq!(b.iter().map(|x| (x.start, x.end, x.kind.as_str())).collect::<Vec<_>>(), vec![(660, 720, "leisure"), (720, 810, "promise"), (810, 840, "meal")]);
+        // As long as they said: the whole afternoon.
+        let long = plan_set_promises(&c, &json!({"blocks": day, "promises": [{"start": 720, "end": 1080, "place": "restaurant"}]})).unwrap();
+        assert!(long["blocks"].as_array().unwrap().iter().any(|x| x["kind"] == "promise" && x["end"] == 1080));
         // called off: the promise block goes again
         let out = plan_set_promises(&c, &json!({"blocks": out["blocks"], "promises": []})).unwrap();
         assert!(out["blocks"].as_array().unwrap().iter().all(|x| x["kind"] != "promise"));

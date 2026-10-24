@@ -269,6 +269,9 @@ void AOKStreetSocialScene::TickShopArrival(){
  const int32 Her=FreeTalkPartner();if(Her==INDEX_NONE)return;
  if(!S.ShopEnteredWith){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: actor=%d was already in %s; no arrival prompt"),Her,*Place);return;}
  FString Why;if(PlaceClosedNow(Place,Why)||ItemsHere(Place).IsEmpty()){S.ShopArrivalPlace=Place;return;}
+ // Closing within twenty minutes: no "look at the menu and order" (they ordered at 21:59 and it closed on their dishes);
+ // the closing notice (TickPlaceClosing) tells her when it comes.
+ if(PlaceClosedAt(Place,StreetNow()+FTimespan::FromMinutes(20),Why)){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: %s closes within 20 minutes; no menu prompt"),*Place);return;}
  S.ShopArrivalPlace=Place;S.ShopArrivalAt=SceneTime();
  const auto* Where=OKStreetFindPlace(Place);
  // A bookshop or a pet shop: what is on sale, not "order what you feel like eating" (she said "nothing to eat here, don't order").
@@ -396,9 +399,9 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   UE_LOG(LogTemp,Display,TEXT("Street meal: she is full (satiety %.0f) with dishes left"),Satiety);RefreshUI();
  }
  {bool Waiting=false;for(const auto& D:S.Table)if(D.Percent>0.f&&(!D.ForHer||!D.Served||CanEat(DishOwner(D),D)))Waiting=true;
-  if(!Waiting&&AnyLeft&&Eaters.Num()>1){S.Message=OKT(TEXT("ui.economy.everyone_full"));RememberMeal(Eaters);S.Table.Reset();UE_LOG(LogTemp,Display,TEXT("Street meal: everyone is full, the rest is left"));RefreshUI();return;}}
+  if(!Waiting&&AnyLeft&&Eaters.Num()>1){S.Message=OKT(TEXT("ui.economy.everyone_full"));RememberMeal(Eaters);S.Table.Reset();S.TableClearedAt=SceneTime();UE_LOG(LogTemp,Display,TEXT("Street meal: everyone is full, the rest is left"));RefreshUI();return;}}
  if(!AnyLeft){
-  S.Message=OKT(TEXT("ui.economy.all_dishes_eaten"));RememberMeal(Eaters);S.Table.Reset();
+  S.Message=OKT(TEXT("ui.economy.all_dishes_eaten"));RememberMeal(Eaters);S.Table.Reset();S.TableClearedAt=SceneTime();
   S.TellHer.Add(OKT(TEXT("ui.economy.all_eaten_prompt")));
   UE_LOG(LogTemp,Display,TEXT("Street meal: everything eaten"));RefreshUI();
  }

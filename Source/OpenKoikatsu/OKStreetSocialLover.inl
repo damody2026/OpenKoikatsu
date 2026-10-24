@@ -157,10 +157,14 @@ void AOKStreetSocialScene::TickLover(){
   FOKRuntimeActionStreamStatus B;
   const bool HisReady=R.MaleClip.IsEmpty()||(OKGetCrowdRuntimeActionStatus(this,0,B)&&B.Ready&&!B.Pending&&!B.Preparing&&B.ClipId==R.MaleClip);
   if(HisReady&&OKGetCrowdRuntimeActionStatus(this,R.Girl,A)&&A.Ready&&!A.Pending&&!A.Preparing&&A.ClipId==R.Clip){FString Error;OKPlayCrowdRuntimeAction(this,R.Girl,R.Clip,Error);if(!R.MaleClip.IsEmpty())OKPlayCrowdRuntimeAction(this,0,R.MaleClip,Error);R.Phase=2;R.At=Now;}
-  else if(Now-R.At>15){S.Agents[R.Girl-1].Held=R.WasHeld;R=FOKStreetLoverReact();}
+  else if(Now-R.At>15){if(S.SoloGirl!=R.Girl&&S.Pair.Partner!=R.Girl)S.Agents[R.Girl-1].Held=R.WasHeld;R=FOKStreetLoverReact();}
   return;
  }
- if(Now-R.At>R.Seconds){FString Error;OKResumeCrowdRuntimeBehavior(this,R.Girl,Error);if(!R.MaleClip.IsEmpty())OKResumeCrowdRuntimeBehavior(this,0,Error);S.Agents[R.Girl-1].Held=R.WasHeld;R=FOKStreetLoverReact();}
+ if(Now-R.At>R.Seconds){
+  // Taken over meanwhile by an activity of hers (Raiden's shrine prayer was being made ready when her reaction ran out):
+  // her clips and his are the activity's now; resuming her behaviour cancelled the prayer it was preparing.
+  if(S.SoloGirl==R.Girl||S.Pair.Partner==R.Girl){UE_LOG(LogTemp,Display,TEXT("Street lover reaction: actor=%d ends inside an activity; its clips are left to it"),R.Girl);R=FOKStreetLoverReact();return;}
+  FString Error;OKResumeCrowdRuntimeBehavior(this,R.Girl,Error);if(!R.MaleClip.IsEmpty())OKResumeCrowdRuntimeBehavior(this,0,Error);S.Agents[R.Girl-1].Held=R.WasHeld;R=FOKStreetLoverReact();}
 }
 
 // What free talk can do that otherwise only a panel button does: give or lend, take the photo, sleep here, ride.

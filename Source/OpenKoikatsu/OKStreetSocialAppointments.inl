@@ -1,11 +1,11 @@
 // Included by OKStreetSocialScene.cpp: plan §13.3 appointments, the task list under the minimap, arriving, being
 // late, standing someone up, and the shop blacklist.
 
-int32 AOKStreetSocialScene::AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label){
+int32 AOKStreetSocialScene::AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label,int32 Minutes){
  auto& S=*State;auto Candidate=S.Store;
  // The same appointment again (a plan rebuilt after a reload, a repeated request): the one already there.
  if(const FOKStreetAppointment* Same=Candidate.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Status==TEXT("pending")&&X.Kind==Kind&&X.Start==Start&&X.Place==Place&&X.Heroine==(S.Manifest.Characters.IsValidIndex(Heroine)&&Heroine>0?OKStreetStableId(S.Manifest.Characters[Heroine]):FString());}))return Same->Id;
- FOKStreetAppointment A;A.Id=Candidate.NextAppointment++;A.Kind=Kind;A.Place=Place;A.Start=Start;A.Grace=Grace;A.Label=Label;
+ FOKStreetAppointment A;A.Id=Candidate.NextAppointment++;A.Kind=Kind;A.Place=Place;A.Start=Start;A.Grace=Grace;A.Label=Label;A.Minutes=FMath::Clamp(Minutes,0,1440);
  if(S.Manifest.Characters.IsValidIndex(Heroine)&&Heroine>0)A.Heroine=OKStreetStableId(S.Manifest.Characters[Heroine]);
  Candidate.Appointments.Add(A);
  if(!CommitStore(MoveTemp(Candidate)))return 0;
@@ -21,7 +21,7 @@ void AOKStreetSocialScene::PlanPromisesToday(int32 Heroine){
  const FString Id=OKStreetStableId(S.Manifest.Characters[Heroine]);
  auto Request=OKRulesRequest(TEXT("plan_set_promises"));TArray<TSharedPtr<FJsonValue>> Blocks,Promises;
  for(const auto& B:*Day)Blocks.Add(MakeShared<FJsonValueObject>(OKRulesBlockJson(B)));
- for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Kind==TEXT("date")&&A.Start/1440==S.PlanDay){auto P=MakeShared<FJsonObject>();P->SetNumberField(TEXT("start"),double(A.Start%1440));P->SetStringField(TEXT("place"),A.Place);Promises.Add(MakeShared<FJsonValueObject>(P));}
+ for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Kind==TEXT("date")&&A.Start/1440==S.PlanDay){auto P=MakeShared<FJsonObject>();P->SetNumberField(TEXT("start"),double(A.Start%1440));P->SetStringField(TEXT("place"),A.Place);if(A.Minutes>0)P->SetNumberField(TEXT("end"),double(A.Start%1440+A.Minutes));Promises.Add(MakeShared<FJsonValueObject>(P));}
  Request->SetArrayField(TEXT("blocks"),Blocks);Request->SetArrayField(TEXT("promises"),Promises);
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
  TArray<FOKStreetPlanBlock> New;for(const auto& V:Answer->GetArrayField(TEXT("blocks")))if(V->AsObject())New.Add(OKRulesReadBlock(*V->AsObject()));
@@ -47,7 +47,7 @@ int32 AOKStreetSocialScene::PatienceOf(int32 Character) const{
 }
 
 // From chat (plan §13.3 "new_promise"): {"day": "+1" | "2010-09-05", "time": "19:00", "place": id, "what": text}.
-void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces){
+void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces,float Hours){
  // An activity id in "what" ("meal") is said by its name in the label and her memory ("約meal" on the list).
  const FString What=OKStreetFindActivity(WhatSaid)?OKStreetActivityName(WhatSaid):WhatSaid;
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);const FOKStreetPlace* P=OKStreetFindPlace(Place);
@@ -96,7 +96,8 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
  const FString Label=OKMsg(TEXT("ui.appointments.meet_with_summary"), {{TEXT("character_name"), *S.Manifest.Characters[Character].Name}, {TEXT("what"), What.IsEmpty()?OKT(TEXT("ui.appointments.meeting_label")):*What}, {TEXT("person_name"), P->Name}});
  // The meeting this one takes the place of goes quietly (promise.rs replaces_id).
  {const int32 Old=int32(Out->GetNumberField(TEXT("replaces_id")));if(Old>0)MovePromiseWith(Old);}
- AddAppointment(TEXT("date"),Character,Place,Start,PatienceOf(Character),Label);
+ // As long as they said they would be together (the judge's promise.hours: "the whole Saturday"), else the usual.
+ AddAppointment(TEXT("date"),Character,Place,Start,PatienceOf(Character),Label,Hours>=2.f?FMath::RoundToInt(FMath::Min(Hours,14.f)*60.f):0);
  // Another girl is already booked near that time: he is told (both stay booked; it is his to sort out).
  {const FString Clash=Out->GetStringField(TEXT("clash"));if(!Clash.IsEmpty()){S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.clash_notice"), {{TEXT("label"), *Clash}});UE_LOG(LogTemp,Display,TEXT("Street appointment: clashes with %s"),*Clash);RefreshUI();}}
  if(S.Store.Appointments.Num())S.PromiseBookedAt.Add(S.Store.Appointments.Last().Id,FPlatformTime::Seconds());

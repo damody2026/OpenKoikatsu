@@ -86,7 +86,7 @@ void AOKStreetSocialScene::PlanAll(){
   H->SetNumberField(TEXT("invest_total"),double(S.HerInvestTotal.FindRef(Id)));H->SetStringField(TEXT("intent"),S.Intents.FindRef(Id));
   if(const auto* A=S.Store.Academics.Find(Id))H->SetObjectField(TEXT("academic"),OKStreetAcademicJson(*A));
   TArray<TSharedPtr<FJsonValue>> Promises;
-  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Start/1440==S.Store.CalendarDay){auto B=MakeShared<FJsonObject>();B->SetNumberField(TEXT("start"),double(A.Start%1440));B->SetStringField(TEXT("place"),A.Place);Promises.Add(MakeShared<FJsonValueObject>(B));}
+  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Start/1440==S.Store.CalendarDay){auto B=MakeShared<FJsonObject>();B->SetNumberField(TEXT("start"),double(A.Start%1440));B->SetStringField(TEXT("place"),A.Place);if(A.Minutes>0)B->SetNumberField(TEXT("end"),double(A.Start%1440+A.Minutes));Promises.Add(MakeShared<FJsonValueObject>(B));}
   H->SetArrayField(TEXT("promises"),Promises);
   for(const auto& E:S.Store.Company.Staff)if(E.Heroine==Id){H->SetStringField(TEXT("company_place"),CompanyHqPlace());H->SetStringField(TEXT("company_role"),E.Role);}
   {const FString Own=HeroCompanyPlace(I);if(!Own.IsEmpty()){H->SetStringField(TEXT("company_place"),Own);H->SetStringField(TEXT("company_role"),TEXT("owner"));}} // her own company
