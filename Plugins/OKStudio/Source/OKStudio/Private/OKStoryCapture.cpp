@@ -238,6 +238,18 @@ void FOKStoryPortraitCapture::Update(UObject* Outer, UWorld* World, const TShare
 	if (!bCapture || !OKStoryCaptureVector(Portrait, TEXT("pos"), Pos) || !OKStoryCaptureQuat(Portrait, TEXT("rot"), Rot)) return;
 	const float Width = float(Portrait->GetNumberField(TEXT("ortho_width")));
 	Render(Color.Get(), Pos, Rot, Width);
+	if (CoverageScope)
+	{
+		// The coverage cuts the colour's outermost line off: taken a frame later, a walking girl has moved within the
+		// frame and the cut slides off her silhouette (the line shows on one side, the edge is clipped on the other,
+		// flickering every capture). Same frame, same pose: it renders here anyway.
+		Render(Coverage.Get(), Pos, Rot, Width);
+		Front = Back;
+		bShown = true;
+		Show();
+		if (Mid) Mid->SetScalarParameterValue(TEXT("Alpha"), float(Portrait->GetNumberField(TEXT("alpha"))));
+		return;
+	}
 	bCoveragePending = true;
 	PendingPos = Pos;
 	PendingRot = Rot;

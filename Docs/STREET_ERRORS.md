@@ -586,3 +586,9 @@
 - 合併 E 組 7c3b67bb（人群姿態全域 shader `FOKIndependentPoseCS` 改了參數結構）之後，我用現在原始碼編的 Gest08 配舊的 `StreetDisplay26HG.patch`，讀檔時 assert `parameter structure has changed without recompilation of the shader` 崩潰。修正：先重編 C 的 OpenKoikatsuEditor（D: 引擎），再跑 `Tools/rebuild_street_social_patch.lua --output <新資料夾>`，把產生的 `RuntimeGlobalShaderPatch-*_P.pak` 放進共用 patch 資料夾。之後只要合併改到 `Plugins/KKCrowdGpuPacking/Shaders` 或其參數結構的 commit，就要做這一步再出 stage。
 - 同一次我還把 host 建置啟動了兩份：一份用 `&` 背景執行，另一份用工具的背景執行，兩份同時寫同一個 log，其中一份 stage 失敗（EXIT=1）。建置只用工具的背景執行，不要再用 `&`。
 - `/fps` 先寫成 `GAverageMS`，但 UE5.8 沒有公開這個變數，`GAverageFPS` 也不在公開標頭裡。改成在檔案範圍 `extern ENGINE_API float GAverageFPS;`，毫秒用 `1000/fps` 算。
+
+### 2026-10-24 立繪外框在角色走動時閃爍
+- 現象：去掉立繪最外層描邊後，她走動時左下角立繪的外框一直閃。
+- 原因：顏色在第 N 幀拍，coverage 在第 N+1 幀沿用第 N 幀的鏡頭拍；她在兩幀之間移動，裁切邊緣偏離剪影。
+- 修正：有 `CoverageScope` 時，coverage 在同一幀緊接著顏色拍（`OKStoryCapture.cpp`）。
+- 預防：兩張要互相對齊的擷取必須是同一幀、同一姿勢；驗收立繪要在角色移動時連拍比對，不能只看靜止畫面。
