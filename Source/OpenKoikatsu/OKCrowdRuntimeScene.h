@@ -27,6 +27,9 @@ bool OKConfigureCrowdRuntimeActionContact(AActor* Owner,int32 Character,const FS
 // An in-use clip blends out, then its private overlay is released.
 bool OKCancelCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error);
 bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error);
+// Let go of the extra action she shows (back to her behavior) but keep a queued or prepared one and every speech: the
+// next clip installs once the slot is free (a song sung over a sequence of clips).
+bool OKReleaseCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error);
 // Session is 0 when this character has no queued or installed extra action.
 // Cancel and a new request both change it. A prepared result from an older
 // session cannot publish or start audio on the replacement.

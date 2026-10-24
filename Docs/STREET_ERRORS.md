@@ -560,3 +560,6 @@
 
 ### 2026-10-24 攻略循環：查品項時看了過時的生成器
 - 以為遊戲裡沒有月餅，因為我只查了 `Tools/build_street_social_catalog_json.lua`，就把月餅加進 catalog.json。其實 catalog.json 早就有 `cv_mooncake`、`snk_mooncake_box`。這個 Lua 表停在舊版，之後一直直接改 JSON。我還跑過一次生成器，差點用舊版蓋掉 catalog.json，當場還原；名稱表出現重複鍵，被 ok-rules 測試擋下。已撤回月餅的改動，並在生成器開頭標明它已過時。查品項一律看 catalog.json 與 names.toml。
+
+- 女主唱歌的動作第一版（SongDance02）沒等攻略 session 回覆、也沒確認 host 是否閒置，就用 FreeTalk01Host 編執行檔。當時別的 session 正在用同一個 host 打包 stage，那次編譯的 exe 可能混進對方的 stage。之後每次編 host 前，都先檢查有沒有 stage_interaction_runtime／rebuild_street_social_runtime／prepare_interaction_runtime_host 在跑，有就等它結束。
+- 唱歌換動作時用 OKResumeCrowdRuntimeBehavior 放掉目前的片段，它會一併取消說話聲，歌唱到 6 秒就斷了。換動作改用新的 OKReleaseCrowdRuntimeAction（只放動作）。另外動作狀態的 ClipId 在有片段準備中時回報的是準備中那一個，不能拿它判斷她正在顯示什麼。

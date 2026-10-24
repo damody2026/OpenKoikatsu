@@ -632,6 +632,10 @@ private:
  TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
  bool SongOwnsVoice(int32 Character) const;
  bool SongCameraShot(double Now,float Dt,FVector& Location,FVector& Focus);
+ void SongChoreograph();
+ void SongStage(const FString& Clip,const FString& Next,const TCHAR* Part);
+ void SongStageTick();
+ void SongUnstage();
  void SongLoad();
  void SongSave();
  void SongReset(const FString& Why,bool CancelJob);
