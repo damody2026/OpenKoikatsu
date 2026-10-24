@@ -219,8 +219,17 @@ pub fn eval(texts: &Texts, kind: &str, r: &Value) -> Option<Result<Value, String
         "reply_lines" => {
             let max = r.get("max").and_then(Value::as_u64).unwrap_or(15) as usize;
             let mut lines = Vec::new();
-            for t in r.get("texts").and_then(Value::as_array).into_iter().flatten() {
-                split_lines(t.as_str().unwrap_or(""), max, &mut lines);
+            let texts: Vec<&str> = r.get("texts").and_then(Value::as_array).into_iter().flatten().map(|t| t.as_str().unwrap_or("")).collect();
+            for (k, t) in texts.iter().enumerate() {
+                // The model's lines of one reply: one cut in the middle of a sentence ("你今天还和胡桃" / "一起吃了饭吧。")
+                // has no stop of its own. Before another of its lines it ends with a comma, not the full stop a last
+                // line gets ("还和胡桃。一起吃了饭吧").
+                let t = t.trim();
+                if k + 1 < texts.len() && t.chars().last().is_some_and(|c| !"。！？!?～~…」』）)\"，、；：,;:—-".contains(c)) {
+                    split_lines(&format!("{t}{}", if latin(t) { "," } else { "，" }), max, &mut lines);
+                } else {
+                    split_lines(t, max, &mut lines);
+                }
             }
             Ok(json!({"reply": join_lines(&lines), "lines": lines}))
         }
@@ -456,6 +465,10 @@ mod tests {
         split_lines("今天天气很好，我们一起去公园散步吧", 10, &mut out);
         assert_eq!(out[0], "今天天气很好，");
         assert_eq!(out[1], "我们一起去公园散步吧", "cut for length again: the middle of a sentence");
+        // One reply's lines together: a line cut mid-sentence ends with a comma, the last with a stop.
+        let texts = Texts::builtin();
+        let r = eval(&texts, "reply_lines", &serde_json::json!({"texts": ["就为了问这个，不行吗？", "你今天还和胡桃", "一起吃了饭吧"], "max": 15})).unwrap().unwrap();
+        assert_eq!(r["reply"], "就为了问这个，不行吗？你今天还和胡桃，一起吃了饭吧。", "{r}");
     }
 
     #[test]
