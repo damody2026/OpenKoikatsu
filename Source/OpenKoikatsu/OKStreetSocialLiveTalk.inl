@@ -96,7 +96,9 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
  const bool Speaking=OKCrowdRuntimeSpeechActive(this,Partner)||S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
  // He talks over her (the server hears speech above the raised barge-in threshold): she stops, the rest of
  // her reply is dropped, and his words go to the model as usual.
- if(Speaking&&S.FreeTalkLiveSpeaking&&S.FreeTalkLiveReady&&!S.ControlMicIgnored){
+ // Her song is a performance, not a reply: talking does not stop it (and the microphone is off while she sings).
+ const bool Singing=SongOwnsVoice(Partner);
+ if(Speaking&&!Singing&&S.FreeTalkLiveSpeaking&&S.FreeTalkLiveReady&&!S.ControlMicIgnored){
   FString Ignore;OKStopCrowdRuntimeSpeech(this,Partner,Ignore);
   S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;
   for(const auto& Stream:S.FreeTalkSpeechStreams)if(Stream)Stream->Finish();
@@ -107,10 +109,11 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
  const bool Talking=OKCrowdRuntimeSpeechActive(this,Partner)||S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
  // His typed line spoken aloud (TickFreeTalkHisVoice): the microphone is off meanwhile, or it would take his own
  // voice from the speakers for something he said.
- const bool HisVoice=FreeTalkHisVoiceBusy();
+ // Her song likewise: through the speakers it is a voice too, and the ASR would take the lyrics for his words.
+ const bool HisVoice=FreeTalkHisVoiceBusy()||Singing;
  if(Talking!=S.FreeTalkLiveMuted||HisVoice!=S.FreeTalkLiveHisMute){
   S.FreeTalkLiveMuted=Talking;S.FreeTalkLiveHisMute=HisVoice;
-  UE_LOG(LogTemp,Display,TEXT("Free talk live: mic %s (audio=%d pending=%d/%d replay=%d)"),HisVoice?TEXT("off while he speaks"):Talking?TEXT("ducked"):TEXT("open"),OKCrowdRuntimeSpeechActive(this,Partner)?1:0,S.FreeTalkSpeechPlayed,S.FreeTalkSpeechLines.Num(),S.FreeTalkReplay.IsEmpty()&&S.FreeTalkReplayParts.IsEmpty()?0:1);
+  UE_LOG(LogTemp,Display,TEXT("Free talk live: mic %s (audio=%d pending=%d/%d replay=%d)"),HisVoice?(Singing?TEXT("off while she sings"):TEXT("off while he speaks")):Talking?TEXT("ducked"):TEXT("open"),OKCrowdRuntimeSpeechActive(this,Partner)?1:0,S.FreeTalkSpeechPlayed,S.FreeTalkSpeechLines.Num(),S.FreeTalkReplay.IsEmpty()&&S.FreeTalkReplayParts.IsEmpty()?0:1);
   OKStreetFreeTalkAsrPost(TEXT("listen/mute"),HisVoice?TEXT("{\"mute\":true,\"duck\":false}"):Talking?TEXT("{\"mute\":false,\"duck\":true}"):TEXT("{\"mute\":false,\"duck\":false}"),nullptr);
  }
  // Silence: 5-10 s after she finishes she speaks up herself; every 30 s he stays silent costs 1 favor, and
