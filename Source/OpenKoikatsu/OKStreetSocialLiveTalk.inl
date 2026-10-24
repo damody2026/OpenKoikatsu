@@ -68,7 +68,7 @@ void AOKStreetSocialScene::FreeTalkLiveConnect(){
 void AOKStreetSocialScene::FreeTalkLiveSet(bool On){
  auto& S=*State;
  if(On==S.FreeTalkLive)return;
- S.FreeTalkLive=On;S.FreeTalkLiveReady=false;S.FreeTalkHeard.Reset();S.FreeTalkLivePending.Reset();S.FreeTalkLiveSpeaking=false;S.FreeTalkLiveMuted=false;
+ S.FreeTalkLive=On;S.FreeTalkLiveReady=false;S.FreeTalkHeard.Reset();S.FreeTalkLivePending.Reset();S.FreeTalkLiveSpeaking=false;S.FreeTalkLiveMuted=false;S.FreeTalkLiveHisMute=false;
  if(!On){if(!S.FreeTalkMicOpen)OKStreetFreeTalkAsrPost(TEXT("listen/stop"),TEXT("{}"),nullptr);RefreshUI();return;}
  if(S.FreeTalkListening)CancelFreeTalkVoice();
  // Results from before this switch-on are skipped: the first poll only records the newest id.
@@ -105,10 +105,13 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
   S.FreeTalkNotice=OKT(TEXT("ui.live_talk.you_interrupted_continue"));
  }
  const bool Talking=OKCrowdRuntimeSpeechActive(this,Partner)||S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
- if(Talking!=S.FreeTalkLiveMuted){
-  S.FreeTalkLiveMuted=Talking;
-  UE_LOG(LogTemp,Display,TEXT("Free talk live: mic %s (audio=%d pending=%d/%d replay=%d)"),Talking?TEXT("ducked"):TEXT("open"),OKCrowdRuntimeSpeechActive(this,Partner)?1:0,S.FreeTalkSpeechPlayed,S.FreeTalkSpeechLines.Num(),S.FreeTalkReplay.IsEmpty()&&S.FreeTalkReplayParts.IsEmpty()?0:1);
-  OKStreetFreeTalkAsrPost(TEXT("listen/mute"),Talking?TEXT("{\"mute\":false,\"duck\":true}"):TEXT("{\"mute\":false,\"duck\":false}"),nullptr);
+ // His typed line spoken aloud (TickFreeTalkHisVoice): the microphone is off meanwhile, or it would take his own
+ // voice from the speakers for something he said.
+ const bool HisVoice=FreeTalkHisVoiceBusy();
+ if(Talking!=S.FreeTalkLiveMuted||HisVoice!=S.FreeTalkLiveHisMute){
+  S.FreeTalkLiveMuted=Talking;S.FreeTalkLiveHisMute=HisVoice;
+  UE_LOG(LogTemp,Display,TEXT("Free talk live: mic %s (audio=%d pending=%d/%d replay=%d)"),HisVoice?TEXT("off while he speaks"):Talking?TEXT("ducked"):TEXT("open"),OKCrowdRuntimeSpeechActive(this,Partner)?1:0,S.FreeTalkSpeechPlayed,S.FreeTalkSpeechLines.Num(),S.FreeTalkReplay.IsEmpty()&&S.FreeTalkReplayParts.IsEmpty()?0:1);
+  OKStreetFreeTalkAsrPost(TEXT("listen/mute"),HisVoice?TEXT("{\"mute\":true,\"duck\":false}"):Talking?TEXT("{\"mute\":false,\"duck\":true}"):TEXT("{\"mute\":false,\"duck\":false}"),nullptr);
  }
  // Silence: 5-10 s after she finishes she speaks up herself; every 30 s he stays silent costs 1 favor, and
  // after the third she says goodbye and leaves. Anything he says resets it.
@@ -169,9 +172,9 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
   L->FreeTalkLiveSpeaking=Speaking;
   // The server's mute must follow ours (it outlives the game; a lost request would leave it stuck).
   bool ServerMuted=false,ServerDucked=false;Root->TryGetBoolField(TEXT("muted"),ServerMuted);Root->TryGetBoolField(TEXT("ducked"),ServerDucked);
-  if(L->FreeTalkLive&&L->FreeTalkLiveReady&&(ServerMuted||ServerDucked!=L->FreeTalkLiveMuted)){
+  if(L->FreeTalkLive&&L->FreeTalkLiveReady&&(ServerMuted!=L->FreeTalkLiveHisMute||(!ServerMuted&&ServerDucked!=L->FreeTalkLiveMuted))){
    UE_LOG(LogTemp,Display,TEXT("Free talk live: server mute %d duck %d differs from game %d, resyncing"),ServerMuted?1:0,ServerDucked?1:0,L->FreeTalkLiveMuted?1:0);
-   OKStreetFreeTalkAsrPost(TEXT("listen/mute"),L->FreeTalkLiveMuted?TEXT("{\"mute\":false,\"duck\":true}"):TEXT("{\"mute\":false,\"duck\":false}"),nullptr);
+   OKStreetFreeTalkAsrPost(TEXT("listen/mute"),L->FreeTalkLiveHisMute?TEXT("{\"mute\":true,\"duck\":false}"):L->FreeTalkLiveMuted?TEXT("{\"mute\":false,\"duck\":true}"):TEXT("{\"mute\":false,\"duck\":false}"),nullptr);
   }
   double Level=0;Root->TryGetNumberField(TEXT("level"),Level);L->FreeTalkMicLevel=(float)Level;
   // The microphone closed under us (server restarted, device switched): reopen it instead of giving up.

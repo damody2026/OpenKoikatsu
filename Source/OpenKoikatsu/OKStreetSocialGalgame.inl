@@ -288,7 +288,8 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			const FString Words = OKStreetGalgameWords(S.FreeTalkCaptionPlayer, NameOf(0));
 			if (!Words.IsEmpty()) SendLine(0, Words, false);
 		}
-		if (S.FreeTalkCaptionHer != G.LastHer)
+		// Her line comes up once he has said his (his voice in TTS mode).
+		if (S.FreeTalkCaptionHer != G.LastHer && !FreeTalkHisVoiceBusy())
 		{
 			G.LastHer = S.FreeTalkCaptionHer;
 			TArray<FString> Lines;

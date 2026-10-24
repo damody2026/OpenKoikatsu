@@ -6,6 +6,9 @@
 //!       speaker embedding of its profile, so a character keeps one voice; design: VoiceDesign from the description.
 //!   ok-tts profile [--base DIR] [--profiles DIR] [--keys 08,m0] [--ages 18] [--ref-text TEXT] [--force]   (see profile.rs)
 //!   ok-tts card-voice --card CARD.png [--set VOICE.okvoice | --remove]   (a character's own voice; see cardvoice.rs)
+//!   ok-tts card-voice --card CARD.png --from-wav REF.wav [--id NAME] [--save VOICE.okvoice] [--base DIR]
+//!       her voice from a recording of her (any language, a few clean seconds or more): the speaker embedding of the
+//!       clip (trimmed and normalised) is stored in the card; the clip itself goes in as the reference
 //!   ok-tts voice-export --personality 08 [--age 18] [--card CARD.png] [--profiles DIR] --out DIR
 //!       read only: the voice she actually speaks with (her card's okVo first, else her design's profile, the same
 //!       order as synthesis), written as reference.wav (24 kHz mono) + voice.json; prints voice.json
@@ -248,7 +251,26 @@ fn cmd_voice_export(args: &Args) -> Result<()> {
 
 fn cmd_card_voice(args: &Args) -> Result<()> {
     let card = PathBuf::from(args.opts.get("card").context("--card is required")?);
-    if let Some(v) = args.opts.get("set") {
+    if let Some(w) = args.opts.get("from-wav") {
+        let base = args.opts.get("base").map(PathBuf::from).or_else(default_base_model_dir).context("Base model not found; pass --base")?;
+        let store = weights::Store::open(&base.join("model.safetensors"))?;
+        let encoder = speaker::SpeakerEncoder::load(&store).context("speaker encoder")?;
+        let wav = std::fs::read(w).with_context(|| format!("read {w}"))?;
+        let samples = profile::finish_reference(consistency::wav_samples(&wav)?)?;
+        let id = args.opts.get("id").cloned().unwrap_or_else(|| card.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
+        let meta = profile::VoiceMeta {
+            schema: profile::SCHEMA, id, source: "reference".into(),
+            description: format!("speaker embedding of {}", Path::new(w).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
+            seed: 0, ref_text: String::new(), ref_audio_sha1: String::new(), design_model: String::new(),
+            base_model: profile::snapshot_name(&base), encoder: profile::ENCODER.into(), created: profile::now_utc(),
+        };
+        let voice = profile::make_profile(&encoder, &samples, meta)?;
+        if let Some(out) = args.opts.get("save") {
+            voice.save(Path::new(out))?;
+        }
+        cardvoice::write_file(&card, Some(&voice))?;
+        println!("stored voice {} (tag {}, {:.1} s reference) in {}", voice.meta.id, voice.tag(), samples.len() as f32 / SAMPLE_RATE as f32, card.display());
+    } else if let Some(v) = args.opts.get("set") {
         let voice = profile::Profile::load(Path::new(v))?;
         cardvoice::write_file(&card, Some(&voice))?;
         println!("stored voice {} (tag {}) in {}", voice.meta.id, voice.tag(), card.display());

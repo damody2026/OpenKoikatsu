@@ -271,7 +271,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  int32 VentureHeroine=INDEX_NONE;FString VentureAmount=TEXT("5000"),VentureDays=TEXT("30");
  TSharedPtr<FOKChartData> FinChart;TSharedPtr<FOKScratchState> Scratch;TArray<TSharedPtr<SVerticalBox>> AppBoxes;TArray<FString> FinWatchCodes[2];TSet<int32> LotPicks;TArray<TSharedPtr<FJsonObject>> BetSlip;TSet<FString> FinReacted;
  int32 ShiftAppointment=0;FString ShiftJob;int64 ShiftStart=0,ShiftEnd=0,ShiftAwaySince=-1;bool ShiftFast=false;int32 ShiftChats=0;double ShiftTickWall=0;
- bool FreeTalkLive=false,FreeTalkLivePolling=false,FreeTalkLiveMuted=false,FreeTalkLiveSpeaking=false,FreeTalkLiveBaseline=false;int64 FreeTalkLiveAfter=0;double FreeTalkLiveNextPoll=0;FString FreeTalkLivePending;int32 FreeTalkGirl=INDEX_NONE,OutingGirl=INDEX_NONE;
+ bool FreeTalkLive=false,FreeTalkLivePolling=false,FreeTalkLiveMuted=false,FreeTalkLiveHisMute=false,FreeTalkLiveSpeaking=false,FreeTalkLiveBaseline=false;int64 FreeTalkLiveAfter=0;double FreeTalkLiveNextPoll=0;FString FreeTalkLivePending;int32 FreeTalkGirl=INDEX_NONE,OutingGirl=INDEX_NONE;
  bool ApproachBlockedNear=false; // she walking over is held up by something within a couple of steps of him: close enough
  int64 ApproachLastMinute=-100000; // game minute the last girl set off to come over to him (TickApproach paces by game time)
  double ApproachBlockedSince=0; // when she walking over to him was last held up (0: walking freely)
@@ -1077,6 +1077,10 @@ void AOKStreetSocialScene::SendFreeTalk(){
  // turn the game wrote for her (a till note, "you just walked in", a nudge) is not his words.
  const bool His=!OKStreetFreeTalkIsNudge(Text)&&!S.SystemNote;S.SystemNote=false;
  if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;}
+ // His line aloud in his tone (the dropdown's x-vector voice), face to face, when the voice is TTS: her answer waits
+ // until he has said it (TickFreeTalkSpeech, the galgame box).
+ if(His&&S.Node==INDEX_NONE&&S.TtsEnabled&&!S.Japanese&&!S.TtsCacheDir.IsEmpty()&&S.MaleTone!=TEXT("off")&&RemoteKind(Character)==0){
+  S.MalePhase=1;S.MaleVoiceId.Reset();RequestTtsLine(Text,S.MaleTone,true);}
  if(His){++S.HisLines;{const int64 Now=OKStreetMindNow(S);if(S.SaidToHerWith!=Character||Now-S.SaidToHerAt>45){S.SaidToHer.Reset();S.SaidToHerWith=Character;}S.SaidToHerAt=Now;}S.SaidToHer.Add(Text);if(S.SaidToHer.Num()>4)S.SaidToHer.RemoveAt(0);}
  // Called by another girl's name: she sees his words and her own name, and notices it herself (no name lookup here).
  if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(Text);return;} // several of them: one reply for all (OKStreetSocialParty.inl)
@@ -1528,11 +1532,28 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
  Request->ProcessRequest();
 }
 
+// His free-talk line (SendFreeTalk): MalePhase 1 waits for its clip (or gives up after the TTS timeout), 2 while he
+// speaks, 3 done. Scripted lines run their own male phase inside the node.
+bool AOKStreetSocialScene::FreeTalkHisVoiceBusy() const{
+ const auto& S=*State;return S.Node==INDEX_NONE&&(S.MalePhase==1||S.MalePhase==2);
+}
+
+void AOKStreetSocialScene::TickFreeTalkHisVoice(double Now){
+ auto& S=*State;if(!FreeTalkHisVoiceBusy())return;
+ if(S.MalePhase==1){
+  if(!S.MaleVoiceId.IsEmpty()){FString Error;S.MalePhase=OKSpeakCrowdRuntimeLine(this,0,S.MaleVoiceId,Error)?2:3;
+   if(S.MalePhase==3){UE_LOG(LogTemp,Warning,TEXT("Free talk: his line not spoken: %s"),*Error);}
+   else{UE_LOG(LogTemp,Display,TEXT("Free talk: he says his line (tone %s)"),*S.MaleTone);}}
+  else if(!S.MaleTtsPending||Now-S.MaleRequestedAt>S.TtsTimeout+1){S.MaleTtsPending=false;S.MalePhase=3;}
+ }else if(S.MalePhase==2&&!OKCrowdRuntimeSpeechActive(this,0))S.MalePhase=3;
+}
+
 // Plays the next ready line when she is quiet. Never over a scripted line or a replay; leaving her stops it.
 void AOKStreetSocialScene::TickFreeTalkSpeech(double Now){
  auto& S=*State;const int32 Character=S.FreeTalkSpeechSpeakers.IsValidIndex(S.FreeTalkSpeechPlayed)?S.FreeTalkSpeechSpeakers[S.FreeTalkSpeechPlayed]:S.FreeTalkSpeechCharacter;
  if(Character==INDEX_NONE||S.FreeTalkSpeechPlayed>=S.FreeTalkSpeechLines.Num()||Now<S.FreeTalkSpeechNext)return;
  if(SongOwnsVoice(Character))return; // she is singing (or saying its lines): her replies wait for the song
+ if(FreeTalkHisVoiceBusy())return; // he is still saying his line
  if(FreeTalkPartner()!=Character&&!(S.FreeTalkSpeechSpeakers.Num()>0&&FreeTalkPartner()!=INDEX_NONE&&(S.Party.Contains(Character)||Character==FreeTalkPartner()))){S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();return;}
  if(S.Node!=INDEX_NONE||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty()||OKCrowdRuntimeSpeechActive(this,Character))return;
  // Several of them (a party): one at a time. The next girl waits until whoever spoke before her is done, not only
@@ -3212,7 +3233,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(!S.CatchLight.IsValid()){auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetLightingChannels(false,false,true);L->SetCastShadows(false);
   L->SetIntensityUnits(ELightUnits::Candelas);L->SetIntensity(100.f); /* 100 cd: a clear wet shine, short of glare (300 burns out) */L->SetAttenuationRadius(800.f);L->SetSourceRadius(2.f);L->RegisterComponent();AddInstanceComponent(L);S.CatchLight=L;}
  if(PC->PlayerCameraManager)S.CatchLight->SetWorldLocation(PC->PlayerCameraManager->GetCameraLocation()+FVector(0,0,25));
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkSpeech(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkHisVoice(SceneTime());TickFreeTalkSpeech(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}
