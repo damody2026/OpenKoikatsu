@@ -24,7 +24,9 @@ fn rain_style(r: &Value) -> Value {
     let has = |k: &str| r.get(k).and_then(Value::as_array).is_some_and(|a| a.iter().any(|v| v.as_str().is_some_and(|s| s.contains("umbrella"))));
     // Hers: one in her things, or the folding one she brought today (items.rs she_has_umbrella).
     let girl = r.get("girl").and_then(Value::as_str).unwrap_or("");
-    let (his, hers) = (has("his_items"), has("her_items") || (!girl.is_empty() && crate::items::she_has_umbrella(r, girl)));
+    // His: one in his bag, or hers that she lent him.
+    let his = has("his_items") || crate::items::he_borrowed_umbrella(r);
+    let hers = has("her_items") || (!girl.is_empty() && crate::items::she_has_umbrella(r, girl));
     let close = r.get("stage").and_then(Value::as_str) == Some("lover");
     if his && (!hers || close) {
         // One umbrella between them when they are that close (or his is the only one): under his.

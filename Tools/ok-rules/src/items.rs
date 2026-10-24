@@ -61,7 +61,9 @@ fn find<'a>(c: &Catalog, held: &'a [Value], said: &str) -> Option<usize> {
         let name = norm(&name_of(c, s(h, "item"), s(h, "name")));
         // Her drawing is "the drawing" too, whatever its title says (the words for it in every language).
         let drawing = s(h, "item").starts_with("drawing:") && crate::tr::t("items.drawing_words").split('|').any(|w| !w.is_empty() && want.contains(&norm(w)));
-        drawing || (!name.is_empty() && (name.contains(&want) || want.contains(&name)))
+        // An umbrella is "the umbrella" in any script or language (折叠伞 / 雨傘 / umbrella).
+        let umbrella = is_umbrella(said) && is_umbrella(&format!("{}{}{name}", s(h, "item"), s(h, "name")));
+        drawing || umbrella || (!name.is_empty() && (name.contains(&want) || want.contains(&name)))
     })
 }
 
@@ -136,6 +138,12 @@ fn judge(c: &Catalog, r: &Value) -> Value {
         }
         let ok = match what {
             "she_gives" | "she_lends_item" => {
+                // "Take my umbrella": the folding one she brought today (she_has_umbrella) becomes a thing she holds, so
+                // it can go to him; after that she has no umbrella of her own today.
+                if is_umbrella(&words) && !owned_mut(&mut st, &girl).iter().any(|e| is_umbrella(&format!("{}{}", s(e, "item"), s(e, "name")))) && she_has_umbrella(&with_state(r, st.clone()), &girl) {
+                    give_to_her(&mut st, &girl, "cv_umbrella", crate::tr::t("items.folding_umbrella"), "own", today);
+                    st["umbrella_out"][girl.as_str()] = json!(today);
+                }
                 let hers = owned_mut(&mut st, &girl).clone();
                 find(c, &hers, &words).map(|k| {
                     let e = owned_mut(&mut st, &girl).remove(k);
@@ -216,17 +224,22 @@ fn judge(c: &Catalog, r: &Value) -> Value {
     json!({"ext": ext, "his_add": his_add, "his_remove": his_remove, "done": done, "refused": refused, "notice": notice.join(crate::tr::t("items.separator"))})
 }
 
-/// For her words: what she owns (latest first, a few), what he borrowed from her and since when, what she borrowed
-/// from him. Request: ext, girl, day. Answer: text ("" when there is nothing).
-/// Whether she has an umbrella with her today: one of her things, or (fixed for the day, half the days) a folding one in
-/// her bag. Her words and the walk both go by this: she said "I have one" and they walked in the rain without any.
+/// An umbrella, by id or by name in any language.
+fn is_umbrella(t: &str) -> bool {
+    t.to_lowercase().contains("umbrella") || t.contains('伞') || t.contains('傘')
+}
+
+fn holds_umbrella(list: &Value, who: (&str, &str)) -> bool {
+    list.as_array().into_iter().flatten().any(|e| s(e, who.0) == who.1 && is_umbrella(&format!("{}{}", s(e, "item"), s(e, "name"))))
+}
+
+/// Whether she has an umbrella with her today: one of her things, one she borrowed from him, or (fixed for the day,
+/// half the days) a folding one in her bag, unless she already gave or lent that one to him today. Her words and the
+/// walk both go by this: she said "I have one" and they walked in the rain without any.
 pub fn she_has_umbrella(r: &Value, girl: &str) -> bool {
     let st = state(r);
-    let owned = st["owned"].get(girl).and_then(Value::as_array).into_iter().flatten().any(|e| {
-        let n = format!("{}{}", s(e, "item"), s(e, "name"));
-        n.contains("umbrella") || n.contains('伞') || n.contains('傘')
-    });
-    owned || {
+    let owned = st["owned"].get(girl).and_then(Value::as_array).into_iter().flatten().any(|e| is_umbrella(&format!("{}{}", s(e, "item"), s(e, "name"))));
+    owned || holds_umbrella(&st["her_borrowed"], ("borrower", girl)) || st["umbrella_out"].get(girl).and_then(Value::as_i64) != Some(day(r)) && {
         let mut h: u64 = 1469598103934665603;
         for b in girl.bytes().chain(day(r).to_le_bytes()) {
             h = (h ^ b as u64).wrapping_mul(1099511628211);
@@ -235,6 +248,13 @@ pub fn she_has_umbrella(r: &Value, girl: &str) -> bool {
     }
 }
 
+/// Whether he has one of hers on loan (she lent him her umbrella): it covers him on the walk like one in his bag.
+pub fn he_borrowed_umbrella(r: &Value) -> bool {
+    state(r)["his_borrowed"].as_array().into_iter().flatten().any(|e| is_umbrella(&format!("{}{}", s(e, "item"), s(e, "name"))))
+}
+
+/// For her words: what she owns (latest first, a few), what he borrowed from her and since when, what she borrowed
+/// from him. Request: ext, girl, day. Answer: text ("" when there is nothing).
 fn facts(c: &Catalog, r: &Value) -> Value {
     let st = state(r);
     let girl = s(r, "girl");
@@ -332,6 +352,22 @@ mod tests {
         assert_eq!(v["his_add"], json!(["bk_postcard", "bk_notebook"]));
         assert_eq!(v["give_her"], "bk_postcard");
         assert_eq!(v["ext"]["items"]["owned"]["r"][0]["item"], "bk_novel_sword");
+    }
+
+    #[test]
+    fn she_lends_him_her_folding_umbrella() {
+        let c = cat();
+        // A day she has the folding one with her.
+        let d = (0..40).find(|d| she_has_umbrella(&json!({"day": d}), "g")).unwrap();
+        let lent = judge(&c, &json!({"girl": "g", "day": d, "she_lends_item": {"item": "折叠伞", "days": 2}}));
+        let ext = lent["ext"].clone();
+        assert_eq!(lent["done"].as_array().unwrap().len(), 1, "{lent}");
+        assert!(he_borrowed_umbrella(&json!({"ext": ext})));
+        // She has none left today; tomorrow is another day.
+        assert!(!she_has_umbrella(&json!({"ext": ext, "day": d}), "g"));
+        // Walking in the rain: his borrowed umbrella covers them.
+        let walk = crate::weather::eval("walk_style", &json!({"raining": true, "ext": ext, "girl": "g", "day": d, "stage": "lover"})).unwrap().unwrap();
+        assert_eq!(walk["style"], "umbrella_shared");
     }
 
     #[test]
