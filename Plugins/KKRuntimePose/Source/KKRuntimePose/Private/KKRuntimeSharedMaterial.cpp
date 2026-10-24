@@ -394,7 +394,7 @@ TConstArrayView<EKKRuntimeMaterialRecipe> OKRuntimeSharedMaterialRecipes(){
 EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRuntimeMaterialRecipe R){
  return R==EKKRuntimeMaterialRecipe::ForgeStudioOpaque?EKKRuntimeMaterialRecipe::ForgeStudio:EKKRuntimeMaterialRecipe::None;
 }
-static TAutoConsoleVariable<float> CVarOkFaceFlatten(TEXT("ok.FaceFlatten"),.6f,
+static TAutoConsoleVariable<float> CVarOkFaceFlatten(TEXT("ok.FaceFlatten"),0.f,
  TEXT("The face pressed flat along the view, as Wuthering Waves draws toon faces: 0 off .. 0.9 (the most; 1 would put the face, eyes and mouth at one depth). ")
  TEXT("Live; a scene started at 0 draws the head with the plain parents (no vertex offset)."));
 static TAutoConsoleVariable<int32> CVarOkFaceFlattenLock(TEXT("ok.FaceFlattenLock"),0,
