@@ -557,3 +557,6 @@
 
 ### 2026-10-24 攻略循環：等待時沒回她的話
 - 用 `game_wait {until}` 或 `{outing}` 推時間時，她在對話中問的話不會讓等待停下：胡桃 14:40 到水族館開口後，我沉默到 14:58；刻晴餵完魚開口後，我也沒回，被扣了好感。改用 scratchpad 的 `waittalk.sh`：每次只走 30 秒，她說出新的一句就停。另外，送出下一句前要先回她最後問的問題。
+
+### 2026-10-24 攻略循環：查品項時看了過時的生成器
+- 以為遊戲裡沒有月餅，因為我只查了 `Tools/build_street_social_catalog_json.lua`，就把月餅加進 catalog.json。其實 catalog.json 早就有 `cv_mooncake`、`snk_mooncake_box`。這個 Lua 表停在舊版，之後一直直接改 JSON。我還跑過一次生成器，差點用舊版蓋掉 catalog.json，當場還原；名稱表出現重複鍵，被 ok-rules 測試擋下。已撤回月餅的改動，並在生成器開頭標明它已過時。查品項一律看 catalog.json 與 names.toml。

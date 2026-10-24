@@ -1,4 +1,6 @@
 -- Writes Content/IndependentResources/StreetSocialData/catalog.json from Docs/STREET_SOCIAL_LIFE_CATALOG.md's tables.
+-- OUT OF DATE (2026-10-24): catalog.json (version 2, yuan, with the picture books, novels and floors) has been edited
+-- directly since; running this writes the older catalog over it. Edit catalog.json instead.
 --
 -- Dev-time tool (the game reads the JSON). Edit the tables below together with the doc, then run:
 --   Tools\lua\lua.exe Tools/build_street_social_catalog_json.lua
