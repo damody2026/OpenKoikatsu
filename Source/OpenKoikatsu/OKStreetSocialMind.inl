@@ -612,6 +612,18 @@ FString AOKStreetSocialScene::SceneLine(int32 Character) const{
 }
 
 // Her things, and what is lent between them (items.rs items_facts): for her words and for the judge.
+// He confessed to her where others could see (within 10 m, the same floor): each of them remembers it and her answer
+// (yes, no, not yet). Anko sat two metres away while he asked Yuuka out and only had yesterday's dinner to be jealous of.
+void AOKStreetSocialScene::ConfessionWitnessed(int32 Girl,const TCHAR* Outcome){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl))return;const FString Place=PlaceHere(S.Male);
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  if(I==Girl||!S.Agents.IsValidIndex(I-1))continue;const FVector& At=S.Agents[I-1].Position;
+  if(FVector::Dist2D(At,S.Male)>1000.f||FMath::Abs(At.Z-S.Male.Z)>300.f)continue;
+  MindObserve(I,TEXT("saw_confession"),OKMsg(TEXT("ui.memory.saw_confession"),{{TEXT("name"),S.Manifest.Characters[Girl].Name},{TEXT("outcome"),Outcome}}),Place,0.8f);
+  UE_LOG(LogTemp,Display,TEXT("Street witness: actor %d saw him confess to actor %d (%s)"),I,Girl,Outcome);
+ }
+}
+
 FString AOKStreetSocialScene::ThingsFacts(int32 Character) const{
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character)||Character<=0)return FString();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Request=OKRulesHeroineRequest(S,TEXT("items_facts"),Id);OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);

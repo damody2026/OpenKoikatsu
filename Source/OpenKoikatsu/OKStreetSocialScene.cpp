@@ -1380,6 +1380,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     if(Confessed&&!Ends&&L->Target==Character&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
      &&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage!=TEXT("lover")){
      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words%s"),Character,Answered&&Accepts?TEXT("; she said yes"):TEXT(""));Weak->RelationshipEvent(TEXT("confession"),Answered&&Accepts);}}
+   // A confession in front of others (Anko drinking at the next table of the cafe): they saw it, and how she answered.
+   {bool SaidIt=false;Verdict->TryGetBoolField(TEXT("confessed"),SaidIt);
+    if(SaidIt&&!Weak->RemoteWith(Character)){bool Yes=false;const bool Ans=Verdict->TryGetBoolField(TEXT("accepts"),Yes);Weak->ConfessionWitnessed(Character,Ans?(Yes?TEXT("yes"):TEXT("no")):TEXT("open"));}}
    {bool BreaksUp=false;Verdict->TryGetBoolField(TEXT("breaks_up"),BreaksUp);
     if(BreaksUp&&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage==TEXT("lover"))Weak->BreakUpSaid(Character);}
    {bool Quiet=false;Verdict->TryGetBoolField(TEXT("quiet"),Quiet);
@@ -1578,12 +1581,12 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
 
 // His free-talk line (SendFreeTalk): MalePhase 1 waits for its clip (or gives up after the TTS timeout), 2 while he
 // speaks, 3 done. Scripted lines run their own male phase inside the node.
-bool AOKStreetSocialScene::FreeTalkHisVoiceBusy() const{
- const auto& S=*State;return S.Node==INDEX_NONE&&(S.MalePhase==1||S.MalePhase==2);
-}
 // How long her ready reply waits for his voice line still being made.
 static constexpr double OKStreetHisVoiceGraceSeconds=3.0;
 
+bool AOKStreetSocialScene::FreeTalkHisVoiceBusy() const{
+ const auto& S=*State;return S.Node==INDEX_NONE&&(S.MalePhase==1||S.MalePhase==2);
+}
 
 void AOKStreetSocialScene::TickFreeTalkHisVoice(double Now){
  auto& S=*State;if(!FreeTalkHisVoiceBusy())return;

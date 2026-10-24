@@ -236,6 +236,7 @@ private:
  void NavigateToNextAppointment();
  bool BusyWithPlayer(int32 I) const;
  FVector SpotFor(int32 I,const FString& PlaceId,const FString& Kind,float& Yaw) const;
+ void ConfessionWitnessed(int32 Girl,const TCHAR* Outcome); // the heroines near him saw him confess to her (OKStreetSocialMind.inl)
  void MakeRoomAround(int32 Partner); // heroines her plan stood at his table walk to another spot (OKStreetSocialSchedule.inl)
  void StandAtWork(const FString& PlaceId); // his shift starts: behind the counter (OKStreetSocialJobs.inl)
  void PlanAll();
