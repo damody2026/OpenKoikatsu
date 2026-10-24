@@ -82,11 +82,11 @@ bool AOKStreetSocialScene::PlaceClosedAt(const FString& PlaceId,const FDateTime&
 // Writes a changed store; self-tests keep the file untouched.
 bool AOKStreetSocialScene::CommitStore(FOKStreetStore&& Candidate){
  auto& S=*State;FString Error;
- if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()){const FString Json=OKStreetWriteSave(Candidate);
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()){FString Json;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SaveSerialize);Json=OKStreetWriteSave(Candidate);}
   // A save is ~100 KB. One growing every write (a list appended to instead of replaced) is said once, before it stalls the game.
   {static int32 WarnedAt=0;const int32 Kb=Json.Len()/1024;if(Kb>2048&&Kb>WarnedAt*2){WarnedAt=Kb;UE_LOG(LogTemp,Warning,TEXT("Street save is %d KB: something in it keeps growing"),Kb);}}
   OKStreetAtomicSaveAsync(S.Manifest.SavePath,Json);}
- S.Store=MoveTemp(Candidate);FlushRulesEffects();return true;
+ S.Store=MoveTemp(Candidate);{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FlushRulesEffects);FlushRulesEffects();}return true;
 }
 
 TSharedPtr<FJsonObject> AOKStreetSocialScene::ProfileOf(int32 Character) const{

@@ -6,6 +6,34 @@
 // BeginPhoto / BeginFacility / BeginCompanion. Activities without a place start where the pair stands.
 // When an activity ends both stay where they are, and talk resumes quietly if free talk was open.
 
+// A place model component made static once its sections are in: the same triangles and materials built into a
+// UStaticMesh at runtime (sections sharing a material become one), drawn by a static mesh component under it. A
+// procedural mesh is drawn on the dynamic path, its sections gathered again every frame for every pass (base, depth,
+// four shadow cascades): 39 models, 1.9 million triangles, the largest share of the render thread's frame. The
+// procedural component stays, empty, as the node the layers hang from. Returns the component that draws (or the
+// procedural one when the build fails).
+static UPrimitiveComponent* OKStreetFreezePlaceMesh(AActor* Actor,UProceduralMeshComponent* Procedural,int32& Built){
+ if(!Actor||!Procedural||Procedural->GetNumSections()==0)return Procedural;
+ FMeshDescription Description=BuildMeshDescription(Procedural);
+ TArray<FStaticMaterial> Materials;
+ for(int32 I=0;I<Procedural->GetNumSections();++I){UMaterialInterface* M=Procedural->GetMaterial(I);if(!M)M=UMaterial::GetDefaultMaterial(MD_Surface);
+  if(!Materials.ContainsByPredicate([M](const FStaticMaterial& S){return S.MaterialInterface==M;}))Materials.Add(FStaticMaterial(M,M->GetFName()));}
+ UStaticMesh* Mesh=NewObject<UStaticMesh>(Actor);
+ Mesh->SetStaticMaterials(Materials);
+ UStaticMesh::FBuildMeshDescriptionsParams Params;Params.bFastBuild=true;Params.bBuildSimpleCollision=false;Params.bAllowCpuAccess=false;Params.bMarkPackageDirty=false;
+ if(!Mesh->BuildFromMeshDescriptions({&Description},Params)){UE_LOG(LogTemp,Warning,TEXT("Street places: %s stays procedural (static build failed)"),*Procedural->GetName());return Procedural;}
+ auto* Static=NewObject<UStaticMeshComponent>(Actor,*(Procedural->GetName()+TEXT("Static")));
+ Static->SetMobility(EComponentMobility::Movable);Static->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+ Static->SetLightingChannels(Procedural->LightingChannels.bChannel0,Procedural->LightingChannels.bChannel1,Procedural->LightingChannels.bChannel2);
+ Static->SetStaticMesh(Mesh);
+ for(int32 I=0;I<Materials.Num();++I)Static->SetMaterial(I,Materials[I].MaterialInterface);
+ Static->SetupAttachment(Procedural);Static->RegisterComponent();
+ Static->SetVisibility(Procedural->IsVisible());
+ Procedural->ClearAllMeshSections();
+ ++Built;
+ return Static;
+}
+
 void AOKStreetSocialScene::SpawnStreetPlaces(){
  auto& S=*State;
  UStaticMesh* Meshes[]={LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCube.StreetCube")),LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetSphere.StreetSphere")),LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCylinder.StreetCylinder"))};
@@ -20,7 +48,7 @@ void AOKStreetSocialScene::SpawnStreetPlaces(){
   S.PlaceActors.Add(Actor);
  };
  for(const auto& Ground:OKStreetPlaceGround())Spawn(Ground);
- int32 Parts=0,Models=0,Triangles=0;
+ int32 Parts=0,Models=0,Triangles=0,Frozen=0;
  // Model colours: the engine's BasicShapeMaterial tinted per section; without it, the nearest street material.
  UMaterialInterface* Tintable=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
  TMap<uint32,UMaterialInterface*> Tints;
@@ -48,8 +76,8 @@ void AOKStreetSocialScene::SpawnStreetPlaces(){
    // Ceiling, roof and rooftop props live on their own component, hidden while the player is in the room;
    // each floor of a multi-storey place too, hidden while he is on a floor below it.
    UProceduralMeshComponent* Target=Mesh;
-   if(Sec.Roof&&!Place.Rooms.IsEmpty()){if(!PlaceLayers.Roof.IsValid())PlaceLayers.Roof=Layer(TEXT("PlaceRoof"));Target=PlaceLayers.Roof.Get();}
-   else if(Sec.Level>0&&!Place.Rooms.IsEmpty()){auto& Level=PlaceLayers.Levels.FindOrAdd(Sec.Level);if(!Level.IsValid())Level=Layer(*FString::Printf(TEXT("PlaceLevel%d"),Sec.Level));Target=Level.Get();}
+   if(Sec.Roof&&!Place.Rooms.IsEmpty()){if(!PlaceLayers.Roof.IsValid())PlaceLayers.Roof=Layer(TEXT("PlaceRoof"));Target=Cast<UProceduralMeshComponent>(PlaceLayers.Roof.Get());}
+   else if(Sec.Level>0&&!Place.Rooms.IsEmpty()){auto& Level=PlaceLayers.Levels.FindOrAdd(Sec.Level);if(!Level.IsValid())Level=Layer(*FString::Printf(TEXT("PlaceLevel%d"),Sec.Level));Target=Cast<UProceduralMeshComponent>(Level.Get());}
    // Without tangents every vertex gets +X, which is parallel to the normal of an X-facing wall: the shading
    // basis collapses and the wall renders black. Any direction across the normal will do (no normal maps).
    TArray<FProcMeshTangent> Tangents;Tangents.SetNum(Sec.Normals.Num());
@@ -66,6 +94,10 @@ void AOKStreetSocialScene::SpawnStreetPlaces(){
    if(!Material)Material=StreetMaterial(Sec.StreetMaterial);
    if(Material)Target->SetMaterial(SectionIndex,Material);
   }
+  // Every component of the model made static (the layers keep their own visibility switch: the roof, each floor).
+  if(PlaceLayers.Roof.IsValid())PlaceLayers.Roof=OKStreetFreezePlaceMesh(Actor,Cast<UProceduralMeshComponent>(PlaceLayers.Roof.Get()),Frozen);
+  for(auto& Level:PlaceLayers.Levels)if(Level.Value.IsValid())Level.Value=OKStreetFreezePlaceMesh(Actor,Cast<UProceduralMeshComponent>(Level.Value.Get()),Frozen);
+  OKStreetFreezePlaceMesh(Actor,Mesh,Frozen);
   S.PlaceActors.Add(Actor);++Models;
  }
  // The street materials add a fixed share of their colour as ambient; the tinted model material has none and no
@@ -82,7 +114,7 @@ void AOKStreetSocialScene::SpawnStreetPlaces(){
    UE_LOG(LogTemp,Display,TEXT("Street place fill light yaw=%.0f intensity=%.2f channels=%d%d%d"),Yaw,L->Intensity,L->LightingChannels.bChannel0,L->LightingChannels.bChannel1,L->LightingChannels.bChannel2);
   }
  }
- UE_LOG(LogTemp,Display,TEXT("Street places: %d places, %d parts, %d models (%d triangles), tint material %s"),OKStreetPlaces().Num(),Parts,Models,Triangles,Tintable?TEXT("found"):TEXT("missing"));
+ UE_LOG(LogTemp,Display,TEXT("Street places: %d places, %d parts, %d models (%d triangles, %d static meshes), tint material %s"),OKStreetPlaces().Num(),Parts,Models,Triangles,Frozen,Tintable?TEXT("found"):TEXT("missing"));
  SpawnElevators();
 }
 

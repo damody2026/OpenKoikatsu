@@ -29,6 +29,11 @@ pub struct Portrait {
     /// Last heading per character (a heading that cannot be read keeps it).
     pub yaw: BTreeMap<String, f64>,
     pub frame: u64,
+    /// Seconds since the last capture, and whom it showed (a new speaker is captured at once).
+    #[serde(default)]
+    pub since_capture: f64,
+    #[serde(default)]
+    pub captured: String,
 }
 
 const PIVOTS: [&str; 4] = ["spine03", "spine02", "hips", "head"];
@@ -48,6 +53,7 @@ impl Portrait {
     }
 
     pub fn tick(&mut self, t: &PortraitTuning, dt: f64) {
+        self.since_capture += dt.max(0.0);
         if self.shown != self.wanted {
             if self.shown.is_empty() || self.alpha <= 0.0 {
                 self.shown = self.wanted.clone();
@@ -138,7 +144,16 @@ impl Portrait {
         out.pos = pos;
         out.rot = rot.to_array();
         out.ortho_width = width;
-        out.capture = self.frame.is_multiple_of(t.every.max(1) as u64);
+        out.capture = if t.capture_hz > 0.0 {
+            let due = self.captured != who || self.since_capture >= 1.0 / t.capture_hz;
+            if due {
+                self.since_capture = 0.0;
+                self.captured = who.clone();
+            }
+            due
+        } else {
+            self.frame.is_multiple_of(t.every.max(1) as u64)
+        };
         out
     }
 }

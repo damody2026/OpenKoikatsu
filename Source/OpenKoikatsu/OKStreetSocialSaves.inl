@@ -60,17 +60,31 @@ FString AOKStreetSocialScene::SaveSlotName(const FString& Slot) const{
  return Slot==TEXT("auto")?OKT(TEXT("ui.saves.auto_slot")):OKMsg(TEXT("ui.saves.slot_n"),{{TEXT("n"),Slot}});
 }
 
-// The live game copied into a slot, with what the slot list shows (the game's day and time, money, lovers).
-bool AOKStreetSocialScene::SaveToSlot(const FString& Slot){
+// The copy of a game into a slot (its files, then slot.json, then moved into place): plain file work on paths and text,
+// no game state, so the autosave runs it on a worker (on the game thread it held a frame half a second every ten minutes).
+static bool OKStreetWriteSlot(const FString& From,const FString& Dir,const FString& SlotJson,FString& Error){
+ const FString Temp=Dir+TEXT(".writing");auto& F=IFileManager::Get();F.DeleteDirectory(*Temp,false,true);
+ if(!OKStreetCopyGame(From,Temp)){F.DeleteDirectory(*Temp,false,true);Error=FString::Printf(TEXT("copying the game into %s failed"),*Temp);return false;}
+ FFileHelper::SaveStringToFile(SlotJson,*(Temp/TEXT("slot.json")),FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+ F.DeleteDirectory(*Dir,false,true);
+ if(!F.Move(*Dir,*Temp,true,true)){Error=FString::Printf(TEXT("moving %s into place failed"),*Temp);return false;}
+ return true;
+}
+
+// The live game copied into a slot, with what the slot list shows (the game's day and time, money, lovers). Background:
+// the copy runs on a worker (the autosave); a save asked for meanwhile waits for it, the quitting one too (EndPlay).
+bool AOKStreetSocialScene::SaveToSlot(const FString& Slot,bool Background){
  auto& S=*State;if(S.SelfTest||S.Manifest.SavePath.IsEmpty())return false;
+ if(*S.SaveCopyRunning){if(Background)return true;for(int32 Tries=0;*S.SaveCopyRunning&&Tries<10000;++Tries)FPlatformProcess::Sleep(0.001f);}
+ const double Began=FPlatformTime::Seconds();
  if(S.FreeTalkLogDirty){S.FreeTalkLogDirty=false;FreeTalkSaveLog();} // the slot copies the file
  // The clock and where he stands first: SaveCalendar writes in the background, and copied before that write was done
  // the slot held the game as of the last write (an hour back, the date not in it) or failed on the file being written.
  SaveCalendar();
  OKStreetFlushSaves();
  if(S.Mind){FString MindError;if(!S.Mind->Save(MindError))UE_LOG(LogTemp,Warning,TEXT("Street saves: mind save failed: %s"),*MindError);}
- const FString Dir=SaveSlotDir(Slot),Temp=Dir+TEXT(".writing");auto& F=IFileManager::Get();F.DeleteDirectory(*Temp,false,true);
- if(!OKStreetCopyGame(FPaths::GetPath(S.Manifest.SavePath),Temp)){UE_LOG(LogTemp,Warning,TEXT("Street saves: copying the game into %s failed"),*Temp);F.DeleteDirectory(*Temp,false,true);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
+ const double Flushed=FPlatformTime::Seconds();
+ const FString Dir=SaveSlotDir(Slot),From=FPaths::GetPath(S.Manifest.SavePath);
  auto M=MakeShared<FJsonObject>();
  M->SetStringField(TEXT("saved_at"),FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M")));
  M->SetNumberField(TEXT("day"),S.Store.CalendarDay);M->SetNumberField(TEXT("minute"),S.Store.CalendarMinute);
@@ -78,12 +92,21 @@ bool AOKStreetSocialScene::SaveToSlot(const FString& Slot){
  TArray<TSharedPtr<FJsonValue>> Lovers;
  for(const auto& R:S.Store.Relations)if(R.Stage==TEXT("lover"))for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(OKStreetStableId(S.Manifest.Characters[I])==R.Id)Lovers.Add(MakeShared<FJsonValueString>(S.Manifest.Characters[I].Name));
  M->SetArrayField(TEXT("lovers"),Lovers);
- FString Out;FJsonSerializer::Serialize(M,TJsonWriterFactory<>::Create(&Out));FFileHelper::SaveStringToFile(Out,*(Temp/TEXT("slot.json")),FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
- F.DeleteDirectory(*Dir,false,true);
- if(!F.Move(*Dir,*Temp,true,true)){UE_LOG(LogTemp,Warning,TEXT("Street saves: moving %s into place failed"),*Temp);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
+ FString Out;FJsonSerializer::Serialize(M,TJsonWriterFactory<>::Create(&Out));
  S.NextAutoSave=FPlatformTime::Seconds()+OKStreetAutoSaveSeconds;
+ if(Background){
+  *S.SaveCopyRunning=true;
+  Async(EAsyncExecution::ThreadPool,[From,Dir,Out,Slot,Running=S.SaveCopyRunning,Flush=(Flushed-Began)*1000]{
+   const double Start=FPlatformTime::Seconds();FString Error;const bool Ok=OKStreetWriteSlot(From,Dir,Out,Error);
+   if(Ok){UE_LOG(LogTemp,Display,TEXT("Street saves: saved slot %s in the background (game thread %.1f ms, copy %.1f ms)"),*Slot,Flush,(FPlatformTime::Seconds()-Start)*1000);}
+   else{UE_LOG(LogTemp,Warning,TEXT("Street saves: background save of slot %s: %s"),*Slot,*Error);}
+   *Running=false;});
+  return true;
+ }
+ FString Error;
+ if(!OKStreetWriteSlot(From,Dir,Out,Error)){UE_LOG(LogTemp,Warning,TEXT("Street saves: %s"),*Error);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
  if(Slot!=TEXT("auto"))S.SaveNotice=OKMsg(TEXT("ui.saves.saved"),{{TEXT("slot"),SaveSlotName(Slot)}});
- UE_LOG(LogTemp,Display,TEXT("Street saves: saved slot %s"),*Slot);RefreshUI();return true;
+ UE_LOG(LogTemp,Display,TEXT("Street saves: saved slot %s (flush %.1f ms, copy %.1f ms)"),*Slot,(Flushed-Began)*1000,(FPlatformTime::Seconds()-Flushed)*1000);RefreshUI();return true;
 }
 
 // A slot's line in the list: its day and time in the game, money and lovers, and when it was saved; "" if empty.
@@ -142,7 +165,7 @@ void AOKStreetSocialScene::TickSaves(){
  if(!S.NewGameRegion.IsEmpty()&&S.Rules){const FString Region=S.NewGameRegion;S.NewGameRegion.Reset();ChangeRegion(Region);SaveCalendar();}
  const double Now=FPlatformTime::Seconds();
  if(S.NextAutoSave<=0)S.NextAutoSave=Now+OKStreetAutoSaveSeconds;
- else if(Now>=S.NextAutoSave&&S.SaveMenu.IsEmpty())SaveToSlot(TEXT("auto"));
+ else if(Now>=S.NextAutoSave&&S.SaveMenu.IsEmpty())SaveToSlot(TEXT("auto"),true); // the copy on a worker
 }
 
 // The menu: at the start (continue, new game, load, language) and from the panel (also save into a slot).

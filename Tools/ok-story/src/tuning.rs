@@ -173,6 +173,9 @@ pub struct PortraitTuning {
     /// anti-aliasing of its own, so a 1:1 target shows jagged, soft edges.
     pub supersample: f64,
     pub every: u32,
+    /// Captures per second at most (0: every `every` frames). Two scene renders each (colour and coverage): counted in
+    /// frames, a game at 150 fps paid 150 extra renders a second for a small picture that looks the same at 30.
+    pub capture_hz: f64,
     /// Where offstage speakers stand (out of every view).
     pub offstage_at: [f64; 3],
     /// Their motion when the story gives none (group:category:no; 0:0:1 is Studio's 立ち1).
@@ -193,6 +196,7 @@ impl Default for PortraitTuning {
             target: [2048, 2048],
             supersample: 2.0,
             every: 3,
+            capture_hz: 30.0,
             offstage_at: [0.0, 50000.0, 0.0],
             offstage_motion: "0:0:1".into(),
         }

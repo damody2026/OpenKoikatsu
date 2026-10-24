@@ -119,7 +119,8 @@ void AOKStreetSocialScene::TickBonds(){
   Heroines.Add(MakeShared<FJsonValueObject>(H));
  }
  auto Request=OKRulesRequest(TEXT("bonds_tick"));Request->SetNumberField(TEXT("minutes"),double(Minutes));Request->SetArrayField(TEXT("heroines"),Heroines);
- const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
+ TSharedPtr<FJsonObject> Out;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BondsEval);Out=OKRulesEval(S,Request);}if(!Out.IsValid())return;
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BondsApply);
  auto Candidate=S.Store;const bool Changed=BondApply(Candidate,*Out);
  if(Changed)CommitStore(MoveTemp(Candidate));
 }

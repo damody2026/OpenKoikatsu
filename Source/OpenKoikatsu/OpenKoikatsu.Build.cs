@@ -39,7 +39,7 @@ public class OpenKoikatsu : ModuleRules
             "KKRuntimePose"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI", "Renderer", "KKCrowdGpuPacking", "OKHGShading", "ImageCore", "ProceduralMeshComponent", "Niagara", "NiagaraCore", "NavigationSystem", "AIModule", "HTTP", "HTTPServer", "OKPhysXSecondary", "OKStudio" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI", "Renderer", "KKCrowdGpuPacking", "OKHGShading", "ImageCore", "ProceduralMeshComponent", "MeshDescription", "StaticMeshDescription", "Niagara", "NiagaraCore", "NavigationSystem", "AIModule", "HTTP", "HTTPServer", "OKPhysXSecondary", "OKStudio" });
 		PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory,"Source/Runtime/Renderer/Private"));
         PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory,"Source/Runtime/Renderer/Internal"));
   PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory,"Source/Runtime/Engine/Internal"));

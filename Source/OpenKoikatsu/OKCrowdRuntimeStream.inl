@@ -47,7 +47,8 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
    const bool ClipBusy=E.ActionOverride!=INDEX_NONE||E.Clock.UsesClip(2);
    const bool Supersede=E.StreamHold&&E.PendingEpoch!=0&&E.ClipSources.IsValidIndex(2)&&E.PendingAction!=E.ClipSources[2];
    if(!SpeechBlocks&&!ClipBusy&&(!E.StreamHold||Supersede)){
-    if(!RestoreStreamCatalog(E))continue;
+    QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamRetire);
+   if(!RestoreStreamCatalog(E))continue;
     const int32 SlotIndex=Index;ENQUEUE_RENDER_COMMAND(RetireRuntimeAction)([R=Render,SlotIndex](FRHICommandListImmediate& Cmd){R->ReleaseStreamIndex(SlotIndex,Cmd);});
     ++E.StreamReleases;ClearActionSlot(Slot);
    }
@@ -81,6 +82,7 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
     const int32 FailedSlot=Index;ENQUEUE_RENDER_COMMAND(DiscardRejectedRuntimeAction)([R=Render,FailedSlot](FRHICommandListImmediate& Cmd){R->ReleaseStreamIndex(FailedSlot,Cmd);});
     ClearActionSlot(Slot);continue;
    }
+   QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamActivate);
    E.BaseClips=MoveTemp(E.Clips);E.BaseKeys=E.CpuKeys;E.BaseSource=E.ClipSources[2];
    E.Clips=MoveTemp(Slot.Prepared->Clips);E.CpuKeys=MoveTemp(Slot.Prepared->Packed.CpuKeys);E.ClipSources[2]=Slot.Source;
    const int32 SlotIndex=Index;const int32 Actor=E.BankActor;const uint64 Epoch=Slot.Epoch;auto Install=Slot.Install;
@@ -107,7 +109,8 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
   auto& E=*Entries[Actor];
   if(E.PendingAction==INDEX_NONE||E.PendingEpoch==0||E.Clips.Num()<3||E.Clock.UsesClip(2)||E.StreamInstalled||ActionSlotBusy(Actor))continue;
   // Read from disk the first time (FScene::ClipBytes); a clip that cannot be read drops the request.
-  if(ClipBytes(E.PendingAction).IsEmpty()){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;continue;}
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamClipBytes);if(ClipBytes(E.PendingAction).IsEmpty()){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;continue;}}
+  QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamStart);
   auto& Slot=ActionSlots[SlotIndex];Slot.Actor=Actor;Slot.Source=E.PendingAction;Slot.Epoch=E.PendingEpoch;
   const double StreamPrepareStart=FPlatformTime::Seconds();const int32 Source=Slot.Source;
   auto Request=E.PoseRecipe;Request.AuthoredCurves=Curves[Source];if(const auto* Contact=E.ContactRecipes.Find(Source))Request.ContactRecipe=*Contact;

@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Templates/Function.h"
+#include <source_location>
 #include "Commandlets/Commandlet.h"
 #include "OKStreetSocialScene.generated.h"
 
@@ -35,7 +36,7 @@ private:
  void GalgameCheckpoint(int32 Character,const FString& Id); void GalgameRollBack(int32 Character,const FString& Id);
  void EndGalgame();
  double SceneTime() const;
- void RefreshUI(); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked
+ void RefreshUI(std::source_location Where=std::source_location::current()); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked (Where: the asking call, for ok.Street.LogUiRebuilds)
  void RebuildUI();
  void ExecuteFreeTalkAction(int32 Character,const FString& Id,const FString& Action);
  bool PartyCanJoin(int32 Girl,FString* Why=nullptr) const;
@@ -187,7 +188,7 @@ private:
  FString SaveSlotName(const FString& Slot) const;
  FString SaveSlotSummary(const FString& Slot) const;
  void ApplyPendingSave();
- bool SaveToSlot(const FString& Slot);
+ bool SaveToSlot(const FString& Slot,bool Background=false);
  void RestartWithSave(const FString& Action,const FString& Slot);
  void OpenSaveMenu(const FString& Mode);
  void CloseSaveMenu();

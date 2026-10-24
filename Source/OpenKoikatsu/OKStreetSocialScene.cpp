@@ -42,6 +42,10 @@
 #include "OKStreetSocialBluff.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "ProceduralMeshComponent.h"
+#include "ProceduralMeshConversion.h"
+#include "MeshDescription.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
@@ -194,7 +198,7 @@ struct FOKStreetSceneState {
  TMap<FString,TArray<FOKFreeTalkTurn>> FreeTalkMemory;TArray<FOKFreeTalkLine> FreeTalkLog;bool FreeTalkLogLoaded=false,FreeTalkHistoryOpen=false;int64 FreeTalkSerial=0;
  // The bottom box keeps the last thing said (gal-game style); control hints wait behind the "?".
  int64 TalkStartMinute=-1; // when the face-to-face talk with Target began (her memory of it, EndTalk)
- FString DialogueText,HintText;int32 DialogueTarget=INDEX_NONE;bool HintOpen=false,HintUnread=false;
+ FString DialogueText,HintText;int32 DialogueTarget=INDEX_NONE;bool HintOpen=false,HintUnread=false;FLinearColor DialogueColor=FLinearColor::White;FString DigestedMessage;int32 DigestedTarget=INDEX_NONE,DigestedNode=INDEX_NONE;
  // Street clock: real local time at start, 24x speed. The sun is driven from it.
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
@@ -251,7 +255,7 @@ struct FOKStreetSceneState {
  int32 InitiativeSlot=-1,InitiativesToday=0,DirectorDay=-1;
  // Plan §15: the open full-screen app (lottery, scratch, web, notebook, atm, cn, us), its data and its inputs.
  FString App,FinMarket,FinCode,FinPeriod=TEXT("intraday"),FinSearchText,FinOrderSide=TEXT("buy"),FinOrderKind=TEXT("market"),FinOrderPrice,FinOrderQty=TEXT("100"),FinTransfer=TEXT("2000"),FinNotice;
- bool AppReadOnly=false,AppSavedMouse=false,FinTickWarned=false,PcWarned=false;int64 FinDueAt=0;bool FinTickInFlight=false,FinBookChanged=false;TSharedRef<FThreadSafeBool,ESPMode::ThreadSafe> FinQueryRunning=MakeShared<FThreadSafeBool,ESPMode::ThreadSafe>(false); /* TickFinance */double FinTickAt=0,AppRefreshAt=0,FinMoversAt=0,DrawShowAt=0,WatchStart=0;
+ bool AppReadOnly=false,AppSavedMouse=false,FinTickWarned=false,PcWarned=false;int64 FinDueAt=0;bool FinTickInFlight=false,FinBookChanged=false;TSharedRef<FThreadSafeBool,ESPMode::ThreadSafe> FinQueryRunning=MakeShared<FThreadSafeBool,ESPMode::ThreadSafe>(false);TSharedRef<FThreadSafeBool,ESPMode::ThreadSafe> SaveCopyRunning=MakeShared<FThreadSafeBool,ESPMode::ThreadSafe>(false); /* SaveToSlot in the background */ /* TickFinance */double FinTickAt=0,AppRefreshAt=0,FinMoversAt=0,DrawShowAt=0,WatchStart=0;
  int32 FinHeroDay=-1,WatchGirl=INDEX_NONE,PcPaidHours=0,LotZone2=1,LotDraws=1;int64 FinClaims=0,ScratchTicket=0,PcStartMinute=0;FString PcPlace,LotTab=TEXT("star649"),LotGame=TEXT("star649"),WebTab=TEXT("home"),ScratchTheme,BetStake=TEXT("20");
  TSharedPtr<FJsonObject> FinLotto,FinBoard,FinTickets,FinNotebook,FinQuote,FinAccount,FinWatch,FinMovers,FinSummary,FinSearch,DrawShow;
  bool NearCounter=false;
@@ -280,7 +284,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  double OverlapCheckAt=0; // next check that nobody stands inside him (TickFreeTalkTrace)
  bool SkipGreeting=false; // she walked up to him and opens in her own words (InitiativeNudge): no scripted greeting line first
  TSet<int32> MeetingGreeted; // appointments she already greeted him for: a talk after the meeting is not "you came as agreed" again
- FOKStreetBluff Bluff;double ShopArrivalAt=-1000;TSet<FString> PartyMoodChecked;TMap<int32,double> PartyLeaving,PartedAt;TArray<int32> Party,FreeTalkSpeechSpeakers;TArray<FString> PartyEvents,PartyLog;TMap<int32,double> PartyGapRef,PartyGapAt;double ManualMoveAt=-100;bool ManualReplan=false;bool UiDirty=false;double UiShopCheckAt=0;FString UiShopKey;FString PlayerAskedText;FString LastPlayerSaid;double ApproachBlockLogAt=0;int32 CompanionGapFor=INDEX_NONE;double CompanionGapRef=0,CompanionGapRefAt=0;double FaceOffSince=0,FaceSetYaw=0,FaceLogAt=0;int32 HeadLookGirl=INDEX_NONE;TArray<FOKStreetDish> Table;int32 ServeBatch=0;FString MealPlace;double MealAwayAt=0,MealBookAt=0;bool StopEating=false,FullTold=false;TArray<FString> TellHer;int32 AutoPickTried=INDEX_NONE;bool FreeTalkUserClosed=false;double FreeTalkLeftAt=0;FString RetryAction;int32 RetryGirl=INDEX_NONE;double RetryUntil=0;bool FarewellPending=false,FarewellAsked=false,FarewellFromTalk=false;double FarewellAt=0,PlaceClosingAt=0;FString ClosedNoticePlace;double DecisionShotAt=0;FString DecisionShotTag;int32 DecisionShots=0;FString ShopArrivalPlace,ShopSeenPlace;bool ShopEnteredWith=false;TArray<FOKStreetPendingServe> Serves;double OrderNoticeDue=0;FString OrderNoticeSig;FString TraceSig;double TraceAt=0;FVector TracePos=FVector::ZeroVector;int32 TraceGirl=INDEX_NONE;double StrayPoseAt=0;TMap<int32,int32> StrayPose; float RightScrollOffset=0;FString FreeTalkHeard; bool AppointmentsOpen=false; // the right panel's list of appointments to cancel
+ FOKStreetBluff Bluff;double ShopArrivalAt=-1000;TSet<FString> PartyMoodChecked;TMap<int32,double> PartyLeaving,PartedAt;TArray<int32> Party,FreeTalkSpeechSpeakers;TArray<FString> PartyEvents,PartyLog;TMap<int32,double> PartyGapRef,PartyGapAt;double ManualMoveAt=-100;bool ManualReplan=false;bool UiDirty=false;const char* UiDirtyFile="";uint32 UiDirtyLine=0;double UiShopCheckAt=0;FString UiShopKey;FString PlayerAskedText;FString LastPlayerSaid;double ApproachBlockLogAt=0;int32 CompanionGapFor=INDEX_NONE;double CompanionGapRef=0,CompanionGapRefAt=0;double FaceOffSince=0,FaceSetYaw=0,FaceLogAt=0;int32 HeadLookGirl=INDEX_NONE;TArray<FOKStreetDish> Table;int32 ServeBatch=0;FString MealPlace;double MealAwayAt=0,MealBookAt=0;bool StopEating=false,FullTold=false;TArray<FString> TellHer;int32 AutoPickTried=INDEX_NONE;bool FreeTalkUserClosed=false;double FreeTalkLeftAt=0;FString RetryAction;int32 RetryGirl=INDEX_NONE;double RetryUntil=0;bool FarewellPending=false,FarewellAsked=false,FarewellFromTalk=false;double FarewellAt=0,PlaceClosingAt=0;FString ClosedNoticePlace;double DecisionShotAt=0;FString DecisionShotTag;int32 DecisionShots=0;FString ShopArrivalPlace,ShopSeenPlace;bool ShopEnteredWith=false;TArray<FOKStreetPendingServe> Serves;double OrderNoticeDue=0;FString OrderNoticeSig;FString TraceSig;double TraceAt=0;FVector TracePos=FVector::ZeroVector;int32 TraceGirl=INDEX_NONE;double StrayPoseAt=0;TMap<int32,int32> StrayPose; float RightScrollOffset=0;FString FreeTalkHeard; bool AppointmentsOpen=false; // the right panel's list of appointments to cancel
  int32 PayAgreedWith=INDEX_NONE;FString PayAgreedHow,PayAgreedShop;int64 PayAgreedAt=0; // who pays, as the AI read what they settled (her reply's payer, the judge's)
  TArray<FString> SaidToHer;int32 SaidToHerWith=INDEX_NONE; // his last lines to her in this conversation: "I'll treat you" said on the way still counts at the table
  // She asked to borrow before he offered (her act skipped): his next line handing it over makes the loan.
@@ -292,7 +296,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  double FreeTalkQuietUntil=0; // she asked him to keep quiet (judge): his silence is what she wanted until then
  bool ControlMicIgnored=false; // control channel: what the room microphone hears is not his (a tester talking nearby)
  bool FreeTalkMicPausedClock=false,FreeTalkMicOpen=false,FreeTalkLiveReady=false,FreeTalkLiveStarting=false,FreeTalkLeavePending=false;double FreeTalkSilenceSince=0,FreeTalkNudgeAt=0,FreeTalkLiveTickAt=0;int32 FreeTalkSilencePenalties=0;float FreeTalkSilenceScale=1;int32 LiveTestPhase=-1,LiveTestNudges=0,LiveTestPenalties=0;float LiveTestFavor=0;bool LiveTestLeft=false,LiveTestInterrupted=false,LiveTestHerReply=false;double LiveTestAt=0;FString LiveTestWav;double FreeTalkLiveRetryAt=0;int32 FreeTalkLivePollFails=0;float FreeTalkMicLevel=0;FString FreeTalkMic;TArray<FString> FreeTalkMics;
- FString OutingActivity,OutingPlace;TArray<FVector> OutingRoute;int32 OutingStep=0;double OutingProgressAt=0;bool OutingWaitDoor=false;bool OutingRun=false;FString StrollActivity;int64 StrollStartMinute=0;bool QuietTalk=false;TArray<TWeakObjectPtr<AActor>> PlaceActors;TArray<TWeakObjectPtr<ADirectionalLight>> PlaceFills;float NextPairYaw=0;FString NextPairFemaleClip,NextPairMaleClip;int32 SoloGirl=INDEX_NONE,SoloPhase=0,SoloMinutes=0;double SoloAt=0;int64 SoloStartMinute=0;FVector SoloSpot=FVector::ZeroVector;float SoloYaw=0;FString SoloFemale,SoloMale,SoloWhat,SoloId;bool SleepPaired=false;int32 SleepPhase=0,SleepGirl=INDEX_NONE;double SleepAt=0;FVector SleepBed=FVector::ZeroVector,SleepGirlBed=FVector::ZeroVector;float SleepYaw=0,SleepGirlYaw=0;FString SleepPlace;int32 RestroomGirl=INDEX_NONE;double RestroomUntil=0;FString RestroomPlace;double RestroomBlockedAt=0;struct FPlaceLayers {int32 Place=INDEX_NONE;TWeakObjectPtr<UProceduralMeshComponent> Roof;TMap<int32,TWeakObjectPtr<UProceduralMeshComponent>> Levels;};TArray<FPlaceLayers> PlaceRoofs;FString PlaceTourDir;int32 PlaceTourIndex=-1;double PlaceTourAt=0;bool PlaceTourShot=false;TMap<int32,FVector> CommuteShown;
+ FString OutingActivity,OutingPlace;TArray<FVector> OutingRoute;int32 OutingStep=0;double OutingProgressAt=0;bool OutingWaitDoor=false;bool OutingRun=false;FString StrollActivity;int64 StrollStartMinute=0;bool QuietTalk=false;TArray<TWeakObjectPtr<AActor>> PlaceActors;TArray<TWeakObjectPtr<ADirectionalLight>> PlaceFills;float NextPairYaw=0;FString NextPairFemaleClip,NextPairMaleClip;int32 SoloGirl=INDEX_NONE,SoloPhase=0,SoloMinutes=0;double SoloAt=0;int64 SoloStartMinute=0;FVector SoloSpot=FVector::ZeroVector;float SoloYaw=0;FString SoloFemale,SoloMale,SoloWhat,SoloId;bool SleepPaired=false;int32 SleepPhase=0,SleepGirl=INDEX_NONE;double SleepAt=0;FVector SleepBed=FVector::ZeroVector,SleepGirlBed=FVector::ZeroVector;float SleepYaw=0,SleepGirlYaw=0;FString SleepPlace;int32 RestroomGirl=INDEX_NONE;double RestroomUntil=0;FString RestroomPlace;double RestroomBlockedAt=0;struct FPlaceLayers {int32 Place=INDEX_NONE;TWeakObjectPtr<UPrimitiveComponent> Roof;TMap<int32,TWeakObjectPtr<UPrimitiveComponent>> Levels;};TArray<FPlaceLayers> PlaceRoofs;FString PlaceTourDir;int32 PlaceTourIndex=-1;double PlaceTourAt=0;bool PlaceTourShot=false;TMap<int32,FVector> CommuteShown;
  TArray<FString> FreeTalkSpeechLines,FreeTalkSpeechPaths,FreeTalkReplayParts;TArray<uint8> FreeTalkSpeechReady,FreeTalkSpeechStreamed;TArray<TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe>> FreeTalkSpeechStreams;int32 FreeTalkSpeechGeneration=0,FreeTalkSpeechCharacter=INDEX_NONE,FreeTalkSpeechPlayed=0,FreeTalkSpeechFiles=0;int64 FreeTalkSpeechSerial=0;double FreeTalkSpeechNext=0,FreeTalkSpeechRepliedAt=0;FString FreeTalkSpeechChannel;TArray<double> FreeTalkSpeechSentAt;
  FString FreeTalkCaptionPlayer,FreeTalkCaptionHer;TArray<int64> FreeTalkReplay;int32 FreeTalkReplayTotal=0,FreeTalkReplaySpeaker=INDEX_NONE;double FreeTalkReplayNext=0;
  // The replayed line now playing, for the galgame scene (its box and portrait): bumped per line.
@@ -686,6 +690,13 @@ void AOKStreetSocialScene::BeginPlay(){
  // Cascaded shadow maps, not virtual ones: the same toon shadows on screen, and every scene measured ran faster with
  // them (food court 108 -> 125, the girls' dorm 85 -> 130, the dorm lounge full of girls 56 -> 70 FPS).
  Quality(TEXT("r.Shadow.Virtual.Enable"),0);
+ // No contrast-adaptive shading rate image (on by default on Windows): it saves GPU shading the toon street does not
+ // need (the GPU idles at 3 ms) and its pass costs the render thread (128 -> 132 FPS walking, three runs each).
+ Quality(TEXT("r.VRS.ContrastAdaptiveShading"),0);
+ // No hardware occlusion queries: the render thread waited on the GPU for last frame's results (~5 ms a frame in the
+ // girls' dorm, GPUBound_WaitingForGPUForOcclusionQueries), worst when another game shares the GPU. Drawing what they
+ // would have culled costs the GPU ~1 ms (it idles at 3-4 ms); 127 -> 150 and 151 -> 177 FPS in the dorm, A/B in place.
+ Quality(TEXT("r.AllowOcclusionQueries"),0);
  int32 ResX=0,ResY=0;
  if(FParse::Value(FCommandLine::Get(),TEXT("ResX="),ResX)&&FParse::Value(FCommandLine::Get(),TEXT("ResY="),ResY)&&ResX>=640&&ResY>=360){if(auto* Settings=GEngine->GetGameUserSettings()){Settings->SetScreenResolution(FIntPoint(ResX,ResY));Settings->SetFullscreenMode(EWindowMode::Windowed);Settings->ApplyResolutionSettings(false);}}
  FString ManifestPath,Json,Error;
@@ -1957,7 +1968,23 @@ void AOKStreetSocialScene::SetCharacterRelationship(int32 Character,const FStrin
 static const FSlateBrush* OKStreetGlassPanel(){static const FSlateRoundedBoxBrush Brush(FLinearColor(.025f,.045f,.075f,.78f),16.f);return &Brush;}
 static const FButtonStyle* OKStreetGlassButton(){static const FButtonStyle Style=[](){auto B=FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("Button");B.SetNormal(FSlateRoundedBoxBrush(FLinearColor(.12f,.19f,.29f,.68f),8.f));B.SetHovered(FSlateRoundedBoxBrush(FLinearColor(.24f,.40f,.53f,.85f),8.f));B.SetPressed(FSlateRoundedBoxBrush(FLinearColor(.07f,.14f,.23f,.85f),8.f));B.SetNormalPadding(FMargin(12,8));B.SetPressedPadding(FMargin(12,8));return B;}();return &Style;}
 
-void AOKStreetSocialScene::RefreshUI(){if(State)State->UiDirty=true;}
+// The bottom box's text from S.Message: her words (kept while only a control hint comes in) and the control hint. Run every
+// tick, and the box binds to the result, so a new message shows without rebuilding the whole UI (a rebuild costs ~10 ms:
+// walking past people changed the hint every few seconds, and each change was a long frame).
+static void OKStreetDigestMessage(FOKStreetSceneState& S){
+ if(S.Message==S.DigestedMessage&&S.Target==S.DigestedTarget&&S.Node==S.DigestedNode)return;
+ S.DigestedMessage=S.Message;S.DigestedTarget=S.Target;S.DigestedNode=S.Node;
+ const FString Speaker=S.Node!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(S.Target)?S.Manifest.Characters[S.Target].Name+OKT(TEXT("ui.economy.colon_mark")):FString();
+ FString Said,Hint;OKStreetSplitMessageHint(S.Message,Said,Hint);
+ // A control-only message keeps her last line on screen; a new partner (or none) starts clean.
+ if(S.DialogueTarget!=S.Target){S.DialogueText.Reset();S.DialogueTarget=S.Target;}
+ if(!Said.IsEmpty())S.DialogueText=Speaker+Said;
+ S.DialogueColor=OKStreetSpeakerColor(OKStreetLineSpeaker(S.DialogueText,OKStreetCharacterNames(S)));
+ if(!Hint.IsEmpty()&&Hint!=S.HintText){S.HintText=Hint;S.HintUnread=!S.HintOpen;}
+}
+
+static TAutoConsoleVariable<int32> CVarOKStreetLogUiRebuilds(TEXT("ok.Street.LogUiRebuilds"),0,TEXT("1: log each rebuild of the right panel with the RefreshUI call that asked for it (file:line). A rebuild costs ~10 ms."));
+void AOKStreetSocialScene::RefreshUI(std::source_location Where){if(State){State->UiDirty=true;State->UiDirtyFile=Where.file_name();State->UiDirtyLine=Where.line();}}
 
 void AOKStreetSocialScene::RebuildUI(){
  if(!State||!GEngine||!GEngine->GameViewport)return;auto& S=*State;
@@ -2223,13 +2250,10 @@ void AOKStreetSocialScene::RebuildUI(){
   Caption->Text=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L?L->FreeTalkCaptionHer:FString();};
   Caption->Names=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L?OKStreetCharacterNames(*L):TArray<FString>();};}
  if(!S.PlayerLine.IsEmpty())Dialogue->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(Scripted).Text(FText::FromString(S.Manifest.Characters[0].Name+OKT(TEXT("ui.economy.colon_mark"))+S.PlayerLine)).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",20)).ColorAndOpacity(FLinearColor(.65f,.85f,1.f))];
- const FString Speaker=S.Node!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(S.Target)?S.Manifest.Characters[S.Target].Name+OKT(TEXT("ui.economy.colon_mark")):FString();
- {FString Said,Hint;OKStreetSplitMessageHint(S.Message,Said,Hint);
-  // A control-only message keeps her last line on screen; a new partner (or none) starts clean.
-  if(S.DialogueTarget!=S.Target){S.DialogueText.Reset();S.DialogueTarget=S.Target;}
-  if(!Said.IsEmpty())S.DialogueText=Speaker+Said;
-  if(!Hint.IsEmpty()&&Hint!=S.HintText){S.HintText=Hint;S.HintUnread=!S.HintOpen;}}
- Dialogue->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(Scripted).Text(FText::FromString(S.DialogueText)).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",21)).ColorAndOpacity(OKStreetSpeakerColor(OKStreetLineSpeaker(S.DialogueText,OKStreetCharacterNames(S))))];
+ OKStreetDigestMessage(S);
+ Dialogue->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(Scripted).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",21))
+  .Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L?FText::FromString(L->DialogueText):FText::GetEmpty();})
+  .ColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FSlateColor(L?L->DialogueColor:FLinearColor::White);})];
  // Free-talk history window: every girl's lines, newest last, each with its voice when one was made.
  TSharedRef<SWidget> History=SNew(SBox).Visibility(EVisibility::Collapsed);
  if(S.FreeTalkHistoryOpen){
@@ -2308,10 +2332,10 @@ void AOKStreetSocialScene::RebuildUI(){
    .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameHidesDialogueBox()?EVisibility::Collapsed:EVisibility::Visible;})[SAssignNew(S.DialoguePanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(20)[Dialogue]]]]]
  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(356,80,0,220)[History]
  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(16,16,16,24)[SNew(SVerticalBox)
-  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[SNew(SBox).MaxDesiredWidth(320).Visibility(S.HintOpen?EVisibility::Visible:EVisibility::Collapsed)[SNew(SBorder).BorderImage(OKStreetGlassPanel()).Padding(14)[SNew(STextBlock).AutoWrapText(true).Text(FText::FromString((S.HintText.IsEmpty()?FString():S.HintText+TEXT("\n"))+(S.MouseUI?OKT(TEXT("ui.scene.ui_mode_hint")):OKT(TEXT("ui.scene.camera_mode_hint")))+OKT(TEXT("ui.scene.map_hint_m"))))]]]
+  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[SNew(SBox).MaxDesiredWidth(320).Visibility(S.HintOpen?EVisibility::Visible:EVisibility::Collapsed)[SNew(SBorder).BorderImage(OKStreetGlassPanel()).Padding(14)[SNew(STextBlock).AutoWrapText(true).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return FText::GetEmpty();return FText::FromString((L->HintText.IsEmpty()?FString():L->HintText+TEXT("\n"))+(L->MouseUI?OKT(TEXT("ui.scene.ui_mode_hint")):OKT(TEXT("ui.scene.camera_mode_hint")))+OKT(TEXT("ui.scene.map_hint_m")));})]]]
   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SNew(SBox).WidthOverride(44).HeightOverride(44)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).VAlign(VAlign_Center).ToolTipText(FText::FromString(OKT(TEXT("ui.scene.controls_hint_title"))))
    .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){auto& L=*Weak->State;L.HintOpen=!L.HintOpen;L.HintUnread=false;Weak->RefreshUI();}return FReply::Handled();})
-   [SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",20)).ColorAndOpacity(S.HintUnread?FLinearColor(1,.83f,.35f):FLinearColor::White).Text(FText::FromString(TEXT("?")))]]]]
+   [SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",20)).ColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FSlateColor(L&&L->HintUnread?FLinearColor(1,.83f,.35f):FLinearColor::White);}).Text(FText::FromString(TEXT("?")))]]]]
  +SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Fill).Padding(16)[SNew(SBox).WidthOverride(400)[SAssignNew(S.InteractionPanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(8)[SNew(SVerticalBox)
   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[ClockRow]
   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[LiftRows]
@@ -3228,10 +3252,11 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(const double WallNow=FPlatformTime::Seconds();WallNow>=S.UiShopCheckAt){
   S.UiShopCheckAt=WallNow+.4;FString Why;const FString Shop=ShopPlaceHere();
   const FString Key=Shop.IsEmpty()?FString():Shop+(PlaceClosedNow(Shop,Why)?TEXT("|closed"):TEXT("|open"));
-  if(Key!=S.UiShopKey){S.UiShopKey=Key;S.UiDirty=true;}
+  if(Key!=S.UiShopKey){S.UiShopKey=Key;S.UiDirty=true;S.UiDirtyFile=__FILE__;S.UiDirtyLine=__LINE__;}
  }
  if(S.FreeTalkLogDirty&&FPlatformTime::Seconds()-S.FreeTalkLogSavedAt>1.0){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkSaveLog);S.FreeTalkLogDirty=false;S.FreeTalkLogSavedAt=FPlatformTime::Seconds();FreeTalkSaveLog();}
- if(S.UiDirty){S.UiDirty=false;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_RebuildUI);RebuildUI();}}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickControl);TickControl();}
+ OKStreetDigestMessage(S);
+ if(S.UiDirty){S.UiDirty=false;if(CVarOKStreetLogUiRebuilds.GetValueOnGameThread())UE_LOG(LogTemp,Display,TEXT("Street UI rebuild asked by %s:%u"),*FPaths::GetCleanFilename(ANSI_TO_TCHAR(S.UiDirtyFile)),S.UiDirtyLine);{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_RebuildUI);RebuildUI();}}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickControl);TickControl();}
  const double Now=SceneTime();auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;
  if(!S.CatchLight.IsValid()){auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetLightingChannels(false,false,true);L->SetCastShadows(false);
   L->SetIntensityUnits(ELightUnits::Candelas);L->SetIntensity(100.f); /* 100 cd: a clear wet shine, short of glare (300 burns out) */L->SetAttenuationRadius(800.f);L->SetSourceRadius(2.f);L->RegisterComponent();AddInstanceComponent(L);S.CatchLight=L;}
@@ -3461,14 +3486,14 @@ void AOKStreetSocialScene::Tick(float Dt){
   S.Candidate=Result.Selection.Selected;S.CandidateCount=Result.Selection.Count;S.CandidateExplicit=Result.Selection.Explicit;
   if(Interact&&Result.AdmitSlot==INDEX_NONE&&FreeTalkPartner()!=INDEX_NONE&&!S.FreeTalkLive){S.FreeTalkOpen=true;FreeTalkLiveSet(true);} // E again: back to the live conversation
   if(Result.AdmitSlot!=INDEX_NONE){if(BeginTalk(Result.AdmitSlot)){S.FreeTalkOpen=true;FreeTalkLiveSet(true);}} // E opens the conversation and the microphone together
-  else if(S.Candidate!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(S.Candidate)){const FString Hint=OKStreetTalkCandidateHint(S.Manifest.Characters[S.Candidate].Name,S.CandidateCount);if(!Hint.IsEmpty()&&Hint!=S.Message){S.Message=Hint;RefreshUI();}}
+  else if(S.Candidate!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(S.Candidate)){const FString Hint=OKStreetTalkCandidateHint(S.Manifest.Characters[S.Candidate].Name,S.CandidateCount);if(!Hint.IsEmpty()&&Hint!=S.Message)S.Message=Hint;} // the box binds to the message (OKStreetDigestMessage): no rebuild
   else if(Interact&&Result.RejectedInteract){
    // E pressed and nobody was taken: say why for each girl in reach (distance, line of sight, readiness, angle off the view).
    FString Why;for(const auto& Sm:Samples)if(Sm.DistanceCm<OKStreetTalkRangeCm*2.f){const FVector2D Dir=FVector2D(Sm.Offset.X,Sm.Offset.Y).GetSafeNormal();const float Ang=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector2D::DotProduct(Dir,FVector2D(View.Horizontal.X,View.Horizontal.Y))),-1.f,1.f)));Why+=FString::Printf(TEXT(" [slot %d dist=%.0f los=%d ready=%d visible=%d actions=%d queried=%d stale=%d angle=%.0f]"),Sm.Slot,Sm.DistanceCm,Sm.LineOfSightClear?1:0,Sm.Ready?1:0,Sm.Visible?1:0,Sm.ActionsReady?1:0,Sm.Queried?1:0,Sm.Stale?1:0,Ang);}
    UE_LOG(LogTemp,Display,TEXT("Street E refused:%s"),Why.IsEmpty()?TEXT(" nobody within reach"):*Why);
    const FString Idle=OKT(TEXT("ui.scene.controls_short_hint"));if(S.Message!=Idle){S.Message=Idle;RefreshUI();}
   }
-  else if(Current.Selected!=INDEX_NONE||Result.RejectedInteract||Tab){const FString Idle=OKT(TEXT("ui.scene.controls_short_hint"));if(S.Message!=Idle){S.Message=Idle;RefreshUI();}}
+  else if(Current.Selected!=INDEX_NONE||Result.RejectedInteract||Tab){const FString Idle=OKT(TEXT("ui.scene.controls_short_hint"));if(S.Message!=Idle)S.Message=Idle;}
  }
  if(S.Target==INDEX_NONE&&S.Pair.Partner==INDEX_NONE&&NearestPickup!=INDEX_NONE){if(const auto* T=S.CollectedTopics.Find(S.PickupTopics[NearestPickup])){const FString Hint=OKT(TEXT("ui.scene.auto_pickup_topic_label"))+T->Name+OKT(TEXT("ui.scene.pickup_controls_hint"));if(S.Message!=Hint){S.Message=Hint;RefreshUI();}}}
  if(Focused&&S.Target!=INDEX_NONE){if(OKKeyPressed(PC,EKeys::Four))AskHerTopic();if(OKKeyPressed(PC,EKeys::One))Topic(TEXT("daily"));if(OKKeyPressed(PC,EKeys::Two))Topic(TEXT("romance"));if(OKKeyPressed(PC,EKeys::Three))Topic(TEXT("intimacy"));}

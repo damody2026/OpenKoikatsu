@@ -115,11 +115,12 @@ void AOKStreetSocialScene::ProbeTtsServer(int32 Attempt){
  Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Attempt](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
   if(!State||!State->TtsEnabled)return;TSharedPtr<FJsonObject> J;bool Ready=false;
   if(Connected&&Response.IsValid()&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()),J)&&J.IsValid())J->TryGetBoolField(TEXT("ready"),Ready);
-  const bool Waiting=!Ready&&Attempt<40;
+  const bool Waiting=!Ready&&Attempt<40;const FString Before=State->TtsNotice;
   State->TtsNotice=Ready?OKT(TEXT("ui.voice.voice_tts_server_ready")):Waiting?OKT(TEXT("ui.voice.voice_tts_server_starting")):OKT(TEXT("ui.voice.voice_tts_no_response"))+State->TtsEndpoint+OKT(TEXT("ui.voice.tts_server_restart_hint"));
   // Still loading: ask again in 2 s (the timer dies with the scene).
   if(Waiting)GetWorldTimerManager().SetTimer(TtsProbeTimer,FTimerDelegate::CreateWeakLambda(this,[this,Attempt](){if(State&&State->TtsEnabled)ProbeTtsServer(Attempt+1);}),2.f,false);
-  RefreshUI();
+  // Only a changed notice rebuilds the panel (the probe repeats every 2 s while the server loads).
+  if(State->TtsNotice!=Before)RefreshUI();
  });
  Request->ProcessRequest();
 }

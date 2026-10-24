@@ -178,7 +178,8 @@ void AOKStreetSocialScene::TickEncounters(){
   Pairs.Add(MakeShared<FJsonValueObject>(P));
  }
  Request->SetArrayField(TEXT("pairs"),Pairs);
- const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
+ TSharedPtr<FJsonObject> Answer;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncountersEval);Answer=OKRulesEval(S,Request);}if(!Answer)return;
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncountersApply);
  for(const auto& V:Answer->GetArrayField(TEXT("caught"))){const auto O=V->AsObject();ApplyJealousyNews(CharacterOf(O->GetStringField(TEXT("seer"))),O->GetStringField(TEXT("other")),1.f);}
  ApplyRulesEffects(S.Store,*Answer);
  for(const auto& V:Answer->GetArrayField(TEXT("meet"))){
