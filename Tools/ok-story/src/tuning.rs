@@ -302,11 +302,14 @@ pub struct LiveTuning {
     pub pov_up: f64,
     /// What the view centres on: 0 her head, 1 her chest.
     pub pov_aim: f64,
+    /// A voiced line waits this long (seconds) for its voice before it types at the reading speed: generated speech can
+    /// start seconds after the text, and typed meanwhile the words ran ahead of the voice and the sync was lost.
+    pub voice_wait: f64,
 }
 
 impl Default for LiveTuning {
     fn default() -> Self {
-        LiveTuning { player_portrait: true, text_speed: 6, parallax: 0.15, pov: true, pov_fov: 60.0, pov_forward: -12.0, pov_up: 6.0, pov_aim: 0.35 }
+        LiveTuning { player_portrait: true, text_speed: 6, parallax: 0.15, pov: true, pov_fov: 60.0, pov_forward: -12.0, pov_up: 6.0, pov_aim: 0.35, voice_wait: 2.5 }
     }
 }
 

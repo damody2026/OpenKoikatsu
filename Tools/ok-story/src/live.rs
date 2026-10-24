@@ -402,7 +402,10 @@ impl Live {
                     following = true;
                 }
             }
-            if !following {
+            // A voiced line whose voice has not started yet: nothing typed for a moment, so the words start with it.
+            let waiting = !following && line.voiced && !voice.done && !voice.playing && self.st.typing.shown == 0
+                && line.age < self.tuning.live.voice_wait;
+            if !following && !waiting {
                 self.st.typing.type_for(&self.tuning.text, dt, self.tuning.live.text_speed);
             }
             if self.st.typing.revealed && line.done_at.is_none() {
@@ -594,6 +597,29 @@ mod tests {
         assert_eq!(l.st.shot.as_ref().unwrap().on.as_deref(), Some("her2"));
         let f = l.st.rig.current.rot.forward();
         assert!(f[1] > 0.9, "looks at her2: {:?}", f);
+    }
+
+    /// A voiced line waits for its voice (generated speech starts seconds after the text): nothing typed meanwhile,
+    /// then the words follow the voice; with no voice by `voice_wait` it types at the reading speed.
+    #[test]
+    fn voiced_line_waits_for_its_voice() {
+        for comes in [true, false] {
+            let mut l = Live::open(LiveConfig::default()).unwrap();
+            l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+            l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "今天的照片拍得真好看呢。".into(), voiced: true });
+            // 1.5 s without a voice (the game reports none playing: id 0).
+            for _ in 0..94 { l.tick(facts(0.016, -1.0, 0)); }
+            assert_eq!(l.st.typing.shown, 0, "nothing typed while the voice is on its way");
+            if comes {
+                let id = l.st.line.as_ref().unwrap().id;
+                for _ in 0..30 { l.tick(facts(0.016, 0.5, id)); }
+                let half = l.st.typing.shown;
+                assert!(half > 0 && half < l.st.typing.total, "follows the voice: {half}/{}", l.st.typing.total);
+            } else {
+                for _ in 0..300 { l.tick(facts(0.016, -1.0, 0)); }
+                assert!(l.st.typing.revealed, "no voice after the wait: typed at the reading speed");
+            }
+        }
     }
 
     /// Something between his eyes and her (the first probe, from her face to his eyes, comes back short): the usual
