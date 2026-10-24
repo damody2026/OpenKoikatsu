@@ -93,6 +93,7 @@ constexpr int32 OKFreeTalkSegmentChars = 15;
 
 // Cuts text into lines of at most OKFreeTalkSegmentChars: after sentence ends, else at a comma, else hard.
 void OKStreetFreeTalkSplitLines(const FString& Text, TArray<FString>& Out);
+void OKStreetFreeTalkSplitTexts(const TArray<FString>& Texts, TArray<FString>& Out); // one reply's lines together (how a line with no stop ends depends on whether it is the last)
 // The segments as one line (no spaces in Chinese; spaces in English).
 FString OKStreetFreeTalkJoinLines(const TArray<FString>& Lines);
 

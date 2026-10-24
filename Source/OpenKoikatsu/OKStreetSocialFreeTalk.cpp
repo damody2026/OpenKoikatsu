@@ -220,11 +220,12 @@ bool OKStreetFreeTalkParseContent(const FString& Content, FOKFreeTalkReply& Out,
  if (Parsed) {
   double Delta = 0;
   const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
-  if (Reply->TryGetArrayField(TEXT("lines"), Lines))
-   for (const auto& Value : *Lines) {
-    FString Line;
-    if (Value.IsValid() && Value->TryGetString(Line)) OKStreetFreeTalkSplitLines(Line, Out.Lines);
-   }
+  // All of them at once: whether a line is the reply's last decides how one with no stop of its own ends.
+  if (Reply->TryGetArrayField(TEXT("lines"), Lines)) {
+   TArray<FString> Texts;
+   for (const auto& Value : *Lines) { FString Line; if (Value.IsValid() && Value->TryGetString(Line)) Texts.Add(Line); }
+   OKStreetFreeTalkSplitTexts(Texts, Out.Lines);
+  }
   FString Single;
   if (Out.Lines.IsEmpty() && Reply->TryGetStringField(TEXT("reply"), Single)) OKStreetFreeTalkSplitLines(Single, Out.Lines);
   Reply->TryGetStringField(TEXT("reason"), Out.Reason);
@@ -290,6 +291,17 @@ FString OKStreetFreeTalkJoinLines(const TArray<FString>& Lines) {
   if (const TSharedPtr<FJsonObject> A = Rules->Eval(Request, Error)) if (A->TryGetStringField(TEXT("reply"), Out)) return Out;
  }
  return FString::Join(Lines, TEXT(""));
+}
+
+void OKStreetFreeTalkSplitTexts(const TArray<FString>& Texts, TArray<FString>& Out) {
+ if (FOKStreetRules* Rules = OKStreetActiveRules()) {
+  auto Request = MakeShared<FJsonObject>(); Request->SetStringField(TEXT("rule"), TEXT("reply_lines"));
+  TArray<TSharedPtr<FJsonValue>> Values; for (const FString& T : Texts) Values.Add(MakeShared<FJsonValueString>(T));
+  Request->SetArrayField(TEXT("texts"), Values); Request->SetNumberField(TEXT("max"), OKFreeTalkSegmentChars);
+  FString Error; const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
+  if (const TSharedPtr<FJsonObject> A = Rules->Eval(Request, Error)) if (A->TryGetArrayField(TEXT("lines"), Lines)) { for (const auto& L : *Lines) Out.Add(L->AsString()); return; }
+ }
+ for (const FString& T : Texts) { const FString Clean = T.TrimStartAndEnd(); if (!Clean.IsEmpty()) Out.Add(Clean); }
 }
 
 void OKStreetFreeTalkSplitLines(const FString& Text, TArray<FString>& Out) {
