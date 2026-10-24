@@ -44,6 +44,23 @@ pub struct Photo {
     pub lover: bool,
 }
 
+/// One of her brows / eyes / mouth by name -> the source's face pattern.
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+pub struct FacePart {
+    pub part: String,
+    pub key: String,
+    pub pattern: i32,
+}
+
+/// Her mood -> the gestures that show it, for a line the model gave no gesture.
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Mood {
+    pub emotions: Vec<String>,
+    pub gestures: Vec<String>,
+}
+
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct MotionsTuning {
@@ -53,6 +70,10 @@ pub struct MotionsTuning {
     pub life: Vec<Life>,
     #[serde(default)]
     pub photo: Vec<Photo>,
+    #[serde(default)]
+    pub mood: Vec<Mood>,
+    #[serde(default)]
+    pub face: Vec<FacePart>,
 }
 
 fn s<'a>(r: &'a Value, k: &str) -> &'a str {
@@ -76,14 +97,25 @@ impl MotionsTuning {
         self.life.iter().find(|l| l.kind == kind && !l.place.is_empty() && l.place == place).or_else(|| self.life.iter().find(|l| l.kind == kind && l.place.is_empty()))
     }
 
-    /// Request: gesture (a key), posture (stand | chair), seed. Answer: clip and seconds, or clip "" (no such key, or
-    /// nothing for that posture: sitting she does not jump up to cheer).
+    /// Request: gesture (a key), posture (stand | chair), seed, emotion, speech_seconds. Answer: clip and seconds, or
+    /// clip "" (no such key, or nothing for that posture: sitting she does not jump up to cheer). No gesture (or "none")
+    /// takes one from her mood; the clip is held at least as long as she speaks, so the words never end in a still pose.
     fn gesture(&self, r: &Value) -> Value {
-        let key = s(r, "gesture").trim().to_lowercase();
+        let mut key = s(r, "gesture").trim().to_lowercase();
+        if key.is_empty() || key == "none" || !self.gesture.iter().any(|g| g.key == key) {
+            let emotion = s(r, "emotion").trim();
+            let mood = self.mood.iter().find(|m| m.emotions.iter().any(|e| e.eq_ignore_ascii_case(emotion)));
+            match mood.and_then(|m| pick(&m.gestures, i(r, "seed") ^ 0x5bd1)) {
+                Some(g) => key = g.clone(),
+                None if key.is_empty() || key == "none" => return json!({"clip": "", "why": "no_gesture"}),
+                None => return json!({"clip": "", "why": "unknown_gesture"}),
+            }
+        }
         let Some(g) = self.gesture.iter().find(|g| g.key == key) else { return json!({"clip": "", "why": "unknown_gesture"}) };
         let clips = if s(r, "posture") == "chair" { &g.chair } else { &g.stand };
+        let speech = r.get("speech_seconds").and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, 12.0);
         match pick(clips, i(r, "seed")) {
-            Some(c) => json!({"clip": c, "seconds": g.seconds, "key": g.key}),
+            Some(c) => json!({"clip": c, "seconds": g.seconds.max(speech as f32), "key": g.key}),
             None => json!({"clip": "", "why": "not_in_this_posture"}),
         }
     }
@@ -118,6 +150,15 @@ impl MotionsTuning {
         json!({"key": p.key, "female": p.female, "male": p.male})
     }
 
+    /// Request: brow, eyes, mouth (names). Answer: brow, eyes, mouth patterns (-1: not given or no such name).
+    fn face_parts(&self, r: &Value) -> Value {
+        let find = |part: &str| {
+            let key = s(r, part).trim().to_lowercase();
+            self.face.iter().find(|f| f.part == part && f.key == key).map(|f| f.pattern).unwrap_or(-1)
+        };
+        json!({"brow": find("brow"), "eyes": find("eyes"), "mouth": find("mouth")})
+    }
+
     /// Every clip the table names and whether she sits for it (Unreal brings the chair for seated loops).
     fn table(&self) -> Value {
         let mut seated = Vec::new();
@@ -149,6 +190,7 @@ pub fn eval(t: &MotionsTuning, kind: &str, r: &Value) -> Option<Result<Value, St
         "motion_life" => t.life(r),
         "motion_photo" => t.photo(r),
         "motion_table" => t.table(),
+        "face_parts" => t.face_parts(r),
         _ => return None,
     }))
 }
@@ -168,6 +210,15 @@ mod tests {
         assert_eq!(m.gesture(&json!({"gesture": "cheer", "posture": "chair", "seed": 1}))["clip"], "");
         assert_eq!(m.gesture(&json!({"gesture": "stretch", "posture": "chair", "seed": 1}))["clip"], "lib_0_6_9.okanim");
         assert_eq!(m.gesture(&json!({"gesture": "no_such", "seed": 1}))["why"], "unknown_gesture");
+        // no gesture from the model: one from her mood, held while she speaks
+        let shy = m.gesture(&json!({"gesture": "none", "emotion": "害羞", "posture": "stand", "seed": 4, "speech_seconds": 9.0}));
+        assert!(["shy", "hide_face"].contains(&shy["key"].as_str().unwrap()), "{shy}");
+        assert_eq!(shy["seconds"].as_f64(), Some(9.0));
+        assert_eq!(m.gesture(&json!({"emotion": "平常", "seed": 2}))["key"], "talk");
+        assert_eq!(m.gesture(&json!({"gesture": "none", "seed": 2}))["why"], "no_gesture");
+        // her face by parts
+        let f = m.face_parts(&json!({"brow": "Angry", "eyes": "glare", "mouth": "nope"}));
+        assert_eq!((f["brow"].as_i64(), f["eyes"].as_i64(), f["mouth"].as_i64()), (Some(9), Some(9), Some(-1)));
         // the same block shows the same loop; the place's own row wins
         let a = m.life(&json!({"kind": "leisure", "place": "cafe", "seed": 77}));
         assert_eq!(a, m.life(&json!({"kind": "leisure", "place": "cafe", "seed": 77})));

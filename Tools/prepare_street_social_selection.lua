@@ -85,15 +85,28 @@ function M.character(p)
   })
 end
 
-function M.locomotion_metadata(sex, personality)
+-- How she stands while they talk: one of her personality group's waits (the game's Studio 会話 待機), the same one for
+-- her every time (by her id). The source standing and open-talk curves raise a finger, so a girl with those pointed
+-- up through every conversation.
+local WAITS = {
+  reserved = { "conversation_reserved.okanim", "conversation_wait_00.okanim", "conversation_wait_04.okanim", "conversation_wait_26.okanim" },
+  outgoing = { "conversation_wait_02.okanim", "conversation_wait_08.okanim", "conversation_wait_20.okanim" },
+  neutral = { "conversation_wait_06.okanim", "conversation_wait_10.okanim", "conversation_wait_14.okanim", "conversation_wait_24.okanim" },
+}
+function M.locomotion_metadata(sex, personality, id)
   if sex ~= 0 and sex ~= 1 then error("ValueError: Unsupported locomotion sex", 0) end
   local reserved = util.set({ 1, 5, 8, 12, 17, 18, 22, 27, 31, 34 })
   local outgoing = util.set({ 0, 3, 6, 9, 13, 20, 24, 28, 32, 37 })
+  local function one(list)
+    local h = 0
+    for k = 1, #(id or "") do h = (h * 31 + (id or ""):byte(k)) % 1000003 end
+    return list[h % #list + 1]
+  end
   local idle
   if sex == 0 then idle = "conversation_male.okanim"
-  elseif reserved[personality] then idle = "conversation_reserved.okanim"
-  elseif outgoing[personality] then idle = "conversation_open.okanim"
-  else idle = "conversation_neutral.okanim" end
+  elseif reserved[personality] then idle = one(WAITS.reserved)
+  elseif outgoing[personality] then idle = one(WAITS.outgoing)
+  else idle = one(WAITS.neutral) end
   return json.object({ { "walk_clip", "walk_01.okanim" }, { "conversation_idle", idle },
     { "run_clip", sex == 0 and "run_male.okanim" or "run_female.okanim" } })
 end
@@ -309,7 +322,7 @@ function M.main(argv)
     util.map(locomotion.actions, function(r) return r.sha256 end), "Common locomotion curve hash mismatch")
   -- Project-defined styles, stable fallback for every future APNG personality.
   for _, c in ipairs(everyone) do
-    for k, v in pairs(M.locomotion_metadata(c.sex, c.personality)) do c[k] = v end
+    for k, v in pairs(M.locomotion_metadata(c.sex, c.personality, c.id)) do c[k] = v end
   end
   local curves = { win(path.join(anim_dir, "idle_02.okanim")), win(path.join(anim_dir, "walk_01.okanim")) }
   for _, r in ipairs(locomotion.actions) do curves[#curves + 1] = win(path.join(anim_dir, r.file)) end

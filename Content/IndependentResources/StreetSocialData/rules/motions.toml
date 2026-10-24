@@ -8,6 +8,8 @@
 # [[life]]     The loop she shows while her schedule holds her in place (a meal, class, her shift, a café): one of the
 #              clips for her block's kind (and place, when given), the same one for the whole block. `seated` brings the
 #              chair (and a table with `table`).
+# [[face]]     Her brows, eyes and mouth by name (the reply's face.brow / eyes / mouth) -> the source's patterns.
+# [[mood]]     Her mood (the reply's emotion, in the prompt's language) -> gestures, for a line the model gave no gesture.
 # [[photo]]    Two-shot poses for a photo with him: her clip and his. One at random, or the one the model names
 #              ("gesture" while they pose), and "another pose" goes to the next. lover = true: only with a lover.
 
@@ -401,3 +403,306 @@ key = "kiss"
 female = "photo_female_kiss.okanim"
 male = "photo_male_kiss.okanim"
 lover = true
+
+[[mood]]
+emotions = ["平常", "Normal"]
+gestures = ["talk"]
+
+[[mood]]
+emotions = ["惊讶", "驚訝", "Surprised"]
+gestures = ["surprised"]
+
+[[mood]]
+emotions = ["崇拜", "Admiring"]
+gestures = ["happy", "cheer"]
+
+[[mood]]
+emotions = ["暧昧", "曖昧", "Flirty"]
+gestures = ["shy", "fix_hair"]
+
+[[mood]]
+emotions = ["害羞", "Shy"]
+gestures = ["shy", "hide_face"]
+
+[[mood]]
+emotions = ["生气", "生氣", "Angry"]
+gestures = ["angry", "sulk"]
+
+[[mood]]
+emotions = ["吃醋", "Jealous"]
+gestures = ["sulk", "why"]
+
+[[mood]]
+emotions = ["感动", "感動", "Moved"]
+gestures = ["happy", "shy"]
+
+[[mood]]
+emotions = ["兴奋", "興奮", "Excited"]
+gestures = ["happy", "cheer"]
+
+[[mood]]
+emotions = ["低落", "Low"]
+gestures = ["sad"]
+
+[[mood]]
+emotions = ["疲倦", "Tired"]
+gestures = ["yawn", "stretch"]
+
+[[mood]]
+emotions = ["嘲讽", "嘲諷", "Mocking"]
+gestures = ["tsk", "laugh_proud"]
+
+[[face]]
+part = "brow"
+key = "normal"
+pattern = 0
+
+[[face]]
+part = "brow"
+key = "frown"
+pattern = 1
+
+[[face]]
+part = "brow"
+key = "sad"
+pattern = 2
+
+[[face]]
+part = "brow"
+key = "doubt"
+pattern = 3
+
+[[face]]
+part = "brow"
+key = "think"
+pattern = 5
+
+[[face]]
+part = "brow"
+key = "furious"
+pattern = 8
+
+[[face]]
+part = "brow"
+key = "angry"
+pattern = 9
+
+[[face]]
+part = "brow"
+key = "serious"
+pattern = 10
+
+[[face]]
+part = "brow"
+key = "worried"
+pattern = 11
+
+[[face]]
+part = "brow"
+key = "raised"
+pattern = 12
+
+[[face]]
+part = "brow"
+key = "downcast"
+pattern = 13
+
+[[face]]
+part = "brow"
+key = "confident"
+pattern = 14
+
+[[face]]
+part = "eyes"
+key = "normal"
+pattern = 0
+
+[[face]]
+part = "eyes"
+key = "closed"
+pattern = 1
+
+[[face]]
+part = "eyes"
+key = "smile"
+pattern = 2
+
+[[face]]
+part = "eyes"
+key = "smile_closed"
+pattern = 3
+
+[[face]]
+part = "eyes"
+key = "gentle"
+pattern = 4
+
+[[face]]
+part = "eyes"
+key = "wink"
+pattern = 5
+
+[[face]]
+part = "eyes"
+key = "teary"
+pattern = 7
+
+[[face]]
+part = "eyes"
+key = "shy"
+pattern = 8
+
+[[face]]
+part = "eyes"
+key = "glare"
+pattern = 9
+
+[[face]]
+part = "eyes"
+key = "sharp"
+pattern = 10
+
+[[face]]
+part = "eyes"
+key = "pout"
+pattern = 11
+
+[[face]]
+part = "eyes"
+key = "pained"
+pattern = 12
+
+[[face]]
+part = "eyes"
+key = "disgust"
+pattern = 13
+
+[[face]]
+part = "eyes"
+key = "sideways"
+pattern = 14
+
+[[face]]
+part = "eyes"
+key = "uneasy"
+pattern = 15
+
+[[face]]
+part = "eyes"
+key = "half"
+pattern = 16
+
+[[face]]
+part = "eyes"
+key = "panic"
+pattern = 17
+
+[[face]]
+part = "eyes"
+key = "dejected"
+pattern = 18
+
+[[face]]
+part = "eyes"
+key = "troubled"
+pattern = 19
+
+[[face]]
+part = "eyes"
+key = "dreamy"
+pattern = 20
+
+[[face]]
+part = "mouth"
+key = "closed"
+pattern = 0
+
+[[face]]
+part = "mouth"
+key = "laugh"
+pattern = 1
+
+[[face]]
+part = "mouth"
+key = "grin"
+pattern = 2
+
+[[face]]
+part = "mouth"
+key = "smile"
+pattern = 3
+
+[[face]]
+part = "mouth"
+key = "soft"
+pattern = 4
+
+[[face]]
+part = "mouth"
+key = "parted"
+pattern = 5
+
+[[face]]
+part = "mouth"
+key = "pressed"
+pattern = 6
+
+[[face]]
+part = "mouth"
+key = "tense"
+pattern = 7
+
+[[face]]
+part = "mouth"
+key = "frown"
+pattern = 8
+
+[[face]]
+part = "mouth"
+key = "shout"
+pattern = 9
+
+[[face]]
+part = "mouth"
+key = "flat"
+pattern = 10
+
+[[face]]
+part = "mouth"
+key = "clench"
+pattern = 12
+
+[[face]]
+part = "mouth"
+key = "uneasy"
+pattern = 13
+
+[[face]]
+part = "mouth"
+key = "panic"
+pattern = 14
+
+[[face]]
+part = "mouth"
+key = "pout"
+pattern = 15
+
+[[face]]
+part = "mouth"
+key = "wry"
+pattern = 16
+
+[[face]]
+part = "mouth"
+key = "gasp"
+pattern = 17
+
+[[face]]
+part = "mouth"
+key = "smug"
+pattern = 19
+
+[[face]]
+part = "mouth"
+key = "kiss"
+pattern = 23

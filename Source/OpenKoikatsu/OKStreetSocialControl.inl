@@ -168,6 +168,12 @@ void AOKStreetSocialScene::StartControlServer(){
  // Her face, set directly (tuning the look without waiting for the model): {girl, blush, sweat, gaze_x, gaze_y,
  // highlight, tears, expr, fade_scale (dev: stretch the look's easing), peek (only read)}. Answers what the runtime did,
  // the look drawn now and the shape cross-fade counters.
+ Bind(TEXT("/play"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
+  auto& S=*State;auto B=OKControlBody(Req);double Girl=-1,Seconds=4;B->TryGetNumberField(TEXT("girl"),Girl);B->TryGetNumberField(TEXT("seconds"),Seconds);
+  if(!S.Manifest.Characters.IsValidIndex(int32(Girl))||Girl<1){OKControlReply(Done,OKControlResult(false,FString::Printf(TEXT("girl: 1..%d"),S.Manifest.Characters.Num()-1)));return;}
+  FString Clip,Gesture,Emotion;B->TryGetStringField(TEXT("clip"),Clip);B->TryGetStringField(TEXT("gesture"),Gesture);B->TryGetStringField(TEXT("emotion"),Emotion);
+  if(!Clip.IsEmpty())StartLoverReaction(int32(Girl),Clip,float(Seconds));else PlayGesture(int32(Girl),Gesture,Emotion,float(Seconds));
+  OKControlReply(Done,OKControlResult(true,FString()));});
  Bind(TEXT("/face"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;auto B=OKControlBody(Req);double Girl=-1,V=0;B->TryGetNumberField(TEXT("girl"),Girl);
   if(!S.Manifest.Characters.IsValidIndex(int32(Girl))||Girl<1){OKControlReply(Done,OKControlResult(false,FString::Printf(TEXT("girl: 1..%d"),S.Manifest.Characters.Num()-1)));return;}

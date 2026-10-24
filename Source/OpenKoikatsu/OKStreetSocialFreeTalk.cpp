@@ -165,6 +165,7 @@ TArray<TSharedPtr<FJsonValue>> OKStreetFreeTalkMessages(const FString& System, c
 // Her "face" object (a talk reply's, or one girl's in a group reply): the expression, blush, tears, sweat, gaze.
 void OKStreetFreeTalkParseFace(const FJsonObject& Face, FOKFreeTalkReply& Out) {
  Out.FaceGiven = true; Face.TryGetStringField(TEXT("expr"), Out.FaceExpr); Face.TryGetStringField(TEXT("gaze"), Out.FaceGaze);
+ Face.TryGetStringField(TEXT("brow"), Out.FaceBrow); Face.TryGetStringField(TEXT("eyes"), Out.FaceEyes); Face.TryGetStringField(TEXT("mouth"), Out.FaceMouth);
  double N = 0;
  if (Face.TryGetNumberField(TEXT("blush"), N) && FMath::IsFinite(N)) Out.FaceBlush = FMath::Clamp(float(N), 0.f, 1.f);
  if (Face.TryGetNumberField(TEXT("sweat"), N) && FMath::IsFinite(N)) Out.FaceSweat = FMath::Clamp(float(N), 0.f, 1.f);

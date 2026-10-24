@@ -9,4 +9,4 @@ repeated_reply_reminder = "（系统提醒，不是他说的话）你刚才的�
 summarize_instruction = "（系统指示，不是玩家说的话）这次见面结束了。请用你自己的第一人称，把最后 {n} 条消息（也就是这次见面）整理成 1 到 5 条记忆。每条不超过 60 字，只记之后还值得想起的事：约定、他说过的重要的话、你的感受变化、发生的事件。用简体中文写。只输出一个 JSON 对象：'{\"memories\": [{\"summary\": \"\", \"kind\": \"conversation|promise|confession|gift|date|insult|touch|reveal\", \"importance\": 0.0, \"quoteable\": false, \"emotional_tag\": \"\"}]}'"
 reflect_instruction = "（系统指示，不是玩家说的话）今天结束了。请以你自己的第一人称回顾今天，用简体中文写，只输出一个 JSON 对象：'{\"summary\": \"今天发生的事，80 字内\", \"reflections\": [\"从今天想到的、对他或对自己的看法（最多 3 条，每条 40 字内）\"], \"rel_adjust\": {\"trust\": 0}, \"intent\": \"明天想做的事：none|seek_player|avoid_player|more_shifts|save_money|ask_help\"}'。rel_adjust 是长期的变化，每项 -3 到 +3，没变的不要写。"
 reflect_today = "\n今天你身边发生、但不在对话里的事："
-reply_language = "\n（语言：你说的每一句话（lines）和 reason 都用简体中文写。JSON 的字段名、id，以及 emotion 的值，照指示原样输出；每次回复都要有 face（expr、blush、tears、sweat、gaze），照这一刻的表情填。）"
+reply_language = "\n（语言：你说的每一句话（lines）和 reason 都用简体中文写。JSON 的字段名、id，以及 emotion 的值，照指示原样输出；每次回复都要有 face（expr、brow、eyes、mouth、blush、tears、sweat、gaze），照这一刻的表情填，眉毛、眼睛、嘴巴要跟着这句话变化；也都要有 gesture，挑跟这句话最相符的动作。）"
