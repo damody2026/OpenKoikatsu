@@ -263,6 +263,7 @@ struct FEntry {
  TUniquePtr<FKKRuntimeRenderMeshData> CommitData;TArray<int32> CommitQueues,CommitCanonical;TArray<TArray<uint8>> CommitIdentities;int32 MaterialCursor=0,CommitStep=0;bool CommitReady=false;TUniquePtr<FKKRuntimeRenderMeshData> CommitMain,CommitVisual;TArray<UMaterialInterface*> CommitVisualMaterials;double CommitWorkMs=0;
  uint32 OriginalSections=0,MergedSections=0,UniqueMaterialBindings=0;
  FString Path,Id,Error;int32 Stage=0,TextureCursor=0,WalkIndex=1,SelectionIndex=0;
+ int32 Outfit=0; // the card's coordinate she wears (manifest outfits, her everyday clothes)
  // Her actor in the composed animation bank: entries are composed in order, skipping the ones that failed to load.
  int32 BankActor=INDEX_NONE;bool ReducedBudget=false,SourceGeometryPreserved=false;
  uint64 SourceVertices=0,SourceTriangles=0;
@@ -891,7 +892,7 @@ struct FScene : TSharedFromThis<FScene> {
 TRACE_CPUPROFILER_EVENT_SCOPE_CONDITIONAL(CrowdGpuProfileAnchor,GpuWindow);
 TRACE_CPUPROFILER_EVENT_SCOPE_CONDITIONAL(CrowdCpuProfileAnchor,CpuWindow);
 auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlatformTime::ToMilliseconds(GGameThreadTime));T.Render.Add(FPlatformTime::ToMilliseconds(GRenderThreadTime));T.Rhi.Add(FPlatformTime::ToMilliseconds(GRHIThreadTime));T.Gpu.Add(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));}}LastWall=Now;
-  while(Active<Concurrency&&Next<Entries.Num()){const int32 Index=NearestStage(0);if(Index==INDEX_NONE)break;LaunchOrder.Add(Index);auto& E=*Entries[Index];E.Behavior.Initialize(Index);E.StageStarted=FPlatformTime::Seconds();E.Snapshot=OKOpenRuntimeCharacterSnapshotAsync(E.Path,0,Curves[E.WalkIndex],256ull*1024*1024,CaptureFacePatterns);E.Stage=1;++Next;++Active;}
+  while(Active<Concurrency&&Next<Entries.Num()){const int32 Index=NearestStage(0);if(Index==INDEX_NONE)break;LaunchOrder.Add(Index);auto& E=*Entries[Index];E.Behavior.Initialize(Index);E.StageStarted=FPlatformTime::Seconds();E.Snapshot=OKOpenRuntimeCharacterSnapshotAsync(E.Path,E.Outfit,Curves[E.WalkIndex],256ull*1024*1024,CaptureFacePatterns);E.Stage=1;++Next;++Active;}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Prepare);  for(auto& E:Entries)Prepare(*E);
  }
   const double LastGameMs=FPlatformTime::ToMilliseconds(GGameThreadTime);
@@ -1106,7 +1107,9 @@ bool OKStartCrowdRuntimeScene(AActor* Owner,const FString& Manifest,FString& Err
  {int32 Found=0;for(auto R:OKRuntimeSharedMaterialRecipes()){const FString Name=OKRuntimeSharedMaterialParentName(R)+TEXT("_Fg");if(State->ForegroundParents.Num()<int32(R))State->ForegroundParents.SetNum(int32(R));
    auto* Fg=Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(),nullptr,*(Root/Name+TEXT(".")+Name),nullptr,LOAD_NoWarn|LOAD_Quiet));State->ForegroundParents[int32(R)-1].Reset(Fg);Found+=Fg!=nullptr;}
   UE_LOG(LogTemp,Display,TEXT("Runtime foreground eye/brow parents: %d"),Found);}
- for(int32 I=0;I<Cards->Num();++I){auto E=MakeUnique<FEntry>();E->Path=Resolve((*Cards)[I]->AsString());if(!IFileManager::Get().FileExists(*E->Path)){Error=TEXT("Selected APNG missing: ")+E->Path;return false;}E->SelectionIndex=I;E->Id=FString::Printf(TEXT("selection-%03d"),I);E->WalkIndex=1+GetTypeHash(E->Path)%(State->WalkSources-1);
+ for(int32 I=0;I<Cards->Num();++I){auto E=MakeUnique<FEntry>();E->Path=Resolve((*Cards)[I]->AsString());if(!IFileManager::Get().FileExists(*E->Path)){Error=TEXT("Selected APNG missing: ")+E->Path;return false;}E->SelectionIndex=I;E->Id=FString::Printf(TEXT("selection-%03d"),I);
+  // Which of the card's coordinates ("outfits", one per card; absent: the first, which some cards make a bunny suit).
+  {const TArray<TSharedPtr<FJsonValue>>* Outfits=nullptr;if(J->TryGetArrayField(TEXT("outfits"),Outfits)&&Outfits->IsValidIndex(I))E->Outfit=FMath::Clamp(int32((*Outfits)[I]->AsNumber()),0,31);}E->WalkIndex=1+GetTypeHash(E->Path)%(State->WalkSources-1);
   // ChaControl.SetForegroundEyesAndEyebrow: the card's 1 is off, 2 on, 0 the game setting (EtceteraSystem's default,
   // off; OK has no such setting yet).
   {FKKCharacterFile Card;FString CardError;constexpr bool GameSetting=false;

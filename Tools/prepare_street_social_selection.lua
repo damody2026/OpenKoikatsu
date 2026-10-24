@@ -154,6 +154,14 @@ function M.main(argv)
   if male.sex ~= 0 or util.any(females, function(c) return c.sex ~= 1 end) then
     fail("Expected one male and only female heroine card metadata records")
   end
+  -- Her everyday clothes: the card's coordinate her profile names (everyday_outfit), else the first one. Card authors
+  -- put anything in the first slot (a bunny suit, a swimsuit); a university town is everyday clothes.
+  for _, female in ipairs(females) do
+    local profile_path = path.join(ok.root, "Content/IndependentResources/StreetSocialData/Profiles", female.id .. ".json")
+    female.outfit = 0
+    if path.exists(profile_path) then female.outfit = tonumber(get(read_json(profile_path), "everyday_outfit", 0)) or 0 end
+  end
+  male.outfit = 0
   local everyone = { male, table.unpack(females) }
   local seen = {}
   for _, c in ipairs(everyone) do
@@ -334,6 +342,7 @@ function M.main(argv)
   end
   local manifest = json.object({
     { "cards", util.map(everyone, function(c) return c.path end) },
+    { "outfits", util.map(everyone, function(c) return c.outfit end) },
     { "characters", everyone },
     { "curves", curves },
     { "actions", action_list },
