@@ -198,6 +198,19 @@ void AOKStreetSocialScene::SongSay(const FString& Text){
 }
 
 // Nothing else wants her or him now: he is talking with her and no line, touch, call or event is running.
+// She only offers where singing to him would feel natural to her (rules heroine_place_ease with the act "sing": the
+// place's quiet and formality, the crowd at this hour, her shyness and how close they are). Somewhere awkward (a quiet
+// library, a busy café at lunch) the song waits for a better moment.
+bool AOKStreetSocialScene::SongAtEase(int32 Girl){
+ auto& S=*State;const FString Here=PlaceHere(S.Male);const FDateTime Now=StreetNow();
+ auto Ask=OKRulesHeroineRequest(S,TEXT("heroine_place_ease"),OKStreetStableId(S.Manifest.Characters[Girl]));
+ Ask->SetStringField(TEXT("place"),Here);Ask->SetNumberField(TEXT("hours"),Now.GetHour()+Now.GetMinute()/60.0);Ask->SetStringField(TEXT("act"),TEXT("sing"));
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return true;
+ bool Ease=true;Out->TryGetBoolField(TEXT("at_ease"),Ease);
+ if(!Ease)UE_LOG(LogTemp,Display,TEXT("Street song: not here (%s, awkward %.2f): she waits for a better moment"),*Here,Out->GetNumberField(TEXT("awkward")));
+ return Ease;
+}
+
 bool AOKStreetSocialScene::SongMayOffer(int32 Girl) const{
  const auto& S=*State;
  return S.Target==Girl&&S.Node==INDEX_NONE&&!S.CollectedActive&&!S.RelationshipPending&&!S.TouchActive&&!S.FreeTalkBusy&&S.RingGirl==INDEX_NONE&&!S.RemoteMode
@@ -327,6 +340,7 @@ void AOKStreetSocialScene::TickSong(double Now){
   // Still the one he likes most? (Not asked for a test song.) If not, this song waits in the cache for her.
   if(!G.Override&&Now>=G.NextCheck){G.NextCheck=Now+OKSongCheckSeconds;const auto D=SongDecide(true);const TSharedPtr<FJsonObject>* Singer=nullptr;FString Id;
    if(D.IsValid()&&D->TryGetObjectField(TEXT("singer"),Singer)&&(*Singer)->TryGetStringField(TEXT("id"),Id)&&Id!=G.HeroineId){SongReset(OKT(TEXT("ui.song.singer_changed")),false);return;}}
+  if(Now>=G.LaterUntil&&SongMayOffer(G.Girl)&&!SongAtEase(G.Girl)){G.LaterUntil=Now+45;return;}
   if(Now>=G.LaterUntil&&SongMayOffer(G.Girl)){G.Phase=EOKSongPhase::Offered;G.PhaseAt=Now;G.Notice.Reset();S.FreeTalkCaptionHer=OKT(TEXT("ui.song.offer_line"));SongSay(OKT(TEXT("ui.song.offer_line")));UE_LOG(LogTemp,Display,TEXT("Street song: offered by actor %d"),G.Girl);RefreshUI();}
   return;
  case EOKSongPhase::Offered:

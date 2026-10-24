@@ -70,3 +70,5 @@ kiss = { min_privacy = 1, max_crowd = 0.2, food = false, loud = false, intimate 
 lap_pillow = { min_privacy = 1, max_crowd = 0.4, food = false, loud = false, intimate = true, name = "膝枕" }
 lie_down = { min_privacy = 2, max_crowd = 0.2, food = false, loud = false, intimate = false, name = "躺下" }
 alcohol = { min_privacy = 0, max_crowd = 1.0, food = true, loud = false, intimate = false, name = "喝酒" }
+# 她唱歌給他聽（女主唱歌）：會大聲，人多會害羞；她只在自在的地方開口（heroine_place_ease）。
+sing = { min_privacy = 0, max_crowd = 0.5, food = false, loud = true, intimate = false, name = "唱歌給他聽" }

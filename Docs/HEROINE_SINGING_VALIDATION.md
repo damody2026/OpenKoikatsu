@@ -268,3 +268,7 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 開場害羞 → 前奏 → 主歌手勢 → 副歌跳舞 → 結尾決勝姿勢 → 收尾開心，依序播出，歌完整唱完。
   - 偶爾某個片段在下一個切換點前還沒裝好會被略過，例如副歌第二個舞步。
 - **限制**：她站在原地，沒有走位。換動作時會短暫回到站立待機。
+- **地點合理性**（追加）：她只在唱歌會覺得自在的地方提議。
+  - 規則 `heroine_place_ease` 以地點規範表的舉動 `sing`（大聲、人多時會不自在）計算尷尬度，再依她的害羞、大方程度與關係判斷反應；只有「自然」或「樂在其中」才提議。
+  - 例如圖書館上午不唱、公園晚上可以；不自在時 45 秒後再看。
+  - 規則測試 `singing_to_him_fits_a_quiet_park_evening_not_a_library_morning`。
