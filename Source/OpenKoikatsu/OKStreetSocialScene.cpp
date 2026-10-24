@@ -1136,7 +1136,9 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
   ApplyChoiceReply(Character,Applied);}
  ApplyMindExpression(Character,Reply->Emotion,Reply);
  // And her body: the gesture she makes with it (motions.toml), face to face only.
- if(!Reply->Gesture.IsEmpty()&&Reply->Gesture!=TEXT("none")&&RemoteKind(Character)==0)PlayGesture(Character,Reply->Gesture);
+ // Every line, as long as she speaks it: with no gesture from the model, one for her mood (motions.toml mood). A still
+ // pose under every line left her standing in her idle (the raised finger) through the whole talk.
+ if(RemoteKind(Character)==0){int32 Chars=0;for(const FString& L:Reply->Lines)Chars+=L.Len();PlayGesture(Character,Reply->Gesture,Reply->Emotion,0.6f+0.22f*Chars);}
  // Free-talk replies have no recorded clip, so they always go to the TTS server (independent of the
  // V voice-mode toggle, which only chooses for scripted lines); the text stays on screen either way.
  if(!S.TtsCacheDir.IsEmpty()&&RemoteKind(Character)!=1)SpeakFreeTalk(Character,Reply->Lines,Serial); // a text message is read, not heard

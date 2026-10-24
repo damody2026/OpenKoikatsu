@@ -449,7 +449,9 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  // What they ordered here is still being made: not off somewhere else before it comes (leaving clears the table).
  // Sitting down here to wait for it is not leaving (cafe_seat in the cafe where the latte is being made).
  const bool StaysHere=Place&&OKStreetInsidePlace(*Place,S.Male);
- if(!Leave&&!StaysHere&&S.Table.ContainsByPredicate([](const FOKStreetDish& D){return !D.Served;})){Error=OKT(TEXT("ui.outing.wait_for_order"));UE_LOG(LogTemp,Display,TEXT("Street outing: waits, the order is still being made"));return false;}
+ // Only his own dishes and hers: another girl's latte she ordered and pays for herself kept him from going to the
+ // shrine with Jeanne (R3-124).
+ if(!Leave&&!StaysHere&&S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);})){Error=OKT(TEXT("ui.outing.wait_for_order"));UE_LOG(LogTemp,Display,TEXT("Street outing: waits, the order is still being made"));return false;}
  // Free talk can end the activity she is in ("leave"), or go somewhere else, which ends it first.
  // Either way both stay where the activity ended (a room returns them to its door).
  // Ended here by their own words, so it lasted the minutes that went by: leaving the moon viewing three minutes in put

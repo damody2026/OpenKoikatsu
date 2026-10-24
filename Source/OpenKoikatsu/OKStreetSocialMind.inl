@@ -450,6 +450,10 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  else if(Reply.ActKind==TEXT("entrust")){FString A,D;if(!Reply.ActArg.Split(TEXT("|"),&A,&D))A=Reply.ActArg;StartEntrust(Character,TEXT("entrust"),FCString::Atoi64(*A),D.IsEmpty()?30:FCString::Atoi(*D));}
  else if(Reply.ActKind==TEXT("follow_mode"))SetFollowMode(Reply.ActArg==TEXT("her_lead")?1:Reply.ActArg==TEXT("side_by_side")?2:0);
  else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.ActKind==TEXT("promise_treat")){} // handled above (the goodbye, the promise)
+ // "Let's go to the restaurant" with act eat: the eating is there, not here (she ate at the shrine and the keeper came
+ // over, R3-126).
+ else if((Reply.ActKind==TEXT("eat")||Reply.ActKind==TEXT("share_food")||Reply.ActKind==TEXT("feed"))&&!Reply.Action.IsEmpty()&&Reply.Action!=TEXT("none")&&Reply.Action!=TEXT("leave")&&Reply.Action!=TEXT("stroll")){
+  UE_LOG(LogTemp,Display,TEXT("Street act: %s left for where they are going (%s)"),*Reply.ActKind,*Reply.Action);}
  else if(!Reply.ActKind.IsEmpty()&&EatActBlocked(Character,Reply.ActKind)){}
  else if(!Reply.ActKind.IsEmpty()&&HandleWorldAct(Character,Reply.ActKind,Reply.ActArg)){} // gift, lend, photo, sleep, elevator (OKStreetSocialLover.inl)
  else if(!Reply.ActKind.IsEmpty()&&DoActHers(Character,Reply.ActKind)){}
@@ -516,13 +520,24 @@ void AOKStreetSocialScene::ApplyMindExpression(int32 Character,const FString& Em
   if(!Chosen||Chosen->Tears==0){static const TSet<FString> Warm={TEXT("感動"),TEXT("興奮"),TEXT("曖昧"),TEXT("崇拜"),TEXT("害羞"),TEXT("感动"),TEXT("兴奋"),TEXT("暧昧")};Name=Tears>=2?TEXT("泣き顔"):Warm.Contains(Emotion)?TEXT("涙目笑顔"):TEXT("見つめ合い（ちょっと涙目）");}}
  const auto* Expression=S.Expressions.Find(Personality,Name);if(!Expression)return;
  FKKRuntimeFaceState State2=Expression->Face;bool Blink=Expression->Blink;
+ // Her brows, eyes and mouth as she chose them for this line (motions.toml face), over the named expression's: the
+ // named ones alone gave every "happy" line the same face.
+ FString Parts;
+ if(Reply&&(!Reply->FaceBrow.IsEmpty()||!Reply->FaceEyes.IsEmpty()||!Reply->FaceMouth.IsEmpty())){
+  auto Ask=OKRulesRequest(TEXT("face_parts"));Ask->SetStringField(TEXT("brow"),Reply->FaceBrow);Ask->SetStringField(TEXT("eyes"),Reply->FaceEyes);Ask->SetStringField(TEXT("mouth"),Reply->FaceMouth);
+  if(const TSharedPtr<FJsonObject> P=OKRulesEval(S,Ask)){
+   const int32 B=int32(P->GetNumberField(TEXT("brow"))),E=int32(P->GetNumberField(TEXT("eyes"))),M=int32(P->GetNumberField(TEXT("mouth")));
+   if(B>=0){State2.BrowPattern=B;State2.BrowBlend=true;}
+   if(E>=0){State2.EyePattern=E;State2.EyeBlend=true;if(Reply->FaceEyes==TEXT("closed")||Reply->FaceEyes==TEXT("smile_closed"))Blink=false;else Blink=true;}
+   if(M>=0){State2.MouthPattern=M;State2.MouthBlend=true;}
+   Parts=FString::Printf(TEXT(" brow=%s(%d) eyes=%s(%d) mouth=%s(%d)"),*Reply->FaceBrow,B,*Reply->FaceEyes,E,*Reply->FaceMouth,M);}}
  // Where she looks, in her words ("away", "look away", "down at her feet"): the first direction it names.
  FString Gaze=Reply?Reply->FaceGaze.ToLower():FString();
  for(const TCHAR* Word:{TEXT("closed"),TEXT("away"),TEXT("down"),TEXT("up"),TEXT("him")})if(Gaze.Contains(Word)){Gaze=Word;break;}
  if(Gaze==TEXT("closed")){State2.EyeOpening=0.f;Blink=false;}
  else if(Reply&&Reply->FaceEyesOpen>=0.f)State2.EyeOpening=State2.EyeOpening<0.f?Reply->FaceEyesOpen:FMath::Min(State2.EyeOpening,Reply->FaceEyesOpen);
  FString Error;
- if(OKSetCrowdRuntimeFaceExpression(this,Character,State2,Blink,Error))UE_LOG(LogTemp,Display,TEXT("Street mind expression: actor=%d emotion=%s face=%s"),Character,*Emotion,*Name);
+ if(OKSetCrowdRuntimeFaceExpression(this,Character,State2,Blink,Error))UE_LOG(LogTemp,Display,TEXT("Street mind expression: actor=%d emotion=%s face=%s%s"),Character,*Emotion,*Name,*Parts);
  FOKRuntimeFaceLook Look;Look.Blush=Reply&&Reply->FaceBlush>=0.f?Reply->FaceBlush:Expression->Blush;
  // Her tears on her face: welling up shows the small drops, crying the large streams (the source's tearsLv 1 / 3);
  // without a word on it, what the expression itself carries.

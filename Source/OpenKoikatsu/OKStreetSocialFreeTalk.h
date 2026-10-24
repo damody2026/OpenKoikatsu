@@ -51,7 +51,7 @@ struct FOKFreeTalkReply {
  FString Gesture; // a gesture key of motions.toml she makes with this reply (wave, shy, ...); empty for none
  // Her face this turn ("face": {"expr", "blush", "tears", "sweat", "gaze", "eyes_open"}): an expression of the source
  // catalogue, cheek blush / sweat 0..1 (-1 not given), tears 0..2, where she looks (him / away / down / up / closed).
- FString FaceExpr, FaceGaze;float FaceBlush=-1.f,FaceSweat=-1.f,FaceEyesOpen=-1.f;int32 FaceTears=-1;bool FaceGiven=false;
+ FString FaceExpr, FaceGaze, FaceBrow, FaceEyes, FaceMouth;float FaceBlush=-1.f,FaceSweat=-1.f,FaceEyesOpen=-1.f;int32 FaceTears=-1;bool FaceGiven=false;
  TSharedPtr<class FJsonObject> RelDelta; // {"trust": 2, ...}; applied only through the rules' validator (Tools/ok-rules mind.rs rel_delta)
  // Plan §7.1: the player's answer to an open choice as the model read it, her own proposal, and an action word.
  FString ResolveId, ResolveOption, ProposeId, ProposeOption, ActKind, ActArg;

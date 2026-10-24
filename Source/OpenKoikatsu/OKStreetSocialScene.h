@@ -413,7 +413,7 @@ private:
  // Lover moments (OKStreetSocialLover.inl): DoAct's kiss / embrace / hand / head pat, shown.
  void PlayLoverAct(int32 Girl,const FString& Act,int32 Reaction);
  // OKStreetSocialLover.inl: a gesture of motions.toml with her words; her next two-shot pose (empty: the next one).
- void PlayGesture(int32 Girl,const FString& Gesture);
+ void PlayGesture(int32 Girl,const FString& Gesture,const FString& Emotion=FString(),float SpeechSeconds=0.f);
  bool SwitchPhotoPose(const FString& Pose);
  // OKStreetSocialLife.inl: the loop her schedule block shows (motions.toml, life), the same for the whole block.
  FString LifeClip(int32 Actor,const struct FOKStreetPlanBlock& Block);

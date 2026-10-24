@@ -9,4 +9,4 @@ repeated_reply_reminder = "（系統提醒，不是他說的話）你剛才的�
 summarize_instruction = "（系統指示，不是玩家說的話）這次見面結束了。請用你自己的第一人稱，把最後 {n} 則訊息（也就是這次見面）整理成 1 到 5 條記憶。每條不超過 60 字，只記之後還值得想起的事：約定、他說過的重要的話、你的感受變化、發生的事件。用台灣繁體中文寫。只輸出一個 JSON 物件：'{\"memories\": [{\"summary\": \"\", \"kind\": \"conversation|promise|confession|gift|date|insult|touch|reveal\", \"importance\": 0.0, \"quoteable\": false, \"emotional_tag\": \"\"}]}'"
 reflect_instruction = "（系統指示，不是玩家說的話）今天結束了。請以你自己的第一人稱回顧今天，用台灣繁體中文寫，只輸出一個 JSON 物件：'{\"summary\": \"今天發生的事，80 字內\", \"reflections\": [\"從今天想到的、對他或對自己的看法（最多 3 條，每條 40 字內）\"], \"rel_adjust\": {\"trust\": 0}, \"intent\": \"明天想做的事：none|seek_player|avoid_player|more_shifts|save_money|ask_help\"}'。rel_adjust 是長期的變化，每項 -3 到 +3，沒變的不要寫。"
 reflect_today = "\n今天你身邊發生、但不在對話裡的事："
-reply_language = "\n（每次回覆都要有 face（expr、blush、tears、sweat、gaze），照這一刻的表情填。）"
+reply_language = "\n（每次回覆都要有 face（expr、brow、eyes、mouth、blush、tears、sweat、gaze），照這一刻的表情填，眉毛、眼睛、嘴巴要跟著這句話變化；也都要有 gesture，挑跟這句話最相符的動作。）"

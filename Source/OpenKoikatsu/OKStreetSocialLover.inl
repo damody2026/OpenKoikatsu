@@ -83,12 +83,13 @@ void AOKStreetSocialScene::FarewellCompanion(){
 // A gesture with her words (the model's "gesture", motions.toml): one of its clips for how she stands, shown a few
 // seconds as her reaction. Mid-activity, on a chair or already reacting, the words go alone; during a photo
 // "another_pose" (or a pose's own key) changes her pose.
-void AOKStreetSocialScene::PlayGesture(int32 Girl,const FString& Gesture){
+void AOKStreetSocialScene::PlayGesture(int32 Girl,const FString& Gesture,const FString& Emotion,float SpeechSeconds){
  if(!State||!S_ValidGirl(Girl))return;auto& S=*State;
  if(S.Pair.Partner==Girl){if(Gesture==TEXT("another_pose")||Gesture.StartsWith(TEXT("twoshot_")))SwitchPhotoPose(Gesture==TEXT("another_pose")?FString():Gesture);return;}
  if(S.Pair.Partner!=INDEX_NONE||S.SoloGirl==Girl||S.LoverReact.Girl!=INDEX_NONE||S.LoverPose.Girl!=INDEX_NONE||S.TouchActive||S.Node!=INDEX_NONE)return;
  if(FVector::Dist2D(S.Agents[Girl-1].Position,S.Male)>400.f)return;
  auto Ask=OKRulesRequest(TEXT("motion_gesture"));Ask->SetStringField(TEXT("gesture"),Gesture);Ask->SetStringField(TEXT("posture"),TEXT("stand"));Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(0,1<<30));
+ Ask->SetStringField(TEXT("emotion"),Emotion);Ask->SetNumberField(TEXT("speech_seconds"),SpeechSeconds);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return;
  const FString Clip=Out->GetStringField(TEXT("clip"));
  if(Clip.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street gesture: actor=%d %s not shown (%s)"),Girl,*Gesture,*Out->GetStringField(TEXT("why")));return;}
