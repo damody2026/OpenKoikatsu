@@ -477,15 +477,17 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  // On his shift he works: not off somewhere with her, and not sat down at a table of his own shop with her (the barista
  // sat with Raiden for her latte). She is served; they talk at the counter.
  if(S.ShiftAppointment&&!Leave){Error=OKT(TEXT("ui.jobs.on_shift_no_outing"));UE_LOG(LogTemp,Display,TEXT("Street outing: %s not started, he is on shift"),*ActivityId);return false;}
- // Closed now and still closed a quarter of an hour from now (it opens at 11:00, they set off at 10:51: by the time they
- // get there it is open).
- if(Place&&!Leave){FString Why;if(PlaceClosedNow(Place->Id,Why)&&PlaceClosedAt(Place->Id,StreetNow()+FTimespan::FromMinutes(15),Why)){Error=Why;return false;}int32 Days=0;if(Blacklisted(Place->Id,&Days)){Error=OKMsg(TEXT("ui.outing.blacklisted_days_left"), {{TEXT("days"), Days}});return false;}
-  // Open now but closed (or about to close) by the time they get there: Raiden and he set off for dinner at 21:39, walked
-  // in at 21:59 and the restaurant closed on their dishes. The walk as the day plans count it (2.75 m a game minute,
-  // the way 1.3 times the straight line), and a quarter of an hour there at least.
+ // Closed when they get there and still a quarter of an hour after (it opens at 11:00, they set off at 10:39 with twenty
+ // minutes to walk: open by then), or open then but closing within a quarter of an hour (Raiden and he set off for
+ // dinner at 21:39, walked in at 21:59 and the restaurant closed on their dishes). The walk as the day plans count it
+ // (2.75 m a game minute, the way 1.3 times the straight line).
+ if(Place&&!Leave){FString Why;int32 Days=0;if(Blacklisted(Place->Id,&Days)){Error=OKMsg(TEXT("ui.outing.blacklisted_days_left"), {{TEXT("days"), Days}});return false;}
   const float WalkMinutes=OKStreetInsidePlace(*Place,S.Male)?0.f:FVector::Dist2D(S.Male,Place->Door)/100.f*1.3f/2.75f;
-  if(!PlaceClosedNow(Place->Id,Why)&&PlaceClosedAt(Place->Id,StreetNow()+FTimespan::FromMinutes(WalkMinutes+15.f),Why)){
-   Error=OKMsg(TEXT("ui.outing.closes_before_arrival"),{{TEXT("place"),Place->Name},{TEXT("minutes"),FMath::CeilToInt(WalkMinutes)},{TEXT("why"),Why}});
+  const FDateTime Arrive=StreetNow()+FTimespan::FromMinutes(WalkMinutes);
+  const bool ClosedThen=PlaceClosedAt(Place->Id,Arrive,Why);FString After;const bool ClosedAfter=PlaceClosedAt(Place->Id,Arrive+FTimespan::FromMinutes(15),After);
+  if(ClosedThen&&ClosedAfter){Error=Why;return false;}
+  if(!ClosedThen&&ClosedAfter){
+   Error=OKMsg(TEXT("ui.outing.closes_before_arrival"),{{TEXT("place"),Place->Name},{TEXT("minutes"),FMath::CeilToInt(WalkMinutes)},{TEXT("why"),After}});
    UE_LOG(LogTemp,Display,TEXT("Street outing: %s not started, %s closes before they could be there and stay (walk %.0f min)"),*ActivityId,Place->Id,WalkMinutes);return false;}}
  if(!S.Manifest.Characters.IsValidIndex(Girl)||!S.Agents.IsValidIndex(Girl-1)){Error=OKT(TEXT("ui.outing.cannot_find_her"));return false;}
  // What they ordered here is still being made: not off somewhere else before it comes (leaving clears the table).

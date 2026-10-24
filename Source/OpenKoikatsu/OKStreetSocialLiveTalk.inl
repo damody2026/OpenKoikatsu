@@ -368,6 +368,9 @@ void AOKStreetSocialScene::TickThenAction(){
  if((S.Pair.Partner==Girl&&!MealDone)||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl)||S.SoloGirl==Girl||S.OutingGirl==Girl||!S.RetryAction.IsEmpty()||S.FreeTalkBusy)return;
  if(OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive))return;
  if(S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);}))return;
+ // Arrived where they went first (a walk in the park, then lunch): a while there before going on.
+ if(S.ThenStayMinutes>0){if(S.ThenReadyAt<=0){S.ThenReadyAt=OKStreetMindNow(S)+S.ThenStayMinutes;S.ThenUntil=FMath::Max(S.ThenUntil,S.ThenReadyAt+60);UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d after %lld minutes here"),*S.ThenAction,Girl,S.ThenStayMinutes);}
+  if(OKStreetMindNow(S)<S.ThenReadyAt)return;}
  FString Error;const FString Action=S.ThenAction;S.ThenAction.Reset();
  const bool Started=BeginOuting(Girl,Action,Error);
  UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d %s%s"),*Action,Girl,Started?TEXT("started"):TEXT("refused: "),*Error);
