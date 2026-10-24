@@ -375,7 +375,10 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // A meal or a drink not paid at the counter comes from the menu. Paid at the counter means during it, or ordered just
  // before sitting down (she ordered on the way in: "my treat, a donut"); that bill is this meal's, not another one.
  // The order could not be paid, or he took it back: they ate nothing, not "a meal from the menu" billed at the end.
- Request->SetBoolField(TEXT("menu"),!S.ActCutShort&&A&&(A->Code==5||A->Code==2)&&A->Kind==EOKStreetActivityKind::Pair&&P&&S.LastCheckoutMinute<StartMinute-30&&S.OrderDroppedMinute<StartMinute-30);
+ Request->SetBoolField(TEXT("menu"),!S.ActCutShort&&A&&(A->Code==5||A->Code==2)&&A->Kind==EOKStreetActivityKind::Pair&&P&&S.LastCheckoutMinute<StartMinute-30&&S.OrderDroppedMinute<StartMinute-30
+  // Dishes ordered there for this visit (within three hours: a private-room hour skipped in between made the half-hour
+  // window miss them and the soup and tea were billed again as a set dinner).
+  &&!(S.OrderedAtPlace.Contains(PlaceId)&&S.OrderedAtPlace[PlaceId]>=StartMinute-180));
  // Cut short (the place closed on them): the minutes that really went by, not the activity's whole length.
  if(S.ActCutShort)Request->SetNumberField(TEXT("spent"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));Request->SetNumberField(TEXT("menu_seed"),int32(StartMinute)+Girl*31);Request->SetStringField(TEXT("agreed"),PayAgreed(Girl)); // who pays, as they settled it (the AI's reading)
  Request->SetNumberField(TEXT("elapsed"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));

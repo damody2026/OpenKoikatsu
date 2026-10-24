@@ -109,6 +109,7 @@
 #include "Components/ExponentialHeightFogComponent.h"
 #include "EngineUtils.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformStackWalk.h"
 #include "Widgets/SWindow.h"
 
 // Preprocess the two mode keys so focused Slate buttons cannot swallow them.
@@ -148,6 +149,9 @@ struct FOKStreetCandidateProbeSnapshot {
 struct FOKStreetPairSession {
  int32 Partner=INDEX_NONE,Phase=0;
  FString MaleClip,FemaleClip,CapturePath;
+ // At a meal: the clip each of the two (0 him, 1 her) plays now and the one asked for (eating while there is something
+ // of theirs to eat, else seated idle: she ate an empty table while only he had ordered).
+ FString MealNow[2],MealWant[2];
  FOKStreetAgentSim SavedAgent;
  FVector SavedMale;
  FRotator SavedMaleRotation,SavedFemaleRotation;
@@ -334,6 +338,9 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  double MealProbeAt=0;FVector MealFirstHand[2];
  bool MealChecked=false,MealCancelChecked=false,MealOnlyTest=false;
  TArray<TPair<TWeakObjectPtr<AStaticMeshActor>,FVector>> MealHandProps;
+ TMap<int32,double> MealAteAt; // when each (0 him) last ate or sipped something of theirs at the table (meal tick)
+ TMap<FString,int64> OrderedAtPlace; // place -> the game minute dishes were last ordered there (a table meal is not billed again)
+ TMap<int32,int64> SheThereSince; // appointment id -> the game minute she got to its place (how long she waited for him)
  FString DrinkMaleClip,DrinkFemaleClip,DrinkProbeSave;
  FOKStreetPairSession DrinkProbeSession;
  int32 DrinkActorsVerified=0,DrinkProbePhase=0,DrinkSamples=0,DrinkVoices=0,DrinkProbeVoices=0;
@@ -1401,6 +1408,14 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     TArray<TSharedPtr<FJsonValue>> Orders;if(const TArray<TSharedPtr<FJsonValue>>* Had=nullptr;Verdict->TryGetArrayField(TEXT("orders"),Had))Orders=*Had;
     auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),ItemId);O->SetStringField(TEXT("for"),TEXT("him"));Orders.Add(MakeShared<FJsonValueObject>(O));
     Verdict->SetArrayField(TEXT("orders"),Orders);UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s is on the menu here; ordered instead"),*DoNow);DoNow.Reset();}}
+  // Ordering at the table and a private-room meal (a facility: the dinner is skipped over, 70 minutes and its own bill)
+  // together: the dinner was billed and skipped, and then the soup came. With dishes ordered, they eat them at the
+  // table: the same place's table meal.
+  {const TArray<TSharedPtr<FJsonValue>>* Ordered=nullptr;
+   const int32 Dishes=(Verdict->TryGetArrayField(TEXT("orders"),Ordered)?Ordered->Num():0)+L->Table.Num(); // ordered now, or already on the table
+   if(const FOKStreetActivity* Room=OKStreetFindActivity(DoNow);Room&&Room->Kind==EOKStreetActivityKind::Facility&&Room->Code==0&&Room->Place&&Dishes>0)
+    for(const auto& Table:OKStreetActivities())if(Table.Kind==EOKStreetActivityKind::Pair&&Table.Code==5&&Table.Place&&FCString::Strcmp(Table.Place,Room->Place)==0){
+     UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s with %d dishes ordered; they eat them at the table (%s)"),*DoNow,Dishes,Table.Id);DoNow=Table.Id;break;}}
   // Orders he (or she) asked for that her reply left out: to the kitchen like any chat order.
   {const TArray<TSharedPtr<FJsonValue>>* Orders=nullptr;int32 Added=0;const FString Here=Weak->OrderShopHere(Character);FString Shop=Here.IsEmpty()?Weak->OutingShop(Character):Here;const bool OnTheWay=Here.IsEmpty();
    // Outside, about to go in ("let's go in, I'll have a latte"): the outing starts below, after the orders; its shop is
@@ -2447,6 +2462,10 @@ void AOKStreetSocialScene::CapturePhoto(){
 void AOKStreetSocialScene::FinishPhoto(bool bKeepTalking){
  if(!State||State->Pair.Partner==INDEX_NONE)return;auto& S=*State;auto& P=S.Pair;
  if(P.CapturePending&&SceneTime()-P.CaptureAt<3){P.FinishRequested=true;return;}
+ // A meal or seat ended within half a minute of being asked for (the dessert at the snack shop ended at once and the
+ // clock skipped its fifty minutes): who ended it goes to the log.
+ if(P.Conversation()&&SceneTime()-P.RequestedAt<30){ANSICHAR Stack[2048]={};FPlatformStackWalk::StackWalkAndDump(Stack,sizeof(Stack),1);
+  UE_LOG(LogTemp,Warning,TEXT("Street pair: ended early (phase %d, %.1f s after it was asked for):\n%hs"),P.Phase,SceneTime()-P.RequestedAt,Stack);}
  const bool WasTalking=S.FreeTalkOpen&&FreeTalkPartner()==P.Partner;
  const auto Before=P;P=FOKStreetPairSession();if(Before.Conversation())EndTalk();
  for(auto& Prop:S.PairProps)if(Prop.IsValid())Prop->Destroy();S.PairProps.Reset();S.MealHandProps.Reset();
@@ -2460,9 +2479,9 @@ void AOKStreetSocialScene::FinishPhoto(bool bKeepTalking){
 void AOKStreetSocialScene::TickPhoto(double Now){
  auto& S=*State;auto& P=S.Pair;if(P.Partner==INDEX_NONE)return;
  FOKRuntimeCharacterStatus Male,Npc;FOKRuntimeActionStreamStatus A,B;
- if(!OKGetCrowdRuntimeCharacterStatus(this,0,Male)||!OKGetCrowdRuntimeCharacterStatus(this,P.Partner,Npc)||!Male.Visible||!Npc.Visible||!Male.Error.IsEmpty()||!Npc.Error.IsEmpty()||!OKGetCrowdRuntimeActionStatus(this,0,A)||!OKGetCrowdRuntimeActionStatus(this,P.Partner,B)){FinishPhoto();return;}
+ if(!OKGetCrowdRuntimeCharacterStatus(this,0,Male)||!OKGetCrowdRuntimeCharacterStatus(this,P.Partner,Npc)||!Male.Visible||!Npc.Visible||!Male.Error.IsEmpty()||!Npc.Error.IsEmpty()||!OKGetCrowdRuntimeActionStatus(this,0,A)||!OKGetCrowdRuntimeActionStatus(this,P.Partner,B)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
  if(P.Phase==0){
-  if(Now-P.RequestedAt>60){FinishPhoto();S.Message=OKT(TEXT("ui.scene.dual_activity_prep_timeout"));RefreshUI();return;}
+  if(Now-P.RequestedAt>60){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();S.Message=OKT(TEXT("ui.scene.dual_activity_prep_timeout"));RefreshUI();return;}
   // Turn into the authored paired orientation before starting the clips / props.
   // Otherwise a rate-limited actor would sit sideways through a table or chair.
   const FRotator PairFacing(0,P.Yaw,0);
@@ -2476,7 +2495,7 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   // In the hot spring they sit in the water itself: no table or benches.
   if((P.Seated&&!P.Bath&&!P.NoProps)||P.Meal){
    auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCube.StreetCube"));
-   if(!Cube){FinishPhoto();return;}
+   if(!Cube){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
    auto Part=[&](FVector Position,FVector Size,int32 Material=8){auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male+PairFacing.RotateVector(Position),PairFacing);if(!A)return;A->SetOwner(this);A->SetActorScale3D(Size/100.f);auto* C=A->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Cube);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetLightingChannels(true,true,false);const FString MaterialPath=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial%02d.StreetMaterial%02d"),Material,Material);if(auto* M=LoadObject<UMaterialInterface>(nullptr,*MaterialPath))C->SetMaterial(0,M);S.PairProps.Add(A);};
    for(float Y:{-12.f,P.Meal?182.f:167.f}){Part(FVector(0,Y,40),FVector(56,48,7));for(float X:{-22.f,22.f})for(float D:{-18.f,18.f})Part(FVector(X,Y+D,19),FVector(6,6,38));}
    Part(FVector(0,P.Meal?85.f:77.f,P.Meal?69.f:62.f),FVector(80,P.Meal?100.f:48.f,4));for(float X:{-32.f,32.f})for(float Y:{P.Meal?45.f:60.f,P.Meal?125.f:94.f})Part(FVector(X,Y,30),FVector(6,6,60));
@@ -2546,22 +2565,22 @@ void AOKStreetSocialScene::TickPhoto(double Now){
      const float PlateY=Participant==0?60.f:110.f;
      Part(FVector(0,PlateY,73),FVector(30,25,2),3);
      Dish(Participant==0||FMath::RandBool()?MealKind:FMath::RandHelper(9),PlateY,74.f); // often the same as his, sometimes her own
-     for(int32 Piece=0;Piece<2;++Piece){const int32 Before=S.PairProps.Num();Part(FVector::ZeroVector,Piece==0?FVector(.8f,13,.8f):FVector(3,4,.6f));if(S.PairProps.Num()!=Before+1){FinishPhoto();return;}auto* Prop=S.PairProps.Last().Get();Prop->SetActorHiddenInGame(true);if(auto* Material=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial11.StreetMaterial11")))Prop->GetStaticMeshComponent()->SetMaterial(0,Material);S.MealHandProps.Add({Prop,FVector(0,Piece==0?5.f:12.f,0)});}
+     for(int32 Piece=0;Piece<2;++Piece){const int32 Before=S.PairProps.Num();Part(FVector::ZeroVector,Piece==0?FVector(.8f,13,.8f):FVector(3,4,.6f));if(S.PairProps.Num()!=Before+1){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}auto* Prop=S.PairProps.Last().Get();Prop->SetActorHiddenInGame(true);if(auto* Material=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial11.StreetMaterial11")))Prop->GetStaticMeshComponent()->SetMaterial(0,Material);S.MealHandProps.Add({Prop,FVector(0,Piece==0?5.f:12.f,0)});}
     }
    }
   }
   if(P.PhoneUse){
-   auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCube.StreetCube"));if(!Mesh){FinishPhoto();return;}
+   auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCube.StreetCube"));if(!Mesh){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
    for(int32 Participant=0;Participant<2;++Participant)for(int32 Part=0;Part<3;++Part){
-    auto* Prop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Prop){FinishPhoto();return;}Prop->SetOwner(this);Prop->SetActorHiddenInGame(true);auto* C=Prop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Mesh);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    auto* Prop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Prop){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}Prop->SetOwner(this);Prop->SetActorHiddenInGame(true);auto* C=Prop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Mesh);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     const int32 Mat=Part==1?5:Part==2?7:11;const FString Path=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial%02d.StreetMaterial%02d"),Mat,Mat);auto* Material=LoadObject<UMaterialInterface>(nullptr,*Path);if(!Material){Prop->Destroy();FinishPhoto();return;}C->SetMaterial(0,Material);S.PairProps.Add(Prop);
    }
   }
   if(P.Drink){
    auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCylinder.StreetCylinder"));
-   if(!Cube){FinishPhoto();return;}
+   if(!Cube){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
    for(int32 Participant=0;Participant<2;++Participant)for(int32 Part=0;Part<2;++Part){
-    auto* Prop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Prop){FinishPhoto();return;}
+    auto* Prop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Prop){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
     Prop->SetOwner(this);Prop->SetActorHiddenInGame(true);Prop->SetActorScale3D((Part==0?FVector(5.6f,5.6f,19):FVector(3.6f,3.6f,2.4f))/100.f);
     auto* C=Prop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Cube);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     if(auto* M=LoadObject<UMaterialInterface>(nullptr,Part==0?TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial09.StreetMaterial09"):TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial11.StreetMaterial11")))C->SetMaterial(0,M);S.PairProps.Add(Prop);
@@ -2570,25 +2589,25 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   if(P.Watermelon){
    const TCHAR* Shapes[]={TEXT("StreetCylinder"),TEXT("StreetCube"),TEXT("StreetSphere"),TEXT("StreetSphere"),TEXT("StreetSphere"),TEXT("StreetSphere"),TEXT("StreetSphere")};
    const FVector Sizes[]={FVector(2.83127f,2.83127f,61.88289f),FVector(16,3,5),FVector(21.8f,21.8f,23.4845f),FVector(21.8f,10.9f,23.4845f),FVector(21.8f,10.9f,23.4845f),FVector(19.4f,2,21),FVector(19.4f,2,21)};const int32 Mats[]={8,7,10,10,10,2,2};
-   for(int32 I=0;I<7;++I){const FString MeshPath=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Meshes/%s.%s"),Shapes[I],Shapes[I]),MatPath=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial%02d.StreetMaterial%02d"),Mats[I],Mats[I]);auto* Mesh=LoadObject<UStaticMesh>(nullptr,*MeshPath);auto* Mat=LoadObject<UMaterialInterface>(nullptr,*MatPath);if(!Mesh||!Mat){FinishPhoto();return;}auto* Prop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Prop){FinishPhoto();return;}Prop->SetOwner(this);Prop->SetActorHiddenInGame(true);Prop->SetActorScale3D(Sizes[I]/100.f);auto* C=Prop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Mesh);C->SetMaterial(0,Mat);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);S.PairProps.Add(Prop);}
+   for(int32 I=0;I<7;++I){const FString MeshPath=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Meshes/%s.%s"),Shapes[I],Shapes[I]),MatPath=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial%02d.StreetMaterial%02d"),Mats[I],Mats[I]);auto* Mesh=LoadObject<UStaticMesh>(nullptr,*MeshPath);auto* Mat=LoadObject<UMaterialInterface>(nullptr,*MatPath);if(!Mesh||!Mat){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}auto* Prop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Prop){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}Prop->SetOwner(this);Prop->SetActorHiddenInGame(true);Prop->SetActorScale3D(Sizes[I]/100.f);auto* C=Prop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Mesh);C->SetMaterial(0,Mat);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);S.PairProps.Add(Prop);}
   }
   if(P.Splash){
    auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetSphere.StreetSphere"));
    auto* Material=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial04.StreetMaterial04"));
-   if(!Mesh||!Material){FinishPhoto();return;}
-   for(int32 I=0;I<16;++I){auto* Drop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Drop){FinishPhoto();return;}Drop->SetOwner(this);Drop->SetActorHiddenInGame(true);Drop->SetActorScale3D(FVector(.018f,.018f,.035f));auto* C=Drop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Mesh);C->SetMaterial(0,Material);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetCastShadow(false);S.PairProps.Add(Drop);}
+   if(!Mesh||!Material){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+   for(int32 I=0;I<16;++I){auto* Drop=GetWorld()->SpawnActor<AStaticMeshActor>(S.Male,FRotator::ZeroRotator);if(!Drop){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}Drop->SetOwner(this);Drop->SetActorHiddenInGame(true);Drop->SetActorScale3D(FVector(.018f,.018f,.035f));auto* C=Drop->GetStaticMeshComponent();C->SetMobility(EComponentMobility::Movable);C->SetStaticMesh(Mesh);C->SetMaterial(0,Material);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetCastShadow(false);S.PairProps.Add(Drop);}
   }
-  if(P.Meal&&S.MealHandProps.Num()!=4){FinishPhoto();return;}
-  FString Error;if(!OKPlayCrowdRuntimeAction(this,0,P.MaleClip,Error)||!OKPlayCrowdRuntimeAction(this,P.Partner,P.FemaleClip,Error)){FinishPhoto();return;}
-  P.Phase=1;P.PlayingAt=Now;if(P.PhoneUse){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-8;S.Distance=350;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.use_phone_together_hint"));RefreshUI();return;}if(P.Watermelon){S.Yaw=P.Yaw+(P.FemaleStrikes?-145.f:-35.f);S.Pitch=-15;S.Distance=430;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.watermelon_swing_hint"));RefreshUI();return;}if(P.Meal){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-12;S.Distance=370;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.eat_together_hint"));RefreshUI();return;}if(P.Splash){S.Yaw=P.Yaw+35;S.Pitch=-8;S.Distance=380;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=P.FemaleThrows?OKT(TEXT("ui.scene.her_splash_hint")):OKT(TEXT("ui.scene.splash_water_hint"));RefreshUI();return;}if(P.Drink){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-8;S.Distance=350;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.drink_together_hint"));RefreshUI();return;}if(P.Read){/* no conversation target: the hand-held book shows only outside a talk */S.Yaw=P.Yaw+150;S.Pitch=-10;S.Distance=330;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.read_together_hint"));RefreshUI();return;}if(P.Seated){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-12;S.Distance=320;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.sit_and_chat_hint"));RefreshUI();return;}S.Yaw=P.Yaw+-90;S.Pitch=-8;S.Distance=350;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.photo_together_hint"));RefreshUI();return;
+  if(P.Meal&&S.MealHandProps.Num()!=4){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+  FString Error;if(!OKPlayCrowdRuntimeAction(this,0,P.MaleClip,Error)||!OKPlayCrowdRuntimeAction(this,P.Partner,P.FemaleClip,Error)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+  P.Phase=1;P.PlayingAt=Now;P.MealNow[0]=P.MaleClip;P.MealNow[1]=P.FemaleClip;S.MealAteAt.Reset();if(P.PhoneUse){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-8;S.Distance=350;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.use_phone_together_hint"));RefreshUI();return;}if(P.Watermelon){S.Yaw=P.Yaw+(P.FemaleStrikes?-145.f:-35.f);S.Pitch=-15;S.Distance=430;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.watermelon_swing_hint"));RefreshUI();return;}if(P.Meal){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-12;S.Distance=370;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.eat_together_hint"));RefreshUI();return;}if(P.Splash){S.Yaw=P.Yaw+35;S.Pitch=-8;S.Distance=380;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=P.FemaleThrows?OKT(TEXT("ui.scene.her_splash_hint")):OKT(TEXT("ui.scene.splash_water_hint"));RefreshUI();return;}if(P.Drink){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-8;S.Distance=350;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.drink_together_hint"));RefreshUI();return;}if(P.Read){/* no conversation target: the hand-held book shows only outside a talk */S.Yaw=P.Yaw+150;S.Pitch=-10;S.Distance=330;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.read_together_hint"));RefreshUI();return;}if(P.Seated){S.Target=P.Partner;S.Yaw=P.Yaw+35;S.Pitch=-12;S.Distance=320;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.sit_and_chat_hint"));RefreshUI();return;}S.Yaw=P.Yaw+-90;S.Pitch=-8;S.Distance=350;S.MouseUI=true;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.photo_together_hint"));RefreshUI();return;
  }
  if(P.Watermelon){
   const int32 Striker=P.FemaleStrikes?P.Partner:0;FTransform Hand,Head;
-  if(S.PairProps.Num()!=7||!OKGetCrowdRuntimeBoneTransform(this,Striker,TEXT("k_f_handR_00"),Hand)||!(OKGetCrowdRuntimeBoneTransform(this,Striker,TEXT("cf_j_head"),Head)||OKGetCrowdRuntimeBoneTransform(this,Striker,TEXT("cm_j_head"),Head))||Hand.ContainsNaN()||Head.ContainsNaN()){FinishPhoto();return;}
-  for(const auto& Prop:S.PairProps)if(!Prop.IsValid()){FinishPhoto();return;}
+  if(S.PairProps.Num()!=7||!OKGetCrowdRuntimeBoneTransform(this,Striker,TEXT("k_f_handR_00"),Hand)||!(OKGetCrowdRuntimeBoneTransform(this,Striker,TEXT("cf_j_head"),Head)||OKGetCrowdRuntimeBoneTransform(this,Striker,TEXT("cm_j_head"),Head))||Hand.ContainsNaN()||Head.ContainsNaN()){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+  for(const auto& Prop:S.PairProps)if(!Prop.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
   const FVector Root=Striker==0?S.Male:S.Agents[Striker-1].Position;const FQuat Rotation=(Striker==0?S.Rotations[0]:S.RenderedRotations[Striker]).Quaternion();const FVector Melon=Root+Rotation.RotateVector(FVector(0,P.MelonForward,12.832f));
   const FVector Tip=Hand.TransformPosition(FVector(0,50.99748f,0));FOKRuntimeActionStreamStatus Clock;
-  if(!OKGetCrowdRuntimeActionStatus(this,Striker,Clock)||!Clock.Playing||Clock.DurationSeconds<=0){FinishPhoto();return;}
+  if(!OKGetCrowdRuntimeActionStatus(this,Striker,Clock)||!Clock.Playing||Clock.DurationSeconds<=0){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
   const int32 Cycle=P.MelonCycle<0?0:P.MelonCycle+(Clock.PlaybackSeconds+.5f< P.MelonPlayback?1:0);P.MelonPlayback=Clock.PlaybackSeconds;
   if(Cycle!=P.MelonCycle){if(P.MelonCycle>=0&&!P.MelonHit){S.Message=OKT(TEXT("ui.scene.watermelon_miss_hint"));RefreshUI();}P.MelonCycle=Cycle;P.MelonHit=false;P.HasStickTip=false;}
   const float HitDistance=FMath::PointDistToSegment(Melon,P.HasStickTip?P.LastStickTip:Tip,Tip);P.MelonClosest=FMath::Min(P.MelonClosest,HitDistance);const bool Hit=HitDistance<12.4f;
@@ -2601,15 +2620,27 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   for(int32 I=3;I<7;++I){S.PairProps[I]->SetActorHiddenInGame(!P.MelonHit);S.PairProps[I]->SetActorLocation(Melon+Rotation.RotateVector(FVector(I%2==1?-13.f:13.f,I<5?0.f:(I==5?-6.f:6.f),0)));}
  }
  if(P.Meal){
-  if(S.MealHandProps.Num()!=4){FinishPhoto();return;}
-  for(int32 Participant=0;Participant<2;++Participant){FTransform Hand;if(!OKGetCrowdRuntimeBoneTransform(this,Participant==0?0:P.Partner,TEXT("k_f_handR_00"),Hand)||Hand.ContainsNaN()){FinishPhoto();S.Message=OKT(TEXT("ui.scene.utensil_prop_failed"));RefreshUI();return;}
-   for(int32 Piece=0;Piece<2;++Piece){auto& Item=S.MealHandProps[Participant*2+Piece];if(!Item.Key.IsValid()){FinishPhoto();return;}Item.Key->SetActorHiddenInGame(false);Item.Key->SetActorLocationAndRotation(Hand.TransformPosition(Item.Value),Hand.GetRotation());}
+  if(S.MealHandProps.Num()!=4){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+  // Eating while something of theirs is being eaten (the meal tick's MealAteAt), else seated with nothing in hand.
+  if(!S.SeatedMaleClip.IsEmpty()&&!S.SeatedFemaleClip.IsEmpty())for(int32 Participant=0;Participant<2;++Participant){
+   const int32 Actor=Participant==0?0:P.Partner;const double* Ate=S.MealAteAt.Find(Actor);
+   const FString& Eat=Participant==0?P.MaleClip:P.FemaleClip;const FString& Idle=Participant==0?S.SeatedMaleClip:S.SeatedFemaleClip;
+   // Two seconds at the start before anything counts (the first dishes are still being made then).
+   const FString Want=(Ate&&FPlatformTime::Seconds()-*Ate<3.0)||Now-P.PlayingAt<2.0?Eat:Idle;
+   if(Want==P.MealNow[Participant]){P.MealWant[Participant].Reset();continue;}
+   // Played at once (a resident clip) or queued and played once it is streamed in (OKPlayCrowdRuntimeAction).
+   FString Error;const bool Played=OKPlayCrowdRuntimeAction(this,Actor,Want,Error);P.MealNow[Participant]=Want;P.MealWant[Participant].Reset();
+   if(Played){UE_LOG(LogTemp,Display,TEXT("Street meal: actor %d %s"),Actor,Want==Eat?TEXT("eats"):TEXT("sits with nothing to eat"));}
+   else{UE_LOG(LogTemp,Warning,TEXT("Street meal: %s for actor %d: %s"),*Want,Actor,*Error);}
+  }
+  for(int32 Participant=0;Participant<2;++Participant){FTransform Hand;if(!OKGetCrowdRuntimeBoneTransform(this,Participant==0?0:P.Partner,TEXT("k_f_handR_00"),Hand)||Hand.ContainsNaN()){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();S.Message=OKT(TEXT("ui.scene.utensil_prop_failed"));RefreshUI();return;}
+   for(int32 Piece=0;Piece<2;++Piece){auto& Item=S.MealHandProps[Participant*2+Piece];if(!Item.Key.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}Item.Key->SetActorHiddenInGame(P.MealNow[Participant]!=(Participant==0?P.MaleClip:P.FemaleClip));Item.Key->SetActorLocationAndRotation(Hand.TransformPosition(Item.Value),Hand.GetRotation());}
   }
  }
  if(P.PhoneUse){
-  if(S.PairProps.Num()!=6){FinishPhoto();return;}
-  for(int32 Participant=0;Participant<2;++Participant){FTransform Hand;if(!OKGetCrowdRuntimeBoneTransform(this,Participant==0?0:P.Partner,TEXT("k_f_handL_00"),Hand)||Hand.ContainsNaN()){FinishPhoto();return;}
-   for(int32 Part=0;Part<3;++Part){auto* Prop=S.PairProps[Participant*3+Part].Get();if(!Prop){FinishPhoto();return;}Prop->SetActorTransform(OKStreetPhonePartTransform(Hand,Part));Prop->SetActorHiddenInGame(false);}
+  if(S.PairProps.Num()!=6){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+  for(int32 Participant=0;Participant<2;++Participant){FTransform Hand;if(!OKGetCrowdRuntimeBoneTransform(this,Participant==0?0:P.Partner,TEXT("k_f_handL_00"),Hand)||Hand.ContainsNaN()){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}
+   for(int32 Part=0;Part<3;++Part){auto* Prop=S.PairProps[Participant*3+Part].Get();if(!Prop){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}Prop->SetActorTransform(OKStreetPhonePartTransform(Hand,Part));Prop->SetActorHiddenInGame(false);}
   }
   ++S.PhoneUseSamples;
  }
@@ -2617,7 +2648,7 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   for(int32 Participant=0;Participant<2;++Participant){
    FTransform Hand;const int32 Character=Participant==0?0:P.Partner;
    const bool Found=OKGetCrowdRuntimeBoneTransform(this,Character,TEXT("k_f_handR_00"),Hand);
-   if(!Found||Hand.ContainsNaN()||S.PairProps.Num()!=4){FinishPhoto();S.Message=OKT(TEXT("ui.scene.drink_prop_failed"));RefreshUI();return;}
+   if(!Found||Hand.ContainsNaN()||S.PairProps.Num()!=4){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();S.Message=OKT(TEXT("ui.scene.drink_prop_failed"));RefreshUI();return;}
    for(int32 Part=0;Part<2;++Part)if(S.PairProps[Participant*2+Part].IsValid()){
     auto* Prop=S.PairProps[Participant*2+Part].Get();Prop->SetActorHiddenInGame(false);
     Prop->SetActorLocationAndRotation(Hand.TransformPosition(FVector(0,0,Part==0?10.f:20.7f)),Hand.GetRotation());
@@ -2626,18 +2657,21 @@ void AOKStreetSocialScene::TickPhoto(double Now){
  }
  if(P.Splash){
   FTransform Hand;const int32 Thrower=P.FemaleThrows?P.Partner:0;
-  if(!OKGetCrowdRuntimeBoneTransform(this,Thrower,TEXT("k_f_handR_00"),Hand)||Hand.ContainsNaN()||S.PairProps.Num()!=16){FinishPhoto();S.Message=OKT(TEXT("ui.scene.splash_prop_invalid"));RefreshUI();return;}
+  if(!OKGetCrowdRuntimeBoneTransform(this,Thrower,TEXT("k_f_handR_00"),Hand)||Hand.ContainsNaN()||S.PairProps.Num()!=16){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();S.Message=OKT(TEXT("ui.scene.splash_prop_invalid"));RefreshUI();return;}
   // Authored droplets: each burst follows the thrower's own runtime hand, never another card's pose.
   const float Time=FMath::Fmod(float(Now-P.PlayingAt),float(S.SplashCycleSeconds));const FVector Direction=P.FemaleThrows?FVector(0,-1,0):FVector(0,1,0);
-  for(int32 I=0;I<S.PairProps.Num();++I){if(!S.PairProps[I].IsValid()){FinishPhoto();return;}auto* Drop=S.PairProps[I].Get();const float Age=Time-1.f-I*.015f;const bool Show=Age>=0&&Age<.65f;Drop->SetActorHiddenInGame(!Show);if(Show){Drop->SetActorLocation(Hand.GetLocation()+Direction*(Age*230)+FVector((I%4-1.5f)*Age*16,0,Age*90-220*Age*Age));++S.SplashEffectSamples;}}
+  for(int32 I=0;I<S.PairProps.Num();++I){if(!S.PairProps[I].IsValid()){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}auto* Drop=S.PairProps[I].Get();const float Age=Time-1.f-I*.015f;const bool Show=Age>=0&&Age<.65f;Drop->SetActorHiddenInGame(!Show);if(Show){Drop->SetActorLocation(Hand.GetLocation()+Direction*(Age*230)+FVector((I%4-1.5f)*Age*16,0,Age*90-220*Age*Age));++S.SplashEffectSamples;}}
  }
  if(P.CapturePending){
   if(IFileManager::Get().FileSize(*P.CapturePath)>1000&&Now-P.CaptureAt>.5){S.LastPhoto=P.CapturePath;++S.PhotosSaved;P.CapturePending=false;
    // Filed as his photo of the two of them (photos.rs), in his album.
-   if(S.Manifest.Characters.IsValidIndex(P.Partner))PhotoFiled(P.CapturePath,TEXT("him"),{OKStreetStableId(S.Manifest.Characters[P.Partner]),TEXT("him")},FString(),INDEX_NONE);S.Message=OKT(TEXT("ui.scene.photo_saved_again"));RefreshUI();if(P.FinishRequested){FinishPhoto();return;}}
-  else if(Now-P.CaptureAt>3){P.CapturePending=false;S.Message=OKT(TEXT("ui.scene.photo_save_failed"));RefreshUI();if(P.FinishRequested){FinishPhoto();return;}}
+   if(S.Manifest.Characters.IsValidIndex(P.Partner))PhotoFiled(P.CapturePath,TEXT("him"),{OKStreetStableId(S.Manifest.Characters[P.Partner]),TEXT("him")},FString(),INDEX_NONE);S.Message=OKT(TEXT("ui.scene.photo_saved_again"));RefreshUI();if(P.FinishRequested){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}}
+  else if(Now-P.CaptureAt>3){P.CapturePending=false;S.Message=OKT(TEXT("ui.scene.photo_save_failed"));RefreshUI();if(P.FinishRequested){UE_LOG(LogTemp,Display,TEXT("Street pair: ended at Scene.cpp:%d (phase %d)"),__LINE__,S.Pair.Phase);FinishPhoto();return;}}
  }
- if(!A.Playing||!B.Playing||A.ClipId!=P.MaleClip||B.ClipId!=P.FemaleClip||(!P.Conversation()&&Now-P.PlayingAt>30))FinishPhoto();
+ // At a meal either of the two may be sitting with nothing to eat (MealNow): that clip is theirs too, not a pose lost.
+ // (Either of the two clips, whichever is playing while the other is being streamed in.)
+ auto Theirs=[&](const FOKRuntimeActionStreamStatus& X,const FString& Clip,int32 Who){return X.ClipId==Clip||(P.Meal&&X.ClipId==(Who==0?S.SeatedMaleClip:S.SeatedFemaleClip));};
+ if(!A.Playing||!B.Playing||!Theirs(A,P.MaleClip,0)||!Theirs(B,P.FemaleClip,1)||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, its clips are gone (%s %s)"),*A.ClipId,*B.ClipId);FinishPhoto();}
 }
 void AOKStreetSocialScene::RunWatermelonProbe(double Now){
  auto& S=*State;auto Fail=[&](const TCHAR* Why){FinishPhoto();S.Errors.Add(Why);WriteReport(false);};

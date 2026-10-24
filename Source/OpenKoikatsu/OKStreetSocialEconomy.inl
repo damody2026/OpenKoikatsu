@@ -365,9 +365,11 @@ void AOKStreetSocialScene::TickMeal(float Dt){
  auto CanEat=[&](int32 G,const FOKStreetDish& D){if(Drink(D)||!Full.Contains(G)||Full[G]<OKStreetFullSatiety)return true;const auto* I=S.Catalog.Find(D.ItemId);return I&&Full[G]+OKStreetItemFill(*I)*D.Percent/100.f<=OKStreetOverfullSatiety;};
  // Each eats one dish and sips one drink at a time, side by side (tea with the tart, not the tea first and then the tart).
  auto EatSome=[&](TFunctionRef<bool(const FOKStreetDish&)> Mine){bool Ate=false,Sipped=false;
-  for(auto& D:S.Table)if(Mine(D)){bool& Busy=Drink(D)?Sipped:Ate;if(Busy)continue;Busy=true;D.Percent=FMath::Max(0.f,D.Percent-Step);}};
- for(const int32 G:Eaters)if(G!=Her||!S.StopEating)EatSome([&](const FOKStreetDish& D){return D.ForHer&&DishOwner(D)==G&&D.Served&&D.Percent>0.f&&CanEat(G,D);});
- EatSome([](const FOKStreetDish& D){return !D.ForHer&&D.Served&&D.Percent>0.f;});
+  for(auto& D:S.Table)if(Mine(D)){bool& Busy=Drink(D)?Sipped:Ate;if(Busy)continue;Busy=true;D.Percent=FMath::Max(0.f,D.Percent-Step);}
+  return Ate||Sipped;};
+ // Who is eating now (the pair's clips follow it: eating, or sitting with nothing to eat).
+ for(const int32 G:Eaters)if(G!=Her||!S.StopEating)if(EatSome([&](const FOKStreetDish& D){return D.ForHer&&DishOwner(D)==G&&D.Served&&D.Percent>0.f&&CanEat(G,D);}))S.MealAteAt.Add(G,Wall);
+ if(EatSome([](const FOKStreetDish& D){return !D.ForHer&&D.Served&&D.Percent>0.f;}))S.MealAteAt.Add(0,Wall);
  if(Wall<S.MealBookAt)return;
  S.MealBookAt=Wall+2.0;
  // What each has eaten since the last booking fills her needs by that share of each dish's effects.
@@ -505,7 +507,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
    // The dishes are on the table at 100% but cannot be eaten until they are served.
    FOKStreetDish D;D.ItemId=L.ItemId;D.Name=I->Name;D.ForHer=L.ForHer||L.Girl!=INDEX_NONE;D.Batch=Serve.Batch;D.Her=L.Girl!=INDEX_NONE?L.Girl:Her;S.Table.Add(D);
   }
-  if(!Serve.Lines.IsEmpty()){S.Serves.Add(Serve);S.MealPlace=S.ShopPlace;S.StopEating=false;S.FullTold=false;S.MealAwayAt=0;}
+  if(!Serve.Lines.IsEmpty()){S.Serves.Add(Serve);S.MealPlace=S.ShopPlace;S.OrderedAtPlace.Add(S.ShopPlace,OKStreetMindNow(S));S.StopEating=false;S.FullTold=false;S.MealAwayAt=0;}
  }
  UE_LOG(LogTemp,Display,TEXT("Street order placed: %d lines, served in %.0f s"),S.Cart.Num(),ServeIn);
  UE_LOG(LogTemp,Display,TEXT("Street checkout: total=%d player=%lld her=%lld advanced=%lld option=%s"),Total,PlayerPays,HerPays,Advanced,*Option);

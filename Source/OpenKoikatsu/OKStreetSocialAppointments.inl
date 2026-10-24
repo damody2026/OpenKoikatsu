@@ -252,6 +252,11 @@ void AOKStreetSocialScene::TickAppointments(){
    const auto* P=OKStreetFindPlace(A.Place);O->SetBoolField(TEXT("there"),PlaceHere(S.Male)==A.Place||(P&&FVector::Dist2D(P->Door,S.Male)<1000));
    if(A.Kind==TEXT("entrust"))O->SetBoolField(TEXT("entrust_done"),EntrustReminderDone(A));
    const int32 Girl=CharacterOf(A.Heroine);
+   // Since when she is at the place (inside, or within 10 m of its door): how long she has waited is from then.
+   if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){const FVector& At=S.Agents[Girl-1].Position;
+    const bool HerThere=PlaceHere(At)==A.Place||(P&&FVector::Dist2D(P->Door,At)<1000);
+    if(!HerThere)S.SheThereSince.Remove(A.Id);else if(!S.SheThereSince.Contains(A.Id))S.SheThereSince.Add(A.Id,Now);
+    O->SetNumberField(TEXT("she_since"),double(S.SheThereSince.Contains(A.Id)?S.SheThereSince[A.Id]:-1));}
    if(Girl!=INDEX_NONE&&!Hers->HasField(A.Heroine)){auto H=MakeShared<FJsonObject>();H->SetObjectField(TEXT("relation"),OKRulesRelationJson(OKStreetViewRelation(S.Store,A.Heroine,S.Manifest.TalkBudget)));if(const auto Pr=ProfileOf(Girl))H->SetObjectField(TEXT("profile"),Pr.ToSharedRef());Hers->SetObjectField(A.Heroine,H);}
   }
   Rows.Add(MakeShared<FJsonValueObject>(O));
