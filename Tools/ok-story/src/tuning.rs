@@ -291,11 +291,22 @@ pub struct LiveTuning {
     pub text_speed: u32,
     /// Pointer parallax of the conversation shots (0 off).
     pub parallax: f64,
+    /// First person: every line is seen through the player's eyes, onto the girl who speaks (onto his partner when he
+    /// speaks). Off: her close-up and a two shot in turn, over his shoulder when he speaks.
+    pub pov: bool,
+    /// Horizontal lens of the first-person view (degrees).
+    pub pov_fov: f64,
+    /// Where the view is from his head bone: toward her (negative: behind, so a girl leaning in still fits) and up
+    /// (cm at scale 1).
+    pub pov_forward: f64,
+    pub pov_up: f64,
+    /// What the view centres on: 0 her head, 1 her chest.
+    pub pov_aim: f64,
 }
 
 impl Default for LiveTuning {
     fn default() -> Self {
-        LiveTuning { player_portrait: true, text_speed: 6, parallax: 0.15 }
+        LiveTuning { player_portrait: true, text_speed: 6, parallax: 0.15, pov: true, pov_fov: 60.0, pov_forward: -12.0, pov_up: 6.0, pov_aim: 0.35 }
     }
 }
 
