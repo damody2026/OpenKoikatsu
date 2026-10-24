@@ -13,7 +13,9 @@ bool OKSuspendCrowdRuntimeScene(AActor* Owner,bool Suspended);
 // can prepare and play at once. A third waits. At most eight unpublished
 // requests are queued. Preparation that is still unpublished after 60 seconds
 // is dropped and cannot activate later.
-inline constexpr int32 OKCrowdRuntimeActionSlots=2;
+// Streamed action slots for the whole scene: two for what he does with a heroine (both of them), two for the heroines
+// around going about their day (eating, reading) meanwhile. Each slot's GPU scratch is taken from the budget when used.
+inline constexpr int32 OKCrowdRuntimeActionSlots=4;
 inline constexpr int32 OKCrowdRuntimeActionQueue=8;
 inline constexpr double OKCrowdRuntimeActionPrepareSeconds=60.0;
 bool OKPlayCrowdRuntimeAction(AActor* Owner,int32 Character,const FString& ClipId,FString& Error);
