@@ -396,7 +396,7 @@ EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRuntimeMaterialRecip
 }
 static TAutoConsoleVariable<float> CVarOkFaceFlatten(TEXT("ok.FaceFlatten"),0.f,
  TEXT("The face pressed flat along the view, as Wuthering Waves draws toon faces: 0 off .. 0.9 (the most; 1 would put the face, eyes and mouth at one depth). ")
- TEXT("Live; a scene started at 0 draws the head with the plain parents (no vertex offset)."));
+ TEXT("Live; a street scene started at 0 draws the head with the plain parents (no vertex offset); the card reader always can."));
 static TAutoConsoleVariable<int32> CVarOkFaceFlattenLock(TEXT("ok.FaceFlattenLock"),0,
  TEXT("1: the direction the face is pressed along stays where it was (turn the camera to see from the side that it is flat)."));
 static TAutoConsoleVariable<float> CVarOkFaceFlattenForward(TEXT("ok.FaceFlattenForward"),2.f,
@@ -407,11 +407,12 @@ float OKFaceFlattenStrength(){
  // patches). Kept below it so their order survives.
  return FMath::Clamp(CVarOkFaceFlatten.GetValueOnGameThread(),0.f,.9f);
 }
-UMaterialInterface* OKRuntimeFlatFaceParent(UMaterialInterface* Parent){
- // Off when the program started at 0 (-FaceFlatten=0): the head keeps the plain parents. Turned to 0 later (the card
- // reader's slider) it stays on the _Flat parents at strength 0, so turning it up again needs no reload.
+UMaterialInterface* OKRuntimeFlatFaceParent(UMaterialInterface* Parent,bool bLive){
+ // Off when the program started at 0 (the default; the street): the head keeps the plain parents, no vertex offset.
+ // Turned to 0 later it stays on the _Flat parents at strength 0, so turning it up again needs no reload. The card
+ // reader asks live: its slider turns it on whenever (with the default 0 it never could).
  static const bool StartedOff=OKFaceFlattenStrength()<=0;
- if(!Parent||StartedOff)return nullptr;
+ if(!Parent||(StartedOff&&!bLive))return nullptr;
  static TMap<TWeakObjectPtr<UMaterialInterface>,TWeakObjectPtr<UMaterialInterface>> Cache;static TSet<TWeakObjectPtr<UMaterialInterface>> Absent;
  if(const auto* Hit=Cache.Find(Parent))if(Hit->IsValid())return Hit->Get();
  if(Absent.Contains(Parent))return nullptr;

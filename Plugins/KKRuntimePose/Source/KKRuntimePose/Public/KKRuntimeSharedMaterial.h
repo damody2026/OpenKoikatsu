@@ -40,8 +40,9 @@ KKRUNTIMEPOSE_API EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialFallback(EKKRu
 KKRUNTIMEPOSE_API UMaterialInterface* OKLoadRuntimeSharedMaterialParent(const FString& Root,EKKRuntimeMaterialRecipe,bool Outline=false);
 // The face pressed flat along the view (Wuthering Waves' toon faces; Tools/GpuPoseAudit PrepareFlatFaceMaterial.cpp):
 // a parent's <Name>_Flat variant beside it (null when the root has none, or ok.FaceFlatten was 0 when the scene started:
-// then the head draws with the plain parent). The head parts (Role "head") draw with it.
-KKRUNTIMEPOSE_API UMaterialInterface* OKRuntimeFlatFaceParent(UMaterialInterface* Parent);
+// then the head draws with the plain parent). The head parts (Role "head") draw with it. Live (the card reader, whose
+// slider turns it on at any time): the _Flat parent whatever the strength was (at 0 it does not move anything).
+KKRUNTIMEPOSE_API UMaterialInterface* OKRuntimeFlatFaceParent(UMaterialInterface* Parent,bool bLive=false);
 // ok.FaceFlatten (0 off .. 0.9 the most; -FaceFlatten= on the command line): how far the face is pressed.
 KKRUNTIMEPOSE_API float OKFaceFlattenStrength();
 // Per character, every frame: the head (world cm) and the player camera give the plane the face is pressed to (only
