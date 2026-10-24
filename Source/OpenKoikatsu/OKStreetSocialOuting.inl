@@ -452,6 +452,10 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  if(!Leave&&!StaysHere&&S.Table.ContainsByPredicate([](const FOKStreetDish& D){return !D.Served;})){Error=OKT(TEXT("ui.outing.wait_for_order"));UE_LOG(LogTemp,Display,TEXT("Street outing: waits, the order is still being made"));return false;}
  // Free talk can end the activity she is in ("leave"), or go somewhere else, which ends it first.
  // Either way both stay where the activity ended (a room returns them to its door).
+ // Ended here by their own words, so it lasted the minutes that went by: leaving the moon viewing three minutes in put
+ // the clock on to its full hour and past her dorm's curfew (R3-117). A meal or a drink keeps its own reckoning (the
+ // menu bill at the end).
+ if(S.ActGirl==Girl&&!(S.Pair.Partner==Girl&&(S.Pair.Meal||S.Pair.Drink)))S.ActCutShort=true;
  if(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl)FinishFacility();
  if(S.Pair.Partner==Girl)FinishPhoto();
  if(S.RestroomGirl==Girl)EndRestroom(false);
