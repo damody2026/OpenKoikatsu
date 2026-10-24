@@ -440,6 +440,17 @@ anchor = "pray"
 female_clip = "venue_pray_male.okanim"
 male_clip = "venue_pray_male.okanim"
 
+# Helping at the shrine: both sweep the grounds (Studio 掃く).
+[[activity]]
+id = "shrine_sweep"
+name = "在神社幫忙一起掃地"
+place = "shrine"
+kind = "solo"
+code = 0
+anchor = "pray"
+female_clip = "lib_0_4_19.okanim"
+male_clip = "lib_0_4_19.okanim"
+
 [[activity]]
 id = "vending_school"
 name = "在校門口的販賣機一起買飲料"
