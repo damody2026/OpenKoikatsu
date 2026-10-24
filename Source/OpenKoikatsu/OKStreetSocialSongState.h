@@ -31,4 +31,6 @@ struct FOKSongState {
  float CamDistance=-1,CamDrop=10;
  // The sheet as the song model sang it (Simplified): the caption in zh-CN.
  FString LyricsModel;
+ // The caption while she sings: each line from when it starts (rules song_choreo lines), Line the one shown.
+ TArray<double> LineAt;TArray<FString> LineText;int32 Line=-1;
 };

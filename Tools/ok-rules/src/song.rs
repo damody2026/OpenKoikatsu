@@ -320,6 +320,25 @@ fn sheet_units(lyrics: &str) -> (usize, usize) {
     (verse, chorus)
 }
 
+/// The sung units' texts, split like sheet_units: verse half lines, chorus lines.
+fn unit_texts(lyrics: &str) -> Vec<String> {
+    let (mut out, mut part) = (Vec::new(), 0);
+    for line in lyrics.lines() {
+        let l = line.trim();
+        if l.starts_with('[') {
+            let low = l.to_lowercase();
+            part = if l.contains("主歌") || low.contains("verse") { 1 } else if l.contains("副歌") || low.contains("chorus") { 2 } else { 0 };
+            continue;
+        }
+        match (part, l.is_empty()) {
+            (1, false) => out.extend(l.split_whitespace().map(str::to_string)),
+            (2, false) => out.push(l.to_string()),
+            _ => {}
+        }
+    }
+    out
+}
+
 /// The song's lines on its clock when the breaths do not show them (sung legato, the envelope rarely falls silent):
 /// the voiced span split evenly by the number of lines, each boundary moved to the quietest moment within 0.5 s.
 fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<(f32, f32)> {
@@ -340,7 +359,9 @@ fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<(f32
 }
 
 /// The staging: intro / outro clips and the cues during the song (seconds on the song's clock).
-pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, template: &str, seed: u64) -> serde_json::Value {
+/// `caption`: the sheet in the game's script (the same lines as `lyrics`); its units come back as `lines` [{at, text}]
+/// on the song's clock, for a caption that shows the line being sung.
+pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template: &str, seed: u64) -> serde_json::Value {
     let base = template.split('+').next().unwrap_or("");
     let upbeat = SHEETS.iter().find(|s| s.id == base).is_some_and(|s| s.tags.contains(&"upbeat"));
     let mut rng = seed ^ 0x2545_f491_4f6c_dd1d;
@@ -354,10 +375,20 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, template: &str, seed: u6
     let breaths = phrases(env, hop);
     // The breaths when they show about as many phrases as the sheet has lines, else the lines spread over the voice.
     let ph = if breaths.len() * 4 >= (verse + chorus_lines) * 3 || breaths.is_empty() {
-        breaths
+        breaths.clone()
     } else {
         even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), verse + chorus_lines)
     };
+    // Caption lines: one per sheet unit; the breaths when there is exactly one per unit, else the units spread over the
+    // voice.
+    let texts = unit_texts(if caption.is_empty() { lyrics } else { caption });
+    let line_spans = if breaths.len() == texts.len() || breaths.is_empty() {
+        breaths.clone()
+    } else {
+        even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), texts.len())
+    };
+    let lines: Vec<serde_json::Value> = texts.iter().zip(line_spans.iter())
+        .map(|(text, (at, _))| serde_json::json!({"at": ((at - 0.1).max(0.0) * 100.0).round() / 100.0, "text": text})).collect();
     let mut cues: Vec<(f32, String, &str)> = Vec::new();
     fn push(cues: &mut Vec<(f32, String, &'static str)>, at: f32, clip: &str, part: &'static str) {
         if let Some(last) = cues.last() {
@@ -367,8 +398,11 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, template: &str, seed: u6
         }
         cues.push((at.max(0.0), clip.to_string(), part));
     }
+    // An introduction only when she starts singing a while in (these songs often start on the first word).
     let prelude = if upbeat { choreo::PRELUDE_UPBEAT } else { choreo::PRELUDE_BALLAD };
-    push(&mut cues, 0.0, prelude[next(prelude.len())], "prelude");
+    if ph.first().map_or(true, |p| p.0 > 1.5) {
+        push(&mut cues, 0.0, prelude[next(prelude.len())], "prelude");
+    }
     let chorus = if upbeat { choreo::CHORUS_UPBEAT } else { choreo::CHORUS_BALLAD };
     let mut last_verse = usize::MAX;
     let mut chorus_at = 0usize;
@@ -395,7 +429,7 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, template: &str, seed: u6
     cues.push((at, finale.to_string(), "finale"));
     serde_json::json!({
         "upbeat": upbeat, "phrases": ph.len(), "verse_phrases": verse, "end": end,
-        "intro": choreo::INTRO[next(choreo::INTRO.len())], "outro": choreo::OUTRO[next(choreo::OUTRO.len())],
+        "intro": choreo::INTRO[next(choreo::INTRO.len())], "outro": choreo::OUTRO[next(choreo::OUTRO.len())], "lines": lines,
         "cues": cues.iter().map(|(at, clip, part)| serde_json::json!({"at": (at * 100.0).round() / 100.0, "clip": clip, "part": part})).collect::<Vec<_>>(),
     })
 }
@@ -430,7 +464,8 @@ pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json
             let lyrics = request.get("lyrics").and_then(serde_json::Value::as_str).unwrap_or("");
             let template = request.get("template").and_then(serde_json::Value::as_str).unwrap_or("");
             let seed = request.get("seed").and_then(serde_json::Value::as_u64).unwrap_or(1);
-            Some(Ok(choreograph(&env, hop, lyrics, template, seed)))
+            let caption = request.get("caption").and_then(serde_json::Value::as_str).unwrap_or("");
+            Some(Ok(choreograph(&env, hop, lyrics, caption, template, seed)))
         }
         _ => None,
     }
@@ -452,7 +487,7 @@ mod tests {
         env.extend(std::iter::repeat(0.0).take(100));
         assert_eq!(phrases(&env, hop).len(), 8);
         let sheet = "[主歌]\n夜色裡的街道 只剩我們兩個\n手心裡的溫度 比星星還要清楚\n[副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好";
-        let c = choreograph(&env, hop, sheet, "lover_night+park", 7);
+        let c = choreograph(&env, hop, sheet, "", "lover_night+park", 7);
         assert_eq!(c["verse_phrases"], 4);
         assert_eq!(c["upbeat"], false);
         let cues = c["cues"].as_array().unwrap();
@@ -464,17 +499,23 @@ mod tests {
         // the finale lands just before the last note ends
         let end = c["end"].as_f64().unwrap();
         assert!((end - ats.last().unwrap()) < 3.0);
-        assert_eq!(choreograph(&env, hop, sheet, "sunny_day", 7)["upbeat"], true);
+        assert_eq!(choreograph(&env, hop, sheet, "", "sunny_day", 7)["upbeat"], true);
+        // the caption: one line per unit (4 verse halves + 4 chorus lines), in order, starting with the first half line
+        let lines = c["lines"].as_array().unwrap();
+        assert_eq!(lines.len(), 8);
+        assert_eq!(lines[0]["text"], "夜色裡的街道");
+        assert_eq!(lines[4]["text"], "就這樣靠著你");
+        assert!(lines.windows(2).all(|w| w[1]["at"].as_f64() > w[0]["at"].as_f64()));
         // sung legato (one breath in the middle): the lines are spread over the voice, and the chorus still dances
         let mut legato = vec![0.0f32; 200];
         legato.extend((0..1000).map(|i| 0.5 + 0.3 * ((i as f32) * 0.05).sin().abs()));
         legato.extend(std::iter::repeat(0.0).take(60));
         legato.extend((0..1000).map(|i| 0.5 + 0.3 * ((i as f32) * 0.05).sin().abs()));
-        let l = choreograph(&legato, hop, sheet, "lover_night", 3);
+        let l = choreograph(&legato, hop, sheet, "", "lover_night", 3);
         let parts: Vec<&str> = l["cues"].as_array().unwrap().iter().map(|q| q["part"].as_str().unwrap()).collect();
         assert!(parts.contains(&"verse") && parts.contains(&"chorus"), "{parts:?}");
         // nothing sung: still a prelude and a finale, no panic
-        assert!(choreograph(&[], hop, sheet, "", 1)["cues"].as_array().unwrap().len() >= 1);
+        assert!(choreograph(&[], hop, sheet, "", "", 1)["cues"].as_array().unwrap().len() >= 1);
     }
 
     #[test]
@@ -571,5 +612,5 @@ fn choreography_of_a_song() {
     let hop = v["hop_ms"].as_f64().unwrap_or(10.0) as f32 / 1000.0;
     let template = std::env::var("OK_SONG_SHEET").unwrap_or_else(|_| "sunny_day".into());
     let sheet = SHEETS.iter().find(|s| s.id == template.split('+').next().unwrap()).unwrap().display;
-    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, sheet, &template, 5)).unwrap());
+    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, sheet, "", &template, 5)).unwrap());
 }

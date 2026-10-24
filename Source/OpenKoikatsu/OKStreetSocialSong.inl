@@ -221,15 +221,17 @@ bool AOKStreetSocialScene::SongMayOffer(int32 Girl) const{
 // the song, cues while she sings (a sway in the introduction, a gesture per verse line, dancing through the chorus, a
 // finishing pose on the last note) and one for her line afterwards.
 void AOKStreetSocialScene::SongChoreograph(){
- auto& S=*State;auto& G=S.Song;G.CueAt.Reset();G.CueClip.Reset();G.CuePart.Reset();G.Cue=-1;G.CamDistance=-1;G.IntroClip.Reset();G.OutroClip.Reset();
+ auto& S=*State;auto& G=S.Song;G.CueAt.Reset();G.CueClip.Reset();G.CuePart.Reset();G.Cue=-1;G.CamDistance=-1;G.LineAt.Reset();G.LineText.Reset();G.Line=-1;G.IntroClip.Reset();G.OutroClip.Reset();
  auto Ask=OKRulesRequest(TEXT("song_choreo"));TArray<TSharedPtr<FJsonValue>> Mouth;Mouth.Reserve(G.Mouth.Num());
  for(const float V:G.Mouth)Mouth.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(V*1000.f)/1000.f));
  Ask->SetArrayField(TEXT("mouth"),Mouth);Ask->SetNumberField(TEXT("hop"),G.Hop);Ask->SetStringField(TEXT("lyrics"),G.Lyrics);
- Ask->SetStringField(TEXT("template"),G.Template);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(1,1<<30));
+ Ask->SetStringField(TEXT("template"),G.Template);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(1,1<<30));Ask->SetStringField(TEXT("caption"),OKSongShownLyrics(S));
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return;
  Out->TryGetStringField(TEXT("intro"),G.IntroClip);Out->TryGetStringField(TEXT("outro"),G.OutroClip);
  const TArray<TSharedPtr<FJsonValue>>* Cues=nullptr;
  if(Out->TryGetArrayField(TEXT("cues"),Cues))for(const auto& V:*Cues){const auto O=V->AsObject();if(!O)continue;G.CueAt.Add(O->GetNumberField(TEXT("at")));G.CueClip.Add(O->GetStringField(TEXT("clip")));G.CuePart.Add(O->GetStringField(TEXT("part")));}
+ const TArray<TSharedPtr<FJsonValue>>* Lines=nullptr;
+ if(Out->TryGetArrayField(TEXT("lines"),Lines))for(const auto& V:*Lines){const auto O=V->AsObject();if(!O)continue;G.LineAt.Add(O->GetNumberField(TEXT("at")));G.LineText.Add(O->GetStringField(TEXT("text")));}
  UE_LOG(LogTemp,Display,TEXT("Street song: staged %d cues over %d phrases (upbeat %d)"),G.CueAt.Num(),int32(Out->GetNumberField(TEXT("phrases"))),Out->GetBoolField(TEXT("upbeat"))?1:0);
 }
 
@@ -356,7 +358,7 @@ void AOKStreetSocialScene::TickSong(double Now){
   if(G.Phase==EOKSongPhase::Intro){
    FString Error,Id;G.SpeechStarted=false;
    if(!OKAdmitCrowdRuntimeVoice(this,G.SongPath,Id,Error)||!OKSpeakCrowdRuntimeSong(this,G.Girl,Id,G.Mouth,G.Hop,Error)){SongReset(OKT(TEXT("ui.song.failed"))+Error,false);return;}
-   G.SongVoiceId=Id;G.Phase=EOKSongPhase::Singing;G.PhaseAt=Now;OKSongCaption(S,OKSongCaptionLyrics(OKSongShownLyrics(S)));UE_LOG(LogTemp,Display,TEXT("Street song: singing (actor %d, %s)"),G.Girl,*G.SongPath);RefreshUI();
+   G.SongVoiceId=Id;G.Phase=EOKSongPhase::Singing;G.PhaseAt=Now;G.Line=-1;OKSongCaption(S,G.LineText.IsEmpty()?OKSongCaptionLyrics(OKSongShownLyrics(S)):FString(TEXT("♪")));UE_LOG(LogTemp,Display,TEXT("Street song: singing (actor %d, %s)"),G.Girl,*G.SongPath);RefreshUI();
   }else{
    G.SungToday=G.SungDay==S.Store.CalendarDay?G.SungToday+1:1;G.SungDay=S.Store.CalendarDay;G.LastSongAtMinutes=Now/60.0;SongSave();
    MindObserve(G.Girl,TEXT("song"),OKT(TEXT("ui.song.sang_memory")),PlaceHere(S.Male),0.7f);
@@ -368,7 +370,10 @@ void AOKStreetSocialScene::TickSong(double Now){
   if(OKCrowdRuntimeSpeechActive(this,G.Girl)){G.SpeechStarted=true;
    // The cue for where the song is now (a little early: a clip takes a moment to blend in).
    double Played=0,Total=0;if(OKGetCrowdRuntimeSpeechPlayback(this,G.Girl,Played,Total)){int32 K=G.Cue;while(G.CueAt.IsValidIndex(K+1)&&G.CueAt[K+1]<=Played+.15)++K;
-    if(K!=G.Cue&&G.CueClip.IsValidIndex(K)){G.Cue=K;SongStage(G.CueClip[K],G.CueClip.IsValidIndex(K+1)?G.CueClip[K+1]:G.OutroClip,TEXT("cue"));}}
+    if(K!=G.Cue&&G.CueClip.IsValidIndex(K)){G.Cue=K;SongStage(G.CueClip[K],G.CueClip.IsValidIndex(K+1)?G.CueClip[K+1]:G.OutroClip,TEXT("cue"));}
+    // The caption: the line being sung, karaoke-like, instead of the whole sheet growing in the box.
+    int32 L=G.Line;while(G.LineAt.IsValidIndex(L+1)&&G.LineAt[L+1]<=Played)++L;
+    if(L!=G.Line&&G.LineText.IsValidIndex(L)){G.Line=L;OKSongCaption(S,TEXT("♪ ")+G.LineText[L]+TEXT(" ♪"));RefreshUI();}}
    SongStageTick();
    return;}
   if(G.SpeechStarted||Now-G.PhaseAt>10){G.Phase=EOKSongPhase::Outro;G.PhaseAt=Now;SongStage(G.OutroClip,FString(),TEXT("outro"));SongSay(OKT(TEXT("ui.song.outro_line")));OKSongCaption(S,OKT(TEXT("ui.song.outro_line")));RefreshUI();}

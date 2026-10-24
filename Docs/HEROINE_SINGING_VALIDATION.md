@@ -272,3 +272,7 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
   - 規則 `heroine_place_ease` 以地點規範表的舉動 `sing`（大聲、人多時會不自在）計算尷尬度，再依她的害羞、大方程度與關係判斷反應；只有「自然」或「樂在其中」才提議。
   - 例如圖書館上午不唱、公園晚上可以；不自在時 45 秒後再看。
   - 規則測試 `singing_to_him_fits_a_quiet_park_evening_not_a_library_morning`。
+- **卡拉 OK 字幕**（追加）：唱歌時字幕一次只顯示正在唱的那一句（♪ 句子 ♪），開唱前顯示 ♪。原本整首歌詞在字幕框越積越長，最後被截斷。
+  - 每句的開始時間來自同一套樂句切分（song_choreo 的 `lines`）：換氣數剛好等於歌詞單位數時照換氣，否則在歌聲區間平均切開並對齊最小聲處。
+  - 字幕依遊戲語言顯示繁體或簡體。
+- **前奏**（追加）：第一句在 1.5 秒之後才開唱時才放前奏動作。這批歌常常一開始就唱第一個字，那時直接從主歌手勢開始。
