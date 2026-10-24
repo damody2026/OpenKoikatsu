@@ -22,4 +22,15 @@ struct FOKSongState {
  int32 SungDay=-1,SungToday=0;
  // Her singing shot (SongCameraShot): when it began (-1: not on) and where the camera eased to.
  double CameraSince=-1;FVector CameraAt=FVector::ZeroVector;
+ // Her staging (rules song_choreo): a clip for her line before and after, and cues on the song's clock (seconds);
+ // Cue is the one playing (-1: none yet), Staged whether any of her clips was started (then she resumes afterwards).
+ // Want is the clip she should be showing, Next the one prepared meanwhile (one streamed action slot: a clip is
+ // prepared while another plays, installed once the playing one is let go).
+ FString IntroClip,OutroClip,Want,Next;TArray<double> CueAt;TArray<FString> CueClip,CuePart;int32 Cue=-1;bool Staged=false,NextAsked=false;
+ // The camera's distance and how far below her head it looks, eased toward each part's framing.
+ float CamDistance=-1,CamDrop=10;
+ // The sheet as the song model sang it (Simplified): the caption in zh-CN.
+ FString LyricsModel;
+ // The caption while she sings: each line from when it starts (rules song_choreo lines), Line the one shown.
+ TArray<double> LineAt;TArray<FString> LineText;int32 Line=-1;
 };

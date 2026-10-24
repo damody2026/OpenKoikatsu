@@ -254,6 +254,16 @@ pub fn eval(acts: &ActsTuning, places: &PlacesTuning, kind: &str, request: &Valu
     Some(match kind {
         "heroine_acts" => Ok(json!({"acts": acts.act.iter().map(|a| json!({"id": a.id, "cat": a.cat, "name": a.name, "stage": a.stage, "face_to_face": a.face_to_face, "button": a.button})).collect::<Vec<_>>()})),
         "heroine_act" => interact(acts, places, request),
+        // request: relation, profile, place, hours, act (a places.toml act) -> {awkward, reaction}: how she would take
+        // doing it here now, before she offers (her song: only where she would be at ease, reaction 0 or 4).
+        "heroine_place_ease" => Ctx::from_request(request).map(|c| {
+            let place = request.get("place").and_then(Value::as_str).unwrap_or("");
+            let act = request.get("act").and_then(Value::as_str).unwrap_or("");
+            let crowd = places::crowd_at(place, request.get("hours").and_then(Value::as_f64).unwrap_or(12.0));
+            let awkward = places::awkwardness(places.norms(place), crowd, places.act(act));
+            let reaction = places::react(awkward, c.traits.shyness, c.traits.public_boldness, &c.rel.stage);
+            json!({"awkward": awkward, "reaction": reaction as i32, "at_ease": matches!(reaction, Reaction::Fine | Reaction::Thrilled)})
+        }),
         "heroine_chastity" => Ctx::from_request(request).map(|c| json!({"chastity": chastity(&c.rel, &c.traits)})),
         "heroine_stranger_cap" => Ctx::from_request(request).map(|c| json!({"stranger_cap": stranger_cap(&c.traits)})),
         "heroine_private" => Ctx::from_request(request).map(|c| {

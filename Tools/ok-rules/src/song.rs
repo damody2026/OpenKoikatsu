@@ -228,6 +228,212 @@ pub fn lyrics_with(stage: &str, hour: u32, day: i32, shared: &[serde_json::Value
     v
 }
 
+
+/// Musical staging for her song ("song_choreo"), like a number in a stage musical: she sways while the introduction
+/// plays, gives each verse line a gesture, dances through the chorus and ends on a pose with the last note. The phrases
+/// are the voiced stretches of the song's mouth envelope; the first `verse` of them are the verse (one per half line of
+/// the sheet's [主歌]), the rest the chorus. Clips are library clips (motions.toml's source), all standing ones.
+mod choreo {
+    /// Before her first note: a light, bouncy wait.
+    pub const PRELUDE_BALLAD: &[&str] = &["lib_0_10_10.okanim"];
+    pub const PRELUDE_UPBEAT: &[&str] = &["lib_0_10_7.okanim"];
+    /// A verse line: an open pose or a happy gesture, a different one each line.
+    pub const VERSE: &[&str] = &["lib_0_1_0.okanim", "lib_0_1_2.okanim", "lib_0_1_5.okanim", "lib_0_1_8.okanim", "lib_0_1_11.okanim",
+                                 "lib_0_2_0.okanim", "lib_0_2_2.okanim", "lib_0_2_4.okanim", "lib_0_2_6.okanim"];
+    /// The chorus: she dances.
+    pub const CHORUS_BALLAD: &[&str] = &["lib_7_22_1.okanim", "lib_7_22_2.okanim"];
+    pub const CHORUS_UPBEAT: &[&str] = &["lib_7_22_1.okanim", "lib_7_22_2.okanim", "lib_0_10_8.okanim", "lib_0_10_9.okanim"];
+    /// The last note: a finishing pose.
+    pub const FINALE: &[&str] = &["lib_12_67_15.okanim", "lib_12_67_16.okanim"];
+    /// Her line before the song (a little shy) and after it (pleased).
+    pub const INTRO: &[&str] = &["lib_0_11_0.okanim", "lib_0_11_1.okanim"];
+    pub const OUTRO: &[&str] = &["lib_0_2_1.okanim", "lib_0_2_3.okanim"];
+    /// A clip is held at least this long (each change blends through her stand and the next clip has to be streamed
+    /// in); shorter phrases keep the previous one.
+    pub const MIN_HOLD: f32 = 4.0;
+}
+
+/// Voiced stretches (start, end seconds) of a mouth envelope: a light smoothing, a threshold at a fifth of the loud
+/// level, gaps under 0.35 s bridged and stretches under 0.25 s dropped.
+pub fn phrases(env: &[f32], hop: f32) -> Vec<(f32, f32)> {
+    if env.is_empty() || hop <= 0.0 {
+        return Vec::new();
+    }
+    let smooth: Vec<f32> = (0..env.len()).map(|i| {
+        let (a, b) = (i.saturating_sub(3), (i + 4).min(env.len()));
+        env[a..b].iter().sum::<f32>() / (b - a) as f32
+    }).collect();
+    let mut sorted = smooth.clone();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let loud = sorted[(sorted.len() * 95 / 100).min(sorted.len() - 1)];
+    if loud <= 0.0 {
+        return Vec::new();
+    }
+    let on = loud * 0.2;
+    let mut out: Vec<(f32, f32)> = Vec::new();
+    let mut start = None;
+    for (i, v) in smooth.iter().enumerate() {
+        let t = i as f32 * hop;
+        match (start, *v > on) {
+            (None, true) => start = Some(t),
+            (Some(s), false) => {
+                out.push((s, t));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        out.push((s, env.len() as f32 * hop));
+    }
+    let mut merged: Vec<(f32, f32)> = Vec::new();
+    for p in out {
+        match merged.last_mut() {
+            Some(last) if p.0 - last.1 < 0.35 => last.1 = p.1,
+            _ => merged.push(p),
+        }
+    }
+    merged.retain(|(s, e)| e - s >= 0.25);
+    merged
+}
+
+/// The sung units of the sheet: (verse, chorus) — half lines (split at spaces) under [主歌] / [Verse], lines under
+/// [副歌] / [Chorus].
+fn sheet_units(lyrics: &str) -> (usize, usize) {
+    let (mut verse, mut chorus, mut part) = (0, 0, 0);
+    for line in lyrics.lines() {
+        let l = line.trim();
+        if l.starts_with('[') {
+            let low = l.to_lowercase();
+            part = if l.contains("主歌") || low.contains("verse") { 1 } else if l.contains("副歌") || low.contains("chorus") { 2 } else { 0 };
+            continue;
+        }
+        if l.is_empty() {
+            continue;
+        }
+        match part {
+            1 => verse += l.split_whitespace().count(),
+            2 => chorus += 1,
+            _ => {}
+        }
+    }
+    (verse, chorus)
+}
+
+/// The sung units' texts, split like sheet_units: verse half lines, chorus lines.
+fn unit_texts(lyrics: &str) -> Vec<String> {
+    let (mut out, mut part) = (Vec::new(), 0);
+    for line in lyrics.lines() {
+        let l = line.trim();
+        if l.starts_with('[') {
+            let low = l.to_lowercase();
+            part = if l.contains("主歌") || low.contains("verse") { 1 } else if l.contains("副歌") || low.contains("chorus") { 2 } else { 0 };
+            continue;
+        }
+        match (part, l.is_empty()) {
+            (1, false) => out.extend(l.split_whitespace().map(str::to_string)),
+            (2, false) => out.push(l.to_string()),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The song's lines on its clock when the breaths do not show them (sung legato, the envelope rarely falls silent):
+/// the voiced span split evenly by the number of lines, each boundary moved to the quietest moment within 0.5 s.
+fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<(f32, f32)> {
+    let (start, end) = span;
+    if lines == 0 || end <= start {
+        return vec![span];
+    }
+    let step = (end - start) / lines as f32;
+    let mut cuts = vec![start];
+    for k in 1..lines {
+        let guess = start + step * k as f32;
+        let (a, b) = (((guess - 0.5) / hop).max(0.0) as usize, (((guess + 0.5) / hop) as usize).min(env.len().saturating_sub(1)));
+        let quiet = (a..=b).min_by(|x, y| env[*x].total_cmp(&env[*y])).map(|i| i as f32 * hop).unwrap_or(guess);
+        cuts.push(quiet.max(*cuts.last().unwrap() + 0.5));
+    }
+    cuts.push(end);
+    cuts.windows(2).map(|w| (w[0], w[1])).collect()
+}
+
+/// The staging: intro / outro clips and the cues during the song (seconds on the song's clock).
+/// `caption`: the sheet in the game's script (the same lines as `lyrics`); its units come back as `lines` [{at, text}]
+/// on the song's clock, for a caption that shows the line being sung.
+pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template: &str, seed: u64) -> serde_json::Value {
+    let base = template.split('+').next().unwrap_or("");
+    let upbeat = SHEETS.iter().find(|s| s.id == base).is_some_and(|s| s.tags.contains(&"upbeat"));
+    let mut rng = seed ^ 0x2545_f491_4f6c_dd1d;
+    let mut next = move |n: usize| -> usize {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        (rng % n.max(1) as u64) as usize
+    };
+    let (verse, chorus_lines) = sheet_units(lyrics);
+    let breaths = phrases(env, hop);
+    // The breaths when they show about as many phrases as the sheet has lines, else the lines spread over the voice.
+    let ph = if breaths.len() * 4 >= (verse + chorus_lines) * 3 || breaths.is_empty() {
+        breaths.clone()
+    } else {
+        even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), verse + chorus_lines)
+    };
+    // Caption lines: one per sheet unit; the breaths when there is exactly one per unit, else the units spread over the
+    // voice.
+    let texts = unit_texts(if caption.is_empty() { lyrics } else { caption });
+    let line_spans = if breaths.len() == texts.len() || breaths.is_empty() {
+        breaths.clone()
+    } else {
+        even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), texts.len())
+    };
+    let lines: Vec<serde_json::Value> = texts.iter().zip(line_spans.iter())
+        .map(|(text, (at, _))| serde_json::json!({"at": ((at - 0.1).max(0.0) * 100.0).round() / 100.0, "text": text})).collect();
+    let mut cues: Vec<(f32, String, &str)> = Vec::new();
+    fn push(cues: &mut Vec<(f32, String, &'static str)>, at: f32, clip: &str, part: &'static str) {
+        if let Some(last) = cues.last() {
+            if at - last.0 < choreo::MIN_HOLD || last.1 == clip {
+                return;
+            }
+        }
+        cues.push((at.max(0.0), clip.to_string(), part));
+    }
+    // An introduction only when she starts singing a while in (these songs often start on the first word).
+    let prelude = if upbeat { choreo::PRELUDE_UPBEAT } else { choreo::PRELUDE_BALLAD };
+    if ph.first().map_or(true, |p| p.0 > 1.5) {
+        push(&mut cues, 0.0, prelude[next(prelude.len())], "prelude");
+    }
+    let chorus = if upbeat { choreo::CHORUS_UPBEAT } else { choreo::CHORUS_BALLAD };
+    let mut last_verse = usize::MAX;
+    let mut chorus_at = 0usize;
+    for (i, (start, _)) in ph.iter().enumerate() {
+        if i + 1 == ph.len() && ph.len() > 1 {
+            break; // the last phrase keeps its move; the finale comes on its last note
+        }
+        if i < verse {
+            let mut k = next(choreo::VERSE.len());
+            if k == last_verse {
+                k = (k + 1) % choreo::VERSE.len();
+            }
+            last_verse = k;
+            push(&mut cues, start - 0.2, choreo::VERSE[k], "verse");
+        } else {
+            push(&mut cues, start - 0.2, chorus[chorus_at % chorus.len()], "chorus");
+            chorus_at += 1;
+        }
+    }
+    let end = ph.last().map(|p| p.1).unwrap_or(env.len() as f32 * hop);
+    // The finishing pose lands on the last note: its clip is streamed in and takes a moment to reach the pose.
+    let finale = choreo::FINALE[next(choreo::FINALE.len())];
+    let at = (end - 2.5).max(cues.last().map(|c| c.0 + 1.0).unwrap_or(0.0));
+    cues.push((at, finale.to_string(), "finale"));
+    serde_json::json!({
+        "upbeat": upbeat, "phrases": ph.len(), "verse_phrases": verse, "end": end,
+        "intro": choreo::INTRO[next(choreo::INTRO.len())], "outro": choreo::OUTRO[next(choreo::OUTRO.len())], "lines": lines,
+        "cues": cues.iter().map(|(at, clip, part)| serde_json::json!({"at": (at * 100.0).round() / 100.0, "clip": clip, "part": part})).collect::<Vec<_>>(),
+    })
+}
+
 pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json::Value, String>> {
     match kind {
         // request: heroines [relation...], ask {played_minutes, day, sung_today, last_song_at, declined_at, event_active,
@@ -249,6 +455,18 @@ pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json
             let shared = request.get("shared").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
             Some(Ok(lyrics_with(stage, hour % 24, day, &shared)))
         }
+        // request: mouth (the song's mouth envelope), hop (seconds per value), lyrics (the displayed sheet), template, seed
+        // -> {intro, outro, cues [{at, clip, part}], ...}: her musical staging (choreograph)
+        "song_choreo" => {
+            let env: Vec<f32> = request.get("mouth").and_then(serde_json::Value::as_array)
+                .map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect()).unwrap_or_default();
+            let hop = request.get("hop").and_then(serde_json::Value::as_f64).unwrap_or(0.01) as f32;
+            let lyrics = request.get("lyrics").and_then(serde_json::Value::as_str).unwrap_or("");
+            let template = request.get("template").and_then(serde_json::Value::as_str).unwrap_or("");
+            let seed = request.get("seed").and_then(serde_json::Value::as_u64).unwrap_or(1);
+            let caption = request.get("caption").and_then(serde_json::Value::as_str).unwrap_or("");
+            Some(Ok(choreograph(&env, hop, lyrics, caption, template, seed)))
+        }
         _ => None,
     }
 }
@@ -256,6 +474,49 @@ pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn choreography_follows_the_phrases() {
+        // 2 s of introduction, eight 2 s phrases with 0.8 s breaths, 1 s of tail
+        let hop = 0.01;
+        let mut env = vec![0.0f32; 200];
+        for _ in 0..8 {
+            env.extend(std::iter::repeat(0.8).take(200));
+            env.extend(std::iter::repeat(0.0).take(80));
+        }
+        env.extend(std::iter::repeat(0.0).take(100));
+        assert_eq!(phrases(&env, hop).len(), 8);
+        let sheet = "[主歌]\n夜色裡的街道 只剩我們兩個\n手心裡的溫度 比星星還要清楚\n[副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好";
+        let c = choreograph(&env, hop, sheet, "", "lover_night+park", 7);
+        assert_eq!(c["verse_phrases"], 4);
+        assert_eq!(c["upbeat"], false);
+        let cues = c["cues"].as_array().unwrap();
+        assert_eq!(cues.first().unwrap()["part"], "prelude");
+        assert_eq!(cues.last().unwrap()["part"], "finale");
+        assert!(cues.iter().any(|q| q["part"] == "verse") && cues.iter().any(|q| q["part"] == "chorus"));
+        let ats: Vec<f64> = cues.iter().map(|q| q["at"].as_f64().unwrap()).collect();
+        assert!(ats.windows(2).all(|w| w[1] > w[0]), "{ats:?}");
+        // the finale lands just before the last note ends
+        let end = c["end"].as_f64().unwrap();
+        assert!((end - ats.last().unwrap()) < 3.0);
+        assert_eq!(choreograph(&env, hop, sheet, "", "sunny_day", 7)["upbeat"], true);
+        // the caption: one line per unit (4 verse halves + 4 chorus lines), in order, starting with the first half line
+        let lines = c["lines"].as_array().unwrap();
+        assert_eq!(lines.len(), 8);
+        assert_eq!(lines[0]["text"], "夜色裡的街道");
+        assert_eq!(lines[4]["text"], "就這樣靠著你");
+        assert!(lines.windows(2).all(|w| w[1]["at"].as_f64() > w[0]["at"].as_f64()));
+        // sung legato (one breath in the middle): the lines are spread over the voice, and the chorus still dances
+        let mut legato = vec![0.0f32; 200];
+        legato.extend((0..1000).map(|i| 0.5 + 0.3 * ((i as f32) * 0.05).sin().abs()));
+        legato.extend(std::iter::repeat(0.0).take(60));
+        legato.extend((0..1000).map(|i| 0.5 + 0.3 * ((i as f32) * 0.05).sin().abs()));
+        let l = choreograph(&legato, hop, sheet, "", "lover_night", 3);
+        let parts: Vec<&str> = l["cues"].as_array().unwrap().iter().map(|q| q["part"].as_str().unwrap()).collect();
+        assert!(parts.contains(&"verse") && parts.contains(&"chorus"), "{parts:?}");
+        // nothing sung: still a prelude and a finale, no panic
+        assert!(choreograph(&[], hop, sheet, "", "", 1)["cues"].as_array().unwrap().len() >= 1);
+    }
 
     #[test]
     fn lyrics_fit_stage_and_hour_and_stay_for_the_day() {
@@ -337,4 +598,19 @@ mod tests {
         let dev = decide(&rel, &SongAsk { override_thresholds: true, ..ask(0.0) }, &t);
         assert!(dev.ok && dev.override_thresholds);
     }
+}
+
+/// Development: OK_SONG_MOUTH=<a song's mouth.json> OK_SONG_SHEET=<template> cargo test --release choreography_of_a_song
+/// -- --ignored --nocapture prints the staging a real song gets.
+#[cfg(test)]
+#[test]
+#[ignore]
+fn choreography_of_a_song() {
+    let path = std::env::var("OK_SONG_MOUTH").expect("OK_SONG_MOUTH");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let env: Vec<f32> = v["values"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap() as f32).collect();
+    let hop = v["hop_ms"].as_f64().unwrap_or(10.0) as f32 / 1000.0;
+    let template = std::env::var("OK_SONG_SHEET").unwrap_or_else(|_| "sunny_day".into());
+    let sheet = SHEETS.iter().find(|s| s.id == template.split('+').next().unwrap()).unwrap().display;
+    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, sheet, "", &template, 5)).unwrap());
 }

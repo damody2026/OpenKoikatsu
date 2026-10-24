@@ -630,8 +630,12 @@ private:
  void TickSong(double Now);
  void BuildSongRow(TSharedRef<class SVerticalBox> Box);
  TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
- bool SongOwnsVoice(int32 Character) const;
+ bool SongOwnsVoice(int32 Character) const;bool SongAtEase(int32 Girl);
  bool SongCameraShot(double Now,float Dt,FVector& Location,FVector& Focus);
+ void SongChoreograph();
+ void SongStage(const FString& Clip,const FString& Next,const TCHAR* Part);
+ void SongStageTick();
+ void SongUnstage();
  void SongLoad();
  void SongSave();
  void SongReset(const FString& Why,bool CancelJob);

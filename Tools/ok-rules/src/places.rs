@@ -188,6 +188,16 @@ mod tests {
     }
 
     #[test]
+    fn singing_to_him_fits_a_quiet_park_evening_not_a_library_morning() {
+        let t = Tuning::builtin().places;
+        let sing = t.act("sing");
+        assert_eq!(sing.name, "唱歌給他聽");
+        let park = awkwardness(t.norms("park"), crowd_at("park", 20.0), sing);
+        assert!(matches!(react(park, 50, 50, "friend"), Reaction::Fine | Reaction::Thrilled), "{park}");
+        let library = awkwardness(t.norms("library"), crowd_at("library", 10.0), sing);
+        assert!(!matches!(react(library, 50, 50, "lover"), Reaction::Fine | Reaction::Thrilled), "{library}");
+    }
+    #[test]
     fn kissing_in_the_library_is_awkward() {
         let t = Tuning::builtin().places;
         let lib = t.norms("library");
