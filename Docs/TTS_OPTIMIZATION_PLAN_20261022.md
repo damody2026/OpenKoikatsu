@@ -449,3 +449,20 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
   - 18 句 ASR 轉寫有 15 句相同；其餘 3 句只差語氣詞或標點，例如「不要了」對「不要啦」。
 - **文字嵌入表移到主記憶體**：`text_embedding` 為 151936×2048 bf16，約 0.6 GB。現在留在主記憶體，每次只把提示詞用到的列上傳到顯卡。輸出音訊和移動前位元相同，常駐顯存再降到 2.98 GB。
 - **部署**：`Build/ok-tts/ok-tts.exe` 已更新。正在執行的服務在下次重啟後才會換成新版。
+
+## 15. 男主的 12 種新聲線與打字台詞朗讀（2026-10-24）
+
+- `Tools/ok-tts/voices.json` 新增 `m10`～`m21`（溫柔學長、熱血少年、優雅貴公子、痞帥浪子、木訥老實、溫潤醫生、開朗暖男、冷酷寡言、偶像少年、可靠大哥、文藝青年、腹黑笑面）。每個聲線先用 VoiceDesign 依 `timbre` 與固定 `seed` 生成參考音，再以 `ok-tts profile --keys m10,...` 抽出 x-vector 存成 `Build/ok-tts/profiles/<id>@0.okvoice`（本機產物，不進版控）；之後同一聲線不再重跑 VoiceDesign。
+- 檢查音高：`m11` 第一版約 210 Hz，男女難辨，改寫 timbre（「嗓音是青年男性」、音高中等）並換 seed 後約 164 Hz。其餘 11 個都在 100～170 Hz。
+- 遊戲：語音設定的男主聲線下拉選單（`OKStreetMaleToneIds`／`OKStreetMaleToneNames`）多了 12 項，名稱在 `[ui.table]`。
+- 自由對話：玩家打字送出（或 MCP `game_talk`／`/say`，同樣走 `SendFreeTalk`）時，語音模式為 TTS、男主聲線不是 `off`、面對面（非電話）且非日語，就用男主聲線合成這句並由男主說出（`TickFreeTalkHisVoice`，`MalePhase` 1 等音檔→2 說話→3 完成，逾時放棄）。他說話期間她的回覆語音與 galgame 對話框的下一句都等著（`FreeTalkHisVoiceBusy`），講完才接她的話。
+- 改了 voices.json 之後，正在跑的 TTS 伺服器要重啟才會載入新聲線。
+- 即時麥克風：面對面對話一律開著麥克風。他說自己那句時麥克風改成靜音（`listen/mute` 的 `mute:true`，`FreeTalkLiveHisMute`），否則喇叭放出的男聲會被當成玩家又說了一句，或被當成打斷她。沙盒測試時另外呼叫控制通道 `/mic {"ignore":true}`，忽略房間裡別人的說話聲。
+
+## 16. 十位女主的聲線改用角色本人的參考錄音（2026-10-24）
+
+- 參考音：`ref/voices/<角色>.wav`（日語原聲，每位 14～27 秒，來源見 `ref/voices/manifest.md`；只留本機，不進版控，和角色卡一樣）。
+- 新指令 `ok-tts card-voice --card <卡>.png --from-wav <參考>.wav [--id 名稱] [--save 檔.okvoice]`：參考音修掉頭尾靜音、正規化後，抽出 speaker embedding（x-vector）做成 `.okvoice`，存進卡片的 `okVo` chunk；參考音本身也一起存進去。44.1／48 kHz 的錄音先對每個輸出取樣區間取平均，再降到 24 kHz，避免高頻折回人聲（`consistency::wav_samples`）。
+- 十張卡（`Content/CharacterCards/StreetHeroines/*.png`）都已寫入。卡片身分（`apng-<sha256>`）的計算會排除 `okVo`，十張卡的 ID 都和寫入前相同，存檔與記憶不受影響。原卡備份在 `C:\portable\OpenKoikatsu-Content-backup-20261024-cardvoice\`。
+- 遊戲送 TTS 請求時會帶她的卡片路徑，伺服器優先用卡裡的聲線，不需要重啟或改設定。合成出來仍是普通話，只有音色換成她本人。
+- 驗證：每位用同一句普通話合成，以 speaker encoder 和十份參考音逐一比對（去平均後的 cosine）。十位的合成音都和自己的參考音最像：雷電將軍 0.67、刻晴 0.55、三月七 0.54、安可 0.50、愛麗絲 0.50、胡桃 0.45、早瀨優香 0.44、貞德 0.41、貞德 Alter 0.37、惠惠 0.13（最弱：參考音原本就是 24 kHz 的手機遊戲錄音）。試聽檔：`Saved/StreetSocial/HeroineVoices/<角色>-sample.ogg`。

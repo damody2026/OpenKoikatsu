@@ -190,6 +190,15 @@ pub fn wav_samples(b: &[u8]) -> Result<Vec<f32>> {
     }
     let step = rate as f64 / crate::engine::SAMPLE_RATE as f64;
     let n = (mono.len() as f64 / step) as usize;
+    if step > 1.0 {
+        // Downsampling (44.1 / 48 kHz recordings): average each output sample's span first, so what lies above the
+        // new Nyquist frequency is damped instead of folding back into the voice.
+        return Ok((0..n).map(|i| {
+            let a = (i as f64 * step) as usize;
+            let b = (((i + 1) as f64 * step) as usize).clamp(a + 1, mono.len());
+            mono[a..b].iter().sum::<f32>() / (b - a) as f32
+        }).collect());
+    }
     Ok((0..n).map(|i| {
         let x = i as f64 * step;
         let j = x as usize;

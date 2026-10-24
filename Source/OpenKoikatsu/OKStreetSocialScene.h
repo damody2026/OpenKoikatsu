@@ -357,7 +357,7 @@ private:
  void ApplyChoiceReply(int32 Character,const struct FOKFreeTalkReply& Reply);
  void SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial);
  void RequestFreeTalkSegment(int32 Generation,int32 Index);
- void TickFreeTalkSpeech(double Now);
+ void TickFreeTalkSpeech(double Now);void TickFreeTalkHisVoice(double Now);bool FreeTalkHisVoiceBusy() const;
  void ApplyFreeTalkFavor(int32 Character,int32 Delta,const FString& Reason);
  void CancelFreeTalkVoice();
  FString FreeTalkFilePath(const TCHAR* Name) const;
