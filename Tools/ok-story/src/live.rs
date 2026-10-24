@@ -71,6 +71,10 @@ pub struct LiveState {
     /// no camera goes out and the game's own view stays: the first line of every conversation stood frozen where the
     /// street camera was when it began, metres from both of them.
     pub framed: bool,
+    /// Where the shot was framed from: his eye for first person, else the subject's point. The two walking to a table
+    /// with no new line left the view where they had stood, nearly four metres off; when they have moved on, the shot
+    /// is framed again.
+    pub framed_at: math::V3,
     pub portrait: Portrait,
     pub probe: Option<ProbeJob>,
     pub next_id: u64,
@@ -190,6 +194,33 @@ impl Live {
         }
     }
 
+    /// After the line's first moment the shot holds still, unless its people have moved on (a walk to a table, a
+    /// seat across the room): first person follows his eye once it is 40 cm away (a cut past 1.5 m), other shots are
+    /// framed again once their subject is a metre away.
+    fn follow_moved(&mut self) {
+        if !self.st.active || !self.st.framed || self.st.reframe_for > 0.0 || self.st.rig.moving() {
+            return;
+        }
+        let Some(spec) = self.st.shot.clone() else { return };
+        if spec.shot.as_deref() == Some("pov") {
+            let partner = self.st.people.first().cloned().unwrap_or_default();
+            if let Some(pose) = spec.on.as_deref().and_then(|on| self.pov(on)).or_else(|| self.pov(&partner)) {
+                let moved = math::len(math::sub(pose.pos, self.st.framed_at));
+                // Framed again the usual way (its line-of-sight check included), not just moved to the new eye.
+                if moved > 40.0 {
+                    self.frame_shot(moved > 150.0);
+                }
+            }
+            return;
+        }
+        let speaker = self.st.line.as_ref().map(|l| l.who.clone()).unwrap_or_default();
+        if let Some(first) = self.candidates(&spec, &speaker).first().copied() {
+            if math::len(math::sub(first.from, self.st.framed_at)) > 100.0 {
+                self.frame_shot(false);
+            }
+        }
+    }
+
     fn frame_shot(&mut self, cut: bool) {
         let Some(spec) = self.st.shot.clone() else { return };
         self.st.pov_fallback = None;
@@ -205,6 +236,7 @@ impl Live {
             self.st.rig.go(&self.tuning.camera, pose, cut || !self.st.camera_set, 1.0);
             self.st.camera_set = true;
             self.st.framed = true;
+            self.st.framed_at = pose.pos;
             self.st.probe = None;
             let Some(face) = self.facts.actors.get(&on).map(|a| a.head()) else { return };
             let usual = self.usual_shot(if speaker.is_empty() { &on } else { &speaker });
@@ -220,6 +252,7 @@ impl Live {
         self.st.rig.go(&self.tuning.camera, first.pose, cut || !self.st.camera_set, 1.0);
         self.st.camera_set = true;
         self.st.framed = true;
+        self.st.framed_at = first.from;
         self.st.probe = None;
         self.ask_probes(candidates, cut);
     }
@@ -402,6 +435,7 @@ impl Live {
                 }
             }
         }
+        self.follow_moved();
         self.st.rig.tick(&self.tuning.camera, dt, false);
         self.st.portrait.tick(&self.tuning.portrait, dt);
         self.frame()
