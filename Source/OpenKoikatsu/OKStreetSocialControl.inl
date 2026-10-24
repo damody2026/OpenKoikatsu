@@ -44,6 +44,7 @@ static void OKControlReply(const FHttpResultCallback& Done,const TSharedRef<FJso
  FString Text;auto Writer=TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text);FJsonSerializer::Serialize(Body,Writer);
  auto Response=FHttpServerResponse::Create(Text,TEXT("application/json; charset=utf-8"));Response->Code=static_cast<EHttpServerResponseCodes>(Code);Done(MoveTemp(Response));
 }
+extern ENGINE_API float GAverageFPS; // UnrealEngine.cpp, not in a public header (the /fps readout)
 static TSharedRef<FJsonObject> OKControlResult(bool Ok,const FString& Error=FString()){auto O=MakeShared<FJsonObject>();O->SetBoolField(TEXT("ok"),Ok);if(!Error.IsEmpty())O->SetStringField(TEXT("error"),Error);return O;}
 static TSharedRef<FJsonObject> OKControlBody(const FHttpServerRequest& Req){
  const FUTF8ToTCHAR Utf8(reinterpret_cast<const ANSICHAR*>(Req.Body.GetData()),Req.Body.Num());
@@ -168,6 +169,12 @@ void AOKStreetSocialScene::StartControlServer(){
  // Her face, set directly (tuning the look without waiting for the model): {girl, blush, sweat, gaze_x, gaze_y,
  // highlight, tears, expr, fade_scale (dev: stretch the look's easing), peek (only read)}. Answers what the runtime did,
  // the look drawn now and the shape cross-fade counters.
+ // The frame rate now, as the engine averages it (no FPS-chart folder per measurement): fps and ms per thread.
+ Bind(TEXT("/fps"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest&,const FHttpResultCallback& Done){
+  auto O=OKControlResult(true,FString());O->SetNumberField(TEXT("fps"),GAverageFPS);O->SetNumberField(TEXT("frame_ms"),GAverageFPS>0.f?1000.f/GAverageFPS:0.f);
+  O->SetNumberField(TEXT("game_ms"),FPlatformTime::ToMilliseconds(GGameThreadTime));O->SetNumberField(TEXT("render_ms"),FPlatformTime::ToMilliseconds(GRenderThreadTime));
+  O->SetNumberField(TEXT("gpu_ms"),FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+  OKControlReply(Done,O);});
  Bind(TEXT("/play"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;auto B=OKControlBody(Req);double Girl=-1,Seconds=4;B->TryGetNumberField(TEXT("girl"),Girl);B->TryGetNumberField(TEXT("seconds"),Seconds);
   if(!S.Manifest.Characters.IsValidIndex(int32(Girl))||Girl<1){OKControlReply(Done,OKControlResult(false,FString::Printf(TEXT("girl: 1..%d"),S.Manifest.Characters.Num()-1)));return;}

@@ -556,7 +556,8 @@ void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error,bool bRun){
  };
  // A run (jogging in the park): longer legs that stay inside the place they run in.
  TArray<FVector> Route;Route.Add(S.Male);FVector At=S.Male;const FString Here=PlaceHere(S.Male);const bool Indoors=!Here.IsEmpty()&&!bRun;
- for(int32 Leg=0;Leg<5;++Leg){
+ // Indoors the legs are short: more of them, so a walk round the floor is not over in a minute or two.
+ for(int32 Leg=0;Leg<(Indoors?12:5);++Leg){
   bool Found=false;
   for(int32 Try=0;Try<(Indoors?40:16)&&!Found;++Try){
    // Indoors the rooms are small: shorter legs, more tries.

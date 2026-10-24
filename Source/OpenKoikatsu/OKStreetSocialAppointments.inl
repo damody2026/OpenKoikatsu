@@ -69,6 +69,10 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
   // they pick a place that exists; he sees it too.
   if(Reason==TEXT("not_a_place")&&!Place.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_such_place_note"),{{TEXT("place_name"),*Place}}));
    S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_such_place_notice"),{{TEXT("place_name"),*Place}});RefreshUI();}
+  // A day and a place but no hour ("Saturday at the park"): agreed, yet nothing to book. She asks him what time,
+  // instead of the meeting being dropped without either of them knowing.
+  if(Reason==TEXT("no_time")&&P&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_note"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}}));
+   S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_time_notice"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}});RefreshUI();}
   return;}
  if(Action==TEXT("keep")||Action==TEXT("move")){const int32 AppId=int32(Out->GetNumberField(TEXT("id")));
   const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==AppId;});if(!A)return;
