@@ -28,6 +28,10 @@ struct FOKStreetGalgame
 	bool bHerPending = false;
 	// When his scripted line went up: hers waits a moment so his can be read (his voice may be skipped).
 	double PlayerSentAt = -1.0;
+	// A replayed line (history replay or one line from the history window) last sent, and whether the scene was opened
+	// only to show the replay (no conversation going on).
+	int64 ReplayShown = 0;
+	bool bReplayScene = false;
 	// Who speaks the line on screen (character slot) and whether a voice plays it.
 	int32 Speaker = INDEX_NONE;
 	bool bVoiced = false;
@@ -99,6 +103,11 @@ static bool OKStreetGalgamePlaceholder(const FString& Words)
 bool AOKStreetSocialScene::GalgameShowsDialogue() const
 {
 	return Galgame.IsValid() && Galgame->bActive && CVarOKStreetGalgame.GetValueOnGameThread() != 0;
+}
+
+bool AOKStreetSocialScene::GalgameReplays() const
+{
+	return CVarOKStreetGalgame.GetValueOnGameThread() != 0 && Galgame.IsValid() && Galgame->Live.IsOpen();
 }
 
 bool AOKStreetSocialScene::GalgameHidesDialogueBox() const
@@ -186,15 +195,23 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	// Not while she does a one-person activity beside him (watching the fish, her explosion spell): that is watched with
 	// its own camera, and speaking to her ends it anyway. The dialog shot held the whole spell off screen (R3-119).
 	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen) && S.SoloGirl == INDEX_NONE;
-	if (bTalking && (!G.bActive || Partner != G.Partner))
+	// History lines played back (the replay button, a line's play button in the history window) are shown as scene
+	// lines too, with her portrait; without a conversation the scene opens for the replay alone and closes after it.
+	const bool bReplaying = !S.FreeTalkReplay.IsEmpty() || !S.FreeTalkReplayParts.IsEmpty() ||
+		(S.FreeTalkReplaySpeaker != INDEX_NONE && OKCrowdRuntimeSpeechActive(this, S.FreeTalkReplaySpeaker)) || SceneTime() < S.FreeTalkReplayHold;
+	const int32 ReplaySlot = S.FreeTalkReplaySceneSlot;
+	const bool bReplayScene = !bTalking && bReplaying && ReplaySlot != INDEX_NONE && S.SoloGirl == INDEX_NONE;
+	const int32 SceneWith = bTalking ? Partner : bReplayScene ? ReplaySlot : INDEX_NONE;
+	if (SceneWith != INDEX_NONE && (!G.bActive || SceneWith != G.Partner))
 	{
+		G.bReplayScene = !bTalking;
 		TSharedRef<FJsonObject> C = MakeShared<FJsonObject>();
 		C->SetStringField(TEXT("type"), TEXT("conversation"));
 		C->SetStringField(TEXT("player"), OKStreetGalgameId(0));
-		C->SetArrayField(TEXT("people"), { MakeShared<FJsonValueString>(OKStreetGalgameId(Partner)) });
+		C->SetArrayField(TEXT("people"), { MakeShared<FJsonValueString>(OKStreetGalgameId(SceneWith)) });
 		G.Live.Input(OKStreetGalgameJson(C));
 		G.bActive = true;
-		G.Partner = Partner;
+		G.Partner = SceneWith;
 		G.LastHer = S.FreeTalkCaptionHer;
 		G.LastPlayer = S.FreeTalkCaptionPlayer;
 		G.LastScripted.Reset();
@@ -202,8 +219,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		G.LastNode = INDEX_NONE;
 		G.bHerPending = false;
 	}
-	else if (!bTalking && G.bActive)
+	else if (SceneWith == INDEX_NONE && G.bActive)
 	{
+		G.bReplayScene = false;
 		G.Live.Input(TEXT("{\"type\":\"end\"}"));
 		G.bActive = false;
 		G.Partner = INDEX_NONE;
@@ -232,6 +250,17 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			SendLine(S.Target != INDEX_NONE ? S.Target : Partner, G.LastScripted, !S.VoiceIds.IsEmpty());
 		}
 		if (S.Node == INDEX_NONE) G.LastNode = INDEX_NONE;
+		// A history line played back: her words as a scene line while her voice replays.
+		if (S.FreeTalkReplayShown != G.ReplayShown)
+		{
+			G.ReplayShown = S.FreeTalkReplayShown;
+			if (bReplaying && S.FreeTalkReplayShownSlot != INDEX_NONE)
+			{
+				const int32 Slot = S.FreeTalkReplayShownSlot;
+				const FString Words = OKStreetGalgameWords(S.FreeTalkReplayShownText, NameOf(Slot));
+				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.FreeTalkReplayShownVoiced);
+			}
+		}
 		// Free talk: his words, then her (newest) line as it arrives.
 		if (S.FreeTalkCaptionPlayer != G.LastPlayer)
 		{

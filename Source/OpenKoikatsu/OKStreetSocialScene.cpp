@@ -295,6 +295,10 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  FString OutingActivity,OutingPlace;TArray<FVector> OutingRoute;int32 OutingStep=0;double OutingProgressAt=0;bool OutingWaitDoor=false;bool OutingRun=false;FString StrollActivity;int64 StrollStartMinute=0;bool QuietTalk=false;TArray<TWeakObjectPtr<AActor>> PlaceActors;TArray<TWeakObjectPtr<ADirectionalLight>> PlaceFills;float NextPairYaw=0;FString NextPairFemaleClip,NextPairMaleClip;int32 SoloGirl=INDEX_NONE,SoloPhase=0,SoloMinutes=0;double SoloAt=0;int64 SoloStartMinute=0;FVector SoloSpot=FVector::ZeroVector;float SoloYaw=0;FString SoloFemale,SoloMale,SoloWhat,SoloId;bool SleepPaired=false;int32 SleepPhase=0,SleepGirl=INDEX_NONE;double SleepAt=0;FVector SleepBed=FVector::ZeroVector,SleepGirlBed=FVector::ZeroVector;float SleepYaw=0,SleepGirlYaw=0;FString SleepPlace;int32 RestroomGirl=INDEX_NONE;double RestroomUntil=0;FString RestroomPlace;double RestroomBlockedAt=0;struct FPlaceLayers {int32 Place=INDEX_NONE;TWeakObjectPtr<UProceduralMeshComponent> Roof;TMap<int32,TWeakObjectPtr<UProceduralMeshComponent>> Levels;};TArray<FPlaceLayers> PlaceRoofs;FString PlaceTourDir;int32 PlaceTourIndex=-1;double PlaceTourAt=0;bool PlaceTourShot=false;TMap<int32,FVector> CommuteShown;
  TArray<FString> FreeTalkSpeechLines,FreeTalkSpeechPaths,FreeTalkReplayParts;TArray<uint8> FreeTalkSpeechReady,FreeTalkSpeechStreamed;TArray<TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe>> FreeTalkSpeechStreams;int32 FreeTalkSpeechGeneration=0,FreeTalkSpeechCharacter=INDEX_NONE,FreeTalkSpeechPlayed=0,FreeTalkSpeechFiles=0;int64 FreeTalkSpeechSerial=0;double FreeTalkSpeechNext=0,FreeTalkSpeechRepliedAt=0;FString FreeTalkSpeechChannel;TArray<double> FreeTalkSpeechSentAt;
  FString FreeTalkCaptionPlayer,FreeTalkCaptionHer;TArray<int64> FreeTalkReplay;int32 FreeTalkReplayTotal=0,FreeTalkReplaySpeaker=INDEX_NONE;double FreeTalkReplayNext=0;
+ // The replayed line now playing, for the galgame scene (its box and portrait): bumped per line.
+ // Who says it (0: him), whose conversation it belongs to, whether her voice plays it, and until when a line without a
+ // voice stays up (scene time).
+ int64 FreeTalkReplayShown=0;int32 FreeTalkReplayShownSlot=INDEX_NONE,FreeTalkReplaySceneSlot=INDEX_NONE;FString FreeTalkReplayShownText;bool FreeTalkReplayShownVoiced=false;double FreeTalkReplayHold=0;
  bool TopicsOpen=false;TArray<TSharedPtr<SSlider>> StatSliders;TArray<TSharedPtr<SCheckBox>> RelationChecks;int32 RelationControlsVerified=0;bool RelationControlsSync=false;TMap<int32,double> RunUntil,RunNext;
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
  TArray<FString> HighCards;TWeakObjectPtr<AOKInteractionMode> PrivateMode;FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
@@ -1591,7 +1595,7 @@ bool AOKStreetSocialScene::FreeTalkSpeakVoice(int32 Character,const FString& Pat
 // speaking her lines again; a second press stops it.
 void AOKStreetSocialScene::FreeTalkReplayToggle(){
  if(!State)return;auto& S=*State;
- if(!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty()){S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.replay_stopped"));RefreshUI();return;}
+ if(!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty()){S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;S.FreeTalkNotice=OKT(TEXT("ui.scene.replay_stopped"));RefreshUI();return;}
  FreeTalkEnsureLog();
  const int32 Partner=FreeTalkPartner();
  const FString Id=Partner!=INDEX_NONE?OKStreetStableId(S.Manifest.Characters[Partner]):FString();
@@ -1623,13 +1627,20 @@ void AOKStreetSocialScene::TickFreeTalkReplay(double Now){
  }
  const int64 Serial=S.FreeTalkReplay[0];S.FreeTalkReplay.RemoveAt(0);S.FreeTalkReplaySpeaker=INDEX_NONE;
  if(const FOKFreeTalkLine* Line=S.FreeTalkLog.FindByPredicate([Serial](const FOKFreeTalkLine& L){return L.Serial==Serial;})){
-  // Replay only plays the voices; the dialogue box keeps showing the current conversation.
+  // Her voiced lines speak again. With the galgame scene every line (his too) is shown in its box with the speaker's
+  // portrait, a line without a voice for a reading time; without it the dialogue box keeps the current conversation.
+  const int32 Girl=FreeTalkSlotOf(Line->CharacterId);
+  bool Voiced=false;
   if(!Line->Player){
-   const int32 Slot=FreeTalkSlotOf(Line->CharacterId);
    TArray<FString> Clips;Line->Voice.ParseIntoArray(Clips,TEXT("|"));
-   if(Slot!=INDEX_NONE&&!Clips.IsEmpty()&&FreeTalkSpeakVoice(Slot,Clips[0])){S.FreeTalkReplaySpeaker=Slot;Clips.RemoveAt(0);S.FreeTalkReplayParts=MoveTemp(Clips);}
+   if(Girl!=INDEX_NONE&&!Clips.IsEmpty()&&FreeTalkSpeakVoice(Girl,Clips[0])){S.FreeTalkReplaySpeaker=Girl;Clips.RemoveAt(0);S.FreeTalkReplayParts=MoveTemp(Clips);Voiced=true;}
   }
   S.FreeTalkReplayNext=Now+.1;
+  if(Girl!=INDEX_NONE&&GalgameReplays()){
+   ++S.FreeTalkReplayShown;S.FreeTalkReplayShownSlot=Line->Player?0:Girl;S.FreeTalkReplaySceneSlot=Girl;S.FreeTalkReplayShownText=Line->Text;S.FreeTalkReplayShownVoiced=Voiced;
+   if(!Voiced)S.FreeTalkReplayNext=Now+FMath::Clamp(.8+.12*Line->Text.Len(),1.5,6.);
+   S.FreeTalkReplayHold=S.FreeTalkReplayNext;
+  }
  }
  const int32 Done=S.FreeTalkReplayTotal-S.FreeTalkReplay.Num();
  S.FreeTalkNotice=S.FreeTalkReplay.IsEmpty()?FString(OKT(TEXT("ui.scene.replay_finished"))):OKMsg(TEXT("ui.scene.replay_progress"), {{TEXT("done"), Done}, {TEXT("total"), S.FreeTalkReplayTotal}});
@@ -2196,7 +2207,7 @@ void AOKStreetSocialScene::RebuildUI(){
    const int64 Serial=Line.Serial;
    List->AddSlot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
     +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[SNew(STextBlock).AutoWrapText(true).ColorAndOpacity(Line.Player?OKStreetPlayerLineColor():OKStreetSpeakerColor(OKStreetLineSpeaker(OKStreetFreeTalkCaption(Line),Names))).Text(FText::FromString(TEXT("[")+Line.Time+TEXT("] ")+OKStreetFreeTalkCaption(Line)))]
-    +SHorizontalBox::Slot().AutoWidth().Padding(6,0,0,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Visibility(Line.Voice.IsEmpty()?EVisibility::Hidden:EVisibility::Visible).Text(FText::FromString(OKT(TEXT("ui.scene.play_button")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Serial](){if(Weak.IsValid())Weak->FreeTalkPlayLine(Serial);return FReply::Handled();})]];
+    +SHorizontalBox::Slot().AutoWidth().Padding(6,0,0,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Visibility(Line.Voice.IsEmpty()&&!GalgameReplays()?EVisibility::Hidden:EVisibility::Visible).Text(FText::FromString(OKT(TEXT("ui.scene.play_button")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Serial](){if(Weak.IsValid())Weak->FreeTalkPlayLine(Serial);return FReply::Handled();})]];
   }
   if(S.FreeTalkLog.IsEmpty())List->AddSlot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.no_freetalk_log_plain"))))];
   TSharedPtr<SScrollBox> Scroll;

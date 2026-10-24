@@ -28,6 +28,7 @@ private:
  TSharedPtr<struct FOKStreetGalgame> Galgame;
  void TickGalgame(float Dt);
  bool GalgameShowsDialogue() const; bool GalgameHidesDialogueBox() const; float GalgameDialogueLift() const;
+ bool GalgameReplays() const; // replayed history lines become galgame scene lines (OKStreetSocialGalgame.inl)
  void EndGalgame();
  double SceneTime() const;
  void RefreshUI(); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked
