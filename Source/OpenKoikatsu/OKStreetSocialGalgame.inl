@@ -32,6 +32,8 @@ struct FOKStreetGalgame
 	// only to show the replay (no conversation going on).
 	int64 ReplayShown = 0;
 	bool bReplayScene = false;
+	// A replay was on screen last frame: once it ends (or is stopped) the box shows the conversation's own last line again.
+	bool bWasReplaying = false;
 	// Who speaks the line on screen (character slot) and whether a voice plays it.
 	int32 Speaker = INDEX_NONE;
 	bool bVoiced = false;
@@ -261,6 +263,19 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.FreeTalkReplayShownVoiced);
 			}
 		}
+		// The replay is over while they still talk: back to her latest line of this conversation.
+		if (G.bWasReplaying && !bReplaying && !G.bReplayScene)
+		{
+			TArray<FString> Lines;
+			S.FreeTalkCaptionHer.ParseIntoArrayLines(Lines);
+			if (Lines.Num())
+			{
+				int32 Slot = OKStreetLineSpeaker(Lines.Last(), Names);
+				if (Slot == INDEX_NONE) Slot = G.Partner;
+				const FString Words = OKStreetGalgameWords(Lines.Last(), NameOf(Slot));
+				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, false);
+			}
+		}
 		// Free talk: his words, then her (newest) line as it arrives.
 		if (S.FreeTalkCaptionPlayer != G.LastPlayer)
 		{
@@ -283,6 +298,8 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			}
 		}
 	}
+
+	G.bWasReplaying = bReplaying;
 
 	// Facts: the people of the conversation (root and bones), the view, the speaker's voice, probe answers.
 	TSharedRef<FJsonObject> F = MakeShared<FJsonObject>();
@@ -307,6 +324,8 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	TSharedRef<FJsonObject> Actors = MakeShared<FJsonObject>();
 	TArray<int32> People;
 	if (G.bActive) { People.Add(0); People.Add(G.Partner); }
+	// Another girl speaking in a group talk: her too, so the first-person view turns to her.
+	if (G.bActive && G.Speaker != INDEX_NONE && !People.Contains(G.Speaker)) People.Add(G.Speaker);
 	for (const int32 Slot : People)
 	{
 		FOKRuntimeCharacterStatus Status;
@@ -375,6 +394,11 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			{
 				const FVector Target = (A.Transform.GetLocation() + B.Transform.GetLocation()) * .5 + FVector(0, 0, 120);
 				TArray<UPrimitiveComponent*> Block;
+				// Seen through his eyes (the first-person shot): his own head and body stay out of his view.
+				FTransform PlayerHead;
+				if ((OKGetCrowdRuntimeBoneTransform(this, 0, TEXT("cm_j_head"), PlayerHead) || OKGetCrowdRuntimeBoneTransform(this, 0, TEXT("cf_j_head"), PlayerHead))
+					&& FVector::Dist(PlayerHead.GetLocation(), Pos) < 45.f * FMath::Max(A.Transform.GetScale3D().Z, .1))
+					OKGetCrowdRuntimeCharacterComponents(this, 0, Block);
 				for (int32 Slot = 1; Slot < S.Manifest.Characters.Num(); ++Slot)
 				{
 					FOKRuntimeCharacterStatus O;

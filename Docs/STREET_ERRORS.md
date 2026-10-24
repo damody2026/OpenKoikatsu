@@ -563,3 +563,9 @@
 
 - 女主唱歌的動作第一版（SongDance02）沒等攻略 session 回覆、也沒確認 host 是否閒置，就用 FreeTalk01Host 編執行檔。當時別的 session 正在用同一個 host 打包 stage，那次編譯的 exe 可能混進對方的 stage。之後每次編 host 前，都先檢查有沒有 stage_interaction_runtime／rebuild_street_social_runtime／prepare_interaction_runtime_host 在跑，有就等它結束。
 - 唱歌換動作時用 OKResumeCrowdRuntimeBehavior 放掉目前的片段，它會一併取消說話聲，歌唱到 6 秒就斷了。換動作改用新的 OKReleaseCrowdRuntimeAction（只放動作）。另外動作狀態的 ClipId 在有片段準備中時回報的是準備中那一個，不能拿它判斷她正在顯示什麼。
+### 2026-10-24 TTS 串流語音斷斷續續：一收到聲音就開始播
+- 現象：自由對話的 TTS 語音斷斷續續。
+- 原因：`FRuntimeSpeechStreamGenerator` 一收到第一批 PCM 就開始播，資料不夠時塞靜音。ok-tts 的串流實測：0.54 s 先送 0.17 s 的聲音，下一批 1.22 s 才到，前 2–3 秒的產生速度只略快於即時，所以幾乎每句開頭都斷一次，之後每個晚到的分段又斷一次。
+- 修正：先緩衝 `ok.Speech.StreamLead`（預設 0.5 s）才開始；播到一半斷流就重新緩衝，且每斷一次下次多等 0.5 s（最多 3 s）。每次斷流會記 `Speech stream ran dry after ... s`。
+- 驗證：E 用 C 的 ok-tts（`OK_TTS_ENDPOINT=http://127.0.0.1:47860`，`voice=false` 的 checkout 現在可用環境變數指定別的伺服器），三月七連續兩輪 11 句沒有斷流；同一場景把 StreamLead 設 0（等同舊行為）第 5 句就斷流。代價是每句開口大約晚 0.5 s。
+- 預防：串流播放要有抖動緩衝。驗收聲音時不能只看「有播出來」，要看播放中有沒有因為等資料而停下來。

@@ -130,9 +130,15 @@ impl Live {
         out
     }
 
-    /// The shot for a line: her close-up and a two shot in turn; over his shoulder onto her when he speaks.
+    /// The shot for a line: through his eyes onto her (`pov`); or her close-up and a two shot in turn, over his
+    /// shoulder onto her when he speaks.
     fn shot_for(&self, who: &str) -> CameraSpec {
         let partner = self.st.people.first().cloned().unwrap_or_default();
+        if self.tuning.live.pov && !self.st.player.is_empty() && !partner.is_empty() {
+            // A girl outside the conversation who joins in (a group talk) is looked at too while the game reports her.
+            let on = if who == self.st.player || !self.facts.actors.contains_key(who) { partner } else { who.to_string() };
+            return CameraSpec { shot: Some("pov".into()), on: Some(on), ..Default::default() };
+        }
         if who == self.st.player && !partner.is_empty() {
             CameraSpec { shot: Some("over".into()), on: Some(partner), ..Default::default() }
         } else if self.st.lines % 2 == 1 && self.st.people.len() + usize::from(!self.st.player.is_empty()) >= 2 {
@@ -142,8 +148,35 @@ impl Live {
         }
     }
 
+    /// His eyes (from his head bone, a little ahead toward her and up) looking at her, between her head and chest.
+    fn pov(&self, on: &str) -> Option<math::Pose> {
+        let me = self.facts.actors.get(&self.st.player)?;
+        let her = self.facts.actors.get(on)?;
+        let k = me.root.scale.abs().max(0.1);
+        let head = me.head();
+        let face = her.head();
+        let chest = her.bone("spine03").map(|b| b.pos).unwrap_or_else(|| math::add(her.root.pos, [0.0, 0.0, 120.0 * her.root.scale.abs().max(0.1)]));
+        let aim = math::lerp3(face, chest, self.tuning.live.pov_aim.clamp(0.0, 1.0));
+        let flat = math::normalize([face[0] - head[0], face[1] - head[1], 0.0]);
+        let eye = math::add(math::add(head, math::scale(flat, self.tuning.live.pov_forward * k)), [0.0, 0.0, self.tuning.live.pov_up * k]);
+        if !math::finite3(eye) || !math::finite3(aim) || math::len(math::sub(aim, eye)) < 1.0 {
+            return None;
+        }
+        Some(math::Pose { pos: eye, rot: math::Quat::look(math::sub(aim, eye), [0.0, 0.0, 1.0]), fov: self.tuning.live.pov_fov })
+    }
+
     fn frame_shot(&mut self, cut: bool) {
         let Some(spec) = self.st.shot.clone() else { return };
+        // First person needs no clear line of sight: the view is his.
+        if spec.shot.as_deref() == Some("pov") {
+            let partner = self.st.people.first().cloned().unwrap_or_default();
+            if let Some(pose) = spec.on.as_deref().and_then(|on| self.pov(on)).or_else(|| self.pov(&partner)) {
+                self.st.rig.go(&self.tuning.camera, pose, cut || !self.st.camera_set, 1.0);
+                self.st.camera_set = true;
+                self.st.probe = None;
+            }
+            return;
+        }
         let speaker = self.st.line.as_ref().map(|l| l.who.clone()).unwrap_or_default();
         let candidates = self.candidates(&spec, &speaker);
         let Some(first) = candidates.first().copied() else { return };
@@ -389,6 +422,7 @@ mod tests {
     #[test]
     fn lines_shots_and_voice() {
         let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.tuning.live.pov = false;
         l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
         l.input(LiveInput::Line { who: "her1".into(), name: "凜".into(), color: "#ff8".into(), text: "你好，今天天氣很好呢。".into(), voiced: true });
         let f = l.tick(facts(0.016, -1.0, 0));
@@ -423,5 +457,42 @@ mod tests {
         let cam = f.camera.unwrap();
         assert!(cam.moving, "a move from the game's view, not a cut");
         assert!(cam.pos[0] < -200.0, "{:?}", cam.pos);
+    }
+
+    #[test]
+    fn first_person_through_his_eyes() {
+        let mut l = Live::open(LiveConfig::default()).unwrap();
+        assert!(l.tuning.live.pov, "first person is the default");
+        l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+        // Her line and his: both seen from his eyes onto her.
+        for who in ["her1", "he"] {
+            l.input(LiveInput::Line { who: who.into(), name: String::new(), color: String::new(), text: "嗯。".into(), voiced: false });
+            for _ in 0..300 {
+                l.tick(facts(0.016, -1.0, 0));
+            }
+            assert_eq!(l.st.shot.as_ref().unwrap().shot.as_deref(), Some("pov"));
+            assert_eq!(l.st.shot.as_ref().unwrap().on.as_deref(), Some("her1"));
+            let p = l.st.rig.current.pos;
+            // His head is at (0, 0, 150): the eyes a little behind its centre (away from her) and up.
+            assert!((p[0] + 12.0).abs() < 1.0 && p[1].abs() < 1.0 && (p[2] - 156.0).abs() < 1.0, "{:?}", p);
+            let f = l.st.rig.current.rot.forward();
+            assert!(f[0] > 0.9, "looks at her: {:?}", f);
+        }
+    }
+
+    #[test]
+    fn first_person_turns_to_the_girl_who_joins_in() {
+        let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+        // A second girl to his left (+y) speaks in a group talk: the view turns to her.
+        l.input(LiveInput::Line { who: "her2".into(), name: String::new(), color: String::new(), text: "我也來了！".into(), voiced: false });
+        for _ in 0..300 {
+            let mut f = facts(0.016, -1.0, 0);
+            f.actors.insert("her2".into(), actor([0.0, 120.0, 0.0], 180.0));
+            l.tick(f);
+        }
+        assert_eq!(l.st.shot.as_ref().unwrap().on.as_deref(), Some("her2"));
+        let f = l.st.rig.current.rot.forward();
+        assert!(f[1] > 0.9, "looks at her2: {:?}", f);
     }
 }

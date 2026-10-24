@@ -916,7 +916,7 @@ void AOKStreetSocialScene::SetSourcePlayerLine(const FString& Text){
 bool AOKStreetSocialScene::QueueNode(int32 Chosen,const FString& Category,const FString& BranchId){
  auto& S=*State;if(!S.Catalogue.Nodes.IsValidIndex(Chosen)){FailTalk(TEXT("Dialogue node is unavailable"));return false;}
  // A scripted line takes the bottom box back from free talk.
- S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkCaptionPlayer.Reset();S.FreeTalkCaptionHer.Reset();
+ S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkCaptionPlayer.Reset();S.FreeTalkCaptionHer.Reset();
  TArray<FString> Voices;
  for(const auto& File:S.Catalogue.Nodes[Chosen].VoiceFiles){FString Id,Error;if(!OKAdmitCrowdRuntimeVoice(this,File,Id,Error)){FailTalk(TEXT("Dialogue voice admission failed: ")+Error);return false;}Voices.Add(Id);}
  if(Voices.IsEmpty()){FailTalk(TEXT("Dialogue has no admitted voice sequence"));return false;}
@@ -1084,7 +1084,7 @@ void AOKStreetSocialScene::SendFreeTalk(){
  S.SentRemoteGirl=RemoteWith(Character)?Character:INDEX_NONE;S.SentRemoteMode=RemoteKind(Character);
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  // The bottom dialogue box shows the exchange: his line now, hers when the reply arrives.
- S.FreeTalkReplay.Reset();
+ S.FreeTalkReplay.Reset();S.FreeTalkReplayHold=0;
  // A goodbye read from what was said (the judge, or her end_talk) is off once he goes on talking: her answer to this
  // line decides again. Otherwise she walks off minutes later in the middle of whatever they agreed since.
  if(!OKStreetFreeTalkIsNudge(Text)&&S.FarewellPending&&S.FarewellFromTalk){S.FarewellPending=false;S.FarewellFromTalk=false;UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d called off, he goes on talking"),Character);}

@@ -22,7 +22,7 @@ void AOKStreetSocialScene::FreeTalkClose(){
  auto& S=*State;
  if(S.FreeTalkLive)FreeTalkLiveSet(false);
  CancelFreeTalkVoice();
- S.FreeTalkOpen=false;S.FreeTalkNotice.Reset();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();
+ S.FreeTalkOpen=false;S.FreeTalkNotice.Reset();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;
  S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkCaptionPlayer.Reset();S.FreeTalkCaptionHer.Reset();
  S.FreeTalkHistoryOpen=false;S.FreeTalkGirl=INDEX_NONE;
  if(S.FreeTalkMicOpen)FreeTalkMicToggle();
@@ -98,7 +98,7 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
  // her reply is dropped, and his words go to the model as usual.
  if(Speaking&&S.FreeTalkLiveSpeaking&&S.FreeTalkLiveReady&&!S.ControlMicIgnored){
   FString Ignore;OKStopCrowdRuntimeSpeech(this,Partner,Ignore);
-  S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();
+  S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;
   for(const auto& Stream:S.FreeTalkSpeechStreams)if(Stream)Stream->Finish();
   if(S.Node!=INDEX_NONE)S.LineInterrupted=true; // a scripted line: it ends here and counts as said (FinishLine)
   UE_LOG(LogTemp,Display,TEXT("Free talk live: the player interrupted her"));S.LiveTestInterrupted=true;

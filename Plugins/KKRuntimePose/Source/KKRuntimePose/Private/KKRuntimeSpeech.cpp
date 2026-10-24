@@ -31,16 +31,25 @@ public:
  bool IsFinished() const override{return Position>=Pcm->Samples.Num()/Pcm->Channels;}
  int32 GetNumChannels() const override{return Pcm->Channels;}
 };
-// Same resampling and meter as above, over PCM that is still arriving: plays silence while starved.
+// Same resampling and meter as above, over PCM that is still arriving. It starts once a lead has arrived and, when the
+// stream runs dry mid-line, waits for a longer lead before going on: started at the first samples, a voice generated about
+// as fast as it plays was cut into pieces by every late chunk (heard as stuttering).
+static TAutoConsoleVariable<float> CVarOKSpeechStreamLead(TEXT("ok.Speech.StreamLead"),.5f,TEXT("Seconds of streamed speech buffered before it starts playing; each time the stream runs dry while playing, the next wait is half a second longer (up to 3 s)."));
 class FRuntimeSpeechStreamGenerator:public ISoundGenerator {
  TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe> Stream;
  TSharedPtr<FKKRuntimeSpeechMeter,ESPMode::ThreadSafe> Meter;
  double Position=0,Step=1;float Window[1024]{};uint32 Ring=0;uint64 Frames=0;TArray<int16> Chunk;bool Done=false;
+ bool Buffering=true;double Lead=-1;
 public:
  FRuntimeSpeechStreamGenerator(TSharedPtr<FKKRuntimeSpeechStream,ESPMode::ThreadSafe> S,TSharedPtr<FKKRuntimeSpeechMeter,ESPMode::ThreadSafe> M,int32 Rate):Stream(MoveTemp(S)),Meter(MoveTemp(M)){Step=double(Stream->SampleRate)/Rate;}
  int32 OnGenerateAudio(float* Out,int32 Count) override {
   FMemory::Memzero(Out,Count*sizeof(float));const int32 Channels=Stream->Channels;
   const bool Complete=Stream->IsComplete();const int32 Total=Stream->Num()/Channels;
+  if(Lead<0)Lead=FMath::Clamp(double(CVarOKSpeechStreamLead.GetValueOnAnyThread()),0.,3.);
+  if(Buffering){
+   if(!Complete&&Total-Position<Lead*Stream->SampleRate)return Count;
+   Buffering=false;
+  }
   // Frames needed for this callback (plus one for interpolation), read in one locked copy.
   const int32 First=int32(Position),Need=int32(Position+Step*(Count/Channels))-First+2;
   Chunk.SetNumUninitialized(Need*Channels);const int32 Got=Stream->Read(First*Channels,Need*Channels,Chunk.GetData())/Channels;
@@ -51,6 +60,8 @@ public:
    for(int32 C=0;C<Channels;++C){const float V=FMath::Lerp(float(Chunk[I*Channels+C]),float(Chunk[J*Channels+C]),Fraction)/32768.f;Out[Taken+C]=V;Energy+=V*V;}
    Window[Ring]=Energy/Channels;Ring=(Ring+1)%1024;Taken+=Channels;Position+=Step;++Frames;
   }
+  // Ran dry while playing: wait for a longer lead before the rest.
+  if(!Complete&&Taken+Channels<=Count){Buffering=true;Lead=FMath::Min(Lead+.5,3.);UE_LOG(LogTemp,Display,TEXT("Speech stream ran dry after %.2f s; waiting for %.1f s before going on"),Frames/double(FMath::Max(1.,1./Step*Stream->SampleRate)),Lead);}
   Done=Complete&&Position>=Total;
   float Sum=0;for(float E:Window)Sum+=E;Meter->Rms.Store(Done?0:FMath::Sqrt(Sum/1024.f));Meter->Frames.Store(Frames);
   // A starved stream keeps the voice alive with silence instead of ending it.
