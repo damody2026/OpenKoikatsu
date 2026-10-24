@@ -580,3 +580,9 @@
 - 現象：加了頭部注視（`IndependentPose.usf`），只重編 exe 的 stage 用的仍是 base 裡 cook 好的舊全域 shader。只換 `GlobalShaderCache-*.bin` 開不了遊戲：Could not load section 466 of the global shadermap。另外用 `cmd //c` 叫 Build.bat 的 Editor 建置根本沒執行，cook 時報 `LookCount could not be bound`（舊 Editor）。
 - 修正：`rebuild_street_social_patch.lua` 先用目前的 Editor cook 專案的 Entry 地圖，把 `GlobalShaderCache-*.bin` 和 `ShaderArchive-Global-*.ushaderbytecode` 一起打進 `RuntimeGlobalShaderPatch-*_P.pak`。Editor 改從 PowerShell 建置。
 - 預防：改 `.usf` 或 shader 參數結構後，先重建 Editor，再重建 patch；全域 shader 的 map 與 bytecode 要一起換。
+
+### 2026-10-24 新 stage 讀檔崩潰：共用 patch 缺新的全域 shader（C 組街區攻略）
+
+- 合併 E 組 7c3b67bb（人群姿態全域 shader `FOKIndependentPoseCS` 改了參數結構）之後，我用現在原始碼編的 Gest08 配舊的 `StreetDisplay26HG.patch`，讀檔時 assert `parameter structure has changed without recompilation of the shader` 崩潰。修正：先重編 C 的 OpenKoikatsuEditor（D: 引擎），再跑 `Tools/rebuild_street_social_patch.lua --output <新資料夾>`，把產生的 `RuntimeGlobalShaderPatch-*_P.pak` 放進共用 patch 資料夾。之後只要合併改到 `Plugins/KKCrowdGpuPacking/Shaders` 或其參數結構的 commit，就要做這一步再出 stage。
+- 同一次我還把 host 建置啟動了兩份：一份用 `&` 背景執行，另一份用工具的背景執行，兩份同時寫同一個 log，其中一份 stage 失敗（EXIT=1）。建置只用工具的背景執行，不要再用 `&`。
+- `/fps` 先寫成 `GAverageMS`，但 UE5.8 沒有公開這個變數，`GAverageFPS` 也不在公開標頭裡。改成在檔案範圍 `extern ENGINE_API float GAverageFPS;`，毫秒用 `1000/fps` 算。
