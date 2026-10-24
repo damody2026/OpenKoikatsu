@@ -218,6 +218,23 @@ fn judge(c: &Catalog, r: &Value) -> Value {
 
 /// For her words: what she owns (latest first, a few), what he borrowed from her and since when, what she borrowed
 /// from him. Request: ext, girl, day. Answer: text ("" when there is nothing).
+/// Whether she has an umbrella with her today: one of her things, or (fixed for the day, half the days) a folding one in
+/// her bag. Her words and the walk both go by this: she said "I have one" and they walked in the rain without any.
+pub fn she_has_umbrella(r: &Value, girl: &str) -> bool {
+    let st = state(r);
+    let owned = st["owned"].get(girl).and_then(Value::as_array).into_iter().flatten().any(|e| {
+        let n = format!("{}{}", s(e, "item"), s(e, "name"));
+        n.contains("umbrella") || n.contains('伞') || n.contains('傘')
+    });
+    owned || {
+        let mut h: u64 = 1469598103934665603;
+        for b in girl.bytes().chain(day(r).to_le_bytes()) {
+            h = (h ^ b as u64).wrapping_mul(1099511628211);
+        }
+        h % 100 < 50
+    }
+}
+
 fn facts(c: &Catalog, r: &Value) -> Value {
     let st = state(r);
     let girl = s(r, "girl");
@@ -232,6 +249,10 @@ fn facts(c: &Catalog, r: &Value) -> Value {
     }
     if !owned.is_empty() {
         parts.push(crate::tr::m("items.fact_owned", &[("items", crate::tr::a(&owned.join(crate::tr::t("items.separator"))))]));
+    }
+    // Raining (the request's raining): whether she brought an umbrella, so what she says matches the walk.
+    if r.get("raining").and_then(Value::as_bool) == Some(true) {
+        parts.push(crate::tr::t(if she_has_umbrella(r, girl) { "items.fact_her_umbrella" } else { "items.fact_no_umbrella" }).to_string());
     }
     for b in st["his_borrowed"].as_array().into_iter().flatten().filter(|b| s(b, "owner") == girl) {
         let due = b.get("due").and_then(Value::as_i64).unwrap_or(today);

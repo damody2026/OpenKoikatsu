@@ -249,6 +249,8 @@ void AOKStreetSocialScene::TickUmbrella(){
   auto Request=OKRulesRequest(TEXT("walk_style"));Request->SetBoolField(TEXT("raining"),Raining);Request->SetNumberField(TEXT("minute"),double(Now%1440));
   TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));Request->SetArrayField(TEXT("his_items"),His);
   Request->SetStringField(TEXT("stage"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Stage);
+  // Her umbrella: her things (ext) or the folding one she brought today (items.rs she_has_umbrella).
+  Request->SetStringField(TEXT("girl"),OKStreetStableId(S.Manifest.Characters[Girl]));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);OKRulesPutExt(S,Request);
   const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
   S.WalkStyle=Out->GetStringField(TEXT("style"));const FString Fact=Out->GetStringField(TEXT("fact"));if(!Fact.IsEmpty())S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}})); // a note of the game, not his words
   UE_LOG(LogTemp,Display,TEXT("Street rain walk: actor=%d %s"),Girl,*S.WalkStyle);

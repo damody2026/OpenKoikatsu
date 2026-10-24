@@ -607,3 +607,8 @@
 - 我用 temp index 提交，只移動 master，沒有把別人從 E 推上來的檔案同步回工作目錄。結果 `Tools/prepare_street_social_selection.lua` 少了 E 組的 `okId` 身分處理，`Tools/ok-extract/src/oklib.rs` 整整落後一個 commit；啟動器每次啟動都會從工作目錄重編，等於默默拿掉了他們的修改。修正：每次提交後，對照 `git diff --stat <舊 HEAD> HEAD`，把上游帶進來、而且沒有任何人未提交修改的檔案 `git checkout HEAD -- <檔案>`。
 - 停掉一個背景建置（Gest22）後馬上開始下一個（Gest23）：`TaskStop` 只會停掉外層的 bash，底下的 UBT／stage 程序還在跑，兩個建置同時用同一個 host、寫同一個 log，結果 Gest23 裡沒有剛改的修正。要重編時，先確認 UnrealBuildTool、cl.exe、stage_interaction 都已經結束；編完再用 `strings -el <exe> | grep <新的 log 字串>` 確認修改真的編進去了。
 - 接著的 Gest24 雖然沒有別的建置在跑，UBT 卻回報「Target is up to date」，執行檔還是舊的：前面同時跑的那次建置已經從還沒改的原始碼編出 .obj，之後複製進 host 的新原始碼保留了原本的修改時間，比 .obj 舊。兩次建置撞在一起之後，要先 `touch` host 裡改過的檔案再編。
+
+### 2026-10-25 和 TTS session 同時用 host（C 組街區攻略）
+
+- 我傳了「要編 Gest29」的訊息後就直接開始建置，沒有等對方回覆；TTS session 的 MaleVoice05 這時正好在 stage，我的建置把原始碼複製進 host 後又啟動 UBT，有可能在他們 stage 時改寫 exe。我停掉自己那串程序，並請對方確認他們的 exe。傳訊息不等於協調好了：開始前要看程序清單裡有沒有人正在用 host 建置或 stage（UBT／Build.bat 的命令列含 `portable\OpenKoikatsu\Saved\Interaction\FreeTalk01Host`，或 stage／host 準備的 lua）。
+- 接著為了測試新加的「host 忙碌就不編」檢查，我直接執行 `compile.sh TESTBUSY`；但檢查本身寫錯了（在 bash 裡呼叫 PowerShell 時跳脫錯誤，算不出數量就被當成 0），結果真的開始編譯，只好再停掉一次。測試一道防護時，不能用一個「防護失效就會造成傷害」的指令去測；應該先單獨執行檢查、看它輸出的數字。

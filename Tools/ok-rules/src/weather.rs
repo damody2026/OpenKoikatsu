@@ -22,15 +22,21 @@ fn rain_style(r: &Value) -> Value {
         return json!({"style": "none", "fact": ""});
     }
     let has = |k: &str| r.get(k).and_then(Value::as_array).is_some_and(|a| a.iter().any(|v| v.as_str().is_some_and(|s| s.contains("umbrella"))));
-    let (his, hers) = (has("his_items"), has("her_items"));
+    // Hers: one in her things, or the folding one she brought today (items.rs she_has_umbrella).
+    let girl = r.get("girl").and_then(Value::as_str).unwrap_or("");
+    let (his, hers) = (has("his_items"), has("her_items") || (!girl.is_empty() && crate::items::she_has_umbrella(r, girl)));
     let close = r.get("stage").and_then(Value::as_str) == Some("lover");
     if his && (!hers || close) {
-        // One umbrella between them when they are that close (or hers is the only other one): under his.
+        // One umbrella between them when they are that close (or his is the only one): under his.
         let shared = close || !hers;
         return json!({"style": if shared { "umbrella_shared" } else { "umbrella_single" }, "fact": crate::tr::t(if shared { "weather.under_his_umbrella" } else { "weather.each_umbrella" })});
     }
-    if his || hers {
+    if his && hers {
         return json!({"style": "umbrella_single", "fact": crate::tr::t("weather.each_umbrella")});
+    }
+    if hers {
+        // Only hers: the two of them under it.
+        return json!({"style": "umbrella_shared", "fact": crate::tr::t("weather.under_her_umbrella")});
     }
     json!({"style": "none", "fact": crate::tr::t("weather.no_umbrella")})
 }
@@ -54,6 +60,12 @@ mod tests {
         let none = walk_style(&json!({"raining": true, "stage": "friend"}));
         assert_eq!(none["style"], "none");
         assert!(!none["fact"].as_str().unwrap().is_empty());
+        // Only she has one: the two of them under hers.
+        assert_eq!(walk_style(&json!({"raining": true, "her_items": ["cv_umbrella"], "stage": "friend"}))["style"], "umbrella_shared");
+        // Her folding umbrella is fixed for the day: asked twice, the same answer; on some days she has one, on some not.
+        let day = |d: i64| walk_style(&json!({"raining": true, "girl": "apng-x", "day": d, "stage": "friend"}))["style"].clone();
+        assert_eq!(day(3), day(3));
+        assert!((0..20).any(|d| day(d) == "umbrella_shared") && (0..20).any(|d| day(d) == "none"));
     }
 
     #[test]

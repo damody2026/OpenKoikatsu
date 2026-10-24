@@ -615,6 +615,8 @@ FString AOKStreetSocialScene::SceneLine(int32 Character) const{
 FString AOKStreetSocialScene::ThingsFacts(int32 Character) const{
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character)||Character<=0)return FString();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Request=OKRulesHeroineRequest(S,TEXT("items_facts"),Id);OKRulesPutExt(S,Request);Request->SetStringField(TEXT("girl"),Id);
+ // Raining now: whether she has an umbrella with her goes in (said and walked the same way).
+ Request->SetBoolField(TEXT("raining"),RainingAt(S.Store.CalendarDay,int32(OKStreetMindNow(S)%1440)));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);FString Text=Out.IsValid()?Out->GetStringField(TEXT("text")):FString();
  FString Loan;{auto Ask=OKRulesHeroineRequest(S,TEXT("errand_facts"),Id);OKRulesPutExt(S,Ask);Ask->SetStringField(TEXT("girl"),Id);if(const TSharedPtr<FJsonObject> L=OKRulesEval(S,Ask))Loan=L->GetStringField(TEXT("text"));}
  // Festivals today and coming soon (events.rs): hers to bring up or ask him to, or not.
