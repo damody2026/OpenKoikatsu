@@ -302,6 +302,12 @@ local function main()
   if not ports.voice then say("local-instance.json voice=false: no ok-tts / ok-asr from this checkout (built-in voices, no voice input)") end
   local servers = {}
   local asr_endpoint, tts_endpoint = "http://127.0.0.1:" .. ports.asr, "http://127.0.0.1:" .. ports.tts
+  -- Without servers of its own (voice=false), a checkout may speak through another one's ok-tts (testing the voices on
+  -- E with C's server): OK_TTS_ENDPOINT / OK_ASR_ENDPOINT from the environment win then.
+  if not voice then
+    tts_endpoint = fs.getenv("OK_TTS_ENDPOINT") or tts_endpoint
+    asr_endpoint = fs.getenv("OK_ASR_ENDPOINT") or asr_endpoint
+  end
   local asr_settings = path.join(root, "Saved/StreetSocial/asr-settings.json")
   if voice then
     if not sandbox then instance.stop_own_voice_servers(root) end

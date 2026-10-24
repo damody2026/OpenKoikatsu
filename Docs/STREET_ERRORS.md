@@ -560,3 +560,10 @@
 
 ### 2026-10-24 攻略循環：查品項時看了過時的生成器
 - 以為遊戲裡沒有月餅，因為我只查了 `Tools/build_street_social_catalog_json.lua`，就把月餅加進 catalog.json。其實 catalog.json 早就有 `cv_mooncake`、`snk_mooncake_box`。這個 Lua 表停在舊版，之後一直直接改 JSON。我還跑過一次生成器，差點用舊版蓋掉 catalog.json，當場還原；名稱表出現重複鍵，被 ok-rules 測試擋下。已撤回月餅的改動，並在生成器開頭標明它已過時。查品項一律看 catalog.json 與 names.toml。
+
+### 2026-10-24 TTS 串流語音斷斷續續：一收到聲音就開始播
+- 現象：自由對話的 TTS 語音斷斷續續。
+- 原因：`FRuntimeSpeechStreamGenerator` 一收到第一批 PCM 就開始播，資料不夠時塞靜音。ok-tts 的串流實測：0.54 s 先送 0.17 s 的聲音，下一批 1.22 s 才到，前 2–3 秒的產生速度只略快於即時，所以幾乎每句開頭都斷一次，之後每個晚到的分段又斷一次。
+- 修正：先緩衝 `ok.Speech.StreamLead`（預設 0.5 s）才開始；播到一半斷流就重新緩衝，且每斷一次下次多等 0.5 s（最多 3 s）。每次斷流會記 `Speech stream ran dry after ... s`。
+- 驗證：E 用 C 的 ok-tts（`OK_TTS_ENDPOINT=http://127.0.0.1:47860`，`voice=false` 的 checkout 現在可用環境變數指定別的伺服器），三月七連續兩輪 11 句沒有斷流；同一場景把 StreamLead 設 0（等同舊行為）第 5 句就斷流。代價是每句開口大約晚 0.5 s。
+- 預防：串流播放要有抖動緩衝。驗收聲音時不能只看「有播出來」，要看播放中有沒有因為等資料而停下來。
