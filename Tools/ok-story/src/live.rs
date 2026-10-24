@@ -192,8 +192,18 @@ impl Live {
             (0..reach.len()).max_by(|a, b| (reach[*a].0 / reach[*a].1.max(1.0)).total_cmp(&(reach[*b].0 / reach[*b].1.max(1.0)))).unwrap_or(0)
         });
         job.chosen = Some(pick);
-        let (pose, cut) = (job.candidates[pick].pose, job.cut);
-        if pick != 0 {
+        let (mut pose, cut) = (job.candidates[pick].pose, job.cut);
+        // None of them has a clear view (a narrow restaurant floor): the best one pulled in along its line to where the
+        // view is clear, as a spring arm does. Left where it was, the shot looked at the wall in front of them.
+        let (clear, need) = reach[pick];
+        let pulled = clear < need - margin;
+        if pulled {
+            let c = &job.candidates[pick];
+            let span = math::len(math::sub(c.pose.pos, c.from));
+            let dist = ((span - need) + clear - margin).max(self.tuning.camera.probe_margin * 3.0);
+            pose.pos = math::add(c.from, math::scale(math::normalize(math::sub(c.pose.pos, c.from)), dist));
+        }
+        if pick != 0 || pulled {
             if self.st.rig.moving() {
                 self.st.rig.retarget(pose);
             } else {

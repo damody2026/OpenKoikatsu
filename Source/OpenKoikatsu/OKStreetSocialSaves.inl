@@ -64,11 +64,13 @@ FString AOKStreetSocialScene::SaveSlotName(const FString& Slot) const{
 bool AOKStreetSocialScene::SaveToSlot(const FString& Slot){
  auto& S=*State;if(S.SelfTest||S.Manifest.SavePath.IsEmpty())return false;
  if(S.FreeTalkLogDirty){S.FreeTalkLogDirty=false;FreeTalkSaveLog();} // the slot copies the file
+ // The clock and where he stands first: SaveCalendar writes in the background, and copied before that write was done
+ // the slot held the game as of the last write (an hour back, the date not in it) or failed on the file being written.
+ SaveCalendar();
  OKStreetFlushSaves();
  if(S.Mind){FString MindError;if(!S.Mind->Save(MindError))UE_LOG(LogTemp,Warning,TEXT("Street saves: mind save failed: %s"),*MindError);}
- SaveCalendar();
  const FString Dir=SaveSlotDir(Slot),Temp=Dir+TEXT(".writing");auto& F=IFileManager::Get();F.DeleteDirectory(*Temp,false,true);
- if(!OKStreetCopyGame(FPaths::GetPath(S.Manifest.SavePath),Temp)){F.DeleteDirectory(*Temp,false,true);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
+ if(!OKStreetCopyGame(FPaths::GetPath(S.Manifest.SavePath),Temp)){UE_LOG(LogTemp,Warning,TEXT("Street saves: copying the game into %s failed"),*Temp);F.DeleteDirectory(*Temp,false,true);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
  auto M=MakeShared<FJsonObject>();
  M->SetStringField(TEXT("saved_at"),FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M")));
  M->SetNumberField(TEXT("day"),S.Store.CalendarDay);M->SetNumberField(TEXT("minute"),S.Store.CalendarMinute);
@@ -78,7 +80,7 @@ bool AOKStreetSocialScene::SaveToSlot(const FString& Slot){
  M->SetArrayField(TEXT("lovers"),Lovers);
  FString Out;FJsonSerializer::Serialize(M,TJsonWriterFactory<>::Create(&Out));FFileHelper::SaveStringToFile(Out,*(Temp/TEXT("slot.json")),FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
  F.DeleteDirectory(*Dir,false,true);
- if(!F.Move(*Dir,*Temp,true,true)){S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
+ if(!F.Move(*Dir,*Temp,true,true)){UE_LOG(LogTemp,Warning,TEXT("Street saves: moving %s into place failed"),*Temp);S.SaveNotice=OKMsg(TEXT("ui.saves.save_failed"),{{TEXT("slot"),SaveSlotName(Slot)}});RefreshUI();return false;}
  S.NextAutoSave=FPlatformTime::Seconds()+OKStreetAutoSaveSeconds;
  if(Slot!=TEXT("auto"))S.SaveNotice=OKMsg(TEXT("ui.saves.saved"),{{TEXT("slot"),SaveSlotName(Slot)}});
  UE_LOG(LogTemp,Display,TEXT("Street saves: saved slot %s"),*Slot);RefreshUI();return true;
