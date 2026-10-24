@@ -123,6 +123,20 @@ kind = "photo"
 code = 0
 anchor = "pets"
 
+# The play corner (the menu's 互動區 30 分): both crouch by the animals. Asking to "play with the cats" made it a photo.
+[[activity]]
+id = "pet_play"
+name = "在寵物店互動區蹲下來陪小動物玩"
+place = "petshop"
+kind = "solo"
+code = 0
+anchor = "pets"
+female_clip = "lib_0_8_1.okanim"
+male_clip = "lib_0_14_3.okanim"
+needs = ["pet_play"]
+minutes = 30
+feed = { fun = 15 }
+
 [[activity]]
 id = "lecture_seat"
 name = "在大學講堂裡坐著一起讀書"
@@ -437,6 +451,7 @@ place = "shrine"
 kind = "solo"
 code = 0
 anchor = "pray"
+turn = 180
 female_clip = "venue_pray_male.okanim"
 male_clip = "venue_pray_male.okanim"
 
@@ -770,7 +785,7 @@ place = "park"
 kind = "solo"
 code = 0
 anchor = "pond|fountain"
-turn = -90
+turn = 90
 female_clip = "venue_observe.okanim"
 needs = ["park_fishfood"]
 minutes = 15
