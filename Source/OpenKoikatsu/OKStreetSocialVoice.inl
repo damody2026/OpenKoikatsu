@@ -5,10 +5,11 @@
 // runtime speech path, so dialogue rules and saves do not change. Any TTS failure or timeout
 // keeps the built-in clips. Self-tests never read the user setting.
 // In TTS mode the player (male) also speaks the line he says (PlayerLine) before her reply, in one of
-// ten tones (ok-tts voices.json "m0".."m9"), chosen from the dropdown; "off" keeps him silent.
+// 22 tones (ok-tts voices.json "m0".."m21", each a VoiceDesign voice fixed as an x-vector profile), chosen from the
+// dropdown; "off" keeps him silent.
 
-static const TCHAR* const OKStreetMaleToneIds[]={TEXT("off"),TEXT("m0"),TEXT("m1"),TEXT("m2"),TEXT("m3"),TEXT("m4"),TEXT("m5"),TEXT("m6"),TEXT("m7"),TEXT("m8"),TEXT("m9")};
-static const TCHAR* const OKStreetMaleToneNames[]={TEXT("不說話"),TEXT("溫柔體貼"),TEXT("爽朗陽光"),TEXT("冷靜沉穩"),TEXT("害羞靦腆"),TEXT("自信霸氣"),TEXT("慵懶隨性"),TEXT("斯文書生"),TEXT("調皮搞笑"),TEXT("清爽少年"),TEXT("成熟大叔")};
+static const TCHAR* const OKStreetMaleToneIds[]={TEXT("off"),TEXT("m0"),TEXT("m1"),TEXT("m2"),TEXT("m3"),TEXT("m4"),TEXT("m5"),TEXT("m6"),TEXT("m7"),TEXT("m8"),TEXT("m9"),TEXT("m10"),TEXT("m11"),TEXT("m12"),TEXT("m13"),TEXT("m14"),TEXT("m15"),TEXT("m16"),TEXT("m17"),TEXT("m18"),TEXT("m19"),TEXT("m20"),TEXT("m21")};
+static const TCHAR* const OKStreetMaleToneNames[]={TEXT("不說話"),TEXT("溫柔體貼"),TEXT("爽朗陽光"),TEXT("冷靜沉穩"),TEXT("害羞靦腆"),TEXT("自信霸氣"),TEXT("慵懶隨性"),TEXT("斯文書生"),TEXT("調皮搞笑"),TEXT("清爽少年"),TEXT("成熟大叔"),TEXT("溫柔學長"),TEXT("熱血少年"),TEXT("優雅貴公子"),TEXT("痞帥浪子"),TEXT("木訥老實"),TEXT("溫潤醫生"),TEXT("開朗暖男"),TEXT("冷酷寡言"),TEXT("偶像少年"),TEXT("可靠大哥"),TEXT("文藝青年"),TEXT("腹黑笑面")};
 static int32 OKStreetMaleToneIndex(const FString& Id){for(int32 I=0;I<UE_ARRAY_COUNT(OKStreetMaleToneIds);++I)if(Id==OKStreetMaleToneIds[I])return I;return INDEX_NONE;}
 
 // Player (male) name: the card name unless the player typed one in the right panel; kept in
