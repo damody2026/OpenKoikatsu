@@ -467,3 +467,11 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
 - 遊戲送 TTS 請求時會帶她的卡片路徑，伺服器優先用卡裡的聲線，不需要重啟或改設定。合成出來仍是普通話，只有音色換成她本人。
 - 驗證：每位用同一句普通話合成，以 speaker encoder 和十份參考音逐一比對（去平均後的 cosine）。十位的合成音都和自己的參考音最像：雷電將軍 0.67、刻晴 0.55、三月七 0.54、安可 0.50、愛麗絲 0.50、胡桃 0.45、早瀨優香 0.44、貞德 0.41、貞德 Alter 0.37、惠惠 0.13（最弱：參考音原本就是 24 kHz 的手機遊戲錄音）。試聽檔：`Saved/StreetSocial/HeroineVoices/<角色>-sample.ogg`。
 - 2026-10-25 補：GPU 滿載時他的台詞可能合成很久。他的請求用自己的 channel／generation 送出；她的回覆到了以後最多再等 3 秒（`OKStreetHisVoiceGraceSeconds`），他的聲音還沒做好就不說出口（文字仍顯示），並用 `/cancel` 讓伺服器也丟掉那句，她的台詞接著合成。逾時、換下一句、對話結束時也同樣取消。驗收（MaleVoice05，GPU 94%）：log 出現 "his line is not spoken (her reply is ready)"，伺服器那句 status=cancelled，她的語音接著播出。
+
+## 17. GPU 排程優先權實驗（2026-10-25）
+
+- 起因：開發機同時跑三個遊戲加 Editor（GPU 94～96%），47860 的 TTS 一句 7 字要 17～19 秒，攻略 session 的每句都 15 秒逾時。
+- `ok-tts` 新增 `OK_TTS_GPU_PRIORITY`（Windows `D3DKMTSetProcessSchedulingPriorityClass`；0 idle～5 realtime；預設不設）。
+- 量測（同一句 13 字、3.04 秒音訊，交錯重跑）：class 4（high）沒有改善（13.9～17.5 秒，對照組 10.7～16.5 秒）。class 5（realtime）0.37～0.57 秒；負載較輕時對照組 1.6～2.0 秒。
+- 代價：沙盒遊戲在旁邊時連續合成 6 句。一般優先權每句 15～322 秒，遊戲約 20 FPS 不受影響；realtime 每句約 0.9 秒，但合成期間遊戲掉到 9～14 FPS，單幀 GPU 時間最高 950 ms（明顯卡頓）。
+- 結論：預設不開。玩家只開一個遊戲時，合成本來約 1 秒，開了反而讓她說話時畫面卡頓。只在開發機多個遊戲同時跑、需要語音即時時手動設 `OK_TTS_GPU_PRIORITY=5`；設了會影響同機其他遊戲的 FPS 量測。

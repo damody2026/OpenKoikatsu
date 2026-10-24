@@ -86,6 +86,31 @@ fn exe_dir() -> PathBuf {
 }
 
 /// Make the CUDA runtime DLLs findable before cudarc loads them.
+/// The GPU scheduling class of this process (Windows WDDM: 0 idle .. 3 above normal, 4 high, 5 realtime). A voice
+/// is many small kernels in a row; next to a game that keeps the GPU busy each one waits for a time slice, and a line
+/// that takes a second alone can take twenty. Off by default: class 5 makes lines 3-30x faster next to other busy
+/// games, but while it generates the game beside it stalls (GPU frames up to ~1 s); one game alone does not need it.
+/// OK_TTS_GPU_PRIORITY=5 (or another class) turns it on, e.g. on a development machine running several games.
+fn set_gpu_priority(class: i32) {
+    #[cfg(windows)]
+    {
+        #[link(name = "gdi32")]
+        extern "system" {
+            fn D3DKMTSetProcessSchedulingPriorityClass(process: *mut std::ffi::c_void, class: i32) -> i32;
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetCurrentProcess() -> *mut std::ffi::c_void;
+        }
+        let status = unsafe { D3DKMTSetProcessSchedulingPriorityClass(GetCurrentProcess(), class) };
+        if status == 0 {
+            eprintln!("ok-tts: GPU scheduling priority class {class}");
+        } else {
+            eprintln!("ok-tts: GPU scheduling priority class {class} not set (NTSTATUS {status:#x})");
+        }
+    }
+}
+
 fn add_dll_dirs(extra: Option<&String>) {
     let mut dirs: Vec<PathBuf> = vec![exe_dir(), exe_dir().join("cuda")];
     if let Some(e) = extra {
@@ -130,6 +155,11 @@ fn main() {
         }
     }
     add_dll_dirs(args.opts.get("cuda-dir"));
+    match std::env::var("OK_TTS_GPU_PRIORITY").ok().as_deref() {
+        Some("off") => {}
+        Some(v) => set_gpu_priority(v.parse().unwrap_or(4)),
+        None => {}
+    }
     let result = match args.cmd.as_str() {
         "serve" => cmd_serve(&args),
         "say" => cmd_say(&args),
