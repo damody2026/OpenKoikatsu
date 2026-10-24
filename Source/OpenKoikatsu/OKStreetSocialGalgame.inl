@@ -183,7 +183,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 
 	// The conversation: who he talks with (free talk follows the walk companion, the date, the pair partner too).
 	const int32 Partner = FreeTalkPartner();
-	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen);
+	// Not while she does a one-person activity beside him (watching the fish, her explosion spell): that is watched with
+	// its own camera, and speaking to her ends it anyway. The dialog shot held the whole spell off screen (R3-119).
+	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen) && S.SoloGirl == INDEX_NONE;
 	if (bTalking && (!G.bActive || Partner != G.Partner))
 	{
 		TSharedRef<FJsonObject> C = MakeShared<FJsonObject>();
