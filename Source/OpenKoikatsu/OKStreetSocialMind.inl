@@ -452,7 +452,12 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.ActKind==TEXT("promise_treat")){} // handled above (the goodbye, the promise)
  // "Let's go to the restaurant" with act eat: the eating is there, not here (she ate at the shrine and the keeper came
  // over, R3-126).
- else if((Reply.ActKind==TEXT("eat")||Reply.ActKind==TEXT("share_food")||Reply.ActKind==TEXT("feed"))&&!Reply.Action.IsEmpty()&&Reply.Action!=TEXT("none")&&Reply.Action!=TEXT("leave")&&Reply.Action!=TEXT("stroll")){
+ // The meal they are already at ("cafeteria_meal" while eating at the cafeteria, she feeds him) is not somewhere else.
+ else if((Reply.ActKind==TEXT("eat")||Reply.ActKind==TEXT("share_food")||Reply.ActKind==TEXT("feed"))&&[&]{
+   const FString& A=Reply.Action;if(A.IsEmpty()||A==TEXT("none")||A==TEXT("leave")||A==TEXT("stroll"))return false;
+   const FOKStreetActivity* Act=OKStreetFindActivity(A);
+   const FString Dest=Act?FString(Act->Place?Act->Place:TEXT("")):A.StartsWith(TEXT("go:"))?A.Mid(3):OKStreetFindPlace(A)?A:FString();
+   return !Dest.IsEmpty()&&Dest!=PlaceHere(S.Male);}()){
   UE_LOG(LogTemp,Display,TEXT("Street act: %s left for where they are going (%s)"),*Reply.ActKind,*Reply.Action);}
  else if(!Reply.ActKind.IsEmpty()&&EatActBlocked(Character,Reply.ActKind)){}
  else if(!Reply.ActKind.IsEmpty()&&HandleWorldAct(Character,Reply.ActKind,Reply.ActArg)){} // gift, lend, photo, sleep, elevator (OKStreetSocialLover.inl)

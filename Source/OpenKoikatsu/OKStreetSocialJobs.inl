@@ -50,6 +50,27 @@ void AOKStreetSocialScene::BookShift(const FString& JobId,int32 Shift){
  AddAppointment(TEXT("shift"),INDEX_NONE,Job->Place,Start,10,OKMsg(TEXT("ui.jobs.job_pay_range"), {{TEXT("place"), P?P->Name:*Job->Place}, {TEXT("min"), H.X}, {TEXT("max"), H.Y}}));
 }
 
+// His shift starts while he is in the shop: he goes behind its counter (the barista stood in the doorway for the whole
+// shift). The first work spot of the place no heroine already stands at, faced its way; he can still walk off to talk.
+void AOKStreetSocialScene::StandAtWork(const FString& PlaceId){
+ auto& S=*State;const FOKStreetPlace* P=OKStreetFindPlace(PlaceId);
+ if(!P||PlaceHere(S.Male)!=PlaceId||S.Companion!=INDEX_NONE||S.Target!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street shift: he stays where he is (at \"%s\", companion %d, talking to %d)"),*PlaceHere(S.Male),S.Companion,S.Target);return;}
+ for(const TCHAR* N:{TEXT("counter"),TEXT("bar"),TEXT("stand"),TEXT("shelf"),TEXT("lobby"),TEXT("food"),TEXT("pets")}){
+  const FOKStreetModelAnchor* Free=nullptr;
+  for(const auto& A:P->Anchors){
+   if(!A.Name.StartsWith(N)||!OKStreetInsidePlace(*P,A.Position))continue;
+   bool Taken=false;for(const auto& G:S.Agents)Taken|=FVector::Dist2D(G.Position,A.Position)<100.f&&FMath::Abs(G.Position.Z-A.Position.Z)<100.f;
+   if(!Taken){Free=&A;break;}
+  }
+  if(!Free)continue;
+  S.Male=Free->Position;S.Male.Z=OKStreetFloorZ(Free->Position);S.Rotations[0]=FRotator(0,Free->Yaw,0);
+  if(APlayerController* Pc=GetWorld()?GetWorld()->GetFirstPlayerController():nullptr)if(Pc->PlayerCameraManager)Pc->PlayerCameraManager->StartCameraFade(1.f,0.f,0.7f,FLinearColor::Black,false,false);
+  UE_LOG(LogTemp,Display,TEXT("Street shift: he stands at %s %s"),*PlaceId,*Free->Name);return;
+ }
+ TArray<FString> Names;for(const auto& A:P->Anchors)Names.Add(A.Name);
+ UE_LOG(LogTemp,Display,TEXT("Street shift: no free work spot at %s (anchors: %s)"),*PlaceId,*FString::Join(Names,TEXT(",")));
+}
+
 // Once he arrived for a shift (the appointment is done or late), he works until its end.
 void AOKStreetSocialScene::TickJobs(){
  auto& S=*State;const int64 Now=OKStreetMindNow(S);
@@ -67,7 +88,8 @@ void AOKStreetSocialScene::TickJobs(){
    // replaced the real payslip).
    for(const FString& J:S.Store.PlayerJobs)if(const auto* Job=S.Catalog.FindJob(J))if(Job->Place==A.Place)for(const auto& H:Job->Shifts)if(int64(H.X*60)==A.Start%1440&&Now<A.Start-A.Start%1440+int64(H.Y*60)){
     S.ShiftAppointment=A.Id;S.ShiftJob=J;S.ShiftStart=FMath::Max<int64>(A.Start,Now); /* paid from when he came */S.ShiftEnd=A.Start-A.Start%1440+int64(H.Y*60);S.ShiftAwaySince=-1;S.ShiftChats=0;
-    S.FreeTalkNotice=OKMsg(TEXT("ui.jobs.shift_started_notice"), {{TEXT("job_title"), *Job->Title}, {TEXT("end_hour"), (S.ShiftEnd%1440)/60}, {TEXT("end_minute"), S.ShiftEnd%60}});RefreshUI();
+    S.FreeTalkNotice=OKMsg(TEXT("ui.jobs.shift_started_notice"), {{TEXT("job_title"), *Job->Title}, {TEXT("end_hour"), (S.ShiftEnd%1440)/60}, {TEXT("end_minute"), S.ShiftEnd%60}});
+    StandAtWork(Job->Place);RefreshUI();
    }
    if(S.ShiftAppointment)break;
   }

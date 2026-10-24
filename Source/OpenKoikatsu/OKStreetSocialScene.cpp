@@ -1313,7 +1313,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // words kept overruling it and could never cover every way of saying it.
   // "Not today, tomorrow" / "make it six": the meeting with her they had moves (the judge says it replaces it).
   // Which one it replaces is promise.rs's (the same meeting said again is moved; else hers at that place or nearest).
-  if(!Place.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces)UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);
+  // A day with no place yet goes in too: she then asks when and where (AddPromiseFromChat).
+  if(!Place.IsEmpty()||!Day.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces)UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);
    Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said,Replaces);}
   // "Every Wednesday" (the judge's promise.repeat): the meeting just booked is the first of a series (series.rs).
   if(!Place.IsEmpty()&&Promise&&(*Promise).IsValid())if(const TSharedPtr<FJsonValue> Rep=(*Promise)->TryGetField(TEXT("repeat"));Rep.IsValid()&&!Rep->IsNull()&&!(Rep->Type==EJson::String&&Rep->AsString().IsEmpty()))Weak->StartSeries(Character,Place,Rep);
@@ -2377,6 +2378,7 @@ void AOKStreetSocialScene::BeginPair(int32 Character,int32 Kind){
  FOKRuntimeCharacterStatus Male,Npc;if(!OKGetCrowdRuntimeCharacterStatus(this,0,Male)||!OKGetCrowdRuntimeCharacterStatus(this,Character,Npc)||!Male.Visible||!Npc.Visible||!Male.Error.IsEmpty()||!Npc.Error.IsEmpty()||FVector::Dist2D(S.Male,S.Agents[Character-1].Position)>250)return;
  StopAmbientActivity();EndTalk();auto& P=S.Pair;P=FOKStreetPairSession();P.Partner=Character;P.PhoneUse=PhoneUse;P.Watermelon=Watermelon;P.FemaleStrikes=FemaleStrikes;P.Meal=Meal;P.Seated=Seated;P.Bath=Bath;P.Read=Read;P.NoProps=NoProps;P.Yaw=S.NextPairYaw;S.NextPairYaw=0;P.Drink=Drink;P.Splash=Splash;P.FemaleThrows=FemaleThrows;P.MaleClip=MaleClip;P.FemaleClip=*Female;P.SavedAgent=S.Agents[Character-1];P.SavedMale=S.Male;P.SavedMaleRotation=S.Rotations[0];P.SavedFemaleRotation=S.Rotations[Character];P.SavedYaw=S.Yaw;P.SavedPitch=S.Pitch;P.SavedDistance=S.Distance;P.SavedMouseUI=S.MouseUI;P.RequestedAt=SceneTime();
  S.Agents[Character-1].Held=true;
+ if(P.Conversation())MakeRoomAround(Character);
  FString Error;
  // The swing was authored for a body whose shoulder stands 125.3 cm high; a shorter striker cannot reach a melon
  // 80 cm out (her stick stops ~11 cm short). Bring it closer in proportion to her shoulder height, never farther.

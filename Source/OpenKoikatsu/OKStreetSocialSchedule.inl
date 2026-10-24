@@ -47,6 +47,27 @@ FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FStri
  return Spot+FRotator(0,Yaw,0).RotateVector(FVector(-((I-1)/5)*70.f,(((I-1)%5)-2)*65.f,0));
 }
 
+// He sits down with her (a meal, a drink, a seat) where other heroines' plans already stood them: the cafeteria's table
+// had five of them in a row around his chair. Each walks to her own spot away from him (SpotFor leaves out the anchors
+// by him); one whose only spot is by him stays.
+void AOKStreetSocialScene::MakeRoomAround(int32 Partner){
+ auto& S=*State;const FString Here=PlaceHere(S.Male);if(Here.IsEmpty())return;
+ const int32 Minute=int32(OKStreetMindNow(S)%1440);
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  if(I==Partner||I==S.Companion||!S.ScheduleHeld.Contains(I)||!S.Agents.IsValidIndex(I-1))continue;
+  // On her way in, she counts by where she will stop (two came in after he sat down and stood by his chair).
+  const auto& A=S.Agents[I-1];const auto* Way=S.Commutes.Find(I);
+  const FVector Stop=S.CommuteFinal.Contains(I)?S.CommuteFinal[I]:Way&&!Way->IsEmpty()?Way->Last():A.Position;
+  if(FVector::Dist2D(Stop,S.Male)>=250.f)continue;
+  const auto* B=BlockNow(I,Minute);if(!B||B->Place!=Here)continue;
+  float Yaw=0;const FVector Spot=SpotFor(I,B->Place,B->Kind==TEXT("class")&&!B->Activity.IsEmpty()?B->Activity:B->Kind,Yaw);
+  if(FVector::Dist2D(Spot,S.Male)<250.f)continue;
+  auto Path=PlaceRoute(A.Position,Spot);if(Path.IsEmpty())continue;
+  S.Commutes.Add(I,MoveTemp(Path));S.CommuteFinal.Remove(I);
+  UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d makes room at %s (%.0f from him, walks %.0f)"),I,*Here,FVector::Dist2D(A.Position,S.Male),FVector::Dist2D(A.Position,Spot));
+ }
+}
+
 // The street's plans for the day come from the rules (Tools/ok-rules src/plan.rs plan_all): each heroine's day, her own
 // morning and pace, errands, friends meeting, leaving in time, rain, pickups. Here only the facts go in and the plans,
 // the best friends' shared morning, pickup appointments and texts come back.
@@ -115,6 +136,8 @@ void AOKStreetSocialScene::TickSchedules(){
   if(!Ready)UE_LOG(LogTemp,Warning,TEXT("Street plan: profiles still missing after 30 s; planning without them"));
   S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;PlanAll();
  }
+ // Sitting with her: whoever comes to stand by his table moves on (R3-140).
+ if(S.Pair.Partner!=INDEX_NONE&&S.Pair.Conversation())MakeRoomAround(S.Pair.Partner);
  const int64 Now=OKStreetMindNow(S);const int32 Minute=int32(Now%1440);
  if(Now!=S.PlaceCountMinute){S.PlaceCountMinute=Now;const FString Here=PlaceHere(S.Male);if(!Here.IsEmpty())++S.PlayerPlaceMinutes.FindOrAdd(Here);
   // Walked into another place: its admission, if it has one (shop.rs entry_fee).

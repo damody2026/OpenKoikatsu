@@ -442,6 +442,9 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  const bool Leave=ActivityId==TEXT("leave");
  const bool Stroll=ActivityId==TEXT("stroll")||ActivityId==TEXT("walk"); // a walk with no destination: a loop nearby
  if(!Activity&&!Place&&!Leave&&!Stroll){Error=OKT(TEXT("ui.outing.no_such_activity_place"));return false;}
+ // On his shift he works: not off somewhere with her, and not sat down at a table of his own shop with her (the barista
+ // sat with Raiden for her latte). She is served; they talk at the counter.
+ if(S.ShiftAppointment&&!Leave){Error=OKT(TEXT("ui.jobs.on_shift_no_outing"));UE_LOG(LogTemp,Display,TEXT("Street outing: %s not started, he is on shift"),*ActivityId);return false;}
  // Closed now and still closed a quarter of an hour from now (it opens at 11:00, they set off at 10:51: by the time they
  // get there it is open).
  if(Place&&!Leave){FString Why;if(PlaceClosedNow(Place->Id,Why)&&PlaceClosedAt(Place->Id,StreetNow()+FTimespan::FromMinutes(15),Why)){Error=Why;return false;}int32 Days=0;if(Blacklisted(Place->Id,&Days)){Error=OKMsg(TEXT("ui.outing.blacklisted_days_left"), {{TEXT("days"), Days}});return false;}}

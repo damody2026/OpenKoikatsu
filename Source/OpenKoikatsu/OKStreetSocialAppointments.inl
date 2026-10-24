@@ -71,6 +71,9 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
    S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_such_place_notice"),{{TEXT("place_name"),*Place}});RefreshUI();}
   // A day and a place but no hour ("Saturday at the park"): agreed, yet nothing to book. She asks him what time,
   // instead of the meeting being dropped without either of them knowing.
+  // A day and nothing else yet ("all of Sunday with you"): she asks when and where.
+  if(Reason==TEXT("not_a_place")&&Place.IsEmpty()&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_place_note"),{{TEXT("day"),*Day}}));
+   UE_LOG(LogTemp,Display,TEXT("Street promise: %s agreed, no time or place yet; she asks"),*Day);}
   if(Reason==TEXT("no_time")&&P&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_note"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}}));
    S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_time_notice"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}});RefreshUI();}
   return;}

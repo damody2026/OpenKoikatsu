@@ -433,14 +433,30 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				if ((OKGetCrowdRuntimeBoneTransform(this, 0, TEXT("cm_j_head"), PlayerHead) || OKGetCrowdRuntimeBoneTransform(this, 0, TEXT("cf_j_head"), PlayerHead))
 					&& FVector::Dist(PlayerHead.GetLocation(), Pos) < 45.f * FMath::Max(A.Transform.GetScale3D().Z, .1))
 					OKGetCrowdRuntimeCharacterComponents(this, 0, Block);
+				// Her face is what the shot is about: the line to her head counts as well as the one to the middle of the two.
+				const FVector HerHead = B.Transform.GetLocation() + FVector(0, 0, 140);
+				const FVector Forward = Rot.GetForwardVector();
+				const float HalfFov = FMath::DegreesToRadians(float((*Camera)->GetNumberField(TEXT("fov"))) * .5f + 10.f);
 				for (int32 Slot = 1; Slot < S.Manifest.Characters.Num(); ++Slot)
 				{
 					FOKRuntimeCharacterStatus O;
 					if (Slot == G.Partner || !OKGetCrowdRuntimeCharacterStatus(this, Slot, O)) continue;
 					const FVector Body = O.Transform.GetLocation() + FVector(0, 0, 90);
-					const FVector Closest = FMath::ClosestPointOnSegment(Body, Pos, Target);
-					if (FVector::DistXY(Body, Closest) < 80.f && FVector::Dist(Pos, Closest) < FVector::Dist(Pos, Target) - 30.f)
-						OKGetCrowdRuntimeCharacterComponents(this, Slot, Block);
+					bool bInWay = false;
+					for (const FVector& To : {Target, HerHead})
+					{
+						const FVector Closest = FMath::ClosestPointOnSegment(Body, Pos, To);
+						bInWay |= FVector::DistXY(Body, Closest) < 80.f && FVector::Dist(Pos, Closest) < FVector::Dist(Pos, To) - 30.f;
+					}
+					// Standing right at the lens (a girl beside the table at the cafeteria): off the line, yet her hair and
+					// back fill the picture.
+					for (const float Z : {30.f, 90.f, 150.f})
+					{
+						const FVector Rel = O.Transform.GetLocation() + FVector(0, 0, Z) - Pos;
+						const float Depth = float(Rel | Forward);
+						bInWay |= Depth > 0.f && Depth < 150.f && FMath::Acos(FMath::Clamp(Depth / FMath::Max(float(Rel.Size()), 1.f), -1.f, 1.f)) < HalfFov;
+					}
+					if (bInWay) OKGetCrowdRuntimeCharacterComponents(this, Slot, Block);
 				}
 				OKStreetGalgameUnhide(GetWorld(), G);
 				if (APlayerController* PC = GetWorld()->GetFirstPlayerController())

@@ -231,6 +231,8 @@ private:
  void NavigateToNextAppointment();
  bool BusyWithPlayer(int32 I) const;
  FVector SpotFor(int32 I,const FString& PlaceId,const FString& Kind,float& Yaw) const;
+ void MakeRoomAround(int32 Partner); // heroines her plan stood at his table walk to another spot (OKStreetSocialSchedule.inl)
+ void StandAtWork(const FString& PlaceId); // his shift starts: behind the counter (OKStreetSocialJobs.inl)
  void PlanAll();
  const struct FOKStreetPlanBlock* BlockNow(int32 I,int32 Minute,int32* Index=nullptr) const;
  void TickSchedules();
