@@ -133,6 +133,8 @@ void AOKStreetSocialScene::RequestTtsLine(const FString& Text,const FString& Voi
  auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("text"),Text);Body->SetStringField(TEXT("personality"),Voice);Body->SetNumberField(TEXT("age"),S.TtsAge);Body->SetStringField(TEXT("out_dir"),S.TtsCacheDir);
  // Her card: a voice of her own stored there is used (the player's tone comes from the menu, not his card).
  if(!Male)if(const FString Card=OKStreetCardFor(S,S.Target);!Card.IsEmpty())Body->SetStringField(TEXT("card"),Card);
+ // His lines: their own channel and number, so a line he gave up on can be dropped on the server (OKStreetTtsCancel).
+ if(Male){Body->SetStringField(TEXT("channel"),OKStreetMaleTtsChannel(this));Body->SetNumberField(TEXT("generation"),double(Serial));}
  FString Payload;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Payload));
  auto Request=FHttpModule::Get().CreateRequest();
  Request->SetURL(S.TtsEndpoint/TEXT("synthesize"));Request->SetVerb(TEXT("POST"));Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(S.TtsTimeout);
@@ -148,7 +150,7 @@ void AOKStreetSocialScene::RequestTtsLine(const FString& Text,const FString& Voi
   }
   if(Male){
    if(Ok&&S.MalePhase==1){S.MaleVoiceId=Id;UE_LOG(LogTemp,Display,TEXT("Street TTS male voice admitted: tone=%s path=%s"),*S.MaleTone,*Path);}
-   else if(!Ok){S.MalePhase=3;S.TtsNotice=OKT(TEXT("ui.voice.male_tts_failed_skip"))+Error;UE_LOG(LogTemp,Warning,TEXT("Street TTS male skipped: %s"),*Error);RefreshUI();}
+   else if(!Ok){S.MalePhase=3;OKStreetTtsCancel(S.TtsEndpoint,OKStreetMaleTtsChannel(this),Serial+1);S.TtsNotice=OKT(TEXT("ui.voice.male_tts_failed_skip"))+Error;UE_LOG(LogTemp,Warning,TEXT("Street TTS male skipped: %s"),*Error);RefreshUI();}
    return;
   }
   if(Ok&&S.Node!=INDEX_NONE&&!S.ClipStarted&&S.Voice==0){S.VoiceIds={Id};++S.TtsLines;UE_LOG(LogTemp,Display,TEXT("Street TTS voice admitted: actor=%d path=%s"),S.Target,*Path);if(!S.TtsNotice.IsEmpty()&&S.TtsNotice.StartsWith(OKT(TEXT("ui.voice.tts_failed")))){S.TtsNotice.Reset();RefreshUI();}}

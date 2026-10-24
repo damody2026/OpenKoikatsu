@@ -466,3 +466,4 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
 - 十張卡（`Content/CharacterCards/StreetHeroines/*.png`）都已寫入。卡片身分（`apng-<sha256>`）的計算會排除 `okVo`，十張卡的 ID 都和寫入前相同，存檔與記憶不受影響。原卡備份在 `C:\portable\OpenKoikatsu-Content-backup-20261024-cardvoice\`。
 - 遊戲送 TTS 請求時會帶她的卡片路徑，伺服器優先用卡裡的聲線，不需要重啟或改設定。合成出來仍是普通話，只有音色換成她本人。
 - 驗證：每位用同一句普通話合成，以 speaker encoder 和十份參考音逐一比對（去平均後的 cosine）。十位的合成音都和自己的參考音最像：雷電將軍 0.67、刻晴 0.55、三月七 0.54、安可 0.50、愛麗絲 0.50、胡桃 0.45、早瀨優香 0.44、貞德 0.41、貞德 Alter 0.37、惠惠 0.13（最弱：參考音原本就是 24 kHz 的手機遊戲錄音）。試聽檔：`Saved/StreetSocial/HeroineVoices/<角色>-sample.ogg`。
+- 2026-10-25 補：GPU 滿載時他的台詞可能合成很久。他的請求用自己的 channel／generation 送出；她的回覆到了以後最多再等 3 秒（`OKStreetHisVoiceGraceSeconds`），他的聲音還沒做好就不說出口（文字仍顯示），並用 `/cancel` 讓伺服器也丟掉那句，她的台詞接著合成。逾時、換下一句、對話結束時也同樣取消。驗收（MaleVoice05，GPU 94%）：log 出現 "his line is not spoken (her reply is ready)"，伺服器那句 status=cancelled，她的語音接著播出。

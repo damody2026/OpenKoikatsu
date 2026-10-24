@@ -933,6 +933,20 @@ void AOKStreetSocialScene::SetSourcePlayerLine(const FString& Text){
  if(!S.PlayerLine.IsEmpty())++S.PlayerPromptsShown;
 }
 
+// The player's voice lines go to the TTS server on a channel of their own (this game, this scene), numbered by
+// MaleSerial, so a line he no longer says (timed out, replaced, the talk ended) can be dropped there with /cancel:
+// one engine makes every line in turn, and a long line nobody waits for would hold up hers.
+static FString OKStreetMaleTtsChannel(const UObject* Scene){
+ return FString::Printf(TEXT("male-%u-%u"),FPlatformProcess::GetCurrentProcessId(),Scene->GetUniqueID());
+}
+static void OKStreetTtsCancel(const FString& Endpoint,const FString& Channel,uint32 Below){
+ if(Endpoint.IsEmpty())return;
+ auto Cancel=MakeShared<FJsonObject>();Cancel->SetStringField(TEXT("channel"),Channel);Cancel->SetNumberField(TEXT("below"),double(Below));
+ FString Payload;FJsonSerializer::Serialize(Cancel,TJsonWriterFactory<>::Create(&Payload));
+ auto Request=FHttpModule::Get().CreateRequest();Request->SetURL(Endpoint/TEXT("cancel"));Request->SetVerb(TEXT("POST"));
+ Request->SetHeader(TEXT("Content-Type"),TEXT("application/json; charset=utf-8"));Request->SetContentAsString(Payload);Request->SetTimeout(5.f);Request->ProcessRequest();
+}
+
 bool AOKStreetSocialScene::QueueNode(int32 Chosen,const FString& Category,const FString& BranchId){
  auto& S=*State;if(!S.Catalogue.Nodes.IsValidIndex(Chosen)){FailTalk(TEXT("Dialogue node is unavailable"));return false;}
  // A scripted line takes the bottom box back from free talk.
@@ -956,6 +970,7 @@ bool AOKStreetSocialScene::QueueNode(int32 Chosen,const FString& Category,const 
  const auto& Line=S.Catalogue.Nodes[Chosen];if(!Line.FacialExpression.IsEmpty()&&!S.Expressions.Items.IsEmpty()){FString FaceError;if(const auto* Expression=S.Expressions.Find(Line.PersonalityId,Line.FacialExpression)){if(OKSetCrowdRuntimeFaceExpression(this,S.Target,Expression->Face,Expression->Blink,FaceError)){++S.ExpressionsApplied;UE_LOG(LogTemp,Display,TEXT("Street source expression applied: actor=%d name=%s"),S.Target,*Line.FacialExpression);}else{++S.ExpressionsMissing;S.Errors.Add(TEXT("Source expression rejected: ")+FaceError);}}else{++S.ExpressionsMissing;S.Errors.Add(TEXT("Source expression missing: ")+Line.FacialExpression);}}
  RefreshUI();
  // TTS: the player's line (male tone) first, then her reply; both play through the normal speech path.
+ if(S.MaleTtsPending)OKStreetTtsCancel(S.TtsEndpoint,OKStreetMaleTtsChannel(this),S.MaleSerial+1);
  S.TtsPending=false;++S.TtsSerial;S.MaleTtsPending=false;++S.MaleSerial;S.MalePhase=0;S.MaleVoiceId.Reset();
  if(S.TtsEnabled&&!S.Japanese&&!S.TtsCacheDir.IsEmpty()&&S.Manifest.Characters.IsValidIndex(S.Target)){
   // Both sides call each other by name now and then: his first line of a talk always, then about half;
@@ -1566,6 +1581,9 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
 bool AOKStreetSocialScene::FreeTalkHisVoiceBusy() const{
  const auto& S=*State;return S.Node==INDEX_NONE&&(S.MalePhase==1||S.MalePhase==2);
 }
+// How long her ready reply waits for his voice line still being made.
+static constexpr double OKStreetHisVoiceGraceSeconds=3.0;
+
 
 void AOKStreetSocialScene::TickFreeTalkHisVoice(double Now){
  auto& S=*State;if(!FreeTalkHisVoiceBusy())return;
@@ -1573,7 +1591,14 @@ void AOKStreetSocialScene::TickFreeTalkHisVoice(double Now){
   if(!S.MaleVoiceId.IsEmpty()){FString Error;S.MalePhase=OKSpeakCrowdRuntimeLine(this,0,S.MaleVoiceId,Error)?2:3;
    if(S.MalePhase==3){UE_LOG(LogTemp,Warning,TEXT("Free talk: his line not spoken: %s"),*Error);}
    else{UE_LOG(LogTemp,Display,TEXT("Free talk: he says his line (tone %s)"),*S.MaleTone);}}
-  else if(!S.MaleTtsPending||Now-S.MaleRequestedAt>S.TtsTimeout+1){S.MaleTtsPending=false;S.MalePhase=3;}
+  else{
+   // Her reply is in and his voice is still not made (a busy GPU): a few seconds more, then he does not say it
+   // aloud (his words are on screen) and the server drops it, so her lines are made next instead of after his.
+   const bool HerReplyWaiting=S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()&&FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt>OKStreetHisVoiceGraceSeconds;
+   if(!S.MaleTtsPending||HerReplyWaiting||Now-S.MaleRequestedAt>S.TtsTimeout+1){
+    if(S.MaleTtsPending){OKStreetTtsCancel(S.TtsEndpoint,OKStreetMaleTtsChannel(this),S.MaleSerial+1);UE_LOG(LogTemp,Display,TEXT("Free talk: his line is not spoken (%s)"),HerReplyWaiting?TEXT("her reply is ready"):TEXT("timeout"));}
+    S.MaleTtsPending=false;S.MalePhase=3;}
+  }
  }else if(S.MalePhase==2&&!OKCrowdRuntimeSpeechActive(this,0))S.MalePhase=3;
 }
 
@@ -3542,7 +3567,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   {FOKRuntimeActionStreamStatus MaleAction,NpcAction;if(OKGetCrowdRuntimeActionStatus(this,0,MaleAction)&&OKGetCrowdRuntimeActionStatus(this,S.Target,NpcAction)&&MaleAction.Playing&&NpcAction.Playing)S.DualActionSeconds+=Dt;}
   if(S.MalePhase==1&&!S.ClipStarted&&S.Voice==0){
    if(!S.MaleVoiceId.IsEmpty()){FString MaleError;S.MalePhase=OKSpeakCrowdRuntimeLine(this,0,S.MaleVoiceId,MaleError)?2:3;if(S.MalePhase==3)UE_LOG(LogTemp,Warning,TEXT("Street TTS male speech failed: %s"),*MaleError);}
-   else if(!S.MaleTtsPending||Now-S.MaleRequestedAt>S.TtsTimeout+1){S.MaleTtsPending=false;S.MalePhase=3;}
+   else if(!S.MaleTtsPending||Now-S.MaleRequestedAt>S.TtsTimeout+1){if(S.MaleTtsPending)OKStreetTtsCancel(S.TtsEndpoint,OKStreetMaleTtsChannel(this),S.MaleSerial+1);S.MaleTtsPending=false;S.MalePhase=3;}
   }else if(S.MalePhase==2&&!OKCrowdRuntimeSpeechActive(this,0)){S.MalePhase=3;if(S.TtsSmoke)UE_LOG(LogTemp,Display,TEXT("Street male voice completed: tone=%s"),*S.MaleTone);}
   if(S.MalePhase==1||S.MalePhase==2){}
   else if(!S.ClipStarted&&S.TtsPending){if(Now-S.TtsRequestedAt>S.TtsTimeout+1){S.TtsPending=false;++S.TtsFallbacks;S.TtsNotice=OKT(TEXT("ui.scene.tts_timeout_builtin"));RefreshUI();}}
