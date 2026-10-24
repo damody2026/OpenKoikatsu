@@ -67,6 +67,10 @@ pub struct LiveState {
     pub typing: Typing,
     pub rig: Rig,
     pub camera_set: bool,
+    /// The line's shot has a pose. Until it has (the game had not sent the two of them yet when the first line came),
+    /// no camera goes out and the game's own view stays: the first line of every conversation stood frozen where the
+    /// street camera was when it began, metres from both of them.
+    pub framed: bool,
     pub portrait: Portrait,
     pub probe: Option<ProbeJob>,
     pub next_id: u64,
@@ -165,14 +169,28 @@ impl Live {
         Some(math::Pose { pos: eye, rot: math::Quat::look(math::sub(aim, eye), [0.0, 0.0, 1.0]), fov: self.tuning.live.pov_fov })
     }
 
+    /// Not framed yet: the move starts from where the game's view is now (it kept following them meanwhile), not from
+    /// where it was when the conversation began.
+    fn start_from_view(&mut self) {
+        if self.st.framed {
+            return;
+        }
+        if let Some(v) = &self.facts.view {
+            self.st.rig.current = Pose { pos: v.pos, rot: v.q(), fov: self.facts.view_fov.unwrap_or(65.0) };
+            self.st.rig.travel = None;
+        }
+    }
+
     fn frame_shot(&mut self, cut: bool) {
         let Some(spec) = self.st.shot.clone() else { return };
         // First person needs no clear line of sight: the view is his.
         if spec.shot.as_deref() == Some("pov") {
             let partner = self.st.people.first().cloned().unwrap_or_default();
             if let Some(pose) = spec.on.as_deref().and_then(|on| self.pov(on)).or_else(|| self.pov(&partner)) {
+                self.start_from_view();
                 self.st.rig.go(&self.tuning.camera, pose, cut || !self.st.camera_set, 1.0);
                 self.st.camera_set = true;
+                self.st.framed = true;
                 self.st.probe = None;
             }
             return;
@@ -180,8 +198,10 @@ impl Live {
         let speaker = self.st.line.as_ref().map(|l| l.who.clone()).unwrap_or_default();
         let candidates = self.candidates(&spec, &speaker);
         let Some(first) = candidates.first().copied() else { return };
+        self.start_from_view();
         self.st.rig.go(&self.tuning.camera, first.pose, cut || !self.st.camera_set, 1.0);
         self.st.camera_set = true;
+        self.st.framed = true;
         self.st.probe = None;
         if candidates.len() > 1 {
             let mut ids = Vec::new();
@@ -263,6 +283,7 @@ impl Live {
             }
             LiveInput::End => {
                 self.st.active = false;
+                self.st.framed = false;
                 self.st.line = None;
                 self.st.shot = None;
                 self.st.probe = None;
@@ -320,8 +341,18 @@ impl Live {
                 line.done_at = Some(self.st.time);
             }
         }
+        if self.st.active && !self.st.framed && self.st.shot.is_some() {
+            self.frame_shot(false);
+        }
         // A shot follows its people for a moment (they turn to face each other as the line starts).
-        if self.st.reframe_for > 0.0 && self.st.active {
+        if self.st.reframe_for > 0.0 && self.st.active && self.st.framed && self.st.shot.as_ref().and_then(|s| s.shot.as_deref()) == Some("pov") {
+            self.st.reframe_for -= dt;
+            let spec = self.st.shot.clone().unwrap_or_default();
+            let partner = self.st.people.first().cloned().unwrap_or_default();
+            if let Some(pose) = spec.on.as_deref().and_then(|on| self.pov(on)).or_else(|| self.pov(&partner)) {
+                self.st.rig.retarget(pose);
+            }
+        } else if self.st.reframe_for > 0.0 && self.st.active {
             self.st.reframe_for -= dt;
             if let Some(spec) = self.st.shot.clone() {
                 let speaker = self.st.line.as_ref().map(|l| l.who.clone()).unwrap_or_default();
@@ -344,7 +375,7 @@ impl Live {
     fn frame(&mut self) -> Frame {
         let mut f = Frame { time: self.st.time, screen: "play".into(), layout: self.tuning.layout.clone(), ..Default::default() };
         f.layout.dialog_opacity = self.tuning.layout.dialog_opacity;
-        if self.st.active && self.st.camera_set {
+        if self.st.active && self.st.camera_set && self.st.framed {
             let p = self.st.rig.shown(&self.tuning.camera, self.tuning.live.parallax);
             f.camera = Some(CameraOut { pos: p.pos, rot: p.rot.to_array(), fov: p.fov, moving: self.st.rig.moving() });
         }

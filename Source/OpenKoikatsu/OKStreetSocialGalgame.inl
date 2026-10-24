@@ -43,6 +43,8 @@ struct FOKStreetGalgame
 	bool bVoiced = false;
 	// Passers-by kept out of the shot (hidden from the main view only while they stand in it).
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> Hidden;
+	// When a broken far-off shot was last written to the log (one line per two seconds).
+	double FarShotLoggedAt = -1000.0;
 };
 
 // The main view shows everyone again.
@@ -421,11 +423,41 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		{
 			const FVector Pos((*P)[0]->AsNumber(), (*P)[1]->AsNumber(), (*P)[2]->AsNumber());
 			const FQuat Rot = FQuat((*R)[0]->AsNumber(), (*R)[1]->AsNumber(), (*R)[2]->AsNumber(), (*R)[3]->AsNumber()).GetNormalized();
-			S.Camera->SetActorLocationAndRotation(Pos, Rot);
-			S.Camera->GetCameraComponent()->SetFieldOfView(float((*Camera)->GetNumberField(TEXT("fov"))));
-			// Someone walking between the lens and the two of them is left out of the picture until they are past.
 			FOKRuntimeCharacterStatus A, B;
-			if (OKGetCrowdRuntimeCharacterStatus(this, 0, A) && OKGetCrowdRuntimeCharacterStatus(this, G.Partner, B))
+			const bool bBoth = OKGetCrowdRuntimeCharacterStatus(this, 0, A) && OKGetCrowdRuntimeCharacterStatus(this, G.Partner, B);
+			// A shot metres away from both of them is a broken one (the camera went off somewhere with the two far in
+			// the picture): the view stays where it is, and what the shot was made from goes to the log.
+			const bool bFar = bBoth && FVector::Dist(Pos, A.Transform.GetLocation()) > 600.f && FVector::Dist(Pos, B.Transform.GetLocation()) > 600.f;
+			if (bFar)
+			{
+				if (SceneTime() >= G.FarShotLoggedAt + 2.0)
+				{
+					G.FarShotLoggedAt = SceneTime();
+					FTransform HeadA, HeadB;
+					const bool bHeadA = OKGetCrowdRuntimeBoneTransform(this, 0, TEXT("cm_j_head"), HeadA) || OKGetCrowdRuntimeBoneTransform(this, 0, TEXT("cf_j_head"), HeadA);
+					const bool bHeadB = OKGetCrowdRuntimeBoneTransform(this, G.Partner, TEXT("cf_j_head"), HeadB) || OKGetCrowdRuntimeBoneTransform(this, G.Partner, TEXT("cm_j_head"), HeadB);
+					UE_LOG(LogTemp, Warning, TEXT("Street galgame: far shot dropped: camera %s; he root %s head %s; partner %d root %s head %s"),
+						*Pos.ToCompactString(), *A.Transform.GetLocation().ToCompactString(), bHeadA ? *HeadA.GetLocation().ToCompactString() : TEXT("-"),
+						G.Partner, *B.Transform.GetLocation().ToCompactString(), bHeadB ? *HeadB.GetLocation().ToCompactString() : TEXT("-"));
+				}
+			}
+			else
+			{
+				// Several metres from both of them (not broken, yet the two small in the picture): logged to see when it happens.
+				if (bBoth && FVector::Dist(Pos, A.Transform.GetLocation()) > 250.f && FVector::Dist(Pos, B.Transform.GetLocation()) > 250.f && SceneTime() >= G.FarShotLoggedAt + 1.0)
+				{
+					G.FarShotLoggedAt = SceneTime();
+					bool bMoving = false;
+					(*Camera)->TryGetBoolField(TEXT("moving"), bMoving);
+					UE_LOG(LogTemp, Display, TEXT("Street galgame: distant shot: camera %s %.0f/%.0f cm from him/her, moving=%d, street view %s"),
+						*Pos.ToCompactString(), FVector::Dist(Pos, A.Transform.GetLocation()), FVector::Dist(Pos, B.Transform.GetLocation()), bMoving ? 1 : 0,
+						*S.Camera->GetActorLocation().ToCompactString());
+				}
+				S.Camera->SetActorLocationAndRotation(Pos, Rot);
+				S.Camera->GetCameraComponent()->SetFieldOfView(float((*Camera)->GetNumberField(TEXT("fov"))));
+			}
+			// Someone walking between the lens and the two of them is left out of the picture until they are past.
+			if (bBoth && !bFar)
 			{
 				const FVector Target = (A.Transform.GetLocation() + B.Transform.GetLocation()) * .5 + FVector(0, 0, 120);
 				TArray<UPrimitiveComponent*> Block;
