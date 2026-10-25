@@ -488,6 +488,9 @@ FString AOKStreetSocialScene::MindPanelText(int32 Character) const{
  if(Mood>0.05f)Out+=OKMsg(TEXT("ui.mind.mood_line"), {{TEXT("emotion"), *R.Emotion}, {TEXT("mood_percent"), Mood*100.f}});
  if(!Bias.Combos.IsEmpty())Out+=OKT(TEXT("ui.mind.status_header"))+FString::Join(Bias.Combos,OKT(TEXT("ui.bank.list_separator")));
  Out+=OKMsg(TEXT("ui.mind.needs_wallet_line"), {{TEXT("satiety"), R.Satiety}, {TEXT("energy"), R.Energy}, {TEXT("fun"), R.Fun}, {TEXT("social"), R.Social}, {TEXT("hygiene"), R.Hygiene}, {TEXT("cash"), R.Cash}, {TEXT("debt_suffix"), R.Debt>0?*OKMsg(TEXT("ui.mind.debt_amount_note"), {{TEXT("debt"), R.Debt}}):TEXT("")}, {TEXT("appeal"), AppealOf(Character)}});
+ // The number in words, as a group talk has it: she ate breakfast in the dorm (satiety 98) and still said "just hungry,
+ // let's go" when he asked her to breakfast (R3-212).
+ Out+=OKMsg(TEXT("ui.mind.hunger_line"),{{TEXT("hunger"),R.Satiety<35.f?OKT(TEXT("ui.party.very_hungry")):R.Satiety<65.f?OKT(TEXT("ui.party.somewhat_hungry")):R.Satiety<OKStreetFullSatiety?OKT(TEXT("ui.party.not_very_hungry")):OKT(TEXT("ui.party.very_full"))}});
  {auto Request=OKRulesHeroineRequest(S,TEXT("heroine_private"),Id);Request->SetNumberField(TEXT("charm"),PlayerLook());
   if(const TSharedPtr<FJsonObject> P=OKRulesEval(S,Request)){const float Chance=float(P->GetNumberField(TEXT("chance"))),Resistance=float(P->GetNumberField(TEXT("resistance")));
    Out+=OKMsg(TEXT("ui.mind.chastity_charm_line"), {{TEXT("chastity"), P->GetNumberField(TEXT("chastity"))}, {TEXT("charm_resistance"), int32(P->GetNumberField(TEXT("charm_resistance")))}, {TEXT("player_appeal"), PlayerLook()}, {TEXT("alone_chance_text"), Chance<0.f?OKT(TEXT("ui.mind.lover_by_invite")):Chance<=0.f?*OKMsg(TEXT("ui.mind.no_chance_resistance"), {{TEXT("resistance"), Resistance}}):*OKMsg(TEXT("ui.mind.chance_resistance_label"), {{TEXT("chance_percent"), Chance*100.f}, {TEXT("resistance"), Resistance}})}});}}

@@ -36,7 +36,11 @@ FString AOKStreetSocialScene::TodayText(int32 Character) const{
   else Parts.Add(OKMsg(TEXT("ui.director.he_is_intelligence_line"), {{TEXT("academic_title"), *AcademicText(0)}, {TEXT("intelligence"), S.Store.PlayerAcademic.Intelligence}}));}
  // School is out (summer, until the term starts): no classes for anyone. She once answered "I have class at noon".
  {EOKStreetTermPhase Phase;FOKStreetTerm Next;FOKStreetTerm Term=OKRulesTermAt(S,StreetNow(),Phase,nullptr,nullptr,&Next);
-  if(Phase==EOKStreetTermPhase::Break)Parts.Add(OKMsg(TEXT("ui.director.school_break_line"),{{TEXT("start"),(Next.Key.IsEmpty()?Term:Next).Start.ToString(TEXT("%m/%d"))}}));}
+  if(Phase==EOKStreetTermPhase::Break)Parts.Add(OKMsg(TEXT("ui.director.school_break_line"),{{TEXT("start"),(Next.Key.IsEmpty()?Term:Next).Start.ToString(TEXT("%m/%d"))}}));
+  // An exam week has no classes and one sitting, its Friday 17:00 (academics.rs): she once had "management, one paper
+  // this morning" on the Wednesday (R3-213).
+  else if(Phase==EOKStreetTermPhase::Midterm||Phase==EOKStreetTermPhase::Final){const FDateTime Week=Phase==EOKStreetTermPhase::Midterm?Term.Midterm:Term.Final;
+   Parts.Add(OKMsg(TEXT("ui.director.exam_week_line"),{{TEXT("exam"),Phase==EOKStreetTermPhase::Midterm?OKT(TEXT("ui.director.midterm_word")):OKT(TEXT("ui.director.final_word"))},{TEXT("date"),(Week+FTimespan::FromDays(4)).ToString(TEXT("%m/%d"))}}));}}
  // What her own day still holds (the plan she follows): what she says she has to do comes from here.
  if(const auto* Plan=S.Plans.Find(Character)){TArray<FString> Next;const int32 Minute=int32(Now%1440);
   for(const auto& B:*Plan)if(B.End>Minute&&Next.Num()<4&&B.Kind!=TEXT("sleep")){const FOKStreetPlace* P=OKStreetFindPlace(B.Place);

@@ -702,3 +702,8 @@
 
 - 查三月七撞牆時，我用 `game_clock {"run": true}` 想讓時鐘走，但這個工具的參數是 `paused`，沒給 `paused: false` 就是暫停。結果每次都把時鐘停住，召喚指令延後到下次時鐘走時才生效，觀察到的「通勤卡住」其實是我自己造成的，白查了一段。
 - 規則：讓時鐘走一律用 `game_clock {"paused": false}`；工具參數不確定時先看 `Tools/ok-game-mcp/src/main.rs` 的工具定義，不要猜。
+
+### 2026-10-26 又在 `lua -e` 命令列裡放中文（C 組十女主循環，重犯）
+
+- 補 R3-212 的實測結果時又用 `lua -e '...中文...'`，命令列被轉成 ANSI 字碼頁，Lua 報 invalid escape sequence，紀錄沒寫進去，提交時才發現少了一句。
+- 規則（重申）：凡是含中文的 Lua 一律寫成 scratchpad 裡的 UTF-8 腳本檔再執行，命令列只放純 ASCII。
