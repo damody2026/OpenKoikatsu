@@ -221,7 +221,10 @@ void AOKStreetSocialScene::EndBluff(const FString& Why,int32 Winner){
  for(int32 K=1;K<B.Seats.Num();++K)if(S.Agents.IsValidIndex(B.Seats[K]-1)&&!S.Party.Contains(B.Seats[K])&&FreeTalkPartner()!=B.Seats[K])S.Agents[B.Seats[K]-1].Held=false;
  if(Winner==INDEX_NONE){S.Message=Why.IsEmpty()?T(TEXT("ui.bluff.ended")):Why;B.Log.Add(S.Message);
   for(int32 K=1;K<B.Seats.Num();++K){TArray<FString> Others;for(int32 J=1;J<B.Seats.Num();++J)if(J!=K)Others.Add(S.Manifest.Characters[B.Seats[J]].Name);
-   MindObserve(B.Seats[K],TEXT("game"),OKMsg(TEXT("ui.memory.bluff_unfinished"),{{TEXT("names"),FString::Join(Others,OKT(TEXT("ui.memory.list_separator")))},{TEXT("with_others"),Others.Num()?TEXT("yes"):TEXT("no")},{TEXT("rounds"),B.Rounds}}),B.Place,0.3f);}UE_LOG(LogTemp,Display,TEXT("Street bluff: ended (%s)"),*S.Message);RefreshUI();return;}
+   MindObserve(B.Seats[K],TEXT("game"),OKMsg(TEXT("ui.memory.bluff_unfinished"),{{TEXT("names"),FString::Join(Others,OKT(TEXT("ui.memory.list_separator")))},{TEXT("with_others"),Others.Num()?TEXT("yes"):TEXT("no")},{TEXT("rounds"),B.Rounds}}),B.Place,0.3f);}
+  // They are told it is over (as after a win): "come on, play your card" to him after he called the game off.
+  if(FreeTalkPartner()!=INDEX_NONE)S.TellHer.Add(T(TEXT("ui.bluff.prompt_stopped"),FStringFormatNamedArguments{{TEXT("why"),S.Message}}));
+  UE_LOG(LogTemp,Display,TEXT("Street bluff: ended (%s)"),*S.Message);RefreshUI();return;}
  int32 Liar=INDEX_NONE,Most=0;for(int32 K=0;K<B.Caught.Num();++K)if(B.Caught[K]>Most){Most=B.Caught[K];Liar=K;}
  const FString WinName=BluffSeatName(Winner);
  UE_LOG(LogTemp,Display,TEXT("Street bluff: %s wins after %d turns"),*WinName,B.Rounds);
