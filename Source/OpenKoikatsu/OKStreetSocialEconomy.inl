@@ -192,22 +192,23 @@ void AOKStreetSocialScene::TickServes(){
 // Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
 void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const FString& GoingNow){
  auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
- // Said again in the same shop (the judge reads what they settled so far, every turn): it stays this shop's. The dinner
- // treat moved on to her dorm's vending machine when "after we eat I'll walk you home" came with it.
- {const FString Here=ShopPlaceHere();if(S.PayAgreedWith==Girl&&S.PayAgreedHow==How&&!Here.IsEmpty()&&S.PayAgreedShop==Here&&OKStreetMindNow(S)-S.PayAgreedAt<=180)return;}
+ // Where a place is: "go:<place>", else the activity's place.
+ auto DestOf=[](const FString& Going){FString Dest=Going.StartsWith(TEXT("go:"))?Going.Mid(3):FString();
+  if(Dest.IsEmpty()&&!Going.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(Going);A&&A->Place&&*A->Place)Dest=A->Place;return Dest;};
+ // Settled while setting off with these very words ("let's eat at the restaurant, my treat", said in the bookshop or at
+ // her dorm's vending machine): for where they are going (the outing itself starts after this).
+ const FString Now=DestOf(GoingNow);const FString Here=ShopPlaceHere();
+ // Said again in the same shop (the judge reads what they settled so far, every turn) and not on the way anywhere with
+ // it: it stays this shop's. The dinner treat moved on to her dorm's vending machine when "after we eat I'll walk you
+ // home" came with it.
+ if(Now.IsEmpty()&&S.PayAgreedWith==Girl&&S.PayAgreedHow==How&&!Here.IsEmpty()&&S.PayAgreedShop==Here&&OKStreetMindNow(S)-S.PayAgreedAt<=180)return;
  S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);
  // Settled inside a shop: for that shop at once (she paid her own book: not her own soup at the restaurant after).
  // Settled outside ("I will treat you to a drink" on the way): for the shop where it is first used (PayAgreed).
- S.PayAgreedShop=ShopPlaceHere();
- // Settled while setting off for somewhere else ("let's eat at the restaurant, my treat", said in the bookshop): for
- // where they are going. Bound to the bookshop, the dinner it was about became hers to pay.
- // Or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's then).
- // What they set off to do with these very words comes first (the outing itself starts after this).
- const FString Going=!GoingNow.IsEmpty()?GoingNow:S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString();
- if(!Going.IsEmpty()){
-  FString Dest=Going.StartsWith(TEXT("go:"))?Going.Mid(3):FString();
-  if(Dest.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(Going);A&&A->Place&&*A->Place)Dest=A->Place;
-  if(!Dest.IsEmpty())S.PayAgreedShop=Dest;}
+ // On the way somewhere, or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's
+ // then): for there.
+ const FString Later=DestOf(S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString());
+ S.PayAgreedShop=!Now.IsEmpty()?Now:!Later.IsEmpty()?Later:Here;
  UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
