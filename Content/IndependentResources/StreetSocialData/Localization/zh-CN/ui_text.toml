@@ -407,6 +407,7 @@ he_is_intelligence_line = "他是{academic_title}，智力 {intelligence, number
 his_major_unknown = "你还不知道他读什么系（他在对话里说过的才算知道）"
 not_raining = "没有下雨"
 raining_now = "正在下雨"
+closed_today_line = "今天公休：{places}（今天不会去这些地方，也不要说要去）"
 today_is_birthday = "今天是你的生日"
 tomorrow_birthday_hint = "明天是你的生日（你可以暗示他）"
 you_are_label = "你是"

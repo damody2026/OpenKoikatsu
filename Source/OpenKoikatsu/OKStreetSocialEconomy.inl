@@ -188,7 +188,11 @@ void AOKStreetSocialScene::TickServes(){
       if(A.Kind!=EOKStreetActivityKind::Pair||!(A.Code==5||A.Code==1)||!A.Place||FCString::Strcmp(A.Place,*P.PlaceId)!=0)continue;
       const FOKStreetModelAnchor* Spot=A.Anchor?OKStreetPlaceAnchor(*Here,A.Anchor):nullptr;const float Dz=Spot?FMath::Abs(Spot->Position.Z-S.Male.Z):0.f;
       if(!Best||Dz<BestZ){Best=&A;BestZ=Dz;}}
-     FString Why;if(Best&&BestZ<300.f&&BeginOuting(G,Best->Id,Why)){UE_LOG(LogTemp,Display,TEXT("Street order served: they sit down to eat it (%s)"),Best->Id);}
+     FString Why;if(Best&&BestZ<300.f&&BeginOuting(G,Best->Id,Why)){UE_LOG(LogTemp,Display,TEXT("Street order served: they sit down to eat it (%s)"),Best->Id);
+      // What she said while it was being made waits until they have eaten it: as soon as it came, the walk she had
+      // agreed to on the way in pulled them off their cake and out of the cafe (R3-207).
+      if(!S.RetryAction.IsEmpty()&&S.RetryGirl==G){if(S.ThenAction.IsEmpty()){S.ThenAction=S.RetryAction;S.ThenGirl=G;S.ThenUntil=OKStreetMindNow(S)+120;S.ThenReadyAt=0;S.ThenStayMinutes=0;}
+       UE_LOG(LogTemp,Display,TEXT("Street order served: %s waits until they have eaten"),*S.RetryAction);S.RetryAction.Reset();}}
      else if(Best){UE_LOG(LogTemp,Display,TEXT("Street order served: no seat taken (%s: %s)"),Best->Id,*Why);}}
   }
   // She reacts once she is free; if she is no longer his partner there is nobody to tell.

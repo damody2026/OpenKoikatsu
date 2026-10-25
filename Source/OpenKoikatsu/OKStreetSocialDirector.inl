@@ -23,6 +23,10 @@ namespace{const TCHAR* OKPhoneDoingWord(const FString& Kind);} // OKStreetSocial
 FString AOKStreetSocialScene::TodayText(int32 Character) const{
  const auto& S=*State;const int64 Now=OKStreetMindNow(S);const int32 Day=S.Store.CalendarDay;TArray<FString> Parts;
  const FString Holiday=HolidayOn(Day);if(!Holiday.IsEmpty())Parts.Add(Holiday);
+ // Places shut all day today (the library on Mondays): she said she was off to the library on a Monday (R3-206).
+ {const int32 Weekday=int32(StreetNow().GetDayOfWeek());TArray<FString> Shut;
+  for(const auto& Pair:S.Catalog.Places)if(Pair.Value.ClosedWeekdays.Contains(Weekday)){const FOKStreetPlace* P=OKStreetFindPlace(Pair.Key);Shut.Add(P?FString(P->Name):Pair.Key);}
+  if(Shut.Num()){Shut.Sort();Parts.Add(OKMsg(TEXT("ui.director.closed_today_line"),{{TEXT("places"),FString::Join(Shut,OKT(TEXT("ui.bank.list_separator")))}}));}}
  Parts.Add(RainingAt(Day,int32(Now%1440))?OKT(TEXT("ui.director.raining_now")):OKT(TEXT("ui.director.not_raining")));
  if(S.Manifest.Characters.IsValidIndex(Character)&&Character>0)if(const FString* Inv=S.HerInvestText.Find(OKStreetStableId(S.Manifest.Characters[Character])))Parts.Add(*Inv);
  {const FString Mine=AcademicText(Character);if(!Mine.IsEmpty())Parts.Add(OKT(TEXT("ui.director.you_are_label"))+Mine);

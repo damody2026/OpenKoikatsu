@@ -407,6 +407,7 @@ he_is_intelligence_line = "He is {academic_title}, intelligence {intelligence, n
 his_major_unknown = "you do not know yet what he studies (only what he has told you in your talks)"
 not_raining = "It's not raining"
 raining_now = "It's raining"
+closed_today_line = "Closed all day today: {places} (you will not go there today, so do not say you will)"
 today_is_birthday = "Today is your birthday."
 tomorrow_birthday_hint = "Tomorrow is your birthday (you can drop him a hint)"
 you_are_label = "You are"

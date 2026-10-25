@@ -83,7 +83,9 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
   Request->SetArrayField(TEXT("pending"),Pending);}
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
  const FString Action=Out->GetStringField(TEXT("action")),Reason=Out->GetStringField(TEXT("reason"));
- const int64 Start=int64(Out->GetNumberField(TEXT("start")));const int32 Minute=int32(Out->GetNumberField(TEXT("minute")));
+ // An ignored promise has no start or minute.
+ double StartAt=0,MinuteAt=0;Out->TryGetNumberField(TEXT("start"),StartAt);Out->TryGetNumberField(TEXT("minute"),MinuteAt);
+ const int64 Start=int64(StartAt);const int32 Minute=int32(MinuteAt);
  if(Action==TEXT("ignore")){UE_LOG(LogTemp,Display,TEXT("Street promise ignored (%s): day \"%s\" time \"%s\" at %s"),*Reason,*Day,*Time,*Place);
   // A place the town does not have ("the cinema"): both agreed and nothing was booked. She is told, so she says so and
   // they pick a place that exists; he sees it too.
