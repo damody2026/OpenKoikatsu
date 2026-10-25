@@ -223,7 +223,8 @@ void AOKStreetSocialScene::TickAppointments(){
  TickSeries();
  if(!S.bAbsentCastChecked){S.bAbsentCastChecked=true;SetAsideAbsentMeetings();} // the rules are open by now (not at load)
  // She walks over to him at the meeting place and opens the talk.
- auto ArriveNow=[this,&S](int32 Girl){
+ // Join: he is talking with another girl; she comes over and joins them (StepApproach), not a talk of her own.
+ auto ArriveNow=[this,&S](int32 Girl,bool Join=false){
    const bool WithHim=S.Target==Girl||S.Companion==Girl||S.OutingGirl==Girl||S.Pair.Partner==Girl; // walking over with him already (they set off for the cafeteria together)
    if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&!WithHim){
     // He waits upstairs (Yuuka was to meet him after class; he was on the fourth floor of the EE building): she takes the
@@ -252,7 +253,7 @@ void AOKStreetSocialScene::TickAppointments(){
     // Time to walk the route, with room to spare (a fixed 90 s gave up halfway across the map).
     float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
     S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);
-    S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
+    S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachJoin=Join;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
     UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
    }else if(WithHim){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
    else{UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d)"),Girl,S.ApproachGirl);}
@@ -264,7 +265,7 @@ void AOKStreetSocialScene::TickAppointments(){
  if(!S.Store.Appointments.ContainsByPredicate([](const FOKStreetAppointment& A){return A.Status==TEXT("pending");})&&!S.Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return Now-A.Start>2*1440;}))return;
  auto IdOf=[&](int32 I){return I>0&&S.Manifest.Characters.IsValidIndex(I)?OKStreetStableId(S.Manifest.Characters[I]):FString();};
  auto Request=OKRulesRequest(TEXT("appointments_tick"));Request->SetNumberField(TEXT("now"),double(Now));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
- Request->SetStringField(TEXT("talking_to"),IdOf(S.Target));Request->SetStringField(TEXT("approaching"),IdOf(S.ApproachGirl));Request->SetStringField(TEXT("with"),IdOf(S.Target!=INDEX_NONE?S.Target:S.Companion));
+ Request->SetStringField(TEXT("talking_to"),IdOf(S.Target));Request->SetStringField(TEXT("talking_name"),S.Target>0?SpokenName(S.Target):FString());Request->SetStringField(TEXT("approaching"),IdOf(S.ApproachGirl));Request->SetStringField(TEXT("with"),IdOf(S.Target!=INDEX_NONE?S.Target:S.Companion));
  Request->SetStringField(TEXT("came_with"),IdOf(S.OutingGirl!=INDEX_NONE?S.OutingGirl:S.Companion!=INDEX_NONE?S.Companion:S.Pair.Partner));
  TArray<TSharedPtr<FJsonValue>> Rows;auto Hers=MakeShared<FJsonObject>();
  for(const auto& A:S.Store.Appointments){
@@ -278,7 +279,10 @@ void AOKStreetSocialScene::TickAppointments(){
    if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){const FVector& At=S.Agents[Girl-1].Position;
     const bool HerThere=PlaceHere(At)==A.Place||(P&&FVector::Dist2D(P->Door,At)<1000);
     if(!HerThere)S.SheThereSince.Remove(A.Id);else if(!S.SheThereSince.Contains(A.Id))S.SheThereSince.Add(A.Id,Now);
-    O->SetNumberField(TEXT("she_since"),double(S.SheThereSince.Contains(A.Id)?S.SheThereSince[A.Id]:-1));}
+    O->SetNumberField(TEXT("she_since"),double(S.SheThereSince.Contains(A.Id)?S.SheThereSince[A.Id]:-1));
+    // She is there for it while he talks with another girl: her wait is that, not him being late (social.rs busy_seen).
+    if(S.SheThereSince.Contains(A.Id)&&S.Target!=INDEX_NONE&&S.Target!=Girl)S.AppointmentBusySeen.Add(A.Id);
+    O->SetBoolField(TEXT("busy_seen"),S.AppointmentBusySeen.Contains(A.Id));}
    if(Girl!=INDEX_NONE&&!Hers->HasField(A.Heroine)){auto H=MakeShared<FJsonObject>();H->SetObjectField(TEXT("relation"),OKRulesRelationJson(OKStreetViewRelation(S.Store,A.Heroine,S.Manifest.TalkBudget)));if(const auto Pr=ProfileOf(Girl))H->SetObjectField(TEXT("profile"),Pr.ToSharedRef());Hers->SetObjectField(A.Heroine,H);}
   }
   Rows.Add(MakeShared<FJsonValueObject>(O));
@@ -309,7 +313,8 @@ void AOKStreetSocialScene::TickAppointments(){
   {const int32 Id=int32(V->AsObject()->GetNumberField(TEXT("id")));const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==Id;});
    const FOKStreetPlanBlock* B=BlockNow(Girl,int32(Now%1440));
    if(A&&Now<A->Start&&B&&(B->Kind==TEXT("work")||B->Kind==TEXT("class"))){S.ArriveLater.Add(Girl,A->Start);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is at %s until %02d:%02d; she comes then"),Girl,*B->Kind,int32(A->Start%1440)/60,int32(A->Start%60));continue;}}
-  ArriveNow(Girl);
+  bool Join=false;V->AsObject()->TryGetBoolField(TEXT("join"),Join);
+  ArriveNow(Girl,Join);
  }
  RefreshUI();
 }

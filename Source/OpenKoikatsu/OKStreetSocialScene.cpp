@@ -256,7 +256,7 @@ struct FOKStreetSceneState {
  // the heroine walking over on her own, and a second sleeper.
  float PlayerLookBase=50.f;TMap<FString,TArray<bool>> InviteStance;TMap<FString,double> InviteRefusedAt;TMap<FString,int32> InviteRefusals;
  int32 FollowMode=0,LedReplans=0;double LedBlockedSince=0;FVector LedLastPos=FVector::ZeroVector,LedReplanPos=FVector::ZeroVector;float FollowGirlWalk=0;FVector FollowLead=FVector::ZeroVector;bool FollowLeadInit=false;
- TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false;int32 ApproachRetries=0;FString AdmittedPlace;int32 AdmittedDay=-1;
+ TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false,ApproachJoin=false;int32 ApproachRetries=0;FString AdmittedPlace;int32 AdmittedDay=-1;
  int32 SleepGirl2=INDEX_NONE;FVector SleepGirl2Bed=FVector::ZeroVector;float SleepGirl2Yaw=0;
  // Plan §12.4 level 4: she agreed, and they are on the way to a lockable room (or already in the private mode).
  int32 PendingIntimacy=INDEX_NONE,IntimacyGirl=INDEX_NONE;
@@ -357,6 +357,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  TArray<TPair<TWeakObjectPtr<AStaticMeshActor>,FVector>> MealHandProps;
  TMap<int32,double> MealAteAt; // when each (0 him) last ate or sipped something of theirs at the table (meal tick)
  TMap<FString,int64> OrderedAtPlace; // place -> the game minute dishes were last ordered there (a table meal is not billed again)
+ TSet<int32> AppointmentBusySeen; // appointment ids: she was there while he talked with another girl (social.rs: not late)
  TMap<int32,int64> SheThereSince; // appointment id -> the game minute she got to its place (how long she waited for him)
  FString DrinkMaleClip,DrinkFemaleClip,DrinkProbeSave;
  FOKStreetPairSession DrinkProbeSession;
