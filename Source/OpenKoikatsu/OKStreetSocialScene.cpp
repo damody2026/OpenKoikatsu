@@ -2223,8 +2223,9 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
    .OnSelectionChanged_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](TSharedPtr<FString> Item,ESelectInfo::Type Info){if(!Weak.IsValid()||!Item.IsValid()||Info==ESelectInfo::Direct)return;const int32 I=Weak->State->MaleToneOptions.IndexOfByKey(Item);if(I!=INDEX_NONE)Weak->SetMaleTone(I);})
    [SNew(STextBlock).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(OKT(TEXT("ui.scene.his_tone_label"))+(Weak.IsValid()?Weak->MaleToneLabel():FString()));})]];
   if(S.Target!=INDEX_NONE&&!S.TtsVoiceInfo.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.TtsVoiceInfo)).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Regular",11))];
-  AddVoicePickUI(Box);
-  BuildSongRow(Box);
+  Mark(TEXT("voicepick"));AddVoicePickUI(Box);
+  Mark(TEXT("song"));BuildSongRow(Box);
+  Mark(TEXT("look2"));
  }
  if(!S.TtsNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TtsNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.ShowDebug?OKT(TEXT("ui.scene.collapse_heroine_stats")):OKT(TEXT("ui.scene.heroine_stats_view_edit")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->ShowDebug=!Weak->State->ShowDebug;Weak->RefreshUI();}return FReply::Handled();})];
@@ -2264,7 +2265,7 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
   Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).AutoWrapText(true).WrapTextAt(360).Text(FText::FromString(S.OutingGirl!=INDEX_NONE?OKMsg(TEXT("ui.scene.walking_together_hint_2"), {{TEXT("companion"), *S.Manifest.Characters[S.Companion].Name}, {TEXT("place"), *S.OutingPlace}}):S.Manifest.Characters[S.Companion].Name+OKT(TEXT("ui.scene.walking_together_hint"))))];
   Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.OutingGirl!=INDEX_NONE?OKT(TEXT("ui.scene.cancel_going")):OKT(TEXT("ui.scene.end_walking_together")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){if(Weak->State->OutingGirl!=INDEX_NONE)Weak->CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else Weak->FarewellCompanion();}return FReply::Handled();})];
  }
- BluffUI(Box); // 吹牛 with the group (OKStreetSocialBluff.inl)
+ Mark(TEXT("party"));BluffUI(Box); // 吹牛 with the group (OKStreetSocialBluff.inl)
 // Follow me: who walks with him, and the girls nearby he can call over (any number; OKStreetSocialParty.inl).
 // Talking: anyone in calling distance, her too; walking alone: the girl right beside him.
  {
@@ -2279,6 +2280,7 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
   for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(PartyCanJoin(G)&&(S.Target!=INDEX_NONE||FreeTalkPartner()!=INDEX_NONE||(S.Agents.IsValidIndex(G-1)&&FVector::Dist2D(S.Agents[G-1].Position,S.Male)<400.f))){Any=true;Row->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKMsg(TEXT("ui.scene.call_follow_me"), {{TEXT("name"), *S.Manifest.Characters[G].Name}}))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),G](){if(Weak.IsValid())Weak->PartyJoin(G);return FReply::Handled();})];}
   if(Any)Box->AddSlot().AutoHeight().Padding(4)[Row];
  }
+ Mark(TEXT("target"));
  if(S.Target!=INDEX_NONE){
   const int32 Partner=S.Target;
   Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.TopicsOpen?OKT(TEXT("ui.scene.collapse_topics")):OKT(TEXT("ui.scene.throw_topic")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->TopicsOpen=!Weak->State->TopicsOpen;Weak->RefreshUI();}return FReply::Handled();})];

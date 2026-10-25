@@ -9,6 +9,7 @@
 #include "RenderingThread.h"
 #include "RHICommandList.h"
 #include "Async/ParallelFor.h"
+#include "Tasks/Pipe.h"
 
 static bool ValidateRuntimeFace(const FKKRuntimeMouthStream& Stream,const FKKRuntimeFaceState& State,FString& Error){
  auto OpeningOk=[&](float Value){return FMath::IsFinite(Value)&&(Value==-1.f||(Value>=0.f&&Value<=1.f));};
@@ -82,12 +83,30 @@ TSharedPtr<const FKKRuntimeMouthStream,ESPMode::ThreadSafe> OKPrepareRuntimeMout
  for(int32 Control=0;Control<3;++Control)Stream->PatternCount[Control]=Seen[Control]?MinCount[Control]:0;
  if(Stream->Ranges.IsEmpty())return nullptr;return Stream;
 }
+static TAutoConsoleVariable<int32> CVarOKFaceAsync(TEXT("ok.Face.Async"),1,TEXT("1: evaluate and upload face vertices on a task (a frame later at most); 0: on the game thread (for comparing)."));
+static UE::Tasks::FPipe& OKRuntimeFacePipe(){static UE::Tasks::FPipe Pipe(TEXT("OKRuntimeFace"));return Pipe;}
 bool OKUpdateRuntimeMouthStream(USkeletalMesh* Main,USkeletalMesh* Depth,TSharedPtr<const FKKRuntimeMouthStream,ESPMode::ThreadSafe> Stream,float Opening,float Gain,FString& Error,float Blink,const FKKRuntimeFaceState* Face,const FKKRuntimeFaceTransition* Transition){
  check(IsInGameThread());if(!Stream||!Main||!FMath::IsFinite(Opening)||!FMath::IsFinite(Gain)||Opening<0.f||Opening>1.f||Gain<0.f||Gain>1.f||!FMath::IsFinite(Blink)||Blink<0.f||Blink>1.f){Error=TEXT("Runtime mouth update invalid");return false;}
  TArray<FBufferRHIRef> Buffers;for(auto* Mesh:{Main,Depth})if(Mesh){auto* R=Mesh->GetResourceForRendering();if(!R||R->LODRenderData.IsEmpty()){Error=TEXT("Runtime mouth mesh resource missing");return false;}const auto& V=R->LODRenderData[0].StaticVertexBuffers.PositionVertexBuffer;if(V.GetStride()!=sizeof(FVector3f)||Stream->Ranges.IsEmpty()||!V.VertexBufferRHI){Error=TEXT("Runtime mouth vertex layout not ready");return false;}Buffers.Add(V.VertexBufferRHI);}
  uint64 Covered=0;for(const auto& Range:Stream->Ranges){if(!Range.Count||Range.DataOffset!=Covered||uint64(Range.DataOffset)+Range.Count>uint64(Stream->Vertices.Num())){Error=TEXT("Runtime face range data invalid");return false;}for(auto* Mesh:{Main,Depth})if(Mesh&&uint64(Range.FirstVertex)+Range.Count>Mesh->GetResourceForRendering()->LODRenderData[0].StaticVertexBuffers.PositionVertexBuffer.GetNumVertices()){Error=TEXT("Runtime face range outside mesh");return false;}Covered+=Range.Count;}if(Covered!=uint64(Stream->Vertices.Num())){Error=TEXT("Runtime face ranges incomplete");return false;}
- TArray<FVector3f> Positions;if(Transition){if(!OKEvaluateRuntimeFaceTransition(*Stream,Opening,Gain,Blink,*Transition,Positions,Error))return false;}else if(!OKEvaluateRuntimeFacePositions(*Stream,Opening,Gain,Blink,Face,Positions,Error))return false;
  auto Ranges=Stream->Ranges;
+ // Off the game thread: the vertices are evaluated by a task and uploaded from there (a frame later at most). The
+ // inputs are checked here so a bad request still fails the caller; the tasks run one after another (one pipe), so an
+ // older face never lands over a newer one. Evaluated here, each update held the game thread ~1.8 ms, many a minute.
+ if(CVarOKFaceAsync.GetValueOnGameThread()){
+  if(!RuntimeFaceRangesOk(*Stream,Error)||(Face&&!ValidateRuntimeFace(*Stream,*Face,Error)))return false;
+  TOptional<FKKRuntimeFaceState> FaceCopy;if(Face)FaceCopy=*Face;TOptional<FKKRuntimeFaceTransition> TransitionCopy;if(Transition)TransitionCopy=*Transition;
+  OKRuntimeFacePipe().Launch(TEXT("OKRuntimeFace"),[Stream,Opening,Gain,Blink,FaceCopy=MoveTemp(FaceCopy),TransitionCopy=MoveTemp(TransitionCopy),Buffers=MoveTemp(Buffers),Ranges=MoveTemp(Ranges)]()mutable{
+   TArray<FVector3f> Positions;FString TaskError;
+   const bool Ok=TransitionCopy?OKEvaluateRuntimeFaceTransition(*Stream,Opening,Gain,Blink,*TransitionCopy,Positions,TaskError):OKEvaluateRuntimeFacePositions(*Stream,Opening,Gain,Blink,FaceCopy?FaceCopy.GetPtrOrNull():nullptr,Positions,TaskError);
+   if(!Ok){UE_LOG(LogTemp,Warning,TEXT("Runtime face update dropped: %s"),*TaskError);return;}
+   ENQUEUE_RENDER_COMMAND(UpdateRuntimeSpeechMouth)([Buffers=MoveTemp(Buffers),Positions=MoveTemp(Positions),Ranges=MoveTemp(Ranges)](FRHICommandListImmediate& Cmd){
+    for(const auto& Buffer:Buffers)for(const auto& Range:Ranges){const uint32 Bytes=Range.Count*sizeof(FVector3f);void* Destination=Cmd.LockBuffer(Buffer,Range.FirstVertex*sizeof(FVector3f),Bytes,RLM_WriteOnly);FMemory::Memcpy(Destination,Positions.GetData()+Range.DataOffset,Bytes);Cmd.UnlockBuffer(Buffer);}
+   });
+  });
+  Error.Reset();return true;
+ }
+ TArray<FVector3f> Positions;if(Transition){if(!OKEvaluateRuntimeFaceTransition(*Stream,Opening,Gain,Blink,*Transition,Positions,Error))return false;}else if(!OKEvaluateRuntimeFacePositions(*Stream,Opening,Gain,Blink,Face,Positions,Error))return false;
  ENQUEUE_RENDER_COMMAND(UpdateRuntimeSpeechMouth)([Buffers=MoveTemp(Buffers),Positions=MoveTemp(Positions),Ranges=MoveTemp(Ranges)](FRHICommandListImmediate& Cmd){
   for(const auto& Buffer:Buffers)for(const auto& Range:Ranges){const uint32 Bytes=Range.Count*sizeof(FVector3f);void* Destination=Cmd.LockBuffer(Buffer,Range.FirstVertex*sizeof(FVector3f),Bytes,RLM_WriteOnly);FMemory::Memcpy(Destination,Positions.GetData()+Range.DataOffset,Bytes);Cmd.UnlockBuffer(Buffer);}
  });Error.Reset();return true;

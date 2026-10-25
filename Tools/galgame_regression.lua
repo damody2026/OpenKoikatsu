@@ -68,7 +68,11 @@ local function log_last(pattern) local last; for line in io.lines(log) do if lin
 -- A time she is about (in the evening she leaves for dinner and ends the talk), and a voice server that answers (the
 -- skip check needs a voiced line).
 local tts = os.getenv("OK_TTS_ENDPOINT") or ("http://127.0.0.1:" .. ok.util.strip(ok.proc.output({ ok.lua_exe, root .. "/Tools/ok_instance.lua", "port", "tts" })))
-if ok.kit.http_request(tts .. "/health", { timeout = 5 }).status ~= 200 then report("WARN", "voice", "no TTS server at " .. tts .. ": the skip check will fail") end
+-- The game's own server may still be starting (up to a few minutes). Still none: her lines are not voiced and the checks
+-- would fail for that alone, so stop here (exit 2, not tested).
+if not wait(function() return ok.kit.http_request(tts .. "/health", { timeout = 5 }).status == 200 end, 180, 5) then
+  report("FAIL", "voice", "no TTS server at " .. tts .. ": not tested (start one or unset OK_TTS_ENDPOINT)"); os.exit(2)
+end
 local g = a.girl
 call("/clock", { paused = false, hours = 10 }); ok.time.sleep(3)
 -- Call her over and open the conversation (again whenever she has ended it: she remembers earlier runs, and a player
