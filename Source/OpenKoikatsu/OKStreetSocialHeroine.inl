@@ -34,7 +34,9 @@ void AOKStreetSocialScene::ApplyRulesEffects(FOKStreetStore& Candidate,const FJs
    // as a talk turn's does; a stage change (its own favor) is not a gain.
    if(R.Favor>Old&&R.Stage==OldStage&&R.Stage!=TEXT("lover")){int32 Lovers=0;for(const auto& X:Candidate.Relations)if(X.Id!=R.Id&&X.Stage==TEXT("lover"))++Lovers;
     if(Lovers>1){auto Request=OKRulesRequest(TEXT("favor_gain"));Request->SetStringField(TEXT("stage"),R.Stage);Request->SetNumberField(TEXT("favor"),Old);Request->SetNumberField(TEXT("limit"),R.Favor);
-     Request->SetNumberField(TEXT("delta"),R.Favor-Old);Request->SetNumberField(TEXT("lovers"),Lovers);if(const TSharedPtr<FJsonObject> Gain=OKRulesEval(S,Request))R.Favor=float(Gain->GetNumberField(TEXT("favor")));}}}}
+     Request->SetNumberField(TEXT("delta"),R.Favor-Old);Request->SetNumberField(TEXT("lovers"),Lovers);if(const TSharedPtr<FJsonObject> Gain=OKRulesEval(S,Request))R.Favor=float(Gain->GetNumberField(TEXT("favor")));}}
+   // A big swing from a rule (not a talk turn): logged with where it came from, so an unexplained drop can be traced.
+   if(FMath::Abs(R.Favor-Old)>=3.f)UE_LOG(LogTemp,Display,TEXT("Street favor effect: %s %.1f -> %.1f (%s; stage %s -> %s)"),*Id,Old,R.Favor,*GOKLastRule,*OldStage,*R.Stage);}}
   else if(Op==TEXT("observe")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EffectObserve);if(Girl!=INDEX_NONE)MindObserve(Girl,Str(TEXT("kind")),Str(TEXT("text")),Str(TEXT("place")),float(Num(TEXT("importance"))),*Str(TEXT("type")));}
   else if(Op==TEXT("recent"))S.MindRecent.Add(Id,Str(TEXT("text")));
   else if(Op==TEXT("note")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EffectNote);if(Girl!=INDEX_NONE){FOKHeroineArgs A;A.RecordOnly=true;A.Hers=E->GetBoolField(TEXT("hers"));A.Importance=float(Num(TEXT("importance")));A.Detail=Str(TEXT("detail"));A.Place=Str(TEXT("place"));A.RumorDetail=Str(TEXT("rumor_detail"));Interact(Girl,Str(TEXT("act")),A);}}

@@ -777,18 +777,33 @@ pub fn phone_answer(r: &Relation, block: &str) -> f32 {
     p.clamp(0.0, 0.97)
 }
 
-/// End of her birthday: a day with him counts; forgotten costs 5 affection (when she cared, 30+).
+/// Set by Unreal when she talked with him the day before her birthday (she had it on her mind to hint at it).
+pub const BIRTHDAY_TOLD: &str = "birthday_told";
+/// Above this favor a birthday he never heard of still stings a little (BIRTHDAY_UNTOLD_LOSS of her favor).
+const BIRTHDAY_UNTOLD_FAVOR: f32 = 50.0;
+const BIRTHDAY_UNTOLD_LOSS: f32 = 0.1;
+
+/// End of her birthday: a day with him counts; forgotten costs 5 affection (when she cared, 30+). Only when he could
+/// have known (BIRTHDAY_TOLD): nothing in the game shows him her birthday, so a day he never heard of costs only a
+/// tenth of her favor, and only past 50 (playtest R3-203: a friend lost 34 favor overnight for a birthday he had no
+/// way to know).
 fn birthday_end(r: &Value) -> Result<Value, String> {
     let mut rel = rel_of(r.get("relation"))?;
     let before = rel.clone();
     let mut fx = Effects::default();
+    let told = rel.has_flag(BIRTHDAY_TOLD);
+    rel.flags.retain(|f| f != BIRTHDAY_TOLD);
     if b(r, "together") {
         fx.observe(&rel.id, "birthday", crate::tr::t("social.birthday_spent_together"), "", 0.8, "observation");
-    } else if rel.liking() > 30.0 {
+    } else if told && rel.liking() > 30.0 {
         rel.add_liking(-5.0);
-        fx.relation(&rel, &before);
         fx.observe(&rel.id, "birthday", crate::tr::t("social.he_forgot_birthday"), "", 0.75, "observation");
+    } else if rel.favor > BIRTHDAY_UNTOLD_FAVOR {
+        // He could not have known, but she cares enough to be a little let down: a tenth of her favor.
+        rel.favor -= rel.favor * BIRTHDAY_UNTOLD_LOSS;
+        fx.observe(&rel.id, "birthday", crate::tr::t("social.birthday_he_did_not_know"), "", 0.4, "observation");
     }
+    fx.relation(&rel, &before);
     Ok(json!({"effects": fx.into_value()}))
 }
 
@@ -948,6 +963,24 @@ mod tests {
             o[k] = x.clone();
         }
         o
+    }
+
+    #[test]
+    fn a_birthday_he_never_heard_of_is_no_slight() {
+        let favor = |v: &Value| v["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").and_then(|e| e["set"]["favor"].as_f64());
+        let friend = rel(json!({"stage": "friend", "favor": 91.0}));
+        let unknown = birthday_end(&json!({"relation": friend, "together": false})).unwrap();
+        assert!((favor(&unknown).unwrap() - 81.9).abs() < 0.01, "not told, past 50: a tenth: {unknown}");
+        let low = birthday_end(&json!({"relation": rel(json!({"stage": "friend", "favor": 40.0})), "together": false})).unwrap();
+        assert_eq!(favor(&low), None, "not told, 50 or less: nothing: {low}");
+        let mut told = friend.clone();
+        told["flags"] = json!([BIRTHDAY_TOLD]);
+        let forgot = birthday_end(&json!({"relation": told, "together": false})).unwrap();
+        assert!(favor(&forgot).unwrap() < 91.0, "told and forgot: {forgot}");
+        let fx = forgot["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").unwrap().clone();
+        assert_eq!(fx["set"]["flags"], json!([]), "the hint is used up: {fx}");
+        let met = birthday_end(&json!({"relation": told, "together": true})).unwrap();
+        assert_eq!(favor(&met), None, "spent together: {met}");
     }
 
     #[test]

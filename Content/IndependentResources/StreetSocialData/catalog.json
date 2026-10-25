@@ -3728,26 +3728,6 @@
    "consumable": true
   },
   {
-   "id": "onsen_bath",
-   "place": "onsen",
-   "name": "入浴",
-   "category": "bath",
-   "price": {
-    "": 74
-   },
-   "season": null,
-   "tags": [],
-   "prop": "none",
-   "options": [],
-   "effects": {
-    "energy": 20,
-    "hygiene": 50,
-    "mood": 8
-   },
-   "giftable": false,
-   "consumable": true
-  },
-  {
    "id": "onsen_towel",
    "place": "onsen",
    "name": "浴巾租借",

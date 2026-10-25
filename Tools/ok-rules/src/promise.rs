@@ -56,6 +56,24 @@ fn game_day_of(day: &str, today: i64) -> i64 {
     today
 }
 
+/// "After class" on game day `day`: the later end of his and her classes that weekday from their timetables. A school
+/// weekday with no class of theirs (an exam week has none: R3-205, "明天放学后" in the midterm week) is the usual end of
+/// the school day, the last period. None at weekends, in the break, or when neither of them studies (-1).
+fn class_end_on(r: &Value, day: i64) -> i64 {
+    let civil = crate::campus::civil_day(day as i32);
+    let weekday = crate::campus::weekday(civil);
+    let courses: Vec<&Value> = ["his_courses", "her_courses"].iter().flat_map(|k| r.get(*k).and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[])).collect();
+    let phase = crate::campus::term_at(civil).1;
+    if courses.is_empty() || weekday >= 5 || phase == crate::campus::Phase::Break {
+        return -1;
+    }
+    let last = crate::academics::SLOT_END[1] as i64;
+    if phase != crate::campus::Phase::Classes {
+        return last;
+    }
+    courses.iter().filter(|c| i(c, "weekday") == weekday).map(|c| crate::academics::SLOT_END[i(c, "slot").clamp(0, 1) as usize] as i64).max().unwrap_or(last)
+}
+
 /// Request: heroine, day, time, place, place_known, now (game minute), today (game day), pending [{id, heroine, kind,
 /// place, start, label, booked_ago (real seconds since booked from chat, -1 unknown)}].
 /// Answer: action ignore | book | move | keep | closed; reason; start; minute (of the day said); id (the meeting moved or
@@ -67,10 +85,21 @@ fn promise(c: &Catalog, r: &Value) -> Value {
         return ignore("not_a_place");
     }
     // No clear time, no meeting (it used to become 19:00 by default, a time nobody said).
-    // "After class" / "after work" with no clock time: when the later of the two of them is through today (C++ gives
-    // the ends of today's classes and shifts after now); nothing left today for either, no time.
+    // "After class" / "after work" with no clock time: when the later of the two of them is through that day. Today:
+    // C++ gives the ends of today's classes and shifts after now. Another day (R3-205: "明天放学后" was read with
+    // today's timetable, nothing left at 17:40, no time): the timetables (his_courses / her_courses [{weekday, slot}])
+    // on that day's weekday while classes run, and his shifts [{start, minutes}] on that day.
+    let today = i(r, "today");
+    let game_day = game_day_of(s(r, "day"), today);
     let after = |kind: &str| -> Option<i64> {
-        let end = i(r, &format!("his_{kind}_end")).max(i(r, &format!("her_{kind}_end")));
+        let end = if game_day == today {
+            i(r, &format!("his_{kind}_end")).max(i(r, &format!("her_{kind}_end")))
+        } else if kind == "class" {
+            class_end_on(r, game_day)
+        } else {
+            let list = r.get("his_shifts").and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[]);
+            list.iter().filter(|x| i(x, "start").div_euclid(1440) == game_day).map(|x| i(x, "start") % 1440 + i(x, "minutes").max(60)).max().unwrap_or(-1)
+        };
         (end > 0).then_some(end)
     };
     let minute = match s(r, "time") {
@@ -79,8 +108,6 @@ fn promise(c: &Catalog, r: &Value) -> Value {
         t => minute_of(t),
     };
     let Some(minute) = minute else { return ignore("no_time") };
-    let today = i(r, "today");
-    let game_day = game_day_of(s(r, "day"), today);
     // Before 04:00 belongs to the previous game day's night.
     let start = game_day * 1440 + minute + if minute < 240 { 1440 } else { 0 };
     if start <= i(r, "now") {
@@ -174,9 +201,28 @@ mod tests {
         assert_eq!((b["action"].as_str(), b["start"].as_i64()), (Some("book"), Some(11 * 1440 + 19 * 60)));
         assert_eq!(ask(json!({"time": "晚上"}))["reason"], "no_time");
         // "After class": the later end of his and her classes today; none left today, no time.
-        let after = ask(json!({"time": "after_class", "his_class_end": 990, "her_class_end": 720}));
+        let after = ask(json!({"day": "+0", "time": "after_class", "his_class_end": 990, "her_class_end": 720}));
         assert_eq!((after["action"].as_str(), after["minute"].as_i64()), (Some("book"), Some(990)));
-        assert_eq!(ask(json!({"time": "after_class", "his_class_end": -1, "her_class_end": -1}))["reason"], "no_time");
+        assert_eq!(ask(json!({"day": "+0", "time": "after_class", "his_class_end": -1, "her_class_end": -1}))["reason"], "no_time");
+        // Another day (R3-205): from the timetables. Day 10 is Saturday 2010-09-11; day 12 is Monday, day 11 Sunday.
+        let monday = json!({"time": "after_class", "his_class_end": -1, "her_courses": [{"weekday": 0, "slot": 1}], "his_courses": [{"weekday": 0, "slot": 0}, {"weekday": 2, "slot": 1}]});
+        let mut m = monday.clone();
+        m["day"] = json!("+2");
+        assert_eq!(ask(m)["start"], 12 * 1440 + 990);
+        let mut sun = monday.clone();
+        sun["day"] = json!("+1");
+        assert_eq!(ask(sun)["reason"], "no_time", "no classes on Sunday");
+        // Tuesday (day 13): neither has a class that day, the school day ends with the last period; no timetable at all,
+        // no time.
+        let mut tue = monday.clone();
+        tue["day"] = json!("+3");
+        assert_eq!(ask(tue)["start"], 13 * 1440 + 990);
+        assert_eq!(ask(json!({"day": "+2", "time": "after_class"}))["reason"], "no_time");
+        // The midterm week (2010-11-08, day 68): no classes, still after school.
+        let mid = ask(json!({"day": "+1", "today": 67, "now": 67 * 1440 + 1060, "time": "after_class", "her_courses": [{"weekday": 0, "slot": 0}]}));
+        assert_eq!(mid["start"], 68 * 1440 + 990, "{mid}");
+        let shift = ask(json!({"time": "after_work", "his_shifts": [{"start": 11 * 1440 + 1020, "minutes": 240}]}));
+        assert_eq!(shift["start"], 11 * 1440 + 1260);
         assert_eq!(ask(json!({"day": "+0", "time": "09:00"}))["reason"], "past");
         assert_eq!(ask(json!({"place_known": false}))["reason"], "not_a_place");
         // 01:30 "tonight" is the night after the game day.

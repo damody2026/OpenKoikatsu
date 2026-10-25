@@ -169,7 +169,10 @@ void AOKStreetSocialScene::HandleMindTalk(const TSharedPtr<FJsonObject>& R){
  if(R->TryGetObjectField(TEXT("usage"),Usage)){(*Usage)->TryGetNumberField(TEXT("cache_hit_tokens"),Hit);(*Usage)->TryGetNumberField(TEXT("cache_miss_tokens"),Miss);}
  R->TryGetNumberField(TEXT("context_chars"),Chars);
  UE_LOG(LogTemp,Display,TEXT("Street free talk (mind): actor=%d ok=%d cache_hit=%.0f cache_miss=%.0f context_chars=%.0f"),Pending.Character,Failure.IsEmpty()?1:0,Hit,Miss,Chars);
- if(Failure.IsEmpty()){S.InteractedToday.Add(Pending.Character);S.MindTalkPartner=Pending.Character;TMap<FString,float> Talked;Talked.Add(TEXT("social"),6.f);QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindTalkFeed);FeedHer(Pending.Character,Talked);}
+ if(Failure.IsEmpty()){S.InteractedToday.Add(Pending.Character);S.MindTalkPartner=Pending.Character;
+  // The day before her birthday she has it on her mind to hint at it (director note): from now on he could know (social.rs birthday_end).
+  if(BirthdayOf(Pending.Character,S.Store.CalendarDay+1)&&S.Manifest.Characters.IsValidIndex(Pending.Character)){const FString Id=OKStreetStableId(S.Manifest.Characters[Pending.Character]);
+   for(auto& R:S.Store.Relations)if(R.Id==Id)R.Flags.AddUnique(TEXT("birthday_told"));}TMap<FString,float> Talked;Talked.Add(TEXT("social"),6.f);QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindTalkFeed);FeedHer(Pending.Character,Talked);}
  FinishFreeTalk(Pending.Character,Pending.Id,Pending.Text,Failure.IsEmpty()?&Reply:nullptr,Failure);
 }
 

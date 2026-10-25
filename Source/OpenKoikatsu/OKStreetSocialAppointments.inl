@@ -70,7 +70,12 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
   for(const auto& C:S.Store.PlayerAcademic.Courses)if(C.Weekday==Weekday){const int32 End=C.Slot==0?720:990;if(End>Now)HisClass=FMath::Max(HisClass,End);}
   for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Kind==TEXT("shift")&&A.Start/1440==S.Store.CalendarDay){const int32 End=int32(A.Start%1440)+FMath::Max(A.Minutes,60);if(End>Now)HisWork=FMath::Max(HisWork,End);}
   if(const TArray<FOKStreetPlanBlock>* Plan=S.Plans.Find(Character))for(const auto& B:*Plan)if(B.End>Now){if(B.Kind==TEXT("class"))HerClass=FMath::Max(HerClass,B.End);else if(B.Kind==TEXT("work"))HerWork=FMath::Max(HerWork,B.End);}
-  Request->SetNumberField(TEXT("his_class_end"),HisClass);Request->SetNumberField(TEXT("her_class_end"),HerClass);Request->SetNumberField(TEXT("his_work_end"),HisWork);Request->SetNumberField(TEXT("her_work_end"),HerWork);}
+  Request->SetNumberField(TEXT("his_class_end"),HisClass);Request->SetNumberField(TEXT("her_class_end"),HerClass);Request->SetNumberField(TEXT("his_work_end"),HisWork);Request->SetNumberField(TEXT("her_work_end"),HerWork);
+  // Another day: their timetables and his shifts (promise.rs reads them for that day).
+  auto Courses=[](const FOKStreetAcademic* A){TArray<TSharedPtr<FJsonValue>> Out;if(A&&A->Status==TEXT("enrolled"))for(const auto& C:A->Courses){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("weekday"),C.Weekday);O->SetNumberField(TEXT("slot"),C.Slot);Out.Add(MakeShared<FJsonValueObject>(O));}return Out;};
+  Request->SetArrayField(TEXT("his_courses"),Courses(&S.Store.PlayerAcademic));Request->SetArrayField(TEXT("her_courses"),Courses(S.Store.Academics.Find(Id)));
+  TArray<TSharedPtr<FJsonValue>> Shifts;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Kind==TEXT("shift")){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("start"),double(A.Start));O->SetNumberField(TEXT("minutes"),A.Minutes);Shifts.Add(MakeShared<FJsonValueObject>(O));}
+  Request->SetArrayField(TEXT("his_shifts"),Shifts);}
  {const double Wall=FPlatformTime::Seconds();TArray<TSharedPtr<FJsonValue>> Pending;
   for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("heroine"),A.Heroine);
    O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("place"),A.Place);O->SetNumberField(TEXT("start"),double(A.Start));O->SetStringField(TEXT("label"),A.Label);
