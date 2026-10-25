@@ -116,6 +116,18 @@ male_clip = "venue_read_seated.okanim"
 yields = ["book_progress"]
 
 [[activity]]
+# 在圖書館一起複習功課（坐著看書是讀自己的書；約好「去圖書館一起複習」時是這個，結束時算自習）
+id = "library_study"
+name = "在圖書館閱覽區坐下來一起複習功課"
+place = "library"
+kind = "pair"
+code = 1
+anchor = "seat"
+female_clip = "venue_study_seated.okanim"
+male_clip = "venue_study_seated.okanim"
+yields = ["study"]
+
+[[activity]]
 id = "pet_photo"
 name = "在寵物店和小動物一起合照"
 place = "petshop"
