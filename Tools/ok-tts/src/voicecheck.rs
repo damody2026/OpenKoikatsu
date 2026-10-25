@@ -5,7 +5,12 @@
 //! a confusion matrix (which reference each line is closest to). A local listening page (index.html) lists every clip.
 //! Auxiliary evidence: the acceptance is the listener's ear (TTS plan §4, §20.4).
 //!
-//!   ok-tts voice-check --cards DIR_OR_PNGS --corpus lines.txt --out DIR [--base DIR] [--seed N]
+//!   ok-tts voice-check --cards DIR_OR_PNGS --corpus lines.txt --out DIR [--base DIR] [--judge DIR] [--compare DIR] [--seed N]
+//!
+//! --base picks the Base model that speaks (1.7B or 0.6B; a card voice made with the other size is embedded again
+//! from its reference clip). --judge picks the model whose speaker encoder scores (default --base): comparing two
+//! models needs one judge, since the two encoders do not give comparable numbers. --compare DIR is an earlier
+//! voice-check output; the page then puts its scores and clips beside these.
 //!
 //! Clips and the page go to --out (local only: the voices are not versioned and are not published).
 
@@ -26,6 +31,8 @@ pub struct VoiceCheckArgs {
     pub corpus: PathBuf,
     pub out: PathBuf,
     pub base: PathBuf,
+    pub judge: PathBuf,
+    pub compare: Option<PathBuf>,
     pub voices: PathBuf,
     pub seed: u64,
     pub positions: usize,
@@ -45,7 +52,7 @@ fn html_escape(s: &str) -> String {
 
 pub fn run(a: &VoiceCheckArgs) -> Result<()> {
     let lines: Vec<String> = std::fs::read_to_string(&a.corpus).with_context(|| format!("read {}", a.corpus.display()))?
-        .lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .lines().map(|l| l.trim().trim_start_matches('\u{feff}')).filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(|l| clean_line(l.rsplit('\t').next().unwrap_or(l))).filter(|l| !l.is_empty()).collect();
     if lines.is_empty() {
         bail!("the corpus has no lines");
@@ -62,12 +69,18 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
             cards.push(c.clone());
         }
     }
+    let store = Store::open(&a.base.join("model.safetensors"))?;
+    let speaker_encoder = SpeakerEncoder::load(&store).context("speaker encoder")?;
+    drop(store);
     let mut heroines = Vec::new();
     for card in &cards {
-        let Some(voice) = crate::cardvoice::read_file(card)? else {
+        let Some(mut voice) = crate::cardvoice::read_file(card)? else {
             crate::log!("ok-tts: voice-check: {} has no voice of its own, skipped", card.display());
             continue;
         };
+        if voice.fit(&speaker_encoder)? {
+            crate::log!("ok-tts: voice-check: {} was made with the other model size; embedded again from its reference", card.display());
+        }
         let name = card.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         heroines.push(Heroine { name, reference: decode_ogg(&voice.ref_ogg)?, clone_embedding: voice.embedding, clips: Vec::new(), rtf: Vec::new() });
     }
@@ -77,7 +90,10 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
     std::fs::create_dir_all(&a.out)?;
 
     // 1. Every heroine speaks the corpus in her card's voice.
+    drop(speaker_encoder);
     let engine = Engine::load(&a.base, &a.voices, a.positions)?;
+    let weights_bytes = crate::gpu::mem_stats().0;
+    crate::gpu::reset_peak();
     for h in heroines.iter_mut() {
         let dir = a.out.join(&h.name);
         std::fs::create_dir_all(&dir)?;
@@ -94,10 +110,11 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
         }
         crate::log!("ok-tts: voice-check: {} spoke {} lines", h.name, lines.len());
     }
+    let peak_bytes = crate::gpu::mem_stats().1;
     drop(engine);
 
-    // 2. Embeddings: each reference and each clip; centred on the mean of all of them.
-    let store = Store::open(&a.base.join("model.safetensors"))?;
+    // 2. Embeddings (the judge's encoder): each reference and each clip; centred on the mean of all of them.
+    let store = Store::open(&a.judge.join("model.safetensors"))?;
     let encoder = SpeakerEncoder::load(&store).context("speaker encoder")?;
     drop(store);
     let refs: Vec<Vec<f32>> = heroines.iter().map(|h| encoder.embed(&h.reference)).collect::<Result<_>>()?;
@@ -134,7 +151,12 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
         json!({"name": names[i], "own": score[i][i], "best_other": other, "margin": score[i][i] - other,
                "correct": confusion[i][i], "lines": clips[i].len(), "rtf_mean": rtf})
     }).collect();
-    let report = json!({"corpus": a.corpus, "seed": a.seed, "names": names, "lines": lines, "score": score, "confusion": confusion,
+    let rtf_all: Vec<f64> = heroines.iter().flat_map(|h| h.rtf.iter().copied()).collect();
+    let rtf_mean = rtf_all.iter().sum::<f64>() / rtf_all.len().max(1) as f64;
+    let mib = |b: usize| b as f64 / 1048576.0;
+    let report = json!({"model": model_label(&a.base), "judge": model_label(&a.judge), "base_dir": a.base, "judge_dir": a.judge,
+                        "embedding_dim": heroines[0].clone_embedding.len(), "vram_weights_mib": mib(weights_bytes), "vram_peak_mib": mib(peak_bytes),
+                        "rtf_mean": rtf_mean, "out": a.out, "corpus": a.corpus, "seed": a.seed, "names": names, "lines": lines, "score": score, "confusion": confusion,
                         "summary": summary, "per_line": per_line,
                         "note": "score[i][j]: mean centred cosine of heroine i's lines to heroine j's reference; confusion[i][j]: lines of i closest to j's reference"});
     write_atomic(&a.out.join("report.json"), serde_json::to_string_pretty(&report)?.as_bytes())?;
@@ -144,6 +166,36 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
         body{font-family:system-ui,sans-serif;margin:16px;max-width:1100px}table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid #bbb;padding:3px 6px;text-align:right}\
         th{background:#eee}.own{background:#d8f0d8}.bad{background:#f6d0d0}audio{height:28px;vertical-align:middle}h2{margin-top:28px}.t{text-align:left}</style></head><body>");
     h += "<h1>女主卡片聲線驗收</h1><p>每位女主用卡片裡的聲線唸同一組台詞。分數是去平均後的聲紋相似度（同一模型的 speaker encoder，只是輔助指標，最後以耳朵為準）。綠色格是自己，紅色格表示有台詞比較像別人。</p>";
+    h += &format!("<p>模型 {}；評分用 {} 的 speaker encoder；聲紋 {} 維；權重 {:.0} MiB，生成時最高 {:.0} MiB；平均 RTF {:.3}。</p>",
+        html_escape(&model_label(&a.base)), html_escape(&model_label(&a.judge)), heroines[0].clone_embedding.len(), mib(weights_bytes), mib(peak_bytes), rtf_mean);
+    // The other run (--compare): its numbers per heroine and its clips beside these.
+    let other: Option<serde_json::Value> = match &a.compare {
+        Some(dir) => Some(serde_json::from_slice(&std::fs::read(dir.join("report.json")).with_context(|| format!("read {}", dir.join("report.json").display()))?)?),
+        None => None,
+    };
+    let other_index = |name: &str| -> Option<usize> { other.as_ref()?["names"].as_array()?.iter().position(|v| v.as_str() == Some(name)) };
+    if let Some(o) = &other {
+        let om = o["model"].as_str().unwrap_or("?");
+        if o["judge"].as_str() != Some(model_label(&a.judge).as_str()) {
+            h += "<p class=\"bad\">注意：兩次的評分 encoder 不同，分數不能直接比。</p>";
+        }
+        h += &format!("<h2>兩個模型對照</h2><p>對照：{}（權重 {:.0} MiB，最高 {:.0} MiB，平均 RTF {:.3}）。</p><table><tr><th></th><th colspan=3>{}</th><th colspan=3>{}</th></tr><tr><th></th><th>自己</th><th>差距</th><th>答對</th><th>自己</th><th>差距</th><th>答對</th></tr>",
+            html_escape(om), o["vram_weights_mib"].as_f64().unwrap_or(0.0), o["vram_peak_mib"].as_f64().unwrap_or(0.0), o["rtf_mean"].as_f64().unwrap_or(0.0),
+            html_escape(&model_label(&a.base)), html_escape(om));
+        let (mut mine, mut theirs) = (0usize, 0usize);
+        for (i, s) in summary.iter().enumerate() {
+            h += &format!("<tr><th>{}</th><td>{:+.3}</td><td>{:+.3}</td><td>{}/{}</td>", html_escape(names[i]), s["own"].as_f64().unwrap_or(0.0), s["margin"].as_f64().unwrap_or(0.0), s["correct"], s["lines"]);
+            mine += s["correct"].as_u64().unwrap_or(0) as usize;
+            match other_index(names[i]).map(|j| &o["summary"][j]) {
+                Some(t) => {
+                    theirs += t["correct"].as_u64().unwrap_or(0) as usize;
+                    h += &format!("<td>{:+.3}</td><td>{:+.3}</td><td>{}/{}</td></tr>", t["own"].as_f64().unwrap_or(0.0), t["margin"].as_f64().unwrap_or(0.0), t["correct"], t["lines"]);
+                }
+                None => h += "<td colspan=3>—</td></tr>",
+            }
+        }
+        h += &format!("<tr><th>合計答對</th><td colspan=3>{mine}</td><td colspan=3>{theirs}</td></tr></table>");
+    }
     h += "<h2>各人對每位參考音的平均相似度</h2><table><tr><th></th>";
     for name in &names {
         h += &format!("<th>{}</th>", html_escape(name));
@@ -159,14 +211,29 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
     }
     h += "</table>";
     for (i, hero) in heroines.iter().enumerate() {
-        h += &format!("<h2>{}</h2><p>參考音：<audio controls preload=\"none\" src=\"{}/ref.ogg\"></audio>　自己 {:+.3}，最像的別人 {:+.3}</p><table><tr><th>#</th><th class=\"t\">台詞</th><th>試聽</th><th>自己</th><th>最像</th></tr>",
-            html_escape(&hero.name), html_escape(&hero.name), score[i][i], summary[i]["best_other"].as_f64().unwrap_or(0.0));
+        h += &format!("<h2>{}</h2><p>參考音：<audio controls preload=\"none\" src=\"{}/ref.ogg\"></audio>　自己 {:+.3}，最像的別人 {:+.3}</p><table><tr><th>#</th><th class=\"t\">台詞</th><th>試聽</th><th>自己</th><th>最像</th>{}</tr>",
+            html_escape(&hero.name), html_escape(&hero.name), score[i][i], summary[i]["best_other"].as_f64().unwrap_or(0.0),
+            match &other { Some(o) => format!("<th>{}</th><th>自己</th><th>最像</th>", html_escape(o["model"].as_str().unwrap_or("對照"))), None => String::new() });
+        let oi = other_index(&hero.name);
         for (k, line) in lines.iter().enumerate() {
             let row = &per_line[i][k];
             let closest = row["closest"].as_str().unwrap_or("");
             let class = if closest == hero.name { "" } else { "bad" };
-            h += &format!("<tr><td>{k}</td><td class=\"t\">{}</td><td><audio controls preload=\"none\" src=\"{}/{k:02}.ogg\"></audio></td><td>{:+.3}</td><td class=\"{class}\">{}</td></tr>",
+            h += &format!("<tr><td>{k}</td><td class=\"t\">{}</td><td><audio controls preload=\"none\" src=\"{}/{k:02}.ogg\"></audio></td><td>{:+.3}</td><td class=\"{class}\">{}</td>",
                 html_escape(line), html_escape(&hero.name), row["own"].as_f64().unwrap_or(0.0), html_escape(closest));
+            if let (Some(o), Some(dir)) = (&other, &a.compare) {
+                let r = oi.map(|j| &o["per_line"][j][k]);
+                match r.filter(|r| r.is_object()) {
+                    Some(r) => {
+                        let c = r["closest"].as_str().unwrap_or("");
+                        let url = format!("file:///{}/{}/{k:02}.ogg", dir.display().to_string().replace('\\', "/"), hero.name);
+                        h += &format!("<td><audio controls preload=\"none\" src=\"{}\"></audio></td><td>{:+.3}</td><td class=\"{}\">{}</td>",
+                            html_escape(&url), r["own"].as_f64().unwrap_or(0.0), if c == hero.name { "" } else { "bad" }, html_escape(c));
+                    }
+                    None => h += "<td colspan=3>—</td>",
+                }
+            }
+            h += "</tr>";
         }
         h += "</table>";
     }
@@ -175,4 +242,16 @@ pub fn run(a: &VoiceCheckArgs) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&json!({"summary": summary, "confusion": confusion}))?);
     println!("wrote {}", a.out.join("index.html").display());
     Ok(())
+}
+
+/// "Qwen3-TTS-12Hz-0.6B-Base" from a Hugging Face cache path (…\models--Qwen--Qwen3-TTS-12Hz-0.6B-Base\snapshots\…),
+/// else the directory's name.
+fn model_label(dir: &std::path::Path) -> String {
+    for c in dir.components() {
+        let s = c.as_os_str().to_string_lossy();
+        if let Some(rest) = s.strip_prefix("models--") {
+            return rest.rsplit("--").next().unwrap_or(rest).to_string();
+        }
+    }
+    dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }

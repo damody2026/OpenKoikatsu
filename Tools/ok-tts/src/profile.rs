@@ -24,7 +24,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use sha1_smol::Sha1;
 
-use crate::audio::{encode_ogg,peak_normalize, trim_silence, write_atomic};
+use crate::audio::{decode_ogg, encode_ogg, peak_normalize, trim_silence, write_atomic};
 use crate::engine::{Engine, SAMPLE_RATE};
 use crate::speaker::SpeakerEncoder;
 use crate::talker::{bf16_to_f32, f32_to_bf16, GenConfig};
@@ -109,6 +109,17 @@ impl Profile {
 
     pub fn save(&self, path: &Path) -> Result<()> {
         write_atomic(path, &self.to_bytes()?)
+    }
+
+    /// A voice made with the other Base size (1.7B: 2048 values, 0.6B: 1024) takes its embedding again from its own
+    /// reference clip with this model's encoder. Only in memory: the file or card keeps working with either model.
+    pub fn fit(&mut self, encoder: &SpeakerEncoder) -> Result<bool> {
+        if self.embedding.len() == encoder.dim() {
+            return Ok(false);
+        }
+        let samples = decode_ogg(&self.ref_ogg).with_context(|| format!("voice {}: the reference clip does not decode", self.meta.id))?;
+        self.embedding = encoder.embed(&samples)?.into_iter().map(|v| bf16_to_f32(f32_to_bf16(v))).collect();
+        Ok(true)
     }
 }
 

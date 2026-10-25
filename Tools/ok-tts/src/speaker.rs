@@ -1,5 +1,5 @@
 //! Speaker encoder of the Qwen3-TTS Base models (ECAPA-TDNN, `speaker_encoder.*`), on the CPU in f32: 24 kHz audio ->
-//! 128-band log mel (n_fft 1024, hop 256, Slaney filters up to 12 kHz) -> one 2048-value speaker embedding, the row the
+//! 128-band log mel (n_fft 1024, hop 256, Slaney filters up to 12 kHz) -> one speaker embedding (2048 values for 1.7B, 1024 for 0.6B), the row the
 //! Base talker takes in place of a voice description (x-vector mode). Follows qwen_tts `Qwen3TTSSpeakerEncoder` and
 //! `mel_spectrogram`; it runs once per reference clip, so plain loops are fast enough.
 
@@ -166,7 +166,12 @@ impl SpeakerEncoder {
         })
     }
 
-    /// 24 kHz mono samples (at least ~0.5 s) -> speaker embedding (2048 values).
+    /// Length of the embedding: the talker's width (1.7B: 2048, 0.6B: 1024).
+    pub fn dim(&self) -> usize {
+        self.fc.out
+    }
+
+    /// 24 kHz mono samples (at least ~0.5 s) -> speaker embedding (`dim` values).
     pub fn embed(&self, samples: &[f32]) -> Result<Vec<f32>> {
         let (mel, t) = self.mel(samples)?;
         let mut h = self.block0.forward(&mel, t);

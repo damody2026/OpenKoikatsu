@@ -10,8 +10,9 @@ use crate::gpu::{ptr_bf16, Arg, Buf, Gpu, Graph, W};
 use crate::sampling::Sampler;
 use crate::weights::Store;
 
-pub const HIDDEN: usize = 2048;
 pub const NUM_CODE_GROUPS: usize = 16;
+/// The code predictor's width (the same in the 1.7B and 0.6B models).
+const PRED_HIDDEN: usize = 1024;
 const TALKER_VOCAB: usize = 3072;
 const PRED_VOCAB: usize = 2048;
 
@@ -177,9 +178,14 @@ enum Pos {
 
 pub struct Talker {
     stack: Stack,
+    /// The talker's width (1.7B: 2048, 0.6B: 1024; also the speaker embedding's), the text embedding's (2048 in both)
+    /// and the text projection's middle; read from the weights' shapes.
+    hidden: usize,
+    text_hidden: usize,
+    text_mid: usize,
     codec_embed: Buf,
-    /// text_embedding [vocab, HIDDEN] bf16 kept in host memory (about 0.6 GB that VRAM does not need): only a prompt's
-    /// rows are gathered and uploaded.
+    /// text_embedding [vocab, text_hidden] bf16 kept in host memory (about 0.6 GB that VRAM does not need): only a
+    /// prompt's rows are gathered and uploaded.
     text_embed: Vec<u16>,
     fc1_w: Buf,
     fc1_b: Buf,
@@ -187,12 +193,12 @@ pub struct Talker {
     fc2_b: Buf,
     codec_head: Buf,
     pred: Stack,
-    pred_proj_w: Buf,
-    pred_proj_b: Buf,
+    /// small_to_mtp_projection: talker width to the predictor's; the 0.6B model has none (both 1024).
+    pred_proj: Option<(Buf, Buf)>,
     pred_embeds: Vec<Buf>,
     pred_heads: Vec<Buf>,
     // Fixed buffers the captured predictor graph reads and writes.
-    g_past: Buf, // bf16 [HIDDEN]: talker hidden of the previous position
+    g_past: Buf, // bf16 [hidden]: talker hidden of the previous position
     g_cur: Buf,  // i32 [16]: codes of the current frame (cur[0] from the talker)
     g_rng: Buf,  // u64 [2]: seed, frame counter
     pred_graph: Mutex<Option<((bool, u32, usize), Graph)>>,
@@ -243,8 +249,20 @@ impl Talker {
         // The 28-layer talker's matrices as int8 (about 1.3 GB less VRAM); OK_TTS_WEIGHTS=bf16 keeps them bf16. The small
         // code predictor stays bf16.
         let int8 = std::env::var("OK_TTS_WEIGHTS").map(|v| v != "bf16").unwrap_or(true);
-        let stack = Stack::load(gpu, st, "talker.model", 28, HIDDEN, 16, 8, 128, 6144, 1_000_000.0, cache_len, int8)?;
-        let pred = Stack::load(gpu, st, "talker.code_predictor.model", 5, 1024, 16, 8, 128, 3072, 1_000_000.0, NUM_CODE_GROUPS + 2, false)?;
+        // The model's size from its weights: down_proj [hidden, inter], text_embedding [vocab, text_hidden],
+        // text_projection.linear_fc1 [mid, text_hidden].
+        let shape = |name: &str| -> Result<Vec<usize>> { Ok(st.bytes(name, safetensors::Dtype::BF16)?.1) };
+        let down = shape("talker.model.layers.0.mlp.down_proj.weight")?;
+        let (hidden, inter) = (down[0], down[1]);
+        let text_hidden = shape("talker.model.text_embedding.weight")?[1];
+        let text_mid = shape("talker.text_projection.linear_fc1.weight")?[0];
+        let stack = Stack::load(gpu, st, "talker.model", 28, hidden, 16, 8, 128, inter, 1_000_000.0, cache_len, int8)?;
+        let pred = Stack::load(gpu, st, "talker.code_predictor.model", 5, PRED_HIDDEN, 16, 8, 128, 3072, 1_000_000.0, NUM_CODE_GROUPS + 2, false)?;
+        let pred_proj = if hidden == PRED_HIDDEN {
+            None
+        } else {
+            Some((st.bf16(gpu, "talker.code_predictor.small_to_mtp_projection.weight")?, st.bf16(gpu, "talker.code_predictor.small_to_mtp_projection.bias")?))
+        };
         let mut pred_embeds = Vec::new();
         let mut pred_heads = Vec::new();
         for i in 0..NUM_CODE_GROUPS - 1 {
@@ -253,6 +271,9 @@ impl Talker {
         }
         Ok(Self {
             stack,
+            hidden,
+            text_hidden,
+            text_mid,
             codec_embed: st.bf16(gpu, "talker.model.codec_embedding.weight")?,
             text_embed: st.bytes("talker.model.text_embedding.weight", safetensors::Dtype::BF16)?.0.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect(),
             fc1_w: st.bf16(gpu, "talker.text_projection.linear_fc1.weight")?,
@@ -261,15 +282,14 @@ impl Talker {
             fc2_b: st.bf16(gpu, "talker.text_projection.linear_fc2.bias")?,
             codec_head: st.bf16(gpu, "talker.codec_head.weight")?,
             pred,
-            pred_proj_w: st.bf16(gpu, "talker.code_predictor.small_to_mtp_projection.weight")?,
-            pred_proj_b: st.bf16(gpu, "talker.code_predictor.small_to_mtp_projection.bias")?,
+            pred_proj,
             pred_embeds,
             pred_heads,
-            g_past: gpu.zeros(HIDDEN * 2)?,
+            g_past: gpu.zeros(hidden * 2)?,
             g_cur: gpu.zeros(NUM_CODE_GROUPS * 4)?,
             g_rng: gpu.zeros(16)?,
             pred_graph: Mutex::new(None),
-            g_step_in: gpu.zeros(HIDDEN * 2)?,
+            g_step_in: gpu.zeros(hidden * 2)?,
             g_logits: gpu.zeros(TALKER_VOCAB * 2)?,
             g_pos: gpu.zeros(8)?,
             talk_graph: Mutex::new(None),
@@ -280,11 +300,28 @@ impl Talker {
         self.stack.cache_len
     }
 
+    /// The talker's width, which is also the length of the speaker embedding this model takes.
+    pub fn hidden(&self) -> usize {
+        self.hidden
+    }
+
+    /// Talker rows into the code predictor's width (small_to_mtp_projection, or as they are when the widths match).
+    fn to_pred(&self, gpu: &Gpu, x: u64, rows: usize) -> Result<Buf> {
+        match &self.pred_proj {
+            Some((w, b)) => self.bias_linear(gpu, x, rows, self.hidden, PRED_HIDDEN, w.ptr, b.ptr),
+            None => {
+                let y = gpu.alloc(rows * PRED_HIDDEN * 2)?;
+                gpu.copy(y.ptr, x, rows * PRED_HIDDEN * 2)?;
+                Ok(y)
+            }
+        }
+    }
+
     fn embed(&self, gpu: &Gpu, table: u64, ids: &[u32]) -> Result<Buf> {
         let ids_i: Vec<i32> = ids.iter().map(|&x| x as i32).collect();
         let dev_ids = gpu.upload(&ids_i)?;
-        let out = gpu.alloc(ids.len() * HIDDEN * 2)?;
-        gpu.launch("embed_bf16", (ids.len() as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(out.ptr), Arg::P(table), Arg::P(dev_ids.ptr), Arg::I(HIDDEN as i32)])?;
+        let out = gpu.alloc(ids.len() * self.hidden * 2)?;
+        gpu.launch("embed_bf16", (ids.len() as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(out.ptr), Arg::P(table), Arg::P(dev_ids.ptr), Arg::I(self.hidden as i32)])?;
         Ok(out)
     }
 
@@ -295,18 +332,19 @@ impl Talker {
         Ok(y)
     }
 
-    /// text_projection(text_embedding(ids)): [n, HIDDEN]
+    /// text_projection(text_embedding(ids)): [n, hidden]
     pub fn text_project(&self, gpu: &Gpu, ids: &[u32]) -> Result<Buf> {
         let n = ids.len();
-        let mut rows = Vec::with_capacity(n * HIDDEN);
+        let th = self.text_hidden;
+        let mut rows = Vec::with_capacity(n * th);
         for &id in ids {
-            let at = id as usize * HIDDEN;
-            rows.extend_from_slice(self.text_embed.get(at..at + HIDDEN).ok_or_else(|| anyhow::anyhow!("text id {id} out of range"))?);
+            let at = id as usize * th;
+            rows.extend_from_slice(self.text_embed.get(at..at + th).ok_or_else(|| anyhow::anyhow!("text id {id} out of range"))?);
         }
         let e = gpu.upload(&rows)?;
-        let h = self.bias_linear(gpu, e.ptr, n, HIDDEN, HIDDEN, self.fc1_w.ptr, self.fc1_b.ptr)?;
-        gpu.launch1("silu_bf16", n * HIDDEN, &[Arg::P(h.ptr), Arg::I((n * HIDDEN) as i32)])?;
-        self.bias_linear(gpu, h.ptr, n, HIDDEN, HIDDEN, self.fc2_w.ptr, self.fc2_b.ptr)
+        let h = self.bias_linear(gpu, e.ptr, n, th, self.text_mid, self.fc1_w.ptr, self.fc1_b.ptr)?;
+        gpu.launch1("silu_bf16", n * self.text_mid, &[Arg::P(h.ptr), Arg::I((n * self.text_mid) as i32)])?;
+        self.bias_linear(gpu, h.ptr, n, self.text_mid, self.hidden, self.fc2_w.ptr, self.fc2_b.ptr)
     }
 
     pub fn codec_rows(&self, gpu: &Gpu, ids: &[u32]) -> Result<Buf> {
@@ -320,9 +358,9 @@ impl Talker {
         if assistant_ids.len() < 9 {
             bail!("text is empty");
         }
-        let row = HIDDEN * 2;
+        let row = self.hidden * 2;
         let add = |dst: u64, a: u64, b: u64, rows: usize| -> Result<()> {
-            gpu.launch1("add_bf16", rows * HIDDEN, &[Arg::P(dst), Arg::P(a), Arg::P(b), Arg::I((rows * HIDDEN) as i32)])
+            gpu.launch1("add_bf16", rows * self.hidden, &[Arg::P(dst), Arg::P(a), Arg::P(b), Arg::I((rows * self.hidden) as i32)])
         };
         let special = self.text_project(gpu, &[TTS_BOS, TTS_EOS, TTS_PAD])?;
         let (tts_bos, tts_eos, tts_pad) = (special.ptr, special.at(row), special.at(2 * row));
@@ -331,8 +369,8 @@ impl Talker {
         let codec = match speaker {
             None => tags,
             Some(s) => {
-                if s.len() != HIDDEN {
-                    bail!("speaker embedding has {} values, expected {HIDDEN}", s.len());
+                if s.len() != self.hidden {
+                    bail!("speaker embedding has {} values, this model takes {}", s.len(), self.hidden);
                 }
                 let all = gpu.alloc(7 * row)?;
                 gpu.copy(all.ptr, tags.ptr, 4 * row)?;
@@ -391,23 +429,23 @@ impl Talker {
     /// Prefill only: logits of the last position (for parity checks).
     pub fn prefill_logits(&self, gpu: &Gpu, prompt: &Prompt) -> Result<(Vec<f32>, Buf)> {
         let hidden = self.stack.forward(gpu, prompt.prefill.ptr, prompt.prefill_len, 0)?;
-        let last = ptr_bf16(hidden.ptr, (prompt.prefill_len - 1) * HIDDEN);
-        Ok((self.logits(gpu, last, self.codec_head.ptr, HIDDEN, TALKER_VOCAB)?, hidden))
+        let last = ptr_bf16(hidden.ptr, (prompt.prefill_len - 1) * self.hidden);
+        Ok((self.logits(gpu, last, self.codec_head.ptr, self.hidden, TALKER_VOCAB)?, hidden))
     }
 
     /// Teacher-forced predictor logits for one frame (parity checks).
     pub fn predict_forced(&self, gpu: &Gpu, past_hidden: u64, first: u32, toks: &[u32]) -> Result<Vec<Vec<f32>>> {
-        let row = HIDDEN * 2;
+        let row = self.hidden * 2;
         let first_e = self.codec_rows(gpu, &[first])?;
         let pin = gpu.alloc(2 * row)?;
         gpu.copy(pin.ptr, past_hidden, row)?;
         gpu.copy(pin.at(row), first_e.ptr, row)?;
-        let h = self.bias_linear(gpu, pin.ptr, 2, HIDDEN, 1024, self.pred_proj_w.ptr, self.pred_proj_b.ptr)?;
+        let h = self.to_pred(gpu, pin.ptr, 2)?;
         let out = self.pred.forward(gpu, h.ptr, 2, 0)?;
         let mut all = vec![self.logits(gpu, ptr_bf16(out.ptr, 1024), self.pred_heads[0].ptr, 1024, PRED_VOCAB)?];
         for cb in 1..NUM_CODE_GROUPS - 1 {
             let e = self.embed(gpu, self.pred_embeds[cb - 1].ptr, &[toks[cb - 1]])?;
-            let h = self.bias_linear(gpu, e.ptr, 1, HIDDEN, 1024, self.pred_proj_w.ptr, self.pred_proj_b.ptr)?;
+            let h = self.to_pred(gpu, e.ptr, 1)?;
             let out = self.pred.forward(gpu, h.ptr, 1, cb + 1)?;
             all.push(self.logits(gpu, out.ptr, self.pred_heads[cb].ptr, 1024, PRED_VOCAB)?);
         }
@@ -426,20 +464,20 @@ impl Talker {
 
     /// Enqueue codebooks 1..15 for the frame in g_cur, from g_past; captured once into a graph.
     fn record_predictor(&self, gpu: &Gpu, sampler: &Sampler) -> Result<()> {
-        let row = HIDDEN * 2;
+        let row = self.hidden * 2;
         let cur = |q: usize| self.g_cur.ptr + (q * 4) as u64;
         let pin = gpu.alloc(2 * row)?;
         gpu.copy(pin.ptr, self.g_past.ptr, row)?;
-        gpu.launch("embed_bf16", (1, 1, 1), (256, 1, 1), 0, &[Arg::P(pin.at(row)), Arg::P(self.codec_embed.ptr), Arg::P(cur(0)), Arg::I(HIDDEN as i32)])?;
-        let h = self.bias_linear(gpu, pin.ptr, 2, HIDDEN, 1024, self.pred_proj_w.ptr, self.pred_proj_b.ptr)?;
+        gpu.launch("embed_bf16", (1, 1, 1), (256, 1, 1), 0, &[Arg::P(pin.at(row)), Arg::P(self.codec_embed.ptr), Arg::P(cur(0)), Arg::I(self.hidden as i32)])?;
+        let h = self.to_pred(gpu, pin.ptr, 2)?;
         let out = self.pred.forward(gpu, h.ptr, 2, 0)?;
         let logits = gpu.alloc(PRED_VOCAB * 2)?;
         gpu.linear_bf16(logits.ptr, ptr_bf16(out.ptr, 1024), self.pred_heads[0].ptr, 1, 1024, PRED_VOCAB, 0.0)?;
         self.sample_dev(gpu, logits.ptr, PRED_VOCAB, sampler, cur(1), PRED_VOCAB, -1, 0, 1.0, 0, 1, 0, 0, self.g_rng.ptr)?;
         let e = gpu.alloc(row)?;
         for cb in 1..NUM_CODE_GROUPS - 1 {
-            gpu.launch("embed_bf16", (1, 1, 1), (256, 1, 1), 0, &[Arg::P(e.ptr), Arg::P(self.pred_embeds[cb - 1].ptr), Arg::P(cur(cb)), Arg::I(HIDDEN as i32)])?;
-            let h = self.bias_linear(gpu, e.ptr, 1, HIDDEN, 1024, self.pred_proj_w.ptr, self.pred_proj_b.ptr)?;
+            gpu.launch("embed_bf16", (1, 1, 1), (256, 1, 1), 0, &[Arg::P(e.ptr), Arg::P(self.pred_embeds[cb - 1].ptr), Arg::P(cur(cb)), Arg::I(self.hidden as i32)])?;
+            let h = self.to_pred(gpu, e.ptr, 1)?;
             let out = self.pred.forward(gpu, h.ptr, 1, cb + 1)?;
             gpu.linear_bf16(logits.ptr, out.ptr, self.pred_heads[cb].ptr, 1, 1024, PRED_VOCAB, 0.0)?;
             self.sample_dev(gpu, logits.ptr, PRED_VOCAB, sampler, cur(cb + 1), PRED_VOCAB, -1, 0, 1.0, 0, (cb + 1) as u64, 0, 0, self.g_rng.ptr)?;
@@ -463,7 +501,7 @@ impl Talker {
     pub fn generate_stream(&self, gpu: &Gpu, prompt: &Prompt, cfg: &GenConfig,
                            on_frames: &mut dyn FnMut(&[[u32; NUM_CODE_GROUPS]]) -> Result<()>) -> Result<()> {
         const POLL: usize = 4;
-        let row = HIDDEN * 2;
+        let row = self.hidden * 2;
         let max_frames = cfg.max_new_tokens.min(self.stack.cache_len.saturating_sub(prompt.prefill_len + 1));
         if max_frames == 0 {
             return Ok(());
@@ -483,7 +521,7 @@ impl Talker {
         let past = gpu.alloc(row)?;
         gpu.copy(past.ptr, hidden.at((prompt.prefill_len - 1) * row), row)?;
         let logits = gpu.alloc(TALKER_VOCAB * 2)?;
-        gpu.linear_bf16(logits.ptr, past.ptr, self.codec_head.ptr, 1, HIDDEN, TALKER_VOCAB, 0.0)?;
+        gpu.linear_bf16(logits.ptr, past.ptr, self.codec_head.ptr, 1, self.hidden, TALKER_VOCAB, 0.0)?;
         let ban0 = if cfg.min_new_tokens > 0 { CODEC_EOS as i32 } else { -1 };
         self.sample_dev(gpu, logits.ptr, TALKER_VOCAB, &cfg.talker, self.g_cur.ptr, suppress, ban0, seen.ptr, rep, cfg.seed, 0, eos.ptr, 0, 0)?;
         gpu.copy(self.g_past.ptr, past.ptr, row)?;
@@ -506,7 +544,7 @@ impl Talker {
             if talk.is_none() {
                 *talk = Some(gpu.capture(|| {
                     let h = self.stack.forward_dev(gpu, self.g_step_in.ptr, self.g_pos.ptr)?;
-                    gpu.linear_bf16(self.g_logits.ptr, h.ptr, self.codec_head.ptr, 1, HIDDEN, TALKER_VOCAB, 0.0)?;
+                    gpu.linear_bf16(self.g_logits.ptr, h.ptr, self.codec_head.ptr, 1, self.hidden, TALKER_VOCAB, 0.0)?;
                     gpu.copy(self.g_past.ptr, h.ptr, row)?;
                     gpu.launch("inc_u64", (1, 1, 1), (32, 1, 1), 0, &[Arg::P(self.g_pos.ptr)])
                 })?);
@@ -533,7 +571,7 @@ impl Talker {
             produced = step + 1;
             // ---- talker step: sum of the 16 codebook embeddings + trailing text (or tts_pad)
             let extra = if step < prompt.trailing_len { prompt.trailing.at(step * row) } else { prompt.tts_pad.ptr };
-            gpu.launch1("codec_sum_bf16", HIDDEN, &[Arg::P(step_in_ptr), Arg::P(tables.ptr), Arg::P(self.g_cur.ptr), Arg::I(NUM_CODE_GROUPS as i32), Arg::I(HIDDEN as i32), Arg::P(extra)])?;
+            gpu.launch1("codec_sum_bf16", self.hidden, &[Arg::P(step_in_ptr), Arg::P(tables.ptr), Arg::P(self.g_cur.ptr), Arg::I(NUM_CODE_GROUPS as i32), Arg::I(self.hidden as i32), Arg::P(extra)])?;
             let step_logits = match talk.as_ref() {
                 Some(g) if use_graph => {
                     gpu.replay(g)?; // forward at g_pos, codec head into g_logits, g_past, g_pos += 1
@@ -541,7 +579,7 @@ impl Talker {
                 }
                 _ => {
                     let h = self.stack.forward(gpu, step_in_ptr, 1, prompt.prefill_len + step)?;
-                    gpu.linear_bf16(logits.ptr, h.ptr, self.codec_head.ptr, 1, HIDDEN, TALKER_VOCAB, 0.0)?;
+                    gpu.linear_bf16(logits.ptr, h.ptr, self.codec_head.ptr, 1, self.hidden, TALKER_VOCAB, 0.0)?;
                     gpu.copy(self.g_past.ptr, h.ptr, row)?;
                     logits.ptr
                 }

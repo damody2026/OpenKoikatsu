@@ -60,7 +60,13 @@ impl BaseVoices {
                 return Ok(v.clone());
             }
         }
-        let v = cardvoice::read_file(card)?.map(Arc::new);
+        let v = match cardvoice::read_file(card)? {
+            Some(mut p) => {
+                p.fit(&self.encoder)?;
+                Some(Arc::new(p))
+            }
+            None => None,
+        };
         self.cards.lock().unwrap().insert(card.to_path_buf(), (mtime, v.clone()));
         Ok(v)
     }

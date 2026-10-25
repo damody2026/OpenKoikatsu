@@ -16,7 +16,7 @@
 //!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
 //!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
 //!   ok-tts consistency --base BASE_DIR --corpus lines.txt --out DIR [--personality 08] [--other 00,03,m0]   (VoiceDesign vs Base clone)
-//!   ok-tts voice-check --cards DIR|a.png,b.png --corpus lines.txt --out DIR [--base DIR] [--seed N]
+//!   ok-tts voice-check --cards DIR|a.png,b.png --corpus lines.txt --out DIR [--base DIR] [--judge DIR] [--compare DIR] [--seed N]
 //!       the card voices against each other: similarity, confusion matrix, a local listening page (see voicecheck.rs)
 //!   ok-tts speaker-sim --base BASE_DIR a.wav b.wav[#1|#2] ...   (speaker-embedding cosine of each pair)
 //!   ok-tts parity --reference DIR      (compare against Tools/ok-tts/reference/dump_reference.py output; run with OK_TTS_WEIGHTS=bf16)
@@ -200,7 +200,7 @@ fn cmd_serve(args: &Args) -> Result<()> {
     // The server keeps its own copy of the voices, so voice lookups and cached lines never wait for the engine.
     let voice_table = text::Voices::load(&voices)?;
     let profiles_dir = profiles_dir(args);
-    let profiles = profile::load_all(&profiles_dir)?;
+    let mut profiles = profile::load_all(&profiles_dir)?;
     let base = args.opts.get("base").map(PathBuf::from).or_else(default_base_model_dir);
     let backend = match args.opts.get("backend").map(String::as_str) {
         Some("design") => "design",
@@ -217,11 +217,19 @@ fn cmd_serve(args: &Args) -> Result<()> {
         let missing: Vec<String> = profile::all_choices(&voice_table, None).iter().map(profile::profile_id).filter(|id| !profiles.contains_key(id)).collect();
         crate::log!("ok-tts: backend base, {} profiles from {}{}", profiles.len(), profiles_dir.display(),
                     if missing.is_empty() { String::new() } else { format!(" (missing {}: {})", missing.len(), missing.join(" ")) });
-        let tags = profiles.iter().map(|(id, p)| (id.clone(), p.tag())).collect();
-        // The speaker encoder (CPU) turns new candidate voices into embeddings while the server runs.
+        // The speaker encoder (CPU) turns new candidate voices into embeddings while the server runs; voices made
+        // with the other model size get theirs again from their reference clips.
         let store = weights::Store::open(&base.join("model.safetensors"))?;
         let encoder = speaker::SpeakerEncoder::load(&store).context("speaker encoder")?;
         drop(store);
+        let mut refitted = 0;
+        for p in profiles.values_mut() {
+            refitted += p.fit(&encoder)? as usize;
+        }
+        if refitted > 0 {
+            crate::log!("ok-tts: {refitted} profiles were made with another model size; embedded again from their reference clips");
+        }
+        let tags = profiles.iter().map(|(id, p)| (id.clone(), p.tag())).collect();
         let design = Some(model.clone()).filter(|m| m.join("model.safetensors").is_file());
         let voices_path = voices.clone();
         let base_voices = voicemgr::BaseVoices::new(tags, profiles_dir.clone(), base.clone(), design, voices_path, positions, encoder);
@@ -344,6 +352,8 @@ fn cmd_voice_check(args: &Args) -> Result<()> {
         cards: opt("cards").context("--cards is required")?.split(',').map(str::trim).filter(|s| !s.is_empty()).map(PathBuf::from).collect(),
         corpus: PathBuf::from(opt("corpus").context("--corpus is required")?),
         out: PathBuf::from(opt("out").context("--out is required")?),
+        judge: opt("judge").or(opt("base")).map(PathBuf::from).or_else(default_base_model_dir).context("Base model not found; pass --judge")?,
+        compare: opt("compare").map(PathBuf::from),
         base: opt("base").map(PathBuf::from).or_else(default_base_model_dir).context("Base model not found; pass --base")?,
         voices,
         seed: opt("seed").map(|v| v.parse()).transpose()?.unwrap_or(20261025),
@@ -470,7 +480,7 @@ fn cmd_parity(args: &Args) -> Result<()> {
     // 2. prompt embeddings and prefill
     let prompt = engine.talker.build_prompt(gpu, &instruct, &assistant, text::LANGUAGE_CHINESE, None)?;
     let to_f32 = |buf: u64, n: usize| -> Result<Vec<f32>> { Ok(gpu.read::<u16>(buf, n)?.into_iter().map(talker::bf16_to_f32).collect()) };
-    let h = talker::HIDDEN;
+    let h = engine.talker.hidden();
     let rel = compare("talker_input_embeds", &to_f32(prompt.prefill.ptr, prompt.prefill_len * h)?, &read_ref_f32(&dir, "talker_input_embeds")?);
     if rel > 1e-2 { failures.push("talker_input_embeds"); }
     let rel = compare("trailing_text_hiddens", &to_f32(prompt.trailing.ptr, prompt.trailing_len * h)?, &read_ref_f32(&dir, "trailing_text_hiddens")?);
