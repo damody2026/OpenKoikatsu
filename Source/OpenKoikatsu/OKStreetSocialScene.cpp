@@ -1438,6 +1438,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     if(BreaksUp&&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage==TEXT("lover"))Weak->BreakUpSaid(Character);}
    {bool Quiet=false;Verdict->TryGetBoolField(TEXT("quiet"),Quiet);
     if(Quiet&&!Ends){L->FreeTalkQuietUntil=FPlatformTime::Seconds()+OKFreeTalkQuietSeconds;L->FreeTalkSilencePenalties=0;UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d asked him to keep quiet; no silence nudges for %.0f s"),Character,OKFreeTalkQuietSeconds);}}
+   // "That's enough reading for today": they stop what they sat down to and go on talking (as the leave-seat button).
+   {bool StopAct=false;Verdict->TryGetBoolField(TEXT("stop_activity"),StopAct);
+    if(StopAct&&!Ends&&DoNow.IsEmpty()&&L->Pair.Partner==Character&&L->Pair.Phase==1&&Weak.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d they stop the activity, the talk goes on"),Character);Weak->FinishPhoto();}}
    if(Treats){L->HerTreatPromise.Add(Character,OKStreetMindNow(*L)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (judged)"),Character);}
    // "Let's skip lunch then, another day" — "fine": the meeting they had is called off (her own act field may forget it).
    {bool Cancel=false;Verdict->TryGetBoolField(TEXT("cancel_promise"),Cancel);

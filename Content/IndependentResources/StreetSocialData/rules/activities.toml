@@ -4,7 +4,7 @@
 #       facility 設施（code 是設施編號）、walk 一起走、restroom 廁所、sleep 睡覺、solo 在錨點並排做 female_clip。
 # place：地點 id，空字串＝就地。anchor：地點模型裡的錨點，可用「|」列多個，取第一個存在的（場景補上新錨點後自動改用）。
 # 選填：who（只限這些女主：stable id 或任一語言的名字）、weather（any／dry／rain）、needs（需要的物品 id，
-#       他或她的背包有就行；結束時才用掉，consume = false 的不用掉）、yields（結束時的產出：photo／drawing／work_progress／book_progress）、once_per_day、
+#       他或她的背包有就行；結束時才用掉，consume = false 的不用掉）、yields（結束時的產出：photo／drawing／work_progress／book_progress／study（坐下一起讀書的分鐘算自習））、once_per_day、
 #       event（只在 events.toml 的這個節日開放）、minutes（時長，遊戲分鐘；0＝依 kind 的預設）、feed（結束時對她需求的影響，例：{ fun = 15, energy = -20 }）。
 
 [[activity]]
@@ -145,6 +145,7 @@ kind = "pair"
 code = 1
 anchor = "seat"
 female_clip = "venue_study_seated.okanim"
+yields = ["study"]
 male_clip = "venue_study_seated.okanim"
 
 [[activity]]
@@ -171,6 +172,7 @@ kind = "pair"
 code = 1
 anchor = "class2"
 female_clip = "venue_study_seated.okanim"
+yields = ["study"]
 male_clip = "venue_study_seated.okanim"
 
 [[activity]]
@@ -222,6 +224,7 @@ kind = "pair"
 code = 1
 anchor = "lounge"
 female_clip = "venue_study_seated.okanim"
+yields = ["study"]
 male_clip = "venue_study_seated.okanim"
 
 [[activity]]
@@ -232,6 +235,7 @@ kind = "pair"
 code = 1
 anchor = "lounge"
 female_clip = "venue_study_seated.okanim"
+yields = ["study"]
 male_clip = "venue_study_seated.okanim"
 
 [[activity]]

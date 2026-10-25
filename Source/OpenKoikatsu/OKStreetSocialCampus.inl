@@ -94,6 +94,22 @@ void AOKStreetSocialScene::ToggleStudy(){
  S.Message=OKMsg(TEXT("ui.campus.studied_minutes_summary"), {{TEXT("minutes"), S.StudyMinutes}, {TEXT("intelligence"), Int}});RefreshUI();
 }
 
+// A study activity together (activities.toml yields "study": the dorm lounge, a classroom): its minutes count as studying
+// with her (campus_study), as the study button does. Two hours over their notes at the lounge used to count for nothing.
+void AOKStreetSocialScene::StudiedTogether(int32 Girl,int32 Minutes){
+ auto& S=*State;if(Minutes<=0||S.Studying||!S.Manifest.Characters.IsValidIndex(Girl))return; // the button's own session counts them already
+ auto Candidate=S.Store;FOKStreetAcademic* HerRecord=AcademicOf(Candidate,Girl);
+ auto Request=OKRulesRequest(TEXT("campus_study"));Request->SetObjectField(TEXT("player"),OKStreetAcademicJson(Candidate.PlayerAcademic));Request->SetField(TEXT("her"),OKRulesAcademicValue(HerRecord));Request->SetNumberField(TEXT("minutes"),Minutes);
+ const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
+ OKStreetReadAcademic(Answer->GetObjectField(TEXT("player")),Candidate.PlayerAcademic);
+ const TSharedPtr<FJsonObject>* HerOut=nullptr;if(HerRecord&&Answer->TryGetObjectField(TEXT("her"),HerOut))OKStreetReadAcademic(*HerOut,*HerRecord);
+ if(!CommitStore(MoveTemp(Candidate)))return;
+ const float Int=S.Store.PlayerAcademic.Intelligence;
+ MindObserve(Girl,TEXT("study"),OKMsg(TEXT("ui.campus.studied_with_him"),{{TEXT("minutes"),Minutes},{TEXT("teaching_suffix"),Int>=75?OKT(TEXT("ui.campus.tutor_praise_note")):TEXT("")}}),PlaceHere(S.Male),0.5f);
+ S.Message=OKMsg(TEXT("ui.campus.studied_minutes_summary"),{{TEXT("minutes"),Minutes},{TEXT("intelligence"),Int}});
+ UE_LOG(LogTemp,Display,TEXT("Street study: %d minutes with actor %d (an activity together), intelligence %.1f"),Minutes,Girl,Int);
+}
+
 // ------------------------------------------------------------------------------------------------ stairs
 
 // The stair landing he stands on: (place index, floor) or false.

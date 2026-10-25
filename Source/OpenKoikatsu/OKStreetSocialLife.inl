@@ -412,7 +412,8 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // What the activity leaves (activities.toml yields): reading together moves both books on.
  {const TArray<TSharedPtr<FJsonValue>>* Yields=nullptr;if(Answer->TryGetArrayField(TEXT("yields"),Yields))for(const auto& Y:*Yields)if(Y->AsString()==TEXT("book_progress"))ReadBooks(Girl,FMath::Max(Want,int32(OKStreetMindNow(S)-StartMinute)),FString());
    else if(Y->AsString()==TEXT("drawing"))HerPhoto(Girl,FString(),TEXT("scene"),false,true); // what she drew: the view in front of her
-   else if(Y->AsString()==TEXT("work_progress"))HelpedHerWork(Girl,PlaceId,FMath::Max(Want,int32(OKStreetMindNow(S)-StartMinute)));}
+   else if(Y->AsString()==TEXT("work_progress"))HelpedHerWork(Girl,PlaceId,FMath::Max(Want,int32(OKStreetMindNow(S)-StartMinute)));
+   else if(Y->AsString()==TEXT("study"))StudiedTogether(Girl,int32(OKStreetMindNow(S)-StartMinute));} // the minutes they actually sat over it
  TMap<FString,float> Feed;for(const auto& E:Answer->GetObjectField(TEXT("feed"))->Values)Feed.Add(FString(*E.Key),float(E.Value->AsNumber()));
  FeedHer(Girl,Feed);
  S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"));RefreshUI();
