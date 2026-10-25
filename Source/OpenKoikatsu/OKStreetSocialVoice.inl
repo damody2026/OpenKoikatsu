@@ -110,7 +110,7 @@ void AOKStreetSocialScene::ProbeVoiceInfo(){
   if(!Connected||!Response.IsValid()||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()),J)||!J.IsValid()||!J->TryGetStringField(TEXT("instruct"),Instruct))return;
   J->TryGetStringField(TEXT("personality"),Key);J->TryGetStringField(TEXT("name"),Name);J->TryGetStringField(TEXT("label"),Label);S.TtsVoiceInstruct=Instruct;
   S.TtsVoiceInfo=OKMsg(TEXT("ui.voice.heroine_voice_profile"), {{TEXT("heroine_name"), *S.Manifest.Characters[Target].Name}, {TEXT("trait_key"), *Key}, {TEXT("trait_name"), *Name}, {TEXT("trait_label"), *Label}, {TEXT("tts_hint"), *Instruct}});
-  RefreshUI();
+  RefreshUI(OKStreetUi::Right); // shown under the male tone menu, in the right panel
  });
  Request->ProcessRequest();
  ProbeCardVoice();

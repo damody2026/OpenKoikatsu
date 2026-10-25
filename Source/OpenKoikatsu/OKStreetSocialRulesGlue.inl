@@ -11,9 +11,12 @@ TSharedRef<FJsonObject> OKRulesRequest(const TCHAR* Rule){auto R=MakeShared<FJso
 // The last rule asked (its effects are usually applied right after): named in the log of a big favor swing.
 static FString GOKLastRule;
 TSharedPtr<FJsonObject> OKRulesEval(const FOKStreetSceneState& S,const TSharedRef<FJsonObject>& Request){
- if(!S.Rules)return nullptr;FString Error;GOKLastRule=Request->GetStringField(TEXT("rule"));
+ if(!S.Rules)return nullptr;FString Error;const bool Game=IsInGameThread();if(Game)GOKLastRule=Request->GetStringField(TEXT("rule"));
+ const double T0=FPlatformTime::Seconds();
  TSharedPtr<FJsonObject> Out=S.Rules->Eval(Request,Error);
  if(!Out.IsValid())UE_LOG(LogTemp,Warning,TEXT("Street rules: %s failed: %s"),*Request->GetStringField(TEXT("rule")),*Error);
+ // A rule that held the game thread over 2 ms (a candidate for OKRulesEvalAsync).
+ if(Game){const double Ms=(FPlatformTime::Seconds()-T0)*1000.0;if(Ms>2.0)UE_LOG(LogTemp,Display,TEXT("Street rules slow: %s %.1f ms"),*Request->GetStringField(TEXT("rule")),Ms);}
  return Out;
 }
 

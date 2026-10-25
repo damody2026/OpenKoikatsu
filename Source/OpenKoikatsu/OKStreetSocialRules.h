@@ -1879,6 +1879,7 @@ inline const FOKStreetBlockIndex& OKStreetBlocksIndexed() {
  Index.Frame = GFrameCounter;
  const uint32 Crc = FCrc::MemCrc32(Blocks.GetData(), Blocks.Num() * sizeof(FBox));
  if (Crc == Index.Crc && Index.Num == Blocks.Num()) return Index;
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BlockIndexRebuild);
  Index.Crc = Crc; Index.Num = Blocks.Num(); Index.Buckets.Reset(); Index.Bounds = FBox2D(ForceInit);
  for (int32 I = 0; I < Blocks.Num(); ++I) {
   const FBox& B = Blocks[I];
@@ -1906,6 +1907,7 @@ template <typename FVisit> inline bool OKStreetVisitBlocksNear(const FVector2D& 
 struct FOKStreetPropIndex { TMap<FIntPoint, TArray<int32>> Buckets; };
 inline const FOKStreetPropIndex& OKStreetPropsIndexed() {
  static const FOKStreetPropIndex Index = [] {
+  QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_PropIndexBuild);
   FOKStreetPropIndex Out; const TArray<FOKStreetProp>& Props = OKStreetPropsOnce();
   for (int32 I = 0; I < Props.Num(); ++I) {
    const FOKStreetProp& Prop = Props[I];

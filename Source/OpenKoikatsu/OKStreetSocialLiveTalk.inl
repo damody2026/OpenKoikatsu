@@ -233,6 +233,7 @@ void AOKStreetSocialScene::TickFreeTalkTrace(double Now){
    if(With)continue;
    const FVector* In=Taken.FindByPredicate([&](const FVector& T){return FVector::Dist2D(A.Position,T)<45.f&&FMath::Abs(A.Position.Z-T.Z)<100.f;});if(!In)continue;
    const FVector From=*In;FVector Away=A.Position-From;Away.Z=0;if(Away.Size2D()<1.f)Away=FRotator(0,S.Rotations[0].Yaw+90.f,0).Vector();Away.Normalize();
+   QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TraceOverlapMove);
    for(const float D:{110.f,160.f,220.f}){FVector To=From+Away*D;To.Z=A.Position.Z;
     if(!OKStreetBlockedPoint(To,28)&&!Taken.ContainsByPredicate([&](const FVector& T){return FVector::Dist2D(To,T)<45.f;})){A.Position=To;UE_LOG(LogTemp,Display,TEXT("Street overlap fixed: actor %d (not with him) moved out of %s"),I,From==S.Male?TEXT("the player"):TEXT("his partner"));break;}}}}
  const int32 G=FreeTalkPartner();

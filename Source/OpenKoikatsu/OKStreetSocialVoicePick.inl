@@ -41,7 +41,9 @@ void AOKStreetSocialScene::ProbeCardVoice(){
  Request->SetURL(S.TtsEndpoint/TEXT("voice/card?card=")+FGenericPlatformHttp::UrlEncode(Card));Request->SetVerb(TEXT("GET"));Request->SetTimeout(5);
  Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Target](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
   if(!State||State->Target!=Target)return;FString Error;
-  if(const auto J=OKVoicePickAnswer(Response,Connected,Error)){const TSharedPtr<FJsonObject>* Voice=nullptr;State->CardHasVoice=J->TryGetObjectField(TEXT("voice"),Voice)&&Voice&&Voice->IsValid();RefreshUI();}
+  if(const auto J=OKVoicePickAnswer(Response,Connected,Error)){const TSharedPtr<FJsonObject>* Voice=nullptr;const bool Has=J->TryGetObjectField(TEXT("voice"),Voice)&&Voice&&Voice->IsValid();
+   // Shown in the right panel only (and only when it changed: asked on every new target).
+   if(Has!=State->CardHasVoice){State->CardHasVoice=Has;RefreshUI(OKStreetUi::Right);}}
  });
  Request->ProcessRequest();
 }

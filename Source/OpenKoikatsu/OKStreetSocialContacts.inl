@@ -109,8 +109,10 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
  auto Heuristic=[&](const FIntPoint& C){const float DX=FMath::Abs(C.X-Goal.X),DY=FMath::Abs(C.Y-Goal.Y);return DX+DY+(UE_SQRT_2-2.f)*FMath::Min(DX,DY);};
  auto& Came=G.Came;auto& Cost=G.Cost;auto& Open=G.Open;
  auto Less=[](const TPair<float,FIntPoint>& A,const TPair<float,FIntPoint>& B){return A.Key<B.Key;};
- if(G.Expanded==0&&Open.IsEmpty()&&Cost[Index(Start)]!=0.f){Cost[Index(Start)]=0.f;Open.HeapPush({Heuristic(Start),Start},Less);}
  static const FIntPoint Steps[]={{1,0},{-1,0},{0,1},{0,-1},{1,1},{1,-1},{-1,1},{-1,-1}};
+ auto Release=[&G](){G.Cost.Empty();G.Came.Empty();G.Cell.Empty();G.Open.Empty();G.Path.Empty();};
+ if(G.Phase==1){
+ if(G.Expanded==0&&Open.IsEmpty()&&Cost[Index(Start)]!=0.f){Cost[Index(Start)]=0.f;Open.HeapPush({Heuristic(Start),Start},Less);}
  bool Reached=false;
  while(!Open.IsEmpty()&&G.Expanded<60000){
   // Out of time: the search goes on from here next slice (the open list, costs and links are kept).
@@ -127,11 +129,12 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
    if(New<Cost[NI]){Cost[NI]=New;Came[NI]=Index(C);Open.HeapPush({New+Heuristic(N),N},Less);}
   }
  }
- G.Phase=2;
- auto Release=[&G](){G.Cost.Empty();G.Came.Empty();G.Cell.Empty();G.Open.Empty();};
- if(!Reached){UE_LOG(LogTemp,Display,TEXT("Street grid route: none from %s to %s (%d cells)"),*From.ToCompactString(),*To.ToCompactString(),G.Expanded);Release();return true;}
- TArray<FIntPoint> Cells{Goal};while(Cells.Last()!=Start){const int32 P=Came[Index(Cells.Last())];Cells.Add(FIntPoint(Lo.X+P%W,Lo.Y+P/W));}
+ if(!Reached){G.Phase=2;UE_LOG(LogTemp,Display,TEXT("Street grid route: none from %s to %s (%d cells)"),*From.ToCompactString(),*To.ToCompactString(),G.Expanded);Release();return true;}
+ TArray<FIntPoint>& Cells=G.Path;Cells={Goal};while(Cells.Last()!=Start){const int32 P=Came[Index(Cells.Last())];Cells.Add(FIntPoint(Lo.X+P%W,Lo.Y+P/W));}
  Algo::Reverse(Cells);
+ // The pull still asks what is known of the cells (Cell), not the costs or links.
+ G.Cost.Empty();G.Came.Empty();G.Open.Empty();G.Route={From};G.PullI=0;G.PullJ=-1;G.Phase=3;
+ }
  // Pull the string: keep only the corners a straight walk cannot cut.
  // A straight line between two cell centres can still clip the corner of something between the cell centres: the body-sized
  // sweep along it must also be clear, or the walk stops at that corner ("the way is blocked") in the open street.
@@ -144,10 +147,13 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
   if(GetWorld()->SweepSingleByChannel(Hit,FVector(A.X,A.Y,Z)+FVector(0,0,85),FVector(B.X,B.Y,Z)+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(30,78),SweepQuery)&&(!Hit.bStartPenetrating||FVector::DotProduct((B-A).GetSafeNormal2D(),Hit.Normal)<=0.f))return false;
   return true;};
  QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_GridPull);
- TArray<FVector>& Route=G.Route;Route={From};int32 I=0;
- while(I<Cells.Num()-1){int32 J=Cells.Num()-1;while(J>I+1&&!Clear(I==0?From:Centre(Cells[I]),Centre(Cells[J])))--J;Route.Add(Centre(Cells[J]));I=J;}
+ // A slice at a time too: out of time between two tries, it goes on from the same corner and cell next slice.
+ const TArray<FIntPoint>& Cells=G.Path;TArray<FVector>& Route=G.Route;
+ while(G.PullI<Cells.Num()-1){const int32 I=G.PullI;if(G.PullJ<0)G.PullJ=Cells.Num()-1;
+  while(G.PullJ>I+1&&!Clear(I==0?From:Centre(Cells[I]),Centre(Cells[G.PullJ]))){--G.PullJ;if(FPlatformTime::Seconds()>Deadline)return false;}
+  Route.Add(Centre(Cells[G.PullJ]));G.PullI=G.PullJ;G.PullJ=-1;}
  if(Goal==ToCell(To)&&Clear(Route.Last(),To))Route.Last()=To;
- Release();return true;
+ G.Phase=2;Release();return true;
 }
 FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Direction,float Distance) const{
  constexpr float Clearance=30.f;

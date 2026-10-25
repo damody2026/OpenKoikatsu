@@ -180,7 +180,8 @@ void AOKStreetSocialScene::TickLife(float Dt){
     FOKRuntimeActionStreamStatus A;
     if(Now-P.Requested>60){StopLifePose(I);continue;}
     if(OKGetCrowdRuntimeActionStatus(this,I,A)&&A.Ready&&!A.Pending&&!A.Preparing&&A.ClipId==P.Clip){FString Error;
-     if(OKPlayCrowdRuntimeAction(this,I,P.Clip,Error)){P.Phase=1;SpawnLifeProps(P);UE_LOG(LogTemp,Display,TEXT("Street life: actor %d %s (%s)"),I,*P.Clip,B?*B->Kind:TEXT(""));}else StopLifePose(I);}
+     bool Played;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LifePlay);Played=OKPlayCrowdRuntimeAction(this,I,P.Clip,Error);}
+     if(Played){P.Phase=1;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LifeProps);SpawnLifeProps(P);}UE_LOG(LogTemp,Display,TEXT("Street life: actor %d %s (%s)"),I,*P.Clip,B?*B->Kind:TEXT(""));}else StopLifePose(I);}
    }
   }
   if(S.LifePoses.Num()<LifeLimit&&S.AmbientActor==INDEX_NONE&&S.AllReady&&!S.SelfTest&&Now>=S.LifeCheckAt){
@@ -197,7 +198,7 @@ void AOKStreetSocialScene::TickLife(float Dt){
     bool Placed=true;
     if(Clip==TEXT("facility_sleep.okanim")){const FOKStreetPlace* Where=nullptr;Placed=false;if(const auto* Bed=OKStreetNearestBed(S.Agents[Best-1].Position,900,nullptr,&Where)){S.LifeRestore.Add(Best,S.Agents[Best-1].Position);S.Agents[Best-1].Position=Bed->Position;S.Rotations[Best]=FRotator(0,Bed->Yaw,0);Placed=true;}}
     if(!Placed){S.LifeCooldown.Add(Best,Now+60.0);UE_LOG(LogTemp,Display,TEXT("Street life: actor %d has no seat/bed for %s"),Best,*Clip);}
-    else if(OKPrewarmCrowdRuntimeAction(this,Best,Clip,Error)){FOKLifePose P;P.Actor=Best;P.Clip=Clip;P.Requested=Now;S.LifePoses.Add(P);}
+    else if([&]{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LifePrewarm);return OKPrewarmCrowdRuntimeAction(this,Best,Clip,Error);}()){FOKLifePose P;P.Actor=Best;P.Clip=Clip;P.Requested=Now;S.LifePoses.Add(P);}
     else{S.LifeRestore.Remove(Best);UE_LOG(LogTemp,Warning,TEXT("Street life: %s for actor %d: %s"),*Clip,Best,*Error);}
    }
   }
@@ -248,6 +249,7 @@ void AOKStreetSocialScene::TickLife(float Dt){
  // 4. Rain: streaks round him and a dimmer sun (half) while it rains outdoors.
  const bool Raining=!S.SelfTest&&(RainingAt(S.Store.CalendarDay,Minute)||FParse::Param(FCommandLine::Get(),TEXT("StreetSocialRain")));
  if(Raining&&!S.Rain.IsValid()){
+  QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LifeRainStart);
   auto* Actor=GetWorld()->SpawnActor<AActor>();
   if(Actor){
    auto* Root=NewObject<USceneComponent>(Actor);Actor->SetRootComponent(Root);Root->RegisterComponent();

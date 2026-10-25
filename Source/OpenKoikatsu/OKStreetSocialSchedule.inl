@@ -195,7 +195,8 @@ void AOKStreetSocialScene::TickSchedules(){
    // Leaving a work block: her wage for the hours.
    if(const auto* Plan=S.Plans.Find(I))if(Plan->IsValidIndex(Previous)&&(*Plan)[Previous].Kind==TEXT("work")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BlockPay);
     const auto& W=(*Plan)[Previous];const int32 Wage=HerWage(W);const int32 Pay=HerShiftPay(I,W,Wage,Minute);
-    if(R.Cash>=0)R.Cash+=OKRulesNetPay(S,Pay,float(Pay)/float(FMath::Max(1,Wage))/176.f);MindObserve(I,TEXT("shared_shift"),OKMsg(TEXT("ui.schedule.worked_part_time"), {{TEXT("place"), OKStreetFindPlace(W.Place)?OKStreetFindPlace(W.Place)->Name:*W.Place}, {TEXT("hours"), (W.End-W.Start)/60}, {TEXT("pay"), Pay}}),W.Place,0.2f);}
+    {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BlockPayNet);if(R.Cash>=0)R.Cash+=OKRulesNetPay(S,Pay,float(Pay)/float(FMath::Max(1,Wage))/176.f);}
+    QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BlockPayObserve);MindObserve(I,TEXT("shared_shift"),OKMsg(TEXT("ui.schedule.worked_part_time"), {{TEXT("place"), OKStreetFindPlace(W.Place)?OKStreetFindPlace(W.Place)->Name:*W.Place}, {TEXT("hours"), (W.End-W.Start)/60}, {TEXT("pay"), Pay}}),W.Place,0.2f);}
    S.PlanBlock.Add(I,Index);S.PlanBlockSince.Add(I,Minute);S.PlanEaten.Remove(I);
    auto& A=S.Agents[I-1];
    // Nowhere in particular (the street): let go to roam. Inside a place she first goes out of its door (she stayed in the

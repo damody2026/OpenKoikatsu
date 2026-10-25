@@ -51,8 +51,8 @@ void AOKStreetSocialScene::PartyLeave(int32 Girl,const FString& Why){
  if(S.Agents.IsValidIndex(Girl-1)){S.Agents[Girl-1].Held=false;S.Agents[Girl-1].Mode=EOKStreetMove::Walking;}
  S.ScheduleHeld.Remove(Girl);
  S.PartyEvents.Add(OKMsg(TEXT("ui.party.girl_left_first"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}}));
- MindRemember(Girl,TEXT("party"),OKMsg(TEXT("ui.memory.left_group"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))}}),PlaceHere(S.Male),0.25f);
- UE_LOG(LogTemp,Display,TEXT("Street party: actor %d leaves (%s)"),Girl,*Why);RefreshUI();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_PartyLeaveMind);MindRemember(Girl,TEXT("party"),OKMsg(TEXT("ui.memory.left_group"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))}}),PlaceHere(S.Male),0.25f);}
+ UE_LOG(LogTemp,Display,TEXT("Street party: actor %d leaves (%s)"),Girl,*Why);{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_PartyLeaveUi);RefreshUI();}
 }
 
 // He says goodbye to one of them: she is leaving, and for 10 s anyone may keep her (PartyStartLeaving). The one he is
