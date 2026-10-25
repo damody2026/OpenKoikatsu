@@ -36,7 +36,9 @@ bool AOKStreetSocialScene::PartyJoin(int32 Girl){
   for(const int32 M:Group){if(M==Girl)continue;int32 Disliked=INDEX_NONE;const int32 Mood=BondMood(M,{Girl},&Disliked);
    if(Mood==2){UE_LOG(LogTemp,Display,TEXT("Street party: actor %d dislikes %d and wants to leave"),M,Girl);PartyStartLeaving(M,false);S.PartyEvents.Add(OKMsg(TEXT("ui.party.clash_wants_to_leave"), {{TEXT("name"), *S.Manifest.Characters[M].Name}, {TEXT("other"), *S.Manifest.Characters[Girl].Name}}));}
    else if(Mood==1)S.PartyEvents.Add(OKMsg(TEXT("ui.party.reluctant_stay_note"), {{TEXT("grudge_name"), *S.Manifest.Characters[M].Name}, {TEXT("target_name"), *S.Manifest.Characters[Girl].Name}}));}}
- S.FreeTalkNotice=OKMsg(TEXT("ui.party.follows_you_line"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});S.Message=S.FreeTalkNotice;
+ // Joining him where he sits with someone (Yuuka at the cafe table for their study evening) is not following him.
+ const bool JoinsTalk=FreeTalkPartner()!=INDEX_NONE&&FreeTalkPartner()!=Girl;
+ S.FreeTalkNotice=OKMsg(JoinsTalk?TEXT("ui.party.joins_you_line"):TEXT("ui.party.follows_you_line"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});S.Message=S.FreeTalkNotice;
  MindObserve(Girl,TEXT("party"),FreeTalkPartner()!=INDEX_NONE&&FreeTalkPartner()!=Girl?OKMsg(TEXT("ui.party.joined_talk_with"), {{TEXT("partner_name"), *S.Manifest.Characters[FreeTalkPartner()].Name}}):FString(OKT(TEXT("ui.party.he_asked_me_follow"))),PlaceHere(S.Male),0.3f);
  UE_LOG(LogTemp,Display,TEXT("Street party: actor %d joins (party %d)"),Girl,S.Party.Num());
  RefreshUI();return true;

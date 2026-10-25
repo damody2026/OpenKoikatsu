@@ -165,7 +165,13 @@ fn promise(c: &Catalog, r: &Value) -> Value {
     } else {
         0
     };
-    let clash = pending.iter().find(|a| s(a, "heroine") != her && s(a, "kind") != "entrust" && (i(a, "start") - start).abs() < 90).map(|a| s(a, "label").to_string()).unwrap_or_default();
+    // Another girl's meeting near it somewhere else: he cannot be at both. At the same place he can (Keqing asked to join
+    // the study evening he had with Yuuka at the cafe was warned as a clash, R3-208); how they take it is theirs.
+    let clash = pending
+        .iter()
+        .find(|a| s(a, "heroine") != her && s(a, "kind") != "entrust" && (i(a, "start") - start).abs() < 90 && s(a, "place") != place)
+        .map(|a| s(a, "label").to_string())
+        .unwrap_or_default();
     json!({"action": "book", "reason": "new", "start": start, "minute": minute, "clash": clash, "replaces_id": replaces_id})
 }
 
@@ -278,5 +284,8 @@ mod tests {
     fn another_girl_near_the_same_time_is_a_clash() {
         let b = ask(json!({"pending": [{"id": 3, "heroine": "b", "kind": "date", "place": "cafe", "start": 11 * 1440 + 19 * 60 + 30, "label": "和刻晴見面"}]}));
         assert_eq!((b["action"].as_str(), b["clash"].as_str()), (Some("book"), Some("和刻晴見面")));
+        // The same place: both meetings can be kept (R3-208).
+        let same = ask(json!({"place": "cafe", "pending": [{"id": 3, "heroine": "b", "kind": "date", "place": "cafe", "start": 11 * 1440 + 19 * 60, "label": "和優香複習"}]}));
+        assert_eq!((same["action"].as_str(), same["clash"].as_str()), (Some("book"), Some("")));
     }
 }
