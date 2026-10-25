@@ -434,6 +434,8 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
     }
     let mut fx = Effects::default();
     let mut payer = String::new();
+    // The same, as she remembers it: "你请客" in her memory was read as her own treat ("I paid for the fish too").
+    let mut payer_her = String::new();
     let mut treat_kept = false;
     if let Some(mut rel) = rel_of(r.get("relation"))? {
         let before = rel.clone();
@@ -464,18 +466,22 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
                 rel.cash -= price64;
                 rel.treat_balance -= 1;
                 payer = crate::tr::t("shop.she_treats").into();
+                payer_her = crate::tr::t("shop.her_view_she_treats").into();
                 treat_kept = true;
             } else if lean == "split" && rng.frand() < insist && rel.cash >= price64 / 2 && his >= price64 - price64 / 2 {
                 rel.cash -= price64 / 2;
                 fx.cash(-(price64 - price64 / 2), "treat", &crate::tr::m("shop.split_half_label", &[("why", crate::tr::a(&why))]));
                 payer = crate::tr::t("shop.split_half").into();
+                payer_her = payer.clone();
             } else if his >= price64 {
                 fx.cash(-price64, "treat", &crate::tr::m("shop.you_treat_label", &[("why", crate::tr::a(&why))]));
                 rel.treat_balance += 1;
                 payer = crate::tr::t("shop.you_treat").into();
+                payer_her = crate::tr::t("shop.her_view_he_treats").into();
             } else if rel.funds() >= price64 {
                 rel.pay(price64);
                 payer = crate::tr::t("shop.short_she_paid").into();
+                payer_her = crate::tr::t("shop.her_view_short_she_paid").into();
                 rel.respect = (rel.respect - 2.0).max(0.0);
             } else {
                 // Neither can pay it all: he pays what he has, she covers the rest on credit and thinks less of him.
@@ -484,6 +490,7 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
                 rel.debt += price64 - mine;
                 rel.respect = (rel.respect - 3.0).max(0.0);
                 payer = crate::tr::t("shop.short_she_advanced").into();
+                payer_her = crate::tr::t("shop.her_view_short_she_advanced").into();
             }
         }
         // Feelings: a little closer, less for the same thing again.
@@ -495,7 +502,7 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
             what += &crate::tr::m("shop.you_ate_suffix", &[("bought", crate::tr::a(&bought))]);
         }
         if price > 0 {
-            what += &crate::tr::m("shop.price_payer_paren", &[("price", crate::tr::a(&crate::tr::money(price))), ("payer", crate::tr::a(&payer))]);
+            what += &crate::tr::m("shop.price_payer_paren", &[("price", crate::tr::a(&crate::tr::money(price))), ("payer", crate::tr::a(&payer_her))]);
         }
         fx.note_at(&rel.id, "activity", &what, place, (0.55 / (1 + again) as f32).clamp(0.15, 0.6));
     }
