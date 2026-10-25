@@ -569,3 +569,21 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
   - 惠惠對自己的相似度最低：參考音是 24 kHz 的手機遊戲錄音。如果耳朵也覺得不像，就換一段更乾淨的錄音重做（`ok-tts card-voice --from-wav`）。
   - 每位平均 RTF 0.09～0.12（GPU 較空閒時）。
 - 這只是輔助指標，最後要由使用者試聽確認。
+
+### 20.5 0.6B Base 評估（2026-10-25：等使用者同意下載）
+
+- 本機沒有 0.6B 模型。`Qwen/Qwen3-TTS-12Hz-0.6B-Base` 共 2.34 GB（`model.safetensors` 1.74 GB、`speech_tokenizer/model.safetensors` 0.65 GB），下載要先經使用者同意。
+- 從 config 看到的差異：
+
+  | | 1.7B | 0.6B |
+  |---|---:|---:|
+  | talker hidden | 2048 | 1024 |
+  | talker 層數 | 28 | 28 |
+  | talker intermediate | 6144 | 3072 |
+  | code predictor | 1024 寬、5 層 | 1024 寬、5 層 |
+
+- 要做的事：
+  1. 把 `talker.rs` 的 `HIDDEN=2048` 等常數改成從 config 讀取。
+  2. 聲紋維度應該變成 1024，所以現有 274 份 profile 和十張卡片的 `okVo`（都是 2048 維）不能直接用。要用 0.6B 的 speaker encoder 從參考錄音重新算；卡片裡有參考錄音，可以重算，但卡片要能同時存兩種模型的聲紋，或在換模型時一起重寫。
+  3. 用同一份語料比較首包、RTF、顯存，並用 `voice-check` 比較聲線一致性。
+- 決策條件不變：0.6B 的聲線一致性不能比 1.7B 差，且顯存或速度要明顯更好，才換。現在 1.7B int8 常駐約 3 GB，加上 talker 與 codec 的 graph 後，在 GPU 滿載時也大約即時。0.6B 能省的主要是約 1 GB 顯存。
