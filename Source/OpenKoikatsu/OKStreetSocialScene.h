@@ -460,6 +460,7 @@ private:
  bool InLifePose(int32 I) const;
  void SpawnLifeProps(struct FOKLifePose& Pose,bool SeatOnly=false);
  void TickPartySeats();void StopPartySeat(int32 Index);
+ void StudiedTogether(int32 Girl,int32 Minutes); // OKStreetSocialCampus.inl
  void TickLife(float Dt);
  bool EntrustReminderDone(const struct FOKStreetAppointment& A) const;
  bool InitiativeFree(int32 I) const;
