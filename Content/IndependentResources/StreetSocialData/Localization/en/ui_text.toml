@@ -400,6 +400,9 @@ game_stopped_by_you = "You call it. The card game ends."
 test_add_money_control = "Test: add money (control channel)"
 
 [ui.director]
+exam_week_line = "This is {exam} week: no classes, and every subject is sat at one sitting, {date} (Friday) 17:00 (do not say there is a paper today or on some morning)"
+midterm_word = "midterm"
+final_word = "final exam"
 school_break_line = "school is on summer break until {start}; there are no classes now"
 plan_block = "{doing} at {place}"
 your_plan_line = "the rest of your day: {plan} (when you say what you have to do, go by this; no classes or shifts that are not in it)"

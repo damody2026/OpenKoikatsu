@@ -400,6 +400,9 @@ game_stopped_by_you = "你喊停，牌局結束。"
 test_add_money_control = "測試加錢（控制通道）"
 
 [ui.director]
+exam_week_line = "這週是{exam}週：不上課，各科考試都在 {date}（週五）17:00 那一場（不要說今天或哪天上午有哪科考試）"
+midterm_word = "期中考"
+final_word = "期末考"
 school_break_line = "學校放暑假，{start} 才開學，現在沒有課"
 plan_block = "{place}{doing}"
 your_plan_line = "你今天接下來的安排：{plan}（說自己要做什麼時照這個，不要說出安排裡沒有的課或打工）"
