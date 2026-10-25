@@ -142,7 +142,13 @@ impl Trace {
     fn finish(mut self, state: &State, job: &Job, status: &str, cache: &str, extra: Value) {
         self.mark("end");
         let marks: serde_json::Map<String, Value> = self.marks.iter().map(|(k, v)| (k.to_string(), json!((v * 1000.0).round() / 1000.0))).collect();
-        let times: Vec<String> = self.marks.iter().map(|(k, v)| format!("{k}={v:.3}")).collect();
+        let mut times: Vec<String> = self.marks.iter().map(|(k, v)| format!("{k}={v:.3}")).collect();
+        // Generation and its codec part (streamed misses), for profiling from the log alone.
+        for k in ["gen_seconds", "codec_seconds"] {
+            if let Some(v) = extra.get(k).and_then(Value::as_f64) {
+                times.push(format!("{}={v:.3}", k.trim_end_matches("_seconds")));
+            }
+        }
         crate::log!("ok-tts: REQ id={} kind={} status={status} cache={cache} p={} chars={} seg={} {} {}", job.id, self.kind, job.voice.key, job.chars,
                     job.segment.map(|s| s.to_string()).unwrap_or_else(|| "-".into()), times.join(" "), job.text);
         let mut record = json!({"request_id": job.id, "kind": self.kind, "status": status, "cache": cache, "text": job.text,

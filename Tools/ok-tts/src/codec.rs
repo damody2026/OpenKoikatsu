@@ -94,7 +94,15 @@ pub struct Codec {
     blocks: Vec<Block>,
     final_snake: Snake,
     final_conv: Conv,
+    // Streaming decodes (up to GRAPH_FRAMES frames with their context) as CUDA graphs, one per length: the codes go
+    // into g_codes first, the samples come out of the length's own buffer. A decode is a few hundred kernels and
+    // matrix products; on a GPU shared with a game each launch waits for a time slice, a graph is one launch.
+    g_codes: Buf,
+    graphs: std::sync::Mutex<std::collections::HashMap<usize, (crate::gpu::Graph, Buf)>>,
 }
+
+/// Longest decode run as a graph (streaming: LEFT_CONTEXT + a few new frames). Longer ones (whole lines) run directly.
+const GRAPH_FRAMES: usize = 64;
 
 fn up(gpu: &Gpu, v: &[f32]) -> Result<Buf> {
     gpu.upload(v)
@@ -239,6 +247,8 @@ impl Codec {
             blocks,
             final_snake: load_snake(gpu, st, &format!("{p}.decoder.5"))?,
             final_conv: load_conv(gpu, st, &format!("{p}.decoder.6.conv"), 1)?,
+            g_codes: gpu.zeros(GRAPH_FRAMES * CODEBOOKS * 4)?,
+            graphs: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -270,17 +280,42 @@ impl Codec {
     }
 
     fn forward(&self, gpu: &Gpu, frames: &[[u32; CODEBOOKS]]) -> Result<Vec<f32>> {
-        self.run(gpu, frames, &mut |_, _, _, _| Ok(()))
+        let t = frames.len();
+        let use_graph = std::env::var("OK_TTS_CODEC_GRAPH").map(|v| v != "0").unwrap_or(true);
+        if !use_graph || t == 0 || t > GRAPH_FRAMES {
+            return self.run(gpu, frames, &mut |_, _, _, _| Ok(()));
+        }
+        let codes: Vec<i32> = frames.iter().flat_map(|f| f.iter().map(|&c| c as i32)).collect();
+        gpu.write(self.g_codes.ptr, &codes)?;
+        let mut graphs = self.graphs.lock().unwrap();
+        if !graphs.contains_key(&t) {
+            let out = gpu.alloc(t * SAMPLES_PER_FRAME * 4)?;
+            let g = gpu.capture(|| {
+                let y = self.run_dev(gpu, self.g_codes.ptr, t, &mut |_, _, _, _| Ok(()))?;
+                gpu.copy(out.ptr, y.ptr, t * SAMPLES_PER_FRAME * 4)
+            })?;
+            graphs.insert(t, (g, out));
+        }
+        let (g, out) = &graphs[&t];
+        gpu.replay(g)?;
+        gpu.read::<f32>(out.ptr, t * SAMPLES_PER_FRAME)
     }
 
     fn run(&self, gpu: &Gpu, frames: &[[u32; CODEBOOKS]], tap: &mut dyn FnMut(&str, &Buf, usize, usize) -> Result<()>) -> Result<Vec<f32>> {
         let t = frames.len();
         let codes: Vec<i32> = frames.iter().flat_map(|f| f.iter().map(|&c| c as i32)).collect();
         let codes = gpu.upload(&codes)?;
+        let y = self.run_dev(gpu, codes.ptr, t, tap)?;
+        gpu.read::<f32>(y.ptr, t * SAMPLES_PER_FRAME)
+    }
+
+    /// The decoder from codes already on the device ([t, 16] i32) to samples on the device (t * SAMPLES_PER_FRAME,
+    /// clamped to ±1); no host sync, so a graph can capture it.
+    fn run_dev(&self, gpu: &Gpu, codes: u64, t: usize, tap: &mut dyn FnMut(&str, &Buf, usize, usize) -> Result<()>) -> Result<Buf> {
         let z1 = gpu.alloc(CB_DIM * t * 4)?;
         let z2 = gpu.alloc(CB_DIM * t * 4)?;
-        gpu.launch("rvq_gather", (t as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(z1.ptr), Arg::P(self.tables.ptr), Arg::P(codes.ptr), Arg::I(16), Arg::I(0), Arg::I(1), Arg::I(CB_DIM as i32), Arg::I(ENTRIES as i32), Arg::I(t as i32)])?;
-        gpu.launch("rvq_gather", (t as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(z2.ptr), Arg::P(self.tables.ptr), Arg::P(codes.ptr), Arg::I(16), Arg::I(1), Arg::I(16), Arg::I(CB_DIM as i32), Arg::I(ENTRIES as i32), Arg::I(t as i32)])?;
+        gpu.launch("rvq_gather", (t as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(z1.ptr), Arg::P(self.tables.ptr), Arg::P(codes), Arg::I(16), Arg::I(0), Arg::I(1), Arg::I(CB_DIM as i32), Arg::I(ENTRIES as i32), Arg::I(t as i32)])?;
+        gpu.launch("rvq_gather", (t as u32, 1, 1), (256, 1, 1), 0, &[Arg::P(z2.ptr), Arg::P(self.tables.ptr), Arg::P(codes), Arg::I(16), Arg::I(1), Arg::I(16), Arg::I(CB_DIM as i32), Arg::I(ENTRIES as i32), Arg::I(t as i32)])?;
         let q = gpu.alloc(512 * t * 4)?;
         gpu.chan_matmul_f32(q.ptr, self.out_first.ptr, z1.ptr, 512, CB_DIM, t, t, 0.0)?;
         gpu.chan_matmul_f32(q.ptr, self.out_rest.ptr, z2.ptr, 512, CB_DIM, t, t, 1.0)?;
@@ -320,7 +355,8 @@ impl Codec {
         x = self.snake(gpu, &self.final_snake, &x, ch, len)?;
         let y = self.conv(gpu, &self.final_conv, &x, len)?;
         gpu.launch1("clamp_f32", len, &[Arg::P(y.ptr), Arg::I(len as i32), Arg::F(-1.0), Arg::F(1.0)])?;
-        gpu.read::<f32>(y.ptr, len)
+        debug_assert_eq!(len, t * SAMPLES_PER_FRAME);
+        Ok(y)
     }
 
     fn conv(&self, gpu: &Gpu, c: &Conv, x: &Buf, t: usize) -> Result<Buf> {

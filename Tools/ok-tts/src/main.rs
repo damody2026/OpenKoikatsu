@@ -16,6 +16,8 @@
 //!   ok-tts bench  --endpoint http://127.0.0.1:47861 --corpus lines.txt --out-dir ABS [--rounds 3] [--mode stream|file] [--fresh] [--json out.json]
 //!   ok-tts serve  ... [--stream-later-frames 4]   (frames per streamed piece after the first)
 //!   ok-tts consistency --base BASE_DIR --corpus lines.txt --out DIR [--personality 08] [--other 00,03,m0]   (VoiceDesign vs Base clone)
+//!   ok-tts voice-check --cards DIR|a.png,b.png --corpus lines.txt --out DIR [--base DIR] [--seed N]
+//!       the card voices against each other: similarity, confusion matrix, a local listening page (see voicecheck.rs)
 //!   ok-tts speaker-sim --base BASE_DIR a.wav b.wav[#1|#2] ...   (speaker-embedding cosine of each pair)
 //!   ok-tts parity --reference DIR      (compare against Tools/ok-tts/reference/dump_reference.py output; run with OK_TTS_WEIGHTS=bf16)
 //!   ok-tts gemv-bench                  (decode-step linear layer timings, bf16 vs int8 weights, in CUDA graphs)
@@ -31,6 +33,7 @@ mod bench;
 mod cardvoice;
 mod codec;
 mod consistency;
+mod voicecheck;
 mod engine;
 mod gpu;
 mod sampling;
@@ -167,6 +170,7 @@ fn main() {
         "parity" => cmd_parity(&args),
         "bench" => cmd_bench(&args),
         "consistency" => cmd_consistency(&args),
+        "voice-check" => cmd_voice_check(&args),
         "profile" => cmd_profile(&args),
         "card-voice" => cmd_card_voice(&args),
         "voice-export" => cmd_voice_export(&args),
@@ -329,6 +333,20 @@ fn cmd_profile(args: &Args) -> Result<()> {
         ages: list("ages").map(|a| a.iter().map(|v| v.parse()).collect::<Result<Vec<u32>, _>>()).transpose()?,
         ref_text: opt("ref-text").unwrap_or_else(|| profile::DEFAULT_REF_TEXT.into()),
         force: args.flags.iter().any(|f| f == "force"),
+        positions: max_positions(args),
+    })
+}
+
+fn cmd_voice_check(args: &Args) -> Result<()> {
+    let (_, voices) = resolve(args)?;
+    let opt = |k: &str| args.opts.get(k).cloned();
+    voicecheck::run(&voicecheck::VoiceCheckArgs {
+        cards: opt("cards").context("--cards is required")?.split(',').map(str::trim).filter(|s| !s.is_empty()).map(PathBuf::from).collect(),
+        corpus: PathBuf::from(opt("corpus").context("--corpus is required")?),
+        out: PathBuf::from(opt("out").context("--out is required")?),
+        base: opt("base").map(PathBuf::from).or_else(default_base_model_dir).context("Base model not found; pass --base")?,
+        voices,
+        seed: opt("seed").map(|v| v.parse()).transpose()?.unwrap_or(20261025),
         positions: max_positions(args),
     })
 }
