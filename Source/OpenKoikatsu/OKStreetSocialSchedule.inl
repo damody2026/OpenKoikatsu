@@ -271,7 +271,11 @@ void AOKStreetSocialScene::DestroyLater(AActor* Actor){
 }
 void AOKStreetSocialScene::TickDestroyQueue(){
  if(!State)return;auto& Q=State->DestroyQueue;const double Deadline=FPlatformTime::Seconds()+0.001;
- while(!Q.IsEmpty()){AActor* Actor=Q[0].Get();Q.RemoveAt(0);if(IsValid(Actor))Actor->Destroy();if(FPlatformTime::Seconds()>Deadline)break;}
+ while(!Q.IsEmpty()){AActor* Actor=Q[0].Get();Q.RemoveAt(0);
+  // One that took long (6 props took 10 ms before this queue; one alone took 10 ms in Sched34E): which, and how big.
+  if(IsValid(Actor)){const double T0=FPlatformTime::Seconds();const FString Name=Actor->GetName();const int32 Parts=Actor->GetComponents().Num();Actor->Destroy();
+   const double Ms=(FPlatformTime::Seconds()-T0)*1000.0;if(Ms>3.0)UE_LOG(LogTemp,Display,TEXT("Street destroy slow: %s (%d components) %.1f ms"),*Name,Parts,Ms);}
+  if(FPlatformTime::Seconds()>Deadline)break;}
 }
 void AOKStreetSocialScene::QueueHeroineWalk(int32 I,const FVector& From,const FVector& To,bool Leave,bool HasFinal,const FVector& Final,const FVector& Fallback,float Yaw,const FString& Place){
  auto& S=*State;FOKStreetPendingMove Move;Move.Leave=Leave;Move.HasFinal=HasFinal;Move.Final=Final;Move.Fallback=Fallback;Move.Yaw=Yaw;Move.Place=Place;
@@ -326,5 +330,5 @@ void AOKStreetSocialScene::TickCommutes(float Dt){
   const FVector Delta=Path[1]-A.Position;const FVector Step=Delta.GetSafeNormal2D()*FMath::Min(float(Delta.Size2D()),OKStreetWalkSpeed*Dt);
   A.Position+=Step;A.Position.Z=Path[1].Z;S.Rotations[I]=OKStreetFacingMovement(Step,S.Rotations[I]);
  }
- for(const int32 I:Done){S.Commutes.Remove(I);if(S.ReleaseAtDoor.Remove(I)&&S.Agents.IsValidIndex(I-1)){S.Agents[I-1].Held=false;S.ScheduleHeld.Remove(I);}if(const FVector* F=S.CommuteFinal.Find(I)){if(S.Agents.IsValidIndex(I-1)&&!StartNpcLift(I,*F))S.Agents[I-1].Position=*F;S.CommuteFinal.Remove(I);}} // seen: up by lift (Life.inl)
+ for(const int32 I:Done){S.Commutes.Remove(I);if(S.ReleaseAtDoor.Remove(I)&&S.Agents.IsValidIndex(I-1)){S.Agents[I-1].Held=false;S.ScheduleHeld.Remove(I);}if(const FVector* F=S.CommuteFinal.Find(I)){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_CommuteLift);if(S.Agents.IsValidIndex(I-1)&&!StartNpcLift(I,*F))S.Agents[I-1].Position=*F;S.CommuteFinal.Remove(I);}} // seen: up by lift (Life.inl)
 }
