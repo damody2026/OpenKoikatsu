@@ -471,6 +471,9 @@ FString AOKStreetSocialScene::ActivityBlockedLine(int32 Character) const{
 
 bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FString& Error){
  if(!State)return false;auto& S=*State;
+ // Already on the way there with her ("eat" said on the way to the cafeteria meal they set off for): the walk goes on,
+ // not cancelled and started over.
+ if(S.OutingGirl==Girl&&S.OutingActivity==ActivityId){UE_LOG(LogTemp,Display,TEXT("Street outing: already on the way to %s with actor %d"),*ActivityId,Girl);return true;}
  const FOKStreetActivity* Activity=OKStreetFindActivity(ActivityId);
  // Out of reach now (raining for the sketching, no fish food, someone else's thing, done today): not set off at all.
  if(Activity&&!ActivityCheck(Girl,ActivityId,Error,false))return false;
