@@ -67,7 +67,18 @@ fn promise(c: &Catalog, r: &Value) -> Value {
         return ignore("not_a_place");
     }
     // No clear time, no meeting (it used to become 19:00 by default, a time nobody said).
-    let Some(minute) = minute_of(s(r, "time")) else { return ignore("no_time") };
+    // "After class" / "after work" with no clock time: when the later of the two of them is through today (C++ gives
+    // the ends of today's classes and shifts after now); nothing left today for either, no time.
+    let after = |kind: &str| -> Option<i64> {
+        let end = i(r, &format!("his_{kind}_end")).max(i(r, &format!("her_{kind}_end")));
+        (end > 0).then_some(end)
+    };
+    let minute = match s(r, "time") {
+        "after_class" => after("class"),
+        "after_work" => after("work"),
+        t => minute_of(t),
+    };
+    let Some(minute) = minute else { return ignore("no_time") };
     let today = i(r, "today");
     let game_day = game_day_of(s(r, "day"), today);
     // Before 04:00 belongs to the previous game day's night.
@@ -162,6 +173,10 @@ mod tests {
         let b = ask(json!({}));
         assert_eq!((b["action"].as_str(), b["start"].as_i64()), (Some("book"), Some(11 * 1440 + 19 * 60)));
         assert_eq!(ask(json!({"time": "晚上"}))["reason"], "no_time");
+        // "After class": the later end of his and her classes today; none left today, no time.
+        let after = ask(json!({"time": "after_class", "his_class_end": 990, "her_class_end": 720}));
+        assert_eq!((after["action"].as_str(), after["minute"].as_i64()), (Some("book"), Some(990)));
+        assert_eq!(ask(json!({"time": "after_class", "his_class_end": -1, "her_class_end": -1}))["reason"], "no_time");
         assert_eq!(ask(json!({"day": "+0", "time": "09:00"}))["reason"], "past");
         assert_eq!(ask(json!({"place_known": false}))["reason"], "not_a_place");
         // 01:30 "tonight" is the night after the game day.

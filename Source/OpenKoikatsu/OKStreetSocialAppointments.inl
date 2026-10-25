@@ -64,6 +64,13 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
  auto Request=OKRulesRequest(TEXT("promise_from_chat"));Request->SetStringField(TEXT("heroine"),Id);Request->SetStringField(TEXT("day"),Day);
  Request->SetStringField(TEXT("time"),Time);Request->SetStringField(TEXT("place"),Place);Request->SetBoolField(TEXT("place_known"),P!=nullptr);Request->SetBoolField(TEXT("replaces"),bReplaces);
  Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));Request->SetNumberField(TEXT("today"),S.Store.CalendarDay);
+ // "After class" (time after_class / after_work): when what each has on today after now ends, his timetable and her
+ // day; promise.rs takes the later. -1: nothing more today.
+ {const int32 Now=int32(OKStreetMindNow(S)%1440),Weekday=int32(StreetNow().GetDayOfWeek());int32 HisClass=-1,HerClass=-1,HisWork=-1,HerWork=-1;
+  for(const auto& C:S.Store.PlayerAcademic.Courses)if(C.Weekday==Weekday){const int32 End=C.Slot==0?720:990;if(End>Now)HisClass=FMath::Max(HisClass,End);}
+  for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Kind==TEXT("shift")&&A.Start/1440==S.Store.CalendarDay){const int32 End=int32(A.Start%1440)+FMath::Max(A.Minutes,60);if(End>Now)HisWork=FMath::Max(HisWork,End);}
+  if(const TArray<FOKStreetPlanBlock>* Plan=S.Plans.Find(Character))for(const auto& B:*Plan)if(B.End>Now){if(B.Kind==TEXT("class"))HerClass=FMath::Max(HerClass,B.End);else if(B.Kind==TEXT("work"))HerWork=FMath::Max(HerWork,B.End);}
+  Request->SetNumberField(TEXT("his_class_end"),HisClass);Request->SetNumberField(TEXT("her_class_end"),HerClass);Request->SetNumberField(TEXT("his_work_end"),HisWork);Request->SetNumberField(TEXT("her_work_end"),HerWork);}
  {const double Wall=FPlatformTime::Seconds();TArray<TSharedPtr<FJsonValue>> Pending;
   for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("heroine"),A.Heroine);
    O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("place"),A.Place);O->SetNumberField(TEXT("start"),double(A.Start));O->SetStringField(TEXT("label"),A.Label);
