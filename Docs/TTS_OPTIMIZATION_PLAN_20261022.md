@@ -1,6 +1,6 @@
 # TTS 聲線一致性與低延遲優化計畫
 
-日期：2026-10-22。狀態：P0／P1 的伺服器部分已實作並在本機測過；P2 的 Base 固定聲線已接進伺服器並建好全部聲線的 profile，使用者試聽確認聲線一致（見 13.6）；2026-10-23 已部署到 `Build/ok-tts`，下次啟動遊戲即使用 Base（尚未在遊戲中實測）。
+日期：2026-10-22。狀態（2026-10-25 盤點）：P0、P1、P2 大致完成，並已部署到遊戲中實際使用：固定聲線用 Base x-vector、卡片聲線、int8、取消與快取。第 6 節的勾選已依實際進度更新。剩下的是高負載下的延遲（P3）、客觀聲線驗收、0.6B 評估，以及「做歌時讓出 GPU」，排程見第 20 節。
 
 ## 1. 目標與決策
 
@@ -124,25 +124,28 @@ Profile 至少保存：schema version、profile ID、revision、模型 ID 與權
 
 ### P0：建立可重現基準與端到端觀測
 
-- [ ] 固定目前執行檔、原始碼 revision、模型 revision、voices hash、取樣參數與遊戲 stage。
-- [ ] 為請求加入 request ID、conversation generation、character/profile ID、片段序號與 cache key。
-- [ ] 記錄文字備妥、請求送出、server receive、queue enter／leave、prefill 完成、first PCM、UE 收到、首次實際消費 PCM、生成結束與 cache ready。
-- [ ] 用各程序 monotonic clock 計算本地 duration，再以 request ID 串接；不直接相減不同程序的 monotonic timestamp。
-- [ ] 記錄音訊 underrun、fallback、取消、截斷、重試與 GPU／frame time。
-- [ ] 設立固定語料、負載腳本、JSON 結果與試聽索引，工具以 Rust／Lua 實作。
+（2026-10-25 盤點：`[x]` 為已完成並註明出處；`[ ]` 為未做，後面寫明怎樣算完成。）
+
+- [x] 固定執行檔、模型 revision、voices、取樣參數：部署時 `Build/ok-tts/package.json` 記錄所有檔案 hash 與 profile 數（13.6）。
+- [x] 請求帶 request ID、generation、segment_index、channel；伺服器紀錄有 cache hit／joined／miss 與聲音來源 `voice: card|profile|design`（13.1、13.7）。
+- [x] 伺服器端記錄 queue enter／leave、first PCM、generated、cache ready；UE 端每句記錄「請求→開始播放」「回覆→開始播放」（13.1）。
+- [x] 各程序用自己的 monotonic 時間，以伺服器收到請求為零點，用 request ID 串接（13.1）。
+- [x] 記錄取消、hangup、failed（伺服器）與串流斷音 `Speech stream ran dry`（UE，18）；遊戲 FPS 由控制通道 `/fps` 讀取。
+- [x] 固定語料 `bench/corpus_zh.txt` 與 `ok-tts bench`（JSON 結果，模擬 UE 起播與斷音）（13.1）。
+- [ ] 試聽索引：每個聲線的固定語料樣本，加上能追溯 profile／模型／文字的索引頁。**驗收**：一頁可以聽完十位女主各 20 句，並附聲紋指標（第 20 節第 4 項）。
 
 退出條件：可區分 LLM 等待、TTS 排隊、模型推論和 UE 起播成本，且同一測試能重複執行。
 
 ### P1：現有引擎的快取、排隊與生命週期
 
-- [ ] 將不可變 voice metadata 與合成引擎鎖分離，快取命中不等待 GPU 推論鎖。
-- [ ] 串流支援快取命中：明確選擇讀 PCM sidecar 或解碼 OGG 為 PCM；以延遲、容量及播放一致性測試選定。
-- [ ] 相同 cache key 的併發請求去重，避免重算與同名暫存檔衝突。
-- [ ] 完成 PCM 後釋放推論資源，由有界後處理工作保存 OGG；不得讓背景工作無限制堆積。
-- [ ] 用明確的 pending／ready／failed 狀態協調串流完成與重播檔可用，避免檔案尚未寫好時 `/synthesize` 又重算。
-- [ ] 下一句預取不再依賴上一句 OGG 落盤，但保持發話順序與有界預取量。
-- [ ] 加入可取消、可觀測的排隊；過期請求在取得引擎前和合成中都能退出。
-- [ ] 設定背壓及緩衝上限；慢客戶端不得累積無上限 PCM。
+- [x] voice metadata 與引擎鎖分離，快取命中不等 GPU（13.1：2.547 s → 0.006 s）。
+- [x] 串流支援快取命中：解碼 OGG 成 PCM，不另存 sidecar（13.1）。
+- [x] 相同 cache key 去重（in-flight 表）（13.1）。
+- [x] OGG 編碼與落盤移出引擎鎖，寫檔數受同時請求數限制（13.1）。
+- [x] pending／ready／failed 狀態（13.1）。
+- [x] 第 i 句串流完成就要求第 i+1 句，不等 OGG 落盤（13.1）。
+- [x] 可取消排隊：`/cancel` 依 channel／generation，取得引擎前與每個串流片段之間都會檢查（13.1）；男主台詞也有自己的 channel（16 的 10-25 補記）。
+- [ ] 背壓：慢客戶端不得累積無上限 PCM。**驗收**：用 `ok-tts bench` 開一個不讀取的串流客戶端，伺服器記憶體不隨句長增加，而且有明確的上限與 hangup 紀錄。
 
 維持單一引擎可變狀態隔離，不直接解除 Mutex 讓多個請求同時修改 KV cache。前景已開始的語音避免被背景預取打斷。
 
@@ -150,44 +153,42 @@ Profile 至少保存：schema version、profile ID、revision、模型 ID 與權
 
 ### P2：固定聲線試點
 
-- [ ] 挑選 3 個差異明顯的成人角色聲線作試點，保留現有對照樣本。
-- [ ] 各準備一段乾淨參考音訊與正確逐字稿；長度先比較約 3、6、10 秒，依品質與 prefill 成本選擇。
-- [ ] 接入 1.7B Base、聲音條件生成／載入、profile 格式驗證。
-- [ ] 以官方實作輸出的中間資料核對 speaker 條件與 prompt；數值容差按階段設定，不能要求所有 bf16 自回歸結果逐位元相同。
-- [ ] 實作角色到 profile 的持久映射、缺失 profile 診斷和相容舊 personality 請求的預設映射。
-- [ ] 完成每角色至少 20 句盲聽與跨重啟一致性比較。
+- [x] 試點 3 個聲線（08／00／03），保留 VoiceDesign 對照樣本（13.4）；使用者試聽確認 Base 是同一個人（13.6）。
+- [x] 參考音訊：採 x-vector（只用 speaker embedding，不需逐字稿）。VoiceDesign 參考句 6～12 秒，十位女主為本人錄音 14～27 秒（16）。沒有做 3／6／10 秒的長度比較，因為 x-vector 的 prefill 不隨參考長度增加。
+- [x] 接入 1.7B Base、`.okvoice` profile 格式（schema 2）與卡片 `okVo`（13.6、13.7）。
+- [ ] speaker encoder 與官方 Python 的中間值核對。**驗收**：同一段參考音，mel、ECAPA 各層與輸出 embedding 的相對誤差 < 1e-3（f32），把結果寫進本文件。
+- [x] 角色到聲音的持久對應：卡片 `okVo` 優先，其次性格的預設 profile；缺 profile 時明確報錯，不換成別的聲音（13.6、13.7）。
+- [ ] 每個角色 20 句的一致性比較。**驗收**：十位女主各 20 句固定語料，算對自己參考音與對其他九人參考音的去平均 cosine，混淆矩陣對角線全是該列最大值；試聽頁交給使用者（第 20 節第 4 項）。
 
 退出條件：同聲線不同台詞的穩定度明顯改善，發音無顯著退步，且取得完整延遲分布。
 
 ### P3：保持快的串流與切句
 
-- [ ] 依 P0 profiling 判定 talker、predictor、prefill、codec、傳輸各自占比，再決定優化項目。
-- [ ] 首包維持小批量，後續評估較大 decode 批量，減少重複左側 context 解碼；比較 4／8／12 frames，不直接套用最大值。
-- [ ] 若 codec 仍是瓶頸，再研究持續解碼狀態；必須驗證卷積邊界、接縫與整句對照。
-- [ ] 評估固定聲音條件的 embedding／prefill prefix 快取；確認文字與位置條件不變才可重用 KV prefix。
-- [ ] 只有 profiling 顯示值得時才補 talker CUDA graph，驗證位置更新、EOS、動態長度與 graph cache 生命週期。
-- [ ] 自由對話採語意完整片段，避免不必要的 2～5 字拆段與「，。」等正規化產物；保留「好」「嗯」等合理短答。
-- [ ] 切句兼顧首段延遲與後續流暢度：首段可較短，後段可適度合併，不為等完整段落而拖慢首次出聲。
-- [ ] 一般腳本對話共用串流播放能力，保留嘴型、取消、完成判定與存檔順序。
+- [ ] 各階段占比（talker、predictor、prefill、codec、傳輸）。**驗收**：`ok-tts` 每句記錄各階段 GPU 時間，GPU 空閒與遊戲在跑兩種情境各量一次，結果寫進第 20 節。
+- [x] 後續 decode 批量比較 4／8／12：較大批量只省約一成，起播反而變晚，維持 4（13.2）。
+- [ ] codec 持續解碼狀態：只有在占比顯示 codec 是瓶頸時才做。**驗收**：整句與串流接縫對照誤差可忽略，RTF 下降。
+- [ ] 固定聲線的 prefill／KV 前綴快取。**驗收**：同聲線連續句的 prefill 時間下降，輸出與不快取時一致（固定種子下位元相同或聲紋 ≥ 0.999）。
+- [ ] talker CUDA graph（code predictor 已有）。**驗收**：talker 每幀時間下降，EOS 與動態長度正確，固定種子下輸出不變。
+- [x] 文字正規化去掉「，。」之類的產物（13.1）；自由對話的分段由攻略線依整則回覆切分（Gest28）。
+- [ ] 一般腳本對話改用串流播放。**驗收**：腳本台詞從請求到開播的時間降到和自由對話相同，嘴型、取消與完成判定不變。
 
 退出條件：達到起播與 RTF 門檻，無可感知接縫；短句改善不是靠延後所有首句。
 
 ### P4：0.6B 對照與部署選擇
 
-- [ ] 參數化模型維度並接入 0.6B Base，沿用同一組 reference、語料、負載與測試。
-- [ ] 比較未命中 first audible P50／P95、RTF、顯存峰值、遊戲 frame time、聲線盲聽、發音自然度。
-- [ ] 0.6B 達到聲線與發音門檻，且速度或顯存收益足夠才採用；否則維持 1.7B。
-- [ ] 不在每句間自動切換不同模型，以免聲線和韻律再次改變。
+- [ ] 參數化模型維度並接入 0.6B Base。**驗收**：0.6B 能載入並產生音訊，與官方輸出的聲紋 ≥ 0.99。
+- [ ] 同一組語料比較首包 P50／P95、RTF、顯存、聲紋一致性。**驗收**：比較表寫進第 20 節。
+- [ ] 決策：0.6B 的聲線一致性不低於 1.7B，且顯存或速度明顯較好才換；否則維持 1.7B（不在句與句之間切換模型）。
 
 退出條件：形成有測量證據的模型決策，而非只依參數量選型。
 
 ### P5：整合、發布與回歸
 
-- [ ] 所有試點通過後才擴展至其餘 profile，不先批量產生全聲線。
-- [ ] 執行完整測試矩陣、發布新的 ok-tts 套件及必要的新遊戲 stage，保存 hashes 與報告。
-- [ ] 使用新 tag；更換引擎建置時使用新的 base-dir。不遞迴刪除帶 junction 的 `.stage`。
-- [ ] 啟動器只處理本 checkout 的服務與連接埠，驗證另一條開發線不受影響。
-- [ ] 更新 TTS 使用與診斷文件，實際錯誤與修正記入 `Docs/STREET_ERRORS.md`，保留其他 session 紀錄。
+- [x] 試點通過後擴展到全部 profile（262 份 + 男聲 m10～m21 + 十張卡片聲線）（13.6、15、16）。
+- [x] 發布 ok-tts 套件，`package.json` 記錄 hash，保留回退用的舊 exe（13.6、14）。
+- [x] 每次打包用新 tag，不遞迴刪除 `.stage`（13.8 起各輪）。
+- [x] 啟動器只處理本 checkout 的服務與連接埠：`local-instance.json`、`-Sandbox`；`voice=false` 時可指定別處的 TTS／ASR／ok-song（13.8、HEROINE_SINGING_VALIDATION 第 14 節）。
+- [x] 錯誤記入 `Docs/ERROR_LOG.md`（保留其他 session 的紀錄）。
 
 ## 7. API、快取與故障契約
 
@@ -261,13 +262,13 @@ PCM 協定需明確標示 endian、sample rate、channels。目前標頭 `audio/
 
 ## 11. 完成交付
 
-- [ ] Rust/Lua 實作與必要 UE 整合。
-- [ ] 有版本的 profile schema 與本機建置／驗證工具。
-- [ ] 現況、1.7B Base、0.6B 候選的相同語料比較報告。
-- [ ] 端到端延遲、RTF、顯存、遊戲 frame time、盲聽與故障測試結果。
-- [ ] 可試聽且能追溯 profile／模型／文字的本機樣本索引。
-- [ ] 套件版本、檔案 hash、部署方式與可操作的回退步驟。
-- [ ] 所有聲線未驗證前，文件明確列出支援與未驗證範圍。
+- [x] Rust/Lua 實作與 UE 整合（13～18）。
+- [x] 有版本的 profile schema（`.okvoice` schema 2）與工具（`ok-tts profile`、`card-voice`、`speaker-sim`、`consistency`）。
+- [ ] 1.7B VoiceDesign／1.7B Base／0.6B Base 的同語料比較報告。VoiceDesign 與 1.7B Base 已有（13.4、13.6），0.6B 待第 20 節第 5 項。
+- [ ] 端到端延遲、RTF、顯存、遊戲 frame time 的完整報告。已有開發參考（13.2、13.6、14、17、18），在高負載下仍未達第 4 節門檻（第 20 節第 2、3 項）。
+- [ ] 可試聽且能追溯的樣本索引（第 20 節第 4 項）。
+- [x] 套件 hash、部署與回退步驟（13.6、14）。
+- [ ] 支援範圍：中文已驗證；英文用中文參考聲紋說、未另外驗證；日文未支援。十位女主的聲線待使用者逐一確認。
 
 ## 12. 參考依據
 
@@ -484,3 +485,13 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
   - 一般優先權：35 句中斷 90 次。
   - `OK_TTS_GPU_PRIORITY=5`（realtime）：25 句中斷 0 次，回覆後 0.1～2.2 秒開始唸，遊戲平均 108～189 FPS；代價是她每次開口前後遊戲卡 3～5 幀，每幀 50～420 ms。
 - 決定（使用者）：維持預設不開，只在多個遊戲同時跑時手動設 `OK_TTS_GPU_PRIORITY=5`。注意 `Build/ok-tts/ok-tts.exe` 要是 10-25 之後編的才有這個設定（啟動時 log 印 `GPU scheduling priority class 5`）。
+
+## 20. 2026-10-25 起的工作排程（E 線）
+
+依序做，結果填在各小節。
+
+1. 整理勾選：第 6、11 節已依實際進度更新（本節建立時完成）。
+2. 做歌時讓出 GPU（20.2）：ok-song 製作歌曲時，如果 ok-tts 正在合成或有請求排隊，就暫停或降速，不靠調高優先權。
+3. TTS 解碼加速（20.3）：先量各階段占比，再做固定聲線的前綴快取、talker CUDA graph 等。
+4. 十位女主卡片聲線的客觀驗收與試聽頁（20.4）。
+5. 評估 0.6B Base（20.5）。
