@@ -7,8 +7,8 @@
 #include "Misc/SecureHash.h"
 #include "Serialization/BufferArchive.h"
 
-TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(FKKRuntimePoseRequest R){
- return Async(EAsyncExecution::ThreadPool,[R=MoveTemp(R)]() mutable {
+static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R){
+ {
   const double Start=FPlatformTime::Seconds();FKKRuntimePoseResult Out;Out.WorkerThread=!IsInGameThread();
   Out.CharacterIdentity=R.CharacterIdentity;Out.ClipIdentity=R.ClipIdentity;Out.Duration=R.Duration;
   auto Fail=[&](const TCHAR* Why){Out.Error=Why;Out.Keys.Reset();Out.Tracks.Reset();Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return MoveTemp(Out);};
@@ -73,7 +73,13 @@ TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(FKKRuntimePoseReques
    for(uint32 K=0;K<Count;++K)for(int32 C=0;C<3;++C)Out.Keys[Write++]=Out.Keys[Source+K*3+C];
   }
   Out.Keys.SetNum(Write,EAllowShrinking::Yes);FString PackingError;if(R.PackedGpuCache&&!OKPackAndSaveRuntimeGpuPoseCache(R,Out,PackingError))return Fail(*PackingError);Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return Out;
- });
+ }
+}
+TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(FKKRuntimePoseRequest R){
+ return Async(EAsyncExecution::ThreadPool,[R=MoveTemp(R)]() mutable {return OKPrepareRuntimePoseBankNow(R);});
+}
+TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(TFunction<FKKRuntimePoseRequest()> Make){
+ return Async(EAsyncExecution::ThreadPool,[Make=MoveTemp(Make)]() mutable {FKKRuntimePoseRequest R=Make();return OKPrepareRuntimePoseBankNow(R);});
 }
 
 FString OKRuntimePoseRecipeIdentity(const FKKRuntimePoseRequest& R){

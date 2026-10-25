@@ -285,7 +285,7 @@ struct FEntry {
  // Plain standing idle (f_tachi_00_00) for stops; the reading idle (slot 0) only when the scene allows it.
  int32 StandSlot=INDEX_NONE;bool ReadingAllowed=true;
  TArray<TFuture<FKKRuntimePoseResult>> PoseJobs;TArray<FKKRuntimePoseResult> Clips;TArray<int32> ClipSources;
- FKKRuntimePoseRequest PoseRecipe;FOKGpuActorRecord ActorRecipe;FOKGpuSkinPaletteData PaletteRecipe;
+ TSharedPtr<const FKKRuntimePoseRequest,ESPMode::ThreadSafe> PoseRecipe; /* shared, never changed: a streamed action copies it on a worker */FOKGpuActorRecord ActorRecipe;FOKGpuSkinPaletteData PaletteRecipe;
  TSharedPtr<const FOKRuntimeSkinEnvelopeGeometry,ESPMode::ThreadSafe> SkinEnvelope;
  TMap<int32,FString> ContactRecipes;
  double PendingActionAt=0;int32 PendingAction=INDEX_NONE;uint64 PendingEpoch=0,InstalledEpoch=0,EpochClock=0,LinkedActionEpoch=0;bool PendingPlay=true,StreamInstalled=false,StreamHold=false,SpeechPaired=false;uint64 StreamRequests=0,StreamInstalls=0,StreamReleases=0,StreamErrors=0;double StreamPrepareMs=0;
@@ -451,13 +451,20 @@ struct FScene : TSharedFromThis<FScene> {
  }
  // Whether an action's curves are in memory; the first time, the file is read on a worker (read on the game thread it
  // held the frame 7-12 ms when an action was first streamed) and this answers false until it has arrived.
- TMap<int32,TFuture<TArray<uint8>>> ClipReads;
+ // The same bytes, shared with the workers that build a streamed action's request (never changed once read).
+ TArray<TSharedPtr<const TArray<uint8>,ESPMode::ThreadSafe>> CurvesShared;
+ TSharedPtr<const TArray<uint8>,ESPMode::ThreadSafe> SharedCurves(int32 Source){
+  if(CurvesShared.Num()<Curves.Num())CurvesShared.SetNum(Curves.Num());
+  if(!CurvesShared[Source])CurvesShared[Source]=MakeShared<const TArray<uint8>,ESPMode::ThreadSafe>(Curves[Source]); // loaded at start: once
+  return CurvesShared[Source];
+ }
+ TMap<int32,TFuture<TPair<TArray<uint8>,TSharedPtr<const TArray<uint8>,ESPMode::ThreadSafe>>>> ClipReads;
  bool ClipBytesReady(int32 Source){
   if(!Curves.IsValidIndex(Source)||!Curves[Source].IsEmpty()||!ClipPaths.IsValidIndex(Source))return true;
-  if(auto* Read=ClipReads.Find(Source)){if(!Read->IsReady())return false;Curves[Source]=Read->Consume();ClipReads.Remove(Source);
+  if(auto* Read=ClipReads.Find(Source)){if(!Read->IsReady())return false;auto Both=Read->Consume();Curves[Source]=MoveTemp(Both.Key);if(CurvesShared.Num()<Curves.Num())CurvesShared.SetNum(Curves.Num());CurvesShared[Source]=MoveTemp(Both.Value);ClipReads.Remove(Source);
    if(OKRuntimeSharedClipDuration(Curves[Source])<=0){UE_LOG(LogTemp,Warning,TEXT("Runtime action %s could not be read"),*ClipPaths[Source]);Curves[Source].Reset();}
    return true;}
-  ClipReads.Add(Source,Async(EAsyncExecution::ThreadPool,[Path=ClipPaths[Source]]{TArray<uint8> Bytes;FFileHelper::LoadFileToArray(Bytes,*Path);return Bytes;}));
+  ClipReads.Add(Source,Async(EAsyncExecution::ThreadPool,[Path=ClipPaths[Source]]{TArray<uint8> Bytes;FFileHelper::LoadFileToArray(Bytes,*Path);auto Shared=MakeShared<const TArray<uint8>,ESPMode::ThreadSafe>(Bytes);return TPair<TArray<uint8>,TSharedPtr<const TArray<uint8>,ESPMode::ThreadSafe>>(MoveTemp(Bytes),MoveTemp(Shared));}));
   return false;
  }TArray<bool> ClipLoops;TArray<float> ClipWindows;TArray<FString> VoicePaths,VoiceIds;int32 WalkSources=0;bool DemoSpeech=false,DemoSpeechStarted=false,DemoActionStarted=false;FString DemoAction;FString ReportPath,VisualPrefix,VisualError;
  int32 VisualClip=1,NpcActionPreload=0;double DemoDelay=1;double ReadyAt=0,LoadMs=0,ProfileSeconds=0,LastWall=0;bool Captured=false;int32 CaptureStage=0;
@@ -770,7 +777,7 @@ struct FScene : TSharedFromThis<FScene> {
    // Missing families must be reported before costly private animation work.
    for(const auto& P:E.Material.Parts)if(OKRuntimeSharedMaterialRecipe(P)==EKKRuntimeMaterialRecipe::None){Fail(E,FString::Printf(TEXT("Source material coverage incomplete: part %d name=%s role=%s kind=%d blend=%s %s"),P.NativePart,*P.Name,*P.Role,P.ShaderKind,*P.Blend,*P.SourceMetadataJson));return;}
    FKKRuntimePoseRequest R;R.PackedGpuCache=true;R.Snapshot=MoveTemp(S.Snapshot);R.Bones=E.Bones;R.Parts=MoveTemp(S.Parts);R.CharacterIdentity=S.RigIdentity;
-   R.PersistentSourceIdentity=S.PersistentSourceIdentity;E.PoseRecipe=R;
+   R.PersistentSourceIdentity=S.PersistentSourceIdentity;E.PoseRecipe=MakeShared<const FKKRuntimePoseRequest,ESPMode::ThreadSafe>(R);
    E.ClipSources={0,E.WalkIndex};
    const int32 ActionCount=Curves.Num()-WalkSources,Admit=E.SelectionIndex==0&&!ExternalControl?ActionCount:FMath::Min(NpcActionPreload,ActionCount);
    for(int32 I=0;I<Admit;++I)E.ClipSources.Add(WalkSources+(E.SelectionIndex+I)%ActionCount);

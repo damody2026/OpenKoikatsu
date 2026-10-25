@@ -50,5 +50,8 @@ struct FKKRuntimePoseResult {
 // One independent native session per job. No environment overrides, UObject
 // animation controller, compression/DDC, SavePackage or render work.
 KKRUNTIMEPOSE_API TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(FKKRuntimePoseRequest Request);
+// The same, the request made on the worker too (its snapshot and curves are megabytes: copied on the game thread they
+// held the frame 3-5 ms each time an action started streaming).
+KKRUNTIMEPOSE_API TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(TFunction<FKKRuntimePoseRequest()> MakeRequest);
 
 KKRUNTIMEPOSE_API FString OKRuntimePoseRecipeIdentity(const FKKRuntimePoseRequest& Request);
