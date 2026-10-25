@@ -176,6 +176,18 @@ void AOKStreetSocialScene::TickServes(){
    S.Message=OKMsg(TEXT("ui.economy.dishes_served_line"), {{TEXT("dish_names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});
    S.FreeTalkNotice=S.Message;RefreshUI();
    UE_LOG(LogTemp,Display,TEXT("Street order served: %s"),*FString::Join(Names,TEXT("、")));
+   // Served at a place where people sit down to eat, while the two of them just stand there (they walked into the
+   // restaurant and ordered on the way in: Hu Tao ate her salad standing by the door): they sit down at its table, the
+   // place's own seated meal on his floor (the department store has one on several floors).
+   if(const int32 G=P.Her;G!=INDEX_NONE&&FreeTalkPartner()==G&&S.Pair.Partner==INDEX_NONE&&S.Facility==INDEX_NONE&&S.SoloGirl==INDEX_NONE&&S.OutingGirl==INDEX_NONE&&!P.PlaceId.IsEmpty()&&ShopPlaceHere()==P.PlaceId)
+    if(const FOKStreetPlace* Here=OKStreetFindPlace(P.PlaceId)){
+     const FOKStreetActivity* Best=nullptr;float BestZ=0;
+     for(const auto& A:OKStreetActivities()){
+      if(A.Kind!=EOKStreetActivityKind::Pair||!(A.Code==5||A.Code==1)||!A.Place||FCString::Strcmp(A.Place,*P.PlaceId)!=0)continue;
+      const FOKStreetModelAnchor* Spot=A.Anchor?OKStreetPlaceAnchor(*Here,A.Anchor):nullptr;const float Dz=Spot?FMath::Abs(Spot->Position.Z-S.Male.Z):0.f;
+      if(!Best||Dz<BestZ){Best=&A;BestZ=Dz;}}
+     FString Why;if(Best&&BestZ<300.f&&BeginOuting(G,Best->Id,Why)){UE_LOG(LogTemp,Display,TEXT("Street order served: they sit down to eat it (%s)"),Best->Id);}
+     else if(Best){UE_LOG(LogTemp,Display,TEXT("Street order served: no seat taken (%s: %s)"),Best->Id,*Why);}}
   }
   // She reacts once she is free; if she is no longer his partner there is nobody to tell.
   if(P.Her==INDEX_NONE||FreeTalkPartner()!=P.Her){S.Serves.RemoveAt(K);continue;}
