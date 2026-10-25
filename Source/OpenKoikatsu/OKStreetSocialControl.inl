@@ -388,7 +388,8 @@ void AOKStreetSocialScene::StartControlServer(){
   if(Action==TEXT("set_relation")){auto& S=*State;const auto* R=OKSongRelation(S,Girl);
    if(!R){OKControlReply(Done,OKControlResult(false,TEXT("he has not met her")));return;}
    auto* W=const_cast<FOKStreetRelation*>(R);FString Stage;double Favor=0;int32 Lines=0;
-   if(Body->TryGetStringField(TEXT("stage"),Stage))W->Stage=Stage;if(Body->TryGetNumberField(TEXT("favor"),Favor))W->Favor=float(Favor);
+   // (Her stage before this one is what the song event saw, so making her his lover here counts as becoming one now.)
+   if(Body->TryGetStringField(TEXT("stage"),Stage)){if(!S.Song.Loaded)SongLoad();auto& Seen=S.Song.Progress.FindOrAdd(W->Id);if(Seen.Stage.IsEmpty())Seen.Stage=W->Stage;W->Stage=Stage;}if(Body->TryGetNumberField(TEXT("favor"),Favor))W->Favor=float(Favor);
    if(Body->TryGetNumberField(TEXT("lines"),Lines)){if(!S.Song.Loaded)SongLoad();S.Song.Progress.FindOrAdd(W->Id).Lines=Lines;SongSave();}
    S.Song.NextCheck=0;RefreshUI();Action=TEXT("state");}
   OKControlReply(Done,SongControl(Action,Girl));

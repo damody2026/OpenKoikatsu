@@ -7,9 +7,11 @@
 // The game event, separate from the ok-song job: a ready song is not a song being sung.
 enum class EOKSongPhase : uint8 { Idle, Preparing, Ready, Offered, Intro, Singing, Outro, Failed };
 
-// A heroine's milestone songs (rules song_milestone): the occasions she has sung, lines of talk since her last song.
+// A heroine's milestone songs (rules song_milestone): the occasions she has sung, lines of talk since her last song, and
+// her stage when the song event last looked (SongTrackStages: becoming his lover is seen as it happens; one who was
+// his lover already when songs first saw her has her confession behind her).
 struct FOKSongProgress {
- TArray<FString> Done;int32 Lines=0;
+ TArray<FString> Done;int32 Lines=0;FString Stage;
 };
 
 // A song she sang, kept to hear again: the mix, her mouth envelope and the sheet (songs.json "memories").

@@ -1334,6 +1334,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  if(const int64* Asked=S.ConfessionPending.Find(Character)){if(OKStreetMindNow(S)-*Asked<=3*1440)User+=OKT(TEXT("ui.scene.judge_pending_confession"));else S.ConfessionPending.Remove(Character);}
  // What the place they are in offers now (and what is out of reach): the activity do_now names belongs here.
  {const FString Here=ActivityBlockedLine(Character);if(!Here.IsEmpty())User+=TEXT("\n")+Here;}
+ // She offered to sing for him and waits for his answer: his words may be it (song_answer; Song.inl acts on it).
+ if(S.Song.Phase==EOKSongPhase::Offered&&S.Song.Girl==Character)User+=OKT(TEXT("ui.scene.judge_song_offer"));
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and
@@ -1356,6 +1358,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
   if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);Weak->ExecuteFreeTalkAction(Character,Id,HerAction);return;}
   FString DoNow,Why;Verdict->TryGetStringField(TEXT("do_now"),DoNow);Verdict->TryGetStringField(TEXT("why"),Why);
+  // His words answered her offer to sing ("sure, sing for me"): the same as the panel's buttons.
+  {FString Song;if(Verdict->TryGetStringField(TEXT("song_answer"),Song)&&(Song==TEXT("accept")||Song==TEXT("later")||Song==TEXT("decline"))
+    &&L->Song.Phase==EOKSongPhase::Offered&&L->Song.Girl==Character){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d answered her song offer in his words: %s"),Character,*Song);Weak->SongAnswer(Song);}}
   if(DoNow.StartsWith(TEXT("act:")))DoNow=DoNow.Mid(4); // "act:stroll": the stroll
   // "go:路口" (walking him to the corner): no place of the map, nothing to start. Dropped quietly: a failed outing told
   // her "it did not work" and she took her words back ("I mixed up the way").
