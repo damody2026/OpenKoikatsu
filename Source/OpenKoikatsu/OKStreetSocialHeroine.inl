@@ -126,13 +126,17 @@ void AOKStreetSocialScene::TickAutoFriendship(){
   const FString Kept=S.FreeTalkDraft;S.SystemNote=true;S.FreeTalkDraft=It.Value();It.RemoveCurrent();SendFreeTalk();S.FreeTalkDraft=Kept;
   UE_LOG(LogTemp,Display,TEXT("Street auto friendship: actor=%d says she is glad"),Girl);break;
  }
- for(int32 Girl=1;Girl<S.Manifest.Characters.Num();++Girl){
+ // One girl a frame, in turn (each is asked every ~10 frames): asking the rules for all of them every frame cost ~1.2 ms
+ // a frame.
+ const int32 Count=S.Manifest.Characters.Num()-1;
+ for(int32 Tried=0;Tried<Count;++Tried){
+  const int32 Girl=1+int32(S.AutoFriendshipNext++%uint32(FMath::Max(1,Count)));
   if(S.RelationshipPending&&S.Target==Girl)continue; // a voiced friendship scene is deciding it
   const FString Id=OKStreetStableId(S.Manifest.Characters[Girl]);const int32 Index=OKStreetFindRelation(S.Store,Id);if(Index==INDEX_NONE)continue;
   const FOKStreetRelation& R=S.Store.Relations[Index];if(R.Stage!=TEXT("stranger")||R.StrangerCap<=0)continue;
   // Reaching her cap makes them friends (talk.rs auto_friendship).
   auto Request=OKRulesRequest(TEXT("auto_friendship"));Request->SetObjectField(TEXT("relation"),OKRulesRelationJson(R));
-  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out||!Out->GetBoolField(TEXT("friend")))continue;
+  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out||!Out->GetBoolField(TEXT("friend")))break; // asked: her turn is over
   const int32 Cap=int32(Out->GetNumberField(TEXT("cap")));
   auto Candidate=S.Store;OKRulesPatchRelation(Candidate.Relations[Index],*Out->GetObjectField(TEXT("relation")));
   if(!CommitStore(MoveTemp(Candidate)))continue;
@@ -141,7 +145,7 @@ void AOKStreetSocialScene::TickAutoFriendship(){
   if(FreeTalkPartner()==Girl)S.HerSaysNext.Add(Girl,OKT(TEXT("ui.heroine.friendship_prompt_note")));
   S.Message=OKMsg(TEXT("ui.heroine.became_friends"), {{TEXT("name"), *S.Manifest.Characters[Girl].Name}, {TEXT("cap"), Cap}});S.FreeTalkNotice=S.Message;
   UE_LOG(LogTemp,Display,TEXT("Street auto friendship: actor=%d cap=%d"),Girl,Cap);
-  RefreshUI();
+  RefreshUI();break;
  }
 }
 
