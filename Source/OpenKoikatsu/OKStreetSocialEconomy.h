@@ -52,7 +52,7 @@ struct FOKStreetPendingServe {
  int32 Batch = 0;
  double At = 0;
  int32 Her = INDEX_NONE;
- FString Place;
+ FString Place, PlaceId; // the shop's name (for words) and id (where it is served)
  TArray<FOKStreetCartLine> Lines;
  bool Applied = false, Told = false;
 };

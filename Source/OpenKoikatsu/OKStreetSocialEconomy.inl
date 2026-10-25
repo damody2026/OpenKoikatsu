@@ -158,6 +158,15 @@ void AOKStreetSocialScene::TickServes(){
   const FString Gift=S.PendingGift;S.PendingGift.Reset();if(S.Store.Inventory.Contains(Gift))StartGift(Gift);}if(S.Serves.IsEmpty())return;const double Now=SceneTime();
  for(int32 K=S.Serves.Num()-1;K>=0;--K){
   auto& P=S.Serves[K];if(Now<P.At)continue;
+  // He walked off before it came (the latte ordered at the cafe was "served" at the cafeteria): it waits at the counter
+  // where it was ordered and is served when he is back there; after three minutes away it is left there, paid for.
+  if(!P.Applied&&!P.PlaceId.IsEmpty()&&ShopPlaceHere()!=P.PlaceId){
+   if(Now-P.At<180.0)continue;
+   TArray<FString> Left;for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Left.Add(I->Name);
+   const int32 Batch=P.Batch;S.Table.RemoveAll([Batch](const FOKStreetDish& D){return D.Batch==Batch&&!D.Served;});
+   const FOKStreetPlace* Where=OKStreetFindPlace(P.PlaceId);
+   S.Message=OKMsg(TEXT("ui.economy.order_left_behind"),{{TEXT("place"),Where?FString(Where->Name):P.Place},{TEXT("items"),FString::Join(Left,OKT(TEXT("ui.bank.list_separator")))}});RefreshUI();
+   UE_LOG(LogTemp,Display,TEXT("Street order left behind at %s: %s"),*P.Place,*FString::Join(Left,TEXT("、")));S.Serves.RemoveAt(K);continue;}
   TArray<FString> Names;
   if(!P.Applied){
    P.Applied=true;
@@ -520,7 +529,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
   S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"))+(Food&&ServeIn>=10?OKMsg(TEXT("ui.economy.dish_serve_eta_suffix"), {{TEXT("seconds"), int32(ServeIn)}}):FString());}
  {
   // Only food and drink go to the kitchen and onto the table (a notebook or a gift is simply bought).
-  FOKStreetPendingServe Serve;Serve.Batch=++S.ServeBatch;Serve.At=SceneTime()+ServeIn;Serve.Her=Her;Serve.Place=PlaceName;
+  FOKStreetPendingServe Serve;Serve.Batch=++S.ServeBatch;Serve.At=SceneTime()+ServeIn;Serve.Her=Her;Serve.Place=PlaceName;Serve.PlaceId=S.ShopPlace;
   for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId))if(I->Consumable){
    Serve.Lines.Add(L);
    // The dishes are on the table at 100% but cannot be eaten until they are served.
