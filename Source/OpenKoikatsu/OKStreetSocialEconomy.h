@@ -52,7 +52,7 @@ struct FOKStreetPendingServe {
  int32 Batch = 0;
  double At = 0;
  int32 Her = INDEX_NONE;
- FString Place;
+ FString Place, PlaceId; // the shop's name (for words) and id (where it is served)
  TArray<FOKStreetCartLine> Lines;
  bool Applied = false, Told = false;
 };
@@ -69,6 +69,7 @@ struct FOKStreetCatalogJob {
  FString ZhTitle; // the data's own title, kept when the language swaps Title
  int32 Wage = 95;
  TArray<FVector2D> Shifts; // hours; "to" may pass 24
+ TArray<FString> Stations; // where in the place this job stands (anchor names: the bookshop floor of the department store)
  bool StudentOnly = false;
 };
 
@@ -121,6 +122,7 @@ inline FOKStreetCatalog OKStreetLoadCatalog(const FString& Path) {
   O->TryGetStringField(TEXT("id"), J.Id); O->TryGetStringField(TEXT("place"), J.Place); O->TryGetStringField(TEXT("title"), J.Title);
   if (O->TryGetNumberField(TEXT("wage"), V)) J.Wage = int32(V); O->TryGetBoolField(TEXT("student_only"), J.StudentOnly);
   Ranges(O, TEXT("shifts"), J.Shifts);
+  O->TryGetStringArrayField(TEXT("stations"), J.Stations);
   if (!J.Id.IsEmpty()) Out.Jobs.Add(J);
  }
  if (Out.Items.IsEmpty()) Out.Error = TEXT("catalog has no items: ") + Path;

@@ -158,6 +158,15 @@ void AOKStreetSocialScene::TickServes(){
   const FString Gift=S.PendingGift;S.PendingGift.Reset();if(S.Store.Inventory.Contains(Gift))StartGift(Gift);}if(S.Serves.IsEmpty())return;const double Now=SceneTime();
  for(int32 K=S.Serves.Num()-1;K>=0;--K){
   auto& P=S.Serves[K];if(Now<P.At)continue;
+  // He walked off before it came (the latte ordered at the cafe was "served" at the cafeteria): it waits at the counter
+  // where it was ordered and is served when he is back there; after three minutes away it is left there, paid for.
+  if(!P.Applied&&!P.PlaceId.IsEmpty()&&ShopPlaceHere()!=P.PlaceId){
+   if(Now-P.At<180.0)continue;
+   TArray<FString> Left;for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Left.Add(I->Name);
+   const int32 Batch=P.Batch;S.Table.RemoveAll([Batch](const FOKStreetDish& D){return D.Batch==Batch&&!D.Served;});
+   const FOKStreetPlace* Where=OKStreetFindPlace(P.PlaceId);
+   S.Message=OKMsg(TEXT("ui.economy.order_left_behind"),{{TEXT("place"),Where?FString(Where->Name):P.Place},{TEXT("items"),FString::Join(Left,OKT(TEXT("ui.bank.list_separator")))}});RefreshUI();
+   UE_LOG(LogTemp,Display,TEXT("Street order left behind at %s: %s"),*P.Place,*FString::Join(Left,TEXT("、")));S.Serves.RemoveAt(K);continue;}
   TArray<FString> Names;
   if(!P.Applied){
    P.Applied=true;
@@ -183,19 +192,23 @@ void AOKStreetSocialScene::TickServes(){
 // Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
 void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const FString& GoingNow){
  auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
+ // Where a place is: "go:<place>", else the activity's place.
+ auto DestOf=[](const FString& Going){FString Dest=Going.StartsWith(TEXT("go:"))?Going.Mid(3):FString();
+  if(Dest.IsEmpty()&&!Going.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(Going);A&&A->Place&&*A->Place)Dest=A->Place;return Dest;};
+ // Settled while setting off with these very words ("let's eat at the restaurant, my treat", said in the bookshop or at
+ // her dorm's vending machine): for where they are going (the outing itself starts after this).
+ const FString Now=DestOf(GoingNow);const FString Here=ShopPlaceHere();
+ // Said again in the same shop (the judge reads what they settled so far, every turn) and not on the way anywhere with
+ // it: it stays this shop's. The dinner treat moved on to her dorm's vending machine when "after we eat I'll walk you
+ // home" came with it.
+ if(Now.IsEmpty()&&S.PayAgreedWith==Girl&&S.PayAgreedHow==How&&!Here.IsEmpty()&&S.PayAgreedShop==Here&&OKStreetMindNow(S)-S.PayAgreedAt<=180)return;
  S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);
  // Settled inside a shop: for that shop at once (she paid her own book: not her own soup at the restaurant after).
  // Settled outside ("I will treat you to a drink" on the way): for the shop where it is first used (PayAgreed).
- S.PayAgreedShop=ShopPlaceHere();
- // Settled while setting off for somewhere else ("let's eat at the restaurant, my treat", said in the bookshop): for
- // where they are going. Bound to the bookshop, the dinner it was about became hers to pay.
- // Or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's then).
- // What they set off to do with these very words comes first (the outing itself starts after this).
- const FString Going=!GoingNow.IsEmpty()?GoingNow:S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString();
- if(!Going.IsEmpty()){
-  FString Dest=Going.StartsWith(TEXT("go:"))?Going.Mid(3):FString();
-  if(Dest.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(Going);A&&A->Place&&*A->Place)Dest=A->Place;
-  if(!Dest.IsEmpty())S.PayAgreedShop=Dest;}
+ // On the way somewhere, or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's
+ // then): for there.
+ const FString Later=DestOf(S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString());
+ S.PayAgreedShop=!Now.IsEmpty()?Now:!Later.IsEmpty()?Later:Here;
  UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
@@ -517,7 +530,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
   S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"))+(Food&&ServeIn>=10?OKMsg(TEXT("ui.economy.dish_serve_eta_suffix"), {{TEXT("seconds"), int32(ServeIn)}}):FString());}
  {
   // Only food and drink go to the kitchen and onto the table (a notebook or a gift is simply bought).
-  FOKStreetPendingServe Serve;Serve.Batch=++S.ServeBatch;Serve.At=SceneTime()+ServeIn;Serve.Her=Her;Serve.Place=PlaceName;
+  FOKStreetPendingServe Serve;Serve.Batch=++S.ServeBatch;Serve.At=SceneTime()+ServeIn;Serve.Her=Her;Serve.Place=PlaceName;Serve.PlaceId=S.ShopPlace;
   for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId))if(I->Consumable){
    Serve.Lines.Add(L);
    // The dishes are on the table at 100% but cannot be eaten until they are served.

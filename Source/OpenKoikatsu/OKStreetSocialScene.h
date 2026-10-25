@@ -238,7 +238,7 @@ private:
  FVector SpotFor(int32 I,const FString& PlaceId,const FString& Kind,float& Yaw) const;
  void ConfessionWitnessed(int32 Girl,const TCHAR* Outcome); // the heroines near him saw him confess to her (OKStreetSocialMind.inl)
  void MakeRoomAround(int32 Partner); // heroines her plan stood at his table walk to another spot (OKStreetSocialSchedule.inl)
- void StandAtWork(const FString& PlaceId); // his shift starts: behind the counter (OKStreetSocialJobs.inl)
+ void StandAtWork(const FString& PlaceId,const TArray<FString>& Stations=TArray<FString>()); // his shift starts: at his job's station, else behind the counter (OKStreetSocialJobs.inl)
  void PlanAll();
  const struct FOKStreetPlanBlock* BlockNow(int32 I,int32 Minute,int32* Index=nullptr) const;
  void TickSchedules();

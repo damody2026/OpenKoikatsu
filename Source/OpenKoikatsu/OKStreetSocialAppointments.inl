@@ -216,7 +216,8 @@ void AOKStreetSocialScene::TickAppointments(){
  if(!S.bAbsentCastChecked){S.bAbsentCastChecked=true;SetAsideAbsentMeetings();} // the rules are open by now (not at load)
  // She walks over to him at the meeting place and opens the talk.
  auto ArriveNow=[this,&S](int32 Girl){
-   if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&S.Target!=Girl){
+   const bool WithHim=S.Target==Girl||S.Companion==Girl||S.OutingGirl==Girl||S.Pair.Partner==Girl; // walking over with him already (they set off for the cafeteria together)
+   if(S.ApproachGirl==INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&!WithHim){
     // He waits upstairs (Yuuka was to meet him after class; he was on the fourth floor of the EE building): she takes the
     // lift up and comes over from there. Walking at him from the ground floor she never reached him and went to work.
     // Far away in another building (at work in the drink shop): he is indoors upstairs and does not see the street, so she
@@ -245,7 +246,7 @@ void AOKStreetSocialScene::TickAppointments(){
     S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);
     S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
     UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
-   }else if(S.Target==Girl){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
+   }else if(WithHim){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
    else{UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d)"),Girl,S.ApproachGirl);}
  };
  // Up on his floor (the lift ride is over): she walks over to him from there. Given up if he left that floor meanwhile.

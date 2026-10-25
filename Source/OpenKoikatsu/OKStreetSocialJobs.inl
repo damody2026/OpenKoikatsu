@@ -52,10 +52,14 @@ void AOKStreetSocialScene::BookShift(const FString& JobId,int32 Shift){
 
 // His shift starts while he is in the shop: he goes behind its counter (the barista stood in the doorway for the whole
 // shift). The first work spot of the place no heroine already stands at, faced its way; he can still walk off to talk.
-void AOKStreetSocialScene::StandAtWork(const FString& PlaceId){
+void AOKStreetSocialScene::StandAtWork(const FString& PlaceId,const TArray<FString>& Stations){
  auto& S=*State;const FOKStreetPlace* P=OKStreetFindPlace(PlaceId);
- if(!P||PlaceHere(S.Male)!=PlaceId||S.Companion!=INDEX_NONE||S.Target!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street shift: he stays where he is (at \"%s\", companion %d, talking to %d)"),*PlaceHere(S.Male),S.Companion,S.Target);return;}
- for(const TCHAR* N:{TEXT("counter"),TEXT("bar"),TEXT("stand"),TEXT("shelf"),TEXT("lobby"),TEXT("food"),TEXT("pets")}){
+ // In the place, or just in at its door (he walked in through the department store's ground floor entrance).
+ const bool There=P&&(PlaceHere(S.Male)==PlaceId||FVector::Dist2D(S.Male,P->Door)<1000.f);
+ if(!There||S.Companion!=INDEX_NONE||S.Target!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street shift: he stays where he is (at \"%s\", companion %d, talking to %d)"),*PlaceHere(S.Male),S.Companion,S.Target);return;}
+ // His job's own station first (the bookshop clerk among the books, on its floor), then the usual counters.
+ TArray<FString> Spots(Stations);for(const TCHAR* N:{TEXT("counter"),TEXT("bar"),TEXT("stand"),TEXT("shelf"),TEXT("lobby"),TEXT("food"),TEXT("pets")})Spots.Add(N);
+ for(const FString& N:Spots){
   const FOKStreetModelAnchor* Free=nullptr;
   for(const auto& A:P->Anchors){
    if(!A.Name.StartsWith(N)||!OKStreetInsidePlace(*P,A.Position))continue;
@@ -89,7 +93,7 @@ void AOKStreetSocialScene::TickJobs(){
    for(const FString& J:S.Store.PlayerJobs)if(const auto* Job=S.Catalog.FindJob(J))if(Job->Place==A.Place)for(const auto& H:Job->Shifts)if(int64(H.X*60)==A.Start%1440&&Now<A.Start-A.Start%1440+int64(H.Y*60)){
     S.ShiftAppointment=A.Id;S.ShiftJob=J;S.ShiftStart=FMath::Max<int64>(A.Start,Now); /* paid from when he came */S.ShiftEnd=A.Start-A.Start%1440+int64(H.Y*60);S.ShiftAwaySince=-1;S.ShiftChats=0;
     S.FreeTalkNotice=OKMsg(TEXT("ui.jobs.shift_started_notice"), {{TEXT("job_title"), *Job->Title}, {TEXT("end_hour"), (S.ShiftEnd%1440)/60}, {TEXT("end_minute"), S.ShiftEnd%60}});
-    StandAtWork(Job->Place);RefreshUI();
+    StandAtWork(Job->Place,Job->Stations);RefreshUI();
    }
    if(S.ShiftAppointment)break;
   }
