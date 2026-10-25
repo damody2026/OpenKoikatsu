@@ -85,7 +85,7 @@ bool OKAddSourceMaterialMeshDiagnosticPass(FRDGBuilder& G,const FSceneView& V,FR
 class FOKSourceMaterialCommandCache {
 public:
  struct FCommand {FMeshDrawCommand Draw;TUniquePtr<FGraphicsMinimalPipelineStateInitializer> Pipeline;int32 Element=0;ERasterizerFillMode Fill;ERasterizerCullMode Cull;FMeshDrawCommandSortKey Sort;EFVisibleMeshDrawCommandFlags Flags;};
- struct FEntry {const FPrimitiveSceneProxy* Proxy=nullptr;const FVertexFactory* VF=nullptr;const FMaterialRenderProxy* Material=nullptr;const FMaterial* ShaderMaterial=nullptr;int32 Serial=0;const FIndexBuffer* Indices=nullptr;uint32 First=0,Triangles=0;TArray<FCommand> Commands;};
+ struct FEntry {const FPrimitiveSceneProxy* Proxy=nullptr;const FVertexFactory* VF=nullptr;const FMaterialRenderProxy* Material=nullptr;const FMaterial* ShaderMaterial=nullptr;int32 Serial=0;const FIndexBuffer* Indices=nullptr;uint32 First=0,Triangles=0;TArray<FCommand> Commands;uint64 UsedFrame=0;};
  TMap<const FMeshBatch*,FEntry> Entries;uint64 Builds=0,Reuses=0;FOKSourceRasterBinding Binding;bool HasBinding=false;
 };
 class FOKSourceCacheContext:public FMeshPassDrawListContext {
@@ -114,10 +114,14 @@ uint32 OKAddCachedSourceMaterialScenePass(FRDGBuilder& G,const FSceneView& View,
    E={};E.Proxy=D.Proxy;E.VF=Mesh.VertexFactory;E.Material=Mesh.MaterialRenderProxy;E.ShaderMaterial=Material;E.Serial=Serial;E.Indices=First.IndexBuffer;E.First=First.FirstIndex;E.Triangles=First.NumPrimitives;
    FOKSourceCacheContext Cached(E);FOKSourceMeshProcessor Processor(View,&Cached,Binding,true);Processor.AddMeshBatch(Mesh,~0ull,D.Proxy);++Cache->Builds;
   }else ++Cache->Reuses;
+  E.UsedFrame=GFrameCounterRenderThread;
   for(auto& C:E.Commands){auto& Copy=Context->AddCommand(C.Draw,Mesh.Elements.Num());Context->FinalizeCommand(Mesh,C.Element,D.Proxy->GetPrimitiveSceneInfo()->GetMDCIdInfo(),C.Fill,C.Cull,C.Sort,C.Flags,*C.Pipeline,nullptr,Copy);++Submitted;}
  }
- // Missing/recreated primitives never leave dangling entries in the cache.
- for(auto It=Cache->Entries.CreateIterator();It;++It)if(!Live.Contains(It.Key()))It.RemoveCurrent();
+ // Entries no view has drawn for a while go (missing or recreated primitives, a heroine gone). Not the ones this view
+ // skipped: the portrait capture (one heroine, 30 Hz) and the main view share the cache, and evicting per view rebuilt
+ // every heroine's commands for the main view after each capture (6-7 ms on the render thread). A reused address is
+ // caught by the fields compared above, so an old entry is never drawn for a new primitive.
+ for(auto It=Cache->Entries.CreateIterator();It;++It)if(!Live.Contains(It.Key())&&GFrameCounterRenderThread-It.Value().UsedFrame>600)It.RemoveCurrent();
  if(!Submitted)return 0;
  auto* P=G.AllocParameters<FOKSourceMeshPassParameters>();P->View.View=View.ViewUniformBuffer;P->View.InstancedView=View.GetInstancedViewUniformBuffer();P->InstanceCullingDrawParams.Scene=GetSceneUniformBufferRef(G,View);
  P->RenderTargets[0]=FRenderTargetBinding(Color,ERenderTargetLoadAction::ELoad);P->RenderTargets.DepthStencil=FDepthStencilBinding(Depth,ERenderTargetLoadAction::ELoad,ERenderTargetLoadAction::ELoad,FExclusiveDepthStencil::DepthWrite_StencilWrite);
