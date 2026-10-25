@@ -9,7 +9,8 @@
 bool AOKStreetSocialScene::PartyCanJoin(int32 Girl,FString* Why) const{
  const auto& S=*State;auto No=[&](const TCHAR* W){if(Why)*Why=W;return false;};
  if(!S.Agents.IsValidIndex(Girl-1)||!S.Manifest.Characters.IsValidIndex(Girl))return No(OKT(TEXT("ui.party.no_such_person")));
- if(S.Party.Contains(Girl))return No(OKT(TEXT("ui.party.girl_already_following")));
+ // Already with him: the one he is talking to (she was listed among "the girls nearby" and invited to join her own talk).
+ if(S.Party.Contains(Girl)||FreeTalkPartner()==Girl)return No(OKT(TEXT("ui.party.girl_already_following")));
  if(S.Party.Num()>=4)return No(OKT(TEXT("ui.party.too_many_people")));
  // Someone in the group she dislikes: she will not come (his girlfriend comes anyway, reluctantly: PartyJoin).
  {TArray<int32> Group=S.Party;if(FreeTalkPartner()!=INDEX_NONE)Group.AddUnique(FreeTalkPartner());int32 Who=INDEX_NONE;
@@ -303,6 +304,8 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
  // Something to do now starts from what he said: a turn that was only the situation (his silence, the end of a game)
  // cannot start one by itself ("let's play again!" with no word from him dealt a new game).
  if(!DoNow.IsEmpty()&&OKStreetFreeTalkIsNudge(Text)){UE_LOG(LogTemp,Display,TEXT("Street party: do_now %s ignored, he did not say anything this turn"),*DoNow);DoNow.Reset();}
+ // Who pays, as they settled it ("today it's my treat" to the table): every girl's bill below follows it (PayAgreed).
+ {FString Payer;if(Partner!=INDEX_NONE&&Reply->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())RecordPayAgreed(Partner,Payer,DoNow);}
  // Orders: each girl's to her own plate and bill (whatever he was putting in the basket stays there).
  {const FString Shop=ShopPlaceHere();
   if(!Shop.IsEmpty()&&Partner!=INDEX_NONE&&Reply->TryGetArrayField(TEXT("orders"),Arr)&&!Arr->IsEmpty()){
