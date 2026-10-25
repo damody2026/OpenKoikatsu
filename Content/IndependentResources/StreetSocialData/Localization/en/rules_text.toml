@@ -624,6 +624,7 @@ sun = "Sunday"
 
 [weather]
 night_walk = "It is late; the street is empty but for the two of you"
+night_walk_group = "It is late; hardly anyone is out on the street now"
 under_his_umbrella = "It is raining; the two of you walk close under his umbrella"
 under_her_umbrella = "It is raining; the two of you share your umbrella"
 each_umbrella = "It is raining; you each hold an umbrella"

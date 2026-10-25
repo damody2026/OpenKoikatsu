@@ -148,6 +148,27 @@ bool AOKStreetSocialScene::GalgameReplays() const
 // voice ends now and the conversation goes on. A replayed line: the next one of the replay. Her free-talk reply: the
 // rest of it in the same voice (the segments of this speaker in a row), as when he talks over her. A scripted line:
 // it ends and counts as said. His own voiced line: it stops.
+// Her side is still speaking: a line playing (in a group, any girl's voice), lines still coming, a replay, or the group's
+// lines not all shown yet. Nothing new is asked of them meanwhile (a till note, a silence nudge): its answer would
+// replace what they have not finished saying.
+bool AOKStreetSocialScene::FreeTalkHerVoiceBusy() const
+{
+	if (!State) return false;
+	const auto& S = *State;
+	if (S.FreeTalkSpeechPlayed < S.FreeTalkSpeechLines.Num() || !S.FreeTalkReplay.IsEmpty() || !S.FreeTalkReplayParts.IsEmpty()) return true;
+	const int32 Partner = FreeTalkPartner();
+	AOKStreetSocialScene* Self = const_cast<AOKStreetSocialScene*>(this); // the speech lookup only reads
+	if (Partner != INDEX_NONE && OKCrowdRuntimeSpeechActive(Self, Partner)) return true;
+	for (const int32 Who : S.FreeTalkSpeechSpeakers)
+		if (Who > 0 && Who != Partner && OKCrowdRuntimeSpeechActive(Self, Who)) return true;
+	return Galgame.IsValid() && Galgame->GroupNext < Galgame->Group.Num();
+}
+
+void AOKStreetSocialScene::GalgameDropGroupLines()
+{
+	if (Galgame.IsValid()) Galgame->GroupNext = Galgame->Group.Num();
+}
+
 void AOKStreetSocialScene::SkipGalgameLine()
 {
 	if (!GalgameShowsDialogue() || !State) return;
@@ -504,7 +525,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		// for its first line starts, and not before whoever spoke before her is done; without voices, by reading time.
 		if (G.GroupNext < G.Group.Num() && !FreeTalkHisVoiceBusy())
 		{
-			const bool bDue = G.bGroupVoiced ? S.FreeTalkSpeechPlayed > G.GroupNext : FPlatformTime::Seconds() >= G.GroupNextAt;
+			// A voice that never starts (the voice server gone: a failed line still counts as played) holds the rest only so long;
+			// a slow server (60 s from reply to voice on a busy GPU) is waited for.
+			const bool bDue = G.bGroupVoiced ? S.FreeTalkSpeechPlayed > G.GroupNext || FPlatformTime::Seconds() >= G.GroupNextAt + 120.0 : FPlatformTime::Seconds() >= G.GroupNextAt;
 			if (bDue)
 			{
 				const int32 Slot = G.Group[G.GroupNext].Slot;

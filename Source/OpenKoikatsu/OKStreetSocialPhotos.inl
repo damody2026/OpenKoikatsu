@@ -243,7 +243,7 @@ void AOKStreetSocialScene::TickUmbrella(){
  const int64 Now=OKStreetMindNow(S);const bool Walking=Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&PlaceHere(S.Male).IsEmpty();
  const bool Raining=Walking&&RainingAt(S.Store.CalendarDay,int32(Now%1440));
  // Asked once per walk (the rain, the hour); the umbrella goes when the walk ends or the rain stops.
- if(!Walking){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();S.WalkStyle.Reset();return;}
+ if(!Walking){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();S.WalkStyle.Reset();S.WalkFact.Reset();return;}
  if(!Raining){if(AActor* U=S.Umbrella.Get())U->Destroy();S.Umbrella.Reset();}
  if(S.WalkStyle.IsEmpty()){
   auto Request=OKRulesRequest(TEXT("walk_style"));Request->SetBoolField(TEXT("raining"),Raining);Request->SetNumberField(TEXT("minute"),double(Now%1440));
@@ -251,8 +251,9 @@ void AOKStreetSocialScene::TickUmbrella(){
   Request->SetStringField(TEXT("stage"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Stage);
   // Her umbrella: her things (ext) or the folding one she brought today (items.rs she_has_umbrella).
   Request->SetStringField(TEXT("girl"),OKStreetStableId(S.Manifest.Characters[Girl]));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);OKRulesPutExt(S,Request);
+  {int32 Company=0;for(const int32 G:S.Party)if(G!=Girl)++Company;Request->SetNumberField(TEXT("company"),Company);} // the others walking with them
   const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
-  S.WalkStyle=Out->GetStringField(TEXT("style"));const FString Fact=Out->GetStringField(TEXT("fact"));if(!Fact.IsEmpty())S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}})); // a note of the game, not his words
+  S.WalkStyle=Out->GetStringField(TEXT("style"));const FString Fact=Out->GetStringField(TEXT("fact"));if(!Fact.IsEmpty())S.WalkFact=OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Fact}}); // a note of the game, not his words; about the way, so only while on it (TickOrderNotice)
   UE_LOG(LogTemp,Display,TEXT("Street rain walk: actor=%d %s"),Girl,*S.WalkStyle);
   if(Raining&&S.WalkStyle!=TEXT("none")){
    // A dark canopy (a flattened sphere) on a thin shaft.

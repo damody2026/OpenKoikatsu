@@ -118,12 +118,16 @@ int32 AOKStreetSocialScene::CartTotal() const{
 // ordering herself. Waits while she is still answering; the same order is told once.
 void AOKStreetSocialScene::TickOrderNotice(){
  auto& S=*State;
+ // What the walk is like (rain, umbrella, the empty street at night): told while they are still on the way and she is free
+ // (TickUmbrella drops it when the walk ends: "only the two of us on the street" once seated in the restaurant is wrong).
+ if(!S.WalkFact.IsEmpty()&&FreeTalkPartner()!=INDEX_NONE&&S.FreeTalkOpen&&!S.FreeTalkBusy&&!FreeTalkHerVoiceBusy()&&!S.FarewellPending){
+  S.SystemNote=true;S.FreeTalkDraft=S.WalkFact;S.WalkFact.Reset();UE_LOG(LogTemp,Display,TEXT("Street walk note sent: %s"),*S.FreeTalkDraft.Left(120));SendFreeTalk();return;}
  // Things that happened at the till (checkout opened, paid, advanced) wait here until she is free to answer.
  if(!S.TellHer.IsEmpty()){
   // Nobody to tell, or they are saying goodbye (her "good night" said, the talk ends after it): a note now would start
   // the talk again ("all eaten — so what shall we do next?" after the goodbye).
   if(FreeTalkPartner()==INDEX_NONE||S.FarewellPending){if(S.FarewellPending)UE_LOG(LogTemp,Display,TEXT("Street till notice dropped (%d): they are saying goodbye"),S.TellHer.Num());S.TellHer.Reset();}
-  else if(S.FreeTalkOpen&&!S.FreeTalkBusy){S.SystemNote=true;S.FreeTalkDraft=S.TellHer[0];S.TellHer.RemoveAt(0);UE_LOG(LogTemp,Display,TEXT("Street till notice sent: %s"),*S.FreeTalkDraft.Left(120));SendFreeTalk();return;}
+  else if(S.FreeTalkOpen&&!S.FreeTalkBusy&&!FreeTalkHerVoiceBusy()){S.SystemNote=true;S.FreeTalkDraft=S.TellHer[0];S.TellHer.RemoveAt(0);UE_LOG(LogTemp,Display,TEXT("Street till notice sent: %s"),*S.FreeTalkDraft.Left(120));SendFreeTalk();return;}
  }
  if(S.OrderNoticeDue<=0)return;
  if(S.Cart.IsEmpty()){S.OrderNoticeDue=0;S.OrderNoticeSig.Reset();return;}

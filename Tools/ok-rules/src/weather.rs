@@ -9,7 +9,9 @@ fn walk_style(r: &Value) -> Value {
     // A walk late at night (walking her home after her shift): the street is empty but for the two of them.
     let minute = r.get("minute").and_then(Value::as_i64).unwrap_or(720);
     if !(5 * 60..21 * 60).contains(&minute) {
-        let night = crate::tr::t("weather.night_walk");
+        // With others along (a group walking together) it is not "just the two of you".
+        let company = r.get("company").and_then(Value::as_i64).unwrap_or(0);
+        let night = crate::tr::t(if company > 0 { "weather.night_walk_group" } else { "weather.night_walk" });
         let fact = out["fact"].as_str().unwrap_or("").to_string();
         out["fact"] = json!(if fact.is_empty() { night.to_string() } else { format!("{fact}{}{night}", crate::tr::t("items.fact_separator")) });
     }
@@ -74,5 +76,10 @@ mod tests {
     fn late_at_night_she_is_told_the_street_is_empty() {
         assert_eq!(walk_style(&json!({"raining": false, "minute": 15 * 60}))["fact"], "");
         assert!(!walk_style(&json!({"raining": false, "minute": 22 * 60 + 10}))["fact"].as_str().unwrap().is_empty());
+        // Others walking with them: not "just the two of you".
+        let alone = walk_style(&json!({"raining": false, "minute": 22 * 60}))["fact"].clone();
+        let group = walk_style(&json!({"raining": false, "minute": 22 * 60, "company": 1}))["fact"].clone();
+        assert_eq!(alone, crate::tr::t("weather.night_walk"));
+        assert_eq!(group, crate::tr::t("weather.night_walk_group"));
     }
 }
