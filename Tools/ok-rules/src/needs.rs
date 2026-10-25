@@ -13,6 +13,9 @@ use std::collections::HashMap;
 pub struct NeedsTuning {
     pub tick_minutes: i64,
     pub max_hours: f32,
+    /// After a jump of more than max_hours (he slept through to the next morning, skipped the day): she ate her
+    /// meals off screen, so she is at least this full. Without it each skip took a few hours of decay and no meal.
+    pub after_gap_satiety: f32,
     pub day_start_hour: i32,
     pub day_end_hour: i32,
     pub decay: Decay,
@@ -120,7 +123,13 @@ impl NeedsTuning {
             .iter()
             .filter_map(|h| {
                 let hours = clamp((h.minutes / 60.0) as f32, 0.0, self.max_hours);
-                (hours > 0.0).then(|| Updated { id: h.id.clone(), needs: self.advance(h.needs, hours, day, &h.activity, h.at_home) })
+                (hours > 0.0).then(|| {
+                    let mut needs = self.advance(h.needs, hours, day, &h.activity, h.at_home);
+                    if (h.minutes / 60.0) as f32 > self.max_hours {
+                        needs.satiety = needs.satiety.max(self.after_gap_satiety);
+                    }
+                    Updated { id: h.id.clone(), needs }
+                })
             })
             .collect()
     }
@@ -220,7 +229,8 @@ mod tests {
         let out = t.tick(12, &hs);
         assert_eq!(out.iter().map(|u| u.id.as_str()).collect::<Vec<_>>(), ["a", "c"]);
         assert!((out[0].needs.satiety - (80.0 - 4.5 * 0.25)).abs() < 1e-4);
-        assert!((out[1].needs.satiety - (80.0 - 4.5 * 6.0)).abs() < 1e-4, "two days away cost at most six hours");
+        // Two days away cost at most six hours, and she ate on her own meanwhile (after_gap_satiety).
+        assert!((out[1].needs.satiety - (80.0f32 - 4.5 * 6.0).max(t.after_gap_satiety)).abs() < 1e-4, "two days away cost at most six hours");
     }
 
     #[test]
@@ -261,5 +271,8 @@ mod tests {
         assert_eq!(v["heroines"][0]["needs"]["hygiene"], 52.0);
         assert!(eval(&t, "bonds_tick", &json!({})).is_none());
         assert!(eval(&t, "needs_tick", &json!({"heroines": []})).unwrap().is_err());
+        // Skipped to the next morning (a day passed off screen): she ate on her own, not left near empty.
+        let skipped = eval(&t, "needs_tick", &json!({"hour": 7, "heroines": [{"id": "a", "minutes": 1440, "needs": {"satiety": 20, "energy": 95, "fun": 50, "social": 50, "hygiene": 90}, "activity": "sleep", "at_home": true}]})).unwrap().unwrap();
+        assert!(skipped["heroines"][0]["needs"]["satiety"].as_f64().unwrap() >= t.after_gap_satiety as f64);
     }
 }
