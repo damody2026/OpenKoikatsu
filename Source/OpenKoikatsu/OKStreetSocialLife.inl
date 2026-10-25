@@ -526,7 +526,7 @@ void AOKStreetSocialScene::TickNpcLifts(){
   if(!S.Agents.IsValidIndex(I-1)||!S.Elevators.IsValidIndex(L.Elevator)){It.RemoveCurrent();continue;}
   auto& A=S.Agents[I-1];auto& E=S.Elevators[L.Elevator];A.Held=true;
   // Her plan moved on, or the lift is taking far too long (he holds it, it is busy): she is simply there.
-  if(S.Commutes.Contains(I)||BusyWithPlayer(I)){It.RemoveCurrent();continue;}
+  if(S.Commutes.Contains(I)||(BusyWithPlayer(I)&&!S.ArriveAfterLift.Contains(I))){It.RemoveCurrent();continue;}
   if(Now-L.At>90.0){A.Position=L.Spot;S.LiftWalks.Remove(I);UE_LOG(LogTemp,Display,TEXT("Street lift: actor %d gave up waiting, placed at her spot"),I);It.RemoveCurrent();continue;}
   if(S.LiftWalks.Contains(I))continue; // walking a leg
   const FVector Inside=FVector(E.Centre.X,E.Centre.Y,E.StopZ[L.From])-E.Out[L.From]*15.f+E.Side*(I%2?30.f:-30.f);
