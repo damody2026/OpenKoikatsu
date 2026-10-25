@@ -306,6 +306,9 @@ void AOKStreetSocialScene::TickShopArrival(){
  const int32 Her=FreeTalkPartner();if(Her==INDEX_NONE)return;
  if(!S.ShopEnteredWith){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: actor=%d was already in %s; no arrival prompt"),Her,*Place);return;}
  FString Why;if(PlaceClosedNow(Place,Why)||ItemsHere(Place).IsEmpty()){S.ShopArrivalPlace=Place;return;}
+ // Her home (walking her back to the dorm at night): she is home, not out shopping ("I'm full, I don't need to buy anything").
+ if(Place==OKStreetProfileString(S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Her])),nullptr,TEXT("home_place_id"))){
+  S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: actor=%d is home at %s; no menu prompt"),Her,*Place);return;}
  // Closing within twenty minutes: no "look at the menu and order" (they ordered at 21:59 and it closed on their dishes);
  // the closing notice (TickPlaceClosing) tells her when it comes.
  if(PlaceClosedAt(Place,StreetNow()+FTimespan::FromMinutes(20),Why)){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: %s closes within 20 minutes; no menu prompt"),*Place);return;}
@@ -583,6 +586,10 @@ void AOKStreetSocialScene::StartGift(const FString& ItemId){
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
  const float Score=float(Answer->GetNumberField(TEXT("score")));
  TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+ // The same gift already held out to her (he said "this is for you" and her answer opened it, then he pressed the button
+ // too): one offer, not a second one that gave her the same hand cream twice.
+ {const FString Label=OKMsg(TEXT("ui.economy.gift_her_button"),{{TEXT("item_name"),*Item->Name}});
+  if(S.Choices.ContainsByPredicate([&](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift")&&C.Heroine==Her&&C.Label==Label;})){UE_LOG(LogTemp,Display,TEXT("Street gift: %s already offered to actor %d"),*ItemId,Her);return;}}
  OpenChoice(Her,TEXT("gift"),OKMsg(TEXT("ui.economy.gift_her_button"), {{TEXT("item_name"), *Item->Name}}),{TEXT("accept"),TEXT("decline")},Answer->GetStringField(TEXT("lean")),float(Answer->GetNumberField(TEXT("insist"))),15,
   [Weak,Her,ItemId,Score](const FString& Option){if(Weak.IsValid())Weak->FinishGift(Her,ItemId,Option,Score);});
  S.FreeTalkNotice=OKMsg(TEXT("ui.economy.you_pulled_out_item"), {{TEXT("item_name"), *Item->Name}});RefreshUI();
@@ -590,6 +597,7 @@ void AOKStreetSocialScene::StartGift(const FString& ItemId){
 
 void AOKStreetSocialScene::FinishGift(int32 Her,const FString& ItemId,const FString& Option,float Score){
  auto& S=*State;if(!S.Catalog.Find(ItemId))return;
+ if(!S.Store.Inventory.Contains(ItemId)){UE_LOG(LogTemp,Display,TEXT("Street gift: %s is no longer in his bag; nothing to give"),*ItemId);return;}
  auto Request=OKRulesHeroineRequest(S,TEXT("gift_settle"),OKStreetStableId(S.Manifest.Characters[Her]));Request->SetStringField(TEXT("item"),ItemId);Request->SetStringField(TEXT("option"),Option);Request->SetNumberField(TEXT("score"),Score);
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
  auto Candidate=S.Store;
@@ -609,6 +617,8 @@ void AOKStreetSocialScene::StartLoan(int32 Amount){
  // Whether she leans to take it is a rule (shop.rs loan_offer); taking it moves the money (loan_settle).
  auto Request=OKRulesHeroineRequest(S,TEXT("loan_offer"),OKStreetStableId(S.Manifest.Characters[Her]));Request->SetNumberField(TEXT("amount"),Amount);
  const TSharedPtr<FJsonObject> Offer=OKRulesEval(S,Request);if(!Offer)return;
+ // A loan to her already on offer (his words and the button for the same money): one, not two (as StartGift).
+ if(S.Choices.ContainsByPredicate([Her](const FOKStreetPendingChoice& C){return C.Kind==TEXT("loan")&&C.Heroine==Her;})){UE_LOG(LogTemp,Display,TEXT("Street loan: already offered to actor %d"),Her);return;}
  TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  OpenChoice(Her,TEXT("loan"),OKMsg(TEXT("ui.economy.loan_her_button"), {{TEXT("amount"), Amount}}),{TEXT("accept"),TEXT("decline")},Offer->GetStringField(TEXT("lean")),float(Offer->GetNumberField(TEXT("insist"))),15,
   [Weak,Her,Amount](const FString& Option){if(!Weak.IsValid())return;auto& L=*Weak->State;

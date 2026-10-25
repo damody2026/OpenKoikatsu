@@ -214,6 +214,27 @@ code = 8
 anchor = "lounge"
 
 [[activity]]
+# 在交誼廳一起讀書、排複習表（只有滑手機的活動時，說好「坐下來一起排表讀書」卻變成站著滑手機）
+id = "girls_lounge_study"
+name = "在女生宿舍交誼廳坐下來一起讀書"
+place = "girls_dorm"
+kind = "pair"
+code = 1
+anchor = "lounge"
+female_clip = "venue_study_seated.okanim"
+male_clip = "venue_study_seated.okanim"
+
+[[activity]]
+id = "boys_lounge_study"
+name = "在男生宿舍交誼廳坐下來一起讀書"
+place = "boys_dorm"
+kind = "pair"
+code = 1
+anchor = "lounge"
+female_clip = "venue_study_seated.okanim"
+male_clip = "venue_study_seated.okanim"
+
+[[activity]]
 id = "lodge_lobby"
 name = "在會館大廳坐著滑手機聊天"
 place = "lodge"
