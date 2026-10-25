@@ -220,12 +220,12 @@ void AOKStreetSocialScene::TickFreeTalkTrace(double Now){
   S.DecisionShotAt=0;FString Tag=S.DecisionShotTag;for(TCHAR& C:Tag)if(!FChar::IsAlnum(C)&&C!='_')C='_';
   const FString Dir=FPaths::GetPath(S.Manifest.SocialReport)/TEXT("decisions");IFileManager::Get().MakeDirectory(*Dir,true);
   const FString File=Dir/FString::Printf(TEXT("decision.%03d.%s.png"),++S.DecisionShots,*Tag);
-  FScreenshotRequest::RequestScreenshot(File,true,false);
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TraceShot);FScreenshotRequest::RequestScreenshot(File,true,false);}
   UE_LOG(LogTemp,Display,TEXT("Street decision shot: %s"),*File);
  }
  // Anyone else standing inside him or inside the girl with him (her plan's spot at the restaurant was his chair; at the
  // café another girl stood in his date's seat): stepped out too. Twice a second is enough.
- if(Now>=S.OverlapCheckAt){S.OverlapCheckAt=Now+0.5;
+ if(Now>=S.OverlapCheckAt){S.OverlapCheckAt=Now+0.5;QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TraceOverlap);
   TArray<FVector> Taken={S.Male};
   for(const int32 G2:{FreeTalkPartner(),S.Pair.Partner})if(S.Agents.IsValidIndex(G2-1))Taken.AddUnique(S.Agents[G2-1].Position);
   for(int32 I=1;I<=S.Agents.Num();++I){if(I==FreeTalkPartner())continue;auto& A=S.Agents[I-1];

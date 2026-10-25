@@ -128,6 +128,7 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
   // Starting against a wall counts as clear only when the line leads away from it (as StreetStep backs out of one).
   if(GetWorld()->SweepSingleByChannel(Hit,FVector(A.X,A.Y,Z)+FVector(0,0,85),FVector(B.X,B.Y,Z)+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(30,78),SweepQuery)&&(!Hit.bStartPenetrating||FVector::DotProduct((B-A).GetSafeNormal2D(),Hit.Normal)<=0.f))return false;
   return true;};
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_GridPull);
  TArray<FVector>& Route=G.Route;Route={From};int32 I=0;
  while(I<Cells.Num()-1){int32 J=Cells.Num()-1;while(J>I+1&&!Clear(I==0?From:Centre(Cells[I]),Centre(Cells[J])))--J;Route.Add(Centre(Cells[J]));I=J;}
  if(Goal==ToCell(To)&&Clear(Route.Last(),To))Route.Last()=To;

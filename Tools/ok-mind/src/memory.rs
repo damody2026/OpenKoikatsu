@@ -1,5 +1,4 @@
 //! Each heroine's memory stream (plan §4.5): what happened, scored for recall by relevance, importance and recency.
-use crate::store::write_atomic;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -105,7 +104,7 @@ pub fn recall(records: &[MemoryRecord], q: &RecallQuery) -> Vec<MemoryRecord> {
 
 pub struct Memories {
     dir: PathBuf,
-    open: Mutex<HashMap<String, MemoryFile>>,
+    open: std::sync::Arc<Mutex<HashMap<String, MemoryFile>>>,
 }
 
 fn file_name(heroine: &str) -> String {
@@ -115,7 +114,7 @@ fn file_name(heroine: &str) -> String {
 
 impl Memories {
     pub fn new(save_dir: &Path) -> Memories {
-        Memories { dir: save_dir.join("memory"), open: Mutex::new(HashMap::new()) }
+        Memories { dir: save_dir.join("memory"), open: Default::default() }
     }
 
     fn with<T>(&self, heroine: &str, f: impl FnOnce(&mut MemoryFile) -> Result<T, String>) -> Result<T, String> {
@@ -138,10 +137,18 @@ impl Memories {
         f(open.get_mut(heroine).unwrap())
     }
 
+    /// Queued: the writer thread serializes her file as it is then (the newest records), not the caller.
     fn persist(&self, file: &MemoryFile) -> Result<(), String> {
-        std::fs::create_dir_all(&self.dir).map_err(|e| format!("memory_dir: {e}"))?;
-        let text = serde_json::to_string(file).map_err(|e| e.to_string())?;
-        write_atomic(&self.dir.join(file_name(&file.heroine)), text.as_bytes())
+        let (open, dir, heroine) = (self.open.clone(), self.dir.clone(), file.heroine.clone());
+        crate::store::write_with(
+            &self.dir.join(file_name(&file.heroine)),
+            Box::new(move || {
+                std::fs::create_dir_all(&dir).map_err(|e| format!("memory_dir: {e}"))?;
+                let open = open.lock().unwrap();
+                let file = open.get(&heroine).ok_or_else(|| format!("memory_closed: {heroine}"))?;
+                serde_json::to_vec(file).map_err(|e| e.to_string())
+            }),
+        )
     }
 
     /// Stores a record (id and owner are filled in) and returns its id.

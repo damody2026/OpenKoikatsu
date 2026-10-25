@@ -58,9 +58,12 @@ pub fn load_state(dir: &Path) -> Result<State, String> {
 /// Saves go to one background thread: the caller (often the game thread: memories, finance, profiles) only hands
 /// over the bytes; the newest bytes for each path are written, paths in the order they were first queued. The
 /// thread ends when the queue is empty. A failed write is returned by the next write_atomic call.
+/// What is written: the bytes, or made by the thread when it gets there (write_with: a whole memory file serialized on
+/// each new memory held the game thread 3-4 ms).
+type Make = Box<dyn FnOnce() -> Result<Vec<u8>, String> + Send>;
 #[derive(Default)]
 struct Writer {
-    pending: HashMap<PathBuf, Vec<u8>>,
+    pending: HashMap<PathBuf, Make>,
     order: VecDeque<PathBuf>,
     writing: Option<PathBuf>,
     running: bool,
@@ -73,26 +76,33 @@ fn writer() -> &'static Mutex<Writer> {
 }
 
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let bytes = bytes.to_vec();
+    write_with(path, Box::new(move || Ok(bytes)))
+}
+
+/// The same, with the bytes made on the writer thread (the newest maker for a path replaces an older one still queued).
+pub fn write_with(path: &Path, make: Make) -> Result<(), String> {
     let mut w = writer().lock().unwrap();
     if !w.pending.contains_key(path) {
         w.order.push_back(path.to_path_buf());
     }
-    w.pending.insert(path.to_path_buf(), bytes.to_vec());
+    w.pending.insert(path.to_path_buf(), make);
     if !w.running {
         w.running = true;
         std::thread::spawn(|| loop {
-            let (path, bytes) = {
+            let (path, make) = {
                 let mut w = writer().lock().unwrap();
                 let Some(path) = w.order.pop_front() else {
                     w.writing = None;
                     w.running = false;
                     return;
                 };
-                let bytes = w.pending.remove(&path).unwrap_or_default();
+                let make = w.pending.remove(&path);
                 w.writing = Some(path.clone());
-                (path, bytes)
+                (path, make)
             };
-            if let Err(e) = write_now(&path, &bytes) {
+            let Some(make) = make else { continue };
+            if let Err(e) = make().and_then(|bytes| write_now(&path, &bytes)) {
                 writer().lock().unwrap().failed = Some(format!("{}: {e}", path.display()));
             }
         });

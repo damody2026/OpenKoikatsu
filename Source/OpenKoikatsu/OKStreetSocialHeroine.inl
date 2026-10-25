@@ -35,13 +35,13 @@ void AOKStreetSocialScene::ApplyRulesEffects(FOKStreetStore& Candidate,const FJs
    if(R.Favor>Old&&R.Stage==OldStage&&R.Stage!=TEXT("lover")){int32 Lovers=0;for(const auto& X:Candidate.Relations)if(X.Id!=R.Id&&X.Stage==TEXT("lover"))++Lovers;
     if(Lovers>1){auto Request=OKRulesRequest(TEXT("favor_gain"));Request->SetStringField(TEXT("stage"),R.Stage);Request->SetNumberField(TEXT("favor"),Old);Request->SetNumberField(TEXT("limit"),R.Favor);
      Request->SetNumberField(TEXT("delta"),R.Favor-Old);Request->SetNumberField(TEXT("lovers"),Lovers);if(const TSharedPtr<FJsonObject> Gain=OKRulesEval(S,Request))R.Favor=float(Gain->GetNumberField(TEXT("favor")));}}}}
-  else if(Op==TEXT("observe")){if(Girl!=INDEX_NONE)MindObserve(Girl,Str(TEXT("kind")),Str(TEXT("text")),Str(TEXT("place")),float(Num(TEXT("importance"))),*Str(TEXT("type")));}
+  else if(Op==TEXT("observe")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EffectObserve);if(Girl!=INDEX_NONE)MindObserve(Girl,Str(TEXT("kind")),Str(TEXT("text")),Str(TEXT("place")),float(Num(TEXT("importance"))),*Str(TEXT("type")));}
   else if(Op==TEXT("recent"))S.MindRecent.Add(Id,Str(TEXT("text")));
-  else if(Op==TEXT("note")){if(Girl!=INDEX_NONE){FOKHeroineArgs A;A.RecordOnly=true;A.Hers=E->GetBoolField(TEXT("hers"));A.Importance=float(Num(TEXT("importance")));A.Detail=Str(TEXT("detail"));A.Place=Str(TEXT("place"));A.RumorDetail=Str(TEXT("rumor_detail"));Interact(Girl,Str(TEXT("act")),A);}}
+  else if(Op==TEXT("note")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EffectNote);if(Girl!=INDEX_NONE){FOKHeroineArgs A;A.RecordOnly=true;A.Hers=E->GetBoolField(TEXT("hers"));A.Importance=float(Num(TEXT("importance")));A.Detail=Str(TEXT("detail"));A.Place=Str(TEXT("place"));A.RumorDetail=Str(TEXT("rumor_detail"));Interact(Girl,Str(TEXT("act")),A);}}
   else if(Op==TEXT("text")){if(Girl!=INDEX_NONE)QueueHerText(Girl,Str(TEXT("text")),Str(TEXT("kind")),Num(TEXT("delay")));}
-  else if(Op==TEXT("rumor"))MakeRumor(Girl,Str(TEXT("kind")),Str(TEXT("text")),float(Num(TEXT("heat"))),E->GetBoolField(TEXT("secret")));
+  else if(Op==TEXT("rumor")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EffectRumor);MakeRumor(Girl,Str(TEXT("kind")),Str(TEXT("text")),float(Num(TEXT("heat"))),E->GetBoolField(TEXT("secret")));}
   else if(Op==TEXT("wallet")||Op==TEXT("hero_open")||Op==TEXT("hero_close"))ApplyCompanyEffect(Candidate,*E);
-  else if(Op==TEXT("bond_event")){const int32 A=CharacterOf(Str(TEXT("a"))),B=CharacterOf(Str(TEXT("b")));if(A!=INDEX_NONE&&B!=INDEX_NONE)BondEventIn(Candidate,A,B,Str(TEXT("event")));}
+  else if(Op==TEXT("bond_event")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EffectBond);const int32 A=CharacterOf(Str(TEXT("a"))),B=CharacterOf(Str(TEXT("b")));if(A!=INDEX_NONE&&B!=INDEX_NONE)BondEventIn(Candidate,A,B,Str(TEXT("event")));}
   else if(Op==TEXT("mind_note")){if(Girl!=INDEX_NONE)MindNote(Girl,Str(TEXT("text")));}
   else if(Op==TEXT("intent"))S.Intents.Add(Id,Str(TEXT("intent")));
   else if(Op==TEXT("log")){UE_LOG(LogTemp,Display,TEXT("%s"),*Str(TEXT("text")));}

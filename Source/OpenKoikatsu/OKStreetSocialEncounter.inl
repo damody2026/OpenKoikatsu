@@ -88,15 +88,19 @@ FString AOKStreetSocialScene::HeardText(int32 Character) const{
 void AOKStreetSocialScene::Encounter(int32 A,int32 B,bool bOverheard){
  auto& S=*State;const FString IdA=OKStreetStableId(S.Manifest.Characters[A]),IdB=OKStreetStableId(S.Manifest.Characters[B]);
  const FString Key=OKStreetBondKey(IdA,IdB);const FString Place=PlaceHere(S.Agents[A-1].Position);
- auto Request=OKRulesRequest(TEXT("encounter"));Request->SetObjectField(TEXT("a"),RulesListener(A));Request->SetObjectField(TEXT("b"),RulesListener(B));
+ auto Request=OKRulesRequest(TEXT("encounter"));{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterListeners);Request->SetObjectField(TEXT("a"),RulesListener(A));Request->SetObjectField(TEXT("b"),RulesListener(B));}
  Request->SetNumberField(TEXT("heat"),S.Store.BondHeat.FindRef(Key));Request->SetStringField(TEXT("place"),Place);Request->SetBoolField(TEXT("food_place"),!Place.IsEmpty()&&OKStreetNormsOf(Place).FoodAllowed);
  Request->SetBoolField(TEXT("overheard"),bOverheard);Request->SetNumberField(TEXT("seed"),FMath::Rand());Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
- TArray<TSharedPtr<FJsonValue>> Rumors;for(const auto& R:S.Store.Rumors)Rumors.Add(MakeShared<FJsonValueObject>(OKRulesRumorJson(R)));Request->SetArrayField(TEXT("rumors"),Rumors);
- const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
- auto Candidate=S.Store;Candidate.BondHeat.Add(Key,float(Answer->GetNumberField(TEXT("heat"))));
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterRumors);TArray<TSharedPtr<FJsonValue>> Rumors;for(const auto& R:S.Store.Rumors)Rumors.Add(MakeShared<FJsonValueObject>(OKRulesRumorJson(R)));Request->SetArrayField(TEXT("rumors"),Rumors);}
+ TSharedPtr<FJsonObject> Answer;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterEval);Answer=OKRulesEval(S,Request);}if(!Answer)return;
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterApply);
+ // Changed in place and saved by the save task: a copy of the whole store to change and another to commit held the
+ // frame ~5 ms for each pair that met (nothing here can fail half-way).
+ auto& Candidate=S.Store;Candidate.BondHeat.Add(Key,float(Answer->GetNumberField(TEXT("heat"))));
  for(const auto& V:Answer->GetArrayField(TEXT("rumors"))){const auto O=V->AsObject();const int32 Id=int32(O->GetNumberField(TEXT("id")));if(auto* R=Candidate.Rumors.FindByPredicate([&](const FOKStreetRumor& X){return X.Id==Id;}))OKRulesReadRumor(*O,*R);}
- ApplyRulesEffects(Candidate,*Answer);
- CommitStore(MoveTemp(Candidate));FlushRulesEffects();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterEffects);ApplyRulesEffects(Candidate,*Answer);}
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterFlush);FlushRulesEffects();}
  UE_LOG(LogTemp,Display,TEXT("Street encounter %d-%d heat=%.0f learned=%d overheard=%d"),A,B,Answer->GetNumberField(TEXT("heat")),int32(Answer->GetNumberField(TEXT("learned"))),bOverheard?1:0);
 }
 
@@ -109,7 +113,7 @@ void AOKStreetSocialScene::MindNote(int32 Character,const FString& Text){
 
 // A scene he can overhear (plan §6.4): one DeepSeek call writes 2-6 lines, both voices speak them.
 void AOKStreetSocialScene::RequestOverheard(int32 A,int32 B){
- auto& S=*State;if(!S.Mind)return;
+ auto& S=*State;if(!S.Mind)return;QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_RequestOverheard);
  auto Persona=[&](int32 I){FOKFreeTalkPersona P;FString E;OKStreetFreeTalkLoadPersona(S.Manifest.Characters[I].Name,P,E);return S.Manifest.Characters[I].Name+OKT(TEXT("ui.economy.colon_mark"))+P.Profile.Left(300);};
  const FString IdA=OKStreetStableId(S.Manifest.Characters[A]),IdB=OKStreetStableId(S.Manifest.Characters[B]);
  const FOKStreetRelation RA=OKStreetViewRelation(S.Store,IdA,S.Manifest.TalkBudget),RB=OKStreetViewRelation(S.Store,IdB,S.Manifest.TalkBudget);
@@ -139,7 +143,7 @@ void AOKStreetSocialScene::HandleOverheard(const TSharedPtr<FJsonObject>& R,int3
  if(!Busy&&!S.TtsCacheDir.IsEmpty()){if(!LinesA.IsEmpty())SpeakFreeTalk(A,LinesA,++S.FreeTalkSerial);if(!LinesB.IsEmpty())SpeakFreeTalk(B,LinesB,++S.FreeTalkSerial);}
  const FString Joined=FString::Join(Transcript,OKT(TEXT("ui.encounter.slash_separator")));
  MindNote(A,OKMsg(TEXT("ui.encounter.chatted_on_street"), {{TEXT("partner_name"), *S.Manifest.Characters[B].Name}, {TEXT("topic"), *Joined}}));MindNote(B,OKMsg(TEXT("ui.encounter.chatted_on_street"), {{TEXT("partner_name"), *S.Manifest.Characters[A].Name}, {TEXT("topic"), *Joined}}));
- Encounter(A,B,true);RefreshUI();
+ Encounter(A,B,true);RefreshUI(OKStreetUi::Bottom|OKStreetUi::History); // their lines: the caption and the log, not the whole panel
 }
 
 // Every ten game minutes: pairs in the same place (or within 4 m on the street) may meet, once a pair a day; in mode C a
@@ -149,7 +153,7 @@ void AOKStreetSocialScene::TickEncounters(){
  // The pairs that met play out one a frame: all of a round in one frame (gossip, memories, history, the rules for each)
  // stalled the street 60-120 ms every ten game minutes.
  if(!S.PendingEncounters.IsEmpty()){const FIntVector P=S.PendingEncounters[0];S.PendingEncounters.RemoveAt(0);
-  if(S.Agents.IsValidIndex(P.X-1)&&S.Agents.IsValidIndex(P.Y-1)){if(P.Z)RequestOverheard(P.X,P.Y);else Encounter(P.X,P.Y,false);}}
+  if(S.Agents.IsValidIndex(P.X-1)&&S.Agents.IsValidIndex(P.Y-1)){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterPair);if(P.Z)RequestOverheard(P.X,P.Y);else Encounter(P.X,P.Y,false);}}
  const int64 Now=OKStreetMindNow(S);if(Now-S.EncounterTick<10||!S.PendingEncounters.IsEmpty())return;S.EncounterTick=Now;
  const int32 With=S.Target!=INDEX_NONE?S.Target:S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;
  auto Request=OKRulesRequest(TEXT("encounters_tick"));Request->SetNumberField(TEXT("seed"),FMath::Rand());Request->SetStringField(TEXT("place"),PlaceHere(S.Male));

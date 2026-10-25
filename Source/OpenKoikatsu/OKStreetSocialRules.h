@@ -1555,7 +1555,9 @@ inline bool OKStreetAtomicSave(const FString& Path, const FString& Body, FString
 // temp file, the .bak copy and the rename stalled the street, several times a frame at worst). The content is a body, or
 // a store snapshot serialized by the task (OKStreetAtomicSaveStoreAsync: the store's JSON took the game thread 4-6 ms each
 // commit). OKStreetFlushSaves waits for what is queued: before a save file is copied into a slot, read back, or the game ends.
-struct FOKStreetSaveQueue { FCriticalSection Lock; TMap<FString, TFunction<FString()>> Pending; TArray<FString> Order; bool Running = false; };
+// Appends (OKStreetAppendQueued) wait in Appends, gathered per file, and are queued in Order as "+" and the path.
+struct FOKStreetSaveQueue { FCriticalSection Lock; TMap<FString, TFunction<FString()>> Pending; TMap<FString, FString> Appends; TArray<FString> Order; bool Running = false; };
+inline void OKStreetSaveQueueRun();
 inline FOKStreetSaveQueue& OKStreetSaveQueue() { static FOKStreetSaveQueue Queue; return Queue; }
 inline void OKStreetAtomicSaveQueued(const FString& Path, TFunction<FString()> Make) {
  auto& Q = OKStreetSaveQueue();
@@ -1566,14 +1568,38 @@ inline void OKStreetAtomicSaveQueued(const FString& Path, TFunction<FString()> M
   if (Q.Running) return;
   Q.Running = true;
  }
+ OKStreetSaveQueueRun();
+}
+// Lines added to the end of a file (her history log), in the order they came: appended there, the open-append-close of
+// each line held the game thread 3-8 ms.
+inline void OKStreetAppendQueued(const FString& Path, const FString& Text) {
+ auto& Q = OKStreetSaveQueue();
+ {
+  FScopeLock Locked(&Q.Lock);
+  const FString Key = TEXT("+") + Path;
+  if (FString* Waiting = Q.Appends.Find(Path)) { *Waiting += Text; return; } // still queued: it goes along
+  Q.Appends.Add(Path, Text); Q.Order.Add(Key);
+  if (Q.Running) return;
+  Q.Running = true;
+ }
+ OKStreetSaveQueueRun();
+}
+inline void OKStreetSaveQueueRun() {
  AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [] {
   auto& Q = OKStreetSaveQueue();
   for (;;) {
-   FString Path;TFunction<FString()> Make;
+   FString Path;TFunction<FString()> Make;FString Appended;bool Append = false;
    {
     FScopeLock Locked(&Q.Lock);
     if (Q.Order.IsEmpty()) { Q.Running = false; return; }
-    Path = Q.Order[0]; Q.Order.RemoveAt(0); Make = Q.Pending.FindAndRemoveChecked(Path);
+    Path = Q.Order[0]; Q.Order.RemoveAt(0);
+    if (Path.StartsWith(TEXT("+"))) { Path.RightChopInline(1); Appended = Q.Appends.FindAndRemoveChecked(Path); Append = true; }
+    else Make = Q.Pending.FindAndRemoveChecked(Path);
+   }
+   if (Append) {
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+    if (!FFileHelper::SaveStringToFile(Appended, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append)) UE_LOG(LogTemp, Warning, TEXT("Street append %s failed"), *Path);
+    continue;
    }
    const FString Body = Make();
    // A save is ~100 KB. One growing every write (a list appended to instead of replaced) is said once, before it stalls.

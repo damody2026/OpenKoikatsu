@@ -262,6 +262,7 @@ void AOKStreetSocialScene::GalgameRollBack(int32 Character, const FString& Id)
 	if (History)
 	{
 		const FString Path = HistoryPath(Id);
+		OKStreetFlushSaves(); // appends still queued would land after the rewrite
 		FString Out;
 		for (const auto& E : List) Out += OKStreetHistoryLine(E) + TEXT("\n");
 		if (!Path.IsEmpty()) FFileHelper::SaveStringToFile(Out, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);

@@ -30,7 +30,7 @@ TArray<FOKStreetHistoryEntry>& AOKStreetSocialScene::HistoryOf(const FString& Id
  auto& S=*State;auto& List=S.History.FindOrAdd(Id);
  if(!S.HistoryLoaded.Contains(Id)){
   S.HistoryLoaded.Add(Id);
-  const FString Path=HistoryPath(Id);TArray<FString> Lines;
+  const FString Path=HistoryPath(Id);TArray<FString> Lines;OKStreetFlushSaves(); // lines still being appended
   if(!Path.IsEmpty()&&FFileHelper::LoadFileToStringArray(Lines,*Path)){
    TArray<FOKStreetHistoryEntry> Loaded;
    for(const FString& Line:Lines){FOKStreetHistoryEntry E;if(OKStreetHistoryParse(Line,E))Loaded.Add(MoveTemp(E));}
@@ -70,7 +70,7 @@ void AOKStreetSocialScene::HistoryAdd(int32 Character,const FString& Kind,const 
  if(!List.IsEmpty())E.Serial=FMath::Max(E.Serial,List.Last().Serial+1);
  List.Add(E);if(List.Num()>OKHistoryKeep)List.RemoveAt(0,List.Num()-OKHistoryKeep);
  const FString Path=HistoryPath(Id);
- if(!Path.IsEmpty()){IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path),true);FFileHelper::SaveStringToFile(OKStreetHistoryLine(E)+TEXT("\n"),*Path,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,&IFileManager::Get(),FILEWRITE_Append);}
+ if(!Path.IsEmpty())OKStreetAppendQueued(Path,OKStreetHistoryLine(E)+TEXT("\n")); // written by the save task (OKStreetFlushSaves before it is read back)
 }
 
 // For the model: the latest events between them (and, apart, the latest phone traffic), with day, time and place.
@@ -524,6 +524,7 @@ void AOKStreetSocialScene::TickStageTest(){
  case 30:{
   // Leave the save as it was: the store, her free-talk memory, and the history lines written by the test.
   CommitStore(FOKStreetStore(Saved));BooksRestore(S.TestBooks);S.FreeTalkMemory=SavedMemory;FreeTalkSaveMemory();
+  OKStreetFlushSaves(); // the test's own appends first: then each file is rewritten without them
   for(auto& Pair:S.History){Pair.Value.RemoveAll([&](const FOKStreetHistoryEntry& E){return E.Serial>=StartSerial;});
    const FString Path=HistoryPath(Pair.Key);if(Path.IsEmpty())continue;FString Out;for(const auto& E:Pair.Value)Out+=OKStreetHistoryLine(E)+TEXT("\n");FFileHelper::SaveStringToFile(Out,*Path,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);}
   UE_LOG(LogTemp,Display,TEXT("STAGE TEST done: %d passed, %d failed"),Passed,Failed);FPlatformMisc::RequestExitWithStatus(false,0);Step=99;break;}
