@@ -186,6 +186,8 @@ void AOKStreetSocialScene::StartControlServer(){
   if(!S.Manifest.Characters.IsValidIndex(int32(Girl))||Girl<1){OKControlReply(Done,OKControlResult(false,FString::Printf(TEXT("girl: 1..%d"),S.Manifest.Characters.Num()-1)));return;}
   FString Expr,Error;bool Peek=false;B->TryGetBoolField(TEXT("peek"),Peek);
   if(!Peek&&B->TryGetStringField(TEXT("expr"),Expr))if(const auto* E=S.Expressions.Find(S.Manifest.Characters[int32(Girl)].PersonalityId,Expr))OKSetCrowdRuntimeFaceExpression(this,int32(Girl),E->Face,E->Blink,Error);
+  // {"mouth": pattern, "mouth_open": 0..1}: one source mouth alone, for seeing how far each pattern opens.
+  if(!Peek&&B->TryGetNumberField(TEXT("mouth"),V)){FKKRuntimeFaceState F;F.MouthPattern=int32(V);F.MouthBlend=true;double Open=0;B->TryGetNumberField(TEXT("mouth_open"),Open);F.MouthOpening=float(Open);OKSetCrowdRuntimeFaceExpression(this,int32(Girl),F,true,Error);}
   FOKRuntimeFaceLook Look;if(B->TryGetNumberField(TEXT("blush"),V))Look.Blush=float(V);if(B->TryGetNumberField(TEXT("sweat"),V))Look.Sweat=float(V);
   if(B->TryGetNumberField(TEXT("gaze_x"),V))Look.Gaze.X=V;if(B->TryGetNumberField(TEXT("gaze_y"),V))Look.Gaze.Y=V;if(B->TryGetNumberField(TEXT("highlight"),V))Look.Highlight=int32(V);if(B->TryGetNumberField(TEXT("tears"),V))Look.Tears=int32(V);if(B->TryGetNumberField(TEXT("fade_scale"),V))Look.FadeScale=float(V);
   const bool Ok=Peek||OKSetCrowdRuntimeFaceLook(this,int32(Girl),Look,Error);auto O=OKControlResult(Ok,Error);

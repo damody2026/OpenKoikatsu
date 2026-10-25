@@ -537,7 +537,9 @@ void AOKStreetSocialScene::ApplyMindExpression(int32 Character,const FString& Em
    const int32 B=int32(P->GetNumberField(TEXT("brow"))),E=int32(P->GetNumberField(TEXT("eyes"))),M=int32(P->GetNumberField(TEXT("mouth")));
    if(B>=0){State2.BrowPattern=B;State2.BrowBlend=true;}
    if(E>=0){State2.EyePattern=E;State2.EyeBlend=true;if(Reply->FaceEyes==TEXT("closed")||Reply->FaceEyes==TEXT("smile_closed"))Blink=false;else Blink=true;}
-   if(M>=0){State2.MouthPattern=M;State2.MouthBlend=true;}
+   // The mouth she chose also says how far it opens while she is silent (a gasp wide, a smile barely): the named
+   // expression's mouth_open was 1 for nearly all of them.
+   if(M>=0){State2.MouthPattern=M;State2.MouthBlend=true;double Open=-1;if(P->TryGetNumberField(TEXT("mouth_open"),Open)&&Open>=0)State2.MouthOpening=float(Open);}
    Parts=FString::Printf(TEXT(" brow=%s(%d) eyes=%s(%d) mouth=%s(%d)"),*Reply->FaceBrow,B,*Reply->FaceEyes,E,*Reply->FaceMouth,M);}}
  // Where she looks, in her words ("away", "look away", "down at her feet"): the first direction it names.
  FString Gaze=Reply?Reply->FaceGaze.ToLower():FString();

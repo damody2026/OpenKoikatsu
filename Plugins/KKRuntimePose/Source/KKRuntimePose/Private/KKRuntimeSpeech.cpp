@@ -46,7 +46,7 @@ public:
   const bool Complete=Stream->IsComplete();const int32 Total=Stream->Num()/Channels;
   if(Buffering){
    const double Lead=FMath::Clamp(double(CVarOKSpeechStreamLead.GetValueOnAnyThread()),0.,3.);
-   if(!Complete&&Total-Position<Lead*Stream->SampleRate)return Count;
+   if(!Complete&&Total-Position<Lead*Stream->SampleRate){Meter->Rms.Store(0);return Count;} // silent while it waits: the mouth closes, not freezes
    Buffering=false;
   }
   // Frames needed for this callback (plus one for interpolation), read in one locked copy.

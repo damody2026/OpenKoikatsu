@@ -44,13 +44,16 @@ pub struct Photo {
     pub lover: bool,
 }
 
-/// One of her brows / eyes / mouth by name -> the source's face pattern.
+/// One of her brows / eyes / mouth by name -> the source's face pattern. A mouth also says how far it opens while she
+/// is silent (0 closed .. 1 wide: a gasp, not a smile); without it the named expression's own opening stays.
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct FacePart {
     pub part: String,
     pub key: String,
     pub pattern: i32,
+    #[serde(default)]
+    pub open: Option<f32>,
 }
 
 /// Her mood -> the gestures that show it, for a line the model gave no gesture.
@@ -150,13 +153,16 @@ impl MotionsTuning {
         json!({"key": p.key, "female": p.female, "male": p.male})
     }
 
-    /// Request: brow, eyes, mouth (names). Answer: brow, eyes, mouth patterns (-1: not given or no such name).
+    /// Request: brow, eyes, mouth (names). Answer: brow, eyes, mouth patterns (-1: not given or no such name), and
+    /// mouth_open (how far that mouth opens while she is silent; -1: the table does not say).
     fn face_parts(&self, r: &Value) -> Value {
         let find = |part: &str| {
             let key = s(r, part).trim().to_lowercase();
-            self.face.iter().find(|f| f.part == part && f.key == key).map(|f| f.pattern).unwrap_or(-1)
+            self.face.iter().find(|f| f.part == part && f.key == key)
         };
-        json!({"brow": find("brow"), "eyes": find("eyes"), "mouth": find("mouth")})
+        let pattern = |part: &str| find(part).map(|f| f.pattern).unwrap_or(-1);
+        let open = find("mouth").and_then(|f| f.open).map(|o| o.clamp(0.0, 1.0)).unwrap_or(-1.0);
+        json!({"brow": pattern("brow"), "eyes": pattern("eyes"), "mouth": pattern("mouth"), "mouth_open": open})
     }
 
     /// Every clip the table names and whether she sits for it (Unreal brings the chair for seated loops).
@@ -219,6 +225,11 @@ mod tests {
         // her face by parts
         let f = m.face_parts(&json!({"brow": "Angry", "eyes": "glare", "mouth": "nope"}));
         assert_eq!((f["brow"].as_i64(), f["eyes"].as_i64(), f["mouth"].as_i64()), (Some(9), Some(9), Some(-1)));
+        assert_eq!(f["mouth_open"].as_f64(), Some(-1.0));
+        // each mouth opens as far as it is meant to while she is silent: a gasp wide, a smile barely, closed shut
+        let open = |mouth: &str| m.face_parts(&json!({"mouth": mouth}))["mouth_open"].as_f64().unwrap();
+        assert!(open("gasp") > open("laugh") && open("laugh") > open("smile") && open("smile") > open("closed"));
+        assert_eq!(open("closed"), 0.0);
         // the same block shows the same loop; the place's own row wins
         let a = m.life(&json!({"kind": "leisure", "place": "cafe", "seed": 77}));
         assert_eq!(a, m.life(&json!({"kind": "leisure", "place": "cafe", "seed": 77})));

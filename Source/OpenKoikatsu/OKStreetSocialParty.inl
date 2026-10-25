@@ -12,14 +12,15 @@ bool AOKStreetSocialScene::PartyCanJoin(int32 Girl,FString* Why) const{
  // Already with him: the one he is talking to (she was listed among "the girls nearby" and invited to join her own talk).
  if(S.Party.Contains(Girl)||FreeTalkPartner()==Girl)return No(OKT(TEXT("ui.party.girl_already_following")));
  if(S.Party.Num()>=4)return No(OKT(TEXT("ui.party.too_many_people")));
- // Someone in the group she dislikes: she will not come (his girlfriend comes anyway, reluctantly: PartyJoin).
- {TArray<int32> Group=S.Party;if(FreeTalkPartner()!=INDEX_NONE)Group.AddUnique(FreeTalkPartner());int32 Who=INDEX_NONE;
-  if(BondMood(Girl,Group,&Who)==2){if(Why)*Why=OKMsg(TEXT("ui.party.girl_dislikes_no_join"), {{TEXT("who_name"), *S.Manifest.Characters[Who].Name}});return false;}}
  const auto& A=S.Agents[Girl-1];
  if(FMath::Abs(A.Position.Z-S.Male.Z)>150.f||FVector::Dist2D(A.Position,S.Male)>1200.f)return No(OKT(TEXT("ui.party.girl_not_nearby"))); // within calling distance: she walks over
  if(S.PrivateGirl==Girl||S.SleepGirl==Girl||S.SleepGirl2==Girl||S.RestroomGirl==Girl)return No(OKT(TEXT("ui.party.girl_busy_now")));
  if(const FOKStreetPlanBlock* B=LifeBlock(Girl,int32(OKStreetMindNow(S)%1440));B&&(B->Kind==TEXT("class")||B->Kind==TEXT("work")||B->Kind==TEXT("sleep")))
   return No(B->Kind==TEXT("class")?OKT(TEXT("ui.party.girl_in_class")):B->Kind==TEXT("work")?OKT(TEXT("ui.party.girl_working")):OKT(TEXT("ui.party.girl_sleeping")));
+ // Someone in the group she dislikes: she will not come (his girlfriend comes anyway, reluctantly: PartyJoin). Asked of
+ // the rules last, and only when someone is with him: the panel asks this for every heroine on each rebuild.
+ {TArray<int32> Group=S.Party;if(FreeTalkPartner()!=INDEX_NONE)Group.AddUnique(FreeTalkPartner());int32 Who=INDEX_NONE;
+  if(!Group.IsEmpty()&&BondMood(Girl,Group,&Who)==2){if(Why)*Why=OKMsg(TEXT("ui.party.girl_dislikes_no_join"), {{TEXT("who_name"), *S.Manifest.Characters[Who].Name}});return false;}}
  return true;
 }
 

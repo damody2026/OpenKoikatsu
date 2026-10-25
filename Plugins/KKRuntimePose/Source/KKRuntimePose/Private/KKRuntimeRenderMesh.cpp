@@ -42,12 +42,17 @@ static void AccumulateAuthoredFace(TArray<FFaceAcc,TInlineAllocator<16>>& Channe
  else if(Control==1){if(Pattern<0)return;if(Opening<0.f)AccumulateFaceControl(Channels,V,1,Pattern,0.f,Blink);else AccumulateFaceControl(Channels,V,1,Pattern,Opening*(1.f-Blink),1.f);}
  else if(Pattern>=0&&Gain>0.f)AccumulateFaceControl(Channels,V,0,Pattern,Audio*(Opening>=0.f?Opening:1.f),Gain);
 }
+static TAutoConsoleVariable<int32> CVarOKMouthCardInFace(TEXT("ok.Mouth.CardInFace"),1,TEXT("1: an expression without a mouth uses the card's speaking mouth (closed to open); 0: the mouth is left alone (for comparing)."));
 static FVector3f RuntimeFaceDelta(const FKKRuntimeMouthVertex& V,float Opening,float Gain,float Blink,const FKKRuntimeFaceState& State){
  TArray<FFaceAcc,TInlineAllocator<16>> Channels;
  AccumulateAuthoredFace(Channels,V,2,State.BrowPattern,State.BrowOpening,Opening,Gain,Blink);
  AccumulateAuthoredFace(Channels,V,1,State.EyePattern,State.EyeOpening,Opening,Gain,Blink);
  AccumulateAuthoredFace(Channels,V,0,State.MouthPattern,State.MouthOpening,Opening,Gain,Blink);
- FVector3f Delta=FVector3f::ZeroVector;for(const auto& Channel:Channels)Delta+=Channel.Delta*Channel.Weight;return Delta;
+ FVector3f Delta=FVector3f::ZeroVector;for(const auto& Channel:Channels)Delta+=Channel.Delta*Channel.Weight;
+ // No mouth in the expression: the card's own speaking mouth (closed to open), as without an expression. Untouched it
+ // neither moved with her voice nor closed after it.
+ if(State.MouthPattern<0&&CVarOKMouthCardInFace.GetValueOnAnyThread())Delta+=FMath::Lerp(V.Closed,V.Open,Opening)*Gain;
+ return Delta;
 }
 // Face vertices are independent of each other: evaluated across the task threads in chunks. On one core a face upload
 // took the game thread 3.6 ms, a blink every few seconds for each of ten heroines and every mouth frame while one speaks.
@@ -189,7 +194,8 @@ bool OKEvaluateRuntimeFaceTransition(const FKKRuntimeMouthStream& Stream,float O
    else{const float U=FMath::Clamp(Ch.Elapsed/OKRuntimeFaceTransitionSeconds,0.f,1.f);if(Control==0)LegacyMouth=Ch.Legacy*(1.f-U);else if(Control==1)LegacyEye=Ch.Legacy*(1.f-U);
     AccumulateBlendedFace(Channels,V,Transition,Control,Cat,U,Control==0?Opening:Control==1?Blink:0.f,Control==0?Gain:1.f);}}
   FVector3f Delta=FVector3f::ZeroVector;for(const auto& Channel:Channels)Delta+=Channel.Delta*Channel.Weight;
-  if(LegacyMouth!=0.f)Delta+=FMath::Lerp(V.Closed,V.Open,Opening)*Gain*LegacyMouth;if(LegacyEye!=0.f)Delta+=V.Blink*Blink*LegacyEye;
+  if(LegacyMouth!=0.f)Delta+=FMath::Lerp(V.Closed,V.Open,Opening)*Gain*LegacyMouth;
+  if(!Transition.Channel[0].Timing&&Transition.Channel[0].Pattern<0&&CVarOKMouthCardInFace.GetValueOnAnyThread())Delta+=FMath::Lerp(V.Closed,V.Open,Opening)*Gain; // as RuntimeFaceDelta: no expression mouthif(LegacyEye!=0.f)Delta+=V.Blink*Blink*LegacyEye;
   return V.Base+Delta;});
 }
 bool OKRequestRuntimeFace(const FKKRuntimeMouthStream& Stream,FOKRuntimeFacePlayback& Playback,const FKKRuntimeFaceState& Request,bool AllowBlink,FString& Error){

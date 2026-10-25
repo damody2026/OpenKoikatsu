@@ -90,6 +90,13 @@ namespace OKRuntimeScene {
 // A character's components follow her transform only when it moved: SetWorldTransform recomputes bounds and marks the
 // render transform dirty even for the same transform, six components for every character every frame (most stand still).
 static void OKCrowdSetTransform(USceneComponent* C,const FTransform& T){if(C&&!C->GetComponentTransform().Equals(T,1e-4))C->SetWorldTransform(T);}
+// How her mouth moves (each switch off gives the earlier behaviour, for comparing).
+static TAutoConsoleVariable<int32> CVarOKMouthNormalize(TEXT("ok.Mouth.Normalize"),1,TEXT("1: the speaking mouth opens against the line's own loudest; 0: Rms x 3."));
+// The card's open-mouth morph at full weight is not a talking mouth: the lips vanish into a white blob (tested on 三月七);
+// her loudest syllable opens it this far.
+static TAutoConsoleVariable<float> CVarOKMouthMaxOpen(TEXT("ok.Mouth.MaxOpen"),.5f,TEXT("How far the speaking mouth opens at her loudest (0-1 of the card's open-mouth morph)."));
+static TAutoConsoleVariable<int32> CVarOKMouthSpeakFull(TEXT("ok.Mouth.SpeakFull"),1,TEXT("1: speaking, the mouth opens with the voice, not capped by the expression's mouth_open; 0: capped."));
+static TAutoConsoleVariable<int32> CVarOKMouthAlwaysDriven(TEXT("ok.Mouth.AlwaysDriven"),1,TEXT("1: silent, the mouth is closed (or the expression's mouth_open); 0: left in the card's own mouth."));
 static TAutoConsoleVariable<int32> CVarOKCrowdLogSlowEntries(TEXT("ok.Crowd.LogSlowEntries"),0,TEXT("1: log a character's frame update taking over 1 ms, split into speech/behaviour, face look, face upload and components."));
 template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
  Async(EAsyncExecution::ThreadPool,[...Held=MoveTemp(Held)]()mutable{(Held.Reset(),...);});
@@ -290,7 +297,7 @@ struct FEntry {
  TMap<int32,FString> ContactRecipes;
  double PendingActionAt=0;int32 PendingAction=INDEX_NONE;uint64 PendingEpoch=0,InstalledEpoch=0,EpochClock=0,LinkedActionEpoch=0;bool PendingPlay=true,StreamInstalled=false,StreamHold=false,SpeechPaired=false;uint64 StreamRequests=0,StreamInstalls=0,StreamReleases=0,StreamErrors=0;double StreamPrepareMs=0;
  TArray<FKKRuntimePoseResult> BaseClips;TSharedPtr<const TArray<FVector4f>,ESPMode::ThreadSafe> BaseKeys;int32 BaseSource=INDEX_NONE;
- int32 ActionOverride=INDEX_NONE;uint64 ActionRequests=0,ActionCompletions=0,SpeechRequests=0,SpeechFrames=0,LastSpeechFrames=0;float SpeechMouth=0,SpeechPeak=0;double SpeechProgressAt=0;
+ int32 ActionOverride=INDEX_NONE;uint64 ActionRequests=0,ActionCompletions=0,SpeechRequests=0,SpeechFrames=0,LastSpeechFrames=0;float SpeechMouth=0,SpeechPeak=0,LinePeak=0,LineMouth=0;double SpeechProgressAt=0;
  TFuture<FKKRuntimeSpeechResult> SpeechJob;TWeakObjectPtr<UAudioComponent> SpeechAudio;TStrongObjectPtr<UKKRuntimeSpeechWave> SpeechWave;
  FString PendingSpeechAction;uint64 SpeechEpoch=0,SpeechEpochClock=0;
  // A song (OKSpeakCrowdRuntimeSong): the mouth follows this envelope of her vocal alone, read at the audio render clock
@@ -997,21 +1004,36 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(A==DemoCharacter&&DemoSpeechStarted&&!DemoSpeechCancelled&&DemoCancelAfter>=0&&Now-E.SpeechRequestedAt>=DemoCancelAfter){FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);DemoSpeechCancelled=true;}
    if(E.SpeechJob.IsValid()&&E.SpeechEpoch!=0&&E.SpeechJob.IsReady()&&(E.PendingSpeechAction.IsEmpty()||E.ClipSources.Find(FindClip(E.PendingSpeechAction))>=2)){const uint64 SpeechEpoch=E.SpeechEpoch;auto Prepared=E.SpeechJob.Consume();if(E.SpeechEpoch!=SpeechEpoch){UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped stale session"));}else if(!Prepared.Error.IsEmpty()){UE_LOG(LogTemp,Warning,TEXT("Runtime voice: %s"),*Prepared.Error);FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=Prepared.Error;}else if(auto Device=Owner->GetWorld()->GetAudioDevice();Device.IsValid()){
     auto* Audio=E.SpeechAudio.Get();if(!Audio){Audio=NewObject<UAudioComponent>(Owner.Get());Owner->AddInstanceComponent(Audio);Audio->bAutoActivate=false;Audio->bAutoDestroy=false;Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->bAllowSpatialization=true;Audio->bOverrideAttenuation=true;Audio->AttenuationOverrides.bAttenuate=true;Audio->AttenuationOverrides.bSpatialize=true;Audio->AttenuationOverrides.FalloffDistance=2000;Audio->RegisterComponent();E.SpeechAudio=Audio;}
-    Audio->Stop();auto* Wave=NewObject<UKKRuntimeSpeechWave>(Owner.Get());if(Prepared.Stream)Wave->InitializeStream(Prepared.Stream,Device->GetSampleRate());else Wave->Initialize(Prepared.Pcm,Device->GetSampleRate());E.SpeechWave.Reset(Wave);E.EnvelopeRate=float(Device->GetSampleRate());E.LastSpeechFrames=0;E.SpeechProgressAt=Now;Audio->SetSound(Wave);
+    Audio->Stop();auto* Wave=NewObject<UKKRuntimeSpeechWave>(Owner.Get());if(Prepared.Stream)Wave->InitializeStream(Prepared.Stream,Device->GetSampleRate());else Wave->Initialize(Prepared.Pcm,Device->GetSampleRate());E.SpeechWave.Reset(Wave);E.LinePeak=0;E.LineMouth=0;E.EnvelopeRate=float(Device->GetSampleRate());E.LastSpeechFrames=0;E.SpeechProgressAt=Now;Audio->SetSound(Wave);
     if(!E.PendingSpeechAction.IsEmpty()){FString ActionError;if(!OKPlayCrowdRuntimeAction(Owner.Get(),A,E.PendingSpeechAction,ActionError))UE_LOG(LogTemp,Warning,TEXT("Runtime speech action: %s"),*ActionError);}E.PendingSpeechAction.Reset();Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->SetPitchMultiplier(E.MouthEnvelope.Num()?1.f:E.VoicePitch);Audio->Play();E.SpeechState=EOKRuntimeSpeechState::Playing;
    }else {FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=TEXT("Runtime voice has no audio device");UE_LOG(LogTemp,Warning,TEXT("Runtime voice has no audio device"));}}
    // Instanced skinned mesh component transforms do not follow their actor instances.
    if(E.SpeechAudio.IsValid())E.SpeechAudio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));
    if(E.SpeechWave.IsValid()){const float Rms=E.SpeechWave->Meter->Rms.Load();
    const int32 EnvelopeAt=E.MouthEnvelope.Num()?FMath::Clamp(int32(double(E.SpeechWave->Meter->Frames.Load())/FMath::Max(1.f,E.EnvelopeRate)/E.EnvelopeHop),0,E.MouthEnvelope.Num()-1):INDEX_NONE;
-   E.SpeechMouth=EnvelopeAt!=INDEX_NONE?FMath::FInterpTo(E.SpeechMouth,FMath::Clamp(E.MouthEnvelope[EnvelopeAt],0.f,1.f),Dt,30.f):FMath::FInterpTo(E.SpeechMouth,FMath::Clamp(Rms*3.f,0.f,1.f),Dt,18.f);E.SpeechPeak=FMath::Max(E.SpeechPeak,Rms);const uint64 Frames=E.SpeechWave->Meter->Frames.Load();if(Frames!=E.LastSpeechFrames)E.SpeechProgressAt=Now;E.SpeechFrames+=Frames>=E.LastSpeechFrames?Frames-E.LastSpeechFrames:0;E.LastSpeechFrames=Frames;
+   // Speech: the level against this line's own loudest so far (a quiet voice opened the mouth barely, Rms x 3), silence
+   // under a small floor closed.
+   E.LinePeak=FMath::Max(E.LinePeak,Rms);const float Level=CVarOKMouthNormalize.GetValueOnGameThread()?(Rms<.008f?0.f:FMath::Clamp(Rms/FMath::Max(E.LinePeak*.7f,.03f),0.f,1.f)*FMath::Clamp(CVarOKMouthMaxOpen.GetValueOnGameThread(),0.f,1.f)):FMath::Clamp(Rms*3.f,0.f,1.f);
+   E.SpeechMouth=EnvelopeAt!=INDEX_NONE?FMath::FInterpTo(E.SpeechMouth,FMath::Clamp(E.MouthEnvelope[EnvelopeAt],0.f,1.f),Dt,30.f):FMath::FInterpTo(E.SpeechMouth,Level,Dt,22.f);E.LineMouth=FMath::Max(E.LineMouth,E.SpeechMouth);E.SpeechPeak=FMath::Max(E.SpeechPeak,Rms);const uint64 Frames=E.SpeechWave->Meter->Frames.Load();if(Frames!=E.LastSpeechFrames)E.SpeechProgressAt=Now;E.SpeechFrames+=Frames>=E.LastSpeechFrames?Frames-E.LastSpeechFrames:0;E.LastSpeechFrames=Frames;
    // A voice whose playback stops advancing (e.g. the output device was swapped under it) would stay "speaking" forever;
    // a stream still waiting on TTS gets longer before it counts as stuck.
    const bool Starving=E.SpeechWave->Stream&&!E.SpeechWave->Stream->IsComplete();const bool Stalled=Now-E.SpeechProgressAt>(Starving?15.:3.);
    if(Stalled)UE_LOG(LogTemp,Warning,TEXT("Runtime voice stopped advancing for %.1fs; treating it as finished (actor=%d)"),Now-E.SpeechProgressAt,A);
    if(Stalled&&E.SpeechAudio.IsValid())E.SpeechAudio->Stop();
-   if(Stalled||(Frames&&E.SpeechAudio.IsValid()&&!E.SpeechAudio->IsPlaying())){E.SpeechAudio->SetSound(nullptr);E.SpeechWave.Reset();E.SpeechMouth=0;E.SpeechState=EOKRuntimeSpeechState::Completed;}}
-   const float MouthOpening=VisualMouth>=0?VisualMouth:E.SpeechMouth,MouthGain=VisualMouth>=0||E.SpeechWave.IsValid()?1.f:0.f;
+   if(Stalled||(Frames&&E.SpeechAudio.IsValid()&&!E.SpeechAudio->IsPlaying())){E.SpeechAudio->SetSound(nullptr);E.SpeechWave.Reset();E.SpeechMouth=0;E.SpeechState=EOKRuntimeSpeechState::Completed;
+    UE_LOG(LogTemp,Display,TEXT("Runtime mouth: actor=%d line ended (loudest rms %.3f, widest opening %.2f); now %s (expression mouth %d open %.2f)"),A,E.LinePeak,E.LineMouth,E.FacePlay.Enabled&&E.FacePlay.Face.MouthPattern>=0&&E.FacePlay.Face.MouthOpening>=0.f?TEXT("the expression's mouth"):TEXT("closed"),E.FacePlay.Enabled?E.FacePlay.Face.MouthPattern:-1,E.FacePlay.Enabled?E.FacePlay.Face.MouthOpening:-1.f);}}
+   // The mouth is always driven. Speaking: it opens with the voice (the expression keeps its mouth shape, not its
+   // opening: a small mouth_open kept her lips nearly still). Silent: closed, unless her expression opens it
+   // (mouth_open). Undriven (gain 0) it stayed in the card's own mouth, often open, after every line.
+   const bool Speaking=E.SpeechWave.IsValid();
+   const bool ExpressionOpens=E.FacePlay.Enabled&&E.FacePlay.Face.MouthPattern>=0&&E.FacePlay.Face.MouthOpening>=0.f;
+   const bool Driven=CVarOKMouthAlwaysDriven.GetValueOnGameThread()!=0;
+   // Silent with an expression that opens it: its mouth_open scaled by the same ceiling as speech (MaxOpen): at full
+   // weight the open-mouth morph is a white blob, the expression's mouth_open 1.0 included.
+   const float MaxOpen=FMath::Clamp(CVarOKMouthMaxOpen.GetValueOnGameThread(),0.f,1.f);
+   const float MouthOpening=VisualMouth>=0?VisualMouth:Speaking?E.SpeechMouth:ExpressionOpens?MaxOpen:0.f,MouthGain=Driven||VisualMouth>=0||Speaking?1.f:0.f;
+   FKKRuntimeFaceState SpokenFace=E.FacePlay.Face;FKKRuntimeFaceTransition SpokenTransition=E.FacePlay.Transition;
+   if(Speaking&&VisualMouth<0&&CVarOKMouthSpeakFull.GetValueOnGameThread()){SpokenFace.MouthOpening=-1.f;SpokenTransition.Channel[0].Opening=-1.f;}
    float Blink=VisualBlink>=0?VisualBlink:FMath::Max(0.f,E.BlinkOverride);
    if(VisualBlink<0&&E.BlinkOverride<0&&AutoBlink&&(!E.FacePlay.Enabled||E.FacePlay.Blink)){const double T=FMath::Fmod(SceneTime+A*.77,3.2+(A%7)*.29);Blink=T<.08?T/.08:(T<.20?(.20-T)/.12:0);}
    if(!E.MouthStream||!E.MouthStream->BlinkVertices||(E.FacePlay.Enabled&&!E.FacePlay.Blink))Blink=0;
@@ -1020,7 +1042,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(E.MouthStream){FOKRuntimeFaceUploadPlan Plan;FString FaceError;const bool MouthMoved=FMath::Abs(MouthOpening-E.LastMouthOpening)>.002f,BlinkMoved=FMath::Abs(Blink-E.LastBlinkClosure)>.002f,GainChanged=MouthGain!=E.LastMouthGain;
     if(!OKPlanRuntimeFaceUpload(E.FacePlay,Dt,MouthBucket,E.LastMouthBucket,MouthMoved,BlinkMoved,GainChanged,Plan,FaceError)){const bool Gate=E.FacePlay.Dirty||MouthBucket!=E.LastMouthBucket||GainChanged,Need=E.FacePlay.Dirty||MouthMoved||BlinkMoved||GainChanged;Plan={};Plan.Upload=Gate&&Need;}
     if((Installed||E.VisibleMs>0)&&(Plan.Upload||E.ShadowFaceDirty)){
-     if(!OKUpdateRuntimeMouthStream(E.Mesh.Get(),E.DepthMesh.Get(),E.MouthStream,MouthOpening,MouthGain,Error,Blink,E.FacePlay.Enabled?&E.FacePlay.Face:nullptr,E.FacePlay.Enabled?&E.FacePlay.Transition:nullptr)){Fail(E,Error);continue;}
+     if(!OKUpdateRuntimeMouthStream(E.Mesh.Get(),E.DepthMesh.Get(),E.MouthStream,MouthOpening,MouthGain,Error,Blink,E.FacePlay.Enabled?&SpokenFace:nullptr,E.FacePlay.Enabled?&SpokenTransition:nullptr)){Fail(E,Error);continue;}
      if(E.ShadowMouth&&E.ShadowMesh.IsValid()){
       const auto ShadowFace=OKRuntimeShadowFaceChannels(*E.ShadowMouth,E.FacePlay.Face);
       const auto* ShadowTransition=E.FacePlay.Enabled&&E.FacePlay.Transition.Active()?&E.FacePlay.Transition:nullptr;
