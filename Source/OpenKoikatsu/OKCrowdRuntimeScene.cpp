@@ -84,6 +84,12 @@ namespace OKRuntimeScene {
 // private session so a cancelled prepare cannot publish on a later request.
 // The bank is validated on the preparing worker; the render thread uploads it a chunk per frame (one whole upload in a
 // single render command stalled the street 60-140 ms, "AdmitRuntimeAction"). Status 0 uploading, 1 ready, -1 failed.
+// What a retired streamed action held (its prepared clips and keys, its GPU bank's CPU copy: megabytes) freed on a
+// worker instead of in this frame: freed on the game thread it held the frame up to 15 ms (STAT_OKCrowd_StreamRetire).
+// Only for plain data nothing else on the game thread still points into; shared pointers must be thread-safe.
+template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
+ Async(EAsyncExecution::ThreadPool,[...Held=MoveTemp(Held)]()mutable{(Held.Reset(),...);});
+}
 struct FStreamInstall {
  TSharedPtr<const FOKValidatedGpuBank,ESPMode::ThreadSafe> Bank;
  TAtomic<int32> Status{0};TAtomic<bool> InFlight{false};FString Error;
@@ -850,11 +856,12 @@ struct FScene : TSharedFromThis<FScene> {
  int32 FreeActionSlot()const{for(int32 Index=0;Index<OKCrowdRuntimeActionSlots;++Index)if(ActionSlots[Index].Actor==INDEX_NONE)return Index;return INDEX_NONE;}
  int32 ActiveActionSlots()const{int32 Count=0;for(const auto& Slot:ActionSlots)Count+=Slot.Actor!=INDEX_NONE;return Count;}
  int32 QueuedActionRequests()const{int32 Count=0;for(const auto& E:Entries)Count+=E->PendingAction!=INDEX_NONE;return Count;}
- void ClearActionSlot(FActionStreamSlot& Slot){Slot.Job=TFuture<FStreamPrepared>();Slot.Prepared.Reset();Slot.Install.Reset();Slot.Actor=INDEX_NONE;Slot.Source=INDEX_NONE;Slot.Epoch=0;}
+ void ClearActionSlot(FActionStreamSlot& Slot){Slot.Job=TFuture<FStreamPrepared>();OKCrowdFreeOnWorker(MoveTemp(Slot.Prepared),MoveTemp(Slot.Install));Slot.Actor=INDEX_NONE;Slot.Source=INDEX_NONE;Slot.Epoch=0;}
  bool RestoreStreamCatalog(FEntry& E){
   if(!E.StreamInstalled)return true;
   if(E.BaseClips.Num()<3||!E.BaseKeys.IsValid()||!E.ClipSources.IsValidIndex(2)){++E.StreamErrors;UE_LOG(LogTemp,Warning,TEXT("Runtime action restore missing private base"));return false;}
   FString Error;if(!E.Clock.ReplaceInactiveClip(2,{SourceId(E.BaseSource),E.BaseClips[2].Duration,SourceLoop(E.BaseSource)},Error))return false;
+  OKCrowdFreeOnWorker(MakeUnique<TArray<FKKRuntimePoseResult>>(MoveTemp(E.Clips)),MoveTemp(E.CpuKeys)); // the streamed action's
   E.Clips=MoveTemp(E.BaseClips);E.CpuKeys=MoveTemp(E.BaseKeys);E.ClipSources[2]=E.BaseSource;E.BaseSource=INDEX_NONE;E.StreamInstalled=false;E.InstalledEpoch=0;E.StreamHold=false;return true;
  }
  bool QueueRuntimeAction(FEntry& E,int32 Source,bool Play,FString& Error){

@@ -2042,7 +2042,11 @@ void AOKStreetSocialScene::RebuildUI(){
  if(!State||!GEngine||!GEngine->GameViewport)return;auto& S=*State;
  {// Diagnostics: a rebuild drops a button press in progress, so frequent rebuilds make buttons unclickable.
   static double Window=0;static int32 Count=0;const double T=FPlatformTime::Seconds();if(T-Window>1){if(Count>3)UE_LOG(LogTemp,Warning,TEXT("Street UI rebuilt %d times in 1 s"),Count);Window=T;Count=0;}++Count;}
+ // Where a slow rebuild spends its time, by section (logged with ok.Street.LogUiRebuilds 1).
+ TArray<TPair<const TCHAR*,uint64>,TInlineAllocator<16>> Marks;auto Mark=[&Marks](const TCHAR* Name){Marks.Emplace(Name,FPlatformTime::Cycles64());};
+ Mark(TEXT("remove"));
  if(S.Overlay.IsValid())GEngine->GameViewport->RemoveViewportWidgetContent(S.Overlay.ToSharedRef());
+ Mark(TEXT("header"));
  // The right panel is rebuilt on every refresh; its scroll position is restored after the rebuild.
  TSharedPtr<SScrollBox> RightScroll;
  auto Box=SNew(SVerticalBox);S.PresentationTopicButtons=0;S.DebugSliders=0;S.StatSliders.Reset();S.RelationChecks.Reset();
@@ -2066,6 +2070,7 @@ void AOKStreetSocialScene::RebuildUI(){
    .OnSelectionChanged_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](TSharedPtr<FString> Item,ESelectInfo::Type Info){if(Weak.IsValid()&&Item.IsValid()&&Info!=ESelectInfo::Direct)Weak->SetLanguage(*Item);})
    [SNew(STextBlock).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(!Weak.IsValid())return FText::GetEmpty();const FString Name=Weak->T(*(TEXT("ui.settings.lang_")+Weak->State->Lang));
      FStringFormatNamedArguments A;A.Add(TEXT("name"),Name);return FText::FromString(Weak->T(TEXT("ui.settings.language"),A));})]];}
+ Mark(TEXT("look"));
  // The characters' look: each card's own ramp, one of the game's shadow ramps (live), or HG (reloads on "auto").
  {if(S.RenderStyleOptions.IsEmpty()){S.RenderStyleOptions.Add(MakeShared<FString>(TEXT("koikatsu")));for(const auto& R:OKRenderRamps())S.RenderStyleOptions.Add(MakeShared<FString>(TEXT("ramp:")+R.Key));S.RenderStyleOptions.Add(MakeShared<FString>(TEXT("hg")));}
   const FString Style=RenderStyle();const int32 StyleIndex=FMath::Max(0,S.RenderStyleOptions.IndexOfByPredicate([&](const TSharedPtr<FString>& R){return *R==Style;}));
@@ -2187,6 +2192,7 @@ void AOKStreetSocialScene::RebuildUI(){
   }
 
  }
+ Mark(TEXT("freetalk"));
  // Free talk follows its partner: the conversation target, or the girl walking or doing an activity with the player.
  if(FreeTalkPartner()!=INDEX_NONE){
   Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.FreeTalkOpen?OKT(TEXT("ui.scene.collapse_free_talk")):OKT(TEXT("ui.scene.free_talk_label")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){auto& W=*Weak->State;W.FreeTalkOpen=!W.FreeTalkOpen;W.FreeTalkUserClosed=!W.FreeTalkOpen;Weak->FreeTalkLiveSet(W.FreeTalkOpen);Weak->RefreshUI();}return FReply::Handled();})];
@@ -2268,6 +2274,7 @@ void AOKStreetSocialScene::RebuildUI(){
    .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&!Owner->TaskListText().IsEmpty()?EVisibility::Visible:EVisibility::Collapsed;})
    [SNew(STextBlock).AutoWrapText(true).WrapTextAt(300).ColorAndOpacity_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()?Owner->TaskListColor():FSlateColor(FLinearColor::White);}).Text_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(Owner.IsValid()?Owner->TaskListText():FString());})]];
  auto Dialogue=SNew(SVerticalBox);FreeTalkEnsureLog();
+ Mark(TEXT("dialogue"));
  // Free talk owns the bottom box while its captions are set and no scripted line plays. Captions are
  // bound to state so replay can change them every line without rebuilding the UI.
  // A galgame scene (OKStreetSocialGalgame.inl) shows the lines itself; this box then keeps only the table and what the microphone heard.
@@ -2306,6 +2313,7 @@ void AOKStreetSocialScene::RebuildUI(){
  Dialogue->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(Scripted).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",21))
   .Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L?FText::FromString(L->DialogueText):FText::GetEmpty();})
   .ColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FSlateColor(L?L->DialogueColor:FLinearColor::White);})];
+ Mark(TEXT("history"));
  // Free-talk history window: every girl's lines, newest last, each with its voice when one was made.
  TSharedRef<SWidget> History=SNew(SBox).Visibility(EVisibility::Collapsed);
  if(S.FreeTalkHistoryOpen){
@@ -2326,6 +2334,7 @@ void AOKStreetSocialScene::RebuildUI(){
    +SVerticalBox::Slot().FillHeight(1)[SAssignNew(Scroll,SScrollBox)+SScrollBox::Slot()[List]]]];
   Scroll->ScrollToEnd();
  }
+ Mark(TEXT("clock"));
  // Street clock on the right panel: jump the time of day (the sun follows within a second) or pause it.
  TWeakPtr<FOKStreetSceneState> ClockState=State;
  auto ClockNow=[ClockState](){auto L=ClockState.Pin();return L?OKStreetClockHours(L->ClockStartHours,FPlatformTime::Seconds()-L->ClockStartWall):12.0;};
@@ -2348,6 +2357,7 @@ void AOKStreetSocialScene::RebuildUI(){
  TSharedRef<SWidget> SleepRow=SNew(SBox).Visibility_Lambda([ClockState](){auto L=ClockState.Pin();return L&&L->SleepPhase==0&&OKStreetNearestBed(L->Male,260,nullptr)?EVisibility::Visible:EVisibility::Collapsed;})
   [SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(OKT(TEXT("ui.scene.sleep_in_bed"))))
    .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()&&Weak->State){const FOKStreetPlace* Where=nullptr;if(const auto* Bed=OKStreetNearestBed(Weak->State->Male,260,nullptr,&Where))Weak->StartSleep(*Bed,Where,Weak->FreeTalkPartner());}return FReply::Handled();})];
+ Mark(TEXT("lift"));
  // Elevator panel: shown while the player is inside a multi-storey place, one button per floor.
  TSharedRef<SVerticalBox> LiftRows=SNew(SVerticalBox);
  for(int32 PlaceIndex=0;PlaceIndex<OKStreetPlaces().Num();++PlaceIndex){
@@ -2373,6 +2383,7 @@ void AOKStreetSocialScene::RebuildUI(){
      return FText::FromString(Inside()?OKMsg(TEXT("ui.scene.elevator_inside"), {{TEXT("place_name"), Place.Name}, {TEXT("where"), *Where}}):OKMsg(TEXT("ui.scene.elevator_at"), {{TEXT("place_name"), Place.Name}, {TEXT("where"), *Where}}));})]
    +SVerticalBox::Slot().AutoHeight()[SNew(SBox).Visibility_Lambda([Inside](){return Inside()?EVisibility::Visible:EVisibility::Collapsed;})[Wrap]]];
  }
+ Mark(TEXT("overlay"));
  S.Overlay=SNew(SOverlay)+SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(16)[S.MinimapPanel.ToSharedRef()]
  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(356,16,0,24)[SNew(SBox).MaxDesiredWidth(1140).MinDesiredWidth(1140)[SNew(SVerticalBox)
   // His cards at the card table, held in front of him right above the dialogue box, which grows upward under them (OKStreetSocialBluff.inl).
@@ -2395,10 +2406,13 @@ void AOKStreetSocialScene::RebuildUI(){
   +SVerticalBox::Slot().FillHeight(1)[SAssignNew(RightScroll,SScrollBox).OnUserScrolled_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](float Offset){if(const auto L=Weak.Pin())L->RightScrollOffset=Offset;})+SScrollBox::Slot()[Box]]
   +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MaxDesiredHeight(S.ShowDebug?560:330)[SNew(SScrollBox)+SScrollBox::Slot()[DebugBox]]]]]]
  +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SBox).Visibility(S.BigMapOpen?EVisibility::Visible:EVisibility::Collapsed)[S.BigMap.ToSharedRef()]];
+ Mark(TEXT("apps"));
  if(!S.App.IsEmpty())StaticCastSharedPtr<SOverlay>(S.Overlay)->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Center)[BuildAppOverlay()];
  if(!S.SaveMenu.IsEmpty())StaticCastSharedPtr<SOverlay>(S.Overlay)->AddSlot()[BuildSaveMenu()];
  if(RightScroll.IsValid())RightScroll->SetScrollOffset(S.RightScrollOffset);
  GEngine->GameViewport->AddViewportWidgetContent(S.Overlay.ToSharedRef(),10);
+ Mark(TEXT("add"));
+ if(CVarOKStreetLogUiRebuilds.GetValueOnGameThread()&&FPlatformTime::ToMilliseconds64(Marks.Last().Value-Marks[0].Value)>5){FString Parts;for(int32 I=1;I<Marks.Num();++I)Parts+=FString::Printf(TEXT(" %s %.1f"),Marks[I-1].Key,FPlatformTime::ToMilliseconds64(Marks[I].Value-Marks[I-1].Value));UE_LOG(LogTemp,Display,TEXT("Street UI rebuild %.1f ms:%s"),FPlatformTime::ToMilliseconds64(Marks.Last().Value-Marks[0].Value),*Parts);}
 }
 
 #include "OKStreetSocialContacts.inl"
