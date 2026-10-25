@@ -98,7 +98,7 @@ void AOKStreetSocialScene::PlanAll(){
  Request->SetObjectField(TEXT("doors"),OKRulesDoors());
  {auto Names=MakeShared<FJsonObject>();for(const auto& P:OKStreetPlaces())Names->SetStringField(P.Id,P.Name);Request->SetObjectField(TEXT("place_names"),Names);}
  // His meetings still ahead: a pickup is not asked for on top of one (plan.rs).
- {TArray<TSharedPtr<FJsonValue>> Meet;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending"))Meet.Add(MakeShared<FJsonValueNumber>(double(A.Start)));Request->SetArrayField(TEXT("his_meetings"),Meet);}
+ {TArray<TSharedPtr<FJsonValue>> Meet;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")||A.Status==TEXT("asked"))Meet.Add(MakeShared<FJsonValueNumber>(double(A.Start)));Request->SetArrayField(TEXT("his_meetings"),Meet);}
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
  const TSharedPtr<FJsonObject>* Plans=nullptr;
  if(Answer->TryGetObjectField(TEXT("plans"),Plans))for(const auto& P:(*Plans)->Values){
@@ -109,7 +109,7 @@ void AOKStreetSocialScene::PlanAll(){
  if(Answer->TryGetArrayField(TEXT("morning_pair"),Pair)&&Pair->Num()==2)S.MorningPair={int32((*Pair)[0]->AsNumber()),int32((*Pair)[1]->AsNumber())}; // walking side by side (OKStreetSocialLife.inl)
  const TArray<TSharedPtr<FJsonValue>>* Pickups=nullptr;
  if(Answer->TryGetArrayField(TEXT("pickups"),Pickups))for(const auto& V:*Pickups){const auto O=V->AsObject();if(!O)continue;
-  AddAppointment(TEXT("pickup"),int32(O->GetNumberField(TEXT("actor"))),O->GetStringField(TEXT("place")),int64(O->GetNumberField(TEXT("start"))),int32(O->GetNumberField(TEXT("grace"))),O->GetStringField(TEXT("label")));}
+  AddAppointment(TEXT("pickup"),int32(O->GetNumberField(TEXT("actor"))),O->GetStringField(TEXT("place")),int64(O->GetNumberField(TEXT("start"))),int32(O->GetNumberField(TEXT("grace"))),O->GetStringField(TEXT("label")),0,TEXT("asked"));} // her request: a meeting once he says yes
  ApplyRulesEffects(S.Store,*Answer);
 }
 

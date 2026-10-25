@@ -402,6 +402,19 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
     let (mut updates, mut arrive, mut blacklist, mut fired) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut notice = String::new();
     for k in 0..list.len() {
+        // Asked of him (her text "can you come for me at ten?") and never answered: no meeting was made, so nobody was
+        // stood up. Once the time is past she went on her own, and remembers he did not answer.
+        if list[k].status == "asked" {
+            let a = list[k].clone();
+            if now > a.start + a.grace as i64 {
+                list[k].status = "unanswered".into();
+                updates.push(json!({"id": a.id, "status": "unanswered"}));
+                if !a.heroine.is_empty() && hers.contains_key(&a.heroine) {
+                    fx.note_at(&a.heroine, "unanswered", &crate::tr::m("social.request_unanswered", &[("label", crate::tr::a(&a.label))]), &a.place, 0.5);
+                }
+            }
+            continue;
+        }
         if list[k].status != "pending" {
             continue;
         }
@@ -485,7 +498,9 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
             // Not turning up for a shift costs him the job, not the place: he can still stay at the hotel he worked at.
             fired.push(json!({"place": a.place}));
             notice = crate::tr::m("social.no_show_fired", &[("label", crate::tr::a(&a.label))]);
-        } else if a.kind == "reservation" || a.kind == "pickup" {
+        } else if a.kind == "reservation" {
+            // A table not turned up for: the shop will not take his bookings for a while. (Not a pickup: the building
+            // where she works did not book anything, and she has already had her say about it.)
             blacklist.push(json!({"place": a.place, "until": day + 7}));
             notice = crate::tr::m("social.no_show_blacklist", &[("label", crate::tr::a(&a.label))]);
         }
@@ -958,6 +973,10 @@ mod tests {
             "heroines": {"a": her(60.0), "b": her(60.0)}})).unwrap();
         assert_eq!(v["updates"], json!([{"id": 1, "status": "missed"}, {"id": 2, "status": "missed"}, {"id": 3, "status": "late"}]));
         assert_eq!(v["blacklist"][0]["until"], 7);
+        // A pickup she asked for and he never answered: no meeting, nobody stood up; past the time it lapses, she notes it.
+        let asked = appointments_tick(&json!({"now": 1400, "day": 0, "appointments": [{"id": 9, "kind": "pickup", "heroine": "g", "place": "campus_t2", "label": "x", "start": 1320, "grace": 20, "status": "asked"}], "heroines": {"g": her(60.0)}})).unwrap();
+        assert_eq!(asked["updates"], json!([{"id": 9, "status": "unanswered"}]));
+        assert!(asked["blacklist"].as_array().unwrap().is_empty());
         // A shift: an hour late still counts (late); past that he loses the job, and the place does not ban him.
         let shift = |now: i64| appointments_tick(&json!({"now": now, "day": 0, "appointments": [{"id": 5, "kind": "shift", "heroine": "", "place": "hotel", "start": 720, "grace": 10, "status": "pending", "there": true}], "heroines": {}})).unwrap();
         assert_eq!(shift(720 + 10 + 30)["updates"], json!([{"id": 5, "status": "late"}]));
