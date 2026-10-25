@@ -14,7 +14,8 @@ pub const KERNELS: &str = include_str!("kernels.cu");
 pub const KERNEL_NAMES: &[&str] = &[
     "gemv_i8_bf16", "i8_to_bf16",
     "embed_bf16", "rmsnorm_bf16", "add_bf16", "silu_mul_bf16", "silu_bf16", "fill_rows_bf16",
-    "qk_norm_rope_bf16", "store_v_bf16", "attention_bf16", "sum_rows_bf16", "bf16_to_f32",
+    "qk_norm_rope_bf16", "store_v_bf16", "attention_bf16", "qk_norm_rope_dp_bf16", "store_v_dp_bf16", "attention_dp_bf16",
+    "sum_rows_bf16", "bf16_to_f32",
     "fill_rows_f32", "rvq_gather", "pad_left_f32", "depthwise_conv_f32", "overlap_add_f32", "snake_f32",
     "layernorm_cols_f32", "gelu_f32", "add_scaled_f32", "transpose_f32", "rmsnorm_f32", "silu_mul_f32",
     "rope_f32", "attention_f32", "clamp_f32", "sample_bf16", "codec_sum_bf16", "inc_u64",

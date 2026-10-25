@@ -38,6 +38,8 @@ pub struct Speech {
     pub samples: Vec<f32>,
     pub frames: usize,
     pub gen_seconds: f64,
+    /// Of gen_seconds, the time spent decoding codes to audio (streaming only; 0 otherwise).
+    pub codec_seconds: f64,
     pub voice_key: String,
     pub age: u32,
 }
@@ -135,7 +137,7 @@ impl Engine {
         let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
         let samples = if frames.is_empty() { Vec::new() } else { self.codec.decode(&self.gpu, &frames)? };
         debug_assert_eq!(samples.len(), frames.len() * SAMPLES_PER_FRAME);
-        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: voice.key, age: voice.age })
+        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), codec_seconds: 0.0, voice_key: voice.key, age: voice.age })
     }
 
     /// VoiceDesign with an explicit description and seed (making candidate voices). A Base engine has no use for it.
@@ -152,7 +154,7 @@ impl Engine {
         cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
         let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
         let samples = if frames.is_empty() { Vec::new() } else { self.codec.decode(&self.gpu, &frames)? };
-        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: "design".into(), age: 0 })
+        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), codec_seconds: 0.0, voice_key: "design".into(), age: 0 })
     }
 
     /// Base model, x-vector clone of any speaker embedding (speaker::SpeakerEncoder), no voice description.
@@ -167,7 +169,7 @@ impl Engine {
         cfg.max_new_tokens = cfg.max_new_tokens.min(budget);
         let frames = self.talker.generate(&self.gpu, &prompt, &cfg)?;
         let samples = if frames.is_empty() { Vec::new() } else { self.codec.decode(&self.gpu, &frames)? };
-        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: "clone".into(), age: 0 })
+        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), codec_seconds: 0.0, voice_key: "clone".into(), age: 0 })
     }
 
     /// Like `speak`, but audio is handed to `sink` while the rest is still being generated: the first
@@ -182,11 +184,14 @@ impl Engine {
         let mut frames = Vec::new();
         let mut samples = Vec::new();
         let mut decoded = 0usize;
+        let mut codec_seconds = 0.0f64;
         self.talker.generate_stream(&self.gpu, &prompt, &cfg, &mut |new| {
             frames.extend_from_slice(new);
             let want = if decoded == 0 { self.stream_first_frames } else { later_frames.unwrap_or(self.stream_later_frames) };
             if frames.len() - decoded >= want.max(1) {
+                let c = Instant::now();
                 let pcm = self.codec.decode_tail(&self.gpu, &frames, decoded)?;
+                codec_seconds += c.elapsed().as_secs_f64();
                 decoded = frames.len();
                 samples.extend_from_slice(&pcm);
                 sink(&pcm)?;
@@ -194,10 +199,12 @@ impl Engine {
             Ok(())
         })?;
         if decoded < frames.len() {
+            let c = Instant::now();
             let pcm = self.codec.decode_tail(&self.gpu, &frames, decoded)?;
+            codec_seconds += c.elapsed().as_secs_f64();
             samples.extend_from_slice(&pcm);
             sink(&pcm)?;
         }
-        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), voice_key: voice.key, age: voice.age })
+        Ok(Speech { samples, frames: frames.len(), gen_seconds: t.elapsed().as_secs_f64(), codec_seconds, voice_key: voice.key, age: voice.age })
     }
 }

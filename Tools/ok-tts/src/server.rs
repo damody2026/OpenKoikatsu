@@ -535,6 +535,8 @@ fn synthesize_job(state: &Arc<State>, job: &Job, trace: &mut Trace) -> Result<(V
         if !state.ready.load(Ordering::SeqCst) {
             bail!("model is still loading");
         }
+        // While this line waits for the engine and is made, background GPU work (songs) waits for it (voicelease.rs).
+        let _voice = crate::voicelease::VoiceBusy::new();
         trace.mark("queue_enter");
         let lock = state.engine.lock().unwrap();
         trace.mark("queue_leave");
@@ -662,6 +664,8 @@ fn stream_job(state: &Arc<State>, job: &Job, tx: &std::sync::mpsc::Sender<Vec<u8
             }
             Claim::Owner(g) => g,
         };
+        // While this line waits for the engine and is made, background GPU work (songs) waits for it (voicelease.rs).
+        let _voice = crate::voicelease::VoiceBusy::new();
         trace.mark("queue_enter");
         let lock = state.engine.lock().unwrap();
         trace.mark("queue_leave");
@@ -720,7 +724,8 @@ fn stream_job(state: &Arc<State>, job: &Job, tx: &std::sync::mpsc::Sender<Vec<u8
         state.stats.generated.fetch_add(1, Ordering::Relaxed);
         state.stats.gen_ms.fetch_add((gen_seconds * 1000.0) as u64, Ordering::Relaxed);
         let mut extra = json!({"gen_seconds": (gen_seconds * 1000.0).round() / 1000.0, "audio_seconds": (raw_audio * 1000.0).round() / 1000.0,
-                               "rtf": (gen_seconds / raw_audio.max(1e-3) * 1000.0).round() / 1000.0});
+                               "rtf": (gen_seconds / raw_audio.max(1e-3) * 1000.0).round() / 1000.0,
+                               "codec_seconds": (speech.codec_seconds * 1000.0).round() / 1000.0});
         if let Err(e) = stored {
             extra["cache_error"] = json!(format!("{e:#}"));
         }

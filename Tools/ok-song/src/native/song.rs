@@ -40,7 +40,7 @@ pub fn separate(models: &Path, song: &Audio, cancel: &AtomicBool) -> Result<(Aud
         _ => [s.channels[0].clone(), s.channels[1].clone()],
     };
     let t2 = std::time::Instant::now();
-    let src = sep.separate(&gpu, &mix, &|| cancel.load(Ordering::SeqCst))
+    let src = sep.separate(&gpu, &mix, &|| super::step(cancel))
         .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
     let acc: Vec<Vec<f32>> = (0..2).map(|c| (0..mix[0].len()).map(|i| src[0][c][i] + src[1][c][i] + src[2][c][i]).collect()).collect();
     let [vl, vr] = src.into_iter().nth(3).unwrap();
@@ -62,7 +62,7 @@ pub fn convert(models: &Path, vocals: &Audio, reference: &Audio, o: &super::seed
     };
     let (src, refw) = (mono(vocals), mono(reference));
     let t2 = std::time::Instant::now();
-    let out = vc.convert(&gpu, &src, &refw, o, &|| cancel.load(Ordering::SeqCst))
+    let out = vc.convert(&gpu, &src, &refw, o, &|| super::step(cancel))
         .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
     let report = json!({"revision": CONVERT_REVISION, "load_seconds": load, "convert_seconds": t2.elapsed().as_secs_f64(),
                         "steps": o.steps, "cfg_rate": o.cfg_rate, "seed": o.seed,
@@ -86,7 +86,7 @@ pub fn generate(ckpt: &Path, lyrics: &str, tags: &str, max_ms: u32, o: &Generate
         }
         let s = Sampling { cfg: o.cfg_scale, temperature: o.temperature, top_k: o.top_k, seed: o.seed };
         let t2 = std::time::Instant::now();
-        let frames = m.generate(&gpu, &p, max_frames, &s, &|| cancel.load(Ordering::SeqCst), |_| {})
+        let frames = m.generate(&gpu, &p, max_frames, &s, &|| super::step(cancel), |_| {})
             .map_err(|e| if cancel.load(Ordering::SeqCst) { stage_error("CANCELLED", "cancelled") } else { e })?;
         super::mem_log(&gpu, "heartmula generated");
         (frames, load, t2.elapsed().as_secs_f64(), p.len())

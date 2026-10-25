@@ -355,6 +355,11 @@ impl Dit {
         let span: Vec<f32> = (0..=steps).map(|i| if i < half { step * i as f32 } else { 1.0 - step * (steps - i) as f32 }).collect();
         let mut tt = span[0];
         for s in 1..=steps {
+            // A chunk is many steps (seconds of GPU work): a voice line being made gets the GPU between them.
+            if super::voicelease::voice_busy() {
+                gpu.sync()?;
+                super::voicelease::wait_for_voice();
+            }
             let dt = span[s] - span[s - 1];
             gpu.copy(xx.ptr, x.ptr, n * 4)?;
             gpu.copy(xx.ptr + (n * 4) as u64, x.ptr, n * 4)?;

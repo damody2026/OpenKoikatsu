@@ -108,6 +108,16 @@ impl Stack {
         if pos0 + n > self.cache_len {
             bail!("sequence too long: {} > {}", pos0 + n, self.cache_len);
         }
+        self.forward_at(gpu, x, n, Pos::Host(pos0))
+    }
+
+    /// One token at the position held in device memory (an i32): the decode step the talker graph captures once and
+    /// replays at every position. The caller keeps the position below cache_len.
+    pub fn forward_dev(&self, gpu: &Gpu, x: u64, pos: u64) -> Result<Buf> {
+        self.forward_at(gpu, x, 1, Pos::Dev(pos))
+    }
+
+    fn forward_at(&self, gpu: &Gpu, x: u64, n: usize, at: Pos) -> Result<Buf> {
         let (h, hd, nh, kvh) = (self.hidden, self.head_dim, self.heads, self.kv_heads);
         let qkv_dim = (nh + 2 * kvh) * hd;
         let resid = gpu.alloc(n * h * 2)?;
@@ -123,19 +133,26 @@ impl Stack {
         for (li, l) in self.layers.iter().enumerate() {
             gpu.launch("rmsnorm_bf16", (rows, 1, 1), (256, 1, 1), 0, &[Arg::P(normed.ptr), Arg::P(resid.ptr), Arg::P(l.ln1.ptr), Arg::I(h as i32), Arg::F(self.eps)])?;
             l.wqkv.linear(gpu, qkv.ptr, normed.ptr, n, h, qkv_dim)?;
-            gpu.launch("qk_norm_rope_bf16", (rows, nh as u32, 1), (hd as u32, 1, 1), 0, &[
+            // The position: a launch argument, or read on the device (`_dp` kernels, for the decode graph).
+            let (rope, store, attend, pos) = match at {
+                Pos::Host(p) => ("qk_norm_rope_bf16", "store_v_bf16", "attention_bf16", Arg::I(p as i32)),
+                Pos::Dev(p) => ("qk_norm_rope_dp_bf16", "store_v_dp_bf16", "attention_dp_bf16", Arg::P(p)),
+            };
+            let posarg = || match pos { Arg::I(v) => Arg::I(v), Arg::P(v) => Arg::P(v), _ => unreachable!() };
+            gpu.launch(rope, (rows, nh as u32, 1), (hd as u32, 1, 1), 0, &[
                 Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::I(0), Arg::P(l.q_norm.ptr), Arg::I(hd as i32), Arg::F(self.eps),
-                Arg::P(self.inv_freq.ptr), Arg::I(pos0 as i32), Arg::P(0), Arg::I(self.cache_len as i32)])?;
-            gpu.launch("qk_norm_rope_bf16", (rows, kvh as u32, 1), (hd as u32, 1, 1), 0, &[
+                Arg::P(self.inv_freq.ptr), posarg(), Arg::P(0), Arg::I(self.cache_len as i32)])?;
+            gpu.launch(rope, (rows, kvh as u32, 1), (hd as u32, 1, 1), 0, &[
                 Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::I((nh * hd) as i32), Arg::P(l.k_norm.ptr), Arg::I(hd as i32), Arg::F(self.eps),
-                Arg::P(self.inv_freq.ptr), Arg::I(pos0 as i32), Arg::P(self.kcache[li].ptr), Arg::I(self.cache_len as i32)])?;
-            gpu.launch("store_v_bf16", (rows, kvh as u32, 1), (hd as u32, 1, 1), 0, &[
-                Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::I(((nh + kvh) * hd) as i32), Arg::I(hd as i32), Arg::I(pos0 as i32),
+                Arg::P(self.inv_freq.ptr), posarg(), Arg::P(self.kcache[li].ptr), Arg::I(self.cache_len as i32)])?;
+            gpu.launch(store, (rows, kvh as u32, 1), (hd as u32, 1, 1), 0, &[
+                Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::I(((nh + kvh) * hd) as i32), Arg::I(hd as i32), posarg(),
                 Arg::P(self.vcache[li].ptr), Arg::I(self.cache_len as i32)])?;
-            let smem = ((hd + pos0 + n) * 4) as u32;
-            gpu.launch("attention_bf16", (rows, nh as u32, 1), (128, 1, 1), smem, &[
+            // Scores for every cached position: on the device the position is unknown, so room for the whole cache.
+            let smem = match at { Pos::Host(p) => (hd + p + n) * 4, Pos::Dev(_) => (hd + self.cache_len) * 4 } as u32;
+            gpu.launch(attend, (rows, nh as u32, 1), (128, 1, 1), smem, &[
                 Arg::P(attn.ptr), Arg::P(qkv.ptr), Arg::I(qkv_dim as i32), Arg::P(self.kcache[li].ptr), Arg::P(self.vcache[li].ptr),
-                Arg::I(nh as i32), Arg::I(kvh as i32), Arg::I(hd as i32), Arg::I(self.cache_len as i32), Arg::I(pos0 as i32), Arg::I(0),
+                Arg::I(nh as i32), Arg::I(kvh as i32), Arg::I(hd as i32), Arg::I(self.cache_len as i32), posarg(), Arg::I(0),
                 Arg::F(1.0 / (hd as f32).sqrt())])?;
             l.wo.linear(gpu, proj.ptr, attn.ptr, n, nh * hd, h)?;
             gpu.launch1("add_bf16", n * h, &[Arg::P(resid.ptr), Arg::P(resid.ptr), Arg::P(proj.ptr), Arg::I(elems)])?;
@@ -149,6 +166,13 @@ impl Stack {
         gpu.launch("rmsnorm_bf16", (rows, 1, 1), (256, 1, 1), 0, &[Arg::P(out.ptr), Arg::P(resid.ptr), Arg::P(self.norm.ptr), Arg::I(h as i32), Arg::F(self.eps)])?;
         Ok(out)
     }
+}
+
+/// Where a forward pass gets its cache position: a launch argument, or an i32 in device memory (graph replay).
+#[derive(Clone, Copy)]
+enum Pos {
+    Host(usize),
+    Dev(u64),
 }
 
 pub struct Talker {
@@ -172,6 +196,13 @@ pub struct Talker {
     g_cur: Buf,  // i32 [16]: codes of the current frame (cur[0] from the talker)
     g_rng: Buf,  // u64 [2]: seed, frame counter
     pred_graph: Mutex<Option<((bool, u32, usize), Graph)>>,
+    // The talker's decode step as one graph (28 layers, the codec head, g_past, the position): reads g_step_in and the
+    // position g_pos (u64 whose low half the kernels read as i32), writes g_logits and g_past, then advances g_pos.
+    // One launch per frame instead of about 340, which matters most when the GPU is shared with a game.
+    g_step_in: Buf,
+    g_logits: Buf,
+    g_pos: Buf,
+    talk_graph: Mutex<Option<Graph>>,
 }
 
 /// Settings for one utterance; defaults follow E:\TTS\STATUS.md (talker) and faster_qwen3_tts (predictor).
@@ -238,6 +269,10 @@ impl Talker {
             g_cur: gpu.zeros(NUM_CODE_GROUPS * 4)?,
             g_rng: gpu.zeros(16)?,
             pred_graph: Mutex::new(None),
+            g_step_in: gpu.zeros(HIDDEN * 2)?,
+            g_logits: gpu.zeros(TALKER_VOCAB * 2)?,
+            g_pos: gpu.zeros(8)?,
+            talk_graph: Mutex::new(None),
         })
     }
 
@@ -463,7 +498,22 @@ impl Talker {
             gpu.write(self.g_rng.ptr, &[cfg.seed, 0u64])?;
         }
 
-        let step_in = gpu.alloc(row)?;
+        // The talker decode step: one graph replay per frame (OK_TTS_TALKER_GRAPH=0: the kernels one by one, to compare).
+        let use_graph = std::env::var("OK_TTS_TALKER_GRAPH").map(|v| v != "0").unwrap_or(true);
+        let mut talk = self.talk_graph.lock().unwrap();
+        if use_graph {
+            gpu.write(self.g_pos.ptr, &[prompt.prefill_len as u64])?;
+            if talk.is_none() {
+                *talk = Some(gpu.capture(|| {
+                    let h = self.stack.forward_dev(gpu, self.g_step_in.ptr, self.g_pos.ptr)?;
+                    gpu.linear_bf16(self.g_logits.ptr, h.ptr, self.codec_head.ptr, 1, HIDDEN, TALKER_VOCAB, 0.0)?;
+                    gpu.copy(self.g_past.ptr, h.ptr, row)?;
+                    gpu.launch("inc_u64", (1, 1, 1), (32, 1, 1), 0, &[Arg::P(self.g_pos.ptr)])
+                })?);
+            }
+        }
+        let step_in = if use_graph { None } else { Some(gpu.alloc(row)?) };
+        let step_in_ptr = step_in.as_ref().map(|b| b.ptr).unwrap_or(self.g_step_in.ptr);
         let mut produced = 0usize;
         let mut handed = 0usize;
         // Frames [handed, upto) are final: never past EOS (it is not a frame) or what has been produced.
@@ -483,12 +533,21 @@ impl Talker {
             produced = step + 1;
             // ---- talker step: sum of the 16 codebook embeddings + trailing text (or tts_pad)
             let extra = if step < prompt.trailing_len { prompt.trailing.at(step * row) } else { prompt.tts_pad.ptr };
-            gpu.launch1("codec_sum_bf16", HIDDEN, &[Arg::P(step_in.ptr), Arg::P(tables.ptr), Arg::P(self.g_cur.ptr), Arg::I(NUM_CODE_GROUPS as i32), Arg::I(HIDDEN as i32), Arg::P(extra)])?;
-            let h = self.stack.forward(gpu, step_in.ptr, 1, prompt.prefill_len + step)?;
-            gpu.linear_bf16(logits.ptr, h.ptr, self.codec_head.ptr, 1, HIDDEN, TALKER_VOCAB, 0.0)?;
+            gpu.launch1("codec_sum_bf16", HIDDEN, &[Arg::P(step_in_ptr), Arg::P(tables.ptr), Arg::P(self.g_cur.ptr), Arg::I(NUM_CODE_GROUPS as i32), Arg::I(HIDDEN as i32), Arg::P(extra)])?;
+            let step_logits = match talk.as_ref() {
+                Some(g) if use_graph => {
+                    gpu.replay(g)?; // forward at g_pos, codec head into g_logits, g_past, g_pos += 1
+                    self.g_logits.ptr
+                }
+                _ => {
+                    let h = self.stack.forward(gpu, step_in_ptr, 1, prompt.prefill_len + step)?;
+                    gpu.linear_bf16(logits.ptr, h.ptr, self.codec_head.ptr, 1, HIDDEN, TALKER_VOCAB, 0.0)?;
+                    gpu.copy(self.g_past.ptr, h.ptr, row)?;
+                    logits.ptr
+                }
+            };
             let ban = if step + 1 < cfg.min_new_tokens { CODEC_EOS as i32 } else { -1 };
-            self.sample_dev(gpu, logits.ptr, TALKER_VOCAB, &cfg.talker, self.g_cur.ptr, suppress, ban, seen.ptr, rep, cfg.seed, (step as u64 + 1) << 8, eos.ptr, (step + 1) as i32, 0)?;
-            gpu.copy(self.g_past.ptr, h.ptr, row)?;
+            self.sample_dev(gpu, step_logits, TALKER_VOCAB, &cfg.talker, self.g_cur.ptr, suppress, ban, seen.ptr, rep, cfg.seed, (step as u64 + 1) << 8, eos.ptr, (step + 1) as i32, 0)?;
             if (step + 1) % POLL == 0 || step + 1 == max_frames {
                 let eos_at = gpu.read::<i32>(eos.ptr, 1)?[0];
                 if eos_at != i32::MAX { break; }

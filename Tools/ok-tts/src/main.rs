@@ -38,6 +38,7 @@ mod server;
 mod speaker;
 mod talker;
 mod text;
+mod voicelease;
 mod voicemgr;
 mod weights;
 

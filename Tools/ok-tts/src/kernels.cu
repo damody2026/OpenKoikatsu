@@ -93,7 +93,9 @@ extern "C" __global__ void fill_rows_bf16(bf16* out, const bf16* bias, int n, in
 // Per-head RMSNorm (q_norm / k_norm) then rotate-half RoPE. One block per (token, head), blockDim = head_dim.
 // x is [tokens, row_stride] with heads starting at x + head_offset. Result goes to dst:
 // dst == 0 -> in place; otherwise dst is a KV cache [heads, cache_len, d] written at position pos0 + token.
-extern "C" __global__ void qk_norm_rope_bf16(bf16* x, int row_stride, int head_offset, const bf16* w, int d,
+// (The `_dp` variants of these three read pos0 from device memory, so one decode step can be captured in a CUDA
+// graph and replayed at every position.)
+__device__ __forceinline__ void qk_norm_rope(bf16* x, int row_stride, int head_offset, const bf16* w, int d,
                                              float eps, const float* inv_freq, int pos0, bf16* dst, int cache_len) {
     __shared__ float scratch[32];
     __shared__ float v[256];
@@ -112,18 +114,34 @@ extern "C" __global__ void qk_norm_rope_bf16(bf16* x, int row_stride, int head_o
     if (dst) dst[((long long)head * cache_len + pos0 + token) * d + i] = outv;
     else src[i] = outv;
 }
+extern "C" __global__ void qk_norm_rope_bf16(bf16* x, int row_stride, int head_offset, const bf16* w, int d,
+                                             float eps, const float* inv_freq, int pos0, bf16* dst, int cache_len) {
+    qk_norm_rope(x, row_stride, head_offset, w, d, eps, inv_freq, pos0, dst, cache_len);
+}
+extern "C" __global__ void qk_norm_rope_dp_bf16(bf16* x, int row_stride, int head_offset, const bf16* w, int d,
+                                                float eps, const float* inv_freq, const int* pos, bf16* dst, int cache_len) {
+    qk_norm_rope(x, row_stride, head_offset, w, d, eps, inv_freq, *pos, dst, cache_len);
+}
 
 // Copy V heads from the fused QKV rows into the cache [heads, cache_len, d].
-extern "C" __global__ void store_v_bf16(const bf16* x, int row_stride, int head_offset, int d, int pos0,
+__device__ __forceinline__ void store_v(const bf16* x, int row_stride, int head_offset, int d, int pos0,
                                         bf16* dst, int cache_len) {
     int token = blockIdx.x, head = blockIdx.y;
     for (int i = threadIdx.x; i < d; i += blockDim.x)
         dst[((long long)head * cache_len + pos0 + token) * d + i] = x[(long long)token * row_stride + head_offset + head * d + i];
 }
+extern "C" __global__ void store_v_bf16(const bf16* x, int row_stride, int head_offset, int d, int pos0,
+                                        bf16* dst, int cache_len) {
+    store_v(x, row_stride, head_offset, d, pos0, dst, cache_len);
+}
+extern "C" __global__ void store_v_dp_bf16(const bf16* x, int row_stride, int head_offset, int d, const int* pos,
+                                           bf16* dst, int cache_len) {
+    store_v(x, row_stride, head_offset, d, *pos, dst, cache_len);
+}
 
 // Causal attention against a KV cache. One block per (query, head); dynamic smem holds the scores.
 // q rows are [tokens, q_stride]; out is [tokens, heads * d]. window <= 0 means unlimited.
-extern "C" __global__ void attention_bf16(bf16* out, const bf16* q, int q_stride, const bf16* kc, const bf16* vc,
+__device__ __forceinline__ void attention(bf16* out, const bf16* q, int q_stride, const bf16* kc, const bf16* vc,
                                           int heads, int kv_heads, int d, int cache_len, int pos0, int window, float scale) {
     extern __shared__ float smem[];
     __shared__ float scratch[32];
@@ -154,6 +172,15 @@ extern "C" __global__ void attention_bf16(bf16* out, const bf16* q, int q_stride
         for (int j = 0; j < len; ++j) acc += sc[j] * bf2f(vbase[(long long)(start + j) * d + i]);
         out[(long long)token * heads * d + head * d + i] = f2bf(acc * inv);
     }
+}
+extern "C" __global__ void attention_bf16(bf16* out, const bf16* q, int q_stride, const bf16* kc, const bf16* vc,
+                                          int heads, int kv_heads, int d, int cache_len, int pos0, int window, float scale) {
+    attention(out, q, q_stride, kc, vc, heads, kv_heads, d, cache_len, pos0, window, scale);
+}
+// Dynamic smem must hold d + cache_len floats (the position is known only on the device).
+extern "C" __global__ void attention_dp_bf16(bf16* out, const bf16* q, int q_stride, const bf16* kc, const bf16* vc,
+                                             int heads, int kv_heads, int d, int cache_len, const int* pos, int window, float scale) {
+    attention(out, q, q_stride, kc, vc, heads, kv_heads, d, cache_len, *pos, window, scale);
 }
 
 // out[0, :] = sum over rows of in[rows, h] (f32 accumulation, one rounding), plus optional add row.

@@ -128,6 +128,7 @@ fn worker(state: &State) {
         let job_dir = state.cfg.jobs_dir().join(&id);
         let _ = std::fs::create_dir_all(&job_dir);
         let progress = JobProgress { state, id: id.clone() };
+        let waited_before = crate::native::voicelease::waited_total();
         // A panic inside a stage (a CUDA library that cannot be loaded, a bug) fails this job instead of killing the
         // worker: otherwise the job stays "generating" forever and no later job runs.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job::run(&state.cfg, &req, &voice, &keys, &job_dir, cancel.clone(), &progress)))
@@ -136,6 +137,10 @@ fn worker(state: &State) {
                 Err(anyhow::anyhow!("internal error: {what}"))
             });
         state.busy.store(false, Ordering::SeqCst);
+        let waited = crate::native::voicelease::waited_total().saturating_sub(waited_before);
+        if !waited.is_zero() {
+            crate::log!("ok-song: job {id} waited {:.1} s for voice lines (voicelease)", waited.as_secs_f64());
+        }
         let mut jobs = state.jobs.lock().unwrap();
         if let Some(j) = jobs.get_mut(&id) {
             j.finished = Some(j.created.elapsed().as_secs_f64());

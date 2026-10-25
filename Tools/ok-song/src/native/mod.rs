@@ -5,6 +5,16 @@
 #[allow(dead_code)]
 pub mod gpu;
 
+/// Voice lines first: song work waits at each loop step while ok-tts makes a line (ok-tts `voicelease.rs`).
+#[path = "../../../ok-tts/src/voicelease.rs"]
+pub mod voicelease;
+
+/// The per-step check of a song stage: wait while a voice line is being made, then say whether the job was cancelled.
+pub fn step(cancel: &std::sync::atomic::AtomicBool) -> bool {
+    voicelease::wait_for_voice();
+    cancel.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// OK_GPU_MEM=1: log live / peak GPU buffer memory at `label` (stage memory budgets).
 pub fn mem_log(gpu: &gpu::Gpu, label: &str) {
     if std::env::var_os("OK_GPU_MEM").is_some() {
