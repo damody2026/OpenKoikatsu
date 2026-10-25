@@ -227,7 +227,9 @@ private:
  void AddSecondSleeper(int32 First,const struct FOKStreetPlace* Place,const FString& FirstBed);
  void RequestIntimacy(int32 Character,bool bHerIdea);
  void TickIntimacy();
- int32 AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label,int32 Minutes=0);
+ // Status "asked": her request ("can you come for me at ten?") not answered yet; a meeting he agrees to with her near
+ // that time makes it a real one (pending). Unanswered, it lapses without a stood-up (social.rs appointments_tick).
+ int32 AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label,int32 Minutes=0,const FString& Status=TEXT("pending"));
  int32 CharacterOf(const FString& Id) const;
  int32 PatienceOf(int32 Character) const;
  void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His,bool bReplaces=false,float Hours=0);

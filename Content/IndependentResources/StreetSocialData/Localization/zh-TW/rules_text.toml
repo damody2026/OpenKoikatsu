@@ -462,6 +462,7 @@ saw_with_own_eyes = "親眼看到：{text}"
 see_him_go_check = "你看到他和{other}在一起，想過去看看他們在做什麼"
 see_him_pull_back = "你看到他和{other}在一起，想把他的注意力拉回你身上"
 stood_up_reason = "他放我鴿子：{label}"
+request_unanswered = "我問他能不能來（{label}），他一直沒回我，我就自己回去了"
 tomorrow_birthday_hint = "明天是你生日，你想不經意地讓他知道"
 
 [venture]

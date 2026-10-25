@@ -1,15 +1,23 @@
 // Included by OKStreetSocialScene.cpp: plan §13.3 appointments, the task list under the minimap, arriving, being
 // late, standing someone up, and the shop blacklist.
 
-int32 AOKStreetSocialScene::AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label,int32 Minutes){
+int32 AOKStreetSocialScene::AddAppointment(const FString& Kind,int32 Heroine,const FString& Place,int64 Start,int32 Grace,const FString& Label,int32 Minutes,const FString& Status){
  auto& S=*State;auto Candidate=S.Store;
+ const FString HerId=S.Manifest.Characters.IsValidIndex(Heroine)&&Heroine>0?OKStreetStableId(S.Manifest.Characters[Heroine]):FString();
+ // He agrees to what she asked for ("OK, I'll come for you at ten" to her pickup text): that request becomes the
+ // meeting, not a second one beside it.
+ if(Status==TEXT("pending")&&!HerId.IsEmpty())if(FOKStreetAppointment* Asked=Candidate.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Status==TEXT("asked")&&X.Heroine==HerId&&FMath::Abs(X.Start-Start)<=90;})){
+  Asked->Status=TEXT("pending");const int32 Id=Asked->Id;const FString AskedLabel=Asked->Label;
+  if(!CommitStore(MoveTemp(Candidate)))return 0;
+  UE_LOG(LogTemp,Display,TEXT("Street appointment %d: he agreed to what she asked (%s)"),Id,*AskedLabel);
+  PlanPromisesToday(Heroine);RefreshUI();return Id;}
  // The same appointment again (a plan rebuilt after a reload, a repeated request): the one already there.
- if(const FOKStreetAppointment* Same=Candidate.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Status==TEXT("pending")&&X.Kind==Kind&&X.Start==Start&&X.Place==Place&&X.Heroine==(S.Manifest.Characters.IsValidIndex(Heroine)&&Heroine>0?OKStreetStableId(S.Manifest.Characters[Heroine]):FString());}))return Same->Id;
- FOKStreetAppointment A;A.Id=Candidate.NextAppointment++;A.Kind=Kind;A.Place=Place;A.Start=Start;A.Grace=Grace;A.Label=Label;A.Minutes=FMath::Clamp(Minutes,0,1440);
+ if(const FOKStreetAppointment* Same=Candidate.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return (X.Status==TEXT("pending")||X.Status==TEXT("asked"))&&X.Kind==Kind&&X.Start==Start&&X.Place==Place&&X.Heroine==(S.Manifest.Characters.IsValidIndex(Heroine)&&Heroine>0?OKStreetStableId(S.Manifest.Characters[Heroine]):FString());}))return Same->Id;
+ FOKStreetAppointment A;A.Id=Candidate.NextAppointment++;A.Kind=Kind;A.Place=Place;A.Start=Start;A.Grace=Grace;A.Label=Label;A.Minutes=FMath::Clamp(Minutes,0,1440);A.Status=Status;
  if(S.Manifest.Characters.IsValidIndex(Heroine)&&Heroine>0)A.Heroine=OKStreetStableId(S.Manifest.Characters[Heroine]);
  Candidate.Appointments.Add(A);
  if(!CommitStore(MoveTemp(Candidate)))return 0;
- UE_LOG(LogTemp,Display,TEXT("Street appointment %d: %s %s at %s minute %lld"),A.Id,*Kind,*Label,*Place,A.Start);
+ UE_LOG(LogTemp,Display,TEXT("Street appointment %d: %s %s at %s minute %lld (%s)"),A.Id,*Kind,*Label,*Place,A.Start,*Status);
  if(Heroine>0)PlanPromisesToday(Heroine);
  RefreshUI();return A.Id;
 }
@@ -262,7 +270,7 @@ void AOKStreetSocialScene::TickAppointments(){
  for(const auto& A:S.Store.Appointments){
   auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("place"),A.Place);
   O->SetStringField(TEXT("label"),A.Label);O->SetNumberField(TEXT("start"),double(A.Start));O->SetNumberField(TEXT("grace"),A.Grace);O->SetStringField(TEXT("status"),A.Status);
-  if(A.Status==TEXT("pending")){
+  if(A.Status==TEXT("pending")||A.Status==TEXT("asked")){ // asked: her, for the note when it lapses unanswered
    const auto* P=OKStreetFindPlace(A.Place);O->SetBoolField(TEXT("there"),PlaceHere(S.Male)==A.Place||(P&&FVector::Dist2D(P->Door,S.Male)<1000));
    if(A.Kind==TEXT("entrust"))O->SetBoolField(TEXT("entrust_done"),EntrustReminderDone(A));
    const int32 Girl=CharacterOf(A.Heroine);

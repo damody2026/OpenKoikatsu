@@ -462,6 +462,7 @@ saw_with_own_eyes = "Saw it firsthand: {text}"
 see_him_go_check = "You saw him with {other} and want to go over and see what they're doing"
 see_him_pull_back = "You saw him with {other} and want to draw his attention back to you"
 stood_up_reason = "He stood me up: {label}"
+request_unanswered = "I asked him whether he could come ({label}); he never answered, so I went on my own"
 tomorrow_birthday_hint = "Tomorrow is your birthday, and you want to let him find out casually"
 
 [venture]
