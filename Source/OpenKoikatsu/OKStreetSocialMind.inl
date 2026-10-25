@@ -124,9 +124,9 @@ void AOKStreetSocialScene::TickCalendarAndMind(){
    // A chat job someone is waiting for (SubmitMindChat).
    {double JobId=0;if(R->TryGetNumberField(TEXT("id"),JobId))if(auto* Done=S.MindChats.Find(uint64(JobId))){
     auto Call=MoveTemp(*Done);S.MindChats.Remove(uint64(JobId));bool Ok=false;FString Content,Error;R->TryGetBoolField(TEXT("ok"),Ok);R->TryGetStringField(TEXT("content"),Content);R->TryGetStringField(TEXT("error"),Error);
-    Call(Ok&&!Content.TrimStartAndEnd().IsEmpty(),Content,Ok&&Content.TrimStartAndEnd().IsEmpty()?FString(TEXT("empty content")):Error);continue;}}
-   if(Kind==TEXT("talk")){HandleMindTalk(R);continue;}
-   if(Kind==TEXT("reflect")){HandleReflect(R);continue;}
+    QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindChatCallback);Call(Ok&&!Content.TrimStartAndEnd().IsEmpty(),Content,Ok&&Content.TrimStartAndEnd().IsEmpty()?FString(TEXT("empty content")):Error);continue;}}
+   if(Kind==TEXT("talk")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindTalkResult);HandleMindTalk(R);continue;}
+   if(Kind==TEXT("reflect")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindReflectResult);HandleReflect(R);continue;}
    if(Kind==TEXT("note"))continue;
    {FString Tag;if(Kind==TEXT("chat")&&R->TryGetStringField(TEXT("tag"),Tag)&&Tag.StartsWith(TEXT("overheard:"))){TArray<FString> P;Tag.ParseIntoArray(P,TEXT(":"));if(P.Num()==3){HandleOverheard(R,FCString::Atoi(*P[1]),FCString::Atoi(*P[2]));continue;}}}
    if(Kind==TEXT("profile")){const TSharedPtr<FJsonObject>* Profile=nullptr;FString Heroine;if(R->TryGetStringField(TEXT("heroine"),Heroine)&&R->TryGetObjectField(TEXT("profile"),Profile)){S.MindProfiles.Add(Heroine,*Profile);InitWalletFromProfile(Heroine,*Profile);InitStrangerCap(Heroine,*Profile);if(S.PlannedWithoutProfiles&&MindProfilesReady()){S.PlannedWithoutProfiles=false;S.PlanDay=-1;UE_LOG(LogTemp,Display,TEXT("Street plan: the profiles came; today planned again"));}}}
@@ -139,7 +139,7 @@ void AOKStreetSocialScene::TickCalendarAndMind(){
 
 // FreeTalk through the mind: her persistent context lives in Rust (Saved/StreetSocial/mind/context), this turn's
 // message carries the full state. False when the mind is not open (nothing is posted around it).
-bool AOKStreetSocialScene::SubmitFreeTalkToMind(int32 Character,const FString& Id,const FString& System,const FString& UserMessage,const FString& Text){
+bool AOKStreetSocialScene::SubmitFreeTalkToMind(int32 Character,const FString& Id,const FString& System,const FString& UserMessage,const FString& Text){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SubmitFreeTalkToMind);
  auto& S=*State;if(!S.Mind)return false;
  TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();
  Job->SetStringField(TEXT("kind"),TEXT("talk"));Job->SetStringField(TEXT("tag"),TEXT("freetalk"));Job->SetStringField(TEXT("priority"),TEXT("dialogue"));

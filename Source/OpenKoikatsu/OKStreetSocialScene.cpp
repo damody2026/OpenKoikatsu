@@ -1099,19 +1099,19 @@ static FOKFreeTalkStatus OKStreetFreeTalkStatusOf(const FOKStreetSceneState& S,c
 
 // One turn's request for her (face to face, by phone, or a message she writes herself): settings, persona, and the
 // prefix-cache friendly prompt — fixed system prompt, her append-only memory, then this turn with the values.
-bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,FOKFreeTalkSettings& Settings,FString& System,FString& UserMessage,FString& Error){
+bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,FOKFreeTalkSettings& Settings,FString& System,FString& UserMessage,FString& Error){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_PrepareFreeTalk);
  auto& S=*State;FOKFreeTalkPersona Persona;
- if(!OKStreetFreeTalkLoadSettings(Settings,Error)||!OKStreetFreeTalkLoadPersona(S.Manifest.Characters[Character].Name,Persona,Error))return false;
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkLoadSettings);if(!OKStreetFreeTalkLoadSettings(Settings,Error)||!OKStreetFreeTalkLoadPersona(S.Manifest.Characters[Character].Name,Persona,Error))return false;}
  FreeTalkEnsureLog();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  auto Status=OKStreetFreeTalkStatusOf(S,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget));
  // His name as the game has it (the group prompt says it too): without it she only knew what he told her.
  if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty())Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *S.Manifest.Characters[0].Name}});
  // Apart (a phone message or call): what they are doing face to face does not apply (OKStreetSocialPhoneInbox.inl).
- Status.Doing=RemoteWith(Character)?RemoteDoing(Character):FreeTalkDoing()+FreeTalkExtras();Status.Nearby=RemoteWith(Character)?FString(OKT(TEXT("ui.free_talk.remote_nearby_unknown"))):FreeTalkNearby(); // the places around him are not around her on the phone
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkDoing);Status.Doing=RemoteWith(Character)?RemoteDoing(Character):FreeTalkDoing()+FreeTalkExtras();}Status.Nearby=RemoteWith(Character)?FString(OKT(TEXT("ui.free_talk.remote_nearby_unknown"))):FreeTalkNearby(); // the places around him are not around her on the phone
  {const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);Status.Now=OKStreetFreeTalkDateTime(OKStreetCalendarDateTime(S.Store.CalendarDay,Hours));Status.StreetTime=OKStreetFreeTalkClock(Hours);}
- Status.Memories=MindRecallText(Id,Text)+HistoryPromptText(Character);
- FillMindStatus(Character,Status);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkRecall);Status.Memories=MindRecallText(Id,Text);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkHistory);Status.Memories+=HistoryPromptText(Character);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkMindStatus);FillMindStatus(Character,Status);}
  System=OKStreetFreeTalkSystemPrompt(Persona,OKStreetPlaceCatalogue());UserMessage=OKStreetFreeTalkUserMessage(Status,Text);
  return true;
 }

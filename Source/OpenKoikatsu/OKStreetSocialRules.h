@@ -1839,9 +1839,44 @@ inline float OKStreetDistanceToSegment(const FVector2D& P, const FVector2D& A, c
 // point standing at a height it spans, so the walls and furniture of one floor do not block the floors above.
 inline TArray<FBox>& OKStreetRuntimeBlocks() { static TArray<FBox> Blocks; return Blocks; }
 
+// The street's built-in props (OKStreetProps), made once: the point tests below ran it on every call.
+inline const TArray<FOKStreetProp>& OKStreetPropsOnce() { static const TArray<FOKStreetProp> Props = [] { TArray<FOKStreetProp> P; OKStreetProps(P); return P; }(); return Props; }
+// The runtime blocks bucketed on a 5 m grid, so a point test looks at the blocks near it, not all of them (a route
+// search tests thousands of points and each scanned every block). Rebuilt when the blocks change, which is checked once a
+// frame (they are edited in place: furniture cleared from an elevator, a company's lot built).
+struct FOKStreetBlockIndex { uint64 Frame = MAX_uint64; uint32 Crc = 0; int32 Num = -1; FBox2D Bounds = FBox2D(ForceInit); TMap<FIntPoint, TArray<int32>> Buckets; };
+inline constexpr float OKStreetBlockBucket = 500.f;
+inline const FOKStreetBlockIndex& OKStreetBlocksIndexed() {
+ static FOKStreetBlockIndex Index;
+ const TArray<FBox>& Blocks = OKStreetRuntimeBlocks();
+ if (Index.Frame == GFrameCounter && Index.Num == Blocks.Num()) return Index;
+ Index.Frame = GFrameCounter;
+ const uint32 Crc = FCrc::MemCrc32(Blocks.GetData(), Blocks.Num() * sizeof(FBox));
+ if (Crc == Index.Crc && Index.Num == Blocks.Num()) return Index;
+ Index.Crc = Crc; Index.Num = Blocks.Num(); Index.Buckets.Reset(); Index.Bounds = FBox2D(ForceInit);
+ for (int32 I = 0; I < Blocks.Num(); ++I) {
+  const FBox& B = Blocks[I];
+  Index.Bounds += FVector2D(B.Min.X, B.Min.Y); Index.Bounds += FVector2D(B.Max.X, B.Max.Y);
+  for (int32 X = FMath::FloorToInt32(B.Min.X / OKStreetBlockBucket); X <= FMath::FloorToInt32(B.Max.X / OKStreetBlockBucket); ++X)
+   for (int32 Y = FMath::FloorToInt32(B.Min.Y / OKStreetBlockBucket); Y <= FMath::FloorToInt32(B.Max.Y / OKStreetBlockBucket); ++Y)
+    Index.Buckets.FindOrAdd(FIntPoint(X, Y)).Add(I);
+ }
+ return Index;
+}
+// Calls Visit(block) for every runtime block in a bucket overlapping the square of half size R around P (a block may
+// come more than once); Visit returns true to stop.
+template <typename FVisit> inline bool OKStreetVisitBlocksNear(const FVector2D& P, float R, FVisit&& Visit) {
+ const FOKStreetBlockIndex& Index = OKStreetBlocksIndexed();
+ const TArray<FBox>& Blocks = OKStreetRuntimeBlocks();
+ for (int32 X = FMath::FloorToInt32((P.X - R) / OKStreetBlockBucket); X <= FMath::FloorToInt32((P.X + R) / OKStreetBlockBucket); ++X)
+  for (int32 Y = FMath::FloorToInt32((P.Y - R) / OKStreetBlockBucket); Y <= FMath::FloorToInt32((P.Y + R) / OKStreetBlockBucket); ++Y)
+   if (const TArray<int32>* Bucket = Index.Buckets.Find(FIntPoint(X, Y)))
+    for (const int32 I : *Bucket) if (Visit(Blocks[I])) return true;
+ return false;
+}
+
 inline bool OKStreetBlockedPoint(const FVector& Point, float Extra = OKStreetBodyClearance) {
- TArray<FOKStreetProp> Props;
- OKStreetProps(Props);
+ const TArray<FOKStreetProp>& Props = OKStreetPropsOnce();
  const FVector2D P(Point.X, Point.Y);
  for (const FOKStreetProp& Prop : Props) {
   if (Prop.Kind != EOKStreetPropKind::Block && Prop.Kind != EOKStreetPropKind::Trunk && Prop.Kind != EOKStreetPropKind::Lamp) continue;
@@ -1854,16 +1889,14 @@ inline bool OKStreetBlockedPoint(const FVector& Point, float Extra = OKStreetBod
    if (FVector2D::Distance(P, FVector2D(Prop.Center.X, Prop.Center.Y)) <= Radius) return true;
   }
  }
- for (const FBox& B : OKStreetRuntimeBlocks())
-  if (Point.Z >= B.Min.Z - 60.f && Point.Z <= B.Max.Z - 20.f && P.X >= B.Min.X - Extra && P.X <= B.Max.X + Extra && P.Y >= B.Min.Y - Extra && P.Y <= B.Max.Y + Extra) return true;
- return false;
+ return OKStreetVisitBlocksNear(P, FMath::Max(Extra, 0.f), [&](const FBox& B) {
+  return Point.Z >= B.Min.Z - 60.f && Point.Z <= B.Max.Z - 20.f && P.X >= B.Min.X - Extra && P.X <= B.Max.X + Extra && P.Y >= B.Min.Y - Extra && P.Y <= B.Max.Y + Extra; });
 }
 
 // How far the point is from the nearest street obstacle that OKStreetBlockedPoint knows about (negative inside one).
 // OKStreetBlockedPoint(P, Extra) == (OKStreetObstacleGap(P) <= Extra) for the same obstacles.
 inline float OKStreetObstacleGap(const FVector& Point) {
- TArray<FOKStreetProp> Props;
- OKStreetProps(Props);
+ const TArray<FOKStreetProp>& Props = OKStreetPropsOnce();
  const FVector2D P(Point.X, Point.Y);
  auto BoxGap = [&P](const FVector2D& Min, const FVector2D& Max) {
   const float DX = FMath::Max3(float(Min.X - P.X), 0.f, float(P.X - Max.X)), DY = FMath::Max3(float(Min.Y - P.Y), 0.f, float(P.Y - Max.Y));
@@ -1875,8 +1908,17 @@ inline float OKStreetObstacleGap(const FVector& Point) {
   if (Prop.Kind == EOKStreetPropKind::Block) Gap = FMath::Min(Gap, BoxGap(FVector2D(Prop.Center.X - Prop.Size.X * 0.5f, Prop.Center.Y - Prop.Size.Y * 0.5f), FVector2D(Prop.Center.X + Prop.Size.X * 0.5f, Prop.Center.Y + Prop.Size.Y * 0.5f)));
   else if (Prop.Kind == EOKStreetPropKind::Trunk || Prop.Kind == EOKStreetPropKind::Lamp) Gap = FMath::Min(Gap, float(FVector2D::Distance(P, FVector2D(Prop.Center.X, Prop.Center.Y))) - FMath::Max(Prop.Size.X, Prop.Size.Y) * 0.5f);
  }
- for (const FBox& B : OKStreetRuntimeBlocks())
-  if (Point.Z >= B.Min.Z - 60.f && Point.Z <= B.Max.Z - 20.f) Gap = FMath::Min(Gap, BoxGap(FVector2D(B.Min.X, B.Min.Y), FVector2D(B.Max.X, B.Max.Y)));
+ // The runtime blocks in widening squares around the point: a block outside a square of half size R is farther than R,
+ // so once the nearest found is within R it is the nearest of all (the whole set when R covers every block).
+ const FOKStreetBlockIndex& Index = OKStreetBlocksIndexed();
+ if (Index.Num > 0) {
+  const float Reach = FMath::Max(Index.Bounds.GetExtent().GetMax() * 2.f + FVector2D::Distance(P, Index.Bounds.GetCenter()), OKStreetBlockBucket);
+  for (float R = OKStreetBlockBucket;; R *= 2.f) {
+   float Near = TNumericLimits<float>::Max();
+   OKStreetVisitBlocksNear(P, R, [&](const FBox& B) { if (Point.Z >= B.Min.Z - 60.f && Point.Z <= B.Max.Z - 20.f) Near = FMath::Min(Near, BoxGap(FVector2D(B.Min.X, B.Min.Y), FVector2D(B.Max.X, B.Max.Y))); return false; });
+   if (Near <= R || R >= Reach) { Gap = FMath::Min(Gap, Near); break; }
+  }
+ }
  return Gap;
 }
 

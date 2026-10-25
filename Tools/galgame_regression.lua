@@ -71,25 +71,43 @@ local tts = os.getenv("OK_TTS_ENDPOINT") or ("http://127.0.0.1:" .. ok.util.stri
 if ok.kit.http_request(tts .. "/health", { timeout = 5 }).status ~= 200 then report("WARN", "voice", "no TTS server at " .. tts .. ": the skip check will fail") end
 local g = a.girl
 call("/clock", { paused = false, hours = 10 }); ok.time.sleep(3)
-call("/summon", { slots = { g } }); ok.time.sleep(3)
-for _ = 1, 60 do
-  local s = call("/state"); local her
-  for _, x in ipairs(s.girls or {}) do if x.slot == g then her = x end end
-  if not her then break end
-  local dx, dy = her.x - s.player.x, her.y - s.player.y
-  local d = math.sqrt(dx * dx + dy * dy)
-  if d < 120 then break end
-  call("/look", { yaw = math.deg(math.atan(dy, dx)), pitch = -12 })
-  local t = math.min(1.5, math.max(0.25, (d - 120) / 400)); call("/key", { key = "W", seconds = t }); ok.time.sleep(t + 0.1)
+-- Call her over and open the conversation (again whenever she has ended it: she remembers earlier runs, and a player
+-- asking the same things again may well be told goodbye).
+local function talking()
+  local gg = call("/galgame") or {}; local s = call("/state") or {}
+  return s.target == g and gg.active
 end
-for _ = 1, 3 do
-  call("/key", { key = "E", seconds = 0.15 }); ok.time.sleep(4)
-  local s = call("/state"); if s and s.target == g then break end
+local function open_talk()
+  call("/summon", { slots = { g } }); ok.time.sleep(3)
+  for _ = 1, 60 do
+    local s = call("/state"); local her
+    for _, x in ipairs(s.girls or {}) do if x.slot == g then her = x end end
+    if not her then break end
+    local dx, dy = her.x - s.player.x, her.y - s.player.y
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d < 120 then break end
+    call("/look", { yaw = math.deg(math.atan(dy, dx)), pitch = -12 })
+    local t = math.min(1.5, math.max(0.25, (d - 120) / 400)); call("/key", { key = "W", seconds = t }); ok.time.sleep(t + 0.1)
+  end
+  for _ = 1, 3 do
+    call("/key", { key = "E", seconds = 0.15 }); ok.time.sleep(4)
+    local s = call("/state"); if s and s.target == g then break end
+  end
 end
+open_talk()
 
--- One exchange: say something, wait for her next line (the log counts her lines), return the line.
+-- Questions differ from run to run (the same ones every run bore her).
+math.randomseed(os.time())
+local function pick(list) return list[math.random(#list)] end
+local openers = { "妳好，今天過得怎麼樣？", "嗨，最近有什麼新鮮事嗎？", "今天天氣不錯，妳在忙什麼呢？", "好久不見，最近還好嗎？" }
+local longers = { "可以多說一點嗎？我很想聽妳講。", "那後來呢？再跟我多說一些吧。", "聽起來很有趣，可以說得詳細一點嗎？", "我想多了解妳一點，再多聊一些好嗎？" }
+local colors = { "綠色", "藍色", "紫色", "橘色", "白色" }
+local days = { { "七月七日", "七月七" }, { "三月十二日", "三月十二" }, { "十月三十日", "十月三十" }, { "五月二十日", "五月二十" } }
+
+-- One exchange: say something (in an open conversation), wait for her next line (the log counts her lines).
 local herLine = "Street galgame line c" .. g
 local function say(text)
+  if not talking() then open_talk() end
   local before = log_count(herLine)
   call("/clock", { paused = false }); call("/say", { text = text })
   local got = wait(function() return log_count(herLine) > before end, 90, 1)
@@ -97,7 +115,7 @@ local function say(text)
   return got and log_last(herLine)
 end
 
-local first = say("妳好，今天過得怎麼樣？")
+local first = say(pick(openers))
 local gg = call("/galgame") or {}
 if gg.active and gg.partner == g then report("PASS", "scene", "presenter active with heroine " .. g)
 else report("FAIL", "scene", "presenter active=" .. tostring(gg.active) .. " partner=" .. tostring(gg.partner) .. (first and "" or " (no reply logged)")) end
@@ -111,8 +129,9 @@ else report("FAIL", "text", ("typed %s of %s"):format(tostring(story.shown), tos
 
 -- Skip: ask again and press Space as soon as her voiced line starts.
 do
+  if not talking() then open_talk() end
   local before, skips = log_count(herLine), log_count("Street galgame: skipped the line of")
-  call("/say", { text = "再多說一點妳今天做了什麼吧，越詳細越好。" })
+  call("/say", { text = pick(longers) })
   wait(function() return log_count(herLine) > before end, 90, 0.5)
   ok.time.sleep(0.8)
   call("/key", { key = "SpaceBar", seconds = 0.05 })
@@ -121,15 +140,21 @@ do
   ok.time.sleep(2)
 end
 
--- Rollback and memory: two facts, back over both lines' worth, then ask about the later fact.
-say("我最喜歡的顏色是綠色，記住喔。")
-say("我的生日是七月七日。")
-local before = call("/galgame") or {}
+-- Rollback and memory: two facts in one conversation, back over both lines' worth, then ask about the later fact.
+local day = pick(days)
+local before
+for attempt = 1, 2 do
+  if not talking() then open_talk() end
+  say("我最喜歡的顏色是" .. pick(colors) .. "，記住喔。")
+  say("跟妳說，我的生日是" .. day[1] .. "。")
+  before = call("/galgame") or {}
+  if talking() then break end
+end
 call("/key", { key = "MouseScrollUp", seconds = 0.05 }); ok.time.sleep(0.6)
 call("/key", { key = "MouseScrollUp", seconds = 0.05 }); ok.time.sleep(0.6)
 local scrolled = call("/galgame") or {}
 if (scrolled.view_line or -1) >= 0 and (scrolled.view_line or 0) < (before.lines or 0) then report("PASS", "wheel", ("scrolled to line %d of %d"):format(scrolled.view_line, before.lines))
-else report("FAIL", "wheel", "view_line=" .. tostring(scrolled.view_line) .. " lines=" .. tostring(before.lines)) end
+else report("FAIL", "wheel", "view_line=" .. tostring(scrolled.view_line) .. " lines=" .. tostring(before.lines) .. (talking() and "" or " (she had ended the conversation)")) end
 local rollbacks = log_count("Street galgame rollback: back to line")
 local answer = say("剛剛那句不算。我的生日是幾號，我有跟妳說過嗎？")
 local rb = rollbacks < log_count("Street galgame rollback: back to line") and log_last("Street galgame rollback: back to line")
@@ -141,7 +166,7 @@ if rb then
 else report("FAIL", "rollback", "no rollback logged") end
 if answer then
   local words = answer:match("%(voiced%): (.*)$") or answer:match(": (.*)$") or answer
-  if words:find("七月七") or words:find("7月7") then report("WARN", "forgot", "she still mentions the birthday: " .. words)
+  if words:find(day[2], 1, true) then report("WARN", "forgot", "she still mentions the birthday: " .. words)
   else report("PASS", "forgot", words) end
 end
 

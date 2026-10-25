@@ -8,6 +8,7 @@
 #include "UObject/StrongObjectPtr.h"
 #include "RenderingThread.h"
 #include "RHICommandList.h"
+#include "Async/ParallelFor.h"
 
 static bool ValidateRuntimeFace(const FKKRuntimeMouthStream& Stream,const FKKRuntimeFaceState& State,FString& Error){
  auto OpeningOk=[&](float Value){return FMath::IsFinite(Value)&&(Value==-1.f||(Value>=0.f&&Value<=1.f));};
@@ -47,6 +48,16 @@ static FVector3f RuntimeFaceDelta(const FKKRuntimeMouthVertex& V,float Opening,f
  AccumulateAuthoredFace(Channels,V,0,State.MouthPattern,State.MouthOpening,Opening,Gain,Blink);
  FVector3f Delta=FVector3f::ZeroVector;for(const auto& Channel:Channels)Delta+=Channel.Delta*Channel.Weight;return Delta;
 }
+// Face vertices are independent of each other: evaluated across the task threads in chunks. On one core a face upload
+// took the game thread 3.6 ms, a blink every few seconds for each of ten heroines and every mouth frame while one speaks.
+static TAutoConsoleVariable<int32> CVarOKFaceParallel(TEXT("ok.Face.Parallel"),1,TEXT("1: evaluate face vertices across the task threads; 0: on the calling thread (for comparing)."));
+template<typename FEval> static bool EvaluateFaceVertices(const FKKRuntimeMouthStream& Stream,TArray<FVector3f>& Out,FString& Error,FEval&& Eval){
+ constexpr int32 Chunk=1024;const int32 N=Stream.Vertices.Num();TArray<FVector3f> Positions;Positions.SetNumUninitialized(N);TAtomic<bool> Bad{false};
+ const EParallelForFlags Flags=CVarOKFaceParallel.GetValueOnAnyThread()?EParallelForFlags::None:EParallelForFlags::ForceSingleThread;
+ ParallelFor(FMath::DivideAndRoundUp(N,Chunk),[&](int32 C){const int32 End=FMath::Min(N,(C+1)*Chunk);for(int32 I=C*Chunk;I<End;++I){const FVector3f P=Eval(Stream.Vertices[I]);if(P.ContainsNaN()){Bad=true;return;}Positions[I]=P;}},Flags);
+ if(Bad){Error=TEXT("Runtime face position nonfinite");return false;}
+ Out=MoveTemp(Positions);Error.Reset();return true;
+}
 bool OKValidateRuntimeFaceState(TSharedPtr<const FKKRuntimeMouthStream,ESPMode::ThreadSafe> Stream,const FKKRuntimeFaceState& State,FString& Error){
  if(!Stream){Error=TEXT("Runtime face stream unavailable");return false;}return ValidateRuntimeFace(*Stream,State,Error);
 }
@@ -54,12 +65,8 @@ bool OKEvaluateRuntimeFacePositions(const FKKRuntimeMouthStream& Stream,float Op
  if(!FMath::IsFinite(Opening)||!FMath::IsFinite(Gain)||Opening<0.f||Opening>1.f||Gain<0.f||Gain>1.f||!FMath::IsFinite(Blink)||Blink<0.f||Blink>1.f){Error=TEXT("Runtime mouth update invalid");return false;}
  if(!RuntimeFaceRangesOk(Stream,Error))return false;
  if(Face&&!ValidateRuntimeFace(Stream,*Face,Error))return false;
- TArray<FVector3f> Positions;Positions.Reserve(Stream.Vertices.Num());
- for(const auto& V:Stream.Vertices){
-  const FVector3f Position=Face?V.Base+RuntimeFaceDelta(V,Opening,Gain,Blink,*Face):V.Base+FMath::Lerp(V.Closed,V.Open,Opening)*Gain+V.Blink*Blink;
-  if(Position.ContainsNaN()){Error=TEXT("Runtime face position nonfinite");return false;}Positions.Add(Position);
- }
- Out=MoveTemp(Positions);Error.Reset();return true;
+ return EvaluateFaceVertices(Stream,Out,Error,[&](const FKKRuntimeMouthVertex& V){
+  return Face?V.Base+RuntimeFaceDelta(V,Opening,Gain,Blink,*Face):V.Base+FMath::Lerp(V.Closed,V.Open,Opening)*Gain+V.Blink*Blink;});
 }
 TSharedPtr<const FKKRuntimeMouthStream,ESPMode::ThreadSafe> OKPrepareRuntimeMouthStream(const FKKRuntimeRenderMeshData& D){
  auto Stream=MakeShared<FKKRuntimeMouthStream,ESPMode::ThreadSafe>();int32 Last=INDEX_NONE;int32 MinCount[3]={MAX_int32,MAX_int32,MAX_int32};bool Seen[3]={};
@@ -158,16 +165,13 @@ bool OKEvaluateRuntimeFaceTransition(const FKKRuntimeMouthStream& Stream,float O
  if(!FMath::IsFinite(Opening)||!FMath::IsFinite(Gain)||Opening<0.f||Opening>1.f||Gain<0.f||Gain>1.f||!FMath::IsFinite(Blink)||Blink<0.f||Blink>1.f){Error=TEXT("Runtime mouth update invalid");return false;}
  if(!RuntimeFaceRangesOk(Stream,Error))return false;
  if(!Transition.Active()){FKKRuntimeFaceState Face;Face.MouthPattern=Transition.Channel[0].Pattern;Face.EyePattern=Transition.Channel[1].Pattern;Face.BrowPattern=Transition.Channel[2].Pattern;Face.MouthOpening=Transition.Channel[0].Opening;Face.EyeOpening=Transition.Channel[1].Opening;Face.BrowOpening=Transition.Channel[2].Opening;return OKEvaluateRuntimeFacePositions(Stream,Opening,Gain,Blink,&Face,Out,Error);}
- TArray<FVector3f> Positions;Positions.Reserve(Stream.Vertices.Num());
- for(const auto& V:Stream.Vertices){TArray<FFaceAcc,TInlineAllocator<16>> Channels;float LegacyMouth=0.f,LegacyEye=0.f;const int32 Cat=FindFaceCatalog(Transition,V.FaceCatalog.Get());
+ return EvaluateFaceVertices(Stream,Out,Error,[&](const FKKRuntimeMouthVertex& V){TArray<FFaceAcc,TInlineAllocator<16>> Channels;float LegacyMouth=0.f,LegacyEye=0.f;const int32 Cat=FindFaceCatalog(Transition,V.FaceCatalog.Get());
   const int32 Order[]={2,1,0};for(const int32 Control:Order){const auto& Ch=Transition.Channel[Control];if(!Ch.Timing)AccumulateAuthoredFace(Channels,V,Control,Ch.Pattern,Ch.Opening,Opening,Gain,Blink);
    else{const float U=FMath::Clamp(Ch.Elapsed/OKRuntimeFaceTransitionSeconds,0.f,1.f);if(Control==0)LegacyMouth=Ch.Legacy*(1.f-U);else if(Control==1)LegacyEye=Ch.Legacy*(1.f-U);
     AccumulateBlendedFace(Channels,V,Transition,Control,Cat,U,Control==0?Opening:Control==1?Blink:0.f,Control==0?Gain:1.f);}}
   FVector3f Delta=FVector3f::ZeroVector;for(const auto& Channel:Channels)Delta+=Channel.Delta*Channel.Weight;
   if(LegacyMouth!=0.f)Delta+=FMath::Lerp(V.Closed,V.Open,Opening)*Gain*LegacyMouth;if(LegacyEye!=0.f)Delta+=V.Blink*Blink*LegacyEye;
-  const FVector3f Position=V.Base+Delta;if(Position.ContainsNaN()){Error=TEXT("Runtime face position nonfinite");return false;}Positions.Add(Position);
- }
- Out=MoveTemp(Positions);Error.Reset();return true;
+  return V.Base+Delta;});
 }
 bool OKRequestRuntimeFace(const FKKRuntimeMouthStream& Stream,FOKRuntimeFacePlayback& Playback,const FKKRuntimeFaceState& Request,bool AllowBlink,FString& Error){
  FKKRuntimeFaceTransition Next;bool Changed=false;int32 Started=0;

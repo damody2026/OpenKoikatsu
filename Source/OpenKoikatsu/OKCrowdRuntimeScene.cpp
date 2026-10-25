@@ -90,6 +90,7 @@ namespace OKRuntimeScene {
 // A character's components follow her transform only when it moved: SetWorldTransform recomputes bounds and marks the
 // render transform dirty even for the same transform, six components for every character every frame (most stand still).
 static void OKCrowdSetTransform(USceneComponent* C,const FTransform& T){if(C&&!C->GetComponentTransform().Equals(T,1e-4))C->SetWorldTransform(T);}
+static TAutoConsoleVariable<int32> CVarOKCrowdLogSlowEntries(TEXT("ok.Crowd.LogSlowEntries"),0,TEXT("1: log a character's frame update taking over 1 ms, split into speech/behaviour, face look, face upload and components."));
 template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
  Async(EAsyncExecution::ThreadPool,[...Held=MoveTemp(Held)]()mutable{(Held.Reset(),...);});
 }
@@ -983,7 +984,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
   TArray<FOKGpuPosePlayback> Play;
   struct FLoadingPoseJob {FEntry* Entry;FOKGpuPosePlayback Playback;int64 Bucket;TArray<FTransform> Poses;};
   TArray<FLoadingPoseJob> LoadingJobs;
-  for(int32 A=0;A<Entries.Num();++A){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFrame);auto& E=*Entries[A];if(E.Stage!=5||(!Installed&&!ProgressiveLoading))continue;if(CaptureStage>=1&&CaptureStage<=2){const int32 Slot=FMath::Min(VisualClip,E.Clips.Num()-1);FOKGpuPosePlayback Frozen;Frozen.ClipA=0;Frozen.ClipB=Slot;Frozen.Times=FVector4f(VisualPhase*E.Clips[0].Duration,VisualPhase*E.Clips[Slot].Duration,VisualBlend,0);Play.Add(Frozen);continue;}FString Error;
+  for(int32 A=0;A<Entries.Num();++A){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFrame);const double EntryT0=FPlatformTime::Seconds();double EntryT1=EntryT0,EntryT2=EntryT0,EntryT3=EntryT0;auto& E=*Entries[A];if(E.Stage!=5||(!Installed&&!ProgressiveLoading))continue;if(CaptureStage>=1&&CaptureStage<=2){const int32 Slot=FMath::Min(VisualClip,E.Clips.Num()-1);FOKGpuPosePlayback Frozen;Frozen.ClipA=0;Frozen.ClipB=Slot;Frozen.Times=FVector4f(VisualPhase*E.Clips[0].Duration,VisualPhase*E.Clips[Slot].Duration,VisualBlend,0);Play.Add(Frozen);continue;}FString Error;
    if(E.SpeechJob.IsValid()&&!E.PendingSpeechAction.IsEmpty()&&E.LinkedActionEpoch!=0&&E.LinkedActionEpoch!=E.PendingEpoch&&E.LinkedActionEpoch!=E.InstalledEpoch){E.CancelSpeech();UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped cancelled action session"));}
    if(E.SpeechJob.IsValid()&&Now-E.SpeechRequestedAt>OKCrowdRuntimeActionPrepareSeconds){E.CancelSpeech();UE_LOG(LogTemp,Warning,TEXT("Runtime speech preparation exceeded 60 seconds; canceled pending audio"));}
    if(A==DemoCharacter&&DemoSpeechStarted&&!DemoSpeechCancelled&&DemoCancelAfter>=0&&Now-E.SpeechRequestedAt>=DemoCancelAfter){FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);DemoSpeechCancelled=true;}
@@ -1008,7 +1009,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(VisualBlink<0&&E.BlinkOverride<0&&AutoBlink&&(!E.FacePlay.Enabled||E.FacePlay.Blink)){const double T=FMath::Fmod(SceneTime+A*.77,3.2+(A%7)*.29);Blink=T<.08?T/.08:(T<.20?(.20-T)/.12:0);}
    if(!E.MouthStream||!E.MouthStream->BlinkVertices||(E.FacePlay.Enabled&&!E.FacePlay.Blink))Blink=0;
    const int64 MouthBucket=int64(SceneTime*60);if(E.SpeechWave.IsValid()&&E.ActionOverride>=2){E.ActionSpeechSeconds+=Dt;if(GpuMode)E.ActionSpeechGpuSeconds+=Dt;}
-   {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFaceLook);TickFaceLook(E,float(Dt));}
+   EntryT1=FPlatformTime::Seconds();{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFaceLook);TickFaceLook(E,float(Dt));}EntryT2=FPlatformTime::Seconds();
    if(E.MouthStream){FOKRuntimeFaceUploadPlan Plan;FString FaceError;const bool MouthMoved=FMath::Abs(MouthOpening-E.LastMouthOpening)>.002f,BlinkMoved=FMath::Abs(Blink-E.LastBlinkClosure)>.002f,GainChanged=MouthGain!=E.LastMouthGain;
     if(!OKPlanRuntimeFaceUpload(E.FacePlay,Dt,MouthBucket,E.LastMouthBucket,MouthMoved,BlinkMoved,GainChanged,Plan,FaceError)){const bool Gate=E.FacePlay.Dirty||MouthBucket!=E.LastMouthBucket||GainChanged,Need=E.FacePlay.Dirty||MouthMoved||BlinkMoved||GainChanged;Plan={};Plan.Upload=Gate&&Need;}
     if((Installed||E.VisibleMs>0)&&(Plan.Upload||E.ShadowFaceDirty)){
@@ -1027,7 +1028,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(A==0&&!ExternalControl){if(!PlayerPositionInitialized){PlayerPosition=Pos;PlayerPositionInitialized=true;}const FRotator Rotation=InputMove.IsNearlyZero()?E.Cpu->GetComponentRotation():FRotator(0,FMath::RadiansToDegrees(FMath::Atan2(InputMove.Y,InputMove.X))-90,0);E.Transform=FTransform(Rotation,PlayerPosition);}
    if(ExternalControl){E.Transform=E.ExternalTransform;if(A==0)PlayerPosition=E.Transform.GetTranslation();}
    if(A==0&&LoadingCaptured&&!VisualPrefix.IsEmpty())E.Transform=LoadingCaptureTransform;
-   QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryTransforms);
+   EntryT3=FPlatformTime::Seconds();QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryTransforms);
    const FVector ShadowCamera=ExternalControl&&Pc&&Pc->PlayerCameraManager?Pc->PlayerCameraManager->GetCameraLocation():(Camera.IsValid()?Camera->GetActorLocation():PlayerPosition);
    if(A==0&&ForegroundCapture.IsValid()){
     if(Pc&&Pc->PlayerCameraManager)UpdateForegroundCapture(Pc->PlayerCameraManager->GetCameraLocation(),Pc->PlayerCameraManager->GetCameraRotation(),Pc->PlayerCameraManager->GetFOVAngle());
@@ -1050,6 +1051,8 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(!Installed&&E.LoadingGpuInstalled){ENQUEUE_RENDER_COMMAND(PrivateLoadingPlayback)([R=E.LoadingRender,P,CpuSource=!RequestedGpu](FRHICommandListImmediate&){if(R->UseCpu!=CpuSource)R->Reset=true;R->UseCpu=CpuSource;R->Playback={P};R->Enabled=true;});if(E.LoadingRender->Ready.Load()&&!E.PrivateGpuVisibleMs){E.PrivateGpuVisibleMs=(FPlatformTime::Seconds()-Started)*1000;E.PrivateGpuVisibleComplete=Complete;if(!FirstVisibleMs)FirstVisibleMs=E.PrivateGpuVisibleMs;UE_LOG(LogTemp,Display,TEXT("APNG private GPU visible: selection=%d elapsed_ms=%.3f complete=%d/%d"),A,E.PrivateGpuVisibleMs,Complete,Entries.Num());}}
    if(auto* C=E.DepthCpu.Get()){C->SetVisibility(true);OKCrowdSetTransform(C,E.Transform);if(!GpuMode){C->BoneSpaceTransforms=E.Cpu->BoneSpaceTransforms;C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();}}
    if(auto* G=E.DepthGpu.Get()){OKCrowdSetTransform(G,E.Transform);G->SetVisibility(DepthPrepassEnabled);}
+   // A slow entry says which part was slow: speech and behaviour, the face look, the face upload, or the components.
+   if(CVarOKCrowdLogSlowEntries.GetValueOnGameThread()){const double End=FPlatformTime::Seconds();if(End-EntryT0>.001)UE_LOG(LogTemp,Display,TEXT("Crowd entry %d slow %.2f ms: speech %.2f look %.2f face %.2f components %.2f"),A,(End-EntryT0)*1000,(EntryT1-EntryT0)*1000,(EntryT2-EntryT1)*1000,(EntryT3-EntryT2)*1000,(End-EntryT3)*1000);}
   }
   if(!LoadingJobs.IsEmpty()){
    // Jobs borrow only immutable plain pose data for the duration of this joined
