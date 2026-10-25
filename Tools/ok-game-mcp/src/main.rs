@@ -18,7 +18,7 @@ fn tools() -> Value {
     };
     json!([
         t("game_launch", "Start the StreetSocial game windowed with the control channel and wait until it answers (the first start after Saved/ was cleared rebuilds the build: up to an hour). options: more launcher options, e.g. [\"-Trace\", \"default,cpu,gpu,frame\"] or [\"-Exec\", \"stat unit\"] or [\"-Sandbox\", \"name\"].",
-          json!({"window": {"type": "string", "description": "WxH, default 1280x720"}, "options": {"type": "array", "items": {"type": "string"}}, "timeout_s": {"type": "number"}}), &[]),
+          json!({"window": {"type": "string", "description": "WxH, default 1280x720"}, "mic": {"type": "boolean", "description": "keep the room microphone (default: ignored, so room noise is not said for him)"}, "options": {"type": "array", "items": {"type": "string"}}, "timeout_s": {"type": "number"}}), &[]),
         t("game_stop", "Stop the game on this checkout's control port (only that one; other sessions' sandbox games keep running).", json!({}), &[]),
         t("game_state", "What is going on: game time, the player, the talk, cart and table, the heroines (nearest first). full=true returns the whole raw state.",
           json!({"full": {"type": "boolean"}, "girls": {"type": "integer", "description": "how many heroines to list (default 5)"}}), &[]),
@@ -135,7 +135,11 @@ fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
         "game_launch" => {
             let window = a["window"].as_str().unwrap_or("1280x720");
             let options: Vec<String> = a["options"].as_array().map(|v| v.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-            let r = game.launch(window, &options, Duration::from_secs_f64(arg_f(a, "timeout_s", 3600.0)))?;
+            let mut r = game.launch(window, &options, Duration::from_secs_f64(arg_f(a, "timeout_s", 3600.0)))?;
+            // The room microphone is live by default: anything it hears (a cough, an "mm") is said for him while an AI
+            // drives the game, and she answers it. Ignored unless mic=true.
+            let ignore = a["mic"] != true;
+            r["mic_ignored"] = game.call("/mic", Some(&json!({"ignore": ignore})))?["ignore"].clone();
             json_text(r)
         }
         "game_stop" => json_text(game.stop()?),

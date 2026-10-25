@@ -27,7 +27,7 @@ Tools/ok-game-mcp（Rust）
 
 | 工具 | 做什麼 |
 |---|---|
-| `game_launch` | 以 `-Control -Window 1280x720` 啟動遊戲，等控制通道上線；`options` 可加啟動器選項（`-Trace`、`-Exec`、`-Sandbox` 等）。Saved 被清掉後第一次啟動會先重建 stage（最多約一小時）。 |
+| `game_launch` | 以 `-Control -Window 1280x720` 啟動遊戲，等控制通道上線；`options` 可加啟動器選項（`-Trace`、`-Exec`、`-Sandbox` 等）。啟動後預設忽略房間麥克風（`/mic {ignore: true}`），免得環境聲被當成他說的話；要用麥克風時給 `mic: true`。Saved 被清掉後第一次啟動會先重建 stage（最多約一小時）。 |
 | `game_stop` | 只關掉佔用本 checkout 控制埠的遊戲（其他 session 的沙盒不受影響）。 |
 | `game_state` | 遊戲時間、玩家、對話、購物車與桌上、女主（近的在前）；`full` 回傳完整 JSON。 |
 | `game_talk` | 對正在說話的女主說一句，讓時鐘走到她回完、說完再暫停，回傳她的台詞與好感提示。 |
