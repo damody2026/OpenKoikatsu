@@ -191,7 +191,8 @@ bool AOKStreetSocialScene::CompanyActOn(FOKStreetStore& C,const FString& Action,
 
 // What the company screens show (estate.rs company_view): each holding's figures, his equity, the market today.
 TSharedPtr<FJsonObject> AOKStreetSocialScene::CompanyView(const FOKStreetStore& C) const{
- return OKRulesEval(*State,CompanyWorld(C,TEXT("company_view")));
+ TSharedPtr<FJsonObject> World;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_CompanyWorld);World=CompanyWorld(C,TEXT("company_view"));}
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_CompanyEval);return OKRulesEval(*State,World.ToSharedRef());
 }
 int64 AOKStreetSocialScene::CompanyEquity(const FOKStreetStore& C) const{
  const TSharedPtr<FJsonObject> V=CompanyView(C);return V.IsValid()?int64(V->GetNumberField(TEXT("equity"))):0;

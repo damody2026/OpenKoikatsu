@@ -130,9 +130,12 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildCompanyApp(){
 
 // On a lot or in one of his holdings: what it costs, and the quick actions; with a girl at his own shop, a visit.
 void AOKStreetSocialScene::BuildCompanyRow(const TSharedRef<SVerticalBox>& Panel){
- const TSharedPtr<FJsonObject> View=CompanyView(State->Store);
- auto Holding=[&](const FString& Unit)->TSharedPtr<FJsonObject>{if(!View.IsValid())return nullptr;for(const auto& V:View->GetArrayField(TEXT("holdings")))if(V->AsObject()->GetStringField(TEXT("unit"))==Unit)return V->AsObject();return nullptr;};
- auto Market=[&](const FString& Unit)->int64{if(!View.IsValid())return 0;for(const auto& V:View->GetArrayField(TEXT("market")))if(V->AsObject()->GetStringField(TEXT("unit"))==Unit)return int64(V->AsObject()->GetNumberField(TEXT("price")));return 0;};
+ // The company's view (the rules over the whole store, ~3 ms) only where he holds a unit: every rebuild asked for it,
+ // although most places have none of his.
+ TSharedPtr<FJsonObject> View;bool ViewAsked=false;
+ auto GetView=[&]()->const TSharedPtr<FJsonObject>&{if(!ViewAsked){ViewAsked=true;View=CompanyView(State->Store);}return View;};
+ auto Holding=[&](const FString& Unit)->TSharedPtr<FJsonObject>{if(!GetView().IsValid())return nullptr;for(const auto& V:View->GetArrayField(TEXT("holdings")))if(V->AsObject()->GetStringField(TEXT("unit"))==Unit)return V->AsObject();return nullptr;};
+ auto Market=[&](const FString& Unit)->int64{if(!GetView().IsValid())return 0;for(const auto& V:View->GetArrayField(TEXT("market")))if(V->AsObject()->GetStringField(TEXT("unit"))==Unit)return int64(V->AsObject()->GetNumberField(TEXT("price")));return 0;};
  auto& S=*State;TWeakObjectPtr<AOKStreetSocialScene> Weak(this);const FString Here=PlaceHere(S.Male);if(Here.IsEmpty())return;
  const auto& D=OKStreetProperty();auto Row=SNew(SWrapBox).UseAllottedSize(true);bool Any=false;
  for(const auto& U:D.Units){

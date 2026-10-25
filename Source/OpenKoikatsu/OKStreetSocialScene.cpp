@@ -1310,7 +1310,7 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
 static int64 OKStreetMindNow(const FOKStreetSceneState& S);
 void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const FString& Said,const FString& Her,const FString& HerAction,const TArray<FString>& HerOrders){
  auto& S=*State;FOKFreeTalkSettings Settings;FString Error;
- if(!OKStreetFreeTalkLoadSettings(Settings,Error)){ExecuteFreeTalkAction(Character,Id,HerAction);return;}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_JudgeSettings);if(!OKStreetFreeTalkLoadSettings(Settings,Error)){ExecuteFreeTalkAction(Character,Id,HerAction);return;}}
  // Built once per language (it is the cached prefix of every judge request); a language switch builds it again, and so
  // does a rules reload (the text tables are read again: a prompt edit applies without a restart).
  static FString System,SystemLang;static int32 SystemGeneration=-1;
@@ -1320,6 +1320,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   System+=OKT(TEXT("ui.scene.activity_id_label"));for(const auto& A:OKStreetActivities())System+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), A.Id}, {TEXT("name"), A.Name}});
   System+=OKT(TEXT("ui.scene.place_id_list_header"));for(const auto& P:OKStreetPlaces())System+=OKMsg(TEXT("ui.scene.id_name_about"), {{TEXT("id"), P.Id}, {TEXT("name"), P.Name}, {TEXT("about"), *FString(P.About).Left(28)}});
  }
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_JudgeContext);
  // The menu where they stand (empty elsewhere or when closed) and what her reply already ordered.
  FString OnTable;for(const auto& D:S.Table)if(D.ForHer&&D.Her==Character&&D.Percent>0)OnTable+=OKMsg(TEXT("ui.scene.dish_entry"), {{TEXT("dish_name"), *D.Name}, {TEXT("served_suffix"), D.Served?TEXT(""):OKT(TEXT("ui.scene.preparing_food"))}});
  FString Menu;{const FString Here=OrderShopHere(Character);const FString Shop=Here.IsEmpty()?OutingShop(Character):Here;FString Closed;if(!Shop.IsEmpty()&&!PlaceClosedNow(Shop,Closed))for(const auto* I:Here.IsEmpty()?OKStreetItemsAt(S.Catalog,Shop,StreetNow().GetMonth()):ItemsHere(Shop))Menu+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), *I->Id}, {TEXT("name"), *I->Name}});}
@@ -2021,8 +2022,8 @@ void AOKStreetSocialScene::SetCharacterStat(int32 Character,int32 Field,float Va
  const FOKHeroineStat& Stat=OKHeroineStats()[Field];float Max=Stat.Max;
  if(Field==0){const int32 Limit=OKRulesFavorLimit(S,R,R.Stage);if(Limit!=INDEX_NONE)Max=FMath::Min(Max,float(Limit));} // favor stays under her stage's cap
  Stat.Set(R,FMath::Clamp(Value,0.f,Max));
- FString Error;if(OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error))S.Store=MoveTemp(Candidate);
- else{S.Errors.Add(TEXT("Character stats save failed: ")+Error);S.ContactsNotice=OKT(TEXT("ui.scene.stats_save_failed"))+Error;}
+ // Written by the save task (serializing the whole store here held every reply's frame 5 ms); a failed write is logged there.
+ S.Store=MoveTemp(Candidate);if(!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
  // Keep the captured Slate slider alive; all value attributes read directly from Store.
 }
 

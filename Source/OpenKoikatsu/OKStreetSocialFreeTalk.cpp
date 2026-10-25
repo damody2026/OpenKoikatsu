@@ -41,7 +41,7 @@ FString OKStreetFreeTalkSettingsPath() {
  return Env.IsEmpty() ? Project : Env;
 }
 
-bool OKStreetFreeTalkLoadSettings(FOKFreeTalkSettings& Out, FString& Error) {
+static bool OKStreetFreeTalkReadSettings(FOKFreeTalkSettings& Out, FString& Error) {
  Out.Endpoint = TEXT("https://api.deepseek.com/chat/completions");
  Out.Model = TEXT("deepseek-v4-flash");
  Out.ApiKey = FPlatformMisc::GetEnvironmentVariable(TEXT("DEEPSEEK_API_KEY"));
@@ -61,7 +61,35 @@ bool OKStreetFreeTalkLoadSettings(FOKFreeTalkSettings& Out, FString& Error) {
  return true;
 }
 
+// The settings and the personas are read again at most every 2 s on the game thread (an edited key or persona file
+// applies within that): reading and parsing them took 1-3 ms a call, and a reply asks several times (prompt, judge,
+// every girl near for a group talk).
+static constexpr double OKFreeTalkFilesFresh = 2.0;
+bool OKStreetFreeTalkLoadSettings(FOKFreeTalkSettings& Out, FString& Error) {
+ if (!IsInGameThread()) return OKStreetFreeTalkReadSettings(Out, Error);
+ struct FEntry { FOKFreeTalkSettings Value; FString Error; bool Ok = false; double At = -1e9; };
+ static FEntry Cache;
+ const double Now = FPlatformTime::Seconds();
+ if (Now - Cache.At > OKFreeTalkFilesFresh) { Cache.Value = FOKFreeTalkSettings(); Cache.Error.Reset(); Cache.Ok = OKStreetFreeTalkReadSettings(Cache.Value, Cache.Error); Cache.At = Now; }
+ Out = Cache.Value;
+ if (!Cache.Ok) Error = Cache.Error;
+ return Cache.Ok;
+}
+
+static bool OKStreetFreeTalkReadPersona(const FString& Name, FOKFreeTalkPersona& Out, FString& Error);
 bool OKStreetFreeTalkLoadPersona(const FString& Name, FOKFreeTalkPersona& Out, FString& Error) {
+ if (!IsInGameThread()) return OKStreetFreeTalkReadPersona(Name, Out, Error);
+ struct FEntry { FOKFreeTalkPersona Value; FString Error; bool Ok = false; double At = -1e9; };
+ static TMap<FString, FEntry> Cache;
+ const double Now = FPlatformTime::Seconds();
+ FEntry& Entry = Cache.FindOrAdd(OKStreetCppText().Lang + TEXT("\n") + Name);
+ if (Now - Entry.At > OKFreeTalkFilesFresh) { Entry.Value = FOKFreeTalkPersona(); Entry.Error.Reset(); Entry.Ok = OKStreetFreeTalkReadPersona(Name, Entry.Value, Entry.Error); Entry.At = Now; }
+ Out = Entry.Value;
+ if (!Entry.Ok) Error = Entry.Error;
+ return Entry.Ok;
+}
+
+static bool OKStreetFreeTalkReadPersona(const FString& Name, FOKFreeTalkPersona& Out, FString& Error) {
  FString Path = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FREE_TALK_PERSONAS"));
  if (Path.IsEmpty()) Path = FPaths::ProjectContentDir() / TEXT("IndependentResources/StreetSocialData/free_talk_personas.json");
  TSharedPtr<FJsonObject> Root;
