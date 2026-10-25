@@ -8,8 +8,10 @@ FString GOKStreetLang=TEXT("zh-TW"),GOKStreetRegion=TEXT("CN");
 TSharedRef<FJsonObject> OKRulesRequest(const TCHAR* Rule){auto R=MakeShared<FJsonObject>();R->SetStringField(TEXT("rule"),Rule);R->SetStringField(TEXT("lang"),GOKStreetLang);R->SetStringField(TEXT("region"),GOKStreetRegion);return R;}
 
 // The rules' answer, or null (logged) when the rules are missing or refuse the request.
+// The last rule asked (its effects are usually applied right after): named in the log of a big favor swing.
+static FString GOKLastRule;
 TSharedPtr<FJsonObject> OKRulesEval(const FOKStreetSceneState& S,const TSharedRef<FJsonObject>& Request){
- if(!S.Rules)return nullptr;FString Error;
+ if(!S.Rules)return nullptr;FString Error;GOKLastRule=Request->GetStringField(TEXT("rule"));
  TSharedPtr<FJsonObject> Out=S.Rules->Eval(Request,Error);
  if(!Out.IsValid())UE_LOG(LogTemp,Warning,TEXT("Street rules: %s failed: %s"),*Request->GetStringField(TEXT("rule")),*Error);
  return Out;
@@ -289,7 +291,7 @@ void OKRulesSyncDefaults(FOKStreetSceneState& S){
    const TArray<TSharedPtr<FJsonValue>>* Step=nullptr;
    if(Out->TryGetArrayField(TEXT("step_up"),Step)&&Step->Num()==3){S.Store.FavorCapIsKksStepUp=true;S.Store.StepUpStranger=int32((*Step)[0]->AsNumber());S.Store.StepUpFriend=int32((*Step)[1]->AsNumber());S.Store.StepUpLover=int32((*Step)[2]->AsNumber());double Beyond=-1;S.Store.StepUpBeyond=Out->TryGetNumberField(TEXT("beyond"),Beyond)?int32(Beyond):INDEX_NONE;}
    auto Clamp=OKRulesRequest(TEXT("favor_clamp"));TArray<TSharedPtr<FJsonValue>> Rows;for(const auto& R:S.Store.Relations)Rows.Add(MakeShared<FJsonValueObject>(OKRulesRelationJson(R)));Clamp->SetArrayField(TEXT("relations"),Rows);
-   if(const TSharedPtr<FJsonObject> C=OKRulesEval(S,Clamp))for(const auto& V:C->GetArrayField(TEXT("changes"))){const auto O=V->AsObject();for(auto& R:S.Store.Relations)if(R.Id==O->GetStringField(TEXT("id")))R.Favor=float(O->GetNumberField(TEXT("favor")));}
+   if(const TSharedPtr<FJsonObject> C=OKRulesEval(S,Clamp))for(const auto& V:C->GetArrayField(TEXT("changes"))){const auto O=V->AsObject();for(auto& R:S.Store.Relations)if(R.Id==O->GetStringField(TEXT("id"))){const float Was=R.Favor;R.Favor=float(O->GetNumberField(TEXT("favor")));UE_LOG(LogTemp,Display,TEXT("Street favor clamp: %s %.1f -> %.1f (stage %s)"),*R.Id,Was,R.Favor,*R.Stage);}}
    UE_LOG(LogTemp,Display,TEXT("Street rules: dialogue catalogue %d lines, %d branches, %d topics"),int32(Out->GetNumberField(TEXT("nodes"))),int32(Out->GetNumberField(TEXT("branches"))),int32(Out->GetNumberField(TEXT("topics"))));
   }else{S.Errors.Add(TEXT("Dialogue rules rejected (ok_rules talk_load)"));}
  }

@@ -676,3 +676,14 @@
 
 - 一直用 `ls -td Saved/StreetSocial/Play-* | head -1` 找自己遊戲的 game.log；在 sandbox 跑了一次自我測試後，最新的目錄變成自我測試的那個，之後幾次查詢（付款、訊息）都是空的，差點誤判成「沒有結帳紀錄」。
 - 規則：有其他遊戲（sandbox、自我測試、別的 session）時，用 `game.pid` 對上自己遊戲的 PID 找 Play 目錄；或在啟動後立刻記下自己的目錄，之後都用那個路徑。
+
+### 2026-10-25 改一行結尾一串 `}}}}` 時少補一個大括號，又在同一個指令裡接著重啟遊戲（C 組十女主循環，重犯）
+
+- Gest68 第一次編譯失敗：在 `ApplyRulesEffects` 的 relation 分支裡，把原本結尾 `}}}}` 的那行拆開加 log，只留了一個 `}`，錯誤卻報在 200 行外 BuildHeroinePanel 的 lambda（C2888），不容易看出來。
+- 同一次又把「看編譯結果」和「停舊遊戲、啟動新版」寫在同一個 bash 指令裡，編譯失敗後照樣重啟，啟動器選到舊的 Gest67（重犯 Gest55 那一條）。
+- 規則：拆開結尾有多個 `}` 的行時，先數清楚原本關掉幾層，改完再數一次；編譯和重啟一定分成兩個指令，前一個看到 `Result: Succeeded` 與 `STAGE EXIT=0` 才下後一個。
+
+### 2026-10-25 改 catalog 用 build_street_social_catalog_json.lua 重新產生，整份少了約 439 行（C 組十女主循環）
+
+- 修溫泉重複收費時先改 `Docs/STREET_SOCIAL_LIFE_CATALOG.md`，再跑產生器重建 `catalog.json`：產生器早就和提交中的 json 不同步，重建後少了一大段品項，差點把別人加的資料一起刪掉。已用 `git checkout` 還原。
+- 規則：`catalog.json` 只做針對性的文字修改（只動要改的那個物件，改完用 json 解析確認、`git diff --stat` 看行數），不要整份重新產生；產生器同步之前，md 只是說明。
