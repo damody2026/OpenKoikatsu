@@ -65,9 +65,12 @@ end
 local function log_count(pattern) local n = 0; for line in io.lines(log) do if line:find(pattern, 1, true) then n = n + 1 end end; return n end
 local function log_last(pattern) local last; for line in io.lines(log) do if line:find(pattern, 1, true) then last = line end end; return last end
 
--- Call her over and open the conversation.
+-- A time she is about (in the evening she leaves for dinner and ends the talk), and a voice server that answers (the
+-- skip check needs a voiced line).
+local tts = os.getenv("OK_TTS_ENDPOINT") or ("http://127.0.0.1:" .. ok.util.strip(ok.proc.output({ ok.lua_exe, root .. "/Tools/ok_instance.lua", "port", "tts" })))
+if ok.kit.http_request(tts .. "/health", { timeout = 5 }).status ~= 200 then report("WARN", "voice", "no TTS server at " .. tts .. ": the skip check will fail") end
 local g = a.girl
-call("/clock", { paused = false })
+call("/clock", { paused = false, hours = 10 }); ok.time.sleep(3)
 call("/summon", { slots = { g } }); ok.time.sleep(3)
 for _ = 1, 60 do
   local s = call("/state"); local her

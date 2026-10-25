@@ -184,6 +184,19 @@ struct FOKLifePose {int32 Actor=INDEX_NONE,Phase=0;FString Clip;double Requested
 // A heroine riding a lift to her spot upstairs while he can see her (OKStreetSocialLife.inl).
 struct FOKNpcLift {int32 Elevator=INDEX_NONE,From=0,To=0,Stage=0;double At=0;FVector Spot=FVector::ZeroVector;};
 struct FOKStreetLoverReact {int32 Girl=INDEX_NONE;FString Clip,MaleClip;int32 Phase=0;double At=0;float Seconds=0;bool WasHeld=false;};
+// One grid route search (AOKStreetSocialScene::GridSearchStep): GridRoute runs it to the end; a heroine's walk runs it a
+// slice a frame (TickRouteJobs), since a search through cells not yet tested (each a physics overlap) took 20-37 ms.
+struct FOKStreetGridSearch {
+ FVector From=FVector::ZeroVector,To=FVector::ZeroVector;float Z=0;FIntPoint Start,Goal,Lo,Hi;int32 Phase=0; // 0 not begun, 1 searching, 2 done
+ TMap<FIntPoint,FIntPoint> Came;TMap<FIntPoint,float> Cost;TArray<TPair<float,FIntPoint>> Open;int32 Expanded=0;
+ TArray<FVector> Route; // once done: the walk, empty when there is none
+};
+// A heroine's walk waiting for its route (QueueHeroineWalk). Found: she walks it (to the door to leave a room, or on to
+// Final upstairs). None: she is placed at Fallback facing Yaw, or (Leave) set free at the door like before.
+struct FOKStreetPendingMove {
+ TSharedPtr<FOKStreetGridSearch> Search;FVector Final=FVector::ZeroVector,Fallback=FVector::ZeroVector;bool HasFinal=false,Leave=false;float Yaw=0;FString Place;
+};
+
 struct FOKStreetSceneState {
  FOKStreetPairSession Pair,PhotoProbeSession,SeatedProbeSession,PhoneUseProbeSession;
  int32 AmbientActor=INDEX_NONE,AmbientCursor=0,AmbientPhase=0,AmbientAction=0,AmbientNextAction=0;FString AmbientPlaceClip;
@@ -248,6 +261,7 @@ struct FOKStreetSceneState {
  int64 AppointmentTickMinute=-1;
  // Plan §6: today's plans per heroine, the block each is in, walks in progress, meals eaten this block, who the
  // schedule is holding in place, and where he spends his time.
+ TMap<int32,FOKStreetPendingMove> PendingMoves; // heroines whose walk is still being routed (TickRouteJobs)
  TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int64> ConfessionPending;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;
  // Plan §8.6: the shift he is working now (appointment id, job, window in game minutes), early-leave tracking, fast-forward.
@@ -1102,7 +1116,7 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  return true;
 }
 
-void AOKStreetSocialScene::SendFreeTalk(){
+void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SendFreeTalk);
  const int32 Character=FreeTalkPartner();
  if(!State||Character==INDEX_NONE||State->FreeTalkBusy)return;auto& S=*State;
  const FString Text=S.FreeTalkDraft.TrimStartAndEnd();
@@ -3389,7 +3403,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickThenAction);TickThenAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRouteJobs);TickRouteJobs();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
  // Reading together ends when the player walks away from her.
  // Walk-in places: the roof and ceiling disappear while the player stands inside, so the camera sees the room.
  // Multi-storey places also hide every floor above the player's.

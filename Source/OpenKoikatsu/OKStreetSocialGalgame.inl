@@ -191,6 +191,7 @@ void AOKStreetSocialScene::SkipGalgameLine()
 // memory, her history, her relation, her mind's context and memory as they are now).
 void AOKStreetSocialScene::GalgameCheckpoint(int32 Character, const FString& Id)
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_GalgameCheckpoint);
 	if (!Galgame.IsValid() || !Galgame->bActive || !State) return;
 	auto& S = *State;
 	FOKStreetGalgame::FCheckpoint P;
@@ -220,6 +221,7 @@ void AOKStreetSocialScene::GalgameCheckpoint(int32 Character, const FString& Id)
 // undone, as if the conversation had stopped there. His own line on screen is undone too (he says it again, differently).
 void AOKStreetSocialScene::GalgameRollBack(int32 Character, const FString& Id)
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_GalgameRollBack);
 	if (!Galgame.IsValid() || !State) return;
 	auto& G = *Galgame;
 	if (G.ViewLine == INDEX_NONE) return;

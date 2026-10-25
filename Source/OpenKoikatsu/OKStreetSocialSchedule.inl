@@ -8,7 +8,7 @@ bool AOKStreetSocialScene::BusyWithPlayer(int32 I) const{
 }
 
 // Where she stands in a place: an anchor that suits what she is doing, spread out so heroines do not overlap.
-FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FString& Kind,float& Yaw) const{
+FVector AOKStreetSocialScene::SpotFor(int32 I,const FString& PlaceId,const FString& Kind,float& Yaw) const{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SpotFor);
  const auto* P=OKStreetFindPlace(PlaceId);Yaw=0;if(!P)return State->Agents[I-1].Position;
  static const TMap<FString,TArray<FString>> Wanted={
   {TEXT("work"),{TEXT("counter"),TEXT("stand"),TEXT("shelf"),TEXT("bar"),TEXT("lobby"),TEXT("food"),TEXT("pets"),TEXT("seat")}},
@@ -134,7 +134,7 @@ void AOKStreetSocialScene::TickSchedules(){
   if(!Ready&&S.PlanWaitSince==0)S.PlanWaitSince=Wall;
   if(!Ready&&Wall-S.PlanWaitSince<30)return;
   if(!Ready)UE_LOG(LogTemp,Warning,TEXT("Street plan: profiles still missing after 30 s; planning without them"));
-  S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;PlanAll();
+  S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SchedulePlanAll);PlanAll();}
  }
  // Sitting with her: whoever comes to stand by his table moves on (R3-140).
  if(S.Pair.Partner!=INDEX_NONE&&S.Pair.Conversation())MakeRoomAround(S.Pair.Partner);
@@ -165,7 +165,8 @@ void AOKStreetSocialScene::TickSchedules(){
    Rows.Add(MakeShared<FJsonValueObject>(H));
   }
   Request->SetArrayField(TEXT("heroines"),Rows);
-  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request))for(const auto& V:Answer->GetArrayField(TEXT("heroines"))){
+  TSharedPtr<FJsonObject> Answer;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ScheduleRules);Answer=OKRulesEval(S,Request);}
+  if(Answer)for(const auto& V:Answer->GetArrayField(TEXT("heroines"))){
    const auto O=V->AsObject();if(!O)continue;const int32 I=int32(O->GetNumberField(TEXT("actor")));
    if(O->GetBoolField(TEXT("bathing")))S.LifeUrgent.Add(I,TEXT("bath"));else if(S.LifeUrgent.FindRef(I)==TEXT("bath"))S.LifeUrgent.Remove(I);
    const TSharedPtr<FJsonObject>* U=nullptr;if(!O->TryGetObjectField(TEXT("urgent"),U))continue;
@@ -173,6 +174,10 @@ void AOKStreetSocialScene::TickSchedules(){
    bool Starts=false;if((*U)->TryGetBoolField(TEXT("starts"),Starts)&&Starts){UE_LOG(LogTemp,Display,TEXT("Street life: actor %d goes home for a bath"),I);}
   }
  }
+ // Block changes are spread over frames: each costs a route (a grid or waypoint search with sweeps) and a memory, and
+ // a clock jump or the hour changed all ten heroines in one frame (25-34 ms). Once this tick has spent its share, the
+ // rest change on the next frame (the tick then runs again right away).
+ const double ChangeBudget=FPlatformTime::Seconds()+.002;int32 Changes=0;
  for(int32 I=1;I<S.Manifest.Characters.Num();++I){
   if(!S.Agents.IsValidIndex(I-1)||BusyWithPlayer(I))continue;
   const FString Id=OKStreetStableId(S.Manifest.Characters[I]);
@@ -185,7 +190,8 @@ void AOKStreetSocialScene::TickSchedules(){
   // Nothing recorded yet: the day (or the game) just started, she is put where her block is. A gap in her plan
   // (INDEX_NONE recorded: no block then) is not a start; from it she walks on like from any block.
   const bool Fresh=!S.PlanBlock.Contains(I);
-  if(Fresh||Index!=Previous){
+  if((Fresh||Index!=Previous)&&Changes>0&&FPlatformTime::Seconds()>ChangeBudget){S.ScheduleTickAt=0;continue;} // her change waits for the next frame
+  if(Fresh||Index!=Previous){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ScheduleBlockChange);++Changes;
    // Leaving a work block: her wage for the hours.
    if(const auto* Plan=S.Plans.Find(I))if(Plan->IsValidIndex(Previous)&&(*Plan)[Previous].Kind==TEXT("work")){
     const auto& W=(*Plan)[Previous];const int32 Wage=HerWage(W);const int32 Pay=HerShiftPay(I,W,Wage,Minute);
@@ -197,9 +203,9 @@ void AOKStreetSocialScene::TickSchedules(){
    if(!Block||Block->Place.IsEmpty()){
     const FOKStreetPlace* In=OKStreetFindPlace(PlaceHere(A.Position));
     if(In&&!In->Rooms.IsEmpty()&&S.ScheduleHeld.Contains(I)){
-     if(FVector::Dist2D(A.Position,S.Male)<4000){auto Path=PlaceRoute(A.Position,In->Door);if(!Path.IsEmpty()){S.Commutes.Add(I,MoveTemp(Path));S.CommuteFinal.Remove(I);S.ReleaseAtDoor.Add(I);UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d leaves %s for the street"),I,In->Id);continue;}}
-     A.Position=In->Door;}
-    if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}continue;}
+     if(FVector::Dist2D(A.Position,S.Male)<4000){QueueHeroineWalk(I,A.Position,In->Door,true,false,FVector::ZeroVector,In->Door,0,In->Id);continue;} // routed a slice a frame
+     A.Position=In->Door;S.PendingMoves.Remove(I);}
+    if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}S.PendingMoves.Remove(I);continue;}
    FString Why;FOKStreetPlanBlock Alt;
    if(PlaceClosedNow(Block->Place,Why)&&Block->Kind!=TEXT("sleep")&&Block->Kind!=TEXT("rest")){ // closed: the nearest open place like it, else home (plan.rs plan_alternative)
     auto Request=OKRulesRequest(TEXT("plan_alternative"));Request->SetObjectField(TEXT("block"),OKRulesBlockJson(*Block));Request->SetObjectField(TEXT("doors"),OKRulesDoors());
@@ -221,12 +227,13 @@ void AOKStreetSocialScene::TickSchedules(){
    // An upper floor: she walks to the building's door, then goes up (no walking through floors).
    const auto* Dest=OKStreetFindPlace(Block->Place);const bool Upstairs=Spot.Z>100&&Dest;
    // The day's first block (the game just started) puts her there directly too: no crowd leaving at once.
-   if(!Fresh&&FVector::Dist2D(A.Position,S.Male)<4000){auto Path=PlaceRoute(A.Position,Upstairs?Dest->Door:Spot);if(!Path.IsEmpty()){S.Commutes.Add(I,MoveTemp(Path));if(Upstairs)S.CommuteFinal.Add(I,Spot);else S.CommuteFinal.Remove(I);continue;}}
+   if(!Fresh&&FVector::Dist2D(A.Position,S.Male)<4000){QueueHeroineWalk(I,A.Position,Upstairs?Dest->Door:Spot,false,Upstairs,Spot,Spot,Yaw,Block->Place);continue;} // routed a slice a frame
+   S.PendingMoves.Remove(I);
    A.Position=Spot;S.Rotations[I]=FRotator(0,Yaw,0);S.Commutes.Remove(I);
    if(Block->Kind==TEXT("class")||Block->Kind==TEXT("study"))UE_LOG(LogTemp,Display,TEXT("Street %s: actor %d at %s %s z=%.0f"),*Block->Kind,I,*Block->Place,*Block->Activity,Spot.Z);
   }
   // Walking along her route: advanced every frame by TickCommutes (a 0.5 s step here made her walk-stop-walk).
-  if(S.Commutes.Contains(I))continue;
+  if(S.Commutes.Contains(I)||S.PendingMoves.Contains(I))continue; // still walking there, or her way still being routed
   // At a meal: she orders what she likes within her budget and pays for it (plan §6.2 自主消費).
   if(Block&&Block->Kind==TEXT("meal")&&!S.PlanEaten.Contains(I)&&!Block->Place.IsEmpty()){
    S.PlanEaten.Add(I);
@@ -249,6 +256,50 @@ FString AOKStreetSocialScene::PlanText(int32 I) const{
 }
 
 // Commutes move every frame at walking speed, so she walks continuously from place to place.
+// A heroine's walk: on the same floor its grid route is searched a slice a frame (TickRouteJobs), so ten heroines changing
+// blocks at once, or one route through streets not searched before (a physics test per new cell), no longer hold a frame
+// 20-37 ms. Another floor takes the waypoint graph at once (PlaceRoute does the same). Asked again before it is done,
+// the newer walk replaces the older.
+void AOKStreetSocialScene::QueueHeroineWalk(int32 I,const FVector& From,const FVector& To,bool Leave,bool HasFinal,const FVector& Final,const FVector& Fallback,float Yaw,const FString& Place){
+ auto& S=*State;FOKStreetPendingMove Move;Move.Leave=Leave;Move.HasFinal=HasFinal;Move.Final=Final;Move.Fallback=Fallback;Move.Yaw=Yaw;Move.Place=Place;
+ S.PendingMoves.Remove(I);
+ if(FMath::Abs(From.Z-To.Z)>=150.f){FinishHeroineWalk(I,Move,PlaceRouteWaypoints(From,To));return;}
+ Move.Search=MakeShared<FOKStreetGridSearch>();Move.Search->From=From;Move.Search->To=To;
+ S.PendingMoves.Add(I,MoveTemp(Move));
+}
+// What a found (or missing) route does, as the schedule did when it searched in place.
+void AOKStreetSocialScene::FinishHeroineWalk(int32 I,const FOKStreetPendingMove& Move,TArray<FVector>&& Path){
+ auto& S=*State;if(!S.Agents.IsValidIndex(I-1))return;auto& A=S.Agents[I-1];
+ // Taken by him (a talk, a call, an elevator) while it was being routed: the walk is dropped like a commute.
+ if(BusyWithPlayer(I)||S.LiftWalks.Contains(I)||S.LiftPins.Contains(I))return;
+ if(Path.Num()>=2){
+  S.Commutes.Add(I,MoveTemp(Path));
+  if(Move.Leave){S.CommuteFinal.Remove(I);S.ReleaseAtDoor.Add(I);UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d leaves %s for the street"),I,*Move.Place);}
+  else if(Move.HasFinal)S.CommuteFinal.Add(I,Move.Final);else S.CommuteFinal.Remove(I);
+  return;
+ }
+ if(Move.Leave){A.Position=Move.Fallback;if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}return;}
+ A.Position=Move.Fallback;S.Rotations[I]=FRotator(0,Move.Yaw,0);S.Commutes.Remove(I);
+}
+// The pending walks' route searches, 2 ms a frame between them; each that is done starts its walk.
+void AOKStreetSocialScene::TickRouteJobs(){
+ auto& S=*State;if(S.PendingMoves.IsEmpty())return;
+ const double Deadline=FPlatformTime::Seconds()+.002;TArray<int32> Done;
+ for(auto& Pair:S.PendingMoves){
+  if(FPlatformTime::Seconds()>Deadline)break;
+  auto& Search=*Pair.Value.Search;
+  if(!GridSearchStep(Search,Deadline))continue;
+  Done.Add(Pair.Key);
+ }
+ for(const int32 I:Done){
+  FOKStreetPendingMove Move=S.PendingMoves.FindAndRemoveChecked(I);
+  TArray<FVector> Path=MoveTemp(Move.Search->Route);
+  // No way on the grid: the waypoint graph, as PlaceRoute falls back to.
+  if(Path.Num()<2)Path=PlaceRouteWaypoints(Move.Search->From,Move.Search->To);
+  FinishHeroineWalk(I,Move,MoveTemp(Path));
+ }
+}
+
 void AOKStreetSocialScene::TickCommutes(float Dt){
  auto& S=*State;Dt=FMath::Min(Dt,.05f);
  TArray<int32> Done;

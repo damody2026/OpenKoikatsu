@@ -59,34 +59,44 @@ bool AOKStreetSocialScene::NavCellFree(const FIntPoint& Cell,float Z) const{
  Grid.Add(Cell,Free);return Free;
 }
 TArray<FVector> AOKStreetSocialScene::GridRoute(const FVector& From,const FVector& To) const{
- const float Z=From.Z;
+ FOKStreetGridSearch G;G.From=From;G.To=To;GridSearchStep(G,TNumericLimits<double>::Max());return MoveTemp(G.Route);
+}
+bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline) const{
+ if(G.Phase==2)return true;
+ const float Z=G.From.Z;const FVector From=G.From,To=G.To;
  auto ToCell=[](const FVector& P){return FIntPoint(FMath::RoundToInt(P.X/OKStreetNavCell),FMath::RoundToInt(P.Y/OKStreetNavCell));};
  auto Centre=[Z](const FIntPoint& C){return FVector(C.X*OKStreetNavCell,C.Y*OKStreetNavCell,Z);};
- const FIntPoint Start=ToCell(From);FIntPoint Goal=ToCell(To);
- // A goal on a counter, a door frame or a bench: the nearest free cell around it.
- if(!NavCellFree(Goal,Z)){
-  bool Found=false;
-  for(int32 R=1;R<=6&&!Found;++R)for(int32 DX=-R;DX<=R&&!Found;++DX)for(int32 DY=-R;DY<=R;++DY){
-   if(FMath::Max(FMath::Abs(DX),FMath::Abs(DY))!=R)continue;const FIntPoint C=Goal+FIntPoint(DX,DY);if(NavCellFree(C,Z)){Goal=C;Found=true;break;}}
-  if(!Found)return {};
+ if(G.Phase==0){
+  G.Z=Z;G.Start=ToCell(From);G.Goal=ToCell(To);G.Phase=2;
+  // A goal on a counter, a door frame or a bench: the nearest free cell around it.
+  if(!NavCellFree(G.Goal,Z)){
+   bool Found=false;
+   for(int32 R=1;R<=6&&!Found;++R)for(int32 DX=-R;DX<=R&&!Found;++DX)for(int32 DY=-R;DY<=R;++DY){
+    if(FMath::Max(FMath::Abs(DX),FMath::Abs(DY))!=R)continue;const FIntPoint C=G.Goal+FIntPoint(DX,DY);if(NavCellFree(C,Z)){G.Goal=C;Found=true;break;}}
+   if(!Found)return true;
+  }
+  if(G.Start==G.Goal){G.Route={From,To};return true;}
+  G.Lo=FIntPoint(FMath::Min(G.Start.X,G.Goal.X)-60,FMath::Min(G.Start.Y,G.Goal.Y)-60);G.Hi=FIntPoint(FMath::Max(G.Start.X,G.Goal.X)+60,FMath::Max(G.Start.Y,G.Goal.Y)+60);
+  G.Phase=1;
  }
- if(Start==Goal)return {From,To};
+ const FIntPoint Start=G.Start,Goal=G.Goal,Lo=G.Lo,Hi=G.Hi;
  // Near the start, cells too close to a wall are allowed (dearly), so standing by one never traps him.
  // A cell he was stopped walking into (a thin wall between two free cell centres) is not passable, even next to the start.
  const TSet<FIntPoint>* Learned=State->NavLearned.Find(FMath::RoundToInt(Z/100.f));
  auto Passable=[&](const FIntPoint& C){if(Learned&&Learned->Contains(C))return false;return NavCellFree(C,Z)||FMath::Max(FMath::Abs(C.X-Start.X),FMath::Abs(C.Y-Start.Y))<=1;};
- const FIntPoint Lo(FMath::Min(Start.X,Goal.X)-60,FMath::Min(Start.Y,Goal.Y)-60),Hi(FMath::Max(Start.X,Goal.X)+60,FMath::Max(Start.Y,Goal.Y)+60);
  auto Heuristic=[&](const FIntPoint& C){const float DX=FMath::Abs(C.X-Goal.X),DY=FMath::Abs(C.Y-Goal.Y);return DX+DY+(UE_SQRT_2-2.f)*FMath::Min(DX,DY);};
- TMap<FIntPoint,FIntPoint> Came;TMap<FIntPoint,float> Cost;TArray<TPair<float,FIntPoint>> Open;
+ auto& Came=G.Came;auto& Cost=G.Cost;auto& Open=G.Open;
  auto Less=[](const TPair<float,FIntPoint>& A,const TPair<float,FIntPoint>& B){return A.Key<B.Key;};
- Cost.Add(Start,0.f);Open.HeapPush({Heuristic(Start),Start},Less);
+ if(Cost.IsEmpty()){Cost.Add(Start,0.f);Open.HeapPush({Heuristic(Start),Start},Less);}
  static const FIntPoint Steps[]={{1,0},{-1,0},{0,1},{0,-1},{1,1},{1,-1},{-1,1},{-1,-1}};
- bool Reached=false;int32 Expanded=0;
- while(!Open.IsEmpty()&&Expanded<60000){
+ bool Reached=false;
+ while(!Open.IsEmpty()&&G.Expanded<60000){
+  // Out of time: the search goes on from here next slice (the open list, costs and links are kept).
+  if((G.Expanded&31)==0&&FPlatformTime::Seconds()>Deadline)return false;
   TPair<float,FIntPoint> Top;Open.HeapPop(Top,Less);const FIntPoint C=Top.Value;const float Here=Cost.FindChecked(C);
   if(Top.Key>Here+Heuristic(C)+.01f)continue; // stale entry
   if(C==Goal){Reached=true;break;}
-  ++Expanded;
+  ++G.Expanded;
   for(const FIntPoint& D:Steps){
    const FIntPoint N=C+D;if(N.X<Lo.X||N.Y<Lo.Y||N.X>Hi.X||N.Y>Hi.Y||!Passable(N))continue;
    if(D.X!=0&&D.Y!=0&&(!Passable(FIntPoint(C.X+D.X,C.Y))||!Passable(FIntPoint(C.X,C.Y+D.Y))))continue; // no cutting corners
@@ -95,7 +105,8 @@ TArray<FVector> AOKStreetSocialScene::GridRoute(const FVector& From,const FVecto
    if(!Old||New<*Old){Cost.Add(N,New);Came.Add(N,C);Open.HeapPush({New+Heuristic(N),N},Less);}
   }
  }
- if(!Reached){UE_LOG(LogTemp,Display,TEXT("Street grid route: none from %s to %s (%d cells)"),*From.ToCompactString(),*To.ToCompactString(),Expanded);return {};}
+ G.Phase=2;
+ if(!Reached){UE_LOG(LogTemp,Display,TEXT("Street grid route: none from %s to %s (%d cells)"),*From.ToCompactString(),*To.ToCompactString(),G.Expanded);return true;}
  TArray<FIntPoint> Cells{Goal};while(Cells.Last()!=Start)Cells.Add(Came.FindChecked(Cells.Last()));
  Algo::Reverse(Cells);
  // Pull the string: keep only the corners a straight walk cannot cut.
@@ -109,10 +120,10 @@ TArray<FVector> AOKStreetSocialScene::GridRoute(const FVector& From,const FVecto
   // Starting against a wall counts as clear only when the line leads away from it (as StreetStep backs out of one).
   if(GetWorld()->SweepSingleByChannel(Hit,FVector(A.X,A.Y,Z)+FVector(0,0,85),FVector(B.X,B.Y,Z)+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(30,78),SweepQuery)&&(!Hit.bStartPenetrating||FVector::DotProduct((B-A).GetSafeNormal2D(),Hit.Normal)<=0.f))return false;
   return true;};
- TArray<FVector> Route{From};int32 I=0;
+ TArray<FVector>& Route=G.Route;Route={From};int32 I=0;
  while(I<Cells.Num()-1){int32 J=Cells.Num()-1;while(J>I+1&&!Clear(I==0?From:Centre(Cells[I]),Centre(Cells[J])))--J;Route.Add(Centre(Cells[J]));I=J;}
  if(Goal==ToCell(To)&&Clear(Route.Last(),To))Route.Last()=To;
- return Route;
+ return true;
 }
 FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Direction,float Distance) const{
  constexpr float Clearance=30.f;

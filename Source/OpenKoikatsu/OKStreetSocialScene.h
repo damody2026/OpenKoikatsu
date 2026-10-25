@@ -608,6 +608,14 @@ private:
  FVector StreetStep(const FVector& From,const FVector& Direction,float Distance) const;
  // Grid A* over the walkable street at From's floor (lazy 40 cm cells, same clearance as walking). Empty if none.
  TArray<FVector> GridRoute(const FVector& From,const FVector& To) const;
+ // GridRoute's search a slice at a time (Deadline: FPlatformTime seconds): true once done, the route in its Route.
+ bool GridSearchStep(struct FOKStreetGridSearch& G,double Deadline) const;
+ // PlaceRoute's waypoint graph (another floor, or no grid way).
+ TArray<FVector> PlaceRouteWaypoints(const FVector& From,const FVector& To) const;
+ // A heroine's walk whose route is searched a slice a frame (TickRouteJobs) instead of all in the frame that asks.
+ void QueueHeroineWalk(int32 I,const FVector& From,const FVector& To,bool Leave,bool HasFinal,const FVector& Final,const FVector& Fallback,float Yaw,const FString& Place);
+ void FinishHeroineWalk(int32 I,const struct FOKStreetPendingMove& Move,TArray<FVector>&& Path);
+ void TickRouteJobs();
  bool NavCellFree(const FIntPoint& Cell,float Z) const;
  TArray<const struct FOKStreetPlace*> NearbyPlaces(float Radius) const;
  bool BeginOuting(int32 Girl,const FString& ActivityId,FString& Error);

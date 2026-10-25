@@ -386,8 +386,11 @@ void AOKStreetSocialScene::DestroyStreetPlaces(){
 }
 
 // Like ContactRoute, over the shared waypoints plus the place corridor and doors.
-TArray<FVector> AOKStreetSocialScene::PlaceRoute(const FVector& From,const FVector& To) const{
+TArray<FVector> AOKStreetSocialScene::PlaceRoute(const FVector& From,const FVector& To) const{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_PlaceRoute);
  if(FMath::Abs(From.Z-To.Z)<150.f){auto Grid=GridRoute(From,To);if(Grid.Num()>=2)return Grid;}
+ return PlaceRouteWaypoints(From,To);
+}
+TArray<FVector> AOKStreetSocialScene::PlaceRouteWaypoints(const FVector& From,const FVector& To) const{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_PlaceRouteWaypoints);
  TArray<FOKStreetPointData> Shared;OKStreetWaypoints(Shared);TArray<FVector> Points;for(const auto& P:Shared)Points.Add(P.Position);
  Points.Append(OKStreetPlaceRoutePoints());
  return OKStreetContactRoute(From,To,Points,[&](const FVector& A,const FVector& B){

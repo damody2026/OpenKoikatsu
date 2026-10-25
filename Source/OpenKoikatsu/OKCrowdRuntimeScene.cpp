@@ -87,6 +87,9 @@ namespace OKRuntimeScene {
 // What a retired streamed action held (its prepared clips and keys, its GPU bank's CPU copy: megabytes) freed on a
 // worker instead of in this frame: freed on the game thread it held the frame up to 15 ms (STAT_OKCrowd_StreamRetire).
 // Only for plain data nothing else on the game thread still points into; shared pointers must be thread-safe.
+// A character's components follow her transform only when it moved: SetWorldTransform recomputes bounds and marks the
+// render transform dirty even for the same transform, six components for every character every frame (most stand still).
+static void OKCrowdSetTransform(USceneComponent* C,const FTransform& T){if(C&&!C->GetComponentTransform().Equals(T,1e-4))C->SetWorldTransform(T);}
 template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
  Async(EAsyncExecution::ThreadPool,[...Held=MoveTemp(Held)]()mutable{(Held.Reset(),...);});
 }
@@ -444,6 +447,17 @@ struct FScene : TSharedFromThis<FScene> {
    if(!FFileHelper::LoadFileToArray(Curves[Source],*ClipPaths[Source])||OKRuntimeSharedClipDuration(Curves[Source])<=0){
     UE_LOG(LogTemp,Warning,TEXT("Runtime action %s could not be read"),*ClipPaths[Source]);Curves[Source].Reset();}}
   return Curves[Source];
+ }
+ // Whether an action's curves are in memory; the first time, the file is read on a worker (read on the game thread it
+ // held the frame 7-12 ms when an action was first streamed) and this answers false until it has arrived.
+ TMap<int32,TFuture<TArray<uint8>>> ClipReads;
+ bool ClipBytesReady(int32 Source){
+  if(!Curves.IsValidIndex(Source)||!Curves[Source].IsEmpty()||!ClipPaths.IsValidIndex(Source))return true;
+  if(auto* Read=ClipReads.Find(Source)){if(!Read->IsReady())return false;Curves[Source]=Read->Consume();ClipReads.Remove(Source);
+   if(OKRuntimeSharedClipDuration(Curves[Source])<=0){UE_LOG(LogTemp,Warning,TEXT("Runtime action %s could not be read"),*ClipPaths[Source]);Curves[Source].Reset();}
+   return true;}
+  ClipReads.Add(Source,Async(EAsyncExecution::ThreadPool,[Path=ClipPaths[Source]]{TArray<uint8> Bytes;FFileHelper::LoadFileToArray(Bytes,*Path);return Bytes;}));
+  return false;
  }TArray<bool> ClipLoops;TArray<float> ClipWindows;TArray<FString> VoicePaths,VoiceIds;int32 WalkSources=0;bool DemoSpeech=false,DemoSpeechStarted=false,DemoActionStarted=false;FString DemoAction;FString ReportPath,VisualPrefix,VisualError;
  int32 VisualClip=1,NpcActionPreload=0;double DemoDelay=1;double ReadyAt=0,LoadMs=0,ProfileSeconds=0,LastWall=0;bool Captured=false;int32 CaptureStage=0;
  struct FActionStreamSlot {int32 Actor=INDEX_NONE,Source=INDEX_NONE;uint64 Epoch=0;TFuture<FStreamPrepared> Job;TUniquePtr<FStreamPrepared> Prepared;TSharedPtr<FStreamInstall,ESPMode::ThreadSafe> Install;};
@@ -994,7 +1008,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(VisualBlink<0&&E.BlinkOverride<0&&AutoBlink&&(!E.FacePlay.Enabled||E.FacePlay.Blink)){const double T=FMath::Fmod(SceneTime+A*.77,3.2+(A%7)*.29);Blink=T<.08?T/.08:(T<.20?(.20-T)/.12:0);}
    if(!E.MouthStream||!E.MouthStream->BlinkVertices||(E.FacePlay.Enabled&&!E.FacePlay.Blink))Blink=0;
    const int64 MouthBucket=int64(SceneTime*60);if(E.SpeechWave.IsValid()&&E.ActionOverride>=2){E.ActionSpeechSeconds+=Dt;if(GpuMode)E.ActionSpeechGpuSeconds+=Dt;}
-   TickFaceLook(E,float(Dt));
+   {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFaceLook);TickFaceLook(E,float(Dt));}
    if(E.MouthStream){FOKRuntimeFaceUploadPlan Plan;FString FaceError;const bool MouthMoved=FMath::Abs(MouthOpening-E.LastMouthOpening)>.002f,BlinkMoved=FMath::Abs(Blink-E.LastBlinkClosure)>.002f,GainChanged=MouthGain!=E.LastMouthGain;
     if(!OKPlanRuntimeFaceUpload(E.FacePlay,Dt,MouthBucket,E.LastMouthBucket,MouthMoved,BlinkMoved,GainChanged,Plan,FaceError)){const bool Gate=E.FacePlay.Dirty||MouthBucket!=E.LastMouthBucket||GainChanged,Need=E.FacePlay.Dirty||MouthMoved||BlinkMoved||GainChanged;Plan={};Plan.Upload=Gate&&Need;}
     if((Installed||E.VisibleMs>0)&&(Plan.Upload||E.ShadowFaceDirty)){
@@ -1013,6 +1027,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(A==0&&!ExternalControl){if(!PlayerPositionInitialized){PlayerPosition=Pos;PlayerPositionInitialized=true;}const FRotator Rotation=InputMove.IsNearlyZero()?E.Cpu->GetComponentRotation():FRotator(0,FMath::RadiansToDegrees(FMath::Atan2(InputMove.Y,InputMove.X))-90,0);E.Transform=FTransform(Rotation,PlayerPosition);}
    if(ExternalControl){E.Transform=E.ExternalTransform;if(A==0)PlayerPosition=E.Transform.GetTranslation();}
    if(A==0&&LoadingCaptured&&!VisualPrefix.IsEmpty())E.Transform=LoadingCaptureTransform;
+   QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryTransforms);
    const FVector ShadowCamera=ExternalControl&&Pc&&Pc->PlayerCameraManager?Pc->PlayerCameraManager->GetCameraLocation():(Camera.IsValid()?Camera->GetActorLocation():PlayerPosition);
    if(A==0&&ForegroundCapture.IsValid()){
     if(Pc&&Pc->PlayerCameraManager)UpdateForegroundCapture(Pc->PlayerCameraManager->GetCameraLocation(),Pc->PlayerCameraManager->GetCameraRotation(),Pc->PlayerCameraManager->GetFOVAngle());
@@ -1022,19 +1037,19 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    const bool NearShadow=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(1600.)&&(A==0||FMath::Abs(E.Transform.GetTranslation().Z-PlayerPosition.Z)<200.);
    if(auto* C=E.Cpu.Get())C->SetCastShadow(false);if(auto* G=E.Gpu.Get())G->SetCastShadow(E.ShadowGpu.IsValid()?false:NearShadow);if(auto* S=E.ShadowGpu.Get())S->SetCastShadow(NearShadow);
    const bool EntryGpu=GpuMode||(!Installed&&E.LoadingGpuInstalled&&RequestedGpu);
-   if(Installed||E.VisibleMs>0)if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)C->SetWorldTransform(E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}if(E.Turned){TurnLocal(E,E.LookNeck,C->BoneSpaceTransforms[E.LookNeck]);TurnLocal(E,E.LookHead,C->BoneSpaceTransforms[E.LookHead]);}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
-   if(!Installed&&!EntryGpu&&ProgressiveLoading&&E.VisibleMs>0){auto* Main=E.LoadingMain.IsValid()?E.LoadingMain.Get():E.Cpu.Get();Main->SetWorldTransform(E.Transform);Main->SetCastShadow(NearShadow);Main->SetVisibility(true);}
+   if(Installed||E.VisibleMs>0)if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)OKCrowdSetTransform(C,E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}if(E.Turned){TurnLocal(E,E.LookNeck,C->BoneSpaceTransforms[E.LookNeck]);TurnLocal(E,E.LookHead,C->BoneSpaceTransforms[E.LookHead]);}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
+   if(!Installed&&!EntryGpu&&ProgressiveLoading&&E.VisibleMs>0){auto* Main=E.LoadingMain.IsValid()?E.LoadingMain.Get():E.Cpu.Get();OKCrowdSetTransform(Main,E.Transform);Main->SetCastShadow(NearShadow);Main->SetVisibility(true);}
    // Her eyes through her front hair need these only up close (OKForegroundRange): farther off the detail is a few
    // pixels, and each one more girl drawn into the custom depth and the capture every frame (the dorm lounge, eight
    // girls, 56 FPS).
    const bool Foreground=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(OKForegroundRange);
-   if(auto* F=E.FrontGpu.Get()){F->SetWorldTransform(E.Transform);F->SetVisibility(Foreground);}
-   if(auto* C=E.OccluderGpu.Get()){C->SetWorldTransform(E.Transform);C->SetVisibility(Foreground);}
-   if(auto* G=E.Gpu.Get()){G->SetWorldTransform(E.Transform);G->SetVisibility(true);if((Render->Ready.Load()||(!Installed&&E.LoadingRender&&E.LoadingRender->Ready.Load()))&&E.VisibleMs<=0)E.VisibleMs=(FPlatformTime::Seconds()-Started)*1000;}
-   if(auto* S=E.ShadowGpu.Get()){S->SetWorldTransform(E.Transform);S->SetVisibility(true);}
+   if(auto* F=E.FrontGpu.Get()){OKCrowdSetTransform(F,E.Transform);F->SetVisibility(Foreground);}
+   if(auto* C=E.OccluderGpu.Get()){OKCrowdSetTransform(C,E.Transform);C->SetVisibility(Foreground);}
+   if(auto* G=E.Gpu.Get()){OKCrowdSetTransform(G,E.Transform);G->SetVisibility(true);if((Render->Ready.Load()||(!Installed&&E.LoadingRender&&E.LoadingRender->Ready.Load()))&&E.VisibleMs<=0)E.VisibleMs=(FPlatformTime::Seconds()-Started)*1000;}
+   if(auto* S=E.ShadowGpu.Get()){OKCrowdSetTransform(S,E.Transform);S->SetVisibility(true);}
    if(!Installed&&E.LoadingGpuInstalled){ENQUEUE_RENDER_COMMAND(PrivateLoadingPlayback)([R=E.LoadingRender,P,CpuSource=!RequestedGpu](FRHICommandListImmediate&){if(R->UseCpu!=CpuSource)R->Reset=true;R->UseCpu=CpuSource;R->Playback={P};R->Enabled=true;});if(E.LoadingRender->Ready.Load()&&!E.PrivateGpuVisibleMs){E.PrivateGpuVisibleMs=(FPlatformTime::Seconds()-Started)*1000;E.PrivateGpuVisibleComplete=Complete;if(!FirstVisibleMs)FirstVisibleMs=E.PrivateGpuVisibleMs;UE_LOG(LogTemp,Display,TEXT("APNG private GPU visible: selection=%d elapsed_ms=%.3f complete=%d/%d"),A,E.PrivateGpuVisibleMs,Complete,Entries.Num());}}
-   if(auto* C=E.DepthCpu.Get()){C->SetVisibility(true);C->SetWorldTransform(E.Transform);if(!GpuMode){C->BoneSpaceTransforms=E.Cpu->BoneSpaceTransforms;C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();}}
-   if(auto* G=E.DepthGpu.Get()){G->SetWorldTransform(E.Transform);G->SetVisibility(DepthPrepassEnabled);}
+   if(auto* C=E.DepthCpu.Get()){C->SetVisibility(true);OKCrowdSetTransform(C,E.Transform);if(!GpuMode){C->BoneSpaceTransforms=E.Cpu->BoneSpaceTransforms;C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();}}
+   if(auto* G=E.DepthGpu.Get()){OKCrowdSetTransform(G,E.Transform);G->SetVisibility(DepthPrepassEnabled);}
   }
   if(!LoadingJobs.IsEmpty()){
    // Jobs borrow only immutable plain pose data for the duration of this joined

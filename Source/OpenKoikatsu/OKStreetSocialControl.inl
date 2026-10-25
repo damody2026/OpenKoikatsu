@@ -318,7 +318,9 @@ void AOKStreetSocialScene::StartControlServer(){
 
  // The street clock paused or running (the panel's pause button): {"paused": true|false}.
  Bind(TEXT("/clock"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
-  auto& S=*State;bool Paused=S.ClockPaused;OKControlBody(Req)->TryGetBoolField(TEXT("paused"),Paused);
+  auto& S=*State;bool Paused=S.ClockPaused;const auto ClockBody=OKControlBody(Req);ClockBody->TryGetBoolField(TEXT("paused"),Paused);
+  // "hours": set the time of day, like the panel's clock buttons (tests start where the heroines are about, not at dinner).
+  double Hours=-1;if(ClockBody->TryGetNumberField(TEXT("hours"),Hours)&&Hours>=0){S.ClockStartHours=FMath::Fmod(Hours+48.0,24.0);S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;S.CalendarLastHours=-1;S.ClockDrivesSun=S.Sun.IsValid();}
   if(Paused!=S.ClockPaused){const double Wall=FPlatformTime::Seconds();if(Paused)S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);S.ClockStartWall=Wall;S.ClockPaused=Paused;RefreshUI();}
   auto O=OKControlResult(true);O->SetBoolField(TEXT("paused"),S.ClockPaused);OKControlReply(Done,O);
  });

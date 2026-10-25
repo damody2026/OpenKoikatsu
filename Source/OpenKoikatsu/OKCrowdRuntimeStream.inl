@@ -108,8 +108,9 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
   const int32 SlotIndex=FreeActionSlot();if(SlotIndex==INDEX_NONE)break;
   auto& E=*Entries[Actor];
   if(E.PendingAction==INDEX_NONE||E.PendingEpoch==0||E.Clips.Num()<3||E.Clock.UsesClip(2)||E.StreamInstalled||ActionSlotBusy(Actor))continue;
-  // Read from disk the first time (FScene::ClipBytes); a clip that cannot be read drops the request.
-  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamClipBytes);if(ClipBytes(E.PendingAction).IsEmpty()){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;continue;}}
+  // Read from disk the first time, on a worker (FScene::ClipBytesReady: the request waits for it); a clip that cannot
+  // be read drops the request.
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamClipBytes);if(!ClipBytesReady(E.PendingAction))continue;if(ClipBytes(E.PendingAction).IsEmpty()){E.PendingAction=INDEX_NONE;E.PendingEpoch=0;continue;}}
   QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamStart);
   auto& Slot=ActionSlots[SlotIndex];Slot.Actor=Actor;Slot.Source=E.PendingAction;Slot.Epoch=E.PendingEpoch;
   const double StreamPrepareStart=FPlatformTime::Seconds();const int32 Source=Slot.Source;
