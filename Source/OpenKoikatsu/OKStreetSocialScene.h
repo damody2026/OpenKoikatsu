@@ -649,7 +649,7 @@ private:
  void SongSave();
  void SongReset(const FString& Why,bool CancelJob);
  TSharedPtr<class FJsonObject> SongDecide(bool Override) const;
- bool SongPrepare(int32 Girl,bool Override,FString& Error);
+ bool SongPrepare(int32 Girl,bool Override,FString& Error,const FString& Occasion=FString());TSharedPtr<class FJsonObject> SongMilestone() const;void SongCountLines(int32 Girl,int32 Lines);void SongReplay(int32 Memory);
  void SongPoll();
  void SongSay(const FString& Text);
  bool SongMayOffer(int32 Girl) const;

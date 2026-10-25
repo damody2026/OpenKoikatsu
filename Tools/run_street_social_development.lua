@@ -302,11 +302,13 @@ local function main()
   if not ports.voice then say("local-instance.json voice=false: no ok-tts / ok-asr from this checkout (built-in voices, no voice input)") end
   local servers = {}
   local asr_endpoint, tts_endpoint = "http://127.0.0.1:" .. ports.asr, "http://127.0.0.1:" .. ports.tts
+  local song_endpoint = "http://127.0.0.1:" .. ports.song
   -- Without servers of its own (voice=false), a checkout may speak through another one's ok-tts (testing the voices on
-  -- E with C's server): OK_TTS_ENDPOINT / OK_ASR_ENDPOINT from the environment win then.
+  -- E with C's server): OK_TTS_ENDPOINT / OK_ASR_ENDPOINT / OK_SONG_ENDPOINT from the environment win then.
   if not voice then
     tts_endpoint = fs.getenv("OK_TTS_ENDPOINT") or tts_endpoint
     asr_endpoint = fs.getenv("OK_ASR_ENDPOINT") or asr_endpoint
+    song_endpoint = fs.getenv("OK_SONG_ENDPOINT") or song_endpoint
   end
   local asr_settings = path.join(root, "Saved/StreetSocial/asr-settings.json")
   if voice then
@@ -388,7 +390,7 @@ local function main()
     OK_ASR_ENDPOINT = asr_endpoint,
     -- The launcher started ok-tts on this checkout's port; it wins over an endpoint saved in voice-settings.json.
     OK_TTS_ENDPOINT = tts_endpoint,
-    OK_SONG_ENDPOINT = "http://127.0.0.1:" .. ports.song,
+    OK_SONG_ENDPOINT = song_endpoint,
     -- The game saves the microphone chosen in its settings here; the next launch passes it to ok-asr.
     OK_ASR_SETTINGS = asr_settings,
     OK_ASR_SERVER = path.join(root, "Build/ok-asr/ok-asr.exe"),

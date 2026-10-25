@@ -109,44 +109,117 @@ pub fn decide(relations: &[Relation], ask: &SongAsk, t: &SongTuning) -> SongDeci
     SongDecision { ok: true, reason: "ok".into(), singer: Some(singer), ranking, override_thresholds: ask.override_thresholds }
 }
 
-/// One lyric sheet: the text shown (Traditional Chinese) and the text the song model reads (Simplified), with a style.
+/// One lyric sheet: the text shown (Traditional Chinese), sectioned by [主歌] / [副歌] / [橋段] and written out in full
+/// (a chorus sung three times is written three times: the caption follows the song line by line). The text the song
+/// model reads is made from it (`model_text`: Simplified, [Verse] / [Chorus] / [Bridge]). `occasion`: the sheet of a
+/// milestone song (song_milestone) rather than one for her stage and the hour.
 struct Sheet {
     id: &'static str,
     stages: &'static [&'static str],
     /// Hours of the street clock it suits (inclusive start, exclusive end; wraps past midnight).
     hours: (u32, u32),
+    occasion: &'static str,
     display: &'static str,
-    model: &'static str,
     tags: &'static [&'static str],
 }
 
+/// A full song, a minute and a half: two verses and the chorus three times. The song model does not stop when the sheet
+/// ends (it sings on to the limit), so the limit is the length; the last two seconds fade out (ok-song audio::mix).
+pub const SONG_MS: u32 = 90_000;
+
 const SHEETS: &[Sheet] = &[
-    Sheet { id: "evening_walk", stages: &["friend", "lover"], hours: (16, 23),
-            display: "[主歌]\n放學後的街角 路燈慢慢亮起\n你說今天的風 好像特別溫柔\n[副歌]\n晚風吹過街角的燈\n你走在我身邊慢慢等\n把今天的笑聲都收好\n明天還要一起走一程",
-            model: "[Verse]\n放学后的街角 路灯慢慢亮起\n你说今天的风 好像特别温柔\n\n[Chorus]\n晚风吹过街角的灯\n你走在我身边慢慢等\n把今天的笑声都收好\n明天还要一起走一程",
+    Sheet { id: "evening_walk", stages: &["friend", "lover"], hours: (16, 23), occasion: "",
+            display: "[主歌]\n放學後的街角 路燈慢慢亮起\n你說今天的風 好像特別溫柔\n[副歌]\n晚風吹過街角的燈\n你走在我身邊慢慢等\n把今天的笑聲都收好\n明天還要一起走一程\n\
+                      [主歌]\n影子並肩走著 一長一短的樣子\n你忽然停下來 指著第一顆星\n[副歌]\n晚風吹過街角的燈\n你走在我身邊慢慢等\n把今天的笑聲都收好\n明天還要一起走一程\n\
+                      [副歌]\n晚風吹過街角的燈\n你走在我身邊慢慢等\n把今天的笑聲都收好\n明天還要一起走一程",
             tags: &["piano", "warm", "female vocal", "ballad", "mandarin pop"] },
-    Sheet { id: "sunny_day", stages: &["stranger", "friend"], hours: (6, 16),
-            display: "[主歌]\n陽光落在窗邊 書頁輕輕翻動\n你笑著跟我說 早安這個城市\n[副歌]\n一起走過熱鬧的街\n風把影子拉得很長很長\n這樣普通的一天\n因為你也變得閃閃發亮",
-            model: "[Verse]\n阳光落在窗边 书页轻轻翻动\n你笑着跟我说 早安这个城市\n\n[Chorus]\n一起走过热闹的街\n风把影子拉得很长很长\n这样普通的一天\n因为你也变得闪闪发亮",
+    Sheet { id: "sunny_day", stages: &["stranger", "friend"], hours: (6, 16), occasion: "",
+            display: "[主歌]\n陽光落在窗邊 書頁輕輕翻動\n你笑著跟我說 早安這個城市\n[副歌]\n一起走過熱鬧的街\n風把影子拉得很長很長\n這樣普通的一天\n因為你也變得閃閃發亮\n\
+                      [主歌]\n路口的麵包香 飄進我們的話題\n你說下次一起 去更遠的地方\n[副歌]\n一起走過熱鬧的街\n風把影子拉得很長很長\n這樣普通的一天\n因為你也變得閃閃發亮\n\
+                      [副歌]\n一起走過熱鬧的街\n風把影子拉得很長很長\n這樣普通的一天\n因為你也變得閃閃發亮",
             tags: &["acoustic guitar", "bright", "female vocal", "pop", "upbeat"] },
-    Sheet { id: "lover_night", stages: &["lover"], hours: (20, 6),
-            display: "[主歌]\n夜色裡的街道 只剩我們兩個\n手心裡的溫度 比星星還要清楚\n[副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好",
-            model: "[Verse]\n夜色里的街道 只剩我们两个\n手心里的温度 比星星还要清楚\n\n[Chorus]\n就这样靠着你\n把心跳慢慢说给你听\n不用说太多的话\n你在这里就很好",
+    Sheet { id: "lover_night", stages: &["lover"], hours: (20, 6), occasion: "",
+            display: "[主歌]\n夜色裡的街道 只剩我們兩個\n手心裡的溫度 比星星還要清楚\n[副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好\n\
+                      [主歌]\n路燈一盞一盞 替我們數著腳步\n晚安說了好幾次 還是捨不得走\n[副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好\n\
+                      [副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好",
             tags: &["piano", "soft", "female vocal", "ballad", "romantic"] },
+    // Milestones (song_milestone): the day she became his lover, her favor at 100 and at its height, and every 500 lines
+    // of talk after that.
+    Sheet { id: "confession", stages: &["lover"], hours: (0, 24), occasion: "confession",
+            display: "[主歌]\n原來那些心跳 不是我的錯覺\n你說出口的時候 世界忽然好安靜\n[副歌]\n從今天開始\n我是你的戀人\n把害羞藏在笑容裡\n這一刻我會一直記得\n\
+                      [主歌]\n好多次想開口 又把話吞回去\n謝謝你比我勇敢 先走向了我\n[副歌]\n從今天開始\n我是你的戀人\n把害羞藏在笑容裡\n這一刻我會一直記得\n\
+                      [副歌]\n從今天開始\n我是你的戀人\n把害羞藏在笑容裡\n這一刻我會一直記得",
+            tags: &["piano", "strings", "female vocal", "ballad", "romantic"] },
+    Sheet { id: "favor100", stages: &["lover"], hours: (0, 24), occasion: "favor100",
+            display: "[主歌]\n習慣了你的聲音 習慣了你的步調\n一天沒見到你 就覺得少了什麼\n[副歌]\n越來越喜歡你\n比昨天再多一點點\n你說的每句玩笑\n我都偷偷放在心裡面\n\
+                      [主歌]\n一起走過的地方 都變成我的地圖\n每個轉角的回憶 都有你的笑容\n[副歌]\n越來越喜歡你\n比昨天再多一點點\n你說的每句玩笑\n我都偷偷放在心裡面\n\
+                      [副歌]\n越來越喜歡你\n比昨天再多一點點\n你說的每句玩笑\n我都偷偷放在心裡面",
+            tags: &["acoustic guitar", "warm", "female vocal", "pop", "sweet"] },
+    Sheet { id: "favor150", stages: &["lover"], hours: (0, 24), occasion: "favor150",
+            display: "[主歌]\n從陌生到熟悉 從朋友到戀人\n一路走到這裡 每一步都是你\n[副歌]\n一直一直在一起\n春天夏天秋天冬天\n就算世界很大很大\n我只想待在你身邊\n\
+                      [主歌]\n吵過架也和好 哭過也笑過\n你的手還是那樣 溫暖得剛剛好\n[副歌]\n一直一直在一起\n春天夏天秋天冬天\n就算世界很大很大\n我只想待在你身邊\n\
+                      [副歌]\n一直一直在一起\n春天夏天秋天冬天\n就算世界很大很大\n我只想待在你身邊",
+            tags: &["piano", "strings", "female vocal", "ballad", "emotional"] },
+    Sheet { id: "lines", stages: &["lover"], hours: (0, 24), occasion: "lines",
+            display: "[主歌]\n我們聊了好多 從早晨聊到夜晚\n說不完的小事 你都認真地聽\n[副歌]\n跟你說話的時候\n時間總是跑得好快\n再多說一句就好\n今天也想跟你在一起\n\
+                      [主歌]\n喜歡的歌 討厭的菜\n你都記得 清清楚楚\n[副歌]\n跟你說話的時候\n時間總是跑得好快\n再多說一句就好\n今天也想跟你在一起\n\
+                      [副歌]\n跟你說話的時候\n時間總是跑得好快\n再多說一句就好\n今天也想跟你在一起",
+            tags: &["acoustic guitar", "bright", "female vocal", "pop", "upbeat"] },
 ];
 
 fn in_hours(hour: u32, (start, end): (u32, u32)) -> bool {
     if start <= end { hour >= start && hour < end } else { hour >= start || hour < end }
 }
 
+/// The song model's text of a sheet: Simplified Chinese, sections [Verse] / [Chorus] / [Bridge], a blank line between.
+fn model_text(display: &str) -> String {
+    let mut out = String::new();
+    for line in display.lines() {
+        let l = line.trim();
+        if l.is_empty() {
+            continue;
+        }
+        let mark = match l {
+            "[主歌]" => Some("[Verse]"),
+            "[副歌]" => Some("[Chorus]"),
+            "[橋段]" => Some("[Bridge]"),
+            _ => None,
+        };
+        match mark {
+            Some(m) => {
+                if !out.is_empty() {
+                    out.push('\n');
+                }
+                out.push_str(m);
+            }
+            None => out.push_str(&zhconv::zhconv(l, zhconv::Variant::ZhCN)),
+        }
+        out.push('\n');
+    }
+    out.trim_end().to_string()
+}
+
+fn sheet_json(sheet: &Sheet, display: &str, template: &str) -> serde_json::Value {
+    serde_json::json!({"template": template, "lyrics_display": display, "lyrics_model": model_text(display), "tags": sheet.tags,
+                       "max_duration_ms": SONG_MS, "occasion": sheet.occasion})
+}
+
 /// The lyric sheet for her stage and the hour; the same day and stage always give the same sheet (a cached song is
-/// reused, and switching slots does not reshuffle it).
+/// reused, and switching slots does not reshuffle it). A milestone's occasion picks its own sheet.
 pub fn lyrics(stage: &str, hour: u32, day: i32) -> serde_json::Value {
-    let fits: Vec<&Sheet> = SHEETS.iter().filter(|s| s.stages.contains(&stage) && in_hours(hour, s.hours)).collect();
-    let pool: Vec<&Sheet> = if fits.is_empty() { SHEETS.iter().filter(|s| s.stages.contains(&stage)).collect() } else { fits };
-    let pool = if pool.is_empty() { SHEETS.iter().collect() } else { pool };
+    lyrics_for(stage, hour, day, "")
+}
+
+pub fn lyrics_for(stage: &str, hour: u32, day: i32, occasion: &str) -> serde_json::Value {
+    if let Some(sheet) = SHEETS.iter().find(|s| !occasion.is_empty() && s.occasion == occasion) {
+        return sheet_json(sheet, sheet.display, sheet.id);
+    }
+    let general = || SHEETS.iter().filter(|s| s.occasion.is_empty());
+    let fits: Vec<&Sheet> = general().filter(|s| s.stages.contains(&stage) && in_hours(hour, s.hours)).collect();
+    let pool: Vec<&Sheet> = if fits.is_empty() { general().filter(|s| s.stages.contains(&stage)).collect() } else { fits };
+    let pool = if pool.is_empty() { general().collect() } else { pool };
     let sheet = pool[(day.unsigned_abs() as usize) % pool.len()];
-    serde_json::json!({"template": sheet.id, "lyrics_display": sheet.display, "lyrics_model": sheet.model, "tags": sheet.tags, "max_duration_ms": 30000})
+    sheet_json(sheet, sheet.display, sheet.id)
 }
 
 /// A place he and she have been to together, as it is sung: a short name and one line of what they did there.
@@ -207,25 +280,79 @@ fn shared_spots(shared: &[serde_json::Value]) -> Vec<&'static Spot> {
 /// section 6: shared experiences fill a template); the chorus and style stay those of the sheet. Without such memories
 /// it is the sheet as it is.
 pub fn lyrics_with(stage: &str, hour: u32, day: i32, shared: &[serde_json::Value]) -> serde_json::Value {
-    let mut v = lyrics(stage, hour, day);
+    lyrics_with_for(stage, hour, day, "", shared)
+}
+
+/// The first verse made from their places; the confession and the height of her love keep their own words.
+pub fn lyrics_with_for(stage: &str, hour: u32, day: i32, occasion: &str, shared: &[serde_json::Value]) -> serde_json::Value {
+    let mut v = lyrics_for(stage, hour, day, occasion);
     let spots = shared_spots(shared);
-    if spots.is_empty() {
+    if spots.is_empty() || matches!(occasion, "confession" | "favor150") {
         return v;
     }
     let display = v["lyrics_display"].as_str().unwrap_or("").to_string();
-    let chorus = display.split_once("[副歌]").map(|(_, c)| c.trim_start_matches('\n').to_string()).unwrap_or_default();
     let verse = match spots.as_slice() {
         [a] => format!("還記得{}的那天\n{}\n你說過的每一句話\n我都悄悄記在心上", a.name, a.line),
         [a, b, ..] => format!("還記得{}的那天\n{}\n還有在{}的時候\n{}", a.name, a.line, b.name, b.line),
         [] => unreachable!(),
     };
-    let display = format!("[主歌]\n{verse}\n[副歌]\n{chorus}");
-    let model = format!("[Verse]\n{}\n\n[Chorus]\n{}", zhconv::zhconv(&verse, zhconv::Variant::ZhCN), zhconv::zhconv(&chorus, zhconv::Variant::ZhCN));
+    // The first [主歌] section's lines give way to the verse of their places; everything after it stays.
+    let rest = display.split_once("[主歌]\n").map(|(_, r)| r).unwrap_or(&display);
+    let rest = rest.find("\n[").map(|i| &rest[i + 1..]).unwrap_or("");
+    let display = format!("[主歌]\n{verse}\n{rest}");
     let template = format!("{}+{}", v["template"].as_str().unwrap_or(""), spots.iter().map(|s| s.place).collect::<Vec<_>>().join("+"));
     v["template"] = template.into();
+    v["lyrics_model"] = model_text(&display).into();
     v["lyrics_display"] = display.into();
-    v["lyrics_model"] = model.into();
     v
+}
+
+/// One heroine as song_milestone sees her: her stage and favor, the milestone songs she has sung, and the lines of talk
+/// with him since her last song.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct SongProgress {
+    pub id: String,
+    pub stage: String,
+    pub favor: f32,
+    pub done: Vec<String>,
+    pub lines: u32,
+}
+
+/// Lines of talk with her between songs once the milestones are sung.
+pub const LINES_PER_SONG: u32 = 500;
+
+/// Her next milestone song: (occasion, due now). The day she becomes his lover; then her favor reaching 100 and its
+/// height (the lover cap, 150); after those, every LINES_PER_SONG lines of talk. Not yet due but close ("near": a
+/// friend who likes him a lot, favor 85 / 135, 400 lines), the song is made ahead (a full song takes minutes to make)
+/// and waits until it is due.
+pub fn milestone(p: &SongProgress) -> Option<(&'static str, bool)> {
+    let done = |o: &str| p.done.iter().any(|d| d == o);
+    let rel = Relation { id: p.id.clone(), stage: p.stage.clone(), favor: p.favor, ..Default::default() };
+    match p.stage.as_str() {
+        "lover" if !done("confession") => Some(("confession", true)),
+        "lover" if !done("favor100") => (p.favor >= 85.0).then_some(("favor100", p.favor >= 100.0)),
+        "lover" if !done("favor150") => (p.favor >= 135.0).then_some(("favor150", p.favor >= LOVER_TOP_FAVOR)),
+        "lover" => (p.lines >= LINES_PER_SONG * 4 / 5).then_some(("lines", p.lines >= LINES_PER_SONG)),
+        "friend" if !done("confession") => (rel.liking() >= 60.0).then_some(("confession", false)),
+        _ => None,
+    }
+}
+
+/// Her favor at its height as a lover (the cap, 150; a hair under it counts).
+const LOVER_TOP_FAVOR: f32 = crate::relation::LOVER_FAVOR_CAP - 0.5;
+
+/// Over all heroines: the milestone song due now (the earliest kind first, then the one who likes him most), else the
+/// one to make ahead.
+pub fn milestone_pick(heroines: &[SongProgress]) -> serde_json::Value {
+    let order = |o: &str| ["confession", "favor100", "favor150", "lines"].iter().position(|x| *x == o).unwrap_or(9);
+    let mut found: Vec<(&SongProgress, &str, bool)> = heroines.iter().filter(|h| !h.id.is_empty() && h.favor.is_finite())
+        .filter_map(|h| milestone(h).map(|(o, due)| (h, o, due))).collect();
+    found.sort_by(|a, b| b.2.cmp(&a.2).then(order(a.1).cmp(&order(b.1))).then(b.0.favor.total_cmp(&a.0.favor)).then(a.0.id.cmp(&b.0.id)));
+    match found.first() {
+        Some((h, o, due)) => serde_json::json!({"id": h.id, "occasion": o, "due": due}),
+        None => serde_json::Value::Null,
+    }
 }
 
 
@@ -297,46 +424,37 @@ pub fn phrases(env: &[f32], hop: f32) -> Vec<(f32, f32)> {
     merged
 }
 
-/// The sung units of the sheet: (verse, chorus) — half lines (split at spaces) under [主歌] / [Verse], lines under
-/// [副歌] / [Chorus].
-fn sheet_units(lyrics: &str) -> (usize, usize) {
-    let (mut verse, mut chorus, mut part) = (0, 0, 0);
+/// The sung units of the sheet in order, each with its part: half lines (split at spaces) under [主歌] / [Verse] and
+/// [橋段] / [Bridge], whole lines under [副歌] / [Chorus]. Lines under any other mark are not sung units.
+fn units(lyrics: &str) -> Vec<(&'static str, String)> {
+    let (mut out, mut part) = (Vec::new(), "");
     for line in lyrics.lines() {
         let l = line.trim();
         if l.starts_with('[') {
             let low = l.to_lowercase();
-            part = if l.contains("主歌") || low.contains("verse") { 1 } else if l.contains("副歌") || low.contains("chorus") { 2 } else { 0 };
-            continue;
-        }
-        if l.is_empty() {
-            continue;
-        }
-        match part {
-            1 => verse += l.split_whitespace().count(),
-            2 => chorus += 1,
-            _ => {}
-        }
-    }
-    (verse, chorus)
-}
-
-/// The sung units' texts, split like sheet_units: verse half lines, chorus lines.
-fn unit_texts(lyrics: &str) -> Vec<String> {
-    let (mut out, mut part) = (Vec::new(), 0);
-    for line in lyrics.lines() {
-        let l = line.trim();
-        if l.starts_with('[') {
-            let low = l.to_lowercase();
-            part = if l.contains("主歌") || low.contains("verse") { 1 } else if l.contains("副歌") || low.contains("chorus") { 2 } else { 0 };
+            part = if l.contains("主歌") || low.contains("verse") {
+                "verse"
+            } else if l.contains("副歌") || low.contains("chorus") {
+                "chorus"
+            } else if l.contains("橋段") || l.contains("桥段") || low.contains("bridge") {
+                "bridge"
+            } else {
+                ""
+            };
             continue;
         }
         match (part, l.is_empty()) {
-            (1, false) => out.extend(l.split_whitespace().map(str::to_string)),
-            (2, false) => out.push(l.to_string()),
+            ("verse" | "bridge", false) => out.extend(l.split_whitespace().map(|h| (part, h.to_string()))),
+            ("chorus", false) => out.push((part, l.to_string())),
             _ => {}
         }
     }
     out
+}
+
+/// The sung units' texts (see units).
+fn unit_texts(lyrics: &str) -> Vec<String> {
+    units(lyrics).into_iter().map(|(_, t)| t).collect()
 }
 
 /// The song's lines on its clock when the breaths do not show them (sung legato, the envelope rarely falls silent):
@@ -371,13 +489,23 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template:
         rng ^= rng << 17;
         (rng % n.max(1) as u64) as usize
     };
-    let (verse, chorus_lines) = sheet_units(lyrics);
+    let sung = units(lyrics);
+    let verse = sung.iter().filter(|u| u.0 == "verse").count();
     let breaths = phrases(env, hop);
     // The breaths when they show about as many phrases as the sheet has lines, else the lines spread over the voice.
-    let ph = if breaths.len() * 4 >= (verse + chorus_lines) * 3 || breaths.is_empty() {
+    let ph = if breaths.len() * 4 >= sung.len() * 3 || breaths.is_empty() {
         breaths.clone()
     } else {
-        even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), verse + chorus_lines)
+        even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), sung.len())
+    };
+    // The part sung in phrase i: the unit at the same place in the sheet (the sections in order: verse, chorus, verse,
+    // chorus, bridge, chorus).
+    let part_of = |i: usize| -> &'static str {
+        if sung.is_empty() {
+            return "chorus";
+        }
+        let k = if ph.len() == sung.len() { i } else { i * sung.len() / ph.len().max(1) };
+        sung[k.min(sung.len() - 1)].0
     };
     // Caption lines: one per sheet unit; the breaths when there is exactly one per unit, else the units spread over the
     // voice.
@@ -410,13 +538,15 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template:
         if i + 1 == ph.len() && ph.len() > 1 {
             break; // the last phrase keeps its move; the finale comes on its last note
         }
-        if i < verse {
+        let part = part_of(i);
+        if part != "chorus" {
+            // A verse or bridge line: a gesture, a different one each line.
             let mut k = next(choreo::VERSE.len());
             if k == last_verse {
                 k = (k + 1) % choreo::VERSE.len();
             }
             last_verse = k;
-            push(&mut cues, start - 0.2, choreo::VERSE[k], "verse");
+            push(&mut cues, start - 0.2, choreo::VERSE[k], part);
         } else {
             push(&mut cues, start - 0.2, chorus[chorus_at % chorus.len()], "chorus");
             chorus_at += 1;
@@ -447,14 +577,22 @@ pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json
             };
             serde_json::to_value(decide(&relations, &ask, &tuning)).map_err(|e| e.to_string())
         })()),
-        // request: stage, hour, day, shared (optional: her ok-mind memories with him, best first) -> the lyric sheet
+        // request: stage, hour, day, shared (optional: her ok-mind memories with him, best first), occasion (optional: a
+        // milestone's, from song_milestone) -> the lyric sheet
         "song_lyrics" => {
             let stage = request.get("stage").and_then(serde_json::Value::as_str).unwrap_or("friend");
             let hour = request.get("hour").and_then(serde_json::Value::as_u64).unwrap_or(18) as u32;
             let day = request.get("day").and_then(serde_json::Value::as_i64).unwrap_or(0) as i32;
             let shared = request.get("shared").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
-            Some(Ok(lyrics_with(stage, hour % 24, day, &shared)))
+            let occasion = request.get("occasion").and_then(serde_json::Value::as_str).unwrap_or("");
+            Some(Ok(lyrics_with_for(stage, hour % 24, day, occasion, &shared)))
         }
+        // request: heroines [{id, stage, favor, done [occasions sung], lines (since her last song)}]
+        // -> {pick: {id, occasion, due} | null}: the milestone song due now, else the one to make ahead
+        "song_milestone" => Some((|| {
+            let heroines: Vec<SongProgress> = serde_json::from_value(request.get("heroines").cloned().unwrap_or_default()).map_err(|e| format!("heroines: {e}"))?;
+            Ok(serde_json::json!({"pick": milestone_pick(&heroines), "lines_per_song": LINES_PER_SONG}))
+        })()),
         // request: mouth (the song's mouth envelope), hop (seconds per value), lyrics (the displayed sheet), template, seed
         // -> {intro, outro, cues [{at, clip, part}], ...}: her musical staging (choreograph)
         "song_choreo" => {
@@ -552,6 +690,58 @@ mod tests {
         assert_eq!(lyrics_with("friend", 10, 3, &[mem("encounter", "park")]), lyrics("friend", 10, 3));
         let e = eval("song_lyrics", &serde_json::json!({"stage": "lover", "hour": 22, "day": 5, "shared": shared})).unwrap().unwrap();
         assert_eq!(e["template"], "lover_night+library+aquarium");
+    }
+
+    #[test]
+    fn full_songs_have_two_verses_and_three_choruses() {
+        for sheet in SHEETS {
+            let u = units(sheet.display);
+            let count = |p: &str| u.iter().filter(|x| x.0 == p).count();
+            assert_eq!(count("verse"), 8, "{}", sheet.id);
+            assert_eq!(count("chorus"), 12, "{}", sheet.id);
+            assert_eq!(count("bridge"), 0, "{}", sheet.id);
+            let v = lyrics_for("lover", 21, 1, sheet.occasion);
+            assert_eq!(v["max_duration_ms"], SONG_MS);
+            let m = v["lyrics_model"].as_str().unwrap();
+            assert_eq!(m.matches("[Chorus]").count(), 3, "{m}");
+            assert!(!m.contains("[Bridge]") && !m.contains("[主歌]") && m.chars().count() < 640, "{m}");
+        }
+        // a milestone's own words; memories fill the first verse of the others, the rest stays
+        assert_eq!(lyrics_for("lover", 21, 1, "confession")["template"], "confession");
+        let mem = serde_json::json!({"kind": "date", "place": "aquarium", "importance": 0.9});
+        assert_eq!(lyrics_with_for("lover", 21, 1, "confession", &[mem.clone()])["template"], "confession");
+        let v = lyrics_with_for("lover", 21, 1, "favor100", &[mem]);
+        let d = v["lyrics_display"].as_str().unwrap();
+        assert!(d.starts_with("[主歌]\n還記得水族館的那天\n") && d.contains("[主歌]\n一起走過的地方") && d.matches("[副歌]").count() == 3, "{d}");
+        assert_eq!(units(d).iter().filter(|x| x.0 == "chorus").count(), 12);
+    }
+
+    #[test]
+    fn milestones_lover_then_favor_100_150_then_every_500_lines() {
+        let p = |stage: &str, favor: f32, done: &[&str], lines: u32| SongProgress {
+            id: "apng-a".into(), stage: stage.into(), favor, done: done.iter().map(|s| s.to_string()).collect(), lines };
+        assert_eq!(milestone(&p("stranger", 50.0, &[], 0)), None);
+        assert_eq!(milestone(&p("friend", 60.0, &[], 0)), None); // liking 45: not close yet
+        assert_eq!(milestone(&p("friend", 190.0, &[], 0)), Some(("confession", false))); // made ahead
+        assert_eq!(milestone(&p("lover", 0.0, &[], 0)), Some(("confession", true)));
+        assert_eq!(milestone(&p("lover", 50.0, &["confession"], 0)), None);
+        assert_eq!(milestone(&p("lover", 90.0, &["confession"], 0)), Some(("favor100", false)));
+        assert_eq!(milestone(&p("lover", 100.0, &["confession"], 0)), Some(("favor100", true)));
+        assert_eq!(milestone(&p("lover", 120.0, &["confession", "favor100"], 0)), None);
+        assert_eq!(milestone(&p("lover", 140.0, &["confession", "favor100"], 0)), Some(("favor150", false)));
+        assert_eq!(milestone(&p("lover", 150.0, &["confession", "favor100"], 0)), Some(("favor150", true)));
+        let all = ["confession", "favor100", "favor150"];
+        assert_eq!(milestone(&p("lover", 150.0, &all, 399)), None);
+        assert_eq!(milestone(&p("lover", 150.0, &all, 420)), Some(("lines", false)));
+        assert_eq!(milestone(&p("lover", 150.0, &all, 500)), Some(("lines", true)));
+        // a due song comes before one made ahead; among due ones, the earlier milestone
+        let e = eval("song_milestone", &serde_json::json!({"heroines": [
+            {"id": "apng-b", "stage": "lover", "favor": 140.0, "done": ["confession", "favor100"]},
+            {"id": "apng-c", "stage": "lover", "favor": 150.0, "done": ["confession", "favor100", "favor150"], "lines": 520},
+            {"id": "apng-d", "stage": "lover", "favor": 100.0, "done": ["confession"]}]})).unwrap().unwrap();
+        assert_eq!(e["pick"], serde_json::json!({"id": "apng-d", "occasion": "favor100", "due": true}));
+        let none = eval("song_milestone", &serde_json::json!({"heroines": [{"id": "apng-b", "stage": "friend", "favor": 10.0}]})).unwrap().unwrap();
+        assert!(none["pick"].is_null());
     }
 
     fn her(id: &str, stage: &str, liking: f32) -> Relation {

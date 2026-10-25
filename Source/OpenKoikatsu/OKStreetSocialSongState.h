@@ -7,12 +7,26 @@
 // The game event, separate from the ok-song job: a ready song is not a song being sung.
 enum class EOKSongPhase : uint8 { Idle, Preparing, Ready, Offered, Intro, Singing, Outro, Failed };
 
+// A heroine's milestone songs (rules song_milestone): the occasions she has sung, lines of talk since her last song.
+struct FOKSongProgress {
+ TArray<FString> Done;int32 Lines=0;
+};
+
+// A song she sang, kept to hear again: the mix, her mouth envelope and the sheet (songs.json "memories").
+struct FOKSongMemory {
+ FString HeroineId,Occasion,Template,Lyrics,LyricsModel,SongPath,MouthPath;float Hop=.01f;int32 Day=0;
+};
+
 struct FOKSongState {
  EOKSongPhase Phase=EOKSongPhase::Idle;
  // ok-song service (OK_SONG_ENDPOINT, set by the launcher); empty: no songs in this run.
  FString Endpoint;
- // Automatic songs are off until the player turns them on (saved in songs.json); the control channel can still test.
- bool Enabled=false,Loaded=false,Override=false,RequestPending=false,PollPending=false,SayPending=false,SpeechStarted=false;
+ // Songs are on unless the player turns them off (saved in songs.json); the control channel can still test.
+ bool Enabled=true,Loaded=false,Override=false,RequestPending=false,PollPending=false,SayPending=false,SpeechStarted=false;
+ // This event's milestone (song_milestone: confession, favor100, favor150, lines; empty for a test song), whether it
+ // is due (a song made ahead waits until it is), and Replay: she sings one of her earlier songs again (no milestone).
+ FString Occasion;bool Due=false,Replay=false;
+ TMap<FString,FOKSongProgress> Progress;TArray<FOKSongMemory> Memories;
  // The locked singer and this event's identity; callbacks check Epoch (bumped by every reset, slot load and new event).
  int32 Girl=INDEX_NONE;uint32 Epoch=0;
  FString SaveId,EventId,RequestId,JobId,HeroineId,VoiceTag,ArtifactKey,JobStage,Template,Lyrics,SongPath,SongVoiceId,Notice,LastReason;

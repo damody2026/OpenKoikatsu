@@ -369,6 +369,14 @@ void AOKStreetSocialScene::StartControlServer(){
  // Her song (OKStreetSocialSong.inl): {"action": state|prepare|play|accept|later|decline|skip|cancel|enable|disable, "girl": N}.
  Bind(TEXT("/song"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   const TSharedRef<FJsonObject> Body=OKControlBody(Req);FString Action=TEXT("state");Body->TryGetStringField(TEXT("action"),Action);int32 Girl=0;Body->TryGetNumberField(TEXT("girl"),Girl);
+  // Testing her milestone songs: set_relation {girl, stage?, favor?, lines?} sets her stage / favor and the lines since
+  // her last song (then the song rules see it on their next check).
+  if(Action==TEXT("set_relation")){auto& S=*State;const auto* R=OKSongRelation(S,Girl);
+   if(!R){OKControlReply(Done,OKControlResult(false,TEXT("he has not met her")));return;}
+   auto* W=const_cast<FOKStreetRelation*>(R);FString Stage;double Favor=0;int32 Lines=0;
+   if(Body->TryGetStringField(TEXT("stage"),Stage))W->Stage=Stage;if(Body->TryGetNumberField(TEXT("favor"),Favor))W->Favor=float(Favor);
+   if(Body->TryGetNumberField(TEXT("lines"),Lines)){if(!S.Song.Loaded)SongLoad();S.Song.Progress.FindOrAdd(W->Id).Lines=Lines;SongSave();}
+   S.Song.NextCheck=0;RefreshUI();Action=TEXT("state");}
   OKControlReply(Done,SongControl(Action,Girl));
  });
  Bind(TEXT("/rules"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){

@@ -1109,7 +1109,7 @@ void AOKStreetSocialScene::SendFreeTalk(){
  // What he said, for the rules that read it (who pays: shop.rs chat_order_payer), one on one or to the group alike. A
  // turn the game wrote for her (a till note, "you just walked in", a nudge) is not his words.
  const bool His=!OKStreetFreeTalkIsNudge(Text)&&!S.SystemNote;S.SystemNote=false;
- if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;}
+ if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;SongCountLines(Character,1);} // his line counts toward her next song
  // His line aloud in his tone (the dropdown's x-vector voice), face to face, when the voice is TTS: her answer waits
  // until he has said it (TickFreeTalkSpeech, the galgame box).
  if(His&&S.Node==INDEX_NONE&&S.TtsEnabled&&!S.Japanese&&!S.TtsCacheDir.IsEmpty()&&S.MaleTone!=TEXT("off")&&RemoteKind(Character)==0){
@@ -1186,6 +1186,7 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  if(RemoteKind(Character)==0){int32 Chars=0;for(const FString& L:Reply->Lines)Chars+=L.Len();PlayGesture(Character,Reply->Gesture,Reply->Emotion,0.6f+0.22f*Chars);}
  // Free-talk replies have no recorded clip, so they always go to the TTS server (independent of the
  // V voice-mode toggle, which only chooses for scripted lines); the text stays on screen either way.
+ SongCountLines(Character,Reply->Lines.Num()); // her lines count toward her next song (every 500, OKStreetSocialSong.inl)
  if(!S.TtsCacheDir.IsEmpty()&&RemoteKind(Character)!=1)SpeakFreeTalk(Character,Reply->Lines,Serial); // a text message is read, not heard
  // What happens next (going somewhere now, an act, or a promise for later) is judged by DeepSeek from his words and hers,
  // not by keyword rules (JudgeFreeTalk). Without words of his (a nudge, a notice) she does her own acts but never starts

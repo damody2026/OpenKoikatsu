@@ -128,7 +128,13 @@ fn worker(state: &State) {
         let job_dir = state.cfg.jobs_dir().join(&id);
         let _ = std::fs::create_dir_all(&job_dir);
         let progress = JobProgress { state, id: id.clone() };
-        let result = job::run(&state.cfg, &req, &voice, &keys, &job_dir, cancel.clone(), &progress);
+        // A panic inside a stage (a CUDA library that cannot be loaded, a bug) fails this job instead of killing the
+        // worker: otherwise the job stays "generating" forever and no later job runs.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job::run(&state.cfg, &req, &voice, &keys, &job_dir, cancel.clone(), &progress)))
+            .unwrap_or_else(|panic| {
+                let what = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
+                Err(anyhow::anyhow!("internal error: {what}"))
+            });
         state.busy.store(false, Ordering::SeqCst);
         let mut jobs = state.jobs.lock().unwrap();
         if let Some(j) = jobs.get_mut(&id) {

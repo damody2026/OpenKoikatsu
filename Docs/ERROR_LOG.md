@@ -3977,3 +3977,9 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **`if/else UE_LOG` 第三次**（2026-10-25，ok-mind 存檔排入佇列）：又寫成 `if(!Ok)UE_LOG(...);else ...`（C2181）。只靠「記得」防不住，改成機器檢查：`Tools/rebuild_street_social_runtime.lua` 編譯前掃 `Source/` 的 `UE_LOG(...);else`，有就直接報出檔名行號、不開始建置。
 - **男主語音占住 TTS 伺服器，她的回覆逾時顯示「无法连接到 TTS 服务器」**（2026-10-25，街區男主語音）：GPU 滿載時他一句 34 字的台詞合成要 40 秒；伺服器一次只做一句，她的回覆排在後面、15 秒逾時。遊戲端逾時不會停掉伺服器上的工作，所以放棄的那句還是照樣占著引擎。修正：他的請求帶自己的 channel／generation，放棄（逾時、她的回覆已等 3 秒、對話結束、換下一句）時送 /cancel 讓伺服器也停掉。凡是會放棄等待的 TTS 請求，都要能在伺服器端取消。另外測試腳本挑「最新的 Play 目錄」拿到的是別的 session 的遊戲 log，要用控制埠辨認自己的。
 - **用舊版 ok-tts 測 GPU 優先權，設定沒有作用**（2026-10-25，E 組 TTS）：直接用 C 的 `Build/ok-tts/ok-tts.exe`（10-22 編的）加 `OK_TTS_GPU_PRIORITY=5`，但這個環境變數是 10-25 才加進原始碼，舊 exe 不認，白跑一輪才發現。測伺服器設定前先確認啟動 log 有對應的那一行（這裡是 `GPU scheduling priority class 5`），沒有就從原始碼重編。
+
+- **E 線唱歌改版的兩個編譯錯誤**（2026-10-25）：`FJsonObject::Values` 的 key 在 UE5.8 不能直接傳給 `TMap<FString,...>::FindOrAdd`（C2665），要包成 `FString(P.Key)`；BuildSongRow 裡新宣告的 `Name` 遮住了外層同名變數（C4456，警告視為錯誤）。各浪費一次 stage 建置。在 .inl 裡加區域變數前先看外層有沒有同名變數。
+- **在 GPU 記憶體快滿時開沙盒，遊戲卡在載入**（2026-10-25）：開了三個遊戲、兩個 Editor，再加上自己的 ok-tts，32 GB 用到 31.1 GB，新開的沙盒在第 1 幀之後就不動了。開遊戲前先看 `nvidia-smi`，剩不到 6 GB 就等別人的測試結束；測試要用 TTS 時，優先共用已經在跑的 ok-tts。
+- **ok-song 的工作執行緒 panic 後，工作永遠停在 generating**（2026-10-25，E 線唱歌）：測試時直接執行 `target\release\ok-song.exe`，旁邊沒有 CUDA DLL（nvrtc），生成階段 panic，把唯一的工作執行緒一起帶走。工作狀態一直是 generating，遊戲就等了 40 分鐘以上。修正：每個工作都包在 `catch_unwind` 裡，panic 時記為 failed，執行緒繼續處理下一個（`Tools/ok-song/src/server.rs`）；遊戲端製作超過一小時也會記為失敗（Song.inl）。另外，測試用的 ok-song 要放在有 `cuda\` 的資料夾旁邊執行，例如建一個 junction 指到 `Build/ok-song/cuda`。
+- **`OKT(...)+TEXT(...)` 編不過**（2026-10-25，E 線唱歌）：`OKT` 傳回 `const TCHAR*`，兩個指標不能相加（C2110）。要接字串時先包成 `FString(OKT(...))`。又浪費一次 stage 建置。
+- **90 秒的歌在 90 秒處被硬切**（2026-10-25，E 線唱歌）：歌詞寫成兩段主歌、三次副歌加橋段，模型唱完要 100 秒以上，`max_duration_ms=90000` 把最後一段副歌切在字中間（嘴型在第 90 秒還在動）。修正：拿掉橋段，給模型 100 秒讓它自己唱完；mix 最後 2 秒一律淡出（`ok-song audio::mix`，artifact key 加 `fade_out_s`）。驗收長度上限的時候，要看結尾是不是還在唱，而不是只看長度對不對。

@@ -27,7 +27,7 @@ use crate::backend::{revisions, stage_error, Runner, StageError};
 use crate::config::Config;
 
 pub const RECIPE_VERSION: u32 = 1;
-const MAX_LYRICS_CHARS: usize = 400;
+const MAX_LYRICS_CHARS: usize = 640;
 const MIX_TARGET_LUFS: f64 = -16.0;
 const MIX_CEILING_DBTP: f64 = -1.0;
 
@@ -93,7 +93,8 @@ impl SongRequest {
             bail!("tags: 1..12 words without commas");
         }
         self.tags = self.tags.iter().map(|t| clean_text(t).to_lowercase()).collect();
-        self.max_duration_ms = self.max_duration_ms.clamp(10_000, 60_000);
+        // Up to two minutes: her full songs are about a minute and a half (two verses, chorus three times, a bridge).
+        self.max_duration_ms = self.max_duration_ms.clamp(10_000, 120_000);
         if self.recipe_version != RECIPE_VERSION {
             bail!("recipe_version {} is not supported (this ok-song makes {RECIPE_VERSION})", self.recipe_version);
         }
@@ -175,7 +176,7 @@ pub fn keys(cfg: &Config, req: &SongRequest, voice: &Voice) -> Keys {
     let stems = key_of(&json!({"song": song, "separate": rev["separate"]}));
     let artifact = key_of(&json!({"stems": stems, "convert": rev["convert"], "voice_tag": voice.tag, "reference_sha1": voice.reference_sha1,
                                   "lyrics_display": req.lyrics_display, "mix": {"target_lufs": MIX_TARGET_LUFS, "ceiling_dbtp": MIX_CEILING_DBTP,
-                                  "rate": audio::OUTPUT_RATE}, "envelope": "rms10ms/p95 floor0.08 attack0.6 release0.25", "f0_shift": 0}));
+                                  "rate": audio::OUTPUT_RATE, "fade_out_s": 2}, "envelope": "rms10ms/p95 floor0.08 attack0.6 release0.25", "f0_shift": 0}));
     Keys { song, stems, artifact }
 }
 
@@ -384,7 +385,7 @@ mod tests {
         r.validate().unwrap();
         assert_eq!(r.lyrics_model, "晚风吹");
         assert_eq!(r.tags, vec!["piano"]);
-        assert_eq!(r.max_duration_ms, 60_000);
+        assert_eq!(r.max_duration_ms, 120_000);
         let mut bad = req();
         bad.tags = vec!["a,b".into()];
         assert!(bad.validate().is_err());

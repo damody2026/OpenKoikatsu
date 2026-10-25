@@ -275,6 +275,14 @@ pub fn mix(vocals: &Audio, accompaniment: &Audio, target_lufs: f64, ceiling_dbtp
             out[i] = v.get(i).copied().unwrap_or(0.0) + a.get(i).copied().unwrap_or(0.0);
         }
     }
+    // The last two seconds fade out: a song the model did not finish within its length (cut at max_duration_ms) ends
+    // softly instead of mid-word, and a finished one only loses its tail of silence or reverb.
+    let fade = (OUTPUT_RATE as usize * 2).min(len);
+    for c in channels.iter_mut() {
+        for (k, s) in c[len - fade..].iter_mut().enumerate() {
+            *s *= (0.5 + 0.5 * (std::f32::consts::PI * k as f32 / fade.max(1) as f32).cos()) as f32;
+        }
+    }
     let mut out = Audio { rate: OUTPUT_RATE, channels };
     let before = integrated_lufs(&out);
     let peak = true_peak_db(&out);
