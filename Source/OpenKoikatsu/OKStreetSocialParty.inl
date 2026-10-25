@@ -124,6 +124,7 @@ void AOKStreetSocialScene::TickParty(float Dt){
   for(const int32 G:Gone){S.PartyLeaving.Remove(G);const FString Name=S.Manifest.Characters.IsValidIndex(G)?S.Manifest.Characters[G].Name:FString();
    if(G==FreeTalkPartner())PartyHandOver(G);
    else{PartyLeave(G,TEXT("nobody kept her"));S.PartyEvents.Add(OKMsg(TEXT("ui.party.has_left"), {{TEXT("name"), *Name}}));S.Message=OKMsg(TEXT("ui.party.name_left_notice"), {{TEXT("name"), *Name}});}}}
+ TickPartySeats();
  if(S.Party.IsEmpty())return;
  const int32 Partner=FreeTalkPartner();if(Partner==INDEX_NONE)S.PartyLog.Reset();
  // He talks to someone a member dislikes: she will not stay (his girlfriend stays, reluctantly). Once for each pair.
@@ -139,6 +140,7 @@ void AOKStreetSocialScene::TickParty(float Dt){
   const int32 G=S.Party[K];if(!S.Agents.IsValidIndex(G-1)||G==Partner)continue;auto& A=S.Agents[G-1];
   const float Angle=(Partner!=INDEX_NONE?TalkAngles:WalkAngles)[(Slot++)%4];
   if(FMath::Abs(A.Position.Z-S.Male.Z)>150.f&&S.NpcLifts.Contains(G))continue; // riding a lift
+  if(S.PartySeats.ContainsByPredicate([G](const FOKLifePose& P){return P.Actor==G&&P.Phase==1;})){A.Held=true;continue;} // sitting on her chair
   if(FVector::Dist2D(A.Position,S.Male)>2500.f){PartyLeave(G,TEXT("too far behind"));--K;continue;}
   FVector Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*155.f;Spot.Z=S.Male.Z;
   // A spot inside something (a counter, a wall): closer to him.
@@ -158,6 +160,49 @@ void AOKStreetSocialScene::TickParty(float Dt){
   }
   A.Held=true;
  }
+}
+
+// The two of them sit down (a meal, drinks at a table): the others with them sit too, each at her spot beside him on a
+// chair of her own (SpawnLifeProps), in the action slots the pair leaves free; up again when the pair gets up or she
+// leaves the group. (She stood beside the table the whole time eating her tiramisu while the other two sat.)
+void AOKStreetSocialScene::TickPartySeats(){
+ auto& S=*State;const int32 Partner=FreeTalkPartner();const double Now=SceneTime();
+ const bool Sitting=Partner!=INDEX_NONE&&S.Pair.Partner==Partner&&S.Pair.Phase==1&&(S.Pair.Meal||S.Pair.Seated);
+ // Her seat is the partner's (the meal's eating clip brings the table); at a meal she eats while something of hers is
+ // being eaten (TickMeal's MealAteAt), else sits idle, as the two of them do.
+ const FString Clip=Sitting?S.Pair.FemaleClip:FString();
+ for(int32 K=S.PartySeats.Num()-1;K>=0;--K){auto& P=S.PartySeats[K];
+  if(!Sitting||P.Clip!=Clip||!S.Party.Contains(P.Actor)||P.Actor==Partner||S.PartyLeaving.Contains(P.Actor)){StopPartySeat(K);continue;}
+  if(P.Phase!=0){
+   if(!S.Pair.Meal||S.SeatedFemaleClip.IsEmpty())continue;
+   const double* Ate=S.MealAteAt.Find(P.Actor);const FString Want=Ate&&FPlatformTime::Seconds()-*Ate<3.0?P.Clip:S.SeatedFemaleClip;
+   FString& Playing=S.PartySeatNow.FindOrAdd(P.Actor,P.Clip);
+   if(Want!=Playing){FString Error;if(OKPlayCrowdRuntimeAction(this,P.Actor,Want,Error))Playing=Want;}
+   continue;}
+  if(Now-P.Requested>60){S.PartySeatRetry.Add(P.Actor,Now+30);StopPartySeat(K);continue;}
+  FOKRuntimeActionStreamStatus A;
+  if(OKGetCrowdRuntimeActionStatus(this,P.Actor,A)&&A.Ready&&!A.Pending&&!A.Preparing&&A.ClipId==P.Clip){FString Error;
+   if(OKPlayCrowdRuntimeAction(this,P.Actor,P.Clip,Error)){P.Phase=1;SpawnLifeProps(P,true);UE_LOG(LogTemp,Display,TEXT("Street party: actor %d sits with them (%s)"),P.Actor,*P.Clip);}
+   else{S.PartySeatRetry.Add(P.Actor,Now+30);StopPartySeat(K);}}
+ }
+ if(!Sitting||!OKLifeSeatedClip(Clip))return;
+ const int32 Free=FMath::Max(0,OKCrowdRuntimeActionSlots-2); // the two of them hold two
+ for(const int32 G:S.Party){
+  if(S.PartySeats.Num()>=Free)break;
+  if(G==Partner||S.PartyLeaving.Contains(G)||!S.Agents.IsValidIndex(G-1)||S.PartySeatRetry.FindRef(G)>Now||S.PartySeats.ContainsByPredicate([G](const FOKLifePose& P){return P.Actor==G;}))continue;
+  if(FVector::Dist2D(S.Agents[G-1].Position,S.Male)>260.f)continue; // at her spot beside him first (TickParty walks her there)
+  // A heroine's own pose nearby gives its slot up (TickLife counts the seats too).
+  StopLifePose(G);while(S.LifePoses.Num()>FMath::Max(0,Free-S.PartySeats.Num()-1))StopLifePose(S.LifePoses.Last().Actor);
+  FString Error;
+  if(OKPrewarmCrowdRuntimeAction(this,G,Clip,Error)){FOKLifePose P;P.Actor=G;P.Clip=Clip;P.Requested=Now;S.PartySeats.Add(P);}
+  else{S.PartySeatRetry.Add(G,Now+30);UE_LOG(LogTemp,Warning,TEXT("Street party: actor %d cannot sit (%s): %s"),G,*Clip,*Error);}
+ }
+}
+void AOKStreetSocialScene::StopPartySeat(int32 Index){
+ auto& S=*State;if(!S.PartySeats.IsValidIndex(Index))return;auto& P=S.PartySeats[Index];
+ FString Error;OKResumeCrowdRuntimeBehavior(this,P.Actor,Error);
+ for(auto& Prop:P.Props)if(Prop.IsValid())Prop->Destroy();
+ S.PartySeatNow.Remove(P.Actor);UE_LOG(LogTemp,Display,TEXT("Street party: actor %d gets up"),P.Actor);S.PartySeats.RemoveAt(Index);
 }
 
 // One line of his, the whole party answers: one DeepSeek call writes the lines (who says what), favor for each, who
@@ -214,7 +259,13 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
    if(!Booked.IsEmpty())States+=OKMsg(TEXT("ui.party.booked_with_him"), {{TEXT("name"), *SpokenName(G)}, {TEXT("meetings"), *Booked}});}
  }
  {const FString Bonds=BondText(Members);if(!Bonds.IsEmpty())States+=OKT(TEXT("ui.party.girls_relations_label"))+Bonds+TEXT("\n");}
+ // What is on the table now (whose, how much is left): a dish that was never ordered is not "eaten up" in their lines.
+ if(!S.Table.IsEmpty())States+=OKT(TEXT("ui.party.table_now_label"))+DishTableText()+TEXT("\n");
+ // Who pays, once settled ("my treat" a turn ago): so nobody asks again whether it is his treat.
+ {const FString How=PayAgreed(FreeTalkPartner());if(How==TEXT("him")||How==TEXT("split")||How==TEXT("her"))States+=OKMsg(TEXT("ui.party.pay_agreed_line"),{{TEXT("how"),How==TEXT("him")?OKT(TEXT("ui.party.pay_agreed_him")):How==TEXT("split")?OKT(TEXT("ui.party.pay_agreed_split")):OKT(TEXT("ui.party.pay_agreed_her"))}});}
  System+=OKT(TEXT("ui.party.ai_party_prompt"));
+ // Who pays, every turn (not only at the menu): "my treat" said on the way there is the deal at the place (RecordPayAgreed).
+ System+=OKT(TEXT("ui.party.payer_format_instruction"));
  for(const auto& A:OKStreetActivities())System+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), A.Id}, {TEXT("name"), A.Name}});
  System+=OKT(TEXT("ui.party.place_id_label"));for(const auto& P:OKStreetPlaces())System+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), P.Id}, {TEXT("name"), P.Name}});
  // In a shop: the menu, and what each of them orders now (he pays; no extra call).
@@ -275,6 +326,13 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
   Memory.Add({TEXT("user"),OKT(TEXT("ui.party.in_group_note"))+Text});Memory.Add({TEXT("assistant"),OKStreetFreeTalkMemoryReply(Mine)});OKStreetFreeTalkTrimMemory(Memory);
  }
  FreeTalkSaveMemory();
+ // Her one-on-one talks go through the mind's own context (SubmitFreeTalkToMind), not the memory above: the exchange goes
+ // there too, or the apology he made in front of both of them in the morning was never heard ("I'm still angry about
+ // yesterday" at lunch).
+ {const FString Sep=OKT(TEXT("ui.party.group_note_separator"));TArray<FString> Heard;for(const auto& [G,Line]:Ordered)Heard.Add(SpokenName(G)+OKT(TEXT("ui.economy.colon_mark"))+Line);
+  if(!Heard.IsEmpty()){const FString Exchange=FString::Join(Heard,*Sep);
+   const FString Note=OKStreetFreeTalkIsNudge(Text)?OKMsg(TEXT("ui.party.group_talk_note"),{{TEXT("lines"),*Exchange}}):OKMsg(TEXT("ui.party.group_talk_note_his"),{{TEXT("his"),*Text},{TEXT("lines"),*Exchange}});
+   for(const int32 G:Members)MindNote(G,Note);}}
  // Favor for each, then who leaves, then what they all do now.
  const TSharedPtr<FJsonObject>* Favor=nullptr;FString Notes;
  if(Reply->TryGetObjectField(TEXT("favor"),Favor))for(const auto& KV:(*Favor)->Values){const int32 G=Find(FString(KV.Key));double D=0;if(G!=INDEX_NONE&&KV.Value.IsValid()&&KV.Value->TryGetNumber(D)&&FMath::RoundToInt(D)!=0){ApplyFreeTalkFavor(G,FMath::Clamp(FMath::RoundToInt(D),-3,3),FString());Notes+=OKMsg(TEXT("ui.party.favor_delta_entry"), {{TEXT("name"), *S.Manifest.Characters[G].Name}, {TEXT("delta"), FMath::RoundToInt(D)}});}}
@@ -315,7 +373,10 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
     if(!Item)for(const auto* I:ItemsHere(Shop))if(I->Name==ItemId||ItemId.Contains(I->Name)){Item=I;break;} // by name
     if(!Item||!SoldHere(*Item,Shop)||!Item->Consumable)continue;ItemId=Item->Id;
     {const int32 For=Find(Who);const int32 Eater=For==INDEX_NONE?0:For;
-     if(HasDishLike(Eater,*Item)){UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s still has one"),*Item->Name,Eater==0?TEXT("he"):*S.Manifest.Characters[Eater].Name);continue;}}
+     if(HasDishLike(Eater,*Item)){UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s still has one"),*Item->Name,Eater==0?TEXT("he"):*S.Manifest.Characters[Eater].Name);continue;}
+     // Food for a girl already full is not ordered (as one-on-one, TooFullFor): she would leave it untouched.
+     if(Eater!=0&&TooFullFor(Eater,*Item)){S.PartyEvents.Add(OKMsg(TEXT("ui.party.too_full_to_order"),{{TEXT("girl_name"),*S.Manifest.Characters[Eater].Name},{TEXT("item"),Item->Name}}));
+      UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s is full"),*Item->Name,*S.Manifest.Characters[Eater].Name);continue;}}
     FOKStreetCartLine Line;Line.ItemId=ItemId;Line.Size=Item->DefaultSize();if(!Item->Options.IsEmpty()){Line.Sweetness=OKT(TEXT("ui.mind.full_sugar_label"));Line.Ice=OKT(TEXT("ui.mind.normal_state_label"));}
     const int32 G=Find(Who);if(G==Partner)Line.ForHer=true;else if(G!=INDEX_NONE)Line.Girl=G;
     S.Cart.Add(Line);UE_LOG(LogTemp,Display,TEXT("Street party order: %s for %s"),*Item->Name,G==INDEX_NONE?TEXT("him"):*S.Manifest.Characters[G].Name);}

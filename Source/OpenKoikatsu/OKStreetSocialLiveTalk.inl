@@ -95,20 +95,21 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
  if(!S.FreeTalkLive&&!S.FreeTalkMicOpen)return;
  if(S.FreeTalkLive){
  // Her actual audio, not the dialogue box: a scripted line whose completion is lost must not keep the mic muted.
- const bool Speaking=OKCrowdRuntimeSpeechActive(this,Partner)||S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
+ const bool Speaking=FreeTalkHerVoiceBusy(); // in a group, whichever girl is speaking
  // He talks over her (the server hears speech above the raised barge-in threshold): she stops, the rest of
  // her reply is dropped, and his words go to the model as usual.
  // Her song is a performance, not a reply: talking does not stop it (and the microphone is off while she sings).
  const bool Singing=SongOwnsVoice(Partner);
  if(Speaking&&!Singing&&S.FreeTalkLiveSpeaking&&S.FreeTalkLiveReady&&!S.ControlMicIgnored){
-  FString Ignore;OKStopCrowdRuntimeSpeech(this,Partner,Ignore);
+  FString Ignore;OKStopCrowdRuntimeSpeech(this,Partner,Ignore);for(const int32 Who:S.FreeTalkSpeechSpeakers)if(Who>0&&Who!=Partner)OKStopCrowdRuntimeSpeech(this,Who,Ignore);
+  GalgameDropGroupLines(); // the group's lines not said yet are dropped too
   S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();S.FreeTalkReplay.Reset();S.FreeTalkReplayParts.Reset();S.FreeTalkReplayHold=0;
   for(const auto& Stream:S.FreeTalkSpeechStreams)if(Stream)Stream->Finish();
   if(S.Node!=INDEX_NONE)S.LineInterrupted=true; // a scripted line: it ends here and counts as said (FinishLine)
   UE_LOG(LogTemp,Display,TEXT("Free talk live: the player interrupted her"));S.LiveTestInterrupted=true;
   S.FreeTalkNotice=OKT(TEXT("ui.live_talk.you_interrupted_continue"));
  }
- const bool Talking=OKCrowdRuntimeSpeechActive(this,Partner)||S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
+ const bool Talking=FreeTalkHerVoiceBusy();
  // His typed line spoken aloud (TickFreeTalkHisVoice): the microphone is off meanwhile, or it would take his own
  // voice from the speakers for something he said.
  // Her song likewise: through the speakers it is a voice too, and the ASR would take the lyrics for his words.
@@ -368,6 +369,10 @@ void AOKStreetSocialScene::TickThenAction(){
  if((S.Pair.Partner==Girl&&!MealDone)||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl)||S.SoloGirl==Girl||S.OutingGirl==Girl||!S.RetryAction.IsEmpty()||S.FreeTalkBusy)return;
  if(OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive))return;
  if(S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);}))return;
+ // Eating where they stand (the convenience store, no seat): what is on the table is eaten first ("once we have eaten
+ // I'll walk you home" left with her rice ball half eaten), unless nobody can eat any more of it (TickMeal keeps
+ // TableClearedAt current while the rest is left over).
+ if(S.Table.ContainsByPredicate([Girl](const FOKStreetDish& D){return D.Served&&D.Percent>0.f&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Girl);})&&SceneTime()-S.TableClearedAt>1.0)return;
  // Arrived where they went first (a walk in the park, then lunch): a while there before going on.
  if(S.ThenStayMinutes>0){if(S.ThenReadyAt<=0){S.ThenReadyAt=OKStreetMindNow(S)+S.ThenStayMinutes;S.ThenUntil=FMath::Max(S.ThenUntil,S.ThenReadyAt+60);UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d after %lld minutes here"),*S.ThenAction,Girl,S.ThenStayMinutes);}
   if(OKStreetMindNow(S)<S.ThenReadyAt)return;}

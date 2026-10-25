@@ -629,3 +629,21 @@
 
 - 提交 d5a449d9 前我跑了「上游有沒有改到我要提交的檔案」的檢查，它明明列出了三個 ui_text.toml，我還是照樣 `git add` 工作目錄的版本，結果把別人剛加的女主唱歌文字（singer_changed、offer_line_* 等 22 行×3）刪掉，馬上用 a1387954 以上游版本為底、只套上我那一行修改還原。
 - 規則：重疊檢查只要列出檔案，就不能直接 add 工作目錄版本；要以 `git show origin/master:<檔案>` 為底重新套上自己的修改（或 3-way merge），寫回工作目錄後再提交，提交後用 `git diff <上游> HEAD -- <檔案>` 確認只剩自己的那幾行。
+
+### 2026-10-25 在先 include 的 .inl 裡直接用後面 .inl 才定義的 struct（C 組十女主循環）
+
+- Gest51 第一次編譯失敗：在 `OKStreetSocialLiveTalk.inl` 直接寫 `Galgame->GroupNext`，但 `FOKStreetGalgame` 定義在之後才 include 的 `OKStreetSocialGalgame.inl`（C2027 未定義型別）；同時在 const 成員函式裡把 `this` 傳給要 `AActor*` 的 `OKCrowdRuntimeSpeechActive`（C2664）。
+- 規則：只在某個 .inl 定義的型別，其他 .inl 一律透過 `OKStreetSocialScene.h` 宣告的成員函式存取（例如 `GalgameDropGroupLines()`），函式本體寫在定義該型別的 .inl；要在 const 函式呼叫只讀但簽名不是 const 的 helper 時，要明確 `const_cast` 並註明只讀。
+- 寫進房捷徑時直接用 `exec <絕對路徑>`，沒注意 `ULocalPlayer::ExecMacro` 會對路徑不含 "Binaries" 的檔案前面加 `../../Binaries/`，61 個捷徑在封裝版全部會找不到巨集（拍攝腳本把巨集放在名為 `Binaries` 的資料夾就是為了這個）。改把巨集放進 `play-rooms/Binaries/`。
+- 測試捷徑時以為巨集裡每行的 `DEFER` 會累加；其實每行都從執行巨集那一刻各自計數。截圖排在 90、傳送排在 120，結果截圖先拍，誤以為傳送失敗。截圖、結束要排在傳送之後（480、560 > 300）。另外 PowerShell `Start-Process -ArgumentList` 不會替含空白的參數加引號，`-ExecCmds=exec <路徑>` 要自己包引號。
+
+### 2026-10-25 又在大函式裡用了外層已有的變數名，還沒看編譯結果就重啟遊戲（C 組十女主循環）
+
+- Gest55 第一次編譯失敗：在 `OKStreetSocialParty.inl` 的群聊回覆處理裡新增 `const FString Lines=...`，外層已經有 `TArray<FString> Lines`（C4456，與先前 `Names` 同一類錯）。改名 `Exchange`。
+- 同一次我在背景編譯還沒確認結果前就停掉遊戲、重新啟動，啟動器挑到的仍是舊的 Gest54。
+- 規則：在超過一百行的函式裡加區塊變數前，先在函式範圍 grep 一次新名字；背景編譯一定要看到 `Result: Succeeded` 與 `STAGE EXIT=0` 才停舊遊戲、啟動新版，啟動後用 log 的 `Base Directory` 確認是新 tag。
+
+### 2026-10-25 用 `lua -e` 在命令列帶中文字串搜尋，結果永遠找不到（C 組十女主循環）
+
+- 在 bash 裡執行 `Tools/lua/lua.exe -e '...u:find("沒有點成")...'`，中文經 Windows 命令列轉成系統代碼頁，跟 UTF-8 的檔案內容永遠比對不上，害我誤判「通知沒送到」「記憶裡沒有」。
+- 規則：要用中文搜尋時，把字串寫進 UTF-8 檔案，或直接寫在 .lua 腳本檔裡；命令列只帶 ASCII。grep 檔案則不受影響。

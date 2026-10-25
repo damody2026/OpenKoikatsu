@@ -120,7 +120,7 @@ void AOKStreetSocialScene::StopStrayPoses(){
  if(Wall<S.StrayPoseAt)return;S.StrayPoseAt=Wall+0.5;
  for(int32 I=1;I<=S.Agents.Num();++I){
   FOKRuntimeActionStreamStatus A;
-  const bool Legit=InLifePose(I)||S.Pair.Partner==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I)||S.PrivateGirl==I||S.SleepGirl==I||S.SleepGirl2==I||S.SoloGirl==I
+  const bool Legit=InLifePose(I)||S.PartySeats.ContainsByPredicate([I](const FOKLifePose& P){return P.Actor==I;})||S.Pair.Partner==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I)||S.PrivateGirl==I||S.SleepGirl==I||S.SleepGirl2==I||S.SoloGirl==I
    ||S.LoverPose.Girl==I||S.LoverReact.Girl==I||S.AmbientActor==I||S.RestroomGirl==I||S.NpcLifts.Contains(I);
   if(Legit||!OKGetCrowdRuntimeActionStatus(this,I,A)||!A.Playing||!OKLifeSeatedClip(A.ClipId)){S.StrayPose.Remove(I);continue;}
   int32& Seen=S.StrayPose.FindOrAdd(I,0);
@@ -132,7 +132,9 @@ void AOKStreetSocialScene::StopStrayPoses(){
 bool AOKStreetSocialScene::InLifePose(int32 I) const{return State&&State->LifePoses.ContainsByPredicate([I](const FOKLifePose& P){return P.Actor==I;});}
 
 // A chair under her (the facility meal's sizes, in her frame: +Y ahead), and for a meal a table with a plate.
-void AOKStreetSocialScene::SpawnLifeProps(FOKLifePose& Pose){
+// SeatOnly: the seat and its legs, no back and no table of her own (one of a group at the pair's table: the back stood
+// right in front of the talk camera, which looks across the table from the side).
+void AOKStreetSocialScene::SpawnLifeProps(FOKLifePose& Pose,bool SeatOnly){
  auto& S=*State;const int32 I=Pose.Actor;const FString Clip=Pose.Clip;if(!S.Agents.IsValidIndex(I-1)||!OKLifeSeatedClip(Clip))return;
  auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Scenes/StreetSocial/Meshes/StreetCube.StreetCube"));if(!Cube)return;
  const FRotator Facing(0,S.Rotations[I].Yaw,0);const FVector Base=S.Agents[I-1].Position;
@@ -142,9 +144,9 @@ void AOKStreetSocialScene::SpawnLifeProps(FOKLifePose& Pose){
   const FString Path=FString::Printf(TEXT("/Game/Scenes/StreetSocial/Materials/StreetMaterial%02d.StreetMaterial%02d"),Material,Material);
   if(auto* M=LoadObject<UMaterialInterface>(nullptr,*Path))C->SetMaterial(0,M);Pose.Props.Add(A);
  };
- Part(FVector(0,-15,41),FVector(47,45,6),8);Part(FVector(0,-40,71),FVector(47,6,60),8);
+ Part(FVector(0,-15,41),FVector(47,45,6),8);if(!SeatOnly)Part(FVector(0,-40,71),FVector(47,6,60),8);
  for(float X:{-19.f,19.f})for(float Y:{-33.f,3.f})Part(FVector(X,Y,19),FVector(5,5,38),8);
- if(OKLifeTableClip(Clip)){
+ if(!SeatOnly&&OKLifeTableClip(Clip)){
   Part(FVector(0,62,69),FVector(90,70,6),8);for(float X:{-38.f,38.f})for(float Y:{32.f,92.f})Part(FVector(X,Y,33),FVector(6,6,66),8);
   Part(FVector(0,60,73),FVector(30,24,3),7);
  }
@@ -162,7 +164,7 @@ void AOKStreetSocialScene::TickLife(float Dt){
  // (which waits while any pose plays). What he does in the foreground keeps two slots for the two of them; the rest go on
  // with their day (at lunch with Alice, five others stood frozen round the cafeteria instead of eating).
  const bool Foreground=S.Target!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.Facility!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE||S.SoloGirl!=INDEX_NONE||S.SleepPhase!=0||S.LoverReact.Girl!=INDEX_NONE||S.LoverPose.Girl!=INDEX_NONE;
- const int32 LifeLimit=FMath::Min(2,FMath::Max(0,OKCrowdRuntimeActionSlots-(Foreground?2:0)));
+ const int32 LifeLimit=FMath::Max(0,FMath::Min(2,FMath::Max(0,OKCrowdRuntimeActionSlots-(Foreground?2:0)))-S.PartySeats.Num()); // the party sitting with them first (TickPartySeats)
  while(S.LifePoses.Num()>LifeLimit)StopLifePose(S.LifePoses.Last().Actor);
  {
   // Keep a pose while her block wants that clip and he is around; a closer heroine with something to do takes over.

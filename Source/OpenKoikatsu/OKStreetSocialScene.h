@@ -371,7 +371,7 @@ private:
  void ApplyChoiceReply(int32 Character,const struct FOKFreeTalkReply& Reply);
  void SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial);
  void RequestFreeTalkSegment(int32 Generation,int32 Index);
- void TickFreeTalkSpeech(double Now);void TickFreeTalkHisVoice(double Now);bool FreeTalkHisVoiceBusy() const;
+ void TickFreeTalkSpeech(double Now);void TickFreeTalkHisVoice(double Now);bool FreeTalkHisVoiceBusy() const;bool FreeTalkHerVoiceBusy() const;void GalgameDropGroupLines();
  void ApplyFreeTalkFavor(int32 Character,int32 Delta,const FString& Reason);
  void CancelFreeTalkVoice();
  FString FreeTalkFilePath(const TCHAR* Name) const;
@@ -456,7 +456,8 @@ private:
  void PlaceChatOrder(int32 Her,const FString& HerSaid=FString()); // HerSaid: her line that ordered it (her own offer to pay)
  void TickShopArrival();
  bool InLifePose(int32 I) const;
- void SpawnLifeProps(struct FOKLifePose& Pose);
+ void SpawnLifeProps(struct FOKLifePose& Pose,bool SeatOnly=false);
+ void TickPartySeats();void StopPartySeat(int32 Index);
  void TickLife(float Dt);
  bool EntrustReminderDone(const struct FOKStreetAppointment& A) const;
  bool InitiativeFree(int32 I) const;

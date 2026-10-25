@@ -385,7 +385,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  double PhotoViewUntil=0;FVector PhotoViewLoc=FVector::ZeroVector;FRotator PhotoViewRot=FRotator::ZeroRotator;
  // An activity's effect (activities.toml effect "explosion"): when it goes off, where, and what is shown of it.
  // Walking out in the rain (weather.rs walk_style): the umbrella shown over him (and her, when they share it).
- FString WalkStyle;TWeakObjectPtr<AActor> Umbrella;
+ TArray<FOKLifePose> PartySeats;TMap<int32,double> PartySeatRetry;TMap<int32,FString> PartySeatNow; // the others with them sitting down too (TickPartySeats)
+ FString WalkStyle,WalkFact;TWeakObjectPtr<AActor> Umbrella; // WalkFact: told while they are still on the way, dropped when the walk ends
  double EffectAt=0;FVector EffectWhere=FVector::ZeroVector;FString EffectKind;TArray<TWeakObjectPtr<AActor>> EffectActors;TWeakObjectPtr<class UPointLightComponent> EffectLight;
  // A photo walk (photo_walk): the stops photographed so far, the album they go in, and the pause at a stop.
  int32 PhotoWalkStops=0;FString PhotoWalkAlbum;double PhotoWalkPauseUntil=0;TArray<FHerPhoto> HerPhotos;
@@ -3589,6 +3590,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   {FVector SongAt,SongFocus;if(SongCameraShot(SceneTime(),Dt,SongAt,SongFocus)){S.Camera->SetActorLocation(SongAt);S.Camera->SetActorRotation((SongFocus-SongAt).Rotation());S.Camera->GetCameraComponent()->SetFieldOfView(40.f);}}if(GControlCamera.Active&&!OKApplyControlCamera(this,S.Camera.Get()))GControlCamera.Active=false;OKUpdateCrowdRuntimeDisplayLighting(this,-S.Camera->GetActorForwardVector());}
  if(S.Camera.IsValid()&&SceneTime()<S.PhotoViewUntil)S.Camera->SetActorLocationAndRotation(S.PhotoViewLoc,S.PhotoViewRot); // a photo being taken
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickGalgame);TickGalgame(Dt);} // conversations as galgame scenes: dialog box, portrait, a shot per line (OKStreetSocialGalgame.inl)
+ if(GControlCamera.Active&&S.Camera.IsValid())OKApplyControlCamera(this,S.Camera.Get()); // the control channel's pinned camera wins over the scene's shot (a look at a seated group mid-talk)
  const bool AppEscape=Focused&&!S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::Escape);if(AppEscape)CloseApp();
  if(Focused&&S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::M)&&S.PrivateGirl==INDEX_NONE)ToggleBigMap();
  if(Focused&&!AppEscape&&OKKeyPressed(PC,EKeys::Escape)){if(S.BigMapOpen)ToggleBigMap();else if(S.SleepNap&&S.SleepPhase==2)S.SleepWake=true;else if(S.OutingGirl!=INDEX_NONE)CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else if(S.PrivateGirl!=INDEX_NONE)FinishPrivate();else if((S.NavGirl!=INDEX_NONE||S.NavPointActive)&&S.Target==INDEX_NONE)StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));else if(S.Pair.Partner!=INDEX_NONE)FinishPhoto();else if(S.Companion!=INDEX_NONE)FarewellCompanion();else if(S.Facility!=INDEX_NONE)FinishFacility();else EndTalk();}
