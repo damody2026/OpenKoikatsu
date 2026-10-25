@@ -353,6 +353,10 @@ struct Appointment {
     /// The game minute she got to the place (-1: she is not there yet). Absent: she is taken to have been there all along.
     #[serde(default, skip_serializing)]
     she_since: Option<i64>,
+    /// Fact: while she was there for it, he was talking with another girl at least once (her wait was that, not him
+    /// being late).
+    #[serde(default, skip_serializing)]
+    busy_seen: bool,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -368,6 +372,9 @@ struct Her {
 /// effects.
 /// Minutes a heroine keeps waiting past the grace before it is a no-show.
 const DATE_WAIT: i64 = 60;
+/// There for their meeting and he is talking with another girl: she waits this long without cutting in, then goes over
+/// and joins them (she stood eight metres off for half an hour, then told him he was half an hour late).
+const BUSY_PATIENCE: i64 = 10;
 /// Favor a no-show costs, and the most being late costs (1 per 3 minutes late).
 const STOOD_UP_FAVOR: f32 = 20.0;
 const LATE_FAVOR_PER_MINUTE: f32 = 1.0 / 3.0;
@@ -434,6 +441,22 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
         let wait = if girl { DATE_WAIT } else if a.kind == "shift" { SHIFT_LATE_WAIT } else { 0 };
         if a.there && now >= a.start - 30 && now <= a.start + a.grace as i64 + wait {
             if busy {
+                // He is talking with another girl: after a polite wait she goes over and joins them. Not late on his
+                // part; she remembers whom he was with and a little jealousy toward her.
+                let there_for = match a.she_since { Some(s) if s >= 0 => now - a.start.max(s), _ => -1 };
+                if girl && !talking.is_empty() && there_for >= BUSY_PATIENCE {
+                    list[k].status = "done".into();
+                    updates.push(json!({"id": a.id, "status": "done"}));
+                    let other = s(r, "talking_name");
+                    if let Some(rel) = hers.get_mut(&a.heroine).and_then(|h| h.relation.as_mut()) {
+                        let before = rel.clone();
+                        let j = rel.jealousy_toward.entry(talking.to_string()).or_insert(0.0);
+                        *j = (*j + 5.0).min(100.0);
+                        fx.relation(rel, &before);
+                    }
+                    fx.note_at(&a.heroine, "date", &crate::tr::m("social.waited_while_he_talked", &[("other", crate::tr::a(&other)), ("minutes", crate::tr::a(&there_for))]), &a.place, 0.55);
+                    arrive.push(json!({"id": a.id, "heroine": a.heroine, "late": false, "join": true}));
+                }
                 continue;
             }
             // Arriving together is not him keeping her waiting, however late the two of them are.
@@ -446,7 +469,9 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
                 Some(s) if s < 0 => 0,
                 Some(s) => now - a.start.max(s),
             };
-            let late = waited > 0 && !together;
+            // He was there talking with another girl while she waited: that wait was his company, not him being late
+            // (the note says so; she joined them or he came over when they finished).
+            let late = waited > 0 && !together && !a.busy_seen;
             list[k].status = if late { "late" } else { "done" }.into();
             updates.push(json!({"id": a.id, "status": list[k].status}));
             if girl {
@@ -457,7 +482,7 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
                         fx.relation(rel, &before);
                     }
                 }
-                fx.note_at(&a.heroine, "date", &if late { crate::tr::m("social.late_minutes", &[("minutes", crate::tr::a(&waited))]) } else if together { crate::tr::t("social.came_together").into() } else { crate::tr::t("social.on_time").into() }, &a.place, if late { 0.5 } else { 0.6 });
+                fx.note_at(&a.heroine, "date", &if late { crate::tr::m("social.late_minutes", &[("minutes", crate::tr::a(&waited))]) } else if a.busy_seen && waited > 0 { crate::tr::m("social.waited_while_he_talked", &[("other", crate::tr::a(&s(r, "talking_name"))), ("minutes", crate::tr::a(&waited))]) } else if together { crate::tr::t("social.came_together").into() } else { crate::tr::t("social.on_time").into() }, &a.place, if late { 0.5 } else { 0.6 });
                 arrive.push(json!({"id": a.id, "heroine": a.heroine, "late": late}));
             }
             notice = format!("{}{}", if late { crate::tr::t("social.late_prefix") } else { crate::tr::t("social.arrived_on_time_prefix") }, a.label);
@@ -973,6 +998,14 @@ mod tests {
             "heroines": {"a": her(60.0), "b": her(60.0)}})).unwrap();
         assert_eq!(v["updates"], json!([{"id": 1, "status": "missed"}, {"id": 2, "status": "missed"}, {"id": 3, "status": "late"}]));
         assert_eq!(v["blacklist"][0]["until"], 7);
+        // He is there on time but talking with another girl: she waits ten minutes, then goes over and joins (not late).
+        let her_date = |now: i64, busy: bool| appointments_tick(&json!({"now": now, "day": 0, "talking_to": "c", "talking_name": "C",
+            "appointments": [{"id": 4, "kind": "date", "heroine": "a", "place": "cafe", "start": 900, "grace": 20, "status": "pending", "there": true, "she_since": 900, "busy_seen": busy}],
+            "heroines": {"a": her(60.0)}})).unwrap();
+        assert!(her_date(905, true)["updates"].as_array().unwrap().is_empty());
+        let joined = her_date(910, true);
+        assert_eq!(joined["updates"], json!([{"id": 4, "status": "done"}]));
+        assert_eq!(joined["arrive"][0]["join"], true);
         // A pickup she asked for and he never answered: no meeting, nobody stood up; past the time it lapses, she notes it.
         let asked = appointments_tick(&json!({"now": 1400, "day": 0, "appointments": [{"id": 9, "kind": "pickup", "heroine": "g", "place": "campus_t2", "label": "x", "start": 1320, "grace": 20, "status": "asked"}], "heroines": {"g": her(60.0)}})).unwrap();
         assert_eq!(asked["updates"], json!([{"id": 9, "status": "unanswered"}]));
