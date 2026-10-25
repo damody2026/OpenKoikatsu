@@ -265,7 +265,7 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  if(!State||!State->Manifest.Characters.IsValidIndex(Character))return;auto& S=*State;
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
- const TSharedPtr<FJsonObject> Mind=MindBiasAnswer(Character,true);
+ TSharedPtr<FJsonObject> Mind;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusBias);Mind=MindBiasAnswer(Character,true);}
  const FOKStreetBias Bias=OKRulesBiasFrom(Mind);
  TArray<FString> Axes;
  static const TMap<FString,FString> Names={{TEXT("trust"),TEXT("信任")},{TEXT("admiration"),TEXT("崇拜")},{TEXT("attraction"),TEXT("吸引")},{TEXT("dependency"),TEXT("依賴")},{TEXT("mystique"),TEXT("神秘感")},{TEXT("jealousy"),TEXT("忌妒")},{TEXT("greed"),TEXT("物慾")},{TEXT("lifestyle_desire"),TEXT("生活欲望")},{TEXT("respect"),TEXT("尊重")},{TEXT("resentment"),TEXT("怨懟")}};
@@ -276,11 +276,11 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  // Apart (a message or a call) the place, menu and people around him are not around her: she knows where he is only if
  // he says so or somebody saw him (what she heard).
  const bool Apart=RemoteWith(Character);
- Status.Menu=Apart?FString():MenuText(R.Satiety);
- Status.Scene=Apart?FString():SceneLine(Character);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusMenu);Status.Menu=Apart?FString():MenuText(R.Satiety);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusScene);Status.Scene=Apart?FString():SceneLine(Character);}
  if(!Apart&&S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
- Status.Invite=RollInviteStance(Character);
- Status.Heard=HeardText(Character);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusInvite);Status.Invite=RollInviteStance(Character);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusHeard);Status.Heard=HeardText(Character);}
  // The meetings the game really has with him: she must not remember others (a time she said once is not a promise).
  {TArray<FString> Lines;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id){const int32 Minute=int32(A.Start%1440);
    Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), *A.Label}}));}
@@ -288,7 +288,7 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
   for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("done")&&A.Heroine==Id&&A.Kind==TEXT("date")&&FMath::Abs(OKStreetMindNow(S)-A.Start)<120){const int32 Minute=int32(A.Start%1440);
    Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), A.Label+OKT(TEXT("ui.mind.promise_being_kept"))}}));}
   Status.Promises=Lines.IsEmpty()?FString(OKT(TEXT("ui.mind.no_pending_promises"))):FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));}
- Status.Today=TodayText(Character);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusToday);Status.Today=TodayText(Character);}
  if(Mind.IsValid())Status.Needs=Mind->GetStringField(TEXT("needs_text"));
  if(const FString* Recent=S.MindRecent.Find(Id)){Status.Recent=*Recent;S.MindRecent.Remove(Id);}
  TArray<FOKStreetPendingChoice> Mine;for(const auto& C:S.Choices)if(C.Heroine==Character)Mine.Add(C);

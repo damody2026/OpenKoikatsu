@@ -105,7 +105,7 @@ bool FOKStreetRules::OpenWith(FApi* NewApi, const FString& Path, FString& Error)
  Config->SetStringField(TEXT("tuning_dir"), TuningDir());
  void* NewHandle = NewApi->Open(TCHAR_TO_UTF8(*OKStreetRulesJson(Config)));
  if (!NewHandle) { Error = TEXT("ok_rules open failed: ") + NewApi->Take(NewApi->LastError()); return false; }
- Close();
+ if (Handle && Api) Api->Close(Handle); // not Close(): Reload calls this holding the lock
  Api = NewApi; Handle = NewHandle; LoadedFrom = Path; ++Gen;
  return true;
 }
@@ -131,11 +131,13 @@ bool FOKStreetRules::Open(FString& Error) {
 }
 
 void FOKStreetRules::Close() {
+ FWriteScopeLock Locked(Lock);
  if (Handle && Api) Api->Close(Handle);
  Handle = nullptr;
 }
 
 TSharedPtr<FJsonObject> FOKStreetRules::Eval(const TSharedRef<FJsonObject>& Request, FString& Error) {
+ FReadScopeLock Locked(Lock);
  if (!Handle) { Error = TEXT("ok_rules not open"); return nullptr; }
  // A request built without the locale still gets the game's: the rules would answer in their fallback language.
  if (!Request->HasField(TEXT("lang"))) Request->SetStringField(TEXT("lang"), OKStreetCppText().Lang);
@@ -149,6 +151,7 @@ TSharedPtr<FJsonObject> FOKStreetRules::Eval(const TSharedRef<FJsonObject>& Requ
 }
 
 bool FOKStreetRules::Reload(FString& Out, FString& Error) {
+ FWriteScopeLock Locked(Lock);
  if (!Handle) { Error = TEXT("ok_rules not open"); return false; }
  const FDateTime Stamp = IFileManager::Get().GetTimeStamp(*SourcePath);
  if (Stamp != FDateTime::MinValue() && Stamp != SourceStamp && !FPaths::IsSamePath(SourcePath, LoadedFrom)) {

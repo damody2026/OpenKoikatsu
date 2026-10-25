@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
+#include "Misc/ScopeRWLock.h"
 
 // ok_rules.dll (Tools/ok-rules), the StreetSocial game rules, loaded into this process at runtime. The rules keep no
 // state: each Eval carries the facts and answers with what changes, so Reload can swap in a freshly built DLL while the
@@ -14,7 +15,8 @@ public:
  const FString& DllPath() const { return LoadedFrom; }
  // Bumped on every open and reload: callers caching values from the rules re-read them when it changes.
  int32 Generation() const { return Gen; }
- // Request {"kind": ...}; null on failure (Error says why).
+ // Request {"kind": ...}; null on failure (Error says why). Any thread (the DLL is thread-safe; Reload and Close wait
+ // for evaluations in flight).
  TSharedPtr<FJsonObject> Eval(const TSharedRef<FJsonObject>& Request, FString& Error);
  // Swaps in the built DLL when it changed since it was loaded, else re-reads the tuning files. Out: what happened.
  bool Reload(FString& Out, FString& Error);
@@ -35,6 +37,7 @@ private:
  FString LoadedFrom, SourcePath, ReloadDir;
  FDateTime SourceStamp;
  int32 Gen = 0;
+ FRWLock Lock;
 };
 
 // The running street scene's rules, for the ok.StreetRules console commands; null when none is open.

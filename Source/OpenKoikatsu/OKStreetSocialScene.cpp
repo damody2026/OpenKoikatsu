@@ -265,6 +265,7 @@ struct FOKStreetSceneState {
  // schedule is holding in place, and where he spends his time.
  TMap<int32,FOKStreetPendingMove> PendingMoves; // heroines whose walk is still being routed (TickRouteJobs)
  uint32 AutoFriendshipNext=0; // whose turn it is to be asked (TickAutoFriendship)
+ bool AcademicsInFlight=false; // campus_tick asked, its answer not back yet (TickAcademics)
  TArray<TWeakObjectPtr<AActor>> DestroyQueue; // DestroyLater
  TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int64> ConfessionPending;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;

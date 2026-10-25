@@ -14,6 +14,8 @@ void AOKStreetSocialScene::TickAcademics(){
  auto& S=*State;if(S.SelfTest)return;
  const FDateTime Now=StreetNow();const int32 Minute=Now.GetHour()*60+Now.GetMinute();
  const int64 Key=int64(S.Store.CalendarDay)*1440+Minute;if(Key==S.AcademicMinute)return;
+ // One answer at a time: the minutes passing meanwhile go into the next request's elapsed.
+ if(S.AcademicsInFlight)return;
  // Game minutes since the last tick (time skips count; capped so a long sleep is not a study marathon).
  const int32 Elapsed=S.AcademicMinute<0?1:int32(FMath::Clamp<int64>(Key-S.AcademicMinute,0,180));S.AcademicMinute=Key;
  auto Request=OKRulesRequest(TEXT("campus_tick"));
@@ -40,7 +42,11 @@ void AOKStreetSocialScene::TickAcademics(){
  State_->SetBoolField(TEXT("studying"),S.Studying);State_->SetNumberField(TEXT("study_minutes"),S.StudyMinutes);State_->SetNumberField(TEXT("study_applied"),S.StudyApplied);State_->SetNumberField(TEXT("study_partner"),Partner);
  {auto Her=MakeShared<FJsonObject>();for(const auto& P:S.HerStudy)Her->SetNumberField(FString::FromInt(P.Key),P.Value);State_->SetObjectField(TEXT("her_study"),Her);}
  Request->SetObjectField(TEXT("state"),State_);
- const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
+ // Asked off the game thread (OKRulesEvalAsync); applied when the answer is back.
+ S.AcademicsInFlight=true;
+ OKRulesEvalAsync(this,State,Request,[this](TSharedPtr<FJsonObject> Answer){
+ if(!State)return;auto& S=*State;S.AcademicsInFlight=false;if(!Answer)return;
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_AcademicsApply);
  // Scene state.
  const TSharedPtr<FJsonObject> St=Answer->GetObjectField(TEXT("state"));
  S.SeenInClass.Reset();for(const auto& V:St->GetArrayField(TEXT("seen_in_class")))S.SeenInClass.Add(int32(V->AsNumber()));
@@ -55,6 +61,7 @@ void AOKStreetSocialScene::TickAcademics(){
  for(const auto& P:Answer->GetObjectField(TEXT("academics"))->Values){FOKStreetAcademic A;OKStreetReadAcademic(P.Value->AsObject(),A);Candidate.Academics.Add(FString(*P.Key),A);}
  ApplyRulesEffects(Candidate,*Answer);
  CommitStore(MoveTemp(Candidate));
+ });
 }
 
 // Studying happens where the rules allow it (academics.rs study_place).

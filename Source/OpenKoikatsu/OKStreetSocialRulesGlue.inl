@@ -15,6 +15,19 @@ TSharedPtr<FJsonObject> OKRulesEval(const FOKStreetSceneState& S,const TSharedRe
  return Out;
 }
 
+// The same off the game thread, for a rule whose answer may come a frame or two later (a tick once a game minute): the
+// request's JSON, the rules and the answer's JSON took the game thread 2-4 ms (campus_tick). The request is the pool
+// thread's from here on (objects it shares with the scene, such as profiles, are replaced there, never changed). Then
+// runs on the game thread with the answer (null on failure), unless the scene is gone; the scene state is let go there
+// too, never on the pool thread (it holds Slate widgets).
+void OKRulesEvalAsync(AOKStreetSocialScene* Scene,const TSharedPtr<FOKStreetSceneState>& Keep,TSharedRef<FJsonObject> Request,TFunction<void(TSharedPtr<FJsonObject>)> Then){
+ if(!Keep||!Keep->Rules){Then(nullptr);return;}
+ Async(EAsyncExecution::ThreadPool,[Keep=TSharedPtr<FOKStreetSceneState>(Keep),Request,Then=MoveTemp(Then),Weak=TWeakObjectPtr<AOKStreetSocialScene>(Scene)]()mutable{
+  TSharedPtr<FJsonObject> Out=OKRulesEval(*Keep,Request);
+  AsyncTask(ENamedThreads::GameThread,[Out=MoveTemp(Out),Then=MoveTemp(Then),Weak,Keep=MoveTemp(Keep)]{if(Weak.IsValid())Then(Out);});
+ });
+}
+
 // A relation as the rules see it (Tools/ok-rules src/relation.rs Relation): the scalar fields under the same names on both
 // sides. Rules answer with only the fields that changed; OKRulesPatchRelation writes those back.
 TSharedRef<FJsonObject> OKRulesRelationJson(const FOKStreetRelation& R,bool bTalk=false){
