@@ -137,6 +137,25 @@ impl Memories {
         f(open.get_mut(heroine).unwrap())
     }
 
+    /// Every memory file in the folder, read and parsed without holding the lock (a heroine opened meanwhile keeps
+    /// the copy already open). Run on a thread of its own when the mind opens.
+    pub fn preload(&self) {
+        let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            crate::store::settle(&path);
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            let Ok(file) = serde_json::from_str::<MemoryFile>(&text) else { continue };
+            if file.schema != MEMORY_SCHEMA || file_name(&file.heroine) != entry.file_name().to_string_lossy() {
+                continue;
+            }
+            self.open.lock().unwrap().entry(file.heroine.clone()).or_insert(file);
+        }
+    }
+
     /// Queued: the writer thread serializes her file as it is then (the newest records), not the caller.
     fn persist(&self, file: &MemoryFile) -> Result<(), String> {
         let (open, dir, heroine) = (self.open.clone(), self.dir.clone(), file.heroine.clone());

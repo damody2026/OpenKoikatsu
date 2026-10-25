@@ -279,16 +279,16 @@ void AOKStreetSocialScene::FreeTalkLeave(const FString& Message){
  FreeTalkLiveSet(false);
  if(Girl!=INDEX_NONE){
   S.PartedAt.Add(Girl,FPlatformTime::Seconds());
-  PartyLeave(Girl,TEXT("she said goodbye")); // a goodbye ends following him too
-  if(S.Pair.Partner==Girl)FinishPhoto(false);
-  if(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl)FinishFacility();
-  if(S.OutingGirl==Girl)CancelOuting(FString());
-  if(S.Companion==Girl)FinishCompanion();
-  if(S.Target==Girl)EndTalk();
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveParty);PartyLeave(Girl,TEXT("she said goodbye"));} // a goodbye ends following him too
+  if(S.Pair.Partner==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeavePhoto);FinishPhoto(false);}
+  if(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveFacility);FinishFacility();}
+  if(S.OutingGirl==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveOuting);CancelOuting(FString());}
+  if(S.Companion==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveCompanion);FinishCompanion();}
+  if(S.Target==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveEndTalk);EndTalk();}
   if(S.Agents.IsValidIndex(Girl-1)){auto& Agent=S.Agents[Girl-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}
  }
- FreeTalkClose();
- S.Message=Message;RefreshUI();
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveClose);FreeTalkClose();}
+ S.Message=Message;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveUi);RefreshUI();}
  UE_LOG(LogTemp,Display,TEXT("Free talk: left (%s)"),*Message);
 }
 

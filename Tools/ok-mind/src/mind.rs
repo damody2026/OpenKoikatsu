@@ -87,6 +87,12 @@ impl Mind {
                 .map_err(|e| format!("worker_spawn_failed: {e}"))?;
             workers.push(handle);
         }
+        // Each heroine's memory file read and parsed now, off the caller: the first memory written for her in a session
+        // otherwise read it on the game thread (~3 ms).
+        {
+            let s = shared.clone();
+            let _ = std::thread::Builder::new().name("ok-mind-preload".into()).spawn(move || s.memories.preload());
+        }
         Ok(Mind { shared, next_id: AtomicU64::new(1), workers: Mutex::new(workers) })
     }
 
