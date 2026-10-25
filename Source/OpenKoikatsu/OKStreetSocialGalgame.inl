@@ -41,6 +41,13 @@ struct FOKStreetGalgame
 	// Who speaks the line on screen (character slot) and whether a voice plays it.
 	int32 Speaker = INDEX_NONE;
 	bool bVoiced = false;
+	// A group reply (several girls in turn): its lines, the next one to show, and the run on screen (speech line indices
+	// [RunStart, RunEnd) of one speaker); shown as each girl's voice starts, or by reading time without voices.
+	struct FGroupLine { int32 Slot = INDEX_NONE; FString Words; };
+	TArray<FGroupLine> Group;
+	int32 GroupNext = 0, RunStart = 0, RunEnd = 0;
+	double GroupNextAt = 0.0;
+	bool bGroupVoiced = false;
 	// Passers-by kept out of the shot (hidden from the main view only while they stand in it).
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> Hidden;
 	// When a broken far-off shot was last written to the log (one line per two seconds).
@@ -165,6 +172,7 @@ void AOKStreetSocialScene::SkipGalgameLine()
 	}
 	if (Speaker == INDEX_NONE || Speaker == 0) return;
 	if (SongOwnsVoice(Speaker)) return; // her song is a performance, not a line
+	Galgame->GroupNextAt = 0.0; // a group reply without voices: the next girl's lines come up now
 	OKStopCrowdRuntimeSpeech(this, Speaker, Ignore);
 	int32 Dropped = 0;
 	while (S.FreeTalkSpeechPlayed < S.FreeTalkSpeechLines.Num())
@@ -374,6 +382,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		G.Lines.Reset();
 		G.Checkpoints.Reset();
 		G.ViewLine = INDEX_NONE;
+		G.Group.Reset();G.GroupNext = G.RunStart = G.RunEnd = 0;
 	}
 	else if (SceneWith == INDEX_NONE && G.bActive)
 	{
@@ -463,13 +472,45 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			G.LastHer = S.FreeTalkCaptionHer;
 			TArray<FString> Lines;
 			S.FreeTalkCaptionHer.ParseIntoArrayLines(Lines);
-			if (Lines.Num())
+			// Several girls answering in turn (a group talk): not the last line at once (Megumin's last word over Yuuka's
+			// voice, the lines between never shown) but each girl's lines in order as she speaks them (below).
+			G.Group.Reset();G.GroupNext = 0;G.RunStart = G.RunEnd = 0;G.GroupNextAt = FPlatformTime::Seconds();
+			{
+				TSet<int32> Who;
+				for (const FString& Line : Lines)
+				{
+					int32 Slot = OKStreetLineSpeaker(Line, Names);
+					if (Slot == INDEX_NONE) Slot = Partner;
+					const FString Words = OKStreetGalgameWords(Line, NameOf(Slot));
+					if (OKStreetGalgamePlaceholder(Words)) continue;
+					G.Group.Add({ Slot, Words });Who.Add(Slot);
+				}
+				if (Who.Num() < 2) G.Group.Reset();
+				// Voiced line by line when the speech queue holds the same lines, one speaker each.
+				G.bGroupVoiced = G.Group.Num() && S.TtsEnabled && S.FreeTalkSpeechSpeakers.Num() == G.Group.Num() && S.FreeTalkSpeechLines.Num() == G.Group.Num();
+			}
+			if (Lines.Num() && G.Group.IsEmpty())
 			{
 				const FString& Last = Lines.Last();
 				int32 Slot = OKStreetLineSpeaker(Last, Names);
 				if (Slot == INDEX_NONE) Slot = Partner;
 				const FString Words = OKStreetGalgameWords(Last, NameOf(Slot));
 				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.TtsEnabled && Slot != 0);
+			}
+		}
+		// The group reply, one girl at a time: her run of lines (the same speaker back to back) comes up when her voice
+		// for its first line starts, and not before whoever spoke before her is done; without voices, by reading time.
+		if (G.GroupNext < G.Group.Num() && !FreeTalkHisVoiceBusy())
+		{
+			const bool bDue = G.bGroupVoiced ? S.FreeTalkSpeechPlayed > G.GroupNext : FPlatformTime::Seconds() >= G.GroupNextAt;
+			if (bDue)
+			{
+				const int32 Slot = G.Group[G.GroupNext].Slot;
+				int32 End = G.GroupNext;FString Words;
+				while (End < G.Group.Num() && G.Group[End].Slot == Slot) { Words += G.Group[End].Words; ++End; }
+				G.RunStart = G.GroupNext;G.RunEnd = End;G.GroupNext = End;
+				G.GroupNextAt = FPlatformTime::Seconds() + FMath::Max(1.5, 0.12 * Words.Len());
+				SendLine(Slot, Words, G.bGroupVoiced && Slot != 0);
 			}
 		}
 	}
@@ -553,7 +594,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		if (!bScripted && !bReplayClips && G.Speaker != 0 && S.FreeTalkSpeechLines.Num() > 1 && S.FreeTalkSpeechPlayed > 0)
 		{
 			int32 Segments = 0, Started = 0;
-			for (int32 I = 0; I < S.FreeTalkSpeechLines.Num(); ++I)
+			// A group reply: only the run on screen (her lines back to back), not all of hers in the reply.
+			if (G.bGroupVoiced && G.RunEnd > G.RunStart) { Segments = G.RunEnd - G.RunStart; Started = FMath::Clamp(S.FreeTalkSpeechPlayed - G.RunStart, 0, Segments); }
+			else for (int32 I = 0; I < S.FreeTalkSpeechLines.Num(); ++I)
 			{
 				const int32 Who = S.FreeTalkSpeechSpeakers.IsValidIndex(I) ? S.FreeTalkSpeechSpeakers[I] : S.FreeTalkSpeechCharacter;
 				if (Who != G.Speaker) continue;
