@@ -164,12 +164,12 @@ void AOKStreetSocialScene::HandleMindTalk(const TSharedPtr<FJsonObject>& R){
  FString Content,Failure;bool Ok=false,Retry=false;R->TryGetBoolField(TEXT("ok"),Ok);
  FOKFreeTalkReply Reply;
  if(!Ok){FString Why;R->TryGetStringField(TEXT("error"),Why);Failure=OKT(TEXT("ui.mind.deepseek_error_prefix"))+Why;}
- else if(!R->TryGetStringField(TEXT("content"),Content)||!OKStreetFreeTalkParseContent(Content,Reply,Failure,Retry)){if(Failure.IsEmpty())Failure=OKT(TEXT("ui.mind.deepseek_empty_reply"));}
+ else{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindTalkParse);if(!R->TryGetStringField(TEXT("content"),Content)||!OKStreetFreeTalkParseContent(Content,Reply,Failure,Retry)){if(Failure.IsEmpty())Failure=OKT(TEXT("ui.mind.deepseek_empty_reply"));}}
  const TSharedPtr<FJsonObject>* Usage=nullptr;double Hit=0,Miss=0,Chars=0;
  if(R->TryGetObjectField(TEXT("usage"),Usage)){(*Usage)->TryGetNumberField(TEXT("cache_hit_tokens"),Hit);(*Usage)->TryGetNumberField(TEXT("cache_miss_tokens"),Miss);}
  R->TryGetNumberField(TEXT("context_chars"),Chars);
  UE_LOG(LogTemp,Display,TEXT("Street free talk (mind): actor=%d ok=%d cache_hit=%.0f cache_miss=%.0f context_chars=%.0f"),Pending.Character,Failure.IsEmpty()?1:0,Hit,Miss,Chars);
- if(Failure.IsEmpty()){S.InteractedToday.Add(Pending.Character);S.MindTalkPartner=Pending.Character;TMap<FString,float> Talked;Talked.Add(TEXT("social"),6.f);FeedHer(Pending.Character,Talked);}
+ if(Failure.IsEmpty()){S.InteractedToday.Add(Pending.Character);S.MindTalkPartner=Pending.Character;TMap<FString,float> Talked;Talked.Add(TEXT("social"),6.f);QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindTalkFeed);FeedHer(Pending.Character,Talked);}
  FinishFreeTalk(Pending.Character,Pending.Id,Pending.Text,Failure.IsEmpty()?&Reply:nullptr,Failure);
 }
 

@@ -364,7 +364,7 @@ bool OKStreetFreeTalkLoadMemory(const FString& Path, TMap<FString, TArray<FOKFre
  return true;
 }
 
-bool OKStreetFreeTalkSaveMemory(const FString& Path, const TMap<FString, TArray<FOKFreeTalkTurn>>& Memory, FString& Error) {
+static TSharedRef<FJsonObject> OKStreetFreeTalkMemoryRoot(const TMap<FString, TArray<FOKFreeTalkTurn>>& Memory) {
  TArray<TSharedPtr<FJsonValue>> Girls;
  for (const auto& Girl : Memory) {
   TArray<TSharedPtr<FJsonValue>> Turns;
@@ -383,7 +383,13 @@ bool OKStreetFreeTalkSaveMemory(const FString& Path, const TMap<FString, TArray<
  Root->SetNumberField(TEXT("schema"), 1);
  Root->SetNumberField(TEXT("chars_per_character"), OKFreeTalkMemoryChars);
  Root->SetArrayField(TEXT("characters"), Girls);
- if (!OKStreetFreeTalkWriteJson(Path, Root)) {
+ return Root;
+}
+FString OKStreetFreeTalkMemoryJson(const TMap<FString, TArray<FOKFreeTalkTurn>>& Memory) {
+ FString Out;FJsonSerializer::Serialize(OKStreetFreeTalkMemoryRoot(Memory), TJsonWriterFactory<>::Create(&Out));return Out;
+}
+bool OKStreetFreeTalkSaveMemory(const FString& Path, const TMap<FString, TArray<FOKFreeTalkTurn>>& Memory, FString& Error) {
+ if (!OKStreetFreeTalkWriteJson(Path, OKStreetFreeTalkMemoryRoot(Memory))) {
   Error = OKT(TEXT("ui.free_talk.memory_save_failed")) + Path;
   return false;
  }
@@ -424,7 +430,7 @@ bool OKStreetFreeTalkLoadLog(const FString& Path, TArray<FOKFreeTalkLine>& Out) 
  return true;
 }
 
-bool OKStreetFreeTalkSaveLog(const FString& Path, const TArray<FOKFreeTalkLine>& Lines, FString& Error) {
+static TSharedRef<FJsonObject> OKStreetFreeTalkLogRoot(const TArray<FOKFreeTalkLine>& Lines) {
  TArray<TSharedPtr<FJsonValue>> Values;
  for (const auto& Line : Lines) {
   TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
@@ -440,7 +446,13 @@ bool OKStreetFreeTalkSaveLog(const FString& Path, const TArray<FOKFreeTalkLine>&
  TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
  Root->SetNumberField(TEXT("schema"), 1);
  Root->SetArrayField(TEXT("lines"), Values);
- if (!OKStreetFreeTalkWriteJson(Path, Root)) {
+ return Root;
+}
+FString OKStreetFreeTalkLogJson(const TArray<FOKFreeTalkLine>& Lines) {
+ FString Out;FJsonSerializer::Serialize(OKStreetFreeTalkLogRoot(Lines), TJsonWriterFactory<>::Create(&Out));return Out;
+}
+bool OKStreetFreeTalkSaveLog(const FString& Path, const TArray<FOKFreeTalkLine>& Lines, FString& Error) {
+ if (!OKStreetFreeTalkWriteJson(Path, OKStreetFreeTalkLogRoot(Lines))) {
   Error = OKT(TEXT("ui.free_talk.transcript_save_failed")) + Path;
   return false;
  }

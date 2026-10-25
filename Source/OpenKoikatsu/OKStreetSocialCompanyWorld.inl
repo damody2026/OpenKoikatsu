@@ -23,7 +23,7 @@ void AOKStreetSocialScene::RunFindLots(){
   bool Inside=false;for(const auto& P:OKStreetPlaces())for(const FBox& R:P.Rooms)if(R.ExpandBy(FVector(Half.X+200,Half.Y+200,0)).IsInsideXY(FVector(C,0)))Inside=true;
   if(Inside)continue;
   if(GetWorld()->OverlapAnyTestByChannel(FVector(C,160.f),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeBox(Half+FVector(150,150,0)),Q))continue;
-  if(OKStreetObstacleGap(FVector(C,0))<FMath::Max(Half.X,Half.Y)+100.f)continue;
+  if(const float Need=FMath::Max(Half.X,Half.Y)+100.f;OKStreetObstacleGap(FVector(C,0),Need)<Need)continue;
   if(Found.ContainsByPredicate([&](const FLot& L){return FVector2D::Distance(L.Center,C)<2200.f;}))continue;
   Found.Add({C,Yaw,Near});
  }

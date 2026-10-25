@@ -188,7 +188,9 @@ struct FOKStreetLoverReact {int32 Girl=INDEX_NONE;FString Clip,MaleClip;int32 Ph
 // slice a frame (TickRouteJobs), since a search through cells not yet tested (each a physics overlap) took 20-37 ms.
 struct FOKStreetGridSearch {
  FVector From=FVector::ZeroVector,To=FVector::ZeroVector;float Z=0;FIntPoint Start,Goal,Lo,Hi;int32 Phase=0; // 0 not begun, 1 searching, 2 done
- TMap<FIntPoint,FIntPoint> Came;TMap<FIntPoint,float> Cost;TArray<TPair<float,FIntPoint>> Open;int32 Expanded=0;
+ // Over the box Lo..Hi, a cell at (X-Lo.X)+(Y-Lo.Y)*W: its cost, the cell it was reached from, and what is known of it
+ // (bit 0 tested, 1 free, 2 learned blocked). Hash maps here cost 11-13 ms for one long route.
+ TArray<int32> Came;TArray<float> Cost;TArray<uint8> Cell;int32 W=0;TArray<TPair<float,FIntPoint>> Open;int32 Expanded=0;
  TArray<FVector> Route; // once done: the walk, empty when there is none
 };
 // A heroine's walk waiting for its route (QueueHeroineWalk). Found: she walks it (to the door to leave a room, or on to
@@ -1181,31 +1183,31 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  if(!Reply){S.ReplyRemoteGirl=INDEX_NONE;S.FreeTalkNotice=Failure;S.FreeTalkDraft=Text;S.FreeTalkCaptionHer.Reset();RefreshUI();return;}
  // Her memory keeps the exchange (her turn in the same JSON form she answers in); the values travel
  // only with the newest message. With the mind open this copy is only the fallback's memory.
- auto& Memory=S.FreeTalkMemory.FindOrAdd(Id);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkMemory);auto& Memory=S.FreeTalkMemory.FindOrAdd(Id);
  Memory.Add({TEXT("user"),Text});Memory.Add({TEXT("assistant"),OKStreetFreeTalkMemoryReply(*Reply)});
  OKStreetFreeTalkTrimMemory(Memory);
- FreeTalkSaveMemory();
- if(!OKStreetFreeTalkIsNudge(Text))FreeTalkAddLine(Character,true,Text);
- const int64 Serial=FreeTalkAddLine(Character,false,Reply->Reply);
+ FreeTalkSaveMemory();}
+ int64 Serial=0;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkLines);if(!OKStreetFreeTalkIsNudge(Text))FreeTalkAddLine(Character,true,Text);
+ Serial=FreeTalkAddLine(Character,false,Reply->Reply);}
  S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.economy.colon_mark"))+Reply->Reply;
- ApplyFreeTalkFavor(Character,Reply->FavorDelta,Reply->Reason);
- ApplyMindRelation(Character,Reply->RelDelta,Reply->Emotion);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkFavor);ApplyFreeTalkFavor(Character,Reply->FavorDelta,Reply->Reason);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkRelation);ApplyMindRelation(Character,Reply->RelDelta,Reply->Emotion);}
  // Who pays is what they settled: a game note ("you just walked in, order something") is no talk between them, so her
  // "payer" on it is a guess ("him" on entering the cafe, nobody had said a word). Not dropped while a checkout
  // choice is open: then the note asks her exactly that. "her" stays: her own money is hers to offer ("到啦。要不要喝罐饮料？
  // 我请你" at the dorm, and he was charged the ¥5).
  {FOKFreeTalkReply Applied=*Reply;if(OKStreetFreeTalkIsNudge(Text)&&!Applied.Payer.IsEmpty()&&Applied.Payer!=TEXT("her")&&!S.Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("checkout");})){
    UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d payer \"%s\" on a game note, not settled by them"),Character,*Applied.Payer);Applied.Payer.Reset();}
-  ApplyChoiceReply(Character,Applied);}
- ApplyMindExpression(Character,Reply->Emotion,Reply);
+  QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkChoice);ApplyChoiceReply(Character,Applied);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkExpression);ApplyMindExpression(Character,Reply->Emotion,Reply);}
  // And her body: the gesture she makes with it (motions.toml), face to face only.
  // Every line, as long as she speaks it: with no gesture from the model, one for her mood (motions.toml mood). A still
  // pose under every line left her standing in her idle (the raised finger) through the whole talk.
- if(RemoteKind(Character)==0){int32 Chars=0;for(const FString& L:Reply->Lines)Chars+=L.Len();PlayGesture(Character,Reply->Gesture,Reply->Emotion,0.6f+0.22f*Chars);}
+ if(RemoteKind(Character)==0){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkGesture);int32 Chars=0;for(const FString& L:Reply->Lines)Chars+=L.Len();PlayGesture(Character,Reply->Gesture,Reply->Emotion,0.6f+0.22f*Chars);}
  // Free-talk replies have no recorded clip, so they always go to the TTS server (independent of the
  // V voice-mode toggle, which only chooses for scripted lines); the text stays on screen either way.
  SongCountLines(Character,Reply->Lines.Num()); // her lines count toward her next song (every 500, OKStreetSocialSong.inl)
- if(!S.TtsCacheDir.IsEmpty()&&RemoteKind(Character)!=1)SpeakFreeTalk(Character,Reply->Lines,Serial); // a text message is read, not heard
+ if(!S.TtsCacheDir.IsEmpty()&&RemoteKind(Character)!=1){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkSpeak);SpeakFreeTalk(Character,Reply->Lines,Serial);} // a text message is read, not heard
  // What happens next (going somewhere now, an act, or a promise for later) is judged by DeepSeek from his words and hers,
  // not by keyword rules (JudgeFreeTalk). Without words of his (a nudge, a notice) she does her own acts but never starts
  // an outing he has not agreed to.
@@ -1213,9 +1215,9 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
   const FString A=Reply->Action;
   if(!A.IsEmpty()&&!(A.StartsWith(TEXT("go:"))||A==TEXT("stroll")||A==TEXT("walk")||OKStreetFindActivity(A)||OKStreetFindPlace(A)))ExecuteFreeTalkAction(Character,Id,A);
  }
- else{TArray<FString> Ordered;for(const auto& O:Reply->Orders)Ordered.Add(O.Id);JudgeFreeTalk(Character,Id,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply,Reply->Action,Ordered);}
+ else{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkJudge);TArray<FString> Ordered;for(const auto& O:Reply->Orders)Ordered.Add(O.Id);JudgeFreeTalk(Character,Id,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply,Reply->Action,Ordered);}
  S.PlayerAskedText.Reset();
- S.ReplyRemoteGirl=INDEX_NONE;RefreshUI();
+ S.ReplyRemoteGirl=INDEX_NONE;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkUi);RefreshUI();}
 }
 
 // Runs what was decided after her reply: an activity or place to go to now, or an act of hers (eat, photo...).
@@ -1667,7 +1669,7 @@ FString AOKStreetSocialScene::FreeTalkFilePath(const TCHAR* Name) const{
 void AOKStreetSocialScene::FreeTalkEnsureLog(){
  auto& S=*State;if(S.FreeTalkLogLoaded)return;S.FreeTalkLogLoaded=true;
  const FString LogFile=FreeTalkFilePath(TEXT("free-talk-log.json")),MemoryFile=FreeTalkFilePath(TEXT("free-talk-memory.json"));
- if(!LogFile.IsEmpty())OKStreetFreeTalkLoadLog(LogFile,S.FreeTalkLog);
+ OKStreetFlushSaves();if(!LogFile.IsEmpty())OKStreetFreeTalkLoadLog(LogFile,S.FreeTalkLog);
  if(!MemoryFile.IsEmpty())OKStreetFreeTalkLoadMemory(MemoryFile,S.FreeTalkMemory);
  for(const auto& Line:S.FreeTalkLog)S.FreeTalkSerial=FMath::Max(S.FreeTalkSerial,Line.Serial);
 }
@@ -1686,14 +1688,18 @@ int64 AOKStreetSocialScene::FreeTalkAddLine(int32 Character,bool Player,const FS
  return S.FreeTalkSerial;
 }
 
+// The log and the memory are written by the save task (a snapshot serialized there): serialized and written here they
+// held the frame 7 ms. Whatever reads the files back (a save slot, a load, the end of the game) flushes the task first.
 void AOKStreetSocialScene::FreeTalkSaveLog(){
- const FString Path=FreeTalkFilePath(TEXT("free-talk-log.json"));FString Error;
- if(!Path.IsEmpty()&&!OKStreetFreeTalkSaveLog(Path,State->FreeTalkLog,Error))State->FreeTalkNotice=Error;
+ const FString Path=FreeTalkFilePath(TEXT("free-talk-log.json"));if(Path.IsEmpty())return;
+ const auto Snapshot=MakeShared<const TArray<FOKFreeTalkLine>,ESPMode::ThreadSafe>(State->FreeTalkLog);
+ OKStreetAtomicSaveQueued(Path,[Snapshot](){return OKStreetFreeTalkLogJson(*Snapshot);});
 }
 
 void AOKStreetSocialScene::FreeTalkSaveMemory(){
- const FString Path=FreeTalkFilePath(TEXT("free-talk-memory.json"));FString Error;
- if(!Path.IsEmpty()&&!OKStreetFreeTalkSaveMemory(Path,State->FreeTalkMemory,Error))State->FreeTalkNotice=Error;
+ const FString Path=FreeTalkFilePath(TEXT("free-talk-memory.json"));if(Path.IsEmpty())return;
+ const auto Snapshot=MakeShared<const TMap<FString,TArray<FOKFreeTalkTurn>>,ESPMode::ThreadSafe>(State->FreeTalkMemory);
+ OKStreetAtomicSaveQueued(Path,[Snapshot](){return OKStreetFreeTalkMemoryJson(*Snapshot);});
 }
 
 int32 AOKStreetSocialScene::FreeTalkSlotOf(const FString& CharacterId) const{
@@ -2066,7 +2072,7 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
  {// Diagnostics: a rebuild drops a button press in progress, so frequent rebuilds make buttons unclickable.
   static double Window=0;static int32 Count=0;const double T=FPlatformTime::Seconds();if(T-Window>1){if(Count>3)UE_LOG(LogTemp,Warning,TEXT("Street UI rebuilt %d times in 1 s"),Count);Window=T;Count=0;}++Count;}
  // Where a slow rebuild spends its time, by section (logged with ok.Street.LogUiRebuilds 1).
- TArray<TPair<const TCHAR*,uint64>,TInlineAllocator<16>> Marks;auto Mark=[&Marks](const TCHAR* Name){Marks.Emplace(Name,FPlatformTime::Cycles64());};
+ TArray<TPair<const TCHAR*,uint64>,TInlineAllocator<24>> Marks;auto Mark=[&Marks](const TCHAR* Name){Marks.Emplace(Name,FPlatformTime::Cycles64());};
  Mark(TEXT("shell"));
  // The shell, built once (again on a language change): the layout, minimap and big map, clock, bed and elevator rows, the
  // hint corner, and a holder for each region. A refresh rebuilds only the regions it names (OKStreetUi) into their holders;
@@ -2345,8 +2351,8 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
  }
  // The shop rows: a region of their own (the menu changes as he walks into a shop or it closes).
  Box->AddSlot().AutoHeight()[SAssignNew(S.UiShopHolder,SBox)];
- BuildFinanceRows(Box);BuildCampusRows(Box);BuildPhoneRow(Box);BuildCompanyRow(Box);BuildAppointmentRows(Box);
- S.UiRightHolder->SetContent(Box);S.UiRightScroll->SetScrollOffset(S.RightScrollOffset);
+ Mark(TEXT("finance"));BuildFinanceRows(Box);Mark(TEXT("campus"));BuildCampusRows(Box);Mark(TEXT("phone"));BuildPhoneRow(Box);Mark(TEXT("company"));BuildCompanyRow(Box);Mark(TEXT("appointments"));BuildAppointmentRows(Box);
+ Mark(TEXT("swap"));S.UiRightHolder->SetContent(Box);S.UiRightScroll->SetScrollOffset(S.RightScrollOffset);
  Regions|=OKStreetUi::Shop;
  }
  Mark(TEXT("shop"));

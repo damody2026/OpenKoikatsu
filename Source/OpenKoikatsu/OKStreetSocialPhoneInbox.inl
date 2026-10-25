@@ -84,6 +84,11 @@ FString AOKStreetSocialScene::HistoryPromptText(int32 Character){
  TArray<FString> Events,Phone;FString Own;
  for(int32 K=List.Num()-1;K>=0&&(Events.Num()<OKHistoryPromptEvents||Phone.Num()<PhoneWant||Own.IsEmpty());--K){
   const auto& E=List[K];
+  // Formatted only when it is used: most entries are talk lines, skipped, and a heroine with no phone lines had the
+  // whole history formatted (9.7 ms a turn).
+  const bool IsPhone=OKStreetHistoryIsPhone(E.Kind);
+  if(!IsPhone&&E.Kind==TEXT("talk"))continue;
+  if(IsPhone?Phone.Num()>=PhoneWant:Routine.Contains(E.Kind)?!Own.IsEmpty():Events.Num()>=OKHistoryPromptEvents)continue;
   const FString Line=OKMsg(TEXT("ui.phone_inbox.when_place_message"), {{TEXT("when"), *OKStreetCalendarLabel(int32(E.Minute/1440),(E.Minute%1440)/60.0)}, {TEXT("place"), *E.Place}, {TEXT("speaker"), E.Who==TEXT("him")?OKT(TEXT("ui.mind.he_label")):E.Who==TEXT("her")?OKT(TEXT("ui.economy.you_speaker_label")):TEXT("")}, {TEXT("text"), *E.Text}});
   if(OKStreetHistoryIsPhone(E.Kind)){if(Phone.Num()<PhoneWant)Phone.Insert(Line,0);}
   else if(E.Kind==TEXT("talk"))continue;

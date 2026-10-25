@@ -54,7 +54,7 @@ bool AOKStreetSocialScene::NavCellFree(const FIntPoint& Cell,float Z) const{
  auto& Grid=State->NavGrid.FindOrAdd(FMath::RoundToInt(Z/100.f));
  if(const bool* Known=Grid.Find(Cell))return *Known;
  const FVector P(Cell.X*OKStreetNavCell,Cell.Y*OKStreetNavCell,Z);
- bool Free=OKStreetObstacleGap(P)>30.f;
+ bool Free=OKStreetObstacleGap(P,30.f)>30.f;
  if(Free){FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetNavCell),false,this);Free=!GetWorld()->OverlapAnyTestByChannel(P+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(40,78),Query);} // wider than his 28: a cell beside an awning or a sign is not a way
  Grid.Add(Cell,Free);return Free;
 }
@@ -77,37 +77,45 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
   }
   if(G.Start==G.Goal){G.Route={From,To};return true;}
   G.Lo=FIntPoint(FMath::Min(G.Start.X,G.Goal.X)-60,FMath::Min(G.Start.Y,G.Goal.Y)-60);G.Hi=FIntPoint(FMath::Max(G.Start.X,G.Goal.X)+60,FMath::Max(G.Start.Y,G.Goal.Y)+60);
+  G.W=G.Hi.X-G.Lo.X+1;const int32 Cells=G.W*(G.Hi.Y-G.Lo.Y+1);
+  G.Cost.Init(TNumericLimits<float>::Max(),Cells);G.Came.SetNumUninitialized(Cells);G.Cell.SetNumZeroed(Cells);
   G.Phase=1;
  }
  const FIntPoint Start=G.Start,Goal=G.Goal,Lo=G.Lo,Hi=G.Hi;
  // Near the start, cells too close to a wall are allowed (dearly), so standing by one never traps him.
  // A cell he was stopped walking into (a thin wall between two free cell centres) is not passable, even next to the start.
  const TSet<FIntPoint>* Learned=State->NavLearned.Find(FMath::RoundToInt(Z/100.f));
- auto Passable=[&](const FIntPoint& C){if(Learned&&Learned->Contains(C))return false;return NavCellFree(C,Z)||FMath::Max(FMath::Abs(C.X-Start.X),FMath::Abs(C.Y-Start.Y))<=1;};
+ const int32 W=G.W;
+ auto Index=[&](const FIntPoint& C){return (C.X-Lo.X)+(C.Y-Lo.Y)*W;};
+ auto Known=[&](const FIntPoint& C)->uint8{
+  if(C.X<Lo.X||C.Y<Lo.Y||C.X>Hi.X||C.Y>Hi.Y)return 1|(NavCellFree(C,Z)?2:0)|(Learned&&Learned->Contains(C)?4:0);
+  uint8& K=G.Cell[Index(C)];if(!K)K=1|(NavCellFree(C,Z)?2:0)|(Learned&&Learned->Contains(C)?4:0);return K;};
+ auto Passable=[&](const FIntPoint& C){const uint8 K=Known(C);if(K&4)return false;return (K&2)||FMath::Max(FMath::Abs(C.X-Start.X),FMath::Abs(C.Y-Start.Y))<=1;};
  auto Heuristic=[&](const FIntPoint& C){const float DX=FMath::Abs(C.X-Goal.X),DY=FMath::Abs(C.Y-Goal.Y);return DX+DY+(UE_SQRT_2-2.f)*FMath::Min(DX,DY);};
  auto& Came=G.Came;auto& Cost=G.Cost;auto& Open=G.Open;
  auto Less=[](const TPair<float,FIntPoint>& A,const TPair<float,FIntPoint>& B){return A.Key<B.Key;};
- if(Cost.IsEmpty()){Cost.Add(Start,0.f);Open.HeapPush({Heuristic(Start),Start},Less);}
+ if(G.Expanded==0&&Open.IsEmpty()&&Cost[Index(Start)]!=0.f){Cost[Index(Start)]=0.f;Open.HeapPush({Heuristic(Start),Start},Less);}
  static const FIntPoint Steps[]={{1,0},{-1,0},{0,1},{0,-1},{1,1},{1,-1},{-1,1},{-1,-1}};
  bool Reached=false;
  while(!Open.IsEmpty()&&G.Expanded<60000){
   // Out of time: the search goes on from here next slice (the open list, costs and links are kept).
   if((G.Expanded&31)==0&&FPlatformTime::Seconds()>Deadline)return false;
-  TPair<float,FIntPoint> Top;Open.HeapPop(Top,Less);const FIntPoint C=Top.Value;const float Here=Cost.FindChecked(C);
+  TPair<float,FIntPoint> Top;Open.HeapPop(Top,Less);const FIntPoint C=Top.Value;const float Here=Cost[Index(C)];
   if(Top.Key>Here+Heuristic(C)+.01f)continue; // stale entry
   if(C==Goal){Reached=true;break;}
   ++G.Expanded;
   for(const FIntPoint& D:Steps){
    const FIntPoint N=C+D;if(N.X<Lo.X||N.Y<Lo.Y||N.X>Hi.X||N.Y>Hi.Y||!Passable(N))continue;
    if(D.X!=0&&D.Y!=0&&(!Passable(FIntPoint(C.X+D.X,C.Y))||!Passable(FIntPoint(C.X,C.Y+D.Y))))continue; // no cutting corners
-   const float Step=(D.X!=0&&D.Y!=0?UE_SQRT_2:1.f)*(NavCellFree(N,Z)?1.f:8.f);
-   const float* Old=Cost.Find(N);const float New=Here+Step;
-   if(!Old||New<*Old){Cost.Add(N,New);Came.Add(N,C);Open.HeapPush({New+Heuristic(N),N},Less);}
+   const float Step=(D.X!=0&&D.Y!=0?UE_SQRT_2:1.f)*(Known(N)&2?1.f:8.f);
+   const int32 NI=Index(N);const float New=Here+Step;
+   if(New<Cost[NI]){Cost[NI]=New;Came[NI]=Index(C);Open.HeapPush({New+Heuristic(N),N},Less);}
   }
  }
  G.Phase=2;
- if(!Reached){UE_LOG(LogTemp,Display,TEXT("Street grid route: none from %s to %s (%d cells)"),*From.ToCompactString(),*To.ToCompactString(),G.Expanded);return true;}
- TArray<FIntPoint> Cells{Goal};while(Cells.Last()!=Start)Cells.Add(Came.FindChecked(Cells.Last()));
+ auto Release=[&G](){G.Cost.Empty();G.Came.Empty();G.Cell.Empty();G.Open.Empty();};
+ if(!Reached){UE_LOG(LogTemp,Display,TEXT("Street grid route: none from %s to %s (%d cells)"),*From.ToCompactString(),*To.ToCompactString(),G.Expanded);Release();return true;}
+ TArray<FIntPoint> Cells{Goal};while(Cells.Last()!=Start){const int32 P=Came[Index(Cells.Last())];Cells.Add(FIntPoint(Lo.X+P%W,Lo.Y+P/W));}
  Algo::Reverse(Cells);
  // Pull the string: keep only the corners a straight walk cannot cut.
  // A straight line between two cell centres can still clip the corner of something between the cell centres: the body-sized
@@ -123,18 +131,18 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
  TArray<FVector>& Route=G.Route;Route={From};int32 I=0;
  while(I<Cells.Num()-1){int32 J=Cells.Num()-1;while(J>I+1&&!Clear(I==0?From:Centre(Cells[I]),Centre(Cells[J])))--J;Route.Add(Centre(Cells[J]));I=J;}
  if(Goal==ToCell(To)&&Clear(Route.Last(),To))Route.Last()=To;
- return true;
+ Release();return true;
 }
 FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Direction,float Distance) const{
  constexpr float Clearance=30.f;
  FVector D=Direction;D.Z=0;if(Distance<=0||!D.Normalize())return From;
- const float Here=OKStreetObstacleGap(From);
+ const float Here=OKStreetObstacleGap(From,Clearance+10.f); // compared only below the clearance (and 3 cm more)
  FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetStep),false,this);
  auto Free=[&](const FVector& To){
   // Into an obstacle's clearance is blocked, but backing out of one he is already too close to never is. Along a wall at
   // the clearance's edge (30 here, 29 a step on) he may slide: a few centimetres closer, never under 25 (the capsule
   // sweep below still stops him at the wall itself).
-  const float There=OKStreetObstacleGap(To);if(There<=Clearance&&(There<Clearance-5.f||There<Here-3.f))return false;
+  const float There=OKStreetObstacleGap(To,Clearance+10.f);if(There<=Clearance&&(There<Clearance-5.f||There<Here-3.f))return false;
   FHitResult Hit;
   if(GetWorld()->SweepSingleByChannel(Hit,From+FVector(0,0,85),To+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(28,78),Query))
    if(!Hit.bStartPenetrating||FVector::DotProduct((To-From).GetSafeNormal2D(),Hit.Normal)<=0.f)return false;

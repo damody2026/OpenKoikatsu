@@ -128,6 +128,9 @@ void OKStreetFreeTalkTrimMemory(TArray<FOKFreeTalkTurn>& Memory);
 
 bool OKStreetFreeTalkLoadLog(const FString& Path, TArray<FOKFreeTalkLine>& Out);
 bool OKStreetFreeTalkSaveLog(const FString& Path, const TArray<FOKFreeTalkLine>& Lines, FString& Error);
+// The same files' contents (for writing them off the game thread).
+FString OKStreetFreeTalkLogJson(const TArray<FOKFreeTalkLine>& Lines);
+FString OKStreetFreeTalkMemoryJson(const TMap<FString, TArray<FOKFreeTalkTurn>>& Memory);
 
 // Voice input goes through the local ok-asr server (Tools/ok-asr): OK_ASR_ENDPOINT or http://127.0.0.1:47861.
 FString OKStreetFreeTalkAsrEndpoint();

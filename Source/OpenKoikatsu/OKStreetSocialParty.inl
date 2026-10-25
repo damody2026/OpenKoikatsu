@@ -144,7 +144,7 @@ void AOKStreetSocialScene::TickParty(float Dt){
   if(FVector::Dist2D(A.Position,S.Male)>2500.f){PartyLeave(G,TEXT("too far behind"));--K;continue;}
   FVector Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*155.f;Spot.Z=S.Male.Z;
   // A spot inside something (a counter, a wall): closer to him.
-  if(OKStreetObstacleGap(Spot)<25.f)Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*90.f;
+  if(OKStreetObstacleGap(Spot,25.f)<25.f)Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*90.f;
   FVector Delta=Spot-A.Position;Delta.Z=0;const float Dist=Delta.Size();
   double& Ref=S.PartyGapRef.FindOrAdd(G);double& RefAt=S.PartyGapAt.FindOrAdd(G);
   if(Dist>60.f){

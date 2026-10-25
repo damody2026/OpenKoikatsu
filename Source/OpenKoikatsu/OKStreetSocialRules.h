@@ -1895,7 +1895,9 @@ inline bool OKStreetBlockedPoint(const FVector& Point, float Extra = OKStreetBod
 
 // How far the point is from the nearest street obstacle that OKStreetBlockedPoint knows about (negative inside one).
 // OKStreetBlockedPoint(P, Extra) == (OKStreetObstacleGap(P) <= Extra) for the same obstacles.
-inline float OKStreetObstacleGap(const FVector& Point) {
+// Enough: the caller only compares the gap with this much, so the search stops there (a value over Enough means "more
+// than Enough", not the exact gap). Without it, an open spot widened the search to the whole city: 0.1-1 ms a call.
+inline float OKStreetObstacleGap(const FVector& Point, float Enough = TNumericLimits<float>::Max()) {
  const TArray<FOKStreetProp>& Props = OKStreetPropsOnce();
  const FVector2D P(Point.X, Point.Y);
  auto BoxGap = [&P](const FVector2D& Min, const FVector2D& Max) {
@@ -1916,7 +1918,7 @@ inline float OKStreetObstacleGap(const FVector& Point) {
   for (float R = OKStreetBlockBucket;; R *= 2.f) {
    float Near = TNumericLimits<float>::Max();
    OKStreetVisitBlocksNear(P, R, [&](const FBox& B) { if (Point.Z >= B.Min.Z - 60.f && Point.Z <= B.Max.Z - 20.f) Near = FMath::Min(Near, BoxGap(FVector2D(B.Min.X, B.Min.Y), FVector2D(B.Max.X, B.Max.Y))); return false; });
-   if (Near <= R || R >= Reach) { Gap = FMath::Min(Gap, Near); break; }
+   if (Near <= R || R >= Reach || R >= Enough) { Gap = FMath::Min(Gap, Near); break; }
   }
  }
  return Gap;
