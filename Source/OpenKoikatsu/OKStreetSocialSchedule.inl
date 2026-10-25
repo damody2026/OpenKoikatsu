@@ -291,7 +291,9 @@ void AOKStreetSocialScene::FinishHeroineWalk(int32 I,const FOKStreetPendingMove&
   else if(Move.HasFinal)S.CommuteFinal.Add(I,Move.Final);else S.CommuteFinal.Remove(I);
   return;
  }
- if(Move.Leave){A.Position=Move.Fallback;if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}return;}
+ if(Move.Leave){A.Position=Move.Fallback;if(S.ScheduleHeld.Contains(I)){A.Held=false;S.ScheduleHeld.Remove(I);S.Commutes.Remove(I);}
+  else A.Held=false; // off her street walk inside a place (Tick): at the door, the street walk again
+  return;}
  A.Position=Move.Fallback;S.Rotations[I]=FRotator(0,Move.Yaw,0);S.Commutes.Remove(I);
 }
 // The pending walks' route searches, 2 ms a frame between them; each that is done starts its walk.
