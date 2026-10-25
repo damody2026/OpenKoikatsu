@@ -183,6 +183,9 @@ void AOKStreetSocialScene::TickServes(){
 // Who pays as they settled it, for this girl and three game hours (the AI's reading: her reply's payer, the judge's).
 void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const FString& GoingNow){
  auto& S=*State;if(How!=TEXT("him")&&How!=TEXT("her")&&How!=TEXT("split"))return;
+ // Said again in the same shop (the judge reads what they settled so far, every turn): it stays this shop's. The dinner
+ // treat moved on to her dorm's vending machine when "after we eat I'll walk you home" came with it.
+ {const FString Here=ShopPlaceHere();if(S.PayAgreedWith==Girl&&S.PayAgreedHow==How&&!Here.IsEmpty()&&S.PayAgreedShop==Here&&OKStreetMindNow(S)-S.PayAgreedAt<=180)return;}
  S.PayAgreedWith=Girl;S.PayAgreedHow=How;S.PayAgreedAt=OKStreetMindNow(S);
  // Settled inside a shop: for that shop at once (she paid her own book: not her own soup at the restaurant after).
  // Settled outside ("I will treat you to a drink" on the way): for the shop where it is first used (PayAgreed).

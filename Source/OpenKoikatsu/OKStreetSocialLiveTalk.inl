@@ -396,7 +396,15 @@ void AOKStreetSocialScene::TickRetryAction(){
 
 // They said goodbye: once she has finished speaking, the conversation ends and she goes her way.
 void AOKStreetSocialScene::TickFarewell(){
- auto& S=*State;if(!S.FarewellPending)return;
+ auto& S=*State;
+ // Goodbye said with her drink still in her hand (Alice at her dorm's vending machine): once it is finished, or nobody can
+ // eat more, the goodbye goes on. It waited for the meal and then never came: the two stood there talking.
+ if(S.FarewellAfterMeal!=INDEX_NONE&&!S.FarewellPending){const int32 G=S.FarewellAfterMeal;
+  if(FreeTalkPartner()!=G)S.FarewellAfterMeal=INDEX_NONE;
+  else if(!S.Table.ContainsByPredicate([G](const FOKStreetDish& D){return D.Her==G&&D.ForHer&&D.Percent>0.f;})||S.TableClearedAt>=S.FarewellAfterMealAt){
+   S.FarewellAfterMeal=INDEX_NONE;S.FarewellPending=true;S.FarewellFromTalk=true;S.FarewellAt=FPlatformTime::Seconds();
+   UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d finished eating; the goodbye goes on"),G);}}
+ if(!S.FarewellPending)return;
  const int32 G=FreeTalkPartner();if(G==INDEX_NONE){S.FarewellPending=false;return;}
  const double Wall=FPlatformTime::Seconds();
  const bool Voicing=OKCrowdRuntimeSpeechActive(this,G)||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty();
