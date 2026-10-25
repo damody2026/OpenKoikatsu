@@ -620,6 +620,9 @@ private:
  void QueueHeroineWalk(int32 I,const FVector& From,const FVector& To,bool Leave,bool HasFinal,const FVector& Final,const FVector& Fallback,float Yaw,const FString& Place);
  void FinishHeroineWalk(int32 I,const struct FOKStreetPendingMove& Move,TArray<FVector>&& Path);
  void TickRouteJobs();
+ // His map navigation: the street route searched a slice a frame, then NavigatePointAlong.
+ void TickNavSearch();
+ void NavigatePointAlong(const FVector& Goal,const FString& Name,TArray<FVector>&& Path);
  // Props that are done with: hidden and without collision now, destroyed a few a frame (TickDestroyQueue).
  void DestroyLater(AActor* Actor);
  void TickDestroyQueue();

@@ -266,6 +266,7 @@ struct FOKStreetSceneState {
  TMap<int32,FOKStreetPendingMove> PendingMoves; // heroines whose walk is still being routed (TickRouteJobs)
  uint32 AutoFriendshipNext=0; // whose turn it is to be asked (TickAutoFriendship)
  bool AcademicsInFlight=false; // campus_tick asked, its answer not back yet (TickAcademics)
+ TSharedPtr<FOKStreetGridSearch> NavSearch;FVector NavSearchGoal=FVector::ZeroVector;FString NavSearchName; // his map navigation being routed (TickNavSearch)
  TArray<TWeakObjectPtr<AActor>> DestroyQueue; // DestroyLater
  TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int64> ConfessionPending;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;
@@ -3437,7 +3438,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickThenAction);TickThenAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRouteJobs);TickRouteJobs();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickDestroyQueue);TickDestroyQueue();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRouteJobs);TickRouteJobs();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickNavSearch);TickNavSearch();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickDestroyQueue);TickDestroyQueue();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
  // Reading together ends when the player walks away from her.
  // Walk-in places: the roof and ceiling disappear while the player stands inside, so the camera sees the room.
  // Multi-storey places also hide every floor above the player's.
@@ -3555,7 +3556,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   static int32 Index=-1,Arrived=0;static double StartedAt=0;
   const auto& Places=OKStreetPlaces();
   if(Places.IsValidIndex(Index)&&S.NavPointActive&&SceneTime()-StartedAt>90)StopNavigation(OKT(TEXT("ui.scene.timeout_label")));
-  if(Index<Places.Num()&&(Index<0||!S.NavPointActive)){
+  if(Index<Places.Num()&&(Index<0||(!S.NavPointActive&&!S.NavSearch))){ // a route still being searched is not done
    if(Index>=0){const bool Ok=FVector::Dist2D(S.Male,Places[Index].Door)<=150;Arrived+=Ok;UE_LOG(LogTemp,Display,TEXT("Street nav walk: %s %s in %.1fs at %s (%s)"),Places[Index].Id,Ok?TEXT("arrived"):TEXT("FAILED"),SceneTime()-StartedAt,*S.Male.ToCompactString(),*S.Message);}
    ++Index;
    if(Places.IsValidIndex(Index)){S.Male=OKStreetMaleSpawn();NavigatePoint(Places[Index].Door,Places[Index].Name);StartedAt=SceneTime();}

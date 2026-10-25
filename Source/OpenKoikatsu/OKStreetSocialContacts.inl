@@ -22,8 +22,22 @@ void AOKStreetSocialScene::NavigateGirl(int32 Character){if(!ContactReady(Charac
 void AOKStreetSocialScene::NavigatePoint(const FVector& Goal,const FString& Name){
  if(!State)return;auto& S=*State;
  if(S.Target!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.OutingGirl!=INDEX_NONE||S.Facility!=INDEX_NONE){S.Message=OKT(TEXT("ui.contacts.end_activity_before_map_nav"));return;}
- // The place graph (doors and corridors) reaches the outer districts; computed once, then walked in order.
- auto Path=PlaceRoute(S.Male,Goal);
+ // On his floor the street grid is searched a slice a frame (TickNavSearch, 3 ms each): a long route held the frame
+ // 6-8 ms. Another floor: the place graph (doors and corridors), at once.
+ S.NavSearch.Reset();
+ if(FMath::Abs(S.Male.Z-Goal.Z)<150.f){S.NavSearch=MakeShared<FOKStreetGridSearch>();S.NavSearch->From=S.Male;S.NavSearch->To=Goal;S.NavSearchGoal=Goal;S.NavSearchName=Name;return;}
+ NavigatePointAlong(Goal,Name,PlaceRouteWaypoints(S.Male,Goal));
+}
+void AOKStreetSocialScene::TickNavSearch(){
+ if(!State||!State->NavSearch)return;auto& S=*State;
+ if(!GridSearchStep(*S.NavSearch,FPlatformTime::Seconds()+0.003))return;
+ TArray<FVector> Path=MoveTemp(S.NavSearch->Route);const FVector From=S.NavSearch->From;S.NavSearch.Reset();
+ if(Path.Num()<2)Path=PlaceRouteWaypoints(From,S.NavSearchGoal); // as PlaceRoute: no grid way, the place graph
+ NavigatePointAlong(S.NavSearchGoal,S.NavSearchName,MoveTemp(Path));
+}
+// The rest of NavigatePoint, once the route is known (computed once, then walked in order).
+void AOKStreetSocialScene::NavigatePointAlong(const FVector& Goal,const FString& Name,TArray<FVector>&& Path){
+ auto& S=*State;
  // A place's door: on through it into its ground floor. Stopped at the door he was outside it, and its buttons (the
  // menu, applying for a job) were not there.
  FVector Target=Goal;for(const auto& P:OKStreetPlaces())if(!P.Rooms.IsEmpty()&&FVector::Dist2D(P.Door,Goal)<5.f&&FMath::Abs(P.Door.Z-Goal.Z)<100.f){Target=PlaceInsideSpot(P);if(!Target.Equals(Goal,1.f)&&!Path.IsEmpty())Path.Add(Target);break;}
@@ -38,7 +52,7 @@ void AOKStreetSocialScene::NavigatePoint(const FVector& Goal,const FString& Name
  if(S.BigMapOpen)ToggleBigMap(); // navigation, its notice and the message are bound to state: no rebuild
 }
 void AOKStreetSocialScene::StopNavigation(const FString& Notice){
- if(!State)return;auto& S=*State;S.NavGirl=INDEX_NONE;S.NavPointActive=false;S.NavPath.Reset();S.NavRide=FOKStreetLiftRide();S.ContactsNotice.Reset();
+ if(!State)return;auto& S=*State;S.NavSearch.Reset();S.NavGirl=INDEX_NONE;S.NavPointActive=false;S.NavPath.Reset();S.NavRide=FOKStreetLiftRide();S.ContactsNotice.Reset();
  if(!Notice.IsEmpty())S.Message=Notice;
 }
 void AOKStreetSocialScene::ToggleBigMap(){
@@ -53,6 +67,7 @@ static constexpr float OKStreetNavCell=40.f;
 bool AOKStreetSocialScene::NavCellFree(const FIntPoint& Cell,float Z) const{
  auto& Grid=State->NavGrid.FindOrAdd(FMath::RoundToInt(Z/100.f));
  if(const bool* Known=Grid.Find(Cell))return *Known;
+ QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_NavCellTest);
  const FVector P(Cell.X*OKStreetNavCell,Cell.Y*OKStreetNavCell,Z);
  bool Free=OKStreetObstacleGap(P,30.f)>30.f;
  if(Free){FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetNavCell),false,this);Free=!GetWorld()->OverlapAnyTestByChannel(P+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(40,78),Query);} // wider than his 28: a cell beside an awning or a sign is not a way
@@ -78,7 +93,7 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
   if(G.Start==G.Goal){G.Route={From,To};return true;}
   G.Lo=FIntPoint(FMath::Min(G.Start.X,G.Goal.X)-60,FMath::Min(G.Start.Y,G.Goal.Y)-60);G.Hi=FIntPoint(FMath::Max(G.Start.X,G.Goal.X)+60,FMath::Max(G.Start.Y,G.Goal.Y)+60);
   G.W=G.Hi.X-G.Lo.X+1;const int32 Cells=G.W*(G.Hi.Y-G.Lo.Y+1);
-  G.Cost.Init(TNumericLimits<float>::Max(),Cells);G.Came.SetNumUninitialized(Cells);G.Cell.SetNumZeroed(Cells);
+  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_GridAlloc);G.Cost.Init(TNumericLimits<float>::Max(),Cells);G.Came.SetNumUninitialized(Cells);G.Cell.SetNumZeroed(Cells);}
   G.Phase=1;
  }
  const FIntPoint Start=G.Start,Goal=G.Goal,Lo=G.Lo,Hi=G.Hi;
