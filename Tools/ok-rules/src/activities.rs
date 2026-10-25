@@ -41,7 +41,7 @@ pub struct Activity {
     pub needs: Vec<String>,
     #[serde(default = "yes")]
     pub consume: bool,
-    /// What it leaves: photo | drawing | work_progress | book_progress.
+    /// What it leaves: photo | drawing | work_progress | book_progress | study (the minutes count as studying together).
     #[serde(default)]
     pub yields: Vec<String>,
     #[serde(default)]
