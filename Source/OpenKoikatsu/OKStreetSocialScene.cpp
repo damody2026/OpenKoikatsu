@@ -459,6 +459,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  FOKStreetCatalogue OtherLanguage;
  bool Japanese=false;
  // Voice source: built-in clips or the local TTS server (OKStreetSocialVoice.inl).
+ // The TTS Base model the launcher starts ok-tts with (voice-settings.json tts_base_size): 1.7B, or 0.6B (less VRAM).
+ FString TtsBaseSize=TEXT("1.7B");
  bool TtsEnabled=false,TtsPending=false;FString TtsEndpoint=TEXT("http://127.0.0.1:47860"),TtsCacheDir,TtsSettingsPath,TtsNotice;int32 TtsAge=18,TtsLines=0,TtsFallbacks=0;uint32 TtsSerial=0;double TtsRequestedAt=0,TtsTimeout=15;bool TtsSmoke=false,TtsSmokeStarted=false;
  // Player (male) TTS line before her reply: MalePhase 0 none, 1 waiting for the clip, 2 speaking, 3 done/skipped.
  FString PlayerCardName,PlayerNameDraft,MaleTone=TEXT("m0"),MaleVoiceId,MaleLineOverride,LastBranchId,TtsVoiceInfo;bool MaleTtsPending=false,MaleAddressed=false;int32 MalePhase=0,TtsSmokeTopics=0;double MaleRequestedAt=0;uint32 MaleSerial=0;TArray<TSharedPtr<FString>> MaleToneOptions;
@@ -1339,6 +1341,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  {const FString Here=ActivityBlockedLine(Character);if(!Here.IsEmpty())User+=TEXT("\n")+Here;}
  // She offered to sing for him and waits for his answer: his words may be it (song_answer; Song.inl acts on it).
  if(S.Song.Phase==EOKSongPhase::Offered&&S.Song.Girl==Character)User+=OKT(TEXT("ui.scene.judge_song_offer"));
+ // Or her song is ready and he asked her to wait (he may want it now); and a song she sang him before he may ask again.
+ else if(S.Song.Phase==EOKSongPhase::Ready&&S.Song.Due&&!S.Song.Replay&&S.Song.Girl==Character)User+=OKT(TEXT("ui.scene.judge_song_ready"));
+ if(!SongIsSinging()&&SongLatestMemory(Character)!=INDEX_NONE)User+=OKT(TEXT("ui.scene.judge_song_again"));
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and
@@ -1361,9 +1366,13 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
   if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);Weak->ExecuteFreeTalkAction(Character,Id,HerAction);return;}
   FString DoNow,Why;Verdict->TryGetStringField(TEXT("do_now"),DoNow);Verdict->TryGetStringField(TEXT("why"),Why);
-  // His words answered her offer to sing ("sure, sing for me"): the same as the panel's buttons.
-  {FString Song;if(Verdict->TryGetStringField(TEXT("song_answer"),Song)&&(Song==TEXT("accept")||Song==TEXT("later")||Song==TEXT("decline"))
-    &&L->Song.Phase==EOKSongPhase::Offered&&L->Song.Girl==Character){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d answered her song offer in his words: %s"),Character,*Song);Weak->SongAnswer(Song);}}
+  // His words answered her offer to sing ("sure, sing for me"), asked for her waiting song now, or asked her to sing
+  // her last song again: the same as the panel's buttons.
+  {FString Song;if(Verdict->TryGetStringField(TEXT("song_answer"),Song)){const auto& SG=L->Song;
+   if(Song==TEXT("replay")){const int32 M=Weak->SongLatestMemory(Character);
+    if(M!=INDEX_NONE&&!Weak->SongIsSinging()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d asked in his words to hear her song again"),Character);Weak->SongReplay(M);}}
+   else if((Song==TEXT("accept")||Song==TEXT("later")||Song==TEXT("decline"))&&SG.Girl==Character
+    &&(SG.Phase==EOKSongPhase::Offered||(SG.Phase==EOKSongPhase::Ready&&SG.Due&&!SG.Replay&&Song==TEXT("accept")))){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d answered her song offer in his words: %s"),Character,*Song);Weak->SongAnswer(Song);}}}
   if(DoNow.StartsWith(TEXT("act:")))DoNow=DoNow.Mid(4); // "act:stroll": the stroll
   // "go:路口" (walking him to the corner): no place of the map, nothing to start. Dropped quietly: a failed outing told
   // her "it did not work" and she took her words back ("I mixed up the way").
@@ -2193,6 +2202,9 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
  if(!S.TalkFailureNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TalkFailureNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE).IsEnabled(!Busy&&!S.OtherLanguage.Nodes.IsEmpty()).Text(FText::FromString(S.Japanese?OKT(TEXT("ui.scene.voice_ja")):OKT(TEXT("ui.scene.voice_zh")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleLanguage();return FReply::Handled();})];
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE).IsEnabled(!S.TtsCacheDir.IsEmpty()).Text(FText::FromString(S.TtsEnabled?OKT(TEXT("ui.scene.voice_tts")):OKT(TEXT("ui.scene.voice_builtin")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleVoiceSource();return FReply::Handled();})];
+ // The TTS model (from the next start): 1.7B sounds closer to each heroine, 0.6B takes about 1 GB less VRAM.
+ if(S.TtsEnabled&&!S.TtsSettingsPath.IsEmpty())Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE)
+  .Text(FText::FromString(OKMsg(TEXT("ui.scene.tts_model"),{{TEXT("size"),*S.TtsBaseSize}}))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleTtsBaseSize();return FReply::Handled();})];
  {if(S.LangOptions.IsEmpty())for(const TCHAR* L:{TEXT("zh-TW"),TEXT("zh-CN"),TEXT("en")})S.LangOptions.Add(MakeShared<FString>(L));
   const int32 LangIndex=FMath::Max(0,S.LangOptions.IndexOfByPredicate([&](const TSharedPtr<FString>& L){return *L==S.Lang;}));
   Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SComboBox<TSharedPtr<FString>>).OptionsSource(&S.LangOptions).InitiallySelectedItem(S.LangOptions[LangIndex])

@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
@@ -37,19 +37,33 @@ pub struct BaseVoices {
     pub tags: Mutex<HashMap<String, String>>,
     pub profiles_dir: PathBuf,
     pub base_model: PathBuf,
+    /// "Qwen/Qwen3-TTS-12Hz-1.7B-Base" or the 0.6B one (health, and part of each cached line's key).
+    pub model_id: String,
     pub design_model: Option<PathBuf>,
     pub voices_path: PathBuf,
     pub positions: usize,
-    pub encoder: SpeakerEncoder,
+    /// The Base model's speaker encoder (CPU), set once the model is there (it may be downloaded first).
+    encoder: OnceLock<SpeakerEncoder>,
+    /// Embeddings of voices made with the other model size (profile::fit_cached).
+    pub fit_cache: PathBuf,
     cards: Mutex<HashMap<PathBuf, (Option<SystemTime>, Option<Arc<Profile>>)>>,
     candidates: Mutex<Vec<Profile>>,
 }
 
 impl BaseVoices {
-    pub fn new(tags: HashMap<String, String>, profiles_dir: PathBuf, base_model: PathBuf, design_model: Option<PathBuf>, voices_path: PathBuf,
-               positions: usize, encoder: SpeakerEncoder) -> Self {
-        Self { tags: Mutex::new(tags), profiles_dir, base_model, design_model, voices_path, positions, encoder,
-               cards: Mutex::new(HashMap::new()), candidates: Mutex::new(Vec::new()) }
+    pub fn new(profiles_dir: PathBuf, base_model: PathBuf, model_id: String, design_model: Option<PathBuf>, voices_path: PathBuf, positions: usize) -> Self {
+        Self { tags: Mutex::new(HashMap::new()), fit_cache: profiles_dir.join("fit"), profiles_dir, base_model, model_id, design_model, voices_path, positions,
+               encoder: OnceLock::new(), cards: Mutex::new(HashMap::new()), candidates: Mutex::new(Vec::new()) }
+    }
+
+    /// The model is there: its encoder and the tags of the design voices.
+    pub fn loaded(&self, encoder: SpeakerEncoder, tags: HashMap<String, String>) {
+        let _ = self.encoder.set(encoder);
+        *self.tags.lock().unwrap() = tags;
+    }
+
+    pub fn encoder(&self) -> Result<&SpeakerEncoder> {
+        self.encoder.get().context("model is still loading")
     }
 
     /// The voice stored in a card, read again only when the file changes.
@@ -62,7 +76,7 @@ impl BaseVoices {
         }
         let v = match cardvoice::read_file(card)? {
             Some(mut p) => {
-                p.fit(&self.encoder)?;
+                p.fit_cached(self.encoder()?, Some(&self.fit_cache))?;
                 Some(Arc::new(p))
             }
             None => None,
@@ -149,7 +163,7 @@ pub fn candidates(engine: &Mutex<Option<Engine>>, bv: &BaseVoices, voices: &Voic
             ref_audio_sha1: String::new(), design_model: snapshot_name(design_dir), base_model: snapshot_name(&bv.base_model),
             encoder: ENCODER.into(), created: now_utc(),
         };
-        let p = make_profile(&bv.encoder, &samples, meta)?;
+        let p = make_profile(bv.encoder()?, &samples, meta)?;
         let tag = p.tag();
         let mut preview = base.speak_voice(&preview_text, &personality, age, Some(&p.embedding), GenConfig::default())?.samples;
         trim_silence(&mut preview, SAMPLE_RATE);

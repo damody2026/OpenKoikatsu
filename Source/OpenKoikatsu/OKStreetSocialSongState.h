@@ -28,6 +28,9 @@ struct FOKSongState {
  // This event's milestone (song_milestone: confession, favor100, favor150, lines; empty for a test song), whether it
  // is due (a song made ahead waits until it is), and Replay: she sings one of her earlier songs again (no milestone).
  FString Occasion;bool Due=false,Replay=false;
+ // He asked for one of her songs again while she was still talking (his words, or the button mid-line): sung once she
+ // is free, if that is within a minute (AskedAt: SceneTime()).
+ int32 AskedMemory=INDEX_NONE;double AskedAt=0;
  TMap<FString,FOKSongProgress> Progress;TArray<FOKSongMemory> Memories;
  // The locked singer and this event's identity; callbacks check Epoch (bumped by every reset, slot load and new event).
  int32 Girl=INDEX_NONE;uint32 Epoch=0;

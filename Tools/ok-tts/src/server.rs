@@ -66,7 +66,7 @@ struct State {
     engine: Mutex<Option<Engine>>,
     voices: Voices,
     /// Base backend: profiles, card voices, candidates (voicemgr.rs). None: VoiceDesign.
-    base: Option<BaseVoices>,
+    base: Option<Arc<BaseVoices>>,
     ready: AtomicBool,
     load_error: Mutex<Option<String>>,
     stats: Stats,
@@ -166,7 +166,7 @@ impl Trace {
     }
 }
 
-pub fn serve(port: u16, workers: usize, voices: Voices, base: Option<BaseVoices>, load: impl FnOnce() -> Result<Engine> + Send + 'static) -> Result<()> {
+pub fn serve(port: u16, workers: usize, voices: Voices, base: Option<Arc<BaseVoices>>, load: impl FnOnce() -> Result<Engine> + Send + 'static) -> Result<()> {
     let server = tiny_http::Server::http(("127.0.0.1", port)).map_err(|e| anyhow::anyhow!("bind 127.0.0.1:{port}: {e}"))?;
     let server = Arc::new(server);
     let state = Arc::new(State {
@@ -181,6 +181,7 @@ pub fn serve(port: u16, workers: usize, voices: Voices, base: Option<BaseVoices>
             Ok(engine) => {
                 *state.engine.lock().unwrap() = Some(engine);
                 state.ready.store(true, Ordering::SeqCst);
+                crate::hfget::set_status(String::new());
                 crate::log!("ok-tts: READY");
             }
             Err(e) => {
@@ -259,7 +260,10 @@ fn handle(state: &Arc<State>, mut req: tiny_http::Request) {
             let s = &state.stats;
             let ready = state.ready.load(Ordering::SeqCst);
             respond(req, 200, json!({
-                "ok": ready, "ready": ready, "model": if state.base.is_some() { BASE_MODEL_ID } else { MODEL_ID }, "engine": "ok-tts (Rust, CUDA)",
+                "ok": ready, "ready": ready, "model": state.base.as_ref().map_or(MODEL_ID, |b| b.model_id.as_str()), "engine": "ok-tts (Rust, CUDA)",
+                // While the model is not there yet: "downloading Qwen/... 37% (...)" (first start; hfget.rs).
+                "loading": if ready { String::new() } else { crate::hfget::status() },
+                "loading_percent": if ready { None } else { crate::hfget::percent() },
                 "backend": if state.base.is_some() { "base" } else { "design" },
                 "profiles": state.base.as_ref().map(|b| b.tags.lock().unwrap().len()),
                 "voice_design_available": state.base.as_ref().map(|b| b.design_model.is_some()),
@@ -574,6 +578,8 @@ fn cache_path(out_dir: &Path, voice: &VoiceChoice, text: &str, profile_tag: Opti
     let mut digest = Sha1::new();
     match profile_tag {
         None => digest.update(format!("{CACHE_VERSION}|{MODEL_ID}|{}|{}|{text}", voice.instruct, voice.seed).as_bytes()),
+        // (The tag tells the model sizes apart too: their embeddings differ. The id stays the 1.7B one so lines cached
+        // before the 0.6B option keep their names.)
         Some(tag) => digest.update(format!("{BASE_CACHE_VERSION}|{BASE_MODEL_ID}|{tag}|{}|{text}", voice.seed).as_bytes()),
     }
     out_dir.join(format!("{}.ogg", digest.digest()))

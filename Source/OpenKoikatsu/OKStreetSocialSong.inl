@@ -110,6 +110,17 @@ void AOKStreetSocialScene::SongReset(const FString& Why,bool CancelJob){
  RefreshUI();
 }
 
+bool AOKStreetSocialScene::SongIsSinging() const{
+ const auto P=State->Song.Phase;return P==EOKSongPhase::Intro||P==EOKSongPhase::Singing||P==EOKSongPhase::Outro;
+}
+
+// Her latest song kept to hear again (INDEX_NONE: none).
+int32 AOKStreetSocialScene::SongLatestMemory(int32 Girl) const{
+ const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl))return INDEX_NONE;const FString Her=OKStreetStableId(S.Manifest.Characters[Girl]);
+ for(int32 I=S.Song.Memories.Num()-1;I>=0;--I)if(S.Song.Memories[I].HeroineId==Her)return I;
+ return INDEX_NONE;
+}
+
 bool AOKStreetSocialScene::SongOwnsVoice(int32 Character) const{
  if(!State)return false;const auto& G=State->Song;
  return Character!=INDEX_NONE&&Character==G.Girl&&(G.Phase==EOKSongPhase::Intro||G.Phase==EOKSongPhase::Singing||G.Phase==EOKSongPhase::Outro);
@@ -175,12 +186,17 @@ void AOKStreetSocialScene::SongCountLines(int32 Girl,int32 Lines){
 // She sings one of her earlier songs again (the panel's memories, while he talks with her): the same mix and staging,
 // no milestone, nothing made at ok-song.
 void AOKStreetSocialScene::SongReplay(int32 Memory){
- auto& S=*State;auto& G=S.Song;if(!G.Memories.IsValidIndex(Memory)||(G.Phase!=EOKSongPhase::Idle&&G.Phase!=EOKSongPhase::Failed))return;
+ auto& S=*State;auto& G=S.Song;if(!G.Memories.IsValidIndex(Memory)||SongIsSinging())return;
  const FOKSongMemory M=G.Memories[Memory];const int32 Girl=OKSongGirlOf(S,M.HeroineId);
+ // She is still answering him (his "sing it again" comes with her reply): she sings once that is over (TickSong).
+ if(Girl!=INDEX_NONE&&S.Target==Girl&&!SongMayOffer(Girl)){G.AskedMemory=Memory;G.AskedAt=SceneTime();UE_LOG(LogTemp,Display,TEXT("Street song: replay %d once she is free"),Memory);return;}
+ G.AskedMemory=INDEX_NONE;
  FString Text;TSharedPtr<FJsonObject> Env;
  if(Girl==INDEX_NONE||S.Target!=Girl||!SongMayOffer(Girl)||!FFileHelper::LoadFileToString(Text,*M.MouthPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Env)||!Env.IsValid()){
   UE_LOG(LogTemp,Warning,TEXT("Street song: replay %d not possible now"),Memory);return;}
- SongReset(FString(),true);++G.Epoch;
+ // A new song made or being made (he said "later", or it is not due yet) is set aside, not thrown away: its job goes on
+ // at ok-song and the milestone makes it again from the cache once this one is over.
+ SongReset(FString(),G.Phase==EOKSongPhase::Idle||G.Phase==EOKSongPhase::Failed);++G.Epoch;
  G.Girl=Girl;G.HeroineId=M.HeroineId;G.Occasion=M.Occasion;G.Template=M.Template;G.Lyrics=M.Lyrics;G.LyricsModel=M.LyricsModel;G.SongPath=M.SongPath;G.ArtifactKey.Reset();
  G.Mouth.Reset();for(const auto& V:Env->GetArrayField(TEXT("values")))G.Mouth.Add(float(V->AsNumber()));G.Hop=float(Env->GetNumberField(TEXT("hop_ms")))/1000.f;
  G.Replay=true;G.Due=true;G.Phase=EOKSongPhase::Ready;
@@ -430,6 +446,12 @@ void AOKStreetSocialScene::TickSong(double Now){
   if(OKGetCrowdRuntimeActionStatus(this,G.Girl,A)&&(A.Playing||A.Pending||A.Preparing||A.QueuedRequests>0)&&!A.ClipId.IsEmpty()
      &&A.ClipId!=G.IntroClip&&A.ClipId!=G.OutroClip&&!G.CueClip.Contains(A.ClipId)&&OKCancelCrowdRuntimeAction(this,G.Girl,Ignore))
    UE_LOG(LogTemp,Display,TEXT("Street song: kept idle (cancelled %s)"),*A.ClipId);}
+ // A song he asked to hear again while she was talking: now that she is free (or never, after a minute or once he left).
+ if(G.AskedMemory!=INDEX_NONE&&!SongIsSinging()){
+  const int32 Girl=G.Memories.IsValidIndex(G.AskedMemory)?OKSongGirlOf(S,G.Memories[G.AskedMemory].HeroineId):INDEX_NONE;
+  if(Girl==INDEX_NONE||S.Target!=Girl||Now-G.AskedAt>60)G.AskedMemory=INDEX_NONE;
+  else if(SongMayOffer(Girl)){SongReplay(G.AskedMemory);return;}
+ }
  switch(G.Phase){
  case EOKSongPhase::Idle:{
   // Her milestone songs (rules song_milestone): made as soon as one is due or close, offered once it is due.
@@ -477,7 +499,8 @@ void AOKStreetSocialScene::TickSong(double Now){
    G.SongVoiceId=Id;G.Phase=EOKSongPhase::Singing;G.PhaseAt=Now;G.Line=-1;OKSongCaption(S,G.LineText.IsEmpty()?OKSongCaptionLyrics(OKSongShownLyrics(S)):FString(TEXT("♪")));UE_LOG(LogTemp,Display,TEXT("Street song: singing (actor %d, %s)"),G.Girl,*G.SongPath);RefreshUI();
   }else{
    G.SungToday=G.SungDay==S.Store.CalendarDay?G.SungToday+1:1;G.SungDay=S.Store.CalendarDay;G.LastSongAtMinutes=Now/60.0;
-   if(G.Replay)MindObserve(G.Girl,TEXT("song"),OKT(TEXT("ui.song.sang_again_memory")),PlaceHere(S.Male),0.5f);
+   // (A new song set aside for this one is offered again a little later, not right after it.)
+   if(G.Replay){MindObserve(G.Girl,TEXT("song"),OKT(TEXT("ui.song.sang_again_memory")),PlaceHere(S.Male),0.5f);G.LaterUntil=Now+OKSongLaterSeconds;}
    else{
     // A new song: its milestone is sung, the lines count again from here, and it is kept to hear again.
     FOKSongProgress& Her=G.Progress.FindOrAdd(G.HeroineId);Her.Lines=0;if(!G.Occasion.IsEmpty()&&G.Occasion!=TEXT("lines"))Her.Done.AddUnique(G.Occasion);
@@ -530,9 +553,13 @@ void AOKStreetSocialScene::BuildSongRow(TSharedRef<SVerticalBox> Box){
  }
  if(G.Phase==EOKSongPhase::Intro||G.Phase==EOKSongPhase::Singing)Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.song.skip"))))
   .OnClicked_Lambda([Weak](){if(Weak.IsValid())Weak->SongSkip();return FReply::Handled();})];
+ // Her song is ready and due but he asked her to wait (or turned it down): he can ask for it now.
+ if(G.Phase==EOKSongPhase::Ready&&G.Due&&!G.Replay&&G.Girl==S.Target&&S.Target>0)Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton())
+  .Text(FText::FromString(OKMsg(TEXT("ui.song.sing_now"),{{TEXT("name"),*Name}}))).OnClicked_Lambda([Weak](){if(Weak.IsValid())Weak->SongAnswer(TEXT("accept"));return FReply::Handled();})];
  if(!G.Notice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(G.Notice)).AutoWrapText(true).WrapTextAt(360)];
- // Her songs to hear again, while he talks with her and nothing is being sung (the latest five).
- if((G.Phase==EOKSongPhase::Idle||G.Phase==EOKSongPhase::Failed)&&S.Manifest.Characters.IsValidIndex(S.Target)&&S.Target>0){
+ // Her songs to hear again, while he talks with her and she is not singing (the latest five); a new song being made
+ // or waiting is set aside meanwhile (SongReplay).
+ if(!SongIsSinging()&&S.Manifest.Characters.IsValidIndex(S.Target)&&S.Target>0){
   const FString Her=OKStreetStableId(S.Manifest.Characters[S.Target]);TArray<int32> Mine;
   for(int32 I=G.Memories.Num()-1;I>=0&&Mine.Num()<5;--I)if(G.Memories[I].HeroineId==Her)Mine.Add(I);
   if(!Mine.IsEmpty()){

@@ -58,6 +58,7 @@ void AOKStreetSocialScene::LoadVoiceSettings(const TSharedPtr<FJsonObject>& Mani
  if(J->TryGetNumberField(TEXT("tts_age"),Age))S.TtsAge=FMath::Clamp(int32(Age),12,45);
  if(J->TryGetNumberField(TEXT("tts_timeout_seconds"),Timeout)&&Timeout>=2&&Timeout<=60)S.TtsTimeout=Timeout;
  FString Tone;if(J->TryGetStringField(TEXT("male_tone"),Tone)&&OKStreetMaleToneIndex(Tone)!=INDEX_NONE)S.MaleTone=Tone;
+ FString Size;if(J->TryGetStringField(TEXT("tts_base_size"),Size)&&(Size==TEXT("1.7B")||Size==TEXT("0.6B")))S.TtsBaseSize=Size;
  if(S.TtsEnabled)ProbeTtsServer();
 }
 
@@ -68,8 +69,16 @@ void AOKStreetSocialScene::SaveVoiceSettings(){
  if(!FFileHelper::LoadFileToString(Body,*S.TtsSettingsPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Body),J)||!J.IsValid())J=MakeShared<FJsonObject>();
  J->SetStringField(TEXT("voice_mode"),S.TtsEnabled?TEXT("tts"):TEXT("builtin"));J->SetStringField(TEXT("tts_endpoint"),S.TtsEndpoint);
  J->SetNumberField(TEXT("tts_age"),S.TtsAge);J->SetNumberField(TEXT("tts_timeout_seconds"),S.TtsTimeout);J->SetStringField(TEXT("male_tone"),S.MaleTone);
+ J->SetStringField(TEXT("tts_base_size"),S.TtsBaseSize);
  FString Out,Error;FJsonSerializer::Serialize(J.ToSharedRef(),TJsonWriterFactory<>::Create(&Out));
  if(!OKStreetAtomicSave(S.TtsSettingsPath,Out,Error))S.TtsNotice=OKT(TEXT("ui.voice.voice_settings_save_failed"))+Error;
+}
+
+// The TTS model for the next start (the launcher reads tts_base_size; ok-tts downloads a model it does not have).
+void AOKStreetSocialScene::ToggleTtsBaseSize(){
+ if(!State)return;auto& S=*State;
+ S.TtsBaseSize=S.TtsBaseSize==TEXT("1.7B")?TEXT("0.6B"):TEXT("1.7B");SaveVoiceSettings();
+ S.TtsNotice=OKMsg(TEXT("ui.voice.tts_model_next_start"),{{TEXT("size"),*S.TtsBaseSize}});RefreshUI();
 }
 
 void AOKStreetSocialScene::ToggleVoiceSource(){
@@ -114,9 +123,15 @@ void AOKStreetSocialScene::ProbeTtsServer(int32 Attempt){
  Request->SetURL(S.TtsEndpoint/TEXT("health"));Request->SetVerb(TEXT("GET"));Request->SetTimeout(3);
  Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Attempt](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
   if(!State||!State->TtsEnabled)return;TSharedPtr<FJsonObject> J;bool Ready=false;
-  if(Connected&&Response.IsValid()&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()),J)&&J.IsValid())J->TryGetBoolField(TEXT("ready"),Ready);
-  const bool Waiting=!Ready&&Attempt<40;const FString Before=State->TtsNotice;
-  State->TtsNotice=Ready?OKT(TEXT("ui.voice.voice_tts_server_ready")):Waiting?OKT(TEXT("ui.voice.voice_tts_server_starting")):OKT(TEXT("ui.voice.voice_tts_no_response"))+State->TtsEndpoint+OKT(TEXT("ui.voice.tts_server_restart_hint"));
+  // While it downloads its model (first start) or prepares the voices for it, it says so: wait as long as it does.
+  FString Loading;double Percent=-1;
+  if(Connected&&Response.IsValid()&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()),J)&&J.IsValid()){
+   J->TryGetBoolField(TEXT("ready"),Ready);J->TryGetStringField(TEXT("loading"),Loading);if(!J->TryGetNumberField(TEXT("loading_percent"),Percent))Percent=-1;}
+  const bool Waiting=!Ready&&(Attempt<40||!Loading.IsEmpty());const FString Before=State->TtsNotice;
+  State->TtsNotice=Ready?OKT(TEXT("ui.voice.voice_tts_server_ready"))
+   :Percent>=0?OKMsg(TEXT("ui.voice.voice_tts_downloading"),{{TEXT("percent"),int32(Percent)}})
+   :!Loading.IsEmpty()?OKT(TEXT("ui.voice.voice_tts_preparing"))
+   :Waiting?OKT(TEXT("ui.voice.voice_tts_server_starting")):OKT(TEXT("ui.voice.voice_tts_no_response"))+State->TtsEndpoint+OKT(TEXT("ui.voice.tts_server_restart_hint"));
   // Still loading: ask again in 2 s (the timer dies with the scene).
   if(Waiting)GetWorldTimerManager().SetTimer(TtsProbeTimer,FTimerDelegate::CreateWeakLambda(this,[this,Attempt](){if(State&&State->TtsEnabled)ProbeTtsServer(Attempt+1);}),2.f,false);
   // Only a changed notice rebuilds the panel (the probe repeats every 2 s while the server loads).

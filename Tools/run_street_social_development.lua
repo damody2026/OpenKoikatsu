@@ -313,12 +313,17 @@ local function main()
   local asr_settings = path.join(root, "Saved/StreetSocial/asr-settings.json")
   if voice then
     if not sandbox then instance.stop_own_voice_servers(root) end
-    local vs = path.join(root, "Saved/StreetSocial/voice-settings.json")
+    local vs = path.join(sandbox or path.join(root, "Saved/StreetSocial"), "voice-settings.json")
     local okv, v = pcall(read_json, vs)
     if path.is_file(vs) and okv and v.tts_server_command then say("tts_server_command is ignored: the server is tied to the game process (Build/ok-tts/ok-tts.exe)") end
-    -- Free-talk replies are always spoken through ok-tts, so it starts in built-in voice mode too.
+    -- Free-talk replies are always spoken through ok-tts, so it starts in built-in voice mode too. Its Base model is
+    -- the one chosen in the voice panel (tts_base_size: 1.7B by default, 0.6B saves about 1 GB of VRAM); a model not
+    -- on this machine is downloaded by ok-tts on its first start (Build/ok-tts/models, not versioned).
     local tts = path.join(root, "Build/ok-tts/ok-tts.exe")
-    if path.is_file(tts) then servers[#servers + 1] = { name = "TTS", file = tts, args = { "serve", "--port", tostring(ports.tts) } }
+    local tts_args = { "serve", "--port", tostring(ports.tts) }
+    local size = path.is_file(vs) and okv and type(v) == "table" and v.tts_base_size
+    if size == "1.7B" or size == "0.6B" then tts_args[#tts_args + 1] = "--base-size"; tts_args[#tts_args + 1] = size end
+    if path.is_file(tts) then servers[#servers + 1] = { name = "TTS", file = tts, args = tts_args }
     else say("TTS server not found; built-in voice will be used: " .. tts) end
     -- Free-talk voice input: asr-settings.json may name the microphone ({"device": "part of the input device name"});
     -- otherwise the Windows default recording device is used. ok-asr writes its own log (Build/ok-asr/logs/ok-asr.log).

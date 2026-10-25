@@ -611,7 +611,17 @@ Base 沒有比 VoiceDesign 慢；第一次量到 RTF 較低（不用帶聲音描
 - 省顯存約 1 GB，是 0.6B 唯一明顯的好處。但目前不是顯存不夠才會出問題，1 GB 換不回變差的聲線。
 - 如果要換，還得先解決啟動慢：把重算後的 1024 維聲紋存成快取，或在卡片／profile 裡同時存兩種維度。
 
-之後如果顯存真的不夠（例如同時開更多 Unreal 或更大的唱歌模型），可以設 `OK_TTS_BASE_MODEL` 改用 0.6B，不必改程式；正式換之前要先做上面的聲紋快取。
+**使用者決定（2026-10-25）**：預設 1.7B，0.6B 當選項；模型不進版控，遊戲啟動時發現沒有就自動下載。
+
+- **選擇**：遊戲人聲面板的「TTS 模型」按鈕在 1.7B／0.6B 間切換，寫進 voice-settings.json 的 `tts_base_size`，下次啟動生效。啟動器（`Tools/run_street_social_development.lua`）讀這個值，傳 `--base-size` 給 ok-tts；沒設就用 1.7B。手動也可以用 `OK_TTS_BASE_SIZE`。
+- **自動下載**（`Tools/ok-tts/src/hfget.rs`）：ok-tts 依序找模型：`--base`／`OK_TTS_BASE_MODEL`、自己下載過的 `Build/ok-tts/models/<名稱>`、Hugging Face 快取（`HF_HUB_CACHE`、`HF_HOME/hub`、`~/.cache/huggingface/hub`、`E:\TTS\hf-cache\hub`）。都沒有就從 Hugging Face 下載到 `Build/ok-tts/models/`（Build 不在版控裡），版本固定在測過的 commit（1.7B `fd4b2543…`、0.6B `5d839924…`）。
+  - **校驗**：LFS 檔對 SHA-256，其他檔對 git blob SHA-1；最後才寫 `.ok-complete`，沒有這個檔的資料夾一律不用。
+  - **續傳**：中斷後再啟動會用 Range 接著下載。
+  - **鏡像與代理**：`HF_ENDPOINT` 可換鏡像站，`HTTPS_PROXY` 可走代理。
+- **下載時伺服器照常回應**：模型的下載、speaker encoder 載入與聲紋重算都改在背景做。`/health` 的 `loading`／`loading_percent` 回報進度，遊戲面板顯示「第一次使用正在下載語音模型（N%）」；完成前用內建人聲。
+- **0.6B 的啟動時間**：重算後的 1024 維聲紋存在 `profiles/fit/<參考錄音 sha1>.bf16`，第二次啟動從 230 s 降到 12 s。
+- **預先下載**：`ok-tts fetch-model --base-size 0.6B [--out DIR]` 可以先抓好模型，給離線安裝用。
+- **實測**：0.6B 下載中途停掉再啟動，從 70% 續傳，18 s 完成，所有檔案與 HF 快取一致；伺服器 READY 後合成正常。
 
 試聽頁（本機，不納入版控）：
 

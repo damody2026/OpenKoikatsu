@@ -62,22 +62,54 @@ pub fn default_model_dir() -> Option<PathBuf> {
     None
 }
 
-/// The Base model (voice cloning from a speaker embedding): OK_TTS_BASE_MODEL or the E:\TTS cache.
-pub fn default_base_model_dir() -> Option<PathBuf> {
-    let roots = [std::env::var("OK_TTS_BASE_MODEL").ok().map(PathBuf::from), Some(PathBuf::from(r"E:\TTS\hf-cache\hub\models--Qwen--Qwen3-TTS-12Hz-1.7B-Base\snapshots"))];
-    for root in roots.into_iter().flatten() {
+/// The Base model sizes ok-tts runs (voice cloning from a speaker embedding). 1.7B is the default: its voices are
+/// closer to each heroine's own (TTS plan 20.5); 0.6B takes about 1 GB less VRAM.
+pub struct BaseSize {
+    pub label: &'static str,
+    pub repo: crate::hfget::Repo,
+}
+
+pub const BASE_SIZES: [BaseSize; 2] = [
+    BaseSize { label: "1.7B", repo: crate::hfget::Repo { id: "Qwen/Qwen3-TTS-12Hz-1.7B-Base", rev: "fd4b254389122332181a7c3db7f27e918eec64e3" } },
+    BaseSize { label: "0.6B", repo: crate::hfget::Repo { id: "Qwen/Qwen3-TTS-12Hz-0.6B-Base", rev: "5d83992436eae1d760afd27aff78a71d676296fc" } },
+];
+
+/// `--base-size`, else OK_TTS_BASE_SIZE, else 1.7B.
+pub fn base_size(arg: Option<&str>) -> Result<&'static BaseSize> {
+    let want = arg.map(str::to_string).or_else(|| std::env::var("OK_TTS_BASE_SIZE").ok()).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "1.7B".into());
+    BASE_SIZES.iter().find(|s| s.label.eq_ignore_ascii_case(want.trim())).ok_or_else(|| anyhow!("base size must be 1.7B or 0.6B, not {want}"))
+}
+
+/// Where a Base model is downloaded when it is nowhere on this machine: <exe>/models/<name> (not versioned).
+pub fn base_download_dir(size: &BaseSize) -> PathBuf {
+    crate::exe_dir().join("models").join(size.repo.name())
+}
+
+/// A Base model already on this machine: OK_TTS_BASE_MODEL (an explicit folder, any size), the downloaded copy
+/// (<exe>/models), or a Hugging Face cache (HF_HUB_CACHE, HF_HOME/hub, ~/.cache/huggingface/hub, E:\TTS\hf-cache\hub).
+pub fn find_base_model(size: &BaseSize) -> Option<PathBuf> {
+    let snapshot = |root: PathBuf| -> Option<PathBuf> {
         if root.join("model.safetensors").is_file() {
             return Some(root);
         }
-        if let Ok(entries) = std::fs::read_dir(&root) {
-            for e in entries.flatten() {
-                if e.path().join("model.safetensors").is_file() {
-                    return Some(e.path());
-                }
-            }
-        }
+        std::fs::read_dir(&root).ok()?.flatten().map(|e| e.path()).find(|p| p.join("model.safetensors").is_file())
+    };
+    if let Some(p) = std::env::var("OK_TTS_BASE_MODEL").ok().filter(|p| !p.trim().is_empty()).and_then(|p| snapshot(PathBuf::from(p))) {
+        return Some(p);
     }
-    None
+    let own = base_download_dir(size);
+    if own.join(crate::hfget::MARKER).is_file() {
+        return Some(own);
+    }
+    let cache_name = format!("models--{}", size.repo.id.replace('/', "--"));
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty()).map(PathBuf::from);
+    let caches = [env("HF_HUB_CACHE"), env("HF_HOME").map(|h| h.join("hub")), env("USERPROFILE").map(|h| h.join(".cache/huggingface/hub")), Some(PathBuf::from(r"E:\TTS\hf-cache\hub"))];
+    caches.into_iter().flatten().find_map(|c| snapshot(c.join(&cache_name).join("snapshots")))
+}
+
+/// The default Base model (OK_TTS_BASE_SIZE or 1.7B) if it is on this machine (tools; the server downloads it).
+pub fn default_base_model_dir() -> Option<PathBuf> {
+    find_base_model(base_size(None).ok()?)
 }
 
 impl Engine {

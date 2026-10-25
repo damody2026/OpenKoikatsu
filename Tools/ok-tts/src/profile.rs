@@ -114,11 +114,30 @@ impl Profile {
     /// A voice made with the other Base size (1.7B: 2048 values, 0.6B: 1024) takes its embedding again from its own
     /// reference clip with this model's encoder. Only in memory: the file or card keeps working with either model.
     pub fn fit(&mut self, encoder: &SpeakerEncoder) -> Result<bool> {
-        if self.embedding.len() == encoder.dim() {
+        self.fit_cached(encoder, None)
+    }
+
+    /// `fit`, keeping each embedding made in `cache` (<sha1 of the reference clip>.bf16): the next start reads it
+    /// instead of running the encoder again (274 profiles take about two minutes on the CPU).
+    pub fn fit_cached(&mut self, encoder: &SpeakerEncoder, cache: Option<&Path>) -> Result<bool> {
+        let dim = encoder.dim();
+        if self.embedding.len() == dim {
             return Ok(false);
+        }
+        let file = cache.map(|c| c.join(format!("{}.bf16", sha1_hex(&self.ref_ogg))));
+        if let Some(bytes) = file.as_ref().and_then(|f| std::fs::read(f).ok()).filter(|b| b.len() == dim * 2) {
+            self.embedding = bytes.chunks_exact(2).map(|c| bf16_to_f32(u16::from_le_bytes([c[0], c[1]]))).collect();
+            return Ok(true);
         }
         let samples = decode_ogg(&self.ref_ogg).with_context(|| format!("voice {}: the reference clip does not decode", self.meta.id))?;
         self.embedding = encoder.embed(&samples)?.into_iter().map(|v| bf16_to_f32(f32_to_bf16(v))).collect();
+        if let Some(f) = file {
+            let bytes: Vec<u8> = self.embedding.iter().flat_map(|v| f32_to_bf16(*v).to_le_bytes()).collect();
+            if let Some(dir) = f.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            write_atomic(&f, &bytes)?;
+        }
         Ok(true)
     }
 }

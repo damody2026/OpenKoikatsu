@@ -1,9 +1,12 @@
 //! ok-tts: Qwen3-TTS 12Hz for OpenKoikatsu, in Rust on CUDA (cudarc + cuBLAS + NVRTC).
 //!
 //!   ok-tts serve  [--port 47860] [--model DIR] [--voices voices.json] [--parent-pid N]   (exits when process N exits)
-//!                 [--backend base|design] [--base DIR] [--profiles DIR]
-//!       base (the default when <exe>/profiles has profiles and the Base model is found): every voice is the fixed
-//!       speaker embedding of its profile, so a character keeps one voice; design: VoiceDesign from the description.
+//!                 [--backend base|design] [--base DIR] [--base-size 1.7B|0.6B] [--profiles DIR]
+//!       base (the default when <exe>/profiles has profiles): every voice is the fixed speaker embedding of its
+//!       profile, so a character keeps one voice; design: VoiceDesign from the description.
+//!       --base-size (or OK_TTS_BASE_SIZE): the Base model, 1.7B (default) or 0.6B. A model that is not on this machine
+//!       is downloaded on the first start into <exe>/models (hfget.rs; not versioned) while the server already answers
+//!       (/health "loading" shows the progress). --base DIR (or OK_TTS_BASE_MODEL) uses a given folder instead.
 //!   ok-tts profile [--base DIR] [--profiles DIR] [--keys 08,m0] [--ages 18] [--ref-text TEXT] [--force]   (see profile.rs)
 //!   ok-tts card-voice --card CARD.png [--set VOICE.okvoice | --remove]   (a character's own voice; see cardvoice.rs)
 //!   ok-tts card-voice --card CARD.png --from-wav REF.wav [--id NAME] [--save VOICE.okvoice] [--base DIR]
@@ -21,6 +24,7 @@
 //!   ok-tts speaker-sim --base BASE_DIR a.wav b.wav[#1|#2] ...   (speaker-embedding cosine of each pair)
 //!   ok-tts parity --reference DIR      (compare against Tools/ok-tts/reference/dump_reference.py output; run with OK_TTS_WEIGHTS=bf16)
 //!   ok-tts gemv-bench                  (decode-step linear layer timings, bf16 vs int8 weights, in CUDA graphs)
+//!   ok-tts fetch-model [--base-size 1.7B|0.6B] [--out DIR]   (download a Base model, as serve does on first start)
 //!
 //! CUDA DLLs (cublas64_12, cublasLt64_12, nvrtc64_120_0, nvrtc-builtins) are searched next to the exe,
 //! in <exe>/cuda, in --cuda-dir, then on PATH. Only the NVIDIA driver must be installed.
@@ -36,6 +40,7 @@ mod consistency;
 mod voicecheck;
 mod engine;
 mod gpu;
+mod hfget;
 mod sampling;
 mod server;
 mod speaker;
@@ -50,7 +55,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use crate::engine::{default_base_model_dir, default_model_dir, Engine, SAMPLE_RATE};
+use crate::engine::{base_download_dir, base_size, default_base_model_dir, default_model_dir, find_base_model, Engine, SAMPLE_RATE};
 use crate::talker::GenConfig;
 
 struct Args {
@@ -137,6 +142,10 @@ fn resolve(args: &Args) -> Result<(PathBuf, PathBuf)> {
         Some(m) => PathBuf::from(m),
         None => default_model_dir().context("model not found; pass --model <snapshot dir> or set OK_TTS_MODEL")?,
     };
+    Ok((model, voices_path(args)?))
+}
+
+fn voices_path(args: &Args) -> Result<PathBuf> {
     let voices = match args.opts.get("voices") {
         Some(v) => PathBuf::from(v),
         None => [exe_dir().join("voices.json"), exe_dir().join("../../voices.json"), PathBuf::from("voices.json")]
@@ -144,7 +153,7 @@ fn resolve(args: &Args) -> Result<(PathBuf, PathBuf)> {
             .find(|p| p.is_file())
             .context("voices.json not found; pass --voices")?,
     };
-    Ok((model, voices))
+    Ok(voices)
 }
 
 fn main() {
@@ -171,6 +180,7 @@ fn main() {
         "bench" => cmd_bench(&args),
         "consistency" => cmd_consistency(&args),
         "voice-check" => cmd_voice_check(&args),
+        "fetch-model" => cmd_fetch_model(&args),
         "profile" => cmd_profile(&args),
         "card-voice" => cmd_card_voice(&args),
         "voice-export" => cmd_voice_export(&args),
@@ -193,7 +203,9 @@ fn max_positions(args: &Args) -> usize {
 }
 
 fn cmd_serve(args: &Args) -> Result<()> {
-    let (model, voices) = resolve(args)?;
+    let voices = voices_path(args)?;
+    // VoiceDesign: the design backend, and new candidate voices on the Base backend (optional there).
+    let model = args.opts.get("model").map(PathBuf::from).or_else(default_model_dir);
     let port: u16 = args.opts.get("port").map(|p| p.parse()).transpose()?.unwrap_or(47860);
     let positions = max_positions(args);
     let later: usize = args.opts.get("stream-later-frames").map(|v| v.parse()).transpose()?.unwrap_or(4);
@@ -201,39 +213,54 @@ fn cmd_serve(args: &Args) -> Result<()> {
     let voice_table = text::Voices::load(&voices)?;
     let profiles_dir = profiles_dir(args);
     let mut profiles = profile::load_all(&profiles_dir)?;
-    let base = args.opts.get("base").map(PathBuf::from).or_else(default_base_model_dir);
     let backend = match args.opts.get("backend").map(String::as_str) {
         Some("design") => "design",
         Some("base") => "base",
         Some(other) => bail!("--backend must be base or design, not {other}"),
-        None if !profiles.is_empty() && base.is_some() => "base",
+        None if !profiles.is_empty() => "base",
         None => "design",
     };
     if backend == "base" {
-        let base = base.context("Base model not found; pass --base <Qwen3-TTS-12Hz-1.7B-Base snapshot dir> or set OK_TTS_BASE_MODEL")?;
+        // The Base model: --base, else one on this machine, else downloaded below (in the background).
+        let size = base_size(args.opts.get("base-size").map(String::as_str))?;
+        let explicit = args.opts.get("base").map(PathBuf::from);
+        let found = explicit.clone().or_else(|| find_base_model(size));
+        let download = found.is_none();
+        let base = found.unwrap_or_else(|| base_download_dir(size));
+        let model_id = if explicit.is_some() || std::env::var("OK_TTS_BASE_MODEL").is_ok_and(|v| !v.trim().is_empty()) {
+            format!("Qwen3-TTS Base ({})", base.display())
+        } else {
+            size.repo.id.to_string()
+        };
         if profiles.is_empty() {
             bail!("no voice profiles in {}; run ok-tts profile", profiles_dir.display());
         }
         let missing: Vec<String> = profile::all_choices(&voice_table, None).iter().map(profile::profile_id).filter(|id| !profiles.contains_key(id)).collect();
-        crate::log!("ok-tts: backend base, {} profiles from {}{}", profiles.len(), profiles_dir.display(),
+        crate::log!("ok-tts: backend base ({}), {} profiles from {}{}", size.label, profiles.len(), profiles_dir.display(),
                     if missing.is_empty() { String::new() } else { format!(" (missing {}: {})", missing.len(), missing.join(" ")) });
-        // The speaker encoder (CPU) turns new candidate voices into embeddings while the server runs; voices made
-        // with the other model size get theirs again from their reference clips.
-        let store = weights::Store::open(&base.join("model.safetensors"))?;
-        let encoder = speaker::SpeakerEncoder::load(&store).context("speaker encoder")?;
-        drop(store);
-        let mut refitted = 0;
-        for p in profiles.values_mut() {
-            refitted += p.fit(&encoder)? as usize;
-        }
-        if refitted > 0 {
-            crate::log!("ok-tts: {refitted} profiles were made with another model size; embedded again from their reference clips");
-        }
-        let tags = profiles.iter().map(|(id, p)| (id.clone(), p.tag())).collect();
-        let design = Some(model.clone()).filter(|m| m.join("model.safetensors").is_file());
-        let voices_path = voices.clone();
-        let base_voices = voicemgr::BaseVoices::new(tags, profiles_dir.clone(), base.clone(), design, voices_path, positions, encoder);
+        let design = model.filter(|m| m.join("model.safetensors").is_file());
+        let base_voices = std::sync::Arc::new(voicemgr::BaseVoices::new(profiles_dir.clone(), base.clone(), model_id, design, voices.clone(), positions));
+        let bv = base_voices.clone();
         return server::serve(port, 8, voice_table, Some(base_voices), move || {
+            if download {
+                hfget::ensure(&size.repo, &base)?;
+            }
+            // The speaker encoder (CPU) turns new candidate voices into embeddings while the server runs; voices made
+            // with the other model size get theirs from their reference clips (kept in <profiles>/fit after the
+            // first start).
+            hfget::set_status(format!("preparing voices for {}", size.label));
+            let store = weights::Store::open(&base.join("model.safetensors"))?;
+            let encoder = speaker::SpeakerEncoder::load(&store).context("speaker encoder")?;
+            drop(store);
+            let mut refitted = 0;
+            for p in profiles.values_mut() {
+                refitted += p.fit_cached(&encoder, Some(&bv.fit_cache))? as usize;
+            }
+            if refitted > 0 {
+                crate::log!("ok-tts: {refitted} profiles were made with another model size; embeddings from their reference clips");
+            }
+            bv.loaded(encoder, profiles.iter().map(|(id, p)| (id.clone(), p.tag())).collect());
+            hfget::set_status(format!("loading {}", size.repo.id));
             let mut engine = Engine::load(&base, &voices, positions)?;
             engine.profiles = Some(profiles);
             engine.stream_later_frames = later.max(1);
@@ -241,6 +268,7 @@ fn cmd_serve(args: &Args) -> Result<()> {
         });
     }
     crate::log!("ok-tts: backend design (VoiceDesign)");
+    let model = model.context("VoiceDesign model not found; pass --model <snapshot dir> or set OK_TTS_MODEL")?;
     server::serve(port, 8, voice_table, None, move || {
         let mut engine = Engine::load(&model, &voices, positions)?;
         engine.stream_later_frames = later.max(1);
@@ -254,8 +282,7 @@ fn profiles_dir(args: &Args) -> PathBuf {
 
 /// The voice a heroine actually speaks with, for other tools (ok-song): never changes the card or the profiles.
 fn cmd_voice_export(args: &Args) -> Result<()> {
-    let (_, voices_path) = resolve(args)?;
-    let voices = text::Voices::load(&voices_path)?;
+    let voices = text::Voices::load(&voices_path(args)?)?;
     let personality = args.opts.get("personality").context("--personality is required")?;
     let age: u32 = args.opts.get("age").map(|v| v.parse()).transpose()?.unwrap_or(18);
     let out = PathBuf::from(args.opts.get("out").context("--out DIR is required")?);
@@ -345,8 +372,17 @@ fn cmd_profile(args: &Args) -> Result<()> {
     })
 }
 
+/// The Base model of a size into a folder (default: where the server downloads it), e.g. before going offline.
+fn cmd_fetch_model(args: &Args) -> Result<()> {
+    let size = base_size(args.opts.get("base-size").map(String::as_str))?;
+    let out = args.opts.get("out").map(PathBuf::from).unwrap_or_else(|| base_download_dir(size));
+    hfget::ensure(&size.repo, &out)?;
+    println!("{}", out.display());
+    Ok(())
+}
+
 fn cmd_voice_check(args: &Args) -> Result<()> {
-    let (_, voices) = resolve(args)?;
+    let voices = voices_path(args)?;
     let opt = |k: &str| args.opts.get(k).cloned();
     voicecheck::run(&voicecheck::VoiceCheckArgs {
         cards: opt("cards").context("--cards is required")?.split(',').map(str::trim).filter(|s| !s.is_empty()).map(PathBuf::from).collect(),
