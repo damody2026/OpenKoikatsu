@@ -53,8 +53,6 @@ void AOKStreetSocialScene::LoadVoiceSettings(const TSharedPtr<FJsonObject>& Mani
  if(!FFileHelper::LoadFileToString(Body,*S.TtsSettingsPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Body),J)||!J.IsValid())return;
  FString Mode,Endpoint;double Age=0,Timeout=0;
  if(J->TryGetStringField(TEXT("voice_mode"),Mode))S.TtsEnabled=Mode==TEXT("tts");
- // Daily conversation is voiced only when the settings ask for it (dialogue_voice); otherwise no TTS at all.
- J->TryGetBoolField(TEXT("dialogue_voice"),S.DialogueVoice);if(!S.DialogueVoice)S.TtsEnabled=false;
  // Local server only; dialogue text is never sent off this machine.
  if(!LaunchedTtsLocal&&J->TryGetStringField(TEXT("tts_endpoint"),Endpoint)&&(Endpoint.StartsWith(TEXT("http://127.0.0.1:"))||Endpoint.StartsWith(TEXT("http://localhost:"))))S.TtsEndpoint=Endpoint;
  if(J->TryGetNumberField(TEXT("tts_age"),Age))S.TtsAge=FMath::Clamp(int32(Age),12,45);
@@ -69,8 +67,7 @@ void AOKStreetSocialScene::SaveVoiceSettings(){
  // Keep keys this scene does not own (the launcher reads tts_server_command).
  FString Body;TSharedPtr<FJsonObject> J;
  if(!FFileHelper::LoadFileToString(Body,*S.TtsSettingsPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Body),J)||!J.IsValid())J=MakeShared<FJsonObject>();
- // (voice_mode is kept as it was while the conversation is not voiced: turning dialogue_voice back on restores it.)
- if(S.DialogueVoice)J->SetStringField(TEXT("voice_mode"),S.TtsEnabled?TEXT("tts"):TEXT("builtin"));J->SetStringField(TEXT("tts_endpoint"),S.TtsEndpoint);J->SetBoolField(TEXT("dialogue_voice"),S.DialogueVoice);
+ J->SetStringField(TEXT("voice_mode"),S.TtsEnabled?TEXT("tts"):TEXT("builtin"));J->SetStringField(TEXT("tts_endpoint"),S.TtsEndpoint);
  J->SetNumberField(TEXT("tts_age"),S.TtsAge);J->SetNumberField(TEXT("tts_timeout_seconds"),S.TtsTimeout);J->SetStringField(TEXT("male_tone"),S.MaleTone);
  J->SetStringField(TEXT("tts_base_size"),S.TtsBaseSize);
  FString Out,Error;FJsonSerializer::Serialize(J.ToSharedRef(),TJsonWriterFactory<>::Create(&Out));

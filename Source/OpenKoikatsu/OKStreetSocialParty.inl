@@ -401,7 +401,7 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
 
 // Their lines in order, each in her own voice (the free-talk speech queue with a speaker per line).
 void AOKStreetSocialScene::SpeakPartyLines(const TArray<int32>& Speakers,const TArray<FString>& Lines){
- auto& S=*State;if(Speakers.IsEmpty()||!DialogueVoiced())return;
+ auto& S=*State;if(Speakers.IsEmpty())return;
  SpeakFreeTalk(Speakers[0],Lines,++S.FreeTalkSerial);
  S.FreeTalkSpeechSpeakers=Speakers;
 }
