@@ -282,3 +282,7 @@ Tools/lua/lua.exe Tools/run_street_social_development.lua -Control -Sandbox Voic
 - 整合版（Gest15）上的驗收發現：歌開始約 10 秒就結束。原因是即時麥克風的「插話」機制把歌當成一般回覆停掉了；房間裡的人聲（正式遊玩時也可能是喇叭放出的歌聲）觸發了插話。
 - 修正（`OKStreetSocialLiveTalk.inl`）：她唱歌期間（`SongOwnsVoice`），麥克風和男主說話時一樣靜音，插話也不會停歌。
 - 重新驗收（SongMic01，沙盒 VoiceTest，雷電將軍）：邀請 → 接受 → 開場動作 → 5 段歌中動作 → 收尾 → 唱完，整首約 24 秒都有唱完；期間 log 顯示 "mic off while she sings"，卡拉 OK 字幕正常。她說話用的是卡片裡的本人聲線（面板顯示「她的角色卡里存有专属声音」）。
+- 2026-10-25 整合版 Int1025C 最終驗收（沙盒 VoiceTest，雷電將軍）：
+  - 打字台詞：男主先用 m12 說出，期間麥克風關閉；他說完後，她的回覆語音和對話框才接上。
+  - 唱歌：邀請 → 開場 → 5 段歌中動作 → 收尾 → 唱完，整首約 28 秒，期間 "mic off while she sings"，沒有被打斷。
+  - 她的語音用卡片裡的本人聲線（協調者在遊戲內確認）。
