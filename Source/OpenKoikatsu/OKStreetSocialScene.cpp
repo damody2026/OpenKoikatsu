@@ -267,6 +267,7 @@ struct FOKStreetSceneState {
  // Plan §6: today's plans per heroine, the block each is in, walks in progress, meals eaten this block, who the
  // schedule is holding in place, and where he spends his time.
  TMap<int32,FOKStreetPendingMove> PendingMoves; // heroines whose walk is still being routed (TickRouteJobs)
+ TMap<int32,float> StreetBlockedFor;TMap<int32,double> StreetDetourAt; // a free heroine held up on her street walk, and when she may be routed round again
  uint32 AutoFriendshipNext=0; // whose turn it is to be asked (TickAutoFriendship)
  bool AcademicsInFlight=false; // campus_tick asked, its answer not back yet (TickAcademics)
  TSharedPtr<FOKStreetGridSearch> NavSearch;FVector NavSearchGoal=FVector::ZeroVector;FString NavSearchName; // his map navigation being routed (TickNavSearch)
@@ -3532,7 +3533,36 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(!S.SelfTest&&!Agent.Held&&Agent.Dwell<=0&&Now>=S.RunNext[Agent.Slot]){S.RunUntil.Add(Agent.Slot,Now+S.Random.FRandRange(2.5f,5.f));S.RunNext[Agent.Slot]=Now+S.Random.FRandRange(18,35);}
   const bool Running=!Agent.Held&&Agent.Dwell<=0&&((S.PresentationOnlyTest&&S.PresentationPhase==2)||Now<S.RunUntil.FindRef(Agent.Slot));
   const float TravelSpeed=Running?OKStreetFemaleRunSpeed:OKStreetWalkSpeed;
-  const FVector Before=Agent.Position;if(Agent.Slot!=S.PairRestoredActor||GFrameCounter!=S.PairRestoredFrame)OKStreetStepAgent(Agent,FMath::Min(Dt,.05f),Snapshot,TravelSpeed);if(Agent.Position!=Before){S.Rotations[Agent.Slot]=OKStreetFacingMovement(Agent.Position-Before,S.Rotations[Agent.Slot]);}float Walk=Agent.Slot==S.Companion?S.CompanionWalk:(Agent.Held||Agent.Mode!=EOKStreetMove::Walking||Agent.Position==Before?0.f:TravelSpeed/OKStreetWalkSpeed);Walk=NpcIdleTick(Agent,Walk,Now);const FRotator PreviousFacing=S.RenderedRotations[Agent.Slot];S.RenderedRotations[Agent.Slot]=OKStreetLimitFemaleFacing(PreviousFacing,S.Rotations[Agent.Slot],Dt);const float Turn=FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousFacing.Yaw,S.RenderedRotations[Agent.Slot].Yaw));if(Dt>0){S.MaxFemaleTurnRate=FMath::Max(S.MaxFemaleTurnRate,Turn/Dt);++S.TurnSamples;}
+  // Free on the street walk but standing inside a place (summoned into the dorm lobby, a heroine with no day plan): the
+  // street walk heads straight for its next stop through the wall, and the stuck rule only moves on to the next stop,
+  // out there too. A wall before that stop: she walks out to it on the grid (through the door), then the street walk
+  // takes her (R3-211). Looked at once a second at most.
+  if(!Agent.Held&&!S.Commutes.Contains(Agent.Slot)&&!S.PendingMoves.Contains(Agent.Slot)&&!S.SelfTest&&!BusyWithPlayer(Agent.Slot)&&SceneTime()>=S.StreetDetourAt.FindRef(Agent.Slot))
+   for(const auto& P:OKStreetPlaces())if(!P.Rooms.IsEmpty()&&OKStreetInsidePlace(P,Agent.Position)){
+    S.StreetDetourAt.Add(Agent.Slot,SceneTime()+1.0);
+    TArray<FOKStreetPointData> Points;TArray<TArray<int32>> Routes;OKStreetWaypoints(Points);OKStreetRoutes(Routes);
+    if(!Routes.IsValidIndex(Agent.Route)||!Routes[Agent.Route].IsValidIndex(Agent.Cursor)||!Points.IsValidIndex(Routes[Agent.Route][Agent.Cursor]))break;
+    const FVector Stop=Points[Routes[Agent.Route][Agent.Cursor]].Position;
+    // Only when a wall stands between: an open place on her way (the playground) is walked across as before.
+    FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetWalkWall),false,this);
+    if(OKStreetInsidePlace(P,Stop)||!GetWorld()->LineTraceSingleByChannel(Hit,Agent.Position+FVector(0,0,85),FVector(Stop.X,Stop.Y,Agent.Position.Z+85),ECC_WorldStatic,Query))break;
+    Agent.Held=true;Agent.Stuck=0;S.StreetDetourAt.Add(Agent.Slot,SceneTime()+8.0);QueueHeroineWalk(Agent.Slot,Agent.Position,Stop,true,false,FVector::ZeroVector,P.Door,S.Rotations[Agent.Slot].Yaw,P.Id);
+    UE_LOG(LogTemp,Display,TEXT("Street walk: actor %d is inside %s, a wall before her next stop %s: out on the grid"),Agent.Slot,P.Id,*Stop.ToCompactString());
+    break;}
+  const FVector Before=Agent.Position;if(Agent.Slot!=S.PairRestoredActor||GFrameCounter!=S.PairRestoredFrame)OKStreetStepAgent(Agent,FMath::Min(Dt,.05f),Snapshot,TravelSpeed);
+  // Her street walk heads straight for its next stop; a building in between (the block across from the dorm door) held
+  // her walking at its wall, and the stuck rule only turned her to the next stop behind it too. Held up 1.5 s, she
+  // walks round to that stop on the grid (its cells tested against the buildings), then the street walk goes on (R3-211).
+  if(!S.SelfTest&&!Agent.Held&&!BusyWithPlayer(Agent.Slot)&&Agent.Dwell<=0.f&&Agent.Mode==EOKStreetMove::Walking&&FVector::Dist2D(Agent.Position,Before)<1.f){
+   float& Blocked=S.StreetBlockedFor.FindOrAdd(Agent.Slot);Blocked+=FMath::Min(Dt,.05f);
+   if(Blocked>1.5f&&SceneTime()>=S.StreetDetourAt.FindRef(Agent.Slot)){
+    TArray<FOKStreetPointData> Points;TArray<TArray<int32>> Routes;OKStreetWaypoints(Points);OKStreetRoutes(Routes);
+    if(Routes.IsValidIndex(Agent.Route)&&Routes[Agent.Route].IsValidIndex(Agent.Cursor)&&Points.IsValidIndex(Routes[Agent.Route][Agent.Cursor])){
+     const FVector Stop=Points[Routes[Agent.Route][Agent.Cursor]].Position;Agent.Held=true;Agent.Stuck=0;S.StreetBlockedFor.Remove(Agent.Slot);S.StreetDetourAt.Add(Agent.Slot,SceneTime()+8.0);
+     QueueHeroineWalk(Agent.Slot,Agent.Position,Stop,true,false,FVector::ZeroVector,Agent.Position,S.Rotations[Agent.Slot].Yaw,TEXT("street"));
+     UE_LOG(LogTemp,Display,TEXT("Street walk: actor %d held up at %s, round to her next stop %s"),Agent.Slot,*Agent.Position.ToCompactString(),*Stop.ToCompactString());}}}
+  else S.StreetBlockedFor.Remove(Agent.Slot);
+  if(Agent.Position!=Before){S.Rotations[Agent.Slot]=OKStreetFacingMovement(Agent.Position-Before,S.Rotations[Agent.Slot]);}float Walk=Agent.Slot==S.Companion?S.CompanionWalk:(Agent.Held||Agent.Mode!=EOKStreetMove::Walking||Agent.Position==Before?0.f:TravelSpeed/OKStreetWalkSpeed);Walk=NpcIdleTick(Agent,Walk,Now);const FRotator PreviousFacing=S.RenderedRotations[Agent.Slot];S.RenderedRotations[Agent.Slot]=OKStreetLimitFemaleFacing(PreviousFacing,S.Rotations[Agent.Slot],Dt);const float Turn=FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousFacing.Yaw,S.RenderedRotations[Agent.Slot].Yaw));if(Dt>0){S.MaxFemaleTurnRate=FMath::Max(S.MaxFemaleTurnRate,Turn/Dt);++S.TurnSamples;}
   OKSetCrowdRuntimeLocomotionState(this,Agent.Slot,S.Target==Agent.Slot,Running&&Walk>0,Error);
  // A schedule commute moves her in coarse steps: show her walking there smoothly instead of sliding in her idle.
   FVector Shown=Agent.Position;float ShownWalk=Walk;
