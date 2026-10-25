@@ -108,7 +108,7 @@ void AOKStreetSocialScene::StopLifePose(int32 Only){
   auto& P=S.LifePoses[K];if(Only!=INDEX_NONE&&P.Actor!=Only)continue;const int32 I=P.Actor;
   FString Error;OKResumeCrowdRuntimeBehavior(this,I,Error);
   if(S.LifeRestore.Contains(I)&&S.Agents.IsValidIndex(I-1))S.Agents[I-1].Position=S.LifeRestore[I];S.LifeRestore.Remove(I);
-  for(auto& Prop:P.Props)if(Prop.IsValid())Prop->Destroy();
+  for(auto& Prop:P.Props)DestroyLater(Prop.Get());
   S.LifePoses.RemoveAt(K);
  }
 }

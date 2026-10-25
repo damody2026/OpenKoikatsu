@@ -231,7 +231,7 @@ void AOKStreetSocialScene::TickEffect(){
   if(UPointLightComponent* L=S.EffectLight.Get())L->SetIntensity(5.0e7f*Fade*Fade);
   // The ground shakes under them for the first second.
   if(T<1.0)S.PhotoViewRot+=FRotator(FMath::FRandRange(-.6f,.6f),FMath::FRandRange(-.6f,.6f),0); // the camera looking out at it shakes
-  if(T>4.0){for(auto& A:S.EffectActors)if(A.IsValid())A->Destroy();S.EffectActors.Reset();if(UPointLightComponent* L=S.EffectLight.Get())L->DestroyComponent();S.EffectLight.Reset();S.EffectKind.Reset();}
+  if(T>4.0){for(auto& A:S.EffectActors)DestroyLater(A.Get());S.EffectActors.Reset();if(UPointLightComponent* L=S.EffectLight.Get())L->DestroyComponent();S.EffectLight.Reset();S.EffectKind.Reset();}
  }
 }
 

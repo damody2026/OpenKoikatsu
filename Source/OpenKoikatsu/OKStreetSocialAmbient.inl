@@ -22,7 +22,7 @@ static FOKStreetAmbientDefinition OKStreetAmbientDefinition(int32 Kind,const FSt
 void AOKStreetSocialScene::StopAmbientActivity(){
  if(!State||State->AmbientActor==INDEX_NONE)return;auto& S=*State;const int32 Character=S.AmbientActor;
  S.AmbientActor=INDEX_NONE;S.AmbientPhase=0;
- for(auto& Prop:S.AmbientProps)if(Prop.IsValid())Prop->Destroy();S.AmbientProps.Reset();
+ for(auto& Prop:S.AmbientProps)DestroyLater(Prop.Get());S.AmbientProps.Reset();
  FString Error;OKResumeCrowdRuntimeBehavior(this,Character,Error);
  if(S.Agents.IsValidIndex(Character-1)){
   const FVector Position=S.Agents[Character-1].Position;S.Agents[Character-1]=S.AmbientSaved;

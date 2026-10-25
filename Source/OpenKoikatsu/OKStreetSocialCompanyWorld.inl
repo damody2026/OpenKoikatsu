@@ -51,7 +51,7 @@ void AOKStreetSocialScene::TickCompanyWorld(){
   if(S.LotWorldKeys.FindRef(U.Id)==Key)continue;
   S.LotWorldKeys.Add(U.Id,Key);
   // Clear what stood there.
-  for(auto& A:S.LotActors.FindOrAdd(U.Id))if(A.IsValid())A->Destroy();S.LotActors[U.Id].Reset();
+  for(auto& A:S.LotActors.FindOrAdd(U.Id))DestroyLater(A.Get());S.LotActors[U.Id].Reset();
   for(const FBox& Box:S.LotBlocks.FindOrAdd(U.Id))OKStreetRuntimeBlocks().RemoveAll([&](const FBox& X){return X.Equals(Box);});S.LotBlocks[U.Id].Reset();
   const FRotator R(0,U.Yaw,0);const FVector C(U.Center.X,U.Center.Y,0.f);const float HX=U.Size.Y*0.5f,HY=U.Size.X*0.5f; // local X: toward the street
   auto Part=[&](FVector Local,FVector Size,int32 Material,bool Solid){

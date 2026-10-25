@@ -619,6 +619,9 @@ private:
  void QueueHeroineWalk(int32 I,const FVector& From,const FVector& To,bool Leave,bool HasFinal,const FVector& Final,const FVector& Fallback,float Yaw,const FString& Place);
  void FinishHeroineWalk(int32 I,const struct FOKStreetPendingMove& Move,TArray<FVector>&& Path);
  void TickRouteJobs();
+ // Props that are done with: hidden and without collision now, destroyed a few a frame (TickDestroyQueue).
+ void DestroyLater(AActor* Actor);
+ void TickDestroyQueue();
  bool NavCellFree(const FIntPoint& Cell,float Z) const;
  TArray<const struct FOKStreetPlace*> NearbyPlaces(float Radius) const;
  bool BeginOuting(int32 Girl,const FString& ActivityId,FString& Error);

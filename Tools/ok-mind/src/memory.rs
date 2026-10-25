@@ -144,9 +144,10 @@ impl Memories {
             &self.dir.join(file_name(&file.heroine)),
             Box::new(move || {
                 std::fs::create_dir_all(&dir).map_err(|e| format!("memory_dir: {e}"))?;
-                let open = open.lock().unwrap();
-                let file = open.get(&heroine).ok_or_else(|| format!("memory_closed: {heroine}"))?;
-                serde_json::to_vec(file).map_err(|e| e.to_string())
+                // A copy under the lock, serialized after it: the game thread adding the next memory does not wait for
+                // the serialization.
+                let file = open.lock().unwrap().get(&heroine).cloned().ok_or_else(|| format!("memory_closed: {heroine}"))?;
+                serde_json::to_vec(&file).map_err(|e| e.to_string())
             }),
         )
     }

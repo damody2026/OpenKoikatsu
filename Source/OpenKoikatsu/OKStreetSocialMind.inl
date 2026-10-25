@@ -183,13 +183,13 @@ static FString OKStreetMindJson(const TSharedRef<FJsonObject>& Object){
 
 // A rule-written memory for one heroine (plan §6.0: no LLM). Kind picks the default importance in Rust.
 void AOKStreetSocialScene::MindObserve(int32 Character,const FString& Kind,const FString& Summary,const FString& Place,float Importance,const TCHAR* Type){
- HistoryAdd(Character,Kind,TEXT("world"),Summary,Place); // every event also goes into her own history (OKStreetSocialPhoneInbox.inl)
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_HistoryAdd);HistoryAdd(Character,Kind,TEXT("world"),Summary,Place);} // every event also goes into her own history (OKStreetSocialPhoneInbox.inl)
  MindRemember(Character,Kind,Summary,Place,Importance,Type);
 }
 
 // Her memory only (the history line written elsewhere): stamped with the game day and minute.
 void AOKStreetSocialScene::MindRemember(int32 Character,const FString& Kind,const FString& Summary,const FString& Place,float Importance,const TCHAR* Type){
- if(!State||!State->Mind||!State->Manifest.Characters.IsValidIndex(Character)||Character==0)return;auto& S=*State;
+ if(!State||!State->Mind||!State->Manifest.Characters.IsValidIndex(Character)||Character==0)return;auto& S=*State;QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindRemember);
  const int64 Now=OKStreetMindNow(S);
  TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();
  Job->SetStringField(TEXT("kind"),TEXT("observe"));Job->SetStringField(TEXT("heroine"),OKStreetStableId(S.Manifest.Characters[Character]));

@@ -265,6 +265,7 @@ struct FOKStreetSceneState {
  // schedule is holding in place, and where he spends his time.
  TMap<int32,FOKStreetPendingMove> PendingMoves; // heroines whose walk is still being routed (TickRouteJobs)
  uint32 AutoFriendshipNext=0; // whose turn it is to be asked (TickAutoFriendship)
+ TArray<TWeakObjectPtr<AActor>> DestroyQueue; // DestroyLater
  TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int64> ConfessionPending;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
  TMap<FString,int32> PlayerPlaceMinutes;double ScheduleTickAt=0;int64 PlaceCountMinute=-1;
  // Plan §8.6: the shift he is working now (appointment id, job, window in game minutes), early-leave tracking, fast-forward.
@@ -2585,7 +2586,7 @@ void AOKStreetSocialScene::FinishPhoto(bool bKeepTalking){
   UE_LOG(LogTemp,Warning,TEXT("Street pair: ended early (phase %d, %.1f s after it was asked for):\n%hs"),P.Phase,SceneTime()-P.RequestedAt,Stack);}
  const bool WasTalking=S.FreeTalkOpen&&FreeTalkPartner()==P.Partner;
  const auto Before=P;P=FOKStreetPairSession();if(Before.Conversation())EndTalk();
- for(auto& Prop:S.PairProps)if(Prop.IsValid())Prop->Destroy();S.PairProps.Reset();S.MealHandProps.Reset();
+ for(auto& Prop:S.PairProps)DestroyLater(Prop.Get());S.PairProps.Reset();S.MealHandProps.Reset();
  const auto& Restore=Before;FString Error;OKResumeCrowdRuntimeBehavior(this,0,Error);OKResumeCrowdRuntimeBehavior(this,Restore.Partner,Error);
  S.PairRestoredFrame=GFrameCounter;S.PairRestoredActor=Restore.Partner;
  {auto& Agent=S.Agents[Restore.Partner-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}S.Yaw=Restore.SavedYaw;S.Pitch=Restore.SavedPitch;S.Distance=Restore.SavedDistance;S.MouseUI=Restore.SavedMouseUI;ApplyMouseMode(S.ViewportFocused);
@@ -3343,7 +3344,7 @@ void AOKStreetSocialScene::FinishFacility(){
  OKResumeCrowdRuntimeBehavior(this,S.FacilityCharacter,Error);
  if(S.Agents.IsValidIndex(S.FacilityCharacter-1)){S.Agents[S.FacilityCharacter-1]=S.FacilitySavedAgent;S.Rotations[S.FacilityCharacter]=S.FacilitySavedRotation;}
  if(S.FacilityEntered){S.Male=S.FacilitySavedMale;S.Rotations[0]=S.FacilitySavedMaleRotation;S.Yaw=S.FacilitySavedYaw;S.Pitch=S.FacilitySavedPitch;S.Distance=S.FacilitySavedDistance;S.MouseUI=S.FacilitySavedMouse;ApplyMouseMode(S.ViewportFocused);}
- for(auto& Prop:S.FacilityProps)if(Prop.IsValid())Prop->Destroy();S.FacilityProps.Reset();S.FacilityHandProps.Reset();S.Facility=INDEX_NONE;S.FacilityCharacter=INDEX_NONE;S.FacilityStartedAt=0;S.FacilityEntered=false;
+ for(auto& Prop:S.FacilityProps)DestroyLater(Prop.Get());S.FacilityProps.Reset();S.FacilityHandProps.Reset();S.Facility=INDEX_NONE;S.FacilityCharacter=INDEX_NONE;S.FacilityStartedAt=0;S.FacilityEntered=false;
  S.Message=OKT(TEXT("ui.scene.left_facility_returned"));RefreshUI();ResumeTalkQuiet(FacilityGirl);
 }
 void AOKStreetSocialScene::TickFacility(double Now){
@@ -3420,7 +3421,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickThenAction);TickThenAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRouteJobs);TickRouteJobs();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRestroom);TickRestroom();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSleep);TickSleep();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSolo);TickSolo();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCalendarAndMind);TickCalendarAndMind();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickSaves);TickSaves();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRouteJobs);TickRouteJobs();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickDestroyQueue);TickDestroyQueue();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCommutes);TickCommutes(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickUiProbe);TickUiProbe();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCounterProximity);TickCounterProximity();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickAcademics);TickAcademics();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickCampusProximity);TickCampusProximity();}
  // Reading together ends when the player walks away from her.
  // Walk-in places: the roof and ceiling disappear while the player stands inside, so the camera sees the room.
  // Multi-storey places also hide every floor above the player's.
