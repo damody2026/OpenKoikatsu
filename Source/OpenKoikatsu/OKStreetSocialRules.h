@@ -1551,33 +1551,45 @@ inline bool OKStreetAtomicSave(const FString& Path, const FString& Body, FString
  return true;
 }
 
-// Saves off the game thread: the game thread only serializes; the newest body for each path is written, in order, by one
-// background task (the temp file, the .bak copy and the rename stalled the street, several times a frame at worst).
-// OKStreetFlushSaves waits for what is queued: before a save file is copied into a slot, read back, or the game ends.
-struct FOKStreetSaveQueue { FCriticalSection Lock; TMap<FString, FString> Pending; TArray<FString> Order; bool Running = false; };
+// Saves off the game thread: the newest content for each path is made and written, in order, by one background task (the
+// temp file, the .bak copy and the rename stalled the street, several times a frame at worst). The content is a body, or
+// a store snapshot serialized by the task (OKStreetAtomicSaveStoreAsync: the store's JSON took the game thread 4-6 ms each
+// commit). OKStreetFlushSaves waits for what is queued: before a save file is copied into a slot, read back, or the game ends.
+struct FOKStreetSaveQueue { FCriticalSection Lock; TMap<FString, TFunction<FString()>> Pending; TArray<FString> Order; bool Running = false; };
 inline FOKStreetSaveQueue& OKStreetSaveQueue() { static FOKStreetSaveQueue Queue; return Queue; }
-inline void OKStreetAtomicSaveAsync(const FString& Path, FString Body) {
+inline void OKStreetAtomicSaveQueued(const FString& Path, TFunction<FString()> Make) {
  auto& Q = OKStreetSaveQueue();
  {
   FScopeLock Locked(&Q.Lock);
   if (!Q.Pending.Contains(Path)) Q.Order.Add(Path);
-  Q.Pending.Add(Path, MoveTemp(Body));
+  Q.Pending.Add(Path, MoveTemp(Make));
   if (Q.Running) return;
   Q.Running = true;
  }
  AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [] {
   auto& Q = OKStreetSaveQueue();
   for (;;) {
-   FString Path, Body;
+   FString Path;TFunction<FString()> Make;
    {
     FScopeLock Locked(&Q.Lock);
     if (Q.Order.IsEmpty()) { Q.Running = false; return; }
-    Path = Q.Order[0]; Q.Order.RemoveAt(0); Body = Q.Pending.FindAndRemoveChecked(Path);
+    Path = Q.Order[0]; Q.Order.RemoveAt(0); Make = Q.Pending.FindAndRemoveChecked(Path);
    }
+   const FString Body = Make();
+   // A save is ~100 KB. One growing every write (a list appended to instead of replaced) is said once, before it stalls.
+   {static int32 WarnedAt = 0; const int32 Kb = Body.Len() / 1024; if (Kb > 2048 && Kb > WarnedAt * 2) { WarnedAt = Kb; UE_LOG(LogTemp, Warning, TEXT("Street save %s is %d KB: something in it keeps growing"), *Path, Kb); }}
    FString Error;
    if (!OKStreetAtomicSave(Path, Body, Error)) UE_LOG(LogTemp, Warning, TEXT("Street save %s failed: %s"), *Path, *Error);
   }
  });
+}
+inline void OKStreetAtomicSaveAsync(const FString& Path, FString Body) {
+ OKStreetAtomicSaveQueued(Path, [Body = MoveTemp(Body)]() { return Body; });
+}
+// The store as it is now, serialized and written by the save task: the game thread only copies it.
+inline void OKStreetAtomicSaveStoreAsync(const FString& Path, const FOKStreetStore& Store) {
+ TSharedRef<const FOKStreetStore, ESPMode::ThreadSafe> Snapshot = [&] { QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SaveSnapshot); return MakeShared<const FOKStreetStore, ESPMode::ThreadSafe>(Store); }();
+ OKStreetAtomicSaveQueued(Path, [Snapshot]() { return OKStreetWriteSave(*Snapshot); });
 }
 inline void OKStreetFlushSaves() {
  auto& Q = OKStreetSaveQueue();

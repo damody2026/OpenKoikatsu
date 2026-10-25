@@ -175,6 +175,29 @@ fn main() {
         }
         return;
     }
+    if out == "--mask-report" {
+        // ok-extract <game> --mask-report <card or folder>...: each outfit's clothes masks and where they are found
+        // (ok / ours: present but not read / mod: the mod ships without it / none); a summary line at the end.
+        let mut cards = Vec::new();
+        for a in args.by_ref() {
+            let p = PathBuf::from(a);
+            if p.is_dir() {
+                let mut found: Vec<PathBuf> = std::fs::read_dir(&p).expect("read card folder").filter_map(|e| e.ok().map(|e| e.path()))
+                    .filter(|f| f.extension().is_some_and(|x| x.eq_ignore_ascii_case("png"))).collect();
+                found.sort();
+                cards.extend(found);
+            } else { cards.push(p); }
+        }
+        let mut counts = std::collections::BTreeMap::<String, usize>::new();
+        for card in &cards {
+            match ok_extract::mask_report(&game, card) {
+                Ok(rows) => for r in rows { *counts.entry(r[..4].trim().to_string()).or_default() += 1; println!("{r}"); },
+                Err(e) => { *counts.entry("error".into()).or_default() += 1; println!("error {}: {e}", card.display()); }
+            }
+        }
+        println!("cards {}: {}", cards.len(), counts.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
+        return;
+    }
     if out == "--posed-objs" {
         // ok-extract <game> --posed-objs <out dir> <card> (OK_OUTFIT): the session's skinned parts as OBJs.
         let dir = PathBuf::from(args.next().expect("output dir required"));

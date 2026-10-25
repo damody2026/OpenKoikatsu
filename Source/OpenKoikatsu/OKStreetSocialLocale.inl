@@ -138,7 +138,7 @@ void AOKStreetSocialScene::SetLanguage(const FString& Lang,bool FollowRegion){
  if(!FFileHelper::LoadFileToString(Body,*PlayerFile)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Body),Player)||!Player.IsValid())Player=MakeShared<FJsonObject>();
  Player->SetStringField(TEXT("locale"),Lang);
  if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty()){FString Out;FJsonSerializer::Serialize(Player.ToSharedRef(),TJsonWriterFactory<>::Create(&Out));FFileHelper::SaveStringToFile(Out,*PlayerFile,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);}
- LoadUiTexts();RefreshUI();
+ LoadUiTexts();RefreshUI(OKStreetUi::All|OKStreetUi::Shell); // the shell's labels too
 }
 
 // The characters' look (Plugins/OKHGShading): "koikatsu" (each card's own ramp), "ramp:<key>" (one of the game's

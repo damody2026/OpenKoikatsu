@@ -6004,18 +6004,66 @@ fn load_over_clothes_mask(game_root: &Path, e: &ListEntry, key: &str) -> Option<
     let low = format!("{name}_low");
     let names: Vec<&str> = if character_hi_poly() { vec![&name] } else { vec![&low, &name] };
     // Mod bundles live inside the zipmod, not on disk; use the entry's source zip.
-    if let Some(zip) = e.extra.get("__zip") {
+    let zip = e.extra.get("__zip").map(String::as_str);
+    if let Some(zip) = zip {
         if let Some(bytes) = crate::mods::zipmod_bundle_named(Path::new(zip), &ab) {
             if let Some((_, b)) = crate::unity::named_png_from_bytes(bytes, &names) {
                 return Some(b);
             }
         }
     }
+    // Sideloader serves one abdata from every zipmod: the mask bundle may come from another mod than the item (a
+    // sweater whose masks ship in a shared pack), or the mask be a png it overrides. `--mask-report` found these missed.
+    if let Some(b) = sideloader_png(zip, game_root, &ab, &names) {
+        return Some(b);
+    }
+    if let Some((_, b)) = crate::mods::override_bundle(&game_root.join("mods"), &ab).and_then(|b| crate::unity::named_png_from_bytes(b, &names)) {
+        return Some(b);
+    }
     let found = png_from_ab(game_root, &ab, &names, &[]);
     if found.is_none() {
         eprintln!("ok-extract: {key} {name} not found in {ab} (zip={:?})", e.extra.get("__zip"));
     }
     found
+}
+
+/// `--mask-report`: every clothes mask a card's outfits ask for (OverBodyMask, OverBraMask, OverInnerMask) and where
+/// it can be found, one line each. `ok`: the extraction finds it. `ours`: it exists (a Sideloader png, or the bundle in
+/// another zipmod) but the extraction does not look there, which is ours to fix. `mod`: no source has it (the mod ships
+/// without it; the game cannot load it either). `none`: the item asks for no mask.
+pub fn mask_report(game_root: &Path, card_path: &Path) -> Result<Vec<String>, String> {
+    let bytes = std::fs::read(card_path).map_err(|e| format!("read {}: {e}", card_path.display()))?;
+    let count = crate::card::parse_card_bytes_mode(&bytes, 0, false).map(|c| c.coordinate_count).unwrap_or(1).max(1);
+    let vanilla = load_characustom_dir(&game_root.join("abdata/list/characustom"));
+    let mods_dir = game_root.join("mods");
+    let mod_catalog = crate::list::load_mods_catalog_shared(&mods_dir);
+    let mut rows = Vec::new();
+    for outfit in 0..count as i32 {
+        let card = parse_card_outfit(card_path, outfit).map_err(|e| format!("parse {} outfit {outfit}: {e}", card_path.display()))?;
+        let wanted: std::collections::HashSet<String> = card.resolves.iter().map(|r| r.mod_id.clone()).collect();
+        let guids = if wanted.is_empty() { Default::default() } else { crate::mods::find_guids(&mods_dir, Some(&wanted)) };
+        for key in ["OverBodyMask", "OverBraMask", "OverInnerMask"] {
+            let kind = match key { "OverBodyMask" => "BodyMask", "OverBraMask" => "BraMask", _ => "InnerMask" };
+            let Some(entry) = active_clothes_mask_entry(&card, &vanilla, &mod_catalog, &guids, outfit, key) else { continue };
+            let (name, ab) = (entry.info(key), entry.info(&format!("{key}AB")));
+            let item = format!("{} outfit {outfit} {key}", card_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
+            if card.clothes_masks.contains_key(&(outfit, kind.to_string())) { rows.push(format!("ok   {item}: in the card")); continue; }
+            if name.is_empty() || name == "0" || ab.is_empty() || ab == "0" { rows.push(format!("none {item}")); continue; }
+            let low = format!("{name}_low");
+            let names: Vec<&str> = if character_hi_poly() { vec![&name] } else { vec![&low, &name] };
+            let zip = entry.extra.get("__zip").map(String::as_str);
+            // The extraction now searches every source below too; a source it still misses would be "ours".
+            let source = if load_over_clothes_mask(game_root, &entry, key).is_some() { Some(("ok  ", "found")) }
+                else if sideloader_png(zip, game_root, &ab, &names).is_some() { Some(("ours", "Sideloader png")) }
+                else if crate::mods::override_bundle(&mods_dir, &ab).and_then(|b| crate::unity::named_png_from_bytes(b, &names)).is_some() { Some(("ours", "bundle in another zipmod")) }
+                else { None };
+            rows.push(match source {
+                Some((tag, what)) => format!("{tag} {item}: {name} in {ab} ({what})"),
+                None => format!("mod  {item}: {name} in {ab} found nowhere (zip={})", zip.unwrap_or("-")),
+            });
+        }
+    }
+    Ok(rows)
 }
 
 fn set_material_color(mesh: &mut ExtractedMesh, property: &str, value: [f32; 4]) {

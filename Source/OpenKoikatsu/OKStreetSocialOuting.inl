@@ -11,13 +11,14 @@
 // procedural mesh is drawn on the dynamic path, its sections gathered again every frame for every pass (base, depth,
 // four shadow cascades): 39 models, 1.9 million triangles, the largest share of the render thread's frame. The
 // procedural component stays, empty, as the node the layers hang from. Returns the component that draws (or the
-// procedural one when the build fails).
+// procedural one when the build fails). Each material slot gets UV density data: texture streaming asks for it, and left
+// uninitialised it raised an ensure whose stack walk held the first frame 12 s.
 static UPrimitiveComponent* OKStreetFreezePlaceMesh(AActor* Actor,UProceduralMeshComponent* Procedural,int32& Built){
  if(!Actor||!Procedural||Procedural->GetNumSections()==0)return Procedural;
  FMeshDescription Description=BuildMeshDescription(Procedural);
  TArray<FStaticMaterial> Materials;
  for(int32 I=0;I<Procedural->GetNumSections();++I){UMaterialInterface* M=Procedural->GetMaterial(I);if(!M)M=UMaterial::GetDefaultMaterial(MD_Surface);
-  if(!Materials.ContainsByPredicate([M](const FStaticMaterial& S){return S.MaterialInterface==M;}))Materials.Add(FStaticMaterial(M,M->GetFName()));}
+  if(!Materials.ContainsByPredicate([M](const FStaticMaterial& S){return S.MaterialInterface==M;})){FStaticMaterial Slot(M,M->GetFName());Slot.UVChannelData=FMeshUVChannelInfo(1.f);Materials.Add(Slot);}}
  UStaticMesh* Mesh=NewObject<UStaticMesh>(Actor);
  Mesh->SetStaticMaterials(Materials);
  UStaticMesh::FBuildMeshDescriptionsParams Params;Params.bFastBuild=true;Params.bBuildSimpleCollision=false;Params.bAllowCpuAccess=false;Params.bMarkPackageDirty=false;
@@ -254,8 +255,9 @@ bool AOKStreetSocialScene::NextDay(){
   if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request))for(const auto& V:Out->GetArrayField(TEXT("bond_heat"))){const auto& P=V->AsArray();if(P.Num()==2)Candidate.BondHeat.Add(P[0]->AsString(),float(P[1]->AsNumber()));}}
  TickVentures(Candidate);
  CompanyDaily(Candidate); // buildings, morale, applicants (OKStreetSocialCompany.inl)
- if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveAsync(S.Manifest.SavePath,OKStreetWriteSave(Candidate));
- S.Store=MoveTemp(Candidate);FlushRulesEffects();return true;
+ S.Store=MoveTemp(Candidate);
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
+ FlushRulesEffects();return true;
 }
 
 // Sleep: the player lies down on a bed (the facility sleeping clip) and the girl with him on the next bed, if any;

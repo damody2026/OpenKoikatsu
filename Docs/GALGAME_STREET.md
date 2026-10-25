@@ -110,3 +110,27 @@ C++ 只負責呈現；鏡頭選擇、打字速度、構圖等規則都在 Rust�
     - ok-mind 截掉之後的對話並刪掉之後新增的記憶（新的查詢 `rollback`；期間若做過對話壓縮，對話維持原樣，只刪記憶）。
   - 他自己那句也會被撤回，等於重新說一次。
   - 金錢、帳本、行程等其他遊戲狀態不回滾。
+
+## 回歸測試（2026-10-25）
+
+每次打包後一鍵驗證街頭 galgame：
+
+```
+Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
+```
+
+不加 `--launch` 時用本 checkout 控制埠上已在跑的遊戲。腳本叫女主過來、按 E 開始對話，逐項回報 PASS／FAIL／WARN，有 FAIL 時結束碼為 1：
+
+| 項目 | 檢查 |
+|---|---|
+| scene | galgame 呈現接手對話（`/galgame` active、partner 是她） |
+| pov | 她回答時是第一人稱鏡頭（presenter shot `pov`；被擋住時會換一般鏡頭，換個地方再跑） |
+| portrait | 立繪顯示並已擷取 |
+| text | 台詞整句顯示（已顯示字數 = 總字數） |
+| skip | 她的語音台詞按 Space 跳過（log「skipped the line」） |
+| wheel | 滾輪往上兩格，畫面回到之前的句子 |
+| rollback | 回滾後再開口，對話回到那一句（log「rollback: back to line」，記錄與事件歷史縮短） |
+| memory | 回滾也帶回 ok-mind（log 的 mind 部分不是 skip／fail） |
+| forgot | 問她回滾掉的事實（生日），她提到就記 WARN（AI 回答，不算失敗） |
+
+遊戲端為此新增控制埠 `GET /galgame`（呈現狀態：active、partner、lines、view_line、checkpoints、on_screen、portrait_captured、ok-story 的 state）與 `/state` 的 `all_ready`（每個角色都載好，不依顯示語言）。

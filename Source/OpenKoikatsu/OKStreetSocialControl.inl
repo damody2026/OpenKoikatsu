@@ -68,7 +68,7 @@ void AOKStreetSocialScene::StartControlServer(){
   {auto P=MakeShared<FJsonObject>();P->SetNumberField(TEXT("x"),S.Male.X);P->SetNumberField(TEXT("y"),S.Male.Y);P->SetNumberField(TEXT("z"),S.Male.Z);P->SetNumberField(TEXT("yaw"),S.Rotations.IsValidIndex(0)?S.Rotations[0].Yaw:0.0);
    P->SetStringField(TEXT("place"),PlaceHere(S.Male));P->SetNumberField(TEXT("gap"),OKStreetObstacleGap(S.Male));P->SetNumberField(TEXT("node"),S.Node);P->SetBoolField(TEXT("relationship_pending"),S.RelationshipPending);P->SetBoolField(TEXT("collected_active"),S.CollectedActive);P->SetBoolField(TEXT("cursor_mode"),S.MouseUI);P->SetNumberField(TEXT("camera_yaw"),S.Yaw);P->SetNumberField(TEXT("camera_pitch"),S.Pitch);
    P->SetNumberField(TEXT("cash"),double(S.Store.PlayerCash));P->SetNumberField(TEXT("bank"),double(S.Store.PlayerBank));O->SetObjectField(TEXT("player"),P);}
-  O->SetStringField(TEXT("message"),S.Message);O->SetStringField(TEXT("notice"),S.FreeTalkNotice);
+  O->SetStringField(TEXT("message"),S.Message);O->SetStringField(TEXT("notice"),S.FreeTalkNotice);O->SetBoolField(TEXT("all_ready"),S.AllReady); // every character loaded (the "all ready" hint in any language)
   O->SetNumberField(TEXT("target"),S.Target);O->SetNumberField(TEXT("partner"),FreeTalkPartner());O->SetNumberField(TEXT("ring"),S.RingGirl); // ring: who is calling him now (-1: nobody)
   {TArray<TSharedPtr<FJsonValue>> Party;for(const int32 G:S.Party)Party.Add(MakeShared<FJsonValueNumber>(G));O->SetArrayField(TEXT("party"),Party);O->SetBoolField(TEXT("bluff"),S.Bluff.Active);}
   {TArray<TSharedPtr<FJsonValue>> Appts;for(const auto& A:S.Store.Appointments){if(A.Status!=TEXT("pending"))continue;auto R=MakeShared<FJsonObject>();
@@ -293,6 +293,18 @@ void AOKStreetSocialScene::StartControlServer(){
  });
 
  // Save slots and the start menu: op = open | start | close | save | load | new (slot: auto, 1..8). Answers the slots.
+ // The galgame presenter, for regression tests (Tools/galgame_regression.lua): whether a scene runs and with whom, its
+ // lines and the one the wheel scrolled back to, the rollback points, the line on screen, whether a portrait was
+ // captured, and the presenter's own state (shot "pov" for first person, camera, portrait shown, typed characters).
+ Bind(TEXT("/galgame"),EHttpServerRequestVerbs::VERB_GET,[this](const FHttpServerRequest&,const FHttpResultCallback& Done){
+  auto O=OKControlResult(true);
+  if(Galgame.IsValid()){
+   const auto& G=*Galgame;O->SetBoolField(TEXT("active"),G.bActive);O->SetNumberField(TEXT("partner"),G.Partner);
+   O->SetNumberField(TEXT("lines"),G.Lines.Num());O->SetNumberField(TEXT("view_line"),G.ViewLine);O->SetNumberField(TEXT("checkpoints"),G.Checkpoints.Num());
+   O->SetStringField(TEXT("on_screen"),G.OnScreen);O->SetBoolField(TEXT("portrait_captured"),G.Portrait.Material()!=nullptr);
+   TSharedPtr<FJsonObject> Story;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(G.Live.State()),Story)&&Story.IsValid())O->SetObjectField(TEXT("story"),Story);
+  }else O->SetBoolField(TEXT("active"),false);
+  OKControlReply(Done,O);});
  Bind(TEXT("/saves"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;const auto Body=OKControlBody(Req);FString Op,Slot;Body->TryGetStringField(TEXT("op"),Op);Body->TryGetStringField(TEXT("slot"),Slot);
   if(Op==TEXT("open"))OpenSaveMenu(TEXT("game"));else if(Op==TEXT("start"))OpenSaveMenu(TEXT("start"));else if(Op==TEXT("close"))CloseSaveMenu();

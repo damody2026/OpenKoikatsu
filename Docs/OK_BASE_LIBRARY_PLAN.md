@@ -138,3 +138,10 @@ DynamicBoneEditor／ASS（清單項目的服裝欄位，服裝卡分別為 0／-
 驗收：Alice 第 0／1／4 套匯出再穿回 MATCH；兩張服裝卡匯入比例 1.0000；服裝卡穿到原版角色可正常產生。
 
 不在範圍：卡片專屬資料、動畫（已有 OK 動畫庫）、語音、地圖。
+
+## 服裝遮罩全卡掃描（2026-10-25）
+
+`ok-extract <遊戲> --mask-report <卡或資料夾>...`：列出每張卡每套服裝要的遮罩（OverBodyMask、OverBraMask、OverInnerMask）在哪裡找到。`ok` 讀得到、`ours` 存在但我們沒去那裡找（要修）、`mod` 任何來源都沒有（mod 本身缺，遊戲也讀不到）、`none` 該物件不要遮罩。
+
+- 2026-10-25 掃 E 的 StreetHeroines＋CrowdAPNG 共 115 張：ok 1006、none 990、mod 38（14 個 mod，例如清單指向的貼圖名不在 bundle 裡）、ours 6。
+- ours 6 都是 C032：遮罩 bundle（`chara/nashi/ns_sweater.unity3d`）由另一個 zipmod 提供；直接讀遊戲時只找物件自己的 zipmod 與 abdata。`load_over_clothes_mask` 改成和 Sideloader 一樣也找 Sideloader png 與每個 zipmod，修後 C032 全部讀到。C032 的 OK 卡轉檔時已經讀到（轉檔經 gamefs 的 mod 對應），卡不用重轉。

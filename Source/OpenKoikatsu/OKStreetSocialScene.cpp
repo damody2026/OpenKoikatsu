@@ -458,6 +458,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  TArray<FString> Errors,VoiceIds,Transactions;
  TSharedPtr<SWidget> Overlay;
  TSharedPtr<SBorder> InteractionPanel,DialoguePanel;
+ // The UI shell's holders, one per region (RebuildUI), and the right panel's scroll box (it keeps its position).
+ TSharedPtr<SBox> UiRightHolder,UiShopHolder,UiDebugHolder,UiBottomHolder,UiBluffHolder,UiHistoryHolder,UiAppHolder,UiSaveHolder;TSharedPtr<SScrollBox> UiRightScroll;uint32 UiDirtyRegions=0;
  TSharedPtr<SOKStreetMinimap> Minimap;
  TSharedPtr<SWidget> MinimapPanel;
  bool MinimapShowNames=true,MinimapProbeShowNames=true;
@@ -1837,10 +1839,13 @@ void AOKStreetSocialScene::PickTopic(int32 Index){
  const int32 No=S.PickupTopics[Index];const auto* Topic=S.CollectedTopics.Find(No);if(!Topic)return;
  auto Candidate=S.Store;
  {auto Ask=OKRulesRequest(TEXT("topic_collect"));Ask->SetNumberField(TEXT("no"),No);Ask->SetNumberField(TEXT("stock"),Candidate.TopicStock.FindRef(No));Ask->SetNumberField(TEXT("day"),Candidate.TopicDay);if(const int32* Claimed=Candidate.TopicClaims.Find(No))Ask->SetNumberField(TEXT("claimed"),*Claimed);
-  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out||!Out->GetBoolField(TEXT("ok"))){S.Message=OKT(TEXT("ui.scene.topic_pickup_limit"));RefreshUI();return;}
+  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out||!Out->GetBoolField(TEXT("ok"))){S.Message=OKT(TEXT("ui.scene.topic_pickup_limit"));return;}
   ++Candidate.TopicStock.FindOrAdd(No);Candidate.TopicClaims.Add(No,Candidate.TopicDay);}
- FString Error;if(!OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error)){S.Errors.Add(TEXT("Topic pickup save failed: ")+Error);return;}
- S.Store=MoveTemp(Candidate);S.TopicPickups[Index]->SetActorHiddenInGame(true);S.Message=OKMsg(TEXT("ui.scene.topic_acquired"), {{TEXT("topic"), *Topic->Name}, {TEXT("count"), S.Store.TopicStock.FindRef(No)}});RefreshUI();
+ // Written by the save task like every other commit (picked up while walking, a synchronous write held the frame). Nothing
+ // on the panel changes: the topics he holds are listed only in a conversation, and the message is bound.
+ S.Store=MoveTemp(Candidate);
+ if(!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
+ S.TopicPickups[Index]->SetActorHiddenInGame(true);S.Message=OKMsg(TEXT("ui.scene.topic_acquired"), {{TEXT("topic"), *Topic->Name}, {TEXT("count"), S.Store.TopicStock.FindRef(No)}});
 }
 void AOKStreetSocialScene::AskHerTopic(){
  if(!State)return;auto& S=*State;if(S.Target==INDEX_NONE||S.Node!=INDEX_NONE||S.RelationshipPending||S.CollectedActive)return;
@@ -2039,20 +2044,112 @@ static void OKStreetDigestMessage(FOKStreetSceneState& S){
 }
 
 static TAutoConsoleVariable<int32> CVarOKStreetLogUiRebuilds(TEXT("ok.Street.LogUiRebuilds"),0,TEXT("1: log each rebuild of the right panel with the RefreshUI call that asked for it (file:line). A rebuild costs ~10 ms."));
-void AOKStreetSocialScene::RefreshUI(std::source_location Where){if(State){State->UiDirty=true;State->UiDirtyFile=Where.file_name();State->UiDirtyLine=Where.line();}}
+void AOKStreetSocialScene::RefreshUI(uint32 Regions,std::source_location Where){if(State){State->UiDirty=true;State->UiDirtyRegions|=Regions;State->UiDirtyFile=Where.file_name();State->UiDirtyLine=Where.line();}}
 
-void AOKStreetSocialScene::RebuildUI(){
+void AOKStreetSocialScene::RebuildUI(uint32 Regions){
  if(!State||!GEngine||!GEngine->GameViewport)return;auto& S=*State;
  {// Diagnostics: a rebuild drops a button press in progress, so frequent rebuilds make buttons unclickable.
   static double Window=0;static int32 Count=0;const double T=FPlatformTime::Seconds();if(T-Window>1){if(Count>3)UE_LOG(LogTemp,Warning,TEXT("Street UI rebuilt %d times in 1 s"),Count);Window=T;Count=0;}++Count;}
  // Where a slow rebuild spends its time, by section (logged with ok.Street.LogUiRebuilds 1).
  TArray<TPair<const TCHAR*,uint64>,TInlineAllocator<16>> Marks;auto Mark=[&Marks](const TCHAR* Name){Marks.Emplace(Name,FPlatformTime::Cycles64());};
- Mark(TEXT("remove"));
- if(S.Overlay.IsValid())GEngine->GameViewport->RemoveViewportWidgetContent(S.Overlay.ToSharedRef());
+ Mark(TEXT("shell"));
+ // The shell, built once (again on a language change): the layout, minimap and big map, clock, bed and elevator rows, the
+ // hint corner, and a holder for each region. A refresh rebuilds only the regions it names (OKStreetUi) into their holders;
+ // rebuilding the whole overlay every time cost 9-20 ms a refresh (2026-10-25: 31 rebuilds in two minutes of walking).
+ if(!S.Overlay.IsValid()||(Regions&OKStreetUi::Shell)){
+  Regions|=OKStreetUi::All;
+  if(S.Overlay.IsValid())GEngine->GameViewport->RemoveViewportWidgetContent(S.Overlay.ToSharedRef());
+  SAssignNew(S.Minimap,SOKStreetMinimap).Visibility(EVisibility::HitTestInvisible);
+  auto MapData=[Weak=TWeakPtr<FOKStreetSceneState>(State),Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](int32 KeepPlaces){FOKStreetMinimapData D;if(auto Live=Weak.Pin()){if(!Owner.IsValid())return D;D.Player=Live->Male;D.ShowNames=Live->MinimapShowNames;for(const auto& Place:OKStreetPlaces())D.Places.Add(TPair<FString,FVector>(Place.Name,Place.Door));D.Navigation=Live->NavPath;D.FacingYaw=Live->Rotations.IsValidIndex(0)?Live->Rotations[0].Yaw:0;
+   for(const auto& A:Live->Agents){FOKRuntimeCharacterStatus Status;if(!Live->Manifest.Characters.IsValidIndex(A.Slot)||!OKGetCrowdRuntimeCharacterStatus(Owner.Get(),A.Slot,Status)||!Status.Visible||!Status.Error.IsEmpty())continue;FOKStreetMinimapMarker M;M.Slot=A.Slot;M.Name=Live->Manifest.Characters[A.Slot].Name;M.Position=A.Position;M.Selected=Live->Target==A.Slot||Live->NavGirl==A.Slot;const auto Rel=OKStreetViewRelation(Live->Store,OKStreetStableId(Live->Manifest.Characters[A.Slot]),Live->Manifest.TalkBudget);M.Favor=Rel.Favor;M.Stage=OKStreetStageIndex(Rel.Stage);const int32 Limit=OKRulesFavorLimit(*Live,Rel,Rel.Stage);M.FavorFull=Limit!=INDEX_NONE&&Rel.Favor>=Limit;D.Girls.Add(M);}
+   TArray<FOKStreetPointData> Points;TArray<TArray<int32>> Routes;OKStreetWaypoints(Points);OKStreetRoutes(Routes);for(const auto& Route:Routes){TArray<FVector> Path;for(int32 I:Route)if(Points.IsValidIndex(I))Path.Add(Points[I].Position);if(!Path.IsEmpty()){const FVector First=Path[0];Path.Add(First);}D.Paths.Add(MoveTemp(Path));}
+  OKStreetNearestPlaces(D.Places,D.Player,KeepPlaces);}return D;};
+  S.Minimap->Read=[MapData](){return MapData(10);};
+  SAssignNew(S.BigMap,SOKStreetBigMap);S.BigMap->Read=[MapData](){return MapData(MAX_int32);};
+  S.BigMap->Pick=[Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](const FVector& Goal,const FString& Name){if(Weak.IsValid())Weak->NavigatePoint(Goal,Name);};
+  S.MinimapPanel=SNew(SVerticalBox)+SVerticalBox::Slot().AutoHeight()[S.Minimap.ToSharedRef()]+SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderBackgroundColor(FLinearColor(.018f,.03f,.055f,.93f))[SNew(SCheckBox).IsChecked_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto Live=Weak.Pin();return Live&&Live->MinimapShowNames?ECheckBoxState::Checked:ECheckBoxState::Unchecked;}).OnCheckStateChanged_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](ECheckBoxState Value){if(auto Live=Weak.Pin())Live->MinimapShowNames=Value==ECheckBoxState::Checked;})[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.show_names"))))]]]
+   +SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderBackgroundColor(FLinearColor(.018f,.03f,.055f,.93f)).Padding(6,2)[SNew(STextBlock).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto Live=Weak.Pin();if(!Live)return FText::GetEmpty();const double H=OKStreetClockHours(Live->ClockStartHours,FPlatformTime::Seconds()-Live->ClockStartWall);return FText::FromString(OKT(TEXT("ui.scene.block_prefix"))+OKStreetCalendarLabel(Live->Store.CalendarDay,H));})]]
+   // Plan §13.3.2: appointments with countdowns (click: walk to the soonest one), and blacklisted shops.
+   +SVerticalBox::Slot().AutoHeight()[SNew(SButton).ButtonStyle(OKStreetGlassButton()).OnClicked_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Owner.IsValid())Owner->NavigateToNextAppointment();return FReply::Handled();})
+    .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&!Owner->TaskListText().IsEmpty()?EVisibility::Visible:EVisibility::Collapsed;})
+    [SNew(STextBlock).AutoWrapText(true).WrapTextAt(300).ColorAndOpacity_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()?Owner->TaskListColor():FSlateColor(FLinearColor::White);}).Text_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(Owner.IsValid()?Owner->TaskListText():FString());})]];
+  // Street clock on the right panel: jump the time of day (the sun follows within a second) or pause it.
+  TWeakPtr<FOKStreetSceneState> ClockState=State;
+  auto ClockNow=[ClockState](){auto L=ClockState.Pin();return L?OKStreetClockHours(L->ClockStartHours,FPlatformTime::Seconds()-L->ClockStartWall):12.0;};
+  auto SetClock=[ClockState](double Hours){if(auto L=ClockState.Pin()){L->ClockStartHours=FMath::Fmod(Hours+48.0,24.0);L->ClockStartWall=FPlatformTime::Seconds();L->NextSunUpdate=0;L->CalendarLastHours=-1;L->ClockDrivesSun=L->Sun.IsValid();}};
+  auto ClockButton=[](const TCHAR* Label,TFunction<void()> Do)->TSharedRef<SWidget>{return SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(Label)).OnClicked_Lambda([Do](){Do();return FReply::Handled();});};
+  TSharedRef<SWidget> ClockRow=SNew(SVerticalBox)
+   +SVerticalBox::Slot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
+    +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).Padding(4,0)[SNew(STextBlock).ColorAndOpacity(FLinearColor::White).Text_Lambda([ClockState,ClockNow](){auto L=ClockState.Pin();if(!L)return FText::GetEmpty();const int32 M=FMath::FloorToInt32(ClockNow()*60);return FText::FromString(OKMsg(TEXT("ui.scene.clock_display"), {{TEXT("hour"), M/60}, {TEXT("minute"), M%60}, {TEXT("paused_suffix"), L->ClockPaused?OKT(TEXT("ui.scene.paused_label")):TEXT("")}}));})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.minus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()-1);})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.plus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()+1);})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center)
+     .Text_Lambda([ClockState](){auto L=ClockState.Pin();return FText::FromString(L&&L->ClockPaused?OKT(TEXT("ui.scene.continue_button")):OKT(TEXT("ui.scene.pause_button")));})
+     .OnClicked_Lambda([ClockState,SetClock,ClockNow](){if(auto L=ClockState.Pin()){const double Hours=ClockNow();L->ClockPaused=!L->ClockPaused;SetClock(Hours);}return FReply::Handled();})]]
+   +SVerticalBox::Slot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
+    +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.morning_label")),[SetClock](){SetClock(8.0);})]
+    +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.free_talk.noon_period")),[SetClock](){SetClock(12.5);})]
+    +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.free_talk.evening_dusk_period")),[SetClock](){SetClock(17.5);})]
+    +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.free_talk.night_period")),[SetClock](){SetClock(21.0);})]];
+  // Bed: a "sleep here" button while the player stands by one.
+  TSharedRef<SWidget> SleepRow=SNew(SBox).Visibility_Lambda([ClockState](){auto L=ClockState.Pin();return L&&L->SleepPhase==0&&OKStreetNearestBed(L->Male,260,nullptr)?EVisibility::Visible:EVisibility::Collapsed;})
+   [SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(OKT(TEXT("ui.scene.sleep_in_bed"))))
+    .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()&&Weak->State){const FOKStreetPlace* Where=nullptr;if(const auto* Bed=OKStreetNearestBed(Weak->State->Male,260,nullptr,&Where))Weak->StartSleep(*Bed,Where,Weak->FreeTalkPartner());}return FReply::Handled();})];
+  // Elevator panel: shown while the player is inside a multi-storey place, one button per floor.
+  TSharedRef<SVerticalBox> LiftRows=SNew(SVerticalBox);
+  for(int32 PlaceIndex=0;PlaceIndex<OKStreetPlaces().Num();++PlaceIndex){
+   const auto Lifts=OKStreetPlaceLifts(OKStreetPlaces()[PlaceIndex]);if(Lifts.Num()<2)continue;
+   TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+   auto Lift=[Weak,PlaceIndex](){return Weak.IsValid()?Weak->ElevatorOfPlace(PlaceIndex):INDEX_NONE;};
+   TSharedRef<SWrapBox> Wrap=SNew(SWrapBox).UseAllottedSize(true);
+   for(int32 Floor=1;Floor<=Lifts.Num();++Floor){
+    Wrap->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKStreetLiftLabel(*Lifts[Floor-1])))
+     .OnClicked_Lambda([Weak,PlaceIndex,Floor](){if(Weak.IsValid())Weak->RideElevator(PlaceIndex,Floor);return FReply::Handled();})];
+   }
+   Wrap->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.toggle_on"))))
+    .OnClicked_Lambda([Weak,Lift](){if(Weak.IsValid())Weak->ElevatorDoorButton(Lift(),true);return FReply::Handled();})];
+   Wrap->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.toggle_off"))))
+    .OnClicked_Lambda([Weak,Lift](){if(Weak.IsValid())Weak->ElevatorDoorButton(Lift(),false);return FReply::Handled();})];
+   auto Inside=[Weak,Lift](){const int32 I=Lift();return Weak.IsValid()&&I!=INDEX_NONE&&Weak->ElevatorWithMale()==I;};
+   auto Near=[ClockState,PlaceIndex](){auto L=ClockState.Pin();return L&&OKStreetPlaceFloor(OKStreetPlaces()[PlaceIndex],L->Male)>0;};
+   LiftRows->AddSlot().AutoHeight()[SNew(SVerticalBox).Visibility_Lambda([Near](){return Near()?EVisibility::Visible:EVisibility::Collapsed;})
+    +SVerticalBox::Slot().AutoHeight().Padding(4,2)[SNew(STextBlock).ColorAndOpacity(FLinearColor::White).AutoWrapText(true).Text_Lambda([ClockState,PlaceIndex,Lift,Inside](){
+      auto L=ClockState.Pin();const int32 I=Lift();const auto& Place=OKStreetPlaces()[PlaceIndex];
+      if(!L||!L->Elevators.IsValidIndex(I))return FText::GetEmpty();const auto& E=L->Elevators[I];
+      const FString Where=E.Phase==4?FString::Printf(TEXT("%s → %s"),*E.Labels[E.Floor],*E.Labels[E.Target]):E.Labels[E.Floor];
+      return FText::FromString(Inside()?OKMsg(TEXT("ui.scene.elevator_inside"), {{TEXT("place_name"), Place.Name}, {TEXT("where"), *Where}}):OKMsg(TEXT("ui.scene.elevator_at"), {{TEXT("place_name"), Place.Name}, {TEXT("where"), *Where}}));})]
+    +SVerticalBox::Slot().AutoHeight()[SNew(SBox).Visibility_Lambda([Inside](){return Inside()?EVisibility::Visible:EVisibility::Collapsed;})[Wrap]]];
+  }
+  S.Overlay=SNew(SOverlay)+SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(16)[S.MinimapPanel.ToSharedRef()]
+  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(356,16,0,24)[SNew(SBox).MaxDesiredWidth(1140).MinDesiredWidth(1140)[SNew(SVerticalBox)
+   // His cards at the card table, held in front of him right above the dialogue box, which grows upward under them (OKStreetSocialBluff.inl).
+   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[SAssignNew(S.UiBluffHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)]
+   // Gal-game layout: the log button sits on the box's top-right edge; the box itself never hides.
+   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0,0,8,4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.history_toggle_count"), {{TEXT("toggle_label"), L->FreeTalkHistoryOpen?OKT(TEXT("ui.scene.close_log")):OKT(TEXT("ui.scene.history_label"))}, {TEXT("count"), L->FreeTalkLog.Num()}}));}).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->FreeTalkHistoryOpen=!Weak->State->FreeTalkHistoryOpen;Weak->RefreshUI(OKStreetUi::History);}return FReply::Handled();})]
+   +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MinDesiredHeight_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FOptionalSize(Owner.IsValid()&&Owner->GalgameShowsDialogue()?0.f:96.f);})
+    .Padding_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FMargin(0,0,0,Owner.IsValid()?Owner->GalgameDialogueLift():0.f);})
+    .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameHidesDialogueBox()?EVisibility::Collapsed:EVisibility::Visible;})[SAssignNew(S.DialoguePanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(20)[SAssignNew(S.UiBottomHolder,SBox)]]]]]
+  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(356,80,0,220)[SAssignNew(S.UiHistoryHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)]
+  +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(16,16,16,24)[SNew(SVerticalBox)
+   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[SNew(SBox).MaxDesiredWidth(320).Visibility_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&L->HintOpen?EVisibility::Visible:EVisibility::Collapsed;})[SNew(SBorder).BorderImage(OKStreetGlassPanel()).Padding(14)[SNew(STextBlock).AutoWrapText(true).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return FText::GetEmpty();return FText::FromString((L->HintText.IsEmpty()?FString():L->HintText+TEXT("\n"))+(L->MouseUI?OKT(TEXT("ui.scene.ui_mode_hint")):OKT(TEXT("ui.scene.camera_mode_hint")))+OKT(TEXT("ui.scene.map_hint_m")));})]]]
+   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SNew(SBox).WidthOverride(44).HeightOverride(44)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).VAlign(VAlign_Center).ToolTipText(FText::FromString(OKT(TEXT("ui.scene.controls_hint_title"))))
+    .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){auto& L=*Weak->State;L.HintOpen=!L.HintOpen;L.HintUnread=false;}return FReply::Handled();})
+    [SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",20)).ColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FSlateColor(L&&L->HintUnread?FLinearColor(1,.83f,.35f):FLinearColor::White);}).Text(FText::FromString(TEXT("?")))]]]]
+  +SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Fill).Padding(16)[SNew(SBox).WidthOverride(400)[SAssignNew(S.InteractionPanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(8)[SNew(SVerticalBox)
+   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[ClockRow]
+   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[LiftRows]
+   +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[SleepRow]
+   +SVerticalBox::Slot().FillHeight(1)[SAssignNew(S.UiRightScroll,SScrollBox).OnUserScrolled_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](float Offset){if(const auto L=Weak.Pin())L->RightScrollOffset=Offset;})+SScrollBox::Slot()[SAssignNew(S.UiRightHolder,SBox)]]
+   +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MaxDesiredHeight_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FOptionalSize(L&&L->ShowDebug?560.f:330.f);})[SNew(SScrollBox)+SScrollBox::Slot()[SAssignNew(S.UiDebugHolder,SBox)]]]]]]
+  +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SBox).Visibility_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&L->BigMapOpen?EVisibility::Visible:EVisibility::Collapsed;})[S.BigMap.ToSharedRef()]]
+  +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SAssignNew(S.UiAppHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)]
+  +SOverlay::Slot()[SAssignNew(S.UiSaveHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)];
+  GEngine->GameViewport->AddViewportWidgetContent(S.Overlay.ToSharedRef(),10);
+ }
  Mark(TEXT("header"));
- // The right panel is rebuilt on every refresh; its scroll position is restored after the rebuild.
- TSharedPtr<SScrollBox> RightScroll;
- auto Box=SNew(SVerticalBox);S.PresentationTopicButtons=0;S.DebugSliders=0;S.StatSliders.Reset();S.RelationChecks.Reset();
+ // The right panel; its scroll box stays, so the scroll position is kept (set again in case the content got shorter).
+ if(Regions&OKStreetUi::Right){
+ auto Box=SNew(SVerticalBox);S.PresentationTopicButtons=0;
  // Player name, editable any time; applies from the next line (subtitles and TTS).
  if(S.Manifest.Characters.IsValidIndex(0))Box->AddSlot().AutoHeight().Padding(4)[SNew(SHorizontalBox)
   +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0,0,6,0)[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.hero_name_label"))))]
@@ -2105,11 +2202,14 @@ void AOKStreetSocialScene::RebuildUI(){
  if(!S.TtsNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TtsNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.ShowDebug?OKT(TEXT("ui.scene.collapse_heroine_stats")):OKT(TEXT("ui.scene.heroine_stats_view_edit")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->ShowDebug=!Weak->State->ShowDebug;Weak->RefreshUI();}return FReply::Handled();})];
  Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.ContactsOpen?OKT(TEXT("ui.scene.collapse_girl_list")):OKT(TEXT("ui.scene.girl_list_nav")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->ContactsOpen=!Weak->State->ContactsOpen;Weak->RefreshUI();}return FReply::Handled();})];
- if(!S.ContactsNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text(FText::FromString(S.ContactsNotice)).AutoWrapText(true).WrapTextAt(360)];
- if(S.NavGirl!=INDEX_NONE){Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||!L->Agents.IsValidIndex(L->NavGirl-1))return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.nav_distance_path"), {{TEXT("name"), *L->Manifest.Characters[L->NavGirl].Name}, {TEXT("distance"), FVector::Dist2D(L->Male,L->Agents[L->NavGirl-1].Position)/100}, {TEXT("path_hint"), L->NavPath.IsEmpty()?OKT(TEXT("ui.scene.no_route_label")):OKT(TEXT("ui.scene.follow_gold_route"))}}));}).AutoWrapText(true).WrapTextAt(360)];
- Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.cancel_navigation")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));}return FReply::Handled();})];}
- if(S.NavPointActive){Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||!L->NavPointActive)return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.nav_distance"), {{TEXT("name"), L->NavPointName.IsEmpty()?OKT(TEXT("ui.scene.map_location")):*L->NavPointName}, {TEXT("distance"), FVector::Dist2D(L->Male,L->NavPoint)/100}}));}).AutoWrapText(true).WrapTextAt(360)];
- Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.cancel_navigation")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));return FReply::Handled();})];}
+ // Navigation and its notice are built always and shown by state: starting or stopping a navigation needs no rebuild.
+ Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();return L&&!L->ContactsNotice.IsEmpty()?EVisibility::Visible:EVisibility::Collapsed;}).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();return L?FText::FromString(L->ContactsNotice):FText::GetEmpty();}).AutoWrapText(true).WrapTextAt(360)];
+ {auto NavGirlShown=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();return L&&L->NavGirl!=INDEX_NONE?EVisibility::Visible:EVisibility::Collapsed;};
+ Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(NavGirlShown).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||!L->Agents.IsValidIndex(L->NavGirl-1))return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.nav_distance_path"), {{TEXT("name"), *L->Manifest.Characters[L->NavGirl].Name}, {TEXT("distance"), FVector::Dist2D(L->Male,L->Agents[L->NavGirl-1].Position)/100}, {TEXT("path_hint"), L->NavPath.IsEmpty()?OKT(TEXT("ui.scene.no_route_label")):OKT(TEXT("ui.scene.follow_gold_route"))}}));}).AutoWrapText(true).WrapTextAt(360)];
+ Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).Visibility_Lambda(NavGirlShown).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.cancel_navigation")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));}return FReply::Handled();})];}
+ {auto NavPointShown=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();return L&&L->NavPointActive?EVisibility::Visible:EVisibility::Collapsed;};
+ Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(NavPointShown).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||!L->NavPointActive)return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.nav_distance"), {{TEXT("name"), L->NavPointName.IsEmpty()?OKT(TEXT("ui.scene.map_location")):*L->NavPointName}, {TEXT("distance"), FVector::Dist2D(L->Male,L->NavPoint)/100}}));}).AutoWrapText(true).WrapTextAt(360)];
+ Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).Visibility_Lambda(NavPointShown).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.cancel_navigation")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));return FReply::Handled();})];}
  if(S.PrivateGirl!=INDEX_NONE)Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.exit_one_on_one")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->FinishPrivate();return FReply::Handled();})];
  S.FacilityExitUI=false;
  if(S.Facility!=INDEX_NONE){S.FacilityExitUI=true;Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.FacilityEntered?OKT(TEXT("ui.scene.leave_facility_to_street")):OKT(TEXT("ui.scene.cancel_facility_prep")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->FinishFacility();return FReply::Handled();})];}
@@ -2228,8 +2328,17 @@ void AOKStreetSocialScene::RebuildUI(){
    Box->AddSlot().AutoHeight().Padding(4)[FreeTalk];
   }
  }
- BuildShopPanel(Box);
+ // The shop rows: a region of their own (the menu changes as he walks into a shop or it closes).
+ Box->AddSlot().AutoHeight()[SAssignNew(S.UiShopHolder,SBox)];
  BuildFinanceRows(Box);BuildCampusRows(Box);BuildPhoneRow(Box);BuildCompanyRow(Box);BuildAppointmentRows(Box);
+ S.UiRightHolder->SetContent(Box);S.UiRightScroll->SetScrollOffset(S.RightScrollOffset);
+ Regions|=OKStreetUi::Shop;
+ }
+ Mark(TEXT("shop"));
+ if((Regions&OKStreetUi::Shop)&&S.UiShopHolder.IsValid()){auto Shop=SNew(SVerticalBox);BuildShopPanel(Shop);S.UiShopHolder->SetContent(Shop);}
+ Mark(TEXT("debug"));
+ if(Regions&OKStreetUi::Debug){
+ S.DebugSliders=0;S.StatSliders.Reset();S.RelationChecks.Reset();
  auto DebugBox=SNew(SVerticalBox);
  const int32 DebugCharacter=S.Target!=INDEX_NONE?S.Target:S.ContactSelection;
  if(S.ShowDebug&&!(S.Manifest.Characters.IsValidIndex(DebugCharacter)&&DebugCharacter>0))
@@ -2262,22 +2371,11 @@ void AOKStreetSocialScene::RebuildUI(){
   }
 
  }
- SAssignNew(S.Minimap,SOKStreetMinimap).Visibility(EVisibility::HitTestInvisible);
- auto MapData=[Weak=TWeakPtr<FOKStreetSceneState>(State),Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](int32 KeepPlaces){FOKStreetMinimapData D;if(auto Live=Weak.Pin()){if(!Owner.IsValid())return D;D.Player=Live->Male;D.ShowNames=Live->MinimapShowNames;for(const auto& Place:OKStreetPlaces())D.Places.Add(TPair<FString,FVector>(Place.Name,Place.Door));D.Navigation=Live->NavPath;D.FacingYaw=Live->Rotations.IsValidIndex(0)?Live->Rotations[0].Yaw:0;
-  for(const auto& A:Live->Agents){FOKRuntimeCharacterStatus Status;if(!Live->Manifest.Characters.IsValidIndex(A.Slot)||!OKGetCrowdRuntimeCharacterStatus(Owner.Get(),A.Slot,Status)||!Status.Visible||!Status.Error.IsEmpty())continue;FOKStreetMinimapMarker M;M.Slot=A.Slot;M.Name=Live->Manifest.Characters[A.Slot].Name;M.Position=A.Position;M.Selected=Live->Target==A.Slot||Live->NavGirl==A.Slot;const auto Rel=OKStreetViewRelation(Live->Store,OKStreetStableId(Live->Manifest.Characters[A.Slot]),Live->Manifest.TalkBudget);M.Favor=Rel.Favor;M.Stage=OKStreetStageIndex(Rel.Stage);const int32 Limit=OKRulesFavorLimit(*Live,Rel,Rel.Stage);M.FavorFull=Limit!=INDEX_NONE&&Rel.Favor>=Limit;D.Girls.Add(M);}
-  TArray<FOKStreetPointData> Points;TArray<TArray<int32>> Routes;OKStreetWaypoints(Points);OKStreetRoutes(Routes);for(const auto& Route:Routes){TArray<FVector> Path;for(int32 I:Route)if(Points.IsValidIndex(I))Path.Add(Points[I].Position);if(!Path.IsEmpty()){const FVector First=Path[0];Path.Add(First);}D.Paths.Add(MoveTemp(Path));}
- OKStreetNearestPlaces(D.Places,D.Player,KeepPlaces);}return D;};
- S.Minimap->Read=[MapData](){return MapData(10);};
- SAssignNew(S.BigMap,SOKStreetBigMap);S.BigMap->Read=[MapData](){return MapData(MAX_int32);};
- S.BigMap->Pick=[Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](const FVector& Goal,const FString& Name){if(Weak.IsValid())Weak->NavigatePoint(Goal,Name);};
- S.MinimapPanel=SNew(SVerticalBox)+SVerticalBox::Slot().AutoHeight()[S.Minimap.ToSharedRef()]+SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderBackgroundColor(FLinearColor(.018f,.03f,.055f,.93f))[SNew(SCheckBox).IsChecked_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto Live=Weak.Pin();return Live&&Live->MinimapShowNames?ECheckBoxState::Checked:ECheckBoxState::Unchecked;}).OnCheckStateChanged_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](ECheckBoxState Value){if(auto Live=Weak.Pin())Live->MinimapShowNames=Value==ECheckBoxState::Checked;})[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.show_names"))))]]]
-  +SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderBackgroundColor(FLinearColor(.018f,.03f,.055f,.93f)).Padding(6,2)[SNew(STextBlock).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto Live=Weak.Pin();if(!Live)return FText::GetEmpty();const double H=OKStreetClockHours(Live->ClockStartHours,FPlatformTime::Seconds()-Live->ClockStartWall);return FText::FromString(OKT(TEXT("ui.scene.block_prefix"))+OKStreetCalendarLabel(Live->Store.CalendarDay,H));})]]
-  // Plan §13.3.2: appointments with countdowns (click: walk to the soonest one), and blacklisted shops.
-  +SVerticalBox::Slot().AutoHeight()[SNew(SButton).ButtonStyle(OKStreetGlassButton()).OnClicked_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Owner.IsValid())Owner->NavigateToNextAppointment();return FReply::Handled();})
-   .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&!Owner->TaskListText().IsEmpty()?EVisibility::Visible:EVisibility::Collapsed;})
-   [SNew(STextBlock).AutoWrapText(true).WrapTextAt(300).ColorAndOpacity_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()?Owner->TaskListColor():FSlateColor(FLinearColor::White);}).Text_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FText::FromString(Owner.IsValid()?Owner->TaskListText():FString());})]];
- auto Dialogue=SNew(SVerticalBox);FreeTalkEnsureLog();
+ S.UiDebugHolder->SetContent(DebugBox);
+ }
  Mark(TEXT("dialogue"));
+ if(Regions&OKStreetUi::Bottom){
+ auto Dialogue=SNew(SVerticalBox);FreeTalkEnsureLog();
  // Free talk owns the bottom box while its captions are set and no scripted line plays. Captions are
  // bound to state so replay can change them every line without rebuilding the UI.
  // A galgame scene (OKStreetSocialGalgame.inl) shows the lines itself; this box then keeps only the table and what the microphone heard.
@@ -2316,7 +2414,11 @@ void AOKStreetSocialScene::RebuildUI(){
  Dialogue->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Visibility_Lambda(Scripted).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",21))
   .Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L?FText::FromString(L->DialogueText):FText::GetEmpty();})
   .ColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FSlateColor(L?L->DialogueColor:FLinearColor::White);})];
+ S.UiBottomHolder->SetContent(Dialogue);
+ S.UiBluffHolder->SetContent(S.Bluff.Active?BluffHandWidget():SNullWidget::NullWidget);
+ }
  Mark(TEXT("history"));
+ if(Regions&OKStreetUi::History){
  // Free-talk history window: every girl's lines, newest last, each with its voice when one was made.
  TSharedRef<SWidget> History=SNew(SBox).Visibility(EVisibility::Collapsed);
  if(S.FreeTalkHistoryOpen){
@@ -2337,84 +2439,14 @@ void AOKStreetSocialScene::RebuildUI(){
    +SVerticalBox::Slot().FillHeight(1)[SAssignNew(Scroll,SScrollBox)+SScrollBox::Slot()[List]]]];
   Scroll->ScrollToEnd();
  }
- Mark(TEXT("clock"));
- // Street clock on the right panel: jump the time of day (the sun follows within a second) or pause it.
- TWeakPtr<FOKStreetSceneState> ClockState=State;
- auto ClockNow=[ClockState](){auto L=ClockState.Pin();return L?OKStreetClockHours(L->ClockStartHours,FPlatformTime::Seconds()-L->ClockStartWall):12.0;};
- auto SetClock=[ClockState](double Hours){if(auto L=ClockState.Pin()){L->ClockStartHours=FMath::Fmod(Hours+48.0,24.0);L->ClockStartWall=FPlatformTime::Seconds();L->NextSunUpdate=0;L->CalendarLastHours=-1;L->ClockDrivesSun=L->Sun.IsValid();}};
- auto ClockButton=[](const TCHAR* Label,TFunction<void()> Do)->TSharedRef<SWidget>{return SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(Label)).OnClicked_Lambda([Do](){Do();return FReply::Handled();});};
- TSharedRef<SWidget> ClockRow=SNew(SVerticalBox)
-  +SVerticalBox::Slot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
-   +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).Padding(4,0)[SNew(STextBlock).ColorAndOpacity(FLinearColor::White).Text_Lambda([ClockState,ClockNow](){auto L=ClockState.Pin();if(!L)return FText::GetEmpty();const int32 M=FMath::FloorToInt32(ClockNow()*60);return FText::FromString(OKMsg(TEXT("ui.scene.clock_display"), {{TEXT("hour"), M/60}, {TEXT("minute"), M%60}, {TEXT("paused_suffix"), L->ClockPaused?OKT(TEXT("ui.scene.paused_label")):TEXT("")}}));})]
-   +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.minus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()-1);})]
-   +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.plus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()+1);})]
-   +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center)
-    .Text_Lambda([ClockState](){auto L=ClockState.Pin();return FText::FromString(L&&L->ClockPaused?OKT(TEXT("ui.scene.continue_button")):OKT(TEXT("ui.scene.pause_button")));})
-    .OnClicked_Lambda([ClockState,SetClock,ClockNow](){if(auto L=ClockState.Pin()){const double Hours=ClockNow();L->ClockPaused=!L->ClockPaused;SetClock(Hours);}return FReply::Handled();})]]
-  +SVerticalBox::Slot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
-   +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.morning_label")),[SetClock](){SetClock(8.0);})]
-   +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.free_talk.noon_period")),[SetClock](){SetClock(12.5);})]
-   +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.free_talk.evening_dusk_period")),[SetClock](){SetClock(17.5);})]
-   +SHorizontalBox::Slot().FillWidth(1).Padding(2,0)[ClockButton(OKT(TEXT("ui.free_talk.night_period")),[SetClock](){SetClock(21.0);})]];
- // Bed: a "sleep here" button while the player stands by one.
- TSharedRef<SWidget> SleepRow=SNew(SBox).Visibility_Lambda([ClockState](){auto L=ClockState.Pin();return L&&L->SleepPhase==0&&OKStreetNearestBed(L->Male,260,nullptr)?EVisibility::Visible:EVisibility::Collapsed;})
-  [SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(OKT(TEXT("ui.scene.sleep_in_bed"))))
-   .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()&&Weak->State){const FOKStreetPlace* Where=nullptr;if(const auto* Bed=OKStreetNearestBed(Weak->State->Male,260,nullptr,&Where))Weak->StartSleep(*Bed,Where,Weak->FreeTalkPartner());}return FReply::Handled();})];
- Mark(TEXT("lift"));
- // Elevator panel: shown while the player is inside a multi-storey place, one button per floor.
- TSharedRef<SVerticalBox> LiftRows=SNew(SVerticalBox);
- for(int32 PlaceIndex=0;PlaceIndex<OKStreetPlaces().Num();++PlaceIndex){
-  const auto Lifts=OKStreetPlaceLifts(OKStreetPlaces()[PlaceIndex]);if(Lifts.Num()<2)continue;
-  TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
-  auto Lift=[Weak,PlaceIndex](){return Weak.IsValid()?Weak->ElevatorOfPlace(PlaceIndex):INDEX_NONE;};
-  TSharedRef<SWrapBox> Wrap=SNew(SWrapBox).UseAllottedSize(true);
-  for(int32 Floor=1;Floor<=Lifts.Num();++Floor){
-   Wrap->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKStreetLiftLabel(*Lifts[Floor-1])))
-    .OnClicked_Lambda([Weak,PlaceIndex,Floor](){if(Weak.IsValid())Weak->RideElevator(PlaceIndex,Floor);return FReply::Handled();})];
-  }
-  Wrap->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.toggle_on"))))
-   .OnClicked_Lambda([Weak,Lift](){if(Weak.IsValid())Weak->ElevatorDoorButton(Lift(),true);return FReply::Handled();})];
-  Wrap->AddSlot().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.scene.toggle_off"))))
-   .OnClicked_Lambda([Weak,Lift](){if(Weak.IsValid())Weak->ElevatorDoorButton(Lift(),false);return FReply::Handled();})];
-  auto Inside=[Weak,Lift](){const int32 I=Lift();return Weak.IsValid()&&I!=INDEX_NONE&&Weak->ElevatorWithMale()==I;};
-  auto Near=[ClockState,PlaceIndex](){auto L=ClockState.Pin();return L&&OKStreetPlaceFloor(OKStreetPlaces()[PlaceIndex],L->Male)>0;};
-  LiftRows->AddSlot().AutoHeight()[SNew(SVerticalBox).Visibility_Lambda([Near](){return Near()?EVisibility::Visible:EVisibility::Collapsed;})
-   +SVerticalBox::Slot().AutoHeight().Padding(4,2)[SNew(STextBlock).ColorAndOpacity(FLinearColor::White).AutoWrapText(true).Text_Lambda([ClockState,PlaceIndex,Lift,Inside](){
-     auto L=ClockState.Pin();const int32 I=Lift();const auto& Place=OKStreetPlaces()[PlaceIndex];
-     if(!L||!L->Elevators.IsValidIndex(I))return FText::GetEmpty();const auto& E=L->Elevators[I];
-     const FString Where=E.Phase==4?FString::Printf(TEXT("%s → %s"),*E.Labels[E.Floor],*E.Labels[E.Target]):E.Labels[E.Floor];
-     return FText::FromString(Inside()?OKMsg(TEXT("ui.scene.elevator_inside"), {{TEXT("place_name"), Place.Name}, {TEXT("where"), *Where}}):OKMsg(TEXT("ui.scene.elevator_at"), {{TEXT("place_name"), Place.Name}, {TEXT("where"), *Where}}));})]
-   +SVerticalBox::Slot().AutoHeight()[SNew(SBox).Visibility_Lambda([Inside](){return Inside()?EVisibility::Visible:EVisibility::Collapsed;})[Wrap]]];
+ S.UiHistoryHolder->SetContent(History);
  }
- Mark(TEXT("overlay"));
- S.Overlay=SNew(SOverlay)+SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(16)[S.MinimapPanel.ToSharedRef()]
- +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(356,16,0,24)[SNew(SBox).MaxDesiredWidth(1140).MinDesiredWidth(1140)[SNew(SVerticalBox)
-  // His cards at the card table, held in front of him right above the dialogue box, which grows upward under them (OKStreetSocialBluff.inl).
-  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[S.Bluff.Active?BluffHandWidget():SNullWidget::NullWidget]
-  // Gal-game layout: the log button sits on the box's top-right edge; the box itself never hides.
-  +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0,0,8,4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKMsg(TEXT("ui.scene.history_toggle_count"), {{TEXT("toggle_label"), S.FreeTalkHistoryOpen?OKT(TEXT("ui.scene.close_log")):OKT(TEXT("ui.scene.history_label"))}, {TEXT("count"), S.FreeTalkLog.Num()}}))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->FreeTalkHistoryOpen=!Weak->State->FreeTalkHistoryOpen;Weak->RefreshUI();}return FReply::Handled();})]
-  +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MinDesiredHeight_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FOptionalSize(Owner.IsValid()&&Owner->GalgameShowsDialogue()?0.f:96.f);})
-   .Padding_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FMargin(0,0,0,Owner.IsValid()?Owner->GalgameDialogueLift():0.f);})
-   .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameHidesDialogueBox()?EVisibility::Collapsed:EVisibility::Visible;})[SAssignNew(S.DialoguePanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(20)[Dialogue]]]]]
- +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(356,80,0,220)[History]
- +SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(16,16,16,24)[SNew(SVerticalBox)
-  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[SNew(SBox).MaxDesiredWidth(320).Visibility(S.HintOpen?EVisibility::Visible:EVisibility::Collapsed)[SNew(SBorder).BorderImage(OKStreetGlassPanel()).Padding(14)[SNew(STextBlock).AutoWrapText(true).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return FText::GetEmpty();return FText::FromString((L->HintText.IsEmpty()?FString():L->HintText+TEXT("\n"))+(L->MouseUI?OKT(TEXT("ui.scene.ui_mode_hint")):OKT(TEXT("ui.scene.camera_mode_hint")))+OKT(TEXT("ui.scene.map_hint_m")));})]]]
-  +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[SNew(SBox).WidthOverride(44).HeightOverride(44)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).VAlign(VAlign_Center).ToolTipText(FText::FromString(OKT(TEXT("ui.scene.controls_hint_title"))))
-   .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){auto& L=*Weak->State;L.HintOpen=!L.HintOpen;L.HintUnread=false;Weak->RefreshUI();}return FReply::Handled();})
-   [SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",20)).ColorAndOpacity_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FSlateColor(L&&L->HintUnread?FLinearColor(1,.83f,.35f):FLinearColor::White);}).Text(FText::FromString(TEXT("?")))]]]]
- +SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Fill).Padding(16)[SNew(SBox).WidthOverride(400)[SAssignNew(S.InteractionPanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(8)[SNew(SVerticalBox)
-  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[ClockRow]
-  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[LiftRows]
-  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[SleepRow]
-  +SVerticalBox::Slot().FillHeight(1)[SAssignNew(RightScroll,SScrollBox).OnUserScrolled_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](float Offset){if(const auto L=Weak.Pin())L->RightScrollOffset=Offset;})+SScrollBox::Slot()[Box]]
-  +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MaxDesiredHeight(S.ShowDebug?560:330)[SNew(SScrollBox)+SScrollBox::Slot()[DebugBox]]]]]]
- +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SBox).Visibility(S.BigMapOpen?EVisibility::Visible:EVisibility::Collapsed)[S.BigMap.ToSharedRef()]];
  Mark(TEXT("apps"));
- if(!S.App.IsEmpty())StaticCastSharedPtr<SOverlay>(S.Overlay)->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Center)[BuildAppOverlay()];
- if(!S.SaveMenu.IsEmpty())StaticCastSharedPtr<SOverlay>(S.Overlay)->AddSlot()[BuildSaveMenu()];
- if(RightScroll.IsValid())RightScroll->SetScrollOffset(S.RightScrollOffset);
- GEngine->GameViewport->AddViewportWidgetContent(S.Overlay.ToSharedRef(),10);
- Mark(TEXT("add"));
+ if(Regions&OKStreetUi::Apps){
+  S.UiAppHolder->SetContent(S.App.IsEmpty()?SNullWidget::NullWidget:BuildAppOverlay());
+  S.UiSaveHolder->SetContent(S.SaveMenu.IsEmpty()?SNullWidget::NullWidget:BuildSaveMenu());
+ }
+ Mark(TEXT("end"));
  if(CVarOKStreetLogUiRebuilds.GetValueOnGameThread()&&FPlatformTime::ToMilliseconds64(Marks.Last().Value-Marks[0].Value)>5){FString Parts;for(int32 I=1;I<Marks.Num();++I)Parts+=FString::Printf(TEXT(" %s %.1f"),Marks[I-1].Key,FPlatformTime::ToMilliseconds64(Marks[I].Value-Marks[I-1].Value));UE_LOG(LogTemp,Display,TEXT("Street UI rebuild %.1f ms:%s"),FPlatformTime::ToMilliseconds64(Marks.Last().Value-Marks[0].Value),*Parts);}
 }
 
@@ -3344,11 +3376,11 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(const double WallNow=FPlatformTime::Seconds();WallNow>=S.UiShopCheckAt){
   S.UiShopCheckAt=WallNow+.4;FString Why;const FString Shop=ShopPlaceHere();
   const FString Key=Shop.IsEmpty()?FString():Shop+(PlaceClosedNow(Shop,Why)?TEXT("|closed"):TEXT("|open"));
-  if(Key!=S.UiShopKey){S.UiShopKey=Key;S.UiDirty=true;S.UiDirtyFile=__FILE__;S.UiDirtyLine=__LINE__;}
+  if(Key!=S.UiShopKey){S.UiShopKey=Key;S.UiDirty=true;S.UiDirtyRegions|=OKStreetUi::Shop;S.UiDirtyFile=__FILE__;S.UiDirtyLine=__LINE__;}
  }
  if(S.FreeTalkLogDirty&&FPlatformTime::Seconds()-S.FreeTalkLogSavedAt>1.0){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkSaveLog);S.FreeTalkLogDirty=false;S.FreeTalkLogSavedAt=FPlatformTime::Seconds();FreeTalkSaveLog();}
  OKStreetDigestMessage(S);
- if(S.UiDirty){S.UiDirty=false;if(CVarOKStreetLogUiRebuilds.GetValueOnGameThread())UE_LOG(LogTemp,Display,TEXT("Street UI rebuild asked by %s:%u"),*FPaths::GetCleanFilename(ANSI_TO_TCHAR(S.UiDirtyFile)),S.UiDirtyLine);{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_RebuildUI);RebuildUI();}}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickControl);TickControl();}
+ if(S.UiDirty){S.UiDirty=false;const uint32 Regions=S.UiDirtyRegions?S.UiDirtyRegions:uint32(OKStreetUi::All);S.UiDirtyRegions=0;if(CVarOKStreetLogUiRebuilds.GetValueOnGameThread())UE_LOG(LogTemp,Display,TEXT("Street UI rebuild asked by %s:%u (regions %u)"),*FPaths::GetCleanFilename(ANSI_TO_TCHAR(S.UiDirtyFile)),S.UiDirtyLine,Regions);{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_RebuildUI);RebuildUI(Regions);}}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickControl);TickControl();}
  const double Now=SceneTime();auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;
  if(!S.CatchLight.IsValid()){auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetLightingChannels(false,false,true);L->SetCastShadows(false);
   L->SetIntensityUnits(ELightUnits::Candelas);L->SetIntensity(100.f); /* 100 cd: a clear wet shine, short of glare (300 burns out) */L->SetAttenuationRadius(800.f);L->SetSourceRadius(2.f);L->RegisterComponent();AddInstanceComponent(L);S.CatchLight=L;}
@@ -3583,11 +3615,11 @@ void AOKStreetSocialScene::Tick(float Dt){
    // E pressed and nobody was taken: say why for each girl in reach (distance, line of sight, readiness, angle off the view).
    FString Why;for(const auto& Sm:Samples)if(Sm.DistanceCm<OKStreetTalkRangeCm*2.f){const FVector2D Dir=FVector2D(Sm.Offset.X,Sm.Offset.Y).GetSafeNormal();const float Ang=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(float(FVector2D::DotProduct(Dir,FVector2D(View.Horizontal.X,View.Horizontal.Y))),-1.f,1.f)));Why+=FString::Printf(TEXT(" [slot %d dist=%.0f los=%d ready=%d visible=%d actions=%d queried=%d stale=%d angle=%.0f]"),Sm.Slot,Sm.DistanceCm,Sm.LineOfSightClear?1:0,Sm.Ready?1:0,Sm.Visible?1:0,Sm.ActionsReady?1:0,Sm.Queried?1:0,Sm.Stale?1:0,Ang);}
    UE_LOG(LogTemp,Display,TEXT("Street E refused:%s"),Why.IsEmpty()?TEXT(" nobody within reach"):*Why);
-   const FString Idle=OKT(TEXT("ui.scene.controls_short_hint"));if(S.Message!=Idle){S.Message=Idle;RefreshUI();}
+   const FString Idle=OKT(TEXT("ui.scene.controls_short_hint"));if(S.Message!=Idle)S.Message=Idle; // bound to the message: no rebuild
   }
   else if(Current.Selected!=INDEX_NONE||Result.RejectedInteract||Tab){const FString Idle=OKT(TEXT("ui.scene.controls_short_hint"));if(S.Message!=Idle)S.Message=Idle;}
  }
- if(S.Target==INDEX_NONE&&S.Pair.Partner==INDEX_NONE&&NearestPickup!=INDEX_NONE){if(const auto* T=S.CollectedTopics.Find(S.PickupTopics[NearestPickup])){const FString Hint=OKT(TEXT("ui.scene.auto_pickup_topic_label"))+T->Name+OKT(TEXT("ui.scene.pickup_controls_hint"));if(S.Message!=Hint){S.Message=Hint;RefreshUI();}}}
+ if(S.Target==INDEX_NONE&&S.Pair.Partner==INDEX_NONE&&NearestPickup!=INDEX_NONE){if(const auto* T=S.CollectedTopics.Find(S.PickupTopics[NearestPickup])){const FString Hint=OKT(TEXT("ui.scene.auto_pickup_topic_label"))+T->Name+OKT(TEXT("ui.scene.pickup_controls_hint"));if(S.Message!=Hint)S.Message=Hint;}} // bound to the message: no rebuild
  if(Focused&&S.Target!=INDEX_NONE){if(OKKeyPressed(PC,EKeys::Four))AskHerTopic();if(OKKeyPressed(PC,EKeys::One))Topic(TEXT("daily"));if(OKKeyPressed(PC,EKeys::Two))Topic(TEXT("romance"));if(OKKeyPressed(PC,EKeys::Three))Topic(TEXT("intimacy"));}
  // N while something is going on: say what (a call ringing, someone walking over, a talk or an activity), not nothing.
  if(Focused&&OKKeyPressed(PC,EKeys::N)&&!S.RetargetSelfTest&&!(S.Target==INDEX_NONE&&S.Pair.Partner==INDEX_NONE&&NothingGoingOn())){

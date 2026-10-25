@@ -86,7 +86,7 @@ void AOKStreetSocialScene::SaveCalendar(){
  // Where he stands: outside the room of a facility he is in (it puts him in a set), not while riding an elevator.
  if(ElevatorWithMale()==INDEX_NONE&&S.LiftRide.Elevator==INDEX_NONE){Candidate.HasPlayerSpot=true;Candidate.PlayerSpot=S.FacilityEntered?S.FacilitySavedMale:S.Male;Candidate.PlayerYaw=S.FacilityEntered?S.FacilitySavedMaleRotation.Yaw:S.Rotations[0].Yaw;Candidate.ViewYaw=S.FacilityEntered?S.FacilitySavedYaw:S.Yaw;S.SpotSavedMale=Candidate.PlayerSpot;S.SpotSavedAt=FPlatformTime::Seconds();}
  Candidate.CalendarMinute=FMath::Clamp(FMath::FloorToInt32(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),0,24*60-1);
- OKStreetAtomicSaveAsync(S.Manifest.SavePath,OKStreetWriteSave(Candidate));S.Store=MoveTemp(Candidate);
+ S.Store=MoveTemp(Candidate);OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
 }
 
 void AOKStreetSocialScene::TickCalendarAndMind(){
@@ -311,8 +311,8 @@ void AOKStreetSocialScene::ApplyMindRelation(int32 Character,const TSharedPtr<FJ
  TArray<FString> Applied;for(const auto& V:Out->GetArrayField(TEXT("applied")))Applied.Add(V->AsString());
  OKRulesPatchRelation(R,*Out->GetObjectField(TEXT("relation")));
  FString Error;
- if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveAsync(S.Manifest.SavePath,OKStreetWriteSave(Candidate));
  S.Store=MoveTemp(Candidate);
+ if(!S.SelfTest&&!S.Manifest.SavePath.IsEmpty())OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
  if(!Applied.IsEmpty()){S.FreeTalkNotice+=TEXT("　")+FString::Join(Applied,TEXT(" "));UE_LOG(LogTemp,Display,TEXT("Street relation: actor=%d %s emotion=%s"),Character,*FString::Join(Applied,TEXT(" ")),*Emotion);}
 }
 

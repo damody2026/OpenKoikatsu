@@ -13,15 +13,15 @@ TArray<FVector> AOKStreetSocialScene::ContactRoute(const FVector& From,const FVe
   FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetContactRoute),false,this);const bool Blocked=GetWorld()->SweepSingleByChannel(Hit,A+FVector(0,0,85),B+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(30,78),Query);if(Blocked&&State->SelfTest)UE_LOG(LogTemp,Verbose,TEXT("Contact route obstructed actor=%s from=%s to=%s"),*GetNameSafe(Hit.GetActor()),*A.ToString(),*B.ToString());return !Blocked;
  });
 }
-void AOKStreetSocialScene::SelectContact(int32 Character){if(!State||!State->Agents.IsValidIndex(Character-1))return;State->ContactSelection=Character;RefreshUI();}
+void AOKStreetSocialScene::SelectContact(int32 Character){if(!State||!State->Agents.IsValidIndex(Character-1))return;State->ContactSelection=Character;RefreshUI(OKStreetUi::Right|OKStreetUi::Debug);}
 void AOKStreetSocialScene::NavigateGirl(int32 Character){if(!ContactReady(Character)||State->PrivateGirl!=INDEX_NONE)return;auto& S=*State;
  // Talking or in an activity he cannot walk off: say so (as the map does) instead of accepting a route he never walks.
- if(S.Target!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.OutingGirl!=INDEX_NONE||S.Facility!=INDEX_NONE){S.Message=OKT(TEXT("ui.contacts.end_activity_before_nav"));S.ContactsNotice=S.Message;RefreshUI();return;}
+ if(S.Target!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.OutingGirl!=INDEX_NONE||S.Facility!=INDEX_NONE){S.Message=OKT(TEXT("ui.contacts.end_activity_before_nav"));S.ContactsNotice=S.Message;return;}
  // She is on another floor: the navigation takes the elevator (PlanNavLift, in StepNavigation).
- S.NavRide=FOKStreetLiftRide();S.NavGirl=Character;S.NavPointActive=false;S.NavAt=0;S.NavStep=1;S.NavReplans=0;S.NavProgressAt=SceneTime();S.NavPath=ContactRoute(S.Male,S.Agents[Character-1].Position);S.ContactsNotice=OKT(TEXT("ui.contacts.auto_travel_to_her_hint"));RefreshUI();}
+ S.NavRide=FOKStreetLiftRide();S.NavGirl=Character;S.NavPointActive=false;S.NavAt=0;S.NavStep=1;S.NavReplans=0;S.NavProgressAt=SceneTime();S.NavPath=ContactRoute(S.Male,S.Agents[Character-1].Position);S.ContactsNotice=OKT(TEXT("ui.contacts.auto_travel_to_her_hint"));}
 void AOKStreetSocialScene::NavigatePoint(const FVector& Goal,const FString& Name){
  if(!State)return;auto& S=*State;
- if(S.Target!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.OutingGirl!=INDEX_NONE||S.Facility!=INDEX_NONE){S.Message=OKT(TEXT("ui.contacts.end_activity_before_map_nav"));RefreshUI();return;}
+ if(S.Target!=INDEX_NONE||S.PrivateGirl!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE||S.OutingGirl!=INDEX_NONE||S.Facility!=INDEX_NONE){S.Message=OKT(TEXT("ui.contacts.end_activity_before_map_nav"));return;}
  // The place graph (doors and corridors) reaches the outer districts; computed once, then walked in order.
  auto Path=PlaceRoute(S.Male,Goal);
  // A place's door: on through it into its ground floor. Stopped at the door he was outside it, and its buttons (the
@@ -31,21 +31,21 @@ void AOKStreetSocialScene::NavigatePoint(const FVector& Goal,const FString& Name
  // On another floor (he upstairs, or the spot upstairs): the navigation takes an elevator (PlanNavLift); no street
  // route is needed from upstairs.
  const bool Floors=NavNeedsLift(Goal);
- if(Path.IsEmpty()&&!Floors){S.Message=OKT(TEXT("ui.contacts.unreachable_try_elsewhere"));RefreshUI();return;}
+ if(Path.IsEmpty()&&!Floors){S.Message=OKT(TEXT("ui.contacts.unreachable_try_elsewhere"));return;}
  if(Path.IsEmpty())Path={S.Male};
  S.NavRide=FOKStreetLiftRide();S.NavGirl=INDEX_NONE;S.NavPointActive=true;S.NavPoint=Floors?Target:FVector(Target.X,Target.Y,S.Male.Z);S.NavPointName=Name;S.NavPath=MoveTemp(Path);S.NavStep=1;S.NavReplans=0;S.NavAt=SceneTime();S.NavProgressAt=S.NavAt;
  S.Message=OKT(TEXT("ui.contacts.auto_travel_button"))+(Name.IsEmpty()?FString(OKT(TEXT("ui.contacts.map_selected_spot"))):Name)+OKT(TEXT("ui.contacts.wasd_cancel_nav_suffix"));
- if(S.BigMapOpen)ToggleBigMap();else RefreshUI();
+ if(S.BigMapOpen)ToggleBigMap(); // navigation, its notice and the message are bound to state: no rebuild
 }
 void AOKStreetSocialScene::StopNavigation(const FString& Notice){
  if(!State)return;auto& S=*State;S.NavGirl=INDEX_NONE;S.NavPointActive=false;S.NavPath.Reset();S.NavRide=FOKStreetLiftRide();S.ContactsNotice.Reset();
- if(!Notice.IsEmpty())S.Message=Notice;RefreshUI();
+ if(!Notice.IsEmpty())S.Message=Notice;
 }
 void AOKStreetSocialScene::ToggleBigMap(){
  if(!State)return;auto& S=*State;
  if(!S.BigMapOpen){S.BigMapOpen=true;S.BigMapSavedMouse=S.MouseUI;S.MouseUI=true;}
  else{S.BigMapOpen=false;S.MouseUI=S.BigMapSavedMouse;}
- ApplyMouseMode(true);RefreshUI();
+ ApplyMouseMode(true);
 }
 // Walkable-street grid: a cell is free when a body standing there keeps the same clearance walking needs (30 cm from
 // street obstacles and place blocks, no overlap with world collision). Cells are tested when A* first reaches them.

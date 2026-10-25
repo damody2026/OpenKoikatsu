@@ -8,6 +8,12 @@
 
 struct FOKStreetSceneState;
 
+// The street UI's regions (AOKStreetSocialScene::RefreshUI): a refresh rebuilds only the regions it names; the shell (layout,
+// maps, clock, lifts) is built once and again only for Shell (a language change).
+namespace OKStreetUi {
+ enum : uint32 { Right=1, Shop=2, Debug=4, Bottom=8, History=16, Apps=32, All=63, Shell=64 };
+}
+
 // Independent environment, with player-selected APNGs prepared at runtime.
 UCLASS()
 class OPENKOIKATSU_API AOKStreetSocialScene : public AActor {
@@ -36,8 +42,10 @@ private:
  void GalgameCheckpoint(int32 Character,const FString& Id); void GalgameRollBack(int32 Character,const FString& Id);
  void EndGalgame();
  double SceneTime() const;
- void RefreshUI(std::source_location Where=std::source_location::current()); // marks the panel dirty; it is rebuilt once at the start of the next tick, however many handlers asked (Where: the asking call, for ok.Street.LogUiRebuilds)
- void RebuildUI();
+ // Marks regions dirty (OKStreetUi, all of them by default); they are rebuilt once at the start of the next tick, however
+ // many handlers asked (Where: the asking call, for ok.Street.LogUiRebuilds).
+ void RefreshUI(uint32 Regions=OKStreetUi::All,std::source_location Where=std::source_location::current());
+ void RebuildUI(uint32 Regions=OKStreetUi::All);
  void ExecuteFreeTalkAction(int32 Character,const FString& Id,const FString& Action);
  bool PartyCanJoin(int32 Girl,FString* Why=nullptr) const;
  bool PartyJoin(int32 Girl);
