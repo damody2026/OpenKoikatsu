@@ -943,10 +943,11 @@ static FString OKStreetMaleLine(const FString& Text){
 }
 
 // A name as the model writes it back: the request reached it in the player's script (ok-mind converts a Simplified
-// game's whole request), so "九十九 過子" comes back as "九十九 过子". Kept per name.
+// game's whole request), so "九十九 過子" comes back as "九十九 过子". A Traditional game the same way round: a card named
+// in Simplified ("贞德") comes back as "貞德" (her group-talk lines were dropped: no girl of that name). Kept per name.
 static FString OKStreetScriptedName(const FString& Name){
  static TMap<FString,FString> Known;static FString KnownLang;if(KnownLang!=GOKStreetLang){Known.Reset();KnownLang=GOKStreetLang;}
- if(GOKStreetLang!=TEXT("zh-CN")||Name.IsEmpty()||!OKStreetActiveRules())return Name;
+ if((GOKStreetLang!=TEXT("zh-CN")&&GOKStreetLang!=TEXT("zh-TW"))||Name.IsEmpty()||!OKStreetActiveRules())return Name;
  if(const FString* K=Known.Find(Name))return *K;
  auto Request=MakeShared<FJsonObject>();Request->SetStringField(TEXT("kind"),TEXT("script_texts"));Request->SetStringField(TEXT("lang"),GOKStreetLang);
  Request->SetArrayField(TEXT("texts"),{MakeShared<FJsonValueString>(Name)});FString Error;const TArray<TSharedPtr<FJsonValue>>* Out=nullptr;

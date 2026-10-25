@@ -313,7 +313,9 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
  TArray<TPair<int32,FString>> Ordered;
  if(Reply->TryGetArrayField(TEXT("lines"),Arr))for(const auto& V:*Arr){
   const TSharedPtr<FJsonObject> O=V.IsValid()?V->AsObject():nullptr;if(!O)continue;FString Who,Line;O->TryGetStringField(TEXT("who"),Who);O->TryGetStringField(TEXT("text"),Line);
-  const int32 G=Find(Who);if(G==INDEX_NONE||Line.IsEmpty())continue;
+  const int32 G=Find(Who);
+  if(G==INDEX_NONE&&!Line.IsEmpty())UE_LOG(LogTemp,Warning,TEXT("Street party talk: line of \"%s\" dropped (no girl here by that name): %s"),*Who,*Line);
+  if(G==INDEX_NONE||Line.IsEmpty())continue;
   Ordered.Add({G,Line});
  }
  for(const auto& [G,Line]:Ordered){
