@@ -92,7 +92,7 @@ void AOKStreetSocialScene::BondEventIn(FOKStreetStore& Store,int32 A,int32 B,con
  auto Request=OKRulesRequest(TEXT("bond_event"));Request->SetStringField(TEXT("event"),Event);
  Request->SetObjectField(TEXT("a"),BondFacts(Store,A));Request->SetObjectField(TEXT("b"),BondFacts(Store,B));
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
- BondApply(Store,*Out);
+ BondApply(Store,*Out);++S.BondsSerial;
  UE_LOG(LogTemp,Display,TEXT("Street bonds: event %s %d<->%d"),*Event,A,B);
 }
 
@@ -106,8 +106,8 @@ void AOKStreetSocialScene::BondEvent(int32 A,int32 B,const FString& Event){
 void AOKStreetSocialScene::TickBonds(){
  auto& S=*State;if(S.SelfTest||!S.Rules)return;OKRulesSyncDefaults(S);const int64 Now=OKStreetMindNow(S);
  if(S.BondTickMinute<0){S.BondTickMinute=Now;return;}
- if(Now-S.BondTickMinute<S.BondTickMinutes)return;
- const int64 Minutes=Now-S.BondTickMinute;S.BondTickMinute=Now;
+ if(Now-S.BondTickMinute<S.BondTickMinutes||S.BondsInFlight)return; // one answer at a time: the minutes go into the next
+ const int64 Since=S.BondTickMinute,Minutes=Now-S.BondTickMinute;S.BondTickMinute=Now;
  const int32 Minute=int32(Now%1440);
  TArray<int32> WithHim=S.Party;if(FreeTalkPartner()!=INDEX_NONE)WithHim.AddUnique(FreeTalkPartner());
  TArray<TSharedPtr<FJsonValue>> Heroines;
@@ -119,10 +119,16 @@ void AOKStreetSocialScene::TickBonds(){
   Heroines.Add(MakeShared<FJsonValueObject>(H));
  }
  auto Request=OKRulesRequest(TEXT("bonds_tick"));Request->SetNumberField(TEXT("minutes"),double(Minutes));Request->SetArrayField(TEXT("heroines"),Heroines);
- TSharedPtr<FJsonObject> Out;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BondsEval);Out=OKRulesEval(S,Request);}if(!Out.IsValid())return;
- QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BondsApply);
- auto Candidate=S.Store;const bool Changed=BondApply(Candidate,*Out);
- if(Changed)CommitStore(MoveTemp(Candidate));
+ // Asked off the game thread (OKRulesEvalAsync, 2-3 ms here); applied when the answer is back.
+ S.BondsInFlight=true;const uint32 Serial=S.BondsSerial;
+ OKRulesEvalAsync(this,State,Request,[this,Serial,Since](TSharedPtr<FJsonObject> Out){
+  if(!State)return;auto& S=*State;S.BondsInFlight=false;if(!Out.IsValid())return;
+  // A bond event came in meanwhile: these favours are older than it. Ask again for the same minutes.
+  if(S.BondsSerial!=Serial){S.BondTickMinute=Since;UE_LOG(LogTemp,Display,TEXT("Street bonds: tick answer dropped (a bond event came first)"));return;}
+  QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BondsApply);
+  auto Candidate=S.Store;const bool Changed=BondApply(Candidate,*Out);
+  const TArray<TSharedPtr<FJsonValue>>* Rows=nullptr;UE_LOG(LogTemp,Display,TEXT("Street bonds tick: %d minutes, %d pairs changed"),int32(S.BondTickMinute-Since),Out->TryGetArrayField(TEXT("changes"),Rows)?Rows->Num():0);
+  if(Changed)CommitStore(MoveTemp(Candidate));});
 }
 
 // Whether she will be in a group with these others: refuse (2: someone she dislikes), reluctant (1: she dislikes someone

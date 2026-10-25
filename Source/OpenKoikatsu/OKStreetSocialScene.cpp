@@ -270,6 +270,9 @@ struct FOKStreetSceneState {
  TMap<int32,float> StreetBlockedFor;TMap<int32,double> StreetDetourAt; // a free heroine held up on her street walk, and when she may be routed round again
  uint32 AutoFriendshipNext=0; // whose turn it is to be asked (TickAutoFriendship)
  bool AcademicsInFlight=false; // campus_tick asked, its answer not back yet (TickAcademics)
+ // bonds_tick asked off the game thread (TickBonds); BondsSerial counts bond events, so an answer computed before one
+ // (its favours are absolute) is dropped and those minutes asked again.
+ bool BondsInFlight=false;uint32 BondsSerial=0;
  TSharedPtr<FOKStreetGridSearch> NavSearch;FVector NavSearchGoal=FVector::ZeroVector;FString NavSearchName; // his map navigation being routed (TickNavSearch)
  TArray<TWeakObjectPtr<AActor>> DestroyQueue; // DestroyLater
  TMap<int32,TArray<FOKStreetPlanBlock>> Plans;int32 PlanDay=-1;double PlanWaitSince=0;bool PlannedWithoutProfiles=false;TMap<int32,int64> ConfessionPending;TMap<int32,int32> PlanBlock;TSet<int32> PlanEaten,ScheduleHeld;TMap<int32,TArray<FVector>> Commutes;
