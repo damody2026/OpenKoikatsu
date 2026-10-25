@@ -659,10 +659,10 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
   if(Seen.Num())Panel->AddSlot().AutoHeight().Padding(2)[Books];}
  if(!S.ShopPlace.IsEmpty()){
   FString Why;int32 BanDays=0;const bool Banned=Blacklisted(S.ShopPlace,&BanDays);if(Banned)Why=OKMsg(TEXT("ui.economy.shop_banned_notice"), {{TEXT("ban_days"), BanDays}});
-  const bool Closed=Banned||PlaceClosedNow(S.ShopPlace,Why);
+  bool Closed=Banned;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopClosed);Closed=Closed||PlaceClosedNow(S.ShopPlace,Why);}
   const auto* Place=OKStreetFindPlace(S.ShopPlace);
   Panel->AddSlot().AutoHeight().Padding(2)[Button(FString::Printf(TEXT("%s %s"),Place?Place->Name:*S.ShopPlace,Closed?*Why:S.ShopOpen?OKT(TEXT("ui.economy.hide_menu_button")):OKT(TEXT("ui.economy.view_menu_button"))),[Weak](){Weak->State->ShopOpen=!Weak->State->ShopOpen;Weak->RefreshUI();},!Closed)];
-  if(S.ShopOpen&&!Closed){
+  if(S.ShopOpen&&!Closed){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopMenu);
    auto List=SNew(SVerticalBox);
    for(const auto* Item:ItemsHere(S.ShopPlace)){
     const FString Id=Item->Id;auto Row=SNew(SHorizontalBox);
@@ -681,7 +681,7 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
    Panel->AddSlot().MaxHeight(MenuHeight)[SNew(SScrollBox)+SScrollBox::Slot()[List]];
   }
  }
- BuildJobRows(Panel);
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopJobs);BuildJobRows(Panel);}
  if(!S.Cart.IsEmpty()){
   for(int32 Index=0;Index<S.Cart.Num();++Index){const auto& L=S.Cart[Index];const auto* I=S.Catalog.Find(L.ItemId);if(!I)continue;
    auto Row=SNew(SHorizontalBox);
@@ -702,7 +702,7 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
    Panel->AddSlot().AutoHeight()[Row];
   }
  }
- if(Her!=INDEX_NONE)BuildHeroinePanel(Panel,Her); // the heroine module (OKStreetSocialHeroine.inl)
+ if(Her!=INDEX_NONE){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopHeroinePanel);BuildHeroinePanel(Panel,Her);} // the heroine module (OKStreetSocialHeroine.inl)
  Box->AddSlot().AutoHeight().Padding(4)[Panel];
 }
 // Admission as he walks in (the aquarium, the onsen): how much and who pays are the rules' (shop.rs entry_fee); she is
