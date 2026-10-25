@@ -463,6 +463,10 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  // Voice source: built-in clips or the local TTS server (OKStreetSocialVoice.inl).
  // The TTS Base model the launcher starts ok-tts with (voice-settings.json tts_base_size): 1.7B, or 0.6B (less VRAM).
  FString TtsBaseSize=TEXT("1.7B");
+ // Daily conversation is not voiced (voice-settings.json dialogue_voice, off by default): no TTS for her replies, his
+ // lines or her words around a song, and scripted lines play their recorded clips silently (their timing and mouth
+ // stay). Songs and the H scene keep their voices.
+ bool DialogueVoice=false;
  bool TtsEnabled=false,TtsPending=false;FString TtsEndpoint=TEXT("http://127.0.0.1:47860"),TtsCacheDir,TtsSettingsPath,TtsNotice;int32 TtsAge=18,TtsLines=0,TtsFallbacks=0;uint32 TtsSerial=0;double TtsRequestedAt=0,TtsTimeout=15;bool TtsSmoke=false,TtsSmokeStarted=false;
  // Player (male) TTS line before her reply: MalePhase 0 none, 1 waiting for the clip, 2 speaking, 3 done/skipped.
  FString PlayerCardName,PlayerNameDraft,MaleTone=TEXT("m0"),MaleVoiceId,MaleLineOverride,LastBranchId,TtsVoiceInfo;bool MaleTtsPending=false,MaleAddressed=false;int32 MalePhase=0,TtsSmokeTopics=0;double MaleRequestedAt=0;uint32 MaleSerial=0;TArray<TSharedPtr<FString>> MaleToneOptions;
@@ -1560,7 +1564,7 @@ static void OKStreetCancelQueuedSpeech(FOKStreetSceneState& S){
  ++S.FreeTalkSpeechGeneration;if(!S.FreeTalkSpeechChannel.IsEmpty())OKStreetTtsCancel(S.TtsEndpoint,S.FreeTalkSpeechChannel,uint32(S.FreeTalkSpeechGeneration));
 }
 void AOKStreetSocialScene::SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial){
- if(!State||State->TtsCacheDir.IsEmpty()||!State->Manifest.Characters.IsValidIndex(Character)||Lines.IsEmpty())return;auto& S=*State;
+ if(!State||!DialogueVoiced()||!State->Manifest.Characters.IsValidIndex(Character)||Lines.IsEmpty())return;auto& S=*State;
  if(S.FreeTalkSpeechChannel.IsEmpty())S.FreeTalkSpeechChannel=TEXT("free_talk-")+FGuid::NewGuid().ToString(EGuidFormats::Digits);
  if(S.FreeTalkSpeechLines.Num()>0)OKStreetCancelQueuedSpeech(S);else ++S.FreeTalkSpeechGeneration;
  for(const auto& Stream:S.FreeTalkSpeechStreams)if(Stream)Stream->Finish();
@@ -1730,9 +1734,13 @@ int32 AOKStreetSocialScene::FreeTalkSlotOf(const FString& CharacterId) const{
  return INDEX_NONE;
 }
 
+bool AOKStreetSocialScene::DialogueVoiced() const{
+ return State&&State->DialogueVoice&&!State->TtsCacheDir.IsEmpty();
+}
+
 bool AOKStreetSocialScene::FreeTalkSpeakVoice(int32 Character,const FString& Path){
  FString Id,Error;
- return !Path.IsEmpty()&&IFileManager::Get().FileExists(*Path)&&OKAdmitCrowdRuntimeVoice(this,Path,Id,Error)&&OKSpeakCrowdRuntimeLine(this,Character,Id,Error);
+ return DialogueVoiced()&&!Path.IsEmpty()&&IFileManager::Get().FileExists(*Path)&&OKAdmitCrowdRuntimeVoice(this,Path,Id,Error)&&OKSpeakCrowdRuntimeLine(this,Character,Id,Error);
 }
 
 // Replay the current partner's last OKFreeTalkReplayCount lines through the bottom dialogue box,
@@ -2206,7 +2214,8 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
  if(!S.TouchNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TouchNotice)).AutoWrapText(true).WrapTextAt(360)];
  if(!S.TalkFailureNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TalkFailureNotice)).AutoWrapText(true).WrapTextAt(360)];
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE).IsEnabled(!Busy&&!S.OtherLanguage.Nodes.IsEmpty()).Text(FText::FromString(S.Japanese?OKT(TEXT("ui.scene.voice_ja")):OKT(TEXT("ui.scene.voice_zh")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleLanguage();return FReply::Handled();})];
- Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE).IsEnabled(!S.TtsCacheDir.IsEmpty()).Text(FText::FromString(S.TtsEnabled?OKT(TEXT("ui.scene.voice_tts")):OKT(TEXT("ui.scene.voice_builtin")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleVoiceSource();return FReply::Handled();})];
+ // (The voice source only matters while daily conversation is voiced.)
+ if(S.DialogueVoice)Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE).IsEnabled(!S.TtsCacheDir.IsEmpty()).Text(FText::FromString(S.TtsEnabled?OKT(TEXT("ui.scene.voice_tts")):OKT(TEXT("ui.scene.voice_builtin")))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleVoiceSource();return FReply::Handled();})];
  // The TTS model (from the next start): 1.7B sounds closer to each heroine, 0.6B takes about 1 GB less VRAM.
  if(S.TtsEnabled&&!S.TtsSettingsPath.IsEmpty())Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsFocusable(S.Target!=INDEX_NONE)
   .Text(FText::FromString(OKMsg(TEXT("ui.scene.tts_model"),{{TEXT("size"),*S.TtsBaseSize}}))).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->ToggleTtsBaseSize();return FReply::Handled();})];
@@ -3639,7 +3648,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  // Enter or Space skips the scene's line too (the chat box keeps its Enter: the game view is not focused then).
  if(Focused&&(OKKeyPressed(PC,EKeys::Enter)||OKKeyPressed(PC,EKeys::SpaceBar)))SkipGalgameLine();
  if(Focused&&OKKeyPressed(PC,EKeys::L))ToggleLanguage();
- if(Focused&&OKKeyPressed(PC,EKeys::V))ToggleVoiceSource();
+ if(Focused&&OKKeyPressed(PC,EKeys::V)&&S.DialogueVoice)ToggleVoiceSource();
  // -StreetSocialTtsSmoke: talk to NPC 1 once with TTS forced on; read game.log for the result.
  if(S.TtsSmoke&&S.AllReady&&!S.TtsSmokeStarted&&Now-S.ReadyAt>3&&Now-S.TtsRequestedAt>2){S.TtsRequestedAt=Now;S.Agents[0].Position=S.Male+FVector(150,0,0);S.TtsSmokeStarted=BeginTalk(1);UE_LOG(LogTemp,Display,TEXT("Street TTS smoke: begin talk ok=%d"),S.TtsSmokeStarted?1:0);}
  if(S.TtsSmoke&&S.TtsSmokeTopics==25&&S.Target!=INDEX_NONE&&S.Node==INDEX_NONE){
@@ -3687,7 +3696,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(S.MalePhase==1||S.MalePhase==2){}
   else if(!S.ClipStarted&&S.TtsPending){if(Now-S.TtsRequestedAt>S.TtsTimeout+1){S.TtsPending=false;++S.TtsFallbacks;S.TtsNotice=OKT(TEXT("ui.scene.tts_timeout_builtin"));RefreshUI();}}
   else if(!S.ClipStarted){const bool WithGesture=S.Voice==0&&(!S.Pair.Conversation()||S.TouchActive);const bool Played=WithGesture?OKSpeakCrowdRuntimeActionLine(this,S.Target,S.VoiceIds[S.Voice],S.ActiveGesture,Error):OKSpeakCrowdRuntimeLine(this,S.Target,S.VoiceIds[S.Voice],Error);
-   if(!Played){FailTalk(TEXT("Dialogue start failed: ")+Error);}else S.ClipStarted=true;
+   if(!Played){FailTalk(TEXT("Dialogue start failed: ")+Error);}else{S.ClipStarted=true;if(!DialogueVoiced())OKMuteCrowdRuntimeSpeech(this,S.Target);}
   }else if(!OKCrowdRuntimeSpeechActive(this,S.Target)){
    EOKRuntimeSpeechState SpeechState;FString SpeechError;
    if(S.LineInterrupted){S.Voice=S.VoiceIds.Num();S.ClipStarted=false;FinishLine();}

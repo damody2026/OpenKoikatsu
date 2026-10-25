@@ -293,7 +293,8 @@ void AOKStreetSocialScene::SongPoll(){
 // She says a line in her own voice (ok-tts with her card), then the phase moves on when it has been heard. A line TTS
 // cannot make is skipped: the song never waits on it.
 void AOKStreetSocialScene::SongSay(const FString& Text){
- auto& S=*State;auto& G=S.Song;G.SayPending=true;G.SpeechStarted=false;const uint32 Epoch=G.Epoch;const int32 Girl=G.Girl;
+ auto& S=*State;auto& G=S.Song;G.SpeechStarted=false;G.SayPending=false;if(!DialogueVoiced())return; // shown as a caption only
+ G.SayPending=true;const uint32 Epoch=G.Epoch;const int32 Girl=G.Girl;
  auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("text"),Text);Body->SetStringField(TEXT("personality"),FString::FromInt(S.Manifest.Characters[Girl].PersonalityId));
  Body->SetNumberField(TEXT("age"),S.TtsAge);Body->SetStringField(TEXT("out_dir"),S.TtsCacheDir);if(const FString Card=OKStreetCardFor(S,Girl);!Card.IsEmpty())Body->SetStringField(TEXT("card"),Card);
  auto Request=OKVoicePickPost(S.TtsEndpoint/TEXT("synthesize"),Body,S.TtsTimeout);
@@ -532,7 +533,7 @@ void AOKStreetSocialScene::TickSong(double Now){
 
 // The song part of the right panel: the switch, what is being prepared, the offer and the lyrics while she sings.
 void AOKStreetSocialScene::BuildSongRow(TSharedRef<SVerticalBox> Box){
- auto& S=*State;auto& G=S.Song;if(G.Endpoint.IsEmpty()||!S.TtsEnabled)return;const TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+ auto& S=*State;auto& G=S.Song;if(G.Endpoint.IsEmpty())return;const TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  const FString Name=S.Manifest.Characters.IsValidIndex(G.Girl)?S.Manifest.Characters[G.Girl].Name:FString();
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(G.Enabled?OKT(TEXT("ui.song.enabled")):OKT(TEXT("ui.song.disabled"))))
   .OnClicked_Lambda([Weak](){if(Weak.IsValid()){auto& L=Weak->State->Song;L.Enabled=!L.Enabled;L.NextCheck=0;Weak->SongSave();Weak->RefreshUI();}return FReply::Handled();})];

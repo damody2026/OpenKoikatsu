@@ -644,7 +644,7 @@ private:
  FString FreeTalkDoing() const;
  FString FreeTalkNearby() const;
  void ToggleLanguage();
- void ToggleVoiceSource();void ToggleTtsBaseSize();
+ void ToggleVoiceSource();void ToggleTtsBaseSize();bool DialogueVoiced() const;
  void LoadVoiceSettings(const TSharedPtr<class FJsonObject>& Manifest);
  void SaveVoiceSettings();
  void ProbeTtsServer(int32 Attempt=0); FTimerHandle TtsProbeTimer;
