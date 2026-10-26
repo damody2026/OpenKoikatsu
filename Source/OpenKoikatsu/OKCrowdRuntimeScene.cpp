@@ -433,6 +433,8 @@ struct FScene : TSharedFromThis<FScene> {
  FString DisplayLUTPath;TStrongObjectPtr<UTexture2D> DisplayLUT;
  TWeakObjectPtr<AActor> Owner;TWeakObjectPtr<ACameraActor> Camera;TSharedPtr<FLateSourceDepth,ESPMode::ThreadSafe> LateDepthExtension;
  TArray<TUniquePtr<FEntry>> Entries;TArray<TStrongObjectPtr<UMaterialInterface>> Parents,OutlineParents;
+ // The heroine on the phone with him (OKSetCrowdRuntimeSpeechRemote): her voice is in his ear, not where she stands.
+ int32 RemoteSpeech=INDEX_NONE;
  // The lit tear parent (M_OKTearLit, Tools/prepare_face_materials.lua) when the material root has it: tears take the
  // engine's specular. Without it they keep their source glasses program.
  TStrongObjectPtr<UMaterialInterface> TearParent;
@@ -1004,6 +1006,9 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    if(A==DemoCharacter&&DemoSpeechStarted&&!DemoSpeechCancelled&&DemoCancelAfter>=0&&Now-E.SpeechRequestedAt>=DemoCancelAfter){FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);DemoSpeechCancelled=true;}
    if(E.SpeechJob.IsValid()&&E.SpeechEpoch!=0&&E.SpeechJob.IsReady()&&(E.PendingSpeechAction.IsEmpty()||E.ClipSources.Find(FindClip(E.PendingSpeechAction))>=2)){const uint64 SpeechEpoch=E.SpeechEpoch;auto Prepared=E.SpeechJob.Consume();if(E.SpeechEpoch!=SpeechEpoch){UE_LOG(LogTemp,Display,TEXT("Runtime voice dropped stale session"));}else if(!Prepared.Error.IsEmpty()){UE_LOG(LogTemp,Warning,TEXT("Runtime voice: %s"),*Prepared.Error);FString StopError;OKStopCrowdRuntimeSpeech(Owner.Get(),A,StopError);E.SpeechState=EOKRuntimeSpeechState::Failed;E.SpeechError=Prepared.Error;}else if(auto Device=Owner->GetWorld()->GetAudioDevice();Device.IsValid()){
     auto* Audio=E.SpeechAudio.Get();if(!Audio){Audio=NewObject<UAudioComponent>(Owner.Get());Owner->AddInstanceComponent(Audio);Audio->bAutoActivate=false;Audio->bAutoDestroy=false;Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->bAllowSpatialization=true;Audio->bOverrideAttenuation=true;Audio->AttenuationOverrides.bAttenuate=true;Audio->AttenuationOverrides.bSpatialize=true;Audio->AttenuationOverrides.FalloffDistance=2000;Audio->RegisterComponent();E.SpeechAudio=Audio;}
+    // On the phone: heard in full wherever she is (a call across the map was a whisper 20 m off). Set before each line.
+    {const bool Here=A!=RemoteSpeech;Audio->bAllowSpatialization=Here;Audio->AttenuationOverrides.bAttenuate=Here;Audio->AttenuationOverrides.bSpatialize=Here;
+     if(!Here)UE_LOG(LogTemp,Display,TEXT("Runtime voice: actor %d speaks on the phone (not spatialized)"),A);}
     QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_SpeechBegin);
     Audio->Stop();auto* Wave=NewObject<UKKRuntimeSpeechWave>(Owner.Get());if(Prepared.Stream)Wave->InitializeStream(Prepared.Stream,Device->GetSampleRate());else Wave->Initialize(Prepared.Pcm,Device->GetSampleRate());E.SpeechWave.Reset(Wave);E.LinePeak=0;E.LineMouth=0;E.EnvelopeRate=float(Device->GetSampleRate());E.LastSpeechFrames=0;E.SpeechProgressAt=Now;Audio->SetSound(Wave);
     if(!E.PendingSpeechAction.IsEmpty()){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_SpeechAction);FString ActionError;if(!OKPlayCrowdRuntimeAction(Owner.Get(),A,E.PendingSpeechAction,ActionError))UE_LOG(LogTemp,Warning,TEXT("Runtime speech action: %s"),*ActionError);}E.PendingSpeechAction.Reset();Audio->SetWorldLocation(E.Transform.TransformPosition(FVector(0,0,150)));Audio->SetPitchMultiplier(E.MouthEnvelope.Num()?1.f:E.VoicePitch);
@@ -1299,6 +1304,10 @@ bool OKSpeakCrowdRuntimeActionLine(AActor* Owner,int32 Character,const FString& 
   else if(E.StreamInstalled&&E.ClipSources.IsValidIndex(2)&&E.ClipSources[2]==Source)Linked=E.InstalledEpoch;
  }
  if(!OKSpeakCrowdRuntimeLine(Owner,Character,VoiceId,Error))return false;E.PendingSpeechAction=Action;E.SpeechPaired=!Action.IsEmpty();E.LinkedActionEpoch=Linked;return true;
+}
+void OKSetCrowdRuntimeSpeechRemote(AActor* Owner,int32 Character){
+ check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
+ if(State)State->RemoteSpeech=Character;
 }
 bool OKStopCrowdRuntimeSpeech(AActor* Owner,int32 Character,FString& Error){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;

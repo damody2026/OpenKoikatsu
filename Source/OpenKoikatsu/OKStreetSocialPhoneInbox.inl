@@ -297,6 +297,7 @@ void AOKStreetSocialScene::TickPhone(){
  // Typing ends with the phone put away (once her reply is in); a call ends when the live talk is switched off.
  if(S.RemoteMode==1&&S.App!=TEXT("phone")&&!S.FreeTalkBusy){S.RemoteMode=0;S.RemotePeer=INDEX_NONE;}
  if(S.RemoteMode==2&&!S.FreeTalkLive&&Now-S.CallStarted>2.0)PhoneHangUp();
+ OKSetCrowdRuntimeSpeechRemote(this,S.RemoteMode==2?S.RemotePeer:INDEX_NONE); // her voice on the line, wherever she is
  if(S.RingGirl!=INDEX_NONE&&Now>S.RingUntil){
   const int32 Girl=S.RingGirl;S.RingGirl=INDEX_NONE;
   HistoryAdd(Girl,TEXT("call_missed"),TEXT("her"),OKT(TEXT("ui.phone_inbox.call_no_answer")));

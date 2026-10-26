@@ -57,6 +57,8 @@ bool OKSpeakCrowdRuntimeStream(AActor* Owner,int32 Character,TSharedPtr<struct F
 bool OKSpeakCrowdRuntimeActionLine(AActor* Owner,int32 Character,const FString& VoiceId,const FString& ActionId,FString& Error);
 // Stop active audio and discard pending decode; mouth restores on the next tick.
 bool OKStopCrowdRuntimeSpeech(AActor* Owner,int32 Character,FString& Error);
+// The heroine he is on the phone with (INDEX_NONE: nobody): her lines play unattenuated, not from where she stands.
+void OKSetCrowdRuntimeSpeechRemote(AActor* Owner,int32 Character);
 // 0 restores authored eyes; 1 native closed eyelids; -1 resumes automatic blink.
 bool OKSetCrowdRuntimeBlink(AActor* Owner,int32 Character,float Closure,FString& Error);
 float OKCrowdRuntimeSpeechMouth(AActor* Owner,int32 Character);
