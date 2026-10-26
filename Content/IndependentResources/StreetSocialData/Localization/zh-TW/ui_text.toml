@@ -1277,6 +1277,7 @@ table_now_label = "桌上現在（誰的、還剩多少；沒有列出的就是�
 group_note_separator = "／"
 group_talk_note = "你們幾個人在一起聊了：{lines}"
 came_for_meeting = "（{name}是來赴約的，看到他正在跟你們聊天，等了一會兒就走過來加入了）"
+note_for_partner = "（遊戲給{name}的提醒，裡面的「你」是{name}，不是他，也不是其他女生）{note}"
 group_talk_note_his = "你們幾個人在一起聊了：他說：「{his}」／{lines}"
 pay_agreed_him = "他請客"
 pay_agreed_split = "各付各的"

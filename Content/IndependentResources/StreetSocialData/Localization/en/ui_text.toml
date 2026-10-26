@@ -1277,6 +1277,7 @@ table_now_label = "On the table now (whose, how much is left; anything not liste
 group_note_separator = " / "
 group_talk_note = "Talking together as a group: {lines}"
 came_for_meeting = "({name} came for her meeting with him; seeing him talking with you, she waited a while, then came over and joined)"
+note_for_partner = "(A note from the game for {name}: \"you\" in it means {name}, not him and not the other girls.) {note}"
 group_talk_note_his = "Talking together as a group: he said: \"{his}\" / {lines}"
 pay_agreed_him = "it is his treat"
 pay_agreed_split = "each pays their own"

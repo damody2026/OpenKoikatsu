@@ -1157,7 +1157,9 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
   S.MalePhase=1;S.MaleVoiceId.Reset();RequestTtsLine(Text,S.MaleTone,true);}
  if(His){++S.HisLines;{const int64 Now=OKStreetMindNow(S);if(S.SaidToHerWith!=Character||Now-S.SaidToHerAt>45){S.SaidToHer.Reset();S.SaidToHerWith=Character;}S.SaidToHerAt=Now;}S.SaidToHer.Add(Text);if(S.SaidToHer.Num()>4)S.SaidToHer.RemoveAt(0);}
  // Called by another girl's name: she sees his words and her own name, and notices it herself (no name lookup here).
- if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(Text);return;} // several of them: one reply for all (OKStreetSocialParty.inl)
+ // A note the game wrote for her (a till note, "you are on shift till three"): in the group prompt the model writes
+ // every girl's lines, so its "you" is named; Encore took Alice's shift for his.
+ if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
  // Said while the scene shows an earlier line (rolled back with the wheel): what came after it is undone first; then
  // the point this line can be rolled back to.
  // Only his own words roll back: a turn the game wrote for her (her "we're friends now" once the favour reached it, a
@@ -1308,7 +1310,7 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
    const FOKStreetPlanBlock* B=BlockNow(Character,int32(OKStreetMindNow(S)%1440));const FOKStreetPlace* P=B?OKStreetFindPlace(B->Place):nullptr;
    const FString Place=P?FString(P->Name):B?B->Place:FString();const FString At=FString::Printf(TEXT("%d:%02d"),Until/60,Until%60);
    // Named, not "you": in a group the model writes every girl's lines, and "you are on shift till three" became his.
-   S.TellHer.Add(OKMsg(TEXT("ui.invite.on_shift_tell_her"),{{TEXT("name"),S.Manifest.Characters[Character].Name},{TEXT("place"),Place},{TEXT("until"),At}}));
+   S.TellHer.Add(OKMsg(TEXT("ui.invite.on_shift_tell_her"),{{TEXT("name"),SpokenName(Character)},{TEXT("place"),Place},{TEXT("until"),At}}));
    S.Message=OKMsg(TEXT("ui.invite.on_shift_player"),{{TEXT("name"),S.Manifest.Characters[Character].Name},{TEXT("place"),Place},{TEXT("until"),At}});RefreshUI();
    UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s not started, actor=%d is on shift until %s"),*Action,Character,*At);}
   if(Handled){}
