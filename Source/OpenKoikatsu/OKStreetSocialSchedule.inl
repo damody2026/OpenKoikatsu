@@ -4,7 +4,8 @@
 bool AOKStreetSocialScene::BusyWithPlayer(int32 I) const{
  const auto& S=*State;
  return S.Target==I||S.Companion==I||S.OutingGirl==I||S.Pair.Partner==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I)||S.PrivateGirl==I
-  ||S.ApproachGirl==I||S.ArriveAfterLift.Contains(I)||S.SleepGirl==I||S.SleepGirl2==I||S.RestroomGirl==I||S.SoloGirl==I||S.PendingIntimacy==I||S.Party.Contains(I);
+  ||S.ApproachGirl==I||S.ArriveAfterLift.Contains(I)||S.SleepGirl==I||S.SleepGirl2==I||S.RestroomGirl==I||S.SoloGirl==I||S.PendingIntimacy==I||S.Party.Contains(I)
+  ||S.InspectSlot==I; // in the inspection room (OKStreetSocialInspect.inl)
 }
 
 // Where she stands in a place: an anchor that suits what she is doing, spread out so heroines do not overlap.

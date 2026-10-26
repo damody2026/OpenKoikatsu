@@ -38,6 +38,8 @@ fn tools() -> Value {
         t("game_look", "Point the camera (yaw degrees, pitch -50..15).", json!({"yaw": {"type": "number"}, "pitch": {"type": "number"}}), &["yaw"]),
         t("game_phone", "Type into the open phone thread and send.", json!({"text": {"type": "string"}}), &["text"]),
         t("game_screenshot", "A screenshot of the game window (with UI). scale 2..4: a high-resolution shot without UI.", json!({"scale": {"type": "number"}}), &[]),
+        t("game_inspect", "Heroine girl (1..10) alone in the inspection room, the camera round her, and a screenshot: yaw 0 in front of her, 90 her left side, 180 behind; pitch up/down degrees; distance cm (about 330 whole body, 100 face). Without girl: the one already there. off=true sends her back to her day.",
+          json!({"girl": {"type": "integer"}, "yaw": {"type": "number"}, "pitch": {"type": "number"}, "distance": {"type": "number"}, "scale": {"type": "number"}, "off": {"type": "boolean"}}), &[]),
         t("game_log", "The last lines of the running game's log, optionally only those containing a text.",
           json!({"lines": {"type": "integer"}, "contains": {"type": "string"}}), &[]),
         t("game_exec", "Run an engine console command in the game and return what it printed (stat unit, stat dumphitches, t.HitchFrameTimeThreshold 60, r.ScreenPercentage 100, ...).",
@@ -276,28 +278,24 @@ fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
             json_text(game.call("/look", Some(&body))?)
         }
         "game_phone" => json_text(game.call("/phone", Some(&json!({"text": a["text"]})))?),
-        "game_screenshot" => {
-            let r = game.call("/screenshot", Some(&json!({"scale": arg_f(a, "scale", 1.0)})))?;
-            let file = r["path"].as_str().context("no screenshot path")?.to_string();
-            // Written a frame or two later; wait until it is there and complete.
-            let start = Instant::now();
-            let mut last = 0;
-            loop {
-                let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
-                if size > 0 && size == last {
-                    break;
-                }
-                if start.elapsed() > Duration::from_secs(15) {
-                    bail!("screenshot not written: {file}");
-                }
-                last = size;
-                sleep(0.4);
+        "game_screenshot" => screenshot(game, arg_f(a, "scale", 1.0))?,
+        "game_inspect" => {
+            if a["off"] == true {
+                return Ok(json_text(game.call("/inspect", Some(&json!({"off": true})))?));
             }
-            let img = image::open(&file)?.to_rgb8();
-            let img = if img.width() > 1600 { image::imageops::resize(&img, 1600, img.height() * 1600 / img.width(), image::imageops::FilterType::Triangle) } else { img };
-            let mut jpeg = Vec::new();
-            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85).encode_image(&img)?;
-            json!({"content": [{"type": "text", "text": file}, {"type": "image", "data": base64::engine::general_purpose::STANDARD.encode(jpeg), "mimeType": "image/jpeg"}], "isError": false})
+            let mut body = json!({});
+            for k in ["girl", "yaw", "pitch", "distance"] {
+                if a[k].is_number() {
+                    body[k] = a[k].clone();
+                }
+            }
+            let r = game.call("/inspect", Some(&body))?;
+            if r["ok"] != true {
+                bail!("inspect: {}", s(&r["error"]));
+            }
+            // The camera and her place are set the next frames; a moment for the room and her pose to settle.
+            sleep(1.5);
+            screenshot(game, arg_f(a, "scale", 1.0))?
         }
         "game_log" => {
             let r = game.log(a["lines"].as_u64().unwrap_or(60) as usize, a["contains"].as_str())?;
@@ -320,6 +318,35 @@ fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
             json_text(game.call(&path, if a["body"].is_null() { None } else { Some(&a["body"]) })?)
         }
         other => bail!("unknown tool {other}"),
+    })
+}
+
+/// A screenshot of the game window as an MCP image (scale 2..4: high resolution, no UI).
+fn screenshot(game: &Game, scale: f64) -> Result<Value> {
+    Ok({
+        {
+            let r = game.call("/screenshot", Some(&json!({"scale": scale})))?;
+            let file = r["path"].as_str().context("no screenshot path")?.to_string();
+            // Written a frame or two later; wait until it is there and complete.
+            let start = Instant::now();
+            let mut last = 0;
+            loop {
+                let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+                if size > 0 && size == last {
+                    break;
+                }
+                if start.elapsed() > Duration::from_secs(15) {
+                    bail!("screenshot not written: {file}");
+                }
+                last = size;
+                sleep(0.4);
+            }
+            let img = image::open(&file)?.to_rgb8();
+            let img = if img.width() > 1600 { image::imageops::resize(&img, 1600, img.height() * 1600 / img.width(), image::imageops::FilterType::Triangle) } else { img };
+            let mut jpeg = Vec::new();
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85).encode_image(&img)?;
+            json!({"content": [{"type": "text", "text": file}, {"type": "image", "data": base64::engine::general_purpose::STANDARD.encode(jpeg), "mimeType": "image/jpeg"}], "isError": false})
+        }
     })
 }
 

@@ -38,6 +38,7 @@ Tools/ok-game-mcp（Rust）
 | `game_wait` | 讓時鐘走：幾秒、到某個遊戲時間（`until: "15:00"`）、或到同行結束（`outing: true`）。 |
 | `game_clock` / `game_look` / `game_phone` | 時鐘暫停／繼續、轉鏡頭、在開著的手機對話裡打字送出。 |
 | `game_screenshot` | 截圖（含 UI），直接回傳圖片；`scale` 2–4 是不含 UI 的高解析截圖。 |
+| `game_inspect` | 把女主（`girl` 1–10）帶進高空的檢視房間（只有灰地板），鏡頭繞著她：`yaw` 0 是正面、90／180 是側面／背面，`pitch` 俯仰、`distance` 遠近（60–900 cm），回傳截圖；`off: true` 讓她回到原本的行程。她在房間裡時行程暫停。啟動時直接進：`game_launch {options: ["-Inspect", "N"]}`，或 `StreetSocial.cmd -Inspect N`（←→ 轉圈、↑↓ 俯仰、滾輪遠近、PageUp／PageDown 換人、Home 重置、End 離開）。 |
 | `game_log` | 目前遊戲日誌的最後幾行，可只取含某段文字的行。 |
 | `game_exec` | 引擎主控台指令，回傳輸出：`stat unit`、`stat dumphitches`、`t.HitchFrameTimeThreshold 60` 等（控制通道 `/exec`）。 |
 | `game_trace_start` / `game_trace_stop` | 錄 Unreal Insights trace 到 `Saved/Profiling/<名稱>.utrace`（`Trace.File`／`Trace.Stop`），預設頻道 `default,cpu,gpu,frame,bookmark,loadtime`。 |
