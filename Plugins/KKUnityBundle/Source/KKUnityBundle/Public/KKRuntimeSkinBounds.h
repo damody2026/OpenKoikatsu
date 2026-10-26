@@ -55,6 +55,9 @@ struct FKKRuntimeSkinBounds
  TMap<const UMorphTarget*,TArray<FBox3f>> Morphs;
  int32 VertexCount=0, MorphCount=-1;
  const void* WeightBuffer=nullptr;
+ // Component-space box of the last game-thread result. The end-of-frame transform update may ask on a worker,
+ // where the engine fallback is the unposed bind box: a posed follower (the 1-on-1 face) was culled with it.
+ FBox LastLocal=FBox(ForceInit);
  bool Calculate(const USkinnedMeshComponent& Component,const FTransform& LocalToWorld,FBoxSphereBounds& Result);
 };
 
@@ -65,6 +68,7 @@ class KKUNITYBUNDLE_API UKKRuntimePoseableMeshComponent : public UPoseableMeshCo
 public:
  virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
  virtual void FinalizeBoneTransform() override;
+ virtual void UpdateFollowerComponent() override;
  virtual const TSharedPtr<FSkelMeshRefPoseOverride>& GetRefPoseOverride() const override;
  bool TryUseExactLeader(UKKRuntimePoseableMeshComponent* Leader);
  void VerifyExactLeader(TArrayView<const FTransform> Pose) const;

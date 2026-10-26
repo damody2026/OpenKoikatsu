@@ -81,8 +81,13 @@ bool FKKRuntimeSkinBounds::Calculate(const USkinnedMeshComponent& Component,cons
  // Engine end-of-frame bounds updates may run on workers. This cache owns
  // mutable palette publication state; the engine's conservative bounds path
  // remains the worker-safe fallback rather than mutating that state there.
- if(!IsInGameThread())return false;
  const auto* Mesh=Cast<USkeletalMesh>(Component.GetSkinnedAsset());
+ if(!IsInGameThread()){
+  // The last posed result (at most a frame old), widened a little for the motion since; never the bind box.
+  if(!LastLocal.IsValid||Asset.Get()!=Mesh)return false;
+  Result=FBoxSphereBounds(LastLocal.ExpandBy(5.)).TransformBy(LocalToWorld);
+  Result.BoxExtent*=Component.BoundsScale;Result.SphereRadius*=Component.BoundsScale;return true;
+ }
  if(!Mesh||!Mesh->GetResourceForRendering()||Mesh->GetResourceForRendering()->LODRenderData.IsEmpty())return false;
  const auto& LOD=Mesh->GetResourceForRendering()->LODRenderData[0];
  const auto* Weights=Component.GetSkinWeightBuffer(0);
@@ -135,7 +140,8 @@ bool FKKRuntimeSkinBounds::Calculate(const USkinnedMeshComponent& Component,cons
  }
  if(!Posed.IsValid||Posed.Min.ContainsNaN()||Posed.Max.ContainsNaN())return false;
  // Small allowance for render-side quantization and outline extrusion.
- Result=FBoxSphereBounds(FBox(FVector(Posed.Min)-FVector(1),FVector(Posed.Max)+FVector(1))).TransformBy(LocalToWorld);
+ LastLocal=FBox(FVector(Posed.Min)-FVector(1),FVector(Posed.Max)+FVector(1));
+ Result=FBoxSphereBounds(LastLocal).TransformBy(LocalToWorld);
  Result.BoxExtent*=Component.BoundsScale;Result.SphereRadius*=Component.BoundsScale;
  return true;
 }
@@ -143,6 +149,12 @@ bool FKKRuntimeSkinBounds::Calculate(const USkinnedMeshComponent& Component,cons
 FBoxSphereBounds UKKRuntimePoseableMeshComponent::CalcBounds(const FTransform& LocalToWorld) const
 {
  FBoxSphereBounds Result;return RuntimeBounds.Calculate(*this,LocalToWorld,Result)?Result:Super::CalcBounds(LocalToWorld);
+}
+void UKKRuntimePoseableMeshComponent::UpdateFollowerComponent()
+{
+ Super::UpdateFollowerComponent();
+ // As UKKRuntimeSkeletalMeshComponent: posed bounds from the game thread for the worker-side transform update.
+ if(IsInGameThread()){FBoxSphereBounds Posed;RuntimeBounds.Calculate(*this,GetComponentTransform(),Posed);}
 }
 
 void FKKRuntimeAffinePalette::ClearDirect(){
@@ -347,6 +359,8 @@ const TSharedPtr<FSkelMeshRefPoseOverride>& UKKRuntimeSkeletalMeshComponent::Get
 void UKKRuntimeSkeletalMeshComponent::UpdateFollowerComponent()
 {
  Super::UpdateFollowerComponent();
+ // Refresh the posed bounds here on the game thread; the end-of-frame transform update reuses them on workers.
+ if(IsInGameThread()){FBoxSphereBounds Posed;RuntimeBounds.Calculate(*this,GetComponentTransform(),Posed);}
  // USkeletalMeshComponent clears a follower's morph targets and appends them back only under a skeletal mesh leader;
  // under the poseable body leader the face parts' expressions (SetMorphTarget) would vanish each time the leader
  // refreshes its followers. Append them here with the same engine semantics.

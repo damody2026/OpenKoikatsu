@@ -177,6 +177,8 @@ static TAutoConsoleVariable<int32> CVarOkAnimationSourceConversion(
 #include "Engine/PostProcessVolume.h"
 #include "GameFramework/HUD.h"
 #include "EngineUtils.h"
+#include "Animation/MorphTarget.h"
+#include "Rendering/SkeletalMeshRenderData.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
@@ -8613,6 +8615,28 @@ static FAutoConsoleCommandWithWorldAndArgs GOKPartMorph(
             if(Args.Num()>3 && It->GetName()!=Args[3]) continue;
             const bool Applied=It->SetPartMorphWeight(PartIndex,FName(*Args[1]),Percent);
             UE_LOG(LogTemp,Display,TEXT("ok.SetPartMorph actor=%s applied=%d"),*It->GetName(),Applied);return;
+        }
+    }));
+
+// Each face renderer's morph targets as built (deltas, largest offset, highest vertex index against the mesh) and the
+// weight it has now, to tell bad morph data from a bad weight.
+static FAutoConsoleCommandWithWorld GOKDumpFaceMorphs(
+    TEXT("ok.DumpFaceMorphs"),TEXT("Log every preview face renderer's morph targets and current weights"),
+    FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World) {
+        if(!World) return;
+        for(TActorIterator<AKKPreviewActor> It(World);It;++It)for(const auto& Slot:It->MouthSlots){
+            for(USkeletalMeshComponent* Comp:{Slot.Comp,Slot.OutlineComp}){
+                const USkeletalMesh* Mesh=Comp?Comp->GetSkeletalMeshAsset():nullptr;if(!Mesh)continue;
+                const auto* Render=Mesh->GetResourceForRendering();
+                const int32 Verts=Render&&Render->LODRenderData.Num()?int32(Render->LODRenderData[0].GetNumVertices()):-1;
+                UE_LOG(LogTemp,Display,TEXT("ok.DumpFaceMorphs actor=%s part=%d comp=%s verts=%d morphs=%d visible=%d"),*It->GetName(),Slot.SessionPartIndex,*Comp->GetName(),Verts,Mesh->GetMorphTargets().Num(),Comp->IsVisible());
+                for(const UMorphTarget* Target:Mesh->GetMorphTargets()){
+                    if(!Target||Target->GetMorphLODModels().IsEmpty())continue;
+                    const auto& LOD=Target->GetMorphLODModels()[0];float MaxDelta=0;uint32 MaxIndex=0;
+                    for(const auto& D:LOD.Vertices){MaxDelta=FMath::Max(MaxDelta,D.PositionDelta.Size());MaxIndex=FMath::Max(MaxIndex,D.SourceIdx);}
+                    UE_LOG(LogTemp,Display,TEXT("  morph %s deltas=%d max_cm=%.3f max_index=%u base=%d weight=%.3f baseline=%.1f"),*Target->GetName(),LOD.Vertices.Num(),MaxDelta,MaxIndex,LOD.NumBaseMeshVerts,Comp->GetMorphTarget(Target->GetFName()),Slot.BaselineWeights.FindRef(Target->GetFName()));
+                }
+            }
         }
     }));
 
