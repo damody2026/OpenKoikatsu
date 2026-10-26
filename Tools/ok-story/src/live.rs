@@ -84,6 +84,10 @@ pub struct LiveState {
     /// A first-person shot's way out while its probes are out: the usual shot of the line, taken when something stands
     /// between his eyes and her (a table lamp, a shelf) and one of its views is clear.
     pub pov_fallback: Option<CameraSpec>,
+    /// First person: how high her hips stood above her feet when the shot was framed, and since when her face has
+    /// been out of the picture (negative: in it). A bow drops her face but not her hips: held a moment, she comes back up.
+    pub framed_hips: f64,
+    pub out_since: f64,
 }
 
 pub struct Live {
@@ -225,9 +229,19 @@ impl Live {
                 // Her face leaving the picture counts too: she sat down at the table while he stood (his eye did not
                 // move) and her face sank behind the dialog box; she crouched and stood up again. While it stays in view
                 // (a nod, a gesture) the view holds still.
-                let out_of_view = self.facts.actors.get(&on).is_some_and(|a| !self.in_view(a.head()));
+                let her = self.facts.actors.get(&on);
+                let out_of_view = her.is_some_and(|a| !self.in_view(a.head()));
+                if !out_of_view {
+                    self.st.out_since = -1.0;
+                } else if self.st.out_since < 0.0 {
+                    self.st.out_since = self.st.time;
+                }
+                // A bow (her face down, her hips where they stood) is held up to 3 s: the view followed her face down to
+                // the top of her head and back. Sitting or crouching lowers her hips: framed again at once.
+                let bent = her.and_then(hips_height).is_some_and(|h| self.st.framed_hips > 0.0 && h > 0.8 * self.st.framed_hips);
+                let held = out_of_view && bent && self.st.time - self.st.out_since < 3.0;
                 // Framed again the usual way (its line-of-sight check included), not just moved to the new eye.
-                if moved > 40.0 || out_of_view {
+                if moved > 40.0 || (out_of_view && !held) {
                     self.frame_shot(moved > 150.0);
                 }
             }
@@ -258,6 +272,8 @@ impl Live {
             self.st.framed = true;
             self.st.framed_at = pose.pos;
             self.st.probe = None;
+            self.st.framed_hips = self.facts.actors.get(&on).and_then(hips_height).unwrap_or(0.0);
+            self.st.out_since = -1.0;
             let Some(face) = self.facts.actors.get(&on).map(|a| a.head()) else { return };
             let usual = self.usual_shot(if speaker.is_empty() { &on } else { &speaker });
             let mut candidates = vec![Candidate { pose, from: face }];
@@ -512,6 +528,11 @@ impl Live {
 }
 
 /// Distance from `p` to the segment `a`–`b`.
+/// Her hips above her feet (cm); none before the hips bone is known.
+fn hips_height(a: &ActorFacts) -> Option<f64> {
+    a.bone("hips").map(|h| h.pos[2] - a.root.pos[2])
+}
+
 fn point_segment(p: math::V3, a: math::V3, b: math::V3) -> f64 {
     let ab = math::sub(b, a);
     let t = (math::dot(math::sub(p, a), ab) / math::dot(ab, ab).max(1e-9)).clamp(0.0, 1.0);
@@ -651,6 +672,37 @@ mod tests {
         let up = run(&mut l, 0.0);
         assert!(l.in_view(l.facts.actors["her1"].head()), "her face back in the picture: {:?}", up);
         assert!(up[2] > crouched[2] + 0.2, "up again: {:?} {:?}", crouched, up);
+    }
+
+    /// She bows (her face drops toward him, her hips stay): the view holds instead of following her face down to the
+    /// top of her head; bent over past 3 s, it goes to her after all.
+    #[test]
+    fn first_person_holds_through_a_bow() {
+        let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+        l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "對不起。".into(), voiced: false });
+        let bowed = || {
+            let mut f = facts(0.016, -1.0, 0);
+            let her = f.actors.get_mut("her1").unwrap();
+            her.bones.get_mut("head").unwrap().pos = [95.0, 0.0, 95.0];
+            her.bones.get_mut("spine03").unwrap().pos = [100.0, 0.0, 110.0];
+            f
+        };
+        for _ in 0..300 {
+            l.tick(facts(0.016, -1.0, 0));
+        }
+        let standing = l.st.rig.current.rot.forward();
+        assert!(!l.in_view(bowed().actors["her1"].head()), "the bow takes her face out of the picture");
+        for _ in 0..120 {
+            l.tick(bowed()); // 1.9 s
+        }
+        let during = l.st.rig.current.rot.forward();
+        assert!((during[2] - standing[2]).abs() < 1e-6, "held through the bow: {:?} {:?}", standing, during);
+        for _ in 0..300 {
+            l.tick(bowed());
+        }
+        let long = l.st.rig.current.rot.forward();
+        assert!(long[2] < standing[2] - 0.2, "bent over longer: down to her: {:?} {:?}", standing, long);
     }
 
     #[test]
