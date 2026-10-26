@@ -417,9 +417,11 @@ void AOKStreetSocialScene::TickFarewell(){
  const bool Queued=S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num();
  // Her goodbye is on screen already: lines the voice server has not delivered yet (a busy GPU, 15 s timeouts per line,
  // and Yuuka stood there 50 s after "take care") do not hold the parting past the time it takes to read them. A line
- // being spoken is let finish.
+ // being spoken is let finish, and so are the parts that follow it while they keep coming (gaps under 3 s): the voice
+ // that started 7.8 s late had her walk off after its first part, three parts of her goodbye unsaid.
+ if(Voicing||S.FarewellVoiceAt<S.FarewellAt)S.FarewellVoiceAt=Voicing?Wall:S.FarewellAt-1000.0;
  int32 Chars=0;for(const FString& Line:S.FreeTalkSpeechLines)Chars+=Line.Len();
- const bool VoiceLate=Queued&&!Voicing&&Wall>S.FarewellAt+4.0+0.2*Chars;
+ const bool VoiceLate=Queued&&!Voicing&&Wall>S.FarewellAt+4.0+0.2*Chars&&Wall>S.FarewellVoiceAt+3.0;
  if(Wall<S.FarewellAt+1.5||Voicing||(Queued&&!VoiceLate)||S.FreeTalkBusy)return;
  if(VoiceLate)UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d parts without the voice of %d line(s) not delivered after %.1f s"),G,S.FreeTalkSpeechLines.Num()-S.FreeTalkSpeechPlayed,Wall-S.FarewellAt);
  FreeTalkLeave(OKT(TEXT("ui.live_talk.parted_she_left")));
