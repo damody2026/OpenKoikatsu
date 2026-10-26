@@ -75,6 +75,9 @@ pub struct LiveState {
     /// with no new line left the view where they had stood, nearly four metres off; when they have moved on, the shot
     /// is framed again.
     pub framed_at: math::V3,
+    /// First person: where her face was when the shot was framed. She sat down at the table while he stood (his eye did
+    /// not move), and the view kept aiming where her head had been: her face sank behind the dialog box.
+    pub framed_aim: math::V3,
     pub portrait: Portrait,
     pub probe: Option<ProbeJob>,
     pub next_id: u64,
@@ -204,10 +207,14 @@ impl Live {
         let Some(spec) = self.st.shot.clone() else { return };
         if spec.shot.as_deref() == Some("pov") {
             let partner = self.st.people.first().cloned().unwrap_or_default();
-            if let Some(pose) = spec.on.as_deref().and_then(|on| self.pov(on)).or_else(|| self.pov(&partner)) {
+            let on = spec.on.clone().filter(|on| self.pov(on).is_some()).unwrap_or(partner);
+            if let Some(pose) = self.pov(&on) {
                 let moved = math::len(math::sub(pose.pos, self.st.framed_at));
+                // Her face moving counts too (sitting down, standing up, moving to a seat): 30 cm turns the view to her
+                // again, smoothly (a nod or a gesture moves it less).
+                let her_moved = self.facts.actors.get(&on).map(|a| math::len(math::sub(a.head(), self.st.framed_aim))).unwrap_or(0.0);
                 // Framed again the usual way (its line-of-sight check included), not just moved to the new eye.
-                if moved > 40.0 {
+                if moved > 40.0 || her_moved > 30.0 {
                     self.frame_shot(moved > 150.0);
                 }
             }
@@ -239,6 +246,7 @@ impl Live {
             self.st.framed_at = pose.pos;
             self.st.probe = None;
             let Some(face) = self.facts.actors.get(&on).map(|a| a.head()) else { return };
+            self.st.framed_aim = face;
             let usual = self.usual_shot(if speaker.is_empty() { &on } else { &speaker });
             let mut candidates = vec![Candidate { pose, from: face }];
             candidates.extend(self.candidates(&usual, &speaker));
@@ -585,6 +593,27 @@ mod tests {
             let f = l.st.rig.current.rot.forward();
             assert!(f[0] > 0.9, "looks at her: {:?}", f);
         }
+    }
+
+    /// She sits down at the table while he stands (his eye stays where it was): the view turns down to her face, not on
+    /// at where her head had been.
+    #[test]
+    fn first_person_follows_her_when_she_sits_down() {
+        let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+        l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "坐吧。".into(), voiced: false });
+        for _ in 0..300 {
+            l.tick(facts(0.016, -1.0, 0));
+        }
+        let standing = l.st.rig.current.rot.forward();
+        for _ in 0..300 {
+            let mut f = facts(0.016, -1.0, 0);
+            f.actors.insert("her1".into(), actor([120.0, 0.0, -45.0], 90.0)); // seated: her head 45 cm lower
+            l.tick(f);
+        }
+        let seated = l.st.rig.current.rot.forward();
+        // Down to her seated face (a point 96 cm up, 120 cm ahead of his eye at 156): about -0.45, not the -0.12 of before.
+        assert!(standing[2] > -0.2 && seated[2] < -0.35, "standing {:?} seated {:?}", standing, seated);
     }
 
     #[test]
