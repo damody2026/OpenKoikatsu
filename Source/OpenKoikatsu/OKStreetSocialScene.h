@@ -663,6 +663,11 @@ private:
  FString MaleToneLabel() const;
  // Her song event (OKStreetSocialSong.inl).
  void TickSong(double Now);
+ // The inspection room (OKStreetSocialInspect.inl): one heroine alone in an empty room in the sky, the camera turning round
+ // her (StreetSocial.cmd -Inspect, the control channel's /inspect).
+ bool BeginInspect(int32 Slot,FString& Error);
+ void EndInspect();
+ void TickInspect(float Dt,class APlayerController* PC,bool bFocused);
  void BuildSongRow(TSharedRef<class SVerticalBox> Box);
  TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
  bool SongOwnsVoice(int32 Character) const;bool SongAtEase(int32 Girl);bool SongIsSinging() const;int32 SongLatestMemory(int32 Girl) const;float StepSongStage(float Dt);void SongListen();

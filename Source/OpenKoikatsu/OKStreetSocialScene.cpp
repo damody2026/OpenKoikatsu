@@ -475,6 +475,10 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  FString PlayerCardName,PlayerNameDraft,MaleTone=TEXT("m0"),MaleVoiceId,MaleLineOverride,LastBranchId,TtsVoiceInfo;bool MaleTtsPending=false,MaleAddressed=false;int32 MalePhase=0,TtsSmokeTopics=0;double MaleRequestedAt=0;uint32 MaleSerial=0;TArray<TSharedPtr<FString>> MaleToneOptions;
  // Her own voice (OKStreetSocialVoicePick.inl): candidates from ok-tts, whether her card holds a voice.
  FOKSongState Song; // her song event (OKStreetSocialSong.inl)
+ // The inspection room (OKStreetSocialInspect.inl): who is in it, where he stood before, its floor, the view round her,
+ // and the heroine asked for on the command line (-StreetSocialInspect=N) once everyone is loaded.
+ int32 InspectSlot=INDEX_NONE,InspectAsked=INDEX_NONE;FVector InspectMaleBack=FVector::ZeroVector,InspectHerBack=FVector::ZeroVector;TArray<TWeakObjectPtr<AActor>> InspectRoom;
+ float InspectYaw=0.f,InspectPitch=8.f,InspectDistance=420.f;
  struct FVoiceCandidate {FString Tag,Reference,Preview;};TArray<FVoiceCandidate> VoicePickCandidates;bool VoicePickOpen=false,VoicePickBusy=false,CardHasVoice=false;FString VoicePickDescription,VoicePickNotice,TtsVoiceInstruct;int32 VoicePickTarget=INDEX_NONE;
  FOKStreetStore Store;
  TArray<FOKStreetAgentSim> Agents;
@@ -2558,6 +2562,7 @@ static int64 OKStreetMindNow(const FOKStreetSceneState& S);
 #include "OKStreetSocialLife.inl"
 #include "OKStreetSocialMind.inl"
 #include "OKStreetSocialSong.inl"
+#include "OKStreetSocialInspect.inl"
 #include "OKStreetSocialEconomy.inl"
 #include "OKStreetSocialInvite.inl"
 #include "OKStreetSocialAppointments.inl"
@@ -2654,6 +2659,9 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   const FRotator PairFacing(0,P.Yaw,0);
   // Reading on foot, they stand face to face.
   S.Rotations[P.Partner]=PairFacing+FRotator(0,(P.Conversation()||P.Splash||P.Read)?180.f:0.f,0);
+  // What the minute to get ready is still waiting on, every 5 s (a park bench never got her seated clip: R3-220).
+  {static double LastWait=0;if(Now-LastWait>5.0){LastWait=Now;UE_LOG(LogTemp,Display,TEXT("Street pair: getting ready %.0fs: turn %.1f, male %s ready=%d pending=%d preparing=%d (want %s), female %s ready=%d pending=%d preparing=%d (want %s)"),Now-P.RequestedAt,
+   FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[P.Partner].Yaw,S.Rotations[P.Partner].Yaw)),*A.ClipId,A.Ready?1:0,A.Pending?1:0,A.Preparing?1:0,*P.MaleClip,*B.ClipId,B.Ready?1:0,B.Pending?1:0,B.Preparing?1:0,*P.FemaleClip);}}
   if(FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[P.Partner].Yaw,S.Rotations[P.Partner].Yaw))>.1f)return;
   if(!A.Ready||!B.Ready||A.Pending||B.Pending||A.Preparing||B.Preparing||A.ClipId!=P.MaleClip||B.ClipId!=P.FemaleClip)return;
   // Original TwoShot starts both actors at the same world anchor. Their own curves carry the offset.
@@ -3501,6 +3509,8 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(Fault){const int32 Commits=S.Transactions.Num();const bool Synthetic=S.InjectActiveFault;const int32 FaultSlot=S.InjectFaultSlot;EndTalk();++S.ActiveActorInterrupts;if(S.Transactions.Num()!=Commits)++S.ActiveActorInterruptCommits;S.InjectActiveFault=false;if(Synthetic){S.InterruptPhase=2;if(S.Agents.IsValidIndex(FaultSlot-1))S.Agents[FaultSlot-1].Held=true;}S.InterruptEndedThisTick=true;}}
  else{for(int32 I=0;I<Cast;++I){FOKStreetPresenceSample Sample;Sample.Queried=Queried[I];if(Sample.Queried){Sample.Ready=Statuses[I].Ready;Sample.Visible=Statuses[I].Visible;Sample.HasError=!Statuses[I].Error.IsEmpty();}OKStreetActiveActorShouldEnd(Sample,S.Presence[I]);}}
  if(Ready&&!S.AllReady){S.AllReady=true;S.ReadyAt=Now;S.Message=OKT(TEXT("ui.scene.all_ready_hint"));RefreshUI();
+  // StreetSocial.cmd -Inspect [N]: straight into the inspection room with heroine N (1 when none is named).
+  {int32 Asked=0;if(FParse::Value(FCommandLine::Get(),TEXT("StreetSocialInspect="),Asked)){FString Error;if(!BeginInspect(FMath::Max(1,Asked),Error))UE_LOG(LogTemp,Warning,TEXT("Street inspect: %s"),*Error);}}
   // -StreetSocialNavProbe: which big-map places the auto navigation can reach from the spawn.
   if(FParse::Param(FCommandLine::Get(),TEXT("StreetSocialNavProbe"))){int32 Reached=0;for(const auto& Place:OKStreetPlaces()){const auto Path=PlaceRoute(S.Male,Place.Door);Reached+=!Path.IsEmpty();UE_LOG(LogTemp,Display,TEXT("Street nav probe: %s door=%s points=%d"),Place.Name,*Place.Door.ToCompactString(),Path.Num());}UE_LOG(LogTemp,Display,TEXT("Street nav probe: %d/%d places reachable"),Reached,OKStreetPlaces().Num());}}
  if((S.SelfTest||FParse::Param(FCommandLine::Get(),TEXT("StreetSocialProfile")))&&S.AllReady&&Now-S.ReadyAt>2&&S.Frame.Num()<10000){if(S.LastWall>0){S.Frame.Add((Now-S.LastWall)*1000);S.Game.Add(FPlatformTime::ToMilliseconds(GGameThreadTime));S.Render.Add(FPlatformTime::ToMilliseconds(GRenderThreadTime));S.Rhi.Add(FPlatformTime::ToMilliseconds(GRHIThreadTime));S.Gpu.Add(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));}S.LastWall=Now;}
@@ -3598,6 +3608,9 @@ void AOKStreetSocialScene::Tick(float Dt){
      QueueHeroineWalk(Agent.Slot,Agent.Position,Stop,true,false,FVector::ZeroVector,Agent.Position,S.Rotations[Agent.Slot].Yaw,TEXT("street"));
      UE_LOG(LogTemp,Display,TEXT("Street walk: actor %d held up at %s, round to her next stop %s"),Agent.Slot,*Agent.Position.ToCompactString(),*Stop.ToCompactString());}}}
   else S.StreetBlockedFor.Remove(Agent.Slot);
+  // In the inspection room nothing of her walk moves or turns her: a walk queued just before took her a step each frame
+  // and the room pulled her back, so she turned this way and that.
+  if(Agent.Slot==S.InspectSlot){Agent.Position=Before;S.Rotations[Agent.Slot]=S.RenderedRotations[Agent.Slot]=OKInspectFacing;}
   if(Agent.Position!=Before){S.Rotations[Agent.Slot]=OKStreetFacingMovement(Agent.Position-Before,S.Rotations[Agent.Slot]);}float Walk=Agent.Slot==S.Companion?S.CompanionWalk:(Agent.Held||Agent.Mode!=EOKStreetMove::Walking||Agent.Position==Before?0.f:TravelSpeed/OKStreetWalkSpeed);Walk=NpcIdleTick(Agent,Walk,Now);const FRotator PreviousFacing=S.RenderedRotations[Agent.Slot];S.RenderedRotations[Agent.Slot]=OKStreetLimitFemaleFacing(PreviousFacing,S.Rotations[Agent.Slot],Dt);const float Turn=FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousFacing.Yaw,S.RenderedRotations[Agent.Slot].Yaw));if(Dt>0){S.MaxFemaleTurnRate=FMath::Max(S.MaxFemaleTurnRate,Turn/Dt);++S.TurnSamples;}
   OKSetCrowdRuntimeLocomotionState(this,Agent.Slot,S.Target==Agent.Slot,Running&&Walk>0,Error);
  // A schedule commute moves her in coarse steps: show her walking there smoothly instead of sliding in her idle.
@@ -3694,6 +3707,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(S.Camera.IsValid()&&SceneTime()<S.PhotoViewUntil)S.Camera->SetActorLocationAndRotation(S.PhotoViewLoc,S.PhotoViewRot); // a photo being taken
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickGalgame);TickGalgame(Dt);} // conversations as galgame scenes: dialog box, portrait, a shot per line (OKStreetSocialGalgame.inl)
  if(GControlCamera.Active&&S.Camera.IsValid())OKApplyControlCamera(this,S.Camera.Get()); // the control channel's pinned camera wins over the scene's shot (a look at a seated group mid-talk)
+ if(S.InspectSlot!=INDEX_NONE)TickInspect(Dt,PC,Focused); // the inspection room's camera wins over everything
  const bool AppEscape=Focused&&!S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::Escape);if(AppEscape)CloseApp();
  if(Focused&&S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::M)&&S.PrivateGirl==INDEX_NONE)ToggleBigMap();
  if(Focused&&!AppEscape&&OKKeyPressed(PC,EKeys::Escape)){if(S.BigMapOpen)ToggleBigMap();else if(S.SleepNap&&S.SleepPhase==2)S.SleepWake=true;else if(S.OutingGirl!=INDEX_NONE)CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else if(S.PrivateGirl!=INDEX_NONE)FinishPrivate();else if((S.NavGirl!=INDEX_NONE||S.NavPointActive)&&S.Target==INDEX_NONE)StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));else if(S.Pair.Partner!=INDEX_NONE)FinishPhoto();else if(S.Companion!=INDEX_NONE)FarewellCompanion();else if(S.Facility!=INDEX_NONE)FinishFacility();else EndTalk();}

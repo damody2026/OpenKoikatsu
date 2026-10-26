@@ -8,6 +8,8 @@
 --     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
 --     [-Editor]  (development: runs the map in the built editor with -game instead of a staged build; no cook needed)
 --     [-Sandbox NAME [-PortBase N] [-RulesDll DLL]] [-Exec "CMD,CMD"] [-Trace [CHANNELS]] [-GameArgs "-SWITCH ..."]
+--     [-Inspect [N]]  (straight into the inspection room with heroine N: her alone in an empty room, the camera round her
+--       by the arrow keys, wheel nearer/farther, PageUp/PageDown another heroine, End back to the street)
 -- -Sandbox runs a second game beside one already playing from this checkout without touching it: its own ports
 -- (-PortBase, default 48060: TTS N, ASR N+1, control N+10), its own save, voice settings and free-talk logs in
 -- Saved/StreetSocial/Sandbox/NAME/ (copied from the main save the first time), voice servers started for it only (the
@@ -36,7 +38,12 @@ local function parse(argv)
     if not name then name = raw:match("^%-%-?([%w%-]+)$") end
     if not name then error("unexpected argument: " .. raw, 0) end
     local key = name:gsub("%-", ""):lower()
-    if SWITCHES[key] then o[key] = true
+    -- -Inspect [N]: straight into the inspection room with heroine N (1 when no number follows).
+    if key == "inspect" then
+      local n = inline or (argv[i + 1] and argv[i + 1]:match("^%d+$"))
+      if n and not inline then i = i + 1 end
+      o.inspect = tonumber(n) or 1
+    elseif SWITCHES[key] then o[key] = true
     elseif VALUES[key] then
       local v = inline
       if v == nil then i = i + 1; v = argv[i] end
@@ -441,6 +448,7 @@ local function main()
   if o.selftest then for _, a in ipairs({ "-StreetSocialSelfTest", "-unattended", "-RenderOffscreen" }) do game[#game + 1] = a end end
   -- Development control channel (http://127.0.0.1:<port>: state, say, click, key, navigate, screenshot); never on by default.
   if o.control then game[#game + 1] = "-StreetSocialControl"; game[#game + 1] = "-StreetSocialControlPort=" .. control_port end
+  if o.inspect then game[#game + 1] = "-StreetSocialInspect=" .. o.inspect end
   if o.clock then game[#game + 1] = "-StreetSocialClock=" .. o.clock end
   say("StreetSocial: one male + up to ten heroines. WASD move, Shift run, mouse camera, Ctrl/middle UI cursor, wheel zoom, E talk, 1/2/3 topics, Esc cancel, L Chinese/Japanese voices, V built-in/TTS voice, N skip to 07:00 next morning; friendship/confession results save automatically after dialogue; F9 CPU/GPU; conversation buttons: shared walk/explore, photo (P save), seated talk, drinks, splash either direction; Esc ends activity. Reading uses a hand-held book.")
   if o.control then say(("Control channel: http://127.0.0.1:%d (Tools/ok-game-mcp finds it through local-instance.json)"):format(control_port)) end

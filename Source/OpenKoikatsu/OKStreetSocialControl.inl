@@ -411,6 +411,18 @@ void AOKStreetSocialScene::StartControlServer(){
  });
 
  // {actor:1..10, bone, yaw, pitch, distance, fov, ortho_width} pins the camera (see GControlCamera); {off:true} releases it.
+ // /inspect {girl:1..10, yaw, pitch, distance}: that heroine alone in the inspection room, the camera round her (yaw 0 in
+ // front of her, 90 her left side); {off:true} sends her back to her day (OKStreetSocialInspect.inl).
+ Bind(TEXT("/inspect"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
+  auto& S=*State;auto B=OKControlBody(Req);bool Off=false;B->TryGetBoolField(TEXT("off"),Off);
+  if(Off){EndInspect();OKControlReply(Done,OKControlResult(true));return;}
+  double Girl=S.InspectSlot!=INDEX_NONE?S.InspectSlot:1;B->TryGetNumberField(TEXT("girl"),Girl);FString Error;
+  if(int32(Girl)!=S.InspectSlot&&!BeginInspect(int32(Girl),Error)){OKControlReply(Done,OKControlResult(false,Error));return;}
+  double V=0;if(B->TryGetNumberField(TEXT("yaw"),V))S.InspectYaw=float(V);if(B->TryGetNumberField(TEXT("pitch"),V))S.InspectPitch=float(V);if(B->TryGetNumberField(TEXT("distance"),V))S.InspectDistance=float(V);
+  auto O=OKControlResult(true);O->SetNumberField(TEXT("girl"),S.InspectSlot);O->SetNumberField(TEXT("yaw"),S.InspectYaw);O->SetNumberField(TEXT("pitch"),S.InspectPitch);O->SetNumberField(TEXT("distance"),S.InspectDistance);
+  OKControlReply(Done,O);
+ });
+
  Bind(TEXT("/camera"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;auto B=OKControlBody(Req);auto& C=GControlCamera;bool Off=false;B->TryGetBoolField(TEXT("off"),Off);
   ACameraActor* Camera=S.Camera.Get();UCameraComponent* Lens=Camera?Camera->GetCameraComponent():nullptr;
