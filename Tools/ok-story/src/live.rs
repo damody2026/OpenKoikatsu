@@ -75,9 +75,6 @@ pub struct LiveState {
     /// with no new line left the view where they had stood, nearly four metres off; when they have moved on, the shot
     /// is framed again.
     pub framed_at: math::V3,
-    /// First person: where her face was when the shot was framed. She sat down at the table while he stood (his eye did
-    /// not move), and the view kept aiming where her head had been: her face sank behind the dialog box.
-    pub framed_aim: math::V3,
     pub portrait: Portrait,
     pub probe: Option<ProbeJob>,
     pub next_id: u64,
@@ -185,6 +182,21 @@ impl Live {
         Some(math::Pose { pos: eye, rot: math::Quat::look(math::sub(aim, eye), [0.0, 0.0, 1.0]), fov: self.tuning.live.pov_fov })
     }
 
+    /// Whether a point shows in the part of the picture the view leaves clear, as the view is now: in front, inside the
+    /// sides, below the top and above the dialog box (with a little margin each).
+    fn in_view(&self, p: math::V3) -> bool {
+        let cam = &self.st.rig.current;
+        let local = cam.rot.inverse().rotate(math::sub(p, cam.pos));
+        if local[0] < 1.0 {
+            return false;
+        }
+        let aspect = self.facts.view_aspect.filter(|a| *a > 0.1).unwrap_or(16.0 / 9.0);
+        let half = (cam.fov.clamp(10.0, 170.0) * 0.5).to_radians().tan();
+        let x = 0.5 + 0.5 * (local[1] / local[0]) / half;
+        let y = 0.5 - 0.5 * (local[2] / local[0]) / (half / aspect);
+        (0.05..=0.95).contains(&x) && y >= 0.05 && y <= 1.0 - self.tuning.layout.dialog_height - 0.03
+    }
+
     /// Not framed yet: the move starts from where the game's view is now (it kept following them meanwhile), not from
     /// where it was when the conversation began.
     fn start_from_view(&mut self) {
@@ -210,11 +222,12 @@ impl Live {
             let on = spec.on.clone().filter(|on| self.pov(on).is_some()).unwrap_or(partner);
             if let Some(pose) = self.pov(&on) {
                 let moved = math::len(math::sub(pose.pos, self.st.framed_at));
-                // Her face moving counts too (sitting down, standing up, moving to a seat): 30 cm turns the view to her
-                // again, smoothly (a nod or a gesture moves it less).
-                let her_moved = self.facts.actors.get(&on).map(|a| math::len(math::sub(a.head(), self.st.framed_aim))).unwrap_or(0.0);
+                // Her face leaving the picture counts too: she sat down at the table while he stood (his eye did not
+                // move) and her face sank behind the dialog box; she crouched and stood up again. While it stays in view
+                // (a nod, a gesture) the view holds still.
+                let out_of_view = self.facts.actors.get(&on).is_some_and(|a| !self.in_view(a.head()));
                 // Framed again the usual way (its line-of-sight check included), not just moved to the new eye.
-                if moved > 40.0 || her_moved > 30.0 {
+                if moved > 40.0 || out_of_view {
                     self.frame_shot(moved > 150.0);
                 }
             }
@@ -246,7 +259,6 @@ impl Live {
             self.st.framed_at = pose.pos;
             self.st.probe = None;
             let Some(face) = self.facts.actors.get(&on).map(|a| a.head()) else { return };
-            self.st.framed_aim = face;
             let usual = self.usual_shot(if speaker.is_empty() { &on } else { &speaker });
             let mut candidates = vec![Candidate { pose, from: face }];
             candidates.extend(self.candidates(&usual, &speaker));
@@ -614,6 +626,31 @@ mod tests {
         let seated = l.st.rig.current.rot.forward();
         // Down to her seated face (a point 96 cm up, 120 cm ahead of his eye at 156): about -0.45, not the -0.12 of before.
         assert!(standing[2] > -0.2 && seated[2] < -0.35, "standing {:?} seated {:?}", standing, seated);
+    }
+
+    /// She crouches (a gesture) and stands up again: the view goes down to her and comes back, ending on her face; a nod
+    /// that keeps her face in the picture moves nothing.
+    #[test]
+    fn first_person_comes_back_when_she_stands_up_again() {
+        let mut l = Live::open(LiveConfig::default()).unwrap();
+        l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+        l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "唔……".into(), voiced: false });
+        let run = |l: &mut Live, z: f64| {
+            for _ in 0..300 {
+                let mut f = facts(0.016, -1.0, 0);
+                f.actors.insert("her1".into(), actor([120.0, 0.0, z], 90.0));
+                l.tick(f);
+            }
+            l.st.rig.current.rot.forward()
+        };
+        let standing = run(&mut l, 0.0);
+        let nod = run(&mut l, -8.0);
+        assert!((nod[2] - standing[2]).abs() < 1e-6, "a nod keeps the view: {:?} {:?}", standing, nod);
+        let crouched = run(&mut l, -70.0);
+        assert!(crouched[2] < standing[2] - 0.2, "down to her: {:?} {:?}", standing, crouched);
+        let up = run(&mut l, 0.0);
+        assert!(l.in_view(l.facts.actors["her1"].head()), "her face back in the picture: {:?}", up);
+        assert!(up[2] > crouched[2] + 0.2, "up again: {:?} {:?}", crouched, up);
     }
 
     #[test]
