@@ -36,7 +36,7 @@ bool AOKStreetSocialScene::BeginInspect(int32 Slot,FString& Error){
  // Her: out of her pose, walk or seat, standing in the middle facing the camera at yaw 0.
  StopLifePose(Slot);S.Commutes.Remove(Slot);S.PendingMoves.Remove(Slot);S.CommuteShown.Remove(Slot);
  auto& A=S.Agents[Slot-1];S.InspectHerBack=A.Position;A.Held=true;A.Position=OKInspectOrigin;S.Rotations[Slot]=OKInspectFacing;S.RenderedRotations[Slot]=OKInspectFacing;
- S.InspectSlot=Slot;
+ S.InspectSlot=Slot;S.NextSunUpdate=0; // afternoon light at once (Tick)
  S.Message=OKMsg(TEXT("ui.inspect.hint"),{{TEXT("name"),*S.Manifest.Characters[Slot].Name}});RefreshUI();
  UE_LOG(LogTemp,Display,TEXT("Street inspect: actor %d in the inspection room"),Slot);
  return true;
@@ -47,7 +47,7 @@ void AOKStreetSocialScene::EndInspect(){
  if(S.Agents.IsValidIndex(Slot-1)){auto& A=S.Agents[Slot-1];A.Position=S.InspectHerBack;A.Held=S.ScheduleHeld.Contains(Slot);
   // Her day takes her again from where she was (a gap in her plan: she walks to where it has her now).
   if(S.PlanBlock.Contains(Slot))S.PlanBlock.Add(Slot,INDEX_NONE);S.ScheduleTickAt=0;}
- S.Male=S.InspectMaleBack;
+ S.Male=S.InspectMaleBack;S.NextSunUpdate=0; // the hour's light again
  for(const auto& A:S.InspectRoom)if(A.IsValid())A->SetActorHiddenInGame(true);
  S.Message=OKT(TEXT("ui.inspect.left"));RefreshUI();
  UE_LOG(LogTemp,Display,TEXT("Street inspect: actor %d back to her day"),Slot);

@@ -170,7 +170,10 @@ FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Dire
   // A heroine is in his way like anything else: walking into one sitting on a chair pushed her off it, left sitting on
   // the air (R3-221). Into her body is blocked; away from her (already that close) never is.
   // His steps only: a heroine walked with this (to a party seat, to an invitation) is not stopped by the others.
-  if(FVector::Dist2D(From,State->Male)<1.f)for(const auto& A:State->Agents){if(FMath::Abs(A.Position.Z-To.Z)>100.f)continue;const float Near=float(FVector::Dist2D(To,A.Position));
+  // The one walking with him (a companion, an outing, a pair activity) walks at his side and never blocks him: she
+  // stopped him on the way to the park lawn every step (R3-223).
+  if(FVector::Dist2D(From,State->Male)<1.f)for(const auto& A:State->Agents){if(FMath::Abs(A.Position.Z-To.Z)>100.f)continue;
+   if(A.Slot==State->Companion||A.Slot==State->OutingGirl||A.Slot==State->Pair.Partner)continue;const float Near=float(FVector::Dist2D(To,A.Position));
    if(Near<OKStreetHeroineBody&&Near<float(FVector::Dist2D(From,A.Position)))return false;}
   FHitResult Hit;
   if(GetWorld()->SweepSingleByChannel(Hit,From+FVector(0,0,85),To+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(28,78),Query))

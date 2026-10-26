@@ -2662,6 +2662,12 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   // What the minute to get ready is still waiting on, every 5 s (a park bench never got her seated clip: R3-220).
   {static double LastWait=0;if(Now-LastWait>5.0){LastWait=Now;UE_LOG(LogTemp,Display,TEXT("Street pair: getting ready %.0fs: turn %.1f, male %s ready=%d pending=%d preparing=%d (want %s), female %s ready=%d pending=%d preparing=%d (want %s)"),Now-P.RequestedAt,
    FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[P.Partner].Yaw,S.Rotations[P.Partner].Yaw)),*A.ClipId,A.Ready?1:0,A.Pending?1:0,A.Preparing?1:0,*P.MaleClip,*B.ClipId,B.Ready?1:0,B.Pending?1:0,B.Preparing?1:0,*P.FemaleClip);}}
+  // The clips were asked for once when the activity began; something else that played on her (or his) action stream in
+  // the meantime (her song, a life pose) left another clip there and nobody asked again, so it waited the whole minute
+  // (R3-220). A stream holding another clip and not getting one ready asks for this one again (at most every 2 s).
+  {static double Reasked=0;if(Now-Reasked>2.0)for(int32 K=0;K<2;++K){const auto& St=K==0?A:B;const FString& Want=K==0?P.MaleClip:P.FemaleClip;
+   if(St.ClipId!=Want&&!St.Pending&&!St.Preparing){Reasked=Now;FString Error;const bool Ok=OKPrewarmCrowdRuntimeAction(this,K==0?0:P.Partner,Want,Error);
+    UE_LOG(LogTemp,Display,TEXT("Street pair: actor %d holds %s, not %s: asked again (%s)"),K==0?0:P.Partner,*St.ClipId,*Want,Ok?TEXT("ok"):*Error);}}}
   if(FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[P.Partner].Yaw,S.Rotations[P.Partner].Yaw))>.1f)return;
   if(!A.Ready||!B.Ready||A.Pending||B.Pending||A.Preparing||B.Preparing||A.ClipId!=P.MaleClip||B.ClipId!=P.FemaleClip)return;
   // Original TwoShot starts both actors at the same world anchor. Their own curves carry the offset.
@@ -3495,7 +3501,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  else if(S.Bluff.Active&&S.Bluff.ClockRate<1.0){const double Wall=FPlatformTime::Seconds();
   S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,FMath::Max(0.0,Wall-S.ClockStartWall)*FMath::Max(0.0,S.Bluff.ClockRate));S.ClockStartWall=Wall;}
  // Once a real second is enough: the sun turns 0.1 degree per second, and each move redraws shadow maps.
- if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const auto Sun=OKStreetSunAt(OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall));S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);}}
+ if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const auto Sun=OKStreetSunAt(S.InspectSlot!=INDEX_NONE?14.0:OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall)); /* the inspection room is in afternoon light at any hour */S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);}}
  if(TickPrivate(Now))return;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFacility);TickFacility(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPhoto);TickPhoto(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickContacts);TickContacts(Dt,Now);}
  // Every actor of this roster (one male and up to OKStreetFemaleCount heroines).

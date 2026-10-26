@@ -161,6 +161,8 @@ static constexpr float OKSongStageDistance=230.f;
 float AOKStreetSocialScene::StepSongStage(float Dt){
  auto& S=*State;const auto& G=S.Song;
  if(!SongIsSinging()||G.Girl<=0||S.Target!=G.Girl||!S.Agents.IsValidIndex(G.Girl-1))return 0.f;
+ // Sitting together (a bench, the lawn, a table): they stay as the activity has them (as in SongStage).
+ if(S.Pair.Partner==G.Girl)return 0.f;
  const FVector Her=S.Agents[G.Girl-1].Position;const float Apart=FVector::Dist2D(S.Male,Her);
  if(Apart<OKSongStageDistance-15.f){
   FVector Away=(S.Male-Her).GetSafeNormal2D();if(Away.IsNearlyZero())Away=FRotationMatrix(S.Rotations[G.Girl]).GetUnitAxis(EAxis::Y).GetSafeNormal2D();
@@ -408,6 +410,9 @@ void AOKStreetSocialScene::SongChoreograph(){
 // through her stand) and the prepared one starts as soon as the slot is free.
 void AOKStreetSocialScene::SongStage(const FString& Clip,const FString& Next,const TCHAR* Part){
  auto& G=State->Song;if(Clip.IsEmpty()||G.Girl==INDEX_NONE)return;FString Error;
+ // In an activity with him (sitting on a bench or the lawn) she sings as she sits: a gesture clip took her seated clip's
+ // slot and the activity, its clip gone, ended at once (R3-220). Her voice and mouth go on; the moves are left out.
+ if(State->Pair.Partner==G.Girl){UE_LOG(LogTemp,Display,TEXT("Street song: %s %s left out: she sings as she sits (activity)"),Part,*Clip);return;}
  G.Want=Clip;G.Next=Next;G.NextAsked=false;
  FOKRuntimeActionStreamStatus A;const bool Showing=OKGetCrowdRuntimeActionStatus(this,G.Girl,A)&&A.Playing;
  // (ClipId names the clip being prepared when there is one, so any clip she shows is let go, not only another one.)
@@ -438,6 +443,10 @@ void AOKStreetSocialScene::SongUnstage(){
 void AOKStreetSocialScene::SongAnswer(const FString& Answer){
  auto& S=*State;auto& G=S.Song;if(G.Phase!=EOKSongPhase::Offered&&!(G.Phase==EOKSongPhase::Ready&&Answer==TEXT("accept")))return;
  if(Answer==TEXT("accept")){
+  // "Let's sit on the bench, sing it for me": they are still sitting down together. Sung once they sit; started at
+  // once, it took her over before she sat, and the sitting was given up as timed out after the song (R3-220).
+  if(S.Pair.Partner==G.Girl&&S.Pair.Phase==0){G.StartWhenSeated=true;UE_LOG(LogTemp,Display,TEXT("Street song: accepted (actor %d), sung once they sit"),G.Girl);return;}
+  G.StartWhenSeated=false;
   // Her words before it: the one for a song she sang before when it is sung again, else the milestone's own.
   const FString Intro=G.Replay?OKT(TEXT("ui.song.replay_intro_line")):OKSongOccasionLine(G.Occasion,TEXT("intro_line"));
   G.Phase=EOKSongPhase::Intro;G.PhaseAt=SceneTime();G.Notice.Reset();SongChoreograph();SongStage(G.IntroClip,G.CueClip.IsValidIndex(0)?G.CueClip[0]:FString(),TEXT("intro"));SongSay(Intro);OKSongCaption(S,Intro);UE_LOG(LogTemp,Display,TEXT("Street song: accepted (actor %d)"),G.Girl);
@@ -491,6 +500,13 @@ void AOKStreetSocialScene::TickSong(double Now){
  if(!State||State->SelfTest)return;auto& S=*State;auto& G=S.Song;
  if(!G.Loaded)SongLoad();
  if(G.Endpoint.IsEmpty())return;
+ // Begun in the same breath as sitting down together ("sit on the bench, sing it now": the judge read both): put back
+ // until they sit, as if accepted while they were sitting down.
+ if(G.Phase==EOKSongPhase::Intro&&S.Pair.Partner==G.Girl&&S.Pair.Phase==0){FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);SongUnstage();++G.Epoch;G.SayPending=G.SpeechStarted=false;G.Phase=EOKSongPhase::Offered;G.StartWhenSeated=true;
+  UE_LOG(LogTemp,Display,TEXT("Street song: actor %d sits down first, then sings"),G.Girl);}
+ // Accepted while they sat down together: now they sit (or the sitting was given up), it begins; he gone, it waits.
+ if(G.StartWhenSeated&&!(S.Pair.Partner==G.Girl&&S.Pair.Phase==0)){
+  if(FreeTalkPartner()==G.Girl)SongAnswer(TEXT("accept"));else G.StartWhenSeated=false;}
  // The singer's actor went away, he left her, or a call came: stop what is playing; a made song stays for later.
  // He is with her as long as she is the one he talks to: sat on the grass with her to watch the stars, the talk's
  // target is not set (her activity holds her) and the song stopped the moment it began (R3-219).
@@ -502,8 +518,9 @@ void AOKStreetSocialScene::TickSong(double Now){
   RefreshUI();return;
  }
  // While the song event has her voice, only her staging moves her: any other gesture action (from the talk, the
- // presenter or a reply) is cancelled.
- if(SongOwnsVoice(G.Girl)){FOKRuntimeActionStreamStatus A;FString Ignore;
+ // presenter or a reply) is cancelled. Not in an activity with him: that clip is the activity's (her sitting), and she
+ // sings as she sits (SongStage, R3-220).
+ if(SongOwnsVoice(G.Girl)&&S.Pair.Partner!=G.Girl){FOKRuntimeActionStreamStatus A;FString Ignore;
   if(OKGetCrowdRuntimeActionStatus(this,G.Girl,A)&&(A.Playing||A.Pending||A.Preparing||A.QueuedRequests>0)&&!A.ClipId.IsEmpty()
      &&A.ClipId!=G.IntroClip&&A.ClipId!=G.OutroClip&&!G.CueClip.Contains(A.ClipId)&&OKCancelCrowdRuntimeAction(this,G.Girl,Ignore))
    UE_LOG(LogTemp,Display,TEXT("Street song: kept idle (cancelled %s)"),*A.ClipId);}

@@ -30,6 +30,7 @@ struct FOKSongState {
  // This event's milestone (song_milestone: confession, favor100, favor150, lines; empty for a test song), whether it
  // is due (a song made ahead waits until it is), and Replay: she sings one of her earlier songs again (no milestone).
  FString Occasion;bool Due=false,Replay=false;
+ bool StartWhenSeated=false; // accepted while they were still sitting down together: sung once they sit (R3-220)
  // He asked for one of her songs again while she was still talking (his words, or the button mid-line): sung once she
  // is free, if that is within a minute (AskedAt: SceneTime()).
  int32 AskedMemory=INDEX_NONE;double AskedAt=0;

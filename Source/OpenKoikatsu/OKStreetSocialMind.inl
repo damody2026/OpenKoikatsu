@@ -176,8 +176,12 @@ void AOKStreetSocialScene::HandleMindTalk(const TSharedPtr<FJsonObject>& R){
  FinishFreeTalk(Pending.Character,Pending.Id,Pending.Text,Failure.IsEmpty()?&Reply:nullptr,Failure);
 }
 
+// The minute on the calendar (its date as OKStreetCalendarDateTime shows it): the small hours before 04:00 still belong to
+// the game day before, so they are a day on. Without it the clock went back a day at midnight and forward at 04:00, and
+// sitting together from 03:42 to 04:02 was told as 1461 minutes (R3-224).
 static int64 OKStreetMindNow(const FOKStreetSceneState& S){
- return int64(S.Store.CalendarDay)*1440+FMath::Clamp(FMath::FloorToInt64(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),int64(0),int64(1439));
+ const int64 Minute=FMath::Clamp(FMath::FloorToInt64(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),int64(0),int64(1439));
+ return int64(S.Store.CalendarDay)*1440+Minute+(Minute<int64(OKStreetDayStartHour*60.0)?1440:0);
 }
 
 static FString OKStreetMindJson(const TSharedRef<FJsonObject>& Object){
