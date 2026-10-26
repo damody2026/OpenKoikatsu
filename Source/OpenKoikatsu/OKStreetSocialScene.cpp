@@ -837,6 +837,7 @@ static int64 OKStreetMindNow(const FOKStreetSceneState& S); // OKStreetSocialMin
 bool AOKStreetSocialScene::BeginTalk(int32 Character){
  auto& S=*State;
  if(S.Pair.Partner!=INDEX_NONE||S.Facility!=INDEX_NONE||S.Companion!=INDEX_NONE)return false;
+ if(S.PrivateGirl!=INDEX_NONE)return false; // the one-on-one scene is his conversation now; a street talk would close it
  if(!S.Agents.IsValidIndex(Character-1)||!S.Manifest.Characters.IsValidIndex(Character))return false;
  StopAmbientActivity();
  // He speaks to her while she (or he) is doing a one-person activity beside him (shopping at a shelf, watching the fish): that
