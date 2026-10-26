@@ -233,8 +233,10 @@ bool AOKStreetSocialScene::AtPlace(const FString& Id) const{
 
 FString AOKStreetSocialScene::SpokenName(int32 G) const{
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(G))return FString();
- FOKFreeTalkPersona P;FString E;if(OKStreetFreeTalkLoadPersona(S.Manifest.Characters[G].Name,P,E)&&!P.DisplayName.IsEmpty())return P.DisplayName;
- return S.Manifest.Characters[G].Name;
+ // In the game's script: a persona written in Simplified ("贞德") was 【贞德】 in a Traditional game's group prompt, and
+ // the model answered as 「貞德」 (two names for one girl in what she and the others remember).
+ FOKFreeTalkPersona P;FString E;if(OKStreetFreeTalkLoadPersona(S.Manifest.Characters[G].Name,P,E)&&!P.DisplayName.IsEmpty())return OKStreetScriptedName(P.DisplayName);
+ return OKStreetScriptedName(S.Manifest.Characters[G].Name);
 }
 
 void AOKStreetSocialScene::SendPartyTalk(const FString& Text){

@@ -1615,7 +1615,9 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
    // The streamed line's file for the log (the server answers once it is written, without generating it again),
    // and the next line's stream right away instead of after that file.
    RequestFreeTalkSegment(Generation,Index);
-   if(Ok&&L.FreeTalkSpeechStreamed.IsValidIndex(Index+1)&&L.FreeTalkSpeechStreamed[Index+1]==0)RequestFreeTalkSegment(Generation,Index+1);
+   // Also when a stream that is already playing failed part way (it ran dry, then timed out): its file is only for the
+   // log then, and the next girl's line waited behind it (and its timeout) for half a minute in a group talk.
+   if((Ok||L.FreeTalkSpeechReady[Index]==3)&&L.FreeTalkSpeechStreamed.IsValidIndex(Index+1)&&L.FreeTalkSpeechStreamed[Index+1]==0)RequestFreeTalkSegment(Generation,Index+1);
   });
   Request->ProcessRequest();
   return;

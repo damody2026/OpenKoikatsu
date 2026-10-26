@@ -52,6 +52,10 @@ C++ 只負責呈現；鏡頭選擇、打字速度、構圖等規則都在 Rust�
 
 繁中遊戲裡，角色卡名字是簡體的女主（「贞德」）在群聊裡一句都沒出現：模型回覆的 `who` 寫成繁體「貞德」，`FinishPartyTalk` 找不到這個名字的人就把那句丟掉，另一位還在回應她「說過」的話。名字比對（`OKStreetScriptedName`）原本只在 zh-CN 轉成簡體，現在 zh-TW 也轉成繁體再比；找不到人的台詞會在 log 記 `Street party talk: line of "<who>" dropped`。
 
+群聊提示裡的名字（`SpokenName`）也改用遊戲的字體：原本 persona 寫簡體的「贞德」在繁中遊戲裡以【贞德】給模型，模型卻以「貞德」回答，同一個人在記憶裡有兩種寫法。
+
+語音伺服器忙時，正在播的串流語音中途斷掉（ran dry 再逾時），原本要先拿這一句的檔案（只是給記錄用，又等一次逾時）才去要下一句，群聊裡下一位女主的台詞因此晚了半分鐘以上；現在這種情況下一句立刻送出。Play3E／Play4E 量測時 GPU 上同時有別的遊戲與語音伺服器，測試用 ok-tts 每句要 15–30 秒，貞德·Alter 的台詞在測試的等待時間內沒輪到，沒能在畫面上確認；台詞本身模型有寫（`Street party talk: 2–4 lines`），比對也對得上。演出等語音的上限仍是 120 秒（刻意的設計：忙碌時寧可等聲音）。
+
 ## 打包版
 
 立繪材質是 `/Game/OKStudio/Story/M_StoryPortrait`（DirectoriesToAlwaysCook）。改了 `OKStoryBuildPortraitMaterial` 之後，要重新存檔：
