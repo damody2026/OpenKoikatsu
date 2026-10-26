@@ -230,8 +230,13 @@ int32 AOKStreetSocialScene::ElevatorOfPlace(int32 PlaceIndex) const{
 }
 
 bool AOKStreetSocialScene::NextDay(){
+ auto& S=*State;
+ // A day already begun before the clock was put back over it (the hour buttons): only its date comes back, it is not
+ // begun twice (allowance, pay, the daily drift once a day; R3-225).
+ if(S.DayRewound==S.Store.CalendarDay+1){++S.Store.CalendarDay;S.DayRewound=-1;UE_LOG(LogTemp,Display,TEXT("Street day: back to day %d (already begun)"),S.Store.CalendarDay);return true;}
+ S.DayRewound=-1;
  MindEndOfDay();
- auto& S=*State;auto Candidate=S.Store;++Candidate.TopicDay;++Candidate.CalendarDay;
+ auto Candidate=S.Store;++Candidate.TopicDay;++Candidate.CalendarDay;
  Candidate.CalendarMinute=FMath::Clamp(FMath::FloorToInt32(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),0,24*60-1);
  // The heroines' day (day.rs day_people): counters, the daily drift, a night's rest, favor and feelings made one, friends
  // after days of talking, a faded lover breaking up, his allowance and her income, bills, debts and paying him back.

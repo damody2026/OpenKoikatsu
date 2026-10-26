@@ -222,6 +222,7 @@ struct FOKStreetSceneState {
  int64 TalkStartMinute=-1; // when the face-to-face talk with Target began (her memory of it, EndTalk)
  FString DialogueText,HintText;int32 DialogueTarget=INDEX_NONE;bool HintOpen=false,HintUnread=false;FLinearColor DialogueColor=FLinearColor::White;FString DigestedMessage;int32 DigestedTarget=INDEX_NONE,DigestedNode=INDEX_NONE;
  // Street clock: real local time at start, 24x speed. The sun is driven from it.
+ int32 DayRewound=-1; // the game day the hour buttons went back from (R3-225): reached again, it is not begun twice
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;
@@ -2150,12 +2151,20 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
   TWeakPtr<FOKStreetSceneState> ClockState=State;
   auto ClockNow=[ClockState](){auto L=ClockState.Pin();return L?OKStreetClockHours(L->ClockStartHours,FPlatformTime::Seconds()-L->ClockStartWall):12.0;};
   auto SetClock=[ClockState](double Hours){if(auto L=ClockState.Pin()){L->ClockStartHours=FMath::Fmod(Hours+48.0,24.0);L->ClockStartWall=FPlatformTime::Seconds();L->NextSunUpdate=0;L->CalendarLastHours=-1;L->ClockDrivesSun=L->Sun.IsValid();}};
+  // An hour on or back is time going by: across 04:00 forward a new game day starts (as when the clock runs there), back
+  // the game day is the one before. Only the clock was set, so 05:12 back to 03:23 showed the next date and the next
+  // 04:00 began another day: two days on for an hour back (R3-225).
+  auto StepClock=[ClockState,SetClock,ClockNow,Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](double Delta){
+   auto L=ClockState.Pin();if(!L)return;const double Was=ClockNow(),To=FMath::Fmod(Was+Delta+48.0,24.0);SetClock(Was+Delta);
+   // (Back over a day already begun and on again: NextDay only gives the date back.)
+   if(Delta>0&&OKStreetDayStartsPassed(Was,To)>0){if(Owner.IsValid())Owner->NextDay();}
+   else if(Delta<0&&OKStreetDayStartsPassed(To,Was)>0&&L->Store.CalendarDay>0){if(L->DayRewound<0)L->DayRewound=L->Store.CalendarDay;--L->Store.CalendarDay;}};
   auto ClockButton=[](const TCHAR* Label,TFunction<void()> Do)->TSharedRef<SWidget>{return SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(Label)).OnClicked_Lambda([Do](){Do();return FReply::Handled();});};
   TSharedRef<SWidget> ClockRow=SNew(SVerticalBox)
    +SVerticalBox::Slot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
     +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).Padding(4,0)[SNew(STextBlock).ColorAndOpacity(FLinearColor::White).Text_Lambda([ClockState,ClockNow](){auto L=ClockState.Pin();if(!L)return FText::GetEmpty();const int32 M=FMath::FloorToInt32(ClockNow()*60);return FText::FromString(OKMsg(TEXT("ui.scene.clock_display"), {{TEXT("hour"), M/60}, {TEXT("minute"), M%60}, {TEXT("paused_suffix"), L->ClockPaused?OKT(TEXT("ui.scene.paused_label")):TEXT("")}}));})]
-    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.minus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()-1);})]
-    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.plus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()+1);})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.minus_one_hour")),[StepClock](){StepClock(-1);})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.plus_one_hour")),[StepClock](){StepClock(1);})]
     +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center)
      .Text_Lambda([ClockState](){auto L=ClockState.Pin();return FText::FromString(L&&L->ClockPaused?OKT(TEXT("ui.scene.continue_button")):OKT(TEXT("ui.scene.pause_button")));})
      .OnClicked_Lambda([ClockState,SetClock,ClockNow](){if(auto L=ClockState.Pin()){const double Hours=ClockNow();L->ClockPaused=!L->ClockPaused;SetClock(Hours);}return FReply::Handled();})]]
