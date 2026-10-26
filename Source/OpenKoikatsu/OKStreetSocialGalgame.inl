@@ -107,6 +107,8 @@ static FString OKStreetGalgameJson(const TSharedRef<FJsonObject>& O)
 static FString OKStreetGalgameWords(const FString& Line, const FString& Name)
 {
 	FString Text = Line;
+	// The model's "⋯" (U+22EF, midline) is not in the box's font: it showed as two boxes. The usual "…" is.
+	Text.ReplaceInline(TEXT("⋯"), TEXT("…"));
 	if (!Name.IsEmpty() && Text.StartsWith(Name)) Text = Text.Mid(Name.Len());
 	Text.TrimStartInline();
 	for (const TCHAR* Mark : { TEXT("："), TEXT(":") })
@@ -356,7 +358,8 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		TSharedRef<FJsonObject> L = MakeShared<FJsonObject>();
 		L->SetStringField(TEXT("type"), TEXT("line"));
 		L->SetStringField(TEXT("who"), OKStreetGalgameId(Slot));
-		L->SetStringField(TEXT("name"), NameOf(Slot));
+		// In the game's script (a card named in Simplified showed 「贞德」 over a Traditional line).
+		L->SetStringField(TEXT("name"), OKStreetScriptedName(NameOf(Slot)));
 		L->SetStringField(TEXT("color"), OKStreetGalgameColor(Slot));
 		// The box draws its own quotes.
 		L->SetStringField(TEXT("text"), OKStreetGalgameWords(Text, FString()));
