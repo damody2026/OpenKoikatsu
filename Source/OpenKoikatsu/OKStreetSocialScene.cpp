@@ -223,6 +223,7 @@ struct FOKStreetSceneState {
  FString DialogueText,HintText;int32 DialogueTarget=INDEX_NONE;bool HintOpen=false,HintUnread=false;FLinearColor DialogueColor=FLinearColor::White;FString DigestedMessage;int32 DigestedTarget=INDEX_NONE,DigestedNode=INDEX_NONE;
  // Street clock: real local time at start, 24x speed. The sun is driven from it.
  int32 DayRewound=-1; // the game day the hour buttons went back from (R3-225): reached again, it is not begun twice
+ TMap<int32,int64> WaitsForHim; // she wrote him where she is: until this minute she stays there for him (R3-230)
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;
@@ -835,7 +836,7 @@ void AOKStreetSocialScene::BeginPlay(){
 
 static int64 OKStreetMindNow(const FOKStreetSceneState& S); // OKStreetSocialMind.inl
 bool AOKStreetSocialScene::BeginTalk(int32 Character){
- auto& S=*State;
+ auto& S=*State;S.WaitsForHim.Remove(Character); // he found her: her waiting for him is over
  if(S.Pair.Partner!=INDEX_NONE||S.Facility!=INDEX_NONE||S.Companion!=INDEX_NONE)return false;
  if(S.PrivateGirl!=INDEX_NONE)return false; // the one-on-one scene is his conversation now; a street talk would close it
  if(!S.Agents.IsValidIndex(Character-1)||!S.Manifest.Characters.IsValidIndex(Character))return false;

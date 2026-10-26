@@ -432,6 +432,12 @@ void AOKStreetSocialScene::StartControlServer(){
    if(S.PrivateGirl!=int32(Girl)){OKControlReply(Done,OKControlResult(false,TEXT("could not open (not ready, not idle, or no high model for her)")));return;}}
   auto O=OKControlResult(true);O->SetNumberField(TEXT("girl"),S.PrivateGirl);OKControlReply(Done,O);
  });
+ // {girl, why, kind?}: she writes him now, from that reason (kind "initiative" when none: her own message).
+ Bind(TEXT("/text"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
+  auto& S=*State;auto B=OKControlBody(Req);double Girl=0;B->TryGetNumberField(TEXT("girl"),Girl);FString Why,Kind=TEXT("initiative");B->TryGetStringField(TEXT("why"),Why);B->TryGetStringField(TEXT("kind"),Kind);
+  if(!S.Manifest.Characters.IsValidIndex(int32(Girl))||Girl<1||Why.IsEmpty()){OKControlReply(Done,OKControlResult(false,TEXT("girl and why")));return;}
+  QueueHerText(int32(Girl),Why,Kind,0.0);OKControlReply(Done,OKControlResult(true));
+ });
  // {girl}: the heroine he is talking with says her wish to be close now (what her own wish does by chance), and the
  // choice opens for him to answer.
  Bind(TEXT("/wish"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){

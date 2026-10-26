@@ -192,6 +192,11 @@ void AOKStreetSocialScene::TickSchedules(){
   // (INDEX_NONE recorded: no block then) is not a start; from it she walks on like from any block.
   const bool Fresh=!S.PlanBlock.Contains(I);
   if((Fresh||Index!=Previous)&&Changes>0&&FPlatformTime::Seconds()>ChangeBudget){S.ScheduleTickAt=0;continue;} // her change waits for the next frame
+  // She wrote him where she is ("at the bookstore out of the rain, a bit bored"): she waits there a while for him, not
+  // off home nine seconds later (R3-230); a class, shift, promise or the night still takes her.
+  if(!Fresh&&Index!=Previous&&S.WaitsForHim.FindRef(I,0)>OKStreetMindNow(S)&&!OKStreetFixedBlock(Block)){
+   static TMap<int32,int32> Told;if(Told.FindRef(I,-2)!=Index){Told.Add(I,Index);UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d stays where she wrote him from (%s waits) until %02d:%02d"),I,Block?*Block->Kind:TEXT("-"),int32(S.WaitsForHim[I]%1440)/60,int32(S.WaitsForHim[I]%60));}
+   continue;}
   if(Fresh||Index!=Previous){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ScheduleBlockChange);++Changes;
    // Leaving a work block: her wage for the hours.
    if(const auto* Plan=S.Plans.Find(I))if(Plan->IsValidIndex(Previous)&&(*Plan)[Previous].Kind==TEXT("work")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_BlockPay);
