@@ -222,6 +222,7 @@ struct FOKStreetSceneState {
  int64 TalkStartMinute=-1; // when the face-to-face talk with Target began (her memory of it, EndTalk)
  FString DialogueText,HintText;int32 DialogueTarget=INDEX_NONE;bool HintOpen=false,HintUnread=false;FLinearColor DialogueColor=FLinearColor::White;FString DigestedMessage;int32 DigestedTarget=INDEX_NONE,DigestedNode=INDEX_NONE;
  // Street clock: real local time at start, 24x speed. The sun is driven from it.
+ int32 DayRewound=-1; // the game day the hour buttons went back from (R3-225): reached again, it is not begun twice
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;
@@ -2151,12 +2152,20 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
   TWeakPtr<FOKStreetSceneState> ClockState=State;
   auto ClockNow=[ClockState](){auto L=ClockState.Pin();return L?OKStreetClockHours(L->ClockStartHours,FPlatformTime::Seconds()-L->ClockStartWall):12.0;};
   auto SetClock=[ClockState](double Hours){if(auto L=ClockState.Pin()){L->ClockStartHours=FMath::Fmod(Hours+48.0,24.0);L->ClockStartWall=FPlatformTime::Seconds();L->NextSunUpdate=0;L->CalendarLastHours=-1;L->ClockDrivesSun=L->Sun.IsValid();}};
+  // An hour on or back is time going by: across 04:00 forward a new game day starts (as when the clock runs there), back
+  // the game day is the one before. Only the clock was set, so 05:12 back to 03:23 showed the next date and the next
+  // 04:00 began another day: two days on for an hour back (R3-225).
+  auto StepClock=[ClockState,SetClock,ClockNow,Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](double Delta){
+   auto L=ClockState.Pin();if(!L)return;const double Was=ClockNow(),To=FMath::Fmod(Was+Delta+48.0,24.0);SetClock(Was+Delta);
+   // (Back over a day already begun and on again: NextDay only gives the date back.)
+   if(Delta>0&&OKStreetDayStartsPassed(Was,To)>0){if(Owner.IsValid())Owner->NextDay();}
+   else if(Delta<0&&OKStreetDayStartsPassed(To,Was)>0&&L->Store.CalendarDay>0){if(L->DayRewound<0)L->DayRewound=L->Store.CalendarDay;--L->Store.CalendarDay;}};
   auto ClockButton=[](const TCHAR* Label,TFunction<void()> Do)->TSharedRef<SWidget>{return SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center).Text(FText::FromString(Label)).OnClicked_Lambda([Do](){Do();return FReply::Handled();});};
   TSharedRef<SWidget> ClockRow=SNew(SVerticalBox)
    +SVerticalBox::Slot().AutoHeight().Padding(2)[SNew(SHorizontalBox)
     +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).Padding(4,0)[SNew(STextBlock).ColorAndOpacity(FLinearColor::White).Text_Lambda([ClockState,ClockNow](){auto L=ClockState.Pin();if(!L)return FText::GetEmpty();const int32 M=FMath::FloorToInt32(ClockNow()*60);return FText::FromString(OKMsg(TEXT("ui.scene.clock_display"), {{TEXT("hour"), M/60}, {TEXT("minute"), M%60}, {TEXT("paused_suffix"), L->ClockPaused?OKT(TEXT("ui.scene.paused_label")):TEXT("")}}));})]
-    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.minus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()-1);})]
-    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.plus_one_hour")),[SetClock,ClockNow](){SetClock(ClockNow()+1);})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.minus_one_hour")),[StepClock](){StepClock(-1);})]
+    +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[ClockButton(OKT(TEXT("ui.scene.plus_one_hour")),[StepClock](){StepClock(1);})]
     +SHorizontalBox::Slot().AutoWidth().Padding(2,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).HAlign(HAlign_Center)
      .Text_Lambda([ClockState](){auto L=ClockState.Pin();return FText::FromString(L&&L->ClockPaused?OKT(TEXT("ui.scene.continue_button")):OKT(TEXT("ui.scene.pause_button")));})
      .OnClicked_Lambda([ClockState,SetClock,ClockNow](){if(auto L=ClockState.Pin()){const double Hours=ClockNow();L->ClockPaused=!L->ClockPaused;SetClock(Hours);}return FReply::Handled();})]]
@@ -2663,6 +2672,12 @@ void AOKStreetSocialScene::TickPhoto(double Now){
   // What the minute to get ready is still waiting on, every 5 s (a park bench never got her seated clip: R3-220).
   {static double LastWait=0;if(Now-LastWait>5.0){LastWait=Now;UE_LOG(LogTemp,Display,TEXT("Street pair: getting ready %.0fs: turn %.1f, male %s ready=%d pending=%d preparing=%d (want %s), female %s ready=%d pending=%d preparing=%d (want %s)"),Now-P.RequestedAt,
    FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[P.Partner].Yaw,S.Rotations[P.Partner].Yaw)),*A.ClipId,A.Ready?1:0,A.Pending?1:0,A.Preparing?1:0,*P.MaleClip,*B.ClipId,B.Ready?1:0,B.Pending?1:0,B.Preparing?1:0,*P.FemaleClip);}}
+  // The clips were asked for once when the activity began; something else that played on her (or his) action stream in
+  // the meantime (her song, a life pose) left another clip there and nobody asked again, so it waited the whole minute
+  // (R3-220). A stream holding another clip and not getting one ready asks for this one again (at most every 2 s).
+  {static double Reasked=0;if(Now-Reasked>2.0)for(int32 K=0;K<2;++K){const auto& St=K==0?A:B;const FString& Want=K==0?P.MaleClip:P.FemaleClip;
+   if(St.ClipId!=Want&&!St.Pending&&!St.Preparing){Reasked=Now;FString Error;const bool Ok=OKPrewarmCrowdRuntimeAction(this,K==0?0:P.Partner,Want,Error);
+    UE_LOG(LogTemp,Display,TEXT("Street pair: actor %d holds %s, not %s: asked again (%s)"),K==0?0:P.Partner,*St.ClipId,*Want,Ok?TEXT("ok"):*Error);}}}
   if(FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[P.Partner].Yaw,S.Rotations[P.Partner].Yaw))>.1f)return;
   if(!A.Ready||!B.Ready||A.Pending||B.Pending||A.Preparing||B.Preparing||A.ClipId!=P.MaleClip||B.ClipId!=P.FemaleClip)return;
   // Original TwoShot starts both actors at the same world anchor. Their own curves carry the offset.
@@ -3496,7 +3511,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  else if(S.Bluff.Active&&S.Bluff.ClockRate<1.0){const double Wall=FPlatformTime::Seconds();
   S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,FMath::Max(0.0,Wall-S.ClockStartWall)*FMath::Max(0.0,S.Bluff.ClockRate));S.ClockStartWall=Wall;}
  // Once a real second is enough: the sun turns 0.1 degree per second, and each move redraws shadow maps.
- if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const auto Sun=OKStreetSunAt(OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall));S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);}}
+ if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const auto Sun=OKStreetSunAt(S.InspectSlot!=INDEX_NONE?14.0:OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall)); /* the inspection room is in afternoon light at any hour */S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);}}
  if(TickPrivate(Now))return;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFacility);TickFacility(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPhoto);TickPhoto(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickContacts);TickContacts(Dt,Now);}
  // Every actor of this roster (one male and up to OKStreetFemaleCount heroines).

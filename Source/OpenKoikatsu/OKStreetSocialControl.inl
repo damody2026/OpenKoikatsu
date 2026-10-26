@@ -64,7 +64,8 @@ void AOKStreetSocialScene::StartControlServer(){
  auto Build=[this]()->TSharedRef<FJsonObject>{
   auto& S=*State;auto O=MakeShared<FJsonObject>();const double Wall=FPlatformTime::Seconds();
   const double Hours=OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);
-  {auto T=MakeShared<FJsonObject>();T->SetNumberField(TEXT("hours"),Hours);T->SetStringField(TEXT("clock"),FString::Printf(TEXT("%02d:%02d"),int32(Hours),int32((Hours-int32(Hours))*60)));T->SetBoolField(TEXT("paused"),S.ClockPaused);O->SetObjectField(TEXT("time"),T);}
+  {auto T=MakeShared<FJsonObject>();T->SetNumberField(TEXT("hours"),Hours);T->SetStringField(TEXT("clock"),FString::Printf(TEXT("%02d:%02d"),int32(Hours),int32((Hours-int32(Hours))*60)));T->SetBoolField(TEXT("paused"),S.ClockPaused);
+   T->SetNumberField(TEXT("game_day"),S.Store.CalendarDay);T->SetStringField(TEXT("date"),OKStreetCalendarDateTime(S.Store.CalendarDay,Hours).ToString(TEXT("%Y-%m-%d")));O->SetObjectField(TEXT("time"),T);} // the date shown (before 04:00 the game day before's next date)
   {auto P=MakeShared<FJsonObject>();P->SetNumberField(TEXT("x"),S.Male.X);P->SetNumberField(TEXT("y"),S.Male.Y);P->SetNumberField(TEXT("z"),S.Male.Z);P->SetNumberField(TEXT("yaw"),S.Rotations.IsValidIndex(0)?S.Rotations[0].Yaw:0.0);
    P->SetStringField(TEXT("place"),PlaceHere(S.Male));P->SetNumberField(TEXT("gap"),OKStreetObstacleGap(S.Male));P->SetNumberField(TEXT("node"),S.Node);P->SetBoolField(TEXT("relationship_pending"),S.RelationshipPending);P->SetBoolField(TEXT("collected_active"),S.CollectedActive);P->SetBoolField(TEXT("cursor_mode"),S.MouseUI);P->SetNumberField(TEXT("camera_yaw"),S.Yaw);P->SetNumberField(TEXT("camera_pitch"),S.Pitch);
    P->SetNumberField(TEXT("cash"),double(S.Store.PlayerCash));P->SetNumberField(TEXT("bank"),double(S.Store.PlayerBank));O->SetObjectField(TEXT("player"),P);}
