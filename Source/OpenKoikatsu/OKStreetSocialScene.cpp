@@ -1153,7 +1153,9 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(Text);return;} // several of them: one reply for all (OKStreetSocialParty.inl)
  // Said while the scene shows an earlier line (rolled back with the wheel): what came after it is undone first; then
  // the point this line can be rolled back to.
- {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);GalgameRollBack(Character,RollId);if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
+ // Only his own words roll back: a turn the game wrote for her (her "we're friends now" once the favour reached it, a
+ // till note) came while he had scrolled back and undid the lines after that point, as if he had spoken there.
+ {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);if(His)GalgameRollBack(Character,RollId);if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
  FOKFreeTalkSettings Settings;FString Error,System,UserMessage;
  if(!PrepareFreeTalk(Character,Text,Settings,System,UserMessage,Error)){S.FreeTalkNotice=Error;RefreshUI();return;}
  // The reply is handled in the mode this was sent in (phone or face to face), whatever happens meanwhile.

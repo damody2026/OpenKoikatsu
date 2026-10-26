@@ -109,6 +109,9 @@ static FString OKStreetGalgameWords(const FString& Line, const FString& Name)
 	FString Text = Line;
 	// The model's "⋯" (U+22EF, midline) is not in the box's font: it showed as two boxes. The usual "…" is.
 	Text.ReplaceInline(TEXT("⋯"), TEXT("…"));
+	// Its "〜" (U+301C, the wave dash of a drawn-out "好呀〜") is drawn as an arc there; the full-width tilde reads right.
+	// (Checked: the rest of the usual marks, 『』《》〈〉【】‥︙―﹏♪☆♡❤※ and the like, are in the font.)
+	Text.ReplaceInline(TEXT("〜"), TEXT("～"));
 	if (!Name.IsEmpty() && Text.StartsWith(Name)) Text = Text.Mid(Name.Len());
 	Text.TrimStartInline();
 	for (const TCHAR* Mark : { TEXT("："), TEXT(":") })
