@@ -190,8 +190,12 @@ int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const 
 		{
 			const FVector2D Pos(R[0]->AsNumber() * W, R[1]->AsNumber() * H), Ext(R[2]->AsNumber() * W, R[3]->AsNumber() * H);
 			const float Alpha = float(OKStoryNum(Portrait, TEXT("alpha"), 1.0));
+			// Kept left of the text column: long twin tails swinging out of the picture lay behind the name and the line.
+			const double ClipRight = FMath::Max(Pos.X + 1.0, TextLeft - W * 0.01);
+			Out.PushClip(FSlateClippingZone(Geo.GetLayoutBoundingRect(FSlateRect(Pos.X, Pos.Y, ClipRight, Pos.Y + Ext.Y))));
 			if (UMaterialInstanceDynamic* Mid = Source.Portrait ? Source.Portrait() : nullptr)
 				FSlateDrawElement::MakeBox(Out, L, Geo.ToPaintGeometry(FVector2f(Ext), FSlateLayoutTransform(FVector2f(Pos))), BrushFor(Mid, Ext), ESlateDrawEffect::None, FLinearColor::White);
+			Out.PopClip();
 			const double From = OKStoryNum(Portrait, TEXT("fade_from"), 0.5);
 			const FVector2D GPos(Pos.X, Pos.Y + Ext.Y * From), GExt(Ext.X, Ext.Y * (1.0 - From));
 			if (bDialog && GExt.Y > 1)
