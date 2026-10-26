@@ -521,7 +521,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  Request->SetNumberField(TEXT("seed"),FMath::Rand()); // what a fortune slip says (shop.rs draw_fortunes)
  TArray<TSharedPtr<FJsonValue>> Cart;
  for(const auto& L:S.Cart){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("item"),L.ItemId);O->SetStringField(TEXT("size"),L.Size);O->SetStringField(TEXT("sweetness"),L.Sweetness);O->SetStringField(TEXT("ice"),L.Ice);
-  O->SetBoolField(TEXT("for_her"),L.ForHer);O->SetStringField(TEXT("girl"),L.Girl!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetStableId(S.Manifest.Characters[L.Girl]):FString());Cart.Add(MakeShared<FJsonValueObject>(O));}
+  O->SetBoolField(TEXT("for_her"),L.ForHer);O->SetBoolField(TEXT("her_own"),L.HerOwn);O->SetStringField(TEXT("girl"),L.Girl!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetStableId(S.Manifest.Characters[L.Girl]):FString());Cart.Add(MakeShared<FJsonValueObject>(O));}
  Request->SetArrayField(TEXT("cart"),Cart);
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);if(!Answer)return;
  const int32 Total=int32(Answer->GetNumberField(TEXT("total")));const int64 PlayerPays=int64(Answer->GetNumberField(TEXT("player_pays"))),HerPays=int64(Answer->GetNumberField(TEXT("her_pays"))),Advanced=int64(Answer->GetNumberField(TEXT("advanced")));

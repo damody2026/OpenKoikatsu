@@ -59,6 +59,8 @@ struct Line {
     for_her: bool,
     /// Another girl at the table ordered it (her id): hers to eat, his to pay.
     girl: String,
+    /// She ordered it herself (her own words): not him remembering her taste.
+    her_own: bool,
 }
 
 /// Paying the cart. Request: option (player_pays | split | she_pays), cart [line], service (%), player_cash, place
@@ -128,8 +130,9 @@ fn checkout(c: &Catalog, r: &Value) -> Result<Value, String> {
         }
         // She saw him spend.
         rel.perceived_wealth = (rel.perceived_wealth + (player_pays as f32 / crate::region::amount("goods", 64) as f32).min(10.0)).clamp(0.0, 100.0);
-        // Her order against her tastes: exactly right is remembered.
-        for l in cart.iter().filter(|l| hers(l)) {
+        // His order for her against her tastes: exactly right is remembered. What she ordered herself is not him knowing
+        // her taste (her own latte read as "he remembered how I like it": +10 favor for Raiden, R3-218).
+        for l in cart.iter().filter(|l| hers(l) && !l.her_own) {
             let Some(i) = c.find(&l.item) else { continue };
             match taste_of(&p, i, &l.sweetness, &l.ice) {
                 2 => {
