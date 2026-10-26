@@ -299,7 +299,7 @@ struct FOKStreetSceneState {
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
  TMap<int32,FString> HerSaysNext; // what she says as soon as her reply and voice are done (TickAutoFriendship)
- FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise;TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
+ FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
 TMap<int32,TArray<FOKStreetCartLine>> CarriedOrders;TMap<int32,FString> CarriedOrderSaid; // CarriedOrders: ordered on the way to the shop (Mind.inl), placed on arrival (StartOutingActivity)
  // RelationshipShy: talk.rs shy_confession
  // she said this meal is on her: until (game minute)
@@ -1312,6 +1312,11 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
    S.Message=OKMsg(TEXT("ui.invite.on_shift_player"),{{TEXT("name"),S.Manifest.Characters[Character].Name},{TEXT("place"),Place},{TEXT("until"),At}});RefreshUI();
    UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s not started, actor=%d is on shift until %s"),*Action,Character,*At);}
   if(Handled){}
+  // In the middle of an activity with him, an action that names no activity or place is her word for what they are doing
+  // ("take_photo" while their photo was being taken): told it "failed", she said the camera had died and they gave up
+  // the photo they were taking (R3-229).
+  else if(S.Pair.Partner==Character&&Action!=TEXT("leave")&&!Action.StartsWith(TEXT("go:"))&&!OKStreetFindActivity(Action)&&!OKStreetFindPlace(Action)){
+   UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s during the activity they are in names nothing else: taken as that activity"),*Action);}
   else if(!BeginOuting(Character,Action,Error)){
    // Only because her scripted line is still playing: she said yes, so it starts as soon as the line ends (TickRetryAction).
    if(Error==OKT(TEXT("ui.scene.wait_her_finish_line"))){S.RetryAction=Action;S.RetryGirl=Character;S.RetryUntil=SceneTime()+25.0;UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s waits for her line to end"),*Action);}
@@ -1467,7 +1472,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    // "That's enough reading for today": they stop what they sat down to and go on talking (as the leave-seat button).
    {bool StopAct=false;Verdict->TryGetBoolField(TEXT("stop_activity"),StopAct);
     if(StopAct&&!Ends&&DoNow.IsEmpty()&&L->Pair.Partner==Character&&L->Pair.Phase==1&&Weak.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d they stop the activity, the talk goes on"),Character);Weak->FinishPhoto();}}
-   if(Treats){L->HerTreatPromise.Add(Character,OKStreetMindNow(*L)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (judged)"),Character);}
+   // Her treat already paid within the hour: "I'm treating you" said over that same dango is not a new promise (it made
+   // her pay at every shop for six hours; R3-227).
+   if(Treats&&OKStreetMindNow(*L)-L->HerTreatKept.FindRef(Character,-100000)<60){UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d already treated him, not again"),Character);}
+   else if(Treats){L->HerTreatPromise.Add(Character,OKStreetMindNow(*L)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (judged)"),Character);}
    // "Let's skip lunch then, another day" — "fine": the meeting they had is called off (her own act field may forget it).
    {bool Cancel=false;Verdict->TryGetBoolField(TEXT("cancel_promise"),Cancel);
     // This one or all of a weekly meeting (cancel_scope; asked when it is not said).
@@ -2868,7 +2876,7 @@ void AOKStreetSocialScene::TickPhoto(double Now){
  // she sat back with nothing to eat), nothing is lost either.
  auto Switching=[&](const FOKRuntimeActionStreamStatus& X){return P.Meal&&(X.Pending||X.Preparing||X.Ready||X.Transitioning);};
  const bool LostA=!(A.Playing&&Theirs(A,P.MaleClip,0))&&!Switching(A),LostB=!(B.Playing&&Theirs(B,P.FemaleClip,1))&&!Switching(B);
- if(LostA||LostB||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, its clips are gone (%s playing=%d %s playing=%d)"),*A.ClipId,A.Playing?1:0,*B.ClipId,B.Playing?1:0);FinishPhoto();}
+ if(LostA||LostB||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, %s (%s playing=%d %s playing=%d)"),LostA||LostB?TEXT("its clips are gone"):TEXT("its 30 s pose is over"),*A.ClipId,A.Playing?1:0,*B.ClipId,B.Playing?1:0);FinishPhoto();}
 }
 void AOKStreetSocialScene::RunWatermelonProbe(double Now){
  auto& S=*State;auto Fail=[&](const TCHAR* Why){FinishPhoto();S.Errors.Add(Why);WriteReport(false);};
