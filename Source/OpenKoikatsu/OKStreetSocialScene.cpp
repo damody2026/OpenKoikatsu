@@ -3539,6 +3539,13 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(!S.SelfTest&&!Agent.Held&&Agent.Dwell<=0&&Now>=S.RunNext[Agent.Slot]){S.RunUntil.Add(Agent.Slot,Now+S.Random.FRandRange(2.5f,5.f));S.RunNext[Agent.Slot]=Now+S.Random.FRandRange(18,35);}
   const bool Running=!Agent.Held&&Agent.Dwell<=0&&((S.PresentationOnlyTest&&S.PresentationPhase==2)||Now<S.RunUntil.FindRef(Agent.Slot));
   const float TravelSpeed=Running?OKStreetFemaleRunSpeed:OKStreetWalkSpeed;
+  // Free on the street walk while her day has her somewhere (a talk ended during her shift: its walk to the counter had
+  // been dropped and the talk let her go): back to the schedule, which puts her there. Raiden was walked out of the cafe
+  // on her shift by the rules below (R3-214).
+  if(!Agent.Held&&!S.Commutes.Contains(Agent.Slot)&&!S.PendingMoves.Contains(Agent.Slot)&&!S.SelfTest&&!BusyWithPlayer(Agent.Slot)&&S.PlanBlock.FindRef(Agent.Slot,INDEX_NONE)!=INDEX_NONE)
+   // As from a gap in her plan (INDEX_NONE): she walks there; a removed entry would put her there at once, as at dawn.
+   if(const FOKStreetPlanBlock* B=BlockNow(Agent.Slot,int32(OKStreetMindNow(S)%1440));B&&!B->Place.IsEmpty()){S.PlanBlock.Add(Agent.Slot,INDEX_NONE);S.ScheduleTickAt=0;S.StreetDetourAt.Add(Agent.Slot,SceneTime()+2.0); // the schedule takes her, not the detours below
+    UE_LOG(LogTemp,Display,TEXT("Street walk: actor %d roams while her day has her at %s: back to her schedule"),Agent.Slot,*B->Place);}
   // Free on the street walk but standing inside a place (summoned into the dorm lobby, a heroine with no day plan): the
   // street walk heads straight for its next stop through the wall, and the stuck rule only moves on to the next stop,
   // out there too. A wall before that stop: she walks out to it on the grid (through the door), then the street walk
