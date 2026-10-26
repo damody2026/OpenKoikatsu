@@ -2035,6 +2035,7 @@ context_sang = "(You just finished singing a song for him.)"
 sing_now = "Ask {name} to sing now"
 listen_again = "♪ Hear it again"
 comes_to_sing = "{name} is walking over to you; she seems to have something to tell you."
+needs_room = "{name} wants to sing for you, but it is too cramped here. Somewhere outdoors or roomier, then."
 context_sing = "(You had a song ready, came to find him, said you wanted to sing it for him and sang. You said: \"{line}\")"
 
 [ui.inspect]

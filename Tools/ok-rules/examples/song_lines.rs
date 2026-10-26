@@ -1,9 +1,9 @@
 //! Caption timing check for a sung song: the line spans the old rule gave (one line per breath when the counts match,
 //! else even shares of the voice) and align_heard from each breath's transcription, as JSON for comparing against the audio (e.g. ASR of each span).
 //!
-//!   cargo run --example song_lines -- <song>.mouth.json <lyrics.txt> [heard.json: one transcription per breath]
+//!   cargo run --example song_lines -- <song>.mouth.json <lyrics.txt> [heard.json: one transcription per breath] [windows.json: per window]
 
-use ok_rules::song::{align_heard, even_lines, phrases, unit_texts};
+use ok_rules::song::{align_heard, even_lines, phrases, refine_heard, song_windows, unit_texts};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -24,5 +24,8 @@ fn main() {
     };
     let heard: Vec<String> = args.get(3).map(|p| serde_json::from_str(&std::fs::read_to_string(p).expect("heard")).expect("heard json")).unwrap_or_default();
     let from_heard = if heard.len() == breaths.len() { align_heard(&breaths, &heard, &texts, &texts) } else { Vec::new() };
-    println!("{}", serde_json::json!({"texts": texts, "breaths": breaths, "old": old, "heard": from_heard}));
+    let windows: Vec<String> = args.get(4).map(|p| serde_json::from_str(&std::fs::read_to_string(p).expect("windows")).expect("windows json")).unwrap_or_default();
+    let refined = refine_heard(&from_heard, &breaths, &texts, &windows);
+    let heard_lines: Vec<(f32, String)> = from_heard.iter().map(|(a, t, _)| (*a, t.clone())).collect();
+    println!("{}", serde_json::json!({"texts": texts, "breaths": breaths, "windows": song_windows(&breaths), "old": old, "heard": heard_lines, "refined": refined}));
 }

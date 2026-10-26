@@ -2035,6 +2035,7 @@ context_sang = "（你刚唱完一首歌给他听。）"
 sing_now = "请{name}现在唱"
 listen_again = "♪ 再听一次"
 comes_to_sing = "{name}朝你走过来了，好像有话想跟你说。"
+needs_room = "{name}想唱歌给你听，但这里太挤了。到外面或宽敞一点的地方吧。"
 context_sing = "（你准备好一首歌，特地来找他，说想唱给他听，接着就唱了。你说的是：「{line}」）"
 
 [ui.inspect]

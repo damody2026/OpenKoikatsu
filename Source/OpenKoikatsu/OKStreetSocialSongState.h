@@ -18,7 +18,8 @@ struct FOKSongProgress {
 struct FOKSongMemory {
  FString HeroineId,Occasion,Template,Lyrics,LyricsModel,SongPath,MouthPath;float Hop=.01f;int32 Day=0;
  // Each breath as ok-asr heard it (SongListen): the captions follow what she sang. Empty: not transcribed (yet).
- TArray<FString> Heard;
+ // HeardWindows: the short windows over its long breaths (rules song_windows), for lines sung in one breath.
+ TArray<FString> Heard,HeardWindows;
 };
 
 struct FOKSongState {
@@ -38,8 +39,8 @@ struct FOKSongState {
  int32 JustSung=INDEX_NONE,JustSungGirl=INDEX_NONE;
  // When she may next try to come over to sing for him (SongCallOver; SceneTime()).
  double CallOverAt=0;
- // This song's breaths as ok-asr heard them (SongListen; song_choreo "heard").
- TArray<FString> Heard;
+ // This song's breaths and windows as ok-asr heard them (SongListen; song_choreo "heard", "heard_windows").
+ TArray<FString> Heard,HeardWindows;
  TMap<FString,FOKSongProgress> Progress;TArray<FOKSongMemory> Memories;
  // The locked singer and this event's identity; callbacks check Epoch (bumped by every reset, slot load and new event).
  int32 Girl=INDEX_NONE;uint32 Epoch=0;
@@ -57,6 +58,8 @@ struct FOKSongState {
  FString IntroClip,OutroClip,Want,Next;TArray<double> CueAt;TArray<FString> CueClip,CuePart;int32 Cue=-1;bool Staged=false,NextAsked=false;
  // The camera's distance and how far below her head it looks, eased toward each part's framing.
  float CamDistance=-1,CamDrop=10;
+ // Its angle off her front (degrees; SongCameraShot picks one with room) and when that is next checked.
+ float CamYaw=35;double CamCheckAt=0;
  // The sheet as the song model sang it (Simplified): the caption in zh-CN.
  FString LyricsModel;
  // The caption while she sings: each line from when it starts (rules song_choreo lines), Line the one shown.
