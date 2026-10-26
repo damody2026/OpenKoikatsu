@@ -1310,6 +1310,11 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
    S.Message=OKMsg(TEXT("ui.invite.on_shift_player"),{{TEXT("name"),S.Manifest.Characters[Character].Name},{TEXT("place"),Place},{TEXT("until"),At}});RefreshUI();
    UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s not started, actor=%d is on shift until %s"),*Action,Character,*At);}
   if(Handled){}
+  // In the middle of an activity with him, an action that names no activity or place is her word for what they are doing
+  // ("take_photo" while their photo was being taken): told it "failed", she said the camera had died and they gave up
+  // the photo they were taking (R3-229).
+  else if(S.Pair.Partner==Character&&Action!=TEXT("leave")&&!Action.StartsWith(TEXT("go:"))&&!OKStreetFindActivity(Action)&&!OKStreetFindPlace(Action)){
+   UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s during the activity they are in names nothing else: taken as that activity"),*Action);}
   else if(!BeginOuting(Character,Action,Error)){
    // Only because her scripted line is still playing: she said yes, so it starts as soon as the line ends (TickRetryAction).
    if(Error==OKT(TEXT("ui.scene.wait_her_finish_line"))){S.RetryAction=Action;S.RetryGirl=Character;S.RetryUntil=SceneTime()+25.0;UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s waits for her line to end"),*Action);}
@@ -2869,7 +2874,7 @@ void AOKStreetSocialScene::TickPhoto(double Now){
  // she sat back with nothing to eat), nothing is lost either.
  auto Switching=[&](const FOKRuntimeActionStreamStatus& X){return P.Meal&&(X.Pending||X.Preparing||X.Ready||X.Transitioning);};
  const bool LostA=!(A.Playing&&Theirs(A,P.MaleClip,0))&&!Switching(A),LostB=!(B.Playing&&Theirs(B,P.FemaleClip,1))&&!Switching(B);
- if(LostA||LostB||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, its clips are gone (%s playing=%d %s playing=%d)"),*A.ClipId,A.Playing?1:0,*B.ClipId,B.Playing?1:0);FinishPhoto();}
+ if(LostA||LostB||(!P.Conversation()&&Now-P.PlayingAt>30)){UE_LOG(LogTemp,Display,TEXT("Street pair: ended, %s (%s playing=%d %s playing=%d)"),LostA||LostB?TEXT("its clips are gone"):TEXT("its 30 s pose is over"),*A.ClipId,A.Playing?1:0,*B.ClipId,B.Playing?1:0);FinishPhoto();}
 }
 void AOKStreetSocialScene::RunWatermelonProbe(double Now){
  auto& S=*State;auto Fail=[&](const TCHAR* Why){FinishPhoto();S.Errors.Add(Why);WriteReport(false);};
