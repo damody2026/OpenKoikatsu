@@ -155,6 +155,35 @@ void AOKStreetSocialScene::SongListen(){
  Request->ProcessRequest();
 }
 
+// She starts: her line before the song (spoken, captioned, in her conversation), then her staging and the song.
+void AOKStreetSocialScene::SongBegin(const FString& Intro,const FString& Context){
+ auto& S=*State;auto& G=S.Song;
+ G.Phase=EOKSongPhase::Intro;G.PhaseAt=SceneTime();G.Notice.Reset();SongChoreograph();SongStage(G.IntroClip,G.CueClip.IsValidIndex(0)?G.CueClip[0]:FString(),TEXT("intro"));
+ S.FreeTalkCaptionHer=Intro;SongSay(Intro);OKSongCaption(S,Intro);SongRecord(Intro,Context);
+}
+
+// Her song is ready and due and he is not with her: when he is free (not talking with anyone, on the phone, out with
+// someone, asleep...), she walks over to him; arriving opens their talk and the song starts from it. Tried again a
+// minute later when she cannot come now.
+void AOKStreetSocialScene::SongCallOver(double Now){
+ auto& S=*State;auto& G=S.Song;const int32 I=G.Girl;
+ if(Now<G.CallOverAt||S.ApproachGirl!=INDEX_NONE||S.Target!=INDEX_NONE||S.FreeTalkBusy||S.RemoteMode!=0||S.OutingGirl!=INDEX_NONE||S.Pair.Partner!=INDEX_NONE
+    ||S.Facility!=INDEX_NONE||S.SoloGirl!=INDEX_NONE||S.SleepPhase!=0||S.PrivateGirl!=INDEX_NONE||S.RingGirl!=INDEX_NONE)return;
+ G.CallOverAt=Now+60;
+ if(!S.Agents.IsValidIndex(I-1)||S.Companion==I||!ContactReady(I)){UE_LOG(LogTemp,Display,TEXT("Street song: actor %d cannot come over yet (not ready)"),I);return;}
+ // Her song is her own reason to leave what she is doing (a walk, a rest, a meal), not class, work, a promise or sleep:
+ // then she comes once that is over.
+ if(const FOKStreetPlanBlock* B=LifeBlock(I,int32(OKStreetMindNow(S)%1440));B&&(B->Kind==TEXT("class")||B->Kind==TEXT("work")||B->Kind==TEXT("promise")||B->Kind==TEXT("sleep"))){
+  UE_LOG(LogTemp,Display,TEXT("Street song: actor %d comes over after her %s"),I,*B->Kind);return;}
+ auto Path=ContactRoute(S.Agents[I-1].Position,S.Male);if(Path.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street song: actor %d has no way to him now"),I);return;}
+ if(S.ScheduleHeld.Contains(I))ReleaseFromSchedule(I);
+ float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
+ S.ApproachGirl=I;S.ApproachJoin=false;S.ApproachInvite=false;S.ApproachAppointment=false;S.ApproachSong=true;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachRetries=0;
+ S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);S.ApproachLast=FPlatformTime::Seconds();S.Agents[I-1].Held=true;
+ UE_LOG(LogTemp,Display,TEXT("Street song: actor %d comes over to sing for him (%.0f m)"),I,Length/100.f);
+ S.FreeTalkNotice=OKMsg(TEXT("ui.song.comes_to_sing"),{{TEXT("name"),*S.Manifest.Characters[I].Name}});RefreshUI();
+}
+
 // While she sings he is her audience: he steps back to a stage distance in front of her (around obstacles), then they
 // face each other. His walk speed for the locomotion (0: standing).
 static constexpr float OKSongStageDistance=230.f;
@@ -449,8 +478,8 @@ void AOKStreetSocialScene::SongAnswer(const FString& Answer){
   G.StartWhenSeated=false;
   // Her words before it: the one for a song she sang before when it is sung again, else the milestone's own.
   const FString Intro=G.Replay?OKT(TEXT("ui.song.replay_intro_line")):OKSongOccasionLine(G.Occasion,TEXT("intro_line"));
-  G.Phase=EOKSongPhase::Intro;G.PhaseAt=SceneTime();G.Notice.Reset();SongChoreograph();SongStage(G.IntroClip,G.CueClip.IsValidIndex(0)?G.CueClip[0]:FString(),TEXT("intro"));SongSay(Intro);OKSongCaption(S,Intro);UE_LOG(LogTemp,Display,TEXT("Street song: accepted (actor %d)"),G.Girl);
-  SongRecord(Intro,OKT(G.Replay?TEXT("ui.song.context_replay"):TEXT("ui.song.context_accept")));}
+  UE_LOG(LogTemp,Display,TEXT("Street song: accepted (actor %d)"),G.Girl);
+  SongBegin(Intro,OKT(G.Replay?TEXT("ui.song.context_replay"):TEXT("ui.song.context_accept")));}
  else if(Answer==TEXT("later")){G.Phase=EOKSongPhase::Ready;G.LaterUntil=SceneTime()+OKSongLaterSeconds;G.Notice=OKT(TEXT("ui.song.later_notice"));SongRecord(FString(),OKT(TEXT("ui.song.context_later")));}
  else{SongRecord(FString(),OKT(TEXT("ui.song.context_decline")));MindObserve(G.Girl,TEXT("song"),OKT(TEXT("ui.song.declined_memory")),PlaceHere(S.Male),0.35f);G.Phase=EOKSongPhase::Ready;G.DeclinedAtMinutes=SceneTime()/60.0;G.LaterUntil=SceneTime()+20*60;G.Notice=OKT(TEXT("ui.song.declined_notice"));SongSave();}
  RefreshUI();
@@ -556,10 +585,15 @@ void AOKStreetSocialScene::TickSong(double Now){
    if(Id==G.HeroineId&&Occasion==G.Occasion)G.Due=Due;
    else if(Due){SongReset(OKT(TEXT("ui.song.singer_changed")),false);return;}
    else G.Due=false;}
-  if(!G.Due)return;
-  if(Now>=G.LaterUntil&&SongMayOffer(G.Girl)&&!SongAtEase(G.Girl)){G.LaterUntil=Now+45;return;}
-  if(Now>=G.LaterUntil&&SongMayOffer(G.Girl)){const FString Offer=OKSongOccasionLine(G.Occasion,TEXT("offer_line"));
-   G.Phase=EOKSongPhase::Offered;G.PhaseAt=Now;G.Notice.Reset();S.FreeTalkCaptionHer=Offer;SongSay(Offer);SongRecord(Offer,OKMsg(TEXT("ui.song.context_offer"),{{TEXT("line"),*Offer}}));UE_LOG(LogTemp,Display,TEXT("Street song: offered by actor %d (%s)"),G.Girl,G.Occasion.IsEmpty()?TEXT("-"):*G.Occasion);RefreshUI();}
+  if(!G.Due||Now<G.LaterUntil)return;
+  // With him, where singing feels right to her: she says she wants to sing for him, and sings (no question first).
+  if(SongMayOffer(G.Girl)){
+   if(!SongAtEase(G.Girl)){G.LaterUntil=Now+45;return;}
+   const FString Offer=OKSongOccasionLine(G.Occasion,TEXT("offer_line"));
+   UE_LOG(LogTemp,Display,TEXT("Street song: actor %d sings for him (%s)"),G.Girl,G.Occasion.IsEmpty()?TEXT("-"):*G.Occasion);
+   SongBegin(Offer,OKMsg(TEXT("ui.song.context_sing"),{{TEXT("line"),*Offer}}));return;}
+  // Not with her: once he is free she comes over to him for it (the approach walk, OKStreetSocialInvite.inl).
+  SongCallOver(Now);
   return;
  case EOKSongPhase::Offered:
   if(S.Target!=G.Girl){G.Phase=EOKSongPhase::Ready;RefreshUI();}

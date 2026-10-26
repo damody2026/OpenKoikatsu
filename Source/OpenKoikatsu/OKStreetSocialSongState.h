@@ -36,6 +36,8 @@ struct FOKSongState {
  int32 AskedMemory=INDEX_NONE;double AskedAt=0;
  // The song she has just sung (a memory index) and to whom: "hear it again" by the dialogue box while he is still with her.
  int32 JustSung=INDEX_NONE,JustSungGirl=INDEX_NONE;
+ // When she may next try to come over to sing for him (SongCallOver; SceneTime()).
+ double CallOverAt=0;
  // This song's breaths as ok-asr heard them (SongListen; song_choreo "heard").
  TArray<FString> Heard;
  TMap<FString,FOKSongProgress> Progress;TArray<FOKSongMemory> Memories;

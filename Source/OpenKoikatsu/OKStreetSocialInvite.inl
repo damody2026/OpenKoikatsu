@@ -140,7 +140,7 @@ void AOKStreetSocialScene::TickApproach(){
 
 void AOKStreetSocialScene::StepApproach(){
  auto& S=*State;const int32 I=S.ApproachGirl;auto& A=S.Agents[I-1];
- auto Stop=[&](){A.Held=false;S.ApproachGirl=INDEX_NONE;S.ApproachPath.Reset();S.ApproachBlockedNear=false;S.ApproachJoin=false;};
+ auto Stop=[&](){A.Held=false;S.ApproachGirl=INDEX_NONE;S.ApproachPath.Reset();S.ApproachBlockedNear=false;S.ApproachJoin=false;S.ApproachSong=false;};
  // On her way to a meeting she was held up step after step (a park exit: 40 cm every 8 s) and ran out of time: the meeting
  // used to vanish. Once more on a fresh route; out of his sight (25 m) she is already further along it.
  if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit&&S.ApproachAppointment&&S.ApproachRetries==0&&S.Target==INDEX_NONE){
@@ -162,9 +162,11 @@ void AOKStreetSocialScene::StepApproach(){
  // Arrived: beside him, or held up (a shelf, someone standing there) a couple of steps away; she stood at 176 cm for
  // 90 s and gave up.
  if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))&&S.RemoteMode==0){ // on the phone: she waits until he hangs up
-  const bool Join=S.ApproachJoin;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
-  UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, he is with %d)"),I,Join?1:0,With);
+  const bool Join=S.ApproachJoin,ForSong=S.ApproachSong;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
+  UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,With);
   Stop();
+  // She came to sing for him (SongCallOver): the talk opens without her usual opener, and her song starts from it.
+  if(ForSong){if(S.Target==INDEX_NONE){S.SkipGreeting=true;BeginTalk(I);S.SkipGreeting=false;}S.Song.NextCheck=0;return;}
   // Their meeting, and he is talking with another girl: she joins them (the group talk hears that she came for it).
   if(Join&&With!=INDEX_NONE&&With!=I){
    if(PartyJoin(I)){S.PartyEvents.Add(OKMsg(TEXT("ui.party.came_for_meeting"),{{TEXT("name"),*SpokenName(I)}}));UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting and joins the talk"),I);return;}

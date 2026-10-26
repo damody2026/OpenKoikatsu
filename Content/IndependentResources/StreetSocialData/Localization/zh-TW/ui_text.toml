@@ -2035,6 +2035,8 @@ context_decline = "（他說這次先不聽你唱歌，下次吧。）"
 context_sang = "（你剛唱完一首歌給他聽。）"
 sing_now = "請{name}現在唱"
 listen_again = "♪ 再聽一次"
+comes_to_sing = "{name}朝你走過來了，好像有話想跟你說。"
+context_sing = "（你準備好一首歌，特地來找他，說想唱給他聽，接著就唱了。你說的是：「{line}」）"
 
 [ui.inspect]
 hint = "檢視 {name}：←→ 轉圈、↑↓ 俯仰、滾輪遠近、PageUp／PageDown 換人、Home 重置視角、End 離開"

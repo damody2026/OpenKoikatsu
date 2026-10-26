@@ -2034,6 +2034,8 @@ context_decline = "(He said not this time; maybe next time.)"
 context_sang = "(You just finished singing a song for him.)"
 sing_now = "Ask {name} to sing now"
 listen_again = "♪ Hear it again"
+comes_to_sing = "{name} is walking over to you; she seems to have something to tell you."
+context_sing = "(You had a song ready, came to find him, said you wanted to sing it for him and sang. You said: \"{line}\")"
 
 [ui.inspect]
 hint = "Inspecting {name}: Left/Right turn round, Up/Down tilt, wheel nearer/farther, PageUp/PageDown next heroine, Home reset view, End leave"
