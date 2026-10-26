@@ -155,6 +155,8 @@ bool AOKStreetSocialScene::GridSearchStep(FOKStreetGridSearch& G,double Deadline
  if(Goal==ToCell(To)&&Clear(Route.Last(),To))Route.Last()=To;
  G.Phase=2;Release();return true;
 }
+// How near his feet may come to a heroine's (her body and his, side by side).
+static constexpr float OKStreetHeroineBody=60.f; // sitting, her knees reach forward of her feet
 FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Direction,float Distance) const{
  constexpr float Clearance=30.f;
  FVector D=Direction;D.Z=0;if(Distance<=0||!D.Normalize())return From;
@@ -165,6 +167,11 @@ FVector AOKStreetSocialScene::StreetStep(const FVector& From,const FVector& Dire
   // the clearance's edge (30 here, 29 a step on) he may slide: a few centimetres closer, never under 25 (the capsule
   // sweep below still stops him at the wall itself).
   const float There=OKStreetObstacleGap(To,Clearance+10.f);if(There<=Clearance&&(There<Clearance-5.f||There<Here-3.f))return false;
+  // A heroine is in his way like anything else: walking into one sitting on a chair pushed her off it, left sitting on
+  // the air (R3-221). Into her body is blocked; away from her (already that close) never is.
+  // His steps only: a heroine walked with this (to a party seat, to an invitation) is not stopped by the others.
+  if(FVector::Dist2D(From,State->Male)<1.f)for(const auto& A:State->Agents){if(FMath::Abs(A.Position.Z-To.Z)>100.f)continue;const float Near=float(FVector::Dist2D(To,A.Position));
+   if(Near<OKStreetHeroineBody&&Near<float(FVector::Dist2D(From,A.Position)))return false;}
   FHitResult Hit;
   if(GetWorld()->SweepSingleByChannel(Hit,From+FVector(0,0,85),To+FVector(0,0,85),FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeCapsule(28,78),Query))
    if(!Hit.bStartPenetrating||FVector::DotProduct((To-From).GetSafeNormal2D(),Hit.Normal)<=0.f)return false;
