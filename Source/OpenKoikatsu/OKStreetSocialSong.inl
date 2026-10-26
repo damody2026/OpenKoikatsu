@@ -492,7 +492,9 @@ void AOKStreetSocialScene::TickSong(double Now){
  if(!G.Loaded)SongLoad();
  if(G.Endpoint.IsEmpty())return;
  // The singer's actor went away, he left her, or a call came: stop what is playing; a made song stays for later.
- if((G.Phase==EOKSongPhase::Intro||G.Phase==EOKSongPhase::Singing||G.Phase==EOKSongPhase::Outro)&&(S.Target!=G.Girl||S.RingGirl!=INDEX_NONE||S.RemoteMode||!ContactReady(G.Girl))){
+ // He is with her as long as she is the one he talks to: sat on the grass with her to watch the stars, the talk's
+ // target is not set (her activity holds her) and the song stopped the moment it began (R3-219).
+ if((G.Phase==EOKSongPhase::Intro||G.Phase==EOKSongPhase::Singing||G.Phase==EOKSongPhase::Outro)&&(FreeTalkPartner()!=G.Girl||S.RingGirl!=INDEX_NONE||S.RemoteMode||!ContactReady(G.Girl))){
   UE_LOG(LogTemp,Display,TEXT("Street song: interrupted (target %d, ring %d, remote %d)"),S.Target,S.RingGirl,S.RemoteMode?1:0);
   // A song sung again is simply over; a new one waits to be offered again.
   if(G.Replay){SongReset(OKT(TEXT("ui.song.interrupted")),false);return;}
