@@ -110,7 +110,8 @@ seconds = 2.5
 
 [[gesture]]
 key = "sulk"
-stand = ["lib_12_67_0.okanim", "lib_12_67_2.okanim"]
+# Not lib_12_67_2 (ジタバタ): it flails lying on the floor, although the library lists it as standing.
+stand = ["lib_12_67_0.okanim"]
 seconds = 3.5
 
 [[gesture]]
