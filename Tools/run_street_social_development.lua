@@ -7,7 +7,7 @@
 --     [-ValidateOnly] [-Strict] [-Executable EXE] [-SelectionFile JSON] [-MaleCard PNG] [-RetargetFile JSON]
 --     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
 --     [-Editor]  (development: runs the map in the built editor with -game instead of a staged build; no cook needed)
---     [-Sandbox NAME [-PortBase N] [-RulesDll DLL]]
+--     [-Sandbox NAME [-PortBase N] [-RulesDll DLL]] [-Exec "CMD,CMD"] [-Trace [CHANNELS]] [-GameArgs "-SWITCH ..."]
 -- -Sandbox runs a second game beside one already playing from this checkout without touching it: its own ports
 -- (-PortBase, default 48060: TTS N, ASR N+1, control N+10), its own save, voice settings and free-talk logs in
 -- Saved/StreetSocial/Sandbox/NAME/ (copied from the main save the first time), voice servers started for it only (the
@@ -25,7 +25,8 @@ local instance = require "ok_instance"
 
 local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true, editor = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
-  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true, exec = true, trace = true, gpucachedir = true }
+  controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true, exec = true, trace = true, gpucachedir = true,
+  gameargs = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -430,6 +431,8 @@ local function main()
   -- Profiling (development): -Exec "stat dumphitches,t.HitchFrameTimeThreshold 60" runs console commands at start;
   -- -Trace records an Unreal Insights trace (default channels default,cpu,gpu,frame,bookmark) to trace.utrace beside game.log.
   if o.exec then execs[#execs + 1] = o.exec end
+  -- -GameArgs "-A -B=1": more command-line switches for the game itself (development diagnostics such as -RuntimeFaceDiag).
+  if o.gameargs then for a in tostring(o.gameargs):gmatch("%S+") do game[#game + 1] = a end end
   if #execs > 0 then game[#game + 1] = "-ExecCmds=" .. table.concat(execs, ",") end
   if o.trace then
     game[#game + 1] = "-trace=" .. ((o.trace == true or o.trace == "") and "default,cpu,gpu,frame,bookmark" or o.trace)

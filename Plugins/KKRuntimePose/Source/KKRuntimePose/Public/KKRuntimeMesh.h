@@ -5,7 +5,7 @@ struct FKKRuntimeMeshInfluence {uint16 Bone=0,Weight=0;};
 // Delta is bind space after capture; the native session is not required later.
 struct FKKRuntimeFaceSparse {uint8 Control=0;uint16 Local=0;int32 Native=INDEX_NONE;FVector3f Delta=FVector3f::ZeroVector;};
 struct FKKRuntimeFaceControl {TArray<int16> Close,Open;TArray<float> Baseline;};
-struct FKKRuntimeFaceCatalog {FKKRuntimeFaceControl Control[3];};
+struct FKKRuntimeFaceCatalog {FKKRuntimeFaceControl Control[3];FString Part;};
 struct FKKRuntimeMeshVertex {
  FVector3f Position,Normal,Tangent,InitialPosition;
  // Card-owned native mouth endpoints in this vertex's pre-skin reference space.

@@ -7353,60 +7353,43 @@ fn neutral_controller_indices_support_custom_mod_channels() {
     assert_eq!(head_neutral_weights(3,&input,0.92,0.61337),vec![Some(8.),Some(92.),Some(61.)]);
 }
 
-fn apply_default_fbs(mesh: &mut ExtractedMesh, authored_fbs: Option<&HeadFbsInput<'_>>) {
-    let authored_mouth = authored_fbs.and_then(|input| input.mouth);
-    if std::env::var("OK_FBS_DIAG").is_ok() {
-        let sample: Vec<_> = mesh
-            .blend_shapes
-            .iter()
-            .filter(|(n, _)| n.contains("kuti") || mesh.name.eq_ignore_ascii_case("cf_Ohitomi_L"))
-            .map(|(n, d)| format!("{n}:{}", d.len()))
-            .collect();
-        eprintln!(
-            "ok-extract: FBS {} channels={} sample={:?}",
-            mesh.name,
-            mesh.blend_shapes.len(),
-            sample
-        );
-    }
-    if std::env::var("OK_NOFBS").is_ok() {
-        return;
+/// The weight (percent) apply_default_fbs bakes into each channel of a head
+/// mesh; 0 where it bakes nothing. The live face subtracts exactly these as its
+/// baseline, so a mouth baked open here is not opened a second time.
+fn default_fbs_weights(mesh_name: &str, channels: &[&str], authored_fbs: Option<&HeadFbsInput<'_>>) -> Vec<f32> {
+    let mut weights = vec![0.0f32; channels.len()];
+    if std::env::var("OK_NOFBS").is_ok() || channels.is_empty() {
+        return weights;
     }
     // Live GPU path still bakes eye/brow neutral into the bind mesh, but leaves
     // kuti_* for SetBlendShapeWeight. Dump + OK_SKELMESH without OK_GPU_SKIN
     // keeps the old skip.
     let gpu_skin = crate::profile::var("OK_GPU_SKIN").ok().as_deref() == Some("1");
     if crate::profile::var("OK_SKELMESH").ok().as_deref() == Some("1") && !gpu_skin {
-        return;
+        return weights;
     }
     // Head stays CPU-baked unless OK_HEAD_GPUSKIN. Skipping kuti then leaves
     // the mouth at the closed bind pose, because the editor morph path only
     // runs for skel_kind 1/2/3.
     let mouth_on_gpu = gpu_skin && crate::profile::var("OK_HEAD_GPUSKIN").is_ok();
-    if mesh.blend_shapes.is_empty() {
-        return;
-    }
+    let authored_mouth = authored_fbs.and_then(|input| input.mouth);
     // Legacy OBJ preview mouth override. Live mouth baselines and head eye/brow
     // baselines below use authored controller indices, including custom names.
-    let mouth = mouth_ptn_override().and_then(|ptn| mouth_ptn_pair(&mesh.name, ptn));
+    let mouth = mouth_ptn_override().and_then(|ptn| mouth_ptn_pair(mesh_name, ptn));
     let mouth_open = mouth_open_percent();
     // Live mouth setters subtract the authored pattern-0 closed delta from
-    // CPU vertices, then add the selected pair. Never bake the OBJ preview's
-    // default 80% open mouth into this baseline. GPU morph meshes stay raw.
+    // CPU vertices, then add the selected pair. GPU morph meshes stay raw.
     // Use the loaded controller's target indices, including mod channel names.
-    let fallback = mouth_ptn_pair(&mesh.name,0).map(|pair| vec![pair]);
+    let fallback = mouth_ptn_pair(mesh_name,0).map(|pair| vec![pair]);
     let live_weights = if gpu_skin {
         authored_mouth.or(fallback.as_deref()).map(|patterns|
-            runtime_mouth_channel_weights(mesh.blend_shapes.len(),patterns,mouth_on_gpu))
+            runtime_mouth_channel_weights(channels.len(),patterns,mouth_on_gpu))
     } else { None };
-    let neutral_weights = authored_fbs.map(|input| head_neutral_weights(mesh.blend_shapes.len(),input,
+    let neutral_weights = authored_fbs.map(|input| head_neutral_weights(channels.len(),input,
         f32::from_bits(EYES_OPEN_MAX_BITS.load(std::sync::atomic::Ordering::Relaxed)),
         f32::from_bits(EYEBROW_OPEN_MAX_BITS.load(std::sync::atomic::Ordering::Relaxed))));
-    let n = mesh.positions.len();
-    let mut touched = 0usize;
-    let mut maxd = 0.0f32;
-    for (i, (name, deltas)) in mesh.blend_shapes.iter().enumerate() {
-        let w = if let Some(weight) = live_weights.as_ref().and_then(|weights| weights[i]) {
+    for (i, name) in channels.iter().enumerate() {
+        let weight = if let Some(weight) = live_weights.as_ref().and_then(|weights| weights[i]) {
             weight
         } else if let Some(weight) = neutral_weights.as_ref().and_then(|weights| weights[i]) {
             weight
@@ -7431,6 +7414,32 @@ fn apply_default_fbs(mesh: &mut ExtractedMesh, authored_fbs: Option<&HeadFbsInpu
         } else {
             if authored_fbs.is_some() { 0.0 } else { neutral_fbs_weight(name) }
         };
+        weights[i] = weight.max(0.0);
+    }
+    weights
+}
+
+fn apply_default_fbs(mesh: &mut ExtractedMesh, authored_fbs: Option<&HeadFbsInput<'_>>) {
+    if std::env::var("OK_FBS_DIAG").is_ok() {
+        let sample: Vec<_> = mesh
+            .blend_shapes
+            .iter()
+            .filter(|(n, _)| n.contains("kuti") || mesh.name.eq_ignore_ascii_case("cf_Ohitomi_L"))
+            .map(|(n, d)| format!("{n}:{}", d.len()))
+            .collect();
+        eprintln!(
+            "ok-extract: FBS {} channels={} sample={:?}",
+            mesh.name,
+            mesh.blend_shapes.len(),
+            sample
+        );
+    }
+    let names: Vec<&str> = mesh.blend_shapes.iter().map(|(name, _)| name.as_str()).collect();
+    let weights = default_fbs_weights(&mesh.name, &names, authored_fbs);
+    let n = mesh.positions.len();
+    let mut touched = 0usize;
+    let mut maxd = 0.0f32;
+    for ((_, deltas), &w) in mesh.blend_shapes.iter().zip(&weights) {
         if w <= 0.0 {
             continue;
         }
@@ -10878,18 +10887,14 @@ pub(crate) fn extract_session_from_info(
                     part.iris_runtime=Some(runtime);
                 }
             }
-            let input=HeadFbsInput {mouth:Some(&part.mouth_patterns),
-                eyes:Some(&part.eye_patterns),eyebrow:Some(&part.eyebrow_patterns)};
-            let mut baseline=head_neutral_weights(part.blend_shapes.len(),&input,eyes,brow);
-            // apply_default_fbs applies Mouth last. GPU head leaves its mouth
-            // raw; CPU head contains the source pattern-0 closed shape.
-            let gpu_head=crate::profile::var("OK_GPU_SKIN").ok().as_deref()==Some("1")
-                && crate::profile::var("OK_HEAD_GPUSKIN").is_ok();
-            for (destination,source) in baseline.iter_mut().zip(
-                runtime_mouth_channel_weights(part.blend_shapes.len(),&part.mouth_patterns,gpu_head)) {
-                if source.is_some() {*destination=source;}
-            }
-            part.face_baseline_weights=baseline.into_iter().map(|w|w.unwrap_or(0.)).collect();
+            // The baseline is what apply_default_fbs baked into this mesh, with the inputs it had (an absent
+            // controller as absent). A CPU head bakes the OBJ preview's pattern 0 at 80% open: assuming it closed
+            // made every live mouth open twice, the tongue pushed out through the chin.
+            fn none_if_empty(p:&[(i32,i32)])->Option<&[(i32,i32)]> {(!p.is_empty()).then_some(p)}
+            let input=HeadFbsInput {mouth:none_if_empty(&part.mouth_patterns),
+                eyes:none_if_empty(&part.eye_patterns),eyebrow:none_if_empty(&part.eyebrow_patterns)};
+            let channels:Vec<&str>=part.blend_shapes.iter().map(|(name,_)|name.to_str().unwrap_or("")).collect();
+            part.face_baseline_weights=default_fbs_weights(&part.name,&channels,Some(&input));
         }
     }
     // KK_InvisibleBody turns off every renderer under the body and head bones (body, face, eyes, hair) but not the

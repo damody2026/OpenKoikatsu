@@ -24,7 +24,7 @@ static FVector RecoverSingularSkin(const FMatrix& M,const FVector& Target,const 
 static bool OKCaptureRuntimeFace(OkSession* Session,int32 Part,const OkMeshView& V,const OkRustBindings& B,TSharedPtr<const FKKRuntimeFaceCatalog,ESPMode::ThreadSafe>& Catalog,TArray<TArray<FKKRuntimeFaceSparse>>& PerVertex,uint64& Payload,FString& Error,uint64 Limit){
  Catalog.Reset();PerVertex.Reset();Payload=0;
  auto Fail=[&](const TCHAR* Why){Error=Why;Catalog.Reset();PerVertex.Reset();Payload=0;return false;};
- auto Built=MakeShared<FKKRuntimeFaceCatalog,ESPMode::ThreadSafe>();bool Any=false;
+ auto Built=MakeShared<FKKRuntimeFaceCatalog,ESPMode::ThreadSafe>();bool Any=false;Built->Part=V.name?UTF8_TO_TCHAR(V.name):TEXT("");
  for(int32 Control=0;Control<3;++Control){
   const int32 Count=B.face_pattern_count(Session,Part,Control);
   if(Count<0||Count>256)return Fail(TEXT("Runtime face pattern count invalid"));
@@ -47,6 +47,12 @@ static bool OKCaptureRuntimeFace(OkSession* Session,int32 Part,const OkMeshView&
   }
  }
  if(!Any)return true;
+ // -RuntimeFaceDiag: each part's mouth pairs, their baselines and how far each pair's morphs move a vertex (cm), to
+ // compare the face with the teeth and tongue that should move with it.
+ if(FParse::Param(FCommandLine::Get(),TEXT("RuntimeFaceDiag"))){const auto& C=Built->Control[0];
+  TArray<float> Reach;Reach.Init(0.f,C.Baseline.Num());for(const auto& Row:PerVertex)for(const auto& S:Row)if(S.Control==0&&Reach.IsValidIndex(S.Local))Reach[S.Local]=FMath::Max(Reach[S.Local],S.Delta.Size());
+  FString Pairs;for(int32 P=0;P<FMath::Min(C.Close.Num(),12);++P){auto One=[&](int16 L){return L<0?FString(TEXT("-")):FString::Printf(TEXT("%d(b%.2f r%.2f)"),L,C.Baseline[L],Reach[L]);};Pairs+=FString::Printf(TEXT(" p%d=%s/%s"),P,*One(C.Close[P]),*One(C.Open[P]));}
+  UE_LOG(LogTemp,Display,TEXT("Runtime face diag part=%d %s mouth patterns=%d morphs=%d%s"),Part,V.name?UTF8_TO_TCHAR(V.name):TEXT("?"),C.Close.Num(),C.Baseline.Num(),*Pairs);}
 
  Catalog=Built;return true;
 }
@@ -101,6 +107,7 @@ bool OKCaptureRuntimeMeshes(OkSession* Session,TConstArrayView<FKKRuntimePoseBon
   TSharedPtr<const FKKRuntimeFaceCatalog,ESPMode::ThreadSafe> FaceCatalog;TArray<TArray<FKKRuntimeFaceSparse>> FaceDeltas;uint64 FacePayload=0;
   if(CaptureFacePatterns&&!OKCaptureRuntimeFace(Session,Part.NativePart,V,B,FaceCatalog,FaceDeltas,FacePayload,Error,Budget-Bytes-FaceBytes))return false;
   if(Bytes+FaceBytes+FacePayload>Budget)return Fail(TEXT("Runtime mesh buffers exceed preallocation budget"));FaceBytes+=FacePayload;
+  double DrawnOpenReach=0;FVector DrawnOpenWidest=FVector::ZeroVector,DrawnOpenSum=FVector::ZeroVector;int32 DrawnOpenCount=0;
   if(FParse::Param(FCommandLine::Get(),TEXT("RuntimeUVInputs"))){const float* Channels[]={V.uvs,V.uv2,V.uv3,V.uv4};for(int32 U=0;U<4;++U){FVector2f Lo(FLT_MAX,FLT_MAX),Hi(-FLT_MAX,-FLT_MAX);if(Channels[U])for(int32 I=0;I<V.n_verts;++I){const FVector2f UV(Channels[U][I*2],Channels[U][I*2+1]);Lo.X=FMath::Min(Lo.X,UV.X);Lo.Y=FMath::Min(Lo.Y,UV.Y);Hi.X=FMath::Max(Hi.X,UV.X);Hi.Y=FMath::Max(Hi.Y,UV.Y);}UE_LOG(LogTemp,Display,TEXT("Runtime UV input part=%s channel=%d present=%d min=(%.6f,%.6f) max=(%.6f,%.6f)"),UTF8_TO_TCHAR(V.name),U,Channels[U]!=nullptr,Lo.X,Lo.Y,Hi.X,Hi.Y);}}
   for(int32 I=0;I<V.n_verts;++I){TMap<int32,double> Combined;
    if(!Part.RigidFollow.IsEmpty())Combined.Add(0,1.);
@@ -156,7 +163,10 @@ bool OKCaptureRuntimeMeshes(OkSession* Session,TConstArrayView<FKKRuntimePoseBon
      const FVector Drawn(NativeSkin.TransformVector(FVector(Value)));
      return FVector3f(Singular?RecoverSingularSkin(Blend,Drawn,FVector::ZeroVector,false):FVector(Inverse.TransformVector(Drawn)));};
     Vertex.MouthClosed=Bind(MouthClosed[I]);Vertex.MouthOpen=Bind(MouthOpen[I]);Vertex.BlinkClosed=Bind(BlinkClosed[I]);
-    for(auto& Sample:Sparse){Sample.Delta=Bind(Sample.Delta);if(Sample.Delta.ContainsNaN())return Fail(TEXT("Runtime face morph delta nonfinite"));}
+    for(auto& Sample:Sparse){Sample.Delta=Bind(Sample.Delta);if(Sample.Delta.ContainsNaN())return Fail(TEXT("Runtime face morph delta nonfinite"));
+     // -RuntimeFaceDiag: how far pattern 0's open shape moves a vertex as drawn (cm, at the capture pose).
+     if(FaceCatalog&&Sample.Control==0&&FaceCatalog->Control[0].Open.Num()&&Sample.Local==FaceCatalog->Control[0].Open[0]){const FVector D=Blend.TransformVector(FVector(Sample.Delta));
+      if(D.Size()>DrawnOpenReach){DrawnOpenReach=D.Size();DrawnOpenWidest=D;}DrawnOpenSum+=D;++DrawnOpenCount;}}
     if(Vertex.BlinkClosed.ContainsNaN()||Vertex.MouthClosed.ContainsNaN()||Vertex.MouthOpen.ContainsNaN())return Fail(TEXT("Runtime reference mouth delta nonfinite"));
    }
    Vertex.Face=MoveTemp(Sparse);Vertex.FaceCatalog=FaceCatalog;
@@ -166,6 +176,14 @@ bool OKCaptureRuntimeMeshes(OkSession* Session,TConstArrayView<FKKRuntimePoseBon
   // The tears lie a hair under the lower lid's skin (the source draws them over it): lifted 0.3 along their own
   // normals, they show as the wet line the source shows.
   if(OKRuntimeTearLevel(Mesh.Name))for(auto& X:Mesh.Vertices){X.Position+=X.Normal*0.3f;X.InitialPosition+=X.Normal*0.3f;}
+  // -RuntimeFaceDiag: every part with where it is drawn (its bounds at the capture pose), to tell which mesh is where.
+  // -RuntimeFaceDiag: the part's local bounds alone and with pattern 0's open shape added to each vertex (a tongue's tip
+  // should move about as far as the source shape moves it, not as far as its root).
+  if(FParse::Param(FCommandLine::Get(),TEXT("RuntimeFaceDiag"))&&FaceCatalog&&FaceCatalog->Control[0].Open.Num()){FBox Rest(ForceInit),Open(ForceInit);const int16 O=FaceCatalog->Control[0].Open[0];
+   for(const auto& X:Mesh.Vertices){FVector3f D=FVector3f::ZeroVector;for(const auto& S:X.Face)if(S.Control==0&&int16(S.Local)==O)D+=S.Delta;Rest+=FVector(X.Position);Open+=FVector(X.Position+D);}
+   UE_LOG(LogTemp,Display,TEXT("Runtime part local diag %s rest=%s..%s open0=%s..%s"),*Mesh.Name,*Rest.Min.ToCompactString(),*Rest.Max.ToCompactString(),*Open.Min.ToCompactString(),*Open.Max.ToCompactString());}
+  if(FParse::Param(FCommandLine::Get(),TEXT("RuntimeFaceDiag"))){FBox Box(ForceInit);for(const auto& X:Mesh.Vertices)Box+=FVector(X.InitialPosition);
+   UE_LOG(LogTemp,Display,TEXT("Runtime part diag part=%d %s role=%s verts=%d rigid=%d visible=%d open0_drawn=%.2f widest=%s mean=%s box=%s..%s"),Part.NativePart,*Mesh.Name,*Mesh.Role,Mesh.Vertices.Num(),Part.RigidFollow.IsEmpty()?0:1,V.render_visible?1:0,DrawnOpenReach,*DrawnOpenWidest.ToCompactString(),*(DrawnOpenCount?DrawnOpenSum/DrawnOpenCount:FVector::ZeroVector).ToCompactString(),*Box.Min.ToCompactString(),*Box.Max.ToCompactString());}
   Meshes.Add(MoveTemp(Mesh));
  }
  Out=MoveTemp(Meshes);Error.Reset();return true;
