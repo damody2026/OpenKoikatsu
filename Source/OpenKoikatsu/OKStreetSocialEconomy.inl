@@ -545,7 +545,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  if(!CommitStore(MoveTemp(Candidate)))return;
  FlushRulesEffects();
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
- if(WithHer&&Answer->GetBoolField(TEXT("treat_kept")))S.HerTreatPromise.Remove(Her);
+ if(WithHer&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;
  {const bool Food=S.Cart.ContainsByPredicate([&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return I&&I->Consumable;});
   S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"))+(Food&&ServeIn>=10?OKMsg(TEXT("ui.economy.dish_serve_eta_suffix"), {{TEXT("seconds"), int32(ServeIn)}}):FString());}

@@ -403,7 +403,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.Action==TEXT("end_talk")||Reply.Action==TEXT("farewell")||Reply.Action==TEXT("goodbye")){
   S.FarewellPending=true;S.FarewellFromTalk=true;S.FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (act=%s)"),Character,*Reply.ActKind);
  }
- if(Reply.ActKind==TEXT("promise_treat")){S.HerTreatPromise.Add(Character,OKStreetMindNow(S)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (act)"),Character);}
+ if(Reply.ActKind==TEXT("promise_treat")&&OKStreetMindNow(S)-S.HerTreatKept.FindRef(Character,-100000)>=60){/* not again within the hour she paid one (R3-227) */S.HerTreatPromise.Add(Character,OKStreetMindNow(S)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (act)"),Character);}
  // Only when asked for (-DecisionShots): the engine's window readback behind them crashed the game once (E: UE5.8,
  // ConvertDXGIToFColor writing to null), a debugging aid must not take the play down with it.
  static const bool Shots=FParse::Param(FCommandLine::Get(),TEXT("DecisionShots"));

@@ -426,7 +426,7 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  if(Price>0&&!PayAgreed(Girl).IsEmpty()&&S.PayAgreedShop.IsEmpty())S.PayAgreedShop=PlaceId;
  auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Answer);ApplyRulesEffects(Candidate,*Answer);
  if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
- if(Answer->GetBoolField(TEXT("treat_kept")))S.HerTreatPromise.Remove(Girl);
+ if(Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Girl);S.HerTreatKept.Add(Girl,OKStreetMindNow(S));}
  // The activity was just billed: what is still in the basket for this meal (her chat orders) would be paid a second time.
  if(Price>0&&!S.Cart.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street activity aftermath: %d unpaid basket lines dropped, the activity bill covers them"),S.Cart.Num());S.Cart.Reset();}
  // What the activity leaves (activities.toml yields): reading together moves both books on.
