@@ -64,6 +64,7 @@ void AOKStreetSocialScene::SongSave(){
  TArray<TSharedPtr<FJsonValue>> Memories;
  for(const auto& M:G.Memories){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("heroine_id"),M.HeroineId);O->SetStringField(TEXT("occasion"),M.Occasion);O->SetStringField(TEXT("template"),M.Template);
   O->SetStringField(TEXT("lyrics"),M.Lyrics);O->SetStringField(TEXT("lyrics_model"),M.LyricsModel);O->SetStringField(TEXT("song"),M.SongPath);O->SetStringField(TEXT("mouth"),M.MouthPath);
+  {TArray<TSharedPtr<FJsonValue>> Heard;for(const FString& H:M.Heard)Heard.Add(MakeShared<FJsonValueString>(H));if(!Heard.IsEmpty())O->SetArrayField(TEXT("heard"),Heard);}
   O->SetNumberField(TEXT("hop"),M.Hop);O->SetNumberField(TEXT("day"),M.Day);Memories.Add(MakeShared<FJsonValueObject>(O));}
  Root->SetArrayField(TEXT("memories"),Memories);
  auto Last=MakeShared<FJsonObject>();Last->SetStringField(TEXT("event_id"),G.EventId);Last->SetStringField(TEXT("heroine_id"),G.HeroineId);Last->SetStringField(TEXT("voice_tag"),G.VoiceTag);
@@ -92,6 +93,7 @@ void AOKStreetSocialScene::SongLoad(){
   if(J->TryGetArrayField(TEXT("memories"),Memories))for(const auto& V:*Memories){const TSharedPtr<FJsonObject>* O=nullptr;if(!V->TryGetObject(O))continue;FOKSongMemory M;
    (*O)->TryGetStringField(TEXT("heroine_id"),M.HeroineId);(*O)->TryGetStringField(TEXT("occasion"),M.Occasion);(*O)->TryGetStringField(TEXT("template"),M.Template);
    (*O)->TryGetStringField(TEXT("lyrics"),M.Lyrics);(*O)->TryGetStringField(TEXT("lyrics_model"),M.LyricsModel);(*O)->TryGetStringField(TEXT("song"),M.SongPath);(*O)->TryGetStringField(TEXT("mouth"),M.MouthPath);
+   {const TArray<TSharedPtr<FJsonValue>>* Heard=nullptr;if((*O)->TryGetArrayField(TEXT("heard"),Heard))for(const auto& H:*Heard)M.Heard.Add(H->AsString());}
    double Hop=.01;(*O)->TryGetNumberField(TEXT("hop"),Hop);M.Hop=float(Hop);(*O)->TryGetNumberField(TEXT("day"),M.Day);
    if(!M.HeroineId.IsEmpty()&&IFileManager::Get().FileExists(*M.SongPath))G.Memories.Add(M);}
  }
@@ -105,13 +107,69 @@ void AOKStreetSocialScene::SongReset(const FString& Why,bool CancelJob){
  if(SongOwnsVoice(G.Girl)){FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);}
  if(CancelJob&&!G.JobId.IsEmpty()&&!G.Endpoint.IsEmpty()){auto Request=FHttpModule::Get().CreateRequest();Request->SetURL(G.Endpoint/TEXT("jobs")/G.JobId/TEXT("cancel"));Request->SetVerb(TEXT("POST"));Request->SetTimeout(5);Request->ProcessRequest();}
  const bool Keep=!CancelJob;++G.Epoch;G.Phase=EOKSongPhase::Idle;G.Override=false;G.Replay=false;G.Due=false;G.Occasion.Reset();G.RequestPending=G.PollPending=G.SayPending=G.SpeechStarted=false;G.Girl=INDEX_NONE;
- G.JobId.Reset();G.RequestId.Reset();G.JobStage.Reset();G.Mouth.Reset();G.SongVoiceId.Reset();if(!Keep){G.SongPath.Reset();G.ArtifactKey.Reset();}
+ G.JobId.Reset();G.RequestId.Reset();G.JobStage.Reset();G.Mouth.Reset();G.SongVoiceId.Reset();G.Heard.Reset();if(!Keep){G.SongPath.Reset();G.ArtifactKey.Reset();}
  G.NextCheck=SceneTime()+OKSongCheckSeconds;if(!Why.IsEmpty()){G.Notice=Why;UE_LOG(LogTemp,Display,TEXT("Street song reset: %s"),*Why);}
  RefreshUI();
 }
 
 bool AOKStreetSocialScene::SongIsSinging() const{
  const auto P=State->Song.Phase;return P==EOKSongPhase::Intro||P==EOKSongPhase::Singing||P==EOKSongPhase::Outro;
+}
+
+// What she sings in each breath, as ok-asr hears it (/transcribe_spans on the song): the song model does not keep to the
+// sheet (two lines in one breath, a chorus once more), so the caption lines are matched to this (rules song_choreo
+// "heard"). Kept with the song for every replay. Without ok-asr the captions follow the sheet alone. If the answer comes
+// while she is already singing this song, its caption lines are timed again then.
+void AOKStreetSocialScene::SongListen(){
+ auto& S=*State;auto& G=S.Song;G.Heard.Reset();if(G.SongPath.IsEmpty()||G.Mouth.IsEmpty())return;
+ auto Ask=OKRulesRequest(TEXT("song_breaths"));TArray<TSharedPtr<FJsonValue>> Mouth;Mouth.Reserve(G.Mouth.Num());
+ for(const float V:G.Mouth)Mouth.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(V*1000.f)/1000.f));
+ Ask->SetArrayField(TEXT("mouth"),Mouth);Ask->SetNumberField(TEXT("hop"),G.Hop);
+ const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);const TArray<TSharedPtr<FJsonValue>>* Spans=nullptr;
+ if(!Out||!Out->TryGetArrayField(TEXT("breaths"),Spans)||Spans->IsEmpty())return;
+ auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("path"),FPaths::ConvertRelativePathToFull(G.SongPath));Body->SetArrayField(TEXT("spans"),*Spans);Body->SetStringField(TEXT("language"),TEXT("Chinese"));
+ FString Text;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Text));
+ auto Request=FHttpModule::Get().CreateRequest();Request->SetURL(OKStreetFreeTalkAsrEndpoint()/TEXT("transcribe_spans"));Request->SetVerb(TEXT("POST"));
+ Request->SetHeader(TEXT("Content-Type"),TEXT("application/json"));Request->SetContentAsString(Text);Request->SetTimeout(120);
+ const FString Path=G.SongPath;const int32 Count=Spans->Num();
+ Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Path,Count](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
+  if(!State)return;auto& L=State->Song;TSharedPtr<FJsonObject> J;const TArray<TSharedPtr<FJsonValue>>* Texts=nullptr;
+  if(!Connected||!Response.IsValid()||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()),J)||!J.IsValid()||!J->TryGetArrayField(TEXT("texts"),Texts)||Texts->Num()!=Count){
+   UE_LOG(LogTemp,Display,TEXT("Street song: %s was not transcribed; its captions follow the sheet"),*Path);return;}
+  TArray<FString> Heard;for(const auto& V:*Texts)Heard.Add(V->AsString());
+  bool Kept=false;for(auto& M:L.Memories)if(M.SongPath==Path&&M.Heard!=Heard){M.Heard=Heard;Kept=true;}
+  if(Kept)SongSave();
+  UE_LOG(LogTemp,Display,TEXT("Street song: heard %d breaths of %s"),Heard.Num(),*Path);
+  if(L.SongPath!=Path)return;L.Heard=MoveTemp(Heard);
+  // Already on stage: the caption lines again, from what she sings (the cues stay).
+  if(L.Phase==EOKSongPhase::Intro||L.Phase==EOKSongPhase::Singing){
+   auto Again=OKRulesRequest(TEXT("song_choreo"));TArray<TSharedPtr<FJsonValue>> Env;for(const float V:L.Mouth)Env.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(V*1000.f)/1000.f));
+   Again->SetArrayField(TEXT("mouth"),Env);Again->SetNumberField(TEXT("hop"),L.Hop);Again->SetStringField(TEXT("lyrics"),L.Lyrics);Again->SetStringField(TEXT("template"),L.Template);
+   Again->SetNumberField(TEXT("seed"),1);Again->SetStringField(TEXT("caption"),OKSongShownLyrics(*State));
+   {TArray<TSharedPtr<FJsonValue>> H;for(const FString& X:L.Heard)H.Add(MakeShared<FJsonValueString>(X));Again->SetArrayField(TEXT("heard"),H);}
+   const TSharedPtr<FJsonObject> Timed=OKRulesEval(*State,Again);const TArray<TSharedPtr<FJsonValue>>* Lines=nullptr;
+   if(Timed&&Timed->TryGetArrayField(TEXT("lines"),Lines)){L.LineAt.Reset();L.LineText.Reset();L.Line=-1;
+    for(const auto& V:*Lines){const auto O=V->AsObject();if(!O)continue;L.LineAt.Add(O->GetNumberField(TEXT("at")));L.LineText.Add(O->GetStringField(TEXT("text")));}}
+  }
+ });
+ Request->ProcessRequest();
+}
+
+// While she sings he is her audience: he steps back to a stage distance in front of her (around obstacles), then they
+// face each other. His walk speed for the locomotion (0: standing).
+static constexpr float OKSongStageDistance=230.f;
+float AOKStreetSocialScene::StepSongStage(float Dt){
+ auto& S=*State;const auto& G=S.Song;
+ if(!SongIsSinging()||G.Girl<=0||S.Target!=G.Girl||!S.Agents.IsValidIndex(G.Girl-1))return 0.f;
+ const FVector Her=S.Agents[G.Girl-1].Position;const float Apart=FVector::Dist2D(S.Male,Her);
+ if(Apart<OKSongStageDistance-15.f){
+  FVector Away=(S.Male-Her).GetSafeNormal2D();if(Away.IsNearlyZero())Away=FRotationMatrix(S.Rotations[G.Girl]).GetUnitAxis(EAxis::Y).GetSafeNormal2D();
+  const float Step=OKStreetMaleWalkSpeed*FMath::Min(Dt,.05f);
+  for(const float Turn:{0.f,35.f,-35.f,70.f,-70.f}){const FVector Dir=Away.RotateAngleAxis(Turn,FVector::UpVector);const FVector Next=StreetStep(S.Male,Dir,Step);
+   if(Next!=S.Male&&FVector::Dist2D(Next,Her)>Apart){S.Rotations[0]=OKStreetFacingMovement(Next-S.Male,S.Rotations[0]);S.Male=Next;return OKStreetMaleWalkSpeed/OKStreetWalkSpeed;}}
+ }
+ S.Rotations[0]=OKStreetFacingMovement(Her-S.Male,S.Rotations[0]);S.Rotations[G.Girl]=OKStreetFacingMovement(S.Male-Her,S.Rotations[G.Girl]);
+ return 0.f;
 }
 
 // Her latest song kept to hear again (INDEX_NONE: none).
@@ -199,7 +257,7 @@ void AOKStreetSocialScene::SongReplay(int32 Memory){
  SongReset(FString(),G.Phase==EOKSongPhase::Idle||G.Phase==EOKSongPhase::Failed);++G.Epoch;
  G.Girl=Girl;G.HeroineId=M.HeroineId;G.Occasion=M.Occasion;G.Template=M.Template;G.Lyrics=M.Lyrics;G.LyricsModel=M.LyricsModel;G.SongPath=M.SongPath;G.ArtifactKey.Reset();
  G.Mouth.Reset();for(const auto& V:Env->GetArrayField(TEXT("values")))G.Mouth.Add(float(V->AsNumber()));G.Hop=float(Env->GetNumberField(TEXT("hop_ms")))/1000.f;
- G.Replay=true;G.Due=true;G.Phase=EOKSongPhase::Ready;
+ G.Replay=true;G.Due=true;G.Phase=EOKSongPhase::Ready;G.Heard=M.Heard;if(G.Heard.IsEmpty())SongListen(); // an older song: heard now, its captions catch up
  UE_LOG(LogTemp,Display,TEXT("Street song: replay %s (actor %d)"),*M.Template,Girl);
  SongAnswer(TEXT("accept"));
 }
@@ -284,7 +342,7 @@ void AOKStreetSocialScene::SongPoll(){
   if(!IFileManager::Get().FileExists(*Copy)&&IFileManager::Get().Copy(*Copy,*Song)!=COPY_OK){L.Phase=EOKSongPhase::Failed;L.Notice=FString(OKT(TEXT("ui.song.failed")))+TEXT("copy");RefreshUI();return;}
   // Her mouth envelope beside it: a song she has sung can be sung again later (SongReplay) without ok-song.
   FFileHelper::SaveStringToFile(Text,*FPaths::ChangeExtension(Copy,TEXT("mouth.json")),FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-  L.SongPath=Copy;L.Phase=EOKSongPhase::Ready;L.PhaseAt=SceneTime();L.Notice.Reset();
+  L.SongPath=Copy;L.Phase=EOKSongPhase::Ready;L.PhaseAt=SceneTime();L.Notice.Reset();SongListen();
   UE_LOG(LogTemp,Display,TEXT("Street song: ready %s (%d mouth values, %s)"),*L.SongPath,L.Mouth.Num(),*L.ArtifactKey);SongSave();RefreshUI();
  });
  Request->ProcessRequest();
@@ -335,6 +393,7 @@ void AOKStreetSocialScene::SongChoreograph(){
  for(const float V:G.Mouth)Mouth.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(V*1000.f)/1000.f));
  Ask->SetArrayField(TEXT("mouth"),Mouth);Ask->SetNumberField(TEXT("hop"),G.Hop);Ask->SetStringField(TEXT("lyrics"),G.Lyrics);
  Ask->SetStringField(TEXT("template"),G.Template);Ask->SetNumberField(TEXT("seed"),S.Random.RandRange(1,1<<30));Ask->SetStringField(TEXT("caption"),OKSongShownLyrics(S));
+ {TArray<TSharedPtr<FJsonValue>> Heard;for(const FString& H:G.Heard)Heard.Add(MakeShared<FJsonValueString>(H));Ask->SetArrayField(TEXT("heard"),Heard);}
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return;
  Out->TryGetStringField(TEXT("intro"),G.IntroClip);Out->TryGetStringField(TEXT("outro"),G.OutroClip);
  const TArray<TSharedPtr<FJsonValue>>* Cues=nullptr;
@@ -505,8 +564,9 @@ void AOKStreetSocialScene::TickSong(double Now){
     // A new song: its milestone is sung, the lines count again from here, and it is kept to hear again.
     FOKSongProgress& Her=G.Progress.FindOrAdd(G.HeroineId);Her.Lines=0;if(!G.Occasion.IsEmpty()&&G.Occasion!=TEXT("lines"))Her.Done.AddUnique(G.Occasion);
     FOKSongMemory M;M.HeroineId=G.HeroineId;M.Occasion=G.Occasion;M.Template=G.Template;M.Lyrics=G.Lyrics;M.LyricsModel=G.LyricsModel;M.SongPath=G.SongPath;
-    M.MouthPath=FPaths::ChangeExtension(G.SongPath,TEXT("mouth.json"));M.Hop=G.Hop;M.Day=S.Store.CalendarDay;G.Memories.Add(M);
+    M.MouthPath=FPaths::ChangeExtension(G.SongPath,TEXT("mouth.json"));M.Hop=G.Hop;M.Day=S.Store.CalendarDay;M.Heard=G.Heard;G.Memories.Add(M);
     MindObserve(G.Girl,TEXT("song"),OKSongOccasionLine(G.Occasion,TEXT("sang_memory")),PlaceHere(S.Male),0.7f);}
+   for(int32 I=G.Memories.Num()-1;I>=0;--I)if(G.Memories[I].SongPath==G.SongPath){G.JustSung=I;G.JustSungGirl=G.Girl;break;}
    SongSave();
    UE_LOG(LogTemp,Display,TEXT("Street song: completed (actor %d%s, %s)"),G.Girl,G.Replay?TEXT(", replay"):TEXT(""),G.Occasion.IsEmpty()?TEXT("-"):*G.Occasion);SongReset(OKT(TEXT("ui.song.completed")),false);G.SongPath.Reset();G.ArtifactKey.Reset();
   }

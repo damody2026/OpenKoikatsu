@@ -453,13 +453,13 @@ fn units(lyrics: &str) -> Vec<(&'static str, String)> {
 }
 
 /// The sung units' texts (see units).
-fn unit_texts(lyrics: &str) -> Vec<String> {
+pub fn unit_texts(lyrics: &str) -> Vec<String> {
     units(lyrics).into_iter().map(|(_, t)| t).collect()
 }
 
 /// The song's lines on its clock when the breaths do not show them (sung legato, the envelope rarely falls silent):
 /// the voiced span split evenly by the number of lines, each boundary moved to the quietest moment within 0.5 s.
-fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<(f32, f32)> {
+pub fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<(f32, f32)> {
     let (start, end) = span;
     if lines == 0 || end <= start {
         return vec![span];
@@ -476,10 +476,99 @@ fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<(f32
     cuts.windows(2).map(|w| (w[0], w[1])).collect()
 }
 
+/// Caption lines from what she actually sang: `heard` is each breath transcribed (ok-asr /transcribe_spans, one text per
+/// breath). The song model does not keep to the sheet (two lines in one breath, a chorus sung once more or once less,
+/// a long break), so each breath is matched to the run of sheet lines (1 to 3) its words are closest to, in sheet order
+/// where it fits and jumping (a repeated chorus) where it does not; a breath that matches nothing (an "ah" between
+/// verses) shows no new line. The words shown are the sheet's (`captions`, the game's script), never the transcription.
+/// Returns (at, text) per caption; empty when nothing matched (then the timing comes from the sheet alone).
+pub fn align_heard(breaths: &[(f32, f32)], heard: &[String], sung: &[String], captions: &[String]) -> Vec<(f32, String)> {
+    let hans = |s: &str| -> Vec<char> {
+        zhconv::zhconv(s, zhconv::Variant::ZhCN).chars().filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c) || ('\u{3400}'..='\u{4dbf}').contains(c)).collect()
+    };
+    let units: Vec<Vec<char>> = sung.iter().map(|u| hans(u)).collect();
+    let heard: Vec<Vec<char>> = heard.iter().map(|h| hans(h)).collect();
+    let (n, m) = (units.len(), breaths.len().min(heard.len()));
+    if n == 0 || m == 0 {
+        return Vec::new();
+    }
+    let distance = |a: &[char], b: &[char]| -> f32 {
+        let mut prev: Vec<usize> = (0..=b.len()).collect();
+        for i in 1..=a.len() {
+            let mut cur = vec![i; b.len() + 1];
+            for j in 1..=b.len() {
+                cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + usize::from(a[i - 1] != b[j - 1]));
+            }
+            prev = cur;
+        }
+        prev[b.len()] as f32 / a.len().max(b.len()).max(1) as f32
+    };
+    const NONE: f32 = 0.6;
+    const JUMP: f32 = 0.25;
+    const MAX_RUN: usize = 3;
+    // cost[k][p]: best for the first k breaths with the sheet's next line p; choice[k][p] = (previous p, run start, run length).
+    let inf = f32::INFINITY;
+    let mut cost = vec![vec![inf; n + 1]; m + 1];
+    let mut choice = vec![vec![(0usize, 0usize, 0usize); n + 1]; m + 1];
+    cost[0][0] = 0.0;
+    for k in 0..m {
+        for p in 0..=n {
+            let c = cost[k][p];
+            if !c.is_finite() {
+                continue;
+            }
+            // Nothing from the sheet in this breath.
+            let none = c + if heard[k].is_empty() { 0.0 } else { NONE };
+            if none < cost[k + 1][p] {
+                cost[k + 1][p] = none;
+                choice[k + 1][p] = (p, 0, 0);
+            }
+            if heard[k].is_empty() {
+                continue;
+            }
+            for j in 0..n {
+                let mut run: Vec<char> = Vec::new();
+                for l in 1..=MAX_RUN.min(n - j) {
+                    run.extend_from_slice(&units[j + l - 1]);
+                    let c2 = c + distance(&run, &heard[k]) + if j == p { 0.0 } else { JUMP };
+                    if c2 < cost[k + 1][j + l] {
+                        cost[k + 1][j + l] = c2;
+                        choice[k + 1][j + l] = (p, j, l);
+                    }
+                }
+            }
+        }
+    }
+    let mut p = (0..=n).min_by(|a, b| cost[m][*a].total_cmp(&cost[m][*b])).unwrap_or(0);
+    let mut runs: Vec<(usize, usize, usize)> = Vec::new(); // (breath, start, length)
+    for k in (1..=m).rev() {
+        let (prev, j, l) = choice[k][p];
+        if l > 0 {
+            runs.push((k - 1, j, l));
+        }
+        p = prev;
+    }
+    runs.reverse();
+    let text = |i: usize| captions.get(i).or(sung.get(i)).cloned().unwrap_or_default();
+    let mut out = Vec::new();
+    for (k, j, l) in runs {
+        let (s, e) = breaths[k];
+        let lens: Vec<f32> = (j..j + l).map(|i| units[i].len().max(1) as f32).collect();
+        let total: f32 = lens.iter().sum();
+        let mut acc = 0f32;
+        for (o, len) in lens.iter().enumerate() {
+            out.push((s + (e - s) * acc / total, text(j + o)));
+            acc += len;
+        }
+    }
+    out
+}
+
 /// The staging: intro / outro clips and the cues during the song (seconds on the song's clock).
 /// `caption`: the sheet in the game's script (the same lines as `lyrics`); its units come back as `lines` [{at, text}]
 /// on the song's clock, for a caption that shows the line being sung.
-pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template: &str, seed: u64) -> serde_json::Value {
+/// `heard`: each breath as transcribed (see align_heard); empty, or not one per breath: the timing comes from the lengths.
+pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template: &str, seed: u64, heard: &[String]) -> serde_json::Value {
     let base = template.split('+').next().unwrap_or("");
     let upbeat = SHEETS.iter().find(|s| s.id == base).is_some_and(|s| s.tags.contains(&"upbeat"));
     let mut rng = seed ^ 0x2545_f491_4f6c_dd1d;
@@ -507,16 +596,22 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template:
         let k = if ph.len() == sung.len() { i } else { i * sung.len() / ph.len().max(1) };
         sung[k.min(sung.len() - 1)].0
     };
-    // Caption lines: one per sheet unit; the breaths when there is exactly one per unit, else the units spread over the
-    // voice.
+    // Caption lines: from what she sang when each breath was transcribed (align_heard), else from the sheet alone.
     let texts = unit_texts(if caption.is_empty() { lyrics } else { caption });
-    let line_spans = if breaths.len() == texts.len() || breaths.is_empty() {
-        breaths.clone()
+    let from_heard = if !heard.is_empty() && heard.len() == breaths.len() { align_heard(&breaths, heard, &unit_texts(lyrics), &texts) } else { Vec::new() };
+    let timed: Vec<(f32, String)> = if !from_heard.is_empty() {
+        from_heard
     } else {
-        even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), texts.len())
+        // One line per breath when the counts match, else the lines spread over the voice.
+        let spans = if breaths.len() == texts.len() || breaths.is_empty() {
+            breaths.clone()
+        } else {
+            even_lines(env, hop, (breaths[0].0, breaths[breaths.len() - 1].1), texts.len())
+        };
+        texts.iter().cloned().zip(spans).map(|(t, (at, _))| (at, t)).collect()
     };
-    let lines: Vec<serde_json::Value> = texts.iter().zip(line_spans.iter())
-        .map(|(text, (at, _))| serde_json::json!({"at": ((at - 0.1).max(0.0) * 100.0).round() / 100.0, "text": text})).collect();
+    let lines: Vec<serde_json::Value> = timed.iter()
+        .map(|(at, text)| serde_json::json!({"at": ((at - 0.1).max(0.0) * 100.0).round() / 100.0, "text": text})).collect();
     let mut cues: Vec<(f32, String, &str)> = Vec::new();
     fn push(cues: &mut Vec<(f32, String, &'static str)>, at: f32, clip: &str, part: &'static str) {
         if let Some(last) = cues.last() {
@@ -603,7 +698,17 @@ pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json
             let template = request.get("template").and_then(serde_json::Value::as_str).unwrap_or("");
             let seed = request.get("seed").and_then(serde_json::Value::as_u64).unwrap_or(1);
             let caption = request.get("caption").and_then(serde_json::Value::as_str).unwrap_or("");
-            Some(Ok(choreograph(&env, hop, lyrics, caption, template, seed)))
+            let heard: Vec<String> = request.get("heard").and_then(serde_json::Value::as_array)
+                .map(|a| a.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default();
+            Some(Ok(choreograph(&env, hop, lyrics, caption, template, seed, &heard)))
+        }
+        // request: mouth, hop -> breaths [[start, end]...] (the spans the game has transcribed for align_heard)
+        "song_breaths" => {
+            let env: Vec<f32> = request.get("mouth").and_then(serde_json::Value::as_array)
+                .map(|a| a.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect()).unwrap_or_default();
+            let hop = request.get("hop").and_then(serde_json::Value::as_f64).unwrap_or(0.01) as f32;
+            let breaths: Vec<[f32; 2]> = phrases(&env, hop).into_iter().map(|(s, e)| [(s * 100.0).round() / 100.0, (e * 100.0).round() / 100.0]).collect();
+            Some(Ok(serde_json::json!({"breaths": breaths})))
         }
         _ => None,
     }
@@ -612,6 +717,22 @@ pub fn eval(kind: &str, request: &serde_json::Value) -> Option<Result<serde_json
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn captions_follow_what_she_sang() {
+        // Four breaths; the model sang lines 0+1 in one breath, an "ah", line 2, then line 1 again (an extra chorus).
+        let breaths = vec![(0.0, 4.0), (5.0, 6.0), (7.0, 9.0), (10.0, 12.0)];
+        let heard: Vec<String> = ["原來那些心跳不是我的錯覺", "啊", "你說出口的時候", "不是我的錯覺"].iter().map(|s| s.to_string()).collect();
+        let sung: Vec<String> = ["原来那些心跳", "不是我的错觉", "你说出口的时候"].iter().map(|s| s.to_string()).collect();
+        let shown: Vec<String> = ["原來那些心跳", "不是我的錯覺", "你說出口的時候"].iter().map(|s| s.to_string()).collect();
+        let lines = align_heard(&breaths, &heard, &sung, &shown);
+        let texts: Vec<&str> = lines.iter().map(|(_, t)| t.as_str()).collect();
+        assert_eq!(texts, ["原來那些心跳", "不是我的錯覺", "你說出口的時候", "不是我的錯覺"]);
+        assert_eq!(lines[0].0, 0.0);
+        assert!(lines[1].0 > 1.5 && lines[1].0 < 2.5, "the second line starts partway through the first breath");
+        assert_eq!(lines[2].0, 7.0);
+        assert_eq!(lines[3].0, 10.0);
+    }
 
     #[test]
     fn choreography_follows_the_phrases() {
@@ -625,7 +746,7 @@ mod tests {
         env.extend(std::iter::repeat(0.0).take(100));
         assert_eq!(phrases(&env, hop).len(), 8);
         let sheet = "[主歌]\n夜色裡的街道 只剩我們兩個\n手心裡的溫度 比星星還要清楚\n[副歌]\n就這樣靠著你\n把心跳慢慢說給你聽\n不用說太多的話\n你在這裡就很好";
-        let c = choreograph(&env, hop, sheet, "", "lover_night+park", 7);
+        let c = choreograph(&env, hop, sheet, "", "lover_night+park", 7, &[]);
         assert_eq!(c["verse_phrases"], 4);
         assert_eq!(c["upbeat"], false);
         let cues = c["cues"].as_array().unwrap();
@@ -637,7 +758,7 @@ mod tests {
         // the finale lands just before the last note ends
         let end = c["end"].as_f64().unwrap();
         assert!((end - ats.last().unwrap()) < 3.0);
-        assert_eq!(choreograph(&env, hop, sheet, "", "sunny_day", 7)["upbeat"], true);
+        assert_eq!(choreograph(&env, hop, sheet, "", "sunny_day", 7, &[])["upbeat"], true);
         // the caption: one line per unit (4 verse halves + 4 chorus lines), in order, starting with the first half line
         let lines = c["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 8);
@@ -649,11 +770,11 @@ mod tests {
         legato.extend((0..1000).map(|i| 0.5 + 0.3 * ((i as f32) * 0.05).sin().abs()));
         legato.extend(std::iter::repeat(0.0).take(60));
         legato.extend((0..1000).map(|i| 0.5 + 0.3 * ((i as f32) * 0.05).sin().abs()));
-        let l = choreograph(&legato, hop, sheet, "", "lover_night", 3);
+        let l = choreograph(&legato, hop, sheet, "", "lover_night", 3, &[]);
         let parts: Vec<&str> = l["cues"].as_array().unwrap().iter().map(|q| q["part"].as_str().unwrap()).collect();
         assert!(parts.contains(&"verse") && parts.contains(&"chorus"), "{parts:?}");
         // nothing sung: still a prelude and a finale, no panic
-        assert!(choreograph(&[], hop, sheet, "", "", 1)["cues"].as_array().unwrap().len() >= 1);
+        assert!(choreograph(&[], hop, sheet, "", "", 1, &[])["cues"].as_array().unwrap().len() >= 1);
     }
 
     #[test]
@@ -802,5 +923,5 @@ fn choreography_of_a_song() {
     let hop = v["hop_ms"].as_f64().unwrap_or(10.0) as f32 / 1000.0;
     let template = std::env::var("OK_SONG_SHEET").unwrap_or_else(|_| "sunny_day".into());
     let sheet = SHEETS.iter().find(|s| s.id == template.split('+').next().unwrap()).unwrap().display;
-    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, sheet, "", &template, 5)).unwrap());
+    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, sheet, "", &template, 5, &[])).unwrap());
 }

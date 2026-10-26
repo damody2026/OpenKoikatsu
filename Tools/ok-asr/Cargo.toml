@@ -9,6 +9,7 @@ anyhow = "1"
 cpal = "0.15"
 cudarc = { version = "0.19", default-features = false, features = ["std", "cuda-12080", "dynamic-loading", "driver", "cublas", "nvrtc"] }
 hound = "3.5"
+lewton = "0.10"
 memmap2 = "0.9"
 safetensors = "0.6"
 serde = { version = "1", features = ["derive"] }

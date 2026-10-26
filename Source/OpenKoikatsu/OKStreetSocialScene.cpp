@@ -2194,7 +2194,14 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
    // His cards at the card table, held in front of him right above the dialogue box, which grows upward under them (OKStreetSocialBluff.inl).
    +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,6)[SAssignNew(S.UiBluffHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)]
    // Gal-game layout: the log button sits on the box's top-right edge; the box itself never hides.
-   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0,0,8,4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.history_toggle_count"), {{TEXT("toggle_label"), L->FreeTalkHistoryOpen?OKT(TEXT("ui.scene.close_log")):OKT(TEXT("ui.scene.history_label"))}, {TEXT("count"), L->FreeTalkLog.Num()}}));}).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->FreeTalkHistoryOpen=!Weak->State->FreeTalkHistoryOpen;Weak->RefreshUI(OKStreetUi::History);}return FReply::Handled();})]
+   // Beside it, once she has sung for him and while he is still with her: hear that song again (OKStreetSocialSong.inl).
+   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0,0,8,4)[SNew(SHorizontalBox)
+    +SHorizontalBox::Slot().AutoWidth().Padding(0,0,6,0)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(OKT(TEXT("ui.song.listen_again"))))
+     .Visibility_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return EVisibility::Collapsed;const auto& G=L->Song;
+      const auto P=G.Phase;const bool Singing=P==EOKSongPhase::Intro||P==EOKSongPhase::Singing||P==EOKSongPhase::Outro||P==EOKSongPhase::Offered;
+      return !Singing&&G.JustSungGirl!=INDEX_NONE&&L->Target==G.JustSungGirl&&G.Memories.IsValidIndex(G.JustSung)?EVisibility::Visible:EVisibility::Collapsed;})
+     .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->SongReplay(Weak->State->Song.JustSung);return FReply::Handled();})]
+    +SHorizontalBox::Slot().AutoWidth()[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();if(!L)return FText::GetEmpty();return FText::FromString(OKMsg(TEXT("ui.scene.history_toggle_count"), {{TEXT("toggle_label"), L->FreeTalkHistoryOpen?OKT(TEXT("ui.scene.close_log")):OKT(TEXT("ui.scene.history_label"))}, {TEXT("count"), L->FreeTalkLog.Num()}}));}).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid()){Weak->State->FreeTalkHistoryOpen=!Weak->State->FreeTalkHistoryOpen;Weak->RefreshUI(OKStreetUi::History);}return FReply::Handled();})]]
    +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MinDesiredHeight_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FOptionalSize(Owner.IsValid()&&Owner->GalgameShowsDialogue()?0.f:96.f);})
     .Padding_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return FMargin(0,0,0,Owner.IsValid()?Owner->GalgameDialogueLift():0.f);})
     .Visibility_Lambda([Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](){return Owner.IsValid()&&Owner->GalgameHidesDialogueBox()?EVisibility::Collapsed:EVisibility::Visible;})[SAssignNew(S.DialoguePanel,SBorder).BorderImage(OKStreetGlassPanel()).Padding(20)[SAssignNew(S.UiBottomHolder,SBox)]]]]]
@@ -3536,6 +3543,7 @@ void AOKStreetSocialScene::Tick(float Dt){
   }
  }
  if(Speed==0)Speed=StepNavigation(Dt);
+ if(Speed==0)Speed=StepSongStage(Dt); // her audience while she sings (OKStreetSocialSong.inl)
  // She leads or walks abreast on an outing (plan §13.2): her walk comes from that step, not the follow.
  S.CompanionWalk=S.FollowMode!=0&&S.OutingGirl!=INDEX_NONE&&S.Companion==S.OutingGirl&&SceneTime()-S.ManualMoveAt>3.0?S.FollowGirlWalk:StepCompanion(Dt);
  // Standing still he always takes his own stand (conversation_male, the game's mc_m_stand): the base idle is the

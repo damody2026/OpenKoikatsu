@@ -6,6 +6,7 @@
 //!   POST /record/stop                   stop and transcribe -> {"ok", "text", "language", "audio_seconds", "asr_seconds"}
 //!   POST /record/cancel                 stop and discard
 //!   POST /transcribe {"path": "x.wav"}  transcribe a file (tests)
+//!   POST /transcribe_spans {"path": "song.ogg", "spans": [[s, e], ...]} -> {"texts": [...]}  each span on its own (song captions)
 //!   POST /listen/start                  hands-free mode: keep the microphone open, cut utterances by voice activity
 //!   POST /listen/stop
 //!   POST /listen/mute {"mute": true}    drop audio while the game plays her voice (no echo transcripts)
@@ -57,6 +58,9 @@ struct Options {
     script: Option<String>,
     #[serde(default)]
     language: Option<String>,
+    /// /transcribe_spans: [start, end] seconds of `path`, each transcribed on its own.
+    #[serde(default)]
+    spans: Option<Vec<[f64; 2]>>,
     #[serde(default)]
     mute: Option<bool>,
     duck: Option<bool>,
@@ -252,6 +256,38 @@ fn handle(state: &State, mut req: tiny_http::Request) {
         (tiny_http::Method::Post, "/record/cancel") => {
             let _ = state.recorder.stop();
             respond(req, 200, json!({"ok": true}));
+        }
+        // A song's lines as she sang them: each [start, end] span of the file transcribed on its own (the game lines its
+        // captions up with these; OKStreetSocialSong.inl).
+        (tiny_http::Method::Post, "/transcribe_spans") => {
+            state.stats.requests.fetch_add(1, Ordering::Relaxed);
+            let result = read_options(&mut req).and_then(|opts| {
+                if !ready {
+                    bail!("model is still loading");
+                }
+                let path = PathBuf::from(opts.path.clone().unwrap_or_default());
+                if !path.is_absolute() {
+                    bail!("path must be an absolute WAV or OGG path");
+                }
+                let spans = opts.spans.clone().ok_or_else(|| anyhow::anyhow!("spans is required"))?;
+                let (samples, rate) = crate::audio::read_audio(&path)?;
+                let at = |s: f64| ((s.max(0.0) * rate as f64) as usize).min(samples.len());
+                let mut texts = Vec::with_capacity(spans.len());
+                for [start, end] in spans {
+                    let (a, b) = (at(start - 0.1), at(end + 0.1));
+                    let r = if b > a { recognize(state, &samples[a..b], rate, opts.language.as_deref())? } else { json!({"text": ""}) };
+                    texts.push(r["text"].as_str().unwrap_or("").to_string());
+                }
+                Ok(json!({"ok": true, "texts": texts}))
+            });
+            match result {
+                Ok(v) => respond(req, 200, v),
+                Err(e) => {
+                    state.stats.failed.fetch_add(1, Ordering::Relaxed);
+                    crate::log!("ok-asr: FAIL {e:#}");
+                    respond(req, 400, json!({"ok": false, "error": format!("{e:#}")}));
+                }
+            }
         }
         (tiny_http::Method::Post, "/record/stop") | (tiny_http::Method::Post, "/transcribe") => {
             state.stats.requests.fetch_add(1, Ordering::Relaxed);

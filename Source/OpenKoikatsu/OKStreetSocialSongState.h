@@ -17,6 +17,8 @@ struct FOKSongProgress {
 // A song she sang, kept to hear again: the mix, her mouth envelope and the sheet (songs.json "memories").
 struct FOKSongMemory {
  FString HeroineId,Occasion,Template,Lyrics,LyricsModel,SongPath,MouthPath;float Hop=.01f;int32 Day=0;
+ // Each breath as ok-asr heard it (SongListen): the captions follow what she sang. Empty: not transcribed (yet).
+ TArray<FString> Heard;
 };
 
 struct FOKSongState {
@@ -31,6 +33,10 @@ struct FOKSongState {
  // He asked for one of her songs again while she was still talking (his words, or the button mid-line): sung once she
  // is free, if that is within a minute (AskedAt: SceneTime()).
  int32 AskedMemory=INDEX_NONE;double AskedAt=0;
+ // The song she has just sung (a memory index) and to whom: "hear it again" by the dialogue box while he is still with her.
+ int32 JustSung=INDEX_NONE,JustSungGirl=INDEX_NONE;
+ // This song's breaths as ok-asr heard them (SongListen; song_choreo "heard").
+ TArray<FString> Heard;
  TMap<FString,FOKSongProgress> Progress;TArray<FOKSongMemory> Memories;
  // The locked singer and this event's identity; callbacks check Epoch (bumped by every reset, slot load and new event).
  int32 Girl=INDEX_NONE;uint32 Epoch=0;

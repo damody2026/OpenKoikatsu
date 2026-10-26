@@ -29,6 +29,21 @@ pub fn read_wav(path: &Path) -> Result<(Vec<f32>, u32)> {
     Ok((downmix(&interleaved, ch), spec.sample_rate))
 }
 
+/// A WAV or an OGG Vorbis file (a song from ok-song), mono.
+pub fn read_audio(path: &Path) -> Result<(Vec<f32>, u32)> {
+    if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ogg")) {
+        return read_wav(path);
+    }
+    let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let mut r = lewton::inside_ogg::OggStreamReader::new(std::io::BufReader::new(file)).with_context(|| format!("ogg {}", path.display()))?;
+    let (ch, rate) = (r.ident_hdr.audio_channels.max(1) as usize, r.ident_hdr.audio_sample_rate);
+    let mut interleaved = Vec::new();
+    while let Some(packet) = r.read_dec_packet_itl().with_context(|| format!("decode {}", path.display()))? {
+        interleaved.extend(packet.into_iter().map(|s| s as f32 / 32768.0));
+    }
+    Ok((downmix(&interleaved, ch), rate))
+}
+
 pub fn downmix(interleaved: &[f32], channels: usize) -> Vec<f32> {
     if channels <= 1 {
         return interleaved.to_vec();
