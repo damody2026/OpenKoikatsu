@@ -279,6 +279,7 @@ struct FOKStreetAppointment {
  int32 Grace = 20; // minutes late still counted as arriving
  int32 Minutes = 0; // how long they said they would be together (a date: "the whole Saturday"); 0 is the usual 90
  FString Status = TEXT("pending"); // pending | done | late | missed | cancelled
+ FString Payer;    // a date: who they said pays (him | her | split), empty when nobody said
 };
 
 // Plan §4.6 public memory: a rumour, who knows it, how hot and how sure.
@@ -1238,7 +1239,7 @@ inline FString OKStreetWriteSave(const FOKStreetStore& Store) {
  Root->SetNumberField(TEXT("schema"), OKStreetSocialSchema);
  {auto Calendar=MakeShared<FJsonObject>();Calendar->SetNumberField(TEXT("day"),Store.CalendarDay);Calendar->SetNumberField(TEXT("minute"),Store.CalendarMinute);
   if(Store.HasPlayerSpot){auto Spot=MakeShared<FJsonObject>();Spot->SetNumberField(TEXT("x"),Store.PlayerSpot.X);Spot->SetNumberField(TEXT("y"),Store.PlayerSpot.Y);Spot->SetNumberField(TEXT("z"),Store.PlayerSpot.Z);Spot->SetNumberField(TEXT("yaw"),Store.PlayerYaw);Spot->SetNumberField(TEXT("view"),Store.ViewYaw);Calendar->SetObjectField(TEXT("player"),Spot);}Root->SetObjectField(TEXT("calendar"),Calendar);}
- {TArray<TSharedPtr<FJsonValue>> ApptRows;for(const auto& A:Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("place"),A.Place);O->SetStringField(TEXT("label"),A.Label);O->SetNumberField(TEXT("start"),double(A.Start));O->SetNumberField(TEXT("grace"),A.Grace);if(A.Minutes>0)O->SetNumberField(TEXT("minutes"),A.Minutes);O->SetStringField(TEXT("status"),A.Status);ApptRows.Add(MakeShared<FJsonValueObject>(O));}
+ {TArray<TSharedPtr<FJsonValue>> ApptRows;for(const auto& A:Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("place"),A.Place);O->SetStringField(TEXT("label"),A.Label);O->SetNumberField(TEXT("start"),double(A.Start));O->SetNumberField(TEXT("grace"),A.Grace);if(A.Minutes>0)O->SetNumberField(TEXT("minutes"),A.Minutes);O->SetStringField(TEXT("status"),A.Status);if(!A.Payer.IsEmpty())O->SetStringField(TEXT("payer"),A.Payer);ApptRows.Add(MakeShared<FJsonValueObject>(O));}
   Root->SetArrayField(TEXT("appointments"),ApptRows);Root->SetNumberField(TEXT("next_appointment"),Store.NextAppointment);
   auto Black=MakeShared<FJsonObject>();TArray<FString> Keys;Store.Blacklist.GetKeys(Keys);Keys.Sort();for(const FString& K:Keys)Black->SetNumberField(K,Store.Blacklist[K]);Root->SetObjectField(TEXT("blacklist"),Black);}
  {auto Bonds=MakeShared<FJsonObject>();TArray<FString> Keys;Store.BondHeat.GetKeys(Keys);Keys.Sort();for(const FString& K:Keys)Bonds->SetNumberField(K,Store.BondHeat[K]);Root->SetObjectField(TEXT("bonds"),Bonds);
@@ -1336,7 +1337,7 @@ inline EOKStreetLoad OKStreetParseSave(const FString& Json, FOKStreetStore& Stor
  {const TArray<TSharedPtr<FJsonValue>>* ApptRows=nullptr;
   if(Root->TryGetArrayField(TEXT("appointments"),ApptRows))for(const auto& R:*ApptRows){const auto O=R.IsValid()?R->AsObject():nullptr;if(!O)continue;FOKStreetAppointment A;double V=0;
    if(O->TryGetNumberField(TEXT("id"),V))A.Id=int32(V);O->TryGetStringField(TEXT("kind"),A.Kind);O->TryGetStringField(TEXT("heroine"),A.Heroine);O->TryGetStringField(TEXT("place"),A.Place);O->TryGetStringField(TEXT("label"),A.Label);
-   if(O->TryGetNumberField(TEXT("start"),V))A.Start=int64(V);if(O->TryGetNumberField(TEXT("grace"),V))A.Grace=FMath::Clamp(int32(V),0,1440);if(O->TryGetNumberField(TEXT("minutes"),V))A.Minutes=FMath::Clamp(int32(V),0,1440);O->TryGetStringField(TEXT("status"),A.Status);Store.Appointments.Add(A);}
+   if(O->TryGetNumberField(TEXT("start"),V))A.Start=int64(V);if(O->TryGetNumberField(TEXT("grace"),V))A.Grace=FMath::Clamp(int32(V),0,1440);if(O->TryGetNumberField(TEXT("minutes"),V))A.Minutes=FMath::Clamp(int32(V),0,1440);O->TryGetStringField(TEXT("status"),A.Status);O->TryGetStringField(TEXT("payer"),A.Payer);Store.Appointments.Add(A);}
   double Next=1;if(Root->TryGetNumberField(TEXT("next_appointment"),Next))Store.NextAppointment=FMath::Max(1,int32(Next));
   const TSharedPtr<FJsonObject>* Black=nullptr;if(Root->TryGetObjectField(TEXT("blacklist"),Black))for(const auto& P:(*Black)->Values){double V=0;if(P.Value.IsValid()&&P.Value->TryGetNumber(V))Store.Blacklist.Add(FString(*P.Key),int32(V));}}
  {const TSharedPtr<FJsonObject>* Bonds=nullptr;if(Root->TryGetObjectField(TEXT("bonds"),Bonds))for(const auto& P:(*Bonds)->Values){double V=0;if(P.Value.IsValid()&&P.Value->TryGetNumber(V)&&FMath::IsFinite(V))Store.BondHeat.Add(FString(*P.Key),FMath::Clamp(float(V),0.f,100.f));}

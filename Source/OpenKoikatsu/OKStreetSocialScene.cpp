@@ -1392,7 +1392,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // "Let's go see the show — Sure, let's go!" inside the aquarium judged as going to the aquarium: they are there
   // already, so they walk around it together instead of standing still after her "let's go" (R3-111).
   if(DoNow.StartsWith(TEXT("go:"))&&DoNow.Mid(3)==Weak->PlaceHere(L->Male)){UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s is where he is; a stroll here"),*DoNow);DoNow=TEXT("stroll");}
-  const TSharedPtr<FJsonObject>* Promise=nullptr;FString Day,Time,Place,What;
+  const TSharedPtr<FJsonObject>* Promise=nullptr;FString Day,Time,Place,What;bool PayForPromise=false;
   if(Verdict->TryGetObjectField(TEXT("promise"),Promise)&&Promise&&(*Promise).IsValid()){(*Promise)->TryGetStringField(TEXT("day"),Day);(*Promise)->TryGetStringField(TEXT("time"),Time);(*Promise)->TryGetStringField(TEXT("place"),Place);(*Promise)->TryGetStringField(TEXT("what"),What);}
   UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d do_now=\"%s\" (her field \"%s\") promise=%s %s %s %s; %s"),Character,*DoNow,*HerAction,*Day,*Time,*Place,*What,*Why);
   // What they agreed to do as soon as this is over ("after we eat I'll walk you home", "eat first, then the department
@@ -1417,7 +1417,13 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // A day with no place yet goes in too: she then asks when and where (AddPromiseFromChat).
   if(!Place.IsEmpty()||!Day.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces)UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);
    double Hours=0;if(Promise&&(*Promise).IsValid())(*Promise)->TryGetNumberField(TEXT("hours"),Hours);
-   Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said,Replaces,float(Hours));}
+   Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said,Replaces,float(Hours));
+   // Who pays, said with it ("Friday seven, the restaurant, my apology treat"): kept on the meeting just booked or moved,
+   // for that day (R3-216).
+   FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&(Payer==TEXT("him")||Payer==TEXT("her")||Payer==TEXT("split"))){
+    const FString HerId=OKStreetStableId(L->Manifest.Characters[Character]);const double Wall=FPlatformTime::Seconds();
+    for(auto& A:L->Store.Appointments)if(A.Heroine==HerId&&A.Status==TEXT("pending")&&A.Kind==TEXT("date"))if(const double* At=L->PromiseBookedAt.Find(A.Id);At&&Wall-*At<5.0){A.Payer=Payer;PayForPromise=true;
+     UE_LOG(LogTemp,Display,TEXT("Street appointment %d: %s pays"),A.Id,*Payer);}}}
   // "Every Wednesday" (the judge's promise.repeat): the meeting just booked is the first of a series (series.rs).
   if(!Place.IsEmpty()&&Promise&&(*Promise).IsValid())if(const TSharedPtr<FJsonValue> Rep=(*Promise)->TryGetField(TEXT("repeat"));Rep.IsValid()&&!Rep->IsNull()&&!(Rep->Type==EJson::String&&Rep->AsString().IsEmpty()))Weak->StartSeries(Character,Place,Rep);
   {bool Ends=false,Treats=false;Verdict->TryGetBoolField(TEXT("ends"),Ends);Verdict->TryGetBoolField(TEXT("she_treats"),Treats);
@@ -1522,7 +1528,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    }
    if(Added>0)Weak->PlaceChatOrder(Character,Her);}
   // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请").
-  {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty())Weak->RecordPayAgreed(Character,Payer,DoNow);}
+  // For a meeting another time and nothing now: it went with the meeting above, not to the next shop today.
+  {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty()&&!(PayForPromise&&DoNow.IsEmpty()))Weak->RecordPayAgreed(Character,Payer,DoNow);}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
   {double Lend=0;Verdict->TryGetNumberField(TEXT("he_lends"),Lend);Weak->SettleMoneyHandover(Character,Lend,true);}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).

@@ -285,11 +285,13 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusInvite);Status.Invite=RollInviteStance(Character);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusHeard);Status.Heard=HeardText(Character);}
  // The meetings the game really has with him: she must not remember others (a time she said once is not a promise).
+ // Who they said pays, with it: his apology dinner became "my apology dinner, I pay" at the table (R3-216).
+ auto PayNote=[](const FOKStreetAppointment& A){return A.Payer==TEXT("him")?FString(OKT(TEXT("ui.mind.promise_he_pays"))):A.Payer==TEXT("her")?FString(OKT(TEXT("ui.mind.promise_you_pay"))):A.Payer==TEXT("split")?FString(OKT(TEXT("ui.mind.promise_split"))):FString();};
  {TArray<FString> Lines;for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id){const int32 Minute=int32(A.Start%1440);
-   Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), *A.Label}}));}
+   Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), A.Label+PayNote(A)}}));}
   // The one they are keeping right now (met in the last two hours): it is not gone, they are in it.
   for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("done")&&A.Heroine==Id&&A.Kind==TEXT("date")&&FMath::Abs(OKStreetMindNow(S)-A.Start)<120){const int32 Minute=int32(A.Start%1440);
-   Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), A.Label+OKT(TEXT("ui.mind.promise_being_kept"))}}));}
+   Lines.Add(OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetCalendarLabel(int32(A.Start/1440),Minute/60.0)}, {TEXT("reply"), A.Label+PayNote(A)+OKT(TEXT("ui.mind.promise_being_kept"))}}));}
   Status.Promises=Lines.IsEmpty()?FString(OKT(TEXT("ui.mind.no_pending_promises"))):FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusToday);Status.Today=TodayText(Character);}
  if(Mind.IsValid())Status.Needs=Mind->GetStringField(TEXT("needs_text"));
