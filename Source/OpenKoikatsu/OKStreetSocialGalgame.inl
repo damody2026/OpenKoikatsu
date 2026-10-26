@@ -354,6 +354,8 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 		G.ViewHost = SNew(SBox).Padding(FMargin(0.f, 0.f, OKStreetGalgameRightColumn, 0.f)).Visibility(EVisibility::HitTestInvisible)[G.View.ToSharedRef()];
 		GEngine->GameViewport->AddViewportWidgetContent(G.ViewHost.ToSharedRef(), 9);
 	}
+	// The one-on-one scene is a world of its own: the street's dialog box (its last line) stayed over it.
+	if (G.ViewHost) G.ViewHost->SetVisibility(S.PrivateGirl != INDEX_NONE ? EVisibility::Collapsed : EVisibility::HitTestInvisible);
 	const TArray<FString> Names = OKStreetCharacterNames(S);
 	auto NameOf = [&](int32 Slot) { return Names.IsValidIndex(Slot) ? Names[Slot] : FString(); };
 	auto SendLine = [&](int32 Slot, const FString& Text, bool bVoiced)

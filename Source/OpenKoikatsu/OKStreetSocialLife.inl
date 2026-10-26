@@ -282,14 +282,28 @@ void AOKStreetSocialScene::TickLife(float Dt){
   // to be closer (R3-116).
   const bool Low=R.Emotion==OKT(TEXT("ui.life.mood_low"))||R.Emotion==OKT(TEXT("ui.life.tired_mood"))||R.Emotion==OKT(TEXT("ui.life.angry_mood"))
    ||R.Emotion==OKT(TEXT("ui.life.jealous_mood"))||R.Emotion==OKT(TEXT("ui.life.mocking_mood"))||R.Jealousy>=40.f||R.Resentment>=30.f;
-  if(R.Stage==TEXT("lover")&&OKStreetNormsOf(PlaceHere(S.Male)).Privacy>=2&&R.Attraction>=55&&R.Energy>=30&&!Low&&FMath::FRand()<0.15f){
-   S.LifeWishDay=S.Store.CalendarDay;
-   S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.life.whisper_closer_scene"));SendFreeTalk();
-   RequestIntimacy(I,true);
-   MindObserve(I,TEXT("intimacy"),OKT(TEXT("ui.life.i_propose_closer")),PlaceHere(S.Male),0.6f);
-   UE_LOG(LogTemp,Display,TEXT("Street life: actor %d asks for intimacy herself"),I);
-  }
+  // Not with her class, shift or a promise within the hour (Raiden asked 51 minutes before her shift and missed it).
+  bool Due=false;{const int32 Clock=int32(OKStreetMindNow(S)%1440);if(const TArray<FOKStreetPlanBlock>* Plan=S.Plans.Find(I))for(const auto& B:*Plan)
+   if((B.Kind==TEXT("class")||B.Kind==TEXT("work")||B.Kind==TEXT("promise"))&&B.End>Clock&&B.Start<=Clock+60)Due=true;}
+  if(R.Stage==TEXT("lover")&&OKStreetNormsOf(PlaceHere(S.Male)).Privacy>=2&&R.Attraction>=55&&R.Energy>=30&&!Low&&!Due&&FMath::FRand()<0.15f)AskIntimacyWish(I);
  }
+}
+
+// Her wish said, and the choice it leaves him. She asks; he answers (the buttons, or in words). Her wish took him straight
+// into the one-on-one scene, which only its own return button leaves (R3-228). Not answered in 40 s is not a yes.
+void AOKStreetSocialScene::AskIntimacyWish(int32 I){
+ auto& S=*State;S.LifeWishDay=S.Store.CalendarDay;
+ if(S.Choices.ContainsByPredicate([I](const FOKStreetPendingChoice& C){return C.Kind==TEXT("intimacy")&&C.Heroine==I;}))return; // asked already, not answered yet
+ S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.life.whisper_closer_scene"));SendFreeTalk();
+ MindObserve(I,TEXT("intimacy"),OKT(TEXT("ui.life.i_propose_closer")),PlaceHere(S.Male),0.6f);
+ TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+ // (No lean: his answer is not argued down.)
+ OpenChoice(I,TEXT("intimacy"),OKT(TEXT("ui.life.intimacy_wish_choice")),{TEXT("accept"),TEXT("decline")},FString(),0.f,40,[Weak,I](const FString& Option){
+  if(!Weak.IsValid()||!Weak->State)return;
+  if(Option==TEXT("accept")){UE_LOG(LogTemp,Display,TEXT("Street life: actor %d's wish for intimacy, he accepted"),I);Weak->RequestIntimacy(I,true);return;}
+  auto& L=*Weak->State;L.SystemNote=true;L.FreeTalkDraft=OKT(TEXT("ui.life.intimacy_wish_declined"));Weak->SendFreeTalk();
+  UE_LOG(LogTemp,Display,TEXT("Street life: actor %d's wish for intimacy, he declined"),I);});
+ UE_LOG(LogTemp,Display,TEXT("Street life: actor %d asks for intimacy herself (asks him)"),I);
 }
 
 // ---- 2026-10-12 plan, stage 1 (Docs/STREET_BEHAVIOR_PLAN_20261012.md) ----
@@ -395,6 +409,10 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // Time: what the activity takes beyond the minutes that already went by while it played, never past an appointment.
  const int32 Want=int32(Answer->GetNumberField(TEXT("minutes")));const int64 Spent=OKStreetMindNow(S)-StartMinute;
  int64 Room=MAX_int64;for(const auto& X:S.Store.Appointments)if(X.Status==TEXT("pending")&&X.Kind!=TEXT("entrust")&&X.Start>OKStreetMindNow(S))Room=FMath::Min(Room,X.Start-5-OKStreetMindNow(S));
+ // Nor past her own class, shift, promise or bedtime: the dessert ran on to 12:54 over her 12:41 class, and only then
+ // she said she would be late (R3-226).
+ {const int32 Minute=int32(OKStreetMindNow(S)%1440);if(const TArray<FOKStreetPlanBlock>* Plan=S.Plans.Find(Girl))for(const auto& B:*Plan)
+  if(OKStreetFixedBlock(&B)&&B.Start>Minute)Room=FMath::Min<int64>(Room,B.Start-5-Minute);}
  if(!S.ClockPaused&&Want>Spent&&Room>0){
   const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);
   const double Add=FMath::Min3(double(Want-Spent)/60.0,FMath::Max(0.0,23.75-Hours),double(FMath::Min<int64>(Room,24*60))/60.0); // never past the day's end or an appointment

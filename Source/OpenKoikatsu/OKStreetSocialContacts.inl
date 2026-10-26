@@ -303,7 +303,14 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
  Mode->Returned=[Weak](TSharedRef<FJsonObject> Result){if(Weak.IsValid()&&Weak->State){Weak->State->HighPrivateResult=Result;Weak->State->HighPrivateSeenReady=Result->HasField(TEXT("partner_ready"))&&Result->GetBoolField(TEXT("partner_ready"));Weak->FinishPrivate();if(Weak->State->SelfTest&&!Weak->State->Reported)Weak->RunContactsProbe(Weak->SceneTime());}};
  OKSuspendCrowdRuntimeScene(this,true);S.MouseToggleRequested=false;S.ContactsNotice=OKT(TEXT("ui.contacts.loading_one_on_one"));RefreshUI();
  if(S.Overlay)S.Overlay->SetVisibility(EVisibility::Collapsed);
- UE_LOG(LogTemp,Display,TEXT("Street shared private started slot=%d pid=%u"),Character,FPlatformProcess::GetCurrentProcessId());
+ // A leave button of the street's own, top right over the scene: back to the street at any time (its panel's return is
+ // at the top of a long scrolled list, and the control channel cannot reach it).
+ if(GEngine&&GEngine->GameViewport){
+  S.PrivateLeave=SNew(SBox).HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0,16,24,0))
+   [SNew(SButton).ButtonStyle(OKStreetGlassButton()).ContentPadding(FMargin(18,8))
+    .Text(FText::FromString(OKT(TEXT("ui.contacts.leave_one_on_one"))))
+    .OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](){if(Weak.IsValid())Weak->FinishPrivate();return FReply::Handled();})];
+  GEngine->GameViewport->AddViewportWidgetContent(S.PrivateLeave.ToSharedRef(),20);}
 }
 void AOKStreetSocialScene::FinishPrivate(){
  if(!State||State->PrivateGirl==INDEX_NONE)return;auto& S=*State;
@@ -313,6 +320,7 @@ void AOKStreetSocialScene::FinishPrivate(){
  OKSuspendCrowdRuntimeScene(this,false);S.MouseUI=S.PrivateMouse;S.MouseToggleRequested=false;
  if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(S.Camera.Get());
  if(S.Overlay)S.Overlay->SetVisibility(EVisibility::Visible);
+ if(S.PrivateLeave.IsValid()){if(GEngine&&GEngine->GameViewport)GEngine->GameViewport->RemoveViewportWidgetContent(S.PrivateLeave.ToSharedRef());S.PrivateLeave.Reset();}
  // Her memory of the session: when it started (the memory's own time), how long, and every thing they did, in order.
  if(S.HighPrivateResult.IsValid()&&S.Manifest.Characters.IsValidIndex(Girl)){
   const TArray<TSharedPtr<FJsonValue>>* Acts=nullptr;TArray<FString> Done;

@@ -369,6 +369,8 @@ void AOKStreetSocialScene::TickChoices(){
   if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
   FOKStreetPendingChoice Done=MoveTemp(S.Choices[I]);S.Choices.RemoveAt(I);
   FString Final=!Done.HerLean.IsEmpty()?Done.HerLean:(Done.Options.IsEmpty()?FString():Done.Options[0]);
+  // Her wish to be close: his silence is not a yes (R3-228).
+  if(Done.Kind==TEXT("intimacy"))Final=TEXT("decline");
   // The bill is his to decide: what they settled, as the AI read it (shop.rs checkout_timeout).
   if(Done.Kind==TEXT("checkout")){
    auto Request=OKRulesRequest(TEXT("checkout_timeout"));Request->SetStringField(TEXT("lean"),Done.HerLean);Request->SetStringField(TEXT("agreed"),PayAgreed(Done.Heroine));

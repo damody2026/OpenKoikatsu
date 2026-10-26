@@ -199,7 +199,9 @@ void AOKStreetSocialScene::BuildHeroinePanel(const TSharedRef<SVerticalBox>& Pan
  }
  Row->AddSlot().Padding(1)[Button(OKT(TEXT("ui.heroine.lend_her_200")),[Weak](){if(Weak.IsValid())Weak->StartLoan(int32(Weak->Local(TEXT("cash"),200)));})];
  for(const auto& C:S.Choices)if(C.Heroine==Her&&C.Kind!=TEXT("checkout")){const FString ChoiceId=C.Id;
-  Row->AddSlot().Padding(1)[Button(C.Label+OKT(TEXT("ui.heroine.okay_suffix")),[Weak,ChoiceId](){if(Weak.IsValid())Weak->ResolveChoice(ChoiceId,TEXT("accept"),0.7f);})];}
+  Row->AddSlot().Padding(1)[Button(C.Label+OKT(TEXT("ui.heroine.okay_suffix")),[Weak,ChoiceId](){if(Weak.IsValid())Weak->ResolveChoice(ChoiceId,TEXT("accept"),0.7f);})];
+  // A no of his own as a button too (her wish to be close had only "okay": no was words or waiting it out; R3-228).
+  if(C.Options.Contains(TEXT("decline")))Row->AddSlot().Padding(1)[Button(C.Label+OKT(TEXT("ui.heroine.decline_suffix")),[Weak,ChoiceId](){if(Weak.IsValid())Weak->ResolveChoice(ChoiceId,TEXT("decline"),0.7f);})];}
  Panel->AddSlot().AutoHeight()[Row];
 }
 

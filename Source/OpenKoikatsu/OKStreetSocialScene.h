@@ -226,6 +226,7 @@ private:
  void StepApproach();
  void AddSecondSleeper(int32 First,const struct FOKStreetPlace* Place,const FString& FirstBed);
  void RequestIntimacy(int32 Character,bool bHerIdea);
+ void AskIntimacyWish(int32 Character); // her wish to be close, as a choice he answers (OKStreetSocialLife.inl)
  void TickIntimacy();
  // Status "asked": her request ("can you come for me at ten?") not answered yet; a meeting he agrees to with her near
  // that time makes it a real one (pending). Unanswered, it lapses without a stood-up (social.rs appointments_tick).
