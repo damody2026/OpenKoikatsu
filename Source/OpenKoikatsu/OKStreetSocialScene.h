@@ -210,6 +210,8 @@ private:
  void StartLoan(int32 Amount);
  void InitWalletFromProfile(const FString& Id,const TSharedPtr<class FJsonObject>& Profile);
  void BuildShopPanel(const TSharedRef<class SVerticalBox>& Box);
+ // The shop's menu as a paper card for the middle of the screen: its dishes by section, name ... price, the order buttons.
+ TSharedRef<class SWidget> BuildMenuCard(const FString& Title, int32 Her);
  FString PlaceHere(const FVector& Where) const;
  FString SceneLine(int32 Character) const;
  void TickNeeds();

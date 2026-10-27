@@ -496,7 +496,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  TSharedPtr<SWidget> Overlay;
  TSharedPtr<SBorder> InteractionPanel,DialoguePanel;
  // The UI shell's holders, one per region (RebuildUI), and the right panel's scroll box (it keeps its position).
- TSharedPtr<SBox> UiRightHolder,UiShopHolder,UiDebugHolder,UiBottomHolder,UiBluffHolder,UiHistoryHolder,UiAppHolder,UiSaveHolder;TSharedPtr<SScrollBox> UiRightScroll;uint32 UiDirtyRegions=0;
+ TSharedPtr<SBox> UiRightHolder,UiShopHolder,UiDebugHolder,UiBottomHolder,UiBluffHolder,UiHistoryHolder,UiAppHolder,UiSaveHolder,UiMenuHolder;TSharedPtr<SScrollBox> UiRightScroll;uint32 UiDirtyRegions=0;
  TSharedPtr<SOKStreetMinimap> Minimap;
  TSharedPtr<SWidget> MinimapPanel;
  bool MinimapShowNames=true,MinimapProbeShowNames=true;
@@ -2250,6 +2250,8 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
    +SVerticalBox::Slot().FillHeight(1)[SAssignNew(S.UiRightScroll,SScrollBox).OnUserScrolled_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](float Offset){if(const auto L=Weak.Pin())L->RightScrollOffset=Offset;})+SScrollBox::Slot()[SAssignNew(S.UiRightHolder,SBox)]]
    +SVerticalBox::Slot().AutoHeight()[SNew(SBox).MaxDesiredHeight_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return FOptionalSize(L&&L->ShowDebug?560.f:330.f);})[SNew(SScrollBox)+SScrollBox::Slot()[SAssignNew(S.UiDebugHolder,SBox)]]]]]]
   +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SBox).Visibility_Lambda([Weak=TWeakPtr<FOKStreetSceneState>(State)](){const auto L=Weak.Pin();return L&&L->BigMapOpen?EVisibility::Visible:EVisibility::Collapsed;})[S.BigMap.ToSharedRef()]]
+  // The shop's menu card, open in the middle of the screen (BuildShopPanel fills it while the menu is open).
+  +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SAssignNew(S.UiMenuHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)]
   +SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SAssignNew(S.UiAppHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)]
   +SOverlay::Slot()[SAssignNew(S.UiSaveHolder,SBox).Visibility(EVisibility::SelfHitTestInvisible)];
   GEngine->GameViewport->AddViewportWidgetContent(S.Overlay.ToSharedRef(),10);

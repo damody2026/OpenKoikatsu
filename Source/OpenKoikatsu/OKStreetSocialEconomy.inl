@@ -671,24 +671,12 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
   bool Closed=Banned;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopClosed);Closed=Closed||PlaceClosedNow(S.ShopPlace,Why);}
   const auto* Place=OKStreetFindPlace(S.ShopPlace);
   Panel->AddSlot().AutoHeight().Padding(2)[Button(FString::Printf(TEXT("%s %s"),Place?Place->Name:*S.ShopPlace,Closed?*Why:S.ShopOpen?OKT(TEXT("ui.economy.hide_menu_button")):OKT(TEXT("ui.economy.view_menu_button"))),[Weak](){Weak->State->ShopOpen=!Weak->State->ShopOpen;Weak->RefreshUI();},!Closed)];
-  if(S.ShopOpen&&!Closed){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopMenu);
-   auto List=SNew(SVerticalBox);
-   for(const auto* Item:ItemsHere(S.ShopPlace)){
-    const FString Id=Item->Id;auto Row=SNew(SHorizontalBox);
-    Row->AddSlot().FillWidth(1).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Item->Name+TEXT("  ")+Money(Item->PriceOf(Item->DefaultSize()))))];
-    if(Item->Consumable||Item->Category==TEXT("stay")||Item->Category==TEXT("leisure")||Item->Category==TEXT("spa")||Item->Category==TEXT("bath")||Item->Category==TEXT("game")||Item->Category==TEXT("service"))
-     Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.i_want_button")),[Weak,Id](){Weak->AddToCart(Id,false);})];
-    if(Her!=INDEX_NONE&&Item->Consumable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.order_for_her_button")),[Weak,Id](){Weak->AddToCart(Id,true);})];
-    if(Item->Giftable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.buy_as_gift_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
-    else if(Item->Consumable)Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.takeaway_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
-    // Goods for himself (an umbrella, a comic, a notebook): bought into his bag. They had no button at all.
-    else if(Item->Category==TEXT("goods"))Row->AddSlot().AutoWidth()[Button(OKT(TEXT("ui.economy.buy_for_self_button")),[Weak,Id](){Weak->BuyForGift(Id);})];
-    List->AddSlot().AutoHeight()[Row];
-   }
-   // As tall as the screen allows (a fixed 260 px showed nine dishes of a long menu).
-   float MenuHeight=260.f;if(GEngine&&GEngine->GameViewport){FVector2D Size;GEngine->GameViewport->GetViewportSize(Size);const float Scale=FMath::Max(.5f,GEngine->GameViewport->GetDPIScale());MenuHeight=FMath::Max(MenuHeight,Size.Y/Scale*.45f);}
-   Panel->AddSlot().MaxHeight(MenuHeight)[SNew(SScrollBox)+SScrollBox::Slot()[List]];
-  }
+  // The menu itself opens as a card in the middle of the screen, not as rows in this panel.
+  if(S.UiMenuHolder.IsValid()){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopMenu);
+   S.UiMenuHolder->SetContent(S.ShopOpen&&!Closed?BuildMenuCard(Place?Place->Name:S.ShopPlace,Her):SNullWidget::NullWidget);}
+ }else{
+  // He walked out: the card closes with the shop.
+  S.ShopOpen=false;if(S.UiMenuHolder.IsValid())S.UiMenuHolder->SetContent(SNullWidget::NullWidget);
  }
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopJobs);BuildJobRows(Panel);}
  if(!S.Cart.IsEmpty()){
@@ -713,6 +701,49 @@ void AOKStreetSocialScene::BuildShopPanel(const TSharedRef<SVerticalBox>& Box){
  }
  if(Her!=INDEX_NONE){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_ShopHeroinePanel);BuildHeroinePanel(Panel,Her);} // the heroine module (OKStreetSocialHeroine.inl)
  Box->AddSlot().AutoHeight().Padding(4)[Panel];
+}
+TSharedRef<SWidget> AOKStreetSocialScene::BuildMenuCard(const FString& Title,int32 Her){
+ auto& S=*State;
+ TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+ const FLinearColor Ink(.24f,.14f,.07f),Accent(.55f,.13f,.08f),Paper(.97f,.93f,.84f,.98f),Wood(.20f,.11f,.05f,.97f);
+ const FSlateBrush* Fill=FCoreStyle::Get().GetBrush("GenericWhiteBox");
+ auto Button=[&Weak](const FString& Text,TFunction<void()> Do){return SNew(SButton).ButtonStyle(OKStreetGlassButton()).ContentPadding(FMargin(8,2)).Text(FText::FromString(Text)).OnClicked_Lambda([Weak,Do](){if(Weak.IsValid())Do();return FReply::Handled();});};
+ auto Line=[&](float Height){return SNew(SBox).HeightOverride(Height)[SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(Accent.CopyWithNewOpacity(.55f))];};
+ // Sections in the order a menu reads: meals first, drinks after, things to take away last.
+ static const TCHAR* Order[]={TEXT("meal"),TEXT("light"),TEXT("dessert"),TEXT("fruit"),TEXT("coffee"),TEXT("drink"),TEXT("alcohol"),TEXT("stay"),TEXT("spa"),TEXT("bath"),TEXT("leisure"),TEXT("game"),TEXT("service"),TEXT("goods"),TEXT("gift")};
+ auto Rank=[](const FString& Category){for(int32 I=0;I<UE_ARRAY_COUNT(Order);++I)if(Category==Order[I])return I;return int32(UE_ARRAY_COUNT(Order));};
+ TArray<const FOKStreetCatalogItem*> Items=ItemsHere(S.ShopPlace);
+ Items.StableSort([&Rank](const FOKStreetCatalogItem& A,const FOKStreetCatalogItem& B){return Rank(A.Category)<Rank(B.Category);});
+ auto List=SNew(SVerticalBox);FString Section;
+ for(const auto* Item:Items){
+  if(Item->Category!=Section||List->NumSlots()==0){Section=Item->Category;
+   const FString Key=TEXT("ui.economy.menu_section_")+Section;const FString Name=OKT(*Key);
+   List->AddSlot().AutoHeight().Padding(0,List->NumSlots()?14:2,0,4)[SNew(SVerticalBox)
+    +SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",17)).ColorAndOpacity(Accent).Text(FText::FromString(Name==Key?Section:Name))]
+    +SVerticalBox::Slot().AutoHeight().Padding(0,3,0,0)[Line(1.f)]];}
+  const FString Id=Item->Id;auto Row=SNew(SHorizontalBox);
+  Row->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",15)).ColorAndOpacity(Ink).Text(FText::FromString(Item->Name))];
+  // The dotted leader from the dish to its price.
+  Row->AddSlot().FillWidth(1).VAlign(VAlign_Center).Padding(6,0)[SNew(STextBlock).Clipping(EWidgetClipping::ClipToBounds).ColorAndOpacity(Ink.CopyWithNewOpacity(.45f)).Text(FText::FromString(FString::ChrN(120,TEXT('.'))))];
+  Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0,0,10,0)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",15)).ColorAndOpacity(Ink).Text(FText::FromString(Money(Item->PriceOf(Item->DefaultSize()))))];
+  if(Item->Consumable||Item->Category==TEXT("stay")||Item->Category==TEXT("leisure")||Item->Category==TEXT("spa")||Item->Category==TEXT("bath")||Item->Category==TEXT("game")||Item->Category==TEXT("service"))
+   Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.i_want_button")),[Weak,Id](){Weak->AddToCart(Id,false);})];
+  if(Her!=INDEX_NONE&&Item->Consumable)Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.order_for_her_button")),[Weak,Id](){Weak->AddToCart(Id,true);})];
+  if(Item->Giftable)Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.buy_as_gift_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
+  else if(Item->Consumable)Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.takeaway_label")),[Weak,Id](){Weak->BuyForGift(Id);})];
+  // Goods for himself (an umbrella, a comic, a notebook): bought into his bag.
+  else if(Item->Category==TEXT("goods"))Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.buy_for_self_button")),[Weak,Id](){Weak->BuyForGift(Id);})];
+  List->AddSlot().AutoHeight().Padding(0,3)[Row];
+ }
+ // As tall as the screen allows; a long menu scrolls inside the card.
+ float ListHeight=360.f;if(GEngine&&GEngine->GameViewport){FVector2D Size;GEngine->GameViewport->GetViewportSize(Size);const float Scale=FMath::Max(.5f,GEngine->GameViewport->GetDPIScale());ListHeight=FMath::Max(ListHeight,Size.Y/Scale*.55f);}
+ return SNew(SBox).WidthOverride(660)[SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(Wood).Padding(6)[SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(Paper).Padding(FMargin(32,20,32,16))[SNew(SVerticalBox)
+  +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",28)).ColorAndOpacity(Ink).Text(FText::FromString(Title))]
+  +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0,2,0,8)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",14)).ColorAndOpacity(Accent).Text(FText::FromString(OKT(TEXT("ui.economy.menu_card_subtitle"))))]
+  +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,4)[Line(2.f)]
+  +SVerticalBox::Slot().MaxHeight(ListHeight)[SNew(SScrollBox)+SScrollBox::Slot()[List]]
+  +SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)[Line(2.f)]
+  +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0,10,0,0)[Button(OKT(TEXT("ui.economy.hide_menu_button")),[Weak](){Weak->State->ShopOpen=false;Weak->RefreshUI();})]]]];
 }
 // Admission as he walks in (the aquarium, the onsen): how much and who pays are the rules' (shop.rs entry_fee); she is
 // the girl walking with him. He cannot pay: back out of the door.
