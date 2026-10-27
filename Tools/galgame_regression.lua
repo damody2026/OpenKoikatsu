@@ -1,6 +1,6 @@
 -- Street galgame regression over the control channel (run after packaging a stage).
 --
---   Tools\lua\lua.exe Tools\galgame_regression.lua [--launch] [--girl 3] [--port N] [--keep]
+--   Tools\lua\lua.exe Tools\galgame_regression.lua [--launch] [--girl 3] [--port N] [--keep] [--private]
 --
 -- With --launch the newest stage starts with -Control (Tools/run_street_social_development.lua); otherwise a running
 -- game on this checkout's control port is used. Heroine --girl is called over and talked to; the run checks:
@@ -13,6 +13,9 @@
 --              "rollback: back to line", her log and history shortened)
 --   memory     the rollback takes her mind back too (the mind part of that log line is not "skipped"), and she is
 --              asked about the fact told after the point rolled back to (her answer is printed; a mention is a warning)
+--   direction  a bracketed stage direction in his line is not said (the voice server log has his line without it)
+--   private    with --private: the one-on-one scene puts the extraction environment back when it ends, and after a
+--              reload (slot 9) a screenshot of her is taken to check by eye
 -- Prints PASS / FAIL / WARN per check; exits 1 when any check fails. --keep leaves a launched game running.
 local ok = require "ok"
 local json = ok.json
@@ -22,6 +25,7 @@ local a = ok.args.parser("Street galgame regression")
   :opt("--port", { type = "int", default = 0 })
   :flag("--launch")
   :flag("--keep")
+  :flag("--private")
   :parse(arg)
 local root = ok.root
 local port = a.port
@@ -172,6 +176,46 @@ if answer then
   local words = answer:match("%(voiced%): (.*)$") or answer:match(": (.*)$") or answer
   if words:find(day[2], 1, true) then report("WARN", "forgot", "she still mentions the birthday: " .. words)
   else report("PASS", "forgot", words) end
+end
+
+-- A stage direction he types in brackets is shown but not said (OKStreetSpokenText.h): the voice server's log has his
+-- line without it. Needs the game's own voice server (Build/ok-tts/logs).
+local ttslog = root .. "/Build/ok-tts/logs/ok-tts.log"
+if ok.path.exists(ttslog) then
+  local function his_reqs() local n, last = 0, nil; for line in io.lines(ttslog) do if line:find("REQ id=s%d+ kind=file") then n = n + 1; last = line end end; return n, last end
+  local before = his_reqs()
+  say("（揮手）" .. pick(openers))
+  local got = wait(function() local n, last = his_reqs(); return n > before and last end, 30, 1)
+  if not got then report("WARN", "direction", "no line of his reached the voice server (is his voice on?)")
+  elseif got:find("（", 1, true) or got:find("挥手", 1, true) or got:find("揮手", 1, true) then report("FAIL", "direction", "said aloud: " .. got:match("[^ ]*$"))
+  else report("PASS", "direction", "his voice without the bracket: " .. (got:match("end=[%d.]+ (.*)$") or got:match("[^ ]*$"))) end
+else
+  report("WARN", "direction", "no voice server log at " .. ttslog .. ": not tested")
+end
+
+-- --private: the one-on-one scene and then a reload (saves slot 9 and loads it back). Leaving the scene puts the
+-- extraction environment back (OKStreetSocialPrivateEnv.cpp); without it every heroine came back from the reload drawn
+-- wrong (black hair spikes, missing clothes). The look after the reload is a screenshot to check by eye.
+if a.private then
+  call("/saves", { op = "save", slot = "9" })
+  local opened = call("/private", { girl = g })
+  if not (opened and opened.girl == g) then report("FAIL", "private", "the scene did not open")
+  else
+    ok.time.sleep(40)
+    local puts = log_count("extraction environment put back")
+    call("/private", { off = true })
+    if wait(function() return log_count("extraction environment put back") > puts end, 10, 0.5) then
+      report("PASS", "private", (log_last("extraction environment put back") or ""):match("put back (.*)$") or "put back")
+    else report("FAIL", "private", "leaving did not put the extraction environment back") end
+    call("/saves", { op = "load", slot = "9" })
+    ok.time.sleep(5)
+    if wait(function() local s = call("/state"); return s and s.all_ready end, 300, 5) then
+      call("/inspect", { girl = g, yaw = 0, distance = 350 }); ok.time.sleep(1.5)
+      local shot = call("/screenshot", { scale = 1 }) or {}
+      call("/inspect", { off = true })
+      report("PASS", "reload", "reloaded; look at " .. tostring(shot.path) .. " (no black spikes, clothes on)")
+    else report("FAIL", "reload", "the characters never got ready after the reload") end
+  end
 end
 
 print(("%d checks, %s"):format(#results, failed and "FAILED" or "all passed"))
