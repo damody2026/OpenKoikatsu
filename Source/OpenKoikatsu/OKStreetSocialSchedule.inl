@@ -138,6 +138,11 @@ void AOKStreetSocialScene::TickSchedules(){
   S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SchedulePlanAll);PlanAll();}
  }
  // Walking with him when the game was saved: once both are drawn, the walk goes on (R3-238).
+ // The others of the group follow him again once the walk is on (or there was none to resume).
+ if(S.ResumeFollow==INDEX_NONE&&!S.ResumeParty.IsEmpty()){
+  for(int32 K=S.ResumeParty.Num()-1;K>=0;--K){const int32 G=S.ResumeParty[K];
+   if(S.Party.Contains(G)||PartyCanJoin(G)){if(!S.Party.Contains(G))PartyJoin(G);UE_LOG(LogTemp,Display,TEXT("Street load: actor %d follows him again"),G);S.ResumeParty.RemoveAt(K);}}
+  if(Wall>S.ResumeFollowUntil){S.ResumeParty.Reset();}}
  if(S.ResumeFollow!=INDEX_NONE){
   if(S.Companion==INDEX_NONE)BeginCompanion(S.ResumeFollow);
   if(S.Companion==S.ResumeFollow||Wall>S.ResumeFollowUntil){UE_LOG(LogTemp,Display,TEXT("Street load: actor %d %s"),S.ResumeFollow,S.Companion==S.ResumeFollow?TEXT("walks with him again"):TEXT("could not walk with him again; waits beside him"));
@@ -205,7 +210,8 @@ void AOKStreetSocialScene::TickSchedules(){
    if(Out&&Out->GetBoolField(TEXT("keep"))){auto& A=S.Agents[I-1];
     A.Position=W->Spot;S.Rotations[I]=FRotator(0,W->Yaw,0);A.Held=true;S.ScheduleHeld.Add(I);S.PendingMoves.Remove(I);S.Commutes.Remove(I);
     S.PlanBlock.Add(I,Index);S.PlanBlockSince.Add(I,Minute);S.WaitsForHim.Add(I,Now+int64(Out->GetNumberField(TEXT("wait_minutes"))));
-    if(Out->GetBoolField(TEXT("follow"))){S.ResumeFollow=I;S.ResumeFollowUntil=FPlatformTime::Seconds()+30;}
+    // The first who walked with him walks with him again; the others who followed him join the group again (R3-252).
+    if(Out->GetBoolField(TEXT("follow"))){if(S.ResumeFollow==INDEX_NONE)S.ResumeFollow=I;else S.ResumeParty.AddUnique(I);S.ResumeFollowUntil=FPlatformTime::Seconds()+30;}
     UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), put back at %s"),I,*W->Mode,*W->Spot.ToCompactString());
     S.ResumeWithHim.Remove(Id);continue;}
    UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), her %s block takes her"),I,*W->Mode,Block?*Block->Kind:TEXT("-"));

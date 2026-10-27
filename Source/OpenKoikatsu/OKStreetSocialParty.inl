@@ -135,31 +135,50 @@ void AOKStreetSocialScene::TickParty(float Dt){
   int32 Who=INDEX_NONE;const int32 Mood=BondMood(M,{Partner},&Who);const FString NM=S.Manifest.Characters[M].Name,NP=S.Manifest.Characters[Partner].Name;
   if(Mood==2){UE_LOG(LogTemp,Display,TEXT("Street party: actor %d dislikes the partner %d and wants to leave"),M,Partner);S.PartyEvents.Add(OKMsg(TEXT("ui.party.clash_wants_to_leave"), {{TEXT("name"), *NM}, {TEXT("other"), *NP}}));PartyStartLeaving(M,false);}
   else if(Mood==1){UE_LOG(LogTemp,Display,TEXT("Street party: actor %d dislikes the partner %d, stays for him"),M,Partner);S.PartyEvents.Add(OKMsg(TEXT("ui.party.dislikes_but_stays"), {{TEXT("name"), *NM}, {TEXT("other"), *NP}}));S.Message=OKMsg(TEXT("ui.party.unhappy_but_follows"), {{TEXT("name"), *NM}});}}
- // Talking: around him, away from the partner's side. Walking: behind him, a little to each side.
- FVector Toward=Partner!=INDEX_NONE&&S.Agents.IsValidIndex(Partner-1)?(S.Agents[Partner-1].Position-S.Male):S.Rotations[0].Vector();Toward.Z=0;if(!Toward.Normalize())Toward=FVector::ForwardVector;
+ // Talking: around him, away from the partner's side. Walking (nobody to talk to, or walking with the one he talks to):
+ // in the group's formation, by his facing (places.rs party_formation: girlfriends at his sides, friends ahead and
+ // behind). The one he walks with joins it while he leads; when she leads or they walk side by side the outing walks her.
+ const bool Walking=Partner==INDEX_NONE||((S.Companion==Partner||S.OutingGirl==Partner)&&S.Pair.Partner==INDEX_NONE);
+ const bool PartnerInLine=Walking&&Partner!=INDEX_NONE&&S.Companion==Partner&&S.FollowMode==0&&S.Agents.IsValidIndex(Partner-1);
+ S.GroupWalkPartner=PartnerInLine?Partner:INDEX_NONE;
+ auto StageOf=[&](int32 G){return OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[G]),S.Manifest.TalkBudget).Stage;};
+ TArray<int32> Members;if(PartnerInLine)Members.Add(Partner);for(const int32 G:S.Party)if(G!=Partner)Members.Add(G);
+ if(Walking){FString Key;for(const int32 G:Members)Key+=FString::Printf(TEXT("%d%s,"),G,*StageOf(G));
+  if(Key!=S.PartySlotsKey){S.PartySlotsKey=Key;S.PartySlots.Reset();auto Ask=OKRulesRequest(TEXT("party_formation"));TArray<TSharedPtr<FJsonValue>> Rows;
+   for(const int32 G:Members){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("actor"),G);O->SetBoolField(TEXT("lover"),StageOf(G)==TEXT("lover"));Rows.Add(MakeShared<FJsonValueObject>(O));}
+   Ask->SetArrayField(TEXT("members"),Rows);
+   if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask))for(const auto& V:Out->GetArrayField(TEXT("slots"))){const auto O=V->AsObject();S.PartySlots.Add(int32(O->GetNumberField(TEXT("actor"))),FVector2D(O->GetNumberField(TEXT("angle")),O->GetNumberField(TEXT("dist"))));}
+   UE_LOG(LogTemp,Display,TEXT("Street party: walking formation %s"),*Key);}}
+ FVector Toward=!Walking&&Partner!=INDEX_NONE&&S.Agents.IsValidIndex(Partner-1)?(S.Agents[Partner-1].Position-S.Male):S.Rotations[0].Vector();Toward.Z=0;if(!Toward.Normalize())Toward=FVector::ForwardVector;
  static const float TalkAngles[]={-70.f,70.f,180.f,-125.f},WalkAngles[]={150.f,-150.f,180.f,125.f};
  int32 Slot=0;
- for(int32 K=0;K<S.Party.Num();++K){
-  const int32 G=S.Party[K];if(!S.Agents.IsValidIndex(G-1)||G==Partner)continue;auto& A=S.Agents[G-1];
-  const float Angle=(Partner!=INDEX_NONE?TalkAngles:WalkAngles)[(Slot++)%4];
+ for(int32 K=0;K<Members.Num();++K){
+  const int32 G=Members[K];if(!S.Agents.IsValidIndex(G-1))continue;auto& A=S.Agents[G-1];const bool IsPartner=G==Partner;
+  const FVector2D* Formation=Walking?S.PartySlots.Find(G):nullptr;
+  const float Angle=Formation?float(Formation->X):(Partner!=INDEX_NONE?TalkAngles:WalkAngles)[(Slot++)%4];const float Reach=Formation?float(Formation->Y):155.f;
   if(FMath::Abs(A.Position.Z-S.Male.Z)>150.f&&S.NpcLifts.Contains(G))continue; // riding a lift
   if(S.PartySeats.ContainsByPredicate([G](const FOKLifePose& P){return P.Actor==G&&P.Phase==1;})){A.Held=true;continue;} // sitting on her chair
-  if(FVector::Dist2D(A.Position,S.Male)>2500.f){PartyLeave(G,TEXT("too far behind"));--K;continue;}
-  FVector Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*155.f;Spot.Z=S.Male.Z;
+  if(!IsPartner&&FVector::Dist2D(A.Position,S.Male)>2500.f){PartyLeave(G,TEXT("too far behind"));Members.RemoveAt(K--);continue;}
+  FVector Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*Reach;Spot.Z=S.Male.Z;
   // A spot inside something (a counter, a wall): closer to him.
-  if(OKStreetObstacleGap(Spot,25.f)<25.f)Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*90.f;
+  if(OKStreetObstacleGap(Spot,25.f)<25.f)Spot=S.Male+Toward.RotateAngleAxis(Angle,FVector::UpVector)*FMath::Min(Reach,90.f);
   FVector Delta=Spot-A.Position;Delta.Z=0;const float Dist=Delta.Size();
   double& Ref=S.PartyGapRef.FindOrAdd(G);double& RefAt=S.PartyGapAt.FindOrAdd(G);
-  if(Dist>60.f){
-   const float Speed=(Dist>400.f?OKStreetMaleRunSpeed:OKStreetWalkSpeed)*FMath::Clamp(Dt,0.f,.05f);
-   const FVector Next=StreetStep(A.Position,Delta/Dist,FMath::Min(Dist,Speed));
+  // In the walking line she keeps her place closely and at his pace (the friend ahead of him lagged into his way).
+  if(Dist>(Formation?25.f:60.f)){
+   const float Speed=(Dist>(Formation?150.f:400.f)?OKStreetMaleRunSpeed:Formation?OKStreetMaleWalkSpeed*1.15f:OKStreetWalkSpeed)*FMath::Clamp(Dt,0.f,.05f);
+   const FVector Next=StreetStep(A.Position,Delta/Dist,FMath::Min(Dist,Speed));const float Moved=FVector::Dist2D(Next,A.Position);
    if(Next!=A.Position){A.Position=FVector(Next.X,Next.Y,S.Male.Z);S.Rotations[G]=OKStreetFacingMovement(Delta,S.Rotations[G]);}
+   // The one he walks with: her pace for her walk clip (StepCompanion hands her to the formation).
+   if(IsPartner)S.GroupWalkPartnerSpeed=Moved/(FMath::Clamp(Dt,0.001f,.05f)*OKStreetWalkSpeed);
    const double Now=SceneTime();
-   if(Dist<Ref-30.0||RefAt==0){Ref=Dist;RefAt=Now;}
+   // Keeping pace beside him or in the line is not being stuck: she is put at her spot only when she falls behind it.
+   if(Dist<Ref-30.0||RefAt==0||(Formation&&Dist<150.f)){Ref=Dist;RefAt=Now;}
    else if(Now-RefAt>6.0){A.Position=Spot;Ref=0;RefAt=Now;UE_LOG(LogTemp,Display,TEXT("Street party: actor %d stood beside him (no progress for 6 s)"),G);}
   }else{
-   Ref=0;RefAt=0;
-   if(Partner!=INDEX_NONE)S.Rotations[G]=OKStreetFacingMovement(S.Male-A.Position,S.Rotations[G]); // talking: she looks at him
+   Ref=0;RefAt=0;if(IsPartner)S.GroupWalkPartnerSpeed=0.f;
+   if(Formation)S.Rotations[G]=FRotator(0,S.Rotations[0].Yaw,0); // in the walking line: the way he faces
+   else if(Partner!=INDEX_NONE)S.Rotations[G]=OKStreetFacingMovement(S.Male-A.Position,S.Rotations[G]); // talking: she looks at him
   }
   A.Held=true;
  }

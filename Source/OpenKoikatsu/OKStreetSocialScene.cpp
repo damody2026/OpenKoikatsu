@@ -226,9 +226,12 @@ struct FOKStreetSceneState {
  FVector OutingStuckPos=FVector::ZeroVector;int32 OutingStuckCount=0; // an outing held up in the same spot again and again (R3-234)
  TMap<int32,int64> WaitsForHim; // she wrote him where she is: until this minute she stays there for him (R3-230)
  // Who was with him in the save, by stable id, until each is put back (R3-238); the one who walks with him again, and until when it is tried.
- TMap<FString,FOKStreetStore::FWithHim> ResumeWithHim;int32 ResumeFollow=INDEX_NONE;double ResumeFollowUntil=0;
+ TMap<FString,FOKStreetStore::FWithHim> ResumeWithHim;int32 ResumeFollow=INDEX_NONE;double ResumeFollowUntil=0;TArray<int32> ResumeParty;
  TArray<FString> PromiseAskNotes; // "ask him what time / where" notes not sent yet: dropped once the meeting is booked (R3-242)
  double FreeTalkSentAt=0,OutingBegunAt=0; // when her reply now coming was asked for, and when the outing under way began (R3-250)
+ // Walking with several: each one's place by his facing (places.rs party_formation), for the group it was asked for;
+ // the one he walks with when the formation, not her trail, walks her (TickParty), and her pace for her walk clip.
+ FString PartySlotsKey;TMap<int32,FVector2D> PartySlots;int32 GroupWalkPartner=INDEX_NONE;float GroupWalkPartnerSpeed=0.f;
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;
@@ -3305,6 +3308,8 @@ float AOKStreetSocialScene::StepCompanion(float Dt){
  // She does not give up on him: only a missing character ends the walk. Far behind, a long trail, or a character that
  // is not drawn yet never ends it; she is stood beside him, the trail is trimmed, and the walk goes on.
  if(!S.Agents.IsValidIndex(S.Companion-1)){FinishCompanion();return 0;}
+ // Walking with several of them: the group's formation (TickParty) walks her, not her trail behind him.
+ if(S.GroupWalkPartner==S.Companion&&!S.Party.IsEmpty()){S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;return S.GroupWalkPartnerSpeed;}
  auto& Agent=S.Agents[S.Companion-1];
  auto StandBeside=[&]()->bool{
   for(int32 K=0;K<12;++K){

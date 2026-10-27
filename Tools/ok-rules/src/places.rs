@@ -164,9 +164,34 @@ fn resume_with_him(mode: &str, fixed: bool, kind: &str, minute: i64) -> Value {
     json!({"keep": keep, "follow": follow && keep, "wait_minutes": if keep { RESUME_WAIT_MINUTES } else { 0 }})
 }
 
+/// Walking with several of them (user, 2026-10-27): his girlfriends walk side by side with him, one on each side; the
+/// others (friends, and a third girlfriend) walk in a line, in front of him and behind him. Request: members [{actor,
+/// lover}] in the order they joined. Answer: slots [{actor, angle, dist}]: degrees from his facing (0 ahead, 90 and -90
+/// his sides, 180 behind) and centimetres from him.
+const SIDE_CM: f64 = 95.0;
+// Ahead of him a little further than behind: at 1.4 m the friend in front stood in his way and he could not walk.
+const AHEAD_CM: [f64; 2] = [200.0, 310.0];
+const BEHIND_CM: [f64; 2] = [140.0, 250.0];
+fn party_formation(members: &[Value]) -> Value {
+    let mut sides = [90.0, -90.0].into_iter();
+    // In front first, then behind, then further behind, then further in front.
+    let mut line = [(0.0, AHEAD_CM[0]), (180.0, BEHIND_CM[0]), (180.0, BEHIND_CM[1]), (0.0, AHEAD_CM[1])].into_iter();
+    let mut slots = Vec::new();
+    for m in members {
+        let lover = m.get("lover").and_then(Value::as_bool).unwrap_or(false);
+        let (angle, dist) = match if lover { sides.next() } else { None } {
+            Some(a) => (a, SIDE_CM),
+            None => line.next().unwrap_or((180.0, BEHIND_CM[1] + 110.0)),
+        };
+        slots.push(json!({"actor": m.get("actor").cloned().unwrap_or(Value::Null), "angle": angle, "dist": dist}));
+    }
+    json!({"slots": slots})
+}
+
 pub fn eval(t: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
         "wake_place" => Ok(json!({"place": wake_place(request.get("place").and_then(Value::as_str).unwrap_or(""))})),
+        "party_formation" => Ok(party_formation(request.get("members").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]))),
         "resume_with_him" => Ok(resume_with_him(
             request.get("mode").and_then(Value::as_str).unwrap_or(""),
             request.get("fixed").and_then(Value::as_bool).unwrap_or(false),
@@ -187,6 +212,24 @@ pub fn eval(t: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Valu
 mod tests {
     use super::*;
     use crate::tuning::Tuning;
+
+    #[test]
+    fn girlfriends_beside_him_friends_in_a_line() {
+        let at = |v: &Value, k: usize| (v["slots"][k]["angle"].as_f64().unwrap(), v["slots"][k]["dist"].as_f64().unwrap());
+        // Two girlfriends and a friend: one on each side, the friend in front.
+        let v = party_formation(&[json!({"actor": 1, "lover": true}), json!({"actor": 2, "lover": false}), json!({"actor": 3, "lover": true})]);
+        assert_eq!((at(&v, 0), at(&v, 2)), ((90.0, SIDE_CM), (-90.0, SIDE_CM)));
+        assert_eq!(at(&v, 1), (0.0, 200.0), "the friend walks ahead");
+        // One girlfriend: beside him.
+        let one = party_formation(&[json!({"actor": 5, "lover": true})]);
+        assert_eq!(at(&one, 0), (90.0, SIDE_CM));
+        // Friends only: in front, behind, further behind.
+        let f = party_formation(&[json!({"actor": 1}), json!({"actor": 2}), json!({"actor": 3})]);
+        assert_eq!((at(&f, 0), at(&f, 1), at(&f, 2)), ((0.0, 200.0), (180.0, 140.0), (180.0, 250.0)));
+        // A third girlfriend has no side left: she joins the line.
+        let three = party_formation(&[json!({"actor": 1, "lover": true}), json!({"actor": 2, "lover": true}), json!({"actor": 3, "lover": true})]);
+        assert_eq!(at(&three, 2), (0.0, 200.0));
+    }
 
     #[test]
     fn who_was_with_him_stays_with_him_after_a_load() {
