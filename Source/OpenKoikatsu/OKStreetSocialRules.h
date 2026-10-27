@@ -244,6 +244,9 @@ struct FOKStreetRelation {
  FString Emotion;
  float EmotionIntensity = 0.f;
  int64 EmotionMinute = 0;
+ // Her spirits (R3-269, relation.rs mood_level): -100..100, 0 her usual self, easing back since MoodMinute.
+ float MoodLevel = 0.f;
+ int64 MoodMinute = 0;
  // Plan §4.7 / §8.3: her wallet (-1 until her profile is known), how many more times he treated her than she him,
  // and what she owes him.
  int64 Cash = -1, Bank = 0, OwesPlayer = 0, Debt = 0; // Debt: bills she could not cover (rules: day.rs charge_bill)
@@ -1226,7 +1229,8 @@ inline FString OKStreetWriteSave(const FOKStreetStore& Store) {
     if(BondKeys.Num())Object->SetObjectField(TEXT("toward"),Bonds);if(!Relation.Orientation.IsEmpty())Object->SetStringField(TEXT("orientation"),Relation.Orientation);}
    auto Money=MakeShared<FJsonObject>();Money->SetNumberField(TEXT("cash"),double(Relation.Cash));Money->SetNumberField(TEXT("bank"),double(Relation.Bank));Money->SetNumberField(TEXT("owes_player"),double(Relation.OwesPlayer));Money->SetNumberField(TEXT("debt"),double(Relation.Debt));Money->SetNumberField(TEXT("treat_balance"),Relation.TreatBalance);Money->SetNumberField(TEXT("perceived_wealth"),Relation.PerceivedWealth);Object->SetObjectField(TEXT("money"),Money);
    auto Needs=MakeShared<FJsonObject>();Needs->SetNumberField(TEXT("satiety"),Relation.Satiety);Needs->SetNumberField(TEXT("energy"),Relation.Energy);Needs->SetNumberField(TEXT("fun"),Relation.Fun);Needs->SetNumberField(TEXT("social"),Relation.Social);Needs->SetNumberField(TEXT("hygiene"),Relation.Hygiene);Needs->SetNumberField(TEXT("minute"),double(Relation.NeedsMinute));Object->SetObjectField(TEXT("needs"),Needs);
-   auto Mood=MakeShared<FJsonObject>();Mood->SetStringField(TEXT("emotion"),Relation.Emotion);Mood->SetNumberField(TEXT("intensity"),Relation.EmotionIntensity);Mood->SetNumberField(TEXT("minute"),double(Relation.EmotionMinute));Object->SetObjectField(TEXT("mood"),Mood);}
+   auto Mood=MakeShared<FJsonObject>();Mood->SetStringField(TEXT("emotion"),Relation.Emotion);Mood->SetNumberField(TEXT("intensity"),Relation.EmotionIntensity);Mood->SetNumberField(TEXT("minute"),double(Relation.EmotionMinute));
+   Mood->SetNumberField(TEXT("level"),Relation.MoodLevel);Mood->SetNumberField(TEXT("level_minute"),double(Relation.MoodMinute));Object->SetObjectField(TEXT("mood"),Mood);}
   {TArray<TSharedPtr<FJsonValue>> Recent;for(int32 No:Relation.ListenRecent)Recent.Add(MakeShared<FJsonValueNumber>(No));Object->SetArrayField(TEXT("listen_recent"),Recent);}
   Object->SetStringField(TEXT("relation"), Relation.Stage);
   Object->SetNumberField(TEXT("talks_remaining"), Relation.TalksRemaining);
@@ -1454,7 +1458,8 @@ inline EOKStreetLoad OKStreetParseSave(const FString& Json, FOKStreetStore& Stor
     Object->TryGetStringField(TEXT("orientation"),Relation.Orientation);}
    const TSharedPtr<FJsonObject>* Money=nullptr;if(Object->TryGetObjectField(TEXT("money"),Money)){double V=0;if((*Money)->TryGetNumberField(TEXT("cash"),V))Relation.Cash=int64(V);if((*Money)->TryGetNumberField(TEXT("bank"),V))Relation.Bank=FMath::Max<int64>(0,int64(V));if((*Money)->TryGetNumberField(TEXT("owes_player"),V))Relation.OwesPlayer=FMath::Max<int64>(0,int64(V));if((*Money)->TryGetNumberField(TEXT("debt"),V))Relation.Debt=FMath::Max<int64>(0,int64(V));if((*Money)->TryGetNumberField(TEXT("treat_balance"),V))Relation.TreatBalance=int32(V);if((*Money)->TryGetNumberField(TEXT("perceived_wealth"),V)&&FMath::IsFinite(V))Relation.PerceivedWealth=FMath::Clamp(float(V),0.f,100.f);}
    const TSharedPtr<FJsonObject>* Needs=nullptr;if(Object->TryGetObjectField(TEXT("needs"),Needs)){double V=0;for(const auto& F:{TPair<const TCHAR*,float*>(TEXT("satiety"),&Relation.Satiety),TPair<const TCHAR*,float*>(TEXT("energy"),&Relation.Energy),TPair<const TCHAR*,float*>(TEXT("fun"),&Relation.Fun),TPair<const TCHAR*,float*>(TEXT("social"),&Relation.Social),TPair<const TCHAR*,float*>(TEXT("hygiene"),&Relation.Hygiene)})if((*Needs)->TryGetNumberField(F.Key,V)&&FMath::IsFinite(V))*F.Value=FMath::Clamp(float(V),0.f,100.f);if((*Needs)->TryGetNumberField(TEXT("minute"),V))Relation.NeedsMinute=int64(V);}
-   const TSharedPtr<FJsonObject>* Mood=nullptr;if(Object->TryGetObjectField(TEXT("mood"),Mood)){(*Mood)->TryGetStringField(TEXT("emotion"),Relation.Emotion);double V=0;if((*Mood)->TryGetNumberField(TEXT("intensity"),V))Relation.EmotionIntensity=FMath::Clamp(float(V),0.f,1.f);if((*Mood)->TryGetNumberField(TEXT("minute"),V))Relation.EmotionMinute=int64(V);}}
+   const TSharedPtr<FJsonObject>* Mood=nullptr;if(Object->TryGetObjectField(TEXT("mood"),Mood)){(*Mood)->TryGetStringField(TEXT("emotion"),Relation.Emotion);double V=0;if((*Mood)->TryGetNumberField(TEXT("intensity"),V))Relation.EmotionIntensity=FMath::Clamp(float(V),0.f,1.f);if((*Mood)->TryGetNumberField(TEXT("minute"),V))Relation.EmotionMinute=int64(V);
+    if((*Mood)->TryGetNumberField(TEXT("level"),V))Relation.MoodLevel=FMath::Clamp(float(V),-100.f,100.f);if((*Mood)->TryGetNumberField(TEXT("level_minute"),V))Relation.MoodMinute=int64(V);}}
   for(const auto& Field:{TPair<FString,float*>(TEXT("sex_desire"),&Relation.SexDesire),TPair<FString,float*>(TEXT("topic_points"),&Relation.TopicPoints)}){double Number=0;if(Object->HasField(Field.Key)&&(!Object->TryGetNumberField(Field.Key,Number)||!FMath::IsFinite(Number)||Number<0||Number>1000000)){Error=TEXT("save_topic_points_invalid");return EOKStreetLoad::Invalid;}*Field.Value=float(Number);}
   if(Object->HasField(TEXT("listen_recent"))){const TArray<TSharedPtr<FJsonValue>>* Values=nullptr;if(!Object->TryGetArrayField(TEXT("listen_recent"),Values)||Values->Num()>5){Error=TEXT("save_listen_recent_invalid");return EOKStreetLoad::Invalid;}for(const auto& Value:*Values){int32 No;if(!OKStreetJsonInt(Value,No)||No<0||No>65535){Error=TEXT("save_listen_recent_invalid");return EOKStreetLoad::Invalid;}Relation.ListenRecent.Add(No);}}
   Store.Relations.Add(MoveTemp(Relation));

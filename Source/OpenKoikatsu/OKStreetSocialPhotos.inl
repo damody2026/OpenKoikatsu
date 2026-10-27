@@ -205,13 +205,40 @@ void AOKStreetSocialScene::PhotoWalkStop(int32 Girl){
 // out in the direction she faces a fireball swells and fades, a hard orange flash lights the field, the camera shakes.
 void AOKStreetSocialScene::StartEffect(const FString& Kind,int32 Girl){
  auto& S=*State;if(!S.Agents.IsValidIndex(Girl-1))return;
- S.EffectKind=Kind;S.EffectAt=SceneTime()+4.0; // the chant first
+ S.EffectKind=Kind;S.EffectAt=SceneTime()+4.0;S.EffectGirl=Girl;S.EffectFizzle=false; // the chant first
  const FVector Facing=FRotator(0,S.Rotations[Girl].Yaw+90.f,0).Vector();S.EffectWhere=S.Agents[Girl-1].Position+Facing*3500.f+FVector(0,0,900); // above the roofs between
+ // The spell takes all she has (social.rs explosion_cast): satiety to 0, and how full she was decides whether it comes
+ // off; her spirits go with it (R3-269).
+ if(Kind==TEXT("explosion")){auto Request=OKRulesHeroineRequest(S,TEXT("explosion_cast"),OKStreetStableId(S.Manifest.Characters[Girl]));Request->SetNumberField(TEXT("seed"),FMath::Rand());Request->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));
+  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
+   S.EffectFizzle=!Answer->GetBoolField(TEXT("success"));UE_LOG(LogTemp,Display,TEXT("Street effect: explosion by actor=%d %s (chance %.0f%%)"),Girl,S.EffectFizzle?TEXT("fizzles"):TEXT("comes off"),Answer->GetNumberField(TEXT("chance"))*100.0);}}
  UE_LOG(LogTemp,Display,TEXT("Street effect: %s by actor=%d at %s in 4 s"),*Kind,Girl,*S.EffectWhere.ToCompactString());
+}
+
+// After her spell (R3-269): she speaks first, of how it went (a fact for her; the words are hers).
+void AOKStreetSocialScene::AfterExplosion(){
+ auto& S=*State;const int32 Girl=S.EffectGirl;S.EffectGirl=INDEX_NONE;if(!S.Manifest.Characters.IsValidIndex(Girl)||Girl<=0)return;
+ if(S.Target!=INDEX_NONE&&S.Target!=Girl)return;
+ if(S.Target==INDEX_NONE){S.SkipGreeting=true;BeginTalk(Girl);S.SkipGreeting=false;}
+ if(S.Target!=Girl)return;
+ S.SystemNote=true;S.FreeTalkDraft=OKT(S.EffectFizzle?TEXT("ui.photos.explosion_fizzled_prompt"):TEXT("ui.photos.explosion_came_off_prompt"));SendFreeTalk();
+ UE_LOG(LogTemp,Display,TEXT("Street effect: actor=%d speaks of her spell (%s)"),Girl,S.EffectFizzle?TEXT("fizzled"):TEXT("came off"));
 }
 
 void AOKStreetSocialScene::TickEffect(){
  auto& S=*State;if(S.EffectKind.IsEmpty())return;const double T=SceneTime()-S.EffectAt;if(T<0)return;
+ // Fizzled (too hungry, R3-269): no fireball, no flash or shaking ground; a little grey puff over the field, then nothing.
+ if(S.EffectKind==TEXT("explosion")&&S.EffectFizzle){
+  if(S.EffectActors.IsEmpty()){UMaterialInterface* Tint=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+   auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));if(!Mesh){S.EffectKind.Reset();AfterExplosion();return;}
+   if(auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(S.EffectWhere-FVector(0,0,600),FRotator::ZeroRotator)){A->SetOwner(this);auto* M=A->GetStaticMeshComponent();M->SetMobility(EComponentMobility::Movable);M->SetStaticMesh(Mesh);M->SetCollisionEnabled(ECollisionEnabled::NoCollision);M->SetCastShadow(false);
+    if(Tint){auto* D=UMaterialInstanceDynamic::Create(Tint,A);D->SetVectorParameterValue(TEXT("Color"),FLinearColor(.45f,.43f,.4f));M->SetMaterial(0,D);}S.EffectActors.Add(A);}
+   {const FVector Toward=(S.EffectWhere-S.Male).GetSafeNormal2D();S.PhotoViewLoc=S.Male-Toward*450.f+FVector(0,0,260);S.PhotoViewRot=(S.EffectWhere-S.PhotoViewLoc).Rotation();S.PhotoViewUntil=SceneTime()+3.0;}
+   UE_LOG(LogTemp,Display,TEXT("Street effect: explosion fizzles"));}
+  for(auto& W:S.EffectActors)if(AActor* A=W.Get()){const float R=FMath::Max(.01f,1.5f*FMath::Sqrt(FMath::Clamp(float(T/1.0),0.f,1.f))*FMath::Clamp(float((2.5-T)/1.5),0.f,1.f));A->SetActorScale3D(FVector(R));A->SetActorLocation(S.EffectWhere-FVector(0,0,600)+FVector(0,0,float(T)*80.f));}
+  if(T>2.5){for(auto& A:S.EffectActors)DestroyLater(A.Get());S.EffectActors.Reset();S.EffectKind.Reset();AfterExplosion();}
+  return;
+ }
  if(S.EffectKind==TEXT("explosion")){
   // The fireball: three nested spheres (white core, orange, red smoke), growing for 1.5 s, gone by 4 s.
   if(S.EffectActors.IsEmpty()){UMaterialInterface* Tint=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
@@ -231,7 +258,7 @@ void AOKStreetSocialScene::TickEffect(){
   if(UPointLightComponent* L=S.EffectLight.Get())L->SetIntensity(5.0e7f*Fade*Fade);
   // The ground shakes under them for the first second.
   if(T<1.0)S.PhotoViewRot+=FRotator(FMath::FRandRange(-.6f,.6f),FMath::FRandRange(-.6f,.6f),0); // the camera looking out at it shakes
-  if(T>4.0){for(auto& A:S.EffectActors)DestroyLater(A.Get());S.EffectActors.Reset();if(UPointLightComponent* L=S.EffectLight.Get())L->DestroyComponent();S.EffectLight.Reset();S.EffectKind.Reset();}
+  if(T>4.0){for(auto& A:S.EffectActors)DestroyLater(A.Get());S.EffectActors.Reset();if(UPointLightComponent* L=S.EffectLight.Get())L->DestroyComponent();S.EffectLight.Reset();S.EffectKind.Reset();AfterExplosion();}
  }
 }
 

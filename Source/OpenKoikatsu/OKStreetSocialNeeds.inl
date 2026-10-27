@@ -14,6 +14,7 @@ void AOKStreetSocialScene::TickNeeds(){
   N->SetNumberField(TEXT("social"),R.Social);N->SetNumberField(TEXT("hygiene"),R.Hygiene);O->SetObjectField(TEXT("needs"),N);
   // What she is doing: her plan's block, or the urgent cut-in (hungry, worn out, a bath) that replaced it (LifeBlock).
   const int32 I=CharacterOf(R.Id);
+  if(I!=INDEX_NONE)O->SetNumberField(TEXT("satiety_max"),SatietyMax(I)); // her appetite: a meal fills her by its share (R3-269)
   // With him (talking, walking along, an activity together): that is what she is doing, not her plan's block (a meal
   // block fed her while she only stood talking to him; what they eat together feeds her through the table).
   const bool WithHim=I!=INDEX_NONE&&(S.Target==I||FreeTalkPartner()==I||S.Companion==I||S.OutingGirl==I||S.Pair.Partner==I||S.Party.Contains(I));

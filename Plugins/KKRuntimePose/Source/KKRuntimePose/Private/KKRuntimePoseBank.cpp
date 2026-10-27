@@ -2,10 +2,31 @@
 #include "KKRuntimeGpuDiskCache.h"
 #include "KKRuntimeNativeSession.h"
 #include "KKRuntimePoseMath.h"
+#include "OKIndependentGpuPose.h"
 #include "Async/Async.h"
 #include "ok_extract.h"
 #include "Misc/SecureHash.h"
 #include "Serialization/BufferArchive.h"
+
+// Baked secondary motion that shakes (R3-265): a bone whose key moves back and forth frame after frame (hair pushed
+// out of a collider and pulled back by its length, every sample), or whose last key is far from its first (the loop
+// jumps). Logged only when found, naming the clip and the worst bones.
+static void OKLogRuntimePoseJitter(const FKKRuntimePoseRequest& R,const FKKRuntimePoseResult& Out){
+ if(Out.Samples<8)return;struct FFound {FName Bone;int32 Reversals=0;float Seam=0;};TArray<FFound> Shaking,Seams;
+ for(int32 B=0;B<Out.Tracks.Num()&&B<R.Bones.Num();++B){const auto& T=Out.Tracks[B];if(T.Y!=Out.Samples||OKGpuTrackPositionRow(T,T.Y-1)>=uint32(Out.Keys.Num()))continue;
+  auto At=[&](uint32 K){const auto& P=Out.Keys[OKGpuTrackPositionRow(T,K)];return FVector3f(P.X,P.Y,P.Z);};
+  const float Eps=.002f*FMath::Max(1.f,At(0).Size());int32 Reversals=0;float Mean=0;
+  for(uint32 K=0;K+2<T.Y;++K){const FVector3f D0=At(K+1)-At(K),D1=At(K+2)-At(K+1);Mean+=D0.Size();
+   if(D0.Size()>Eps&&D1.Size()>Eps&&FVector3f::DotProduct(D0,D1)<-.5f*D0.Size()*D1.Size())++Reversals;}
+  Mean/=float(T.Y-2);
+  if(Reversals*4>int32(T.Y))Shaking.Add({R.Bones[B].Name,Reversals,0});
+  const float Seam=(At(T.Y-1)-At(0)).Size();if(Seam>FMath::Max(8*Mean,10*Eps))Seams.Add({R.Bones[B].Name,0,Mean>0?Seam/Mean:0});
+ }
+ auto Names=[](TArray<FFound>& F,bool bSeam){F.Sort([bSeam](const FFound& A,const FFound& B){return bSeam?A.Seam>B.Seam:A.Reversals>B.Reversals;});FString S;
+  for(int32 I=0;I<F.Num()&&I<4;++I)S+=FString::Printf(TEXT(" %s(%s)"),*F[I].Bone.ToString(),*(bSeam?FString::Printf(TEXT("%.0fx"),F[I].Seam):FString::FromInt(F[I].Reversals)));return S;};
+ if(Shaking.Num())UE_LOG(LogTemp,Warning,TEXT("Runtime pose jitter: %s clip %s, %d bones reverse most frames of %u:%s"),*R.CharacterIdentity.Left(16),*R.ClipIdentity,Shaking.Num(),Out.Samples,*Names(Shaking,false));
+ if(Seams.Num())UE_LOG(LogTemp,Warning,TEXT("Runtime pose seam: %s clip %s, %d bones end far from their start:%s"),*R.CharacterIdentity.Left(16),*R.ClipIdentity,Seams.Num(),*Names(Seams,true));
+}
 
 static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R){
  {
@@ -28,7 +49,7 @@ static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R
    for(const auto& Part:R.Parts){if(!Part.RigidFollow.IsEmpty()){float World[16];if(!Session.BoneWorldMatrix(Part.RigidFollow,World))return Fail(TEXT("Runtime rigid attachment bone missing"));H.Update(reinterpret_cast<const uint8*>(World),sizeof(World));continue;}
     if(Session.SkinPalette(Part.NativePart,Raw,Matrices)<=0)return Fail(TEXT("Runtime native palette missing"));H.Update(reinterpret_cast<const uint8*>(Matrices.GetData()),Matrices.Num()*sizeof(float));}
    H.Final();FSHAHash Digest;H.GetHash(Digest.Hash);R.FirstFrameDigest=Digest.ToString();}
-  if(R.PackedGpuCache&&OKLoadRuntimeGpuPoseCache(R,Out)){Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return Out;}
+  if(R.PackedGpuCache&&OKLoadRuntimeGpuPoseCache(R,Out)){Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;OKLogRuntimePoseJitter(R,Out);return Out;}
   struct FMapping {int32 Native=INDEX_NONE,Part=INDEX_NONE,Slot=0,Axis=0,SlotIndex=INDEX_NONE;};
   TMap<FName,int32> Native;for(int32 B=0;B<Session.SkelBoneCount();++B){OkBoneView V{};if(!Session.SkelBoneAt(B,V)||!V.name)return Fail(TEXT("Native runtime bone unavailable"));Native.Add(FName(UTF8_TO_TCHAR(V.name)),B);}
   TMap<FName,FMapping> Palettes;TSet<int32> Parts;
@@ -50,7 +71,10 @@ static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R
   for(int32 P=0;P<R.Parts.Num();++P){auto& F=PartFrames[P];F.Slots.SetNum(R.Parts[P].Slots.Num());F.SlotReady.SetNumZeroed(F.Slots.Num());if(!R.Parts[P].RigidFollow.IsEmpty())F.InverseBind=R.Parts[P].RigidBindWorld.Inverse();}
   TArray<uint8> Contact;if(!R.ContactRecipe.IsEmpty()){FTCHARToUTF8 Utf8(*R.ContactRecipe);Contact.Append(reinterpret_cast<const uint8*>(Utf8.Get()),Utf8.Length());if(Contact.Num()>16384)return Fail(TEXT("Contact recipe exceeds limit"));}
   const float Step=R.Duration/Frames;
-  for(uint32 K=0;K<Samples;++K){const float Time=K==Frames?R.Duration:Step*K;if(Contact.IsEmpty()?(K&&!Session.ApplyAnimFrame(Time,Step)):!Session.ApplyContactFrame(Time,K?Step:0,Contact))return Fail(TEXT("Runtime authored frame evaluation failed"));
+  // A loop of its own (not a prefix, no contact recipe): one loop first, untaken, and the keys from its wrap to time 0.
+  const bool Preroll=R.Loop&&!R.AuthoredPrefix&&Contact.IsEmpty();
+  if(Preroll)for(uint32 K=1;K<Frames;++K)if(!Session.ApplyAnimFrame(Step*K,Step))return Fail(TEXT("Runtime authored frame evaluation failed"));
+  for(uint32 K=0;K<Samples;++K){const float Time=K==Frames?R.Duration:Step*K;if(Contact.IsEmpty()?((K||Preroll)&&!Session.ApplyAnimFrame(Time,Step)):!Session.ApplyContactFrame(Time,K?Step:0,Contact))return Fail(TEXT("Runtime authored frame evaluation failed"));
    for(auto& F:PartFrames){F.Ready=false;F.Raw={};if(!F.SlotReady.IsEmpty())FMemory::Memzero(F.SlotReady.GetData(),F.SlotReady.Num());}
    for(int32 B=0;B<Mapping.Num();++B){const auto& M=Mapping[B];FTransform T=R.Bones[B].Reference;
     if(M.Native!=INDEX_NONE){OkBoneView V{};if(!Session.SkelBoneAt(M.Native,V))return Fail(TEXT("Runtime native pose missing"));T=OKUnityLocalToUnreal(V.pose_pos,V.pose_rot,V.pose_scl);}
@@ -72,7 +96,7 @@ static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R
    const uint32 Count=Constant?1:Samples;Out.ConstantTracks+=Constant?1:0;Out.Tracks.Add(FUintVector4(Write/3,Count,R.Bones[B].Parent<0?MAX_uint32:uint32(R.Bones[B].Parent),Mapping[B].Part!=INDEX_NONE?(33u|(uint32(Mapping[B].Axis)<<6)):1u));
    for(uint32 K=0;K<Count;++K)for(int32 C=0;C<3;++C)Out.Keys[Write++]=Out.Keys[Source+K*3+C];
   }
-  Out.Keys.SetNum(Write,EAllowShrinking::Yes);FString PackingError;if(R.PackedGpuCache&&!OKPackAndSaveRuntimeGpuPoseCache(R,Out,PackingError))return Fail(*PackingError);Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return Out;
+  Out.Keys.SetNum(Write,EAllowShrinking::Yes);OKLogRuntimePoseJitter(R,Out);FString PackingError;if(R.PackedGpuCache&&!OKPackAndSaveRuntimeGpuPoseCache(R,Out,PackingError))return Fail(*PackingError);Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return Out;
  }
 }
 TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(FKKRuntimePoseRequest R){
@@ -86,6 +110,7 @@ FString OKRuntimePoseRecipeIdentity(const FKKRuntimePoseRequest& R){
  FSHA1 H;auto Feed=[&](const TArray<uint8>& B){const uint64 N=B.Num();H.Update(reinterpret_cast<const uint8*>(&N),sizeof(N));if(N)H.Update(B.GetData(),N);};if(R.PackedGpuCache&&!R.PersistentSourceIdentity.IsEmpty()){FTCHARToUTF8 Stable(*R.PersistentSourceIdentity);TArray<uint8> Source;Source.Append(reinterpret_cast<const uint8*>(Stable.Get()),Stable.Length());Feed(Source);}else Feed(R.Snapshot);Feed(R.AuthoredCurves);
  FBufferArchive Metadata;uint32 Version=4,Hz=R.SampleHz;float Duration=R.Duration;Metadata<<Version<<Hz<<Duration;bool Packed=R.PackedGpuCache;Metadata<<Packed;
  if(R.AuthoredPrefix){uint32 PrefixVersion=1;FString Mode=TEXT("authored-prefix");Metadata<<Mode<<PrefixVersion;}
+ if(R.Loop&&!R.AuthoredPrefix&&R.ContactRecipe.IsEmpty()){uint32 LoopVersion=1;FString Mode=TEXT("loop-preroll");Metadata<<Mode<<LoopVersion;}
  int32 N=R.Bones.Num();Metadata<<N;for(auto B:R.Bones){FString Name=B.Name.ToString();Metadata<<Name<<B.Parent<<B.Reference;}
  if(!R.ContactRecipe.IsEmpty()){uint32 ContactVersion=1;Metadata<<ContactVersion;FString Contact=R.ContactRecipe;Metadata<<Contact;}
  N=R.Parts.Num();Metadata<<N;for(auto P:R.Parts)Metadata<<P.NativePart<<P.Slots<<P.RigidFollow<<P.RigidBindWorld;Feed(Metadata);H.Final();FSHAHash Hash;H.GetHash(Hash.Hash);return Hash.ToString();

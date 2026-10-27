@@ -67,6 +67,18 @@ pub struct Heroine {
     /// The block is at her home (or the dorm).
     #[serde(default)]
     pub at_home: bool,
+    /// Her profile's satiety_max (R3-269); 100 when it has none.
+    #[serde(default = "ordinary_appetite")]
+    pub satiety_max: f32,
+}
+
+fn ordinary_appetite() -> f32 {
+    100.0
+}
+
+/// Her profile's satiety_max: 50..1000, 100 when it has none (an ordinary appetite).
+pub fn satiety_max(profile: &Value) -> f32 {
+    profile.get("satiety_max").and_then(Value::as_f64).map(|v| clamp(v as f32, 50.0, 1000.0)).unwrap_or(100.0)
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -97,6 +109,13 @@ impl NeedsTuning {
 
     /// Decay by the hours passed (each need clamped), then what she is doing gives back (clamped again).
     pub fn advance(&self, n: Needs, hours: f32, day: bool, activity: &str, at_home: bool) -> Needs {
+        self.advance_with(n, hours, day, activity, at_home, 100.0)
+    }
+
+    /// The same for her appetite (R3-269): satiety is how full she is (0..100 of her stomach); a meal brings the same
+    /// food to everyone, so a bigger stomach (satiety_max 50..1000, 100 an ordinary one) fills by less of itself.
+    pub fn advance_with(&self, n: Needs, hours: f32, day: bool, activity: &str, at_home: bool, satiety_max: f32) -> Needs {
+        let appetite = 100.0 / clamp(satiety_max, 50.0, 1000.0);
         let d = &self.decay;
         let mut n = Needs {
             satiety: pct(n.satiety - hours * if day { d.satiety_day } else { d.satiety_night }),
@@ -108,7 +127,7 @@ impl NeedsTuning {
         if let Some(g) = self.gain.get(activity).filter(|_| !activity.is_empty()) {
             let hygiene = if at_home { g.hygiene.max(g.hygiene_home) } else { g.hygiene };
             n.energy = pct(n.energy + g.energy * hours);
-            n.satiety = pct(n.satiety + g.satiety * hours);
+            n.satiety = pct(n.satiety + g.satiety * hours * appetite);
             n.hygiene = pct(n.hygiene + hygiene * hours);
             n.fun = pct(n.fun + g.fun * hours);
             n.social = pct(n.social + g.social * hours);
@@ -124,7 +143,7 @@ impl NeedsTuning {
             .filter_map(|h| {
                 let hours = clamp((h.minutes / 60.0) as f32, 0.0, self.max_hours);
                 (hours > 0.0).then(|| {
-                    let mut needs = self.advance(h.needs, hours, day, &h.activity, h.at_home);
+                    let mut needs = self.advance_with(h.needs, hours, day, &h.activity, h.at_home, h.satiety_max);
                     if (h.minutes / 60.0) as f32 > self.max_hours {
                         needs.satiety = needs.satiety.max(self.after_gap_satiety);
                     }
@@ -194,6 +213,10 @@ mod tests {
         let low = Needs { satiety: 20.0, energy: 20.0, fun: 20.0, social: 20.0, hygiene: 20.0 };
         let meal = t.advance(low, 1.0, true, "meal", false);
         assert!(close(meal, Needs { satiety: 40.5, energy: 20.0, fun: 18.5, social: 20.75, hygiene: 19.0 }), "{meal:?}");
+        // A big eater (satiety_max 200, R3-269) fills by half as much of herself from the same meal; decay is the same.
+        let big = t.advance_with(low, 1.0, true, "meal", false, 200.0);
+        assert!((big.satiety - 28.0).abs() < 1e-4, "{big:?}");
+        assert!((t.advance_with(low, 1.0, true, "meal", false, 5.0).satiety - t.advance_with(low, 1.0, true, "meal", false, 50.0).satiety).abs() < 1e-4, "clamped to 50");
         let rest_away = t.advance(low, 1.0, true, "rest", false);
         let rest_home = t.advance(low, 1.0, true, "rest", true);
         assert!((rest_away.hygiene - 19.0).abs() < 1e-4 && (rest_home.hygiene - 22.0).abs() < 1e-4);

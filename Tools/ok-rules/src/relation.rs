@@ -32,6 +32,10 @@ pub struct Relation {
     pub emotion: String,
     pub emotion_intensity: f32,
     pub emotion_minute: i64,
+    /// Her spirits (R3-269): -100 low .. 100 high, 0 her usual self, easing back to it (half every MOOD_HALF_MINUTES);
+    /// what lifts or sinks it is an event's (her explosion spell coming off or fizzling). mood_minute: when it was set.
+    pub mood_level: f32,
+    pub mood_minute: i64,
     // Money: cash -1 until her profile is known.
     pub cash: i64,
     pub bank: i64,
@@ -84,6 +88,8 @@ impl Default for Relation {
             emotion: String::new(),
             emotion_intensity: 0.0,
             emotion_minute: 0,
+            mood_level: 0.0,
+            mood_minute: 0,
             cash: -1,
             bank: 0,
             owes_player: 0,
@@ -239,6 +245,18 @@ impl Relation {
         }
     }
 
+    /// Her spirits at game minute `now`: eased back towards 0 since they were set.
+    pub fn mood_at(&self, now: i64) -> f32 {
+        let minutes = (now - self.mood_minute).max(0) as f32;
+        self.mood_level * 0.5f32.powf(minutes / MOOD_HALF_MINUTES)
+    }
+
+    /// Lifts (or sinks) her spirits by `by` at minute `now` (-100..100).
+    pub fn add_mood(&mut self, by: f32, now: i64) {
+        self.mood_level = (self.mood_at(now) + by).clamp(-100.0, 100.0);
+        self.mood_minute = now;
+    }
+
     /// The fields that differ from `before`, by name (what Unreal writes back).
     pub fn patch(&self, before: &Relation) -> Map<String, Value> {
         let (Value::Object(now), Value::Object(was)) = (serde_json::to_value(self).unwrap(), serde_json::to_value(before).unwrap()) else {
@@ -246,6 +264,14 @@ impl Relation {
         };
         now.into_iter().filter(|(k, v)| was.get(k) != Some(v)).collect()
     }
+}
+
+/// Game minutes for her spirits to come halfway back to her usual self.
+pub const MOOD_HALF_MINUTES: f32 = 360.0;
+
+/// Her spirits in a word for the panel and her prompt (low, down, usual, good, high).
+pub fn mood_band(level: f32) -> &'static str {
+    if level <= -45.0 { "low" } else if level <= -15.0 { "down" } else if level < 15.0 { "usual" } else if level < 45.0 { "good" } else { "high" }
 }
 
 pub fn stage_index(stage: &str) -> i32 {

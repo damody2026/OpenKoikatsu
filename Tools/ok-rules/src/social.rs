@@ -587,6 +587,68 @@ fn appointment_cancel(r: &Value) -> Result<Value, String> {
     Ok(json!({"effects": fx.into_value()}))
 }
 
+/// A date called off is called off on the phone, in person (R3-268): messages and a no-show do not cancel it. How he
+/// put it is the judge's (grace 0 curt, no reason .. 10 sincere, a reason, making it up to her; -1 unread: 5), and costs
+/// her liking 3 (grace 10) to 9 (grace 0); hanging up without a word costs 15. A yandere lover takes no offence: she
+/// comes to him instead (comes); she calling it off herself costs nothing (by "her").
+/// Request: relation, profile, said ("silent" | ""), by ("her" | ""), grace, minutes_left.
+/// Answer: effects, cost, comes.
+fn call_cancel(r: &Value) -> Result<Value, String> {
+    let mut rel = rel_of(r.get("relation"))?;
+    let before = rel.clone();
+    let traits = Traits::from_profile(&profile(r.get("profile")));
+    let silent = s(r, "said") == "silent";
+    let mut fx = Effects::default();
+    // She called it off herself and he agreed: nothing to hold against him.
+    if s(r, "by") == "her" && !silent {
+        fx.note_at(&rel.id, "promise", crate::tr::t("social.cancel_by_her"), "", 0.3);
+        return Ok(json!({"effects": fx.into_value(), "cost": 0, "comes": false}));
+    }
+    if traits.yandere && rel.stage == "lover" {
+        fx.note_at(&rel.id, "promise", crate::tr::t("social.cancel_yandere"), "", 0.6);
+        return Ok(json!({"effects": fx.into_value(), "cost": 0, "comes": true}));
+    }
+    let cost = if silent {
+        15
+    } else {
+        let grace = r.get("grace").and_then(Value::as_f64).filter(|g| *g >= 0.0).unwrap_or(5.0).clamp(0.0, 10.0);
+        3 + ((10.0 - grace) * 0.6).round() as i32
+    };
+    // Favor points as the panel shows them, not liking (add_liking scales by her stage's band).
+    rel.favor = (rel.favor - cost as f32).clamp(0.0, rel.favor_cap());
+    if n(r, "minutes_left") < 120.0 {
+        rel.trust = (rel.trust - 2.0).max(0.0);
+    }
+    fx.relation(&rel, &before);
+    let note = if silent { "social.cancel_hung_up" } else if cost >= 7 { "social.cancel_badly" } else { "social.cancel_called" };
+    fx.note_at(&rel.id, "promise", crate::tr::t(note), "", if cost >= 7 { 0.6 } else { 0.4 });
+    Ok(json!({"effects": fx.into_value(), "cost": cost, "comes": false}))
+}
+
+/// Her explosion spell (惠惠, R3-269): it takes all she has, her satiety goes to 0, and how full she was decides whether
+/// it comes off (full: nearly always; empty: hardly ever). Coming off lifts her spirits, fizzling sinks them; what she
+/// says about it is hers. Request: relation, seed, now. Answer: effects, success, chance.
+fn explosion_cast(r: &Value) -> Result<Value, String> {
+    let mut rel = rel_of(r.get("relation"))?;
+    let before = rel.clone();
+    let chance = explosion_chance(rel.satiety);
+    let success = RandomStream::new(n(r, "seed") as i32).frand() < chance;
+    rel.satiety = 0.0;
+    rel.add_mood(if success { EXPLOSION_MOOD } else { -EXPLOSION_MOOD }, n(r, "now") as i64);
+    let mut fx = Effects::default();
+    fx.relation(&rel, &before);
+    fx.note_at(&rel.id, "explosion", crate::tr::t(if success { "social.explosion_success" } else { "social.explosion_fizzle" }), "", 0.6);
+    Ok(json!({"effects": fx.into_value(), "success": success, "chance": chance}))
+}
+
+/// How much her spirits move with the spell coming off or not.
+const EXPLOSION_MOOD: f32 = 30.0;
+
+/// The spell's chance from her satiety (0..100 of her stomach): 5% empty, rising to 95% at 80 and above.
+fn explosion_chance(satiety: f32) -> f32 {
+    (0.05 + 0.9 * satiety / 80.0).clamp(0.05, 0.95)
+}
+
 // ------------------------------------------------------------------------------------------------ acting first
 
 /// Three times a day (07-12, 12-18, 18-) each heroine weighs acting first; the strongest reason (40+) wins, one heroine a
@@ -967,6 +1029,8 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
         "appointments_tick" => appointments_tick(r),
         "appointment_done_early" => appointment_done_early(r),
         "appointment_cancel" => appointment_cancel(r),
+        "call_cancel" => call_cancel(r),
+        "explosion_cast" => explosion_cast(r),
         "initiative" => initiative(r),
         "rival_named" => rival_named(r),
         "director" => director(r),
@@ -1004,6 +1068,54 @@ mod tests {
             o[k] = x.clone();
         }
         o
+    }
+
+    #[test]
+    fn her_explosion_spell_takes_all_she_has() {
+        let set = |v: &Value, k: &str| v["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").and_then(|e| e["set"][k].as_f64());
+        let cast = |satiety: f64, seed: i64| explosion_cast(&json!({"relation": rel(json!({"satiety": satiety, "mood_level": 0.0})), "seed": seed, "now": 600})).unwrap();
+        // Full: nearly always; empty: hardly ever; satiety 0 after either way.
+        assert!((explosion_chance(90.0) - 0.95).abs() < 1e-6 && (explosion_chance(0.0) - 0.05).abs() < 1e-6 && explosion_chance(40.0) > 0.5 - 0.01);
+        let (mut up, mut down) = (0, 0);
+        for seed in 0..200 {
+            let v = cast(90.0, seed);
+            assert_eq!(set(&v, "satiety"), Some(0.0), "{v}");
+            if v["success"] == true { up += 1; assert!(set(&v, "mood_level").unwrap() > 0.0); } else { assert!(set(&v, "mood_level").unwrap() < 0.0); }
+            if cast(0.0, seed)["success"] == true { down += 1; }
+        }
+        assert!(up > 170 && down < 30, "full {up}/200, empty {down}/200");
+        // Her spirits ease back: half after six hours.
+        let mut r: crate::relation::Relation = serde_json::from_value(json!({"id": "m"})).unwrap();
+        r.add_mood(40.0, 0);
+        assert!((r.mood_at(360) - 20.0).abs() < 1e-3 && crate::relation::mood_band(r.mood_at(0)) == "good");
+    }
+
+    #[test]
+    fn a_date_called_off_on_the_phone() {
+        let favor = |v: &Value| v["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").and_then(|e| e["set"]["favor"].as_f64());
+        let friend = rel(json!({"stage": "friend", "favor": 80.0}));
+        let ask = |rel: &Value, profile: Value, said: &str, grace: f64| call_cancel(&json!({"relation": rel, "profile": profile, "said": said, "grace": grace, "minutes_left": 600})).unwrap();
+        // How he put it, as the judge scored it: 3 (sincere) to 9 (curt), in favor points.
+        for (grace, cost) in [(10.0, 3), (5.0, 6), (0.0, 9), (-1.0, 6)] {
+            let v = ask(&friend, json!({}), "", grace);
+            assert_eq!(v["cost"], cost, "grace {grace}: {v}");
+            assert!((favor(&v).unwrap() - (80.0 - cost as f64)).abs() < 1e-3, "{v}");
+        }
+        // Not a word, then the line went dead.
+        let silent = ask(&friend, json!({}), "silent", 10.0);
+        assert_eq!(silent["cost"], 15);
+        assert!((favor(&silent).unwrap() - 65.0).abs() < 1e-3, "{silent}");
+        // A yandere lover: no favor lost, she comes to him.
+        let lover = rel(json!({"stage": "lover", "favor": 150.0}));
+        let yandere = json!({"traits": {"yandere": true}});
+        let comes = ask(&lover, yandere.clone(), "silent", 0.0);
+        assert_eq!((comes["comes"].as_bool(), comes["cost"].as_i64(), favor(&comes)), (Some(true), Some(0), None), "{comes}");
+        // A yandere who is not his lover yet minds it like anyone; the card's own 病嬌 personality counts too.
+        assert_eq!(ask(&friend, yandere, "", 0.0)["cost"], 9);
+        assert_eq!(ask(&lover, json!({"personality": 24}), "", 0.0)["comes"], true);
+        // She called it off and he agreed: nothing against him.
+        let hers = call_cancel(&json!({"relation": friend, "profile": {}, "by": "her", "grace": -1})).unwrap();
+        assert_eq!((hers["cost"].as_i64(), favor(&hers)), (Some(0), None), "{hers}");
     }
 
     #[test]

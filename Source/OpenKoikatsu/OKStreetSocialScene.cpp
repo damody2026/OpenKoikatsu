@@ -272,7 +272,11 @@ struct FOKStreetSceneState {
  // the heroine walking over on her own, and a second sleeper.
  float PlayerLookBase=50.f;TMap<FString,TArray<bool>> InviteStance;TMap<FString,double> InviteRefusedAt;TMap<FString,int32> InviteRefusals;
  int32 FollowMode=0,LedReplans=0;double LedBlockedSince=0;FVector LedLastPos=FVector::ZeroVector,LedReplanPos=FVector::ZeroVector;float FollowGirlWalk=0;FVector FollowLead=FVector::ZeroVector;bool FollowLeadInit=false;
- TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false,ApproachJoin=false,ApproachSong=false;int32 ApproachRetries=0;FString AdmittedPlace;int32 AdmittedDay=-1;
+ TArray<double> ApproachNext;int32 ApproachGirl=INDEX_NONE;TArray<FVector> ApproachPath;double ApproachLimit=90,ApproachStarted=0,ApproachLast=-1e9,ApproachRouteAt=0;bool ApproachInvite=false;bool ApproachAppointment=false,ApproachJoin=false,ApproachSong=false,ApproachPrivate=false;int32 ApproachRetries=0;
+  // A date called off on the phone (R3-268): who, how he put it (the judge's cancel_grace; -1: hers), the date the
+  // "call to cancel" button is about, his lines when the call began (none by the hang-up: hung up without a word), and
+  // the last cancel for each girl (her act and the judge both read the same "cancel it": one date, not two).
+  int32 CancelCallGirl=INDEX_NONE,CancelCallAppointment=INDEX_NONE;double CancelCallGrace=-1;FString CancelCallSaid;int64 CallHisLines=0;TMap<int32,double> CancelledAt;FString AdmittedPlace;int32 AdmittedDay=-1;
  int32 SleepGirl2=INDEX_NONE;FVector SleepGirl2Bed=FVector::ZeroVector;float SleepGirl2Yaw=0;
  // Plan §12.4 level 4: she agreed, and they are on the way to a lockable room (or already in the private mode).
  int32 PendingIntimacy=INDEX_NONE,IntimacyGirl=INDEX_NONE;
@@ -414,7 +418,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  // Walking out in the rain (weather.rs walk_style): the umbrella shown over him (and her, when they share it).
  TArray<FOKLifePose> PartySeats;TMap<int32,double> PartySeatRetry;TMap<int32,FString> PartySeatNow; // the others with them sitting down too (TickPartySeats)
  FString WalkStyle,WalkFact;TWeakObjectPtr<AActor> Umbrella; // WalkFact: told while they are still on the way, dropped when the walk ends
- double EffectAt=0;FVector EffectWhere=FVector::ZeroVector;FString EffectKind;TArray<TWeakObjectPtr<AActor>> EffectActors;TWeakObjectPtr<class UPointLightComponent> EffectLight;
+ double EffectAt=0;FVector EffectWhere=FVector::ZeroVector;FString EffectKind;int32 EffectGirl=INDEX_NONE;bool EffectFizzle=false; /* her explosion spell came off or fizzled (R3-269) */TArray<TWeakObjectPtr<AActor>> EffectActors;TWeakObjectPtr<class UPointLightComponent> EffectLight;
  // A photo walk (photo_walk): the stops photographed so far, the album they go in, and the pause at a stop.
  int32 PhotoWalkStops=0;FString PhotoWalkAlbum;double PhotoWalkPauseUntil=0;TArray<FHerPhoto> HerPhotos;
  int32 PhotosSaved=0,PhotoProbePhase=0,PhotoActorsVerified=0;
@@ -1403,9 +1407,12 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   const FString Things=ThingsFacts(Character);if(!Things.IsEmpty())Bag+=OKMsg(TEXT("ui.scene.judge_her_things"),{{TEXT("things"),Things}});}
  AddMessage(TEXT("system"),System);AddMessage(TEXT("user"),(Earlier.IsEmpty()?User:OKMsg(TEXT("ui.scene.judge_earlier_lines"),{{TEXT("lines"),Earlier}})+User)+Bag);
  TWeakPtr<FOKStreetSceneState> WeakState=State;TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+ // On the phone with her as he said it (a call, not typing): only then does a date get called off (R3-268). Taken now,
+ // the call may be over when the verdict comes.
+ const bool InCall=S.RemoteMode==2&&S.RemotePeer==Character;
  // Room for the whole verdict: with the things, photos and series fields it runs past 200 tokens and came back cut off
  // mid-"why" (no verdict at all: a meeting agreed was never booked).
- SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier](bool Ok,const FString& Content,const FString& Failure){
+ SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier,InCall](bool Ok,const FString& Content,const FString& Failure){
   const auto L=WeakState.Pin();if(!L||!Weak.IsValid()||Weak->State!=L)return;
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
   if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);Weak->ExecuteFreeTalkAction(Character,Id,HerAction);return;}
@@ -1498,7 +1505,12 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    // "Let's skip lunch then, another day" — "fine": the meeting they had is called off (her own act field may forget it).
    {bool Cancel=false;Verdict->TryGetBoolField(TEXT("cancel_promise"),Cancel);
     // This one or all of a weekly meeting (cancel_scope; asked when it is not said).
-    if(Cancel&&Place.IsEmpty()){FString Scope;Verdict->TryGetStringField(TEXT("cancel_scope"),Scope);UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the promise is called off (%s)"),Character,*Scope);Weak->CancelPromiseWith(Character,Scope);}}
+    // Only on the phone, the call itself (R3-268): a message or a word in passing does not call a date off, and she hears
+    // that it still stands. How he put it is scored by the judge (cancel_grace); -1, she called it off herself.
+    if(Cancel&&Place.IsEmpty()&&!InCall){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d calling a date off, not on a call: it stands"),Character);L->TellHer.Add(OKT(TEXT("ui.appointments.cancel_needs_call")));}
+    else if(Cancel&&Place.IsEmpty()){FString Scope;Verdict->TryGetStringField(TEXT("cancel_scope"),Scope);double Grace=-1;Verdict->TryGetNumberField(TEXT("cancel_grace"),Grace);
+     L->CancelCallGirl=Character;L->CancelCallGrace=Grace;L->CancelCallSaid.Reset();
+     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the promise is called off on the phone (%s, grace %.0f)"),Character,*Scope,Grace);Weak->CancelPromiseWith(Character,Scope);}}
    // "Take it, it was for you anyway" — "thank you": the gift is given (her own act field may forget it). Only something
    // he still carries (her act may have given it already).
    {FString Gift;Verdict->TryGetStringField(TEXT("gift"),Gift);
@@ -2280,7 +2292,8 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
    .OnTextChanged_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](const FText& Text){if(Weak.IsValid()&&Weak->State)Weak->State->PlayerNameDraft=Text.ToString();})
    .OnTextCommitted_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](const FText& Text,ETextCommit::Type){if(Weak.IsValid()&&Weak->State){Weak->State->PlayerNameDraft.Reset();Weak->SetPlayerName(Text.ToString());}})]];
  const bool Busy=OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive);
- auto Heading=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||L->Target==INDEX_NONE)return FText::FromString(OKT(TEXT("ui.scene.app_title_apng")));const auto Relation=OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[L->Target]),L->Manifest.TalkBudget);return FText::FromString(L->Manifest.Characters[L->Target].Name+OKMsg(TEXT("ui.scene.stats_line"), {{TEXT("favor"), Relation.Favor}, {TEXT("arousal"), Relation.Lewdness}, {TEXT("stage"), Relation.Stage==TEXT("lover")?OKT(TEXT("ui.bonds.lover_stage")):Relation.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.scene.stage_new"))}}));};
+ auto Heading=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||L->Target==INDEX_NONE)return FText::FromString(OKT(TEXT("ui.scene.app_title_apng")));const auto Relation=OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[L->Target]),L->Manifest.TalkBudget);const float Spirits=Relation.MoodLevel*FMath::Pow(.5f,float(FMath::Max<int64>(0,OKStreetMindNow(*L)-Relation.MoodMinute))/360.f); // her spirits (R3-269)
+ return FText::FromString(L->Manifest.Characters[L->Target].Name+OKMsg(TEXT("ui.scene.stats_line"), {{TEXT("favor"), Relation.Favor}, {TEXT("arousal"), Relation.Lewdness}, {TEXT("mood"), OKStreetMoodBand(Spirits)},{TEXT("stage"), Relation.Stage==TEXT("lover")?OKT(TEXT("ui.bonds.lover_stage")):Relation.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.scene.stage_new"))}}));};
  Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text_Lambda(Heading).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Bold",20))];
  if(!S.TouchNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TouchNotice)).AutoWrapText(true).WrapTextAt(360)];
  if(!S.TalkFailureNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TalkFailureNotice)).AutoWrapText(true).WrapTextAt(360)];

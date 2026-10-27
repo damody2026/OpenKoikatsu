@@ -119,8 +119,8 @@ void ServiceStream(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ServiceStream);
   TOptional<FString> Contact;if(const auto* Found=E.ContactRecipes.Find(Source))Contact=*Found;
   // Long common activities remain at 60 Hz; only two on-demand preparation slots exist (key ceiling: FKKRuntimePoseRequest).
   float Duration=OKRuntimeSharedClipDuration(Curves[Source]);const bool Prefix=ClipWindows.IsValidIndex(Source)&&ClipWindows[Source]>0;if(Prefix)Duration=FMath::Min(Duration,ClipWindows[Source]);
-  TFuture<FKKRuntimePoseResult> Job=OKPrepareRuntimePoseBankAsync([Recipe=E.PoseRecipe,Bytes=SharedCurves(Source),Contact,Duration,Prefix,Id=ClipIds[Source]](){
-   FKKRuntimePoseRequest R=*Recipe;R.AuthoredCurves=*Bytes;if(Contact)R.ContactRecipe=*Contact;R.Duration=Duration;R.AuthoredPrefix=Prefix;R.ClipIdentity=Id;return R;});
+  TFuture<FKKRuntimePoseResult> Job=OKPrepareRuntimePoseBankAsync([Recipe=E.PoseRecipe,Bytes=SharedCurves(Source),Contact,Duration,Prefix,Id=ClipIds[Source],Loop=ClipLoops[Source]](){
+   FKKRuntimePoseRequest R=*Recipe;R.AuthoredCurves=*Bytes;if(Contact)R.ContactRecipe=*Contact;R.Duration=Duration;R.AuthoredPrefix=Prefix;R.ClipIdentity=Id;R.Loop=Loop;return R;});
   TArray<FKKRuntimePoseResult> Clips;{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamCopyClips);Clips=E.Clips;}auto Keys=E.CpuKeys;
   FOKGpuActorRecord Recipe;FOKGpuSkinPaletteData Palette;{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_StreamCopyRecipe);Recipe=E.ActorRecipe;Palette=E.PaletteRecipe;}auto Envelope=E.SkinEnvelope;
   TArray<FString> Ids;for(int32 Clip=0;Clip<E.ClipSources.Num();++Clip)Ids.Add(SourceId(Clip==2?Source:E.ClipSources[Clip]));

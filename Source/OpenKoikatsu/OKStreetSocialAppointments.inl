@@ -161,6 +161,8 @@ void AOKStreetSocialScene::TickSeries(){
 
 void AOKStreetSocialScene::CancelPromiseWith(int32 Character,const FString& Scope){
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ // Her act and the judge read the same "cancel it": one date, not the next one too (R3-268).
+ if(const double* At=S.CancelledAt.Find(Character);At&&SceneTime()-*At<20.0){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d already cancelled one just now"),Character);return;}
  // Her word "cancel it": the soonest meeting with her, a pickup included ("I can't come for you at five today"
  // called off Wednesday's stake-out and left today's pickup standing).
  const FOKStreetAppointment* Soonest=nullptr;
@@ -193,12 +195,21 @@ void AOKStreetSocialScene::CancelAppointment(int32 AppointmentId){
  auto Candidate=S.Store;FOKStreetAppointment* Found=Candidate.Appointments.FindByPredicate([&](const FOKStreetAppointment& A){return A.Id==AppointmentId&&A.Status==TEXT("pending");});
  if(!Found)return;
  Found->Status=TEXT("cancelled");const FString Label=Found->Label;const FString Id=Found->Heroine;const int32 Girl=Id.IsEmpty()?INDEX_NONE:CharacterOf(Id);
- // With a heroine it costs her feelings by how late it is called off; a shift or a table is just given up.
+ // With a heroine it is called off on the phone (R3-268), and costs her feelings by how he put it (social.rs
+ // call_cancel); a yandere lover comes to him instead. A shift or a table is just given up.
+ bool Comes=false;
  if(Girl!=INDEX_NONE){
-  auto Request=OKRulesRelationRequest(TEXT("appointment_cancel"),OKStreetViewRelation(Candidate,Id,S.Manifest.TalkBudget),ProfileOf(Girl));Request->SetNumberField(TEXT("minutes_left"),double(Found->Start-Now));
-  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request))ApplyRulesEffects(Candidate,*Answer);
+  S.CancelledAt.Add(Girl,SceneTime());
+  auto Request=OKRulesRelationRequest(TEXT("call_cancel"),OKStreetViewRelation(Candidate,Id,S.Manifest.TalkBudget),ProfileOf(Girl));Request->SetNumberField(TEXT("minutes_left"),double(Found->Start-Now));
+  const bool Judged=S.CancelCallGirl==Girl;
+  Request->SetStringField(TEXT("said"),Judged?S.CancelCallSaid:FString());Request->SetNumberField(TEXT("grace"),Judged?S.CancelCallGrace:-1.0);
+  Request->SetStringField(TEXT("by"),Judged&&S.CancelCallGrace<0&&S.CancelCallSaid.IsEmpty()?TEXT("her"):TEXT(""));
+  if(Judged){S.CancelCallGirl=INDEX_NONE;S.CancelCallGrace=-1;S.CancelCallSaid.Reset();}
+  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){ApplyRulesEffects(Candidate,*Answer);Comes=Answer->GetBoolField(TEXT("comes"));
+   UE_LOG(LogTemp,Display,TEXT("Street appointment %d call cancel: cost %d%s"),AppointmentId,int32(Answer->GetNumberField(TEXT("cost"))),Comes?TEXT(", she comes to him"):TEXT(""));}
  }
  if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
+ if(Comes)YandereComes(Girl);
  // Called off to her face: she answers it in the talk (the cost is the rule's, not hers to add).
  if(Girl!=INDEX_NONE&&FreeTalkPartner()==Girl)S.TellHer.Add(OKMsg(TEXT("ui.appointments.cancel_appointment_prompt"), {{TEXT("label"), *Label}}));
  if(Girl!=INDEX_NONE)PlanPromisesToday(Girl);

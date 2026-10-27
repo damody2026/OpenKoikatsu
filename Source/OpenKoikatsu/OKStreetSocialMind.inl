@@ -317,7 +317,7 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  // Apart (a message or a call) the place, menu and people around him are not around her: she knows where he is only if
  // he says so or somebody saw him (what she heard).
  const bool Apart=RemoteWith(Character);
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusMenu);Status.Menu=Apart?FString():MenuText(R.Satiety);}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusMenu);Status.Menu=Apart?FString():MenuText(R.Satiety,100.f/SatietyMax(Character));}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusScene);Status.Scene=Apart?FString():SceneLine(Character);}
  if(!Apart&&S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusInvite);Status.Invite=RollInviteStance(Character);}
@@ -333,6 +333,8 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
   Status.Promises=Lines.IsEmpty()?FString(OKT(TEXT("ui.mind.no_pending_promises"))):FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusToday);Status.Today=TodayText(Character);}
  if(Mind.IsValid())Status.Needs=Mind->GetStringField(TEXT("needs_text"));
+ // Her spirits (R3-269), in a word: in the turn's own status, not the cached prefix. Her usual self says nothing.
+ {const FString Band=OKStreetMoodBand(MoodNow(Character));if(Band!=TEXT("usual"))Status.Needs+=OKMsg(TEXT("ui.mind.spirits_status"),{{TEXT("band"),Band}});}
  if(const FString* Recent=S.MindRecent.Find(Id)){Status.Recent=*Recent;S.MindRecent.Remove(Id);}
  TArray<FOKStreetPendingChoice> Mine;for(const auto& C:S.Choices)if(C.Heroine==Character)Mine.Add(C);
  Status.Choices=OKStreetChoiceBlock(Mine,SceneTime());
@@ -497,7 +499,8 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  if(Added>0)PlaceChatOrder(Character,Reply.Reply);
  if(Reply.ActKind==TEXT("checkout"))StartCheckout();
  else if(Reply.ActKind==TEXT("intimacy"))RequestIntimacy(Character,false);
- else if(Reply.ActKind==TEXT("cancel_promise"))CancelPromiseWith(Character,TEXT("her")); // a weekly one: the judge says which ("her" defers)
+ // A weekly one: the judge says which ("her" defers). Only on a call with her (R3-268); hers, so it costs him nothing.
+ else if(Reply.ActKind==TEXT("cancel_promise")&&S.RemoteMode==2&&S.RemotePeer==Character){S.CancelCallGirl=Character;S.CancelCallGrace=-1;S.CancelCallSaid.Reset();CancelPromiseWith(Character,TEXT("her"));}
  else if(Reply.ActKind==TEXT("entrust")){FString A,D;if(!Reply.ActArg.Split(TEXT("|"),&A,&D))A=Reply.ActArg;StartEntrust(Character,TEXT("entrust"),FCString::Atoi64(*A),D.IsEmpty()?30:FCString::Atoi(*D));}
  else if(Reply.ActKind==TEXT("follow_mode"))SetFollowMode(Reply.ActArg==TEXT("her_lead")?1:Reply.ActArg==TEXT("side_by_side")?2:0);
  else if(Reply.ActKind==TEXT("end_talk")||Reply.ActKind==TEXT("leave")||Reply.ActKind==TEXT("promise_treat")){} // handled above (the goodbye, the promise)
@@ -534,6 +537,8 @@ FString AOKStreetSocialScene::MindPanelText(int32 Character) const{
  Out+=OKMsg(TEXT("ui.mind.stat_breakdown_line"), {{TEXT("trust"), R.Trust}, {TEXT("attraction"), R.Attraction}, {TEXT("dependency"), R.Dependency}, {TEXT("mystique"), R.Mystique}, {TEXT("greed"), R.Greed}, {TEXT("lifestyle_desire"), R.LifestyleDesire}, {TEXT("respect"), R.Respect}, {TEXT("resentment"), R.Resentment}});
  if(Bias.Masked)Out+=OKMsg(TEXT("ui.mind.tsundere_stat_line"), {{TEXT("true_liking"), Bias.TrueLiking}, {TEXT("shown_affection"), Bias.ShownAffection}, {TEXT("admiration"), R.Admiration}, {TEXT("shown_admiration"), Bias.ShownAdmiration}, {TEXT("peak_jealousy"), Bias.PeakJealousy}, {TEXT("shown_jealousy"), Bias.ShownJealousy}});
  if(Mood>0.05f)Out+=OKMsg(TEXT("ui.mind.mood_line"), {{TEXT("emotion"), *R.Emotion}, {TEXT("mood_percent"), Mood*100.f}});
+ // Her spirits and her stomach as she is made (R3-269): satiety in her own units, now / at most.
+ {const float Max=SatietyMax(Character),Spirits=MoodNow(Character);Out+=OKMsg(TEXT("ui.mind.spirits_panel"),{{TEXT("band"),OKStreetMoodBand(Spirits)},{TEXT("level"),FMath::RoundToInt(Spirits)},{TEXT("satiety_now"),FMath::RoundToInt(R.Satiety*Max/100.f)},{TEXT("satiety_max"),FMath::RoundToInt(Max)}});}
  if(!Bias.Combos.IsEmpty())Out+=OKT(TEXT("ui.mind.status_header"))+FString::Join(Bias.Combos,OKT(TEXT("ui.bank.list_separator")));
  Out+=OKMsg(TEXT("ui.mind.needs_wallet_line"), {{TEXT("satiety"), R.Satiety}, {TEXT("energy"), R.Energy}, {TEXT("fun"), R.Fun}, {TEXT("social"), R.Social}, {TEXT("hygiene"), R.Hygiene}, {TEXT("cash"), R.Cash}, {TEXT("debt_suffix"), R.Debt>0?*OKMsg(TEXT("ui.mind.debt_amount_note"), {{TEXT("debt"), R.Debt}}):TEXT("")}, {TEXT("appeal"), AppealOf(Character)}});
  // The number in words, as a group talk has it: she ate breakfast in the dorm (satiety 98) and still said "just hungry,
@@ -624,10 +629,11 @@ bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Ite
  for(const auto& C:S.Cart)if(C.ForHer)if(const auto* I=S.Catalog.Find(C.ItemId))Coming.Add(MakeShared<FJsonValueObject>(Dish(*I,1.0)));
  auto Request=OKRulesRequest(TEXT("order_too_full"));Request->SetArrayField(TEXT("coming"),Coming);Request->SetObjectField(TEXT("item"),Dish(Item,1.0));
  Request->SetNumberField(TEXT("satiety"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Satiety);
+ if(const TSharedPtr<FJsonObject> P=ProfileOf(Girl))Request->SetObjectField(TEXT("profile"),P.ToSharedRef()); // her appetite (R3-269)
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);return Out.IsValid()&&Out->GetBoolField(TEXT("too_full"));
 }
 
-FString AOKStreetSocialScene::MenuText(float Satiety) const{
+FString AOKStreetSocialScene::MenuText(float Satiety,float Appetite) const{
  const FString Place=ShopPlaceHere();if(Place.IsEmpty())return FString();
  FString Why;if(PlaceClosedNow(Place,Why))return Why;
  TArray<FString> Lines;
@@ -639,7 +645,7 @@ FString AOKStreetSocialScene::MenuText(float Satiety) const{
  for(const auto* I:ItemsHere(Place)){
   TArray<FString> Prices;for(const auto& P:I->Price)Prices.Add(P.Key.IsEmpty()?FString::FromInt(P.Value):P.Key+FString::FromInt(P.Value));
   const float Fills=OKStreetItemFill(*I); // a drink fits even when full
-  Lines.Add(FString::Printf(TEXT("%s %s %s"),*I->Id,*I->Name,*FString::Join(Prices,TEXT("/")))+(Fills>Room?OKT(TEXT("ui.mind.menu_too_much")):FString()));
+  Lines.Add(FString::Printf(TEXT("%s %s %s"),*I->Id,*I->Name,*FString::Join(Prices,TEXT("/")))+(Fills*Appetite>Room?OKT(TEXT("ui.mind.menu_too_much")):FString()));
  }
  if(!State->Cart.IsEmpty()){TArray<FString> Cart;for(const auto& L:State->Cart)if(const auto* I=State->Catalog.Find(L.ItemId))Cart.Add((L.ForHer?OKT(TEXT("ui.economy.she_speaker_label")):OKT(TEXT("ui.mind.he_label")))+I->Name);Lines.Add(OKT(TEXT("ui.mind.ordered_label"))+FString::Join(Cart,OKT(TEXT("ui.bank.list_separator"))));}
  return FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));
@@ -708,8 +714,8 @@ void AOKStreetSocialScene::ReturnBorrowed(int32 Her,const FString& ItemId){
 void AOKStreetSocialScene::FeedHer(int32 Character,const TMap<FString,float>& Effects){
  auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character))return;
  const int32 I=OKStreetRelationIndex(S.Store,OKStreetStableId(S.Manifest.Characters[Character]),S.Manifest.TalkBudget,true);if(!S.Store.Relations.IsValidIndex(I))return;
- auto& R=S.Store.Relations[I];
- for(const auto& E:Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("social")?&R.Social:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;if(V)*V=FMath::Clamp(*V+E.Value,0.f,100.f);}
+ auto& R=S.Store.Relations[I];const float Appetite=100.f/SatietyMax(Character); // her stomach's share of the food (R3-269)
+ for(const auto& E:Effects){if(E.Key==TEXT("satiety")){R.Satiety=FMath::Clamp(R.Satiety+E.Value*Appetite,0.f,100.f);continue;}float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("social")?&R.Social:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;if(V)*V=FMath::Clamp(*V+E.Value,0.f,100.f);}
 }
 
 // Money stress (plan §4.3): a week's spending by her style against her cash, and urgent needs she cannot cover.

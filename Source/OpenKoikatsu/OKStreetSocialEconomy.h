@@ -41,6 +41,10 @@ constexpr float OKStreetFullSatiety = 92.f;
 // A little too much is still eaten: a dish whose rest fits under this (satiety now + what is left of it) is finished,
 // so a tea egg at 80 is eaten, not left after a bite at 92. Ordering food uses the same measure.
 constexpr float OKStreetOverfullSatiety = 115.f;
+// Satiety is 0..100 of her own stomach, so these hold for every appetite; a dish's fill is scaled by 100 / her
+// satiety_max where it goes in (R3-269).
+// Her spirits in a word (relation.rs mood_band): low, down, usual, good, high.
+inline const TCHAR* OKStreetMoodBand(float Level) { return Level <= -45.f ? TEXT("low") : Level <= -15.f ? TEXT("down") : Level < 15.f ? TEXT("usual") : Level < 45.f ? TEXT("good") : TEXT("high"); }
 inline float OKStreetItemFill(const FOKStreetCatalogItem& I) { if (I.IsDrink()) return 0.f; const float* V = I.Effects.Find(TEXT("satiety")); return V ? *V : 0.f; }
 struct FOKStreetDish {
  FString ItemId, Name;

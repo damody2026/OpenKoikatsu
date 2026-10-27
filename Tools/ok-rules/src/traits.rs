@@ -18,6 +18,8 @@ pub struct Traits {
     pub money_resistance: i32,
     /// traits.difficulty when the profile has one (her stranger cap), else 0.
     pub difficulty: i32,
+    /// traits.yandere (病嬌), or the card's own personality 病嬌 (profile personality 24).
+    pub yandere: bool,
 }
 
 impl Default for Traits {
@@ -36,6 +38,7 @@ impl Default for Traits {
             charm_resistance: 50,
             money_resistance: 50,
             difficulty: 0,
+            yandere: false,
         }
     }
 }
@@ -48,7 +51,10 @@ fn round(v: f64) -> i32 {
 impl Traits {
     pub fn from_profile(profile: &Value) -> Traits {
         let mut t = Traits::default();
+        // Koikatsu's personality 24 is 病嬌 (the card's own, when the request carries it).
+        t.yandere = profile.get("personality").and_then(Value::as_i64) == Some(24);
         let Some(traits) = profile.get("traits").filter(|v| v.is_object()) else { return t };
+        if traits.get("yandere").and_then(Value::as_bool).unwrap_or(false) { t.yandere = true; }
         let get = |name: &str, out: &mut i32| {
             if let Some(v) = traits.get(name).and_then(Value::as_f64).filter(|v| v.is_finite()) {
                 *out = round(v).clamp(0, 100);

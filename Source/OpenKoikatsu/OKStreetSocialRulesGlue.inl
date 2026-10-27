@@ -42,6 +42,7 @@ TSharedRef<FJsonObject> OKRulesRelationJson(const FOKStreetRelation& R,bool bTal
  for(const auto& A:OKStreetAxisFields(const_cast<FOKStreetRelation&>(R)))O->SetNumberField(A.Key,*A.Value);
  auto Toward=MakeShared<FJsonObject>();for(const auto& P:R.JealousyToward)Toward->SetNumberField(P.Key,P.Value);O->SetObjectField(TEXT("jealousy_toward"),Toward);
  O->SetStringField(TEXT("emotion"),R.Emotion);O->SetNumberField(TEXT("emotion_intensity"),R.EmotionIntensity);O->SetNumberField(TEXT("emotion_minute"),double(R.EmotionMinute));
+ O->SetNumberField(TEXT("mood_level"),R.MoodLevel);O->SetNumberField(TEXT("mood_minute"),double(R.MoodMinute));
  O->SetNumberField(TEXT("cash"),double(R.Cash));O->SetNumberField(TEXT("bank"),double(R.Bank));O->SetNumberField(TEXT("owes_player"),double(R.OwesPlayer));O->SetNumberField(TEXT("debt"),double(R.Debt));O->SetNumberField(TEXT("treat_balance"),R.TreatBalance);
  O->SetNumberField(TEXT("satiety"),R.Satiety);O->SetNumberField(TEXT("energy"),R.Energy);O->SetNumberField(TEXT("fun"),R.Fun);O->SetNumberField(TEXT("social"),R.Social);O->SetNumberField(TEXT("hygiene"),R.Hygiene);
  O->SetNumberField(TEXT("needs_minute"),double(R.NeedsMinute));O->SetNumberField(TEXT("perceived_wealth"),R.PerceivedWealth);O->SetNumberField(TEXT("chastity"),R.Chastity);O->SetNumberField(TEXT("stranger_cap"),R.StrangerCap);
@@ -64,6 +65,7 @@ void OKRulesPatchRelation(FOKStreetRelation& R,const FJsonObject& Patch){
   else if(K==TEXT("talks_remaining"))R.TalksRemaining=int32(Num());else if(K==TEXT("day"))R.Day=int32(Num());else if(K==TEXT("sex_desire"))R.SexDesire=float(Num());else if(K==TEXT("topic_points"))R.TopicPoints=float(Num());
   else if(K==TEXT("jealousy_toward")){R.JealousyToward.Reset();if(const TSharedPtr<FJsonObject> O=V->AsObject())for(const auto& J:O->Values)R.JealousyToward.Add(FString(*J.Key),float(J.Value->AsNumber()));}
   else if(K==TEXT("emotion"))R.Emotion=V->AsString();else if(K==TEXT("emotion_intensity"))R.EmotionIntensity=float(Num());else if(K==TEXT("emotion_minute"))R.EmotionMinute=int64(Num());
+  else if(K==TEXT("mood_level"))R.MoodLevel=float(Num());else if(K==TEXT("mood_minute"))R.MoodMinute=int64(Num());
   else if(K==TEXT("cash"))R.Cash=int64(Num());else if(K==TEXT("bank"))R.Bank=int64(Num());else if(K==TEXT("owes_player"))R.OwesPlayer=int64(Num());else if(K==TEXT("debt"))R.Debt=int64(Num());else if(K==TEXT("treat_balance"))R.TreatBalance=int32(Num());
   else if(K==TEXT("satiety"))R.Satiety=float(Num());else if(K==TEXT("energy"))R.Energy=float(Num());else if(K==TEXT("fun"))R.Fun=float(Num());else if(K==TEXT("social"))R.Social=float(Num());else if(K==TEXT("hygiene"))R.Hygiene=float(Num());
   else if(K==TEXT("needs_minute"))R.NeedsMinute=int64(Num());else if(K==TEXT("perceived_wealth"))R.PerceivedWealth=float(Num());else if(K==TEXT("chastity"))R.Chastity=float(Num());else if(K==TEXT("stranger_cap"))R.StrangerCap=int32(Num());

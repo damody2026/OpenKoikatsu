@@ -122,6 +122,9 @@ pub struct Traits {
     pub public_boldness: i32,
     pub charm_resistance: i32,
     pub money_resistance: i32,
+    /// 病嬌: a lover who is told a date is off does not sulk, she comes to him (ok-rules social.rs call_cancel).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub yandere: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -173,6 +176,9 @@ pub struct Profile {
     pub money: Money,
     pub tastes: Tastes,
     pub traits: Traits,
+    /// How full she can get (satiety 0..this; 50..1000, 100 an ordinary appetite; None: 100). ok-rules needs.rs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub satiety_max: Option<i32>,
     pub bio: String,
     /// llm | hand
     pub source: String,
@@ -361,6 +367,14 @@ impl Profiles {
         }
         let text = std::fs::read_to_string(&path).map_err(|e| format!("profile_unreadable: {e}"))?;
         let mut p: Profile = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("profile_invalid: {e}"))?;
+        // Her design settings are the shipped profile's, not the save's (a save from before they were written has none):
+        // her appetite (satiety_max) and 病嬌 (traits.yandere).
+        if let Some(shipped) = self.seed.as_ref().map(|d| d.join(file_name(id))).filter(|s| s.exists() && *s != path) {
+            if let Some(s) = std::fs::read_to_string(&shipped).ok().and_then(|t| serde_json::from_str::<Profile>(t.trim_start_matches('\u{feff}')).ok()) {
+                if s.satiety_max.is_some() { p.satiety_max = s.satiety_max; }
+                p.traits.yandere = s.traits.yandere;
+            }
+        }
         if p.money.currency != "CNY" {
             p.money.to_rmb();
             self.save(&p)?;

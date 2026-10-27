@@ -203,7 +203,7 @@ void AOKStreetSocialScene::PhoneCall(int32 Girl){
   UE_LOG(LogTemp,Display,TEXT("Street phone: call to actor %d not answered"),Girl);RefreshUI();return;
  }
  if(S.App==TEXT("phone"))CloseApp();
- S.RemoteMode=2;S.RemotePeer=Girl;S.CallStarted=SceneTime();
+ S.RemoteMode=2;S.RemotePeer=Girl;S.CallStarted=SceneTime();S.CallHisLines=S.HisLines;
  HistoryAdd(Girl,TEXT("call"),TEXT("him"),OKT(TEXT("ui.phone_inbox.he_called_answered")));
  S.FreeTalkOpen=true;FreeTalkLiveSet(true);
  S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.phone_inbox.he_called_you_prompt"));SendFreeTalk();
@@ -211,11 +211,29 @@ void AOKStreetSocialScene::PhoneCall(int32 Girl){
  UE_LOG(LogTemp,Display,TEXT("Street phone: call to actor %d answered"),Girl);RefreshUI();
 }
 
+// The appointment's button for a date with her (R3-268): it calls her about it; what he says on the call (or that he
+// says nothing and hangs up) is how it is called off.
+void AOKStreetSocialScene::CallToCancel(int32 AppointmentId){
+ auto& S=*State;const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([AppointmentId](const FOKStreetAppointment& X){return X.Id==AppointmentId&&X.Status==TEXT("pending");});
+ if(!A)return;const int32 Girl=CharacterOf(A->Heroine);if(Girl==INDEX_NONE)return;const FString Label=A->Label;
+ if(S.RemoteMode==2&&S.RemotePeer!=Girl){S.FinNotice=OKT(TEXT("ui.phone_inbox.in_call_now"));RefreshUI();return;}
+ if(S.RemoteMode!=2)PhoneCall(Girl);
+ if(S.RemoteMode!=2||S.RemotePeer!=Girl)return; // not answered (or he cannot call now): the date stands
+ S.CancelCallAppointment=AppointmentId;
+ S.TellHer.Add(OKMsg(TEXT("ui.appointments.he_calls_about_date"),{{TEXT("label"),*Label}}));
+ UE_LOG(LogTemp,Display,TEXT("Street phone: calling actor %d about date %d (%s)"),Girl,AppointmentId,*Label);RefreshUI();
+}
+
 void AOKStreetSocialScene::PhoneHangUp(){
  auto& S=*State;if(S.RemoteMode!=2)return;const int32 Girl=S.RemotePeer;
  const int32 Seconds=FMath::RoundToInt(SceneTime()-S.CallStarted);
  if(S.FreeTalkLive)FreeTalkLiveSet(false);
  S.RemoteMode=0;S.RemotePeer=INDEX_NONE;
+ // He called her to call a date off and hung up without a word (R3-268): it is off, and that costs the most.
+ if(S.CancelCallAppointment!=INDEX_NONE){const int32 Date=S.CancelCallAppointment;S.CancelCallAppointment=INDEX_NONE;
+  const FOKStreetAppointment* Still=S.Store.Appointments.FindByPredicate([Date](const FOKStreetAppointment& A){return A.Id==Date&&A.Status==TEXT("pending");});
+  if(Still&&S.HisLines==S.CallHisLines){UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d hung up on without a word; date %d is off"),Girl,Date);
+   S.CancelCallGirl=Girl;S.CancelCallSaid=TEXT("silent");S.CancelCallGrace=-1;CancelAppointment(Date);}}
  HistoryAdd(Girl,TEXT("call"),TEXT("world"),OKMsg(TEXT("ui.phone_inbox.call_ended_duration"), {{TEXT("minutes"), Seconds/60}, {TEXT("seconds"), Seconds%60}}));
  if(FreeTalkPartner()==INDEX_NONE)FreeTalkClose(); // someone here with him: that talk goes on
  S.Message=OKT(TEXT("ui.phone_inbox.call_ended_notice"));RefreshUI();
@@ -550,7 +568,9 @@ void AOKStreetSocialScene::BuildAppointmentRows(const TSharedRef<SVerticalBox>& 
   const FString When=FString::Printf(TEXT("%s %02d:%02d"),*OKStreetCalendarLabel(int32(A->Start/1440),0.0).Left(10),int32(A->Start%1440)/60,int32(A->Start%1440)%60);
   auto Row=SNew(SWrapBox).UseAllottedSize(true);
   Row->AddSlot().Padding(2)[OKFinText(OKMsg(TEXT("ui.bank.date_text_line"), {{TEXT("date"), *When}, {TEXT("text"), *A->Label}}),Left<120?FLinearColor(1,.75f,.3f):FLinearColor::White,10)];
-  Row->AddSlot().Padding(2)[OKFinButton(Weak,OKMsg(TEXT("ui.phone_inbox.cancel_promise_id"), {{TEXT("id"), Id}}),[Weak,Id](){Weak->CancelAppointment(Id);})];
+  // A date with her is called off on the phone (R3-268): the button calls her; a shift or a table is just given up.
+  if(!A->Heroine.IsEmpty())Row->AddSlot().Padding(2)[OKFinButton(Weak,OKMsg(TEXT("ui.phone_inbox.call_to_cancel_id"), {{TEXT("id"), Id}}),[Weak,Id](){Weak->CallToCancel(Id);})];
+  else Row->AddSlot().Padding(2)[OKFinButton(Weak,OKMsg(TEXT("ui.phone_inbox.cancel_promise_id"), {{TEXT("id"), Id}}),[Weak,Id](){Weak->CancelAppointment(Id);})];
   Panel->AddSlot().AutoHeight().Padding(2)[Row];}
 }
 // Whose number he has (contacts.rs phone_contact): given in talk, or a friend or lover, or someone he has written or

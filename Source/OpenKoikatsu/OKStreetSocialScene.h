@@ -164,6 +164,8 @@ private:
  bool PlaceClosedNow(const FString& PlaceId,FString& Why) const;
  bool CommitStore(struct FOKStreetStore&& Candidate);
  TSharedPtr<class FJsonObject> ProfileOf(int32 Character) const;
+ float SatietyMax(int32 Character) const; // her appetite, profile satiety_max 50..1000, 100 ordinary (R3-269)
+ float MoodNow(int32 Character) const; // her spirits now, -100..100 (relation.rs mood_at)
  void AddToCart(const FString& ItemId,bool ForHer);
  int32 CartTotal() const;
  void StartCheckout(int32 ForHer=INDEX_NONE); // ForHer: the girl whose order it is (on arrival she is not his talk partner yet)
@@ -226,6 +228,8 @@ private:
  float StepOutingLed(float Dt);
  void TickApproach();
  void StepApproach();
+ void YandereComes(int32 Girl); // a yandere lover told the date is off comes to him (R3-268, OKStreetSocialInvite.inl)
+ void CallToCancel(int32 AppointmentId); // the appointment's "call her to cancel" button (OKStreetSocialPhoneInbox.inl)
  void AddSecondSleeper(int32 First,const struct FOKStreetPlace* Place,const FString& FirstBed);
  void RequestIntimacy(int32 Character,bool bHerIdea);
  void AskIntimacyWish(int32 Character); // her wish to be close, as a choice he answers (OKStreetSocialLife.inl)
@@ -371,7 +375,7 @@ private:
  void CampusAction(const FString& Action,const FString& Dept);
  void TickUiProbe();
  void EatFromBag(const FString& ItemId,bool Feed);
- FString MenuText(float Satiety=-1.f) const;
+ FString MenuText(float Satiety=-1.f,float Appetite=1.f) const; // Appetite: 100 / her satiety_max (R3-269)
  bool TooFullFor(int32 Girl,const struct FOKStreetCatalogItem& Item) const; // OKStreetSocialMind.inl // with her satiety: what she could not finish now is marked
  void ApplyChoiceReply(int32 Character,const struct FOKFreeTalkReply& Reply);
  void SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial);
@@ -746,6 +750,7 @@ private:
  void SettleMoneyHandover(int32 Girl,double Lend,bool bVerdict); // OKStreetSocialLover.inl (shop.rs money_handover)
  bool SecondDishOk(int32 Her,bool bForHer,const FString& ItemId); // OKStreetSocialLover.inl (shop.rs order_second_dish) // OKStreetSocialLover.inl: her act's give_money, once the judge has read the exchange // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
  void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)
+ void AfterExplosion(); // she speaks of how her spell went (R3-269)
  void TickEffect();
  void TickUmbrella(); // OKStreetSocialPhotos.inl: the umbrella on a rainy walk (weather.rs walk_style)
  void FinishPhoto(bool bKeepTalking=true); // false: the conversation ends with the activity (goodbye, Esc)

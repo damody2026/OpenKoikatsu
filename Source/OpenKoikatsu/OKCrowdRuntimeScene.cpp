@@ -797,7 +797,7 @@ struct FScene : TSharedFromThis<FScene> {
    {const int32 Stand=FindClip(TEXT("conversation_neutral.okanim"));if(Stand!=INDEX_NONE)E.StandSlot=Stand==E.ConversationSource?E.ConversationSlot:E.ClipSources.Add(Stand);}
    E.Clips.SetNum(E.ClipSources.Num());
    for(int32 Slot=0;Slot<E.ClipSources.Num();++Slot){const int32 Source=E.ClipSources[Slot];if(Source==INDEX_NONE)continue;
-    R.AuthoredCurves=ClipBytes(Source);R.Duration=OKRuntimeSharedClipDuration(R.AuthoredCurves);R.AuthoredPrefix=ClipWindows.IsValidIndex(Source)&&ClipWindows[Source]>0;if(R.AuthoredPrefix)R.Duration=FMath::Min(R.Duration,ClipWindows[Source]);R.ClipIdentity=ClipIds[Source];
+    R.AuthoredCurves=ClipBytes(Source);R.Duration=OKRuntimeSharedClipDuration(R.AuthoredCurves);R.AuthoredPrefix=ClipWindows.IsValidIndex(Source)&&ClipWindows[Source]>0;if(R.AuthoredPrefix)R.Duration=FMath::Min(R.Duration,ClipWindows[Source]);R.ClipIdentity=ClipIds[Source];R.Loop=SourceLoop(Source);
     E.PoseJobSlots.Add(Slot);E.PoseJobs.Add(OKPrepareRuntimePoseBankAsync(R));}
    for(const auto& Mesh:S.Meshes){E.SourceVertices+=Mesh.Vertices.Num();E.SourceTriangles+=Mesh.Indices.Num()/3;}
    E.StageMs[0]=(FPlatformTime::Seconds()-E.StageStarted)*1000;E.StageStarted=FPlatformTime::Seconds();E.Reduction=LowPolyRules?OKReduceRuntimeMeshesAsync(MoveTemp(S.Meshes),30000,30000,30000,PreserveSourceGeometry,true):OKReduceRuntimeMeshesAsync(MoveTemp(S.Meshes),15000,15000,30000,PreserveSourceGeometry);E.Stage=2;

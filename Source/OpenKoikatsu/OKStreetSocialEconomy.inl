@@ -91,6 +91,17 @@ TSharedPtr<FJsonObject> AOKStreetSocialScene::ProfileOf(int32 Character) const{
  if(!State->Manifest.Characters.IsValidIndex(Character))return nullptr;
  return State->MindProfiles.FindRef(OKStreetStableId(State->Manifest.Characters[Character]));
 }
+// Satiety is how full she is, 0..100 of her own stomach; food brings the same to everyone, so it fills a bigger one by
+// less of itself: a dish's satiety times 100 / SatietyMax (R3-269, needs.rs advance_with).
+float AOKStreetSocialScene::SatietyMax(int32 Character) const{
+ double Max=100;const TSharedPtr<FJsonObject> P=ProfileOf(Character);if(P.IsValid())P->TryGetNumberField(TEXT("satiety_max"),Max);
+ return FMath::Clamp(float(Max),50.f,1000.f);
+}
+float AOKStreetSocialScene::MoodNow(int32 Character) const{
+ if(!State->Manifest.Characters.IsValidIndex(Character))return 0.f;
+ const FOKStreetRelation R=OKStreetViewRelation(State->Store,OKStreetStableId(State->Manifest.Characters[Character]),State->Manifest.TalkBudget);
+ return R.MoodLevel*FMath::Pow(.5f,float(FMath::Max<int64>(0,OKStreetMindNow(*State)-R.MoodMinute))/360.f);
+}
 
 void AOKStreetSocialScene::AddToCart(const FString& ItemId,bool ForHer){
  auto& S=*State;const auto* Item=S.Catalog.Find(ItemId);if(!Item)return;
@@ -427,7 +438,7 @@ void AOKStreetSocialScene::TickMeal(float Dt){
  // Full stops food, not drinks: a full girl still sips her drink.
  auto Drink=[&](const FOKStreetDish& D){const auto* I=S.Catalog.Find(D.ItemId);return I&&I->IsDrink();};
  // She goes on with a dish while she is not full, or when the rest of it still fits (OKStreetOverfullSatiety).
- auto CanEat=[&](int32 G,const FOKStreetDish& D){if(Drink(D)||!Full.Contains(G)||Full[G]<OKStreetFullSatiety)return true;const auto* I=S.Catalog.Find(D.ItemId);return I&&Full[G]+OKStreetItemFill(*I)*D.Percent/100.f<=OKStreetOverfullSatiety;};
+ auto CanEat=[&](int32 G,const FOKStreetDish& D){if(Drink(D)||!Full.Contains(G)||Full[G]<OKStreetFullSatiety)return true;const auto* I=S.Catalog.Find(D.ItemId);return I&&Full[G]+OKStreetItemFill(*I)*D.Percent/100.f*100.f/SatietyMax(G)<=OKStreetOverfullSatiety;};
  // Each eats one dish and sips one drink at a time, side by side (tea with the tart, not the tea first and then the tart).
  auto EatSome=[&](TFunctionRef<bool(const FOKStreetDish&)> Mine){bool Ate=false,Sipped=false;
   for(auto& D:S.Table)if(Mine(D)){bool& Busy=Drink(D)?Sipped:Ate;if(Busy)continue;Busy=true;D.Percent=FMath::Max(0.f,D.Percent-Step);}
@@ -446,7 +457,8 @@ void AOKStreetSocialScene::TickMeal(float Dt){
    auto& R=Candidate.Relations[Index];
    for(auto& D:S.Table)if(D.ForHer&&DishOwner(D)==G&&D.Served){
     const float Eaten=100.f-D.Percent,Delta=Eaten-D.Booked;if(Delta<1.f)continue;
-    if(const auto* I=S.Catalog.Find(D.ItemId))for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;if(V)*V=FMath::Clamp(*V+E.Value*Delta/100.f,0.f,100.f);}
+    if(const auto* I=S.Catalog.Find(D.ItemId))for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;
+     if(V)*V=FMath::Clamp(*V+E.Value*Delta/100.f*(V==&R.Satiety?100.f/SatietyMax(G):1.f),0.f,100.f);} // her stomach's share (R3-269)
     D.Booked=Eaten;Changed=true;
    }
    if(G==Her)Satiety=R.Satiety;

@@ -634,8 +634,13 @@ fn order_too_full(r: &Value) -> Value {
     }
     let coming: f64 = r.get("coming").and_then(Value::as_array).map(|a| a.iter().map(weight).sum()).unwrap_or(0.0);
     let satiety = r.get("satiety").and_then(Value::as_f64).unwrap_or(0.0);
-    json!({"too_full": satiety + coming + weight(&item) > 115.0})
+    // Food in her own stomach's terms (R3-269): satiety is 0..100 of it, a dish fills 100 / satiety_max of its own fill.
+    let appetite = 100.0 / f64::from(crate::needs::satiety_max(r.get("profile").unwrap_or(&Value::Null)));
+    json!({"too_full": satiety + (coming + weight(&item)) * appetite > OVERFULL_SATIETY})
 }
+
+/// How full she can get before a dish is too much (her stomach's 100 is full; a little more still goes in).
+pub const OVERFULL_SATIETY: f64 = 115.0;
 
 fn order_second_dish(r: &Value) -> Value {
     let has_like = r.get("has_like").and_then(Value::as_bool).unwrap_or(false);
@@ -791,6 +796,11 @@ mod tests {
         assert_eq!(order_too_full(&json!({"satiety": 86, "item": bowl}))["too_full"], true);
         assert_eq!(order_too_full(&json!({"satiety": 110, "item": {"fill": 0, "drink": true}}))["too_full"], false, "a drink still");
         assert_eq!(order_too_full(&json!({"satiety": 60, "item": bowl, "coming": [{"fill": 40, "left": 0.5}]}))["too_full"], false);
+    // Her stomach (R3-269): the bowl that is too much at 86 for an ordinary appetite goes in for a big eater (200), and a
+    // small one (60) is full sooner.
+    assert_eq!(order_too_full(&json!({"satiety": 86, "item": bowl, "profile": {"satiety_max": 200}}))["too_full"], false);
+    assert_eq!(order_too_full(&json!({"satiety": 70, "item": bowl, "profile": {"satiety_max": 60}}))["too_full"], true);
+    assert_eq!(order_too_full(&json!({"satiety": 70, "item": bowl}))["too_full"], false, "the same bowl at 70, ordinary");
     }
 
     #[test]

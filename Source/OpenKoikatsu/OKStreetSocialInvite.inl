@@ -138,9 +138,26 @@ void AOKStreetSocialScene::TickApproach(){
  }
 }
 
+// A yandere lover told the date is off (R3-268): she does not sulk, she comes to him, now, and the two of them go into
+// the one-on-one scene once she is beside him and he is off the phone.
+void AOKStreetSocialScene::YandereComes(int32 Girl){
+ auto& S=*State;if(!S.Agents.IsValidIndex(Girl-1)||Girl<=0)return;
+ if(S.ApproachGirl!=INDEX_NONE&&S.ApproachGirl!=Girl){S.Agents[S.ApproachGirl-1].Held=false;S.ApproachGirl=INDEX_NONE;S.ApproachPath.Reset();}
+ TArray<FVector> Path=ContactRoute(S.Agents[Girl-1].Position,S.Male);
+ if(Path.Num()<2){Path={S.Agents[Girl-1].Position,S.Male};}
+ float Length=0;for(int32 K=1;K<Path.Num();++K)Length+=FVector::Dist2D(Path[K-1],Path[K]);
+ if(S.ScheduleHeld.Contains(Girl))ReleaseFromSchedule(Girl);
+ const double Now=FPlatformTime::Seconds();
+ S.ApproachGirl=Girl;S.ApproachJoin=false;S.ApproachSong=false;S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachPrivate=true;S.ApproachRetries=0;
+ S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=Now;S.ApproachLast=Now;S.ApproachLimit=FMath::Max(90.0,30.0+2.0*Length/OKStreetWalkSpeed);
+ S.ApproachLastMinute=OKStreetMindNow(S);S.Agents[Girl-1].Held=true;
+ S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.yandere_comes"),{{TEXT("name"),*S.Manifest.Characters[Girl].Name}});RefreshUI();
+ UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d (yandere lover) comes to him for the one-on-one, %.0f m"),Girl,Length/100.f);
+}
+
 void AOKStreetSocialScene::StepApproach(){
  auto& S=*State;const int32 I=S.ApproachGirl;auto& A=S.Agents[I-1];
- auto Stop=[&](){A.Held=false;S.ApproachGirl=INDEX_NONE;S.ApproachPath.Reset();S.ApproachBlockedNear=false;S.ApproachJoin=false;S.ApproachSong=false;};
+ auto Stop=[&](){A.Held=false;S.ApproachGirl=INDEX_NONE;S.ApproachPath.Reset();S.ApproachBlockedNear=false;S.ApproachJoin=false;S.ApproachSong=false;S.ApproachPrivate=false;};
  // On her way to a meeting she was held up step after step (a park exit: 40 cm every 8 s) and ran out of time: the meeting
  // used to vanish. Once more on a fresh route; out of his sight (25 m) she is already further along it.
  if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit&&S.ApproachAppointment&&S.ApproachRetries==0&&S.Target==INDEX_NONE){
@@ -166,9 +183,14 @@ void AOKStreetSocialScene::StepApproach(){
  // On the phone or in the one-on-one scene: she waits until he hangs up or comes back (arriving opened her talk and the
  // talk closed the scene half a second after he entered it).
  if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))&&S.RemoteMode==0&&S.PrivateGirl==INDEX_NONE){
-  const bool Join=S.ApproachJoin,ForSong=S.ApproachSong;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
-  UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,With);
+  const bool Join=S.ApproachJoin,ForSong=S.ApproachSong,ForPrivate=S.ApproachPrivate;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
+  UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, private=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,ForPrivate?1:0,With);
   Stop();
+  // The date he called off (a yandere lover, R3-268): straight into the one-on-one; while he is on a date with someone
+  // else that cannot open, and she talks to him instead.
+  if(ForPrivate){S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.yandere_arrived"),{{TEXT("name"),*S.Manifest.Characters[I].Name}});BeginPrivate(I);
+   if(S.PrivateGirl==I){UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d takes him into the one-on-one"),I);return;}
+   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d could not open the one-on-one; she talks to him"),I);}
   // She came to sing for him (SongCallOver): the talk opens without her usual opener, and her song starts from it.
   if(ForSong){if(S.Target==INDEX_NONE){S.SkipGreeting=true;BeginTalk(I);S.SkipGreeting=false;}S.Song.NextCheck=0;return;}
   // Their meeting, and he is talking with another girl: she joins them (the group talk hears that she came for it).

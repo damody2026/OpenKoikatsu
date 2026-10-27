@@ -28,6 +28,9 @@ struct FKKRuntimePoseRequest {
  bool PackedGpuCache=false;
  // Explicit prefix sampling; Duration remains bounded by the authored clip.
  bool AuthoredPrefix=false;
+ // A looping clip: its secondary motion is run through one loop before the keys are taken, so the last key leads
+ // into the first (taken from the settled first frame, hair jumped at every loop, R3-265).
+ bool Loop=false;
  // Stable APNG content/outfit identity from a verified capture. Snapshot byte
  // order is not canonical because native serialization contains hash maps.
  FString PersistentSourceIdentity;

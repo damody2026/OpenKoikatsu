@@ -794,11 +794,13 @@ pub fn meal(c: &Catalog, r: &Value) -> Result<Value, String> {
     let ctx = crate::heroine::Ctx::from_request(r)?;
     let place = r.get("place").and_then(Value::as_str).unwrap_or("");
     let mut rng = RandomStream::new(r.get("seed").and_then(Value::as_i64).unwrap_or(0) as i32);
+    // Her stomach's share of the food (R3-269): satiety is 0..100 of it.
+    let appetite = 100.0 / crate::needs::satiety_max(&ctx.profile);
     // Nothing she can pay for (broke after the fees, or nothing here within her budget): a meal that costs nothing (the
     // bread she brought, instant noodles in the dorm), not none at all: she stayed at 0 satiety for days, no money.
     let frugal = |rel: &crate::relation::Relation| {
         let mut fed = rel.clone();
-        fed.satiety = (fed.satiety + FRUGAL_MEAL_SATIETY).clamp(0.0, 100.0);
+        fed.satiety = (fed.satiety + FRUGAL_MEAL_SATIETY * appetite).clamp(0.0, 100.0);
         Ok(json!({"item": "frugal_meal", "name": crate::tr::t("plan.frugal_meal"), "price": 0, "frugal": true, "relation": fed.patch(rel)}))
     };
     let Some(item) = catalog::pick_meal(c, place, r.get("month").and_then(Value::as_i64).unwrap_or(1) as i32, &ctx.profile, r.get("budget").and_then(Value::as_i64).unwrap_or(0) as i32, &mut rng) else {
@@ -819,7 +821,7 @@ pub fn meal(c: &Catalog, r: &Value) -> Result<Value, String> {
             "fun" => &mut rel.fun,
             _ => continue,
         };
-        *f = (*f + v).clamp(0.0, 100.0);
+        *f = (*f + v * if k == "satiety" { appetite } else { 1.0 }).clamp(0.0, 100.0);
     }
     Ok(json!({"item": item.id, "name": item.name, "price": price, "relation": rel.patch(&ctx.rel)}))
 }
