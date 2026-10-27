@@ -976,6 +976,7 @@ refuses_sleep_together = "{name} 不想和 {first_name} 一起睡。"
 she_pulls_toward = "她拉着你往{place}走。"
 walks_toward_you = "{name} 朝你走过来了。"
 meeting_walk_blocked = "{name} 往约好的地方走，路上被挡住了，没能走到你身边；去她那边找她吧。"
+approach_left_busy = "{name}看你在跟别人说话，就先走开了。"
 on_shift_tell_her = "（{name}还在{place}上班，{until} 才下班，不能跟他走开或坐下来一起做事；她刚才答应的话，请让她自然地改口说等下班再说。这是她的班，不是他的。）"
 on_shift_player = "{name} 还在{place}上班（到 {until}），下班后再约她吧。"
 
