@@ -292,7 +292,7 @@ float AOKStreetSocialScene::StepNavigation(float Dt){
 }
 void AOKStreetSocialScene::BeginPrivate(int32 Character){
  if(!ContactReady(Character)||!ContactIdle()||!State->HighCards.IsValidIndex(Character)||State->HighCards.IsEmpty())return;
- auto& S=*State;StopAmbientActivity();EndTalk();
+ auto& S=*State;StopAmbientActivity();EndTalk();GalgameHideForPrivate();
  auto* Mode=AOKInteractionMode::EnterCards(GetWorld()->GetFirstPlayerController(),S.HighCards[Character],S.HighCards[0]);
  if(!Mode){S.ContactsNotice=OKT(TEXT("ui.contacts.interaction_load_failed"));RefreshUI();return;}
  S.PrivateGirl=Character;S.HighPrivateAt=FPlatformTime::Seconds();S.HighPrivateSeenReady=false;S.HighPrivateResult.Reset();S.PrivateMouse=S.MouseUI;S.PrivateMode=Mode;

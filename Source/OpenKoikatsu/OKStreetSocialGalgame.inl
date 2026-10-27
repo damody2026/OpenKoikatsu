@@ -349,6 +349,16 @@ void AOKStreetSocialScene::EndGalgame()
 	Galgame.Reset();
 }
 
+// Into the one-on-one scene: the street's box goes away now. The street does not tick there (TickPrivate returns
+// first), so TickGalgame never got to collapse it, and her last street line stayed over the scene; it comes back with
+// the street's own ticks.
+void AOKStreetSocialScene::GalgameHideForPrivate()
+{
+	if (!Galgame) return;
+	if (Galgame->ViewHost) Galgame->ViewHost->SetVisibility(EVisibility::Collapsed);
+	OKStreetGalgameUnhide(GetWorld(), *Galgame);
+}
+
 void AOKStreetSocialScene::TickGalgame(float Dt)
 {
 	auto& S = *State;
