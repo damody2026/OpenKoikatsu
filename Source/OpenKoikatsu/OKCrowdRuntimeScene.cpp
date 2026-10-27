@@ -325,6 +325,7 @@ struct FEntry {
  uint32 OriginalSections=0,MergedSections=0,UniqueMaterialBindings=0;
  FString Path,Id,Error;int32 Stage=0,TextureCursor=0,WalkIndex=1,SelectionIndex=0;
  int32 Outfit=0; // the card's coordinate she wears (manifest outfits, her everyday clothes)
+ float WalkSpeed=0; // cm/s her walk clip carries her (the snapshot's; 0 unknown)
  // Her actor in the composed animation bank: entries are composed in order, skipping the ones that failed to load.
  int32 BankActor=INDEX_NONE;bool ReducedBudget=false,SourceGeometryPreserved=false;
  uint64 SourceVertices=0,SourceTriangles=0;
@@ -842,7 +843,7 @@ struct FScene : TSharedFromThis<FScene> {
  }
  void Prepare(FEntry& E){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_PrepareEntry);
   if(E.Stage==1&&E.Snapshot.IsReady()){
-   auto S=E.Snapshot.Consume();E.SnapshotMs[0]=S.NativeOpenMs;E.SnapshotMs[1]=S.RigCaptureMs;E.SnapshotMs[2]=S.MeshCaptureMs;E.SnapshotMs[3]=S.MaterialCaptureMs;if(!S.Error.IsEmpty()){Fail(E,S.Error);return;}FString Error;TArray<int32> Remap;
+   auto S=E.Snapshot.Consume();E.WalkSpeed=S.WalkSpeed*100.f;E.SnapshotMs[0]=S.NativeOpenMs;E.SnapshotMs[1]=S.RigCaptureMs;E.SnapshotMs[2]=S.MeshCaptureMs;E.SnapshotMs[3]=S.MaterialCaptureMs;if(!S.Error.IsEmpty()){Fail(E,S.Error);return;}FString Error;TArray<int32> Remap;
    TArray<FName> GameplayBones;
    if(ExternalControl)for(FName Name:{FName(TEXT("cf_j_head")),FName(TEXT("cf_j_hand_L")),FName(TEXT("cf_j_hand_R")),FName(TEXT("cf_j_bust02_L")),FName(TEXT("cf_j_bust02_R")),FName(TEXT("cm_j_head")),FName(TEXT("cm_j_hand_L")),FName(TEXT("cm_j_hand_R")),FName(TEXT("k_f_handL_00")),FName(TEXT("k_f_handR_00"))})if(S.Bones.ContainsByPredicate([Name](const auto& B){return B.Name==Name;}))GameplayBones.Add(Name);
    if(!OKCompactRuntimeRenderRig(S.Bones,S.Parts,GameplayBones,E.Bones,Remap,Error)||!OKRemapRuntimeMeshBones(S.Meshes,Remap,E.Bones.Num(),Error)){Fail(E,Error);return;}
@@ -1231,8 +1232,8 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    const bool NearShadow=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(1600.)&&(A==0||FMath::Abs(E.Transform.GetTranslation().Z-PlayerPosition.Z)<200.);
    if(auto* C=E.Cpu.Get())C->SetCastShadow(false);if(auto* G=E.Gpu.Get())G->SetCastShadow(E.ShadowGpu.IsValid()?false:NearShadow);if(auto* S=E.ShadowGpu.Get())S->SetCastShadow(NearShadow);
    const bool EntryGpu=GpuMode||(!Installed&&E.LoadingGpuInstalled&&RequestedGpu);
-   if(Installed||E.VisibleMs>0)if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)OKCrowdSetTransform(C,E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}if(E.Turned){TurnLocal(E,E.LookNeck,C->BoneSpaceTransforms[E.LookNeck]);TurnLocal(E,E.LookHead,C->BoneSpaceTransforms[E.LookHead]);}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
-   if(!Installed&&!EntryGpu&&ProgressiveLoading&&E.VisibleMs>0){auto* Main=E.LoadingMain.IsValid()?E.LoadingMain.Get():E.Cpu.Get();OKCrowdSetTransform(Main,E.Transform);Main->SetCastShadow(NearShadow);Main->SetVisibility(true);}
+   if(Installed||(E.VisibleMs>0&&!GpuRig))if(auto* C=E.Cpu.Get()){C->SetVisibility(true);if(!EntryGpu)OKCrowdSetTransform(C,E.Transform);const int64 Bucket=int64(SceneTime*60);if(!EntryGpu&&(!Warm||!RequestedGpu||!VisualPrefix.IsEmpty())&&(E.LastCpuBucket!=Bucket||Warm)){if(!Installed){auto& Job=LoadingJobs.AddDefaulted_GetRef();Job.Entry=&E;Job.Playback=P;Job.Bucket=Bucket;Job.Poses.SetNumUninitialized(E.Bones.Num());}else {for(int32 B=0;B<E.Bones.Num();++B){auto T=SampleLocal(E.Clips[P.ClipA],*E.CpuKeys,B,P.Times.X);if(P.ClipA!=P.ClipB){const auto Other=SampleLocal(E.Clips[P.ClipB],*E.CpuKeys,B,P.Times.Y);T=OKGpuBlendLocal(T,Other,P.Times.Z,E.Clips[P.ClipA].Tracks[B]);}C->BoneSpaceTransforms[B]=T;}if(E.Turned){TurnLocal(E,E.LookNeck,C->BoneSpaceTransforms[E.LookNeck]);TurnLocal(E,E.LookHead,C->BoneSpaceTransforms[E.LookHead]);}C->MarkRefreshTransformDirty();C->RefreshBoneTransforms();E.LastCpuBucket=Bucket;}}}
+   if(!Installed&&!EntryGpu&&ProgressiveLoading&&E.VisibleMs>0&&!GpuRig){auto* Main=E.LoadingMain.IsValid()?E.LoadingMain.Get():E.Cpu.Get();OKCrowdSetTransform(Main,E.Transform);Main->SetCastShadow(NearShadow);Main->SetVisibility(true);}
    // Her eyes through her front hair need these only up close (OKForegroundRange): farther off the detail is a few
    // pixels, and each one more girl drawn into the custom depth and the capture every frame (the dorm lounge, eight
    // girls, 56 FPS).
@@ -1515,7 +1516,7 @@ bool OKGetCrowdRuntimeCharacterStatus(AActor* Owner,int32 Character,FOKRuntimeCh
  check(IsInGameThread());Status={};const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Entries.IsValidIndex(Character))return false;
  const auto& E=*State->Entries[Character];Status.Path=E.Path;Status.Error=E.Error;Status.Transform=State->ExternalControl?E.ExternalTransform:E.Transform;
- Status.Ready=E.Stage==5;Status.Visible=E.RevealStarted&&E.VisibleMs>0&&Owner->GetWorld()->GetTimeSeconds()>=E.RevealWorldStart+3;
+ Status.WalkSpeed=E.WalkSpeed;Status.Ready=E.Stage==5;Status.Visible=E.RevealStarted&&E.VisibleMs>0&&Owner->GetWorld()->GetTimeSeconds()>=E.RevealWorldStart+3;
  const auto Playback=E.Clock.Parameters();Status.AnimationTransitioning=E.Clock.IsTransitioning();
  if(E.ClipSources.IsValidIndex(Playback.ClipA)&&State->ClipIds.IsValidIndex(E.ClipSources[Playback.ClipA]))Status.ActiveClipId=State->ClipIds[E.ClipSources[Playback.ClipA]];
  Status.ActionsReady=State->Installed&&Status.Visible;return true;

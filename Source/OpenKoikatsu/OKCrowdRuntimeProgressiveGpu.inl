@@ -42,7 +42,8 @@ bool InstallProgressiveGpu(FEntry& E){
  BeginReveal(E);E.LoadingGpuInstalled=true;return true;
 }
 bool ServiceProgressiveGpu(){
- if(Installed||!ProgressiveLoading||LoadingCpuPreview||!RequestedGpu)return false;
+ // GPU rig: her bank keeps only its layout (a pose from it is not hers in motion), so nobody shows before the rig does.
+ if(Installed||!ProgressiveLoading||LoadingCpuPreview||!RequestedGpu||GpuRig)return false;
  int32 Best=INDEX_NONE;double Distance=TNumericLimits<double>::Max();bool Pending=false;
  // One install a frame: each registers two instanced skinned components (several at once stalled loading 660 ms).
  bool InstalledOne=false;

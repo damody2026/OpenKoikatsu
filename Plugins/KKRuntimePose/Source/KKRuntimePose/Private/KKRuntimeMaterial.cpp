@@ -91,8 +91,10 @@ bool PrepareSharedRuntimeTexture(const FString& Key,const FString& Hash,const ui
  // PNG, or ok-extract's raw LZ4 container (OK_RAW_TEXTURES=1).
  if(OKIsRawTexture(Bytes,Length)){if(!OKDecodeRawTexture(Bytes,Length,M.BGRA,Width,Height)){Error=TEXT("Runtime raw texture invalid");return false;}}
  else{
- auto& Images=FModuleManager::GetModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
- auto W=Images.CreateImageWrapper(EImageFormat::PNG);if(!W||!W->SetCompressed(Bytes,Length)){Error=TEXT("Runtime PNG decode header failed");return false;}
+ // A worker still preparing when the game quits finds the image module already unloaded: it stops, the scene is gone.
+ auto* Images=IsEngineExitRequested()?nullptr:FModuleManager::GetModulePtr<IImageWrapperModule>(TEXT("ImageWrapper"));
+ if(!Images){Error=TEXT("Runtime texture preparation stopped: the game is quitting");return false;}
+ auto W=Images->CreateImageWrapper(EImageFormat::PNG);if(!W||!W->SetCompressed(Bytes,Length)){Error=TEXT("Runtime PNG decode header failed");return false;}
  Width=W->GetWidth();Height=W->GetHeight();if(Width<=0||Height<=0||uint64(Width)*Height*4>128ull*1024*1024){Error=TEXT("Runtime PNG decoded size exceeds budget");return false;}
  // A grayscale PNG is one value per pixel: every colour channel gets it, explicitly rather than through the
  // wrapper's BGRA conversion.

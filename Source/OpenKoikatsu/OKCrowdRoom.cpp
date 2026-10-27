@@ -24,7 +24,8 @@
 #include "UnrealClient.h"
 
 namespace OKCrowdRoom {
-// The street's walking pace and turning limit (OKStreetWalkSpeed, OKStreetLimitFemaleFacing).
+// The street's walking pace (OKStreetWalkSpeed; a girl walks at her own once her walk is read) and turning limit
+// (OKStreetLimitFemaleFacing).
 constexpr float WalkSpeed=110.f,TurnRate=145.f;
 // Two girls closer than this stop rather than walk into each other; spots are picked at least this far apart.
 constexpr float Gap=110.f;
@@ -39,6 +40,8 @@ static TAutoConsoleVariable<float> CVarFollowLook(TEXT("ok.Crowd.FollowLook"),10
 
 struct FAgent {
  FVector Pos=FVector::ZeroVector,Target=FVector::ZeroVector;float Yaw=0;
+ // Her own pace: how fast her walk clip carries her (her stride), else the street's.
+ float Speed=WalkSpeed;
  bool Walking=false,Moving=false;double Until=0,BlockedSince=-1;
  int32 Variants=0,Variant=INDEX_NONE;bool Visible=false,Failed=false;
 };
@@ -134,7 +137,7 @@ struct FRoom {
      bool Blocked=false;for(int32 J=0;J<Agents.Num()&&!Blocked;++J)if(J!=I){const FVector D=Agents[J].Pos-A.Pos;const float Sq=D.SizeSquared2D();Blocked=Sq<Gap*Gap&&FVector::DotProduct(D.GetSafeNormal2D(),Dir)>.5f;}
      const float Want=FacingOf(Dir);A.Yaw=A.Yaw+FMath::Clamp(FMath::FindDeltaAngleDegrees(A.Yaw,Want),-TurnRate*Dt,TurnRate*Dt);
      if(Blocked){if(A.BlockedSince<0)A.BlockedSince=Time;if(Time-A.BlockedSince>3)Walk(A,I);}
-     else{A.BlockedSince=-1;A.Pos+=Dir*FMath::Min(Dist,WalkSpeed*Dt);A.Moving=true;}
+     else{A.BlockedSince=-1;A.Pos+=Dir*FMath::Min(Dist,A.Speed*Dt);A.Moving=true;}
     }
    }else if(I==Follow&&A.Variants>0)Walk(A,I);
    else if(A.Variants>0&&Time>=A.Until){if(Rng.FRand()<WalkChance)Walk(A,I);else Stand(A,I);}
@@ -144,7 +147,7 @@ struct FRoom {
   const double Wall=FPlatformTime::Seconds();
   // A girl whose card could not load (her error set) counts as done: the others are measured without her.
   if(Wall>=NextVisibleCheck){NextVisibleCheck=Wall+1;Visible=0;Failed=0;
-   for(int32 I=0;I<Agents.Num();++I){FOKRuntimeCharacterStatus St;const bool Got=OKGetCrowdRuntimeCharacterStatus(O,I,St);Agents[I].Visible=Got&&St.Visible;Agents[I].Failed=Got&&!St.Error.IsEmpty();Visible+=Agents[I].Visible;Failed+=Agents[I].Failed;}
+   for(int32 I=0;I<Agents.Num();++I){FOKRuntimeCharacterStatus St;const bool Got=OKGetCrowdRuntimeCharacterStatus(O,I,St);Agents[I].Visible=Got&&St.Visible;if(Got&&St.WalkSpeed>0)Agents[I].Speed=St.WalkSpeed;Agents[I].Failed=Got&&!St.Error.IsEmpty();Visible+=Agents[I].Visible;Failed+=Agents[I].Failed;}
    if(AllVisibleAt<0&&Visible+Failed==Agents.Num()){AllVisibleAt=Wall;UE_LOG(LogTemp,Display,TEXT("Crowd room: all %d girls drawn %.1f s after the start (%d could not load)"),Visible,Wall-Wall0,Failed);}}
   // Frame times (the same numbers as the street's /fps), logged every 5 s, and the report.
   const float GameMs=FPlatformTime::ToMilliseconds(GGameThreadTime),RenderMs=FPlatformTime::ToMilliseconds(GRenderThreadTime),GpuMs=FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());

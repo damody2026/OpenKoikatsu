@@ -75,6 +75,8 @@ TFuture<FKKRuntimeSnapshotResult> OKOpenRuntimeCharacterSnapshotAsync(FString Ap
    const bool Used=OKApplyRuntimeLowPoly(S,R.Bones,R.Parts,R.Meshes,Map,Summary);UE_LOG(LogTemp,Display,TEXT("Runtime low-poly %s: %s %s"),Used?TEXT("applied"):TEXT("skipped"),*Apng,*Summary);}
   R.MeshCaptureMs=(FPlatformTime::Seconds()-StageStart)*1000;StageStart=FPlatformTime::Seconds();
   if(!OKCaptureRuntimeMaterials(S,R.Parts,R.Materials,R.Error))return Fail(R.Error);R.MaterialCaptureMs=(FPlatformTime::Seconds()-StageStart)*1000;
+  // Last: it poses the session through the walk (her stride, so a scene moves her without sliding feet).
+  R.WalkSpeed=FMath::Max(0.f,ok_session_walk_speed(S,Curves.GetData(),Curves.Num()));
   R.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return R;
  });
 }

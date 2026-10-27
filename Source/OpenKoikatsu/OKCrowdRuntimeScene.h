@@ -69,6 +69,8 @@ struct FOKRuntimeCharacterStatus {
  bool AnimationTransitioning=false;
  FTransform Transform=FTransform::Identity;
  bool Ready=false,Visible=false,ActionsReady=false;
+ // How fast her walk clip carries her (cm/s; 0 unknown): move her at it and her feet do not slide.
+ float WalkSpeed=0;
 };
 bool OKGetCrowdRuntimeCharacterStatus(AActor* Owner,int32 Character,FOKRuntimeCharacterStatus& Status);
 // Sparse gameplay query, sampled from this actor's private current animation.
