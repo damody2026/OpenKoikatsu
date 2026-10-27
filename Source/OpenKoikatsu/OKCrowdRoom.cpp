@@ -16,6 +16,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "RHI.h"
+#include "RHIStats.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UnrealClient.h"
@@ -40,7 +41,12 @@ struct FRoom {
  FVector CamPos=FVector::ZeroVector;FRotator CamRot=FRotator::ZeroRotator;
  // Frame-time report: warmup_seconds after every girl is drawn, then benchmark_seconds of frames.
  double BenchSeconds=0,Warmup=10,AllVisibleAt=-1,BenchStart=-1,NextVisibleCheck=0,NextLog=0,ExitAt=-1;int32 Visible=0,Failed=0;
- FString Report;bool ExitAfter=false,BenchDone=false;TArray<float> Frames;double GameSum=0,RenderSum=0,GpuSum=0;
+ FString Report;bool ExitAfter=false,BenchDone=false;TArray<float> Frames;double GameSum=0,RenderSum=0,GpuSum=0,DrawSum=0,TriSum=0;
+ // In-process A/B (manifest room.cases: [{name, exec: [console commands]}]): each case is applied, warmed up and
+ // measured for benchmark_seconds in turn, the same girls and camera; the report lists every case.
+ struct FCase {FString Name;TArray<FString> Exec;};TArray<FCase> Cases;int32 Case=0;TArray<TSharedPtr<FJsonValue>> Results;double CaseAppliedAt=-1;
+ // A CPU trace of the (first) measurement only (room.trace_file).
+ FString TraceFile;bool Tracing=false;
  TArray<float> LogFrames;
 
  // A free spot in the room; From given: 3..10 m from there (a short walk, not across the room).
@@ -119,30 +125,42 @@ struct FRoom {
    if(AllVisibleAt<0&&Visible+Failed==Agents.Num()){AllVisibleAt=Wall;UE_LOG(LogTemp,Display,TEXT("Crowd room: all %d girls drawn %.1f s after the start (%d could not load)"),Visible,Wall-Wall0,Failed);}}
   // Frame times (the same numbers as the street's /fps), logged every 5 s, and the report.
   const float GameMs=FPlatformTime::ToMilliseconds(GGameThreadTime),RenderMs=FPlatformTime::ToMilliseconds(GRenderThreadTime),GpuMs=FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+  // Draw calls and triangles of the last rendered frame (stat RHI's numbers).
+  const int32 Draws=GNumDrawCallsRHI[0],Tris=GNumPrimitivesDrawnRHI[0];
   LogFrames.Add(Dt*1000.f);
   if(Wall>=NextLog){NextLog=Wall+5;LogFrames.Sort();float Sum=0;for(float F:LogFrames)Sum+=F;const float Mean=LogFrames.Num()?Sum/LogFrames.Num():0,P95=LogFrames.Num()?LogFrames[FMath::Min(LogFrames.Num()-1,int32(LogFrames.Num()*.95f))]:0;
    int32 Walking=0;for(const auto& A:Agents)Walking+=A.Moving;
-   UE_LOG(LogTemp,Display,TEXT("Crowd room: %.1f FPS (frame %.2f ms, p95 %.2f) game %.2f render %.2f gpu %.2f ms, drawn %d/%d, walking %d"),Mean>0?1000/Mean:0,Mean,P95,GameMs,RenderMs,GpuMs,Visible,Agents.Num(),Walking);
+   UE_LOG(LogTemp,Display,TEXT("Crowd room: %.1f FPS (frame %.2f ms, p95 %.2f) game %.2f render %.2f gpu %.2f ms, %d draws %.2fM triangles, drawn %d/%d, walking %d"),Mean>0?1000/Mean:0,Mean,P95,GameMs,RenderMs,GpuMs,Draws,Tris/1e6f,Visible,Agents.Num(),Walking);
    if(GEngine)GEngine->AddOnScreenDebugMessage(int32(0x0C10),6.f,FColor::Green,FString::Printf(TEXT("%.0f FPS  frame %.2f ms (p95 %.2f)  game %.2f  render %.2f  gpu %.2f  drawn %d/%d  walking %d"),Mean>0?1000/Mean:0,Mean,P95,GameMs,RenderMs,GpuMs,Visible,Agents.Num(),Walking));
    LogFrames.Reset();}
   if(BenchSeconds>0&&!BenchDone&&AllVisibleAt>=0&&Wall>=AllVisibleAt+Warmup){
-   if(BenchStart<0){BenchStart=Wall;UE_LOG(LogTemp,Display,TEXT("Crowd room: benchmark starts (%.0f s)"),BenchSeconds);}
-   Frames.Add(Dt*1000.f);GameSum+=GameMs;RenderSum+=RenderMs;GpuSum+=GpuMs;
+   if(Cases.IsValidIndex(Case)&&CaseAppliedAt<0){CaseAppliedAt=Wall;for(const FString& C:Cases[Case].Exec)GEngine->Exec(World,*C);UE_LOG(LogTemp,Display,TEXT("Crowd room: case %s applied"),*Cases[Case].Name);}
+   if(Cases.IsValidIndex(Case)&&Wall<CaseAppliedAt+5)return true;
+   if(BenchStart<0){BenchStart=Wall;UE_LOG(LogTemp,Display,TEXT("Crowd room: benchmark starts (%.0f s)"),BenchSeconds);
+    if(!TraceFile.IsEmpty()&&Results.IsEmpty()){GEngine->Exec(World,*FString::Printf(TEXT("Trace.File \"%s\" cpu,frame"),*TraceFile));Tracing=true;}}
+   Frames.Add(Dt*1000.f);GameSum+=GameMs;RenderSum+=RenderMs;GpuSum+=GpuMs;DrawSum+=Draws;TriSum+=Tris;
    if(Wall-BenchStart>=BenchSeconds)FinishBench(Wall);}
   if(ExitAt>0&&Wall>=ExitAt){FPlatformMisc::RequestExit(false);return false;}
   return true;
  }
 
  void FinishBench(double Wall){
-  BenchDone=true;TArray<float> Sorted=Frames;Sorted.Sort();double Sum=0;for(float F:Sorted)Sum+=F;const int32 N=Sorted.Num();
+  if(Tracing){if(AActor* O=Owner.Get())GEngine->Exec(O->GetWorld(),TEXT("Trace.Stop"));Tracing=false;}
+  TArray<float> Sorted=Frames;Sorted.Sort();double Sum=0;for(float F:Sorted)Sum+=F;const int32 N=Sorted.Num();
   const double Mean=N?Sum/N:0,P95=N?Sorted[FMath::Min(N-1,int32(N*.95))]:0,P99=N?Sorted[FMath::Min(N-1,int32(N*.99))]:0;
   int32 Over=0;for(float F:Sorted)Over+=F>1000.f/120.f;
   auto J=MakeShared<FJsonObject>();J->SetNumberField(TEXT("characters"),Agents.Num());J->SetNumberField(TEXT("drawn"),Visible);J->SetNumberField(TEXT("failed"),Failed);
   J->SetNumberField(TEXT("all_drawn_seconds"),AllVisibleAt-Wall0);J->SetNumberField(TEXT("samples"),N);J->SetNumberField(TEXT("seconds"),Wall-BenchStart);
   J->SetNumberField(TEXT("fps_mean"),Mean>0?1000/Mean:0);J->SetNumberField(TEXT("frame_mean_ms"),Mean);J->SetNumberField(TEXT("frame_p95_ms"),P95);J->SetNumberField(TEXT("frame_p99_ms"),P99);
-  J->SetNumberField(TEXT("frames_over_8_33_ms"),Over);J->SetNumberField(TEXT("game_ms"),N?GameSum/N:0);J->SetNumberField(TEXT("render_ms"),N?RenderSum/N:0);J->SetNumberField(TEXT("gpu_ms"),N?GpuSum/N:0);
+  J->SetNumberField(TEXT("frames_over_8_33_ms"),Over);J->SetNumberField(TEXT("game_ms"),N?GameSum/N:0);J->SetNumberField(TEXT("render_ms"),N?RenderSum/N:0);J->SetNumberField(TEXT("gpu_ms"),N?GpuSum/N:0);J->SetNumberField(TEXT("draw_calls"),N?DrawSum/N:0);J->SetNumberField(TEXT("triangles"),N?TriSum/N:0);
   J->SetBoolField(TEXT("target_120_met"),N>=120&&Mean<=1000./120.&&P95<=1000./120.);
   {const IConsoleVariable* Max=IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS"));J->SetNumberField(TEXT("max_fps"),Max?Max->GetFloat():0);}
+  if(Cases.IsValidIndex(Case)){J->SetStringField(TEXT("case"),Cases[Case].Name);Results.Add(MakeShared<FJsonValueObject>(J));
+   if(!Report.IsEmpty())FScreenshotRequest::RequestScreenshot(FPaths::GetPath(Report)/FString::Printf(TEXT("case%02d-%s.png"),Case,*Cases[Case].Name),false,false);
+   UE_LOG(LogTemp,Display,TEXT("Crowd room case %s: %.1f FPS (frame %.2f ms, p95 %.2f) game %.2f render %.2f gpu %.2f, %.0f draws"),*Cases[Case].Name,Mean>0?1000/Mean:0,Mean,P95,N?GameSum/N:0,N?RenderSum/N:0,N?GpuSum/N:0,N?DrawSum/N:0);
+   if(++Case<Cases.Num()){Frames.Reset();GameSum=RenderSum=GpuSum=DrawSum=TriSum=0;BenchStart=-1;CaseAppliedAt=-1;return;}
+   J=MakeShared<FJsonObject>();J->SetArrayField(TEXT("cases"),Results);}
+  BenchDone=true;
   FString Text;FJsonSerializer::Serialize(J,TJsonWriterFactory<>::Create(&Text));
   UE_LOG(LogTemp,Display,TEXT("Crowd room benchmark: %s"),*Text);
   if(!Report.IsEmpty()){FFileHelper::SaveStringToFile(Text,*Report,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);FScreenshotRequest::RequestScreenshot(FPaths::ChangeExtension(Report,TEXT("png")),false,false);}
@@ -163,7 +181,10 @@ bool OKStartCrowdRoom(AActor* Owner,const FString& Manifest,FString& Error){
   if(R->TryGetNumberField(TEXT("half_size"),V))Room->Half=FMath::Clamp(float(V),500.f,10000.f);
   R->TryGetNumberField(TEXT("benchmark_seconds"),Room->BenchSeconds);R->TryGetNumberField(TEXT("warmup_seconds"),Room->Warmup);
   R->TryGetStringField(TEXT("report"),Room->Report);R->TryGetBoolField(TEXT("exit_after_report"),Room->ExitAfter);
-  double Seed=0;if(R->TryGetNumberField(TEXT("seed"),Seed))Room->Rng.Initialize(int32(Seed));}
+  double Seed=0;if(R->TryGetNumberField(TEXT("seed"),Seed))Room->Rng.Initialize(int32(Seed));
+  R->TryGetStringField(TEXT("trace_file"),Room->TraceFile);
+  const TArray<TSharedPtr<FJsonValue>>* Cases=nullptr;if(R->TryGetArrayField(TEXT("cases"),Cases))for(const auto& CaseValue:*Cases){const auto C=CaseValue->AsObject();if(!C)continue;FRoom::FCase Item;C->TryGetStringField(TEXT("name"),Item.Name);
+   const TArray<TSharedPtr<FJsonValue>>* Exec=nullptr;if(C->TryGetArrayField(TEXT("exec"),Exec))for(const auto& E:*Exec)Item.Exec.Add(E->AsString());Room->Cases.Add(MoveTemp(Item));}}
  UWorld* World=Owner->GetWorld();Room->Build(World,Owner);
  Room->Agents.SetNum(Cards->Num());
  for(int32 I=0;I<Room->Agents.Num();++I){auto& A=Room->Agents[I];A.Pos=Room->RandomSpot(I);A.Target=A.Pos;A.Yaw=Room->Rng.FRandRange(-180.f,180.f);A.Until=Room->Rng.FRandRange(2.f,12.f);}

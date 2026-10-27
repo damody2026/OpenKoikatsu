@@ -2,7 +2,12 @@
 -- shadows and render settings as the street's heroines) wandering an empty room (Source/OpenKoikatsu/OKCrowdRoom.cpp).
 -- Runs the newest StreetSocial stage with -CrowdRoom=<manifest>; nothing else of the street starts.
 --   Tools\lua\lua.exe Tools\run_crowd_room100.lua [--count N] [--cards <dir>] [--benchmark <seconds>] [--warmup <seconds>]
---       [--max-fps N] [--window WxH] [--executable <exe>] [--variants N] [--exec "CMD,CMD"]
+--       [--max-fps N] [--window WxH] [--executable <exe>] [--variants N] [--exec "CMD,CMD"] [--cases <json>] [--trace] [--aggregate]
+-- --aggregate: once everyone is loaded, compose every girl's pose bank into one GPU bank (one skinning provider instead
+-- of a hundred; needs twice the banks' memory while composing).
+-- --cases: a JSON array [{"name": "...", "exec": ["console command", ...]}, ...]: each case is applied in the same running
+-- game and measured for --benchmark seconds in turn (an A/B without loading the girls again). --trace: an Unreal
+-- Insights trace (cpu, frame, named events) of the first measurement, trace.utrace beside the report.
 -- --benchmark: measure that many seconds once every girl is drawn and warmed up, write report.json (frame mean / P95,
 -- game / render / GPU ms, the same numbers as the street's /fps) and a screenshot, then quit. Measure with only this
 -- Unreal game running (t.MaxFPS 0 unless --max-fps).
@@ -28,6 +33,9 @@ local function parse(argv)
     elseif a == "executable" then o.executable = v; i = i + 1
     elseif a == "variants" then o.variants = tonumber(v); i = i + 1
     elseif a == "exec" then o.exec = v; i = i + 1
+    elseif a == "cases" then o.cases = v; i = i + 1
+    elseif a == "trace" then o.trace = true
+    elseif a == "aggregate" then o.aggregate = true
     else error("Unknown option " .. argv[i], 0) end
     i = i + 1
   end
@@ -124,6 +132,8 @@ local function main()
   end
   local room = json.object({ { "half_size", 2400 }, { "benchmark_seconds", o.benchmark }, { "warmup_seconds", o.warmup },
     { "report", win(path.join(out, "report.json")) }, { "exit_after_report", o.benchmark > 0 } })
+  if o.cases then room.cases = read_json(o.cases) end
+  if o.trace then room.trace_file = win(path.join(out, "trace.utrace")) end
   local manifest = json.object({
     { "cards", json.array((function() local t = {}; for i, c in ipairs(cards) do t[i] = win(c) end; return t end)()) },
     { "outfits", json.array(outfits) }, { "characters", json.array(characters) },
@@ -136,7 +146,7 @@ local function main()
     { "auto_blink", true }, { "auto_action_streaming", false }, { "npc_action_preload_count", 0 },
     { "background_prepare_concurrency", 16 }, { "diagnostic_load_deadline_seconds", 300 },
     { "profile_seconds", 0 }, { "exit_after_report", false }, { "depth_prepass_enabled", true },
-    { "room", room }, { "aggregate_gpu", false },
+    { "room", room }, { "aggregate_gpu", o.aggregate == true },
   })
   if materials.hg_root then manifest.hg_material_root = materials.hg_root end
   local selection = path.join(out, "selection.json")
@@ -147,12 +157,15 @@ local function main()
   if not w then error("--window takes WxH", 0) end
   -- The street's render settings (OKStreetSocialScene BeginPlay: TAA at 100%, cascaded shadows, no CAS, no occlusion
   -- queries); the room path does not run that code, so they are passed here.
-  local execs = "r.AntiAliasingMethod 2,r.ScreenPercentage 100,r.Shadow.Virtual.Enable 0,r.VRS.ContrastAdaptiveShading 0,r.AllowOcclusionQueries 0,t.MaxFPS " .. o.max_fps
+  -- Plus the room's own two (Docs/CROWD_ROOM100.md): no outline shells past 15 m (ok.Crowd.OutlineRange) and no depth
+  -- prepass (r.EarlyZPass 0): a hundred girls are draw calls, these two took them from about 10000 to 5800 a frame.
+  local execs = "r.AntiAliasingMethod 2,r.ScreenPercentage 100,r.Shadow.Virtual.Enable 0,r.VRS.ContrastAdaptiveShading 0,r.AllowOcclusionQueries 0,ok.Crowd.OutlineRange 1500,r.EarlyZPass 0,t.MaxFPS " .. o.max_fps
   if o.exec then execs = execs .. "," .. o.exec end
   local game = { exe, "/Game/Scenes/StreetSocial/StreetSocial", "-D3D12", "-SM6", "-windowed", "-ResX=" .. w, "-ResY=" .. h, "-WinX=40", "-WinY=40",
     "-CrowdRoom=" .. win(selection), "-abslog=" .. win(path.join(out, "game.log")), "-RuntimeGpuCacheMiB=4096", "-ExecCmds=" .. execs }
   local patch = path.join(root, launch.patch)
   if path.exists(patch) then game[#game + 1] = "-pakdir=" .. patch end
+  if o.trace then game[#game + 1] = "-statnamedevents" end
   local pid = proc.spawn(game, { cwd = root })
   path.write_text(path.join(out, "game.pid"), tostring(pid))
   say("Crowd room: " .. #cards .. " girls, " .. #variants .. " standing poses (" .. o.variants .. " each), " .. exe)

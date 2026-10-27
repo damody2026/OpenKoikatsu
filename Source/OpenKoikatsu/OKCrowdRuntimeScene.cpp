@@ -97,6 +97,9 @@ static TAutoConsoleVariable<int32> CVarOKMouthNormalize(TEXT("ok.Mouth.Normalize
 static TAutoConsoleVariable<float> CVarOKMouthMaxOpen(TEXT("ok.Mouth.MaxOpen"),.5f,TEXT("How far the speaking mouth opens at her loudest (0-1 of the card's open-mouth morph)."));
 static TAutoConsoleVariable<int32> CVarOKMouthSpeakFull(TEXT("ok.Mouth.SpeakFull"),1,TEXT("1: speaking, the mouth opens with the voice, not capped by the expression's mouth_open; 0: capped."));
 static TAutoConsoleVariable<int32> CVarOKMouthAlwaysDriven(TEXT("ok.Mouth.AlwaysDriven"),1,TEXT("1: silent, the mouth is closed (or the expression's mouth_open); 0: left in the card's own mouth."));
+// Outline LOD: a character farther from the camera than this (cm) draws without her outline shells (their sections
+// hidden on her main component: no draw calls, not just transparent). 0 (default): always drawn.
+static TAutoConsoleVariable<float> CVarOKCrowdOutlineRange(TEXT("ok.Crowd.OutlineRange"),0.f,TEXT("cm: farther characters draw no outline shells (0: always)"));
 static TAutoConsoleVariable<int32> CVarOKCrowdLogSlowEntries(TEXT("ok.Crowd.LogSlowEntries"),0,TEXT("1: log a character's frame update taking over 1 ms, split into speech/behaviour, face look, face upload and components."));
 template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
  Async(EAsyncExecution::ThreadPool,[...Held=MoveTemp(Held)]()mutable{(Held.Reset(),...);});
@@ -294,6 +297,8 @@ struct FEntry {
  int32 StandSlot=INDEX_NONE;bool ReadingAllowed=true;
  // Standing poses of her own for stops (manifest idle_variants, a few per character): IdleVariant picks one (none: as above).
  TArray<int32> IdleVariantSlots;int32 IdleVariant=INDEX_NONE;
+ // Her outline shells' material slots on the main mesh, hidden when she is past ok.Crowd.OutlineRange.
+ TArray<int32> OutlineSlotIds;bool OutlinesHidden=false;TWeakObjectPtr<UPrimitiveComponent> OutlineComponent;
  double BudgetRetryAt=0;bool BudgetWaitLogged=false;
  TArray<TFuture<FKKRuntimePoseResult>> PoseJobs;TArray<FKKRuntimePoseResult> Clips;TArray<int32> ClipSources;
  TSharedPtr<const FKKRuntimePoseRequest,ESPMode::ThreadSafe> PoseRecipe; /* shared, never changed: a streamed action copies it on a worker */FOKGpuActorRecord ActorRecipe;FOKGpuSkinPaletteData PaletteRecipe;
@@ -709,6 +714,7 @@ struct FScene : TSharedFromThis<FScene> {
   VisualData.Materials=VisualMaterials.Num();
   E.FrontHairSlots.Reset();for(int32 I=0;I<E.FaceClasses.Num()&&I<Canonical.Num();++I)if(E.FaceClasses[I]==1)E.FrontHairSlots.AddUnique(Canonical[I]);
   for(const auto& Shell:OutlineSlots)if(E.FaceClasses.IsValidIndex(Shell.Key)&&E.FaceClasses[Shell.Key]==1)E.FrontHairSlots.AddUnique(Shell.Value);
+  E.OutlineSlotIds.Reset();for(const auto& Shell:OutlineSlots)E.OutlineSlotIds.AddUnique(Shell.Value);
   UE_LOG(LogTemp,Display,TEXT("Runtime source outlines %s: materials=%d sections=%d"),*E.Id,E.OutlineMaterials.Num(),VisualData.Sections.Num()-MainData.Sections.Num());
   E.CommitMain=MakeUnique<FKKRuntimeRenderMeshData>(MoveTemp(MainData));E.CommitVisual=MakeUnique<FKKRuntimeRenderMeshData>(MoveTemp(VisualData));E.CommitVisualMaterials=MoveTemp(VisualMaterials);
   E.CommitStep=11;return true;}
@@ -1007,7 +1013,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
   // Warm GPU visibility is required to receive its first provider invocation.
   const bool Warm=Installed&&!Render->Ready.Load()&&Render->Failures.Load()==0;
   GpuMode=Installed&&RequestedGpu&&Render->Ready.Load()&&Render->Failures.Load()==0;
-  TArray<FOKGpuPosePlayback> Play;
+  TArray<FOKGpuPosePlayback> Play;int32 OutlineToggles=0;const float OutlineRange=CVarOKCrowdOutlineRange.GetValueOnGameThread();
   struct FLoadingPoseJob {FEntry* Entry;FOKGpuPosePlayback Playback;int64 Bucket;TArray<FTransform> Poses;};
   TArray<FLoadingPoseJob> LoadingJobs;
   for(int32 A=0;A<Entries.Num();++A){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_EntryFrame);const double EntryT0=FPlatformTime::Seconds();double EntryT1=EntryT0,EntryT2=EntryT0,EntryT3=EntryT0;auto& E=*Entries[A];if(E.Stage!=5||(!Installed&&!ProgressiveLoading))continue;if(CaptureStage>=1&&CaptureStage<=2){const int32 Slot=FMath::Min(VisualClip,E.Clips.Num()-1);FOKGpuPosePlayback Frozen;Frozen.ClipA=0;Frozen.ClipB=Slot;Frozen.Times=FVector4f(VisualPhase*E.Clips[0].Duration,VisualPhase*E.Clips[Slot].Duration,VisualBlend,0);Play.Add(Frozen);continue;}FString Error;
@@ -1092,6 +1098,10 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    const bool Foreground=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation())<FMath::Square(OKForegroundRange);
    if(auto* F=E.FrontGpu.Get()){OKCrowdSetTransform(F,E.Transform);F->SetVisibility(Foreground);}
    if(auto* C=E.OccluderGpu.Get()){OKCrowdSetTransform(C,E.Transform);C->SetVisibility(Foreground);}
+   // Outline LOD (a little hysteresis; at most four characters switch a frame: each change rebuilds her render proxy).
+   if(auto* G=E.Gpu.Get();G&&!E.OutlineSlotIds.IsEmpty()){if(E.OutlineComponent.Get()!=G){E.OutlineComponent=G;E.OutlinesHidden=false;}
+    const double D2=FVector::DistSquared(ShadowCamera,E.Transform.GetTranslation());const bool Hide=OutlineRange>0&&D2>FMath::Square(E.OutlinesHidden?OutlineRange*.9:OutlineRange);
+    if(Hide!=E.OutlinesHidden&&OutlineToggles<4){++OutlineToggles;E.OutlinesHidden=Hide;for(const int32 Slot:E.OutlineSlotIds)G->ShowMaterialSection(Slot,0,!Hide,0);}}
    if(auto* G=E.Gpu.Get()){OKCrowdSetTransform(G,E.Transform);G->SetVisibility(true);if((Render->Ready.Load()||(!Installed&&E.LoadingRender&&E.LoadingRender->Ready.Load()))&&E.VisibleMs<=0)E.VisibleMs=(FPlatformTime::Seconds()-Started)*1000;}
    if(auto* S=E.ShadowGpu.Get()){OKCrowdSetTransform(S,E.Transform);S->SetVisibility(true);}
    if(!Installed&&E.LoadingGpuInstalled){ENQUEUE_RENDER_COMMAND(PrivateLoadingPlayback)([R=E.LoadingRender,P,CpuSource=!RequestedGpu](FRHICommandListImmediate&){if(R->UseCpu!=CpuSource)R->Reset=true;R->UseCpu=CpuSource;R->Playback={P};R->Enabled=true;});if(E.LoadingRender->Ready.Load()&&!E.PrivateGpuVisibleMs){E.PrivateGpuVisibleMs=(FPlatformTime::Seconds()-Started)*1000;E.PrivateGpuVisibleComplete=Complete;if(!FirstVisibleMs)FirstVisibleMs=E.PrivateGpuVisibleMs;UE_LOG(LogTemp,Display,TEXT("APNG private GPU visible: selection=%d elapsed_ms=%.3f complete=%d/%d"),A,E.PrivateGpuVisibleMs,Complete,Entries.Num());}}
