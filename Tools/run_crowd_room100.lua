@@ -19,6 +19,10 @@
 -- --benchmark: measure that many seconds once every girl is drawn and warmed up, write report.json (frame mean / P95,
 -- game / render / GPU ms, the same numbers as the street's /fps) and a screenshot, then quit. Measure with only this
 -- Unreal game running (t.MaxFPS 0 unless --max-fps).
+-- Cards whose outfit 0 wears neither a top nor a bottom, or has a material the runtime cannot draw, are left out
+-- (decided offline from the card, check_cards). --check-cards: only that check (every card), then the usable count;
+-- no game. --no-card-check: open no card, use the verdicts already in Saved/Crowd/card-check.tsv (a card without one
+-- counts as usable).
 local ok = require "ok"
 local path, json, proc, time = ok.path, ok.json, ok.proc, require("ok.time")
 
@@ -34,6 +38,8 @@ local function parse(argv)
     local v = argv[i + 1]
     if a == "count" then o.count = tonumber(v); i = i + 1
     elseif a == "cards" then o.cards = v; i = i + 1
+    elseif a == "check-cards" then o.check_cards = true
+    elseif a == "no-card-check" then o.no_card_check = true
     elseif a == "benchmark" then o.benchmark = tonumber(v); i = i + 1
     elseif a == "warmup" then o.warmup = tonumber(v); i = i + 1
     elseif a == "max-fps" then o.max_fps = tonumber(v); i = i + 1
@@ -80,45 +86,98 @@ end
 local WAITS = { "conversation_wait_00", "conversation_wait_02", "conversation_wait_04", "conversation_wait_06", "conversation_wait_08",
   "conversation_wait_10", "conversation_wait_14", "conversation_wait_20", "conversation_wait_24", "conversation_wait_26", "conversation_reserved" }
 
+-- Whether the room can use each card, decided offline from the card itself (not from earlier rooms' logs, and not from
+-- its cover image, which is not outfit 0): `ok-extract --oklib crowd-check` opens outfit 0 as the runtime does and
+-- tells whether she wears a top or a bottom and which drawn parts have a material the runtime cannot draw
+-- (Tools/ok-extract/src/oklib/crowd_check.rs). Cards are checked in order until `want` are usable (a few seconds per
+-- card); verdicts are kept in Saved/Crowd/card-check.tsv by file size and modification time, so later rooms open only
+-- new or changed cards. Returns card -> { dressed, roles, unsupported ("-": none) } for the cards checked.
+local CARD_CHECK_VERSION = 3
+local function read_card_checks(store, into)
+  if not path.is_file(store) then return into end
+  for line in io.lines(store) do
+    local v, c, st, dressed, roles, unsupported = line:match("^(%d+)\t([^\t]+)\t([^\t]+)\t([01])\t([^\t]*)\t(.*)$")
+    if v and tonumber(v) == CARD_CHECK_VERSION then into[c] = { stamp = st, dressed = dressed == "1", roles = roles, unsupported = unsupported } end
+  end
+  return into
+end
+local function check_cards(root, cards, want, cached_only)
+  local lib = path.join(root, "Content/IndependentResources/base_v1")
+  local store = path.join(root, "Saved/Crowd/card-check.tsv")
+  local tool = path.join(root, "Tools/ok-extract/target/release/ok-extract.exe")
+  local stamp = function(c) return ("%d:%d"):format(path.size(c) or -1, math.floor(path.mtime(c) or -1)) end
+  local known = read_card_checks(store, {})
+  local out = {}
+  local function current(c) local k = known[win(c)]; return k and k.stamp == stamp(c) and k or nil end
+  while true do
+    local usable, todo = 0, {}
+    for _, c in ipairs(cards) do
+      local k = out[c] or current(c)
+      if k then out[c] = k; if k.dressed and k.unsupported == "-" then usable = usable + 1 end
+      elseif usable + #todo < want + 4 then todo[#todo + 1] = c end
+    end
+    if usable >= want or #todo == 0 or cached_only then break end
+    if not path.is_file(tool) then error("Card check needs " .. win(tool) .. " (cargo build --release --manifest-path Tools/ok-extract/Cargo.toml --bin ok-extract)", 0) end
+    say(("Checking %d cards' outfit 0 (clothes, materials) ..."):format(#todo))
+    -- The library as the game folder: an OK card opens from the library and its own pack only.
+    local argv = { win(tool), win(lib), "--oklib", "crowd-check", win(lib) }
+    for _, c in ipairs(todo) do argv[#argv + 1] = win(c) end
+    local r = proc.run(argv, { capture = true })
+    local fresh = {}
+    for line in (r.stdout or ""):gmatch("[^\r\n]+") do
+      local c, dressed, roles, unsupported = line:match("^OKCROWD\t([^\t]+)\t([01])\t([^\t]*)\t(.*)$")
+      if c then fresh[c] = { stamp = stamp(c), dressed = dressed == "1", roles = roles, unsupported = unsupported } end
+    end
+    -- (another room may have written the store meanwhile: merge)
+    known = read_card_checks(store, {})
+    for c, k in pairs(fresh) do known[c] = k end
+    local rows = {}
+    for c, k in pairs(known) do rows[#rows + 1] = table.concat({ CARD_CHECK_VERSION, c, k.stamp, k.dressed and "1" or "0", k.roles, k.unsupported }, "\t") end
+    table.sort(rows)
+    path.mkdir(path.parent(store), true)
+    path.write_text(store, table.concat(rows, "\n") .. "\n", { atomic = true })
+    if not next(fresh) then error("Card check failed:\n" .. (r.stdout or "") .. (r.stderr or ""), 0) end
+    -- A card that cannot be opened is left out this time (not remembered).
+    for _, c in ipairs(todo) do out[c] = fresh[win(c)] or { dressed = false, roles = "", unsupported = "cannot be opened" } end
+  end
+  return out
+end
+
 local function main()
   local o = parse(arg)
   local root = ok.root
   local launch = read_json(path.join(root, "Content/IndependentResources/StreetSocialData/Launch/runtime.json"))
   local materials = read_json(path.join(root, launch.materials))
   local exe = o.executable or (o.editor and path.join(ok.engine_root(), "Engine/Binaries/Win64/UnrealEditor.exe")) or newest_stage(root)
-  if not exe or not path.is_file(exe) then error("No StreetSocial stage under Saved/StreetSocial/Build (build one with Tools/rebuild_street_social_runtime.lua)", 0) end
-  -- Cards: the crowd set first, then the street heroines. A card an earlier room could not draw (its materials are not
-  -- among the shared runtime parents: "Source material coverage incomplete" in that run's log) is left out and the
-  -- next one takes its place.
+  if not o.check_cards and not (exe and path.is_file(exe)) then error("No StreetSocial stage under Saved/StreetSocial/Build (build one with Tools/rebuild_street_social_runtime.lua)", 0) end
+  -- Cards: the crowd set first, then the street heroines, in file name order. A card the room cannot use is left out
+  -- and the next one takes its place (check_cards).
   local dirs = o.cards and { o.cards } or { path.join(root, "Content/CharacterCards/CrowdAPNG"), path.join(root, "Content/CharacterCards/StreetHeroines") }
-  local unusable = {}
-  local runs = path.join(root, "Saved/Crowd")
-  if path.is_dir(runs) then
-    for _, n in ipairs(path.list(runs)) do
-      local log = path.join(runs, n, "game.log")
-      if n:match("^Room100") and path.is_file(log) then
-        for line in io.lines(log) do
-          local card = line:match("LogTemp: Error: APNG (.-%.png): Source material coverage incomplete")
-          if card then unusable[path.norm(card):lower()] = true end
-        end
-      end
-    end
-  end
-  local cards, skipped = {}, 0
+  local all = {}
   for _, dir in ipairs(dirs) do
     local here = {}
     if path.is_dir(dir) then
       for _, n in ipairs(path.list(dir)) do
-        if n:lower():match("%.png$") then here[#here + 1] = path.join(dir, n) end
+        -- (".okremake-*.png": a card being rewritten in place)
+        if n:lower():match("%.png$") and n:sub(1, 1) ~= "." then here[#here + 1] = path.join(dir, n) end
       end
     end
     table.sort(here)
-    for _, c in ipairs(here) do
-      if unusable[path.norm(c):lower()] then skipped = skipped + 1
-      elseif #cards < o.count then cards[#cards + 1] = c end
-    end
+    for _, c in ipairs(here) do all[#all + 1] = c end
   end
-  if skipped > 0 then say(("Left out %d cards an earlier room could not draw"):format(skipped)) end
+  local verdicts = check_cards(root, all, o.check_cards and math.huge or o.count, o.no_card_check)
+  local cards, skipped, undressed, unchecked = {}, 0, 0, 0
+  for _, c in ipairs(all) do
+    -- (no verdict: past the cards needed, or --no-card-check without one)
+    local v = verdicts[c]
+    if not v then unchecked = unchecked + 1; if o.no_card_check and #cards < o.count then cards[#cards + 1] = c end
+    elseif v.unsupported ~= "-" then skipped = skipped + 1; say(("Left out %s: material the runtime cannot draw (%s)"):format(path.name(c), v.unsupported))
+    elseif not v.dressed then undressed = undressed + 1; say(("Left out %s: outfit 0 wears neither a top nor a bottom (%s)"):format(path.name(c), v.roles))
+    elseif #cards < o.count then cards[#cards + 1] = c end
+  end
+  say(("Cards: %d usable of %d checked (%d with an unsupported material, %d undressed), %d not checked"):format(#all - unchecked - skipped - undressed,
+    #all - unchecked, skipped, undressed, unchecked))
+  if o.check_cards then return 0 end
   if #cards < o.count then error(("only %d usable cards, %d asked for"):format(#cards, o.count), 0) end
 
   local anim = path.join(root, "Content/IndependentResources/RuntimeAnimations")

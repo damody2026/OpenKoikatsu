@@ -9,6 +9,35 @@
 - 站姿：manifest `idle_variants` 是站姿池（Studio 立ち 2～30、待機 1～3、看窗外／天空／瀑布、對話等待姿勢，都不拿道具）。每人依卡片雜湊挑 3 種，烘進自己的動作庫；`OKSetCrowdRuntimeIdleVariant` 切換。基本站姿用 1.33 s 的立ち1。
 - 鏡頭：WASD、Q/E、右鍵轉向、Shift 加速。
 
+## 卡片：來源與排除規則（2026-10-28）
+
+- 來源：先 `Content/CharacterCards/CrowdAPNG`（`C000.png`…，依檔名），再 `Content/CharacterCards/StreetHeroines`；取前 `--count` 張可用的。`CrowdAPNG/sources.tsv` 記每張 OK 卡的原卡（`D:/KoikatuSunshine/UserData/chara/female/…`）。卡片只留本機，不進版控。
+- 排除（`run_crowd_room100.lua` 的 `check_cards`，啟動前離線判斷，不讀以前的遊戲 log）：`ok-extract <lib> --oklib crowd-check <lib> <卡>...`（`Tools/ok-extract/src/oklib/crowd_check.rs`）照 runtime 的方式開第 0 套服裝，看畫出來的部件：
+  - 沒有 `clothes_top` 也沒有 `clothes_bot` 的部件 → 沒穿衣服，排除。卡片封面不是第 0 套服裝，不能拿來判斷。
+  - 有部件的材質對不到共用 runtime 材質（遊戲裡會報 `Source material coverage incomplete`）→ 排除。規則照抄 `OKRuntimeSharedMaterialRecipe`（`KKRuntimeSharedMaterial.cpp`），**那邊新增材質家族時這裡也要改**。
+  - 結果依檔案大小與修改時間存在 `Saved/Crowd/card-check.tsv`（可刪，會重算）。依序檢查到湊滿所需張數為止，每張約 3～6 秒（125 張全查一次 12 分鐘）；之後只開新卡或改過的卡，沒變動時 0.03 秒。`--no-card-check`：不開卡，只用快取（沒有判定的卡當可用）。`--check-cards` 只做檢查、印出可用張數。
+- 驗證（10-28）：家族比對前的版本對原本 111 張卡的判定，和 `Room100-20261027T233943` 等舊 log 完全一致：沒穿 4 張（C002、C024、C037、C079），材質不支援 11 張（C049～C053、C055、C062～C064、C066、C068，都是 `xukmi/MainItemStudioAlphaPlus`）；96 張可對照的卡，部件角色和 Unreal 的 `APNG …: outfit 0 roles …` 逐字相同。
+- 補卡（10-28）：從 `D:\KoikatuSunshine\UserData\chara\female` 挑 18 張沒用過的卡，`ok-extract D:/KoikatuSunshine --oklib cards <base_v1> <清單> <輸出>` 轉 OK 卡，再 `--oklib okcard-check <base_v1> <輸出> <清單> live` 驗收。15 張 MATCH（时崎狂三、一之濑千鹤、雾切响子有 `gaps`，不用）；其中重绘佩拉的 `Koikano/main_clothes_emblem` 材質 runtime 不支援，剩 14 張裝成 `C100`～`C113`：
+
+  | 卡 | 原卡 |
+  |---|---|
+  | C100 | 重绘八重神子.png |
+  | C101 | 重绘申鹤.png |
+  | C102 | 重绘符玄1.1.png |
+  | C103 | 重绘阮梅.png |
+  | C104 | 重绘流萤.png |
+  | C105 | 重绘灵砂.png |
+  | C106 | 重绘星见雅.png |
+  | C107 | 重绘克拉拉.png |
+  | C108 | 重绘五河琴里B.png |
+  | C109 | 冰菓 - 千反田爱瑠.png |
+  | C110 | 鸣潮 泱泱.png |
+  | C111 | 椿.png |
+  | C112 | 折枝.png |
+  | C113 | kks长离abmx修复.png |
+
+  可用卡：125 張中 121 張（只排除沒穿的 C002、C024、C037、C079）。這是錄影 session 讓 `xukmi/…Plus` 依 Shader Forge 家族畫出（`KKRuntimeSharedMaterial.cpp` 的 `ShaderFamily`，crowd_check 同規則）之後的規則；遊戲執行檔沒編進那個改動時，那 11 張在遊戲裡仍會報 coverage incomplete，可用的是 110 張。
+
 ## 量測方式
 
 - `--benchmark <秒>`：全員畫出並暖機後量測，寫 `report.json`（平均／P95／P99、game／render／GPU ms、draw 數、三角形數）與截圖，然後結束。數字與街頭 `/fps` 同源（`GAverageFPS` 之外另記每幀時間）。

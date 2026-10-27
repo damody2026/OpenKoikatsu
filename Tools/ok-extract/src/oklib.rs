@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
+mod crowd_check;
+
 pub const TOKEN_MAGIC: &[u8; 8] = b"OKLIB001";
 pub type Id = [u8; 16];
 const MODEL_MAGIC: &[u8; 8] = b"OKMODEL2";
@@ -2135,6 +2137,11 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let verdict = if a == b { "MATCH" } else { "DIFFERENT" };
             if a != b { let _ = std::fs::write(work.join("a.okpreview"), &a); let _ = std::fs::write(work.join("b.okpreview"), &b); }
             println!("OKCLOTHES test {} outfit={outfit} {verdict} okclothes={} card={} dropped={dropped:?}", card.display(), packed.len(), original.len());
+        }
+        "crowd-check" => {
+            // crowd-check <lib> <card>...: whether the hundred-girl room can use each card's outfit 0 (dressed, every drawn
+            // material supported): OKCROWD lines (oklib/crowd_check.rs).
+            crowd_check::cli(&lib.ok_or("library directory required")?, game, &args[2..])?;
         }
         "check" => {
             // check <lib>: every mesh record decodes with the current layout.

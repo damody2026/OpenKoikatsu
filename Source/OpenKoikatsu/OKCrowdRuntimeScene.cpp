@@ -840,6 +840,9 @@ struct FScene : TSharedFromThis<FScene> {
    E.Material=MoveTemp(S.Materials);
    // Missing families must be reported before costly private animation work.
    for(const auto& P:E.Material.Parts)if(OKRuntimeSharedMaterialRecipe(P)==EKKRuntimeMaterialRecipe::None){Fail(E,FString::Printf(TEXT("Source material coverage incomplete: part %d name=%s role=%s kind=%d blend=%s %s"),P.NativePart,*P.Name,*P.Role,P.ShaderKind,*P.Blend,*P.SourceMetadataJson));return;}
+   // What she wears: the roles `ok-extract --oklib crowd-check` must report offline for this card (the crowd room leaves
+   // out a girl with neither a top nor a bottom before launching: Tools/run_crowd_room100.lua).
+   {TArray<FString> Roles;for(const auto& P:E.Material.Parts)Roles.AddUnique(P.Role);Roles.Sort();UE_LOG(LogTemp,Display,TEXT("APNG %s: outfit %d roles %s"),*E.Path,E.Outfit,*FString::Join(Roles,TEXT(",")));}
    FKKRuntimePoseRequest R;R.PackedGpuCache=true;R.Snapshot=MoveTemp(S.Snapshot);R.Bones=E.Bones;R.Parts=MoveTemp(S.Parts);R.CharacterIdentity=S.RigIdentity;
    R.PersistentSourceIdentity=S.PersistentSourceIdentity;E.PoseRecipe=MakeShared<const FKKRuntimePoseRequest,ESPMode::ThreadSafe>(R);
    E.ClipSources={0,E.WalkIndex};
