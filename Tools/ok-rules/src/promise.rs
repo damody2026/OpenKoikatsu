@@ -152,7 +152,9 @@ fn promise(c: &Catalog, r: &Value) -> Value {
     let d = date((start / 1440) as i32, 12.0);
     let hours = (start % 1440) as f64 / 60.0;
     let opens_soon = (1..=4).any(|k| c.place_open(place, hours + k as f64 * 0.25, d.weekday as i32));
-    if !c.place_open(place, hours, d.weekday as i32) && !opens_soon {
+    // Its door as it closes is one too: picking her up at 22:00 when her shift at the cafe (8-22) ends (R3-260).
+    let just_closed = (1..=2).any(|k| c.place_open(place, hours - k as f64 * 0.25, d.weekday as i32));
+    if !c.place_open(place, hours, d.weekday as i32) && !opens_soon && !just_closed {
         return json!({"action": "closed", "reason": "closed", "start": start, "minute": minute, "why": c.closed_why(place, d.weekday as i32)});
     }
     // Another girl already booked near that time: he is told (both stay booked; it is his to sort out).
@@ -247,6 +249,10 @@ mod tests {
         // At the bookstore door half an hour before it opens (10:00): a meeting, they wait for it there (R3-253).
         let door = ask(json!({"place": "bookstore", "time": "09:30"}));
         assert_ne!(door["action"], "closed", "{door}");
+        // Picking her up at the cafe door as it closes (22:00, her shift's end) is a meeting too; an hour later is not (R3-260).
+        let pickup = ask(json!({"place": "cafe", "time": "22:00"}));
+        assert_ne!(pickup["action"], "closed", "{pickup}");
+        assert_eq!(ask(json!({"place": "cafe", "time": "23:00"}))["action"], "closed");
     }
 
     #[test]
