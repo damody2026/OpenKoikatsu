@@ -130,7 +130,9 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
   // Walking somewhere together (an outing on its way) is not an awkward silence: side by side, quiet is fine.
   // Texting her on the phone is not standing in front of her: a reply can take minutes, and she writes again on her own
   // (SelfText), not after seconds of "silence".
-  const bool Waiting=Talking||S.FreeTalkBusy||S.RemoteMode==1||S.OutingGirl!=INDEX_NONE||!S.FreeTalkDraft.IsEmpty()||!S.FreeTalkLivePending.IsEmpty()||S.FreeTalkLiveSpeaking||S.ClockPaused||S.FreeTalkMicOpen||S.Bluff.Active||S.SoloGirl!=INDEX_NONE||(S.Pair.Partner==Partner&&(S.Pair.Read||[&S]{const FOKStreetActivity* A=S.ActId.IsEmpty()?nullptr:OKStreetFindActivity(S.ActId);
+  // Her song (its line before it, the song, its line after) is not his silence: a nudge in its opening line had her say
+  // "say something!" and the song was cut off after nine seconds (R3-233).
+  const bool Waiting=Talking||Singing||S.FreeTalkBusy||S.RemoteMode==1||S.OutingGirl!=INDEX_NONE||!S.FreeTalkDraft.IsEmpty()||!S.FreeTalkLivePending.IsEmpty()||S.FreeTalkLiveSpeaking||S.ClockPaused||S.FreeTalkMicOpen||S.Bluff.Active||S.SoloGirl!=INDEX_NONE||(S.Pair.Partner==Partner&&(S.Pair.Read||[&S]{const FOKStreetActivity* A=S.ActId.IsEmpty()?nullptr:OKStreetFindActivity(S.ActId);
    // reading or studying side by side: the reading or study pose, or anything done in the library
    return A&&((A->Place&&FCString::Strcmp(A->Place,TEXT("library"))==0)||(A->FemaleClip&&(FCString::Strstr(A->FemaleClip,TEXT("read"))||FCString::Strstr(A->FemaleClip,TEXT("study")))));}()))||S.Table.ContainsByPredicate([](const FOKStreetDish& D){return D.Served&&D.Percent>0.f;})||Wall<S.FreeTalkQuietUntil; // playing cards (praying side by side, reading together, eating) is not silence, nor keeping quiet when she asked for it
   // Only time he could have answered counts: the clock stands still while she thinks or speaks.
