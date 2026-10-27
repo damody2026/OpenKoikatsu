@@ -667,7 +667,8 @@ void AOKStreetSocialScene::TickSong(double Now){
     if(K!=G.Cue&&G.CueClip.IsValidIndex(K)){G.Cue=K;SongStage(G.CueClip[K],G.CueClip.IsValidIndex(K+1)?G.CueClip[K+1]:G.OutroClip,TEXT("cue"));}
     // The caption: the line being sung, karaoke-like, instead of the whole sheet growing in the box.
     int32 L=G.Line;while(G.LineAt.IsValidIndex(L+1)&&G.LineAt[L+1]<=Played)++L;
-    if(L!=G.Line&&G.LineText.IsValidIndex(L)){G.Line=L;OKSongCaption(S,TEXT("♪ ")+G.LineText[L]+TEXT(" ♪"));RefreshUI();}}
+    // (An empty line is a rest: she hums or pauses for a while, so no words stay up.)
+    if(L!=G.Line&&G.LineText.IsValidIndex(L)){G.Line=L;OKSongCaption(S,G.LineText[L].IsEmpty()?FString(TEXT("♪")):TEXT("♪ ")+G.LineText[L]+TEXT(" ♪"));RefreshUI();}}
    SongStageTick();
    return;}
   if(G.SpeechStarted||Now-G.PhaseAt>10){G.Phase=EOKSongPhase::Outro;G.PhaseAt=Now;SongStage(G.OutroClip,FString(),TEXT("outro"));{const FString Outro=OKSongOccasionLine(G.Occasion,TEXT("outro_line"));SongSay(Outro);OKSongCaption(S,Outro);SongRecord(Outro,OKT(TEXT("ui.song.context_sang")));}RefreshUI();}

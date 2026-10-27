@@ -642,6 +642,38 @@ pub fn refine_heard(lines: &[(f32, String, usize)], breaths: &[(f32, f32)], sung
     out
 }
 
+/// The caption lines with a rest ("" — the game shows ♪) where she stops singing words for a while: after a breath whose
+/// next line is more than 4 s away, when the next breath only comes after a 3 s pause or is only hummed ("啊", "嗯": its
+/// transcription has no other words). Otherwise the last line stayed up through a long hum (half a minute in a song
+/// that skipped its last chorus).
+pub fn with_rests(timed: Vec<(f32, String)>, breaths: &[(f32, f32)], heard: &[String]) -> Vec<(f32, String)> {
+    const HUM: &str = "啊阿嗯恩哦喔噢呀啦哈嗚呜唔哼欸诶耶嘿嘛呢吧";
+    let wordless = |k: usize| -> bool {
+        heard.len() == breaths.len()
+            && heard[k].chars().all(|c| !(('\u{4e00}'..='\u{9fff}').contains(&c) || ('\u{3400}'..='\u{4dbf}').contains(&c)) || HUM.contains(c))
+    };
+    let Some(first) = timed.first().map(|l| l.0) else { return timed };
+    let mut out = timed.clone();
+    for k in 0..breaths.len().saturating_sub(1) {
+        let (end, next) = (breaths[k].1, breaths[k + 1].0);
+        if end < first {
+            continue;
+        }
+        let next_line = timed.iter().map(|l| l.0).find(|at| *at > end);
+        if next_line.is_some_and(|at| at <= end + 4.0) || !(next >= end + 3.0 || wordless(k + 1)) {
+            continue;
+        }
+        // (Already resting there: nothing new.)
+        let shown = out.iter().filter(|l| l.0 <= end + 0.3).max_by(|a, b| a.0.total_cmp(&b.0));
+        if shown.is_some_and(|l| l.1.is_empty()) {
+            continue;
+        }
+        out.push((end + 0.3, String::new()));
+    }
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    out
+}
+
 /// The staging: intro / outro clips and the cues during the song (seconds on the song's clock).
 /// `caption`: the sheet in the game's script (the same lines as `lyrics`); its units come back as `lines` [{at, text}]
 /// on the song's clock, for a caption that shows the line being sung.
@@ -689,6 +721,7 @@ pub fn choreograph(env: &[f32], hop: f32, lyrics: &str, caption: &str, template:
         };
         texts.iter().cloned().zip(spans).map(|(t, (at, _))| (at, t)).collect()
     };
+    let timed = with_rests(timed, &breaths, heard);
     let lines: Vec<serde_json::Value> = timed.iter()
         .map(|(at, text)| serde_json::json!({"at": ((at - 0.1).max(0.0) * 100.0).round() / 100.0, "text": text})).collect();
     let mut cues: Vec<(f32, String, &str)> = Vec::new();
@@ -991,6 +1024,28 @@ mod tests {
         assert_eq!(decide(&rel, &SongAsk { event_active: true, ..ask(90.0) }, &t).reason, "event_active");
         let dev = decide(&rel, &SongAsk { override_thresholds: true, ..ask(0.0) }, &t);
         assert!(dev.ok && dev.override_thresholds);
+    }
+
+    #[test]
+    fn a_long_hum_shows_a_rest() {
+        // The end of a song that skipped its last chorus: the second chorus ends at 61 s, a pause, a hum at 77 s, and the
+        // last chorus only starts at 88 s.
+        let breaths = [(45.7, 48.5), (49.0, 61.0), (77.0, 77.4), (88.3, 89.9)];
+        let heard: Vec<String> = ["我是你的戀人。", "把害羞藏在笑容里，這一刻我會一直記得。", "嗯。", "從今天開始。"].iter().map(|s| s.to_string()).collect();
+        let timed = vec![(45.7, "我是你的戀人".to_string()), (49.0, "把害羞藏在笑容裡".to_string()), (52.5, "這一刻我會一直記得".to_string()), (88.3, "從今天開始".to_string())];
+        let out = with_rests(timed.clone(), &breaths, &heard);
+        assert_eq!(out.len(), 5, "{out:?}");
+        assert!((out[3].0 - 61.3).abs() < 0.01 && out[3].1.is_empty());
+        assert_eq!(out[4].1, "從今天開始");
+        // Lines a breath apart, sung on: no rest.
+        let tight = [(0.5, 3.0), (3.4, 6.0), (6.3, 9.0)];
+        let lines = vec![(0.5, "一".to_string()), (3.4, "二".to_string()), (6.3, "三".to_string())];
+        assert_eq!(with_rests(lines.clone(), &tight, &[]), lines);
+        // A hummed breath right after a line, the next line soon after: no rest either.
+        let hum = [(0.5, 3.0), (3.4, 4.0), (5.0, 8.0)];
+        let said: Vec<String> = ["一", "啊", "二"].iter().map(|s| s.to_string()).collect();
+        let two = vec![(0.5, "一".to_string()), (5.0, "二".to_string())];
+        assert_eq!(with_rests(two.clone(), &hum, &said), two);
     }
 }
 
