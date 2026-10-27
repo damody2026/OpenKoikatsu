@@ -578,6 +578,11 @@ pub fn chat_order_payer(r: &Value) -> Value {
     let lean = r.get("lean").and_then(Value::as_str).unwrap_or("player_pays");
     let insist = r.get("insist").and_then(Value::as_f64).unwrap_or(0.0);
     let promise = r.get("promise").and_then(Value::as_bool).unwrap_or(false);
+    // What he buys to give her (his_gift: a book for her, not her own pick, nothing to eat): his, whatever they settled
+    // for another bill ("the dango are on me" made her pay for the novel he gave her, R3-255b).
+    if r.get("his_gift").and_then(Value::as_bool).unwrap_or(false) {
+        return json!({"option": "player_pays"});
+    }
     let option = match agreed(r) {
         Some(o) => o,
         None if promise => "she_pays",
@@ -952,6 +957,8 @@ mod tests {
         assert_eq!(o(json!({"lean": "player_pays", "insist": 0.4, "has_hers": true})), "choice", "her own order, nothing settled: he decides");
         assert_eq!(o(json!({"lean": "split", "promise": true})), "she_pays", "her promise");
         assert_eq!(o(json!({"lean": "split", "promise": true, "agreed": "him"})), "player_pays", "he insisted and she let him");
+        // The novel he buys to give her: his, though she said the dango were on her (R3-255b).
+        assert_eq!(o(json!({"lean": "she_pays", "insist": 0.9, "agreed": "her", "promise": true, "his_gift": true})), "player_pays");
         assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays"}))["option"], "split", "nothing settled");
         assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays", "agreed": "him"}))["option"], "player_pays");
         assert_eq!(super::checkout_timeout(&json!({"lean": "she_pays"}))["option"], "she_pays");

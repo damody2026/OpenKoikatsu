@@ -96,7 +96,8 @@ void AOKStreetSocialScene::SaveCalendar(){
  if(S.ResumeWithHim.IsEmpty()&&Candidate.HasPlayerSpot){Candidate.WithHim.Reset();const FVector His=Candidate.PlayerSpot;
   for(int32 I=1;I<S.Manifest.Characters.Num();++I){if(!S.Agents.IsValidIndex(I-1))continue;
    const bool Follow=S.Companion==I||S.OutingGirl==I||S.Party.Contains(I);
-   const bool Stay=S.Pair.Partner==I||S.Target==I||S.PrivateGirl==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I);
+   // The one he is in free talk with counts too (shopping with her at the bookstore, the talk open, no activity on).
+   const bool Stay=S.Pair.Partner==I||S.Target==I||FreeTalkPartner()==I||S.PrivateGirl==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I);
    if(!Follow&&!Stay)continue;
    FOKStreetStore::FWithHim W;W.Id=OKStreetStableId(S.Manifest.Characters[I]);W.Mode=Follow?TEXT("follow"):TEXT("stay");
    const FVector Her=S.Agents[I-1].Position;

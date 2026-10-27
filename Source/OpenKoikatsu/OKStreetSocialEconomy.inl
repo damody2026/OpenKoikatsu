@@ -254,6 +254,8 @@ void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
  // She promised to treat him: hers to pay, unless he insists now (chat_order_payer, promise).
  FString Lean;float Insist=0;HeroineCheckoutLean(Her,CartTotal(),Lean,Insist);
  auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Her));Request->SetBoolField(TEXT("has_hers"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return L.ForHer;}));Request->SetNumberField(TEXT("insist"),Insist);Request->SetBoolField(TEXT("promise"),S.HerTreatPromise.Contains(Her));
+ // Everything a thing he buys to give her (for her, not her own pick, nothing to eat or drink): his to pay (R3-255b).
+ Request->SetBoolField(TEXT("his_gift"),S.Cart.Num()>0&&!S.Cart.ContainsByPredicate([&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return !L.ForHer||L.HerOwn||!I||I->Consumable;}));
  const TSharedPtr<FJsonObject> Payer=OKRulesEval(S,Request);const FString Option=Payer.IsValid()?Payer->GetStringField(TEXT("option")):Lean;
  if(!PayAgreed(Her).IsEmpty()&&S.PayAgreedShop.IsEmpty())S.PayAgreedShop=S.ShopPlace; // used here: this shop's agreement from now on
  UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d lines=%d lean=%s insist=%.2f agreed=%s promise=%d -> %s"),Her,S.Cart.Num(),*Lean,Insist,*PayAgreed(Her),S.HerTreatPromise.Contains(Her),*Option);
