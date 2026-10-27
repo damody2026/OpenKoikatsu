@@ -13,6 +13,9 @@ use crate::tuning::Tuning;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// How quickly a line's first moment follows its people (seconds to close most of the way).
+const REFRAME_EASE: f64 = 0.25;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LiveConfig {
@@ -88,6 +91,9 @@ pub struct LiveState {
     /// been out of the picture (negative: in it). A bow drops her face but not her hips: held a moment, she comes back up.
     pub framed_hips: f64,
     pub out_since: f64,
+    /// The pose the line's first moment follows, eased towards each frame's: her nod, his breathing and a talking
+    /// gesture went into the view as they were and it shook while the speaker changed (R3-264).
+    pub reframe_pose: Option<math::Pose>,
 }
 
 pub struct Live {
@@ -278,7 +284,20 @@ impl Live {
         }
     }
 
+    /// The line's first moment follows its people, eased (REFRAME_EASE seconds): the turn towards each other comes
+    /// through, the shake of their heads does not.
+    fn ease_retarget(&mut self, pose: Pose, dt: f64) {
+        let k = 1.0 - (-dt.max(0.0) / REFRAME_EASE).exp();
+        let eased = match self.st.reframe_pose {
+            Some(p) => Pose { pos: math::lerp3(p.pos, pose.pos, k), rot: p.rot.slerp(pose.rot, k), fov: math::lerp(p.fov, pose.fov, k) },
+            None => pose,
+        };
+        self.st.reframe_pose = Some(eased);
+        self.st.rig.retarget(eased);
+    }
+
     fn frame_shot(&mut self, cut: bool) {
+        self.st.reframe_pose = None;
         let Some(spec) = self.st.shot.clone() else { return };
         self.st.pov_fallback = None;
         let speaker = self.st.line.as_ref().map(|l| l.who.clone()).unwrap_or_default();
@@ -384,6 +403,7 @@ impl Live {
             pose.pos = math::add(c.from, math::scale(math::normalize(math::sub(c.pose.pos, c.from)), dist));
         }
         if pick != 0 || pulled {
+            self.st.reframe_pose = None;
             if self.st.rig.moving() {
                 self.st.rig.retarget(pose);
             } else {
@@ -483,7 +503,7 @@ impl Live {
             let spec = self.st.shot.clone().unwrap_or_default();
             let partner = self.st.people.first().cloned().unwrap_or_default();
             if let Some(pose) = spec.on.as_deref().and_then(|on| self.pov(on)).or_else(|| self.pov(&partner)) {
-                self.st.rig.retarget(pose);
+                self.ease_retarget(pose, dt);
             }
         } else if self.st.reframe_for > 0.0 && self.st.active {
             self.st.reframe_for -= dt;
@@ -495,7 +515,7 @@ impl Live {
                         self.frame_shot(true);
                     } else {
                         let pick = self.st.probe.as_ref().and_then(|j| j.chosen).unwrap_or(0).min(candidates.len() - 1);
-                        self.st.rig.retarget(candidates[pick].pose);
+                        self.ease_retarget(candidates[pick].pose, dt);
                     }
                 }
             }
@@ -743,6 +763,35 @@ mod tests {
         assert_eq!(l.st.shot.as_ref().unwrap().on.as_deref(), Some("her2"));
         let f = l.st.rig.current.rot.forward();
         assert!(f[1] > 0.9, "looks at her2: {:?}", f);
+    }
+
+    /// The speaker changes while their heads shake a little (a nod, breathing, a gesture each frame): the view follows
+    /// them for the line's first moment without shaking (R3-264).
+    #[test]
+    fn the_first_moment_of_a_line_does_not_shake() {
+        for pov in [true, false] {
+            let mut l = Live::open(LiveConfig::default()).unwrap();
+            l.tuning.live.pov = pov;
+            l.input(LiveInput::Conversation { player: "he".into(), people: vec!["her1".into()] });
+            l.input(LiveInput::Line { who: "her1".into(), name: String::new(), color: String::new(), text: "嗯。".into(), voiced: false });
+            for _ in 0..120 {
+                l.tick(facts(0.016, -1.0, 0));
+            }
+            l.input(LiveInput::Line { who: "he".into(), name: String::new(), color: String::new(), text: "走吧。".into(), voiced: false });
+            let mut at = Vec::new();
+            for i in 0..50 {
+                let mut f = facts(0.016, -1.0, 0);
+                let shake = if i % 2 == 0 { 3.0 } else { -3.0 };
+                for a in f.actors.values_mut() {
+                    a.bones.get_mut("head").unwrap().pos[2] += shake;
+                    a.bones.get_mut("head").unwrap().pos[1] += shake;
+                }
+                at.push(l.tick(f).camera.map(|c| c.pos).unwrap_or_default());
+            }
+            let worst = at.windows(3).map(|w| math::len(math::add(math::sub(w[2], w[1]), math::sub(w[0], w[1])))).fold(0.0, f64::max);
+            // Followed as it came, the first-person view shook 60 cm frame to frame here.
+            assert!(worst < 3.0, "pov={pov}: the view shook {worst} cm");
+        }
     }
 
     /// By default a line shows whole at once (the voice plays over it; a click skips it).

@@ -17,6 +17,9 @@ pub struct Reference {
     pub hips: [f64; 4],
     pub facing: V3,
     pub scale: f64,
+    /// The root's rotation then (all zero in references kept from before: the hips alone turn the camera).
+    #[serde(default)]
+    pub root: [f64; 4],
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -34,6 +37,14 @@ pub struct Portrait {
     pub since_capture: f64,
     #[serde(default)]
     pub captured: String,
+    /// The last tick's step and whom the last frame showed: the heading is eased while the same one stays.
+    #[serde(default)]
+    pub dt: f64,
+    #[serde(default)]
+    pub last_shown: String,
+    /// Her hips' own turn against her root, eased (degrees, per character).
+    #[serde(default)]
+    pub hip_turn: BTreeMap<String, f64>,
 }
 
 const PIVOTS: [&str; 4] = ["spine03", "spine02", "hips", "head"];
@@ -54,6 +65,7 @@ impl Portrait {
 
     pub fn tick(&mut self, t: &PortraitTuning, dt: f64) {
         self.since_capture += dt.max(0.0);
+        self.dt = dt.max(0.0);
         if self.shown != self.wanted {
             if self.shown.is_empty() || self.alpha <= 0.0 {
                 self.shown = self.wanted.clone();
@@ -82,6 +94,7 @@ impl Portrait {
             hips: a.bone("hips").map(|h| h.rot).unwrap_or(a.root.rot),
             facing,
             scale: a.root.scale.abs().max(1e-6),
+            root: a.root.rot,
         };
         self.references.insert(who.to_string(), r.clone());
         Some(r)
@@ -119,9 +132,30 @@ impl Portrait {
         let (Some(pivot), true) = (a.bone(&r.pivot), self.alpha > 0.0) else { return out };
         // Heading: how far the hips turned since the reference, applied to the facing then.
         let hips_now = a.bone("hips").map(|h| h.q()).unwrap_or(a.root.q());
-        let turn = hips_now.times(Quat::from_array(r.hips).inverse());
-        let f = turn.rotate(r.facing);
-        let yaw = if f[0] * f[0] + f[1] * f[1] > 1e-6 { yaw_of(f) } else { *self.yaw.get(&who).unwrap_or(&yaw_of(r.facing)) };
+        let heading = |turn: Quat| {
+            let f = turn.rotate(r.facing);
+            (f[0] * f[0] + f[1] * f[1] > 1e-6).then(|| yaw_of(f))
+        };
+        let by_hips = heading(hips_now.times(Quat::from_array(r.hips).inverse()));
+        let wrap = |d: f64| (d + 540.0).rem_euclid(360.0) - 180.0;
+        // Her root turns with where she goes; her hips swing a few degrees round it with every step, and the portrait
+        // swung with them while she walked (R3-263). The root's heading at once, the hips' own turn eased (a seated pose
+        // turned at the hips still comes through). A new speaker is framed at once.
+        let by_root = (r.root.iter().any(|v| *v != 0.0)).then(|| heading(a.root.q().times(Quat::from_array(r.root).inverse()))).flatten();
+        let yaw = match (by_root, by_hips) {
+            (Some(root), Some(hips)) => {
+                let extra = wrap(hips - root);
+                let eased = match self.hip_turn.get(&who) {
+                    Some(prev) if self.last_shown == who && t.yaw_ease > 0.0 => prev + wrap(extra - prev) * (1.0 - (-self.dt / t.yaw_ease).exp()),
+                    _ => extra,
+                };
+                self.hip_turn.insert(who.clone(), eased);
+                root + eased
+            }
+            (_, Some(hips)) => hips,
+            _ => *self.yaw.get(&who).unwrap_or(&yaw_of(r.facing)),
+        };
+        self.last_shown = who.clone();
         self.yaw.insert(who.clone(), yaw);
         let frame = heading_frame(yaw);
         let s = a.root.scale.abs().max(1e-6) / r.scale;
@@ -201,12 +235,40 @@ mod tests {
         // Turning or nodding the head does not turn the camera.
         let head = shot(&mut p, actor(0.0, 30.0, 15.0));
         assert_eq!(head.rot, base.rot);
-        // Turning the body does.
+        // Turning the body does (eased: given the time to).
+        p.tick(&t, 10.0);
         let body = shot(&mut p, actor(40.0, 0.0, 0.0));
         let angle = Quat::from_array(body.rot).angle_to(Quat::from_array(base.rot)).to_degrees();
         assert!((angle - 40.0).abs() < 0.5, "{angle}");
         // The camera looks at her from the front (she faces +Y at yaw 0).
         assert!(base.pos[1] > 50.0, "{:?}", base.pos);
+    }
+
+    #[test]
+    fn walking_hip_swing_does_not_swing_the_portrait() {
+        // Her hips swing ±6° twice a second while she walks (R3-263); she then turns round by 90°.
+        let t = PortraitTuning::default();
+        let mut p = Portrait::default();
+        p.want("ayu");
+        p.tick(&t, 1.0);
+        let base = Quat::from_array(shot(&mut p, actor(0.0, 0.0, 0.0)).rot);
+        let mut worst: f64 = 0.0;
+        for i in 0..120 {
+            p.tick(&t, 1.0 / 60.0);
+            // One stride a second: the hips swing round the root, which keeps her heading.
+            let swing = 6.0 * (i as f64 / 60.0 * std::f64::consts::TAU).sin();
+            let mut a = actor(0.0, 0.0, 0.0);
+            a.bones.get_mut("hips").unwrap().rot = Quat::yaw_deg(swing).to_array();
+            let r = Quat::from_array(shot(&mut p, a).rot);
+            worst = worst.max(r.angle_to(base).to_degrees());
+        }
+        assert!(worst < 2.0, "the portrait swung {worst}°");
+        for _ in 0..120 {
+            p.tick(&t, 1.0 / 60.0);
+            shot(&mut p, actor(90.0, 0.0, 0.0));
+        }
+        let turned = Quat::from_array(shot(&mut p, actor(90.0, 0.0, 0.0)).rot).angle_to(base).to_degrees();
+        assert!((turned - 90.0).abs() < 3.0, "a turn still comes through: {turned}°");
     }
 
     #[test]

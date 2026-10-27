@@ -176,6 +176,9 @@ pub struct PortraitTuning {
     /// Captures per second at most (0: every `every` frames). Two scene renders each (colour and coverage): counted in
     /// frames, a game at 150 fps paid 150 extra renders a second for a small picture that looks the same at 30.
     pub capture_hz: f64,
+    /// Seconds the portrait takes to follow her hips' own turn against her root (0: at once). Walking swings them a few
+    /// degrees each step; the root's heading is followed at once.
+    pub yaw_ease: f64,
     /// Where offstage speakers stand (out of every view).
     pub offstage_at: [f64; 3],
     /// Their motion when the story gives none (group:category:no; 0:0:1 is Studio's 立ち1).
@@ -197,6 +200,7 @@ impl Default for PortraitTuning {
             supersample: 2.0,
             every: 3,
             capture_hz: 30.0,
+            yaw_ease: 1.0,
             offstage_at: [0.0, 50000.0, 0.0],
             offstage_motion: "0:0:1".into(),
         }
