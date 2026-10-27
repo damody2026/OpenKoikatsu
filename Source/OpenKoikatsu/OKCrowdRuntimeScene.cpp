@@ -104,6 +104,9 @@ static TAutoConsoleVariable<int32> CVarOKMouthAlwaysDriven(TEXT("ok.Mouth.Always
 static TAutoConsoleVariable<float> CVarOKCrowdOutlineRange(TEXT("ok.Crowd.OutlineRange"),0.f,TEXT("cm: farther characters draw no outline shells (0: always)"));
 // GPU rig: 1 poses the render bones that are her own rig bones with the full matrices (Unity's shear) instead of the
 // pose bank's per-axis scale composition (a before/after check of GpuRig.usf NativeWorld). Read when the rig installs.
+// Foot-slide check (Docs/CROWD_ROOM100.md): 1 keeps every drawn girl's frame (time, clip A/B, rendered clip times, blend,
+// position, yaw) and writes walk.tsv beside the report (gpu_rig::foot_slip::gpu_rig_foot_slip_trace reads it).
+static TAutoConsoleVariable<int32> CVarOKCrowdWalkTrace(TEXT("ok.Crowd.WalkTrace"),0,TEXT("1: record each girl's motion and clip times every frame into walk.tsv beside the report"));
 static TAutoConsoleVariable<int32> CVarOKCrowdGpuRigFullBones(TEXT("ok.Crowd.GpuRigFullBones"),0,TEXT("1: GPU rig native bones as full matrices, not the bank's composition (read at install)"));
 static TAutoConsoleVariable<int32> CVarOKCrowdLogSlowEntries(TEXT("ok.Crowd.LogSlowEntries"),0,TEXT("1: log a character's frame update taking over 1 ms, split into speech/behaviour, face look, face upload and components."));
 template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
@@ -326,6 +329,8 @@ struct FEntry {
  FString Path,Id,Error;int32 Stage=0,TextureCursor=0,WalkIndex=1,SelectionIndex=0;
  int32 Outfit=0; // the card's coordinate she wears (manifest outfits, her everyday clothes)
  float WalkSpeed=0; // cm/s her walk clip carries her (the snapshot's; 0 unknown)
+ TArray<float> WalkCurve; // the same through the walk, cm/s per 1/60 s from its start (empty: unknown)
+ TArray<FVector2f> WalkPivot; // the planted foot's ball then, in her component space (UE x, y cm)
  // Her actor in the composed animation bank: entries are composed in order, skipping the ones that failed to load.
  int32 BankActor=INDEX_NONE;bool ReducedBudget=false,SourceGeometryPreserved=false;
  uint64 SourceVertices=0,SourceTriangles=0;
@@ -845,7 +850,7 @@ struct FScene : TSharedFromThis<FScene> {
  }
  void Prepare(FEntry& E){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_PrepareEntry);
   if(E.Stage==1&&E.Snapshot.IsReady()){
-   auto S=E.Snapshot.Consume();E.WalkSpeed=S.WalkSpeed*100.f;E.SnapshotMs[0]=S.NativeOpenMs;E.SnapshotMs[1]=S.RigCaptureMs;E.SnapshotMs[2]=S.MeshCaptureMs;E.SnapshotMs[3]=S.MaterialCaptureMs;if(!S.Error.IsEmpty()){Fail(E,S.Error);return;}FString Error;TArray<int32> Remap;
+   auto S=E.Snapshot.Consume();E.WalkSpeed=S.WalkSpeed*100.f;E.WalkCurve.Reset();for(const float V:S.WalkCurve)E.WalkCurve.Add(V*100.f);E.WalkPivot.Reset();if(S.WalkPivot.Num()==S.WalkCurve.Num())for(const auto& P:S.WalkPivot)E.WalkPivot.Add(FVector2f(-P.X*100.f,P.Y*100.f));E.SnapshotMs[0]=S.NativeOpenMs;E.SnapshotMs[1]=S.RigCaptureMs;E.SnapshotMs[2]=S.MeshCaptureMs;E.SnapshotMs[3]=S.MaterialCaptureMs;if(!S.Error.IsEmpty()){Fail(E,S.Error);return;}FString Error;TArray<int32> Remap;
    TArray<FName> GameplayBones;
    if(ExternalControl)for(FName Name:{FName(TEXT("cf_j_head")),FName(TEXT("cf_j_hand_L")),FName(TEXT("cf_j_hand_R")),FName(TEXT("cf_j_bust02_L")),FName(TEXT("cf_j_bust02_R")),FName(TEXT("cm_j_head")),FName(TEXT("cm_j_hand_L")),FName(TEXT("cm_j_hand_R")),FName(TEXT("k_f_handL_00")),FName(TEXT("k_f_handR_00"))})if(S.Bones.ContainsByPredicate([Name](const auto& B){return B.Name==Name;}))GameplayBones.Add(Name);
    if(!OKCompactRuntimeRenderRig(S.Bones,S.Parts,GameplayBones,E.Bones,Remap,Error)||!OKRemapRuntimeMeshBones(S.Meshes,Remap,E.Bones.Num(),Error)){Fail(E,Error);return;}
@@ -893,7 +898,7 @@ struct FScene : TSharedFromThis<FScene> {
  #include "OKCrowdRuntimeProgressiveGpu.inl"
  #include "OKCrowdRuntimeShadow.inl"
  // The GPU rig's tables for every installed actor, in the aggregate bank's actor and task order (FOKGpuRigBatch).
- TArray<FString> RowNames;TArray<uint32> RowActors;
+ TArray<FString> RowNames;TArray<uint32> RowActors;TArray<FString> WalkTrace;
  TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> BuildRigBatch(const FOKGpuAnimationBundle& Bank,FString& Error){
   auto B=MakeShared<FOKGpuRigBatch,ESPMode::ThreadSafe>();
   TArray<FEntry*> ByActor;ByActor.SetNumZeroed(Bank.Manifest.Actors.Num());for(auto& E:Entries)if(E->BankActor!=INDEX_NONE&&ByActor.IsValidIndex(E->BankActor))ByActor[E->BankActor]=E.Get();
@@ -1067,8 +1072,11 @@ struct FScene : TSharedFromThis<FScene> {
   E.PendingEpoch=++E.EpochClock;E.PendingAction=Source;E.PendingPlay=Play;E.PendingActionAt=FPlatformTime::Seconds();++E.StreamRequests;Error.Reset();return true;
  }
  #include "OKCrowdRuntimeStream.inl"
+ // walk.tsv: '#' lines name each girl (index, walk clip slot 1's source, card), then one row a girl a frame.
+ void WriteWalkTrace(const FString& Dir){if(WalkTrace.IsEmpty()||Dir.IsEmpty())return;TArray<FString> Lines;Lines.Add(TEXT("# time\tgirl\tclip_a\tclip_b\ttime_a\ttime_b\tblend\tx\ty\tz\tyaw"));for(int32 A=0;A<Entries.Num();++A)Lines.Add(FString::Printf(TEXT("#\t%d\t%s\t%s"),A,Entries[A]->ClipSources.IsValidIndex(1)&&ClipIds.IsValidIndex(Entries[A]->ClipSources[1])?*ClipIds[Entries[A]->ClipSources[1]]:TEXT(""),*Entries[A]->Path));Lines.Append(WalkTrace);FFileHelper::SaveStringArrayToFile(Lines,*(Dir/TEXT("walk.tsv")));}
  void WriteReport(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_WriteReport);
   if(ReportPath.IsEmpty())return;
+  WriteWalkTrace(FPaths::GetPath(ReportPath));
 
   FOKGpuResidencyStats Residency;uint64 BankKeyBytes=0;uint64 CachedCommands=0,CachedPrimitives=0;TArray<FPrimitiveComponentId> AuditIds;for(const auto& E:Entries)if(E->Gpu.IsValid())AuditIds.Add(E->Gpu->GetPrimitiveSceneId());
   ENQUEUE_RENDER_COMMAND(AuditRuntimePersistentDraws)([Scene=Render->Scene,Ids=MoveTemp(AuditIds),&CachedCommands,&CachedPrimitives,&Residency,&BankKeyBytes,R=Render](FRHICommandListImmediate&){Residency=R->Budget->GetStats();if(R->Bank)BankKeyBytes=uint64(R->Bank->Data.Pose.Keys.Num())*16;if(!Scene)return;for(const auto Id:Ids){const auto* Info=Scene->GetPrimitiveSceneInfo(Id);if(!Info)continue;uint64 Count=0;for(const auto& Command:Info->StaticMeshCommandInfos)if(Command.CommandIndex!=INDEX_NONE||Command.StateBucketId!=INDEX_NONE)++Count;CachedCommands+=Count;CachedPrimitives+=Count>0;}});FlushRenderingCommands();
@@ -1226,7 +1234,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
      OKNoteRuntimeFaceUpload(E.FacePlay,Plan);if(MouthMoved||GainChanged)++E.MouthUpdates;if(BlinkMoved)++E.BlinkUpdates;E.LastBlinkClosure=Blink;E.BlinkPeak=FMath::Max(E.BlinkPeak,Blink);E.LastMouthOpening=MouthOpening;E.LastMouthGain=MouthGain;E.LastMouthBucket=MouthBucket;E.MouthPeak=FMath::Max(E.MouthPeak,MouthOpening);
     }
    }
-   if(ExternalControl)E.Behavior.Speed=E.ExternalSpeed;else if(A==0)E.Behavior.Speed=InputMove.Size();else if(E.ActionOverride==INDEX_NONE){const bool Changed=E.Behavior.Step(Dt);if(Installed&&Changed&&E.Behavior.State==FOKCrowdBehavior::EState::Look&&E.Clips.Num()>2&&E.PendingAction==INDEX_NONE&&!ActionSlotBusy(A)&&(AutoActionStreaming||E.ClipSources[2]!=INDEX_NONE)){const int32 Source=AutoActionStreaming?WalkSources+(A+E.Behavior.Transitions)%(Curves.Num()-WalkSources):E.ClipSources[2];if(!ClipLoops[Source]){FString ActionError;OKPlayCrowdRuntimeAction(Owner.Get(),A,ClipIds[Source],ActionError);}}}const int32 Clip=E.ActionOverride!=INDEX_NONE?E.ActionOverride:(E.Behavior.Speed<.001?(E.ConversationIdle&&E.ConversationSlot!=INDEX_NONE?E.ConversationSlot:E.IdleVariantSlots.IsValidIndex(E.IdleVariant)?E.IdleVariantSlots[E.IdleVariant]:!E.ReadingAllowed&&E.StandSlot!=INDEX_NONE?E.StandSlot:0):(E.Running&&E.RunSlot!=INDEX_NONE?E.RunSlot:1));if(Clip!=E.LastClip){E.Clock.RequestClip(Clip,.3,0,Error);E.LastClip=Clip;}E.Clock.Advance(Dt,Error);auto P=E.Clock.Parameters();if(E.ActionOverride!=INDEX_NONE&&!ClipLoops[E.ClipSources[E.ActionOverride]]&&!E.Clock.IsTransitioning()&&P.ClipA==uint32(E.ActionOverride)&&P.Times.X>=E.Clips[E.ActionOverride].Duration-1e-5f){E.ActionOverride=INDEX_NONE;++E.ActionCompletions;}P.Times.X=FMath::FloorToFloat(P.Times.X*60)/60;P.Times.Y=FMath::FloorToFloat(P.Times.Y*60)/60;ApplyHeadLook(E,P,Dt);Play.Add(P);
+   if(ExternalControl)E.Behavior.Speed=E.ExternalSpeed;else if(A==0)E.Behavior.Speed=InputMove.Size();else if(E.ActionOverride==INDEX_NONE){const bool Changed=E.Behavior.Step(Dt);if(Installed&&Changed&&E.Behavior.State==FOKCrowdBehavior::EState::Look&&E.Clips.Num()>2&&E.PendingAction==INDEX_NONE&&!ActionSlotBusy(A)&&(AutoActionStreaming||E.ClipSources[2]!=INDEX_NONE)){const int32 Source=AutoActionStreaming?WalkSources+(A+E.Behavior.Transitions)%(Curves.Num()-WalkSources):E.ClipSources[2];if(!ClipLoops[Source]){FString ActionError;OKPlayCrowdRuntimeAction(Owner.Get(),A,ClipIds[Source],ActionError);}}}const int32 Clip=E.ActionOverride!=INDEX_NONE?E.ActionOverride:(E.Behavior.Speed<.001?(E.ConversationIdle&&E.ConversationSlot!=INDEX_NONE?E.ConversationSlot:E.IdleVariantSlots.IsValidIndex(E.IdleVariant)?E.IdleVariantSlots[E.IdleVariant]:!E.ReadingAllowed&&E.StandSlot!=INDEX_NONE?E.StandSlot:0):(E.Running&&E.RunSlot!=INDEX_NONE?E.RunSlot:1));if(Clip!=E.LastClip){E.Clock.RequestClip(Clip,.3,0,Error);E.LastClip=Clip;}E.Clock.Advance(Dt,Error);auto P=E.Clock.Parameters();if(E.ActionOverride!=INDEX_NONE&&!ClipLoops[E.ClipSources[E.ActionOverride]]&&!E.Clock.IsTransitioning()&&P.ClipA==uint32(E.ActionOverride)&&P.Times.X>=E.Clips[E.ActionOverride].Duration-1e-5f){E.ActionOverride=INDEX_NONE;++E.ActionCompletions;}P.Times.X=FMath::FloorToFloat(P.Times.X*60)/60;P.Times.Y=FMath::FloorToFloat(P.Times.Y*60)/60;ApplyHeadLook(E,P,Dt);Play.Add(P);if(E.Stage==5&&CVarOKCrowdWalkTrace.GetValueOnGameThread()){const FVector L=E.Transform.GetLocation();WalkTrace.Add(FString::Printf(TEXT("%.4f\t%d\t%u\t%u\t%.5f\t%.5f\t%.4f\t%.3f\t%.3f\t%.3f\t%.3f"),SceneTime,A,P.ClipA,P.ClipB,P.Times.X,P.Times.Y,P.Times.Z,L.X,L.Y,L.Z,E.Transform.Rotator().Yaw));}
    const int32 Columns=FMath::CeilToInt(FMath::Sqrt(float(Entries.Num()))),Rows=FMath::DivideAndRoundUp(Entries.Num(),Columns);const double Phase=E.Behavior.RouteTime*.8+A*.47;const FVector Pos((A%Columns-(Columns-1)*.5)*210+FMath::Sin(Phase)*75,(A/Columns-(Rows-1)*.5)*210+FMath::Cos(Phase)*75,0);E.Transform=FTransform(FRotator(0,-90-FMath::RadiansToDegrees(Phase)+E.Behavior.LookYaw(),0),Pos);
    if(A==0&&!ExternalControl){if(!PlayerPositionInitialized){PlayerPosition=Pos;PlayerPositionInitialized=true;}const FRotator Rotation=InputMove.IsNearlyZero()?E.Cpu->GetComponentRotation():FRotator(0,FMath::RadiansToDegrees(FMath::Atan2(InputMove.Y,InputMove.X))-90,0);E.Transform=FTransform(Rotation,PlayerPosition);}
    if(ExternalControl){E.Transform=E.ExternalTransform;if(A==0)PlayerPosition=E.Transform.GetTranslation();}
@@ -1537,6 +1545,19 @@ bool OKSetCrowdRuntimeCharacterMotion(AActor* Owner,int32 Character,const FTrans
  auto& E=*State->Entries[Character];E.ExternalTransform=Transform;E.ExternalSpeed=Speed;E.Transform=Transform;
  if(Character==0){State->PlayerPosition=Transform.GetTranslation();State->PlayerPositionInitialized=true;}Error.Reset();return true;
 }
+float OKGetCrowdRuntimeWalkSpeedNow(AActor* Owner,int32 Character,FVector2f* Pivot){
+ check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
+ if(!State||State->Stopped||!State->Entries.IsValidIndex(Character))return -1;const auto& E=*State->Entries[Character];
+ const int32 N=E.WalkCurve.Num();if(E.Stage!=5||!N)return -1;
+ // Clip slot 1 is her walk (ClipSources {0, walk}); value k is her speed from k/60 to (k+1)/60 s, so time t reads k=t*60-0.5.
+ auto At=[&](float T){const float F=FMath::Max(T,0.f)*60.f-.5f;const int32 K=FMath::FloorToInt(F);const float A=F-K;return FMath::Lerp(E.WalkCurve[((K%N)+N)%N],E.WalkCurve[((K+1)%N+N)%N],A);};
+ const auto P=E.Clock.Parameters();float Speed=0;
+ if(P.ClipA==1)Speed+=(1.f-P.Times.Z)*At(P.Times.X);if(P.ClipB==1)Speed+=P.Times.Z*At(P.Times.Y);
+ // The pivot: her planted foot at the drawn walk frame, while the walk is most of her pose (else none: zero).
+ if(Pivot){*Pivot=FVector2f::ZeroVector;const float W=(P.ClipA==1?1.f-P.Times.Z:0.f)+(P.ClipB==1?P.Times.Z:0.f);
+  if(W>=.5f&&E.WalkPivot.Num()==N){const float T=P.ClipA==1&&(P.ClipB!=1||P.Times.Z<.5f)?P.Times.X:P.Times.Y;*Pivot=E.WalkPivot[((FMath::FloorToInt(FMath::Max(T,0.f)*60.f)%N)+N)%N];}}
+ return Speed;
+}
 bool OKGetCrowdRuntimeBonePosition(AActor* Owner,int32 Character,FName Bone,FVector& World){
  FTransform Transform;if(!OKGetCrowdRuntimeBoneTransform(Owner,Character,Bone,Transform))return false;World=Transform.GetTranslation();return true;
 }
@@ -1566,6 +1587,9 @@ bool OKAdmitCrowdRuntimeVoice(AActor* Owner,const FString& Path,FString& VoiceId
 bool OKCrowdRuntimeSpeechActive(AActor* Owner,int32 Character){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  return State&&State->Entries.IsValidIndex(Character)&&(State->Entries[Character]->SpeechJob.IsValid()||State->Entries[Character]->SpeechWave.IsValid());
+}
+void OKWriteCrowdRuntimeWalkTrace(AActor* Owner,const FString& Dir){
+ check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;if(State)State->WriteWalkTrace(Dir);
 }
 bool OKCaptureCrowdRuntimeSceneReport(AActor* Owner){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;

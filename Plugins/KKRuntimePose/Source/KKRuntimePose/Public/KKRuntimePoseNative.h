@@ -7,8 +7,10 @@
 // Empty KKS root; the APNG and the game's shipped independent resources are
 // the source. Does not switch the legacy preview renderer/environment mode.
 KKRUNTIMEPOSE_API bool OKOpenRuntimePoseSnapshot(const FString& Apng,int32 Outfit,TArray<uint8>& Snapshot,FString& Error);
-struct FKKRuntimeSnapshotResult {TArray<uint8> Snapshot;TArray<FKKRuntimePoseBone> Bones;TArray<FKKRuntimePalettePart> Parts;TArray<FKKRuntimeMeshPart> Meshes;FKKRuntimeMaterialData Materials;FString RigIdentity,PersistentSourceIdentity,Error;double NativeOpenMs=0,RigCaptureMs=0,MeshCaptureMs=0,MaterialCaptureMs=0,PrepareMs=0;bool WorkerThread=false;float WalkSpeed=0;};
-// WalkSpeed (OKOpenRuntimeCharacterSnapshotAsync): how fast the initialization clip, a walk, carries her (m/s; 0 unknown).
+struct FKKRuntimeSnapshotResult {TArray<uint8> Snapshot;TArray<FKKRuntimePoseBone> Bones;TArray<FKKRuntimePalettePart> Parts;TArray<FKKRuntimeMeshPart> Meshes;FKKRuntimeMaterialData Materials;FString RigIdentity,PersistentSourceIdentity,Error;double NativeOpenMs=0,RigCaptureMs=0,MeshCaptureMs=0,MaterialCaptureMs=0,PrepareMs=0;bool WorkerThread=false;float WalkSpeed=0;TArray<float> WalkCurve;TArray<FVector2f> WalkPivot;};
+// WalkSpeed (OKOpenRuntimeCharacterSnapshotAsync): how fast the initialization clip, a walk, carries her (m/s; 0 unknown);
+// WalkCurve: the same through the clip, one value per 1/60 s from its start (empty: unknown); WalkPivot: the planted foot's
+// ball then (Unity root space x, z, metres): she turns about it.
 // A shipped curve initializes private renderers before palette discovery.
 // RigIdentity hashes the actual snapshot bytes, not a separate file read.
 KKRUNTIMEPOSE_API TFuture<FKKRuntimeSnapshotResult> OKOpenRuntimePoseSnapshotAsync(FString Apng,int32 Outfit,TArray<uint8> InitializationCurves);

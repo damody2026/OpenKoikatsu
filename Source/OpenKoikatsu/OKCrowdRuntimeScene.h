@@ -78,6 +78,12 @@ bool OKGetCrowdRuntimeCharacterStatus(AActor* Owner,int32 Character,FOKRuntimeCh
 bool OKGetCrowdRuntimeBonePosition(AActor* Owner,int32 Character,FName Bone,FVector& World);
 bool OKGetCrowdRuntimeBoneTransform(AActor* Owner,int32 Character,FName Bone,FTransform& World);
 bool OKSetCrowdRuntimeCharacterMotion(AActor* Owner,int32 Character,const FTransform& Transform,float Speed,FString& Error);
+// How fast her walk carries her right now (cm/s): her walk clip's speed at its current time (it changes through the
+// step), times its weight while it crossfades in or out; 0 while she plays another clip; < 0 unknown (no curve).
+// Pivot: her planted foot's ball in her component space (cm) while the walk is most of her pose, else zero (her root).
+float OKGetCrowdRuntimeWalkSpeedNow(AActor* Owner,int32 Character,FVector2f* Pivot=nullptr);
+// ok.Crowd.WalkTrace: the frames recorded so far into Dir/walk.tsv (the crowd room's report folder).
+void OKWriteCrowdRuntimeWalkTrace(AActor* Owner,const FString& Dir);
 // Admit only files below manifest voice_root; voice IDs can then use existing playback APIs.
 bool OKAdmitCrowdRuntimeVoice(AActor* Owner,const FString& Path,FString& VoiceId,FString& Error);
 bool OKCrowdRuntimeSpeechActive(AActor* Owner,int32 Character);

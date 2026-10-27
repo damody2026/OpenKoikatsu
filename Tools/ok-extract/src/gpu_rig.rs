@@ -337,3 +337,161 @@ mod composition {
         }
     }
 }
+
+#[cfg(test)]
+mod foot_slip {
+    /// How far a crowd girl's feet slide while she walks the room's way (OKCrowdRoom: straight at walk_speed, the walk
+    /// clip at 1x): each foot bone's world position is her pose (the native solve, which the bank and the rig both match:
+    /// `--gpu-rig-verify`) plus her travel, and while the bone is down (within 1 cm of its lowest) its horizontal speed is
+    /// the slide. Also the speed that would zero it: the bone's own backward speed in her root space while down.
+    ///   OK_RIG_CARDS=C000,C001 cargo test --release --lib gpu_rig_foot_slip -- --ignored --nocapture --test-threads=1
+    #[test]
+    #[ignore]
+    fn gpu_rig_foot_slip() {
+        let cards = std::env::var("OK_RIG_CARDS").unwrap_or_else(|_| "C000,C001,C003,C004,C005,C006,C007,C008,C009,C010".into());
+        let clip = std::fs::read("E:/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/walk_01.okanim").unwrap();
+        let pct = |v: &mut Vec<f32>, p: f32| -> f32 { if v.is_empty() { return f32::NAN; } v.sort_by(|a, b| a.total_cmp(b)); v[((v.len() - 1) as f32 * p).round() as usize] };
+        for card in cards.split(',') {
+            std::env::set_var("OK_RIG_CARD", format!("E:/OpenKoikatsu/Content/CharacterCards/CrowdAPNG/{card}.png"));
+            let Ok(opened) = std::panic::catch_unwind(|| super::tests::open_with_clip_pub()) else { println!("{card}: open failed"); continue };
+            let mut s = Box::new(crate::session::OkSession::from_animation_bytes(&opened.to_animation_bytes().expect("snapshot")).expect("reopen"));
+            let s = &mut *s;
+            let Some(v) = super::walk::walk_speed(s, &clip) else { println!("{card}: no walk speed"); continue };
+            let d = crate::anim::clip_duration(&s.game_root, &s.anim_clip);
+            let names = ["cf_j_foot_L", "cf_j_toes_L", "cf_j_foot_R", "cf_j_toes_R"];
+            let ids: Vec<i64> = names.iter().map(|n| s.body_skel.as_ref().unwrap().tfs.iter().find(|(_, t)| t.name == *n).map(|(id, _)| *id).expect("foot")).collect();
+            // Two loops at 60 Hz: root-space positions (x, y up, z forward).
+            let frames = (d * 60.).round() as usize * 2;
+            let mut track: Vec<Vec<[f32; 3]>> = Vec::new();
+            for k in 0..=frames {
+                s.sample_paired_frame((k as f32 / 60.) % d);
+                let body = s.body_skel.as_ref().unwrap();
+                track.push(ids.iter().map(|id| { let w = crate::pose::world_of_id(*id, &body.tfs); [w[0][3], w[1][3], w[2][3]] }).collect());
+            }
+            let mut line = format!("{card}: walk {:.1} cm/s, loop {d:.3} s;", v * 100.);
+            let mut all = Vec::new(); let mut best = Vec::new();
+            for (b, name) in names.iter().enumerate() {
+                let low = track.iter().map(|t| t[b][1]).fold(f32::MAX, f32::min);
+                let (mut slide, mut back) = (Vec::new(), Vec::new());
+                for k in 0..frames {
+                    let (a, c) = (track[k][b], track[k + 1][b]);
+                    if a[1] > low + 0.01 || c[1] > low + 0.01 { continue; }
+                    // A loop's wrap is not a step of the clip.
+                    if ((k + 1) as f32 / 60.) % d < (k as f32 / 60.) % d { continue; }
+                    let (dx, dz) = (c[0] - a[0], c[2] - a[2] + v / 60.);
+                    slide.push((dx * dx + dz * dz).sqrt() * 60. * 100.);
+                    back.push(-(c[2] - a[2]) * 60. * 100.);
+                }
+                all.extend(slide.iter().copied()); best.extend(back.iter().copied());
+                line += &format!(" {name} {}f median {:.1} p90 {:.1} max {:.1} (own {:.1})", slide.len(), pct(&mut slide.clone(), 0.5), pct(&mut slide.clone(), 0.9), pct(&mut slide, 1.), pct(&mut back, 0.5));
+            }
+            // The same walk under the best constant speed, and under a speed that follows the clip: at each frame the
+            // backward speed of the foot that is down (the lower contact point of the two sides), smoothed over 5 frames.
+            let contact = |t: &Vec<[f32; 3]>, side: usize| if t[side * 2][1] <= t[side * 2 + 1][1] { side * 2 } else { side * 2 + 1 };
+            let mut curve = vec![0f32; frames];
+            for k in 0..frames {
+                let (a, c) = (&track[k], &track[k + 1]);
+                let side = if a[contact(a, 0)][1] <= a[contact(a, 1)][1] { 0 } else { 1 };
+                let b = contact(a, side);
+                curve[k] = -(c[b][2] - a[b][2]) * 60.;
+            }
+            let smooth: Vec<f32> = (0..frames).map(|k| { let mut s = 0.; for j in 0..5 { s += curve[(k + frames + j - 2) % frames]; } s / 5. }).collect();
+            let opt = pct(&mut best.clone(), 0.5) / 100.;
+            let shipped = super::walk::walk_curve(s, &clip).expect("walk curve").speed;
+            let shipped: Vec<f32> = (0..frames).map(|k| shipped[k % shipped.len()]).collect();
+            for (label, speed) in [("best constant", None), ("clip curve", Some(&smooth)), ("walk_curve", Some(&shipped))] {
+                let (mut sl, mut sx, mut sz) = (Vec::new(), Vec::new(), Vec::new());
+                for b in 0..names.len() {
+                    let low = track.iter().map(|t| t[b][1]).fold(f32::MAX, f32::min);
+                    for k in 0..frames {
+                        let (a, c) = (track[k][b], track[k + 1][b]);
+                        if a[1] > low + 0.01 || c[1] > low + 0.01 { continue; }
+                        if ((k + 1) as f32 / 60.) % d < (k as f32 / 60.) % d { continue; }
+                        let vk = speed.map_or(opt, |s| s[k]);
+                        let (dx, dz) = (c[0] - a[0], c[2] - a[2] + vk / 60.);
+                        sl.push((dx * dx + dz * dz).sqrt() * 6000.); sx.push(dx.abs() * 6000.); sz.push(dz.abs() * 6000.);
+                    }
+                }
+                println!("  {card} {label} ({:.1} cm/s mean): slide median {:.1} p90 {:.1}; sideways median {:.1}, along median {:.1} cm/s", speed.map_or(opt, |s| s.iter().sum::<f32>() / s.len() as f32) * 100.,
+                    pct(&mut sl.clone(), 0.5), pct(&mut sl, 0.9), pct(&mut sx, 0.5), pct(&mut sz, 0.5));
+            }
+            println!("{line}; all median {:.1} p90 {:.1} cm/s, speed that zeroes it {:.1} cm/s", pct(&mut all.clone(), 0.5), pct(&mut all, 0.9), pct(&mut best, 0.5));
+        }
+    }
+    /// The same from a game's own record (ok.Crowd.WalkTrace 1 writes walk.tsv beside the room's report): each girl's
+    /// frames while she plays only her walk (clip slot 1, no crossfade), her pose at the drawn clip time (the native solve;
+    /// the bank and the rig match it) placed by her transform that frame. A foot bone is down within 1 cm of its lowest;
+    /// its slide is its horizontal speed over at least 1/30 s with both ends down.
+    ///   OK_WALK_TRACE=<report dir> cargo test --release --lib gpu_rig_foot_slip_trace -- --ignored --nocapture --test-threads=1
+    #[test]
+    #[ignore]
+    fn gpu_rig_foot_slip_trace() {
+        use std::collections::HashMap;
+        let dir = std::env::var("OK_WALK_TRACE").expect("OK_WALK_TRACE");
+        let text = std::fs::read_to_string(format!("{dir}/walk.tsv")).expect("walk.tsv");
+        let mut girls: HashMap<usize, (String, String)> = HashMap::new();
+        let mut rows: HashMap<usize, Vec<(f32, f32, [f32; 3], f32)>> = HashMap::new(); // time, clip time, position, yaw
+        for line in text.lines() {
+            let f: Vec<&str> = line.split('\t').collect();
+            if line.starts_with("# ") { continue; }
+            if f[0] == "#" { girls.insert(f[1].parse().unwrap(), (f[2].to_string(), f[3].to_string())); continue; }
+            let n = |i: usize| f[i].parse::<f32>().unwrap();
+            if f[2] != "1" || n(6) != 0. { continue; }
+            rows.entry(f[1].parse().unwrap()).or_default().push((n(0), n(4), [n(7), n(8), n(9)], n(10)));
+        }
+        let pct = |v: &mut Vec<f32>, p: f32| -> f32 { if v.is_empty() { return f32::NAN; } v.sort_by(|a, b| a.total_cmp(b)); v[((v.len() - 1) as f32 * p).round() as usize] };
+        let names = ["cf_j_foot_L", "cf_j_toes_L", "cf_j_foot_R", "cf_j_toes_R"];
+        let mut keys: Vec<usize> = rows.keys().copied().collect(); keys.sort();
+        let (mut everyone, mut everyone_turning) = (Vec::new(), Vec::new());
+        for g in keys {
+            let (clip_id, card) = &girls[&g];
+            let frames = &rows[&g];
+            if frames.len() < 30 { continue; }
+            let clip_path = if std::path::Path::new(clip_id).is_file() { clip_id.clone() } else { format!("E:/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/{clip_id}") };
+            let clip = std::fs::read(&clip_path).unwrap_or_else(|_| panic!("clip {clip_path}"));
+            std::env::set_var("OK_RIG_CARD", card);
+            let Ok(opened) = std::panic::catch_unwind(|| super::tests::open_with_clip_pub()) else { println!("{card}: open failed"); continue };
+            let mut s = Box::new(crate::session::OkSession::from_animation_bytes(&opened.to_animation_bytes().expect("snapshot")).expect("reopen"));
+            let s = &mut *s;
+            let (root, key) = crate::anim::install_shared_clip(&clip).expect("install");
+            s.game_root = root; s.anim_clip = key; s.anim_parameters.clear(); s.anim_scene_mode = 0; s.anim_time = 0.; s.reset_anim_clock(); s.pv_mask = 15;
+            let ids: Vec<i64> = names.iter().map(|n| s.body_skel.as_ref().unwrap().tfs.iter().find(|(_, t)| t.name == *n).map(|(id, _)| *id).expect("foot")).collect();
+            let mut cache: HashMap<u32, Vec<[f32; 3]>> = HashMap::new();
+            // World (UE cm) per frame and bone: Unity root space (x, y up, z forward) -> UE (-x, z, y) x 100, turned by yaw.
+            let world: Vec<Vec<[f32; 3]>> = frames.iter().map(|(_, t, p, yaw)| {
+                let local = cache.entry(t.to_bits()).or_insert_with(|| {
+                    s.sample_paired_frame(*t);
+                    let body = s.body_skel.as_ref().unwrap();
+                    ids.iter().map(|id| { let w = crate::pose::world_of_id(*id, &body.tfs); [w[0][3], w[1][3], w[2][3]] }).collect()
+                }).clone();
+                let (sn, cs) = yaw.to_radians().sin_cos();
+                local.iter().map(|u| { let (vx, vy, vz) = (-u[0] * 100., u[2] * 100., u[1] * 100.); [p[0] + vx * cs - vy * sn, p[1] + vx * sn + vy * cs, p[2] + vz] }).collect()
+            }).collect();
+            let (mut slide, mut turning) = (Vec::new(), Vec::new()); let mut moved = 0f32; let mut span = 0f32;
+            for b in 0..names.len() {
+                let low = world.iter().map(|w| w[b][2]).fold(f32::MAX, f32::min);
+                let mut j = 0;
+                for i in 0..frames.len() {
+                    if world[i][b][2] > low + 1. { continue; }
+                    j = j.max(i + 1);
+                    while j < frames.len() && frames[j].0 < frames[i].0 + 1. / 30. { j += 1; }
+                    if j >= frames.len() || frames[j].0 > frames[i].0 + 0.1 { continue; }
+                    if (i..=j).any(|k| world[k][b][2] > low + 1.) { continue; }
+                    let (a, c) = (world[i][b], world[j][b]);
+                    let v = ((c[0] - a[0]).powi(2) + (c[1] - a[1]).powi(2)).sqrt() / (frames[j].0 - frames[i].0);
+                    // Turning (her yaw changes over 5 deg/s): the room turns her about her root, so a planted foot swings.
+                    let turn = ((frames[j].3 - frames[i].3 + 540.) % 360. - 180.).abs() / (frames[j].0 - frames[i].0);
+                    if turn > 5. { turning.push(v); } else { slide.push(v); }
+                }
+            }
+            for w in frames.windows(2) { if w[1].0 - w[0].0 < 0.1 { moved += ((w[1].2[0] - w[0].2[0]).powi(2) + (w[1].2[1] - w[0].2[1]).powi(2)).sqrt(); span += w[1].0 - w[0].0; } }
+            everyone.extend(slide.iter().copied()); everyone_turning.extend(turning.iter().copied());
+            println!("girl {g} {}: {} walking frames, moved {:.1} cm/s; foot down, straight {} spans: slide median {:.1} p90 {:.1} max {:.1}; turning {} spans: median {:.1} p90 {:.1} cm/s",
+                std::path::Path::new(card).file_name().unwrap().to_string_lossy(), frames.len(), moved / span.max(1e-3), slide.len(),
+                pct(&mut slide.clone(), 0.5), pct(&mut slide.clone(), 0.9), pct(&mut slide, 1.), turning.len(), pct(&mut turning.clone(), 0.5), pct(&mut turning, 0.9));
+        }
+        println!("everyone straight: {} spans, slide median {:.1} p90 {:.1} cm/s; turning: {} spans, median {:.1} p90 {:.1} cm/s", everyone.len(), pct(&mut everyone.clone(), 0.5), pct(&mut everyone, 0.9),
+            everyone_turning.len(), pct(&mut everyone_turning.clone(), 0.5), pct(&mut everyone_turning, 0.9));
+    }
+
+}

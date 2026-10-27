@@ -33,6 +33,9 @@ constexpr float Gap=110.f;
 constexpr float WalkChance=.3f;
 // The demo camera around the girl it follows: 0 is behind her, 180 in front; distance, camera height and the height it
 // looks at, in cm (a close front view of the face: FollowYaw 180, FollowDistance 140, FollowHeight 125, FollowLook 118).
+// 0: girls walk at their mean pace straight at their target, turning about their root as they go, instead of at their
+// walk clip's speed at its current time where they face, turning about the planted foot (the foot-slide check's before).
+static TAutoConsoleVariable<int32> CVarWalkCurve(TEXT("ok.Crowd.WalkCurve"),1,TEXT("1: a walking girl moves at her walk clip's speed at its current time and turns about her planted foot; 0: at her mean pace, about her root"));
 static TAutoConsoleVariable<float> CVarFollowYaw(TEXT("ok.Crowd.FollowYaw"),0.f,TEXT("Crowd room demo camera angle around the followed girl, degrees (0 behind, 180 in front)."));
 static TAutoConsoleVariable<float> CVarFollowDistance(TEXT("ok.Crowd.FollowDistance"),320.f,TEXT("Crowd room demo camera distance from the followed girl, cm."));
 static TAutoConsoleVariable<float> CVarFollowHeight(TEXT("ok.Crowd.FollowHeight"),190.f,TEXT("Crowd room demo camera height above the followed girl's feet, cm."));
@@ -127,7 +130,7 @@ struct FRoom {
   // The girls.
   for(int32 I=0;I<Agents.Num();++I){auto& A=Agents[I];if(A.Failed)continue;
    if(A.Variants==0&&A.Visible){A.Variants=OKSetCrowdRuntimeIdleVariant(O,I,INDEX_NONE);if(A.Variants>0)Stand(A,I);}
-   A.Moving=false;
+   const bool WasMoving=A.Moving;A.Moving=false;
    if(A.Walking){
     const FVector To=A.Target-A.Pos;const float Dist=To.Size2D();
     if(Dist<15){Stand(A,I);}
@@ -135,9 +138,18 @@ struct FRoom {
      const FVector Dir=To.GetSafeNormal2D();
      // Someone right ahead: wait for her to pass; still blocked after a while, go somewhere else.
      bool Blocked=false;for(int32 J=0;J<Agents.Num()&&!Blocked;++J)if(J!=I){const FVector D=Agents[J].Pos-A.Pos;const float Sq=D.SizeSquared2D();Blocked=Sq<Gap*Gap&&FVector::DotProduct(D.GetSafeNormal2D(),Dir)>.5f;}
-     const float Want=FacingOf(Dir);A.Yaw=A.Yaw+FMath::Clamp(FMath::FindDeltaAngleDegrees(A.Yaw,Want),-TurnRate*Dt,TurnRate*Dt);
+     // Her walk's speed at its current time (it changes through the step; 0 until the walk fades in), else her mean; and
+     // her planted foot: she turns about it, not about her root, so it stays put (zero: none, her root).
+     const bool Curve=CVarWalkCurve.GetValueOnGameThread()!=0;
+     FVector2f Pivot=FVector2f::ZeroVector;const float Now=Curve?OKGetCrowdRuntimeWalkSpeedNow(O,I,&Pivot):-1.f;
+     const float Want=FacingOf(Dir),Err=FMath::FindDeltaAngleDegrees(A.Yaw,Want),Yaw=A.Yaw+FMath::Clamp(Err,-TurnRate*Dt,TurnRate*Dt);
+     {const FVector Foot(Pivot.X,Pivot.Y,0);A.Pos+=FRotator(0,A.Yaw,0).RotateVector(Foot)-FRotator(0,Yaw,0).RotateVector(Foot);A.Yaw=Yaw;}
+     // Her feet go back along her facing: walking any other way slides them sideways. So far off her way she first
+     // turns where she stands (sets off under 20 deg, stops to turn over 60), and she walks where she faces.
+     const bool Facing=!Curve||FMath::Abs(Err)<(WasMoving?60.f:20.f);
+     const FVector Way=Curve?FRotator(0,A.Yaw+90.f,0).Vector():Dir;
      if(Blocked){if(A.BlockedSince<0)A.BlockedSince=Time;if(Time-A.BlockedSince>3)Walk(A,I);}
-     else{A.BlockedSince=-1;A.Pos+=Dir*FMath::Min(Dist,A.Speed*Dt);A.Moving=true;}
+     else if(Facing){A.BlockedSince=-1;A.Pos+=Way*FMath::Min(Dist,(Now>=0?Now:A.Speed)*Dt);A.Moving=true;}
     }
    }else if(I==Follow&&A.Variants>0)Walk(A,I);
    else if(A.Variants>0&&Time>=A.Until){if(Rng.FRand()<WalkChance)Walk(A,I);else Stand(A,I);}
@@ -189,7 +201,7 @@ struct FRoom {
   BenchDone=true;
   FString Text;FJsonSerializer::Serialize(J,TJsonWriterFactory<>::Create(&Text));
   UE_LOG(LogTemp,Display,TEXT("Crowd room benchmark: %s"),*Text);
-  if(!Report.IsEmpty()){FFileHelper::SaveStringToFile(Text,*Report,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);FScreenshotRequest::RequestScreenshot(FPaths::ChangeExtension(Report,TEXT("png")),false,false);}
+  if(!Report.IsEmpty()){FFileHelper::SaveStringToFile(Text,*Report,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);if(AActor* O=Owner.Get())OKWriteCrowdRuntimeWalkTrace(O,FPaths::GetPath(Report));FScreenshotRequest::RequestScreenshot(FPaths::ChangeExtension(Report,TEXT("png")),false,false);}
   if(ExitAfter)ExitAt=Wall+3;
  }
 };

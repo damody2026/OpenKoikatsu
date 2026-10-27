@@ -76,7 +76,9 @@ TFuture<FKKRuntimeSnapshotResult> OKOpenRuntimeCharacterSnapshotAsync(FString Ap
   R.MeshCaptureMs=(FPlatformTime::Seconds()-StageStart)*1000;StageStart=FPlatformTime::Seconds();
   if(!OKCaptureRuntimeMaterials(S,R.Parts,R.Materials,R.Error))return Fail(R.Error);R.MaterialCaptureMs=(FPlatformTime::Seconds()-StageStart)*1000;
   // Last: it poses the session through the walk (her stride, so a scene moves her without sliding feet).
-  R.WalkSpeed=FMath::Max(0.f,ok_session_walk_speed(S,Curves.GetData(),Curves.Num()));
+  // Through the step too: at one constant speed the planted foot still slides (gpu_rig/walk.rs).
+  {TArray<float> Curve;Curve.SetNumUninitialized(3*1024);const int32 N=ok_session_walk_curve(S,Curves.GetData(),Curves.Num(),Curve.GetData(),Curve.Num());
+   if(N>0){double Sum=0;for(int32 K=0;K<N;++K){R.WalkCurve.Add(Curve[K*3]);R.WalkPivot.Add(FVector2f(Curve[K*3+1],Curve[K*3+2]));Sum+=Curve[K*3];}R.WalkSpeed=float(Sum/N);}}
   R.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return R;
  });
 }
