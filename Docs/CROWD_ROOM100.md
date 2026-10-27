@@ -40,6 +40,8 @@
 
   100 人驗證（10-28，打包版 `Int1027E.stage`，`--benchmark 20`，`Saved/Crowd/Room100-20261028T025627`）：啟動前排除的只有沒穿的 4 張；前 100 張可用卡包含 C100～C103，這 4 張都正常畫出。結果 `drawn 89／failed 11`，失敗的正好是上面那 11 張 studio alpha 卡（`Int1027E` 編在 `ShaderFamily` 之前），沒有新的排除；畫出的 89 人 128.9 FPS（p95 8.55 ms）。執行檔換成含 `ShaderFamily` 的建置後，這 11 張才會畫出、湊滿 100 人。Editor 版這次沒跑成：工作樹的 `GpuRig.usf` 正在改，`FOKGpuRigSkeletonCS` 編不過，Editor 卡在 shader 錯誤。
 
+  Editor 版（10-28，含 `ShaderFamily` 的 b6a8d22be 之後重建，`--editor --benchmark 20`，`Saved/Crowd/Room100-20261028T031533`）：**drawn 100／failed 0**，130.6 秒全員畫出，119.6 FPS（p95 9.04 ms）。啟動前排除的仍只有沒穿的 4 張。
+
 ## 量測方式
 
 - `--benchmark <秒>`：全員畫出並暖機後量測，寫 `report.json`（平均／P95／P99、game／render／GPU ms、draw 數、三角形數）與截圖，然後結束。數字與街頭 `/fps` 同源（`GAverageFPS` 之外另記每幀時間）。
@@ -175,6 +177,13 @@ bank 保持完整長度，前 N 幀兩邊都算並讀回逐列比較，結果寫
 - 動作變多時：bank 是「人數 × 動作 × 長度」，GPU rig 只是「動作 × 長度」（所有人共用）加上每人固定的約 1 MB。
 - 載入：100 人全部畫出 bank 126 秒、GPU rig 130 秒。rig 每人多一個 0.2～0.45 秒的 worker 準備。
 - 用 bank 加 `--aggregate` 量第一輪時，彙總需要 2×2.4 GB，超過 4 GiB 預算。被拒之後當在 `FLateSourceDepth::Draw`（`OKSourceMaterialMesh.cpp:103` 釋放 shared pointer 時存取違規）。這是既有的失敗路徑，已記在 ERROR_LOG。
+- **已修（10-28）**：總 bank 一次預約全部大小時，99 個私有 bank 的租約還算在同一份 4 GiB 預算裡，所以被拒。現在做法如下：
+  - 總 bank 合成好之後，`MakeRoomForAggregate`（`OKCrowdRuntimeProgressiveGpu.inl`）從離玩家最遠的人開始退私有 bank，直到放得下。退掉的人在 Install 前先不顯示，和 waits for budget 一樣。總 bank 本身就超過預算時，直接報錯。
+  - 總 bank 合成好之後不再收新的私有 bank，總 bank 立刻開始上傳，不再等全部私有 bank 裝完。
+  - 預約被拒時（退掉的 bank 要等 GPU fence 才釋放）下一 tick 重試，不再 Fail。
+  - Install 時退掉所有私有 bank，包括已上傳但還沒裝上的。之後釋放 CPU 端的私有 bank（`E->Bank`），RAM 少 2.4 GB。
+  - 驗證：`--editor --aggregate --benchmark 20`（`Saved/Crowd/Room100-20261028T031839`）。總 bank 2340 MB；74 個私有 bank 共 1739 MB 留著，25 個退掉。結果 drawn 100／failed 0，101.4 秒全員畫出，149.0 FPS（p95 7.27 ms）。report.json 的 `triangles` 只有 2643，是統計沒算到 instanced skinned mesh，截圖裡 100 人都在。
+  - 被拒後 `FLateSourceDepth::Draw` 存取違規的停止路徑沒有另外查：現在不會再走到被拒那一步。
 
 ## 街頭（StreetSocial.cmd）的 GPU rig（2026-10-27，預設關閉）
 

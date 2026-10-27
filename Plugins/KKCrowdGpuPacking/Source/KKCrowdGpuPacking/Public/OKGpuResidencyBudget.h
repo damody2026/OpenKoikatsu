@@ -12,6 +12,8 @@ class KKCROWDGPUPACKING_API FOKGpuResidencyBudget {
  TMap<uint64,FEntry> Entries;uint64 Limit=0,NextTicket=0;FOKGpuResidencyStats Stats;
 public:
  explicit FOKGpuResidencyBudget(uint64 MaxBytes):Limit(MaxBytes){}
+ // Fixed at construction: readable from any thread.
+ uint64 GetLimit()const{return Limit;}
  bool Reserve(uint64 Bytes,uint64& Ticket,FString& Error);
  bool ReserveShared(uint64 SourceTicket,uint64 PrivateBytes,uint64& Ticket,FString& Error);
  // Only for reservations for which no upload/dispatch was submitted.

@@ -344,6 +344,8 @@ struct FEntry {
  // Her outline shells' material slots on the main mesh, hidden when she is past ok.Crowd.OutlineRange.
  TArray<int32> OutlineSlotIds;bool OutlinesHidden=false;TWeakObjectPtr<UPrimitiveComponent> OutlineComponent;
  double BudgetRetryAt=0;bool BudgetWaitLogged=false;
+ // Her private bank holds (or is about to hold) a lease in the crowd GPU budget: set when its first chunk is sent.
+ bool PrivateCharged=false;
  TArray<TFuture<FKKRuntimePoseResult>> PoseJobs;TArray<FKKRuntimePoseResult> Clips;TArray<int32> ClipSources;
  TSharedPtr<const FKKRuntimePoseRequest,ESPMode::ThreadSafe> PoseRecipe; /* shared, never changed: a streamed action copies it on a worker */FOKGpuActorRecord ActorRecipe;FOKGpuSkinPaletteData PaletteRecipe;
  TSharedPtr<const FOKRuntimeSkinEnvelopeGeometry,ESPMode::ThreadSafe> SkinEnvelope;
@@ -973,7 +975,7 @@ struct FScene : TSharedFromThis<FScene> {
  }
  void Install(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Install);
   auto Verified=PendingComposition;const auto* Bank=Verified.IsValid()?&Verified->Get():nullptr;if(!Bank){UE_LOG(LogTemp,Error,TEXT("Runtime private GPU bank composition rejected"));VisualError=TEXT("Runtime private GPU bank composition rejected");WriteReport();Stopped=true;return;}
-  for(auto& E:Entries){if(E->LoadingGpuInstalled){if(auto* G=E->Gpu.Get())G->DestroyComponent();if(auto* G=E->DepthGpu.Get())G->DestroyComponent();if(auto* G=E->ShadowGpu.Get())G->DestroyComponent();E->Gpu.Reset();E->DepthGpu.Reset();E->ShadowGpu.Reset();RetireProgressiveGpu(*E);}}
+  for(auto& E:Entries){if(E->LoadingGpuInstalled||E->LoadingRender){if(auto* G=E->Gpu.Get())G->DestroyComponent();if(auto* G=E->DepthGpu.Get())G->DestroyComponent();if(auto* G=E->ShadowGpu.Get())G->DestroyComponent();E->Gpu.Reset();E->DepthGpu.Reset();E->ShadowGpu.Reset();RetireProgressiveGpu(*E);}}
   auto* O=Owner.Get();auto* Renderer=static_cast<::FScene*>(O->GetWorld()->Scene->GetRenderScene());TMap<const USkinnedAsset*,int32> MeshActors;TMap<const USkinnedAsset*,FPrimitiveComponentId> References;TArray<FOKGpuSkinPaletteData> Palettes;TArray<FPrimitiveComponentId> DepthProxies;TSet<FPrimitiveComponentId> CpuSourceProxies;TSet<const FMaterialRenderProxy*> SourceIblMaterials;for(const auto& Entry:Entries)for(const auto& Material:Entry->Materials)if(Material.IsValid()&&Material->GetMaterial()->GetName()==TEXT("M_IBLAlpha"))SourceIblMaterials.Add(Material->GetRenderProxy());
   for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];if(E.BankActor==INDEX_NONE)continue;BeginReveal(E);FString Error;FOKGpuSkinPaletteData P;if(!OKBuildGpuMeshPalette(Bank->Manifest.Actors[E.BankActor],E.Mesh->GetRefSkeleton(),E.Mesh->GetRefBasesInvMatrix(),Bank->Data.Pose.Tasks.Num(),P,Error)){UE_LOG(LogTemp,Error,TEXT("APNG aggregate palette: %s"),*Error);Stopped=true;return;}MeshActors.Add(E.Mesh.Get(),Palettes.Num());Palettes.Add(MoveTemp(P));References.Add(E.Mesh.Get(),E.Cpu->GetPrimitiveSceneId());
    auto* Gpu=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(Gpu);Gpu->SetSkinnedAssetAndUpdate(E.Mesh.Get());auto* Provider=NewObject<UOKIndependentTransformProvider>(Gpu);Provider->SetRuntimeProviderId(Render->ProviderId);Provider->SetDiagnosticBounds(E.AnimationBounds);Gpu->SetTransformProvider(Provider);Gpu->SetAnimationMinScreenSize(-1);Gpu->SetCollisionEnabled(ECollisionEnabled::NoCollision);Gpu->SetCastShadow(false);Gpu->SetLightingChannels(true,false,true); /* channel 2: the street catch light, read by the lit tears */Gpu->SetVisibility(false);Gpu->AddInstance(FTransform::Identity,0);Gpu->RegisterComponent();Gpu->SetComponentTickEnabled(false);E.Gpu=Gpu;AttachFrontHair(E,Render->ProviderId);
@@ -982,6 +984,8 @@ struct FScene : TSharedFromThis<FScene> {
   TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> RigBatch;
   if(GpuRig){FString RigError;RigBatch=BuildRigBatch(*Bank,RigError);if(!RigBatch){UE_LOG(LogTemp,Error,TEXT("APNG GPU rig: %s"),*RigError);VisualError=TEXT("GPU rig: ")+RigError;WriteReport();Stopped=true;return;}}
   ENQUEUE_RENDER_COMMAND(InstallApngProvider)([Renderer,R=Render,Bank,Verified,RigBatch,RigVerify=GpuRig?GpuRigVerify:0,RigDump=GpuRig&&GpuRigVerify>0&&!ReportPath.IsEmpty()?FPaths::GetPath(ReportPath)/TEXT("rig"):FString(),RigRows=MoveTemp(RowNames),RigActors=MoveTemp(RowActors),MeshActors=MoveTemp(MeshActors),References=MoveTemp(References),DepthProxies=MoveTemp(DepthProxies),CpuSourceProxies=MoveTemp(CpuSourceProxies),SourceIblMaterials=MoveTemp(SourceIblMaterials),Palettes=MoveTemp(Palettes)](FRHICommandListImmediate&)mutable{R->RigBatch=RigBatch;R->RigVerifyLeft=RigVerify;R->RigDumpPath=RigDump;R->RigRowNames=MoveTemp(RigRows);R->RigRowActors=MoveTemp(RigActors);R->CpuSourceProxies=MoveTemp(CpuSourceProxies);R->SourceIblMaterials=MoveTemp(SourceIblMaterials);R->Bank=Bank;R->Scene=Renderer;R->LateDepthProxies=MoveTemp(DepthProxies);R->CpuReferences=MoveTemp(References);R->MeshActors=MoveTemp(MeshActors);R->Sources=MoveTemp(Palettes);R->Validated=Verified;R->Initialized=true;R->Palettes.SetNum(R->Sources.Num());R->BoneMaps.SetNum(R->Sources.Num());R->StorageModes.SetNum(R->Sources.Num());if(auto* P=Renderer->GetExtensionPtr<FSkinningTransformProvider>()){P->RegisterProvider(R->ProviderId,FSkinningTransformProvider::FOnProvideTransforms::CreateLambda([R](auto& C){R->Provide(C);}),false);R->ProviderRegistered=true;}else R->Fail(TEXT("Skinning scene provider unavailable"));});if(!LateDepthExtension.IsValid()){LateDepthExtension=FSceneViewExtensions::NewExtension<FLateSourceDepth>(Render,O->GetWorld()->Scene);ENQUEUE_RENDER_COMMAND(RegisterApngComposite)([Extension=LateDepthExtension](FRHICommandListImmediate&){Extension->Register();});}Installed=true;for(auto& E:Entries){if(auto* C=E->LoadingMain.Get()){C->DestroyComponent();E->LoadingMain.Reset();}if(auto* C=E->Cpu.Get()){C->SetRenderInMainPass(false);C->SetRenderInDepthPass(false);}}
+  // Her private bank is copied into the aggregate and nothing reads it after this (2.4 GB of RAM for 100 bank girls).
+  for(auto& E:Entries)E->Bank.Reset();
  }
  // Her front hair once more, into custom depth / stencil only (stencil = her ForegroundStencil), when any of her eyes /
  // brows took a _Fg parent: those test against it to show through her front hair (Tools/GpuPoseAudit
@@ -1119,8 +1123,11 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
   }
   if(!Installed&&Composition.IsValid()&&Composition.IsReady()){
    PendingComposition=Composition.Consume();if(!PendingComposition){VisualError=TEXT("Immutable GPU bank validation failed");Stopped=true;WriteReport();return false;}
+   if(!MakeRoomForAggregate()){Stopped=true;WriteReport();return false;}
   }
-  bool PrivateUploadsPending=false;{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ProgressiveGpu);PrivateUploadsPending=ServiceProgressiveGpu();}
+  // Once the aggregate is composed no private bank is admitted any more (each would go back at Install): its upload
+  // starts now instead of after every private one.
+  bool PrivateUploadsPending=false;if(!PendingComposition.IsValid()){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_ProgressiveGpu);PrivateUploadsPending=ServiceProgressiveGpu();}
   if(!Installed&&PendingComposition.IsValid()&&!PrivateUploadsPending){
    const int32 Status=Render->UploadStatus.Load();
    if(Status<0){VisualError=TEXT("Incremental GPU bank upload failed");Stopped=true;WriteReport();return false;}
@@ -1128,6 +1135,8 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
    else if(Status==0){Render->UploadStatus.Store(1);ENQUEUE_RENDER_COMMAND(UploadApngBankChunk)([R=Render,Bank=PendingComposition](FRHICommandListImmediate& Cmd){
     FRDGBuilder G(Cmd);FString Error;bool Done=false;R->Budget->Collect();
     const bool Passed=R->Pose.UploadManagedChunk(G,Bank.ToSharedRef(),R->Budget,4ull*1024*1024,Done,Error);G.Execute();++R->UploadChunks;
+    // Private banks handed back for it free their bytes only once the GPU is past them: ask again next tick.
+    if(!Passed&&Error.Contains(TEXT("capacity unavailable"))){R->UploadStatus.Store(0);return;}
     if(!Passed){R->Fail(Error);R->UploadStatus.Store(-1);}else R->UploadStatus.Store(Done?2:0);
    });}
   }

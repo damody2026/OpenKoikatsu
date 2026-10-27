@@ -3,13 +3,30 @@
 // or scene pointer is borrowed across render/worker lifetime.
 void RetireProgressiveGpu(FEntry& E){
  if(!E.LoadingRender)return;
- auto R=E.LoadingRender;E.LoadingRender.Reset();E.LoadingGpuInstalled=false;
+ auto R=E.LoadingRender;E.LoadingRender.Reset();E.LoadingGpuInstalled=false;E.PrivateCharged=false;
  auto* O=Owner.Get();if(!O||!O->GetWorld()->Scene)return;
  auto* Scene=static_cast<::FScene*>(O->GetWorld()->Scene->GetRenderScene());
  ENQUEUE_RENDER_COMMAND(RetirePrivateLoadingProvider)([R,Scene](FRHICommandListImmediate&){
   if(R->ProviderRegistered)if(auto* P=Scene->GetExtensionPtr<FSkinningTransformProvider>())P->UnregisterProvider(R->ProviderId);
   R->Enabled=false;R->ProviderRegistered=false;R->Scene=nullptr;R->Pose.Release();R->Palettes.Reset();
  });
+}
+// The aggregate bank reserves its whole size at once while the private leases are still charged (100 bank girls: 2.4 GB
+// of each against 4 GiB). Hand private banks back, farthest from the player first, until it fits beside the rest; one
+// whose bank went back stays hidden until the aggregate installs, like one still waiting for budget.
+static uint64 ResidentBankBytes(const FOKGpuAnimationBundle& Bank){const auto& B=Bank.Data.Pose;return uint64(B.Keys.Num())*16+uint64(B.Tracks.Num())*16+uint64(B.Actors.Num())*32+uint64(B.Tasks.Num())*112+uint64(B.InverseBindRows.Num())*16;}
+bool MakeRoomForAggregate(){
+ const uint64 Need=ResidentBankBytes(PendingComposition->Get()),Limit=Render->Budget->GetLimit();
+ if(Need>Limit){VisualError=FString::Printf(TEXT("Aggregate GPU bank (%llu MB) exceeds the crowd GPU budget (%llu MB)"),Need>>20,Limit>>20);return false;}
+ uint64 Charged=0;TArray<int32> Held;
+ for(int32 A=0;A<Entries.Num();++A){const auto& E=*Entries[A];if(E.PrivateCharged&&E.Bank.IsValid()){Charged+=ResidentBankBytes(E.Bank->Get());Held.Add(A);}}
+ Held.Sort([&](int32 X,int32 Y){return FVector::DistSquared(Entries[X]->Transform.GetTranslation(),PlayerPosition)>FVector::DistSquared(Entries[Y]->Transform.GetTranslation(),PlayerPosition);});
+ int32 Returned=0;
+ for(int32 A:Held){if(Charged+Need<=Limit)break;auto& E=*Entries[A];Charged-=ResidentBankBytes(E.Bank->Get());++Returned;
+  if(auto* G=E.Gpu.Get())G->DestroyComponent();if(auto* G=E.DepthGpu.Get())G->DestroyComponent();if(auto* G=E.ShadowGpu.Get())G->DestroyComponent();if(auto* G=E.FrontGpu.Get())G->SetVisibility(false);
+  E.Gpu.Reset();E.DepthGpu.Reset();E.ShadowGpu.Reset();RetireProgressiveGpu(E);}
+ UE_LOG(LogTemp,Display,TEXT("APNG aggregate bank %llu MB: %d private banks hold %llu MB of %llu MB; %d handed back"),Need>>20,Held.Num()-Returned,Charged>>20,Limit>>20,Returned);
+ return true;
 }
 bool InstallProgressiveGpu(FEntry& E){
  auto* O=Owner.Get();auto* Scene=static_cast<::FScene*>(O->GetWorld()->Scene->GetRenderScene());
@@ -52,14 +69,14 @@ bool ServiceProgressiveGpu(){
   const int32 Status=E.LoadingRender->UploadStatus.Load();
   if(Status<0){VisualError=TEXT("Private NPC GPU admission failed");Stopped=true;return true;}
   // The GPU budget is full right now (others still uploading or retiring): try her again in a while.
-  if(Status==3){E.LoadingRender->UploadStatus.Store(0);E.BudgetRetryAt=SceneTime+2;if(!E.BudgetWaitLogged){E.BudgetWaitLogged=true;UE_LOG(LogTemp,Warning,TEXT("APNG private GPU bank %d waits for budget"),A);}continue;}
+  if(Status==3){E.LoadingRender->UploadStatus.Store(0);E.PrivateCharged=false;E.BudgetRetryAt=SceneTime+2;if(!E.BudgetWaitLogged){E.BudgetWaitLogged=true;UE_LOG(LogTemp,Warning,TEXT("APNG private GPU bank %d waits for budget"),A);}continue;}
   if(SceneTime<E.BudgetRetryAt){Pending=true;continue;}
   if(Status==2){if(!InstalledOne){InstalledOne=true;QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallProgressive);InstallProgressiveGpu(E);}continue;}
   if(Status==1)continue;
   const double D=FVector::DistSquared(SpawnPosition(A),PlayerPosition);if(D<Distance){Distance=D;Best=A;}
  }
  // One bounded private upload globally per tick, nearest ready actor first.
- if(Best!=INDEX_NONE){auto& E=*Entries[Best];E.LoadingRender->UploadStatus.Store(1);
+ if(Best!=INDEX_NONE){auto& E=*Entries[Best];E.LoadingRender->UploadStatus.Store(1);E.PrivateCharged=true;
   ENQUEUE_RENDER_COMMAND(UploadPrivateLoadingBank)([R=E.LoadingRender,Bank=E.Bank](FRHICommandListImmediate& Cmd){
    FRDGBuilder G(Cmd);FString Error;bool Done=false;R->Budget->Collect();
    const bool Passed=R->Pose.UploadManagedChunk(G,Bank.ToSharedRef(),R->Budget,4ull*1024*1024,Done,Error);G.Execute();++R->UploadChunks;
