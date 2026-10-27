@@ -520,6 +520,9 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
  if(S.RestroomGirl==Girl)EndRestroom(false);
  if(S.SoloGirl==Girl){UE_LOG(LogTemp,Display,TEXT("Street solo: %s ends, a new outing (%s) begins"),*S.SoloWhat,*ActivityId);EndSolo();}
  if(Leave){
+  // Her "let's go" answered the table eaten clean, asked before the walk they agreed on began that same moment: it is
+  // that walk, not a stop to it (R3-250: the walk to her class ended 2 s in, on the department store's 9F).
+  if(S.OutingGirl==Girl&&S.OutingBegunAt>S.FreeTalkSentAt){UE_LOG(LogTemp,Display,TEXT("Street free talk: actor=%d's leave was asked before %s began; the outing goes on"),Girl,*S.OutingActivity);return true;}
   if(S.OutingGirl==Girl)CancelOuting(FString());
   if(S.Companion==Girl)FinishCompanion();
   if(S.Pair.Partner==Girl){Error=OKT(TEXT("ui.outing.wait_activity_wrapup"));return false;}
@@ -551,7 +554,7 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
   TArray<FVector> Down=GridRoute(S.Male,Lifts[Floor]->Position);if(Down.Num()<2)Down={S.Male,Lifts[Floor]->Position};
   S.LiftRide=FOKStreetLiftRide();S.LiftRide.Elevator=Elevator;S.LiftRide.Floor=0;S.LiftRide.Descend=true;S.LiftRide.Spot=Spot?Spot->Position:PlaceInsideSpot(*Place);
   StopAmbientActivity();EndTalk();
-  S.OutingGirl=Girl;S.OutingActivity=ActivityId;S.OutingPlace=Place->Name;S.OutingRoute=MoveTemp(Down);S.OutingStep=1;S.OutingProgressAt=SceneTime();
+  S.OutingGirl=Girl;S.OutingActivity=ActivityId;S.OutingPlace=Place->Name;S.OutingRoute=MoveTemp(Down);S.OutingStep=1;S.OutingProgressAt=S.OutingBegunAt=SceneTime();
   S.Companion=Girl;S.Agents[Girl-1].Held=true;S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;S.CompanionBlockedAt=0;S.CompanionTravel=0;S.CompanionWalk=0;
   S.Message=OKMsg(TEXT("ui.outing.walk_to_place_by_elevator"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}, {TEXT("place_name"), Place->Name}});
   UE_LOG(LogTemp,Display,TEXT("Street outing: actor=%d activity=%s starts upstairs in %s: down by the elevator first"),Girl,*ActivityId,Here.Name);
@@ -591,7 +594,7 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
    if(In!=Place->Door){TArray<FVector> Steps=GridRoute(Route.Last(),In);if(Steps.Num()>=2){Steps.RemoveAt(0);Route.Append(Steps);}}}
  }
  StopAmbientActivity();EndTalk();
- S.OutingGirl=Girl;S.OutingActivity=ActivityId;S.OutingPlace=Place->Name;S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=SceneTime();
+ S.OutingGirl=Girl;S.OutingActivity=ActivityId;S.OutingPlace=Place->Name;S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=S.OutingBegunAt=SceneTime();
  // Same follow as the shared walk: she trails the player's breadcrumbs.
  S.Companion=Girl;S.Agents[Girl-1].Held=true;S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;S.CompanionBlockedAt=0;S.CompanionTravel=0;S.CompanionWalk=0;
  S.Message=OKMsg(TEXT("ui.outing.walk_to_place_together"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}, {TEXT("place_name"), Place->Name}});
@@ -628,7 +631,7 @@ void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error,bool bRun){
  if(Route.Num()>=3&&Clear(At,S.Male))Route.Add(S.Male);
  if(Route.Num()<3){Error=OKT(TEXT("ui.outing.no_walk_route_nearby"));UE_LOG(LogTemp,Display,TEXT("Street stroll: no route found around (%.0f,%.0f)"),S.Male.X,S.Male.Y);return;}
  StopAmbientActivity();EndTalk();
- S.OutingGirl=Girl;S.OutingActivity=TEXT("stroll");S.OutingPlace=OKT(TEXT("ui.outing.nearby_label"));S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=SceneTime();S.OutingRun=bRun;
+ S.OutingGirl=Girl;S.OutingActivity=TEXT("stroll");S.OutingPlace=OKT(TEXT("ui.outing.nearby_label"));S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=S.OutingBegunAt=SceneTime();S.OutingRun=bRun;
  S.Companion=Girl;S.Agents[Girl-1].Held=true;S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;S.CompanionBlockedAt=0;S.CompanionTravel=0;S.CompanionWalk=0;
  S.Message=OKMsg(TEXT("ui.outing.stroll_nearby_together"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});
  UE_LOG(LogTemp,Display,TEXT("Street stroll: actor=%d route_points=%d"),Girl,Route.Num());

@@ -77,7 +77,10 @@ pub fn jealousy_news(r: &mut Relation, t: &Traits, mode: char, is_foil: bool, ab
     if mode == 'A' || r.id == about || (r.liking() < 25.0 && r.stage == "stranger") {
         return;
     }
-    let gain = if mode == 'C' { 18.0 } else { 10.0 } * (0.5 + t.jealousy_prone as f32 / 100.0) * confidence * if is_foil { 1.5 } else { 1.0 };
+    // As much as she cares for him: a friend at favor 14 was at the top of her jealousy and soured every meeting with
+    // it (R3-249); a lover who loves him fully feels all of it.
+    let cares = ((r.liking() - 25.0) / 75.0).clamp(0.0, 1.0);
+    let gain = if mode == 'C' { 18.0 } else { 10.0 } * (0.5 + t.jealousy_prone as f32 / 100.0) * confidence * if is_foil { 1.5 } else { 1.0 } * cares;
     let toward = r.jealousy_toward.entry(about.to_string()).or_insert(0.0);
     *toward = (*toward + gain).min(100.0);
     r.jealousy = (r.jealousy + gain * 0.3).min(100.0);
@@ -463,6 +466,16 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
         // also when he is there but held up by someone else walking up to him or talking with him.
         let busy = girl && talking != a.heroine && ((!approaching.is_empty() && approaching != a.heroine) || !talking.is_empty());
         let wait = if girl { DATE_WAIT } else if a.kind == "shift" { SHIFT_LATE_WAIT } else { 0 };
+        // With her at its time, somewhere else they went together (the cake at the snack shop eaten on the department
+        // store's 9F instead): the meeting is kept, not a no-show at the snack shop (R3-251).
+        let with_her = girl && (came_with == a.heroine || talking == a.heroine);
+        if with_her && !a.there && now >= a.start - 30 && now <= a.start + a.grace as i64 + wait {
+            list[k].status = "done".into();
+            updates.push(json!({"id": a.id, "status": "done"}));
+            fx.note_at(&a.heroine, "date", crate::tr::t("social.came_together"), &a.place, 0.6);
+            notice = format!("{}{}", crate::tr::t("social.arrived_on_time_prefix"), a.label);
+            continue;
+        }
         if a.there && now >= a.start - 30 && now <= a.start + a.grace as i64 + wait {
             if busy {
                 // He is talking with another girl: after a polite wait she goes over and joins them. Not late on his
@@ -1040,18 +1053,29 @@ mod tests {
 
     #[test]
     fn jealousy_from_news() {
-        let mut r: Relation = serde_json::from_value(rel(json!({"stage": "friend", "affection": 50}))).unwrap();
+        let mut r: Relation = serde_json::from_value(rel(json!({"stage": "lover", "favor": 1000}))).unwrap();
         let t = Traits::from_profile(&json!({"traits": {"jealousy_proneness": 50}}));
         jealousy_news(&mut r, &t, 'C', false, "b", 1.0);
-        assert_eq!(r.jealousy_toward["b"], 18.0);
+        assert!((r.jealousy_toward["b"] - 18.0).abs() < 1e-3, "a lover at her fullest: all of it");
         jealousy_news(&mut r, &t, 'A', false, "b", 1.0);
-        assert_eq!(r.jealousy_toward["b"], 18.0, "mode A stays out of it");
+        assert!((r.jealousy_toward["b"] - 18.0).abs() < 1e-3, "mode A stays out of it");
+        // A friend who barely likes him (favor 14): a little, not the top of her jealousy (R3-249).
+        let mut cool: Relation = serde_json::from_value(rel(json!({"stage": "friend", "favor": 14}))).unwrap();
+        jealousy_news(&mut cool, &t, 'C', false, "b", 1.0);
+        let got = cool.jealousy_toward["b"];
+        assert!(got > 0.0 && got < 5.0, "{got}");
     }
 
 
     #[test]
     fn stood_up_and_kept() {
         let her = |favor: f32| json!({"relation": rel(json!({"stage": "friend", "favor": favor, "trust": 50, "admiration": 0})), "profile": {}});
+        // The cake at the snack shop, eaten with her on the department store's 9F at that time: kept, no favor lost (R3-251).
+        let moved = appointments_tick(&json!({"now": 905, "day": 0, "came_with": "a",
+            "appointments": [{"id": 9, "kind": "date", "heroine": "a", "place": "snack", "start": 900, "grace": 20, "status": "pending", "there": false}],
+            "heroines": {"a": her(100.0)}})).unwrap();
+        assert_eq!(moved["updates"], json!([{"id": 9, "status": "done"}]));
+        assert!(!moved["effects"].to_string().contains("\"favor\""), "{moved}");
         let v = appointments_tick(&json!({"now": 1000 + DATE_WAIT, "day": 0, "with": "c",
             "appointments": [{"id": 1, "kind": "date", "heroine": "a", "place": "cafe", "start": 900, "grace": 20, "status": "pending"},
                              {"id": 2, "kind": "reservation", "heroine": "", "place": "restaurant", "start": 900, "grace": 15, "status": "pending"},

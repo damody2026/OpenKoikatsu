@@ -384,6 +384,9 @@ void AOKStreetSocialScene::TickThenAction(){
  FString Error;const FString Action=S.ThenAction;S.ThenAction.Reset();
  const bool Started=BeginOuting(Girl,Action,Error);
  UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d %s%s"),*Action,Girl,Started?TEXT("started"):TEXT("refused: "),*Error);
+ // What they do next is under way: "the table is eaten clean, talk about what to do next" queued the same moment got a
+ // "let's go" with leave, which ended this walk 2 s in (R3-250).
+ if(Started){const FString AllEaten=OKT(TEXT("ui.economy.all_eaten_prompt"));if(S.TellHer.Remove(AllEaten))UE_LOG(LogTemp,Display,TEXT("Street then: the eaten-clean note is dropped, %s is what they do next"),*Action);}
  if(!Started){S.FreeTalkNotice=OKT(TEXT("ui.live_talk.she_agreed_but"))+Error;S.TellHer.Add(OKMsg(TEXT("ui.live_talk.promise_failed_explain"),{{TEXT("action"),*OKStreetActivityName(Action)},{TEXT("place"),TEXT("none")},{TEXT("error"),*Error}}));}
 }
 

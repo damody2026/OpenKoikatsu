@@ -1,4 +1,4 @@
-﻿#include "OKStreetSocialScene.h"
+#include "OKStreetSocialScene.h"
 #include "OKStreetSocialText.h"
 #include "OKStreetSocialSpeakerText.h"
 #include "OKStreetSocialSongState.h"
@@ -228,6 +228,7 @@ struct FOKStreetSceneState {
  // Who was with him in the save, by stable id, until each is put back (R3-238); the one who walks with him again, and until when it is tried.
  TMap<FString,FOKStreetStore::FWithHim> ResumeWithHim;int32 ResumeFollow=INDEX_NONE;double ResumeFollowUntil=0;
  TArray<FString> PromiseAskNotes; // "ask him what time / where" notes not sent yet: dropped once the meeting is booked (R3-242)
+ double FreeTalkSentAt=0,OutingBegunAt=0; // when her reply now coming was asked for, and when the outing under way began (R3-250)
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;
@@ -1190,7 +1191,7 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  if(His){S.FreeTalkSilenceSince=FPlatformTime::Seconds();S.FreeTalkSilencePenalties=0;S.FreeTalkLeavePending=false;}
  if(!His)S.FreeTalkCaptionPlayer.Reset();else S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
  S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.scene.ellipsis_colon"));
- S.FreeTalkBusy=true;++S.FreeTalkSent;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.she_is_thinking"));
+ S.FreeTalkBusy=true;S.FreeTalkSentAt=SceneTime();++S.FreeTalkSent;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.she_is_thinking"));
  // The heroine mind keeps her whole context and the full state of every turn (plan §7.0); without it,
  // the request goes straight to DeepSeek with the trimmed local memory.
  if(!SubmitFreeTalkToMind(Character,Id,System,UserMessage,Text))FinishFreeTalk(Character,Id,Text,nullptr,OKT(TEXT("ui.scene.ai_service_off_reply")));
