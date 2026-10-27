@@ -822,3 +822,11 @@
 - 修正：avatar 路徑表依根目錄記在記憶體（只記非空結果）。另外兩項猜錯的改動保留，因為輸出完全一樣、只省一點時間：葉子不再自己重算世界矩陣（`OK_LEAF_WORLDS=1` 可切回比較）；骨架綁定每次取樣只比對一次。
 - 規則：量效能先拆到最細的區段再改，不要照猜測先寫優化。「快取」要確認它真的有記憶體這一層；以 `Arc::ptr_eq` 當鍵的快取，上游每次都給新 `Arc` 就等於沒有快取。
 - 結果（Gal1027P）：曲線取樣每角色 2.76 → 0.64 ms，查快取 0.94 → 0.007 ms；愛麗絲 1 對 1 109 → 128 FPS，畫面不變。Rust lib 測試 430 項中 429 過（失敗的那項缺 `Saved/Tests/EyeGaze284` 測試資料，與此無關）。
+
+### 2026-10-27 回報「trace 還在錄」，其實遊戲啟動第 0 幀就當掉了（E 組 galgame）
+- 打包 Gal1027Q 後，用同一個指令接著開遊戲錄 trace，指令超過 10 分鐘被移到背景。我沒看 game.log，就回報「還在錄」。協調者發現 E 上根本沒有這個遊戲在跑。
+- 實際情況：遊戲在啟動第 0 幀就當掉，`Missing global shader FOKGpuRigTaskCS's permutation 0`。工作樹裡有另一個 session 還沒提交的 GPU rig global shader，被一起編進 exe；但 StreetDisplay patch 的 global shader 快取裡沒有它，所以 E 上任何新的 exe-only stage 都會一樣當掉。
+- 規則：
+  - 打包和開遊戲分成兩個指令。開遊戲後，先確認 `game.log` 裡有 `Base Directory` 而且沒有 `LogWindows: Error`，才說遊戲在跑。
+  - 長時間的背景工作，看輸出確認狀態，不要用推測回報。
+  - exe-only 打包會帶進工作樹裡所有未提交的程式；有人加了新的 global shader 時，要等 patch 重建後才能用。

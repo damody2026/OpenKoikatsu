@@ -1608,6 +1608,7 @@ impl OkSession {
         // Private rigs own independent particle histories. Prepare immutable
         // character colliders once, then solve each renderer on the pool.
         let needs_frame=|coordinated|self.parts.iter().any(|p|p.runtime_accessory.as_ref().is_some_and(|r|r.coordinated==coordinated&&r.source.deferred_dbones.as_ref().is_some_and(|d|!d.is_empty())));
+        let frames_trace=crate::native_profile::Scope::new(44);
         let body_frame=body.filter(|_|needs_frame(false)).map(|sk|crate::dbone::CharacterColliderFrame::new(sk,&self.body_colliders,flags));
         let clothes_frame=clothes_body.filter(|_|needs_frame(true)).map(|sk|crate::dbone::CharacterColliderFrame::new(sk,&self.body_colliders,flags));
         let colliders=&self.body_colliders;
@@ -1615,10 +1616,12 @@ impl OkSession {
         // dynamics do not consume skin matrices and must not pay this preparation.
         let assigned_body=if palette_only{None}else{AssignedWorldFrame::prepare(body,&self.parts,false)};
         let assigned_clothes=if palette_only{None}else{AssignedWorldFrame::prepare(clothes_body,&self.parts,true)};
+        drop(frames_trace);
         // One accessory drawn by several renderers simulates the same bones once per renderer. Each measured the
         // mesh thickness of its own renderer only; with different radii against the partner's body the copies of a
         // strand parted and crossed each other (bangs "fighting"). Every copy uses the largest thickness of the bone.
         {
+            let _trace=crate::native_profile::Scope::new(45);
             let mut radii: HashMap<(String, String), f32> = HashMap::new();
             for runtime in self.parts.iter().filter_map(|p| p.runtime_accessory.as_ref()) {
                 let Some(state) = runtime.state.as_ref() else { continue };
@@ -1641,6 +1644,7 @@ impl OkSession {
         let mut leader_of:Vec<Option<usize>>=vec![None;self.parts.len()];
         let mut particle_ids:HashMap<usize,Vec<i64>>=HashMap::new();
         if dt>0.0 && acc_shared_solve() {
+            let _trace=crate::native_profile::Scope::new(46);
             let mut leaders:HashMap<(String,String,Option<String>,[u32;16],Vec<i64>),usize>=HashMap::new();
             for (index,part) in self.parts.iter().enumerate() {
                 let Some(runtime)=&part.runtime_accessory else {continue;};
