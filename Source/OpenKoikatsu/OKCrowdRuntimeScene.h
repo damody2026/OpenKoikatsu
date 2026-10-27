@@ -118,6 +118,9 @@ bool OKGetCrowdRuntimeFaceStatus(AActor* Owner,int32 Character,FOKRuntimeFaceSta
 bool OKSetCrowdRuntimeLocomotionState(AActor* Owner,int32 Character,bool Conversation,bool Running,FString& Error);
 // Standing still: the reading idle (book) when true, the plain standing idle when false (default true).
 bool OKSetCrowdRuntimeIdleReading(AActor* Owner,int32 Character,bool Reading);
+// Standing still in one of her own standing poses (manifest idle_variants; INDEX_NONE: the idle above). Answers how
+// many she has (0 before she is loaded or when the manifest names none).
+int32 OKSetCrowdRuntimeIdleVariant(AActor* Owner,int32 Character,int32 Variant);
 
 struct FPostProcessSettings;
 // Apply the admitted CardReader display LUT to gameplay and diagnostic cameras.

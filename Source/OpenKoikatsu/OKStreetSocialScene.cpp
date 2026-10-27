@@ -56,6 +56,7 @@
 #include "Widgets/Notifications/SProgressBar.h"
 #include "OKStreetSocialExpression.h"
 #include "OKCrowdRuntimeScene.h"
+#include "OKCrowdRoom.h"
 #include "HighResScreenshot.h"
 #include "KKRuntimeSpeech.h"
 #include "OKCrowdScene.h"
@@ -703,6 +704,12 @@ void AOKStreetSocialScene::BeginPlay(){
  // shaders. The shared scene ticker owns diagnostic playback and capture;
  // StreetSocial gameplay remains inactive when a crowd manifest is supplied.
  FString DiagnosticManifest;
+ // The hundred-girl room (CrowdRoom100.cmd): the street's characters, nothing else of the street.
+ if(FParse::Value(FCommandLine::Get(),TEXT("CrowdRoom="),DiagnosticManifest)){
+  FString RoomError;
+  if(!OKStartCrowdRoom(this,DiagnosticManifest,RoomError)){UE_LOG(LogTemp,Error,TEXT("Crowd room: %s"),*RoomError);FPlatformMisc::RequestExitWithStatus(false,1);}
+  return;
+ }
  if(FParse::Value(FCommandLine::Get(),TEXT("CrowdRuntimeScene="),DiagnosticManifest)){
   FString DiagnosticError;
   if(!OKStartCrowdRuntimeScene(this,DiagnosticManifest,DiagnosticError)){
