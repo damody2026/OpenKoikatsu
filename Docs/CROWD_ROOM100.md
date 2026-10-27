@@ -321,3 +321,10 @@ body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開
   - 行程裡的第一張卡另含一次 zipmod 掃描（約 3 秒，例如 C001 6.1 s）。
   - 「單張 3 秒內」還沒全部達到。
 - **關遊戲閃退**：載入中的工作執行緒在引擎結束後還去拿已卸載的 ImageWrapper 模組（`KKRuntimeMaterial.cpp`）。改成結束中就停下。全員載完後關閉沒有閃退；載入途中關閉的情況還沒重測。
+
+### 打包版（2026-10-28）
+
+- exe-only stage `Phys1028A`（`Saved/StreetSocial/Base1027`）＋ patch `StreetDisplay30Phys`（`Launch/runtime.json` 已改掛）。
+- `CrowdRoom100.cmd --gpu-rig --benchmark 20`（`Saved/Crowd/Room100-20261028T032553`）：
+  - **177.5 FPS**，幀 5.64 ms（P95 6.04、P99 6.31），game / render / GPU 1.56 / 5.63 / 4.61 ms，draw 5391。
+  - 100 人全部畫出，用時 79.8 秒，沒有載入失敗，沒有當機。
