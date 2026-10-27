@@ -223,6 +223,7 @@ struct FOKStreetSceneState {
  FString DialogueText,HintText;int32 DialogueTarget=INDEX_NONE;bool HintOpen=false,HintUnread=false;FLinearColor DialogueColor=FLinearColor::White;FString DigestedMessage;int32 DigestedTarget=INDEX_NONE,DigestedNode=INDEX_NONE;
  // Street clock: real local time at start, 24x speed. The sun is driven from it.
  int32 DayRewound=-1; // the game day the hour buttons went back from (R3-225): reached again, it is not begun twice
+ FVector OutingStuckPos=FVector::ZeroVector;int32 OutingStuckCount=0; // an outing held up in the same spot again and again (R3-234)
  TMap<int32,int64> WaitsForHim; // she wrote him where she is: until this minute she stays there for him (R3-230)
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.

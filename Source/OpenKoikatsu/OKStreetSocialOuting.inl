@@ -705,6 +705,15 @@ float AOKStreetSocialScene::StepOuting(float Dt){
      S.Male=FVector(In->Door.X,In->Door.Y,S.Male.Z);S.Agents[S.OutingGirl-1].Position=S.Male+FVector(0,80,0);Again=MoveTemp(Out);}
     else if(Out.Num()>=2){Again={S.Male};Again.Append(Out);}}
    UE_LOG(LogTemp,Display,TEXT("Street outing: blocked at (%.0f,%.0f), route planned again (%d points)"),S.Male.X,S.Male.Y,Again.Num());
+   // The same route again ran into the same thing every 4 s for minutes (a stroll stuck by the restaurant tables;
+   // R3-234). Held up in the same spot a third time: round it on the grid (cells tested with his body's clearance);
+   // a fifth: he squeezes past to the next point, as the navigation does when wedged.
+   if(FVector::Dist2D(S.Male,S.OutingStuckPos)<30.f)++S.OutingStuckCount;else{S.OutingStuckCount=1;S.OutingStuckPos=S.Male;}
+   if(S.OutingStuckCount>=5&&S.OutingRoute.IsValidIndex(S.OutingStep)){
+    const FVector Next=S.OutingRoute[S.OutingStep];UE_LOG(LogTemp,Display,TEXT("Street outing: wedged at (%.0f,%.0f); he steps past to the next point %s"),S.Male.X,S.Male.Y,*Next.ToCompactString());
+    S.Male=FVector(Next.X,Next.Y,S.Male.Z);++S.OutingStep;S.OutingStuckCount=0;return 0;}
+   if(S.OutingStuckCount>=3&&S.OutingRoute.IsValidIndex(S.OutingStep)){TArray<FVector> Around=GridRoute(S.Male,S.OutingRoute[S.OutingStep]);
+    if(Around.Num()>=2){for(int32 K=S.OutingStep+1;K<S.OutingRoute.Num();++K)Around.Add(S.OutingRoute[K]);Again=MoveTemp(Around);UE_LOG(LogTemp,Display,TEXT("Street outing: round it on the grid (%d points)"),Again.Num());}}
    if(Again.Num()>=2){S.OutingRoute=Again;S.OutingStep=1;}
   }
   return 0;
