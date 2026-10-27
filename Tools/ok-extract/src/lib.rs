@@ -27,6 +27,7 @@ pub mod vertcolor;
 pub mod video_motion;
 mod mods;
 mod pose;
+mod gpu_rig;
 mod ordered;
 mod profile;
 mod ffi;

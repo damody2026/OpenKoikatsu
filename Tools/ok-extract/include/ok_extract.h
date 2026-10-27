@@ -400,6 +400,12 @@ int32_t ok_session_open_clothes(const char* game,const char* card,int32_t outfit
 int32_t ok_session_export_shared_clip(OkSession* s,const char* key,uint8_t* out,int32_t cap);
 /* Offline deterministic initialization; live install retains private physics. */
 int32_t ok_session_prepare_shared_clip(OkSession* s,const uint8_t* bytes,int32_t len);
+// GPU rig (gpu_rig/export.rs): the session's body skeleton and palette factorization ("OKGR"), and a shared clip as GPU
+// channels ("OKGC"). Size-then-copy: out null and cap 0 answer the size. -1: failed.
+int32_t ok_session_gpu_rig(OkSession* s,const uint8_t* clip,int32_t len,uint8_t* out,int32_t cap);
+int32_t ok_session_gpu_clip(OkSession* s,const uint8_t* clip,int32_t len,uint8_t* out,int32_t cap);
+// The installed clip's pose at t without the frame's dynamics (a native-only pose bank). 0: done.
+int32_t ok_session_sample_frame(OkSession* s,float t);
 int32_t ok_session_apply_contact_frame(OkSession* s,float t,float dt,const uint8_t* json,int32_t len);
 int32_t ok_session_install_shared_clip(OkSession* s,const uint8_t* bytes,int32_t len);
 /* Game sessions: play OKCLIP01 bytes keeping the session's game root. */

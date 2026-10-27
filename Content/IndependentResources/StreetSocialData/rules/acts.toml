@@ -361,6 +361,15 @@ history = "promise"
 text = "%s"
 memory = -1
 
+# 交換電話（PhoneInbox 的 ExchangeContact）：她記得兩人什麼時候、在哪裡交換了聯絡方式。沒有這一項時紀錄整筆被丟掉
+# （log「unknown interaction contact」），她之後不記得給過他電話。
+[[act]]
+id = "contact"
+cat = "activity"
+history = "contact"
+text = "%s"
+memory = -1
+
 [[act]]
 id = "date"
 cat = "activity"

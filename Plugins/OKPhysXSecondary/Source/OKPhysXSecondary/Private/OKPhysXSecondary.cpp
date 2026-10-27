@@ -1008,12 +1008,15 @@ namespace OKPhysXSecondary
 			// Report a changed clothes layer once (how much each capsule grew, cm).
 			FString Grown;
 			for (int32 i = 0; i < Clothed.Num(); ++i) Grown += FString::Printf(TEXT("%d:%.1f "), i, (Clothed[i].Radius - Group->Body[i].Radius) * 100.f);
-			static FString LastGrown;
+			// Per group: one shared "last" with two characters in the scene (the one-on-one) changed every call, and the
+			// line was written twice a frame (55k lines a minute).
+			static TMap<uint64, FString> LastGrown;
 			static UE::FMutex LogLock;
 			{
 				UE::TUniqueLock LogGuard(LogLock);
 				if (Split < int32(Count)) Grown += FString::Printf(TEXT("| skinMedian=%.3f skinVerts=%.0f clothVerts=%.0f"), All[Split].A[0], All[Split].A[1], All[Split].A[2]);
-				if (Grown != LastGrown) { UE_LOG(LogOKPhysX, Display, TEXT("clothes layer group=%llu grown(cm)=%s"), GroupId, Grown.IsEmpty() ? TEXT("none") : *Grown); LastGrown = Grown; }
+				FString& Last = LastGrown.FindOrAdd(uint64(GroupId));
+				if (Grown != Last) { UE_LOG(LogOKPhysX, Display, TEXT("clothes layer group=%llu grown(cm)=%s"), GroupId, Grown.IsEmpty() ? TEXT("none") : *Grown); Last = Grown; }
 			}
 			Group->Clothed = MoveTemp(Clothed);
 		}

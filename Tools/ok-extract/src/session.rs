@@ -508,6 +508,19 @@ impl AccessoryRuntime {
         }
     }
 
+    /// Its DynamicBone state (the GPU rig exports the chains; None: no simulated bones).
+    pub(crate) fn dynamic_state(&self) -> Option<&crate::dbone::AttachedDynamicSet> { self.state.as_ref() }
+    /// The body bone each palette matrix follows, by name (export_skin_palette order), for an accessory skinned onto the
+    /// body (copy_weights_body); None for one with its own rig. A coordinated implanted bone follows the clothes set's
+    /// bone of that key (true), as effective_worlds reads it; any other implanted bone's name is its private one.
+    pub(crate) fn body_palette_names(&self) -> Option<Vec<(String,bool)>> {
+        if !self.copy_weights_body {return None;}
+        let rigid_clothes=AccessoryFramePolicy::read().rigid_clothes;
+        let private=match self.state.as_ref().filter(|_|!rigid_clothes){Some(state)=>&state.skel,None=>self.source.smr_skel.as_ref()?};
+        Some(private.names.iter().zip(&private.bone_ids).map(|(name,id)|
+            if self.implanted_bones.contains(id)&&self.coordinated {(crate::dbone::implant::rig::key(&self.clothes_component,*id),true)} else {(name.clone(),false)}).collect())
+    }
+
     pub(crate) fn export_skin_palette(&self, body:Option<&Skeleton>, head:Option<&Skeleton>) -> Option<(&ExtractedMesh,Vec<crate::pose::Mat4>)> {
         let (mesh,mut matrices,correction)=self.export_skin_stages(body,head)?;
         // Staged consumers always receive an explicit identity fallback. The
@@ -1599,6 +1612,7 @@ impl OkSession {
         // Private rigs own independent particle histories. Prepare immutable
         // character colliders once, then solve each renderer on the pool.
         let needs_frame=|coordinated|self.parts.iter().any(|p|p.runtime_accessory.as_ref().is_some_and(|r|r.coordinated==coordinated&&r.source.deferred_dbones.as_ref().is_some_and(|d|!d.is_empty())));
+        let frames_trace=crate::native_profile::Scope::new(44);
         let body_frame=body.filter(|_|needs_frame(false)).map(|sk|crate::dbone::CharacterColliderFrame::new(sk,&self.body_colliders,flags));
         let clothes_frame=clothes_body.filter(|_|needs_frame(true)).map(|sk|crate::dbone::CharacterColliderFrame::new(sk,&self.body_colliders,flags));
         let colliders=&self.body_colliders;
@@ -1606,10 +1620,12 @@ impl OkSession {
         // dynamics do not consume skin matrices and must not pay this preparation.
         let assigned_body=if palette_only{None}else{AssignedWorldFrame::prepare(body,&self.parts,false)};
         let assigned_clothes=if palette_only{None}else{AssignedWorldFrame::prepare(clothes_body,&self.parts,true)};
+        drop(frames_trace);
         // One accessory drawn by several renderers simulates the same bones once per renderer. Each measured the
         // mesh thickness of its own renderer only; with different radii against the partner's body the copies of a
         // strand parted and crossed each other (bangs "fighting"). Every copy uses the largest thickness of the bone.
         {
+            let _trace=crate::native_profile::Scope::new(45);
             let mut radii: HashMap<(String, String), f32> = HashMap::new();
             for runtime in self.parts.iter().filter_map(|p| p.runtime_accessory.as_ref()) {
                 let Some(state) = runtime.state.as_ref() else { continue };
@@ -1632,6 +1648,7 @@ impl OkSession {
         let mut leader_of:Vec<Option<usize>>=vec![None;self.parts.len()];
         let mut particle_ids:HashMap<usize,Vec<i64>>=HashMap::new();
         if dt>0.0 && acc_shared_solve() {
+            let _trace=crate::native_profile::Scope::new(46);
             let mut leaders:HashMap<(String,String,Option<String>,[u32;16],Vec<i64>),usize>=HashMap::new();
             for (index,part) in self.parts.iter().enumerate() {
                 let Some(runtime)=&part.runtime_accessory else {continue;};

@@ -46,10 +46,13 @@ bool ServiceProgressiveGpu(){
  int32 Best=INDEX_NONE;double Distance=TNumericLimits<double>::Max();bool Pending=false;
  // One install a frame: each registers two instanced skinned components (several at once stalled loading 660 ms).
  bool InstalledOne=false;
- for(int32 A=1;A<Entries.Num();++A){auto& E=*Entries[A];if(E.Stage!=5||E.LoadingGpuInstalled)continue;
+ for(int32 A=AggregateGpu?1:0;A<Entries.Num();++A){auto& E=*Entries[A];if(E.Stage!=5||E.LoadingGpuInstalled)continue;
   Pending=true;if(!E.LoadingRender){E.LoadingRender=MakeShared<FRenderState,ESPMode::ThreadSafe>();E.LoadingRender->Budget=Render->Budget;}
   const int32 Status=E.LoadingRender->UploadStatus.Load();
   if(Status<0){VisualError=TEXT("Private NPC GPU admission failed");Stopped=true;return true;}
+  // The GPU budget is full right now (others still uploading or retiring): try her again in a while.
+  if(Status==3){E.LoadingRender->UploadStatus.Store(0);E.BudgetRetryAt=SceneTime+2;if(!E.BudgetWaitLogged){E.BudgetWaitLogged=true;UE_LOG(LogTemp,Warning,TEXT("APNG private GPU bank %d waits for budget"),A);}continue;}
+  if(SceneTime<E.BudgetRetryAt){Pending=true;continue;}
   if(Status==2){if(!InstalledOne){InstalledOne=true;QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_InstallProgressive);InstallProgressiveGpu(E);}continue;}
   if(Status==1)continue;
   const double D=FVector::DistSquared(SpawnPosition(A),PlayerPosition);if(D<Distance){Distance=D;Best=A;}
@@ -59,6 +62,7 @@ bool ServiceProgressiveGpu(){
   ENQUEUE_RENDER_COMMAND(UploadPrivateLoadingBank)([R=E.LoadingRender,Bank=E.Bank](FRHICommandListImmediate& Cmd){
    FRDGBuilder G(Cmd);FString Error;bool Done=false;R->Budget->Collect();
    const bool Passed=R->Pose.UploadManagedChunk(G,Bank.ToSharedRef(),R->Budget,4ull*1024*1024,Done,Error);G.Execute();++R->UploadChunks;
+   if(!Passed&&Error.Contains(TEXT("capacity unavailable"))){R->UploadStatus.Store(3);return;}
    if(!Passed){R->Fail(Error);R->UploadStatus.Store(-1);}else R->UploadStatus.Store(Done?2:0);
   });
  }

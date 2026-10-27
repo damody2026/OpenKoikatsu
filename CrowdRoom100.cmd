@@ -1,15 +1,13 @@
 @echo off
 
 setlocal
-rem Native APNG room with the shared StreetSocial toon materials and display profile.
-rem FXAA + 150%% supersampling; progressive GPU entry with 3-second fade-in.
-rem GPU pose cache defaults to 4 GiB. WASD is available while characters load.
-rem Default APNG cards and selection: Content\CharacterCards\CrowdAPNG.
-rem Low models: each card's .lowpoly.okmap (Instant Meshes remesh, written by
-rem ok-lowpoly or the APNG export) replaces its source meshes; skinning keeps the
-rem card's own palette. Room-only host pinned by Saved\Crowd\CrowdRoom100\receipt.json.
+rem The hundred-girl room: the StreetSocial runtime characters (same build, materials, GPU poses and shadows as the
+rem street's heroines) wandering an empty room. Each girl stands about in one of her standing poses, now and then
+rem walks somewhere else. WASD / Q,E move the camera, hold the right mouse button to look, Shift faster.
+rem Cards: Content\CharacterCards\CrowdAPNG. Uses the newest Saved\StreetSocial\Build\*.stage.
+rem   CrowdRoom100.cmd --benchmark 60    measure 60 s once everyone is drawn (report.json + screenshot), then quit
 
-"%~dp0Tools\lua\lua.exe" "%~dp0Tools\run_crowd_runtime_apng_development.lua" --low-poly --executable "%~dp0Saved\Crowd\CrowdRoom100\receipt.json" %*
+"%~dp0Tools\lua\lua.exe" "%~dp0Tools\run_crowd_room100.lua" %*
 
 set "taskExitCode=%errorlevel%"
 if not "%taskExitCode%"=="0" pause

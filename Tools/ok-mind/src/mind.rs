@@ -496,7 +496,33 @@ fn run_chat(s: &Shared, agent: &ureq::Agent, job: &Job) -> Value {
         Ok(r) => r,
         Err(e) => return json!({"ok": false, "error": e}),
     };
-    let c = call_llm(s, agent, job, "chat", &req);
+    let mut c = call_llm(s, agent, job, "chat", &req);
+    // Asked for a JSON object, and what came back is not one: the group talk lost a whole turn to a reply whose last
+    // string ended in 」 with the response format echoed after it ({"type": "json_object"}). Mended when only its end
+    // is broken (text after the object, an unclosed string or bracket), otherwise asked again once.
+    if req.json {
+        if let Ok(r) = &mut c.reply {
+            if !is_json_object(&r.content) {
+                let mended = leading_json_object(&r.content).or_else(|| close_json_object(&r.content));
+                if let Some(mended) = mended {
+                    s.trace.write(&json!({"t": now_ms(), "id": job.id, "step": "chat_json_mended"}));
+                    r.content = mended;
+                }
+            }
+        }
+        if matches!(&c.reply, Ok(r) if !is_json_object(&r.content)) {
+            s.trace.write(&json!({"t": now_ms(), "id": job.id, "step": "chat_json_malformed"}));
+            let mut again = req.clone();
+            if let Ok(r) = &c.reply {
+                again.messages.push(Message { role: "assistant".into(), content: r.content.clone() });
+            }
+            again.messages.push(Message { role: "user".into(), content: crate::text::t(job_lang(job), "mind.malformed_json_reminder", &[]) });
+            let c2 = call_llm(s, agent, job, "chat", &again);
+            if matches!(&c2.reply, Ok(r2) if is_json_object(&r2.content)) {
+                c = c2;
+            }
+        }
+    }
     match c.reply {
         Ok(r) => json!({"ok": true, "content": r.content, "model": r.model, "finish_reason": r.finish_reason,
                         "usage": r.usage, "ms": c.ms, "attempts": c.attempts}),
@@ -641,6 +667,75 @@ fn leading_json_object(content: &str) -> Option<String> {
         Some(Ok(v)) if v.is_object() => Some(t[..values.byte_offset()].to_string()),
         _ => None,
     }
+}
+
+/// Whether a reply is one JSON object (a ```json fence around it is fine).
+fn is_json_object(content: &str) -> bool {
+    let t = content.trim();
+    let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t);
+    let t = t.strip_suffix("```").unwrap_or(t).trim();
+    matches!(serde_json::from_str::<Value>(t), Ok(v) if v.is_object())
+}
+
+/// A reply object whose end is broken, closed: the response format echoed after it is dropped, then an unclosed string,
+/// a dangling comma or key, and the open brackets are closed. None when even that does not make one object.
+fn close_json_object(content: &str) -> Option<String> {
+    let mut t = content.trim();
+    t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```")).unwrap_or(t).trim_start();
+    t = t.strip_suffix("```").unwrap_or(t).trim_end();
+    if let Some(at) = t.rfind("{\"type\"") {
+        if at > 0 && t[at..].contains("json_object") {
+            t = t[..at].trim_end();
+        }
+    }
+    if !t.starts_with('{') {
+        return None;
+    }
+    let (mut in_string, mut escaped, mut open) = (false, false, Vec::new());
+    for ch in t.chars() {
+        if in_string {
+            match (escaped, ch) {
+                (true, _) => escaped = false,
+                (false, '\\') => escaped = true,
+                (false, '"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '{' => open.push('}'),
+            '[' => open.push(']'),
+            '}' | ']' => {
+                if open.pop() != Some(ch) {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = t.to_string();
+    if in_string {
+        if escaped {
+            out.pop();
+        }
+        // Raw line breaks inside the unclosed string (the model went on after it) are not JSON.
+        let end = out.trim_end().len();
+        out.truncate(end);
+        out.push('"');
+    } else {
+        let end = out.trim_end().len();
+        out.truncate(end);
+        if out.ends_with(',') {
+            out.pop();
+        } else if out.ends_with(':') {
+            out.push_str("null");
+        }
+    }
+    while let Some(close) = open.pop() {
+        out.push(close);
+    }
+    serde_json::from_str::<Value>(&out).ok().filter(Value::is_object).map(|_| out)
 }
 
 /// The non-blank lines of a talk reply (empty when it is not such a JSON object).
@@ -942,5 +1037,16 @@ mod reply_tests {
         assert!(!object.contains("书局"));
         assert_eq!(leading_json_object("```json\n{\"lines\": [\"嗯。\"]}\n```").as_deref(), Some("{\"lines\": [\"嗯。\"]}"));
         assert_eq!(leading_json_object("好啊 {\"lines\": []}"), None);
+        // The group talk's broken end: the last string closed with 」 and the response format echoed after it.
+        let broken = "{\"lines\": [{\"who\": \"惠惠\", \"text\": \"給你就是了！\"}], \"favor\": {\"惠惠\": 2}, \"why\": \"惠惠害羞卻嘴硬。」\n\n{\"type\": \"json_object\"}";
+        assert!(!is_json_object(broken));
+        let mended = close_json_object(broken).unwrap();
+        let v: Value = serde_json::from_str(&mended).unwrap();
+        assert_eq!(v["lines"][0]["text"], "給你就是了！");
+        assert_eq!(v["why"], "惠惠害羞卻嘴硬。」");
+        assert_eq!(close_json_object("{\"lines\": [\"嗯\", ").as_deref(), Some("{\"lines\": [\"嗯\"]}"));
+        assert_eq!(close_json_object("{\"a\": 1}}"), None);
+        assert_eq!(close_json_object("好啊"), None);
+        assert!(is_json_object("```json\n{\"a\": 1}\n```"));
     }
 }

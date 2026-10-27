@@ -98,10 +98,15 @@ void AOKInteractionMode::LoadFemale(const FString& Path){
     FOkSession::InitBindings();
     Async(EAsyncExecution::Thread,[Weak,Job,Token,Path,Root,Source](){
         if(*Token)return;
+        // Each step timed: March 7th's high model took 14 s here (Encore 1.6 s) with nothing in the log.
+        const double T0=FPlatformTime::Seconds();
         Job->Ok=UKKCardReader::LoadFromFile(Path,Job->Card,Job->Error);
         if(Job->Ok&&Job->Card.Sex!=1){Job->Ok=false;Job->Error=TEXT("這張卡是男性角色，不能當女角：")+FPaths::GetCleanFilename(Path);}
+        const double T1=FPlatformTime::Seconds();
         Job->Ok=Job->Ok&&Job->Session.Open(Root,Source,0,Job->Error);
-        if(Job->Ok&&!*Token){Job->Session.ApplyBodyPhysics(Job->Card.Body.BustSoftness,Job->Card.Body.BustWeight);AKKPreviewActor::PrecacheSessionTextures(Job->Session,true);}
+        const double T2=FPlatformTime::Seconds();double T3=T2,T4=T2;
+        if(Job->Ok&&!*Token){Job->Session.ApplyBodyPhysics(Job->Card.Body.BustSoftness,Job->Card.Body.BustWeight);T3=FPlatformTime::Seconds();AKKPreviewActor::PrecacheSessionTextures(Job->Session,true);T4=FPlatformTime::Seconds();}
+        UE_LOG(LogTemp,Display,TEXT("Interaction female load %s: card %.0f ms, session %.0f ms, body physics %.0f ms, textures %.0f ms"),*FPaths::GetCleanFilename(Path),(T1-T0)*1000.,(T2-T1)*1000.,(T3-T2)*1000.,(T4-T3)*1000.);
         AsyncTask(ENamedThreads::GameThread,[Weak,Job,Token,Path](){
             if(*Token||!Weak.IsValid())return;auto* Mode=Weak.Get();auto* C=Mode->Controller.Get();
             if(!Job->Ok){Mode->Fail(Job->Error.IsEmpty()?TEXT("女角高模載入失敗"):Job->Error);return;}

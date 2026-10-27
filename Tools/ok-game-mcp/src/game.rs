@@ -148,9 +148,12 @@ impl Game {
             .filter(|p| p.join("game.log").is_file())
             .collect();
         let pid = self.port_pid().ok().flatten();
-        let ours = pid.and_then(|pid| plays.iter().find(|p| std::fs::read_to_string(p.join("game.pid")).is_ok_and(|t| t.trim() == pid)).cloned());
+        let modified = |p: &&std::path::PathBuf| p.join("game.log").metadata().and_then(|m| m.modified()).ok();
+        // The newest of the folders with that pid: Windows gives a pid out again, and the first match was a game of an
+        // hour before (its log read as this one's).
+        let ours = pid.and_then(|pid| plays.iter().filter(|p| std::fs::read_to_string(p.join("game.pid")).is_ok_and(|t| t.trim() == pid)).max_by_key(modified).cloned());
         let newest = ours
-            .or_else(|| plays.iter().max_by_key(|p| p.join("game.log").metadata().and_then(|m| m.modified()).ok()).cloned())
+            .or_else(|| plays.iter().max_by_key(modified).cloned())
             .map(|p| p.join("game.log"))
             .context("no Saved/StreetSocial/Play-*/game.log yet")?;
         let bytes = std::fs::read(&newest)?;

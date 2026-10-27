@@ -155,3 +155,56 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 | forgot | 問她回滾掉的事實（生日），她提到就記 WARN（AI 回答，不算失敗） |
 
 遊戲端為此新增控制埠 `GET /galgame`（呈現狀態：active、partner、lines、view_line、checkpoints、on_screen、portrait_captured、ok-story 的 state）與 `/state` 的 `all_ready`（每個角色都載好，不依顯示語言）。
+
+回歸腳本 2026-10-27 新增兩項：
+
+| 項目 | 檢查 |
+|---|---|
+| direction | 他說「（揮手）……」，語音伺服器收到的那句沒有括號內容（要用遊戲自己帶起的 ok-tts，讀 `Build/ok-tts/logs/ok-tts.log`；沒有這個 log 就記 WARN） |
+| private | 加 `--private` 才做：存到 slot 9、進出一次 1 對 1，確認離開時 log 有 `extraction environment put back`；讀回 slot 9 後拍一張檢視截圖，用眼睛看她沒有黑色尖刺、衣服完整 |
+
+## 名字照遊戲的字體（2026-10-27）
+
+卡名是識別用，不能改；十位女主有五位的卡名是簡體。顯示時：
+
+- 訊息參數裡鍵名含 `name` 的字串（`name`、`girl_name`、`place_name`……），由 ok-rules 的 `text` 轉成遊戲語言的字體（`locale.rs` `text_of`）。
+- 不走訊息的幾處（小地圖標記、右側標題、女角名單、目前對象）用 `OKStreetScriptedName`。
+- 餐點清單的主人用 `SpokenName`。
+
+新的 UI 顯示女主名字時，用訊息參數或這兩個函式，不要直接接卡名。
+
+## 群聊與走路時的演出（2026-10-27）
+
+- 群聊時他的話也進對話框：`SendFreeTalk` 走 `SendPartyTalk` 之前先設定 `FreeTalkCaptionPlayer`。
+- 群聊的模型回覆壞掉時：ok-mind 的 `chat` 在要求 JSON 時，先修補結尾（物件後面多出的文字、回聲的 `{"type": "json_object"}`、沒關的字串和括號），修不好就重問一次。
+- 一起走路聊天時：演出中、沒有 Target、她在他 3 m 內，跟隨鏡頭的焦點半秒內平滑移到兩人中間（`GalgameWalkFocus`）。原本鏡頭只對著他，她說話時落在右側面板底下。
+- 回放最近 20 句時，遊戲替她送的話（上桌、點餐、櫃檯通知、沉默搭話）會等回放播完。
+- 舞台指示不念：送語音前拿掉 16 字以內的括號段（`OKStreetSpokenText.h`），她的分段語音和他的語音都用；對話框照常顯示。
+
+## 1 對 1 場景（2026-10-27）
+
+- 進場時收起街頭的對話框（`GalgameHideForPrivate`）。1 對 1 期間街頭不 Tick，`TickGalgame` 裡的隱藏判斷不會執行。
+- 離開時她就在身邊（4 m 內）：用 `ResumeTalkQuiet` 接回對話。原本她回到街頭就照行程走掉。
+- 取模環境變數：高模開卡時 `OKPrepareLiveGpuEnv` 會把 `OK_GPU_SKIN`、`OK_SKELMESH` 等改成整個程序都生效。現在進場前記下、離開時還原（`OKStreetSocialPrivateEnv.cpp`）。沒有還原時，之後讀檔或開新遊戲，所有女主都會畫壞。
+- 效能：遊戲裡沒有任何 OK 配對包，所有雙人姿勢都走原生路徑。原生 GPU 求解現在也放到背景執行緒，下一幀顯示（`AKKPairedPlayback::Advance`、`ok.Anim.AsyncPair`）。1 對 1 從 77 FPS 提升到 185 FPS（GPU 上只有另一個遊戲時量的）。
+- log：`clothes layer`、`shadow capture skipped`、`APNG source capture` 原本每幀都印，現在依實例或組合各只印一次。
+
+### 量 1 對 1 的 Rust 雙人求解
+
+1. 啟動時就開 trace：`game_launch {options: ["-Trace","default,cpu,frame","-GameArgs","-OKNativeTrace"]}`。Rust 的計時區段在第一次求解時登記，若事後才開 trace，會登記成空類型、全被丟掉。
+2. 用 `UnrealInsights.exe -OpenTraceFile=<trace.utrace> -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimerStatistics out.csv" -AutoQuit -NoUI` 匯出，看 `KK_Native*` 各項。trace 動輒幾百 MB，看完就刪。
+
+2026-10-27 量到的愛麗絲 1 對 1（109 FPS，胡桃 185），每幀：
+
+- 取樣 3.3 ms：
+  - 其中 `KK_NativeMotionLeaves` 每個角色 2.08 ms（兩人平行算），是各混合葉的骨架快照加原始曲線取樣。
+  - `KK_NativeMotionPlan` 0.04 ms、`KK_NativeMotionBlend` 0.12 ms，都很小。
+- 接觸 1 ms。
+- 動態 3.6 ms，主要是飾品鏈。
+
+要上 120 FPS，得重寫 `anim.rs` 葉取樣的資料結構（每片葉一份 HashMap 骨架、逐骨查表），尚未動手。
+
+之後拆出 `KK_NativeLeafSnapshot`／`KK_NativeLeafChannels`／`KK_NativeChannelLookup`／`KK_NativeChannelSample`，找到真正原因是每次都從磁碟快取重讀 avatar 路徑表，並導致綁定與通道計畫快取永遠不中。改成依根目錄記在記憶體後（`anim.rs` `load_avatar_tos_shared`）：
+
+- 每個角色的曲線取樣從 2.76 ms 降到 0.64 ms。
+- 愛麗絲 1 對 1 從 109 FPS 提升到 128 FPS（不開 trace，GPU 上只有另一個 C 的遊戲）。

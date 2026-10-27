@@ -1,5 +1,6 @@
 #include "OKStreetSocialScene.h"
 #include "OKStreetSocialText.h"
+#include "OKStreetSpokenText.h"
 #include "OKStreetSocialSpeakerText.h"
 #include "OKStreetSocialSongState.h"
 #include "OKInteractionMode.h"
@@ -55,6 +56,7 @@
 #include "Widgets/Notifications/SProgressBar.h"
 #include "OKStreetSocialExpression.h"
 #include "OKCrowdRuntimeScene.h"
+#include "OKCrowdRoom.h"
 #include "HighResScreenshot.h"
 #include "KKRuntimeSpeech.h"
 #include "OKCrowdScene.h"
@@ -716,6 +718,12 @@ void AOKStreetSocialScene::BeginPlay(){
  // shaders. The shared scene ticker owns diagnostic playback and capture;
  // StreetSocial gameplay remains inactive when a crowd manifest is supplied.
  FString DiagnosticManifest;
+ // The hundred-girl room (CrowdRoom100.cmd): the street's characters, nothing else of the street.
+ if(FParse::Value(FCommandLine::Get(),TEXT("CrowdRoom="),DiagnosticManifest)){
+  FString RoomError;
+  if(!OKStartCrowdRoom(this,DiagnosticManifest,RoomError)){UE_LOG(LogTemp,Error,TEXT("Crowd room: %s"),*RoomError);FPlatformMisc::RequestExitWithStatus(false,1);}
+  return;
+ }
  if(FParse::Value(FCommandLine::Get(),TEXT("CrowdRuntimeScene="),DiagnosticManifest)){
   FString DiagnosticError;
   if(!OKStartCrowdRuntimeScene(this,DiagnosticManifest,DiagnosticError)){
@@ -1178,8 +1186,9 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  if(His){++S.HisLines;{const int64 Now=OKStreetMindNow(S);if(S.SaidToHerWith!=Character||Now-S.SaidToHerAt>45){S.SaidToHer.Reset();S.SaidToHerWith=Character;}S.SaidToHerAt=Now;}S.SaidToHer.Add(Text);if(S.SaidToHer.Num()>4)S.SaidToHer.RemoveAt(0);}
  // Called by another girl's name: she sees his words and her own name, and notices it herself (no name lookup here).
  // A note the game wrote for her (a till note, "you are on shift till three"): in the group prompt the model writes
- // every girl's lines, so its "you" is named; Encore took Alice's shift for his.
- if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
+ // every girl's lines, so its "you" is named; Encore took Alice's shift for his. His line goes to the galgame box first
+ // (FreeTalkCaptionPlayer, set below only for one girl): in a group talk his question never showed.
+ if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){if(His)S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
  // Said while the scene shows an earlier line (rolled back with the wheel): what came after it is undone first; then
  // the point this line can be rolled back to.
  // Only his own words roll back: a turn the game wrote for her (her "we're friends now" once the favour reached it, a
@@ -1641,7 +1650,7 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
  const int32 Character=S.FreeTalkSpeechSpeakers.IsValidIndex(Index)?S.FreeTalkSpeechSpeakers[Index]:S.FreeTalkSpeechCharacter;
  // What the server can speak: a line of only dots ("……") has nothing to say and is shown silent, not a "TTS failed:
  // text must be 1..400 characters" notice; a longer one is cut at its last sentence end within 400 (R3-215).
- FString Spoken=S.FreeTalkSpeechLines[Index];
+ FString Spoken=OKStreetSpokenText(S.FreeTalkSpeechLines[Index]); // no stage directions (OKStreetSpokenText.h)
  {bool Speakable=false;for(const TCHAR C:Spoken)if(FChar::IsAlnum(C)||(C>=0x3040&&C<0xFF00)){Speakable=true;break;}
   if(!Speakable){S.FreeTalkSpeechStreamed[Index]=2;if(S.FreeTalkSpeechReady[Index]==0)S.FreeTalkSpeechReady[Index]=2;return;}
   if(Spoken.Len()>400){int32 Cut=400;for(int32 I=399;I>200;--I)if(FCString::Strchr(TEXT("。！？!?…"),Spoken[I])){Cut=I+1;break;}Spoken.LeftInline(Cut);}}
@@ -2178,7 +2187,7 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
   if(S.Overlay.IsValid())GEngine->GameViewport->RemoveViewportWidgetContent(S.Overlay.ToSharedRef());
   SAssignNew(S.Minimap,SOKStreetMinimap).Visibility(EVisibility::HitTestInvisible);
   auto MapData=[Weak=TWeakPtr<FOKStreetSceneState>(State),Owner=TWeakObjectPtr<AOKStreetSocialScene>(this)](int32 KeepPlaces){FOKStreetMinimapData D;if(auto Live=Weak.Pin()){if(!Owner.IsValid())return D;D.Player=Live->Male;D.ShowNames=Live->MinimapShowNames;for(const auto& Place:OKStreetPlaces())D.Places.Add(TPair<FString,FVector>(Place.Name,Place.Door));D.Navigation=Live->NavPath;D.FacingYaw=Live->Rotations.IsValidIndex(0)?Live->Rotations[0].Yaw:0;
-   for(const auto& A:Live->Agents){FOKRuntimeCharacterStatus Status;if(!Live->Manifest.Characters.IsValidIndex(A.Slot)||!OKGetCrowdRuntimeCharacterStatus(Owner.Get(),A.Slot,Status)||!Status.Visible||!Status.Error.IsEmpty())continue;FOKStreetMinimapMarker M;M.Slot=A.Slot;M.Name=Live->Manifest.Characters[A.Slot].Name;M.Position=A.Position;M.Selected=Live->Target==A.Slot||Live->NavGirl==A.Slot;const auto Rel=OKStreetViewRelation(Live->Store,OKStreetStableId(Live->Manifest.Characters[A.Slot]),Live->Manifest.TalkBudget);M.Favor=Rel.Favor;M.Stage=OKStreetStageIndex(Rel.Stage);const int32 Limit=OKRulesFavorLimit(*Live,Rel,Rel.Stage);M.FavorFull=Limit!=INDEX_NONE&&Rel.Favor>=Limit;D.Girls.Add(M);}
+   for(const auto& A:Live->Agents){FOKRuntimeCharacterStatus Status;if(!Live->Manifest.Characters.IsValidIndex(A.Slot)||!OKGetCrowdRuntimeCharacterStatus(Owner.Get(),A.Slot,Status)||!Status.Visible||!Status.Error.IsEmpty())continue;FOKStreetMinimapMarker M;M.Slot=A.Slot;M.Name=OKStreetScriptedName(Live->Manifest.Characters[A.Slot].Name);M.Position=A.Position;M.Selected=Live->Target==A.Slot||Live->NavGirl==A.Slot;const auto Rel=OKStreetViewRelation(Live->Store,OKStreetStableId(Live->Manifest.Characters[A.Slot]),Live->Manifest.TalkBudget);M.Favor=Rel.Favor;M.Stage=OKStreetStageIndex(Rel.Stage);const int32 Limit=OKRulesFavorLimit(*Live,Rel,Rel.Stage);M.FavorFull=Limit!=INDEX_NONE&&Rel.Favor>=Limit;D.Girls.Add(M);}
    TArray<FOKStreetPointData> Points;TArray<TArray<int32>> Routes;OKStreetWaypoints(Points);OKStreetRoutes(Routes);for(const auto& Route:Routes){TArray<FVector> Path;for(int32 I:Route)if(Points.IsValidIndex(I))Path.Add(Points[I].Position);if(!Path.IsEmpty()){const FVector First=Path[0];Path.Add(First);}D.Paths.Add(MoveTemp(Path));}
   OKStreetNearestPlaces(D.Places,D.Player,KeepPlaces);}return D;};
   S.Minimap->Read=[MapData](){return MapData(10);};
@@ -2293,7 +2302,7 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
    .OnTextCommitted_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this)](const FText& Text,ETextCommit::Type){if(Weak.IsValid()&&Weak->State){Weak->State->PlayerNameDraft.Reset();Weak->SetPlayerName(Text.ToString());}})]];
  const bool Busy=OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive);
  auto Heading=[Weak=TWeakPtr<FOKStreetSceneState>(State)](){auto L=Weak.Pin();if(!L||L->Target==INDEX_NONE)return FText::FromString(OKT(TEXT("ui.scene.app_title_apng")));const auto Relation=OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[L->Target]),L->Manifest.TalkBudget);const float Spirits=Relation.MoodLevel*FMath::Pow(.5f,float(FMath::Max<int64>(0,OKStreetMindNow(*L)-Relation.MoodMinute))/360.f); // her spirits (R3-269)
- return FText::FromString(L->Manifest.Characters[L->Target].Name+OKMsg(TEXT("ui.scene.stats_line"), {{TEXT("favor"), Relation.Favor}, {TEXT("arousal"), Relation.Lewdness}, {TEXT("mood"), OKStreetMoodBand(Spirits)},{TEXT("stage"), Relation.Stage==TEXT("lover")?OKT(TEXT("ui.bonds.lover_stage")):Relation.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.scene.stage_new"))}}));};
+ return FText::FromString(OKStreetScriptedName(L->Manifest.Characters[L->Target].Name)+OKMsg(TEXT("ui.scene.stats_line"), {{TEXT("favor"), Relation.Favor}, {TEXT("arousal"), Relation.Lewdness}, {TEXT("mood"), OKStreetMoodBand(Spirits)},{TEXT("stage"), Relation.Stage==TEXT("lover")?OKT(TEXT("ui.bonds.lover_stage")):Relation.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.scene.stage_new"))}}));};
  Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text_Lambda(Heading).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Bold",20))];
  if(!S.TouchNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TouchNotice)).AutoWrapText(true).WrapTextAt(360)];
  if(!S.TalkFailureNotice.IsEmpty())Box->AddSlot().AutoHeight().Padding(8)[SNew(STextBlock).Text(FText::FromString(S.TalkFailureNotice)).AutoWrapText(true).WrapTextAt(360)];
@@ -2357,12 +2366,12 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
  if(S.ContactsOpen){
   auto List=SNew(SVerticalBox);
   for(const auto& Girl:S.Agents){const int32 Slot=Girl.Slot;++S.ContactRows;
-   List->AddSlot().AutoHeight().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot](){if(!Weak.IsValid())return FText::GetEmpty();const auto& L=*Weak->State;const auto R=OKStreetViewRelation(L.Store,OKStreetStableId(L.Manifest.Characters[Slot]),L.Manifest.TalkBudget);return FText::FromString(FString::Printf(TEXT("%s%s  ·  %s  ·  %.1fm"),L.ContactSelection==Slot?TEXT("▶ "):TEXT(""),*L.Manifest.Characters[Slot].Name,R.Stage==TEXT("lover")?OKT(TEXT("ui.bonds.lover_stage")):R.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.scene.stage_new")),FVector::Dist2D(L.Male,L.Agents[Slot-1].Position)/100));}).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot](){if(Weak.IsValid())Weak->SelectContact(Slot);return FReply::Handled();})];
+   List->AddSlot().AutoHeight().Padding(2)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot](){if(!Weak.IsValid())return FText::GetEmpty();const auto& L=*Weak->State;const auto R=OKStreetViewRelation(L.Store,OKStreetStableId(L.Manifest.Characters[Slot]),L.Manifest.TalkBudget);return FText::FromString(FString::Printf(TEXT("%s%s  ·  %s  ·  %.1fm"),L.ContactSelection==Slot?TEXT("▶ "):TEXT(""),*OKStreetScriptedName(L.Manifest.Characters[Slot].Name),R.Stage==TEXT("lover")?OKT(TEXT("ui.bonds.lover_stage")):R.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.scene.stage_new")),FVector::Dist2D(L.Male,L.Agents[Slot-1].Position)/100));}).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot](){if(Weak.IsValid())Weak->SelectContact(Slot);return FReply::Handled();})];
   }
   Box->AddSlot().AutoHeight().Padding(4)[SNew(SBox).MaxDesiredHeight(200)[SNew(SScrollBox)+SScrollBox::Slot()[List]]];
   const int32 Slot=S.ContactSelection;
   if(S.Agents.IsValidIndex(Slot-1)){
-   Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.target_label"))+S.Manifest.Characters[Slot].Name)).AutoWrapText(true).WrapTextAt(360).ColorAndOpacity(FLinearColor(1,.83f,.35f))];
+   Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.target_label"))+OKStreetScriptedName(S.Manifest.Characters[Slot].Name))).AutoWrapText(true).WrapTextAt(360).ColorAndOpacity(FLinearColor(1,.83f,.35f))];
    Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot](){if(!Weak.IsValid())return FText::GetEmpty();const auto& L=*Weak->State;FString Hint;if(!Weak->ContactReady(Slot))Hint=OKT(TEXT("ui.scene.character_loading"));else if(L.PrivateGirl!=INDEX_NONE)Hint=OKT(TEXT("ui.scene.exit_one_on_one_first"));else if(!Weak->ContactIdle())Hint=OKT(TEXT("ui.scene.finish_current_first"));else Hint=OKT(TEXT("ui.scene.navigate_or_scene_hint"));return FText::FromString(Hint);}).AutoWrapText(true).WrapTextAt(360)];
    for(int32 Action=0;Action<2;++Action){++S.ContactActions;const TCHAR* Labels[]={OKT(TEXT("ui.scene.navigate_to_her")),OKT(TEXT("ui.scene.enter_one_on_one"))};Box->AddSlot().AutoHeight().Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).IsEnabled_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot,Action](){return Weak.IsValid()&&Weak->ContactReady(Slot)&&(Action==0?Weak->State->PrivateGirl==INDEX_NONE:Weak->ContactIdle());}).Text(FText::FromString(Labels[Action])).OnClicked_Lambda([Weak=TWeakObjectPtr<AOKStreetSocialScene>(this),Slot,Action](){if(Weak.IsValid()){if(Action==0)Weak->NavigateGirl(Slot);else if(Weak->PrivateConsent(Slot))Weak->BeginPrivate(Slot);}return FReply::Handled();})];}
   }else Box->AddSlot().AutoHeight().Padding(4)[SNew(STextBlock).Text(FText::FromString(OKT(TEXT("ui.scene.pick_girl_first")))).AutoWrapText(true).WrapTextAt(360)];
@@ -3766,6 +3775,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(S.Camera.IsValid()){FVector Focus=S.Target!=INDEX_NONE?S.Agents[S.Target-1].Position+FVector(0,0,135):S.Male+FVector(0,0,115);FVector Pivot=S.Target!=INDEX_NONE?(S.Male+S.Agents[S.Target-1].Position)*.5f+FVector(0,0,115):Focus;
   if((S.Pair.Conversation()||S.Pair.Splash)&&S.Pair.Phase==1){FVector A,B;if((OKGetCrowdRuntimeBonePosition(this,0,TEXT("cm_j_head"),A)||OKGetCrowdRuntimeBonePosition(this,0,TEXT("cf_j_head"),A))&&OKGetCrowdRuntimeBonePosition(this,S.Pair.Partner,TEXT("cf_j_head"),B)&&!A.ContainsNaN()&&!B.ContainsNaN()){Focus=(A+B)*.5f-FVector(0,0,25);Pivot=Focus;}}
   if(S.Pair.Watermelon&&S.Pair.Phase==1){Focus=(S.Male+S.Agents[S.Pair.Partner-1].Position)*.5f+FVector(0,35,80);Pivot=Focus;}
+  GalgameWalkFocus(Focus,Pivot); // walking and talking: between him and her (OKStreetSocialGalgame.inl)
   const FRotator View(S.Pitch,S.Yaw,0);const FVector Wanted=Pivot-View.Vector()*S.Distance+(S.Target!=INDEX_NONE?FRotationMatrix(View).GetUnitAxis(EAxis::Y)*(S.Pair.Conversation()?-120.f:110.f):FVector::ZeroVector);FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetCamera),false,this);const bool Blocked=GetWorld()->SweepSingleByChannel(Hit,Pivot,Wanted,FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeSphere(8),Query);S.Camera->SetActorLocation(Blocked?Hit.Location:Wanted);S.Camera->SetActorRotation((Focus-S.Camera->GetActorLocation()).Rotation());
   {FVector SongAt,SongFocus;if(SongCameraShot(SceneTime(),Dt,SongAt,SongFocus)){S.Camera->SetActorLocation(SongAt);S.Camera->SetActorRotation((SongFocus-SongAt).Rotation());S.Camera->GetCameraComponent()->SetFieldOfView(40.f);}}if(GControlCamera.Active&&!OKApplyControlCamera(this,S.Camera.Get()))GControlCamera.Active=false;OKUpdateCrowdRuntimeDisplayLighting(this,-S.Camera->GetActorForwardVector());}
  if(S.Camera.IsValid()&&SceneTime()<S.PhotoViewUntil)S.Camera->SetActorLocationAndRotation(S.PhotoViewLoc,S.PhotoViewRot); // a photo being taken

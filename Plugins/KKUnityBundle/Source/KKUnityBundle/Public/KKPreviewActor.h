@@ -620,6 +620,10 @@ public:
     void PublishPhysicsFrame() const;
     static bool ApplyPairedFrameWithDisplay(AKKPreviewActor& Female,AKKPreviewActor& Male,float Time,float Delta,
         const FString& State,const FString& FemaleMotion,const FString& MaleMotion,FString& Error);
+    /** The GPU-owned parts of a pair, when ApplyPairedFrameWithDisplay would solve it with the GPU path only (a Rust call
+     *  that can run off the game thread, AKKPairedPlayback); marks both displays stale for the frame it will show. */
+    static bool PairedFrameGpuParts(AKKPreviewActor& Female,AKKPreviewActor& Male,TArray<int32>& FemaleParts,TArray<uint64>& FemaleRevisions,
+        TArray<int32>& MaleParts,TArray<uint64>& MaleRevisions);
 	void CaptureRigidFollowerNeutral();
 	void UpdateRigidFollowers();
 	void SyncMouthPose();

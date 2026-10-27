@@ -121,9 +121,10 @@ bool AOKStreetSocialScene::SongIsSinging() const{
 // What she sings in each breath, as ok-asr hears it (/transcribe_spans on the song): the song model does not keep to the
 // sheet (two lines in one breath, a chorus once more), so the caption lines are matched to this (rules song_choreo
 // "heard"). Kept with the song for every replay. Without ok-asr the captions follow the sheet alone. If the answer comes
-// while she is already singing this song, its caption lines are timed again then.
+// while she is already singing this song, its caption lines are timed again then. What is already heard stays until
+// the answer comes (an older song sung again keeps its breaths while its windows are being heard).
 void AOKStreetSocialScene::SongListen(){
- auto& S=*State;auto& G=S.Song;G.Heard.Reset();G.HeardWindows.Reset();if(G.SongPath.IsEmpty()||G.Mouth.IsEmpty())return;
+ auto& S=*State;auto& G=S.Song;if(G.SongPath.IsEmpty()||G.Mouth.IsEmpty())return;
  auto Ask=OKRulesRequest(TEXT("song_breaths"));TArray<TSharedPtr<FJsonValue>> Mouth;Mouth.Reserve(G.Mouth.Num());
  for(const float V:G.Mouth)Mouth.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(V*1000.f)/1000.f));
  Ask->SetArrayField(TEXT("mouth"),Mouth);Ask->SetNumberField(TEXT("hop"),G.Hop);
@@ -134,7 +135,9 @@ void AOKStreetSocialScene::SongListen(){
  auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("path"),FPaths::ConvertRelativePathToFull(G.SongPath));Body->SetArrayField(TEXT("spans"),All);Body->SetStringField(TEXT("language"),TEXT("Chinese"));
  FString Text;FJsonSerializer::Serialize(Body,TJsonWriterFactory<>::Create(&Text));
  auto Request=FHttpModule::Get().CreateRequest();Request->SetURL(OKStreetFreeTalkAsrEndpoint()/TEXT("transcribe_spans"));Request->SetVerb(TEXT("POST"));
- Request->SetHeader(TEXT("Content-Type"),TEXT("application/json"));Request->SetContentAsString(Text);Request->SetTimeout(120);
+ // About 100 short spans: half a minute on a free GPU, several minutes beside other games; a late answer still times
+ // the captions (below), so it is waited for.
+ Request->SetHeader(TEXT("Content-Type"),TEXT("application/json"));Request->SetContentAsString(Text);Request->SetTimeout(600);
  const FString Path=G.SongPath;const int32 Count=Spans->Num(),Total=All.Num();
  Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Path,Count,Total](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
   if(!State)return;auto& L=State->Song;TSharedPtr<FJsonObject> J;const TArray<TSharedPtr<FJsonValue>>* Texts=nullptr;
@@ -391,7 +394,7 @@ void AOKStreetSocialScene::SongPoll(){
   if(!IFileManager::Get().FileExists(*Copy)&&IFileManager::Get().Copy(*Copy,*Song)!=COPY_OK){L.Phase=EOKSongPhase::Failed;L.Notice=FString(OKT(TEXT("ui.song.failed")))+TEXT("copy");RefreshUI();return;}
   // Her mouth envelope beside it: a song she has sung can be sung again later (SongReplay) without ok-song.
   FFileHelper::SaveStringToFile(Text,*FPaths::ChangeExtension(Copy,TEXT("mouth.json")),FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-  L.SongPath=Copy;L.Phase=EOKSongPhase::Ready;L.PhaseAt=SceneTime();L.Notice.Reset();SongListen();
+  L.SongPath=Copy;L.Phase=EOKSongPhase::Ready;L.PhaseAt=SceneTime();L.Notice.Reset();L.Heard.Reset();L.HeardWindows.Reset();SongListen();
   UE_LOG(LogTemp,Display,TEXT("Street song: ready %s (%d mouth values, %s)"),*L.SongPath,L.Mouth.Num(),*L.ArtifactKey);SongSave();RefreshUI();
  });
  Request->ProcessRequest();
@@ -664,7 +667,8 @@ void AOKStreetSocialScene::TickSong(double Now){
     if(K!=G.Cue&&G.CueClip.IsValidIndex(K)){G.Cue=K;SongStage(G.CueClip[K],G.CueClip.IsValidIndex(K+1)?G.CueClip[K+1]:G.OutroClip,TEXT("cue"));}
     // The caption: the line being sung, karaoke-like, instead of the whole sheet growing in the box.
     int32 L=G.Line;while(G.LineAt.IsValidIndex(L+1)&&G.LineAt[L+1]<=Played)++L;
-    if(L!=G.Line&&G.LineText.IsValidIndex(L)){G.Line=L;OKSongCaption(S,TEXT("♪ ")+G.LineText[L]+TEXT(" ♪"));RefreshUI();}}
+    // (An empty line is a rest: she hums or pauses for a while, so no words stay up.)
+    if(L!=G.Line&&G.LineText.IsValidIndex(L)){G.Line=L;OKSongCaption(S,G.LineText[L].IsEmpty()?FString(TEXT("♪")):TEXT("♪ ")+G.LineText[L]+TEXT(" ♪"));RefreshUI();}}
    SongStageTick();
    return;}
   if(G.SpeechStarted||Now-G.PhaseAt>10){G.Phase=EOKSongPhase::Outro;G.PhaseAt=Now;SongStage(G.OutroClip,FString(),TEXT("outro"));{const FString Outro=OKSongOccasionLine(G.Occasion,TEXT("outro_line"));SongSay(Outro);OKSongCaption(S,Outro);SongRecord(Outro,OKT(TEXT("ui.song.context_sang")));}RefreshUI();}
@@ -736,7 +740,7 @@ TSharedRef<FJsonObject> AOKStreetSocialScene::SongControl(const FString& Action,
  // replay {girl: memory index, or -1: her latest song (the heroine he is talking with)}
  else if(Action==TEXT("replay")){int32 Index=Girl;
   if(Index<0&&S.Manifest.Characters.IsValidIndex(S.Target)){const FString Her=OKStreetStableId(S.Manifest.Characters[S.Target]);for(int32 I=G.Memories.Num()-1;I>=0;--I)if(G.Memories[I].HeroineId==Her){Index=I;break;}}
-  Ok=G.Memories.IsValidIndex(Index);if(Ok){SongReplay(Index);Ok=G.Replay;}if(!Ok)Error=TEXT("no song to sing again now");}
+  Ok=G.Memories.IsValidIndex(Index);if(Ok){SongReplay(Index);Ok=G.Replay||G.AskedMemory==Index;}if(!Ok)Error=TEXT("no song to sing again now");}
  else if(Action==TEXT("cancel"))SongReset(TEXT("cancelled"),true);
  else if(Action==TEXT("enable")||Action==TEXT("disable")){G.Enabled=Action==TEXT("enable");G.NextCheck=0;SongSave();}
  else if(Action!=TEXT("state")){Ok=false;Error=TEXT("unknown action");}

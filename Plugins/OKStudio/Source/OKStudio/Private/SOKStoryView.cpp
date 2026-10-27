@@ -43,8 +43,11 @@ namespace
 		Paragraphs.ReplaceInline(TEXT("\r"), TEXT(""));
 		TArray<FString> Parts;
 		Paragraphs.ParseIntoArray(Parts, TEXT("\n"), false);
+		// Punctuation that never starts a line (it goes up with the character before it).
+		auto Closing = [](TCHAR C) { return FCString::Strchr(TEXT("。，、．！？：；）」』】〉》…～ー,.!?:;)"), C) != nullptr; };
 		for (const FString& Part : Parts)
 		{
+			const int32 First = Lines.Num();
 			FString Line;
 			int32 LastSpace = -1;
 			for (int32 I = 0; I < Part.Len(); ++I)
@@ -57,6 +60,12 @@ namespace
 						Lines.Add(Line.Left(LastSpace));
 						Line = Line.Mid(LastSpace + 1) + FString::Chr(Part[I]);
 					}
+					else if (Closing(Part[I]) && Line.Len() > 1)
+					{
+						// 「…乾乾淨」/「淨。」 would start a line with 。: the character before it goes down with it.
+						Lines.Add(Line.LeftChop(1));
+						Line = Line.Right(1) + FString::Chr(Part[I]);
+					}
 					else
 					{
 						Lines.Add(Line);
@@ -67,6 +76,17 @@ namespace
 				}
 				if (FChar::IsWhitespace(Part[I])) LastSpace = Line.Len();
 				Line = Next;
+			}
+			// One or two characters left alone on a wrapped paragraph's last line (「淨。」): one more comes down from the
+			// line above, unless that one ends in a space (latin words are kept whole).
+			if (Lines.Num() > First && Line.Len() <= 2)
+			{
+				FString& Above = Lines.Last();
+				if (Above.Len() >= 4 && !FChar::IsWhitespace(Above[Above.Len() - 1]) && !(Above[Above.Len() - 1] < 128 && FChar::IsAlpha(Above[Above.Len() - 1])))
+				{
+					Line = Above.Right(1) + Line;
+					Above.LeftChopInline(1);
+				}
 			}
 			Lines.Add(Line);
 		}

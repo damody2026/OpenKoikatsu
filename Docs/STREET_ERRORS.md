@@ -794,3 +794,93 @@
 - 存檔用錯參數：`/saves {action:save}` 不存在，什麼都沒存，還回了上一次的 notice。照 Docs/STREET_SOCIAL_GAME_MCP.md 用 `{op:"save",slot:"1"}`，並看回傳的欄位時間確認真的存了。
 - 回報裡寫「之後照排好的約會赴約、一輪一輪玩下去」，卻在同一則回報後結束了回合，遊戲開著停了 19 分鐘。回報不是收尾：寫完進度要在同一個回合接著下一步（讀檔、推進時間、赴約），只有在等背景工作時才結束回合，而且要有會叫醒我的通知。
 - 想看兩個人站在哪裡，用 CLI 呼叫了 `game_inspect`（以為是查狀態），結果進了角色檢視模式；按 End 離開時「她回到原本的行程」，正在進行的同行、外出、隊伍全部結束，胡桃和安可各自走掉。查位置用 `game_state`／`game_screenshot`，不要碰 `game_inspect`。
+### 2026-10-27 繁中遊戲裡的簡體卡名；群聊時他的話沒進對話框；一起讀書時她嫌他安靜（E 組 galgame，刻晴新存檔實玩）
+- **卡名：** 十位女主有五位的卡名是簡體（贞德·Alter、雷电将军、早濑优香、贞德、爱丽丝）。繁中遊戲裡「叫 贞德·Alter 跟著我」、小地圖、右側標題、女角名單都照卡名顯示。卡名是識別用（人設、存檔、ok-mind 都靠它），不能改。修正：ok-rules 的 `text`（OKMsg）把鍵名含 `name` 的字串參數轉成遊戲語言的字體（zh-TW 繁、zh-CN 簡；`locale.rs` `text_of`），一次涵蓋約 90 處訊息；不走訊息的四處（小地圖標記、右側標題、女角名單、目前對象）改用 `OKStreetScriptedName`。
+- **群聊：** 他對多人說的話直接進 `SendPartyTalk`，在設定 `FreeTalkCaptionPlayer` 之前就 return，galgame 對話框一直停在上一句她的台詞，他問優香的話從沒出現。修正：群聊分支也先把他的話放進 `FreeTalkCaptionPlayer`。
+- **一起讀書：** 按「一起讀書」只設 `S.Studying`，沉默判斷只認圖書館的活動和讀書姿勢，沒認這個按鈕；她剛說「各看各的，別打擾我」，三十秒後又問「怎麼不說話了」。修正：`S.Studying` 也算不是尷尬的沉默。
+- 規則：新增「兩人一起安靜做事」的狀態時，要一起列進即時對話的沉默例外（`TickFreeTalkLive` 的 `Waiting`）。顯示女主名字的新 UI 用訊息參數（`{name}`）或 `OKStreetScriptedName`，不要直接接卡名。
+
+### 2026-10-27 群聊一整輪消失（模型 JSON 尾巴壞掉）；1 對 1 場景 log 每幀兩行（E 組 galgame，惠惠／刻晴實玩）
+- **群聊：** 問惠惠電話時畫面只出「多人對話沒有回應，再說一次試試」。模型回的物件最後一個字串用「」」收尾、沒關引號，後面又多吐了 `{"type": "json_object"}`；單人對話（`talk`）有「格式壞了重問一次」，群聊走的 `chat` 沒有，整輪就丟了，log 的失敗原因還是空字串。修正：ok-mind 的 `run_chat` 在要求 JSON 時，先去掉尾巴（`leading_json_object`、`close_json_object`：拿掉回聲的 response format、補上沒關的字串與括號），還不行就帶 `mind.malformed_json_reminder` 重問一次。
+- **1 對 1 場景：** `clothes layer group=… grown(cm)` 的「變了才印」用一個全域的上一次內容，場景裡有兩個角色輪流更新，每次都不一樣，一分鐘 5.5 萬行；`OK character display shadow capture skipped (disabled)` 每幀每個角色都印，一分鐘 2.9 萬行，game.log 幾分鐘就 17 MB。修正：上一次內容依 group 記；陰影那行只印一次。
+- 規則：「只在改變時記錄」的 log，比較對象要依實例分開；每幀會走到的提早 return 不寫 log。模型回覆的 JSON 解析失敗時，所有呼叫路徑都要有修補或重問，不能只有其中一條有。
+
+### 2026-10-27 唱歌字幕整體慢一句、主歌一口氣四句漏掉一句（E 組 TTS／唱歌，SongE 沙盒實玩重播）
+- **實測：** 重播雷電將軍的 evening_walk，邊錄字幕邊用 ok-asr 轉寫每句字幕顯示時段的音訊：字幕整體慢一句（2～4 秒），例如字幕「路燈慢慢亮起」時她已經在唱「你說今天的風」。
+- **原因一：** 舊歌（有 `heard`、沒有 `heard_windows`）重播時呼叫 `SongListen()` 補做窗格，`SongListen` 一開頭就清空 `G.Heard`，接著的編舞拿到空的 heard，字幕只能照歌詞稿平均分配（15 口氣、20 句）。修正：`SongListen` 不再清空，新歌就緒的呼叫點自己清（`SongReset` 本來也會清）。
+- **原因二：** 同時開了三個遊戲，`/transcribe_spans`（15 口氣＋80 窗格）要 130～225 秒，遊戲只等 120 秒，逾時後整份辨識作廢。這個請求在背景、晚到也會在唱歌中重新對時，所以逾時改為 600 秒。單一遊戲時約 20 秒。
+- **原因三：** `align_heard` 一口氣最多對 3 句（`MAX_RUN`），這首第一口氣唱了整段主歌 4 句，「好像特別溫柔」永遠不會出現在字幕上。改為 6。沙盒裡 9 首歌重算都是 20 句。
+- **複驗（SongE13 stage＋新 ok-rules）：** 20 句全部出現，每句與實際演唱誤差約 0.2～0.5 秒；只有辨識結果在第 17 秒回來重新對時的那一句晚了約 1.6 秒，之後存進 songs.json，下次重播一開始就準。唱完有「♪ 再聽一次」；男主在她前方 2.16 m，兩人面對面。
+- 控制通道 `/song replay` 在她還在說話、重播排隊時回報「no song to sing again now」，其實之後會唱。改成排隊也算成功。
+- **我自己做錯的：** 在 GPU 已有兩個遊戲時又開第三個，沙盒的 ok-tts 四分鐘一句都沒生成、收尾台詞「無法連線到 TTS 伺服器」，不是程式問題。驗證語音前先看 `nvidia-smi` 和遊戲數。另外誤用 `game_inspect`（它會進檢視室），把唱到一半的歌打斷；查狀態只用 `game_state`。評估用的 ok-asr 從 `Build/` 啟動，別人一般啟動遊戲時會被當成殘留伺服器關掉，評估要用另一份 exe 或沙盒埠。
+- 規則：快取的辨識結果要「新的到了才換掉」，不要在發請求時先清空。對齊時一個段落能涵蓋的句數上限，要用實際資料中最長的段落去驗證。
+
+### 2026-10-27 一起走路聊天時她在右側面板底下說話（E 組 galgame，雷電將軍實玩）
+- 和雷電將軍一起走去便利商店，邊走邊聊時街頭跟隨鏡頭只對著他（沒有 Target 時 `Focus = S.Male`），她走在他右邊，正好落在右側 432px 面板的邊緣，說話時畫面上只看得到她的肩膀。galgame 對走路對話刻意不接手鏡頭，只換對話框和立繪，結果沒有人管她在不在畫面裡。
+- 修正：`GalgameWalkFocus`（`OKStreetSocialGalgame.inl`）在 galgame 演出中、沒有 Target、她在他 3 m 內時，把跟隨鏡頭的焦點與樞軸半秒內平滑移到兩人中間；結束時同樣平滑移回他身上。`OKStreetSocialScene.cpp` 只多一行呼叫。
+- 規則：「這種情況維持原本鏡頭」的設計，要確認原本鏡頭在這種情況下拍得到說話的人。
+- 同一輪另外看到：和雷電將軍交換電話時 log 兩行 `Street heroine: unknown interaction contact`。`ExchangeContact` 用 `HeroineNote(Girl, "contact", …)` 記「交換了電話」，可是 `acts.toml` 沒有 `contact` 這一項，`Interact` 找不到就整筆丟掉，她的紀錄與記憶裡沒有這件事。修正：`acts.toml` 加 `contact`（history `contact`、memory -1）。規則：新增 `HeroineNote` 的種類時，同時在 `acts.toml` 加這一項，並在遊戲裡看一次 log 沒有 `unknown interaction`。
+
+### 2026-10-27 「回放最近 20 句」播兩句就停；立繪擷取的 log 佔了整份 log 一半（E 組 galgame，雷電將軍在 10F 餐廳）
+- **回放：** 在餐廳按「回放最近 20 句」，播了兩句熱紅茶剛好上桌，`TickServes` 替她送「菜上桌了」，`SendFreeTalk` 一開頭就清掉回放，她回了一句新台詞，回放就沒了。修正：回放進行中，上桌通知（`TickServes`）、點餐與櫃檯通知（`TickOrderNotice`）都等它播完，沉默計時也不算（`Waiting`）。
+- **log：** `APNG source capture`／`APNG source mesh` 的「變了才印」只記一份上次內容，galgame 立繪的顏色與覆蓋兩次擷取輪流，每次都不一樣，一份 4,200 行的 log 有 2,076 行是它。修正：每種擷取組合只印第一次（最多 64 種）。這是同一天第二次遇到同樣的錯（1 對 1 場景的 `clothes layer` 也是）。
+- 規則：遊戲自己替她送的話（`SystemNote`）都要先看有沒有玩家正在進行的東西（回放、歌、他正在說話），不要直接打斷。寫「只在改變時記錄」時，先想有沒有兩個以上的呼叫者輪流進來。
+- 我自己的操作錯誤：離開 1 對 1 場景後讀截圖時，用編號猜檔名，讀到的是前一張（還在 1 對 1 場景），差點把正常的退出當成「場景沒有關掉」去修。截圖一律先 `ls -t` 取最新檔名再讀；`game_log` 也可能讀到舊的那場遊戲的 log，查問題時直接讀這次 `Play-*` 目錄裡的 `game.log`。
+- 同一輪：他在 10F 加點牛排後，雷電將軍對著他說「嗯，他的那份正在做」。點餐與上桌通知（`placed_order_total_prompt`、`dishes_served_prompt`）都用「玩家」「他」描述他，模型就照著用第三人稱。三種語言的這兩則提示加上「你是在對他說話，提到他或他的菜時說『你』」。
+
+### 2026-10-27 1 對 1 場景上面疊著街頭的對話框（E 組 galgame，刻晴走正常流程進 1 對 1）
+- 刻晴聊到朋友後按「進入一對一場景」，她同意，場景載入後畫面下方還留著街頭 galgame 對話框和她升朋友時的那句台詞。`TickGalgame` 裡有「1 對 1 時收起對話框」的判斷，可是 1 對 1 期間場景的 `Tick` 在 `TickPrivate` 就 return，`TickGalgame` 根本不會跑，對話框維持進場前的樣子。之前用 `/private` 直接進場時剛好沒有對話在進行，所以沒看到。
+- 修正：`BeginPrivate` 進場時呼叫 `GalgameHideForPrivate`（收起對話框、讓被藏起來的路人恢復）；回到街頭後 `TickGalgame` 照常決定顯示。
+- 規則：放在每幀 Tick 裡的「某狀態時隱藏」判斷，要確認那個狀態下這段 Tick 還會跑。測 1 對 1 要走正常流程（對話中進場），不要只用 `/private` 直接開。
+- 同一輪接著看到：刻晴答應讓他請午餐賠罪，點了貢丸湯（他付了錢）之後進 1 對 1，回到街頭時她已經照行程走掉，湯還在等上桌。進場時 `BeginPrivate` 結束了對話，離開時沒有人把對話接回來。修正：`FinishPrivate` 時她就在他身邊（4 m 內，不是從聯絡人清單進場）就用 `ResumeTalkQuiet` 接回對話，不重打招呼。
+
+### 2026-10-27 做過 1 對 1 之後讀檔或開新遊戲，所有女主都畫壞（E 組 galgame，愛麗絲新存檔；既有問題，Fix1027M 也一樣）
+- 現象：開新遊戲找愛麗絲，她和三月七都缺衣服、長髮變成甩到半空的黑色尖刺、袖子拉成黑色長條；檢視模式看貞德·Alter（沒進過 1 對 1）也一樣。重現條件：同一個程序裡進出過一次 1 對 1，之後讀檔或開新遊戲（重開地圖）。新程序直接讀同一個存檔是正常的；只做 1 對 1、不重開地圖也正常。log 沒有任何錯誤。
+- 原因：1 對 1 的高模用 `FOkSession::Open` 開卡時，`OKPrepareLiveGpuEnv` 把 `OK_GPU_SKIN`、`OK_SKELMESH`、`OK_NOPOSE`、`OK_UE_ANIM`、`OK_HEAD_GPUSKIN`（還有 `OK_GAME_ROOT`）寫進整個程序的環境變數，從不還原。街頭人群重開地圖時重新開卡，Rust 讀到的是即時檢視器的取模設定（`OK_SKELMESH` 跳過部件刷新、`OK_GPU_SKIN` 把頭髮改掛頭骨），骨架和部件的配置跟人群預期的不一樣。
+- 修正：`OKStreetSocialPrivateEnv.cpp`：`BeginPrivate` 開場前記下這些變數，`FinishPrivate`（和開場失敗時）照原樣放回去，原本不存在的就刪掉。
+- 規則：寫程序環境變數當設定的地方，必須在離開那個模式時還原，或改用 Rust 的執行緒範圍設定（`profile::scope`）。這次靠子代理靜態讀程式找到原因，之後在 Rust 端讓人群開卡固定用自己的設定會更穩。
+
+### 2026-10-27 唱歌：她哼了半分鐘，字幕一直停在上一句（E 組 TTS／唱歌，Gal1027G 沙盒新歌實測）
+- **實測：** 安可成為戀人，confession 新歌從做歌到唱完走一遍（做歌 81 s〔前段有快取〕、辨識 53 s，在她開唱前就回來）。字幕 17 句的時間都和演唱對得上；男主 2.15 m 面對面；唱完有「♪ 再聽一次」。
+- **問題：** 這首歌只唱了兩次副歌，55～86 秒都在「啊啊啊」「嗯」地哼，88 秒才開始第三次副歌就被 90 秒上限切掉。中間 33 秒字幕一直是「這一刻我會一直記得」，看起來像字幕卡住。
+- **修正：** ok-rules `with_rests`：某口氣結束後，下一句要 4 秒以上才來，而且接著是 3 秒以上的停頓或只有語氣詞的哼聲（辨識結果除了「啊、嗯、哦…」沒有別的字），字幕就在那口氣結束時換成「♪」（`lines` 裡的空字串，遊戲端顯示 ♪）。沙盒 10 首歌重算：休止只出現在 16 秒間奏與整段哼聲處，唱詞中間沒有。
+- 規則：字幕對時不只要決定每句何時出現，也要決定何時收起來；模型唱的歌常常不照歌詞走完，要預期中間有長段沒有歌詞。
+- 另外：第一次開始實測時只有一個遊戲，途中別人又開了兩個，ok-song 換聲 20 分鐘沒做完，只好關掉重來。GPU 共用時，要先和其他 session 說好空檔再做要跑好幾分鐘的 GPU 工作。
+
+### 2026-10-27 1 對 1 場景只有 77 FPS：雙人配對每幀在遊戲執行緒同步求解（E 組 galgame，胡桃 1 對 1 量 FPS）
+- GPU 空出來時量 1 對 1（胡桃），77 FPS，遊戲執行緒 12.9 ms、GPU 1.1 ms。Insights 計時：`KK_PairNative` 每幀 6.2 ms。`AKKPairedPlayback` 有背景求解（`ok.Anim.AsyncPair`），可是只用在有 OK 配對包（`Saved/OKAnim/Pairs/*.okgroup`）的狀態；遊戲裡一個配對包都沒有（打包版的 Saved 是 stage 自己的），所以每個姿勢都走同步的原生路徑。
+- 修正：原生路徑在 GPU 擁有部件時本來就只有一個 Rust 呼叫（`ok_animation_pair_frame_gpu`），改成和 OK 路徑一樣丟到背景、下一幀顯示（`AKKPreviewActor::PairedFrameGpuParts` 收集部件、`AKKPairedPlayback::Advance`；`bPendingNative` 時不套 OK 的臉部曲線）。
+- 規則：「有背景版」的優化要確認實際遊戲走的是哪條路；量效能時用 Insights 匯出計時（`UnrealInsights.exe -OpenTraceFile=… -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimerStatistics out.csv" -AutoQuit -NoUI`），不要只看 `stat dumpframe` 的 Self。
+
+### 2026-10-27 她把舞台指示「（小聲）」念出來（E 組 galgame，早瀨優香在圖書館）
+- 在圖書館聊天時，模型的台詞開頭寫「（小聲）拍照存收據？……」，整句連括號原封送給 TTS，她就念出「小聲」。修正：`RequestFreeTalkSegment` 送 TTS 前拿掉 16 字以內的括號段（全形或半形），對話框照常顯示；拿掉後沒有可念的字就照原本的靜音處理。
+- 同一輪也確認：交換電話不再出現 `unknown interaction contact`；聊到朋友後起身按「進入一對一場景」，她以 0.56 的機率拒絕（正常規則）；坐著讀書時這個按鈕是停用的。
+- 後續：驗證時看 ok-tts 的 log，發現他自己的台詞也一樣（我打的「（我壓低聲音）」被他的聲音念出來，`RequestTtsLine` 是另一條路）。去括號抽成 `OKStreetSpokenText.h`，她的分段語音與他的語音都用。
+
+### 2026-10-27 1 對 1 裡愛麗絲有 6 個部件每幀在 CPU 蒙皮；對話框換行留下孤字（E 組 galgame，看 log 與截圖）
+- **CPU 蒙皮：** log 有 `OK private GPU retained CPU ... reason=Private source has incomplete GPU direction streams`（愛麗絲的部件 21、56、58、60、79、80）。`OKCapturePrivateGpuSource` 只要缺任何一個頂點串流就整個部件退回 CPU，訊息也沒寫缺哪個。修正：只缺切線時由法線補一條正交切線（這種部件沒有法線貼圖用到它）；缺別的就在訊息寫出是哪個。
+- **孤字：** 貞德的「……我一定能吃得乾乾淨淨。」換行後第二行只剩「淨。」。`OKStoryWrap` 只看寬度。修正：句末標點不放行首（帶前一個字下去）；段落最後一行只剩一兩個字時，從上一行挪一個字下來（英文字母結尾不挪，單字保持完整）。OK Studio 的劇本播放共用這個對話框。
+
+### 2026-10-27 雙人動畫每幀每片混合葉都重新從磁碟快取讀 avatar 路徑表（E 組 galgame，愛麗絲 1 對 1 只有 109 FPS）
+- 用 `-Trace` 加 `-OKNativeTrace` 一層層加計時區段量：每個角色每幀 2.1 ms 花在混合葉取樣，其中每片葉 0.94 ms 是「查快取」，真正取樣曲線只要 0.11 ms。
+  - 先猜世界矩陣重算，量了只差 0.05 ms。
+  - 再猜骨架簽章逐骨比對，改成每次取樣只比一次，也沒變。
+  - 最後才找到真正原因：`load_avatar_tos_shared` 在一般遊戲根目錄下每次都走 `disk_cache::load`，讀檔、LZ4 解壓、bincode 解出數千筆的 HashMap，而且每次給一個新的 `Arc`。後面以指標比對的綁定計畫與通道計畫快取因此永遠不中，每次都重新編譯計畫。
+- 修正：avatar 路徑表依根目錄記在記憶體（只記非空結果）。另外兩項猜錯的改動保留，因為輸出完全一樣、只省一點時間：葉子不再自己重算世界矩陣（`OK_LEAF_WORLDS=1` 可切回比較）；骨架綁定每次取樣只比對一次。
+- 規則：量效能先拆到最細的區段再改，不要照猜測先寫優化。「快取」要確認它真的有記憶體這一層；以 `Arc::ptr_eq` 當鍵的快取，上游每次都給新 `Arc` 就等於沒有快取。
+- 結果（Gal1027P）：曲線取樣每角色 2.76 → 0.64 ms，查快取 0.94 → 0.007 ms；愛麗絲 1 對 1 109 → 128 FPS，畫面不變。Rust lib 測試 430 項中 429 過（失敗的那項缺 `Saved/Tests/EyeGaze284` 測試資料，與此無關）。
+
+### 2026-10-27 回報「trace 還在錄」，其實遊戲啟動第 0 幀就當掉了（E 組 galgame）
+- 打包 Gal1027Q 後，用同一個指令接著開遊戲錄 trace，指令超過 10 分鐘被移到背景。我沒看 game.log，就回報「還在錄」。協調者發現 E 上根本沒有這個遊戲在跑。
+- 實際情況：遊戲在啟動第 0 幀就當掉，`Missing global shader FOKGpuRigTaskCS's permutation 0`。工作樹裡有另一個 session 還沒提交的 GPU rig global shader，被一起編進 exe；但 StreetDisplay patch 的 global shader 快取裡沒有它，所以 E 上任何新的 exe-only stage 都會一樣當掉。
+- 規則：
+  - 打包和開遊戲分成兩個指令。開遊戲後，先確認 `game.log` 裡有 `Base Directory` 而且沒有 `LogWindows: Error`，才說遊戲在跑。
+  - 長時間的背景工作，看輸出確認狀態，不要用推測回報。
+  - exe-only 打包會帶進工作樹裡所有未提交的程式；有人加了新的 global shader 時，要等 patch 重建後才能用。
+
+### 2026-10-27 群聊裡她說要先走，同一句答應的「現在去吃」卻算在她頭上（E 組 galgame）
+- 咖啡廳三人（雷電將軍上班中＋安可）。他說「安可，我們先去學生餐廳吃午餐，將軍下班再來」。模型回：安可答應、將軍說「去吧，我處理完便過去」，同一則回覆 `leave=[將軍]`、`do_now=cafeteria_meal`。
+- 程式把 `do_now` 交給說話對象（將軍）執行，被「上班到 15:00」擋下，並把「將軍在上班」塞進下一則提示。10 秒後將軍離開、交接給安可，安可只聽到這句，回「那午餐我自己去吃好了」，什麼也沒發生。
+- 修正（`OKStreetSocialParty.inl` `FinishPartyTalk`）：說話對象在同一則回覆裡要離開、而群裡還有不離開的人時，先交接（`PartyHandOver`），由接手的人執行 `do_now`。
+- 第二次重現時模型沒填 `do_now`（安可答應了卻沒動）：群聊提示只有「大家一起去」，沒有「部分人去、她留下」的寫法。三種語言的 `ai_party_prompt` 補一句：有人不能去（例如在上班）時，答應的人照填 `do_now`，不能去的人放進 `leave`。
+- 驗證（Gal1027S2，新存檔）：將軍留在咖啡廳，安可和他一起走到學生餐廳（log「actor 2 leaves in the reply that agreed on cafeteria; 10 does it」）。

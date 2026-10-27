@@ -129,6 +129,8 @@ int32 AOKStreetSocialScene::CartTotal() const{
 // ordering herself. Waits while she is still answering; the same order is told once.
 void AOKStreetSocialScene::TickOrderNotice(){
  auto& S=*State;
+ // Nothing of the game's is said for her while a replay he asked for plays (it would stop the replay).
+ if(!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty())return;
  // What the walk is like (rain, umbrella, the empty street at night): told while they are still on the way and she is free
  // (TickUmbrella drops it when the walk ends: "only the two of us on the street" once seated in the restaurant is wrong).
  if(!S.WalkFact.IsEmpty()&&FreeTalkPartner()!=INDEX_NONE&&S.FreeTalkOpen&&!S.FreeTalkBusy&&!FreeTalkHerVoiceBusy()&&!S.FarewellPending){
@@ -213,7 +215,8 @@ void AOKStreetSocialScene::TickServes(){
   }
   // She reacts once she is free; if she is no longer his partner there is nobody to tell.
   if(P.Her==INDEX_NONE||FreeTalkPartner()!=P.Her){S.Serves.RemoveAt(K);continue;}
-  if(S.FreeTalkBusy)continue;
+  // A replay he asked for plays out first: "the tea is here" sent in the middle of it stopped it after two lines.
+  if(S.FreeTalkBusy||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty())continue;
   TArray<FString> Dishes;for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Dishes.Add(OKMsg(TEXT("ui.economy.item_owner_label"), {{TEXT("owner_label"), L.ForHer?OKT(TEXT("ui.economy.your_label")):OKT(TEXT("ui.economy.his_label"))}, {TEXT("item_name"), *I->Name}}));
   S.SystemNote=true;S.FreeTalkDraft=OKMsg(TEXT("ui.economy.dishes_served_prompt"), {{TEXT("dish_names"), *FString::Join(Dishes,OKT(TEXT("ui.bank.list_separator")))}});
   S.Serves.RemoveAt(K);SendFreeTalk();return;
@@ -496,7 +499,7 @@ FString AOKStreetSocialScene::DishTableText() const{
   FString Note;
   if(!D.Served){double Wait=0;for(const auto& P:S.Serves)if(P.Batch==D.Batch)Wait=P.At-Now;Note=OKMsg(TEXT("ui.economy.kitchen_wait_note"), {{TEXT("seconds"), FMath::Max(0,int32(FMath::CeilToDouble(Wait)))}});}
   else if(D.Percent<=0.f)Note=OKT(TEXT("ui.economy.finished_eating_suffix"));
-  Lines.Add(OKMsg(TEXT("ui.economy.item_remaining_line"), {{TEXT("item_name"), *D.Name}, {TEXT("owner_label"), !D.ForHer?OKT(TEXT("ui.economy.his_label")):S.Manifest.Characters.IsValidIndex(D.Her)?*S.Manifest.Characters[D.Her].Name:OKT(TEXT("ui.economy.her_label"))}, {TEXT("bar"), *Bar}, {TEXT("percent"), FMath::RoundToInt(D.Percent)}, {TEXT("note"), *Note}}));
+  Lines.Add(OKMsg(TEXT("ui.economy.item_remaining_line"), {{TEXT("item_name"), *D.Name}, {TEXT("owner_label"), !D.ForHer?OKT(TEXT("ui.economy.his_label")):S.Manifest.Characters.IsValidIndex(D.Her)?*SpokenName(D.Her):OKT(TEXT("ui.economy.her_label"))}, {TEXT("bar"), *Bar}, {TEXT("percent"), FMath::RoundToInt(D.Percent)}, {TEXT("note"), *Note}}));
  }
  return FString::Join(Lines,TEXT("\n"));
 }

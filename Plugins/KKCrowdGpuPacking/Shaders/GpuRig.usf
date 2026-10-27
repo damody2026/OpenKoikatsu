@@ -1,0 +1,848 @@
+// GPU runtime rig (OKGpuRig.cpp; data from Tools/ok-extract/src/gpu_rig/export.rs). SkeletonCS: one thread per
+// character poses her body skeleton for this frame from shared clips and her own static data, the way the native solver
+// does (session.rs sample_paired_frame: the shaped baseline, the clip, the female UpdateAlways channels and limb-size
+// corrections, PV copies and ExpressionBone, ABMX), into Unity-space world matrices. TaskCS: one thread per pose task
+// writes its 3x4 rows (UE space, as IndependentPose.usf) from up to four "weight x world x constant" terms.
+#include "/Engine/Public/Platform.ush"
+
+// Per actor, four uint4: (bone first, bone count, flags (1 female), named first), (always first, count, forearm first,
+// count), (hand first, count, pv first, count), (abm first, count, look neck, look head: global bones or 0xffffffff).
+StructuredBuffer<uint4> RigActors;
+// Per bone three float4: (pos, parent as uint: global index or 0xffffffff), rot (x,y,z,w), (scale, 0).
+StructuredBuffer<float4> RigBones;
+// Always: (bone, axis); forearms / hands: (bone); pv: (src, dst). All global bone indices, in .xy.
+StructuredBuffer<uint4> RigLists;
+// Per ABMX op three float4: rot, (pos, length), (scale, bone as uint).
+StructuredBuffer<float4> RigAbm;
+// Per actor 66 global bone indices (0xffffffff: missing), NAMED_FIRST then NAMED_LAST (export.rs order).
+StructuredBuffer<uint> RigNamed;
+// Per actor and clip slot: (channel first, channel count, frames, flags: 1 limb arm, 2 limb hand, 4 ExpressionBone).
+StructuredBuffer<uint4> RigClipSlots;
+StructuredBuffer<float4> RigClipRates; // per actor and clip slot: (rate, duration, 0, 0)
+// Per channel: (global bone or 0xffffffff, mask: 1..4 position xyz, 8 rotation, 16..64 scale xyz, first sample row, 0).
+StructuredBuffer<uint4> RigChannels;
+// Per channel and frame three float4: (pos, 0), rot, (scale, 0).
+StructuredBuffer<float4> RigSamples;
+// Per actor: (clip slot A, clip slot B, 0, 0) and (time A, time B, blend, 0).
+StructuredBuffer<uint4> RigSelect;
+StructuredBuffer<float4> RigTimes;
+// Per actor two float4: the head look's neck and head turns (UE quaternions in each bone's parent frame, as the pose
+// bank's LookRotation; (0,0,0,1): none).
+StructuredBuffer<float4> RigLook;
+uint ActorCount;
+uint ClipSlotsPerActor;
+// Scratch, three float4 per bone: the locals of clip A (then the frame), of clip B; the worlds (Unity rows 0..2).
+RWStructuredBuffer<float4> Locals;
+RWStructuredBuffer<float4> LocalsB;
+RWStructuredBuffer<float4> Worlds;
+// Per bone: Transform.rotation (the local rotations composed up the parents), with the worlds; the physics read it.
+RWStructuredBuffer<float4> RigRots;
+
+static const uint NONE = 0xffffffff;
+
+// ---- math, as Tools/ok-extract/src/pose.rs ----
+float4 QMul(float4 a, float4 b) {
+	return float4(a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+		a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+}
+float4 QAxis(float3 axis, float rad) { float s = sin(rad * 0.5); return float4(axis * s, cos(rad * 0.5)); }
+float4 EulerOrderToQuat(uint order, float x, float y, float z) {
+	float4 qx = QAxis(float3(1, 0, 0), radians(x)), qy = QAxis(float3(0, 1, 0), radians(y)), qz = QAxis(float3(0, 0, 1), radians(z));
+	if (order == 0) return QMul(qx, QMul(qy, qz));
+	if (order == 1) return QMul(qx, QMul(qz, qy));
+	if (order == 2) return QMul(qy, QMul(qx, qz));
+	if (order == 3) return QMul(qy, QMul(qz, qx));
+	if (order == 4) return QMul(qz, QMul(qx, qy));
+	return QMul(qz, QMul(qy, qx));
+}
+float4 EulerDegToQuat(float3 e) { return EulerOrderToQuat(2, e.x, e.y, e.z); }
+// Rows 0..2 of trs(pos, rot, scale) (pose.rs trs; translation in .w).
+void Trs(float3 p, float4 q, float3 s, out float4 r0, out float4 r1, out float4 r2) {
+	float x2 = q.x + q.x, y2 = q.y + q.y, z2 = q.z + q.z;
+	float xx = q.x * x2, yy = q.y * y2, zz = q.z * z2, xy = q.x * y2, xz = q.x * z2, yz = q.y * z2, wx = q.w * x2, wy = q.w * y2, wz = q.w * z2;
+	r0 = float4((1 - (yy + zz)) * s.x, (xy - wz) * s.y, (xz + wy) * s.z, p.x);
+	r1 = float4((xy + wz) * s.x, (1 - (xx + zz)) * s.y, (yz - wx) * s.z, p.y);
+	r2 = float4((xz - wy) * s.x, (yz + wx) * s.y, (1 - (xx + yy)) * s.z, p.z);
+}
+float3x4 TrsM(float3 p, float4 q, float3 s) { float4 a, b, c; Trs(p, q, s, a, b, c); return float3x4(a, b, c); }
+float3x4 Mul34(float3x4 a, float3x4 b) {
+	float4x4 bb = float4x4(b[0], b[1], b[2], float4(0, 0, 0, 1));
+	return float3x4(mul(a[0], bb), mul(a[1], bb), mul(a[2], bb));
+}
+float3 MulPoint(float3x4 m, float3 p) { return float3(dot(m[0].xyz, p) + m[0].w, dot(m[1].xyz, p) + m[1].w, dot(m[2].xyz, p) + m[2].w); }
+float3x4 Inverse34(float3x4 m) {
+	float3x3 a = float3x3(m[0].xyz, m[1].xyz, m[2].xyz);
+	float det = determinant(a);
+	float3x3 inv = float3x3(
+		a[1][1] * a[2][2] - a[1][2] * a[2][1], a[0][2] * a[2][1] - a[0][1] * a[2][2], a[0][1] * a[1][2] - a[0][2] * a[1][1],
+		a[1][2] * a[2][0] - a[1][0] * a[2][2], a[0][0] * a[2][2] - a[0][2] * a[2][0], a[0][2] * a[1][0] - a[0][0] * a[1][2],
+		a[1][0] * a[2][1] - a[1][1] * a[2][0], a[0][1] * a[2][0] - a[0][0] * a[2][1], a[0][0] * a[1][1] - a[0][1] * a[1][0]) / det;
+	float3 t = -mul(inv, float3(m[0].w, m[1].w, m[2].w));
+	return float3x4(float4(inv[0], t.x), float4(inv[1], t.y), float4(inv[2], t.z));
+}
+float3 EulerOf(uint order, float4 q) {
+	float3x4 m = TrsM(0, q, 1);
+	float x, y, z;
+	if (order == 2) {
+		float sx = clamp(-m[1][2], -1, 1); x = asin(sx);
+		if (abs(sx) > 0.9999) { y = atan2(-m[2][0], m[0][0]); z = 0; } else { y = atan2(m[0][2], m[2][2]); z = atan2(m[1][0], m[1][1]); }
+	} else if (order == 3) {
+		float m10 = m[1][0]; z = asin(clamp(m10, -1, 1));
+		if (m10 > 0.9999) { x = 0; y = atan2(m[0][2], m[2][2]); } else { x = atan2(-m[1][2], m[1][1]); y = atan2(-m[2][0], m[0][0]); }
+	} else if (order == 4) {
+		float m21 = m[2][1]; x = asin(clamp(m21, -1, 1));
+		if (m21 > 0.9999) { y = 0; z = atan2(m[1][0], m[0][0]); } else { y = atan2(-m[2][0], m[2][2]); z = atan2(-m[0][1], m[1][1]); }
+	} else {
+		float num = -m[2][0]; y = asin(clamp(num, -1, 1));
+		if (num > 0.9999) { x = 0; z = atan2(-m[0][1], m[1][1]); } else { x = atan2(m[2][1], m[2][2]); z = atan2(m[1][0], m[0][0]); }
+	}
+	return degrees(float3(x, y, z));
+}
+
+// ---- the locals of the frame (global bone indices) ----
+float3 LP(uint b) { return Locals[b * 3].xyz; }
+float4 LQ(uint b) { return Locals[b * 3 + 1]; }
+float3 LS(uint b) { return Locals[b * 3 + 2].xyz; }
+void SetP(uint b, float3 p) { Locals[b * 3] = float4(p, 0); }
+void SetQ(uint b, float4 q) { Locals[b * 3 + 1] = q; }
+void SetS(uint b, float3 s) { Locals[b * 3 + 2] = float4(s, 0); }
+uint Parent(uint b) { return asuint(RigBones[b * 3].w); }
+// World of one bone from the current locals, up the parents (pose.rs world_of).
+float3x4 World(uint b) {
+	uint chain[96]; uint n = 0; uint node = b;
+	while (node != NONE && n < 96) { chain[n++] = node; node = Parent(node); }
+	float3x4 w = TrsM(LP(chain[n - 1]), LQ(chain[n - 1]), LS(chain[n - 1]));
+	for (uint k = n - 1; k > 0; --k) w = Mul34(w, TrsM(LP(chain[k - 1]), LQ(chain[k - 1]), LS(chain[k - 1])));
+	return w;
+}
+// Unity Transform.rotation: the local rotations composed up the parents.
+float4 WorldRot(uint b) {
+	uint chain[96]; uint n = 0; uint node = b;
+	while (node != NONE && n < 96) { chain[n++] = node; node = Parent(node); }
+	float4 r = LQ(chain[n - 1]);
+	for (uint k = n - 1; k > 0; --k) r = QMul(r, LQ(chain[k - 1]));
+	return r;
+}
+float3 Pos(float3x4 m) { return float3(m[0].w, m[1].w, m[2].w); }
+float3x4 Translation(float x, float y, float z) { return float3x4(float4(1, 0, 0, x), float4(0, 1, 0, y), float4(0, 0, 1, z)); }
+
+// ---- the clip ----
+void SampleClip(uint actor, uint slot, float t, bool intoB) {
+	uint4 cs = RigClipSlots[actor * ClipSlotsPerActor + slot];
+	float rate = RigClipRates[actor * ClipSlotsPerActor + slot].x;
+	if (cs.z == 0) return;
+	float f = min(max(t, 0) * rate, (float)(cs.z - 1));
+	uint k0 = (uint)floor(f); float a = f - floor(f); uint k1 = min(k0 + 1, cs.z - 1);
+	for (uint c = 0; c < cs.y; ++c) {
+		uint4 ch = RigChannels[cs.x + c];
+		if (ch.x == NONE) continue;
+		uint b = ch.x, m = ch.y, r0 = ch.z + k0 * 3, r1 = ch.z + k1 * 3;
+		float4 p = intoB ? LocalsB[b * 3] : Locals[b * 3];
+		float4 s = intoB ? LocalsB[b * 3 + 2] : Locals[b * 3 + 2];
+		float3 pa = RigSamples[r0].xyz, pb = RigSamples[r1].xyz, sa = RigSamples[r0 + 2].xyz, sb = RigSamples[r1 + 2].xyz;
+		[unroll] for (uint k = 0; k < 3; ++k) {
+			if (m & (1u << k)) p[k] = pa[k] + (pb[k] - pa[k]) * a;
+			if (m & (16u << k)) s[k] = sa[k] + (sb[k] - sa[k]) * a;
+		}
+		if (intoB) { LocalsB[b * 3] = p; LocalsB[b * 3 + 2] = s; } else { Locals[b * 3] = p; Locals[b * 3 + 2] = s; }
+		if (m & 8u) {
+			float4 qa = RigSamples[r0 + 1], qb = RigSamples[r1 + 1];
+			float4 q = qa;
+			if (a > 0) { if (dot(qa, qb) < 0) qb = -qb; q = normalize(qa + (qb - qa) * a); }
+			if (intoB) LocalsB[b * 3 + 1] = q; else Locals[b * 3 + 1] = q;
+		}
+	}
+}
+
+// ---- ExpressionBone (pose.rs apply_expression_bone, branch by branch) ----
+uint NF(uint actor, uint k) { return RigNamed[actor * 66 + k]; }
+uint NL(uint actor, uint k) { return RigNamed[actor * 66 + 26 + k]; }
+bool Ok(uint b) { return b != NONE; }
+float4 ReplaceEuler(uint order, float4 q, int axis, float value) { float3 e = EulerOf(order, q); e[axis] = value; return EulerOrderToQuat(order, e.x, e.y, e.z); }
+
+void ExpressionBone(uint actor) {
+	// Arms: worlds of the shoulders and forearms before any write.
+	{
+		float3x4 wsho[2], wfore[2]; bool have[2];
+		[unroll] for (uint s = 0; s < 2; ++s) {
+			uint sho = NF(actor, 0 + s), fore = NF(actor, 2 + s);
+			have[s] = Ok(sho) && Ok(fore);
+			if (Ok(sho)) wsho[s] = World(sho); else wsho[s] = Translation(0, 0, 0);
+			if (Ok(fore)) wfore[s] = World(fore); else wfore[s] = Translation(0, 0, 0);
+		}
+		[unroll] for (uint s = 0; s < 2; ++s) {
+			bool left = s == 0;
+			uint arm = NF(actor, 4 + s), dsh = NF(actor, 6 + s);
+			if (!(Ok(arm) && Ok(dsh) && have[s])) continue;
+			float3x4 goal = Mul34(wsho[s], Translation(0, 0.3, 0));
+			float3 v = MulPoint(Inverse34(goal), Pos(wfore[s]));
+			float3 t2pos = LP(arm); float4 t3rot = LQ(dsh);
+			float dy = abs(v.y), dz = abs(v.z);
+			float num3 = dy <= 0.3 ? (0.3 - dy) * 250.0 : 0.0;
+			float3 p = LP(dsh); float3 e = EulerOf(3, t3rot);
+			if (left) {
+				if (dy <= 0.3) { p.x = t2pos.x - (0.3 - dy) * 0.03 - dz * 0.03; p.y = (0.3 - dy) * 0.2; } else { p.x = t2pos.x - dz * 0.03; p.y = 0; }
+				e.y = v.z * 50.0; e.z = min(-num3, 0.0);
+			} else {
+				float num6 = dy <= 0.3 ? (0.3 - dy) * -250.0 : 0.0;
+				if (dy <= 0.3) { p.x = t2pos.x + (0.3 - dy) * 0.03 + dz * 0.03; p.y = (0.3 - dy) * 0.2; } else { p.x = t2pos.x + dz * 0.03; p.y = 0; }
+				e.y = -v.z * 50.0; e.z = max(0.0, -num6);
+			}
+			p.z = -v.z * 0.06;
+			SetQ(dsh, EulerOrderToQuat(3, e.x, e.y, e.z)); SetP(dsh, p);
+			float x = EulerOf(5, LQ(arm)).x;
+			float coef[3] = { 0.6, 0.5, 0.125 };
+			[unroll] for (uint k = 0; k < 3; ++k) { uint d = NF(actor, 8 + k * 2 + s); if (Ok(d)) SetQ(d, ReplaceEuler(5, LQ(d), 0, -x * coef[k])); }
+		}
+	}
+	// Elbows.
+	[unroll] for (uint s = 0; s < 2; ++s) {
+		bool left = s == 0; uint fore = NL(actor, 0 + s);
+		if (!Ok(fore)) continue;
+		float y = EulerOf(4, LQ(fore)).y;
+		uint elbow = NL(actor, 2 + s);
+		if (Ok(elbow)) {
+			SetQ(elbow, ReplaceEuler(4, LQ(elbow), 1, -y * 0.5));
+			float3 p = LP(elbow); p.x = sin(y * 0.015) * 0.022;
+			float bend = sin((y - 1.0) * 0.006) * 0.18; p.z = (-0.25 + (left ? bend : -bend)) * 0.1; SetP(elbow, p);
+		}
+		uint back = NL(actor, 4 + s);
+		if (Ok(back)) {
+			SetQ(back, ReplaceEuler(4, LQ(back), 1, -y * 0.5));
+			float3 p = LP(back); p.x = -tan(y * 0.0039) * 1.2;
+			p.z = left ? (0.3 - sin(-y * 0.009) * 7.6 - tan(y * 0.0022) * 16.0) * 0.1 : (0.3 - sin(y * 0.009) * 7.6 + tan(y * 0.0022) * 16.0) * 0.1;
+			SetP(back, p);
+		}
+	}
+	// Forearms and hands (worlds from the current locals).
+	[unroll] for (uint s = 0; s < 2; ++s) {
+		bool left = s == 0; float3 offset = left ? float3(-0.01, 0.01, 0) : float3(0.01, 0.01, 0);
+		uint hand = NL(actor, 6 + s); if (!Ok(hand)) continue;
+		uint fore = NL(actor, 0 + s), mid = NL(actor, 8 + s);
+		if (Ok(fore) && Ok(mid)) {
+			float3x4 foreWorld = World(fore), handWorld = World(hand), midWorld = World(mid);
+			float3 handPos = Pos(handWorld), midPos = Pos(midWorld);
+			float4 foreRot = WorldRot(fore), handRot = WorldRot(hand);
+			float3 finger = MulPoint(Inverse34(TrsM(handPos, foreRot, 1)), midPos);
+			float f = max(finger.y, 0.0) * 100.0 * 3.14159265 / 180.0;
+			uint dhand = NL(actor, 10 + s);
+			if (Ok(dhand)) { float3 p = LP(dhand); p.x = (left ? -0.25 + sin(f) * 15.0 : 0.25 - sin(f) * 15.0) * 0.1; p.y = sin(f) * 1.5; SetP(dhand, p); }
+			float3 moved = handPos + MulPoint(TrsM(0, handRot, 1), offset);
+			uint wrist = NL(actor, 12 + s);
+			if (Ok(wrist)) {
+				float3 local = MulPoint(Inverse34(foreWorld), moved); local.x = 0;
+				float len = sqrt(local.y * local.y + local.z * local.z);
+				float angle = len > 1e-8 ? degrees(acos(clamp(local.y / len, -1, 1))) * (local.z < 0 ? -1.0 : 1.0) : 0.0;
+				float3 e = EulerOf(2, LQ(wrist)); e.x = angle; SetQ(wrist, EulerDegToQuat(e));
+			}
+		}
+		uint dfore = NL(actor, 14 + s);
+		if (Ok(dfore)) { float x = EulerOf(5, LQ(hand)).x; SetQ(dfore, ReplaceEuler(5, LQ(dfore), 0, x * 0.45)); }
+	}
+	// Leg positions: worlds before any write.
+	{
+		uint nh = NF(actor, 19), waist = NF(actor, 14);
+		if (Ok(nh) && Ok(waist)) {
+			float3x4 wwaist = World(waist); float4 waistRot = WorldRot(waist);
+			float3x4 wthigh[2], wleg[2]; bool have[2];
+			[unroll] for (uint s = 0; s < 2; ++s) {
+				uint thigh = NF(actor, 15 + s), leg = NF(actor, 17 + s); have[s] = Ok(thigh) && Ok(leg);
+				wthigh[s] = Ok(thigh) ? World(thigh) : Translation(0, 0, 0); wleg[s] = Ok(leg) ? World(leg) : Translation(0, 0, 0);
+			}
+			float nheight = max(LS(nh).y, 1e-6);
+			[unroll] for (uint s = 0; s < 2; ++s) {
+				if (!have[s]) continue;
+				bool left = s == 0;
+				float3x4 goal = Mul34(wwaist, Translation(left ? -0.083 : 0.083, 0.4, -0.008));
+				float3 v1 = MulPoint(Inverse34(TrsM(Pos(wthigh[s]), waistRot, 1)), Pos(wleg[s])) / nheight * 10.0;
+				float num = v1.y >= 0 ? abs(v1.y) : 0.0;
+				float3 v = MulPoint(Inverse34(goal), Pos(wleg[s])) * -10.0;
+				uint sl = NF(actor, 20 + s);
+				if (Ok(sl)) {
+					float3 p; float3 r;
+					if (left) {
+						p = float3((1.0 + v.x * 0.2 + (abs(v.z * 1.1) - (8.849 - v.y)) * 0.06) * -0.1, (1.0 + (8.849 - v.y) * 0.4 + v.x * 0.2 + num * 0.6) * 0.1, (-v.z * 0.2 + v.x * 0.05 - num * 0.4) * 0.1);
+						r = float3(v.z * 6.0 - v.x * 2.0 - num * 5.0, -v.x * 12.0 - v.z * 3.0, -v.x);
+					} else {
+						p = float3((-1.0 + v.x * 0.2 - (abs(v.z * 1.1) - (8.849 - v.y)) * 0.06) * -0.1, (1.0 + (8.849 - v.y) * 0.4 - v.x * 0.2 + num * 0.6) * 0.1, (-v.z * 0.2 - v.x * 0.05 - num * 0.4) * 0.1);
+						r = float3(v.z * 6.0 + v.x * 2.0 - num * 5.0, -v.x * 12.0 + v.z * 3.0, -v.x);
+					}
+					SetP(sl, p); SetQ(sl, EulerOrderToQuat(5, r.x, r.y, r.z));
+					float3 sc = LS(sl); sc.x = 1.0 + abs(v.z) * 0.2; sc.y = 1.0 + num * 0.4; sc.z = 1.0 + abs(v.z) * 0.3 + num * 0.3; SetS(sl, sc);
+				}
+				uint siri = NF(actor, 22 + s);
+				if (Ok(siri)) {
+					float3 p = left
+						? float3((-0.7 + v.x * 0.01 - abs(v.x * 0.02) - abs(v.z * 0.005)) * 0.1, ((8.849 - v.y) * 0.01 + abs(v.z * 0.02) + v.x * 0.04) * 0.1, (-(8.849 - v.y) * 0.03 - (v.z - num * 3.0) * 0.03 - abs(v.x) * 0.02) * 0.1)
+						: float3((0.7 + v.x * 0.01 + abs(v.x * 0.02) + abs(v.z * 0.005)) * 0.1, ((8.849 - v.y) * 0.01 + abs(v.z * 0.02) - v.x * 0.04) * 0.1, (-(8.849 - v.y) * 0.03 - (v.z - num * 3.0) * 0.03 - abs(v.x) * 0.02) * 0.1);
+					SetP(siri, p);
+					float3 sc = LS(siri); sc.x = 1.0 + abs(v.z) * 0.02; sc.y = 1.0 + abs(num) * 0.01; SetS(siri, sc);
+				}
+			}
+		}
+	}
+	// Leg twists.
+	[unroll] for (uint s = 0; s < 2; ++s) {
+		bool left = s == 0;
+		uint thigh = NL(actor, 16 + s);
+		if (Ok(thigh)) {
+			float y = EulerOf(5, LQ(thigh)).y; float coef[3] = { 0.75, 0.5, 0.25 };
+			[unroll] for (uint k = 0; k < 3; ++k) { uint d = NL(actor, 18 + k * 2 + s); if (Ok(d)) SetQ(d, ReplaceEuler(5, LQ(d), 1, -y * coef[k])); }
+		}
+		uint knee = NL(actor, 24 + s);
+		if (Ok(knee)) {
+			float x = EulerOf(5, LQ(knee)).x;
+			uint front = NL(actor, 26 + s);
+			if (Ok(front)) {
+				float3 e = EulerOf(5, LQ(front)); e.x = -x * 0.5; e.z = x * (left ? 0.1 : -0.1); SetQ(front, EulerOrderToQuat(5, e.x, e.y, e.z));
+				float3 p = LP(front); p.y = (-x * 0.048 + sin(x * 0.01) * 1.1) * 0.1; p.z = (-0.6 - sin(x * 0.0115) * 4.0 + tan(x * 0.0032) * 5.0) * 0.1; SetP(front, p);
+			}
+			uint back = NL(actor, 28 + s);
+			if (Ok(back)) {
+				SetQ(back, ReplaceEuler(5, LQ(back), 0, -x * 0.5));
+				float3 p = LP(back); p.y = (sin(x * 0.012) * 1.8 - tan(x * 0.00335) * 4.5) * 0.1; p.z = (0.4 + x * 0.0125 - tan(x * 0.0032) * 4.5) * 0.1; SetP(back, p);
+			}
+		}
+		uint calf = NL(actor, 30 + s), deform = NL(actor, 32 + s);
+		if (Ok(calf) && Ok(deform)) { float y = EulerOf(5, LQ(calf)).y; SetQ(deform, ReplaceEuler(5, LQ(deform), 1, y * 0.5)); }
+	}
+	// Bust.
+	{
+		uint spine = NL(actor, 34), deform = NL(actor, 35);
+		if (Ok(spine) && Ok(deform)) {
+			float3 se = EulerOf(5, LQ(spine));
+			SetQ(deform, EulerOrderToQuat(5, -se.x * 0.35, -se.y * 0.35, -se.z * 0.35));
+			float3 p = LP(deform); p.y = (-0.081 + se.x * 0.003) * 0.1; p.z = se.x * 0.0004; SetP(deform, p);
+		}
+		[unroll] for (uint s = 0; s < 2; ++s) {
+			uint bust = NL(actor, 36 + s), hit = NL(actor, 38 + s);
+			if (!(Ok(bust) && Ok(hit))) continue;
+			float3 bp = LP(bust), bs = LS(bust);
+			SetP(hit, float3(-bp.x * 0.5, -bp.y * 0.5, -bp.z * 0.25)); SetS(hit, 1.5 - bs * 0.5);
+		}
+	}
+	// AcsNull.
+	{
+		uint head = NF(actor, 24), neck = NF(actor, 25);
+		if (Ok(head) && Ok(neck)) { float3 e = EulerOf(5, LQ(head)); float3 p = LP(neck); p.x = e.z * 0.0002; p.z = (-0.08 - e.x * 0.002) * 0.1; SetP(neck, p); }
+	}
+}
+
+[numthreads(64, 1, 1)]
+void SkeletonCS(uint3 id : SV_DispatchThreadID) {
+	if (id.x >= ActorCount) return;
+	uint actor = id.x;
+	uint4 a0 = RigActors[actor * 4], a1 = RigActors[actor * 4 + 1], a2 = RigActors[actor * 4 + 2], a3 = RigActors[actor * 4 + 3];
+	uint first = a0.x, count = a0.y;
+	uint4 sel = RigSelect[actor]; float4 times = RigTimes[actor];
+	// The shaped baseline, then each clip's channels over it.
+	for (uint b = first; b < first + count; ++b) {
+		Locals[b * 3] = float4(RigBones[b * 3].xyz, 0); Locals[b * 3 + 1] = RigBones[b * 3 + 1]; Locals[b * 3 + 2] = RigBones[b * 3 + 2];
+		LocalsB[b * 3] = Locals[b * 3]; LocalsB[b * 3 + 1] = Locals[b * 3 + 1]; LocalsB[b * 3 + 2] = Locals[b * 3 + 2];
+	}
+	SampleClip(actor, sel.x, times.x, false);
+	uint flags = RigClipSlots[actor * ClipSlotsPerActor + sel.x].w;
+	if (times.z > 0) {
+		SampleClip(actor, sel.y, times.y, true);
+		for (uint b = first; b < first + count; ++b) {
+			Locals[b * 3] = lerp(Locals[b * 3], LocalsB[b * 3], times.z);
+			Locals[b * 3 + 2] = lerp(Locals[b * 3 + 2], LocalsB[b * 3 + 2], times.z);
+			float4 qa = Locals[b * 3 + 1], qb = LocalsB[b * 3 + 1]; if (dot(qa, qb) < 0) qb = -qb;
+			Locals[b * 3 + 1] = normalize(lerp(qa, qb, times.z));
+		}
+		if (times.z >= 0.5) flags = RigClipSlots[actor * ClipSlotsPerActor + sel.y].w;
+	}
+	if (a0.z & 1u) {
+		for (uint k = 0; k < a1.y; ++k) { uint2 ba = RigLists[a1.x + k].xy; float4 p = Locals[ba.x * 3]; p[ba.y] = RigBones[ba.x * 3][ba.y]; Locals[ba.x * 3] = p; }
+		float arm = (flags & 1u) ? 0.92 : 1.0, hand = (flags & 2u) ? 0.9 : 1.0;
+		for (uint k = 0; k < a1.w; ++k) SetS(RigLists[a1.z + k].x, float3(arm, 1, 1));
+		for (uint k = 0; k < a2.y; ++k) SetS(RigLists[a2.x + k].x, float3(1, hand, hand));
+	}
+	if (flags & 4u) {
+		for (uint k = 0; k < a2.w; ++k) {
+			uint2 pv = RigLists[a2.z + k].xy; uint src = pv.x, dst = pv.y;
+			SetS(dst, LS(src));
+			float3 position = Pos(World(src)); float4 rotation = WorldRot(src);
+			uint parent = Parent(dst);
+			if (parent != NONE) { float4 pr = WorldRot(parent); SetP(dst, MulPoint(Inverse34(World(parent)), position)); SetQ(dst, QMul(float4(-pr.xyz, pr.w), rotation)); }
+			else { SetP(dst, position); SetQ(dst, rotation); }
+		}
+		ExpressionBone(actor);
+	}
+	for (uint k = 0; k < a3.y; ++k) {
+		uint o = (a3.x + k) * 3; uint b = asuint(RigAbm[o + 2].w);
+		SetQ(b, QMul(LQ(b), RigAbm[o]));
+		SetP(b, LP(b) * RigAbm[o + 1].w + RigAbm[o + 1].xyz);
+		SetS(b, LS(b) * RigAbm[o + 2].xyz);
+	}
+	// Head look (OKCrowdRuntimeScene ApplyHeadLook), last like the bank's LookRotation: the turn before the local
+	// rotation, brought from UE to Unity (OKUnityLocalToUnreal's basis change is its own inverse).
+	{
+		const float4 basis = float4(0, 0.70710678, 0.70710678, 0);
+		[unroll] for (uint k = 0; k < 2; ++k) {
+			uint b = k == 0 ? a3.z : a3.w; float4 r = RigLook[actor * 2 + k];
+			if (b != NONE && r.w < 1) SetQ(b, normalize(QMul(QMul(QMul(basis, r), basis), LQ(b))));
+		}
+	}
+	// Worlds, parents first (the export's order).
+	for (uint b = first; b < first + count; ++b) {
+		float3x4 local = TrsM(LP(b), LQ(b), LS(b)); uint p = Parent(b);
+		float3x4 w = p == NONE ? local : Mul34(float3x4(Worlds[p * 3], Worlds[p * 3 + 1], Worlds[p * 3 + 2]), local);
+		Worlds[b * 3] = w[0]; Worlds[b * 3 + 1] = w[1]; Worlds[b * 3 + 2] = w[2];
+		RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
+	}
+}
+
+// ---- physics: DynamicBone, the built-in verlet (Tools/ok-extract/src/dbone.rs AttachedDynamicSet::step_impl) ----
+// One thread per set (the clothes set, each accessory's own set; export.rs Physics::write): a pass for the clothes sets
+// (their chains move body bones: the solved worlds go back to them and the bones under them follow), then one for the
+// accessory sets (hung on body bones, after the clothes moved them). A node's world sits after the rig's bones in Worlds.
+// Per set two uint4: (kind: 2 body Ver02, 1 clothes, 0 accessory; node first, node count, chain first), (chain count,
+// follow first, follow count, 0).
+StructuredBuffer<uint4> PhysSets;
+// Per node eight float4: (pos, kind: 0 alias, 1 local, 2 fixed matrix), rot, (scale, parent ref), matrix rows 0..2,
+// rot offset, (alias bone, local source bone, 0, 0). A ref is a bone, or NODE | node; 0xffffffff: none.
+StructuredBuffer<float4> PhysNodes;
+// Per chain two uint4: (root node, component node, flags: 1 ver01, 2 no skip update, 8 Ver02, freeze axis << 4,
+// mirror << 8, max steps), (particle first, count, collider first, count); four float4: (gravity, update rate),
+// (force, 0), (local gravity, 0), (end offset, reflect speed).
+StructuredBuffer<uint4> PhysChains;
+StructuredBuffer<float4> PhysChainValues;
+// Per particle eight float4: (node, parent particle, flags: 1 turns its parent, damping), (end offset, elasticity),
+// (local position, stiffness), (inert, radius, add angle scale, initial scale z); Ver02: (keep min, keep max, next
+// length, flags: 1 move limit, 2 crush, 4 rotate), (move min, crush min), (move max, crush max), (crush add min, crush
+// add max, initial scale xy). Global indices; 0xffffffff: none.
+StructuredBuffer<float4> PhysParticles;
+// Per collider two float4: (center, radius), (height, direction, inside, ref).
+StructuredBuffer<float4> PhysColliders;
+StructuredBuffer<uint> PhysFollow;
+// Per node: the local now (pos, rot, scale) and Transform.rotation; per particle: pos, prev; then per chain:
+// (time, previous component position); then per set: (ready, 0, 0, 0).
+RWStructuredBuffer<float4> NodeLocals;
+RWStructuredBuffer<float4> NodeRots;
+RWStructuredBuffer<float4> PhysState;
+uint SetCount;
+uint ClothesPass;
+// 0: per set, every node from its local, a start over (settle) and the sets stepped one chain after another; 1: per
+// chain, the other sets' chains; 2: per set, the worlds from the solved locals and the body bones written back.
+uint Stage;
+uint ChainCount;
+uint BoneTotal;
+uint ParticleTotal;
+uint ChainTotal;
+float DeltaTime;
+uint ResetAll;
+uint SettleSteps;
+
+static const uint NODE = 0x40000000;
+
+float3x4 BoneWorldAt(uint b) { return float3x4(Worlds[b * 3], Worlds[b * 3 + 1], Worlds[b * 3 + 2]); }
+float3x4 NodeWorld(uint n) { return BoneWorldAt(BoneTotal + n); }
+void SetBoneWorld(uint b, float3x4 w) { Worlds[b * 3] = w[0]; Worlds[b * 3 + 1] = w[1]; Worlds[b * 3 + 2] = w[2]; }
+float3x4 RefWorld(uint r) {
+	if (r == NONE) return Translation(0, 0, 0);
+	return (r & NODE) != 0 ? NodeWorld(r & ~NODE) : BoneWorldAt(r);
+}
+float4 RefRot(uint r) {
+	if (r == NONE) return float4(0, 0, 0, 1);
+	return (r & NODE) != 0 ? NodeRots[r & ~NODE] : RigRots[r];
+}
+float4 QConj(float4 q) { return float4(-q.xyz, q.w); }
+float3 QRot(float4 q, float3 v) { float3 t = 2 * cross(q.xyz, v); return v + q.w * t + cross(q.xyz, t); }
+float3 RotAxis(float4 q, uint axis) { float3 e = 0; e[axis] = 1; return QRot(q, e); }
+float3 Norm8(float3 v) { float l = length(v); return l > 1e-8 ? v / l : v; }
+float3 MulDir(float3x4 m, float3 v) { return float3(dot(m[0].xyz, v), dot(m[1].xyz, v), dot(m[2].xyz, v)); }
+// dbone.rs quat_from_to (Unity's control: 0.001 rad is the identity).
+float4 FromTo(float3 from, float3 to) {
+	float3 f = Norm8(from), t = Norm8(to);
+	float d = dot(f, t);
+	if (d > 0.999999) return float4(0, 0, 0, 1);
+	if (d < -0.999999) {
+		float3 axis = cross(f, float3(1, 0, 0));
+		if (length(axis) < 1e-6) axis = cross(f, float3(0, 1, 0));
+		return float4(normalize(axis), 0);
+	}
+	return normalize(float4(cross(f, t), 1 + d));
+}
+
+uint NodeKind(uint n) { return asuint(PhysNodes[n * 8].w); }
+uint NodeParent(uint n) { return asuint(PhysNodes[n * 8 + 2].w); }
+// Every step starts from the prefab local (private bones) or the animated one (an alias of a body bone; a Ver02
+// particle's: its reference bone's).
+void LoadNode(uint n) {
+	if (NodeKind(n) == 0) {
+		uint a = asuint(PhysNodes[n * 8 + 7].x), from = asuint(PhysNodes[n * 8 + 7].y);
+		if (from != NONE) a = from;
+		NodeLocals[n * 3] = float4(LP(a), 0); NodeLocals[n * 3 + 1] = LQ(a); NodeLocals[n * 3 + 2] = float4(LS(a), 0);
+	} else {
+		NodeLocals[n * 3] = float4(PhysNodes[n * 8].xyz, 0); NodeLocals[n * 3 + 1] = PhysNodes[n * 8 + 1]; NodeLocals[n * 3 + 2] = float4(PhysNodes[n * 8 + 2].xyz, 0);
+	}
+}
+// World and Transform.rotation from the parent's and the local now (dbone.rs world_of, world_rot_of).
+void UpdateNode(uint n) {
+	uint parent = NodeParent(n);
+	float3x4 pw = RefWorld(parent);
+	float4 pr = RefRot(parent);
+	float3x4 w; float4 r;
+	if (NodeKind(n) == 2) {
+		w = Mul34(pw, float3x4(PhysNodes[n * 8 + 3], PhysNodes[n * 8 + 4], PhysNodes[n * 8 + 5]));
+		r = normalize(QMul(pr, PhysNodes[n * 8 + 6]));
+	} else {
+		float4 lq = normalize(NodeLocals[n * 3 + 1]);
+		w = Mul34(pw, TrsM(NodeLocals[n * 3].xyz, lq, NodeLocals[n * 3 + 2].xyz));
+		r = parent == NONE ? lq : normalize(QMul(pr, lq));
+	}
+	SetBoneWorld(BoneTotal + n, w); NodeRots[n] = r;
+}
+// set_world_rot / set_world_pos: the local that puts the bone there under its parent now.
+void SetNodeRotation(uint n, float4 wrot) {
+	if (NodeKind(n) == 2) return;
+	uint parent = NodeParent(n);
+	NodeLocals[n * 3 + 1] = normalize(parent == NONE ? wrot : QMul(QConj(RefRot(parent)), wrot));
+	UpdateNode(n);
+}
+void SetNodePosition(uint n, float3 pos) {
+	if (NodeKind(n) == 2) return;
+	uint parent = NodeParent(n);
+	float3 local = pos;
+	if (parent != NONE) { float3x4 pw = RefWorld(parent); local = MulDir(Inverse34(pw), pos - Pos(pw)); }
+	NodeLocals[n * 3] = float4(local, 0);
+	UpdateNode(n);
+}
+
+uint PNode(uint i) { return asuint(PhysParticles[i * 8].x); }
+uint PParent(uint i) { return asuint(PhysParticles[i * 8].y); }
+float3 PPos(uint i) { return PhysState[i * 2].xyz; }
+float3 PPrev(uint i) { return PhysState[i * 2 + 1].xyz; }
+void SetPPos(uint i, float3 p) { PhysState[i * 2] = float4(p, 0); }
+void SetPPrev(uint i, float3 p) { PhysState[i * 2 + 1] = float4(p, 0); }
+
+// DynamicBoneCollider.Collide (dbone.rs collide_particle_world): sphere or capsule, outside or inside.
+void Collide(inout float3 pos, float radius, uint c) {
+	float4 c0 = PhysColliders[c * 2], c1 = PhysColliders[c * 2 + 1];
+	float3x4 w = RefWorld(asuint(c1.w));
+	float scaleZ = length(float3(w[0][2], w[1][2], w[2][2]));
+	float cradius = c0.w, height = c1.x; uint direction = asuint(c1.y); bool inside = asuint(c1.z) != 0;
+	float reach = cradius * scaleZ + radius;
+	float halfLength = (height - cradius) * 0.5;
+	float3 lo = c0.xyz, hi = c0.xyz;
+	if (halfLength > 0) { lo[direction] -= halfLength; hi[direction] += halfLength; }
+	float3 a = MulPoint(w, lo), b = MulPoint(w, hi), ab = b - a;
+	float3 diff = pos - a;
+	float projection = dot(diff, ab), lengthSquared = dot(ab, ab);
+	bool interior = halfLength > 0 && projection > 0 && projection < lengthSquared;
+	float3 center = a;
+	if (halfLength <= 0 || projection <= 0) center = a;
+	else if (projection >= lengthSquared) { diff = pos - b; center = b; }
+	else diff = diff - ab * (projection / lengthSquared);
+	float d2 = dot(diff, diff);
+	if (d2 > 0 && (inside ? d2 > reach * reach : d2 < reach * reach)) {
+		float d = sqrt(d2);
+		pos = interior ? pos + diff * ((reach - d) / d) : center + diff * (reach / d);
+	}
+}
+
+// The rest length to the parent (UpdateParticles2's num).
+float RestLength(uint i, uint pn, bool ver01, float objectScale) {
+	float3x4 pw = NodeWorld(pn);
+	uint sn = PNode(i);
+	if (sn == NONE) return ver01 ? length(PhysParticles[i * 8 + 1].xyz) * objectScale : length(MulDir(pw, PhysParticles[i * 8 + 1].xyz));
+	return length(Pos(pw) - Pos(NodeWorld(sn)));
+}
+// The local the parent's matrix carries the particle to (its Transform's local, an end point's offset).
+float3 TargetLocal(uint i, bool ver01) {
+	uint sn = PNode(i);
+	if (ver01) return PhysParticles[i * 8 + 2].xyz;
+	return sn != NONE ? NodeLocals[sn * 3].xyz : PhysParticles[i * 8 + 1].xyz;
+}
+
+float InvLerp(float a, float b, float v) { return a != b ? saturate((v - a) / (b - a)) : 0.0; }
+// DynamicBone_Ver02 (dbone/ver02.rs Chain::prepare, finish): ordered body chains, each particle the previous one's child.
+void StepChainV02(uint c, float dt) {
+	uint4 h = PhysChains[c * 2], k = PhysChains[c * 2 + 1];
+	float4 gv = PhysChainValues[c * 4], fv = PhysChainValues[c * 4 + 1], ev = PhysChainValues[c * 4 + 3];
+	bool skipOff = (h.z & 2u) != 0;
+	uint first = k.x, count = k.y, cfirst = k.z, ccount = k.w, maxSteps = max(h.w, 1u);
+	for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+	uint si = ParticleTotal * 2 + c;
+	float4 st = PhysState[si];
+	float3x4 rw = NodeWorld(h.x);
+	float scale = length(float3(rw[0][0], rw[1][0], rw[2][0]));
+	float3 movement = Pos(rw) - st.yzw; st.yzw = Pos(rw);
+	uint steps = 1;
+	if (gv.w > 0) {
+		st.x += dt; float period = 1.0 / gv.w; steps = 0;
+		while (st.x >= period) { st.x -= period; steps++; if (steps >= maxSteps) { st.x = 0; break; } }
+	}
+	PhysState[si] = st;
+	float3 force = (gv.xyz + fv.xyz) * scale, endOffset = ev.xyz;
+	uint iterations = (steps == 0 && skipOff) ? 0 : max(steps, 1u);
+	for (uint it = 0; it < iterations; ++it) {
+		for (uint i = first; i < first + count; ++i) {
+			if (i == first) { SetPPrev(i, PPos(i)); SetPPos(i, Pos(NodeWorld(PNode(i)))); continue; }
+			float3 inert = movement * PhysParticles[i * 8 + 3].x, pos = PPos(i), prev = PPrev(i);
+			if (steps > 0) { float3 velocity = (pos - prev) * ev.w; SetPPrev(i, pos + inert); SetPPos(i, pos + velocity * (1 - PhysParticles[i * 8].w) + force + inert); }
+			else { SetPPrev(i, prev + inert); SetPPos(i, pos + inert); }
+		}
+		for (uint i = first + 1; i < first + count; ++i) {
+			uint p = i - 1, pn = PNode(p), sn = PNode(i);
+			float3x4 pw = NodeWorld(pn);
+			float rest = sn != NONE ? length(Pos(pw) - Pos(NodeWorld(sn))) : length(endOffset) * scale;
+			float3 ppos = PPos(p);
+			float3x4 gm = pw; gm[0].w = ppos.x; gm[1].w = ppos.y; gm[2].w = ppos.z;
+			float3 goal = MulPoint(gm, sn != NONE ? PhysParticles[i * 8 + 2].xyz : endOffset);
+			float3 pos = PPos(i);
+			if (steps > 0) pos += (goal - pos) * PhysParticles[i * 8 + 1].w;
+			float stiff = PhysParticles[i * 8 + 2].w;
+			if (stiff > 0) { float3 diff = goal - pos; float dist = length(diff), limit = rest * (1 - stiff) * 2; if (dist > limit) pos += diff * ((dist - limit) / dist); }
+			if (steps > 0) { float radius = PhysParticles[i * 8 + 3].y * scale; for (uint q = cfirst; q < cfirst + ccount; ++q) Collide(pos, radius, q); }
+			float4 v4 = PhysParticles[i * 8 + 4];
+			float3 back = ppos - pos; float dist = length(back);
+			if (dist > 0) { float fraction = (dist - rest) / dist; if (fraction <= v4.x) pos += back * (fraction - v4.x); else if (fraction >= v4.y) pos += back * (fraction - v4.y); }
+			if ((asuint(v4.w) & 1u) != 0 && sn != NONE) {
+				float3x4 m = NodeWorld(sn); m[0].w = goal.x; m[1].w = goal.y; m[2].w = goal.z;
+				float3 local = clamp(MulPoint(Inverse34(m), pos), PhysParticles[i * 8 + 5].xyz, PhysParticles[i * 8 + 6].xyz);
+				pos = MulPoint(m, local);
+			}
+			SetPPos(i, pos);
+		}
+		movement = 0;
+	}
+	for (uint i = first + 1; i < first + count; ++i) {
+		uint p = i - 1, pn = PNode(p), sn = PNode(i);
+		float4 pv = PhysParticles[p * 8 + 4];
+		if ((asuint(pv.w) & 4u) != 0) {
+			float3 direction = sn != NONE ? PhysParticles[i * 8 + 2].xyz : endOffset;
+			float4 rotation = NodeRots[pn];
+			float3 from = QRot(rotation, direction);
+			float3 target = PPos(i) - from * (1 - pv.z) - PPos(p);
+			SetNodeRotation(pn, normalize(QMul(FromTo(from, target), rotation)));
+		}
+		if (sn != NONE) {
+			if ((asuint(PhysParticles[i * 8 + 4].w) & 2u) != 0) {
+				float3 local = MulPoint(Inverse34(NodeWorld(sn)), PPos(i));
+				float4 c7 = PhysParticles[i * 8 + 7];
+				float amount = local.z <= 0 ? c7.x * (1 - InvLerp(PhysParticles[i * 8 + 5].w, 0, local.z)) : c7.y * InvLerp(0, PhysParticles[i * 8 + 6].w, local.z);
+				NodeLocals[sn * 3 + 2] = float4(c7.z + amount, c7.w + amount, PhysParticles[i * 8 + 3].w, 0);
+				UpdateNode(sn);
+			}
+			SetNodePosition(sn, PPos(i));
+		}
+	}
+}
+
+void StepChain(uint c, float dt) {
+	uint4 h = PhysChains[c * 2], k = PhysChains[c * 2 + 1];
+	if ((h.z & 8u) != 0) { StepChainV02(c, dt); return; }
+	float4 gv = PhysChainValues[c * 4], fv = PhysChainValues[c * 4 + 1], lg = PhysChainValues[c * 4 + 2];
+	bool ver01 = (h.z & 1u) != 0, skipOff = (h.z & 2u) != 0;
+	uint freeze = (h.z >> 4) & 3u, mirror = (h.z >> 8) & 0x77u;
+	uint first = k.x, count = k.y, cfirst = k.z, ccount = k.w;
+	// An earlier chain may have moved bones this one reads (overlapping chains): its bones from their locals now.
+	for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+	uint si = ParticleTotal * 2 + c;
+	float4 st = PhysState[si];
+	float3x4 cw = NodeWorld(h.y);
+	float3 cp = Pos(cw);
+	float3 objectMove = cp - st.yzw; st.yzw = cp;
+	float objectScale = max(length(float3(cw[0][0], cw[1][0], cw[2][0])), 1e-6);
+	float3 g = gv.xyz;
+	float3 normalized = Norm8(g);
+	float3 rootDir = QRot(NodeRots[h.x], lg.xyz);
+	float3 source = ver01 ? g : g - normalized * max(dot(rootDir, normalized), 0.0);
+	float3 gravity = (source + fv.xyz) * objectScale;
+	int num = 1;
+	if (gv.w > 0) {
+		float step = 1.0 / gv.w;
+		st.x += dt; num = 0;
+		while (st.x >= step) { st.x -= step; num++; if (num >= 3) { st.x = 0; break; } }
+	}
+	PhysState[si] = st;
+	if (num > 0) {
+		for (int s = 0; s < num; ++s) {
+			float3 move = s == 0 ? objectMove : float3(0, 0, 0);
+			// UpdateParticles1
+			for (uint i = first; i < first + count; ++i) {
+				if (PParent(i) == NONE) { uint n = PNode(i); if (n != NONE) { SetPPrev(i, PPos(i)); SetPPos(i, Pos(NodeWorld(n))); } continue; }
+				float4 p0 = PhysParticles[i * 8]; float inert = PhysParticles[i * 8 + 3].x;
+				float3 pos = PPos(i), velocity = pos - PPrev(i), v3 = move * inert;
+				SetPPrev(i, pos + v3);
+				SetPPos(i, pos + velocity * (1 - p0.w) + gravity + v3);
+			}
+			// UpdateParticles2
+			for (uint i = first + 1; i < first + count; ++i) {
+				uint p = PParent(i); if (p == NONE) continue;
+				uint pn = PNode(p); if (pn == NONE) continue;
+				float3x4 pw = NodeWorld(pn);
+				float rest = RestLength(i, pn, ver01, objectScale);
+				float stiff = PhysParticles[i * 8 + 2].w, elastic = PhysParticles[i * 8 + 1].w;
+				float3 pos = PPos(i), ppos = PPos(p);
+				if (stiff > 0 || elastic > 0) {
+					float3x4 l2w = pw; l2w[0].w = ppos.x; l2w[1].w = ppos.y; l2w[2].w = ppos.z;
+					float3 target = MulPoint(l2w, TargetLocal(i, ver01));
+					pos += (target - pos) * elastic;
+					if (stiff > 0) {
+						float3 d = target - pos; float mag = length(d), lim = rest * (1 - stiff) * 2;
+						if (mag > lim && mag > 1e-8) pos += d * ((mag - lim) / mag);
+					}
+				}
+				float radius = PhysParticles[i * 8 + 3].y * objectScale;
+				for (uint q = cfirst; q < cfirst + ccount; ++q) Collide(pos, radius, q);
+				if (!ver01 && freeze > 0) { float3 normal = RotAxis(NodeRots[pn], freeze - 1); pos -= normal * dot(pos - ppos, normal); }
+				float3 d = ppos - pos; float mag = length(d);
+				if (mag > 0) pos += d * ((mag - rest) / mag);
+				SetPPos(i, pos);
+			}
+		}
+	} else if (!skipOff) {
+		// SkipUpdate
+		for (uint i = first; i < first + count; ++i) {
+			uint p = PParent(i);
+			if (p == NONE) { uint n = PNode(i); if (n != NONE) { SetPPrev(i, PPos(i)); SetPPos(i, Pos(NodeWorld(n))); } continue; }
+			float3 moveHere = ver01 ? objectMove * PhysParticles[i * 8 + 3].x : objectMove;
+			SetPPrev(i, PPrev(i) + moveHere);
+			float3 pos = PPos(i) + moveHere;
+			uint pn = PNode(p);
+			if (pn != NONE) {
+				float3x4 pw = NodeWorld(pn);
+				float rest = RestLength(i, pn, ver01, objectScale);
+				float stiff = PhysParticles[i * 8 + 2].w;
+				float3 ppos = PPos(p);
+				if (stiff > 0) {
+					float3x4 l2w = pw; l2w[0].w = ppos.x; l2w[1].w = ppos.y; l2w[2].w = ppos.z;
+					uint sn = PNode(i);
+					float3 target = MulPoint(l2w, sn != NONE ? NodeLocals[sn * 3].xyz : PhysParticles[i * 8 + 1].xyz);
+					float3 d = target - pos; float mag = length(d), lim = rest * (1 - stiff) * 2;
+					if (mag > lim && mag > 1e-8) pos += d * ((mag - lim) / mag);
+				}
+				float3 d = ppos - pos; float mag = length(d);
+				if (mag > 0) pos += d * ((mag - rest) / mag);
+			}
+			SetPPos(i, pos);
+		}
+	}
+	// ApplyParticlesToTransforms
+	float3 axes[3]; uint mirrored = 0;
+	[unroll] for (uint ax = 0; ax < 3; ++ax) {
+		if ((mirror & (1u << ax)) != 0) axes[mirrored++] = RotAxis(NodeRots[h.y], ax);
+		else if ((mirror & (16u << ax)) != 0) axes[mirrored++] = RotAxis(RefRot(NodeParent(h.y)), ax);
+	}
+	for (uint i = first + 1; i < first + count; ++i) {
+		uint p = PParent(i); if (p == NONE) continue;
+		uint pn = PNode(p); if (pn == NONE) continue;
+		uint sn = PNode(i);
+		if ((asuint(PhysParticles[i * 8].z) & 1u) != 0) {
+			float3 direction = sn == NONE ? PhysParticles[i * 8 + 1].xyz : (ver01 ? PhysParticles[i * 8 + 2].xyz : NodeLocals[sn * 3].xyz);
+			float4 pr = NodeRots[pn];
+			float3 from = QRot(pr, direction);
+			float3 v = PPos(i) - PPos(p);
+			if (!ver01) for (uint m = 0; m < mirrored; ++m) v -= axes[m] * (2 * dot(v, axes[m]));
+			float4 q = FromTo(from, v);
+			float angleScale = PhysParticles[i * 8 + 3].z;
+			if (ver01 && abs(angleScale - 1) > 1e-6) {
+				float halfAngle = acos(clamp(q.w, -1.0, 1.0)), sinHalf = sin(halfAngle);
+				if (sinHalf > 1e-7) q = normalize(float4(q.xyz * (sin(halfAngle * angleScale) / sinHalf), cos(halfAngle * angleScale)));
+			}
+			SetNodeRotation(pn, normalize(QMul(q, pr)));
+		}
+		if (sn != NONE) SetNodePosition(sn, PPos(i));
+	}
+}
+
+// Every node of the set from its local now, parents first.
+void RestoreSet(uint nf, uint nc, bool load) {
+	for (uint n = nf; n < nf + nc; ++n) { if (load) LoadNode(n); UpdateNode(n); }
+}
+
+[numthreads(64, 1, 1)]
+void PhysicsCS(uint3 id : SV_DispatchThreadID) {
+	if (Stage == 1) {
+		// One chain of a set whose chains move unrelated bones.
+		if (id.x >= ChainCount) return;
+		uint set = asuint(PhysChainValues[id.x * 4 + 2].w);
+		if ((PhysSets[set * 2].x & 0xffu) != ClothesPass) return;
+		if (PhysState[ParticleTotal * 2 + ChainTotal + set].y != 0) return;
+		StepChain(id.x, DeltaTime);
+		return;
+	}
+	if (id.x >= SetCount) return;
+	uint4 s0 = PhysSets[id.x * 2], s1 = PhysSets[id.x * 2 + 1];
+	if ((s0.x & 0xffu) != ClothesPass) return;
+	bool serial = (s0.x & 0x100u) != 0;
+	uint nf = s0.y, nc = s0.z, cf = s0.w, cc = s1.x;
+	uint ready = ParticleTotal * 2 + ChainTotal + id.x;
+	if (Stage == 2) {
+		RestoreSet(nf, nc, false);
+		if ((s0.x & 0xffu) != 0) {
+			// The body's chains and the clothes moved body bones: their solved worlds go back, and the bones under them follow.
+			for (uint n = nf; n < nf + nc; ++n) if (NodeKind(n) == 0) { uint a = asuint(PhysNodes[n * 8 + 7].x); SetBoneWorld(a, NodeWorld(n)); RigRots[a] = NodeRots[n]; }
+			for (uint f = s1.y; f < s1.y + s1.z; ++f) {
+				uint b = PhysFollow[f], p = Parent(b);
+				float3x4 local = TrsM(LP(b), LQ(b), LS(b));
+				SetBoneWorld(b, p == NONE ? local : Mul34(BoneWorldAt(p), local));
+				RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
+			}
+		}
+		return;
+	}
+	RestoreSet(nf, nc, true);
+	PhysState[ready].y = 0;
+	if (ResetAll != 0 || PhysState[ready].x == 0) {
+		// Particles at the animated pose, then held there for a while (AttachedDynamicSet::new: a settle of steps).
+		for (uint c = cf; c < cf + cc; ++c) {
+			uint4 k = PhysChains[c * 2 + 1];
+			for (uint i = k.x; i < k.x + k.y; ++i) {
+				uint n = PNode(i), p = PParent(i);
+				float3 pos = n != NONE ? Pos(NodeWorld(n)) : (p != NONE && PNode(p) != NONE ? MulPoint(NodeWorld(PNode(p)), PhysParticles[i * 8 + 1].xyz) : float3(0, 0, 0));
+				SetPPos(i, pos); SetPPrev(i, pos);
+			}
+			PhysState[ParticleTotal * 2 + c] = float4(0, Pos(NodeWorld(PhysChains[c * 2].y)));
+		}
+		for (uint step = 0; step < SettleSteps; ++step) {
+			RestoreSet(nf, nc, true);
+			for (uint c = cf; c < cf + cc; ++c) StepChain(c, 1.0 / 60.0);
+		}
+		PhysState[ready] = float4(1, 1, 0, 0);
+		RestoreSet(nf, nc, true);
+		for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
+		return;
+	}
+	if (serial) {
+		for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
+		PhysState[ready].y = 1;
+	}
+}
+
+// ---- tasks ----
+// Per task: (term first, term count, 0, 0). Per term four float4: (node as uint: global bone or 0xffffffff, weight, 0, 0)
+// then the constant's rows 0..2 (UE column form: out = sum weight * U(world) * C).
+StructuredBuffer<uint4> RigTasks;
+StructuredBuffer<float4> RigTerms;
+StructuredBuffer<float4> TaskWorlds;
+RWStructuredBuffer<float4> OutputRows;
+uint TaskCount;
+
+// Unity world -> UE (KKRuntimePoseMath.h OKSkinPaletteToUnreal, transposed): U[r][c] = s_r s_c W[m_r][m_c], translation x100.
+float3x4 ToUnreal(float3x4 w) {
+	const uint m[3] = { 0, 2, 1 }; const float sg[3] = { -1, 1, 1 };
+	float3x4 u;
+	[unroll] for (uint r = 0; r < 3; ++r) {
+		[unroll] for (uint c = 0; c < 3; ++c) u[r][c] = sg[r] * sg[c] * w[m[r]][m[c]];
+		u[r][3] = 100.0 * sg[r] * w[m[r]][3];
+	}
+	return u;
+}
+
+[numthreads(64, 1, 1)]
+void TaskCS(uint3 id : SV_DispatchThreadID) {
+	if (id.x >= TaskCount) return;
+	uint4 t = RigTasks[id.x];
+	float3x4 sum = (float3x4)0;
+	for (uint k = 0; k < t.y; ++k) {
+		uint o = (t.x + k) * 4; float4 head = RigTerms[o]; uint node = asuint(head.x);
+		float3x4 c = float3x4(RigTerms[o + 1], RigTerms[o + 2], RigTerms[o + 3]);
+		float3x4 u = node == NONE ? float3x4(float4(1, 0, 0, 0), float4(0, 1, 0, 0), float4(0, 0, 1, 0)) : ToUnreal(float3x4(TaskWorlds[node * 3], TaskWorlds[node * 3 + 1], TaskWorlds[node * 3 + 2]));
+		sum += head.y * Mul34(u, c);
+	}
+	OutputRows[id.x * 3] = sum[0]; OutputRows[id.x * 3 + 1] = sum[1]; OutputRows[id.x * 3 + 2] = sum[2];
+}

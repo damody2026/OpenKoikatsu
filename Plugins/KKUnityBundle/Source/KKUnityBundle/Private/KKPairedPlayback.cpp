@@ -74,14 +74,29 @@ bool AKKPairedPlayback::Advance(float Delta,FString& Error)
   FemaleActor->PublishPhysicsFrame();MaleActor->PublishPhysicsFrame();
   PendingNext=Next;PendingDelta=BodyUpdate?Delta:PoseDelta;PendingReactions[0]=Reactions[0];PendingReactions[1]=Reactions[1];
   TSharedPtr<FOkAnimPlayer> Player=OkPlayer;FOkSession* F=&FemaleActor->Session;FOkSession* M=&MaleActor->Session;const float T=float(Next),D=PendingDelta;
-  bSolvePending=true;
+  bSolvePending=true;bPendingNative=false;
   PendingSolve=UE::Tasks::Launch(UE_SOURCE_LOCATION,[this,Player,F,M,T,D]{bSolveOk=Player->ApplySessions({F,M},T,D,&PendingReport);});
   return true;}
  if(OkPlayer){TRACE_CPUPROFILER_EVENT_SCOPE(KK_PairOK);
   FemaleActor->PublishPhysicsFrame();MaleActor->PublishPhysicsFrame();
   if(!OkPlayer->ApplySessions({&FemaleActor->Session,&MaleActor->Session},float(Next),BodyUpdate?Delta:PoseDelta,&OkReport)){Error=TEXT("OK pair frame: ")+OkReport;return false;}
   OkPlayer->ApplyFaceCurves(0,float(Next),*FemaleActor);OkPlayer->ApplyFaceCurves(1,float(Next),*MaleActor);}
- else {TRACE_CPUPROFILER_EVENT_SCOPE(KK_PairNative);if(!AKKPreviewActor::ApplyPairedFrameWithDisplay(*FemaleActor,*MaleActor,float(Next),BodyUpdate?Delta:PoseDelta,StateName,FemaleIK,MaleIK,Error)) return false;}
+ else{
+  // No OK group for this state (none are saved for the game's pairs, so this is every one-on-one pose): the native
+  // GPU pair frame is a Rust call as well and goes to a worker the same way. On the game thread it took 6 ms of a
+  // 13 ms frame (77 FPS in the one-on-one scene).
+  TArray<int32> FemaleParts,MaleParts;TArray<uint64> FemaleRevisions,MaleRevisions;
+  if(CVarPairAsync.GetValueOnGameThread()!=0&&Delta>0.f&&AKKPreviewActor::PairedFrameGpuParts(*FemaleActor,*MaleActor,FemaleParts,FemaleRevisions,MaleParts,MaleRevisions)){
+   TRACE_CPUPROFILER_EVENT_SCOPE(KK_PairNativeAsync);
+   FemaleActor->PublishPhysicsFrame();MaleActor->PublishPhysicsFrame();
+   PendingNext=Next;PendingDelta=BodyUpdate?Delta:PoseDelta;PendingReactions[0]=Reactions[0];PendingReactions[1]=Reactions[1];
+   FOkSession* F=&FemaleActor->Session;FOkSession* M=&MaleActor->Session;const float T=float(Next),D=PendingDelta;
+   bSolvePending=true;bPendingNative=true;
+   PendingSolve=UE::Tasks::Launch(UE_SOURCE_LOCATION,[this,F,M,T,D,State=StateName,FemaleMotion=FemaleIK,MaleMotion=MaleIK,
+    FemaleParts=MoveTemp(FemaleParts),FemaleRevisions=MoveTemp(FemaleRevisions),MaleParts=MoveTemp(MaleParts),MaleRevisions=MoveTemp(MaleRevisions)]{
+    FString Report;bSolveOk=FOkSession::ApplyPairedFrameGpu(*F,*M,T,D,State,FemaleMotion,MaleMotion,FemaleParts,FemaleRevisions,MaleParts,MaleRevisions,Report);PendingReport=Report;});
+   return true;}
+  TRACE_CPUPROFILER_EVENT_SCOPE(KK_PairNative);if(!AKKPreviewActor::ApplyPairedFrameWithDisplay(*FemaleActor,*MaleActor,float(Next),BodyUpdate?Delta:PoseDelta,StateName,FemaleIK,MaleIK,Error)) return false;}
 	Elapsed=Next;
 	return ShowFrame(Delta,Reactions,Error);
 }
@@ -111,7 +126,7 @@ void AKKPairedPlayback::SyncAsync()
 	{TRACE_CPUPROFILER_EVENT_SCOPE(KK_PairOKWait);PendingSolve.Wait();}
 	bSolvePending=false;OkReport=PendingReport;
 	if(!bSolveOk||!IsValid(FemaleActor)||!IsValid(MaleActor))return;
-	OkPlayer->ApplyFaceCurves(0,float(PendingNext),*FemaleActor);OkPlayer->ApplyFaceCurves(1,float(PendingNext),*MaleActor);
+	if(OkPlayer&&!bPendingNative){OkPlayer->ApplyFaceCurves(0,float(PendingNext),*FemaleActor);OkPlayer->ApplyFaceCurves(1,float(PendingNext),*MaleActor);}
 	Elapsed=PendingNext;
 	FString Error;
 	ShowFrame(PendingDelta,PendingReactions,Error);

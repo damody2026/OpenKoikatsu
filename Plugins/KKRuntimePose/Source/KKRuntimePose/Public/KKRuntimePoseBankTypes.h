@@ -31,6 +31,11 @@ struct FKKRuntimePoseRequest {
  // A looping clip: its secondary motion is run through one loop before the keys are taken, so the last key leads
  // into the first (taken from the settled first frame, hair jumped at every loop, R3-265).
  bool Loop=false;
+ // Native bones only, for the GPU runtime rig (which writes every pose row itself): each palette bone keeps its first
+ // frame (one sample once the constant channels collapse), so the bank costs the native bones' keys and is drawn, before
+ // the rig takes over, in that first frame. The CPU reads (sockets, head look) are unchanged. Its frames are sampled
+ // without the frame's dynamics (the rig solves them on the GPU), which keeps a clip's solve to its sampling.
+ bool NativeOnly=false;
  // Stable APNG content/outfit identity from a verified capture. Snapshot byte
  // order is not canonical because native serialization contains hash maps.
  FString PersistentSourceIdentity;
