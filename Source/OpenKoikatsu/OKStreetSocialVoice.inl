@@ -145,7 +145,7 @@ void AOKStreetSocialScene::ProbeTtsServer(int32 Attempt){
 void AOKStreetSocialScene::RequestTtsLine(const FString& Text,const FString& Voice,bool Male){
  auto& S=*State;const uint32 Serial=Male?++S.MaleSerial:++S.TtsSerial;
  if(Male){S.MaleTtsPending=true;S.MaleRequestedAt=SceneTime();}else{S.TtsPending=true;S.TtsRequestedAt=SceneTime();}
- auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("text"),Text);Body->SetStringField(TEXT("personality"),Voice);Body->SetNumberField(TEXT("age"),S.TtsAge);Body->SetStringField(TEXT("out_dir"),S.TtsCacheDir);
+ auto Body=MakeShared<FJsonObject>();Body->SetStringField(TEXT("text"),OKStreetSpokenText(Text));Body->SetStringField(TEXT("personality"),Voice);Body->SetNumberField(TEXT("age"),S.TtsAge);Body->SetStringField(TEXT("out_dir"),S.TtsCacheDir);
  // Her card: a voice of her own stored there is used (the player's tone comes from the menu, not his card).
  if(!Male)if(const FString Card=OKStreetCardFor(S,S.Target);!Card.IsEmpty())Body->SetStringField(TEXT("card"),Card);
  // His lines: their own channel and number, so a line he gave up on can be dropped on the server (OKStreetTtsCancel).

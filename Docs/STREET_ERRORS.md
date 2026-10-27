@@ -804,3 +804,8 @@
 - GPU 空出來時量 1 對 1（胡桃），77 FPS，遊戲執行緒 12.9 ms、GPU 1.1 ms。Insights 計時：`KK_PairNative` 每幀 6.2 ms。`AKKPairedPlayback` 有背景求解（`ok.Anim.AsyncPair`），可是只用在有 OK 配對包（`Saved/OKAnim/Pairs/*.okgroup`）的狀態；遊戲裡一個配對包都沒有（打包版的 Saved 是 stage 自己的），所以每個姿勢都走同步的原生路徑。
 - 修正：原生路徑在 GPU 擁有部件時本來就只有一個 Rust 呼叫（`ok_animation_pair_frame_gpu`），改成和 OK 路徑一樣丟到背景、下一幀顯示（`AKKPreviewActor::PairedFrameGpuParts` 收集部件、`AKKPairedPlayback::Advance`；`bPendingNative` 時不套 OK 的臉部曲線）。
 - 規則：「有背景版」的優化要確認實際遊戲走的是哪條路；量效能時用 Insights 匯出計時（`UnrealInsights.exe -OpenTraceFile=… -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimerStatistics out.csv" -AutoQuit -NoUI`），不要只看 `stat dumpframe` 的 Self。
+
+### 2026-10-27 她把舞台指示「（小聲）」念出來（E 組 galgame，早瀨優香在圖書館）
+- 在圖書館聊天時，模型的台詞開頭寫「（小聲）拍照存收據？……」，整句連括號原封送給 TTS，她就念出「小聲」。修正：`RequestFreeTalkSegment` 送 TTS 前拿掉 16 字以內的括號段（全形或半形），對話框照常顯示；拿掉後沒有可念的字就照原本的靜音處理。
+- 同一輪也確認：交換電話不再出現 `unknown interaction contact`；聊到朋友後起身按「進入一對一場景」，她以 0.56 的機率拒絕（正常規則）；坐著讀書時這個按鈕是停用的。
+- 後續：驗證時看 ok-tts 的 log，發現他自己的台詞也一樣（我打的「（我壓低聲音）」被他的聲音念出來，`RequestTtsLine` 是另一條路）。去括號抽成 `OKStreetSpokenText.h`，她的分段語音與他的語音都用。

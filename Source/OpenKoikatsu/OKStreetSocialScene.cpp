@@ -1,5 +1,6 @@
 ﻿#include "OKStreetSocialScene.h"
 #include "OKStreetSocialText.h"
+#include "OKStreetSpokenText.h"
 #include "OKStreetSocialSpeakerText.h"
 #include "OKStreetSocialSongState.h"
 #include "OKInteractionMode.h"
@@ -1620,7 +1621,7 @@ void AOKStreetSocialScene::RequestFreeTalkSegment(int32 Generation,int32 Index){
  const int32 Character=S.FreeTalkSpeechSpeakers.IsValidIndex(Index)?S.FreeTalkSpeechSpeakers[Index]:S.FreeTalkSpeechCharacter;
  // What the server can speak: a line of only dots ("……") has nothing to say and is shown silent, not a "TTS failed:
  // text must be 1..400 characters" notice; a longer one is cut at its last sentence end within 400 (R3-215).
- FString Spoken=S.FreeTalkSpeechLines[Index];
+ FString Spoken=OKStreetSpokenText(S.FreeTalkSpeechLines[Index]); // no stage directions (OKStreetSpokenText.h)
  {bool Speakable=false;for(const TCHAR C:Spoken)if(FChar::IsAlnum(C)||(C>=0x3040&&C<0xFF00)){Speakable=true;break;}
   if(!Speakable){S.FreeTalkSpeechStreamed[Index]=2;if(S.FreeTalkSpeechReady[Index]==0)S.FreeTalkSpeechReady[Index]=2;return;}
   if(Spoken.Len()>400){int32 Cut=400;for(int32 I=399;I>200;--I)if(FCString::Strchr(TEXT("。！？!?…"),Spoken[I])){Cut=I+1;break;}Spoken.LeftInline(Cut);}}
