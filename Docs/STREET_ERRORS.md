@@ -799,3 +799,8 @@
 - **修正：** ok-rules `with_rests`：某口氣結束後，下一句要 4 秒以上才來，而且接著是 3 秒以上的停頓或只有語氣詞的哼聲（辨識結果除了「啊、嗯、哦…」沒有別的字），字幕就在那口氣結束時換成「♪」（`lines` 裡的空字串，遊戲端顯示 ♪）。沙盒 10 首歌重算：休止只出現在 16 秒間奏與整段哼聲處，唱詞中間沒有。
 - 規則：字幕對時不只要決定每句何時出現，也要決定何時收起來；模型唱的歌常常不照歌詞走完，要預期中間有長段沒有歌詞。
 - 另外：第一次開始實測時只有一個遊戲，途中別人又開了兩個，ok-song 換聲 20 分鐘沒做完，只好關掉重來。GPU 共用時，要先和其他 session 說好空檔再做要跑好幾分鐘的 GPU 工作。
+
+### 2026-10-27 1 對 1 場景只有 77 FPS：雙人配對每幀在遊戲執行緒同步求解（E 組 galgame，胡桃 1 對 1 量 FPS）
+- GPU 空出來時量 1 對 1（胡桃），77 FPS，遊戲執行緒 12.9 ms、GPU 1.1 ms。Insights 計時：`KK_PairNative` 每幀 6.2 ms。`AKKPairedPlayback` 有背景求解（`ok.Anim.AsyncPair`），可是只用在有 OK 配對包（`Saved/OKAnim/Pairs/*.okgroup`）的狀態；遊戲裡一個配對包都沒有（打包版的 Saved 是 stage 自己的），所以每個姿勢都走同步的原生路徑。
+- 修正：原生路徑在 GPU 擁有部件時本來就只有一個 Rust 呼叫（`ok_animation_pair_frame_gpu`），改成和 OK 路徑一樣丟到背景、下一幀顯示（`AKKPreviewActor::PairedFrameGpuParts` 收集部件、`AKKPairedPlayback::Advance`；`bPendingNative` 時不套 OK 的臉部曲線）。
+- 規則：「有背景版」的優化要確認實際遊戲走的是哪條路；量效能時用 Insights 匯出計時（`UnrealInsights.exe -OpenTraceFile=… -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimerStatistics out.csv" -AutoQuit -NoUI`），不要只看 `stat dumpframe` 的 Self。

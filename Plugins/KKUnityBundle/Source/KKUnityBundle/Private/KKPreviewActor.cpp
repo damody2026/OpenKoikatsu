@@ -7159,6 +7159,19 @@ bool AKKPreviewActor::AppendJointFramePoints(TArray<FVector>& Points) const
 	return Found >= 6;
 }
 
+bool AKKPreviewActor::PairedFrameGpuParts(AKKPreviewActor& Female,AKKPreviewActor& Male,TArray<int32>& FemaleParts,TArray<uint64>& FemaleRevisions,
+    TArray<int32>& MaleParts,TArray<uint64>& MaleRevisions)
+{
+    check(IsInGameThread());
+    FemaleParts.Reset();FemaleRevisions.Reset();MaleParts.Reset();MaleRevisions.Reset();
+    if(!CVarOkPrivateGpuStreams.GetValueOnGameThread())return false;
+    for(const auto& P:Female.Parts)if(P.PrivateGpuDisplay&&P.PrivateGpuDisplay->Installed){FemaleParts.Add(P.SessionIndex);FemaleRevisions.Add(P.PrivateGpuDisplay->Source.Revision);}
+    for(const auto& P:Male.Parts)if(P.PrivateGpuDisplay&&P.PrivateGpuDisplay->Installed){MaleParts.Add(P.SessionIndex);MaleRevisions.Add(P.PrivateGpuDisplay->Source.Revision);}
+    if(FemaleParts.IsEmpty()&&MaleParts.IsEmpty())return false;
+    for(AKKPreviewActor* Role:{&Female,&Male}){Role->bNativeSkinReady=false;for(auto& Part:Role->Parts)Part.bNativeDisplayPrepared=false;}
+    return true;
+}
+
 bool AKKPreviewActor::ApplyPairedFrameWithDisplay(AKKPreviewActor& Female,AKKPreviewActor& Male,float Time,float Delta,
     const FString& State,const FString& FemaleMotion,const FString& MaleMotion,FString& Error)
 {

@@ -57,6 +57,8 @@ private:
 	// shown at the start of the next tick (one frame of latency).
 	UE::Tasks::FTask PendingSolve;
 	bool bSolvePending=false,bSolveOk=true;
+	// The pending solve is the native GPU pair frame (no OK group for this state), not the OK player's: no face curves.
+	bool bPendingNative=false;
 	double PendingNext=0.;float PendingDelta=0.;
 	bool PendingReactions[2]={false,false};
 	FString PendingReport;
