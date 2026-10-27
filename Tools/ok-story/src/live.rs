@@ -181,25 +181,31 @@ impl Live {
         let flat = math::normalize([face[0] - head[0], face[1] - head[1], 0.0]);
         let mut eye = math::add(math::add(head, math::scale(flat, self.tuning.live.pov_forward * k)), [0.0, 0.0, self.tuning.live.pov_up * k]);
         // Her whole upper body (the top of her head to her hips) in the part of the picture above the dialog box: a metre
-        // apart, his eyes showed only her face. The view steps back along his line to her as far as that takes, and centres
-        // on that span with the box's height under it.
+        // apart, his eyes showed only her face. The lens widens first (up to 90° across), so the view stays at his eyes;
+        // stepping back from there put his own head in the middle of the picture, so when even 90° is not enough the view
+        // steps back over his right shoulder. It centres on her span with the box's height under it.
         let aspect = self.facts.view_aspect.filter(|a| *a > 0.1).unwrap_or(16.0 / 9.0);
-        let tan_v = (self.tuning.live.pov_fov.clamp(10.0, 170.0) * 0.5).to_radians().tan() / aspect;
         let dialog = self.tuning.layout.dialog_height.clamp(0.0, 0.6);
         let clear = (1.0 - dialog - 0.08).max(0.3);
         // A quarter more than the span, so a nod or a bow (her face lower, her hips where they were) keeps the picture.
         let (top, bottom) = ((face[2] + 18.0 * kh).max(hips[2] + 70.0 * kh), hips[2]);
-        let need = 1.25 * (top - bottom) / (2.0 * clear * tan_v);
-        let apart = math::len([face[0] - eye[0], face[1] - eye[1], 0.0]);
+        let span = 1.25 * (top - bottom);
+        let apart = math::len([face[0] - eye[0], face[1] - eye[1], 0.0]).max(1.0);
+        let base = (self.tuning.live.pov_fov.clamp(10.0, 170.0) * 0.5).to_radians().tan() / aspect;
+        let widest = (self.tuning.live.pov_fov.max(90.0).clamp(10.0, 170.0) * 0.5).to_radians().tan() / aspect;
+        let tan_v = (span / (2.0 * clear * apart)).clamp(base, widest);
+        let need = span / (2.0 * clear * tan_v);
         if apart < need {
-            eye = math::sub(eye, math::scale(flat, need - apart));
+            let side = math::normalize([flat[1], -flat[0], 0.0]);
+            eye = math::add(math::sub(eye, math::scale(flat, need - apart)), math::scale(side, 35.0 * k));
         }
         let away = apart.max(need);
         let aim = [face[0], face[1], 0.5 * (top + bottom) - dialog * away * tan_v];
+        let fov = (tan_v * aspect).atan().to_degrees() * 2.0;
         if !math::finite3(eye) || !math::finite3(aim) || math::len(math::sub(aim, eye)) < 1.0 {
             return None;
         }
-        Some(math::Pose { pos: eye, rot: math::Quat::look(math::sub(aim, eye), [0.0, 0.0, 1.0]), fov: self.tuning.live.pov_fov })
+        Some(math::Pose { pos: eye, rot: math::Quat::look(math::sub(aim, eye), [0.0, 0.0, 1.0]), fov })
     }
 
     /// Whether a point shows in the part of the picture the view leaves clear, as the view is now: in front, inside the
@@ -638,9 +644,10 @@ mod tests {
             assert_eq!(l.st.shot.as_ref().unwrap().shot.as_deref(), Some("pov"));
             assert_eq!(l.st.shot.as_ref().unwrap().on.as_deref(), Some("her1"));
             let p = l.st.rig.current.pos;
-            // His head is at (0, 0, 150), she stands 120 cm ahead: from his eye height, stepped back along his line to her
-            // until her upper body fits (her face alone filled the picture).
-            assert!(p[0] < -12.0 && p[1].abs() < 1.0 && (p[2] - 156.0).abs() < 1.0, "{:?}", p);
+            // His head is at (0, 0, 150), she stands 120 cm ahead: his eyes (a little behind its centre and up), the lens
+            // widened until her upper body fits (her face alone filled the picture).
+            assert!((p[0] + 12.0).abs() < 1.0 && p[1].abs() < 1.0 && (p[2] - 156.0).abs() < 1.0, "{:?}", p);
+            assert!(l.st.rig.current.fov > 60.0, "wider lens: {}", l.st.rig.current.fov);
             let f = l.st.rig.current.rot.forward();
             assert!(f[0] > 0.9, "looks at her: {:?}", f);
             let her = &l.facts.actors["her1"];
