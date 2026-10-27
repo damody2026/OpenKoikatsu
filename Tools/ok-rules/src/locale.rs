@@ -398,12 +398,20 @@ pub fn message_hint(message: &str) -> (String, String) {
 
 fn text_of(r: &Value) -> String {
     let id = r.get("id").and_then(Value::as_str).unwrap_or("");
+    let l = lang(r);
     let mut args = crate::icu::Args::new();
     if let Some(m) = r.get("args").and_then(Value::as_object) {
         for (k, v) in m {
             let a = match v {
                 Value::Number(n) if n.is_i64() => crate::icu::Arg::Int(n.as_i64().unwrap_or(0)),
                 Value::Number(n) => crate::icu::Arg::Num(n.as_f64().unwrap_or(0.0)),
+                // Names (name, girl_name, place_name, …) in the game's script: a card named in Simplified ("贞德·Alter",
+                // "早濑优香") showed as written on a Traditional game's buttons and notes.
+                Value::String(s) if k.contains("name") => crate::icu::Arg::Str(match l {
+                    "zh-CN" => zhconv::zhconv(s, zhconv::Variant::ZhCN),
+                    "zh-TW" => zhconv::zhconv(s, zhconv::Variant::ZhTW),
+                    _ => s.clone(),
+                }),
                 Value::String(s) => crate::icu::Arg::Str(s.clone()),
                 other => crate::icu::Arg::Str(other.to_string()),
             };
@@ -504,6 +512,9 @@ mod tests {
         // A zh-TW text that is a message comes out in the language asked for.
         assert_eq!(ask(json!({"rule": "text", "lang": "en", "id": "只有繁中"}))["text"], "只有繁中");
         assert_eq!(ask(json!({"rule": "text", "lang": "zh-TW", "id": "你好，{name}", "args": {"name": "A"}}))["text"], "你好，A");
+        // Names come in the game's script; other words as they are.
+        assert_eq!(ask(json!({"rule": "text", "lang": "zh-TW", "id": "叫 {name} 跟著我{note}", "args": {"name": "早濑优香", "note": "贞德"}}))["text"], "叫 早瀨優香 跟著我贞德");
+        assert_eq!(ask(json!({"rule": "text", "lang": "zh-CN", "id": "{girl_name}", "args": {"girl_name": "貞德"}}))["text"], "贞德");
         assert_eq!(ask(json!({"rule": "text", "lang": "en", "id": "no.such.key"}))["text"], "no.such.key");
         let many = ask(json!({"rule": "texts", "lang": "en", "region": "US", "items": [{"id": "test.cards", "args": {"n": 3}}, {"id": "{a, number, ::currency}", "args": {"a": 199}}]}));
         assert_eq!(many["texts"][0], "3 cards");

@@ -469,7 +469,7 @@ FString AOKStreetSocialScene::DishTableText() const{
   FString Note;
   if(!D.Served){double Wait=0;for(const auto& P:S.Serves)if(P.Batch==D.Batch)Wait=P.At-Now;Note=OKMsg(TEXT("ui.economy.kitchen_wait_note"), {{TEXT("seconds"), FMath::Max(0,int32(FMath::CeilToDouble(Wait)))}});}
   else if(D.Percent<=0.f)Note=OKT(TEXT("ui.economy.finished_eating_suffix"));
-  Lines.Add(OKMsg(TEXT("ui.economy.item_remaining_line"), {{TEXT("item_name"), *D.Name}, {TEXT("owner_label"), !D.ForHer?OKT(TEXT("ui.economy.his_label")):S.Manifest.Characters.IsValidIndex(D.Her)?*S.Manifest.Characters[D.Her].Name:OKT(TEXT("ui.economy.her_label"))}, {TEXT("bar"), *Bar}, {TEXT("percent"), FMath::RoundToInt(D.Percent)}, {TEXT("note"), *Note}}));
+  Lines.Add(OKMsg(TEXT("ui.economy.item_remaining_line"), {{TEXT("item_name"), *D.Name}, {TEXT("owner_label"), !D.ForHer?OKT(TEXT("ui.economy.his_label")):S.Manifest.Characters.IsValidIndex(D.Her)?*SpokenName(D.Her):OKT(TEXT("ui.economy.her_label"))}, {TEXT("bar"), *Bar}, {TEXT("percent"), FMath::RoundToInt(D.Percent)}, {TEXT("note"), *Note}}));
  }
  return FString::Join(Lines,TEXT("\n"));
 }

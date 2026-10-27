@@ -132,8 +132,9 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
   // (SelfText), not after seconds of "silence".
   // Her song (its line before it, the song, its line after) is not his silence: a nudge in its opening line had her say
   // "say something!" and the song was cut off after nine seconds (R3-233).
-  const bool Waiting=Talking||Singing||S.FreeTalkBusy||S.RemoteMode==1||S.OutingGirl!=INDEX_NONE||!S.FreeTalkDraft.IsEmpty()||!S.FreeTalkLivePending.IsEmpty()||S.FreeTalkLiveSpeaking||S.ClockPaused||S.FreeTalkMicOpen||S.Bluff.Active||S.SoloGirl!=INDEX_NONE||(S.Pair.Partner==Partner&&(S.Pair.Read||[&S]{const FOKStreetActivity* A=S.ActId.IsEmpty()?nullptr:OKStreetFindActivity(S.ActId);
-   // reading or studying side by side: the reading or study pose, or anything done in the library
+  const bool Waiting=Talking||Singing||S.FreeTalkBusy||S.RemoteMode==1||S.OutingGirl!=INDEX_NONE||!S.FreeTalkDraft.IsEmpty()||!S.FreeTalkLivePending.IsEmpty()||S.FreeTalkLiveSpeaking||S.ClockPaused||S.FreeTalkMicOpen||S.Bluff.Active||S.Studying||S.SoloGirl!=INDEX_NONE||(S.Pair.Partner==Partner&&(S.Pair.Read||[&S]{const FOKStreetActivity* A=S.ActId.IsEmpty()?nullptr:OKStreetFindActivity(S.ActId);
+   // reading or studying side by side: the reading or study pose, or anything done in the library; the study button
+  // (S.Studying) too: she said "each reads, don't disturb me" and then asked why he went quiet
    return A&&((A->Place&&FCString::Strcmp(A->Place,TEXT("library"))==0)||(A->FemaleClip&&(FCString::Strstr(A->FemaleClip,TEXT("read"))||FCString::Strstr(A->FemaleClip,TEXT("study")))));}()))||S.Table.ContainsByPredicate([](const FOKStreetDish& D){return D.Served&&D.Percent>0.f;})||Wall<S.FreeTalkQuietUntil; // playing cards (praying side by side, reading together, eating) is not silence, nor keeping quiet when she asked for it
   // Only time he could have answered counts: the clock stands still while she thinks or speaks.
   if(Waiting)S.FreeTalkSilenceSince+=FMath::Clamp(Wall-S.FreeTalkLiveTickAt,0.0,1.0);
