@@ -9358,7 +9358,8 @@ void AKKPreviewActor::BindToonShadowTarget(int32 Index)
 
 bool AKKPreviewActor::RefreshShotShadow(bool bDeferred)
 {
-    if(!bCharacterDisplayShadows){UE_LOG(LogTemp,Display,TEXT("OK character display shadow capture skipped (disabled)"));return true;}
+    // Said once: called every frame for each character of the one-on-one scene (30k lines a minute).
+    if(!bCharacterDisplayShadows){static bool bSaid=false;if(!bSaid){UE_LOG(LogTemp,Display,TEXT("OK character display shadow capture skipped (disabled)"));bSaid=true;}return true;}
 	if (!ToonShadowCapture && ToonShadowTargets.IsEmpty()) return true;
 	if (!ToonShadowCapture || ToonShadowTargets.Num() != 2) return false;
 	const float HeldPhase = AnimPhase;

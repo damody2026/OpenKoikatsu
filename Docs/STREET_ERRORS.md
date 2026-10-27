@@ -752,3 +752,8 @@
 - **群聊：** 他對多人說的話直接進 `SendPartyTalk`，在設定 `FreeTalkCaptionPlayer` 之前就 return，galgame 對話框一直停在上一句她的台詞，他問優香的話從沒出現。修正：群聊分支也先把他的話放進 `FreeTalkCaptionPlayer`。
 - **一起讀書：** 按「一起讀書」只設 `S.Studying`，沉默判斷只認圖書館的活動和讀書姿勢，沒認這個按鈕；她剛說「各看各的，別打擾我」，三十秒後又問「怎麼不說話了」。修正：`S.Studying` 也算不是尷尬的沉默。
 - 規則：新增「兩人一起安靜做事」的狀態時，要一起列進即時對話的沉默例外（`TickFreeTalkLive` 的 `Waiting`）。顯示女主名字的新 UI 用訊息參數（`{name}`）或 `OKStreetScriptedName`，不要直接接卡名。
+
+### 2026-10-27 群聊一整輪消失（模型 JSON 尾巴壞掉）；1 對 1 場景 log 每幀兩行（E 組 galgame，惠惠／刻晴實玩）
+- **群聊：** 問惠惠電話時畫面只出「多人對話沒有回應，再說一次試試」。模型回的物件最後一個字串用「」」收尾、沒關引號，後面又多吐了 `{"type": "json_object"}`；單人對話（`talk`）有「格式壞了重問一次」，群聊走的 `chat` 沒有，整輪就丟了，log 的失敗原因還是空字串。修正：ok-mind 的 `run_chat` 在要求 JSON 時，先去掉尾巴（`leading_json_object`、`close_json_object`：拿掉回聲的 response format、補上沒關的字串與括號），還不行就帶 `mind.malformed_json_reminder` 重問一次。
+- **1 對 1 場景：** `clothes layer group=… grown(cm)` 的「變了才印」用一個全域的上一次內容，場景裡有兩個角色輪流更新，每次都不一樣，一分鐘 5.5 萬行；`OK character display shadow capture skipped (disabled)` 每幀每個角色都印，一分鐘 2.9 萬行，game.log 幾分鐘就 17 MB。修正：上一次內容依 group 記；陰影那行只印一次。
+- 規則：「只在改變時記錄」的 log，比較對象要依實例分開；每幀會走到的提早 return 不寫 log。模型回覆的 JSON 解析失敗時，所有呼叫路徑都要有修補或重問，不能只有其中一條有。
