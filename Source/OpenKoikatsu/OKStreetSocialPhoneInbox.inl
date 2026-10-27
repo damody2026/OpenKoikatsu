@@ -287,6 +287,8 @@ void AOKStreetSocialScene::ComposeHerText(int32 Girl,const FString& Why,const FS
   Weak->HistoryAdd(Girl,TEXT("message"),TEXT("her"),Reply.Reply,Where);
   L->FreeTalkNotice=OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *L->Manifest.Characters[Girl].Name}, {TEXT("reply"), *OKPhoneShown(Reply.Reply)}});
   if(L->App==TEXT("phone")&&L->PhoneThread==Girl)Weak->PhoneMarkSeen(Girl);
+  // Her own message telling him where she is: she stays there for him a while (TickSchedule, R3-230).
+  if(Kind==TEXT("initiative"))L->WaitsForHim.Add(Girl,OKStreetMindNow(*L)+40);
   UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d writes (%s): %s"),Girl,*Kind,*Reply.Reply);
   Weak->RefreshUI();
  });
