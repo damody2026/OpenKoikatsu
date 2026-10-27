@@ -113,7 +113,8 @@ struct Catalog {
 }
 thread_local! {
     static CATALOG:std::cell::RefCell<Option<(PathBuf,std::rc::Rc<Catalog>)>>=const {std::cell::RefCell::new(None)};
-    static EPOCH:std::cell::RefCell<Option<(PathBuf,String)>>=const {std::cell::RefCell::new(None)};
+    // (root, mounted card pack, signature): the pack's own files are part of what the root serves.
+    static EPOCH:std::cell::RefCell<Option<(PathBuf,String,String)>>=const {std::cell::RefCell::new(None)};
     // Optional per-thread change notification for a long-lived source owner.
     static WATCH:std::cell::RefCell<Option<(PathBuf,crate::appearance::catalog_watch::Watch)>>=const {std::cell::RefCell::new(None)};
 }
@@ -133,7 +134,8 @@ fn watched_unchanged(root: &Path) -> Option<String> {
     if !unchanged {
         return None;
     }
-    EPOCH.with(|epoch| epoch.borrow().as_ref().filter(|(r, _)| r == root).map(|(_, s)| s.clone()))
+    let pack = crate::oklib::mounted_pack_identity();
+    EPOCH.with(|epoch| epoch.borrow().as_ref().filter(|(r, k, _)| r == root && *k == pack).map(|(_, _, s)| s.clone()))
 }
 pub(crate) fn clear_cache() {
     CATALOG.with(|c| *c.borrow_mut() = None);
@@ -161,12 +163,13 @@ pub(crate) fn begin_load(root: &Path) -> String {
         return signature;
     }
     let signature = inventory_signature(root);
+    let pack = crate::oklib::mounted_pack_identity();
     let changed = EPOCH.with(|epoch| {
         let changed = epoch
             .borrow()
             .as_ref()
-            .is_some_and(|(r, s)| r != root || s != &signature);
-        *epoch.borrow_mut() = Some((root.to_owned(), signature.clone()));
+            .is_some_and(|(r, _, s)| r != root || s != &signature);
+        *epoch.borrow_mut() = Some((root.to_owned(), pack, signature.clone()));
         changed
     });
     if changed {
@@ -180,8 +183,8 @@ pub(crate) fn current_signature(root: &Path) -> String {
         epoch
             .borrow()
             .as_ref()
-            .filter(|(r, _)| r == root)
-            .map(|(_, s)| s.clone())
+            .filter(|(r, k, _)| r == root && *k == crate::oklib::mounted_pack_identity())
+            .map(|(_, _, s)| s.clone())
     });
     cached.unwrap_or_else(|| begin_load(root))
 }

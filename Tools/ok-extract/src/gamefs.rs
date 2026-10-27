@@ -219,7 +219,13 @@ pub fn take_overlay() -> Option<Index> {
     let index = std::mem::take(&mut *o.index.lock().unwrap());
     Some(index)
 }
-fn overlay() -> Option<Arc<Overlay>> { OVERLAY.read().unwrap().clone() }
+/// A replaying overlay over `index`, for one open's pack (oklib::PackScope).
+pub fn replay_overlay_of(index: Index) -> Arc<Overlay> { Arc::new(Overlay { record: false, index: Mutex::new(index) }) }
+/// The open's own pack on this thread (oklib::pack_scope), else the process-wide overlay.
+fn overlay() -> Option<Arc<Overlay>> {
+    if let Some(scope) = crate::oklib::pack_scope() { return Some(scope.overlay.clone()); }
+    OVERLAY.read().unwrap().clone()
+}
 /// The overlay answers lookups only when replaying an OK card's pack. While recording it is write-only:
 /// the card being converted must read the real zipmods, so that every query reaches the recorder.
 fn replay_overlay() -> Option<Arc<Overlay>> { overlay().filter(|o| !o.record) }
@@ -285,9 +291,21 @@ pub fn fallback_identity() -> String {
     }
     out
 }
-pub fn reset_fallback_used() { FALLBACK_USED.store(false, std::sync::atomic::Ordering::Relaxed); }
+pub fn reset_fallback_used() {
+    if let Some(scope) = crate::oklib::pack_scope() { scope.fallback_used.store(false, std::sync::atomic::Ordering::Relaxed); }
+    FALLBACK_USED.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+/// The open on this thread read installed zipmods (its own flag when it has a pack, so cards opening at once do not mix).
+fn mark_fallback_used() {
+    if let Some(scope) = crate::oklib::pack_scope() { scope.fallback_used.store(true, std::sync::atomic::Ordering::Relaxed); }
+    FALLBACK_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
 /// Whether anything was served from a fallback directory since `reset_fallback_used`.
-pub fn fallback_used() -> bool { FALLBACK_USED.load(std::sync::atomic::Ordering::Relaxed) }
+pub fn fallback_used() -> bool {
+    // (the open on this thread: after it, as at the end of session_open, the process-wide flag)
+    if let Some(scope) = crate::oklib::current_pack_scope() { return scope.fallback_used.load(std::sync::atomic::Ordering::Relaxed); }
+    FALLBACK_USED.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 fn is_mods_key(key: &str) -> bool { key == "mods" || key.starts_with("mods/") }
 
@@ -320,7 +338,7 @@ fn fallback_source(key: &str, want_dir: Option<bool>) -> Option<(PathBuf, std::f
     for (path, installation) in fallback_candidates(key) {
         if let Ok(m) = std::fs::metadata(&path) {
             if want_dir.is_none_or(|d| d == m.is_dir()) {
-                FALLBACK_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+                mark_fallback_used();
                 return Some((path, m, installation));
             }
         }
@@ -759,7 +777,7 @@ pub fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<std::vec::IntoIter<io::Re
                     (None, None) => { missing("read_dir", &key); return Err(not_found()); }
                 };
                 if added {
-                    FALLBACK_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    mark_fallback_used();
                     if let Some(o) = recording_overlay() { o.index.lock().unwrap().dirs.insert(key.clone(), list.clone()); }
                 }
                 list
@@ -844,7 +862,7 @@ impl PendingEntry {
         let bytes = std::fs::File::open(&self.real).ok()
             .and_then(|f| zip::ZipArchive::new(std::io::BufReader::new(f)).ok())
             .and_then(|mut z| { let mut v = Vec::new(); z.by_name(&self.name).ok()?.read_to_end(&mut v).ok()?; Some(v) })?;
-        FALLBACK_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+        mark_fallback_used();
         if let (Some(o), Some(names)) = (recording_overlay(), self.names.as_ref()) {
             let entry = content_entry(Path::new(&self.name), &bytes);
             o.index.lock().unwrap().zips.entry(self.key.clone()).or_insert_with(|| ZipIndex { names: names.clone(), entries: BTreeMap::new() }).entries.insert(self.index, entry);
@@ -1019,7 +1037,8 @@ pub fn library_zip_memo<T: Clone + Send + Sync + 'static>(what: &str, zip: &Path
     if !st.index.lock().unwrap().zips.contains_key(&key) { return build(); }
     // A recorded archive whose models this checkout lacks is served by whatever the fallback holds (the real
     // zipmod, or nothing), and a card being recorded must read it again: its values last one fallback generation.
-    let generation = if zip_lacks_models(&st, &key) { FALLBACK_GENERATION.load(std::sync::atomic::Ordering::Relaxed) } else { 0 };
+    // (and, cards opening at once each with their own pack, on the pack serving it)
+    let generation = if zip_lacks_models(&st, &key) { format!("{}|{}", FALLBACK_GENERATION.load(std::sync::atomic::Ordering::Relaxed), crate::oklib::mounted_pack_identity()) } else { String::new() };
     let key = format!("{what}\n{}\n{key}\n{generation}", st.root);
     let memo = MEMO.get_or_init(Default::default);
     if let Some(hit) = memo.lock().unwrap().get(&key).and_then(|v| v.downcast_ref::<T>().cloned()) { return hit; }

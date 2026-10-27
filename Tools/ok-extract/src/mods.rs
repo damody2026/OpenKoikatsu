@@ -320,7 +320,7 @@ fn tree_guid_index(mods_dir: &Path) -> Option<Arc<HashMap<String, PathBuf>>> {
         let map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
         walk.iter().zip(&recorded).map(|(p, r)| if *r { map.as_ref().and_then(|m| m.get(p).cloned()) } else { None }).collect()
     };
-    let guids: Vec<Vec<String>> = { use rayon::prelude::*; walk.par_iter().zip(known.into_par_iter()).map(|(p, k)| k.unwrap_or_else(|| guids_from_zipmod(p))).collect() };
+    let guids: Vec<Vec<String>> = { use rayon::prelude::*; crate::oklib::pack_parallel(|| walk.par_iter().zip(known.into_par_iter()).map(|(p, k)| k.unwrap_or_else(|| guids_from_zipmod(p))).collect()) };
     {
         let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
         let map = map.get_or_insert_with(HashMap::new);

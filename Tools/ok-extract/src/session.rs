@@ -30,6 +30,8 @@ use crate::shape::{CorrectInfo, Keyframe};
 use crate::unity::ExtractedMesh;
 
 pub(crate) fn native_parallel_work<F,R>(work:F)->R where F:FnOnce()->R+Send,R:Send {
+    // A card opening with its own pack: its own pool, whose threads read that pack (oklib::pack_parallel).
+    if crate::oklib::pack_scope_here() { return crate::oklib::pack_parallel(work); }
     match native_pool(true) {Some(pool)=>pool.install(work),None=>work()}
 }
 /// Runs `f` once on every native worker thread (their per-thread caches), if the pool was started.
@@ -2898,11 +2900,13 @@ impl OkSession {
     }
 
     pub(crate) fn to_preview_bytes(&self) -> Result<Vec<u8>, String> {
+        bincode::serialize(&self.preview_snapshot()).map_err(|e| e.to_string())
+    }
+    /// What to_preview_bytes serializes, owned (serialized elsewhere).
+    pub(crate) fn preview_snapshot(&self) -> PreviewSnapshot {
         let mut blob = SessionBlob::from_session(self);
         blob.game_root = PathBuf::new();
-        let preview = PreviewSnapshot { session: blob, collider_settings: self.collider_settings,
-            hand_shapes: self.hand_shapes.clone() };
-        bincode::serialize(&preview).map_err(|e| e.to_string())
+        PreviewSnapshot { session: blob, collider_settings: self.collider_settings, hand_shapes: self.hand_shapes.clone() }
     }
 
     /// Unreal already owns the renderer's textures. Its animation evaluator
@@ -3102,7 +3106,7 @@ pub(crate) fn preview_json(bytes: &[u8]) -> Result<serde_json::Value, String> {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct PreviewSnapshot {
+pub(crate) struct PreviewSnapshot {
     session: SessionBlob,
     collider_settings: crate::dbone::game_colliders::Settings,
     hand_shapes: crate::shape::hand::HandShapes,
@@ -3527,8 +3531,10 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
         crate::gamefs::reset_fallback_used();
         // Recording a card pack must visit source models/queries, including an explicitly
         // selected nonzero outfit. A cached final session cannot record those dependencies.
+        let t_key = std::time::Instant::now();
         let key = if crate::oklib::recording_card_pack() { None }
             else { card.and_then(|c| crate::oklib::session_cache_key(game, c, outfit)) };
+        if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: PROFILE open cache key {:>8.1}ms", t_key.elapsed().as_secs_f64() * 1e3); }
         crate::oklib::LAST_FROM_CACHE.store(false, std::sync::atomic::Ordering::Relaxed);
         // A card that carries this open baked in (okBk, OK_CARD_BAKED=1) needs neither its pack nor the cache.
         if crate::cardbake::enabled() {
@@ -3542,7 +3548,9 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
             }
         }
         // An OK card carrying its own resources: mounted over the library while it opens.
+        let t = std::time::Instant::now();
         let _pack = match card { Some(c) => crate::oklib::mount_card_pack(c)?, None => None };
+        if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: PROFILE mount card pack {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
         // A background warm process (ok-card-warm) already building this entry finishes it sooner than a new build.
         for attempt in 0..2 {
             if let Some(bytes) = key.as_ref().and_then(|k| crate::oklib::session_cache_load(k)) {
@@ -3554,7 +3562,7 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
             if attempt == 1 || !key.as_ref().is_some_and(|k| crate::oklib::wait_for_warming(k)) { break; }
         }
         // Claimed while building, so a warm process does not build the same entry meanwhile.
-        let _claim = key.as_ref().and_then(|k| crate::oklib::claim_warming(k));
+        let claim = key.as_ref().and_then(|k| crate::oklib::claim_warming(k));
         // Memo results recorded into the card (okMm, OK_CARD_MEMO=kinds) stand in for that work during this build.
         let kinds = crate::memosnap::replay_kinds();
         let _memo = if kinds == 0 { None } else {
@@ -3567,7 +3575,16 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
         // The key covers the library, the card (and its pack) and the zipmods the fallback can serve.
         // An open that read installed zipmods is only valid while they are unchanged (checked on load).
         let fallback = if crate::gamefs::fallback_used() { crate::gamefs::fallback_identity() } else { String::new() };
-        if let (Some(k), Ok(bytes)) = (key, sess.to_preview_bytes()) { crate::oklib::session_cache_store(&k, &bytes, &fallback); }
+        let t = std::time::Instant::now();
+        if let Some(k) = key {
+            if crate::oklib::defer_cache_store() && crate::oklib::session_cache_location().is_some() {
+                // The entry is written on its own thread (the claim held until then); what it records about this open
+                // is read here, where the card pack is mounted.
+                let (inputs, preview) = (crate::oklib::session_cache_inputs(&fallback), sess.preview_snapshot());
+                std::thread::spawn(move || { let _claim = claim; if let Ok(bytes) = bincode::serialize(&preview) { crate::oklib::session_cache_store_prepared(&k, &bytes, &inputs); } });
+            } else { drop(claim); if let Ok(bytes) = sess.to_preview_bytes() { crate::oklib::session_cache_store(&k, &bytes, &fallback); } }
+        }
+        if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: PROFILE open cache store {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
         return Ok(sess);
     }
     // An original card on the installation is built every time: its SQL session cache never answered an open (the
