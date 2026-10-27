@@ -224,7 +224,8 @@ pub fn eval(texts: &Texts, kind: &str, r: &Value) -> Option<Result<Value, String
                 // The model's lines of one reply: one cut in the middle of a sentence ("你今天还和胡桃" / "一起吃了饭吧。")
                 // has no stop of its own. Before another of its lines it ends with a comma, not the full stop a last
                 // line gets ("还和胡桃。一起吃了饭吧").
-                let t = t.trim();
+                let fixed = fix_hey(t.trim());
+                let t = fixed.as_str();
                 if k + 1 < texts.len() && t.chars().last().is_some_and(|c| !"。！？!?～~…」』）)\"，、；：,;:—-".contains(c)) {
                     split_lines(&format!("{t}{}", if latin(t) { "," } else { "，" }), max, &mut lines);
                 } else {
@@ -258,6 +259,17 @@ pub fn eval(texts: &Texts, kind: &str, r: &Value) -> Option<Result<Value, String
 /// English (the game's English mode): letters and no CJK.
 fn latin(text: &str) -> bool {
     !text.chars().any(|c| ('\u{3040}'..='\u{9FFF}').contains(&c)) && text.chars().any(|c| c.is_ascii_alphabetic())
+}
+
+/// The model writes the call "喂～" as 餵 (to feed) in Traditional: a call (at the start of a sentence, followed by a
+/// pause) is 喂. "餵你吃一口" and "我來餵。" stay.
+pub fn fix_hey(text: &str) -> String {
+    const PAUSE: &str = "～~，,、！!？?…—－-。 ";
+    let chars: Vec<char> = text.chars().collect();
+    chars.iter().enumerate().map(|(i, &c)| {
+        let starts = i == 0 || PAUSE.contains(chars[i - 1]) || "「『（(\"".contains(chars[i - 1]);
+        if c == '餵' && starts && chars.get(i + 1).is_some_and(|n| PAUSE.contains(*n)) { '喂' } else { c }
+    }).collect()
 }
 
 /// Her lines joined into one reply: English with spaces, Chinese without.
@@ -404,6 +416,15 @@ fn text_of(r: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_call_is_wei_not_feed() {
+        assert_eq!(fix_hey("餵～你怎麼不說話了？"), "喂～你怎麼不說話了？");
+        assert_eq!(fix_hey("餵，阿明"), "喂，阿明");
+        assert_eq!(fix_hey("餵你吃一口嘛"), "餵你吃一口嘛");
+        assert_eq!(fix_hey("我來餵。"), "我來餵。");
+        assert_eq!(fix_hey("嗯…餵！你聽到沒？"), "嗯…喂！你聽到沒？");
+    }
 
     #[test]
     fn floors_and_weekdays() {
