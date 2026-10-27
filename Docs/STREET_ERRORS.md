@@ -767,3 +767,9 @@
 - 控制通道 `/song replay` 在她還在說話、重播排隊時回報「no song to sing again now」，其實之後會唱。改成排隊也算成功。
 - **我自己做錯的：** 在 GPU 已有兩個遊戲時又開第三個，沙盒的 ok-tts 四分鐘一句都沒生成、收尾台詞「無法連線到 TTS 伺服器」，不是程式問題。驗證語音前先看 `nvidia-smi` 和遊戲數。另外誤用 `game_inspect`（它會進檢視室），把唱到一半的歌打斷；查狀態只用 `game_state`。評估用的 ok-asr 從 `Build/` 啟動，別人一般啟動遊戲時會被當成殘留伺服器關掉，評估要用另一份 exe 或沙盒埠。
 - 規則：快取的辨識結果要「新的到了才換掉」，不要在發請求時先清空。對齊時一個段落能涵蓋的句數上限，要用實際資料中最長的段落去驗證。
+
+### 2026-10-27 一起走路聊天時她在右側面板底下說話（E 組 galgame，雷電將軍實玩）
+- 和雷電將軍一起走去便利商店，邊走邊聊時街頭跟隨鏡頭只對著他（沒有 Target 時 `Focus = S.Male`），她走在他右邊，正好落在右側 432px 面板的邊緣，說話時畫面上只看得到她的肩膀。galgame 對走路對話刻意不接手鏡頭，只換對話框和立繪，結果沒有人管她在不在畫面裡。
+- 修正：`GalgameWalkFocus`（`OKStreetSocialGalgame.inl`）在 galgame 演出中、沒有 Target、她在他 3 m 內時，把跟隨鏡頭的焦點與樞軸半秒內平滑移到兩人中間；結束時同樣平滑移回他身上。`OKStreetSocialScene.cpp` 只多一行呼叫。
+- 規則：「這種情況維持原本鏡頭」的設計，要確認原本鏡頭在這種情況下拍得到說話的人。
+- 同一輪另外看到：和雷電將軍交換電話時 log 兩行 `Street heroine: unknown interaction contact`。`ExchangeContact` 用 `HeroineNote(Girl, "contact", …)` 記「交換了電話」，可是 `acts.toml` 沒有 `contact` 這一項，`Interact` 找不到就整筆丟掉，她的紀錄與記憶裡沒有這件事。修正：`acts.toml` 加 `contact`（history `contact`、memory -1）。規則：新增 `HeroineNote` 的種類時，同時在 `acts.toml` 加這一項，並在遊戲裡看一次 log 沒有 `unknown interaction`。

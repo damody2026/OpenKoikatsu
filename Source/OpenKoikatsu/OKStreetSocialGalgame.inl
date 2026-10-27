@@ -52,6 +52,11 @@ struct FOKStreetGalgame
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> Hidden;
 	// When a broken far-off shot was last written to the log (one line per two seconds).
 	double FarShotLoggedAt = -1000.0;
+	// Walking together: how far the street camera looks between him and her (0 him, 1 the middle), the girl it was for
+	// and when it was last eased (GalgameWalkFocus).
+	float WalkFocus = 0.f;
+	int32 WalkFocusGirl = INDEX_NONE;
+	double WalkFocusAt = -1.0;
 	// Rollback: the lines of this conversation as shown (slot, words), the one the wheel scrolled back to (INDEX_NONE:
 	// the newest), and a point to return to taken before each of his lines (GalgameCheckpoint).
 	struct FLine { int32 Slot = INDEX_NONE; FString Words; };
@@ -300,6 +305,27 @@ bool AOKStreetSocialScene::GalgameHidesDialogueBox() const
 	// Heard words stay only until they are sent (then they are his line in the scene's box).
 	const bool bHeard = S.FreeTalkOpen && S.FreeTalkLive && !S.FreeTalkHeard.IsEmpty() && !S.FreeTalkCaptionPlayer.Contains(S.FreeTalkHeard);
 	return S.Table.IsEmpty() && !bHeard;
+}
+
+// Walking together while the scene is up (no target: the street's own follow camera): the camera looks between him and
+// her. Aimed at him alone, she walked at his right and spoke from under the right-hand panel. Eased in and out over half
+// a second so the view does not jump when the scene opens or closes.
+void AOKStreetSocialScene::GalgameWalkFocus(FVector& Focus, FVector& Pivot)
+{
+	if (!Galgame || !State) return;
+	FOKStreetGalgame& G = *Galgame;
+	const FOKStreetSceneState& S = *State;
+	const double Now = FPlatformTime::Seconds();
+	const float Dt = G.WalkFocusAt < 0.0 ? 0.f : float(FMath::Min(Now - G.WalkFocusAt, 0.1));
+	G.WalkFocusAt = Now;
+	const bool bBeside = G.bActive && S.Target == INDEX_NONE && S.Agents.IsValidIndex(G.Partner - 1)
+		&& FVector::Dist2D(S.Agents[G.Partner - 1].Position, S.Male) < 300.f;
+	if (bBeside) G.WalkFocusGirl = G.Partner;
+	G.WalkFocus = FMath::FInterpConstantTo(G.WalkFocus, bBeside ? 1.f : 0.f, Dt, 2.f);
+	if (G.WalkFocus <= 0.f || !S.Agents.IsValidIndex(G.WalkFocusGirl - 1)) return;
+	const FVector Middle = (S.Male + S.Agents[G.WalkFocusGirl - 1].Position) * .5f + FVector(0, 0, 115);
+	Focus = FMath::Lerp(Focus, Middle, G.WalkFocus);
+	Pivot = FMath::Lerp(Pivot, Middle, G.WalkFocus);
 }
 
 float AOKStreetSocialScene::GalgameDialogueLift() const
