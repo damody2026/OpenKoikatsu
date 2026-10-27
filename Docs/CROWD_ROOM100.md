@@ -68,6 +68,7 @@
 - 錄影時只開這一個 Unreal 遊戲。
 - **實測（10-28）**：打包版 Int1027E、20 人、跟拍 C006、bank：`Room100-20261028T004834/demo.mp4`，20.0 秒、1200 格、平均 YDIF 0.90、沒有靜止段，抽格看得到她在走、鏡頭在跟。那時畫面右上角還有 `stat fps` 的數字（PlayerController 開的），已改成跟拍時關掉。
 - **鏡頭角度**（CVar，`--exec` 傳入）：`ok.Crowd.FollowYaw`（0 背後、180 正面）、`ok.Crowd.FollowDistance`（cm，預設 320）、`ok.Crowd.FollowHeight`（鏡頭離腳底，預設 190）、`ok.Crowd.FollowLook`（看向的高度，預設 105）。正面近拍臉：`--exec "ok.Crowd.FollowYaw 180,ok.Crowd.FollowDistance 140,ok.Crowd.FollowHeight 125,ok.Crowd.FollowLook 118"`。
+- **最終 demo（10-28）**：使用者決定用 GPU 畫（原話「你等 "百人房：GPU 物理拉到 120 FPS" 做好直接用gpu畫」）。打包版 Phys1028A（patch StreetDisplay30Phys），`CrowdRoom100.cmd --gpu-rig --follow C049 --record 20`，100 人（121 張可用卡的前 100 張）、第三人稱跟拍 Yvonne：`Saved/Crowd/Room100-20261028T032909/demo.mp4`。自動檢查：20.0 秒、1200 格、平均 YDIF 1.97、沒有靜止段；100 人全部畫出（72.7 秒）、沒有失敗；錄影期間 144.8 FPS（幀 6.91 ms、P95 7.98 ms、GPU 4.51 ms；錄影本身佔一些，不當量測數字）。抽格看過：她一路在走、鏡頭在跟、腳左右交替沒有明顯打滑、沒有畫面數字。
 
 ## xukmi「…Plus」材質與眼白排序（2026-10-28，救回 11 張卡）
 
