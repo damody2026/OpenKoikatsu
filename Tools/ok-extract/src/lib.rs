@@ -9390,6 +9390,16 @@ pub(crate) fn extract_session_from_info(
         // material. Keep it separate from MainTex: main_skin samples t0 at
         // the body's UV and clips min(max(r,1-alpha_a),max(g,1-alpha_b)).
         t_mark = Instant::now();
+        // The body's normal map converts on another thread while the masks and MaterialEditor run below: the card's
+        // MaterialEditor normal map when it has one (it replaces the body's below), else the body's own. Whatever the
+        // body ends up with and was not converted here converts as before.
+        let normal_source = parsed_card.as_ref()
+            .and_then(|card| me_texture(Some(&card.me_tex), outfit, "body", None, mesh, "normalmap").map(|png| png.to_vec()))
+            .or_else(|| mesh.normal_map_png.clone());
+        let normal_job = normal_source.clone().map(|png| {
+            let pack = crate::oklib::current_pack_scope();
+            std::thread::spawn(move || { let _pack = crate::oklib::enter_pack_scope(pack); convert_runtime_normal_map(png) })
+        });
         let mut body_blend = "opaque";
         if let Some(card) = parsed_card.as_ref() {
             mesh.alpha_mask_png = over_body_mask_png(game_root, card, &vanilla, &mod_catalog, &guid_index, outfit)
@@ -9449,7 +9459,13 @@ pub(crate) fn extract_session_from_info(
             if mesh.alpha_mask_png.is_some() { body_blend = "masked"; }
         }
         profile_tick("body masks+ME", t_mark); t_mark = Instant::now();
-        mesh.normal_map_png = mesh.normal_map_png.take().map(convert_runtime_normal_map);
+        let normal_now = mesh.normal_map_png.take();
+        let converted = match normal_job {
+            Some(job) if normal_now.is_some() && normal_now == normal_source => job.join().ok(),
+            Some(job) => { let _ = job.join(); None }
+            None => None,
+        };
+        mesh.normal_map_png = converted.or_else(|| normal_now.map(convert_runtime_normal_map));
         profile_tick("body normal convert", t_mark); t_mark = Instant::now();
         if let Some(card)=parsed_card.as_ref() {apply_native_skin_draw_settings(mesh,card,outfit,true);}
         let (p, tex) = emit_part(out_dir, &mut session_parts, "body", "body", mesh, body_blend, false)?;

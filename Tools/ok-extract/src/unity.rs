@@ -7586,6 +7586,14 @@ pub fn load_base_bundle_from_memory(
         let Ok(bundle) = load_bundle_unbounded(bytes) else { return (Vec::new(), None, Vec::new()); };
         return load_base_bundle_impl(&bundle, name);
     }
+    // Every card reads the same base bundles (oo_base, bo_head): their meshes and textures, once decoded (the textures
+    // re-derived from the bundle: ~0.25 s a card), are kept for the process, by content and name like the memo below.
+    type Base = (Vec<ExtractedMesh>, Option<crate::pose::Skeleton>, Vec<(String, Vec<u8>)>);
+    static DECODED: std::sync::Mutex<Vec<(crate::oklib::Id, String, Arc<Base>)>> = std::sync::Mutex::new(Vec::new());
+    let id = crate::oklib::content_id(&bytes);
+    if let Some(hit) = DECODED.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(i, n, _)| *i == id && n == name).map(|e| e.2.clone()) {
+        return (*hit).clone();
+    }
     let parsed = parse_bundle_cached(bytes.clone());
     let (mut meshes, skel, mut textures) = crate::oklib::memo_bytes(&bytes.clone(), "base_bundle", name, || {
         let Ok(bundle) = load_bundle_unbounded(bytes) else {
@@ -7596,7 +7604,13 @@ pub fn load_base_bundle_from_memory(
         (m, s, t)
     });
     parsed.restore_mesh_textures(&mut meshes); parsed.restore_named_textures(&mut textures);
-    (meshes, skel, textures)
+    let result = (meshes, skel, textures);
+    {
+        let mut kept = DECODED.lock().unwrap_or_else(|e| e.into_inner());
+        if kept.len() >= 4 { kept.remove(0); }
+        kept.push((id, name.to_string(), Arc::new(result.clone())));
+    }
+    result
 }
 
 fn load_base_bundle_impl(

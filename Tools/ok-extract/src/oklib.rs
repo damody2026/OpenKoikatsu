@@ -353,7 +353,8 @@ impl Store {
         self.pack.read().unwrap().clone()
     }
     /// The pack being recorded (an original card becoming an OK card).
-    fn recording_pack(&self) -> Option<Arc<Store>> { self.pack().filter(|p| p.mode == Mode::Record) }
+    // (recording is process-wide: an open's replayed pack is never one)
+    fn recording_pack(&self) -> Option<Arc<Store>> { self.pack.read().unwrap().clone().filter(|p| p.mode == Mode::Record) }
 
     pub fn put_raw(&self, id: &Id, query: &str, args: &[u8], raw: &[u8]) {
         if self.mode != Mode::Record { return; }

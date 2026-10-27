@@ -292,7 +292,8 @@ pub fn fallback_identity() -> String {
     out
 }
 pub fn reset_fallback_used() {
-    if let Some(scope) = crate::oklib::pack_scope() { scope.fallback_used.store(false, std::sync::atomic::Ordering::Relaxed); }
+    // Only this thread's own open (at an open's start its pack is not mounted yet: never another card's flag).
+    if let Some(scope) = crate::oklib::current_pack_scope() { scope.fallback_used.store(false, std::sync::atomic::Ordering::Relaxed); }
     FALLBACK_USED.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 /// The open on this thread read installed zipmods (its own flag when it has a pack, so cards opening at once do not mix).
