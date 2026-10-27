@@ -617,7 +617,10 @@ pub fn plan_all(c: &Catalog, r: &Value) -> Result<Value, String> {
         }
         plan.sort_by_key(|b| b.start);
     }
-    // Outdoor free time in the rain moves indoors (or home).
+    // Outdoor free time in the rain moves indoors (or home). To the indoor place the fewest others are moved to at that
+    // time: a stream seeded actor*31+start drew its first number almost the same for every girl, and on a rainy
+    // afternoon five of them sat in the one small bookstore.
+    let mut moved: Vec<(String, i32, i32)> = Vec::new();
     for (actor, plan) in plans.iter_mut() {
         let home = heroines.iter().find(|h| h.actor == *actor).map(|h| pstr(&h.profile, None, "home_place_id").to_string()).filter(|x| !x.is_empty()).unwrap_or_else(|| "girls_dorm".into());
         for b in plan.iter_mut() {
@@ -630,7 +633,18 @@ pub fn plan_all(c: &Catalog, r: &Value) -> Result<Value, String> {
             }
             const INDOOR: [&str; 4] = ["cafe", "library", "bookstore", "department"];
             let go_home = b.kind == "leisure" && RandomStream::new(actor.wrapping_mul(97).wrapping_add(b.start)).frand() < 0.3;
-            b.place = if go_home { home.clone() } else { INDOOR[RandomStream::new(actor.wrapping_mul(31).wrapping_add(b.start)).rand_range(0, 3) as usize].into() };
+            b.place = if go_home {
+                home.clone()
+            } else {
+                let mut ties = RandomStream::new(actor.wrapping_mul(31).wrapping_add(b.start));
+                let _ = ties.frand(); // the first number follows the seed too closely
+                let offset = ties.rand_range(0, INDOOR.len() as i32 - 1) as usize;
+                let crowd = |p: &str| moved.iter().filter(|(q, s, e)| q == p && *s < b.end && *e > b.start).count();
+                (0..INDOOR.len()).map(|k| INDOOR[(k + offset) % INDOOR.len()]).min_by_key(|p| crowd(p)).unwrap().into()
+            };
+            if !go_home {
+                moved.push((b.place.clone(), b.start, b.end));
+            }
             if go_home {
                 b.kind = "rest".into();
             }
@@ -1101,6 +1115,32 @@ mod tests {
         for p in v["plans"].as_object().unwrap().values() {
             assert!(p.as_array().unwrap().iter().any(|b| b["kind"] == "sleep"));
         }
+    }
+
+    #[test]
+    fn rain_does_not_send_everybody_to_one_place() {
+        // A rainy afternoon: ten girls' outdoor free time moved indoors, at most a fair share in one place at once.
+        let c = Tuning::builtin().catalog;
+        let ten: Vec<Value> = (1..=10)
+            .map(|k| json!({"actor": k, "id": format!("r{k}"), "name": format!("r{k}"), "relation": {"id": format!("r{k}"), "stage": "friend", "favor": 60}, "profile": {}}))
+            .collect();
+        let mut seen = 0;
+        for day in (0..120).filter(|d| raining_at(*d, 900)) {
+            let v = plan_all(&c, &json!({"day": day, "now": 0, "doors": {"cafe": [0, 0]}, "heroines": ten})).unwrap();
+            let moved: Vec<(String, i64, i64)> = v["plans"].as_object().unwrap().values().flat_map(|p| p.as_array().unwrap().clone())
+                .filter(|b| b["source"] == "rain" && b["kind"] != "rest")
+                .map(|b| (b["place"].as_str().unwrap().to_string(), b["start"].as_i64().unwrap(), b["end"].as_i64().unwrap()))
+                .collect();
+            seen += moved.len();
+            for minute in (600..1320).step_by(30) {
+                let now: Vec<&str> = moved.iter().filter(|(_, s, e)| *s <= minute && *e > minute).map(|(p, _, _)| p.as_str()).collect();
+                for p in &now {
+                    let here = now.iter().filter(|q| *q == p).count();
+                    assert!(here <= now.len().div_ceil(4) + 1, "day {day} {minute}: {here} of {} in {p}: {now:?}", now.len());
+                }
+            }
+        }
+        assert!(seen > 0, "the test saw rain moves at all");
     }
 
     #[test]
