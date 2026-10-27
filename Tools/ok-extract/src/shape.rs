@@ -517,7 +517,7 @@ pub(crate) fn world_scale(m: &crate::pose::Mat4) -> [f32; 3] {
     [cx, cy, cz]
 }
 
-fn tree_ids(skel: &Skeleton) -> Option<std::collections::HashSet<i64>> {
+pub(crate) fn tree_ids(skel: &Skeleton) -> Option<std::collections::HashSet<i64>> {
     crate::pose::animator_tree(skel).map(|(_,tree)|tree.into_iter().collect())
 }
 

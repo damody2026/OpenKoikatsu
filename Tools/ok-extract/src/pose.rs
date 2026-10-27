@@ -575,7 +575,7 @@ pub fn euler_deg_to_quat(e: [f32; 3]) -> [f32; 4] {
 
 /// Rotation-order codes for Illusion's ConvertRotation:
 /// 0 xyz, 1 xzy, 2 yxz, 3 yzx, 4 zxy, 5 zyx.
-fn euler_order_to_quat(order: u8, x: f32, y: f32, z: f32) -> [f32; 4] {
+pub(crate) fn euler_order_to_quat(order: u8, x: f32, y: f32, z: f32) -> [f32; 4] {
     let qx = quat_axis_angle([1.0, 0.0, 0.0], x.to_radians());
     let qy = quat_axis_angle([0.0, 1.0, 0.0], y.to_radians());
     let qz = quat_axis_angle([0.0, 0.0, 1.0], z.to_radians());
@@ -592,7 +592,7 @@ fn euler_order_to_quat(order: u8, x: f32, y: f32, z: f32) -> [f32; 4] {
 /// Port of ConvertRotation.ConvertDegreeFromQuaternion for the orders the
 /// ExpressionBone correction uses (3 = yzx, 4 = zxy, 5 = zyx), plus Unity's
 /// Quaternion.Euler order (2 = yxz) for SetLocalRotationX.
-fn quat_to_euler_deg(order: u8, q: [f32; 4]) -> [f32; 3] {
+pub(crate) fn quat_to_euler_deg(order: u8, q: [f32; 4]) -> [f32; 3] {
     let m = trs([0.0, 0.0, 0.0], q, [1.0, 1.0, 1.0]);
     let g = |r: usize, c: usize| m[r][c];
     let (x, y, z) = match order {

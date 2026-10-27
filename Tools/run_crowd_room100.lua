@@ -3,8 +3,13 @@
 -- Runs the newest StreetSocial stage with -CrowdRoom=<manifest>; nothing else of the street starts.
 --   Tools\lua\lua.exe Tools\run_crowd_room100.lua [--count N] [--cards <dir>] [--benchmark <seconds>] [--warmup <seconds>]
 --       [--max-fps N] [--window WxH] [--executable <exe>] [--variants N] [--exec "CMD,CMD"] [--cases <json>] [--trace] [--aggregate]
+--       [--gpu-rig] [--gpu-rig-verify N] [--editor]
 -- --aggregate: once everyone is loaded, compose every girl's pose bank into one GPU bank (one skinning provider instead
 -- of a hundred; needs twice the banks' memory while composing).
+-- --gpu-rig: pose every girl on the GPU from the shared clips and her body parameters (Shaders/GpuRig.usf) instead of
+-- per-girl solved banks (implies --aggregate; physics is not simulated). --gpu-rig-verify N: keep the full banks too and
+-- compare N frames of the rig's rows with them (runtime.json "gpu_rig"). --editor: run uncooked in the E engine's
+-- UnrealEditor -game (new shaders without a cook); otherwise the newest stage.
 -- --cases: a JSON array [{"name": "...", "exec": ["console command", ...]}, ...]: each case is applied in the same running
 -- game and measured for --benchmark seconds in turn (an A/B without loading the girls again). --trace: an Unreal
 -- Insights trace (cpu, frame, named events) of the first measurement, trace.utrace beside the report.
@@ -36,6 +41,9 @@ local function parse(argv)
     elseif a == "cases" then o.cases = v; i = i + 1
     elseif a == "trace" then o.trace = true
     elseif a == "aggregate" then o.aggregate = true
+    elseif a == "gpu-rig" then o.gpu_rig = true; o.aggregate = true
+    elseif a == "gpu-rig-verify" then o.gpu_rig_verify = tonumber(v); o.gpu_rig = true; o.aggregate = true; i = i + 1
+    elseif a == "editor" then o.editor = true
     else error("Unknown option " .. argv[i], 0) end
     i = i + 1
   end
@@ -72,7 +80,7 @@ local function main()
   local root = ok.root
   local launch = read_json(path.join(root, "Content/IndependentResources/StreetSocialData/Launch/runtime.json"))
   local materials = read_json(path.join(root, launch.materials))
-  local exe = o.executable or newest_stage(root)
+  local exe = o.executable or (o.editor and path.join(ok.engine_root(), "Engine/Binaries/Win64/UnrealEditor.exe")) or newest_stage(root)
   if not exe or not path.is_file(exe) then error("No StreetSocial stage under Saved/StreetSocial/Build (build one with Tools/rebuild_street_social_runtime.lua)", 0) end
   -- Cards: the crowd set first, then the street heroines. A card an earlier room could not draw (its materials are not
   -- among the shared runtime parents: "Source material coverage incomplete" in that run's log) is left out and the
@@ -147,6 +155,7 @@ local function main()
     { "background_prepare_concurrency", 16 }, { "diagnostic_load_deadline_seconds", 300 },
     { "profile_seconds", 0 }, { "exit_after_report", false }, { "depth_prepass_enabled", true },
     { "room", room }, { "aggregate_gpu", o.aggregate == true },
+    { "gpu_rig", o.gpu_rig == true }, { "gpu_rig_verify", o.gpu_rig_verify or 0 }, { "editor_common_materials", o.editor == true },
   })
   if materials.hg_root then manifest.hg_material_root = materials.hg_root end
   local selection = path.join(out, "selection.json")
@@ -161,10 +170,12 @@ local function main()
   -- prepass (r.EarlyZPass 0): a hundred girls are draw calls, these two took them from about 10000 to 5800 a frame.
   local execs = "r.AntiAliasingMethod 2,r.ScreenPercentage 100,r.Shadow.Virtual.Enable 0,r.VRS.ContrastAdaptiveShading 0,r.AllowOcclusionQueries 0,ok.Crowd.OutlineRange 1500,r.EarlyZPass 0,t.MaxFPS " .. o.max_fps
   if o.exec then execs = execs .. "," .. o.exec end
-  local game = { exe, "/Game/Scenes/StreetSocial/StreetSocial", "-D3D12", "-SM6", "-windowed", "-ResX=" .. w, "-ResY=" .. h, "-WinX=40", "-WinY=40",
-    "-CrowdRoom=" .. win(selection), "-abslog=" .. win(path.join(out, "game.log")), "-RuntimeGpuCacheMiB=4096", "-ExecCmds=" .. execs }
+  local game = o.editor and { exe, win(path.join(root, "OpenKoikatsu.uproject")), "/Game/Scenes/StreetSocial/StreetSocial", "-game", "-D3D12", }
+    or { exe, "/Game/Scenes/StreetSocial/StreetSocial", "-D3D12", }
+  for _, a in ipairs({ "-SM6", "-windowed", "-ResX=" .. w, "-ResY=" .. h, "-WinX=40", "-WinY=40",
+    "-CrowdRoom=" .. win(selection), "-abslog=" .. win(path.join(out, "game.log")), "-RuntimeGpuCacheMiB=4096", "-ExecCmds=" .. execs }) do game[#game + 1] = a end
   local patch = path.join(root, launch.patch)
-  if path.exists(patch) then game[#game + 1] = "-pakdir=" .. patch end
+  if not o.editor and path.exists(patch) then game[#game + 1] = "-pakdir=" .. patch end
   if o.trace then game[#game + 1] = "-statnamedevents" end
   local pid = proc.spawn(game, { cwd = root })
   path.write_text(path.join(out, "game.pid"), tostring(pid))

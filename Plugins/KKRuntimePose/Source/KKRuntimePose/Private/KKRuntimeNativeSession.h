@@ -23,6 +23,9 @@ public:
  bool ApplyAnimFrame(float T,float Delta){return Handle&&OKRuntimeNativeBindings().apply_anim_frame(Handle,T,Delta)==0;}
  bool ApplyContactFrame(float T,float Delta,const TArray<uint8>& Json){return Handle&&!Json.IsEmpty()&&ok_session_apply_contact_frame(Handle,T,Delta,Json.GetData(),Json.Num())==0;}
  bool BoneWorldMatrix(const FString& Name,float* Matrix){return Handle&&ok_bone_world_matrix(Handle,TCHAR_TO_UTF8(*Name),Matrix)==0;}
+ // GPU rig exports (Tools/ok-extract/src/gpu_rig/export.rs): "OKGR" for this character, "OKGC" for a shared clip.
+ bool GpuRig(const TArray<uint8>& Clip,TArray<uint8>& Out){Out.Reset();if(!Handle||Clip.IsEmpty())return false;const int32 Size=ok_session_gpu_rig(Handle,Clip.GetData(),Clip.Num(),nullptr,0);if(Size<=0)return false;Out.SetNumUninitialized(Size);return ok_session_gpu_rig(Handle,Clip.GetData(),Clip.Num(),Out.GetData(),Size)==Size;}
+ bool GpuClip(const TArray<uint8>& Clip,TArray<uint8>& Out){Out.Reset();if(!Handle||Clip.IsEmpty())return false;const int32 Size=ok_session_gpu_clip(Handle,Clip.GetData(),Clip.Num(),nullptr,0);if(Size<=0)return false;Out.SetNumUninitialized(Size);return ok_session_gpu_clip(Handle,Clip.GetData(),Clip.Num(),Out.GetData(),Size)==Size;}
  int32 SkinPalette(int32 Part,OkSkinPaletteView& Raw,TArray<float>& Matrices){
   if(!Handle)return -1;
   // The native size query performs the same palette construction and vertex

@@ -508,6 +508,15 @@ impl AccessoryRuntime {
         }
     }
 
+    /// The body bone each palette matrix follows, by name (export_skin_palette order), for an accessory skinned onto the
+    /// body (copy_weights_body); None for one with its own rig. An implanted bone's name is its private one.
+    pub(crate) fn body_palette_names(&self) -> Option<Vec<String>> {
+        if !self.copy_weights_body {return None;}
+        let rigid_clothes=AccessoryFramePolicy::read().rigid_clothes;
+        let private=match self.state.as_ref().filter(|_|!rigid_clothes){Some(state)=>&state.skel,None=>self.source.smr_skel.as_ref()?};
+        Some(private.names.clone())
+    }
+
     pub(crate) fn export_skin_palette(&self, body:Option<&Skeleton>, head:Option<&Skeleton>) -> Option<(&ExtractedMesh,Vec<crate::pose::Mat4>)> {
         let (mesh,mut matrices,correction)=self.export_skin_stages(body,head)?;
         // Staged consumers always receive an explicit identity fallback. The

@@ -34,3 +34,54 @@
 ## 記憶體
 
 每個角色的動作庫是「每個 clip 用她自己的身形解算好的骨骼矩陣」（60 Hz）。照搬街頭的長 clip，每人 60～116 MB，100 人超過 4 GiB 預算；只放短 clip 後全體約 1.03 GB。動作越多，記憶體跟著「人數 × 動作數」成長，所以下一步改成 GPU 即時骨架（共用動畫曲線＋每人的形狀骨修正，每幀在 GPU 組合），見之後的文件。
+
+## GPU 即時骨架（`--gpu-rig`，開發中）
+
+每個女角的骨架改成每幀在 GPU 上用參數解算，不再每人每個 clip 烘一份矩陣。所有角色共用同一份動畫 clip（`OKGC`）。每個角色只留下自己的身形骨（基準 local、前臂／手修正、PV／ExpressionBone、ABMX），以及每個 render 骨的「權重 × 某根 body 骨的世界矩陣 × 常數」（`OKGR`，`Tools/ok-extract/src/gpu_rig/export.rs`）。
+
+- Shader：`Plugins/KKCrowdGpuPacking/Shaders/GpuRig.usf`。`SkeletonCS` 每個角色一個執行緒，跑完原生每幀管線的非物理部分。`TaskCS` 每個 pose task 一個執行緒，寫出和 bank 相同格式的列，palette pass 之後的流程都不變。
+- 常數的求法：
+  - body 蒙皮 part 的第 j 格就是 `body_skel.bone_ids[j]`。
+  - 蒙到 body 上的飾品，第 j 格就是同名的 body 骨。
+  - 其他（頭部、私有骨架的飾品）以 4 個取樣時間搜尋能剛性帶動它的骨頭。頭部骨跟著 `cf_s_head`。
+  - bank 的別名骨列（只留一欄、乘 3、乘 InverseBind）在建 batch 時併進常數。
+- 新的 global shader 要 cook 才進得了打包版。開發期用 `--editor`（E 引擎的 `UnrealEditor -game`，不 cook）。
+
+### 和完整解算對照（`--gpu-rig-verify N`）
+
+bank 保持完整長度，前 N 幀兩邊都算並讀回逐列比較，結果寫進 `runtime.json` 的 `gpu_rig`。另外存兩個檔：
+
+- `rig.bin`：兩邊的列，可用來逐列分析。
+- `rig.txt`：每一列對應的角色與骨頭。
+
+正在交叉淡入的角色不列入：bank 是把兩段各自解算後的最後矩陣混合，rig 是先混合 locals 再解算一次，兩者都不是原生的交叉淡入。
+
+2026-10-27，10 位女角，20 幀（`Saved/Crowd/Room100-20261027T184625`）。沒在交叉淡入的 17307 列：
+
+| 位移誤差 | 列數 | 比例 |
+|---|---:|---:|
+| < 0.01 cm | 13869 | 80.1% |
+| 0.01～0.05 cm | 256 | 1.5% |
+| 0.05～0.5 cm | 947 | 5.5% |
+| 0.5～2 cm | 894 | 5.2% |
+| 2～10 cm | 930 | 5.4% |
+| ≥ 10 cm | 411 | 2.4% |
+
+- 平均 0.76 cm，最大 36 cm。
+- 大誤差都在物理骨：裙子的 `cf_j_sk` 類骨頭、胸部、頭髮與飾品鏈。GPU rig 目前不模擬物理，這些骨頭被當成剛性跟著父骨。
+- 手與前臂另有 0.4～1 cm 的差，還沒查。
+- 用 Rust 照遊戲流程（snapshot → `apply_anim_frame`）在 6 個片段上檢查，body 與非物理 part 的常數誤差都是 0（`gpu_rig::check_terms`）。
+
+### FPS 與記憶體（2026-10-27，Editor `-game`，1920×1080，100 人，只有這一個遊戲）
+
+兩輪都用 `UnrealEditor -game`，不 cook。新的 shader 還沒進打包版，所以拿 Editor 對 Editor 比較。
+
+| 模式 | FPS | 幀 ms（P95） | game / render / GPU ms | draw | 姿勢資料 |
+|---|---:|---:|---:|---:|---:|
+| 每人解算的 bank（`aggregate_gpu:false`，房間預設） | 135.5 | 7.38（7.98） | 2.49 / 7.37 / 4.94 | 5876 | 約 2.4 GB（彙總時量到的 key bytes） |
+| GPU rig（`--gpu-rig`，彙總 provider） | 161.3 | 6.20（6.64） | 2.12 / 6.19 / 5.48 | 5740 | bank 只剩 61 MB（每 clip 兩個取樣，只用來對齊資料格式）；rig 共用 clip 99 MB，加上骨架與 term 約 16 MB |
+
+- GPU 時間多了 0.54 ms，是兩個 compute pass（`Crowd.GpuRigSkeleton`、`Crowd.GpuRigTasks`）的成本。FPS 提高主要來自 render thread：100 個 provider 合成 1 個彙總 provider 後少了 1.2 ms。
+- 動作變多時：bank 是「人數 × 動作 × 長度」，GPU rig 只是「動作 × 長度」（所有人共用）加上每人固定的約 1 MB。
+- 載入：100 人全部畫出 bank 126 秒、GPU rig 130 秒。rig 每人多一個 0.2～0.45 秒的 worker 準備。
+- 用 bank 加 `--aggregate` 量第一輪時，彙總需要 2×2.4 GB，超過 4 GiB 預算。被拒之後當在 `FLateSourceDepth::Draw`（`OKSourceMaterialMesh.cpp:103` 釋放 shared pointer 時存取違規）。這是既有的失敗路徑，已記在 ERROR_LOG。

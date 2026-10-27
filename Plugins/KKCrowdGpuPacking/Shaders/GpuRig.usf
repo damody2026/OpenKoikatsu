@@ -1,0 +1,413 @@
+// GPU runtime rig (OKGpuRig.cpp; data from Tools/ok-extract/src/gpu_rig/export.rs). SkeletonCS: one thread per
+// character poses her body skeleton for this frame from shared clips and her own static data, the way the native solver
+// does (session.rs sample_paired_frame: the shaped baseline, the clip, the female UpdateAlways channels and limb-size
+// corrections, PV copies and ExpressionBone, ABMX), into Unity-space world matrices. TaskCS: one thread per pose task
+// writes its 3x4 rows (UE space, as IndependentPose.usf) from up to four "weight x world x constant" terms.
+#include "/Engine/Public/Platform.ush"
+
+// Per actor, four uint4: (bone first, bone count, flags (1 female), named first), (always first, count, forearm first,
+// count), (hand first, count, pv first, count), (abm first, count, 0, 0).
+StructuredBuffer<uint4> RigActors;
+// Per bone three float4: (pos, parent as uint: global index or 0xffffffff), rot (x,y,z,w), (scale, 0).
+StructuredBuffer<float4> RigBones;
+// Always: (bone, axis); forearms / hands: (bone); pv: (src, dst). All global bone indices, in .xy.
+StructuredBuffer<uint4> RigLists;
+// Per ABMX op three float4: rot, (pos, length), (scale, bone as uint).
+StructuredBuffer<float4> RigAbm;
+// Per actor 66 global bone indices (0xffffffff: missing), NAMED_FIRST then NAMED_LAST (export.rs order).
+StructuredBuffer<uint> RigNamed;
+// Per actor and clip slot: (channel first, channel count, frames, flags: 1 limb arm, 2 limb hand, 4 ExpressionBone).
+StructuredBuffer<uint4> RigClipSlots;
+StructuredBuffer<float4> RigClipRates; // per actor and clip slot: (rate, duration, 0, 0)
+// Per channel: (global bone or 0xffffffff, mask: 1..4 position xyz, 8 rotation, 16..64 scale xyz, first sample row, 0).
+StructuredBuffer<uint4> RigChannels;
+// Per channel and frame three float4: (pos, 0), rot, (scale, 0).
+StructuredBuffer<float4> RigSamples;
+// Per actor: (clip slot A, clip slot B, 0, 0) and (time A, time B, blend, 0).
+StructuredBuffer<uint4> RigSelect;
+StructuredBuffer<float4> RigTimes;
+uint ActorCount;
+uint ClipSlotsPerActor;
+// Scratch, three float4 per bone: the locals of clip A (then the frame), of clip B; the worlds (Unity rows 0..2).
+RWStructuredBuffer<float4> Locals;
+RWStructuredBuffer<float4> LocalsB;
+RWStructuredBuffer<float4> Worlds;
+
+static const uint NONE = 0xffffffff;
+
+// ---- math, as Tools/ok-extract/src/pose.rs ----
+float4 QMul(float4 a, float4 b) {
+	return float4(a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+		a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+}
+float4 QAxis(float3 axis, float rad) { float s = sin(rad * 0.5); return float4(axis * s, cos(rad * 0.5)); }
+float4 EulerOrderToQuat(uint order, float x, float y, float z) {
+	float4 qx = QAxis(float3(1, 0, 0), radians(x)), qy = QAxis(float3(0, 1, 0), radians(y)), qz = QAxis(float3(0, 0, 1), radians(z));
+	if (order == 0) return QMul(qx, QMul(qy, qz));
+	if (order == 1) return QMul(qx, QMul(qz, qy));
+	if (order == 2) return QMul(qy, QMul(qx, qz));
+	if (order == 3) return QMul(qy, QMul(qz, qx));
+	if (order == 4) return QMul(qz, QMul(qx, qy));
+	return QMul(qz, QMul(qy, qx));
+}
+float4 EulerDegToQuat(float3 e) { return EulerOrderToQuat(2, e.x, e.y, e.z); }
+// Rows 0..2 of trs(pos, rot, scale) (pose.rs trs; translation in .w).
+void Trs(float3 p, float4 q, float3 s, out float4 r0, out float4 r1, out float4 r2) {
+	float x2 = q.x + q.x, y2 = q.y + q.y, z2 = q.z + q.z;
+	float xx = q.x * x2, yy = q.y * y2, zz = q.z * z2, xy = q.x * y2, xz = q.x * z2, yz = q.y * z2, wx = q.w * x2, wy = q.w * y2, wz = q.w * z2;
+	r0 = float4((1 - (yy + zz)) * s.x, (xy - wz) * s.y, (xz + wy) * s.z, p.x);
+	r1 = float4((xy + wz) * s.x, (1 - (xx + zz)) * s.y, (yz - wx) * s.z, p.y);
+	r2 = float4((xz - wy) * s.x, (yz + wx) * s.y, (1 - (xx + yy)) * s.z, p.z);
+}
+float3x4 TrsM(float3 p, float4 q, float3 s) { float4 a, b, c; Trs(p, q, s, a, b, c); return float3x4(a, b, c); }
+float3x4 Mul34(float3x4 a, float3x4 b) {
+	float4x4 bb = float4x4(b[0], b[1], b[2], float4(0, 0, 0, 1));
+	return float3x4(mul(a[0], bb), mul(a[1], bb), mul(a[2], bb));
+}
+float3 MulPoint(float3x4 m, float3 p) { return float3(dot(m[0].xyz, p) + m[0].w, dot(m[1].xyz, p) + m[1].w, dot(m[2].xyz, p) + m[2].w); }
+float3x4 Inverse34(float3x4 m) {
+	float3x3 a = float3x3(m[0].xyz, m[1].xyz, m[2].xyz);
+	float det = determinant(a);
+	float3x3 inv = float3x3(
+		a[1][1] * a[2][2] - a[1][2] * a[2][1], a[0][2] * a[2][1] - a[0][1] * a[2][2], a[0][1] * a[1][2] - a[0][2] * a[1][1],
+		a[1][2] * a[2][0] - a[1][0] * a[2][2], a[0][0] * a[2][2] - a[0][2] * a[2][0], a[0][2] * a[1][0] - a[0][0] * a[1][2],
+		a[1][0] * a[2][1] - a[1][1] * a[2][0], a[0][1] * a[2][0] - a[0][0] * a[2][1], a[0][0] * a[1][1] - a[0][1] * a[1][0]) / det;
+	float3 t = -mul(inv, float3(m[0].w, m[1].w, m[2].w));
+	return float3x4(float4(inv[0], t.x), float4(inv[1], t.y), float4(inv[2], t.z));
+}
+float3 EulerOf(uint order, float4 q) {
+	float3x4 m = TrsM(0, q, 1);
+	float x, y, z;
+	if (order == 2) {
+		float sx = clamp(-m[1][2], -1, 1); x = asin(sx);
+		if (abs(sx) > 0.9999) { y = atan2(-m[2][0], m[0][0]); z = 0; } else { y = atan2(m[0][2], m[2][2]); z = atan2(m[1][0], m[1][1]); }
+	} else if (order == 3) {
+		float m10 = m[1][0]; z = asin(clamp(m10, -1, 1));
+		if (m10 > 0.9999) { x = 0; y = atan2(m[0][2], m[2][2]); } else { x = atan2(-m[1][2], m[1][1]); y = atan2(-m[2][0], m[0][0]); }
+	} else if (order == 4) {
+		float m21 = m[2][1]; x = asin(clamp(m21, -1, 1));
+		if (m21 > 0.9999) { y = 0; z = atan2(m[1][0], m[0][0]); } else { y = atan2(-m[2][0], m[2][2]); z = atan2(-m[0][1], m[1][1]); }
+	} else {
+		float num = -m[2][0]; y = asin(clamp(num, -1, 1));
+		if (num > 0.9999) { x = 0; z = atan2(-m[0][1], m[1][1]); } else { x = atan2(m[2][1], m[2][2]); z = atan2(m[1][0], m[0][0]); }
+	}
+	return degrees(float3(x, y, z));
+}
+
+// ---- the locals of the frame (global bone indices) ----
+float3 LP(uint b) { return Locals[b * 3].xyz; }
+float4 LQ(uint b) { return Locals[b * 3 + 1]; }
+float3 LS(uint b) { return Locals[b * 3 + 2].xyz; }
+void SetP(uint b, float3 p) { Locals[b * 3] = float4(p, 0); }
+void SetQ(uint b, float4 q) { Locals[b * 3 + 1] = q; }
+void SetS(uint b, float3 s) { Locals[b * 3 + 2] = float4(s, 0); }
+uint Parent(uint b) { return asuint(RigBones[b * 3].w); }
+// World of one bone from the current locals, up the parents (pose.rs world_of).
+float3x4 World(uint b) {
+	uint chain[96]; uint n = 0; uint node = b;
+	while (node != NONE && n < 96) { chain[n++] = node; node = Parent(node); }
+	float3x4 w = TrsM(LP(chain[n - 1]), LQ(chain[n - 1]), LS(chain[n - 1]));
+	for (uint k = n - 1; k > 0; --k) w = Mul34(w, TrsM(LP(chain[k - 1]), LQ(chain[k - 1]), LS(chain[k - 1])));
+	return w;
+}
+// Unity Transform.rotation: the local rotations composed up the parents.
+float4 WorldRot(uint b) {
+	uint chain[96]; uint n = 0; uint node = b;
+	while (node != NONE && n < 96) { chain[n++] = node; node = Parent(node); }
+	float4 r = LQ(chain[n - 1]);
+	for (uint k = n - 1; k > 0; --k) r = QMul(r, LQ(chain[k - 1]));
+	return r;
+}
+float3 Pos(float3x4 m) { return float3(m[0].w, m[1].w, m[2].w); }
+float3x4 Translation(float x, float y, float z) { return float3x4(float4(1, 0, 0, x), float4(0, 1, 0, y), float4(0, 0, 1, z)); }
+
+// ---- the clip ----
+void SampleClip(uint actor, uint slot, float t, bool intoB) {
+	uint4 cs = RigClipSlots[actor * ClipSlotsPerActor + slot];
+	float rate = RigClipRates[actor * ClipSlotsPerActor + slot].x;
+	if (cs.z == 0) return;
+	float f = min(max(t, 0) * rate, (float)(cs.z - 1));
+	uint k0 = (uint)floor(f); float a = f - floor(f); uint k1 = min(k0 + 1, cs.z - 1);
+	for (uint c = 0; c < cs.y; ++c) {
+		uint4 ch = RigChannels[cs.x + c];
+		if (ch.x == NONE) continue;
+		uint b = ch.x, m = ch.y, r0 = ch.z + k0 * 3, r1 = ch.z + k1 * 3;
+		float4 p = intoB ? LocalsB[b * 3] : Locals[b * 3];
+		float4 s = intoB ? LocalsB[b * 3 + 2] : Locals[b * 3 + 2];
+		float3 pa = RigSamples[r0].xyz, pb = RigSamples[r1].xyz, sa = RigSamples[r0 + 2].xyz, sb = RigSamples[r1 + 2].xyz;
+		[unroll] for (uint k = 0; k < 3; ++k) {
+			if (m & (1u << k)) p[k] = pa[k] + (pb[k] - pa[k]) * a;
+			if (m & (16u << k)) s[k] = sa[k] + (sb[k] - sa[k]) * a;
+		}
+		if (intoB) { LocalsB[b * 3] = p; LocalsB[b * 3 + 2] = s; } else { Locals[b * 3] = p; Locals[b * 3 + 2] = s; }
+		if (m & 8u) {
+			float4 qa = RigSamples[r0 + 1], qb = RigSamples[r1 + 1];
+			float4 q = qa;
+			if (a > 0) { if (dot(qa, qb) < 0) qb = -qb; q = normalize(qa + (qb - qa) * a); }
+			if (intoB) LocalsB[b * 3 + 1] = q; else Locals[b * 3 + 1] = q;
+		}
+	}
+}
+
+// ---- ExpressionBone (pose.rs apply_expression_bone, branch by branch) ----
+uint NF(uint actor, uint k) { return RigNamed[actor * 66 + k]; }
+uint NL(uint actor, uint k) { return RigNamed[actor * 66 + 26 + k]; }
+bool Ok(uint b) { return b != NONE; }
+float4 ReplaceEuler(uint order, float4 q, int axis, float value) { float3 e = EulerOf(order, q); e[axis] = value; return EulerOrderToQuat(order, e.x, e.y, e.z); }
+
+void ExpressionBone(uint actor) {
+	// Arms: worlds of the shoulders and forearms before any write.
+	{
+		float3x4 wsho[2], wfore[2]; bool have[2];
+		[unroll] for (uint s = 0; s < 2; ++s) {
+			uint sho = NF(actor, 0 + s), fore = NF(actor, 2 + s);
+			have[s] = Ok(sho) && Ok(fore);
+			if (Ok(sho)) wsho[s] = World(sho); else wsho[s] = Translation(0, 0, 0);
+			if (Ok(fore)) wfore[s] = World(fore); else wfore[s] = Translation(0, 0, 0);
+		}
+		[unroll] for (uint s = 0; s < 2; ++s) {
+			bool left = s == 0;
+			uint arm = NF(actor, 4 + s), dsh = NF(actor, 6 + s);
+			if (!(Ok(arm) && Ok(dsh) && have[s])) continue;
+			float3x4 goal = Mul34(wsho[s], Translation(0, 0.3, 0));
+			float3 v = MulPoint(Inverse34(goal), Pos(wfore[s]));
+			float3 t2pos = LP(arm); float4 t3rot = LQ(dsh);
+			float dy = abs(v.y), dz = abs(v.z);
+			float num3 = dy <= 0.3 ? (0.3 - dy) * 250.0 : 0.0;
+			float3 p = LP(dsh); float3 e = EulerOf(3, t3rot);
+			if (left) {
+				if (dy <= 0.3) { p.x = t2pos.x - (0.3 - dy) * 0.03 - dz * 0.03; p.y = (0.3 - dy) * 0.2; } else { p.x = t2pos.x - dz * 0.03; p.y = 0; }
+				e.y = v.z * 50.0; e.z = min(-num3, 0.0);
+			} else {
+				float num6 = dy <= 0.3 ? (0.3 - dy) * -250.0 : 0.0;
+				if (dy <= 0.3) { p.x = t2pos.x + (0.3 - dy) * 0.03 + dz * 0.03; p.y = (0.3 - dy) * 0.2; } else { p.x = t2pos.x + dz * 0.03; p.y = 0; }
+				e.y = -v.z * 50.0; e.z = max(0.0, -num6);
+			}
+			p.z = -v.z * 0.06;
+			SetQ(dsh, EulerOrderToQuat(3, e.x, e.y, e.z)); SetP(dsh, p);
+			float x = EulerOf(5, LQ(arm)).x;
+			float coef[3] = { 0.6, 0.5, 0.125 };
+			[unroll] for (uint k = 0; k < 3; ++k) { uint d = NF(actor, 8 + k * 2 + s); if (Ok(d)) SetQ(d, ReplaceEuler(5, LQ(d), 0, -x * coef[k])); }
+		}
+	}
+	// Elbows.
+	[unroll] for (uint s = 0; s < 2; ++s) {
+		bool left = s == 0; uint fore = NL(actor, 0 + s);
+		if (!Ok(fore)) continue;
+		float y = EulerOf(4, LQ(fore)).y;
+		uint elbow = NL(actor, 2 + s);
+		if (Ok(elbow)) {
+			SetQ(elbow, ReplaceEuler(4, LQ(elbow), 1, -y * 0.5));
+			float3 p = LP(elbow); p.x = sin(y * 0.015) * 0.022;
+			float bend = sin((y - 1.0) * 0.006) * 0.18; p.z = (-0.25 + (left ? bend : -bend)) * 0.1; SetP(elbow, p);
+		}
+		uint back = NL(actor, 4 + s);
+		if (Ok(back)) {
+			SetQ(back, ReplaceEuler(4, LQ(back), 1, -y * 0.5));
+			float3 p = LP(back); p.x = -tan(y * 0.0039) * 1.2;
+			p.z = left ? (0.3 - sin(-y * 0.009) * 7.6 - tan(y * 0.0022) * 16.0) * 0.1 : (0.3 - sin(y * 0.009) * 7.6 + tan(y * 0.0022) * 16.0) * 0.1;
+			SetP(back, p);
+		}
+	}
+	// Forearms and hands (worlds from the current locals).
+	[unroll] for (uint s = 0; s < 2; ++s) {
+		bool left = s == 0; float3 offset = left ? float3(-0.01, 0.01, 0) : float3(0.01, 0.01, 0);
+		uint hand = NL(actor, 6 + s); if (!Ok(hand)) continue;
+		uint fore = NL(actor, 0 + s), mid = NL(actor, 8 + s);
+		if (Ok(fore) && Ok(mid)) {
+			float3x4 foreWorld = World(fore), handWorld = World(hand), midWorld = World(mid);
+			float3 handPos = Pos(handWorld), midPos = Pos(midWorld);
+			float4 foreRot = WorldRot(fore), handRot = WorldRot(hand);
+			float3 finger = MulPoint(Inverse34(TrsM(handPos, foreRot, 1)), midPos);
+			float f = max(finger.y, 0.0) * 100.0 * 3.14159265 / 180.0;
+			uint dhand = NL(actor, 10 + s);
+			if (Ok(dhand)) { float3 p = LP(dhand); p.x = (left ? -0.25 + sin(f) * 15.0 : 0.25 - sin(f) * 15.0) * 0.1; p.y = sin(f) * 1.5; SetP(dhand, p); }
+			float3 moved = handPos + MulPoint(TrsM(0, handRot, 1), offset);
+			uint wrist = NL(actor, 12 + s);
+			if (Ok(wrist)) {
+				float3 local = MulPoint(Inverse34(foreWorld), moved); local.x = 0;
+				float len = sqrt(local.y * local.y + local.z * local.z);
+				float angle = len > 1e-8 ? degrees(acos(clamp(local.y / len, -1, 1))) * (local.z < 0 ? -1.0 : 1.0) : 0.0;
+				float3 e = EulerOf(2, LQ(wrist)); e.x = angle; SetQ(wrist, EulerDegToQuat(e));
+			}
+		}
+		uint dfore = NL(actor, 14 + s);
+		if (Ok(dfore)) { float x = EulerOf(5, LQ(hand)).x; SetQ(dfore, ReplaceEuler(5, LQ(dfore), 0, x * 0.45)); }
+	}
+	// Leg positions: worlds before any write.
+	{
+		uint nh = NF(actor, 19), waist = NF(actor, 14);
+		if (Ok(nh) && Ok(waist)) {
+			float3x4 wwaist = World(waist); float4 waistRot = WorldRot(waist);
+			float3x4 wthigh[2], wleg[2]; bool have[2];
+			[unroll] for (uint s = 0; s < 2; ++s) {
+				uint thigh = NF(actor, 15 + s), leg = NF(actor, 17 + s); have[s] = Ok(thigh) && Ok(leg);
+				wthigh[s] = Ok(thigh) ? World(thigh) : Translation(0, 0, 0); wleg[s] = Ok(leg) ? World(leg) : Translation(0, 0, 0);
+			}
+			float nheight = max(LS(nh).y, 1e-6);
+			[unroll] for (uint s = 0; s < 2; ++s) {
+				if (!have[s]) continue;
+				bool left = s == 0;
+				float3x4 goal = Mul34(wwaist, Translation(left ? -0.083 : 0.083, 0.4, -0.008));
+				float3 v1 = MulPoint(Inverse34(TrsM(Pos(wthigh[s]), waistRot, 1)), Pos(wleg[s])) / nheight * 10.0;
+				float num = v1.y >= 0 ? abs(v1.y) : 0.0;
+				float3 v = MulPoint(Inverse34(goal), Pos(wleg[s])) * -10.0;
+				uint sl = NF(actor, 20 + s);
+				if (Ok(sl)) {
+					float3 p; float3 r;
+					if (left) {
+						p = float3((1.0 + v.x * 0.2 + (abs(v.z * 1.1) - (8.849 - v.y)) * 0.06) * -0.1, (1.0 + (8.849 - v.y) * 0.4 + v.x * 0.2 + num * 0.6) * 0.1, (-v.z * 0.2 + v.x * 0.05 - num * 0.4) * 0.1);
+						r = float3(v.z * 6.0 - v.x * 2.0 - num * 5.0, -v.x * 12.0 - v.z * 3.0, -v.x);
+					} else {
+						p = float3((-1.0 + v.x * 0.2 - (abs(v.z * 1.1) - (8.849 - v.y)) * 0.06) * -0.1, (1.0 + (8.849 - v.y) * 0.4 - v.x * 0.2 + num * 0.6) * 0.1, (-v.z * 0.2 - v.x * 0.05 - num * 0.4) * 0.1);
+						r = float3(v.z * 6.0 + v.x * 2.0 - num * 5.0, -v.x * 12.0 + v.z * 3.0, -v.x);
+					}
+					SetP(sl, p); SetQ(sl, EulerOrderToQuat(5, r.x, r.y, r.z));
+					float3 sc = LS(sl); sc.x = 1.0 + abs(v.z) * 0.2; sc.y = 1.0 + num * 0.4; sc.z = 1.0 + abs(v.z) * 0.3 + num * 0.3; SetS(sl, sc);
+				}
+				uint siri = NF(actor, 22 + s);
+				if (Ok(siri)) {
+					float3 p = left
+						? float3((-0.7 + v.x * 0.01 - abs(v.x * 0.02) - abs(v.z * 0.005)) * 0.1, ((8.849 - v.y) * 0.01 + abs(v.z * 0.02) + v.x * 0.04) * 0.1, (-(8.849 - v.y) * 0.03 - (v.z - num * 3.0) * 0.03 - abs(v.x) * 0.02) * 0.1)
+						: float3((0.7 + v.x * 0.01 + abs(v.x * 0.02) + abs(v.z * 0.005)) * 0.1, ((8.849 - v.y) * 0.01 + abs(v.z * 0.02) - v.x * 0.04) * 0.1, (-(8.849 - v.y) * 0.03 - (v.z - num * 3.0) * 0.03 - abs(v.x) * 0.02) * 0.1);
+					SetP(siri, p);
+					float3 sc = LS(siri); sc.x = 1.0 + abs(v.z) * 0.02; sc.y = 1.0 + abs(num) * 0.01; SetS(siri, sc);
+				}
+			}
+		}
+	}
+	// Leg twists.
+	[unroll] for (uint s = 0; s < 2; ++s) {
+		bool left = s == 0;
+		uint thigh = NL(actor, 16 + s);
+		if (Ok(thigh)) {
+			float y = EulerOf(5, LQ(thigh)).y; float coef[3] = { 0.75, 0.5, 0.25 };
+			[unroll] for (uint k = 0; k < 3; ++k) { uint d = NL(actor, 18 + k * 2 + s); if (Ok(d)) SetQ(d, ReplaceEuler(5, LQ(d), 1, -y * coef[k])); }
+		}
+		uint knee = NL(actor, 24 + s);
+		if (Ok(knee)) {
+			float x = EulerOf(5, LQ(knee)).x;
+			uint front = NL(actor, 26 + s);
+			if (Ok(front)) {
+				float3 e = EulerOf(5, LQ(front)); e.x = -x * 0.5; e.z = x * (left ? 0.1 : -0.1); SetQ(front, EulerOrderToQuat(5, e.x, e.y, e.z));
+				float3 p = LP(front); p.y = (-x * 0.048 + sin(x * 0.01) * 1.1) * 0.1; p.z = (-0.6 - sin(x * 0.0115) * 4.0 + tan(x * 0.0032) * 5.0) * 0.1; SetP(front, p);
+			}
+			uint back = NL(actor, 28 + s);
+			if (Ok(back)) {
+				SetQ(back, ReplaceEuler(5, LQ(back), 0, -x * 0.5));
+				float3 p = LP(back); p.y = (sin(x * 0.012) * 1.8 - tan(x * 0.00335) * 4.5) * 0.1; p.z = (0.4 + x * 0.0125 - tan(x * 0.0032) * 4.5) * 0.1; SetP(back, p);
+			}
+		}
+		uint calf = NL(actor, 30 + s), deform = NL(actor, 32 + s);
+		if (Ok(calf) && Ok(deform)) { float y = EulerOf(5, LQ(calf)).y; SetQ(deform, ReplaceEuler(5, LQ(deform), 1, y * 0.5)); }
+	}
+	// Bust.
+	{
+		uint spine = NL(actor, 34), deform = NL(actor, 35);
+		if (Ok(spine) && Ok(deform)) {
+			float3 se = EulerOf(5, LQ(spine));
+			SetQ(deform, EulerOrderToQuat(5, -se.x * 0.35, -se.y * 0.35, -se.z * 0.35));
+			float3 p = LP(deform); p.y = (-0.081 + se.x * 0.003) * 0.1; p.z = se.x * 0.0004; SetP(deform, p);
+		}
+		[unroll] for (uint s = 0; s < 2; ++s) {
+			uint bust = NL(actor, 36 + s), hit = NL(actor, 38 + s);
+			if (!(Ok(bust) && Ok(hit))) continue;
+			float3 bp = LP(bust), bs = LS(bust);
+			SetP(hit, float3(-bp.x * 0.5, -bp.y * 0.5, -bp.z * 0.25)); SetS(hit, 1.5 - bs * 0.5);
+		}
+	}
+	// AcsNull.
+	{
+		uint head = NF(actor, 24), neck = NF(actor, 25);
+		if (Ok(head) && Ok(neck)) { float3 e = EulerOf(5, LQ(head)); float3 p = LP(neck); p.x = e.z * 0.0002; p.z = (-0.08 - e.x * 0.002) * 0.1; SetP(neck, p); }
+	}
+}
+
+[numthreads(64, 1, 1)]
+void SkeletonCS(uint3 id : SV_DispatchThreadID) {
+	if (id.x >= ActorCount) return;
+	uint actor = id.x;
+	uint4 a0 = RigActors[actor * 4], a1 = RigActors[actor * 4 + 1], a2 = RigActors[actor * 4 + 2], a3 = RigActors[actor * 4 + 3];
+	uint first = a0.x, count = a0.y;
+	uint4 sel = RigSelect[actor]; float4 times = RigTimes[actor];
+	// The shaped baseline, then each clip's channels over it.
+	for (uint b = first; b < first + count; ++b) {
+		Locals[b * 3] = float4(RigBones[b * 3].xyz, 0); Locals[b * 3 + 1] = RigBones[b * 3 + 1]; Locals[b * 3 + 2] = RigBones[b * 3 + 2];
+		LocalsB[b * 3] = Locals[b * 3]; LocalsB[b * 3 + 1] = Locals[b * 3 + 1]; LocalsB[b * 3 + 2] = Locals[b * 3 + 2];
+	}
+	SampleClip(actor, sel.x, times.x, false);
+	uint flags = RigClipSlots[actor * ClipSlotsPerActor + sel.x].w;
+	if (times.z > 0) {
+		SampleClip(actor, sel.y, times.y, true);
+		for (uint b = first; b < first + count; ++b) {
+			Locals[b * 3] = lerp(Locals[b * 3], LocalsB[b * 3], times.z);
+			Locals[b * 3 + 2] = lerp(Locals[b * 3 + 2], LocalsB[b * 3 + 2], times.z);
+			float4 qa = Locals[b * 3 + 1], qb = LocalsB[b * 3 + 1]; if (dot(qa, qb) < 0) qb = -qb;
+			Locals[b * 3 + 1] = normalize(lerp(qa, qb, times.z));
+		}
+		if (times.z >= 0.5) flags = RigClipSlots[actor * ClipSlotsPerActor + sel.y].w;
+	}
+	if (a0.z & 1u) {
+		for (uint k = 0; k < a1.y; ++k) { uint2 ba = RigLists[a1.x + k].xy; float4 p = Locals[ba.x * 3]; p[ba.y] = RigBones[ba.x * 3][ba.y]; Locals[ba.x * 3] = p; }
+		float arm = (flags & 1u) ? 0.92 : 1.0, hand = (flags & 2u) ? 0.9 : 1.0;
+		for (uint k = 0; k < a1.w; ++k) SetS(RigLists[a1.z + k].x, float3(arm, 1, 1));
+		for (uint k = 0; k < a2.y; ++k) SetS(RigLists[a2.x + k].x, float3(1, hand, hand));
+	}
+	if (flags & 4u) {
+		for (uint k = 0; k < a2.w; ++k) {
+			uint2 pv = RigLists[a2.z + k].xy; uint src = pv.x, dst = pv.y;
+			SetS(dst, LS(src));
+			float3 position = Pos(World(src)); float4 rotation = WorldRot(src);
+			uint parent = Parent(dst);
+			if (parent != NONE) { float4 pr = WorldRot(parent); SetP(dst, MulPoint(Inverse34(World(parent)), position)); SetQ(dst, QMul(float4(-pr.xyz, pr.w), rotation)); }
+			else { SetP(dst, position); SetQ(dst, rotation); }
+		}
+		ExpressionBone(actor);
+	}
+	for (uint k = 0; k < a3.y; ++k) {
+		uint o = (a3.x + k) * 3; uint b = asuint(RigAbm[o + 2].w);
+		SetQ(b, QMul(LQ(b), RigAbm[o]));
+		SetP(b, LP(b) * RigAbm[o + 1].w + RigAbm[o + 1].xyz);
+		SetS(b, LS(b) * RigAbm[o + 2].xyz);
+	}
+	// Worlds, parents first (the export's order).
+	for (uint b = first; b < first + count; ++b) {
+		float3x4 local = TrsM(LP(b), LQ(b), LS(b)); uint p = Parent(b);
+		float3x4 w = p == NONE ? local : Mul34(float3x4(Worlds[p * 3], Worlds[p * 3 + 1], Worlds[p * 3 + 2]), local);
+		Worlds[b * 3] = w[0]; Worlds[b * 3 + 1] = w[1]; Worlds[b * 3 + 2] = w[2];
+	}
+}
+
+// ---- tasks ----
+// Per task: (term first, term count, 0, 0). Per term four float4: (node as uint: global bone or 0xffffffff, weight, 0, 0)
+// then the constant's rows 0..2 (UE column form: out = sum weight * U(world) * C).
+StructuredBuffer<uint4> RigTasks;
+StructuredBuffer<float4> RigTerms;
+StructuredBuffer<float4> TaskWorlds;
+RWStructuredBuffer<float4> OutputRows;
+uint TaskCount;
+
+// Unity world -> UE (KKRuntimePoseMath.h OKSkinPaletteToUnreal, transposed): U[r][c] = s_r s_c W[m_r][m_c], translation x100.
+float3x4 ToUnreal(float3x4 w) {
+	const uint m[3] = { 0, 2, 1 }; const float sg[3] = { -1, 1, 1 };
+	float3x4 u;
+	[unroll] for (uint r = 0; r < 3; ++r) {
+		[unroll] for (uint c = 0; c < 3; ++c) u[r][c] = sg[r] * sg[c] * w[m[r]][m[c]];
+		u[r][3] = 100.0 * sg[r] * w[m[r]][3];
+	}
+	return u;
+}
+
+[numthreads(64, 1, 1)]
+void TaskCS(uint3 id : SV_DispatchThreadID) {
+	if (id.x >= TaskCount) return;
+	uint4 t = RigTasks[id.x];
+	float3x4 sum = (float3x4)0;
+	for (uint k = 0; k < t.y; ++k) {
+		uint o = (t.x + k) * 4; float4 head = RigTerms[o]; uint node = asuint(head.x);
+		float3x4 c = float3x4(RigTerms[o + 1], RigTerms[o + 2], RigTerms[o + 3]);
+		float3x4 u = node == NONE ? float3x4(float4(1, 0, 0, 0), float4(0, 1, 0, 0), float4(0, 0, 1, 0)) : ToUnreal(float3x4(TaskWorlds[node * 3], TaskWorlds[node * 3 + 1], TaskWorlds[node * 3 + 2]));
+		sum += head.y * Mul34(u, c);
+	}
+	OutputRows[id.x * 3] = sum[0]; OutputRows[id.x * 3 + 1] = sum[1]; OutputRows[id.x * 3 + 2] = sum[2];
+}
