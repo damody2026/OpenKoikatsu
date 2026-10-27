@@ -213,6 +213,25 @@ body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開
 - 一種做法是物理件仍由 bank 提供（bank 只保留 native 骨加物理骨）。
 - 另一種是把彈簧骨與布料搬上 GPU。
 
+### GPU 物理之後的街頭驗證（2026-10-28，打包版 Phys1028A，預設仍關閉）
+
+`run_street_social_development.lua -Control -Sandbox handrig -GpuRig -GpuRigVerify 20`（ok-game-mcp CLI，控制埠 48070）。只開這一個遊戲，跑完關掉。報告：`Saved/StreetSocial/Play-20261028T041021`（`rig.bin`、`rig.txt`、`control_shots/`）。
+
+- **比對**：11 人、20 幀、23176 列，沒有交叉淡入。20 幀平均位移差 0.74 cm，最大 135 cm；第 1 幀 ≥10 cm 的列占 1.44%（`crowd_rig_errors.lua`）。
+  - 具名骨 341 列：平均 0.022 cm，≥10 cm 的 0 列。
+    - 手最大 0.11 cm，比百人房的 0.0001 cm 大，原因還沒查。
+    - 胸 `cf_j_bust02` 平均 0.19、最大 0.94 cm，跟著物理。
+  - palette 列 22791 列：平均 0.86 cm，≥10 cm 占 1.46%。
+    - 大的都在三月七（actor 3）的飾品 part 55～65，最大 175 cm；其他人零星幾列 12～33 cm。
+    - 都是物理件：bank 逐片段從頭解算，rig 是連續模擬。
+    - 這個量法是看網格原點（腳底）的位移，離原點遠的飾品轉一點角度數字就很大。
+- **畫面**（`control_shots/shot.0001`～`0013.png`）：
+  - 三月七正反面：頭髮、裙子、弓弦、相機都在原位，沒有部件飛出去；之前「弓弦、緞帶停在水平形狀往兩側伸出」的問題已經沒有。
+  - 雷電將軍（長辮子）背面、貞德 Alter 正面也都正常。
+  - 串流動作：`/play` 讓貞德 Alter 播 `phone_standing.okanim`、三月七播 `drink_standing.okanim`，姿勢換成動作（左手抬起／手到嘴邊），表示 overlay 有蓋上 rig 的列。`/play` 不會掛手機與杯子道具，道具沒驗。
+  - 看向玩家：和貞德 Alter 交談時，她轉向玩家、臉朝著玩家。咖啡廳裡的其他女主外觀也都正常。
+- **結論**：物理件與動作在畫面上沒看到問題，數字差異來自物理件連續模擬（量法也放大了數字）。預設仍維持關閉，要不要開由使用者決定。
+
 ## GPU 物理（DynamicBone verlet，2026-10-27）
 
 使用者決定把物理搬到 GPU，用原始的 verlet（DynamicBone），不走 PhysX。
