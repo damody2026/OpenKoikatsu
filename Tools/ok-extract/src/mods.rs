@@ -317,14 +317,18 @@ fn tree_guid_index(mods_dir: &Path) -> Option<Arc<HashMap<String, PathBuf>>> {
     static RECORDED: Mutex<Option<HashMap<PathBuf, Vec<String>>>> = Mutex::new(None);
     let recorded = crate::gamefs::library_records_zips(&walk);
     let known: Vec<Option<Vec<String>>> = {
-        let map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        // The previous process's answers for this library (oklib::library_scan_load).
+        if map.is_none() { *map = crate::oklib::library_scan_load::<HashMap<PathBuf, Vec<String>>>("zip-guids-v1"); }
         walk.iter().zip(&recorded).map(|(p, r)| if *r { map.as_ref().and_then(|m| m.get(p).cloned()) } else { None }).collect()
     };
+    let fresh_recorded = recorded.iter().zip(&known).any(|(r, k)| *r && k.is_none());
     let guids: Vec<Vec<String>> = { use rayon::prelude::*; crate::oklib::pack_parallel(|| walk.par_iter().zip(known.into_par_iter()).map(|(p, k)| k.unwrap_or_else(|| guids_from_zipmod(p))).collect()) };
     {
         let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
         let map = map.get_or_insert_with(HashMap::new);
         for ((p, r), g) in walk.iter().zip(&recorded).zip(&guids) { if *r { map.entry(p.clone()).or_insert_with(|| g.clone()); } }
+        if fresh_recorded { crate::oklib::library_scan_save("zip-guids-v1", &*map); }
     }
     let mut index = HashMap::new();
     for (path, guids) in walk.iter().zip(guids) { for g in guids { index.entry(g.to_ascii_lowercase()).or_insert_with(|| path.clone()); } }
@@ -912,15 +916,32 @@ pub(crate) fn uncensor_sources(game_root: &Path) -> Arc<(Vec<UncensorBodySource>
     }
     if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: MEMO miss uncensor_sources key={}", key.replace('\n', " | ")); }
     let paths = uncensor_zipmod_paths(game_root);
-    let mut manifests: Vec<(PathBuf, Vec<String>)> = Vec::with_capacity(paths.len());
-    for path in &paths {
+    // Each archive's UncensorSelector manifests, read at once; an archive the active library records cannot change,
+    // so its answer is kept by path, across processes too (oklib::library_scan_load): the first card of a process
+    // read ~7000 archives for this (~0.5 s).
+    static RECORDED: Mutex<Option<HashMap<PathBuf, Vec<String>>>> = Mutex::new(None);
+    let recorded = crate::gamefs::library_records_zips(&paths);
+    let known: Vec<Option<Vec<String>>> = {
+        let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        if map.is_none() { *map = crate::oklib::library_scan_load::<HashMap<PathBuf, Vec<String>>>("uncensor-manifests-v1"); }
+        paths.iter().zip(&recorded).map(|(p, r)| if *r { map.as_ref().and_then(|m| m.get(p).cloned()) } else { None }).collect()
+    };
+    let fresh_recorded = recorded.iter().zip(&known).any(|(r, k)| *r && k.is_none());
+    let found: Vec<Vec<String>> = { use rayon::prelude::*; crate::oklib::pack_parallel(|| paths.par_iter().zip(known.into_par_iter()).map(|(path, k)| k.unwrap_or_else(|| {
         let mut xmls = Vec::new();
         with_zipmod_manifests(path, |xml| {
             let lower = xml.to_ascii_lowercase();
             if lower.contains("<body>") || lower.contains("<penis>") || lower.contains("<balls>") { xmls.push(xml.to_string()); }
         });
-        if !xmls.is_empty() { manifests.push((path.clone(), xmls)); }
+        xmls
+    })).collect()) };
+    {
+        let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        let map = map.get_or_insert_with(HashMap::new);
+        for ((p, r), xmls) in paths.iter().zip(&recorded).zip(&found) { if *r { map.entry(p.clone()).or_insert_with(|| xmls.clone()); } }
+        if fresh_recorded { crate::oklib::library_scan_save("uncensor-manifests-v1", &*map); }
     }
+    let manifests: Vec<(PathBuf, Vec<String>)> = paths.iter().cloned().zip(found).filter(|(_, x)| !x.is_empty()).collect();
     let mut bodies: Vec<UncensorBodySource> = Vec::new();
     for (path, xmls) in &manifests {
         for xml in xmls {

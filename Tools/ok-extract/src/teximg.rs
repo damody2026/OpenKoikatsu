@@ -52,6 +52,11 @@ pub(crate) fn raw_bytes(img: &RgbaImage) -> Vec<u8> {
 }
 
 /// Texture bytes of an RGBA image for the next stage: raw when enabled, else PNG.
+/// Which encoding `encode_rgba` writes now (raw container, default PNG, fast PNG): part of any key of its output.
+pub(crate) fn encoding_tag() -> &'static str {
+    if raw_enabled() { "raw" } else if std::env::var_os("OK_PNG_DEFAULT").is_some() { "png" } else { "png-fast-up" }
+}
+
 pub(crate) fn encode_rgba(img: &RgbaImage) -> Option<Vec<u8>> {
     if raw_enabled() { return Some(raw_bytes(img)); }
     // OK_PNG_DEFAULT=1: the default level, as before (byte-for-byte comparisons with older builds).

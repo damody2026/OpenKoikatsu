@@ -4095,9 +4095,16 @@ impl ParsedBundle {
             }
         }
         if crate::oklib::memo_active() {
-            // OK texture: the texels are the model data, the PNG is derived.
+            // OK texture: the texels are the model data, the PNG is derived. A library model is content-addressed (and
+            // unedited here), so the PNG of one of its textures is the same in every process: kept on disk.
+            let disk=!crate::memosnap::active(crate::memosnap::TEX);
+            if let Some((n,png))=self.lib.filter(|_|disk).and_then(|id|derived_png_load(&id,&key)) {
+                self.remember_texture(n.to_ascii_lowercase(),png.clone());
+                return Some(png);
+            }
             let payload=self.memo_texture("texture_payload",name,||self.texture_payload_unity(name));
             let Some((n,png))=payload.and_then(|p|png_from_payload(p.0,None)) else { return self.dependency_texture_png(name); };
+            if let Some(id)=self.lib.filter(|_|disk) { derived_png_save(&id,&key,&n,&png); }
             self.remember_texture(n.to_ascii_lowercase(),png.clone());
             return Some(png);
         }
@@ -6202,6 +6209,49 @@ pub(crate) fn png_from_payload(tex: unity_asset_decode::texture::Texture2D, obje
     let out = png_from_payload_uncached(tex, object_name)?;
     put(TEX, &key, || Some(out.1.clone()));
     Some(out)
+}
+
+/// A library model's texture as derived (name, PNG), kept between processes: (model id, texture name, encoding) names
+/// it, and a library model is content-addressed. The first card of a process derived the base body's and head's again
+/// (~0.5 s). Bounded: past 8 GB the oldest go.
+fn derived_png_path(id: &crate::oklib::Id, key: &str) -> Option<std::path::PathBuf> {
+    use sha2::Digest;
+    let mut h = sha2::Sha256::new();
+    h.update(b"derived_png_v1");
+    h.update(id);
+    h.update(key.as_bytes());
+    h.update(crate::teximg::encoding_tag().as_bytes());
+    let hash = h.finalize();
+    let hex: String = hash[..12].iter().map(|b| format!("{b:02x}")).collect();
+    Some(crate::oklib::session_cache_location()?.join("derived-textures").join(&hex[..2]).join(format!("{hex}.tex")))
+}
+fn derived_png_load(id: &crate::oklib::Id, key: &str) -> Option<(String, Vec<u8>)> {
+    let bytes = std::fs::read(derived_png_path(id, key)?).ok()?;
+    let n = u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?) as usize;
+    let name = String::from_utf8(bytes.get(4..4 + n)?.to_vec()).ok()?;
+    Some((name, bytes.get(4 + n..)?.to_vec()))
+}
+fn derived_png_save(id: &crate::oklib::Id, key: &str, name: &str, png: &[u8]) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let Some(path) = derived_png_path(id, key) else { return };
+    let Some(dir) = path.parent() else { return };
+    let _ = std::fs::create_dir_all(dir);
+    let mut out = Vec::with_capacity(4 + name.len() + png.len());
+    out.extend_from_slice(&(name.len() as u32).to_le_bytes()); out.extend_from_slice(name.as_bytes()); out.extend_from_slice(png);
+    static WRITES: AtomicU64 = AtomicU64::new(0);
+    let n = WRITES.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("{}.{n}.tmp", std::process::id()));
+    if std::fs::write(&tmp, &out).is_ok() && std::fs::rename(&tmp, &path).is_err() { let _ = std::fs::remove_file(&tmp); }
+    // Now and then: trim the oldest beyond the budget.
+    if n % 256 == 255 {
+        let Some(root) = dir.parent() else { return };
+        let mut files: Vec<_> = std::fs::read_dir(root).into_iter().flatten().flatten()
+            .flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten())
+            .filter_map(|e| { let m = e.metadata().ok()?; Some((m.modified().ok()?, m.len(), e.path())) }).collect();
+        files.sort();
+        let mut total: u64 = files.iter().map(|f| f.1).sum();
+        for (_, len, p) in files { if total <= 8 << 30 { break; } if std::fs::remove_file(&p).is_ok() { total -= len; } }
+    }
 }
 
 fn png_from_payload_uncached(tex: unity_asset_decode::texture::Texture2D, object_name: Option<String>) -> Option<(String, Vec<u8>)> {

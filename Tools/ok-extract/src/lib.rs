@@ -5084,9 +5084,12 @@ fn me_manifest_sections(game_root: &Path) -> std::sync::Arc<Vec<(PathBuf, String
             RECORDED.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map_or(0, |m| m.len()), zips.first());
     }
     let known: Vec<Option<Option<String>>> = {
-        let map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        // The previous process's answers for this library (oklib::library_scan_load).
+        if map.is_none() { *map = crate::oklib::library_scan_load::<std::collections::HashMap<PathBuf, Option<String>>>("me-sections-v1"); }
         zips.iter().zip(&recorded).map(|(z, r)| if *r { map.as_ref().and_then(|m| m.get(z).cloned()) } else { None }).collect()
     };
+    let fresh_recorded = recorded.iter().zip(&known).any(|(r, k)| *r && k.is_none());
     let rows: Vec<Option<(PathBuf, String)>> = {
         use rayon::prelude::*;
         let fresh: Vec<Option<String>> = crate::oklib::pack_parallel(|| zips.par_iter().zip(known.par_iter()).map(|(zip, known)| match known {
@@ -5096,6 +5099,7 @@ fn me_manifest_sections(game_root: &Path) -> std::sync::Arc<Vec<(PathBuf, String
         let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
         let map = map.get_or_insert_with(Default::default);
         for ((zip, r), answer) in zips.iter().zip(&recorded).zip(&fresh) { if *r { map.entry(zip.clone()).or_insert_with(|| answer.clone()); } }
+        if fresh_recorded { crate::oklib::library_scan_save("me-sections-v1", &*map); }
         zips.iter().zip(fresh).map(|(z, a)| a.map(|a| (z.clone(), a))).collect()
     };
     let out = Arc::new(rows.into_iter().flatten().collect::<Vec<_>>());

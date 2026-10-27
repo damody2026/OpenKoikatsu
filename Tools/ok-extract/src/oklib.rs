@@ -982,6 +982,34 @@ pub fn wait_for_warming(key: &str) -> bool {
     true
 }
 /// Where the game keeps opened OK cards (also when this process itself runs with OK_NOCACHE).
+/// Answers about the archives the active library records (each archive's GUIDs, its MaterialEditor section), kept
+/// across processes: a recorded archive cannot change while the library's index is unchanged, and the first card of
+/// every process read ~7000 manifests again for them (~1 s). Keyed by the library folder, its index files' sizes and
+/// times, and `what` with its own version; a missing or unreadable file is just rebuilt.
+fn library_scan_path(what: &str) -> Option<PathBuf> {
+    use sha2::Digest;
+    let lib = active_dir()?;
+    let mut h = sha2::Sha256::new();
+    h.update(crate::gamefs::normalize(&lib).as_bytes());
+    for f in ["oklib.json", "sources.okidx", "converted.tsv"] {
+        let m = std::fs::metadata(lib.join(f)).ok()?;
+        h.update(m.len().to_le_bytes());
+        h.update(format!("{:?}", m.modified().ok()).as_bytes());
+    }
+    h.update(what.as_bytes());
+    Some(session_cache_location()?.join("library-scans").join(format!("{what}-{}.bin", hex(&h.finalize()[..12]))))
+}
+pub fn library_scan_load<T: serde::de::DeserializeOwned>(what: &str) -> Option<T> {
+    bincode::deserialize(&std::fs::read(library_scan_path(what)?).ok()?).ok()
+}
+pub fn library_scan_save<T: serde::Serialize>(what: &str, value: &T) {
+    let Some(path) = library_scan_path(what) else { return };
+    let Ok(bytes) = bincode::serialize(value) else { return };
+    let _ = std::fs::create_dir_all(path.parent().unwrap_or(&path));
+    static WRITES: AtomicU64 = AtomicU64::new(0);
+    let tmp = path.with_extension(format!("{}.{}.tmp", std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
+    if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, &path).is_err() { let _ = std::fs::remove_file(&tmp); }
+}
 pub fn session_cache_location() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("OK_LIBRARY_CACHE") { return Some(PathBuf::from(dir)); }
     std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("OpenKoikatsu").join("oklib-cache"))

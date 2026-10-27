@@ -670,10 +670,20 @@ fn view_catalog(_mods_dir: &Path, zips: &[std::path::PathBuf]) -> Option<ChaList
     use std::sync::Mutex;
     static RECORDED: Mutex<Option<HashMap<std::path::PathBuf, std::sync::Arc<ChaListCatalog>>>> = Mutex::new(None);
     let recorded = crate::gamefs::library_records_zips(zips);
+    // Kept across processes as each archive's tagged entries (oklib::library_scan_load).
+    type Saved = HashMap<std::path::PathBuf, Vec<ListEntry>>;
     let known: Vec<Option<std::sync::Arc<ChaListCatalog>>> = {
-        let map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
+        if map.is_none() {
+            *map = crate::oklib::library_scan_load::<Saved>("zip-catalogs-v1").map(|saved| saved.into_iter().map(|(p, entries)| {
+                let mut part = ChaListCatalog::default();
+                for e in entries { part.by_id.insert((e.category_no, e.id), e); }
+                (p, std::sync::Arc::new(part))
+            }).collect());
+        }
         zips.iter().zip(&recorded).map(|(p, r)| if *r { map.as_ref().and_then(|m| m.get(p).cloned()) } else { None }).collect()
     };
+    let fresh_recorded = recorded.iter().zip(&known).any(|(r, k)| *r && k.is_none());
     let parts: Vec<std::sync::Arc<ChaListCatalog>> = {
         use rayon::prelude::*;
         crate::oklib::pack_parallel(|| zips.par_iter().zip(known.into_par_iter()).map(|(p, k)| k.unwrap_or_else(|| tagged_zip_catalog(p))).collect())
@@ -682,6 +692,10 @@ fn view_catalog(_mods_dir: &Path, zips: &[std::path::PathBuf]) -> Option<ChaList
         let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
         let map = map.get_or_insert_with(HashMap::new);
         for ((p, r), part) in zips.iter().zip(&recorded).zip(&parts) { if *r { map.entry(p.clone()).or_insert_with(|| part.clone()); } }
+        if fresh_recorded {
+            let saved: Saved = map.iter().map(|(p, part)| (p.clone(), part.by_id.values().cloned().collect())).collect();
+            crate::oklib::library_scan_save("zip-catalogs-v1", &saved);
+        }
     }
     let read = t.elapsed();
     let mut cat = ChaListCatalog::default();
