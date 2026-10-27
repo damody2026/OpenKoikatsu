@@ -188,3 +188,18 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 - 取模環境變數：高模開卡時 `OKPrepareLiveGpuEnv` 會把 `OK_GPU_SKIN`、`OK_SKELMESH` 等改成整個程序都生效。現在進場前記下、離開時還原（`OKStreetSocialPrivateEnv.cpp`）。沒有還原時，之後讀檔或開新遊戲，所有女主都會畫壞。
 - 效能：遊戲裡沒有任何 OK 配對包，所有雙人姿勢都走原生路徑。原生 GPU 求解現在也放到背景執行緒，下一幀顯示（`AKKPairedPlayback::Advance`、`ok.Anim.AsyncPair`）。1 對 1 從 77 FPS 提升到 185 FPS（GPU 上只有另一個遊戲時量的）。
 - log：`clothes layer`、`shadow capture skipped`、`APNG source capture` 原本每幀都印，現在依實例或組合各只印一次。
+
+### 量 1 對 1 的 Rust 雙人求解
+
+1. 啟動時就開 trace：`game_launch {options: ["-Trace","default,cpu,frame","-GameArgs","-OKNativeTrace"]}`。Rust 的計時區段在第一次求解時登記，若事後才開 trace，會登記成空類型、全被丟掉。
+2. 用 `UnrealInsights.exe -OpenTraceFile=<trace.utrace> -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimerStatistics out.csv" -AutoQuit -NoUI` 匯出，看 `KK_Native*` 各項。trace 動輒幾百 MB，看完就刪。
+
+2026-10-27 量到的愛麗絲 1 對 1（109 FPS，胡桃 185），每幀：
+
+- 取樣 3.3 ms：
+  - 其中 `KK_NativeMotionLeaves` 每個角色 2.08 ms（兩人平行算），是各混合葉的骨架快照加原始曲線取樣。
+  - `KK_NativeMotionPlan` 0.04 ms、`KK_NativeMotionBlend` 0.12 ms，都很小。
+- 接觸 1 ms。
+- 動態 3.6 ms，主要是飾品鏈。
+
+要上 120 FPS，得重寫 `anim.rs` 葉取樣的資料結構（每片葉一份 HashMap 骨架、逐骨查表），尚未動手。

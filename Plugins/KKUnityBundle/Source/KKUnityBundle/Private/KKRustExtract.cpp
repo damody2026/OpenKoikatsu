@@ -28,7 +28,7 @@ namespace { UKKSharedAnimation* FindSharedCurveAsset(const FString& Key); }
 
 namespace {
 #if CPUPROFILERTRACE_ENABLED
-uint32 NativeTraceSpecs[37];
+uint32 NativeTraceSpecs[40];
 void NativeCpuTrace(uint32_t Event,int32_t Begin){
     if(Event>=UE_ARRAY_COUNT(NativeTraceSpecs))return;
     if(Begin)FCpuProfilerTrace::OutputBeginEvent(NativeTraceSpecs[Event]);
@@ -48,7 +48,8 @@ void RegisterNativeCpuTrace(){
                 "KK_NativeDynamicParticles","KK_NativeDynamicApply","KK_NativeDynamicWorlds","KK_NativeFrameWait",
                 "KK_NativeShapeRestore","KK_NativeShapeBody","KK_NativeShapeHead","KK_NativeShapeFullHead","KK_NativeShapeReferences",
                 "KK_NativeContactCorrectBefore","KK_NativeContactFreeze","KK_NativeContactSolve","KK_NativeContactCorrectAfter",
-                "KK_NativePalettePrepare","KK_NativePaletteRead","KK_NativePalettePublish"};
+                "KK_NativePalettePrepare","KK_NativePaletteRead","KK_NativePalettePublish",
+                "KK_NativeMotionPlan","KK_NativeMotionLeaves","KK_NativeMotionBlend"};
             static_assert(UE_ARRAY_COUNT(Names)==UE_ARRAY_COUNT(NativeTraceSpecs),"Native CPU trace event storage must match the registered events");
             for(int32 I=0;I<UE_ARRAY_COUNT(Names);++I)NativeTraceSpecs[I]=FCpuProfilerTrace::OutputEventType(Names[I],__FILE__,__LINE__);
             const int32 Result=ok_set_cpu_trace_callback(NativeCpuTrace);

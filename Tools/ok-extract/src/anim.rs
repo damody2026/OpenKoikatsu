@@ -2300,6 +2300,7 @@ pub(crate) fn valid_animation_clock(game_root:&Path,want:&str,parameters:&HashMa
 }
 
 fn motion_plan(game_root:&Path,want:&str,parameters:&HashMap<String,f32>) -> Option<(String,controller::StateEntry,Vec<(ClipEntry,f32,f32,f32)>,f32)> {
+    let _trace=crate::native_profile::Scope::new(37);
     let (source,label)=want.split_once('|')?;
     let source=source.strip_prefix(controller::SOURCE_PREFIX)?;
     let resolved=source_path(game_root,source)?;
@@ -2386,6 +2387,7 @@ fn sample_motion_pose_impl(game_root:&Path,skel:&mut Skeleton,baseline:&Skeleton
         for tf in skel.tfs.values_mut(){for i in 0..3{tf.pos[i]=0.+tf.pos[i]*1.;tf.scale[i]=0.+tf.scale[i]*1.;}tf.rot=norm_quat(tf.rot.map(|x|0.+x*1.*1.));}
         skel.rebuild_worlds();return true;
     }
+    let leaves_trace=crate::native_profile::Scope::new(38);
     let mut poses=Vec::new();
     for(clip,weight,cycle,length) in leaves {
         let mut pose=SkeletonSnapshot::new(baseline);
@@ -2406,6 +2408,8 @@ fn sample_motion_pose_impl(game_root:&Path,skel:&mut Skeleton,baseline:&Skeleton
         }
         poses.push((pose,weight));
     }
+    drop(leaves_trace);
+    let _blend_trace=crate::native_profile::Scope::new(39);
     for(&id,tf) in &mut skel.tfs {
         let mut pos=[0.;3];let mut scale=[0.;3];let mut q=[0.;4];
         let reference=poses[0].0.tfs[&id].rot;
