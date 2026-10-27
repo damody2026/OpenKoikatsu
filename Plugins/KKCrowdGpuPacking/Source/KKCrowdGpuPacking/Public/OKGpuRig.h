@@ -26,6 +26,7 @@ struct KKCROWDGPUPACKING_API FOKGpuRigBatch {
  TArray<FVector4f> PhysParticles;    // 8 per particle
  TArray<FVector4f> PhysColliders;    // 2 per collider
  TArray<uint32> PhysFollow;
+ TArray<FUintVector4> PhysActors;    // 1 per actor: (set first, set count, 0, 0); her sets are contiguous, body then clothes then accessories
  uint32 ActorCount=0,ClipSlotsPerActor=0,BoneCount=0,NodeCount=0;
  bool Validate(FString& Error) const;
 };
@@ -44,6 +45,12 @@ private:
  TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> Static;
  TRefCountPtr<FRDGPooledBuffer> Actors,Bones,Lists,Abm,Named,ClipSlots,ClipRates,Channels,Samples,Tasks,Terms,Locals,LocalsB,Worlds,Current;
  TRefCountPtr<FRDGPooledBuffer> RigRots,PhysSets,PhysNodes,PhysChains,PhysChainValues,PhysParticles,PhysColliders,PhysFollow,NodeLocals,NodeRots,PhysState;
+ // PhysicsCS works one thread group per character (OKGpuRig.cpp OKGpuRigPhysicsGroups): per character and kind four
+ // uint4, the jobs (a chain, or a serial set's chains, dearest first), the nodes and the follow bones by depth (level
+ // ends, order); ColliderWorlds: every collider's capsule this frame.
+ TRefCountPtr<FRDGPooledBuffer> PhysGroups,PhysJobs,PhysLevels,PhysOrder,ColliderWorlds;
+ // SkeletonCS works one thread group per character: her bones by depth (OKGpuRig.cpp Initialize).
+ TRefCountPtr<FRDGPooledBuffer> SkelGroups,SkelLevels,SkelOrder;
  bool PhysicsCleared=false;
  bool HasFrame=false;
 };

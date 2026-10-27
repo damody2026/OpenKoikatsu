@@ -34,6 +34,9 @@ class FOKGpuRigSkeletonCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,RigSelect)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigTimes)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigLook)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,RigGroups)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,RigLevels)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,RigOrder)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Locals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,LocalsB)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Worlds)
@@ -73,16 +76,17 @@ class FOKGpuRigPhysicsCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,PhysParticles)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,PhysColliders)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,PhysFollow)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,PhysGroups)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,PhysJobs)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,PhysLevels)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,PhysOrder)
+  SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,ColliderWorlds)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Locals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Worlds)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,RigRots)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,NodeLocals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,NodeRots)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,PhysState)
-  SHADER_PARAMETER(uint32,SetCount)
-  SHADER_PARAMETER(uint32,ClothesPass)
-  SHADER_PARAMETER(uint32,Stage)
-  SHADER_PARAMETER(uint32,ChainCount)
   SHADER_PARAMETER(uint32,BoneTotal)
   SHADER_PARAMETER(uint32,ParticleTotal)
   SHADER_PARAMETER(uint32,ChainTotal)
@@ -122,6 +126,85 @@ bool FOKGpuRigBatch::Validate(FString& Error) const {
  for(uint32 C=0;C<Colliders;++C)if(!RefOk(reinterpret_cast<const uint32&>(PhysColliders[C*2+1].W)))return Fail(TEXT("GPU rig physics collider out of range"));
  for(int32 S=0;S<PhysSets.Num();S+=2){const auto& A=PhysSets[S];const auto& B=PhysSets[S+1];if(uint64(A.Y)+A.Z>NodeCount||uint64(A.W)+B.X>Chains||uint64(B.Y)+B.Z>uint64(PhysFollow.Num()))return Fail(TEXT("GPU rig physics set out of range"));}
  for(const uint32 F:PhysFollow)if(F>=BoneCount)return Fail(TEXT("GPU rig physics follow out of range"));
+ if(PhysActors.Num()!=int32(ActorCount))return Fail(TEXT("GPU rig physics actors malformed"));
+ uint32 NextSet=0;for(const auto& A:PhysActors){if(A.X!=NextSet||uint64(A.X)+A.Y>uint64(PhysSets.Num()/2))return Fail(TEXT("GPU rig physics actor sets out of range"));NextSet+=A.Y;}
+ if(NextSet!=uint32(PhysSets.Num()/2))return Fail(TEXT("GPU rig physics sets outside the actors"));
+ return true;
+}
+
+// PhysicsCS runs one thread group per character, her kinds in turn (body Ver02, clothes, accessories: the first two move
+// body bones the next reads). Per character and kind four uint4: (set first, set count, job first, job count), (node
+// order first, level first, level count, 0), (follow order first, level first, level count, 0), (collider first, count,
+// 0, 0). A job is a chain, or 0x80000000 | where its chains are listed (count, chains): chains of a set that must go one
+// after another, one writing a bone another reads (that bone or one above it; OKGpuRigChainNodes), joined while any two
+// meet; a group's jobs dearest first (particles x colliders), so the long ones start at once. Levels: the end of each
+// depth's run in Order (nodes: their parent node is a level up; follow bones: their parent follow bone), so a level is
+// one parallel step.
+static void OKGpuRigChainNodes(const FOKGpuRigBatch& B,uint32 C,TArray<uint32>& Writes,TArray<uint32>& Reads){
+ auto U=[](float V){return reinterpret_cast<const uint32&>(V);};
+ Writes.Reset();Reads.Reset();
+ const auto& H=B.PhysChains[C*2];const auto& K=B.PhysChains[C*2+1];const bool V02=(H.Z&8u)!=0;
+ auto Up=[&](uint32 N){while(N!=MAX_uint32&&N<B.NodeCount){Reads.AddUnique(N);const uint32 P=U(B.PhysNodes[N*8+2].W);N=(P!=MAX_uint32&&(P&OKGpuRigPhysicsNode))?P&~OKGpuRigPhysicsNode:MAX_uint32;}};
+ Up(H.X);Up(H.Y);
+ for(uint32 I=K.X;I<K.X+K.Y;++I){const uint32 Node=U(B.PhysParticles[I*8].X),Parent=U(B.PhysParticles[I*8].Y);Up(Node);
+  if(Parent==MAX_uint32)continue;
+  if(Node!=MAX_uint32)Writes.AddUnique(Node);
+  // DynamicBone turns a parent with one child; Ver02 a parent with the rotate flag.
+  const bool Turns=V02?(U(B.PhysParticles[Parent*8+4].W)&4u)!=0:(U(B.PhysParticles[I*8].Z)&1u)!=0;
+  const uint32 ParentNode=U(B.PhysParticles[Parent*8].X);if(Turns&&ParentNode!=MAX_uint32)Writes.AddUnique(ParentNode);}
+ for(uint32 Q=K.Z;Q<K.Z+K.W;++Q){const uint32 R=U(B.PhysColliders[Q*2+1].W);if(R!=MAX_uint32&&(R&OKGpuRigPhysicsNode))Up(R&~OKGpuRigPhysicsNode);}
+}
+static bool OKGpuRigPhysicsGroups(const FOKGpuRigBatch& B,TArray<FUintVector4>& Groups,TArray<uint32>& Jobs,TArray<uint32>& Levels,TArray<uint32>& Order,FString& Error){
+ auto U=[](float V){return reinterpret_cast<const uint32&>(V);};
+ TArray<uint32> Depth;Depth.SetNumZeroed(B.NodeCount);
+ for(uint32 N=0;N<B.NodeCount;++N){const uint32 P=U(B.PhysNodes[N*8+2].W);if(P!=MAX_uint32&&(P&OKGpuRigPhysicsNode))Depth[N]=Depth[P&~OKGpuRigPhysicsNode]+1;}
+ auto Leveled=[&](const TArray<TPair<uint32,uint32>>& Items,FUintVector4& Row){ // (item, depth) -> order and level ends
+  uint32 Deepest=0;for(const auto& I:Items)Deepest=FMath::Max(Deepest,I.Value);
+  Row=FUintVector4(Order.Num(),Levels.Num(),Items.IsEmpty()?0:Deepest+1,0);if(Items.IsEmpty())return;
+  for(uint32 L=0;L<=Deepest;++L){for(const auto& I:Items)if(I.Value==L)Order.Add(I.Key);Levels.Add(Order.Num());}
+ };
+ TSet<uint32> Following;TArray<uint32> Lists;TArray<TPair<int32,int32>> ListJobs; // (job, list offset)
+ TArray<TArray<uint32>> Writes,Reads;
+ for(uint32 A=0;A<B.ActorCount;++A)for(const uint32 Kind:{2u,1u,0u}){
+  FUintVector4 G[4]={FUintVector4(0,0,Jobs.Num(),0),FUintVector4(Order.Num(),Levels.Num(),0,0),FUintVector4(Order.Num(),Levels.Num(),0,0),FUintVector4(0,0,0,0)};
+  const auto& Actor=B.PhysActors[A];TArray<uint32> Sets;
+  for(uint32 S=Actor.X;S<Actor.X+Actor.Y;++S)if((B.PhysSets[S*2].X&0xffu)==Kind)Sets.Add(S);
+  if(!Sets.IsEmpty()){
+   if(Sets.Last()-Sets[0]+1!=uint32(Sets.Num())){Error=TEXT("GPU rig physics sets of a kind not contiguous");return false;}
+   G[0].X=Sets[0];G[0].Y=Sets.Num();
+   TArray<TPair<uint32,uint32>> Nodes,Follow;TArray<TPair<uint32,uint64>> Costed;uint32 ColliderFirst=MAX_uint32,ColliderEnd=0;
+   auto ChainCost=[&](uint32 C){const auto& K=B.PhysChains[C*2+1];return uint64(K.Y)*(1+K.W);};
+   for(const uint32 S:Sets){
+    const auto& H=B.PhysSets[S*2];const auto& T=B.PhysSets[S*2+1];
+    for(uint32 N=H.Y;N<H.Y+H.Z;++N)Nodes.Add({N,Depth[N]});
+    const uint32 Count=T.X;
+    for(uint32 C=H.W;C<H.W+Count;++C){const auto& K=B.PhysChains[C*2+1];
+     if(K.W){if(ColliderFirst!=MAX_uint32&&K.Z!=ColliderEnd){Error=TEXT("GPU rig physics colliders of a kind not contiguous");return false;}if(ColliderFirst==MAX_uint32)ColliderFirst=K.Z;ColliderEnd=K.Z+K.W;}}
+    // The set's chains joined while one writes a bone another reads; each group of them a job, in the set's order.
+    Writes.SetNum(Count);Reads.SetNum(Count);for(uint32 C=0;C<Count;++C)OKGpuRigChainNodes(B,H.W+C,Writes[C],Reads[C]);
+    TArray<uint32> Root;Root.SetNum(Count);for(uint32 C=0;C<Count;++C)Root[C]=C;
+    auto Find=[&](uint32 X){while(Root[X]!=X)X=Root[X]=Root[Root[X]];return X;};
+    auto Meets=[&](const TArray<uint32>& W,const TArray<uint32>& R){for(const uint32 N:W)if(R.Contains(N))return true;return false;};
+    for(uint32 I=0;I<Count;++I)for(uint32 J=I+1;J<Count;++J)if(Find(I)!=Find(J)&&(Meets(Writes[I],Reads[J])||Meets(Writes[J],Reads[I])))Root[Find(J)]=Find(I);
+    for(uint32 C=0;C<Count;++C){if(Find(C)!=C)continue;
+     TArray<uint32> Members;uint64 Cost=0;for(uint32 M=C;M<Count;++M)if(Find(M)==C){Members.Add(H.W+M);Cost+=ChainCost(H.W+M);}
+     if(Members.Num()==1){Costed.Add({Members[0],Cost});continue;}
+     ListJobs.Add({-1,Lists.Num()});Costed.Add({0x80000000u|uint32(ListJobs.Num()-1),Cost});Lists.Add(Members.Num());Lists.Append(Members);}
+    // Follow bones in rig order (parents first): a level below a parent that follows too.
+    Following.Reset();for(uint32 F=T.Y;F<T.Y+T.Z;++F){const uint32 Bone=B.PhysFollow[F];const uint32 P=U(B.Bones[Bone*3].W);
+     uint32 D=0;if(Following.Contains(P))for(const auto& X:Follow)if(X.Key==P){D=X.Value+1;break;}
+     Follow.Add({Bone,D});Following.Add(Bone);}
+   }
+   Costed.StableSort([](const TPair<uint32,uint64>& X,const TPair<uint32,uint64>& Y){return X.Value>Y.Value;});
+   for(const auto& J:Costed){if(J.Key&0x80000000u)ListJobs[J.Key&0x7fffffffu].Key=Jobs.Num();Jobs.Add(J.Key);}
+   G[0].W=Costed.Num();
+   Leveled(Nodes,G[1]);Leveled(Follow,G[2]);
+   if(ColliderFirst!=MAX_uint32)G[3]=FUintVector4(ColliderFirst,ColliderEnd-ColliderFirst,0,0);
+  }
+  for(const auto& R:G)Groups.Add(R);
+ }
+ // The lists after the jobs.
+ const uint32 ListBase=Jobs.Num();for(const auto& L:ListJobs)Jobs[L.Key]=0x80000000u|(ListBase+uint32(L.Value));Jobs.Append(Lists);
  return true;
 }
 
@@ -143,6 +226,17 @@ bool FOKGpuRig::Initialize(FRDGBuilder& G,TSharedRef<const FOKGpuRigBatch,ESPMod
  PhysChains=OKGpuRigUpload(G,TEXT("GpuRig.PhysChains"),B.PhysChains);PhysChainValues=OKGpuRigUpload(G,TEXT("GpuRig.PhysChainValues"),B.PhysChainValues);
  PhysParticles=OKGpuRigUpload(G,TEXT("GpuRig.PhysParticles"),B.PhysParticles);PhysColliders=OKGpuRigUpload(G,TEXT("GpuRig.PhysColliders"),B.PhysColliders);
  PhysFollow=OKGpuRigUpload(G,TEXT("GpuRig.PhysFollow"),B.PhysFollow);
+ {TArray<FUintVector4> Groups;TArray<uint32> Jobs,Levels,Order;if(!OKGpuRigPhysicsGroups(B,Groups,Jobs,Levels,Order,Error))return false;
+  PhysGroups=OKGpuRigUpload(G,TEXT("GpuRig.PhysGroups"),Groups);PhysJobs=OKGpuRigUpload(G,TEXT("GpuRig.PhysJobs"),Jobs);
+  PhysLevels=OKGpuRigUpload(G,TEXT("GpuRig.PhysLevels"),Levels);PhysOrder=OKGpuRigUpload(G,TEXT("GpuRig.PhysOrder"),Order);
+  ColliderWorlds=Scratch(TEXT("GpuRig.ColliderWorlds"),B.PhysColliders.Num());}
+ // SkeletonCS: per actor (order first, level first, level count, 0), her bones by depth (a parent precedes its bones).
+ {TArray<FUintVector4> Groups;TArray<uint32> Levels,Order;TArray<uint32> Depth;Depth.SetNumZeroed(B.BoneCount);
+  for(uint32 A=0;A<B.ActorCount;++A){const uint32 First=B.Actors[A*4].X,Count=B.Actors[A*4].Y;uint32 Deepest=0;
+   for(uint32 Bone=First;Bone<First+Count;++Bone){const uint32 P=reinterpret_cast<const uint32&>(B.Bones[Bone*3].W);Depth[Bone]=P!=MAX_uint32&&P>=First&&P<Bone?Depth[P]+1:0;Deepest=FMath::Max(Deepest,Depth[Bone]);}
+   Groups.Add(FUintVector4(Order.Num(),Levels.Num(),Count?Deepest+1:0,0));
+   if(Count)for(uint32 L=0;L<=Deepest;++L){for(uint32 Bone=First;Bone<First+Count;++Bone)if(Depth[Bone]==L)Order.Add(Bone);Levels.Add(Order.Num());}}
+  SkelGroups=OKGpuRigUpload(G,TEXT("GpuRig.SkelGroups"),Groups);SkelLevels=OKGpuRigUpload(G,TEXT("GpuRig.SkelLevels"),Levels);SkelOrder=OKGpuRigUpload(G,TEXT("GpuRig.SkelOrder"),Order);}
  NodeLocals=Scratch(TEXT("GpuRig.NodeLocals"),B.NodeCount*3);NodeRots=Scratch(TEXT("GpuRig.NodeRots"),B.NodeCount);
  // Particles (pos, prev), chains (time, component position), sets (ready): persistent, cleared once.
  PhysState=Scratch(TEXT("GpuRig.PhysState"),B.PhysParticles.Num()/8*2+B.PhysChains.Num()/2+B.PhysSets.Num()/2);PhysicsCleared=false;
@@ -168,29 +262,30 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
   P->RigActors=G.CreateSRV(G.RegisterExternalBuffer(Actors));P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->RigLists=G.CreateSRV(G.RegisterExternalBuffer(Lists));
   P->RigAbm=G.CreateSRV(G.RegisterExternalBuffer(Abm));P->RigNamed=G.CreateSRV(G.RegisterExternalBuffer(Named));P->RigClipSlots=G.CreateSRV(G.RegisterExternalBuffer(ClipSlots));
   P->RigClipRates=G.CreateSRV(G.RegisterExternalBuffer(ClipRates));P->RigChannels=G.CreateSRV(G.RegisterExternalBuffer(Channels));P->RigSamples=G.CreateSRV(G.RegisterExternalBuffer(Samples));
+  P->RigGroups=G.CreateSRV(G.RegisterExternalBuffer(SkelGroups));P->RigLevels=G.CreateSRV(G.RegisterExternalBuffer(SkelLevels));P->RigOrder=G.CreateSRV(G.RegisterExternalBuffer(SkelOrder));
   P->RigSelect=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Select"),Select));P->RigTimes=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Times"),Times));P->RigLook=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Look"),Look));
   P->Locals=LocalsUav;P->LocalsB=LocalsBUav;P->Worlds=G.CreateUAV(WorldsBuffer);P->RigRots=G.CreateUAV(G.RegisterExternalBuffer(RigRots));P->ActorCount=B.ActorCount;P->ClipSlotsPerActor=B.ClipSlotsPerActor;
   TShaderMapRef<FOKGpuRigSkeletonCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-  FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigSkeleton"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(B.ActorCount),64));
+  // One group per character (her bones shared by its threads).
+  FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigSkeleton"),Shader,P,FIntVector(int32(B.ActorCount),1,1));
  }
  const uint32 Sets=B.PhysSets.Num()/2;
  if(Sets&&B.NodeCount){
   FRDGBufferRef StateBuffer=G.RegisterExternalBuffer(PhysState);
   if(!PhysicsCleared){AddClearUAVPass(G,G.CreateUAV(StateBuffer),0u);PhysicsCleared=true;}
   TShaderMapRef<FOKGpuRigPhysicsCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-  // The body's Ver02 sets, the clothes sets (both move body bones), then the accessories hung on them.
-  const uint32 ChainCount=B.PhysChains.Num()/2;
-  for(uint32 Clothes:{2u,1u,0u})for(uint32 Stage:{0u,1u,2u}){
-   auto* P=G.AllocParameters<FOKGpuRigPhysicsCS::FParameters>();P->Stage=Stage;P->ChainCount=ChainCount;P->RigRots=G.CreateUAV(G.RegisterExternalBuffer(RigRots));
-   P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->PhysSets=G.CreateSRV(G.RegisterExternalBuffer(PhysSets));P->PhysNodes=G.CreateSRV(G.RegisterExternalBuffer(PhysNodes));
-   P->PhysChains=G.CreateSRV(G.RegisterExternalBuffer(PhysChains));P->PhysChainValues=G.CreateSRV(G.RegisterExternalBuffer(PhysChainValues));
-   P->PhysParticles=G.CreateSRV(G.RegisterExternalBuffer(PhysParticles));P->PhysColliders=G.CreateSRV(G.RegisterExternalBuffer(PhysColliders));P->PhysFollow=G.CreateSRV(G.RegisterExternalBuffer(PhysFollow));
-   P->Locals=G.CreateUAV(G.RegisterExternalBuffer(Locals));P->Worlds=G.CreateUAV(WorldsBuffer);P->NodeLocals=G.CreateUAV(G.RegisterExternalBuffer(NodeLocals));
-   P->NodeRots=G.CreateUAV(G.RegisterExternalBuffer(NodeRots));P->PhysState=G.CreateUAV(StateBuffer);
-   P->SetCount=Sets;P->ClothesPass=Clothes;P->BoneTotal=B.BoneCount;P->ParticleTotal=B.PhysParticles.Num()/8;P->ChainTotal=B.PhysChains.Num()/2;
-   P->DeltaTime=FMath::Clamp(DeltaSeconds,0.f,0.1f);P->ResetAll=Reset?1u:0u;P->SettleSteps=30;
-   FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigPhysics %u.%u",Clothes,Stage),Shader,P,FComputeShaderUtils::GetGroupCount(int32(Stage==1?ChainCount:Sets),64));
-  }
+  // One group per character: her body's Ver02 sets, her clothes (both move body bones), then her accessories.
+  auto* P=G.AllocParameters<FOKGpuRigPhysicsCS::FParameters>();P->RigRots=G.CreateUAV(G.RegisterExternalBuffer(RigRots));
+  P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->PhysSets=G.CreateSRV(G.RegisterExternalBuffer(PhysSets));P->PhysNodes=G.CreateSRV(G.RegisterExternalBuffer(PhysNodes));
+  P->PhysChains=G.CreateSRV(G.RegisterExternalBuffer(PhysChains));P->PhysChainValues=G.CreateSRV(G.RegisterExternalBuffer(PhysChainValues));
+  P->PhysParticles=G.CreateSRV(G.RegisterExternalBuffer(PhysParticles));P->PhysColliders=G.CreateSRV(G.RegisterExternalBuffer(PhysColliders));P->PhysFollow=G.CreateSRV(G.RegisterExternalBuffer(PhysFollow));
+  P->PhysGroups=G.CreateSRV(G.RegisterExternalBuffer(PhysGroups));P->PhysJobs=G.CreateSRV(G.RegisterExternalBuffer(PhysJobs));
+  P->PhysLevels=G.CreateSRV(G.RegisterExternalBuffer(PhysLevels));P->PhysOrder=G.CreateSRV(G.RegisterExternalBuffer(PhysOrder));P->ColliderWorlds=G.CreateUAV(G.RegisterExternalBuffer(ColliderWorlds));
+  P->Locals=G.CreateUAV(G.RegisterExternalBuffer(Locals));P->Worlds=G.CreateUAV(WorldsBuffer);P->NodeLocals=G.CreateUAV(G.RegisterExternalBuffer(NodeLocals));
+  P->NodeRots=G.CreateUAV(G.RegisterExternalBuffer(NodeRots));P->PhysState=G.CreateUAV(StateBuffer);
+  P->BoneTotal=B.BoneCount;P->ParticleTotal=B.PhysParticles.Num()/8;P->ChainTotal=B.PhysChains.Num()/2;
+  P->DeltaTime=FMath::Clamp(DeltaSeconds,0.f,0.1f);P->ResetAll=Reset?1u:0u;P->SettleSteps=30;
+  FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigPhysics"),Shader,P,FIntVector(int32(B.ActorCount),1,1));
  }
  const uint32 TaskCount=B.Tasks.Num();
  FRDGBufferRef Output=G.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(sizeof(FVector4f),TaskCount*3),TEXT("GpuRig.PoseRows"));

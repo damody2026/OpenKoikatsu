@@ -29,6 +29,11 @@ StructuredBuffer<float4> RigTimes;
 // Per actor two float4: the head look's neck and head turns (UE quaternions in each bone's parent frame, as the pose
 // bank's LookRotation; (0,0,0,1): none).
 StructuredBuffer<float4> RigLook;
+// Per actor (order first, level first, level count, 0): her bones by depth, as RigOrder runs ending at RigLevels (a
+// level's parents all in the levels before it), so SkeletonCS builds a level's worlds at once.
+StructuredBuffer<uint4> RigGroups;
+StructuredBuffer<uint> RigLevels;
+StructuredBuffer<uint> RigOrder;
 uint ActorCount;
 uint ClipSlotsPerActor;
 // Scratch, three float4 per bone: the locals of clip A (then the frame), of clip B; the worlds (Unity rows 0..2).
@@ -127,13 +132,14 @@ float3 Pos(float3x4 m) { return float3(m[0].w, m[1].w, m[2].w); }
 float3x4 Translation(float x, float y, float z) { return float3x4(float4(1, 0, 0, x), float4(0, 1, 0, y), float4(0, 0, 1, z)); }
 
 // ---- the clip ----
-void SampleClip(uint actor, uint slot, float t, bool intoB) {
+// Channels lane, lane + stride, ... (each its own bone: SkeletonCS's threads share a clip).
+void SampleClip(uint actor, uint slot, float t, bool intoB, uint lane, uint stride) {
 	uint4 cs = RigClipSlots[actor * ClipSlotsPerActor + slot];
 	float rate = RigClipRates[actor * ClipSlotsPerActor + slot].x;
 	if (cs.z == 0) return;
 	float f = min(max(t, 0) * rate, (float)(cs.z - 1));
 	uint k0 = (uint)floor(f); float a = f - floor(f); uint k1 = min(k0 + 1, cs.z - 1);
-	for (uint c = 0; c < cs.y; ++c) {
+	for (uint c = lane; c < cs.y; c += stride) {
 		uint4 ch = RigChannels[cs.x + c];
 		if (ch.x == NONE) continue;
 		uint b = ch.x, m = ch.y, r0 = ch.z + k0 * 3, r1 = ch.z + k1 * 3;
@@ -328,30 +334,38 @@ void ExpressionBone(uint actor) {
 	}
 }
 
-[numthreads(64, 1, 1)]
-void SkeletonCS(uint3 id : SV_DispatchThreadID) {
-	if (id.x >= ActorCount) return;
-	uint actor = id.x;
+// One thread group per character: her bones and clip channels shared among its threads, the steps that must go in
+// order (limb lists, PV, ExpressionBone, ABMX, the head look) on its first thread, then her worlds level by level.
+#define SKEL_THREADS 64
+[numthreads(SKEL_THREADS, 1, 1)]
+void SkeletonCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex) {
+	uint actor = gid.x;
+	if (actor >= ActorCount) return;
 	uint4 a0 = RigActors[actor * 4], a1 = RigActors[actor * 4 + 1], a2 = RigActors[actor * 4 + 2], a3 = RigActors[actor * 4 + 3];
 	uint first = a0.x, count = a0.y;
 	uint4 sel = RigSelect[actor]; float4 times = RigTimes[actor];
 	// The shaped baseline, then each clip's channels over it.
-	for (uint b = first; b < first + count; ++b) {
-		Locals[b * 3] = float4(RigBones[b * 3].xyz, 0); Locals[b * 3 + 1] = RigBones[b * 3 + 1]; Locals[b * 3 + 2] = RigBones[b * 3 + 2];
-		LocalsB[b * 3] = Locals[b * 3]; LocalsB[b * 3 + 1] = Locals[b * 3 + 1]; LocalsB[b * 3 + 2] = Locals[b * 3 + 2];
+	for (uint b = first + tid; b < first + count; b += SKEL_THREADS) {
+		float4 p = float4(RigBones[b * 3].xyz, 0), q = RigBones[b * 3 + 1], sc = RigBones[b * 3 + 2];
+		Locals[b * 3] = p; Locals[b * 3 + 1] = q; Locals[b * 3 + 2] = sc;
+		LocalsB[b * 3] = p; LocalsB[b * 3 + 1] = q; LocalsB[b * 3 + 2] = sc;
 	}
-	SampleClip(actor, sel.x, times.x, false);
+	DeviceMemoryBarrierWithGroupSync();
+	SampleClip(actor, sel.x, times.x, false, tid, SKEL_THREADS);
+	if (times.z > 0) SampleClip(actor, sel.y, times.y, true, tid, SKEL_THREADS);
+	DeviceMemoryBarrierWithGroupSync();
 	uint flags = RigClipSlots[actor * ClipSlotsPerActor + sel.x].w;
 	if (times.z > 0) {
-		SampleClip(actor, sel.y, times.y, true);
-		for (uint b = first; b < first + count; ++b) {
+		for (uint b = first + tid; b < first + count; b += SKEL_THREADS) {
 			Locals[b * 3] = lerp(Locals[b * 3], LocalsB[b * 3], times.z);
 			Locals[b * 3 + 2] = lerp(Locals[b * 3 + 2], LocalsB[b * 3 + 2], times.z);
 			float4 qa = Locals[b * 3 + 1], qb = LocalsB[b * 3 + 1]; if (dot(qa, qb) < 0) qb = -qb;
 			Locals[b * 3 + 1] = normalize(lerp(qa, qb, times.z));
 		}
 		if (times.z >= 0.5) flags = RigClipSlots[actor * ClipSlotsPerActor + sel.y].w;
+		DeviceMemoryBarrierWithGroupSync();
 	}
+	if (tid == 0) {
 	if (a0.z & 1u) {
 		for (uint k = 0; k < a1.y; ++k) { uint2 ba = RigLists[a1.x + k].xy; float4 p = Locals[ba.x * 3]; p[ba.y] = RigBones[ba.x * 3][ba.y]; Locals[ba.x * 3] = p; }
 		float arm = (flags & 1u) ? 0.92 : 1.0, hand = (flags & 2u) ? 0.9 : 1.0;
@@ -384,19 +398,29 @@ void SkeletonCS(uint3 id : SV_DispatchThreadID) {
 			if (b != NONE && r.w < 1) SetQ(b, normalize(QMul(QMul(QMul(basis, r), basis), LQ(b))));
 		}
 	}
-	// Worlds, parents first (the export's order).
-	for (uint b = first; b < first + count; ++b) {
-		float3x4 local = TrsM(LP(b), LQ(b), LS(b)); uint p = Parent(b);
-		float3x4 w = p == NONE ? local : Mul34(float3x4(Worlds[p * 3], Worlds[p * 3 + 1], Worlds[p * 3 + 2]), local);
-		Worlds[b * 3] = w[0]; Worlds[b * 3 + 1] = w[1]; Worlds[b * 3 + 2] = w[2];
-		RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
+	}
+	DeviceMemoryBarrierWithGroupSync();
+	// Worlds, a level at a time (parents first; full matrices, Parent x TRS(local)).
+	uint4 g = RigGroups[actor];
+	uint start = g.x;
+	for (uint l = 0; l < g.z; ++l) {
+		uint end = RigLevels[g.y + l];
+		for (uint o = start + tid; o < end; o += SKEL_THREADS) {
+			uint b = RigOrder[o];
+			float3x4 local = TrsM(LP(b), LQ(b), LS(b)); uint p = Parent(b);
+			float3x4 w = p == NONE ? local : Mul34(float3x4(Worlds[p * 3], Worlds[p * 3 + 1], Worlds[p * 3 + 2]), local);
+			Worlds[b * 3] = w[0]; Worlds[b * 3 + 1] = w[1]; Worlds[b * 3 + 2] = w[2];
+			RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
+		}
+		DeviceMemoryBarrierWithGroupSync();
+		start = end;
 	}
 }
 
 // ---- physics: DynamicBone, the built-in verlet (Tools/ok-extract/src/dbone.rs AttachedDynamicSet::step_impl) ----
-// One thread per set (the clothes set, each accessory's own set; export.rs Physics::write): a pass for the clothes sets
-// (their chains move body bones: the solved worlds go back to them and the bones under them follow), then one for the
-// accessory sets (hung on body bones, after the clothes moved them). A node's world sits after the rig's bones in Worlds.
+// One thread group per character (OKGpuRig.cpp OKGpuRigPhysicsGroups), her kinds in turn: the body's Ver02 sets, the
+// clothes set (both move body bones: the solved worlds go back to them and the bones under them follow), then the
+// accessory sets (hung on body bones, after those moved them). A node's world sits after the rig's bones in Worlds.
 // Per set two uint4: (kind: 2 body Ver02, 1 clothes, 0 accessory; node first, node count, chain first), (chain count,
 // follow first, follow count, 0).
 StructuredBuffer<uint4> PhysSets;
@@ -421,12 +445,18 @@ StructuredBuffer<uint> PhysFollow;
 RWStructuredBuffer<float4> NodeLocals;
 RWStructuredBuffer<float4> NodeRots;
 RWStructuredBuffer<float4> PhysState;
-uint SetCount;
-uint ClothesPass;
-// 0: per set, every node from its local, a start over (settle) and the sets stepped one chain after another; 1: per
-// chain, the other sets' chains; 2: per set, the worlds from the solved locals and the body bones written back.
-uint Stage;
-uint ChainCount;
+// Per character and kind (2, 1, 0) four uint4: (set first, set count, job first, job count), (node order first, level
+// first, level count, 0), (follow order first, level first, level count, 0), (collider first, collider count, 0, 0).
+StructuredBuffer<uint4> PhysGroups;
+// A chain, or 0x80000000 | where a list of chains stepped one after another starts (count, chains); dearest first.
+StructuredBuffer<uint> PhysJobs;
+// The end (in PhysOrder) of each level: nodes whose parent node is a level up / follow bones whose parent is.
+StructuredBuffer<uint> PhysLevels;
+StructuredBuffer<uint> PhysOrder;
+// Per collider two float4, this frame: the capsule's ends in the world (a, radius x its scale z), (b, flags: 1 inside,
+// 2 capsule). A chain's bones keep their worlds while it steps (they move in ApplyParticlesToTransforms, at its end), so
+// they are found once a frame; and again before each chain of a set stepped one chain after another.
+RWStructuredBuffer<float4> ColliderWorlds;
 uint BoneTotal;
 uint ParticleTotal;
 uint ChainTotal;
@@ -517,28 +547,48 @@ float3 PPrev(uint i) { return PhysState[i * 2 + 1].xyz; }
 void SetPPos(uint i, float3 p) { PhysState[i * 2] = float4(p, 0); }
 void SetPPrev(uint i, float3 p) { PhysState[i * 2 + 1] = float4(p, 0); }
 
-// DynamicBoneCollider.Collide (dbone.rs collide_particle_world): sphere or capsule, outside or inside.
-void Collide(inout float3 pos, float radius, uint c) {
+// A collider's capsule now (DynamicBoneCollider.Collide, dbone.rs collide_particle_world: sphere or capsule, outside
+// or inside), for every particle that meets it.
+void PrepareCollider(uint c) {
 	float4 c0 = PhysColliders[c * 2], c1 = PhysColliders[c * 2 + 1];
+	uint flags = asuint(c1.z) != 0 ? 1u : 0u;
 	float3x4 w = RefWorld(asuint(c1.w));
 	float scaleZ = length(float3(w[0][2], w[1][2], w[2][2]));
-	float cradius = c0.w, height = c1.x; uint direction = asuint(c1.y); bool inside = asuint(c1.z) != 0;
-	float reach = cradius * scaleZ + radius;
-	float halfLength = (height - cradius) * 0.5;
+	float halfLength = (c1.x - c0.w) * 0.5;
 	float3 lo = c0.xyz, hi = c0.xyz;
-	if (halfLength > 0) { lo[direction] -= halfLength; hi[direction] += halfLength; }
-	float3 a = MulPoint(w, lo), b = MulPoint(w, hi), ab = b - a;
+	uint direction = asuint(c1.y);
+	if (halfLength > 0) { lo[direction] -= halfLength; hi[direction] += halfLength; flags |= 2u; }
+	ColliderWorlds[c * 2] = float4(MulPoint(w, lo), c0.w * scaleZ);
+	ColliderWorlds[c * 2 + 1] = float4(MulPoint(w, hi), asfloat(flags));
+}
+// Collide with a prepared capsule.
+void CollidePrepared(inout float3 pos, float radius, float4 ea, float4 eb) {
+	uint flags = asuint(eb.w);
+	bool inside = (flags & 1u) != 0, capsule = (flags & 2u) != 0;
+	float reach = ea.w + radius;
+	float3 a = ea.xyz, b = eb.xyz, ab = b - a;
 	float3 diff = pos - a;
 	float projection = dot(diff, ab), lengthSquared = dot(ab, ab);
-	bool interior = halfLength > 0 && projection > 0 && projection < lengthSquared;
+	bool interior = capsule && projection > 0 && projection < lengthSquared;
 	float3 center = a;
-	if (halfLength <= 0 || projection <= 0) center = a;
+	if (!capsule || projection <= 0) center = a;
 	else if (projection >= lengthSquared) { diff = pos - b; center = b; }
 	else diff = diff - ab * (projection / lengthSquared);
 	float d2 = dot(diff, diff);
 	if (d2 > 0 && (inside ? d2 > reach * reach : d2 < reach * reach)) {
 		float d = sqrt(d2);
 		pos = interior ? pos + diff * ((reach - d) / d) : center + diff * (reach / d);
+	}
+}
+// A particle against its chain's colliders, four capsules fetched at a time.
+void CollideAll(inout float3 pos, float radius, uint first, uint count) {
+	uint end = first + count;
+	for (uint q = first; q < end; q += 4) {
+		float4 ea[4], eb[4];
+		[unroll] for (uint k = 0; k < 4; ++k) { uint c = min(q + k, end - 1); ea[k] = ColliderWorlds[c * 2]; eb[k] = ColliderWorlds[c * 2 + 1]; }
+		[unroll] for (uint k2 = 0; k2 < 4; ++k2) {
+			if (q + k2 < end) CollidePrepared(pos, radius, ea[k2], eb[k2]);
+		}
 	}
 }
 
@@ -558,12 +608,16 @@ float3 TargetLocal(uint i, bool ver01) {
 
 float InvLerp(float a, float b, float v) { return a != b ? saturate((v - a) / (b - a)) : 0.0; }
 // DynamicBone_Ver02 (dbone/ver02.rs Chain::prepare, finish): ordered body chains, each particle the previous one's child.
-void StepChainV02(uint c, float dt) {
+// refresh: the chain's bones from their locals and its colliders first (another chain of a serial set may have moved them).
+void StepChainV02(uint c, float dt, bool refresh) {
 	uint4 h = PhysChains[c * 2], k = PhysChains[c * 2 + 1];
 	float4 gv = PhysChainValues[c * 4], fv = PhysChainValues[c * 4 + 1], ev = PhysChainValues[c * 4 + 3];
 	bool skipOff = (h.z & 2u) != 0;
 	uint first = k.x, count = k.y, cfirst = k.z, ccount = k.w, maxSteps = max(h.w, 1u);
-	for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+	if (refresh) {
+		for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+		for (uint q = cfirst; q < cfirst + ccount; ++q) PrepareCollider(q);
+	}
 	uint si = ParticleTotal * 2 + c;
 	float4 st = PhysState[si];
 	float3x4 rw = NodeWorld(h.x);
@@ -595,7 +649,7 @@ void StepChainV02(uint c, float dt) {
 			if (steps > 0) pos += (goal - pos) * PhysParticles[i * 8 + 1].w;
 			float stiff = PhysParticles[i * 8 + 2].w;
 			if (stiff > 0) { float3 diff = goal - pos; float dist = length(diff), limit = rest * (1 - stiff) * 2; if (dist > limit) pos += diff * ((dist - limit) / dist); }
-			if (steps > 0) { float radius = PhysParticles[i * 8 + 3].y * scale; for (uint q = cfirst; q < cfirst + ccount; ++q) Collide(pos, radius, q); }
+			if (steps > 0) CollideAll(pos, PhysParticles[i * 8 + 3].y * scale, cfirst, ccount);
 			float4 v4 = PhysParticles[i * 8 + 4];
 			float3 back = ppos - pos; float dist = length(back);
 			if (dist > 0) { float fraction = (dist - rest) / dist; if (fraction <= v4.x) pos += back * (fraction - v4.x); else if (fraction >= v4.y) pos += back * (fraction - v4.y); }
@@ -631,15 +685,18 @@ void StepChainV02(uint c, float dt) {
 	}
 }
 
-void StepChain(uint c, float dt) {
+void StepChain(uint c, float dt, bool refresh) {
 	uint4 h = PhysChains[c * 2], k = PhysChains[c * 2 + 1];
-	if ((h.z & 8u) != 0) { StepChainV02(c, dt); return; }
+	if ((h.z & 8u) != 0) { StepChainV02(c, dt, refresh); return; }
 	float4 gv = PhysChainValues[c * 4], fv = PhysChainValues[c * 4 + 1], lg = PhysChainValues[c * 4 + 2];
 	bool ver01 = (h.z & 1u) != 0, skipOff = (h.z & 2u) != 0;
 	uint freeze = (h.z >> 4) & 3u, mirror = (h.z >> 8) & 0x77u;
 	uint first = k.x, count = k.y, cfirst = k.z, ccount = k.w;
 	// An earlier chain may have moved bones this one reads (overlapping chains): its bones from their locals now.
-	for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+	if (refresh) {
+		for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+		for (uint q = cfirst; q < cfirst + ccount; ++q) PrepareCollider(q);
+	}
 	uint si = ParticleTotal * 2 + c;
 	float4 st = PhysState[si];
 	float3x4 cw = NodeWorld(h.y);
@@ -686,8 +743,7 @@ void StepChain(uint c, float dt) {
 						if (mag > lim && mag > 1e-8) pos += d * ((mag - lim) / mag);
 					}
 				}
-				float radius = PhysParticles[i * 8 + 3].y * objectScale;
-				for (uint q = cfirst; q < cfirst + ccount; ++q) Collide(pos, radius, q);
+				CollideAll(pos, PhysParticles[i * 8 + 3].y * objectScale, cfirst, ccount);
 				if (!ver01 && freeze > 0) { float3 normal = RotAxis(NodeRots[pn], freeze - 1); pos -= normal * dot(pos - ppos, normal); }
 				float3 d = ppos - pos; float mag = length(d);
 				if (mag > 0) pos += d * ((mag - rest) / mag);
@@ -754,62 +810,91 @@ void RestoreSet(uint nf, uint nc, bool load) {
 	for (uint n = nf; n < nf + nc; ++n) { if (load) LoadNode(n); UpdateNode(n); }
 }
 
-[numthreads(64, 1, 1)]
-void PhysicsCS(uint3 id : SV_DispatchThreadID) {
-	if (Stage == 1) {
-		// One chain of a set whose chains move unrelated bones.
-		if (id.x >= ChainCount) return;
-		uint set = asuint(PhysChainValues[id.x * 4 + 2].w);
-		if ((PhysSets[set * 2].x & 0xffu) != ClothesPass) return;
-		if (PhysState[ParticleTotal * 2 + ChainTotal + set].y != 0) return;
-		StepChain(id.x, DeltaTime);
-		return;
-	}
-	if (id.x >= SetCount) return;
-	uint4 s0 = PhysSets[id.x * 2], s1 = PhysSets[id.x * 2 + 1];
-	if ((s0.x & 0xffu) != ClothesPass) return;
-	bool serial = (s0.x & 0x100u) != 0;
+// The start of a set's frame: ready (.x) once started; stepped (.y) when its chains are done this frame. A set's first
+// frame or a reset starts its particles at the animated pose, holds them there for a while (AttachedDynamicSet::new: a
+// settle of steps) and steps it here.
+void BeginSet(uint set) {
+	uint4 s0 = PhysSets[set * 2], s1 = PhysSets[set * 2 + 1];
 	uint nf = s0.y, nc = s0.z, cf = s0.w, cc = s1.x;
-	uint ready = ParticleTotal * 2 + ChainTotal + id.x;
-	if (Stage == 2) {
-		RestoreSet(nf, nc, false);
-		if ((s0.x & 0xffu) != 0) {
-			// The body's chains and the clothes moved body bones: their solved worlds go back, and the bones under them follow.
-			for (uint n = nf; n < nf + nc; ++n) if (NodeKind(n) == 0) { uint a = asuint(PhysNodes[n * 8 + 7].x); SetBoneWorld(a, NodeWorld(n)); RigRots[a] = NodeRots[n]; }
-			for (uint f = s1.y; f < s1.y + s1.z; ++f) {
-				uint b = PhysFollow[f], p = Parent(b);
-				float3x4 local = TrsM(LP(b), LQ(b), LS(b));
-				SetBoneWorld(b, p == NONE ? local : Mul34(BoneWorldAt(p), local));
-				RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
-			}
+	uint ready = ParticleTotal * 2 + ChainTotal + set;
+	if (ResetAll == 0 && PhysState[ready].x != 0) { PhysState[ready].y = 0; return; }
+	for (uint c = cf; c < cf + cc; ++c) {
+		uint4 k = PhysChains[c * 2 + 1];
+		for (uint i = k.x; i < k.x + k.y; ++i) {
+			uint n = PNode(i), p = PParent(i);
+			float3 pos = n != NONE ? Pos(NodeWorld(n)) : (p != NONE && PNode(p) != NONE ? MulPoint(NodeWorld(PNode(p)), PhysParticles[i * 8 + 1].xyz) : float3(0, 0, 0));
+			SetPPos(i, pos); SetPPrev(i, pos);
 		}
-		return;
+		PhysState[ParticleTotal * 2 + c] = float4(0, Pos(NodeWorld(PhysChains[c * 2].y)));
 	}
-	RestoreSet(nf, nc, true);
-	PhysState[ready].y = 0;
-	if (ResetAll != 0 || PhysState[ready].x == 0) {
-		// Particles at the animated pose, then held there for a while (AttachedDynamicSet::new: a settle of steps).
-		for (uint c = cf; c < cf + cc; ++c) {
-			uint4 k = PhysChains[c * 2 + 1];
-			for (uint i = k.x; i < k.x + k.y; ++i) {
-				uint n = PNode(i), p = PParent(i);
-				float3 pos = n != NONE ? Pos(NodeWorld(n)) : (p != NONE && PNode(p) != NONE ? MulPoint(NodeWorld(PNode(p)), PhysParticles[i * 8 + 1].xyz) : float3(0, 0, 0));
-				SetPPos(i, pos); SetPPrev(i, pos);
-			}
-			PhysState[ParticleTotal * 2 + c] = float4(0, Pos(NodeWorld(PhysChains[c * 2].y)));
-		}
-		for (uint step = 0; step < SettleSteps; ++step) {
-			RestoreSet(nf, nc, true);
-			for (uint c = cf; c < cf + cc; ++c) StepChain(c, 1.0 / 60.0);
-		}
-		PhysState[ready] = float4(1, 1, 0, 0);
+	// The settle's steps at 60 Hz, then this frame's.
+	for (uint step = 0; step <= SettleSteps; ++step) {
 		RestoreSet(nf, nc, true);
-		for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
-		return;
+		for (uint c2 = cf; c2 < cf + cc; ++c2) StepChain(c2, step < SettleSteps ? 1.0 / 60.0 : DeltaTime, true);
 	}
-	if (serial) {
-		for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
-		PhysState[ready].y = 1;
+	PhysState[ready] = float4(1, 1, 0, 0);
+}
+
+// Chains that go one after another, each from the bones as the last left them; or one chain, which nothing else this
+// frame moves the bones of: the restored worlds and the prepared colliders stand.
+void RunJob(uint job) {
+	bool serial = (job & 0x80000000u) != 0;
+	uint list = job & 0x7fffffffu, count = serial ? PhysJobs[list] : 1;
+	uint set = asuint(PhysChainValues[(serial ? PhysJobs[list + 1] : job) * 4 + 2].w);
+	if (PhysState[ParticleTotal * 2 + ChainTotal + set].y != 0) return;
+	for (uint k = 0; k < count; ++k) StepChain(serial ? PhysJobs[list + 1 + k] : job, DeltaTime, serial);
+}
+
+#define PHYS_THREADS 64
+// The nodes of a run, level by level (a level's parents are all done): from their locals (load: the frame's) or as
+// the chains left them.
+void NodeLevels(uint4 g, uint tid, bool load) {
+	uint start = g.x;
+	for (uint l = 0; l < g.z; ++l) {
+		uint end = PhysLevels[g.y + l];
+		for (uint o = start + tid; o < end; o += PHYS_THREADS) { uint n = PhysOrder[o]; if (load) LoadNode(n); UpdateNode(n); }
+		DeviceMemoryBarrierWithGroupSync();
+		start = end;
+	}
+}
+
+[numthreads(PHYS_THREADS, 1, 1)]
+void PhysicsCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex) {
+	for (uint slot = 0; slot < 3; ++slot) {
+		uint g = (gid.x * 3 + slot) * 4;
+		uint4 g0 = PhysGroups[g], g1 = PhysGroups[g + 1], g2 = PhysGroups[g + 2], g3 = PhysGroups[g + 3];
+		if (g0.y == 0) continue;
+		// Her sets of this kind: every node from the frame's locals; the colliders where the bones now put them.
+		NodeLevels(g1, tid, true);
+		for (uint q = g3.x + tid; q < g3.x + g3.y; q += PHYS_THREADS) PrepareCollider(q);
+		DeviceMemoryBarrierWithGroupSync();
+		for (uint s = g0.x + tid; s < g0.x + g0.y; s += PHYS_THREADS) BeginSet(s);
+		DeviceMemoryBarrierWithGroupSync();
+		for (uint j = g0.z + tid; j < g0.z + g0.w; j += PHYS_THREADS) RunJob(PhysJobs[j]);
+		DeviceMemoryBarrierWithGroupSync();
+		// The worlds from the solved locals.
+		NodeLevels(g1, tid, false);
+		if (slot < 2) {
+			// The body's chains and the clothes moved body bones: their solved worlds go back, and the bones under them follow.
+			uint nend = g1.z > 0 ? PhysLevels[g1.y + g1.z - 1] : g1.x;
+			for (uint o = g1.x + tid; o < nend; o += PHYS_THREADS) {
+				uint n = PhysOrder[o];
+				if (NodeKind(n) == 0) { uint a = asuint(PhysNodes[n * 8 + 7].x); SetBoneWorld(a, NodeWorld(n)); RigRots[a] = NodeRots[n]; }
+			}
+			DeviceMemoryBarrierWithGroupSync();
+			uint fstart = g2.x;
+			for (uint l = 0; l < g2.z; ++l) {
+				uint fend = PhysLevels[g2.y + l];
+				for (uint o2 = fstart + tid; o2 < fend; o2 += PHYS_THREADS) {
+					uint b = PhysOrder[o2], p = Parent(b);
+					float3x4 local = TrsM(LP(b), LQ(b), LS(b));
+					SetBoneWorld(b, p == NONE ? local : Mul34(BoneWorldAt(p), local));
+					RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
+				}
+				DeviceMemoryBarrierWithGroupSync();
+				fstart = fend;
+			}
+		}
 	}
 }
 

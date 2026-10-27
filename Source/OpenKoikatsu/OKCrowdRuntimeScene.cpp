@@ -918,6 +918,7 @@ struct FScene : TSharedFromThis<FScene> {
     for(int32 C=0;C*2<Ph.Colliders.Num();++C){FVector4f Row=Ph.Colliders[C*2+1];Row.W=Bits(Ref(U(Row.W)));B->PhysColliders.Add(Ph.Colliders[C*2]);B->PhysColliders.Add(Row);}
     for(const uint32 F:Ph.Follow)B->PhysFollow.Add(Global(int32(F)));
     // The bones under the body's solved ones follow after the last set that moves them (clothes, else the body's Ver02).
+    B->PhysActors.Add(FUintVector4(B->PhysSets.Num()/2,Ph.Sets.Num()/2,0,0));
     int32 Last=INDEX_NONE;for(int32 S=0;S*2<Ph.Sets.Num();++S){const uint32 Kind=Ph.Sets[S*2].X&0xffu;if(Kind!=0&&(Last==INDEX_NONE||Kind<(Ph.Sets[Last*2].X&0xffu)))Last=S;}
     for(int32 S=0;S*2<Ph.Sets.Num();++S){const auto& SetHead=Ph.Sets[S*2];const bool Follows=S==Last;
      // Each chain knows its set (local gravity .w): a chain thread skips a set stepped as a whole.

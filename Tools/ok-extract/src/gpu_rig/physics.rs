@@ -292,17 +292,102 @@ impl Physics {
 
     pub fn particle_count(&self) -> usize { self.chains.iter().map(|c| c.particles.len()).sum() }
 
-    /// Whether a set's chains must be stepped one after another: two of them move the same bone, or one moves a bone
-    /// above another's (its result moves the other's bones before that one reads them). Otherwise the GPU steps each
-    /// chain on its own thread.
+    /// The nodes a chain's step writes (GpuRig.usf StepChain / StepChainV02): every particle bone below the root (its
+    /// position), and a parent particle's bone a child turns (DynamicBone turns a parent with one child; Ver02 a
+    /// parent with the rotate flag).
+    pub fn chain_writes(&self, c: &PhysChain) -> Vec<usize> {
+        let mut out = Vec::new();
+        for (i, p) in c.particles.iter().enumerate() {
+            if p.parent < 0 { continue; }
+            if let Some(n) = p.node { out.push(n); }
+            let parent = &c.particles[p.parent as usize];
+            let turns = if c.v02.is_some() { parent.v02.as_ref().is_some_and(|v| v.rotate) } else { p.turns_parent };
+            if turns && i > 0 { if let Some(n) = parent.node { out.push(n); } }
+        }
+        out.sort_unstable(); out.dedup(); out
+    }
+    /// The nodes whose worlds a chain's step reads: its particles', root's, component's and colliders' bones, each with
+    /// every node above it (a world is built from the parent's).
+    pub fn chain_reads(&self, c: &PhysChain) -> Vec<usize> {
+        let mut out = Vec::new();
+        let mut up = |n: usize, out: &mut Vec<usize>| { let mut k = n; loop { out.push(k); match self.nodes[k].parent { Parent::Node(p) if out.len() < 8192 => k = p, _ => break } } };
+        up(c.root, &mut out); up(c.component, &mut out);
+        for p in &c.particles { if let Some(n) = p.node { up(n, &mut out); } }
+        for col in &c.colliders { if let Ref::Node(n) = col.at { up(n, &mut out); } }
+        out.sort_unstable(); out.dedup(); out
+    }
+
+    /// Whether a set's chains must be stepped one after another: one writes a bone another reads (the same bone, or
+    /// one above it: its result moves the other's bones before that one reads them). Otherwise the GPU steps each chain
+    /// on its own thread; every node is rebuilt from the solved locals afterwards either way.
     pub fn serial(&self, chain_first: usize, chain_count: usize) -> bool {
-        let ancestors = |n: usize| { let mut out = vec![n]; let mut k = n; while let Parent::Node(p) = self.nodes[k].parent { out.push(p); k = p; if out.len() > 4096 { break; } } out };
-        let touched: Vec<Vec<usize>> = self.chains[chain_first..chain_first + chain_count].iter().map(|c| c.particles.iter().filter_map(|p| p.node).collect()).collect();
-        let lines: Vec<Vec<Vec<usize>>> = touched.iter().map(|t| t.iter().map(|n| ancestors(*n)).collect()).collect();
-        for i in 0..touched.len() { for j in i + 1..touched.len() {
-            // Same bone, or one chain's bone on the other's line up to the top.
-            if touched[i].iter().any(|a| lines[j].iter().any(|l| l.contains(a))) || touched[j].iter().any(|b| lines[i].iter().any(|l| l.contains(b))) { return true; }
+        let chains = &self.chains[chain_first..chain_first + chain_count];
+        let writes: Vec<Vec<usize>> = chains.iter().map(|c| self.chain_writes(c)).collect();
+        let reads: Vec<Vec<usize>> = chains.iter().map(|c| self.chain_reads(c)).collect();
+        let meets = |a: &[usize], b: &[usize]| a.iter().any(|x| b.binary_search(x).is_ok());
+        for i in 0..chains.len() { for j in i + 1..chains.len() {
+            if meets(&writes[i], &reads[j]) || meets(&writes[j], &reads[i]) { return true; }
         } }
         false
+    }
+}
+
+#[cfg(test)]
+mod stats {
+    /// What bounds the GPU physics pass (one thread per chain or per serial set, so the slowest thread): per card, the
+    /// sets that must step their chains one after another (the old test: chains sharing any bone or line; the new one:
+    /// a chain writing a bone another reads), the longest chain and its colliders, the dearest serial set, the deepest
+    /// node. OK_PHYS_CARDS: a folder of OK cards (default CrowdAPNG), OK_PHYS_LIMIT cards at most.
+    ///   cargo test --release --lib gpu_rig_physics_stats -- --ignored --nocapture --test-threads=1
+    #[test]
+    #[ignore]
+    fn gpu_rig_physics_stats() {
+        use super::{Parent, Physics};
+        let dir = std::env::var("OK_PHYS_CARDS").unwrap_or_else(|_| "E:/OpenKoikatsu/Content/CharacterCards/CrowdAPNG".into());
+        let limit: usize = std::env::var("OK_PHYS_LIMIT").ok().and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
+        let mut cards: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "png") && !p.file_name().unwrap().to_string_lossy().starts_with('.')).collect();
+        cards.sort();
+        let clip = std::fs::read("E:/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/walk_01.okanim").unwrap();
+        let mut worst_chain = (0usize, String::new());
+        let mut worst_serial = (0usize, String::new());
+        for card in cards.iter().take(limit) {
+            std::env::set_var("OK_RIG_CARD", card);
+            let opened = std::panic::catch_unwind(|| crate::gpu_rig::tests::open_with_clip_pub());
+            let Ok(card_session) = opened else { println!("{}: open failed", card.display()); continue };
+            let bytes = card_session.to_animation_bytes().expect("snapshot");
+            let s = crate::session::OkSession::from_animation_bytes(&bytes).expect("reopen");
+            let mut s = Box::new(s);
+            let s = &mut *s;
+            if crate::gpu_rig::export::export_rig(s, &clip).is_err() { println!("{}: no rig", card.display()); continue; }
+            let rig = crate::gpu_rig::export::FlatRig::from_session(s).unwrap();
+            let d = crate::anim::clip_duration(&s.game_root, &s.anim_clip).max(0.1);
+            let taken = crate::gpu_rig::export::take_samples(s, &rig, &[0., d * 0.31, d * 0.62, d * 0.87]);
+            let ph = Physics::build(s, &rig, &taken);
+            let name = card.file_name().unwrap().to_string_lossy().to_string();
+            let cost = |c: &super::PhysChain| c.particles.len() * (1 + c.colliders.len());
+            let depth = |n: usize| { let mut d = 0; let mut k = n; while let Parent::Node(p) = ph.nodes[k].parent { d += 1; k = p; } d };
+            let (mut old_serial, mut new_serial, mut set_cost_max, mut levels_max) = (0, 0, 0usize, 0usize);
+            for &(kind, nf, nc, cf, cc) in &ph.ranges {
+                let old = {
+                    let anc = |n: usize| { let mut out = vec![n]; let mut k = n; while let Parent::Node(p) = ph.nodes[k].parent { out.push(p); k = p; } out };
+                    let touched: Vec<Vec<usize>> = ph.chains[cf..cf + cc].iter().map(|c| c.particles.iter().filter_map(|p| p.node).collect()).collect();
+                    let lines: Vec<Vec<Vec<usize>>> = touched.iter().map(|t| t.iter().map(|n| anc(*n)).collect()).collect();
+                    (0..cc).any(|i| (i + 1..cc).any(|j| touched[i].iter().any(|a| lines[j].iter().any(|l| l.contains(a))) || touched[j].iter().any(|b| lines[i].iter().any(|l| l.contains(b)))))
+                };
+                let new = ph.serial(cf, cc);
+                old_serial += old as usize; new_serial += new as usize;
+                let sc: usize = ph.chains[cf..cf + cc].iter().map(cost).sum();
+                if new { set_cost_max = set_cost_max.max(sc); if sc > worst_serial.0 { worst_serial = (sc, format!("{name} kind {kind} chains {cc}")); } }
+                levels_max = levels_max.max((nf..nf + nc).map(depth).max().unwrap_or(0) + 1);
+            }
+            let longest = ph.chains.iter().map(|c| c.particles.len()).max().unwrap_or(0);
+            let most_colliders = ph.chains.iter().map(|c| c.colliders.len()).max().unwrap_or(0);
+            let chain_cost = ph.chains.iter().map(cost).max().unwrap_or(0);
+            if chain_cost > worst_chain.0 { worst_chain = (chain_cost, name.clone()); }
+            println!("{name}: sets {} serial {old_serial}->{new_serial}, nodes {}, chains {}, particles {}, longest chain {longest}, most colliders {most_colliders}, dearest chain {chain_cost}, dearest serial set {set_cost_max}, levels {levels_max}, follow {}",
+                ph.ranges.len(), ph.nodes.len(), ph.chains.len(), ph.particle_count(), ph.follow.len());
+        }
+        println!("dearest chain {} ({}), dearest serial set {} ({})", worst_chain.0, worst_chain.1, worst_serial.0, worst_serial.1);
     }
 }
