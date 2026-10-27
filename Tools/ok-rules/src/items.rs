@@ -42,6 +42,12 @@ fn name_of(c: &Catalog, item: &str, kept: &str) -> String {
     c.items.iter().find(|i| i.id == item).map(|i| i.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| if kept.is_empty() { item.to_string() } else { kept.to_string() })
 }
 
+/// Whether the words are about her drawing (the words for it in every language), whatever its title says.
+fn says_drawing(said: &str) -> bool {
+    let low = said.to_lowercase();
+    crate::tr::t("items.drawing_words").split('|').any(|w| !w.trim().is_empty() && low.contains(&w.trim().to_lowercase()))
+}
+
 /// Which of these held things the words name: the id itself, else the name containing the words or the words the name
 /// ("那本劍客小說" names 劍客小說《孤劍行》). None when nothing held matches.
 fn find<'a>(c: &Catalog, held: &'a [Value], said: &str) -> Option<usize> {
@@ -57,12 +63,13 @@ fn find<'a>(c: &Catalog, held: &'a [Value], said: &str) -> Option<usize> {
     if want.is_empty() {
         return None;
     }
+    let said_drawing = says_drawing(said);
     held.iter().position(|h| {
         let name = norm(&name_of(c, s(h, "item"), s(h, "name")));
-        // Her drawing is "the drawing" too, whatever its title says (the words for it in every language).
-        let drawing = s(h, "item").starts_with("drawing:") && crate::tr::t("items.drawing_words").split('|').any(|w| !w.is_empty() && want.contains(&norm(w)));
-        // An umbrella is "the umbrella" in any script or language (折叠伞 / 雨傘 / umbrella).
-        let umbrella = is_umbrella(said) && is_umbrella(&format!("{}{}{name}", s(h, "item"), s(h, "name")));
+        let drawing = s(h, "item").starts_with("drawing:") && said_drawing;
+        // An umbrella is "the umbrella" in any script or language (折叠伞 / 雨傘 / umbrella); not in a drawing of one
+        // ("the drawing of you under the umbrella" gave him her umbrella, R3-262).
+        let umbrella = !said_drawing && is_umbrella(said) && is_umbrella(&format!("{}{}{name}", s(h, "item"), s(h, "name")));
         drawing || umbrella || (!name.is_empty() && (name.contains(&want) || want.contains(&name)))
     })
 }
@@ -140,7 +147,7 @@ fn judge(c: &Catalog, r: &Value) -> Value {
             "she_gives" | "she_lends_item" => {
                 // "Take my umbrella": the folding one she brought today (she_has_umbrella) becomes a thing she holds, so
                 // it can go to him; after that she has no umbrella of her own today.
-                if is_umbrella(&words) && !owned_mut(&mut st, &girl).iter().any(|e| is_umbrella(&format!("{}{}", s(e, "item"), s(e, "name")))) && she_has_umbrella(&with_state(r, st.clone()), &girl) {
+                if is_umbrella(&words) && !says_drawing(&words) && !owned_mut(&mut st, &girl).iter().any(|e| is_umbrella(&format!("{}{}", s(e, "item"), s(e, "name")))) && she_has_umbrella(&with_state(r, st.clone()), &girl) {
                     give_to_her(&mut st, &girl, "cv_umbrella", crate::tr::t("items.folding_umbrella"), "own", today);
                     st["umbrella_out"][girl.as_str()] = json!(today);
                 }
@@ -401,6 +408,11 @@ mod tests {
         assert_eq!(g["his_add"], json!(["drawing:1"]));
         assert_eq!(g["ext"]["photos"][0]["shared_with"], json!(["him"]));
         assert!(!g["notice"].as_str().unwrap().contains("drawing:"), "said by its name");
+        // The drawing of him under the umbrella, with her umbrella in her hands too: the drawing (R3-262).
+        let mut ext = d["ext"].clone();
+        ext["items"]["owned"]["a"].as_array_mut().unwrap().push(json!({"item": "cv_umbrella", "from": "own", "day": 3}));
+        let u = judge(&c, &json!({"ext": ext, "girl": "a", "day": 3, "she_gives": {"item": "画着撑伞的你的那张画"}}));
+        assert_eq!(u["his_add"], json!(["drawing:1"]), "{u}");
     }
 
     #[test]

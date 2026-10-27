@@ -270,7 +270,10 @@ void AOKStreetSocialScene::SettleMoneyHandover(int32 Girl,double Lend,bool bVerd
  auto Request=OKRulesRequest(TEXT("money_handover"));Request->SetNumberField(TEXT("he_lends"),Lend);Request->SetBoolField(TEXT("verdict"),bVerdict);
  Request->SetNumberField(TEXT("give_pending"),Give?double(Give->Key):0.0);Request->SetNumberField(TEXT("waited"),Give?FPlatformTime::Seconds()-Give->Value:0.0);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;const FString Action=Out->GetStringField(TEXT("action"));
- if(Action==TEXT("loan")){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f%s"),Girl,Lend,Give?TEXT(" (her give_money is this loan)"):TEXT(""));S.PendingGiveMoney.Remove(Girl);S.LendAskGirl=INDEX_NONE;StartLoan(int32(Lend));}
+ if(Action==TEXT("loan")){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he lends %.0f%s"),Girl,Lend,Give?TEXT(" (her give_money is this loan)"):TEXT(""));S.PendingGiveMoney.Remove(Girl);S.LendAskGirl=INDEX_NONE;StartLoan(int32(Lend));
+  // Read from a turn she has already answered (R3-261): her「谢谢你」was the answer, yet the money waited 105 s for another
+  // reply while she asked if he did not want to lend it after all.
+  if(bVerdict)for(auto& C:S.Choices)if(C.Kind==TEXT("loan")&&C.Heroine==Girl){C.SentAtOpen=FMath::Min(C.SentAtOpen,S.FreeTalkAnswered-1);C.Deadline=FMath::Min(C.Deadline,SceneTime()+2.0);}}
  else if(Action==TEXT("give")&&Give){const int64 Amount=Give->Key;S.PendingGiveMoney.Remove(Girl);GiveMoneyNow(Girl,Amount);}
 }
 
