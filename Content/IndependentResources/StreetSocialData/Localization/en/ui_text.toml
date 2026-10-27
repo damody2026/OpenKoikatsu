@@ -513,6 +513,7 @@ menu_section_goods = "Goods"
 menu_section_gift = "Gifts"
 wallet_line = "Wallet {cash, number, ::currency}{bag_part}"
 you_pulled_out_item = "You took out {item_name}."
+gift_held_out_note = "(A note from the game, not his words: he takes out {item_name} and holds it out to you as a gift. Answer the gift as you feel and as close as you two are: to take it, fill resolve '{'\"choice_id\": \"{choice_id}\", \"option\": \"accept\"'}'; to refuse, \"decline\". Set favor_delta to 0.)"
 you_speaker_label = "You: "
 your_label = "Yours"
 

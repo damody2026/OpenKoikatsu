@@ -330,6 +330,7 @@ FString AOKStreetSocialScene::OpenChoice(int32 Heroine,const FString& Kind,const
  auto& S=*State;
  FOKStreetPendingChoice C;C.Id=FString::Printf(TEXT("c%d"),S.NextChoice++);C.Kind=Kind;C.Label=Label;C.Options=Options;C.Heroine=Heroine;
  C.HerLean=Options.Contains(HerLean)?HerLean:FString();C.HerInsist=FMath::Clamp(HerInsist,0.f,1.f);C.Deadline=Seconds>0?SceneTime()+Seconds:0;C.OnResolve=MoveTemp(OnResolve);C.HisLinesAtOpen=S.HisLines;
+ C.SentAtOpen=S.FreeTalkSent;C.OpenedAt=SceneTime();
  S.Choices.Add(MoveTemp(C));
  UE_LOG(LogTemp,Display,TEXT("Street choice open: %s %s %s lean=%s"),*S.Choices.Last().Id,*Kind,*Label,*HerLean);
  return S.Choices.Last().Id;
@@ -367,6 +368,11 @@ void AOKStreetSocialScene::TickChoices(){
  {TArray<int32> Waiting;S.PendingGiveMoney.GetKeys(Waiting);for(const int32 G:Waiting)SettleMoneyHandover(G,0,false);}
  for(int32 I=S.Choices.Num()-1;I>=0;--I){
   if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
+  // Her answer cannot come before she has replied to a turn that knew of it (a reply asked before it opened does not),
+  // nor while she is still saying it: a gift was taken on its 15 s deadline while she talked on about dango, and she
+  // then asked whose cake that was. At most a minute and a half longer, if she never gets a turn.
+  {const auto& C=S.Choices[I];
+   if(C.Heroine==FreeTalkPartner()&&(S.FreeTalkBusy||FreeTalkHerVoiceBusy()||S.FreeTalkAnswered<=C.SentAtOpen)&&Now<C.OpenedAt+105.0){S.Choices[I].Deadline=Now+5.0;continue;}}
   FOKStreetPendingChoice Done=MoveTemp(S.Choices[I]);S.Choices.RemoveAt(I);
   FString Final=!Done.HerLean.IsEmpty()?Done.HerLean:(Done.Options.IsEmpty()?FString():Done.Options[0]);
   // Her wish to be close: his silence is not a yes (R3-228).

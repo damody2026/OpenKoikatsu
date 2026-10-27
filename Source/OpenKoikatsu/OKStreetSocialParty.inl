@@ -289,7 +289,7 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
   User+=OKMsg(TEXT("ui.party.speaker_says_line"), {{TEXT("him"), *Him}, {TEXT("text"), *Text}});
  }
  S.FreeTalkCaptionHer=TEXT("……");
- S.FreeTalkBusy=true;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.party.girls_thinking"));RefreshUI();
+ S.FreeTalkBusy=true;++S.FreeTalkSent;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.party.girls_thinking"));RefreshUI();
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  AddMessage(TEXT("system"),System);AddMessage(TEXT("user"),User);
@@ -300,6 +300,7 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
   L->FreeTalkBusy=false;
   TSharedPtr<FJsonObject> Reply;if(Ok&&!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Reply)){Reply.Reset();FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(OKStreetJsonDropStrayPunct(Content)),Reply);if(Reply.IsValid())UE_LOG(LogTemp,Display,TEXT("Street party talk: the reply parsed after dropping stray punctuation"));}
   if(!Reply.IsValid()){UE_LOG(LogTemp,Warning,TEXT("Street party talk failed: %s"),*Failure);L->FreeTalkNotice=OKT(TEXT("ui.party.group_no_reply_retry"));Weak->RefreshUI();return;}
+  L->FreeTalkAnswered=L->FreeTalkSent; // the open choices were in that request (TickChoices)
   Weak->FinishPartyTalk(Text,Members,Reply);
  });
 }

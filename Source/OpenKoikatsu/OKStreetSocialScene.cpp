@@ -308,7 +308,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  int32 VentureHeroine=INDEX_NONE;FString VentureAmount=TEXT("5000"),VentureDays=TEXT("30");
  TSharedPtr<FOKChartData> FinChart;TSharedPtr<FOKScratchState> Scratch;TArray<TSharedPtr<SVerticalBox>> AppBoxes;TArray<FString> FinWatchCodes[2];TSet<int32> LotPicks;TArray<TSharedPtr<FJsonObject>> BetSlip;TSet<FString> FinReacted;
  int32 ShiftAppointment=0;FString ShiftJob;int64 ShiftStart=0,ShiftEnd=0,ShiftAwaySince=-1;bool ShiftFast=false;int32 ShiftChats=0;double ShiftTickWall=0;
- bool FreeTalkLive=false,FreeTalkLivePolling=false,FreeTalkLiveMuted=false,FreeTalkLiveHisMute=false,FreeTalkLiveSpeaking=false,FreeTalkLiveBaseline=false;int64 FreeTalkLiveAfter=0;double FreeTalkLiveNextPoll=0;FString FreeTalkLivePending;FString PendingTopic /* chosen while her answer was on its way */;int32 FreeTalkGirl=INDEX_NONE,OutingGirl=INDEX_NONE;
+ bool FreeTalkLive=false,FreeTalkLivePolling=false,FreeTalkLiveMuted=false,FreeTalkLiveHisMute=false,FreeTalkLiveSpeaking=false,FreeTalkLiveBaseline=false;int64 FreeTalkLiveAfter=0;double FreeTalkLiveNextPoll=0;FString FreeTalkLivePending;FString PendingTopic /* chosen while her answer was on its way */;int64 FreeTalkSent=0,FreeTalkAnswered=0; /* talk requests sent / answered (TickChoices) */int32 FreeTalkGirl=INDEX_NONE,OutingGirl=INDEX_NONE;
  bool ApproachBlockedNear=false; // she walking over is held up by something within a couple of steps of him: close enough
  int64 ApproachLastMinute=-100000; // game minute the last girl set off to come over to him (TickApproach paces by game time)
  double ApproachBlockedSince=0; // when she walking over to him was last held up (0: walking freely)
@@ -1186,7 +1186,7 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  if(His){S.FreeTalkSilenceSince=FPlatformTime::Seconds();S.FreeTalkSilencePenalties=0;S.FreeTalkLeavePending=false;}
  if(!His)S.FreeTalkCaptionPlayer.Reset();else S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
  S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.scene.ellipsis_colon"));
- S.FreeTalkBusy=true;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.she_is_thinking"));
+ S.FreeTalkBusy=true;++S.FreeTalkSent;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.she_is_thinking"));
  // The heroine mind keeps her whole context and the full state of every turn (plan §7.0); without it,
  // the request goes straight to DeepSeek with the trimmed local memory.
  if(!SubmitFreeTalkToMind(Character,Id,System,UserMessage,Text))FinishFreeTalk(Character,Id,Text,nullptr,OKT(TEXT("ui.scene.ai_service_off_reply")));
@@ -1212,6 +1212,7 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  S.FreeTalkBusy=false;
  S.ReplyRemoteGirl=S.SentRemoteGirl;S.ReplyRemoteMode=S.SentRemoteMode;S.SentRemoteGirl=INDEX_NONE;
  if(!Reply){S.ReplyRemoteGirl=INDEX_NONE;S.FreeTalkNotice=Failure;S.FreeTalkDraft=Text;S.FreeTalkCaptionHer.Reset();RefreshUI();return;}
+ S.FreeTalkAnswered=S.FreeTalkSent; // the open choices were in that request (TickChoices)
  // Her memory keeps the exchange (her turn in the same JSON form she answers in); the values travel
  // only with the newest message. With the mind open this copy is only the fallback's memory.
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkMemory);auto& Memory=S.FreeTalkMemory.FindOrAdd(Id);

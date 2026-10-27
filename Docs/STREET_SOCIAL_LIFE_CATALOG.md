@@ -124,7 +124,7 @@
 | snk_bubble_tea | 珍珠奶茶 | 50 | – | sweet, cold |
 | snk_lemon_tea | 檸檬紅茶 | 35 | – | cold |
 | snk_cocoa | 熱可可 | 60 | 10–4 | sweet, hot |
-| snk_bday_cake | 6 吋生日蛋糕（預訂，隔天取） | 450 | – | gift, romantic |
+| snk_bday_cake | 6 吋生日蛋糕 | 450 | – | gift, romantic |
 | snk_gift_box | 手工餅乾禮盒 | 280 | – | gift |
 
 ### 2.3 drinkshop 飲料店（手搖）

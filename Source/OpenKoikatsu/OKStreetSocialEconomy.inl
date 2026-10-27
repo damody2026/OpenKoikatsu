@@ -599,8 +599,11 @@ void AOKStreetSocialScene::StartGift(const FString& ItemId){
  // too): one offer, not a second one that gave her the same hand cream twice.
  {const FString Label=OKMsg(TEXT("ui.economy.gift_her_button"),{{TEXT("item_name"),*Item->Name}});
   if(S.Choices.ContainsByPredicate([&](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift")&&C.Heroine==Her&&C.Label==Label;})){UE_LOG(LogTemp,Display,TEXT("Street gift: %s already offered to actor %d"),*ItemId,Her);return;}}
- OpenChoice(Her,TEXT("gift"),OKMsg(TEXT("ui.economy.gift_her_button"), {{TEXT("item_name"), *Item->Name}}),{TEXT("accept"),TEXT("decline")},Answer->GetStringField(TEXT("lean")),float(Answer->GetNumberField(TEXT("insist"))),15,
+ const FString ChoiceId=OpenChoice(Her,TEXT("gift"),OKMsg(TEXT("ui.economy.gift_her_button"), {{TEXT("item_name"), *Item->Name}}),{TEXT("accept"),TEXT("decline")},Answer->GetStringField(TEXT("lean")),float(Answer->GetNumberField(TEXT("insist"))),15,
   [Weak,Her,ItemId,Score](const FString& Option){if(Weak.IsValid())Weak->FinishGift(Her,ItemId,Option,Score);});
+ // She is told he holds it out to her, and answers it in her next turn: as one open choice among the prompt's lines she
+ // talked on about dango, the gift was taken on its deadline, and she asked whose cake that was.
+ S.TellHer.Add(OKMsg(TEXT("ui.economy.gift_held_out_note"),{{TEXT("item_name"),*Item->Name},{TEXT("choice_id"),*ChoiceId}}));
  S.FreeTalkNotice=OKMsg(TEXT("ui.economy.you_pulled_out_item"), {{TEXT("item_name"), *Item->Name}});RefreshUI();
 }
 

@@ -17,6 +17,8 @@ struct FOKStreetPendingChoice {
  int32 Round = 0;       // pushbacks so far; at most two, then the stronger side wins
  double Deadline = 0;   // scene seconds; past it her lean is taken
  int32 HisLinesAtOpen = 0; // his lines to her when it opened: a pick of his must come from something he said after
+ int64 SentAtOpen = 0;  // talk requests sent when it opened: it waits for her answer to a later one (she knew of it)
+ double OpenedAt = 0;   // scene seconds
  TFunction<void(const FString& Option)> OnResolve;
 };
 

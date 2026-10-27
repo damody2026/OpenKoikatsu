@@ -513,6 +513,7 @@ menu_section_goods = "商品"
 menu_section_gift = "礼品"
 wallet_line = "钱包 {cash, number, ::currency}{bag_part}"
 you_pulled_out_item = "你拿出了{item_name}。"
+gift_held_out_note = "（系统说明，不是他说的话：他拿出{item_name}，递到你面前说要送给你。照你自己的心情和你们的关系回应这份礼物：收下就填 resolve '{'\"choice_id\": \"{choice_id}\", \"option\": \"accept\"'}'，不想收就填 \"decline\"；favor_delta 设 0。）"
 you_speaker_label = "你："
 your_label = "你的"
 

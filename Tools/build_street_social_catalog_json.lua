@@ -105,7 +105,7 @@ local ITEMS = {
   { "snk_bubble_tea", "snack", "珍珠奶茶", 50, "drink", "sweet,cold", "cup", false },
   { "snk_lemon_tea", "snack", "檸檬紅茶", 35, "drink", "cold", "cup", false },
   { "snk_cocoa", "snack", "熱可可", 60, "drink", "sweet,hot", "cup", { 10, 11, 12, 1, 2, 3, 4 } },
-  { "snk_bday_cake", "snack", "6 吋生日蛋糕（預訂，隔天取）", 450, "gift", "gift,romantic", "bag", false },
+  { "snk_bday_cake", "snack", "6 吋生日蛋糕", 450, "gift", "gift,romantic", "bag", false },
   { "snk_gift_box", "snack", "手工餅乾禮盒", 280, "gift", "gift", "bag", false },
   -- drinkshop (M / L)
   { "dk_black", "drinkshop", "紅茶", O({ { "M", 20 }, { "L", 25 } }), "drink", "", "cup", false },
