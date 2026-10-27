@@ -676,7 +676,7 @@ fn view_catalog(_mods_dir: &Path, zips: &[std::path::PathBuf]) -> Option<ChaList
     };
     let parts: Vec<std::sync::Arc<ChaListCatalog>> = {
         use rayon::prelude::*;
-        zips.par_iter().zip(known.into_par_iter()).map(|(p, k)| k.unwrap_or_else(|| tagged_zip_catalog(p))).collect()
+        crate::oklib::pack_parallel(|| zips.par_iter().zip(known.into_par_iter()).map(|(p, k)| k.unwrap_or_else(|| tagged_zip_catalog(p))).collect())
     };
     {
         let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
