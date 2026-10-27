@@ -335,9 +335,11 @@ local function main()
     else say("TTS server not found; built-in voice will be used: " .. tts) end
     -- Free-talk voice input: asr-settings.json may name the microphone ({"device": "part of the input device name"});
     -- otherwise the Windows default recording device is used. ok-asr writes its own log (Build/ok-asr/logs/ok-asr.log).
+    -- A saved "endpoint" names someone else's server and is used only without one of our own: the server started here
+    -- listens on this instance's port, and E launched with C's saved 47861 shared C's ok-asr (and its mute) with C's game.
     local oka, a = pcall(read_json, asr_settings)
-    if path.is_file(asr_settings) and oka and type(a.endpoint) == "string" and a.endpoint ~= "" then asr_endpoint = a.endpoint end
     local asr = path.join(root, "Build/ok-asr/ok-asr.exe")
+    if not path.is_file(asr) and path.is_file(asr_settings) and oka and type(a.endpoint) == "string" and a.endpoint ~= "" then asr_endpoint = a.endpoint end
     if path.is_file(asr) then
       local args = { "serve", "--port", tostring(ports.asr) }
       if path.is_file(asr_settings) then args[#args + 1] = "--settings"; args[#args + 1] = asr_settings end

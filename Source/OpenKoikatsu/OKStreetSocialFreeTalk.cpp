@@ -1,6 +1,7 @@
 ﻿#include "OKStreetSocialFreeTalk.h"
 #include "OKStreetSocialText.h"
 #include "HAL/PlatformMisc.h"
+#include "PlatformHttp.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/FileHelper.h"
@@ -516,7 +517,9 @@ void OKStreetFreeTalkEnsureAsrServer() {
  const FString Settings = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_ASR_SETTINGS"));
  if (!Settings.IsEmpty() && FFileHelper::LoadFileToString(Text, *Settings) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) && Root.IsValid()) Root->TryGetStringField(TEXT("device"), Device);
  // --parent-pid: the server exits with the game, so a closed game never leaves it (and the microphone) running.
- const FString Parent = FString::Printf(TEXT(" --parent-pid %u"), FPlatformProcess::GetCurrentProcessId());
+ // On the port the game polls: started without it, it took the default 47861 (another checkout's) while this game kept
+ // calling its own.
+ const FString Parent = FString::Printf(TEXT(" --port %d --parent-pid %u"), int32(FPlatformHttp::GetUrlPort(OKStreetFreeTalkAsrEndpoint()).Get(47861)), FPlatformProcess::GetCurrentProcessId());
  const FString Params = (Device.IsEmpty() ? FString(TEXT("serve")) : FString::Printf(TEXT("serve --device \"%s\""), *Device.Replace(TEXT("\""), TEXT("")))) + Parent;
  FProcHandle Proc = FPlatformProcess::CreateProc(*Exe, *Params, true, true, true, nullptr, 0, *FPaths::GetPath(Exe), nullptr);
  UE_LOG(LogTemp, Display, TEXT("Free talk: ok-asr was not answering; started %s %s (%s)"), *Exe, *Params, Proc.IsValid() ? TEXT("ok") : TEXT("failed"));
