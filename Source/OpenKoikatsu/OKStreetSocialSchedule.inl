@@ -200,6 +200,7 @@ void AOKStreetSocialScene::TickSchedules(){
   // with him she follows him again; otherwise she waits there for him a while (the rules: places.rs resume_with_him).
   if(Fresh&&!S.ResumeWithHim.IsEmpty())if(const FOKStreetStore::FWithHim* W=S.ResumeWithHim.Find(Id)){
    auto Ask=OKRulesRequest(TEXT("resume_with_him"));Ask->SetStringField(TEXT("mode"),W->Mode);Ask->SetBoolField(TEXT("fixed"),OKStreetFixedBlock(Block));
+   Ask->SetStringField(TEXT("kind"),Block?Block->Kind:FString());Ask->SetNumberField(TEXT("minute"),Minute);
    const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);
    if(Out&&Out->GetBoolField(TEXT("keep"))){auto& A=S.Agents[I-1];
     A.Position=W->Spot;S.Rotations[I]=FRotator(0,W->Yaw,0);A.Held=true;S.ScheduleHeld.Add(I);S.PendingMoves.Remove(I);S.Commutes.Remove(I);

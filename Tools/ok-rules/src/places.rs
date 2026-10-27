@@ -152,10 +152,14 @@ fn wake_place(place: &str) -> &'static str {
 /// A heroine who was with him when the game was saved (walking with him, out with him, sitting or talking with him), on
 /// load (R3-238): she is put back where she was, not where her plan says. Walking or out with him, she follows him again;
 /// sitting or talking with him, she waits beside him a while, unless her block now is a fixed one (class, shift, promise,
-/// sleep), which takes her as usual. Request: mode ("follow" | "stay"), fixed. Answer: keep, follow, wait_minutes.
+/// sleep), which takes her as usual. She was up and with him: the end of a night's sleep block (the day replanned on
+/// load ran her sleep to 08:13) is not bed, only the night is (R3-241). Request: mode ("follow" | "stay"), fixed,
+/// kind (her block now), minute (of the day). Answer: keep, follow, wait_minutes.
 const RESUME_WAIT_MINUTES: i64 = 40;
-fn resume_with_him(mode: &str, fixed: bool) -> Value {
+fn resume_with_him(mode: &str, fixed: bool, kind: &str, minute: i64) -> Value {
     let follow = mode == "follow";
+    let night = !(5 * 60..21 * 60).contains(&minute);
+    let fixed = fixed && !(kind == "sleep" && !night);
     let keep = follow || !fixed;
     json!({"keep": keep, "follow": follow && keep, "wait_minutes": if keep { RESUME_WAIT_MINUTES } else { 0 }})
 }
@@ -166,6 +170,8 @@ pub fn eval(t: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Valu
         "resume_with_him" => Ok(resume_with_him(
             request.get("mode").and_then(Value::as_str).unwrap_or(""),
             request.get("fixed").and_then(Value::as_bool).unwrap_or(false),
+            request.get("kind").and_then(Value::as_str).unwrap_or(""),
+            request.get("minute").and_then(Value::as_i64).unwrap_or(12 * 60),
         )),
         "places_table" => Ok(json!({"default": t.default, "norms": t.norms})),
         "place_crowd" => {
@@ -184,14 +190,19 @@ mod tests {
 
     #[test]
     fn who_was_with_him_stays_with_him_after_a_load() {
-        let walk = resume_with_him("follow", false);
+        let walk = resume_with_him("follow", false, "leisure", 900);
         assert_eq!((walk["keep"].as_bool(), walk["follow"].as_bool()), (Some(true), Some(true)));
-        let walk_in_class = resume_with_him("follow", true);
+        let walk_in_class = resume_with_him("follow", true, "class", 600);
         assert_eq!(walk_in_class["follow"].as_bool(), Some(true), "out with him, her plan waits");
-        let sat = resume_with_him("stay", false);
+        let sat = resume_with_him("stay", false, "leisure", 900);
         assert_eq!((sat["keep"].as_bool(), sat["follow"].as_bool(), sat["wait_minutes"].as_i64()), (Some(true), Some(false), Some(40)));
-        let on_shift = resume_with_him("stay", true);
+        let on_shift = resume_with_him("stay", true, "work", 900);
         assert_eq!((on_shift["keep"].as_bool(), on_shift["wait_minutes"].as_i64()), (Some(false), Some(0)));
+        // Breakfast with him at 07:52, her replanned sleep still running to 08:13: she stays (R3-241); at 23:30 bed takes her.
+        let breakfast = resume_with_him("stay", true, "sleep", 7 * 60 + 52);
+        assert_eq!(breakfast["keep"].as_bool(), Some(true));
+        let night = resume_with_him("stay", true, "sleep", 23 * 60 + 30);
+        assert_eq!(night["keep"].as_bool(), Some(false));
     }
 
     #[test]

@@ -52,8 +52,10 @@ void AOKStreetSocialScene::MakeRumor(int32 About,const FString& Kind,const FStri
  auto Request=OKRulesRequest(TEXT("rumor_make"));
  Request->SetStringField(TEXT("about"),HasAbout?OKStreetStableId(S.Manifest.Characters[About]):FString());Request->SetStringField(TEXT("about_mode"),HasAbout?FString::Chr(DramaModeOf(About)):FString());
  Request->SetStringField(TEXT("global_mode"),FString::Chr(S.DramaMode));Request->SetStringField(TEXT("kind"),Kind);Request->SetStringField(TEXT("text"),Text);Request->SetNumberField(TEXT("heat"),Heat);
- Request->SetBoolField(TEXT("secret"),bSecret);Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
- TArray<TSharedPtr<FJsonValue>> Near;for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=About&&SeesHim(I))Near.Add(MakeShared<FJsonValueObject>(RulesListener(I)));
+ Request->SetBoolField(TEXT("secret"),bSecret);Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);Request->SetNumberField(TEXT("minute"),double(OKStreetMindNow(S)%1440));Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
+ // Who can see him (the walls, the floor) and how far she stands: who saw it is the rules' (social.rs WITNESS_METRES).
+ TArray<TSharedPtr<FJsonValue>> Near;for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=About&&SeesHim(I)){const TSharedRef<FJsonObject> L=RulesListener(I);
+  L->SetNumberField(TEXT("dist"),FVector::Dist2D(S.Agents[I-1].Position,S.Male)/100.0);Near.Add(MakeShared<FJsonValueObject>(L));}
  Request->SetArrayField(TEXT("near"),Near);
  TArray<TSharedPtr<FJsonValue>> Old;for(const auto& R:S.Store.Rumors){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),R.Id);O->SetNumberField(TEXT("heat"),R.Heat);O->SetNumberField(TEXT("day"),R.Day);Old.Add(MakeShared<FJsonValueObject>(O));}
  Request->SetArrayField(TEXT("rumors"),Old);
@@ -79,7 +81,13 @@ FString AOKStreetSocialScene::HeardText(int32 Character) const{
  TArray<const FOKStreetRumor*> Known;for(const auto& R:S.Store.Rumors)if(R.KnownBy.Contains(Id)&&R.About!=Id)Known.Add(&R);
  Known.Sort([](const FOKStreetRumor& A,const FOKStreetRumor& B){return A.Heat>B.Heat;});
  // When she heard it happened: without it "today at the dorm" came out as "yesterday you went to the dorm with Megumin".
- TArray<FString> Lines;for(int32 N=0;N<Known.Num()&&N<3;++N)Lines.Add(OKMsg(TEXT("ui.encounter.heard_item"), {{TEXT("days"), FMath::Max(0,S.Store.CalendarDay-Known[N]->Day)}, {TEXT("text"), *Known[N]->Text}, {TEXT("sure"), Known[N]->SureOf(Id)>0.8f?OKT(TEXT("ui.encounter.confirm_button")):Known[N]->SureOf(Id)>0.5f?OKT(TEXT("ui.encounter.heard_label")):OKT(TEXT("ui.encounter.unsure_option"))}}));
+ // Today, also when: "today: he and 安可" was told as "at noon, 安可" of a breakfast at 08:50 (R3-243).
+ auto When=[&](const FOKStreetRumor& R){return S.Store.CalendarDay==R.Day&&R.Minute>=0?FString::Printf(TEXT(" %02d:%02d"),R.Minute/60,R.Minute%60):FString();};
+ // Seen or told: a witness has no second-hand entry (social.rs rumor_make). "Sure" was the OK button's word, and she said
+ // "I saw you two laughing" of a lunch eight kilometres away (R3-246).
+ auto Sure=[&](const FOKStreetRumor& R)->FString{if(!R.Heard.Contains(Id))return OKT(TEXT("ui.encounter.heard_seen"));const float C=R.SureOf(Id);
+  return C>0.8f?OKT(TEXT("ui.encounter.heard_sure")):C>0.5f?OKT(TEXT("ui.encounter.heard_label")):OKT(TEXT("ui.encounter.unsure_option"));};
+ TArray<FString> Lines;for(int32 N=0;N<Known.Num()&&N<3;++N)Lines.Add(OKMsg(TEXT("ui.encounter.heard_item"), {{TEXT("days"), FMath::Max(0,S.Store.CalendarDay-Known[N]->Day)}, {TEXT("time"), When(*Known[N])}, {TEXT("text"), *Known[N]->Text}, {TEXT("sure"), Sure(*Known[N])}}));
  return FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));
 }
 
@@ -91,6 +99,7 @@ void AOKStreetSocialScene::Encounter(int32 A,int32 B,bool bOverheard){
  auto Request=OKRulesRequest(TEXT("encounter"));{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterListeners);Request->SetObjectField(TEXT("a"),RulesListener(A));Request->SetObjectField(TEXT("b"),RulesListener(B));}
  Request->SetNumberField(TEXT("heat"),S.Store.BondHeat.FindRef(Key));Request->SetStringField(TEXT("place"),Place);Request->SetBoolField(TEXT("food_place"),!Place.IsEmpty()&&OKStreetNormsOf(Place).FoodAllowed);
  Request->SetBoolField(TEXT("overheard"),bOverheard);Request->SetNumberField(TEXT("seed"),FMath::Rand());Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
+ Request->SetBoolField(TEXT("friends"),BondStageOf(A,B)!=TEXT("stranger")); // gossip only between friends (social.rs encounter)
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterRumors);TArray<TSharedPtr<FJsonValue>> Rumors;for(const auto& R:S.Store.Rumors)Rumors.Add(MakeShared<FJsonValueObject>(OKRulesRumorJson(R)));Request->SetArrayField(TEXT("rumors"),Rumors);}
  TSharedPtr<FJsonObject> Answer;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterEval);Answer=OKRulesEval(S,Request);}if(!Answer)return;
  QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_EncounterApply);
@@ -117,7 +126,10 @@ void AOKStreetSocialScene::RequestOverheard(int32 A,int32 B){
  auto Persona=[&](int32 I){FOKFreeTalkPersona P;FString E;OKStreetFreeTalkLoadPersona(S.Manifest.Characters[I].Name,P,E);return S.Manifest.Characters[I].Name+OKT(TEXT("ui.economy.colon_mark"))+P.Profile.Left(300);};
  const FString IdA=OKStreetStableId(S.Manifest.Characters[A]),IdB=OKStreetStableId(S.Manifest.Characters[B]);
  const FOKStreetRelation RA=OKStreetViewRelation(S.Store,IdA,S.Manifest.TalkBudget),RB=OKStreetViewRelation(S.Store,IdB,S.Manifest.TalkBudget);
- const FString User=OKMsg(TEXT("ui.encounter.pair_context_summary"), {{TEXT("name_a"), *Persona(A)}, {TEXT("name_b"), *Persona(B)}, {TEXT("bond_score"), S.Store.BondHeat.FindRef(OKStreetBondKey(IdA,IdB))}, {TEXT("jealousy_a_to_b"), RA.JealousyToward.FindRef(IdB)}, {TEXT("jealousy_b_to_a"), RB.JealousyToward.FindRef(IdA)}, {TEXT("heard_a"), *HeardText(A)}, {TEXT("heard_b"), *HeardText(B)}, {TEXT("scene_line"), *SceneLine(A)}});
+ // Not friends: they do not tell each other what they heard of him (the rules pass no gossip either), so their talk
+ // is not given it (user, 2026-10-27).
+ const bool Friends=BondStageOf(A,B)!=TEXT("stranger");const FString None=OKT(TEXT("ui.encounter.heard_none"));
+ const FString User=OKMsg(TEXT("ui.encounter.pair_context_summary"), {{TEXT("name_a"), *Persona(A)}, {TEXT("name_b"), *Persona(B)}, {TEXT("bond_score"), S.Store.BondHeat.FindRef(OKStreetBondKey(IdA,IdB))}, {TEXT("jealousy_a_to_b"), RA.JealousyToward.FindRef(IdB)}, {TEXT("jealousy_b_to_a"), RB.JealousyToward.FindRef(IdA)}, {TEXT("heard_a"), Friends?HeardText(A):None}, {TEXT("heard_b"), Friends?HeardText(B):None}, {TEXT("scene_line"), *SceneLine(A)}});
  TSharedRef<FJsonObject> Job=MakeShared<FJsonObject>();Job->SetStringField(TEXT("kind"),TEXT("chat"));Job->SetStringField(TEXT("priority"),TEXT("overheard"));
  Job->SetStringField(TEXT("tag"),FString::Printf(TEXT("overheard:%d:%d"),A,B));Job->SetNumberField(TEXT("max_tokens"),500);Job->SetNumberField(TEXT("temperature"),1.1);
  TArray<TSharedPtr<FJsonValue>> Messages;
@@ -170,9 +182,14 @@ void AOKStreetSocialScene::TickEncounters(){
    const int32 I=Side.Value;const FString& Name=Side.Key;
    P->SetStringField(Name,OKStreetStableId(S.Manifest.Characters[I]));P->SetStringField(Name+TEXT("_name"),S.Manifest.Characters[I].Name);
    P->SetStringField(Name+TEXT("_mode"),FString::Chr(DramaModeOf(I)));P->SetBoolField(Name+TEXT("_busy"),BusyWithPlayer(I));
-   P->SetBoolField(Name+TEXT("_sees"),FVector::Dist2D(S.Agents[I-1].Position,S.Male)<1500&&FMath::Abs(S.Agents[I-1].Position.Z-S.Male.Z)<300.f);
+   // Whether she catches him is the rules' (social.rs WITNESS_METRES): how far she stands, on his floor and his side of the walls.
+   const bool CanSee=FMath::Abs(S.Agents[I-1].Position.Z-S.Male.Z)<300.f&&SeesHim(I);P->SetBoolField(Name+TEXT("_sees"),CanSee);
+   if(CanSee)P->SetNumberField(Name+TEXT("_dist"),FVector::Dist2D(S.Agents[I-1].Position,S.Male)/100.0);
   }
   const FString& PA=PlaceOf[A];const FString& PB=PlaceOf[B];
+  // The meeting her day planned with this friend (both in that social block, at the same place): they do talk.
+  {const int32 Minute=int32(OKStreetMindNow(S)%1440);const FOKStreetPlanBlock* BA=BlockNow(A,Minute);const FOKStreetPlanBlock* BB=BlockNow(B,Minute);
+   P->SetBoolField(TEXT("planned"),BA&&BB&&BA->Kind==TEXT("social")&&BB->Kind==TEXT("social")&&BA->Place==BB->Place&&!PA.IsEmpty()&&PA==PB);}
   P->SetBoolField(TEXT("together"),(!PA.IsEmpty()&&PA==PB)||(PA.IsEmpty()&&PB.IsEmpty()&&FVector::Dist2D(S.Agents[A-1].Position,S.Agents[B-1].Position)<400));
   // He hears them only on their floor, and not while he is in a conversation of his own (it would talk over her).
   const bool SameFloor=FMath::Abs(S.Agents[A-1].Position.Z-S.Male.Z)<300.f;

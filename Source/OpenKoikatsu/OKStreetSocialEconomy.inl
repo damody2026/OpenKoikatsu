@@ -314,6 +314,12 @@ void AOKStreetSocialScene::TickShopArrival(){
  if(Place==S.ShopArrivalPlace||!S.FreeTalkOpen||S.FreeTalkBusy)return;
  const int32 Her=FreeTalkPartner();if(Her==INDEX_NONE)return;
  if(!S.ShopEnteredWith){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: actor=%d was already in %s; no arrival prompt"),Her,*Place);return;}
+ // On their way through a shop to an activity in the same building (the food court on 9F of the department store):
+ // that activity is the visit. The "we just walked in, nothing to eat here" at the 1F door came back on 9F, at the
+ // table: "this is the first floor" (R3-245). A restaurant's own menu still comes (the meal is ordered from it).
+ const bool SellsFood=ItemsHere(Place).ContainsByPredicate([](const FOKStreetCatalogItem* I){return I&&I->Consumable;});
+ if(!SellsFood&&S.OutingGirl!=INDEX_NONE&&!S.OutingActivity.StartsWith(TEXT("go:")))if(const auto* Act=OKStreetFindActivity(S.OutingActivity);Act&&Act->Place==Place){
+  S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: on the way to %s inside %s; no arrival prompt"),*S.OutingActivity,*Place);return;}
  FString Why;if(PlaceClosedNow(Place,Why)||ItemsHere(Place).IsEmpty()){S.ShopArrivalPlace=Place;return;}
  // Her home (walking her back to the dorm at night): she is home, not out shopping ("I'm full, I don't need to buy anything").
  if(Place==OKStreetProfileString(S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Her])),nullptr,TEXT("home_place_id"))){
@@ -447,7 +453,9 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   S.TellHer.Add(OKT(TEXT("ui.economy.too_full_prompt")));
   UE_LOG(LogTemp,Display,TEXT("Street meal: she is full (satiety %.0f) with dishes left"),Satiety);RefreshUI();
  }
- {bool Waiting=false;for(const auto& D:S.Table)if(D.Percent>0.f&&(!D.ForHer||!D.Served||CanEat(DishOwner(D),D)))Waiting=true;
+ // She said she cannot eat any more (stop_eating) at 99: her dish is not waiting for her either. Counted as waiting,
+ // the meal never ended and "walk me home after" never came (R3-247).
+ {bool Waiting=false;for(const auto& D:S.Table)if(D.Percent>0.f&&(!D.ForHer||!D.Served||(CanEat(DishOwner(D),D)&&!S.StopEating)))Waiting=true;
   // Nobody at the table can eat any more (she alone, full with her soup half left): the eating is over for what they
   // do next (TickThenAction), the dishes stay.
   if(!Waiting&&AnyLeft)S.TableClearedAt=SceneTime();

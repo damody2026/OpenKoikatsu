@@ -94,6 +94,16 @@ struct Listener {
     profile: Value,
     mode: String,
     foil: bool,
+    /// How far from him she stands (metres), when she could see him at all (same side of the walls): who saw it.
+    dist: Option<f32>,
+}
+
+/// Seeing him with someone is only within this (metres): on the street a passer-by 10 m away knows, one 11 m away does
+/// not; behind walls or in a private room nobody does (the game sends only those who can see him). User, 2026-10-27.
+pub const WITNESS_METRES: f32 = 10.0;
+
+fn witnessed(dist: Option<f32>) -> bool {
+    dist.map_or(true, |d| d <= WITNESS_METRES)
 }
 
 impl Listener {
@@ -127,6 +137,10 @@ pub struct Rumor {
     pub heat: f32,
     pub confidence: f32,
     pub day: i32,
+    /// The minute of that day it happened (none in older saves): "today, the morning breakfast with 安可" was told as
+    /// "at noon, 安可" when only the day was known (R3-243).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minute: Option<i32>,
     pub known_by: Vec<String>,
     pub heard: BTreeMap<String, f32>,
 }
@@ -148,13 +162,14 @@ fn rumor_make(r: &Value) -> Result<Value, String> {
     let day = n(r, "day") as i32;
     let text = s(r, "text");
     let mut fx = Effects::default();
-    let mut rumor = Rumor { kind: s(r, "kind").into(), text: text.into(), heat: n(r, "heat") as f32, confidence: 1.0, day, about: about.into(), ..Default::default() };
+    let minute = r.get("minute").and_then(Value::as_i64).filter(|m| (0..1440).contains(m)).map(|m| m as i32);
+    let mut rumor = Rumor { kind: s(r, "kind").into(), text: text.into(), heat: n(r, "heat") as f32, confidence: 1.0, day, minute, about: about.into(), ..Default::default() };
     if !about.is_empty() {
         rumor.known_by.push(about.into());
     }
     let mut near: Vec<Listener> = serde_json::from_value(r.get("near").cloned().unwrap_or(json!([]))).map_err(|e| format!("near: {e}"))?;
     let place = s(r, "place");
-    for l in near.iter_mut().filter(|l| l.id != about) {
+    for l in near.iter_mut().filter(|l| l.id != about && witnessed(l.dist)) {
         if !rumor.known_by.contains(&l.id) {
             rumor.known_by.push(l.id.clone());
         }
@@ -219,7 +234,9 @@ fn encounter(r: &Value) -> Result<Value, String> {
     let mut learned: Vec<(usize, String, f32)> = Vec::new();
     let mut later: Vec<(usize, String, f32)> = Vec::new();
     let people = [&a, &bb];
-    for (k, rm) in rumors.iter_mut().enumerate() {
+    // Gossip goes only between friends: two who are not friends meet and say nothing of him (user, 2026-10-27).
+    let friends = r.get("friends").and_then(Value::as_bool).unwrap_or(true);
+    for (k, rm) in rumors.iter_mut().enumerate().filter(|_| friends) {
         for (teller, listener) in [(0usize, 1usize), (1, 0)] {
             let (t, l) = (people[teller], people[listener]);
             if !rm.known_by.contains(&t.id) || rm.known_by.contains(&l.id) || rm.about == l.id {
@@ -300,7 +317,12 @@ fn encounters_tick(r: &Value) -> Result<Value, String> {
         let mut met = false;
         for (seer, other) in [("a", "b"), ("b", "a")] {
             let (seer_id, other_id) = (s(p, seer), s(p, other));
-            if with == other_id && !b(p, &format!("{seer}_busy")) && s(p, &format!("{seer}_mode")) == "C" && b(p, &format!("{seer}_sees")) {
+            // She catches him with the other one only from within the witness distance ({seer}_dist, metres).
+            let sees = match p.get(format!("{seer}_dist")).and_then(Value::as_f64) {
+                Some(d) => d as f32 <= WITNESS_METRES,
+                None => b(p, &format!("{seer}_sees")),
+            };
+            if with == other_id && !b(p, &format!("{seer}_busy")) && s(p, &format!("{seer}_mode")) == "C" && sees {
                 let other_name = s(p, &format!("{other}_name"));
                 fx.recent(seer_id, &crate::tr::m("social.saw_him_with", &[("other_name", crate::tr::a(&other_name))]));
                 fx.intent(seer_id, "seek_player");
@@ -315,7 +337,9 @@ fn encounters_tick(r: &Value) -> Result<Value, String> {
             }
             continue;
         }
-        if rng.frand() >= 0.6 {
+        // Friends who planned to meet (both in that social block, together now) do talk; others by chance. What they
+        // tell each other of him is the encounter's, between friends only.
+        if !b(p, "planned") && rng.frand() >= 0.6 {
             continue;
         }
         meet.push(json!({"a": p["a"], "b": p["b"], "met": true, "overheard": b(p, "near")}));
@@ -713,6 +737,10 @@ fn bias_actions(r: &Value) -> Result<Value, String> {
     let other = s(r, "with_name");
     let mut come = Vec::new();
     for h in r.get("near").and_then(Value::as_array).into_iter().flatten() {
+        // She saw him with the other one only from within the witness distance.
+        if !witnessed(h.get("dist").and_then(Value::as_f64).map(|d| d as f32)) {
+            continue;
+        }
         let (surveil, compete) = (n(h, "surveil") as f32, n(h, "compete") as f32);
         let pull = surveil.max(compete);
         if pull < 0.3 || rng.frand() >= pull * 0.3 {
@@ -1100,6 +1128,45 @@ mod tests {
             }
         }
         assert!(spread > 60 && spread < 140, "about half: {spread}");
+        // Not friends: nothing about him passes between them, whatever the seed (user, 2026-10-27).
+        for seed in 0..200 {
+            let v = encounter(&json!({"a": l("a"), "b": l("b"), "friends": false, "heat": 90, "seed": seed, "rumors": [{"id": 1, "text": "x", "about": "c", "kind": "date", "heat": 100, "confidence": 1, "known_by": ["a"]}]})).unwrap();
+            assert_eq!(v["learned"], 0, "strangers do not gossip");
+        }
+    }
+
+    #[test]
+    fn planned_meetings_talk_and_catching_him_is_within_ten_metres() {
+        let pair = |extra: Value| {
+            let mut p = json!({"a": "a", "b": "b", "a_name": "A", "b_name": "B", "a_mode": "C", "b_mode": "B", "together": true});
+            p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            p
+        };
+        for seed in 0..40 {
+            let v = encounters_tick(&json!({"seed": seed, "pairs": [pair(json!({"planned": true}))]})).unwrap();
+            assert_eq!(v["meet"][0]["met"], true, "a planned meeting always talks");
+        }
+        let far = encounters_tick(&json!({"seed": 1, "with": "b", "pairs": [pair(json!({"a_dist": 12.0, "a_sees": true}))]})).unwrap();
+        assert!(far["caught"].as_array().unwrap().is_empty(), "12 m away she did not see it");
+        let near = encounters_tick(&json!({"seed": 1, "with": "b", "pairs": [pair(json!({"a_dist": 8.0}))]})).unwrap();
+        assert_eq!(near["caught"][0]["seer"], "a");
+    }
+
+    #[test]
+    fn only_who_stands_within_ten_metres_saw_it() {
+        let l = |id: &str, d: f64| json!({"id": id, "name": id, "relation": rel(json!({"id": id, "stage": "friend"})), "profile": {}, "mode": "B", "dist": d});
+        let v = rumor_make(&json!({"about": "a", "kind": "date", "text": "他和a在街上", "heat": 50, "day": 1, "global_mode": "B", "near": [l("b", 9.5), l("c", 10.0), l("d", 10.5), l("e", 24.0)], "rumors": []})).unwrap();
+        let known: Vec<&str> = v["rumor"]["known_by"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+        assert_eq!(known, vec!["a", "b", "c"], "10 m and closer saw it");
+        // Seeing him with another girl from 15 m: she does not come over for it.
+        let far = bias_actions(&json!({"seed": 1, "with_name": "a", "near": [{"actor": 2, "surveil": 1.0, "compete": 1.0, "dist": 15.0}]})).unwrap();
+        assert!(far["come"].as_array().unwrap().is_empty());
+        let mut came = 0;
+        for seed in 0..50 {
+            let near = bias_actions(&json!({"seed": seed, "with_name": "a", "near": [{"actor": 2, "surveil": 1.0, "compete": 1.0, "dist": 6.0}]})).unwrap();
+            came += near["come"].as_array().unwrap().len();
+        }
+        assert!(came > 0, "from 6 m she may");
     }
 
     #[test]

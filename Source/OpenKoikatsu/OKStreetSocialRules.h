@@ -290,6 +290,7 @@ struct FOKStreetRumor {
  TArray<FString> KnownBy;
  TMap<FString, float> Heard; // how sure each listener is (second-hand is less sure); missing: Confidence
  int32 Day = 0;
+ int32 Minute = -1; // of that day, when it happened (-1: not known, older saves) (R3-243)
  float SureOf(const FString& Who) const { const float* C = Heard.Find(Who); return C ? *C : Confidence; }
 };
 
@@ -1248,7 +1249,7 @@ inline FString OKStreetWriteSave(const FOKStreetStore& Store) {
   Root->SetArrayField(TEXT("appointments"),ApptRows);Root->SetNumberField(TEXT("next_appointment"),Store.NextAppointment);
   auto Black=MakeShared<FJsonObject>();TArray<FString> Keys;Store.Blacklist.GetKeys(Keys);Keys.Sort();for(const FString& K:Keys)Black->SetNumberField(K,Store.Blacklist[K]);Root->SetObjectField(TEXT("blacklist"),Black);}
  {auto Bonds=MakeShared<FJsonObject>();TArray<FString> Keys;Store.BondHeat.GetKeys(Keys);Keys.Sort();for(const FString& K:Keys)Bonds->SetNumberField(K,Store.BondHeat[K]);Root->SetObjectField(TEXT("bonds"),Bonds);
-  TArray<TSharedPtr<FJsonValue>> RumorRows;for(const auto& R:Store.Rumors){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),R.Id);O->SetStringField(TEXT("text"),R.Text);O->SetStringField(TEXT("about"),R.About);O->SetStringField(TEXT("kind"),R.Kind);O->SetNumberField(TEXT("heat"),R.Heat);O->SetNumberField(TEXT("confidence"),R.Confidence);O->SetNumberField(TEXT("day"),R.Day);OKStreetWriteStringArray(O,TEXT("known_by"),R.KnownBy);if(R.Heard.Num()){auto H=MakeShared<FJsonObject>();for(const auto& P:R.Heard)H->SetNumberField(P.Key,P.Value);O->SetObjectField(TEXT("heard"),H);}RumorRows.Add(MakeShared<FJsonValueObject>(O));}
+  TArray<TSharedPtr<FJsonValue>> RumorRows;for(const auto& R:Store.Rumors){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),R.Id);O->SetStringField(TEXT("text"),R.Text);O->SetStringField(TEXT("about"),R.About);O->SetStringField(TEXT("kind"),R.Kind);O->SetNumberField(TEXT("heat"),R.Heat);O->SetNumberField(TEXT("confidence"),R.Confidence);O->SetNumberField(TEXT("day"),R.Day);if(R.Minute>=0)O->SetNumberField(TEXT("minute"),R.Minute);OKStreetWriteStringArray(O,TEXT("known_by"),R.KnownBy);if(R.Heard.Num()){auto H=MakeShared<FJsonObject>();for(const auto& P:R.Heard)H->SetNumberField(P.Key,P.Value);O->SetObjectField(TEXT("heard"),H);}RumorRows.Add(MakeShared<FJsonValueObject>(O));}
   Root->SetArrayField(TEXT("rumors"),RumorRows);Root->SetNumberField(TEXT("next_rumor"),Store.NextRumor);}
  {TArray<TSharedPtr<FJsonValue>> EntrustRows;for(const auto& E:Store.Entrusts){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),E.Id);O->SetStringField(TEXT("heroine"),E.Heroine);O->SetStringField(TEXT("kind"),E.Kind);O->SetNumberField(TEXT("principal"),double(E.Principal));O->SetNumberField(TEXT("returned"),double(E.Returned));O->SetNumberField(TEXT("day"),E.Day);O->SetNumberField(TEXT("due"),E.Due);O->SetStringField(TEXT("status"),E.Status);O->SetStringField(TEXT("split"),E.Split);O->SetBoolField(TEXT("overdue"),E.Overdue);O->SetBoolField(TEXT("jealous"),E.Jealous);EntrustRows.Add(MakeShared<FJsonValueObject>(O));}
   Root->SetArrayField(TEXT("entrusts"),EntrustRows);Root->SetNumberField(TEXT("next_entrust"),Store.NextEntrust);
@@ -1349,6 +1350,7 @@ inline EOKStreetLoad OKStreetParseSave(const FString& Json, FOKStreetStore& Stor
   const TArray<TSharedPtr<FJsonValue>>* RumorRows=nullptr;if(Root->TryGetArrayField(TEXT("rumors"),RumorRows))for(const auto& Row:*RumorRows){const auto O=Row.IsValid()?Row->AsObject():nullptr;if(!O)continue;FOKStreetRumor R;double V=0;
    if(O->TryGetNumberField(TEXT("id"),V))R.Id=int32(V);O->TryGetStringField(TEXT("text"),R.Text);O->TryGetStringField(TEXT("about"),R.About);O->TryGetStringField(TEXT("kind"),R.Kind);
    if(O->TryGetNumberField(TEXT("heat"),V))R.Heat=FMath::Clamp(float(V),0.f,100.f);if(O->TryGetNumberField(TEXT("confidence"),V))R.Confidence=FMath::Clamp(float(V),0.f,1.f);if(O->TryGetNumberField(TEXT("day"),V))R.Day=int32(V);
+   if(O->TryGetNumberField(TEXT("minute"),V)&&V>=0&&V<1440)R.Minute=int32(V);
    const TArray<TSharedPtr<FJsonValue>>* Known=nullptr;if(O->TryGetArrayField(TEXT("known_by"),Known))for(const auto& K:*Known){FString S;if(K.IsValid()&&K->TryGetString(S))R.KnownBy.Add(S);}
    const TSharedPtr<FJsonObject>* Heard=nullptr;if(O->TryGetObjectField(TEXT("heard"),Heard))for(const auto& P:(*Heard)->Values){double C=0;if(P.Value.IsValid()&&P.Value->TryGetNumber(C)&&FMath::IsFinite(C))R.Heard.Add(FString(*P.Key),FMath::Clamp(float(C),0.f,1.f));}
    if(!R.Text.IsEmpty())Store.Rumors.Add(R);}

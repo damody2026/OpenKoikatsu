@@ -253,13 +253,14 @@ TSharedRef<FJsonValue> OKRulesAcademicValue(const FOKStreetAcademic* A){return A
 // A rumour both ways (social.rs Rumor = the save's rumour row).
 TSharedRef<FJsonObject> OKRulesRumorJson(const FOKStreetRumor& R){
  auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),R.Id);O->SetStringField(TEXT("text"),R.Text);O->SetStringField(TEXT("about"),R.About);O->SetStringField(TEXT("kind"),R.Kind);
- O->SetNumberField(TEXT("heat"),R.Heat);O->SetNumberField(TEXT("confidence"),R.Confidence);O->SetNumberField(TEXT("day"),R.Day);
+ O->SetNumberField(TEXT("heat"),R.Heat);O->SetNumberField(TEXT("confidence"),R.Confidence);O->SetNumberField(TEXT("day"),R.Day);if(R.Minute>=0)O->SetNumberField(TEXT("minute"),R.Minute);
  TArray<TSharedPtr<FJsonValue>> Known;for(const FString& K:R.KnownBy)Known.Add(MakeShared<FJsonValueString>(K));O->SetArrayField(TEXT("known_by"),Known);
  auto Heard=MakeShared<FJsonObject>();for(const auto& P:R.Heard)Heard->SetNumberField(P.Key,P.Value);O->SetObjectField(TEXT("heard"),Heard);return O;
 }
 void OKRulesReadRumor(const FJsonObject& O,FOKStreetRumor& R){
  double V=0;if(O.TryGetNumberField(TEXT("id"),V))R.Id=int32(V);O.TryGetStringField(TEXT("text"),R.Text);O.TryGetStringField(TEXT("about"),R.About);O.TryGetStringField(TEXT("kind"),R.Kind);
  if(O.TryGetNumberField(TEXT("heat"),V))R.Heat=float(V);if(O.TryGetNumberField(TEXT("confidence"),V))R.Confidence=float(V);if(O.TryGetNumberField(TEXT("day"),V))R.Day=int32(V);
+ if(O.TryGetNumberField(TEXT("minute"),V)&&V>=0&&V<1440)R.Minute=int32(V);
  const TArray<TSharedPtr<FJsonValue>>* Known=nullptr;if(O.TryGetArrayField(TEXT("known_by"),Known)){R.KnownBy.Reset();for(const auto& K:*Known)R.KnownBy.Add(K->AsString());}
  const TSharedPtr<FJsonObject>* Heard=nullptr;if(O.TryGetObjectField(TEXT("heard"),Heard)){R.Heard.Reset();for(const auto& P:(*Heard)->Values)R.Heard.Add(FString(*P.Key),float(P.Value->AsNumber()));}
 }

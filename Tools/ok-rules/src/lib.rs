@@ -270,6 +270,10 @@ mod tests {
         let rules = Rules::open("{}").unwrap();
         let rumor: Value = serde_json::from_str(&rules.eval(r#"{"rule":"rumor_make","kind":"treat","text":"x","heat":50,"day":1,"global_mode":"B","near":[],"rumors":[]}"#).unwrap()).unwrap();
         assert_eq!(rumor["rumor"]["kind"], "treat");
+        assert!(rumor["rumor"].get("minute").is_none(), "no minute asked, none kept");
+        // When it happened that day comes back with it (R3-243).
+        let timed: Value = serde_json::from_str(&rules.eval(r#"{"rule":"rumor_make","kind":"treat","text":"x","heat":50,"day":1,"minute":530,"global_mode":"B","near":[],"rumors":[]}"#).unwrap()).unwrap();
+        assert_eq!(timed["rumor"]["minute"], 530);
         let act: Value = serde_json::from_str(&rules.eval(r#"{"rule":"activity_end","kind":"pair","code":2,"id":"drink","name":"一起喝飲料","relation":{"id":"a"}}"#).unwrap()).unwrap();
         assert_eq!(act["minutes"], 25);
         let ent: Value = serde_json::from_str(&rules.eval(r#"{"rule":"entrust_start","kind":"help","amount":500,"relation":{"id":"a"}}"#).unwrap()).unwrap();

@@ -752,3 +752,26 @@
 - **現象：** `b25cf262` 的 commit 標題開頭多了一個 U+FEFF，已推到 origin。
 - **原因：** 用 PowerShell 5.1 的 `Set-Content -Encoding utf8` 寫 commit 訊息檔，它會寫入 BOM；`git commit -F` 把 BOM 當成訊息的一部分。前一次用管線 `git commit -F -` 搭 here-string，PowerShell 把 here-string 當成路徑參數，commit 失敗。
 - **修正：** 已推送，不改寫歷史。之後 commit 訊息檔一律用 Write 工具或 `[IO.File]::WriteAllText(..., [Text.UTF8Encoding]::new($false))` 寫成無 BOM 的 UTF-8。
+
+## 2026-10-27 只看拒點就放寬配湯上限（R3-244，已還原）
+
+- **現象：** 兩次看到貢丸湯因為「太飽」被拒，就把配菜的上限從 115 放寬到 130。熱載入後優香點到了湯，但吃完麵飽足度到 99，湯一口沒動。
+- **原因：** 只看點餐那一刻，沒有對照進食模型（飽足度到 100 就停）。拒點本來就是避免點了吃不完。
+- **修正：** 還原改動，R3-244 記為「不是錯誤」。改點餐或進食的門檻前，先算她實際吃得下多少，並在遊戲裡看完整頓飯再判斷。
+
+## 2026-10-27 toml 插入新鍵後多出單獨的 CR，git 把檔案當成二進位（R3-246，提交前已修）
+
+- **現象：** 在三語 `ui_text.toml` 加 `heard_seen`／`heard_sure` 後，`git diff --numstat` 顯示整個檔案（2068/2066 行）都改了，`git ls-files --eol` 是 `w/-text`。
+- **原因：** 用 `(?m)^heard_item = .*$` 找插入點。.NET 的 `.` 會吃到 `\r`，插入點落在 `\r` 後面，變成 `\r\r\n`；git 看到單獨的 CR 就不做 autocrlf 轉換。
+- **修正：** 把 `\r\r\n` 換回 `\r\n`，diff 回到 3 行。之後用正規表示式找整行時寫成 `[^\r\n]*`，寫完先看 `git diff --numstat`，刪除數不對就停下。
+
+## 2026-10-27 用 game_goto 走向正在跟他說話的女主，把約會對話掐掉
+
+- **現象：** 雷電將軍依約到點心店門口開口說話後，我用 `game_goto girl 2` 走向她；這個工具會先結束進行中的對話，她就走了，約會變成中途走開。
+- **修正：** 等待約會時先看 `game_state` 的 target／partner：她已經在說話就直接 `game_talk`，不要再 `game_goto`。
+
+## 2026-10-27 把上一包的「exited」當成這一包打完，D 引擎上兩個 stage 重疊
+
+- **現象：** Gest133 還在 staging（13:19–13:31）時，我就開了 Gest134（13:25 開始），兩個打包在同一個引擎上重疊了約 3 分鐘（編譯沒有重疊，staging 重疊）。
+- **原因：** Gest133 的背景指令開頭先印了 Gest132 輸出檔的最後幾行，裡面有「[exited with code 0]」；我讀 Gest133 的輸出檔時看到這行，就當成它已經結束。
+- **修正：** 只用 Gest134，Gest133 不用。之後判斷打包是否結束只看背景工作的完成通知，或 `Rebuild-<tag>/` 的 log 與 `.stage` 時間；背景指令裡不要先印別的工作的輸出。

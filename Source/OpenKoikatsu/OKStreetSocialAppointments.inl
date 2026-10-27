@@ -94,11 +94,15 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
   // A day and a place but no hour ("Saturday at the park"): agreed, yet nothing to book. She asks him what time,
   // instead of the meeting being dropped without either of them knowing.
   // A day and nothing else yet ("all of Sunday with you"): she asks when and where.
-  if(Reason==TEXT("not_a_place")&&Place.IsEmpty()&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_place_note"),{{TEXT("day"),*Day}}));
+  if(Reason==TEXT("not_a_place")&&Place.IsEmpty()&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_place_note"),{{TEXT("day"),*Day}}));S.PromiseAskNotes.Add(S.TellHer.Last());
    UE_LOG(LogTemp,Display,TEXT("Street promise: %s agreed, no time or place yet; she asks"),*Day);}
-  if(Reason==TEXT("no_time")&&P&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_note"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}}));
+  if(Reason==TEXT("no_time")&&P&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_note"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}}));S.PromiseAskNotes.Add(S.TellHer.Last());
    S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_time_notice"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}});RefreshUI();}
   return;}
+ // Booked, or said again with its time: her question still waiting ("what time? where?") is answered already; she
+ // asked again right after "17:30 at the snack shop, I'll be there" (R3-242).
+ if(!S.PromiseAskNotes.IsEmpty()){const int32 Dropped=S.TellHer.RemoveAll([&](const FString& N){return S.PromiseAskNotes.Contains(N);});S.PromiseAskNotes.Reset();
+  if(Dropped)UE_LOG(LogTemp,Display,TEXT("Street promise: settled, %d question(s) to him about it dropped"),Dropped);}
  if(Action==TEXT("keep")||Action==TEXT("move")){const int32 AppId=int32(Out->GetNumberField(TEXT("id")));
   const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==AppId;});if(!A)return;
   if(Action==TEXT("keep")){UE_LOG(LogTemp,Display,TEXT("Street appointment: %s at minute %lld kept, said again (%s)"),*A->Label,A->Start,*Reason);return;}
