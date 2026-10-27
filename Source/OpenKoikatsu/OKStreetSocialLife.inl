@@ -447,7 +447,9 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // eaten at 16:30 stayed pending, and skipping to the morning counted him a no-show.
  {const FString HerId=OKStreetStableId(S.Manifest.Characters[Girl]);auto Ask=OKRulesRequest(TEXT("appointment_done_early"));
   Ask->SetStringField(TEXT("heroine"),HerId);Ask->SetStringField(TEXT("place"),PlaceId);Ask->SetNumberField(TEXT("now"),double(OKStreetMindNow(S)));
-  TArray<TSharedPtr<FJsonValue>> Rows;for(const auto& Ap:S.Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),Ap.Id);O->SetStringField(TEXT("kind"),Ap.Kind);
+  // Only what was made before it began: "after work at five, here" agreed over breakfast at the cafe is for later, and
+  // it was crossed off as kept when breakfast ended at ten.
+  TArray<TSharedPtr<FJsonValue>> Rows;for(const auto& Ap:S.Store.Appointments)if(Ap.Id<S.ActFirstAppointment){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),Ap.Id);O->SetStringField(TEXT("kind"),Ap.Kind);
    O->SetStringField(TEXT("heroine"),Ap.Heroine);O->SetStringField(TEXT("place"),Ap.Place);O->SetStringField(TEXT("label"),Ap.Label);O->SetNumberField(TEXT("start"),double(Ap.Start));
    O->SetNumberField(TEXT("grace"),Ap.Grace);O->SetStringField(TEXT("status"),Ap.Status);Rows.Add(MakeShared<FJsonValueObject>(O));}
   Ask->SetArrayField(TEXT("appointments"),Rows);
@@ -473,7 +475,7 @@ void AOKStreetSocialScene::TickActivityWatch(){
   S.ActGirl=INDEX_NONE;if(!S.ActLover){S.ActCutShort=true;ActivityAftermath(S.ActId,Girl,S.ActStart);}
  }
  if(Girl!=INDEX_NONE&&S.ActGirl==INDEX_NONE){
-  S.ActGirl=Girl;S.ActSig=Sig;S.ActStart=OKStreetMindNow(S);S.ActCutShort=false;S.ActLover=S.LoverPose.Girl!=INDEX_NONE; // a kiss or an embrace is not an outing activity
+  S.ActGirl=Girl;S.ActSig=Sig;S.ActStart=OKStreetMindNow(S);S.ActFirstAppointment=S.Store.NextAppointment;S.ActCutShort=false;S.ActLover=S.LoverPose.Girl!=INDEX_NONE; // a kiss or an embrace is not an outing activity
   if(S.LastActivityGirl==Girl&&!S.LastActivity.IsEmpty()&&SceneTime()-S.LastActivityAt<20.0)S.ActId=S.LastActivity;
   else if(const auto* F=S.Facility!=INDEX_NONE?OKStreetFacilityActivity(S.Facility):nullptr)S.ActId=F->Id;
   else if(S.Pair.Partner!=INDEX_NONE)S.ActId=S.Pair.Seated?TEXT("sit_talk"):S.Pair.PhoneUse?TEXT("phone_together"):S.Pair.Meal?TEXT("meal"):S.Pair.Drink?TEXT("drink"):TEXT("photo");

@@ -607,8 +607,8 @@ fact_together = "There are {count} photos of you two together"
 [reading]
 he_read = "Read {book} for a while ({progress}%)"
 he_finished = "Finished {book}"
-fact_she_reads = "You are reading {book} ({progress}%)"
-fact_he_reads = "He is reading {book} ({progress}%)"
+fact_she_reads = "You have been reading {book} lately ({progress}% through; not in hand, not reading it right now)"
+fact_he_reads = "He has been reading {book} lately ({progress}% through; not in hand, not reading it right now)"
 fact_both_finished = "You have both finished {books} and can talk about it"
 
 [work]

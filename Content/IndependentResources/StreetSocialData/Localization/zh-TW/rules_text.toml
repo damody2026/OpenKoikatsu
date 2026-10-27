@@ -607,8 +607,8 @@ fact_together = "你和他的合照有 {count} 張"
 [reading]
 he_read = "讀了一會兒{book}（{progress}%）"
 he_finished = "讀完了{book}"
-fact_she_reads = "你正在讀{book}（{progress}%）"
-fact_he_reads = "他正在讀{book}（{progress}%）"
+fact_she_reads = "你近來在讀{book}（讀到{progress}%，書不在手上，此刻沒在看）"
+fact_he_reads = "他近來在讀{book}（讀到{progress}%，書不在手上，此刻沒在看）"
 fact_both_finished = "你們都讀完了{books}，可以聊讀後感"
 
 [work]
