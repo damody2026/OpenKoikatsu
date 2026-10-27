@@ -381,3 +381,27 @@ body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開
 - `CrowdRoom100.cmd --gpu-rig --benchmark 20`（`Saved/Crowd/Room100-20261028T032553`）：
   - **177.5 FPS**，幀 5.64 ms（P95 6.04、P99 6.31），game / render / GPU 1.56 / 5.63 / 4.61 ms，draw 5391。
   - 100 人全部畫出，用時 79.8 秒，沒有載入失敗，沒有當機。
+- exe-only stage `Phys1028B`（同一個 base 與 patch；加進腳步修正 `b6caeecfa` 與開卡加速 `cba26afec`、`2147120f9`）。
+  - Shader 自 `StreetDisplay30Phys` 之後沒有改動（最後一次是 03:18 的 `66211df88`，patch 是 03:24 建的），所以沿用原 patch。
+  - 04:28 建 exe 時工作樹裡還有別的 session 未提交的 okchara／appearance 改動（新增的模組，不影響百人房與街頭）也一起編進去了。04:31 之後才改的 `OKCrowdRoom.cpp` 走法沒有編進去。
+  - `CrowdRoom100.cmd --gpu-rig --benchmark 20`（`Saved/Crowd/Room100-20261028T042851`）：
+    - **177.5 FPS**，幀 5.64 ms（P95 6.07、P99 6.39），game / render / GPU 1.53 / 5.63 / 4.54 ms，draw 5391。
+    - 100 人全部畫出，沒有載入失敗，沒有當機，關閉正常。
+    - 全部畫出用時 108.1 秒：新 exe 第一次執行，要先建程式庫掃描與程式庫貼圖的快取。
+  - 第二次加 `--exec "ok.Crowd.WalkTrace 1"`（`Room100-20261028T043133`）：
+    - 全部畫出用時 **75.0 秒**（Phys1028A 是 79.8 秒）。
+    - FPS 162.6：逐幀寫 walk.tsv 的字串要花時間，這個數字不拿來當效能數字。
+  - 新走法有生效，以 walk.tsv 檢查（腳本只看位置與朝向，不重算姿勢）：
+
+    | 執行 | 走法 | 走路時移動方向與面向的偏差（p99／最大） | 原地轉身的幀數 |
+    |---|---|---:|---:|
+    | 打包版 Phys1028B，100 人 | 新 | 0.07°／1.2° | 4457 |
+    | Editor 最終（`Room100-20261028T040600`） | 新 | 0.17°／30° | 3052 |
+    | Editor `ok.Crowd.WalkCurve 0`（`Room100-20261028T035057`） | 舊 | 38°／65° | 0 |
+
+    - 偏差是扣掉角色 yaw 慣例固定的 90° 之後的數字。
+    - 著地滑動（`gpu_rig_foot_slip_trace`）這次沒有重算：測試正被手部 session 改寫中，數字無法和上表比較。
+  - `StreetSocial.cmd -Sandbox Phys1028B -PortBase 48160 -Control`（預設 bank，不開 GPU rig；`Saved/StreetSocial/Play-20261028T043400`）：
+    - 進入街頭，10 位女角與男主全部就緒（11/11），約 311 FPS。
+    - 走到貞德·Alter 旁邊，她正常畫出，影子也在。
+    - 以 `game_stop` 關閉，log 沒有 Fatal 或 Assertion。
