@@ -128,6 +128,8 @@ void AOKStreetSocialScene::TickParty(float Dt){
    if(G==FreeTalkPartner())PartyHandOver(G);
    else{PartyLeave(G,TEXT("nobody kept her"));S.PartyEvents.Add(OKMsg(TEXT("ui.party.has_left"), {{TEXT("name"), *Name}}));S.Message=OKMsg(TEXT("ui.party.name_left_notice"), {{TEXT("name"), *Name}});}}}
  TickPartySeats();
+ // His pace this frame, for the walking line to keep up with (cm/s).
+ {const float Moved=FVector::Dist2D(S.Male,S.PartyLastMale);S.PartyLastMale=S.Male;S.PartyHisSpeed=Dt>0.f&&Moved<500.f?Moved/FMath::Max(Dt,0.001f):0.f;}
  if(S.Party.IsEmpty())return;
  const int32 Partner=FreeTalkPartner();if(Partner==INDEX_NONE)S.PartyLog.Reset();
  // He talks to someone a member dislikes: she will not stay (his girlfriend stays, reluctantly). Once for each pair.
@@ -149,7 +151,9 @@ void AOKStreetSocialScene::TickParty(float Dt){
    Ask->SetArrayField(TEXT("members"),Rows);
    if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask))for(const auto& V:Out->GetArrayField(TEXT("slots"))){const auto O=V->AsObject();S.PartySlots.Add(int32(O->GetNumberField(TEXT("actor"))),FVector2D(O->GetNumberField(TEXT("angle")),O->GetNumberField(TEXT("dist"))));}
    UE_LOG(LogTemp,Display,TEXT("Street party: walking formation %s"),*Key);}}
- FVector Toward=!Walking&&Partner!=INDEX_NONE&&S.Agents.IsValidIndex(Partner-1)?(S.Agents[Partner-1].Position-S.Male):S.Rotations[0].Vector();Toward.Z=0;if(!Toward.Normalize())Toward=FVector::ForwardVector;
+ // His heading: a character's yaw is its heading less 90 (OKStreetFacingMovement); taken as is, his sides were ahead of
+ // and behind him and the two girlfriends walked one in front, one behind (R3-252).
+ FVector Toward=!Walking&&Partner!=INDEX_NONE&&S.Agents.IsValidIndex(Partner-1)?(S.Agents[Partner-1].Position-S.Male):FRotator(0,S.Rotations[0].Yaw+90.f,0).Vector();Toward.Z=0;if(!Toward.Normalize())Toward=FVector::ForwardVector;
  static const float TalkAngles[]={-70.f,70.f,180.f,-125.f},WalkAngles[]={150.f,-150.f,180.f,125.f};
  int32 Slot=0;
  for(int32 K=0;K<Members.Num();++K){
@@ -166,7 +170,11 @@ void AOKStreetSocialScene::TickParty(float Dt){
   double& Ref=S.PartyGapRef.FindOrAdd(G);double& RefAt=S.PartyGapAt.FindOrAdd(G);
   // In the walking line she keeps her place closely and at his pace (the friend ahead of him lagged into his way).
   if(Dist>(Formation?25.f:60.f)){
-   const float Speed=(Dist>(Formation?150.f:400.f)?OKStreetMaleRunSpeed:Formation?OKStreetMaleWalkSpeed*1.15f:OKStreetWalkSpeed)*FMath::Clamp(Dt,0.f,.05f);
+   // In the line: his own pace plus a pull toward her place (at a fixed walking pace she trailed his run on a navigation
+   // by a metre, the girlfriends behind his shoulders instead of beside him).
+   const float Step=FMath::Clamp(Dt,0.f,.05f);
+   const float Speed=Formation?FMath::Min(S.PartyHisSpeed*1.05f+Dist*3.f,OKStreetMaleRunSpeed*1.5f)*Step
+    :(Dist>400.f?OKStreetMaleRunSpeed:OKStreetWalkSpeed)*Step;
    const FVector Next=StreetStep(A.Position,Delta/Dist,FMath::Min(Dist,Speed));const float Moved=FVector::Dist2D(Next,A.Position);
    if(Next!=A.Position){A.Position=FVector(Next.X,Next.Y,S.Male.Z);S.Rotations[G]=OKStreetFacingMovement(Delta,S.Rotations[G]);}
    // The one he walks with: her pace for her walk clip (StepCompanion hands her to the formation).
@@ -174,7 +182,11 @@ void AOKStreetSocialScene::TickParty(float Dt){
    const double Now=SceneTime();
    // Keeping pace beside him or in the line is not being stuck: she is put at her spot only when she falls behind it.
    if(Dist<Ref-30.0||RefAt==0||(Formation&&Dist<150.f)){Ref=Dist;RefAt=Now;}
-   else if(Now-RefAt>6.0){A.Position=Spot;Ref=0;RefAt=Now;UE_LOG(LogTemp,Display,TEXT("Street party: actor %d stood beside him (no progress for 6 s)"),G);}
+   // Stuck behind a corner (she walks straight to her place): put at it, sooner when far behind in the line (the friend
+   // fell 25 m behind a running navigation and left the group); a place inside a wall gives a free one around him.
+   else if(Now-RefAt>(Formation?(Dist>400.f?1.5:4.0):6.0)){
+    FVector To=Spot;for(int32 Turn=0;Turn<12&&OKStreetBlockedPoint(To,28.f);++Turn)To=S.Male+Toward.RotateAngleAxis(Angle+Turn*30.f,FVector::UpVector)*FMath::Min(Reach,130.f);
+    To.Z=S.Male.Z;A.Position=To;Ref=0;RefAt=Now;UE_LOG(LogTemp,Display,TEXT("Street party: actor %d stood beside him (no progress, %.0f behind her place)"),G,Dist);}
   }else{
    Ref=0;RefAt=0;if(IsPartner)S.GroupWalkPartnerSpeed=0.f;
    if(Formation)S.Rotations[G]=FRotator(0,S.Rotations[0].Yaw,0); // in the walking line: the way he faces
