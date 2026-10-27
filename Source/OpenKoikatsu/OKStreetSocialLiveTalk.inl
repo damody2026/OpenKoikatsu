@@ -92,6 +92,8 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
   if(S.FreeTalkGirl!=INDEX_NONE){S.FreeTalkCaptionPlayer.Reset();S.FreeTalkCaptionHer.Reset();S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();}
   S.FreeTalkGirl=Partner;
  }
+ // A topic he chose while her answer was on its way (Topic): asked once she has said it.
+ if(!S.PendingTopic.IsEmpty()&&!S.FreeTalkBusy&&!FreeTalkHerVoiceBusy()){const FString Category=MoveTemp(S.PendingTopic);S.PendingTopic.Reset();Topic(Category);}
  if(!S.FreeTalkLive&&!S.FreeTalkMicOpen)return;
  if(S.FreeTalkLive){
  // Her actual audio, not the dialogue box: a scripted line whose completion is lost must not keep the mic muted.

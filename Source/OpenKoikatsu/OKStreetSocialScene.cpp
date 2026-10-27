@@ -308,7 +308,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  int32 VentureHeroine=INDEX_NONE;FString VentureAmount=TEXT("5000"),VentureDays=TEXT("30");
  TSharedPtr<FOKChartData> FinChart;TSharedPtr<FOKScratchState> Scratch;TArray<TSharedPtr<SVerticalBox>> AppBoxes;TArray<FString> FinWatchCodes[2];TSet<int32> LotPicks;TArray<TSharedPtr<FJsonObject>> BetSlip;TSet<FString> FinReacted;
  int32 ShiftAppointment=0;FString ShiftJob;int64 ShiftStart=0,ShiftEnd=0,ShiftAwaySince=-1;bool ShiftFast=false;int32 ShiftChats=0;double ShiftTickWall=0;
- bool FreeTalkLive=false,FreeTalkLivePolling=false,FreeTalkLiveMuted=false,FreeTalkLiveHisMute=false,FreeTalkLiveSpeaking=false,FreeTalkLiveBaseline=false;int64 FreeTalkLiveAfter=0;double FreeTalkLiveNextPoll=0;FString FreeTalkLivePending;int32 FreeTalkGirl=INDEX_NONE,OutingGirl=INDEX_NONE;
+ bool FreeTalkLive=false,FreeTalkLivePolling=false,FreeTalkLiveMuted=false,FreeTalkLiveHisMute=false,FreeTalkLiveSpeaking=false,FreeTalkLiveBaseline=false;int64 FreeTalkLiveAfter=0;double FreeTalkLiveNextPoll=0;FString FreeTalkLivePending;FString PendingTopic /* chosen while her answer was on its way */;int32 FreeTalkGirl=INDEX_NONE,OutingGirl=INDEX_NONE;
  bool ApproachBlockedNear=false; // she walking over is held up by something within a couple of steps of him: close enough
  int64 ApproachLastMinute=-100000; // game minute the last girl set off to come over to him (TickApproach paces by game time)
  double ApproachBlockedSince=0; // when she walking over to him was last held up (0: walking freely)
@@ -881,6 +881,9 @@ bool AOKStreetSocialScene::BeginTalk(int32 Character){
 // The talk topic he chose: which line or branch she answers with is the rules' (talk.rs talk_topic).
 void AOKStreetSocialScene::Topic(const FString& Category){
  if(!State||State->Target==INDEX_NONE||State->Node!=INDEX_NONE||State->RelationshipPending||State->CollectedActive)return;auto& S=*State;
+ // Her answer is on its way (she spoke up after his silence): his topic waits for it (TickFreeTalkLive), or her "you went
+ // quiet again" arrived right after his question.
+ if(S.FreeTalkBusy){S.PendingTopic=Category;UE_LOG(LogTemp,Display,TEXT("Street topic %s waits for her answer in progress"),*Category);return;}
  S.BranchLine=false;S.RelationshipPending=false;S.PlayerLine.Reset();
  const auto& Meta=S.Manifest.Characters[S.Target];
  auto Request=OKRulesTalkRequest(S,TEXT("talk_topic"),OKStreetViewRelation(S.Store,OKStreetStableId(Meta),S.Manifest.TalkBudget),&Meta);
@@ -2054,6 +2057,7 @@ void AOKStreetSocialScene::CompleteTouch(){
 void AOKStreetSocialScene::EndTalk(){
  if(!State)return;auto& S=*State;
  if(S.PrivateGirl!=INDEX_NONE){FinishPrivate();return;}
+ S.PendingTopic.Reset(); // a topic queued behind her answer is for this talk only
  if(S.Pair.Conversation()&&S.Pair.Partner!=INDEX_NONE){FinishPhoto(false);return;} // ending the talk ends the meal too, not the other way round
  S.InvitationActive=false;S.InvitationSequence.Reset();S.InvitationQueued=INDEX_NONE;S.InvitationGirl=INDEX_NONE;S.InvitationCommand=INDEX_NONE;
  const bool Ending=S.Target!=INDEX_NONE;
