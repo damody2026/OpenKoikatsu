@@ -1,4 +1,5 @@
 // Included after scene state/UI definitions. All reservations belong to this scene.
+#include "OKStreetSocialPrivateEnv.h"
 bool AOKStreetSocialScene::ContactReady(int32 Character) const {
  if(!State||!State->Agents.IsValidIndex(Character-1)||!State->Manifest.Characters.IsValidIndex(Character))return false;
  FOKRuntimeCharacterStatus M,N;return OKGetCrowdRuntimeCharacterStatus(const_cast<AOKStreetSocialScene*>(this),0,M)&&OKGetCrowdRuntimeCharacterStatus(const_cast<AOKStreetSocialScene*>(this),Character,N)&&M.Visible&&N.Visible&&N.ActionsReady&&M.Error.IsEmpty()&&N.Error.IsEmpty();
@@ -293,8 +294,9 @@ float AOKStreetSocialScene::StepNavigation(float Dt){
 void AOKStreetSocialScene::BeginPrivate(int32 Character){
  if(!ContactReady(Character)||!ContactIdle()||!State->HighCards.IsValidIndex(Character)||State->HighCards.IsEmpty())return;
  auto& S=*State;StopAmbientActivity();EndTalk();GalgameHideForPrivate();
+ OKStreetPrivateEnvSave(); // its high models change the extraction environment the crowd reads (OKStreetSocialPrivateEnv.cpp)
  auto* Mode=AOKInteractionMode::EnterCards(GetWorld()->GetFirstPlayerController(),S.HighCards[Character],S.HighCards[0]);
- if(!Mode){S.ContactsNotice=OKT(TEXT("ui.contacts.interaction_load_failed"));RefreshUI();return;}
+ if(!Mode){OKStreetPrivateEnvRestore();S.ContactsNotice=OKT(TEXT("ui.contacts.interaction_load_failed"));RefreshUI();return;}
  S.PrivateGirl=Character;S.HighPrivateAt=FPlatformTime::Seconds();S.HighPrivateSeenReady=false;S.HighPrivateResult.Reset();S.PrivateMouse=S.MouseUI;S.PrivateMode=Mode;
  const FString Directory=FPaths::GetPath(S.Manifest.SocialReport)/TEXT("HighInteraction")/FGuid::NewGuid().ToString(EGuidFormats::Digits);IFileManager::Get().MakeDirectory(*Directory,true);
  S.HighPrivateReport=Directory/TEXT("result.json");Mode->ReportPath=S.HighPrivateReport;
@@ -316,6 +318,7 @@ void AOKStreetSocialScene::FinishPrivate(){
  if(!State||State->PrivateGirl==INDEX_NONE)return;auto& S=*State;
  auto Mode=S.PrivateMode;const int32 Girl=S.PrivateGirl;S.PrivateMode.Reset();S.PrivateGirl=INDEX_NONE;
  if(Mode.IsValid()&&!Mode->IsFinished()){Mode->Returned=nullptr;Mode->Exit(true);}
+ OKStreetPrivateEnvRestore();
  S.PrivatePausedSeconds+=FMath::Max(0.,FPlatformTime::Seconds()-S.HighPrivateAt);S.LastWall=0;
  OKSuspendCrowdRuntimeScene(this,false);S.MouseUI=S.PrivateMouse;S.MouseToggleRequested=false;
  if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(S.Camera.Get());
