@@ -814,13 +814,61 @@ void PhysicsCS(uint3 id : SV_DispatchThreadID) {
 }
 
 // ---- tasks ----
-// Per task: (term first, term count, 0, 0). Per term four float4: (node as uint: global bone or 0xffffffff, weight, 0, 0)
-// then the constant's rows 0..2 (UE column form: out = sum weight * U(world) * C).
+// Per task: (term first, term count, 0, 0). Per term four float4: (node as uint: global bone or 0xffffffff, weight,
+// 1: a native bone (NativeWorld), 0) then the constant's rows 0..2 (UE column form: out = sum weight * U(world) * C).
 StructuredBuffer<uint4> RigTasks;
 StructuredBuffer<float4> RigTerms;
 StructuredBuffer<float4> TaskWorlds;
 RWStructuredBuffer<float4> OutputRows;
 uint TaskCount;
+
+// A native bone as the pose bank composes it (IndependentPose.usf NativeTRS): each bone's local TRS composed like UE's
+// FTransform, rotations multiplied, scales multiplied per axis, no shear. The worlds multiply full matrices (Unity, the
+// native solver); the two part under a non-uniformly scaled bone that turns its child (shape or ABMX scale on an
+// arm, the forearm's 0.92, the hand's 0.9). Each local is read back off the worlds, which hold this frame's physics;
+// its scale signs come from the baseline.
+float3x4 TaskWorld(uint b) { return float3x4(TaskWorlds[b * 3], TaskWorlds[b * 3 + 1], TaskWorlds[b * 3 + 2]); }
+// IndependentPose.usf MatrixQuaternion / ReconstructRotation.
+float4 MatrixQuaternion(float3x3 r) {
+	if (all(abs(float3(r[0][0], r[1][0], r[2][0])) <= 0.0001) || all(abs(float3(r[0][1], r[1][1], r[2][1])) <= 0.0001) || all(abs(float3(r[0][2], r[1][2], r[2][2])) <= 0.0001)) return float4(0, 0, 0, 1);
+	float4 q; float tr = r[0][0] + r[1][1] + r[2][2];
+	if (tr > 0) { float inv = rsqrt(tr + 1), k = 0.5 * inv; q = float4((r[2][1] - r[1][2]) * k, (r[0][2] - r[2][0]) * k, (r[1][0] - r[0][1]) * k, 0.5 / inv); }
+	else {
+		uint i = 0; if (r[1][1] > r[0][0]) i = 1; if (r[2][2] > r[i][i]) i = 2; uint j = (i + 1) % 3, k = (j + 1) % 3;
+		float inv = rsqrt(r[i][i] - r[j][j] - r[k][k] + 1), f = 0.5 * inv;
+		q = float4(0, 0, 0, 0); q[i] = 0.5 / inv; q.w = (r[k][j] - r[j][k]) * f; q[j] = (r[j][i] + r[i][j]) * f; q[k] = (r[k][i] + r[i][k]) * f;
+	}
+	return dot(q, q) > 1e-8 ? normalize(q) : float4(0, 0, 0, 1);
+}
+float4 ReconstructRotation(float3x4 m, float3 desired) {
+	float3x3 r = float3x3(m[0].xyz, m[1].xyz, m[2].xyz);
+	[unroll] for (uint c = 0; c < 3; ++c) {
+		float3 axis = float3(r[0][c], r[1][c], r[2][c]); float n = dot(axis, axis);
+		if (n > 0) axis *= rsqrt(n); axis *= desired[c] >= 0 ? 1 : -1; r[0][c] = axis.x; r[1][c] = axis.y; r[2][c] = axis.z;
+	}
+	return MatrixQuaternion(r);
+}
+void TrsOf(float3x4 m, uint b, out float3 t, out float4 q, out float3 s) {
+	float3 flip = RigBones[b * 3 + 2].xyz; s = 0;
+	[unroll] for (uint c = 0; c < 3; ++c) s[c] = length(float3(m[0][c], m[1][c], m[2][c])) * (flip[c] < 0 ? -1.0 : 1.0);
+	t = Pos(m); q = ReconstructRotation(m, s);
+}
+float3x4 NativeWorld(uint b) {
+	uint chain[96]; uint n = 0; uint node = b;
+	while (node != NONE && n < 96) { chain[n++] = node; node = Parent(node); }
+	float3x4 above = TaskWorld(chain[n - 1]);
+	float3 t, s; float4 q; TrsOf(above, chain[n - 1], t, q, s);
+	for (uint k = n - 1; k > 0; --k) {
+		float3x4 w = TaskWorld(chain[k - 1]);
+		// A collapsed parent (zero scale) gives no local back: the full matrix.
+		if (abs(determinant(float3x3(above[0].xyz, above[1].xyz, above[2].xyz))) < 1e-12) return TaskWorld(b);
+		float3 lt, ls; float4 lq; TrsOf(Mul34(Inverse34(above), w), chain[k - 1], lt, lq, ls);
+		if (any(s < 0) || any(ls < 0)) { float3x4 m = Mul34(TrsM(t, q, s), TrsM(lt, lq, ls)); s = s * ls; t = Pos(m); q = ReconstructRotation(m, s); }
+		else { t = QRot(q, s * lt) + t; q = QMul(q, lq); s = s * ls; }
+		above = w;
+	}
+	return TrsM(t, q, s);
+}
 
 // Unity world -> UE (KKRuntimePoseMath.h OKSkinPaletteToUnreal, transposed): U[r][c] = s_r s_c W[m_r][m_c], translation x100.
 float3x4 ToUnreal(float3x4 w) {
@@ -841,7 +889,7 @@ void TaskCS(uint3 id : SV_DispatchThreadID) {
 	for (uint k = 0; k < t.y; ++k) {
 		uint o = (t.x + k) * 4; float4 head = RigTerms[o]; uint node = asuint(head.x);
 		float3x4 c = float3x4(RigTerms[o + 1], RigTerms[o + 2], RigTerms[o + 3]);
-		float3x4 u = node == NONE ? float3x4(float4(1, 0, 0, 0), float4(0, 1, 0, 0), float4(0, 0, 1, 0)) : ToUnreal(float3x4(TaskWorlds[node * 3], TaskWorlds[node * 3 + 1], TaskWorlds[node * 3 + 2]));
+		float3x4 u = node == NONE ? float3x4(float4(1, 0, 0, 0), float4(0, 1, 0, 0), float4(0, 0, 1, 0)) : ToUnreal(head.z != 0 ? NativeWorld(node) : TaskWorld(node));
 		sum += head.y * Mul34(u, c);
 	}
 	OutputRows[id.x * 3] = sum[0]; OutputRows[id.x * 3 + 1] = sum[1]; OutputRows[id.x * 3 + 2] = sum[2];

@@ -129,8 +129,38 @@ bank 保持完整長度，前 N 幀兩邊都算並讀回逐列比較，結果寫
 
 - 平均 0.76 cm，最大 36 cm。
 - 大誤差都在物理骨：裙子的 `cf_j_sk` 類骨頭、胸部、頭髮與飾品鏈。GPU rig 目前不模擬物理，這些骨頭被當成剛性跟著父骨。
-- 手與前臂另有 0.4～1 cm 的差，還沒查。
+- 手與前臂另有 0.4～1 cm 的差：已修，見下一節。
 - 用 Rust 照遊戲流程（snapshot → `apply_anim_frame`）在 6 個片段上檢查，body 與非物理 part 的常數誤差都是 0（`gpu_rig::check_terms`）。
+
+### 手與前臂的差：bank 的縮放組合方式不同（2026-10-28 修）
+
+- **現象**：`cf_j_hand`、`cf_s_hand`、`cf_j_forearm01` 這些具名 render 骨的列差 0.3～1 cm，只出現在部分角色身上，其他角色是 0。
+- **分析工具**：`Tools/crowd_rig_errors.lua <報告資料夾> [骨名 pattern] [--actors] [--rows N]` 依骨名分組統計 `rig.bin`。它在 bind 空間把差拆成旋轉角、縮放／剪切與平移。
+  - 手與前臂的差不是旋轉，也不是平移：兩邊線性部分的比值是行列式 1 的對稱應變（剪切到 0.15），軸心落在骨頭自己的位置。
+  - 和身形、clip、時間都無關：第一幀、沒在交叉淡入時就有。只看那張卡手臂這條線有沒有非等比縮放。
+- **根因**：bank 存每根原生骨的 Unity local TRS，再用 `IndependentPose.usf` 的 `NativeTRS` 組合。這是 UE FTransform 的做法：旋轉相乘、縮放逐軸相乘，不會產生剪切。GPU rig 和原生 Rust（`pose::world_of`）、Unity 一樣把完整矩陣相乘。
+  - 祖先骨有非等比縮放、子骨又相對它轉動時，兩種做法的結果就不同。例如 C004 的 `cf_j_arm00` 是 (0.96, 1, 1)、`cf_j_shoulder` 是 (1, 0.988, 1.03)；前臂 0.92、手 0.9 的四肢尺寸修正也會造成。
+  - Rust 測試 `gpu_rig::composition::gpu_rig_trs_composition`（ignored，要本機卡）用同一份 locals 比兩種組合：C004、C005 的腳最多差 5 cm、前臂附近 2.8 cm；C001 只差 0.14 cm。
+  - 腳、身體網格走 palette 別名列，bank 那邊也是原生的完整矩陣，所以不受影響。受影響的只有每人約 34 根具名 render 骨（脊椎、手臂、手、胸、頭），其中手臂這條線最明顯。
+- **修正**：`GpuRig.usf` 的 `TaskCS` 對具名原生骨（term 第一列 `.z`=1，`KKRuntimeGpuRig.cpp` 標 `Native`）改用 `NativeWorld`：沿父骨從 `Worlds` 反推每根骨的 local TRS（縮放正負號取基準 scale；`Worlds` 已含物理寫回），再照 `NativeTRS` 組合，含負縮放分支。
+  - `TaskCS` 多綁 `RigBones`。
+  - `ok.Crowd.GpuRigFullBones 1`：改回完整矩陣，用來做前後對照。在 rig 安裝時讀取，用 `--exec` 傳。
+  - 照使用者「用完整解算當對照」的決定，rig 對齊 bank。Unity 原作是有剪切的完整矩陣；想讓兩邊都照原作，要改的是 bank 的 `NativeTRS`。
+- **數字**：同一個 Editor 建置、同一組 10 張卡（C000～C010，跳過 C002），`--editor --count 10 --gpu-rig-verify 20`。修正前加 `--exec "ok.Crowd.GpuRigFullBones 1"`。逐骨數字取自 `crowd_rig_errors.lua`（第一次比對的 `rig.bin`）。
+
+  | | 修正前 `Saved/Crowd/Room100-20261028T030418` | 修正後 `Saved/Crowd/Room100-20261028T030513` |
+  |---|---:|---:|
+  | 具名骨 310 列：平均 | 0.0225 cm | 0.0003 cm |
+  | 具名骨 ≥0.1 cm 的列 | 12 | 0 |
+  | `cf_j_hand_R` 平均／最大 | 0.146／0.956 cm | 0.0001／0.0001 cm |
+  | `cf_j_hand_L` 平均／最大 | 0.113／0.860 cm | ＜0.0001 cm |
+  | `cf_j_forearm01_R`／`_L` 最大 | 0.436／0.448 cm | 0.0005／0.0006 cm |
+  | palette 列 19131 列（含物理件）：平均、≥10 cm | 0.284 cm、0.72% | 0.280 cm、0.77% |
+  | 全部列（第一次比對）：平均、≥10 cm | 0.280 cm、0.71% | 0.275 cm、0.76% |
+  | 全部列（game.log，20 次比對的平均） | 0.185 cm | 0.190 cm |
+
+  - 具名骨只剩胸部 `cf_j_bust02`（最大 0.015 cm，跟著物理）。
+  - 整體平均與 ≥10 cm 的比例由 palette 列裡的物理件決定，兩次的起伏是連續模擬與逐 clip 解算的差（見「GPU 物理」一節），和這個修正無關。
 
 ### FPS 與記憶體（2026-10-27，Editor `-game`，1920×1080，100 人，只有這一個遊戲）
 

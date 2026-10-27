@@ -5,6 +5,7 @@
 
 pub(crate) mod export;
 pub(crate) mod physics;
+pub(crate) mod walk;
 
 #[cfg(test)]
 mod tests {
@@ -264,5 +265,75 @@ mod physics_export {
         let loose: Vec<String> = palettes.iter().enumerate().filter_map(|(p, t)| { let n = t.iter().filter(|t| t.error > 1e-4).count(); (n > 0).then(|| format!("{p}:{n}/{}", t.len())) }).collect();
         let on_nodes = palettes.iter().flatten().filter(|t| t.node >= rig.ids.len() as i32).count();
         println!("palette terms on physics nodes {on_nodes}, loose {}", loose.join(" "));
+    }
+}
+
+#[cfg(test)]
+mod composition {
+    /// The pose bank keeps each native bone's Unity local TRS and composes them like UE's FTransform (IndependentPose.usf
+    /// NativeTRS: rotations multiply, scales multiply per axis, no shear); the native skeleton (and SkeletonCS) multiplies
+    /// full matrices. Under a non-uniformly scaled bone that turns its child (the limb-size corrections' forearm 0.92 and
+    /// hand 0.9, ABMX) the two differ. Per card and clip: the bones where they differ most (cm, Unity x 100).
+    ///   OK_RIG_CARDS=C000,C004 cargo test --release --lib gpu_rig_trs_composition -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn gpu_rig_trs_composition() {
+        use crate::pose::{quat_mul, Mat4, Tf};
+        use std::collections::HashMap;
+        fn rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
+            let t = [2. * (q[1] * v[2] - q[2] * v[1]), 2. * (q[2] * v[0] - q[0] * v[2]), 2. * (q[0] * v[1] - q[1] * v[0])];
+            [v[0] + q[3] * t[0] + (q[1] * t[2] - q[2] * t[1]), v[1] + q[3] * t[1] + (q[2] * t[0] - q[0] * t[2]), v[2] + q[3] * t[2] + (q[0] * t[1] - q[1] * t[0])]
+        }
+        fn trs_world(id: i64, tfs: &HashMap<i64, Tf>) -> Mat4 {
+            let mut chain = vec![id];
+            while let Some(p) = tfs.get(chain.last().unwrap()).and_then(|t| t.parent).filter(|p| *p != 0 && tfs.contains_key(p)) { chain.push(p); }
+            let root = &tfs[chain.last().unwrap()];
+            let (mut t, mut q, mut s) = (root.pos, root.rot, root.scale);
+            for id in chain.iter().rev().skip(1) {
+                let l = &tfs[id];
+                if s.iter().chain(l.scale.iter()).any(|v| *v < 0.) { return crate::pose::world_of_id(*id, tfs); }
+                let r = rotate(q, [s[0] * l.pos[0], s[1] * l.pos[1], s[2] * l.pos[2]]);
+                t = [t[0] + r[0], t[1] + r[1], t[2] + r[2]];
+                q = quat_mul(q, l.rot);
+                s = [s[0] * l.scale[0], s[1] * l.scale[1], s[2] * l.scale[2]];
+            }
+            crate::pose::trs(t, q, s)
+        }
+        let cards = std::env::var("OK_RIG_CARDS").unwrap_or_else(|_| "C000,C001,C004".into());
+        let clips = ["walk_01", "conversation_wait_00", "conversation_wait_10", "library/lib_0_0_5", "library/lib_17_4_2"];
+        for card in cards.split(',') {
+            std::env::set_var("OK_RIG_CARD", format!("E:/OpenKoikatsu/Content/CharacterCards/CrowdAPNG/{card}.png"));
+            let mut s = super::tests::open_with_clip_pub();
+            let s = &mut *s;
+            for clip in clips {
+                let bytes = std::fs::read(format!("E:/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/{clip}.okanim")).unwrap();
+                let (root, key) = crate::anim::install_shared_clip(&bytes).expect("install");
+                s.game_root = root; s.anim_clip = key; s.anim_parameters.clear(); s.anim_scene_mode = 0; s.anim_time = 0.; s.reset_anim_clock(); s.pv_mask = 15;
+                let d = crate::anim::clip_duration(&s.game_root, &s.anim_clip).max(0.1);
+                let mut worst: HashMap<String, (f32, f32)> = HashMap::new();
+                for k in 0..8 {
+                    s.sample_paired_frame(d * k as f32 / 8.);
+                    let body = s.body_skel.as_ref().unwrap();
+                    for (id, tf) in &body.tfs {
+                        let full = crate::pose::world_of_id(*id, &body.tfs);
+                        let comp = trs_world(*id, &body.tfs);
+                        let pos = ((0..3).map(|r| (full[r][3] - comp[r][3]).powi(2)).sum::<f32>()).sqrt() * 100.;
+                        let lin = (0..3).flat_map(|r| (0..3).map(move |c| (r, c))).map(|(r, c)| (full[r][c] - comp[r][c]).abs()).fold(0f32, f32::max);
+                        let e = worst.entry(tf.name.clone()).or_default();
+                        e.0 = e.0.max(pos); e.1 = e.1.max(lin);
+                    }
+                }
+                let mut list: Vec<_> = worst.into_iter().filter(|(_, e)| e.0 > 0.01 || e.1 > 1e-3).collect();
+                list.sort_by(|a, b| b.1.0.total_cmp(&a.1.0).then(b.1.1.total_cmp(&a.1.1)));
+                println!("{card} {clip}: {} bones differ; {}", list.len(),
+                    list.iter().take(8).map(|(n, e)| format!("{n} {:.3} cm / {:.4}", e.0, e.1)).collect::<Vec<_>>().join(", "));
+            }
+            let body = s.body_skel.as_ref().unwrap();
+            let mut scaled: Vec<String> = body.tfs.values().filter(|t| (t.scale[0] - t.scale[1]).abs() > 1e-4 || (t.scale[1] - t.scale[2]).abs() > 1e-4)
+                .filter(|t| t.name.contains("arm") || t.name.contains("hand") || t.name.contains("shoulder") || t.name.contains("height") || t.name.contains("root"))
+                .map(|t| format!("{} {:?}", t.name, t.scale)).collect();
+            scaled.sort();
+            println!("{card} non-uniform arm-line scales: {}", scaled.join("; "));
+        }
     }
 }

@@ -16,7 +16,7 @@ struct KKCROWDGPUPACKING_API FOKGpuRigBatch {
  TArray<uint32> Named;          // 66 per actor
  TArray<FUintVector4> ClipSlots;TArray<FVector4f> ClipRates; // ClipSlotsPerActor per actor
  TArray<FUintVector4> Channels;TArray<FVector4f> Samples;
- TArray<FUintVector4> Tasks;TArray<FVector4f> Terms; // 4 rows per term
+ TArray<FUintVector4> Tasks;TArray<FVector4f> Terms; // 4 rows per term: (node, weight, 1: native bone, 0), C rows
  // DynamicBone chains (PhysicsCS): a reference is a bone, or OKGpuRigPhysicsNode | node; a node's world follows the
  // bones' in the worlds buffer (a term's node there is BoneCount + node).
  TArray<FUintVector4> PhysSets;      // 2 per set: (kind: 2 body, 1 clothes, 0 accessory; node first, node count, chain first), (chain count, follow first, follow count, 0)

@@ -102,6 +102,9 @@ static TAutoConsoleVariable<int32> CVarOKMouthAlwaysDriven(TEXT("ok.Mouth.Always
 // Outline LOD: a character farther from the camera than this (cm) draws without her outline shells (their sections
 // hidden on her main component: no draw calls, not just transparent). 0 (default): always drawn.
 static TAutoConsoleVariable<float> CVarOKCrowdOutlineRange(TEXT("ok.Crowd.OutlineRange"),0.f,TEXT("cm: farther characters draw no outline shells (0: always)"));
+// GPU rig: 1 poses the render bones that are her own rig bones with the full matrices (Unity's shear) instead of the
+// pose bank's per-axis scale composition (a before/after check of GpuRig.usf NativeWorld). Read when the rig installs.
+static TAutoConsoleVariable<int32> CVarOKCrowdGpuRigFullBones(TEXT("ok.Crowd.GpuRigFullBones"),0,TEXT("1: GPU rig native bones as full matrices, not the bank's composition (read at install)"));
 static TAutoConsoleVariable<int32> CVarOKCrowdLogSlowEntries(TEXT("ok.Crowd.LogSlowEntries"),0,TEXT("1: log a character's frame update taking over 1 ms, split into speech/behaviour, face look, face upload and components."));
 template<typename... THeld> static void OKCrowdFreeOnWorker(THeld&&... Held){
  Async(EAsyncExecution::ThreadPool,[...Held=MoveTemp(Held)]()mutable{(Held.Reset(),...);});
@@ -941,6 +944,7 @@ struct FScene : TSharedFromThis<FScene> {
     B->ClipSlots.Add(FUintVector4(ChannelFirst,C.Bones.Num(),C.Frames,C.Flags));B->ClipRates.Add(FVector4f(C.Rate,C.Duration,0,0));
    }
   }
+  const bool FullBones=CVarOKCrowdGpuRigFullBones.GetValueOnAnyThread()!=0;
   for(const auto& Task:Bank.Data.Pose.Tasks){
    auto* E=ByActor.IsValidIndex(int32(Task.Y))?ByActor[Task.Y]:nullptr;if(!E||!E->Rig.BoneTerms.IsValidIndex(int32(Task.X))){Error=TEXT("GPU rig task outside an actor's render bones");return nullptr;}
    const auto& Terms=E->Rig.BoneTerms[Task.X];const uint32 First=B->Terms.Num()/4;
@@ -956,7 +960,8 @@ struct FScene : TSharedFromThis<FScene> {
      for(int32 K=0;K<4;++K)C[R][K]=Row.X*Bind[0][K]+Row.Y*Bind[1][K]+Row.Z*Bind[2][K]+(K==3?Row.W:0.f);}
     // Her physics nodes come after her bones; in the worlds buffer after everyone's bones.
     const uint32 Node=T.Node<0?MAX_uint32:T.Node>=int32(NameCount[Task.Y])?B->BoneCount+NodeFirst[Task.Y]+uint32(T.Node-int32(NameCount[Task.Y])):BoneFirst[Task.Y]+uint32(T.Node);
-    B->Terms.Add(FVector4f(Bits(Node),T.Weight,0,0));B->Terms.Add(C[0]);B->Terms.Add(C[1]);B->Terms.Add(C[2]);}
+    // .z: her own rig bone, composed as the bank composes it (GpuRig.usf NativeWorld; ok.Crowd.GpuRigFullBones: the full matrix).
+    B->Terms.Add(FVector4f(Bits(Node),T.Weight,T.Native&&T.Node<int32(NameCount[Task.Y])&&!FullBones?1.f:0.f,0));B->Terms.Add(C[0]);B->Terms.Add(C[1]);B->Terms.Add(C[2]);}
    B->Tasks.Add(FUintVector4(First,Terms.Num(),0,0));
    RowActors.Add(Task.Y);if(GpuRigVerify>0)RowNames.Add(FString::Printf(TEXT("%u %s %d"),Task.Y,*E->PoseRecipe->Bones[Task.X].Name.ToString(),Terms.Num()>0?Terms[0].Node:-2));
   }

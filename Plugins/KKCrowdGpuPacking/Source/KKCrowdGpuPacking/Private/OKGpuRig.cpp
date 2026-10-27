@@ -53,6 +53,7 @@ class FOKGpuRigTaskCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,RigTasks)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigTerms)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,TaskWorlds)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigBones) // a native term's parents and scale signs
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,OutputRows)
   SHADER_PARAMETER(uint32,TaskCount)
  END_SHADER_PARAMETER_STRUCT()
@@ -196,7 +197,7 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
  {
   auto* P=G.AllocParameters<FOKGpuRigTaskCS::FParameters>();
   P->RigTasks=G.CreateSRV(G.RegisterExternalBuffer(Tasks));P->RigTerms=G.CreateSRV(G.RegisterExternalBuffer(Terms));P->TaskWorlds=G.CreateSRV(WorldsBuffer);
-  P->OutputRows=G.CreateUAV(Output);P->TaskCount=TaskCount;
+  P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->OutputRows=G.CreateUAV(Output);P->TaskCount=TaskCount;
   TShaderMapRef<FOKGpuRigTaskCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
   FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigTasks"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(TaskCount),64));
  }

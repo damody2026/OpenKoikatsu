@@ -7,7 +7,9 @@
 // worker from her pose recipe (Tools/ok-extract/src/gpu_rig/export.rs): her body skeleton (local bone indices) and,
 // for every bone of her render rig, the terms its pose row is the sum of: weight x UE(world of a body bone) x C (C in
 // UE column form, three rows; Node INDEX_NONE: the identity). Physics is not part of it.
-struct FKKRuntimeGpuRigTerm {int32 Node=INDEX_NONE;float Weight=1.f;FVector4f C[3];};
+// Native: a render bone that is her rig bone itself; the pose bank composes those like UE's FTransform (IndependentPose.usf
+// NativeTRS, no shear), so the rig does too (GpuRig.usf TaskCS).
+struct FKKRuntimeGpuRigTerm {int32 Node=INDEX_NONE;float Weight=1.f;FVector4f C[3];bool Native=false;};
 struct FKKRuntimeGpuRigAbm {int32 Bone=0;FVector4f Rot;float Length=1.f;FVector3f Pos=FVector3f::ZeroVector,Scale=FVector3f::OneVector;};
 // Her DynamicBone chains for the rig's verlet pass (export.rs Physics::write, Shaders/GpuRig.usf PhysicsCS), in the
 // shader's rows with her own indices: a transform reference is her rig bone, or 0x40000000 | her node; a particle's

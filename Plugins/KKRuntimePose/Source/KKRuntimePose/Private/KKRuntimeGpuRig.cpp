@@ -125,7 +125,7 @@ TFuture<FKKRuntimeGpuRigResult> OKPrepareRuntimeGpuRigAsync(TSharedPtr<const FKK
    }
    FKKRuntimeGpuRigTerm T;
    if(B==0&&Name==TEXT("__ok_scene")){Identity(T);Terms.Add(T);continue;}
-   if(const int32* Node=ByName.Find(Name)){Identity(T);T.Node=*Node;Terms.Add(T);continue;}
+   if(const int32* Node=ByName.Find(Name)){Identity(T);T.Node=*Node;T.Native=true;Terms.Add(T);continue;}
    FMatrix44d World;if(UnityWorld(Name,World)&&Riding(World,T)){Terms.Add(T);continue;}
    Identity(T);Terms.Add(T);
   }
