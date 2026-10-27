@@ -401,7 +401,16 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
   if(Seat.IsEmpty())StartBluff();
   else{S.BluffOnArrival=Seat;UE_LOG(LogTemp,Display,TEXT("Street bluff: agreed outdoors, to %s first"),*Seat);ExecuteFreeTalkAction(Partner,OKStreetStableId(S.Manifest.Characters[Partner]),Seat);}
  }
- else if(!DoNow.IsEmpty()&&Partner!=INDEX_NONE)ExecuteFreeTalkAction(Partner,OKStreetStableId(S.Manifest.Characters[Partner]),DoNow);
+ else if(!DoNow.IsEmpty()&&Partner!=INDEX_NONE){
+  // The one he talks to says goodbye in this same reply ("go ahead, I'll come after my shift") while the others agree to
+  // go: they go without her. Run on her, the plan was refused by her shift and the one left heard only "she is working"
+  // ("then I'll eat alone"). Hand over now and the one staying does it.
+  int32 Doer=Partner;
+  if(DoNow!=TEXT("leave")&&S.PartyLeaving.Contains(Partner)&&S.Party.ContainsByPredicate([&S,Partner](int32 X){return X!=Partner&&!S.PartyLeaving.Contains(X);})){
+   S.PartyLeaving.Remove(Partner);PartyHandOver(Partner);Doer=FreeTalkPartner();
+   UE_LOG(LogTemp,Display,TEXT("Street party: actor %d leaves in the reply that agreed on %s; %d does it"),Partner,*DoNow,Doer);}
+  if(S.Manifest.Characters.IsValidIndex(Doer))ExecuteFreeTalkAction(Doer,OKStreetStableId(S.Manifest.Characters[Doer]),DoNow);
+ }
  RefreshUI();
 }
 
