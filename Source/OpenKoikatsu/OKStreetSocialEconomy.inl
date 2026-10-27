@@ -181,7 +181,12 @@ void AOKStreetSocialScene::TickServes(){
    // Served at a place where people sit down to eat, while the two of them just stand there (they walked into the
    // restaurant and ordered on the way in: Hu Tao ate her salad standing by the door): they sit down at its table, the
    // place's own seated meal on his floor (the department store has one on several floors).
-   if(const int32 G=P.Her;G!=INDEX_NONE&&FreeTalkPartner()==G&&S.Pair.Partner==INDEX_NONE&&S.Facility==INDEX_NONE&&S.SoloGirl==INDEX_NONE&&S.OutingGirl==INDEX_NONE&&!P.PlaceId.IsEmpty()&&ShopPlaceHere()==P.PlaceId)
+   // Not while she is at work or in class: Jeanne Alter, on her shift at the cafe ("I'm working, no time to sit with
+   // you"), was sat down with him the moment her latte came (R3-231).
+   const FOKStreetPlanBlock* HerBlock=P.Her!=INDEX_NONE?BlockNow(P.Her,int32(OKStreetMindNow(S)%1440)):nullptr;
+   const bool OnDuty=HerBlock&&(HerBlock->Kind==TEXT("work")||HerBlock->Kind==TEXT("class"));
+   if(OnDuty&&P.Her!=INDEX_NONE)UE_LOG(LogTemp,Display,TEXT("Street order served: actor %d is on %s; they do not sit down"),P.Her,*HerBlock->Kind);
+   if(const int32 G=P.Her;!OnDuty&&G!=INDEX_NONE&&FreeTalkPartner()==G&&S.Pair.Partner==INDEX_NONE&&S.Facility==INDEX_NONE&&S.SoloGirl==INDEX_NONE&&S.OutingGirl==INDEX_NONE&&!P.PlaceId.IsEmpty()&&ShopPlaceHere()==P.PlaceId)
     if(const FOKStreetPlace* Here=OKStreetFindPlace(P.PlaceId)){
      const FOKStreetActivity* Best=nullptr;float BestZ=0;
      for(const auto& A:OKStreetActivities()){
