@@ -147,9 +147,12 @@ fn promise(c: &Catalog, r: &Value) -> Value {
                       "id": i(a, "id"), "start": said, "minute": minute, "place_changed": s(a, "place") != place});
     }
     // Booked for when the place is closed (breakfast at 8:00 at a shop opening at 10:00): not booked; she hears why.
+    // Meeting at its door a little before it opens ("09:30 at the bookstore door, we read once it opens at 10") is a
+    // meeting: they wait there for it (R3-253).
     let d = date((start / 1440) as i32, 12.0);
     let hours = (start % 1440) as f64 / 60.0;
-    if !c.place_open(place, hours, d.weekday as i32) {
+    let opens_soon = (1..=4).any(|k| c.place_open(place, hours + k as f64 * 0.25, d.weekday as i32));
+    if !c.place_open(place, hours, d.weekday as i32) && !opens_soon {
         return json!({"action": "closed", "reason": "closed", "start": start, "minute": minute, "why": c.closed_why(place, d.weekday as i32)});
     }
     // Another girl already booked near that time: he is told (both stay booked; it is his to sort out).
@@ -241,6 +244,9 @@ mod tests {
         let closed = ask(json!({"place": "cafe", "time": "08:00"}));
         assert_eq!(closed["action"], "closed");
         assert!(!closed["why"].as_str().unwrap().is_empty());
+        // At the bookstore door half an hour before it opens (10:00): a meeting, they wait for it there (R3-253).
+        let door = ask(json!({"place": "bookstore", "time": "09:30"}));
+        assert_ne!(door["action"], "closed", "{door}");
     }
 
     #[test]
