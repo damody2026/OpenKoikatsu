@@ -444,3 +444,19 @@ body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開
     - 進入街頭，10 位女角與男主全部就緒（11/11），約 311 FPS。
     - 走到貞德·Alter 旁邊，她正常畫出，影子也在。
     - 以 `game_stop` 關閉，log 沒有 Fatal 或 Assertion。
+- exe-only stage `Phys1028C`（同一個 base 與 patch；加進 `5cb155b0f`：不再原地轉身、bank 格數修正、bank 快取版本 4 → 5）。
+  - Shader 仍沒有改動，沿用 `StreetDisplay30Phys`。
+  - 每次啟動都在背景開看門狗：log 出現 GPU crash／device lost／Fatal，或 5 分鐘沒動，就關掉自己的 PID。這次三輪都沒觸發。
+
+  | 執行 | 報告 | 畫出 | 全部畫出用時 | FPS | 幀（P95） | GPU |
+  |---|---|---:|---:|---:|---:|---:|
+  | `CrowdRoom100.cmd --gpu-rig --benchmark 20` | `Saved/Crowd/Room100-20261028T053740` | 100／失敗 0 | 99.0 s | **175.5** | 5.70 ms（6.11） | 4.60 ms |
+  | `CrowdRoom100.cmd --benchmark 20`（預設 bank） | `Saved/Crowd/Room100-20261028T054031` | 100／失敗 0 | 128.8 s | 116.3 | 8.60 ms（9.32） | 6.23 ms |
+
+  - 兩輪都是 bank 快取改版後第一次執行（要重建）。兩輪都畫滿 100 人，關閉正常。
+  - 預設 bank 100 人沒到 120。120 的目標是對 `--gpu-rig`；bank 的 GPU 時間和之前 Int1027E 畫 89 人的 5.72 ms 換算成 100 人（約 6.4 ms）相當，不是這次退步。
+  - `StreetSocial.cmd -Sandbox Phys1028C -PortBase 48160 -Control`（預設 bank；`Saved/StreetSocial/Play-20261028T054352`）：
+    - 11/11 就緒，約 290～315 FPS。
+    - 胡桃站著時，間隔 1 秒的兩張截圖姿勢、頭髮與裙擺都有變化；她走開時步伐正常。
+    - 貞德·Alter 交談時雙手抱胸、手的位置正常，台詞與語音正常。
+    - 以 `game_stop` 關閉，log 沒有 Fatal、Assertion 或 GPU crash。
