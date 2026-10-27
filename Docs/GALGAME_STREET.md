@@ -203,3 +203,8 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 - 動態 3.6 ms，主要是飾品鏈。
 
 要上 120 FPS，得重寫 `anim.rs` 葉取樣的資料結構（每片葉一份 HashMap 骨架、逐骨查表），尚未動手。
+
+之後拆出 `KK_NativeLeafSnapshot`／`KK_NativeLeafChannels`／`KK_NativeChannelLookup`／`KK_NativeChannelSample`，找到真正原因是每次都從磁碟快取重讀 avatar 路徑表，並導致綁定與通道計畫快取永遠不中。改成依根目錄記在記憶體後（`anim.rs` `load_avatar_tos_shared`）：
+
+- 每個角色的曲線取樣從 2.76 ms 降到 0.64 ms。
+- 愛麗絲 1 對 1 從 109 FPS 提升到 128 FPS（不開 trace，GPU 上只有另一個 C 的遊戲）。

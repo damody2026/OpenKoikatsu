@@ -361,6 +361,17 @@ pub fn ingest_avatar_tos(obj: &UnityObject) {
 
 fn load_avatar_tos_shared(game_root: &Path) -> std::sync::Arc<HashMap<u32, String>> {
     if let Some(tos)=shared::avatar_tos(game_root) { return tos; }
+    // Kept per root: the disk cache has no memory of its own, so every sampled clip (each blend leaf, every frame)
+    // read, decompressed and decoded the whole table again (0.9 ms a call on the one-on-one pair), and the new Arc
+    // missed the binding and channel plan caches, which match it by pointer, so both plans were rebuilt each time.
+    static MEMO: std::sync::Mutex<Option<HashMap<PathBuf, std::sync::Arc<HashMap<u32, String>>>>> = std::sync::Mutex::new(None);
+    if let Some(tos)=MEMO.lock().ok().and_then(|m|m.as_ref().and_then(|m|m.get(game_root).cloned())) { return tos; }
+    let tos=load_avatar_tos_uncached(game_root);
+    if !tos.is_empty() { if let Ok(mut m)=MEMO.lock() { m.get_or_insert_with(HashMap::new).insert(game_root.to_path_buf(), tos.clone()); } }
+    tos
+}
+
+fn load_avatar_tos_uncached(game_root: &Path) -> std::sync::Arc<HashMap<u32, String>> {
     // Decoded on disk (and in an OK base library root, which has no oo_base bundle).
     if let Some(tos)=disk_cache::load::<HashMap<u32, String>>(game_root, "tos", "avatar") { if !tos.is_empty() { return std::sync::Arc::new(tos); } }
     let tos=load_avatar_tos_bundle(game_root);
@@ -2383,17 +2394,19 @@ fn sample_motion_pose_impl(game_root:&Path,skel:&mut Skeleton,baseline:&Skeleton
         let (clip,_,cycle,length)=&leaves[0];
         let p=if t==f32::MAX {1.}else if entry.timing.looping {(phase+cycle).rem_euclid(1.)}else{(phase+cycle).clamp(0.,1.)};
         let key=format!("{}|{}",clip.source.as_deref().unwrap_or(source),clip.label);
-        skel.restore_from(baseline);apply_raw_clip_at(game_root,skel,&key,p*length);
+        skel.restore_from(baseline);apply_raw_clip_local(game_root,skel,&key,p*length,&cached_rig_bindings(baseline));
         for tf in skel.tfs.values_mut(){for i in 0..3{tf.pos[i]=0.+tf.pos[i]*1.;tf.scale[i]=0.+tf.scale[i]*1.;}tf.rot=norm_quat(tf.rot.map(|x|0.+x*1.*1.));}
         skel.rebuild_worlds();return true;
     }
     let leaves_trace=crate::native_profile::Scope::new(38);
+    // Every leaf is a snapshot of `baseline` (same transforms, parents and names): its rig is matched once here.
+    let rig=cached_rig_bindings(baseline);
     let mut poses=Vec::new();
     for(clip,weight,cycle,length) in leaves {
-        let mut pose=SkeletonSnapshot::new(baseline);
+        let mut pose={let _trace=crate::native_profile::Scope::new(40);SkeletonSnapshot::new(baseline)};
         let p=if t==f32::MAX {1.} else if entry.timing.looping {(phase+cycle).rem_euclid(1.)} else {(phase+cycle).clamp(0.,1.)};
         let key=format!("{}|{}",clip.source.as_deref().unwrap_or(source),clip.label);
-        apply_raw_clip_at(game_root,&mut pose,&key,p*length);
+        {let _trace=crate::native_profile::Scope::new(41);apply_raw_clip_local(game_root,&mut pose,&key,p*length,&rig);}
         if entry.layer.as_ref().is_some_and(|l|l.additive) {
             let mut reference=SkeletonSnapshot::new(baseline);
             let Some((binds,values))=additive_reference_values(game_root,&key) else {return false;};
@@ -2545,12 +2558,22 @@ fn apply_raw_elapsed_clip_at(game_root:&Path,skel:&mut Skeleton,state:&str,t:f32
     apply_raw_clip_impl(game_root,skel,state,t,true);
 }
 fn apply_raw_clip_impl(game_root:&Path,skel:&mut Skeleton,state:&str,t:f32,elapsed:bool) {
+    apply_raw_clip_worlds(game_root,skel,state,t,elapsed,true,None);
+}
+/// A blend tree's leaf: only the local TRS is blended (the tree rebuilds the worlds once at the end), so the leaf
+/// skips its own world rebuild. Alice's one-on-one sampled four leaves a role every frame and rebuilt ~3000 worlds
+/// for each (KK_NativeMotionLeaves 2.1 ms a role). OK_LEAF_WORLDS=1 keeps the old rebuild, to compare.
+fn apply_raw_clip_local(game_root:&Path,skel:&mut Skeleton,state:&str,t:f32,rig:&Arc<RigBindingData>) {
+    static KEEP:std::sync::OnceLock<bool>=std::sync::OnceLock::new();
+    apply_raw_clip_worlds(game_root,skel,state,t,false,*KEEP.get_or_init(||std::env::var("OK_LEAF_WORLDS").ok().as_deref()==Some("1")),Some(rig));
+}
+fn apply_raw_clip_worlds(game_root:&Path,skel:&mut Skeleton,state:&str,t:f32,elapsed:bool,worlds:bool,rig:Option<&Arc<RigBindingData>>) {
     let start=std::time::Instant::now();
     if std::env::var_os("OK_ANIM_DEBUG").is_none() {
         let key=format!("{}\0{}",game_root.display(),state);
         if let Some(clip)=cached_clip(&key) {
             let time=if elapsed{raw_preview_sample_time(&clip,t)}else{t};
-            if apply_cached_channels(game_root,skel,clip,time){return;}
+            if apply_cached_channels(game_root,skel,clip,time,worlds,rig){return;}
         }
     }
     let Some((binds, values, streamed_n, dense_n, const_n, _dur)) =
@@ -2718,22 +2741,27 @@ fn direct_channels_match_full_sampler_boundaries_and_overrides(){
         }}
     }
 }
-fn apply_cached_channels(root:&Path,skel:&mut Skeleton,clip:Arc<CachedClip>,t:f32)->bool {
+fn apply_cached_channels(root:&Path,skel:&mut Skeleton,clip:Arc<CachedClip>,t:f32,worlds:bool,rig:Option<&Arc<RigBindingData>>)->bool {
     // Unordered/malformed keys retain the legacy scan. Addresses own both the
     // decoded clip and verified rig/avatar plan, preventing pointer reuse.
     if clip.curve_index.is_none() || clip.dense.samples.len()<(clip.dense.count as usize).saturating_mul(clip.dense.frames){return false;}
-    let binding=binding_plan(cached_rig_bindings(skel),load_avatar_tos_shared(root),&clip.binds);
+    let lookup_trace=crate::native_profile::Scope::new(42);
+    // The rig's binding paths: given by a blend tree for its leaves (copies of one baseline, same topology), else
+    // found by matching this skeleton (every transform's id, parent and name: 0.9 ms a call on Alice's rig).
+    let rig=rig.cloned().unwrap_or_else(||cached_rig_bindings(skel));
+    let binding=binding_plan(rig,load_avatar_tos_shared(root),&clip.binds);
     let plan=CHANNEL_PLANS.with(|cache|{let mut cache=cache.borrow_mut();
         if let Some(i)=cache.iter().rposition(|p|Arc::ptr_eq(&p.clip,&clip)&&Arc::ptr_eq(&p.binding,&binding)){let p=cache.remove(i);cache.push(p.clone());return p;}
         let channels=binding.steps.iter().map(|s|std::array::from_fn(|i|channel_address(&clip,s.curve+i as i32))).collect();
         let p=Arc::new(ChannelPlan{clip,binding,channels});if cache.len()>=32{cache.remove(0);}cache.push(p.clone());p
     });
     let c=&plan.clip;let time=c.start+c.state_timing.map(|clock|clock.clip_time(t,c.duration)).unwrap_or(t);let dense_frame=channel_dense_frame(c,time);
+    drop(lookup_trace);let _sample_trace=crate::native_profile::Scope::new(43);
     for(step,channels)in plan.binding.steps.iter().zip(&plan.channels){
         let Some(tf)=skel.tfs.get_mut(&step.id)else{continue;};let values=channels.map(|channel|sample_channel(c,channel,time,dense_frame));
         match step.attribute{1=>tf.pos=[values[0],values[1],values[2]],2=>tf.rot=norm_quat(values),3=>{let scale=[values[0],values[1],values[2]];if scale.iter().all(|s|s.is_finite()&&s.abs()>1e-6){tf.scale=scale;}},4=>tf.rot=euler_deg_to_quat([values[0],values[1],values[2]]),_=>{}}
     }
-    skel.rebuild_worlds();true
+    if worlds{skel.rebuild_worlds();}true
 }
 fn apply_binding_values(game_root:&Path,skel:&mut Skeleton,state:&str,binds:Vec<Binding>,values:HashMap<i32,f32>,streamed_n:u32,dense_n:u32,const_n:usize) {
     if std::env::var_os("OK_ANIM_DEBUG").is_some(){apply_binding_values_legacy(game_root,skel,state,binds,values,streamed_n,dense_n,const_n);return;}
