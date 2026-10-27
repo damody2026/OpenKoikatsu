@@ -233,6 +233,7 @@ struct FOKStreetSceneState {
  // the one he walks with when the formation, not her trail, walks her (TickParty), and her pace for her walk clip.
  FString PartySlotsKey;TMap<int32,FVector2D> PartySlots;int32 GroupWalkPartner=INDEX_NONE;float GroupWalkPartnerSpeed=0.f;
  FVector PartyLastMale=FVector::ZeroVector;float PartyHisSpeed=0.f; // his pace, for the walking line (TickParty)
+ FString ThenWaitLogged; // the "then" logged as waiting for its place to open (TickThenAction)
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;

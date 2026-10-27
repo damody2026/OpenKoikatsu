@@ -381,7 +381,11 @@ void AOKStreetSocialScene::TickThenAction(){
  // Arrived where they went first (a walk in the park, then lunch): a while there before going on.
  if(S.ThenStayMinutes>0){if(S.ThenReadyAt<=0){S.ThenReadyAt=OKStreetMindNow(S)+S.ThenStayMinutes;S.ThenUntil=FMath::Max(S.ThenUntil,S.ThenReadyAt+60);UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d after %lld minutes here"),*S.ThenAction,Girl,S.ThenStayMinutes);}
   if(OKStreetMindNow(S)<S.ThenReadyAt)return;}
- FString Error;const FString Action=S.ThenAction;S.ThenAction.Reset();
+ // Agreed for when the shop opens ("once it opens, we sit and read" at the bookstore door at 09:44): they wait for it,
+ // not "she agreed, but it is closed" at once (within the two hours above).
+ {const FString PlaceId=S.ThenAction.StartsWith(TEXT("go:"))?S.ThenAction.Mid(3):[&]{const auto* A=OKStreetFindActivity(S.ThenAction);return A?FString(A->Place):FString();}();
+  FString Why;if(!PlaceId.IsEmpty()&&PlaceClosedNow(PlaceId,Why)){if(S.ThenWaitLogged!=S.ThenAction){S.ThenWaitLogged=S.ThenAction;UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d waits, %s is closed (%s)"),*S.ThenAction,Girl,*PlaceId,*Why);}return;}}
+ FString Error;const FString Action=S.ThenAction;S.ThenAction.Reset();S.ThenWaitLogged.Reset();
  const bool Started=BeginOuting(Girl,Action,Error);
  UE_LOG(LogTemp,Display,TEXT("Street then: %s for actor %d %s%s"),*Action,Girl,Started?TEXT("started"):TEXT("refused: "),*Error);
  // What they do next is under way: "the table is eaten clean, talk about what to do next" queued the same moment got a

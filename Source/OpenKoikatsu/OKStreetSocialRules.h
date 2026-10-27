@@ -347,6 +347,9 @@ struct FOKStreetStore {
  // Who was with him then (walking, out, sitting or talking with him): put back there on load, not sent off by her plan (R3-238).
  struct FWithHim { FString Id, Mode; FVector Spot = FVector::ZeroVector; float Yaw = 0.f; }; // Mode: follow | stay
  TArray<FWithHim> WithHim;
+ // What was on their table then (paid; a dish still being made counts as served on load), and the place (R3-254).
+ struct FTableDish { FString ItemId, Name, Her; bool ForHer = false; float Percent = 100.f; }; // Her: her stable id, "" for his
+ TArray<FTableDish> Table; FString TablePlace;
  // Plan §15 player start: ¥5,000 cash, allowance ¥8,000 on the 5th. Inventory holds bought gifts (item ids).
  int64 PlayerCash = 1000, PlayerBank = 0; // RMB
  FOKStreetPersonal Personal;      // his payroll year (OKStreetSocialBooks.h)
@@ -1244,6 +1247,8 @@ inline FString OKStreetWriteSave(const FOKStreetStore& Store) {
  {auto Calendar=MakeShared<FJsonObject>();Calendar->SetNumberField(TEXT("day"),Store.CalendarDay);Calendar->SetNumberField(TEXT("minute"),Store.CalendarMinute);
   if(Store.HasPlayerSpot){auto Spot=MakeShared<FJsonObject>();Spot->SetNumberField(TEXT("x"),Store.PlayerSpot.X);Spot->SetNumberField(TEXT("y"),Store.PlayerSpot.Y);Spot->SetNumberField(TEXT("z"),Store.PlayerSpot.Z);Spot->SetNumberField(TEXT("yaw"),Store.PlayerYaw);Spot->SetNumberField(TEXT("view"),Store.ViewYaw);Calendar->SetObjectField(TEXT("player"),Spot);}
   if(!Store.WithHim.IsEmpty()){TArray<TSharedPtr<FJsonValue>> With;for(const auto& W:Store.WithHim){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),W.Id);O->SetStringField(TEXT("mode"),W.Mode);O->SetNumberField(TEXT("x"),W.Spot.X);O->SetNumberField(TEXT("y"),W.Spot.Y);O->SetNumberField(TEXT("z"),W.Spot.Z);O->SetNumberField(TEXT("yaw"),W.Yaw);With.Add(MakeShared<FJsonValueObject>(O));}Calendar->SetArrayField(TEXT("with_him"),With);}
+  if(!Store.Table.IsEmpty()){TArray<TSharedPtr<FJsonValue>> TableRows;for(const auto& D:Store.Table){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("item"),D.ItemId);O->SetStringField(TEXT("name"),D.Name);O->SetStringField(TEXT("her"),D.Her);O->SetBoolField(TEXT("for_her"),D.ForHer);O->SetNumberField(TEXT("percent"),D.Percent);TableRows.Add(MakeShared<FJsonValueObject>(O));}
+   Calendar->SetArrayField(TEXT("table"),TableRows);Calendar->SetStringField(TEXT("table_place"),Store.TablePlace);}
   Root->SetObjectField(TEXT("calendar"),Calendar);}
  {TArray<TSharedPtr<FJsonValue>> ApptRows;for(const auto& A:Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("place"),A.Place);O->SetStringField(TEXT("label"),A.Label);O->SetNumberField(TEXT("start"),double(A.Start));O->SetNumberField(TEXT("grace"),A.Grace);if(A.Minutes>0)O->SetNumberField(TEXT("minutes"),A.Minutes);O->SetStringField(TEXT("status"),A.Status);if(!A.Payer.IsEmpty())O->SetStringField(TEXT("payer"),A.Payer);ApptRows.Add(MakeShared<FJsonValueObject>(O));}
   Root->SetArrayField(TEXT("appointments"),ApptRows);Root->SetNumberField(TEXT("next_appointment"),Store.NextAppointment);
@@ -1402,6 +1407,15 @@ inline EOKStreetLoad OKStreetParseSave(const FString& Json, FOKStreetStore& Stor
    O->TryGetStringField(TEXT("mode"), W.Mode); O->TryGetNumberField(TEXT("yaw"), WYaw);
    W.Spot = FVector(WX, WY, WZ); W.Yaw = FMath::IsFinite(WYaw) ? float(WYaw) : 0.f; Store.WithHim.Add(MoveTemp(W));
   }
+  const TArray<TSharedPtr<FJsonValue>>* TableRows = nullptr;
+  if ((*Calendar)->TryGetArrayField(TEXT("table"), TableRows)) for (const auto& V : *TableRows) {
+   const TSharedPtr<FJsonObject> O = V.IsValid() ? V->AsObject() : nullptr; FOKStreetStore::FTableDish D; double P = 100;
+   if (!O || !O->TryGetStringField(TEXT("item"), D.ItemId) || D.ItemId.IsEmpty()) continue;
+   O->TryGetStringField(TEXT("name"), D.Name); O->TryGetStringField(TEXT("her"), D.Her); O->TryGetBoolField(TEXT("for_her"), D.ForHer);
+   if (O->TryGetNumberField(TEXT("percent"), P) && FMath::IsFinite(P)) D.Percent = FMath::Clamp(float(P), 0.f, 100.f);
+   if (D.Percent > 0.f) Store.Table.Add(MoveTemp(D));
+  }
+  (*Calendar)->TryGetStringField(TEXT("table_place"), Store.TablePlace);
  }
  const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
  if (!Root->TryGetArrayField(TEXT("relations"), Rows) || !Rows) { Error = TEXT("save_relations_missing"); return EOKStreetLoad::Invalid; }

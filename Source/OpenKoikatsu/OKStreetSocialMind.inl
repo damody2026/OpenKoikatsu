@@ -13,7 +13,11 @@ void AOKStreetSocialScene::StartCalendarAndMind(){
  // A saved game continues where he was (the start place below, a development switch, still wins).
  if(S.Store.HasPlayerSpot&&!S.SelfTest){S.Male=S.Store.PlayerSpot;if(S.Rotations.IsValidIndex(0))S.Rotations[0]=FRotator(0,S.Store.PlayerYaw,0);S.Yaw=S.Store.ViewYaw;S.SpotSavedMale=S.Male;
   UE_LOG(LogTemp,Display,TEXT("Street start: where he was saved, %s yaw %.0f"),*S.Male.ToCompactString(),S.Store.PlayerYaw);
-  for(const auto& W:S.Store.WithHim)S.ResumeWithHim.Add(W.Id,W);} // put back by TickSchedules once her plan is there
+  for(const auto& W:S.Store.WithHim)S.ResumeWithHim.Add(W.Id,W); // put back by TickSchedules once her plan is there
+  // Their table as it was (a dish still being made is on it now): eaten on when he talks with her there (TickMeal).
+  if(!S.Store.Table.IsEmpty()&&!S.Store.TablePlace.IsEmpty()){S.MealPlace=S.Store.TablePlace;
+   for(const auto& T:S.Store.Table){FOKStreetDish D;D.ItemId=T.ItemId;D.Name=T.Name;D.ForHer=T.ForHer;D.Percent=T.Percent;D.Served=true;D.Her=T.Her.IsEmpty()?INDEX_NONE:CharacterOf(T.Her);S.Table.Add(D);}
+   UE_LOG(LogTemp,Display,TEXT("Street load: %d dishes back on the table at %s"),S.Table.Num(),*S.MealPlace);}}
  // Development: OK_STREET_START_PLACE=<place id> starts the player inside that place (first anchor, else room, else door).
  {FString Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE")),Anchor;Start.Split(TEXT("@"),&Start,&Anchor);if(Start.IsEmpty())Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE"));
   if(!Start.IsEmpty()&&!S.SelfTest)if(const auto* P=OKStreetFindPlace(Start)){const FOKStreetModelAnchor* A=Anchor.IsEmpty()?(P->Anchors.Num()?&P->Anchors[0]:nullptr):P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& X){return X.Name==Anchor;});
@@ -99,7 +103,11 @@ void AOKStreetSocialScene::SaveCalendar(){
    // Where she stood, when that is by him (the trail behind him, or a set far from where he is put back: beside him).
    if(!S.FacilityEntered&&FVector::Dist2D(Her,His)<(Follow?230.f:600.f)&&FMath::Abs(Her.Z-His.Z)<150.f){W.Spot=Her;W.Yaw=S.Rotations.IsValidIndex(I)?S.Rotations[I].Yaw:0.f;}
    else{W.Spot=His+FRotator(0,Candidate.PlayerYaw+150.f,0).RotateVector(FVector(130,0,0));W.Spot.Z=Her.Z;if(FMath::Abs(Her.Z-His.Z)>=150.f)W.Spot.Z=His.Z;W.Yaw=Candidate.PlayerYaw;}
-   Candidate.WithHim.Add(MoveTemp(W));}}
+   Candidate.WithHim.Add(MoveTemp(W));}
+  // Their table (paid; R3-254): a dish ordered at 11:46 never came after a load, ¥49 paid for nothing.
+  Candidate.Table.Reset();Candidate.TablePlace.Reset();
+  if(!S.Table.IsEmpty()){Candidate.TablePlace=S.MealPlace;for(const auto& D:S.Table){if(D.Percent<=0.f)continue;FOKStreetStore::FTableDish T;T.ItemId=D.ItemId;T.Name=D.Name;T.ForHer=D.ForHer;T.Percent=D.Percent;
+    if(S.Manifest.Characters.IsValidIndex(D.Her)&&D.Her>0)T.Her=OKStreetStableId(S.Manifest.Characters[D.Her]);Candidate.Table.Add(MoveTemp(T));}}}
  S.Store=MoveTemp(Candidate);OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
 }
 
