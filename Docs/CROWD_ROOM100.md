@@ -112,3 +112,29 @@ Editor 版街頭驗證（11 人、30 幀，`Saved/StreetSocial/Play-20261027T200
 body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開啟，必須先處理物理件：
 - 一種做法是物理件仍由 bank 提供（bank 只保留 native 骨加物理骨）。
 - 另一種是把彈簧骨與布料搬上 GPU。
+
+## GPU 物理（DynamicBone verlet，2026-10-27）
+
+使用者決定把物理搬到 GPU，用原始的 verlet（DynamicBone），不走 PhysX。
+
+- **匯出**（`Tools/ok-extract/src/gpu_rig/physics.rs`，OKGR v2 的物理段）：
+  - 每組物理（衣服一組、每個飾品各一組）的鏈、粒子（含 curve 套用後的阻尼、彈性、剛性、慣性、半徑）、碰撞體（body 的、植入的）。
+  - 每組物理用到的骨頭都成為「節點」，有三種：
+    - body 骨的別名（衣服鏈）。
+    - 固定 local 的私有骨。
+    - 私有骨架頂層：以「某根 body 骨 × 固定矩陣」掛上，用取樣分解求得；attachment 鏈不算在內。
+  - 飾品的 palette 第 j 格就是該飾品骨架的第 j 根骨（節點）；OK 卡衣服的植入骨按 `rig::key` 名稱對到衣服組的節點。
+  - 三月七：87 條鏈、929 個粒子、1101 個節點。靜態節點重建誤差 0，palette 全部精確分解（`gpu_rig::physics_export`）。
+- **GPU**（`GpuRig.usf` 的 `PhysicsCS`）：照 `dbone.rs` 逐段移植。
+  - 演算法：UpdateParticles1/2、SkipUpdate、ApplyParticlesToTransforms、膠囊碰撞（含 inside）、凍結軸、鏡像軸、Ver01。
+  - 每組一個 thread。衣服組先跑，解好的 body 骨寫回 `Worlds`，再更新其下的 body 骨；飾品組後跑。
+  - 粒子的 pos/prev、每鏈時間與上一幀元件位置，都存在持續的 GPU 緩衝。重設時從當下姿勢起算，先穩定 30 步。
+- **Editor 比對**（10 位女角，30 幀，`Saved/Crowd/Room100-20261027T213320`）：
+  - 平均位移差 0.76 cm → 0.27 cm。
+  - 誤差 ≥ 10 cm 的列 2.4% → 0.5%。
+  - 物理件大多只差幾公分，最大 24 cm。GPU 是連續模擬，bank 是每段片段各自從頭解算，物理對初始狀態敏感，兩邊本來不會逐幀一致。
+- **畫面**：街頭近景（Editor `-GpuRig`）中，三月七的弓弦、緞帶自然往下垂（原本是水平伸出）。
+- **尚未完成**：
+  - 胸部的 Ver02（`dbone/ver02.rs`）仍是剛性，差 2～20 cm。
+  - 遠處降低物理頻率的 LOD。
+  - 100 人時物理 pass 的 GPU 成本還沒量。

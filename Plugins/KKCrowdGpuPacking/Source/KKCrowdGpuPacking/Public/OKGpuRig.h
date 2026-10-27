@@ -17,7 +17,16 @@ struct KKCROWDGPUPACKING_API FOKGpuRigBatch {
  TArray<FUintVector4> ClipSlots;TArray<FVector4f> ClipRates; // ClipSlotsPerActor per actor
  TArray<FUintVector4> Channels;TArray<FVector4f> Samples;
  TArray<FUintVector4> Tasks;TArray<FVector4f> Terms; // 4 rows per term
- uint32 ActorCount=0,ClipSlotsPerActor=0,BoneCount=0;
+ // DynamicBone chains (PhysicsCS): a reference is a bone, or OKGpuRigPhysicsNode | node; a node's world follows the
+ // bones' in the worlds buffer (a term's node there is BoneCount + node).
+ TArray<FUintVector4> PhysSets;      // 2 per set: (clothes, node first, node count, chain first), (chain count, follow first, follow count, 0)
+ TArray<FVector4f> PhysNodes;        // 8 per node
+ TArray<FUintVector4> PhysChains;    // 2 per chain
+ TArray<FVector4f> PhysChainValues;  // 3 per chain
+ TArray<FVector4f> PhysParticles;    // 4 per particle
+ TArray<FVector4f> PhysColliders;    // 2 per collider
+ TArray<uint32> PhysFollow;
+ uint32 ActorCount=0,ClipSlotsPerActor=0,BoneCount=0,NodeCount=0;
  bool Validate(FString& Error) const;
 };
 
@@ -28,11 +37,15 @@ public:
  bool IsInitialized() const {return Static.IsValid();}
  // Playback: one per actor (clip slots, times, head look turns). Writes Current (and Previous: last frame's,
  // or Current itself after a reset) in the bank's row layout.
- bool Evaluate(FRDGBuilder& Graph,TConstArrayView<FOKGpuPosePlayback> Playback,bool ResetHistory,FOKResidentPoseFrame& Out,FString& Error);
+ // DeltaSeconds steps the DynamicBone chains (a reset starts their particles over at the pose and settles them).
+ bool Evaluate(FRDGBuilder& Graph,TConstArrayView<FOKGpuPosePlayback> Playback,bool ResetHistory,float DeltaSeconds,FOKResidentPoseFrame& Out,FString& Error);
  uint64 Evaluations=0;
 private:
  TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> Static;
  TRefCountPtr<FRDGPooledBuffer> Actors,Bones,Lists,Abm,Named,ClipSlots,ClipRates,Channels,Samples,Tasks,Terms,Locals,LocalsB,Worlds,Current;
+ TRefCountPtr<FRDGPooledBuffer> PhysSets,PhysNodes,PhysChains,PhysChainValues,PhysParticles,PhysColliders,PhysFollow,NodeLocals,NodeRots,PhysState;
+ bool PhysicsCleared=false;
  bool HasFrame=false;
 };
 KKCROWDGPUPACKING_API bool OKGpuRigAvailable();
+inline constexpr uint32 OKGpuRigPhysicsNode=0x40000000u;

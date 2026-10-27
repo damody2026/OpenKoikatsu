@@ -126,7 +126,7 @@ struct FRenderState {
  TArray<TUniquePtr<FOKGpuSkinPalette>> Palettes;
  FOKResidentGpuPose Pose;FOKGpuSkinPaletteBatch PaletteBatch;
  // GPU runtime rig (manifest gpu_rig): the bank keeps only its layout; the rig writes the pose rows every frame.
- TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> RigBatch;FOKGpuRig Rig;
+ TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> RigBatch;FOKGpuRig Rig;float RigDt=1.f/60.f;
  // Rig check (manifest gpu_rig_verify N): the banks stay full, both evaluate every frame, and N frames of their rows are
  // read back and compared (translation in cm, the 3x3 part unitless); the rig's rows are the ones shown.
  int32 RigVerifyLeft=0;FString RigDumpPath;TArray<FString> RigRowNames;TArray<uint32> RigRowActors;TArray<float> RigBlends;TAtomic<uint64> RigBlendRows{0};TUniquePtr<FRHIGPUBufferReadback> RigReadBank,RigReadRig;uint32 RigReadBytes=0;
@@ -176,7 +176,7 @@ struct FRenderState {
   FOKResidentPoseFrame FrameData;
   if(RigBatch){
    if(!Rig.IsInitialized()&&!Rig.Initialize(G,RigBatch.ToSharedRef(),Error)){Fail(Error);return;}
-   if(!Rig.Evaluate(G,Playback,Reset,FrameData,Error)){Fail(Error);return;}FrameData.Generation=Pose.GetStats().Generation;++Frame;
+   if(!Rig.Evaluate(G,Playback,Reset,RigDt,FrameData,Error)){Fail(Error);return;}FrameData.Generation=Pose.GetStats().Generation;++Frame;
    PollRigCheck();
    if(RigVerifyLeft>0&&!RigReadBank&&!Reset){FOKResidentPoseFrame Full;if(!Pose.Evaluate(G,Playback,Frame,Pose.GetStats().Generation,false,Full,Error)){Fail(Error);return;}
     RigReadBytes=uint32(FrameData.Current->Desc.GetSize());if(Full.Current->Desc.GetSize()!=RigReadBytes){Fail(TEXT("GPU rig rows differ from the bank's"));return;}
@@ -885,11 +885,29 @@ struct FScene : TSharedFromThis<FScene> {
   uint32 Slots=1;for(auto* E:ByActor){if(!E||!E->Rig.Passed()||E->Rig.Names.IsEmpty()){Error=TEXT("GPU rig missing for an installed actor");return nullptr;}Slots=FMath::Max<uint32>(Slots,E->ClipSources.Num());}
   B->ActorCount=ByActor.Num();B->ClipSlotsPerActor=Slots;
   auto Bits=[](uint32 V){return reinterpret_cast<const float&>(V);};
-  TArray<uint32> BoneFirst;TMap<int32,TPair<uint32,FKKRuntimeGpuClip>> Shared;
+  TArray<uint32> BoneFirst,NodeFirst,NameCount;TMap<int32,TPair<uint32,FKKRuntimeGpuClip>> Shared;
   for(int32 A=0;A<ByActor.Num();++A){auto& E=*ByActor[A];const auto& Rig=E.Rig;const uint32 First=B->BoneCount;BoneFirst.Add(First);
    auto Global=[&](int32 Local){return Local<0?MAX_uint32:First+uint32(Local);};
    for(int32 K=0;K<Rig.Names.Num();++K){B->Bones.Add(FVector4f(Rig.Pos[K].X,Rig.Pos[K].Y,Rig.Pos[K].Z,Bits(Global(Rig.Parent[K]))));B->Bones.Add(Rig.Rot[K]);B->Bones.Add(FVector4f(Rig.Scale[K].X,Rig.Scale[K].Y,Rig.Scale[K].Z,0));}
    B->BoneCount+=Rig.Names.Num();
+   // Her DynamicBone chains, her indices made global (a node ref keeps its flag; nodes follow all bones in the worlds).
+   {const auto& Ph=Rig.Physics;const uint32 NF=B->NodeCount,PF=B->PhysParticles.Num()/4,CF=B->PhysColliders.Num()/2,ChF=B->PhysChains.Num()/2,FF=B->PhysFollow.Num();
+    NodeFirst.Add(NF);NameCount.Add(Rig.Names.Num());
+    auto U=[](float V){return reinterpret_cast<const uint32&>(V);};
+    auto Ref=[&](uint32 R)->uint32{if(R==MAX_uint32)return R;return (R&OKGpuRigNodeFlag)?(OKGpuRigPhysicsNode|(NF+(R&~OKGpuRigNodeFlag))):Global(int32(R));};
+    for(int32 N=0;N<Ph.NodeCount();++N){for(int32 K=0;K<8;++K){FVector4f Row=Ph.Nodes[N*8+K];
+      if(K==2)Row.W=Bits(Ref(U(Row.W)));if(K==7){const uint32 Alias=U(Row.X);Row.X=Bits(Alias==MAX_uint32?MAX_uint32:Global(int32(Alias)));}B->PhysNodes.Add(Row);}}
+    for(int32 C=0;C*2<Ph.Chains.Num();++C){const auto& H=Ph.Chains[C*2];const auto& K=Ph.Chains[C*2+1];
+     B->PhysChains.Add(FUintVector4(NF+H.X,NF+H.Y,H.Z,0));B->PhysChains.Add(FUintVector4(PF+K.X,K.Y,CF+K.Z,K.W));
+     for(int32 V=0;V<3;++V)B->PhysChainValues.Add(Ph.ChainValues[C*3+V]);
+     for(uint32 P=K.X;P<K.X+K.Y;++P){FVector4f Row=Ph.Particles[P*4];const uint32 Node=U(Row.X);const int32 Parent=int32(U(Row.Y));
+      Row.X=Bits(Node==MAX_uint32?MAX_uint32:NF+Node);Row.Y=Bits(Parent<0?MAX_uint32:PF+K.X+uint32(Parent));
+      B->PhysParticles.Add(Row);for(int32 R=1;R<4;++R)B->PhysParticles.Add(Ph.Particles[P*4+R]);}}
+    for(int32 C=0;C*2<Ph.Colliders.Num();++C){FVector4f Row=Ph.Colliders[C*2+1];Row.W=Bits(Ref(U(Row.W)));B->PhysColliders.Add(Ph.Colliders[C*2]);B->PhysColliders.Add(Row);}
+    for(const uint32 F:Ph.Follow)B->PhysFollow.Add(Global(int32(F)));
+    for(int32 S=0;S*2<Ph.Sets.Num();++S){const auto& SetHead=Ph.Sets[S*2];const bool Clothes=SetHead.X!=0;
+     B->PhysSets.Add(FUintVector4(SetHead.X,NF+SetHead.Y,SetHead.Z,ChF+SetHead.W));B->PhysSets.Add(FUintVector4(Ph.Sets[S*2+1].X,Clothes?FF:0,Clothes?uint32(Ph.Follow.Num()):0,0));}
+    B->NodeCount+=Ph.NodeCount();}
    const uint32 AlwaysFirst=B->Lists.Num();for(const auto& P:Rig.Always)B->Lists.Add(FUintVector4(Global(P.X),uint32(P.Y),0,0));
    const uint32 ForeFirst=B->Lists.Num();for(const int32 X:Rig.Forearms)B->Lists.Add(FUintVector4(Global(X),0,0,0));
    const uint32 HandFirst=B->Lists.Num();for(const int32 X:Rig.Hands)B->Lists.Add(FUintVector4(Global(X),0,0,0));
@@ -923,12 +941,14 @@ struct FScene : TSharedFromThis<FScene> {
    for(const auto& T:Terms){
     FVector4f C[3];for(int32 R=0;R<3;++R){FVector4f Row=T.C[R];if(Axis>=0){for(int32 K=0;K<3;++K)if(K!=Axis)Row[K]=0;Row[Axis]*=3.f;}
      for(int32 K=0;K<4;++K)C[R][K]=Row.X*Bind[0][K]+Row.Y*Bind[1][K]+Row.Z*Bind[2][K]+(K==3?Row.W:0.f);}
-    B->Terms.Add(FVector4f(Bits(T.Node<0?MAX_uint32:BoneFirst[Task.Y]+uint32(T.Node)),T.Weight,0,0));B->Terms.Add(C[0]);B->Terms.Add(C[1]);B->Terms.Add(C[2]);}
+    // Her physics nodes come after her bones; in the worlds buffer after everyone's bones.
+    const uint32 Node=T.Node<0?MAX_uint32:T.Node>=int32(NameCount[Task.Y])?B->BoneCount+NodeFirst[Task.Y]+uint32(T.Node-int32(NameCount[Task.Y])):BoneFirst[Task.Y]+uint32(T.Node);
+    B->Terms.Add(FVector4f(Bits(Node),T.Weight,0,0));B->Terms.Add(C[0]);B->Terms.Add(C[1]);B->Terms.Add(C[2]);}
    B->Tasks.Add(FUintVector4(First,Terms.Num(),0,0));
    RowActors.Add(Task.Y);if(GpuRigVerify>0)RowNames.Add(FString::Printf(TEXT("%u %s %d"),Task.Y,*E->PoseRecipe->Bones[Task.X].Name.ToString(),Terms.Num()>0?Terms[0].Node:-2));
   }
   if(!B->Validate(Error))return nullptr;
-  UE_LOG(LogTemp,Display,TEXT("APNG GPU rig batch: %u actors, %u bones, %d tasks, %d terms, %d shared clips (%d sample rows)"),B->ActorCount,B->BoneCount,B->Tasks.Num(),B->Terms.Num()/4,Shared.Num(),B->Samples.Num());
+  UE_LOG(LogTemp,Display,TEXT("APNG GPU rig batch: %u actors, %u bones, %d tasks, %d terms, %d shared clips (%d sample rows); physics %d sets, %u nodes, %d chains, %d particles, %d colliders"),B->ActorCount,B->BoneCount,B->Tasks.Num(),B->Terms.Num()/4,Shared.Num(),B->Samples.Num(),B->PhysSets.Num()/2,B->NodeCount,B->PhysChains.Num()/2,B->PhysParticles.Num()/4,B->PhysColliders.Num()/2);
   return B;
  }
  void Install(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_Install);
@@ -1226,7 +1246,7 @@ auto& T=Timings[GpuWindow?1:0];T.Frame.Add((Now-LastWall)*1000);T.Game.Add(FPlat
     }
    }LoadingPoseRefreshMs+=(FPlatformTime::Seconds()-RefreshBegin)*1000;
   }
-  if(Installed){ENQUEUE_RENDER_COMMAND(ApngPlaybackParameters)([R=Render,Play=MoveTemp(Play),CpuSource=CaptureStage==1?true:CaptureStage==2?false:!GpuMode&&!Warm](FRHICommandListImmediate&)mutable{if(!R->Enabled||R->UseCpu!=CpuSource)R->Reset=true;R->Enabled=true;R->UseCpu=CpuSource;R->Playback=MoveTemp(Play);});}
+  if(Installed){ENQUEUE_RENDER_COMMAND(ApngPlaybackParameters)([R=Render,Play=MoveTemp(Play),Dt,CpuSource=CaptureStage==1?true:CaptureStage==2?false:!GpuMode&&!Warm](FRHICommandListImmediate&)mutable{if(!R->Enabled||R->UseCpu!=CpuSource)R->Reset=true;R->Enabled=true;R->UseCpu=CpuSource;R->Playback=MoveTemp(Play);R->RigDt=Dt;});}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_CaptureLoading);  CaptureLoading();
  }
   if(!ExternalControl&&Camera.IsValid()&&PlayerPositionInitialized){auto* C=Camera.Get();C->SetActorRotation(FRotator(CameraPitch,CameraYaw,0));C->SetActorLocation(PlayerPosition-FRotator(0,CameraYaw,0).Vector()*300+FVector(0,0,160));}

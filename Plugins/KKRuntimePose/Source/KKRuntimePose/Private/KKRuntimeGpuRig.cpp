@@ -47,7 +47,7 @@ TFuture<FKKRuntimeGpuRigResult> OKPrepareRuntimeGpuRigAsync(TSharedPtr<const FKK
   TArray<uint8> Bytes;if(!S.GpuRig(Clips[0],Bytes))return Fail(TEXT("GPU rig export failed"));
   // "OKGR" (export.rs FlatRig::to_bytes).
   FOKRigReader R{Bytes.GetData(),Bytes.Num()};
-  if(R.U()!=0x52474B4F||R.U()!=1)return Fail(TEXT("GPU rig export format"));
+  const uint32 Magic=R.U(),Version=R.U();if(Magic!=0x52474B4F||(Version!=1&&Version!=2))return Fail(TEXT("GPU rig export format"));
   const uint32 Bones=R.U(),Flags=R.U(),Always=R.U(),Forearms=R.U(),Hands=R.U(),Pv=R.U(),Abm=R.U(),NamedFirst=R.U(),NamedLast=R.U(),Parts=R.U();
   if(R.Bad||!Bones||Bones>65536||NamedFirst+NamedLast!=66||Parts>4096)return Fail(TEXT("GPU rig export header"));
   Out.Female=(Flags&1)!=0;
@@ -62,6 +62,26 @@ TFuture<FKKRuntimeGpuRigResult> OKPrepareRuntimeGpuRigAsync(TSharedPtr<const FKK
   for(uint32 P=0;P<Parts;++P){const uint32 Count=R.U();if(R.Bad||Count>65536)return Fail(TEXT("GPU rig export palettes"));
    for(uint32 J=0;J<Count;++J){FOKRigPaletteTerm T;T.Node=R.I();const float Error=R.F();if(Error>1e-4f)++Out.LoosePalettes;for(int32 K=0;K<12;++K)T.C[K]=R.F();Palettes[P].Add(T);}}
   for(uint32 B=0;B<Bones;++B)Out.Names.Add(R.Name());
+  if(Version>=2){
+   // The physics section (export.rs Physics::write), into the shader's rows.
+   auto& Ph=Out.Physics;const uint32 Nodes=R.U(),Chains=R.U(),Particles=R.U(),Colliders=R.U(),Follow=R.U(),Sets=R.U();
+   if(R.Bad||Nodes>65536||Chains>65536||Particles>262144||Colliders>1048576||Follow>65536||Sets>4096)return Fail(TEXT("GPU rig physics header"));
+   for(uint32 K=0;K<Sets;++K){const uint32 Clothes=R.U(),NF=R.U(),NC=R.U(),CF=R.U(),CC=R.U();Ph.Sets.Add(FUintVector4(Clothes,NF,NC,CF));Ph.Sets.Add(FUintVector4(CC,0,0,0));}
+   auto Bits=[](uint32 V){return reinterpret_cast<const float&>(V);};
+   for(uint32 K=0;K<Nodes;++K){const uint32 Kind=R.U(),Parent=R.U(),Alias=R.U();float V[26];for(float& X:V)X=R.F();
+    Ph.Nodes.Add(FVector4f(V[0],V[1],V[2],Bits(Kind)));Ph.Nodes.Add(FVector4f(V[3],V[4],V[5],V[6]));Ph.Nodes.Add(FVector4f(V[7],V[8],V[9],Bits(Parent)));
+    for(int32 Row=0;Row<3;++Row)Ph.Nodes.Add(FVector4f(V[10+Row*4],V[11+Row*4],V[12+Row*4],V[13+Row*4]));
+    Ph.Nodes.Add(FVector4f(V[22],V[23],V[24],V[25]));Ph.Nodes.Add(FVector4f(Bits(Alias),0,0,0));}
+   for(uint32 K=0;K<Chains;++K){const uint32 Root=R.U(),Component=R.U(),ChainFlags=R.U(),PF=R.U(),PC=R.U(),CF=R.U(),CC=R.U();float V[10];for(float& X:V)X=R.F();
+    Ph.Chains.Add(FUintVector4(Root,Component,ChainFlags,0));Ph.Chains.Add(FUintVector4(PF,PC,CF,CC));
+    Ph.ChainValues.Add(FVector4f(V[0],V[1],V[2],V[9]));Ph.ChainValues.Add(FVector4f(V[3],V[4],V[5],0));Ph.ChainValues.Add(FVector4f(V[6],V[7],V[8],0));}
+   for(uint32 K=0;K<Particles;++K){const uint32 Node=R.U(),Parent=R.U(),ParticleFlags=R.U();float V[12];for(float& X:V)X=R.F();
+    Ph.Particles.Add(FVector4f(Bits(Node),Bits(Parent),Bits(ParticleFlags),V[6]));Ph.Particles.Add(FVector4f(V[0],V[1],V[2],V[7]));
+    Ph.Particles.Add(FVector4f(V[3],V[4],V[5],V[8]));Ph.Particles.Add(FVector4f(V[9],V[10],V[11],0));}
+   for(uint32 K=0;K<Colliders;++K){const uint32 Ref=R.U(),Direction=R.U(),Inside=R.U();float V[5];for(float& X:V)X=R.F();
+    Ph.Colliders.Add(FVector4f(V[0],V[1],V[2],V[3]));Ph.Colliders.Add(FVector4f(V[4],Bits(Direction),Bits(Inside),Bits(Ref)));}
+   for(uint32 K=0;K<Follow;++K)Ph.Follow.Add(R.U());
+  }
   if(R.Bad||R.At!=R.N)return Fail(TEXT("GPU rig export length"));
   for(uint32 B=0;B<Bones;++B)if(Out.Parent[B]>=int32(B))return Fail(TEXT("GPU rig export bone order"));
   TMap<FString,int32> ByName;for(int32 B=0;B<Out.Names.Num();++B)ByName.FindOrAdd(Out.Names[B],B);

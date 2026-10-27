@@ -215,16 +215,41 @@ pub(crate) fn part_palette(s: &mut crate::session::OkSession, part: usize) -> Op
 /// bones that keep still relative to each other over the samples (a hand and its fingers over a walk) carry it equally
 /// and the first of them is not the one another clip moves.
 pub fn factor_palettes(s: &mut crate::session::OkSession, rig: &FlatRig, samples: &[f32]) -> Vec<Vec<PaletteTerm>> {
-    let mut palettes: Vec<Vec<Option<Vec<Mat4>>>> = Vec::new();
-    let mut worlds: Vec<Vec<Mat4>> = Vec::new();
-    for &t in samples {
+    let taken = take_samples(s, rig, samples);
+    factor(s, rig, &taken, None)
+}
+
+/// What the session shows at each sampling time: the rig's worlds, every part's palette, every physics set's bone worlds.
+pub struct Samples {
+    pub worlds: Vec<Vec<Mat4>>,
+    pub palettes: Vec<Vec<Option<Vec<Mat4>>>>,
+    pub sets: Vec<HashMap<(super::physics::SetRef, i64), Mat4>>,
+}
+
+pub fn take_samples(s: &mut crate::session::OkSession, rig: &FlatRig, times: &[f32]) -> Samples {
+    let mut out = Samples { worlds: Vec::new(), palettes: Vec::new(), sets: Vec::new() };
+    for &t in times {
         // Accessories export their palettes only once the frame's dynamics ran (zero step: nothing moves).
         s.sample_paired_frame(t);
         s.finish_paired_dynamics(0.);
         let body = s.body_skel.as_ref().unwrap();
-        worlds.push(rig.ids.iter().map(|id| crate::pose::world_of_id(*id, &body.tfs)).collect());
-        palettes.push((0..s.parts.len()).map(|p| part_palette(s, p)).collect());
+        out.worlds.push(rig.ids.iter().map(|id| crate::pose::world_of_id(*id, &body.tfs)).collect());
+        out.palettes.push((0..s.parts.len()).map(|p| part_palette(s, p)).collect());
+        out.sets.push(super::physics::Physics::sample_sets(s));
     }
+    out
+}
+
+/// The palettes factored over the samples. With physics, the candidates are the rig's bones then the physics nodes
+/// (index rig bones + node), and an accessory's matrix j is its skeleton's bone j when that bone is a node.
+pub fn factor(s: &crate::session::OkSession, rig: &FlatRig, taken: &Samples, physics: Option<&super::physics::Physics>) -> Vec<Vec<PaletteTerm>> {
+    let samples = &taken.worlds;
+    let palettes = &taken.palettes;
+    let worlds: Vec<Vec<Mat4>> = samples.iter().enumerate().map(|(k, w)| {
+        let mut all = w.clone();
+        if let Some(ph) = physics { all.extend(super::physics::node_worlds(ph, &taken.sets[k])); }
+        all
+    }).collect();
     let inverses: Vec<Option<Mat4>> = worlds[0].iter().map(crate::pose::mat_inverse_checked).collect();
     let rig_index: HashMap<i64, usize> = rig.ids.iter().enumerate().map(|(n, id)| (*id, n)).collect();
     let body_ids = s.body_skel.as_ref().map(|b| b.bone_ids.clone()).unwrap_or_default();
@@ -247,11 +272,21 @@ pub fn factor_palettes(s: &mut crate::session::OkSession, rig: &FlatRig, samples
         // An accessory skinned onto the body: matrix j follows the body bone of its slot's name.
         let named: Option<Vec<Option<usize>>> = s.parts[p].runtime_accessory.as_ref().and_then(|r| r.body_palette_names()).map(|names| {
             let index = s.body_skel.as_ref().map(|b| crate::pose::rig_name_index(b, false));
-            names.iter().map(|n| index.as_ref().and_then(|i| i.get(n)).and_then(|id| rig_index.get(id).copied())).collect()
+            names.iter().map(|(n, clothes)| if *clothes {
+                // A coordinated implant: the clothes set's bone of that key (a physics node).
+                physics.and_then(|ph| ph.clothes_by_name.get(n)).map(|k| rig.ids.len() + k)
+            } else { index.as_ref().and_then(|i| i.get(n)).and_then(|id| rig_index.get(id).copied()) }).collect()
+        });
+        // A simulated accessory: matrix j is its own skeleton's bone j, a physics node.
+        let simulated: Option<Vec<Option<usize>>> = physics.and_then(|ph| {
+            let state = s.parts[p].runtime_accessory.as_ref()?.dynamic_state()?;
+            let key = super::physics::SetRef::Part(p);
+            Some(state.skel.bone_ids.iter().map(|id| ph.index.get(&(key, *id)).map(|n| rig.ids.len() + n)).collect())
         });
         for j in 0..first.len() {
             let structural = if own { body_ids.get(j).and_then(|id| rig_index.get(id)).copied() }
-                else { named.as_ref().and_then(|n| n.get(j).copied().flatten()) };
+                else { named.as_ref().and_then(|n| n.get(j).copied().flatten())
+                    .or_else(|| simulated.as_ref().and_then(|n| n.get(j).copied().flatten())) };
             if let Some(n) = structural {
                 if let Some((c, err)) = carry(n, p, j, &first[j], f32::INFINITY) {
                     if err < 1e-5 { terms.push(PaletteTerm { node: n as i32, c, error: err }); continue; }
@@ -259,8 +294,10 @@ pub fn factor_palettes(s: &mut crate::session::OkSession, rig: &FlatRig, samples
             }
             // A matrix that does not move (no bone, the identity world) first, then every body bone.
             let still = (1..samples.len()).map(|k| distance(&palettes[k][p].as_ref().unwrap()[j], &first[j])).fold(0f32, f32::max);
+            // Physics nodes only by their structural slot: at the sampling frames nothing swings, so a node ties with
+            // the bone it hangs on, and only the structure tells which one a swing moves.
             let mut best = PaletteTerm { node: -1, c: first[j], error: still };
-            for n in 0..inverses.len() {
+            for n in 0..rig.ids.len() {
                 if best.error < 1e-6 { break; }
                 let Some((c, err)) = carry(n, p, j, &first[j], best.error) else { continue };
                 if err < best.error { best = PaletteTerm { node: n as i32, c, error: err }; }
@@ -287,10 +324,10 @@ impl FlatRig {
     /// abm: bone, rot 4, length, pos 3, scale 3; named first / last (i32, -1 none);
     /// parts: count, then per palette matrix node (i32, -1 identity), error, C rows 0..2 (Unity, row-major);
     /// bone names: length, utf-8 bytes, padded to 4.
-    pub fn to_bytes(&self, palettes: &[Vec<PaletteTerm>]) -> Vec<u8> {
+    pub fn to_bytes(&self, palettes: &[Vec<PaletteTerm>], physics: &super::physics::Physics) -> Vec<u8> {
         let (nf, nl) = (self.named_first(), self.named_last());
         let mut b = Vec::new();
-        for v in [u32::from_le_bytes(*b"OKGR"), 1, self.names.len() as u32, self.female as u32, self.always.len() as u32, self.forearms.len() as u32,
+        for v in [u32::from_le_bytes(*b"OKGR"), 2, self.names.len() as u32, self.female as u32, self.always.len() as u32, self.forearms.len() as u32,
             self.hands.len() as u32, self.pv.len() as u32, self.abm.len() as u32, nf.len() as u32, nl.len() as u32, palettes.len() as u32] { push_u32(&mut b, v); }
         for i in 0..self.names.len() { push_i32(&mut b, self.parent[i]); push_f32s(&mut b, &self.pos[i]); push_f32s(&mut b, &self.rot[i]); push_f32s(&mut b, &self.scale[i]); }
         for (bone, axis) in &self.always { push_u32(&mut b, *bone as u32); push_u32(&mut b, *axis as u32); }
@@ -304,7 +341,55 @@ impl FlatRig {
             for t in part { push_i32(&mut b, t.node); push_f32s(&mut b, &[t.error]); for r in 0..3 { push_f32s(&mut b, &t.c[r]); } }
         }
         for name in &self.names { push_name(&mut b, name); }
+        physics.write(&mut b);
         b
+    }
+}
+
+/// v2 physics section (after the names). A reference to a transform: rig bone index, or 0x40000000 | node index.
+/// nodes, chains, particles, colliders, follow, sets (counts); per set: clothes, node first and count, chain first and
+/// count; per node: kind (0 alias, 1 local TRS, 2 matrix), parent ref
+/// (0xffffffff none), alias bone, pos 3, rot 4, scale 3, matrix rows 0..2 (12), rot offset 4; per chain: root node,
+/// component node, flags (1 ver01, 2 skip off, freeze axis << 4, mirror << 8), particles first and count, colliders
+/// first and count, gravity 3, force 3, local gravity 3, update rate; per particle: node (0xffffffff: an end point),
+/// parent (chain index, -1), flags (1 turns its parent), end offset 3, local position 3, damping, elasticity, stiffness,
+/// inert, radius, add angle scale; per collider: ref, direction, inside, center 3, radius, height; follow: rig bones.
+pub const NODE_FLAG: u32 = 0x4000_0000;
+impl super::physics::Physics {
+    pub fn write(&self, b: &mut Vec<u8>) {
+        use super::physics::{Parent, Ref};
+        let particles: usize = self.chains.iter().map(|c| c.particles.len()).sum();
+        let colliders: usize = self.chains.iter().map(|c| c.colliders.len()).sum();
+        for v in [self.nodes.len(), self.chains.len(), particles, colliders, self.follow.len(), self.ranges.len()] { push_u32(b, v as u32); }
+        for (clothes, nf, nc, cf, cc) in &self.ranges { for v in [*clothes as usize, *nf, *nc, *cf, *cc] { push_u32(b, v as u32); } }
+        let r = |x: &Ref| match x { Ref::Rig(i) => *i as u32, Ref::Node(n) => NODE_FLAG | *n as u32 };
+        for n in &self.nodes {
+            let kind = if n.alias.is_some() { 0 } else if n.matrix.is_some() { 2 } else { 1 };
+            let parent = match n.parent { Parent::None => u32::MAX, Parent::Rig(i) => i as u32, Parent::Node(k) => NODE_FLAG | k as u32 };
+            push_u32(b, kind); push_u32(b, parent); push_u32(b, n.alias.map_or(u32::MAX, |a| a as u32));
+            push_f32s(b, &n.pos); push_f32s(b, &n.rot); push_f32s(b, &n.scale);
+            let m = n.matrix.unwrap_or_else(crate::pose::ident);
+            for row in 0..3 { push_f32s(b, &m[row]); }
+            push_f32s(b, &n.rot_offset);
+        }
+        let (mut pf, mut cf) = (0u32, 0u32);
+        for c in &self.chains {
+            push_u32(b, c.root as u32); push_u32(b, c.component as u32);
+            push_u32(b, c.ver01 as u32 | (c.suppress_skip as u32) << 1 | c.freeze_axis << 4 | c.mirror << 8);
+            push_u32(b, pf); push_u32(b, c.particles.len() as u32); push_u32(b, cf); push_u32(b, c.colliders.len() as u32);
+            push_f32s(b, &c.gravity); push_f32s(b, &c.force); push_f32s(b, &c.local_gravity); push_f32s(b, &[c.update_rate]);
+            pf += c.particles.len() as u32; cf += c.colliders.len() as u32;
+        }
+        for c in &self.chains { for p in &c.particles {
+            push_u32(b, p.node.map_or(u32::MAX, |n| n as u32)); push_i32(b, p.parent); push_u32(b, p.turns_parent as u32);
+            push_f32s(b, &p.end_offset); push_f32s(b, &p.local_position);
+            push_f32s(b, &[p.damping, p.elasticity, p.stiffness, p.inert, p.radius, p.add_angle_scale]);
+        } }
+        for c in &self.chains { for col in &c.colliders {
+            push_u32(b, r(&col.at)); push_u32(b, col.direction); push_u32(b, col.inside as u32);
+            push_f32s(b, &col.center); push_f32s(b, &[col.radius, col.height]);
+        } }
+        for f in &self.follow { push_u32(b, *f as u32); }
     }
 }
 
@@ -336,9 +421,11 @@ pub fn export_rig(s: &mut crate::session::OkSession, clip: &[u8]) -> Result<(Vec
     install(s, clip)?;
     let rig = FlatRig::from_session(s).ok_or("no shaped body skeleton")?;
     let duration = crate::anim::clip_duration(&s.game_root, &s.anim_clip).max(0.1);
-    let palettes = factor_palettes(s, &rig, &[0., duration * 0.31, duration * 0.62, duration * 0.87]);
+    let taken = take_samples(s, &rig, &[0., duration * 0.31, duration * 0.62, duration * 0.87]);
+    let physics = super::physics::Physics::build(s, &rig, &taken);
+    let palettes = factor(s, &rig, &taken, Some(&physics));
     let loose = palettes.iter().flatten().filter(|t| t.error > 1e-4).count();
-    Ok((rig.to_bytes(&palettes), loose))
+    Ok((rig.to_bytes(&palettes, &physics), loose))
 }
 
 /// A shared clip as flat channels, sampled through a session (any character: the channels are absolute locals).

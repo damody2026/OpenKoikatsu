@@ -9,12 +9,28 @@
 // UE column form, three rows; Node INDEX_NONE: the identity). Physics is not part of it.
 struct FKKRuntimeGpuRigTerm {int32 Node=INDEX_NONE;float Weight=1.f;FVector4f C[3];};
 struct FKKRuntimeGpuRigAbm {int32 Bone=0;FVector4f Rot;float Length=1.f;FVector3f Pos=FVector3f::ZeroVector,Scale=FVector3f::OneVector;};
+// Her DynamicBone chains for the rig's verlet pass (export.rs Physics::write, Shaders/GpuRig.usf PhysicsCS), in the
+// shader's rows with her own indices: a transform reference is her rig bone, or 0x40000000 | her node; a particle's
+// parent is its chain's index. BoneTerms nodes at Names.Num() and above are her nodes.
+struct FKKRuntimeGpuRigPhysics {
+ TArray<FVector4f> Nodes;      // 8 per node: (pos, kind), rot, (scale, parent ref), matrix rows 0..2, rot offset, (alias bone, 0, 0, 0)
+ TArray<FUintVector4> Chains;  // 2 per chain: (root node, component node, flags, 0), (particle first, count, collider first, count)
+ TArray<FVector4f> ChainValues;// 3 per chain: (gravity, update rate), (force, 0), (local gravity, 0)
+ TArray<FVector4f> Particles;  // 4 per particle: (node, parent, flags, damping), (end offset, elasticity), (local position, stiffness), (inert, radius, add angle scale, 0)
+ TArray<FVector4f> Colliders;  // 2 per collider: (center, radius), (height, direction, inside, ref)
+ TArray<uint32> Follow;        // her rig bones under a solved alias
+ TArray<FUintVector4> Sets;    // per set, stepping order: (clothes, node first, node count, chain first) then chain count in the next .x
+ int32 NodeCount() const {return Nodes.Num()/8;}
+ int32 ParticleCount() const {return Particles.Num()/4;}
+};
+inline constexpr uint32 OKGpuRigNodeFlag=0x40000000u;
 struct FKKRuntimeGpuRigResult {
  FString Error;
  TArray<FString> Names;TArray<int32> Parent;TArray<FVector3f> Pos;TArray<FVector4f> Rot;TArray<FVector3f> Scale;
  bool Female=false;TArray<FIntPoint> Always;TArray<int32> Forearms,Hands;TArray<FIntPoint> Pv;TArray<FKKRuntimeGpuRigAbm> Abm;
  TArray<int32> Named; // 66 (export.rs NAMED_FIRST then NAMED_LAST), INDEX_NONE: missing
  TArray<TArray<FKKRuntimeGpuRigTerm>> BoneTerms; // per bone of the request's render rig
+ FKKRuntimeGpuRigPhysics Physics;
  // Per requested clip: "OKGC" (export.rs SharedClip::to_bytes), empty when the clip could not be exported.
  TArray<TArray<uint8>> Clips;
  int32 LoosePalettes=0,EmpiricalTerms=0;double PrepareMs=0;

@@ -508,13 +508,17 @@ impl AccessoryRuntime {
         }
     }
 
+    /// Its DynamicBone state (the GPU rig exports the chains; None: no simulated bones).
+    pub(crate) fn dynamic_state(&self) -> Option<&crate::dbone::AttachedDynamicSet> { self.state.as_ref() }
     /// The body bone each palette matrix follows, by name (export_skin_palette order), for an accessory skinned onto the
-    /// body (copy_weights_body); None for one with its own rig. An implanted bone's name is its private one.
-    pub(crate) fn body_palette_names(&self) -> Option<Vec<String>> {
+    /// body (copy_weights_body); None for one with its own rig. A coordinated implanted bone follows the clothes set's
+    /// bone of that key (true), as effective_worlds reads it; any other implanted bone's name is its private one.
+    pub(crate) fn body_palette_names(&self) -> Option<Vec<(String,bool)>> {
         if !self.copy_weights_body {return None;}
         let rigid_clothes=AccessoryFramePolicy::read().rigid_clothes;
         let private=match self.state.as_ref().filter(|_|!rigid_clothes){Some(state)=>&state.skel,None=>self.source.smr_skel.as_ref()?};
-        Some(private.names.clone())
+        Some(private.names.iter().zip(&private.bone_ids).map(|(name,id)|
+            if self.implanted_bones.contains(id)&&self.coordinated {(crate::dbone::implant::rig::key(&self.clothes_component,*id),true)} else {(name.clone(),false)}).collect())
     }
 
     pub(crate) fn export_skin_palette(&self, body:Option<&Skeleton>, head:Option<&Skeleton>) -> Option<(&ExtractedMesh,Vec<crate::pose::Mat4>)> {

@@ -4,6 +4,7 @@
 //!   OK_RIG_CARD=<OK card png> OK_RIG_CLIP=<shared .okanim> cargo test --release --lib gpu_rig -- --ignored --nocapture
 
 pub(crate) mod export;
+pub(crate) mod physics;
 
 #[cfg(test)]
 mod tests {
@@ -215,5 +216,52 @@ mod check_terms {
         }
         for (p, e) in worst.iter().enumerate() { if *e > 0.05 { println!("part {p} {} acc={} err={e:.3} terms={:?}", s.parts[p].name, s.parts[p].runtime_accessory.is_some(), terms[p].iter().take(4).map(|t| t.node).collect::<Vec<_>>()); } }
         println!("worst per part (m): {}", worst.iter().enumerate().map(|(p, e)| format!("{p}:{e:.4}")).collect::<Vec<_>>().join(" "));
+    }
+}
+
+#[cfg(test)]
+mod physics_export {
+    /// The physics section of a card's rig: counts, and every node's world rebuilt from its anchor and locals the way the
+    /// GPU builds it (rest pose: a particle's prefab local), against the session's at the first sample.
+    #[test]
+    #[ignore]
+    fn gpu_rig_physics_export() {
+        use super::physics::{Parent, Physics};
+        let card = super::tests::open_with_clip_pub();
+        let bytes = card.to_animation_bytes().expect("snapshot");
+        let mut s = Box::new(crate::session::OkSession::from_animation_bytes(&bytes).expect("reopen"));
+        let s = &mut *s;
+        let clip = std::fs::read("E:/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/walk_01.okanim").unwrap();
+        let _ = super::export::export_rig(s, &clip).expect("rig");
+        let rig = super::export::FlatRig::from_session(s).unwrap();
+        let d = crate::anim::clip_duration(&s.game_root, &s.anim_clip).max(0.1);
+        let taken = super::export::take_samples(s, &rig, &[0., d * 0.31, d * 0.62, d * 0.87]);
+        let ph = Physics::build(s, &rig, &taken);
+        let aliases = ph.nodes.iter().filter(|n| n.alias.is_some()).count();
+        let tops = ph.nodes.iter().filter(|n| n.matrix.is_some()).count();
+        let colliders: usize = ph.chains.iter().map(|c| c.colliders.len()).sum();
+        println!("sets {:?}", super::physics::sets(s));
+        println!("nodes {} (aliases {aliases}, tops {tops}, loose tops {}), chains {}, particles {}, colliders {colliders}, follow {}",
+            ph.nodes.len(), ph.loose_tops, ph.chains.len(), ph.particle_count(), ph.follow.len());
+        // Rebuild every node at sample 0 and compare (particles are not at their prefab locals after the steps: skipped).
+        let particles: std::collections::HashSet<usize> = ph.chains.iter().flat_map(|c| c.particles.iter().filter_map(|p| p.node)).collect();
+        let mut built: Vec<crate::pose::Mat4> = Vec::new();
+        let (mut worst, mut worst_at) = (0f32, 0usize);
+        let actual = super::physics::node_worlds(&ph, &taken.sets[0]);
+        for (k, n) in ph.nodes.iter().enumerate() {
+            let parent = match n.parent { Parent::None => crate::pose::ident(), Parent::Rig(r) => taken.worlds[0][r], Parent::Node(p) => built[p] };
+            let w = if let Some(a) = n.alias { taken.worlds[0][a] } else if let Some(m) = n.matrix { crate::pose::mat_mul_pub(&parent, &m) }
+                else { crate::pose::mat_mul_pub(&parent, &crate::pose::trs(n.pos, n.rot, n.scale)) };
+            // Continue from the session's actual world so one swung particle does not spoil its whole subtree.
+            built.push(actual[k]);
+            if particles.contains(&k) || n.alias.is_some() { continue; }
+            let e = super::export::distance_pub(&w, &actual[k]);
+            if e > worst { worst = e; worst_at = k; }
+        }
+        println!("static node rebuild: worst {worst:.6} at node {worst_at} {:?}", ph.sources.get(worst_at));
+        let palettes = super::export::factor(s, &rig, &taken, Some(&ph));
+        let loose: Vec<String> = palettes.iter().enumerate().filter_map(|(p, t)| { let n = t.iter().filter(|t| t.error > 1e-4).count(); (n > 0).then(|| format!("{p}:{n}/{}", t.len())) }).collect();
+        let on_nodes = palettes.iter().flatten().filter(|t| t.node >= rig.ids.len() as i32).count();
+        println!("palette terms on physics nodes {on_nodes}, loose {}", loose.join(" "));
     }
 }

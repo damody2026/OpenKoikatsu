@@ -2671,6 +2671,8 @@ impl AttachedDynamicSet {
     pub(crate) fn set_attachment_chain(&mut self,chain:&[Tf])->bool {
         self.set_attachment_chain_for_step(chain,false)
     }
+    /// The ancestors copied in each frame from the body or head (set_attachment_chain).
+    pub(crate) fn attachment_ids(&self)->&[i64]{&self.attachment_ids}
     /// Number of attachment ancestors this state was built on (0: placed without a chain).
     pub(crate) fn attachment_len(&self)->usize{self.attachment_ids.len()}
     /// The bones this set's chains move (sorted): renderers of one prefab carry the same set.
@@ -3292,6 +3294,67 @@ impl AttachedDynamicSet {
         cache.clear();self.world_cache=cache;
         rotations.clear();self.rotation_cache=rotations;
         lossy_rotations.clear();self.lossy_rotation_cache=lossy_rotations;
+    }
+}
+
+/// One DynamicBone chain as the GPU runtime rig simulates it (gpu_rig/export.rs, Shaders/GpuRig.usf PhysicsCS): the
+/// particles in solver order and what UpdateDynamicBones reads besides the transforms (ids are the set's skeleton's).
+#[derive(Clone, Debug)]
+pub(crate) struct GpuChainView {
+    pub root: i64, pub component: i64, pub ver01: bool, pub suppress_skip: bool,
+    pub gravity: [f32; 3], pub force: [f32; 3], pub local_gravity: [f32; 3], pub freeze_axis: usize, pub update_rate: f32,
+    /// ApplyParticlesToTransforms mirrors along these world axes of (bit 0..2 set) the component, (bit 4..6) its parent.
+    pub mirror: u32,
+    pub particles: Vec<GpuParticleView>,
+    pub colliders: Vec<GpuColliderView>,
+}
+#[derive(Clone, Debug)]
+pub(crate) struct GpuParticleView {
+    pub id: Option<i64>, pub parent: i32,
+    pub init_local_pos: [f32; 3], pub init_local_rot: [f32; 4], pub end_offset: [f32; 3], pub local_position: [f32; 3],
+    pub damping: f32, pub elasticity: f32, pub stiffness: f32, pub inert: f32, pub radius: f32, pub add_angle_scale: f32,
+    /// Apply turns this particle's parent bone toward it (ordinary: the parent has at most one child; Ver01: rotation_calc).
+    pub turns_parent: bool,
+}
+/// `in_body`: the transform is the character's body bone (CharacterColliderFrame), else a bone of the set's skeleton.
+#[derive(Clone, Debug)]
+pub(crate) struct GpuColliderView {
+    pub transform: i64, pub in_body: bool, pub center: [f32; 3], pub radius: f32, pub height: f32, pub direction: usize, pub inside: bool,
+}
+impl AttachedDynamicSet {
+    /// The chains as the GPU rig reads them (configured colliders and freeze axes as the last step used them).
+    pub(crate) fn gpu_view(&self) -> Vec<GpuChainView> {
+        let mut children: HashMap<i64, usize> = HashMap::new();
+        for (id, tf) in &self.skel.tfs { if let Some(p) = tf.parent.filter(|p| *p != 0 && *p != *id) { *children.entry(p).or_insert(0) += 1; } }
+        self.chains.iter().map(|chain| {
+            let db = &chain.db;
+            let component_tf = self.skel.tfs.get(&chain.component);
+            let parent_tf = component_tf.and_then(|tf| tf.parent).and_then(|id| self.skel.tfs.get(&id));
+            let mut mirror = 0u32;
+            for axis in 0..3 {
+                if component_tf.is_some_and(|tf| tf.scale[axis] < 0.0) { mirror |= 1 << axis; }
+                else if parent_tf.is_some_and(|tf| tf.scale[axis] < 0.0) { mirror |= 16 << axis; }
+            }
+            let particles = chain.particles.iter().map(|p| {
+                let turns_parent = p.parent >= 0 && {
+                    let parent = &chain.particles[p.parent as usize];
+                    if db.ver01 { parent.rotation_calc } else { parent.id.is_some_and(|id| children.get(&id).copied().unwrap_or(0) <= 1) }
+                };
+                GpuParticleView { id: p.id, parent: p.parent, init_local_pos: p.init_local_pos, init_local_rot: p.init_local_rot,
+                    end_offset: p.end_offset, local_position: p.local_position, damping: p.damping, elasticity: p.elasticity,
+                    stiffness: p.stiffness, inert: p.inert, radius: p.radius, add_angle_scale: p.add_angle_scale, turns_parent }
+            }).collect();
+            let view = |c: &BodyCollider, in_body: bool| GpuColliderView { transform: c.transform, in_body, center: c.center, radius: c.radius,
+                height: c.height, direction: c.direction, inside: c.inside };
+            let mut colliders: Vec<GpuColliderView> = chain.colliders.iter().map(|c| view(c, false)).collect();
+            for (index, (c, _, _)) in chain.external_colliders.iter().enumerate() {
+                let implanted = index >= chain.implanted_collider_offset && index < chain.implanted_collider_offset + chain.implanted_colliders.len();
+                colliders.push(view(c, !(self.body_space || implanted) || !self.skel.tfs.contains_key(&c.transform)));
+            }
+            GpuChainView { root: db.root, component: chain.component, ver01: db.ver01, suppress_skip: db.suppress_skip_update,
+                gravity: db.gravity, force: db.force, local_gravity: chain.local_gravity, freeze_axis: db.freeze_axis,
+                update_rate: db.update_rate, mirror, particles, colliders }
+        }).collect()
     }
 }
 
