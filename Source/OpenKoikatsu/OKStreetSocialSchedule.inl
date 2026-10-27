@@ -137,6 +137,12 @@ void AOKStreetSocialScene::TickSchedules(){
   if(!Ready)UE_LOG(LogTemp,Warning,TEXT("Street plan: profiles still missing after 30 s; planning without them"));
   S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SchedulePlanAll);PlanAll();}
  }
+ // The basket saved unpaid (R3-257): its bill again once he talks with her in that shop; left elsewhere, it is dropped.
+ if(!S.ResumeCartPlace.IsEmpty()){
+  if(S.Cart.IsEmpty()){S.ResumeCartPlace.Reset();}
+  else if(PlaceHere(S.Male)!=S.ResumeCartPlace){UE_LOG(LogTemp,Display,TEXT("Street load: the saved basket is dropped, he left %s"),*S.ResumeCartPlace);S.Cart.Reset();S.ResumeCartPlace.Reset();}
+  else if(PlaceHere(S.Male)==S.ResumeCartPlace&&S.ResumeCartHer!=INDEX_NONE&&FreeTalkPartner()==S.ResumeCartHer&&!S.FreeTalkBusy){
+   UE_LOG(LogTemp,Display,TEXT("Street load: the saved basket's bill (%d lines) with actor %d"),S.Cart.Num(),S.ResumeCartHer);S.ResumeCartPlace.Reset();StartCheckout(S.ResumeCartHer);}}
  // Walking with him when the game was saved: once both are drawn, the walk goes on (R3-238).
  // The others of the group follow him again once the walk is on (or there was none to resume).
  if(S.ResumeFollow==INDEX_NONE&&!S.ResumeParty.IsEmpty()){

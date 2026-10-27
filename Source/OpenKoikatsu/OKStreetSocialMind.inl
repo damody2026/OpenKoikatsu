@@ -17,7 +17,11 @@ void AOKStreetSocialScene::StartCalendarAndMind(){
   // Their table as it was (a dish still being made is on it now): eaten on when he talks with her there (TickMeal).
   if(!S.Store.Table.IsEmpty()&&!S.Store.TablePlace.IsEmpty()){S.MealPlace=S.Store.TablePlace;
    for(const auto& T:S.Store.Table){FOKStreetDish D;D.ItemId=T.ItemId;D.Name=T.Name;D.ForHer=T.ForHer;D.Percent=T.Percent;D.Served=true;D.Her=T.Her.IsEmpty()?INDEX_NONE:CharacterOf(T.Her);S.Table.Add(D);}
-   UE_LOG(LogTemp,Display,TEXT("Street load: %d dishes back on the table at %s"),S.Table.Num(),*S.MealPlace);}}
+   UE_LOG(LogTemp,Display,TEXT("Street load: %d dishes back on the table at %s"),S.Table.Num(),*S.MealPlace);}
+  // The basket as it was: its bill comes again once he talks with her there (TickSchedules).
+  if(!S.Store.Cart.IsEmpty()){for(const auto& C:S.Store.Cart){FOKStreetCartLine L;L.ItemId=C.ItemId;L.Size=C.Size;L.Sweetness=C.Sweetness;L.Ice=C.Ice;L.ForHer=C.ForHer;L.HerOwn=C.HerOwn;L.Girl=C.Girl.IsEmpty()?INDEX_NONE:CharacterOf(C.Girl);S.Cart.Add(L);}
+   S.ResumeCartPlace=S.Store.CartPlace;S.ResumeCartHer=S.Store.CartHer.IsEmpty()?INDEX_NONE:CharacterOf(S.Store.CartHer);
+   UE_LOG(LogTemp,Display,TEXT("Street load: %d basket lines back at %s, the bill comes with her"),S.Cart.Num(),*S.ResumeCartPlace);}}
  // Development: OK_STREET_START_PLACE=<place id> starts the player inside that place (first anchor, else room, else door).
  {FString Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE")),Anchor;Start.Split(TEXT("@"),&Start,&Anchor);if(Start.IsEmpty())Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE"));
   if(!Start.IsEmpty()&&!S.SelfTest)if(const auto* P=OKStreetFindPlace(Start)){const FOKStreetModelAnchor* A=Anchor.IsEmpty()?(P->Anchors.Num()?&P->Anchors[0]:nullptr):P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& X){return X.Name==Anchor;});
@@ -97,7 +101,9 @@ void AOKStreetSocialScene::SaveCalendar(){
   for(int32 I=1;I<S.Manifest.Characters.Num();++I){if(!S.Agents.IsValidIndex(I-1))continue;
    const bool Follow=S.Companion==I||S.OutingGirl==I||S.Party.Contains(I);
    // The one he is in free talk with counts too (shopping with her at the bookstore, the talk open, no activity on).
-   const bool Stay=S.Pair.Partner==I||S.Target==I||FreeTalkPartner()==I||S.PrivateGirl==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I);
+   // Not the one on the phone (R3-258): a message thread open to her at 111 m put her beside him at the library after a load.
+   const bool Remote=S.RemoteMode!=0&&S.RemotePeer==I;
+   const bool Stay=S.Pair.Partner==I||S.Target==I||(FreeTalkPartner()==I&&!Remote)||S.PrivateGirl==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I);
    if(!Follow&&!Stay)continue;
    FOKStreetStore::FWithHim W;W.Id=OKStreetStableId(S.Manifest.Characters[I]);W.Mode=Follow?TEXT("follow"):TEXT("stay");
    const FVector Her=S.Agents[I-1].Position;
@@ -108,7 +114,12 @@ void AOKStreetSocialScene::SaveCalendar(){
   // Their table (paid; R3-254): a dish ordered at 11:46 never came after a load, ¥49 paid for nothing.
   Candidate.Table.Reset();Candidate.TablePlace.Reset();
   if(!S.Table.IsEmpty()){Candidate.TablePlace=S.MealPlace;for(const auto& D:S.Table){if(D.Percent<=0.f)continue;FOKStreetStore::FTableDish T;T.ItemId=D.ItemId;T.Name=D.Name;T.ForHer=D.ForHer;T.Percent=D.Percent;
-    if(S.Manifest.Characters.IsValidIndex(D.Her)&&D.Her>0)T.Her=OKStreetStableId(S.Manifest.Characters[D.Her]);Candidate.Table.Add(MoveTemp(T));}}}
+    if(S.Manifest.Characters.IsValidIndex(D.Her)&&D.Her>0)T.Her=OKStreetStableId(S.Manifest.Characters[D.Her]);Candidate.Table.Add(MoveTemp(T));}}
+  // The basket not paid yet (R3-257): "got my sketchbook" after a load, nothing bought, nothing paid.
+  Candidate.Cart.Reset();Candidate.CartPlace.Reset();Candidate.CartHer.Reset();
+  if(!S.Cart.IsEmpty()){const int32 With=S.RemoteMode!=0?INDEX_NONE:FreeTalkPartner();Candidate.CartPlace=PlaceHere(S.Male);if(S.Manifest.Characters.IsValidIndex(With)&&With>0)Candidate.CartHer=OKStreetStableId(S.Manifest.Characters[With]);
+   for(const auto& L:S.Cart){FOKStreetStore::FCartItem C;C.ItemId=L.ItemId;C.Size=L.Size;C.Sweetness=L.Sweetness;C.Ice=L.Ice;C.ForHer=L.ForHer;C.HerOwn=L.HerOwn;
+    if(S.Manifest.Characters.IsValidIndex(L.Girl)&&L.Girl>0)C.Girl=OKStreetStableId(S.Manifest.Characters[L.Girl]);Candidate.Cart.Add(MoveTemp(C));}}}
  S.Store=MoveTemp(Candidate);OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
 }
 

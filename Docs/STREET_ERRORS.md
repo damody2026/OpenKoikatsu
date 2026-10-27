@@ -787,3 +787,8 @@
 - **現象：** 協調者兩次看到 `Saved/StreetSocial/Build/Gest13x.stage` 已存在，以為打包完了，我卻沒動作，空等了 10 分鐘。
 - **原因：** `.stage` 目錄是 staging 一開始就建立的（例如 Gest141 在 15:27:07 建立），staging（`stage_interaction_runtime.lua`）要再跑大約 10 分鐘，`Rebuild-<tag>/stage.log` 寫入才算完成。我用 `run_in_background` 跑建置，完成時會收到通知，但等待期間我沒有做別的事就結束了回合，從外面看就是停著。
 - **修正：** 判斷打包是否完成，看 `Rebuild-<tag>/stage.log` 有內容、log 出現 `done`，不要看 `.stage` 目錄。建置一律用 `run_in_background`，等待期間繼續在遊戲裡玩或寫紀錄，不要只說「等通知」就結束回合。
+
+### 2026-10-27 自由對話對象算在身邊時，連手機那頭的人也算進去（C組 街區攻略）
+
+- R3-256 在存檔的「和他在一起」加了 `FreeTalkPartner()`，沒看這個函式在手機通話／傳訊息時回傳電話那頭的人（`RemotePeer`）。結果傳訊息給 111 m 外的雷電將軍後存檔，讀檔時她被放到他身邊（R3-258）。用一個回傳「目前對象」的函式判斷位置前，先讀完它所有回傳的分支。
+- 存檔用錯參數：`/saves {action:save}` 不存在，什麼都沒存，還回了上一次的 notice。照 Docs/STREET_SOCIAL_GAME_MCP.md 用 `{op:"save",slot:"1"}`，並看回傳的欄位時間確認真的存了。

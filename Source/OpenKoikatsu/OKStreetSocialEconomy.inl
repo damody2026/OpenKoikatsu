@@ -399,7 +399,12 @@ void AOKStreetSocialScene::TickMeal(float Dt){
  }
  if(Her==INDEX_NONE||!There){
   if(S.MealAwayAt==0)S.MealAwayAt=Wall;
-  else if(Wall-S.MealAwayAt>5){UE_LOG(LogTemp,Display,TEXT("Street meal: they left, the table is cleared (%d dishes)"),S.Table.Num());S.Table.Reset();return;}
+  else if(Wall-S.MealAwayAt>5){
+   // Untouched ones go with him, as a takeaway would (R3-259): a ¥14 bento served just as he walked her home was thrown away.
+   auto Candidate=S.Store;TArray<FString> Packed;
+   for(const auto& D:S.Table)if(D.Served&&D.Percent>=99.f)if(const auto* I=S.Catalog.Find(D.ItemId);I&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}
+   if(!Packed.IsEmpty()){CommitStore(MoveTemp(Candidate));S.Message=OKMsg(TEXT("ui.economy.untouched_packed"),{{TEXT("items"),FString::Join(Packed,TEXT("、"))}});RefreshUI();}
+   UE_LOG(LogTemp,Display,TEXT("Street meal: they left, the table is cleared (%d dishes, %d packed)"),S.Table.Num(),Packed.Num());S.Table.Reset();return;}
   return;
  }
  S.MealAwayAt=0;
