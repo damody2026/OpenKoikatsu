@@ -107,7 +107,7 @@ bool OKLoadRuntimeGpuPoseCache(const FKKRuntimePoseRequest& R,FKKRuntimePoseResu
   }
   return false;
  }
- Out.Keys=MoveTemp(Data.Pose.Keys);Out.Tracks=MoveTemp(Data.Pose.Tracks);Out.Samples=FMath::CeilToInt(R.Duration*R.SampleHz)+1;Out.ConstantTracks=0;for(const auto& T:Out.Tracks)Out.ConstantTracks+=T.Y==1;
+ Out.Keys=MoveTemp(Data.Pose.Keys);Out.Tracks=MoveTemp(Data.Pose.Tracks);Out.Samples=OKRuntimePoseFrames(R.Duration,R.SampleHz)+1;Out.ConstantTracks=0;for(const auto& T:Out.Tracks)Out.ConstantTracks+=T.Y==1;
  Out.PersistentCacheHit=true;Out.PersistentCacheBytes=Size;++Hits;ReadBytes.AddExchange(Size);
  UE_LOG(LogTemp,Display,TEXT("Runtime GPU cache hit clip=%s bytes=%lld"),*R.ClipIdentity,Size);return true;
 }

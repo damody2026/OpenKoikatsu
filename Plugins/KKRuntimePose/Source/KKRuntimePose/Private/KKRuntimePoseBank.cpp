@@ -34,7 +34,7 @@ static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R
   Out.CharacterIdentity=R.CharacterIdentity;Out.ClipIdentity=R.ClipIdentity;Out.Duration=R.Duration;
   auto Fail=[&](const TCHAR* Why){Out.Error=Why;Out.Keys.Reset();Out.Tracks.Reset();Out.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;return MoveTemp(Out);};
   if(R.CharacterIdentity.IsEmpty()||R.ClipIdentity.IsEmpty()||R.Snapshot.IsEmpty()||R.AuthoredCurves.IsEmpty()||R.Bones.IsEmpty()||R.Bones.Num()>65536||R.SampleHz!=60||!FMath::IsFinite(R.Duration)||R.Duration<=0||R.Duration>34.f)return Fail(TEXT("Invalid runtime private pose request"));
-  const uint32 Frames=FMath::CeilToInt(R.Duration*R.SampleHz),Samples=Frames+1;
+  const uint32 Frames=OKRuntimePoseFrames(R.Duration,R.SampleHz),Samples=Frames+1;
   const uint64 KeyRows=uint64(R.Bones.Num())*Samples*3,Bytes=KeyRows*sizeof(FVector4f);
   if(!R.MaxKeyBytes||Bytes>R.MaxKeyBytes||KeyRows>MAX_int32)return Fail(*FString::Printf(TEXT("Runtime pose keys exceed preallocation budget: %d bones x %u samples = %llu MB (budget %llu MB), clip %s"),R.Bones.Num(),Samples,Bytes>>20,R.MaxKeyBytes>>20,*R.ClipIdentity));
   Out.PreparationIdentity=OKRuntimePoseRecipeIdentity(R);
@@ -110,7 +110,7 @@ TFuture<FKKRuntimePoseResult> OKPrepareRuntimePoseBankAsync(TFunction<FKKRuntime
 
 FString OKRuntimePoseRecipeIdentity(const FKKRuntimePoseRequest& R){
  FSHA1 H;auto Feed=[&](const TArray<uint8>& B){const uint64 N=B.Num();H.Update(reinterpret_cast<const uint8*>(&N),sizeof(N));if(N)H.Update(B.GetData(),N);};if(R.PackedGpuCache&&!R.PersistentSourceIdentity.IsEmpty()){FTCHARToUTF8 Stable(*R.PersistentSourceIdentity);TArray<uint8> Source;Source.Append(reinterpret_cast<const uint8*>(Stable.Get()),Stable.Length());Feed(Source);}else Feed(R.Snapshot);Feed(R.AuthoredCurves);
- FBufferArchive Metadata;uint32 Version=4,Hz=R.SampleHz;float Duration=R.Duration;Metadata<<Version<<Hz<<Duration;bool Packed=R.PackedGpuCache;Metadata<<Packed;
+ FBufferArchive Metadata;uint32 Version=5,Hz=R.SampleHz;float Duration=R.Duration;Metadata<<Version<<Hz<<Duration;bool Packed=R.PackedGpuCache;Metadata<<Packed;
  if(R.AuthoredPrefix){uint32 PrefixVersion=1;FString Mode=TEXT("authored-prefix");Metadata<<Mode<<PrefixVersion;}
  if(R.Loop&&!R.NativeOnly&&!R.AuthoredPrefix&&R.ContactRecipe.IsEmpty()){uint32 LoopVersion=1;FString Mode=TEXT("loop-preroll");Metadata<<Mode<<LoopVersion;}
  if(R.NativeOnly){uint32 NativeVersion=2;FString Mode=TEXT("native-only");Metadata<<Mode<<NativeVersion;}

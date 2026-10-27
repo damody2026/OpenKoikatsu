@@ -11,6 +11,11 @@ inline int32 OKRuntimeTearLevel(const FString& Name){
  const TCHAR Size=FChar::ToUpper(Name.Len()>12?Name[12]:TEXT(' '));return Size==TEXT('S')?1:Size==TEXT('M')?2:Size==TEXT('L')?3:0;
 }
 inline bool OKRuntimeIsTearRenderer(const char* Name){return Name&&OKRuntimeTearLevel(UTF8_TO_TCHAR(Name))>0;}
+// A pose bank's frame count (keys k * Duration / Frames, plus the end). A clip authored at Hz is a whole number of frames,
+// but Duration * Hz in floats can land just above it (walk_01: 2.0667 s x 60 = 124.00001): a ceiling of that adds a
+// frame, the keys fall between the clip's own samples and the bank cuts every corner of its curves (up to a frame's
+// motion: 0.11 cm on a street heroine's hips, Docs/CROWD_ROOM100.md). So a hair over a whole number is that number.
+inline uint32 OKRuntimePoseFrames(float Duration,uint32 Hz){return uint32(FMath::Max(1,FMath::CeilToInt(Duration*float(Hz)-1e-3f)));}
 struct FKKRuntimePalettePart {
  int32 NativePart=INDEX_NONE;TArray<int32> Slots;
  FString RigidFollow;FMatrix RigidBindWorld=FMatrix::Identity;

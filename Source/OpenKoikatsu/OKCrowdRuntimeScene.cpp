@@ -135,7 +135,7 @@ struct FRenderState {
  TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> RigBatch;FOKGpuRig Rig;float RigDt=1.f/60.f;
  // Rig check (manifest gpu_rig_verify N): the banks stay full, both evaluate every frame, and N frames of their rows are
  // read back and compared (translation in cm, the 3x3 part unitless); the rig's rows are the ones shown.
- int32 RigVerifyLeft=0;FString RigDumpPath;TArray<FString> RigRowNames;TArray<uint32> RigRowActors;TArray<float> RigBlends;TAtomic<uint64> RigBlendRows{0};TUniquePtr<FRHIGPUBufferReadback> RigReadBank,RigReadRig;uint32 RigReadBytes=0;
+ int32 RigVerifyLeft=0;FString RigDumpPath;TArray<FString> RigRowNames;TArray<uint32> RigRowActors;TArray<float> RigBlends;TArray<FString> RigPlays,RigActorNames;TAtomic<uint64> RigBlendRows{0};TUniquePtr<FRHIGPUBufferReadback> RigReadBank,RigReadRig;uint32 RigReadBytes=0;
  TAtomic<uint64> RigChecks{0},RigRows{0},RigBadRows{0};TAtomic<double> RigMaxLinear{0},RigMaxTranslation{0},RigMeanTranslation{0};TAtomic<int32> RigWorstRow{-1};
  void PollRigCheck(){
   if(!RigReadBank||!RigReadBank->IsReady()||!RigReadRig->IsReady())return;
@@ -151,7 +151,10 @@ struct FRenderState {
    // First check: both row sets (rig.bin: bank then rig, 12 floats a row) and each row's actor/bone (rig.txt).
    TArray<uint8> Dump;Dump.Append(reinterpret_cast<const uint8*>(A),RigReadBytes);Dump.Append(reinterpret_cast<const uint8*>(B),RigReadBytes);
    FFileHelper::SaveArrayToFile(Dump,*(RigDumpPath+TEXT(".bin")));FFileHelper::SaveStringArrayToFile(RigRowNames,*(RigDumpPath+TEXT(".txt")));
-   TArray<FString> Blends;for(const float W:RigBlends)Blends.Add(FString::SanitizeFloat(W));FFileHelper::SaveStringArrayToFile(Blends,*(RigDumpPath+TEXT("-blend.txt")));}
+   TArray<FString> Blends;for(const float W:RigBlends)Blends.Add(FString::SanitizeFloat(W));FFileHelper::SaveStringArrayToFile(Blends,*(RigDumpPath+TEXT("-blend.txt")));
+   // rig-play.txt: each actor's playback that frame (clip slot A, B, time A, B, blend); rig-actors.txt: her card and
+   // the clip of each slot.
+   FFileHelper::SaveStringArrayToFile(RigPlays,*(RigDumpPath+TEXT("-play.txt")));FFileHelper::SaveStringArrayToFile(RigActorNames,*(RigDumpPath+TEXT("-actors.txt")));}
   RigReadBank->Unlock();RigReadRig->Unlock();RigReadBank.Reset();RigReadRig.Reset();
   const uint64 Checks=RigChecks.Load()+1;RigMeanTranslation.Store((RigMeanTranslation.Load()*double(Checks-1)+(Rows?Sum/Rows:0))/double(Checks));
   RigMaxLinear.Store(Linear);RigMaxTranslation.Store(Translation);RigWorstRow.Store(Worst);RigRows+=Rows-Blending;RigBadRows+=Bad;RigBlendRows+=Blending;RigChecks.Store(Checks);
@@ -187,7 +190,7 @@ struct FRenderState {
    if(RigVerifyLeft>0&&!RigReadBank&&!Reset){FOKResidentPoseFrame Full;if(!Pose.Evaluate(G,Playback,Frame,Pose.GetStats().Generation,false,Full,Error)){Fail(Error);return;}
     RigReadBytes=uint32(FrameData.Current->Desc.GetSize());if(Full.Current->Desc.GetSize()!=RigReadBytes){Fail(TEXT("GPU rig rows differ from the bank's"));return;}
     RigReadBank=MakeUnique<FRHIGPUBufferReadback>(TEXT("Crowd.RigCheckBank"));RigReadRig=MakeUnique<FRHIGPUBufferReadback>(TEXT("Crowd.RigCheckRig"));
-    RigBlends.Reset();for(const auto& P:Playback)RigBlends.Add(P.Times.Z);AddEnqueueCopyPass(G,RigReadBank.Get(),Full.Current,RigReadBytes);AddEnqueueCopyPass(G,RigReadRig.Get(),FrameData.Current,RigReadBytes);--RigVerifyLeft;}
+    RigBlends.Reset();RigPlays.Reset();for(const auto& P:Playback){RigBlends.Add(P.Times.Z);RigPlays.Add(FString::Printf(TEXT("%u %u %.6f %.6f %.6f"),P.ClipA,P.ClipB,P.Times.X,P.Times.Y,P.Times.Z));}AddEnqueueCopyPass(G,RigReadBank.Get(),Full.Current,RigReadBytes);AddEnqueueCopyPass(G,RigReadRig.Get(),FrameData.Current,RigReadBytes);--RigVerifyLeft;}
   }else if(!Pose.Evaluate(G,Playback,++Frame,Pose.GetStats().Generation,Reset,FrameData,Error)){Fail(Error);return;}
   // One full-frame copy, then each active actor replaces only its own rows.
   // Slots do not share history. Releasing one must not reset the other.
@@ -898,12 +901,13 @@ struct FScene : TSharedFromThis<FScene> {
  #include "OKCrowdRuntimeProgressiveGpu.inl"
  #include "OKCrowdRuntimeShadow.inl"
  // The GPU rig's tables for every installed actor, in the aggregate bank's actor and task order (FOKGpuRigBatch).
- TArray<FString> RowNames;TArray<uint32> RowActors;TArray<FString> WalkTrace;
+ TArray<FString> RowNames;TArray<uint32> RowActors;TArray<FString> WalkTrace,RigActorLines;
  TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> BuildRigBatch(const FOKGpuAnimationBundle& Bank,FString& Error){
   auto B=MakeShared<FOKGpuRigBatch,ESPMode::ThreadSafe>();
   TArray<FEntry*> ByActor;ByActor.SetNumZeroed(Bank.Manifest.Actors.Num());for(auto& E:Entries)if(E->BankActor!=INDEX_NONE&&ByActor.IsValidIndex(E->BankActor))ByActor[E->BankActor]=E.Get();
   uint32 Slots=1;for(auto* E:ByActor){if(!E||!E->Rig.Passed()||E->Rig.Names.IsEmpty()){Error=TEXT("GPU rig missing for an installed actor");return nullptr;}Slots=FMath::Max<uint32>(Slots,E->ClipSources.Num());}
   B->ActorCount=ByActor.Num();B->ClipSlotsPerActor=Slots;
+  if(GpuRigVerify>0)for(int32 A=0;A<ByActor.Num();++A){TArray<FString> Clips;for(const int32 S:ByActor[A]->ClipSources)Clips.Add(SourceId(S));RigActorLines.Add(FString::Printf(TEXT("%d\t%s\t%s"),A,*ByActor[A]->Path,*FString::Join(Clips,TEXT(","))));}
   auto Bits=[](uint32 V){return reinterpret_cast<const float&>(V);};
   TArray<uint32> BoneFirst,NodeFirst,NameCount;TMap<int32,TPair<uint32,FKKRuntimeGpuClip>> Shared;
   for(int32 A=0;A<ByActor.Num();++A){auto& E=*ByActor[A];const auto& Rig=E.Rig;const uint32 First=B->BoneCount;BoneFirst.Add(First);
@@ -988,7 +992,7 @@ struct FScene : TSharedFromThis<FScene> {
   for(int32 A=0;A<Entries.Num();++A){auto& E=*Entries[A];if(!E.DepthMesh.IsValid()||E.BankActor==INDEX_NONE)continue;FString Error;FOKGpuSkinPaletteData P;if(!OKBuildGpuMeshPalette(Bank->Manifest.Actors[E.BankActor],E.DepthMesh->GetRefSkeleton(),E.DepthMesh->GetRefBasesInvMatrix(),Bank->Data.Pose.Tasks.Num(),P,Error)){UE_LOG(LogTemp,Error,TEXT("APNG depth palette: %s"),*Error);Stopped=true;return;}MeshActors.Add(E.DepthMesh.Get(),Palettes.Num());References.Add(E.DepthMesh.Get(),E.Cpu->GetPrimitiveSceneId());Palettes.Add(MoveTemp(P));auto* Gpu=NewObject<UInstancedSkinnedMeshComponent>(O);O->AddInstanceComponent(Gpu);Gpu->SetSkinnedAssetAndUpdate(E.DepthMesh.Get());auto* Provider=NewObject<UOKIndependentTransformProvider>(Gpu);Provider->SetRuntimeProviderId(Render->ProviderId);Provider->SetDiagnosticBounds(E.AnimationBounds);Gpu->SetTransformProvider(Provider);Gpu->SetAnimationMinScreenSize(-1);Gpu->SetCollisionEnabled(ECollisionEnabled::NoCollision);Gpu->SetRenderInMainPass(false);Gpu->SetRenderInDepthPass(false);Gpu->SetCastShadow(false);Gpu->SetVisibility(false);Gpu->AddInstance(FTransform::Identity,0);Gpu->RegisterComponent();Gpu->SetComponentTickEnabled(false);E.DepthGpu=Gpu;if(DepthPrepassEnabled){DepthProxies.Add(Gpu->GetPrimitiveSceneId());}}
   TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> RigBatch;
   if(GpuRig){FString RigError;RigBatch=BuildRigBatch(*Bank,RigError);if(!RigBatch){UE_LOG(LogTemp,Error,TEXT("APNG GPU rig: %s"),*RigError);VisualError=TEXT("GPU rig: ")+RigError;WriteReport();Stopped=true;return;}}
-  ENQUEUE_RENDER_COMMAND(InstallApngProvider)([Renderer,R=Render,Bank,Verified,RigBatch,RigVerify=GpuRig?GpuRigVerify:0,RigDump=GpuRig&&GpuRigVerify>0&&!ReportPath.IsEmpty()?FPaths::GetPath(ReportPath)/TEXT("rig"):FString(),RigRows=MoveTemp(RowNames),RigActors=MoveTemp(RowActors),MeshActors=MoveTemp(MeshActors),References=MoveTemp(References),DepthProxies=MoveTemp(DepthProxies),CpuSourceProxies=MoveTemp(CpuSourceProxies),SourceIblMaterials=MoveTemp(SourceIblMaterials),Palettes=MoveTemp(Palettes)](FRHICommandListImmediate&)mutable{R->RigBatch=RigBatch;R->RigVerifyLeft=RigVerify;R->RigDumpPath=RigDump;R->RigRowNames=MoveTemp(RigRows);R->RigRowActors=MoveTemp(RigActors);R->CpuSourceProxies=MoveTemp(CpuSourceProxies);R->SourceIblMaterials=MoveTemp(SourceIblMaterials);R->Bank=Bank;R->Scene=Renderer;R->LateDepthProxies=MoveTemp(DepthProxies);R->CpuReferences=MoveTemp(References);R->MeshActors=MoveTemp(MeshActors);R->Sources=MoveTemp(Palettes);R->Validated=Verified;R->Initialized=true;R->Palettes.SetNum(R->Sources.Num());R->BoneMaps.SetNum(R->Sources.Num());R->StorageModes.SetNum(R->Sources.Num());if(auto* P=Renderer->GetExtensionPtr<FSkinningTransformProvider>()){P->RegisterProvider(R->ProviderId,FSkinningTransformProvider::FOnProvideTransforms::CreateLambda([R](auto& C){R->Provide(C);}),false);R->ProviderRegistered=true;}else R->Fail(TEXT("Skinning scene provider unavailable"));});if(!LateDepthExtension.IsValid()){LateDepthExtension=FSceneViewExtensions::NewExtension<FLateSourceDepth>(Render,O->GetWorld()->Scene);ENQUEUE_RENDER_COMMAND(RegisterApngComposite)([Extension=LateDepthExtension](FRHICommandListImmediate&){Extension->Register();});}Installed=true;for(auto& E:Entries){if(auto* C=E->LoadingMain.Get()){C->DestroyComponent();E->LoadingMain.Reset();}if(auto* C=E->Cpu.Get()){C->SetRenderInMainPass(false);C->SetRenderInDepthPass(false);}}
+  ENQUEUE_RENDER_COMMAND(InstallApngProvider)([Renderer,R=Render,Bank,Verified,RigBatch,RigVerify=GpuRig?GpuRigVerify:0,RigDump=GpuRig&&GpuRigVerify>0&&!ReportPath.IsEmpty()?FPaths::GetPath(ReportPath)/TEXT("rig"):FString(),RigRows=MoveTemp(RowNames),RigActors=MoveTemp(RowActors),RigActorLines=MoveTemp(RigActorLines),MeshActors=MoveTemp(MeshActors),References=MoveTemp(References),DepthProxies=MoveTemp(DepthProxies),CpuSourceProxies=MoveTemp(CpuSourceProxies),SourceIblMaterials=MoveTemp(SourceIblMaterials),Palettes=MoveTemp(Palettes)](FRHICommandListImmediate&)mutable{R->RigBatch=RigBatch;R->RigVerifyLeft=RigVerify;R->RigDumpPath=RigDump;R->RigRowNames=MoveTemp(RigRows);R->RigActorNames=MoveTemp(RigActorLines);R->RigRowActors=MoveTemp(RigActors);R->CpuSourceProxies=MoveTemp(CpuSourceProxies);R->SourceIblMaterials=MoveTemp(SourceIblMaterials);R->Bank=Bank;R->Scene=Renderer;R->LateDepthProxies=MoveTemp(DepthProxies);R->CpuReferences=MoveTemp(References);R->MeshActors=MoveTemp(MeshActors);R->Sources=MoveTemp(Palettes);R->Validated=Verified;R->Initialized=true;R->Palettes.SetNum(R->Sources.Num());R->BoneMaps.SetNum(R->Sources.Num());R->StorageModes.SetNum(R->Sources.Num());if(auto* P=Renderer->GetExtensionPtr<FSkinningTransformProvider>()){P->RegisterProvider(R->ProviderId,FSkinningTransformProvider::FOnProvideTransforms::CreateLambda([R](auto& C){R->Provide(C);}),false);R->ProviderRegistered=true;}else R->Fail(TEXT("Skinning scene provider unavailable"));});if(!LateDepthExtension.IsValid()){LateDepthExtension=FSceneViewExtensions::NewExtension<FLateSourceDepth>(Render,O->GetWorld()->Scene);ENQUEUE_RENDER_COMMAND(RegisterApngComposite)([Extension=LateDepthExtension](FRHICommandListImmediate&){Extension->Register();});}Installed=true;for(auto& E:Entries){if(auto* C=E->LoadingMain.Get()){C->DestroyComponent();E->LoadingMain.Reset();}if(auto* C=E->Cpu.Get()){C->SetRenderInMainPass(false);C->SetRenderInDepthPass(false);}}
   // Her private bank is copied into the aggregate and nothing reads it after this (2.4 GB of RAM for 100 bank girls).
   for(auto& E:Entries)E->Bank.Reset();
  }
@@ -1072,8 +1076,9 @@ struct FScene : TSharedFromThis<FScene> {
   E.PendingEpoch=++E.EpochClock;E.PendingAction=Source;E.PendingPlay=Play;E.PendingActionAt=FPlatformTime::Seconds();++E.StreamRequests;Error.Reset();return true;
  }
  #include "OKCrowdRuntimeStream.inl"
- // walk.tsv: '#' lines name each girl (index, walk clip slot 1's source, card), then one row a girl a frame.
- void WriteWalkTrace(const FString& Dir){if(WalkTrace.IsEmpty()||Dir.IsEmpty())return;TArray<FString> Lines;Lines.Add(TEXT("# time\tgirl\tclip_a\tclip_b\ttime_a\ttime_b\tblend\tx\ty\tz\tyaw"));for(int32 A=0;A<Entries.Num();++A)Lines.Add(FString::Printf(TEXT("#\t%d\t%s\t%s"),A,Entries[A]->ClipSources.IsValidIndex(1)&&ClipIds.IsValidIndex(Entries[A]->ClipSources[1])?*ClipIds[Entries[A]->ClipSources[1]]:TEXT(""),*Entries[A]->Path));Lines.Append(WalkTrace);FFileHelper::SaveStringArrayToFile(Lines,*(Dir/TEXT("walk.tsv")));}
+ // walk.tsv: '#' lines name each girl (index, every clip slot's source by commas: slot 1 her walk; card), then one row
+ // a girl a frame.
+ void WriteWalkTrace(const FString& Dir){if(WalkTrace.IsEmpty()||Dir.IsEmpty())return;TArray<FString> Lines;Lines.Add(TEXT("# time\tgirl\tclip_a\tclip_b\ttime_a\ttime_b\tblend\tx\ty\tz\tyaw"));for(int32 A=0;A<Entries.Num();++A){TArray<FString> Clips;for(const int32 S:Entries[A]->ClipSources)Clips.Add(SourceId(S));Lines.Add(FString::Printf(TEXT("#\t%d\t%s\t%s"),A,*FString::Join(Clips,TEXT(",")),*Entries[A]->Path));}Lines.Append(WalkTrace);FFileHelper::SaveStringArrayToFile(Lines,*(Dir/TEXT("walk.tsv")));}
  void WriteReport(){QUICK_SCOPE_CYCLE_COUNTER(STAT_OKCrowd_WriteReport);
   if(ReportPath.IsEmpty())return;
   WriteWalkTrace(FPaths::GetPath(ReportPath));

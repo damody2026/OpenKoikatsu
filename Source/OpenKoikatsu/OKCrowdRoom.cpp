@@ -33,9 +33,10 @@ constexpr float Gap=110.f;
 constexpr float WalkChance=.3f;
 // The demo camera around the girl it follows: 0 is behind her, 180 in front; distance, camera height and the height it
 // looks at, in cm (a close front view of the face: FollowYaw 180, FollowDistance 140, FollowHeight 125, FollowLook 118).
-// 0: girls walk at their mean pace straight at their target, turning about their root as they go, instead of at their
-// walk clip's speed at its current time where they face, turning about the planted foot (the foot-slide check's before).
-static TAutoConsoleVariable<int32> CVarWalkCurve(TEXT("ok.Crowd.WalkCurve"),1,TEXT("1: a walking girl moves at her walk clip's speed at its current time and turns about her planted foot; 0: at her mean pace, about her root"));
+// How a walking girl moves (the foot-slide check, Docs/CROWD_ROOM100.md): 2 at her walk clip's speed at its current
+// time where she faces, turning as she walks about her planted foot; 1 the same but turning on the spot first when far
+// off her way; 0 at her mean pace straight at her target, turning about her root.
+static TAutoConsoleVariable<int32> CVarWalkCurve(TEXT("ok.Crowd.WalkCurve"),2,TEXT("2: a walking girl moves at her walk clip's speed where she faces and turns as she walks about her planted foot; 1: turns on the spot first; 0: her mean pace straight at the target"));
 static TAutoConsoleVariable<float> CVarFollowYaw(TEXT("ok.Crowd.FollowYaw"),0.f,TEXT("Crowd room demo camera angle around the followed girl, degrees (0 behind, 180 in front)."));
 static TAutoConsoleVariable<float> CVarFollowDistance(TEXT("ok.Crowd.FollowDistance"),320.f,TEXT("Crowd room demo camera distance from the followed girl, cm."));
 static TAutoConsoleVariable<float> CVarFollowHeight(TEXT("ok.Crowd.FollowHeight"),190.f,TEXT("Crowd room demo camera height above the followed girl's feet, cm."));
@@ -140,16 +141,26 @@ struct FRoom {
      bool Blocked=false;for(int32 J=0;J<Agents.Num()&&!Blocked;++J)if(J!=I){const FVector D=Agents[J].Pos-A.Pos;const float Sq=D.SizeSquared2D();Blocked=Sq<Gap*Gap&&FVector::DotProduct(D.GetSafeNormal2D(),Dir)>.5f;}
      // Her walk's speed at its current time (it changes through the step; 0 until the walk fades in), else her mean; and
      // her planted foot: she turns about it, not about her root, so it stays put (zero: none, her root).
-     const bool Curve=CVarWalkCurve.GetValueOnGameThread()!=0;
-     FVector2f Pivot=FVector2f::ZeroVector;const float Now=Curve?OKGetCrowdRuntimeWalkSpeedNow(O,I,&Pivot):-1.f;
-     const float Want=FacingOf(Dir),Err=FMath::FindDeltaAngleDegrees(A.Yaw,Want),Yaw=A.Yaw+FMath::Clamp(Err,-TurnRate*Dt,TurnRate*Dt);
-     {const FVector Foot(Pivot.X,Pivot.Y,0);A.Pos+=FRotator(0,A.Yaw,0).RotateVector(Foot)-FRotator(0,Yaw,0).RotateVector(Foot);A.Yaw=Yaw;}
-     // Her feet go back along her facing: walking any other way slides them sideways. So far off her way she first
-     // turns where she stands (sets off under 20 deg, stops to turn over 60), and she walks where she faces.
-     const bool Facing=!Curve||FMath::Abs(Err)<(WasMoving?60.f:20.f);
-     const FVector Way=Curve?FRotator(0,A.Yaw+90.f,0).Vector():Dir;
-     if(Blocked){if(A.BlockedSince<0)A.BlockedSince=Time;if(Time-A.BlockedSince>3)Walk(A,I);}
-     else if(Facing){A.BlockedSince=-1;A.Pos+=Way*FMath::Min(Dist,(Now>=0?Now:A.Speed)*Dt);A.Moving=true;}
+     const int32 Mode=CVarWalkCurve.GetValueOnGameThread();const bool Curve=Mode!=0;
+     FVector2f Pivot=FVector2f::ZeroVector;const float Now=Curve?OKGetCrowdRuntimeWalkSpeedNow(O,I,&Pivot):-1.f;const float Speed=Now>=0?Now:A.Speed;
+     const float Want=FacingOf(Dir),Err=FMath::FindDeltaAngleDegrees(A.Yaw,Want);
+     // A turn of her yaw at this rate, about her planted foot (zero: none, her root), so that foot stays put.
+     auto Turn=[&](float Rate){const float Yaw=A.Yaw+FMath::Clamp(Err,-Rate*Dt,Rate*Dt);const FVector Foot(Pivot.X,Pivot.Y,0);A.Pos+=FRotator(0,A.Yaw,0).RotateVector(Foot)-FRotator(0,Yaw,0).RotateVector(Foot);A.Yaw=Yaw;};
+     // Her feet go back along her facing: walking any other way slides them sideways, so she walks where she faces.
+     // Mode 2: she turns as she walks, as fast as she walks (a fixed turning circle), never on the spot (a standing pose
+     // turned slides both feet), not while she waits; close by with her target well to the side she has arrived (she
+     // would circle it). Mode 1: far off her way she turns on the spot first (sets off under 20 deg, stops over 60).
+     if(Mode>=2){
+      if(Dist<60&&FMath::Abs(Err)>60)Stand(A,I);
+      else if(Blocked){if(A.BlockedSince<0)A.BlockedSince=Time;if(Time-A.BlockedSince>3)Walk(A,I);}
+      else{Turn(TurnRate*FMath::Clamp(Speed/FMath::Max(A.Speed,1.f),0.f,1.f));A.BlockedSince=-1;A.Pos+=FRotator(0,A.Yaw+90.f,0).Vector()*FMath::Min(Dist,Speed*Dt);A.Moving=true;}
+     }else{
+      Turn(TurnRate);
+      const bool Facing=!Curve||FMath::Abs(Err)<(WasMoving?60.f:20.f);
+      const FVector Way=Curve?FRotator(0,A.Yaw+90.f,0).Vector():Dir;
+      if(Blocked){if(A.BlockedSince<0)A.BlockedSince=Time;if(Time-A.BlockedSince>3)Walk(A,I);}
+      else if(Facing){A.BlockedSince=-1;A.Pos+=Way*FMath::Min(Dist,Speed*Dt);A.Moving=true;}
+     }
     }
    }else if(I==Follow&&A.Variants>0)Walk(A,I);
    else if(A.Variants>0&&Time>=A.Until){if(Rng.FRand()<WalkChance)Walk(A,I);else Stand(A,I);}

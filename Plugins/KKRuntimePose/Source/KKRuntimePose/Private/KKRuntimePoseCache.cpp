@@ -2,7 +2,7 @@
 
 uint64 FKKRuntimePoseCache::Estimate(const FKKRuntimePoseRequest& R){
  if(R.Bones.IsEmpty()||R.Bones.Num()>65536||R.SampleHz!=60||!FMath::IsFinite(R.Duration)||R.Duration<=0||R.Duration>34)return 0;
- const uint64 Rows=uint64(R.Bones.Num())*uint64(FMath::CeilToInt(R.Duration*60)+1)*3;if(Rows>MAX_int32)return 0;
+ const uint64 Rows=uint64(R.Bones.Num())*uint64(OKRuntimePoseFrames(R.Duration,60)+1)*3;if(Rows>MAX_int32)return 0;
  // Match Keys/Tracks Reserve, including allocator quantization. The exact
  // palette can remain fully animated, so no constant-key savings are assumed.
  return uint64(DefaultCalculateSlackReserve(int32(Rows),sizeof(FVector4f),true,alignof(FVector4f)))*sizeof(FVector4f)
