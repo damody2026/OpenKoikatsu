@@ -157,6 +157,8 @@ void AOKStreetSocialScene::StepApproach(){
  if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit||(S.Target!=INDEX_NONE&&S.Target!=I&&!S.ApproachJoin)){
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d gave up (%s) at %s, he is at %s, distance %.0f"),I,FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit?*FString::Printf(TEXT("%.0f s"),S.ApproachLimit):TEXT("he talks to someone else"),*A.Position.ToCompactString(),*S.Male.ToCompactString(),FVector::Dist2D(A.Position,S.Male));
   if(S.ApproachAppointment&&S.Target==INDEX_NONE&&S.Manifest.Characters.IsValidIndex(I)){S.FreeTalkNotice=OKMsg(TEXT("ui.invite.meeting_walk_blocked"),{{TEXT("name"),*S.Manifest.Characters[I].Name}});RefreshUI();}
+  // He is talking with someone else: said, not left at "she is coming over" for a girl who never comes (R3-232).
+  else if(S.Target!=INDEX_NONE&&S.Target!=I&&S.Manifest.Characters.IsValidIndex(I)){S.FreeTalkNotice=OKMsg(TEXT("ui.invite.approach_left_busy"),{{TEXT("name"),*S.Manifest.Characters[I].Name}});RefreshUI();}
   Stop();return;
  }
  // Arrived: beside him, or held up (a shelf, someone standing there) a couple of steps away; she stood at 176 cm for
