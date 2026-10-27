@@ -38,6 +38,8 @@
 
   可用卡：125 張中 121 張（只排除沒穿的 C002、C024、C037、C079）。這是錄影 session 讓 `xukmi/…Plus` 依 Shader Forge 家族畫出（`KKRuntimeSharedMaterial.cpp` 的 `ShaderFamily`，crowd_check 同規則）之後的規則；遊戲執行檔沒編進那個改動時，那 11 張在遊戲裡仍會報 coverage incomplete，可用的是 110 張。
 
+  100 人驗證（10-28，打包版 `Int1027E.stage`，`--benchmark 20`，`Saved/Crowd/Room100-20261028T025627`）：啟動前排除的只有沒穿的 4 張；前 100 張可用卡包含 C100～C103，這 4 張都正常畫出。結果 `drawn 89／failed 11`，失敗的正好是上面那 11 張 studio alpha 卡（`Int1027E` 編在 `ShaderFamily` 之前），沒有新的排除；畫出的 89 人 128.9 FPS（p95 8.55 ms）。執行檔換成含 `ShaderFamily` 的建置後，這 11 張才會畫出、湊滿 100 人。Editor 版這次沒跑成：工作樹的 `GpuRig.usf` 正在改，`FOKGpuRigSkeletonCS` 編不過，Editor 卡在 shader 錯誤。
+
 ## 量測方式
 
 - `--benchmark <秒>`：全員畫出並暖機後量測，寫 `report.json`（平均／P95／P99、game／render／GPU ms、draw 數、三角形數）與截圖，然後結束。數字與街頭 `/fps` 同源（`GAverageFPS` 之外另記每幀時間）。
