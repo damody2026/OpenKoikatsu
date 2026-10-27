@@ -773,3 +773,9 @@
 - 修正：`GalgameWalkFocus`（`OKStreetSocialGalgame.inl`）在 galgame 演出中、沒有 Target、她在他 3 m 內時，把跟隨鏡頭的焦點與樞軸半秒內平滑移到兩人中間；結束時同樣平滑移回他身上。`OKStreetSocialScene.cpp` 只多一行呼叫。
 - 規則：「這種情況維持原本鏡頭」的設計，要確認原本鏡頭在這種情況下拍得到說話的人。
 - 同一輪另外看到：和雷電將軍交換電話時 log 兩行 `Street heroine: unknown interaction contact`。`ExchangeContact` 用 `HeroineNote(Girl, "contact", …)` 記「交換了電話」，可是 `acts.toml` 沒有 `contact` 這一項，`Interact` 找不到就整筆丟掉，她的紀錄與記憶裡沒有這件事。修正：`acts.toml` 加 `contact`（history `contact`、memory -1）。規則：新增 `HeroineNote` 的種類時，同時在 `acts.toml` 加這一項，並在遊戲裡看一次 log 沒有 `unknown interaction`。
+
+### 2026-10-27 「回放最近 20 句」播兩句就停；立繪擷取的 log 佔了整份 log 一半（E 組 galgame，雷電將軍在 10F 餐廳）
+- **回放：** 在餐廳按「回放最近 20 句」，播了兩句熱紅茶剛好上桌，`TickServes` 替她送「菜上桌了」，`SendFreeTalk` 一開頭就清掉回放，她回了一句新台詞，回放就沒了。修正：回放進行中，上桌通知（`TickServes`）、點餐與櫃檯通知（`TickOrderNotice`）都等它播完，沉默計時也不算（`Waiting`）。
+- **log：** `APNG source capture`／`APNG source mesh` 的「變了才印」只記一份上次內容，galgame 立繪的顏色與覆蓋兩次擷取輪流，每次都不一樣，一份 4,200 行的 log 有 2,076 行是它。修正：每種擷取組合只印第一次（最多 64 種）。這是同一天第二次遇到同樣的錯（1 對 1 場景的 `clothes layer` 也是）。
+- 規則：遊戲自己替她送的話（`SystemNote`）都要先看有沒有玩家正在進行的東西（回放、歌、他正在說話），不要直接打斷。寫「只在改變時記錄」時，先想有沒有兩個以上的呼叫者輪流進來。
+- 我自己的操作錯誤：離開 1 對 1 場景後讀截圖時，用編號猜檔名，讀到的是前一張（還在 1 對 1 場景），差點把正常的退出當成「場景沒有關掉」去修。截圖一律先 `ls -t` 取最新檔名再讀；`game_log` 也可能讀到舊的那場遊戲的 log，查問題時直接讀這次 `Play-*` 目錄裡的 `game.log`。

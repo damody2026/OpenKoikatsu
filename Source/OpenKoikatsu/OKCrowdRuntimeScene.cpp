@@ -217,9 +217,10 @@ public:
   // but their transient mesh addresses must never enter the persistent cache.
   for(const auto& Batch:Parameters.View->DynamicMeshElements)if(Batch.Mesh&&EligibleProxies.Contains(Batch.PrimitiveSceneProxy)&&State->SourceIblMaterials.Contains(Batch.Mesh->MaterialRenderProxy))DynamicDraws.Add({Batch.Mesh,Batch.PrimitiveSceneProxy});
   if(View.bIsSceneCapture){int32 Candidates=0;for(const auto& Batch:Parameters.View->DynamicMeshElements)Candidates+=EligibleProxies.Contains(Batch.PrimitiveSceneProxy);
-   // Logged when it changes, not every captured frame (62,000 identical lines in ten minutes).
-   static FIntVector4 LastCapture(-1,-1,-1,-1);const FIntVector4 Capture(EligibleProxies.Num(),Draws.Num(),Candidates,DynamicDraws.Num());
-   if(Capture!=LastCapture){LastCapture=Capture;UE_LOG(LogTemp,Display,TEXT("APNG source capture: eligible=%d retained=%d dynamic_candidates=%d dynamic_source=%d"),Capture.X,Capture.Y,Capture.Z,Capture.W);for(const auto& Draw:Draws)UE_LOG(LogTemp,Display,TEXT("APNG source mesh: component=%u vf=%s"),Draw.Proxy->GetPrimitiveComponentId().PrimIDValue,Draw.Mesh->VertexFactory->GetType()->GetName());}}
+   // Logged once for each different capture, not every captured frame (62,000 identical lines in ten minutes). Two
+   // captures take turns (the galgame portrait's colour and coverage), so "when it changes" was every frame again.
+   static TSet<FIntVector4> Seen;const FIntVector4 Capture(EligibleProxies.Num(),Draws.Num(),Candidates,DynamicDraws.Num());
+   if(Seen.Num()<64&&!Seen.Contains(Capture)){Seen.Add(Capture);UE_LOG(LogTemp,Display,TEXT("APNG source capture: eligible=%d retained=%d dynamic_candidates=%d dynamic_source=%d"),Capture.X,Capture.Y,Capture.Z,Capture.W);for(const auto& Draw:Draws)UE_LOG(LogTemp,Display,TEXT("APNG source mesh: component=%u vf=%s"),Draw.Proxy->GetPrimitiveComponentId().PrimIDValue,Draw.Mesh->VertexFactory->GetType()->GetName());}}
   State->LateDepthDraws+=OKAddCachedSourceMaterialScenePass(G,View,Parameters.ColorTexture,Parameters.DepthTexture,Draws,Binding,Commands);
   for(const auto& Draw:DynamicDraws)if(OKAddSourceMaterialScenePass(G,View,Parameters.ColorTexture,Parameters.DepthTexture,*Draw.Mesh,Draw.Proxy,Binding))++State->LateDepthDraws;
   // Native IBL depth and alpha color share the exact same mesh, material and
