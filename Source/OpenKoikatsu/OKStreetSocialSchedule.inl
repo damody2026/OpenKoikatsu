@@ -137,6 +137,11 @@ void AOKStreetSocialScene::TickSchedules(){
   if(!Ready)UE_LOG(LogTemp,Warning,TEXT("Street plan: profiles still missing after 30 s; planning without them"));
   S.PlanWaitSince=0;S.PlannedWithoutProfiles=!Ready;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SchedulePlanAll);PlanAll();}
  }
+ // Walking with him when the game was saved: once both are drawn, the walk goes on (R3-238).
+ if(S.ResumeFollow!=INDEX_NONE){
+  if(S.Companion==INDEX_NONE)BeginCompanion(S.ResumeFollow);
+  if(S.Companion==S.ResumeFollow||Wall>S.ResumeFollowUntil){UE_LOG(LogTemp,Display,TEXT("Street load: actor %d %s"),S.ResumeFollow,S.Companion==S.ResumeFollow?TEXT("walks with him again"):TEXT("could not walk with him again; waits beside him"));
+   if(S.Companion==S.ResumeFollow)S.WaitsForHim.Remove(S.ResumeFollow);S.ResumeFollow=INDEX_NONE;}}
  // Sitting with her: whoever comes to stand by his table moves on (R3-140).
  if(S.Pair.Partner!=INDEX_NONE&&S.Pair.Conversation())MakeRoomAround(S.Pair.Partner);
  const int64 Now=OKStreetMindNow(S);const int32 Minute=int32(Now%1440);
@@ -191,6 +196,19 @@ void AOKStreetSocialScene::TickSchedules(){
   // Nothing recorded yet: the day (or the game) just started, she is put where her block is. A gap in her plan
   // (INDEX_NONE recorded: no block then) is not a start; from it she walks on like from any block.
   const bool Fresh=!S.PlanBlock.Contains(I);
+  // She was with him when the game was saved: back where she was, not where her plan puts her (R3-238). Walking or out
+  // with him she follows him again; otherwise she waits there for him a while (the rules: places.rs resume_with_him).
+  if(Fresh&&!S.ResumeWithHim.IsEmpty())if(const FOKStreetStore::FWithHim* W=S.ResumeWithHim.Find(Id)){
+   auto Ask=OKRulesRequest(TEXT("resume_with_him"));Ask->SetStringField(TEXT("mode"),W->Mode);Ask->SetBoolField(TEXT("fixed"),OKStreetFixedBlock(Block));
+   const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);
+   if(Out&&Out->GetBoolField(TEXT("keep"))){auto& A=S.Agents[I-1];
+    A.Position=W->Spot;S.Rotations[I]=FRotator(0,W->Yaw,0);A.Held=true;S.ScheduleHeld.Add(I);S.PendingMoves.Remove(I);S.Commutes.Remove(I);
+    S.PlanBlock.Add(I,Index);S.PlanBlockSince.Add(I,Minute);S.WaitsForHim.Add(I,Now+int64(Out->GetNumberField(TEXT("wait_minutes"))));
+    if(Out->GetBoolField(TEXT("follow"))){S.ResumeFollow=I;S.ResumeFollowUntil=FPlatformTime::Seconds()+30;}
+    UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), put back at %s"),I,*W->Mode,*W->Spot.ToCompactString());
+    S.ResumeWithHim.Remove(Id);continue;}
+   UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), her %s block takes her"),I,*W->Mode,Block?*Block->Kind:TEXT("-"));
+   S.ResumeWithHim.Remove(Id);}
   if((Fresh||Index!=Previous)&&Changes>0&&FPlatformTime::Seconds()>ChangeBudget){S.ScheduleTickAt=0;continue;} // her change waits for the next frame
   // She wrote him where she is ("at the bookstore out of the rain, a bit bored"): she waits there a while for him, not
   // off home nine seconds later (R3-230); a class, shift, promise or the night still takes her.

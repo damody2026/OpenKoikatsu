@@ -343,6 +343,9 @@ struct FOKStreetStore {
  bool HasPlayerSpot = false;
  FVector PlayerSpot = FVector::ZeroVector;
  float PlayerYaw = 0.f, ViewYaw = 90.f; // his facing, and the camera's
+ // Who was with him then (walking, out, sitting or talking with him): put back there on load, not sent off by her plan (R3-238).
+ struct FWithHim { FString Id, Mode; FVector Spot = FVector::ZeroVector; float Yaw = 0.f; }; // Mode: follow | stay
+ TArray<FWithHim> WithHim;
  // Plan §15 player start: ¥5,000 cash, allowance ¥8,000 on the 5th. Inventory holds bought gifts (item ids).
  int64 PlayerCash = 1000, PlayerBank = 0; // RMB
  FOKStreetPersonal Personal;      // his payroll year (OKStreetSocialBooks.h)
@@ -1238,7 +1241,9 @@ inline FString OKStreetWriteSave(const FOKStreetStore& Store) {
  TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
  Root->SetNumberField(TEXT("schema"), OKStreetSocialSchema);
  {auto Calendar=MakeShared<FJsonObject>();Calendar->SetNumberField(TEXT("day"),Store.CalendarDay);Calendar->SetNumberField(TEXT("minute"),Store.CalendarMinute);
-  if(Store.HasPlayerSpot){auto Spot=MakeShared<FJsonObject>();Spot->SetNumberField(TEXT("x"),Store.PlayerSpot.X);Spot->SetNumberField(TEXT("y"),Store.PlayerSpot.Y);Spot->SetNumberField(TEXT("z"),Store.PlayerSpot.Z);Spot->SetNumberField(TEXT("yaw"),Store.PlayerYaw);Spot->SetNumberField(TEXT("view"),Store.ViewYaw);Calendar->SetObjectField(TEXT("player"),Spot);}Root->SetObjectField(TEXT("calendar"),Calendar);}
+  if(Store.HasPlayerSpot){auto Spot=MakeShared<FJsonObject>();Spot->SetNumberField(TEXT("x"),Store.PlayerSpot.X);Spot->SetNumberField(TEXT("y"),Store.PlayerSpot.Y);Spot->SetNumberField(TEXT("z"),Store.PlayerSpot.Z);Spot->SetNumberField(TEXT("yaw"),Store.PlayerYaw);Spot->SetNumberField(TEXT("view"),Store.ViewYaw);Calendar->SetObjectField(TEXT("player"),Spot);}
+  if(!Store.WithHim.IsEmpty()){TArray<TSharedPtr<FJsonValue>> With;for(const auto& W:Store.WithHim){auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),W.Id);O->SetStringField(TEXT("mode"),W.Mode);O->SetNumberField(TEXT("x"),W.Spot.X);O->SetNumberField(TEXT("y"),W.Spot.Y);O->SetNumberField(TEXT("z"),W.Spot.Z);O->SetNumberField(TEXT("yaw"),W.Yaw);With.Add(MakeShared<FJsonValueObject>(O));}Calendar->SetArrayField(TEXT("with_him"),With);}
+  Root->SetObjectField(TEXT("calendar"),Calendar);}
  {TArray<TSharedPtr<FJsonValue>> ApptRows;for(const auto& A:Store.Appointments){auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("place"),A.Place);O->SetStringField(TEXT("label"),A.Label);O->SetNumberField(TEXT("start"),double(A.Start));O->SetNumberField(TEXT("grace"),A.Grace);if(A.Minutes>0)O->SetNumberField(TEXT("minutes"),A.Minutes);O->SetStringField(TEXT("status"),A.Status);if(!A.Payer.IsEmpty())O->SetStringField(TEXT("payer"),A.Payer);ApptRows.Add(MakeShared<FJsonValueObject>(O));}
   Root->SetArrayField(TEXT("appointments"),ApptRows);Root->SetNumberField(TEXT("next_appointment"),Store.NextAppointment);
   auto Black=MakeShared<FJsonObject>();TArray<FString> Keys;Store.Blacklist.GetKeys(Keys);Keys.Sort();for(const FString& K:Keys)Black->SetNumberField(K,Store.Blacklist[K]);Root->SetObjectField(TEXT("blacklist"),Black);}
@@ -1386,6 +1391,14 @@ inline EOKStreetLoad OKStreetParseSave(const FString& Json, FOKStreetStore& Stor
    (*Spot)->TryGetNumberField(TEXT("yaw"), SpotYaw);
    double View = 90; if ((*Spot)->TryGetNumberField(TEXT("view"), View) && FMath::IsFinite(View)) Store.ViewYaw = float(View);
    Store.HasPlayerSpot = true; Store.PlayerSpot = FVector(X, Y, Z); Store.PlayerYaw = FMath::IsFinite(SpotYaw) ? float(SpotYaw) : 0.f;
+  }
+  const TArray<TSharedPtr<FJsonValue>>* With = nullptr;
+  if ((*Calendar)->TryGetArrayField(TEXT("with_him"), With)) for (const auto& V : *With) {
+   const TSharedPtr<FJsonObject> O = V.IsValid() ? V->AsObject() : nullptr; FOKStreetStore::FWithHim W; double WX = 0, WY = 0, WZ = 0, WYaw = 0;
+   if (!O || !O->TryGetStringField(TEXT("id"), W.Id) || W.Id.IsEmpty() || !O->TryGetNumberField(TEXT("x"), WX) || !O->TryGetNumberField(TEXT("y"), WY) || !O->TryGetNumberField(TEXT("z"), WZ)
+    || !FMath::IsFinite(WX) || !FMath::IsFinite(WY) || !FMath::IsFinite(WZ) || FMath::Abs(WX) >= 1.e6 || FMath::Abs(WY) >= 1.e6 || FMath::Abs(WZ) >= 1.e5) continue;
+   O->TryGetStringField(TEXT("mode"), W.Mode); O->TryGetNumberField(TEXT("yaw"), WYaw);
+   W.Spot = FVector(WX, WY, WZ); W.Yaw = FMath::IsFinite(WYaw) ? float(WYaw) : 0.f; Store.WithHim.Add(MoveTemp(W));
   }
  }
  const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;

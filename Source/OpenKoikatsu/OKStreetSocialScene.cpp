@@ -225,6 +225,8 @@ struct FOKStreetSceneState {
  int32 DayRewound=-1; // the game day the hour buttons went back from (R3-225): reached again, it is not begun twice
  FVector OutingStuckPos=FVector::ZeroVector;int32 OutingStuckCount=0; // an outing held up in the same spot again and again (R3-234)
  TMap<int32,int64> WaitsForHim; // she wrote him where she is: until this minute she stays there for him (R3-230)
+ // Who was with him in the save, by stable id, until each is put back (R3-238); the one who walks with him again, and until when it is tried.
+ TMap<FString,FOKStreetStore::FWithHim> ResumeWithHim;int32 ResumeFollow=INDEX_NONE;double ResumeFollowUntil=0;
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;

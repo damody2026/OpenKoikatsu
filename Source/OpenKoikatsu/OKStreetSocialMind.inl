@@ -12,7 +12,8 @@ void AOKStreetSocialScene::StartCalendarAndMind(){
  LoadCatalog();
  // A saved game continues where he was (the start place below, a development switch, still wins).
  if(S.Store.HasPlayerSpot&&!S.SelfTest){S.Male=S.Store.PlayerSpot;if(S.Rotations.IsValidIndex(0))S.Rotations[0]=FRotator(0,S.Store.PlayerYaw,0);S.Yaw=S.Store.ViewYaw;S.SpotSavedMale=S.Male;
-  UE_LOG(LogTemp,Display,TEXT("Street start: where he was saved, %s yaw %.0f"),*S.Male.ToCompactString(),S.Store.PlayerYaw);}
+  UE_LOG(LogTemp,Display,TEXT("Street start: where he was saved, %s yaw %.0f"),*S.Male.ToCompactString(),S.Store.PlayerYaw);
+  for(const auto& W:S.Store.WithHim)S.ResumeWithHim.Add(W.Id,W);} // put back by TickSchedules once her plan is there
  // Development: OK_STREET_START_PLACE=<place id> starts the player inside that place (first anchor, else room, else door).
  {FString Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE")),Anchor;Start.Split(TEXT("@"),&Start,&Anchor);if(Start.IsEmpty())Start=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_START_PLACE"));
   if(!Start.IsEmpty()&&!S.SelfTest)if(const auto* P=OKStreetFindPlace(Start)){const FOKStreetModelAnchor* A=Anchor.IsEmpty()?(P->Anchors.Num()?&P->Anchors[0]:nullptr):P->Anchors.FindByPredicate([&](const FOKStreetModelAnchor& X){return X.Name==Anchor;});
@@ -86,6 +87,19 @@ void AOKStreetSocialScene::SaveCalendar(){
  // Where he stands: outside the room of a facility he is in (it puts him in a set), not while riding an elevator.
  if(ElevatorWithMale()==INDEX_NONE&&S.LiftRide.Elevator==INDEX_NONE){Candidate.HasPlayerSpot=true;Candidate.PlayerSpot=S.FacilityEntered?S.FacilitySavedMale:S.Male;Candidate.PlayerYaw=S.FacilityEntered?S.FacilitySavedMaleRotation.Yaw:S.Rotations[0].Yaw;Candidate.ViewYaw=S.FacilityEntered?S.FacilitySavedYaw:S.Yaw;S.SpotSavedMale=Candidate.PlayerSpot;S.SpotSavedAt=FPlatformTime::Seconds();}
  Candidate.CalendarMinute=FMath::Clamp(FMath::FloorToInt32(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)*60.0),0,24*60-1);
+ // Who is with him (R3-238): walking or out with him follows him again after a load; sitting, talking or in a set with
+ // him waits beside him. Not put back yet from the last load: kept as it was saved.
+ if(S.ResumeWithHim.IsEmpty()&&Candidate.HasPlayerSpot){Candidate.WithHim.Reset();const FVector His=Candidate.PlayerSpot;
+  for(int32 I=1;I<S.Manifest.Characters.Num();++I){if(!S.Agents.IsValidIndex(I-1))continue;
+   const bool Follow=S.Companion==I||S.OutingGirl==I||S.Party.Contains(I);
+   const bool Stay=S.Pair.Partner==I||S.Target==I||S.PrivateGirl==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I);
+   if(!Follow&&!Stay)continue;
+   FOKStreetStore::FWithHim W;W.Id=OKStreetStableId(S.Manifest.Characters[I]);W.Mode=Follow?TEXT("follow"):TEXT("stay");
+   const FVector Her=S.Agents[I-1].Position;
+   // Where she stood, when that is by him (the trail behind him, or a set far from where he is put back: beside him).
+   if(!S.FacilityEntered&&FVector::Dist2D(Her,His)<(Follow?230.f:600.f)&&FMath::Abs(Her.Z-His.Z)<150.f){W.Spot=Her;W.Yaw=S.Rotations.IsValidIndex(I)?S.Rotations[I].Yaw:0.f;}
+   else{W.Spot=His+FRotator(0,Candidate.PlayerYaw+150.f,0).RotateVector(FVector(130,0,0));W.Spot.Z=Her.Z;if(FMath::Abs(Her.Z-His.Z)>=150.f)W.Spot.Z=His.Z;W.Yaw=Candidate.PlayerYaw;}
+   Candidate.WithHim.Add(MoveTemp(W));}}
  S.Store=MoveTemp(Candidate);OKStreetAtomicSaveStoreAsync(S.Manifest.SavePath,S.Store);
 }
 

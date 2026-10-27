@@ -149,9 +149,24 @@ fn wake_place(place: &str) -> &'static str {
     BEDS.iter().copied().find(|b| *b == place).unwrap_or("boys_dorm")
 }
 
+/// A heroine who was with him when the game was saved (walking with him, out with him, sitting or talking with him), on
+/// load (R3-238): she is put back where she was, not where her plan says. Walking or out with him, she follows him again;
+/// sitting or talking with him, she waits beside him a while, unless her block now is a fixed one (class, shift, promise,
+/// sleep), which takes her as usual. Request: mode ("follow" | "stay"), fixed. Answer: keep, follow, wait_minutes.
+const RESUME_WAIT_MINUTES: i64 = 40;
+fn resume_with_him(mode: &str, fixed: bool) -> Value {
+    let follow = mode == "follow";
+    let keep = follow || !fixed;
+    json!({"keep": keep, "follow": follow && keep, "wait_minutes": if keep { RESUME_WAIT_MINUTES } else { 0 }})
+}
+
 pub fn eval(t: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
         "wake_place" => Ok(json!({"place": wake_place(request.get("place").and_then(Value::as_str).unwrap_or(""))})),
+        "resume_with_him" => Ok(resume_with_him(
+            request.get("mode").and_then(Value::as_str).unwrap_or(""),
+            request.get("fixed").and_then(Value::as_bool).unwrap_or(false),
+        )),
         "places_table" => Ok(json!({"default": t.default, "norms": t.norms})),
         "place_crowd" => {
             let place = request.get("place").and_then(Value::as_str).unwrap_or("");
@@ -166,6 +181,18 @@ pub fn eval(t: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Valu
 mod tests {
     use super::*;
     use crate::tuning::Tuning;
+
+    #[test]
+    fn who_was_with_him_stays_with_him_after_a_load() {
+        let walk = resume_with_him("follow", false);
+        assert_eq!((walk["keep"].as_bool(), walk["follow"].as_bool()), (Some(true), Some(true)));
+        let walk_in_class = resume_with_him("follow", true);
+        assert_eq!(walk_in_class["follow"].as_bool(), Some(true), "out with him, her plan waits");
+        let sat = resume_with_him("stay", false);
+        assert_eq!((sat["keep"].as_bool(), sat["follow"].as_bool(), sat["wait_minutes"].as_i64()), (Some(true), Some(false), Some(40)));
+        let on_shift = resume_with_him("stay", true);
+        assert_eq!((on_shift["keep"].as_bool(), on_shift["wait_minutes"].as_i64()), (Some(false), Some(0)));
+    }
 
     #[test]
     fn crowd_by_hour() {
