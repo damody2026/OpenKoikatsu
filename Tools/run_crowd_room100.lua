@@ -3,7 +3,10 @@
 -- Runs the newest StreetSocial stage with -CrowdRoom=<manifest>; nothing else of the street starts.
 --   Tools\lua\lua.exe Tools\run_crowd_room100.lua [--count N] [--cards <dir>] [--benchmark <seconds>] [--warmup <seconds>]
 --       [--max-fps N] [--window WxH] [--executable <exe>] [--variants N] [--exec "CMD,CMD"] [--cases <json>] [--trace] [--aggregate]
---       [--gpu-rig] [--gpu-rig-verify N] [--editor]
+--       [--gpu-rig] [--gpu-rig-verify N] [--editor] [--follow <card name part>] [--record <seconds>]
+-- --follow: a demo: that girl (the first card whose file name contains it) walks the whole time and the camera follows
+-- her from behind, without the on-screen numbers. --record: a video of that many seconds (demo.mp4 beside the report,
+-- ffmpeg from Tools\ffmpeg grabbing the game window) once everyone is drawn and warmed up; then the game quits.
 -- --aggregate: once everyone is loaded, compose every girl's pose bank into one GPU bank (one skinning provider instead
 -- of a hundred; needs twice the banks' memory while composing).
 -- --gpu-rig: pose every girl on the GPU from the shared clips and her body parameters (Shaders/GpuRig.usf) instead of
@@ -44,6 +47,8 @@ local function parse(argv)
     elseif a == "gpu-rig" then o.gpu_rig = true; o.aggregate = true
     elseif a == "gpu-rig-verify" then o.gpu_rig_verify = tonumber(v); o.gpu_rig = true; o.aggregate = true; i = i + 1
     elseif a == "editor" then o.editor = true
+    elseif a == "follow" then o.follow = v; i = i + 1
+    elseif a == "record" then o.record = tonumber(v); i = i + 1
     else error("Unknown option " .. argv[i], 0) end
     i = i + 1
   end
@@ -138,8 +143,17 @@ local function main()
     outfits[i] = 0
     characters[i] = json.object({ { "path", win(c) }, { "walk_clip", "walk_01.okanim" } })
   end
+  -- A recording runs as a measurement of its length (the room quits after it).
+  if o.record then o.benchmark = math.max(o.benchmark, o.record + 2) end
   local room = json.object({ { "half_size", 2400 }, { "benchmark_seconds", o.benchmark }, { "warmup_seconds", o.warmup },
     { "report", win(path.join(out, "report.json")) }, { "exit_after_report", o.benchmark > 0 } })
+  if o.follow then
+    local index
+    for i, c in ipairs(cards) do if path.name(c):lower():find(o.follow:lower(), 1, true) then index = i - 1; break end end
+    if not index then error("--follow: no card named like " .. o.follow .. " among the room's girls", 0) end
+    room.follow = index
+    say(("Following %s (girl %d)"):format(path.name(cards[index + 1]), index))
+  end
   if o.cases then room.cases = read_json(o.cases) end
   if o.trace then room.trace_file = win(path.join(out, "trace.utrace")) end
   local manifest = json.object({
@@ -180,6 +194,24 @@ local function main()
   if o.gpu_rig then game[#game + 1] = "-OKGpuRig" end
   local pid = proc.spawn(game, { cwd = root })
   path.write_text(path.join(out, "game.pid"), tostring(pid))
+  if o.record then
+    -- Once the measurement starts (everyone drawn, warmed up): the game window, by its title, for o.record seconds.
+    local log, deadline = path.join(out, "game.log"), time.time() + 1800
+    while not (path.is_file(log) and path.read_text(log):find("Crowd room: benchmark starts", 1, true)) do
+      if time.time() > deadline then error("Crowd room record: the measurement never started", 0) end
+      time.sleep(2)
+    end
+    local list = proc.run({ "tasklist", "/v", "/fo", "csv", "/nh", "/fi", "PID eq " .. pid }, { capture = true }).stdout or ""
+    local title = list:match('^"[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","([^"]*)"')
+    if not title or title == "" or title == "N/A" then error("Crowd room record: the game window has no title", 0) end
+    local video = path.join(out, "demo.mp4")
+    say("Recording " .. o.record .. " s of \"" .. title .. "\" -> " .. win(video))
+    local rec = proc.run({ win(path.join(root, "Tools/ffmpeg/ffmpeg.exe")), "-y", "-loglevel", "error", "-f", "gdigrab", "-framerate", "60",
+      "-draw_mouse", "0", "-i", "title=" .. title, "-t", tostring(o.record), "-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19",
+      "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", win(video) }, { stdout_file = path.join(out, "ffmpeg.log"), merge = true })
+    if not rec.ok then error("Crowd room record: ffmpeg failed (" .. win(path.join(out, "ffmpeg.log")) .. ")", 0) end
+    say(win(video))
+  end
   say("Crowd room: " .. #cards .. " girls, " .. #variants .. " standing poses (" .. o.variants .. " each), " .. exe)
   say(out)
   if o.benchmark > 0 then

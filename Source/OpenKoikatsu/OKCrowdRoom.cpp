@@ -39,6 +39,9 @@ struct FRoom {
  TWeakObjectPtr<AActor> Owner;TWeakObjectPtr<ACameraActor> Camera;FRandomStream Rng{20261027};TArray<FAgent> Agents;
  float Half=2400,FloorZ=10000;double Time=0,Wall0=0;
  FVector CamPos=FVector::ZeroVector;FRotator CamRot=FRotator::ZeroRotator;
+ // A demo (room.follow): one girl walks the whole time and the camera follows her from behind (third person), eased;
+ // no on-screen numbers.
+ int32 Follow=INDEX_NONE;FVector FollowDir=FVector(1,0,0);bool FollowPlaced=false;
  // Frame-time report: warmup_seconds after every girl is drawn, then benchmark_seconds of frames.
  double BenchSeconds=0,Warmup=10,AllVisibleAt=-1,BenchStart=-1,NextVisibleCheck=0,NextLog=0,ExitAt=-1;int32 Visible=0,Failed=0;
  FString Report;bool ExitAfter=false,BenchDone=false;TArray<float> Frames;double GameSum=0,RenderSum=0,GpuSum=0,DrawSum=0,TriSum=0;
@@ -89,8 +92,16 @@ struct FRoom {
  bool Tick(float Dt){
   AActor* O=Owner.Get();if(!O||!O->GetWorld())return false;UWorld* World=O->GetWorld();Time+=Dt;FString Error;
   APlayerController* Pc=World->GetFirstPlayerController();
+  // The demo camera: behind the girl it follows, eased toward her heading.
+  if(Pc&&Agents.IsValidIndex(Follow)){
+   const auto& A=Agents[Follow];
+   if(A.Walking){const FVector D=(A.Target-A.Pos).GetSafeNormal2D();if(!D.IsNearlyZero())FollowDir=FMath::VInterpNormalRotationTo(FollowDir,D,Dt,90.f);}
+   const FVector Want=A.Pos-FollowDir*320.f+FVector(0,0,190.f),Look=A.Pos+FVector(0,0,105.f);
+   CamPos=FollowPlaced?FMath::VInterpTo(CamPos,Want,Dt,3.f):Want;FollowPlaced=true;CamRot=(Look-CamPos).Rotation();
+   if(auto* C=Camera.Get()){C->SetActorLocationAndRotation(CamPos,CamRot);if(Pc->GetViewTarget()!=C)Pc->SetViewTarget(C);}
+  }
   // The free camera.
-  if(Pc){
+  else if(Pc){
    if(Pc->IsInputKeyDown(EKeys::RightMouseButton)){float Dx=0,Dy=0;Pc->GetInputMouseDelta(Dx,Dy);CamRot.Yaw+=Dx*2.f;CamRot.Pitch=FMath::Clamp(CamRot.Pitch+Dy*2.f,-89.f,60.f);}
    FVector Move=FVector::ZeroVector;const FRotator Flat(0,CamRot.Yaw,0);
    if(Pc->IsInputKeyDown(EKeys::W))Move+=Flat.Vector();if(Pc->IsInputKeyDown(EKeys::S))Move-=Flat.Vector();
@@ -114,7 +125,8 @@ struct FRoom {
      if(Blocked){if(A.BlockedSince<0)A.BlockedSince=Time;if(Time-A.BlockedSince>3)Walk(A,I);}
      else{A.BlockedSince=-1;A.Pos+=Dir*FMath::Min(Dist,WalkSpeed*Dt);A.Moving=true;}
     }
-   }else if(A.Variants>0&&Time>=A.Until){if(Rng.FRand()<WalkChance)Walk(A,I);else Stand(A,I);}
+   }else if(I==Follow&&A.Variants>0)Walk(A,I);
+   else if(A.Variants>0&&Time>=A.Until){if(Rng.FRand()<WalkChance)Walk(A,I);else Stand(A,I);}
    OKSetCrowdRuntimeCharacterMotion(O,I,FTransform(FRotator(0,A.Yaw,0),A.Pos),A.Moving?1.f:0.f,Error);
   }
   // Who is drawn (once a second).
@@ -131,7 +143,7 @@ struct FRoom {
   if(Wall>=NextLog){NextLog=Wall+5;LogFrames.Sort();float Sum=0;for(float F:LogFrames)Sum+=F;const float Mean=LogFrames.Num()?Sum/LogFrames.Num():0,P95=LogFrames.Num()?LogFrames[FMath::Min(LogFrames.Num()-1,int32(LogFrames.Num()*.95f))]:0;
    int32 Walking=0;for(const auto& A:Agents)Walking+=A.Moving;
    UE_LOG(LogTemp,Display,TEXT("Crowd room: %.1f FPS (frame %.2f ms, p95 %.2f) game %.2f render %.2f gpu %.2f ms, %d draws %.2fM triangles, drawn %d/%d, walking %d"),Mean>0?1000/Mean:0,Mean,P95,GameMs,RenderMs,GpuMs,Draws,Tris/1e6f,Visible,Agents.Num(),Walking);
-   if(GEngine)GEngine->AddOnScreenDebugMessage(int32(0x0C10),6.f,FColor::Green,FString::Printf(TEXT("%.0f FPS  frame %.2f ms (p95 %.2f)  game %.2f  render %.2f  gpu %.2f  drawn %d/%d  walking %d"),Mean>0?1000/Mean:0,Mean,P95,GameMs,RenderMs,GpuMs,Visible,Agents.Num(),Walking));
+   if(GEngine&&Follow==INDEX_NONE)GEngine->AddOnScreenDebugMessage(int32(0x0C10),6.f,FColor::Green,FString::Printf(TEXT("%.0f FPS  frame %.2f ms (p95 %.2f)  game %.2f  render %.2f  gpu %.2f  drawn %d/%d  walking %d"),Mean>0?1000/Mean:0,Mean,P95,GameMs,RenderMs,GpuMs,Visible,Agents.Num(),Walking));
    LogFrames.Reset();}
   if(BenchSeconds>0&&!BenchDone&&AllVisibleAt>=0&&Wall>=AllVisibleAt+Warmup){
    if(Cases.IsValidIndex(Case)&&CaseAppliedAt<0){CaseAppliedAt=Wall;for(const FString& C:Cases[Case].Exec)GEngine->Exec(World,*C);UE_LOG(LogTemp,Display,TEXT("Crowd room: case %s applied"),*Cases[Case].Name);}
@@ -183,6 +195,7 @@ bool OKStartCrowdRoom(AActor* Owner,const FString& Manifest,FString& Error){
   R->TryGetStringField(TEXT("report"),Room->Report);R->TryGetBoolField(TEXT("exit_after_report"),Room->ExitAfter);
   double Seed=0;if(R->TryGetNumberField(TEXT("seed"),Seed))Room->Rng.Initialize(int32(Seed));
   R->TryGetStringField(TEXT("trace_file"),Room->TraceFile);
+  double FollowIndex=-1;if(R->TryGetNumberField(TEXT("follow"),FollowIndex))Room->Follow=int32(FollowIndex);
   const TArray<TSharedPtr<FJsonValue>>* Cases=nullptr;if(R->TryGetArrayField(TEXT("cases"),Cases))for(const auto& CaseValue:*Cases){const auto C=CaseValue->AsObject();if(!C)continue;FRoom::FCase Item;C->TryGetStringField(TEXT("name"),Item.Name);
    const TArray<TSharedPtr<FJsonValue>>* Exec=nullptr;if(C->TryGetArrayField(TEXT("exec"),Exec))for(const auto& E:*Exec)Item.Exec.Add(E->AsString());Room->Cases.Add(MoveTemp(Item));}}
  UWorld* World=Owner->GetWorld();Room->Build(World,Owner);

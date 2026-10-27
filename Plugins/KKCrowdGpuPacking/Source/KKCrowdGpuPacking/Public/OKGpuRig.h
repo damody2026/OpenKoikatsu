@@ -43,7 +43,7 @@ public:
 private:
  TSharedPtr<const FOKGpuRigBatch,ESPMode::ThreadSafe> Static;
  TRefCountPtr<FRDGPooledBuffer> Actors,Bones,Lists,Abm,Named,ClipSlots,ClipRates,Channels,Samples,Tasks,Terms,Locals,LocalsB,Worlds,Current;
- TRefCountPtr<FRDGPooledBuffer> PhysSets,PhysNodes,PhysChains,PhysChainValues,PhysParticles,PhysColliders,PhysFollow,NodeLocals,NodeRots,PhysState;
+ TRefCountPtr<FRDGPooledBuffer> RigRots,PhysSets,PhysNodes,PhysChains,PhysChainValues,PhysParticles,PhysColliders,PhysFollow,NodeLocals,NodeRots,PhysState;
  bool PhysicsCleared=false;
  bool HasFrame=false;
 };

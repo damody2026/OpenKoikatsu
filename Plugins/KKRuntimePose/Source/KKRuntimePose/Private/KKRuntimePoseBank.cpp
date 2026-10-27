@@ -50,7 +50,7 @@ static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R
   for(int32 P=0;P<R.Parts.Num();++P){auto& F=PartFrames[P];F.Slots.SetNum(R.Parts[P].Slots.Num());F.SlotReady.SetNumZeroed(F.Slots.Num());if(!R.Parts[P].RigidFollow.IsEmpty())F.InverseBind=R.Parts[P].RigidBindWorld.Inverse();}
   TArray<uint8> Contact;if(!R.ContactRecipe.IsEmpty()){FTCHARToUTF8 Utf8(*R.ContactRecipe);Contact.Append(reinterpret_cast<const uint8*>(Utf8.Get()),Utf8.Length());if(Contact.Num()>16384)return Fail(TEXT("Contact recipe exceeds limit"));}
   const float Step=R.Duration/Frames;
-  for(uint32 K=0;K<Samples;++K){const float Time=K==Frames?R.Duration:Step*K;if(Contact.IsEmpty()?(K&&!Session.ApplyAnimFrame(Time,Step)):!Session.ApplyContactFrame(Time,K?Step:0,Contact))return Fail(TEXT("Runtime authored frame evaluation failed"));
+  for(uint32 K=0;K<Samples;++K){const float Time=K==Frames?R.Duration:Step*K;if(Contact.IsEmpty()?(K&&!(R.NativeOnly?Session.SampleFrame(Time):Session.ApplyAnimFrame(Time,Step))):!Session.ApplyContactFrame(Time,K?Step:0,Contact))return Fail(TEXT("Runtime authored frame evaluation failed"));
    for(auto& F:PartFrames){F.Ready=false;F.Raw={};if(!F.SlotReady.IsEmpty())FMemory::Memzero(F.SlotReady.GetData(),F.SlotReady.Num());}
    for(int32 B=0;B<Mapping.Num();++B){const auto& M=Mapping[B];FTransform T=R.Bones[B].Reference;
     if(M.Native!=INDEX_NONE){OkBoneView V{};if(!Session.SkelBoneAt(M.Native,V))return Fail(TEXT("Runtime native pose missing"));T=OKUnityLocalToUnreal(V.pose_pos,V.pose_rot,V.pose_scl);}
@@ -87,7 +87,7 @@ FString OKRuntimePoseRecipeIdentity(const FKKRuntimePoseRequest& R){
  FSHA1 H;auto Feed=[&](const TArray<uint8>& B){const uint64 N=B.Num();H.Update(reinterpret_cast<const uint8*>(&N),sizeof(N));if(N)H.Update(B.GetData(),N);};if(R.PackedGpuCache&&!R.PersistentSourceIdentity.IsEmpty()){FTCHARToUTF8 Stable(*R.PersistentSourceIdentity);TArray<uint8> Source;Source.Append(reinterpret_cast<const uint8*>(Stable.Get()),Stable.Length());Feed(Source);}else Feed(R.Snapshot);Feed(R.AuthoredCurves);
  FBufferArchive Metadata;uint32 Version=4,Hz=R.SampleHz;float Duration=R.Duration;Metadata<<Version<<Hz<<Duration;bool Packed=R.PackedGpuCache;Metadata<<Packed;
  if(R.AuthoredPrefix){uint32 PrefixVersion=1;FString Mode=TEXT("authored-prefix");Metadata<<Mode<<PrefixVersion;}
- if(R.NativeOnly){uint32 NativeVersion=1;FString Mode=TEXT("native-only");Metadata<<Mode<<NativeVersion;}
+ if(R.NativeOnly){uint32 NativeVersion=2;FString Mode=TEXT("native-only");Metadata<<Mode<<NativeVersion;}
  int32 N=R.Bones.Num();Metadata<<N;for(auto B:R.Bones){FString Name=B.Name.ToString();Metadata<<Name<<B.Parent<<B.Reference;}
  if(!R.ContactRecipe.IsEmpty()){uint32 ContactVersion=1;Metadata<<ContactVersion;FString Contact=R.ContactRecipe;Metadata<<Contact;}
  N=R.Parts.Num();Metadata<<N;for(auto P:R.Parts)Metadata<<P.NativePart<<P.Slots<<P.RigidFollow<<P.RigidBindWorld;Feed(Metadata);H.Final();FSHAHash Hash;H.GetHash(Hash.Hash);return Hash.ToString();

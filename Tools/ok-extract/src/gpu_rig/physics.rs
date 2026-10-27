@@ -291,4 +291,18 @@ impl Physics {
     }
 
     pub fn particle_count(&self) -> usize { self.chains.iter().map(|c| c.particles.len()).sum() }
+
+    /// Whether a set's chains must be stepped one after another: two of them move the same bone, or one moves a bone
+    /// above another's (its result moves the other's bones before that one reads them). Otherwise the GPU steps each
+    /// chain on its own thread.
+    pub fn serial(&self, chain_first: usize, chain_count: usize) -> bool {
+        let ancestors = |n: usize| { let mut out = vec![n]; let mut k = n; while let Parent::Node(p) = self.nodes[k].parent { out.push(p); k = p; if out.len() > 4096 { break; } } out };
+        let touched: Vec<Vec<usize>> = self.chains[chain_first..chain_first + chain_count].iter().map(|c| c.particles.iter().filter_map(|p| p.node).collect()).collect();
+        let lines: Vec<Vec<Vec<usize>>> = touched.iter().map(|t| t.iter().map(|n| ancestors(*n)).collect()).collect();
+        for i in 0..touched.len() { for j in i + 1..touched.len() {
+            // Same bone, or one chain's bone on the other's line up to the top.
+            if touched[i].iter().any(|a| lines[j].iter().any(|l| l.contains(a))) || touched[j].iter().any(|b| lines[i].iter().any(|l| l.contains(b))) { return true; }
+        } }
+        false
+    }
 }

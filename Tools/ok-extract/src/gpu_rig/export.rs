@@ -347,7 +347,8 @@ impl FlatRig {
 }
 
 /// v2 physics section (after the names). A reference to a transform: rig bone index, or 0x40000000 | node index.
-/// nodes, chains, particles, colliders, follow, sets (counts); per set: kind (2 body, 1 clothes, 0 accessory), node first
+/// nodes, chains, particles, colliders, follow, sets (counts); per set: kind (2 body, 1 clothes, 0 accessory; 0x100: its
+/// chains are stepped one after another, Physics::serial), node first
 /// and count, chain first and count; per node: kind (0 alias, 1 local TRS, 2 matrix), parent ref (0xffffffff none), alias
 /// bone, local source bone (an alias's animated local; 0xffffffff: its own), pos 3, rot 4, scale 3, matrix rows 0..2
 /// (12), rot offset 4; per chain: root node, component node, flags (1 ver01, 2 skip off, 8 Ver02, freeze axis << 4,
@@ -364,7 +365,10 @@ impl super::physics::Physics {
         let particles: usize = self.chains.iter().map(|c| c.particles.len()).sum();
         let colliders: usize = self.chains.iter().map(|c| c.colliders.len()).sum();
         for v in [self.nodes.len(), self.chains.len(), particles, colliders, self.follow.len(), self.ranges.len()] { push_u32(b, v as u32); }
-        for (kind, nf, nc, cf, cc) in &self.ranges { for v in [*kind as usize, *nf, *nc, *cf, *cc] { push_u32(b, v as u32); } }
+        for (kind, nf, nc, cf, cc) in &self.ranges {
+            let flags = *kind as usize | (self.serial(*cf, *cc) as usize) << 8;
+            for v in [flags, *nf, *nc, *cf, *cc] { push_u32(b, v as u32); }
+        }
         let r = |x: &Ref| match x { Ref::Rig(i) => *i as u32, Ref::Node(n) => NODE_FLAG | *n as u32 };
         for n in &self.nodes {
             let kind = if n.alias.is_some() { 0 } else if n.matrix.is_some() { 2 } else { 1 };
@@ -472,6 +476,16 @@ unsafe fn export_entry(s: *mut crate::session::OkSession, clip: *const u8, len: 
     let n = crate::ffi::copy_resource(&result, out, cap);
     LAST.with(|l| *l.borrow_mut() = if out.is_null() { Some((key.0, key.1, key.2, result)) } else { None });
     n
+}
+
+/// The installed clip's pose at `t` without the frame's dynamics (the GPU rig solves them): a native-only pose bank's
+/// frame (KKRuntimePoseBank NativeOnly). 0: done.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_sample_frame(s: *mut crate::session::OkSession, t: f32) -> i32 {
+    if !t.is_finite() { return 1; }
+    let Some(s) = s.as_mut() else { return 1 };
+    s.sample_paired_frame(t);
+    0
 }
 
 /// The GPU rig of a session ("OKGR", see FlatRig::to_bytes); `clip` is a shared clip used to tell each palette matrix's

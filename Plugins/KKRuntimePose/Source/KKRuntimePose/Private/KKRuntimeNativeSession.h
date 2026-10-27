@@ -21,6 +21,8 @@ public:
   TArray<uint8> Json;Json.SetNumZeroed(Size+1);return ok_part_material_metadata(Handle,P,Json.GetData(),Size)==Size?FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Json.GetData()))):FString();}
  bool SkelBoneAt(int32 B,OkBoneView& V){return Handle&&OKRuntimeNativeBindings().skel_bone_at(Handle,B,&V)==0;}
  bool ApplyAnimFrame(float T,float Delta){return Handle&&OKRuntimeNativeBindings().apply_anim_frame(Handle,T,Delta)==0;}
+ // The pose without the frame's dynamics (GPU rig: the physics are solved on the GPU).
+ bool SampleFrame(float T){return Handle&&ok_session_sample_frame(Handle,T)==0;}
  bool ApplyContactFrame(float T,float Delta,const TArray<uint8>& Json){return Handle&&!Json.IsEmpty()&&ok_session_apply_contact_frame(Handle,T,Delta,Json.GetData(),Json.Num())==0;}
  bool BoneWorldMatrix(const FString& Name,float* Matrix){return Handle&&ok_bone_world_matrix(Handle,TCHAR_TO_UTF8(*Name),Matrix)==0;}
  // GPU rig exports (Tools/ok-extract/src/gpu_rig/export.rs): "OKGR" for this character, "OKGC" for a shared clip.

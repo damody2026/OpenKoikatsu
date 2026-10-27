@@ -146,7 +146,9 @@ bool FOKResidentGpuPose::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayb
   LookBones.Add(FUintVector4(P.LookNeck,P.LookHead,0,0));LookRotations.Add(P.NeckRotation);LookRotations.Add(P.HeadRotation);
  }
  bool ChangedActors=FMemory::Memcmp(Layout.GetData(),S.Layout.GetData(),Layout.Num()*sizeof(FUintVector4))!=0;
- bool Same=S.HasFrame&&!ChangedActors&&Times.Num()==S.LastTimes.Num()&&FMemory::Memcmp(Times.GetData(),S.LastTimes.GetData(),Times.Num()*sizeof(FVector4f))==0&&LookBones==S.LastLookBones&&LookRotations==S.LastLookRotations;
+ // Every frame is evaluated: a frame that only re-registered the last output (its times unchanged, floored to
+ // 1/60 s) left a private actor frozen on one pose for good (CrowdRoom100 walkers, 2026-10-27; ERROR_LOG).
+ const bool Same=false;
  const bool AnyLook=LookBones.ContainsByPredicate([](const FUintVector4& L){return L.X!=MAX_uint32||L.Y!=MAX_uint32;});
  Out.Generation=S.Stats.Generation;Out.Reused=Same;
  if(Same){Out.Current=G.RegisterExternalBuffer(S.Current);Out.Previous=Out.Current;++S.Stats.ReusedFrames;}

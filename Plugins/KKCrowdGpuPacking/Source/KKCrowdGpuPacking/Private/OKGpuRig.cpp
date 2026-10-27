@@ -37,6 +37,7 @@ class FOKGpuRigSkeletonCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Locals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,LocalsB)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Worlds)
+  SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,RigRots)
   SHADER_PARAMETER(uint32,ActorCount)
   SHADER_PARAMETER(uint32,ClipSlotsPerActor)
  END_SHADER_PARAMETER_STRUCT()
@@ -73,11 +74,14 @@ class FOKGpuRigPhysicsCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint>,PhysFollow)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Locals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Worlds)
+  SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,RigRots)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,NodeLocals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,NodeRots)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,PhysState)
   SHADER_PARAMETER(uint32,SetCount)
   SHADER_PARAMETER(uint32,ClothesPass)
+  SHADER_PARAMETER(uint32,Stage)
+  SHADER_PARAMETER(uint32,ChainCount)
   SHADER_PARAMETER(uint32,BoneTotal)
   SHADER_PARAMETER(uint32,ParticleTotal)
   SHADER_PARAMETER(uint32,ChainTotal)
@@ -133,7 +137,7 @@ bool FOKGpuRig::Initialize(FRDGBuilder& G,TSharedRef<const FOKGpuRigBatch,ESPMod
  ClipRates=OKGpuRigUpload(G,TEXT("GpuRig.ClipRates"),B.ClipRates);Channels=OKGpuRigUpload(G,TEXT("GpuRig.Channels"),B.Channels);Samples=OKGpuRigUpload(G,TEXT("GpuRig.Samples"),B.Samples);
  Tasks=OKGpuRigUpload(G,TEXT("GpuRig.Tasks"),B.Tasks);Terms=OKGpuRigUpload(G,TEXT("GpuRig.Terms"),B.Terms);
  auto Scratch=[&](const TCHAR* Name,uint32 Rows){return G.ConvertToExternalBuffer(G.CreateBuffer(FRDGBufferDesc::CreateStructuredDesc(sizeof(FVector4f),FMath::Max<uint32>(1,Rows)),Name));};
- Locals=Scratch(TEXT("GpuRig.Locals"),B.BoneCount*3);LocalsB=Scratch(TEXT("GpuRig.LocalsB"),B.BoneCount*3);Worlds=Scratch(TEXT("GpuRig.Worlds"),(B.BoneCount+B.NodeCount)*3);
+ RigRots=Scratch(TEXT("GpuRig.RigRots"),B.BoneCount);Locals=Scratch(TEXT("GpuRig.Locals"),B.BoneCount*3);LocalsB=Scratch(TEXT("GpuRig.LocalsB"),B.BoneCount*3);Worlds=Scratch(TEXT("GpuRig.Worlds"),(B.BoneCount+B.NodeCount)*3);
  PhysSets=OKGpuRigUpload(G,TEXT("GpuRig.PhysSets"),B.PhysSets);PhysNodes=OKGpuRigUpload(G,TEXT("GpuRig.PhysNodes"),B.PhysNodes);
  PhysChains=OKGpuRigUpload(G,TEXT("GpuRig.PhysChains"),B.PhysChains);PhysChainValues=OKGpuRigUpload(G,TEXT("GpuRig.PhysChainValues"),B.PhysChainValues);
  PhysParticles=OKGpuRigUpload(G,TEXT("GpuRig.PhysParticles"),B.PhysParticles);PhysColliders=OKGpuRigUpload(G,TEXT("GpuRig.PhysColliders"),B.PhysColliders);
@@ -164,7 +168,7 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
   P->RigAbm=G.CreateSRV(G.RegisterExternalBuffer(Abm));P->RigNamed=G.CreateSRV(G.RegisterExternalBuffer(Named));P->RigClipSlots=G.CreateSRV(G.RegisterExternalBuffer(ClipSlots));
   P->RigClipRates=G.CreateSRV(G.RegisterExternalBuffer(ClipRates));P->RigChannels=G.CreateSRV(G.RegisterExternalBuffer(Channels));P->RigSamples=G.CreateSRV(G.RegisterExternalBuffer(Samples));
   P->RigSelect=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Select"),Select));P->RigTimes=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Times"),Times));P->RigLook=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Look"),Look));
-  P->Locals=LocalsUav;P->LocalsB=LocalsBUav;P->Worlds=G.CreateUAV(WorldsBuffer);P->ActorCount=B.ActorCount;P->ClipSlotsPerActor=B.ClipSlotsPerActor;
+  P->Locals=LocalsUav;P->LocalsB=LocalsBUav;P->Worlds=G.CreateUAV(WorldsBuffer);P->RigRots=G.CreateUAV(G.RegisterExternalBuffer(RigRots));P->ActorCount=B.ActorCount;P->ClipSlotsPerActor=B.ClipSlotsPerActor;
   TShaderMapRef<FOKGpuRigSkeletonCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
   FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigSkeleton"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(B.ActorCount),64));
  }
@@ -174,8 +178,9 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
   if(!PhysicsCleared){AddClearUAVPass(G,G.CreateUAV(StateBuffer),0u);PhysicsCleared=true;}
   TShaderMapRef<FOKGpuRigPhysicsCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
   // The body's Ver02 sets, the clothes sets (both move body bones), then the accessories hung on them.
-  for(uint32 Clothes:{2u,1u,0u}){
-   auto* P=G.AllocParameters<FOKGpuRigPhysicsCS::FParameters>();
+  const uint32 ChainCount=B.PhysChains.Num()/2;
+  for(uint32 Clothes:{2u,1u,0u})for(uint32 Stage:{0u,1u,2u}){
+   auto* P=G.AllocParameters<FOKGpuRigPhysicsCS::FParameters>();P->Stage=Stage;P->ChainCount=ChainCount;P->RigRots=G.CreateUAV(G.RegisterExternalBuffer(RigRots));
    P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->PhysSets=G.CreateSRV(G.RegisterExternalBuffer(PhysSets));P->PhysNodes=G.CreateSRV(G.RegisterExternalBuffer(PhysNodes));
    P->PhysChains=G.CreateSRV(G.RegisterExternalBuffer(PhysChains));P->PhysChainValues=G.CreateSRV(G.RegisterExternalBuffer(PhysChainValues));
    P->PhysParticles=G.CreateSRV(G.RegisterExternalBuffer(PhysParticles));P->PhysColliders=G.CreateSRV(G.RegisterExternalBuffer(PhysColliders));P->PhysFollow=G.CreateSRV(G.RegisterExternalBuffer(PhysFollow));
@@ -183,7 +188,7 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
    P->NodeRots=G.CreateUAV(G.RegisterExternalBuffer(NodeRots));P->PhysState=G.CreateUAV(StateBuffer);
    P->SetCount=Sets;P->ClothesPass=Clothes;P->BoneTotal=B.BoneCount;P->ParticleTotal=B.PhysParticles.Num()/8;P->ChainTotal=B.PhysChains.Num()/2;
    P->DeltaTime=FMath::Clamp(DeltaSeconds,0.f,0.1f);P->ResetAll=Reset?1u:0u;P->SettleSteps=30;
-   FComputeShaderUtils::AddPass(G,Clothes==2?RDG_EVENT_NAME("Crowd.GpuRigBody"):Clothes==1?RDG_EVENT_NAME("Crowd.GpuRigClothes"):RDG_EVENT_NAME("Crowd.GpuRigAccessories"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(Sets),64));
+   FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigPhysics %u.%u",Clothes,Stage),Shader,P,FComputeShaderUtils::GetGroupCount(int32(Stage==1?ChainCount:Sets),64));
   }
  }
  const uint32 TaskCount=B.Tasks.Num();

@@ -35,6 +35,8 @@ uint ClipSlotsPerActor;
 RWStructuredBuffer<float4> Locals;
 RWStructuredBuffer<float4> LocalsB;
 RWStructuredBuffer<float4> Worlds;
+// Per bone: Transform.rotation (the local rotations composed up the parents), with the worlds; the physics read it.
+RWStructuredBuffer<float4> RigRots;
 
 static const uint NONE = 0xffffffff;
 
@@ -387,6 +389,7 @@ void SkeletonCS(uint3 id : SV_DispatchThreadID) {
 		float3x4 local = TrsM(LP(b), LQ(b), LS(b)); uint p = Parent(b);
 		float3x4 w = p == NONE ? local : Mul34(float3x4(Worlds[p * 3], Worlds[p * 3 + 1], Worlds[p * 3 + 2]), local);
 		Worlds[b * 3] = w[0]; Worlds[b * 3 + 1] = w[1]; Worlds[b * 3 + 2] = w[2];
+		RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
 	}
 }
 
@@ -420,6 +423,10 @@ RWStructuredBuffer<float4> NodeRots;
 RWStructuredBuffer<float4> PhysState;
 uint SetCount;
 uint ClothesPass;
+// 0: per set, every node from its local, a start over (settle) and the sets stepped one chain after another; 1: per
+// chain, the other sets' chains; 2: per set, the worlds from the solved locals and the body bones written back.
+uint Stage;
+uint ChainCount;
 uint BoneTotal;
 uint ParticleTotal;
 uint ChainTotal;
@@ -438,7 +445,7 @@ float3x4 RefWorld(uint r) {
 }
 float4 RefRot(uint r) {
 	if (r == NONE) return float4(0, 0, 0, 1);
-	return (r & NODE) != 0 ? NodeRots[r & ~NODE] : WorldRot(r);
+	return (r & NODE) != 0 ? NodeRots[r & ~NODE] : RigRots[r];
 }
 float4 QConj(float4 q) { return float4(-q.xyz, q.w); }
 float3 QRot(float4 q, float3 v) { float3 t = 2 * cross(q.xyz, v); return v + q.w * t + cross(q.xyz, t); }
@@ -749,12 +756,37 @@ void RestoreSet(uint nf, uint nc, bool load) {
 
 [numthreads(64, 1, 1)]
 void PhysicsCS(uint3 id : SV_DispatchThreadID) {
+	if (Stage == 1) {
+		// One chain of a set whose chains move unrelated bones.
+		if (id.x >= ChainCount) return;
+		uint set = asuint(PhysChainValues[id.x * 4 + 2].w);
+		if ((PhysSets[set * 2].x & 0xffu) != ClothesPass) return;
+		if (PhysState[ParticleTotal * 2 + ChainTotal + set].y != 0) return;
+		StepChain(id.x, DeltaTime);
+		return;
+	}
 	if (id.x >= SetCount) return;
 	uint4 s0 = PhysSets[id.x * 2], s1 = PhysSets[id.x * 2 + 1];
-	if (s0.x != ClothesPass) return;
+	if ((s0.x & 0xffu) != ClothesPass) return;
+	bool serial = (s0.x & 0x100u) != 0;
 	uint nf = s0.y, nc = s0.z, cf = s0.w, cc = s1.x;
 	uint ready = ParticleTotal * 2 + ChainTotal + id.x;
+	if (Stage == 2) {
+		RestoreSet(nf, nc, false);
+		if ((s0.x & 0xffu) != 0) {
+			// The body's chains and the clothes moved body bones: their solved worlds go back, and the bones under them follow.
+			for (uint n = nf; n < nf + nc; ++n) if (NodeKind(n) == 0) { uint a = asuint(PhysNodes[n * 8 + 7].x); SetBoneWorld(a, NodeWorld(n)); RigRots[a] = NodeRots[n]; }
+			for (uint f = s1.y; f < s1.y + s1.z; ++f) {
+				uint b = PhysFollow[f], p = Parent(b);
+				float3x4 local = TrsM(LP(b), LQ(b), LS(b));
+				SetBoneWorld(b, p == NONE ? local : Mul34(BoneWorldAt(p), local));
+				RigRots[b] = p == NONE ? normalize(LQ(b)) : normalize(QMul(RigRots[p], normalize(LQ(b))));
+			}
+		}
+		return;
+	}
 	RestoreSet(nf, nc, true);
+	PhysState[ready].y = 0;
 	if (ResetAll != 0 || PhysState[ready].x == 0) {
 		// Particles at the animated pose, then held there for a while (AttachedDynamicSet::new: a settle of steps).
 		for (uint c = cf; c < cf + cc; ++c) {
@@ -770,19 +802,14 @@ void PhysicsCS(uint3 id : SV_DispatchThreadID) {
 			RestoreSet(nf, nc, true);
 			for (uint c = cf; c < cf + cc; ++c) StepChain(c, 1.0 / 60.0);
 		}
-		PhysState[ready] = float4(1, 0, 0, 0);
+		PhysState[ready] = float4(1, 1, 0, 0);
 		RestoreSet(nf, nc, true);
+		for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
+		return;
 	}
-	for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
-	RestoreSet(nf, nc, false);
-	if (s0.x != 0) {
-		// The body's chains and the clothes moved body bones: their solved worlds go back, and the bones under them follow.
-		for (uint n = nf; n < nf + nc; ++n) if (NodeKind(n) == 0) SetBoneWorld(asuint(PhysNodes[n * 8 + 7].x), NodeWorld(n));
-		for (uint f = s1.y; f < s1.y + s1.z; ++f) {
-			uint b = PhysFollow[f], p = Parent(b);
-			float3x4 local = TrsM(LP(b), LQ(b), LS(b));
-			SetBoneWorld(b, p == NONE ? local : Mul34(BoneWorldAt(p), local));
-		}
+	if (serial) {
+		for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
+		PhysState[ready].y = 1;
 	}
 }
 
