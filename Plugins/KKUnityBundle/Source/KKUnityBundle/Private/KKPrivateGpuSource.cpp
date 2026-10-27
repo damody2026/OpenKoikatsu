@@ -41,10 +41,21 @@ bool OKCapturePrivateGpuSource(const FOkSession& Session,int32 Part,FKKPrivateGp
  if(!Revision){Error=TEXT("Private native GPU source unavailable");return false;}
  OkSkinPaletteView View{};FKKPrivateGpuPose NextPose;
  if(!ReadPose(Session,Part,Revision,0,View,NextPose,Error))return false;
- if(View.n_verts<=0||!View.positions||!View.normals||!View.tangents||!View.weights||!View.bone_idx){Error=TEXT("Private source has incomplete GPU direction streams; retain CPU");return false;}
+ if(View.n_verts<=0||!View.positions||!View.normals||!View.weights||!View.bone_idx){Error=FString::Printf(TEXT("Private source has incomplete GPU direction streams (%s%s%s%s); retain CPU"),
+  View.positions?TEXT(""):TEXT("positions "),View.normals?TEXT(""):TEXT("normals "),View.weights?TEXT(""):TEXT("weights "),View.bone_idx?TEXT(""):TEXT("bones "));return false;}
+ // A mesh without tangents (Alice's accessories: six parts skinned on the CPU every frame of the one-on-one scene) gets
+ // one at right angles to each normal; such parts have no normal map to read it.
+ TArray<float> MadeTangents;
+ if(!View.tangents){
+  MadeTangents.SetNumUninitialized(View.n_verts*4);
+  for(int32 I=0;I<View.n_verts;++I){const FVector3f N(View.normals[I*3],View.normals[I*3+1],View.normals[I*3+2]);
+   const FVector3f Axis=FMath::Abs(N.X)<.9f?FVector3f(1,0,0):FVector3f(0,1,0);const FVector3f T=FVector3f::CrossProduct(Axis,N).GetSafeNormal();
+   MadeTangents[I*4]=T.X;MadeTangents[I*4+1]=T.Y;MadeTangents[I*4+2]=T.Z;MadeTangents[I*4+3]=1.f;}
+ }
+ const float* Tangents=View.tangents?View.tangents:MadeTangents.GetData();
  FKKPrivateGpuSource Next;Next.Revision=Revision;Next.PaletteCount=NextPose.Palette.Num();Next.FallbackSlot=Next.PaletteCount-1;
  Next.Vertices.SetNumUninitialized(View.n_verts);
- for(int32 I=0;I<View.n_verts;++I){auto& V=Next.Vertices[I];const float* P=View.positions+I*3,*N=View.normals+I*3,*T=View.tangents+I*4,*W=View.weights+I*4;const uint16* B=View.bone_idx+I*4;
+ for(int32 I=0;I<View.n_verts;++I){auto& V=Next.Vertices[I];const float* P=View.positions+I*3,*N=View.normals+I*3,*T=Tangents+I*4,*W=View.weights+I*4;const uint16* B=View.bone_idx+I*4;
   V.Position=FVector4f(P[0],P[1],P[2],1);V.Normal=FVector4f(N[0],N[1],N[2],0);
   V.Tangent=FVector4f(T[0],T[1],T[2],T[3]);V.Weights=FVector4f(W[0],W[1],W[2],W[3]);V.Bones=FUintVector4(B[0],B[1],B[2],B[3]);
  }
