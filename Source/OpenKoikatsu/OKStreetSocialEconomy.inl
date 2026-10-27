@@ -736,7 +736,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildMenuCard(const FString& Title,int
   List->AddSlot().AutoHeight().Padding(0,3)[Row];
  }
  // As tall as the screen allows; a long menu scrolls inside the card.
- float ListHeight=360.f;if(GEngine&&GEngine->GameViewport){FVector2D Size;GEngine->GameViewport->GetViewportSize(Size);const float Scale=FMath::Max(.5f,GEngine->GameViewport->GetDPIScale());ListHeight=FMath::Max(ListHeight,Size.Y/Scale*.55f);}
+ float ListHeight=360.f;if(GEngine&&GEngine->GameViewport){FVector2D Size;GEngine->GameViewport->GetViewportSize(Size);const float Scale=FMath::Max(.5f,GEngine->GameViewport->GetDPIScale());ListHeight=FMath::Max(ListHeight,Size.Y/Scale*.42f);}
  return SNew(SBox).WidthOverride(660)[SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(Wood).Padding(6)[SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(Paper).Padding(FMargin(32,20,32,16))[SNew(SVerticalBox)
   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",28)).ColorAndOpacity(Ink).Text(FText::FromString(Title))]
   +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0,2,0,8)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",14)).ColorAndOpacity(Accent).Text(FText::FromString(OKT(TEXT("ui.economy.menu_card_subtitle"))))]
