@@ -394,17 +394,21 @@ void SkeletonCS(uint3 id : SV_DispatchThreadID) {
 // One thread per set (the clothes set, each accessory's own set; export.rs Physics::write): a pass for the clothes sets
 // (their chains move body bones: the solved worlds go back to them and the bones under them follow), then one for the
 // accessory sets (hung on body bones, after the clothes moved them). A node's world sits after the rig's bones in Worlds.
-// Per set two uint4: (clothes, node first, node count, chain first), (chain count, follow first, follow count, 0).
+// Per set two uint4: (kind: 2 body Ver02, 1 clothes, 0 accessory; node first, node count, chain first), (chain count,
+// follow first, follow count, 0).
 StructuredBuffer<uint4> PhysSets;
 // Per node eight float4: (pos, kind: 0 alias, 1 local, 2 fixed matrix), rot, (scale, parent ref), matrix rows 0..2,
-// rot offset, (alias bone, 0, 0, 0). A ref is a bone, or NODE | node; 0xffffffff: none.
+// rot offset, (alias bone, local source bone, 0, 0). A ref is a bone, or NODE | node; 0xffffffff: none.
 StructuredBuffer<float4> PhysNodes;
-// Per chain two uint4: (root node, component node, flags: 1 ver01, 2 no skip update, freeze axis << 4, mirror << 8, 0),
-// (particle first, count, collider first, count); three float4: (gravity, update rate), (force, 0), (local gravity, 0).
+// Per chain two uint4: (root node, component node, flags: 1 ver01, 2 no skip update, 8 Ver02, freeze axis << 4,
+// mirror << 8, max steps), (particle first, count, collider first, count); four float4: (gravity, update rate),
+// (force, 0), (local gravity, 0), (end offset, reflect speed).
 StructuredBuffer<uint4> PhysChains;
 StructuredBuffer<float4> PhysChainValues;
-// Per particle four float4: (node, parent particle, flags: 1 turns its parent, damping), (end offset, elasticity),
-// (local position, stiffness), (inert, radius, add angle scale, 0). Global indices; 0xffffffff: none.
+// Per particle eight float4: (node, parent particle, flags: 1 turns its parent, damping), (end offset, elasticity),
+// (local position, stiffness), (inert, radius, add angle scale, initial scale z); Ver02: (keep min, keep max, next
+// length, flags: 1 move limit, 2 crush, 4 rotate), (move min, crush min), (move max, crush max), (crush add min, crush
+// add max, initial scale xy). Global indices; 0xffffffff: none.
 StructuredBuffer<float4> PhysParticles;
 // Per collider two float4: (center, radius), (height, direction, inside, ref).
 StructuredBuffer<float4> PhysColliders;
@@ -456,10 +460,12 @@ float4 FromTo(float3 from, float3 to) {
 
 uint NodeKind(uint n) { return asuint(PhysNodes[n * 8].w); }
 uint NodeParent(uint n) { return asuint(PhysNodes[n * 8 + 2].w); }
-// Every step starts from the prefab local (private bones) or the animated one (an alias of a body bone).
+// Every step starts from the prefab local (private bones) or the animated one (an alias of a body bone; a Ver02
+// particle's: its reference bone's).
 void LoadNode(uint n) {
 	if (NodeKind(n) == 0) {
-		uint a = asuint(PhysNodes[n * 8 + 7].x);
+		uint a = asuint(PhysNodes[n * 8 + 7].x), from = asuint(PhysNodes[n * 8 + 7].y);
+		if (from != NONE) a = from;
 		NodeLocals[n * 3] = float4(LP(a), 0); NodeLocals[n * 3 + 1] = LQ(a); NodeLocals[n * 3 + 2] = float4(LS(a), 0);
 	} else {
 		NodeLocals[n * 3] = float4(PhysNodes[n * 8].xyz, 0); NodeLocals[n * 3 + 1] = PhysNodes[n * 8 + 1]; NodeLocals[n * 3 + 2] = float4(PhysNodes[n * 8 + 2].xyz, 0);
@@ -497,8 +503,8 @@ void SetNodePosition(uint n, float3 pos) {
 	UpdateNode(n);
 }
 
-uint PNode(uint i) { return asuint(PhysParticles[i * 4].x); }
-uint PParent(uint i) { return asuint(PhysParticles[i * 4].y); }
+uint PNode(uint i) { return asuint(PhysParticles[i * 8].x); }
+uint PParent(uint i) { return asuint(PhysParticles[i * 8].y); }
 float3 PPos(uint i) { return PhysState[i * 2].xyz; }
 float3 PPrev(uint i) { return PhysState[i * 2 + 1].xyz; }
 void SetPPos(uint i, float3 p) { PhysState[i * 2] = float4(p, 0); }
@@ -533,19 +539,95 @@ void Collide(inout float3 pos, float radius, uint c) {
 float RestLength(uint i, uint pn, bool ver01, float objectScale) {
 	float3x4 pw = NodeWorld(pn);
 	uint sn = PNode(i);
-	if (sn == NONE) return ver01 ? length(PhysParticles[i * 4 + 1].xyz) * objectScale : length(MulDir(pw, PhysParticles[i * 4 + 1].xyz));
+	if (sn == NONE) return ver01 ? length(PhysParticles[i * 8 + 1].xyz) * objectScale : length(MulDir(pw, PhysParticles[i * 8 + 1].xyz));
 	return length(Pos(pw) - Pos(NodeWorld(sn)));
 }
 // The local the parent's matrix carries the particle to (its Transform's local, an end point's offset).
 float3 TargetLocal(uint i, bool ver01) {
 	uint sn = PNode(i);
-	if (ver01) return PhysParticles[i * 4 + 2].xyz;
-	return sn != NONE ? NodeLocals[sn * 3].xyz : PhysParticles[i * 4 + 1].xyz;
+	if (ver01) return PhysParticles[i * 8 + 2].xyz;
+	return sn != NONE ? NodeLocals[sn * 3].xyz : PhysParticles[i * 8 + 1].xyz;
+}
+
+float InvLerp(float a, float b, float v) { return a != b ? saturate((v - a) / (b - a)) : 0.0; }
+// DynamicBone_Ver02 (dbone/ver02.rs Chain::prepare, finish): ordered body chains, each particle the previous one's child.
+void StepChainV02(uint c, float dt) {
+	uint4 h = PhysChains[c * 2], k = PhysChains[c * 2 + 1];
+	float4 gv = PhysChainValues[c * 4], fv = PhysChainValues[c * 4 + 1], ev = PhysChainValues[c * 4 + 3];
+	bool skipOff = (h.z & 2u) != 0;
+	uint first = k.x, count = k.y, cfirst = k.z, ccount = k.w, maxSteps = max(h.w, 1u);
+	for (uint i = first; i < first + count; ++i) { uint n = PNode(i); if (n != NONE) UpdateNode(n); }
+	uint si = ParticleTotal * 2 + c;
+	float4 st = PhysState[si];
+	float3x4 rw = NodeWorld(h.x);
+	float scale = length(float3(rw[0][0], rw[1][0], rw[2][0]));
+	float3 movement = Pos(rw) - st.yzw; st.yzw = Pos(rw);
+	uint steps = 1;
+	if (gv.w > 0) {
+		st.x += dt; float period = 1.0 / gv.w; steps = 0;
+		while (st.x >= period) { st.x -= period; steps++; if (steps >= maxSteps) { st.x = 0; break; } }
+	}
+	PhysState[si] = st;
+	float3 force = (gv.xyz + fv.xyz) * scale, endOffset = ev.xyz;
+	uint iterations = (steps == 0 && skipOff) ? 0 : max(steps, 1u);
+	for (uint it = 0; it < iterations; ++it) {
+		for (uint i = first; i < first + count; ++i) {
+			if (i == first) { SetPPrev(i, PPos(i)); SetPPos(i, Pos(NodeWorld(PNode(i)))); continue; }
+			float3 inert = movement * PhysParticles[i * 8 + 3].x, pos = PPos(i), prev = PPrev(i);
+			if (steps > 0) { float3 velocity = (pos - prev) * ev.w; SetPPrev(i, pos + inert); SetPPos(i, pos + velocity * (1 - PhysParticles[i * 8].w) + force + inert); }
+			else { SetPPrev(i, prev + inert); SetPPos(i, pos + inert); }
+		}
+		for (uint i = first + 1; i < first + count; ++i) {
+			uint p = i - 1, pn = PNode(p), sn = PNode(i);
+			float3x4 pw = NodeWorld(pn);
+			float rest = sn != NONE ? length(Pos(pw) - Pos(NodeWorld(sn))) : length(endOffset) * scale;
+			float3 ppos = PPos(p);
+			float3x4 gm = pw; gm[0].w = ppos.x; gm[1].w = ppos.y; gm[2].w = ppos.z;
+			float3 goal = MulPoint(gm, sn != NONE ? PhysParticles[i * 8 + 2].xyz : endOffset);
+			float3 pos = PPos(i);
+			if (steps > 0) pos += (goal - pos) * PhysParticles[i * 8 + 1].w;
+			float stiff = PhysParticles[i * 8 + 2].w;
+			if (stiff > 0) { float3 diff = goal - pos; float dist = length(diff), limit = rest * (1 - stiff) * 2; if (dist > limit) pos += diff * ((dist - limit) / dist); }
+			if (steps > 0) { float radius = PhysParticles[i * 8 + 3].y * scale; for (uint q = cfirst; q < cfirst + ccount; ++q) Collide(pos, radius, q); }
+			float4 v4 = PhysParticles[i * 8 + 4];
+			float3 back = ppos - pos; float dist = length(back);
+			if (dist > 0) { float fraction = (dist - rest) / dist; if (fraction <= v4.x) pos += back * (fraction - v4.x); else if (fraction >= v4.y) pos += back * (fraction - v4.y); }
+			if ((asuint(v4.w) & 1u) != 0 && sn != NONE) {
+				float3x4 m = NodeWorld(sn); m[0].w = goal.x; m[1].w = goal.y; m[2].w = goal.z;
+				float3 local = clamp(MulPoint(Inverse34(m), pos), PhysParticles[i * 8 + 5].xyz, PhysParticles[i * 8 + 6].xyz);
+				pos = MulPoint(m, local);
+			}
+			SetPPos(i, pos);
+		}
+		movement = 0;
+	}
+	for (uint i = first + 1; i < first + count; ++i) {
+		uint p = i - 1, pn = PNode(p), sn = PNode(i);
+		float4 pv = PhysParticles[p * 8 + 4];
+		if ((asuint(pv.w) & 4u) != 0) {
+			float3 direction = sn != NONE ? PhysParticles[i * 8 + 2].xyz : endOffset;
+			float4 rotation = NodeRots[pn];
+			float3 from = QRot(rotation, direction);
+			float3 target = PPos(i) - from * (1 - pv.z) - PPos(p);
+			SetNodeRotation(pn, normalize(QMul(FromTo(from, target), rotation)));
+		}
+		if (sn != NONE) {
+			if ((asuint(PhysParticles[i * 8 + 4].w) & 2u) != 0) {
+				float3 local = MulPoint(Inverse34(NodeWorld(sn)), PPos(i));
+				float4 c7 = PhysParticles[i * 8 + 7];
+				float amount = local.z <= 0 ? c7.x * (1 - InvLerp(PhysParticles[i * 8 + 5].w, 0, local.z)) : c7.y * InvLerp(0, PhysParticles[i * 8 + 6].w, local.z);
+				NodeLocals[sn * 3 + 2] = float4(c7.z + amount, c7.w + amount, PhysParticles[i * 8 + 3].w, 0);
+				UpdateNode(sn);
+			}
+			SetNodePosition(sn, PPos(i));
+		}
+	}
 }
 
 void StepChain(uint c, float dt) {
 	uint4 h = PhysChains[c * 2], k = PhysChains[c * 2 + 1];
-	float4 gv = PhysChainValues[c * 3], fv = PhysChainValues[c * 3 + 1], lg = PhysChainValues[c * 3 + 2];
+	if ((h.z & 8u) != 0) { StepChainV02(c, dt); return; }
+	float4 gv = PhysChainValues[c * 4], fv = PhysChainValues[c * 4 + 1], lg = PhysChainValues[c * 4 + 2];
 	bool ver01 = (h.z & 1u) != 0, skipOff = (h.z & 2u) != 0;
 	uint freeze = (h.z >> 4) & 3u, mirror = (h.z >> 8) & 0x77u;
 	uint first = k.x, count = k.y, cfirst = k.z, ccount = k.w;
@@ -575,7 +657,7 @@ void StepChain(uint c, float dt) {
 			// UpdateParticles1
 			for (uint i = first; i < first + count; ++i) {
 				if (PParent(i) == NONE) { uint n = PNode(i); if (n != NONE) { SetPPrev(i, PPos(i)); SetPPos(i, Pos(NodeWorld(n))); } continue; }
-				float4 p0 = PhysParticles[i * 4]; float inert = PhysParticles[i * 4 + 3].x;
+				float4 p0 = PhysParticles[i * 8]; float inert = PhysParticles[i * 8 + 3].x;
 				float3 pos = PPos(i), velocity = pos - PPrev(i), v3 = move * inert;
 				SetPPrev(i, pos + v3);
 				SetPPos(i, pos + velocity * (1 - p0.w) + gravity + v3);
@@ -586,7 +668,7 @@ void StepChain(uint c, float dt) {
 				uint pn = PNode(p); if (pn == NONE) continue;
 				float3x4 pw = NodeWorld(pn);
 				float rest = RestLength(i, pn, ver01, objectScale);
-				float stiff = PhysParticles[i * 4 + 2].w, elastic = PhysParticles[i * 4 + 1].w;
+				float stiff = PhysParticles[i * 8 + 2].w, elastic = PhysParticles[i * 8 + 1].w;
 				float3 pos = PPos(i), ppos = PPos(p);
 				if (stiff > 0 || elastic > 0) {
 					float3x4 l2w = pw; l2w[0].w = ppos.x; l2w[1].w = ppos.y; l2w[2].w = ppos.z;
@@ -597,7 +679,7 @@ void StepChain(uint c, float dt) {
 						if (mag > lim && mag > 1e-8) pos += d * ((mag - lim) / mag);
 					}
 				}
-				float radius = PhysParticles[i * 4 + 3].y * objectScale;
+				float radius = PhysParticles[i * 8 + 3].y * objectScale;
 				for (uint q = cfirst; q < cfirst + ccount; ++q) Collide(pos, radius, q);
 				if (!ver01 && freeze > 0) { float3 normal = RotAxis(NodeRots[pn], freeze - 1); pos -= normal * dot(pos - ppos, normal); }
 				float3 d = ppos - pos; float mag = length(d);
@@ -610,19 +692,19 @@ void StepChain(uint c, float dt) {
 		for (uint i = first; i < first + count; ++i) {
 			uint p = PParent(i);
 			if (p == NONE) { uint n = PNode(i); if (n != NONE) { SetPPrev(i, PPos(i)); SetPPos(i, Pos(NodeWorld(n))); } continue; }
-			float3 moveHere = ver01 ? objectMove * PhysParticles[i * 4 + 3].x : objectMove;
+			float3 moveHere = ver01 ? objectMove * PhysParticles[i * 8 + 3].x : objectMove;
 			SetPPrev(i, PPrev(i) + moveHere);
 			float3 pos = PPos(i) + moveHere;
 			uint pn = PNode(p);
 			if (pn != NONE) {
 				float3x4 pw = NodeWorld(pn);
 				float rest = RestLength(i, pn, ver01, objectScale);
-				float stiff = PhysParticles[i * 4 + 2].w;
+				float stiff = PhysParticles[i * 8 + 2].w;
 				float3 ppos = PPos(p);
 				if (stiff > 0) {
 					float3x4 l2w = pw; l2w[0].w = ppos.x; l2w[1].w = ppos.y; l2w[2].w = ppos.z;
 					uint sn = PNode(i);
-					float3 target = MulPoint(l2w, sn != NONE ? NodeLocals[sn * 3].xyz : PhysParticles[i * 4 + 1].xyz);
+					float3 target = MulPoint(l2w, sn != NONE ? NodeLocals[sn * 3].xyz : PhysParticles[i * 8 + 1].xyz);
 					float3 d = target - pos; float mag = length(d), lim = rest * (1 - stiff) * 2;
 					if (mag > lim && mag > 1e-8) pos += d * ((mag - lim) / mag);
 				}
@@ -642,14 +724,14 @@ void StepChain(uint c, float dt) {
 		uint p = PParent(i); if (p == NONE) continue;
 		uint pn = PNode(p); if (pn == NONE) continue;
 		uint sn = PNode(i);
-		if ((asuint(PhysParticles[i * 4].z) & 1u) != 0) {
-			float3 direction = sn == NONE ? PhysParticles[i * 4 + 1].xyz : (ver01 ? PhysParticles[i * 4 + 2].xyz : NodeLocals[sn * 3].xyz);
+		if ((asuint(PhysParticles[i * 8].z) & 1u) != 0) {
+			float3 direction = sn == NONE ? PhysParticles[i * 8 + 1].xyz : (ver01 ? PhysParticles[i * 8 + 2].xyz : NodeLocals[sn * 3].xyz);
 			float4 pr = NodeRots[pn];
 			float3 from = QRot(pr, direction);
 			float3 v = PPos(i) - PPos(p);
 			if (!ver01) for (uint m = 0; m < mirrored; ++m) v -= axes[m] * (2 * dot(v, axes[m]));
 			float4 q = FromTo(from, v);
-			float angleScale = PhysParticles[i * 4 + 3].z;
+			float angleScale = PhysParticles[i * 8 + 3].z;
 			if (ver01 && abs(angleScale - 1) > 1e-6) {
 				float halfAngle = acos(clamp(q.w, -1.0, 1.0)), sinHalf = sin(halfAngle);
 				if (sinHalf > 1e-7) q = normalize(float4(q.xyz * (sin(halfAngle * angleScale) / sinHalf), cos(halfAngle * angleScale)));
@@ -669,7 +751,7 @@ void RestoreSet(uint nf, uint nc, bool load) {
 void PhysicsCS(uint3 id : SV_DispatchThreadID) {
 	if (id.x >= SetCount) return;
 	uint4 s0 = PhysSets[id.x * 2], s1 = PhysSets[id.x * 2 + 1];
-	if ((s0.x != 0) != (ClothesPass != 0)) return;
+	if (s0.x != ClothesPass) return;
 	uint nf = s0.y, nc = s0.z, cf = s0.w, cc = s1.x;
 	uint ready = ParticleTotal * 2 + ChainTotal + id.x;
 	RestoreSet(nf, nc, true);
@@ -679,7 +761,7 @@ void PhysicsCS(uint3 id : SV_DispatchThreadID) {
 			uint4 k = PhysChains[c * 2 + 1];
 			for (uint i = k.x; i < k.x + k.y; ++i) {
 				uint n = PNode(i), p = PParent(i);
-				float3 pos = n != NONE ? Pos(NodeWorld(n)) : (p != NONE && PNode(p) != NONE ? MulPoint(NodeWorld(PNode(p)), PhysParticles[i * 4 + 1].xyz) : float3(0, 0, 0));
+				float3 pos = n != NONE ? Pos(NodeWorld(n)) : (p != NONE && PNode(p) != NONE ? MulPoint(NodeWorld(PNode(p)), PhysParticles[i * 8 + 1].xyz) : float3(0, 0, 0));
 				SetPPos(i, pos); SetPPrev(i, pos);
 			}
 			PhysState[ParticleTotal * 2 + c] = float4(0, Pos(NodeWorld(PhysChains[c * 2].y)));
@@ -694,7 +776,7 @@ void PhysicsCS(uint3 id : SV_DispatchThreadID) {
 	for (uint c = cf; c < cf + cc; ++c) StepChain(c, DeltaTime);
 	RestoreSet(nf, nc, false);
 	if (s0.x != 0) {
-		// The clothes moved body bones: their solved worlds go back, and the bones under them follow.
+		// The body's chains and the clothes moved body bones: their solved worlds go back, and the bones under them follow.
 		for (uint n = nf; n < nf + nc; ++n) if (NodeKind(n) == 0) SetBoneWorld(asuint(PhysNodes[n * 8 + 7].x), NodeWorld(n));
 		for (uint f = s1.y; f < s1.y + s1.z; ++f) {
 			uint b = PhysFollow[f], p = Parent(b);

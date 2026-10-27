@@ -68,16 +68,20 @@ TFuture<FKKRuntimeGpuRigResult> OKPrepareRuntimeGpuRigAsync(TSharedPtr<const FKK
    if(R.Bad||Nodes>65536||Chains>65536||Particles>262144||Colliders>1048576||Follow>65536||Sets>4096)return Fail(TEXT("GPU rig physics header"));
    for(uint32 K=0;K<Sets;++K){const uint32 Clothes=R.U(),NF=R.U(),NC=R.U(),CF=R.U(),CC=R.U();Ph.Sets.Add(FUintVector4(Clothes,NF,NC,CF));Ph.Sets.Add(FUintVector4(CC,0,0,0));}
    auto Bits=[](uint32 V){return reinterpret_cast<const float&>(V);};
-   for(uint32 K=0;K<Nodes;++K){const uint32 Kind=R.U(),Parent=R.U(),Alias=R.U();float V[26];for(float& X:V)X=R.F();
+   for(uint32 K=0;K<Nodes;++K){const uint32 Kind=R.U(),Parent=R.U(),Alias=R.U(),LocalFrom=R.U();float V[26];for(float& X:V)X=R.F();
     Ph.Nodes.Add(FVector4f(V[0],V[1],V[2],Bits(Kind)));Ph.Nodes.Add(FVector4f(V[3],V[4],V[5],V[6]));Ph.Nodes.Add(FVector4f(V[7],V[8],V[9],Bits(Parent)));
     for(int32 Row=0;Row<3;++Row)Ph.Nodes.Add(FVector4f(V[10+Row*4],V[11+Row*4],V[12+Row*4],V[13+Row*4]));
-    Ph.Nodes.Add(FVector4f(V[22],V[23],V[24],V[25]));Ph.Nodes.Add(FVector4f(Bits(Alias),0,0,0));}
-   for(uint32 K=0;K<Chains;++K){const uint32 Root=R.U(),Component=R.U(),ChainFlags=R.U(),PF=R.U(),PC=R.U(),CF=R.U(),CC=R.U();float V[10];for(float& X:V)X=R.F();
-    Ph.Chains.Add(FUintVector4(Root,Component,ChainFlags,0));Ph.Chains.Add(FUintVector4(PF,PC,CF,CC));
-    Ph.ChainValues.Add(FVector4f(V[0],V[1],V[2],V[9]));Ph.ChainValues.Add(FVector4f(V[3],V[4],V[5],0));Ph.ChainValues.Add(FVector4f(V[6],V[7],V[8],0));}
+    Ph.Nodes.Add(FVector4f(V[22],V[23],V[24],V[25]));Ph.Nodes.Add(FVector4f(Bits(Alias),Bits(LocalFrom),0,0));}
+   for(uint32 K=0;K<Chains;++K){const uint32 Root=R.U(),Component=R.U(),ChainFlags=R.U(),PF=R.U(),PC=R.U(),CF=R.U(),CC=R.U(),Steps=R.U();float V[14];for(float& X:V)X=R.F();
+    Ph.Chains.Add(FUintVector4(Root,Component,ChainFlags,Steps));Ph.Chains.Add(FUintVector4(PF,PC,CF,CC));
+    Ph.ChainValues.Add(FVector4f(V[0],V[1],V[2],V[9]));Ph.ChainValues.Add(FVector4f(V[3],V[4],V[5],0));Ph.ChainValues.Add(FVector4f(V[6],V[7],V[8],0));Ph.ChainValues.Add(FVector4f(V[10],V[11],V[12],V[13]));}
    for(uint32 K=0;K<Particles;++K){const uint32 Node=R.U(),Parent=R.U(),ParticleFlags=R.U();float V[12];for(float& X:V)X=R.F();
+    const uint32 Ver02Flags=R.U();float W[16];for(float& X:W)X=R.F();
     Ph.Particles.Add(FVector4f(Bits(Node),Bits(Parent),Bits(ParticleFlags),V[6]));Ph.Particles.Add(FVector4f(V[0],V[1],V[2],V[7]));
-    Ph.Particles.Add(FVector4f(V[3],V[4],V[5],V[8]));Ph.Particles.Add(FVector4f(V[9],V[10],V[11],0));}
+    Ph.Particles.Add(FVector4f(V[3],V[4],V[5],V[8]));Ph.Particles.Add(FVector4f(V[9],V[10],V[11],W[15]));
+    // Ver02: keep min/max, next length, move box, crush, initial scale (export.rs order).
+    Ph.Particles.Add(FVector4f(W[0],W[1],W[2],Bits(Ver02Flags)));Ph.Particles.Add(FVector4f(W[3],W[4],W[5],W[9]));
+    Ph.Particles.Add(FVector4f(W[6],W[7],W[8],W[10]));Ph.Particles.Add(FVector4f(W[11],W[12],W[13],W[14]));}
    for(uint32 K=0;K<Colliders;++K){const uint32 Ref=R.U(),Direction=R.U(),Inside=R.U();float V[5];for(float& X:V)X=R.F();
     Ph.Colliders.Add(FVector4f(V[0],V[1],V[2],V[3]));Ph.Colliders.Add(FVector4f(V[4],Bits(Direction),Bits(Inside),Bits(Ref)));}
    for(uint32 K=0;K<Follow;++K)Ph.Follow.Add(R.U());

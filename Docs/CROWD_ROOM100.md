@@ -138,3 +138,15 @@ body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開
   - 胸部的 Ver02（`dbone/ver02.rs`）仍是剛性，差 2～20 cm。
   - 遠處降低物理頻率的 LOD。
   - 100 人時物理 pass 的 GPU 成本還沒量。
+
+### 胸部 Ver02 也在 GPU 上（2026-10-27）
+
+- `dbone/ver02.rs` 的 body 鏈（左右胸、左右臀）匯出成第三種物理組（kind 2）。
+- 粒子是 body 骨的別名節點，每步從參考骨的動畫 local 起算。
+- GPU 的 `StepChainV02` 照 `Chain::prepare`／`finish` 移植：reflect speed、keep 範圍、move limit 方塊、crush 縮放、`next_length` 轉向。
+- pass 順序：body（Ver02）→ 衣服 → 飾品，前兩者解好的 body 骨都寫回 `Worlds`。
+- 10 人比對（`Saved/Crowd/Room100-20261027T215705`）：
+  - 平均位移差 0.15～0.20 cm。
+  - 誤差 ≥ 10 cm 的列 0.3%。
+  - 胸部骨 bank 與 rig 只差約 0.01 cm。
+- 每次改 GPU rig 的 shader（包括資料排版），都要重建 patch；目前掛 `StreetDisplay29V02.patch`。

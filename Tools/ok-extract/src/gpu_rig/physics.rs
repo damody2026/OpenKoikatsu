@@ -1,4 +1,5 @@
-//! The character's DynamicBone chains for the GPU rig's verlet pass (Shaders/GpuRig.usf PhysicsCS): the clothes set
+//! The character's DynamicBone chains for the GPU rig's verlet pass (Shaders/GpuRig.usf PhysicsCS): her body's Ver02
+//! chains (breasts, hips: dbone/ver02.rs, on body bones, each starting from its reference bone's local), the clothes set
 //! (chains on her body bones, written back to them) and every accessory's own set (a private skeleton hung on a body
 //! bone), as the session steps them (session.rs update_clothes_dynamics, update_dynamic_accessories_filtered; dbone.rs
 //! AttachedDynamicSet::step_impl, the built-in solver: no PhysX).
@@ -20,6 +21,8 @@ pub struct PhysNode {
     pub parent: Parent,
     /// Alias of this rig bone: its local is the animated one and its solved world is written back to the bone.
     pub alias: Option<usize>,
+    /// An alias whose every step starts from another bone's animated local (a Ver02 particle's reference bone).
+    pub local_from: Option<usize>,
     /// Fixed local (private bones; a particle bone's prefab local, which every step starts from).
     pub pos: [f32; 3], pub rot: [f32; 4], pub scale: [f32; 3],
     /// The top of a private skeleton: world = parent world x matrix, Transform.rotation = parent rotation x rot_offset.
@@ -36,6 +39,14 @@ pub struct PhysParticle {
     pub end_offset: [f32; 3], pub local_position: [f32; 3],
     pub damping: f32, pub elasticity: f32, pub stiffness: f32, pub inert: f32, pub radius: f32, pub add_angle_scale: f32,
     pub turns_parent: bool,
+    /// A Ver02 particle (local_position is its rest offset from the parent).
+    pub v02: Option<V02Particle>,
+}
+#[derive(Clone, Debug, Default)]
+pub struct V02Particle {
+    pub rotate: bool, pub next_length: f32, pub keep_min: f32, pub keep_max: f32,
+    pub move_limit: bool, pub min: [f32; 3], pub max: [f32; 3],
+    pub crush: bool, pub crush_min: f32, pub crush_max: f32, pub crush_add_min: f32, pub crush_add_max: f32, pub initial_scale: [f32; 3],
 }
 
 #[derive(Clone, Debug)]
@@ -46,11 +57,13 @@ pub struct PhysChain {
     pub root: usize, pub component: usize, pub ver01: bool, pub suppress_skip: bool, pub freeze_axis: u32, pub mirror: u32,
     pub gravity: [f32; 3], pub force: [f32; 3], pub local_gravity: [f32; 3], pub update_rate: f32,
     pub particles: Vec<PhysParticle>, pub colliders: Vec<PhysCollider>,
+    /// A Ver02 chain: (end offset, reflect speed, max steps).
+    pub v02: Option<([f32; 3], f32, u32)>,
 }
 
 /// Which session set a node's actual world is read from (for the palette factorization).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SetRef { Clothes, Part(usize) }
+pub enum SetRef { Body, Clothes, Part(usize) }
 
 #[derive(Clone, Debug, Default)]
 pub struct Physics {
@@ -66,13 +79,15 @@ pub struct Physics {
     pub loose_tops: usize,
     /// The clothes set's nodes by bone name (a coordinated implant's palette follows the clothes bone of its key).
     pub clothes_by_name: HashMap<String, usize>,
-    /// Per set, in stepping order: (clothes, node first, node count, chain first, chain count). Sets do not share nodes:
-    /// the GPU steps each on its own thread, the clothes first (they move body bones the accessories hang on).
-    pub ranges: Vec<(bool, usize, usize, usize, usize)>,
+    /// Per set, in stepping order: (kind: 2 body, 1 clothes, 0 accessory; node first, node count, chain first, chain
+    /// count). Sets do not share nodes: the GPU steps each on its own thread, body then clothes (both move body bones)
+    /// then the accessories hung on them.
+    pub ranges: Vec<(u32, usize, usize, usize, usize)>,
 }
 
 fn set_of(s: &crate::session::OkSession, set: SetRef) -> Option<&crate::dbone::AttachedDynamicSet> {
     match set {
+        SetRef::Body => None,
         SetRef::Clothes => s.clothes_dynamic_runtime.as_ref().map(|(_, state)| state),
         SetRef::Part(p) => s.parts.get(p)?.runtime_accessory.as_ref()?.dynamic_state(),
     }
@@ -117,6 +132,45 @@ impl Physics {
         let rig_index: HashMap<i64, usize> = rig.ids.iter().enumerate().map(|(n, id)| (*id, n)).collect();
         let body = s.body_skel.as_ref();
         let mut aliased: Vec<usize> = Vec::new();
+        // Her body's Ver02 chains first (session finish_paired_dynamics: body, clothes, accessories).
+        if let (Some(runtime), Some(body)) = (s.body_dynamic_runtime.as_ref(), body) {
+            let chains = runtime.gpu_view();
+            let node_first = out.nodes.len();
+            let mut node_of: HashMap<i64, usize> = HashMap::new();
+            let mut ids: Vec<i64> = Vec::new();
+            for c in &chains { for id in std::iter::once(c.root).chain(c.particles.iter().filter_map(|p| p.id)) { if rig_index.contains_key(&id) && !ids.contains(&id) { ids.push(id); } } }
+            ids.sort_by_key(|id| rig_index[id]);
+            let reference: HashMap<i64, i64> = chains.iter().flat_map(|c| c.particles.iter().filter_map(|p| Some((p.id?, p.reference?)))).collect();
+            for id in &ids {
+                let r = rig_index[id];
+                let parent = match rig.parent[r] { p if p < 0 => Parent::None, p => match node_of.get(&rig.ids[p as usize]) { Some(n) => Parent::Node(*n), None => Parent::Rig(p as usize) } };
+                let tf = &body.tfs[id];
+                out.index.insert((SetRef::Body, *id), out.nodes.len());
+                node_of.insert(*id, out.nodes.len());
+                out.nodes.push(PhysNode { parent, alias: Some(r), local_from: reference.get(id).and_then(|q| rig_index.get(q)).copied(),
+                    pos: tf.pos, rot: tf.rot, scale: tf.scale, matrix: None, rot_offset: [0., 0., 0., 1.] });
+                out.sources.push((SetRef::Body, *id));
+                aliased.push(r);
+            }
+            let chain_first = out.chains.len();
+            for c in chains {
+                let Some(&root) = node_of.get(&c.root) else { continue };
+                let particles: Vec<PhysParticle> = c.particles.iter().enumerate().map(|(i, p)| PhysParticle {
+                    node: p.id.and_then(|id| node_of.get(&id).copied()), parent: i as i32 - 1, end_offset: c.end, local_position: p.local,
+                    damping: p.damping, elasticity: p.elasticity, stiffness: p.stiffness, inert: p.inert, radius: p.radius, add_angle_scale: 1., turns_parent: false,
+                    v02: Some(V02Particle { rotate: p.rotate, next_length: p.next_length, keep_min: p.keep_min, keep_max: p.keep_max, move_limit: p.move_limit,
+                        min: p.min, max: p.max, crush: p.crush, crush_min: p.crush_min, crush_max: p.crush_max, crush_add_min: p.crush_add_min,
+                        crush_add_max: p.crush_add_max, initial_scale: p.initial.as_ref().map(|t| t.scale).unwrap_or([1.; 3]) }) }).collect();
+                if particles.iter().take(particles.len() - 1).any(|p| p.node.is_none()) { continue; }
+                let colliders = c.colliders.iter().filter_map(|col| Some(PhysCollider { at: Ref::Rig(*rig_index.get(&col.transform)?), center: col.center,
+                    radius: col.radius, height: col.height, direction: col.direction as u32, inside: col.inside })).collect();
+                out.chains.push(PhysChain { root, component: root, ver01: false, suppress_skip: c.suppress_skip, freeze_axis: 0, mirror: 0,
+                    gravity: c.gravity, force: c.force, local_gravity: [0.; 3], update_rate: c.update_rate, particles, colliders,
+                    v02: Some((c.end, c.reflect_speed, c.max_steps as u32)) });
+            }
+            if out.chains.len() > chain_first { out.ranges.push((2, node_first, out.nodes.len() - node_first, chain_first, out.chains.len() - chain_first)); }
+            else { out.nodes.truncate(node_first); out.sources.truncate(node_first); }
+        }
         for set in sets(s) {
             let Some(state) = set_of(s, set) else { continue };
             let tfs = &state.skel.tfs;
@@ -159,7 +213,7 @@ impl Physics {
                 let parent_id = tf.parent.filter(|p| *p != *id && inside(p));
                 let alias = if is_rig(*id) { rig_index.get(id).copied() } else { None };
                 let (pos, rot) = init.get(id).copied().unwrap_or((tf.pos, tf.rot));
-                let mut node = PhysNode { parent: Parent::None, alias, pos, rot, scale: tf.scale, matrix: None, rot_offset: [0., 0., 0., 1.] };
+                let mut node = PhysNode { parent: Parent::None, alias, local_from: None, pos, rot, scale: tf.scale, matrix: None, rot_offset: [0., 0., 0., 1.] };
                 match parent_id {
                     Some(p) if node_of.contains_key(&p) => node.parent = Parent::Node(node_of[&p]),
                     Some(p) if set == SetRef::Clothes && rig_index.contains_key(&p) => node.parent = Parent::Rig(rig_index[&p]),
@@ -205,13 +259,13 @@ impl Physics {
                 let (Some(&root), Some(&component)) = (node_of.get(&c.root), node_of.get(&c.component)) else { continue };
                 let particles = c.particles.iter().map(|p| PhysParticle { node: p.id.and_then(|id| node_of.get(&id).copied()), parent: p.parent,
                     end_offset: p.end_offset, local_position: p.local_position, damping: p.damping, elasticity: p.elasticity, stiffness: p.stiffness,
-                    inert: p.inert, radius: p.radius, add_angle_scale: p.add_angle_scale, turns_parent: p.turns_parent }).collect();
+                    inert: p.inert, radius: p.radius, add_angle_scale: p.add_angle_scale, turns_parent: p.turns_parent, v02: None }).collect();
                 let colliders = c.colliders.iter().filter_map(|col| Some(PhysCollider { at: at(col.transform, col.in_body)?, center: col.center,
                     radius: col.radius, height: col.height, direction: col.direction as u32, inside: col.inside })).collect();
                 out.chains.push(PhysChain { root, component, ver01: c.ver01, suppress_skip: c.suppress_skip, freeze_axis: c.freeze_axis as u32,
-                    mirror: c.mirror, gravity: c.gravity, force: c.force, local_gravity: c.local_gravity, update_rate: c.update_rate, particles, colliders });
+                    mirror: c.mirror, gravity: c.gravity, force: c.force, local_gravity: c.local_gravity, update_rate: c.update_rate, particles, colliders, v02: None });
             }
-            out.ranges.push((set == SetRef::Clothes, node_first, out.nodes.len() - node_first, chain_first, out.chains.len() - chain_first));
+            out.ranges.push((u32::from(set == SetRef::Clothes), node_first, out.nodes.len() - node_first, chain_first, out.chains.len() - chain_first));
         }
         // Rig bones whose world hangs under a solved alias (and are not aliases themselves), in rig order.
         let mut under = vec![false; rig.ids.len()];

@@ -19,11 +19,11 @@ struct KKCROWDGPUPACKING_API FOKGpuRigBatch {
  TArray<FUintVector4> Tasks;TArray<FVector4f> Terms; // 4 rows per term
  // DynamicBone chains (PhysicsCS): a reference is a bone, or OKGpuRigPhysicsNode | node; a node's world follows the
  // bones' in the worlds buffer (a term's node there is BoneCount + node).
- TArray<FUintVector4> PhysSets;      // 2 per set: (clothes, node first, node count, chain first), (chain count, follow first, follow count, 0)
+ TArray<FUintVector4> PhysSets;      // 2 per set: (kind: 2 body, 1 clothes, 0 accessory; node first, node count, chain first), (chain count, follow first, follow count, 0)
  TArray<FVector4f> PhysNodes;        // 8 per node
  TArray<FUintVector4> PhysChains;    // 2 per chain
- TArray<FVector4f> PhysChainValues;  // 3 per chain
- TArray<FVector4f> PhysParticles;    // 4 per particle
+ TArray<FVector4f> PhysChainValues;  // 4 per chain
+ TArray<FVector4f> PhysParticles;    // 8 per particle
  TArray<FVector4f> PhysColliders;    // 2 per collider
  TArray<uint32> PhysFollow;
  uint32 ActorCount=0,ClipSlotsPerActor=0,BoneCount=0,NodeCount=0;

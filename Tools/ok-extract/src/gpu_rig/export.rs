@@ -347,13 +347,16 @@ impl FlatRig {
 }
 
 /// v2 physics section (after the names). A reference to a transform: rig bone index, or 0x40000000 | node index.
-/// nodes, chains, particles, colliders, follow, sets (counts); per set: clothes, node first and count, chain first and
-/// count; per node: kind (0 alias, 1 local TRS, 2 matrix), parent ref
-/// (0xffffffff none), alias bone, pos 3, rot 4, scale 3, matrix rows 0..2 (12), rot offset 4; per chain: root node,
-/// component node, flags (1 ver01, 2 skip off, freeze axis << 4, mirror << 8), particles first and count, colliders
-/// first and count, gravity 3, force 3, local gravity 3, update rate; per particle: node (0xffffffff: an end point),
-/// parent (chain index, -1), flags (1 turns its parent), end offset 3, local position 3, damping, elasticity, stiffness,
-/// inert, radius, add angle scale; per collider: ref, direction, inside, center 3, radius, height; follow: rig bones.
+/// nodes, chains, particles, colliders, follow, sets (counts); per set: kind (2 body, 1 clothes, 0 accessory), node first
+/// and count, chain first and count; per node: kind (0 alias, 1 local TRS, 2 matrix), parent ref (0xffffffff none), alias
+/// bone, local source bone (an alias's animated local; 0xffffffff: its own), pos 3, rot 4, scale 3, matrix rows 0..2
+/// (12), rot offset 4; per chain: root node, component node, flags (1 ver01, 2 skip off, 8 Ver02, freeze axis << 4,
+/// mirror << 8), particles first and count, colliders first and count, max steps, gravity 3, force 3, local gravity 3,
+/// update rate, end offset 3, reflect speed; per particle: node (0xffffffff: an end point), parent (chain index, -1),
+/// flags (1 turns its parent), end offset 3, local position 3, damping, elasticity, stiffness, inert, radius, add angle
+/// scale, Ver02 flags (1 move limit, 2 crush, 4 rotate), keep min, keep max, next length, move min 3, move max 3, crush
+/// min, crush max, crush add min, crush add max, initial scale 3; per collider: ref, direction, inside, center 3,
+/// radius, height; follow: rig bones.
 pub const NODE_FLAG: u32 = 0x4000_0000;
 impl super::physics::Physics {
     pub fn write(&self, b: &mut Vec<u8>) {
@@ -361,12 +364,12 @@ impl super::physics::Physics {
         let particles: usize = self.chains.iter().map(|c| c.particles.len()).sum();
         let colliders: usize = self.chains.iter().map(|c| c.colliders.len()).sum();
         for v in [self.nodes.len(), self.chains.len(), particles, colliders, self.follow.len(), self.ranges.len()] { push_u32(b, v as u32); }
-        for (clothes, nf, nc, cf, cc) in &self.ranges { for v in [*clothes as usize, *nf, *nc, *cf, *cc] { push_u32(b, v as u32); } }
+        for (kind, nf, nc, cf, cc) in &self.ranges { for v in [*kind as usize, *nf, *nc, *cf, *cc] { push_u32(b, v as u32); } }
         let r = |x: &Ref| match x { Ref::Rig(i) => *i as u32, Ref::Node(n) => NODE_FLAG | *n as u32 };
         for n in &self.nodes {
             let kind = if n.alias.is_some() { 0 } else if n.matrix.is_some() { 2 } else { 1 };
             let parent = match n.parent { Parent::None => u32::MAX, Parent::Rig(i) => i as u32, Parent::Node(k) => NODE_FLAG | k as u32 };
-            push_u32(b, kind); push_u32(b, parent); push_u32(b, n.alias.map_or(u32::MAX, |a| a as u32));
+            push_u32(b, kind); push_u32(b, parent); push_u32(b, n.alias.map_or(u32::MAX, |a| a as u32)); push_u32(b, n.local_from.map_or(u32::MAX, |a| a as u32));
             push_f32s(b, &n.pos); push_f32s(b, &n.rot); push_f32s(b, &n.scale);
             let m = n.matrix.unwrap_or_else(crate::pose::ident);
             for row in 0..3 { push_f32s(b, &m[row]); }
@@ -375,15 +378,22 @@ impl super::physics::Physics {
         let (mut pf, mut cf) = (0u32, 0u32);
         for c in &self.chains {
             push_u32(b, c.root as u32); push_u32(b, c.component as u32);
-            push_u32(b, c.ver01 as u32 | (c.suppress_skip as u32) << 1 | c.freeze_axis << 4 | c.mirror << 8);
+            push_u32(b, c.ver01 as u32 | (c.suppress_skip as u32) << 1 | (c.v02.is_some() as u32) << 3 | c.freeze_axis << 4 | c.mirror << 8);
             push_u32(b, pf); push_u32(b, c.particles.len() as u32); push_u32(b, cf); push_u32(b, c.colliders.len() as u32);
+            let (end, reflect, steps) = c.v02.unwrap_or(([0.; 3], 1., 3));
+            push_u32(b, steps);
             push_f32s(b, &c.gravity); push_f32s(b, &c.force); push_f32s(b, &c.local_gravity); push_f32s(b, &[c.update_rate]);
+            push_f32s(b, &end); push_f32s(b, &[reflect]);
             pf += c.particles.len() as u32; cf += c.colliders.len() as u32;
         }
         for c in &self.chains { for p in &c.particles {
             push_u32(b, p.node.map_or(u32::MAX, |n| n as u32)); push_i32(b, p.parent); push_u32(b, p.turns_parent as u32);
             push_f32s(b, &p.end_offset); push_f32s(b, &p.local_position);
             push_f32s(b, &[p.damping, p.elasticity, p.stiffness, p.inert, p.radius, p.add_angle_scale]);
+            let v = p.v02.clone().unwrap_or_default();
+            push_u32(b, v.move_limit as u32 | (v.crush as u32) << 1 | (v.rotate as u32) << 2);
+            push_f32s(b, &[v.keep_min, v.keep_max, v.next_length]); push_f32s(b, &v.min); push_f32s(b, &v.max);
+            push_f32s(b, &[v.crush_min, v.crush_max, v.crush_add_min, v.crush_add_max]); push_f32s(b, &v.initial_scale);
         } }
         for c in &self.chains { for col in &c.colliders {
             push_u32(b, r(&col.at)); push_u32(b, col.direction); push_u32(b, col.inside as u32);

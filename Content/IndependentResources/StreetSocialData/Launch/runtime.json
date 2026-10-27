@@ -5,6 +5,6 @@
   "materials": "Content/IndependentResources/StreetSocialData/Launch/materials.json",
   "roster": "Content/IndependentResources/StreetSocialData/Launch/heroines.json",
   "male_card": "output/StreetSocialAPNG/Male01.png",
-  "patch": "Saved/StreetSocial/Build/StreetDisplay28Phys.patch",
+  "patch": "Saved/StreetSocial/Build/StreetDisplay29V02.patch",
   "render_quality": {"antialiasing_method": 1, "screen_percentage": 150}
 }

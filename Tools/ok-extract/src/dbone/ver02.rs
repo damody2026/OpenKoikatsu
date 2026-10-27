@@ -852,3 +852,35 @@ mod tests {
         assert!((sk.tfs[&2].pos[1] - 1.0).abs() < 1e-6);
     }
 }
+
+/// One enabled Ver02 chain as the GPU rig simulates it (gpu_rig/physics.rs, Shaders/GpuRig.usf PhysicsCS): the particles
+/// in order (each the previous one's child; the last an end point) and what Chain::step reads besides the transforms.
+#[derive(Clone, Debug)]
+pub(crate) struct Ver02ChainView {
+    pub root: i64, pub end: [f32; 3], pub gravity: [f32; 3], pub force: [f32; 3],
+    pub update_rate: f32, pub reflect_speed: f32, pub max_steps: usize, pub suppress_skip: bool,
+    pub particles: Vec<Ver02ParticleView>,
+    pub colliders: Vec<GpuColliderView>,
+}
+#[derive(Clone, Debug)]
+pub(crate) struct Ver02ParticleView {
+    pub id: Option<i64>, pub reference: Option<i64>, pub initial: Option<Tf>, pub local: [f32; 3],
+    pub rotate: bool, pub damping: f32, pub elasticity: f32, pub stiffness: f32, pub inert: f32, pub next_length: f32, pub radius: f32,
+    pub move_limit: bool, pub min: [f32; 3], pub max: [f32; 3], pub keep_min: f32, pub keep_max: f32,
+    pub crush: bool, pub crush_min: f32, pub crush_max: f32, pub crush_add_min: f32, pub crush_add_max: f32,
+}
+impl BodyDynamicRuntime {
+    /// The enabled chains as the GPU rig reads them (configured colliders and radii as the last step used them).
+    pub(crate) fn gpu_view(&self) -> Vec<Ver02ChainView> {
+        self.chains.iter().filter(|c| c.enabled && c.particles.len() >= 2).map(|c| Ver02ChainView {
+            root: c.root, end: c.end, gravity: c.gravity, force: c.force, update_rate: c.update_rate, reflect_speed: c.reflect_speed,
+            max_steps: c.max_steps, suppress_skip: self.suppress_skip_update,
+            particles: c.particles.iter().map(|p| { let q = &p.params; Ver02ParticleView { id: p.id, reference: p.reference, initial: p.initial.clone(), local: p.local,
+                rotate: q.rotate, damping: q.damping, elasticity: q.elasticity, stiffness: q.stiffness, inert: q.inert, next_length: q.next_length, radius: q.radius,
+                move_limit: q.move_limit, min: q.min, max: q.max, keep_min: q.keep_min, keep_max: q.keep_max,
+                crush: q.crush, crush_min: q.crush_min, crush_max: q.crush_max, crush_add_min: q.crush_add_min, crush_add_max: q.crush_add_max } }).collect(),
+            colliders: c.colliders.iter().map(|col| GpuColliderView { transform: col.transform, in_body: true, center: col.center, radius: col.radius,
+                height: col.height, direction: col.direction, inside: col.inside }).collect(),
+        }).collect()
+    }
+}

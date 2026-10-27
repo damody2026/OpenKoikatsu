@@ -13,15 +13,16 @@ struct FKKRuntimeGpuRigAbm {int32 Bone=0;FVector4f Rot;float Length=1.f;FVector3
 // shader's rows with her own indices: a transform reference is her rig bone, or 0x40000000 | her node; a particle's
 // parent is its chain's index. BoneTerms nodes at Names.Num() and above are her nodes.
 struct FKKRuntimeGpuRigPhysics {
- TArray<FVector4f> Nodes;      // 8 per node: (pos, kind), rot, (scale, parent ref), matrix rows 0..2, rot offset, (alias bone, 0, 0, 0)
- TArray<FUintVector4> Chains;  // 2 per chain: (root node, component node, flags, 0), (particle first, count, collider first, count)
- TArray<FVector4f> ChainValues;// 3 per chain: (gravity, update rate), (force, 0), (local gravity, 0)
- TArray<FVector4f> Particles;  // 4 per particle: (node, parent, flags, damping), (end offset, elasticity), (local position, stiffness), (inert, radius, add angle scale, 0)
+ TArray<FVector4f> Nodes;      // 8 per node: (pos, kind), rot, (scale, parent ref), matrix rows 0..2, rot offset, (alias bone, local source bone, 0, 0)
+ TArray<FUintVector4> Chains;  // 2 per chain: (root node, component node, flags, max steps), (particle first, count, collider first, count)
+ TArray<FVector4f> ChainValues;// 4 per chain: (gravity, update rate), (force, 0), (local gravity, 0), (end offset, reflect speed)
+ TArray<FVector4f> Particles;  // 8 per particle: (node, parent, flags, damping), (end offset, elasticity), (local position, stiffness), (inert, radius, add angle scale, initial scale z),
+                               // Ver02: (keep min, keep max, next length, flags), (move min, crush min), (move max, crush max), (crush add min, crush add max, initial scale xy)
  TArray<FVector4f> Colliders;  // 2 per collider: (center, radius), (height, direction, inside, ref)
  TArray<uint32> Follow;        // her rig bones under a solved alias
- TArray<FUintVector4> Sets;    // per set, stepping order: (clothes, node first, node count, chain first) then chain count in the next .x
+ TArray<FUintVector4> Sets;    // per set, stepping order: (kind: 2 body, 1 clothes, 0 accessory; node first, node count, chain first) then chain count in the next .x
  int32 NodeCount() const {return Nodes.Num()/8;}
- int32 ParticleCount() const {return Particles.Num()/4;}
+ int32 ParticleCount() const {return Particles.Num()/8;}
 };
 inline constexpr uint32 OKGpuRigNodeFlag=0x40000000u;
 struct FKKRuntimeGpuRigResult {

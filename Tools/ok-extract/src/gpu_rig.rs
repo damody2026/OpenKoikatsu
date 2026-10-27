@@ -241,6 +241,7 @@ mod physics_export {
         let tops = ph.nodes.iter().filter(|n| n.matrix.is_some()).count();
         let colliders: usize = ph.chains.iter().map(|c| c.colliders.len()).sum();
         println!("sets {:?}", super::physics::sets(s));
+        println!("ranges {:?}", ph.ranges);
         println!("nodes {} (aliases {aliases}, tops {tops}, loose tops {}), chains {}, particles {}, colliders {colliders}, follow {}",
             ph.nodes.len(), ph.loose_tops, ph.chains.len(), ph.particle_count(), ph.follow.len());
         // Rebuild every node at sample 0 and compare (particles are not at their prefab locals after the steps: skipped).

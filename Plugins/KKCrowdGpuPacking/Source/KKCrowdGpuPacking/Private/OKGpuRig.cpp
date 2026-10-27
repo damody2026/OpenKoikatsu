@@ -106,13 +106,14 @@ bool FOKGpuRigBatch::Validate(FString& Error) const {
  for(const auto& T:Tasks)if(uint64(T.X)+T.Y>uint64(Terms.Num()/4)||T.Y>4)return Fail(TEXT("GPU rig task terms out of range"));
  for(int32 T=0;T<Terms.Num();T+=4){const uint32 Node=reinterpret_cast<const uint32&>(Terms[T].X);if(Node!=MAX_uint32&&Node>=BoneCount+NodeCount)return Fail(TEXT("GPU rig term bone out of range"));}
  // Physics: every reference inside the bones or the nodes, every range inside its table.
- const uint32 Chains=PhysChains.Num()/2,Particles=PhysParticles.Num()/4,Colliders=PhysColliders.Num()/2;
- if(PhysNodes.Num()!=int32(NodeCount)*8||PhysSets.Num()%2||PhysChains.Num()%2||PhysChainValues.Num()!=int32(Chains)*3||PhysParticles.Num()%4||PhysColliders.Num()%2)return Fail(TEXT("GPU rig physics tables malformed"));
+ const uint32 Chains=PhysChains.Num()/2,Particles=PhysParticles.Num()/8,Colliders=PhysColliders.Num()/2;
+ if(PhysNodes.Num()!=int32(NodeCount)*8||PhysSets.Num()%2||PhysChains.Num()%2||PhysChainValues.Num()!=int32(Chains)*4||PhysParticles.Num()%8||PhysColliders.Num()%2)return Fail(TEXT("GPU rig physics tables malformed"));
  auto RefOk=[&](uint32 R){return R==MAX_uint32||((R&OKGpuRigPhysicsNode)?(R&~OKGpuRigPhysicsNode)<NodeCount:R<BoneCount);};
  for(uint32 N=0;N<NodeCount;++N){const uint32 Kind=reinterpret_cast<const uint32&>(PhysNodes[N*8].W),Parent=reinterpret_cast<const uint32&>(PhysNodes[N*8+2].W),Alias=reinterpret_cast<const uint32&>(PhysNodes[N*8+7].X);
-  if(Kind>2||!RefOk(Parent)||((Parent&OKGpuRigPhysicsNode)&&Parent!=MAX_uint32&&(Parent&~OKGpuRigPhysicsNode)>=N)||(Kind==0&&Alias>=BoneCount))return Fail(TEXT("GPU rig physics node malformed"));}
+  const uint32 From=reinterpret_cast<const uint32&>(PhysNodes[N*8+7].Y);
+  if(Kind>2||!RefOk(Parent)||((Parent&OKGpuRigPhysicsNode)&&Parent!=MAX_uint32&&(Parent&~OKGpuRigPhysicsNode)>=N)||(Kind==0&&Alias>=BoneCount)||(From!=MAX_uint32&&From>=BoneCount))return Fail(TEXT("GPU rig physics node malformed"));}
  for(uint32 C=0;C<Chains;++C){const auto& H=PhysChains[C*2];const auto& K=PhysChains[C*2+1];if(H.X>=NodeCount||H.Y>=NodeCount||uint64(K.X)+K.Y>Particles||uint64(K.Z)+K.W>Colliders)return Fail(TEXT("GPU rig physics chain out of range"));}
- for(uint32 P=0;P<Particles;++P){const uint32 Node=reinterpret_cast<const uint32&>(PhysParticles[P*4].X),Parent=reinterpret_cast<const uint32&>(PhysParticles[P*4].Y);if((Node!=MAX_uint32&&Node>=NodeCount)||(Parent!=MAX_uint32&&Parent>=P))return Fail(TEXT("GPU rig physics particle out of range"));}
+ for(uint32 P=0;P<Particles;++P){const uint32 Node=reinterpret_cast<const uint32&>(PhysParticles[P*8].X),Parent=reinterpret_cast<const uint32&>(PhysParticles[P*8].Y);if((Node!=MAX_uint32&&Node>=NodeCount)||(Parent!=MAX_uint32&&Parent>=P))return Fail(TEXT("GPU rig physics particle out of range"));}
  for(uint32 C=0;C<Colliders;++C)if(!RefOk(reinterpret_cast<const uint32&>(PhysColliders[C*2+1].W)))return Fail(TEXT("GPU rig physics collider out of range"));
  for(int32 S=0;S<PhysSets.Num();S+=2){const auto& A=PhysSets[S];const auto& B=PhysSets[S+1];if(uint64(A.Y)+A.Z>NodeCount||uint64(A.W)+B.X>Chains||uint64(B.Y)+B.Z>uint64(PhysFollow.Num()))return Fail(TEXT("GPU rig physics set out of range"));}
  for(const uint32 F:PhysFollow)if(F>=BoneCount)return Fail(TEXT("GPU rig physics follow out of range"));
@@ -139,7 +140,7 @@ bool FOKGpuRig::Initialize(FRDGBuilder& G,TSharedRef<const FOKGpuRigBatch,ESPMod
  PhysFollow=OKGpuRigUpload(G,TEXT("GpuRig.PhysFollow"),B.PhysFollow);
  NodeLocals=Scratch(TEXT("GpuRig.NodeLocals"),B.NodeCount*3);NodeRots=Scratch(TEXT("GpuRig.NodeRots"),B.NodeCount);
  // Particles (pos, prev), chains (time, component position), sets (ready): persistent, cleared once.
- PhysState=Scratch(TEXT("GpuRig.PhysState"),B.PhysParticles.Num()/4*2+B.PhysChains.Num()/2+B.PhysSets.Num()/2);PhysicsCleared=false;
+ PhysState=Scratch(TEXT("GpuRig.PhysState"),B.PhysParticles.Num()/8*2+B.PhysChains.Num()/2+B.PhysSets.Num()/2);PhysicsCleared=false;
  Static=Batch;HasFrame=false;Current.SafeRelease();return true;
 }
 
@@ -172,17 +173,17 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
   FRDGBufferRef StateBuffer=G.RegisterExternalBuffer(PhysState);
   if(!PhysicsCleared){AddClearUAVPass(G,G.CreateUAV(StateBuffer),0u);PhysicsCleared=true;}
   TShaderMapRef<FOKGpuRigPhysicsCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-  // The clothes sets first (they move body bones), then the accessories hung on them.
-  for(uint32 Clothes:{1u,0u}){
+  // The body's Ver02 sets, the clothes sets (both move body bones), then the accessories hung on them.
+  for(uint32 Clothes:{2u,1u,0u}){
    auto* P=G.AllocParameters<FOKGpuRigPhysicsCS::FParameters>();
    P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->PhysSets=G.CreateSRV(G.RegisterExternalBuffer(PhysSets));P->PhysNodes=G.CreateSRV(G.RegisterExternalBuffer(PhysNodes));
    P->PhysChains=G.CreateSRV(G.RegisterExternalBuffer(PhysChains));P->PhysChainValues=G.CreateSRV(G.RegisterExternalBuffer(PhysChainValues));
    P->PhysParticles=G.CreateSRV(G.RegisterExternalBuffer(PhysParticles));P->PhysColliders=G.CreateSRV(G.RegisterExternalBuffer(PhysColliders));P->PhysFollow=G.CreateSRV(G.RegisterExternalBuffer(PhysFollow));
    P->Locals=G.CreateUAV(G.RegisterExternalBuffer(Locals));P->Worlds=G.CreateUAV(WorldsBuffer);P->NodeLocals=G.CreateUAV(G.RegisterExternalBuffer(NodeLocals));
    P->NodeRots=G.CreateUAV(G.RegisterExternalBuffer(NodeRots));P->PhysState=G.CreateUAV(StateBuffer);
-   P->SetCount=Sets;P->ClothesPass=Clothes;P->BoneTotal=B.BoneCount;P->ParticleTotal=B.PhysParticles.Num()/4;P->ChainTotal=B.PhysChains.Num()/2;
+   P->SetCount=Sets;P->ClothesPass=Clothes;P->BoneTotal=B.BoneCount;P->ParticleTotal=B.PhysParticles.Num()/8;P->ChainTotal=B.PhysChains.Num()/2;
    P->DeltaTime=FMath::Clamp(DeltaSeconds,0.f,0.1f);P->ResetAll=Reset?1u:0u;P->SettleSteps=30;
-   FComputeShaderUtils::AddPass(G,Clothes?RDG_EVENT_NAME("Crowd.GpuRigClothes"):RDG_EVENT_NAME("Crowd.GpuRigAccessories"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(Sets),64));
+   FComputeShaderUtils::AddPass(G,Clothes==2?RDG_EVENT_NAME("Crowd.GpuRigBody"):Clothes==1?RDG_EVENT_NAME("Crowd.GpuRigClothes"):RDG_EVENT_NAME("Crowd.GpuRigAccessories"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(Sets),64));
   }
  }
  const uint32 TaskCount=B.Tasks.Num();
