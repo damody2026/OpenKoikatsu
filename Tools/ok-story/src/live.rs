@@ -174,12 +174,28 @@ impl Live {
         let me = self.facts.actors.get(&self.st.player)?;
         let her = self.facts.actors.get(on)?;
         let k = me.root.scale.abs().max(0.1);
+        let kh = her.root.scale.abs().max(0.1);
         let head = me.head();
         let face = her.head();
-        let chest = her.bone("spine03").map(|b| b.pos).unwrap_or_else(|| math::add(her.root.pos, [0.0, 0.0, 120.0 * her.root.scale.abs().max(0.1)]));
-        let aim = math::lerp3(face, chest, self.tuning.live.pov_aim.clamp(0.0, 1.0));
+        let hips = her.bone("hips").map(|b| b.pos).unwrap_or_else(|| math::add(her.root.pos, [0.0, 0.0, 95.0 * kh]));
         let flat = math::normalize([face[0] - head[0], face[1] - head[1], 0.0]);
-        let eye = math::add(math::add(head, math::scale(flat, self.tuning.live.pov_forward * k)), [0.0, 0.0, self.tuning.live.pov_up * k]);
+        let mut eye = math::add(math::add(head, math::scale(flat, self.tuning.live.pov_forward * k)), [0.0, 0.0, self.tuning.live.pov_up * k]);
+        // Her whole upper body (the top of her head to her hips) in the part of the picture above the dialog box: a metre
+        // apart, his eyes showed only her face. The view steps back along his line to her as far as that takes, and centres
+        // on that span with the box's height under it.
+        let aspect = self.facts.view_aspect.filter(|a| *a > 0.1).unwrap_or(16.0 / 9.0);
+        let tan_v = (self.tuning.live.pov_fov.clamp(10.0, 170.0) * 0.5).to_radians().tan() / aspect;
+        let dialog = self.tuning.layout.dialog_height.clamp(0.0, 0.6);
+        let clear = (1.0 - dialog - 0.08).max(0.3);
+        // A quarter more than the span, so a nod or a bow (her face lower, her hips where they were) keeps the picture.
+        let (top, bottom) = ((face[2] + 18.0 * kh).max(hips[2] + 70.0 * kh), hips[2]);
+        let need = 1.25 * (top - bottom) / (2.0 * clear * tan_v);
+        let apart = math::len([face[0] - eye[0], face[1] - eye[1], 0.0]);
+        if apart < need {
+            eye = math::sub(eye, math::scale(flat, need - apart));
+        }
+        let away = apart.max(need);
+        let aim = [face[0], face[1], 0.5 * (top + bottom) - dialog * away * tan_v];
         if !math::finite3(eye) || !math::finite3(aim) || math::len(math::sub(aim, eye)) < 1.0 {
             return None;
         }
@@ -230,7 +246,8 @@ impl Live {
                 // move) and her face sank behind the dialog box; she crouched and stood up again. While it stays in view
                 // (a nod, a gesture) the view holds still.
                 let her = self.facts.actors.get(&on);
-                let out_of_view = her.is_some_and(|a| !self.in_view(a.head()));
+                // Her hips too: the view shows her upper body, and seated they sank under the dialog box.
+                let out_of_view = her.is_some_and(|a| !self.in_view(a.head()) || a.bone("hips").is_some_and(|h| !self.in_view(h.pos)));
                 if !out_of_view {
                     self.st.out_since = -1.0;
                 } else if self.st.out_since < 0.0 {
@@ -621,10 +638,13 @@ mod tests {
             assert_eq!(l.st.shot.as_ref().unwrap().shot.as_deref(), Some("pov"));
             assert_eq!(l.st.shot.as_ref().unwrap().on.as_deref(), Some("her1"));
             let p = l.st.rig.current.pos;
-            // His head is at (0, 0, 150): the eyes a little behind its centre (away from her) and up.
-            assert!((p[0] + 12.0).abs() < 1.0 && p[1].abs() < 1.0 && (p[2] - 156.0).abs() < 1.0, "{:?}", p);
+            // His head is at (0, 0, 150), she stands 120 cm ahead: from his eye height, stepped back along his line to her
+            // until her upper body fits (her face alone filled the picture).
+            assert!(p[0] < -12.0 && p[1].abs() < 1.0 && (p[2] - 156.0).abs() < 1.0, "{:?}", p);
             let f = l.st.rig.current.rot.forward();
             assert!(f[0] > 0.9, "looks at her: {:?}", f);
+            let her = &l.facts.actors["her1"];
+            assert!(l.in_view(her.head()) && l.in_view(her.bone("hips").unwrap().pos), "her upper body in the picture");
         }
     }
 
@@ -645,8 +665,9 @@ mod tests {
             l.tick(f);
         }
         let seated = l.st.rig.current.rot.forward();
-        // Down to her seated face (a point 96 cm up, 120 cm ahead of his eye at 156): about -0.45, not the -0.12 of before.
-        assert!(standing[2] > -0.2 && seated[2] < -0.35, "standing {:?} seated {:?}", standing, seated);
+        // Seated, her face and hips are still in the picture (above the dialog box), as they were standing.
+        let her = &l.facts.actors["her1"];
+        assert!(l.in_view(her.head()) && l.in_view(her.bone("hips").unwrap().pos), "standing {:?} seated {:?}", standing, seated);
     }
 
     /// She crouches (a gesture) and stands up again: the view goes down to her and comes back, ending on her face; a nod
@@ -692,17 +713,13 @@ mod tests {
             l.tick(facts(0.016, -1.0, 0));
         }
         let standing = l.st.rig.current.rot.forward();
-        assert!(!l.in_view(bowed().actors["her1"].head()), "the bow takes her face out of the picture");
         for _ in 0..120 {
             l.tick(bowed()); // 1.9 s
         }
         let during = l.st.rig.current.rot.forward();
         assert!((during[2] - standing[2]).abs() < 1e-6, "held through the bow: {:?} {:?}", standing, during);
-        for _ in 0..300 {
-            l.tick(bowed());
-        }
-        let long = l.st.rig.current.rot.forward();
-        assert!(long[2] < standing[2] - 0.2, "bent over longer: down to her: {:?} {:?}", standing, long);
+        // The view shows her upper body: her bowed face stays in the picture.
+        assert!(l.in_view(bowed().actors["her1"].head()), "her bowed face in the picture");
     }
 
     #[test]
