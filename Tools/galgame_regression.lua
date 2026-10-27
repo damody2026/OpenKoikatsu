@@ -61,9 +61,20 @@ if not wait(function() local s = call("/state"); return s and s.all_ready end, 9
   report("FAIL", "start", "the game on port " .. port .. " never got every character ready"); os.exit(1)
 end
 if not log then
-  -- The running game's own log: the newest play folder of this checkout.
-  local newest, when = nil, 0
-  for _, d in ipairs(ok.path.glob(root .. "/Saved/StreetSocial", "Play-*")) do local m = ok.path.mtime(d .. "/game.log") or 0; if m > when then newest, when = d, m end end
+  -- The running game's own log: the play folder whose game.pid is the process on this control port (the newest of
+  -- them: Windows gives pids out again), else the newest play folder. The newest alone was another session's sandbox.
+  local pid = (ok.proc.output({ "netstat", "-ano", "-p", "TCP" }) or ""):match("[%d%.]+:" .. port .. "%s+%S+%s+LISTENING%s+(%d+)")
+  local function newest_of(keep)
+    local best, when = nil, -1
+    for _, d in ipairs(ok.path.glob(root .. "/Saved/StreetSocial", "Play-*")) do
+      local m = ok.path.mtime(d .. "/game.log")
+      if m and m > when and keep(d) then best, when = d, m end
+    end
+    return best
+  end
+  local newest = pid and newest_of(function(d)
+    return ok.path.exists(d .. "/game.pid") and ok.util.strip(ok.path.read_text(d .. "/game.pid")) == pid
+  end) or newest_of(function() return true end)
   log = newest and newest .. "/game.log"
 end
 local function log_count(pattern) local n = 0; for line in io.lines(log) do if line:find(pattern, 1, true) then n = n + 1 end end; return n end
