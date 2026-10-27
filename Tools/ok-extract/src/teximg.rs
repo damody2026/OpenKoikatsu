@@ -54,20 +54,7 @@ pub(crate) fn raw_bytes(img: &RgbaImage) -> Vec<u8> {
 /// Texture bytes of an RGBA image for the next stage: raw when enabled, else PNG.
 pub(crate) fn encode_rgba(img: &RgbaImage) -> Option<Vec<u8>> {
     if raw_enabled() { return Some(raw_bytes(img)); }
-    // OK_PNG_DEFAULT=1: the default level, as before (byte-for-byte comparisons with older builds).
-    if std::env::var_os("OK_PNG_DEFAULT").is_some() { return png_bytes(img); }
-    png_fast_bytes(img)
-}
-
-/// PNG with the fast deflate (fdeflate): a session's textures are decoded again right away (by the runtime, or by the
-/// next transform), so a few percent of size is not worth the default level's time (a 2048² map: ~0.3 s -> ~0.05 s).
-pub(crate) fn png_fast_bytes(img: &RgbaImage) -> Option<Vec<u8>> {
-    use image::ImageEncoder;
-    use image::codecs::png::{CompressionType, FilterType, PngEncoder};
-    let mut buf = Vec::new();
-    PngEncoder::new_with_quality(&mut buf, CompressionType::Fast, FilterType::Up)
-        .write_image(img.as_raw(), img.width(), img.height(), image::ExtendedColorType::Rgba8).ok()?;
-    Some(buf)
+    png_bytes(img)
 }
 
 /// Same, taking the image.
@@ -120,7 +107,6 @@ mod tests {
         let mut old = Vec::new();
         DynamicImage::ImageRgba8(img.clone()).write_to(&mut std::io::Cursor::new(&mut old), image::ImageFormat::Png).unwrap();
         assert_eq!(png_bytes(&img).unwrap(), old);
-        // A session's textures take the fast deflate: other bytes, the same pixels.
-        assert_eq!(load_from_memory(&encode_rgba(&img).unwrap()).unwrap().to_rgba8(), img);
+        assert_eq!(encode_rgba(&img).unwrap(), old);
     }
 }

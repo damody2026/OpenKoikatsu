@@ -6,10 +6,12 @@
 #include "Containers/Ticker.h"
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -28,6 +30,12 @@ constexpr float WalkSpeed=110.f,TurnRate=145.f;
 constexpr float Gap=110.f;
 // After standing a while she walks somewhere else this often; otherwise she changes her pose and stays.
 constexpr float WalkChance=.3f;
+// The demo camera around the girl it follows: 0 is behind her, 180 in front; distance, camera height and the height it
+// looks at, in cm (a close front view of the face: FollowYaw 180, FollowDistance 140, FollowHeight 125, FollowLook 118).
+static TAutoConsoleVariable<float> CVarFollowYaw(TEXT("ok.Crowd.FollowYaw"),0.f,TEXT("Crowd room demo camera angle around the followed girl, degrees (0 behind, 180 in front)."));
+static TAutoConsoleVariable<float> CVarFollowDistance(TEXT("ok.Crowd.FollowDistance"),320.f,TEXT("Crowd room demo camera distance from the followed girl, cm."));
+static TAutoConsoleVariable<float> CVarFollowHeight(TEXT("ok.Crowd.FollowHeight"),190.f,TEXT("Crowd room demo camera height above the followed girl's feet, cm."));
+static TAutoConsoleVariable<float> CVarFollowLook(TEXT("ok.Crowd.FollowLook"),105.f,TEXT("Height above the followed girl's feet the demo camera looks at, cm."));
 
 struct FAgent {
  FVector Pos=FVector::ZeroVector,Target=FVector::ZeroVector;float Yaw=0;
@@ -95,8 +103,11 @@ struct FRoom {
   // The demo camera: behind the girl it follows, eased toward her heading.
   if(Pc&&Agents.IsValidIndex(Follow)){
    const auto& A=Agents[Follow];
+   // A demo shows no numbers: the player controller turns the engine's stat fps on at start.
+   if(!FollowPlaced&&GEngine)if(UGameViewportClient* VP=World->GetGameViewport())if(VP->IsStatEnabled(TEXT("FPS")))GEngine->SetEngineStat(World,VP,TEXT("FPS"),false);
    if(A.Walking){const FVector D=(A.Target-A.Pos).GetSafeNormal2D();if(!D.IsNearlyZero())FollowDir=FMath::VInterpNormalRotationTo(FollowDir,D,Dt,90.f);}
-   const FVector Want=A.Pos-FollowDir*320.f+FVector(0,0,190.f),Look=A.Pos+FVector(0,0,105.f);
+   const FVector Back=FollowDir.RotateAngleAxis(CVarFollowYaw.GetValueOnGameThread(),FVector::UpVector);
+   const FVector Want=A.Pos-Back*CVarFollowDistance.GetValueOnGameThread()+FVector(0,0,CVarFollowHeight.GetValueOnGameThread()),Look=A.Pos+FVector(0,0,CVarFollowLook.GetValueOnGameThread());
    CamPos=FollowPlaced?FMath::VInterpTo(CamPos,Want,Dt,3.f):Want;FollowPlaced=true;CamRot=(Look-CamPos).Rotation();
    if(auto* C=Camera.Get()){C->SetActorLocationAndRotation(CamPos,CamRot);if(Pc->GetViewTarget()!=C)Pc->SetViewTarget(C);}
   }

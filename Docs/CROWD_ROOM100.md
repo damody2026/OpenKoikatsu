@@ -46,6 +46,35 @@
 - `--cases <json>`：同一個遊戲裡依序套用主控台指令、各自暖機後量測（A/B 不用重載 100 人）。`--trace`：第一段量測錄 Insights trace。
 - 量測時只開這一個 Unreal 遊戲，`t.MaxFPS 0`。分析：`UnrealInsights.exe -OpenTraceFile=… -AutoQuit -NoUI -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimingEvents <csv> -threads=RenderThread* -columns=ThreadName,TimerName,StartTime,EndTime,Depth"`，再用 `Tools/summarize_crowd_events.lua`（PowerShell 呼叫；從 bash 傳引號會被吃掉）。
 
+## Demo 錄影（`--follow`／`--record`，2026-10-28）
+
+```powershell
+.\CrowdRoom100.cmd --follow C000 --record 20            # 打包版（最新 stage），bank 方法
+.\CrowdRoom100.cmd --editor --follow C000 --record 20   # 改了 C++ 還沒打包時
+.\Tools\lua\lua.exe Tools\run_crowd_room100.lua --check-video <mp4> --record 20   # 只檢查一段現成的影片
+```
+
+- `--follow <卡名片段>`：那位女角一直走，鏡頭從背後跟拍，不顯示畫面上的數字。`--record <秒>`：量測一開始（全員畫出、暖機後）就錄，存成報告旁的 `demo.mp4`；量測長度自動設成「錄影秒數 + 6」，錄完遊戲自己結束。
+- **抓的是這個遊戲自己的視窗**：啟動器用遊戲的 PID 查它的主視窗 handle（`Get-Process -Id <pid>` 的 `MainWindowHandle`），交給 ffmpeg 的 `gfxcapture=hwnd=<handle>`（Windows.Graphics.Capture）。不用視窗標題：這台上所有 Unreal 遊戲的標題都一樣。Windows.Graphics.Capture 拿的是視窗自己的畫面，被別的視窗蓋住也照錄，只有最小化時沒有畫面。
+- 編碼：`hwdownload,format=bgra,fps=60` → `h264_nvenc`（`-preset p5 -cq 19`，yuv420p）。這台的 ffmpeg 沒有 libx264；`gdigrab` 也沒有 `hwnd=` 選項。
+- **錄完自動檢查畫面有在動**，不通過就報錯：
+  - 長度不短於要求 1 秒以上、每秒至少 50 格（ffprobe）。
+  - `freezedetect=n=-60dB:d=1`：不能有 1 秒以上的靜止段。
+  - `signalstats` 的 YDIF（相鄰兩格的平均亮度差，第一格不算）平均要大於 0.2。
+  - 第 1 秒、1/4、1/2、3/4、最後 1 秒各抽一格到 `demo-frames/`，數字寫在 `video-check.json`。
+  - 拿 10-27 那段靜止的 `Room100-20261027T233237/demo.mp4` 測：判定「0～20 秒靜止」、只有 786 格，報錯。
+- 錄影時只開這一個 Unreal 遊戲。
+- **實測（10-28）**：打包版 Int1027E、20 人、跟拍 C006、bank：`Room100-20261028T004834/demo.mp4`，20.0 秒、1200 格、平均 YDIF 0.90、沒有靜止段，抽格看得到她在走、鏡頭在跟。那時畫面右上角還有 `stat fps` 的數字（PlayerController 開的），已改成跟拍時關掉。
+- **鏡頭角度**（CVar，`--exec` 傳入）：`ok.Crowd.FollowYaw`（0 背後、180 正面）、`ok.Crowd.FollowDistance`（cm，預設 320）、`ok.Crowd.FollowHeight`（鏡頭離腳底，預設 190）、`ok.Crowd.FollowLook`（看向的高度，預設 105）。正面近拍臉：`--exec "ok.Crowd.FollowYaw 180,ok.Crowd.FollowDistance 140,ok.Crowd.FollowHeight 125,ok.Crowd.FollowLook 118"`。
+
+## xukmi「…Plus」材質與眼白排序（2026-10-28，救回 11 張卡）
+
+- CrowdAPNG 有 11 張卡（C049 C050 C051 C052 C053 C055 C062 C063 C064 C066 C068，Yvonne 是 C049／C050）以前被排除，原因都一樣：髮飾的陰影層用 `xukmi/MainItemStudioAlphaPlus`（`_alpha` 0.4～0.65、queue 2500），UE 的 `OKRuntimeSharedMaterialRecipe` 只認 `Shader Forge/main_item_studio_alpha` 這個字串。
+- xukmi 的 KKShadersPlus 是用「CamelCase＋Plus」的名字取代 Shader Forge 的 shader，blend、`_alpha` 與屬性都照原本那個。Rust 早就用 `shader_family` 這樣歸類（kind 4、translucent），UE 的父材質 `M_ForgeStudioAlpha` 也已在 StreetDisplay26。所以只補 UE 的判斷：`KKRuntimeSharedMaterial.cpp` 的 `ShaderFamily()` 用同一規則，kind 4 比對家族。沒有新 shader、沒有新材質資產，**不用 cook、不用重建 patch**；打包版要畫出這 11 張只需要新的 exe。
+- `_alpha` 原本會乘兩次：部件貼圖已經乘過 `_alpha`（Rust `scale_studio_item_alpha`／`studio_alpha_texture`），原作翻譯的 ForgeStudioAlpha 程式又乘一次。binding 改成對這個 recipe 綁 `_alpha=1`，照原作是「貼圖 alpha × `_alpha`」一次。Yvonne 的髮影貼圖是 25×25 黑色、alpha 96（0.6 已乘入），畫出來是瀏海下淡淡的暗影。
+- 救回後發現 C049／C051 的眼睛全白：卡片把虹膜的 queue 改成 2451（眼白 2901）。遊戲裡虹膜寫深度，後畫的眼白被擋住；runtime 的半透明不寫深度，眼白蓋掉虹膜。`OKCrowdRuntimeScene.cpp` 的 Commit 排序改成：眼球白（`cf_Ohitomi_L/R`）不晚於最早的虹膜減 1；一般卡（虹膜在眼白之後）不受影響，虹膜和 2500 髮影的原作順序保留。
+- 離線卡片檢查（`oklib/crowd_check.rs`）的 kind 4 同步改成比對家族；11 張都判定為有穿衣服、材質都支援。
+
 ## 結果（1920×1080，100 人，只有這一個遊戲）
 
 | 版本／設定 | FPS | 每幀 ms | P95 ms | game | render | GPU | draw |

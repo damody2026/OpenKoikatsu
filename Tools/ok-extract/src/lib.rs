@@ -521,8 +521,7 @@ fn check_preempted() -> Result<(), String> {
 type EntryMeshes = (Vec<ExtractedMesh>, Option<crate::pose::Skeleton>);
 /// One prefetched item: filled by a helper thread, waited for by the extraction that asks for the same memo key.
 type PrefetchSlot = std::sync::Arc<(std::sync::Mutex<Option<Option<EntryMeshes>>>, std::sync::Condvar)>;
-// The prefetched items of the extraction running on this thread (cards opening at once each keep their own).
-thread_local! { static ENTRY_PREFETCH: std::cell::RefCell<Option<std::collections::HashMap<String, PrefetchSlot>>> = const { std::cell::RefCell::new(None) }; }
+static ENTRY_PREFETCH: std::sync::Mutex<Option<std::collections::HashMap<String, PrefetchSlot>>> = std::sync::Mutex::new(None);
 thread_local! { static PREFETCH_WORKER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 
 fn entry_memo_key_for(game_root: &Path, zip: Option<&Path>, entry: &ListEntry, shake_enabled: bool) -> (String, String) {
@@ -545,7 +544,7 @@ fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, ListEntry, bo
     let switches = crate::profile::snapshot();
     let mut jobs = Vec::new();
     {
-        ENTRY_PREFETCH.with(|cell| { let mut store = cell.borrow_mut();
+        let mut store = ENTRY_PREFETCH.lock().unwrap_or_else(|e| e.into_inner());
         let store = store.get_or_insert_with(std::collections::HashMap::new);
         for (zip, entry, shake) in items {
             if entry.main_data.is_empty() || entry.main_data.eq_ignore_ascii_case("p_dummy") { continue; }
@@ -555,7 +554,6 @@ fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, ListEntry, bo
             store.insert(key.clone(), slot.clone());
             jobs.push((key, slot, zip, entry, shake));
         }
-        });
     }
     // One helper per source bundle, its items in order: parsed bundles are cached per thread, so items of one large
     // pack spread over the pool each decompressed and kept their own copy (one card reached 20+ GB that way).
@@ -566,22 +564,11 @@ fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, ListEntry, bo
     }
     // A few helpers take the groups in order (the order the passes ask for them): one per group at once parsed every
     // source bundle of the card together. Each helper drops what it parsed once a group's items are handed over.
-    // A group of more than two items goes to two helpers, half each: the bundle is parsed twice at most, and a card
-    // whose clothes all sit in one pack no longer waits for one helper to decode them one after another.
-    let groups: Vec<Vec<_>> = groups.into_iter().flat_map(|(_, mut g)| {
-        if g.len() <= 2 { return vec![g]; }
-        let rest = g.split_off(g.len().div_ceil(2));
-        vec![g, rest]
-    }).collect();
-    let queue = std::sync::Arc::new(std::sync::Mutex::new(groups.into_iter().collect::<std::collections::VecDeque<_>>()));
+    let queue = std::sync::Arc::new(std::sync::Mutex::new(groups.into_iter().map(|(_, g)| g).collect::<std::collections::VecDeque<_>>()));
     let helpers = queue.lock().unwrap_or_else(|e| e.into_inner()).len().min(PREFETCH_HELPERS);
-    if profile_enabled() { let sizes: Vec<usize> = queue.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|g| g.len()).collect(); eprintln!("ok-extract: PROFILE prefetch {} groups {sizes:?} items, {helpers} helpers", sizes.len()); }
     for _ in 0..helpers {
         let (game_root, switches, queue) = (game_root.to_path_buf(), switches.clone(), queue.clone());
-        let pack = crate::oklib::current_pack_scope();
         rayon::spawn(move || {
-            // The asking open's card pack (cards opening at once each read their own).
-            let _pack = crate::oklib::enter_pack_scope(pack);
             let _switches = crate::profile::scope(&switches);
             let _requested = crate::unity::request_clothes_states(requested);
             let _states = crate::unity::set_session_clothes_states(states);
@@ -590,14 +577,10 @@ fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, ListEntry, bo
                 for (key, slot, zip, entry, shake) in group {
                     PREFETCH_WORKER.with(|w| w.set(true));
                     // Only a result made under the same key may stand in for the asking thread's own extraction.
-                    let mine = entry_memo_key_for(&game_root, zip.as_deref(), &entry, shake).0;
-                    let same = mine == key;
-                    if !same && profile_enabled() { eprintln!("ok-extract: PROFILE prefetch key differs\n  asked {key}\n  here  {mine}"); }
-                    let t_item = std::time::Instant::now();
+                    let same = entry_memo_key_for(&game_root, zip.as_deref(), &entry, shake).0 == key;
                     let result = same.then(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
                         meshes_for_entry_shake(&game_root, zip.as_deref(), &entry, shake))).ok()).flatten();
                     PREFETCH_WORKER.with(|w| w.set(false));
-                    if profile_enabled() { eprintln!("ok-extract: PROFILE prefetch item {} {} {:.1}ms", entry.main_ab, entry.main_data, t_item.elapsed().as_secs_f64() * 1e3); }
                     *slot.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
                     slot.1.notify_all();
                 }
@@ -610,7 +593,7 @@ fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, ListEntry, bo
 
 /// Prefetch helpers working at once on one card's items: as fast as one helper per group on the 10-card check
 /// (every source bundle of a card parsed at once), with about a quarter less memory per card.
-const PREFETCH_HELPERS: usize = 8;
+const PREFETCH_HELPERS: usize = 4;
 
 struct PrefetchGuard;
 impl Drop for PrefetchGuard { fn drop(&mut self) { clear_entry_prefetch(); } }
@@ -618,7 +601,7 @@ impl Drop for PrefetchGuard { fn drop(&mut self) { clear_entry_prefetch(); } }
 /// Drops prefetched items nobody asked for (end of an extraction), after their helpers finish: a helper must not
 /// outlive the extraction's card pack mount (the next card's pack would answer its reads).
 fn clear_entry_prefetch() {
-    let slots = ENTRY_PREFETCH.with(|cell| cell.borrow_mut().take());
+    let slots = ENTRY_PREFETCH.lock().unwrap_or_else(|e| e.into_inner()).take();
     for slot in slots.into_iter().flat_map(|s| s.into_values()) {
         let mut done = slot.0.lock().unwrap_or_else(|e| e.into_inner());
         while done.is_none() { done = slot.1.wait(done).unwrap_or_else(|e| e.into_inner()); }
@@ -654,10 +637,10 @@ fn meshes_for_entry_shake_memo(
         return hit;
     }
     if !PREFETCH_WORKER.with(|w| w.get()) {
-        let slot = ENTRY_PREFETCH.with(|cell| cell.borrow_mut().as_mut().and_then(|s| s.remove(&memo_key)));
+        let slot = ENTRY_PREFETCH.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|s| s.remove(&memo_key));
         let _prefetch_spot = crate::profile::spot(if slot.is_some() { "prefetch hit (wait)" } else { "prefetch miss" });
         if slot.is_none() && profile_enabled() && !entry.main_data.is_empty() {
-            let keys: Vec<String> = ENTRY_PREFETCH.with(|cell| cell.borrow().as_ref().map(|s| s.keys().cloned().collect()).unwrap_or_default());
+            let keys: Vec<String> = ENTRY_PREFETCH.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.keys().cloned().collect()).unwrap_or_default();
             let near = keys.iter().find(|k| k.contains(&entry.main_data)).cloned().unwrap_or_default();
             eprintln!("ok-extract: prefetch miss {} {} zip={:?} shake={shake_enabled}\n  key ={memo_key}\n  near={near}", entry.main_ab, entry.main_data, zip);
         }
@@ -5089,10 +5072,10 @@ fn me_manifest_sections(game_root: &Path) -> std::sync::Arc<Vec<(PathBuf, String
     };
     let rows: Vec<Option<(PathBuf, String)>> = {
         use rayon::prelude::*;
-        let fresh: Vec<Option<String>> = crate::oklib::pack_parallel(|| zips.par_iter().zip(known.par_iter()).map(|(zip, known)| match known {
+        let fresh: Vec<Option<String>> = zips.par_iter().zip(known.par_iter()).map(|(zip, known)| match known {
             Some(answer) => answer.clone(),
             None => section(zip),
-        }).collect());
+        }).collect();
         let mut map = RECORDED.lock().unwrap_or_else(|e| e.into_inner());
         let map = map.get_or_insert_with(Default::default);
         for ((zip, r), answer) in zips.iter().zip(&recorded).zip(&fresh) { if *r { map.entry(zip.clone()).or_insert_with(|| answer.clone()); } }
@@ -5912,13 +5895,11 @@ fn finalize_clothes_texture(meshes: &mut [ExtractedMesh]) {
     if std::env::var("OK_CLOTH_NOFLIP").is_ok() {
         return;
     }
-    // Each mesh's own texture (decode, flip, encode): all at once.
-    use rayon::prelude::*;
-    crate::session::native_parallel_work(|| meshes.par_iter_mut().for_each(|m| {
+    for m in meshes.iter_mut() {
         if let Some(png) = m.texture_png.take() {
             m.texture_png = Some(flip_runtime_blit_v(png));
         }
-    }));
+    }
 }
 
 /// Load the three colour channels' pattern textures (cat 430) for a clothes part.
@@ -10467,9 +10448,7 @@ pub(crate) fn extract_session_from_info(
                 .get("__zip")
                 .map(PathBuf::from)
                 .or_else(|| zip_path.clone());
-            let t_part = Instant::now();
             let (mut meshes, part_skel) = meshes_for_entry(game_root, zip.as_deref(), &entry);
-            profile_tick("clothes meshes_for_entry", t_part);
             if kind == 0 { top_prefab_world = part_skel.as_ref().map_or_else(crate::pose::ident, |s| s.root_world()); }
             if meshes.is_empty() {
                 continue;
@@ -10488,7 +10467,6 @@ pub(crate) fn extract_session_from_info(
                 .get(kind)
                 .copied()
                 .unwrap_or([[1.0, 1.0, 1.0, 1.0]; 4]);
-            let t_part = Instant::now();
             let pats = build_clothes_patterns(
                 game_root,
                 &vanilla,
@@ -10501,7 +10479,6 @@ pub(crate) fn extract_session_from_info(
                 &body_texs,
                 outfit,
             );
-            profile_tick("clothes patterns", t_part);
             // ChaControl.CreateClothesTexture + ChangeCustomClothes: up to 3
             // create RTs (MainTex / MainTex02 / MainTex03) assigned to
             // rendNormal01 / rendNormal02 / rendNormal03.
@@ -10554,7 +10531,6 @@ pub(crate) fn extract_session_from_info(
                 }
             }
             let role = role_for_category(cat, "");
-            let t_part = Instant::now();
             // ChaControl loads top/bottom with copyDynamicBone=true: the prefab
             // components retarget their roots onto aaWeightsBody before skinning.
             {
@@ -10568,8 +10544,6 @@ pub(crate) fn extract_session_from_info(
                         game_root, clothes_load_settings(&format!("outfit{outfit}.clothes{kind}")).1, None, kind<=1));
                 }
             }
-            profile_tick("clothes dynamics", t_part);
-            let t_part = Instant::now();
             push_meshes(
                 &mut parts,
                 &mut session_parts,
@@ -10605,7 +10579,6 @@ pub(crate) fn extract_session_from_info(
                 } else { None },
                 None, None, Some(&mut push_batch),
             )?;
-            profile_tick("clothes push", t_part);
         }
         profile_tick("clothes", t_clo);
         // Sub-clothes: ChaFileClothes.subPartsId (ChaFileDefine.ClothesSubKind

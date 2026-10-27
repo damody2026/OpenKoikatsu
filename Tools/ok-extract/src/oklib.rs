@@ -347,11 +347,7 @@ impl Store {
         read_loc(&file, &loc)
     }
 
-    /// The card pack: the one of the open running on this thread (PackScope), else the process-wide one.
-    pub fn pack(&self) -> Option<Arc<Store>> {
-        if self.mode == Mode::Replay { if let Some(scope) = pack_scope() { return Some(scope.store.clone()); } }
-        self.pack.read().unwrap().clone()
-    }
+    pub fn pack(&self) -> Option<Arc<Store>> { self.pack.read().unwrap().clone() }
     /// The pack being recorded (an original card becoming an OK card).
     fn recording_pack(&self) -> Option<Arc<Store>> { self.pack().filter(|p| p.mode == Mode::Record) }
 
@@ -687,29 +683,7 @@ fn keep_identity(input: &[u8], made: Vec<u8>) -> Result<Vec<u8>, String> {
 /// `okLc` payload: zstd of this. Records are kept uncompressed inside (models compress per record with
 /// LZ4; one zstd stream over all of them is several times smaller) and rebuilt into model files on mount.
 #[derive(serde::Serialize, serde::Deserialize)]
-struct CardPack { version: u32, index: crate::gamefs::Index, records: Vec<PackRecord> }
-/// (model, query, args, value). The byte fields go through serde as byte strings: the same bincode bytes as a Vec<u8>
-/// (length, then the bytes), read in one copy instead of byte by byte (a 170 MB pack: ~1.05 s -> ~0.1 s).
-#[derive(serde::Serialize, serde::Deserialize)]
-struct PackRecord(Id, String, #[serde(with = "pack_bytes")] Vec<u8>, #[serde(with = "pack_bytes")] Vec<u8>);
-mod pack_bytes {
-    pub fn serialize<S: serde::Serializer>(v: &[u8], s: S) -> Result<S::Ok, S::Error> { s.serialize_bytes(v) }
-    pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-        struct V;
-        impl<'de> serde::de::Visitor<'de> for V {
-            type Value = Vec<u8>;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { f.write_str("bytes") }
-            fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<Vec<u8>, E> { Ok(v) }
-            fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> { Ok(v.to_vec()) }
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
-                let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-                while let Some(b) = seq.next_element()? { out.push(b); }
-                Ok(out)
-            }
-        }
-        d.deserialize_byte_buf(V)
-    }
-}
+struct CardPack { version: u32, index: crate::gamefs::Index, records: Vec<(Id, String, Vec<u8>, Vec<u8>)> }
 const CARD_PACK_VERSION: u32 = 2;
 
 /// Start recording what an original card needs beyond the library (call with the library active and the
@@ -760,7 +734,7 @@ pub fn end_card_pack() -> Result<Option<Vec<u8>>, String> {
         models.iter().map(|m| m.1).sum::<usize>(), records.len(), index.files.len(), index.dirs.len(), index.zips.len(),
         index.zips.values().map(|z| z.entries.len()).sum::<usize>());
     if records.is_empty() && index.files.is_empty() && index.dirs.is_empty() && index.zips.is_empty() { return Ok(None); }
-    let raw = bincode::serialize(&CardPack { version: CARD_PACK_VERSION, index, records: records.into_iter().map(|(a, b, c, d)| PackRecord(a, b, c, d)).collect() }).map_err(|e| e.to_string())?;
+    let raw = bincode::serialize(&CardPack { version: CARD_PACK_VERSION, index, records }).map_err(|e| e.to_string())?;
     let packed = zstd::stream::encode_all(&raw[..], 19).map_err(|e| e.to_string())?;
     eprintln!("ok-extract: card pack {summary} payload={}", packed.len());
     Ok(Some(packed))
@@ -784,34 +758,26 @@ pub fn png_chunk<'a>(bytes: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
 pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     let bytes = std::fs::read(card).map_err(|e| e.to_string())?;
     let Some(chunk) = png_chunk(&bytes, PACK_CHUNK) else { return Ok(None) };
-    // Each open has its own pack (PackScope): many pack-carrying cards open at once. Only extracting a pack's models
-    // to its cache folder is one at a time.
-    active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
-    let (profile, t) = (std::env::var_os("OK_PROFILE").is_some(), std::time::Instant::now());
+    // The overlay is process-wide: one pack-carrying card opens at a time.
+    let lock = PACK_OPEN.lock().unwrap_or_else(|e| e.into_inner());
+    let store = active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
     let raw = zstd::stream::decode_all(chunk).map_err(|e| format!("card pack: {e}"))?;
-    if profile { eprintln!("ok-extract: PROFILE pack zstd {} -> {} bytes {:>8.1}ms", chunk.len(), raw.len(), t.elapsed().as_secs_f64() * 1e3); }
     let pack: CardPack = bincode::deserialize(&raw).map_err(|e| format!("card pack: {e}"))?;
     if pack.version != CARD_PACK_VERSION { return Err(format!("card pack version {} (expected {CARD_PACK_VERSION})", pack.version)); }
-    if profile { eprintln!("ok-extract: PROFILE pack decoded {:>8.1}ms ({} records)", t.elapsed().as_secs_f64() * 1e3, pack.records.len()); }
     let base = session_cache_dir().map(|d| d.join("packs")).unwrap_or_else(|| std::env::temp_dir().join("okcard-packs"));
     let dir = base.join(hex(&hash16(chunk)));
-    {
-        let _extracting = PACK_OPEN.lock().unwrap_or_else(|e| e.into_inner());
-        if !dir.join("oklib.json").is_file() {
-            let tmp = dir.with_extension("tmp");
-            let _ = std::fs::remove_dir_all(&tmp);
-            {
-                let writer = Store::open(&tmp, Mode::Record)?;
-                for PackRecord(id, query, args, value) in &pack.records { writer.put_raw(id, query, args, value); }
-            }
-            std::fs::write(tmp.join("oklib.json"), br#"{"format":"oklib-card-pack","version":2}"#).map_err(|e| e.to_string())?;
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::rename(&tmp, &dir).map_err(|e| e.to_string())?;
+    if !dir.join("oklib.json").is_file() {
+        let tmp = dir.with_extension("tmp");
+        let _ = std::fs::remove_dir_all(&tmp);
+        {
+            let writer = Store::open(&tmp, Mode::Record)?;
+            for (id, query, args, value) in &pack.records { writer.put_raw(id, query, args, value); }
         }
+        std::fs::write(tmp.join("oklib.json"), br#"{"format":"oklib-card-pack","version":2}"#).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::rename(&tmp, &dir).map_err(|e| e.to_string())?;
     }
-    if profile { eprintln!("ok-extract: PROFILE pack extracted {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
-    let pack_store = Arc::new(Store::open(&dir, Mode::Replay)?);
-    if profile { eprintln!("ok-extract: PROFILE pack store open {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
+    *store.pack.write().unwrap() = Some(Arc::new(Store::open(&dir, Mode::Replay)?));
     // What the pack serves under mods/ (zipmods, their entries, listings): the mods-tree memos only depend on this.
     let mods_view = {
         let in_mods = |k: &String| k.to_ascii_lowercase().replace('\\', "/").contains("mods/");
@@ -821,102 +787,32 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
         if files.is_empty() && dirs.is_empty() && pack.index.zips.is_empty() { String::new() }
         else { bincode::serialize(&(files, dirs, &pack.index.zips)).map(|b| hex(&hash16(&b))).unwrap_or_else(|_| hex(&hash16(chunk))) }
     };
+    crate::gamefs::set_overlay(Some(pack.index), false);
+    *MOUNTED_PACK.lock().unwrap_or_else(|e| e.into_inner()) = hex(&hash16(chunk));
+    *MOUNTED_PACK_MODS.lock().unwrap_or_else(|e| e.into_inner()) = mods_view;
     LAST_PACK_MODELS.store(pack.records.iter().map(|r| r.0).collect::<std::collections::BTreeSet<_>>().len() as u64, Ordering::Relaxed);
-    let scope = Arc::new(PackScope { overlay: crate::gamefs::replay_overlay_of(pack.index), store: pack_store, identity: hex(&hash16(chunk)),
-        mods_identity: mods_view, fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new() });
-    ACTIVE_SCOPES.lock().unwrap_or_else(|e| e.into_inner()).push(Arc::downgrade(&scope));
-    let previous = PACK_SCOPE.with(|c| c.replace(Some(scope.clone())));
-    Ok(Some(PackMount { scope, previous }))
-}
-
-/// A replayed OK card's pack (okLc) for one open: its overlay index, models and identities. Set on the thread that
-/// opens the card and on the threads of its own pool (pack_parallel), so cards opening at once each read their own
-/// pack (it used to be process-wide: one pack-carrying card opened at a time, a hundred girls one after another).
-pub struct PackScope {
-    pub overlay: Arc<crate::gamefs::Overlay>,
-    store: Arc<Store>,
-    identity: String,
-    mods_identity: String,
-    /// The open read installed zipmods (gamefs::fallback_used, per open).
-    pub fallback_used: AtomicBool,
-    pool: std::sync::OnceLock<Option<rayon::ThreadPool>>,
-}
-thread_local! { static PACK_SCOPE: std::cell::RefCell<Option<Arc<PackScope>>> = const { std::cell::RefCell::new(None) }; }
-// A thread of an open's pool: weak, so the pool (held by the scope) ends with the open.
-thread_local! { static POOL_SCOPE: std::cell::RefCell<std::sync::Weak<PackScope>> = const { std::cell::RefCell::new(std::sync::Weak::new()) }; }
-/// This thread works for an open with its own pack (not the fallback to the only one open).
-pub fn pack_scope_here() -> bool { own_scope().is_some() }
-/// The open's pack on this thread, to hand to a job it starts elsewhere (enter_pack_scope there).
-pub fn current_pack_scope() -> Option<Arc<PackScope>> { own_scope() }
-/// Works for that open's pack until the guard drops (a spawned job of the open).
-pub fn enter_pack_scope(scope: Option<Arc<PackScope>>) -> PackScopeGuard {
-    let previous = scope.map(|s| PACK_SCOPE.with(|c| c.replace(Some(s))));
-    PackScopeGuard(previous)
-}
-pub struct PackScopeGuard(Option<Option<Arc<PackScope>>>);
-impl Drop for PackScopeGuard {
-    fn drop(&mut self) { if let Some(previous) = self.0.take() { PACK_SCOPE.with(|c| *c.borrow_mut() = previous); } }
-}
-fn own_scope() -> Option<Arc<PackScope>> { PACK_SCOPE.with(|c| c.borrow().clone()).or_else(|| POOL_SCOPE.with(|c| c.borrow().upgrade())) }
-/// Scopes of the opens running now (the fallback for a thread outside every open's pool).
-static ACTIVE_SCOPES: Mutex<Vec<std::sync::Weak<PackScope>>> = Mutex::new(Vec::new());
-/// The pack of the open this thread works for: its own, else the only one open (a worker outside every open's pool
-/// while one card opens). Several open and none on this thread: none, and said once.
-pub fn pack_scope() -> Option<Arc<PackScope>> {
-    if let Some(s) = own_scope() { return Some(s); }
-    let mut active = ACTIVE_SCOPES.lock().unwrap_or_else(|e| e.into_inner());
-    active.retain(|w| w.strong_count() > 0);
-    match active.len() {
-        0 => None,
-        1 => active[0].upgrade(),
-        _ => {
-            static SAID: AtomicBool = AtomicBool::new(false);
-            if !SAID.swap(true, Ordering::Relaxed) { eprintln!("ok-extract: a card pack was read outside its open's threads while several cards open (pack_parallel missing) at{}", std::backtrace::Backtrace::force_capture()); }
-            None
-        }
-    }
-}
-/// Runs parallel work of the current open (its rayon iterators) in its own pool, whose threads carry its pack; no
-/// open on this thread: as it is.
-pub fn pack_parallel<R: Send>(work: impl FnOnce() -> R + Send) -> R {
-    let Some(scope) = own_scope() else { return work() };
-    let pool = scope.pool.get_or_init(|| {
-        let weak = Arc::downgrade(&scope);
-        let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(2, 8);
-        rayon::ThreadPoolBuilder::new().num_threads(workers).thread_name(|i| format!("OKCardPack{i}"))
-            .start_handler(move |_| POOL_SCOPE.with(|c| *c.borrow_mut() = weak.clone())).build().ok()
-    });
-    match pool {
-        // Already one of its pool's threads: stay.
-        Some(pool) if pool.current_thread_index().is_some() => work(),
-        Some(pool) => pool.install(work),
-        None => work(),
-    }
+    Ok(Some(PackMount { _lock: lock }))
 }
 
 static PACK_OPEN: Mutex<()> = Mutex::new(());
 static MOUNTED_PACK: Mutex<String> = Mutex::new(String::new());
 /// Identity of the card pack mounted over the library right now ("" when none): per-process memos of what the
 /// library serves must not mix two cards' own zipmods.
-pub fn mounted_pack_identity() -> String {
-    if let Some(scope) = pack_scope() { return scope.identity.clone(); }
-    MOUNTED_PACK.lock().unwrap_or_else(|e| e.into_inner()).clone()
-}
+pub fn mounted_pack_identity() -> String { MOUNTED_PACK.lock().unwrap_or_else(|e| e.into_inner()).clone() }
 static MOUNTED_PACK_MODS: Mutex<String> = Mutex::new(String::new());
 /// Identity of what the mounted card pack serves under mods/ ("" when none). Memos of the mods tree (manifest scans,
 /// GUID lookups, uncensor sources) key on this instead of the whole pack, so opening another card that adds no
 /// zipmods of its own reuses them instead of rescanning ~7000 zipmods.
-pub fn mounted_pack_mods_identity() -> String {
-    if let Some(scope) = pack_scope() { return scope.mods_identity.clone(); }
-    MOUNTED_PACK_MODS.lock().unwrap_or_else(|e| e.into_inner()).clone()
-}
+pub fn mounted_pack_mods_identity() -> String { MOUNTED_PACK_MODS.lock().unwrap_or_else(|e| e.into_inner()).clone() }
 /// Models in the last mounted OK card pack (diagnostics).
 pub static LAST_PACK_MODELS: AtomicU64 = AtomicU64::new(0);
-pub struct PackMount { scope: Arc<PackScope>, previous: Option<Arc<PackScope>> }
+pub struct PackMount { _lock: std::sync::MutexGuard<'static, ()> }
 impl Drop for PackMount {
     fn drop(&mut self) {
-        PACK_SCOPE.with(|c| *c.borrow_mut() = self.previous.take());
-        ACTIVE_SCOPES.lock().unwrap_or_else(|e| e.into_inner()).retain(|w| w.upgrade().is_some_and(|s| !Arc::ptr_eq(&s, &self.scope)));
+        crate::gamefs::set_overlay(None, false);
+        MOUNTED_PACK.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        MOUNTED_PACK_MODS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        if let Some(store) = active() { store.pack.write().unwrap().take(); }
     }
 }
 
@@ -1158,30 +1054,13 @@ fn session_cache_budget() -> u64 {
 }
 /// Separates the inputs an entry records: the zipmod fallback identity, then the UncensorSelector configuration.
 const ENTRY_INPUT_SEPARATOR: char = '\u{1f}';
-/// What an entry records besides the card and the library (session_cache_store_in), read now: on the opening thread,
-/// whose card pack may hold the UncensorSelector configuration.
-thread_local! { static DEFER_STORE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
-/// Opens on this thread store their open-cache entry on another thread (the game: the process outlives it, and the
-/// girl is shown without waiting for the entry to be written). Command-line tools store it before they return.
-pub struct DeferCacheStore(bool);
-impl DeferCacheStore { pub fn begin() -> Self { Self(DEFER_STORE.with(|d| d.replace(true))) } }
-impl Drop for DeferCacheStore { fn drop(&mut self) { DEFER_STORE.with(|d| d.set(self.0)); } }
-pub fn defer_cache_store() -> bool { DEFER_STORE.with(|d| d.get()) }
-pub fn session_cache_inputs(fallback: &str) -> String { format!("{fallback}{ENTRY_INPUT_SEPARATOR}{}", crate::mods::uncensor_config_identity()) }
-/// session_cache_store with the inputs read on the opening thread (a store finished on another thread).
-pub fn session_cache_store_prepared(key: &str, preview: &[u8], inputs: &str) {
-    let Some(dir) = session_cache_dir() else { return; };
-    session_cache_write(&dir, key, preview, inputs);
-}
-fn session_cache_store_in(dir: &Path, key: &str, preview: &[u8], fallback: &str) { session_cache_write(dir, key, preview, &session_cache_inputs(fallback)); }
-fn session_cache_write(dir: &Path, key: &str, preview: &[u8], inputs: &str) {
+fn session_cache_store_in(dir: &Path, key: &str, preview: &[u8], fallback: &str) {
     let dir = dir.to_owned();
     if std::fs::create_dir_all(&dir).is_err() { return; }
-    // (stores of one process may run at once: deferred ones on their own threads)
-    static WRITES: AtomicU64 = AtomicU64::new(0);
-    let tmp = dir.join(format!("{key}.{}.{}.tmp", std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
+    let tmp = dir.join(format!("{key}.{}.tmp", std::process::id()));
     // The configuration decides the body when the card names none (a packaged game that did not find it stored the
     // censored base body here, and every reader, C and E alike, drew that). The key is only the card and the library.
+    let inputs = format!("{fallback}{ENTRY_INPUT_SEPARATOR}{}", crate::mods::uncensor_config_identity());
     let mut data = Vec::with_capacity(preview.len() / 2);
     data.extend_from_slice(ENTRY_MAGIC);
     data.extend_from_slice(&(inputs.len() as u32).to_le_bytes());
@@ -2529,114 +2408,5 @@ mod card_identity_tests {
         assert!(png_chunk(&strip_ok_chunks(&kept).unwrap(), IDENTITY_CHUNK).is_none());
         let original = png(&[chunk(b"IHDR", &[0; 13])], b"card data");
         assert_eq!(keep_identity(&original, old.clone()).unwrap(), old, "a first conversion has no identity to keep");
-    }
-}
-
-#[cfg(test)]
-mod concurrent_open_tests {
-    /// Pack-carrying OK cards opened at once (each with its own PackScope) build exactly what they build one at a time,
-    /// and faster. OK_PHYS_CARDS: a folder of OK cards (default CrowdAPNG), OK_OPEN_CARDS cards (default 16).
-    ///   cargo test --release --lib concurrent_card_opens -- --ignored --nocapture --test-threads=1
-    #[test]
-    #[ignore]
-    fn concurrent_card_opens() {
-        std::env::set_var("OK_NOCACHE", "1");
-        if std::env::var("OK_BUILTIN_RESOURCES").is_err() { std::env::set_var("OK_BUILTIN_RESOURCES", "E:/OpenKoikatsu/Content/IndependentResources/v1"); }
-        if std::env::var("OK_BASE_LIBRARY").is_err() { std::env::set_var("OK_BASE_LIBRARY", "E:/OpenKoikatsu/Content/IndependentResources/base_v1"); }
-        let dir = std::env::var("OK_PHYS_CARDS").unwrap_or_else(|_| "E:/OpenKoikatsu/Content/CharacterCards/CrowdAPNG".into());
-        let count: usize = std::env::var("OK_OPEN_CARDS").ok().and_then(|v| v.parse().ok()).unwrap_or(16);
-        let mut cards: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "png") && !p.file_name().unwrap().to_string_lossy().starts_with('.')).collect();
-        cards.sort();
-        cards.truncate(count);
-        let open = |card: &std::path::Path| -> Vec<u8> {
-            let (game, path) = (std::ffi::CString::new("").unwrap(), std::ffi::CString::new(card.to_string_lossy().as_bytes()).unwrap());
-            let mut out: *mut crate::session::OkSession = std::ptr::null_mut();
-            let mut err = vec![0i8; 2048];
-            let status = unsafe { crate::ffi::session_open(game.as_ptr(), path.as_ptr(), 0, &mut out, err.as_mut_ptr(), err.len() as i32) };
-            assert!(status == 0 && !out.is_null(), "{}: open failed", card.display());
-            let s = unsafe { Box::from_raw(out) };
-            s.to_preview_bytes().expect("preview bytes")
-        };
-        // Warm the process (catalogs, mods tree) once, then one at a time.
-        let _ = open(&cards[0]);
-        let t = std::time::Instant::now();
-        let serial: Vec<Vec<u8>> = cards.iter().map(|c| open(c)).collect();
-        let serial_s = t.elapsed().as_secs_f64();
-        let t = std::time::Instant::now();
-        let parallel: Vec<Vec<u8>> = std::thread::scope(|scope| {
-            let handles: Vec<_> = cards.iter().map(|c| scope.spawn(move || open(c))).collect();
-            handles.into_iter().map(|h| h.join().unwrap()).collect()
-        });
-        let parallel_s = t.elapsed().as_secs_f64();
-        let mut differ = Vec::new();
-        for ((c, a), b) in cards.iter().zip(&serial).zip(&parallel) { if a != b { differ.push(c.file_name().unwrap().to_string_lossy().to_string()); } }
-        println!("{} cards: one at a time {serial_s:.1} s ({:.2} s each), all at once {parallel_s:.1} s; differing: {differ:?}", cards.len(), serial_s / cards.len() as f64);
-        assert!(differ.is_empty(), "opens at once differ from one at a time: {differ:?}");
-    }
-}
-
-#[cfg(test)]
-mod pack_record_tests {
-    /// A pack record's bincode bytes are those of the plain tuple it replaced (cards written before read the same).
-    #[test]
-    fn pack_records_keep_the_tuple_encoding() {
-        let id: super::Id = [7u8; 16];
-        let old = vec![(id, "query".to_string(), vec![1u8, 2, 3], (0..1000u32).map(|v| v as u8).collect::<Vec<u8>>())];
-        let new: Vec<super::PackRecord> = old.iter().map(|(a, b, c, d)| super::PackRecord(*a, b.clone(), c.clone(), d.clone())).collect();
-        let (old_bytes, new_bytes) = (bincode::serialize(&old).unwrap(), bincode::serialize(&new).unwrap());
-        assert_eq!(old_bytes, new_bytes);
-        let back: Vec<super::PackRecord> = bincode::deserialize(&old_bytes).unwrap();
-        assert_eq!((back[0].2.clone(), back[0].3.clone()), (old[0].2.clone(), old[0].3.clone()));
-    }
-}
-
-#[cfg(test)]
-mod open_timing_tests {
-    /// How long one OK card opens without the open cache, one after another in one process (the first also warms the
-    /// process: catalogs, the mods tree). OK_OPEN_NAMES: CrowdAPNG card names (default C009,C001,C049,C020).
-    ///   OK_PROFILE=1 cargo test --release --lib crowd_card_open_seconds -- --ignored --nocapture --test-threads=1
-    #[test]
-    #[ignore]
-    fn crowd_card_open_seconds() {
-        std::env::set_var("OK_NOCACHE", "1");
-        if std::env::var("OK_BUILTIN_RESOURCES").is_err() { std::env::set_var("OK_BUILTIN_RESOURCES", "E:/OpenKoikatsu/Content/IndependentResources/v1"); }
-        if std::env::var("OK_BASE_LIBRARY").is_err() { std::env::set_var("OK_BASE_LIBRARY", "E:/OpenKoikatsu/Content/IndependentResources/base_v1"); }
-        let names = std::env::var("OK_OPEN_NAMES").unwrap_or_else(|_| "C009,C001,C049,C020".into());
-        for name in names.split(',') {
-            let card = format!("E:/OpenKoikatsu/Content/CharacterCards/CrowdAPNG/{name}.png");
-            let start = std::time::Instant::now();
-            let (game, path) = (std::ffi::CString::new("").unwrap(), std::ffi::CString::new(card).unwrap());
-            let mut out: *mut crate::session::OkSession = std::ptr::null_mut();
-            let mut err = vec![0i8; 2048];
-            let status = unsafe { crate::ffi::session_open(game.as_ptr(), path.as_ptr(), 0, &mut out, err.as_mut_ptr(), err.len() as i32) };
-            eprintln!("OPEN {name}: status {status} {:.2} s", start.elapsed().as_secs_f64());
-            if !out.is_null() { drop(unsafe { Box::from_raw(out) }); }
-        }
-    }
-}
-
-#[cfg(test)]
-mod open_dump_tests {
-    /// Each named CrowdAPNG card opened without the open cache, its session's bytes (to_preview_bytes) written to
-    /// OK_DUMP_DIR/<name>.bin: two builds' opens compared byte for byte.
-    #[test]
-    #[ignore]
-    fn dump_card_opens() {
-        std::env::set_var("OK_NOCACHE", "1");
-        if std::env::var("OK_BUILTIN_RESOURCES").is_err() { std::env::set_var("OK_BUILTIN_RESOURCES", "E:/OpenKoikatsu/Content/IndependentResources/v1"); }
-        if std::env::var("OK_BASE_LIBRARY").is_err() { std::env::set_var("OK_BASE_LIBRARY", "E:/OpenKoikatsu/Content/IndependentResources/base_v1"); }
-        let dir = std::path::PathBuf::from(std::env::var("OK_DUMP_DIR").expect("OK_DUMP_DIR"));
-        std::fs::create_dir_all(&dir).unwrap();
-        for name in std::env::var("OK_OPEN_NAMES").unwrap_or_else(|_| "C009,C001,C049,C020".into()).split(',') {
-            let card = format!("E:/OpenKoikatsu/Content/CharacterCards/CrowdAPNG/{name}.png");
-            let (game, path) = (std::ffi::CString::new("").unwrap(), std::ffi::CString::new(card).unwrap());
-            let mut out: *mut crate::session::OkSession = std::ptr::null_mut();
-            let mut err = vec![0i8; 2048];
-            let status = unsafe { crate::ffi::session_open(game.as_ptr(), path.as_ptr(), 0, &mut out, err.as_mut_ptr(), err.len() as i32) };
-            assert_eq!(status, 0, "{name}");
-            let s = unsafe { Box::from_raw(out) };
-            std::fs::write(dir.join(format!("{name}.bin")), s.to_preview_bytes().unwrap()).unwrap();
-        }
     }
 }

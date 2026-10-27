@@ -206,6 +206,15 @@ FString OKRuntimeSharedMaterialProgram(EKKRuntimeMaterialRecipe Recipe){
  return Recipe==EKKRuntimeMaterialRecipe::ForgeNose?GForgeNoseForwardProgram:Recipe==EKKRuntimeMaterialRecipe::KoikanoEye?GKoikanoEyeForwardProgram:Recipe==EKKRuntimeMaterialRecipe::KoikanoEyeWhite?GKoikanoEyeWhiteForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeEye?GForgeEyeForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeEyeWhite?GForgeEyeWhiteForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeStudioAlpha?GForgeStudioAlphaForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeHair?GForgeHairForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeHairFront?GForgeHairFrontForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeItem?GForgeForwardProgram:Recipe==EKKRuntimeMaterialRecipe::ForgeOpaque?GForgeOpaqueForwardProgram:
  (Recipe==EKKRuntimeMaterialRecipe::ForgeAlphaMasked||Recipe==EKKRuntimeMaterialRecipe::ForgeAlphaTranslucent)?GForgeAlphaForwardProgram:FString();
 }
+// The Shader Forge shader a material's shader stands for (Rust shader_family): xukmi's KKShadersPlus replace them under
+// CamelCase names with a "Plus" suffix ("xukmi/MainItemStudioAlphaPlus" for "Shader Forge/main_item_studio_alpha"),
+// with the same blend state, _alpha and properties. The extractor already draws them as that family (shader kind 4).
+static FString ShaderFamily(const FString& Shader){
+ if(!Shader.StartsWith(TEXT("xukmi/"),ESearchCase::IgnoreCase))return Shader;
+ FString Name=Shader.Mid(6);if(Name.EndsWith(TEXT("Plus"),ESearchCase::IgnoreCase))Name.LeftChopInline(4);
+ FString Snake=TEXT("Shader Forge/");for(int32 I=0;I<Name.Len();++I){if(I>0&&FChar::IsUpper(Name[I]))Snake+=TEXT('_');Snake+=FChar::ToLower(Name[I]);}
+ return Snake;
+}
 EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialRecipe(const FKKRuntimeMaterialPart& P){
  TSharedPtr<FJsonObject> AdditionalRoot;const TSharedPtr<FJsonObject>* AdditionalMat=nullptr;FString AdditionalShader;
  if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(P.SourceMetadataJson),AdditionalRoot)&&AdditionalRoot&&AdditionalRoot->TryGetObjectField(TEXT("material"),AdditionalMat)&&(*AdditionalMat)->TryGetStringField(TEXT("shader"),AdditionalShader)){
@@ -251,7 +260,7 @@ EKKRuntimeMaterialRecipe OKRuntimeSharedMaterialRecipe(const FKKRuntimeMaterialP
   if(P.Blend.Equals(TEXT("translucent"),ESearchCase::IgnoreCase)&&P.Unlit&&P.EyeDraw==0&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(P.SourceMetadataJson),Root)&&Root&&Root->TryGetObjectField(TEXT("material"),Mat)&&(*Mat)->TryGetStringField(TEXT("shader"),Shader)&&Shader.Equals(TEXT("Shader Forge/toon_eyew_lod0"),ESearchCase::IgnoreCase))return EKKRuntimeMaterialRecipe::ForgeEyeWhite;return EKKRuntimeMaterialRecipe::None;
  }
  if(P.ShaderKind==4){TSharedPtr<FJsonObject> Root;const TSharedPtr<FJsonObject>* Mat=nullptr;FString Shader;
-  if(P.Blend.Equals(TEXT("translucent"),ESearchCase::IgnoreCase)&&P.Unlit&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(P.SourceMetadataJson),Root)&&Root&&Root->TryGetObjectField(TEXT("material"),Mat)&&(*Mat)->TryGetStringField(TEXT("shader"),Shader)&&Shader.Equals(TEXT("Shader Forge/main_item_studio_alpha"),ESearchCase::IgnoreCase))return EKKRuntimeMaterialRecipe::ForgeStudioAlpha;return EKKRuntimeMaterialRecipe::None;
+  if(P.Blend.Equals(TEXT("translucent"),ESearchCase::IgnoreCase)&&P.Unlit&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(P.SourceMetadataJson),Root)&&Root&&Root->TryGetObjectField(TEXT("material"),Mat)&&(*Mat)->TryGetStringField(TEXT("shader"),Shader)&&ShaderFamily(Shader).Equals(TEXT("Shader Forge/main_item_studio_alpha"),ESearchCase::IgnoreCase))return EKKRuntimeMaterialRecipe::ForgeStudioAlpha;return EKKRuntimeMaterialRecipe::None;
  }
  if(P.ShaderKind==1){TSharedPtr<FJsonObject> Root;const TSharedPtr<FJsonObject>* Mat=nullptr;FString Shader;
   if(!P.Blend.Equals(TEXT("masked"),ESearchCase::IgnoreCase)||!P.Unlit||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(P.SourceMetadataJson),Root)||!Root||!Root->TryGetObjectField(TEXT("material"),Mat)||!(*Mat)->TryGetStringField(TEXT("shader"),Shader))return EKKRuntimeMaterialRecipe::None;
@@ -282,6 +291,10 @@ bool OKPrepareRuntimeSharedMaterialBinding(const FKKRuntimeMaterialPart& P,const
  // frame, so the values saved in a material asset never show in the game. A host passes them as overrides when it has
  // that state; otherwise the character has none (the saved values drew liquid stains over Alice's bodysuit).
  for(const TCHAR* Liquid:{TEXT("_liquidftop"),TEXT("_liquidfbot"),TEXT("_liquidbtop"),TEXT("_liquidbbot"),TEXT("_liquidface")})Values.Add(Liquid,FLinearColor(0,0,0,0));
+ // main_item_studio_alpha draws MainTex.a * _alpha. The extractor already multiplied _alpha into the part texture
+ // (scale_studio_item_alpha for accessories, studio_alpha_texture for the rest and xukmi's ...StudioAlphaPlus), so
+ // the program's own factor is 1 here: a 0.6 hair-shadow overlay otherwise drew at 0.36.
+ if(Recipe==EKKRuntimeMaterialRecipe::ForgeStudioAlpha)Values.Add(TEXT("_alpha"),FLinearColor(1,0,0,0));
  // Host overrides (FKKRuntimeMaterialPart::Overrides: OK Studio item colours) replace the source material's values.
  for(const auto& O:P.Overrides){if(!FMath::IsFinite(O.Value.R)||!FMath::IsFinite(O.Value.G)||!FMath::IsFinite(O.Value.B)||!FMath::IsFinite(O.Value.A))return Fail(TEXT("Shared material override nonfinite"));Values.Add(O.Key,O.Value);}
  // Eye streams own native neutral-gaze affine transforms; do not apply

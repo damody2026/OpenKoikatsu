@@ -5,8 +5,11 @@
 --       [--max-fps N] [--window WxH] [--executable <exe>] [--variants N] [--exec "CMD,CMD"] [--cases <json>] [--trace] [--aggregate]
 --       [--gpu-rig] [--gpu-rig-verify N] [--editor] [--follow <card name part>] [--record <seconds>]
 -- --follow: a demo: that girl (the first card whose file name contains it) walks the whole time and the camera follows
--- her from behind, without the on-screen numbers. --record: a video of that many seconds (demo.mp4 beside the report,
--- ffmpeg from Tools\ffmpeg grabbing the game window) once everyone is drawn and warmed up; then the game quits.
+-- her from behind, without the on-screen numbers. --record: a video of that many seconds (demo.mp4 beside the report)
+-- once everyone is drawn and warmed up; then the game quits. ffmpeg from Tools\ffmpeg grabs this game's own window by
+-- its handle (looked up from the process id) with Windows.Graphics.Capture (gfxcapture), which sees the window's own
+-- frames even behind other windows (not minimised); the video is then checked to move (no freeze of 1 s or more,
+-- frames under demo-frames/), else an error. --check-video <mp4> [--record <seconds>]: only that check, on any video.
 -- --aggregate: once everyone is loaded, compose every girl's pose bank into one GPU bank (one skinning provider instead
 -- of a hundred; needs twice the banks' memory while composing).
 -- --gpu-rig: pose every girl on the GPU from the shared clips and her body parameters (Shaders/GpuRig.usf) instead of
@@ -29,6 +32,63 @@ local path, json, proc, time = ok.path, ok.json, ok.proc, require("ok.time")
 local function say(s) io.write(s, "\n"); io.flush() end
 local function read_json(p) return json.decode(path.read_text(p)) end
 local function win(p) return (path.norm(p):gsub("/", "\\")) end
+local function ffmpeg_tool(root, name) return win(path.join(root, "Tools/ffmpeg/" .. name .. ".exe")) end
+
+-- The main window handle of a process (nil while it has none). Recording goes by this handle, never by the window
+-- title: every Unreal game here has the same title, and another one may be running.
+local function main_window(pid)
+  local r = proc.run({ "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+    ("(Get-Process -Id %d -ErrorAction SilentlyContinue).MainWindowHandle"):format(pid) }, { capture = true, hide = true })
+  local h = tonumber(((r.stdout or ""):match("(%d+)")))
+  if h and h ~= 0 then return h end
+end
+
+-- A recording must show the game moving: about the asked length at ~60 fps, no still stretch of 1 s or more (ffmpeg
+-- freezedetect at -60 dB) and a mean frame-to-frame luma change (signalstats YDIF) above 0.2. Five frames (1 s, 1/4,
+-- 1/2, 3/4, last second) go to <dir>/demo-frames for a look; the numbers to <dir>/video-check.json. Errors if it fails.
+local function check_video(root, video, seconds, dir)
+  local probe = proc.run({ ffmpeg_tool(root, "ffprobe"), "-v", "error", "-select_streams", "v:0", "-count_packets",
+    "-show_entries", "format=duration:stream=nb_read_packets,width,height", "-of", "default=nw=1", win(video) }, { capture = true })
+  local info = probe.stdout or ""
+  local duration, frames = tonumber(info:match("duration=([%d%.]+)")), tonumber(info:match("nb_read_packets=(%d+)"))
+  if not duration or not frames then error("Video check: cannot read " .. win(video) .. "\n" .. info .. (probe.stderr or ""), 0) end
+  local r = proc.run({ ffmpeg_tool(root, "ffmpeg"), "-hide_banner", "-nostats", "-i", win(video), "-map", "0:v:0", "-vf",
+    "freezedetect=n=-60dB:d=1,signalstats,metadata=mode=print:key=lavfi.signalstats.YDIF", "-f", "null", "-" }, { capture = true, merge = true })
+  local text = r.stdout or ""
+  local freezes = {}
+  for s in text:gmatch("freeze_start: ([%d%.]+)") do freezes[#freezes + 1] = { tonumber(s), duration } end
+  local k = 0
+  for e in text:gmatch("freeze_end: ([%d%.]+)") do k = k + 1; if freezes[k] then freezes[k][2] = tonumber(e) end end
+  local sum, n = 0, 0
+  -- (the first frame's YDIF is against nothing: left out)
+  local first = true
+  for d in text:gmatch("lavfi%.signalstats%.YDIF=([%d%.]+)") do
+    if first then first = false else sum = sum + tonumber(d); n = n + 1 end
+  end
+  local ydif = n > 0 and sum / n or 0
+  local shots = path.join(dir, "demo-frames")
+  path.mkdir(shots, true)
+  local picks = {}
+  for _, t in ipairs({ 1, duration / 4, duration / 2, duration * 3 / 4, duration - 1 }) do
+    t = math.max(0, math.min(t, duration - 0.05))
+    local png = path.join(shots, ("t%05.2f.png"):format(t))
+    proc.run({ ffmpeg_tool(root, "ffmpeg"), "-y", "-loglevel", "error", "-ss", ("%.2f"):format(t), "-i", win(video), "-frames:v", "1", win(png) }, { quiet = true })
+    picks[#picks + 1] = win(png)
+  end
+  local problems = {}
+  if not r.ok then problems[#problems + 1] = "ffmpeg could not decode it" end
+  if seconds and duration < seconds - 1 then problems[#problems + 1] = ("%.1f s long, %d s asked for"):format(duration, seconds) end
+  if frames < duration * 50 then problems[#problems + 1] = ("only %d frames in %.1f s"):format(frames, duration) end
+  for _, f in ipairs(freezes) do problems[#problems + 1] = ("still from %.2f s to %.2f s"):format(f[1], f[2]) end
+  if ydif < 0.2 then problems[#problems + 1] = ("mean frame change %.3f (still)"):format(ydif) end
+  local freeze_list = {}
+  for i, f in ipairs(freezes) do freeze_list[i] = json.array({ f[1], f[2] }) end
+  path.write_text(path.join(dir, "video-check.json"), json.encode(json.object({ { "video", win(video) }, { "seconds", duration },
+    { "frames", frames }, { "mean_ydif", ydif }, { "freezes", json.array(freeze_list) }, { "frames_png", json.array(picks) },
+    { "ok", #problems == 0 }, { "problems", json.array(problems) } })))
+  say(("Video check %s: %.1f s, %d frames, mean frame change %.2f, %d still stretches"):format(win(video), duration, frames, ydif, #freezes))
+  if #problems > 0 then error("Video check failed (" .. win(video) .. "): " .. table.concat(problems, "; "), 0) end
+end
 
 local function parse(argv)
   local o = { count = 100, benchmark = 0, warmup = 10, max_fps = 0, window = "1920x1080", variants = 3 }
@@ -55,6 +115,7 @@ local function parse(argv)
     elseif a == "editor" then o.editor = true
     elseif a == "follow" then o.follow = v; i = i + 1
     elseif a == "record" then o.record = tonumber(v); i = i + 1
+    elseif a == "check-video" then o.check_video = v; i = i + 1
     else error("Unknown option " .. argv[i], 0) end
     i = i + 1
   end
@@ -146,6 +207,7 @@ end
 local function main()
   local o = parse(arg)
   local root = ok.root
+  if o.check_video then check_video(root, o.check_video, o.record, path.parent(path.abs(o.check_video))); return 0 end
   local launch = read_json(path.join(root, "Content/IndependentResources/StreetSocialData/Launch/runtime.json"))
   local materials = read_json(path.join(root, launch.materials))
   local exe = o.executable or (o.editor and path.join(ok.engine_root(), "Engine/Binaries/Win64/UnrealEditor.exe")) or newest_stage(root)
@@ -203,7 +265,8 @@ local function main()
     characters[i] = json.object({ { "path", win(c) }, { "walk_clip", "walk_01.okanim" } })
   end
   -- A recording runs as a measurement of its length (the room quits after it).
-  if o.record then o.benchmark = math.max(o.benchmark, o.record + 2) end
+  -- The margin covers finding the window and starting ffmpeg after "benchmark starts" (the game quits 3 s after it).
+  if o.record then o.benchmark = math.max(o.benchmark, o.record + 6) end
   local room = json.object({ { "half_size", 2400 }, { "benchmark_seconds", o.benchmark }, { "warmup_seconds", o.warmup },
     { "report", win(path.join(out, "report.json")) }, { "exit_after_report", o.benchmark > 0 } })
   if o.follow then
@@ -254,22 +317,26 @@ local function main()
   local pid = proc.spawn(game, { cwd = root })
   path.write_text(path.join(out, "game.pid"), tostring(pid))
   if o.record then
-    -- Once the measurement starts (everyone drawn, warmed up): the game window, by its title, for o.record seconds.
+    -- Once the measurement starts (everyone drawn, warmed up): this game's own window for o.record seconds. Found by
+    -- the process id's window handle, not the title (all the Unreal games here share it), and grabbed through
+    -- Windows.Graphics.Capture (ffmpeg gfxcapture): it takes the window's own frames even behind other windows. The
+    -- old gdigrab GDI copy of the D3D12 window gave a still image (Docs/ERROR_LOG.md).
     local log, deadline = path.join(out, "game.log"), time.time() + 1800
     while not (path.is_file(log) and path.read_text(log):find("Crowd room: benchmark starts", 1, true)) do
       if time.time() > deadline then error("Crowd room record: the measurement never started", 0) end
-      time.sleep(2)
+      time.sleep(0.5)
     end
-    local list = proc.run({ "tasklist", "/v", "/fo", "csv", "/nh", "/fi", "PID eq " .. pid }, { capture = true }).stdout or ""
-    local title = list:match('^"[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","[^"]*","([^"]*)"')
-    if not title or title == "" or title == "N/A" then error("Crowd room record: the game window has no title", 0) end
+    local hwnd = main_window(pid)
+    if not hwnd then error("Crowd room record: process " .. pid .. " has no window", 0) end
     local video = path.join(out, "demo.mp4")
-    say("Recording " .. o.record .. " s of \"" .. title .. "\" -> " .. win(video))
-    local rec = proc.run({ win(path.join(root, "Tools/ffmpeg/ffmpeg.exe")), "-y", "-loglevel", "error", "-f", "gdigrab", "-framerate", "60",
-      "-draw_mouse", "0", "-i", "title=" .. title, "-t", tostring(o.record), "-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19",
-      "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", win(video) }, { stdout_file = path.join(out, "ffmpeg.log"), merge = true })
+    say(("Recording %d s of process %d's window 0x%X -> %s"):format(o.record, pid, hwnd, win(video)))
+    local rec = proc.run({ ffmpeg_tool(root, "ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+      "-i", ("gfxcapture=hwnd=%d:capture_cursor=0:max_framerate=60"):format(hwnd), "-t", tostring(o.record),
+      "-vf", "hwdownload,format=bgra,fps=60,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+      "-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19", win(video) }, { stdout_file = path.join(out, "ffmpeg.log"), merge = true })
     if not rec.ok then error("Crowd room record: ffmpeg failed (" .. win(path.join(out, "ffmpeg.log")) .. ")", 0) end
     say(win(video))
+    check_video(root, video, o.record, out)
   end
   say("Crowd room: " .. #cards .. " girls, " .. #variants .. " standing poses (" .. o.variants .. " each), " .. exe)
   say(out)

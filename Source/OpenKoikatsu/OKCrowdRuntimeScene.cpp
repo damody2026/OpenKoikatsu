@@ -706,6 +706,12 @@ struct FScene : TSharedFromThis<FScene> {
   auto& Queues=E.CommitQueues;auto& Canonical=E.CommitCanonical;auto& Identities=E.CommitIdentities;
   if(Queues.IsEmpty()){
    for(const auto& P:E.Material.Parts){int32 Queue=P.Blend==TEXT("translucent")?3000:2000;TSharedPtr<FJsonObject> Root;const TSharedPtr<FJsonObject>* Mat=nullptr;double Value=-1;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(P.SourceMetadataJson),Root)&&Root&&Root->TryGetObjectField(TEXT("material"),Mat)&&(*Mat)->TryGetNumberField(TEXT("render_queue"),Value)&&Value>=0)Queue=int32(Value);Queues.Add(Queue);E.ViewLitMaterials.Add(ViewLightAll||P.ShaderKind==3||P.ShaderKind==5||P.ShaderKind==7);}
+   // The game's iris writes depth, so an eye white drawn after it stays behind it. A card can move the iris's queue
+   // below the eye white's (C049/C051: iris 2451, eye white 2901, so a hair shadow at 2500 darkens it); a translucent
+   // section here writes no depth and that eye white covered the iris (white eyes). The eyeball's white
+   // (cf_Ohitomi_L/R; the eyelines share its shader and keep their queues) then draws just before the iris instead.
+   int32 Iris=MAX_int32;for(int32 I=0;I<Queues.Num();++I){const auto R=OKRuntimeSharedMaterialRecipe(E.Material.Parts[I]);if(R==EKKRuntimeMaterialRecipe::KoikanoEye||R==EKKRuntimeMaterialRecipe::ForgeEye)Iris=FMath::Min(Iris,Queues[I]);}
+   if(Iris!=MAX_int32)for(int32 I=0;I<Queues.Num();++I){const auto& P=E.Material.Parts[I];const auto R=OKRuntimeSharedMaterialRecipe(P);if((R==EKKRuntimeMaterialRecipe::KoikanoEyeWhite||R==EKKRuntimeMaterialRecipe::ForgeEyeWhite)&&(P.Name.Equals(TEXT("cf_Ohitomi_L"),ESearchCase::IgnoreCase)||P.Name.Equals(TEXT("cf_Ohitomi_R"),ESearchCase::IgnoreCase)))Queues[I]=FMath::Min(Queues[I],Iris-1);}
    D.Sections.StableSort([&](const auto& A,const auto& B){return Queues[A.Material]<Queues[B.Material];});
   }
   TArray<UTexture2D*> Textures;for(auto& T:E.Textures)Textures.Add(T.Get());
