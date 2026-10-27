@@ -746,3 +746,9 @@
 - 整合後恢復時，「還原診斷碼＋改 base」寫在同一個 Bash 指令裡，那個指令因引號問題整個沒執行；我緊接著在背景開了編譯，用的還是已刪掉的 Base1026b 和沒還原的診斷碼（Base1026b 已刪），只好停掉、殺 UBT 重來。準備步驟要用腳本檔跑，確認輸出（base 名稱、diff 為空）之後才開始編譯。
 - 1 對 1 臉黑那次，在 KKPreviewActor 試了一個未經查證的猜想（以為 FMorphTargetDelta 不會初始化法線差值），改完才去看引擎標頭，發現早就預設為零。修改引擎型別相關的假設前，先讀引擎原始碼確認。
 - 整合後恢復的未提交檔案是整合前的版本，蓋掉了 HEAD 新增的內容（OKStreetSocialScene.cpp 少了 ApproachSong 欄位，編譯失敗；ui_text 少了 3 行）。整合後第一件事：每個未提交檔案和 HEAD 比對「被刪掉的行」，以上次自己的 commit 為基準，把自己的改動三方合併到 HEAD 上。
+
+## 2026-10-27 commit 訊息帶了 BOM（R3-240，b25cf262）
+
+- **現象：** `b25cf262` 的 commit 標題開頭多了一個 U+FEFF，已推到 origin。
+- **原因：** 用 PowerShell 5.1 的 `Set-Content -Encoding utf8` 寫 commit 訊息檔，它會寫入 BOM；`git commit -F` 把 BOM 當成訊息的一部分。前一次用管線 `git commit -F -` 搭 here-string，PowerShell 把 here-string 當成路徑參數，commit 失敗。
+- **修正：** 已推送，不改寫歷史。之後 commit 訊息檔一律用 Write 工具或 `[IO.File]::WriteAllText(..., [Text.UTF8Encoding]::new($false))` 寫成無 BOM 的 UTF-8。
