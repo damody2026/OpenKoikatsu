@@ -124,7 +124,7 @@ E:\OpenKoikatsu\Tools\lua\lua.exe Tools\galgame_regression.lua [--launch] [--gir
 ### 4.6 只提交自己的 hunk
 - 先 `git diff <檔案>` 確認只有自己的改動，才整檔 `git add`。
 - 檔案裡混有別人的 hunk 時：組出「HEAD 版本＋自己的修改」的內容，`git hash-object -w --no-filters` 寫入物件，再 `git update-index --cacheinfo 100644,<hash>,<path>` 放進索引。
-- 推送：`git push origin duo2`，用 `git ls-remote origin duo2` 確認。這個 checkout 的 `origin` 是 `file:///C:/portable/OpenKoikatsu`。
+- 推送：`git push origin duo2`，用 `git ls-remote origin duo2` 確認。這個 checkout 的 `origin` 是 GitHub（`https://damody2026@github.com/damody2026/OpenKoikatsu.git`）；另一個 remote `local` 才是 `file:///C:/portable/OpenKoikatsu`。
 - 很多檔案是 CRLF：Lua／sed 改檔時要保留換行格式，改完用 `git diff | od -c` 確認有 `\r`。`/tmp` 路徑 Windows 的 Lua 讀不到，改用 `C:/Users/Damody/AppData/Local/Temp`。
 
 ## 5. 已完成（10-26～10-27，都在 duo2）

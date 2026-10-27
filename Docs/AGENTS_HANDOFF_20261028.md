@@ -2,6 +2,19 @@
 
 這份文件給接手協調者或任一個 agent 的人或 session。它接續 [協調者交接（2026-10-27）](COORDINATOR_HANDOFF_20261027.md)：固定規則（第 3 節）、巡檢 prompt（第 4 節）、整合流程（第 5 節）照舊適用，這裡只寫 10-27 晚上到 10-28 整合時的狀態。
 
+## 各 agent 的完整交接文件
+
+每個 agent 都寫了一份自己這條線的完整交接。新 session 接手某條線時，先讀那一份；第 3 節只是摘要。
+
+| agent | 完整交接 | 版控 |
+|---|---|---|
+| e-galgame（E，1 對 1／galgame） | [`Docs/HANDOFF_E_GALGAME_20261028.md`](HANDOFF_E_GALGAME_20261028.md) | 已提交 |
+| c-conquest（C，街區規則與十位女主） | [`Docs/HANDOFF_C_CONQUEST_20261028.md`](HANDOFF_C_CONQUEST_20261028.md) | 已提交 |
+| e-tts-song（E，百人房 120 FPS＋TTS／唱歌） | [`Docs/HANDOFF_E_CROWD_TTS_20261028.md`](HANDOFF_E_CROWD_TTS_20261028.md) | 已提交 |
+| c-street-city（StreetSocialCity） | `C:\portable\OpenKoikatsu\Docs\STREET_CITY_HANDOFF_20261028.md` | **照使用者指示不 commit**，只在 C 本機 |
+
+接手時要讓 agent 寫完整交接，可以用 [協調者交接](COORDINATOR_HANDOFF_20261027.md) 的格式要求，或直接要求涵蓋這 8 項：範圍與邊界、使用者的決定、架構、建置測試指令與通過標準、已完成（commit）、未提交的進行中項目、已知問題與踩過的坑、存檔與 notes 路徑。
+
 ## 1. 整合結果（2026-10-28 00:20）
 
 | 項目 | C | E |
@@ -96,7 +109,7 @@
 - **教訓**：
   - 還沒提交的 global shader 編進 exe，但 patch 沒有它，E 上所有新的 exe-only stage 一啟動就當掉（`Missing global shader FOKGpuRigTaskCS`）。之後加 shader 要同時重建 patch，並在找不到 shader 時退回原路徑，不要當掉。
   - 在除錯、不是在量 FPS 的時候，也叫其他線一直等，一度讓它們停了 30～40 分鐘。只有真正量測或錄影時才請別人暫停。
-- **TTS／唱歌**：優化清單照使用者 10-25 的決定暫停。唱歌字幕對時已在遊戲裡驗證並修好（`9211746a3`）；「從頭做一首新歌再唱」還沒在遊戲裡跑過。
+- **TTS／唱歌**：優化清單照使用者 10-25 的決定暫停。唱歌字幕對時已在遊戲裡驗證並修好（`9211746a3`）；「從頭做一首新歌再唱」已在 Gal1027G 沙盒用安可測過一首（`d33ceb6be`），其他女主和曲風還沒測。
 
 ### 3.3 c-conquest（C 線，街區規則與十位女主循環）
 
