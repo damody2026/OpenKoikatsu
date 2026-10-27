@@ -478,7 +478,7 @@ pub fn even_lines(env: &[f32], hop: f32, span: (f32, f32), lines: usize) -> Vec<
 
 /// Caption lines from what she actually sang: `heard` is each breath transcribed (ok-asr /transcribe_spans, one text per
 /// breath). The song model does not keep to the sheet (two lines in one breath, a chorus sung once more or once less,
-/// a long break), so each breath is matched to the run of sheet lines (1 to 3) its words are closest to, in sheet order
+/// a long break), so each breath is matched to the run of sheet lines (1 to 6: a whole verse in one breath) its words are closest to, in sheet order
 /// where it fits and jumping (a repeated chorus) where it does not; a breath that matches nothing (an "ah" between
 /// verses) shows no new line. The words shown are the sheet's (`captions`, the game's script), never the transcription.
 /// Returns (at, text, sheet line) per caption; empty when nothing matched (then the timing comes from the sheet alone).
@@ -505,7 +505,7 @@ pub fn align_heard(breaths: &[(f32, f32)], heard: &[String], sung: &[String], ca
     };
     const NONE: f32 = 0.6;
     const JUMP: f32 = 0.25;
-    const MAX_RUN: usize = 3;
+    const MAX_RUN: usize = 6;
     // cost[k][p]: best for the first k breaths with the sheet's next line p; choice[k][p] = (previous p, run start, run length).
     let inf = f32::INFINITY;
     let mut cost = vec![vec![inf; n + 1]; m + 1];
@@ -995,16 +995,39 @@ mod tests {
 }
 
 /// Development: OK_SONG_MOUTH=<a song's mouth.json> OK_SONG_SHEET=<template> cargo test --release choreography_of_a_song
-/// -- --ignored --nocapture prints the staging a real song gets.
+/// -- --ignored --nocapture prints the staging a real song gets. With OK_SONG_MEMORY=<songs.json>#<memory index> the
+/// song, its sheet and what was heard of it come from that memory (as a replay in the game stages it), and the breaths
+/// and windows to transcribe are printed as `spans` (for ok-asr /transcribe_spans); OK_SONG_HEARD=<ok-asr's answer to
+/// them> then times the captions with that answer (breaths, then windows) instead.
 #[cfg(test)]
 #[test]
 #[ignore]
 fn choreography_of_a_song() {
-    let path = std::env::var("OK_SONG_MOUTH").expect("OK_SONG_MOUTH");
-    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let read = |p: &str| -> serde_json::Value { serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap() };
+    let texts = |v: &serde_json::Value| -> Vec<String> { v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default() };
+    let memory = std::env::var("OK_SONG_MEMORY").ok().map(|m| {
+        let (file, index) = m.rsplit_once('#').expect("OK_SONG_MEMORY=<songs.json>#<index>");
+        read(file)["memories"][index.parse::<usize>().unwrap()].clone()
+    });
+    let path = memory.as_ref().and_then(|m| m["mouth"].as_str().map(String::from)).unwrap_or_else(|| std::env::var("OK_SONG_MOUTH").expect("OK_SONG_MOUTH"));
+    let v = read(&path);
     let env: Vec<f32> = v["values"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap() as f32).collect();
     let hop = v["hop_ms"].as_f64().unwrap_or(10.0) as f32 / 1000.0;
-    let template = std::env::var("OK_SONG_SHEET").unwrap_or_else(|_| "sunny_day".into());
+    let template = memory.as_ref().and_then(|m| m["template"].as_str().map(String::from))
+        .unwrap_or_else(|| std::env::var("OK_SONG_SHEET").unwrap_or_else(|_| "sunny_day".into()));
     let sheet = SHEETS.iter().find(|s| s.id == template.split('+').next().unwrap()).unwrap().display;
-    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, sheet, "", &template, 5, &[], &[])).unwrap());
+    let lyrics = memory.as_ref().and_then(|m| m["lyrics"].as_str().map(String::from)).unwrap_or_else(|| sheet.to_string());
+    let mut heard = memory.as_ref().map(|m| texts(&m["heard"])).unwrap_or_default();
+    let mut windows = memory.as_ref().map(|m| texts(&m["heard_windows"])).unwrap_or_default();
+    let breaths = phrases(&env, hop);
+    if let Ok(answer) = std::env::var("OK_SONG_HEARD") {
+        let all = texts(&read(&answer)["texts"]);
+        let n = breaths.len().min(all.len());
+        (heard, windows) = (all[..n].to_vec(), all[n..].to_vec());
+    }
+    if memory.is_some() {
+        let spans: Vec<[f32; 2]> = breaths.iter().chain(song_windows(&breaths).iter()).map(|(s, e)| [*s, *e]).collect();
+        println!("{}", serde_json::json!({"breaths": breaths.len(), "spans": spans}));
+    }
+    println!("{}", serde_json::to_string_pretty(&choreograph(&env, hop, &lyrics, "", &template, 5, &heard, &windows)).unwrap());
 }
