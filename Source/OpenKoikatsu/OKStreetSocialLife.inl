@@ -397,6 +397,8 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
   // Dishes ordered there for this visit (within three hours: a private-room hour skipped in between made the half-hour
   // window miss them and the soup and tea were billed again as a set dinner).
   &&!(S.OrderedAtPlace.Contains(PlaceId)&&S.OrderedAtPlace[PlaceId]>=StartMinute-180));
+ // What it is about (the machine's drink) bought from the menu and settled during it or just before: no fee on top (R3-240).
+ Request->SetBoolField(TEXT("bought_at_counter"),S.LastCheckoutMinute>=StartMinute-30||(S.OrderedAtPlace.Contains(PlaceId)&&S.OrderedAtPlace[PlaceId]>=StartMinute-30));
  // Cut short (the place closed on them): the minutes that really went by, not the activity's whole length.
  if(S.ActCutShort)Request->SetNumberField(TEXT("spent"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));Request->SetNumberField(TEXT("menu_seed"),int32(StartMinute)+Girl*31);Request->SetStringField(TEXT("agreed"),PayAgreed(Girl)); // who pays, as they settled it (the AI's reading)
  Request->SetNumberField(TEXT("elapsed"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));

@@ -408,7 +408,10 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
         let her_key = entry_key(cst.0, r.get("relation"));
         let in_today = |key: &str| day.is_some() && ext.as_ref().and_then(|e| e.get("entries")).and_then(|e| e.get(key)).and_then(Value::as_i64) == day;
         let paid_at_door = in_today(cst.0) && her_key.as_deref().map_or(true, in_today);
-        if !(ticket && (b(r, "admitted") || paid_at_door)) {
+        // The drink itself bought from the machine's menu and settled during it (bought_at_counter): the fee is that
+        // drink, not a second one on top (¥5 settled, then ¥6 more at the end, R3-240).
+        let goods_paid = cst.0 == "vending" && b(r, "bought_at_counter");
+        if !goods_paid && !(ticket && (b(r, "admitted") || paid_at_door)) {
             price += crate::region::price(cst.1 as i64) as i32;
             admission |= ticket;
             // Paid here: the door does not charge it again today either.
@@ -900,6 +903,12 @@ mod tests {
         assert_eq!((v["price"].as_i64(), v["payer"].as_str()), (Some(80), Some("你請客")));
         assert_eq!(v["feed"]["hygiene"], 15.0, "half again the same day");
         assert_eq!(v["admission"], true);
+        // A machine drink: the fee once, nothing more when the drink was already settled at the machine (R3-240).
+        let machine = activity_end(&c, &json!({"id": "vending_girls_dorm", "kind": "solo", "name": "售貨機", "player_cash": 1000, "relation": rel(json!({"cash": 50})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!(machine["price"].as_i64(), Some(6));
+        let settled = activity_end(&c, &json!({"id": "vending_girls_dorm", "kind": "solo", "name": "售貨機", "bought_at_counter": true, "player_cash": 1000, "relation": rel(json!({"cash": 50})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!(settled["price"].as_i64(), Some(0));
+        assert_eq!(settled["feed"]["satiety"], 5.0, "she still had the drink");
         // Watching the tank and then sitting on the bench before it: one ticket for the visit.
         let tank = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(60), Some(true)));
