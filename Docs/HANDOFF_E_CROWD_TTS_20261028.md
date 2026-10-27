@@ -160,7 +160,25 @@
 - GPU 物理讓 100 人的 GPU 時間從 5.5 ms 漲到約 12 ms，這就是沒到 120 FPS 的原因。
 - 載入也很慢：Room100-20261027T224945 全員畫出要 561 秒。之後的 `SampleFrame` 改動是為了縮短載入，還沒用 100 人重量。
 
-### A5. 進行中、尚未完成
+### A4b. 10-28 接手後已完成（四個平行 session，細節與數字在 `Docs/CROWD_ROOM100.md`）
+
+下面 A5 列的項目都已完成並推到 `origin duo2`（7d3aef8dc..b949b401b）：
+
+| 項目 | 結果 | commit |
+|---|---|---|
+| GPU 物理到 120 FPS | 物理與骨架改成每人一個 thread group。100 人 `--gpu-rig`：Editor 169.1 FPS，打包版 Phys1028A 177.5 FPS、Phys1028C 175.5 FPS（改前 70.8）。patch 換成 StreetDisplay30Phys | `66211df88`、`cae892bb9` |
+| 沒穿衣服的卡 | 改成離線判斷（`ok-extract --oklib crowd-check`，結果快取在 `Saved/Crowd/card-check.tsv`），補上 C100～C113。可用 121／125 張 | `578577e60` |
+| Yvonne 等 11 張 studio alpha 卡 | `xukmi/MainItemStudioAlphaPlus` 改走既有的 ForgeStudioAlpha，不用新材質，也不用 cook；眼白蓋住虹膜一併修好 | `b6a8d22be` |
+| 錄影 | 用遊戲 PID 找視窗 handle，再用 ffmpeg `gfxcapture`，錄完自動檢查。最終 demo：`Saved/Crowd/Room100-20261028T032909/demo.mp4`（使用者改要求用 GPU 畫：`--gpu-rig`，跟拍 Yvonne，20 秒） | `b6a8d22be`、`f121fdd72` |
+| 手與前臂的差 | 具名原生骨改用和 bank 一樣的 FTransform 組合方式，0.956 → 0.0001 cm。街頭 0.11 cm 的差是 bank 多算一格，已修 | `5a53c69a5`、`5cb155b0f` |
+| 腳步滑動 | 改用逐幀步速曲線，先轉向再沿面向走，不再原地轉身。直走著地滑動 16 → 6 cm/s | `b6caeecfa`、`5cb155b0f` |
+| `--aggregate` 4 GiB 當機 | 合成好之後，從離最遠的人開始退掉私有 bank，100 人畫滿 | `6937fc312` |
+| 開卡 | 卡包可以同時開。單張冷開（含全新程序的第一張）都在 3 秒內 | `61f30722c`、`cba26afec`、`2147120f9` |
+| 街頭 GPU rig | 在打包版驗證：外觀、物理件、手機／喝飲料 overlay、看向玩家都正常。預設仍關閉 | `1ef9b6345` |
+
+最新的 exe-only stage 是 `Phys1028C`（base `Base1027`）。
+
+### A5. 進行中、尚未完成（10-27 時的狀態，見上方 A4b）
 
 1. **GPU 物理到 120 FPS（主線）**：
    - 先在其他線暫停的情況下，重量 100 人 GPU rig＋物理（`--editor --gpu-rig --benchmark 20`）。也用 `--trace` 看 `Crowd.GpuRigPhysics k.s` 各 pass 的 GPU 時間。
