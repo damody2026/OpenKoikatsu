@@ -330,6 +330,11 @@ void AOKStreetSocialScene::FinishPrivate(){
   const FString Text=OKMsg(TEXT("ui.memory.private_session"),{{TEXT("minutes"),FMath::Max(1,Seconds/60)},{TEXT("count"),Done.Num()},{TEXT("actions"),FString::Join(Done,OKT(TEXT("ui.memory.list_separator")))}});
   MindObserve(Girl,TEXT("private"),Text,PlaceHere(S.Male),Done.IsEmpty()?0.5f:0.75f);
  }
+ // Back on the street with her beside him: they go on talking (the scene started from their talk, which it ended).
+ // Without this she went straight back to her schedule and walked off from the lunch he had just paid for. Opened from
+ // the contacts with her elsewhere, there is nobody beside him to go on with.
+ if(S.Agents.IsValidIndex(Girl-1)&&FVector::Dist2D(S.Agents[Girl-1].Position,S.Male)<400.f){S.FreeTalkOpen=true;ResumeTalkQuiet(Girl);
+  UE_LOG(LogTemp,Display,TEXT("Street private: back with actor=%d, talk resumed=%d"),Girl,S.Target==Girl?1:0);}
  S.ContactsNotice=OKT(TEXT("ui.contacts.exited_one_on_one"));ApplyMouseMode(S.ViewportFocused);RefreshUI();
 }
 bool AOKStreetSocialScene::TickPrivate(double Now){
