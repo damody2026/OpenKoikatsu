@@ -3,6 +3,20 @@
 #include "ShaderParameterStruct.h"
 #include "RenderGraphUtils.h"
 #include "RenderingThread.h"
+#include "Misc/CommandLine.h"
+
+// A cooked game verifies every global shader it compiles in at startup and stops when one is missing from its shader
+// cache, which comes from the base pak and the StreetDisplay patch. So the rig's two shaders count only in the editor
+// and the cook, and in a game started with -OKGpuRig (the launchers pass it with gpu_rig): any other stage starts
+// whatever its patch holds, and the scene falls back to the solved banks when they are absent (OKGpuRigAvailable).
+static bool OKGpuRigCompiled(const FGlobalShaderPermutationParameters& P){
+ if(!IsFeatureLevelSupported(P.Platform,ERHIFeatureLevel::SM6))return false;
+#if WITH_EDITOR
+ return true;
+#else
+ static const bool Requested=FParse::Param(FCommandLine::Get(),TEXT("OKGpuRig"));return Requested;
+#endif
+}
 
 class FOKGpuRigSkeletonCS:public FGlobalShader {
  DECLARE_GLOBAL_SHADER(FOKGpuRigSkeletonCS);
@@ -19,6 +33,7 @@ class FOKGpuRigSkeletonCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigSamples)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint4>,RigSelect)
   SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigTimes)
+  SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<float4>,RigLook)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Locals)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,LocalsB)
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,Worlds)
@@ -26,7 +41,7 @@ class FOKGpuRigSkeletonCS:public FGlobalShader {
   SHADER_PARAMETER(uint32,ClipSlotsPerActor)
  END_SHADER_PARAMETER_STRUCT()
  // The ancestor stacks are dynamically indexed (DXC/SM6), as IndependentPose.usf.
- static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& P){return IsFeatureLevelSupported(P.Platform,ERHIFeatureLevel::SM6);}
+ static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& P){return OKGpuRigCompiled(P);}
 };
 IMPLEMENT_GLOBAL_SHADER(FOKGpuRigSkeletonCS,"/Plugin/KKCrowdGpuPacking/GpuRig.usf","SkeletonCS",SF_Compute);
 
@@ -40,12 +55,12 @@ class FOKGpuRigTaskCS:public FGlobalShader {
   SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<float4>,OutputRows)
   SHADER_PARAMETER(uint32,TaskCount)
  END_SHADER_PARAMETER_STRUCT()
- static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& P){return IsFeatureLevelSupported(P.Platform,ERHIFeatureLevel::SM6);}
+ static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& P){return OKGpuRigCompiled(P);}
 };
 IMPLEMENT_GLOBAL_SHADER(FOKGpuRigTaskCS,"/Plugin/KKCrowdGpuPacking/GpuRig.usf","TaskCS",SF_Compute);
 
 bool OKGpuRigAvailable(){
- check(IsInRenderingThread());const auto* Map=GetGlobalShaderMap(GMaxRHIFeatureLevel);
+ check(IsInRenderingThread());if(!IsFeatureLevelSupported(GMaxRHIShaderPlatform,ERHIFeatureLevel::SM6))return false;const auto* Map=GetGlobalShaderMap(GMaxRHIFeatureLevel);
  return Map&&Map->HasShader(&FOKGpuRigSkeletonCS::GetStaticType(),0)&&Map->HasShader(&FOKGpuRigTaskCS::GetStaticType(),0);
 }
 
@@ -84,11 +99,13 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
  check(IsInRenderingThread());Out={};
  if(!Static){Error=TEXT("GPU rig not initialized");return false;}
  const auto& B=*Static;if(Playback.Num()!=int32(B.ActorCount)){Error=TEXT("GPU rig playback count differs");return false;}
- TArray<FUintVector4> Select;TArray<FVector4f> Times;Select.Reserve(Playback.Num());Times.Reserve(Playback.Num());
+ TArray<FUintVector4> Select;TArray<FVector4f> Times,Look;Select.Reserve(Playback.Num());Times.Reserve(Playback.Num());Look.Reserve(Playback.Num()*2);
  for(const auto& P:Playback){
   if(P.ClipA>=B.ClipSlotsPerActor||P.ClipB>=B.ClipSlotsPerActor){Error=TEXT("GPU rig clip slot outside the actor's slots");return false;}
   for(int32 C=0;C<4;++C)if(!FMath::IsFinite(P.Times[C])){Error=TEXT("GPU rig nonfinite playback");return false;}
   Select.Add(FUintVector4(P.ClipA,P.ClipB,0,0));Times.Add(FVector4f(P.Times.X,P.Times.Y,FMath::Clamp(P.Times.Z,0.f,1.f),0));
+  // The look's bones are the actor's own (BuildRigBatch); these say only whether and how far she turns.
+  Look.Add(P.LookNeck!=MAX_uint32?P.NeckRotation:FVector4f(0,0,0,1));Look.Add(P.LookHead!=MAX_uint32?P.HeadRotation:FVector4f(0,0,0,1));
  }
  auto* LocalsUav=G.CreateUAV(G.RegisterExternalBuffer(Locals));auto* LocalsBUav=G.CreateUAV(G.RegisterExternalBuffer(LocalsB));
  FRDGBufferRef WorldsBuffer=G.RegisterExternalBuffer(Worlds);
@@ -97,7 +114,7 @@ bool FOKGpuRig::Evaluate(FRDGBuilder& G,TConstArrayView<FOKGpuPosePlayback> Play
   P->RigActors=G.CreateSRV(G.RegisterExternalBuffer(Actors));P->RigBones=G.CreateSRV(G.RegisterExternalBuffer(Bones));P->RigLists=G.CreateSRV(G.RegisterExternalBuffer(Lists));
   P->RigAbm=G.CreateSRV(G.RegisterExternalBuffer(Abm));P->RigNamed=G.CreateSRV(G.RegisterExternalBuffer(Named));P->RigClipSlots=G.CreateSRV(G.RegisterExternalBuffer(ClipSlots));
   P->RigClipRates=G.CreateSRV(G.RegisterExternalBuffer(ClipRates));P->RigChannels=G.CreateSRV(G.RegisterExternalBuffer(Channels));P->RigSamples=G.CreateSRV(G.RegisterExternalBuffer(Samples));
-  P->RigSelect=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Select"),Select));P->RigTimes=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Times"),Times));
+  P->RigSelect=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Select"),Select));P->RigTimes=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Times"),Times));P->RigLook=G.CreateSRV(CreateStructuredBuffer(G,TEXT("GpuRig.Look"),Look));
   P->Locals=LocalsUav;P->LocalsB=LocalsBUav;P->Worlds=G.CreateUAV(WorldsBuffer);P->ActorCount=B.ActorCount;P->ClipSlotsPerActor=B.ClipSlotsPerActor;
   TShaderMapRef<FOKGpuRigSkeletonCS> Shader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
   FComputeShaderUtils::AddPass(G,RDG_EVENT_NAME("Crowd.GpuRigSkeleton"),Shader,P,FComputeShaderUtils::GetGroupCount(int32(B.ActorCount),64));

@@ -6,7 +6,7 @@
 #include "/Engine/Public/Platform.ush"
 
 // Per actor, four uint4: (bone first, bone count, flags (1 female), named first), (always first, count, forearm first,
-// count), (hand first, count, pv first, count), (abm first, count, 0, 0).
+// count), (hand first, count, pv first, count), (abm first, count, look neck, look head: global bones or 0xffffffff).
 StructuredBuffer<uint4> RigActors;
 // Per bone three float4: (pos, parent as uint: global index or 0xffffffff), rot (x,y,z,w), (scale, 0).
 StructuredBuffer<float4> RigBones;
@@ -26,6 +26,9 @@ StructuredBuffer<float4> RigSamples;
 // Per actor: (clip slot A, clip slot B, 0, 0) and (time A, time B, blend, 0).
 StructuredBuffer<uint4> RigSelect;
 StructuredBuffer<float4> RigTimes;
+// Per actor two float4: the head look's neck and head turns (UE quaternions in each bone's parent frame, as the pose
+// bank's LookRotation; (0,0,0,1): none).
+StructuredBuffer<float4> RigLook;
 uint ActorCount;
 uint ClipSlotsPerActor;
 // Scratch, three float4 per bone: the locals of clip A (then the frame), of clip B; the worlds (Unity rows 0..2).
@@ -369,6 +372,15 @@ void SkeletonCS(uint3 id : SV_DispatchThreadID) {
 		SetQ(b, QMul(LQ(b), RigAbm[o]));
 		SetP(b, LP(b) * RigAbm[o + 1].w + RigAbm[o + 1].xyz);
 		SetS(b, LS(b) * RigAbm[o + 2].xyz);
+	}
+	// Head look (OKCrowdRuntimeScene ApplyHeadLook), last like the bank's LookRotation: the turn before the local
+	// rotation, brought from UE to Unity (OKUnityLocalToUnreal's basis change is its own inverse).
+	{
+		const float4 basis = float4(0, 0.70710678, 0.70710678, 0);
+		[unroll] for (uint k = 0; k < 2; ++k) {
+			uint b = k == 0 ? a3.z : a3.w; float4 r = RigLook[actor * 2 + k];
+			if (b != NONE && r.w < 1) SetQ(b, normalize(QMul(QMul(QMul(basis, r), basis), LQ(b))));
+		}
 	}
 	// Worlds, parents first (the export's order).
 	for (uint b = first; b < first + count; ++b) {

@@ -7,6 +7,8 @@
 --     [-ValidateOnly] [-Strict] [-Executable EXE] [-SelectionFile JSON] [-MaleCard PNG] [-RetargetFile JSON]
 --     [-RenderScale 100..200] [-Window WxH]  (window size, default 1920x1080; a smaller one leaves room for other work)
 --     [-Editor]  (development: runs the map in the built editor with -game instead of a staged build; no cook needed)
+--     [-GpuRig | -NoGpuRig]  (heroine poses from the GPU runtime rig, Docs/CROWD_ROOM100.md, or from her own solved banks)
+--     [-GpuRigVerify N]  (also solve full banks and compare N frames of the rig with them: runtime.json "gpu_rig", rig.bin)
 --     [-Sandbox NAME [-PortBase N] [-RulesDll DLL]] [-Exec "CMD,CMD"] [-Trace [CHANNELS]] [-GameArgs "-SWITCH ..."]
 --     [-Inspect [N]]  (straight into the inspection room with heroine N: her alone in an empty room, the camera round her
 --       by the arrow keys, wheel nearer/farther, PageUp/PageDown another heroine, End back to the street)
@@ -25,10 +27,10 @@ local json, path, proc, hash, util = ok.json, ok.path, ok.proc, ok.hash, ok.util
 local fs = require "okfs"
 local instance = require "ok_instance"
 
-local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true, editor = true }
+local SWITCHES = { validateonly = true, selftest = true, strict = true, control = true, editor = true, nogpurig = true, gpurig = true }
 local VALUES = { selectionfile = true, malecard = true, retargetfile = true, renderscale = true, executable = true,
   controlport = true, clock = true, window = true, sandbox = true, portbase = true, rulesdll = true, exec = true, trace = true, gpucachedir = true,
-  gameargs = true }
+  gameargs = true, gpurigverify = true }
 
 local function parse(argv)
   local o, i = {}, 1
@@ -270,6 +272,26 @@ local function main()
     m.editor_common_materials = true
     path.write_text(manifest, json.encode(m, { ensure_ascii = false, indent = 2 }) .. "\n", { newline = "\n" })
   end
+  -- -GpuRig: poses from the GPU runtime rig (off by default until the street is checked with it).
+  if o.gpurig and not o.nogpurig then
+    local m = read_json(manifest)
+    m.gpu_rig = true
+    path.write_text(manifest, json.encode(m, { ensure_ascii = false, indent = 2 }) .. "\n", { newline = "\n" })
+  end
+  -- -GpuRigVerify N: the rig, full banks as well, and N frames of its rows compared with them (runtime.json "gpu_rig").
+  if o.gpurigverify then
+    local m = read_json(manifest)
+    m.gpu_rig = true
+    m.gpu_rig_verify = tonumber(o.gpurigverify) or 0
+    path.write_text(manifest, json.encode(m, { ensure_ascii = false, indent = 2 }) .. "\n", { newline = "\n" })
+  end
+  -- -NoGpuRig: each heroine's poses from her own solved banks again (the GPU rig's shaders come from the patch's global
+  -- shader pak; a stage older than the rig has none).
+  if o.nogpurig then
+    local m = read_json(manifest)
+    m.gpu_rig = false
+    path.write_text(manifest, json.encode(m, { ensure_ascii = false, indent = 2 }) .. "\n", { newline = "\n" })
+  end
   -- Replaced heroine cards (StreetSocialData/identity_aliases.json): the live game and every save slot move to the new
   -- ids before the game opens them (a no-op when no save names an old id).
   if not o.selftest and not o.sandbox and not tool("street_identity_migrate.lua", {}).ok then error("Identity alias migration failed", 0) end
@@ -429,6 +451,8 @@ local function main()
   elseif path.exists(build.patch) then game[#game + 1] = "-pakdir=" .. build.patch end
   game[#game + 1] = "-abslog=" .. path.join(output, "game.log")
   game[#game + 1] = "-RuntimeGpuCacheMiB=4096"
+  -- The GPU rig's shaders are verified at startup only when asked for (OKGpuRig.cpp): with gpu_rig on, the patch has them.
+  if read_json(manifest).gpu_rig then game[#game + 1] = "-OKGpuRig" end
   -- -GpuCacheDir <dir>: another runtime GPU pose cache (default %LOCALAPPDATA%, shared by every checkout).
   if o.gpucachedir then game[#game + 1] = "-RuntimeGpuCacheDir=" .. o.gpucachedir end
   local q = build.runtime_render_quality

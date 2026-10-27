@@ -382,6 +382,9 @@ function M.main(argv)
     { "auto_blink", true }, { "auto_action_streaming", false }, { "npc_action_preload_count", 0 },
     { "background_prepare_concurrency", 8 }, { "diagnostic_load_deadline_seconds", 180 },
     { "profile_seconds", 0 }, { "exit_after_report", false }, { "depth_prepass_enabled", true },
+    -- Poses solved on the GPU each frame from the shared clips and her body (Docs/CROWD_ROOM100.md, GPU rig); her banks
+    -- keep only the native bones. The launcher's -NoGpuRig turns it off.
+    { "gpu_rig", false },
   }) do manifest[kv[1]] = kv[2] end
   if T(photo_data) then manifest.paired_photo = json.object({ { "male", photo_data.male }, { "groups", photo_data.groups } }) end
   if T(seated_data) then manifest.seated_talk = json.object({ { "male", seated_data.male }, { "female", seated_data.female } }) end

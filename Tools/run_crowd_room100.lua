@@ -177,6 +177,7 @@ local function main()
   local patch = path.join(root, launch.patch)
   if not o.editor and path.exists(patch) then game[#game + 1] = "-pakdir=" .. patch end
   if o.trace then game[#game + 1] = "-statnamedevents" end
+  if o.gpu_rig then game[#game + 1] = "-OKGpuRig" end
   local pid = proc.spawn(game, { cwd = root })
   path.write_text(path.join(out, "game.pid"), tostring(pid))
   say("Crowd room: " .. #cards .. " girls, " .. #variants .. " standing poses (" .. o.variants .. " each), " .. exe)

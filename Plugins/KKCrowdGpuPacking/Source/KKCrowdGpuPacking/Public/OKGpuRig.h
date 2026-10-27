@@ -26,7 +26,7 @@ class KKCROWDGPUPACKING_API FOKGpuRig {
 public:
  bool Initialize(FRDGBuilder& Graph,TSharedRef<const FOKGpuRigBatch,ESPMode::ThreadSafe> Batch,FString& Error);
  bool IsInitialized() const {return Static.IsValid();}
- // Playback: one per actor (clip slots and times; look is not applied yet). Writes Current (and Previous: last frame's,
+ // Playback: one per actor (clip slots, times, head look turns). Writes Current (and Previous: last frame's,
  // or Current itself after a reset) in the bank's row layout.
  bool Evaluate(FRDGBuilder& Graph,TConstArrayView<FOKGpuPosePlayback> Playback,bool ResetHistory,FOKResidentPoseFrame& Out,FString& Error);
  uint64 Evaluations=0;

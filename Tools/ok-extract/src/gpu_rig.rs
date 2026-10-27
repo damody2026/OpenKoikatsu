@@ -193,9 +193,11 @@ mod check_terms {
             let d = crate::anim::clip_duration(&s.game_root, &s.anim_clip).max(0.1);
             s.apply_anim_frame(0., 0.);
             let mut clip_worst = vec![0f32; terms.len()];
-            for k in 1..20 {
-                let t = d * k as f32 / 20.;
-                s.apply_anim_frame(t, d / 20.);
+            // Played at 60 Hz, springs and all, as the bank solves it.
+            let frames = (d * 60.).ceil() as usize;
+            for k in 1..=frames {
+                let t = (k as f32 / 60.).min(d);
+                s.apply_anim_frame(t, 1. / 60.);
                 let body = s.body_skel.as_ref().unwrap();
                 let worlds: Vec<_> = rig.ids.iter().map(|id| crate::pose::world_of_id(*id, &body.tfs)).collect();
                 for p in 0..terms.len() {
@@ -211,6 +213,7 @@ mod check_terms {
             println!("{other}: {}", clip_worst.iter().enumerate().filter(|(_, e)| **e > 1e-3).map(|(p, e)| format!("{p}:{e:.3}")).collect::<Vec<_>>().join(" "));
             for (w, e) in worst.iter_mut().zip(&clip_worst) { *w = w.max(*e); }
         }
+        for (p, e) in worst.iter().enumerate() { if *e > 0.05 { println!("part {p} {} acc={} err={e:.3} terms={:?}", s.parts[p].name, s.parts[p].runtime_accessory.is_some(), terms[p].iter().take(4).map(|t| t.node).collect::<Vec<_>>()); } }
         println!("worst per part (m): {}", worst.iter().enumerate().map(|(p, e)| format!("{p}:{e:.4}")).collect::<Vec<_>>().join(" "));
     }
 }

@@ -85,3 +85,30 @@ bank 保持完整長度，前 N 幀兩邊都算並讀回逐列比較，結果寫
 - 動作變多時：bank 是「人數 × 動作 × 長度」，GPU rig 只是「動作 × 長度」（所有人共用）加上每人固定的約 1 MB。
 - 載入：100 人全部畫出 bank 126 秒、GPU rig 130 秒。rig 每人多一個 0.2～0.45 秒的 worker 準備。
 - 用 bank 加 `--aggregate` 量第一輪時，彙總需要 2×2.4 GB，超過 4 GiB 預算。被拒之後當在 `FLateSourceDepth::Draw`（`OKSourceMaterialMesh.cpp:103` 釋放 shared pointer 時存取違規）。這是既有的失敗路徑，已記在 ERROR_LOG。
+
+## 街頭（StreetSocial.cmd）的 GPU rig（2026-10-27，預設關閉）
+
+- **啟動器選項**（`Tools/run_street_social_development.lua`）：
+  - `-GpuRig` 開啟；`-NoGpuRig` 關閉，用原本的 bank。
+  - `-GpuRigVerify N` 同時解算完整 bank，前 N 幀逐列對照。
+  - 開啟時啟動器會加上 `-OKGpuRig`，並在 manifest 寫 `gpu_rig:true`。
+- **bank**：開啟時女主的 bank 改成 `NativeOnly`。native 骨照完整長度解算；palette 別名骨固定第一幀，會被合併成 1 個取樣。所以 CPU 端讀骨頭的功能照常可用：手上道具、相機、galgame 的頭部位置、看向玩家。
+- **看向玩家**：GPU rig 會在最後把脖子和頭的轉動乘到 local 上，和 bank 的 `LookRotation` 相同。
+- **串流動作**（手機、喝飲料等）：照舊用該角色自己的完整 bank，以 overlay 蓋掉她的列。
+- **shader 與保護**：
+  - GPU rig 的 shader 由 patch 的 `RuntimeGlobalShaderPatch` 提供，目前是 `StreetDisplay27Rig.patch`。
+  - 只有帶 `-OKGpuRig` 的遊戲，啟動時才會驗證這兩個 shader。
+  - shader 不在快取裡時，場景記一筆警告並改用原本的 bank。已在 Rig1027A 上掛舊 patch 測過，可以正常啟動。
+
+### 為什麼還不能預設開啟：物理
+
+Editor 版街頭驗證（11 人、30 幀，`Saved/StreetSocial/Play-20261027T200302`）：74.0% 的列誤差小於 0.01 cm，5.4% 的列誤差大於 10 cm。用三月七的卡在 Rust 端照遊戲流程逐片段檢查，誤差都落在有物理的部件上：
+
+- 頭髮：跟著頭剛性移動，偏差 0.15～0.57 m。
+- OK 卡的上衣與裙子（`top_*`／`bot*`，布料物理）：1.2～2.5 m（這個量法會把縮放放大，但畫面上也看得出來）。
+
+打包版截圖也看得到：弓弦、緞帶在 bank 裡是往下垂的；在 GPU rig 裡停在原始的水平形狀，往兩側伸出去。
+
+body 與非物理部件和完整解算一致。街頭鏡頭很近，要預設開啟，必須先處理物理件：
+- 一種做法是物理件仍由 bank 提供（bank 只保留 native 骨加物理骨）。
+- 另一種是把彈簧骨與布料搬上 GPU。

@@ -54,6 +54,7 @@ static FKKRuntimePoseResult OKPrepareRuntimePoseBankNow(FKKRuntimePoseRequest& R
    for(auto& F:PartFrames){F.Ready=false;F.Raw={};if(!F.SlotReady.IsEmpty())FMemory::Memzero(F.SlotReady.GetData(),F.SlotReady.Num());}
    for(int32 B=0;B<Mapping.Num();++B){const auto& M=Mapping[B];FTransform T=R.Bones[B].Reference;
     if(M.Native!=INDEX_NONE){OkBoneView V{};if(!Session.SkelBoneAt(M.Native,V))return Fail(TEXT("Runtime native pose missing"));T=OKUnityLocalToUnreal(V.pose_pos,V.pose_rot,V.pose_scl);}
+    else if(M.Part!=INDEX_NONE&&R.NativeOnly&&K>0){const int32 First=B*Samples*3,I=(B*Samples+K)*3;Out.Keys[I]=FVector4f(Out.Keys[First].X,Out.Keys[First].Y,Out.Keys[First].Z,Time);Out.Keys[I+1]=Out.Keys[First+1];Out.Keys[I+2]=Out.Keys[First+2];continue;}
     else if(M.Part!=INDEX_NONE){auto& F=PartFrames[M.Part];const auto& Part=R.Parts[M.Part];if(!F.Ready){
       if(Part.RigidFollow.IsEmpty()){if(Session.SkinPalette(Part.NativePart,F.Raw,F.Matrices)<=0)return Fail(TEXT("Runtime native palette missing"));}
       else {float World[16];if(!Session.BoneWorldMatrix(Part.RigidFollow,World))return Fail(TEXT("Runtime rigid attachment bone missing"));F.Rigid=F.InverseBind*OKSkinPaletteToUnreal(World);}F.Ready=true;}
@@ -86,6 +87,7 @@ FString OKRuntimePoseRecipeIdentity(const FKKRuntimePoseRequest& R){
  FSHA1 H;auto Feed=[&](const TArray<uint8>& B){const uint64 N=B.Num();H.Update(reinterpret_cast<const uint8*>(&N),sizeof(N));if(N)H.Update(B.GetData(),N);};if(R.PackedGpuCache&&!R.PersistentSourceIdentity.IsEmpty()){FTCHARToUTF8 Stable(*R.PersistentSourceIdentity);TArray<uint8> Source;Source.Append(reinterpret_cast<const uint8*>(Stable.Get()),Stable.Length());Feed(Source);}else Feed(R.Snapshot);Feed(R.AuthoredCurves);
  FBufferArchive Metadata;uint32 Version=4,Hz=R.SampleHz;float Duration=R.Duration;Metadata<<Version<<Hz<<Duration;bool Packed=R.PackedGpuCache;Metadata<<Packed;
  if(R.AuthoredPrefix){uint32 PrefixVersion=1;FString Mode=TEXT("authored-prefix");Metadata<<Mode<<PrefixVersion;}
+ if(R.NativeOnly){uint32 NativeVersion=1;FString Mode=TEXT("native-only");Metadata<<Mode<<NativeVersion;}
  int32 N=R.Bones.Num();Metadata<<N;for(auto B:R.Bones){FString Name=B.Name.ToString();Metadata<<Name<<B.Parent<<B.Reference;}
  if(!R.ContactRecipe.IsEmpty()){uint32 ContactVersion=1;Metadata<<ContactVersion;FString Contact=R.ContactRecipe;Metadata<<Contact;}
  N=R.Parts.Num();Metadata<<N;for(auto P:R.Parts)Metadata<<P.NativePart<<P.Slots<<P.RigidFollow<<P.RigidBindWorld;Feed(Metadata);H.Final();FSHAHash Hash;H.GetHash(Hash.Hash);return Hash.ToString();

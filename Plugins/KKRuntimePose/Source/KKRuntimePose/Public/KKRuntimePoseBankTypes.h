@@ -28,6 +28,10 @@ struct FKKRuntimePoseRequest {
  bool PackedGpuCache=false;
  // Explicit prefix sampling; Duration remains bounded by the authored clip.
  bool AuthoredPrefix=false;
+ // Native bones only, for the GPU runtime rig (which writes every pose row itself): each palette bone keeps its first
+ // frame (one sample once the constant channels collapse), so the bank costs the native bones' keys and is drawn, before
+ // the rig takes over, in that first frame. The CPU reads (sockets, head look) are unchanged.
+ bool NativeOnly=false;
  // Stable APNG content/outfit identity from a verified capture. Snapshot byte
  // order is not canonical because native serialization contains hash maps.
  FString PersistentSourceIdentity;
