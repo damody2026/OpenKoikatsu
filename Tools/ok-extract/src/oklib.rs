@@ -824,7 +824,7 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     };
     LAST_PACK_MODELS.store(pack.records.iter().map(|r| r.0).collect::<std::collections::BTreeSet<_>>().len() as u64, Ordering::Relaxed);
     let scope = Arc::new(PackScope { overlay: crate::gamefs::replay_overlay_of(pack.index), store: pack_store, identity: hex(&hash16(chunk)),
-        mods_identity: mods_view, fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new() });
+        mods_identity: mods_view, fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new(), tree: crate::tree_answers::parse(&bytes) });
     ACTIVE_SCOPES.lock().unwrap_or_else(|e| e.into_inner()).push(Arc::downgrade(&scope));
     let previous = PACK_SCOPE.with(|c| c.replace(Some(scope.clone())));
     Ok(Some(PackMount { scope, previous }))
@@ -840,6 +840,8 @@ pub struct PackScope {
     mods_identity: String,
     /// The open read installed zipmods (gamefs::fallback_used, per open).
     pub fallback_used: AtomicBool,
+    /// What the card answers of its open's mods-tree questions (`okLt`, tree_answers.rs).
+    pub tree: Option<Arc<crate::tree_answers::Table>>,
     pool: std::sync::OnceLock<Option<rayon::ThreadPool>>,
 }
 thread_local! { static PACK_SCOPE: std::cell::RefCell<Option<Arc<PackScope>>> = const { std::cell::RefCell::new(None) }; }
@@ -1257,7 +1259,7 @@ pub fn png_has_chunk(bytes: &[u8], kind: &[u8; 4]) -> bool {
     false
 }
 
-/// The card without OK chunks (`okLb`, `okLc`, `okId`) and a legacy `okPv` snapshot: the original KKS card data.
+/// The card without OK chunks (`okLb`, `okLc`, `okLt`, `okId`) and a legacy `okPv` snapshot: the original KKS card data.
 pub fn strip_ok_chunks(bytes: &[u8]) -> Result<Vec<u8>, String> {
     if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" { return Err("not a PNG card".into()); }
     let mut out = bytes[..8].to_vec();
@@ -1267,7 +1269,7 @@ pub fn strip_ok_chunks(bytes: &[u8]) -> Result<Vec<u8>, String> {
         let end = pos.checked_add(12 + len).filter(|e| *e <= bytes.len()).ok_or("truncated PNG chunk")?;
         let kind = &bytes[pos + 4..pos + 8];
         if kind == b"IEND" { out.extend_from_slice(&bytes[pos..]); return Ok(out); }
-        if kind != CARD_CHUNK && kind != PACK_CHUNK && kind != IDENTITY_CHUNK && kind != b"okPv" { out.extend_from_slice(&bytes[pos..end]); }
+        if kind != CARD_CHUNK && kind != PACK_CHUNK && kind != crate::tree_answers::CHUNK && kind != IDENTITY_CHUNK && kind != b"okPv" { out.extend_from_slice(&bytes[pos..end]); }
         pos = end;
     }
     Err("missing PNG IEND".into())
@@ -1562,7 +1564,33 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
     LAST_UNNAMED_ZIPMOD_BYTES.store(extra.iter().filter_map(|p| std::fs::metadata(p).ok()).map(|m| m.len()).sum(), Ordering::Relaxed);
     let payload = serde_json::to_vec(&serde_json::json!({"format":"oklib-card","version":1,"digest":digest,"models":models})).unwrap();
     let bytes = library_card_with_pack(&original, &payload, pack.as_deref())?;
+    let bytes = with_tree_answers(lib, &bytes)?;
     Ok((digest, parts, bytes, pack.map_or(0, |p| p.len())))
+}
+
+/// The OK card with `okLt`: the answers its opens take from the library's mods tree (tree_answers.rs), recorded by
+/// opening it from the library and its own pack, every saved outfit, with nothing read from or written to the open
+/// cache. An outfit that fails to open is left out (its questions are asked of the tree, as before).
+pub fn with_tree_answers(lib: &Path, card: &[u8]) -> Result<Vec<u8>, String> {
+    ensure_library(lib)?;
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = lib.join("work");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let temp = TempCard(dir.join(format!("answers_{}_{}.png", std::process::id(), N.fetch_add(1, Ordering::Relaxed))));
+    let plain = crate::cardbake::strip_answers(card);
+    std::fs::write(&temp.0, &*plain).map_err(|e| format!("{}: {e}", temp.0.display()))?;
+    let coordinates = crate::card::parse_card_bytes_mode(card, 0, false).map(|c| c.coordinate_count).unwrap_or(1).max(1);
+    let nocache = std::env::var_os("OK_NOCACHE");
+    std::env::set_var("OK_NOCACHE", "1");
+    crate::tree_answers::begin(lib);
+    for outfit in 0..coordinates as i32 {
+        if let Err(e) = crate::session::open(lib, Some(&temp.0), outfit) {
+            eprintln!("ok-extract: tree answers: outfit {outfit} did not open: {e}");
+        }
+    }
+    let payload = crate::tree_answers::end();
+    if nocache.is_none() { std::env::remove_var("OK_NOCACHE"); }
+    crate::tree_answers::with_answers(card, &payload?)
 }
 
 /// Root to open a card with: callers pass an empty root for self-contained
@@ -2287,6 +2315,28 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let verdict = if a == b { "MATCH" } else { "DIFFERENT" };
             if a != b { let _ = std::fs::write(work.join("a.okpreview"), &a); let _ = std::fs::write(work.join("b.okpreview"), &b); }
             println!("OKCLOTHES test {} outfit={outfit} {verdict} okclothes={} card={} dropped={dropped:?}", card.display(), packed.len(), original.len());
+        }
+        "tree-answers" => {
+            // tree-answers <lib> <OK card>...: give each OK card its okLt (tree_answers.rs), in place. Cards made
+            // before okLt existed then open without reading the library's mods tree.
+            let lib = lib.ok_or("library directory required")?;
+            let mut failed = 0;
+            for card in args[2..].iter().map(PathBuf::from) {
+                let t = std::time::Instant::now();
+                let made = std::fs::read(&card).map_err(|e| e.to_string()).and_then(|bytes| {
+                    if !is_library_card(&card) { return Err("not an OK card".into()); }
+                    let out = with_tree_answers(&lib, &bytes)?;
+                    let temp = card.with_extension("png.answers-tmp");
+                    std::fs::write(&temp, &out).map_err(|e| e.to_string())?;
+                    std::fs::rename(&temp, &card).map_err(|e| e.to_string())?;
+                    Ok((bytes.len(), out.len(), png_chunk(&out, crate::tree_answers::CHUNK).map_or(0, <[u8]>::len)))
+                });
+                match made {
+                    Ok((before, after, chunk)) => println!("OKTREE ok\t{}\t{before} -> {after} bytes\tokLt={chunk}\t{:.1}s", card.display(), t.elapsed().as_secs_f64()),
+                    Err(e) => { failed += 1; println!("OKTREE error\t{}\t{e}", card.display()); }
+                }
+            }
+            if failed > 0 { return Err(format!("{failed} card(s) failed")); }
         }
         "crowd-check" => {
             // crowd-check <lib> <card>...: whether the hundred-girl room can use each card's outfit 0 (dressed, every drawn

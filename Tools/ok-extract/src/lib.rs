@@ -36,6 +36,7 @@ mod png_transform_cache;
 mod teximg;
 pub mod cardbake;
 pub mod memosnap;
+pub mod tree_answers;
 #[cfg(test)]
 mod crowd_native_tests;
 mod eye_gaze;
@@ -5023,7 +5024,18 @@ fn me_shader_registration(game_root: &Path, shader: &str) -> (bool, Option<bool>
     if shader.to_ascii_lowercase().starts_with("xukmi/") && shader_family(shader).contains("main_item_studio") {
         return (true, None);
     }
-    let results = MOD_RESULTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    // An OK card's answer (tree_answers.rs): no manifest of the tree is read.
+    let question = shader.to_ascii_lowercase();
+    if let Some(found) = crate::tree_answers::lookup::<(bool, Option<bool>)>("me-shader", question.as_bytes()) { return found; }
+    let found = me_shader_registration_in_tree(game_root, shader, &MOD_RESULTS);
+    crate::tree_answers::record("me-shader", question.as_bytes(), &found);
+    found
+}
+
+/// `me_shader_registration` for a shader MaterialEditor's own resources do not declare: the tree's manifests.
+fn me_shader_registration_in_tree(game_root: &Path, shader: &str,
+    results: &std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, (bool, Option<bool>)>>>) -> (bool, Option<bool>) {
+    let results = results.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
     // Which mods are readable depends on the root and on the zipmods the fallback serves (an OK card conversion adds
     // the ones the card uses unnamed and retries): a result found for one view is not an answer for another.
     let key = format!("{}\n{}\n{}", crate::gamefs::normalize(game_root), crate::gamefs::fallback_identity(), shader.to_ascii_lowercase());
