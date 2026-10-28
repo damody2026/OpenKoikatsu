@@ -116,6 +116,8 @@ const LIGHT_BEFORE_DATE: i32 = 8 * 60;
 /// Not hungry in the morning of a lunch date: no breakfast at all. Hu Tao slept to 08:30 still at 76 (the night costs
 /// little), had only a tea and was 74 at noon: the beef noodles (45) did not fit under OVERFULL_SATIETY.
 const SKIP_BREAKFAST_SATIETY: f32 = 60.0;
+/// The least time between the end of her lunch and her dinner.
+const MEAL_GAP: i32 = 180;
 
 fn lighten(b: &mut Block) {
     b.budget = -b.budget.abs().max(1);
@@ -259,6 +261,10 @@ pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
     let starts: &[i32] = match (rng.frand() * 3.0) as i32 { 0 => &[1050, 1080, 1020, 960, 1320], 1 => &[1080, 1110, 1020, 960, 1290], _ => &[1110, 1080, 1050, 960, 1290] };
     // The cafeteria closes at 19:00: only the starts that end by then.
     let starts: Vec<i32> = starts.iter().copied().filter(|s| dinner != "cafeteria" || s + 60 <= 1140).collect();
+    // Not two meals two hours apart: Raiden worked through lunch, ate it at 16:15 after her shift and had dinner at 18:15.
+    // Dinner comes three hours after her lunch at least (a later start of the list, or none at a place closing early).
+    let lunch_end = day.iter().filter(|b| b.kind == "meal" && b.source == "need" && b.start >= LUNCH_WINDOW.0 && b.start < 1000).map(|b| b.end).max();
+    let starts: Vec<i32> = starts.into_iter().filter(|s| lunch_end.map_or(true, |e| *s >= e + MEAL_GAP)).collect();
     if !eats_with_him(DINNER_WINDOW) {
         meal(&mut day, &starts, 60, dinner, budget);
     }
@@ -1278,6 +1284,24 @@ mod tests {
         assert!(blocks.iter().find(|b| b.start == 1080).unwrap().budget == 40);
     }
 
+    #[test]
+    fn dinner_is_not_right_after_a_late_lunch() {
+        let c = Tuning::builtin().catalog;
+        // working through lunch at the cafe, as Raiden: her lunch slides to 16:15
+        let p = json!({"occupation": {"primary": "clerk", "workplace_place_id": "cafe"}});
+        let mut late = 0;
+        for seed in 1..60 {
+            let plan = plan_day(&inputs(&p, seed % 7, seed * 7919), &c);
+            let lunch = plan.iter().filter(|x| x.kind == "meal" && x.start >= LUNCH_WINDOW.0 && x.start < 1000).map(|x| x.end).max();
+            if lunch.map_or(false, |e| e > 960) {
+                late += 1;
+            }
+            if let Some(end) = lunch {
+                assert!(!plan.iter().any(|x| x.kind == "meal" && x.start >= 1000 && x.start < end + MEAL_GAP), "seed {seed}: dinner within three hours of lunch ending {end}: {plan:?}");
+            }
+        }
+        assert!(late > 0, "no late lunch among the seeds: the case is not exercised");
+    }
     #[test]
     fn a_light_meal_is_a_small_dish() {
         let c = Tuning::builtin().catalog;
