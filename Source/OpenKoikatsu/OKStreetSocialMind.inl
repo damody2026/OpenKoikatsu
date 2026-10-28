@@ -503,7 +503,10 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  // went by her own lean (split) a second before the judge said he treats (R4-3). TickServes bills it if no verdict comes.
  if(Added>0){if(Reply.Payer.IsEmpty())S.ChatOrderAwaitsJudge.Add(Character,FPlatformTime::Seconds());else PlaceChatOrder(Character,Reply.Reply);}
  if(Reply.ActKind==TEXT("checkout"))StartCheckout();
- else if(Reply.ActKind==TEXT("intimacy"))RequestIntimacy(Character,false);
+ // Her own wish waiting for his answer (AskIntimacyWish): the line she asks it with is not his yes. It took 三月七
+ // straight into the one-on-one scene in the middle of her song (R4-6).
+ else if(Reply.ActKind==TEXT("intimacy")){if(!S.Choices.ContainsByPredicate([Character](const FOKStreetPendingChoice& C){return C.Kind==TEXT("intimacy")&&C.Heroine==Character;}))RequestIntimacy(Character,false);
+  else UE_LOG(LogTemp,Display,TEXT("Street life: actor %d asks in her own words; her wish waits for his answer"),Character);}
  // A weekly one: the judge says which ("her" defers). Only on a call with her (R3-268); hers, so it costs him nothing.
  else if(Reply.ActKind==TEXT("cancel_promise")&&S.RemoteMode==2&&S.RemotePeer==Character){S.CancelCallGirl=Character;S.CancelCallGrace=-1;S.CancelCallSaid.Reset();CancelPromiseWith(Character,TEXT("her"));}
  else if(Reply.ActKind==TEXT("entrust")){FString A,D;if(!Reply.ActArg.Split(TEXT("|"),&A,&D))A=Reply.ActArg;StartEntrust(Character,TEXT("entrust"),FCString::Atoi64(*A),D.IsEmpty()?30:FCString::Atoi(*D));}

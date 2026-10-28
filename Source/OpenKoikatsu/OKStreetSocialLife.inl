@@ -275,7 +275,8 @@ void AOKStreetSocialScene::TickLife(float Dt){
   if(S.ClockDrivesSun&&S.Sun.IsValid())S.Sun->GetLightComponent()->SetIntensity(OKStreetSunAt(OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall)).Intensity*.5f);
  }
  // 5. Her own wish (plan §12.4, her idea): a lover alone with him in a lockable room, in a good mood, once a day.
- if(S.Target!=INDEX_NONE&&S.RemoteMode==0&&!S.FreeTalkBusy&&S.PendingIntimacy==INDEX_NONE&&S.PrivateGirl==INDEX_NONE&&S.LifeWishDay!=S.Store.CalendarDay&&Now>=S.LifeWishAt){
+ // Not in the middle of a song (三月七 stopped her own song for him to ask, R4-6).
+ if(S.Target!=INDEX_NONE&&S.RemoteMode==0&&!S.FreeTalkBusy&&!SongIsSinging()&&S.PendingIntimacy==INDEX_NONE&&S.PrivateGirl==INDEX_NONE&&S.LifeWishDay!=S.Store.CalendarDay&&Now>=S.LifeWishAt){
   S.LifeWishAt=Now+30.0;const int32 I=S.Target;
   const FString Id=OKStreetStableId(S.Manifest.Characters[I]);const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
   // Not while she is cross with him: jealous a moment ago ("who were you so close with today?") she whispered she wanted
