@@ -45,6 +45,8 @@ FString AOKStreetSocialScene::TodayText(int32 Character) const{
  // friend; only "resting at home at the girls' dorm" in her plan said so.
  if(Character>0&&S.Manifest.Characters.IsValidIndex(Character)){const FString Home=OKStreetProfileString(S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Character])),nullptr,TEXT("home_place_id"));
   if(const FOKStreetPlace* P=Home.IsEmpty()?nullptr:OKStreetFindPlace(Home))Parts.Add(OKMsg(TEXT("ui.director.your_home_line"),{{TEXT("place"),FString(P->Name)}}));}
+ // Where he lives: Yuuka, at the girls' dorm, took "I just moved in, do you live here too?" as him living on her floor.
+ if(const FOKStreetPlace* P=OKStreetFindPlace(TEXT("boys_dorm")))Parts.Add(OKMsg(TEXT("ui.director.his_home_line"),{{TEXT("place"),FString(P->Name)}}));
  // What her own day still holds (the plan she follows): what she says she has to do comes from here.
  if(const auto* Plan=S.Plans.Find(Character)){TArray<FString> Next;const int32 Minute=int32(Now%1440);
   for(const auto& B:*Plan)if(B.End>Minute&&Next.Num()<4&&B.Kind!=TEXT("sleep")){const FOKStreetPlace* P=OKStreetFindPlace(B.Place);

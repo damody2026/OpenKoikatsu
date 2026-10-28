@@ -412,6 +412,7 @@ school_break_line = "school is on summer break until {start}; there are no class
 plan_block = "{doing} at {place}"
 plan_now = "now until {end}: {block}"
 your_home_line = "you live at {place} (your own home: being there is being at home)"
+his_home_line = "he lives at {place} (a man: not in the girls' dorm)"
 your_plan_line = "the rest of your day: {plan} (when you say what you have to do, go by this; no classes or shifts that are not in it)"
 he_is_intelligence_line = "He is {academic_title}, intelligence {intelligence, number, ::integer}"
 his_major_unknown = "you do not know yet what he studies (only what he has told you in your talks)"
