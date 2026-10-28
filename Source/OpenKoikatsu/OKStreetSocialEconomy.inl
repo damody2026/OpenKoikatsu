@@ -780,8 +780,14 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildMenuCard(const FString& Title,int
 }
 // Admission as he walks in (the aquarium, the onsen): how much and who pays are the rules' (shop.rs entry_fee); she is
 // the girl walking with him. He cannot pay: back out of the door.
+// Walking with him, on the way to something with him, or talking with him face to face in the same place: 惠惠 walked
+// into the aquarium beside him, talking, and only his ticket was bought (R3-267).
+int32 AOKStreetSocialScene::EntryCompanion(const FString& Place) const{
+ const auto& S=*State;if(S.Companion!=INDEX_NONE)return S.Companion;if(S.OutingGirl!=INDEX_NONE)return S.OutingGirl;
+ return S.RemoteMode==0&&S.Target>0&&S.Agents.IsValidIndex(S.Target-1)&&PlaceHere(S.Agents[S.Target-1].Position)==Place?S.Target:INDEX_NONE;
+}
 bool AOKStreetSocialScene::PayEntry(const FString& Place,int32 MinutesInside){
- auto& S=*State;const int32 Her=S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;const bool With=S.Manifest.Characters.IsValidIndex(Her)&&Her>0;
+ auto& S=*State;const int32 Her=EntryCompanion(Place);const bool With=S.Manifest.Characters.IsValidIndex(Her)&&Her>0;
  const FString HerId=With?OKStreetStableId(S.Manifest.Characters[Her]):FString();
  auto Request=With?OKRulesHeroineRequest(S,TEXT("entry_fee"),HerId):OKRulesRequest(TEXT("entry_fee"));OKRulesPutExt(S,Request);
  Request->SetStringField(TEXT("place"),Place);Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("minutes_inside"),MinutesInside);
@@ -795,5 +801,5 @@ bool AOKStreetSocialScene::PayEntry(const FString& Place,int32 MinutesInside){
   S.FreeTalkNotice=Notice;S.Message=Notice;UE_LOG(LogTemp,Display,TEXT("Street entry: %s refused (%s)"),*Place,*Notice);RefreshUI();return true;}
  auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);ApplyRulesEffects(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return true;FlushRulesEffects();
  if(With)S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),Notice}}));
- S.FreeTalkNotice=Notice;UE_LOG(LogTemp,Display,TEXT("Street entry: %s %s"),*Place,*Notice);RefreshUI();return true;
+ S.FreeTalkNotice=Notice;UE_LOG(LogTemp,Display,TEXT("Street entry: %s %s (day %d, actor %d, %d minutes in)"),*Place,*Notice,S.Store.CalendarDay,With?Her:-1,MinutesInside);RefreshUI();return true;
 }

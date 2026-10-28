@@ -250,6 +250,7 @@ private:
  void TickAppointments();
  void SetAsideAbsentMeetings(); // OKStreetSocialAppointments.inl (series.rs appointments_cast)
  bool PayEntry(const FString& Place,int32 MinutesInside); // OKStreetSocialEconomy.inl (shop.rs entry_fee); false: ask again next minute
+ int32 EntryCompanion(const FString& Place) const; // the girl who walks in with him (her ticket is bought with his), or INDEX_NONE
  FString TaskListText() const;
  struct FSlateColor TaskListColor() const;
  void NavigateToNextAppointment();
