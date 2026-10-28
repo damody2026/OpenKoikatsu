@@ -203,7 +203,11 @@ void AOKStreetSocialScene::PhoneCall(int32 Girl){
   UE_LOG(LogTemp,Display,TEXT("Street phone: call to actor %d not answered"),Girl);RefreshUI();return;
  }
  if(S.App==TEXT("phone"))CloseApp();
+ // He reached her now: her "missed your call, what was it?" from the call before is no longer owed (R3-270: it came in
+ // the middle of this call).
+ S.PendingTexts.RemoveAll([Girl](const FOKStreetSceneState::FPendingText& T){return T.Girl==Girl&&T.Kind==TEXT("missed_call");});
  S.RemoteMode=2;S.RemotePeer=Girl;S.CallStarted=SceneTime();S.CallHisLines=S.HisLines;
+ S.CallStartFavor=OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Favor; // a yandere lover keeps it (R3-268)
  HistoryAdd(Girl,TEXT("call"),TEXT("him"),OKT(TEXT("ui.phone_inbox.he_called_answered")));
  S.FreeTalkOpen=true;FreeTalkLiveSet(true);
  S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.phone_inbox.he_called_you_prompt"));SendFreeTalk();

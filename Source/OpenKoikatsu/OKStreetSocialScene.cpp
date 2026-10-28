@@ -278,7 +278,7 @@ struct FOKStreetSceneState {
   // A date called off on the phone (R3-268): who, how he put it (the judge's cancel_grace; -1: hers), the date the
   // "call to cancel" button is about, his lines when the call began (none by the hang-up: hung up without a word), and
   // the last cancel for each girl (her act and the judge both read the same "cancel it": one date, not two).
-  int32 CancelCallGirl=INDEX_NONE,CancelCallAppointment=INDEX_NONE;double CancelCallGrace=-1;FString CancelCallSaid;int64 CallHisLines=0;TMap<int32,double> CancelledAt;FString AdmittedPlace;int32 AdmittedDay=-1;
+  int32 CancelCallGirl=INDEX_NONE,CancelCallAppointment=INDEX_NONE;double CancelCallGrace=-1;FString CancelCallSaid;int64 CallHisLines=0;float CallStartFavor=-1;TMap<int32,double> CancelledAt;FString AdmittedPlace;int32 AdmittedDay=-1;
  int32 SleepGirl2=INDEX_NONE;FVector SleepGirl2Bed=FVector::ZeroVector;float SleepGirl2Yaw=0;
  // Plan §12.4 level 4: she agreed, and they are on the way to a lockable room (or already in the private mode).
  int32 PendingIntimacy=INDEX_NONE,IntimacyGirl=INDEX_NONE;

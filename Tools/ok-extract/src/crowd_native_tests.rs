@@ -549,3 +549,78 @@ fn parallel_opens_match_single() {
     }
     eprintln!("PARALLEL done");
 }
+
+// R3-265: a street heroine's loop as the pose bank bakes it (animation snapshot, shared clip, one loop first, 60 Hz):
+// hair/accessory vertices in head space, and every part's palette translations (what the GPU keys record), counting
+// the frames whose motion turns back on the previous one (the bank's "Runtime pose jitter"). OK_JITTER_DT0=1 samples
+// without dynamics (what is left comes from the clip itself). Run with the reader's env (OK_GPU_SKIN=1 OK_HEAD_GPUSKIN=1
+// OK_SKELMESH=1 OK_NOPOSE=1 OK_UE_ANIM=1) so the parts match the game's.
+//   OK_JITTER_GAME=C:/portable/OpenKoikatsu/Content/IndependentResources/base_v1 [OK_JITTER_CARD=<png>] [OK_JITTER_CLIP=<okanim>]
+//   cargo test --release --lib street_bake_jitter -- --ignored --nocapture
+#[test]
+#[ignore = "real-card diagnostic"]
+fn street_bake_jitter() {
+    let card = std::env::var("OK_JITTER_CARD").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/CharacterCards/StreetHeroines/march_7th.png".into());
+    let card_c = std::ffi::CString::new(card).unwrap();let game = std::ffi::CString::new(std::env::var("OK_JITTER_GAME").unwrap_or_default()).unwrap();
+    let mut raw: *mut crate::session::OkSession = std::ptr::null_mut();let mut err = [0i8; 2048];
+    let status = unsafe { crate::ffi::session_open(game.as_ptr(), card_c.as_ptr(), 0, &mut raw, err.as_mut_ptr(), err.len() as i32) };
+    assert!(status == 0 && !raw.is_null(), "open failed: {}", unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy());
+    let a = unsafe { &mut *raw };
+    let mut b = crate::session::OkSession::from_animation_bytes(&a.to_animation_bytes().unwrap()).unwrap();
+    let clip_path = std::env::var("OK_JITTER_CLIP").unwrap_or_else(|_| "C:/portable/OpenKoikatsu/Content/IndependentResources/RuntimeAnimations/conversation_wait_04.okanim".into());
+    let clip = std::fs::read(clip_path).unwrap();
+    assert_eq!(unsafe { crate::ffi::ok_session_install_shared_clip(&mut b as *mut _, clip.as_ptr(), clip.len() as i32) }, 0);
+    let frames = 240usize;
+    let mut tracks: Vec<Vec<Vec<[f32; 3]>>> = Vec::new(); // part -> frame -> vertex
+    let mut names = Vec::new();
+    let mut palettes: Vec<Vec<Vec<[f32; 3]>>> = Vec::new();
+    for frame in 0..frames * 2 {
+        let t = (frame % frames) as f32 / 60.;
+        b.apply_anim_frame(t, if frame == 0 || std::env::var("OK_JITTER_DT0").is_ok() { 0. } else { 1. / 60. }); b.skin_all();
+        if frame < frames { continue; }
+        let sk = b.body_skel.as_ref().unwrap(); let i = sk.names.iter().position(|n| n == "cf_j_head").unwrap();
+        let inv = crate::pose::mat_inv_pub(&sk.worlds[i]);
+        let parts: Vec<_> = b.parts.iter().filter(|p| (p.role == "accessory" || p.role.starts_with("hair")) && !p.positions.is_empty()).collect();
+        if tracks.is_empty() { tracks = vec![Vec::new(); parts.len()]; names = parts.iter().map(|p| p.name.clone()).collect(); }
+        for (k, p) in parts.iter().enumerate() {
+            tracks[k].push(p.positions.iter().map(|x| { let mut o = [0f32; 3]; for r in 0..3 { o[r] = inv[r][0]*x[0] + inv[r][1]*x[1] + inv[r][2]*x[2] + inv[r][3]; } o }).collect());
+        }
+        // What the pose bank records: each part's palette translations (world), as the GPU keys get them.
+        if palettes.is_empty() { palettes = vec![Vec::new(); b.parts.len()]; }
+        for index in 0..b.parts.len() {
+            let mut view: crate::ffi::OkSkinPaletteView = unsafe { std::mem::zeroed() };
+            let mut m = vec![0f32; 16 * 4096];
+            let n = unsafe { crate::ffi::ok_part_skin_palette(&mut b as *mut _, index as i32, &mut view, m.as_mut_ptr(), 4096) };
+            palettes[index].push(if n > 0 { (0..(n as usize).min(4096)).map(|s| [m[s*16+3], m[s*16+7], m[s*16+11]]).collect() } else { Vec::new() });
+        }
+    }
+    for (index, part) in palettes.iter().enumerate() {
+        let slots = part.iter().map(|f| f.len()).min().unwrap_or(0);
+        for s in 0..slots {
+            let (mut rev, mut amp) = (0, 0f32);
+            for f in 0..frames - 2 {
+                let d0 = [part[f+1][s][0]-part[f][s][0], part[f+1][s][1]-part[f][s][1], part[f+1][s][2]-part[f][s][2]];
+                let d1 = [part[f+2][s][0]-part[f+1][s][0], part[f+2][s][1]-part[f+1][s][1], part[f+2][s][2]-part[f+1][s][2]];
+                let (l0, l1) = ((d0[0]*d0[0]+d0[1]*d0[1]+d0[2]*d0[2]).sqrt(), (d1[0]*d1[0]+d1[1]*d1[1]+d1[2]*d1[2]).sqrt());
+                if l0 > 2e-5 && l1 > 2e-5 && d0[0]*d1[0]+d0[1]*d1[1]+d0[2]*d1[2] < -0.5*l0*l1 { rev += 1; amp = amp.max(l0.min(l1)); }
+            }
+            if rev * 4 > frames { let bone = if b.parts[index].skel_kind == 1 { b.body_skel.as_ref().and_then(|k| k.names.get(s).cloned()).unwrap_or_default() } else { String::new() }; eprintln!("PALETTE part {index} {} slot {s} {bone}: {rev} reversals, step {amp:.6} m", b.parts[index].name); }
+        }
+    }
+    let sub = |x: [f32; 3], y: [f32; 3]| [x[0]-y[0], x[1]-y[1], x[2]-y[2]];
+    let len = |x: [f32; 3]| (x[0]*x[0]+x[1]*x[1]+x[2]*x[2]).sqrt();
+    for (k, part) in tracks.iter().enumerate() {
+        let verts = part[0].len();
+        let (mut worst, mut worst_amp, mut worst_rev_amp) = (0usize, 0f32, 0f32);
+        for v in 0..verts {
+            let mut rev = 0; let mut amp = 0f32; let mut rev_amp = 0f32;
+            for f in 0..frames - 2 {
+                let d0 = sub(part[f + 1][v], part[f][v]); let d1 = sub(part[f + 2][v], part[f + 1][v]);
+                let (l0, l1) = (len(d0), len(d1)); amp = amp.max(l0);
+                if l0 > 2e-5 && l1 > 2e-5 && d0[0]*d1[0]+d0[1]*d1[1]+d0[2]*d1[2] < -0.5 * l0 * l1 { rev += 1; rev_amp = rev_amp.max(l0.min(l1)); }
+            }
+            if rev > worst || (rev == worst && amp > worst_amp) { worst = rev; worst_amp = amp; worst_rev_amp = rev_amp; }
+        }
+        eprintln!("JITTER {:<32} verts={:<6} worst_reversals={:<4} of {} max_step={:.5} m reversing_step={:.6} m", names[k], verts, worst, frames, worst_amp, worst_rev_amp);
+    }
+}

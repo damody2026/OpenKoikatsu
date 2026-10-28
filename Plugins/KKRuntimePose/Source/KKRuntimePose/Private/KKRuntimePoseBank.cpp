@@ -15,7 +15,9 @@ static void OKLogRuntimePoseJitter(const FKKRuntimePoseRequest& R,const FKKRunti
  if(Out.Samples<8)return;struct FFound {FName Bone;int32 Reversals=0;float Seam=0;};TArray<FFound> Shaking,Seams;
  for(int32 B=0;B<Out.Tracks.Num()&&B<R.Bones.Num();++B){const auto& T=Out.Tracks[B];if(T.Y!=Out.Samples||OKGpuTrackPositionRow(T,T.Y-1)>=uint32(Out.Keys.Num()))continue;
   auto At=[&](uint32 K){const auto& P=Out.Keys[OKGpuTrackPositionRow(T,K)];return FVector3f(P.X,P.Y,P.Z);};
-  const float Eps=.002f*FMath::Max(1.f,At(0).Size());int32 Reversals=0;float Mean=0;
+  // A visible step (1 mm), not a share of the key's distance from the origin: palette translations (world x bind) sit
+  // near it, and 0.4 mm of clip noise in 三月七's legs read as 92 reversals of her hair (R3-265).
+  const float Eps=.1f;int32 Reversals=0;float Mean=0;
   for(uint32 K=0;K+2<T.Y;++K){const FVector3f D0=At(K+1)-At(K),D1=At(K+2)-At(K+1);Mean+=D0.Size();
    if(D0.Size()>Eps&&D1.Size()>Eps&&FVector3f::DotProduct(D0,D1)<-.5f*D0.Size()*D1.Size())++Reversals;}
   Mean/=float(T.Y-2);
