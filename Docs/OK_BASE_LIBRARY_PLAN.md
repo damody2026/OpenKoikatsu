@@ -53,7 +53,7 @@
 | `card <lib> <KKS 卡> <out>` | 原作卡 → APNG 卡：基礎庫＋此卡 zipmod 開卡，基礎庫沒有的部分錄成卡內 `okLc` |
 | `kks-verify <lib> <清單>` | 原作卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod digest（`work/kks_verify.tsv`） |
 | `okcard-verify <lib> <清單>` | 原作卡 → APNG 卡 → 只用 OK 資料重開：三者 digest 相同、大小比例、`okLc` 大小（`work/okcard_verify.tsv`） |
-| `seal <lib> <OK 卡>... [--out 目錄]` | 讓既有 OK 卡只靠自己開卡：補上 `okLt`，並把它從基礎庫讀到的第三方 mod 資料複製進 `okLc`（見下方「OK 卡只靠自己開卡」）；原地改寫或寫到目錄。`card`／`cards` 轉出的新卡已經封好。批次用 `Tools/seal_ok_cards.lua`（先備份、新程序嚴格檢查通過才換掉原檔） |
+| `seal <lib> <OK 卡>... [--out 目錄]` | （舊卡用；新轉的卡不需要）讓既有 OK 卡只靠自己開卡：補上 `okLt`，並把它從基礎庫讀到的第三方 mod 資料複製進 `okLc`（見下方「OK 卡只靠自己開卡」）；原地改寫或寫到目錄。`card`／`cards` 轉出的新卡已經封好。批次用 `Tools/seal_ok_cards.lua`（先備份、新程序嚴格檢查通過才換掉原檔） |
 | `strict-check <lib> <OK 卡>...` | 每套服裝都以嚴格模式開一次（不經快取）；一張卡一個新程序最可靠 |
 
 ## 階段與驗收
@@ -115,12 +115,20 @@
   - `mods/` 底下的目錄列表一律只看卡內；第三方 zipmod 的清單、檔案、bundle 只從卡內 `okLc` 取；只有第三方 mod 用到的模型（`models/.gitignore` 列的）只從卡內取。
   - 任何缺的東西（卡內沒有、也不是共用資源）記成缺口，開卡失敗並列出缺什麼，不回頭掃、不現算。沒有 `okLt` 的舊卡直接報錯，訊息附上補救指令。
   - 轉卡給 zipmod 資料夾（名稱為 `mods`，例如 `D:/KoikatuSunshine/mods`）而不是遊戲目錄時，只從裡面取 zipmod，不讀遊戲的設定檔：陰影 ramp（`UserData/config/system.xml`）用基礎庫記錄的那份，UncensorSelector 設定用專案 `Config/UncensorSelector.cfg`（`oklib::zipmod_source`）。轉卡本來就不讀遊戲的 abdata（原作資源一律來自基礎庫）。
-  - 轉卡（`card`／`cards`）最後就是封卡：每套服裝都要能嚴格開卡，任何一套缺資料就轉卡失敗並列出缺什麼。
+  - 轉卡（`card`／`cards`）是單次錄製（見下方「批次轉換」），基礎庫和 zipmod 都沒有的東西就轉卡失敗並列出缺什麼。
   - 基礎庫帶自己的共用清單 `shared_mods.txt`（`shared-ignore` 時從 `Tools/base_library_shared_mods.txt` 複製），打包版沒有 `Tools/` 也能判斷。
   - 封卡（`seal`）：先錄 `okLt`；再以「補齊模式」開每套服裝，嚴格開卡會缺、但基礎庫有的資料（第三方 zipmod 的清單與檔案、模型查詢結果；基礎庫本來就沒存、以前每次現算的查詢則存下現算的值）複製進卡內 `okLc`；最後每套服裝嚴格開一次。這三步（錄答案、補齊、嚴格檢查）各在一個新程序裡跑（`seal-step`）：同一程序先前開卡留下的值（entry memo、陰影 ramp、`textures_keep_base`、解析過的 bundle）會讓後一步不去讀它該讀的東西，答案沒錄到、資料沒複製，同程序的檢查卻照樣通過。`cards` 也是一張卡一個程序（`OK_CARDS_IN_PROCESS=1` 才在同一程序轉）。
   - 卡片指名、但不在基礎庫的 zipmod 裡的大 bundle（超過映射門檻、分段讀成暫存檔）以前不會記進卡包的 zip 項目，那個部件在 OK 卡裡一直是缺的；現在轉卡時整個項目照樣記錄（`Zip::note_read`）。卡片指名的 zipmod 在轉卡時掛成 `mods/<檔名>`，基礎庫若以原路徑記著同一檔案，補齊時以「同檔名、項目清單相同」對上（`library_alias`）。
   - 以前會順手記成缺口、其實是正確答案的情況不再算缺口：bundle 裡沒有那個 prefab（`memo_prefab`）、貼圖不是外部引用（`dependency_texture_model` 沒記錄）、把資料夾當檔案讀（空的 bundle 名稱組出 `abdata`）。
   - 驗收（10-28，C049，7 套服裝）：有沒有 `okLt` 的 session 逐位元組相同。新程序第一次開卡（`OK_NOCACHE`，同時有其他工作在跑）：`lists+mods+guids` 774 → 40 ms，`uncensor body` 289 → 24 ms；讀到的 zip 從 14,641 次降到 67 次（只剩卡片自己用到的）；extract_session 3.39 → 2.03 秒。只有某套服裝才用、基礎庫又沒有的資源，例如 mod 上衣給身體的 `OverBodyMask`，以前不在包裡，讀卡器換到那套就缺；這類缺口現在會印 `OverBodyMask ... not found`。舊卡用 `--oklib card`／`cards` 重轉（輸入可以是 OK 卡本身，會先剝掉 OK 區塊）。重轉已是 OK 卡的卡時，新卡帶 `okId` 區塊記下原本的身分（街區的 `apng-<id>`），名字、個人設定、存檔照常對得上（`oklib::keep_identity`、`card_identity`）。
+- 批次轉換（2026-10-28，`Tools/ok_cards.lua`）：原作 KKS 卡轉成 OK 卡的固定流程；舊 OK 卡不再處理（不封、不修）。
+  - 轉換（`convert`，即 `ok-extract <zipmod 資料夾> --oklib cards`）：開多個工作程序（`OK_CARDS_WORKERS`，各自的執行緒數 `OK_THREADS`＝硬體執行緒÷程序數），每個程序初始化一次（啟用基礎庫）後從標準輸入一張一張領卡（卡的成本差好幾倍，事先平分會讓多數程序閒著等最慢的那個）；卡與卡之間清掉 bundle、entry 與遮罩烘焙記憶。每次轉換的檢視身分唯一（程序 ID＋序號）：以檢視為鍵的記憶（mods 樹的 zip 清單、GUID 索引）不能拿上一張卡的樹回答下一張（見 ERROR_LOG）。同一張卡的各套服裝共用 entry 記憶，outfit 1.. 不重解析 outfit 0 已解析的配件；錄製中的卡包放記憶體，補齊資料合併後只壓縮一次（zstd 等級 `OK_PACK_LEVEL`，預設 3）。每張卡單次錄製：每套服裝開一次，轉換模式（`okstrict.rs`）下樹問題的答案錄進 `okLt`（背後的掃描在專用執行緒池跑，讀到的不算卡片資料），基礎庫有的第三方資料複製、只有 zipmod 有的照卡包錄製，一起寫進 `okLc`；兩邊都沒有的就轉換失敗並列出。不讀遊戲安裝；身分是新卡自己的。
+  - 驗收（`verify`）：一張卡一個新程序、空的暫存資料夾、沒有磁碟快取，所有服裝都要能嚴格開卡；有缺口就是轉換的 bug，修轉換器、整批重跑。嚴格開卡只抓得到「讀了卻沒有」，抓不到「該讀卻沒讀」：改了轉換器後另抽幾張卡各自單獨轉當基準，和同一程序連續轉（換順序）比 outfit 0 摘要與 `pack-keys` 的記錄鍵，要完全相同。驗收不和轉換同時跑。
+  - 冷讀（`cold`）：一次一張、新程序、沒有快取，量 outfit 0 開卡；量之前請其他 session 暫停遊戲與編譯。
+  - 安裝（`install`）：全部通過才依清單順序裝成 `C000.png`…，重寫 `sources.tsv`、`selection.json`。
+  - 不用磁碟快取：開卡快取、衍生貼圖、程式庫掃描預設都關（只有設 `OK_LIBRARY_CACHE` 才用）；卡包解壓後放記憶體，大型暫存也放記憶體，開完就釋放。以前的驗收在有快取的環境做，快取擋住讀取，卡包漏錄而驗收照樣通過（見 ERROR_LOG）。
+  - `pack-keys <OK 卡>` 依序列出卡包記錄、overlay 項目與 okLt 答案，用來比較兩次轉換。
+  - 效能（2026-10-28，Ryzen 9 9950X3D 16 核 32 執行緒，其他 session 暫停時）：一個工作程序逐張轉 16 張平均 6.9 秒／張（Alice 穩態 6.0 秒：outfit 0 約 2 秒、其餘每套約 0.5–0.7 秒）；48 張用 8 個工作程序 116.6 秒（12 個 120.3 秒，實體核心已滿）。冷讀 6 張平均 1.97 秒、最慢 2.95 秒。分析工具：`OK_PROFILE=1` 印每套服裝、轉換各段與 GPU 呼叫時間。
 - 驗收：
   - KKS 卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod 的 digest（用基礎庫沒有的卡測，包含卡片專屬 mod 的卡）。
   - APNG 卡：封閉重播（無遊戲目錄、無後備）digest ＝ 遊戲模式 digest。

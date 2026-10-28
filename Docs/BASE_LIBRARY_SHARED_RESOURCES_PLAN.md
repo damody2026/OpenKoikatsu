@@ -68,14 +68,11 @@
 
 ### 嚴格開卡上線時處理一個 checkout 的 OK 卡（E 已做；C 在下次 C⇔E 整合時照做）
 
-1. 合併程式、重編 `ok-extract` 前，先盤點 checkout 裡的 OK 卡（含 `okLb` 區塊的 PNG）：`Content/CharacterCards/` 各資料夾、`output/` 下的 APNG、`UserData/Studio/scene/*_cards`、`UserData/Studio/import/*_cards`。
-2. `Content/CharacterCards/` 直接用 E 已處理好的卡覆蓋（`CrowdAPNG` 是從 `D:\KoikatuSunshine\UserData\chara\female` 前 100 張、只用 `D:/KoikatuSunshine/mods` 重轉的新卡；`StreetHeroines`、`Demo` 是封好的同名卡，身分 `okId` 不變）。
-3. 其他 OK 卡二選一：
-   - 封卡（保留原本的卡，補上 `okLt` 並把第三方資料複製進 `okLc`）：`Tools\lua\lua.exe Tools\seal_ok_cards.lua --backup <備份資料夾> <卡或資料夾>...`；它先備份、在新程序裡嚴格檢查通過才換掉原檔。卡片用到的 mod 在基礎庫也沒有（例如以前只錄了 outfit 0 的卡）就封不了，改用重轉。
-   - 重轉：`ok-extract D:/KoikatuSunshine/mods --oklib cards <基礎庫> <原作卡清單> <輸出資料夾>`（輸入也可以是 OK 卡本身，會用卡內的原作卡資料重轉並保留身分）。
-   - `UserData/Studio/import/*_cards` 是開 KStudio 場景時自動重轉的暫存，不必處理；`scene/*_cards` 被 `.okscene` 引用，要封或重轉。
-4. 每張卡用新程序跑 `ok-extract X:/NoGame --oklib strict-check <基礎庫> <卡>` 驗收，不要多個轉換程序同時跑時驗收（負載高時曾漏錄背景預取讀到的資料；封卡已會自動補齊重試）。
-5. 刪掉開卡快取（`%LOCALAPPDATA%\OpenKoikatsu\oklib-cache`）與暫存的卡包（`%TEMP%\okcard-packs`），重開遊戲確認。
+1. 舊 OK 卡不處理（不封、不修）：遊戲用到的卡一律換成從原作 KKS 卡新轉、驗收過的卡（`Tools/ok_cards.lua`，見 [OK 基礎模型庫](OK_BASE_LIBRARY_PLAN.md)「批次轉換」）。
+2. `Content/CharacterCards/`（`CrowdAPNG`、`StreetHeroines`、`Demo`）直接用 E 驗收過的新卡覆蓋，覆蓋前把原卡備份到 `Saved/CardBackup/`。新卡的身分是新的（街區對這些女主角的存檔關係會重來）。`StreetHeroines` 要等那個 checkout 的遊戲關掉再換，換完通知用它的 session。
+3. `UserData/Studio/import/*_cards` 是開 KStudio 場景時自動重轉的暫存，不必處理；`scene/*_cards` 被 `.okscene` 引用，要從場景重新匯入。
+4. 驗收：`Tools\lua\lua.exe Tools\ok_cards.lua verify <卡片資料夾>`（一張卡一個新程序、沒有快取），全部通過才算完成。
+5. 刪掉舊的磁碟快取（`%LOCALAPPDATA%\OpenKoikatsu\oklib-cache`、`%TEMP%\okcard-packs`、`%TEMP%\ok-extract-spill`）：新程式不再使用，但舊程式留下的檔案還在。
 
 ### 60 張樣本卡回歸（UserData 抽樣，指定遊戲路徑轉 OK 卡 → 封閉重開 → 對照遊戲模式）
 

@@ -830,10 +830,11 @@ fn take_card_pack() -> Result<Option<CardPack>, String> {
     Ok(Some(CardPack { version: CARD_PACK_VERSION, index, records: records.into_iter().map(|(a, b, c, d)| PackRecord(a, b, c, d)).collect() }))
 }
 
-/// The `okLc` payload of a pack: zstd (OK_PACK_LEVEL, default 9) on all hardware threads.
+/// The `okLc` payload of a pack: zstd (OK_PACK_LEVEL, default 3) on all hardware threads. Level 9 made cards ~5%
+/// smaller for several times the CPU, an eighth of a batch conversion's; reading is as fast either way.
 fn encode_card_pack(pack: &CardPack) -> Result<Vec<u8>, String> {
     let raw = bincode::serialize(pack).map_err(|e| e.to_string())?;
-    let level = std::env::var("OK_PACK_LEVEL").ok().and_then(|v| v.parse().ok()).unwrap_or(9);
+    let level = std::env::var("OK_PACK_LEVEL").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
     let mut encoder = zstd::stream::Encoder::new(Vec::new(), level).map_err(|e| e.to_string())?;
     encoder.multithread(crate::cpu_threads() as u32).map_err(|e| e.to_string())?;
     std::io::Write::write_all(&mut encoder, &raw).map_err(|e| e.to_string())?;
