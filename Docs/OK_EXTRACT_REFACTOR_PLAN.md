@@ -27,3 +27,16 @@
 ## 順序
 
 在「只讀不組裝」實驗量完並提交之後、全部轉換之前進行。步驟 2、3 直接服務轉卡加速；1、4、5 可以穿插在其他工作之間。
+
+## 進度（2026-10-28）
+
+- 1 完成（610d1396d）：測試移到 `src/tests.rs`，lib.rs 18,600 → 11,500 行。
+- 2a 完成（0064a77d3）：`extract_session_from_info` 原封不動移到 `src/extract.rs`。
+- 2b 完成（a61fd60a2）：「清單＋mods＋GUID」拆成 `lists_stage`，回傳 `ListsStage`；兩個 RAII scope（穿著狀態、預取）放在結構裡，呼叫端以 `_clothes_scope`、`_prefetch_guard` 綁定，保持原本的釋放順序。
+- 下一步 2c：「基礎 bundle」（身體、頭部、臉、shape keys）。這段約 45 個綁定、許多是可變的且後面各段都用，先分成身體與頭部兩個結構，再拆函式。
+
+## 做法
+
+- 開發在自己的匯出副本（`git archive HEAD Tools/ok-extract Tools/vendor`，另外複製編譯期 `include_*!` 用到的 `Plugins/KKUnityBundle/.../Shaders`、`Plugins/OKAnimation/Resources/kk_cf_j_rest.json`、`Content/IndependentResources/BodyInteractions/hit-reaction-v1.json`、`Tools/base_library_shared_mods.txt`），用獨立的 `CARGO_TARGET_DIR`。
+- 每步：release 建置、`cargo test --release --lib --no-run`；6 張樣本卡用重構前的程式做一次基準（含穿著狀態），重構後轉換比對 outfit 0 摘要與 `pack-keys` 的鍵與值（HashSet／HashMap 序列化順序不定的 `clothes_renderer_map`、`accessory_color_use`、`prefab_node_names` 只比鍵）。
+- 寫回：工作樹的 lib.rs 常有別人的未提交改動；以 HEAD 版本做同樣的變換後 `git hash-object --path` 寫進暫存區，確認與匯出副本相同再提交，別人的改動留在工作樹。
