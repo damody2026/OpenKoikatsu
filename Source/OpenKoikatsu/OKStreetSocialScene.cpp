@@ -1168,7 +1168,8 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty()){const FString& HisName=S.Manifest.Characters[0].Name;
   bool Knows=HerRelation.Stage!=TEXT("stranger");
   if(!Knows)for(const FOKStreetHistoryEntry& E:HistoryOf(Id))if(E.Who==TEXT("him")&&E.Text.Contains(HisName)){Knows=true;break;}
-  if(Knows)Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *HisName}});}
+  // Not known yet: said so, or she takes a name from around her (刻晴 greeted him "早，安可" the first time, R5-1).
+  Status.Relation+=Knows?OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *HisName}}):FString(OKT(TEXT("ui.free_talk.his_name_unknown_note")));}
  // Apart (a phone message or call): what they are doing face to face does not apply (OKStreetSocialPhoneInbox.inl).
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkDoing);Status.Doing=RemoteWith(Character)?RemoteDoing(Character):FreeTalkDoing()+FreeTalkExtras();}Status.Nearby=RemoteWith(Character)?FString(OKT(TEXT("ui.free_talk.remote_nearby_unknown"))):FreeTalkNearby(); // the places around him are not around her on the phone
  {const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);Status.Now=OKStreetFreeTalkDateTime(OKStreetCalendarDateTime(S.Store.CalendarDay,Hours));Status.StreetTime=OKStreetFreeTalkClock(Hours);}
