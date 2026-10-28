@@ -220,3 +220,11 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 - **只問推薦**：她推薦的品項，他沒說要就不算點餐（`ai_judge_prompt` orders 規則）。
 - **對話框排版**：ok-story 的 `DialogOut` 多傳整句 `text`，`SOKStoryView` 依整句排版、只畫打出來的字（打字時字不會跳到下一行）；最後一行孤字不計標點（「淨。」」），從上一行拉下來的字帶著後面的標點（下一行不以「，」開頭）。
 - 回歸腳本（Gal1028G 沙盒，惠惠 `--private` 12/12 通過）：`--sandbox NAME [--port-base N]` 以沙盒啟動；用 `--port` 指定別的遊戲時，TTS 埠由控制埠推算（控制埠－10）；找不到 PID 對應的 Play 資料夾時，以 log 的「listening on ...:<port>」認，不再選最新的資料夾。
+
+### 三月七 1 對 1 載入慢的原因（2026-10-28）
+
+同一負載下（另有 C 的遊戲在跑）重量：三月七取模 6.8 s（同程序第二次 1.7 s，和別人差不多），「貼圖」14.2 s、第二次仍 12.0 s（優香 5.6、安可 1.9）。`OK_LOAD_PROFILE=1` 細分：時間全在 `PrepareRuntimeMaterials`→`OKCaptureRuntimeMaterials`（`OK runtime material capture ms=10343`，安可 1145），貼圖解碼只有幾 ms。這一步逐張貼圖依序做 PNG 解碼、double 精度 box filter 的 mip 鏈與整份像素 SHA1；她的貼圖多又大，準備好的快取（256 MB 上限）也放不下，第二次照樣重做。
+
+讀卡器早就量過平行版（`OK_FIRSTLOAD=C5`，材質準備 1.98 → 0.34 s），因為街頭群眾也走同一函式才預設關閉。1 對 1 的高模在背景執行緒載入、玩家看著載入畫面，所以 `LoadFemale` 先以平行方式準備材質（`OKCaptureRuntimeMaterialsParallel`，`FOkSession::PrepareRuntimeMaterials(Error, true)`），之後的 `PrecacheSessionTextures` 直接沿用。log 多一欄 `materials`。
+
+Gal1028H（同樣有別的遊戲在跑）：三月七 materials 2.0 s＋textures 1.1 s（第二次 2.1＋0.1），安可 0.23＋0.15，優香 0.68＋0.59；1 對 1 截圖材質正確。整台乾淨時的數字還沒量。

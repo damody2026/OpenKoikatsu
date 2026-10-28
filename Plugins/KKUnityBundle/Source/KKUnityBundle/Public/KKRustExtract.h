@@ -110,7 +110,7 @@ public:
  bool ExportAnimationSnapshot(TArray<uint8>& Out) const;
  bool OpenAnimationSnapshot(const TArray<uint8>& Bytes);
  bool CloneForInteraction(FOkSession& Destination) const;
- bool PrepareRuntimeMaterials(FString& Error);
+ bool PrepareRuntimeMaterials(FString& Error,bool bParallel=false); // bParallel: textures decoded in parallel (OKCaptureRuntimeMaterialsParallel)
  // One part's runtime material description (OKDescribeRuntimeMaterialPart: source metadata, resolved values), no textures.
  bool DescribeRuntimeMaterialPart(int32 Index,struct FKKRuntimeMaterialPart& Out,FString& Error) const;
  bool HeadTextureChanges(const FOkSession& Source,TArray<int32>& Parts,bool Apply,FString& Error);

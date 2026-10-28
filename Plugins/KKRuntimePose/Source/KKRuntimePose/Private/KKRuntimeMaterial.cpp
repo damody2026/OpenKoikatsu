@@ -138,12 +138,13 @@ bool OKDescribeRuntimeMaterialPart(OkSession* Session,int32 NativePart,FKKRuntim
  TSharedPtr<FJsonObject> Metadata;return DescribePart(Session,V,NativePart,Out,Metadata,Error);
 }
 
-bool OKCaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntimePalettePart> Parts,FKKRuntimeMaterialData& Out,FString& Error){
+static bool CaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntimePalettePart> Parts,FKKRuntimeMaterialData& Out,FString& Error,bool bParallel){
  const double Start=FPlatformTime::Seconds();FKKRuntimeMaterialData D;D.WorkerThread=!IsInGameThread();
  const uint64 EncodedBudget=256ull*1024*1024,PixelBudget=512ull*1024*1024;
  // OK_FIRSTLOAD=C5: the card's distinct textures are decoded and mipped in parallel after all parts are read
  // (one at a time on the calling worker was ~1.8 s of a packaged card reader's first load).
- static const bool Parallel=[]{TArray<FString> Options;FString Value=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FIRSTLOAD"));Value.ParseIntoArray(Options,TEXT(","));for(FString& O:Options)O.TrimStartAndEndInline();return Options.Contains(TEXT("C5"))||Options.Contains(TEXT("all"));}();
+ static const bool ParallelDefault=[]{TArray<FString> Options;FString Value=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FIRSTLOAD"));Value.ParseIntoArray(Options,TEXT(","));for(FString& O:Options)O.TrimStartAndEndInline();return Options.Contains(TEXT("C5"))||Options.Contains(TEXT("all"));}();
+ const bool Parallel=bParallel||ParallelDefault;
  struct FPendingTexture{int32 Index;FString Key,Hash;FKKRuntimeTextureSettings Settings;};TArray<FPendingTexture> Pending;
  TArray<TArray<uint8>> Sources;const auto& Bind=OKRuntimeNativeBindings();
  auto Fail=[&](const FString& Why){Error=Why;return false;};
@@ -195,6 +196,8 @@ bool OKCaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntimePale
  }
  D.PrepareMs=(FPlatformTime::Seconds()-Start)*1000;Out=MoveTemp(D);Error.Reset();return true;
 }
+bool OKCaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntimePalettePart> Parts,FKKRuntimeMaterialData& Out,FString& Error){return CaptureRuntimeMaterials(Session,Parts,Out,Error,false);}
+bool OKCaptureRuntimeMaterialsParallel(OkSession* Session,TConstArrayView<FKKRuntimePalettePart> Parts,FKKRuntimeMaterialData& Out,FString& Error){return CaptureRuntimeMaterials(Session,Parts,Out,Error,true);}
 namespace {
 TMap<FString,TWeakObjectPtr<UTexture2D>> RuntimeTextureCache;
 // Recently used textures stay alive for a while after their last material is gone: the card reader switching back to an

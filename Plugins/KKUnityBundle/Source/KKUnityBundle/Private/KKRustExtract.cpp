@@ -1282,10 +1282,10 @@ bool FOkSession::CloneForInteraction(FOkSession& Destination)const{
  // Its animation source is the common library, even when the input was KKS.
  Destination.Close();Destination.Handle=Clone;Destination.bPortable=true;Destination.bSharedAnimation=false;Destination.ApplyPhysXSecondary();return true;
 }
-bool FOkSession::PrepareRuntimeMaterials(FString& Error){
+bool FOkSession::PrepareRuntimeMaterials(FString& Error,bool bParallel){
  if(RuntimeMaterials)return true;
  TArray<FKKRuntimePalettePart> Parts;for(int32 I=0;I<PartCount();++I){FKKRuntimePalettePart Part;Part.NativePart=I;Parts.Add(MoveTemp(Part));}
- auto Result=MakeShared<FKKRuntimeMaterialData>();if(!OKCaptureRuntimeMaterials(Handle,Parts,*Result,Error))return false;
+ auto Result=MakeShared<FKKRuntimeMaterialData>();if(!(bParallel?OKCaptureRuntimeMaterialsParallel:OKCaptureRuntimeMaterials)(Handle,Parts,*Result,Error))return false;
  RuntimeMaterials=MoveTemp(Result);return true;
 }
 bool FOkSession::DescribeRuntimeMaterialPart(int32 Index,FKKRuntimeMaterialPart& Out,FString& Error)const{
