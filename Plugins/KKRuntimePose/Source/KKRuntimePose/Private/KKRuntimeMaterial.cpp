@@ -187,9 +187,11 @@ static bool CaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntim
  }
  if(!Pending.IsEmpty()){
   // Each pending texture has its own key (distinct hash/settings), so no two jobs join one flight here.
+  // Background priority: on foreground workers too, March 7th's 2 s of decoding (42 s of CPU) held the game thread's
+  // end-of-tick tasks for 1.4 s, a frozen frame while her 1-on-1 scene loaded behind the street.
   TArray<FString> Errors;Errors.SetNum(Pending.Num());
   ParallelFor(Pending.Num(),[&](int32 J){const auto& Job=Pending[J];const auto& Source=Sources[Job.Index];FKKRuntimePreparedTexture T;
-   if(PrepareSharedRuntimeTexture(Job.Key,Job.Hash,Source.GetData(),Source.Num(),Job.Settings,T,Errors[J]))D.Textures[Job.Index]=MoveTemp(T);else if(Errors[J].IsEmpty())Errors[J]=TEXT("Runtime texture preparation failed");},EParallelForFlags::Unbalanced);
+   if(PrepareSharedRuntimeTexture(Job.Key,Job.Hash,Source.GetData(),Source.Num(),Job.Settings,T,Errors[J]))D.Textures[Job.Index]=MoveTemp(T);else if(Errors[J].IsEmpty())Errors[J]=TEXT("Runtime texture preparation failed");},EParallelForFlags::Unbalanced|EParallelForFlags::BackgroundPriority);
   for(const FString& E:Errors)if(!E.IsEmpty())return Fail(E);
   for(const auto& Job:Pending){for(const auto& L:D.Textures[Job.Index].Mips)D.PixelBytes+=L.BGRA.GetAllocatedSize();}
   if(D.PixelBytes>PixelBudget)return Fail(TEXT("Runtime prepared texture pixels exceed budget"));

@@ -109,7 +109,9 @@ void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
         // March 7th's took 10 s here (Encore 1 s), the player looking at the loading screen.
         if(Job->Ok&&!*Token){Job->Session.ApplyBodyPhysics(Job->Card.Body.BustSoftness,Job->Card.Body.BustWeight);T3=FPlatformTime::Seconds();
          FString MaterialError;if(!Job->Session.PrepareRuntimeMaterials(MaterialError,true))UE_LOG(LogTemp,Warning,TEXT("Interaction female materials: %s"),*MaterialError);T35=FPlatformTime::Seconds();
-         AKKPreviewActor::PrecacheSessionTextures(Job->Session,true);T4=FPlatformTime::Seconds();}
+         AKKPreviewActor::PrecacheSessionTextures(Job->Session,true);T4=FPlatformTime::Seconds();
+         // The touch reactions' shared data, parsed here rather than in the frame her scene comes up.
+         FString BodyError;if(!FOKBodyInteraction::WarmShared(BodyError))UE_LOG(LogTemp,Warning,TEXT("Interaction body data: %s"),*BodyError);}
         UE_LOG(LogTemp,Display,TEXT("Interaction female load %s: card %.0f ms, session %.0f ms, body physics %.0f ms, materials %.0f ms, textures %.0f ms"),*FPaths::GetCleanFilename(Path),(T1-T0)*1000.,(T2-T1)*1000.,(T3-T2)*1000.,(T35-T3)*1000.,(T4-T35)*1000.);
         AsyncTask(ENamedThreads::GameThread,[Weak,Job,Token,Path,Outfit](){
             if(*Token||!Weak.IsValid())return;auto* Mode=Weak.Get();auto* C=Mode->Controller.Get();

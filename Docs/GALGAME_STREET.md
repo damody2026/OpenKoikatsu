@@ -252,3 +252,13 @@ Gal1028R，`/private girl 3`，兩次：card 185／224 ms、session 5073／5556 
 
 - CLI（`ok-card-open-bench`，80ef396f 匯出，同時只有兩個遊戲在跑）：三月七冷開 3.48 s、熱開 1.41 s；安可 1.95／0.62 s。遊戲裡第二次仍 5.5 s，可能是 CPU 被占滿，也可能是遊戲的開卡路徑不同，要在乾淨時重量。
 - 高模裝配在遊戲執行緒上一幀一個部件：每個髮片約 60～150 ms（第二次貼圖已命中快取，仍約 100 ms），之後的 `OK private GPU installed` 每幀一個約 25 ms，`OK body interaction prepared` 單幀約 0.9 s。下一步錄 Unreal Insights（`game_trace_start`）找出髮片的成本。
+
+### 三月七 1 對 1 進場的卡頓（2026-10-28 深夜，Gal1028T／U）
+
+乾淨量測（雙 slot，背景只有一個約 2.2 核的轉卡）：Gal1028T 冷開 card 72 ms、session 2476 ms、materials 972 ms、textures 774 ms，按下到 `OK interaction entered` 約 9 s、到男角就緒約 12 s；同程序第二次約 7 s／9.5 s。CLI（`ok-card-open-bench`）冷開 3.48 s、熱開 1.41 s，遊戲裡熱開仍 2.5～2.7 s。
+
+錄 Unreal Insights（`game_trace_start`，`UnrealInsights.exe -NoUI -AutoQuit -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimingEvents ..."` 匯出 CSV）找到兩個大卡頓：
+
+- **平行材質準備把前景 worker 也占滿**：`OKCaptureRuntimeMaterialsParallel` 的 `ParallelFor`（PNG 解碼、mip、SHA1，2 s 內約 42 s CPU）在背景執行緒跑時，主執行緒 tick 結尾的 `WaitForTasks` 等了 1369 ms 與 436 ms。改用 `EParallelForFlags::BackgroundPriority`，前景 worker 留給遊戲；之後最長只剩 82 ms。
+- **身體互動資料每次重讀**：`FOKBodyInteraction::Prepare` 每次進 1 對 1 都在主執行緒解析 8.5 MB 的 `catalog-v1.json`（`prepare_ms` 620～740）。改成程序內只解析一次（`WarmShared`），並在 `LoadFemale` 的背景工作先讀好；之後 `prepare_ms` 60（第一次）／3.5（第二次），log 拆成 data／colliders／reaction。
+- 進場那一幀：1477 ms → 1099 ms（T）→ 568 ms（U）。剩下的是同步 `LoadObject`（`FlushAsyncLoading` 112 ms）、`KK_GalleryPairs` 103 ms，以及部件裝配期間的 `UTexture2D::UpdateResource`（`TryLoadMips`，每張最多約 50 ms）和一次 `Sync_RenderingThread` 810 ms。
