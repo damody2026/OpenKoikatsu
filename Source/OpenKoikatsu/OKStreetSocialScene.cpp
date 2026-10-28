@@ -1157,9 +1157,14 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkLoadSettings);if(!OKStreetFreeTalkLoadSettings(Settings,Error)||!OKStreetFreeTalkLoadPersona(S.Manifest.Characters[Character].Name,Persona,Error))return false;}
  FreeTalkEnsureLog();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
- auto Status=OKStreetFreeTalkStatusOf(S,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget));
- // His name as the game has it (the group prompt says it too): without it she only knew what he told her.
- if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty())Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *S.Manifest.Characters[0].Name}});
+ const FOKStreetRelation HerRelation=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
+ auto Status=OKStreetFreeTalkStatusOf(S,HerRelation);
+ // His name as the game has it (the group prompt says it too), once she knows it: past a stranger, or he told her. A
+ // stranger meeting him called him by name and said 爱丽丝 had told her (R4-1).
+ if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty()){const FString& HisName=S.Manifest.Characters[0].Name;
+  bool Knows=HerRelation.Stage!=TEXT("stranger");
+  if(!Knows)for(const FOKStreetHistoryEntry& E:HistoryOf(Id))if(E.Who==TEXT("him")&&E.Text.Contains(HisName)){Knows=true;break;}
+  if(Knows)Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *HisName}});}
  // Apart (a phone message or call): what they are doing face to face does not apply (OKStreetSocialPhoneInbox.inl).
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkDoing);Status.Doing=RemoteWith(Character)?RemoteDoing(Character):FreeTalkDoing()+FreeTalkExtras();}Status.Nearby=RemoteWith(Character)?FString(OKT(TEXT("ui.free_talk.remote_nearby_unknown"))):FreeTalkNearby(); // the places around him are not around her on the phone
  {const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);Status.Now=OKStreetFreeTalkDateTime(OKStreetCalendarDateTime(S.Store.CalendarDay,Hours));Status.StreetTime=OKStreetFreeTalkClock(Hours);}

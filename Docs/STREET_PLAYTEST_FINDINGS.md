@@ -506,3 +506,9 @@
 | R3-270 | 撥給三月七沒接，排了一則「剛才沒接到你電話，打來是想說什麼？」的延遲訊息；再撥一次接通後，這則訊息在通話中才送出 | PhoneCall 沒接時 QueueHerText(missed_call)，之後接通沒有撤掉 | 已改（PhoneInbox.inl PhoneCall）：接通時撤掉她還沒送出的 missed_call 訊息。Conq1028a 驗證：撥給三月七（朋友、怨氣 17 以下，沒接一定會排 20～60 秒後的 missed_call）沒接，14 秒後再撥接通，通話 90 秒內與掛斷後都沒有收到「剛才沒接到你電話」 |
 | R3-271 | 惠惠在晴天早上、飽足 22 時放爆裂魔法失敗（機率 29%），她說「失败了……魔力散了」、心情低落，表現正確；但 log 同時有「Street heroine: unknown interaction explosion」 | 規則 social.rs `explosion_cast` 用 `note_at(…, "explosion", …)` 記下成敗，acts.toml 沒有 `explosion` 這一項，Interact 不認得 id 就整筆丟掉，她的歷史與記憶裡沒有這次魔法。同樣漏掉的還有 shop.rs 他給她錢的 `money`、social.rs 她的請求沒被回覆的 `unanswered` | 已改：acts.toml 加 `explosion`（活動）、`money`（禮物）、`unanswered`（約定）三項；ok-rules heroine.rs 加測試 `recorded_ids_are_acts`，掃描 ok-rules 的 `note_at` 與場景的 `HeroineNote`／`Interact` 寫死的 id，全部要在 acts.toml。Conq1028a 規則熱重載後重放同一個早上：又失敗一次（31%），沒有 unknown interaction 警告，她的歷史多了「肚子太空，爆裂魔法没能炸开，心情很差」 |
 | R3-272 | 存檔時惠惠在水族館陪他、飽足 2，讀檔後同一分鐘她的歷史記下「在学生餐厅吃了阳春面（¥7）」，接著對他說「吾刚在学生餐厅吃了碗面」，人卻一直站在他旁邊 | Schedule.inl 讀檔放回身邊（R3-238）時，用的是已被緊急區塊（餓了：學生餐廳，index -2）取代的 Index 記成她目前的區塊；下一次排程 Index 沒變，不算換區塊、不會走過去，直接走到「到了吃飯的區塊就點餐」那段，在原地把學生餐廳的飯吃掉 | 已改：放回身邊時記下她計畫裡的區塊（PlanIndex），緊急區塊留待下一次排程當成一般的換區塊：她在等他的時間內不離開（WaitsForHim），之後在他看得到的地方就走去吃。Conq1028c 驗證：讀同一個存檔，她的歷史沒有吃飯紀錄，log「stays where she wrote him from (meal waits) until 09:49」，她還是餓、想約他去吃 |
+
+## 攻略第四輪（zh-CN，十位女主，2026-10-28 新遊戲，sandbox Conq1028，stage Conq1028c 起）
+
+| # | 發現 | 原因 | 狀態 |
+|---|---|---|---|
+| R4-1 | 新遊戲 9/1 早上，在便利商店和愛麗絲自我介紹「我叫阿明」；隔壁的雷電將軍（陌生人，好感 0，從沒和他說過話）一開口就是「阿明，早安」，問她怎麼知道，她說「名字是愛麗絲告訴我的」，但 log 裡兩人之間沒有任何交談（encounter） | Scene.cpp PrepareFreeTalk 對每一位女主都附上「（他叫阿明）」，陌生人也一樣；她知道名字卻沒有來源，只好編一個 | 已改：只有已經不是陌生人，或她的歷史裡有他說過自己名字的話，才附上名字。Conq1028d 驗證：新遊戲先找雷電將軍，問「你知道我叫什么名字吗」，她答「不知。你我不过初见，还未互通姓名」；他自我介紹後再問，她答「阿明。名字已刻入我心」 |
