@@ -264,3 +264,10 @@ Gal1028R，`/private girl 3`，兩次：card 185／224 ms、session 5073／5556 
 - 進場那一幀：1477 ms → 1099 ms（T）→ 568 ms（U）。剩下的是同步 `LoadObject`（`FlushAsyncLoading` 112 ms）、`KK_GalleryPairs` 103 ms，以及部件裝配期間的 `UTexture2D::UpdateResource`（`TryLoadMips`，每張最多約 50 ms）和一次 `Sync_RenderingThread` 810 ms。
 - 配對清單（`NativeAnimationPairs`）改在 `LoadFemale` 的背景工作先取，`RefreshPairs` 沿用（圖庫自己的載入本來就這樣做）；Gal1028V 的 trace 裡 `KK_GalleryPairs`（86～103 ms）不見了。
 - 背景優先權之後，平行解碼仍占滿全部背景 worker，渲染圖（RDG）的工作排在後面，渲染執行緒等了 590～810 ms。改成最多 `NumWorkers/4`（2～8）條通道、各自從 atomic 取下一張貼圖（解碼受記憶體頻寬限制：依序約 10 s，31 條約 1 s 但總 CPU 約 30 s）。Gal1028V：等渲染執行緒最長 810 → 220 ms、進場那一幀 568 → 471 ms、超過 15 ms 的幀合計 5.4 → 3.4 s；materials 約 1.0 → 2.1 s，按下到進入 1 對 1 仍約 8.5 s。
+
+### 新存檔實玩：胡桃、早瀨優香、貞德·Alter（2026-10-29 凌晨，Gal1028V）
+
+- **坐好才開始吃**（116e65be8）這次真的走到了：早瀨優香一進咖啡廳就點拿鐵加司康（他請），菜先上（`order served`），系統才帶兩人去座位（`they sit down to eat it (cafe_seat)`）並準備坐姿；這段時間桌上兩樣都維持 100%，坐好後才開始扣（59% → 12%）。
+- **她把他稱為「妳」**：貞德·Alter 對他說「我可沒說要跟妳討論」。zh-TW 的共用角色規則（`free_talk_personas.json` `system_rules`）加一條：玩家是男生，稱呼他用「你」、不要寫成「妳」。重開後確認提示裡有這條，她之後 5 句都用「你」。zh-CN、en 沒有這個問題。
+- 約看電影：判斷器把地點填成 `cinema`，街上沒有，`promise ignored (not_a_place)`；她照 `no_such_place_note` 改提咖啡廳門口。他回「怎麼了？」時沒有答應，判斷器不記（照規則：她提議要他在這句答應）；他說「好，咖啡廳門口見」後才記成約會。流程正確。
+- 胡桃約明天中午（沒講地點，記在兩人所在的學生餐廳、他請客），早瀨優香教記帳（「我會驗收的」），三人個性都穩定。

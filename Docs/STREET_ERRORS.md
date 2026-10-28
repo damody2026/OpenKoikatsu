@@ -949,3 +949,8 @@
 - 我之前把 1 對 1 女角的材質準備改成平行（c29daeea6），用的是一般優先權的 `ParallelFor`：解碼工作占滿所有 worker（含前景），主執行緒 tick 結尾等的工作排不進去，凍住 1369 ms 與 436 ms。當時只看了載入時間變短，沒看主執行緒。
 - 修正（`KKRuntimeMaterial.cpp`）：加 `EParallelForFlags::BackgroundPriority`。Gal1028T trace：最長等待 82 ms。
 - 同一輪：進 1 對 1 時主執行緒每次重新解析 8.5 MB 的身體互動目錄（620～740 ms），改成只解析一次並在背景先讀（`OKBodyInteraction.cpp`，Gal1028U：60／3.5 ms）。
+
+### 2026-10-29 貞德·Alter 稱男主為「妳」（E 組 galgame，新存檔實玩）
+- 「交換心得？我可沒說要跟妳討論。」zh-TW 的共用角色規則沒有寫玩家的性別該怎麼稱呼，模型偶爾用了女性的「妳」。
+- 修正（`free_talk_personas.json` `system_rules`）：玩家是男生，稱呼他用「你」，「妳」只用在女生身上。
+- 驗證（Gal1028V，重開後讀檔）：提示裡有這條，她之後 5 句（含被問「妳覺得…」）都用「你」。
