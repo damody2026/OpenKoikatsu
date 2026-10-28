@@ -40,7 +40,8 @@
   - 轉卡時 thread 的 bundle 快取上限改成 160（原本 24，滿了就整個清空）。一張卡會碰到 60–150 個 bundle，原本每次開卡都會清空快取再全部重新 parse，bundle 上已解碼的貼圖也跟著丟掉。jeanne 的 parse 次數 933 → 69，raiden_shogun 41 → 32 秒，記憶體峰值不變。遊戲開卡仍是 24，因為快取在開卡結束後會一直留著。
   - `CardInfo.source_digest`：卡片資料（IEND 之後的位元組）與解析模式的雜湊，給要讀很多卡片欄位的階段當 memo 鍵。
   - head_detail 每個頭部網格的 rig 與貼圖，以 `(source_digest, 服裝, 網格)` 共用；有 OK Studio 眼型時照舊每次重算。jeanne 42 次開卡的 head_detail 合計 1.4 → 0.6 秒。
-- 2d 其餘：臉（`genital+mouth+face prep`，每次約 15 ms）、uncensor genitals（約 7 ms）、身體 rig（約 10 ms）。身體的透明遮罩依穿著狀態（`clothes_alpha_state`）、over body mask 依服裝，這兩項要留在 memo 外面。
+- 2d 第二部分（2026-10-29）：`rig_memo`（rig.rs）。身體、臉、嘴唇、生殖器的 rig／蒙皮以 `(source_digest, 服裝, 部位, 網格)` 共用，鍵要能決定 rig 前的網格與骨架。OK Studio 的狀態覆寫（`studio_status::apply`）也併進 `source_digest`。jeanne 42 次開卡的臉部準備合計 0.8 → 0.3 秒，整張卡 13.6 秒（今早 24.8 秒）。`compose_body_texture` 仍以網格內容雜湊為鍵（傳進來的身體網格可能隨穿著狀態不同），每次約 10 ms。
+- 之後：衣服與配件的延後網格（`deferred meshes`，每次約 34 ms）、`resolves`（約 20 ms）要看各穿著狀態實際用到哪些查詢，才能決定可不可以共用。
 
 ## 做法
 

@@ -1,6 +1,16 @@
 //! Rigs of the open: a part's mesh rigged to its skeleton, and a part remapped onto the body's bones.
 use super::*;
 
+/// `rig(mesh)` once per view and key (crate::view_memo), the rigged mesh after: rigging a face or a body skins every
+/// vertex, the same in each garment state of an outfit. The key must determine the mesh before rigging and the
+/// skeletons: callers give the card data's digest (CardInfo::source_digest), the outfit and the mesh. No key: rigged
+/// afresh.
+pub(crate) fn rig_memo(key: Option<String>, mesh: &mut ExtractedMesh, rig: impl FnOnce(&mut ExtractedMesh)) {
+    let Some(key) = key else { return rig(mesh) };
+    let input = std::mem::take(mesh);
+    *mesh = crate::view_memo(format!("rig|{key}"), move || { let mut made = input; rig(&mut made); made });
+}
+
 pub(crate) fn rig_mesh(
     mesh: &mut ExtractedMesh,
     role: &str,

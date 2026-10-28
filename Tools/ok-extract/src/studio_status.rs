@@ -59,6 +59,13 @@ pub fn cache_key_bytes() -> Option<Vec<u8>> { current().and_then(|o| serde_json:
 /// The card as the scene shows it.
 pub fn apply(info: &mut crate::card::CardInfo) {
     let Some(o) = current() else { return; };
+    // The card data's digest covers the state too: view memos key on it (CardInfo::source_digest).
+    info.source_digest = {
+        use std::hash::{Hash, Hasher};
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        (info.source_digest, format!("{o:?}")).hash(&mut hash);
+        hash.finish()
+    };
     if let Some(v) = o.tears_lv { info.tears_lv = v.clamp(0, 3); }
     if let Some(v) = o.hoho_aka_rate { info.hoho_aka_rate = v.clamp(0., 1.); }
     if let Some(v) = o.nip_stand_rate { info.nip_stand_rate = v.clamp(0., 1.); }

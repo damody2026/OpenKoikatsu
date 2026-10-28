@@ -14,6 +14,9 @@ pub(crate) fn extract_session_from_info(
         return Err(format!("game_root missing abdata: {}",game_root.display()));
     }
     if let Some(card)=parsed_card.as_mut(){crate::mods::apply_strip_all_migrations(game_root,card);}
+    // What the card says (CardInfo::source_digest): with the outfit and a mesh, the key of its rig (rig_memo).
+    let card_digest = parsed_card.as_ref().map(|card| card.source_digest);
+    let rig_key = |what: &str, mesh: &ExtractedMesh| card_digest.map(|d| format!("{d:016x}|{outfit}|{what}|{}|{}", mesh.name, mesh.path_id));
     if game_root.join("require_complete_mods").ok_is_file() {
         if let Some(card)=parsed_card.as_ref() {
             let wanted:std::collections::HashSet<String>=card.resolves.iter().map(|r|r.mod_id.clone()).filter(|g|!g.is_empty()).collect();
@@ -605,7 +608,8 @@ pub(crate) fn extract_session_from_info(
         }
         profile_tick("pre-skin body setup", t_mark); t_mark = Instant::now();
         let t_skin = Instant::now();
-        rig_mesh(mesh, "body", body_skel.as_ref(), head_skel.as_ref(), None, None, None, None, None);
+        rig_memo(rig_key("body", mesh), mesh,
+            |mesh| rig_mesh(mesh, "body", body_skel.as_ref(), head_skel.as_ref(), None, None, None, None, None));
         profile_tick("skin+rig body", t_skin);
         let t_body_tex = Instant::now();
         compose_body_texture(
@@ -794,14 +798,16 @@ pub(crate) fn extract_session_from_info(
     }
     for mut mesh in genital_best {
         if !seen_meshes.insert(mesh.name.to_ascii_lowercase()) { continue; }
-        let part_skel = mesh.smr_skel.clone();
-        mesh.skel_kind = 1;
-        if let (Some(sk), Some(ps)) = (body_skel.as_ref(), part_skel.as_ref()) {
-            remap_part_to_body(&mut mesh, sk, ps);
-            let _ = skin_mesh(&mut mesh, sk);
-        } else if let Some(sk) = body_skel.as_ref() {
-            let _ = skin_mesh(&mut mesh, sk);
-        }
+        rig_memo(rig_key("genital", &mesh), &mut mesh, |mesh| {
+            let part_skel = mesh.smr_skel.clone();
+            mesh.skel_kind = 1;
+            if let (Some(sk), Some(ps)) = (body_skel.as_ref(), part_skel.as_ref()) {
+                remap_part_to_body(mesh, sk, ps);
+                let _ = skin_mesh(mesh, sk);
+            } else if let Some(sk) = body_skel.as_ref() {
+                let _ = skin_mesh(mesh, sk);
+            }
+        });
         let stem = format!("genital_{}", mesh.name.replace(['/', '\\'], "_"));
         let (p, tex) = emit_part(out_dir, &mut session_parts, &stem, "body", &mesh, "opaque", false)?;
         eprintln!("ok-extract: genital mesh {} verts={} tex={}",
@@ -842,18 +848,20 @@ pub(crate) fn extract_session_from_info(
         if is_hidden_part(&mesh.name) {
             continue;
         }
-        let part_skel = crate::unity::skeleton_for_mesh(&body_bundle, &mesh.name);
-        rig_mesh(
-            &mut mesh,
-            "mouth",
-            body_skel.as_ref(),
-            head_skel.as_ref(),
-            None,
-            part_skel.as_ref(),
-            None,
-            None,
-            None,
-        );
+        rig_memo(rig_key("mouth", &mesh), &mut mesh, |mesh| {
+            let part_skel = crate::unity::skeleton_for_mesh(&body_bundle, &mesh.name);
+            rig_mesh(
+                mesh,
+                "mouth",
+                body_skel.as_ref(),
+                head_skel.as_ref(),
+                None,
+                part_skel.as_ref(),
+                None,
+                None,
+                None,
+            );
+        });
         if std::env::var("OK_FACE_RAW").is_ok() {
             for i in 0..4 {
                 let n = format!("cf_t_mnpb_00_{i:02}");
@@ -1005,8 +1013,8 @@ pub(crate) fn extract_session_from_info(
             eyes:head_eye_patterns.get(&key).map(|(_,p)|p.as_slice()),
             eyebrow:head_eyebrow_patterns.get(&key).map(|(_,p)|p.as_slice()),
         };
-        rig_mesh(
-            &mut mesh,
+        rig_memo(rig_key("face", &mesh), &mut mesh, |mesh| rig_mesh(
+            mesh,
             "head",
             body_skel.as_ref(),
             head_skel.as_ref(),
@@ -1015,7 +1023,7 @@ pub(crate) fn extract_session_from_info(
             None,
             Some(&authored_fbs),
             None,
-        );
+        ));
         if std::env::var("OK_CHINDIAG").is_ok() {
             if let Some(sk) = head_skel.as_ref() {
                 for n in [
