@@ -399,6 +399,7 @@ place = "department"
 kind = "pair"
 code = 5
 anchor = "food"
+floor = 9
 
 [[activity]]
 id = "dept_view"
@@ -407,6 +408,7 @@ place = "department"
 kind = "pair"
 code = 1
 anchor = "view"
+floor = 10
 
 [[activity]]
 id = "aquarium_photo"

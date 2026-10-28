@@ -3,7 +3,7 @@
 //! (its time, price, who pays, what it does to her and the memory), her errands, two friends meeting, his part-time job
 //! (the manager's decision, the pay and rating), and the time alone in a private room. Unreal moves the money through the
 //! books and plays the scenes.
-use crate::catalog::{checkout_lean, gift_score, pick_meal, profile_int, taste_of, Catalog};
+use crate::catalog::{checkout_lean, gift_score, pick_meal_on, profile_int, taste_of, Catalog};
 use crate::effects::Effects;
 use crate::relation::Relation;
 use crate::rng::RandomStream;
@@ -384,14 +384,16 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
     if b(r, "menu") {
         let month = n(r, "month") as i32;
         let mut pick_rng = RandomStream::new(n(r, "menu_seed") as i32);
-        if let Some(i) = pick_meal(c, place, month, &p, crate::region::amount("goods", 80) as i32, &mut pick_rng) {
+        // The activity's own floor (activities.toml floor): the food court's meal is from 9F, not the 10F view restaurant (R4-5).
+        let floor = n(r, "table_floor") as i32;
+        if let Some(i) = pick_meal_on(c, place, floor, month, &p, crate::region::amount("goods", 80) as i32, &mut pick_rng) {
             price += i.price_of(&i.default_size());
             bought = i.name.clone();
             for (k, v) in &i.effects {
                 add(&mut feed, k, *v);
             }
         }
-        if let Some(i) = pick_meal(c, place, month, &Value::Null, crate::region::amount("goods", 80) as i32, &mut pick_rng) {
+        if let Some(i) = pick_meal_on(c, place, floor, month, &Value::Null, crate::region::amount("goods", 80) as i32, &mut pick_rng) {
             price += i.price_of(&i.default_size());
         }
     }
@@ -972,6 +974,19 @@ mod tests {
         assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays"}))["option"], "split", "nothing settled");
         assert_eq!(super::checkout_timeout(&json!({"lean": "player_pays", "agreed": "him"}))["option"], "player_pays");
         assert_eq!(super::checkout_timeout(&json!({"lean": "she_pays"}))["option"], "she_pays");
+    }
+
+    /// The meal of an activity on one floor comes from that floor (R4-5: the 9F food court billed 10F hot coffee).
+    #[test]
+    fn activity_meal_from_its_own_floor() {
+        let mut c = Catalog::default();
+        let item = |id: &str, floor: i32, price: i32| crate::catalog::Item { id: id.into(), place: "department".into(), name: id.into(), price: [(String::new(), price)].into_iter().collect(), consumable: true, floor, ..Default::default() };
+        c.items.push(item("ramen", 9, 30));
+        c.items.push(item("view_coffee", 10, 38));
+        for seed in 0..20 {
+            let v = activity_end(&c, &json!({"id": "dept_food", "kind": "pair", "code": 5, "place": "department", "month": 9, "menu": true, "menu_seed": seed, "table_floor": 9, "relation": {"id": "a"}})).unwrap();
+            assert_eq!(v["price"], 60, "two ramen from 9F, never the 10F coffee (seed {seed})");
+        }
     }
 
 }

@@ -57,6 +57,9 @@ pub struct Activity {
     /// Her needs at the end (fun, energy, social, satiety, hygiene).
     #[serde(default)]
     pub feed: BTreeMap<String, f32>,
+    /// The floor its meal comes from (catalog items' floor): the 9F food court, the 10F view restaurant. 0: any.
+    #[serde(default)]
+    pub floor: i32,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -269,6 +272,9 @@ pub fn table_end(t: &ActivitiesTuning, request: &mut Value) {
         }
         if !a.yields.is_empty() {
             o.insert("table_yields".into(), json!(a.yields));
+        }
+        if a.floor > 0 {
+            o.insert("table_floor".into(), json!(a.floor));
         }
         if !a.feed.is_empty() {
             let feed: Map<String, Value> = a.feed.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
