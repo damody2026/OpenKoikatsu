@@ -6,7 +6,8 @@
 //!   entry:  key (u16 length + UTF-8), fallback identity (u16 length + UTF-8), chunk count u32, chunk indices u32...
 //! An entry's preview bytes are its chunks concatenated. Chunks are content-defined (oklib::chunk_spans), so outfits
 //! of one card share their identical body, face and hair data. The key is the open-cache key, which hashes the card
-//! without its `okBk` chunk: a baked card and the plain card share one key.
+//! without its `okBk` chunk: a baked card and the plain card share one key (nor its `okLt` answers, which only save
+//! work of the open: tree_answers.rs).
 use std::path::Path;
 
 pub const BAKE_CHUNK: &[u8; 4] = b"okBk";
@@ -37,9 +38,13 @@ fn chunks(bytes: &[u8]) -> Vec<(usize, usize, [u8; 4])> {
     out
 }
 
-/// The card bytes without `okBk`/`okMm` chunks (borrowed when there is none).
+/// The card bytes without `okBk`/`okMm`/`okLt` chunks (borrowed when there is none).
 pub fn strip(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
-    strip_kinds(bytes, &[BAKE_CHUNK, MEMO_CHUNK])
+    strip_kinds(bytes, &[BAKE_CHUNK, MEMO_CHUNK, crate::tree_answers::CHUNK])
+}
+/// The card bytes without its `okLt` answers.
+pub fn strip_answers(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    strip_kinds(bytes, &[crate::tree_answers::CHUNK])
 }
 fn strip_kinds<'a>(bytes: &'a [u8], kinds: &[&[u8; 4]]) -> std::borrow::Cow<'a, [u8]> {
     let list = chunks(bytes);

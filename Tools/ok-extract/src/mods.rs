@@ -65,7 +65,20 @@ pub(crate) fn prepare_strip_all_migrations(game:&Path) {
 pub(crate) fn apply_strip_all_migrations(game:&Path,card:&mut crate::card::CardInfo) {
     if !strip_all_enabled(game){return;}
     if card.resolves.is_empty(){return;}
-    let stripped=strip_all_guids(&game.join("mods"));
+    // An OK card's answer (tree_answers.rs): which of its GUIDs a StripAll migration removes, without the tree.
+    let mut question:Vec<&str>=card.resolves.iter().map(|r|r.mod_id.trim()).collect();
+    question.sort_unstable();question.dedup();
+    let question=question.join("\n");
+    let stripped:HashSet<String>=match crate::tree_answers::lookup::<Vec<String>>("strip-all",question.as_bytes()) {
+        Some(answer)=>answer.into_iter().collect(),
+        None=>{
+            let all=strip_all_guids(&game.join("mods"));
+            let mut answer:Vec<String>=question.split('\n').filter(|g|all.contains(*g)).map(str::to_owned).collect();
+            answer.sort();
+            crate::tree_answers::record("strip-all",question.as_bytes(),&answer);
+            answer.into_iter().collect()
+        }
+    };
     card.resolves.retain(|r| {
         let keep=!stripped.contains(r.mod_id.trim());
         if !keep {eprintln!("ok-extract: native StripAll guid={} property={} slot={}",r.mod_id,r.property,r.slot);}
@@ -235,10 +248,25 @@ fn save_guid_cache(mods_dir: &Path, map: &HashMap<String, PathBuf>, full: bool) 
 /// find_guids, remembered for the process per mods tree (zip list, mounted card pack) and wanted set: a GUID that is
 /// not in the on-disk cache otherwise makes every card open read every zipmod's manifest again (~0.5 s).
 pub fn find_guids(mods_dir: &Path, wanted: Option<&std::collections::HashSet<String>>) -> HashMap<String, PathBuf> {
-    use std::sync::Mutex;
     let Some(w) = wanted else { return find_guids_uncached(mods_dir, None) };
     let mut names: Vec<&String> = w.iter().collect();
     names.sort();
+    // An OK card's answer (tree_answers.rs): which archive declares each GUID, without the tree's manifests.
+    let question = names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n");
+    if let Some(rows) = crate::tree_answers::lookup::<Vec<(String, String)>>("guids", question.as_bytes()) {
+        return rows.into_iter().map(|(guid, zip)| (guid, crate::tree_answers::rebase(mods_dir, &zip))).collect();
+    }
+    let found = find_guids_wanted(mods_dir, w, &names);
+    if crate::tree_answers::recording() {
+        let rows: Option<Vec<(String, String)>> = found.iter().map(|(g, p)| crate::tree_answers::relative(p).map(|z| (g.clone(), z))).collect();
+        if let Some(mut rows) = rows { rows.sort(); crate::tree_answers::record("guids", question.as_bytes(), &rows); }
+    }
+    found
+}
+
+fn find_guids_wanted(mods_dir: &Path, w: &std::collections::HashSet<String>, names: &[&String]) -> HashMap<String, PathBuf> {
+    use std::sync::Mutex;
+    let wanted = Some(w);
     let key = format!("{}\n{:016x}\n{}\n{}", mods_dir.display(), crate::list::zip_list_sig(mods_dir), crate::oklib::mounted_pack_mods_identity(),
         names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"));
     static MEMO: Mutex<Vec<(String, HashMap<String, PathBuf>)>> = Mutex::new(Vec::new());
@@ -556,6 +584,20 @@ pub(crate) fn override_bundle_source(mods_dir:&Path,ab:&str)->Option<PathBuf> {
 /// One override_index entry without copying the index: every bundle a card reads asks once, and copying the whole
 /// library index for each (~0.15 s) set a floor under every mesh load.
 fn override_lookup(mods_dir:&Path,want:&str)->Option<PathBuf> {
+    // An OK card's answer (tree_answers.rs): which archive overrides this bundle, without the tree's listings.
+    if let Some(answer)=crate::tree_answers::lookup::<Option<String>>("override",want.as_bytes()) {
+        return answer.map(|zip|crate::tree_answers::rebase(mods_dir,&zip));
+    }
+    let found=override_lookup_in_tree(mods_dir,want);
+    if crate::tree_answers::recording() {
+        match &found {
+            None=>crate::tree_answers::record("override",want.as_bytes(),&None::<String>),
+            Some(zip)=>if let Some(zip)=crate::tree_answers::relative(zip) { crate::tree_answers::record("override",want.as_bytes(),&Some(zip)); },
+        }
+    }
+    found
+}
+fn override_lookup_in_tree(mods_dir:&Path,want:&str)->Option<PathBuf> {
     if mods_dir.parent().is_some_and(crate::gamefs::serves_from_library) {
         let index=crate::gamefs::library_memo("override_index", mods_dir, || std::sync::Arc::new(build_override_index(mods_dir)));
         return index.get(want).cloned();
@@ -907,12 +949,29 @@ fn select_uncensor_body<'a>(sources:&'a [UncensorBodySource],explicit:Option<&st
 /// Bodies: the first zipmod naming a GUID provides it. Genitals: one GUID is one candidate and, over the sorted
 /// paths, the last one wins (what `select_uncensor_genital` used to find).
 pub(crate) fn uncensor_sources(game_root: &Path) -> Arc<(Vec<UncensorBodySource>, Vec<UncensorGenitalSource>)> {
+    // An OK card's answer (tree_answers.rs): the tree's UncensorSelector manifests, without reading its archives.
+    if let Some(rows) = crate::tree_answers::lookup::<Vec<(String, Vec<String>)>>("uncensor", b"") {
+        let mods = game_root.join("mods");
+        let manifests: Vec<(PathBuf, Vec<String>)> = rows.into_iter().map(|(zip, xmls)| (crate::tree_answers::rebase(&mods, &zip), xmls)).collect();
+        return Arc::new(uncensor_sources_of(&manifests));
+    }
+    let (out, manifests) = uncensor_sources_in_tree(game_root);
+    if crate::tree_answers::recording() {
+        let rows: Option<Vec<(String, Vec<String>)>> = manifests.iter().map(|(p, x)| crate::tree_answers::relative(p).map(|z| (z, x.clone()))).collect();
+        if let Some(rows) = rows { crate::tree_answers::record("uncensor", b"", &rows); }
+    }
+    out
+}
+
+type UncensorSources = Arc<(Vec<UncensorBodySource>, Vec<UncensorGenitalSource>)>;
+/// `uncensor_sources` from the tree, with the manifests it was built from (archives with UncensorSelector parts).
+fn uncensor_sources_in_tree(game_root: &Path) -> (UncensorSources, Arc<Vec<(PathBuf, Vec<String>)>>) {
     use std::sync::Mutex;
     let key = format!("{}\n{:016x}\n{}", game_root.display(), crate::list::zip_list_sig(&game_root.join("mods")),
         crate::oklib::mounted_pack_mods_identity());
-    static MEMO: Mutex<Vec<(String, Arc<(Vec<UncensorBodySource>, Vec<UncensorGenitalSource>)>)>> = Mutex::new(Vec::new());
-    if let Some((_, hit)) = MEMO.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| *k == key) {
-        if hit.0.iter().map(|s| &s.zipmod).chain(hit.1.iter().map(|s| &s.zipmod)).all(|p| p.ok_is_file()) { return hit.clone(); }
+    static MEMO: Mutex<Vec<(String, UncensorSources, Arc<Vec<(PathBuf, Vec<String>)>>)>> = Mutex::new(Vec::new());
+    if let Some((_, hit, manifests)) = MEMO.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _, _)| *k == key) {
+        if hit.0.iter().map(|s| &s.zipmod).chain(hit.1.iter().map(|s| &s.zipmod)).all(|p| p.ok_is_file()) { return (hit.clone(), manifests.clone()); }
     }
     if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: MEMO miss uncensor_sources key={}", key.replace('\n', " | ")); }
     let paths = uncensor_zipmod_paths(game_root);
@@ -942,8 +1001,19 @@ pub(crate) fn uncensor_sources(game_root: &Path) -> Arc<(Vec<UncensorBodySource>
         if fresh_recorded { crate::oklib::library_scan_save("uncensor-manifests-v1", &*map); }
     }
     let manifests: Vec<(PathBuf, Vec<String>)> = paths.iter().cloned().zip(found).filter(|(_, x)| !x.is_empty()).collect();
+    let out = Arc::new(uncensor_sources_of(&manifests));
+    let manifests = Arc::new(manifests);
+    let mut memo = MEMO.lock().unwrap_or_else(|e| e.into_inner());
+    memo.retain(|(k, _, _)| *k != key);
+    if memo.len() >= 8 { memo.remove(0); }
+    memo.push((key, out.clone(), manifests.clone()));
+    (out, manifests)
+}
+
+/// The installed bodies and genitals the manifests declare (archives in walk order).
+fn uncensor_sources_of(manifests: &[(PathBuf, Vec<String>)]) -> (Vec<UncensorBodySource>, Vec<UncensorGenitalSource>) {
     let mut bodies: Vec<UncensorBodySource> = Vec::new();
-    for (path, xmls) in &manifests {
+    for (path, xmls) in manifests {
         for xml in xmls {
             for source in uncensor_body_descriptors(xml, path) {
                 if bodies.iter().any(|have| have.guid == source.guid) { continue; }
@@ -965,12 +1035,7 @@ pub(crate) fn uncensor_sources(game_root: &Path) -> Arc<(Vec<UncensorBodySource>
             }
         }
     }
-    let out = Arc::new((bodies, genitals));
-    let mut memo = MEMO.lock().unwrap_or_else(|e| e.into_inner());
-    memo.retain(|(k, _)| *k != key);
-    if memo.len() >= 8 { memo.remove(0); }
-    memo.push((key, out.clone()));
-    out
+    (bodies, genitals)
 }
 
 pub(crate) fn uncensor_body_for_card(game_root:&Path,explicit:Option<&str>,sex:i32)->Option<(UncensorBodySource,Vec<u8>)> {let _spot=crate::profile::spot("uncensor_body_for_card");

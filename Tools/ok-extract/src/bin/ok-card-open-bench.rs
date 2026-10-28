@@ -27,6 +27,27 @@ fn run() -> Result<serde_json::Value, String> {
         }
         return Ok(serde_json::json!({"compare": rows}));
     }
+    // ok-card-open-bench --fresh-dump LIBRARY OUTDIR CARD...: every saved outfit of each card opened fresh (no open
+    // cache), its session bytes written as OUTDIR/<card stem>_<outfit>.bin. Two runs (OK_TREE_ANSWERS=0 and not) must
+    // give the same files: a card's okLt answers only save work (tree_answers.rs).
+    if args.get(1).map(String::as_str) == Some("--fresh-dump") {
+        let lib = Path::new(args.get(2).ok_or("missing LIBRARY")?);
+        let out = Path::new(args.get(3).ok_or("missing OUTDIR")?);
+        std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
+        std::env::set_var("OK_BASE_LIBRARY", lib);
+        let mut rows = Vec::new();
+        for card in &args[4..] {
+            let bytes = std::fs::read(card).map_err(|e| e.to_string())?;
+            let stem = Path::new(card).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            for outfit in 0..ok_extract::tree_answers::outfit_count(&bytes) as i32 {
+                let t = Instant::now();
+                let (fresh, _) = ok_extract::open_card_compare_cache(lib, Path::new(card), outfit)?;
+                std::fs::write(out.join(format!("{stem}_{outfit}.bin")), &fresh).map_err(|e| e.to_string())?;
+                rows.push(serde_json::json!({"card": card, "outfit": outfit, "bytes": fresh.len(), "seconds": t.elapsed().as_secs_f64()}));
+            }
+        }
+        return Ok(serde_json::json!({"fresh": rows}));
+    }
     // ok-card-open-bench --abm CARD: the card's bone modifiers (ABMX) and face/body sliders (diagnostics).
     if args.get(1).map(String::as_str) == Some("--abm") {
         let card = ok_extract::parse_card(Path::new(args.get(2).ok_or("missing CARD")?))?;

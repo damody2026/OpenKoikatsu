@@ -53,20 +53,70 @@ pub struct ChaListCatalog {
     /// OK_FIRSTLOAD=A3 layered view: `by_id` holds only what a mounted card pack's archives change, everything
     /// else is read from the catalogue the reader prewarmed (`load_mods_catalog_shared`).
     pub(crate) base: Option<std::sync::Arc<ChaListCatalog>>,
+    /// A mods tree's catalogue as an OK card's open sees it (tree_answers.rs): the card's recorded answers first, the
+    /// whole tree's catalogue (built on the first question the card has no answer to) for the rest. `by_id` is empty.
+    pub(crate) tree: Option<std::sync::Arc<TreeCatalog>>,
+}
+
+/// See `ChaListCatalog::tree`. While answers are recorded (`record`), every question is answered by `full` and logged.
+#[derive(Debug)]
+pub(crate) struct TreeCatalog {
+    mods_dir: std::path::PathBuf,
+    get: HashMap<(i32, i32), Option<ListEntry>>,
+    slot: HashMap<(i32, i32, i32), Option<ListEntry>>,
+    record: bool,
+    full: std::sync::OnceLock<std::sync::Arc<ChaListCatalog>>,
+}
+
+impl TreeCatalog {
+    fn full(&self) -> &ChaListCatalog {
+        self.full.get_or_init(|| {
+            let _spot = crate::profile::spot("tree answer miss: catalogue");
+            load_mods_catalog_tree(&self.mods_dir)
+        })
+    }
+    /// Logs an answer; an entry from an archive outside the recorded mods folder is not logged (asked of the tree).
+    fn log<K: serde::Serialize>(&self, kind: &str, key: &K, found: Option<&ListEntry>) {
+        if !self.record { return; }
+        let found = match found.cloned() {
+            Some(mut e) => {
+                if let Some(zip) = e.extra.get("__zip") {
+                    let Some(relative) = crate::tree_answers::relative(Path::new(zip)) else { return };
+                    e.extra.insert("__zip".into(), relative);
+                }
+                Some(e)
+            }
+            None => None,
+        };
+        if let Ok(key) = bincode::serialize(key) { crate::tree_answers::record(kind, &key, &found); }
+    }
 }
 
 impl ChaListCatalog {
     pub fn get(&self, category_no: i32, id: i32) -> Option<&ListEntry> {
+        if let Some(tree) = &self.tree {
+            if let Some(answer) = tree.get.get(&(category_no, id)) { return answer.as_ref(); }
+            let found = tree.full().get(category_no, id);
+            tree.log("cat", &(category_no, id), found);
+            return found;
+        }
         self.by_id.get(&(category_no, id)).or_else(|| self.base.as_ref()?.by_id.get(&(category_no, id)))
     }
 
     /// Every entry once, the layered view included.
-    pub fn entries(&self) -> impl Iterator<Item = &ListEntry> {
-        self.by_id.values().chain(self.base.iter().flat_map(|base|
-            base.by_id.iter().filter(|(k, _)| !self.by_id.contains_key(k)).map(|(_, e)| e)))
+    pub fn entries(&self) -> Box<dyn Iterator<Item = &ListEntry> + '_> {
+        if let Some(tree) = &self.tree { return tree.full().entries(); }
+        Box::new(self.by_id.values().chain(self.base.iter().flat_map(|base|
+            base.by_id.iter().filter(|(k, _)| !self.by_id.contains_key(k)).map(|(_, e)| e))))
     }
 
     pub fn get_slot(&self, category_no: i32, slot: i32, local_slot: i32) -> Option<&ListEntry> {
+        if let Some(tree) = &self.tree {
+            if let Some(answer) = tree.slot.get(&(category_no, slot, local_slot)) { return answer.as_ref(); }
+            let found = tree.full().get_slot(category_no, slot, local_slot);
+            tree.log("cat-slot", &(category_no, slot, local_slot), found);
+            return found;
+        }
         self.get(category_no, slot)
             .or_else(|| {
                 if local_slot != 0 {
@@ -581,6 +631,40 @@ fn parse_catalog(text: &str) -> ChaListCatalog {
 /// load_mods_catalog without a copy per call: the SQL catalogue as it is held, or one merged catalogue per mods tree
 /// (zip list, mounted card pack) kept for the process. A card open used to copy the full catalogue (~0.8 s).
 pub fn load_mods_catalog_shared(mods_dir: &Path) -> std::sync::Arc<ChaListCatalog> {
+    use std::sync::Arc;
+    // An OK card answering its catalogue questions (tree_answers.rs): no archive of the tree is read for them.
+    if let Some(table) = crate::tree_answers::table().filter(|t| t.contains_key(&("cat-view".to_owned(), Vec::new()))) {
+        let rebased = |entry: Option<ListEntry>| entry.map(|mut e| {
+            if let Some(zip) = e.extra.get("__zip") {
+                let zip = crate::tree_answers::rebase(mods_dir, zip).to_string_lossy().into_owned();
+                e.extra.insert("__zip".into(), zip);
+            }
+            e
+        });
+        let (mut get, mut slot) = (HashMap::new(), HashMap::new());
+        for ((kind, key), value) in table.iter() {
+            let Ok(entry) = bincode::deserialize::<Option<ListEntry>>(value) else { continue };
+            match kind.as_str() {
+                "cat" => if let Ok(k) = bincode::deserialize::<(i32, i32)>(key) { get.insert(k, rebased(entry)); },
+                "cat-slot" => if let Ok(k) = bincode::deserialize::<(i32, i32, i32)>(key) { slot.insert(k, rebased(entry)); },
+                _ => {}
+            }
+        }
+        let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get, slot, record: false, full: Default::default() };
+        return Arc::new(ChaListCatalog { tree: Some(Arc::new(tree)), ..Default::default() });
+    }
+    let full = load_mods_catalog_tree(mods_dir);
+    // Recording an OK card's answers: the same catalogue, every question logged.
+    if crate::tree_answers::recording() {
+        crate::tree_answers::record("cat-view", &[], &());
+        let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get: HashMap::new(), slot: HashMap::new(), record: true, full: full.into() };
+        return Arc::new(ChaListCatalog { tree: Some(Arc::new(tree)), ..Default::default() });
+    }
+    full
+}
+
+/// `load_mods_catalog_shared` from the tree itself.
+fn load_mods_catalog_tree(mods_dir: &Path) -> std::sync::Arc<ChaListCatalog> {
     use std::sync::{Arc, Mutex};
     if let Some(cat) = crate::sqlcache::mods_catalog_shared(mods_dir) {
         return cat;
@@ -602,7 +686,7 @@ pub fn load_mods_catalog_shared(mods_dir: &Path) -> std::sync::Arc<ChaListCatalo
     }
     // Replayed from the card (OK_CARD_MEMO=res).
     let replayed = get(RES, memo_key.as_bytes()).and_then(|b| bincode::deserialize::<Vec<((i32, i32), ListEntry)>>(&b).ok())
-        .map(|list| ChaListCatalog { by_id: list.into_iter().collect(), base: None });
+        .map(|list| ChaListCatalog { by_id: list.into_iter().collect(), ..Default::default() });
     let layered = if replayed.is_none() && crate::first_load_option("A3") && crate::oklib::active().is_some() {
         let memo = MEMO.lock().unwrap_or_else(|e| e.into_inner());
         memo.iter().rev().filter(|(k, _, c)| k.0 == key.0 && c.base.is_none())
@@ -629,7 +713,7 @@ fn layered_catalog(zips: &[std::path::PathBuf], base_zips: &[std::path::PathBuf]
     if std::env::var_os("OK_PROFILE").is_some() {
         eprintln!("ok-extract: layered catalog added_zips={} entries={} ms={:.1}", added.len(), by_id.len(), t.elapsed().as_secs_f64() * 1000.0);
     }
-    Some(ChaListCatalog { by_id, base: Some(base) })
+    Some(ChaListCatalog { by_id, base: Some(base), ..Default::default() })
 }
 
 /// The entries the added archives (in sorted path order, each with its own list) win over `base`, the merged view of
@@ -769,7 +853,7 @@ mod tests {
             let full = merge(&|_| true);
             let base = std::sync::Arc::new(merge(&|i| !added.contains(&i)));
             let layer = layer_entries(&base, added.iter().map(|&i| (zips[i].as_path(), &parts[i]))).expect("tagged base");
-            let view = ChaListCatalog { by_id: layer, base: Some(base) };
+            let view = ChaListCatalog { by_id: layer, base: Some(base), ..Default::default() };
             for c in 99..104 { for id in -1..11 {
                 assert_eq!(view.get(c, id).map(|e| &e.name), full.get(c, id).map(|e| &e.name), "round {round} get {c} {id}");
                 for local in [0, 3] {

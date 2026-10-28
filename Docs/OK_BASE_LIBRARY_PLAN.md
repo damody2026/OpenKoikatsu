@@ -53,6 +53,7 @@
 | `card <lib> <KKS 卡> <out>` | 原作卡 → APNG 卡：基礎庫＋此卡 zipmod 開卡，基礎庫沒有的部分錄成卡內 `okLc` |
 | `kks-verify <lib> <清單>` | 原作卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod digest（`work/kks_verify.tsv`） |
 | `okcard-verify <lib> <清單>` | 原作卡 → APNG 卡 → 只用 OK 資料重開：三者 digest 相同、大小比例、`okLc` 大小（`work/okcard_verify.tsv`） |
+| `tree-answers <lib> <OK 卡>...` | 替既有 OK 卡補上 `okLt`（開卡對整棵 mods 樹的問題的答案），原地改寫；`card`／`cards` 轉出的新卡已經自帶 |
 
 ## 階段與驗收
 
@@ -103,7 +104,13 @@
   `LogOkExtract` 會記錄每張卡的資源來源（基礎庫＋幾個 zipmod／是否用到 zipmod 資料／是否掛上卡內資源包／是否來自快取）。
 - KKS 卡 → APNG 卡（`--oklib card`）：先以「基礎庫＋後備」開卡，記下由後備提供的 zipmod 來源，把它們轉成 OK 模型，
   連同所需的目錄／清單觀測打包成卡內的 `okLc`；讀 APNG 卡時掛上這包、關閉後備，只用 OK 資源。
-  卡片存的每一套服裝都會開一次錄進同一包（2026-10-24 起；以前只錄第 0 套）。只有某套服裝才用、基礎庫又沒有的資源，例如 mod 上衣給身體的 `OverBodyMask`，以前不在包裡，讀卡器換到那套就缺；這類缺口現在會印 `OverBodyMask ... not found`。舊卡用 `--oklib card`／`cards` 重轉（輸入可以是 OK 卡本身，會先剝掉 OK 區塊）。重轉已是 OK 卡的卡時，新卡帶 `okId` 區塊記下原本的身分（街區的 `apng-<id>`），名字、個人設定、存檔照常對得上（`oklib::keep_identity`、`card_identity`）。
+  卡片存的每一套服裝都會開一次錄進同一包（2026-10-24 起；以前只錄第 0 套）。
+- 卡內答案 `okLt`（2026-10-28，`Tools/ok-extract/src/tree_answers.rs`）：開 OK 卡時有幾個問題原本要問「整棵 mods 樹」——基礎庫記錄的約 7300 個 zipmod：合併的 ChaList 目錄、哪個 zipmod 宣告某個 GUID、StripAll 移轉、哪個 zipmod 覆蓋某個原版 bundle、UncensorSelector 的身體／生殖器清單、MaterialEditor 有沒有註冊某個 shader。每一項都要讀遍或合併全部 7300 個記錄，新程序第一張卡要多花 0.7～1.6 秒（負載高時更久），卡片本身只問其中幾十個。
+  - 現在卡片自己帶這些答案：轉卡（`card`／`cards`）做完後，只用基礎庫＋卡內 `okLc` 把成品的每一套服裝開一次，記下這些問題與答案（zipmod 路徑存成相對 `mods/` 的路徑，開卡時接回當時的 mods 目錄），zstd 後存成 `okLt` 區塊（C049 為 5.3 KB）。
+  - 開卡時先查卡內答案，整棵樹一個 zipmod 都不讀。卡片沒錄過的問題（例如以後的程式多問了一題），照舊問整棵樹，所以答案只會省工、不會改變結果。
+  - 舊卡用 `tree-answers` 補上，不用重轉。沒有 `okId` 的卡補上 `okId`，值是原本的身分，名字、存檔照常對得上。開卡快取的 key 不含 `okLt`，補上之後快取照用。
+  - `OK_TREE_ANSWERS=0`：開卡不用卡內答案（對照用）。`ok-card-open-bench --fresh-dump <lib> <目錄> <卡>...`：每套服裝都不經快取開一次，寫出 session 位元組。兩種設定的結果要逐位元組相同。
+  - 驗收（10-28，C049，7 套服裝）：有沒有 `okLt` 的 session 逐位元組相同。新程序第一次開卡（`OK_NOCACHE`，同時有其他工作在跑）：`lists+mods+guids` 774 → 40 ms，`uncensor body` 289 → 24 ms；讀到的 zip 從 14,641 次降到 67 次（只剩卡片自己用到的）；extract_session 3.39 → 2.03 秒。只有某套服裝才用、基礎庫又沒有的資源，例如 mod 上衣給身體的 `OverBodyMask`，以前不在包裡，讀卡器換到那套就缺；這類缺口現在會印 `OverBodyMask ... not found`。舊卡用 `--oklib card`／`cards` 重轉（輸入可以是 OK 卡本身，會先剝掉 OK 區塊）。重轉已是 OK 卡的卡時，新卡帶 `okId` 區塊記下原本的身分（街區的 `apng-<id>`），名字、個人設定、存檔照常對得上（`oklib::keep_identity`、`card_identity`）。
 - 驗收：
   - KKS 卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod 的 digest（用基礎庫沒有的卡測，包含卡片專屬 mod 的卡）。
   - APNG 卡：封閉重播（無遊戲目錄、無後備）digest ＝ 遊戲模式 digest。
