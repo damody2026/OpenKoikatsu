@@ -853,6 +853,17 @@ minutes = 30
 feed = { fun = 8, social = 6, energy = -15 }
 
 [[activity]]
+# 在操場跑步（說「繞操場跑一圈」時只有公園的慢跑，兩人走去公園跑，R5-5）
+id = "field_jog"
+name = "在操場一起跑步"
+place = "playground"
+kind = "walk"
+code = 1
+weather = "dry"
+minutes = 30
+feed = { fun = 8, social = 6, energy = -15 }
+
+[[activity]]
 id = "park_sketch"
 name = "在公園寫生（她畫畫，你陪在旁邊）"
 place = "park"
