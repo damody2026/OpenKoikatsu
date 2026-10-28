@@ -1430,6 +1430,7 @@ he_comes_to_talk_note = "(A note from the game, not his words: he walks up and s
 judge_her_things = "\n[Her things and loans] {things}"
 confession_accepted_note = "(A note from the game, not his words) He just confessed to you and you said yes: you are lovers now. Go on in your own voice."
 confession_refused_note = "(A note from the game, not his words) He just confessed to you and you asked for time, turning him down for now. Go on in your own voice and remember it."
+confession_not_yet_note = "(A note from the game, not his words) You just said yes to his confession, but you have not known him long enough and you are not really ready to be his girlfriend yet. Add a word in your own voice, for example that you would like to spend more time together first; you are not lovers yet, remember it."
 confession_shy_refused_note = "(System note, not his words) He just confessed to you in front of other people. You are too shy to say yes with people around, so you refused; you don't actually dislike him. Go on in your own voice."
 confession_shy_onlookers_hint = "She is too shy to answer with people around. Try again when it's just the two of you."
 confession_ran_away = "{name} turned bright red and ran off without a word..."

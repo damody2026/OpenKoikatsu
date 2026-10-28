@@ -1930,6 +1930,9 @@ void AOKStreetSocialScene::RelationshipEvent(const FString& Event,bool bHerYes){
  if(const int32* Line=S.Catalogue.ById.Find(Answer->GetStringField(TEXT("line"))))Preview.LineNode=*Line;else Preview.Playable=false;
  S.PlayerLine.Reset();S.RelationshipSequence.Reset();S.RelationshipSilentUntil=0;
  if(!Preview.Resolved)UE_LOG(LogTemp,Display,TEXT("Street relationship event %s not resolved: %s"),*Event,*Preview.Reason);
+ // She said yes aloud, but they are not there yet (the favor the rules ask for): she is told, takes it back in her own
+ // way, and her answer is still to come. 胡桃 said "I accept" and stayed his friend, thinking they were together (R4-22).
+ if(!Preview.Resolved&&Event==TEXT("confession")&&bHerYes&&S.Target!=INDEX_NONE){S.TellHer.Add(OKT(TEXT("ui.scene.confession_not_yet_note")));S.ConfessionPending.Add(S.Target,OKStreetMindNow(S));}
  if(!Preview.Resolved){S.Message=Answer->GetStringField(TEXT("message"));RefreshUI();return;} // the rules say why, with the numbers
  S.RelationshipShy.Reset();Answer->TryGetStringField(TEXT("shy"),S.RelationshipShy);
  S.PendingEffect=Preview.Effect;S.RelationshipPending=true;S.RelationshipEventName=Event;S.BranchLine=false;S.RelationshipVoiceRequired=Preview.Playable;S.RelationshipVoiceCompleted=false;
