@@ -412,7 +412,9 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
         let paid_at_door = in_today(cst.0) && her_key.as_deref().map_or(true, in_today);
         // The drink itself bought from the machine's menu and settled during it (bought_at_counter): the fee is that
         // drink, not a second one on top (¥5 settled, then ¥6 more at the end, R3-240).
-        let goods_paid = cst.0 == "vending" && b(r, "bought_at_counter");
+        // Any fee that is a meal or a drink (satiety): dishes ordered at the counter for this visit are that meal — 安可's
+        // soup was paid at the counter and the private room's ¥160 set dinner was billed on top (R4-7).
+        let goods_paid = cst.3 == "satiety" && b(r, "bought_at_counter");
         if !goods_paid && !(ticket && (b(r, "admitted") || paid_at_door)) {
             price += crate::region::price(cst.1 as i64) as i32;
             admission |= ticket;
@@ -926,6 +928,11 @@ mod tests {
         let settled = activity_end(&c, &json!({"id": "vending_girls_dorm", "kind": "solo", "name": "售貨機", "bought_at_counter": true, "player_cash": 1000, "relation": rel(json!({"cash": 50})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!(settled["price"].as_i64(), Some(0));
         assert_eq!(settled["feed"]["satiety"], 5.0, "she still had the drink");
+        // The private room's set dinner, when they ordered at the counter instead (R4-7: soup paid, then ¥160 more).
+        let room = activity_end(&c, &json!({"id": "restaurant_room", "kind": "facility", "name": "包廂", "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!(room["price"].as_i64(), Some(160));
+        let ordered = activity_end(&c, &json!({"id": "restaurant_room", "kind": "facility", "name": "包廂", "bought_at_counter": true, "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!(ordered["price"].as_i64(), Some(0));
         // Watching the tank and then sitting on the bench before it: one ticket for the visit.
         let tank = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(60), Some(true)));
