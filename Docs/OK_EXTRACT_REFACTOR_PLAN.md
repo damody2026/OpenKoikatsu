@@ -34,6 +34,7 @@
 - 2a 完成（0064a77d3）：`extract_session_from_info` 原封不動移到 `src/extract.rs`。
 - 2b 完成（a61fd60a2）：「清單＋mods＋GUID」拆成 `lists_stage`，回傳 `ListsStage`；兩個 RAII scope（穿著狀態、預取）放在結構裡，呼叫端以 `_clothes_scope`、`_prefetch_guard` 綁定，保持原本的釋放順序。
 - 4 lib.rs 分檔完成（d5e545985 … 7ab6363c3，一群一個 commit）：`texture_bake`、`face_texture`、`clothes_texture`（含 8c53dae5e 欄位可見性修正）、`placement`、`face_shapes`、`rig`、`entries`、`catalog_textures`、`head_body`、`material_editor`、`push`、`accessories`。lib.rs 18,600 → 976 行，剩模組宣告、Manifest 等共用型別、shader 分類、開卡對外 API 與 FFI 小工具。做法：`move_items.lua` 把連續的頂層項目搬到新檔、沒有 `pub` 的改 `pub(crate)`，lib.rs 留 `mod x; pub(crate) use x::*;`（區塊有對外 `pub` 項目時用 `pub use`），其他地方的 `crate::名稱` 不用改；結構欄位與 `thread_local!` 內的 static 若被外面用到，另外改 `pub(crate)`。
+- 5 unity.rs 分檔（86f8c2454 … 26a235da7）：測試移到 `unity/tests.rs`；`textures`、`tints`、`prefabs`、`clothes_states`、`mesh_channels`、`mesh_decode`（模組放在 `src/unity/`）。unity.rs 11,000 → 5,055 行，剩開頭的型別與兩段 `impl ParsedBundle`（約 2,700 行）；拆 impl 要逐一把被別處呼叫的方法改成 `pub(crate)`，列為 5g。
 - 下一步 2c：「基礎 bundle」（身體、頭部、臉、shape keys）。這段約 45 個綁定、許多是可變的且後面各段都用，先分成身體與頭部兩個結構，再拆函式。
 
 ## 做法

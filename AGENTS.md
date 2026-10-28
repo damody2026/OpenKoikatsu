@@ -212,7 +212,8 @@ SelectIndex / Outfit 選擇
 | Rust 程式／群組 | 主要責任 |
 |---|---|
 | `card.rs`、`list.rs`、`mods.rs` | 人物／服裝資料、ChaList、GUID 與 bundle override 解析 |
-| `unity.rs`、`unity/references.rs` | Unity bundle、物件參照、mesh／texture／材質／prefab 解碼 |
+| `unity.rs`、`unity/references.rs` | Unity bundle 與 `ParsedBundle`（記錄查詢）、物件參照 |
+| `unity/mesh_channels.rs`、`unity/mesh_decode.rs`、`unity/textures.rs`、`unity/tints.rs`、`unity/prefabs.rs`、`unity/clothes_states.rs` | 頂點欄位；UV／顏色／權重／索引／skin／blend shape；Texture2D 轉 PNG 與貼圖查找；頭髮與身體配色、overtex；基礎 bundle、prefab 圖與 maindata 網格查詢；穿著狀態 scope |
 | `session.rs` | 部件與角色狀態、身形初始化、動畫幀、骨架／palette、物理及輸出協調 |
 | `extract.rs` | 開卡主流程 `extract_session_from_info`（依 OK_PROFILE 的階段逐步拆成函式，例如 `lists_stage`；見 [重構計畫](Docs/OK_EXTRACT_REFACTOR_PLAN.md)） |
 | `entries.rs`、`push.rs` | 清單項目轉網格（entry 記憶、穿著狀態規則、預取）；部件推送進 session（`PushCtx`／`PushBatch`、`push_meshes`） |
