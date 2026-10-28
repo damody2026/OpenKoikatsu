@@ -357,7 +357,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  int64 FreeTalkReplayShown=0;int32 FreeTalkReplayShownSlot=INDEX_NONE,FreeTalkReplaySceneSlot=INDEX_NONE;FString FreeTalkReplayShownText;bool FreeTalkReplayShownVoiced=false;double FreeTalkReplayHold=0;
  bool TopicsOpen=false;TArray<TSharedPtr<SSlider>> StatSliders;TArray<TSharedPtr<SCheckBox>> RelationChecks;int32 RelationControlsVerified=0;bool RelationControlsSync=false;TMap<int32,double> RunUntil,RunNext;
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
- TArray<FString> HighCards;TWeakObjectPtr<AOKInteractionMode> PrivateMode;TSharedPtr<SWidget> PrivateLeave; /* the one-on-one scene's own leave button (R3-228) */FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
+ TArray<FString> HighCards;TArray<int32> HighOutfits;TWeakObjectPtr<AOKInteractionMode> PrivateMode;TSharedPtr<SWidget> PrivateLeave; /* the one-on-one scene's own leave button (R3-228) */FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
  TMap<int32,double> CommutePausedUntil; // a girl he walked up to stops her walk for a moment (StepNavigation)
  int32 NavGirl=INDEX_NONE,PrivateGirl=INDEX_NONE,ContactsProbePhase=0;FOKStreetLiftRide NavRide; // the navigation riding an elevator (PlanNavLift)
  double NavAt=0,ContactsProbeAt=0;
@@ -775,6 +775,9 @@ void AOKStreetSocialScene::BeginPlay(){
  TSharedPtr<FJsonObject> SelectionRoot;
  if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),SelectionRoot)&&SelectionRoot){
   const TArray<TSharedPtr<FJsonValue>>* HostCards=nullptr;if(SelectionRoot->TryGetArrayField(TEXT("cards"),HostCards))for(const auto& C:*HostCards)S.HighCards.Add(OKStreetResolveAgainst(ManifestPath,C->AsString()));
+  // The outfit each wears in the street (the crowd reads the same list): the one-on-one scene opens her in it, not outfit 0
+  // (Hu Tao walked the street in her white uniform and stood in the scene in a pink nurse's dress).
+  {const TArray<TSharedPtr<FJsonValue>>* Outfits=nullptr;if(SelectionRoot->TryGetArrayField(TEXT("outfits"),Outfits))for(const auto& O:*Outfits)S.HighOutfits.Add(FMath::Clamp(int32(O->AsNumber()),0,31));}
 
   const TSharedPtr<FJsonObject>* Seat=nullptr;
   if(SelectionRoot->TryGetObjectField(TEXT("seated_talk"),Seat)&&Seat&&Seat->IsValid()){(*Seat)->TryGetStringField(TEXT("male"),S.SeatedMaleClip);(*Seat)->TryGetStringField(TEXT("female"),S.SeatedFemaleClip);}

@@ -83,27 +83,27 @@ AOKInteractionMode* AOKInteractionMode::EnterReader(UOKCharacterController* Sour
     Mode->Returned=[Weak=TWeakObjectPtr<UOKCharacterController>(Source),SourceVisibility](TSharedRef<FJsonObject>){if(Weak.IsValid()){Weak->SetVisibility(SourceVisibility);Weak->ApplyClickInputMode();}};
     return Mode;
 }
-AOKInteractionMode* AOKInteractionMode::EnterCards(APlayerController* Player,const FString& Female,const FString& Male){
+AOKInteractionMode* AOKInteractionMode::EnterCards(APlayerController* Player,const FString& Female,const FString& Male,int32 FemaleOutfit){
     if(!Player||!FPaths::FileExists(Female)||!FPaths::FileExists(Male))return nullptr;
     auto* Shared=CreateWidget<UOKCharacterController>(Player);Shared->bInteractionOnly=true;Shared->bIndependentCards=!UKKCardWorkspace::PortableSourcePath(Female).IsEmpty();Shared->Selected.Sex=1;Shared->InitializeInteractionControls();
     auto* Mode=Enter(Shared);if(!Mode)return nullptr;
-    Mode->OwnController=true;Mode->MalePath=Male;Mode->ReturnLabel=TEXT("返回多人街區");Mode->LoadFemale(Female);return Mode;
+    Mode->OwnController=true;Mode->MalePath=Male;Mode->ReturnLabel=TEXT("返回多人街區");Mode->LoadFemale(Female,FemaleOutfit);return Mode;
 }
-void AOKInteractionMode::LoadFemale(const FString& Path){
+void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
     Controller->bLoadInFlight=true;
     const FString Portable=UKKCardWorkspace::PortableSourcePath(Path);
     const FString Root=Portable.IsEmpty()&&UKKGameRoot::Get()?UKKGameRoot::Get()->Root:FString();
     const FString Source=Portable.IsEmpty()?Path:Portable;
     auto Job=MakeShared<FInteractionRoleLoad,ESPMode::ThreadSafe>();const auto Token=Cancelled;TWeakObjectPtr<AOKInteractionMode> Weak(this);
     FOkSession::InitBindings();
-    Async(EAsyncExecution::Thread,[Weak,Job,Token,Path,Root,Source](){
+    Async(EAsyncExecution::Thread,[Weak,Job,Token,Path,Root,Source,Outfit](){
         if(*Token)return;
         // Each step timed: March 7th's high model took 14 s here (Encore 1.6 s) with nothing in the log.
         const double T0=FPlatformTime::Seconds();
         Job->Ok=UKKCardReader::LoadFromFile(Path,Job->Card,Job->Error);
         if(Job->Ok&&Job->Card.Sex!=1){Job->Ok=false;Job->Error=TEXT("這張卡是男性角色，不能當女角：")+FPaths::GetCleanFilename(Path);}
         const double T1=FPlatformTime::Seconds();
-        Job->Ok=Job->Ok&&Job->Session.Open(Root,Source,0,Job->Error);
+        Job->Ok=Job->Ok&&Job->Session.Open(Root,Source,Outfit,Job->Error);
         const double T2=FPlatformTime::Seconds();double T3=T2,T35=T2,T4=T2;
         // Her materials first, every texture in parallel (the precache below then finds them prepared): one at a time,
         // March 7th's took 10 s here (Encore 1 s), the player looking at the loading screen.
@@ -111,10 +111,10 @@ void AOKInteractionMode::LoadFemale(const FString& Path){
          FString MaterialError;if(!Job->Session.PrepareRuntimeMaterials(MaterialError,true))UE_LOG(LogTemp,Warning,TEXT("Interaction female materials: %s"),*MaterialError);T35=FPlatformTime::Seconds();
          AKKPreviewActor::PrecacheSessionTextures(Job->Session,true);T4=FPlatformTime::Seconds();}
         UE_LOG(LogTemp,Display,TEXT("Interaction female load %s: card %.0f ms, session %.0f ms, body physics %.0f ms, materials %.0f ms, textures %.0f ms"),*FPaths::GetCleanFilename(Path),(T1-T0)*1000.,(T2-T1)*1000.,(T3-T2)*1000.,(T35-T3)*1000.,(T4-T35)*1000.);
-        AsyncTask(ENamedThreads::GameThread,[Weak,Job,Token,Path](){
+        AsyncTask(ENamedThreads::GameThread,[Weak,Job,Token,Path,Outfit](){
             if(*Token||!Weak.IsValid())return;auto* Mode=Weak.Get();auto* C=Mode->Controller.Get();
             if(!Job->Ok){Mode->Fail(Job->Error.IsEmpty()?TEXT("女角高模載入失敗"):Job->Error);return;}
-            C->Selected=MoveTemp(Job->Card);C->Entries.Reset();auto& E=C->Entries.AddDefaulted_GetRef();E.Path=Path;E.FileName=FPaths::GetCleanFilename(Path);C->SelectedIndex=0;C->OutfitIndex=0;C->PreviewOutfitIndex=0;C->PreviewCardPath=Path;C->bModelLayout=true;
+            C->Selected=MoveTemp(Job->Card);C->Entries.Reset();auto& E=C->Entries.AddDefaulted_GetRef();E.Path=Path;E.FileName=FPaths::GetCleanFilename(Path);C->SelectedIndex=0;C->OutfitIndex=Outfit;C->PreviewOutfitIndex=Outfit;C->PreviewCardPath=Path;C->bModelLayout=true;
             Mode->LoadingFemale=Mode->GetWorld()->SpawnActor<AKKPreviewActor>();if(!Mode->LoadingFemale){Mode->Fail(TEXT("無法建立高模角色"));return;}Mode->LoadingFemale->bPreserveSourceWorld=true;Mode->LoadingFemale->SetActorLocation(FVector::ZeroVector);Mode->LoadingFemale->SetActorHiddenInGame(true);Mode->LoadingFemale->Session=MoveTemp(Job->Session);
             FString Error;if(!Mode->LoadingFemale->BeginSessionLoad(Error)){Mode->Fail(Error);return;}
         });

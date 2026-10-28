@@ -906,3 +906,9 @@
 - 先試「被牆擠壓時鏡頭升高往下看」：電梯車廂頂沒有碰撞，鏡頭穿出車頂拍到屋頂，放棄。
 - 修正（`OKStreetSocialScene.cpp`）：街頭跟隨鏡頭（不含 galgame 對話鏡頭）前方 1 m 內、畫面中央 30° 內的女角，暫時從主畫面隱藏（`PC->HiddenPrimitiveComponents`），鏡頭有空間後恢復；他本人不隱藏，立繪擷取不受影響。
 - 驗證（Gal1028F）：電梯裡看到他與車廂、說話者立繪照常；到九樓後全員正常顯示。
+
+### 2026-10-28 進 1 對 1 時她換了一套衣服，畫面上還有除錯字（E 組 galgame，新存檔實玩）
+- 胡桃在街上穿白帽制服，進 1 對 1 卻是粉色護士裝；雷電將軍也一樣。`selection.json` 的 `outfits` 指定每位在街上穿第幾套（將軍 4、胡桃 3），人群照著讀，`AOKInteractionMode::LoadFemale` 卻寫死開第 0 套。
+- 修正：街區讀 `outfits` 存成 `HighOutfits`，`EnterCards`／`LoadFemale` 多一個服裝參數，`BeginPrivate` 傳她街上那套。
+- 1 對 1 畫面中央有黃色「侍奉・玩弄龜頭・WLoop」與引擎的 `DisableAllScreenMessages` 提示：`ShowPairStatus` 用 `AddOnScreenDebugMessage` 印動作名稱，打包的 Development 版會顯示。互動模式（`bInteractionOnly`）左側面板已經寫「已載入：…」，不再印到畫面上。
+- 驗證（Gal1028I）：胡桃、將軍的 1 對 1 截圖都是街上的服裝，沒有除錯字。
