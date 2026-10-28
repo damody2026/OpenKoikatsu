@@ -255,7 +255,7 @@ struct FOKStreetSceneState {
  TMap<FString,FString> MindRecent;int64 NeedsTickMinute=-1,BondTickMinute=-1;
  // OKStreetSocialLife.inl
  int32 LifeWishDay=-1;TArray<FOKLifePose> LifePoses;double LifeCheckAt=0,LifeFaceAt=0,LifeWishAt=0;TMap<int32,double> LifeCooldown;TMap<int32,FVector> LifeRestore;
- TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater,ArriveWaiting;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
+ TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater,ArriveWaiting,MeetJoinSince;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
  // OKStreetSocialPhoneInbox.inl: her history, the phone (messages, calls), and what is apart.
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;

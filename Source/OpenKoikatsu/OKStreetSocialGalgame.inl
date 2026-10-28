@@ -770,7 +770,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				for (int32 Slot = 1; Slot < S.Manifest.Characters.Num(); ++Slot)
 				{
 					FOKRuntimeCharacterStatus O;
-					if (Slot == G.Partner || !OKGetCrowdRuntimeCharacterStatus(this, Slot, O)) continue;
+					// The one speaking is who the shot is on (in a group, not always the one he talks to): at the table beside him
+					// she stood right at the lens and was left out, the picture empty while she spoke.
+					if (Slot == G.Partner || Slot == G.Speaker || !OKGetCrowdRuntimeCharacterStatus(this, Slot, O)) continue;
 					const FVector Body = O.Transform.GetLocation() + FVector(0, 0, 90);
 					bool bInWay = false;
 					for (const FVector& To : {Target, HerHead})

@@ -912,3 +912,14 @@
 - 修正：街區讀 `outfits` 存成 `HighOutfits`，`EnterCards`／`LoadFemale` 多一個服裝參數，`BeginPrivate` 傳她街上那套。
 - 1 對 1 畫面中央有黃色「侍奉・玩弄龜頭・WLoop」與引擎的 `DisableAllScreenMessages` 提示：`ShowPairStatus` 用 `AddOnScreenDebugMessage` 印動作名稱，打包的 Development 版會顯示。互動模式（`bInteractionOnly`）左側面板已經寫「已載入：…」，不再印到畫面上。
 - 驗證（Gal1028I）：胡桃、將軍的 1 對 1 截圖都是街上的服裝，沒有除錯字。
+
+### 2026-10-28 約好兩人一起到景觀餐廳，第二位到了卻沒跟上樓，自己回家了（E 組 galgame，新存檔實玩）
+- 群聊約「今晚七點景觀餐廳」，19:00 第一位到了，他和她搭電梯上十樓。第二位隨後到他原本的位置，`PartyCanJoin` 因為他已不在同一層而拒絕，log 只寫 `came for their meeting but cannot join; she waits`，接著她照自己的行程離開百貨。
+- 修正一（`OKStreetSocialInvite.inl`）：赴約時加入不了，就排進 `ArriveLater` 一分鐘後重試，最多重試 60 分鐘（`MeetJoinSince`）；重試時 `ArriveNow` 會找他所在的樓層、帶她搭電梯上去。
+- 第二次重現時她在他還在電梯裡時出發，停在 7F，接著「he is no longer on that floor」又放棄。修正二（`OKStreetSocialAppointments.inl`）：電梯到了他卻已不在那層時，同樣重試；超過 2 小時的等待紀錄每分鐘清掉。
+- 驗證（Gal1028L，slot 8 重玩）：安可先後重試、搭電梯上 10F，`actor 10 sits with them`，兩人都在群聊裡說話。
+
+### 2026-10-28 群聊時正在說話的女主被當成擋鏡頭的人藏起來，畫面一片空（E 組 galgame）
+- 十樓景觀餐廳，惠惠是對話對象，安可坐在他旁邊說話。pov 鏡頭對著安可，可是擋鏡頭的隱藏規則（鏡頭前 1.5 m、在畫面內的人）只豁免對話對象 `G.Partner`，她就被藏起來了，畫面只剩夜色、桌角和他的衣服。
+- 修正（`OKStreetSocialGalgame.inl`）：目前說話者 `G.Speaker` 也不隱藏。
+- 驗證（Gal1028P，嚴格開卡前的 ok-extract 副本＋封卡前原卡，slot 8 重玩）：十樓景觀餐廳，對話對象是惠惠，安可說「超級美的啦～」時 pov 鏡頭清楚拍到她。

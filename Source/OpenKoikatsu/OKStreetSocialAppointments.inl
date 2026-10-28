@@ -298,9 +298,15 @@ void AOKStreetSocialScene::TickAppointments(){
     return;}
    S.ArriveWaiting.Remove(Girl);
  };
- // Up on his floor (the lift ride is over): she walks over to him from there. Given up if he left that floor meanwhile.
+ // A wait for him that ended long ago (she joined, or he was alone when she came) does not count against a later one.
+ for(auto It=S.MeetJoinSince.CreateIterator();It;++It)if(Now-It.Value()>120)It.RemoveCurrent();
+ // Up on his floor (the lift ride is over): she walks over to him from there. He left that floor meanwhile (she set off
+ // while he rode up to the view restaurant, and got off at 7F): she goes after him again in a minute, up to an hour.
  for(auto It=S.ArriveAfterLift.CreateIterator();It;++It){const int32 G=*It;if(S.NpcLifts.Contains(G))continue;It.RemoveCurrent();
-  if(S.Agents.IsValidIndex(G-1)&&FMath::Abs(S.Agents[G-1].Position.Z-S.Male.Z)<100.f)ArriveNow(G);else UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor"),G);}
+  if(S.Agents.IsValidIndex(G-1)&&FMath::Abs(S.Agents[G-1].Position.Z-S.Male.Z)<100.f)ArriveNow(G);
+  else{const int64 Since=S.MeetJoinSince.FindOrAdd(G,Now);
+   if(Now-Since<=60){S.ArriveLater.Add(G,Now+1);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor; she goes after him"),G);}
+   else{S.MeetJoinSince.Remove(G);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor; gives up after an hour"),G);}}}
  // Due now (after her shift, or after the one walking over before her); he talking with another girl by then, she joins them.
  {TArray<int32> Due;for(auto It=S.ArriveLater.CreateIterator();It;++It)if(Now>=It.Value()){Due.Add(It.Key());It.RemoveCurrent();}
   for(const int32 Girl:Due){const int32 With=FreeTalkPartner();ArriveNow(Girl,With!=INDEX_NONE&&With!=Girl);}}

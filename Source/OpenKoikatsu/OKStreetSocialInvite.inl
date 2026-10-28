@@ -195,8 +195,14 @@ void AOKStreetSocialScene::StepApproach(){
   if(ForSong){if(S.Target==INDEX_NONE){S.SkipGreeting=true;BeginTalk(I);S.SkipGreeting=false;}S.Song.NextCheck=0;return;}
   // Their meeting, and he is talking with another girl: she joins them (the group talk hears that she came for it).
   if(Join&&With!=INDEX_NONE&&With!=I){
-   if(PartyJoin(I)){S.PartyEvents.Add(OKMsg(TEXT("ui.party.came_for_meeting"),{{TEXT("name"),*SpokenName(I)}}));UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting and joins the talk"),I);return;}
-   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting but cannot join; she waits"),I);return;}
+   if(PartyJoin(I)){S.MeetJoinSince.Remove(I);S.PartyEvents.Add(OKMsg(TEXT("ui.party.came_for_meeting"),{{TEXT("name"),*SpokenName(I)}}));UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting and joins the talk"),I);return;}
+   // Not now (he had just gone up in the lift with the first one to the view restaurant): she comes after him again in
+   // a minute, up to an hour from when she first waited (ArriveNow finds his floor). Waiting where she stood, her day took
+   // her off home and she never came up.
+   {const int64 Now=OKStreetMindNow(S);const int64 Since=S.MeetJoinSince.FindOrAdd(I,Now);
+    if(Now-Since<=60){S.ArriveLater.Add(I,Now+1);UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting but cannot join now; she comes after him"),I);}
+    else{S.MeetJoinSince.Remove(I);UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting but could not join for an hour; gives up"),I);}}
+   return;}
   S.ApproachJoin=false;
   // Her own opening follows (InitiativeNudge): a scripted "oh, chatting time♡" line before it was a second opener, and
   // often not hers (fin is not bubbly).
