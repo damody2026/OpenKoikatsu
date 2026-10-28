@@ -1191,12 +1191,16 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // A note the game wrote for her (a till note, "you are on shift till three"): in the group prompt the model writes
  // every girl's lines, so its "you" is named; Encore took Alice's shift for his. His line goes to the galgame box first
  // (FreeTalkCaptionPlayer, set below only for one girl): in a group talk his question never showed.
- if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){if(His)S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
+ if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){if(His)S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
+  // The wheel rolled back in a group: every girl in it goes back to before that line; then each one's point to return to.
+  if(His){TArray<int32> In={Character};for(const int32 Member:S.Party)In.AddUnique(Member);TArray<FString> Ids;for(const int32 Member:In)Ids.Add(OKStreetStableId(S.Manifest.Characters[Member]));
+   GalgameRollBack(Ids);if(!OKStreetFreeTalkIsNudge(Text))for(int32 K=0;K<In.Num();++K)GalgameCheckpoint(In[K],Ids[K]);}
+  SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
  // Said while the scene shows an earlier line (rolled back with the wheel): what came after it is undone first; then
  // the point this line can be rolled back to.
  // Only his own words roll back: a turn the game wrote for her (her "we're friends now" once the favour reached it, a
  // till note) came while he had scrolled back and undid the lines after that point, as if he had spoken there.
- {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);if(His)GalgameRollBack(Character,RollId);if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
+ {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);if(His)GalgameRollBack({RollId});if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
  FOKFreeTalkSettings Settings;FString Error,System,UserMessage;
  if(!PrepareFreeTalk(Character,Text,Settings,System,UserMessage,Error)){S.FreeTalkNotice=Error;RefreshUI();return;}
  // The reply is handled in the mode this was sent in (phone or face to face), whatever happens meanwhile.

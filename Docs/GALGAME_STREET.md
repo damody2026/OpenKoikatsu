@@ -228,3 +228,9 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 讀卡器早就量過平行版（`OK_FIRSTLOAD=C5`，材質準備 1.98 → 0.34 s），因為街頭群眾也走同一函式才預設關閉。1 對 1 的高模在背景執行緒載入、玩家看著載入畫面，所以 `LoadFemale` 先以平行方式準備材質（`OKCaptureRuntimeMaterialsParallel`，`FOkSession::PrepareRuntimeMaterials(Error, true)`），之後的 `PrecacheSessionTextures` 直接沿用。log 多一欄 `materials`。
 
 Gal1028H（同樣有別的遊戲在跑）：三月七 materials 2.0 s＋textures 1.1 s（第二次 2.1＋0.1），安可 0.23＋0.15，優香 0.68＋0.59；1 對 1 截圖材質正確。整台乾淨時的數字還沒量。
+
+### 群聊也能回滾（2026-10-28）
+
+原本只有 1 對 1 能用滾輪回滾：檢查點只記說話對象一人，群聊時他的話走 `SendPartyTalk`，根本不記檢查點，滾回去再說話不會還原任何人。現在群聊時，他每句話前替在場每位各記一個檢查點（另存群聊最近的台詞 `PartyLog`）；滾回去後再說話，所有人一起回到那句之前（台詞紀錄、記憶、歷史、好感、ok-mind 的上下文），只和他說話的那位回去、其他人還記得的情況不再發生。
+
+驗證（Gal1028J，安可＋惠惠在咖啡廳）：告訴兩人「喜歡橘色」與「生日三月十二」，滾回到惠惠回「橘色」那句後問「我有跟妳們說過生日嗎」：兩人各一行 `rollback: back to line 16`，安可「沒聽你說過耶」、惠惠「你根本沒提過吧」。
