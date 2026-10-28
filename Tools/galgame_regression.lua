@@ -1,9 +1,11 @@
 -- Street galgame regression over the control channel (run after packaging a stage).
 --
---   Tools\lua\lua.exe Tools\galgame_regression.lua [--launch] [--girl 3] [--port N] [--keep] [--private]
+--   Tools\lua\lua.exe Tools\galgame_regression.lua [--launch [--sandbox NAME [--port-base N]]] [--girl 3] [--port N]
+--                                                 [--keep] [--private]
 --
--- With --launch the newest stage starts with -Control (Tools/run_street_social_development.lua); otherwise a running
--- game on this checkout's control port is used. Heroine --girl is called over and talked to; the run checks:
+-- With --launch the newest stage starts with -Control (Tools/run_street_social_development.lua; --sandbox starts it as
+-- that sandbox, control port N+10); otherwise a running game on this checkout's control port (or --port) is used.
+-- Heroine --girl is called over and talked to; the run checks:
 --   scene      the galgame presenter takes the conversation (/galgame active, partner = the girl)
 --   pov        her reply is framed in first person (presenter shot "pov")
 --   portrait   the speaker's portrait is shown and captured
@@ -23,12 +25,15 @@ local json = ok.json
 local a = ok.args.parser("Street galgame regression")
   :opt("--girl", { type = "int", default = 3 })
   :opt("--port", { type = "int", default = 0 })
+  :opt("--sandbox", { default = "" })
+  :opt("--port-base", { type = "int", default = 0 })
   :flag("--launch")
   :flag("--keep")
   :flag("--private")
   :parse(arg)
 local root = ok.root
 local port = a.port
+if port == 0 and a.sandbox ~= "" then port = (a.port_base ~= 0 and a.port_base or 48060) + 10 end
 if port == 0 then port = math.tointeger(tonumber(ok.util.strip(ok.proc.output({ ok.lua_exe, root .. "/Tools/ok_instance.lua", "port", "street_control" })))) end
 local base = "http://127.0.0.1:" .. port
 
@@ -53,7 +58,11 @@ end
 -- The game and its log.
 local log
 if a.launch then
-  local out = ok.proc.output({ ok.lua_exe, root .. "/Tools/run_street_social_development.lua", "-Control", "-Window", "1600x900" })
+  local cmd = { ok.lua_exe, root .. "/Tools/run_street_social_development.lua", "-Control", "-Window", "1600x900" }
+  if a.sandbox ~= "" then
+    for _, v in ipairs({ "-Sandbox", a.sandbox, "-PortBase", tostring(port - 10) }) do cmd[#cmd + 1] = v end
+  end
+  local out = ok.proc.output(cmd)
   log = out:match("(%a:[/\\][^\r\n ]*Play%-%d+T%d+)")
   if log then log = log .. "/game.log" end
 end
@@ -62,7 +71,8 @@ if not wait(function() local s = call("/state"); return s and s.all_ready end, 9
 end
 if not log then
   -- The running game's own log: the play folder whose game.pid is the process on this control port (the newest of
-  -- them: Windows gives pids out again), else the newest play folder. The newest alone was another session's sandbox.
+  -- them: Windows gives pids out again), else the newest whose log says it listens on this port. The newest play
+  -- folder alone was another session's sandbox.
   local pid = (ok.proc.output({ "netstat", "-ano", "-p", "TCP" }) or ""):match("[%d%.]+:" .. port .. "%s+%S+%s+LISTENING%s+(%d+)")
   local function newest_of(keep)
     local best, when = nil, -1
@@ -74,15 +84,22 @@ if not log then
   end
   local newest = pid and newest_of(function(d)
     return ok.path.exists(d .. "/game.pid") and ok.util.strip(ok.path.read_text(d .. "/game.pid")) == pid
-  end) or newest_of(function() return true end)
-  log = newest and newest .. "/game.log"
+  end) or newest_of(function(d)
+    local mark = "Street control: listening on http://127.0.0.1:" .. port .. " "
+    for line in io.lines(d .. "/game.log") do if line:find(mark, 1, true) then return true end end
+    return false
+  end)
+  if not newest then report("FAIL", "start", "no play folder belongs to the game on port " .. port); os.exit(1) end
+  log = newest .. "/game.log"
 end
 local function log_count(pattern) local n = 0; for line in io.lines(log) do if line:find(pattern, 1, true) then n = n + 1 end end; return n end
 local function log_last(pattern) local last; for line in io.lines(log) do if line:find(pattern, 1, true) then last = line end end; return last end
 
 -- A time she is about (in the evening she leaves for dinner and ends the talk), and a voice server that answers (the
 -- skip check needs a voiced line).
-local tts = os.getenv("OK_TTS_ENDPOINT") or ("http://127.0.0.1:" .. ok.util.strip(ok.proc.output({ ok.lua_exe, root .. "/Tools/ok_instance.lua", "port", "tts" })))
+-- The game's own voice server: its ports are laid out from one base (Tools/ok_instance.lua: TTS base, control base+10),
+-- so a sandbox's or another --port's is found from the control port, not this checkout's local-instance.json.
+local tts = os.getenv("OK_TTS_ENDPOINT") or ("http://127.0.0.1:" .. (port - 10))
 -- The game's own server may still be starting (up to a few minutes). Still none: her lines are not voiced and the checks
 -- would fail for that alone, so stop here (exit 2, not tested).
 if not wait(function() return ok.kit.http_request(tts .. "/health", { timeout = 5 }).status == 200 end, 180, 5) then
