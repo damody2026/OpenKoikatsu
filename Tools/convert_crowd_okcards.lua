@@ -12,6 +12,7 @@
 --     <card dir>/sources.tsv records the original of each, and they replace the card list of <card dir>/selection.json.
 local ok = require "ok"
 local P = ok.path
+local voice = require "ok_card_voice"
 
 local function list(src, out, parts)
   local names = {}
@@ -48,7 +49,7 @@ local function install(listfile, okdir, dest, logs, count)
       local v = verdict[P.abs(card):lower()]
       if v == "MATCH" and P.is_file(made) then
         local name = ("C%03d.png"):format(#cards)
-        P.write_bytes(P.join(dest, name), P.read_bytes(made), { atomic = true })
+        P.write_bytes(P.join(dest, name), voice.keep(P.read_bytes(made), P.join(dest, name)), { atomic = true })
         cards[#cards + 1] = P.abs(P.join(dest, name)):gsub("/", "\\")
         rows[#rows + 1] = name .. "\t" .. card
       else

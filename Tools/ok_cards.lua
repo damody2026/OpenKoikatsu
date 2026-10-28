@@ -14,11 +14,15 @@
 --   Tools\lua\lua.exe Tools\ok_cards.lua install <card list> <OK card dir> <crowd dir>
 --     The listed cards' OK cards become <crowd dir>/C000.png.. in list order (old C###.png past them removed);
 --     sources.tsv and selection.json are rewritten. Only after verify passed for all of them.
+--   Tools\lua\lua.exe Tools\ok_cards.lua install-named <OK card dir> <dest dir>
+--     Each OK card replaces the card of the same name in <dest dir> (StreetHeroines, Demo).
+--   Both installs keep the voice (okVo) of the card they replace when the new card has none.
 --
 -- --exe picks ok-extract.exe (default the release build); the bench (ok-card-open-bench.exe) is taken beside it.
 local ok = require "ok"
 local fs = require "okfs"
 local path, proc = ok.path, ok.proc
+local voice = require "ok_card_voice"
 
 local root = path.parent(path.parent(path.abs(arg[0])))
 local lib = path.join(root, "Content/IndependentResources/base_v1")
@@ -138,7 +142,7 @@ elseif cmd == "install" and pos[3] then
     local made = path.join(okdir, path.name(card))
     assert(path.is_file(made), "missing " .. made)
     local name = ("C%03d.png"):format(#cards)
-    path.write_bytes(path.join(dest, name), path.read_bytes(made), { atomic = true })
+    path.write_bytes(path.join(dest, name), voice.keep(path.read_bytes(made), path.join(dest, name)), { atomic = true })
     cards[#cards + 1] = path.abs(path.join(dest, name)):gsub("/", "\\")
     rows[#rows + 1] = name .. "\t" .. card
   end
@@ -155,6 +159,14 @@ elseif cmd == "install" and pos[3] then
     ok.write_json(selection, s, { indent = 2 })
   end
   print(("installed %d OK cards in %s, removed %d old"):format(#cards, dest, removed))
+elseif cmd == "install-named" and pos[2] then
+  local okdir, dest, n = pos[1], pos[2], 0
+  for _, made in ipairs(path.glob(okdir, "*.png")) do
+    local target = path.join(dest, path.name(made))
+    path.write_bytes(target, voice.keep(path.read_bytes(made), target), { atomic = true })
+    n = n + 1
+  end
+  print(("installed %d OK cards in %s"):format(n, dest))
 else
   io.stderr:write("usage: ok_cards.lua convert|verify|cold|install ... (see the top of this file)\n")
   os.exit(2)
