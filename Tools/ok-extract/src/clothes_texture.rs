@@ -293,13 +293,15 @@ pub(crate) fn apply_clothes_color_mask_sampled(
 
 /// Match the vertical orientation of a Unity Graphics.Blit output. This is
 /// shared by the clothes colour bake and MaterialEditor's normal conversion.
-pub(crate) fn flip_runtime_blit_v(png: Vec<u8>) -> Vec<u8> {
-    crate::teximg::load_from_memory(&png).ok()
+pub(crate) fn flip_runtime_blit_v(png: Vec<u8>) -> Vec<u8> {let _spot=crate::profile::spot("flip_runtime_blit_v");
+    // The same texture comes again in every garment state of an outfit, other outfits and other cards (a decode and an
+    // encode each, ~10–40 ms for a 1–2K texture).
+    png_transform_cache::transform("runtime_blit_v1", &png, &[], || crate::teximg::load_from_memory(&png).ok()
         .and_then(|img| {
             let mut im = img.to_rgba8();
             image::imageops::flip_vertical_in_place(&mut im);
             encode_png(&im)
-        })
+        }))
         .unwrap_or(png)
 }
 
