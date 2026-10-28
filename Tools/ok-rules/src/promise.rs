@@ -109,7 +109,12 @@ fn promise(c: &Catalog, r: &Value) -> Value {
     };
     let Some(minute) = minute else { return ignore("no_time") };
     // Before 04:00 belongs to the previous game day's night.
-    let start = game_day * 1440 + minute + if minute < 240 { 1440 } else { 0 };
+    let mut start = game_day * 1440 + minute + if minute < 240 { 1440 } else { 0 };
+    // A weekday named on that weekday, its hour gone ("每周二早上八点" at 09:21 on a Tuesday): next week's, not today's
+    // past one (R4-9: 惠惠's weekly morning was dropped as "past").
+    if start <= i(r, "now") && game_day == today && weekday_day(s(r, "day"), today).is_some() {
+        start += 7 * 1440;
+    }
     if start <= i(r, "now") {
         return ignore("past");
     }
@@ -235,6 +240,9 @@ mod tests {
         let shift = ask(json!({"time": "after_work", "his_shifts": [{"start": 11 * 1440 + 1020, "minutes": 240}]}));
         assert_eq!(shift["start"], 11 * 1440 + 1260);
         assert_eq!(ask(json!({"day": "+0", "time": "09:00"}))["reason"], "past");
+        // "周二 08:00" said at 09:21 on Tuesday 09-07 (day 6): next Tuesday, not today's gone hour (R4-9).
+        assert_eq!(ask(json!({"day": "周二", "time": "08:00", "today": 6, "now": 6 * 1440 + 561}))["start"], 13 * 1440 + 480);
+        assert_eq!(ask(json!({"day": "周二", "time": "10:00", "today": 6, "now": 6 * 1440 + 561}))["start"], 6 * 1440 + 600, "later today stays today");
         assert_eq!(ask(json!({"place_known": false}))["reason"], "not_a_place");
         // 01:30 "tonight" is the night after the game day.
         assert_eq!(ask(json!({"day": "+0", "time": "01:30"}))["start"], 11 * 1440 + 90);
