@@ -82,9 +82,27 @@ local function report(file, header, rows)
 end
 
 if cmd == "convert" and pos[2] then
-  local res = proc.run({ opts.exe, opts.zipmods, "--oklib", "cards", lib, pos[1], pos[2] },
-    { env = { OK_CARDS_WORKERS = opts.workers or false, OK_LIBRARY_CACHE = false, OK_NOCACHE = "1" } })
-  os.exit(res.ok and 0 or 1)
+  local function run(list, workers)
+    local res = proc.run({ opts.exe, opts.zipmods, "--oklib", "cards", lib, list, pos[2] },
+      { stdout_only = true, env = { OK_CARDS_WORKERS = workers or false, OK_LIBRARY_CACHE = false, OK_NOCACHE = "1" } })
+    io.write(res.stdout or ""); io.stdout:flush()
+    local failed, seen = {}, {}
+    for card in (res.stdout or ""):gmatch("OKCARDS error\t([^\t\n]+)\t") do
+      if not seen[card] then seen[card] = true; failed[#failed + 1] = card end
+    end
+    return res.ok, failed
+  end
+  local ok_run, failed = run(pos[1], opts.workers)
+  -- A card that failed in the batch gets one more try alone in a new process (C032 failed once in a 12-worker batch
+  -- with reads of unrelated zipmods counted as its own, and converted fine alone; see ERROR_LOG). Still failing: failed.
+  if #failed > 0 then
+    local retry = path.temp(".txt")
+    path.write_text(retry, table.concat(failed, "\n") .. "\n")
+    print(("convert: retrying %d failed card(s) alone"):format(#failed))
+    ok_run, failed = run(retry, "1")
+    path.remove(retry, true)
+  end
+  os.exit(ok_run and #failed == 0 and 0 or 1)
 elseif cmd == "verify" and pos[1] then
   local cards, rows, failed = cards_of(pos[1]), {}, 0
   local jobs = tonumber(opts.jobs) or 8

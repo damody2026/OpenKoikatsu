@@ -75,10 +75,12 @@ pub fn active() -> Option<Arc<Strict>> {
 /// This thread converts an original card (see the module notes).
 pub fn converting() -> bool { active().is_some_and(|s| s.converting) }
 
-/// A conversion's opens after the first outfit only read (OK_CONVERT_READ_ONLY=1, an experiment): the pure work that
-/// turns what was read into the character (texture decoding to PNG, colour and GPU bakes, composites) is skipped.
-/// Whatever such work would read is read before it, and a strict open of the result does all of it: a read it needs
-/// that a skipped step held back is a gap there. A conversion holds a process lock (one at a time), so this is global.
+/// A conversion's opens after the first outfit only read (OK_CONVERT_READ_ONLY=1, an experiment; do not use for cards
+/// that ship): the pure work that turns what was read into the character (texture decoding to PNG, colour and GPU
+/// bakes, composites) is skipped. Unsafe as it stands: a query first computed in such an open (an accessory only a
+/// later outfit or garment state uses) records what the skipped step left, e.g. a 1×1 placeholder texture inside a
+/// card-own `meshes_for_maindata` (raiden_shogun pf_acs_tassel), and no strict open notices. A conversion holds a
+/// process lock (one at a time), so this is global.
 static READ_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 pub fn set_read_only(on: bool) { READ_ONLY.store(on, std::sync::atomic::Ordering::Relaxed); }
 /// The pure assembly steps run (false while a conversion's later outfits only read).

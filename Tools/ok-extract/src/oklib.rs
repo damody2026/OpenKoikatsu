@@ -1644,6 +1644,14 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             let opened = if o == 0 { session_digest_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
             crate::okstrict::set_read_only(false);
             if let Err(e) = opened { failed.push(format!("outfit {o}: {e}")); }
+            // The other garment states the game and the card reader show (CLOTHES_STATE_VARIANTS): only read.
+            for states in CLOTHES_STATE_VARIANTS {
+                let _states = crate::unity::request_clothes_states(states);
+                crate::okstrict::set_read_only(read_only);
+                let opened = crate::session::open(lib, Some(card), o);
+                crate::okstrict::set_read_only(false);
+                if let Err(e) = opened { failed.push(format!("outfit {o} clothes {states:?}: {e}")); }
+            }
             if profile { eprintln!("OKPROFILE convert outfit {o} {:.2}s", t.elapsed().as_secs_f64()); }
         }
         drop(mount);
@@ -1728,6 +1736,12 @@ fn seal_step(lib: &Path, step: &str, card: &[u8]) -> Result<(Vec<u8>, String), S
 
 /// Opens every saved outfit of the card (bytes) from the library, nothing read from or written to the open cache, with
 /// cold bundle caches (an earlier open's parsed bundles would answer reads the card must make itself).
+/// Garment states an OK card's outfits must open in besides the worn one: every garment half off (1), lowered (2) and
+/// off (3), and the card reader's preloads (top four garments half off, the rest on or off). Opens in another state
+/// ask other questions (which prefab nodes a garment has, the skeleton of the mesh that stays drawn): a conversion
+/// opens these too, a strict check as well (the card reader's clothing warm load lacked 51 things of C000).
+pub(crate) const CLOTHES_STATE_VARIANTS: [[u8; 9]; 5] = [[1; 9], [2; 9], [3; 9], [1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 3, 3, 3, 3, 3]];
+
 fn open_outfits(lib: &Path, card: &[u8], what: &str) -> Result<(), String> {
     ensure_library(lib)?;
     static N: AtomicU64 = AtomicU64::new(0);
@@ -1741,6 +1755,10 @@ fn open_outfits(lib: &Path, card: &[u8], what: &str) -> Result<(), String> {
     let mut errors = Vec::new();
     for outfit in 0..crate::tree_answers::outfit_count(card) as i32 {
         if let Err(e) = crate::session::open(lib, Some(&temp.0), outfit) { errors.push(format!("outfit {outfit}: {e}")); }
+        for states in CLOTHES_STATE_VARIANTS {
+            let _states = crate::unity::request_clothes_states(states);
+            if let Err(e) = crate::session::open(lib, Some(&temp.0), outfit) { errors.push(format!("outfit {outfit} clothes {states:?}: {e}")); }
+        }
     }
     if nocache.is_none() { std::env::remove_var("OK_NOCACHE"); }
     if errors.is_empty() { Ok(()) } else { Err(format!("{what} open failed: {}", errors.join(" | "))) }
