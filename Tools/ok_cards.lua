@@ -9,7 +9,8 @@
 --     (okLc/okLt and shared resources only). A gap is a conversion bug. Do not run conversions meanwhile.
 --   Tools\lua\lua.exe Tools\ok_cards.lua cold <card dir|list> [--report FILE]
 --     Outfit 0 opened once per card in a new process (empty temporary folder, no cache), one card at a time: the cold
---     read. Ask the other sessions to pause their games and builds first.
+--     read. Take both machine-wide slots first (C:\portable\OpenKoikatsu\Saved\UnrealSlots\slot1 and slot2, owner.txt
+--     saying 量測 and when it ends) and give them back right after; keep a measurement under 30 minutes.
 --   Tools\lua\lua.exe Tools\ok_cards.lua install <card list> <OK card dir> <crowd dir>
 --     The listed cards' OK cards become <crowd dir>/C000.png.. in list order (old C###.png past them removed);
 --     sources.tsv and selection.json are rewritten. Only after verify passed for all of them.
