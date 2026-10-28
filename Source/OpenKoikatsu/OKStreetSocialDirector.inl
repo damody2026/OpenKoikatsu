@@ -41,6 +41,10 @@ FString AOKStreetSocialScene::TodayText(int32 Character) const{
   // this morning" on the Wednesday (R3-213).
   else if(Phase==EOKStreetTermPhase::Midterm||Phase==EOKStreetTermPhase::Final){const FDateTime Week=Phase==EOKStreetTermPhase::Midterm?Term.Midterm:Term.Final;
    Parts.Add(OKMsg(TEXT("ui.director.exam_week_line"),{{TEXT("exam"),Phase==EOKStreetTermPhase::Midterm?OKT(TEXT("ui.director.midterm_word")):OKT(TEXT("ui.director.final_word"))},{TEXT("date"),(Week+FTimespan::FromDays(4)).ToString(TEXT("%m/%d"))}}));}}
+ // Where she lives (her profile): at the door of her own dorm Jeanne said she did not live there and had come to see a
+ // friend; only "resting at home at the girls' dorm" in her plan said so.
+ if(Character>0&&S.Manifest.Characters.IsValidIndex(Character)){const FString Home=OKStreetProfileString(S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Character])),nullptr,TEXT("home_place_id"));
+  if(const FOKStreetPlace* P=Home.IsEmpty()?nullptr:OKStreetFindPlace(Home))Parts.Add(OKMsg(TEXT("ui.director.your_home_line"),{{TEXT("place"),FString(P->Name)}}));}
  // What her own day still holds (the plan she follows): what she says she has to do comes from here.
  if(const auto* Plan=S.Plans.Find(Character)){TArray<FString> Next;const int32 Minute=int32(Now%1440);
   for(const auto& B:*Plan)if(B.End>Minute&&Next.Num()<4&&B.Kind!=TEXT("sleep")){const FOKStreetPlace* P=OKStreetFindPlace(B.Place);

@@ -1491,7 +1491,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d still has food on the table; the talk goes on until the meal ends"),Character);Ends=false;
     L->FarewellAfterMeal=Character;L->FarewellAfterMealAt=Weak->SceneTime();}
    if(Ends&&DoNow.IsEmpty()&&!L->FarewellPending&&L->OutingGirl!=Character){L->FarewellPending=true;L->FarewellFromTalk=true;L->FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (judged)"),Character);}
-   {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name)){int32 Who=INDEX_NONE;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(Name.Equals(L->Manifest.Characters[G].Name,ESearchCase::IgnoreCase))Who=G;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(OKStreetNameMatches(Name,L->Manifest.Characters[G].Name))Who=G;if(Who!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street judge: he invites %s to join"),*Name);Weak->PartyJoin(Who);}}}}
+   {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name)){int32 Who=INDEX_NONE;
+    // The exact name first, as the game writes it too ("貞德" in a zh-TW game for the card's "贞德"): otherwise the looser match
+    // below took 貞德·Alter, the one he was talking to, and Jeanne was "already following him".
+    for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(Name.Equals(L->Manifest.Characters[G].Name,ESearchCase::IgnoreCase)||Name.Equals(Weak->SpokenName(G),ESearchCase::IgnoreCase))Who=G;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(OKStreetNameMatches(Name,L->Manifest.Characters[G].Name))Who=G;if(Who!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street judge: he invites %s to join"),*Name);Weak->PartyJoin(Who);}}}}
    // He confessed in his own words: the confession the rules decide (the same roll as the button), when she is the one he
    // is talking to face to face and nothing else is being settled.
    {bool Confessed=false;Verdict->TryGetBoolField(TEXT("confessed"),Confessed);
