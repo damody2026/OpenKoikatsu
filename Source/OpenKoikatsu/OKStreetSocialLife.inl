@@ -400,6 +400,13 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
   &&!(S.OrderedAtPlace.Contains(PlaceId)&&S.OrderedAtPlace[PlaceId]>=StartMinute-180));
  // What it is about (the machine's drink) bought from the menu and settled during it or just before: no fee on top (R3-240).
  Request->SetBoolField(TEXT("bought_at_counter"),S.LastCheckoutMinute>=StartMinute-30||(S.OrderedAtPlace.Contains(PlaceId)&&S.OrderedAtPlace[PlaceId]>=StartMinute-30));
+ // At the machine, what they ordered here just before is the drink they had there: not still being made afterwards (it
+ // is only served inside, and they drank at the door). 刻晴's tea, paid by chat, stayed "being made" after their machine
+ // drink, to be "left behind" later (R5-2, R4-24).
+ if(A&&A->FemaleClip&&FCString::Strstr(A->FemaleClip,TEXT("vending"))&&S.OrderedAtPlace.Contains(PlaceId)&&S.OrderedAtPlace[PlaceId]>=StartMinute-30){
+  TSet<int32> Batches;for(int32 K=S.Serves.Num()-1;K>=0;--K)if(S.Serves[K].PlaceId==PlaceId){Batches.Add(S.Serves[K].Batch);S.Serves.RemoveAt(K);}
+  const int32 Gone=S.Table.RemoveAll([&Batches](const FOKStreetDish& D){return !D.Served&&Batches.Contains(D.Batch);});
+  if(Batches.Num())UE_LOG(LogTemp,Display,TEXT("Street activity: %d orders at %s were the machine's drink (%d dishes)"),Batches.Num(),*PlaceId,Gone);}
  // Cut short (the place closed on them): the minutes that really went by, not the activity's whole length.
  if(S.ActCutShort)Request->SetNumberField(TEXT("spent"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));Request->SetNumberField(TEXT("menu_seed"),int32(StartMinute)+Girl*31);Request->SetStringField(TEXT("agreed"),PayAgreed(Girl)); // who pays, as they settled it (the AI's reading)
  Request->SetNumberField(TEXT("elapsed"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));
