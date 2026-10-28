@@ -27,7 +27,7 @@
 #include "Widgets/Input/SButton.h"
 
 namespace {
-struct FInteractionRoleLoad {FOkSession Session;FKKCharacterFile Card;FString Error;bool Ok=false;};
+struct FInteractionRoleLoad {FOkSession Session;FKKCharacterFile Card;FString Error,Pairs;bool Ok=false;};
 }
 AOKInteractionMode::AOKInteractionMode(){PrimaryActorTick.bCanEverTick=true;}
 AOKInteractionMode* AOKInteractionMode::Enter(UOKCharacterController* Input){
@@ -111,12 +111,15 @@ void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
          FString MaterialError;if(!Job->Session.PrepareRuntimeMaterials(MaterialError,true))UE_LOG(LogTemp,Warning,TEXT("Interaction female materials: %s"),*MaterialError);T35=FPlatformTime::Seconds();
          AKKPreviewActor::PrecacheSessionTextures(Job->Session,true);T4=FPlatformTime::Seconds();
          // The touch reactions' shared data, parsed here rather than in the frame her scene comes up.
-         FString BodyError;if(!FOKBodyInteraction::WarmShared(BodyError))UE_LOG(LogTemp,Warning,TEXT("Interaction body data: %s"),*BodyError);}
+         FString BodyError;if(!FOKBodyInteraction::WarmShared(BodyError))UE_LOG(LogTemp,Warning,TEXT("Interaction body data: %s"),*BodyError);
+         // Her pair list too, as the card reader's own load does (RefreshPairs read it from the session on the game thread).
+         Job->Pairs=Job->Session.NativeAnimationPairs();}
         UE_LOG(LogTemp,Display,TEXT("Interaction female load %s: card %.0f ms, session %.0f ms, body physics %.0f ms, materials %.0f ms, textures %.0f ms"),*FPaths::GetCleanFilename(Path),(T1-T0)*1000.,(T2-T1)*1000.,(T3-T2)*1000.,(T35-T3)*1000.,(T4-T35)*1000.);
         AsyncTask(ENamedThreads::GameThread,[Weak,Job,Token,Path,Outfit](){
             if(*Token||!Weak.IsValid())return;auto* Mode=Weak.Get();auto* C=Mode->Controller.Get();
             if(!Job->Ok){Mode->Fail(Job->Error.IsEmpty()?TEXT("女角高模載入失敗"):Job->Error);return;}
             C->Selected=MoveTemp(Job->Card);C->Entries.Reset();auto& E=C->Entries.AddDefaulted_GetRef();E.Path=Path;E.FileName=FPaths::GetCleanFilename(Path);C->SelectedIndex=0;C->OutfitIndex=Outfit;C->PreviewOutfitIndex=Outfit;C->PreviewCardPath=Path;C->bModelLayout=true;
+            if(!Job->Pairs.IsEmpty()){C->PendingLoadPairJson=MoveTemp(Job->Pairs);C->PendingLoadPairGeneration=C->LoadGeneration;}
             Mode->LoadingFemale=Mode->GetWorld()->SpawnActor<AKKPreviewActor>();if(!Mode->LoadingFemale){Mode->Fail(TEXT("無法建立高模角色"));return;}Mode->LoadingFemale->bPreserveSourceWorld=true;Mode->LoadingFemale->SetActorLocation(FVector::ZeroVector);Mode->LoadingFemale->SetActorHiddenInGame(true);Mode->LoadingFemale->Session=MoveTemp(Job->Session);
             FString Error;if(!Mode->LoadingFemale->BeginSessionLoad(Error)){Mode->Fail(Error);return;}
         });

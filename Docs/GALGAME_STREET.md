@@ -262,3 +262,4 @@ Gal1028R，`/private girl 3`，兩次：card 185／224 ms、session 5073／5556 
 - **平行材質準備把前景 worker 也占滿**：`OKCaptureRuntimeMaterialsParallel` 的 `ParallelFor`（PNG 解碼、mip、SHA1，2 s 內約 42 s CPU）在背景執行緒跑時，主執行緒 tick 結尾的 `WaitForTasks` 等了 1369 ms 與 436 ms。改用 `EParallelForFlags::BackgroundPriority`，前景 worker 留給遊戲；之後最長只剩 82 ms。
 - **身體互動資料每次重讀**：`FOKBodyInteraction::Prepare` 每次進 1 對 1 都在主執行緒解析 8.5 MB 的 `catalog-v1.json`（`prepare_ms` 620～740）。改成程序內只解析一次（`WarmShared`），並在 `LoadFemale` 的背景工作先讀好；之後 `prepare_ms` 60（第一次）／3.5（第二次），log 拆成 data／colliders／reaction。
 - 進場那一幀：1477 ms → 1099 ms（T）→ 568 ms（U）。剩下的是同步 `LoadObject`（`FlushAsyncLoading` 112 ms）、`KK_GalleryPairs` 103 ms，以及部件裝配期間的 `UTexture2D::UpdateResource`（`TryLoadMips`，每張最多約 50 ms）和一次 `Sync_RenderingThread` 810 ms。
+- 配對清單（`NativeAnimationPairs`）改在 `LoadFemale` 的背景工作先取，`RefreshPairs` 沿用（圖庫自己的載入本來就這樣做）；Gal1028V 的 trace 裡 `KK_GalleryPairs`（86～103 ms）不見了。
