@@ -4,13 +4,13 @@ use super::*;
 /// Illusion clothes: MainTex * (Color1*mask.r + Color2*mask.g + Color3*mask.b).
 /// A clothes colour channel's pattern (StudioEditor `KoikatsuClothesBake`).
 pub(crate) struct ClothesPatternSrc {
-    png: Option<image::RgbaImage>,
-    gpu: Option<clothes_gpu::Texture>,
-    color: [f32; 4],
-    tiling: [f32; 2],
-    offset: [f32; 2],
-    rotate: f32,
-    sampling: crate::unity::TextureSampling,
+    pub(crate) png: Option<image::RgbaImage>,
+    pub(crate) gpu: Option<clothes_gpu::Texture>,
+    pub(crate) color: [f32; 4],
+    pub(crate) tiling: [f32; 2],
+    pub(crate) offset: [f32; 2],
+    pub(crate) rotate: f32,
+    pub(crate) sampling: crate::unity::TextureSampling,
 }
 
 pub(crate) fn named_texture_sampling(game:&Path,entry:&ListEntry,ab:&str,names:&[&str])->Option<crate::unity::TextureSampling> {
