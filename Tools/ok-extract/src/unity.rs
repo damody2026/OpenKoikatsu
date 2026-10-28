@@ -2167,7 +2167,11 @@ fn cache_put(key: BundleCacheKey, v: Arc<ParsedBundle>) {
     sync_bundle_cache();
     BUNDLE_CACHE.with(|c| {
         let mut m = c.borrow_mut();
-        if m.len() >= 24 {
+        // A conversion opens its card 42 times (every outfit in six garment states) over 60–150 bundles: at 24 the
+        // cache emptied itself in every open, which parsed them all again and lost their decoded textures
+        // (raiden_shogun 41 → 32 s, jeanne 15.7 → 13.7 s, the same peak memory). Its worker drops the cache after the
+        // card (release_bundle_caches). Other opens keep the small cache: what it holds after an open stays held.
+        if m.len() >= if crate::oklib::recording_card_pack() { 160 } else { 24 } {
             m.clear();
         }
         m.insert(key, v);

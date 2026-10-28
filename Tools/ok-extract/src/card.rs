@@ -16,6 +16,9 @@ pub struct ResolveInfo {
 
 #[derive(Debug, Clone)]
 pub struct CardInfo {
+    /// Hash of the card data this was parsed from (everything after IEND) and of the parse mode: two infos with the
+    /// same digest and outfit say the same. View memos of stages that read many fields key on it (extract.rs).
+    pub source_digest: u64,
     pub marker: String,
     pub lastname: String,
     pub firstname: String,
@@ -2135,7 +2138,14 @@ pub(crate) fn parse_card_bytes_mode_cached(data:&[u8],outfit:i32,apply_shape_plu
     let base = cur.position() as usize;
     let blocks = lst_blocks(&header);
 
+    let source_digest = {
+        use std::hash::{Hash, Hasher};
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        (extra, apply_shape_plugins).hash(&mut hash);
+        hash.finish()
+    };
     let mut info = CardInfo {
+        source_digest,
         marker,
         lastname: String::new(),
         firstname: String::new(),

@@ -36,7 +36,11 @@
 - 4 lib.rs 分檔完成（d5e545985 … 7ab6363c3，一群一個 commit）：`texture_bake`、`face_texture`、`clothes_texture`（含 8c53dae5e 欄位可見性修正）、`placement`、`face_shapes`、`rig`、`entries`、`catalog_textures`、`head_body`、`material_editor`、`push`、`accessories`。lib.rs 18,600 → 976 行，剩模組宣告、Manifest 等共用型別、shader 分類、開卡對外 API 與 FFI 小工具。做法：`move_items.lua` 把連續的頂層項目搬到新檔、沒有 `pub` 的改 `pub(crate)`，lib.rs 留 `mod x; pub(crate) use x::*;`（區塊有對外 `pub` 項目時用 `pub use`），其他地方的 `crate::名稱` 不用改；結構欄位與 `thread_local!` 內的 static 若被外面用到，另外改 `pub(crate)`。
 - 5 unity.rs 分檔（86f8c2454 … 26a235da7）：測試移到 `unity/tests.rs`；`textures`、`tints`、`prefabs`、`clothes_states`、`mesh_channels`、`mesh_decode`（模組放在 `src/unity/`）。unity.rs 11,000 → 5,055 行，剩開頭的型別與兩段 `impl ParsedBundle`（約 2,700 行）；拆 impl 要逐一把被別處呼叫的方法改成 `pub(crate)`，列為 5g。
 - 2c 完成（2026-10-29）：「基礎 bundle」拆成 `base_bundles_stage`，回傳 `BaseStage`（25 個欄位；後面各段會改的照樣以 `mut` 綁定）。這一段只看卡片的性別、頭部、眨眼與 resolves，與服裝和穿著狀態無關，所以用 `view_memo` 包起來，鍵就是這些欄位。轉卡時同一張卡開 42 次（7 套服裝 × 6 種穿著狀態），只有第一次真正讀取並組裝。原版清單目錄（`load_characustom_dir_shared`）也一樣：基礎庫的清單資料夾不是實體資料夾，原本的變更監看快取存不住它，每次開卡都重新解析一次（約 30 ms）。jeanne 轉一張 24.8 → 17.2 秒。驗收：6 張樣本卡相同；3 張卡 × 7 套服裝 × 6 種穿著狀態共 126 個 session，開著與關掉 `OK_NO_VIEW_MEMO` 逐位元組相同。
-- 下一步 2d：身體與 uncensor、頭與臉（`head_detail`、`uncensor genitals`、`genital+mouth+face prep`，jeanne 合計每卡約 3 秒）。其中身體的透明遮罩依穿著狀態（`clothes_alpha_state`）、over body mask 依服裝，這兩項要留在 memo 外面。
+- 2d 第一部分（2026-10-29）：
+  - 轉卡時 thread 的 bundle 快取上限改成 160（原本 24，滿了就整個清空）。一張卡會碰到 60–150 個 bundle，原本每次開卡都會清空快取再全部重新 parse，bundle 上已解碼的貼圖也跟著丟掉。jeanne 的 parse 次數 933 → 69，raiden_shogun 41 → 32 秒，記憶體峰值不變。遊戲開卡仍是 24，因為快取在開卡結束後會一直留著。
+  - `CardInfo.source_digest`：卡片資料（IEND 之後的位元組）與解析模式的雜湊，給要讀很多卡片欄位的階段當 memo 鍵。
+  - head_detail 每個頭部網格的 rig 與貼圖，以 `(source_digest, 服裝, 網格)` 共用；有 OK Studio 眼型時照舊每次重算。jeanne 42 次開卡的 head_detail 合計 1.4 → 0.6 秒。
+- 2d 其餘：臉（`genital+mouth+face prep`，每次約 15 ms）、uncensor genitals（約 7 ms）、身體 rig（約 10 ms）。身體的透明遮罩依穿著狀態（`clothes_alpha_state`）、over body mask 依服裝，這兩項要留在 memo 外面。
 
 ## 做法
 

@@ -1234,88 +1234,96 @@ pub(crate) fn extract_session_from_info(
             eyes:head_eye_patterns.get(&key).map(|(_,p)|p.as_slice()),
             eyebrow:head_eyebrow_patterns.get(&key).map(|(_,p)|p.as_slice()),
         };
-        rig_mesh(
-            &mut mesh,
-            "head",
-            body_skel.as_ref(),
-            head_skel.as_ref(),
-            None,
-            part_skel.as_ref(),
-            None,
-            Some(&authored_fbs),
-            None,
-        );
-        if let Some(card) = parsed_card.as_ref() {
-            resolve_head_detail_texture(
-                game_root,
-                &vanilla,
-                &mod_catalog,
-                card,
-                &guid_index,
-                outfit,
+        let prepare = |mut mesh: ExtractedMesh| {
+            rig_mesh(
                 &mut mesh,
-                &head_texs,
-                &body_texs,
+                "head",
+                body_skel.as_ref(),
+                head_skel.as_ref(),
+                None,
+                part_skel.as_ref(),
+                None,
+                Some(&authored_fbs),
+                None,
             );
-        }
-        if mesh.texture_png.is_none() {
-            let ln = mesh.name.to_ascii_lowercase();
-            if ln.contains("hitomi") {
-                mesh.texture_png = simple_iris_png();
-            } else if ln.contains("noseline") || ln.contains("nose") {
-                mesh.texture_png = crate::unity::solid_png([0.04, 0.03, 0.04, 0.35], 32, 32);
-            } else if ln.contains("eyeline") || ln.contains("mayuge") {
-                // A missing line texture must not become an opaque dark quad
-                // over the eyes. The game simply has no texture on that pass.
-                mesh.texture_png = crate::unity::solid_png([0.0, 0.0, 0.0, 0.0], 32, 32);
-            } else if ln.contains("tooth") || ln.contains("canine") || ln.contains("tang") {
-                // A missing source MainTex uses the shader's white default.
-                mesh.texture_png = crate::unity::solid_png([1.0; 4], 8, 8);
-            }
-        }
-        let stem = format!("head_{}", sanitize(&mesh.name));
-        seen_meshes.insert(mesh.name.to_ascii_lowercase());
-        let (blend, unlit) = blend_for_mesh("head", &mesh);
-        let ln = mesh.name.to_ascii_lowercase();
-        let eyeline_up = ln.contains("eyeline") && !ln.contains("low");
-        // Unity draws extra materials on the last submesh. rendEyelineUp has
-        // materials[1]=EyelineShadowTex * skinMainColor (ChaControl.cs:4046/4073).
-        if eyeline_up {
             if let Some(card) = parsed_card.as_ref() {
+                resolve_head_detail_texture(
+                    game_root,
+                    &vanilla,
+                    &mod_catalog,
+                    card,
+                    &guid_index,
+                    outfit,
+                    &mut mesh,
+                    &head_texs,
+                    &body_texs,
+                );
+            }
+            if mesh.texture_png.is_none() {
+                let ln = mesh.name.to_ascii_lowercase();
+                if ln.contains("hitomi") {
+                    mesh.texture_png = simple_iris_png();
+                } else if ln.contains("noseline") || ln.contains("nose") {
+                    mesh.texture_png = crate::unity::solid_png([0.04, 0.03, 0.04, 0.35], 32, 32);
+                } else if ln.contains("eyeline") || ln.contains("mayuge") {
+                    // A missing line texture must not become an opaque dark quad
+                    // over the eyes. The game simply has no texture on that pass.
+                    mesh.texture_png = crate::unity::solid_png([0.0, 0.0, 0.0, 0.0], 32, 32);
+                } else if ln.contains("tooth") || ln.contains("canine") || ln.contains("tang") {
+                    // A missing source MainTex uses the shader's white default.
+                    mesh.texture_png = crate::unity::solid_png([1.0; 4], 8, 8);
+                }
+            }
+            // Unity draws extra materials on the last submesh. rendEyelineUp has
+            // materials[1]=EyelineShadowTex * skinMainColor (ChaControl.cs:4046/4073).
+            let ln = mesh.name.to_ascii_lowercase();
+            let kage = parsed_card.as_ref().filter(|_| ln.contains("eyeline") && !ln.contains("low")).map(|card| {
                 // ChaControl.ChangeSettingEyelineUp assigns slot0 and slot1
                 // separately. Preserve slot1 identity before looking up ME
                 // MainTex/Color; the stroke's replacement belongs only to slot0.
                 let mut kage = eyeline_shadow_mesh(&parsed_head,&mesh);
                 resolve_head_detail_texture(game_root,&vanilla,&mod_catalog,card,&guid_index,
                     outfit,&mut kage,&head_texs,&body_texs);
-                if kage.texture_png.is_some() {
-                    head_fbs_sources.insert(kage.name.to_ascii_lowercase(), key.clone());
-                    eprintln!("ok-extract: KAGE {} slot1={}",kage.name,
-                        kage.mat.as_ref().map(|m|m.name.as_str()).unwrap_or(""));
-                    let kstem = format!("head_{}", sanitize(&kage.name));
-                    let (kp, ktex) = emit_part(
-                        out_dir,
-                        &mut session_parts,
-                        &kstem,
-                        "head",
-                        &kage,
-                        &blend,
-                        unlit,
-                    )?;
-                    parts.push(ManifestPart {
-                        #[cfg(test)]
-                        source_mesh: Some(mesh.name.clone()),
-                        role: "head".into(),
-                        path: kp,
-                        guid: None,
-                        mesh: kage.name.clone(),
-                        texture: ktex,
-                        blend: blend.clone(),
-                        unlit,
-                        ..Default::default()
-                    });
-                }
-            }
+                kage
+            });
+            (mesh, kage)
+        };
+        // Rigged and textured the same in every garment state of an outfit (crate::view_memo), keyed by the card data;
+        // an OK Studio eye set changes the meshes before this, so it is done afresh.
+        let (mesh, kage) = match parsed_card.as_ref().filter(|_| studio_eyes.is_none()) {
+            Some(card) => crate::view_memo(format!("head_detail|{:016x}|{outfit}|{}|{}", card.source_digest, mesh.name,
+                mesh.path_id), || prepare(mesh)),
+            None => prepare(mesh),
+        };
+        let stem = format!("head_{}", sanitize(&mesh.name));
+        seen_meshes.insert(mesh.name.to_ascii_lowercase());
+        let (blend, unlit) = blend_for_mesh("head", &mesh);
+        if let Some(kage) = kage.filter(|kage| kage.texture_png.is_some()) {
+            head_fbs_sources.insert(kage.name.to_ascii_lowercase(), key.clone());
+            eprintln!("ok-extract: KAGE {} slot1={}",kage.name,
+                kage.mat.as_ref().map(|m|m.name.as_str()).unwrap_or(""));
+            let kstem = format!("head_{}", sanitize(&kage.name));
+            let (kp, ktex) = emit_part(
+                out_dir,
+                &mut session_parts,
+                &kstem,
+                "head",
+                &kage,
+                &blend,
+                unlit,
+            )?;
+            parts.push(ManifestPart {
+                #[cfg(test)]
+                source_mesh: Some(mesh.name.clone()),
+                role: "head".into(),
+                path: kp,
+                guid: None,
+                mesh: kage.name.clone(),
+                texture: ktex,
+                blend: blend.clone(),
+                unlit,
+                ..Default::default()
+            });
         }
         let (p, tex) = emit_part(out_dir, &mut session_parts, &stem, "head", &mesh, &blend, unlit)?;
         parts.push(ManifestPart {
