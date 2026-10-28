@@ -1444,6 +1444,7 @@ judge_pending_confession = "\n(Note: he already asked her to be his girlfriend e
 judge_song_offer = "\nShe has just offered to sing him a song and is waiting for his answer. If his line answers that offer, add a field song_answer: \"accept\" for yes, \"later\" if he asks her to wait, \"decline\" if he does not want to hear it. Leave it out if he is not answering it."
 judge_song_ready = "\nShe has a song ready for him and he asked her to sing it later. If his line asks her to sing it now, add a field song_answer: \"accept\"."
 judge_song_again = "\nShe has sung for him before. If his line asks her to sing that song again, add a field song_answer: \"replay\". Leave it out if he does not ask."
+judge_her_plan = "\nHer day ahead: {plan}. If she asks him to come along to her own errand first (\"walk with me first\", \"come with me to buy something\") and his line agrees, do_now is that errand's go:place id (the one in brackets); what she said comes after it still goes in then."
 judge_earlier_lines = "(The few lines before these, only to tell what \"there\" or \"walk over\" means:\n{lines})\n"
 judge_his_bag = "\nIn his bag: {items} (when he gives her one and she accepts, gift is its name)"
 meeting_greet_note = "(System note, not his words: this is the meeting you two agreed on, and he has come. Greet him in your own words and start the meeting naturally; favor_delta 0.)"

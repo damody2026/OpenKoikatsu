@@ -1444,6 +1444,7 @@ judge_pending_confession = "\n（补充：他之前已经向她告白、请她�
 judge_song_offer = "\n她刚邀他听她唱一首歌，还在等他回答。如果他这句是在回答这个邀约，就加一个字段 song_answer：答应就填 \"accept\"，要她等一下就填 \"later\"，不想听就填 \"decline\"。他没有在回答这件事就不要填。"
 judge_song_ready = "\n她准备好一首歌要唱给他听，他刚才要她等一下再唱。如果他这句是要她现在就唱，就加一个字段 song_answer：填 \"accept\"。"
 judge_song_again = "\n她以前唱过歌给他听。如果他这句是要她再唱一次那首歌，就加一个字段 song_answer：填 \"replay\"。他没有要求就不要填。"
+judge_her_plan = "\n她今天接下来的安排：{plan}。如果她要他先陪她去办自己的事（「先陪我走一趟」「陪我去买个东西」），而他这句答应了，do_now 填那件事的 go:地点id（括号里的那个），她说之后才做的事照旧填在 then。"
 judge_earlier_lines = "（这之前的几句对话，只用来理解“那里”“走过去”指的是什么：\n{lines}）\n"
 judge_his_bag = "\n他背包里有：{items}（他说要送她、她收下时，gift 填其中一样的名字）"
 meeting_greet_note = "（系统说明，不是他说的话：这是你们约好的见面，他来了。用你自己的话跟他打招呼，自然地开始这次见面；favor_delta 设 0。）"

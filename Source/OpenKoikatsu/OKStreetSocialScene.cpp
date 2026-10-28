@@ -1415,6 +1415,8 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  // Or her song is ready and he asked her to wait (he may want it now); and a song she sang him before he may ask again.
  else if(S.Song.Phase==EOKSongPhase::Ready&&S.Song.Due&&!S.Song.Replay&&S.Song.Girl==Character)User+=OKT(TEXT("ui.scene.judge_song_ready"));
  if(!SongIsSinging()&&SongLatestMemory(Character)!=INDEX_NONE)User+=OKT(TEXT("ui.scene.judge_song_again"));
+ // Her day ahead, with place ids: where "come along with me first" goes (JudgePlanLine).
+ User+=JudgePlanLine(Character);
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and

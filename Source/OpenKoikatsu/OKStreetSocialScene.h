@@ -40,6 +40,7 @@ private:
  // Rollback of a scene (OKStreetSocialGalgame.inl): a point to come back to before each of his lines, and back to the
  // line the wheel scrolled to once he says something there (her memory, mind, history and relation with it).
  void GalgameCheckpoint(int32 Character,const FString& Id); void GalgameRollBack(const TArray<FString>& Ids); // Ids: who was in the talk (all of them in a group)
+ FString JudgePlanLine(int32 Character) const; // OKStreetSocialDirector.inl: her day ahead with place ids, for the judge
  void EndGalgame();
  void GalgameWalkFocus(FVector& Focus,FVector& Pivot); // the street camera between him and her while they walk and talk
  void GalgameHideForPrivate(); // the street's box off while the one-on-one scene is up (the street does not tick there)
