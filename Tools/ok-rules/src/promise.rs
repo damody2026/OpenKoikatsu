@@ -169,6 +169,9 @@ fn promise(c: &Catalog, r: &Value) -> Value {
         pending
             .iter()
             .filter(|a| s(a, "heroine") == her && matches!(s(a, "kind"), "date" | "pickup"))
+            // Somewhere else, only one within two days: "4:30, not six" for today's snack moved their aquarium day a
+            // week off (R4-27).
+            .filter(|a| s(a, "place") == place || (i(a, "start") - start).abs() <= 2 * 1440)
             .min_by_key(|a| (s(a, "place") != place, (i(a, "start") - start).abs()))
             .map(|a| i(a, "id"))
             .unwrap_or(0)
@@ -298,6 +301,9 @@ mod tests {
         let d = ask(json!({"day": "+2", "replaces": true, "pending": pend.clone()}));
         assert_eq!((d["action"].as_str(), d["replaces_id"].as_i64()), (Some("book"), Some(2)));
         assert_eq!(ask(json!({"day": "+2", "pending": pend}))["replaces_id"], 0);
+        // A week off somewhere else is not the one a time for today changes (R4-27: the aquarium day moved to 4:30).
+        let far = json!([{"id": 3, "heroine": "a", "kind": "date", "place": "aquarium", "start": 16 * 1440 + 600}]);
+        assert_eq!(ask(json!({"time": "16:00", "replaces": true, "pending": far}))["replaces_id"], 0);
     }
 
     #[test]

@@ -399,6 +399,8 @@ struct Her {
 /// effects.
 /// Minutes a heroine keeps waiting past the grace before it is a no-show.
 const DATE_WAIT: i64 = 60;
+/// Together this many minutes before a meeting with her: it is kept.
+const WITH_HER_EARLY: i64 = 5;
 /// There for their meeting and he is talking with another girl: she waits this long without cutting in, then goes over
 /// and joins them (she stood eight metres off for half an hour, then told him he was half an hour late).
 const BUSY_PATIENCE: i64 = 10;
@@ -469,7 +471,9 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
         // With her at its time, somewhere else they went together (the cake at the snack shop eaten on the department
         // store's 9F instead): the meeting is kept, not a no-show at the snack shop (R3-251).
         let with_her = girl && (came_with == a.heroine || talking == a.heroine);
-        if with_her && !a.there && now >= a.start - 30 && now <= a.start + a.grace as i64 + wait {
+        // At its time, not half an hour before: 胡桃 and he booked the snack shop at 4:30 while talking at 4:03, and the
+        // meeting counted as kept the moment it was made; her "4:30, not six" then moved their aquarium day instead (R4-27).
+        if with_her && !a.there && now >= a.start - WITH_HER_EARLY && now <= a.start + a.grace as i64 + wait {
             list[k].status = "done".into();
             updates.push(json!({"id": a.id, "status": "done"}));
             fx.note_at(&a.heroine, "date", crate::tr::t("social.came_together"), &a.place, 0.6);
@@ -1188,6 +1192,11 @@ mod tests {
             "heroines": {"a": her(100.0)}})).unwrap();
         assert_eq!(moved["updates"], json!([{"id": 9, "status": "done"}]));
         assert!(!moved["effects"].to_string().contains("\"favor\""), "{moved}");
+        // Booked at 16:03 for 16:30 while talking with her: not kept yet (R4-27).
+        let early = appointments_tick(&json!({"now": 873, "day": 0, "talking_to": "a",
+            "appointments": [{"id": 9, "kind": "date", "heroine": "a", "place": "snack", "start": 900, "grace": 20, "status": "pending", "there": false}],
+            "heroines": {"a": her(100.0)}})).unwrap();
+        assert_eq!(early["updates"], json!([]), "{early}");
         let v = appointments_tick(&json!({"now": 1000 + DATE_WAIT, "day": 0, "with": "c",
             "appointments": [{"id": 1, "kind": "date", "heroine": "a", "place": "cafe", "start": 900, "grace": 20, "status": "pending"},
                              {"id": 2, "kind": "reservation", "heroine": "", "place": "restaurant", "start": 900, "grace": 15, "status": "pending"},
