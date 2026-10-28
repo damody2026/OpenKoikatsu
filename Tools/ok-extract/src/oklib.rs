@@ -1635,11 +1635,14 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
         let mount = mount_scope(scope);
         let mut first = None;
         let mut failed = Vec::new();
+        let read_only = std::env::var("OK_CONVERT_READ_ONLY").as_deref() == Ok("1");
         lap("setup");
         for o in 0..outfits {
             let t = std::time::Instant::now();
             // (only outfit 0's session is the card's digest; the others are opened for what they read)
+            crate::okstrict::set_read_only(o > 0 && read_only);
             let opened = if o == 0 { session_digest_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
+            crate::okstrict::set_read_only(false);
             if let Err(e) = opened { failed.push(format!("outfit {o}: {e}")); }
             if profile { eprintln!("OKPROFILE convert outfit {o} {:.2}s", t.elapsed().as_secs_f64()); }
         }

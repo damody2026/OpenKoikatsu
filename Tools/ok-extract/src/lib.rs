@@ -673,8 +673,13 @@ fn meshes_for_entry_shake_memo(
             let mut done = slot.0.lock().unwrap_or_else(|e| e.into_inner());
             while done.is_none() { done = slot.1.wait(done).unwrap_or_else(|e| e.into_inner()); }
             // Handed over as is: copying the meshes (texture bytes included, tens of MB) into this thread's memo
-            // cost more than the extraction saved. An extraction asks for an item once.
-            if let Some(Some(hit)) = done.take() { return hit; }
+            // cost more than the extraction saved when an extraction asks for an item once. Within a view that is
+            // opened again (a conversion opens every outfit, extract_session keeps the memo) it is asked again:
+            // there the copy is kept, or every outfit extracted the prefetched items anew.
+            if let Some(Some(hit)) = done.take() {
+                if !crate::oklib::mounted_pack_identity().is_empty() { ENTRY_MEMO.with(|m| m.borrow_mut().insert(memo_key, hit.clone())); }
+                return hit;
+            }
         }
     }
     let variant = format!("{}|dynamicfix={}|references={}", entry_prefab_variant_key(entry.category_no, shake_enabled, crate::unity::clothes_states()),
@@ -3425,6 +3430,7 @@ fn compose_body_texture(
     body_texs: &[(String, Vec<u8>)],
     outfit: i32,
 ) {let _spot=crate::profile::spot("compose_body_texture");
+    if !crate::okstrict::assembling() { return; }
     // ChaControl.CreateBodyTexture assigns cf_body_00_t and cf_body_00_mc
     // directly to the create material, with the card's skin colors.
     let mut tex = pick_named_png(body_texs, &["cf_body_00_t"])
@@ -5670,6 +5676,7 @@ fn clothes_gpu_bake_with_quality(game:&Path,entry:&ListEntry,main_key:&str,mask_
         cb[start+2]=p.map(|p|p.color).unwrap_or([1.0;4]);cb[start+3]=colors[i];
         for k in 0..3 {cb[start+2][k]=srgb_channel_to_linear(cb[start+2][k]);cb[start+3][k]=srgb_channel_to_linear(cb[start+3][k]);}
     }
+    if !crate::okstrict::assembling() { return crate::unity::solid_png([1.0;4],1,1).ok_or_else(||"solid png".into()); }
     let r=clothes_gpu::bake(&shader,&textures,&cb,quality);profile_tick("gpu bake: bake",t0);r
 }
 
@@ -5789,6 +5796,7 @@ fn apply_clothes_color_mask_sampled(
 ) -> Option<Vec<u8>> {
     // Koikano/create_topN PS DXBC 0001: three transformed pattern samples,
     // alpha-dependent pattern colour arithmetic, then cascading RGB masks.
+    if !crate::okstrict::assembling() { return Some(main.to_vec()); }
     let mask_mode = std::env::var("OK_CLOTHES_MASK").unwrap_or_default();
     let src = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
     let mask = crate::teximg::load_from_memory(mask).ok()?.to_rgba8();
@@ -6454,6 +6462,7 @@ fn composite_overlay(base:&[u8],overlay:&[u8])->Option<Vec<u8>> {
 }
 
 fn composite_overlay_space(base:&[u8],overlay:&[u8],base_srgb:bool,output_srgb:bool)->Option<Vec<u8>> {
+    if !crate::okstrict::assembling() { return Some(base.to_vec()); }
     let mut parameters=Vec::with_capacity(overlay.len()+2);parameters.extend([base_srgb as u8,output_srgb as u8]);parameters.extend_from_slice(overlay);
     png_transform_cache::transform("composite_overlay_v1",base,&parameters,||composite_overlay_space_uncached(base,overlay,base_srgb,output_srgb))
 }

@@ -6245,6 +6245,10 @@ pub(crate) fn texture_object_png(object: &UnityObject, files: &[(String, BundleF
 }
 
 pub(crate) fn png_from_payload(tex: unity_asset_decode::texture::Texture2D, object_name: Option<String>) -> Option<(String, Vec<u8>)> {let _spot=crate::profile::spot("png_from_payload");
+    if !crate::okstrict::assembling() {
+        let name = if tex.name.is_empty() { object_name.unwrap_or_else(|| "tex".into()) } else { tex.name.clone() };
+        return solid_png([1.0; 4], 1, 1).map(|png| (name, png));
+    }
     use crate::memosnap::{TEX,active,get,put};
     // Recorded into / replayed from the card (OK_CARD_MEMO=tex): keyed by the texels, format and size.
     if !active(TEX) { return png_from_payload_uncached(tex, object_name); }
@@ -7115,6 +7119,7 @@ pub fn hair_get_diffuse(
     c3: [f32; 4],
 ) -> Option<Vec<u8>> {
     use std::io::Cursor;
+    if !crate::okstrict::assembling() { return Some(main.to_vec()); }
     let src = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
     let (w, h) = src.dimensions();
     if w == 0 || h == 0 {
@@ -7550,6 +7555,7 @@ pub fn stamp_overtex(
 }
 
 pub fn tint_png(png: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
+    if !crate::okstrict::assembling() { return None; }
     let (cr, cg, cb) = (color[0].clamp(0.0, 2.0), color[1].clamp(0.0, 2.0), color[2].clamp(0.0, 2.0));
     if (cr - 1.0).abs() < 0.02 && (cg - 1.0).abs() < 0.02 && (cb - 1.0).abs() < 0.02 {
         return None;

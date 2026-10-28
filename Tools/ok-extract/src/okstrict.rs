@@ -75,6 +75,15 @@ pub fn active() -> Option<Arc<Strict>> {
 /// This thread converts an original card (see the module notes).
 pub fn converting() -> bool { active().is_some_and(|s| s.converting) }
 
+/// A conversion's opens after the first outfit only read (OK_CONVERT_READ_ONLY=1, an experiment): the pure work that
+/// turns what was read into the character (texture decoding to PNG, colour and GPU bakes, composites) is skipped.
+/// Whatever such work would read is read before it, and a strict open of the result does all of it: a read it needs
+/// that a skipped step held back is a gap there. A conversion holds a process lock (one at a time), so this is global.
+static READ_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn set_read_only(on: bool) { READ_ONLY.store(on, std::sync::atomic::Ordering::Relaxed); }
+/// The pure assembly steps run (false while a conversion's later outfits only read).
+pub fn assembling() -> bool { !READ_ONLY.load(std::sync::atomic::Ordering::Relaxed) }
+
 thread_local! { static SCANNING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 /// A scan of the whole mods tree behind a question an OK card answers itself (tree_answers.rs). While converting it
 /// runs in a pool of its own whose threads are marked: what it reads is the tree's, never copied into the card (and
