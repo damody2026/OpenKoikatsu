@@ -187,7 +187,7 @@ pub(crate) fn apply_clothes_color_mask(
 
 pub(crate) fn apply_clothes_color_mask_sampled(
     main:&[u8],mask:&[u8],colors:[[f32;4];4],patterns:&[ClothesPatternSrc],sampling:crate::unity::TextureSampling,main_srgb:Option<bool>,
-) -> Option<Vec<u8>> {
+) -> Option<Vec<u8>> {let _spot=crate::profile::spot("apply_clothes_color_mask");
     // Koikano/create_topN PS DXBC 0001: three transformed pattern samples,
     // alpha-dependent pattern colour arithmetic, then cascading RGB masks.
     if !crate::okstrict::assembling() { return Some(main.to_vec()); }

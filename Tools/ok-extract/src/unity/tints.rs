@@ -11,7 +11,7 @@ pub fn hair_get_diffuse(
     c2: [f32; 4],
     c3: [f32; 4],
 ) -> Option<Vec<u8>> {
-    use std::io::Cursor;
+    use std::io::Cursor;let _spot=crate::profile::spot("hair_get_diffuse");
     if !crate::okstrict::assembling() { return Some(main.to_vec()); }
     let src = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
     let (w, h) = src.dimensions();
@@ -456,7 +456,7 @@ pub fn tint_png(png: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
     let parameters:Vec<u8>=[cr,cg,cb].into_iter().flat_map(|v|v.to_bits().to_le_bytes()).collect();
     crate::png_transform_cache::transform("tint_rgb_v1",png,&parameters,||tint_png_uncached(png,[cr,cg,cb]))
 }
-pub(crate) fn tint_png_uncached(png:&[u8],color:[f32;3])->Option<Vec<u8>>{
+pub(crate) fn tint_png_uncached(png:&[u8],color:[f32;3])->Option<Vec<u8>>{let _spot=crate::profile::spot("tint_png");
     use std::io::Cursor;
     let [cr,cg,cb]=color;
     let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();

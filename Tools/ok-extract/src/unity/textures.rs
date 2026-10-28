@@ -447,7 +447,8 @@ pub(crate) fn each_stored_texture_payload(raw: &[u8], mut each: impl FnMut(Strin
         type Value = ();
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { f.write_str("a texture payload list") }
         fn visit_seq<S: SeqAccess<'de>>(self, mut seq: S) -> Result<(), S::Error> {
-            while let Some((name, payload)) = seq.next_element::<(String, Option<unity_asset_decode::texture::Texture2D>)>()? { (self.0)(name, payload); }
+            // (texels read as one byte string: element by element was most of an accessory's colouring)
+            while let Some((name, payload)) = seq.next_element::<(String, Option<crate::unity::TexturePayload>)>()? { (self.0)(name, payload.map(|p| p.0)); }
             Ok(())
         }
     }

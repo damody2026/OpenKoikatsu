@@ -825,7 +825,7 @@ pub(crate) fn scale_studio_item_alpha(m: &mut ExtractedMesh, shader: &str) {
     }
 }
 
-pub(crate) fn bake_accessory_glass_color(png: Option<&[u8]>, color: [f32; 4]) -> Option<Vec<u8>> {
+pub(crate) fn bake_accessory_glass_color(png: Option<&[u8]>, color: [f32; 4]) -> Option<Vec<u8>> {let _spot=crate::profile::spot("glass_color");
     let mut image = match png {
         Some(bytes) => crate::teximg::load_from_memory(bytes).ok()?.to_rgba8(),
         None => image::RgbaImage::from_pixel(1, 1, image::Rgba([255; 4])),
