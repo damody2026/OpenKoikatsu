@@ -569,7 +569,10 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
   UE_LOG(LogTemp,Display,TEXT("Street checkout: not paid, he would have to pay %lld and has %lld (total %d, option %s)"),PlayerPays,Candidate.PlayerCash,Total,*Option);S.OrderDroppedMinute=OKStreetMindNow(S);
   if(WithHer)S.TellHer.Add(OKMsg(TEXT("ui.economy.checkout_failed_note"), {{TEXT("total"), Total}}));RefreshUI();return;}}
  else OKCash(Candidate,-PlayerPays,TEXT("food"),Why);
- S.LastCheckoutMinute=OKStreetMindNow(S);
+ // Something to eat or drink paid for here: what a meal's or a drink's end is not billed again for (Life.inl
+ // bought_at_counter). Not the fish food: ¥2 of it in the park made the drinks at the park's machine free (R4-17).
+ const auto Edible=[&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return I&&I->Consumable&&(I->IsDrink()||I->Effects.Contains(TEXT("satiety")));};
+ if(S.Cart.ContainsByPredicate(Edible))S.LastCheckoutMinute=OKStreetMindNow(S);
  ApplyRulesEffects(Candidate,*Answer);
  // What is not eaten (a plush, a keyring, a notebook) is his to carry: into the backpack. Bought for her and giftable:
  // he gives it to her next, the gift as the gift rules take it (StartGift), not a dish served.
@@ -595,7 +598,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
    // The dishes are on the table at 100% but cannot be eaten until they are served.
    FOKStreetDish D;D.ItemId=L.ItemId;D.Name=I->Name;D.ForHer=L.ForHer||L.Girl!=INDEX_NONE;D.Batch=Serve.Batch;D.Her=L.Girl!=INDEX_NONE?L.Girl:Her;S.Table.Add(D);
   }
-  if(!Serve.Lines.IsEmpty()){S.Serves.Add(Serve);S.MealPlace=S.ShopPlace;S.OrderedAtPlace.Add(S.ShopPlace,OKStreetMindNow(S));S.StopEating=false;S.FullTold=false;S.MealAwayAt=0;}
+  if(!Serve.Lines.IsEmpty()){S.Serves.Add(Serve);S.MealPlace=S.ShopPlace;if(Serve.Lines.ContainsByPredicate(Edible))S.OrderedAtPlace.Add(S.ShopPlace,OKStreetMindNow(S));S.StopEating=false;S.FullTold=false;S.MealAwayAt=0;}
  }
  UE_LOG(LogTemp,Display,TEXT("Street order placed: %d lines, served in %.0f s"),S.Cart.Num(),ServeIn);
  UE_LOG(LogTemp,Display,TEXT("Street checkout: total=%d player=%lld her=%lld advanced=%lld option=%s"),Total,PlayerPays,HerPays,Advanced,*Option);
