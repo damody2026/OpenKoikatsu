@@ -1433,9 +1433,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  // On the phone with her as he said it (a call, not typing): only then does a date get called off (R3-268). Taken now,
  // the call may be over when the verdict comes.
  const bool InCall=S.RemoteMode==2&&S.RemotePeer==Character;
+ // His lines so far: one more by the time the verdict comes and this exchange is not the last any more (R4-10).
+ const int64 HisLinesAt=S.HisLines;
  // Room for the whole verdict: with the things, photos and series fields it runs past 200 tokens and came back cut off
  // mid-"why" (no verdict at all: a meeting agreed was never booked).
- SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier,InCall](bool Ok,const FString& Content,const FString& Failure){
+ SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier,InCall,HisLinesAt](bool Ok,const FString& Content,const FString& Failure){
   const auto L=WeakState.Pin();if(!L||!Weak.IsValid()||Weak->State!=L)return;
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
   if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);
@@ -1499,7 +1501,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    if(Ends&&DoNow.IsEmpty()&&L->Table.ContainsByPredicate([Character](const FOKStreetDish& D){return D.Her==Character&&D.ForHer&&D.Percent>0.f;})){
     UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d still has food on the table; the talk goes on until the meal ends"),Character);Ends=false;
     L->FarewellAfterMeal=Character;L->FarewellAfterMealAt=Weak->SceneTime();}
-   if(Ends&&DoNow.IsEmpty()&&!L->FarewellPending&&L->OutingGirl!=Character){L->FarewellPending=true;L->FarewellFromTalk=true;L->FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (judged)"),Character);}
+   // Not when he has spoken again since (his words called it off): 惠惠's "I'm going" was judged after he asked her to
+   // eat and she agreed, and the late farewell took her off the walk to the cafeteria (R4-10).
+   if(Ends&&DoNow.IsEmpty()&&!L->FarewellPending&&L->OutingGirl!=Character&&L->HisLines==HisLinesAt){L->FarewellPending=true;L->FarewellFromTalk=true;L->FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (judged)"),Character);}
    {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name)){int32 Who=INDEX_NONE;
     // The exact name first, as the game writes it too ("貞德" in a zh-TW game for the card's "贞德"): otherwise the looser match
     // below took 貞德·Alter, the one he was talking to, and Jeanne was "already following him".
