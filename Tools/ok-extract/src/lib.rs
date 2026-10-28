@@ -5030,7 +5030,7 @@ fn me_shader_registration(game_root: &Path, shader: &str) -> (bool, Option<bool>
     let question = shader.to_ascii_lowercase();
     if let Some(found) = crate::tree_answers::lookup::<(bool, Option<bool>)>("me-shader", question.as_bytes()) { return found; }
     if crate::tree_answers::unanswered("me-shader", question.as_bytes()) { return (false, None); }
-    let found = me_shader_registration_in_tree(game_root, shader, &MOD_RESULTS);
+    let found = crate::okstrict::scanning(|| me_shader_registration_in_tree(game_root, shader, &MOD_RESULTS));
     crate::tree_answers::record("me-shader", question.as_bytes(), &found);
     found
 }
@@ -5278,11 +5278,11 @@ fn color_accessory_meshes(
             None
         }
     };
-    let mut mask_cache: std::collections::HashMap<String, Option<Vec<u8>>> =
-        std::collections::HashMap::new();
+    let mask_cache: std::sync::Mutex<std::collections::HashMap<String, Option<Vec<u8>>>> = Default::default();
     let color_key = ["_Color", "_Color2", "_Color3"];
-    let mut kept = Vec::with_capacity(meshes.len());
-    for mut m in meshes.drain(..) {
+    // Each renderer is coloured on its own (texture bakes, alpha, glass: decoded and encoded per texture): renderers
+    // are coloured in parallel in the open's pool (its pack), kept in their order.
+    let colour = |mut m: ExtractedMesh| -> Option<ExtractedMesh> {
         apply_me_shader(game_root, Some(&card.me_shader), outfit, "accessory", Some(property), &mut m);
         apply_me_floats(&card.me_float, outfit, "accessory", Some(property), &mut m);
         let shader = m
@@ -5406,7 +5406,7 @@ fn color_accessory_meshes(
         // rendAlpha && color[3].a == 0: the game disables that renderer.
         if role == 2 && cols[3][3] == 0.0 {
             eprintln!("ok-extract: skip rendAlpha a=0 {}", m.name);
-            continue;
+            return None;
         }
         let mask_name = m
             .mat
@@ -5420,12 +5420,12 @@ fn color_accessory_meshes(
         let mask_from_me = me_mask_png.is_some();
         let mask_png = me_mask_png.or_else(|| m.color_mask_png.clone()).or_else(|| {
             mask_name.as_ref().and_then(|n| {
-                mask_cache
-                    .entry(n.clone())
-                    .or_insert_with(|| {
-                        png_from_list_entry(game_root, entry, &[n.as_str()], head_texs, body_texs)
-                    })
-                    .clone()
+                let cached = mask_cache.lock().unwrap_or_else(|e| e.into_inner()).get(n).cloned();
+                cached.unwrap_or_else(|| {
+                    let png = png_from_list_entry(game_root, entry, &[n.as_str()], head_texs, body_texs);
+                    mask_cache.lock().unwrap_or_else(|e| e.into_inner()).insert(n.clone(), png.clone());
+                    png
+                })
             })
         });
         // ME SetTexture replaces the albedo, then the shader still multiplies
@@ -5455,8 +5455,7 @@ fn color_accessory_meshes(
                 if m.texture_png.is_none() || (null_main && !main_from_me) {m.texture_png=crate::unity::solid_png([1.0;4],8,8);}
                 scale_studio_item_alpha(&mut m,&shader);
             }
-            kept.push(m);
-            continue;
+            return Some(m);
         }
         if is_native_hair_shader(&shader) || m.hair_shader_hint {
             // Shader Forge/main_hair samples the full-resolution ColorMask in
@@ -5477,8 +5476,7 @@ fn color_accessory_meshes(
             if m.texture_png.is_none() || (null_main && !main_from_me) {
                 m.texture_png=crate::unity::solid_png([1.0;4],8,8);
             }
-            kept.push(m);
-            continue;
+            return Some(m);
         }
         // The native glasses shader declares a white _MainTex default.
         // A null texture is valid, and _Color4's alpha remains a shader input.
@@ -5496,12 +5494,10 @@ fn color_accessory_meshes(
             if let Some(png) = native_main { m.shader_extra_textures.insert("_MainTex".into(), png); }
             let png = m.texture_png.as_deref();
             m.texture_png = bake_accessory_glass_color(png, cols[3]);
-            kept.push(m);
-            continue;
+            return Some(m);
         }
         let Some(png) = m.texture_png.clone() else {
-            kept.push(m);
-            continue;
+            return Some(m);
         };
         let cols4 = [cols[0], cols[1], cols[2], [1.0, 1.0, 1.0, 1.0]];
         // ME PNGs and static bundle textures have opposite row directions.
@@ -5546,9 +5542,11 @@ fn color_accessory_meshes(
             m.texture_png = Some(t);
         }
         scale_studio_item_alpha(&mut m,&shader);
-        kept.push(m);
-    }
-    *meshes = kept;
+        Some(m)
+    };
+    use rayon::prelude::*;
+    let drained: Vec<ExtractedMesh> = meshes.drain(..).collect();
+    *meshes = crate::oklib::pack_parallel(|| drained.into_par_iter().filter_map(colour).collect());
 }
 
 /// Material Editor copies the source material, switches its shader, then
@@ -5736,7 +5734,12 @@ fn apply_clothes_color_mask_sampled(
         }
     }
     let mut out = src;
-    for y in 0..h {
+    // Each pixel depends only on its own inputs: rows are baked in parallel (the same bytes as one by one; a heavy
+    // accessory's bakes took seconds of an open on one thread).
+    use rayon::prelude::*;
+    let pixels: &mut [u8] = &mut out;
+    pixels.par_chunks_mut(w as usize * 4).enumerate().for_each(|(y, row)| {
+        let y = y as u32;
         for x in 0..w {
             let m = sample_clothes_mask(&mask,(x as f32+0.5)/w as f32,(y as f32+0.5)/h as f32,sampling);
             let wr = m[0].clamp(0.0, 1.0);
@@ -5791,7 +5794,7 @@ fn apply_clothes_color_mask_sampled(
                     tint[k] = t;
                 }
             }
-            let p = out.get_pixel_mut(x, y);
+            let p = &mut row[x as usize * 4..x as usize * 4 + 4];
             for k in 0..3 {
                 let mut source=p[k] as f32/255.0;
                 if main_srgb==Some(true){source=srgb_channel_to_linear(source);}
@@ -5799,7 +5802,7 @@ fn apply_clothes_color_mask_sampled(
                 p[k]=to_unorm8(if main_srgb.is_some(){linear_channel_to_srgb(value)}else{value});
             }
         }
-    }
+    });
     encode_png(&out)
 }
 
@@ -8343,6 +8346,8 @@ pub(crate) fn extract_session_from_info(
     clear_entry_memo();
     crate::unity::references::begin_load(game_root);
     let t_all = Instant::now();
+    // OK_PROFILE: the per-slot stage timings (appearance::timings) of this open too.
+    let stages = std::env::var_os("OK_PROFILE").map(|_| crate::appearance::timings::Capture::begin());
     let mut t = Instant::now();
     if let Some(dir) = out_dir {
         std::fs::create_dir_all(dir).map_err(|e| format!("mkdir: {e}"))?;
@@ -8687,7 +8692,8 @@ pub(crate) fn extract_session_from_info(
     // Shape curves live in the same bundle as the head prefab (`ShapeAnime` =
     // `cf_anmShapeHead_00`). A sideloader head's curves are the mod's face
     // algorithm; vanilla keys are only the fallback when that asset is absent.
-    let mut shape_bundle = head_bundle.clone();
+    let shape_bundle = head_bundle.clone();
+    let mut mod_shape_keys = None;
     let mut head_key = crate::sqlcache::file_key(&head_bundle);
     if let Some(entry) = face_entry.as_ref() {
         let ab = entry.main_ab.as_str();
@@ -8697,16 +8703,15 @@ pub(crate) fn extract_session_from_info(
         {
             let zip = entry.extra.get("__zip").map(std::path::Path::new);
             if let Some(bytes) = accessory_bundle_bytes(game_root, zip, entry) {
-                let shape_path = std::env::temp_dir().join("ok_mod_head_shape.unity3d");
-                if std::fs::write(&shape_path, &bytes).is_ok() {
-                    let trial = crate::shape::load_head_keys_named(&shape_path, &head_shape_asset);
-                    if !trial.is_empty() {
-                        eprintln!(
-                            "ok-extract: head shape keys from mod bundle n={}",
-                            trial.len()
-                        );
-                        shape_bundle = shape_path;
-                    }
+                // Read from the bundle in memory (it was written to one temporary file name that cards opening at once
+                // overwrote for each other).
+                let trial = crate::shape::load_head_keys_named_bytes(&bytes, &head_shape_asset);
+                if !trial.is_empty() {
+                    eprintln!(
+                        "ok-extract: head shape keys from mod bundle n={}",
+                        trial.len()
+                    );
+                    mod_shape_keys = Some(trial);
                 }
                 let parsed = crate::unity::parse_bundle_cached(bytes);
                 let (ms, _) = parsed.meshes_for_maindata(&head_main);
@@ -8735,7 +8740,7 @@ pub(crate) fn extract_session_from_info(
             }
         }
     }
-    let mut head_shape_keys = crate::shape::load_head_keys_named(&shape_bundle, &head_shape_asset);
+    let mut head_shape_keys = mod_shape_keys.unwrap_or_else(|| crate::shape::load_head_keys_named(&shape_bundle, &head_shape_asset));
     if head_shape_keys.is_empty() && shape_bundle != vanilla_head_bundle {
         head_shape_keys = crate::shape::load_head_keys_named(&vanilla_head_bundle, &head_shape_asset);
     }
@@ -10845,6 +10850,9 @@ pub(crate) fn extract_session_from_info(
     profile_tick("load shape keys (session)", t_keys);
     clear_entry_prefetch();
     profile_tick("extract_card_outfit TOTAL", t_all);
+    for (name, s) in stages.map(crate::appearance::timings::Capture::finish).unwrap_or_default() {
+        eprintln!("ok-extract: STAGE {name:28} {:8.1}ms x{} max {:.1}ms", s.total_ms, s.calls, s.max_ms);
+    }
     crate::profile::dump_spots();
     let (shape_body, shape_face, sex, type_bone, nip, abm) = parsed_card
         .as_ref()

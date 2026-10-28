@@ -75,7 +75,7 @@ impl TreeCatalog {
         self.full.get_or_init(|| {
             if self.strict { return Default::default(); }
             let _spot = crate::profile::spot("tree answer miss: catalogue");
-            load_mods_catalog_tree(&self.mods_dir)
+            crate::okstrict::scanning(|| load_mods_catalog_tree(&self.mods_dir))
         })
     }
     /// Logs an answer; an entry from an archive outside the recorded mods folder is not logged (asked of the tree).
@@ -336,6 +336,12 @@ pub fn parse_chalist(bytes: &[u8]) -> Option<(i32, Vec<ListEntry>)> {
 
 pub fn text_assets_from_bundle(path: &Path) -> Vec<(String, Vec<u8>)> {
     text_assets_from_bundle_status(path).0
+}
+
+/// `text_assets_from_bundle` for a bundle in memory.
+pub(crate) fn text_assets_from_bundle_bytes(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
+    if !crate::oklib::memo_active() { return text_assets_from_bundle_status_unity(bytes.to_vec()).0; }
+    crate::oklib::memo_bytes(bytes, "text_assets_status", &(), || text_assets_from_bundle_status_unity(bytes.to_vec())).0
 }
 
 fn text_assets_from_bundle_status(path:&Path)->(Vec<(String,Vec<u8>)>,bool){
@@ -662,12 +668,12 @@ pub fn load_mods_catalog_shared(mods_dir: &Path) -> std::sync::Arc<ChaListCatalo
         let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get, slot, record: false, strict, full: Default::default() };
         return Arc::new(ChaListCatalog { tree: Some(Arc::new(tree)), ..Default::default() });
     }
-    // An OK card's strict open that has no catalogue answers: nothing of the tree (okstrict.rs).
-    if crate::okstrict::active().is_some() {
+    // An OK card's strict open that has no catalogue answers: nothing of the tree (okstrict.rs). (Converting records them.)
+    if crate::okstrict::active().is_some() && !crate::tree_answers::recording() {
         crate::okstrict::gap(|| "okLt cat-view".into());
         return Arc::new(ChaListCatalog::default());
     }
-    let full = load_mods_catalog_tree(mods_dir);
+    let full = crate::okstrict::scanning(|| load_mods_catalog_tree(mods_dir));
     // Recording an OK card's answers: the same catalogue, every question logged.
     if crate::tree_answers::recording() {
         crate::tree_answers::record("cat-view", &[], &());

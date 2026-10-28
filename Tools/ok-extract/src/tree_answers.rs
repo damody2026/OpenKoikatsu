@@ -71,7 +71,7 @@ pub fn table() -> Option<Arc<Table>> {
 /// A question the card has no answer to: under an OK card's strict open (okstrict.rs) a gap, and the caller answers it
 /// as nothing, never from the tree. False otherwise (the caller asks the tree, recording the answer).
 pub fn unanswered(kind: &str, key: &[u8]) -> bool {
-    if crate::okstrict::active().is_none() { return false; }
+    if recording() || crate::okstrict::active().is_none() { return false; }
     crate::okstrict::gap(|| format!("okLt {kind} {}", String::from_utf8_lossy(key).replace('\n', ",")));
     true
 }

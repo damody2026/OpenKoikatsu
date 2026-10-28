@@ -80,8 +80,7 @@ impl SourceBytes {
             Some(Self { data, start: *start, len: *len })
         })
     }
-    /// `len` bytes streamed from `reader` (an archive entry that cannot be read in place) into a mapped temporary
-    /// file that the system deletes once the map is gone: no private memory however large the entry. The reader
+    /// `len` bytes streamed from `reader` (an archive entry that cannot be read in place) into memory. The reader
     /// must then be at its end (an archive entry checks its CRC there). None when that fails.
     pub(crate) fn spill(reader: &mut impl std::io::Read, len: u64) -> Option<Self> {
         Self::spill_with(len, |out| {
@@ -93,29 +92,12 @@ impl SourceBytes {
             matches!(reader.read(&mut [0u8; 1]), Ok(0)).then_some(())
         })
     }
-    /// `len` bytes written by `fill` into a mapped temporary file the system deletes once the map is gone.
+    /// `len` bytes written by `fill` into memory, freed with the last reference (an open's temporary data: it used to
+    /// go to a mapped temporary file).
     pub(crate) fn spill_with(len: u64, fill: impl FnOnce(&mut [u8]) -> Option<()>) -> Option<Self> {
-        static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let dir = std::env::temp_dir().join("ok-extract-spill");
-        std::fs::create_dir_all(&dir).ok()?;
-        let path = dir.join(format!("{}-{}.tmp", std::process::id(), SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-        let mut options = std::fs::OpenOptions::new();
-        options.read(true).write(true).create_new(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            // FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE; shared for delete so the map can outlive the handle.
-            options.attributes(0x100).custom_flags(0x0400_0000).share_mode(0x1 | 0x2 | 0x4);
-        }
-        let file = options.open(&path).ok()?;
-        #[cfg(not(windows))]
-        let _ = std::fs::remove_file(&path);
-        let size = usize::try_from(len).ok()?;
-        file.set_len(len).ok()?;
-        let mut out = unsafe { memmap2::MmapMut::map_mut(&file) }.ok()?;
-        fill(&mut out[..size])?;
-        let map = out.make_read_only().ok()?;
-        Some(Self { data: unity_asset_binary::shared_bytes::SharedBytes::Mmap(Arc::new(map)), start: 0, len: size }.registered())
+        let mut out = vec![0u8; usize::try_from(len).ok()?];
+        fill(&mut out)?;
+        Some(out.into())
     }
     /// A whole file: mapped when large, read otherwise.
     pub(crate) fn file(path: &Path) -> std::io::Result<Self> {
@@ -4107,7 +4089,10 @@ impl ParsedBundle {
         if crate::oklib::memo_active() {
             // OK texture: the texels are the model data, the PNG is derived. A library model is content-addressed (and
             // unedited here), so the PNG of one of its textures is the same in every process: kept on disk.
-            let disk=!crate::memosnap::active(crate::memosnap::TEX);
+            // Not for a card's own model while a pack is recorded or an OK card opens strictly (okstrict.rs): a PNG kept on
+            // disk would stand in for the texels the card must carry itself.
+            let own=self.lib.is_some_and(|id|crate::oklib::recording_card_pack()||(crate::okstrict::active().is_some()&&!crate::okstrict::library_model(&id)));
+            let disk=!crate::memosnap::active(crate::memosnap::TEX)&&!own;
             if let Some((n,png))=self.lib.filter(|_|disk).and_then(|id|derived_png_load(&id,&key)) {
                 self.remember_texture(n.to_ascii_lowercase(),png.clone());
                 return Some(png);
@@ -7084,7 +7069,11 @@ pub fn hair_get_diffuse(
         .map(|i| i.dimensions())
         .unwrap_or((1, 1));
     let mut out = src.clone();
-    for y in 0..h {
+    // Rows are independent: baked in parallel (the same bytes as one by one).
+    use rayon::prelude::*;
+    let pixels: &mut [u8] = &mut out;
+    pixels.par_chunks_mut(w as usize * 4).enumerate().for_each(|(y, row)| {
+        let y = y as u32;
         for x in 0..w {
             let p = src.get_pixel(x, y).0;
             let (mr, mg, mb) = if let Some(mi) = mask_img.as_ref() {
@@ -7106,18 +7095,14 @@ pub fn hair_get_diffuse(
             d[0] += mb * (c3[0] - d[0]);
             d[1] += mb * (c3[1] - d[1]);
             d[2] += mb * (c3[2] - d[2]);
-            out.put_pixel(
-                x,
-                y,
-                image::Rgba([
-                    ((p[0] as f32) * d[0]).clamp(0.0, 255.0) as u8,
-                    ((p[1] as f32) * d[1]).clamp(0.0, 255.0) as u8,
-                    ((p[2] as f32) * d[2]).clamp(0.0, 255.0) as u8,
-                    p[3],
-                ]),
-            );
+            row[x as usize * 4..x as usize * 4 + 4].copy_from_slice(&[
+                ((p[0] as f32) * d[0]).clamp(0.0, 255.0) as u8,
+                ((p[1] as f32) * d[1]).clamp(0.0, 255.0) as u8,
+                ((p[2] as f32) * d[2]).clamp(0.0, 255.0) as u8,
+                p[3],
+            ]);
         }
-    }
+    });
     crate::teximg::encode_rgba_owned(out)
 }
 
@@ -10759,9 +10744,12 @@ pub fn pick_named<'a>(meshes: &'a [ExtractedMesh], want: &str) -> Option<&'a Ext
 /// Bake a shader's uniform alpha factor into the exported albedo's alpha.
 /// RGB stays unchanged; UE then applies the same per-pixel blend coverage.
 pub fn scale_png_alpha(png: &[u8], factor: f32) -> Option<Vec<u8>> {
-    use std::io::Cursor;
-    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    // Studio items share textures between many renderers: each texture and factor is decoded and encoded once.
     let factor = factor.clamp(0.0, 1.0);
+    crate::png_transform_cache::transform("scale_alpha_v1", png, &factor.to_bits().to_le_bytes(), || scale_png_alpha_uncached(png, factor))
+}
+fn scale_png_alpha_uncached(png: &[u8], factor: f32) -> Option<Vec<u8>> {
+    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
     for p in img.pixels_mut() {
         p[3] = ((p[3] as f32) * factor).round() as u8;
     }

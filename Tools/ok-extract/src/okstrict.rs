@@ -11,6 +11,11 @@
 //! Sealing (`seal`): an OK card made before this, or on a library holding third-party models (which then never went
 //! into its pack), gets its answers recorded, then is opened in completing mode: whatever the strict open would miss
 //! and the library has is copied into the card's pack. A strict open of the sealed card needs nothing else.
+//!
+//! Converting (`oklib::convert_card`): an original card becomes an OK card in one pass. Every outfit is opened once in
+//! converting mode: the tree's answers are recorded (the scans behind them run in their own pool, `scanning`, where
+//! nothing they read is the card's), the third-party data the library holds is copied (as when sealing) and what only
+//! the zipmods hold is recorded from them (`oklib::begin_card_pack`). Whatever neither has is a gap.
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -23,6 +28,9 @@ pub struct Strict {
     gaps: Mutex<BTreeSet<String>>,
     /// Completing (sealing): what the library served in place of the card's own data, for the card's pack.
     adds: Option<Mutex<Additions>>,
+    /// Converting an original card: the tree's answers are recorded meanwhile, and what the library lacks is read
+    /// from the zipmods.
+    converting: bool,
 }
 
 /// Library data a card being sealed reads of its third-party mods.
@@ -34,7 +42,8 @@ pub struct Additions {
 }
 
 impl Strict {
-    pub fn completing() -> Arc<Strict> { Arc::new(Strict { gaps: Mutex::default(), adds: Some(Mutex::default()) }) }
+    pub fn completing() -> Arc<Strict> { Arc::new(Strict { gaps: Mutex::default(), adds: Some(Mutex::default()), converting: false }) }
+    pub fn converting() -> Arc<Strict> { Arc::new(Strict { gaps: Mutex::default(), adds: Some(Mutex::default()), converting: true }) }
     pub fn gaps(&self) -> Vec<String> { self.gaps.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect() }
     pub fn take_additions(&self) -> Additions {
         self.adds.as_ref().map(|a| std::mem::take(&mut *a.lock().unwrap_or_else(|e| e.into_inner()))).unwrap_or_default()
@@ -54,10 +63,29 @@ pub fn for_open() -> Arc<Strict> {
     SEALING.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_default()
 }
 
-/// The strict open this thread works for (none while answers are recorded: that open asks the tree on purpose).
+/// The strict open this thread works for (none while a tree scan runs, nor while answers are recorded for sealing:
+/// those ask the tree on purpose).
 pub fn active() -> Option<Arc<Strict>> {
-    if crate::tree_answers::recording() { return None; }
-    crate::oklib::pack_scope()?.strict.clone()
+    if SCANNING.with(|s| s.get()) { return None; }
+    let strict = crate::oklib::pack_scope()?.strict.clone()?;
+    if crate::tree_answers::recording() && !strict.converting { return None; }
+    Some(strict)
+}
+
+/// This thread converts an original card (see the module notes).
+pub fn converting() -> bool { active().is_some_and(|s| s.converting) }
+
+thread_local! { static SCANNING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+/// A scan of the whole mods tree behind a question an OK card answers itself (tree_answers.rs). While converting it
+/// runs in a pool of its own whose threads are marked: what it reads is the tree's, never copied into the card (and
+/// a value it leaves in a memo is read again by the card's own open, which copies it). Elsewhere it just runs.
+pub fn scanning<R: Send>(scan: impl FnOnce() -> R + Send) -> R {
+    if !converting() { return scan(); }
+    static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+    let pool = POOL.get_or_init(|| rayon::ThreadPoolBuilder::new()
+        .num_threads(std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(2, 16)).thread_name(|i| format!("OKTreeScan{i}"))
+        .start_handler(|_| SCANNING.with(|s| s.set(true))).build().ok());
+    match pool { Some(pool) => pool.install(scan), None => { SCANNING.with(|s| s.set(true)); let r = scan(); SCANNING.with(|s| s.set(false)); r } }
 }
 
 /// A gap of the strict open on this thread (nothing when there is none).
@@ -81,7 +109,7 @@ pub fn complete(add: impl FnOnce(&mut Additions)) -> bool {
 pub fn completing() -> bool { active().is_some_and(|s| s.adds.is_some()) }
 /// A card being sealed asks a query of its own model (one only third-party mods use) that neither its pack nor the
 /// library holds: every open used to compute it from what is stored; the value is kept in the card (`keep_record`).
-pub fn completing_model(id: &Id) -> bool { completing() && !library_model(id) }
+pub fn completing_model(id: &Id) -> bool { completing() && !library_model(id) && shared().is_some_and(|s| s.present(id)) }
 pub fn keep_record(id: &Id, query: &str, args: &[u8], raw: Vec<u8>) {
     complete(|a| { a.records.entry((*id, query.to_owned(), args.to_vec())).or_insert(raw); });
 }
@@ -98,12 +126,12 @@ pub fn library_entry(zip: &str, entry: &str) -> bool {
 }
 /// Under a strict open: the library may serve this archive's listing (a shared mod, or one a shared bundle is in).
 pub fn library_zip(zip: &str) -> bool { shared().is_some_and(|s| s.zip(zip)) }
-/// Under a strict open: the library may serve this model (not one only third-party mods use).
-pub fn library_model(id: &Id) -> bool { shared().is_some_and(|s| !s.excluded.contains(id)) }
+/// Under a strict open: the library may serve this model: it holds it, and not as one only third-party mods use.
+pub fn library_model(id: &Id) -> bool { shared().is_some_and(|s| !s.excluded.contains(id) && s.present(id)) }
 
 /// The library's shared mods (`shared_mods.txt`) and the models that stay out of version control (`models/.gitignore`,
 /// both written by `--oklib shared-ignore`).
-struct Shared { lines: Vec<String>, excluded: HashSet<Id> }
+struct Shared { lines: Vec<String>, excluded: HashSet<Id>, lib: PathBuf, present: Mutex<HashMap<Id, bool>> }
 
 impl Shared {
     fn load(lib: &Path) -> Result<Shared, String> {
@@ -114,7 +142,11 @@ impl Shared {
         let ignore = lib.join("models").join(".gitignore");
         let excluded = std::fs::read_to_string(&ignore).map_err(|e| format!("{}: {e}", ignore.display()))?.lines()
             .filter_map(|l| l.trim().rsplit('/').next()?.strip_suffix(".okmodel").and_then(crate::oklib::id_from_hex_pub)).collect();
-        Ok(Shared { lines, excluded })
+        Ok(Shared { lines, excluded, lib: lib.to_owned(), present: Mutex::default() })
+    }
+    /// The library has model `id` (a model only a card's own zipmod has is not shared, whatever the ignore list).
+    fn present(&self, id: &Id) -> bool {
+        *self.present.lock().unwrap_or_else(|e| e.into_inner()).entry(*id).or_insert_with(|| crate::oklib::model_path(&self.lib, id).is_file())
     }
     /// The same rule as `shared-ignore`: original sources, list bundles of any archive, listed folders, archives and bundles.
     fn entry(&self, label: &str) -> bool {
@@ -158,7 +190,8 @@ mod tests {
     use super::*;
     fn shared() -> Shared {
         Shared { lines: vec!["mods/sideloader modpack - kks_uncensorselector/".into(), "mods/sideloader modpack/[dak]cgramp.zipmod".into(),
-            "mods/sideloader modpack/tansen/[tansen] eyes skin v2.0.zipmod|abdata/chara/mt_eye_00.unity3d".into()], excluded: HashSet::new() }
+            "mods/sideloader modpack/tansen/[tansen] eyes skin v2.0.zipmod|abdata/chara/mt_eye_00.unity3d".into()], excluded: HashSet::new(),
+            lib: PathBuf::new(), present: Mutex::default() }
     }
     #[test]
     fn shared_mods_rule() {

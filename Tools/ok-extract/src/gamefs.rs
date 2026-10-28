@@ -222,6 +222,8 @@ pub fn take_overlay() -> Option<Index> {
     let index = std::mem::take(&mut *o.index.lock().unwrap());
     Some(index)
 }
+/// The process-wide overlay (the one being recorded while an original card is converted).
+pub fn process_overlay() -> Option<Arc<Overlay>> { OVERLAY.read().unwrap().clone() }
 /// A replaying overlay over `index`, for one open's pack (oklib::PackScope).
 pub fn replay_overlay_of(index: Index) -> Arc<Overlay> { Arc::new(Overlay { record: false, index: Mutex::new(index) }) }
 /// The open's own pack on this thread (oklib::pack_scope), else the process-wide overlay.
@@ -546,14 +548,16 @@ pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {let _spot=crate::pr
             // An OK card's open: a third-party mod's file only from its own pack (okstrict.rs).
             if crate::okstrict::active().is_some() && !crate::okstrict::library_path(&key) {
                 let entry = st.index.lock().unwrap().files.get(&key).map(portable);
-                match entry {
-                    Some(entry) => match entry_bytes(&entry) {
-                        Some(bytes) if crate::okstrict::complete(|a| { a.index.files.insert(key.clone(), entry.clone()); }) => return Ok(bytes),
-                        _ => missing("read", &key),
-                    },
-                    None => {}
+                if let Some(entry) = &entry {
+                    if let Some(bytes) = entry_bytes(entry) {
+                        if crate::okstrict::complete(|a| { a.index.files.insert(key.clone(), entry.clone()); }) { return Ok(bytes); }
+                    }
                 }
-                return Err(not_found());
+                // Converting: what the library does not hold is the zipmods' (read below and recorded).
+                if !crate::okstrict::converting() {
+                    if entry.is_some() { missing("read", &key); }
+                    return Err(not_found());
+                }
             }
             // The game's settings (shadow ramp, UncensorSelector) are the installation's when one is given, not the
             // ones the library recorded; a card being made carries them.
@@ -801,7 +805,7 @@ pub fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<std::vec::IntoIter<io::Re
             Mode::Replay => {
                 let overlaid = replay_overlay().and_then(|o| o.index.lock().unwrap().dirs.get(&key).cloned());
                 // An OK card's open never lists the library's mods tree (okstrict.rs): only listings its pack holds.
-                if overlaid.is_none() && is_mods_key(&key) && crate::okstrict::active().is_some() {
+                if overlaid.is_none() && is_mods_key(&key) && crate::okstrict::active().is_some() && !crate::okstrict::converting() {
                     missing("read_dir", &key);
                     return Err(not_found());
                 }
@@ -873,7 +877,9 @@ pub fn open_zip<P: AsRef<Path>>(path: P) -> Option<Zip> {let _spot=crate::profil
             let overlaid = replay_overlay().and_then(|o| o.index.lock().unwrap().zips.get(&key).cloned());
             // An OK card's open: a third-party archive from its own pack, with the library's shared entries (list
             // bundles, a shared bundle in it) (okstrict.rs). Sealing reads the library's and copies what is read.
-            if is_mods_key(&key) && crate::okstrict::active().is_some() && !crate::okstrict::library_zip(&key) {
+            // (converting: an archive the library does not record is the zipmods', below)
+            let converting = crate::okstrict::converting();
+            if is_mods_key(&key) && crate::okstrict::active().is_some() && !crate::okstrict::library_zip(&key) && !(converting && library.is_none()) {
                 // A zipmod the card named was made reachable at mods/<file name> while it was converted; the library
                 // records the same archive at its own path (sealing copies its entries from there).
                 let library = library.or_else(|| if crate::okstrict::completing() { library_alias(&st, &key, overlaid.as_ref()) } else { None });
@@ -891,7 +897,9 @@ pub fn open_zip<P: AsRef<Path>>(path: P) -> Option<Zip> {let _spot=crate::profil
                     }
                     (None, _) => { missing("zip", &key); return None; }
                 };
-                return Some(Zip::Library(st, key, index, None));
+                // Converting: entries the library never converted come from the zipmod (recorded).
+                let real = if converting { fallback_source(&key, Some(false)).map(|(p, _, installation)| (p, installation)) } else { None };
+                return Some(Zip::Library(st, key, index, real));
             }
             let found = match (library, overlaid) {
                 (Some(mut index), Some(extra)) => { index.entries.extend(extra.entries); Some(index) }

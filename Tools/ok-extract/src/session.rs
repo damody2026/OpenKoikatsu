@@ -3532,7 +3532,9 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
         // Recording a card pack must visit source models/queries, including an explicitly
         // selected nonzero outfit. A cached final session cannot record those dependencies.
         let t_key = std::time::Instant::now();
-        let key = if crate::oklib::recording_card_pack() { None }
+        // (the key hashes the whole card: only worked out when something is looked up by it)
+        let keyed = crate::oklib::session_cache_enabled() || crate::cardbake::enabled() || crate::memosnap::replay_kinds() != 0;
+        let key = if crate::oklib::recording_card_pack() || !keyed { None }
             else { card.and_then(|c| crate::oklib::session_cache_key(game, c, outfit)) };
         if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: PROFILE open cache key {:>8.1}ms", t_key.elapsed().as_secs_f64() * 1e3); }
         crate::oklib::LAST_FROM_CACHE.store(false, std::sync::atomic::Ordering::Relaxed);

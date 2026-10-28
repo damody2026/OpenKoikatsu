@@ -73,7 +73,7 @@ pub(crate) fn apply_strip_all_migrations(game:&Path,card:&mut crate::card::CardI
         Some(answer)=>answer.into_iter().collect(),
         None if crate::tree_answers::unanswered("strip-all",question.as_bytes())=>HashSet::new(),
         None=>{
-            let all=strip_all_guids(&game.join("mods"));
+            let all=crate::okstrict::scanning(||strip_all_guids(&game.join("mods")));
             let mut answer:Vec<String>=question.split('\n').filter(|g|all.contains(*g)).map(str::to_owned).collect();
             answer.sort();
             crate::tree_answers::record("strip-all",question.as_bytes(),&answer);
@@ -251,7 +251,7 @@ fn save_guid_cache(mods_dir: &Path, map: &HashMap<String, PathBuf>, full: bool) 
 pub fn find_guids(mods_dir: &Path, wanted: Option<&std::collections::HashSet<String>>) -> HashMap<String, PathBuf> {
     let Some(w) = wanted else {
         if crate::tree_answers::unanswered("guids", b"(every guid)") { return HashMap::new(); }
-        return find_guids_uncached(mods_dir, None);
+        return crate::okstrict::scanning(|| find_guids_uncached(mods_dir, None));
     };
     let mut names: Vec<&String> = w.iter().collect();
     names.sort();
@@ -261,7 +261,7 @@ pub fn find_guids(mods_dir: &Path, wanted: Option<&std::collections::HashSet<Str
         return rows.into_iter().map(|(guid, zip)| (guid, crate::tree_answers::rebase(mods_dir, &zip))).collect();
     }
     if crate::tree_answers::unanswered("guids", question.as_bytes()) { return HashMap::new(); }
-    let found = find_guids_wanted(mods_dir, w, &names);
+    let found = crate::okstrict::scanning(|| find_guids_wanted(mods_dir, w, &names));
     if crate::tree_answers::recording() {
         let rows: Option<Vec<(String, String)>> = found.iter().map(|(g, p)| crate::tree_answers::relative(p).map(|z| (g.clone(), z))).collect();
         if let Some(mut rows) = rows { rows.sort(); crate::tree_answers::record("guids", question.as_bytes(), &rows); }
@@ -594,7 +594,7 @@ fn override_lookup(mods_dir:&Path,want:&str)->Option<PathBuf> {
         return answer.map(|zip|crate::tree_answers::rebase(mods_dir,&zip));
     }
     if crate::tree_answers::unanswered("override",want.as_bytes()) { return None; }
-    let found=override_lookup_in_tree(mods_dir,want);
+    let found=crate::okstrict::scanning(||override_lookup_in_tree(mods_dir,want));
     if crate::tree_answers::recording() {
         match &found {
             None=>crate::tree_answers::record("override",want.as_bytes(),&None::<String>),
@@ -962,7 +962,7 @@ pub(crate) fn uncensor_sources(game_root: &Path) -> Arc<(Vec<UncensorBodySource>
         return Arc::new(uncensor_sources_of(&manifests));
     }
     if crate::tree_answers::unanswered("uncensor", b"") { return Arc::new((Vec::new(), Vec::new())); }
-    let (out, manifests) = uncensor_sources_in_tree(game_root);
+    let (out, manifests) = crate::okstrict::scanning(|| uncensor_sources_in_tree(game_root));
     if crate::tree_answers::recording() {
         let rows: Option<Vec<(String, Vec<String>)>> = manifests.iter().map(|(p, x)| crate::tree_answers::relative(p).map(|z| (z, x.clone()))).collect();
         if let Some(rows) = rows { crate::tree_answers::record("uncensor", b"", &rows); }

@@ -1690,11 +1690,16 @@ pub(crate) fn load_head_keys(head_bundle: &Path) -> HashMap<String, Vec<Keyframe
 /// A bundle may contain several shape TextAssets; taking the first one can
 /// silently apply the wrong head curve set to a sideloader prefab.
 pub(crate) fn load_head_keys_named(head_bundle: &Path, asset: &str) -> HashMap<String, Vec<Keyframe>> {let _spot=crate::profile::spot("load_head_keys_named");
-    text_assets_from_bundle(head_bundle)
-        .into_iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(asset))
-        .map(|(_, bytes)| load_anm_keys(&bytes))
-        .unwrap_or_default()
+    head_keys_named_in(text_assets_from_bundle(head_bundle), asset)
+}
+
+/// `load_head_keys_named` for a head bundle in memory (a sideloader head's).
+pub(crate) fn load_head_keys_named_bytes(head_bundle: &[u8], asset: &str) -> HashMap<String, Vec<Keyframe>> {let _spot=crate::profile::spot("load_head_keys_named");
+    head_keys_named_in(crate::list::text_assets_from_bundle_bytes(head_bundle), asset)
+}
+
+fn head_keys_named_in(assets: Vec<(String, Vec<u8>)>, asset: &str) -> HashMap<String, Vec<Keyframe>> {
+    assets.into_iter().find(|(name, _)| name.eq_ignore_ascii_case(asset)).map(|(_, bytes)| load_anm_keys(&bytes)).unwrap_or_default()
 }
 
 pub fn apply_head_shape(
