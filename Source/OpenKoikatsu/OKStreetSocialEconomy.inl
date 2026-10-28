@@ -425,6 +425,9 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   return;
  }
  S.MealAwayAt=0;
+ // Not yet at the table: on the way to its seat, or still sitting down. Jeanne Alter's soup came as they stood at the
+ // counter and was a third gone by the time she sat (25 s walking round a chair, then the seated clips loading).
+ if((S.OutingGirl!=INDEX_NONE&&S.OutingGirl==Her)||(S.Pair.Partner==Her&&S.Pair.Phase==0))return;
  // Everyone eating: the partner and the girls with them (each her own dishes); a dish ordered for "her" with nobody named is the partner's.
  auto DishOwner=[&](const FOKStreetDish& D){return S.Manifest.Characters.IsValidIndex(D.Her)?D.Her:Her;};
  // The meal ends: each girl who ate remembers it (with its time): where, with whom, what she had and what he had.
