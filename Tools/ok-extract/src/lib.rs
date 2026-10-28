@@ -971,5 +971,11 @@ pub fn cpu_threads() -> usize {
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()))
 }
 
+/// `f` with these garment states requested for the opens it makes (tools: ok-card-open-bench).
+pub fn with_clothes_states<R>(states: [u8; 9], f: impl FnOnce() -> R) -> R {
+    let _states = crate::unity::request_clothes_states(states);
+    f()
+}
+
 /// `unity::bundle_texture_report` for the CLI (`--bundle-textures`).
 pub fn bundle_texture_report(bytes: Vec<u8>) -> Vec<(String, u32, bool)> { crate::unity::bundle_texture_report(bytes) }

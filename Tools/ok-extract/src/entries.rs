@@ -9,6 +9,27 @@ thread_local! {
 pub(crate) fn clear_entry_memo() {
     ENTRY_MEMO.with(|m| m.borrow_mut().clear());
     ACCESSORY_SOURCE_MEMO.with(|m| m.borrow_mut().clear());
+    VIEW_MEMO.with(|m| m.borrow_mut().clear());
+}
+
+thread_local! {
+    /// Results of an open's stages that do not depend on the outfit or garment states (or that say so in their key),
+    /// kept for the view's next opens like the entry memo: a conversion opens every outfit in six garment states, 42
+    /// opens of one card that loaded the same base bundles and catalogue each time. Their reads were recorded by the
+    /// view's first open into the same pack.
+    static VIEW_MEMO: std::cell::RefCell<std::collections::HashMap<String, std::rc::Rc<dyn std::any::Any>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// `make()` once per view and key (see VIEW_MEMO); a clone of it after.
+pub(crate) fn view_memo<T: Clone + 'static>(key: String, make: impl FnOnce() -> T) -> T {
+    // OK_NO_VIEW_MEMO=1: every open computes it (to compare with the memo).
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *OFF.get_or_init(|| std::env::var_os("OK_NO_VIEW_MEMO").is_some()) { return make(); }
+    if let Some(hit) = VIEW_MEMO.with(|m| m.borrow().get(&key).and_then(|v| v.downcast_ref::<T>().cloned())) { return hit; }
+    let made = make();
+    VIEW_MEMO.with(|m| m.borrow_mut().insert(key, std::rc::Rc::new(made.clone())));
+    made
 }
 
 thread_local! {

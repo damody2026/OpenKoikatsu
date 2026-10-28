@@ -512,6 +512,31 @@ pub(crate) fn compose_body_texture(
     body_texs: &[(String, Vec<u8>)],
     outfit: i32,
 ) {let _spot=crate::profile::spot("compose_body_texture");
+    // The same composite for the same inputs in every open of a view (crate::view_memo): the body mesh as it comes in
+    // (its content, not only its outfit: a garment state may change it), the outfit, the colours and the textures.
+    if !crate::okstrict::assembling() { return; }
+    let key = {
+        use sha2::Digest;
+        let mut h = sha2::Sha256::new();
+        h.update(bincode::serialize(&*mesh).unwrap_or_default());
+        for (name, bytes) in body_texs { h.update(name.as_bytes()); h.update((bytes.len() as u64).to_le_bytes()); h.update(bytes); }
+        format!("compose_body_texture|{outfit}|{skin:?}|{sub:?}|{:x}", h.finalize())
+    };
+    *mesh = crate::view_memo(key, || {
+        let mut made = mesh.clone();
+        compose_body_texture_uncached(&mut made, card, skin, sub, body_texs, outfit);
+        made
+    });
+}
+
+fn compose_body_texture_uncached(
+    mesh: &mut ExtractedMesh,
+    card: Option<&CardInfo>,
+    skin: [f32; 4],
+    sub: [f32; 4],
+    body_texs: &[(String, Vec<u8>)],
+    outfit: i32,
+) {
     if !crate::okstrict::assembling() { return; }
     // ChaControl.CreateBodyTexture assigns cf_body_00_t and cf_body_00_mc
     // directly to the create material, with the card's skin colors.

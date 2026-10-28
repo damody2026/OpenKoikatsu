@@ -98,12 +98,15 @@ pub fn load_base_bundle(
     Option<crate::pose::Skeleton>,
     Vec<(String, Vec<u8>)>,
 ) {
-    let Ok(bytes) = crate::gamefs::read(path) else {
-        return (Vec::new(), None, Vec::new());
-    };
-    // The texture hint only depends on the bundle file name.
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    load_base_bundle_from_memory(bytes, &name)
+    // The same bundle in every open of a view (crate::view_memo).
+    crate::view_memo(format!("load_base_bundle|{}", path.display()), || {
+        let Ok(bytes) = crate::gamefs::read(path) else {
+            return (Vec::new(), None, Vec::new());
+        };
+        // The texture hint only depends on the bundle file name.
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        load_base_bundle_from_memory(bytes, &name)
+    })
 }
 
 /// Same as `load_base_bundle` but for bytes already in memory (e.g. a zipmod

@@ -140,7 +140,7 @@ fn watched_unchanged(root: &Path) -> Option<String> {
 pub(crate) fn clear_cache() {
     CATALOG.with(|c| *c.borrow_mut() = None);
 }
-fn inventory_signature(root: &Path) -> String {
+fn inventory_signature(root: &Path) -> String {let _spot=crate::profile::spot("view: inventory_signature");
     use std::hash::{Hash, Hasher};
     // An OK card's strict open lists nothing of the library's trees (okstrict.rs); the library cannot change while
     // it is active, and the card's own pack has its identity.
