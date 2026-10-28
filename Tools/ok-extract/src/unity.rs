@@ -1224,6 +1224,55 @@ fn cubemap_atlas(tex: &unity_asset_decode::texture::Texture2D) -> Option<(u32, u
     Some((size as u32, mips as u32, png))
 }
 
+/// A map of byte strings read whole: bincode writes a `Vec<u8>` and a byte string alike, and element by element was
+/// most of what reading a card's records cost.
+mod byte_map {
+    use std::collections::BTreeMap;
+    pub fn serialize<S: serde::Serializer>(map: &BTreeMap<String, Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut out = s.serialize_map(Some(map.len()))?;
+        for (k, v) in map { out.serialize_entry(k, serde_bytes::Bytes::new(v))?; }
+        out.end()
+    }
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<String, Vec<u8>>, D::Error> {
+        let map: BTreeMap<String, serde_bytes::ByteBuf> = serde::Deserialize::deserialize(d)?;
+        Ok(map.into_iter().map(|(k, v)| (k, v.into_vec())).collect())
+    }
+}
+
+/// A texture payload as records keep it: `Texture2D` written as it is, read through a copy of its fields whose texels
+/// are one byte string (see `byte_map`).
+pub(crate) struct TexturePayload(pub unity_asset_decode::texture::Texture2D);
+
+impl serde::Serialize for TexturePayload {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> { self.0.serialize(s) }
+}
+
+impl<'de> serde::Deserialize<'de> for TexturePayload {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use unity_asset_decode::texture::{GLTextureSettings, StreamingInfo, Texture2D, TextureFormat};
+        #[derive(serde::Deserialize)]
+        struct Fields {
+            name: String, width: i32, height: i32, complete_image_size: i32, format: TextureFormat, mip_map: bool,
+            mip_count: i32, is_readable: bool, image_count: i32, texture_dimension: i32, light_map_format: i32,
+            color_space: i32, data_size: i32, stream_info: StreamingInfo, texture_settings: GLTextureSettings,
+            #[serde(with = "serde_bytes")]
+            image_data: Vec<u8>,
+            forced_fallback_format: Option<i32>, downscale_fallback: Option<bool>, is_alpha_channel_optional: Option<bool>,
+            mips_stripped: Option<i32>,
+        }
+        let f = <Fields as serde::Deserialize>::deserialize(d)?;
+        Ok(TexturePayload(Texture2D {
+            name: f.name, width: f.width, height: f.height, complete_image_size: f.complete_image_size, format: f.format,
+            mip_map: f.mip_map, mip_count: f.mip_count, is_readable: f.is_readable, image_count: f.image_count,
+            texture_dimension: f.texture_dimension, light_map_format: f.light_map_format, color_space: f.color_space,
+            data_size: f.data_size, stream_info: f.stream_info, texture_settings: f.texture_settings, image_data: f.image_data,
+            forced_fallback_format: f.forced_fallback_format, downscale_fallback: f.downscale_fallback,
+            is_alpha_channel_optional: f.is_alpha_channel_optional, mips_stripped: f.mips_stripped,
+        }))
+    }
+}
+
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ExtractedMesh {
     /// Settings of textures created by runtime blits, keyed by shader property.
@@ -1233,7 +1282,7 @@ pub struct ExtractedMesh {
     #[serde(default)]
     pub runtime_textures: std::collections::BTreeMap<String, [i32; 5]>,
     /// Additional authored material textures. Raw Unity row order until push_meshes.
-    #[serde(default)]
+    #[serde(default, with = "byte_map")]
     pub shader_extra_textures: std::collections::BTreeMap<String, Vec<u8>>,
     pub name: String,
     /// OBJ text is rebuilt from positions when writing files. Skipped in the
@@ -1270,7 +1319,7 @@ pub struct ExtractedMesh {
     pub hair_shader_hint: bool,
     /// The resolved renderer has a Shader Forge/main_hair_front layer. This
     /// includes Material Editor copies on the same renderer/submesh.
-    #[serde(default)]
+    #[serde(default, with = "serde_bytes")]
     pub texture_png: Option<Vec<u8>>,
     pub texture_name: String,
     /// OK base library: texture fields stored as (field, texture, transform)
@@ -1280,16 +1329,22 @@ pub struct ExtractedMesh {
     #[serde(default, skip_serializing_if = "texture_plan_hidden", deserialize_with = "texture_plan_compat")]
     pub texture_plan: Vec<(String, String, u8)>,
     /// Hair shader `_ColorMask` (RGB ??_Color / _Color2 / _Color3).
+    #[serde(with = "serde_bytes")]
     pub color_mask_png: Option<Vec<u8>>,
     /// Material `_AlphaMask` retained when no outer garment replaces it.
+    #[serde(with = "serde_bytes")]
     pub alpha_mask_png: Option<Vec<u8>>,
     /// Shader `_DetailMask`; retained separately from baked albedo.
+    #[serde(with = "serde_bytes")]
     pub detail_mask_png: Option<Vec<u8>>,
     /// Shader `_LineMask`; its channels gate the clothing ramp and painted seams.
+    #[serde(with = "serde_bytes")]
     pub line_mask_png: Option<Vec<u8>>,
     /// Shader `_NormalMap`; retained for the fragment normal path.
+    #[serde(with = "serde_bytes")]
     pub normal_map_png: Option<Vec<u8>>,
     /// `main_skin` `_NormalMask`; G bends face lighting toward the view.
+    #[serde(with = "serde_bytes")]
     pub normal_mask_png: Option<Vec<u8>>,
     /// Whether Unity supplied the tangent basis required by a tangent-space
     /// normal map. `None` is reserved for meshes built outside the Unity decoder.
@@ -1299,6 +1354,7 @@ pub struct ExtractedMesh {
     #[serde(default)]
     pub tangents: Vec<[f32; 4]>,
     /// Hair shader `_HairGloss` (matcap sheen).
+    #[serde(with = "serde_bytes")]
     pub hair_gloss_png: Option<Vec<u8>>,
     pub positions: Vec<[f32; 3]>,
     /// Unity `m_Normals` (file space, rest). Empty if the channel is missing.
@@ -2080,6 +2136,7 @@ pub fn clear_bundle_cache() {
 /// earlier card (tens of GB over a batch of cards). Call outside pool work, with no open in progress.
 pub fn release_bundle_caches() {
     clear_bundle_cache();
+    crate::clear_mask_bakes();
     let release = || { sync_bundle_cache(); crate::mods::clear_zip_bundle_cache(); };
     release();
     rayon::broadcast(|_| release());
@@ -4097,7 +4154,7 @@ impl ParsedBundle {
                 self.remember_texture(n.to_ascii_lowercase(),png.clone());
                 return Some(png);
             }
-            let payload=self.memo_texture("texture_payload",name,||self.texture_payload_unity(name));
+            let payload=self.memo_texture("texture_payload",name,||self.texture_payload_unity(name).map(|(t,n)|(TexturePayload(t),n))).map(|(t,n)|(t.0,n));
             let Some((n,png))=payload.and_then(|p|png_from_payload(p.0,None)) else { return self.dependency_texture_png(name); };
             if let Some(id)=self.lib.filter(|_|disk) { derived_png_save(&id,&key,&n,&png); }
             self.remember_texture(n.to_ascii_lowercase(),png.clone());
@@ -8261,8 +8318,10 @@ fn decode_bc_banded(data: &[u8], w: usize, h: usize, format: unity_asset_decode:
             _ => texture2ddecoder::decode_bc7(src, w, band_h, &mut texels),
         };
         if decoded.is_err() { return false; }
+        // One 4-byte store a texel (a slice copy here was a memcpy call per texel).
         for (p, o) in texels.iter().zip(out.chunks_exact_mut(4)) {
-            o.copy_from_slice(&[((p >> 16) & 0xFF) as u8, ((p >> 8) & 0xFF) as u8, (p & 0xFF) as u8, ((p >> 24) & 0xFF) as u8]);
+            let o: &mut [u8; 4] = o.try_into().unwrap();
+            *o = [((p >> 16) & 0xFF) as u8, ((p >> 8) & 0xFF) as u8, (p & 0xFF) as u8, ((p >> 24) & 0xFF) as u8];
         }
         true
     });

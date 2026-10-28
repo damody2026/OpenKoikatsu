@@ -5,6 +5,9 @@
 // (the first may build and store the cache, the second should be served by it). Stage timings go to stderr.
 use std::{path::Path, sync::atomic::Ordering, time::Instant};
 
+#[global_allocator]
+static ALLOC: ok_extract::recycle_alloc::RecyclingAlloc = ok_extract::recycle_alloc::RecyclingAlloc;
+
 fn run() -> Result<serde_json::Value, String> {
     let args: Vec<_> = std::env::args().collect();
     // ok-card-open-bench --compare LIBRARY CARD...: does a fresh open equal the open cache's (older build's) entry?

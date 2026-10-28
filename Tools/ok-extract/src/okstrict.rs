@@ -83,7 +83,7 @@ pub fn scanning<R: Send>(scan: impl FnOnce() -> R + Send) -> R {
     if !converting() { return scan(); }
     static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
     let pool = POOL.get_or_init(|| rayon::ThreadPoolBuilder::new()
-        .num_threads(std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(2, 16)).thread_name(|i| format!("OKTreeScan{i}"))
+        .num_threads(crate::cpu_threads().clamp(2, 16)).thread_name(|i| format!("OKTreeScan{i}"))
         .start_handler(|_| SCANNING.with(|s| s.set(true))).build().ok());
     match pool { Some(pool) => pool.install(scan), None => { SCANNING.with(|s| s.set(true)); let r = scan(); SCANNING.with(|s| s.set(false)); r } }
 }

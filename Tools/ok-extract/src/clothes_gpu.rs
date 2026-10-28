@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 
 #[derive(Clone,serde::Serialize,serde::Deserialize)]
 pub(crate) struct Texture {
+    #[serde(with="serde_bytes")]
     pub data:Vec<u8>,pub width:u32,pub height:u32,pub format:u32,pub mips:u32,
     pub sampling:crate::unity::TextureSampling,pub aniso:u32,pub bias:f32,
 }
@@ -20,6 +21,10 @@ extern "C" {
     fn ok_texture_gpu_readback(input:*const Input,width:u32,height:u32,output:*mut u8,output_size:usize,error:*mut u8,error_size:usize)->i32;
 }
 
+/// Time spent in GPU calls and their number (diagnostics: OK_PROFILE per converted card).
+pub(crate) static GPU_NANOS:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
+pub(crate) static GPU_CALLS:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
+
 /// Decode compressed authored texels with their actual GPU sRGB view. This
 /// avoids CPU BC interpolation errors being amplified by a second transfer.
 pub(crate) fn texture_readback(texture:Texture)->Result<Vec<u8>,String> {
@@ -31,7 +36,9 @@ pub(crate) fn texture_readback(texture:Texture)->Result<Vec<u8>,String> {
             format:t.format,mips:t.mips,filter:t.sampling.filter as u32,wrap_u:t.sampling.wrap_u as u32,
             wrap_v:t.sampling.wrap_v as u32,aniso:t.aniso,bias:t.bias});
         let mut out=vec![0u8;width as usize*height as usize*4];let mut error=vec![0u8;512];
+        let t=std::time::Instant::now();
         let result=unsafe{ok_texture_gpu_readback(inputs.as_ptr(),width,height,out.as_mut_ptr(),out.len(),error.as_mut_ptr(),error.len())};
+        GPU_NANOS.fetch_add(t.elapsed().as_nanos() as u64,std::sync::atomic::Ordering::Relaxed);GPU_CALLS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
         if result!=0 {return Err(String::from_utf8_lossy(&error[..error.iter().position(|&b|b==0).unwrap_or(error.len())]).into_owned());}
         let mut image=image::RgbaImage::from_raw(width,height,out).ok_or("invalid GPU texture readback")?;
         image::imageops::flip_vertical_in_place(&mut image);
@@ -88,7 +95,9 @@ pub(crate) fn bake(shader:&[u8],textures:&[Texture;5],constants:&[[f32;4];16],qu
         let size=(width as usize).checked_mul(height as usize).and_then(|n|n.checked_mul(4)).ok_or("image overflow")?;
         let input:[Input;5]=std::array::from_fn(|i|{let t=&textures[i];Input{data:t.data.as_ptr(),size:t.data.len(),width:t.width,height:t.height,format:t.format,mips:t.mips,filter:t.sampling.filter as u32,wrap_u:t.sampling.wrap_u as u32,wrap_v:t.sampling.wrap_v as u32,aniso:t.aniso,bias:t.bias}});
         let mut output=vec![0;size];let mut error=[0u8;512];
+        let t=std::time::Instant::now();
         let result=unsafe{ok_clothes_gpu_bake(shader.as_ptr(),shader.len(),input.as_ptr(),constants.as_ptr().cast(),width,height,quality,output.as_mut_ptr(),output.len(),error.as_mut_ptr(),error.len())};
+        GPU_NANOS.fetch_add(t.elapsed().as_nanos() as u64,std::sync::atomic::Ordering::Relaxed);GPU_CALLS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
         if result!=0 {return Err(String::from_utf8_lossy(&error[..error.iter().position(|&x|x==0).unwrap_or(error.len())]).into_owned());}
         let mut image=image::RgbaImage::from_raw(width,height,output).ok_or("invalid GPU readback")?;
         // The public bake returns source row order; the shared runtime Blit

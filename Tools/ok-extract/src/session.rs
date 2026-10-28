@@ -45,7 +45,7 @@ fn native_pool(start:bool)->Option<&'static rayon::ThreadPool> {
         // Bound native work alongside Unreal's task workers. Nested accessory
         // jobs and the two independent actors share this same pool.
         let workers=std::env::var("OK_NATIVE_WORKERS").ok().and_then(|v|v.parse::<usize>().ok())
-            .unwrap_or_else(||std::thread::available_parallelism().map_or(2,|n|{
+            .unwrap_or_else(||std::num::NonZeroUsize::new(crate::cpu_threads()).map_or(2,|n|{
                 // Keep the established small-machine limit; larger machines
                 // can overlap both roles without consuming every UE worker.
                 let available=n.get();available.div_ceil(2).max(4).min(available).min(8)

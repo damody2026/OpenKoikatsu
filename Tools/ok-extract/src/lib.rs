@@ -1,5 +1,6 @@
 #[allow(unused_imports)] use crate::gamefs::GamePath as _;
 pub mod appearance;
+pub mod recycle_alloc;
 mod anim;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -355,6 +356,11 @@ thread_local! {
 
 #[cfg(test)]
 mod multi_character_tests;
+
+thread_local! {
+    /// The view the entry memos were filled in (extract_session).
+    static ENTRY_EPOCH: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
 
 pub(crate) fn clear_entry_memo() {
     ENTRY_MEMO.with(|m| m.borrow_mut().clear());
@@ -5692,6 +5698,64 @@ fn sample_clothes_mask(image:&image::RgbaImage,u:f32,v:f32,sampling:crate::unity
     std::array::from_fn(|i|lerp_f(lerp_f(channel(a,i),channel(b,i),fx),lerp_f(channel(c,i),channel(d,i),fx),fy))
 }
 
+/// `sample_clothes_mask` at the pixel centres of a `w`×`h` target, set up once: each column's and row's texels and
+/// weights, and each byte's channel value. The arithmetic and its order are those of sampling pixel by pixel, so the
+/// bytes are the same (a card's accessory bakes spent most of a conversion's CPU in the per-pixel set-up).
+struct GridSampler<'a> {
+    image: &'a image::RgbaImage,
+    cols: Vec<(u32, u32, f32)>,
+    rows: Vec<(u32, u32, f32)>,
+    nearest: bool,
+    /// [alpha, colour] channel values per byte.
+    lut: [[f32; 256]; 2],
+}
+
+impl<'a> GridSampler<'a> {
+    fn new(image: &'a image::RgbaImage, w: u32, h: u32, sampling: crate::unity::TextureSampling) -> Self {
+        let (iw, ih) = image.dimensions();
+        let address = |i: i32, n: u32, mode: i32| -> u32 {
+            let n = n as i32;
+            match mode {
+                0 => i.rem_euclid(n) as u32,
+                2 => { let p = i.rem_euclid(2 * n); (if p < n { p } else { 2 * n - 1 - p }) as u32 }
+                3 => { let p = if i < 0 { -1 - i } else { i }; p.min(n - 1) as u32 }
+                _ => i.clamp(0, n - 1) as u32,
+            }
+        };
+        let nearest = sampling.filter == 0;
+        let axis = |n: u32, size: u32, mode: i32| -> Vec<(u32, u32, f32)> {
+            (0..n).map(|i| {
+                let x = (i as f32 + 0.5) / n as f32 * size as f32 - 0.5;
+                if nearest { let p = address((x + 0.5).floor() as i32, size, mode); (p, p, 0.0) }
+                else { let x0 = x.floor() as i32; (address(x0, size, mode), address(x0 + 1, size, mode), x - x0 as f32) }
+            }).collect()
+        };
+        let lut = [std::array::from_fn(|v| v as f32 / 255.0), std::array::from_fn(|v| {
+            let value = v as f32 / 255.0;
+            if sampling.srgb { srgb_channel_to_linear(value) } else { value }
+        })];
+        GridSampler { image, cols: axis(w, iw, sampling.wrap_u), rows: axis(h, ih, sampling.wrap_v), nearest, lut }
+    }
+
+    fn sample(&self, x: u32, y: u32) -> [f32; 4] {
+        let (x0, x1, fx) = self.cols[x as usize];
+        let (y0, y1, fy) = self.rows[y as usize];
+        let channel = |p: [u8; 4], i: usize| self.lut[(i < 3) as usize][p[i] as usize];
+        let a = self.image.get_pixel(x0, y0).0;
+        if self.nearest { return std::array::from_fn(|i| channel(a, i)); }
+        let b = self.image.get_pixel(x1, y0).0;
+        let c = self.image.get_pixel(x0, y1).0;
+        let d = self.image.get_pixel(x1, y1).0;
+        std::array::from_fn(|i| lerp_f(lerp_f(channel(a, i), channel(b, i), fx), lerp_f(channel(c, i), channel(d, i), fx), fy))
+    }
+}
+
+/// Colour-mask bakes without patterns already made in this process, by their inputs: the outfits of one card bake
+/// the same accessories again. Dropped with the bundle caches (between the cards of a batch) or past 512 MiB.
+static MASK_BAKES: std::sync::Mutex<(usize, Vec<([u8; 16], Option<std::sync::Arc<Vec<u8>>>)>)> = std::sync::Mutex::new((0, Vec::new()));
+
+pub(crate) fn clear_mask_bakes() { *MASK_BAKES.lock().unwrap() = (0, Vec::new()); }
+
 fn apply_clothes_color_mask(
     main: &[u8],
     mask: &[u8],
@@ -5700,7 +5764,24 @@ fn apply_clothes_color_mask(
 ) -> Option<Vec<u8>> {
     // Direct accessory shader baking retains its separate colour convention.
     let sampling=crate::unity::TextureSampling{srgb:false,..Default::default()};
-    apply_clothes_color_mask_sampled(main,mask,colors,patterns,sampling,None)
+    if !patterns.is_empty() { return apply_clothes_color_mask_sampled(main,mask,colors,patterns,sampling,None); }
+    let key = {
+        use sha2::Digest;
+        let mut h = sha2::Sha256::new();
+        for part in [main, mask] { h.update((part.len() as u64).to_le_bytes()); h.update(part); }
+        for c in colors.iter().flatten() { h.update(c.to_bits().to_le_bytes()); }
+        h.update(std::env::var("OK_CLOTHES_MASK").unwrap_or_default().as_bytes());
+        let mut id = [0u8; 16];
+        id.copy_from_slice(&h.finalize()[..16]);
+        id
+    };
+    if let Some((_, made)) = MASK_BAKES.lock().unwrap().1.iter().find(|(k, _)| *k == key) { return made.as_ref().map(|m| m.to_vec()); }
+    let made = apply_clothes_color_mask_sampled(main,mask,colors,patterns,sampling,None);
+    let mut bakes = MASK_BAKES.lock().unwrap();
+    if bakes.0 > 512 << 20 { *bakes = (0, Vec::new()); }
+    bakes.0 += made.as_ref().map_or(0, Vec::len);
+    bakes.1.push((key, made.clone().map(std::sync::Arc::new)));
+    made
 }
 
 fn apply_clothes_color_mask_sampled(
@@ -5734,6 +5815,8 @@ fn apply_clothes_color_mask_sampled(
         }
     }
     let mut out = src;
+    let grid = GridSampler::new(&mask, w, h, sampling);
+    let rotations: Vec<(f32, f32)> = patterns.iter().map(|p| ((p.rotate - 0.5) * std::f32::consts::TAU).sin_cos()).collect();
     // Each pixel depends only on its own inputs: rows are baked in parallel (the same bytes as one by one; a heavy
     // accessory's bakes took seconds of an open on one thread).
     use rayon::prelude::*;
@@ -5741,7 +5824,7 @@ fn apply_clothes_color_mask_sampled(
     pixels.par_chunks_mut(w as usize * 4).enumerate().for_each(|(y, row)| {
         let y = y as u32;
         for x in 0..w {
-            let m = sample_clothes_mask(&mask,(x as f32+0.5)/w as f32,(y as f32+0.5)/h as f32,sampling);
+            let m = grid.sample(x, y);
             let wr = m[0].clamp(0.0, 1.0);
             let wg = m[1].clamp(0.0, 1.0);
             let wb = m[2].clamp(0.0, 1.0);
@@ -5755,7 +5838,7 @@ fn apply_clothes_color_mask_sampled(
                         let v=(y as f32+0.5)/h as f32;
                         let qx=(u+2.0*pattern.offset[0]-1.0)*pat_scale[c][0]-0.5;
                         let qy=(v+2.0*pattern.offset[1]-1.0)*pat_scale[c][1]-0.5;
-                        let (sn,cs)=((pattern.rotate-0.5)*std::f32::consts::TAU).sin_cos();
+                        let (sn,cs)=rotations[c];
                         let ps=sample_clothes_mask(p,cs*qx+sn*qy+0.5,
                             -sn*qx+cs*qy+0.5,pattern.sampling);
                         let alpha=pattern.color[3];
@@ -8343,7 +8426,14 @@ pub(crate) fn extract_session_from_info(
             }
         }
     }
-    clear_entry_memo();
+    // Within one view (a card pack mounted: a conversion, or an OK card opened again) the entries answer the same, so
+    // what an earlier open of it extracted is kept: a conversion opens every outfit, and outfits 1.. extracted outfit
+    // 0's accessories again. Their reads were recorded by that first open into the same pack. Any other open starts
+    // afresh (begin_load still clears on a changed reference signature).
+    let view = crate::oklib::mounted_pack_identity();
+    let epoch = format!("{}|{view}|{}|{}", game_root.display(), crate::oklib::mounted_pack_mods_identity(), crate::dbone::dynamic_bones_fix_enabled(game_root));
+    let previous = ENTRY_EPOCH.with(|e| e.replace(epoch.clone()));
+    if view.is_empty() || previous != epoch { clear_entry_memo(); }
     crate::unity::references::begin_load(game_root);
     let t_all = Instant::now();
     // OK_PROFILE: the per-slot stage timings (appearance::timings) of this open too.
@@ -18482,6 +18572,13 @@ pub fn export_session_posed_objs(game_root: &Path, card_path: &Path, outfit: i32
         std::fs::write(out_dir.join(format!("{safe}.obj")), text).map_err(|e| e.to_string())?;
     }
     Ok(session.parts.len())
+}
+
+/// Threads one process's pools may use: OK_THREADS (set by `--oklib cards` for its workers, which share the machine),
+/// else the hardware threads.
+pub fn cpu_threads() -> usize {
+    std::env::var("OK_THREADS").ok().and_then(|v| v.parse().ok()).filter(|&n: &usize| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()))
 }
 
 /// `unity::bundle_texture_report` for the CLI (`--bundle-textures`).
