@@ -142,6 +142,11 @@ pub(crate) fn clear_cache() {
 }
 fn inventory_signature(root: &Path) -> String {
     use std::hash::{Hash, Hasher};
+    // An OK card's strict open lists nothing of the library's trees (okstrict.rs); the library cannot change while
+    // it is active, and the card's own pack has its identity.
+    if crate::okstrict::active().is_some() && crate::gamefs::serves_from_library(root) {
+        return format!("ok card:{}", crate::oklib::mounted_pack_identity());
+    }
     let mut paths = Vec::new();
     collect(&root.join("abdata"), &mut paths, false);
     collect(&root.join("mods"), &mut paths, true);

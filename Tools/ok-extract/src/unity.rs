@@ -1651,6 +1651,7 @@ impl Default for TextureSampling {
 
 /// OK base library surface: every Unity query of a bundle is recorded or
 /// replayed here (see oklib.rs). Bodies live in the `*_unity` methods.
+thread_local! { static PREFAB_ABSENT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 impl ParsedBundle {
     fn memo<A: serde::Serialize + ?Sized, R: serde::Serialize + serde::de::DeserializeOwned>(&self, method: &str, args: &A, f: impl FnOnce() -> R) -> R {
         // A card pack stores mesh records with texture plans (texture references decoded on use), and decoding a plan
@@ -1696,7 +1697,12 @@ impl ParsedBundle {
             let key=prefab.to_ascii_lowercase();
             if !self.prefab_directory().objects.iter().any(|o|o.contains(&key)) {
                 if std::env::var_os("OKLIB_TRACE_SILENT").is_some(){if let Some(s)=crate::oklib::active(){s.note_missing(format!("SILENT {query} {} {prefab}",self.lib.map(|i|crate::oklib::id_hex(&i)).unwrap_or_default()));}}
-                return f();
+                // The bundle has no such prefab: `f` finds nothing in the model handle, which is the answer, not a gap
+                // of the library (an OK card's strict open would fail on it, okstrict.rs).
+                PREFAB_ABSENT.with(|a|a.set(true));
+                let out=f();
+                PREFAB_ABSENT.with(|a|a.set(false));
+                return out;
             }
         }
         self.memo(query,args,f)
@@ -1924,7 +1930,9 @@ impl ParsedBundle {
         // store again for every card (the base head, ~0.35 s) is kept once per process.
         type Memo=std::sync::Mutex<std::collections::HashMap<crate::oklib::Id,std::sync::Arc<Vec<(String,Vec<u8>)>>>>;
         static MEMO:std::sync::OnceLock<Memo>=std::sync::OnceLock::new();
-        let replay=self.lib.filter(|_|crate::oklib::active().is_some_and(|s|s.mode==crate::oklib::Mode::Replay));
+        // (not a model of an OK card's own third-party mods: its answer is the card's, okstrict.rs)
+        let replay=self.lib.filter(|id|crate::oklib::active().is_some_and(|s|s.mode==crate::oklib::Mode::Replay)
+            &&(crate::okstrict::active().is_none()||crate::okstrict::library_model(id)));
         if let Some(id)=replay {
             if let Some(hit)=MEMO.get_or_init(Default::default).lock().unwrap_or_else(|e|e.into_inner()).get(&id).cloned(){return (*hit).clone();}
         }
@@ -3090,7 +3098,7 @@ impl ParsedBundle {
     /// A library model has no Unity internals: reaching them during replay
     /// means a query path that is not recorded (reported with its callers).
     fn library_internals(&self, what: &'static str) {
-        if self.files.is_empty() && crate::oklib::replaying() {
+        if self.files.is_empty() && crate::oklib::replaying() && !PREFAB_ABSENT.with(|a| a.get()) {
             // A model this checkout does not have (a third-party zipmod's, out of version control): a gap naming it,
             // so the zipmod it comes from is reported (and, while an OK card is made, taken from the game).
             match self.lib {
@@ -3714,6 +3722,8 @@ impl ParsedBundle {
         if crate::oklib::active().is_some() {
             // Only names a material took from outside are recorded (others stay unanswered, as in Unity).
             if !self.library_model() && !self.dependency_texture_source.borrow().contains_key(&key) { return None; }
+            // A library model records only names taken from outside: no record is the answer (not a gap of it).
+            if self.library_model() && !crate::oklib::has_record(self.lib.as_ref(), "dependency_texture_model", key.as_str()) { return None; }
             // The dependency bundle is a library model of its own (its textures recorded there): record which one,
             // and decode the texture from it.
             let model: Option<String> = self.memo("dependency_texture_model", key.as_str(), || {

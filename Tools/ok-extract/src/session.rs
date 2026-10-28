@@ -3569,14 +3569,21 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
             card.zip(key.as_ref()).and_then(|(c, k)| crate::cardbake::load_kind(c, crate::cardbake::MEMO_CHUNK, k))
                 .and_then(|b| crate::memosnap::seed(&b, kinds))
         };
-        let mut sess = crate::extract_session(game, card, outfit, None)?;
+        let made = crate::extract_session(game, card, outfit, None);
+        // An OK card's strict open (okstrict.rs) that needed what neither the card nor the shared resources hold fails.
+        if let (Some(strict), Some(c)) = (_pack.as_ref().and_then(crate::oklib::PackMount::strict), card) {
+            let gaps = strict.gaps();
+            if !gaps.is_empty() { return Err(crate::okstrict::failure(c, &gaps)); }
+        }
+        let mut sess = made?;
         sess.game_root = std::path::PathBuf::new();
         log_shader_inputs(&sess);
         // The key covers the library, the card (and its pack) and the zipmods the fallback can serve.
         // An open that read installed zipmods is only valid while they are unchanged (checked on load).
         let fallback = if crate::gamefs::fallback_used() { crate::gamefs::fallback_identity() } else { String::new() };
         let t = std::time::Instant::now();
-        if let Some(k) = key {
+        // (OK_NOCACHE: nothing is written, so the session is not serialized for it either)
+        if let Some(k) = key.filter(|_| crate::oklib::session_cache_enabled()) {
             if crate::oklib::defer_cache_store() && crate::oklib::session_cache_location().is_some() {
                 // The entry is written on its own thread (the claim held until then); what it records about this open
                 // is read here, where the card pack is mounted.

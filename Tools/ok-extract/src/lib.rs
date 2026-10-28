@@ -37,6 +37,7 @@ mod teximg;
 pub mod cardbake;
 pub mod memosnap;
 pub mod tree_answers;
+pub mod okstrict;
 #[cfg(test)]
 mod crowd_native_tests;
 mod eye_gaze;
@@ -3954,7 +3955,8 @@ pub(crate) fn configured_ramp_png(game_root: &Path, vanilla: &ChaListCatalog) ->
     type RampMemo = std::sync::Mutex<Vec<(String, Option<Vec<u8>>)>>;
     static MEMO: RampMemo = std::sync::Mutex::new(Vec::new());
     let memo_key = format!("{}|{id}|{guid}|{}", game_root.display(), crate::oklib::mounted_pack_mods_identity());
-    if let Some((_, hit)) = MEMO.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| *k == memo_key) {
+    // (not while an OK card's answers are recorded: its own open must ask the ramp's GUID, tree_answers.rs)
+    if let Some((_, hit)) = MEMO.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| *k == memo_key && !crate::tree_answers::recording()) {
         return hit.clone();
     }
     let found = configured_ramp_png_uncached(game_root, vanilla, id, guid);
@@ -5027,6 +5029,7 @@ fn me_shader_registration(game_root: &Path, shader: &str) -> (bool, Option<bool>
     // An OK card's answer (tree_answers.rs): no manifest of the tree is read.
     let question = shader.to_ascii_lowercase();
     if let Some(found) = crate::tree_answers::lookup::<(bool, Option<bool>)>("me-shader", question.as_bytes()) { return found; }
+    if crate::tree_answers::unanswered("me-shader", question.as_bytes()) { return (false, None); }
     let found = me_shader_registration_in_tree(game_root, shader, &MOD_RESULTS);
     crate::tree_answers::record("me-shader", question.as_bytes(), &found);
     found

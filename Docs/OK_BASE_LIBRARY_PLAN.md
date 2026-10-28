@@ -53,7 +53,8 @@
 | `card <lib> <KKS 卡> <out>` | 原作卡 → APNG 卡：基礎庫＋此卡 zipmod 開卡，基礎庫沒有的部分錄成卡內 `okLc` |
 | `kks-verify <lib> <清單>` | 原作卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod digest（`work/kks_verify.tsv`） |
 | `okcard-verify <lib> <清單>` | 原作卡 → APNG 卡 → 只用 OK 資料重開：三者 digest 相同、大小比例、`okLc` 大小（`work/okcard_verify.tsv`） |
-| `tree-answers <lib> <OK 卡>...` | 替既有 OK 卡補上 `okLt`（開卡對整棵 mods 樹的問題的答案），原地改寫；`card`／`cards` 轉出的新卡已經自帶 |
+| `seal <lib> <OK 卡>... [--out 目錄]` | 讓既有 OK 卡只靠自己開卡：補上 `okLt`，並把它從基礎庫讀到的第三方 mod 資料複製進 `okLc`（見下方「OK 卡只靠自己開卡」）；原地改寫或寫到目錄。`card`／`cards` 轉出的新卡已經封好。批次用 `Tools/seal_ok_cards.lua`（先備份、新程序嚴格檢查通過才換掉原檔） |
+| `strict-check <lib> <OK 卡>...` | 每套服裝都以嚴格模式開一次（不經快取）；一張卡一個新程序最可靠 |
 
 ## 階段與驗收
 
@@ -107,9 +108,18 @@
   卡片存的每一套服裝都會開一次錄進同一包（2026-10-24 起；以前只錄第 0 套）。
 - 卡內答案 `okLt`（2026-10-28，`Tools/ok-extract/src/tree_answers.rs`）：開 OK 卡時有幾個問題原本要問「整棵 mods 樹」——基礎庫記錄的約 7300 個 zipmod：合併的 ChaList 目錄、哪個 zipmod 宣告某個 GUID、StripAll 移轉、哪個 zipmod 覆蓋某個原版 bundle、UncensorSelector 的身體／生殖器清單、MaterialEditor 有沒有註冊某個 shader。每一項都要讀遍或合併全部 7300 個記錄，新程序第一張卡要多花 0.7～1.6 秒（負載高時更久），卡片本身只問其中幾十個。
   - 現在卡片自己帶這些答案：轉卡（`card`／`cards`）做完後，只用基礎庫＋卡內 `okLc` 把成品的每一套服裝開一次，記下這些問題與答案（zipmod 路徑存成相對 `mods/` 的路徑，開卡時接回當時的 mods 目錄），zstd 後存成 `okLt` 區塊（C049 為 5.3 KB）。
-  - 開卡時先查卡內答案，整棵樹一個 zipmod 都不讀。卡片沒錄過的問題（例如以後的程式多問了一題），照舊問整棵樹，所以答案只會省工、不會改變結果。
-  - 舊卡用 `tree-answers` 補上，不用重轉。沒有 `okId` 的卡補上 `okId`，值是原本的身分，名字、存檔照常對得上。開卡快取的 key 不含 `okLt`，補上之後快取照用。
-  - `OK_TREE_ANSWERS=0`：開卡不用卡內答案（對照用）。`ok-card-open-bench --fresh-dump <lib> <目錄> <卡>...`：每套服裝都不經快取開一次，寫出 session 位元組。兩種設定的結果要逐位元組相同。
+  - 開卡時只查卡內答案，整棵樹一個 zipmod 都不讀；卡片沒錄過的問題是缺口（見下一項），不再回頭問整棵樹。
+  - 沒有 `okId` 的卡封卡時補上 `okId`，值是原本的身分，名字、存檔照常對得上。開卡快取的 key 不含 `okLt`。
+  - `ok-card-open-bench --fresh-dump <lib> <目錄> <卡>...`：每套服裝都不經快取開一次，寫出 session 位元組，用來和舊版逐位元組對照。
+- OK 卡只靠自己開卡（2026-10-28，`Tools/ok-extract/src/okstrict.rs`）：開 OK 卡只用卡內資料（`okLc`、`okLt`）和基礎庫的共用資源（原作資源，以及 `shared_mods.txt` 列的共用 mod：uncensor 身體、全域修正、陰影 ramp、MaterialEditor shader）。基礎庫記錄的其他第三方 mod（`sources.okidx` 記著約 7300 個 zipmod，它們的模型不進版控，見 `models/.gitignore`）一律不讀、不列、不掃：
+  - `mods/` 底下的目錄列表一律只看卡內；第三方 zipmod 的清單、檔案、bundle 只從卡內 `okLc` 取；只有第三方 mod 用到的模型（`models/.gitignore` 列的）只從卡內取。
+  - 任何缺的東西（卡內沒有、也不是共用資源）記成缺口，開卡失敗並列出缺什麼，不回頭掃、不現算。沒有 `okLt` 的舊卡直接報錯，訊息附上補救指令。
+  - 轉卡給 zipmod 資料夾（名稱為 `mods`，例如 `D:/KoikatuSunshine/mods`）而不是遊戲目錄時，只從裡面取 zipmod，不讀遊戲的設定檔：陰影 ramp（`UserData/config/system.xml`）用基礎庫記錄的那份，UncensorSelector 設定用專案 `Config/UncensorSelector.cfg`（`oklib::zipmod_source`）。轉卡本來就不讀遊戲的 abdata（原作資源一律來自基礎庫）。
+  - 轉卡（`card`／`cards`）最後就是封卡：每套服裝都要能嚴格開卡，任何一套缺資料就轉卡失敗並列出缺什麼。
+  - 基礎庫帶自己的共用清單 `shared_mods.txt`（`shared-ignore` 時從 `Tools/base_library_shared_mods.txt` 複製），打包版沒有 `Tools/` 也能判斷。
+  - 封卡（`seal`）：先錄 `okLt`；再以「補齊模式」開每套服裝，嚴格開卡會缺、但基礎庫有的資料（第三方 zipmod 的清單與檔案、模型查詢結果；基礎庫本來就沒存、以前每次現算的查詢則存下現算的值）複製進卡內 `okLc`；最後每套服裝嚴格開一次。這三步（錄答案、補齊、嚴格檢查）各在一個新程序裡跑（`seal-step`）：同一程序先前開卡留下的值（entry memo、陰影 ramp、`textures_keep_base`、解析過的 bundle）會讓後一步不去讀它該讀的東西，答案沒錄到、資料沒複製，同程序的檢查卻照樣通過。`cards` 也是一張卡一個程序（`OK_CARDS_IN_PROCESS=1` 才在同一程序轉）。
+  - 卡片指名、但不在基礎庫的 zipmod 裡的大 bundle（超過映射門檻、分段讀成暫存檔）以前不會記進卡包的 zip 項目，那個部件在 OK 卡裡一直是缺的；現在轉卡時整個項目照樣記錄（`Zip::note_read`）。卡片指名的 zipmod 在轉卡時掛成 `mods/<檔名>`，基礎庫若以原路徑記著同一檔案，補齊時以「同檔名、項目清單相同」對上（`library_alias`）。
+  - 以前會順手記成缺口、其實是正確答案的情況不再算缺口：bundle 裡沒有那個 prefab（`memo_prefab`）、貼圖不是外部引用（`dependency_texture_model` 沒記錄）、把資料夾當檔案讀（空的 bundle 名稱組出 `abdata`）。
   - 驗收（10-28，C049，7 套服裝）：有沒有 `okLt` 的 session 逐位元組相同。新程序第一次開卡（`OK_NOCACHE`，同時有其他工作在跑）：`lists+mods+guids` 774 → 40 ms，`uncensor body` 289 → 24 ms；讀到的 zip 從 14,641 次降到 67 次（只剩卡片自己用到的）；extract_session 3.39 → 2.03 秒。只有某套服裝才用、基礎庫又沒有的資源，例如 mod 上衣給身體的 `OverBodyMask`，以前不在包裡，讀卡器換到那套就缺；這類缺口現在會印 `OverBodyMask ... not found`。舊卡用 `--oklib card`／`cards` 重轉（輸入可以是 OK 卡本身，會先剝掉 OK 區塊）。重轉已是 OK 卡的卡時，新卡帶 `okId` 區塊記下原本的身分（街區的 `apng-<id>`），名字、個人設定、存檔照常對得上（`oklib::keep_identity`、`card_identity`）。
 - 驗收：
   - KKS 卡：遊戲模式 digest ＝ 基礎庫＋此卡 zipmod 的 digest（用基礎庫沒有的卡測，包含卡片專屬 mod 的卡）。

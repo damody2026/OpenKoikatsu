@@ -7,10 +7,9 @@
 //!
 //! The card carries those answers. They are recorded by opening the finished OK card from the library and its pack,
 //! every saved outfit, with the questions logged (`record`); the open of the card then takes them (`lookup`) and
-//! touches no archive of the tree. A question it was never asked (another clothes state, a later extractor asking
-//! something new) is answered from the tree as before, so an answer can only save work, never change the result.
-//! Archive paths are kept relative to the mods folder and rebased on the folder of the open.
-//! `OK_TREE_ANSWERS=0`: the open ignores the card's answers (comparisons).
+//! touches no archive of the tree. A question it was never asked is a gap of the OK card's strict open (okstrict.rs):
+//! the open fails naming it, nothing is asked of the tree. Archive paths are kept relative to the mods folder and
+//! rebased on the folder of the open.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -63,15 +62,18 @@ pub fn parse(card: &[u8]) -> Option<Arc<Table>> {
     (saved.version == VERSION).then(|| Arc::new(saved.rows.into_iter().map(|(k, key, v)| ((k, key), v)).collect()))
 }
 
-fn enabled() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("OK_TREE_ANSWERS").as_deref() != Ok("0"))
+/// The open's card answers (None: the card has none, or answers are being recorded).
+pub fn table() -> Option<Arc<Table>> {
+    if recording() { return None; }
+    crate::oklib::pack_scope()?.tree.clone()
 }
 
-/// The open's card answers (None: the card has none, they are off, or answers are being recorded).
-pub fn table() -> Option<Arc<Table>> {
-    if recording() || !enabled() { return None; }
-    crate::oklib::pack_scope()?.tree.clone()
+/// A question the card has no answer to: under an OK card's strict open (okstrict.rs) a gap, and the caller answers it
+/// as nothing, never from the tree. False otherwise (the caller asks the tree, recording the answer).
+pub fn unanswered(kind: &str, key: &[u8]) -> bool {
+    if crate::okstrict::active().is_none() { return false; }
+    crate::okstrict::gap(|| format!("okLt {kind} {}", String::from_utf8_lossy(key).replace('\n', ",")));
+    true
 }
 
 /// The card's answer to a question, if it carries one.
@@ -90,11 +92,15 @@ pub fn outfit_count(card: &[u8]) -> usize {
 /// A mods folder as the text archive paths under it start with.
 fn mods_prefix(mods_dir: &Path) -> String { mods_dir.to_string_lossy().into_owned() }
 
-/// An archive path under the recorded open's mods folder, relative to it (None: elsewhere, not recordable).
+/// An archive path under the recorded open's mods folder, relative to it (None: elsewhere, not recordable). Compared
+/// as gamefs keys compare (case and separators do not matter: a tree walk and a listing spell one archive differently).
 pub fn relative(path: &Path) -> Option<String> {
     let record = RECORD.lock().unwrap_or_else(|e| e.into_inner());
     let (prefix, _) = record.as_ref()?;
-    path.to_string_lossy().strip_prefix(prefix.as_str()).map(str::to_owned)
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(prefix.as_str()) { return Some(rest.to_owned()); }
+    let (path, prefix) = (crate::gamefs::normalize(path), crate::gamefs::normalize(Path::new(prefix)));
+    path.strip_prefix(prefix.as_str()).filter(|rest| rest.starts_with('/')).map(str::to_owned)
 }
 
 /// A relative archive path rebased on this open's mods folder (the text the tree walk gives for it).
@@ -104,7 +110,12 @@ pub fn rebase(mods_dir: &Path, relative: &str) -> PathBuf {
 
 /// `bytes` with `okLt` set to `payload` (right before IEND, replacing one it had). A card without `okId` gets the
 /// identity it had before, so names, saves and caches that know it by its bytes keep knowing it.
-pub fn with_answers(bytes: &[u8], payload: &[u8]) -> Result<Vec<u8>, String> {
+pub fn with_answers(bytes: &[u8], payload: &[u8]) -> Result<Vec<u8>, String> { with_chunk(bytes, CHUNK, payload) }
+
+/// `bytes` with chunk `kind` set to `payload` (right before IEND, replacing one it had), keeping the card's identity
+/// as `with_answers` does.
+pub fn with_chunk(bytes: &[u8], kind: &[u8; 4], payload: &[u8]) -> Result<Vec<u8>, String> {
+    let replaced = kind;
     let identity = crate::oklib::card_identity(bytes);
     let had_identity = crate::oklib::png_chunk(bytes, crate::oklib::IDENTITY_CHUNK).is_some();
     if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" { return Err("not a PNG card".into()); }
@@ -116,7 +127,7 @@ pub fn with_answers(bytes: &[u8], payload: &[u8]) -> Result<Vec<u8>, String> {
         let end = pos.checked_add(12 + len).filter(|e| *e <= bytes.len()).ok_or("truncated PNG chunk")?;
         let kind = &bytes[pos + 4..pos + 8];
         if kind == b"IEND" {
-            let mut chunk = CHUNK.to_vec();
+            let mut chunk = replaced.to_vec();
             chunk.extend_from_slice(payload);
             out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
             out.extend_from_slice(&chunk);
@@ -125,7 +136,7 @@ pub fn with_answers(bytes: &[u8], payload: &[u8]) -> Result<Vec<u8>, String> {
             done = Some(out);
             break;
         }
-        if kind != CHUNK { out.extend_from_slice(&bytes[pos..end]); }
+        if kind != replaced { out.extend_from_slice(&bytes[pos..end]); }
         pos = end;
     }
     let out = done.ok_or("missing PNG IEND")?;
