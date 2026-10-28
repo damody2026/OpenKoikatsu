@@ -72,6 +72,8 @@ pub struct Inputs<'a> {
     pub weekday: i32,
     pub money_stress: f32,
     pub energy: f32,
+    /// How full she is as her day is planned (the morning): a lunch date skips the breakfast she does not need.
+    pub satiety: f32,
     pub wealth: i64,
     pub promises: Vec<Block>,
     pub stalk_place: String,
@@ -100,6 +102,34 @@ const DINNER_WINDOW: (i32, i32) = (1020, 1320);
 /// A meeting with him at a place that serves food, starting inside a meal window: that meal is the meeting.
 fn meal_with_him(c: &Catalog, place: &str, start: i32, window: (i32, i32)) -> bool {
     start >= window.0 && start < window.1 && c.items.iter().any(|it| it.place == place && it.consumable)
+}
+
+/// A lunch or dinner date with him later that day: her own meal before it is a light one, so she comes hungry enough to
+/// eat with him (Hu Tao had a pork-chop rice at 08:30 and could only drink tea at the 12:00 lunch date: satiety 90, the
+/// beef noodles too much). A quarter of an hour at the table and a small dish (plan_meal); its budget is kept as its
+/// negative to say so, as the block goes to the game and back to plan_meal unchanged.
+const LIGHT_MEAL_MINUTES: i32 = 15;
+/// The most a light meal's dish fills (a roll, a yoghurt; not a rice bowl).
+const LIGHT_MEAL_FILL: f32 = 12.0;
+/// How long before a meal date her own meal is the light one (breakfast before lunch, lunch before dinner).
+const LIGHT_BEFORE_DATE: i32 = 8 * 60;
+/// Not hungry in the morning of a lunch date: no breakfast at all. Hu Tao slept to 08:30 still at 76 (the night costs
+/// little), had only a tea and was 74 at noon: the beef noodles (45) did not fit under OVERFULL_SATIETY.
+const SKIP_BREAKFAST_SATIETY: f32 = 60.0;
+
+fn lighten(b: &mut Block) {
+    b.budget = -b.budget.abs().max(1);
+    b.end = b.end.min(b.start + LIGHT_MEAL_MINUTES);
+}
+
+/// Her own meals in the hours before a meal date are light (plan_day, plan_set_promises).
+fn lighten_before(c: &Catalog, day: &mut [Block], place: &str, start: i32) {
+    if ![LUNCH_WINDOW, DINNER_WINDOW].iter().any(|w| meal_with_him(c, place, start, *w)) {
+        return;
+    }
+    for b in day.iter_mut().filter(|b| b.kind == "meal" && b.source == "need" && b.budget >= 0 && b.end <= start && b.start >= start - LIGHT_BEFORE_DATE) {
+        lighten(b);
+    }
 }
 
 pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
@@ -188,8 +218,15 @@ pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
         }
     };
     let morning: &[i32] = match (rng.frand() * 3.0) as i32 { 0 => &[420, 450, 480], 1 => &[450, 480, 510], _ => &[480, 510, 450] };
-    let morning: Vec<i32> = morning.iter().copied().filter(|s| breakfast != "cafe" || *s >= 480).collect();
-    meal(&mut day, &morning, 30, &breakfast, budget.min(crate::region::amount("goods", 17) as i32));
+    let mut morning: Vec<i32> = morning.iter().copied().filter(|s| breakfast != "cafe" || *s >= 480).collect();
+    // A lunch date: her breakfast as early as she has it, and light (lighten_before below); none when she is not hungry.
+    let lunch_date = i.promises.iter().any(|p| meal_with_him(c, &p.place, p.start, LUNCH_WINDOW));
+    if lunch_date {
+        morning.sort();
+    }
+    if !lunch_date || i.satiety < SKIP_BREAKFAST_SATIETY {
+        meal(&mut day, &morning, 30, &breakfast, budget.min(crate::region::amount("goods", 17) as i32));
+    }
     // A lunch or dinner date with him is that meal: she does not eat it alone first (dinner at 17:30, then the 20:00
     // dinner date with him full).
     let eats_with_him = |w: (i32, i32)| i.promises.iter().any(|p| meal_with_him(c, &p.place, p.start, w));
@@ -224,6 +261,9 @@ pub fn plan_day(i: &Inputs, c: &Catalog) -> Vec<Block> {
     let starts: Vec<i32> = starts.iter().copied().filter(|s| dinner != "cafeteria" || s + 60 <= 1140).collect();
     if !eats_with_him(DINNER_WINDOW) {
         meal(&mut day, &starts, 60, dinner, budget);
+    }
+    for p in &i.promises {
+        lighten_before(c, &mut day, &p.place, p.start);
     }
     // 4. Jealous: she turns up where he usually is.
     if !i.stalk_place.is_empty() {
@@ -447,6 +487,7 @@ pub fn plan_all(c: &Catalog, r: &Value) -> Result<Value, String> {
             weekday,
             money_stress: stress,
             energy: h.relation.energy,
+            satiety: h.relation.satiety,
             wealth: h.relation.cash.max(0) + h.relation.bank + h.invest_total,
             promises,
             stalk_place: stalk,
@@ -803,8 +844,25 @@ pub fn meal(c: &Catalog, r: &Value) -> Result<Value, String> {
         fed.satiety = (fed.satiety + FRUGAL_MEAL_SATIETY * appetite).clamp(0.0, 100.0);
         Ok(json!({"item": "frugal_meal", "name": crate::tr::t("plan.frugal_meal"), "price": 0, "frugal": true, "relation": fed.patch(rel)}))
     };
-    let Some(item) = catalog::pick_meal(c, place, r.get("month").and_then(Value::as_i64).unwrap_or(1) as i32, &ctx.profile, r.get("budget").and_then(Value::as_i64).unwrap_or(0) as i32, &mut rng) else {
-        return frugal(&ctx.rel);
+    let month = r.get("month").and_then(Value::as_i64).unwrap_or(1) as i32;
+    let budget = r.get("budget").and_then(Value::as_i64).unwrap_or(0) as i32;
+    // A light meal before a meal date (lighten): a small dish of what she likes here, or a little of what she brought.
+    let item = if budget < 0 {
+        let small: Vec<&catalog::Item> = c.items_at(place, month).into_iter()
+            .filter(|it| it.consumable && it.price_of(&it.default_size()) <= (-budget).max(crate::region::amount("goods", 30) as i32))
+            .filter(|it| it.effects.get("satiety").copied().unwrap_or(0.0) <= LIGHT_MEAL_FILL && catalog::taste_of(&ctx.profile, it, "", "") >= 0)
+            .collect();
+        if small.is_empty() {
+            let mut fed = ctx.rel.clone();
+            fed.satiety = (fed.satiety + LIGHT_MEAL_FILL * appetite).clamp(0.0, 100.0);
+            return Ok(json!({"item": "frugal_meal", "name": crate::tr::t("plan.frugal_meal"), "price": 0, "frugal": true, "light": true, "relation": fed.patch(&ctx.rel)}));
+        }
+        small[rng.rand_range(0, small.len() as i32 - 1) as usize]
+    } else {
+        let Some(item) = catalog::pick_meal(c, place, month, &ctx.profile, budget, &mut rng) else {
+            return frugal(&ctx.rel);
+        };
+        item
     };
     let price = item.price_of(&item.default_size());
     let mut rel = ctx.rel.clone();
@@ -883,6 +941,7 @@ fn plan_set_promises(c: &Catalog, r: &Value) -> Result<Value, String> {
                 day.retain(|b| !(b.kind == "meal" && b.source == "need" && b.start > (start - 180).min(w.0 - 60) && b.start < w.1));
             }
         }
+        lighten_before(c, &mut day, place, start);
         let mut kept = Vec::with_capacity(day.len() + 2);
         for b in day.drain(..) {
             if b.end <= start || b.start >= end {
@@ -952,7 +1011,7 @@ mod tests {
     }
 
     fn inputs(profile: &Value, weekday: i32, seed: i32) -> Inputs<'_> {
-        Inputs { profile, weekday, money_stress: 0.0, energy: 90.0, wealth: 0, promises: vec![], stalk_place: String::new(), rainy: false, exam_week: false, company_place: String::new(), company_role: String::new(), classes: vec![], timetable: false, seed }
+        Inputs { profile, weekday, money_stress: 0.0, energy: 90.0, satiety: 50.0, wealth: 0, promises: vec![], stalk_place: String::new(), rainy: false, exam_week: false, company_place: String::new(), company_role: String::new(), classes: vec![], timetable: false, seed }
     }
 
     #[test]
@@ -1166,5 +1225,71 @@ mod tests {
         let v = meal(&c, &r).unwrap();
         assert_eq!(v["frugal"], true, "{v}");
         assert_eq!(v["price"], 0);
+    }
+
+    #[test]
+    fn a_lunch_date_makes_her_breakfast_light() {
+        let c = Tuning::builtin().catalog;
+        let student = json!({"occupation": {"primary": "student"}});
+        let breakfast = |plan: &[Block]| plan.iter().filter(|x| x.kind == "meal" && x.start < 600).min_by_key(|x| x.start).cloned();
+        for seed in 1..40 {
+            let mut i = inputs(&student, seed % 7, seed * 7919);
+            // no date: breakfast as always (half an hour, her own budget)
+            if let Some(b) = breakfast(&plan_day(&i, &c)) {
+                assert!(b.budget >= 0 && b.end - b.start == 30, "seed {seed}: an ordinary day's breakfast changed: {b:?}");
+            }
+            // a 12:00 lunch date at the cafeteria: a quarter of an hour, marked light, as early as she has it
+            i.promises = vec![block(720, 810, "cafeteria", "promise", "promise", "", 0)];
+            let plan = plan_day(&i, &c);
+            let b = breakfast(&plan).expect("hungry in the morning, she still has breakfast");
+            assert!(b.budget < 0 && b.end - b.start <= LIGHT_MEAL_MINUTES, "seed {seed}: breakfast before the lunch date not light: {b:?}");
+            assert!(!plan.iter().any(|x| x.kind == "meal" && x.start >= 600 && x.start < 870), "seed {seed}: she ate lunch alone");
+            // not hungry in the morning: no breakfast before the lunch date; an ordinary day keeps it
+            i.satiety = 76.0;
+            assert!(breakfast(&plan_day(&i, &c)).is_none(), "seed {seed}: breakfast at 76 before the lunch date");
+            let date = std::mem::take(&mut i.promises);
+            assert!(breakfast(&plan_day(&i, &c)).is_some(), "seed {seed}: no breakfast on an ordinary day at 76");
+            i.promises = date;
+            i.satiety = 50.0;
+            // a date at a place without food is not a meal: breakfast stays
+            i.promises = vec![block(720, 810, "library", "promise", "promise", "", 0)];
+            assert!(breakfast(&plan_day(&i, &c)).map_or(true, |b| b.budget >= 0), "seed {seed}: a library meeting made breakfast light");
+        }
+    }
+
+    #[test]
+    fn a_dinner_date_makes_her_lunch_light() {
+        let c = Tuning::builtin().catalog;
+        let p = json!({});
+        for seed in 1..40 {
+            let mut i = inputs(&p, seed % 7, seed * 104729);
+            i.promises = vec![block(1140, 1230, "restaurant", "promise", "promise", "", 0)];
+            for m in plan_day(&i, &c).iter().filter(|x| x.kind == "meal" && x.source == "need" && x.end <= 1140 && x.start >= 1140 - LIGHT_BEFORE_DATE) {
+                assert!(m.budget < 0 && m.end - m.start <= LIGHT_MEAL_MINUTES, "seed {seed}: her meal before the 19:00 dinner date: {m:?}");
+            }
+        }
+        // made at nine for noon: her breakfast still ahead turns light, the meals after the date stay
+        let day = json!([{"start": 480, "end": 510, "place": "conveni", "kind": "meal", "source": "need", "budget": 17},
+                         {"start": 1080, "end": 1140, "place": "cafeteria", "kind": "meal", "source": "need", "budget": 40}]);
+        let out = plan_set_promises(&c, &json!({"blocks": day, "promises": [{"start": 720, "place": "cafeteria"}]})).unwrap();
+        let blocks: Vec<Block> = serde_json::from_value(out["blocks"].clone()).unwrap();
+        let first = blocks.iter().find(|b| b.start == 480).unwrap();
+        assert!(first.budget < 0 && first.end == 495, "{first:?}");
+        assert!(blocks.iter().find(|b| b.start == 1080).unwrap().budget == 40);
+    }
+
+    #[test]
+    fn a_light_meal_is_a_small_dish() {
+        let c = Tuning::builtin().catalog;
+        for seed in 1..30 {
+            let r = json!({"relation": {"id": "a", "cash": 500, "satiety": 60.0}, "profile": {}, "place": "cafeteria", "budget": -17, "month": 9, "seed": seed});
+            let v = meal(&c, &r).unwrap();
+            let fill = c.items.iter().find(|it| it.id == v["item"].as_str().unwrap_or("")).and_then(|it| it.effects.get("satiety").copied()).unwrap_or(LIGHT_MEAL_FILL);
+            assert!(fill <= LIGHT_MEAL_FILL, "seed {seed}: a light breakfast of {v}");
+            assert!(v["relation"]["satiety"].as_f64().unwrap_or(60.0) <= 60.0 + LIGHT_MEAL_FILL as f64 + 0.01, "{v}");
+        }
+        // an ordinary meal there can still be the rice bowl
+        let r = json!({"relation": {"id": "a", "cash": 500, "satiety": 30.0}, "profile": {}, "place": "cafeteria", "budget": 40, "month": 9, "seed": 1});
+        assert!(meal(&c, &r).unwrap()["item"].is_string());
     }
 }
