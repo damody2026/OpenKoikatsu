@@ -1422,6 +1422,7 @@ impl Director {
                 visible: ui,
                 name,
                 name_color: color,
+                text: self.st.typing.full.clone(),
                 text_visible: self.st.typing.visible(),
                 shown: self.st.typing.shown,
                 total: self.st.typing.total,
@@ -1449,6 +1450,7 @@ impl Director {
             if self.st.phase == Phase::Ended && ui {
                 f.dialog.visible = true;
                 f.dialog.text_visible = self.words.t("ui.end");
+                f.dialog.text = f.dialog.text_visible.clone();
                 f.dialog.shown = text::graphemes(&f.dialog.text_visible).len();
                 f.dialog.total = f.dialog.shown;
                 f.dialog.opacity = self.st.settings.ui_opacity;

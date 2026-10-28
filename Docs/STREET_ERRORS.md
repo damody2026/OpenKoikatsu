@@ -884,3 +884,25 @@
 - 修正（`OKStreetSocialParty.inl` `FinishPartyTalk`）：說話對象在同一則回覆裡要離開、而群裡還有不離開的人時，先交接（`PartyHandOver`），由接手的人執行 `do_now`。
 - 第二次重現時模型沒填 `do_now`（安可答應了卻沒動）：群聊提示只有「大家一起去」，沒有「部分人去、她留下」的寫法。三種語言的 `ai_party_prompt` 補一句：有人不能去（例如在上班）時，答應的人照填 `do_now`，不能去的人放進 `leave`。
 - 驗證（Gal1027S2，新存檔）：將軍留在咖啡廳，安可和他一起走到學生餐廳（log「actor 2 leaves in the reply that agreed on cafeteria; 10 does it」）。
+
+### 2026-10-28 他只問「推薦哪一杯」，判斷器就替他點了她推薦的拿鐵（E 組 galgame，新存檔實玩）
+- 咖啡廳，雷電將軍上班中。他問「妳推薦哪一杯？」，她回「拿鐵算是穩妥的選擇」。判斷器的 `orders` 填了拿鐵（log `Street judge order: 拿鐵 for him`），他接著說要抹茶拿鐵，桌上變成兩杯、錢包也扣了兩杯。
+- `ai_judge_prompt` 的 orders 規則只寫「只是提到、以後才要的不要填」，沒說她推薦的不算他點。三種語言補一句：他只是問推薦、她推薦了某個品項，他還沒說要它就不要填。
+- 驗證：遊戲裡 `/rules reload` 後再問「甜點有什麼推薦」，她推薦檸檬塔與提拉米蘇，沒有任何 `judge order`。
+
+### 2026-10-28 群聊裡約好「傍晚一起吃晚餐」，大家都答應了，卻什麼都沒記下（E 組 galgame，新存檔實玩）
+- 學生餐廳，惠惠與安可群聊。他說「傍晚五點半大家一起去吃晚餐好不好？」，兩人都答應（「好耶～晚餐！」「哼，吾准了」）。
+- 群聊回覆格式（`ai_party_prompt`）沒有 `promise` 欄位，`FinishPartyTalk` 也不看；1 對 1 的約定是判斷器的 `promise` 交給 `AddPromiseFromChat`，群聊不走判斷器。結果傍晚誰也不會來。
+- 修正：三種語言的 `ai_party_prompt` 加 `promise`（`who` 列出答應的人，day／time／place／what 和判斷器同格式、同時段換算）；`FinishPartyTalk` 對每位答應的人呼叫 `AddPromiseFromChat`，和 1 對 1 的約定一樣由 `promise.rs` 決定新約、改期或打不開門。log：`Street party promise: day ... N agreed`。
+- 驗證（Gal1028C～F，新存檔 slot 3 重玩）：`Street party promise: day "+0" time "17:30" at department ..., 2 agreed`，安可、惠惠各訂一筆 17:30 的約；另與雷電將軍 1 對 1 約同一時間地點。
+
+### 2026-10-28 三人約在同一時間地點，只有第一位來，另兩位整晚沒出現（E 組 galgame，新存檔實玩）
+- 17:30 百貨三個約定同時到點。`ArriveNow` 一次只讓一位「走過來」，另兩位只印 `waits, another girl is walking over` 就沒有下文，約定卻已算赴約（`0 pending of 3`）。
+- 修正（`OKStreetSocialAppointments.inl`）：在等的人排進 `ArriveLater` 下一分鐘重試，最多等 60 分鐘；到時他若正和別人說話就以加入（join）的方式過來；重試迴圈先收集到期的人再處理，不在迭代中改 map。
+- 驗證（Gal1028C～F）：安可先到，惠惠、將軍依序 `came for their meeting and joins the talk`，四人一起上九樓美食街、各自點餐。
+
+### 2026-10-28 一起搭電梯時，畫面整片是她的後腦與頭髮（E 組 galgame）
+- 走路時街頭跟隨鏡頭看兩人中間；電梯裡她站在鏡頭和他之間、離鏡頭不到 1 m，頭髮擋滿畫面。
+- 先試「被牆擠壓時鏡頭升高往下看」：電梯車廂頂沒有碰撞，鏡頭穿出車頂拍到屋頂，放棄。
+- 修正（`OKStreetSocialScene.cpp`）：街頭跟隨鏡頭（不含 galgame 對話鏡頭）前方 1 m 內、畫面中央 30° 內的女角，暫時從主畫面隱藏（`PC->HiddenPrimitiveComponents`），鏡頭有空間後恢復；他本人不隱藏，立繪擷取不受影響。
+- 驗證（Gal1028F）：電梯裡看到他與車廂、說話者立繪照常；到九樓後全員正常顯示。

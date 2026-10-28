@@ -35,9 +35,12 @@ namespace
 		return FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, F);
 	}
 
-	/** Lines of `Text` no wider than `Width` (latin words kept whole where they fit, any other script by character). */
-	TArray<FString> OKStoryWrap(const FString& Text, const FSlateFontInfo& F, float Width)
+	/** Lines of `Text` no wider than `Width` (latin words kept whole where they fit, any other script by character).
+	 * Only the first `Visible` characters are returned, laid out where the whole text puts them, so typing a line
+	 * out never moves characters from one line to the next. */
+	TArray<FString> OKStoryWrap(const FString& Text, const FSlateFontInfo& F, float Width, int32 Visible = MAX_int32)
 	{
+		struct FSpan { int32 Start, Len; };
 		TArray<FString> Lines;
 		FString Paragraphs = Text;
 		Paragraphs.ReplaceInline(TEXT("\r"), TEXT(""));
@@ -45,50 +48,74 @@ namespace
 		Paragraphs.ParseIntoArray(Parts, TEXT("\n"), false);
 		// Punctuation that never starts a line (it goes up with the character before it).
 		auto Closing = [](TCHAR C) { return FCString::Strchr(TEXT("。，、．！？：；）」』】〉》…～ー,.!?:;)"), C) != nullptr; };
+		int32 PartStart = 0;
+		const FString* Current = nullptr;
+		// How many characters before `At` go down to the next line so that it does not start with a mark: the one
+		// before `At` and every mark in front of it (never back to `From`).
+		auto Back = [&](int32 At, int32 From)
+		{
+			int32 N = 1;
+			while (At - N > From && Closing((*Current)[At - N])) ++N;
+			return N;
+		};
 		for (const FString& Part : Parts)
 		{
-			const int32 First = Lines.Num();
-			FString Line;
+			Current = &Part;
+			TArray<FSpan> Spans;
+			int32 LineStart = 0;
 			int32 LastSpace = -1;
 			for (int32 I = 0; I < Part.Len(); ++I)
 			{
-				const FString Next = Line + FString::Chr(Part[I]);
-				if (Line.Len() && OKStoryMeasure(Next, F).X > Width)
+				if (I > LineStart && OKStoryMeasure(Part.Mid(LineStart, I + 1 - LineStart), F).X > Width)
 				{
-					if (LastSpace > 0 && !FChar::IsWhitespace(Part[I]))
+					if (LastSpace > LineStart && !FChar::IsWhitespace(Part[I]))
 					{
-						Lines.Add(Line.Left(LastSpace));
-						Line = Line.Mid(LastSpace + 1) + FString::Chr(Part[I]);
+						Spans.Add({LineStart, LastSpace - LineStart});
+						LineStart = LastSpace + 1;
 					}
-					else if (Closing(Part[I]) && Line.Len() > 1)
+					else if (Closing(Part[I]) && I - LineStart > Back(I, LineStart))
 					{
-						// 「…乾乾淨」/「淨。」 would start a line with 。: the character before it goes down with it.
-						Lines.Add(Line.LeftChop(1));
-						Line = Line.Right(1) + FString::Chr(Part[I]);
+						// 「…乾乾淨」/「淨。」 would start a line with 。: the character before it goes down with it (and 「淨。」」
+						// with both marks).
+						const int32 Down = Back(I, LineStart);
+						Spans.Add({LineStart, I - Down - LineStart});
+						LineStart = I - Down;
 					}
 					else
 					{
-						Lines.Add(Line);
-						Line = FChar::IsWhitespace(Part[I]) ? FString() : FString::Chr(Part[I]);
+						Spans.Add({LineStart, I - LineStart});
+						LineStart = FChar::IsWhitespace(Part[I]) ? I + 1 : I;
 					}
 					LastSpace = -1;
-					continue;
+					if (LineStart > I) continue;
 				}
-				if (FChar::IsWhitespace(Part[I])) LastSpace = Line.Len();
-				Line = Next;
+				if (FChar::IsWhitespace(Part[I])) LastSpace = I;
 			}
-			// One or two characters left alone on a wrapped paragraph's last line (「淨。」): one more comes down from the
-			// line above, unless that one ends in a space (latin words are kept whole).
-			if (Lines.Num() > First && Line.Len() <= 2)
+			// One or two characters left alone on a wrapped paragraph's last line (「淨。」, 「淨。」」: marks do not count):
+			// one more comes down from the line above, with the marks after it (「，」 never starts the line), unless a space
+			// separates them or it is a latin letter or digit (words are kept whole).
+			if (Spans.Num())
 			{
-				FString& Above = Lines.Last();
-				if (Above.Len() >= 4 && !FChar::IsWhitespace(Above[Above.Len() - 1]) && !(Above[Above.Len() - 1] < 128 && FChar::IsAlpha(Above[Above.Len() - 1])))
+				int32 Alone = 0;
+				for (int32 I = LineStart; I < Part.Len(); ++I) Alone += !Closing(Part[I]) && !FChar::IsWhitespace(Part[I]);
+				FSpan& Above = Spans.Last();
+				const int32 End = Above.Start + Above.Len;
+				const int32 Down = Above.Len ? Back(End, Above.Start) : 0;
+				const TCHAR C = Above.Len ? Part[End - Down] : TEXT(' ');
+				if (Alone <= 2 && Above.Len - Down >= 3 && End == LineStart && !Closing(C) && !FChar::IsWhitespace(C) && !(C < 128 && FChar::IsAlnum(C)))
 				{
-					Line = Above.Right(1) + Line;
-					Above.LeftChopInline(1);
+					Above.Len -= Down;
+					LineStart -= Down;
 				}
 			}
-			Lines.Add(Line);
+			Spans.Add({LineStart, Part.Len() - LineStart});
+			for (const FSpan& S : Spans)
+			{
+				const int32 Shown = FMath::Min(S.Len, Visible - (PartStart + S.Start));
+				if (Shown < 0 || (Shown == 0 && S.Len > 0)) return Lines;
+				Lines.Add(Part.Mid(S.Start, Shown));
+			}
+			PartStart += Part.Len() + 1;
 		}
 		return Lines;
 	}
@@ -247,7 +274,11 @@ int32 SOKStoryView::OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const 
 		}
 		Y += NamePx * 1.75;
 		const FSlateFontInfo F = OKStoryFont(TextPx);
-		const TArray<FString> Lines = OKStoryWrap(OKStoryStr(Dialog, TEXT("text_visible")), F, float(W * 0.95 - TextLeft));
+		// Lay out the whole line and show the typed part of it (older story DLLs only send the typed part).
+		FString Typed = OKStoryStr(Dialog, TEXT("text_visible")), Whole = OKStoryStr(Dialog, TEXT("text"));
+		Typed.ReplaceInline(TEXT("\r"), TEXT(""));
+		if (!Whole.Replace(TEXT("\r"), TEXT("")).StartsWith(Typed, ESearchCase::CaseSensitive)) Whole = Typed;
+		const TArray<FString> Lines = OKStoryWrap(Whole, F, float(W * 0.95 - TextLeft), Typed.Len());
 		double LastX = TextLeft, LastY = Y;
 		for (const FString& Line : Lines)
 		{

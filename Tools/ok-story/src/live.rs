@@ -538,6 +538,7 @@ impl Live {
                 visible: true,
                 name: line.name.clone(),
                 name_color: line.color.clone(),
+                text: self.st.typing.full.clone(),
                 text_visible: self.st.typing.visible(),
                 shown: self.st.typing.shown,
                 total: self.st.typing.total,

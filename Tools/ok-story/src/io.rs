@@ -224,6 +224,8 @@ pub struct DialogOut {
     pub visible: bool,
     pub name: String,
     pub name_color: String,
+    /// The whole line; the widget lays it out once so typing never moves characters between lines.
+    pub text: String,
     pub text_visible: String,
     pub shown: usize,
     pub total: usize,

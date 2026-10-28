@@ -255,7 +255,7 @@ struct FOKStreetSceneState {
  TMap<FString,FString> MindRecent;int64 NeedsTickMinute=-1,BondTickMinute=-1;
  // OKStreetSocialLife.inl
  int32 LifeWishDay=-1;TArray<FOKLifePose> LifePoses;double LifeCheckAt=0,LifeFaceAt=0,LifeWishAt=0;TMap<int32,double> LifeCooldown;TMap<int32,FVector> LifeRestore;
- TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
+ TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater,ArriveWaiting;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
  // OKStreetSocialPhoneInbox.inl: her history, the phone (messages, calls), and what is apart.
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
@@ -532,7 +532,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  mutable TMap<FString,int64> LocalAmounts; // Local(): region|kind|base -> amount, cleared when the region changes
  FString BluffOnArrival;double BluffDealBy=0; // ...and the time to wait for the others to sit down // the outing that takes them in to play cards: the game is dealt when it arrives (ArriveOuting)
  FVector SpotSavedMale=OKStreetMaleSpawn();double SpotSavedAt=0; // his position in the save, and when it was written (SaveCalendar)
- float Yaw=90,Pitch=-12,Distance=350,PeakMouth=0;
+ float Yaw=90,Pitch=-12,Distance=350,PeakMouth=0;TArray<TWeakObjectPtr<UPrimitiveComponent>> CameraHidden; // CameraHidden: whoever the follow camera is pressed into, left out of the view
  bool MouseUI=false,ViewportFocused=false,MouseToggleRequested=false,MouseModeChecked=false;
  FString SaveMenu,SaveNotice,NewGameRegion;bool SaveConfirmNew=false,SaveMenuPausedClock=false,SaveRestarting=false,StartMenuDecided=false,SaveApplied=false;double NextAutoSave=0; // OKStreetSocialSaves.inl
  int32 FacingChecks=0;
@@ -3777,6 +3777,17 @@ void AOKStreetSocialScene::Tick(float Dt){
   if(S.Pair.Watermelon&&S.Pair.Phase==1){Focus=(S.Male+S.Agents[S.Pair.Partner-1].Position)*.5f+FVector(0,35,80);Pivot=Focus;}
   GalgameWalkFocus(Focus,Pivot); // walking and talking: between him and her (OKStreetSocialGalgame.inl)
   const FRotator View(S.Pitch,S.Yaw,0);const FVector Wanted=Pivot-View.Vector()*S.Distance+(S.Target!=INDEX_NONE?FRotationMatrix(View).GetUnitAxis(EAxis::Y)*(S.Pair.Conversation()?-120.f:110.f):FVector::ZeroVector);FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(StreetCamera),false,this);const bool Blocked=GetWorld()->SweepSingleByChannel(Hit,Pivot,Wanted,FQuat::Identity,ECC_WorldStatic,FCollisionShape::MakeSphere(8),Query);S.Camera->SetActorLocation(Blocked?Hit.Location:Wanted);S.Camera->SetActorRotation((Focus-S.Camera->GetActorLocation()).Rotation());
+   // Right in front of the lens (in the lift she stood between the camera and him, under a metre from it: her back and
+   // hair filled the view): she is left out of the view until the camera has room again; her portrait still shows her.
+   // Not him (he is who is walked). Only for the street's own follow camera: the scene's shots hide what is in their way
+   // themselves (TickGalgame).
+   PC->HiddenPrimitiveComponents.RemoveAll([&S](const TWeakObjectPtr<UPrimitiveComponent>& P){return S.CameraHidden.Contains(P);});S.CameraHidden.Reset();
+   if(S.Target==INDEX_NONE){const FVector Lens=S.Camera->GetActorLocation(),Ahead=S.Camera->GetActorForwardVector();TArray<UPrimitiveComponent*> Inside;
+    for(int32 Slot=1;Slot<S.Manifest.Characters.Num();++Slot){FOKRuntimeCharacterStatus O;if(!OKGetCrowdRuntimeCharacterStatus(this,Slot,O)||!O.Visible)continue;
+     bool bIn=false;for(const float Z:{60.f,100.f,140.f}){const FVector Rel=O.Transform.GetLocation()+FVector(0,0,Z*FMath::Max(O.Transform.GetScale3D().Z,.1))-Lens;const float Depth=float(Rel|Ahead);
+      bIn|=Rel.Size()<55.f||(Depth>0.f&&Depth<100.f&&Depth>float(Rel.Size())*.87f);} // within 30 degrees of the middle of the view
+     if(bIn)OKGetCrowdRuntimeCharacterComponents(this,Slot,Inside);}
+    for(UPrimitiveComponent* Prim:Inside){PC->HiddenPrimitiveComponents.AddUnique(Prim);S.CameraHidden.Add(Prim);}}
   {FVector SongAt,SongFocus;if(SongCameraShot(SceneTime(),Dt,SongAt,SongFocus)){S.Camera->SetActorLocation(SongAt);S.Camera->SetActorRotation((SongFocus-SongAt).Rotation());S.Camera->GetCameraComponent()->SetFieldOfView(40.f);}}if(GControlCamera.Active&&!OKApplyControlCamera(this,S.Camera.Get()))GControlCamera.Active=false;OKUpdateCrowdRuntimeDisplayLighting(this,-S.Camera->GetActorForwardVector());}
  if(S.Camera.IsValid()&&SceneTime()<S.PhotoViewUntil)S.Camera->SetActorLocationAndRotation(S.PhotoViewLoc,S.PhotoViewRot); // a photo being taken
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickGalgame);TickGalgame(Dt);} // conversations as galgame scenes: dialog box, portrait, a shot per line (OKStreetSocialGalgame.inl)

@@ -396,6 +396,18 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
    UE_LOG(LogTemp,Display,TEXT("Street party: actor %d kept -> %s"),G,Keep?TEXT("stays"):TEXT("refuses, goes now"));}}
  // He told them himself about another girl (told_about, the AI's reading): every girl here heard it from him.
  {TArray<FString> Told;FString One;const TArray<TSharedPtr<FJsonValue>>* List=nullptr;if(Reply->TryGetArrayField(TEXT("told_about"),List))for(const auto& V:*List){FString N;if(V.IsValid()&&V->TryGetString(N)&&!N.IsEmpty())Told.Add(N);}else if(Reply->TryGetStringField(TEXT("told_about"),One)&&!One.IsEmpty())Told.Add(One);for(const FString& N:Told){if(Partner!=INDEX_NONE)ToldAboutRival(Partner,N);for(const int32 G:S.Party)if(G!=Partner)ToldAboutRival(G,N);}}
+ // A meeting later agreed on in front of everyone ("dinner at half past five, all of us"): each who said yes has it with
+ // him, booked as in a talk of two (AddPromiseFromChat, promise.rs). The group reply had no such field, and at half past
+ // five nobody came.
+ {const TSharedPtr<FJsonObject>* Promise=nullptr;
+  if(!OKStreetFreeTalkIsNudge(Text)&&Reply->TryGetObjectField(TEXT("promise"),Promise)&&Promise&&Promise->IsValid()){
+   FString Day,Time,Place,What;double Hours=0;(*Promise)->TryGetStringField(TEXT("day"),Day);(*Promise)->TryGetStringField(TEXT("time"),Time);
+   (*Promise)->TryGetStringField(TEXT("place"),Place);(*Promise)->TryGetStringField(TEXT("what"),What);(*Promise)->TryGetNumberField(TEXT("hours"),Hours);
+   TArray<int32> Agreed;const TArray<TSharedPtr<FJsonValue>>* Who=nullptr;
+   if((*Promise)->TryGetArrayField(TEXT("who"),Who))for(const auto& V:*Who){FString Name;const int32 G=V.IsValid()&&V->TryGetString(Name)?Find(Name):INDEX_NONE;if(G!=INDEX_NONE)Agreed.AddUnique(G);}
+   UE_LOG(LogTemp,Display,TEXT("Street party promise: day \"%s\" time \"%s\" at %s (%s), %d agreed"),*Day,*Time,*Place,*What,Agreed.Num());
+   if(!Place.IsEmpty()||!Day.IsEmpty())for(const int32 G:Agreed){const TArray<FString>* Hers=Said.Find(G);
+    AddPromiseFromChat(G,Day,Time,Place,What,Text+TEXT("\n")+(Hers?FString::Join(*Hers,TEXT("")):FString()),Text,false,float(Hours));}}}
  FString DoNow,Why;Reply->TryGetStringField(TEXT("do_now"),DoNow);Reply->TryGetStringField(TEXT("why"),Why);
  UE_LOG(LogTemp,Display,TEXT("Street party talk: %d lines, do_now=\"%s\"; %s"),Lines.Num(),*DoNow,*Why);
  // Something to do now starts from what he said: a turn that was only the situation (his silence, the end of a game)

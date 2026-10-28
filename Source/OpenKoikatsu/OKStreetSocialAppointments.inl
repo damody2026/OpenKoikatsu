@@ -285,12 +285,21 @@ void AOKStreetSocialScene::TickAppointments(){
     S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachJoin=Join;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
     UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
    }else if(WithHim){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
-   else{UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d)"),Girl,S.ApproachGirl);}
+   else{
+    // Another one walking over first (the three of them meeting for dinner): she comes after her, not never. Only the
+    // first came; the other two stood at home all evening, their meetings already counted as kept.
+    const bool First=!S.ArriveWaiting.Contains(Girl);const int64 Since=S.ArriveWaiting.FindOrAdd(Girl,OKStreetMindNow(S));
+    if(OKStreetMindNow(S)-Since<=60){S.ArriveLater.Add(Girl,OKStreetMindNow(S)+1);if(First)UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waits, another girl is walking over (approach=%d); she comes after her"),Girl,S.ApproachGirl);}
+    else{S.ArriveWaiting.Remove(Girl);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d waited an hour for another girl walking over (approach=%d); gives up"),Girl,S.ApproachGirl);}
+    return;}
+   S.ArriveWaiting.Remove(Girl);
  };
  // Up on his floor (the lift ride is over): she walks over to him from there. Given up if he left that floor meanwhile.
  for(auto It=S.ArriveAfterLift.CreateIterator();It;++It){const int32 G=*It;if(S.NpcLifts.Contains(G))continue;It.RemoveCurrent();
   if(S.Agents.IsValidIndex(G-1)&&FMath::Abs(S.Agents[G-1].Position.Z-S.Male.Z)<100.f)ArriveNow(G);else UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor"),G);}
- for(auto It=S.ArriveLater.CreateIterator();It;++It)if(Now>=It.Value()){const int32 Girl=It.Key();It.RemoveCurrent();ArriveNow(Girl);}
+ // Due now (after her shift, or after the one walking over before her); he talking with another girl by then, she joins them.
+ {TArray<int32> Due;for(auto It=S.ArriveLater.CreateIterator();It;++It)if(Now>=It.Value()){Due.Add(It.Key());It.RemoveCurrent();}
+  for(const int32 Girl:Due){const int32 With=FreeTalkPartner();ArriveNow(Girl,With!=INDEX_NONE&&With!=Girl);}}
  if(!S.Store.Appointments.ContainsByPredicate([](const FOKStreetAppointment& A){return A.Status==TEXT("pending");})&&!S.Store.Appointments.ContainsByPredicate([&](const FOKStreetAppointment& A){return Now-A.Start>2*1440;}))return;
  auto IdOf=[&](int32 I){return I>0&&S.Manifest.Characters.IsValidIndex(I)?OKStreetStableId(S.Manifest.Characters[I]):FString();};
  auto Request=OKRulesRequest(TEXT("appointments_tick"));Request->SetNumberField(TEXT("now"),double(Now));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
