@@ -214,6 +214,11 @@ SelectIndex / Outfit 選擇
 | `card.rs`、`list.rs`、`mods.rs` | 人物／服裝資料、ChaList、GUID 與 bundle override 解析 |
 | `unity.rs`、`unity/references.rs` | Unity bundle、物件參照、mesh／texture／材質／prefab 解碼 |
 | `session.rs` | 部件與角色狀態、身形初始化、動畫幀、骨架／palette、物理及輸出協調 |
+| `extract.rs` | 開卡主流程 `extract_session_from_info`（依 OK_PROFILE 的階段逐步拆成函式，例如 `lists_stage`；見 [重構計畫](Docs/OK_EXTRACT_REFACTOR_PLAN.md)） |
+| `entries.rs`、`push.rs` | 清單項目轉網格（entry 記憶、穿著狀態規則、預取）；部件推送進 session（`PushCtx`／`PushBatch`、`push_meshes`） |
+| `texture_bake.rs`、`catalog_textures.rs`、`clothes_texture.rs`、`face_texture.rs` | 貼圖：PNG 與 sRGB 工具、眼白／虹膜烘焙；目錄貼圖與衣服 create 槽；衣服圖樣、GPU／CPU 顏色遮罩、over mask；臉部貼圖與合成 |
+| `head_body.rs`、`face_shapes.rs`、`accessories.rs`、`material_editor.rs` | 頭部與身體部件、uncensor；嘴型與 FBS 權重；頭髮與配件上色、選取穿著的衣服；Material Editor 與渲染設定 |
+| `placement.rs`、`rig.rs` | 部件寫出、蒙皮、掛點鏈與配件擺放；`rig_mesh`、`remap_part_to_body` |
 | `pose.rs`、`shape.rs`、`shape/hand.rs`、`abmx.rs` | 骨架階層／矩陣、身體與臉部 shape keys、手型、ABM／ABMX |
 | `anim.rs`、`anim/controller.rs`、`anim/crossfade.rs` | clip／state 取樣、blend tree、layers／mask／Additive、過渡與時鐘 |
 | `anim/yure.rs`、`pv.rs` | Studio Yure 與 PV／FK 對應語義 |
