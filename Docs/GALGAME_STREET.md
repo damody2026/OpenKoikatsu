@@ -263,3 +263,4 @@ Gal1028R，`/private girl 3`，兩次：card 185／224 ms、session 5073／5556 
 - **身體互動資料每次重讀**：`FOKBodyInteraction::Prepare` 每次進 1 對 1 都在主執行緒解析 8.5 MB 的 `catalog-v1.json`（`prepare_ms` 620～740）。改成程序內只解析一次（`WarmShared`），並在 `LoadFemale` 的背景工作先讀好；之後 `prepare_ms` 60（第一次）／3.5（第二次），log 拆成 data／colliders／reaction。
 - 進場那一幀：1477 ms → 1099 ms（T）→ 568 ms（U）。剩下的是同步 `LoadObject`（`FlushAsyncLoading` 112 ms）、`KK_GalleryPairs` 103 ms，以及部件裝配期間的 `UTexture2D::UpdateResource`（`TryLoadMips`，每張最多約 50 ms）和一次 `Sync_RenderingThread` 810 ms。
 - 配對清單（`NativeAnimationPairs`）改在 `LoadFemale` 的背景工作先取，`RefreshPairs` 沿用（圖庫自己的載入本來就這樣做）；Gal1028V 的 trace 裡 `KK_GalleryPairs`（86～103 ms）不見了。
+- 背景優先權之後，平行解碼仍占滿全部背景 worker，渲染圖（RDG）的工作排在後面，渲染執行緒等了 590～810 ms。改成最多 `NumWorkers/4`（2～8）條通道、各自從 atomic 取下一張貼圖（解碼受記憶體頻寬限制：依序約 10 s，31 條約 1 s 但總 CPU 約 30 s）。Gal1028V：等渲染執行緒最長 810 → 220 ms、進場那一幀 568 → 471 ms、超過 15 ms 的幀合計 5.4 → 3.4 s；materials 約 1.0 → 2.1 s，按下到進入 1 對 1 仍約 8.5 s。

@@ -13,6 +13,8 @@
 #include "Misc/ScopeExit.h"
 #include "HAL/Event.h"
 #include "Async/ParallelFor.h"
+#include "Async/TaskGraphInterfaces.h"
+#include <atomic>
 
 namespace {
 // Immutable prepared pixels only; each card retains its own material bindings.
@@ -187,11 +189,13 @@ static bool CaptureRuntimeMaterials(OkSession* Session,TConstArrayView<FKKRuntim
  }
  if(!Pending.IsEmpty()){
   // Each pending texture has its own key (distinct hash/settings), so no two jobs join one flight here.
-  // Background priority: on foreground workers too, March 7th's 2 s of decoding (42 s of CPU) held the game thread's
-  // end-of-tick tasks for 1.4 s, a frozen frame while her 1-on-1 scene loaded behind the street.
-  TArray<FString> Errors;Errors.SetNum(Pending.Num());
-  ParallelFor(Pending.Num(),[&](int32 J){const auto& Job=Pending[J];const auto& Source=Sources[Job.Index];FKKRuntimePreparedTexture T;
-   if(PrepareSharedRuntimeTexture(Job.Key,Job.Hash,Source.GetData(),Source.Num(),Job.Settings,T,Errors[J]))D.Textures[Job.Index]=MoveTemp(T);else if(Errors[J].IsEmpty())Errors[J]=TEXT("Runtime texture preparation failed");},EParallelForFlags::Unbalanced|EParallelForFlags::BackgroundPriority);
+  // A few lanes at background priority, each taking the next texture: on every worker, March 7th's decoding (about 30 s
+  // of CPU in 1 s, memory bound: 10 s on one thread) held the game thread's end-of-tick tasks for 1.4 s and, at
+  // background priority alone, the render graph's tasks for 0.6 s while her 1-on-1 scene loaded behind the street.
+  TArray<FString> Errors;Errors.SetNum(Pending.Num());std::atomic<int32> Next{0};
+  const int32 Lanes=FMath::Min(Pending.Num(),FMath::Clamp(FTaskGraphInterface::Get().GetNumWorkerThreads()/4,2,8));
+  ParallelFor(Lanes,[&](int32){for(int32 J=Next++;J<Pending.Num();J=Next++){const auto& Job=Pending[J];const auto& Source=Sources[Job.Index];FKKRuntimePreparedTexture T;
+   if(PrepareSharedRuntimeTexture(Job.Key,Job.Hash,Source.GetData(),Source.Num(),Job.Settings,T,Errors[J]))D.Textures[Job.Index]=MoveTemp(T);else if(Errors[J].IsEmpty())Errors[J]=TEXT("Runtime texture preparation failed");}},EParallelForFlags::Unbalanced|EParallelForFlags::BackgroundPriority);
   for(const FString& E:Errors)if(!E.IsEmpty())return Fail(E);
   for(const auto& Job:Pending){for(const auto& L:D.Textures[Job.Index].Mips)D.PixelBytes+=L.BGRA.GetAllocatedSize();}
   if(D.PixelBytes>PixelBudget)return Fail(TEXT("Runtime prepared texture pixels exceed budget"));
