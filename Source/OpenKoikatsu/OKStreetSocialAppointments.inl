@@ -212,6 +212,10 @@ void AOKStreetSocialScene::CancelAppointment(int32 AppointmentId){
   if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){ApplyRulesEffects(Candidate,*Answer);Comes=Answer->GetBoolField(TEXT("comes"));
    UE_LOG(LogTemp,Display,TEXT("Street appointment %d call cancel: cost %d%s"),AppointmentId,int32(Answer->GetNumberField(TEXT("cost"))),Comes?TEXT(", she comes to him"):TEXT(""));}
  }
+ // A yandere lover loses no favor over it: what her replies on this call took (said before the cancel was settled) is
+ // given back to where it was when the call began.
+ if(Comes&&S.RemotePeer==Girl&&S.CallStartFavor>=0){const int32 Index=OKStreetRelationIndex(Candidate,Id,S.Manifest.TalkBudget,true);
+  if(Candidate.Relations.IsValidIndex(Index)&&Candidate.Relations[Index].Favor<S.CallStartFavor){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d favor back to %.0f (was %.0f)"),Girl,S.CallStartFavor,Candidate.Relations[Index].Favor);Candidate.Relations[Index].Favor=S.CallStartFavor;}}
  if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
  if(Comes)YandereComes(Girl);
  // Called off to her face: she answers it in the talk (the cost is the rule's, not hers to add).

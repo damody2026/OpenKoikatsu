@@ -907,6 +907,10 @@
 - 修正（`OKStreetSocialScene.cpp`）：街頭跟隨鏡頭（不含 galgame 對話鏡頭）前方 1 m 內、畫面中央 30° 內的女角，暫時從主畫面隱藏（`PC->HiddenPrimitiveComponents`），鏡頭有空間後恢復；他本人不隱藏，立繪擷取不受影響。
 - 驗證（Gal1028F）：電梯裡看到他與車廂、說話者立繪照常；到九樓後全員正常顯示。
 
+### 2026-10-28 抖動診斷的門檻沒先核對，追錯了原因（C組 街區攻略）
+
+- R3-265 看到「Runtime pose jitter: 21 bones reverse 92 of 241」，就假設是三月七的頭髮，追 40 Hz 骨鏈、改 DynamicBones 修正，兩輪打包都沒變。其實 92 幀是腿（`__ok_palette_*` 是 palette 別名骨，名字看不出部位），每幀 0.4 mm，是 clip 本身的雜訊。偵測器的門檻是「鍵值到原點距離 × 0.002」，palette 平移靠近原點，門檻只剩 0.02 mm。
+- 規則：診斷 log 報出問題時，先查它報的骨頭是哪個部位、幅度多大、門檻怎麼定，再找原因；能離線重現就先寫離線測試（這次 `street_bake_jitter` 20 秒就分清楚），不要每試一個假設就打包一次。
 ### 2026-10-28 進 1 對 1 時她換了一套衣服，畫面上還有除錯字（E 組 galgame，新存檔實玩）
 - 胡桃在街上穿白帽制服，進 1 對 1 卻是粉色護士裝；雷電將軍也一樣。`selection.json` 的 `outfits` 指定每位在街上穿第幾套（將軍 4、胡桃 3），人群照著讀，`AOKInteractionMode::LoadFemale` 卻寫死開第 0 套。
 - 修正：街區讀 `outfits` 存成 `HighOutfits`，`EnterCards`／`LoadFemale` 多一個服裝參數，`BeginPrivate` 傳她街上那套。

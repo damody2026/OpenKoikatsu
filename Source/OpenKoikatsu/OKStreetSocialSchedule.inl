@@ -162,10 +162,12 @@ void AOKStreetSocialScene::TickSchedules(){
   if(Here!=S.EntryPlace){S.EntryPlace=Here;S.EntryMinutes=0;S.bEntrySettled=Here.IsEmpty()||!S.bEntryPlaceKnown;}else ++S.EntryMinutes;
   // She joined him inside (he bought his ticket alone, she met him in the hall): asked again, and the rules charge
   // only the ticket not bought yet today (R3-110).
-  const int32 WithHer=S.Companion!=INDEX_NONE?S.Companion:S.OutingGirl;
+  const int32 WithHer=EntryCompanion(Here);
   if(S.bEntrySettled&&!Here.IsEmpty()&&S.bEntryPlaceKnown&&WithHer>0&&WithHer!=S.EntryHer)S.bEntrySettled=false;
   if(!S.bEntrySettled)S.bEntrySettled=PayEntry(Here,S.EntryMinutes);
-  if(S.bEntrySettled)S.EntryHer=WithHer;S.bEntryPlaceKnown=true;}
+  // A minute without her on the way from meeting her to the activity with her is not another girl joining him: 胡桃
+  // met him at the aquarium door, they started looking at the fish, and both tickets were bought again (R3-267).
+  if(S.bEntrySettled&&(WithHer>0||Here!=S.EntryHerPlace)){S.EntryHer=WithHer;S.EntryHerPlace=Here;}S.bEntryPlaceKnown=true;}
  // Urgent needs (hungry, worn out, grimy) cut in before the plan: the rules decide (plan.rs schedule_tick).
  TMap<int32,TPair<int32,FOKStreetPlanBlock>> Urgents;
  {
@@ -200,7 +202,7 @@ void AOKStreetSocialScene::TickSchedules(){
   const FString Id=OKStreetStableId(S.Manifest.Characters[I]);
   const int32 Rel=OKStreetRelationIndex(S.Store,Id,S.Manifest.TalkBudget,true);if(!S.Store.Relations.IsValidIndex(Rel))continue;
   auto& R=S.Store.Relations[Rel];
-  int32 Index=INDEX_NONE;const FOKStreetPlanBlock* Block=BlockNow(I,Minute,&Index);
+  int32 Index=INDEX_NONE;const FOKStreetPlanBlock* Block=BlockNow(I,Minute,&Index);const int32 PlanIndex=Index;
   FOKStreetPlanBlock Urgent;
   if(const auto* U=Urgents.Find(I)){Urgent=U->Value;Block=&Urgent;Index=U->Key;}
   const int32 Previous=S.PlanBlock.FindRef(I,INDEX_NONE);
@@ -215,7 +217,9 @@ void AOKStreetSocialScene::TickSchedules(){
    const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);
    if(Out&&Out->GetBoolField(TEXT("keep"))){auto& A=S.Agents[I-1];
     A.Position=W->Spot;S.Rotations[I]=FRotator(0,W->Yaw,0);A.Held=true;S.ScheduleHeld.Add(I);S.PendingMoves.Remove(I);S.Commutes.Remove(I);
-    S.PlanBlock.Add(I,Index);S.PlanBlockSince.Add(I,Minute);S.WaitsForHim.Add(I,Now+int64(Out->GetNumberField(TEXT("wait_minutes"))));
+    // Her plan's block, not an urgent one (hungry: the cafeteria): that is still to come and waits like any change. Taken
+    // as hers already, 惠惠 "ate at the cafeteria" on the spot, standing by him in the aquarium (R3-272).
+    S.PlanBlock.Add(I,PlanIndex);S.PlanBlockSince.Add(I,Minute);S.WaitsForHim.Add(I,Now+int64(Out->GetNumberField(TEXT("wait_minutes"))));
     // The first who walked with him walks with him again; the others who followed him join the group again (R3-252).
     if(Out->GetBoolField(TEXT("follow"))){if(S.ResumeFollow==INDEX_NONE)S.ResumeFollow=I;else S.ResumeParty.AddUnique(I);S.ResumeFollowUntil=FPlatformTime::Seconds()+30;}
     UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), put back at %s"),I,*W->Mode,*W->Spot.ToCompactString());

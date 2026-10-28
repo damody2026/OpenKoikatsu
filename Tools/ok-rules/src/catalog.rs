@@ -31,6 +31,8 @@ pub struct Item {
     pub effects: BTreeMap<String, f32>,
     pub giftable: bool,
     pub consumable: bool,
+    /// The floor of a building it is sold on (the department store: 9F food court, 10F view restaurant); 0: anywhere there.
+    pub floor: i32,
 }
 
 impl Item {
@@ -103,6 +105,7 @@ impl Catalog {
                 effects: o.get("effects").and_then(Value::as_object).map(|m| m.iter().filter_map(|(k, v)| v.as_f64().map(|e| (k.clone(), e as f32))).collect()).unwrap_or_default(),
                 giftable: o.get("giftable").and_then(Value::as_bool).unwrap_or(false),
                 consumable: o.get("consumable").and_then(Value::as_bool).unwrap_or(true),
+                floor: o.get("floor").and_then(Value::as_i64).unwrap_or(0) as i32,
             };
             if !item.id.is_empty() && !item.price.is_empty() {
                 c.items.push(item);
@@ -188,9 +191,18 @@ pub fn taste_of(profile: &Value, item: &Item, sweetness: &str, ice: &str) -> i32
 
 /// Her choice eating out alone: liked items first, within budget, at this place.
 pub fn pick_meal<'a>(c: &'a Catalog, place: &str, month: i32, profile: &Value, budget: i32, rng: &mut RandomStream) -> Option<&'a Item> {
+    pick_meal_on(c, place, 0, month, profile, budget, rng)
+}
+
+/// pick_meal on one floor of the place (0: any): a meal at the 9F food court was billed as two hot coffees from the 10F
+/// view restaurant (R4-5).
+pub fn pick_meal_on<'a>(c: &'a Catalog, place: &str, floor: i32, month: i32, profile: &Value, budget: i32, rng: &mut RandomStream) -> Option<&'a Item> {
     let mut options = Vec::new();
     let mut liked = Vec::new();
     for i in c.items_at(place, month) {
+        if floor > 0 && i.floor > 0 && i.floor != floor {
+            continue;
+        }
         if !i.consumable || i.price_of(&i.default_size()) > budget.max(crate::region::amount("goods", 30) as i32) {
             continue;
         }

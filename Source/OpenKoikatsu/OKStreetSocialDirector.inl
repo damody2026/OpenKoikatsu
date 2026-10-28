@@ -50,7 +50,10 @@ FString AOKStreetSocialScene::TodayText(int32 Character) const{
   for(const auto& B:*Plan)if(B.End>Minute&&Next.Num()<4&&B.Kind!=TEXT("sleep")){const FOKStreetPlace* P=OKStreetFindPlace(B.Place);
    // On the hour or the quarter as people say it ("快十点"), not the staggered 09:44 she once repeated word for word.
    const int32 Said=(B.Start+7)/15*15;
-   Next.Add(FString::Printf(TEXT("%02d:%02d %s"),Said/60%24,Said%60,*OKMsg(TEXT("ui.director.plan_block"),{{TEXT("doing"),OKPhoneDoingWord(B.Kind)},{TEXT("place"),P?FString(P->Name):B.Place}})));}
+   const FString Block=OKMsg(TEXT("ui.director.plan_block"),{{TEXT("doing"),OKPhoneDoingWord(B.Kind)},{TEXT("place"),P?FString(P->Name):B.Place}});
+   // The block she is in already is now, not at its start: at 10:30 刻晴 said she would go to the library "at 10:15" (R4-2).
+   if(B.Start<=Minute){const int32 Until=(B.End+7)/15*15;Next.Add(OKMsg(TEXT("ui.director.plan_now"),{{TEXT("end"),FString::Printf(TEXT("%02d:%02d"),Until/60%24,Until%60)},{TEXT("block"),Block}}));}
+   else Next.Add(FString::Printf(TEXT("%02d:%02d %s"),Said/60%24,Said%60,*Block));}
   if(Next.Num())Parts.Add(OKMsg(TEXT("ui.director.your_plan_line"),{{TEXT("plan"),FString::Join(Next,OKT(TEXT("ui.bank.list_separator")))}}));}
  if(BirthdayOf(Character,Day))Parts.Add(OKT(TEXT("ui.director.today_is_birthday")));else if(BirthdayOf(Character,Day+1))Parts.Add(OKT(TEXT("ui.director.tomorrow_birthday_hint")));
  return FString::Join(Parts,OKT(TEXT("ui.bank.list_separator")));

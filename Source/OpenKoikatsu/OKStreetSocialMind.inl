@@ -17,6 +17,9 @@ void AOKStreetSocialScene::StartCalendarAndMind(){
   // Their table as it was (a dish still being made is on it now): eaten on when he talks with her there (TickMeal).
   if(!S.Store.Table.IsEmpty()&&!S.Store.TablePlace.IsEmpty()){S.MealPlace=S.Store.TablePlace;
    for(const auto& T:S.Store.Table){FOKStreetDish D;D.ItemId=T.ItemId;D.Name=T.Name;D.ForHer=T.ForHer;D.Percent=T.Percent;D.Served=true;D.Her=T.Her.IsEmpty()?INDEX_NONE:CharacterOf(T.Her);S.Table.Add(D);}
+   // Those dishes were ordered and paid there: the meal's end does not bill a set from the menu again (R4-8: ¥21 more
+   // after a load, the rice and the pork chop already paid at the counter).
+   if(S.Store.CalendarMinute>=0)S.OrderedAtPlace.Add(S.Store.TablePlace,int64(S.Store.CalendarDay)*1440+S.Store.CalendarMinute);
    UE_LOG(LogTemp,Display,TEXT("Street load: %d dishes back on the table at %s"),S.Table.Num(),*S.MealPlace);}
   // The basket as it was: its bill comes again once he talks with her there (TickSchedules).
   if(!S.Store.Cart.IsEmpty()){for(const auto& C:S.Store.Cart){FOKStreetCartLine L;L.ItemId=C.ItemId;L.Size=C.Size;L.Sweetness=C.Sweetness;L.Ice=C.Ice;L.ForHer=C.ForHer;L.HerOwn=C.HerOwn;L.Girl=C.Girl.IsEmpty()?INDEX_NONE:CharacterOf(C.Girl);S.Cart.Add(L);}
@@ -496,7 +499,9 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  }
  S.LastPlayerSaid.Reset();
  // Ordered in conversation (his words, or hers): straight to the kitchen, he pays unless she insists.
- if(Added>0)PlaceChatOrder(Character,Reply.Reply);
+ // Unless her reply says who pays, it waits for the judge reading his words ("我请你"): billed at once, 雷电将军's latte
+ // went by her own lean (split) a second before the judge said he treats (R4-3). TickServes bills it if no verdict comes.
+ if(Added>0){if(Reply.Payer.IsEmpty())S.ChatOrderAwaitsJudge.Add(Character,FPlatformTime::Seconds());else PlaceChatOrder(Character,Reply.Reply);}
  if(Reply.ActKind==TEXT("checkout"))StartCheckout();
  else if(Reply.ActKind==TEXT("intimacy"))RequestIntimacy(Character,false);
  // A weekly one: the judge says which ("her" defers). Only on a call with her (R3-268); hers, so it costs him nothing.

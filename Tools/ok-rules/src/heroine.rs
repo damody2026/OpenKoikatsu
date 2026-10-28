@@ -417,4 +417,34 @@ mod tests {
         assert_eq!(stranger_cap(&t), 55);
         assert_eq!(stranger_cap(&Traits { charm_resistance: 0, shyness: 0, public_boldness: 100, ..Default::default() }), 14);
     }
+
+    /// Every id a record is written under (the rules' note_at, the scene's HeroineNote / Interact) is in acts.toml:
+    /// Interact drops a record whose id it does not know ("unknown interaction explosion" lost 惠惠's failed spell).
+    #[test]
+    fn recorded_ids_are_acts() {
+        let t = Tuning::builtin();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        // The quoted id right after the call's first argument (a plain string in Rust, a TEXT literal in the scene).
+        fn ids(text: &str, marker: &str, quote: &str, out: &mut Vec<String>) {
+            for (at, _) in text.match_indices(marker) {
+                let rest = &text[at + marker.len()..];
+                let Some(comma) = rest.find(',') else { continue };
+                if rest[..comma].contains(['(', ')', '"']) { continue; }
+                let Some(id) = rest[comma + 1..].trim_start().strip_prefix(quote) else { continue };
+                if let Some(end) = id.find('"') { out.push(id[..end].to_string()); }
+            }
+        }
+        let mut found = Vec::new();
+        for (dir, markers) in [("src", &[("note_at(", "\"")][..]), ("../../Source/OpenKoikatsu", &[("HeroineNote(", "TEXT(\""), ("Interact(", "TEXT(\"")][..])] {
+            for entry in std::fs::read_dir(root.join(dir)).unwrap() {
+                let path = entry.unwrap().path();
+                if !matches!(path.extension().and_then(|e| e.to_str()), Some("rs" | "inl" | "cpp")) { continue; }
+                let text = std::fs::read_to_string(&path).unwrap();
+                for (marker, quote) in markers { ids(&text, marker, quote, &mut found); }
+            }
+        }
+        assert!(found.len() > 30, "the scan found the call sites ({})", found.len());
+        let missing: Vec<_> = found.iter().filter(|id| t.acts.find(id).is_none()).collect();
+        assert!(missing.is_empty(), "recorded under ids acts.toml does not have: {missing:?}");
+    }
 }

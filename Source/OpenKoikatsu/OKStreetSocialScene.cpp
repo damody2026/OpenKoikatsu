@@ -278,7 +278,7 @@ struct FOKStreetSceneState {
   // A date called off on the phone (R3-268): who, how he put it (the judge's cancel_grace; -1: hers), the date the
   // "call to cancel" button is about, his lines when the call began (none by the hang-up: hung up without a word), and
   // the last cancel for each girl (her act and the judge both read the same "cancel it": one date, not two).
-  int32 CancelCallGirl=INDEX_NONE,CancelCallAppointment=INDEX_NONE;double CancelCallGrace=-1;FString CancelCallSaid;int64 CallHisLines=0;TMap<int32,double> CancelledAt;FString AdmittedPlace;int32 AdmittedDay=-1;
+  int32 CancelCallGirl=INDEX_NONE,CancelCallAppointment=INDEX_NONE;double CancelCallGrace=-1;FString CancelCallSaid;int64 CallHisLines=0;float CallStartFavor=-1;TMap<int32,double> CancelledAt;FString AdmittedPlace;int32 AdmittedDay=-1;
  int32 SleepGirl2=INDEX_NONE;FVector SleepGirl2Bed=FVector::ZeroVector;float SleepGirl2Yaw=0;
  // Plan §12.4 level 4: she agreed, and they are on the way to a lockable room (or already in the private mode).
  int32 PendingIntimacy=INDEX_NONE,IntimacyGirl=INDEX_NONE;
@@ -312,7 +312,7 @@ struct FOKStreetSceneState {
  // NPC idles: when each last moved, how long she has stood still, and whether her current stop was lengthened.
  TMap<int32,int32> IdlePose;TMap<int32,double> LastMovedAt,StillSince;TMap<int32,float> LastWalk,PrevDwell;int32 ProbeStep=-1;double ProbeAt=0;FString ProbeWhy;TArray<TSharedPtr<FJsonValue>> ProbeRows; // OK_STREET_UI_PROBE
  // Campus (OKStreetSocialCampus.inl): upstairs commute targets, studying, stair/office proximity, attendance, exams.
- TMap<int32,FVector> CommuteFinal;bool FreeTalkLogDirty=false;double FreeTalkLogSavedAt=0; /* free-talk-log.json written at most once a second (Tick) */TArray<FIntVector> PendingEncounters; /* met pairs (a, b, overheard) waiting for their turn: one a frame (TickEncounters) */FString EntryPlace;int32 EntryMinutes=0;bool bEntryPlaceKnown=false,bEntrySettled=true;int32 EntryHer=INDEX_NONE; /* the place he is in, minutes in a row, admission asked (PayEntry), the girl with him then */bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
+ TMap<int32,FVector> CommuteFinal;bool FreeTalkLogDirty=false;double FreeTalkLogSavedAt=0; /* free-talk-log.json written at most once a second (Tick) */TArray<FIntVector> PendingEncounters; /* met pairs (a, b, overheard) waiting for their turn: one a frame (TickEncounters) */FString EntryPlace;int32 EntryMinutes=0;bool bEntryPlaceKnown=false,bEntrySettled=true;int32 EntryHer=INDEX_NONE; /* the place he is in, minutes in a row, admission asked (PayEntry), the girl with him then */FString EntryHerPlace; /* where EntryHer was last set (R3-267) */bool bAbsentCastChecked=false; /* meetings with heroines not in this cast set aside (SetAsideAbsentMeetings), once the rules are open */TMap<int32,TPair<int64,double>> PendingGiveMoney; /* her act's give_money, waiting for the judge (amount, wall time) */TSet<int32> ReleaseAtDoor; /* walking out of a place to roam the street: let go at its door */bool Studying=false,ShowTranscript=false;int32 StudyMinutes=0,StudyApplied=0,StairKey=-1;TSet<int32> StudiedWith,SeenInClass;int32 HerInvestMinute=-1;TMap<int32,int32> HerStudy;FString OfficeKey,DeptOffice,ClassClosed;TSet<FString> ExamsDone;int64 AcademicMinute=-1;
  // Bank app, price alerts, net worth chart and the heroines' own accounts (OKStreetSocialBank.inl).
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
@@ -336,6 +336,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  TSet<int32> MeetingGreeted; // appointments she already greeted him for: a talk after the meeting is not "you came as agreed" again
  FOKStreetBluff Bluff;double ShopArrivalAt=-1000;TSet<FString> PartyMoodChecked;TMap<int32,double> PartyLeaving,PartedAt;TArray<int32> Party,FreeTalkSpeechSpeakers;TArray<FString> PartyEvents,PartyLog;TMap<int32,double> PartyGapRef,PartyGapAt;double ManualMoveAt=-100;bool ManualReplan=false;bool UiDirty=false;const char* UiDirtyFile="";uint32 UiDirtyLine=0;double UiShopCheckAt=0;FString UiShopKey;FString PlayerAskedText;FString LastPlayerSaid;double ApproachBlockLogAt=0;int32 CompanionGapFor=INDEX_NONE;double CompanionGapRef=0,CompanionGapRefAt=0;double FaceOffSince=0,FaceSetYaw=0,FaceLogAt=0;int32 HeadLookGirl=INDEX_NONE;TArray<FOKStreetDish> Table;int32 ServeBatch=0;FString MealPlace;double MealAwayAt=0,MealBookAt=0;bool StopEating=false,FullTold=false;TArray<FString> TellHer;int32 AutoPickTried=INDEX_NONE;bool FreeTalkUserClosed=false;double FreeTalkLeftAt=0;FString RetryAction;int32 RetryGirl=INDEX_NONE;double RetryUntil=0;FString ThenAction;int32 ThenGirl=INDEX_NONE;int64 ThenUntil=0,ThenStayMinutes=0,ThenReadyAt=0;TSet<int32> ArriveAfterLift;int32 FarewellAfterMeal=INDEX_NONE;double FarewellAfterMealAt=0;double TableClearedAt=-1;bool FarewellPending=false,FarewellAsked=false,FarewellFromTalk=false;double FarewellAt=0,FarewellVoiceAt=0,PlaceClosingAt=0;FString ClosedNoticePlace;double DecisionShotAt=0;FString DecisionShotTag;int32 DecisionShots=0;FString ShopArrivalPlace,ShopSeenPlace;bool ShopEnteredWith=false;TArray<FOKStreetPendingServe> Serves;double OrderNoticeDue=0;FString OrderNoticeSig;FString TraceSig;double TraceAt=0;FVector TracePos=FVector::ZeroVector;int32 TraceGirl=INDEX_NONE;double StrayPoseAt=0;TMap<int32,int32> StrayPose; float RightScrollOffset=0;FString FreeTalkHeard; bool AppointmentsOpen=false; // the right panel's list of appointments to cancel
  int32 PayAgreedWith=INDEX_NONE;FString PayAgreedHow,PayAgreedShop;int64 PayAgreedAt=0; // who pays, as the AI read what they settled (her reply's payer, the judge's)
+ TMap<int32,double> ChatOrderAwaitsJudge; // her reply's order, billed once the judge says who pays (wall time it waits from; R4-3)
  TArray<FString> SaidToHer;int32 SaidToHerWith=INDEX_NONE; // his last lines to her in this conversation: "I'll treat you" said on the way still counts at the table
  // She asked to borrow before he offered (her act skipped): his next line handing it over makes the loan.
  int32 LendAskGirl=INDEX_NONE;int32 LendAskAmount=0;int64 LendAskMinute=-100000;
@@ -1160,9 +1161,14 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkLoadSettings);if(!OKStreetFreeTalkLoadSettings(Settings,Error)||!OKStreetFreeTalkLoadPersona(S.Manifest.Characters[Character].Name,Persona,Error))return false;}
  FreeTalkEnsureLog();
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
- auto Status=OKStreetFreeTalkStatusOf(S,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget));
- // His name as the game has it (the group prompt says it too): without it she only knew what he told her.
- if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty())Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *S.Manifest.Characters[0].Name}});
+ const FOKStreetRelation HerRelation=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
+ auto Status=OKStreetFreeTalkStatusOf(S,HerRelation);
+ // His name as the game has it (the group prompt says it too), once she knows it: past a stranger, or he told her. A
+ // stranger meeting him called him by name and said 爱丽丝 had told her (R4-1).
+ if(S.Manifest.Characters.IsValidIndex(0)&&!S.Manifest.Characters[0].Name.IsEmpty()){const FString& HisName=S.Manifest.Characters[0].Name;
+  bool Knows=HerRelation.Stage!=TEXT("stranger");
+  if(!Knows)for(const FOKStreetHistoryEntry& E:HistoryOf(Id))if(E.Who==TEXT("him")&&E.Text.Contains(HisName)){Knows=true;break;}
+  if(Knows)Status.Relation+=OKMsg(TEXT("ui.free_talk.his_name_note"), {{TEXT("name"), *HisName}});}
  // Apart (a phone message or call): what they are doing face to face does not apply (OKStreetSocialPhoneInbox.inl).
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkDoing);Status.Doing=RemoteWith(Character)?RemoteDoing(Character):FreeTalkDoing()+FreeTalkExtras();}Status.Nearby=RemoteWith(Character)?FString(OKT(TEXT("ui.free_talk.remote_nearby_unknown"))):FreeTalkNearby(); // the places around him are not around her on the phone
  {const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);Status.Now=OKStreetFreeTalkDateTime(OKStreetCalendarDateTime(S.Store.CalendarDay,Hours));Status.StreetTime=OKStreetFreeTalkClock(Hours);}
@@ -1275,6 +1281,7 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  // not by keyword rules (JudgeFreeTalk). Without words of his (a nudge, a notice) she does her own acts but never starts
  // an outing he has not agreed to.
  if(OKStreetFreeTalkIsNudge(Text)){
+  if(S.ChatOrderAwaitsJudge.Remove(Character)>0&&!S.Cart.IsEmpty())PlaceChatOrder(Character,Reply->Reply); // no judge comes for a nudge
   const FString A=Reply->Action;
   if(!A.IsEmpty()&&!(A.StartsWith(TEXT("go:"))||A==TEXT("stroll")||A==TEXT("walk")||OKStreetFindActivity(A)||OKStreetFindPlace(A)))ExecuteFreeTalkAction(Character,Id,A);
  }
@@ -1431,7 +1438,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier,InCall](bool Ok,const FString& Content,const FString& Failure){
   const auto L=WeakState.Pin();if(!L||!Weak.IsValid()||Weak->State!=L)return;
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
-  if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);Weak->ExecuteFreeTalkAction(Character,Id,HerAction);return;}
+  if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);
+   if(L->ChatOrderAwaitsJudge.Remove(Character)>0&&!L->Cart.IsEmpty())Weak->PlaceChatOrder(Character,Her);
+   Weak->ExecuteFreeTalkAction(Character,Id,HerAction);return;}
   FString DoNow,Why;Verdict->TryGetStringField(TEXT("do_now"),DoNow);Verdict->TryGetStringField(TEXT("why"),Why);
   // His words answered her offer to sing ("sure, sing for me"), asked for her waiting song now, or asked her to sing
   // her last song again: the same as the panel's buttons.
@@ -1572,6 +1581,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    if(const FOKStreetActivity* Room=OKStreetFindActivity(DoNow);Room&&Room->Kind==EOKStreetActivityKind::Facility&&Room->Code==0&&Room->Place&&Dishes>0)
     for(const auto& Table:OKStreetActivities())if(Table.Kind==EOKStreetActivityKind::Pair&&Table.Code==5&&Table.Place&&FCString::Strcmp(Table.Place,Room->Place)==0){
      UE_LOG(LogTemp,Display,TEXT("Street judge: do_now %s with %d dishes ordered; they eat them at the table (%s)"),*DoNow,Dishes,Table.Id);DoNow=Table.Id;break;}}
+  // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请"); before the orders are billed below.
+  // For a meeting another time and nothing now: it went with the meeting above, not to the next shop today.
+  {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty()&&!(PayForPromise&&DoNow.IsEmpty()))Weak->RecordPayAgreed(Character,Payer,DoNow);}
+  // Her reply's own order waited for this (R4-3): billed now, with what was settled.
+  const bool OrderWaited=L->ChatOrderAwaitsJudge.Remove(Character)>0;
   // Orders he (or she) asked for that her reply left out: to the kitchen like any chat order.
   {const TArray<TSharedPtr<FJsonValue>>* Orders=nullptr;int32 Added=0;const FString Here=Weak->OrderShopHere(Character);FString Shop=Here.IsEmpty()?Weak->OutingShop(Character):Here;const bool OnTheWay=Here.IsEmpty();
    // Outside, about to go in ("let's go in, I'll have a latte"): the outing starts below, after the orders; its shop is
@@ -1592,10 +1606,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     if(OnTheWay){L->CarriedOrders.FindOrAdd(Character).Add(Line);UE_LOG(LogTemp,Display,TEXT("Street judge order: %s for %s, carried to %s"),*Item->Name,*For,*Shop);continue;}
     L->ShopPlace=Shop;L->Cart.Add(Line);++Added;UE_LOG(LogTemp,Display,TEXT("Street judge order: %s for %s"),*Item->Name,*For);
    }
-   if(Added>0)Weak->PlaceChatOrder(Character,Her);}
-  // Who pays, as the judge read what they settled ("门票各付各的", "这顿我请").
-  // For a meeting another time and nothing now: it went with the meeting above, not to the next shop today.
-  {FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&!Payer.IsEmpty()&&!(PayForPromise&&DoNow.IsEmpty()))Weak->RecordPayAgreed(Character,Payer,DoNow);}
+   if(Added>0||(OrderWaited&&!L->Cart.IsEmpty()))Weak->PlaceChatOrder(Character,Her);}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
   {double Lend=0;Verdict->TryGetNumberField(TEXT("he_lends"),Lend);Weak->SettleMoneyHandover(Character,Lend,true);}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).

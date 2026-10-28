@@ -295,9 +295,25 @@ history = "company"
 text = "%s"
 memory = -1
 
+# 他給她錢（shop.rs give_money）：她記得收過他多少。沒有這一項時紀錄整筆被丟掉。
+[[act]]
+id = "money"
+cat = "money"
+history = "gift"
+text = "%s"
+memory = -1
+
 # 活動與邀約：她答不答應在別處決定，這裡是她記得的事。
 [[act]]
 id = "activity"
+cat = "activity"
+history = "activity"
+text = "%s"
+memory = -1
+
+# 惠惠的爆裂魔法（social.rs explosion_cast）：放成了還是失敗，她記得（R3-269 的失敗原本整筆被丟掉）。
+[[act]]
+id = "explosion"
 cat = "activity"
 history = "activity"
 text = "%s"
@@ -356,6 +372,14 @@ rumor_heat = 50
 
 [[act]]
 id = "promise"
+cat = "activity"
+history = "promise"
+text = "%s"
+memory = -1
+
+# 她的請求他一直沒回（social.rs appointments_tick 的 unanswered）：她記得被晾著。沒有這一項時紀錄整筆被丟掉。
+[[act]]
+id = "unanswered"
 cat = "activity"
 history = "promise"
 text = "%s"
