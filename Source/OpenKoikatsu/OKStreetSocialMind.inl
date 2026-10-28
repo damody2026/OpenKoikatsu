@@ -496,7 +496,9 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  }
  S.LastPlayerSaid.Reset();
  // Ordered in conversation (his words, or hers): straight to the kitchen, he pays unless she insists.
- if(Added>0)PlaceChatOrder(Character,Reply.Reply);
+ // Unless her reply says who pays, it waits for the judge reading his words ("我请你"): billed at once, 雷电将军's latte
+ // went by her own lean (split) a second before the judge said he treats (R4-3). TickServes bills it if no verdict comes.
+ if(Added>0){if(Reply.Payer.IsEmpty())S.ChatOrderAwaitsJudge.Add(Character,FPlatformTime::Seconds());else PlaceChatOrder(Character,Reply.Reply);}
  if(Reply.ActKind==TEXT("checkout"))StartCheckout();
  else if(Reply.ActKind==TEXT("intimacy"))RequestIntimacy(Character,false);
  // A weekly one: the judge says which ("her" defers). Only on a call with her (R3-268); hers, so it costs him nothing.

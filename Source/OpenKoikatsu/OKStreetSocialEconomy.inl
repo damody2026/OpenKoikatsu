@@ -168,6 +168,9 @@ void AOKStreetSocialScene::TickOrderNotice(){
 // (as his turn, not shown as his words) so she reacts to the food. Told once she is free to answer.
 void AOKStreetSocialScene::TickServes(){
  auto& S=*State;
+ // Her reply's order waiting for the judge's payer (R4-3): no verdict within 10 s (a reply with no judge after it), billed as it is.
+ for(auto It=S.ChatOrderAwaitsJudge.CreateIterator();It;++It)if(FPlatformTime::Seconds()-It.Value()>10.0){const int32 Girl=It.Key();It.RemoveCurrent();
+  UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d no judge in 10 s, billed now"),Girl);if(!S.Cart.IsEmpty())PlaceChatOrder(Girl,FString());}
  // A gift he just bought for her goes to her once she can take it (the talk is not busy, the gift choice not open).
  if(!S.PendingGift.IsEmpty()&&!S.FreeTalkBusy&&FreeTalkPartner()!=INDEX_NONE&&!S.Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift");})){
   const FString Gift=S.PendingGift;S.PendingGift.Reset();if(S.Store.Inventory.Contains(Gift))StartGift(Gift);}if(S.Serves.IsEmpty())return;const double Now=SceneTime();
