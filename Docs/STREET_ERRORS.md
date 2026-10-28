@@ -937,3 +937,10 @@
 - 判斷器回傳邀請名單「貞德」（繁體）。完全比對只比卡片名（簡體「贞德」），對不上，落到寬鬆比對，先遇到名字也含「貞德」的 1 號貞德·Alter——正是他在說話的對象，於是回「已經跟著你了」，真正的貞德沒被邀到。
 - 修正（`OKStreetSocialScene.cpp`）：邀請的完全比對也比遊戲字體的名字（`SpokenName`），和群聊 `FinishPartyTalk` 一致。
 - 驗證（Gal1028Q）：log `he invites 貞德 to join`、`actor 7 joins`，貞德加入了貞德·Alter 的對話。
+
+### 2026-10-28 攻略第四輪：新加的區域變數遮蔽外層同名變數，打包編譯失敗（c-conquest）
+
+- R4-13 在 `OKStreetSocialScene.cpp` 的 `else if` 初始化裡宣告 `const FOKStreetActivity* A`，外層已經有區域變數 `A`，打包的 Development 建置把 C4456 當錯誤，`Conq1028l` 沒編出來。
+- 修正：改名 `Fed`，用新 tag `Conq1028m` 重編。
+- 規則：在既有長函式裡加 `if(...;...)` 初始化變數時，先 grep 同一函式有沒有同名的區域變數；名字取得具體（不要用單字母）。
+- 同一輪 R4-15：用 sed 把一句含英文雙引號（"let's go up to the 6F bookshop"）的話插進 en `ui_text.toml` 的 basic string，沒有寫成 `\"`，TOML 第 1441 行解析失敗，遊戲開起來「rules unavailable」5 秒後自行結束（讀檔回傳的也是 `ui.saves.summary` 鍵名）。修正：補上 `\"`。規則：改語系 toml 的長提示後，先開一次遊戲（或用 ok-rules 讀一次）確認能解析，再做別的；英文句子裡的引號一律跳脫。
