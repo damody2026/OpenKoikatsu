@@ -207,6 +207,9 @@ void AOKStreetSocialScene::TickServes(){
      const FOKStreetActivity* Best=nullptr;float BestZ=0;
      for(const auto& A:OKStreetActivities()){
       if(A.Kind!=EOKStreetActivityKind::Pair||!(A.Code==5||A.Code==1)||!A.Place||FCString::Strcmp(A.Place,*P.PlaceId)!=0)continue;
+      // Not a seat for studying or reading: 三月七's vending-machine drink sat them down at the boys' dorm lounge to
+      // "study together" for 39 minutes, and he got the intelligence for it (R4-11).
+      if(A.FemaleClip&&(FCString::Strstr(A.FemaleClip,TEXT("study"))||FCString::Strstr(A.FemaleClip,TEXT("read"))))continue;
       const FOKStreetModelAnchor* Spot=A.Anchor?OKStreetPlaceAnchor(*Here,A.Anchor):nullptr;const float Dz=Spot?FMath::Abs(Spot->Position.Z-S.Male.Z):0.f;
       if(!Best||Dz<BestZ){Best=&A;BestZ=Dz;}}
      FString Why;if(Best&&BestZ<300.f&&BeginOuting(G,Best->Id,Why)){UE_LOG(LogTemp,Display,TEXT("Street order served: they sit down to eat it (%s)"),Best->Id);
