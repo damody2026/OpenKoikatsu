@@ -911,3 +911,29 @@
 
 - R3-265 看到「Runtime pose jitter: 21 bones reverse 92 of 241」，就假設是三月七的頭髮，追 40 Hz 骨鏈、改 DynamicBones 修正，兩輪打包都沒變。其實 92 幀是腿（`__ok_palette_*` 是 palette 別名骨，名字看不出部位），每幀 0.4 mm，是 clip 本身的雜訊。偵測器的門檻是「鍵值到原點距離 × 0.002」，palette 平移靠近原點，門檻只剩 0.02 mm。
 - 規則：診斷 log 報出問題時，先查它報的骨頭是哪個部位、幅度多大、門檻怎麼定，再找原因；能離線重現就先寫離線測試（這次 `street_bake_jitter` 20 秒就分清楚），不要每試一個假設就打包一次。
+### 2026-10-28 進 1 對 1 時她換了一套衣服，畫面上還有除錯字（E 組 galgame，新存檔實玩）
+- 胡桃在街上穿白帽制服，進 1 對 1 卻是粉色護士裝；雷電將軍也一樣。`selection.json` 的 `outfits` 指定每位在街上穿第幾套（將軍 4、胡桃 3），人群照著讀，`AOKInteractionMode::LoadFemale` 卻寫死開第 0 套。
+- 修正：街區讀 `outfits` 存成 `HighOutfits`，`EnterCards`／`LoadFemale` 多一個服裝參數，`BeginPrivate` 傳她街上那套。
+- 1 對 1 畫面中央有黃色「侍奉・玩弄龜頭・WLoop」與引擎的 `DisableAllScreenMessages` 提示：`ShowPairStatus` 用 `AddOnScreenDebugMessage` 印動作名稱，打包的 Development 版會顯示。互動模式（`bInteractionOnly`）左側面板已經寫「已載入：…」，不再印到畫面上。
+- 驗證（Gal1028I）：胡桃、將軍的 1 對 1 截圖都是街上的服裝，沒有除錯字。
+
+### 2026-10-28 約好兩人一起到景觀餐廳，第二位到了卻沒跟上樓，自己回家了（E 組 galgame，新存檔實玩）
+- 群聊約「今晚七點景觀餐廳」，19:00 第一位到了，他和她搭電梯上十樓。第二位隨後到他原本的位置，`PartyCanJoin` 因為他已不在同一層而拒絕，log 只寫 `came for their meeting but cannot join; she waits`，接著她照自己的行程離開百貨。
+- 修正一（`OKStreetSocialInvite.inl`）：赴約時加入不了，就排進 `ArriveLater` 一分鐘後重試，最多重試 60 分鐘（`MeetJoinSince`）；重試時 `ArriveNow` 會找他所在的樓層、帶她搭電梯上去。
+- 第二次重現時她在他還在電梯裡時出發，停在 7F，接著「he is no longer on that floor」又放棄。修正二（`OKStreetSocialAppointments.inl`）：電梯到了他卻已不在那層時，同樣重試；超過 2 小時的等待紀錄每分鐘清掉。
+- 驗證（Gal1028L，slot 8 重玩）：安可先後重試、搭電梯上 10F，`actor 10 sits with them`，兩人都在群聊裡說話。
+
+### 2026-10-28 群聊時正在說話的女主被當成擋鏡頭的人藏起來，畫面一片空（E 組 galgame）
+- 十樓景觀餐廳，惠惠是對話對象，安可坐在他旁邊說話。pov 鏡頭對著安可，可是擋鏡頭的隱藏規則（鏡頭前 1.5 m、在畫面內的人）只豁免對話對象 `G.Partner`，她就被藏起來了，畫面只剩夜色、桌角和他的衣服。
+- 修正（`OKStreetSocialGalgame.inl`）：目前說話者 `G.Speaker` 也不隱藏。
+- 驗證（Gal1028P，嚴格開卡前的 ok-extract 副本＋封卡前原卡，slot 8 重玩）：十樓景觀餐廳，對話對象是惠惠，安可說「超級美的啦～」時 pov 鏡頭清楚拍到她。
+
+### 2026-10-28 貞德在自己住的宿舍門口說「我不住這裡，是來找朋友」（E 組 galgame，新存檔實玩）
+- 她的設定 `home_place_id` 是女生宿舍，但對話提示從沒寫她住哪裡，只有行程裡的「校外女生宿舍在家休息」，模型就猜錯了。
+- 修正（`OKStreetSocialDirector.inl`）：她的情境加一行「你住在{地點}（那是你自己的住處，在那裡就是在家）」，三種語言的 `ui.director.your_home_line`。
+- 驗證（Gal1028Q，新存檔）：在宿舍問她「妳住在這棟宿舍嗎？」，她答「是的，我住在這裡」。
+
+### 2026-10-28 跟貞德·Alter 說「貞德，過來一起聊吧」，系統卻說「她已經跟著你了」（E 組 galgame，新存檔實玩）
+- 判斷器回傳邀請名單「貞德」（繁體）。完全比對只比卡片名（簡體「贞德」），對不上，落到寬鬆比對，先遇到名字也含「貞德」的 1 號貞德·Alter——正是他在說話的對象，於是回「已經跟著你了」，真正的貞德沒被邀到。
+- 修正（`OKStreetSocialScene.cpp`）：邀請的完全比對也比遊戲字體的名字（`SpokenName`），和群聊 `FinishPartyTalk` 一致。
+- 驗證（Gal1028Q）：log `he invites 貞德 to join`、`actor 7 joins`，貞德加入了貞德·Alter 的對話。

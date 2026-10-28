@@ -208,3 +208,29 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 
 - 每個角色的曲線取樣從 2.76 ms 降到 0.64 ms。
 - 愛麗絲 1 對 1 從 109 FPS 提升到 128 FPS（不開 trace，GPU 上只有另一個 C 的遊戲）。
+
+## 群聊約定、多人赴約與電梯鏡頭（2026-10-28）
+
+用新存檔實玩雷電將軍、安可、惠惠（Gal1028B～G）：上午各自認識，中午在學生餐廳和惠惠、安可群聊，約傍晚五點半在百貨吃晚餐，下午在咖啡廳再約剛下班的將軍。
+
+- **群聊約定**：群聊回覆加 `promise`（`who` 列出答應的人，其餘和判斷器的格式相同），`FinishPartyTalk` 對每位答應的人呼叫 `AddPromiseFromChat`。log：`Street party promise: day "+0" time "17:30" at department (...), 2 agreed`。
+- **地點填成活動 id**：模型把「景觀餐廳」填成 `dept_view`（百貨裡的活動），被判成沒有這個地點，她還被告知餐廳不存在。`AddPromiseFromChat` 遇到活動 id 時改約在那個活動的地點（Gal1028J 驗證：群聊約「今晚七點景觀餐廳」，回覆填 `dept_view`，安可、惠惠各訂 19:00 大學城百貨）。
+- **多人同時赴約**：一次只有一位「走過來」，其他人原本只印 `waits` 就沒有下文；現在排進 `ArriveLater` 下一分鐘重試（最多 60 分鐘），到時他正和別人說話就加入群聊。三人依序 `came for their meeting and joins the talk`，再一起上九樓美食街，群聊點餐各自上桌、各自結帳。
+- **電梯裡的跟隨鏡頭**：她站在鏡頭和他之間、不到 1 m，畫面整片是頭髮。街頭跟隨鏡頭（不含對話鏡頭）前方 1 m、畫面中央 30° 內的女角暫時從主畫面隱藏（`PC->HiddenPrimitiveComponents`，`CameraHidden`），立繪照常。試過「被牆擠壓時升高往下看」：電梯車廂頂沒有碰撞，鏡頭穿出車頂。
+- **只問推薦**：她推薦的品項，他沒說要就不算點餐（`ai_judge_prompt` orders 規則）。
+- **對話框排版**：ok-story 的 `DialogOut` 多傳整句 `text`，`SOKStoryView` 依整句排版、只畫打出來的字（打字時字不會跳到下一行）；最後一行孤字不計標點（「淨。」」），從上一行拉下來的字帶著後面的標點（下一行不以「，」開頭）。
+- 回歸腳本（Gal1028G 沙盒，惠惠 `--private` 12/12 通過）：`--sandbox NAME [--port-base N]` 以沙盒啟動；用 `--port` 指定別的遊戲時，TTS 埠由控制埠推算（控制埠－10）；找不到 PID 對應的 Play 資料夾時，以 log 的「listening on ...:<port>」認，不再選最新的資料夾。
+
+### 三月七 1 對 1 載入慢的原因（2026-10-28）
+
+同一負載下（另有 C 的遊戲在跑）重量：三月七取模 6.8 s（同程序第二次 1.7 s，和別人差不多），「貼圖」14.2 s、第二次仍 12.0 s（優香 5.6、安可 1.9）。`OK_LOAD_PROFILE=1` 細分：時間全在 `PrepareRuntimeMaterials`→`OKCaptureRuntimeMaterials`（`OK runtime material capture ms=10343`，安可 1145），貼圖解碼只有幾 ms。這一步逐張貼圖依序做 PNG 解碼、double 精度 box filter 的 mip 鏈與整份像素 SHA1；她的貼圖多又大，準備好的快取（256 MB 上限）也放不下，第二次照樣重做。
+
+讀卡器早就量過平行版（`OK_FIRSTLOAD=C5`，材質準備 1.98 → 0.34 s），因為街頭群眾也走同一函式才預設關閉。1 對 1 的高模在背景執行緒載入、玩家看著載入畫面，所以 `LoadFemale` 先以平行方式準備材質（`OKCaptureRuntimeMaterialsParallel`，`FOkSession::PrepareRuntimeMaterials(Error, true)`），之後的 `PrecacheSessionTextures` 直接沿用。log 多一欄 `materials`。
+
+Gal1028H（同樣有別的遊戲在跑）：三月七 materials 2.0 s＋textures 1.1 s（第二次 2.1＋0.1），安可 0.23＋0.15，優香 0.68＋0.59；1 對 1 截圖材質正確。整台乾淨時的數字還沒量。
+
+### 群聊也能回滾（2026-10-28）
+
+原本只有 1 對 1 能用滾輪回滾：檢查點只記說話對象一人，群聊時他的話走 `SendPartyTalk`，根本不記檢查點，滾回去再說話不會還原任何人。現在群聊時，他每句話前替在場每位各記一個檢查點（另存群聊最近的台詞 `PartyLog`）；滾回去後再說話，所有人一起回到那句之前（台詞紀錄、記憶、歷史、好感、ok-mind 的上下文），只和他說話的那位回去、其他人還記得的情況不再發生。
+
+驗證（Gal1028J，安可＋惠惠在咖啡廳）：告訴兩人「喜歡橘色」與「生日三月十二」，滾回到惠惠回「橘色」那句後問「我有跟妳們說過生日嗎」：兩人各一行 `rollback: back to line 16`，安可「沒聽你說過耶」、惠惠「你根本沒提過吧」。

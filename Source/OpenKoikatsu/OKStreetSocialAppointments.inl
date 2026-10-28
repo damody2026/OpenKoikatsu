@@ -55,9 +55,13 @@ int32 AOKStreetSocialScene::PatienceOf(int32 Character) const{
 }
 
 // From chat (plan §13.3 "new_promise"): {"day": "+1" | "2010-09-05", "time": "19:00", "place": id, "what": text}.
-void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces,float Hours){
+void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& PlaceSaid,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces,float Hours){
+ // An activity given as the place ("dept_view", the view restaurant): they meet at its place to do it. Booked as no such
+ // place, she was told the restaurant does not exist and then insisted it does.
+ FString Place=PlaceSaid,WhatId=WhatSaid;
+ if(!OKStreetFindPlace(Place))if(const FOKStreetActivity* Act=OKStreetFindActivity(Place);Act&&Act->Place&&*Act->Place){if(WhatId.IsEmpty())WhatId=Place;Place=Act->Place;}
  // An activity id in "what" ("meal") is said by its name in the label and her memory ("約meal" on the list).
- const FString What=OKStreetFindActivity(WhatSaid)?OKStreetActivityName(WhatSaid):WhatSaid;
+ const FString What=OKStreetFindActivity(WhatId)?OKStreetActivityName(WhatId):WhatId;
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);const FOKStreetPlace* P=OKStreetFindPlace(Place);
  // Whether it is a meeting at all, a new one or the same one said again, and where and when, is promise.rs
  // (promise_from_chat); the judge's reading of both lines gives day, time and place.
@@ -298,9 +302,15 @@ void AOKStreetSocialScene::TickAppointments(){
     return;}
    S.ArriveWaiting.Remove(Girl);
  };
- // Up on his floor (the lift ride is over): she walks over to him from there. Given up if he left that floor meanwhile.
+ // A wait for him that ended long ago (she joined, or he was alone when she came) does not count against a later one.
+ for(auto It=S.MeetJoinSince.CreateIterator();It;++It)if(Now-It.Value()>120)It.RemoveCurrent();
+ // Up on his floor (the lift ride is over): she walks over to him from there. He left that floor meanwhile (she set off
+ // while he rode up to the view restaurant, and got off at 7F): she goes after him again in a minute, up to an hour.
  for(auto It=S.ArriveAfterLift.CreateIterator();It;++It){const int32 G=*It;if(S.NpcLifts.Contains(G))continue;It.RemoveCurrent();
-  if(S.Agents.IsValidIndex(G-1)&&FMath::Abs(S.Agents[G-1].Position.Z-S.Male.Z)<100.f)ArriveNow(G);else UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor"),G);}
+  if(S.Agents.IsValidIndex(G-1)&&FMath::Abs(S.Agents[G-1].Position.Z-S.Male.Z)<100.f)ArriveNow(G);
+  else{const int64 Since=S.MeetJoinSince.FindOrAdd(G,Now);
+   if(Now-Since<=60){S.ArriveLater.Add(G,Now+1);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor; she goes after him"),G);}
+   else{S.MeetJoinSince.Remove(G);UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d came up, he is no longer on that floor; gives up after an hour"),G);}}}
  // Due now (after her shift, or after the one walking over before her); he talking with another girl by then, she joins them.
  {TArray<int32> Due;for(auto It=S.ArriveLater.CreateIterator();It;++It)if(Now>=It.Value()){Due.Add(It.Key());It.RemoveCurrent();}
   for(const int32 Girl:Due){const int32 With=FreeTalkPartner();ArriveNow(Girl,With!=INDEX_NONE&&With!=Girl);}}

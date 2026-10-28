@@ -39,7 +39,7 @@ private:
  void SkipGalgameLine(); // a click, Enter or Space during a scene: the line on screen ends now (its voice stops)
  // Rollback of a scene (OKStreetSocialGalgame.inl): a point to come back to before each of his lines, and back to the
  // line the wheel scrolled to once he says something there (her memory, mind, history and relation with it).
- void GalgameCheckpoint(int32 Character,const FString& Id); void GalgameRollBack(int32 Character,const FString& Id);
+ void GalgameCheckpoint(int32 Character,const FString& Id); void GalgameRollBack(const TArray<FString>& Ids); // Ids: who was in the talk (all of them in a group)
  void EndGalgame();
  void GalgameWalkFocus(FVector& Focus,FVector& Pivot); // the street camera between him and her while they walk and talk
  void GalgameHideForPrivate(); // the street's box off while the one-on-one scene is up (the street does not tick there)

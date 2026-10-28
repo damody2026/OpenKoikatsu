@@ -94,6 +94,12 @@ pub struct Store {
     /// Card-specific models next to the library: recorded while an original card becomes an OK card,
     /// replayed from the pack an OK card carries.
     pack: RwLock<Option<Arc<Store>>>,
+    /// An OK card's pack held in memory for its open (`Store::in_memory`): (model, query, args) -> stored value.
+    /// Nothing is written to disk; the table is freed with the open.
+    /// Also a card pack being recorded (`Store::recording_in_memory`): nothing goes to disk.
+    records: Option<RwLock<HashMap<(Id, String, Vec<u8>), Vec<u8>>>>,
+    /// The models `records` hold.
+    record_models: RwLock<std::collections::HashSet<Id>>,
 }
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -195,7 +201,7 @@ pub fn model_path(dir: &Path, id: &Id) -> PathBuf {
 /// sources whose models stay out of version control (third-party mods); those come from the real zipmods.
 pub fn has_model(id: &Id) -> bool {
     let Some(store) = active() else { return false };
-    model_path(&store.dir, id).is_file() || store.pack().is_some_and(|p| model_path(&p.dir, id).is_file())
+    model_path(&store.dir, id).is_file() || store.pack().is_some_and(|p| p.has_own_model(id))
 }
 /// Directory of the active library.
 pub fn active_dir() -> Option<PathBuf> { active().map(|s| s.dir.clone()) }
@@ -309,8 +315,37 @@ impl Store {
         Ok(Store {
             dir: dir.to_owned(), mode, models: Mutex::new(HashMap::new()), missing: Mutex::new(HashMap::new()),
             hits: AtomicU64::new(0), misses: AtomicU64::new(0), stored: AtomicU64::new(0), conflicts: AtomicU64::new(0),
-            conflict_log: Mutex::new(HashMap::new()), pack: RwLock::new(None),
+            conflict_log: Mutex::new(HashMap::new()), pack: RwLock::new(None), records: None, record_models: Default::default(),
         })
+    }
+
+    /// A replayed card pack in memory: its records answer queries directly (no model files).
+    fn in_memory(records: Vec<PackRecord>) -> Store {
+        Store {
+            dir: PathBuf::new(), mode: Mode::Replay, models: Mutex::new(HashMap::new()), missing: Mutex::new(HashMap::new()),
+            hits: AtomicU64::new(0), misses: AtomicU64::new(0), stored: AtomicU64::new(0), conflicts: AtomicU64::new(0),
+            conflict_log: Mutex::new(HashMap::new()), pack: RwLock::new(None),
+            record_models: RwLock::new(records.iter().map(|r| r.0).collect()),
+            records: Some(RwLock::new(records.into_iter().map(|PackRecord(id, query, args, value)| ((id, query, args), value)).collect())),
+        }
+    }
+
+    /// A card pack being recorded in memory (begin_card_pack): the first value of a query is kept.
+    fn recording_in_memory() -> Store {
+        Store { mode: Mode::Record, ..Store::in_memory(Vec::new()) }
+    }
+
+    /// The records of an in-memory store, sorted.
+    fn take_records(&self) -> Vec<PackRecord> {
+        let mut out: Vec<PackRecord> = self.records.as_ref().map(|r| std::mem::take(&mut *r.write().unwrap()))
+            .unwrap_or_default().into_iter().map(|((id, query, args), value)| PackRecord(id, query, args, value)).collect();
+        out.sort_by(|a, b| (a.0, &a.1, &a.2).cmp(&(b.0, &b.1, &b.2)));
+        out
+    }
+
+    /// Whether this store holds model `id` (a model file, or records of it in memory).
+    fn has_own_model(&self, id: &Id) -> bool {
+        if self.records.is_some() { self.record_models.read().unwrap().contains(id) } else { model_path(&self.dir, id).is_file() }
     }
 
     fn model(&self, id: &Id) -> Arc<Mutex<Model>> {
@@ -328,12 +363,22 @@ impl Store {
     /// The stored result and whether it came from the card pack (which holds complete values: its
     /// sources are not library models, so packed texture references could not be restored).
     pub fn get_raw_src(&self, id: &Id, query: &str, args: &[u8]) -> Option<(Vec<u8>, bool)> {
+        // An OK card's open reads a model only third-party mods use from its own pack (okstrict.rs): the library's
+        // copy is a gap, copied into the card while it is sealed.
+        if self.mode == Mode::Replay && crate::okstrict::active().is_some() && !crate::okstrict::library_model(id) {
+            if let Some(raw) = self.pack().and_then(|p| p.get_own(id, query, args)) { return Some((raw, true)); }
+            let raw = self.get_own(id, query, args)?;
+            if crate::okstrict::complete(|a| { a.records.insert((*id, query.to_owned(), args.to_vec()), raw.clone()); }) { return Some((raw, true)); }
+            crate::okstrict::gap(|| format!("model {} {query} {}", hex(id), describe_args(args)));
+            return None;
+        }
         if let Some(raw) = self.get_own(id, query, args) { return Some((raw, false)); }
         self.pack().and_then(|p| p.get_own(id, query, args)).map(|raw| (raw, true))
     }
 
     /// `get_own` without holding a large result in memory (decompressed into a mapped temporary file).
     fn get_own_source(&self, id: &Id, query: &str, args: &[u8]) -> Option<crate::unity::SourceBytes> {
+        if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).cloned().map(crate::unity::SourceBytes::from); }
         let model = self.model(id);
         let loc = model.lock().unwrap().entries.get(&(query.to_owned(), args.to_vec()))?.clone();
         let file = File::open(model_path(&self.dir, id)).ok()?;
@@ -341,6 +386,7 @@ impl Store {
     }
 
     fn get_own(&self, id: &Id, query: &str, args: &[u8]) -> Option<Vec<u8>> {
+        if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).cloned(); }
         let model = self.model(id);
         let loc = model.lock().unwrap().entries.get(&(query.to_owned(), args.to_vec()))?.clone();
         let file = File::open(model_path(&self.dir, id)).ok()?;
@@ -349,7 +395,7 @@ impl Store {
 
     /// The card pack: the one of the open running on this thread (PackScope), else the process-wide one.
     pub fn pack(&self) -> Option<Arc<Store>> {
-        if self.mode == Mode::Replay { if let Some(scope) = pack_scope() { return Some(scope.store.clone()); } }
+        if self.mode == Mode::Replay { if let Some(scope) = pack_scope() { return scope.store.clone(); } }
         self.pack.read().unwrap().clone()
     }
     /// The pack being recorded (an original card becoming an OK card).
@@ -358,6 +404,11 @@ impl Store {
 
     pub fn put_raw(&self, id: &Id, query: &str, args: &[u8], raw: &[u8]) {
         if self.mode != Mode::Record { return; }
+        if let Some(records) = &self.records {
+            records.write().unwrap().entry((*id, query.to_owned(), args.to_vec())).or_insert_with(|| raw.to_vec());
+            self.record_models.write().unwrap().insert(*id);
+            return;
+        }
         let model = self.model(id);
         let mut m = model.lock().unwrap();
         let key = (query.to_owned(), args.to_vec());
@@ -434,6 +485,7 @@ impl Store {
     }
 
     pub fn flush(&self) {
+        if self.records.is_some() { return; }
         let missing = self.missing.lock().unwrap();
         if !missing.is_empty() {
             let mut lines: Vec<_> = missing.iter().map(|(k, n)| format!("{n}\t{k}")).collect();
@@ -449,6 +501,9 @@ impl Store {
     }
 
     pub fn note_missing(&self, what: String) {
+        // (a card being sealed computes a query its own model lacks as every open did, and keeps the value: what that
+        // computation could not read is no gap of the card, okstrict.rs)
+        if !(what.starts_with("UNMEMOIZED ") && crate::okstrict::completing()) { crate::okstrict::gap(|| what.clone()); }
         self.misses.fetch_add(1, Ordering::Relaxed);
         *self.missing.lock().unwrap().entry(what).or_default() += 1;
     }
@@ -723,15 +778,25 @@ pub fn begin_card_pack(dir: &Path) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(dir);
     // Parsed bundles answer repeated queries from their own caches: start cold so every query is recorded.
     crate::unity::clear_bundle_cache();
-    *store.pack.write().unwrap() = Some(Arc::new(Store::open(dir, Mode::Record)?));
+    *store.pack.write().unwrap() = Some(Arc::new(Store::recording_in_memory()));
     crate::gamefs::set_overlay(Some(Default::default()), true);
     Ok(())
 }
 
 /// Stop recording; the `okLc` payload (None when the library covered everything).
 pub fn end_card_pack() -> Result<Option<Vec<u8>>, String> {
+    match take_card_pack()? { Some(pack) => encode_card_pack(&pack).map(Some), None => Ok(None) }
+}
+
+/// `end_card_pack` before it is encoded (None when the library covered everything).
+fn take_card_pack() -> Result<Option<CardPack>, String> {
     let index = crate::gamefs::take_overlay().unwrap_or_default();
     let Some(pack) = active().and_then(|s| s.pack.write().unwrap().take()) else { return Ok(None) };
+    if pack.records.is_some() {
+        let records = pack.take_records();
+        if records.is_empty() && index.files.is_empty() && index.dirs.is_empty() && index.zips.is_empty() { return Ok(None); }
+        return Ok(Some(CardPack { version: CARD_PACK_VERSION, index, records }));
+    }
     pack.flush();
     let mut models = Vec::new();
     let mut records = Vec::new();
@@ -761,10 +826,32 @@ pub fn end_card_pack() -> Result<Option<Vec<u8>>, String> {
         models.iter().map(|m| m.1).sum::<usize>(), records.len(), index.files.len(), index.dirs.len(), index.zips.len(),
         index.zips.values().map(|z| z.entries.len()).sum::<usize>());
     if records.is_empty() && index.files.is_empty() && index.dirs.is_empty() && index.zips.is_empty() { return Ok(None); }
-    let raw = bincode::serialize(&CardPack { version: CARD_PACK_VERSION, index, records: records.into_iter().map(|(a, b, c, d)| PackRecord(a, b, c, d)).collect() }).map_err(|e| e.to_string())?;
-    let packed = zstd::stream::encode_all(&raw[..], 19).map_err(|e| e.to_string())?;
-    eprintln!("ok-extract: card pack {summary} payload={}", packed.len());
-    Ok(Some(packed))
+    eprintln!("ok-extract: card pack {summary}");
+    Ok(Some(CardPack { version: CARD_PACK_VERSION, index, records: records.into_iter().map(|(a, b, c, d)| PackRecord(a, b, c, d)).collect() }))
+}
+
+/// The `okLc` payload of a pack: zstd (OK_PACK_LEVEL, default 3) on all hardware threads. Level 9 made cards ~5%
+/// smaller for several times the CPU, an eighth of a batch conversion's; reading is as fast either way.
+fn encode_card_pack(pack: &CardPack) -> Result<Vec<u8>, String> {
+    let raw = bincode::serialize(pack).map_err(|e| e.to_string())?;
+    let level = std::env::var("OK_PACK_LEVEL").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), level).map_err(|e| e.to_string())?;
+    encoder.multithread(crate::cpu_threads() as u32).map_err(|e| e.to_string())?;
+    std::io::Write::write_all(&mut encoder, &raw).map_err(|e| e.to_string())?;
+    encoder.finish().map_err(|e| e.to_string())
+}
+
+/// What a sealing or converting open copied from the library, added to a pack (its own entries keep precedence).
+fn merge_additions(pack: &mut CardPack, adds: crate::okstrict::Additions) {
+    for (key, entry) in adds.index.files { pack.index.files.entry(key).or_insert(entry); }
+    for (key, dir) in adds.index.dirs { pack.index.dirs.entry(key).or_insert(dir); }
+    for (key, zip) in adds.index.zips {
+        let own = pack.index.zips.entry(key).or_insert_with(|| crate::gamefs::ZipIndex { names: zip.names.clone(), entries: Default::default() });
+        for (i, entry) in zip.entries { own.entries.entry(i).or_insert(entry); }
+    }
+    let have: std::collections::HashSet<(Id, String, Vec<u8>)> = pack.records.iter().map(|r| (r.0, r.1.clone(), r.2.clone())).collect();
+    pack.records.extend(adds.records.into_iter().filter(|(k, _)| !have.contains(k)).map(|((id, query, args), value)| PackRecord(id, query, args, value)));
+    pack.records.sort_by(|a, b| (a.0, &a.1, &a.2).cmp(&(b.0, &b.1, &b.2)));
 }
 
 /// A PNG chunk's data.
@@ -784,9 +871,22 @@ pub fn png_chunk<'a>(bytes: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
 /// cache keyed by the pack's hash). Unmounted when the guard drops. None: the card carries no pack.
 pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     let bytes = std::fs::read(card).map_err(|e| e.to_string())?;
-    let Some(chunk) = png_chunk(&bytes, PACK_CHUNK) else { return Ok(None) };
-    // Each open has its own pack (PackScope): many pack-carrying cards open at once. Only extracting a pack's models
-    // to its cache folder is one at a time.
+    // An OK card opens from its own data and the shared resources only (okstrict.rs), a card without a pack too; an
+    // original card being made into one (its pack recorded) reads its zipmods.
+    let strict = (png_chunk(&bytes, CARD_CHUNK).is_some() && !recording_card_pack()).then(crate::okstrict::for_open);
+    let tree = crate::tree_answers::parse(&bytes);
+    if strict.is_some() && tree.is_none() && !crate::tree_answers::recording() {
+        return Err(format!("{}: the OK card has no okLt answers (made before 2026-10-28; ok-extract X:/NoGame --oklib seal \
+            <base library> <card> completes it)", card.display()));
+    }
+    let Some(chunk) = png_chunk(&bytes, PACK_CHUNK) else {
+        if strict.is_none() { return Ok(None) }
+        active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
+        return Ok(Some(mount_scope(PackScope { overlay: crate::gamefs::replay_overlay_of(Default::default()), store: None,
+            identity: String::new(), mods_identity: String::new(), fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new(), tree, strict })));
+    };
+    // Each open has its own pack (PackScope), held in memory for that open only: many pack-carrying cards open at
+    // once, and nothing is written to disk.
     active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
     let (profile, t) = (std::env::var_os("OK_PROFILE").is_some(), std::time::Instant::now());
     let raw = zstd::stream::decode_all(chunk).map_err(|e| format!("card pack: {e}"))?;
@@ -794,40 +894,28 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     let pack: CardPack = bincode::deserialize(&raw).map_err(|e| format!("card pack: {e}"))?;
     if pack.version != CARD_PACK_VERSION { return Err(format!("card pack version {} (expected {CARD_PACK_VERSION})", pack.version)); }
     if profile { eprintln!("ok-extract: PROFILE pack decoded {:>8.1}ms ({} records)", t.elapsed().as_secs_f64() * 1e3, pack.records.len()); }
-    let base = session_cache_dir().map(|d| d.join("packs")).unwrap_or_else(|| std::env::temp_dir().join("okcard-packs"));
-    let dir = base.join(hex(&hash16(chunk)));
-    {
-        let _extracting = PACK_OPEN.lock().unwrap_or_else(|e| e.into_inner());
-        if !dir.join("oklib.json").is_file() {
-            let tmp = dir.with_extension("tmp");
-            let _ = std::fs::remove_dir_all(&tmp);
-            {
-                let writer = Store::open(&tmp, Mode::Record)?;
-                for PackRecord(id, query, args, value) in &pack.records { writer.put_raw(id, query, args, value); }
-            }
-            std::fs::write(tmp.join("oklib.json"), br#"{"format":"oklib-card-pack","version":2}"#).map_err(|e| e.to_string())?;
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::rename(&tmp, &dir).map_err(|e| e.to_string())?;
-        }
-    }
-    if profile { eprintln!("ok-extract: PROFILE pack extracted {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
-    let pack_store = Arc::new(Store::open(&dir, Mode::Replay)?);
-    if profile { eprintln!("ok-extract: PROFILE pack store open {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
+    let CardPack { index, records, .. } = pack;
+    LAST_PACK_MODELS.store(records.iter().map(|r| r.0).collect::<std::collections::BTreeSet<_>>().len() as u64, Ordering::Relaxed);
+    let pack_store = Arc::new(Store::in_memory(records));
+    if profile { eprintln!("ok-extract: PROFILE pack store in memory {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
     // What the pack serves under mods/ (zipmods, their entries, listings): the mods-tree memos only depend on this.
     let mods_view = {
         let in_mods = |k: &String| k.to_ascii_lowercase().replace('\\', "/").contains("mods/");
-        let files: Vec<_> = pack.index.files.iter().filter(|(k, _)| in_mods(k)).collect();
-        let dirs: Vec<_> = pack.index.dirs.iter().filter(|(k, _)| in_mods(k)).collect();
+        let files: Vec<_> = index.files.iter().filter(|(k, _)| in_mods(k)).collect();
+        let dirs: Vec<_> = index.dirs.iter().filter(|(k, _)| in_mods(k)).collect();
         // Nothing under mods/: the library's own tree, the same memos as without a pack (and as a prewarm).
-        if files.is_empty() && dirs.is_empty() && pack.index.zips.is_empty() { String::new() }
-        else { bincode::serialize(&(files, dirs, &pack.index.zips)).map(|b| hex(&hash16(&b))).unwrap_or_else(|_| hex(&hash16(chunk))) }
+        if files.is_empty() && dirs.is_empty() && index.zips.is_empty() { String::new() }
+        else { bincode::serialize(&(files, dirs, &index.zips)).map(|b| hex(&hash16(&b))).unwrap_or_else(|_| hex(&hash16(chunk))) }
     };
-    LAST_PACK_MODELS.store(pack.records.iter().map(|r| r.0).collect::<std::collections::BTreeSet<_>>().len() as u64, Ordering::Relaxed);
-    let scope = Arc::new(PackScope { overlay: crate::gamefs::replay_overlay_of(pack.index), store: pack_store, identity: hex(&hash16(chunk)),
-        mods_identity: mods_view, fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new(), tree: crate::tree_answers::parse(&bytes) });
+    Ok(Some(mount_scope(PackScope { overlay: crate::gamefs::replay_overlay_of(index), store: Some(pack_store), identity: hex(&hash16(chunk)),
+        mods_identity: mods_view, fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new(), tree, strict })))
+}
+
+fn mount_scope(scope: PackScope) -> PackMount {
+    let scope = Arc::new(scope);
     ACTIVE_SCOPES.lock().unwrap_or_else(|e| e.into_inner()).push(Arc::downgrade(&scope));
     let previous = PACK_SCOPE.with(|c| c.replace(Some(scope.clone())));
-    Ok(Some(PackMount { scope, previous }))
+    PackMount { scope, previous }
 }
 
 /// A replayed OK card's pack (okLc) for one open: its overlay index, models and identities. Set on the thread that
@@ -835,13 +923,16 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
 /// pack (it used to be process-wide: one pack-carrying card opened at a time, a hundred girls one after another).
 pub struct PackScope {
     pub overlay: Arc<crate::gamefs::Overlay>,
-    store: Arc<Store>,
+    /// The pack's models (none: an OK card without a pack).
+    store: Option<Arc<Store>>,
     identity: String,
     mods_identity: String,
     /// The open read installed zipmods (gamefs::fallback_used, per open).
     pub fallback_used: AtomicBool,
     /// What the card answers of its open's mods-tree questions (`okLt`, tree_answers.rs).
     pub tree: Option<Arc<crate::tree_answers::Table>>,
+    /// An OK card's open: its own data and the shared resources only (okstrict.rs).
+    pub strict: Option<Arc<crate::okstrict::Strict>>,
     pool: std::sync::OnceLock<Option<rayon::ThreadPool>>,
 }
 thread_local! { static PACK_SCOPE: std::cell::RefCell<Option<Arc<PackScope>>> = const { std::cell::RefCell::new(None) }; }
@@ -885,7 +976,7 @@ pub fn pack_parallel<R: Send>(work: impl FnOnce() -> R + Send) -> R {
     let Some(scope) = own_scope() else { return work() };
     let pool = scope.pool.get_or_init(|| {
         let weak = Arc::downgrade(&scope);
-        let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(2, 8);
+        let workers = crate::cpu_threads().clamp(2, 8);
         rayon::ThreadPoolBuilder::new().num_threads(workers).thread_name(|i| format!("OKCardPack{i}"))
             .start_handler(move |_| POOL_SCOPE.with(|c| *c.borrow_mut() = weak.clone())).build().ok()
     });
@@ -897,7 +988,6 @@ pub fn pack_parallel<R: Send>(work: impl FnOnce() -> R + Send) -> R {
     }
 }
 
-static PACK_OPEN: Mutex<()> = Mutex::new(());
 static MOUNTED_PACK: Mutex<String> = Mutex::new(String::new());
 /// Identity of the card pack mounted over the library right now ("" when none): per-process memos of what the
 /// library serves must not mix two cards' own zipmods.
@@ -916,6 +1006,10 @@ pub fn mounted_pack_mods_identity() -> String {
 /// Models in the last mounted OK card pack (diagnostics).
 pub static LAST_PACK_MODELS: AtomicU64 = AtomicU64::new(0);
 pub struct PackMount { scope: Arc<PackScope>, previous: Option<Arc<PackScope>> }
+impl PackMount {
+    /// The OK card's strict open (okstrict.rs).
+    pub fn strict(&self) -> Option<Arc<crate::okstrict::Strict>> { self.scope.strict.clone() }
+}
 impl Drop for PackMount {
     fn drop(&mut self) {
         PACK_SCOPE.with(|c| *c.borrow_mut() = self.previous.take());
@@ -941,6 +1035,8 @@ pub fn library_card_with_pack(original: &[u8], payload: &[u8], pack: Option<&[u8
 /// Derived, deletable cache of sessions built from the library (a library
 /// card opens in seconds the first time, instantly afterwards). Keyed by the
 /// card bytes, outfit, requested clothes states and the library identity.
+/// Opens read and write the open cache (not under OK_NOCACHE).
+pub fn session_cache_enabled() -> bool { session_cache_dir().is_some() }
 fn session_cache_dir() -> Option<PathBuf> {
     if std::env::var_os("OK_NOCACHE").is_some() { return None; }
     session_cache_location()
@@ -1012,9 +1108,11 @@ pub fn library_scan_save<T: serde::Serialize>(what: &str, value: &T) {
     let tmp = path.with_extension(format!("{}.{}.tmp", std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
     if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, &path).is_err() { let _ = std::fs::remove_file(&tmp); }
 }
+/// The folder of the disk caches (opened cards, derived library textures, library scans): none unless
+/// `OK_LIBRARY_CACHE` names one. Since 2026-10-28 an OK card opens from itself and the library every time (it used to
+/// default to %LOCALAPPDATA%\OpenKoikatsu\oklib-cache).
 pub fn session_cache_location() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("OK_LIBRARY_CACHE") { return Some(PathBuf::from(dir)); }
-    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("OpenKoikatsu").join("oklib-cache"))
+    std::env::var_os("OK_LIBRARY_CACHE").map(PathBuf::from)
 }
 /// Bump when extraction changes what an opened card contains (material/shader resolution, baked textures): cached
 /// sessions are keyed by the card and the library only, so they would keep the old result.
@@ -1422,21 +1520,33 @@ pub fn with_zipmods<R>(lib: &Path, game: &Path, card: &Path, f: impl FnOnce() ->
     with_zipmods_and(lib, game, card, &[], f)
 }
 
+/// Where a card's zipmods come from: an installation (its `mods/` and its settings), or only a zipmod folder named
+/// `mods` (no game: the shadow ramp and UncensorSelector settings are the shared resources'). (root whose `mods/` is
+/// searched, whether the root's settings are read)
+pub fn zipmod_source(game: &Path) -> (PathBuf, bool) {
+    match (game.file_name(), game.parent()) {
+        (Some(name), Some(parent)) if name.eq_ignore_ascii_case("mods") && game.is_dir() => (parent.to_owned(), false),
+        _ => (game.to_owned(), true),
+    }
+}
+
 /// `with_zipmods` plus game zipmods the card uses without naming them (`extra`).
 fn with_zipmods_and<R>(lib: &Path, game: &Path, card: &Path, extra: &[PathBuf], f: impl FnOnce() -> Result<R, String>) -> Result<R, String> {
     let _one = ORIGINAL_OPEN.lock().unwrap_or_else(|e| e.into_inner());
     ensure_library(lib)?;
+    let (game, settings) = zipmod_source(game);
+    let game = game.as_path();
     let mut roots = Vec::new();
-    if let Some(dir) = card.parent() { roots.push(crate::gamefs::Fallback { root: dir.to_owned(), loose_mods: true, files: Vec::new(), installation: false }); }
+    if let Some(dir) = card.parent() { roots.push(crate::gamefs::Fallback { root: dir.to_owned(), loose_mods: true, files: Vec::new(), installation: false, settings: false }); }
     if !game.as_os_str().is_empty() && game.is_dir() && crate::gamefs::normalize(game) != crate::gamefs::normalize(lib) {
         let t = std::time::Instant::now();
         let mut files = card_zipmods(game, card);
         if std::env::var_os("OK_TIMING").is_some() { eprintln!("OKTIME card_zipmods {:.2}s ({} zips)", t.elapsed().as_secs_f64(), files.len()); }
         for z in extra { if !files.contains(z) { files.push(z.clone()); } }
-        roots.push(crate::gamefs::Fallback { root: PathBuf::new(), loose_mods: false, files, installation: false });
+        roots.push(crate::gamefs::Fallback { root: PathBuf::new(), loose_mods: false, files, installation: false, settings: false });
         // Last: the installation itself, as the game sees it (zipmods the card uses without naming them, its
         // UncensorSelector configuration), for what this checkout's library does not hold.
-        roots.push(crate::gamefs::Fallback { root: game.to_owned(), loose_mods: false, files: Vec::new(), installation: true });
+        roots.push(crate::gamefs::Fallback { root: game.to_owned(), loose_mods: false, files: Vec::new(), installation: true, settings });
     }
     crate::gamefs::set_fallback(roots);
     let result = f();
@@ -1498,74 +1608,153 @@ pub fn make_ok_card(lib: &Path, game: &Path, card: &Path) -> Result<(String, usi
 fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) -> Result<(String, usize, Vec<u8>, usize), String> {
     let original = std::fs::read(card).map_err(|e| e.to_string())?;
     if is_library_card(card) { return Err(format!("{} is already an OK card", card.display())); }
-    let work = lib.join("work").join(format!("pack_{}", std::process::id()));
-    // A card saved without sideloader resolve data for an item names no zipmod for it; the game finds it by id in
-    // the installed mods. The zipmods such an open had to read (and the library does not convert, being
-    // character-specific) are taken into this card's pack: exactly those, never a scan of the mods directory.
-    let mut extra: Vec<PathBuf> = Vec::new();
-    let (digest, parts, models, pack) = loop {
-        if let Some(store) = active() { store.clear_missing(); }
-        // A retry records a new pack: bundles cached by the previous attempt would be answered without being read.
-        if !extra.is_empty() { crate::unity::release_bundle_caches(); }
-        let made = with_zipmods_and(lib, game, card, &extra, || {
-            let store = active().ok_or("library not active")?;
-            store.forget_models();
-            begin_card_pack(&work)?;
+    let outfits = crate::tree_answers::outfit_count(&original) as i32;
+    if outfit < 0 || outfit >= outfits { return Err(format!("{}: outfit {outfit} of {outfits}", card.display())); }
+    LAST_ABSENT_ZIPMODS.lock().unwrap().clear();
+    LAST_UNNAMED_ZIPMOD_BYTES.store(0, Ordering::Relaxed);
+    let work = lib.join("work").join(format!("convert_{}", std::process::id()));
+    let (profile, clock) = (std::env::var_os("OK_PROFILE").is_some(), std::time::Instant::now());
+    let lap = |what: &str| if profile { eprintln!("OKPROFILE convert {what} at {:.2}s", clock.elapsed().as_secs_f64()); };
+    // One pass (okstrict.rs, "Converting"): every saved outfit is opened once, the tree's answers recorded (okLt), the
+    // third-party data the library holds copied and what only the zipmods hold recorded from them (okLc).
+    let made = with_zipmods_and(lib, game, card, &[], || {
+        let store = active().ok_or("library not active")?;
+        store.forget_models();
+        store.clear_missing();
+        begin_card_pack(&work)?;
+        crate::tree_answers::begin(lib);
+        let strict = crate::okstrict::Strict::converting();
+        // Every conversion is a view of its own (the card's zipmods join the library's tree): memos keyed by the view
+        // (the tree's zip list and GUID index among them) must not answer the next card of the same worker with this
+        // one's tree (小绯雪 converted after Denia lost its own zipmod's GUID, and with it its clothes).
+        static CONVERSIONS: AtomicU64 = AtomicU64::new(0);
+        let view = format!("converting-{}-{}", std::process::id(), CONVERSIONS.fetch_add(1, Ordering::Relaxed));
+        let scope = PackScope { overlay: crate::gamefs::process_overlay().ok_or("no recording overlay")?,
+            store: store.pack.read().unwrap().clone(), identity: view.clone(), mods_identity: view,
+            fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new(), tree: None, strict: Some(strict.clone()) };
+        let mount = mount_scope(scope);
+        let mut first = None;
+        let mut failed = Vec::new();
+        lap("setup");
+        for o in 0..outfits {
             let t = std::time::Instant::now();
-            // The card format's digest still describes coordinate 0. Every other saved coordinate is opened
-            // into the same pack too: the reader changes outfits from the card alone, and what only another
-            // outfit needs (a mod top's body alpha mask the library lacks) was missing from cards made from
-            // coordinate 0 (a breast showing through the top). The explicitly selected one must open.
-            let opened = (|| {
-                let first = session_digest(lib, card)?;
-                if outfit != 0 { session_digest_outfit(lib, card, outfit)?; }
-                let coordinates = crate::card::parse_card_bytes_mode(&original, 0, false).map(|c| c.coordinate_count).unwrap_or(1);
-                for other in 1..coordinates as i32 {
-                    if other == outfit { continue; }
-                    if let Err(e) = session_digest_outfit(lib, card, other) {
-                        eprintln!("ok-extract: {} outfit {other} not recorded: {e}", card.display());
-                    }
-                }
-                Ok::<_, String>(first)
-            })();
-            if std::env::var_os("OK_TIMING").is_some() { eprintln!("OKTIME session {:.2}s", t.elapsed().as_secs_f64()); }
-            let pack = end_card_pack();
-            let (digest, parts, preview) = opened?;
-            if let Some(dir) = std::env::var_os("OKLIB_KEEP") { let _ = std::fs::write(Path::new(&dir).join(format!("{}.make.okpreview", card_key(card))), &preview); }
-            let models: Vec<String> = store.touched().iter().map(id_hex).collect();
-            Ok((digest, parts, models, pack?))
-        })?;
-        // Gaps name either the zip entry the library cannot serve, or a query a model of a mods zip lacks.
-        let mut keys: Vec<String> = Vec::new();
-        for (what, _) in active().map(|s| s.missing_list()).unwrap_or_default() {
-            if let Some(k) = what.strip_prefix("GAMEFS zip-entry ").and_then(|k| k.split('|').next()) { keys.push(k.to_owned()); continue; }
-            if what.starts_with("GAMEFS ") || what.starts_with("UNMEMOIZED ") { continue; }
-            // "<query> <model id> <args>": the model id is the first 32-hex word.
-            if let Some(id) = what.split_whitespace().find(|w| w.len() == 32).and_then(id_from_hex) {
-                keys.extend(crate::gamefs::zips_with_model(&id));
-            }
+            // (only outfit 0's session is the card's digest; the others are opened for what they read)
+            let opened = if o == 0 { session_digest_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
+            if let Err(e) = opened { failed.push(format!("outfit {o}: {e}")); }
+            if profile { eprintln!("OKPROFILE convert outfit {o} {:.2}s", t.elapsed().as_secs_f64()); }
         }
-        // Zipmods the card needs that neither the library, the card's directory nor the game can give.
-        let mut absent: Vec<String> = keys.iter().filter(|k| k.starts_with("mods/") && !game.join(k).is_file()
-            && !card.parent().is_some_and(|d| k.rsplit('/').next().is_some_and(|n| d.join(n).is_file())))
-            .filter_map(|k| k.rsplit('/').next().map(str::to_owned)).collect();
-        absent.sort();
-        absent.dedup();
-        LAST_ABSENT_ZIPMODS.lock().unwrap().clone_from(&absent);
-        if !absent.is_empty() { eprintln!("ok-extract: card needs {} zipmod(s) that are not available: {:?}", absent.len(), absent); }
-        let mut unnamed: Vec<PathBuf> = keys.into_iter().filter(|k| k.starts_with("mods/")).map(|k| game.join(k))
-            .filter(|p| p.is_file() && !extra.contains(p)).collect();
-        unnamed.sort();
-        unnamed.dedup();
-        if unnamed.is_empty() || extra.len() > 64 { break made; }
-        eprintln!("ok-extract: card uses {} zipmod(s) it does not name: {:?}", unnamed.len(), unnamed);
-        extra.extend(unnamed);
-    };
-    LAST_UNNAMED_ZIPMOD_BYTES.store(extra.iter().filter_map(|p| std::fs::metadata(p).ok()).map(|m| m.len()).sum(), Ordering::Relaxed);
+        drop(mount);
+        let answers = crate::tree_answers::end();
+        lap("opens");
+        let pack = take_card_pack();
+        lap("answers+take");
+        let models: Vec<String> = store.touched().iter().map(id_hex).collect();
+        Ok::<_, String>((first, failed, strict.gaps(), strict.take_additions(), answers, pack, models))
+    });
+    let _ = std::fs::remove_dir_all(&work);
+    let (first, failed, gaps, adds, answers, pack, models) = made?;
+    if !gaps.is_empty() { return Err(crate::okstrict::failure(card, &gaps)); }
+    if !failed.is_empty() { return Err(failed.join(" | ")); }
+    let (digest, parts, _) = first.ok_or("outfit 0 did not open")?;
+    // The pack is put together once (recorded, then what the library supplied) and encoded once.
+    let mut pack = pack?.unwrap_or_else(|| CardPack { version: CARD_PACK_VERSION, index: Default::default(), records: Vec::new() });
+    merge_additions(&mut pack, adds);
+    lap("merge");
+    let empty = pack.records.is_empty() && pack.index.files.is_empty() && pack.index.dirs.is_empty() && pack.index.zips.is_empty();
+    let pack = if empty { None } else { Some(encode_card_pack(&pack)?) };
+    lap("encode");
     let payload = serde_json::to_vec(&serde_json::json!({"format":"oklib-card","version":1,"digest":digest,"models":models})).unwrap();
     let bytes = library_card_with_pack(&original, &payload, pack.as_deref())?;
-    let bytes = with_tree_answers(lib, &bytes)?;
+    let bytes = crate::tree_answers::with_answers(&bytes, &answers?)?;
+    lap("card");
     Ok((digest, parts, bytes, pack.map_or(0, |p| p.len())))
+}
+
+/// The OK card made to open from its own data and the shared resources only (okstrict.rs): its answers (`okLt`)
+/// recorded, then every outfit opened in completing mode, what those opens read of third-party mods from the library
+/// copied into its pack (`okLc`), then every outfit opened strictly from the result. Also a summary of what was added.
+///
+/// Each step runs in a process of its own (`seal-step`): a value an earlier open of the process kept (an entry memo,
+/// a ramp, a parsed bundle) answers a later open without the reads that step must make, so answers went unrecorded
+/// and library data uncopied, and a check in the same process passed a card a new process could not open.
+pub fn seal_card(lib: &Path, card: &[u8]) -> Result<(Vec<u8>, String), String> {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = lib.join("work");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let step_file = |step: &str| TempCard(dir.join(format!("seal_{}_{n}_{step}.png", std::process::id())));
+    let (input, answered, sealed) = (step_file("in"), step_file("answers"), step_file("sealed"));
+    std::fs::write(&input.0, card).map_err(|e| format!("{}: {e}", input.0.display()))?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let run = |args: &[&std::ffi::OsStr]| -> Result<String, String> {
+        let out = std::process::Command::new(&exe).arg("X:/NoGame").arg("--oklib").args(args).output().map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() { Ok(text) } else { Err(text.lines().filter(|l| l.starts_with("OK")).collect::<Vec<_>>().join(" ")) }
+    };
+    run(&["seal-step".as_ref(), lib.as_os_str(), "answers".as_ref(), input.0.as_os_str(), answered.0.as_os_str()])?;
+    let mut summary = run(&["seal-step".as_ref(), lib.as_os_str(), "complete".as_ref(), answered.0.as_os_str(), sealed.0.as_os_str()])?;
+    // A read made by an open's background work (entry prefetch) can land after its step took what it copied (seen
+    // under load): the strict check names it, and completing the sealed card again copies it.
+    let mut check = run(&["strict-check".as_ref(), lib.as_os_str(), sealed.0.as_os_str()]);
+    for _ in 0..2 {
+        if check.is_ok() { break; }
+        std::fs::copy(&sealed.0, &answered.0).map_err(|e| e.to_string())?;
+        summary.push_str(&run(&["seal-step".as_ref(), lib.as_os_str(), "complete".as_ref(), answered.0.as_os_str(), sealed.0.as_os_str()])?);
+        check = run(&["strict-check".as_ref(), lib.as_os_str(), sealed.0.as_os_str()]);
+    }
+    check?;
+    let summary = summary.lines().filter_map(|l| l.strip_prefix("OKSEALSTEP ")).collect::<Vec<_>>().join("; then ");
+    Ok((std::fs::read(&sealed.0).map_err(|e| e.to_string())?, summary))
+}
+
+/// One step of `seal_card` in this process: "answers" (okLt recorded) or "complete" (library data copied in).
+fn seal_step(lib: &Path, step: &str, card: &[u8]) -> Result<(Vec<u8>, String), String> {
+    if step == "answers" { return Ok((with_tree_answers(lib, card)?, String::new())); }
+    if step != "complete" { return Err(format!("seal step {step}?")); }
+    let answered = card.to_vec();
+    let strict = crate::okstrict::begin_sealing();
+    let completing = open_outfits(lib, &answered, "sealing");
+    crate::okstrict::end_sealing();
+    let adds = strict.take_additions();
+    completing?;
+    let summary = format!("added files={} zips={} zip entries={} model records={} ({} bytes)", adds.index.files.len(), adds.index.zips.len(),
+        adds.index.zips.values().map(|z| z.entries.len()).sum::<usize>(), adds.records.len(), adds.records.values().map(Vec::len).sum::<usize>());
+    let sealed = if adds.index.files.is_empty() && adds.index.zips.is_empty() && adds.records.is_empty() { answered } else { extend_card_pack(&answered, adds)? };
+    Ok((sealed, summary))
+}
+
+/// Opens every saved outfit of the card (bytes) from the library, nothing read from or written to the open cache, with
+/// cold bundle caches (an earlier open's parsed bundles would answer reads the card must make itself).
+fn open_outfits(lib: &Path, card: &[u8], what: &str) -> Result<(), String> {
+    ensure_library(lib)?;
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = lib.join("work");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let temp = TempCard(dir.join(format!("{what}_{}_{}.png", std::process::id(), N.fetch_add(1, Ordering::Relaxed))));
+    std::fs::write(&temp.0, card).map_err(|e| format!("{}: {e}", temp.0.display()))?;
+    let nocache = std::env::var_os("OK_NOCACHE");
+    std::env::set_var("OK_NOCACHE", "1");
+    crate::unity::release_bundle_caches();
+    let mut errors = Vec::new();
+    for outfit in 0..crate::tree_answers::outfit_count(card) as i32 {
+        if let Err(e) = crate::session::open(lib, Some(&temp.0), outfit) { errors.push(format!("outfit {outfit}: {e}")); }
+    }
+    if nocache.is_none() { std::env::remove_var("OK_NOCACHE"); }
+    if errors.is_empty() { Ok(()) } else { Err(format!("{what} open failed: {}", errors.join(" | "))) }
+}
+
+/// The card with what a sealing open copied from the library added to its pack (a pack made when it has none).
+fn extend_card_pack(card: &[u8], adds: crate::okstrict::Additions) -> Result<Vec<u8>, String> {
+    let mut pack = match png_chunk(card, PACK_CHUNK) {
+        Some(chunk) => {
+            let raw = zstd::stream::decode_all(chunk).map_err(|e| format!("card pack: {e}"))?;
+            bincode::deserialize::<CardPack>(&raw).map_err(|e| format!("card pack: {e}"))?
+        }
+        None => CardPack { version: CARD_PACK_VERSION, index: Default::default(), records: Vec::new() },
+    };
+    if pack.version != CARD_PACK_VERSION { return Err(format!("card pack version {} (expected {CARD_PACK_VERSION})", pack.version)); }
+    merge_additions(&mut pack, adds);
+    crate::tree_answers::with_chunk(card, PACK_CHUNK, &encode_card_pack(&pack)?)
 }
 
 /// The OK card with `okLt`: the answers its opens take from the library's mods tree (tree_answers.rs), recorded by
@@ -1673,6 +1862,13 @@ where A: serde::Serialize + ?Sized, R: serde::Serialize + serde::de::Deserialize
             unpack(&mut stored);
             return value;
         }
+        if crate::okstrict::completing_model(id) {
+            let value = f();
+            let mut stored = pack(&value);
+            if let Ok(raw) = crate::unity::with_texture_plans(|| bincode::serialize(&stored)) { crate::okstrict::keep_record(id, method, &arg_bytes, raw); }
+            unpack(&mut stored);
+            return value;
+        }
         store.note_missing(format!("{method} {} {}", hex(id), describe_args(&arg_bytes)));
         return f();
     }
@@ -1700,6 +1896,11 @@ where A: serde::Serialize + ?Sized, R: serde::Serialize + serde::de::Deserialize
         if let Some(card_pack) = store.recording_pack() {
             let value = f();
             if let Ok(raw) = crate::unity::with_texture_plans(|| bincode::serialize(&value)) { card_pack.put_raw(id, method, &arg_bytes, &raw); }
+            return value;
+        }
+        if crate::okstrict::completing_model(id) {
+            let value = f();
+            if let Ok(raw) = crate::unity::with_texture_plans(|| bincode::serialize(&value)) { crate::okstrict::keep_record(id, method, &arg_bytes, raw); }
             return value;
         }
         store.note_missing(format!("{method} {} {}", hex(id), describe_args(&arg_bytes)));
@@ -1735,7 +1936,10 @@ pub(crate) fn memo_bytes_visit<A: serde::Serialize + ?Sized, T>(bytes: &[u8], me
     if store.mode != Mode::Replay || store.recording_pack().is_some() { return None; }
     let id = content_id(bytes);
     let arg_bytes = bincode::serialize(args).ok()?;
-    let raw = store.get_own_source(&id, method, &arg_bytes).or_else(|| store.pack().and_then(|p| p.get_own_source(&id, method, &arg_bytes)))?;
+    // (an OK card's own model: its pack only; one it lacks goes through memo_bytes, okstrict.rs)
+    let own = crate::okstrict::active().is_some() && !crate::okstrict::library_model(&id);
+    let library = if own { None } else { store.get_own_source(&id, method, &arg_bytes) };
+    let raw = library.or_else(|| store.pack().and_then(|p| p.get_own_source(&id, method, &arg_bytes)))?;
     let value = visit(&raw)?;
     store.hits.fetch_add(1, Ordering::Relaxed);
     Some(value)
@@ -1971,19 +2175,82 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             size_rule?;
         }
         "cards" => {
-            // cards <lib> <card list> <out dir>: `card` for every listed original card in one process (the library,
-            // the mod catalogs and indexes are loaded once). No verification: run okcard-verify afterwards.
+            // cards <lib> <card list> <out dir>: `card` for every listed original card (convert in one pass, okstrict.rs).
+            // Worker processes (OK_CARDS_WORKERS, default half the hardware threads, at most 12) each set up the
+            // library once and convert cards one after another; every card starts from released caches. A worker
+            // takes its cards one at a time on stdin (card list "-").
             let lib = lib.ok_or("library directory required")?;
-            let list = std::fs::read_to_string(args.get(2).ok_or("card list required")?).map_err(|e| e.to_string())?;
+            let list_arg = args.get(2).ok_or("card list required")?;
+            let list = if list_arg == "-" { String::new() } else { std::fs::read_to_string(list_arg).map_err(|e| e.to_string())? };
             let out_dir = PathBuf::from(args.get(3).ok_or("output directory required")?);
             std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
             ensure_library(&lib)?;
             let started = std::time::Instant::now();
             let (mut done, mut failed) = (0, 0);
-            for card in list.lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from) {
-                let t0 = std::time::Instant::now();
-                let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| remake_ok_card(&lib, game, &card))).unwrap_or_else(|_| Err("panic".into()));
+            if std::env::var_os("OK_CARDS_IN_PROCESS").is_none() {
+                let cards: Vec<String> = list.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned).collect();
+                let workers = std::env::var("OK_CARDS_WORKERS").ok().and_then(|v| v.parse().ok())
+                    .unwrap_or_else(|| (std::thread::available_parallelism().map_or(8, |n| n.get()) / 2).clamp(1, 12)).clamp(1, cards.len().max(1));
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                // The workers share the machine: each one's pools get its part of the hardware threads.
+                let threads = (crate::cpu_threads() / workers).max(2);
+                // Cards are handed out one at a time, each worker asking for the next when it is done: their costs differ
+                // several times over, and shares fixed in advance left workers idle while one went through heavy cards.
+                let queue = std::sync::Arc::new(Mutex::new(cards.iter().cloned().collect::<std::collections::VecDeque<String>>()));
+                let runs: Vec<_> = (0..workers).map(|_| {
+                    let (exe, game, lib, out_dir, queue) = (exe.clone(), game.to_owned(), lib.clone(), out_dir.clone(), queue.clone());
+                    std::thread::spawn(move || -> Result<Vec<String>, String> {
+                        use std::io::{BufRead, Write};
+                        let mut child = std::process::Command::new(&exe).arg(&game).arg("--oklib").arg("cards").arg(&lib).arg("-").arg(&out_dir)
+                            .env("OK_CARDS_IN_PROCESS", "1").env("OK_THREADS", threads.to_string()).env("RAYON_NUM_THREADS", threads.to_string())
+                            .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::inherit())
+                            .spawn().map_err(|e| e.to_string())?;
+                        let mut input = child.stdin.take().ok_or("worker stdin")?;
+                        let mut output = std::io::BufReader::new(child.stdout.take().ok_or("worker stdout")?).lines();
+                        let mut results = Vec::new();
+                        loop {
+                            let Some(card) = queue.lock().unwrap().pop_front() else { break };
+                            let answer = writeln!(input, "{card}").and_then(|_| input.flush()).ok().and_then(|_| loop {
+                                match output.next() {
+                                    Some(Ok(l)) if l.starts_with("OKCARDS ok") || l.starts_with("OKCARDS error") => break Some(l),
+                                    Some(Ok(_)) => continue,
+                                    _ => break None,
+                                }
+                            });
+                            match answer {
+                                Some(line) => { println!("{line}"); results.push(line); }
+                                None => { results.push(format!("OKCARDS error\t{card}\tthe worker ended ({:?})\t0.0s", child.try_wait())); break; }
+                            }
+                        }
+                        drop(input);
+                        let _ = child.wait();
+                        Ok(results)
+                    })
+                }).collect();
+                let mut seconds = 0.0;
+                let mut lines = Vec::new();
+                for run in runs { lines.extend(run.join().map_err(|_| "worker thread panicked")??); }
+                // Cards no worker was left to take (all of them ended).
+                lines.extend(queue.lock().unwrap().drain(..).map(|card| format!("OKCARDS error\t{card}\tno worker left\t0.0s")));
+                for line in &lines {
+                    if line.starts_with("OKCARDS ok") { done += 1 } else { failed += 1; if line.ends_with("\t0.0s") { println!("{line}"); } }
+                    seconds += line.split('\t').find_map(|f| f.strip_suffix('s').and_then(|v| v.parse::<f64>().ok())).unwrap_or(0.0);
+                }
+                println!("OKCARDS finished {done} made, {failed} failed in {:.1}s with {workers} workers ({seconds:.1}s converting in all, {:.2}s a card)",
+                    started.elapsed().as_secs_f64(), seconds / (done + failed).max(1) as f64);
+                return Ok(());
+            }
+            let given: Box<dyn Iterator<Item = String>> = if list_arg == "-" { Box::new(std::io::stdin().lines().map_while(Result::ok)) }
+                else { Box::new(list.lines().map(str::to_owned).collect::<Vec<_>>().into_iter()) };
+            for card in given.map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).map(PathBuf::from) {
+                // Nothing an earlier card's open kept in this process may stand in for this card's reads: every one of
+                // them must reach the recorder.
                 crate::unity::release_bundle_caches();
+                crate::clear_entry_memo();
+                let t0 = std::time::Instant::now();
+                crate::clothes_gpu::GPU_NANOS.store(0, Ordering::Relaxed);
+                crate::clothes_gpu::GPU_CALLS.store(0, Ordering::Relaxed);
+                let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| remake_ok_card(&lib, game, &card))).unwrap_or_else(|_| Err("panic".into()));
                 match made {
                     Ok((digest, parts, bytes, pack_len)) => {
                         let out = out_dir.join(card.file_name().unwrap_or_default());
@@ -1991,9 +2258,11 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                         done += 1;
                         let absent = LAST_ABSENT_ZIPMODS.lock().unwrap().join(" | ");
                         println!("OKCARDS ok\t{}\t{digest}\tparts={parts}\tpack={pack_len}\t{:.1}s\tabsent={absent}", card.display(), t0.elapsed().as_secs_f64());
+                        if std::env::var_os("OK_PROFILE").is_some() { eprintln!("OKPROFILE gpu {:.2}s in {} calls", crate::clothes_gpu::GPU_NANOS.load(Ordering::Relaxed) as f64 / 1e9, crate::clothes_gpu::GPU_CALLS.load(Ordering::Relaxed)); }
                     }
                     Err(e) => { failed += 1; println!("OKCARDS error\t{}\t{}\t{:.1}s", card.display(), e.replace(['\t', '\n'], " "), t0.elapsed().as_secs_f64()); }
                 }
+                let _ = std::io::Write::flush(&mut std::io::stdout());
             }
             if let Some(store) = active() { store.flush(); }
             println!("OKCARDS finished {done} made, {failed} failed in {:.0}s", started.elapsed().as_secs_f64());
@@ -2110,6 +2379,28 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 print!("OKCARDV {line}");
                 let _ = out.write_all(line.as_bytes());
             }
+        }
+        "pack-keys" => {
+            // pack-keys <OK card>: what its okLc and okLt hold, one sorted line each (record keys with their value
+            //   hashes, overlay files, archives and entries, answer keys): two conversions of a card are compared by it.
+            let bytes = std::fs::read(args.get(1).ok_or("card required")?).map_err(|e| e.to_string())?;
+            let mut lines = Vec::new();
+            if let Some(chunk) = png_chunk(&bytes, PACK_CHUNK) {
+                let raw = zstd::stream::decode_all(chunk).map_err(|e| e.to_string())?;
+                let pack: CardPack = bincode::deserialize(&raw).map_err(|e| e.to_string())?;
+                for PackRecord(id, query, a, value) in &pack.records { lines.push(format!("record {} {query} {} {}", hex(id), hex(a), hex(&hash16(value)))); }
+                for (k, e) in &pack.index.files { lines.push(format!("file {k} {}", hex(&hash16(&bincode::serialize(e).unwrap_or_default())))); }
+                for (k, d) in &pack.index.dirs { lines.push(format!("dir {k} {}", d.len())); }
+                for (k, z) in &pack.index.zips {
+                    lines.push(format!("zip {k} names={}", z.names.len()));
+                    for (i, e) in &z.entries { lines.push(format!("entry {k} {i} {}", hex(&hash16(&bincode::serialize(e).unwrap_or_default())))); }
+                }
+            }
+            if let Some(table) = crate::tree_answers::parse(&bytes) {
+                for ((kind, key), value) in table.iter() { lines.push(format!("answer {kind} {} {}", hex(key), hex(&hash16(value)))); }
+            }
+            lines.sort();
+            for l in lines { println!("{l}"); }
         }
         "pack-diff" => {
             // pack-diff <lib> <card>: the original card from the library plus its zipmods, without and with the
@@ -2316,24 +2607,56 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             if a != b { let _ = std::fs::write(work.join("a.okpreview"), &a); let _ = std::fs::write(work.join("b.okpreview"), &b); }
             println!("OKCLOTHES test {} outfit={outfit} {verdict} okclothes={} card={} dropped={dropped:?}", card.display(), packed.len(), original.len());
         }
-        "tree-answers" => {
-            // tree-answers <lib> <OK card>...: give each OK card its okLt (tree_answers.rs), in place. Cards made
-            // before okLt existed then open without reading the library's mods tree.
+        "seal" => {
+            // seal <lib> <OK card>... [--out DIR]: make each OK card open from its own data and the shared resources
+            // only (okstrict.rs): okLt answers, the third-party data it reads from the library copied into its okLc.
+            // In place, or written to DIR. One card per process is the reliable check (strict-check).
+            let lib = lib.ok_or("library directory required")?;
+            let (mut cards, mut out_dir) = (Vec::new(), None);
+            let mut rest = args[2..].iter();
+            while let Some(a) = rest.next() {
+                if a == "--out" { out_dir = Some(PathBuf::from(rest.next().ok_or("--out needs a directory")?)); } else { cards.push(PathBuf::from(a)); }
+            }
+            let mut failed = 0;
+            for card in cards {
+                let t = std::time::Instant::now();
+                let made = std::fs::read(&card).map_err(|e| e.to_string()).and_then(|bytes| {
+                    if !is_library_card(&card) { return Err("not an OK card".into()); }
+                    let (out, summary) = seal_card(&lib, &bytes)?;
+                    let target = match &out_dir { Some(d) => d.join(card.file_name().unwrap_or_default()), None => card.clone() };
+                    let temp = target.with_extension("png.seal-tmp");
+                    std::fs::write(&temp, &out).map_err(|e| e.to_string())?;
+                    std::fs::rename(&temp, &target).map_err(|e| e.to_string())?;
+                    Ok((bytes.len(), out.len(), summary))
+                });
+                match made {
+                    Ok((before, after, summary)) => println!("OKSEAL ok\t{}\t{before} -> {after} bytes\t{summary}\t{:.1}s", card.display(), t.elapsed().as_secs_f64()),
+                    Err(e) => { failed += 1; println!("OKSEAL error\t{}\t{e}", card.display()); }
+                }
+            }
+            if failed > 0 { return Err(format!("{failed} card(s) failed")); }
+        }
+        "seal-step" => {
+            // seal-step <lib> answers|complete <in> <out>: one step of seal_card, run in a process of its own.
+            let lib = lib.ok_or("library directory required")?;
+            let (step, input, output) = (args.get(2).ok_or("step required")?, args.get(3).ok_or("input required")?, args.get(4).ok_or("output required")?);
+            match std::fs::read(input).map_err(|e| e.to_string()).and_then(|bytes| seal_step(&lib, step, &bytes)) {
+                Ok((out, summary)) => {
+                    std::fs::write(output, &out).map_err(|e| e.to_string())?;
+                    println!("OKSEALSTEP {summary}");
+                }
+                Err(e) => { println!("OKSEALSTEP error {step}: {e}"); return Err(e); }
+            }
+        }
+        "strict-check" => {
+            // strict-check <lib> <OK card>...: every outfit opens from the card and the shared resources only.
             let lib = lib.ok_or("library directory required")?;
             let mut failed = 0;
             for card in args[2..].iter().map(PathBuf::from) {
                 let t = std::time::Instant::now();
-                let made = std::fs::read(&card).map_err(|e| e.to_string()).and_then(|bytes| {
-                    if !is_library_card(&card) { return Err("not an OK card".into()); }
-                    let out = with_tree_answers(&lib, &bytes)?;
-                    let temp = card.with_extension("png.answers-tmp");
-                    std::fs::write(&temp, &out).map_err(|e| e.to_string())?;
-                    std::fs::rename(&temp, &card).map_err(|e| e.to_string())?;
-                    Ok((bytes.len(), out.len(), png_chunk(&out, crate::tree_answers::CHUNK).map_or(0, <[u8]>::len)))
-                });
-                match made {
-                    Ok((before, after, chunk)) => println!("OKTREE ok\t{}\t{before} -> {after} bytes\tokLt={chunk}\t{:.1}s", card.display(), t.elapsed().as_secs_f64()),
-                    Err(e) => { failed += 1; println!("OKTREE error\t{}\t{e}", card.display()); }
+                match std::fs::read(&card).map_err(|e| e.to_string()).and_then(|bytes| open_outfits(&lib, &bytes, "strict")) {
+                    Ok(()) => println!("OKSTRICT ok\t{}\t{:.1}s", card.display(), t.elapsed().as_secs_f64()),
+                    Err(e) => { failed += 1; println!("OKSTRICT error\t{}\t{e}", card.display()); }
                 }
             }
             if failed > 0 { return Err(format!("{failed} card(s) failed")); }
@@ -2415,6 +2738,9 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 # the uncensor bodies and the shared mods stay in. Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md.\n");
             for e in &excluded { text.push_str(e); text.push('\n'); }
             std::fs::write(lib.join("models").join(".gitignore"), text).map_err(|e| e.to_string())?;
+            // The library carries its list: an OK card's strict open (okstrict.rs) tells shared mods by it, also where
+            // the project's Tools folder is not (a packaged game).
+            std::fs::copy(&list, lib.join("shared_mods.txt")).map_err(|e| format!("{}: {e}", list.display()))?;
             println!("OKLIB SHARED kept={kept} ({:.2} GB) excluded={} ({:.2} GB) without_source={unnamed}",
                 kept_bytes as f64 / 1e9, excluded.len(), out_bytes as f64 / 1e9);
         }

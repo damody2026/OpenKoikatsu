@@ -59,7 +59,9 @@
 轉成 OK 卡：
 
 ```powershell
-# 有遊戲：卡片指名的 zipmod 由遊戲 mods/ 提供
+# 只有 zipmod 資料夾（名稱為 mods）：不讀遊戲任何東西，陰影 ramp、UncensorSelector 設定用共用資源（基礎庫、專案 Config/）
+.\Tools\ok-extract\target\release\ok-extract.exe D:/KoikatuSunshine/mods --oklib card .\Content\IndependentResources\base_v1 <原作卡.png> <輸出.png>
+# 有遊戲：卡片指名的 zipmod 由遊戲 mods/ 提供，設定用遊戲的
 .\Tools\ok-extract\target\release\ok-extract.exe D:/KoikatuSunshine --oklib card .\Content\IndependentResources\base_v1 <原作卡.png> <輸出.png>
 # 沒有遊戲：zipmod 放在卡片旁邊，遊戲目錄給一個不存在的路徑
 .\Tools\ok-extract\target\release\ok-extract.exe X:/NoGame --oklib card .\Content\IndependentResources\base_v1 <卡片資料夾\原作卡.png> <輸出.png>

@@ -18,7 +18,7 @@ public:
     AOKInteractionMode();
     static AOKInteractionMode* Enter(UOKCharacterController* Controller);
     static AOKInteractionMode* EnterReader(UOKCharacterController* Source);
-    static AOKInteractionMode* EnterCards(APlayerController* Player,const FString& Female,const FString& Male);
+    static AOKInteractionMode* EnterCards(APlayerController* Player,const FString& Female,const FString& Male,int32 FemaleOutfit=0); // FemaleOutfit: the outfit she wears (the street's)
     virtual void Tick(float Delta) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     void Exit(bool Cancelled=false);
@@ -31,7 +31,7 @@ public:
     TFunction<void(TSharedRef<FJsonObject>)> Returned;
     UPROPERTY() TObjectPtr<UOKCharacterController> Controller;
 private:
-    void LoadFemale(const FString& Path);
+    void LoadFemale(const FString& Path,int32 Outfit=0);
 #if !UE_BUILD_SHIPPING
     bool TickFeatureAudit();
     int32 FeatureAuditStage=0,FeatureAuditPair=INDEX_NONE;

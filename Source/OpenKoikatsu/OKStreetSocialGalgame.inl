@@ -74,6 +74,7 @@ struct FOKStreetGalgame
 		FOKStreetRelation Relation;
 		bool bMind = false;
 		int64 MindMessages = 0, MindCompactions = 0, MindMemoryNext = 0;
+		TArray<FString> PartyLog; // the group's last lines, as the next group prompt shows them
 	};
 	TArray<FCheckpoint> Checkpoints;
 };
@@ -229,6 +230,7 @@ void AOKStreetSocialScene::GalgameCheckpoint(int32 Character, const FString& Id)
 	P.Lines = Galgame->Lines.Num();
 	P.Id = Id;
 	P.LogSerial = S.FreeTalkSerial;
+	P.PartyLog = S.PartyLog;
 	{ const auto& List = HistoryOf(Id); P.HistorySerial = List.IsEmpty() ? 0 : List.Last().Serial; }
 	if (const auto* Memory = S.FreeTalkMemory.Find(Id)) P.Memory = *Memory;
 	if (const auto* R = S.Store.Relations.FindByPredicate([&Id](const FOKStreetRelation& X) { return X.Id == Id; })) { P.bRelation = true; P.Relation = *R; }
@@ -250,7 +252,9 @@ void AOKStreetSocialScene::GalgameCheckpoint(int32 Character, const FString& Id)
 
 // He says something while the box shows an earlier line (the wheel scrolled back): everything after that line is
 // undone, as if the conversation had stopped there. His own line on screen is undone too (he says it again, differently).
-void AOKStreetSocialScene::GalgameRollBack(int32 Character, const FString& Id)
+// In a group every girl in it goes back (each has her own point, taken before his line to all of them); with only the
+// one he spoke to, the others kept favour, memory and mind of lines no longer there.
+void AOKStreetSocialScene::GalgameRollBack(const TArray<FString>& Ids)
 {
 	QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_GalgameRollBack);
 	if (!Galgame.IsValid() || !State) return;
@@ -259,42 +263,55 @@ void AOKStreetSocialScene::GalgameRollBack(int32 Character, const FString& Id)
 	auto& S = *State;
 	const int32 Keep = G.ViewLine + 1;
 	G.ViewLine = INDEX_NONE;
-	int32 Pick = INDEX_NONE;
-	for (int32 I = 0; I < G.Checkpoints.Num(); ++I) if (G.Checkpoints[I].Lines <= Keep && G.Checkpoints[I].Id == Id) Pick = I;
-	if (Pick == INDEX_NONE) { UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: nothing to undo before line %d"), Keep); return; }
-	const FOKStreetGalgame::FCheckpoint P = G.Checkpoints[Pick];
-	const int32 Log = S.FreeTalkLog.RemoveAll([&P](const FOKFreeTalkLine& L) { return L.Serial > P.LogSerial; });
-	if (Log) S.FreeTalkLogDirty = true;
-	S.FreeTalkMemory.FindOrAdd(Id) = P.Memory;
-	FreeTalkSaveMemory();
-	auto& List = HistoryOf(Id);
-	const int32 History = List.RemoveAll([&P](const FOKStreetHistoryEntry& E) { return E.Serial > P.HistorySerial; });
-	if (History)
+	// One girl back to her checkpoint: the log lines, her memory, history, relation and mind.
+	auto Restore = [&](const FOKStreetGalgame::FCheckpoint& P)
 	{
-		const FString Path = HistoryPath(Id);
-		OKStreetFlushSaves(); // appends still queued would land after the rewrite
-		FString Out;
-		for (const auto& E : List) Out += OKStreetHistoryLine(E) + TEXT("\n");
-		if (!Path.IsEmpty()) FFileHelper::SaveStringToFile(Out, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-	}
-	if (P.bRelation)
+		const FString& Id = P.Id;
+		const int32 Log = S.FreeTalkLog.RemoveAll([&P](const FOKFreeTalkLine& L) { return L.Serial > P.LogSerial; });
+		if (Log) S.FreeTalkLogDirty = true;
+		S.FreeTalkMemory.FindOrAdd(Id) = P.Memory;
+		FreeTalkSaveMemory();
+		auto& List = HistoryOf(Id);
+		const int32 History = List.RemoveAll([&P](const FOKStreetHistoryEntry& E) { return E.Serial > P.HistorySerial; });
+		if (History)
+		{
+			const FString Path = HistoryPath(Id);
+			OKStreetFlushSaves(); // appends still queued would land after the rewrite
+			FString Out;
+			for (const auto& E : List) Out += OKStreetHistoryLine(E) + TEXT("\n");
+			if (!Path.IsEmpty()) FFileHelper::SaveStringToFile(Out, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		}
+		if (P.bRelation)
+		{
+			FOKStreetStore Next = S.Store;
+			if (auto* R = Next.Relations.FindByPredicate([&Id](const FOKStreetRelation& X) { return X.Id == Id; })) *R = P.Relation;
+			CommitStore(MoveTemp(Next));
+		}
+		FString MindResult;
+		if (P.bMind && S.Mind)
+		{
+			FString Error;
+			S.Mind->Query(FString::Printf(TEXT("{\"kind\":\"rollback\",\"heroine\":\"%s\",\"messages\":%lld,\"compactions\":%lld,\"memory_next\":%lld}"),
+				*Id.ReplaceCharWithEscapedChar(), P.MindMessages, P.MindCompactions, P.MindMemoryNext), MindResult, Error);
+			if (MindResult.IsEmpty()) MindResult = Error;
+		}
+		UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: back to line %d (kept %d lines): log -%d, history -%d, favor %.1f, mind %s"),
+			Keep, P.Lines, Log, History, P.bRelation ? P.Relation.Favor : -1.f, *MindResult);
+	};
+	TArray<int32> Picks;
+	for (const FString& Id : Ids)
 	{
-		FOKStreetStore Next = S.Store;
-		if (auto* R = Next.Relations.FindByPredicate([&Id](const FOKStreetRelation& X) { return X.Id == Id; })) *R = P.Relation;
-		CommitStore(MoveTemp(Next));
+		int32 Pick = INDEX_NONE;
+		for (int32 I = 0; I < G.Checkpoints.Num(); ++I) if (G.Checkpoints[I].Lines <= Keep && G.Checkpoints[I].Id == Id) Pick = I;
+		if (Pick != INDEX_NONE) Picks.Add(Pick);
 	}
-	FString MindResult;
-	if (P.bMind && S.Mind)
-	{
-		FString Error;
-		S.Mind->Query(FString::Printf(TEXT("{\"kind\":\"rollback\",\"heroine\":\"%s\",\"messages\":%lld,\"compactions\":%lld,\"memory_next\":%lld}"),
-			*Id.ReplaceCharWithEscapedChar(), P.MindMessages, P.MindCompactions, P.MindMemoryNext), MindResult, Error);
-		if (MindResult.IsEmpty()) MindResult = Error;
-	}
-	G.Lines.SetNum(FMath::Min(G.Lines.Num(), P.Lines));
-	G.Checkpoints.SetNum(Pick);
-	UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: back to line %d (kept %d lines): log -%d, history -%d, favor %.1f, mind %s"),
-		Keep, P.Lines, Log, History, P.bRelation ? P.Relation.Favor : -1.f, *MindResult);
+	if (Picks.IsEmpty()) { UE_LOG(LogTemp, Display, TEXT("Street galgame rollback: nothing to undo before line %d"), Keep); return; }
+	const int32 First = FMath::Min(Picks);
+	if (Ids.Num() > 1) S.PartyLog = G.Checkpoints[First].PartyLog;
+	int32 KeepLines = MAX_int32;
+	for (const int32 Pick : Picks) { Restore(G.Checkpoints[Pick]); KeepLines = FMath::Min(KeepLines, G.Checkpoints[Pick].Lines); }
+	G.Lines.SetNum(FMath::Min(G.Lines.Num(), KeepLines));
+	G.Checkpoints.SetNum(First);
 }
 
 bool AOKStreetSocialScene::GalgameHidesDialogueBox() const
@@ -753,7 +770,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				for (int32 Slot = 1; Slot < S.Manifest.Characters.Num(); ++Slot)
 				{
 					FOKRuntimeCharacterStatus O;
-					if (Slot == G.Partner || !OKGetCrowdRuntimeCharacterStatus(this, Slot, O)) continue;
+					// The one speaking is who the shot is on (in a group, not always the one he talks to): at the table beside him
+					// she stood right at the lens and was left out, the picture empty while she spoke.
+					if (Slot == G.Partner || Slot == G.Speaker || !OKGetCrowdRuntimeCharacterStatus(this, Slot, O)) continue;
 					const FVector Body = O.Transform.GetLocation() + FVector(0, 0, 90);
 					bool bInWay = false;
 					for (const FVector& To : {Target, HerHead})

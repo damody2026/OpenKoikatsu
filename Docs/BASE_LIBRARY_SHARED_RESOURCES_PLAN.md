@@ -64,6 +64,16 @@
 
 既有 OK 卡（StreetHeroines、CrowdAPNG）是在完整基礎庫上做的，`okLc` 不含第三方共用 mod 的資料；在有完整本機模型的 C、E 仍可開，要給乾淨 clone 用時以 `--oklib cards` 重轉。
 
+2026-10-28 起 OK 卡一律嚴格開卡（只用卡內 `okLc`／`okLt` 與共用資源，見 [OK 基礎模型庫](OK_BASE_LIBRARY_PLAN.md)「OK 卡只靠自己開卡」）：上面這種靠本機第三方模型才開得了的卡，開卡會報錯，要用 `--oklib seal` 封卡，或從原作卡加 zipmod 資料夾重轉。
+
+### 嚴格開卡上線時處理一個 checkout 的 OK 卡（E 已做；C 在下次 C⇔E 整合時照做）
+
+1. 舊 OK 卡不處理（不封、不修）：遊戲用到的卡一律換成從原作 KKS 卡新轉、驗收過的卡（`Tools/ok_cards.lua`，見 [OK 基礎模型庫](OK_BASE_LIBRARY_PLAN.md)「批次轉換」）。
+2. `Content/CharacterCards/`（`CrowdAPNG`、`StreetHeroines`、`Demo`）直接用 E 驗收過的新卡覆蓋，覆蓋前把原卡備份到 `Saved/CardBackup/`。新卡的身分是新的（街區對這些女主角的存檔關係會重來）。`StreetHeroines` 要等那個 checkout 的遊戲關掉再換，換完通知用它的 session。
+3. `UserData/Studio/import/*_cards` 是開 KStudio 場景時自動重轉的暫存，不必處理；`scene/*_cards` 被 `.okscene` 引用，要從場景重新匯入。
+4. 驗收：`Tools\lua\lua.exe Tools\ok_cards.lua verify <卡片資料夾>`（一張卡一個新程序、沒有快取），全部通過才算完成。
+5. 刪掉舊的磁碟快取（`%LOCALAPPDATA%\OpenKoikatsu\oklib-cache`、`%TEMP%\okcard-packs`、`%TEMP%\ok-extract-spill`）：新程式不再使用，但舊程式留下的檔案還在。
+
 ### 60 張樣本卡回歸（UserData 抽樣，指定遊戲路徑轉 OK 卡 → 封閉重開 → 對照遊戲模式）
 
 | | 乾淨 clone | 完整基礎庫（對照組） |

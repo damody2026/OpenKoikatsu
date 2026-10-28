@@ -30,6 +30,9 @@ struct FKKRuntimeMaterialData {
 struct OkSession;
 struct FKKRuntimePalettePart;
 KKRUNTIMEPOSE_API bool OKCaptureRuntimeMaterials(OkSession*,TConstArrayView<FKKRuntimePalettePart>,FKKRuntimeMaterialData&,FString& Error);
+// The same, every distinct texture decoded and mipped in parallel (what OK_FIRSTLOAD=C5 makes the default): for a load
+// the player waits on, off the game thread (the one-on-one scene's high model).
+KKRUNTIMEPOSE_API bool OKCaptureRuntimeMaterialsParallel(OkSession*,TConstArrayView<FKKRuntimePalettePart>,FKKRuntimeMaterialData&,FString& Error);
 // One part's description (source metadata and card-resolved values) without decoding its textures: what an own-graph
 // material needs to run the part's installed programs (OKMakeRuntimeOutlineVertexOffset).
 KKRUNTIMEPOSE_API bool OKDescribeRuntimeMaterialPart(OkSession*,int32 NativePart,FKKRuntimeMaterialPart&,FString& Error);

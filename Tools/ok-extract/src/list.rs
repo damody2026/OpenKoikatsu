@@ -65,14 +65,17 @@ pub(crate) struct TreeCatalog {
     get: HashMap<(i32, i32), Option<ListEntry>>,
     slot: HashMap<(i32, i32, i32), Option<ListEntry>>,
     record: bool,
+    /// An OK card's strict open (okstrict.rs): a question without an answer is a gap, never asked of the tree.
+    strict: bool,
     full: std::sync::OnceLock<std::sync::Arc<ChaListCatalog>>,
 }
 
 impl TreeCatalog {
     fn full(&self) -> &ChaListCatalog {
         self.full.get_or_init(|| {
+            if self.strict { return Default::default(); }
             let _spot = crate::profile::spot("tree answer miss: catalogue");
-            load_mods_catalog_tree(&self.mods_dir)
+            crate::okstrict::scanning(|| load_mods_catalog_tree(&self.mods_dir))
         })
     }
     /// Logs an answer; an entry from an archive outside the recorded mods folder is not logged (asked of the tree).
@@ -96,6 +99,7 @@ impl ChaListCatalog {
     pub fn get(&self, category_no: i32, id: i32) -> Option<&ListEntry> {
         if let Some(tree) = &self.tree {
             if let Some(answer) = tree.get.get(&(category_no, id)) { return answer.as_ref(); }
+            if tree.strict { crate::okstrict::gap(|| format!("okLt cat {category_no} {id}")); return None; }
             let found = tree.full().get(category_no, id);
             tree.log("cat", &(category_no, id), found);
             return found;
@@ -105,7 +109,10 @@ impl ChaListCatalog {
 
     /// Every entry once, the layered view included.
     pub fn entries(&self) -> Box<dyn Iterator<Item = &ListEntry> + '_> {
-        if let Some(tree) = &self.tree { return tree.full().entries(); }
+        if let Some(tree) = &self.tree {
+            if tree.strict { crate::okstrict::gap(|| "okLt cat: every entry".into()); }
+            return tree.full().entries();
+        }
         Box::new(self.by_id.values().chain(self.base.iter().flat_map(|base|
             base.by_id.iter().filter(|(k, _)| !self.by_id.contains_key(k)).map(|(_, e)| e))))
     }
@@ -113,6 +120,7 @@ impl ChaListCatalog {
     pub fn get_slot(&self, category_no: i32, slot: i32, local_slot: i32) -> Option<&ListEntry> {
         if let Some(tree) = &self.tree {
             if let Some(answer) = tree.slot.get(&(category_no, slot, local_slot)) { return answer.as_ref(); }
+            if tree.strict { crate::okstrict::gap(|| format!("okLt cat-slot {category_no} {slot} {local_slot}")); return None; }
             let found = tree.full().get_slot(category_no, slot, local_slot);
             tree.log("cat-slot", &(category_no, slot, local_slot), found);
             return found;
@@ -328,6 +336,12 @@ pub fn parse_chalist(bytes: &[u8]) -> Option<(i32, Vec<ListEntry>)> {
 
 pub fn text_assets_from_bundle(path: &Path) -> Vec<(String, Vec<u8>)> {
     text_assets_from_bundle_status(path).0
+}
+
+/// `text_assets_from_bundle` for a bundle in memory.
+pub(crate) fn text_assets_from_bundle_bytes(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
+    if !crate::oklib::memo_active() { return text_assets_from_bundle_status_unity(bytes.to_vec()).0; }
+    crate::oklib::memo_bytes(bytes, "text_assets_status", &(), || text_assets_from_bundle_status_unity(bytes.to_vec())).0
 }
 
 fn text_assets_from_bundle_status(path:&Path)->(Vec<(String,Vec<u8>)>,bool){
@@ -650,14 +664,20 @@ pub fn load_mods_catalog_shared(mods_dir: &Path) -> std::sync::Arc<ChaListCatalo
                 _ => {}
             }
         }
-        let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get, slot, record: false, full: Default::default() };
+        let strict = crate::okstrict::active().is_some();
+        let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get, slot, record: false, strict, full: Default::default() };
         return Arc::new(ChaListCatalog { tree: Some(Arc::new(tree)), ..Default::default() });
     }
-    let full = load_mods_catalog_tree(mods_dir);
+    // An OK card's strict open that has no catalogue answers: nothing of the tree (okstrict.rs). (Converting records them.)
+    if crate::okstrict::active().is_some() && !crate::tree_answers::recording() {
+        crate::okstrict::gap(|| "okLt cat-view".into());
+        return Arc::new(ChaListCatalog::default());
+    }
+    let full = crate::okstrict::scanning(|| load_mods_catalog_tree(mods_dir));
     // Recording an OK card's answers: the same catalogue, every question logged.
     if crate::tree_answers::recording() {
         crate::tree_answers::record("cat-view", &[], &());
-        let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get: HashMap::new(), slot: HashMap::new(), record: true, full: full.into() };
+        let tree = TreeCatalog { mods_dir: mods_dir.to_path_buf(), get: HashMap::new(), slot: HashMap::new(), record: true, strict: false, full: full.into() };
         return Arc::new(ChaListCatalog { tree: Some(Arc::new(tree)), ..Default::default() });
     }
     full

@@ -2537,7 +2537,9 @@ void UOKCharacterController::ShowPairStatus(const FString& Text,bool bOnScreen){
     UE_LOG(LogTemp,Display,TEXT("OK pair %s"),*Shown);
     if(PairStatus)PairStatus->SetText(FText::FromString(Shown));
     if(InspectorText)InspectorText->SetText(FText::FromString(Shown));
-    if(bOnScreen&&GEngine)GEngine->AddOnScreenDebugMessage(91,8.f,FColor::Yellow,Shown);
+    // The one-on-one scene shows it in its panel already; on screen it was debug text over the scene (with the engine's
+    // "DisableAllScreenMessages" hint) in the street's packaged game.
+    if(bOnScreen&&!bInteractionOnly&&GEngine)GEngine->AddOnScreenDebugMessage(91,8.f,FColor::Yellow,Shown);
 }
 void UOKCharacterController::RebuildPartnerMaleButtons(){
     if(!PartnerMaleList)return;PartnerMaleList->ClearChildren();

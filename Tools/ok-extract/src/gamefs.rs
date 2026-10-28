@@ -175,6 +175,9 @@ pub struct Fallback {
     /// zipmod whose model is not in this checkout), the library's own models keep precedence, and nothing it
     /// serves is taken into a card being recorded (the recording finds such zipmods through its gaps instead).
     pub installation: bool,
+    /// The installation's settings (shadow ramp, UncensorSelector configuration) are read from `root` too. Not when
+    /// only a zipmod folder was given: those come from the shared resources (the library, the project's Config).
+    pub settings: bool,
 }
 static FALLBACK: RwLock<Vec<Fallback>> = RwLock::new(Vec::new());
 
@@ -183,7 +186,7 @@ const INSTALLATION_SETTINGS: &[&str] = &["userdata/config/system.xml", "bepinex/
 
 /// The game installation exposed by the current fallback, if any.
 pub fn fallback_installation() -> Option<PathBuf> {
-    FALLBACK.read().unwrap().iter().find(|f| f.installation && !f.root.as_os_str().is_empty()).map(|f| f.root.clone())
+    FALLBACK.read().unwrap().iter().find(|f| f.installation && f.settings && !f.root.as_os_str().is_empty()).map(|f| f.root.clone())
 }
 /// The card directory exposed by the current fallback, if any.
 pub fn fallback_card_dir() -> Option<PathBuf> {
@@ -219,6 +222,8 @@ pub fn take_overlay() -> Option<Index> {
     let index = std::mem::take(&mut *o.index.lock().unwrap());
     Some(index)
 }
+/// The process-wide overlay (the one being recorded while an original card is converted).
+pub fn process_overlay() -> Option<Arc<Overlay>> { OVERLAY.read().unwrap().clone() }
 /// A replaying overlay over `index`, for one open's pack (oklib::PackScope).
 pub fn replay_overlay_of(index: Index) -> Arc<Overlay> { Arc::new(Overlay { record: false, index: Mutex::new(index) }) }
 /// The open's own pack on this thread (oklib::pack_scope), else the process-wide overlay.
@@ -540,6 +545,20 @@ pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {let _spot=crate::pr
         }
         Mode::Replay => {
             if let Some(o) = replay_overlay() { if let Some(bytes) = o.index.lock().unwrap().files.get(&key).and_then(entry_bytes) { return Ok(bytes); } }
+            // An OK card's open: a third-party mod's file only from its own pack (okstrict.rs).
+            if crate::okstrict::active().is_some() && !crate::okstrict::library_path(&key) {
+                let entry = st.index.lock().unwrap().files.get(&key).map(portable);
+                if let Some(entry) = &entry {
+                    if let Some(bytes) = entry_bytes(entry) {
+                        if crate::okstrict::complete(|a| { a.index.files.insert(key.clone(), entry.clone()); }) { return Ok(bytes); }
+                    }
+                }
+                // Converting: what the library does not hold is the zipmods' (read below and recorded).
+                if !crate::okstrict::converting() {
+                    if entry.is_some() { missing("read", &key); }
+                    return Err(not_found());
+                }
+            }
             // The game's settings (shadow ramp, UncensorSelector) are the installation's when one is given, not the
             // ones the library recorded; a card being made carries them.
             if INSTALLATION_SETTINGS.contains(&key.as_str()) {
@@ -550,6 +569,8 @@ pub fn read<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {let _spot=crate::pr
             }
             let index = st.index.lock().unwrap();
             if let Some(bytes) = index.files.get(&key).and_then(entry_bytes) { return Ok(bytes); }
+            // A directory read as a file (a path built from an empty bundle name): not found, which is the answer.
+            if index.dirs.contains_key(&key) { return Err(not_found()); }
             let known = index.files.get(&key).cloned();
             let absent = known.is_none() && proven_absent(&index, &key);
             drop(index);
@@ -644,7 +665,24 @@ fn observe_library(st: &State, key: &str) -> Option<Entry> {
         if let Some(entry) = observe_in(&o.index.lock().unwrap(), key) { if !matches!(entry, Entry::Missing) { return Some(entry); } }
     }
     let index = st.index.lock().unwrap();
-    observe_in(&index, key).or_else(|| proven_absent(&index, key).then_some(Entry::Missing))
+    let found = observe_in(&index, key).or_else(|| proven_absent(&index, key).then_some(Entry::Missing));
+    drop(index);
+    // An OK card's open: what exists of a third-party mod is what its own pack holds (okstrict.rs).
+    if let Some(entry) = found.as_ref().filter(|e| !matches!(e, Entry::Missing)) {
+        if crate::okstrict::active().is_some() && !crate::okstrict::library_path(key) {
+            let entry = portable(entry);
+            if !crate::okstrict::complete(|a| { a.index.files.entry(key.to_owned()).or_insert(entry); }) {
+                missing("stat", key);
+                return Some(Entry::Missing);
+            }
+        }
+    }
+    found
+}
+
+/// A library entry as a card's pack keeps it (content left in the mapped index copied out).
+fn portable(entry: &Entry) -> Entry {
+    match entry { Entry::Mapped(..) => Entry::Data(entry.data().unwrap_or_default()), e => e.clone() }
 }
 
 fn observe_in(index: &Index, key: &str) -> Option<Entry> {
@@ -766,6 +804,11 @@ pub fn read_dir<P: AsRef<Path>>(path: P) -> io::Result<std::vec::IntoIter<io::Re
             }
             Mode::Replay => {
                 let overlaid = replay_overlay().and_then(|o| o.index.lock().unwrap().dirs.get(&key).cloned());
+                // An OK card's open never lists the library's mods tree (okstrict.rs): only listings its pack holds.
+                if overlaid.is_none() && is_mods_key(&key) && crate::okstrict::active().is_some() && !crate::okstrict::converting() {
+                    missing("read_dir", &key);
+                    return Err(not_found());
+                }
                 let library = overlaid.or_else(|| st.index.lock().unwrap().dirs.get(&key).cloned());
                 let mut added = false;
                 let list = match (library, fallback_listing(&key)) {
@@ -797,6 +840,13 @@ pub enum Zip {
     Library(Arc<State>, String, ZipIndex, Option<(PathBuf, bool)>),
 }
 
+/// The library's record of the archive at `key` under another folder: same file name and the same entries.
+fn library_alias(st: &State, key: &str, own: Option<&ZipIndex>) -> Option<ZipIndex> {
+    let name = key.rsplit('/').next()?;
+    let index = st.index.lock().unwrap();
+    index.zips.iter().find(|(k, z)| k.rsplit('/').next() == Some(name) && own.is_none_or(|o| o.names == z.names)).map(|(_, z)| z.clone())
+}
+
 pub fn open_zip<P: AsRef<Path>>(path: P) -> Option<Zip> {let _spot=crate::profile::spot("open_zip");
     note_access(path.as_ref());
     let path = path.as_ref();
@@ -825,6 +875,32 @@ pub fn open_zip<P: AsRef<Path>>(path: P) -> Option<Zip> {let _spot=crate::profil
             // Library entries, completed by the overlay's (an OK card's pack, or what was read for one).
             let library = st.index.lock().unwrap().zips.get(&key).cloned();
             let overlaid = replay_overlay().and_then(|o| o.index.lock().unwrap().zips.get(&key).cloned());
+            // An OK card's open: a third-party archive from its own pack, with the library's shared entries (list
+            // bundles, a shared bundle in it) (okstrict.rs). Sealing reads the library's and copies what is read.
+            // (converting: an archive the library does not record is the zipmods', below)
+            let converting = crate::okstrict::converting();
+            if is_mods_key(&key) && crate::okstrict::active().is_some() && !crate::okstrict::library_zip(&key) && !(converting && library.is_none()) {
+                // A zipmod the card named was made reachable at mods/<file name> while it was converted; the library
+                // records the same archive at its own path (sealing copies its entries from there).
+                let library = library.or_else(|| if crate::okstrict::completing() { library_alias(&st, &key, overlaid.as_ref()) } else { None });
+                let index = match (overlaid, library) {
+                    (own, Some(lib)) if crate::okstrict::complete(|a| { a.index.zips.entry(key.clone()).or_insert_with(|| ZipIndex { names: lib.names.clone(), entries: BTreeMap::new() }); }) => {
+                        let mut index = lib;
+                        if let Some(own) = own { index.entries.extend(own.entries); }
+                        index
+                    }
+                    (Some(mut own), lib) => {
+                        for (i, e) in lib.map(|l| l.entries).unwrap_or_default() {
+                            if !own.entries.contains_key(&i) && own.names.get(i).is_some_and(|n| crate::okstrict::library_entry(&key, &n.0)) { own.entries.insert(i, e); }
+                        }
+                        own
+                    }
+                    (None, _) => { missing("zip", &key); return None; }
+                };
+                // Converting: entries the library never converted come from the zipmod (recorded).
+                let real = if converting { fallback_source(&key, Some(false)).map(|(p, _, installation)| (p, installation)) } else { None };
+                return Some(Zip::Library(st, key, index, real));
+            }
             let found = match (library, overlaid) {
                 (Some(mut index), Some(extra)) => { index.entries.extend(extra.entries); Some(index) }
                 (a, b) => a.or(b),
@@ -897,6 +973,14 @@ impl Zip {
         (f.compression() == zip::CompressionMethod::Stored && f.compressed_size() == f.size()).then(|| (f.data_start(), f.size()))
     }
 
+    /// Entry `i` was read whole in parts (`Read::read`, which logs nothing): a recording logs it as `read_to_end` does.
+    pub fn note_read(&self, i: usize, bytes: &[u8]) {
+        if let Zip::Real(_, Some((sink, key))) = self {
+            let entry = if crate::oklib::is_unity_bundle(bytes) { Entry::Model(crate::oklib::content_id(bytes), bytes.len() as u64) } else { Entry::Data(bytes.to_vec()) };
+            sink.with(|index| if let Some(z) = index.zips.get_mut(key) { z.entries.insert(i, entry); });
+        }
+    }
+
     pub fn by_index(&mut self, i: usize) -> zip::result::ZipResult<ZipEntry<'_>> {
         match self {
             Zip::Real(z, rec) => {
@@ -909,6 +993,13 @@ impl Zip {
                 // A zipmod of the card itself is read from the real archive even when the library knows the entry's model:
                 // the library may hold only some queries of a model it never converted, and the card's pack records the rest.
                 let recorded = index.entries.get(&i);
+                // A card being sealed (okstrict.rs) takes the third-party entries it reads into its pack.
+                if let Some(e) = recorded.filter(|_| is_mods_key(key) && crate::okstrict::active().is_some() && !crate::okstrict::library_entry(key, &name)) {
+                    let own = replay_overlay().is_some_and(|o| o.index.lock().unwrap().zips.get(key.as_str()).is_some_and(|z| z.entries.contains_key(&i)));
+                    if !own {
+                        crate::okstrict::complete(|a| { a.index.zips.entry(key.clone()).or_insert_with(|| ZipIndex { names: index.names.clone(), entries: BTreeMap::new() }).entries.insert(i, portable(e)); });
+                    }
+                }
                 // The installation's archive only fills in: a model this checkout has (the base library's shared
                 // resources, a mounted pack) answers first, a model that is not here comes from the real entry.
                 let use_real = match real {
@@ -1002,6 +1093,9 @@ pub fn library_memo<T: Clone + Send + Sync + 'static>(what: &str, dir: &Path, bu
     let Some(st) = state().filter(|st| st.mode == Mode::Replay) else { return build() };
     let n = normalize(dir);
     if n != st.root && !n.starts_with(&format!("{}/", st.root)) { return build(); }
+    // An OK card's strict open derives nothing from the library's mods tree (okstrict.rs): an earlier open's value
+    // must not stand in for the gap.
+    if crate::okstrict::active().is_some() && logical(&st, dir).is_none_or(|k| is_mods_key(&k)) { return build(); }
     let key = format!("{what}\n{n}\n{}", fallback_identity());
     if let Some(hit) = MEMO.lock().unwrap().iter().find(|(k, _)| *k == key).and_then(|(_, v)| v.downcast_ref::<T>().cloned()) { return hit; }
     let value = build();
@@ -1039,7 +1133,11 @@ pub fn library_zip_memo<T: Clone + Send + Sync + 'static>(what: &str, zip: &Path
     // A recorded archive whose models this checkout lacks is served by whatever the fallback holds (the real
     // zipmod, or nothing), and a card being recorded must read it again: its values last one fallback generation.
     // (and, cards opening at once each with their own pack, on the pack serving it)
-    let generation = if zip_lacks_models(&st, &key) { format!("{}|{}", FALLBACK_GENERATION.load(std::sync::atomic::Ordering::Relaxed), crate::oklib::mounted_pack_identity()) } else { String::new() };
+    // An OK card's strict open reads a third-party archive from its own pack (okstrict.rs): values last that pack; a
+    // card being sealed reads it again, so what it reads is copied into the card.
+    let own = crate::okstrict::active().is_some() && !crate::okstrict::library_zip(&key);
+    if own && crate::okstrict::complete(|_| {}) { return build(); }
+    let generation = if own || zip_lacks_models(&st, &key) { format!("{}|{}", FALLBACK_GENERATION.load(std::sync::atomic::Ordering::Relaxed), crate::oklib::mounted_pack_identity()) } else { String::new() };
     let key = format!("{what}\n{}\n{key}\n{generation}", st.root);
     let memo = MEMO.get_or_init(Default::default);
     if let Some(hit) = memo.lock().unwrap().get(&key).and_then(|v| v.downcast_ref::<T>().cloned()) { return hit; }

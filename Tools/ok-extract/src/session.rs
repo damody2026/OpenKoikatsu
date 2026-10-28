@@ -45,7 +45,7 @@ fn native_pool(start:bool)->Option<&'static rayon::ThreadPool> {
         // Bound native work alongside Unreal's task workers. Nested accessory
         // jobs and the two independent actors share this same pool.
         let workers=std::env::var("OK_NATIVE_WORKERS").ok().and_then(|v|v.parse::<usize>().ok())
-            .unwrap_or_else(||std::thread::available_parallelism().map_or(2,|n|{
+            .unwrap_or_else(||std::num::NonZeroUsize::new(crate::cpu_threads()).map_or(2,|n|{
                 // Keep the established small-machine limit; larger machines
                 // can overlap both roles without consuming every UE worker.
                 let available=n.get();available.div_ceil(2).max(4).min(available).min(8)
@@ -3532,7 +3532,9 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
         // Recording a card pack must visit source models/queries, including an explicitly
         // selected nonzero outfit. A cached final session cannot record those dependencies.
         let t_key = std::time::Instant::now();
-        let key = if crate::oklib::recording_card_pack() { None }
+        // (the key hashes the whole card: only worked out when something is looked up by it)
+        let keyed = crate::oklib::session_cache_enabled() || crate::cardbake::enabled() || crate::memosnap::replay_kinds() != 0;
+        let key = if crate::oklib::recording_card_pack() || !keyed { None }
             else { card.and_then(|c| crate::oklib::session_cache_key(game, c, outfit)) };
         if std::env::var_os("OK_PROFILE").is_some() { eprintln!("ok-extract: PROFILE open cache key {:>8.1}ms", t_key.elapsed().as_secs_f64() * 1e3); }
         crate::oklib::LAST_FROM_CACHE.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -3569,14 +3571,21 @@ fn open_unconfigured(game: &Path, card: Option<&Path>, outfit: i32) -> Result<Ok
             card.zip(key.as_ref()).and_then(|(c, k)| crate::cardbake::load_kind(c, crate::cardbake::MEMO_CHUNK, k))
                 .and_then(|b| crate::memosnap::seed(&b, kinds))
         };
-        let mut sess = crate::extract_session(game, card, outfit, None)?;
+        let made = crate::extract_session(game, card, outfit, None);
+        // An OK card's strict open (okstrict.rs) that needed what neither the card nor the shared resources hold fails.
+        if let (Some(strict), Some(c)) = (_pack.as_ref().and_then(crate::oklib::PackMount::strict), card) {
+            let gaps = strict.gaps();
+            if !gaps.is_empty() { return Err(crate::okstrict::failure(c, &gaps)); }
+        }
+        let mut sess = made?;
         sess.game_root = std::path::PathBuf::new();
         log_shader_inputs(&sess);
         // The key covers the library, the card (and its pack) and the zipmods the fallback can serve.
         // An open that read installed zipmods is only valid while they are unchanged (checked on load).
         let fallback = if crate::gamefs::fallback_used() { crate::gamefs::fallback_identity() } else { String::new() };
         let t = std::time::Instant::now();
-        if let Some(k) = key {
+        // (OK_NOCACHE: nothing is written, so the session is not serialized for it either)
+        if let Some(k) = key.filter(|_| crate::oklib::session_cache_enabled()) {
             if crate::oklib::defer_cache_store() && crate::oklib::session_cache_location().is_some() {
                 // The entry is written on its own thread (the claim held until then); what it records about this open
                 // is read here, where the card pack is mounted.

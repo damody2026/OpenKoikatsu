@@ -10,6 +10,9 @@ public class KKRuntimePose:ModuleRules {
   var NativeTools=new DirectoryInfo(Path.GetFullPath(Path.Combine(ModuleDirectory,"../../../../Tools")));
   string ToolsRoot=NativeTools.LinkTarget!=null?NativeTools.ResolveLinkTarget(true).FullName:NativeTools.FullName;
   string Root=Path.Combine(ToolsRoot,"ok-extract");
+  // OK_EXTRACT_ROOT (as KKUnityBundle): the same exported copy of Tools/ok-extract. Linked from the shared tree here while
+  // KKUnityBundle took the copy, the shared tree's ok_extract.lib won and a packaging run still got its unfinished Rust.
+  {string Override=System.Environment.GetEnvironmentVariable("OK_EXTRACT_ROOT");if(!string.IsNullOrEmpty(Override)){Root=Path.GetFullPath(Override);System.Console.WriteLine("KKRuntimePose: ok-extract from OK_EXTRACT_ROOT "+Root);}}
   PublicIncludePaths.Add(Path.Combine(Root,"include"));
   // Persistent poses depend on code contents, not compilation wall-clock time.
   // Hash relative names + framed file bytes so unchanged relocations/rebuilds

@@ -80,8 +80,7 @@ impl SourceBytes {
             Some(Self { data, start: *start, len: *len })
         })
     }
-    /// `len` bytes streamed from `reader` (an archive entry that cannot be read in place) into a mapped temporary
-    /// file that the system deletes once the map is gone: no private memory however large the entry. The reader
+    /// `len` bytes streamed from `reader` (an archive entry that cannot be read in place) into memory. The reader
     /// must then be at its end (an archive entry checks its CRC there). None when that fails.
     pub(crate) fn spill(reader: &mut impl std::io::Read, len: u64) -> Option<Self> {
         Self::spill_with(len, |out| {
@@ -93,29 +92,12 @@ impl SourceBytes {
             matches!(reader.read(&mut [0u8; 1]), Ok(0)).then_some(())
         })
     }
-    /// `len` bytes written by `fill` into a mapped temporary file the system deletes once the map is gone.
+    /// `len` bytes written by `fill` into memory, freed with the last reference (an open's temporary data: it used to
+    /// go to a mapped temporary file).
     pub(crate) fn spill_with(len: u64, fill: impl FnOnce(&mut [u8]) -> Option<()>) -> Option<Self> {
-        static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let dir = std::env::temp_dir().join("ok-extract-spill");
-        std::fs::create_dir_all(&dir).ok()?;
-        let path = dir.join(format!("{}-{}.tmp", std::process::id(), SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-        let mut options = std::fs::OpenOptions::new();
-        options.read(true).write(true).create_new(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            // FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE; shared for delete so the map can outlive the handle.
-            options.attributes(0x100).custom_flags(0x0400_0000).share_mode(0x1 | 0x2 | 0x4);
-        }
-        let file = options.open(&path).ok()?;
-        #[cfg(not(windows))]
-        let _ = std::fs::remove_file(&path);
-        let size = usize::try_from(len).ok()?;
-        file.set_len(len).ok()?;
-        let mut out = unsafe { memmap2::MmapMut::map_mut(&file) }.ok()?;
-        fill(&mut out[..size])?;
-        let map = out.make_read_only().ok()?;
-        Some(Self { data: unity_asset_binary::shared_bytes::SharedBytes::Mmap(Arc::new(map)), start: 0, len: size }.registered())
+        let mut out = vec![0u8; usize::try_from(len).ok()?];
+        fill(&mut out)?;
+        Some(out.into())
     }
     /// A whole file: mapped when large, read otherwise.
     pub(crate) fn file(path: &Path) -> std::io::Result<Self> {
@@ -1242,6 +1224,55 @@ fn cubemap_atlas(tex: &unity_asset_decode::texture::Texture2D) -> Option<(u32, u
     Some((size as u32, mips as u32, png))
 }
 
+/// A map of byte strings read whole: bincode writes a `Vec<u8>` and a byte string alike, and element by element was
+/// most of what reading a card's records cost.
+mod byte_map {
+    use std::collections::BTreeMap;
+    pub fn serialize<S: serde::Serializer>(map: &BTreeMap<String, Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut out = s.serialize_map(Some(map.len()))?;
+        for (k, v) in map { out.serialize_entry(k, serde_bytes::Bytes::new(v))?; }
+        out.end()
+    }
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<String, Vec<u8>>, D::Error> {
+        let map: BTreeMap<String, serde_bytes::ByteBuf> = serde::Deserialize::deserialize(d)?;
+        Ok(map.into_iter().map(|(k, v)| (k, v.into_vec())).collect())
+    }
+}
+
+/// A texture payload as records keep it: `Texture2D` written as it is, read through a copy of its fields whose texels
+/// are one byte string (see `byte_map`).
+pub(crate) struct TexturePayload(pub unity_asset_decode::texture::Texture2D);
+
+impl serde::Serialize for TexturePayload {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> { self.0.serialize(s) }
+}
+
+impl<'de> serde::Deserialize<'de> for TexturePayload {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use unity_asset_decode::texture::{GLTextureSettings, StreamingInfo, Texture2D, TextureFormat};
+        #[derive(serde::Deserialize)]
+        struct Fields {
+            name: String, width: i32, height: i32, complete_image_size: i32, format: TextureFormat, mip_map: bool,
+            mip_count: i32, is_readable: bool, image_count: i32, texture_dimension: i32, light_map_format: i32,
+            color_space: i32, data_size: i32, stream_info: StreamingInfo, texture_settings: GLTextureSettings,
+            #[serde(with = "serde_bytes")]
+            image_data: Vec<u8>,
+            forced_fallback_format: Option<i32>, downscale_fallback: Option<bool>, is_alpha_channel_optional: Option<bool>,
+            mips_stripped: Option<i32>,
+        }
+        let f = <Fields as serde::Deserialize>::deserialize(d)?;
+        Ok(TexturePayload(Texture2D {
+            name: f.name, width: f.width, height: f.height, complete_image_size: f.complete_image_size, format: f.format,
+            mip_map: f.mip_map, mip_count: f.mip_count, is_readable: f.is_readable, image_count: f.image_count,
+            texture_dimension: f.texture_dimension, light_map_format: f.light_map_format, color_space: f.color_space,
+            data_size: f.data_size, stream_info: f.stream_info, texture_settings: f.texture_settings, image_data: f.image_data,
+            forced_fallback_format: f.forced_fallback_format, downscale_fallback: f.downscale_fallback,
+            is_alpha_channel_optional: f.is_alpha_channel_optional, mips_stripped: f.mips_stripped,
+        }))
+    }
+}
+
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ExtractedMesh {
     /// Settings of textures created by runtime blits, keyed by shader property.
@@ -1251,7 +1282,7 @@ pub struct ExtractedMesh {
     #[serde(default)]
     pub runtime_textures: std::collections::BTreeMap<String, [i32; 5]>,
     /// Additional authored material textures. Raw Unity row order until push_meshes.
-    #[serde(default)]
+    #[serde(default, with = "byte_map")]
     pub shader_extra_textures: std::collections::BTreeMap<String, Vec<u8>>,
     pub name: String,
     /// OBJ text is rebuilt from positions when writing files. Skipped in the
@@ -1288,7 +1319,7 @@ pub struct ExtractedMesh {
     pub hair_shader_hint: bool,
     /// The resolved renderer has a Shader Forge/main_hair_front layer. This
     /// includes Material Editor copies on the same renderer/submesh.
-    #[serde(default)]
+    #[serde(default, with = "serde_bytes")]
     pub texture_png: Option<Vec<u8>>,
     pub texture_name: String,
     /// OK base library: texture fields stored as (field, texture, transform)
@@ -1298,16 +1329,22 @@ pub struct ExtractedMesh {
     #[serde(default, skip_serializing_if = "texture_plan_hidden", deserialize_with = "texture_plan_compat")]
     pub texture_plan: Vec<(String, String, u8)>,
     /// Hair shader `_ColorMask` (RGB ??_Color / _Color2 / _Color3).
+    #[serde(with = "serde_bytes")]
     pub color_mask_png: Option<Vec<u8>>,
     /// Material `_AlphaMask` retained when no outer garment replaces it.
+    #[serde(with = "serde_bytes")]
     pub alpha_mask_png: Option<Vec<u8>>,
     /// Shader `_DetailMask`; retained separately from baked albedo.
+    #[serde(with = "serde_bytes")]
     pub detail_mask_png: Option<Vec<u8>>,
     /// Shader `_LineMask`; its channels gate the clothing ramp and painted seams.
+    #[serde(with = "serde_bytes")]
     pub line_mask_png: Option<Vec<u8>>,
     /// Shader `_NormalMap`; retained for the fragment normal path.
+    #[serde(with = "serde_bytes")]
     pub normal_map_png: Option<Vec<u8>>,
     /// `main_skin` `_NormalMask`; G bends face lighting toward the view.
+    #[serde(with = "serde_bytes")]
     pub normal_mask_png: Option<Vec<u8>>,
     /// Whether Unity supplied the tangent basis required by a tangent-space
     /// normal map. `None` is reserved for meshes built outside the Unity decoder.
@@ -1317,6 +1354,7 @@ pub struct ExtractedMesh {
     #[serde(default)]
     pub tangents: Vec<[f32; 4]>,
     /// Hair shader `_HairGloss` (matcap sheen).
+    #[serde(with = "serde_bytes")]
     pub hair_gloss_png: Option<Vec<u8>>,
     pub positions: Vec<[f32; 3]>,
     /// Unity `m_Normals` (file space, rest). Empty if the channel is missing.
@@ -1651,6 +1689,7 @@ impl Default for TextureSampling {
 
 /// OK base library surface: every Unity query of a bundle is recorded or
 /// replayed here (see oklib.rs). Bodies live in the `*_unity` methods.
+thread_local! { static PREFAB_ABSENT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 impl ParsedBundle {
     fn memo<A: serde::Serialize + ?Sized, R: serde::Serialize + serde::de::DeserializeOwned>(&self, method: &str, args: &A, f: impl FnOnce() -> R) -> R {
         // A card pack stores mesh records with texture plans (texture references decoded on use), and decoding a plan
@@ -1696,7 +1735,12 @@ impl ParsedBundle {
             let key=prefab.to_ascii_lowercase();
             if !self.prefab_directory().objects.iter().any(|o|o.contains(&key)) {
                 if std::env::var_os("OKLIB_TRACE_SILENT").is_some(){if let Some(s)=crate::oklib::active(){s.note_missing(format!("SILENT {query} {} {prefab}",self.lib.map(|i|crate::oklib::id_hex(&i)).unwrap_or_default()));}}
-                return f();
+                // The bundle has no such prefab: `f` finds nothing in the model handle, which is the answer, not a gap
+                // of the library (an OK card's strict open would fail on it, okstrict.rs).
+                PREFAB_ABSENT.with(|a|a.set(true));
+                let out=f();
+                PREFAB_ABSENT.with(|a|a.set(false));
+                return out;
             }
         }
         self.memo(query,args,f)
@@ -1924,7 +1968,9 @@ impl ParsedBundle {
         // store again for every card (the base head, ~0.35 s) is kept once per process.
         type Memo=std::sync::Mutex<std::collections::HashMap<crate::oklib::Id,std::sync::Arc<Vec<(String,Vec<u8>)>>>>;
         static MEMO:std::sync::OnceLock<Memo>=std::sync::OnceLock::new();
-        let replay=self.lib.filter(|_|crate::oklib::active().is_some_and(|s|s.mode==crate::oklib::Mode::Replay));
+        // (not a model of an OK card's own third-party mods: its answer is the card's, okstrict.rs)
+        let replay=self.lib.filter(|id|crate::oklib::active().is_some_and(|s|s.mode==crate::oklib::Mode::Replay)
+            &&(crate::okstrict::active().is_none()||crate::okstrict::library_model(id)));
         if let Some(id)=replay {
             if let Some(hit)=MEMO.get_or_init(Default::default).lock().unwrap_or_else(|e|e.into_inner()).get(&id).cloned(){return (*hit).clone();}
         }
@@ -2090,6 +2136,7 @@ pub fn clear_bundle_cache() {
 /// earlier card (tens of GB over a batch of cards). Call outside pool work, with no open in progress.
 pub fn release_bundle_caches() {
     clear_bundle_cache();
+    crate::clear_mask_bakes();
     let release = || { sync_bundle_cache(); crate::mods::clear_zip_bundle_cache(); };
     release();
     rayon::broadcast(|_| release());
@@ -3090,7 +3137,7 @@ impl ParsedBundle {
     /// A library model has no Unity internals: reaching them during replay
     /// means a query path that is not recorded (reported with its callers).
     fn library_internals(&self, what: &'static str) {
-        if self.files.is_empty() && crate::oklib::replaying() {
+        if self.files.is_empty() && crate::oklib::replaying() && !PREFAB_ABSENT.with(|a| a.get()) {
             // A model this checkout does not have (a third-party zipmod's, out of version control): a gap naming it,
             // so the zipmod it comes from is reported (and, while an OK card is made, taken from the game).
             match self.lib {
@@ -3714,6 +3761,8 @@ impl ParsedBundle {
         if crate::oklib::active().is_some() {
             // Only names a material took from outside are recorded (others stay unanswered, as in Unity).
             if !self.library_model() && !self.dependency_texture_source.borrow().contains_key(&key) { return None; }
+            // A library model records only names taken from outside: no record is the answer (not a gap of it).
+            if self.library_model() && !crate::oklib::has_record(self.lib.as_ref(), "dependency_texture_model", key.as_str()) { return None; }
             // The dependency bundle is a library model of its own (its textures recorded there): record which one,
             // and decode the texture from it.
             let model: Option<String> = self.memo("dependency_texture_model", key.as_str(), || {
@@ -4097,12 +4146,15 @@ impl ParsedBundle {
         if crate::oklib::memo_active() {
             // OK texture: the texels are the model data, the PNG is derived. A library model is content-addressed (and
             // unedited here), so the PNG of one of its textures is the same in every process: kept on disk.
-            let disk=!crate::memosnap::active(crate::memosnap::TEX);
+            // Not for a card's own model while a pack is recorded or an OK card opens strictly (okstrict.rs): a PNG kept on
+            // disk would stand in for the texels the card must carry itself.
+            let own=self.lib.is_some_and(|id|crate::oklib::recording_card_pack()||(crate::okstrict::active().is_some()&&!crate::okstrict::library_model(&id)));
+            let disk=!crate::memosnap::active(crate::memosnap::TEX)&&!own;
             if let Some((n,png))=self.lib.filter(|_|disk).and_then(|id|derived_png_load(&id,&key)) {
                 self.remember_texture(n.to_ascii_lowercase(),png.clone());
                 return Some(png);
             }
-            let payload=self.memo_texture("texture_payload",name,||self.texture_payload_unity(name));
+            let payload=self.memo_texture("texture_payload",name,||self.texture_payload_unity(name).map(|(t,n)|(TexturePayload(t),n))).map(|(t,n)|(t.0,n));
             let Some((n,png))=payload.and_then(|p|png_from_payload(p.0,None)) else { return self.dependency_texture_png(name); };
             if let Some(id)=self.lib.filter(|_|disk) { derived_png_save(&id,&key,&n,&png); }
             self.remember_texture(n.to_ascii_lowercase(),png.clone());
@@ -7074,7 +7126,11 @@ pub fn hair_get_diffuse(
         .map(|i| i.dimensions())
         .unwrap_or((1, 1));
     let mut out = src.clone();
-    for y in 0..h {
+    // Rows are independent: baked in parallel (the same bytes as one by one).
+    use rayon::prelude::*;
+    let pixels: &mut [u8] = &mut out;
+    pixels.par_chunks_mut(w as usize * 4).enumerate().for_each(|(y, row)| {
+        let y = y as u32;
         for x in 0..w {
             let p = src.get_pixel(x, y).0;
             let (mr, mg, mb) = if let Some(mi) = mask_img.as_ref() {
@@ -7096,18 +7152,14 @@ pub fn hair_get_diffuse(
             d[0] += mb * (c3[0] - d[0]);
             d[1] += mb * (c3[1] - d[1]);
             d[2] += mb * (c3[2] - d[2]);
-            out.put_pixel(
-                x,
-                y,
-                image::Rgba([
-                    ((p[0] as f32) * d[0]).clamp(0.0, 255.0) as u8,
-                    ((p[1] as f32) * d[1]).clamp(0.0, 255.0) as u8,
-                    ((p[2] as f32) * d[2]).clamp(0.0, 255.0) as u8,
-                    p[3],
-                ]),
-            );
+            row[x as usize * 4..x as usize * 4 + 4].copy_from_slice(&[
+                ((p[0] as f32) * d[0]).clamp(0.0, 255.0) as u8,
+                ((p[1] as f32) * d[1]).clamp(0.0, 255.0) as u8,
+                ((p[2] as f32) * d[2]).clamp(0.0, 255.0) as u8,
+                p[3],
+            ]);
         }
-    }
+    });
     crate::teximg::encode_rgba_owned(out)
 }
 
@@ -8266,8 +8318,10 @@ fn decode_bc_banded(data: &[u8], w: usize, h: usize, format: unity_asset_decode:
             _ => texture2ddecoder::decode_bc7(src, w, band_h, &mut texels),
         };
         if decoded.is_err() { return false; }
+        // One 4-byte store a texel (a slice copy here was a memcpy call per texel).
         for (p, o) in texels.iter().zip(out.chunks_exact_mut(4)) {
-            o.copy_from_slice(&[((p >> 16) & 0xFF) as u8, ((p >> 8) & 0xFF) as u8, (p & 0xFF) as u8, ((p >> 24) & 0xFF) as u8]);
+            let o: &mut [u8; 4] = o.try_into().unwrap();
+            *o = [((p >> 16) & 0xFF) as u8, ((p >> 8) & 0xFF) as u8, (p & 0xFF) as u8, ((p >> 24) & 0xFF) as u8];
         }
         true
     });
@@ -10749,9 +10803,12 @@ pub fn pick_named<'a>(meshes: &'a [ExtractedMesh], want: &str) -> Option<&'a Ext
 /// Bake a shader's uniform alpha factor into the exported albedo's alpha.
 /// RGB stays unchanged; UE then applies the same per-pixel blend coverage.
 pub fn scale_png_alpha(png: &[u8], factor: f32) -> Option<Vec<u8>> {
-    use std::io::Cursor;
-    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    // Studio items share textures between many renderers: each texture and factor is decoded and encoded once.
     let factor = factor.clamp(0.0, 1.0);
+    crate::png_transform_cache::transform("scale_alpha_v1", png, &factor.to_bits().to_le_bytes(), || scale_png_alpha_uncached(png, factor))
+}
+fn scale_png_alpha_uncached(png: &[u8], factor: f32) -> Option<Vec<u8>> {
+    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
     for p in img.pixels_mut() {
         p[3] = ((p[3] as f32) * factor).round() as u8;
     }

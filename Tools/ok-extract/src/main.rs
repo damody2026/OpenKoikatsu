@@ -1,6 +1,9 @@
 use std::env;
 use std::path::PathBuf;
 
+#[global_allocator]
+static ALLOC: ok_extract::recycle_alloc::RecyclingAlloc = ok_extract::recycle_alloc::RecyclingAlloc;
+
 fn main() {
     std::panic::set_hook(Box::new(|info| {
         eprintln!("ok-extract error: {info}");

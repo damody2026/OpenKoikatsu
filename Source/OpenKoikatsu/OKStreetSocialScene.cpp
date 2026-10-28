@@ -255,7 +255,7 @@ struct FOKStreetSceneState {
  TMap<FString,FString> MindRecent;int64 NeedsTickMinute=-1,BondTickMinute=-1;
  // OKStreetSocialLife.inl
  int32 LifeWishDay=-1;TArray<FOKLifePose> LifePoses;double LifeCheckAt=0,LifeFaceAt=0,LifeWishAt=0;TMap<int32,double> LifeCooldown;TMap<int32,FVector> LifeRestore;
- TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater,ArriveWaiting;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
+ TMap<int32,FString> LifeUrgent,InitiativeReason;TMap<int32,int64> InitiativeSince;TMap<int32,int64> ArriveLater,ArriveWaiting,MeetJoinSince;TMap<int32,TArray<FString>> ActivitiesDone;int64 ActivitiesDoneDay=-1,SeriesHour=-1;TPair<int32,int32> MorningPair{INDEX_NONE,INDEX_NONE};TMap<int32,int32> LifePairRoute;TMap<int32,TSharedPtr<FOKStreetPlanBlock>> LifeNow;double SkipAskedAt=-100;bool SleepNap=false,SleepWake=false;
  // OKStreetSocialPhoneInbox.inl: her history, the phone (messages, calls), and what is apart.
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
@@ -358,7 +358,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  int64 FreeTalkReplayShown=0;int32 FreeTalkReplayShownSlot=INDEX_NONE,FreeTalkReplaySceneSlot=INDEX_NONE;FString FreeTalkReplayShownText;bool FreeTalkReplayShownVoiced=false;double FreeTalkReplayHold=0;
  bool TopicsOpen=false;TArray<TSharedPtr<SSlider>> StatSliders;TArray<TSharedPtr<SCheckBox>> RelationChecks;int32 RelationControlsVerified=0;bool RelationControlsSync=false;TMap<int32,double> RunUntil,RunNext;
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
- TArray<FString> HighCards;TWeakObjectPtr<AOKInteractionMode> PrivateMode;TSharedPtr<SWidget> PrivateLeave; /* the one-on-one scene's own leave button (R3-228) */FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
+ TArray<FString> HighCards;TArray<int32> HighOutfits;TWeakObjectPtr<AOKInteractionMode> PrivateMode;TSharedPtr<SWidget> PrivateLeave; /* the one-on-one scene's own leave button (R3-228) */FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
  TMap<int32,double> CommutePausedUntil; // a girl he walked up to stops her walk for a moment (StepNavigation)
  int32 NavGirl=INDEX_NONE,PrivateGirl=INDEX_NONE,ContactsProbePhase=0;FOKStreetLiftRide NavRide; // the navigation riding an elevator (PlanNavLift)
  double NavAt=0,ContactsProbeAt=0;
@@ -776,6 +776,9 @@ void AOKStreetSocialScene::BeginPlay(){
  TSharedPtr<FJsonObject> SelectionRoot;
  if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),SelectionRoot)&&SelectionRoot){
   const TArray<TSharedPtr<FJsonValue>>* HostCards=nullptr;if(SelectionRoot->TryGetArrayField(TEXT("cards"),HostCards))for(const auto& C:*HostCards)S.HighCards.Add(OKStreetResolveAgainst(ManifestPath,C->AsString()));
+  // The outfit each wears in the street (the crowd reads the same list): the one-on-one scene opens her in it, not outfit 0
+  // (Hu Tao walked the street in her white uniform and stood in the scene in a pink nurse's dress).
+  {const TArray<TSharedPtr<FJsonValue>>* Outfits=nullptr;if(SelectionRoot->TryGetArrayField(TEXT("outfits"),Outfits))for(const auto& O:*Outfits)S.HighOutfits.Add(FMath::Clamp(int32(O->AsNumber()),0,31));}
 
   const TSharedPtr<FJsonObject>* Seat=nullptr;
   if(SelectionRoot->TryGetObjectField(TEXT("seated_talk"),Seat)&&Seat&&Seat->IsValid()){(*Seat)->TryGetStringField(TEXT("male"),S.SeatedMaleClip);(*Seat)->TryGetStringField(TEXT("female"),S.SeatedFemaleClip);}
@@ -1194,12 +1197,16 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // A note the game wrote for her (a till note, "you are on shift till three"): in the group prompt the model writes
  // every girl's lines, so its "you" is named; Encore took Alice's shift for his. His line goes to the galgame box first
  // (FreeTalkCaptionPlayer, set below only for one girl): in a group talk his question never showed.
- if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){if(His)S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
+ if(S.Party.ContainsByPredicate([Character](int32 G){return G!=Character;})&&RemoteKind(Character)==0){if(His)S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
+  // The wheel rolled back in a group: every girl in it goes back to before that line; then each one's point to return to.
+  if(His){TArray<int32> In={Character};for(const int32 Member:S.Party)In.AddUnique(Member);TArray<FString> Ids;for(const int32 Member:In)Ids.Add(OKStreetStableId(S.Manifest.Characters[Member]));
+   GalgameRollBack(Ids);if(!OKStreetFreeTalkIsNudge(Text))for(int32 K=0;K<In.Num();++K)GalgameCheckpoint(In[K],Ids[K]);}
+  SendPartyTalk(His?Text:OKMsg(TEXT("ui.party.note_for_partner"),{{TEXT("name"),*SpokenName(Character)},{TEXT("note"),Text}}));return;} // several of them: one reply for all (OKStreetSocialParty.inl)
  // Said while the scene shows an earlier line (rolled back with the wheel): what came after it is undone first; then
  // the point this line can be rolled back to.
  // Only his own words roll back: a turn the game wrote for her (her "we're friends now" once the favour reached it, a
  // till note) came while he had scrolled back and undid the lines after that point, as if he had spoken there.
- {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);if(His)GalgameRollBack(Character,RollId);if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
+ {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);if(His)GalgameRollBack({RollId});if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
  FOKFreeTalkSettings Settings;FString Error,System,UserMessage;
  if(!PrepareFreeTalk(Character,Text,Settings,System,UserMessage,Error)){S.FreeTalkNotice=Error;RefreshUI();return;}
  // The reply is handled in the mode this was sent in (phone or face to face), whatever happens meanwhile.
@@ -1493,7 +1500,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d still has food on the table; the talk goes on until the meal ends"),Character);Ends=false;
     L->FarewellAfterMeal=Character;L->FarewellAfterMealAt=Weak->SceneTime();}
    if(Ends&&DoNow.IsEmpty()&&!L->FarewellPending&&L->OutingGirl!=Character){L->FarewellPending=true;L->FarewellFromTalk=true;L->FarewellAt=FPlatformTime::Seconds();UE_LOG(LogTemp,Display,TEXT("Street farewell: actor=%d the conversation ends after her last line (judged)"),Character);}
-   {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name)){int32 Who=INDEX_NONE;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(Name.Equals(L->Manifest.Characters[G].Name,ESearchCase::IgnoreCase))Who=G;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(OKStreetNameMatches(Name,L->Manifest.Characters[G].Name))Who=G;if(Who!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street judge: he invites %s to join"),*Name);Weak->PartyJoin(Who);}}}}
+   {const TArray<TSharedPtr<FJsonValue>>* Invite=nullptr;if(Verdict->TryGetArrayField(TEXT("invite"),Invite))for(const auto& V:*Invite){FString Name;if(V.IsValid()&&V->TryGetString(Name)){int32 Who=INDEX_NONE;
+    // The exact name first, as the game writes it too ("貞德" in a zh-TW game for the card's "贞德"): otherwise the looser match
+    // below took 貞德·Alter, the one he was talking to, and Jeanne was "already following him".
+    for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(Name.Equals(L->Manifest.Characters[G].Name,ESearchCase::IgnoreCase)||Name.Equals(Weak->SpokenName(G),ESearchCase::IgnoreCase))Who=G;for(int32 G=1;G<L->Manifest.Characters.Num()&&Who==INDEX_NONE;++G)if(OKStreetNameMatches(Name,L->Manifest.Characters[G].Name))Who=G;if(Who!=INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street judge: he invites %s to join"),*Name);Weak->PartyJoin(Who);}}}}
    // He confessed in his own words: the confession the rules decide (the same roll as the button), when she is the one he
    // is talking to face to face and nothing else is being settled.
    {bool Confessed=false;Verdict->TryGetBoolField(TEXT("confessed"),Confessed);
