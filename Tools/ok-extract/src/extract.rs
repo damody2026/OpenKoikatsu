@@ -87,317 +87,18 @@ pub(crate) fn extract_session_from_info(
     let mod_catalog = &*mod_catalog;
     profile_tick("lists+mods+guids", t);
     t = Instant::now();
-    let body_bundle = game_root.join("abdata/chara/oo_base.unity3d");
-    // ChaControl.InitBaseCustomTextureBody loads the draw material from
-    // mm_base, independently of the body mesh bundle (ChaControl.cs:10709).
-    let skin_material_bundle = crate::gamefs::read_source(game_root.join("abdata/chara/mm_base.unity3d"))
-        .ok().map(crate::unity::parse_bundle_cached);
-    let vanilla_head_bundle = game_root.join("abdata/chara/bo_head_00.unity3d");
-    let mut head_bundle = vanilla_head_bundle.clone();
-    // Sideloader lets mods replace vanilla assetbundles. `[DeathWeasel][KKS]
-    // Face Fixes` ships `chara/bo_head_00.unity3d` with the fixed face/eye
-    // meshes, skeleton and shape animation the game actually loads. Opt in with
-    // OK_FACE_FIXES so the vanilla pipeline stays available for comparison.
-    if std::env::var("OK_FACE_FIXES").is_ok() {
-        if let Some(b) = crate::mods::override_bundle(&mods_dir, "chara/bo_head_00.unity3d") {
-            let tmp = std::env::temp_dir().join("ok_bo_head_00.unity3d");
-            if std::fs::write(&tmp, &b).is_ok() {
-                eprintln!("ok-extract: FACE_FIXES override bytes={} -> {}", b.len(), tmp.display());
-                head_bundle = tmp;
-            }
-        } else {
-            eprintln!("ok-extract: FACE_FIXES requested but no override found");
-        }
-    }
-    let t_body = Instant::now();
-    let (mut body_meshes, mut body_skel, mut body_texs) = load_base_bundle(&body_bundle);
-    profile_tick("load_base_bundle body", t_body);
-    // StudioEditor builds the head from the armature prefab `p_cf_head_bone`
-    // (in the base bundle) parented under `cf_s_head`, not from the head mesh's
-    // own SMR skeleton (KoikatsuCharacterAssembler.cs:237-274). That armature
-    // has the full head bone tree (97 bones, scale 1) so the head/hair scale is
-    // inherited from `cf_s_head` alone.
-    let body_bundle_bytes = crate::gamefs::read_source(&body_bundle).unwrap_or_default();
-    let parsed_body = crate::unity::parse_bundle_cached(body_bundle_bytes.clone());
-    parsed_body.configure_game_references(game_root);
-    // ChaControl.Load: sexFemale selects p_cf_body_00 or p_cm_body_00.
-    // Filtering the requested prefab prevents a largest-mesh female fallback.
-    if parsed_card.as_ref().is_some_and(|card|card.sex==0) {
-        let (male_meshes,_)=parsed_body.meshes_for_maindata("p_cm_body_00");
-        if !male_meshes.iter().any(|m|m.name.eq_ignore_ascii_case("o_body_a")) {
-            return Err("male body prefab p_cm_body_00 has no o_body_a".into());
-        }
-        body_skel=male_meshes.iter().find(|m|m.name.eq_ignore_ascii_case("o_body_a"))
-            .and_then(|m|m.smr_skel.clone());
-        if body_skel.is_none() {return Err("male body renderer has no source skeleton".into());}
-        body_meshes=male_meshes;
-        eprintln!("ok-extract: selected male body prefab p_cm_body_00");
-    }
-    if let (Some(body), Some(bone_prefab)) = (
-        body_skel.as_mut(), parsed_body.skeleton_for_prefab_name("p_cf_body_bone"),
-    ) {
-        let added = body.merge_missing_tree_transforms(&bone_prefab);
-        if added > 0 {
-            eprintln!("ok-extract: body collider tree merged {added} transforms");
-        }
-    }
-    // ChaControl.cs:8085-8104: objHeadBone = `p_cf_head_bone` loaded from
-    // `studio/base/00.unity3d` (not oo_base), parented under cf_s_head.
-    let head_bone_bundle = game_root.join("abdata/studio/base/00.unity3d");
-    let parsed_head_rig=crate::mods::override_bundle(&game_root.join("mods"),"studio/base/00.unity3d").map(crate::unity::SourceBytes::from)
-        .or_else(||crate::gamefs::read_source(&head_bone_bundle).ok()).map(crate::unity::parse_bundle_cached);
-    let prefab_head_skel = parsed_head_rig.as_ref()
-        .and_then(|rig|rig.skeleton_for_prefab_name("p_cf_head_bone"))
-        .or_else(|| parsed_body.skeleton_for_prefab_name("p_cf_head_bone"));
-    let pv_config=parsed_head_rig.as_ref().and_then(|rig|rig.studio_pv_config("p_cf_body_bone"));
-    if let (Some(body),Some(rig))=(&mut body_skel,&parsed_head_rig) {
-        if let Some(source)=rig.skeleton_for_prefab_name("p_cf_body_bone") {body.merge_missing_tree_transforms(&source);}
-    }
-    let head_has_eye_controller=parsed_head_rig.as_ref().map_or_else(
-        ||parsed_body.prefab_has_component_field("p_cf_head_bone","eyeLookScript"),
-        |rig|rig.prefab_has_component_field("p_cf_head_bone","eyeLookScript"));
-    let mut eye_look_config=parsed_head_rig.as_ref().and_then(|rig|rig.eye_look_config("p_cf_head_bone"))
-        .or_else(||parsed_body.eye_look_config("p_cf_head_bone"));
-    // EyeLookCalc.Awake runs on the newly instantiated rig BEFORE copying the
-    // selected head prefab or applying sliders/ABMX. Preserve that Init basis.
-    if let (Some(c),Some(rig))=(&mut eye_look_config,&prefab_head_skel) {
-        c.init=crate::eye_look::Runtime::init_from_skeleton(rig,c);
-    }
-    // `[DeathWeasel][KKS] Face Fixes` overrides chara/bo_head_00.unity3d and is
-    // what the game actually loads: its face skeleton places the eyes/nose
-    // correctly and its meshes are the fixed ones. Its bundle omits
-    // cf_face_00_t/_mc, so the custom face texture keeps using the vanilla
-    // bundle's textures (composite is built from head_texs).
-    // NOTE: the game loads `[DeathWeasel][KKS] Face Fixes` over
-    // abdata/chara/bo_head_00.unity3d. Its skeleton places the eyes/nose
-    // correctly (verified against the mesh dump face bones), but its meshes
-    // ship changed UVs and its detail maps are not provided, so rendering the
-    // override against the vanilla textures (which this pipeline uses) is
-    // worse than the vanilla meshes. Keep vanilla until the override's own
-    // textures + cf_m_face shader can be reproduced.
-    let t_head = Instant::now();
-    let head_bundle_bytes = crate::gamefs::read_source(&head_bundle).unwrap_or_default();
-    let mut parsed_head = crate::unity::parse_bundle_cached(head_bundle_bytes);
-    profile_tick("load_base_bundle head", t_head);
-    let mut head_texs = parsed_head.textures_keep_base();
-    // The Face Fixes bundle omits `cf_face_00_t`/`_mc`, so borrow the vanilla
-    // bundle's textures for anything the override does not ship.
-    if head_bundle != vanilla_head_bundle {
-        let vb = crate::gamefs::read_source(&vanilla_head_bundle).unwrap_or_default();
-        let vanilla_head = crate::unity::parse_bundle_cached(vb);
-        let have: std::collections::HashSet<String> =
-            head_texs.iter().map(|(n, _)| n.to_ascii_lowercase()).collect();
-        for (n, b) in vanilla_head.textures_keep_base() {
-            if !have.contains(&n.to_ascii_lowercase()) {
-                head_texs.push((n, b));
-            }
-        }
-        eprintln!("ok-extract: FACE_FIXES merged textures={}", head_texs.len());
-    }
-    // The game instantiates the list entry's `MainData` prefab; the bundle holds
-    // several prefabs that reuse mesh names with different SMR bone lists. Only
-    // the active prefab's meshes have the SMR the live game uses (e.g. the iris
-    // is 1 bone, the sclera 54), so filter to it instead of name-matching.
-    // `mod_catalog.get(100, headId)` is ambiguous: every sideloader head reuses
-    // a small local id (usually 1). Resolve the card's own KKEx row, same as
-    // the face texture.
-    let mut face_zip_lists = std::collections::HashMap::new();
-    let face_entry = parsed_card.as_ref().and_then(|card| {
-        resolve_face_entry(&vanilla, card, &guid_index, &mut face_zip_lists)
-    });
-    if let Some(card) = parsed_card.as_ref() {
-        if face_entry.is_none() && card.resolves.iter().any(|r| {
-            r.category_no == 100 && r.property.to_ascii_lowercase().contains("headid")
-        }) {
-            // The mod is not installed: the game keeps its default head.
-            eprintln!("ok-extract: head KKEx resolve has no list entry for headId={}; default head", card.head_id);
-        }
-    }
-    let head_main = face_entry
-        .as_ref()
-        .map(|e| e.info("MainData"))
-        .filter(|s| !s.is_empty() && s != "0")
-        .unwrap_or_else(|| "p_cf_head_00".to_string());
-    let head_shape_asset = face_entry
-        .as_ref()
-        .map(|e| e.info("ShapeAnime"))
-        .filter(|s| !s.is_empty() && s != "0")
-        .unwrap_or_else(|| "cf_anmShapeHead_00".to_string());
-    eprintln!(
-        "ok-extract: head entry={} main={} ab={}",
-        face_entry.as_ref().map(|e| e.name.as_str()).unwrap_or("none"),
-        head_main,
-        face_entry.as_ref().map(|e| e.main_ab.as_str()).unwrap_or("")
-    );
-    // ChaControl.LoadCharaFbxData (ChaControl.cs:10596-10607) instantiates
-    // `GetInfo(MainAB)` / `GetInfo(MainData)`, not always vanilla bo_head_00.
-    // A sideloader head (KK_384283 Head Mod) ships its own mesh and eye textures.
-    // Shape curves live in the same bundle as the head prefab (`ShapeAnime` =
-    // `cf_anmShapeHead_00`). A sideloader head's curves are the mod's face
-    // algorithm; vanilla keys are only the fallback when that asset is absent.
-    let shape_bundle = head_bundle.clone();
-    let mut mod_shape_keys = None;
-    let mut head_key = crate::sqlcache::file_key(&head_bundle);
-    if let Some(entry) = face_entry.as_ref() {
-        let ab = entry.main_ab.as_str();
-        if !ab.is_empty()
-            && ab != "0"
-            && !ab.eq_ignore_ascii_case("chara/bo_head_00.unity3d")
-        {
-            let zip = entry.extra.get("__zip").map(std::path::Path::new);
-            if let Some(bytes) = accessory_bundle_bytes(game_root, zip, entry) {
-                // Read from the bundle in memory (it was written to one temporary file name that cards opening at once
-                // overwrote for each other).
-                let trial = crate::shape::load_head_keys_named_bytes(&bytes, &head_shape_asset);
-                if !trial.is_empty() {
-                    eprintln!(
-                        "ok-extract: head shape keys from mod bundle n={}",
-                        trial.len()
-                    );
-                    mod_shape_keys = Some(trial);
-                }
-                let parsed = crate::unity::parse_bundle_cached(bytes);
-                let (ms, _) = parsed.meshes_for_maindata(&head_main);
-                if pick_named(&ms, "cf_O_face").is_some() {
-                    eprintln!(
-                        "ok-extract: head from list ab={ab} main={head_main} meshes={}",
-                        ms.len()
-                    );
-                    let mut texs = parsed.textures_keep_base();
-                    let have: std::collections::HashSet<String> =
-                        texs.iter().map(|(n, _)| n.to_ascii_lowercase()).collect();
-                    for (n, b) in std::mem::take(&mut head_texs) {
-                        if !have.contains(&n.to_ascii_lowercase()) {
-                            texs.push((n, b));
-                        }
-                    }
-                    head_texs = texs;
-                    parsed_head = parsed;
-                    head_key = match zip {
-                        Some(z) => crate::sqlcache::zip_key(z, ab),
-                        None => format!("ab:{ab}|v{}", crate::sqlcache::CACHE_VER),
-                    };
-                } else {
-                    eprintln!("ok-extract: list head ab={ab} has no cf_O_face, keeping vanilla");
-                }
-            }
-        }
-    }
-    let mut head_shape_keys = mod_shape_keys.unwrap_or_else(|| crate::shape::load_head_keys_named(&shape_bundle, &head_shape_asset));
-    if head_shape_keys.is_empty() && shape_bundle != vanilla_head_bundle {
-        head_shape_keys = crate::shape::load_head_keys_named(&vanilla_head_bundle, &head_shape_asset);
-    }
-    if head_shape_keys.is_empty() {
-        eprintln!("ok-extract: head ShapeAnime asset missing: {head_shape_asset}");
-    }
-    let t_head_md = Instant::now();
-    let (head_filtered, mut head_skel) =
-        if let Some(hit) = crate::sqlcache::load_prefab(game_root, &head_key, &head_main) {
-            eprintln!("ok-extract: sql head prefab hit {head_main}");
-            hit
-        } else {
-            let got = parsed_head.meshes_for_maindata(&head_main);
-            crate::sqlcache::store_prefab(
-                game_root,
-                &head_key,
-                &head_main,
-                &got.0,
-                got.1.as_ref(),
-            );
-            got
-        };
-    profile_tick("meshes_skel_for_maindata head", t_head_md);
-    let head_meshes = if head_filtered.is_empty() {
-        parsed_head.decode_all().0
-    } else {
-        head_filtered
-    };
-    let head_mouth_patterns = parsed_head.face_mouth_patterns(&head_main);
-    let head_eye_patterns = parsed_head.face_control_patterns(&head_main,"EyesCtrl");
-    let head_eyebrow_patterns = parsed_head.face_control_patterns(&head_main,"EyebrowCtrl");
-    let mut head_face_settings=parsed_head.face_runtime_settings(&head_main);
-    head_face_settings[3]=if parsed_card.as_ref().map_or(true,|card|card.eyes_blink) {1.}else{0.};
-    head_face_settings[11]=if head_has_eye_controller {1.}else{0.};
-    let head_eye_materials=parsed_head.eye_material_settings(&head_main);
-    // Emitted material passes may have a different display name but retain
-    // the source renderer's entire FBS controller identity.
-    let mut head_fbs_sources = std::collections::HashMap::<String, String>::new();
-    eprintln!("ok-extract: head FaceBlendShape mouth targets={} eyes={} eyebrow={}",
-        head_mouth_patterns.len(),head_eye_patterns.len(),head_eyebrow_patterns.len());
-    // ChaControl.cs:8115 + 8497: aaWeightsHead.CreateBoneList(objHeadBone =
-    // "p_cf_head_bone") then AssignedWeightsAndSetBounds remaps every head SMR's
-    // own bone list (component.bones[i].name) onto that armature. Set
-    // `OK_OLDPHEAD` to keep the head mesh prefab's own SMR skeleton instead.
-    if std::env::var("OK_OLDPHEAD").is_ok() {
-        if let Some(face) = head_meshes
-            .iter()
-            .find(|m| m.name.eq_ignore_ascii_case("cf_O_face"))
-        {
-            if let Some(s) = parsed_head.skeleton(face.path_id) {
-                head_skel = Some(s);
-            }
-        }
-    } else if let Some(s) = prefab_head_skel.clone() {
-        eprintln!(
-            "ok-extract: head_skel = p_cf_head_bone ({} bones)",
-            s.names.len()
-        );
-        head_skel = Some(s);
-    }
-    // StudioEditor instantiates p_cf_head_bone then RebindSkinning every head
-    // SMR onto that full name map. The face SMR is only 45 bones; iris/sclera
-    // extras (cf_J_hitomi_tx_*) live in tfs but not in names until we append.
-    if let Some(sk) = head_skel.as_mut() {
-        let before = sk.names.len();
-        sk.include_tree_bones();
-        if sk.names.len() != before {
-            eprintln!(
-                "ok-extract: head_skel include_tree_bones smr={} names={} tfs={} hitomi={}",
-                sk.smr_count,
-                sk.names.len(),
-                sk.tfs.len(),
-                sk.index_of("cf_J_hitomi_tx_L").is_some()
-            );
-        }
-    }
-    // ChaControl.cs:8630 `CommonLib.CopySameNameTransform(objHeadBone, objHead)`:
-    // the head mesh prefab's LOCAL transforms overwrite every same-named node of
-    // `p_cf_head_bone` before the face shape is applied (ChaControl.cs:8726
-    // InitShapeFace targets objHeadBone). The armature authors the head attach
-    // nodes at different positions than the mesh, so without this the hair
-    // accessories hang ~0.03 high / ~0.016 forward (see pose.rs).
-    if std::env::var("OK_NOCOPYTRF").is_err() {
-        if let Some(mesh_skel) = parsed_head.skeleton_for_prefab_name(&head_main) {
-            if let Some(sk) = head_skel.as_mut() {
-                let changed = crate::pose::copy_same_name_transform(sk, &mesh_skel);
-                if changed > 0 {
-                    eprintln!(
-                        "ok-extract: CopySameNameTransform head mesh '{}' onto p_cf_head_bone changed={changed}",
-                        head_main
-                    );
-                }
-            }
-        }
-    }
-    // The supplied Studio T-pose captures use ChaControl's !hiPoly body-bone
-    // reference layout even though their generated texture RTs use the 1024px
-    // path. Keep texture resolution selection separate from attach nodes.
-    // OK_BONE_HIPOLY=1 opts into the unmodified prefab references.
-    if std::env::var("OK_BONE_HIPOLY").ok().as_deref() != Some("1") {
-        if let Some(sk) = body_skel.as_mut() {
-            crate::pose::apply_low_poly_body_references(sk);
-        }
-    }
-    let mut body_rest = body_skel.clone();
-    // Parse local PPtrs against the original prefab IDs. Merging the tree
-    // into the SMR rig assigns synthetic IDs; runtime rebinds by these names.
-    let body_dynamics = parsed_body.skeleton_for_prefab_name("p_cf_body_bone")
-        .map(|s| parsed_body.body_dynamics_for_skeleton(&s)).unwrap_or_default();
-    let body_colliders = parsed_body.skeleton_for_prefab_name("p_cf_body_bone")
-        .map(|s| parsed_body.body_colliders_for_skeleton(&s)).unwrap_or_default();
-    let mut clothes_dynamics = crate::dbone::DBoneSet::default();
-    eprintln!("ok-extract: body Ver02 components={}", body_dynamics.len());
-    let head_rest = head_skel.clone();
+    // The base bundles' body and head (base_bundles_stage): the same in every open of a view, whatever the outfit or
+    // garment states (crate::view_memo); the card's fields it reads are in the key. What it reads was recorded by the
+    // view's first open.
+    let base_key = parsed_card.as_ref().map_or_else(String::new, |card|
+        format!("{}|{}|{}|{:?}", card.sex, card.head_id, card.eyes_blink, card.resolves));
+    let BaseStage { body_bundle, skin_material_bundle, vanilla_head_bundle, body_meshes, mut body_skel,
+        mut body_texs, pv_config, eye_look_config, parsed_head, head_texs, head_main, head_shape_keys,
+        mut head_skel, head_meshes, head_mouth_patterns, head_eye_patterns, head_eyebrow_patterns,
+        head_face_settings, head_eye_materials, mut head_fbs_sources, mut body_rest, body_dynamics, body_colliders,
+        mut clothes_dynamics, head_rest, } =
+        crate::view_memo(format!("base_bundles_stage|{}|{}|{base_key}", game_root.display(), mods_dir.display()),
+            || base_bundles_stage(game_root, &parsed_card, &vanilla, &guid_index, &mods_dir))?;
     profile_tick("load_base_bundles", t);
     check_preempted()?;
     t = Instant::now();
@@ -2587,10 +2288,360 @@ pub(crate) fn extract_session_from_info(
     })
 }
 
+/// The body and head an open builds from the base bundles (ChaControl.Load, LoadCharaFbxData, the head armature and
+/// face controllers): they depend on the card's sex, head and resolves only, not on the outfit or garment states.
+#[derive(Clone)]
+struct BaseStage {
+    body_bundle: PathBuf,
+    skin_material_bundle: Option<std::sync::Arc<crate::unity::ParsedBundle>>,
+    vanilla_head_bundle: PathBuf,
+    body_meshes: Vec<ExtractedMesh>,
+    body_skel: Option<crate::pose::Skeleton>,
+    body_texs: Vec<(String, Vec<u8>)>,
+    pv_config: Option<crate::pv::Config>,
+    eye_look_config: Option<crate::eye_look::Config>,
+    parsed_head: std::sync::Arc<crate::unity::ParsedBundle>,
+    head_texs: Vec<(String, Vec<u8>)>,
+    head_main: String,
+    head_shape_keys: std::collections::HashMap<String, Vec<crate::shape::Keyframe>>,
+    head_skel: Option<crate::pose::Skeleton>,
+    head_meshes: Vec<ExtractedMesh>,
+    head_mouth_patterns: std::collections::HashMap<String, (usize, Vec<(i32, i32)>)>,
+    head_eye_patterns: std::collections::HashMap<String, (usize, Vec<(i32, i32)>)>,
+    head_eyebrow_patterns: std::collections::HashMap<String, (usize, Vec<(i32, i32)>)>,
+    head_face_settings: [f32; 12],
+    head_eye_materials: std::collections::HashMap<String, [f32; 14]>,
+    head_fbs_sources: std::collections::HashMap<String, String>,
+    body_rest: Option<crate::pose::Skeleton>,
+    body_dynamics: crate::dbone::ver02::BodyDynamicSet,
+    body_colliders: crate::dbone::BodyColliderSet,
+    clothes_dynamics: crate::dbone::DBoneSet,
+    head_rest: Option<crate::pose::Skeleton>,
+}
+
+fn base_bundles_stage(game_root: &Path, parsed_card: &Option<CardInfo>, vanilla: &ChaListCatalog,
+    guid_index: &std::collections::HashMap<String, PathBuf>, mods_dir: &Path) -> Result<BaseStage, String> {
+    let body_bundle = game_root.join("abdata/chara/oo_base.unity3d");
+    // ChaControl.InitBaseCustomTextureBody loads the draw material from
+    // mm_base, independently of the body mesh bundle (ChaControl.cs:10709).
+    let skin_material_bundle = crate::gamefs::read_source(game_root.join("abdata/chara/mm_base.unity3d"))
+        .ok().map(crate::unity::parse_bundle_cached);
+    let vanilla_head_bundle = game_root.join("abdata/chara/bo_head_00.unity3d");
+    let mut head_bundle = vanilla_head_bundle.clone();
+    // Sideloader lets mods replace vanilla assetbundles. `[DeathWeasel][KKS]
+    // Face Fixes` ships `chara/bo_head_00.unity3d` with the fixed face/eye
+    // meshes, skeleton and shape animation the game actually loads. Opt in with
+    // OK_FACE_FIXES so the vanilla pipeline stays available for comparison.
+    if std::env::var("OK_FACE_FIXES").is_ok() {
+        if let Some(b) = crate::mods::override_bundle(&mods_dir, "chara/bo_head_00.unity3d") {
+            let tmp = std::env::temp_dir().join("ok_bo_head_00.unity3d");
+            if std::fs::write(&tmp, &b).is_ok() {
+                eprintln!("ok-extract: FACE_FIXES override bytes={} -> {}", b.len(), tmp.display());
+                head_bundle = tmp;
+            }
+        } else {
+            eprintln!("ok-extract: FACE_FIXES requested but no override found");
+        }
+    }
+    let t_body = Instant::now();
+    let (mut body_meshes, mut body_skel, mut body_texs) = load_base_bundle(&body_bundle);
+    profile_tick("load_base_bundle body", t_body);
+    // StudioEditor builds the head from the armature prefab `p_cf_head_bone`
+    // (in the base bundle) parented under `cf_s_head`, not from the head mesh's
+    // own SMR skeleton (KoikatsuCharacterAssembler.cs:237-274). That armature
+    // has the full head bone tree (97 bones, scale 1) so the head/hair scale is
+    // inherited from `cf_s_head` alone.
+    let body_bundle_bytes = crate::gamefs::read_source(&body_bundle).unwrap_or_default();
+    let parsed_body = crate::unity::parse_bundle_cached(body_bundle_bytes.clone());
+    parsed_body.configure_game_references(game_root);
+    // ChaControl.Load: sexFemale selects p_cf_body_00 or p_cm_body_00.
+    // Filtering the requested prefab prevents a largest-mesh female fallback.
+    if parsed_card.as_ref().is_some_and(|card|card.sex==0) {
+        let (male_meshes,_)=parsed_body.meshes_for_maindata("p_cm_body_00");
+        if !male_meshes.iter().any(|m|m.name.eq_ignore_ascii_case("o_body_a")) {
+            return Err("male body prefab p_cm_body_00 has no o_body_a".into());
+        }
+        body_skel=male_meshes.iter().find(|m|m.name.eq_ignore_ascii_case("o_body_a"))
+            .and_then(|m|m.smr_skel.clone());
+        if body_skel.is_none() {return Err("male body renderer has no source skeleton".into());}
+        body_meshes=male_meshes;
+        eprintln!("ok-extract: selected male body prefab p_cm_body_00");
+    }
+    if let (Some(body), Some(bone_prefab)) = (
+        body_skel.as_mut(), parsed_body.skeleton_for_prefab_name("p_cf_body_bone"),
+    ) {
+        let added = body.merge_missing_tree_transforms(&bone_prefab);
+        if added > 0 {
+            eprintln!("ok-extract: body collider tree merged {added} transforms");
+        }
+    }
+    // ChaControl.cs:8085-8104: objHeadBone = `p_cf_head_bone` loaded from
+    // `studio/base/00.unity3d` (not oo_base), parented under cf_s_head.
+    let head_bone_bundle = game_root.join("abdata/studio/base/00.unity3d");
+    let parsed_head_rig=crate::mods::override_bundle(&game_root.join("mods"),"studio/base/00.unity3d").map(crate::unity::SourceBytes::from)
+        .or_else(||crate::gamefs::read_source(&head_bone_bundle).ok()).map(crate::unity::parse_bundle_cached);
+    let prefab_head_skel = parsed_head_rig.as_ref()
+        .and_then(|rig|rig.skeleton_for_prefab_name("p_cf_head_bone"))
+        .or_else(|| parsed_body.skeleton_for_prefab_name("p_cf_head_bone"));
+    let pv_config=parsed_head_rig.as_ref().and_then(|rig|rig.studio_pv_config("p_cf_body_bone"));
+    if let (Some(body),Some(rig))=(&mut body_skel,&parsed_head_rig) {
+        if let Some(source)=rig.skeleton_for_prefab_name("p_cf_body_bone") {body.merge_missing_tree_transforms(&source);}
+    }
+    let head_has_eye_controller=parsed_head_rig.as_ref().map_or_else(
+        ||parsed_body.prefab_has_component_field("p_cf_head_bone","eyeLookScript"),
+        |rig|rig.prefab_has_component_field("p_cf_head_bone","eyeLookScript"));
+    let mut eye_look_config=parsed_head_rig.as_ref().and_then(|rig|rig.eye_look_config("p_cf_head_bone"))
+        .or_else(||parsed_body.eye_look_config("p_cf_head_bone"));
+    // EyeLookCalc.Awake runs on the newly instantiated rig BEFORE copying the
+    // selected head prefab or applying sliders/ABMX. Preserve that Init basis.
+    if let (Some(c),Some(rig))=(&mut eye_look_config,&prefab_head_skel) {
+        c.init=crate::eye_look::Runtime::init_from_skeleton(rig,c);
+    }
+    // `[DeathWeasel][KKS] Face Fixes` overrides chara/bo_head_00.unity3d and is
+    // what the game actually loads: its face skeleton places the eyes/nose
+    // correctly and its meshes are the fixed ones. Its bundle omits
+    // cf_face_00_t/_mc, so the custom face texture keeps using the vanilla
+    // bundle's textures (composite is built from head_texs).
+    // NOTE: the game loads `[DeathWeasel][KKS] Face Fixes` over
+    // abdata/chara/bo_head_00.unity3d. Its skeleton places the eyes/nose
+    // correctly (verified against the mesh dump face bones), but its meshes
+    // ship changed UVs and its detail maps are not provided, so rendering the
+    // override against the vanilla textures (which this pipeline uses) is
+    // worse than the vanilla meshes. Keep vanilla until the override's own
+    // textures + cf_m_face shader can be reproduced.
+    let t_head = Instant::now();
+    let head_bundle_bytes = crate::gamefs::read_source(&head_bundle).unwrap_or_default();
+    let mut parsed_head = crate::unity::parse_bundle_cached(head_bundle_bytes);
+    profile_tick("load_base_bundle head", t_head);
+    let mut head_texs = parsed_head.textures_keep_base();
+    // The Face Fixes bundle omits `cf_face_00_t`/`_mc`, so borrow the vanilla
+    // bundle's textures for anything the override does not ship.
+    if head_bundle != vanilla_head_bundle {
+        let vb = crate::gamefs::read_source(&vanilla_head_bundle).unwrap_or_default();
+        let vanilla_head = crate::unity::parse_bundle_cached(vb);
+        let have: std::collections::HashSet<String> =
+            head_texs.iter().map(|(n, _)| n.to_ascii_lowercase()).collect();
+        for (n, b) in vanilla_head.textures_keep_base() {
+            if !have.contains(&n.to_ascii_lowercase()) {
+                head_texs.push((n, b));
+            }
+        }
+        eprintln!("ok-extract: FACE_FIXES merged textures={}", head_texs.len());
+    }
+    // The game instantiates the list entry's `MainData` prefab; the bundle holds
+    // several prefabs that reuse mesh names with different SMR bone lists. Only
+    // the active prefab's meshes have the SMR the live game uses (e.g. the iris
+    // is 1 bone, the sclera 54), so filter to it instead of name-matching.
+    // `mod_catalog.get(100, headId)` is ambiguous: every sideloader head reuses
+    // a small local id (usually 1). Resolve the card's own KKEx row, same as
+    // the face texture.
+    let mut face_zip_lists = std::collections::HashMap::new();
+    let face_entry = parsed_card.as_ref().and_then(|card| {
+        resolve_face_entry(&vanilla, card, &guid_index, &mut face_zip_lists)
+    });
+    if let Some(card) = parsed_card.as_ref() {
+        if face_entry.is_none() && card.resolves.iter().any(|r| {
+            r.category_no == 100 && r.property.to_ascii_lowercase().contains("headid")
+        }) {
+            // The mod is not installed: the game keeps its default head.
+            eprintln!("ok-extract: head KKEx resolve has no list entry for headId={}; default head", card.head_id);
+        }
+    }
+    let head_main = face_entry
+        .as_ref()
+        .map(|e| e.info("MainData"))
+        .filter(|s| !s.is_empty() && s != "0")
+        .unwrap_or_else(|| "p_cf_head_00".to_string());
+    let head_shape_asset = face_entry
+        .as_ref()
+        .map(|e| e.info("ShapeAnime"))
+        .filter(|s| !s.is_empty() && s != "0")
+        .unwrap_or_else(|| "cf_anmShapeHead_00".to_string());
+    eprintln!(
+        "ok-extract: head entry={} main={} ab={}",
+        face_entry.as_ref().map(|e| e.name.as_str()).unwrap_or("none"),
+        head_main,
+        face_entry.as_ref().map(|e| e.main_ab.as_str()).unwrap_or("")
+    );
+    // ChaControl.LoadCharaFbxData (ChaControl.cs:10596-10607) instantiates
+    // `GetInfo(MainAB)` / `GetInfo(MainData)`, not always vanilla bo_head_00.
+    // A sideloader head (KK_384283 Head Mod) ships its own mesh and eye textures.
+    // Shape curves live in the same bundle as the head prefab (`ShapeAnime` =
+    // `cf_anmShapeHead_00`). A sideloader head's curves are the mod's face
+    // algorithm; vanilla keys are only the fallback when that asset is absent.
+    let shape_bundle = head_bundle.clone();
+    let mut mod_shape_keys = None;
+    let mut head_key = crate::sqlcache::file_key(&head_bundle);
+    if let Some(entry) = face_entry.as_ref() {
+        let ab = entry.main_ab.as_str();
+        if !ab.is_empty()
+            && ab != "0"
+            && !ab.eq_ignore_ascii_case("chara/bo_head_00.unity3d")
+        {
+            let zip = entry.extra.get("__zip").map(std::path::Path::new);
+            if let Some(bytes) = accessory_bundle_bytes(game_root, zip, entry) {
+                // Read from the bundle in memory (it was written to one temporary file name that cards opening at once
+                // overwrote for each other).
+                let trial = crate::shape::load_head_keys_named_bytes(&bytes, &head_shape_asset);
+                if !trial.is_empty() {
+                    eprintln!(
+                        "ok-extract: head shape keys from mod bundle n={}",
+                        trial.len()
+                    );
+                    mod_shape_keys = Some(trial);
+                }
+                let parsed = crate::unity::parse_bundle_cached(bytes);
+                let (ms, _) = parsed.meshes_for_maindata(&head_main);
+                if pick_named(&ms, "cf_O_face").is_some() {
+                    eprintln!(
+                        "ok-extract: head from list ab={ab} main={head_main} meshes={}",
+                        ms.len()
+                    );
+                    let mut texs = parsed.textures_keep_base();
+                    let have: std::collections::HashSet<String> =
+                        texs.iter().map(|(n, _)| n.to_ascii_lowercase()).collect();
+                    for (n, b) in std::mem::take(&mut head_texs) {
+                        if !have.contains(&n.to_ascii_lowercase()) {
+                            texs.push((n, b));
+                        }
+                    }
+                    head_texs = texs;
+                    parsed_head = parsed;
+                    head_key = match zip {
+                        Some(z) => crate::sqlcache::zip_key(z, ab),
+                        None => format!("ab:{ab}|v{}", crate::sqlcache::CACHE_VER),
+                    };
+                } else {
+                    eprintln!("ok-extract: list head ab={ab} has no cf_O_face, keeping vanilla");
+                }
+            }
+        }
+    }
+    let mut head_shape_keys = mod_shape_keys.unwrap_or_else(|| crate::shape::load_head_keys_named(&shape_bundle, &head_shape_asset));
+    if head_shape_keys.is_empty() && shape_bundle != vanilla_head_bundle {
+        head_shape_keys = crate::shape::load_head_keys_named(&vanilla_head_bundle, &head_shape_asset);
+    }
+    if head_shape_keys.is_empty() {
+        eprintln!("ok-extract: head ShapeAnime asset missing: {head_shape_asset}");
+    }
+    let t_head_md = Instant::now();
+    let (head_filtered, mut head_skel) =
+        if let Some(hit) = crate::sqlcache::load_prefab(game_root, &head_key, &head_main) {
+            eprintln!("ok-extract: sql head prefab hit {head_main}");
+            hit
+        } else {
+            let got = parsed_head.meshes_for_maindata(&head_main);
+            crate::sqlcache::store_prefab(
+                game_root,
+                &head_key,
+                &head_main,
+                &got.0,
+                got.1.as_ref(),
+            );
+            got
+        };
+    profile_tick("meshes_skel_for_maindata head", t_head_md);
+    let head_meshes = if head_filtered.is_empty() {
+        parsed_head.decode_all().0
+    } else {
+        head_filtered
+    };
+    let head_mouth_patterns = parsed_head.face_mouth_patterns(&head_main);
+    let head_eye_patterns = parsed_head.face_control_patterns(&head_main,"EyesCtrl");
+    let head_eyebrow_patterns = parsed_head.face_control_patterns(&head_main,"EyebrowCtrl");
+    let mut head_face_settings=parsed_head.face_runtime_settings(&head_main);
+    head_face_settings[3]=if parsed_card.as_ref().map_or(true,|card|card.eyes_blink) {1.}else{0.};
+    head_face_settings[11]=if head_has_eye_controller {1.}else{0.};
+    let head_eye_materials=parsed_head.eye_material_settings(&head_main);
+    // Emitted material passes may have a different display name but retain
+    // the source renderer's entire FBS controller identity.
+    let mut head_fbs_sources = std::collections::HashMap::<String, String>::new();
+    eprintln!("ok-extract: head FaceBlendShape mouth targets={} eyes={} eyebrow={}",
+        head_mouth_patterns.len(),head_eye_patterns.len(),head_eyebrow_patterns.len());
+    // ChaControl.cs:8115 + 8497: aaWeightsHead.CreateBoneList(objHeadBone =
+    // "p_cf_head_bone") then AssignedWeightsAndSetBounds remaps every head SMR's
+    // own bone list (component.bones[i].name) onto that armature. Set
+    // `OK_OLDPHEAD` to keep the head mesh prefab's own SMR skeleton instead.
+    if std::env::var("OK_OLDPHEAD").is_ok() {
+        if let Some(face) = head_meshes
+            .iter()
+            .find(|m| m.name.eq_ignore_ascii_case("cf_O_face"))
+        {
+            if let Some(s) = parsed_head.skeleton(face.path_id) {
+                head_skel = Some(s);
+            }
+        }
+    } else if let Some(s) = prefab_head_skel.clone() {
+        eprintln!(
+            "ok-extract: head_skel = p_cf_head_bone ({} bones)",
+            s.names.len()
+        );
+        head_skel = Some(s);
+    }
+    // StudioEditor instantiates p_cf_head_bone then RebindSkinning every head
+    // SMR onto that full name map. The face SMR is only 45 bones; iris/sclera
+    // extras (cf_J_hitomi_tx_*) live in tfs but not in names until we append.
+    if let Some(sk) = head_skel.as_mut() {
+        let before = sk.names.len();
+        sk.include_tree_bones();
+        if sk.names.len() != before {
+            eprintln!(
+                "ok-extract: head_skel include_tree_bones smr={} names={} tfs={} hitomi={}",
+                sk.smr_count,
+                sk.names.len(),
+                sk.tfs.len(),
+                sk.index_of("cf_J_hitomi_tx_L").is_some()
+            );
+        }
+    }
+    // ChaControl.cs:8630 `CommonLib.CopySameNameTransform(objHeadBone, objHead)`:
+    // the head mesh prefab's LOCAL transforms overwrite every same-named node of
+    // `p_cf_head_bone` before the face shape is applied (ChaControl.cs:8726
+    // InitShapeFace targets objHeadBone). The armature authors the head attach
+    // nodes at different positions than the mesh, so without this the hair
+    // accessories hang ~0.03 high / ~0.016 forward (see pose.rs).
+    if std::env::var("OK_NOCOPYTRF").is_err() {
+        if let Some(mesh_skel) = parsed_head.skeleton_for_prefab_name(&head_main) {
+            if let Some(sk) = head_skel.as_mut() {
+                let changed = crate::pose::copy_same_name_transform(sk, &mesh_skel);
+                if changed > 0 {
+                    eprintln!(
+                        "ok-extract: CopySameNameTransform head mesh '{}' onto p_cf_head_bone changed={changed}",
+                        head_main
+                    );
+                }
+            }
+        }
+    }
+    // The supplied Studio T-pose captures use ChaControl's !hiPoly body-bone
+    // reference layout even though their generated texture RTs use the 1024px
+    // path. Keep texture resolution selection separate from attach nodes.
+    // OK_BONE_HIPOLY=1 opts into the unmodified prefab references.
+    if std::env::var("OK_BONE_HIPOLY").ok().as_deref() != Some("1") {
+        if let Some(sk) = body_skel.as_mut() {
+            crate::pose::apply_low_poly_body_references(sk);
+        }
+    }
+    let mut body_rest = body_skel.clone();
+    // Parse local PPtrs against the original prefab IDs. Merging the tree
+    // into the SMR rig assigns synthetic IDs; runtime rebinds by these names.
+    let body_dynamics = parsed_body.skeleton_for_prefab_name("p_cf_body_bone")
+        .map(|s| parsed_body.body_dynamics_for_skeleton(&s)).unwrap_or_default();
+    let body_colliders = parsed_body.skeleton_for_prefab_name("p_cf_body_bone")
+        .map(|s| parsed_body.body_colliders_for_skeleton(&s)).unwrap_or_default();
+    let mut clothes_dynamics = crate::dbone::DBoneSet::default();
+    eprintln!("ok-extract: body Ver02 components={}", body_dynamics.len());
+    let head_rest = head_skel.clone();
+    Ok(BaseStage { body_bundle, skin_material_bundle, vanilla_head_bundle, body_meshes, body_skel, body_texs,
+        pv_config, eye_look_config, parsed_head, head_texs, head_main, head_shape_keys, head_skel,
+        head_meshes, head_mouth_patterns, head_eye_patterns, head_eyebrow_patterns, head_face_settings,
+        head_eye_materials, head_fbs_sources, body_rest, body_dynamics, body_colliders, clothes_dynamics, head_rest, })
+}
+
 /// What the lists stage (OK_PROFILE "lists+mods+guids") hands the rest of the open. The two scopes hold the
 /// session's garment states and its entry prefetch until the open ends.
 struct ListsStage {
-    vanilla: ChaListCatalog,
+    vanilla: std::sync::Arc<ChaListCatalog>,
     ramp_png: Option<Vec<u8>>,
     mods_dir: PathBuf,
     mod_catalog: std::sync::Arc<ChaListCatalog>,
@@ -2613,7 +2664,7 @@ struct ListsStage {
 fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, out_dir: Option<&Path>,
     manifest: &mut Manifest) -> Result<ListsStage, String> {
     let t_sub = Instant::now();
-    let vanilla = load_characustom_dir(&game_root.join("abdata/list/characustom"));
+    let vanilla = crate::list::load_characustom_dir_shared(&game_root.join("abdata/list/characustom"));
     profile_tick("lists: vanilla", t_sub);
     let t_sub = Instant::now();
     let ramp_png = configured_ramp_png(game_root, &vanilla);
