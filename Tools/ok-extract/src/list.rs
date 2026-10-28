@@ -537,6 +537,11 @@ fn load_characustom_dir_uncached(dir: &Path) -> (ChaListCatalog,bool) {
 
 /// Signature of a mods tree's zipmod list (paths, sizes, times), for per-process memos.
 pub(crate) fn zip_list_sig(mods_dir: &Path) -> u64 {let _spot=crate::profile::spot("view: zip_list_sig");
+    // The same in every open of a view (crate::view_memo): several memo keys of each open ask for it.
+    crate::view_memo(format!("zip_list_sig|{}", mods_dir.display()), || zip_list_sig_view(mods_dir))
+}
+
+fn zip_list_sig_view(mods_dir: &Path) -> u64 {
     if let Some(tree) = crate::mods::watched_tree_zips(mods_dir) { return tree.1; }
     // A replaying library's recorded tree only changes with the mounted card pack: walking and stating its ~7000
     // archives for every memo key (several per open) cost ~0.1 s each time.

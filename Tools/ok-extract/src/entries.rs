@@ -21,11 +21,25 @@ thread_local! {
         std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
-/// `make()` once per view and key (see VIEW_MEMO); a clone of it after.
+thread_local! {
+    /// This thread is in an open (extract_session_from_info), whose view VIEW_MEMO holds. Other threads (prefetch
+    /// helpers, pool work) never clear theirs when the view changes, so they compute afresh.
+    static IN_VIEW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// Marks this thread as in an open for its duration (VIEW_MEMO answers only there).
+pub(crate) struct ViewMemoScope(bool);
+impl ViewMemoScope {
+    pub(crate) fn begin() -> Self { ViewMemoScope(IN_VIEW.with(|v| v.replace(true))) }
+}
+impl Drop for ViewMemoScope {
+    fn drop(&mut self) { IN_VIEW.with(|v| v.set(self.0)); }
+}
+
+/// `make()` once per view and key (see VIEW_MEMO); a clone of it after. Outside an open: `make()`.
 pub(crate) fn view_memo<T: Clone + 'static>(key: String, make: impl FnOnce() -> T) -> T {
     // OK_NO_VIEW_MEMO=1: every open computes it (to compare with the memo).
     static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *OFF.get_or_init(|| std::env::var_os("OK_NO_VIEW_MEMO").is_some()) { return make(); }
+    if *OFF.get_or_init(|| std::env::var_os("OK_NO_VIEW_MEMO").is_some()) || !IN_VIEW.with(|v| v.get()) { return make(); }
     if let Some(hit) = VIEW_MEMO.with(|m| m.borrow().get(&key).and_then(|v| v.downcast_ref::<T>().cloned())) { return hit; }
     let made = make();
     VIEW_MEMO.with(|m| m.borrow_mut().insert(key, std::rc::Rc::new(made.clone())));

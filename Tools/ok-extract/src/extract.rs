@@ -40,6 +40,7 @@ pub(crate) fn extract_session_from_info(
     let epoch = format!("{}|{view}|{}|{}", game_root.display(), crate::oklib::mounted_pack_mods_identity(), crate::dbone::dynamic_bones_fix_enabled(game_root));
     let previous = ENTRY_EPOCH.with(|e| e.replace(epoch.clone()));
     if view.is_empty() || previous != epoch { clear_entry_memo(); }
+    let _view_memo = crate::ViewMemoScope::begin();
     crate::unity::references::begin_load(game_root);
     let t_all = Instant::now();
     // OK_PROFILE: the per-slot stage timings (appearance::timings) of this open too.
