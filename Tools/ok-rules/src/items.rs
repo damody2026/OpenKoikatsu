@@ -81,6 +81,21 @@ fn owned_mut<'a>(st: &'a mut Value, girl: &str) -> &'a mut Vec<Value> {
     st["owned"][girl].as_array_mut().unwrap()
 }
 
+/// The item ids she holds (ext items.owned), for an activity that needs one (activities.rs).
+pub fn owned_ids(r: &Value, girl: &str) -> Vec<String> {
+    let st = state(r);
+    st["owned"].get(girl).and_then(Value::as_array).into_iter().flatten().filter_map(|e| e["item"].as_str().map(str::to_string)).collect()
+}
+
+/// One of hers used up (the fish food fed to the fish): the ext without it, or None when she has none.
+pub fn use_up(r: &Value, girl: &str, item: &str) -> Option<Value> {
+    let mut st = state(r);
+    let owned = st["owned"].get_mut(girl).and_then(Value::as_array_mut)?;
+    let k = owned.iter().position(|e| e["item"].as_str() == Some(item))?;
+    owned.remove(k);
+    Some(with_state(r, st))
+}
+
 fn give_to_her(st: &mut Value, girl: &str, item: &str, name: &str, from: &str, today: i64) {
     let mut e = json!({"item": item, "from": from, "day": today});
     if !name.is_empty() {

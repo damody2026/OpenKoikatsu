@@ -435,7 +435,13 @@ TSharedRef<FJsonObject> AOKStreetSocialScene::ActivityContext(int32 Girl,const T
   // Her profile: an activity may be hers only when it names a field of it (help_her_work: occupation.side_task).
   if(const TSharedPtr<FJsonObject> Profile=S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Girl])))R->SetObjectField(TEXT("profile"),Profile);}
  const int64 Now=OKStreetMindNow(S);R->SetBoolField(TEXT("raining"),RainingAt(S.Store.CalendarDay,int32(Now%1440)));R->SetNumberField(TEXT("day"),S.Store.CalendarDay); // festival-only activities (events.toml)
- TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("his_items"),His);
+ TArray<TSharedPtr<FJsonValue>> His;for(const FString& I:S.Store.Inventory)His.Add(MakeShared<FJsonValueString>(I));
+ // What they ordered here counts too, made or still being made: 三月七 ordered the fish food and paid for it, and the
+ // feeding that started before it came had him buy another bag (R4-16).
+ TArray<TSharedPtr<FJsonValue>> Hers;
+ for(const FOKStreetDish& D:S.Table)if(D.Percent>0.f){if(!D.ForHer)His.Add(MakeShared<FJsonValueString>(D.ItemId));else if(D.Her==INDEX_NONE||D.Her==Girl)Hers.Add(MakeShared<FJsonValueString>(D.ItemId));}
+ R->SetArrayField(TEXT("his_items"),His);R->SetArrayField(TEXT("her_items"),Hers);
+ OKRulesPutExt(S,R); // what she bought for herself (activities.rs reads her things from it)
  TArray<TSharedPtr<FJsonValue>> Done;if(S.ActivitiesDoneDay==Now/1440)if(const auto* D=S.ActivitiesDone.Find(Girl))for(const FString& I:*D)Done.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("done_today"),Done);
  auto Names=MakeShared<FJsonObject>();for(const auto& P:OKStreetPlaces())Names->SetStringField(P.Id,P.Name);R->SetObjectField(TEXT("place_names"),Names);
  return R;
@@ -453,8 +459,11 @@ bool AOKStreetSocialScene::ActivityCheck(int32 Girl,const FString& ActivityId,FS
   ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
  if(bConsume){const TArray<TSharedPtr<FJsonValue>>* Consume=nullptr;
   if(Answer->TryGetArrayField(TEXT("consume"),Consume)&&Consume->Num()){auto Candidate=S.Store;
-   for(const auto& V:*Consume){const auto O=V->AsObject();if(O->GetStringField(TEXT("from"))==TEXT("his"))Candidate.Inventory.RemoveSingle(O->GetStringField(TEXT("item")));
+   for(const auto& V:*Consume){const auto O=V->AsObject();const FString Item=O->GetStringField(TEXT("item"));const bool FromHis=O->GetStringField(TEXT("from"))==TEXT("his");
+    // From his bag, else the one they ordered here (ActivityContext lists both): used up, it leaves the table.
+    if(!(FromHis&&Candidate.Inventory.RemoveSingle(Item)>0)){const int32 K=S.Table.IndexOfByPredicate([&](const FOKStreetDish& D){return D.ItemId==Item&&D.ForHer!=FromHis&&D.Percent>0.f;});if(K!=INDEX_NONE)S.Table.RemoveAt(K);}
     UE_LOG(LogTemp,Display,TEXT("Street activity check: %s uses %s (%s)"),*ActivityId,*O->GetStringField(TEXT("item")),*O->GetStringField(TEXT("from")));}
+   if(Answer->HasField(TEXT("ext")))OKRulesTakeExt(Candidate,*Answer); // hers used up, out of her things
    CommitStore(MoveTemp(Candidate));}}
  return true;
 }

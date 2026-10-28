@@ -98,6 +98,18 @@ fn list(r: &Value, k: &str) -> Vec<String> {
     r.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default()
 }
 
+fn girl_id(r: &Value) -> &str {
+    r.get("girl").map(|g| s(g, "id")).unwrap_or_default()
+}
+
+/// What she has with her: her_items (what she ordered here) and what is hers in the ext (bought for herself). 三月七
+/// paid for the fish food herself and the feeding still had him buy a second bag (R4-16).
+fn hers(r: &Value) -> Vec<String> {
+    let mut v = list(r, "her_items");
+    v.extend(crate::items::owned_ids(r, girl_id(r)));
+    v
+}
+
 /// Why this activity cannot start now, or None. Request fields: girl {id, names[]}, raining, his_items[], her_items[],
 /// done_today[] (activity ids done with her today).
 fn blocked(a: &Activity, c: &Catalog, r: &Value) -> Option<(String, String)> {
@@ -134,7 +146,7 @@ fn blocked(a: &Activity, c: &Catalog, r: &Value) -> Option<(String, String)> {
     if a.once_per_day && list(r, "done_today").contains(&a.id) {
         return Some(("once".into(), crate::tr::t("activity.done_today").into()));
     }
-    let (his, her) = (list(r, "his_items"), list(r, "her_items"));
+    let (his, her) = (list(r, "his_items"), hers(r));
     for need in &a.needs {
         if !his.contains(need) && !her.contains(need) {
             let item = c.items.iter().find(|i| &i.id == need);
@@ -157,7 +169,7 @@ fn place_name(id: &str, r: &Value) -> String {
 /// What it needs and neither of them has, when all of it is sold right here (`here`) or where the activity is done
 /// (the fish food by the pond, asked for at the cafe) and he can pay (`player_cash`): he buys it. Else None.
 fn buy_here(a: &Activity, c: &Catalog, r: &Value) -> Option<(Vec<Value>, i64)> {
-    let (his, her, here) = (list(r, "his_items"), list(r, "her_items"), s(r, "here"));
+    let (his, her, here) = (list(r, "his_items"), hers(r), s(r, "here"));
     let mut buy = Vec::new();
     let mut total = 0i64;
     for need in a.needs.iter().filter(|n| !his.contains(n) && !her.contains(n)) {
@@ -223,7 +235,16 @@ fn check(t: &ActivitiesTuning, c: &Catalog, r: &Value) -> Value {
     let his = list(r, "his_items");
     let used = if at_end && a.consume { a.needs.clone() } else { Vec::new() };
     let consume: Vec<Value> = used.iter().map(|n| json!({"item": n, "from": if his.contains(n) { "his" } else { "her" }})).collect();
-    json!({"ok": true, "known": true, "consume": consume, "yields": a.yields})
+    let mut v = json!({"ok": true, "known": true, "consume": consume, "yields": a.yields});
+    // Hers used up: out of what she holds (the ext), not only off the table.
+    let mut r2 = r.clone();
+    for n in used.iter().filter(|n| !his.contains(n)) {
+        if let Some(ext) = crate::items::use_up(&r2, girl_id(r), n) {
+            r2["ext"] = ext.clone();
+            v["ext"] = ext;
+        }
+    }
+    v
 }
 
 /// What cannot be done right now among this place's activities and those done where they stand, for her prompt:
@@ -330,6 +351,15 @@ mod tests {
         assert_eq!(blocked_here(&t, &c, &json!({"place": "park"}))["blocked"].as_array().map(Vec::len), Some(0), "not listed as impossible in the park");
         assert_eq!(check(&t, &c, &json!({"id": "park_feed_fish", "here": "park", "player_cash": 2}))["ok"], false, "cannot pay");
         assert!(check(&t, &c, &json!({"id": "park_feed_fish", "here": "park", "his_items": ["park_fishfood"]})).get("buy").is_none());
+        // Hers, bought for herself (ext owned): not bought again, and used up out of her things at the end (R4-16).
+        let ext = json!({"items": {"owned": {"g1": [{"item": "park_fishfood", "from": "bought", "day": 8}]}}});
+        let her = json!({"id": "park_feed_fish", "here": "park", "player_cash": 100, "girl": {"id": "g1"}, "ext": ext});
+        assert!(check(&t, &c, &her).get("buy").is_none());
+        let mut end = her.clone();
+        end["at_end"] = json!(true);
+        let done = check(&t, &c, &end);
+        assert_eq!(done["consume"][0]["from"], "her");
+        assert_eq!(done["ext"]["items"]["owned"]["g1"].as_array().map(Vec::len), Some(0));
     }
 
     #[test]
