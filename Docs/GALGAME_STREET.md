@@ -280,3 +280,22 @@ Gal1028R，`/private girl 3`，兩次：card 185／224 ms、session 5073／5556 
 - 約了晚餐的那天：約會前 8 小時內她自己的那頓同樣變輕食；當天才約的（`plan_set_promises`）還沒吃的那頓也變輕食。
 - 測試：`a_lunch_date_makes_her_breakfast_light`、`a_dinner_date_makes_her_lunch_light`、`a_light_meal_is_a_small_dish`（ok-rules 218 通過）。
 - 驗證（Gal1028V 沙盒，新存檔約胡桃）：只做輕食時她睡到 08:30（飽足約 76），喝了紅茶、中午仍 74，只點得了貢丸湯（20）；加上「不餓就不吃早餐」後，隔天她 07:17 吃輕早餐，中午到場 70，自己點了水餃 10 顆（45），沒有被擋。
+
+### 三月七 1 對 1 乾淨重量（2026-10-29 03:54，Gal1029E）
+
+雙 slot、機器上沒有其他遊戲與轉卡；ok-extract 用 b9a4cdfdd 的匯出副本（含 crowd 的開卡加速：舊貼圖清單整段讀、卡包多 frame 平行解壓、view_memo、base_bundles_stage），1 對 1 這邊含 20e8b39ba、1f20d13a8、ad7c45674。
+
+| | Gal1028T（10-28 23:18） | Gal1029E |
+|---|---|---|
+| 冷開 session | 2476 ms | 1865 ms |
+| 冷開 materials／textures | 972／774 ms | 1628／760 ms |
+| 冷開：按下到 `OK interaction entered` | 約 9.1 s | 約 6.7 s |
+| 冷開：到男角就緒 | 約 12 s | 約 9.1 s |
+| 熱開：進入／男角就緒 | 約 7.1／9.5 s | 約 5.3／7.3 s |
+| 身體互動準備 | 690 ms | 49 ms（熱開 3 ms） |
+
+materials 變長是 ad7c45674 限制解碼通道數的代價（換來主執行緒與渲染執行緒不再被卡住）。
+
+### 女主的專屬聲音（okVo）
+
+crowd 把十張街頭女主卡寫回自己的聲音（`okVo`）。Gal1029E 向遊戲的 TTS 查 `voice/card`：十張都回本人的 voice id（source=reference）；對話的串流請求都帶 `card`，右側面板顯示「她的角色卡裡存有專屬聲音」；貞德、安可的句子實際播出。音色是否像本人要使用者聽過確認。
