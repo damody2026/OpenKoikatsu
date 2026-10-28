@@ -34,6 +34,14 @@ public class KKUnityBundle : ModuleRules
 
 
 		string ExtractRoot = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", "..", "..", "Tools", "ok-extract"));
+		// OK_EXTRACT_ROOT: build and link ok_extract.lib from another copy of Tools/ok-extract (an exported tree), so a
+		// packaging run in a shared checkout does not pick up Rust edits someone else is still making there.
+		string ExtractOverride = Environment.GetEnvironmentVariable("OK_EXTRACT_ROOT");
+		if (!string.IsNullOrEmpty(ExtractOverride))
+		{
+			ExtractRoot = Path.GetFullPath(ExtractOverride);
+			Console.WriteLine("KKUnityBundle: ok-extract from OK_EXTRACT_ROOT " + ExtractRoot);
+		}
 		string BuiltinRoot = Path.Combine(Path.GetDirectoryName(Target.ProjectFile.FullName), "Content", "IndependentResources", "v1");
 		if (Directory.Exists(BuiltinRoot))
 		{
