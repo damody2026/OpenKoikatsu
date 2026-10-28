@@ -1222,7 +1222,7 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // A note the game wrote for her (a till note, "he just confessed") is neither: it is not shown as his line either.
  if(His){S.FreeTalkSilenceSince=FPlatformTime::Seconds();S.FreeTalkSilencePenalties=0;S.FreeTalkLeavePending=false;}
  if(!His)S.FreeTalkCaptionPlayer.Reset();else S.FreeTalkCaptionPlayer=S.Manifest.Characters[0].Name+OKT(TEXT("ui.party.speech_open_quote"))+Text+OKT(TEXT("ui.party.closing_quote_mark"));
- S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.scene.ellipsis_colon"));
+ S.FreeTalkCaptionHer=OKStreetScriptedName(S.Manifest.Characters[Character].Name)+OKT(TEXT("ui.scene.ellipsis_colon"));
  S.FreeTalkBusy=true;S.FreeTalkSentAt=SceneTime();++S.FreeTalkSent;S.FreeTalkDraft.Reset();S.FreeTalkNotice=OKT(TEXT("ui.scene.she_is_thinking"));
  // The heroine mind keeps her whole context and the full state of every turn (plan §7.0); without it,
  // the request goes straight to DeepSeek with the trimmed local memory.
@@ -1258,7 +1258,7 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  FreeTalkSaveMemory();}
  int64 Serial=0;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkLines);if(!OKStreetFreeTalkIsNudge(Text))FreeTalkAddLine(Character,true,Text);
  Serial=FreeTalkAddLine(Character,false,Reply->Reply);}
- S.FreeTalkCaptionHer=S.Manifest.Characters[Character].Name+OKT(TEXT("ui.economy.colon_mark"))+Reply->Reply;
+ S.FreeTalkCaptionHer=OKStreetScriptedName(S.Manifest.Characters[Character].Name)+OKT(TEXT("ui.economy.colon_mark"))+Reply->Reply;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkFavor);ApplyFreeTalkFavor(Character,Reply->FavorDelta,Reply->Reason);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkRelation);ApplyMindRelation(Character,Reply->RelDelta,Reply->Emotion);}
  // Who pays is what they settled: a game note ("you just walked in, order something") is no talk between them, so her
@@ -2181,7 +2181,7 @@ static const FButtonStyle* OKStreetGlassButton(){static const FButtonStyle Style
 static void OKStreetDigestMessage(FOKStreetSceneState& S){
  if(S.Message==S.DigestedMessage&&S.Target==S.DigestedTarget&&S.Node==S.DigestedNode)return;
  S.DigestedMessage=S.Message;S.DigestedTarget=S.Target;S.DigestedNode=S.Node;
- const FString Speaker=S.Node!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(S.Target)?S.Manifest.Characters[S.Target].Name+OKT(TEXT("ui.economy.colon_mark")):FString();
+ const FString Speaker=S.Node!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(S.Target)?OKStreetScriptedName(S.Manifest.Characters[S.Target].Name)+OKT(TEXT("ui.economy.colon_mark")):FString();
  FString Said,Hint;OKStreetSplitMessageHint(S.Message,Said,Hint);
  // A control-only message keeps her last line on screen; a new partner (or none) starts clean.
  if(S.DialogueTarget!=S.Target){S.DialogueText.Reset();S.DialogueTarget=S.Target;}

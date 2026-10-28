@@ -188,7 +188,7 @@ void AOKStreetSocialScene::TickServes(){
   TArray<FString> Names;
   if(!P.Applied){
    P.Applied=true;
-   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?S.Manifest.Characters[L.Girl].Name+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
+   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
    // Served: the dishes can be eaten now; her needs fill as she eats them (TickMeal).
    for(auto& D:S.Table)if(D.Batch==P.Batch)D.Served=true;
    S.Message=OKMsg(TEXT("ui.economy.dishes_served_line"), {{TEXT("dish_names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});
@@ -317,7 +317,7 @@ void AOKStreetSocialScene::SettleGroupOrder(int32 Partner){
   }
   UE_LOG(LogTemp,Display,TEXT("Street group order: actor=%d lines=%d -> %s"),G,S.Cart.Num(),*Option);
   FinishCheckout(Option,G,G==Partner?FString():OKStreetStableId(S.Manifest.Characters[G]));
-  Notices.Add(S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.colon_mark"))+S.FreeTalkNotice);
+  Notices.Add(OKStreetScriptedName(S.Manifest.Characters[G].Name)+OKT(TEXT("ui.economy.colon_mark"))+S.FreeTalkNotice);
  }
  S.Cart.Reset();S.FreeTalkNotice=FString::Join(Notices,TEXT("\n"));RefreshUI();
 }

@@ -84,7 +84,7 @@ void AOKStreetSocialScene::HeroineRefuseGate(int32 Girl,const FString& ActId,con
  UE_LOG(LogTemp,Display,TEXT("Street heroine gate: actor=%d %s refused (stage %d)"),Girl,*ActId,int32((*Gate)->GetNumberField(TEXT("stage"))));
  if(FreeTalkPartner()==Girl&&!S.FreeTalkBusy&&SceneTime()-S.GateNudgeAt>20.0){
   S.GateNudgeAt=SceneTime();S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.finance_apps.open_paren"))+What+OKT(TEXT("ui.heroine.react_in_character_suffix"));SendFreeTalk();
- }else{S.FreeTalkNotice=S.Manifest.Characters[Girl].Name+OKT(TEXT("ui.heroine.dodged_suffix"));RefreshUI();}
+ }else{S.FreeTalkNotice=OKStreetScriptedName(S.Manifest.Characters[Girl].Name)+OKT(TEXT("ui.heroine.dodged_suffix"));RefreshUI();}
 }
 
 // Settled elsewhere (her consent and values were the caller's): her record and the rumour, in the caller's words.

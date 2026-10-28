@@ -965,3 +965,8 @@
 - 先試著按各嘴型的頂點位移量自動判斷「張不大」：soft(4) 的總位移 168 和 0 號的 170 幾乎一樣（開形狀主要是整片嘴唇移動，不是上下唇分開），判斷不出來，改用固定名單。
 - 修正（`KKRuntimeRenderMesh.cpp` `AccumulateAuthoredFace`）：說話時（嘴巴那組 Opening<0、有語音），閉唇的嘴型（soft 4、parted 5、pressed 6、tense 7、frown 8、flat 10、clench 12、uneasy 13、pout 15、wry 16、smug 19、kiss 23；`ok.Mouth.TalkBorrow`）在自己的閉嘴形狀上，疊 0 號嘴型的開－閉形狀；臉、牙齒、舌頭用同一份名單。不說話時不變。
 - 驗證（Gal1029D，`/camera` 對準貞德的頭、說話時連拍 8 張）：張口隨聲音變化，看得到上下唇分開與牙齒、舌頭；停頓與說完回到微笑的閉嘴線。
+
+### 2026-10-29 手機聯絡人與幾處字幕顯示簡體名（E 組 galgame，新存檔實玩）
+- 繁體遊戲裡，手機的聯絡人按鈕與標題是「爱丽丝」，左上名單卻是「愛麗絲」。卡片的名字是簡體（`name_overrides.json`）；用 `OKMsg` 組的訊息由規則端連參數一起轉成遊戲語言的字體，所以大多正確，直接把原名接在字串上、或放進按鈕與文字元件的地方則沒轉。
+- 修正：顯示用的地方改用 `OKStreetScriptedName`：手機（`OKStreetSocialPhoneInbox.inl` 聯絡人、標題、訊息串、來電與漏接提示）、上菜提示與提示列（`OKStreetSocialEconomy.inl`、`OKStreetSocialHeroine.inl`）、她的字幕與舊對話列的說話者（`OKStreetSocialScene.cpp`）、群聊與 Bluff 的字幕。送給模型的提示與身分比對照舊用原名。
+- 驗證（Gal1029F）：手機聯絡人、標題、訊息串都顯示「愛麗絲」，傳訊息她正常回覆。

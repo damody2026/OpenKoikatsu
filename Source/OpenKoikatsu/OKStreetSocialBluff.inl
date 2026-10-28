@@ -12,7 +12,7 @@ void AOKStreetSocialScene::BluffSay(const TArray<int32>& Seats,const TArray<FStr
  for(int32 I=0;I<Seats.Num()&&I<Lines.Num();++I){
   const int32 G=B.Seats.IsValidIndex(Seats[I])?B.Seats[Seats[I]]:0;
   if(G==0){S.FreeTalkCaptionPlayer=T(TEXT("ui.common.you"))+T(TEXT("ui.common.colon"))+T(TEXT("ui.common.quote_open"))+Lines[I]+T(TEXT("ui.common.quote_close"));continue;}
-  Speakers.Add(G);Spoken.Add(Lines[I]);Caption.Add(S.Manifest.Characters[G].Name+T(TEXT("ui.common.colon"))+Lines[I]);
+  Speakers.Add(G);Spoken.Add(Lines[I]);Caption.Add(OKStreetScriptedName(S.Manifest.Characters[G].Name)+T(TEXT("ui.common.colon"))+Lines[I]);
  }
  if(Speakers.IsEmpty())return;
  S.FreeTalkCaptionHer=FString::Join(Caption,TEXT("\n"));
