@@ -80,161 +80,11 @@ pub(crate) fn extract_session_from_info(
         }
     }
 
-    let t_sub = Instant::now();
-    let vanilla = load_characustom_dir(&game_root.join("abdata/list/characustom"));
-    profile_tick("lists: vanilla", t_sub);
-    let t_sub = Instant::now();
-    let ramp_png = configured_ramp_png(game_root, &vanilla);
-    profile_tick("lists: ramp", t_sub);
-    if std::env::var("OK_DUMP_HAIR_INPUTS").as_deref() == Ok("1")
-        || std::env::var("OK_DUMP_MATERIAL_INPUTS").as_deref() == Ok("1") {
-        if let (Some(dir), Some(bytes)) = (out_dir, ramp_png.as_deref()) {
-            std::fs::write(dir.join("toon-ramp.png"), &*crate::teximg::as_png(bytes)).map_err(|e| e.to_string())?;
-        }
-    }
-    eprintln!("ok-extract: global toon ramp bytes={}", ramp_png.as_ref().map_or(0, Vec::len));
-    let mods_dir = game_root.join("mods");
-    let t_sub = Instant::now();
-    let mod_catalog = crate::list::load_mods_catalog_shared(&mods_dir);
+    let ListsStage { vanilla, ramp_png, mods_dir, mod_catalog, guid_index, selected_clothes, selected_top_type,
+        selected_top_subparts, state_types, linked_not_bot, linked_not_shorts, requested_states, reference_flags,
+        resolved_states, selected_hair_gloss, clothes_scope: _clothes_scope, prefetch_guard: _prefetch_guard } =
+        lists_stage(game_root, &parsed_card, outfit, out_dir, &mut manifest)?;
     let mod_catalog = &*mod_catalog;
-    profile_tick("lists: mods catalog", t_sub);
-    let t_sub = Instant::now();
-    let guid_index: std::collections::HashMap<String, PathBuf> = parsed_card
-        .as_ref()
-        .map(|c| {
-            if c.resolves.is_empty() {
-                Default::default()
-            } else {
-                let wanted: std::collections::HashSet<String> =
-                    c.resolves.iter().map(|r| r.mod_id.clone()).collect();
-                crate::mods::find_guids(&mods_dir, Some(&wanted))
-            }
-        })
-        .unwrap_or_default();
-    // Resolve the list entries before creating body masks or reading prefab
-    // variants. The game derives state availability and linked clothing from
-    // these entries before DrawClothes, including for clothes later hidden.
-    profile_tick("lists: guids", t_sub);
-    let t_sub = Instant::now();
-    let selected_clothes = parsed_card.as_ref().map(|card|
-        select_card_clothes(card, outfit, &vanilla, &mod_catalog, &guid_index));
-    profile_tick("lists: select clothes", t_sub);
-    let selected_top_type: i32 = selected_clothes.as_ref()
-        .and_then(|slots| slots[0].as_ref())
-        .and_then(|(entry, _, _)| entry.info("Kind").parse().ok()).unwrap_or(0);
-    let selected_top_subparts = parsed_card.as_ref().map(|card|
-        select_card_top_subparts(card, outfit, selected_top_type,
-            &vanilla, &mod_catalog, &guid_index));
-    let mut state_types = std::array::from_fn(|kind| selected_clothes.as_ref()
-        .and_then(|slots| slots[kind].as_ref())
-        .and_then(|(entry, _, _)| entry.info("StateType").trim().parse::<u8>().ok()));
-    let linked_not_bot = selected_clothes.as_ref().and_then(|slots| slots[0].as_ref())
-        .is_some_and(|(entry, _, _)| entry.info("Coordinate").trim() == "2");
-    let linked_not_shorts = selected_clothes.as_ref().and_then(|slots| slots[2].as_ref())
-        .is_some_and(|(entry, _, _)| entry.info("Coordinate").trim() == "2");
-    let requested_states = crate::unity::requested_clothes_states();
-    let mut reference_flags = [false; 4];
-    if requested_states != [0; 9] {
-        if let Some(slots) = selected_clothes.as_ref() {
-            reference_flags = selected_clothes_reference_flags(game_root, slots);
-            let top_not_bra = slots[0].as_ref()
-                .is_some_and(|(entry, _, _)| entry.info("NotBra").trim() == "1");
-            let sub_not_bra: [Option<bool>; 2] = std::array::from_fn(|kind|
-                selected_top_subparts.as_ref()
-                    .and_then(|sub| sub[kind].as_ref())
-                    .and_then(|(_, entry, _, _)|
-                        (!is_dummy_part(&entry.main_data, Some(&entry.name)))
-                            .then(|| entry.info("NotBra").trim() == "1")));
-            let not_bra = match selected_top_type {
-                1 => sub_not_bra[0].unwrap_or(top_not_bra),
-                2 if sub_not_bra.iter().any(Option::is_some) =>
-                    sub_not_bra.iter().any(|value| *value == Some(true)),
-                _ => top_not_bra,
-            };
-            state_types = adjust_clothes_state_types(
-                state_types, reference_flags, not_bra, linked_not_shorts);
-        }
-    }
-    let resolved_states = resolve_clothes_states(
-        requested_states, state_types,
-        linked_not_bot, linked_not_shorts);
-    let _clothes_scope = crate::unity::set_session_clothes_states(resolved_states);
-    manifest.clothes_states = resolved_states;
-    // Whatever way this extraction ends (an error, a preempted background open), its helpers finish before it
-    // returns, while its card pack is still mounted.
-    let _prefetch_guard = PrefetchGuard;
-    // Predict the hair/accessory (KKEx resolves) and clothing items the item passes extract, with the same
-    // filters, lookups and shake switches, and start extracting them on helper threads now (`prefetch_entries`),
-    // so they run while this thread builds the body, face and uncensor parts.
-    if let Some(card) = parsed_card.as_ref() {
-        let want_outfit = outfit_prefix(outfit);
-        let mut items: Vec<(Option<PathBuf>, ListEntry, bool)> = Vec::new();
-        let mut lists: std::collections::HashMap<String, ChaListCatalog> = std::collections::HashMap::new();
-        let mut seen = std::collections::HashSet::new();
-        for resolve in &card.resolves {
-            if !is_mesh_category(resolve.category_no) { continue; }
-            let p = resolve.property.to_ascii_lowercase();
-            if p.contains("outfit") && !p.contains(&want_outfit) { continue; }
-            let role = role_for_category(resolve.category_no, &resolve.property);
-            if role.starts_with("clothes") || is_dummy_part("", Some(&resolve.name)) { continue; }
-            if !seen.insert(format!("{}:{}:{}", resolve.category_no, resolve.slot, resolve.property)) { continue; }
-            let zip_path = guid_path(&guid_index, &resolve.mod_id);
-            let Some(entry) = lookup_entry(&vanilla, &mut lists, zip_path.map(|p| p.as_path()), &resolve.mod_id,
-                resolve.category_no, resolve.slot, resolve.local_slot) else { continue };
-            let shake = if role.starts_with("acc") {
-                accessory_slot_from_property(&resolve.property).and_then(|s| card.accessory.get(s)).is_none_or(|p| !p.no_shake)
-            } else {
-                !(101..=104).contains(&resolve.category_no) || !card.hair_parts[(resolve.category_no - 101) as usize].no_shake
-            };
-            items.push((zip_path.cloned(), entry, shake));
-        }
-        if let Some(slots) = selected_clothes.as_ref() {
-            for (kind, slot) in slots.iter().enumerate() {
-                let Some((entry, _, zip_path)) = slot.as_ref() else { continue };
-                if !crate::unity::clothes_kind_visible(kind, &manifest.clothes_states, manifest.shoes_type)
-                    || is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
-                let zip = entry.extra.get("__zip").map(PathBuf::from).or_else(|| zip_path.clone());
-                items.push((zip, entry.clone(), true));
-            }
-        }
-        // Hair slots (ChaFileHair.parts), as the hair-slot pass looks them up.
-        for (i, &hid) in card.hair_ids.iter().enumerate() {
-            if hid == 0 { continue; }
-            let cat = 101 + i as i32;
-            let resolve = card.resolves.iter().find(|r| (r.slot == hid || r.local_slot == hid) && (r.category_no == cat || (101..=104).contains(&r.category_no)));
-            let (guid, zip_path) = resolve.map_or((String::new(), None), |r| (r.mod_id.clone(), guid_path(&guid_index, &r.mod_id).cloned()));
-            let Some(entry) = lookup_entry(&vanilla, &mut lists, zip_path.as_deref(), &guid, cat, hid, hid) else { continue };
-            if is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
-            items.push((zip_path, entry, !card.hair_parts[i].no_shake));
-        }
-        // Accessory slots without a KKEx resolve (the ChaFileAccessory.parts pass): vanilla id, else the mod list.
-        let resolved_slots: std::collections::HashSet<usize> = card.resolves.iter()
-            .filter(|r| is_mesh_category(r.category_no) && role_for_category(r.category_no, &r.property).starts_with("acc"))
-            .filter(|r| { let p = r.property.to_ascii_lowercase(); !p.contains("outfit") || p.contains(&want_outfit) })
-            .filter_map(|r| accessory_slot_from_property(&r.property)).collect();
-        for (slot_i, a) in card.accessory.iter().enumerate() {
-            if a.type_id == 120 || !is_mesh_category(a.type_id) || resolved_slots.contains(&slot_i) { continue; }
-            if !role_for_category(a.type_id, "").starts_with("acc") { continue; }
-            let Some(entry) = vanilla.get(a.type_id, a.id).or_else(|| mod_catalog.get(a.type_id, a.id)).cloned() else { continue };
-            if is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
-            let zip = entry.extra.get("__zip").map(PathBuf::from);
-            items.push((zip, entry, !a.no_shake));
-        }
-        // The top's sailor/jacket subparts (the subclothes pass).
-        if manifest.clothes_states[0] != 3 {
-            for (_, entry, _, zip_path) in selected_top_subparts.iter().flatten().flatten() {
-                if is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
-                let zip = entry.extra.get("__zip").map(PathBuf::from).or_else(|| zip_path.clone());
-                items.push((zip, entry.clone(), true));
-            }
-        }
-        prefetch_entries(game_root, items);
-    }
-    if std::env::var("OK_DIAG").is_ok() {
-        eprintln!("ok-extract: clothes requested={requested_states:?} resolved={resolved_states:?} types={state_types:?} refs={reference_flags:?} notBot={linked_not_bot} notShorts={linked_not_shorts}");
-    }
-    let selected_hair_gloss = parsed_card.as_ref()
-        .and_then(|card| selected_hair_gloss_texture(game_root, card, &vanilla, &mod_catalog, &guid_index));
     profile_tick("lists+mods+guids", t);
     t = Instant::now();
     let body_bundle = game_root.join("abdata/chara/oo_base.unity3d");
@@ -2735,4 +2585,190 @@ pub(crate) fn extract_session_from_info(
         head_full_rest,
         head_full_posed: head_full_skel,
     })
+}
+
+/// What the lists stage (OK_PROFILE "lists+mods+guids") hands the rest of the open. The two scopes hold the
+/// session's garment states and its entry prefetch until the open ends.
+struct ListsStage {
+    vanilla: ChaListCatalog,
+    ramp_png: Option<Vec<u8>>,
+    mods_dir: PathBuf,
+    mod_catalog: std::sync::Arc<ChaListCatalog>,
+    guid_index: std::collections::HashMap<String, PathBuf>,
+    selected_clothes: Option<Vec<SelectedClothes>>,
+    selected_top_type: i32,
+    selected_top_subparts: Option<Vec<SelectedTopSubpart>>,
+    state_types: [Option<u8>; 9],
+    linked_not_bot: bool,
+    linked_not_shorts: bool,
+    requested_states: [u8; 9],
+    reference_flags: [bool; 4],
+    resolved_states: [u8; 9],
+    selected_hair_gloss: Option<(Vec<u8>, crate::unity::TextureSampling)>,
+    clothes_scope: crate::unity::ClothesStatesScope,
+    prefetch_guard: PrefetchGuard,
+}
+
+/// The lists, the mods catalogue and the card's GUIDs; the worn clothes and their states; the entry prefetch.
+fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, out_dir: Option<&Path>,
+    manifest: &mut Manifest) -> Result<ListsStage, String> {
+    let t_sub = Instant::now();
+    let vanilla = load_characustom_dir(&game_root.join("abdata/list/characustom"));
+    profile_tick("lists: vanilla", t_sub);
+    let t_sub = Instant::now();
+    let ramp_png = configured_ramp_png(game_root, &vanilla);
+    profile_tick("lists: ramp", t_sub);
+    if std::env::var("OK_DUMP_HAIR_INPUTS").as_deref() == Ok("1")
+        || std::env::var("OK_DUMP_MATERIAL_INPUTS").as_deref() == Ok("1") {
+        if let (Some(dir), Some(bytes)) = (out_dir, ramp_png.as_deref()) {
+            std::fs::write(dir.join("toon-ramp.png"), &*crate::teximg::as_png(bytes)).map_err(|e| e.to_string())?;
+        }
+    }
+    eprintln!("ok-extract: global toon ramp bytes={}", ramp_png.as_ref().map_or(0, Vec::len));
+    let mods_dir = game_root.join("mods");
+    let t_sub = Instant::now();
+    let mod_catalog_shared = crate::list::load_mods_catalog_shared(&mods_dir);
+    let mod_catalog = &*mod_catalog_shared;
+    profile_tick("lists: mods catalog", t_sub);
+    let t_sub = Instant::now();
+    let guid_index: std::collections::HashMap<String, PathBuf> = parsed_card
+        .as_ref()
+        .map(|c| {
+            if c.resolves.is_empty() {
+                Default::default()
+            } else {
+                let wanted: std::collections::HashSet<String> =
+                    c.resolves.iter().map(|r| r.mod_id.clone()).collect();
+                crate::mods::find_guids(&mods_dir, Some(&wanted))
+            }
+        })
+        .unwrap_or_default();
+    // Resolve the list entries before creating body masks or reading prefab
+    // variants. The game derives state availability and linked clothing from
+    // these entries before DrawClothes, including for clothes later hidden.
+    profile_tick("lists: guids", t_sub);
+    let t_sub = Instant::now();
+    let selected_clothes = parsed_card.as_ref().map(|card|
+        select_card_clothes(card, outfit, &vanilla, &mod_catalog, &guid_index));
+    profile_tick("lists: select clothes", t_sub);
+    let selected_top_type: i32 = selected_clothes.as_ref()
+        .and_then(|slots| slots[0].as_ref())
+        .and_then(|(entry, _, _)| entry.info("Kind").parse().ok()).unwrap_or(0);
+    let selected_top_subparts = parsed_card.as_ref().map(|card|
+        select_card_top_subparts(card, outfit, selected_top_type,
+            &vanilla, &mod_catalog, &guid_index));
+    let mut state_types = std::array::from_fn(|kind| selected_clothes.as_ref()
+        .and_then(|slots| slots[kind].as_ref())
+        .and_then(|(entry, _, _)| entry.info("StateType").trim().parse::<u8>().ok()));
+    let linked_not_bot = selected_clothes.as_ref().and_then(|slots| slots[0].as_ref())
+        .is_some_and(|(entry, _, _)| entry.info("Coordinate").trim() == "2");
+    let linked_not_shorts = selected_clothes.as_ref().and_then(|slots| slots[2].as_ref())
+        .is_some_and(|(entry, _, _)| entry.info("Coordinate").trim() == "2");
+    let requested_states = crate::unity::requested_clothes_states();
+    let mut reference_flags = [false; 4];
+    if requested_states != [0; 9] {
+        if let Some(slots) = selected_clothes.as_ref() {
+            reference_flags = selected_clothes_reference_flags(game_root, slots);
+            let top_not_bra = slots[0].as_ref()
+                .is_some_and(|(entry, _, _)| entry.info("NotBra").trim() == "1");
+            let sub_not_bra: [Option<bool>; 2] = std::array::from_fn(|kind|
+                selected_top_subparts.as_ref()
+                    .and_then(|sub| sub[kind].as_ref())
+                    .and_then(|(_, entry, _, _)|
+                        (!is_dummy_part(&entry.main_data, Some(&entry.name)))
+                            .then(|| entry.info("NotBra").trim() == "1")));
+            let not_bra = match selected_top_type {
+                1 => sub_not_bra[0].unwrap_or(top_not_bra),
+                2 if sub_not_bra.iter().any(Option::is_some) =>
+                    sub_not_bra.iter().any(|value| *value == Some(true)),
+                _ => top_not_bra,
+            };
+            state_types = adjust_clothes_state_types(
+                state_types, reference_flags, not_bra, linked_not_shorts);
+        }
+    }
+    let resolved_states = resolve_clothes_states(
+        requested_states, state_types,
+        linked_not_bot, linked_not_shorts);
+    let _clothes_scope = crate::unity::set_session_clothes_states(resolved_states);
+    manifest.clothes_states = resolved_states;
+    // Whatever way this extraction ends (an error, a preempted background open), its helpers finish before it
+    // returns, while its card pack is still mounted.
+    let _prefetch_guard = PrefetchGuard;
+    // Predict the hair/accessory (KKEx resolves) and clothing items the item passes extract, with the same
+    // filters, lookups and shake switches, and start extracting them on helper threads now (`prefetch_entries`),
+    // so they run while this thread builds the body, face and uncensor parts.
+    if let Some(card) = parsed_card.as_ref() {
+        let want_outfit = outfit_prefix(outfit);
+        let mut items: Vec<(Option<PathBuf>, ListEntry, bool)> = Vec::new();
+        let mut lists: std::collections::HashMap<String, ChaListCatalog> = std::collections::HashMap::new();
+        let mut seen = std::collections::HashSet::new();
+        for resolve in &card.resolves {
+            if !is_mesh_category(resolve.category_no) { continue; }
+            let p = resolve.property.to_ascii_lowercase();
+            if p.contains("outfit") && !p.contains(&want_outfit) { continue; }
+            let role = role_for_category(resolve.category_no, &resolve.property);
+            if role.starts_with("clothes") || is_dummy_part("", Some(&resolve.name)) { continue; }
+            if !seen.insert(format!("{}:{}:{}", resolve.category_no, resolve.slot, resolve.property)) { continue; }
+            let zip_path = guid_path(&guid_index, &resolve.mod_id);
+            let Some(entry) = lookup_entry(&vanilla, &mut lists, zip_path.map(|p| p.as_path()), &resolve.mod_id,
+                resolve.category_no, resolve.slot, resolve.local_slot) else { continue };
+            let shake = if role.starts_with("acc") {
+                accessory_slot_from_property(&resolve.property).and_then(|s| card.accessory.get(s)).is_none_or(|p| !p.no_shake)
+            } else {
+                !(101..=104).contains(&resolve.category_no) || !card.hair_parts[(resolve.category_no - 101) as usize].no_shake
+            };
+            items.push((zip_path.cloned(), entry, shake));
+        }
+        if let Some(slots) = selected_clothes.as_ref() {
+            for (kind, slot) in slots.iter().enumerate() {
+                let Some((entry, _, zip_path)) = slot.as_ref() else { continue };
+                if !crate::unity::clothes_kind_visible(kind, &manifest.clothes_states, manifest.shoes_type)
+                    || is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
+                let zip = entry.extra.get("__zip").map(PathBuf::from).or_else(|| zip_path.clone());
+                items.push((zip, entry.clone(), true));
+            }
+        }
+        // Hair slots (ChaFileHair.parts), as the hair-slot pass looks them up.
+        for (i, &hid) in card.hair_ids.iter().enumerate() {
+            if hid == 0 { continue; }
+            let cat = 101 + i as i32;
+            let resolve = card.resolves.iter().find(|r| (r.slot == hid || r.local_slot == hid) && (r.category_no == cat || (101..=104).contains(&r.category_no)));
+            let (guid, zip_path) = resolve.map_or((String::new(), None), |r| (r.mod_id.clone(), guid_path(&guid_index, &r.mod_id).cloned()));
+            let Some(entry) = lookup_entry(&vanilla, &mut lists, zip_path.as_deref(), &guid, cat, hid, hid) else { continue };
+            if is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
+            items.push((zip_path, entry, !card.hair_parts[i].no_shake));
+        }
+        // Accessory slots without a KKEx resolve (the ChaFileAccessory.parts pass): vanilla id, else the mod list.
+        let resolved_slots: std::collections::HashSet<usize> = card.resolves.iter()
+            .filter(|r| is_mesh_category(r.category_no) && role_for_category(r.category_no, &r.property).starts_with("acc"))
+            .filter(|r| { let p = r.property.to_ascii_lowercase(); !p.contains("outfit") || p.contains(&want_outfit) })
+            .filter_map(|r| accessory_slot_from_property(&r.property)).collect();
+        for (slot_i, a) in card.accessory.iter().enumerate() {
+            if a.type_id == 120 || !is_mesh_category(a.type_id) || resolved_slots.contains(&slot_i) { continue; }
+            if !role_for_category(a.type_id, "").starts_with("acc") { continue; }
+            let Some(entry) = vanilla.get(a.type_id, a.id).or_else(|| mod_catalog.get(a.type_id, a.id)).cloned() else { continue };
+            if is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
+            let zip = entry.extra.get("__zip").map(PathBuf::from);
+            items.push((zip, entry, !a.no_shake));
+        }
+        // The top's sailor/jacket subparts (the subclothes pass).
+        if manifest.clothes_states[0] != 3 {
+            for (_, entry, _, zip_path) in selected_top_subparts.iter().flatten().flatten() {
+                if is_dummy_part(&entry.main_data, Some(&entry.name)) { continue; }
+                let zip = entry.extra.get("__zip").map(PathBuf::from).or_else(|| zip_path.clone());
+                items.push((zip, entry.clone(), true));
+            }
+        }
+        prefetch_entries(game_root, items);
+    }
+    if std::env::var("OK_DIAG").is_ok() {
+        eprintln!("ok-extract: clothes requested={requested_states:?} resolved={resolved_states:?} types={state_types:?} refs={reference_flags:?} notBot={linked_not_bot} notShorts={linked_not_shorts}");
+    }
+    let selected_hair_gloss = parsed_card.as_ref()
+        .and_then(|card| selected_hair_gloss_texture(game_root, card, &vanilla, &mod_catalog, &guid_index));
+    Ok(ListsStage { vanilla, ramp_png, mods_dir, mod_catalog: mod_catalog_shared, guid_index, selected_clothes,
+        selected_top_type, selected_top_subparts, state_types, linked_not_bot, linked_not_shorts, requested_states,
+        reference_flags, resolved_states, selected_hair_gloss, clothes_scope: _clothes_scope,
+        prefetch_guard: _prefetch_guard })
 }
