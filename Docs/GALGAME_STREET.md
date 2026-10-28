@@ -214,7 +214,7 @@ Tools\lua\lua.exe Tools\galgame_regression.lua --launch [--girl 3] [--keep]
 用新存檔實玩雷電將軍、安可、惠惠（Gal1028B～G）：上午各自認識，中午在學生餐廳和惠惠、安可群聊，約傍晚五點半在百貨吃晚餐，下午在咖啡廳再約剛下班的將軍。
 
 - **群聊約定**：群聊回覆加 `promise`（`who` 列出答應的人，其餘和判斷器的格式相同），`FinishPartyTalk` 對每位答應的人呼叫 `AddPromiseFromChat`。log：`Street party promise: day "+0" time "17:30" at department (...), 2 agreed`。
-- **地點填成活動 id**：模型把「景觀餐廳」填成 `dept_view`（百貨裡的活動），被判成沒有這個地點，她還被告知餐廳不存在。工作樹裡 `AddPromiseFromChat` 遇到活動 id 時改約在那個活動的地點（尚未在遊戲裡重現驗證，之後兩次約景觀餐廳模型都填了 `department`，未提交）。
+- **地點填成活動 id**：模型把「景觀餐廳」填成 `dept_view`（百貨裡的活動），被判成沒有這個地點，她還被告知餐廳不存在。`AddPromiseFromChat` 遇到活動 id 時改約在那個活動的地點（Gal1028J 驗證：群聊約「今晚七點景觀餐廳」，回覆填 `dept_view`，安可、惠惠各訂 19:00 大學城百貨）。
 - **多人同時赴約**：一次只有一位「走過來」，其他人原本只印 `waits` 就沒有下文；現在排進 `ArriveLater` 下一分鐘重試（最多 60 分鐘），到時他正和別人說話就加入群聊。三人依序 `came for their meeting and joins the talk`，再一起上九樓美食街，群聊點餐各自上桌、各自結帳。
 - **電梯裡的跟隨鏡頭**：她站在鏡頭和他之間、不到 1 m，畫面整片是頭髮。街頭跟隨鏡頭（不含對話鏡頭）前方 1 m、畫面中央 30° 內的女角暫時從主畫面隱藏（`PC->HiddenPrimitiveComponents`，`CameraHidden`），立繪照常。試過「被牆擠壓時升高往下看」：電梯車廂頂沒有碰撞，鏡頭穿出車頂。
 - **只問推薦**：她推薦的品項，他沒說要就不算點餐（`ai_judge_prompt` orders 規則）。

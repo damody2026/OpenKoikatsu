@@ -55,9 +55,13 @@ int32 AOKStreetSocialScene::PatienceOf(int32 Character) const{
 }
 
 // From chat (plan §13.3 "new_promise"): {"day": "+1" | "2010-09-05", "time": "19:00", "place": id, "what": text}.
-void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces,float Hours){
+void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& PlaceSaid,const FString& WhatSaid,const FString& Words,const FString& His,bool bReplaces,float Hours){
+ // An activity given as the place ("dept_view", the view restaurant): they meet at its place to do it. Booked as no such
+ // place, she was told the restaurant does not exist and then insisted it does.
+ FString Place=PlaceSaid,WhatId=WhatSaid;
+ if(!OKStreetFindPlace(Place))if(const FOKStreetActivity* Act=OKStreetFindActivity(Place);Act&&Act->Place&&*Act->Place){if(WhatId.IsEmpty())WhatId=Place;Place=Act->Place;}
  // An activity id in "what" ("meal") is said by its name in the label and her memory ("約meal" on the list).
- const FString What=OKStreetFindActivity(WhatSaid)?OKStreetActivityName(WhatSaid):WhatSaid;
+ const FString What=OKStreetFindActivity(WhatId)?OKStreetActivityName(WhatId):WhatId;
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);const FOKStreetPlace* P=OKStreetFindPlace(Place);
  // Whether it is a meeting at all, a new one or the same one said again, and where and when, is promise.rs
  // (promise_from_chat); the judge's reading of both lines gives day, time and place.
