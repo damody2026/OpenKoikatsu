@@ -1374,7 +1374,10 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
     // Which place it was ("there is closed" at the cafeteria door was taken for the cafeteria, not the restaurant).
     FString PlaceName=TEXT("none");{const FOKStreetActivity* A=OKStreetFindActivity(Action);const FString PlaceId=A&&A->Place&&*A->Place?FString(A->Place):FString(); // going somewhere: its name is the action already
      if(const FOKStreetPlace* P=PlaceId.IsEmpty()?nullptr:OKStreetFindPlace(PlaceId))PlaceName=P->Name;}
-    S.TellHer.Add(OKMsg(TEXT("ui.live_talk.promise_failed_explain"), {{TEXT("action"), *OKStreetActivityName(Action)}, {TEXT("place"), *PlaceName}, {TEXT("error"), *Error}}));
+    // Where they still are: told only that the drink shop was closed while they stood in the girls' dorm, Megumin said
+    // "and we walked all the way to the door".
+    FString Here=TEXT("none");for(const auto& P:OKStreetPlaces())if(OKStreetInsidePlace(P,S.Male)){if(P.Name!=PlaceName)Here=P.Name;break;}
+    S.TellHer.Add(OKMsg(TEXT("ui.live_talk.promise_failed_explain"), {{TEXT("action"), *OKStreetActivityName(Action)}, {TEXT("place"), *PlaceName}, {TEXT("here"), *Here}, {TEXT("error"), *Error}}));
    }UE_LOG(LogTemp,Display,TEXT("Street free talk action refused: %s (%s)"),*Action,*Error);}
   // "leave" ends the activity they are in: not an outing she agreed to ("he went to leave with her" in the rumours).
   else if(Action!=TEXT("leave"))HeroineNote(Character,TEXT("outing"),OKMsg(TEXT("ui.scene.accepted_date_activity"), {{TEXT("activity"), *OKStreetActivityName(Action)}}),TEXT(""),-1.f,OKStreetActivityName(Action)); // words, not the id (rumours repeat it)
