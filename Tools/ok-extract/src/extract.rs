@@ -2047,7 +2047,7 @@ pub(crate) fn extract_session_from_info(
         }
         profile_tick("subclothes", t_sub);
         let t_batch = Instant::now();
-        push_batch.flush(&mut parts, &mut session_parts)?;
+        push_batch.flush(&mut parts, &mut session_parts, &mut seen_meshes)?;
         profile_tick("deferred meshes", t_batch);
         // ChaControl.DrawClothes disables the bra renderer when the selected
         // top (or its sailor/jacket subparts) sets NotBra. The subpart rules

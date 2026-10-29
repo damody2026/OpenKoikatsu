@@ -41,10 +41,32 @@ pub(crate) type PushDone = (usize, ExtractedMesh, Option<crate::session::Accesso
 /// (PNG decode/re-encode, flips, tints, masks, normal conversion) at once, then emits them in call order, which keeps
 /// the output identical. Nothing between the calls reads the emitted parts.
 #[derive(Default)]
-pub(crate) struct PushBatch<'a> { groups: Vec<(PushCtx<'a, 'static>, Vec<PushWork>)> }
+pub(crate) struct PushBatch<'a> {
+    groups: Vec<(PushCtx<'a, 'static>, Vec<PushWork>)>,
+    /// Accessory slots whose colour bake and push wait for the flush (accessory_extract::emit), each with the number of
+    /// groups kept before it (its place among the calls).
+    slots: Vec<(usize, crate::accessory_extract::Deferred<'a>)>,
+}
 impl<'a> PushBatch<'a> {
-    pub(crate) fn flush(&mut self, parts: &mut Vec<ManifestPart>, session_parts: &mut Vec<crate::session::SessionPart>) -> Result<(), String> {
+    pub(crate) fn defer_accessory(&mut self, slot: crate::accessory_extract::Deferred<'a>) {
+        self.slots.push((self.groups.len(), slot));
+    }
+    pub(crate) fn flush(&mut self, parts: &mut Vec<ManifestPart>, session_parts: &mut Vec<crate::session::SessionPart>,
+        seen: &mut std::collections::HashSet<String>) -> Result<(), String> {
         use rayon::prelude::*;
+        // The kept accessory slots: their colour bakes at once, then their pushes in their places, in call order.
+        let mut slots = std::mem::take(&mut self.slots);
+        if !slots.is_empty() {
+            crate::session::native_parallel_work(|| slots.par_iter_mut().for_each(|(_, slot)| slot.color()));
+            let kept = std::mem::take(&mut self.groups);
+            let mut kept = kept.into_iter();
+            let mut taken = 0;
+            for (at, slot) in slots {
+                while taken < at { if let Some(g) = kept.next() { self.groups.push(g); } taken += 1; }
+                slot.finish(parts, session_parts, seen, self)?;
+            }
+            self.groups.extend(kept);
+        }
         let groups = std::mem::take(&mut self.groups);
         let (ctxs, works): (Vec<PushCtx<'a, 'static>>, Vec<Vec<PushWork>>) = groups.into_iter().unzip();
         let items: Vec<(usize, PushWork)> = works.into_iter().enumerate().flat_map(|(g, w)| w.into_iter().map(move |item| (g, item))).collect();
