@@ -699,22 +699,39 @@ pub(crate) fn adopt_uncensor_genitals(
     outfit: i32,
 ) {
     if !sources.iter().any(|mesh| is_kind(&mesh.name)) { return; }
+    // The installed uncensor's painted meshes follow from the card, the kind, the outfit (its skin draw settings), the
+    // seed and the colours: once per view (every open of a conversion painted them again, ~15 ms).
+    let painted = crate::view_memo(format!("uncensor_genitals|{:016x}|{kind:?}|{outfit}|{seed}|{skin:?}|{sub:?}|{nail:?}", card.source_digest),
+        || uncensor_genitals_painted(game_root, card, kind, is_kind, seed, skin, sub, nail, outfit));
+    match painted {
+        None => {
+            if !replaced_body {
+                let before = sources.len();
+                sources.retain(|mesh| !is_kind(&mesh.name));
+                if sources.len() != before {
+                    eprintln!("ok-extract: removed vanilla {kind:?} meshes; no non-mosaic uncensor is installed");
+                }
+            } else {
+                eprintln!("ok-extract: {kind:?} uncensor was not found; the body mesh is unchanged");
+            }
+        }
+        Some(painted) if painted.is_empty() => { if !replaced_body { sources.retain(|mesh| !is_kind(&mesh.name)); } }
+        Some(painted) => {
+            sources.retain(|mesh| !is_kind(&mesh.name));
+            sources.extend(painted);
+        }
+    }
+}
+
+/// The installed uncensor's meshes of this kind painted for the card (None: no uncensor of it installed).
+#[allow(clippy::too_many_arguments)]
+fn uncensor_genitals_painted(game_root: &Path, card: &CardInfo, kind: crate::mods::UncensorGenitalKind, is_kind: fn(&str) -> bool,
+    seed: i32, skin: [f32; 4], sub: [f32; 4], nail: [f32; 4], outfit: i32) -> Option<Vec<ExtractedMesh>> {
     let explicit = match kind {
         crate::mods::UncensorGenitalKind::Penis => card.penis_guid.as_deref(),
         crate::mods::UncensorGenitalKind::Balls => card.balls_guid.as_deref(),
     };
-    let Some((source, bytes)) = crate::mods::uncensor_genital_for_card(game_root, kind, explicit, card.sex, seed) else {
-        if !replaced_body {
-            let before = sources.len();
-            sources.retain(|mesh| !is_kind(&mesh.name));
-            if sources.len() != before {
-                eprintln!("ok-extract: removed vanilla {kind:?} meshes; no non-mosaic uncensor is installed");
-            }
-        } else {
-            eprintln!("ok-extract: {kind:?} uncensor was not found; the body mesh is unchanged");
-        }
-        return;
-    };
+    let (source, bytes) = crate::mods::uncensor_genital_for_card(game_root, kind, explicit, card.sex, seed)?;
     let bundle = crate::unity::parse_bundle_cached(bytes);
     bundle.configure_game_references(game_root);
     // The installed uncensor's meshes before painting are the same for every card (~0.25 s to extract each time).
@@ -753,13 +770,8 @@ pub(crate) fn adopt_uncensor_genitals(
         );
         painted.push(mesh);
     }
-    if painted.is_empty() {
-        eprintln!("ok-extract: {kind:?} uncensor {} had no paintable mesh", source.guid);
-        if !replaced_body { sources.retain(|mesh| !is_kind(&mesh.name)); }
-        return;
-    }
-    sources.retain(|mesh| !is_kind(&mesh.name));
-    sources.extend(painted);
+    if painted.is_empty() { eprintln!("ok-extract: {kind:?} uncensor {} had no paintable mesh", source.guid); }
+    Some(painted)
 }
 
 pub(crate) fn is_hidden_part(name: &str) -> bool {
