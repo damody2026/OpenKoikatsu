@@ -35,6 +35,17 @@ impl Drop for ViewMemoScope {
     fn drop(&mut self) { IN_VIEW.with(|v| v.set(self.0)); }
 }
 
+/// A value `view_memo_put` kept for this view and key (None outside an open, or with OK_NO_VIEW_MEMO).
+pub(crate) fn view_memo_get<T: Clone + 'static>(key: &str) -> Option<T> {
+    if std::env::var_os("OK_NO_VIEW_MEMO").is_some() || !IN_VIEW.with(|v| v.get()) { return None; }
+    VIEW_MEMO.with(|m| m.borrow().get(key).and_then(|v| v.downcast_ref::<T>().cloned()))
+}
+/// Keeps `value` for this view's later opens (no-op outside an open).
+pub(crate) fn view_memo_put<T: 'static>(key: String, value: T) {
+    if std::env::var_os("OK_NO_VIEW_MEMO").is_some() || !IN_VIEW.with(|v| v.get()) { return; }
+    VIEW_MEMO.with(|m| m.borrow_mut().insert(key, std::rc::Rc::new(value)));
+}
+
 /// `make()` once per view and key (see VIEW_MEMO); a clone of it after. Outside an open: `make()`.
 pub(crate) fn view_memo<T: Clone + 'static>(key: String, make: impl FnOnce() -> T) -> T {
     // OK_NO_VIEW_MEMO=1: every open computes it (to compare with the memo).
