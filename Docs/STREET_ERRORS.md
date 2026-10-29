@@ -1089,3 +1089,11 @@
 - 修正：`OKStreetSocialAppointments.inl` 的 `PlanPromisesToday` 比對新舊行程，還沒到時間、被約定拿掉的那一餐寫進她的記憶（`ui.schedule.meal_skipped_for_date`：原本幾點在哪裡吃的那一餐，因為和他約了吃飯就不吃了，還沒吃），並記 `Street plan: actor N skips her HH:MM meal at X for the date`。
 - 同一輪：上桌提示「她的日式豬排定食、漢堡排定食」他的菜沒有標示，英文的 her_label 直接接菜名沒有空格；改用 `item_owner_label`，她的／你的都標出來。
 - 驗證（Gal1030E，欄位 15）：16:50 手機約惠惠七點晚餐，log 記「skips her 18:20 meal at department for the date」，她的記憶多了「原本18:20要在大學城百貨吃的那一餐……（還沒吃）」；到餐廳問她「剛剛有先吃點什麼嗎」，她答「餓死了，跑腿跑了一整個下午」，沒有再說吃過。上桌提示變成「你的「漢堡排定食」、她的「日式豬排定食」、她的「焦糖布丁」」。
+
+## 2026-10-30 走向飲料店的路上她說「這家沒有珍奶？」，菜單上明明有珍珠奶茶（E 組 galgame）
+
+- 現象：在公園約惠惠去飲料店，路上她點珍奶、水果茶，兩次都說「這家沒有」；飲料店菜單上有 `dk_pearl_milk 珍珠奶茶`。
+- 原因：她的【菜單】只在人已經在店裡時給（`MenuText` 只看 `ShopPlaceHere`），路上沒有菜單，她自己編了 `drink_bubble_tea`、`drink_fruit_tea`；`ResolveItemId` 對不上，訂單被當成「這家沒賣」告訴她。另外路上後續的回覆沒有帶 action，就算 id 正確，「帶到店裡再點」的判斷也不成立，一樣會被拒。
+- 修正：`MenuText` 在路上改給出遊目的地那家店的菜單，前面加 `ui.mind.menu_ahead`（還沒到、到了才點得到、用這裡的 id）；`ApplyChoiceReply` 的 `ShopAhead` 多認「人不在店裡、品項屬於這次出遊要去的店」，訂單帶到店裡。
+- 同一輪：`ok-game-mcp` 的 `game_wait` `until` 用字串比較，20:56 等 09:20 立刻結束；改成目標時間早於現在時先等時鐘跨過午夜（bd3b1d85c）。另外我在她 09:39 開對話後又呼叫 `game_wait`，讓她被晾了二十分鐘後離開，是我的操作錯誤：`game_wait` 在對話已開著時不會停，她來了要先 `game_talk`。
+- 驗證（Gal1030F）：從飲料店約惠惠去咖啡廳，路上請她幫兩人點；她的提示詞有「還沒到，這是你們正要去的咖啡廳的菜單……」，回覆沒有 action，訂單 `cf_matcha_latte`、`cf_cocoa` 都記「carried until they reach cafe」；到店結帳 NT$238，上桌「她的「熱可可」、你的「抹茶拿鐵」」。
