@@ -163,7 +163,7 @@ int32 SOKStudioView::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 		for (const UOKStudioGame::FGuideHandle& H : Handles)
 		{
 			TArray<FVector2D> P = H.Points;
-			if (H.bClosed && P.Num() > 2) P.Add(P[0]);
+			if (H.bClosed && P.Num() > 2) { const FVector2D First = P[0]; P.Add(First); }
 			const bool bActive = H.Axis == DragAxis;
 			const FLinearColor C = bActive ? FLinearColor::Yellow : H.Axis >= 10 ? Colors[H.Axis - 10] * 0.8f : H.Axis >= 4 && H.Axis <= 6 ? Planes[H.Axis - 4] : Colors[FMath::Clamp(H.Axis, 0, 3)];
 			Lines(P, C, bActive ? 4.f : (H.bFilled ? 3.f : (H.Axis >= 10 ? 2.f : 2.5f)), Layer + 2);

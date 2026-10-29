@@ -260,11 +260,16 @@ void UOKStudioGame::Undo()
 {
 	if (bHistoryDirty) CommitHistory();
 	if (UndoStack.IsEmpty()) return;
+	// The objects the undone edit was made on stay selected (when they are still there).
+	const TArray<int32> EditSelection = HistorySelection;
 	RedoStack.Add(MoveTemp(HistoryState));
 	RedoSelections.Add(HistorySelection);
 	HistoryState = UndoStack.Pop();
 	HistorySelection = UndoSelections.Num() ? UndoSelections.Pop() : TArray<int32>();
 	RestoreHistory(HistoryState);
+	TArray<int32> Keep;
+	for (int32 Id : EditSelection) if (Document->Find(Id)) Keep.Add(Id);
+	if (Keep.Num()) SelectMany(Keep, Keep.Last());
 	bDirty = true;
 }
 

@@ -85,7 +85,25 @@ TArray<FString> SOKStudioPanel::CardRoots() const
 
 void SOKStudioPanel::ScanCardFolder()
 {
-	if (CardFolder.IsEmpty() || !FPaths::DirectoryExists(CardFolder)) { const TArray<FString> Roots = CardRoots(); CardFolder = Roots.Num() ? Roots[0] : FString(); }
+	if (CardFolder.IsEmpty() || !FPaths::DirectoryExists(CardFolder))
+	{
+		// The first root; when its cards are all in folders, the first folder with cards.
+		const TArray<FString> Roots = CardRoots();
+		CardFolder = Roots.Num() ? Roots[0] : FString();
+		TArray<FString> Here, Subs;
+		if (!CardFolder.IsEmpty()) IFileManager::Get().FindFiles(Here, *(CardFolder / TEXT("*.png")), true, false);
+		if (Here.IsEmpty() && !CardFolder.IsEmpty())
+		{
+			IFileManager::Get().FindFiles(Subs, *(CardFolder / TEXT("*")), false, true);
+			Subs.Sort();
+			for (const FString& S : Subs)
+			{
+				TArray<FString> Pngs;
+				IFileManager::Get().FindFiles(Pngs, *(CardFolder / S / TEXT("*.png")), true, false);
+				if (!S.StartsWith(TEXT(".")) && Pngs.Num()) { CardFolder = CardFolder / S; break; }
+			}
+		}
+	}
 	CardFiles.Reset();
 	if (CardFolder.IsEmpty()) return;
 	TArray<FString> Names;
@@ -99,7 +117,7 @@ bool SOKStudioPanel::AddOrReplaceCard(const FString& Card, bool bReplace)
 {
 	if (!Game.IsValid() || Card.IsEmpty()) return false;
 	// Cards under the project are kept relative (a scene moves with the project).
-	FString Path = FPaths::ConvertRelativePathToFull(Card);
+	FString Path = FPaths::ConvertRelativePathToFull(FPaths::IsRelative(Card) ? FPaths::ProjectDir() / Card : Card);
 	const FString Project = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	if (Path.StartsWith(Project)) FPaths::MakePathRelativeTo(Path, *Project);
 	FOKStudioSettings::Get().UseRecent(TEXT("card:") + Path);
@@ -144,7 +162,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 	TArray<FString> Subs;
 	if (!CardFolder.IsEmpty()) IFileManager::Get().FindFiles(Subs, *(CardFolder / TEXT("*")), false, true);
 	Subs.Sort();
-	for (const FString& S : Subs) if (!S.StartsWith(TEXT("."))) FolderButton(TEXT("📁 ") + S, CardFolder / S);
+	for (const FString& S : Subs) if (!S.StartsWith(TEXT("."))) FolderButton(TEXT("▸ ") + S, CardFolder / S);
 
 	// A page of cards: 6 across, 3 down.
 	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(2.f));

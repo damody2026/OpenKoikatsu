@@ -534,6 +534,15 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
 資料模型（`OKSceneDocument`）：相機 `Near`／`Far`、`Bookmarks[10]`、key 的 `Color`／`AnimTime`／`Exposure`／`FocalDistance`、場景軌道（`SceneTrackId = -2`）、`ExportFragment`／`PasteFragment`／`Merge`、原子寫入；角色加 `Blink`。舊檔照常讀取。
 `ok-game-mcp`：`studio_*` 19 個工具（`Tools/ok-game-mcp/src/studio.rs`），說明在 [OK Studio MCP](OK_STUDIO_MCP.md)。
 
+**驗收（2026-10-30）**
+- `OKStudio.UiSelfTest`：46/46（`Saved/OKStudio/ui_selftest.txt`）。涵蓋 U0 的指令表流程、U2 的點選／多選一起移動／一次 Undo／掛到右手後存讀／跨場景貼上、U3 的快搜與中鍵加子物件、U4 的聚焦／書籤／吸附／局部軸、U5 的 IK 拖動與 Undo／鏡像對稱／姿勢存讀、U6 的 FOV 與曝光插值／key 拖動 Undo／中途取消輸出、U7 的未存提示／疊加／原子寫入失敗不損舊檔／備份、U8 的色盤與新欄位存讀、U9 的快捷鍵重綁與版面保存。
+- `Tools/lua/lua.exe Tools/verify_ok_studio.lua`：GameSelfTest（tag `Game1030b`）、PatternTest、BloomTest、GradeTest、TransparencyTest 通過；EyeSetTest 仍失敗，原因見下。GameSelfTest 的三個 Gizmo 檢查原本寫死「3 個把手」，改成只數 X／Y／Z 並另外確認平面把手與角色雙軸存在。
+- 版面比對：`studio_layout_spec.lua --compare` 11 個步驟全部在 ±4 以內（最差 0.2）。截圖 `Saved/StudioUIRef/ok/U2_*.png`（30 張，腳本 `Saved/StudioUIRef/scripts/u2_all.txt`）。
+- 1280×720：`studio_layout_spec.lua --bounds` 8 個畫面（空場景、系統選單、骨骼、時間軸、角色卡、場景檔、設定、快搜）都沒有元件超出視窗（腳本 `u2_720.txt`；腳本裡每步先 `r.setres 1280x720w`，因為執行中視窗曾被放大）。
+- 控制通道：SceneEditor 加 `-Control -StudioControlPort=47890`，用 `ok-game-mcp call studio_*` 跑完加角色、FK＋鏡像、表情與視線、正面聚焦、截圖、存檔、Undo／Redo、時間軸打 key；截圖與存檔都拒絕覆蓋既有檔。
+- 效能：照 slot 規則要同時拿到兩個名額才量，還沒量。
+- **EyeSetTest 漩渦眼**：不是 UI 造成的。OK 卡 `C002.png` 平常開得起來（眼型 0 時 69 個部件）；切到眼型 23 時要換成 gag eye 部件重建，而轉卡時只記錄了卡片預設狀態的開卡閉包，模型 `3e5b33000000000056e2c0bf4f4b4331` 的骨架不在卡內也不在基礎庫，10-28 嚴格開卡後就開不了。`ok-extract --oklib seal` 照預設狀態重放，補不到（試過，卡片已還原）。要在 ok-extract 轉卡／seal 時把「會換部件的眼型」也記錄進閉包，或讓基礎庫收 gag eye 模型，屬 OK 卡工具（e-okcard）的範圍。測試另加了「整張卡開不了時換下一張本機卡」。
+
 **沒做到或做法不同的地方**
 - 遠面：Unreal 的透視投影沒有遠面，`Far` 只存檔，不影響畫面。近面有效（`UOKStudioViewCamera`）。
 - 地圖縮圖：基礎庫沒有地圖縮圖，地圖瀏覽器只列名稱。

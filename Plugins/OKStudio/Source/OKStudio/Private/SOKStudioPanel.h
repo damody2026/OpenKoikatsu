@@ -1457,7 +1457,7 @@ public:
 							const FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Id) : nullptr;
 							if (!O) return FText::GetEmpty();
 							const bool bError = Game->SceneActor && Game->SceneActor->Errors.Contains(Id);
-							return FText::FromString(FString::Printf(TEXT("%s%s%s"), *O->Name, O->AttachBone.IsEmpty() ? TEXT("") : *(TEXT("　@") + O->AttachBone), bError ? TEXT(" ⚠") : TEXT("")));
+							return FText::FromString(FString::Printf(TEXT("%s%s%s"), *O->Name, O->AttachBone.IsEmpty() ? TEXT("") : *(TEXT("　@") + O->AttachBone), bError ? TEXT("（未顯示）") : TEXT("")));
 						})
 						.ToolTipText_Lambda([this, Id] { const FString* E = Game.IsValid() && Game->SceneActor ? Game->SceneActor->Errors.Find(Id) : nullptr; return FText::FromString(E ? *E : FString()); })
 						.OnBeginTextEdit_Lambda([this, Id](const FText&) { if (const FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Id) : nullptr) if (TSharedPtr<SInlineEditableTextBlock> N = RowNames.FindRef(Id).Pin()) N->SetText(FText::FromString(O->Name)); })

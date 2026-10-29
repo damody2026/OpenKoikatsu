@@ -510,7 +510,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	FolderButton(TEXT("自動備份"), UOKStudioGame::BackupDirectory());
 	TArray<FString> Subs;
 	IFileManager::Get().FindFiles(Subs, *(SceneFolder / TEXT("*")), false, true);
-	for (const FString& S : Subs) FolderButton(TEXT("📁 ") + S, SceneFolder / S);
+	for (const FString& S : Subs) FolderButton(TEXT("▸ ") + S, SceneFolder / S);
 	if (SceneFolder != UOKStudioGame::SceneDirectory() && SceneFolder != KStudioFolder() && SceneFolder != UOKStudioGame::BackupDirectory()) FolderButton(TEXT(".. 上一層"), FPaths::GetPath(SceneFolder));
 
 	// Pictures of the scenes, four across.
@@ -637,7 +637,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildReport()
 	if (ReportLines.IsEmpty() && Game.IsValid()) ReportLines = Game->LoadReport();
 	const TArray<FString> Lines = ReportLines;
 	return SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 個物件沒有顯示；它們仍在場景裡（工作區有 ⚠），補齊資源後重新開啟就會出現。點一行選取該物件。"), Lines.Num())), 10.f, TextSoft())]
+		+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 個物件沒有顯示；它們仍在場景裡（工作區名稱後標「（未顯示）」），補齊資源後重新開啟就會出現。點一行選取該物件。"), Lines.Num())), 10.f, TextSoft())]
 		+ SVerticalBox::Slot().FillHeight(1.f).Padding(0.f, 3.f)[TextList(Lines, [this, Lines](int32 I) { const int32 Id = LineId(Lines[I]); if (Id > 0 && Game.IsValid()) Game->Select(Id); }, 220.f)]
 		+ SVerticalBox::Slot().AutoHeight()
 		[
@@ -721,11 +721,11 @@ FString SOKStudioPanel::TakeShot()
 {
 	if (!Game.IsValid()) return FString();
 	const FString Folder = ShotFolder.IsEmpty() ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio/screenshot")) : ShotFolder;
-	FString Base = FDateTime::Now().ToString(*ShotPattern);
-	if (bShotAlpha) Base += TEXT("_alpha");
-	FString Path = Folder / FPaths::MakeValidFileName(Base) + TEXT(".png");
+	FString ShotBase = FDateTime::Now().ToString(*ShotPattern);
+	if (bShotAlpha) ShotBase += TEXT("_alpha");
+	FString Path = Folder / FPaths::MakeValidFileName(ShotBase) + TEXT(".png");
 	// Never over an existing picture unless asked.
-	for (int32 N = 1; bShotNoOverwrite && FPaths::FileExists(Path); ++N) Path = Folder / FPaths::MakeValidFileName(Base) + FString::Printf(TEXT("_%d.png"), N);
+	for (int32 N = 1; bShotNoOverwrite && FPaths::FileExists(Path); ++N) Path = Folder / FPaths::MakeValidFileName(ShotBase) + FString::Printf(TEXT("_%d.png"), N);
 	FString Error;
 	if (!Game->CaptureToPng(Path, ShotW, ShotH, Error, bShotAlpha)) { SetStatus(TEXT("截圖失敗：") + Error); return FString(); }
 	SetStatus(TEXT("截圖：") + Path);

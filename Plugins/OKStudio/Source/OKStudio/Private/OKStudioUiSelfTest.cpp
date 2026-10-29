@@ -1,4 +1,4 @@
-// OKStudio.UiSelfTest [exit]: the studio UI checked through its command table and public calls, one step per frame
+﻿// OKStudio.UiSelfTest [exit]: the studio UI checked through its command table and public calls, one step per frame
 // (objects build over frames). Results in Saved/OKStudio/ui_selftest.txt; "UI SELFTEST n/m" at the end of the log.
 #include "SOKStudioPanel.h"
 #include "OKStudioGameInternal.h"
@@ -54,6 +54,8 @@ namespace
 			if (Wait > 0) { --Wait; return true; }
 			UOKSceneDocument* D = Doc();
 			UOKStudioGame* G = Game.Get();
+			// Each step starts from a recorded history state (frames here come faster than the studio's settle time).
+			G->CommitHistory();
 			SOKStudioPanel* P = Panel();
 			switch (Step++)
 			{

@@ -1,4 +1,4 @@
-#include "SOKStudioTimeline.h"
+﻿#include "SOKStudioTimeline.h"
 #include "OKSceneActor.h"
 #include "OKStudioStyle.h"
 #include "Fonts/FontMeasure.h"
@@ -96,7 +96,7 @@ int32 SOKStudioTimeline::OnPaint(const FPaintArgs&, const FGeometry& G, const FS
 		const float X = TimeToX(G, float(S));
 		if (X < LabelWidth || X > Size.X) continue;
 		FSlateDrawElement::MakeLines(Out, Layer + 2, G.ToPaintGeometry(), { FVector2f(X, RulerHeight - 6.f), FVector2f(X, Size.Y) }, ESlateDrawEffect::None, FLinearColor(1.f, 1.f, 1.f, 0.12f));
-		Text(X + 2.f, 1.f, FString::Printf(TEXT("%d"), S), TextHint(), 9.f, Layer + 2);
+		if (X < Size.X - 14.f) Text(X + 2.f, 1.f, FString::Printf(TEXT("%d"), S), TextHint(), 9.f, Layer + 2);
 	}
 	// Rows.
 	const TArray<FRowInfo> Rows = RowInfos();

@@ -1115,7 +1115,10 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 		FVector2D Center;
 		double CmPerPixel = 0.;
 		const bool bHandles = GuideHandles(Handles, Center, CmPerPixel);
-		Check(bHandles && Handles.Num() == 3, FString::Printf(TEXT("move guide: %d handles, %.3f cm per pixel"), Handles.Num(), CmPerPixel));
+		// The X / Y / Z handles (the plane squares follow them).
+		const int32 Planes = Handles.FilterByPredicate([](const FGuideHandle& H) { return H.Axis >= 4 && H.Axis <= 6; }).Num();
+		Handles.RemoveAll([](const FGuideHandle& H) { return H.Axis > 2; });
+		Check(bHandles && Handles.Num() == 3 && Planes >= 2, FString::Printf(TEXT("move guide: %d axis handles, %d plane handles, %.3f cm per pixel"), Handles.Num(), Planes, CmPerPixel));
 		if (bHandles && Handles.Num() == 3)
 		{
 			const FVector2D End = Handles[0].Points.Last();
@@ -1238,7 +1241,11 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 			TArray<FGuideHandle> BoneHandles;
 			FVector2D BoneCenter;
 			double BoneCm = 0.;
-			const bool bRings = GuideHandles(BoneHandles, BoneCenter, BoneCm) && BoneHandles.Num() == 3 && BoneHandles[0].bClosed;
+			const bool bBoneGuide = GuideHandles(BoneHandles, BoneCenter, BoneCm);
+			// Beside the rings, the character keeps its own small move axes (10..12).
+			const int32 RootAxes = BoneHandles.FilterByPredicate([](const FGuideHandle& H) { return H.Axis >= 10; }).Num();
+			BoneHandles.RemoveAll([](const FGuideHandle& H) { return H.Axis > 2; });
+			const bool bRings = bBoneGuide && BoneHandles.Num() == 3 && BoneHandles[0].bClosed && RootAxes == 3;
 			FVector Start(0), Posed(0);
 			P->Session.BoneEuler(TEXT("cf_j_arm00_L"), Start);
 			const float In[3] = { float(Start.X), float(Start.Y), float(Start.Z) };
@@ -1274,7 +1281,9 @@ void UOKStudioGame::RunSelfTest(bool bExit)
 			TArray<FGuideHandle> IkHandles;
 			FVector2D IkCenter;
 			double IkCm = 0.;
-			const bool bIkGuide = GuideHandles(IkHandles, IkCenter, IkCm) && IkHandles.Num() == 3 && !IkHandles[0].bClosed;
+			const bool bIkHandles = GuideHandles(IkHandles, IkCenter, IkCm);
+			IkHandles.RemoveAll([](const FGuideHandle& H) { return H.Axis > 2; });
+			const bool bIkGuide = bIkHandles && IkHandles.Num() == 3 && !IkHandles[0].bClosed;
 			const FVector Before2 = Document->Find(A)->Character.Ik[0].Position;
 			const bool bDragged = bIkGuide && ApplyGuideDrag(0, (IkHandles[0].Points.Last() - IkHandles[0].Points[0]).GetSafeNormal() * 40.);
 			Check(bIkGuide && bDragged && !Document->Find(A)->Character.Ik[0].Position.Equals(Before2, 0.1), TEXT("the IK guide moves the target"));
