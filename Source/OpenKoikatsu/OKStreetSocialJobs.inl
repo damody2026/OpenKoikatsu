@@ -99,7 +99,10 @@ void AOKStreetSocialScene::TickJobs(){
    // A shift whose end has passed is over (paid at 12:00, it started again and ended at once: "worked 0 minutes, ¥0"
    // replaced the real payslip).
    for(const FString& J:S.Store.PlayerJobs)if(const auto* Job=S.Catalog.FindJob(J))if(Job->Place==A.Place)for(const auto& H:Job->Shifts)if(int64(H.X*60)==A.Start%1440&&Now<A.Start-A.Start%1440+int64(H.Y*60)){
-    S.ShiftAppointment=A.Id;S.ShiftJob=J;S.ShiftStart=FMath::Max<int64>(A.Start,Now); /* paid from when he came */S.ShiftEnd=A.Start-A.Start%1440+int64(H.Y*60);S.ShiftAwaySince=-1;S.ShiftChats=0;
+    // Paid from when he came; a shift begun before a save goes on from then (17:02-22:00 with a save at 19:05 came to
+    // 173 minutes).
+    S.ShiftAppointment=A.Id;S.ShiftJob=J;S.ShiftStart=A.WorkedFrom>=A.Start?FMath::Min<int64>(A.WorkedFrom,Now):FMath::Max<int64>(A.Start,Now);
+    for(auto& Mine:S.Store.Appointments)if(Mine.Id==A.Id)Mine.WorkedFrom=S.ShiftStart;S.ShiftEnd=A.Start-A.Start%1440+int64(H.Y*60);S.ShiftAwaySince=-1;S.ShiftChats=0;
     S.FreeTalkNotice=OKMsg(TEXT("ui.jobs.shift_started_notice"), {{TEXT("job_title"), *Job->Title}, {TEXT("end_hour"), (S.ShiftEnd%1440)/60}, {TEXT("end_minute"), S.ShiftEnd%60}});
     StandAtWork(Job->Place,Job->Stations);RefreshUI();
    }
