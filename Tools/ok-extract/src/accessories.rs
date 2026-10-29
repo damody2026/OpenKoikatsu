@@ -258,7 +258,7 @@ pub(crate) fn select_card_top_subparts(
 pub(crate) fn me_shader_registration(game_root: &Path, shader: &str) -> (bool, Option<bool>) {
     // Asked for every MaterialEditor shader override of every mesh in every open (~2500 times a card conversion):
     // once per view (crate::view_memo), whose tree and card answers it depends on.
-    crate::view_memo(format!("me_shader_registration|{}|{shader}", game_root.display()), || me_shader_registration_now(game_root, shader))
+    crate::pack_memo(format!("me_shader_registration|{}|{shader}", game_root.display()), || me_shader_registration_now(game_root, shader))
 }
 
 fn me_shader_registration_now(game_root: &Path, shader: &str) -> (bool, Option<bool>) {

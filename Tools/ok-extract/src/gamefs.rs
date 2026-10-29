@@ -265,6 +265,8 @@ pub fn fallback_summary() -> (usize, usize) {
     let roots = FALLBACK.read().unwrap();
     (roots.iter().map(|f| f.files.len()).sum(), roots.iter().filter(|f| f.loose_mods).count())
 }
+/// Changes whenever the fallback or the overlay does (a key part of memos of the tree it serves).
+pub fn fallback_generation() -> u64 { FALLBACK_GENERATION.load(std::sync::atomic::Ordering::Relaxed) }
 /// Identity of what the fallback can serve (each archive's path, size and time; the card directory's
 /// archives): part of the cache key of sessions built with it. Worked out once per fallback generation: in-process
 /// memos key on it (MaterialEditor shader registrations, library memos), ~1000 times a card conversion at ~1 ms each

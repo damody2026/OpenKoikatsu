@@ -35,6 +35,9 @@ impl Drop for ViewMemoScope {
     fn drop(&mut self) { IN_VIEW.with(|v| v.set(self.0)); }
 }
 
+/// Whether view_memo keeps values on this thread now (in an open, without OK_NO_VIEW_MEMO).
+pub(crate) fn view_memo_active() -> bool { std::env::var_os("OK_NO_VIEW_MEMO").is_none() && IN_VIEW.with(|v| v.get()) }
+
 /// A value `view_memo_put` kept for this view and key (None outside an open, or with OK_NO_VIEW_MEMO).
 pub(crate) fn view_memo_get<T: Clone + 'static>(key: &str) -> Option<T> {
     if std::env::var_os("OK_NO_VIEW_MEMO").is_some() || !IN_VIEW.with(|v| v.get()) { return None; }
@@ -69,8 +72,26 @@ pub(crate) fn entry_sql_key(game_root: &Path, zip: Option<&Path>, entry: &ListEn
     if entry.main_ab.is_empty() { return String::new(); }
     // The same in every open of a view (crate::view_memo): finding the entry's bundle again took ~0.5 ms, for every
     // item of every open (ACCESSORY_SOURCE_MEMO keeps only four bundles).
-    crate::view_memo(format!("entry_sql_key|{}|{zip:?}|{}|{}", game_root.display(), entry.main_ab, entry.main_data),
+    // The entry prefetch helpers ask for it of every item they extract too (a miss reads the entry's bundle, 10–30 ms).
+    pack_memo(format!("entry_sql_key|{}|{zip:?}|{}|{}", game_root.display(), entry.main_ab, entry.main_data),
         || entry_sql_key_view(game_root, zip, entry))
+}
+
+/// `make()` once per mounted card pack's tree (its identity and the fallback's generation) and key, for every thread
+/// of its opens (the open's own, the entry prefetch helpers, pool work): a view_memo that the helpers share. Without a
+/// pack (a game folder): view_memo.
+pub(crate) fn pack_memo<T: Clone + Send + Sync + 'static>(key: String, make: impl FnOnce() -> T) -> T {
+    let pack = crate::oklib::mounted_pack_identity();
+    if pack.is_empty() || std::env::var_os("OK_NO_VIEW_MEMO").is_some() { return view_memo(key, make); }
+    type Slot = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+    static SHARED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, Slot>>> = std::sync::LazyLock::new(Default::default);
+    let shared_key = format!("{pack}|{}|{key}", crate::gamefs::fallback_generation());
+    if let Some(hit) = SHARED.lock().unwrap_or_else(|e| e.into_inner()).get(&shared_key).and_then(|v| v.downcast_ref::<T>().cloned()) { return hit; }
+    let made = make();
+    let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+    if shared.len() > 100_000 { shared.clear(); }
+    shared.insert(shared_key, std::sync::Arc::new(made.clone()));
+    made
 }
 
 fn entry_sql_key_view(game_root: &Path, zip: Option<&Path>, entry: &ListEntry) -> String {

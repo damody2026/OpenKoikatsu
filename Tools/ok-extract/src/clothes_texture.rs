@@ -659,6 +659,15 @@ pub(crate) fn over_layer_mask_png(
     mod_catalog: &ChaListCatalog, guid_index: &std::collections::HashMap<String,PathBuf>,
     outfit: i32, key: &str,
 ) -> Option<Vec<u8>> {let _spot=crate::profile::spot("over_layer_mask_png");
+    // The card's outfit decides it (not the garment states): once per view, card, outfit and mask.
+    crate::view_memo(format!("over_layer_mask|{:016x}|{outfit}|{key}", card.source_digest),
+        || over_layer_mask_png_now(game_root, card, vanilla, mod_catalog, guid_index, outfit, key))
+}
+fn over_layer_mask_png_now(
+    game_root: &Path, card: &CardInfo, vanilla: &ChaListCatalog,
+    mod_catalog: &ChaListCatalog, guid_index: &std::collections::HashMap<String,PathBuf>,
+    outfit: i32, key: &str,
+) -> Option<Vec<u8>> {
     // ChangeClothesTop loads its list mask first. Only Kind 1/2 loads SubA/B
     // afterwards, replacing that mask. IDs/resolves retained from another
     // style do not load subparts, even when their ID zero is a valid item.
