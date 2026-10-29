@@ -308,7 +308,8 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
  FString Menu;{const FString Shop=ShopPlaceHere();FString Closed;if(!Shop.IsEmpty()&&!PlaceClosedNow(Shop,Closed))for(const auto* I:ItemsHere(Shop))if(I->Consumable)Menu+=OKMsg(TEXT("ui.party.menu_item_price_entry"), {{TEXT("item_id"), *I->Id}, {TEXT("item_name"), *I->Name}, {TEXT("price"), I->PriceOf(I->DefaultSize())}});}
  if(!Menu.IsEmpty())System+=OKT(TEXT("ui.party.menu_listing_header"))+Menu+OKT(TEXT("ui.party.order_format_instruction"));
  const FDateTime Now=StreetNow();
- FString User=States+OKMsg(TEXT("ui.party.now_status_line"), {{TEXT("hour"), Now.GetHour()}, {TEXT("minute"), Now.GetMinute()}, {TEXT("place_name"), [&]{const FOKStreetPlace* P=OKStreetFindPlace(PlaceHere(S.Male));return P?FString(P->Name):FString(OKT(TEXT("ui.etiquette.street_location")));}()}, {TEXT("doing"), *FreeTalkDoing()}});
+ // With the date and the weekday: given only "10:40", "Sunday at two" said on a Saturday became "+0", today (R5-15).
+ FString User=States+OKMsg(TEXT("ui.party.now_status_line"), {{TEXT("year"), Now.GetYear()}, {TEXT("month"), Now.GetMonth()}, {TEXT("day"), Now.GetDay()}, {TEXT("weekday"), OKMsg(TEXT("ui.calendar.weekday_name"), {{TEXT("d"), int32(Now.GetDayOfWeek())}})}, {TEXT("hour"), Now.GetHour()}, {TEXT("minute"), Now.GetMinute()}, {TEXT("place_name"), [&]{const FOKStreetPlace* P=OKStreetFindPlace(PlaceHere(S.Male));return P?FString(P->Name):FString(OKT(TEXT("ui.etiquette.street_location")));}()}, {TEXT("doing"), *FreeTalkDoing()}});
  if(!S.PartyLog.IsEmpty())User+=OKT(TEXT("ui.party.previous_dialogue_header"))+FString::Join(S.PartyLog,TEXT("\n"))+TEXT("\n");
  for(const FString& Ev:S.PartyEvents)User+=Ev+TEXT("\n");
  for(const auto& KV:S.PartyLeaving)if(S.Manifest.Characters.IsValidIndex(KV.Key))User+=OKMsg(TEXT("ui.party.about_to_leave_seconds"), {{TEXT("name"), *SpokenName(KV.Key)}, {TEXT("seconds_left"), FMath::Max(0,int32(KV.Value-FPlatformTime::Seconds()))}});
