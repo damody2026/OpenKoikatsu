@@ -105,7 +105,7 @@ void AOKStreetSocialScene::BondEvent(int32 A,int32 B,const FString& Event){
 // doing and whether she is with him, and answer how their feelings for each other move.
 void AOKStreetSocialScene::TickBonds(){
  auto& S=*State;if(S.SelfTest||!S.Rules)return;OKRulesSyncDefaults(S);const int64 Now=OKStreetMindNow(S);
- if(S.BondTickMinute<0){S.BondTickMinute=Now;return;}
+ if(S.BondTickMinute<0||S.BondTickMinute>Now){S.BondTickMinute=Now;return;} // or the clock was set back: from now
  if(Now-S.BondTickMinute<S.BondTickMinutes||S.BondsInFlight)return; // one answer at a time: the minutes go into the next
  const int64 Since=S.BondTickMinute,Minutes=Now-S.BondTickMinute;S.BondTickMinute=Now;
  const int32 Minute=int32(Now%1440);
