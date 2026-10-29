@@ -215,9 +215,9 @@ pub(crate) fn resolve_material_alpha_masks(game_root: &Path, meshes: &mut [Extra
 }
 
 /// The base mask bundles' texture of this name (every clothes item of every open looked it up in each mt_mask_ bundle
-/// again): once per pack's tree (crate::pack_memo).
+/// again): once per view (crate::view_memo; the open's own thread asks).
 fn material_alpha_mask(game_root: &Path, name: &str) -> Option<Vec<u8>> {
-    crate::pack_memo(format!("material_alpha_mask|{}|{name}", game_root.display()), || {
+    crate::view_memo(format!("material_alpha_mask|{}|{name}", game_root.display()), || {
         let mask_dir = game_root.join("abdata/chara");
         let mut bundles: Vec<PathBuf> = crate::gamefs::read_dir(&mask_dir)
             .into_iter().flatten().filter_map(|e| e.ok().map(|e| e.path()))
