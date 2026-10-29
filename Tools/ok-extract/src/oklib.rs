@@ -903,7 +903,7 @@ pub fn png_chunk<'a>(bytes: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
 /// Mounts an OK card's pack over the active library (overlay index, pack models extracted once to a
 /// cache keyed by the pack's hash). Unmounted when the guard drops. None: the card carries no pack.
 pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
-    let bytes = std::fs::read(card).map_err(|e| e.to_string())?;
+    let bytes = crate::card::card_file_bytes(card).map_err(|e| e.to_string())?;
     // An OK card opens from its own data and the shared resources only (okstrict.rs), a card without a pack too; an
     // original card being made into one (its pack recorded) reads its zipmods.
     let strict = (png_chunk(&bytes, CARD_CHUNK).is_some() && !recording_card_pack()).then(crate::okstrict::for_open);

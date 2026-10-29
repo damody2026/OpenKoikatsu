@@ -3527,7 +3527,7 @@ impl PartBlob {
 
 pub fn open(game: &Path, card: Option<&Path>, outfit: i32) -> Result<OkSession, String> {
     let mut sess = open_unconfigured(game, card, outfit)?;
-    if let Some(bytes) = card.and_then(|c| std::fs::read(c).ok()) { sess.physics = crate::okphysics::CardPhysics::read_card(&bytes); }
+    if let Some(bytes) = card.and_then(|c| crate::card::card_file_bytes(c).ok()) { sess.physics = crate::okphysics::CardPhysics::read_card(&bytes); }
     Ok(sess)
 }
 

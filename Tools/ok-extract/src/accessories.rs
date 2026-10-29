@@ -80,6 +80,10 @@ pub(crate) fn accessory_bundle_bytes(game_root:&Path,zip:Option<&Path>,entry:&Li
 }
 
 pub(crate) fn accessory_clothes_plugins(game_root:&Path)->Vec<PathBuf> {
+    // Asked for every accessory of every open (a walk of the plugins tree each time): once per view.
+    crate::view_memo(format!("accessory_clothes_plugins|{}",game_root.display()),||accessory_clothes_plugins_now(game_root))
+}
+fn accessory_clothes_plugins_now(game_root:&Path)->Vec<PathBuf> {
     let mut pending=vec![game_root.join("BepInEx/plugins")];let mut found=Vec::new();
     while let Some(path)=pending.pop() {
         let Ok(entries)=crate::gamefs::read_dir(path) else {continue};

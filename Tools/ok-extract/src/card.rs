@@ -2044,6 +2044,27 @@ pub fn parse_card(path: &Path) -> Result<CardInfo, String> {
     parse_card_outfit(path, 0)
 }
 
+/// A card file's bytes, read again only when its length or time changes. Every open reads the card it opens (its
+/// pack, its physics) and a conversion opens one card 42 times; cards run to tens of MB.
+pub(crate) fn card_file_bytes(path: &Path) -> std::io::Result<std::sync::Arc<Vec<u8>>> {
+    use std::sync::{Arc, Mutex};
+    type Stamp = (std::path::PathBuf, u64, std::time::SystemTime);
+    static LAST: Mutex<Vec<(Stamp, Arc<Vec<u8>>)>> = Mutex::new(Vec::new());
+    let m = std::fs::metadata(path)?;
+    let stamp = m.modified().ok().map(|t| (path.to_path_buf(), m.len(), t));
+    if let Some(key) = &stamp {
+        if let Some((_, hit)) = LAST.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| k == key) { return Ok(hit.clone()); }
+    }
+    let bytes = Arc::new(std::fs::read(path)?);
+    // Read before the stamp is trusted: a file written meanwhile changes its time and is read again next time.
+    if let Some(key) = stamp {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        if last.len() >= 2 { last.remove(0); }
+        last.push((key, bytes.clone()));
+    }
+    Ok(bytes)
+}
+
 pub fn parse_card_outfit(path: &Path, outfit: i32) -> Result<CardInfo, String> {let _spot=crate::profile::spot("parse_card_outfit");
     // The same card file opened again (every outfit and garment state of a conversion, a reader switching outfits):
     // read and parsed once while its length and time stay the same. The Studio state is applied to each copy.
