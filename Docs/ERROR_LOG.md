@@ -4060,3 +4060,14 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **view_memo 的記憶留在 helper thread 上，換卡時可能答出上一張卡的結果**（2026-10-29，E 組 OK 卡）：`view_memo` 存在 thread-local，只有開卡流程（`extract_session_from_info`）在檢視改變時呼叫 `clear_entry_memo` 清空。但被記住的 `load_characustom_dir_shared` 也會被 `accessory_extract` 這類可能在預取 helper 或 pool thread 上執行的程式呼叫，那些 thread 的記憶不會跟著清空。遊戲裡切換兩張 mods 相同的卡時，`references::begin_load` 的簽章不變，不會清空所有 thread 的快取，helper 就會沿用上一張卡的結果。這次記住的目錄剛好每張卡都一樣，所以還沒出錯，是在加下一個記憶（`zip_list_sig`）前檢查呼叫端時發現的。修正：`ViewMemoScope` 只在開卡期間標記該 thread，其他 thread 一律現算。教訓：thread-local 的記憶要確認「誰負責清空」和「誰會讀」是同一個 thread。
 - **雙 slot 量測腳本卡住 26 分鐘，量完後停掉的舊腳本又把 slot 搶回去**（2026-10-29，E 組 OK 卡）：(1) 量測腳本拿到 slot 後，要等「我的編譯與驗收程序都結束」才開始量，但條件寫成「機器上沒有任何 cargo.exe／rustc.exe」，而別的工具常駐了好幾個 cargo.exe（MCP 伺服器），結果 05:59 拿到 slot 後一直空等到 06:25，c-conquest、e-galgame、c-street-city 都在排隊。(2) 我以為 TaskStop 停掉了先前兩個等待腳本，其實只停掉外殼，bash 腳本變成孤兒還在跑，連 01:36 的冷讀量測腳本也還在。06:48:33 量完釋放 slot，兩秒後其中一個孤兒又拿走兩個 slot，06:48:57 用 taskkill 全部結束才放出來。修正：等待條件只看自己啟動的程序（依路徑或 PID），不要看程式名稱；停掉背景腳本後，用命令列內容確認程序真的結束了（`Get-CimInstance Win32_Process` 找腳本名稱），還在就 `taskkill /T /F`。會去搶共用資源的腳本，停掉後一定要確認。
 - **C032 的根因：外部 CAB 索引在開卡 thread 上重建，讀遍整棵樹的 bundle 檔頭**（2026-10-29，E 組 OK 卡；接 10-28「C032 一度轉換失敗」那一條）：以 `OK_STRICT_TRACE=lyfe_mod` 在 12 個程序的批次裡重現並取得呼叫堆疊。C032 的配件材質引用外部 CAB，`references::external_source_path` 要用 `catalog()` 索引查出是哪個 bundle 含有它。這份索引原本靠 `base_v1\.ok_serialized_index_v1.bin` 這個磁碟快取；快取讀不到或不完整（12 個程序同時用非原子的 `fs::write` 改寫它，就可能讀到寫一半的檔案），就把 8,427 個來源的檔頭全部重讀。重讀發生在預取 helper 上：那個 thread 帶著卡包範圍，又沒有標記為掃描，所以每一筆都算成這張卡的缺口。只有 C032 中招，因為只有它的配件會走到外部 CAB 查詢；單獨轉時快取有效，所以重現不了。修正（references.rs `build_catalog`）：重建放進 `okstrict::scanning`；基礎庫模式不讀寫那個磁碟檔（走 `library_scan_load/save`，預設不用磁碟），一般遊戲目錄照舊用，但改成原子寫入；程序內共用上一份索引，沒變的來源不重讀。教訓：會讀遍整棵樹的查詢都要放在 `scanning` 裡，不能指望快取剛好有效；寫在共用目錄、會被多個程序同時讀寫的檔案，一律先寫暫存檔再改名。
+
+## 2026-10-28 協調者整合：PowerShell 傳參數給原生程式時被拆開或吃掉引號
+
+- **錯誤**：PowerShell 5.1 執行 `run_card_reader_development.lua -NoBuild -- -ExecCmds=ok.FaceFlatten` 時，遊戲收到的是 `-ExecCmds=ok .FaceFlatten`，ok.FaceFlatten 沒有執行。另外 `ok-game-mcp.exe call game_goto '{"girl":9}'` 的雙引號被吃掉，回 `key must be a string`。
+- **修正**：寫成 `'-ExecCmds="ok.FaceFlatten"'`；JSON 參數寫成 `'{\"key\":\"E\"}'`。
+- **驗證**：C、E 的讀卡器 log 都出現 `ok.FaceFlatten = "0"`；控制通道的 goto／key 都正常。
+
+## 2026-10-28 主 session：還原別的 session 未提交的 ok-extract，對方以為改動遺失
+
+- 經過：crowd-gpu-physics 在 E 共用工作樹留了還在改的 ok-extract，e-galgame 的 exe-only 打包一直連到它、街頭卡開不了。crowd 正在等使用者回答，主 session 就先把它 7 個檔備份到 `E:\OpenKoikatsu\Saved\Crowd\wip-okextract-20261028\`、再還原成 HEAD。通知排在 crowd 的佇列裡沒被讀到，它以為改動遺失，開始逐項手動重做。
+- 修正：不再動別人正在改的檔；新增 `OK_EXTRACT_ROOT`（E commit e83776b31），打包改用匯出副本（`E:\Saved\okx-galgame`）的 ok-extract，不受共用樹影響。規則寫進 `C:\portable\OpenKoikatsu\Saved\SESSION_RULES_ALL_20261028.md`。
