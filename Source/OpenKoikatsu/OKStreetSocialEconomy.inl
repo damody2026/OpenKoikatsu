@@ -195,7 +195,7 @@ void AOKStreetSocialScene::TickServes(){
   TArray<FString> Names;
   if(!P.Applied){
    P.Applied=true;
-   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
+   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:OKMsg(TEXT("ui.economy.item_owner_label"),{{TEXT("owner_label"),L.ForHer?OKT(TEXT("ui.economy.her_label")):OKT(TEXT("ui.economy.your_label"))},{TEXT("item_name"),*I->Name}}));
    // Served: the dishes can be eaten now; her needs fill as she eats them (TickMeal).
    for(auto& D:S.Table)if(D.Batch==P.Batch)D.Served=true;
    // "Not served yet, a few seconds" still waiting to be told: it is served now (爱丽丝 heard it after her drink came and

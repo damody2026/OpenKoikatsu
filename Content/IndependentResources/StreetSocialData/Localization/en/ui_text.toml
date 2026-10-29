@@ -1737,6 +1737,7 @@ your_turn_topic = "This time you pick the topic. I'd like to hear what you want 
 
 [ui.schedule]
 ate_at_place = "At {place}, ate {food}{price, plural, =0 {} other { ({price, number, ::currency})}}"
+meal_skipped_for_date = "Skipped the meal planned at {place} at {time}, since there is a meal date with him (not eaten yet)"
 today_schedule_label = "Today's schedule: "
 worked_part_time = "Worked at {place} for {hours, plural, one {# hour} other {# hours}} and earned {pay, number, ::currency}"
 

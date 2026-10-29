@@ -1738,6 +1738,7 @@ your_turn_topic = "這次換妳選話題吧，我想聽聽妳想聊什麼。"
 
 [ui.schedule]
 ate_at_place = "在{place}吃了{food}{price, plural, =0 {} other {（{price, number, ::currency}）}}"
+meal_skipped_for_date = "原本{time}要在{place}吃的那一餐，因為和他約了一起吃飯就不吃了（還沒吃）"
 today_schedule_label = "今日行程："
 worked_part_time = "在{place}打工 {hours} 小時，賺了 {pay, number, ::currency}"
 
