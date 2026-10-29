@@ -450,9 +450,11 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 
 	// The conversation: who he talks with (free talk follows the walk companion, the date, the pair partner too).
 	const int32 Partner = FreeTalkPartner();
-	// Not while she does a one-person activity beside him (watching the fish, her explosion spell): that is watched with
-	// its own camera, and speaking to her ends it anyway. The dialog shot held the whole spell off screen (R3-119).
-	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen) && S.SoloGirl == INDEX_NONE;
+	// While she does a one-person activity beside him (watching the fish, her explosion spell) the talk stays open and
+	// she answers him: the box and her portrait stay too (惠惠 at the aquarium went on talking in the old caption panel).
+	// The dialog shot is not taken then (it needs S.Target, which the activity clears): it held the whole spell off
+	// screen (R3-119).
+	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen);
 	// History lines played back (the replay button, a line's play button in the history window) are shown as scene
 	// lines too, with her portrait; without a conversation the scene opens for the replay alone and closes after it.
 	const bool bReplaying = !S.FreeTalkReplay.IsEmpty() || !S.FreeTalkReplayParts.IsEmpty() ||
