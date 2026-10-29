@@ -101,6 +101,8 @@ public:
 	 *  _WorldSpaceLightPos0 and _LightColor0, written when the light changes. */
 	void UpdateItemLighting();
 	FLinearColor ItemLightDirection = FLinearColor(0.f, 0.f, 0.f, -1.f), ItemLightColor = FLinearColor(0.f, 0.f, 0.f, -1.f);
+	/** The scene has had a light: from then on the characters' forward light follows the scene's lights (off when none is on). */
+	bool bCharacterLightSeen = false;
 	TSet<TWeakObjectPtr<AKKPreviewActor>> ItemsLit;
 	/** The map/sky's full probe on characters and unlightmapped Standard surfaces: the sky pattern it was written for (-1: the
 	 *  character display's own) and the characters that have it. */

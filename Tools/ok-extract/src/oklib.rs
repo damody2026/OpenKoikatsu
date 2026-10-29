@@ -2951,6 +2951,24 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             crate::studio_items::write(&lib, &studio)?;
             println!("OKCONVERT studio items={} with components={} unresolved={unresolved}", studio.items.len(), studio.items.iter().filter(|i| i.line_width.is_some()).count());
         }
+        "studio-names" => {
+            // studio-names <lib>: the eye and hand pattern names (character list, HandAnime) into studio_items.json.
+            let (eyes, hands) = crate::studio_items::add_names(game, &lib.ok_or("library directory required")?)?;
+            println!("OKCONVERT studio names eyes={eyes} hands={hands}");
+        }
+        "studio-mods" => {
+            // studio-mods <lib> [scene folder [threads]]: the zipmods' Studio items (GUID + slot -> library model) into
+            // studio_mod_items.json; with a scene folder, the bundles of the mod items its scenes use converted first.
+            let lib = lib.ok_or("library directory required")?;
+            if let Some(scenes) = args.get(2) {
+                let threads = args.get(3).and_then(|t| t.parse().ok()).unwrap_or(6);
+                let (used, converted, still) = crate::studio_items::convert_scene_mod_items(game, &lib, std::path::Path::new(scenes), threads)?;
+                println!("OKCONVERT studio scene mod items={used} bundles converted={converted} still without model={still}");
+            } else {
+                let (items, missing) = crate::studio_items::add_mod_items(game, &lib)?;
+                println!("OKCONVERT studio mod items={items} without library model={missing}");
+            }
+        }
         "studio-child-anims" => crate::studio_child_animation::convert(game, &lib.ok_or("library directory required")?)?,
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),

@@ -544,7 +544,16 @@ void SOKStudioPanel::ExpressionPage(FOKSceneObject& O)
 	Label(TEXT("表情"));
 	auto Show = [](const TCHAR* Kind) { return [Kind](int32 N) { return N < 0 ? FString(TEXT("照卡片")) : FString::Printf(TEXT("%s %d"), Kind, N); }; };
 	Named(TEXT("眉"), TEXT("eyebrow"), 40, Show(TEXT("眉型")), [](FOKSceneObject& X) { return X.Character.EyebrowPattern; }, [](FOKSceneObject& X, int32 V) { X.Character.EyebrowPattern = V; });
-	Named(TEXT("眼"), TEXT("eyes"), 40, Show(TEXT("眼型")), [](FOKSceneObject& X) { return X.Character.EyesPattern; }, [](FOKSceneObject& X, int32 V) { X.Character.EyesPattern = V; });
+	// Eyes patterns carry the game's names (character list cha_eyeset); eyebrows and mouths have none in the game data.
+	const TMap<int32, FString>& EyeNames = FOKStudioCatalog::Get().EyeNames;
+	int32 EyeCount = 40;
+	for (const TPair<int32, FString>& E : EyeNames) EyeCount = FMath::Max(EyeCount, E.Key + 1);
+	Named(TEXT("眼"), TEXT("eyes"), EyeCount, [](int32 N)
+	{
+		if (N < 0) return FString(TEXT("照卡片"));
+		const FString* Name = FOKStudioCatalog::Get().EyeNames.Find(N);
+		return Name && !Name->IsEmpty() ? FString::Printf(TEXT("%d %s"), N, **Name) : FString::Printf(TEXT("眼型 %d"), N);
+	}, [](FOKSceneObject& X) { return X.Character.EyesPattern; }, [](FOKSceneObject& X, int32 V) { X.Character.EyesPattern = V; });
 	Named(TEXT("嘴"), TEXT("mouth"), 40, Show(TEXT("嘴型")), [](FOKSceneObject& X) { return X.Character.MouthPattern; }, [](FOKSceneObject& X, int32 V) { X.Character.MouthPattern = V; });
 	Float(TEXT("張嘴（-1 照動畫）"), [](FOKSceneObject& X) { return X.Character.MouthOpen; }, [](FOKSceneObject& X, float V) { X.Character.MouthOpen = V; }, -1.f, 1.f, 0.05f);
 	Choice(TEXT("眨眼"), { TEXT("照卡片"), TEXT("不眨"), TEXT("眨") }, [](FOKSceneObject& X) { return X.Character.Blink + 1; }, [](FOKSceneObject& X, int32 V) { X.Character.Blink = V - 1; });
@@ -557,9 +566,26 @@ void SOKStudioPanel::ExpressionPage(FOKSceneObject& O)
 void SOKStudioPanel::HandPage(FOKSceneObject& O)
 {
 	Label(TEXT("手型"));
-	auto Show = [](int32 N) { return N < 0 ? FString(TEXT("照動畫")) : FString::Printf(TEXT("手型 %d"), N); };
-	Named(TEXT("左手"), TEXT("hand"), 40, Show, [](FOKSceneObject& X) { return X.Character.HandLeft; }, [](FOKSceneObject& X, int32 V) { X.Character.HandLeft = V; });
-	Named(TEXT("右手"), TEXT("hand"), 40, Show, [](FOKSceneObject& X) { return X.Character.HandRight; }, [](FOKSceneObject& X, int32 V) { X.Character.HandRight = V; });
+	// Studio's hand patterns (HandAnime): the clip names, with a Chinese name for the common ones.
+	auto Show = [](int32 Side)
+	{
+		return [Side](int32 N)
+		{
+			if (N < 0) return FString(TEXT("照動畫"));
+			static const TMap<FString, FString> Zh = { { TEXT("goo"), TEXT("握拳") }, { TEXT("scissors"), TEXT("剪刀") }, { TEXT("par"), TEXT("張開") }, { TEXT("grip_hard"), TEXT("用力握") },
+				{ TEXT("grip_normal"), TEXT("握") }, { TEXT("grip_soft"), TEXT("輕握") }, { TEXT("par_soft"), TEXT("輕張") }, { TEXT("par_grip"), TEXT("半握") }, { TEXT("gun_grip"), TEXT("握槍") },
+				{ TEXT("soft_grip"), TEXT("柔握") }, { TEXT("natural_pose"), TEXT("自然") }, { TEXT("hug"), TEXT("擁抱") }, { TEXT("index_finger1"), TEXT("伸食指 1") },
+				{ TEXT("index_finger2"), TEXT("伸食指 2") }, { TEXT("thumb_finger"), TEXT("豎拇指") }, { TEXT("ok"), TEXT("OK") }, { TEXT("soft_hold"), TEXT("輕持") },
+				{ TEXT("hard_hold"), TEXT("緊持") }, { TEXT("par_straight"), TEXT("伸直張開") } };
+			const FString* Clip = FOKStudioCatalog::Get().HandNames[Side].Find(N);
+			if (!Clip || Clip->IsEmpty()) return FString::Printf(TEXT("手型 %d"), N);
+			const FString* Name = Zh.Find(*Clip);
+			return Name ? FString::Printf(TEXT("%d %s（%s）"), N, **Name, **Clip) : FString::Printf(TEXT("%d %s"), N, **Clip);
+		};
+	};
+	auto Count = [](int32 Side) { int32 C = 40; for (const TPair<int32, FString>& H : FOKStudioCatalog::Get().HandNames[Side]) C = FMath::Max(C, H.Key + 1); return C; };
+	Named(TEXT("左手"), TEXT("hand_l"), Count(0), Show(0), [](FOKSceneObject& X) { return X.Character.HandLeft; }, [](FOKSceneObject& X, int32 V) { X.Character.HandLeft = V; });
+	Named(TEXT("右手"), TEXT("hand_r"), Count(1), Show(1), [](FOKSceneObject& X) { return X.Character.HandRight; }, [](FOKSceneObject& X, int32 V) { X.Character.HandRight = V; });
 	Props->AddSlot().AutoHeight().Padding(0.f, 3.f)
 	[
 		SNew(SHorizontalBox)

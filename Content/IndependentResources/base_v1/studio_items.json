@@ -60802,5 +60802,383 @@
       "bundle": "abdata/studio/filter/00.unity3d",
       "file": "Lut_MonoGreen"
     }
+  ],
+  "eye_names": [
+    {
+      "id": 0,
+      "name": "デフォルト"
+    },
+    {
+      "id": 1,
+      "name": "両目閉じ"
+    },
+    {
+      "id": 2,
+      "name": "笑顔"
+    },
+    {
+      "id": 3,
+      "name": "笑顔　両目閉じ"
+    },
+    {
+      "id": 4,
+      "name": "微笑"
+    },
+    {
+      "id": 5,
+      "name": "ウィンク左"
+    },
+    {
+      "id": 6,
+      "name": "ウィンク右"
+    },
+    {
+      "id": 7,
+      "name": "切ない"
+    },
+    {
+      "id": 8,
+      "name": "照れ"
+    },
+    {
+      "id": 9,
+      "name": "怒り"
+    },
+    {
+      "id": 10,
+      "name": "真剣"
+    },
+    {
+      "id": 11,
+      "name": "つまらない"
+    },
+    {
+      "id": 12,
+      "name": "苦しい"
+    },
+    {
+      "id": 13,
+      "name": "嫌悪"
+    },
+    {
+      "id": 14,
+      "name": "思案"
+    },
+    {
+      "id": 15,
+      "name": "悲しい"
+    },
+    {
+      "id": 16,
+      "name": "泣き"
+    },
+    {
+      "id": 17,
+      "name": "焦り"
+    },
+    {
+      "id": 18,
+      "name": "落胆"
+    },
+    {
+      "id": 19,
+      "name": "困る"
+    },
+    {
+      "id": 20,
+      "name": "ドヤ"
+    },
+    {
+      "id": 21,
+      "name": "ぐるぐる目１"
+    },
+    {
+      "id": 22,
+      "name": "ぐるぐる目２"
+    },
+    {
+      "id": 23,
+      "name": "ぐるぐる目３"
+    },
+    {
+      "id": 24,
+      "name": "瞳に星"
+    },
+    {
+      "id": 25,
+      "name": "瞳にハート"
+    },
+    {
+      "id": 26,
+      "name": "目がハート"
+    },
+    {
+      "id": 27,
+      "name": "目に炎"
+    },
+    {
+      "id": 28,
+      "name": "デフォルメウィンク"
+    },
+    {
+      "id": 29,
+      "name": "縦一文字"
+    },
+    {
+      "id": 30,
+      "name": "ディフォルメつむり"
+    },
+    {
+      "id": 31,
+      "name": "横一文字"
+    },
+    {
+      "id": 32,
+      "name": "デフォルメ泣き"
+    },
+    {
+      "id": 33,
+      "name": "左目ぎゅっと閉じ"
+    },
+    {
+      "id": 34,
+      "name": "右目ぎゅっと閉じ"
+    },
+    {
+      "id": 35,
+      "name": "両目ぎゅっと閉じ"
+    },
+    {
+      "id": 36,
+      "name": "左目ぎゅっと閉じ02"
+    },
+    {
+      "id": 37,
+      "name": "右目ぎゅっと閉じ02"
+    },
+    {
+      "id": 38,
+      "name": "両目ぎゅっと閉じ02"
+    },
+    {
+      "id": 39,
+      "name": "目パチウインク左"
+    },
+    {
+      "id": 40,
+      "name": "目パチウインク右"
+    }
+  ],
+  "hand_names": [
+    {
+      "group": 0,
+      "id": 1,
+      "name": "goo"
+    },
+    {
+      "group": 0,
+      "id": 2,
+      "name": "scissors"
+    },
+    {
+      "group": 0,
+      "id": 3,
+      "name": "par"
+    },
+    {
+      "group": 0,
+      "id": 4,
+      "name": "grip_hard"
+    },
+    {
+      "group": 0,
+      "id": 5,
+      "name": "grip_normal"
+    },
+    {
+      "group": 0,
+      "id": 6,
+      "name": "grip_soft"
+    },
+    {
+      "group": 0,
+      "id": 7,
+      "name": "par_soft"
+    },
+    {
+      "group": 0,
+      "id": 8,
+      "name": "par_grip"
+    },
+    {
+      "group": 0,
+      "id": 9,
+      "name": "gun_grip"
+    },
+    {
+      "group": 0,
+      "id": 10,
+      "name": "soft_grip"
+    },
+    {
+      "group": 0,
+      "id": 11,
+      "name": "dirty_grip"
+    },
+    {
+      "group": 0,
+      "id": 12,
+      "name": "natural_pose"
+    },
+    {
+      "group": 0,
+      "id": 13,
+      "name": "hug"
+    },
+    {
+      "group": 0,
+      "id": 14,
+      "name": "index_finger1"
+    },
+    {
+      "group": 0,
+      "id": 15,
+      "name": "index_finger2"
+    },
+    {
+      "group": 0,
+      "id": 16,
+      "name": "thumb_finger"
+    },
+    {
+      "group": 0,
+      "id": 17,
+      "name": "ok"
+    },
+    {
+      "group": 0,
+      "id": 18,
+      "name": "soft_hold"
+    },
+    {
+      "group": 0,
+      "id": 19,
+      "name": "go"
+    },
+    {
+      "group": 0,
+      "id": 20,
+      "name": "hard_hold"
+    },
+    {
+      "group": 0,
+      "id": 21,
+      "name": "par_straight"
+    },
+    {
+      "group": 1,
+      "id": 1,
+      "name": "goo"
+    },
+    {
+      "group": 1,
+      "id": 2,
+      "name": "scissors"
+    },
+    {
+      "group": 1,
+      "id": 3,
+      "name": "par"
+    },
+    {
+      "group": 1,
+      "id": 4,
+      "name": "grip_hard"
+    },
+    {
+      "group": 1,
+      "id": 5,
+      "name": "grip_normal"
+    },
+    {
+      "group": 1,
+      "id": 6,
+      "name": "grip_soft"
+    },
+    {
+      "group": 1,
+      "id": 7,
+      "name": "par_soft"
+    },
+    {
+      "group": 1,
+      "id": 8,
+      "name": "par_grip"
+    },
+    {
+      "group": 1,
+      "id": 9,
+      "name": "gun_grip"
+    },
+    {
+      "group": 1,
+      "id": 10,
+      "name": "soft_grip"
+    },
+    {
+      "group": 1,
+      "id": 11,
+      "name": "dirty_grip"
+    },
+    {
+      "group": 1,
+      "id": 12,
+      "name": "natural_pose"
+    },
+    {
+      "group": 1,
+      "id": 13,
+      "name": "hug"
+    },
+    {
+      "group": 1,
+      "id": 14,
+      "name": "index_finger1"
+    },
+    {
+      "group": 1,
+      "id": 15,
+      "name": "index_finger2"
+    },
+    {
+      "group": 1,
+      "id": 16,
+      "name": "thumb_finger"
+    },
+    {
+      "group": 1,
+      "id": 17,
+      "name": "ok"
+    },
+    {
+      "group": 1,
+      "id": 18,
+      "name": "soft_hold"
+    },
+    {
+      "group": 1,
+      "id": 19,
+      "name": "go"
+    },
+    {
+      "group": 1,
+      "id": 20,
+      "name": "hard_hold"
+    },
+    {
+      "group": 1,
+      "id": 21,
+      "name": "par_straight"
+    }
   ]
 }

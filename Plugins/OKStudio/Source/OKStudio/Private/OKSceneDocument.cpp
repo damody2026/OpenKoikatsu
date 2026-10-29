@@ -47,6 +47,8 @@ bool UOKSceneDocument::Reparent(int32 Id, int32 NewParent)
 	Object->Parent = NewParent;
 	Object->AttachBone.Reset();
 	Object->Transform = World.GetRelativeTransform(ParentWorld);
+	// World scale is the object's own (WorldTransform): moving it under another parent keeps its size.
+	Object->Transform.SetScale3D(World.GetScale3D());
 	NotifyChanged();
 	return true;
 }
@@ -123,18 +125,29 @@ TArray<int32> UOKSceneDocument::Children(int32 Parent) const
 
 FTransform UOKSceneDocument::WorldTransform(int32 Id) const
 {
-	FTransform World = FTransform::Identity;
-	// Bounded walk: a corrupt file with a parent cycle must not hang.
-	for (int32 Steps = 0, Cur = Id; Cur >= 0 && Steps < 256; ++Steps)
+	// The chain from the scene root down (bounded: a corrupt file with a parent cycle must not hang).
+	TArray<const FOKSceneObject*, TInlineAllocator<16>> Chain;
+	for (int32 Steps = 0, Cur = Id; Cur >= 0 && Steps < UOKSceneDocument::MaxDepth; ++Steps)
 	{
 		const FOKSceneObject* O = Find(Cur);
 		if (!O) break;
-		World = World * O->Transform;
-		const FOKSceneObject* P = Find(O->Parent);
-		if (P && P->Kind == EOKSceneObjectKind::Item) World = World * FOKStudioCatalog::Get().AnimatedItemChildPoint(P->Item.Group, P->Item.Category, P->Item.No, P->Item.AnimePattern, P->Item.AnimeTime, ItemAnimationSeconds, P->Item.AnimeSpeed);
-		FTransform Bone;
-		if (P && P->Kind == EOKSceneObjectKind::Character && !O->AttachBone.IsEmpty() && BoneFrame && BoneFrame(P->Id, O->AttachBone, Bone)) World = World * Bone;
+		Chain.Add(O);
 		Cur = O->Parent;
+	}
+	FTransform World = FTransform::Identity;
+	for (int32 K = Chain.Num() - 1; K >= 0; --K)
+	{
+		const FOKSceneObject* O = Chain[K];
+		const FOKSceneObject* P = Chain.IsValidIndex(K + 1) ? Chain[K + 1] : nullptr;
+		FTransform Frame = World;
+		if (P && P->Kind == EOKSceneObjectKind::Item) Frame = FOKStudioCatalog::Get().AnimatedItemChildPoint(P->Item.Group, P->Item.Category, P->Item.No, P->Item.AnimePattern, P->Item.AnimeTime, ItemAnimationSeconds, P->Item.AnimeSpeed) * Frame;
+		FTransform Bone;
+		if (P && P->Kind == EOKSceneObjectKind::Character && !O->AttachBone.IsEmpty() && BoneFrame && BoneFrame(P->Id, O->AttachBone, Bone)) Frame = Bone * Frame;
+		World = O->Transform * Frame;
+		// Studio's GuideObject keeps every object's world scale at its own (localScale = localScale / lossyScale *
+		// changeAmount.scale each frame): a parent's scale moves its children (their positions scale with it) but does
+		// not size them. A child under a 57x stretched cylinder keeps its own size.
+		World.SetScale3D(O->Transform.GetScale3D());
 	}
 	return World;
 }
@@ -160,7 +173,7 @@ FTransform UOKSceneDocument::ParentFrame(int32 Id) const
 
 bool UOKSceneDocument::IsShown(int32 Id) const
 {
-	for (int32 Steps = 0, Cur = Id; Cur >= 0 && Steps < 256; ++Steps)
+	for (int32 Steps = 0, Cur = Id; Cur >= 0 && Steps < UOKSceneDocument::MaxDepth; ++Steps)
 	{
 		const FOKSceneObject* O = Find(Cur);
 		if (!O) break;

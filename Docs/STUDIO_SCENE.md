@@ -1,4 +1,6 @@
 # 工作室（動作編輯場景）
+> **2026-10-30 已移除**：這份文件描述的 UMG 工作室（OKStudioScene.h/.cpp）與 Tools/video_motion/test_studio.lua 已刪除。讀卡畫面「動作時間軸」改開 OK Studio（Source/OpenKoikatsu/OKGalleryOkStudio.cpp）；影片雙人動作在 OK Studio 的「動畫」頁播放（Saved/VideoMotions/*.okanim、*.pair.json）；人物編輯 MCP 的 studio 動作只剩 enter／cmd／exit，場景編輯用 ok-game-mcp 的 studio_* 工具（[OK Studio MCP](OK_STUDIO_MCP.md)）。以下保留作歷史紀錄。
+
 
 參考原作 CharaStudio 做的場景。在角色編輯器按「進入工作室（動作編輯）」進入，直接沿用目前載入的女角和配對男角（不重新載入）。
 

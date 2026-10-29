@@ -215,8 +215,17 @@ namespace
 			else if (Kind == TEXT("Item"))
 			{
 				++Report->Items;
-				const int32 Group = int32(O->GetNumberField(TEXT("group"))), Category = int32(O->GetNumberField(TEXT("category"))), No = int32(O->GetNumberField(TEXT("no")));
+				int32 Group = int32(O->GetNumberField(TEXT("group"))), Category = int32(O->GetNumberField(TEXT("category"))), No = int32(O->GetNumberField(TEXT("no")));
 				const FOKStudioCatalogItem* Entry = FOKStudioCatalog::Get().FindItem(Group, Category, No);
+				// A sideloader mod item: the scene saved the session's local slot; the mod's GUID and own slot name it
+				// (studio_mod_items.json, ok-extract --oklib studio-mods). The item keeps the mod's numbers from now on.
+				FString ModGuid;
+				if (O->TryGetStringField(TEXT("mod_guid"), ModGuid) && !ModGuid.IsEmpty())
+				{
+					Entry = FOKStudioCatalog::Get().FindModItem(ModGuid, int32(O->GetNumberField(TEXT("mod_slot"))));
+					if (Entry) { Group = Entry->Group; Category = Entry->Category; No = Entry->No; Note(TEXT("mod items come from the library's converted mods")); }
+					else Note(FString::Printf(TEXT("mod items not in the library (ok-extract <game> --oklib studio-mods <library> <scene folder>): %s"), *ModGuid));
+				}
 				// Particle items become OK Niagara effects (the game's ParticleSystems are not converted).
 				if (const FOKStudioEffect* Effect = FOKStudioCatalog::Get().EffectForKks(Group, Category, No))
 				{
@@ -321,7 +330,8 @@ namespace
 				SavedOutfit = FMath::Max(0, SavedOutfit);
 				const bool bCard = !KksCard.IsEmpty() && FOkSession::MakeOkCardForOutfit(KksCard, OkCard, SavedOutfit, Summary);
 				if (bCard) ++Report->CharacterCards; else Report->Notes.Add(FString::Printf(TEXT("character %d: no OK card (%s)"), Key, *Summary));
-				IFileManager::Get().Delete(*KksCard);
+				// A card that did not convert stays beside the scene's cards (char_<key>.kks.png) to reproduce the failure.
+				if (bCard) IFileManager::Get().Delete(*KksCard);
 				const int32 Id = Add(EOKSceneObjectKind::Character, FString::Printf(TEXT("Character %d"), Key), Parent, O);
 				FOKSceneCharacter& C = Doc->Find(Id)->Character;
 				C.EyesLook = EOKSceneLook::Animation;

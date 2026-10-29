@@ -308,7 +308,10 @@ fn convert_source(game: &Path, source: &Source, bytes: &[u8], prefab_hints: &BTr
 }
 
 /// `convert <lib> [threads] [filter]`
-pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) -> Result<(), String> {
+pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) -> Result<(), String> { convert_with(game, lib, threads, filter, true) }
+
+/// `convert`; `studio_catalog` false leaves studio_items.json alone (a few mod sources converted for scenes).
+pub fn convert_with(game: &Path, lib: &Path, threads: usize, filter: Option<&str>, studio_catalog: bool) -> Result<(), String> {
     use rayon::prelude::*;
     use std::io::Write;
     let started = std::time::Instant::now();
@@ -359,10 +362,12 @@ pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) ->
         }
     }));
     // Studio catalogue with the library model of every item, light and map bundle.
-    let mut studio = crate::studio_items::catalog(game);
-    let unresolved = crate::studio_items::resolve_models(game, &mut studio);
-    crate::studio_items::write(lib, &studio)?;
-    println!("OKCONVERT studio items={} maps={} lights={} unresolved={unresolved}", studio.items.len(), studio.maps.len(), studio.lights.len());
+    if studio_catalog {
+        let mut studio = crate::studio_items::catalog(game);
+        let unresolved = crate::studio_items::resolve_models(game, &mut studio);
+        crate::studio_items::write(lib, &studio)?;
+        println!("OKCONVERT studio items={} maps={} lights={} unresolved={unresolved}", studio.items.len(), studio.maps.len(), studio.lights.len());
+    }
     crate::gamefs::save(lib)?;
     crate::oklib::deactivate();
     crate::gamefs::deactivate();

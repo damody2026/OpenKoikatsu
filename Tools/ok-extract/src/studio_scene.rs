@@ -193,6 +193,28 @@ fn scene_plugins(bytes: &[u8]) -> Option<rmpv::Value> {
     rmpv::decode::read_value(&mut std::io::Cursor::new(data)).ok()
 }
 
+/// Sideloader's Studio items (UniversalAutoResolver "itemInfo", StudioResolveInfo): scene object key (DicKey) -> the
+/// mod's GUID and the item's slot in the mod's own list. The scene saved the session's local slot as the item's number.
+pub fn scene_mod_items(bytes: &[u8]) -> std::collections::HashMap<i32, (String, i32)> {
+    use crate::card::map_get;
+    let mut out = std::collections::HashMap::new();
+    let Some(blocks) = scene_plugins(bytes) else { return out };
+    for key in ["com.bepis.sideloader.universalautoresolver", "EC.Core.Sideloader.UniversalAutoResolver"] {
+        let Some(plugin) = map_get(&blocks, key) else { continue };
+        let data = plugin.as_array().and_then(|a| a.get(1)).unwrap_or(plugin);
+        for info in map_get(data, "itemInfo").and_then(rmpv::Value::as_array).into_iter().flatten() {
+            let decoded = info.as_slice().and_then(|b| rmpv::decode::read_value(&mut std::io::Cursor::new(b)).ok());
+            let info = decoded.as_ref().unwrap_or(info);
+            let guid = map_get(info, "ModID").and_then(rmpv::Value::as_str).unwrap_or_default();
+            let slot = map_get(info, "Slot").and_then(rmpv::Value::as_i64);
+            // KKS sideloader writes SceneDicKey (with SceneObjectOrder, Group, Category); older ones DicKey.
+            let dic = map_get(info, "SceneDicKey").or_else(|| map_get(info, "DicKey")).and_then(rmpv::Value::as_i64);
+            if let (false, Some(slot), Some(dic)) = (guid.is_empty(), slot, dic) { out.insert(dic as i32, (guid.to_owned(), slot as i32)); }
+        }
+    }
+    out
+}
+
 /// Material Editor edits in the scene's plugin data.
 fn scene_material_edits(bytes: &[u8]) -> Vec<MaterialEdit> {
     use crate::card::{map_get, me_plugin_data, parse_color};
@@ -977,21 +999,27 @@ pub fn export(scene_path: &std::path::Path, out_dir: &std::path::Path) -> Result
     }
     walk(&bytes, &scene.objects, out_dir, &mut cards, &mut errors);
     let mut json = serde_json::to_value(&scene).map_err(|e| e.to_string())?;
-    fn mark(v: &mut serde_json::Value, cards: &std::collections::HashMap<i32, (String, serde_json::Value)>) {
+    let mods = scene_mod_items(&bytes);
+    fn mark(v: &mut serde_json::Value, cards: &std::collections::HashMap<i32, (String, serde_json::Value)>, mods: &std::collections::HashMap<i32, (String, i32)>) {
         match v {
             serde_json::Value::Object(m) => {
+                // A mod item: its mod's GUID and slot in the mod's list (studio_mods resolves it).
+                if m.get("kind").and_then(|k| k.as_str()) == Some("Item") {
+                    let key = m.get("key").and_then(|k| k.as_i64()).unwrap_or(-1) as i32;
+                    if let Some((guid, slot)) = mods.get(&key) { m.insert("mod_guid".into(), guid.clone().into()); m.insert("mod_slot".into(), (*slot).into()); }
+                }
                 if m.get("kind").and_then(|k| k.as_str()) == Some("Character") {
                     let key = m.get("key").and_then(|k| k.as_i64()).unwrap_or(-1) as i32;
                     if let Some((p, status)) = cards.get(&key) { m.insert("card".into(), p.clone().into()); m.insert("status".into(), status.clone()); }
                     for k in ["card_offset", "card_len", "face_png_offset", "face_png_len", "ext_offset", "ext_len"] { m.remove(k); }
                 }
-                for (_, x) in m.iter_mut() { mark(x, cards); }
+                for (_, x) in m.iter_mut() { mark(x, cards, mods); }
             }
-            serde_json::Value::Array(a) => for x in a { mark(x, cards); },
+            serde_json::Value::Array(a) => for x in a { mark(x, cards, mods); },
             _ => {}
         }
     }
-    mark(&mut json, &cards);
+    mark(&mut json, &cards, &mods);
     json["card_errors"] = errors.into();
     Ok(json)
 }

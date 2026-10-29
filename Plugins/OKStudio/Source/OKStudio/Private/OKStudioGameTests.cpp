@@ -303,6 +303,18 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 				}
 			}
 			UE_LOG(LogTemp, Display, TEXT("OK studio compare: %s %s %s (memory %.1f GB)"), *FPaths::GetCleanFilename(Path), Error.IsEmpty() ? TEXT("pictured") : TEXT("failed"), *Error, FPlatformMemory::GetStats().UsedPhysical / double(1 << 30));
+			// report.txt: one line per scene, its objects and every object that is not shown with the reason (what a
+			// batch of scene cards still loads wrong).
+			int32 Kinds[8] = {};
+			for (const FOKSceneObject& O : Self->Document->Objects) ++Kinds[FMath::Clamp(int32(O.Kind), 0, 7)];
+			FString Line = FString::Printf(TEXT("%s\t%s\tchars=%d items=%d lights=%d map=%d unshown=%d"), Error.IsEmpty() ? TEXT("OK") : TEXT("FAIL"), *FPaths::GetCleanFilename(Path),
+				Kinds[int32(EOKSceneObjectKind::Character)], Kinds[int32(EOKSceneObjectKind::Item)], Kinds[int32(EOKSceneObjectKind::Light)], Self->Document->Map, Self->SceneActor->Errors.Num());
+			for (const TPair<int32, FString>& E : Self->SceneActor->Errors)
+			{
+				const FOKSceneObject* O = Self->Document->Find(E.Key);
+				Line += FString::Printf(TEXT("\t[%s] %s"), O ? *O->Name : TEXT("?"), *E.Value.Left(160));
+			}
+			FFileHelper::SaveStringToFile(Line + TEXT("\n"), *(Out / TEXT("report.txt")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
 		}
 		if (++State->Index >= Scenes.Num())
 		{
@@ -324,6 +336,8 @@ void UOKStudioGame::RunKStudioCompare(const TArray<FString>& Scenes, int32 WaitF
 		if (!State->bLoaded)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("OK studio compare: %s not opened: %s"), *Scenes[State->Index], *LoadError);
+			FFileHelper::SaveStringToFile(FString::Printf(TEXT("NOT OPENED\t%s\t%s\n"), *FPaths::GetCleanFilename(Scenes[State->Index]), *LoadError), *(Out / TEXT("report.txt")),
+				FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
 			return true;
 		}
 		// Diagnostic ablations change only this comparison's in-memory document.

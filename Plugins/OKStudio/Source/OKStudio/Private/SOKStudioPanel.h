@@ -510,6 +510,9 @@ public:
 		AddCommand(TEXT("timeline.duration"), TEXT("時長"), [this](const FString& Arg) { const float D = FCString::Atof(*Arg); if (D <= 0.f) return false; Game->Document->Duration = D; Changed(); return true; });
 		AddCommand(TEXT("timeline.ease"), TEXT("曲線"), [this](const FString& Arg) { if (!TimelineView) return false; TimelineView->SetEase(EOKSceneEase(FMath::Clamp(FCString::Atoi(*Arg), 0, 4))); return true; });
 		Float_(TEXT("timeline.export"), TEXT("輸出"), TEXT("export"));
+		// Animation files and video motion pairs.
+		AddCommand(TEXT("anim.file"), TEXT("播放 OK 動畫檔"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && !Arg.IsEmpty() && PickAnimFile(*X, Arg); });
+		AddCommand(TEXT("anim.pair"), TEXT("雙人影片動作"), [this](const FString& Arg) { return PickVideoPair(Arg); });
 		// Pose.
 		AddCommand(TEXT("pose.mirror"), TEXT("鏡像姿勢"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && MirrorPose(*X, Arg == TEXT("l2r") ? 1 : Arg == TEXT("r2l") ? 2 : 0); });
 		Simple(TEXT("pose.ikfromfk"), TEXT("IK←FK"), [this] { if (FOKSceneObject* X = Obj()) IkFromFk(*X); });
@@ -1750,6 +1753,8 @@ public:
 		}
 		case EOKSceneObjectKind::Light:
 			Label(TEXT("燈光"));
+			// On/off is the object's visibility (the tree's eye): a switched-off light lights nothing, characters included.
+			Check(TEXT("開啟"), [](FOKSceneObject& X) { return X.bVisible; }, [](FOKSceneObject& X, bool V) { X.bVisible = V; });
 			Choice(TEXT("種類"), { TEXT("方向光"), TEXT("點光"), TEXT("聚光") }, [](FOKSceneObject& X) { return int32(X.Light.Type); }, [](FOKSceneObject& X, int32 V) { X.Light.Type = EOKSceneLightType(V); });
 			Float(TEXT("強度"), [](FOKSceneObject& X) { return X.Light.Intensity; }, [](FOKSceneObject& X, float V) { X.Light.Intensity = V; }, 0.f, 200.f, 0.5f);
 			if (O->Light.Type != EOKSceneLightType::Directional)
@@ -1827,6 +1832,95 @@ public:
 			Float(TEXT("動畫時間 秒"), [](FOKSceneObject& X) { return X.Character.Time; }, [](FOKSceneObject& X, float V) { X.Character.Time = FMath::Max(V, 0.f); X.Character.Speed = 0.f; },
 				0.f, Playing && Playing->Duration > 0.f ? Playing->Duration : 60.f, 0.01f);
 			AnimBrowser(*O);
+			VideoMotionList(*O);
+	}
+
+public:
+	/** A video motion pair (Saved/VideoMotions/*.pair.json, written by the gallery's video import): its two .okanim files. */
+	struct FVideoPair { FString Name, Female, Male; };
+	static TArray<FVideoPair> VideoPairs()
+	{
+		TArray<FVideoPair> Out;
+		const FString Dir = FPaths::ProjectSavedDir() / TEXT("VideoMotions");
+		TArray<FString> Files;
+		IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.pair.json")), true, false);
+		Files.Sort();
+		auto FileOf = [](const FString& Key) { FString Name = Key; Name.RemoveFromStart(TEXT("video:|")); return FString(TEXT("Saved/VideoMotions/")) + Name + TEXT(".okanim"); };
+		for (const FString& F : Files)
+		{
+			FString Text;
+			TSharedPtr<FJsonObject> J;
+			if (!FFileHelper::LoadFileToString(Text, *(Dir / F)) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), J) || !J) continue;
+			FVideoPair P;
+			J->TryGetStringField(TEXT("name"), P.Name);
+			FString Female, Male;
+			J->TryGetStringField(TEXT("female"), Female);
+			J->TryGetStringField(TEXT("male"), Male);
+			if (P.Name.IsEmpty() || Female.IsEmpty() || Male.IsEmpty()) continue;
+			P.Female = FileOf(Female); P.Male = FileOf(Male);
+			Out.Add(P);
+		}
+		return Out;
+	}
+	/** .okanim files a character can play: the video motions and the studio's exported timelines. */
+	static TArray<FString> AnimFiles()
+	{
+		TArray<FString> Out;
+		for (const FString& Folder : { FString(TEXT("Saved/VideoMotions")), FString(TEXT("UserData/Studio/anim")) })
+		{
+			TArray<FString> Names;
+			IFileManager::Get().FindFiles(Names, *(FPaths::ProjectDir() / Folder / TEXT("*.okanim")), true, false);
+			Names.Sort();
+			for (const FString& N : Names) Out.Add(Folder / N);
+		}
+		return Out;
+	}
+	/** Plays an .okanim file on a character (the Studio animation stops). */
+	bool PickAnimFile(FOKSceneObject& X, const FString& File)
+	{
+		if (X.Kind != EOKSceneObjectKind::Character) return false;
+		X.Character.StudioAnimeNo = -1;
+		X.Character.Animation.Reset();
+		X.Character.AnimFile = File;
+		X.Character.Time = 0.f;
+		Changed();
+		DeferRebuild();
+		return true;
+	}
+	/** A video motion pair: the woman's motion on the primary character, the man's on the other selected character (or
+	 *  the next character of the scene); both start together. */
+	bool PickVideoPair(const FString& Name)
+	{
+		const TArray<FVideoPair> Pairs = VideoPairs();
+		const FVideoPair* P = Pairs.FindByPredicate([&Name](const FVideoPair& V) { return V.Name == Name; });
+		FOKSceneObject* First = Obj();
+		if (!P || !First || First->Kind != EOKSceneObjectKind::Character) { SetStatus(TEXT("先選一個角色（雙人動作再加選第二個角色）")); return false; }
+		int32 Other = -1;
+		for (int32 Id : Game->Selection) if (Id != First->Id && Game->Document->Find(Id) && Game->Document->Find(Id)->Kind == EOKSceneObjectKind::Character) { Other = Id; break; }
+		if (Other < 0) for (const FOKSceneObject& O : Game->Document->Objects) if (O.Id != First->Id && O.Kind == EOKSceneObjectKind::Character) { Other = O.Id; break; }
+		const int32 FirstId = First->Id;
+		PickAnimFile(*First, P->Female);
+		if (FOKSceneObject* Partner = Game->Document->Find(Other)) PickAnimFile(*Partner, P->Male);
+		if (FOKSceneObject* Again = Game->Document->Find(FirstId)) Again->Character.Time = 0.f;
+		SetStatus(Other >= 0 ? FString::Printf(TEXT("雙人動作 %s：#%d 女、#%d 男"), *Name, FirstId, Other) : FString::Printf(TEXT("雙人動作 %s：只有一個角色，只套了女方"), *Name));
+		return true;
+	}
+	void VideoMotionList(const FOKSceneObject& O)
+	{
+		using namespace OKStudioStyle;
+		const TArray<FVideoPair> Pairs = VideoPairs();
+		const TArray<FString> Files = AnimFiles();
+		Label(TEXT("影片動作與 OK 動畫檔") + (O.Character.AnimFile.IsEmpty() ? FString() : TEXT("（播放中：") + FPaths::GetBaseFilename(O.Character.AnimFile) + TEXT("）")));
+		if (Pairs.IsEmpty() && Files.IsEmpty()) { Label(TEXT("沒有影片動作（讀卡畫面的「影片動作」匯入後會出現在這裡）")); return; }
+		for (const FVideoPair& P : Pairs)
+		{
+			const FString Name = P.Name;
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(FText::FromString(TEXT("雙人：") + Name), [this, Name] { PickVideoPair(Name); }, 0.f, 18.f, false, 10.f, RowFill())];
+		}
+		for (const FString& F : Files)
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
+				[Button(FText::FromString(FPaths::GetBaseFilename(F)), [this, F] { if (FOKSceneObject* X = Obj()) PickAnimFile(*X, F); }, 0.f, 18.f,
+					TAttribute<bool>::CreateLambda([this, F] { const FOKSceneObject* X = Obj(); return X && X->Character.AnimFile == F; }), 10.f, RowFill())];
 	}
 
 	/** 骨骼 pages: FK, IK, eyes, neck, expression, hands, pose files. */
@@ -2249,7 +2343,7 @@ public:
 		const FOKStudioCatalog& C = FOKStudioCatalog::Get();
 		if (!X || X->Kind != EOKSceneObjectKind::Character || !C.Anims.IsValidIndex(Index) || C.Anims[Index].File.IsEmpty()) return false;
 		const FOKStudioAnim& A = C.Anims[Index];
-		X->Character.StudioAnimeKind = A.Kind; X->Character.StudioAnimeGroup = A.Group; X->Character.StudioAnimeCategory = A.Category; X->Character.StudioAnimeNo = A.No;
+		X->Character.StudioAnimeKind = A.Kind; X->Character.StudioAnimeGroup = A.Group; X->Character.StudioAnimeCategory = A.Category; X->Character.StudioAnimeNo = A.No; X->Character.AnimFile.Reset();
 		X->Character.Time = 0.f;
 		Changed();
 		DeferRebuild();

@@ -112,6 +112,11 @@ struct OKSTUDIO_API FOKSceneCharacter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (AllowedClasses = "/Script/OKAnimation.OKAnimationAsset"))
 	FSoftObjectPath Animation;
 
+	/** An .okanim file (a video motion of Saved/VideoMotions, an exported timeline, ...): absolute or relative to the project.
+	 *  Played when no Studio animation is set. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character")
+	FString AnimFile;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (ClampMin = "0", UIMax = "4"))
 	float Speed = 1.f;
 
@@ -228,7 +233,7 @@ struct OKSTUDIO_API FOKSceneCharacter
 
 	bool SameContent(const FOKSceneCharacter& O) const
 	{
-		return Card == O.Card && Outfit == O.Outfit && ClothesStates == O.ClothesStates && Animation == O.Animation && SameState(O)
+		return Card == O.Card && Outfit == O.Outfit && ClothesStates == O.ClothesStates && Animation == O.Animation && AnimFile == O.AnimFile && SameState(O)
 			&& StudioAnimeKind == O.StudioAnimeKind && StudioAnimeGroup == O.StudioAnimeGroup && StudioAnimeCategory == O.StudioAnimeCategory && StudioAnimeNo == O.StudioAnimeNo;
 	}
 };
@@ -872,6 +877,11 @@ public:
 
 	/** Visible unless it or a parent is hidden. */
 	bool IsShown(int32 Id) const;
+
+	/** How far a walk up the parents goes (a corrupt file's parent cycle must not hang it). KStudio scenes nest up to
+	 *  1024 deep (an audience of glow sticks: each one turning under the last); 256 left deep objects unplaced and
+	 *  shown under a hidden folder. */
+	static constexpr int32 MaxDepth = 4096;
 
 	FString ToJson() const;
 	bool FromJson(const FString& Json, FString& OutError);

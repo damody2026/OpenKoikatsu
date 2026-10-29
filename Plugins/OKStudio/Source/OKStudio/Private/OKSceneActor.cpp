@@ -325,6 +325,30 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			if (Player && Actor->SetOkAnimation(Player, false)) { Actor->PoseMode = 3; Out.StudioAnim.Reset(Seq); }
 			else Errors.Add(Object.Id, FString::Printf(TEXT("studio animation %d/%d/%d/%d not playable: %s"), C.StudioAnimeKind, C.StudioAnimeGroup, C.StudioAnimeCategory, C.StudioAnimeNo, Entry ? (Entry->File.IsEmpty() ? TEXT("not converted") : *AnimError) : TEXT("not in the library")));
 		}
+		else if (!Object.Character.AnimFile.IsEmpty())
+		{
+			// An .okanim file of its own (a video motion, an exported timeline).
+			const FString File = FPaths::IsRelative(Object.Character.AnimFile) ? FPaths::ProjectDir() / Object.Character.AnimFile : Object.Character.AnimFile;
+			FString AnimError;
+			// A video motion (Tools/video_motion) is a session clip (OKCLIP01), played by the character's own session
+			// under its "video:|<name>" key; the OK animation library's files (OKANIM) play through an anim player.
+			TArray<uint8> Magic;
+			const bool bVideo = FFileHelper::LoadFileToArray(Magic, *File, FILEREAD_Silent) && Magic.Num() >= 8 && FMemory::Memcmp(Magic.GetData(), "OKCLIP01", 8) == 0;
+			if (bVideo)
+			{
+				const bool bInVideoDir = FPaths::IsSamePath(FPaths::GetPath(FPaths::ConvertRelativePathToFull(File)), FPaths::ConvertRelativePathToFull(FOkSession::VideoMotionDirectory()));
+				if (!bInVideoDir || !Actor->SetGameAnimation(TEXT("video:|") + FPaths::GetBaseFilename(File)))
+					Errors.Add(Object.Id, FString::Printf(TEXT("video motion %s not playable%s"), *Object.Character.AnimFile, bInVideoDir ? TEXT("") : TEXT(" (only Saved/VideoMotions plays)")));
+			}
+			else
+			{
+				UOKAnimSequence* Seq = UOKAnimationLibrary::LoadOkAnimFile(File, nullptr, NAME_None, AnimError);
+				const TSharedPtr<FOkAnimPlayer> Player = Seq ? Seq->CreatePlayer(AnimError) : nullptr;
+				if (Player && Actor->SetOkAnimation(Player, false)) { Actor->PoseMode = 3; Out.StudioAnim.Reset(Seq); }
+				else Errors.Add(Object.Id, FString::Printf(TEXT("animation file %s not playable: %s"), *Object.Character.AnimFile, *AnimError));
+			}
+			if (Errors.Contains(Object.Id)) UE_LOG(LogTemp, Warning, TEXT("OK studio: %s: %s"), *Object.Name, *Errors[Object.Id]);
+		}
 		else if (Object.Character.Animation.IsValid())
 		{
 			const UOKAnimationAsset* Anim = Cast<UOKAnimationAsset>(Object.Character.Animation.TryLoad());
@@ -341,7 +365,13 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		if (!ItemModel(Object.Item, Model, Prefab, OutError)) return false;
 		// Item FK turns the item's bones before its meshes are baked; Material Editor shader and renderer edits apply then too.
 		FOkSession Session;
-		if (!Session.OpenOkModelFk(LibraryDirectory(), Model, Prefab, ItemBuildJson(Object.Item), OutError)) return false;
+		if (!Session.OpenOkModelFk(LibraryDirectory(), Model, Prefab, ItemBuildJson(Object.Item), OutError))
+		{
+			// Studio's helper items draw nothing in the game either (a turning pivot "obj無し", a 3D sound emitter): only a
+			// place for their children, which the document already keeps. Not an error.
+			if (OutError.Contains(TEXT("has no meshes"))) { OutError.Reset(); return true; }
+			return false;
+		}
 		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, false,
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;
@@ -762,7 +792,8 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         AKKPreviewActor* Actor = Pair.Value.Preview.Get();
         const FOKSceneObject* Object = Document->Find(Pair.Key);
         if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) continue;
-        if (Actor->OkPlayer)
+        // An anim player or a session clip (a video motion, PoseMode 2) runs on the scene's clock.
+        if (Actor->OkPlayer || Actor->PoseMode == 2)
         {
             if (bAdvancePhase) Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
             Actor->AnimPhase = Pair.Value.Time;
@@ -826,7 +857,7 @@ void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
 	const FOKSceneObject* Object = Document ? Document->Find(Id) : nullptr;
 	AKKPreviewActor* Actor = Item ? Item->Preview.Get() : nullptr;
 	if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) return;
-	if (Actor->OkPlayer)
+	if (Actor->OkPlayer || Actor->PoseMode == 2)
 	{
 		Item->Time = Object->Character.Time + Time * Object->Character.Speed;
 		Actor->AnimPhase = Item->Time;
@@ -959,13 +990,26 @@ void AOKSceneActor::UpdateItemLighting()
 	// Studio's character light (CameraLightCtrl: a scene-root light, turned by charaLight.rot) lights the Chara layer,
 	// where Studio's characters and items are: its direction towards the light in Unity space, and its colour times
 	// intensity (a dim character light leaves the characters in their toon shadow, as in Studio).
+	// The toon shaders take one forward light: the shown character light, else the first shown directional light. A
+	// hidden (switched off) light gives none; once the scene has had a light, no light on leaves the characters in
+	// their toon shadow, so switching lights on and off shows on them.
 	const ULightComponent* Light = nullptr;
 	const FOKSceneLight* SourceLight = nullptr;
 	float Intensity = 1.f;
-	for (const FOKSceneObject& Object : Document->Objects)
-		if (Object.Kind == EOKSceneObjectKind::Light && Object.Light.bCharactersOnly && Object.Light.Type == EOKSceneLightType::Directional)
+	bool bAnyLight = false;
+	for (const int32 Pass : { 0, 1 })
+	{
+		for (const FOKSceneObject& Object : Document->Objects)
+		{
+			if (Object.Kind != EOKSceneObjectKind::Light) continue;
+			bAnyLight = true;
+			if (Object.Light.Type != EOKSceneLightType::Directional || (Pass == 0 && !Object.Light.bCharactersOnly) || !Document->IsShown(Object.Id)) continue;
 			if (const FShown* S = Shown.Find(Object.Id); S && S->Component.IsValid())
 				if ((Light = Cast<ULightComponent>(S->Component.Get()))) { Intensity = Object.Light.Intensity / 4.f; SourceLight = &Object.Light; break; }
+		}
+		if (Light) break;
+	}
+	bCharacterLightSeen = bCharacterLightSeen || bAnyLight;
 	// The sky's ambient (Studio's ambient mode is Skybox: the sky controller updates the ambient probe) on the
 	// scene renderers' unity_SHA*. Without a map or sky, native Studio's
 	// empty environment is zero, rather than the Maker display environment.
@@ -1013,14 +1057,19 @@ void AOKSceneActor::UpdateItemLighting()
         }
 		AmbientLit.Add(Preview);
 	}
-	if (!Light) return;
-	const FVector F = Light->GetForwardVector();
-	// Unreal (x, y, z) is Unity (-x, z, y); towards the light is against the light's forward.
-	const FVector Towards = FVector(F.X, -F.Z, -F.Y).GetSafeNormal();
-	const FLinearColor Direction(Towards.X, Towards.Y, Towards.Z, 0.f);
-	// Unity's linear renderer converts the final gamma-space light colour,
-	// including intensity; values above one use its GammaToLinearSpace HDR tail.
-	const FLinearColor Color=OKStudioLinearLightColor(SourceLight->Color,Intensity);
+	if (!Light && !bCharacterLightSeen) return;
+	FLinearColor Direction = ItemLightDirection.A < 0.f ? FLinearColor(0.f, 0.f, -1.f, 0.f) : ItemLightDirection;
+	FLinearColor Color(0.f, 0.f, 0.f, 0.f);
+	if (Light)
+	{
+		const FVector F = Light->GetForwardVector();
+		// Unreal (x, y, z) is Unity (-x, z, y); towards the light is against the light's forward.
+		const FVector Towards = FVector(F.X, -F.Z, -F.Y).GetSafeNormal();
+		Direction = FLinearColor(Towards.X, Towards.Y, Towards.Z, 0.f);
+		// Unity's linear renderer converts the final gamma-space light colour,
+		// including intensity; values above one use its GammaToLinearSpace HDR tail.
+		Color = OKStudioLinearLightColor(SourceLight->Color, Intensity);
+	}
 	if (!Direction.Equals(ItemLightDirection, 1e-4f) || !Color.Equals(ItemLightColor, 1e-4f)) { ItemLightDirection = Direction; ItemLightColor = Color; ItemsLit.Reset(); }
 	for (const TPair<int32, FShown>& It : Shown)
 	{
@@ -1054,7 +1103,7 @@ void AOKSceneActor::PlaceAttached()
 	for (const FOKSceneObject& Object : Document->Objects)
 	{
 		bool bAttached = false, bMoving = false;
-		for (int32 Steps = 0, Cur = Object.Id; Cur >= 0 && Steps < 256; ++Steps)
+		for (int32 Steps = 0, Cur = Object.Id; Cur >= 0 && Steps < UOKSceneDocument::MaxDepth; ++Steps)
 		{
 			const FOKSceneObject* O = Document->Find(Cur);
 			if (!O) break;

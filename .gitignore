@@ -77,6 +77,9 @@ local-instance.json
 # OK shared library (base_v1): models / index in Git LFS (.gitattributes); work files and replay caches stay local
 Content/IndependentResources/base_v1/work/
 Content/IndependentResources/base_v1/*.okpreview
+# Third-party mod Studio items (ok-extract --oklib studio-mods): local like the mod models
+Content/IndependentResources/base_v1/studio_mod_items.json
+Content/IndependentResources/base_v1/studio_mod_sources.txt
 
 # Probe / build outputs
 Tools/GamePoseProbe/*.dll

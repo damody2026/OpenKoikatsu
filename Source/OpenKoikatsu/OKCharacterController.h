@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
@@ -272,8 +272,6 @@ public:
 	void OnBackToGallery();
 	UFUNCTION() void OnEnterInteraction();
 	// Studio scene (Docs/STUDIO_SCENE.md): timeline keys, guide object and video import on the loaded characters.
-	UFUNCTION() void OnEnterStudio();
-	void OnExitStudio();
 	// OK Studio (Plugins/OKStudio): the scene tree with the loaded card as its first character; the gallery returns when it closes.
 	UFUNCTION() void OnEnterOkStudio();
 	/** The gallery's 動作時間軸: OK Studio with the card and its timeline window open. */
@@ -281,7 +279,6 @@ public:
 	void OnOkStudioStopped();
 	bool bOkStudioOpen = false;
 	ESlateVisibility VisibilityBeforeOkStudio = ESlateVisibility::Visible;
-	UPROPERTY() TObjectPtr<class UOKStudioWidget> StudioWidget;
 	// While the studio is open the partner belongs to the studio: stopping a pair keeps it.
 	bool bStudioMode = false;
 	// Card file of the loaded PartnerActor (studio scenes record it).

@@ -542,12 +542,13 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
 - 控制通道：SceneEditor 加 `-Control -StudioControlPort=47890`，用 `ok-game-mcp call studio_*` 跑完加角色、FK＋鏡像、表情與視線、正面聚焦、截圖、存檔、Undo／Redo、時間軸打 key；截圖與存檔都拒絕覆蓋既有檔。
 - 效能：照 slot 規則要同時拿到兩個名額才量，還沒量。
 - **EyeSetTest 漩渦眼**：不是 UI 造成的。OK 卡 `C002.png` 平常開得起來（眼型 0 時 69 個部件）；切到眼型 23 時要換成 gag eye 部件重建，而轉卡時只記錄了卡片預設狀態的開卡閉包，模型 `3e5b33000000000056e2c0bf4f4b4331` 的骨架不在卡內也不在基礎庫，10-28 嚴格開卡後就開不了。`ok-extract --oklib seal` 照預設狀態重放，補不到（試過，卡片已還原）。要在 ok-extract 轉卡／seal 時把「會換部件的眼型」也記錄進閉包，或讓基礎庫收 gag eye 模型，屬 OK 卡工具（e-okcard）的範圍。測試另加了「整張卡開不了時換下一張本機卡」。
+  - 10-30 e-okcard 回覆：E `duo2` commit `70b762429` 修好（尚未 push）。轉卡在各套服裝之後，對 gag 物件 1／2／3 各取一個眼型（21、23、27），用 outfit 0 再開一次並記錄，每張卡多 3 筆 skeleton，digest 不變。舊卡要用該版之後的 ok-extract 重轉，seal 只用基礎庫，補不到 mod 頭。F 等該 commit 合併進來後，重轉 `C002.png` 再跑 EyeSetTest。
 
 **沒做到或做法不同的地方**
 - 遠面：Unreal 的透視投影沒有遠面，`Far` 只存檔，不影響畫面。近面有效（`UOKStudioViewCamera`）。
-- 地圖縮圖：基礎庫沒有地圖縮圖，地圖瀏覽器只列名稱。
-- 表情與手型名稱：基礎庫沒有名稱表，下拉選單顯示「眉型 N」這類編號名。
-- U6-8：讀卡畫面「動作時間軸」改成開 OK Studio 並打開時間軸。舊 UMG 工作室沒有刪：它的「雙人影片動作」（`video:` 片段播在讀卡畫面的兩個角色上）OK Studio 的角色還不能播，`Tools/video_motion/test_studio.lua` 與人物編輯 MCP 的 `studio` 動作仍走它。要等 OK Studio 角色能播影片動作後再移除。
+- 地圖縮圖：KK Studio 的地圖清單（`abdata/studio/info` 的 `Map` 表）本身就沒有縮圖欄位，原作也只列名稱；維持只列名稱。
+- 表情與手型名稱：U11 從遊戲資料補上眼型與手型名稱；眉型、嘴型遊戲資料沒有名稱，維持編號。
+- U6-8：讀卡畫面「動作時間軸」改成開 OK Studio 並打開時間軸。舊 UMG 工作室已在 U11 移除（2026-10-30）。
 
 ---
 
@@ -565,6 +566,43 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
 實測：SceneEditor 加 `-Control`，用 `ok-game-mcp call` 依序目錄瀏覽／搜尋 → 加兩個角色與一張桌子 → `studio_bounds` → `studio_patch` 改名 → 動畫與 FK＋表情＋視線 → 天空、泛光、景深 → 兩個 key 加 Ease → 正面相機 → 截圖與 UI 截圖 → 複製／刪除 → 讀取報告 → 存檔 → 場景清單 → Undo／Redo，全部成功。實測中發現並修好：道具是由自己的預覽 Actor 顯示的，原本的範圍計算只看 `ComponentOf`，道具一律回 30 cm 代替框（也影響視窗點選、聚焦、材質屬性下拉、道具懸停預覽）。改完 UiSelfTest 仍 46/46。
 
 EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshine` 補到共用資源）：還沒補成。`ok-extract --oklib record` 加了 `OK_RECORD_STATUS`（Studio 狀態 JSON，例如 `{"eyes_ptn":23}`），能以 Studio 狀態開卡做記錄（不寫 parity）。但 OK 卡開卡只走基礎庫，不讀遊戲的 zipmod；把 C002 去掉 `ok*` 區塊還原成原作卡再以遊戲記錄，0 筆未命中：遊戲版 `[minih] headmod v4` 的記錄已存在，但記在另一個模型 id 下，C002 指名的是 `3e5b33000000000056e2c0bf4f4b4331`。要在轉卡／seal 時對「會換部件的眼型」另外開一次並收進卡或基礎庫，已把細節交給 e-okcard。實驗動到的基礎庫版控檔已還原，C002 嚴格檢查仍通過。重現：`OK_RECORD_STATUS={"eyes_ptn":23} ok-extract X:/NoGame --oklib replay Content/IndependentResources/base_v1 Content/CharacterCards/CrowdAPNG/C002.png`。
+
+### U11　用遊戲資料補完剩下的缺口（2026-10-30，F 組，未 push）
+
+使用者：缺的元件可以到 `D:\KoikatuSunshine` 找，補到共用資源裡。
+
+| 項目 | 結果 |
+|---|---|
+| 眼型名稱 | 角色清單 `cha_eyeset`（分類 2）41 個名稱（デフォルト、ウィンク、ぐるぐる目…）。`ok-extract D:/KoikatuSunshine --oklib studio-names <base_v1>` 寫進 `base_v1/studio_items.json` 的 `eye_names`（只新增 378 行，其他內容不變）；表情頁的眼型下拉顯示「編號 名稱」 |
+| 手型名稱 | Studio `HandAnime` 表（左右各 21 個）寫進 `hand_names`；手型頁顯示中文名與原片段名（例：「1 握拳（goo）」） |
+| 眉型、嘴型名稱 | 遊戲清單沒有，維持編號 |
+| 地圖縮圖 | KK Studio 的地圖清單本來就沒有縮圖，維持只列名稱 |
+| 影片動作 | 影片匯入的結果就是 `Saved/VideoMotions/*.okanim` 與 `*.pair.json`；角色加 `AnimFile`（任何 .okanim，含輸出的時間軸動畫），動畫頁列出雙人動作與動畫檔：雙人動作把女方給主選角色、男方給另一個選取（或下一個）角色，同時從 0 秒開始。指令 `anim.file`、`anim.pair`；MCP 的 `studio_pose` 加 `anim_file`、`video_pair`，`studio_catalog` 加 `video` |
+| 舊 UMG 工作室 | 刪除 `Source/OpenKoikatsu/OKStudioScene.h/.cpp` 與 `Tools/video_motion/test_studio.lua`；讀卡畫面進 OK Studio 的程式搬到 `OKGalleryOkStudio.cpp`；人物編輯 MCP 的 `studio` 動作改成 enter／cmd／exit（場景編輯走 `studio_*`） |
+| 診斷 | `OK_STUDIO_INFO_DUMP=1` 時 studio 目錄轉換印出各表與角色清單分類 |
+| 影片動作的格式 | 影片動作檔是 session 片段（`OKCLIP01`），不是動作庫的 `OKANIM02`，第一版用 anim player 讀而失敗（角色標成「未顯示」）。改成：`AnimFile` 開頭是 `OKCLIP01` 且在 `Saved/VideoMotions` 時，以 `video:\|<名稱>` 交給角色自己的 session 播（`SetGameAnimation`，PoseMode 2），場景時鐘與時間軸也推動 PoseMode 2。實測 `網球示範.okanim` 播放 10.37 秒、循環 |
+| 燈光開關（使用者回報） | 角色的卡通著色只讀一盞「角色光」（勾了「只照角色與道具」的方向光），而且不看它有沒有開：關燈、刪燈、或新增一般燈都不影響角色。改成：取「顯示中」的角色光，沒有就取第一盞顯示中的方向光；場景有過燈但全部關掉時角色進入陰影色；燈光頁加「開啟」勾選（等於樹上的顯示）。新燈預設強度 6 → 4（換算 1.0，Studio 角色光的預設），原本 1.5 倍把角色照到泛白。實測（`Saved/StudioUIRef/ok/L0_main.png`～`L4_dir_on_again.png`）：主光、方向光逐一關掉後角色變暗，再開回復 |
+| 點光、聚光照角色 | 尚未支援：卡通著色只有一盞前向光，點光與聚光只照得到地圖與一般材質的道具 |
+
+### U12　各種 KKS 場景卡正確載入（2026-10-30，F 組，使用者要求）
+
+批次檢查：`OKStudio.CompareKStudio <資料夾> <數量> 60 exit`（`-OKStudioCompareOutput=<資料夾>`）。每張場景左邊是原作存的縮圖、右邊是 OK Studio 的畫面，另外寫 `report.txt`：每個場景一行，列出物件數量和每個沒顯示的物件及原因。第一輪抽樣 Official 40、vmd 10、根目錄 5 張，55 張全部載入並截圖（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck1030`）。
+
+| 問題 | 處理 |
+|---|---|
+| 比對指令在場景編輯器模式下直接退出 | `CompareKStudio` 會先 `Start` 新工作室，關掉原本的工作室；工作室一關，整個程式就退出。改成和 `PerfKStudio` 一樣，先沿用已在跑的工作室 |
+| 沒網格的輔助道具被標成「未顯示」 | 例如「回転／投げ／振動／ピストン（obj無し）」和 3D 音效（換気扇、風），遊戲裡也不畫。改成當空物件，只用來放子物件，不算錯誤 |
+| mod 道具變成空資料夾（vmd `87018458_p3` 有 30 個，舞台布景整個不見） | 新增 `ok-extract <遊戲> --oklib studio-mods <基礎庫> [場景資料夾 [執行緒]]`：<br>• 讀遊戲 `mods/` 每個 zipmod 的 `abdata/studio/info/**/ItemList_*.csv`，用 `converted.tsv` 對到 bundle 的模型 id，寫進 `base_v1/studio_mod_items.json`（第三方內容，只留本機，已加進 `.gitignore`）。<br>• 給了場景資料夾時，先把場景用到、但基礎庫還沒有的 mod bundle 轉進基礎庫（`convert_with`，不重寫 `studio_items.json`）。<br>• 場景解析讀 sideloader 的 `itemInfo`（`ModID`、`Slot`、`SceneDicKey`），匯出時在道具上標 `mod_guid`、`mod_slot`。<br>• 匯入器用 GUID＋Slot 找道具，換成 mod 自己的群組、分類和編號。<br>• 目錄改成用索引查找（mod 道具有兩萬多筆） |
+| 場景角色轉不成 OK 卡（vmd `1545919667549` 的角色 560、3） | 舊場景裡的角色沒用 GUID 指名 zipmod，轉卡的閉包因此缺東西。e-okcard 修好（E `duo2` 的 `6dd189247`：從缺口找出沒指名的 zipmod 重轉），F 已 cherry-pick（`779526b70`）。轉卡失敗時，匯入器會把原作卡留在 `char_<key>.kks.png` 方便重現 |
+| 子物件繼承了父道具的縮放（vmd 舞台場景鏡頭前擋著 25 m 高的燈籠） | 依反編譯的 `GuideObject.cs`（第 581～586 行）：每幀把 `localScale` 設成 `localScale / lossyScale * 自己的縮放`。所以物件的世界縮放永遠是自己設定的縮放；父物件的縮放只會放大子物件的位置，不會放大子物件本身。`WorldTransform` 改成從根往下算，每層把世界縮放換成物件自己的縮放；`Reparent` 保留世界縮放。往上找父物件的上限從 256 層提高到 `MaxDepth` 4096 層（場景最深約 1024 層） |
+
+結果：mod 道具補轉後，vmd 57 張全部載入、沒有任何未顯示的物件（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck1030b`）；舞台場景修正縮放後，鏡頭、桁架、燈具都和原作一致（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck1030d`）。全部 7,694 張場景用到的 mod 道具共 146 種，47 個 bundle 補轉進基礎庫，全部都有模型了。
+
+尚未一致、尚未處理：
+- 螢幕道具在原作即時顯示另一台相機拍到的畫面（render texture），OK Studio 顯示灰色或靜態圖。
+- vmd 資料夾的場景靠 MMD 的 VMD 外掛驅動角色姿勢與位置，原作縮圖拍的是外掛播放中的瞬間；OK Studio 沒有這個外掛，角色停在 T 字姿勢。
+- 部分地圖的光照與色調不同，例如 `ill_ss_sample_01` 的大浴場、`1546790632203` 的地板。
+- cs0004179 火鍋裡約 1 cm 的豆腐沒露出來；豆腐的位置和大小都正確，推測是周圍食材有毫米級的高低差，把它蓋住了。
 
 ## 7. 優先順序總表
 

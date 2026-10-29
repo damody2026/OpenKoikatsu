@@ -92,6 +92,12 @@ pub struct Catalog {
     pub accessory_points: Vec<AccessoryPoint>,
     #[serde(default)]
     pub filters: Vec<Filter>,
+    /// Names of the eyes patterns (character list cha_eyeset, category 2): ChaFileStatus.eyesPtn as Studio lists it.
+    #[serde(default)]
+    pub eye_names: Vec<Group>,
+    /// Studio hand patterns (HandAnime sheets: group 0 left, 1 right): the row's display name, else its clip name.
+    #[serde(default)]
+    pub hand_names: Vec<Category>,
 }
 
 pub const FILE_NAME: &str = "studio_items.json";
@@ -132,6 +138,12 @@ fn suffix(name: &str) -> Option<i32> { name.rsplit('_').next()?.parse().ok() }
 
 /// Builds the catalogue from the game's info bundles (later bundles and sheets override earlier entries, as in the game).
 pub fn catalog(game: &Path) -> Catalog {
+    if std::env::var_os("OK_STUDIO_INFO_DUMP").is_some() {
+        let lists = crate::list::load_characustom_dir(&game.join("abdata/list/characustom"));
+        let mut by_cat: BTreeMap<i32, Vec<String>> = BTreeMap::new();
+        for ((c, i), e) in lists.by_id.iter() { if *c < 20 || (*c >= 100 && *c < 140) || *c >= 900 { by_cat.entry(*c).or_default().push(format!("{i}={}", e.name)); } }
+        for (c, names) in by_cat { eprintln!("LIST {c} n={} {}", names.len(), names.iter().take(40).cloned().collect::<Vec<_>>().join(", ")); }
+    }
     let dir = game.join("abdata/studio/info");
     let mut files: Vec<_> = crate::gamefs::read_dir(&dir).map(|it| it.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("unity3d"))).collect()).unwrap_or_default();
     files.sort();
@@ -144,10 +156,16 @@ pub fn catalog(game: &Path) -> Catalog {
     let mut fk_bones = BTreeMap::new();
     let mut accessory_points = BTreeMap::new();
     let mut filters = BTreeMap::new();
+    let mut hand_names = BTreeMap::new();
     for file in files {
         let Ok(bytes) = crate::gamefs::read(&file) else { continue; };
         for (name, rows) in sheets(bytes) {
             let kind = name.split('_').next().unwrap_or_default();
+            // OK_STUDIO_INFO_DUMP=1: every sheet's name and first rows (to find the columns of a list).
+            if std::env::var_os("OK_STUDIO_INFO_DUMP").is_some() {
+                eprintln!("SHEET {} {name} rows={}", file.display(), rows.len());
+                for r in rows.iter().take(4) { eprintln!("  {}", r.join(" | ")); }
+            }
             for r in data_rows(&rows) {
                 let no = num(r.first()).unwrap_or_default();
                 match kind {
@@ -166,6 +184,12 @@ pub fn catalog(game: &Path) -> Catalog {
                     "Bone" => { fk_bones.insert(no, FkBone { no, bone: cell(r, 1), name: cell(r, 2), group: num(r.get(3)).unwrap_or_default(), op: num(r.get(4)).unwrap_or_default() }); }
                     "Filter" => { filters.insert(no, Filter { no, name: cell(r, 1), bundle: game_bundle(&cell(r, 2)), file: cell(r, 3) }); }
                     "AccessoryPoint" => { let key = cell(r, 2); accessory_points.insert(no, AccessoryPoint { no, group: num(r.get(1)).unwrap_or_default(), bone: reference_bone(&key), key, name: cell(r, 3) }); }
+                    "HandAnime" => {
+                        // HandAnime_<side>_<sheet>: side 0 left, 1 right.
+                        let side = name.split('_').nth(1).and_then(|s| s.parse::<i32>().ok()).unwrap_or_default();
+                        let label = if cell(r, 1).is_empty() { cell(r, 4) } else { cell(r, 1) };
+                        hand_names.insert((side, no), Category { group: side, id: no, name: label });
+                    }
                     "Light" => { lights.insert(no, Light { no, name: cell(r, 1), bundle: game_bundle(&cell(r, 3)), prefab: cell(r, 4), model: String::new() }); }
                     _ => {}
                 }
@@ -179,6 +203,8 @@ pub fn catalog(game: &Path) -> Catalog {
         items: items.into_values().filter(|i: &Item| !i.bundle.is_empty() && !i.prefab.is_empty()).collect(),
         maps: maps.into_values().filter(|m: &Map| !m.bundle.is_empty() && !m.prefab.is_empty()).collect(),
         map_categories: map_categories.into_values().collect(),
+        eye_names: eye_names(game),
+        hand_names: hand_names.into_values().collect(),
         lights: lights.into_values().collect(),
         fk_bones: fk_bones.into_values().filter(|b: &FkBone| !b.bone.is_empty()).collect(),
         accessory_points: accessory_points.into_values().filter(|p: &AccessoryPoint| !p.key.is_empty()).collect(),
@@ -246,6 +272,158 @@ pub fn item_components(game: &Path, c: &mut Catalog) {
     for i in &mut c.items {
         if let Some(&(width, alpha)) = by_bundle.get(&i.bundle).and_then(|m| m.get(&i.prefab)) { i.line_width = Some(width); i.alpha = alpha; }
     }
+}
+
+/// The eyes patterns' names from the character lists (category 2).
+pub fn eye_names(game: &Path) -> Vec<Group> {
+    let lists = crate::list::load_characustom_dir(&game.join("abdata/list/characustom"));
+    let mut out: Vec<Group> = lists.by_id.iter().filter(|((c, _), _)| *c == crate::eye_set::CATEGORY).map(|((_, i), e)| Group { id: *i, name: e.name.trim().to_owned() }).collect();
+    out.sort_by_key(|g| g.id);
+    out
+}
+
+/// Adds the eye and hand pattern names to the library's studio_items.json (nothing else of it changes).
+pub fn add_names(game: &Path, lib: &Path) -> Result<(usize, usize), String> {
+    let file = lib.join(FILE_NAME);
+    let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    // Read and written as the catalogue itself, so the rest of the file keeps its order and form.
+    let mut c: Catalog = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let fresh = catalog(game);
+    c.eye_names = fresh.eye_names;
+    c.hand_names = fresh.hand_names;
+    write(lib, &c)?;
+    Ok((c.eye_names.len(), c.hand_names.len()))
+}
+
+/// A Studio item of a sideloader mod (its zipmod's `abdata/studio/info/**/ItemList_*.csv`, the vanilla list's columns).
+/// Scenes name it by the mod's GUID and its 管理番号 (StudioResolveInfo ModID and Slot); group and category are the mod's own.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct ModItem {
+    pub guid: String,
+    #[serde(flatten)]
+    pub item: Item,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct ModCatalog {
+    pub format: String,
+    /// The mods' ItemGroup and ItemCategory lists (the item browser's names for the mods' groups and categories).
+    #[serde(default)]
+    pub groups: Vec<Group>,
+    #[serde(default)]
+    pub categories: Vec<Category>,
+    pub items: Vec<ModItem>,
+}
+
+/// Mod items live beside the shared catalogue, in a file of their own that stays local (third-party content).
+pub const MOD_FILE_NAME: &str = "studio_mod_items.json";
+
+/// `--oklib studio-mods <lib>`: every Studio item list of the installation's zipmods, each item with the library model
+/// of its bundle (the converter's `converted.tsv`: mod Studio bundles are converted with the character mods). Returns
+/// (items, items whose bundle is not in the library).
+pub fn add_mod_items(game: &Path, lib: &Path) -> Result<(usize, usize), String> {
+    use std::io::Read;
+    let converted = std::fs::read_to_string(lib.join("converted.tsv")).map_err(|e| format!("converted.tsv: {e}"))?;
+    let mut models: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for line in converted.lines() {
+        let mut f = line.split('\t');
+        let (Some(label), Some("ok"), _, Some(detail)) = (f.next(), f.next(), f.next(), f.next()) else { continue };
+        if let Some(id) = detail.split(' ').next().filter(|id| id.len() == 32) { models.insert(label, id); }
+    }
+    let mods = game.join("mods");
+    let mut zips = crate::mods::all_zipmods(&mods);
+    zips.sort();
+    let mut out = Vec::new();
+    let (mut groups, mut categories) = (BTreeMap::new(), BTreeMap::new());
+    let mut missing = 0usize;
+    for zip_path in zips {
+        let Ok(file) = std::fs::File::open(&zip_path) else { continue };
+        let Ok(mut zip) = zip::ZipArchive::new(file) else { continue };
+        let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
+        let info_csv = |n: &String, prefix: &str| { let l = n.replace('\\', "/").to_ascii_lowercase(); l.starts_with("abdata/studio/info/") && l.rsplit('/').next().is_some_and(|f| f.starts_with(prefix) && f.ends_with(".csv")) };
+        let lists: Vec<&String> = names.iter().filter(|n| info_csv(n, "itemlist_")).collect();
+        if lists.is_empty() { continue; }
+        // ItemGroup_<name>.csv (id, name) and ItemCategory_<x>_<group>.csv (id, name).
+        for n in names.iter().filter(|n| info_csv(n, "itemgroup_") || info_csv(n, "itemcategory_")) {
+            let Ok(mut f) = zip.by_name(n) else { continue };
+            let mut bytes = Vec::new();
+            if f.read_to_end(&mut bytes).is_err() { continue; }
+            let file = n.replace('\\', "/").to_ascii_lowercase();
+            let group = file.rsplit('/').next().unwrap_or_default().trim_end_matches(".csv").rsplit('_').next().and_then(|g| g.parse::<i32>().ok());
+            for line in String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}').lines() {
+                let r: Vec<String> = line.split(',').map(|c| c.trim().to_owned()).collect();
+                let Some(id) = num(r.first()) else { continue };
+                if file.contains("/itemgroup_") { groups.insert(id, Group { id, name: cell(&r, 1) }); }
+                else if let Some(group) = group { categories.insert((group, id), Category { group, id, name: cell(&r, 1) }); }
+            }
+        }
+        let Some(guid) = crate::mods::guids_from_zipmod(&zip_path).into_iter().next() else { continue };
+        let rel = zip_path.strip_prefix(game).unwrap_or(&zip_path).to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+        for list in lists {
+            let mut text = String::new();
+            let Ok(mut f) = zip.by_name(list) else { continue };
+            let mut bytes = Vec::new();
+            if f.read_to_end(&mut bytes).is_err() { continue; }
+            text.push_str(String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}'));
+            for line in text.lines() {
+                let r: Vec<String> = line.split(',').map(|c| c.trim().to_owned()).collect();
+                let Some(no) = num(r.first()) else { continue };
+                let bundle = game_bundle(&cell(&r, 5));
+                let prefab = cell(&r, 6);
+                if bundle.is_empty() || prefab.is_empty() { continue; }
+                let model = models.get(format!("{rel}|{bundle}").as_str()).map(|s| s.to_string()).unwrap_or_default();
+                if model.is_empty() { missing += 1; }
+                out.push(ModItem { guid: guid.clone(), item: Item {
+                    no, group: num(r.get(1)).unwrap_or_default(), category: num(r.get(2)).unwrap_or_default(), name: cell(&r, 3),
+                    bundle: format!("{rel}|{bundle}"), prefab, model, child: cell(&r, 7), anime: flag(&r, 8),
+                    colors: [flag(&r, 9), flag(&r, 11), flag(&r, 13)], patterns: [flag(&r, 10), flag(&r, 12), flag(&r, 14)], scale: flag(&r, 15),
+                    line_width: None, alpha: false,
+                } });
+            }
+        }
+    }
+    let n = out.len();
+    let text = serde_json::to_string_pretty(&ModCatalog { format: "ok-studio-mod-items-1".into(), groups: groups.into_values().collect(), categories: categories.into_values().collect(), items: out }).map_err(|e| e.to_string())?;
+    std::fs::write(lib.join(MOD_FILE_NAME), text).map_err(|e| format!("{MOD_FILE_NAME}: {e}"))?;
+    Ok((n, missing))
+}
+
+/// `--oklib studio-mods <lib> <scene folder> [threads]`: the mod items the KStudio scenes below the folder use, whose
+/// bundles the library lacks, converted into it (the converter's sources `<zipmod>|<bundle>`), then the mod item list
+/// rewritten with their models. Returns (mod items the scenes use, bundles converted, items still without a model).
+pub fn convert_scene_mod_items(game: &Path, lib: &Path, scenes: &Path, threads: usize) -> Result<(usize, usize, usize), String> {
+    fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() { walk(&p, out) } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("png")) { out.push(p) }
+        }
+    }
+    add_mod_items(game, lib)?;
+    let text = std::fs::read_to_string(lib.join(MOD_FILE_NAME)).map_err(|e| e.to_string())?;
+    let mods: ModCatalog = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let by_key: std::collections::HashMap<(String, i32), &ModItem> = mods.items.iter().map(|m| ((m.guid.to_ascii_lowercase(), m.item.no), m)).collect();
+    let mut files = Vec::new();
+    walk(scenes, &mut files);
+    let (mut used, mut labels) = (BTreeSet::new(), BTreeSet::new());
+    for f in &files {
+        let Ok(bytes) = std::fs::read(f) else { continue };
+        for (guid, slot) in crate::studio_scene::scene_mod_items(&bytes).into_values() {
+            let key = (guid.to_ascii_lowercase(), slot);
+            if let Some(m) = by_key.get(&key) { if m.item.model.is_empty() { labels.insert(m.item.bundle.clone()); } }
+            used.insert(key);
+        }
+    }
+    let converted = labels.len();
+    if !labels.is_empty() {
+        let list = lib.join("studio_mod_sources.txt");
+        std::fs::write(&list, labels.iter().cloned().collect::<Vec<_>>().join("\n")).map_err(|e| e.to_string())?;
+        crate::oklib_convert::convert_with(game, lib, threads, Some(&format!("@{}", list.display())), false)?;
+    }
+    add_mod_items(game, lib)?;
+    let text = std::fs::read_to_string(lib.join(MOD_FILE_NAME)).map_err(|e| e.to_string())?;
+    let mods: ModCatalog = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let still = mods.items.iter().filter(|m| m.item.model.is_empty() && used.contains(&(m.guid.to_ascii_lowercase(), m.item.no))).count();
+    Ok((used.len(), converted, still))
 }
 
 pub fn write(lib: &Path, c: &Catalog) -> Result<(), String> {

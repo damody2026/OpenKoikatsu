@@ -375,13 +375,19 @@ namespace
 							Entries.Add(MakeShared<FJsonValueObject>(O));
 						}
 			}
+			else if (Kind == TEXT("video"))
+			{
+				// Video motion pairs (pose video_pair) and the .okanim files a character can play (pose anim_file).
+				for (const SOKStudioPanel::FVideoPair& V : SOKStudioPanel::VideoPairs()) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetStringField(TEXT("video_pair"), V.Name); O->SetStringField(TEXT("female"), V.Female); O->SetStringField(TEXT("male"), V.Male); Entries.Add(MakeShared<FJsonValueObject>(O)); }
+				for (const FString& F : SOKStudioPanel::AnimFiles()) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetStringField(TEXT("anim_file"), F); Entries.Add(MakeShared<FJsonValueObject>(O)); }
+			}
 			else if (Kind == TEXT("filter")) { for (const FOKStudioFilter& F : C.Filters) Entries.Add(Named(F.No, F.Name)); }
 			else if (Kind == TEXT("sky")) { for (const FOKStudioSkyPattern& S : OKStudioSkyPatterns()) Entries.Add(Named(S.No, S.Name)); }
 			else if (Kind == TEXT("accessory_point"))
 			{
 				for (const FOKStudioAccessoryPoint& Pt : C.AccessoryPoints) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetStringField(TEXT("key"), Pt.Key); O->SetStringField(TEXT("name"), Pt.Name); O->SetNumberField(TEXT("group"), Pt.Group); Entries.Add(MakeShared<FJsonValueObject>(O)); }
 			}
-			else return Result(false, TEXT("kind: item, map, effect, anim, filter, sky or accessory_point"));
+			else return Result(false, TEXT("kind: item, map, effect, anim, video, filter, sky or accessory_point"));
 			TSharedRef<FJsonObject> O = Result(true);
 			if (Groups.Num()) O->SetArrayField(TEXT("groups"), Groups);
 			if (Categories.Num()) O->SetArrayField(TEXT("categories"), Categories);
@@ -675,6 +681,8 @@ namespace
 				if (Index == INDEX_NONE || !P->PickAnim(Index)) return Result(false, TEXT("no such animation (kind/group/category/no)"));
 				X = Doc->Find(X->Id);
 			}
+			if (J->TryGetStringField(TEXT("anim_file"), S) && !S.IsEmpty()) { if (!P->PickAnimFile(*X, S)) return Result(false, TEXT("anim_file not set")); X = Doc->Find(X->Id); }
+			if (J->TryGetStringField(TEXT("video_pair"), S) && !S.IsEmpty()) { if (!P->PickVideoPair(S)) return Result(false, TEXT("no such video pair (studio_catalog kind video)")); X = Doc->Find(X->Id); }
 			const TSharedPtr<FJsonObject>* Sub = nullptr;
 			if (J->TryGetObjectField(TEXT("expression"), Sub))
 			{

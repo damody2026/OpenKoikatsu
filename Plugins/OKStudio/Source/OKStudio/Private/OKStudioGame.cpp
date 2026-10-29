@@ -1,4 +1,4 @@
-#include "OKStudioGame.h"
+﻿#include "OKStudioGame.h"
 #include "SOKStudioPanel.h"
 #include "OKStudioGameInternal.h"
 #include "OKStudioSettings.h"
@@ -339,7 +339,7 @@ int32 UOKStudioGame::Add(EOKSceneObjectKind Kind)
 	const int32 Parent = !Sel ? -1 : (Sel->Kind == EOKSceneObjectKind::Folder ? Sel->Id : Sel->Parent);
 	const int32 Id = Document->AddObject(Kind, FString(), Parent);
 	FOKSceneObject* O = Document->Find(Id);
-	if (Kind == EOKSceneObjectKind::Light) { O->Name = TEXT("主光"); O->Light.Type = EOKSceneLightType::Directional; O->Light.Intensity = 6.f; O->Transform = FTransform(FRotator(-35.f, -120.f, 0.f), FVector(0.f, 0.f, 300.f)); }
+	if (Kind == EOKSceneObjectKind::Light) { O->Name = TEXT("主光"); O->Light.Type = EOKSceneLightType::Directional; O->Light.Intensity = 4.f; /* Studio's character light at 1 (4 per unit, as imported) */ O->Transform = FTransform(FRotator(-35.f, -120.f, 0.f), FVector(0.f, 0.f, 300.f)); }
 	if (Kind == EOKSceneObjectKind::Camera) O->Transform = FTransform(FRotator(Pitch, Yaw, 0.f), Focus - FRotator(Pitch, Yaw, 0.f).Vector() * Distance);
 	Select(Id);
 	return Id;
@@ -1257,7 +1257,9 @@ namespace
 			{
 				if (++*Frames < 30) return true;
 				FString Error;
-				UOKStudioGame* Game = UOKStudioGame::Start(GameWorld(), FString(), Error);
+				// The studio game mode (SceneEditor.cmd) runs its own studio and quits when it stops: compare in that one.
+				UOKStudioGame* Game = UOKStudioGame::Get();
+				if (!Game) Game = UOKStudioGame::Start(GameWorld(), FString(), Error);
 				if (Game) Game->RunKStudioCompare(Scenes, WaitFrames, bExit);
 				else { UE_LOG(LogTemp, Error, TEXT("OK studio compare: %s"), *Error); if (bExit) FPlatformMisc::RequestExit(false); }
 				return false;
