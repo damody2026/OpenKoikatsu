@@ -1689,6 +1689,17 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             }
             if profile { eprintln!("OKPROFILE convert outfit {o} {:.2}s", t.elapsed().as_secs_f64()); }
         }
+        // An OK Studio eyes pattern that shows a gag eye builds that head object (cf_O_gag_eye_00..02), which no
+        // ordinary open does: its rig reads the card's own head (a mod head's skeleton). Once per gag object, after
+        // the outfits (the digest open is done), only read; the eye sets' textures are the base library's.
+        for set in gag_eye_sets(lib) {
+            let _status = crate::studio_status::request(crate::studio_status::StatusOverride { eyes_ptn: Some(set), ..Default::default() });
+            crate::okstrict::set_read_only(read_only);
+            let opened = crate::session::open(lib, Some(card), 0);
+            crate::okstrict::set_read_only(false);
+            if let Err(e) = opened { failed.push(format!("eyes pattern {set}: {e}")); }
+        }
+        lap("gag eyes");
         drop(mount);
         let answers = crate::tree_answers::end();
         lap("opens");
@@ -1775,6 +1786,16 @@ fn seal_step(lib: &Path, step: &str, card: &[u8]) -> Result<(Vec<u8>, String), S
 /// off (3), and the card reader's preloads (top four garments half off, the rest on or off). Opens in another state
 /// ask other questions (which prefab nodes a garment has, the skeleton of the mesh that stays drawn): a conversion
 /// opens these too, a strict check as well (the card reader's clothing warm load lacked 51 things of C000).
+/// One eyes pattern (cha_eyeset row) of the library for each gag eye object it shows (1..3), the lowest row of each.
+fn gag_eye_sets(lib: &Path) -> Vec<i32> {
+    let mut by_gag = std::collections::BTreeMap::new();
+    for ptn in 0..256 {
+        let Some(set) = crate::eye_set::eye_set(lib, ptn) else { break };
+        if set.id == ptn && set.gag != 0 { by_gag.entry(set.gag).or_insert(ptn); }
+    }
+    by_gag.into_values().collect()
+}
+
 pub(crate) const CLOTHES_STATE_VARIANTS: [[u8; 9]; 5] = [[1; 9], [2; 9], [3; 9], [1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 3, 3, 3, 3, 3]];
 
 fn open_outfits(lib: &Path, card: &[u8], what: &str) -> Result<(), String> {
