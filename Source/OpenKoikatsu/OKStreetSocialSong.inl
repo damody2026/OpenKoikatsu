@@ -304,12 +304,12 @@ void AOKStreetSocialScene::SongReplay(int32 Memory){
  auto& S=*State;auto& G=S.Song;if(!G.Memories.IsValidIndex(Memory)||SongIsSinging())return;
  const FOKSongMemory M=G.Memories[Memory];const int32 Girl=OKSongGirlOf(S,M.HeroineId);
  // She is still answering him (his "sing it again" comes with her reply): she sings once that is over (TickSong).
- if(Girl!=INDEX_NONE&&S.Target==Girl&&!SongMayOffer(Girl)){G.AskedMemory=Memory;G.AskedAt=SceneTime();UE_LOG(LogTemp,Display,TEXT("Street song: replay %d once she is free"),Memory);return;}
+ if(Girl!=INDEX_NONE&&FreeTalkPartner()==Girl&&!SongMayOffer(Girl)){G.AskedMemory=Memory;G.AskedAt=SceneTime();UE_LOG(LogTemp,Display,TEXT("Street song: replay %d once she is free"),Memory);return;}
  G.AskedMemory=INDEX_NONE;
  // Too cramped here to sing (SongHasRoom): she says so instead of singing into a wall.
  if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)&&!SongHasRoom(S.Agents[Girl-1].Position)){G.Notice=OKMsg(TEXT("ui.song.needs_room"),{{TEXT("name"),*S.Manifest.Characters[Girl].Name}});RefreshUI();return;}
  FString Text;TSharedPtr<FJsonObject> Env;
- if(Girl==INDEX_NONE||S.Target!=Girl||!SongMayOffer(Girl)||!FFileHelper::LoadFileToString(Text,*M.MouthPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Env)||!Env.IsValid()){
+ if(Girl==INDEX_NONE||FreeTalkPartner()!=Girl||!SongMayOffer(Girl)||!FFileHelper::LoadFileToString(Text,*M.MouthPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Env)||!Env.IsValid()){
   UE_LOG(LogTemp,Warning,TEXT("Street song: replay %d not possible now"),Memory);return;}
  // A new song made or being made (he said "later", or it is not due yet) is set aside, not thrown away: its job goes on
  // at ok-song and the milestone makes it again from the cache once this one is over.
@@ -439,7 +439,9 @@ bool AOKStreetSocialScene::SongAtEase(int32 Girl){
 
 bool AOKStreetSocialScene::SongMayOffer(int32 Girl) const{
  const auto& S=*State;
- return S.Target==Girl&&S.Node==INDEX_NONE&&!S.CollectedActive&&!S.RelationshipPending&&!S.TouchActive&&!S.FreeTalkBusy&&S.RingGirl==INDEX_NONE&&!S.RemoteMode
+ // (FreeTalkPartner, not Target: in an activity with him the talk's target is not set; she said "I'll sing it" at the
+ // pet shop and never did.)
+ return FreeTalkPartner()==Girl&&S.Node==INDEX_NONE&&!S.CollectedActive&&!S.RelationshipPending&&!S.TouchActive&&!S.FreeTalkBusy&&S.RingGirl==INDEX_NONE&&!S.RemoteMode
   &&ContactReady(Girl)&&!OKCrowdRuntimeSpeechActive(const_cast<AOKStreetSocialScene*>(this),Girl)&&S.FreeTalkSpeechPlayed>=S.FreeTalkSpeechLines.Num();
 }
 
@@ -467,10 +469,13 @@ void AOKStreetSocialScene::SongChoreograph(){
 // next is prepared while she shows this one (SongStageTick), and at its cue she lets this one go (a short blend
 // through her stand) and the prepared one starts as soon as the slot is free.
 void AOKStreetSocialScene::SongStage(const FString& Clip,const FString& Next,const TCHAR* Part){
- auto& G=State->Song;if(Clip.IsEmpty()||G.Girl==INDEX_NONE)return;FString Error;
+ auto& G=State->Song;if(G.Girl==INDEX_NONE)return;FString Error;
+ // No move for this part (an outro without its own clip): the dance she was in stops now, not after her closing line
+ // (the song had ended and she went on dancing). Cancel leaves her own speech alone; Unstage gives her walk back later.
+ if(Clip.IsEmpty()){if(G.Staged&&State->Pair.Partner!=G.Girl&&State->SoloGirl!=G.Girl){OKCancelCrowdRuntimeAction(this,G.Girl,Error);G.Want.Reset();G.Next.Reset();G.NextAsked=false;UE_LOG(LogTemp,Display,TEXT("Street song: %s without a move, the dance stops"),Part);}return;}
  // In an activity with him (sitting on a bench or the lawn) she sings as she sits: a gesture clip took her seated clip's
  // slot and the activity, its clip gone, ended at once (R3-220). Her voice and mouth go on; the moves are left out.
- if(State->Pair.Partner==G.Girl){UE_LOG(LogTemp,Display,TEXT("Street song: %s %s left out: she sings as she sits (activity)"),Part,*Clip);return;}
+ if(State->Pair.Partner==G.Girl||State->SoloGirl==G.Girl){UE_LOG(LogTemp,Display,TEXT("Street song: %s %s left out: she sings as she sits (activity)"),Part,*Clip);return;}
  G.Want=Clip;G.Next=Next;G.NextAsked=false;
  FOKRuntimeActionStreamStatus A;const bool Showing=OKGetCrowdRuntimeActionStatus(this,G.Girl,A)&&A.Playing;
  // (ClipId names the clip being prepared when there is one, so any clip she shows is let go, not only another one.)
@@ -494,7 +499,9 @@ void AOKStreetSocialScene::SongStageTick(){
 // After the number (or when it is cut short) she goes back to standing as she did.
 void AOKStreetSocialScene::SongUnstage(){
  auto& G=State->Song;
- if(G.Staged&&G.Girl!=INDEX_NONE){FString Ignore;OKCancelCrowdRuntimeAction(this,G.Girl,Ignore);OKResumeCrowdRuntimeBehavior(this,G.Girl,Ignore);}
+ // Sat down with him meanwhile: the activity owns her clip now (cancelling it ended their coffee the moment the song
+ // was over, R5-17).
+ if(G.Staged&&G.Girl!=INDEX_NONE&&State->Pair.Partner!=G.Girl&&State->SoloGirl!=G.Girl){FString Ignore;OKCancelCrowdRuntimeAction(this,G.Girl,Ignore);OKResumeCrowdRuntimeBehavior(this,G.Girl,Ignore);}
  G.Staged=false;G.Cue=-1;G.Want.Reset();G.Next.Reset();G.NextAsked=false;
 }
 
@@ -519,7 +526,7 @@ void AOKStreetSocialScene::SongSkip(){
  // Her words after the song: cut short too (the song ends on the next tick).
  if(G.Phase==EOKSongPhase::Outro){FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);G.SayPending=false;G.SpeechStarted=false;return;}
  if(G.Phase!=EOKSongPhase::Singing&&G.Phase!=EOKSongPhase::Intro)return;
- FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);G.Phase=EOKSongPhase::Outro;G.PhaseAt=SceneTime();{const FString Outro=OKSongOccasionLine(G.Occasion,TEXT("outro_line"));SongSay(Outro);OKSongCaption(S,Outro);SongRecord(Outro,OKT(TEXT("ui.song.context_sang")));}RefreshUI();
+ FString Ignore;OKStopCrowdRuntimeSpeech(this,G.Girl,Ignore);G.Phase=EOKSongPhase::Outro;G.PhaseAt=SceneTime();SongStage(G.OutroClip,FString(),TEXT("outro"));{const FString Outro=OKSongOccasionLine(G.Occasion,TEXT("outro_line"));SongSay(Outro);OKSongCaption(S,Outro);SongRecord(Outro,OKT(TEXT("ui.song.context_sang")));}RefreshUI();
 }
 
 // While she sings (intro, song, outro), a shot from in front of her instead of the over-the-shoulder talk camera
@@ -594,7 +601,7 @@ void AOKStreetSocialScene::TickSong(double Now){
  // A song he asked to hear again while she was talking: now that she is free (or never, after a minute or once he left).
  if(G.AskedMemory!=INDEX_NONE&&!SongIsSinging()){
   const int32 Girl=G.Memories.IsValidIndex(G.AskedMemory)?OKSongGirlOf(S,G.Memories[G.AskedMemory].HeroineId):INDEX_NONE;
-  if(Girl==INDEX_NONE||S.Target!=Girl||Now-G.AskedAt>60)G.AskedMemory=INDEX_NONE;
+  if(Girl==INDEX_NONE||FreeTalkPartner()!=Girl||Now-G.AskedAt>60)G.AskedMemory=INDEX_NONE;
   else if(SongMayOffer(Girl)){SongReplay(G.AskedMemory);return;}
  }
  switch(G.Phase){

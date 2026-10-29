@@ -1061,3 +1061,7 @@
   - `game_inspect` 會把主角和一位女主帶進檢查房間（天上的空平台）。我沒看工具說明就呼叫，雷電將軍的「一起走回宿舍」在空平台上卡了兩小時（11:18→13:21），看起來像整座城沒載入。
   - 修正：`/inspect {off:true}` 離開後重讀欄位 7，重走一次；約定清單改看 `game_state {"full":true}` 的 `appointments`。
   - 以後：沒用過的 ok-game 工具先看 `Tools/ok-game-mcp/src/main.rs` 的說明；畫面突然整片空白，先查 log 有沒有 `Street inspect`。
+- 2026-10-30 c-conquest：唱歌停了她還在跳舞（使用者回報），收尾只顧到一部分路徑：
+  - 唱完轉結尾時沒有結尾動作就什麼都不做，跳舞的那段照跑；`SongSkip` 轉結尾完全沒換動作；`SongUnstage` 還會把坐下活動的動作一起取消。
+  - 修正：`SongStage` 空 clip 時停掉正在跳的那段（坐下活動除外），`SongSkip` 也經 `SongStage`，`SongUnstage` 不碰坐下活動的動作（R5-18）。
+  - 以後：改唱歌的狀態轉換時，逐一檢查唱完、跳過、中斷、坐下四條路徑，聲音和動作要一起收。
