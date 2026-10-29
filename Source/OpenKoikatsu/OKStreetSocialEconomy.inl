@@ -342,7 +342,12 @@ void AOKStreetSocialScene::TickShopArrival(){
  // Who came in with him: walking in together (talking, beside him, or on their way here) is a visit together; meeting her
  // when she is already inside and he starts talking to her is not "we just walked in" (no menu prompt for a stranger).
  if(Place!=S.ShopSeenPlace){S.ShopSeenPlace=Place;S.ShopEnteredWith=!Place.IsEmpty()&&(FreeTalkPartner()!=INDEX_NONE||S.Companion!=INDEX_NONE||S.OutingGirl!=INDEX_NONE);}
- if(Place.IsEmpty()){if(SceneTime()-S.ShopArrivalAt>60.0)S.ShopArrivalPlace.Reset();return;} // out through the door and back in: not a new visit
+ // Out through the door and back in within a minute: not a new visit. The minute counts from when they stepped out (it
+ // counted from the last menu prompt, and none is given when she was already inside: a stroll with 爱丽丝 in the park
+ // left it for a moment and "we just walked in, there is fish food" came over his question). A stroll keeps the place.
+ if(Place.IsEmpty()){if(S.OutingGirl!=INDEX_NONE&&(S.OutingActivity==TEXT("stroll")||S.OutingActivity==TEXT("walk")))S.ShopArrivalAt=SceneTime();
+  if(SceneTime()-S.ShopArrivalAt>60.0)S.ShopArrivalPlace.Reset();return;}
+ if(Place==S.ShopArrivalPlace)S.ShopArrivalAt=SceneTime();
  if(Place==S.ShopArrivalPlace||!S.FreeTalkOpen||S.FreeTalkBusy)return;
  const int32 Her=FreeTalkPartner();if(Her==INDEX_NONE)return;
  if(!S.ShopEnteredWith){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: actor=%d was already in %s; no arrival prompt"),Her,*Place);return;}
