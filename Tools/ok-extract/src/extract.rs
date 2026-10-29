@@ -2777,7 +2777,9 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
         let mut items: Vec<(Option<PathBuf>, ListEntry, bool)> = Vec::new();
         let mut lists: std::collections::HashMap<String, ChaListCatalog> = std::collections::HashMap::new();
         let mut seen = std::collections::HashSet::new();
-        for resolve in &card.resolves {
+        // A garment-state variant does not extract the hair and accessories (extract_session_from_info).
+        let hair_and_accessories = !crate::state_variant_open();
+        for resolve in card.resolves.iter().filter(|_| hair_and_accessories) {
             if !is_mesh_category(resolve.category_no) { continue; }
             let p = resolve.property.to_ascii_lowercase();
             if p.contains("outfit") && !p.contains(&want_outfit) { continue; }
@@ -2804,7 +2806,7 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
             }
         }
         // Hair slots (ChaFileHair.parts), as the hair-slot pass looks them up.
-        for (i, &hid) in card.hair_ids.iter().enumerate() {
+        for (i, &hid) in card.hair_ids.iter().enumerate().filter(|_| hair_and_accessories) {
             if hid == 0 { continue; }
             let cat = 101 + i as i32;
             let resolve = card.resolves.iter().find(|r| (r.slot == hid || r.local_slot == hid) && (r.category_no == cat || (101..=104).contains(&r.category_no)));
@@ -2818,7 +2820,7 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
             .filter(|r| is_mesh_category(r.category_no) && role_for_category(r.category_no, &r.property).starts_with("acc"))
             .filter(|r| { let p = r.property.to_ascii_lowercase(); !p.contains("outfit") || p.contains(&want_outfit) })
             .filter_map(|r| accessory_slot_from_property(&r.property)).collect();
-        for (slot_i, a) in card.accessory.iter().enumerate() {
+        for (slot_i, a) in card.accessory.iter().enumerate().filter(|_| hair_and_accessories) {
             if a.type_id == 120 || !is_mesh_category(a.type_id) || resolved_slots.contains(&slot_i) { continue; }
             if !role_for_category(a.type_id, "").starts_with("acc") { continue; }
             let Some(entry) = vanilla.get(a.type_id, a.id).or_else(|| mod_catalog.get(a.type_id, a.id)).cloned() else { continue };
