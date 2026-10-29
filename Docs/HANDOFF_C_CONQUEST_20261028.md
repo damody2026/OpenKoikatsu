@@ -1,10 +1,12 @@
-# C 線「街區攻略」交接（2026-10-28）
+# C 線「街區攻略」交接（2026-10-28，10-29 08:50 更新）
 
 給接手的新 session。讀完這份就能繼續：玩十位女主、找出不合理的地方、用通用的方式修好、記錄、提交。
 
-- 寫於 C/E 整合之後（HEAD `3b8b95d8`）。
-- C 的 stage：`Saved/StreetSocial/Build/Int1027C.stage`。
-- base：`Saved/StreetSocial/Base1027`。
+- 10-29 08:50 因使用者要整合 C⇔E 而暫停。暫停時 C 的 HEAD 是本文件這次提交。
+- 攻略用 sandbox `Conq1028`（控制埠 48070，MCP 預設 47870 連不到，要用 CLI 並設 `OK_CONTROL_PORT=48070`）。
+- 最後一次可用的 stage：`Saved/StreetSocial/Build/Conq1029h.stage`（base `Saved/StreetSocial/Base1028b`）。`Conq1029i` 編到一半被停掉，不要用。整合後照協調者給的新 base 重編。
+- 第 4 輪、第 5 輪的發現逐列記在 `Docs/STREET_PLAYTEST_FINDINGS.md`（「攻略第四輪」「攻略第五輪」兩節，R4-n、R5-n）。
+- 以下第 5～7 節的第 3 輪內容是 10-28 之前的歷史；目前狀態看第 9 節。
 
 ---
 
@@ -140,7 +142,7 @@
 **exe-only 打包**（平常開發用；換新 tag，base 用整合時那份）：
 
 ```powershell
-.\Tools\lua\lua.exe Tools\rebuild_street_social_runtime.lua --tag <新tag> --engine D:/PhysX/UE5.8 --base-dir Saved/StreetSocial/Base1027 --skip-cook --skip-base
+.\Tools\lua\lua.exe Tools\rebuild_street_social_runtime.lua --tag <新tag> --engine D:/PhysX/UE5.8 --base-dir Saved/StreetSocial/<整合時的 base，10-29 暫停前是 Base1028b> --skip-cook --skip-base
 ```
 
 - 用 PowerShell 的 `run_in_background` 跑，輸出導到 `Saved\StreetSocial\<tag>.out`。完成時一定會收到通知。
@@ -158,7 +160,7 @@ cargo test --release --manifest-path Tools\ok-story\Cargo.toml
 cargo test --release --lib --manifest-path Tools\ok-extract\Cargo.toml dbone
 ```
 
-- ok-rules 目前 212 個測試通過。
+- ok-rules 目前 215 個測試通過（10-29）。
 
 **規則熱載入**
 1. `cargo build --release --manifest-path Tools\ok-rules\Cargo.toml`
@@ -290,4 +292,42 @@ cargo test --release --lib --manifest-path Tools\ok-extract\Cargo.toml dbone
 - **判斷打包完成**：看輸出的 `done`，不要看 `.stage` 目錄；等待時要有通知能叫醒自己，曾經兩次被協調者看到停著沒動。
 - **烘焙快取**：KKRuntimePose 的快取在 `UserSettingsDir/OpenKoikatsu/RuntimeGpuCache/v1`，key 含 recipe identity 和建置戳記。改了烘焙方式要讓 recipe identity 跟著變，例如 `loop-preroll`。
 - **Relation 的 `add_liking`**：會依關係階段換算，不等於好感點數。要扣好感點數就直接改 `favor`，並限制在 `favor_cap()` 以內。
-- **只殺自己埠上的程序**：遊戲 47870、ok-tts 47860、ok-asr 47861、ok-song 47880，以及自己 D: 引擎建置留下的 dotnet。別人的遊戲、UnrealEditor 和 E: 引擎底下的程序都不要動。
+- **只殺自己埠上的程序**：遊戲 47870、ok-tts 47860、ok-asr 47861、ok-song 47880，以及自己 D: 引擎建置留下的 dotnet。別人的遊戲、UnrealEditor 和 E: 引擎底下的程序都不要動。sandbox `Conq1028` 用的是 48070（控制）、48060（ok-tts）、48061（ok-asr）。
+- **Unreal 名額**：`Saved/UnrealSlots/slot1|slot2`（mkdir＋owner.txt），排隊寫 `queue/<名>.txt`，先來先用；只在真的開 Unreal 時持有，約 60 分鐘或做完就放；打包（exe-only rebuild）不必占名額，但要先關掉自己的遊戲。
+- **語系 toml 裡插英文句子**：雙引號要寫成 `\"`，否則整份 ui_text 解析失敗、遊戲 5 秒後自己結束（R4-15 時踩過，見 STREET_ERRORS）。用 sed 插多行會被併成一行，多行用 Edit。
+- **在既有長函式加 `if(init;cond)` 變數**：先 grep 同名區域變數，打包建置會把遮蔽（C4456）當錯誤。
+- **只提交自己的 hunk**：用暫時 index（`GIT_INDEX_FILE`）；同一檔有別人的或未驗證的段落時，用 `git diff -U0` 挑 hunk 再 `git apply --cached --unidiff-zero`；FINDINGS／STREET_ERRORS 用「HEAD 內容＋要加的列」組 blob 再 `git update-index --cacheinfo`。STREET_ERRORS 的 HEAD 有 CRLF 行，組 blob 時不要對 HEAD 那份 `tr -d '\r'`。
+
+---
+
+## 9. 第 4、5 輪（10-28～10-29）與暫停時的狀態
+
+### 第 4 輪（新遊戲，sandbox Conq1028）：五位戀人，不乾淨
+- 9/13 三月七、早濑优香、安可、惠惠、胡桃成為戀人。終局存檔：**欄位 6**（9/13 19:30）。
+- 已提交（都在 `git log`）：R4-1、2、3、5、6、7、8、9、10、11、15、16、17、18、22、27（規則部分）。
+- 只觀察、沒修：R4-4、12、14、20（照 R3-268 使用者決定）、23、26、29。
+
+### 第 5 輪（10-29 04:05 新遊戲，同 sandbox）：進行中
+- 起點存檔 **欄位 8**（9/1 08:11）；目前進度 **欄位 7**（9/8（三）07:03，¥2,390）。
+- 這輪先攻略第 4 輪沒成為戀人的五位。關係：雷电将军 戀人（9/5）；爱丽丝 朋友；刻晴 朋友；贞德·Alter 陌生人 40；贞德 陌生人 14。
+- 已排好的約：9/8 10:00 贞德·Alter 百貨門口挑耳機；9/8 16:00 雷电将军 點心店吃三色團子。爱丽丝已交換手機。
+- 已提交：R5-1、R5-2、R5-5、R4-11（第 5 輪驗證）。只觀察：R5-3、R5-4。
+
+### 已提交但「未驗證」的修正（暫停時一起提交，見該次 commit 訊息）
+| 編號 | 改了什麼 | 怎麼驗 |
+|---|---|---|
+| R4-13 | 這裡還在做的點單時，判斷說的別處喝／吃活動當成喝這裡點的，不出發（Scene.cpp） | 在非點心店的地方點飲料、判斷給 do_now=drink；log「is what they ordered here」 |
+| R4-19 | 帶手勢開口失敗時改成只播語音，不中止整段對話（Scene.cpp） | log「gesture not queued」後對話繼續 |
+| R4-21 | 她上班中，聊天點單裡給她自己的那項不點（Mind.inl） | 女主在店裡上班時替自己點；log「she is on her shift」 |
+| R4-24 | 跳到隔天時清掉還在做的點單與桌上東西（Mind.inl） | log「cleared overnight」 |
+| R4-25 | 沉默催話提示加「決定先走就填 end_talk」（三語 ui_text） | 同行時沉默，她說要走後應該真的離開 |
+| R4-27 (3) | 判斷提示：只有列出的才算已有約定（三語 ui_text） | 被刪掉的約，她再答應一次要重新記下 |
+| R4-28 | 聊天點單因店裡沒賣被拒時告訴她（Mind.inl＋三語 ui_text `not_sold_here_order`） | log「order rejected」後她照實說沒賣 |
+| R5-6 | 帶著的點單在他已到那家店時就下單；道別時清掉（Economy.inl、LiveTalk.inl） | log「they are there already」 |
+| R5-7 | 餐點上桌時撤掉排著的「還沒上桌」提示（Economy.inl、Scene.cpp 欄位） | 上桌後她不再說「好像還有東西沒來」 |
+
+### 恢復後的下一步
+1. 用協調者給的新 base 重編 exe-only（新 tag），開 sandbox `Conq1028` 讀欄位 7。
+2. 先開遊戲聽一次 10 位女主的聲音：10-29 已把 StreetHeroines 10 張卡補上 okVo（備份在 `Saved/CardBackup/voice-20261029-024537`，okId 不變，去掉 okVo 後與備份逐位元組相同）；惠惠的歌用的是她卡上的 tag，其他 9 位只對過 tag。
+3. 赴 9/8 兩個約，繼續第 5 輪到五位戀人；途中驗證上表，驗過就在 FINDINGS 該列補結果。
+4. 第 5 輪仍有問題就開第 6 輪，直到一輪完全乾淨（記憶：conquest-loop-until-clean）。
