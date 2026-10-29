@@ -1677,9 +1677,11 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             let opened = if o == 0 { session_digest_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
             crate::okstrict::set_read_only(false);
             if let Err(e) = opened { failed.push(format!("outfit {o}: {e}")); }
-            // The other garment states the game and the card reader show (CLOTHES_STATE_VARIANTS): only read.
+            // The other garment states the game and the card reader show (CLOTHES_STATE_VARIANTS): only read. What
+            // reads the same in every state (hair, accessories) the outfit's own open above read (state_variant_open).
             for states in CLOTHES_STATE_VARIANTS {
                 let _states = crate::unity::request_clothes_states(states);
+                let _variant = crate::StateVariantScope::begin();
                 crate::okstrict::set_read_only(read_only);
                 let opened = crate::session::open(lib, Some(card), o);
                 crate::okstrict::set_read_only(false);

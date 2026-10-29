@@ -1391,6 +1391,10 @@ pub(crate) fn extract_session_from_info(
         let want_outfit = outfit_prefix(outfit);
         profile_tick("accessory context+manifest", t_ctx);
         check_preempted()?;
+        // A conversion's garment-state variant of an outfit (state_variant_open) is opened only for what the other
+        // garment states read; hair and accessories read the same in every state, and the outfit's own open read them.
+        let hair_and_accessories = !crate::state_variant_open();
+        if hair_and_accessories {
         let t_res = Instant::now();
         for resolve in &card.resolves {
             if !is_mesh_category(resolve.category_no) {
@@ -1711,6 +1715,7 @@ pub(crate) fn extract_session_from_info(
             crate::accessory_extract::emit(game_root,card,outfit,&source,&context,out_dir,&mut parts,&mut session_parts,&mut seen_meshes,Some(&mut push_batch))?;
         }
         profile_tick("accessories", t_acc);
+        }
         // Clothes from ChaFileClothes.parts (per outfit).
         // Sideloader's UniversalAutoResolver.ResolveStructure identifies an item
         // by (GUID, original Slot) from the per-outfit ResolveInfo whose

@@ -35,6 +35,15 @@ impl Drop for ViewMemoScope {
     fn drop(&mut self) { IN_VIEW.with(|v| v.set(self.0)); }
 }
 
+thread_local! { static STATE_VARIANT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+/// This thread's opens are a conversion's garment-state variants of an outfit already opened in its own states
+/// (oklib::make_ok_card): only what those states read is needed of them, the session is not kept.
+pub(crate) fn state_variant_open() -> bool { STATE_VARIANT.with(|v| v.get()) }
+/// Marks this thread's opens as garment-state variants while alive.
+pub(crate) struct StateVariantScope(bool);
+impl StateVariantScope { pub(crate) fn begin() -> Self { StateVariantScope(STATE_VARIANT.with(|v| v.replace(true))) } }
+impl Drop for StateVariantScope { fn drop(&mut self) { STATE_VARIANT.with(|v| v.set(self.0)); } }
+
 /// Whether view_memo keeps values on this thread now (in an open, without OK_NO_VIEW_MEMO).
 pub(crate) fn view_memo_active() -> bool { std::env::var_os("OK_NO_VIEW_MEMO").is_none() && IN_VIEW.with(|v| v.get()) }
 
