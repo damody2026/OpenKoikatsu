@@ -2232,7 +2232,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         }
         "cards" => {
             // cards <lib> <card list> <out dir>: `card` for every listed original card (convert in one pass, okstrict.rs).
-            // Worker processes (OK_CARDS_WORKERS, default half the hardware threads, at most 12) each set up the
+            // Worker processes (OK_CARDS_WORKERS, default half the hardware threads, at most 16) each set up the
             // library once and convert cards one after another; every card starts from released caches. A worker
             // takes its cards one at a time on stdin (card list "-").
             let lib = lib.ok_or("library directory required")?;
@@ -2246,7 +2246,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             if std::env::var_os("OK_CARDS_IN_PROCESS").is_none() {
                 let cards: Vec<String> = list.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned).collect();
                 let workers = std::env::var("OK_CARDS_WORKERS").ok().and_then(|v| v.parse().ok())
-                    .unwrap_or_else(|| (std::thread::available_parallelism().map_or(8, |n| n.get()) / 2).clamp(1, 12)).clamp(1, cards.len().max(1));
+                    .unwrap_or_else(|| (std::thread::available_parallelism().map_or(8, |n| n.get()) / 2).clamp(1, 16)).clamp(1, cards.len().max(1));
                 let exe = std::env::current_exe().map_err(|e| e.to_string())?;
                 // The workers share the machine: each one's pools get its part of the hardware threads.
                 let threads = (crate::cpu_threads() / workers).max(2);
