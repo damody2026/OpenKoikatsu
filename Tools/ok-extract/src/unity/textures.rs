@@ -115,14 +115,30 @@ pub(crate) fn texture_object_png(object: &UnityObject, files: &[(String, BundleF
     read_texture_payload(object, files, None).and_then(|t| png_from_payload(t, object.name())).map(|(_, png)| png)
 }
 
-pub(crate) fn png_from_payload(tex: unity_asset_decode::texture::Texture2D, object_name: Option<String>) -> Option<(String, Vec<u8>)> {let _spot=crate::profile::spot("png_from_payload");
+pub(crate) fn png_from_payload(mut tex: unity_asset_decode::texture::Texture2D, object_name: Option<String>) -> Option<(String, Vec<u8>)> {let _spot=crate::profile::spot("png_from_payload");
     if !crate::okstrict::assembling() {
         let name = if tex.name.is_empty() { object_name.unwrap_or_else(|| "tex".into()) } else { tex.name.clone() };
         return solid_png([1.0; 4], 1, 1).map(|png| (name, png));
     }
     use crate::memosnap::{TEX,active,get,put};
     // Recorded into / replayed from the card (OK_CARD_MEMO=tex): keyed by the texels, format and size.
-    if !active(TEX) { return png_from_payload_uncached(tex, object_name); }
+    if !active(TEX) {
+        // Block-compressed maps decode from the texels, format and size alone: the same texture of another card,
+        // outfit or open (the base body's and face's, a shared mod's) is decoded and encoded once (png_transform_cache).
+        use unity_asset_decode::texture::TextureFormat;
+        let banded = tex.width as u64 * tex.height as u64 >= 512 * 512;
+        if matches!(tex.format, TextureFormat::DXT1 | TextureFormat::BC7) || (banded && tex.format == TextureFormat::DXT5) {
+            let name = if tex.name.is_empty() { object_name.clone().unwrap_or_else(|| "tex".into()) } else { tex.name.clone() };
+            let parameters = format!("{:?}|{}|{}|{}", tex.format, tex.width, tex.height, crate::teximg::encoding_tag());
+            let data = std::mem::take(&mut tex.image_data);
+            let png = crate::png_transform_cache::transform("payload_png_v1", &data, parameters.as_bytes(), || {
+                tex.image_data = data.clone();
+                png_from_payload_uncached(tex, object_name).map(|(_, png)| png)
+            })?;
+            return Some((name, png));
+        }
+        return png_from_payload_uncached(tex, object_name);
+    }
     let key = {
         use sha2::Digest;
         let mut h = sha2::Sha256::new();
