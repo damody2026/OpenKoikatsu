@@ -249,8 +249,19 @@ fn entry_state_sig(base: &str, category: i32, states: [u8; 9]) -> String {
     match nodes {
         Some(nodes) => format!("nodes={}", nodes.iter().map(|(name, cc)| match crate::unity::clothes_state_node_visible(name, &states, *cc) {
             Some(true) => '1', Some(false) => '0', None => '-' }).collect::<String>()),
-        None => format!("{}|{states:?}", entry_prefab_variant_key(category, true, states)),
+        None => unlearned_state_sig(category, states),
     }
+}
+
+/// The states part of an entry's key before an extraction named the prefab's state nodes.
+fn unlearned_state_sig(category: i32, states: [u8; 9]) -> String { format!("{}|{states:?}", entry_prefab_variant_key(category, true, states)) }
+
+/// The entry's memo key now and as it was before its state nodes were learned: an entry prefetch keyed before a helper
+/// learned them is still this extraction's (the same states).
+pub(crate) fn entry_memo_keys(game_root: &Path, zip: Option<&Path>, entry: &ListEntry, shake_enabled: bool) -> (String, String) {
+    let base_sql_key = entry_sql_key(game_root, zip, entry);
+    let (base, states) = entry_state_base(game_root, zip, entry, shake_enabled, &base_sql_key);
+    (format!("{base}|{}", entry_state_sig(&base, entry.category_no, states)), format!("{base}|{}", unlearned_state_sig(entry.category_no, states)))
 }
 
 /// Records the state nodes an extraction of the entry looked at (see entry_memo_key_for).
@@ -320,8 +331,8 @@ pub(crate) fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, Li
                 for (key, slot, zip, entry, shake) in group {
                     PREFETCH_WORKER.with(|w| w.set(true));
                     // Only a result made under the same key may stand in for the asking thread's own extraction.
-                    let mine = entry_memo_key_for(&game_root, zip.as_deref(), &entry, shake).0;
-                    let same = mine == key;
+                    let (mine, unlearned) = entry_memo_keys(&game_root, zip.as_deref(), &entry, shake);
+                    let same = mine == key || unlearned == key;
                     if !same && profile_enabled() { eprintln!("ok-extract: PROFILE prefetch key differs\n  asked {key}\n  here  {mine}"); }
                     let t_item = std::time::Instant::now();
                     let result = same.then(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
@@ -384,7 +395,8 @@ pub(crate) fn meshes_for_entry_shake_memo(
         return hit;
     }
     if !PREFETCH_WORKER.with(|w| w.get()) {
-        let slot = ENTRY_PREFETCH.with(|cell| cell.borrow_mut().as_mut().and_then(|s| s.remove(&memo_key)));
+        let slot = ENTRY_PREFETCH.with(|cell| cell.borrow_mut().as_mut().and_then(|s| s.remove(&memo_key)
+            .or_else(|| s.remove(&entry_memo_keys(game_root, zip, entry, shake_enabled).1))));
         let _prefetch_spot = crate::profile::spot(if slot.is_some() { "prefetch hit (wait)" } else { "prefetch miss" });
         if slot.is_none() && profile_enabled() && !entry.main_data.is_empty() {
             let keys: Vec<String> = ENTRY_PREFETCH.with(|cell| cell.borrow().as_ref().map(|s| s.keys().cloned().collect()).unwrap_or_default());
