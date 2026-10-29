@@ -508,24 +508,37 @@ pub(crate) fn each_legacy_texture(bytes: &[u8], mut each: impl FnMut(String, &dy
 pub(crate) fn named_png_from_bytes_legacy_unity(bundle_bytes: Vec<u8>, names: &[&str]) -> Option<(String, Vec<u8>)> {
     let wants: Vec<String> = names.iter().map(|s| s.to_ascii_lowercase()).collect();
     let mut best: Option<(i32, String, Vec<u8>)> = None;
-    let mut consider = |name: String, payload: &dyn Fn() -> Option<unity_asset_decode::texture::Texture2D>| {
-        let score = wants.iter().map(|w| tex_name_rank(&name.to_ascii_lowercase(), w)).max().unwrap_or(0);
-        if score == 0 || !best.as_ref().map(|b| score > b.0).unwrap_or(true) { return; }
-        if let Some((n, png)) = payload().and_then(|p| png_from_payload(p, Some(name.clone()))) { best = Some((score, n, png)); }
-    };
+    let mut consider = |name: String, payload: &dyn Fn() -> Option<unity_asset_decode::texture::Texture2D>| consider_legacy(&mut best, &wants, name, payload);
     // Recording an OK base library keeps every payload (the memo); otherwise only candidates are decoded.
-    if crate::oklib::active().is_some() {
+    if let Some(mode) = crate::oklib::mode() {
         // Replaying: the stored list is read one texture at a time (a large pack's list was hundreds of MB once
         // decompressed, and as much again deserialized), with the same ranking in the same order.
         let streamed = crate::oklib::memo_bytes_visit(&bundle_bytes, "legacy_texture_payloads", &(),
             |raw| each_stored_texture_payload(raw, |name, payload| consider(name, &|| payload.clone())));
         if streamed.is_none() {
-            for (name, payload) in legacy_texture_payloads(&bundle_bytes) { consider(name, &|| payload.clone()); }
+            if mode == crate::oklib::Mode::Record {
+                for (name, payload) in legacy_texture_payloads(&bundle_bytes) { consider(name, &|| payload.clone()); }
+            } else {
+                // Without the list (an OK card's conversion, or a card converted since): only this lookup's answer
+                // is kept. The whole list went into the card's pack: a hair pack's 230 textures, 190 MB of a 520 MB
+                // pack and ~1.8 s, for a ColorMask that decoded to nothing.
+                return crate::oklib::memo_bytes(&bundle_bytes, "legacy_named_png", &wants, || {
+                    let mut best = None;
+                    each_legacy_texture(&bundle_bytes, |name, payload| consider_legacy(&mut best, &wants, name, payload));
+                    best.map(|(_, n, b)| (n, b))
+                });
+            }
         }
     } else {
         each_legacy_texture(&bundle_bytes, consider);
     }
     best.map(|(_, n, b)| (n, b))
+}
+/// The legacy lookup's ranking: a texture that ranks higher than the best so far and decodes takes its place.
+fn consider_legacy(best: &mut Option<(i32, String, Vec<u8>)>, wants: &[String], name: String, payload: &dyn Fn() -> Option<unity_asset_decode::texture::Texture2D>) {
+    let score = wants.iter().map(|w| tex_name_rank(&name.to_ascii_lowercase(), w)).max().unwrap_or(0);
+    if score == 0 || !best.as_ref().map(|b| score > b.0).unwrap_or(true) { return; }
+    if let Some((n, png)) = payload().and_then(|p| png_from_payload(p, Some(name.clone()))) { *best = Some((score, n, png)); }
 }
 #[allow(dead_code)]
 pub(crate) fn named_png_from_bytes_legacy_eager(bundle_bytes: Vec<u8>, names: &[&str]) -> Option<(String, Vec<u8>)> {

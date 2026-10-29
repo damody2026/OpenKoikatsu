@@ -25,9 +25,36 @@ extern "C" {
 pub(crate) static GPU_NANOS:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
 pub(crate) static GPU_CALLS:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
 
+/// GPU results kept by their inputs' content for the process. A card's opens read the same texture back again and
+/// again (every outfit and garment state extracts its meshes anew): 378 calls for two cards were 129 different
+/// inputs, and each call waits a round trip on the GPU (~10–50 ms, shared by every worker of a batch). A result
+/// depends on its inputs and the process's one device only; errors are not kept.
+fn gpu_memo(key:[u64;2],make:impl FnOnce()->Result<Vec<u8>,String>)->Result<Vec<u8>,String> {
+    const KEPT_BYTES:usize=512<<20;
+    static KEPT:std::sync::LazyLock<std::sync::Mutex<(std::collections::HashMap<[u64;2],Vec<u8>>,usize)>>=std::sync::LazyLock::new(Default::default);
+    if let Some(hit)=KEPT.lock().unwrap_or_else(|e|e.into_inner()).0.get(&key).cloned() {return Ok(hit);}
+    let made=make()?;
+    let mut kept=KEPT.lock().unwrap_or_else(|e|e.into_inner());
+    if kept.1+made.len()>KEPT_BYTES {kept.0.clear();kept.1=0;}
+    kept.1+=made.len();kept.0.insert(key,made.clone());
+    Ok(made)
+}
+fn gpu_key(kind:&str,inputs:&[&[u8]])->[u64;2] {
+    use std::io::Write;
+    let mut h=crate::push::StreamHash::default();
+    let _=h.write_all(kind.as_bytes());
+    for part in inputs {let _=h.write_all(&(part.len() as u64).to_le_bytes());let _=h.write_all(part);}
+    h.finish()
+}
+fn texture_key(t:&Texture)->Vec<u8> {bincode::serialize(&(t.width,t.height,t.format,t.mips,&t.sampling,t.aniso,t.bias.to_bits())).unwrap_or_default()}
+
 /// Decode compressed authored texels with their actual GPU sRGB view. This
 /// avoids CPU BC interpolation errors being amplified by a second transfer.
 pub(crate) fn texture_readback(texture:Texture)->Result<Vec<u8>,String> {
+    let described=texture_key(&texture);
+    gpu_memo(gpu_key("readback",&[&described,&texture.data]),||texture_readback_now(texture))
+}
+fn texture_readback_now(texture:Texture)->Result<Vec<u8>,String> {
     #[cfg(not(windows))] {let _=texture;return Err("D3D11 unavailable".into());}
     #[cfg(windows)] {
         let mut textures=std::array::from_fn::<_,5,_>(|_|Texture::white());
@@ -89,6 +116,13 @@ fn quality_unity(bytes:Vec<u8>)->Option<u32> {
 }
 
 pub(crate) fn bake(shader:&[u8],textures:&[Texture;5],constants:&[[f32;4];16],quality:u32)->Result<Vec<u8>,String> {
+    let described:Vec<Vec<u8>>=textures.iter().map(texture_key).collect();
+    let numbers=bincode::serialize(&(constants.map(|c|c.map(f32::to_bits)),quality)).unwrap_or_default();
+    let mut inputs:Vec<&[u8]>=vec![shader,&numbers];
+    for (d,t) in described.iter().zip(textures) {inputs.push(d);inputs.push(&t.data);}
+    gpu_memo(gpu_key("bake",&inputs),||bake_now(shader,textures,constants,quality))
+}
+fn bake_now(shader:&[u8],textures:&[Texture;5],constants:&[[f32;4];16],quality:u32)->Result<Vec<u8>,String> {
     #[cfg(not(windows))] {let _=(shader,textures,constants,quality);return Err("native clothes GPU unavailable on this platform".into());}
     #[cfg(windows)] {
         let width=textures[4].width;let height=textures[4].height;
