@@ -214,6 +214,9 @@ void AOKStreetSocialScene::StepApproach(){
   SendFreeTalk();
   return;
  }
+ // Beside him while he is on the phone or in the one-on-one scene: she stands and waits there (above), not on into him.
+ // Walking on, she stood inside him, was stepped out and walked back in, 111 times in a minute while he texted her.
+ if(FVector::Dist2D(A.Position,S.Male)<170&&(S.RemoteMode!=0||S.PrivateGirl!=INDEX_NONE)){S.ApproachStarted=FPlatformTime::Seconds();return;}
  if(SceneTime()-S.ApproachRouteAt>.75){
   auto Fresh=ContactRoute(A.Position,S.Male);
   if(Fresh.IsEmpty())Fresh={A.Position,S.Male}; // no planned route (indoors, other floor): straight to him, the body sweep below stops her at walls

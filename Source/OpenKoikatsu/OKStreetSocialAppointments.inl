@@ -294,6 +294,9 @@ void AOKStreetSocialScene::TickAppointments(){
     S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachJoin=Join;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
     UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
    }else if(WithHim){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
+   // She is the one walking over already (to sing for him, and on the way he texted her to meet): that walk is the
+   // meeting. She waited for herself ("another girl is walking over (approach=9)").
+   else if(S.ApproachGirl==Girl){S.ApproachAppointment=true;UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is walking over to him already"),Girl);}
    else{
     // Another one walking over first (the three of them meeting for dinner): she comes after her, not never. Only the
     // first came; the other two stood at home all evening, their meetings already counted as kept.
