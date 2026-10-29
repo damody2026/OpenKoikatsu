@@ -2,6 +2,8 @@
 
 `CrowdRoom100.cmd` → `Tools/run_crowd_room100.lua`：用最新的 StreetSocial stage 開 StreetSocial 地圖並加上 `-CrowdRoom=<manifest>`，街頭的其他東西都不啟動。角色和街頭女主是同一套 runtime（`OKStartCrowdRuntimeScene`，外部控制）：同樣的共用材質、GPU 姿勢、陰影與畫面設定（TAA、CSM、關遮擋查詢、關 CAS）。舊的 CrowdRoom 收據管線在 10-20 重開倉庫之後已經不存在（`Docs/CROWD_ROOM.md` 是當時的紀錄）。
 
+**姿勢預設用 GPU rig（2026-10-28 起）**：不加參數就是 GPU 即時骨架＋GPU 物理（見「GPU 即時骨架」與「GPU 物理」兩節）。`--bank` 切回舊的每人解算 bank。執行檔的 shader 快取裡沒有 rig 的 shader 時（例如 patch 沒帶），場景會記一筆警告並自動改用 bank（`OKCrowdRuntimeScene.cpp`）。`--gpu-rig` 仍可加，等於預設。實測（2026-10-29 17:13，雙 slot＋E 鎖，打包版 Gal1029H＋patch StreetDisplay30Phys，100 人，1920×1080，`--benchmark 20`）：預設（GPU rig＋GPU 物理）173.6 FPS、P95 6.19 ms、GPU 4.58 ms、全員畫出 109 秒（`Saved/Crowd/Room100-20261029T171842`）；`--bank` 115.7 FPS、P95 9.30 ms、GPU 6.21 ms、全員畫出 159 秒（`Room100-20261029T172114`）。截圖確認 100 人都有畫出、穿著正常。
+
 ## 行為（`Source/OpenKoikatsu/OKCrowdRoom.cpp`）
 
 - 房間：高空 48 m，地板與四面矮牆用引擎 Cube。
@@ -51,7 +53,7 @@
 ## Demo 錄影（`--follow`／`--record`，2026-10-28）
 
 ```powershell
-.\CrowdRoom100.cmd --follow C000 --record 20            # 打包版（最新 stage），bank 方法
+.\CrowdRoom100.cmd --follow C000 --record 20            # 打包版（最新 stage），GPU rig（預設；--bank 改用 bank）
 .\CrowdRoom100.cmd --editor --follow C000 --record 20   # 改了 C++ 還沒打包時
 .\Tools\lua\lua.exe Tools\run_crowd_room100.lua --check-video <mp4> --record 20   # 只檢查一段現成的影片
 ```
@@ -98,7 +100,7 @@
 
 每個角色的動作庫是「每個 clip 用她自己的身形解算好的骨骼矩陣」（60 Hz）。照搬街頭的長 clip，每人 60～116 MB，100 人超過 4 GiB 預算；只放短 clip 後全體約 1.03 GB。動作越多，記憶體跟著「人數 × 動作數」成長，所以下一步改成 GPU 即時骨架（共用動畫曲線＋每人的形狀骨修正，每幀在 GPU 組合），見之後的文件。
 
-## GPU 即時骨架（`--gpu-rig`，開發中）
+## GPU 即時骨架（10-28 起是預設；`--bank` 切回舊路徑）
 
 每個女角的骨架改成每幀在 GPU 上用參數解算，不再每人每個 clip 烘一份矩陣。所有角色共用同一份動畫 clip（`OKGC`）。每個角色只留下自己的身形骨（基準 local、前臂／手修正、PV／ExpressionBone、ABMX），以及每個 render 骨的「權重 × 某根 body 骨的世界矩陣 × 常數」（`OKGR`，`Tools/ok-extract/src/gpu_rig/export.rs`）。
 

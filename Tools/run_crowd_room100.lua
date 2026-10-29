@@ -3,7 +3,7 @@
 -- Runs the newest StreetSocial stage with -CrowdRoom=<manifest>; nothing else of the street starts.
 --   Tools\lua\lua.exe Tools\run_crowd_room100.lua [--count N] [--cards <dir>] [--benchmark <seconds>] [--warmup <seconds>]
 --       [--max-fps N] [--window WxH] [--executable <exe>] [--variants N] [--exec "CMD,CMD"] [--cases <json>] [--trace] [--aggregate]
---       [--gpu-rig] [--gpu-rig-verify N] [--editor] [--follow <card name part>] [--record <seconds>]
+--       [--bank] [--gpu-rig-verify N] [--editor] [--follow <card name part>] [--record <seconds>]
 -- --follow: a demo: that girl (the first card whose file name contains it) walks the whole time and the camera follows
 -- her from behind, without the on-screen numbers. --record: a video of that many seconds (demo.mp4 beside the report)
 -- once everyone is drawn and warmed up; then the game quits. ffmpeg from Tools\ffmpeg grabs this game's own window by
@@ -12,10 +12,13 @@
 -- frames under demo-frames/), else an error. --check-video <mp4> [--record <seconds>]: only that check, on any video.
 -- --aggregate: once everyone is loaded, compose every girl's pose bank into one GPU bank (one skinning provider instead
 -- of a hundred; needs twice the banks' memory while composing).
--- --gpu-rig: pose every girl on the GPU from the shared clips and her body parameters (Shaders/GpuRig.usf) instead of
--- per-girl solved banks (implies --aggregate; physics is not simulated). --gpu-rig-verify N: keep the full banks too and
--- compare N frames of the rig's rows with them (runtime.json "gpu_rig"). --editor: run uncooked in the E engine's
--- UnrealEditor -game (new shaders without a cook); otherwise the newest stage.
+-- GPU rig (the default since 10-28): every girl is posed on the GPU from the shared clips and her body parameters,
+-- her dynamic bones simulated there too (Shaders/GpuRig.usf; one aggregate provider). When the build's shader cache
+-- lacks the rig's shaders the room logs a warning and draws the solved banks instead (OKCrowdRuntimeScene.cpp).
+-- --bank: the older path, per-girl solved pose banks (no aggregate unless --aggregate). --gpu-rig: accepted, the
+-- default. --gpu-rig-verify N: keep the full banks too and compare N frames of the rig's rows with them (runtime.json
+-- "gpu_rig"). --editor: run uncooked in the E engine's UnrealEditor -game (new shaders without a cook); otherwise the
+-- newest stage.
 -- --cases: a JSON array [{"name": "...", "exec": ["console command", ...]}, ...]: each case is applied in the same running
 -- game and measured for --benchmark seconds in turn (an A/B without loading the girls again). --trace: an Unreal
 -- Insights trace (cpu, frame, named events) of the first measurement, trace.utrace beside the report.
@@ -91,7 +94,7 @@ local function check_video(root, video, seconds, dir)
 end
 
 local function parse(argv)
-  local o = { count = 100, benchmark = 0, warmup = 10, max_fps = 0, window = "1920x1080", variants = 3 }
+  local o = { count = 100, benchmark = 0, warmup = 10, max_fps = 0, window = "1920x1080", variants = 3, gpu_rig = true, aggregate = true }
   local i = 1
   while i <= #argv do
     local a = argv[i]:lower():gsub("^%-%-?", "")
@@ -109,7 +112,8 @@ local function parse(argv)
     elseif a == "exec" then o.exec = v; i = i + 1
     elseif a == "cases" then o.cases = v; i = i + 1
     elseif a == "trace" then o.trace = true
-    elseif a == "aggregate" then o.aggregate = true
+    elseif a == "aggregate" then o.aggregate = true; o.keep_aggregate = true
+    elseif a == "bank" then o.bank = true
     elseif a == "gpu-rig" then o.gpu_rig = true; o.aggregate = true
     elseif a == "gpu-rig-verify" then o.gpu_rig_verify = tonumber(v); o.gpu_rig = true; o.aggregate = true; i = i + 1
     elseif a == "editor" then o.editor = true
@@ -118,6 +122,10 @@ local function parse(argv)
     elseif a == "check-video" then o.check_video = v; i = i + 1
     else error("Unknown option " .. argv[i], 0) end
     i = i + 1
+  end
+  if o.bank then
+    if o.gpu_rig_verify then error("--bank and --gpu-rig-verify do not go together", 0) end
+    o.gpu_rig = false; o.aggregate = o.keep_aggregate == true
   end
   if not o.count or o.count < 1 or o.count > 100 then error("--count takes 1..100", 0) end
   return o
