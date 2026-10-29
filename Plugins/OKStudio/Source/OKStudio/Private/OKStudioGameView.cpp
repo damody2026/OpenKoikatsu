@@ -1,4 +1,4 @@
-// OK Studio in-game: picking in the view, framing the selection, view presets and bookmarks, camera objects from the
+﻿// OK Studio in-game: picking in the view, framing the selection, view presets and bookmarks, camera objects from the
 // view, auto backups and the open report.
 #include "OKStudioGame.h"
 #include "OKStudioGameInternal.h"
@@ -57,6 +57,12 @@ bool UOKStudioGame::WorldBounds(int32 Id, FBox& Out) const
 	{
 		TArray<TPair<FVector, FVector>> Segments;
 		if (SkeletonSegments(SceneActor->PreviewOf(Id), Segments)) for (const TPair<FVector, FVector>& S : Segments) { Out += S.Key; Out += S.Value; }
+	}
+	else if (const AKKPreviewActor* Preview = SceneActor->PreviewOf(Id))
+	{
+		// Items are shown by a preview actor of their own (like characters): its drawn meshes.
+		TInlineComponentArray<UPrimitiveComponent*> Parts(Preview);
+		for (const UPrimitiveComponent* P : Parts) if (P->IsVisible() && P->IsRegistered()) Out += P->Bounds.GetBox();
 	}
 	else if (USceneComponent* C = SceneActor->ComponentOf(Id))
 	{

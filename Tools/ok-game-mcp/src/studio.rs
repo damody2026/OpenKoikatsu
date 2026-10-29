@@ -172,6 +172,42 @@ pub fn tools() -> Vec<Value> {
           json!({"id": {"type": "string"}, "arg": {"description": "the command's argument, any JSON"}}), &["id"]),
         t("studio_timeline", "The timeline: seek (time s), play/stop, add keys for objects. Returns {time, duration, playing}.",
           json!({"time": {"type": "number"}, "play": {"type": "boolean"}, "key": {"type": "object", "properties": {"ids": ids("object ids")}, "required": ["ids"]}}), &[]),
+        t("studio_patch", "Change any setting of one object by deep-merging `fields` into its JSON (the same JSON studio_inspect returns under `object`: objects merge key by key, arrays and plain values replace). For everything studio_transform / studio_pose do not cover (colours, light intensity, item patterns, character clothes state, visibility...); studio_inspect first to see the keys. id, kind and parent cannot change (use studio_reparent). Undoable, in the same undo history as the person's edits in the SceneEditor. Returns {object} after the change.",
+          json!({"id": id("object id"), "fields": {"type": "object", "description": "partial object JSON to merge, e.g. {\"visible\": false}"}}), &["id", "fields"]),
+        t("studio_scene", "The scene's look and global settings, for the first version's mood: post (bloom, depth of field, fog, sky, filter, background..., deep-merged like studio_patch; the keys are what this tool returns under post), the map (-1 none) and its transform, the timeline duration and the active camera (-1 free view). With no arguments it only reads. Returns {post, map, map_transform, duration, active_camera, bookmarks}.",
+          json!({"post": {"type": "object", "description": "partial post settings to merge (keys as returned under post)"},
+                 "map": {"type": "integer", "description": "map number (studio_catalog kind map), -1 none"},
+                 "map_transform": {"type": "object", "properties": {"location": loc(), "rotation": rot(), "scale": scl()}},
+                 "duration": {"type": "number", "description": "timeline length in seconds"},
+                 "active_camera": id("camera object id to render through, -1 the free view")}), &[]),
+        t("studio_bones", "A character's posing handles, read before studio_pose: FK bones [{bone, name, part, euler, set, world}] (euler: current rotation in degrees, set: holds an FK value, world: position cm), IK effectors [{effector, name, enabled, position, world}], look_point, and accessory_points [{key, name, group, world}] (bones to attach items to with studio_spawn / studio_reparent bone).",
+          json!({"id": id("character id")}), &["id"]),
+        t("studio_bounds", "World-space bounding boxes in cm, to place objects on the floor, on top of or next to each other (e.g. move an item so its min z meets a table's max z). No ids: every object. Returns {objects [{id, min, max, center, size}]}.",
+          json!({"ids": ids("object ids (default: all)")}), &[]),
+        t("studio_catalog", "Browse a catalogue by group and category (studio_catalog_search stays the text search). kind alone lists its groups; with group, its categories; with group + category, the entries (keys for studio_spawn item/effect, studio_scene map, post filter / sky, studio_pose anim, accessory point bones). anim_kind: which animation table for kind anim. Returns {groups?, categories?, entries [...]}.",
+          json!({"kind": {"type": "string", "enum": ["item", "map", "effect", "anim", "filter", "sky", "accessory_point"]},
+                 "group": {"type": "integer"}, "category": {"type": "integer"}, "anim_kind": {"type": "integer", "description": "kind anim: the animation table"}}), &["kind"]),
+        t("studio_keys", "The timeline keys of one object (id -2: the scene's own track): list, set a key at time (the object's current state), remove the key at time, move it to `to`, set its ease, clear all, or smooth (smooth=true: curves through the keys). Returns {keys [{time, ease, ...}], duration}.",
+          json!({"id": id("object id, -2 for the scene track"),
+                 "action": {"type": "string", "enum": ["list", "set", "remove", "move", "ease", "clear", "smooth"]},
+                 "time": {"type": "number", "description": "seconds: the key to set / remove / move / ease"},
+                 "to": {"type": "number", "description": "move: the new time in seconds"},
+                 "ease": {"type": "string", "enum": ["linear", "ease_in_out", "ease_in", "ease_out", "step"]},
+                 "smooth": {"type": "boolean"}}), &["id", "action"]),
+        t("studio_duplicate", "Copy objects (undoable), e.g. a row of chairs or a second character with the same card. Returns {ids} of the new copies.",
+          json!({"ids": ids("object ids")}), &["ids"]),
+        t("studio_export", "Export the timeline: png (an image sequence into a folder), mp4 (a movie), okanim (one character's animation; id). Runs in the background: progress in studio_state `export` {running, frame, frames, last_movie, error}; edits answer busy meanwhile. Returns {folder} or {file}.",
+          json!({"kind": {"type": "string", "enum": ["png", "mp4", "okanim"]},
+                 "fps": {"type": "number"}, "width": {"type": "integer"}, "height": {"type": "integer"},
+                 "from": {"type": "number", "description": "start time s"}, "to": {"type": "number", "description": "end time s"},
+                 "folder": {"type": "string", "description": "output folder"},
+                 "id": id("okanim: the character")}), &["kind"]),
+        t("studio_scenes", "List scene files to open with studio_load (default: the studio's scene folder). Returns {folder, files [{path, name, kind, modified}]}.",
+          json!({"folder": {"type": "string"}}), &[]),
+        t("studio_report", "What the last open could not show and which resources the scene lacks (cards, mods, items). Returns {load [lines], missing [lines]}.",
+          json!({}), &[]),
+        t("studio_ui_shot", "Screenshot the whole studio window WITH its UI panels (studio_capture renders only the view), to see what the person sees in the SceneEditor. Written a frame or two later; waits up to 15 s for the file and shows it. Returns {file}.",
+          json!({"name": {"type": "string", "description": "file name (never overwrites)"}}), &[]),
     ]
 }
 
@@ -228,9 +264,11 @@ pub fn run(studio: &Studio, name: &str, a: &Value) -> Result<Value> {
             json!({"content": [{"type": "text", "text": serde_json::to_string_pretty(&r).unwrap_or_default()}], "isError": false})
         }
         "studio_stop" => reply("cmd", studio.call("cmd", &json!({"id": "app.quit"}))?),
-        "studio_capture" => {
-            let r = studio.call("capture", &body)?;
-            let mut out = reply("capture", r.clone());
+        // Both answer {file}; ui_shot writes it a frame or two later, image_part waits up to 15 s for it.
+        "studio_capture" | "studio_ui_shot" => {
+            let op = &name["studio_".len()..];
+            let r = studio.call(op, &body)?;
+            let mut out = reply(op, r.clone());
             if r["ok"] == true {
                 if let Some(file) = r["file"].as_str() {
                     match crate::image_part(file) {

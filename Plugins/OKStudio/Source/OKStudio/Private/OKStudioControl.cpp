@@ -6,6 +6,8 @@
 #include "HttpServerModule.h"
 #include "HttpServerResponse.h"
 #include "IHttpRouter.h"
+#include "OKStudioSky.h"
+#include "UnrealClient.h"
 
 namespace
 {
@@ -109,7 +111,429 @@ namespace
 		T->SetNumberField(TEXT("duration"), G.Document->Duration);
 		T->SetBoolField(TEXT("playing"), G.bTimelinePlaying);
 		O->SetObjectField(TEXT("timeline"), T);
+		TSharedRef<FJsonObject> E = MakeShared<FJsonObject>();
+		E->SetBoolField(TEXT("running"), G.IsExporting());
+		E->SetNumberField(TEXT("frame"), G.ExportFrameIndex());
+		E->SetNumberField(TEXT("frames"), G.ExportFrameCount());
+		E->SetStringField(TEXT("folder"), G.ExportFolder());
+		E->SetStringField(TEXT("last_movie"), G.LastMovie);
+		E->SetStringField(TEXT("error"), G.LastMovieError);
+		O->SetObjectField(TEXT("export"), E);
 		return O;
+	}
+
+	/** Merges a JSON object into another: objects merge field by field, everything else (arrays too) replaces. */
+	void DeepMerge(const TSharedPtr<FJsonObject>& Into, const TSharedPtr<FJsonObject>& From)
+	{
+		for (const auto& P : From->Values)
+		{
+			const FString Key(*P.Key);
+			const TSharedPtr<FJsonObject>* Have = nullptr;
+			if (P.Value.IsValid() && P.Value->Type == EJson::Object && Into->TryGetObjectField(Key, Have)) DeepMerge(*Have, P.Value->AsObject());
+			else Into->SetField(Key, P.Value);
+		}
+	}
+
+	TSharedRef<FJsonObject> TransformJson(const FTransform& T)
+	{
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetArrayField(TEXT("location"), Vec(T.GetLocation()));
+		const FRotator R = T.Rotator();
+		O->SetArrayField(TEXT("rotation"), Vec(FVector(R.Pitch, R.Yaw, R.Roll)));
+		O->SetArrayField(TEXT("scale"), Vec(T.GetScale3D()));
+		return O;
+	}
+
+	TSharedRef<FJsonObject> SceneJson(UOKStudioGame& G)
+	{
+		UOKSceneDocument* D = G.Document;
+		TSharedRef<FJsonObject> O = Result(true);
+		if (TSharedPtr<FJsonObject> Post = FJsonObjectConverter::UStructToJsonObject(D->Post)) O->SetObjectField(TEXT("post"), Post);
+		O->SetNumberField(TEXT("map"), D->Map);
+		O->SetObjectField(TEXT("map_transform"), TransformJson(D->MapTransform));
+		O->SetNumberField(TEXT("duration"), D->Duration);
+		O->SetNumberField(TEXT("active_camera"), D->ActiveCamera);
+		TArray<TSharedPtr<FJsonValue>> Marks;
+		for (int32 I = 0; I < D->Bookmarks.Num(); ++I)
+			if (D->Bookmarks[I].bSet)
+			{
+				TSharedRef<FJsonObject> B = MakeShared<FJsonObject>();
+				B->SetNumberField(TEXT("slot"), I);
+				B->SetArrayField(TEXT("focus"), Vec(D->Bookmarks[I].Focus));
+				B->SetNumberField(TEXT("yaw"), D->Bookmarks[I].Yaw);
+				B->SetNumberField(TEXT("pitch"), D->Bookmarks[I].Pitch);
+				B->SetNumberField(TEXT("distance"), D->Bookmarks[I].Distance);
+				B->SetNumberField(TEXT("camera"), D->Bookmarks[I].Camera);
+				Marks.Add(MakeShared<FJsonValueObject>(B));
+			}
+		O->SetArrayField(TEXT("bookmarks"), Marks);
+		return O;
+	}
+
+	TSharedRef<FJsonObject> KeyJson(const FOKSceneKey& K)
+	{
+		static const TCHAR* Eases[] = { TEXT("linear"), TEXT("ease_in_out"), TEXT("ease_in"), TEXT("ease_out"), TEXT("step") };
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("time"), K.Time);
+		O->SetStringField(TEXT("ease"), Eases[FMath::Clamp(int32(K.Ease), 0, 4)]);
+		O->SetObjectField(TEXT("transform"), TransformJson(K.Transform));
+		O->SetNumberField(TEXT("value"), K.Value);
+		O->SetNumberField(TEXT("fk_bones"), K.Fk.Num());
+		O->SetBoolField(TEXT("character_state"), K.bCharacterState);
+		if (K.AnimTime >= 0.f) O->SetNumberField(TEXT("anim_time"), K.AnimTime);
+		if (K.Color.A >= 0.f) O->SetStringField(TEXT("color"), TEXT("#") + K.Color.ToFColor(false).ToHex());
+		O->SetNumberField(TEXT("exposure"), K.Exposure);
+		O->SetNumberField(TEXT("focal_distance"), K.FocalDistance);
+		return O;
+	}
+
+	/** The ops an AI uses to build a scene in detail (patch, scene look, bones, bounds, catalogue, keys, ...). */
+	TSharedPtr<FJsonObject> RunMore(UOKStudioGame& G, SOKStudioPanel& P, const FString& Op, const TSharedRef<FJsonObject>& J)
+	{
+		UOKSceneDocument* Doc = G.Document;
+		if (Op == TEXT("patch"))
+		{
+			FOKSceneObject* X = Doc->Find(ReadId(J, TEXT("id")));
+			const TSharedPtr<FJsonObject>* Fields = nullptr;
+			if (!X) return Result(false, TEXT("no such object"));
+			if (!J->TryGetObjectField(TEXT("fields"), Fields)) return Result(false, TEXT("fields (object) required"));
+			TSharedPtr<FJsonObject> Now = FJsonObjectConverter::UStructToJsonObject(*X);
+			TSharedPtr<FJsonObject> Change = MakeShared<FJsonObject>(**Fields);
+			for (const TCHAR* Fixed : { TEXT("id"), TEXT("kind"), TEXT("parent") }) Change->RemoveField(Fixed);
+			DeepMerge(Now, Change);
+			FOKSceneObject Patched;
+			if (!FJsonObjectConverter::JsonObjectToUStruct(Now.ToSharedRef(), &Patched)) return Result(false, TEXT("fields do not fit the object (see studio_inspect)"));
+			Patched.Id = X->Id; Patched.Kind = X->Kind; Patched.Parent = X->Parent;
+			*X = Patched;
+			Doc->NotifyChanged();
+			TSharedRef<FJsonObject> O = Result(true);
+			if (TSharedPtr<FJsonObject> Obj = FJsonObjectConverter::UStructToJsonObject(*X)) O->SetObjectField(TEXT("object"), Obj);
+			return O;
+		}
+		if (Op == TEXT("scene"))
+		{
+			const TSharedPtr<FJsonObject>* Post = nullptr;
+			if (J->TryGetObjectField(TEXT("post"), Post))
+			{
+				TSharedPtr<FJsonObject> Now = FJsonObjectConverter::UStructToJsonObject(Doc->Post);
+				DeepMerge(Now, *Post);
+				FOKScenePost Patched;
+				if (!FJsonObjectConverter::JsonObjectToUStruct(Now.ToSharedRef(), &Patched)) return Result(false, TEXT("post fields do not fit (see studio_scene)"));
+				Doc->Post = Patched;
+			}
+			double D;
+			if (J->TryGetNumberField(TEXT("map"), D)) Doc->Map = int32(D);
+			const TSharedPtr<FJsonObject>* MapT = nullptr;
+			if (J->TryGetObjectField(TEXT("map_transform"), MapT))
+			{
+				FVector V = FVector::ZeroVector;
+				const TSharedRef<FJsonObject> M = MapT->ToSharedRef();
+				if (ReadVec(M, TEXT("location"), V)) Doc->MapTransform.SetLocation(V);
+				if (ReadVec(M, TEXT("rotation"), V)) Doc->MapTransform.SetRotation(FRotator(V.X, V.Y, V.Z).Quaternion());
+				if (ReadVec(M, TEXT("scale"), V)) Doc->MapTransform.SetScale3D(V);
+			}
+			if (J->TryGetNumberField(TEXT("duration"), D)) Doc->Duration = FMath::Max(float(D), 0.1f);
+			const int32 Camera = ReadId(J, TEXT("active_camera"), -2);
+			if (Camera != -2) Doc->ActiveCamera = Doc->Find(Camera) ? Camera : -1;
+			if (J->Values.Num()) Doc->NotifyChanged();
+			return SceneJson(G);
+		}
+		if (Op == TEXT("bones"))
+		{
+			const FOKSceneObject* X = Doc->Find(ReadId(J, TEXT("id")));
+			AKKPreviewActor* A = X && G.SceneActor ? G.SceneActor->PreviewOf(X->Id) : nullptr;
+			if (!X || X->Kind != EOKSceneObjectKind::Character) return Result(false, TEXT("not a character"));
+			if (!A) return Result(false, TEXT("the character is not shown (studio_report says why)"));
+			static const TCHAR* Parts[] = { TEXT("body"), TEXT("chest"), TEXT("hair"), TEXT("neck"), TEXT("left_hand"), TEXT("right_hand"), TEXT("skirt") };
+			TArray<TSharedPtr<FJsonValue>> Fk, Ik, Points;
+			for (const FOKStudioFkBone& B : FOKStudioCatalog::Get().FkBones)
+			{
+				const FOKSceneFkBone* Set = X->Character.Fk.FindByPredicate([&B](const FOKSceneFkBone& F) { return F.Bone == B.Bone; });
+				FVector Euler = FVector::ZeroVector;
+				if (Set) Euler = Set->Euler; else A->Session.BoneEuler(B.Bone, Euler);
+				TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetStringField(TEXT("bone"), B.Bone);
+				O->SetStringField(TEXT("name"), B.Name);
+				O->SetStringField(TEXT("part"), Parts[FMath::Clamp(SOKStudioPanel::FkPartOf(B.Bone), 0, 6)]);
+				O->SetArrayField(TEXT("euler"), Vec(Euler));
+				O->SetBoolField(TEXT("set"), Set != nullptr);
+				FTransform W;
+				if (OKStudioGameInternal::BoneWorld(A, B.Bone, W)) O->SetArrayField(TEXT("world"), Vec(W.GetLocation()));
+				Fk.Add(MakeShared<FJsonValueObject>(O));
+			}
+			static const TCHAR* Effectors[13] = { TEXT("body"), TEXT("left_shoulder"), TEXT("right_shoulder"), TEXT("left_thigh"), TEXT("right_thigh"), TEXT("left_hand"), TEXT("right_hand"),
+				TEXT("left_foot"), TEXT("right_foot"), TEXT("left_elbow"), TEXT("right_elbow"), TEXT("left_knee"), TEXT("right_knee") };
+			FString Error;
+			const bool bIk = A->bStudioIkReady || A->Session.PrepareStudioIk(Error);
+			if (bIk) A->bStudioIkReady = true;
+			for (int32 E = 0; E < 13; ++E)
+			{
+				const FOKSceneIkTarget* T = X->Character.Ik.FindByPredicate([E](const FOKSceneIkTarget& I) { return I.Effector == E; });
+				FVector Local = FVector::ZeroVector, Unity;
+				if (T) Local = T->Position; else if (bIk && A->Session.IkEffectorPosition(E, Unity)) Local = AKKPreviewActor::UnityToActorLocal(Unity);
+				TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("effector"), E);
+				O->SetStringField(TEXT("name"), Effectors[E]);
+				O->SetBoolField(TEXT("enabled"), T != nullptr);
+				O->SetArrayField(TEXT("position"), Vec(Local));
+				O->SetArrayField(TEXT("world"), Vec(A->GetActorTransform().TransformPosition(Local)));
+				Ik.Add(MakeShared<FJsonValueObject>(O));
+			}
+			for (const FOKStudioAccessoryPoint& Pt : FOKStudioCatalog::Get().AccessoryPoints)
+			{
+				TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetStringField(TEXT("key"), Pt.Key);
+				O->SetStringField(TEXT("name"), Pt.Name);
+				O->SetNumberField(TEXT("group"), Pt.Group);
+				FTransform W;
+				if (OKStudioGameInternal::BoneWorld(A, Pt.Bone, W)) O->SetArrayField(TEXT("world"), Vec(W.GetLocation()));
+				Points.Add(MakeShared<FJsonValueObject>(O));
+			}
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetArrayField(TEXT("fk"), Fk);
+			O->SetArrayField(TEXT("ik"), Ik);
+			O->SetArrayField(TEXT("look_point"), Vec(X->Character.LookPoint));
+			O->SetArrayField(TEXT("accessory_points"), Points);
+			O->SetStringField(TEXT("note"), TEXT("euler: Unity local degrees (as KK Studio FK); ik position: cm in the character's space (+Y ahead, +Z up); world: cm. A character with rotation [0,0,0] faces +Y (the front view looks at its face); yaw -90 faces +X, yaw 90 faces -X, yaw 180 faces away."));
+			return O;
+		}
+		if (Op == TEXT("bounds"))
+		{
+			TArray<int32> Ids = ReadIds(J, TEXT("ids"));
+			if (Ids.IsEmpty()) for (const FOKSceneObject& X : Doc->Objects) Ids.Add(X.Id);
+			TArray<TSharedPtr<FJsonValue>> Out;
+			for (int32 Id : Ids)
+			{
+				FBox B;
+				if (!G.WorldBounds(Id, B)) continue;
+				TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("id"), Id);
+				O->SetArrayField(TEXT("min"), Vec(B.Min));
+				O->SetArrayField(TEXT("max"), Vec(B.Max));
+				O->SetArrayField(TEXT("center"), Vec(B.GetCenter()));
+				O->SetArrayField(TEXT("size"), Vec(B.GetSize()));
+				// Not built yet (still loading) or not shown: the box is only a stand-in around its place.
+				const FOKSceneObject* X = Doc->Find(Id);
+				const bool bShown = X && G.SceneActor && !G.SceneActor->Errors.Contains(Id)
+					&& (X->Kind == EOKSceneObjectKind::Character ? G.SceneActor->PreviewOf(Id) != nullptr : X->Kind != EOKSceneObjectKind::Item || G.SceneActor->PreviewOf(Id) != nullptr);
+				O->SetBoolField(TEXT("built"), bShown && !G.SceneActor->HasPendingBuilds());
+				Out.Add(MakeShared<FJsonValueObject>(O));
+			}
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetArrayField(TEXT("objects"), Out);
+			return O;
+		}
+		if (Op == TEXT("catalog"))
+		{
+			const FOKStudioCatalog& C = FOKStudioCatalog::Get();
+			FString Kind;
+			J->TryGetStringField(TEXT("kind"), Kind);
+			const int32 Group = ReadId(J, TEXT("group"), INDEX_NONE), Category = ReadId(J, TEXT("category"), INDEX_NONE), AnimKind = ReadId(J, TEXT("anim_kind"), 0);
+			TArray<TSharedPtr<FJsonValue>> Groups, Categories, Entries;
+			auto Named = [](int32 Id, const FString& Name) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetNumberField(TEXT("id"), Id); O->SetStringField(TEXT("name"), Name); return MakeShared<FJsonValueObject>(O); };
+			if (Kind == TEXT("item"))
+			{
+				for (const FOKStudioCatalogGroup& Gr : C.Groups) Groups.Add(Named(Gr.Id, Gr.Name));
+				if (Group != INDEX_NONE) for (const FOKStudioCatalogGroup* Ca : C.CategoriesOf(Group)) Categories.Add(Named(Ca->Id, Ca->Name));
+				if (Group != INDEX_NONE && Category != INDEX_NONE)
+					for (const FOKStudioCatalogItem* I : C.ItemsIn(Group, Category))
+					{
+						TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+						O->SetStringField(TEXT("item"), FString::Printf(TEXT("%d/%d/%d"), I->Group, I->Category, I->No));
+						O->SetStringField(TEXT("name"), I->Name);
+						O->SetBoolField(TEXT("colors"), I->Colors[0] || I->Colors[1] || I->Colors[2]);
+						O->SetBoolField(TEXT("patterns"), I->Patterns[0] || I->Patterns[1] || I->Patterns[2]);
+						O->SetBoolField(TEXT("animated"), I->bAnime);
+						Entries.Add(MakeShared<FJsonValueObject>(O));
+					}
+			}
+			else if (Kind == TEXT("map"))
+			{
+				for (const FOKStudioCatalogGroup& Ca : C.MapCategories) Categories.Add(Named(Ca.Id, Ca.Name));
+				for (const FOKStudioCatalogMap& M : C.Maps) if (Category == INDEX_NONE || M.Category == Category) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetNumberField(TEXT("map"), M.No); O->SetStringField(TEXT("name"), M.Name); O->SetNumberField(TEXT("category"), M.Category); Entries.Add(MakeShared<FJsonValueObject>(O)); }
+			}
+			else if (Kind == TEXT("effect"))
+			{
+				for (const FString& Ca : C.EffectCategories) Categories.Add(MakeShared<FJsonValueString>(Ca));
+				for (const FOKStudioEffect& E : C.Effects) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetStringField(TEXT("effect"), E.Id); O->SetStringField(TEXT("name"), E.Name); O->SetStringField(TEXT("category"), E.Category); Entries.Add(MakeShared<FJsonValueObject>(O)); }
+			}
+			else if (Kind == TEXT("anim"))
+			{
+				TSet<int32> Used;
+				for (const FOKStudioAnim& A : C.Anims) if (A.Kind == AnimKind && !A.File.IsEmpty()) Used.Add(A.Group);
+				for (const FOKStudioCatalogGroup& Gr : C.AnimGroups) if (Used.Contains(Gr.Id)) Groups.Add(Named(Gr.Id, Gr.Name));
+				if (Group != INDEX_NONE) for (const FOKStudioCatalogGroup& Ca : C.AnimCategories) if (Ca.Group == Group) Categories.Add(Named(Ca.Id, Ca.Name));
+				if (Group != INDEX_NONE && Category != INDEX_NONE)
+					for (const FOKStudioAnim& A : C.Anims)
+						if (A.Kind == AnimKind && A.Group == Group && A.Category == Category && !A.File.IsEmpty())
+						{
+							TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+							O->SetStringField(TEXT("anim"), FString::Printf(TEXT("%d/%d/%d/%d"), A.Kind, A.Group, A.Category, A.No));
+							O->SetStringField(TEXT("name"), A.Name);
+							O->SetNumberField(TEXT("duration"), A.Duration);
+							O->SetBoolField(TEXT("looping"), A.bLooping);
+							Entries.Add(MakeShared<FJsonValueObject>(O));
+						}
+			}
+			else if (Kind == TEXT("filter")) { for (const FOKStudioFilter& F : C.Filters) Entries.Add(Named(F.No, F.Name)); }
+			else if (Kind == TEXT("sky")) { for (const FOKStudioSkyPattern& S : OKStudioSkyPatterns()) Entries.Add(Named(S.No, S.Name)); }
+			else if (Kind == TEXT("accessory_point"))
+			{
+				for (const FOKStudioAccessoryPoint& Pt : C.AccessoryPoints) { TSharedRef<FJsonObject> O = MakeShared<FJsonObject>(); O->SetStringField(TEXT("key"), Pt.Key); O->SetStringField(TEXT("name"), Pt.Name); O->SetNumberField(TEXT("group"), Pt.Group); Entries.Add(MakeShared<FJsonValueObject>(O)); }
+			}
+			else return Result(false, TEXT("kind: item, map, effect, anim, filter, sky or accessory_point"));
+			TSharedRef<FJsonObject> O = Result(true);
+			if (Groups.Num()) O->SetArrayField(TEXT("groups"), Groups);
+			if (Categories.Num()) O->SetArrayField(TEXT("categories"), Categories);
+			O->SetArrayField(TEXT("entries"), Entries);
+			return O;
+		}
+		if (Op == TEXT("keys"))
+		{
+			const int32 Id = ReadId(J, TEXT("id"), INDEX_NONE);
+			if (Id != UOKSceneDocument::SceneTrackId && !Doc->Find(Id)) return Result(false, TEXT("no such object (-2: the scene's track)"));
+			FString Action;
+			J->TryGetStringField(TEXT("action"), Action);
+			double Time = G.TimelineTime, To = 0.;
+			J->TryGetNumberField(TEXT("time"), Time);
+			if (Action == TEXT("set")) Doc->SetKey(Id, float(Time));
+			else if (Action == TEXT("remove") && !Doc->RemoveKey(Id, float(Time))) return Result(false, TEXT("no key at that time"));
+			else if (Action == TEXT("move"))
+			{
+				FOKSceneTrack* T = Doc->TrackOf(Id);
+				const int32 Index = T ? T->Keys.IndexOfByPredicate([Time](const FOKSceneKey& K) { return FMath::Abs(K.Time - Time) < 1.f / 60.f; }) : INDEX_NONE;
+				if (Index == INDEX_NONE || !J->TryGetNumberField(TEXT("to"), To)) return Result(false, TEXT("move needs a key at time and to"));
+				Doc->MoveKey(Id, Index, float(To));
+			}
+			else if (Action == TEXT("ease"))
+			{
+				static const TMap<FString, EOKSceneEase> Eases = { { TEXT("linear"), EOKSceneEase::Linear }, { TEXT("ease_in_out"), EOKSceneEase::EaseInOut }, { TEXT("ease_in"), EOKSceneEase::EaseIn }, { TEXT("ease_out"), EOKSceneEase::EaseOut }, { TEXT("step"), EOKSceneEase::Step } };
+				FString Name;
+				J->TryGetStringField(TEXT("ease"), Name);
+				FOKSceneKey* K = Doc->KeyAt(Id, float(Time));
+				const EOKSceneEase* E = Eases.Find(Name);
+				if (!K || !E) return Result(false, TEXT("ease needs a key at time and ease (linear, ease_in_out, ease_in, ease_out, step)"));
+				K->Ease = *E;
+				Doc->NotifyChanged();
+			}
+			else if (Action == TEXT("clear")) { Doc->Tracks.RemoveAll([Id](const FOKSceneTrack& T) { return T.ObjectId == Id; }); Doc->NotifyChanged(); }
+			else if (Action == TEXT("smooth"))
+			{
+				bool bSmooth = true;
+				J->TryGetBoolField(TEXT("smooth"), bSmooth);
+				FOKSceneTrack* T = Doc->TrackOf(Id);
+				if (!T) return Result(false, TEXT("no keys yet"));
+				T->bSmoothPath = bSmooth;
+				Doc->NotifyChanged();
+			}
+			else if (Action != TEXT("list")) return Result(false, TEXT("action: list, set, remove, move, ease, clear or smooth"));
+			TArray<TSharedPtr<FJsonValue>> Keys;
+			if (const FOKSceneTrack* T = Doc->TrackOf(Id)) for (const FOKSceneKey& K : T->Keys) Keys.Add(MakeShared<FJsonValueObject>(KeyJson(K)));
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetArrayField(TEXT("keys"), Keys);
+			O->SetNumberField(TEXT("duration"), Doc->Duration);
+			if (const FOKSceneTrack* T = Doc->TrackOf(Id)) O->SetBoolField(TEXT("smooth"), T->bSmoothPath);
+			return O;
+		}
+		if (Op == TEXT("duplicate"))
+		{
+			TArray<TSharedPtr<FJsonValue>> New;
+			TArray<int32> Ids;
+			for (int32 Id : ReadIds(J, TEXT("ids"))) { const int32 Copy = Doc->Duplicate(Id); if (Copy >= 0) { New.Add(MakeShared<FJsonValueNumber>(Copy)); Ids.Add(Copy); } }
+			if (Ids.Num()) G.SelectMany(Ids, Ids.Last());
+			TSharedRef<FJsonObject> O = Result(Ids.Num() > 0, Ids.Num() ? FString() : TEXT("nothing duplicated"));
+			O->SetArrayField(TEXT("ids"), New);
+			return O;
+		}
+		if (Op == TEXT("export"))
+		{
+			FString Kind = TEXT("png"), Folder;
+			J->TryGetStringField(TEXT("kind"), Kind);
+			J->TryGetStringField(TEXT("folder"), Folder);
+			double Fps = 30., W = 1920., H = 1080., From = 0., To = -1.;
+			J->TryGetNumberField(TEXT("fps"), Fps); J->TryGetNumberField(TEXT("width"), W); J->TryGetNumberField(TEXT("height"), H);
+			J->TryGetNumberField(TEXT("from"), From); J->TryGetNumberField(TEXT("to"), To);
+			TSharedRef<FJsonObject> O = Result(true);
+			if (Kind == TEXT("okanim"))
+			{
+				FString Error;
+				const FString File = G.ExportOkAnim(ReadId(J, TEXT("id")), float(Fps), Error);
+				if (File.IsEmpty()) return Result(false, Error);
+				O->SetStringField(TEXT("file"), File);
+				return O;
+			}
+			if (Kind != TEXT("png") && Kind != TEXT("mp4")) return Result(false, TEXT("kind: png, mp4 or okanim"));
+			if (Kind == TEXT("mp4") && !FPaths::FileExists(UOKStudioGame::FfmpegPath())) return Result(false, TEXT("no ffmpeg at ") + UOKStudioGame::FfmpegPath());
+			O->SetStringField(TEXT("folder"), G.ExportFrames(float(Fps), int32(W), int32(H), Kind == TEXT("mp4"), float(From), float(To), Folder));
+			return O;
+		}
+		if (Op == TEXT("scenes"))
+		{
+			FString Folder;
+			J->TryGetStringField(TEXT("folder"), Folder);
+			if (Folder.IsEmpty()) Folder = UOKStudioGame::SceneDirectory();
+			TArray<FString> Names, More;
+			IFileManager::Get().FindFiles(Names, *(Folder / TEXT("*.png")), true, false);
+			IFileManager::Get().FindFiles(More, *(Folder / TEXT("*.okscene")), true, false);
+			Names.Append(More);
+			TArray<TSharedPtr<FJsonValue>> Files;
+			for (const FString& N : Names)
+			{
+				const FString Path = Folder / N;
+				const FOKSceneCard::EKind K = N.EndsWith(TEXT(".okscene")) ? FOKSceneCard::EKind::Json : FOKSceneCard::Kind(Path);
+				if (K == FOKSceneCard::EKind::None) continue;
+				TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetStringField(TEXT("path"), Path);
+				O->SetStringField(TEXT("name"), FPaths::GetBaseFilename(N));
+				O->SetStringField(TEXT("kind"), K == FOKSceneCard::EKind::KStudio ? TEXT("kstudio") : (N.EndsWith(TEXT(".okscene")) ? TEXT("okscene") : TEXT("ok_scene_card")));
+				O->SetStringField(TEXT("modified"), IFileManager::Get().GetTimeStamp(*Path).ToIso8601());
+				Files.Add(MakeShared<FJsonValueObject>(O));
+			}
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetStringField(TEXT("folder"), Folder);
+			O->SetArrayField(TEXT("files"), Files);
+			return O;
+		}
+		if (Op == TEXT("report"))
+		{
+			TArray<TSharedPtr<FJsonValue>> Load, Missing;
+			for (const FString& L : G.LoadReport()) Load.Add(MakeShared<FJsonValueString>(L));
+			const FString Project = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+			for (const FOKSceneObject& X : Doc->Objects)
+			{
+				FString Why;
+				if (X.Kind == EOKSceneObjectKind::Character && !FPaths::FileExists(FPaths::IsRelative(X.Character.Card) ? Project / X.Character.Card : X.Character.Card)) Why = TEXT("card missing: ") + X.Character.Card;
+				if (X.Kind == EOKSceneObjectKind::Item) { FString Model, Prefab, Error; if (!AOKSceneActor::ItemModel(X.Item, Model, Prefab, Error)) Why = Error; }
+				if (X.Kind == EOKSceneObjectKind::Effect && !FOKStudioCatalog::Get().FindEffect(X.Effect.Effect)) Why = TEXT("effect missing: ") + X.Effect.Effect;
+				if (!Why.IsEmpty()) Missing.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("#%d %s: %s"), X.Id, *X.Name, *Why)));
+			}
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetArrayField(TEXT("load"), Load);
+			O->SetArrayField(TEXT("missing"), Missing);
+			return O;
+		}
+		if (Op == TEXT("ui_shot"))
+		{
+			FString Name;
+			J->TryGetStringField(TEXT("name"), Name);
+			const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("OKStudio/mcp_ui")) / FPaths::MakeValidFileName(Name.IsEmpty() ? FDateTime::Now().ToString(TEXT("ui_%Y%m%d_%H%M%S")) : Name) + TEXT(".png");
+			IFileManager::Get().Delete(*File, false, true, true);
+			FScreenshotRequest::RequestScreenshot(File, true, false);
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetStringField(TEXT("file"), File);
+			return O;
+		}
+		return nullptr;
+	}
+
+	/** Ops that only read (always answered, also while the studio is busy). */
+	bool ReadsOnly(const FString& Op, const TSharedRef<FJsonObject>& J)
+	{
+		static const TSet<FString> Read = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot") };
+		if (Read.Contains(Op)) return true;
+		if (Op == TEXT("scene")) return J->Values.Num() == 0;
+		if (Op == TEXT("keys")) { FString A; J->TryGetStringField(TEXT("action"), A); return A.IsEmpty() || A == TEXT("list"); }
+		return false;
 	}
 
 	/** Runs one op on the studio (game thread). */
@@ -118,8 +542,7 @@ namespace
 		UOKStudioGame* G = UOKStudioGame::Get();
 		SOKStudioPanel* P = G ? G->GetPanel() : nullptr;
 		if (!G || !P) return Result(false, TEXT("no studio running"));
-		static const TSet<FString> ReadOnly = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search") };
-		if (!ReadOnly.Contains(Op))
+		if (!ReadsOnly(Op, J))
 		{
 			const FString Busy = G->BusyReason();
 			// The timeline op itself may stop playback.
@@ -377,6 +800,7 @@ namespace
 			O->SetBoolField(TEXT("playing"), G->bTimelinePlaying);
 			return O;
 		}
+		if (TSharedPtr<FJsonObject> More = RunMore(*G, *P, Op, J)) return More.ToSharedRef();
 		return Result(false, TEXT("unknown op: ") + Op);
 	}
 }
@@ -391,7 +815,8 @@ namespace OKStudioControl
 		GRouter = FHttpServerModule::Get().GetHttpRouter(Port, true);
 		if (!GRouter.IsValid()) { UE_LOG(LogTemp, Warning, TEXT("OK studio control: could not open port %d"), Port); return; }
 		static const TCHAR* Ops[] = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("spawn"), TEXT("transform"), TEXT("reparent"), TEXT("delete"), TEXT("select"),
-			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline") };
+			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline"),
+			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot") };
 		for (const TCHAR* Op : Ops)
 		{
 			const FString Name = Op;

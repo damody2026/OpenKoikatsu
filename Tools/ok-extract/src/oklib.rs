@@ -2138,12 +2138,24 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let store = activate(&lib, mode)?;
             crate::gamefs::activate(if mode == Mode::Record { crate::gamefs::Mode::Record } else { crate::gamefs::Mode::Replay }, &root, &lib)?;
             let expected = read_parity(&lib);
+            // OK_RECORD_STATUS (studio_status::StatusOverride JSON, e.g. {"eyes_ptn":23}): open the cards as an OK Studio
+            // scene overrides them, so what that look needs (a gag eye set's parts) is recorded into the library too.
+            // Such an open is not the card's own look: its digest is not written to the parity file.
+            let status: Option<crate::studio_status::StatusOverride> = match std::env::var("OK_RECORD_STATUS") {
+                Ok(s) if !s.trim().is_empty() => Some(serde_json::from_str(&s).map_err(|e| format!("OK_RECORD_STATUS: {e}"))?),
+                _ => None,
+            };
             let mut failures = 0;
             for card in &args[2..] {
                 let card = Path::new(card);
                 let started = std::time::Instant::now();
                 let (hits0, miss0, stored0) = (store.hits.load(Ordering::Relaxed), store.misses.load(Ordering::Relaxed), store.stored.load(Ordering::Relaxed));
+                let _scope = status.clone().map(crate::studio_status::request);
                 match session_digest(&root, card) {
+                    Ok((digest, parts, _)) if status.is_some() => {
+                        println!("OKLIB RECORDED-STATUS {} parts={parts} digest={digest} {:.1}s misses={} stored={}", card_key(card), started.elapsed().as_secs_f64(),
+                            store.misses.load(Ordering::Relaxed) - miss0, store.stored.load(Ordering::Relaxed) - stored0);
+                    }
                     Ok((digest, parts, bytes)) => {
                         let verdict = match (mode, expected.get(&card_key(card))) {
                             (Mode::Replay, Some(want)) if *want == digest => "MATCH",

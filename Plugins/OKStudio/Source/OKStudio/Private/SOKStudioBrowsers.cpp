@@ -286,12 +286,10 @@ void SOKStudioPanel::TickItemPreview()
 	// Frame the item's bounds from the front, a little above.
 	FBox Box(ForceInit);
 	if (const FOKSceneObject* O = PreviewDoc->Objects.Num() ? &PreviewDoc->Objects[0] : nullptr)
-		if (USceneComponent* C = Actor->ComponentOf(O->Id))
+		if (const AKKPreviewActor* Shown = Actor->PreviewOf(O->Id))
 		{
-			TArray<USceneComponent*> Children;
-			C->GetChildrenComponents(true, Children);
-			Children.Add(C);
-			for (USceneComponent* Child : Children) if (const UPrimitiveComponent* P = Cast<UPrimitiveComponent>(Child); P && P->IsRegistered()) Box += P->Bounds.GetBox();
+			TInlineComponentArray<UPrimitiveComponent*> Parts(Shown);
+			for (const UPrimitiveComponent* P : Parts) if (P->IsVisible() && P->IsRegistered()) Box += P->Bounds.GetBox();
 		}
 	TArray<FColor> Pixels;
 	FString Error;
@@ -786,12 +784,10 @@ TArray<FString> SOKStudioPanel::MaterialProperties(int32 Id) const
 	// Every parameter of the item's materials, with its kind.
 	TSet<FString> Seen;
 	TArray<FString> Out;
-	USceneComponent* Root = Game.IsValid() && Game->SceneActor ? Game->SceneActor->ComponentOf(Id) : nullptr;
-	if (!Root) return Out;
-	TArray<USceneComponent*> Children;
-	Root->GetChildrenComponents(true, Children);
-	Children.Add(Root);
-	for (USceneComponent* C : Children)
+	const AKKPreviewActor* Shown = Game.IsValid() && Game->SceneActor ? Game->SceneActor->PreviewOf(Id) : nullptr;
+	if (!Shown) return Out;
+	TInlineComponentArray<UMeshComponent*> Meshes(Shown);
+	for (UMeshComponent* C : Meshes)
 	{
 		const UMeshComponent* Mesh = Cast<UMeshComponent>(C);
 		if (!Mesh) continue;

@@ -551,6 +551,21 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
 
 ---
 
+### U10　完整 MCP：AI 擺初版、人手細調（2026-10-30 追加並完成，F 組，未 push）
+
+使用者指示：工作室 UI 要接完整的 MCP，之後用 AI 擺初版、再由人細調。
+
+| 項目 | 內容 |
+|---|---|
+| 控制通道新 op | `patch`（物件任意欄位深合併）、`scene`（畫面設定、地圖與位置、時長、使用中相機、書籤）、`bones`（FK 骨與世界座標、13 個 IK 點、注視點、54 個掛點）、`bounds`（世界範圍與 `built`）、`catalog`（依分類瀏覽道具／地圖／特效／動畫／濾鏡／天空／掛點）、`keys`（列出、打、刪、移、Ease、清除、平滑路徑；`-2` 是場景軌道）、`duplicate`、`export`（PNG／mp4／.okanim，進度在 `state.export`）、`scenes`、`report`、`ui_shot`（含 UI 的視窗截圖） |
+| ok-game-mcp | 再加 11 個工具，`studio_*` 共 30 個 |
+| 讀取類 op | 使用者拖動、載入、播放時也會回答；修改類照舊回 `busy` |
+| 文件 | [OK Studio MCP](OK_STUDIO_MCP.md) 加「AI 擺初版、人手細調」與座標規則（角色 rotation 0 面向 +Y＝前視相機） |
+
+實測：SceneEditor 加 `-Control`，用 `ok-game-mcp call` 依序目錄瀏覽／搜尋 → 加兩個角色與一張桌子 → `studio_bounds` → `studio_patch` 改名 → 動畫與 FK＋表情＋視線 → 天空、泛光、景深 → 兩個 key 加 Ease → 正面相機 → 截圖與 UI 截圖 → 複製／刪除 → 讀取報告 → 存檔 → 場景清單 → Undo／Redo，全部成功。實測中發現並修好：道具是由自己的預覽 Actor 顯示的，原本的範圍計算只看 `ComponentOf`，道具一律回 30 cm 代替框（也影響視窗點選、聚焦、材質屬性下拉、道具懸停預覽）。改完 UiSelfTest 仍 46/46。
+
+EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshine` 補到共用資源）：`ok-extract --oklib record` 加 `OK_RECORD_STATUS`（Studio 狀態 JSON），以 `{"eyes_ptn":23}` 開卡，把漩渦眼路徑要的記錄寫進 `base_v1`；這種開卡不寫 parity 摘要。C002 補了 10 筆記錄，嚴格檢查仍通過；其餘本機卡（112 張）同樣補錄。
+
 ## 7. 優先順序總表
 
 | 優先 | 階段 | 理由 |

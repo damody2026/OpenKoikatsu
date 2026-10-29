@@ -42,6 +42,17 @@
 | `studio_undo` / `studio_redo` | `undo` / `redo` | 無 | `{}` |
 | `studio_cmd` | `cmd` | `id`（`studio_state` 的 `ui.commands`）、`arg?` | `{}` |
 | `studio_timeline` | `timeline` | `time?`、`play?`、`key?{ids}` | `{time,duration,playing}` |
+| `studio_patch` | `patch` | `id`、`fields`（深層合併進物件 JSON，即 `studio_inspect` 的 `object`；物件逐鍵合併、陣列與純值取代；`id`／`kind`／`parent` 不能改，改父物件用 `studio_reparent`） | `{object}` |
+| `studio_scene` | `scene` | `post?`（深層合併：bloom、景深、霧、天空、濾鏡、背景…，鍵同回傳的 `post`）、`map?`（-1 = 無）、`map_transform?{location,rotation,scale}`、`duration?`（秒）、`active_camera?`（-1 = 自由視角）；全不給只讀取 | `{post,map,map_transform,duration,active_camera,bookmarks}` |
+| `studio_bones` | `bones` | `id`（角色） | `{fk[{bone,name,part,euler,set,world}], ik[{effector,name,enabled,position,world}], look_point, accessory_points[{key,name,group,world}]}` |
+| `studio_bounds` | `bounds` | `ids?`（預設全部） | `{objects[{id,min,max,center,size}]}`（世界座標 cm） |
+| `studio_catalog` | `catalog` | `kind`（`item map effect anim filter sky accessory_point`）、`group?`、`category?`、`anim_kind?` | `{groups?, categories?, entries[...]}`；文字搜尋仍用 `studio_catalog_search` |
+| `studio_keys` | `keys` | `id`（物件；-2 = 場景本身的軌道）、`action`（`list set remove move ease clear smooth`）、`time?`、`to?`、`ease?`（`linear ease_in_out ease_in ease_out step`）、`smooth?` | `{keys[{time,ease,...}], duration}` |
+| `studio_duplicate` | `duplicate` | `ids` | `{ids}`（新複本） |
+| `studio_export` | `export` | `kind`（`png mp4 okanim`）、`fps?`、`width?`、`height?`、`from?`、`to?`、`folder?`、`id?`（okanim 的角色） | `{folder}` 或 `{file}`；進度看 `studio_state` 的 `export{running,frame,frames,last_movie,error}` |
+| `studio_scenes` | `scenes` | `folder?` | `{folder, files[{path,name,kind,modified}]}`，給 `studio_load` 開 |
+| `studio_report` | `report` | 無 | `{load[...], missing[...]}`：上次開檔沒能顯示的內容、場景缺的資源 |
+| `studio_ui_shot` | `ui_shot` | `name?` | `{file}`，含 UI 面板的整個視窗截圖（晚一兩幀寫出，最多等 15 秒），並附上圖片預覽 |
 
 ## 範例：加角色、擺姿勢、拍照、存檔
 
@@ -64,3 +75,30 @@ $mcp = '.\Tools\ok-game-mcp\target\release\ok-game-mcp.exe'
 - `anim`：`studio_catalog_search` 回的 key 去掉開頭的 `anim:`（例如 `anim:0/1/2/3` → `0/1/2/3`）；`card` 用結果的 `path`。
 - FK 骨名是 Studio 的 FK 骨（`cf_j_arm00_L` 等，左右以 `_L`／`_R` 結尾）；`mirror` 可用 `all`、`left_to_right`、`right_to_left`。
 - 不確定欄位時先 `studio_inspect` 看角色目前的值。
+
+## AI 擺初版、人手細調
+
+用法是 AI 先用 `studio_*` 工具擺出場景的第一版，存成新檔，再由人在 SceneEditor 裡細調。
+
+擺放時要知道的座標規則（2026-10-30 實測）：
+- 單位 cm，Z 朝上，地面 Z = 0。
+- 角色 `rotation [0,0,0]` 面向 +Y，也就是前視相機（`studio_camera` `preset: "front"`）看到的是臉；yaw −90 面向 +X、yaw 90 面向 −X、yaw 180 背對前視。兩個角色面對面站在 X 軸上：左邊的 yaw −90、右邊的 yaw 90。
+- 道具與角色剛加入時還在建：`studio_bounds` 回 `built: false`，`min`／`max` 只是預留的小框；等到 `built: true`（或 `studio_state` 的 `busy` 不再是 `loading`）再用它的大小擺放。
+- `studio_bones` 的 FK `euler` 是 Unity 區域角度（與 KK Studio 的 FK 相同）；IK `position` 是角色空間的 cm（+Y 前方、+Z 上方）；`world` 是世界座標 cm。
+
+1. **啟動**：`studio_launch`（`studio_state` 回「OK Studio is not running」時）。
+2. **找素材**：`studio_catalog` 依 group／category 瀏覽道具、地圖、特效、動畫、濾鏡、天空與飾品掛點；知道關鍵字時用 `studio_catalog_search`。
+3. **放物件**：`studio_spawn` 加角色、道具、燈光、相機；多份相同的東西用 `studio_duplicate`。擺放時用 `studio_bounds` 對齊：要站在地上就讓物件的 `min` z 等於地面高度，放在桌上就對齊桌子的 `max` z，並排時比較 `min`／`max` 的 x、y，再用 `studio_transform` 移動。其他設定（顏色、燈光強度、可見度…）先 `studio_inspect` 看鍵，再用 `studio_patch` 改。
+4. **擺姿勢**：`studio_bones` 讀角色的 FK 骨、IK 端點、注視點與飾品掛點，再用 `studio_pose` 設 FK／IK、動畫、表情、手型與視線；道具可掛到 `accessory_points` 的骨頭上。
+5. **畫面氛圍**：`studio_scene` 設地圖、bloom、景深、霧、天空、濾鏡與背景；要做動畫時設 `duration`，用 `studio_keys` 打關鍵幀。
+6. **檢查**：`studio_camera` 擺鏡頭（或放相機物件並用 `studio_scene` 的 `active_camera` 指定），`studio_capture` 拍圖確認；要看人在編輯器裡看到的畫面（含面板）用 `studio_ui_shot`。開舊場景時用 `studio_report` 看缺哪些資源。
+7. **存檔**：`studio_save` 用新的名稱（不覆寫既有檔），回傳 `{file}`。
+
+接著由人開啟這個場景細調：
+
+```powershell
+.\SceneEditor.cmd <studio_save 回傳的 file>
+```
+
+- Studio 開著控制通道時，AI 的編輯與人的編輯在同一份 undo 歷史裡，兩邊都可以 `Ctrl+Z`／`studio_undo` 復原對方的步驟。
+- 人正在拖曳、場景載入中、時間軸播放或匯出時，AI 的編輯會被拒絕並回 `busy`（`{"ok":false,"busy":"<原因>"}`）；等人放手或載入、播放結束後再試，不要連續重送。
