@@ -4071,3 +4071,4 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 
 - 經過：crowd-gpu-physics 在 E 共用工作樹留了還在改的 ok-extract，e-galgame 的 exe-only 打包一直連到它、街頭卡開不了。crowd 正在等使用者回答，主 session 就先把它 7 個檔備份到 `E:\OpenKoikatsu\Saved\Crowd\wip-okextract-20261028\`、再還原成 HEAD。通知排在 crowd 的佇列裡沒被讀到，它以為改動遺失，開始逐項手動重做。
 - 修正：不再動別人正在改的檔；新增 `OK_EXTRACT_ROOT`（E commit e83776b31），打包改用匯出副本（`E:\Saved\okx-galgame`）的 ok-extract，不受共用樹影響。規則寫進 `C:\portable\OpenKoikatsu\Saved\SESSION_RULES_ALL_20261028.md`。
+- **把熱點平均值當成每次的成本，改錯了地方**（2026-10-29，E 組 OK 卡轉卡效能）：`compose_body_texture` 的 SPOT 合計 42 次 2.8 秒，我以為是記憶鍵對身體貼圖做 SHA-256 每次花 67 ms，把雜湊換成 CRC-32。逐次看才發現 35 次都是 0.1 ms 的命中，花時間的是每套服裝第一次的 7 次未命中（Alice 每套服裝有自己的 KSOX 身體覆蓋圖，鍵本來就不同）；身體貼圖總共只有約 0.5 MB。最後的修正（鍵改為覆蓋圖內容）是對的，換 CRC 只是順手、沒有效果。教訓：SPOT／PROFILE 的合計要先看逐次分布（`grep SPOT ... | awk '{print $(NF-1)}'`）再判斷是固定成本還是少數幾次很貴。另外 `OK_RAW_TEXTURES=1` 的實測要和同一時段的 PNG 版交替量：這次冷開反而慢（march_7th 4.5 → 5.3 秒），沒有採用。
