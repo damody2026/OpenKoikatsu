@@ -687,7 +687,12 @@ FString AOKStreetSocialScene::SceneLine(int32 Character) const{
  static const TCHAR* Privacy[]={TEXT("公共"),TEXT("半公共"),TEXT("可上鎖"),TEXT("私密")};
  FString Line=OKMsg(TEXT("ui.mind.location_info_line"), {{TEXT("place_name_or_street"), P?P->Name:OKT(TEXT("ui.etiquette.street_location"))}, {TEXT("floor_suffix"), Floor>1?*FString::Printf(TEXT(" %dF"),Floor):TEXT("")}, {TEXT("location_label"), *N.Label}, {TEXT("privacy_label"), OKT(Privacy[FMath::Clamp(N.Privacy,0,3)])}, {TEXT("privacy_level"), N.Privacy}, {TEXT("quiet_label"), N.Quiet>=0.7f?OKT(TEXT("ui.mind.quiet_required")):N.Quiet<=0.2f?OKT(TEXT("ui.mind.busy_label")):OKT(TEXT("ui.mind.normal_volume_label"))}, {TEXT("food_label"), N.FoodAllowed?OKT(TEXT("ui.mind.food_allowed_tag")):OKT(TEXT("ui.mind.food_banned_tag"))}, {TEXT("staff_label"), N.Staff?OKT(TEXT("ui.mind.has_staff_tag")):TEXT("")}, {TEXT("crowd_label"), Crowd>=0.7f?OKT(TEXT("ui.mind.crowd_many")):Crowd>=0.35f?OKT(TEXT("ui.mind.normal_label")):OKT(TEXT("ui.mind.crowd_few"))}});
  TArray<FString> Known;
- for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=Character&&S.Agents.IsValidIndex(I-1)){const float D=FVector::Dist2D(S.Agents[I-1].Position,S.Male)/100.f;if(D<25.f)Known.Add(OKMsg(TEXT("ui.mind.nearby_person_distance"), {{TEXT("name"), *S.Manifest.Characters[I].Name}, {TEXT("distance"), D}}));}
+ // A name inside her own (贞德 beside 贞德·Alter) is someone else: asked "is that Jeanne over there?", Jeanne Alter
+ // answered "she is me, I am her" (R5-14).
+ const FString Own=S.Manifest.Characters.IsValidIndex(Character)?S.Manifest.Characters[Character].Name:FString();
+ for(int32 I=1;I<S.Manifest.Characters.Num();++I)if(I!=Character&&S.Agents.IsValidIndex(I-1)){const float D=FVector::Dist2D(S.Agents[I-1].Position,S.Male)/100.f;const FString& Name=S.Manifest.Characters[I].Name;
+  const bool Overlaps=!Own.IsEmpty()&&!Name.IsEmpty()&&(Own.Contains(Name)||Name.Contains(Own));
+  if(D<25.f)Known.Add(OKMsg(TEXT("ui.mind.nearby_person_distance"), {{TEXT("name"), *Name}, {TEXT("distance"), D}})+(Overlaps?OKT(TEXT("ui.mind.nearby_not_you")):TEXT("")));}
  if(!Known.IsEmpty())Line+=OKT(TEXT("ui.mind.known_people_label"))+FString::Join(Known,OKT(TEXT("ui.bank.list_separator")));
  const FString Things=ThingsFacts(Character);
  return Line+ActivityBlockedLine(Character)+(Things.IsEmpty()?FString():OKT(TEXT("ui.bank.list_separator"))+Things)+FinanceSceneText();

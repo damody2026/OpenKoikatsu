@@ -1011,3 +1011,4 @@
 - 發現後立刻關掉自己的遊戲 PID，在 `queue/c-conquest.txt` 排在最後。
 - 以後：拿名額與啟動分成兩步，先確認 slot 目錄是自己建的（owner.txt 是自己寫的）再啟動；也要先看 queue 有沒有人等更久。
 - 又一條（同日）：改了 ui_text.toml（R4-12 的 rather_full）後沒先 `cargo build --release` ok-rules 就用 C1029c 開 sandbox；文字由 ok-rules DLL 以 include_str 編入，所以那次新詞沒生效。以後改任何 Localization toml，啟動前一定重編 ok-rules（並跑 cargo test 確認 toml 能解析）。
+- 又一條（同日）：用「HEAD＋檔尾 tail」組 STREET_ERRORS 的 blob 時，c-street-city 剛好在我段落尾端追加了「世界邊緣 skirt」幾行，被 c0774ffb 一起提交並推上 origin。84cecc56 已從版本中拿掉（工作檔保留）。以後組 blob 前先 diff 那段 tail，只取自己寫的行。
