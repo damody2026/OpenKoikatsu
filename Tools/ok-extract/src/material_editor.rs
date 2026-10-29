@@ -206,21 +206,27 @@ pub(crate) fn me_texture<'a>(
 /// the equipped outer garment does not supply an OverBra/OverInner override.
 pub(crate) fn resolve_material_alpha_masks(game_root: &Path, meshes: &mut [ExtractedMesh]) {
     let mut found: std::collections::HashMap<String, Option<Vec<u8>>> = std::collections::HashMap::new();
-    let mask_dir = game_root.join("abdata/chara");
-    let mut bundles: Vec<PathBuf> = crate::gamefs::read_dir(&mask_dir)
-        .into_iter().flatten().filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.file_name().and_then(|s| s.to_str())
-            .is_some_and(|s| s.starts_with("mt_mask_") && s.ends_with(".unity3d")))
-        .collect();
-    bundles.sort();
     for mesh in meshes {
         if mesh.alpha_mask_png.is_some() { continue; }
         let Some(name) = mesh.mat.as_ref().and_then(|m| m.slot("_AlphaMask")) else { continue; };
-        let png = found.entry(name.to_ascii_lowercase()).or_insert_with(|| {
-            bundles.iter().find_map(|p| crate::unity::named_png_from_bundle(p, &[name]).map(|(_,png)| orient_raw_mask(png)))
-        });
+        let png = found.entry(name.to_ascii_lowercase()).or_insert_with(|| material_alpha_mask(game_root, name));
         mesh.alpha_mask_png = png.clone();
     }
+}
+
+/// The base mask bundles' texture of this name (every clothes item of every open looked it up in each mt_mask_ bundle
+/// again): once per pack's tree (crate::pack_memo).
+fn material_alpha_mask(game_root: &Path, name: &str) -> Option<Vec<u8>> {
+    crate::pack_memo(format!("material_alpha_mask|{}|{name}", game_root.display()), || {
+        let mask_dir = game_root.join("abdata/chara");
+        let mut bundles: Vec<PathBuf> = crate::gamefs::read_dir(&mask_dir)
+            .into_iter().flatten().filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.file_name().and_then(|s| s.to_str())
+                .is_some_and(|s| s.starts_with("mt_mask_") && s.ends_with(".unity3d")))
+            .collect();
+        bundles.sort();
+        bundles.iter().find_map(|p| crate::unity::named_png_from_bundle(p, &[name]).map(|(_,png)| orient_raw_mask(png)))
+    })
 }
 
 /// ChaControl.LoadHairGlossMask resolves ChaFileHair.glossId in category 433,
