@@ -69,6 +69,40 @@ pub fn clothes_kind_visible(kind: usize, states: &[u8; 9], shoes_type: u8) -> bo
     }
 }
 
+thread_local! {
+    // State nodes the garment-state filter looked at while collecting (collect_state_nodes).
+    static STATE_NODES_SEEN: std::cell::RefCell<Option<Vec<(String, Option<i32>)>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// `f()` and the state nodes (name, clothes category) whose visibility decided which of its meshes the garment-state
+/// filter kept: the only way the garment states reach what `f` extracts. Same visibility of these nodes, same result.
+pub(crate) fn collect_state_nodes<R>(f: impl FnOnce() -> R) -> (R, Vec<(String, Option<i32>)>) {
+    struct Restore(Option<Vec<(String, Option<i32>)>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            // A collection around this one also depends on what this one saw.
+            let seen = STATE_NODES_SEEN.with(|s| s.replace(self.0.take()));
+            if let Some(seen) = seen { STATE_NODES_SEEN.with(|s| if let Some(outer) = s.borrow_mut().as_mut() { outer.extend(seen) }); }
+        }
+    }
+    let restore = Restore(STATE_NODES_SEEN.with(|s| s.replace(Some(Vec::new()))));
+    let result = f();
+    let mut seen = STATE_NODES_SEEN.with(|s| s.borrow().clone()).unwrap_or_default();
+    drop(restore);
+    seen.sort();
+    seen.dedup();
+    (result, seen)
+}
+
+/// Notes the state nodes of these GameObject chains (no-op unless collecting).
+pub(crate) fn note_state_nodes<'a>(names: impl Iterator<Item = &'a String>, clothes_category: Option<i32>) {
+    STATE_NODES_SEEN.with(|s| if let Some(seen) = s.borrow_mut().as_mut() {
+        for name in names {
+            if clothes_state_node_visible(name, &[0; 9], clothes_category).is_some() { seen.push((name.to_ascii_lowercase(), clothes_category)); }
+        }
+    });
+}
+
 pub(crate) fn clothes_state_node_visible(name: &str, states: &[u8; 9], clothes_category: Option<i32>) -> Option<bool> {
     let (prefix, suffix) = name.rsplit_once('_')?;
     let variant = match suffix.to_ascii_lowercase().as_str() {

@@ -3475,6 +3475,8 @@ impl ParsedBundle {
     /// node). We loaded the whole prefab, so both states rendered at once.
     fn clothes_state_filter(&self, meshes: &mut Vec<ExtractedMesh>, chains: &[(i64, Vec<String>)], clothes_category: Option<i32>) {
         let states = clothes_states();
+        let picked: std::collections::HashSet<i64> = meshes.iter().map(|m| m.path_id).collect();
+        note_state_nodes(chains.iter().filter(|(mesh, _)| picked.contains(mesh)).flat_map(|(_, chain)| chain.iter()), clothes_category);
         // A renderer can sit below two state nodes (for example o_bra_b inside
         // n_top_b). Every ancestor must be active, just like activeInHierarchy.
         let drop: std::collections::HashSet<i64> = chains.iter().filter(|(_, chain)| chain.iter()

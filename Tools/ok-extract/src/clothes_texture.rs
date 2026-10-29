@@ -820,6 +820,11 @@ pub(crate) fn body_mask_for_alpha_state_uncached(mask_png: &[u8], enabled: [bool
 /// KSOX skin overlay for (outfit, kind); mirrors `KoikatsuSkinOverlayData.TryGetTexture`
 /// (use the outfit's coordinate, else coordinate 0, else the first).
 pub(crate) fn ksox_overlay_png(card: &CardInfo, outfit: i32, kind: i32) -> Option<Vec<u8>> {
+    card.ksox.get(&(ksox_overlay_coordinate(card, outfit, kind)?, kind)).cloned()
+}
+
+/// The coordinate whose overlay of this kind `ksox_overlay_png` gives (None: no overlay).
+pub(crate) fn ksox_overlay_coordinate(card: &CardInfo, outfit: i32, kind: i32) -> Option<i32> {
     if card.ksox.is_empty() {
         return None;
     }
@@ -831,7 +836,7 @@ pub(crate) fn ksox_overlay_png(card: &CardInfo, outfit: i32, kind: i32) -> Optio
     } else {
         card.ksox.keys().next().map(|(c, _)| *c)?
     };
-    card.ksox.get(&(coord, kind)).cloned()
+    card.ksox.contains_key(&(coord, kind)).then_some(coord)
 }
 
 pub(crate) fn sample_rgba_clamped(image:&image::RgbaImage,u:f32,v:f32)->[f32;4] {

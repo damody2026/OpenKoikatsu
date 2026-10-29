@@ -1811,14 +1811,8 @@ pub(crate) fn extract_session_from_info(
                 .and_then(|b| crate::unity::clothes_renderer_map(&b, &entry.main_data));
             profile_tick("clothes renderer map", t_part);
             let t_part = Instant::now();
-            let (baked, used_mask) = bake_clothes_create_textures(
-                game_root,
-                &entry,
-                cols,
-                &pats,
-                &head_texs,
-                &body_texs,
-            );
+            let (baked, used_mask) = bake_clothes_create_memo(game_root, card, outfit, &format!("main{kind}"), zip.as_deref(),
+                &entry, cols, &pats, &head_texs, &body_texs);
             if baked[0].is_none() && std::env::var("OK_DIAG").is_ok() {
                 eprintln!(
                     "ok-extract: clothes no list MainTex cat={cat} id={cid} mt='{}' zip={:?}",
@@ -1989,14 +1983,8 @@ pub(crate) fn extract_session_from_info(
                 );
                 let cmp = accessory_bundle_bytes(game_root, zip.as_deref(), &entry)
                     .and_then(|b| crate::unity::clothes_renderer_map(&b, &entry.main_data));
-                let (baked, used_mask) = bake_clothes_create_textures(
-                    game_root,
-                    &entry,
-                    cols,
-                    &pats,
-                    &head_texs,
-                    &body_texs,
-                );
+                let (baked, used_mask) = bake_clothes_create_memo(game_root, card, outfit, &format!("sub{kind}"), zip.as_deref(),
+                    &entry, cols, &pats, &head_texs, &body_texs);
                 apply_clothes_create_textures(&mut meshes, cmp.as_ref(), &baked);
                 finalize_clothes_texture(&mut meshes);
                 #[cfg(test)]
@@ -2335,6 +2323,18 @@ struct BaseStage {
     body_colliders: crate::dbone::BodyColliderSet,
     clothes_dynamics: crate::dbone::DBoneSet,
     head_rest: Option<crate::pose::Skeleton>,
+}
+
+/// `bake_clothes_create_textures` once per view, card, outfit and garment (`part`: main kind or sub kind with its
+/// colour channel): its colours and patterns follow from those, and the garment states, which a conversion opens each
+/// outfit in six of, do not enter. The first open's bake read what it reads.
+#[allow(clippy::too_many_arguments)]
+fn bake_clothes_create_memo(game_root: &Path, card: &CardInfo, outfit: i32, part: &str, zip: Option<&Path>, entry: &ListEntry,
+    cols: [[f32; 4]; 4], pats: &[crate::clothes_texture::ClothesPatternSrc], head_texs: &[(String, Vec<u8>)], body_texs: &[(String, Vec<u8>)])
+    -> ([Option<Vec<u8>>; 3], bool) {
+    crate::view_memo(format!("bake_clothes_create|{:016x}|{outfit}|{part}|{}|{}|{}|{}|{zip:?}|{cols:?}", card.source_digest,
+        entry.category_no, entry.id, entry.main_ab, entry.main_data),
+        || bake_clothes_create_textures(game_root, entry, cols, pats, head_texs, body_texs))
 }
 
 fn base_bundles_stage(game_root: &Path, parsed_card: &Option<CardInfo>, vanilla: &ChaListCatalog,
