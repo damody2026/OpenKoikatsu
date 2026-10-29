@@ -2044,12 +2044,14 @@ pub fn parse_card(path: &Path) -> Result<CardInfo, String> {
     parse_card_outfit(path, 0)
 }
 
-/// A card file's bytes, read again only when its length or time changes. Every open reads the card it opens (its
-/// pack, its physics) and a conversion opens one card 42 times; cards run to tens of MB.
+/// A card file's bytes. Every open reads the card it opens (its pack, its physics), and a conversion opens one card 42
+/// times (cards run to tens of MB): while a card pack is recorded, the last two are kept and read again only when the
+/// length or time changes. Other opens (the game's, each card once, up to ~160 MB an OK card) read the file.
 pub(crate) fn card_file_bytes(path: &Path) -> std::io::Result<std::sync::Arc<Vec<u8>>> {
     use std::sync::{Arc, Mutex};
     type Stamp = (std::path::PathBuf, u64, std::time::SystemTime);
     static LAST: Mutex<Vec<(Stamp, Arc<Vec<u8>>)>> = Mutex::new(Vec::new());
+    if !crate::oklib::recording_card_pack() { return std::fs::read(path).map(Arc::new); }
     let m = std::fs::metadata(path)?;
     let stamp = m.modified().ok().map(|t| (path.to_path_buf(), m.len(), t));
     if let Some(key) = &stamp {
