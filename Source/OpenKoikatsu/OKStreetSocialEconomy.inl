@@ -621,6 +621,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
   if(const TSharedPtr<FJsonObject> Whose=OKRulesEval(S,Things)){OKRulesTakeExt(Candidate,*Whose);const FString Give=Whose->GetStringField(TEXT("give_her"));if(!Give.IsEmpty())GiveHer.Add(Give);}}
  if(!CommitStore(MoveTemp(Candidate)))return;
  FlushRulesEffects();
+ for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId);I&&!I->Consumable)S.RecentBought.Add(L.ItemId+(L.ForHer?TEXT("|her"):TEXT("|him")),OKStreetMindNow(S));
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
  if(WithHer&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;

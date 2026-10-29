@@ -1105,3 +1105,10 @@
 - 修正：`OKStreetSocialInvite.inl` 的 `StepApproach`，走到他身邊時他正和她本人通話（`RemoteMode==2&&RemotePeer==I`）就 `PhoneHangUp`，接著照一般到達流程當面交談、她先開口。
 - 驗證（Gal1030G，欄位 21 起）：約兩點書局，13:37 打給她，聊了兩句她走到身邊，log 記「reached him while he was on the phone with her; the call ends」「call with actor 9 ended after 30 s」「arrived beside him」，她當面說「到了！沒讓你久等吧？進去挑書吧。」
 - 我的操作錯誤：對話開著時又呼叫 `game_wait`（她在書局說「他又發呆」）；讀檔後角色還沒載入完就按 E 和 Escape，把剛開的對話關掉。對話開著時只用 `game_talk`，讀檔後等 `busy=false` 再說話。
+
+## 2026-10-30 說要買一本書送她，同一本書扣了兩次錢（E 組 galgame）
+
+- 現象：在書局說「妳有沒有想看的書？我買一本送妳」，她說「那本推理小說吧」；他說「好，就那本，我去結帳」。錢從 10444 變 10084，一本 180 的書扣了 360。
+- 原因：她第一句回覆就把書點給自己（`her_own`），裁判讀完第一輪才結帳，書歸她；第二輪裁判讀到「我去結帳，送妳的」又下一次「for her」，`HerOrders` 只排除這一輪回覆點過的，`HasDishLike` 只管桌上的菜，書被當禮物再買一本。
+- 修正：`FinishCheckout` 把買下的非消耗品記進 `RecentBought`（品項＋給誰→分鐘）；裁判下單（`OKStreetSocialScene.cpp`）與她回覆下單（`OKStreetSocialMind.inl`）遇到 15 分鐘內才買給同一人的同一樣東西就不再下單。
+- 重測（Gal1030H，欄位 23）：再說「我再買一本送妳」「好，就那本，我去結帳，送妳的」，水彩畫具組只結一次帳（249）；這輪裁判讀到她說「不是已經結好了嗎」沒有再下單，所以 `RecentBought` 的跳過沒有實際觸發，只確認了不影響正常結帳。

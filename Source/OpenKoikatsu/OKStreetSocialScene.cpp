@@ -317,7 +317,7 @@ struct FOKStreetSceneState {
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
  TMap<int32,FString> HerSaysNext; // what she says as soon as her reply and voice are done (TickAutoFriendship)
- FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
+ FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
 TMap<int32,TArray<FOKStreetCartLine>> CarriedOrders;TMap<int32,FString> CarriedOrderSaid; // CarriedOrders: ordered on the way to the shop (Mind.inl), placed on arrival (StartOutingActivity)
  // RelationshipShy: talk.rs shy_confession
  // she said this meal is on her: until (game minute)
@@ -1618,6 +1618,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     // front of her made her say it never came.
     if(Weak->HasDishLike(ForHer?Character:0,*Item)&&!Weak->SecondDishOk(Character,ForHer,ItemId)){
      UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, %s still has one on the table"),*Item->Name,ForHer?TEXT("she"):TEXT("he"));continue;}
+    // A thing (not food) bought for the same one minutes ago: the judge reading "I'll buy it for you" after her own reply
+    // had ordered the novel for herself bought it a second time as a gift (NT$360 for one book).
+    if(!Item->Consumable){const int64* At=L->RecentBought.Find(ItemId+(ForHer?TEXT("|her"):TEXT("|him")));
+     if(At&&OKStreetMindNow(*L)-*At<=15){UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, bought for %s %lld min ago"),*Item->Name,ForHer?TEXT("her"):TEXT("him"),OKStreetMindNow(*L)-*At);continue;}}
     if(ForHer&&Weak->TooFullFor(Character,*Item)){L->TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, she is full"),*Item->Name);continue;}
     FOKStreetCartLine Line;Line.ItemId=ItemId;Line.ForHer=ForHer;Line.Size=Item->DefaultSize();if(!Item->Options.IsEmpty()){Line.Sweetness=OKT(TEXT("ui.mind.full_sugar_label"));Line.Ice=OKT(TEXT("ui.mind.normal_state_label"));}
     if(OnTheWay){L->CarriedOrders.FindOrAdd(Character).Add(Line);UE_LOG(LogTemp,Display,TEXT("Street judge order: %s for %s, carried to %s"),*Item->Name,*For,*Shop);continue;}
