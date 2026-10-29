@@ -2296,6 +2296,9 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                     started.elapsed().as_secs_f64(), seconds / (done + failed).max(1) as f64);
                 return Ok(());
             }
+            // The process's one-time scans of the library's mods tree (GUIDs, MaterialEditor manifests, catalogues), all
+            // at once before the first card: they used to land on whichever card first asked (2–3 s of that card).
+            crate::prewarm(&lib)?;
             let given: Box<dyn Iterator<Item = String>> = if list_arg == "-" { Box::new(std::io::stdin().lines().map_while(Result::ok)) }
                 else { Box::new(list.lines().map(str::to_owned).collect::<Vec<_>>().into_iter()) };
             for card in given.map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).map(PathBuf::from) {

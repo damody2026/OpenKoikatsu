@@ -574,8 +574,20 @@ pub fn named_png_from_bundle(path: &Path, names: &[&str]) -> Option<(String, Vec
 }
 
 pub(crate) fn named_png_from_zip(path:&Path,asset:&str,names:&[&str])->Option<(String,Vec<u8>)>{
-    let parsed=parse_bundle_zip_cached(path,asset)?;
-    named_png_cached_fallback(&parsed,names,||crate::mods::zipmod_bundle_named(path,asset).map(|b|b.to_vec()))
+    zip_absent_memo(path,asset,names,||{
+        let parsed=parse_bundle_zip_cached(path,asset)?;
+        named_png_cached_fallback(&parsed,names,||crate::mods::zipmod_bundle_named(path,asset).map(|b|b.to_vec()))
+    })
+}
+
+/// A name the zip's bundle does not serve, remembered for the mounted pack: a name that ranks against the catalog but
+/// decodes to nothing falls back to re-reading the whole bundle (`missing_texture_queries` only lasts as long as one
+/// ParsedBundle), ~1.3 s for a hair ribbon's ColorMask in every outfit. Only the absence is kept, never pixels.
+fn zip_absent_memo<T>(path:&Path,asset:&str,names:&[&str],lookup:impl Fn()->Option<T>)->Option<T>{
+    let mut found=None;
+    let present=crate::pack_memo(format!("zip_texture_present|{}|{asset}|{names:?}",path.display()),||{found=Some(lookup());found.as_ref().is_some_and(Option::is_some)});
+    if !present {return None;}
+    found.unwrap_or_else(&lookup)
 }
 
 /// Preserve the serialized Texture2D import colour space when a face texture
@@ -599,9 +611,11 @@ pub fn named_png_with_color_space_from_bundle(
 
 pub(crate) fn named_png_with_color_space_from_zip(path:&Path,asset:&str,names:&[&str])
     ->Option<(String,Vec<u8>,Option<i32>)> {
-    let parsed=parse_bundle_zip_cached(path,asset)?;
-    let(name,png)=named_png_cached_fallback(&parsed,names,||crate::mods::zipmod_bundle_named(path,asset).map(|b|b.to_vec()))?;
-    let color_space=parsed.texture_color_space(&name);Some((name,png,color_space))
+    zip_absent_memo(path,asset,names,||{
+        let parsed=parse_bundle_zip_cached(path,asset)?;
+        let(name,png)=named_png_cached_fallback(&parsed,names,||crate::mods::zipmod_bundle_named(path,asset).map(|b|b.to_vec()))?;
+        let color_space=parsed.texture_color_space(&name);Some((name,png,color_space))
+    })
 }
 
 pub(crate) fn score_texture(mesh_name: &str, hint: &str, tex_name: &str, bytes_len: usize) -> i64 {
