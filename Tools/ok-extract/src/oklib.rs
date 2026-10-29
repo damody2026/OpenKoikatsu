@@ -2209,6 +2209,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let lib = lib.ok_or("library directory required")?;
             let card = PathBuf::from(args.get(2).ok_or("card required")?);
             let out = PathBuf::from(args.get(3).ok_or("output required")?);
+            crate::clothes_gpu::keep_results();
             let original = std::fs::read(&card).map_err(|e| e.to_string())?;
             ensure_library(&lib)?;
             let store = active().ok_or("library not active")?;
@@ -2299,6 +2300,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             // The process's one-time scans of the library's mods tree (GUIDs, MaterialEditor manifests, catalogues), all
             // at once before the first card: they used to land on whichever card first asked (2–3 s of that card).
             crate::prewarm(&lib)?;
+            crate::clothes_gpu::keep_results();
             let given: Box<dyn Iterator<Item = String>> = if list_arg == "-" { Box::new(std::io::stdin().lines().map_while(Result::ok)) }
                 else { Box::new(list.lines().map(str::to_owned).collect::<Vec<_>>().into_iter()) };
             for card in given.map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).map(PathBuf::from) {

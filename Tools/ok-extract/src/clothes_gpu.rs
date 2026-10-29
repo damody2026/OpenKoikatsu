@@ -25,11 +25,15 @@ extern "C" {
 pub(crate) static GPU_NANOS:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
 pub(crate) static GPU_CALLS:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);
 
-/// GPU results kept by their inputs' content for the process. A card's opens read the same texture back again and
-/// again (every outfit and garment state extracts its meshes anew): 378 calls for two cards were 129 different
-/// inputs, and each call waits a round trip on the GPU (~10–50 ms, shared by every worker of a batch). A result
-/// depends on its inputs and the process's one device only; errors are not kept.
+/// GPU results kept by their inputs' content, in a process converting cards (`keep_results`). A card's opens read the
+/// same texture back again and again (every outfit and garment state extracts its meshes anew): 378 calls for two
+/// cards were 129 different inputs, and each call waits a round trip on the GPU (~10–50 ms, shared by every worker of
+/// a batch). A result depends on its inputs and the process's one device only; errors are not kept. The game (one
+/// open per card) does not keep them.
+static KEEP_RESULTS:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+pub(crate) fn keep_results() {KEEP_RESULTS.store(true,std::sync::atomic::Ordering::Relaxed);}
 fn gpu_memo(key:[u64;2],make:impl FnOnce()->Result<Vec<u8>,String>)->Result<Vec<u8>,String> {
+    if !KEEP_RESULTS.load(std::sync::atomic::Ordering::Relaxed) {return make();}
     const KEPT_BYTES:usize=512<<20;
     static KEPT:std::sync::LazyLock<std::sync::Mutex<(std::collections::HashMap<[u64;2],Vec<u8>>,usize)>>=std::sync::LazyLock::new(Default::default);
     if let Some(hit)=KEPT.lock().unwrap_or_else(|e|e.into_inner()).0.get(&key).cloned() {return Ok(hit);}
