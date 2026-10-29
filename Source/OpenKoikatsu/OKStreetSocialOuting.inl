@@ -327,24 +327,24 @@ void AOKStreetSocialScene::TickSleep(){
  S.SleepWake=false;
  if(S.SleepNap){
   // Up again where they lay down, the same day.
-  FString Error;OKResumeCrowdRuntimeBehavior(this,0,Error);
+  FString Error;ResumeBehavior(0,Error);
   S.Male=S.SleepBed+FRotator(0,S.SleepYaw,0).RotateVector(FVector(110,0,0));S.Male.Z=OKStreetFloorZ(S.SleepBed);
   const int32 Girl=S.SleepGirl;S.SleepGirl=INDEX_NONE;S.SleepPhase=0;S.SleepNap=false;
-  if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){OKResumeCrowdRuntimeBehavior(this,Girl,Error);S.Agents[Girl-1].Position=S.Male+FRotator(0,S.SleepYaw,0).RotateVector(FVector(40,120,0));ResumeTalkQuiet(Girl);}
+  if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){ResumeBehavior(Girl,Error);S.Agents[Girl-1].Position=S.Male+FRotator(0,S.SleepYaw,0).RotateVector(FVector(40,120,0));ResumeTalkQuiet(Girl);}
   S.Message=OKT(TEXT("ui.outing.rested_then_got_up"));RefreshUI();
   return;
  }
  // Morning: up at 7:00 the next day, standing beside the bed.
- FString Error;OKResumeCrowdRuntimeBehavior(this,0,Error);
+ FString Error;ResumeBehavior(0,Error);
  const FVector Side=FRotator(0,S.SleepYaw,0).RotateVector(FVector(110,0,0));
  S.Male=S.SleepBed+Side;S.Male.Z=OKStreetFloorZ(S.SleepBed);
  {const double Wake=double(SkipWakeMinute()%1440)/60.0;S.ClockStartHours=Wake;S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;S.ClockDrivesSun=S.Sun.IsValid();S.CalendarLastHours=Wake;}
  NextDay();
- if(S.SleepGirl2!=INDEX_NONE&&S.Agents.IsValidIndex(S.SleepGirl2-1)){OKResumeCrowdRuntimeBehavior(this,S.SleepGirl2,Error);auto& Second=S.Agents[S.SleepGirl2-1];Second.Held=false;Second.Position=S.Male+FRotator(0,S.SleepYaw,0).RotateVector(FVector(-60,160,0));}
+ if(S.SleepGirl2!=INDEX_NONE&&S.Agents.IsValidIndex(S.SleepGirl2-1)){ResumeBehavior(S.SleepGirl2,Error);auto& Second=S.Agents[S.SleepGirl2-1];Second.Held=false;Second.Position=S.Male+FRotator(0,S.SleepYaw,0).RotateVector(FVector(-60,160,0));}
  S.SleepGirl2=INDEX_NONE;
  const int32 Girl=S.SleepGirl;S.SleepGirl=INDEX_NONE;S.SleepPhase=0;
  if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){
-  OKResumeCrowdRuntimeBehavior(this,Girl,Error);
+  ResumeBehavior(Girl,Error);
   auto& Agent=S.Agents[Girl-1];Agent.Position=S.Male+FRotator(0,S.SleepYaw,0).RotateVector(FVector(40,120,0));
   ResumeTalkQuiet(Girl);
  }
@@ -378,7 +378,7 @@ void AOKStreetSocialScene::EndSolo(){
  // Ended before its time (he spoke to her, another activity took over): settled for the minutes it lasted, not its
  // whole length. Watching the fish two minutes and then sitting on the bench put the clock 18 minutes on (R3-112).
  if(S.ActGirl==Girl&&OKStreetMindNow(S)-S.SoloStartMinute<S.SoloMinutes)S.ActCutShort=true;
- FString Error;OKResumeCrowdRuntimeBehavior(this,Girl,Error);if(!S.SoloMale.IsEmpty())OKResumeCrowdRuntimeBehavior(this,0,Error);
+ FString Error;ResumeBehavior(Girl,Error);if(!S.SoloMale.IsEmpty())ResumeBehavior(0,Error);
  if(S.Agents.IsValidIndex(Girl-1)){auto& Agent=S.Agents[Girl-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}
  S.Message=OKMsg(TEXT("ui.outing.solo_activity_ended"), {{TEXT("solo_activity"), *S.SoloWhat}});RefreshUI();ResumeTalkQuiet(Girl);
 }
@@ -757,7 +757,7 @@ void AOKStreetSocialScene::ArriveOuting(){
  if(Girl!=INDEX_NONE)MindRemember(Girl,TEXT("outing"),OKMsg(TEXT("ui.memory.outing_arrived"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(Place)},{TEXT("activity"),OKStreetActivityName(Activity)}}),Place,0.3f);
  if(S.Companion==Girl){
   if(S.Agents.IsValidIndex(Girl-1)){auto& Agent=S.Agents[Girl-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}
-  FString Error;OKResumeCrowdRuntimeBehavior(this,Girl,Error);S.Companion=INDEX_NONE;S.CompanionTrail.Reset();S.CompanionBlockedAt=0;S.CompanionWalk=0;
+  FString Error;ResumeBehavior(Girl,Error);S.Companion=INDEX_NONE;S.CompanionTrail.Reset();S.CompanionBlockedAt=0;S.CompanionWalk=0;
  }
  FString Error;
  if(Activity==TEXT("stroll")){

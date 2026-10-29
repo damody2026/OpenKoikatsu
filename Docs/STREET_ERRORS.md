@@ -1057,3 +1057,7 @@
 - 水族館約會，她開始「看魚」（單人活動 `aquarium_observe`，`target=-1`）後對話仍開著、她照常回答，但 galgame 對話框與立繪消失，台詞改在舊的字幕面板顯示。galgame 在 `SoloGirl` 有值時一律關閉，註解說「對她說話反正會結束活動」，但對話早已開著時不會經過 `BeginTalk`，活動不會結束。
 - 修正（`OKStreetSocialGalgame.inl`）：單人活動中對話開著就照樣顯示對話框與立繪；對話鏡頭仍不接管（它要 `S.Target`，活動中是空的），R3-119（爆裂魔法被對話鏡頭擋在畫面外）不會回來。
 - 驗證（Gal1029H，欄位 32）：惠惠看水母時問她「哪一隻最漂亮」，`/galgame` active、who c9，截圖是對話框＋立繪，鏡頭仍是活動的跟隨鏡頭。
+- 2026-10-29 c-conquest（Conq1028，Int1029CK）：想查約定清單，誤用 `game_inspect '{"what":"appointments"}'`：
+  - `game_inspect` 會把主角和一位女主帶進檢查房間（天上的空平台）。我沒看工具說明就呼叫，雷電將軍的「一起走回宿舍」在空平台上卡了兩小時（11:18→13:21），看起來像整座城沒載入。
+  - 修正：`/inspect {off:true}` 離開後重讀欄位 7，重走一次；約定清單改看 `game_state {"full":true}` 的 `appointments`。
+  - 以後：沒用過的 ok-game 工具先看 `Tools/ok-game-mcp/src/main.rs` 的說明；畫面突然整片空白，先查 log 有沒有 `Street inspect`。

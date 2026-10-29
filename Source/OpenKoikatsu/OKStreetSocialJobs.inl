@@ -71,6 +71,14 @@ void AOKStreetSocialScene::StandAtWork(const FString& PlaceId,const TArray<FStri
   if(APlayerController* Pc=GetWorld()?GetWorld()->GetFirstPlayerController():nullptr)if(Pc->PlayerCameraManager)Pc->PlayerCameraManager->StartCameraFade(1.f,0.f,0.7f,FLinearColor::Black,false,false);
   UE_LOG(LogTemp,Display,TEXT("Street shift: he stands at %s %s"),*PlaceId,*Free->Name);return;
  }
+ // Every spot taken (a heroine on the same shift at the cafe's one counter): he works beside the first one, not in the
+ // doorway the whole shift.
+ for(const FString& N:Spots)for(const auto& A:P->Anchors){
+  if(!A.Name.StartsWith(N)||!OKStreetInsidePlace(*P,A.Position))continue;
+  for(const float Side:{120.f,-120.f}){const FVector Beside=A.Position+FRotator(0,A.Yaw,0).RotateVector(FVector(0,Side,0));
+   if(!OKStreetInsidePlace(*P,Beside))continue;
+   S.Male=Beside;S.Male.Z=OKStreetFloorZ(Beside);S.Rotations[0]=FRotator(0,A.Yaw,0);
+   UE_LOG(LogTemp,Display,TEXT("Street shift: %s %s is taken; he stands beside it"),*PlaceId,*A.Name);return;}}
  TArray<FString> Names;for(const auto& A:P->Anchors)Names.Add(A.Name);
  UE_LOG(LogTemp,Display,TEXT("Street shift: no free work spot at %s (anchors: %s)"),*PlaceId,*FString::Join(Names,TEXT(",")));
 }

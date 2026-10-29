@@ -229,6 +229,13 @@ int32 AOKStreetSocialScene::SongLatestMemory(int32 Girl) const{
  return INDEX_NONE;
 }
 
+// Giving her back her own behaviour (a walk together arrived, the companion let go, an activity ended) also cancelled
+// her speech: he said "go on, sing" as she began, the judge sat them down in the cafe, and the song stopped after a
+// second. A song is a performance, not a line: only leaving her or a call stops it (TickSong).
+bool AOKStreetSocialScene::ResumeBehavior(int32 Character,FString& Error){
+ return OKResumeCrowdRuntimeBehavior(this,Character,Error,SongOwnsVoice(Character));
+}
+
 bool AOKStreetSocialScene::SongOwnsVoice(int32 Character) const{
  if(!State)return false;const auto& G=State->Song;
  return Character!=INDEX_NONE&&Character==G.Girl&&(G.Phase==EOKSongPhase::Intro||G.Phase==EOKSongPhase::Singing||G.Phase==EOKSongPhase::Outro);

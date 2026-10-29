@@ -2145,7 +2145,7 @@ void AOKStreetSocialScene::EndTalk(){
   MindRemember(S.Target,TEXT("talk"),OKMsg(TEXT("ui.memory.talk_session"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))},{TEXT("minutes"),int32(FMath::Max<int64>(1,Now-From))},
    {TEXT("start"),FString::Printf(TEXT("%02d:%02d"),int32(From%1440/60),int32(From%60))},{TEXT("end"),FString::Printf(TEXT("%02d:%02d"),int32(Now%1440/60),int32(Now%60))}}),PlaceHere(S.Male),0.2f);}
  S.RelationshipSequence.Reset();S.RelationshipPart=0;S.RelationshipSilentUntil=0;S.TopicsOpen=false;S.TouchNotice.Reset();S.TouchActive=false;S.TouchCounts.Reset();S.TouchRegion=INDEX_NONE;S.TopicCommandCounts.Reset();
- if(Ending){FString Error;OKStopCrowdRuntimeSpeech(this,S.Target,Error);OKResetCrowdRuntimeFaceExpression(this,S.Target,Error);OKResumeCrowdRuntimeBehavior(this,S.Target,Error);OKResumeCrowdRuntimeBehavior(this,0,Error);if(S.Agents.IsValidIndex(S.Target-1))S.Agents[S.Target-1].Held=false;S.CandidateExplicit=false;S.Candidate=INDEX_NONE;S.CandidateCount=0;}
+ if(Ending){FString Error;OKStopCrowdRuntimeSpeech(this,S.Target,Error);OKResetCrowdRuntimeFaceExpression(this,S.Target,Error);ResumeBehavior(S.Target,Error);ResumeBehavior(0,Error);if(S.Agents.IsValidIndex(S.Target-1))S.Agents[S.Target-1].Held=false;S.CandidateExplicit=false;S.Candidate=INDEX_NONE;S.CandidateCount=0;}
  S.SilentTopicUntil=0;S.CollectedVoiceIds.Reset();S.CollectedActive=false;S.AwaitTopicAnswer=false;S.TopicIntroduction=false;S.TopicSequence.Reset();S.UsedTopic=INDEX_NONE;S.AskedTopic=INDEX_NONE;S.PlayerLine.Reset();S.Target=INDEX_NONE;S.Node=INDEX_NONE;S.VoiceIds.Reset();S.ClipStarted=false;S.ActiveCategory.Reset();S.RelationshipPending=false;S.RelationshipVoiceRequired=false;S.RelationshipVoiceCompleted=false;S.BranchLine=false;S.PendingEffect=FOKStreetEffect{};
  S.Message=OKT(TEXT("ui.scene.controls_full_hint"));RefreshUI();
 }
@@ -2653,7 +2653,7 @@ void AOKStreetSocialScene::RebuildUI(uint32 Regions){
 void AOKStreetSocialScene::ResumeConversationPose(int32 Character,FString& Error){
  if(State&&State->PrivateGirl!=INDEX_NONE&&(Character==0||Character==State->PrivateGirl)){OKPlayCrowdRuntimeAction(this,Character,Character==0?TEXT("talk_gesture_03.okanim"):TEXT("talk_gesture_00.okanim"),Error);return;}
  if(State&&State->Pair.Conversation()&&State->Pair.Phase==1&&(Character==0||Character==State->Pair.Partner)){Error.Reset();return;}
- OKResumeCrowdRuntimeBehavior(this,Character,Error);
+ ResumeBehavior(Character,Error);
 }
 // Source phone prefab bounds (Unity x/z/y -> UE x/y/z), shared across APNGs.
 static FTransform OKStreetPhonePartTransform(const FTransform& Hand,int32 Part){
@@ -2753,7 +2753,7 @@ void AOKStreetSocialScene::FinishPhoto(bool bKeepTalking){
  const bool WasTalking=S.FreeTalkOpen&&FreeTalkPartner()==P.Partner;
  const auto Before=P;P=FOKStreetPairSession();if(Before.Conversation())EndTalk();
  for(auto& Prop:S.PairProps)DestroyLater(Prop.Get());S.PairProps.Reset();S.MealHandProps.Reset();
- const auto& Restore=Before;FString Error;OKResumeCrowdRuntimeBehavior(this,0,Error);OKResumeCrowdRuntimeBehavior(this,Restore.Partner,Error);
+ const auto& Restore=Before;FString Error;ResumeBehavior(0,Error);ResumeBehavior(Restore.Partner,Error);
  S.PairRestoredFrame=GFrameCounter;S.PairRestoredActor=Restore.Partner;
  {auto& Agent=S.Agents[Restore.Partner-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}S.Yaw=Restore.SavedYaw;S.Pitch=Restore.SavedPitch;S.Distance=Restore.SavedDistance;S.MouseUI=Restore.SavedMouseUI;ApplyMouseMode(S.ViewportFocused);
  P=FOKStreetPairSession();S.Message=Before.PhoneUse?OKT(TEXT("ui.scene.phone_activity_ended")):Before.Watermelon?OKT(TEXT("ui.scene.watermelon_ended")):Before.Meal?OKT(TEXT("ui.scene.meal_ended")):Before.Splash?OKT(TEXT("ui.scene.splash_ended")):Before.Drink?OKT(TEXT("ui.scene.drink_ended")):Before.Bath?OKT(TEXT("ui.scene.hotspring_ended")):Before.Read?OKT(TEXT("ui.scene.reading_ended")):Before.Seated?OKT(TEXT("ui.scene.sit_chat_ended")):OKT(TEXT("ui.scene.photo_ended"));RefreshUI();ResumeTalkQuiet(Restore.Partner);
@@ -3239,7 +3239,7 @@ void AOKStreetSocialScene::RunReadingProbe(double Now){
  if(Character>=6){S.ReadingChecked=true;return;}
  // He holds no book on his own (his standing idle is the reading clip too; TickReadingProps): the heroines are checked.
  if(Character==0&&S.ReadingProbePhase==0){S.ReadingActorsVerified=1;return;}
- if(S.ReadingProbePhase==0){S.ReadingProbeSave=OKStreetWriteSave(S.Store);if(Character>0){S.ReadingSavedAgent=S.Agents[Character-1];S.Agents[Character-1].Held=true;}FString Error;OKResumeCrowdRuntimeBehavior(this,Character,Error);S.ReadingProbeAt=Now;S.ReadingProbePhase=1;return;}
+ if(S.ReadingProbePhase==0){S.ReadingProbeSave=OKStreetWriteSave(S.Store);if(Character>0){S.ReadingSavedAgent=S.Agents[Character-1];S.Agents[Character-1].Held=true;}FString Error;ResumeBehavior(Character,Error);S.ReadingProbeAt=Now;S.ReadingProbePhase=1;return;}
  if(Now-S.ReadingProbeAt>15){FOKRuntimeCharacterStatus Seen;const bool Got=OKGetCrowdRuntimeCharacterStatus(this,Character,Seen);const auto* Have=S.ReadingProps.Find(Character);
   Fail(FString::Printf(TEXT("Reading book visibility/transition timeout (actor %d: clip %s, transitioning %d, visible %d, error \"%s\", book parts %d, target %d)"),Character,Got?*Seen.ActiveClipId:TEXT("?"),Got&&Seen.AnimationTransitioning?1:0,Got&&Seen.Visible?1:0,Got?*Seen.Error:TEXT(""),Have?Have->Num():0,S.Target));return;}
  FOKRuntimeCharacterStatus Status;FTransform Hand;const auto* Parts=S.ReadingProps.Find(Character);
@@ -3365,14 +3365,14 @@ void AOKStreetSocialScene::BeginCompanion(int32 Character){
  FOKRuntimeCharacterStatus Male,Npc;
  if(!OKGetCrowdRuntimeCharacterStatus(this,0,Male)||!OKGetCrowdRuntimeCharacterStatus(this,Character,Npc)||!Male.Visible||!Npc.Visible||!Male.Error.IsEmpty()||!Npc.Error.IsEmpty()||FVector::Dist2D(S.Male,S.Agents[Character-1].Position)>250)return;
  EndTalk();S.Companion=Character;S.Agents[Character-1].Held=true;S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;S.CompanionBlockedAt=0;S.CompanionTravel=0;S.CompanionWalk=0;
- FString Error;OKResumeCrowdRuntimeBehavior(this,0,Error);OKResumeCrowdRuntimeBehavior(this,Character,Error);
+ FString Error;ResumeBehavior(0,Error);ResumeBehavior(Character,Error);
  S.MouseUI=false;ApplyMouseMode(S.ViewportFocused);S.Message=OKT(TEXT("ui.scene.walk_explore_hint"));RefreshUI();
 }
 void AOKStreetSocialScene::FinishCompanion(){
  if(!State||State->Companion==INDEX_NONE)return;auto& S=*State;
  MindRemember(S.Companion,TEXT("walk"),OKMsg(TEXT("ui.memory.walked_together"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))}}),PlaceHere(S.Male),0.15f);
  if(S.Agents.IsValidIndex(S.Companion-1)){auto& Agent=S.Agents[S.Companion-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}
- FString Error;OKResumeCrowdRuntimeBehavior(this,S.Companion,Error);S.Companion=INDEX_NONE;S.CompanionTrail.Reset();S.CompanionBlockedAt=0;S.CompanionWalk=0;
+ FString Error;ResumeBehavior(S.Companion,Error);S.Companion=INDEX_NONE;S.CompanionTrail.Reset();S.CompanionBlockedAt=0;S.CompanionWalk=0;
  S.Message=OKT(TEXT("ui.scene.walk_ended"));RefreshUI();
 }
 float AOKStreetSocialScene::StepCompanion(float Dt){
@@ -3518,7 +3518,7 @@ void AOKStreetSocialScene::BeginFacility(int32 Kind,int32 Character){
 }
 void AOKStreetSocialScene::FinishFacility(){
  if(!State||State->Facility==INDEX_NONE)return;auto& S=*State;FString Error;const int32 FacilityGirl=S.FacilityCharacter;
- OKResumeCrowdRuntimeBehavior(this,S.FacilityCharacter,Error);
+ ResumeBehavior(S.FacilityCharacter,Error);
  if(S.Agents.IsValidIndex(S.FacilityCharacter-1)){S.Agents[S.FacilityCharacter-1]=S.FacilitySavedAgent;S.Rotations[S.FacilityCharacter]=S.FacilitySavedRotation;}
  if(S.FacilityEntered){S.Male=S.FacilitySavedMale;S.Rotations[0]=S.FacilitySavedMaleRotation;S.Yaw=S.FacilitySavedYaw;S.Pitch=S.FacilitySavedPitch;S.Distance=S.FacilitySavedDistance;S.MouseUI=S.FacilitySavedMouse;ApplyMouseMode(S.ViewportFocused);}
  for(auto& Prop:S.FacilityProps)DestroyLater(Prop.Get());S.FacilityProps.Reset();S.FacilityHandProps.Reset();S.Facility=INDEX_NONE;S.FacilityCharacter=INDEX_NONE;S.FacilityStartedAt=0;S.FacilityEntered=false;

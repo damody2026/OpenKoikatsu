@@ -106,7 +106,7 @@ void AOKStreetSocialScene::StopLifePose(int32 Only){
  if(!State)return;auto& S=*State;
  for(int32 K=S.LifePoses.Num()-1;K>=0;--K){
   auto& P=S.LifePoses[K];if(Only!=INDEX_NONE&&P.Actor!=Only)continue;const int32 I=P.Actor;
-  FString Error;OKResumeCrowdRuntimeBehavior(this,I,Error);
+  FString Error;ResumeBehavior(I,Error);
   if(S.LifeRestore.Contains(I)&&S.Agents.IsValidIndex(I-1))S.Agents[I-1].Position=S.LifeRestore[I];S.LifeRestore.Remove(I);
   for(auto& Prop:P.Props)DestroyLater(Prop.Get());
   S.LifePoses.RemoveAt(K);
@@ -125,7 +125,7 @@ void AOKStreetSocialScene::StopStrayPoses(){
   if(Legit||!OKGetCrowdRuntimeActionStatus(this,I,A)||!A.Playing||!OKLifeSeatedClip(A.ClipId)){S.StrayPose.Remove(I);continue;}
   int32& Seen=S.StrayPose.FindOrAdd(I,0);
   if(++Seen<2)continue;
-  FString Error;OKResumeCrowdRuntimeBehavior(this,I,Error);S.StrayPose.Remove(I);
+  FString Error;ResumeBehavior(I,Error);S.StrayPose.Remove(I);
   UE_LOG(LogTemp,Warning,TEXT("Street stray pose: actor %d was still playing %s outside any seated activity (target=%d companion=%d outing=%d pair=%d); stopped"),I,*A.ClipId,S.Target,S.Companion,S.OutingGirl,S.Pair.Partner);
  }
 }
@@ -725,8 +725,8 @@ bool AOKStreetSocialScene::LiftWalkNear(int32 Index) const{
 
 // A3 The night or a nap could not start (the poses never came ready): everyone back as they were.
 void AOKStreetSocialScene::AbortSleep(const FString& Why){
- auto& S=*State;FString Error;OKResumeCrowdRuntimeBehavior(this,0,Error);
- for(const int32 Girl:{S.SleepGirl,S.SleepGirl2})if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){OKResumeCrowdRuntimeBehavior(this,Girl,Error);auto& A=S.Agents[Girl-1];A.Held=false;A.Mode=EOKStreetMove::Walking;A.Position=S.SleepBed+FRotator(0,S.SleepYaw,0).RotateVector(FVector(40,120,0));}
+ auto& S=*State;FString Error;ResumeBehavior(0,Error);
+ for(const int32 Girl:{S.SleepGirl,S.SleepGirl2})if(Girl!=INDEX_NONE&&S.Agents.IsValidIndex(Girl-1)){ResumeBehavior(Girl,Error);auto& A=S.Agents[Girl-1];A.Held=false;A.Mode=EOKStreetMove::Walking;A.Position=S.SleepBed+FRotator(0,S.SleepYaw,0).RotateVector(FVector(40,120,0));}
  S.Male=S.SleepBed+FRotator(0,S.SleepYaw,0).RotateVector(FVector(110,0,0));S.Male.Z=OKStreetFloorZ(S.SleepBed);
  S.SleepGirl=INDEX_NONE;S.SleepGirl2=INDEX_NONE;S.SleepPhase=0;S.SleepNap=false;S.SleepWake=false;
  S.Message=Why;RefreshUI();UE_LOG(LogTemp,Warning,TEXT("Street sleep aborted: %s"),*Why);

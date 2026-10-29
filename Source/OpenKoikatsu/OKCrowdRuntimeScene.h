@@ -28,7 +28,7 @@ bool OKConfigureCrowdRuntimeActionContact(AActor* Owner,int32 Character,const FS
 // A paired speech for that action is cancelled. Unrelated speech is left alone.
 // An in-use clip blends out, then its private overlay is released.
 bool OKCancelCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error);
-bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error);
+bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error,bool KeepSpeech=false); // KeepSpeech: a song she is singing goes on
 // Let go of the extra action she shows (back to her behavior) but keep a queued or prepared one and every speech: the
 // next clip installs once the slot is free (a song sung over a sequence of clips).
 bool OKReleaseCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error);

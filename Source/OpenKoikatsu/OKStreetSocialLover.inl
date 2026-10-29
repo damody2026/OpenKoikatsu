@@ -106,9 +106,9 @@ bool AOKStreetSocialScene::SwitchPhotoPose(const FString& Pose){
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Ask);if(!Out)return false;
  const FString Female=Out->GetStringField(TEXT("female")),Male=Out->GetStringField(TEXT("male"));
  if(Female.IsEmpty()||Female==P.FemaleClip)return false;
- FString Error;OKResumeCrowdRuntimeBehavior(this,P.Partner,Error);
+ FString Error;ResumeBehavior(P.Partner,Error);
  if(!OKPrewarmCrowdRuntimeAction(this,P.Partner,Female,Error)){UE_LOG(LogTemp,Warning,TEXT("Street photo: pose %s: %s"),*Female,*Error);FinishPhoto(true);return false;}
- if(!Male.IsEmpty()&&Male!=P.MaleClip){OKResumeCrowdRuntimeBehavior(this,0,Error);if(OKPrewarmCrowdRuntimeAction(this,0,Male,Error))P.MaleClip=Male;}
+ if(!Male.IsEmpty()&&Male!=P.MaleClip){ResumeBehavior(0,Error);if(OKPrewarmCrowdRuntimeAction(this,0,Male,Error))P.MaleClip=Male;}
  P.FemaleClip=Female;P.Phase=0;P.RequestedAt=SceneTime();S.PhotoPoseKey=Out->GetStringField(TEXT("key"));
  S.Message=OKT(TEXT("ui.scene.photo_changing_pose"));RefreshUI();
  UE_LOG(LogTemp,Display,TEXT("Street photo: actor=%d changes pose to %s (%s)"),P.Partner,*S.PhotoPoseKey,*Female);
@@ -164,7 +164,7 @@ void AOKStreetSocialScene::TickLover(){
   // Taken over meanwhile by an activity of hers (Raiden's shrine prayer was being made ready when her reaction ran out):
   // her clips and his are the activity's now; resuming her behaviour cancelled the prayer it was preparing.
   if(S.SoloGirl==R.Girl||S.Pair.Partner==R.Girl){UE_LOG(LogTemp,Display,TEXT("Street lover reaction: actor=%d ends inside an activity; its clips are left to it"),R.Girl);R=FOKStreetLoverReact();return;}
-  FString Error;OKResumeCrowdRuntimeBehavior(this,R.Girl,Error);if(!R.MaleClip.IsEmpty())OKResumeCrowdRuntimeBehavior(this,0,Error);S.Agents[R.Girl-1].Held=R.WasHeld;R=FOKStreetLoverReact();}
+  FString Error;ResumeBehavior(R.Girl,Error);if(!R.MaleClip.IsEmpty())ResumeBehavior(0,Error);S.Agents[R.Girl-1].Held=R.WasHeld;R=FOKStreetLoverReact();}
 }
 
 // What free talk can do that otherwise only a panel button does: give or lend, take the photo, sleep here, ride.

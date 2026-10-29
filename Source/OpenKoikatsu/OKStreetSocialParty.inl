@@ -234,7 +234,7 @@ void AOKStreetSocialScene::TickPartySeats(){
 }
 void AOKStreetSocialScene::StopPartySeat(int32 Index){
  auto& S=*State;if(!S.PartySeats.IsValidIndex(Index))return;auto& P=S.PartySeats[Index];
- FString Error;OKResumeCrowdRuntimeBehavior(this,P.Actor,Error);
+ FString Error;ResumeBehavior(P.Actor,Error);
  for(auto& Prop:P.Props)DestroyLater(Prop.Get());
  S.PartySeatNow.Remove(P.Actor);UE_LOG(LogTemp,Display,TEXT("Street party: actor %d gets up"),P.Actor);S.PartySeats.RemoveAt(Index);
 }

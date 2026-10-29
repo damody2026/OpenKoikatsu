@@ -1453,10 +1453,10 @@ bool OKReleaseCrowdRuntimeAction(AActor* Owner,int32 Character,FString& Error){
  if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
  State->Entries[Character]->ActionOverride=INDEX_NONE;Error.Reset();return true;
 }
-bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error){
+bool OKResumeCrowdRuntimeBehavior(AActor* Owner,int32 Character,FString& Error,bool KeepSpeech){
  check(IsInGameThread());const auto* Weak=OKRuntimeScene::ActiveScenes.Find(Owner);const auto State=Weak?Weak->Pin():nullptr;
  if(!State||State->Stopped||!State->Installed||!State->Entries.IsValidIndex(Character)||State->Entries[Character]->BankActor==INDEX_NONE){Error=TEXT("Runtime character not ready");return false;}
- auto& E=*State->Entries[Character];E.ActionOverride=INDEX_NONE;E.PendingAction=INDEX_NONE;E.PendingEpoch=0;E.StreamHold=false;E.CancelSpeech();Error.Reset();return true;
+ auto& E=*State->Entries[Character];E.ActionOverride=INDEX_NONE;E.PendingAction=INDEX_NONE;E.PendingEpoch=0;E.StreamHold=false;if(!KeepSpeech)E.CancelSpeech();Error.Reset();return true;
 }
 
 bool OKSpeakCrowdRuntimeLine(AActor* Owner,int32 Character,const FString& VoiceId,FString& Error){

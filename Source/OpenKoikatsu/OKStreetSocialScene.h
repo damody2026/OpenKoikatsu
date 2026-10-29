@@ -681,6 +681,7 @@ private:
  void TickInspect(float Dt,class APlayerController* PC,bool bFocused);
  void BuildSongRow(TSharedRef<class SVerticalBox> Box);
  TSharedRef<class FJsonObject> SongControl(const FString& Action,int32 Girl);
+ bool ResumeBehavior(int32 Character,FString& Error); // her own walk/idle again; a song she is singing goes on
  bool SongOwnsVoice(int32 Character) const;bool SongAtEase(int32 Girl);bool SongIsSinging() const;int32 SongLatestMemory(int32 Girl) const;float StepSongStage(float Dt);void SongListen();void SongBegin(const FString& Intro,const FString& Context);void SongCallOver(double Now);bool SongHasRoom(const FVector& Where) const;
  bool SongCameraShot(double Now,float Dt,FVector& Location,FVector& Focus);
  void SongChoreograph();
