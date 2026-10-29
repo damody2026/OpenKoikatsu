@@ -192,7 +192,7 @@ void AOKStreetSocialScene::PhoneCall(int32 Girl){
  {FString Why;if(PhoneCutOff(&Why)){S.FinNotice=Why;S.Message=Why;RefreshUI();return;}}
  if(S.RemoteMode==2){S.FinNotice=OKT(TEXT("ui.phone_inbox.in_call_now"));RefreshUI();return;}
  if((S.Target!=INDEX_NONE&&S.Target!=Girl)||!NothingGoingOnExcept(Girl)){S.FinNotice=OKT(TEXT("ui.phone_inbox.busy_with_others"));RefreshUI();return;}
- const FString Name=S.Manifest.Characters[Girl].Name;
+ const FString Name=OKStreetScriptedName(S.Manifest.Characters[Girl].Name);
  if(FMath::FRand()>=PhoneAnswerChance(Girl)){
   HistoryAdd(Girl,TEXT("call_missed"),TEXT("him"),OKT(TEXT("ui.phone_inbox.he_called_no_answer")));
   S.FinNotice=Name+OKT(TEXT("ui.phone_inbox.no_answer_suffix"));
@@ -251,7 +251,7 @@ void AOKStreetSocialScene::ReachOutByPhone(int32 Girl){
  if(!HasHerNumber(Girl,true))return;
  if(R.Stage==TEXT("lover")&&FMath::FRand()<0.5f&&S.RingGirl==INDEX_NONE&&S.RemoteMode==0&&S.Target==INDEX_NONE&&SelfTextAllowed(Girl)){
   S.RingGirl=Girl;S.RingWhy=Why;S.RingUntil=SceneTime()+20.0;
-  S.Message=OKMsg(TEXT("ui.phone_inbox.girl_calling_hint"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});RefreshUI();
+  S.Message=OKMsg(TEXT("ui.phone_inbox.girl_calling_hint"), {{TEXT("girl_name"), *OKStreetScriptedName(S.Manifest.Characters[Girl].Name)}});RefreshUI();
   UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d calls him (%s)"),Girl,*Why);return;
  }
  if(!SelfTextAllowed(Girl)){UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d has written enough today"),Girl);return;}
@@ -269,7 +269,7 @@ void AOKStreetSocialScene::PhoneAnswer(bool Accept){
  HistoryAdd(Girl,TEXT("call"),TEXT("her"),OKT(TEXT("ui.phone_inbox.call_answered")));
  S.FreeTalkOpen=true;FreeTalkLiveSet(true);
  S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.phone_inbox.you_call_him_because"))+S.RingWhy+OKT(TEXT("ui.phone_inbox.he_picked_up_hint"));SendFreeTalk();
- S.Message=OKMsg(TEXT("ui.phone_inbox.in_call_with"), {{TEXT("name"), *S.Manifest.Characters[Girl].Name}});RefreshUI();
+ S.Message=OKMsg(TEXT("ui.phone_inbox.in_call_with"), {{TEXT("name"), *OKStreetScriptedName(S.Manifest.Characters[Girl].Name)}});RefreshUI();
 }
 
 void AOKStreetSocialScene::QueueHerText(int32 Girl,const FString& Why,const FString& Kind,double DelaySeconds){
@@ -307,7 +307,7 @@ void AOKStreetSocialScene::ComposeHerText(int32 Girl,const FString& Why,const FS
   OKStreetFreeTalkTrimMemory(Memory);Weak->FreeTalkSaveMemory();
   FString Where=L->Agents.IsValidIndex(Girl-1)?Weak->PlaceHere(L->Agents[Girl-1].Position):FString();
   Weak->HistoryAdd(Girl,TEXT("message"),TEXT("her"),Reply.Reply,Where);
-  L->FreeTalkNotice=OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *L->Manifest.Characters[Girl].Name}, {TEXT("reply"), *OKPhoneShown(Reply.Reply)}});
+  L->FreeTalkNotice=OKMsg(TEXT("ui.bank.heroine_reply_line"), {{TEXT("heroine_name"), *OKStreetScriptedName(L->Manifest.Characters[Girl].Name)}, {TEXT("reply"), *OKPhoneShown(Reply.Reply)}});
   if(L->App==TEXT("phone")&&L->PhoneThread==Girl)Weak->PhoneMarkSeen(Girl);
   // Her own message telling him where she is: she stays there for him a while (TickSchedule, R3-230).
   if(Kind==TEXT("initiative"))L->WaitsForHim.Add(Girl,OKStreetMindNow(*L)+40);
@@ -326,7 +326,7 @@ void AOKStreetSocialScene::TickPhone(){
   const int32 Girl=S.RingGirl;S.RingGirl=INDEX_NONE;
   HistoryAdd(Girl,TEXT("call_missed"),TEXT("her"),OKT(TEXT("ui.phone_inbox.call_no_answer")));
   QueueHerText(Girl,S.RingWhy+OKT(TEXT("ui.phone_inbox.you_called_no_answer_note")),TEXT("call_missed"),3.0);
-  S.Message=OKMsg(TEXT("ui.phone_inbox.missed_call_from"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});RefreshUI();
+  S.Message=OKMsg(TEXT("ui.phone_inbox.missed_call_from"), {{TEXT("girl_name"), *OKStreetScriptedName(S.Manifest.Characters[Girl].Name)}});RefreshUI();
  }
  // One message on its way at a time.
  if(!S.PhoneInFlight)for(int32 K=0;K<S.PendingTexts.Num();++K)if(S.PendingTexts[K].Due<=Now){
@@ -342,7 +342,7 @@ void AOKStreetSocialScene::BuildPhoneRow(const TSharedRef<SVerticalBox>& Panel){
  auto Row=SNew(SWrapBox).UseAllottedSize(true);
  Row->AddSlot().Padding(2)[OKFinButton(Weak,Unread>0?OKMsg(TEXT("ui.phone_inbox.phone_unread_label"), {{TEXT("unread_count"), Unread}}):FString(OKT(TEXT("ui.finance_apps.phone_label"))),[Weak](){Weak->PhoneOpen(INDEX_NONE);},true,Unread>0?FLinearColor(1,.6f,.6f):FLinearColor::White)];
  if(S.RingGirl!=INDEX_NONE){
-  Row->AddSlot().Padding(2)[OKFinText(OKMsg(TEXT("ui.phone_inbox.incoming_call_from"), {{TEXT("caller_name"), *S.Manifest.Characters[S.RingGirl].Name}}),FLinearColor(1,.85f,.3f),12,true)];
+  Row->AddSlot().Padding(2)[OKFinText(OKMsg(TEXT("ui.phone_inbox.incoming_call_from"), {{TEXT("caller_name"), *OKStreetScriptedName(S.Manifest.Characters[S.RingGirl].Name)}}),FLinearColor(1,.85f,.3f),12,true)];
   Row->AddSlot().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.phone_inbox.answer_button")),[Weak](){Weak->PhoneAnswer(true);},true,FLinearColor(.5f,1,.5f))];
   Row->AddSlot().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.phone_inbox.decline_button")),[Weak](){Weak->PhoneAnswer(false);},true,FLinearColor(1,.5f,.5f))];
  }
@@ -351,7 +351,7 @@ void AOKStreetSocialScene::BuildPhoneRow(const TSharedRef<SVerticalBox>& Panel){
   if(!Here.IsEmpty()&&(Here==TEXT("restaurant")||Here==TEXT("cafe")||Here==TEXT("hotel")||Here==TEXT("snack")||Here==TEXT("dept_food")||Label.Contains(OKT(TEXT("ui.phone_inbox.meal_suffix")))))
    Row->AddSlot().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.phone_inbox.book_here_two_hours")),[Weak,Here](){Weak->BookTable(Here);})];}
  if(S.RemoteMode==2&&S.Manifest.Characters.IsValidIndex(S.RemotePeer)){
-  Row->AddSlot().Padding(2)[OKFinText(OKMsg(TEXT("ui.phone_inbox.in_call_label"), {{TEXT("peer_name"), *S.Manifest.Characters[S.RemotePeer].Name}}),FLinearColor(.5f,1,.5f),12,true)];
+  Row->AddSlot().Padding(2)[OKFinText(OKMsg(TEXT("ui.phone_inbox.in_call_label"), {{TEXT("peer_name"), *OKStreetScriptedName(S.Manifest.Characters[S.RemotePeer].Name)}}),FLinearColor(.5f,1,.5f),12,true)];
   Row->AddSlot().Padding(2)[OKFinButton(Weak,OKT(TEXT("ui.phone_inbox.hang_up_button")),[Weak](){Weak->PhoneHangUp();},true,FLinearColor(1,.5f,.5f))];
  }
  Panel->AddSlot().AutoHeight().Padding(2)[Row];
@@ -366,7 +366,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
  if(S.PhoneThread==OKStreetFatherThread&&!Fa.FatherTexts.IsEmpty()){
   auto People=SNew(SVerticalBox);People->AddSlot().AutoHeight().Padding(2)[FatherButton(true)];
   for(int32 I=1;I<S.Manifest.Characters.Num();++I){if(!HasHerNumber(I))continue;const int32 N=PhoneUnread(I);
-   People->AddSlot().AutoHeight().Padding(2)[OKFinButton(Weak,S.Manifest.Characters[I].Name+(N>0?OKMsg(TEXT("ui.phone_inbox.count_paren"), {{TEXT("n"), N}}):FString()),[Weak,I](){Weak->State->PhoneThread=I;Weak->PhoneMarkSeen(I);Weak->RefreshUI();})];}
+   People->AddSlot().AutoHeight().Padding(2)[OKFinButton(Weak,OKStreetScriptedName(S.Manifest.Characters[I].Name)+(N>0?OKMsg(TEXT("ui.phone_inbox.count_paren"), {{TEXT("n"), N}}):FString()),[Weak,I](){Weak->State->PhoneThread=I;Weak->PhoneMarkSeen(I);Weak->RefreshUI();})];}
   auto Lines=SNew(SVerticalBox);
   for(const auto& T:Fa.FatherTexts)
    Lines->AddSlot().AutoHeight().Padding(FMargin(4,3,120,3)).HAlign(HAlign_Left)[SNew(SBorder).BorderImage(OKFinSolid()).BorderBackgroundColor(FLinearColor(.22f,.22f,.28f)).Padding(8)[SNew(SVerticalBox)
@@ -390,7 +390,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
  auto People=SNew(SVerticalBox);
  if(!Fa.FatherTexts.IsEmpty())People->AddSlot().AutoHeight().Padding(2)[FatherButton(false)];
  for(int32 I=1;I<S.Manifest.Characters.Num();++I){if(!HasHerNumber(I))continue; // only the numbers he has (contacts.rs)
-  const int32 N=PhoneUnread(I);const FString Label=S.Manifest.Characters[I].Name+(N>0?OKMsg(TEXT("ui.phone_inbox.count_paren"), {{TEXT("n"), N}}):FString());
+  const int32 N=PhoneUnread(I);const FString Label=OKStreetScriptedName(S.Manifest.Characters[I].Name)+(N>0?OKMsg(TEXT("ui.phone_inbox.count_paren"), {{TEXT("n"), N}}):FString());
   People->AddSlot().AutoHeight().Padding(2)[OKFinButton(Weak,Label,[Weak,I](){Weak->State->PhoneThread=I;Weak->PhoneMarkSeen(I);Weak->RefreshUI();},true,I==Girl?FLinearColor(1,.85f,.3f):FLinearColor::White)];
  }
  // Right: her thread or her full record.
@@ -399,7 +399,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
  auto When=[](const FOKStreetHistoryEntry& E){return OKMsg(TEXT("ui.phone_inbox.when_place"), {{TEXT("when"), *OKStreetCalendarLabel(int32(E.Minute/1440),(E.Minute%1440)/60.0)}, {TEXT("place"), *E.Place}});};
  if(Log){
   for(int32 K=List.Num()-1;K>=0&&Shown<200;--K,++Shown){const auto& E=List[K];
-   const FString Who=E.Who==TEXT("him")?S.Manifest.Characters[0].Name+OKT(TEXT("ui.economy.colon_mark")):E.Who==TEXT("her")?S.Manifest.Characters[Girl].Name+OKT(TEXT("ui.economy.colon_mark")):FString();
+   const FString Who=E.Who==TEXT("him")?OKStreetScriptedName(S.Manifest.Characters[0].Name)+OKT(TEXT("ui.economy.colon_mark")):E.Who==TEXT("her")?OKStreetScriptedName(S.Manifest.Characters[Girl].Name)+OKT(TEXT("ui.economy.colon_mark")):FString();
    Lines->AddSlot().AutoHeight().Padding(2)[OKFinText(OKPhoneShown(OKMsg(TEXT("ui.phone_inbox.history_entry"), {{TEXT("when"), *When(E)}, {TEXT("kind_label"), *OKHistoryKindLabel(E.Kind)}, {TEXT("who"), *Who}, {TEXT("text"), *E.Text}})),E.Kind==TEXT("act_refused")||E.Kind==TEXT("breakup")?FLinearColor(1,.5f,.5f):E.Who==TEXT("her")?OKStreetSpeakerColor(Girl):E.Who==TEXT("him")?OKStreetPlayerLineColor():FLinearColor(.9f,.9f,.9f),10,false,true)];}
  }else{
   TArray<const FOKStreetHistoryEntry*> Phone;for(int32 K=List.Num()-1;K>=0&&Phone.Num()<80;--K)if(OKStreetHistoryIsPhone(List[K].Kind))Phone.Insert(&List[K],0);
@@ -444,7 +444,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildPhoneApp(){
  return SNew(SHorizontalBox)
   +SHorizontalBox::Slot().AutoWidth().Padding(0,0,10,0)[SNew(SBox).WidthOverride(220)[SNew(SScrollBox)+SScrollBox::Slot()[People]]]
   +SHorizontalBox::Slot().FillWidth(1)[SNew(SVerticalBox)
-   +SVerticalBox::Slot().AutoHeight()[OKFinText(S.Manifest.Characters[Girl].Name,FLinearColor(1,.85f,.3f),16,true)]
+   +SVerticalBox::Slot().AutoHeight()[OKFinText(OKStreetScriptedName(S.Manifest.Characters[Girl].Name),FLinearColor(1,.85f,.3f),16,true)]
    +SVerticalBox::Slot().AutoHeight().Padding(0,4)[Tabs]
    +SVerticalBox::Slot().FillHeight(1)[Scroll]
    +SVerticalBox::Slot().AutoHeight().Padding(0,6,0,0)[Log?SNullWidget::NullWidget:StaticCastSharedRef<SWidget>(Input)]];
@@ -595,6 +595,6 @@ void AOKStreetSocialScene::HerNumberGiven(int32 Girl,const TCHAR* What){
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid()||!Out->GetBoolField(TEXT("added")))return;
  auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Out);if(!CommitStore(MoveTemp(Candidate)))return;
  HeroineNote(Girl,TEXT("contact"),Out->GetStringField(TEXT("fact")),PlaceHere(S.Male),0.6f);
- if(FCString::Strcmp(What,TEXT("his"))!=0)S.FreeTalkNotice=OKMsg(TEXT("ui.phone_inbox.number_saved"),{{TEXT("name"),S.Manifest.Characters[Girl].Name}});
+ if(FCString::Strcmp(What,TEXT("his"))!=0)S.FreeTalkNotice=OKMsg(TEXT("ui.phone_inbox.number_saved"),{{TEXT("name"),OKStreetScriptedName(S.Manifest.Characters[Girl].Name)}});
  UE_LOG(LogTemp,Display,TEXT("Street phone: actor %d %s"),Girl,FCString::Strcmp(What,TEXT("his"))==0?TEXT("took his number"):TEXT("gave her number"));RefreshUI();
 }

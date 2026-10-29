@@ -27,3 +27,24 @@
 ## 順序
 
 在「只讀不組裝」實驗量完並提交之後、全部轉換之前進行。步驟 2、3 直接服務轉卡加速；1、4、5 可以穿插在其他工作之間。
+
+## 進度（2026-10-28）
+
+- 1 完成（610d1396d）：測試移到 `src/tests.rs`，lib.rs 18,600 → 11,500 行。
+- 2a 完成（0064a77d3）：`extract_session_from_info` 原封不動移到 `src/extract.rs`。
+- 2b 完成（a61fd60a2）：「清單＋mods＋GUID」拆成 `lists_stage`，回傳 `ListsStage`；兩個 RAII scope（穿著狀態、預取）放在結構裡，呼叫端以 `_clothes_scope`、`_prefetch_guard` 綁定，保持原本的釋放順序。
+- 4 lib.rs 分檔完成（d5e545985 … 7ab6363c3，一群一個 commit）：`texture_bake`、`face_texture`、`clothes_texture`（含 8c53dae5e 欄位可見性修正）、`placement`、`face_shapes`、`rig`、`entries`、`catalog_textures`、`head_body`、`material_editor`、`push`、`accessories`。lib.rs 18,600 → 976 行，剩模組宣告、Manifest 等共用型別、shader 分類、開卡對外 API 與 FFI 小工具。做法：`move_items.lua` 把連續的頂層項目搬到新檔、沒有 `pub` 的改 `pub(crate)`，lib.rs 留 `mod x; pub(crate) use x::*;`（區塊有對外 `pub` 項目時用 `pub use`），其他地方的 `crate::名稱` 不用改；結構欄位與 `thread_local!` 內的 static 若被外面用到，另外改 `pub(crate)`。
+- 5 unity.rs 分檔（86f8c2454 … 26a235da7）：測試移到 `unity/tests.rs`；`textures`、`tints`、`prefabs`、`clothes_states`、`mesh_channels`、`mesh_decode`（模組放在 `src/unity/`）。unity.rs 11,000 → 5,055 行，剩開頭的型別與兩段 `impl ParsedBundle`（約 2,700 行）；拆 impl 要逐一把被別處呼叫的方法改成 `pub(crate)`，列為 5g。
+- 2c 完成（2026-10-29）：「基礎 bundle」拆成 `base_bundles_stage`，回傳 `BaseStage`（25 個欄位；後面各段會改的照樣以 `mut` 綁定）。這一段只看卡片的性別、頭部、眨眼與 resolves，與服裝和穿著狀態無關，所以用 `view_memo` 包起來，鍵就是這些欄位。轉卡時同一張卡開 42 次（7 套服裝 × 6 種穿著狀態），只有第一次真正讀取並組裝。原版清單目錄（`load_characustom_dir_shared`）也一樣：基礎庫的清單資料夾不是實體資料夾，原本的變更監看快取存不住它，每次開卡都重新解析一次（約 30 ms）。jeanne 轉一張 24.8 → 17.2 秒。驗收：6 張樣本卡相同；3 張卡 × 7 套服裝 × 6 種穿著狀態共 126 個 session，開著與關掉 `OK_NO_VIEW_MEMO` 逐位元組相同。
+- 2d 第一部分（2026-10-29）：
+  - 轉卡時 thread 的 bundle 快取上限改成 160（原本 24，滿了就整個清空）。一張卡會碰到 60–150 個 bundle，原本每次開卡都會清空快取再全部重新 parse，bundle 上已解碼的貼圖也跟著丟掉。jeanne 的 parse 次數 933 → 69，raiden_shogun 41 → 32 秒，記憶體峰值不變。遊戲開卡仍是 24，因為快取在開卡結束後會一直留著。
+  - `CardInfo.source_digest`：卡片資料（IEND 之後的位元組）與解析模式的雜湊，給要讀很多卡片欄位的階段當 memo 鍵。
+  - head_detail 每個頭部網格的 rig 與貼圖，以 `(source_digest, 服裝, 網格)` 共用；有 OK Studio 眼型時照舊每次重算。jeanne 42 次開卡的 head_detail 合計 1.4 → 0.6 秒。
+- 2d 第二部分（2026-10-29）：`rig_memo`（rig.rs）。身體、臉、嘴唇、生殖器的 rig／蒙皮以 `(source_digest, 服裝, 部位, 網格)` 共用，鍵要能決定 rig 前的網格與骨架。OK Studio 的狀態覆寫（`studio_status::apply`）也併進 `source_digest`。jeanne 42 次開卡的臉部準備合計 0.8 → 0.3 秒，整張卡 13.6 秒（今早 24.8 秒）。`compose_body_texture` 仍以網格內容雜湊為鍵（傳進來的身體網格可能隨穿著狀態不同），每次約 10 ms。
+- 之後：衣服與配件的延後網格（`deferred meshes`，每次約 34 ms）、`resolves`（約 20 ms）要看各穿著狀態實際用到哪些查詢，才能決定可不可以共用。
+
+## 做法
+
+- 開發在自己的匯出副本（`git archive HEAD Tools/ok-extract Tools/vendor`，另外複製編譯期 `include_*!` 用到的 `Plugins/KKUnityBundle/.../Shaders`、`Plugins/OKAnimation/Resources/kk_cf_j_rest.json`、`Content/IndependentResources/BodyInteractions/hit-reaction-v1.json`、`Tools/base_library_shared_mods.txt`），用獨立的 `CARGO_TARGET_DIR`。
+- 每步：release 建置、`cargo test --release --lib --no-run`；6 張樣本卡用重構前的程式做一次基準（含穿著狀態），重構後轉換比對 outfit 0 摘要與 `pack-keys` 的鍵與值（HashSet／HashMap 序列化順序不定的 `clothes_renderer_map`、`accessory_color_use`、`prefab_node_names` 只比鍵）。
+- 寫回：工作樹的 lib.rs 常有別人的未提交改動；以 HEAD 版本做同樣的變換後 `git hash-object --path` 寫進暫存區，確認與匯出副本相同再提交，別人的改動留在工作樹。

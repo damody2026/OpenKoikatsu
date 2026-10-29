@@ -42,10 +42,39 @@ static void AccumulateFaceControl(TArray<FFaceAcc,TInlineAllocator<16>>& Channel
   if(!Found)Channels.Add({Sample.Native,Weight,Sample.Delta});
  }
 }
+// Mouth patterns that keep the lips together (soft 4, parted 5, pressed 6, tense 7, frown 8, flat 10, clench 12, uneasy 13,
+// pout 15, wry 16, smug 19, kiss 23): their open shapes are a slit, and her voice moved nothing (Jeanne's soft smile,
+// the usual talking mouth, opened to a line at full weight and to half of that while she spoke). Speaking, these open
+// pattern 0's open shape over their own closed mouth; the same patterns for every face part (face, teeth, tongue).
+static TAutoConsoleVariable<FString> CVarOKMouthTalkBorrow(TEXT("ok.Mouth.TalkBorrow"),TEXT("4,5,6,7,8,10,12,13,15,16,19,23"),TEXT("Mouth patterns that speak with pattern 0's open shape (comma-separated; empty: every pattern its own)."));
+static TArray<int32> GMouthTalkBorrow;
+static FAutoConsoleVariableSink GMouthTalkBorrowSink(FConsoleCommandDelegate::CreateLambda([]{TArray<FString> Names;CVarOKMouthTalkBorrow.GetValueOnGameThread().ParseIntoArray(Names,TEXT(","));TArray<int32> Next;for(auto& N:Names){N.TrimStartAndEndInline();if(N.IsNumeric())Next.Add(FCString::Atoi(*N));}if(Next!=GMouthTalkBorrow)GMouthTalkBorrow=MoveTemp(Next);}));
+// The pattern whose open shape her voice opens (-1: her own).
+static int32 MouthTalkPattern(int32 Pattern){
+ // The first call parses the default once (thread-safe static init); later changes come through the sink above.
+ static const bool Parsed=[]{TArray<FString> Names;CVarOKMouthTalkBorrow.GetValueOnAnyThread().ParseIntoArray(Names,TEXT(","));for(auto& N:Names){N.TrimStartAndEndInline();if(N.IsNumeric())GMouthTalkBorrow.AddUnique(FCString::Atoi(*N));}return true;}();(void)Parsed;
+ return Pattern>0&&GMouthTalkBorrow.Contains(Pattern)?0:INDEX_NONE;
+}
+// Her voice opens the talk pattern's open shape over her own closed mouth (her smile stays, the lips part as she talks).
+static void AccumulateTalkOpen(TArray<FFaceAcc,TInlineAllocator<16>>& Channels,const FKKRuntimeMouthVertex& V,int32 Talk,float Rate,float Scale){
+ if(Talk<0||Rate==0.f||Scale==0.f||!V.FaceCatalog||FaceMuted(*V.FaceCatalog))return;
+ const auto& C=V.FaceCatalog->Control[0];if(!C.Close.IsValidIndex(Talk)||!C.Open.IsValidIndex(Talk))return;
+ const int16 Close=C.Close[Talk],Open=C.Open[Talk];
+ for(const auto& Sample:V.Face)if(Sample.Control==0){
+  float Add=0.f;if(Open>=0&&int16(Sample.Local)==Open)Add+=Rate;if(Close>=0&&int16(Sample.Local)==Close)Add-=Rate;if(Add==0.f)continue;
+  bool Found=false;for(auto& Channel:Channels)if(Channel.Native==Sample.Native){Channel.Weight+=Add*Scale;Found=true;break;}
+  if(!Found)Channels.Add({Sample.Native,Add*Scale,Sample.Delta});
+ }
+}
 static void AccumulateAuthoredFace(TArray<FFaceAcc,TInlineAllocator<16>>& Channels,const FKKRuntimeMouthVertex& V,int32 Control,int32 Pattern,float Opening,float Audio,float Gain,float Blink){
  if(Control==2)AccumulateFaceControl(Channels,V,2,Pattern,Opening>=0.f?Opening:1.f,1.f);
  else if(Control==1){if(Pattern<0)return;if(Opening<0.f)AccumulateFaceControl(Channels,V,1,Pattern,0.f,Blink);else AccumulateFaceControl(Channels,V,1,Pattern,Opening*(1.f-Blink),1.f);}
- else if(Pattern>=0&&Gain>0.f)AccumulateFaceControl(Channels,V,0,Pattern,Audio*(Opening>=0.f?Opening:1.f),Gain);
+ else if(Pattern>=0&&Gain>0.f){
+  // Speaking (her expression's opening left to the voice): a mouth that hardly opens takes the talk pattern's.
+  const int32 Talk=Opening<0.f&&Audio>0.f?MouthTalkPattern(Pattern):INDEX_NONE;
+  if(Talk<0)AccumulateFaceControl(Channels,V,0,Pattern,Audio*(Opening>=0.f?Opening:1.f),Gain);
+  else{AccumulateFaceControl(Channels,V,0,Pattern,0.f,Gain);AccumulateTalkOpen(Channels,V,Talk,Audio,Gain);}
+ }
 }
 static TAutoConsoleVariable<int32> CVarOKMouthCardInFace(TEXT("ok.Mouth.CardInFace"),1,TEXT("1: an expression without a mouth uses the card's speaking mouth (closed to open); 0: the mouth is left alone (for comparing)."));
 static FVector3f RuntimeFaceDelta(const FKKRuntimeMouthVertex& V,float Opening,float Gain,float Blink,const FKKRuntimeFaceState& State){

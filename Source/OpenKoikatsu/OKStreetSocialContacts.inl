@@ -231,7 +231,9 @@ float AOKStreetSocialScene::StepNavigation(float Dt){
   // speak to her instead of chasing her down the street.
   if(!S.NavPointActive&&S.Agents.IsValidIndex(S.NavGirl-1)){const int32 G=S.NavGirl;S.CommutePausedUntil.Add(G,SceneTime()+10.0);
    if(S.Commutes.Contains(G))S.Rotations[G]=FRotator(0,(S.Male-S.Agents[G-1].Position).Rotation().Yaw,0);}
-  StopNavigation(S.NavPointActive?OKT(TEXT("ui.contacts.arrived_label"))+(S.NavPointName.IsEmpty()?FString(OKT(TEXT("ui.contacts.destination_label"))):S.NavPointName)+OKT(TEXT("ui.contacts.full_stop")):OKT(TEXT("ui.contacts.arrived_short"))+S.Manifest.Characters[S.NavGirl].Name+OKT(TEXT("ui.contacts.beside_her_talk_hint")));return 0;}
+  // And he looks at her: E picks the girl in view, and beside Megumin in the dorm lounge it was Yuuka in front of him.
+  if(!S.NavPointActive&&S.Agents.IsValidIndex(S.NavGirl-1)){const int32 G=S.NavGirl;S.Yaw=(S.Agents[G-1].Position-S.Male).Rotation().Yaw;S.Candidate=G;S.CandidateExplicit=true;}
+  StopNavigation(S.NavPointActive?OKT(TEXT("ui.contacts.arrived_label"))+(S.NavPointName.IsEmpty()?FString(OKT(TEXT("ui.contacts.destination_label"))):S.NavPointName)+OKT(TEXT("ui.contacts.full_stop")):OKT(TEXT("ui.contacts.arrived_short"))+OKStreetScriptedName(S.Manifest.Characters[S.NavGirl].Name)+OKT(TEXT("ui.contacts.beside_her_talk_hint")));return 0;}
  while(S.NavStep<S.NavPath.Num()&&FVector::Dist2D(S.Male,S.NavPath[S.NavStep])<=30)++S.NavStep;
  FVector Next=S.NavPath.IsValidIndex(S.NavStep)?S.NavPath[S.NavStep]:Goal;
  // Chasing her: close by and nothing in between, straight at where she is now (the route, drawn every 0.75 s, lags a

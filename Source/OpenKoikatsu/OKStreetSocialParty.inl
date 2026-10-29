@@ -353,7 +353,7 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
   Ordered.Add({G,Line});
  }
  for(const auto& [G,Line]:Ordered){
-  Speakers.Add(G);Lines.Add(Line);Said.FindOrAdd(G).Add(Line);Caption.Add(S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.colon_mark"))+Line);
+  Speakers.Add(G);Lines.Add(Line);Said.FindOrAdd(G).Add(Line);Caption.Add(OKStreetScriptedName(S.Manifest.Characters[G].Name)+OKT(TEXT("ui.economy.colon_mark"))+Line);
   FreeTalkAddLine(G,false,Line);S.PartyLog.Add(SpokenName(G)+OKT(TEXT("ui.economy.colon_mark"))+Line);
  }
  while(S.PartyLog.Num()>14)S.PartyLog.RemoveAt(0);

@@ -20,6 +20,16 @@ bool AOKStreetSocialScene::BirthdayOf(int32 I,int32 Day) const{
 
 // The 【今天】 line: date events, weather now, her birthday (and tomorrow's, so she can hint).
 namespace{const TCHAR* OKPhoneDoingWord(const FString& Kind);} // OKStreetSocialPhoneInbox.inl
+// Her day ahead for the judge, each with its place id: "come along with me first" names no place, and Raiden's errand
+// was skipped (he agreed to walk with her, they went straight to the dessert she had said would come after it).
+FString AOKStreetSocialScene::JudgePlanLine(int32 Character) const{
+ const auto& S=*State;const auto* Plan=S.Plans.Find(Character);if(!Plan)return FString();
+ const int32 Minute=int32(OKStreetMindNow(S)%1440);TArray<FString> Next;
+ for(const auto& B:*Plan)if(B.End>Minute&&Next.Num()<3&&B.Kind!=TEXT("sleep")&&!B.Place.IsEmpty()){const FOKStreetPlace* P=OKStreetFindPlace(B.Place);
+  const int32 Said=(FMath::Max(B.Start,Minute)+7)/15*15;
+  Next.Add(FString::Printf(TEXT("%02d:%02d "),Said/60%24,Said%60)+OKMsg(TEXT("ui.director.plan_block"),{{TEXT("doing"),OKPhoneDoingWord(B.Kind)},{TEXT("place"),P?FString(P->Name):B.Place}})+TEXT(" (go:")+B.Place+TEXT(")"));}
+ return Next.IsEmpty()?FString():OKMsg(TEXT("ui.scene.judge_her_plan"),{{TEXT("plan"),FString::Join(Next,OKT(TEXT("ui.economy.semicolon_mark")))}});
+}
 FString AOKStreetSocialScene::TodayText(int32 Character) const{
  const auto& S=*State;const int64 Now=OKStreetMindNow(S);const int32 Day=S.Store.CalendarDay;TArray<FString> Parts;
  const FString Holiday=HolidayOn(Day);if(!Holiday.IsEmpty())Parts.Add(Holiday);
@@ -45,6 +55,8 @@ FString AOKStreetSocialScene::TodayText(int32 Character) const{
  // friend; only "resting at home at the girls' dorm" in her plan said so.
  if(Character>0&&S.Manifest.Characters.IsValidIndex(Character)){const FString Home=OKStreetProfileString(S.MindProfiles.FindRef(OKStreetStableId(S.Manifest.Characters[Character])),nullptr,TEXT("home_place_id"));
   if(const FOKStreetPlace* P=Home.IsEmpty()?nullptr:OKStreetFindPlace(Home))Parts.Add(OKMsg(TEXT("ui.director.your_home_line"),{{TEXT("place"),FString(P->Name)}}));}
+ // Where he lives: Yuuka, at the girls' dorm, took "I just moved in, do you live here too?" as him living on her floor.
+ if(const FOKStreetPlace* P=OKStreetFindPlace(TEXT("boys_dorm")))Parts.Add(OKMsg(TEXT("ui.director.his_home_line"),{{TEXT("place"),FString(P->Name)}}));
  // What her own day still holds (the plan she follows): what she says she has to do comes from here.
  if(const auto* Plan=S.Plans.Find(Character)){TArray<FString> Next;const int32 Minute=int32(Now%1440);
   for(const auto& B:*Plan)if(B.End>Minute&&Next.Num()<4&&B.Kind!=TEXT("sleep")){const FOKStreetPlace* P=OKStreetFindPlace(B.Place);

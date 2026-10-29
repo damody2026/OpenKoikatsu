@@ -234,3 +234,68 @@ Gal1028H（同樣有別的遊戲在跑）：三月七 materials 2.0 s＋textures
 原本只有 1 對 1 能用滾輪回滾：檢查點只記說話對象一人，群聊時他的話走 `SendPartyTalk`，根本不記檢查點，滾回去再說話不會還原任何人。現在群聊時，他每句話前替在場每位各記一個檢查點（另存群聊最近的台詞 `PartyLog`）；滾回去後再說話，所有人一起回到那句之前（台詞紀錄、記憶、歷史、好感、ok-mind 的上下文），只和他說話的那位回去、其他人還記得的情況不再發生。
 
 驗證（Gal1028J，安可＋惠惠在咖啡廳）：告訴兩人「喜歡橘色」與「生日三月十二」，滾回到惠惠回「橘色」那句後問「我有跟妳們說過生日嗎」：兩人各一行 `rollback: back to line 16`，安可「沒聽你說過耶」、惠惠「你根本沒提過吧」。
+
+## 整合後新卡實玩與餐廳入座（2026-10-28 晚）
+
+整合後（`Int1028cE`、新卡、`Base1028b`）用新存檔玩刻晴、貞德·Alter，順帶惠惠、雷電將軍、貞德、胡桃：
+
+- **約會**：刻晴在圖書館答應「週六中午咖啡廳門口」（各付各的，`split pays`），隔天又約學生餐廳午餐，兩次都準時到；她知道他中午和貞德·Alter 一起吃過飯，嘴上調侃、`jealousy+2`。貞德·Alter 拒絕看電影（「太早了」），但答應一起走去學生餐廳。陌生人（惠惠、雷電將軍）不同桌，將軍在打工也婉拒，都合理。
+- **坐好才開始吃**（116e65be8）：學生餐廳菜上桌時兩人還站在櫃台，走去座位加準備坐姿約 25 秒，`TickMeal` 照樣在吃，貞德·Alter 坐下時湯只剩 64%。現在她走去座位（`OutingGirl`）或還在準備坐姿（`Pair.Phase==0`）時先不吃。
+- **座位旁被擋**（116e65be8）：走去座位時在桌邊卡住（0.6 m、1.55 m），每 4 秒重排路線、第 5 次才站過去（約 20 秒）。目標是路線最後一點且不到 2 m 時，第一次被擋就入座。
+- 以上兩點在之後兩輪沒有重現（系統改成點餐時就先入座）；4 次入座吃飯都正常，修正路徑本身尚待遇到時確認。
+- **用控制通道玩時菜不上桌**：不是 bug。控制通道在指令之間暫停時鐘，廚房跟著停（`ClockPaused` 時 `Serves.At` 往後延），要 `game_wait seconds` 讓時鐘跑。
+- **結束對話後菜被清掉**：她依行程走出餐廳、他跟出去，桌子照規則清掉；她之後仍答應「回座位把湯喝完」，坐下時桌上沒有東西。模型不知道桌子已清，暫不處理。
+
+### 三月七 1 對 1 載入（2026-10-28 晚，未乾淨）
+
+Gal1028R，`/private girl 3`，兩次：card 185／224 ms、session 5073／5556 ms、materials 1197／1140 ms、textures 1029／165 ms；從按下到 `OK body interaction prepared` 約 14 s。當時另有 13 個 `ok-extract2` 批次轉卡占約 15 核，數字不算乾淨。
+
+- CLI（`ok-card-open-bench`，80ef396f 匯出，同時只有兩個遊戲在跑）：三月七冷開 3.48 s、熱開 1.41 s；安可 1.95／0.62 s。遊戲裡第二次仍 5.5 s，可能是 CPU 被占滿，也可能是遊戲的開卡路徑不同，要在乾淨時重量。
+- 高模裝配在遊戲執行緒上一幀一個部件：每個髮片約 60～150 ms（第二次貼圖已命中快取，仍約 100 ms），之後的 `OK private GPU installed` 每幀一個約 25 ms，`OK body interaction prepared` 單幀約 0.9 s。下一步錄 Unreal Insights（`game_trace_start`）找出髮片的成本。
+
+### 三月七 1 對 1 進場的卡頓（2026-10-28 深夜，Gal1028T／U）
+
+乾淨量測（雙 slot，背景只有一個約 2.2 核的轉卡）：Gal1028T 冷開 card 72 ms、session 2476 ms、materials 972 ms、textures 774 ms，按下到 `OK interaction entered` 約 9 s、到男角就緒約 12 s；同程序第二次約 7 s／9.5 s。CLI（`ok-card-open-bench`）冷開 3.48 s、熱開 1.41 s，遊戲裡熱開仍 2.5～2.7 s。
+
+錄 Unreal Insights（`game_trace_start`，`UnrealInsights.exe -NoUI -AutoQuit -ExecOnAnalysisCompleteCmd="TimingInsights.ExportTimingEvents ..."` 匯出 CSV）找到兩個大卡頓：
+
+- **平行材質準備把前景 worker 也占滿**：`OKCaptureRuntimeMaterialsParallel` 的 `ParallelFor`（PNG 解碼、mip、SHA1，2 s 內約 42 s CPU）在背景執行緒跑時，主執行緒 tick 結尾的 `WaitForTasks` 等了 1369 ms 與 436 ms。改用 `EParallelForFlags::BackgroundPriority`，前景 worker 留給遊戲；之後最長只剩 82 ms。
+- **身體互動資料每次重讀**：`FOKBodyInteraction::Prepare` 每次進 1 對 1 都在主執行緒解析 8.5 MB 的 `catalog-v1.json`（`prepare_ms` 620～740）。改成程序內只解析一次（`WarmShared`），並在 `LoadFemale` 的背景工作先讀好；之後 `prepare_ms` 60（第一次）／3.5（第二次），log 拆成 data／colliders／reaction。
+- 進場那一幀：1477 ms → 1099 ms（T）→ 568 ms（U）。剩下的是同步 `LoadObject`（`FlushAsyncLoading` 112 ms）、`KK_GalleryPairs` 103 ms，以及部件裝配期間的 `UTexture2D::UpdateResource`（`TryLoadMips`，每張最多約 50 ms）和一次 `Sync_RenderingThread` 810 ms。
+- 配對清單（`NativeAnimationPairs`）改在 `LoadFemale` 的背景工作先取，`RefreshPairs` 沿用（圖庫自己的載入本來就這樣做）；Gal1028V 的 trace 裡 `KK_GalleryPairs`（86～103 ms）不見了。
+- 背景優先權之後，平行解碼仍占滿全部背景 worker，渲染圖（RDG）的工作排在後面，渲染執行緒等了 590～810 ms。改成最多 `NumWorkers/4`（2～8）條通道、各自從 atomic 取下一張貼圖（解碼受記憶體頻寬限制：依序約 10 s，31 條約 1 s 但總 CPU 約 30 s）。Gal1028V：等渲染執行緒最長 810 → 220 ms、進場那一幀 568 → 471 ms、超過 15 ms 的幀合計 5.4 → 3.4 s；materials 約 1.0 → 2.1 s，按下到進入 1 對 1 仍約 8.5 s。
+
+### 新存檔實玩：胡桃、早瀨優香、貞德·Alter（2026-10-29 凌晨，Gal1028V）
+
+- **坐好才開始吃**（116e65be8）這次真的走到了：早瀨優香一進咖啡廳就點拿鐵加司康（他請），菜先上（`order served`），系統才帶兩人去座位（`they sit down to eat it (cafe_seat)`）並準備坐姿；這段時間桌上兩樣都維持 100%，坐好後才開始扣（59% → 12%）。
+- **她把他稱為「妳」**：貞德·Alter 對他說「我可沒說要跟妳討論」。zh-TW 的共用角色規則（`free_talk_personas.json` `system_rules`）加一條：玩家是男生，稱呼他用「你」、不要寫成「妳」。重開後確認提示裡有這條，她之後 5 句都用「你」。zh-CN、en 沒有這個問題。
+- 約看電影：判斷器把地點填成 `cinema`，街上沒有，`promise ignored (not_a_place)`；她照 `no_such_place_note` 改提咖啡廳門口。他回「怎麼了？」時沒有答應，判斷器不記（照規則：她提議要他在這句答應）；他說「好，咖啡廳門口見」後才記成約會。流程正確。
+- 胡桃約明天中午（沒講地點，記在兩人所在的學生餐廳、他請客），早瀨優香教記帳（「我會驗收的」），三人個性都穩定。
+
+### 約了吃飯的那天，她會空著肚子來（2026-10-29，主 session 決定採 (a)）
+
+胡桃中午的學生餐廳約會，到場時飽足 90，牛肉麵（飽足值 45）超過 `OVERFULL_SATIETY` 115，只喝紅茶。原因是早餐吃到約 100，白天每小時只降 4.5，正餐要 70 以下才點得了。不動 115 與「很飽」門檻、不加需求壓力，只改 `Tools/ok-rules/src/plan.rs`：
+
+- 約了午餐的那天：早上（排行程時）飽足 60 以上就不吃早餐；不到 60 才吃，排最早的時段、只吃 15 分鐘、只挑飽足值 12 以下的品項（`lighten`，block 的 budget 存成負數，`plan_meal` 看到就挑小份量；沒有就吃一點自己帶的）。
+- 約了晚餐的那天：約會前 8 小時內她自己的那頓同樣變輕食；當天才約的（`plan_set_promises`）還沒吃的那頓也變輕食。
+- 測試：`a_lunch_date_makes_her_breakfast_light`、`a_dinner_date_makes_her_lunch_light`、`a_light_meal_is_a_small_dish`（ok-rules 218 通過）。
+- 驗證（Gal1028V 沙盒，新存檔約胡桃）：只做輕食時她睡到 08:30（飽足約 76），喝了紅茶、中午仍 74，只點得了貢丸湯（20）；加上「不餓就不吃早餐」後，隔天她 07:17 吃輕早餐，中午到場 70，自己點了水餃 10 顆（45），沒有被擋。
+
+### 三月七 1 對 1 乾淨重量（2026-10-29 03:54，Gal1029E）
+
+雙 slot、機器上沒有其他遊戲與轉卡；ok-extract 用 b9a4cdfdd 的匯出副本（含 crowd 的開卡加速：舊貼圖清單整段讀、卡包多 frame 平行解壓、view_memo、base_bundles_stage），1 對 1 這邊含 20e8b39ba、1f20d13a8、ad7c45674。
+
+| | Gal1028T（10-28 23:18） | Gal1029E |
+|---|---|---|
+| 冷開 session | 2476 ms | 1865 ms |
+| 冷開 materials／textures | 972／774 ms | 1628／760 ms |
+| 冷開：按下到 `OK interaction entered` | 約 9.1 s | 約 6.7 s |
+| 冷開：到男角就緒 | 約 12 s | 約 9.1 s |
+| 熱開：進入／男角就緒 | 約 7.1／9.5 s | 約 5.3／7.3 s |
+| 身體互動準備 | 690 ms | 49 ms（熱開 3 ms） |
+
+materials 變長是 ad7c45674 限制解碼通道數的代價（換來主執行緒與渲染執行緒不再被卡住）。
+
+### 女主的專屬聲音（okVo）
+
+crowd 把十張街頭女主卡寫回自己的聲音（`okVo`）。Gal1029E 向遊戲的 TTS 查 `voice/card`：十張都回本人的 voice id（source=reference）；對話的串流請求都帶 `card`，右側面板顯示「她的角色卡裡存有專屬聲音」；貞德、安可的句子實際播出。音色是否像本人要使用者聽過確認。

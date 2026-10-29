@@ -222,3 +222,40 @@ E:\OpenKoikatsu\Tools\lua\lua.exe Tools\galgame_regression.lua [--launch] [--gir
 - notes（10-27 的逐步進度，內容已整理進本文件）：
   `C:\Users\Damody\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_237f11ad-67cc-4a05-9cd6-a0cfd56cefca\e-galgame-progress.md`
 - 相關文件：`Docs/GALGAME_STREET.md`（演出細節與量測）、`Docs/GALGAME_STORY_USAGE.md`、`Docs/STREET_ERRORS.md`（10-27 的錯誤條目）、`Docs/AGENTS_HANDOFF_20261028.md`（整合總表）。
+
+## 9. 10-28～10-29 進度（e-galgame，2026-10-29 08:50 因整合暫停）
+
+接手的 session：e-galgame（`local_be065ef7`）。暫停時已關掉自己的遊戲（PID 52160）、停掉打包，slot2、E 鎖（`Saved/Crowd/unreal.lock`）都已釋放，queue 沒有登記。所有改動都已提交（未 push）。
+
+### 9.1 這兩天的 commit（duo2）
+- `116e65be8` 街區用餐：坐好才開始吃；離座位 2 m 內被擋就直接入座。
+- `20e8b39ba`、`ad7c45674` 1 對 1 進場卡頓：材質平行解碼改背景優先權，最多 NumWorkers/4 條通道；身體互動目錄（`catalog-v1.json` 8.5 MB）只解析一次。
+- `1f20d13a8` 1 對 1 載入：配對清單在背景先取，進場那一幀不再呼叫 `NativeAnimationPairs`。
+- `ced4c3d7d` 女主行程：約了午餐／晚餐的那天，約會前那頓改輕食（不餓就不吃早餐）。
+- `113e29db1` 女主行程：晚餐至少在午餐結束 3 小時後（`plan.rs` `MEAL_GAP`）。
+- `dd73e6e3d` 街區對話：玩家是男生，稱呼他用「你」不要寫成「妳」。
+- `10ccc2e87` 女主的情境加上男主住在校外男生宿舍。
+- `07c2036e2` 判斷器情境加上她今天接下來的安排與地點 id（`JudgePlanLine`）。**遊戲裡還沒看到觸發**（她說「先陪我走一趟」且他答應時，do_now 應填那件事的 go:地點）。實玩遇到再驗，不用刻意觸發。
+- `648afd267` 講話嘴型：閉唇的表情嘴型說話時借 0 號嘴型的張開形狀（使用者回報嘴巴沒開合；`ok.Mouth.TalkBorrow`）。
+- `e8252b945` 手機聯絡人、提示列與字幕的女主名字改成遊戲語言的字體。
+- `3a682325d` 導航走到女主身邊時視線轉向她並選定她。
+- `05a70eb9a` ok-mind 測試沒有 A 股行情資料時跳過。
+- `78127edd6`、`9c0d0016e` `GALGAME_STREET.md`：三月七 1 對 1 乾淨重量（冷開進入 9.1 → 6.7 s，夥伴 12 → 9.1 s；材質約 1.6 s 是最大的一段，屬開卡／材質，要改先通知 crowd session）與十張女主 okVo 聲音確認（音色要使用者自己聽）。
+- `5c4c672d5` **未驗證**：答應的行動失敗時告訴她兩人現在還在哪裡（惠惠在女生宿舍聽到「飲料店沒開」就說「明明都走到門口了」）。Gal1029K 打包在連結前被暫停中止；含這個檔的 unity 單元已編過、沒有新的警告或錯誤。
+
+### 9.2 沙盒與存檔
+- 沙盒 `GalE`：`-Sandbox GalE -PortBase 48360`，控制埠 48370（`OK_CONTROL_PORT=48370`），存檔在 `E:\OpenKoikatsu\Saved\StreetSocial\Sandbox\GalE\Saves\`。
+- 欄位 17（10-29 08:20）：第二天 09:28，和惠惠在女生宿舍（好感 41），雷電將軍的外觀已確認正常。`auto`（08:48，關遊戲時自動存）是之後一點：惠惠剛拒絕進 1 對 1（魅力 50 對抗性 52，規則判定，不是 bug）。
+- 欄位 1～16 是 10-28～10-29 各輪的新存檔，沒有特別保留。
+- 最新的 E stage：`E:\OpenKoikatsu\Saved\StreetSocial\Build\Gal1029J.stage`（base `Saved/StreetSocial/Base1028b`）。`Gal1029K` 沒有完成，不要用。
+
+### 9.3 開卡副本（OK_EXTRACT_ROOT）
+- 打包時 ok-extract 用乾淨的匯出副本，不吃 crowd session 在工作樹裡的未提交改動：
+  `OK_EXTRACT_ROOT='E:\Saved\okx-galgame-head3\Tools\ok-extract' Tools/lua/lua.exe Tools/rebuild_street_social_runtime.lua --tag <新 tag> --base-dir Saved/StreetSocial/Base1028b --skip-cook --skip-base`
+- `E:\Saved\okx-galgame-head3` 是 `75725edac` 的匯出（`git archive HEAD Tools/ok-extract Tools/vendor Plugins/KKUnityBundle/Source/KKUnityBundle/Private/Shaders | tar -x -C <目錄>`，再複製前一份的 `target` 並跑 `<目錄>\Tools\ok-extract\build-release.cmd`）。整合後 HEAD 改了要重做一份新的；`okx-galgame-head2` 是更舊的，可以刪。
+
+### 9.4 下一步
+1. 整合完成後用新的 stage（或用乾淨副本重新打包一個 exe-only tag），讀 GalE 欄位 17 或 `auto`，先驗 `5c4c672d5`：約她去還沒開的店，她的回答不再說「已經走到門口」。
+2. 繼續 1 對 1／街頭實玩找 bug；`07c2036e2` 遇到再驗。
+3. 1 對 1 進場的材質 1.6 s：若要動，先和 crowd session（`local_26f3bbaf`）說好，KKRuntimePose／KKUnityBundle 載入路徑是共用的。
+4. 已知非 bug：陌生人接電話機率 8%；控制通道會在指令之間暫停時鐘，所以活動有時顯示「約 0 分鐘」；FPS 顯示疊在右側面板上（開發用顯示，不改）。

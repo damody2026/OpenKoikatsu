@@ -491,12 +491,16 @@ pub fn load_entries_from_bytes(name: &str, bytes: &[u8]) -> Vec<ListEntry> {
 mod catalog_cache;
 
 pub(crate) fn load_characustom_dir_shared(dir:&Path)->std::sync::Arc<ChaListCatalog>{
-    static CACHE:std::sync::OnceLock<std::sync::Mutex<catalog_cache::Cache>>=std::sync::OnceLock::new();
-    match CACHE.get_or_init(Default::default).lock(){
-        Ok(mut cache)=>cache.get(dir,load_characustom_dir_uncached),
-        // A poisoned cache is never a reason to return stale or empty data.
-        Err(_)=>std::sync::Arc::new(load_characustom_dir_uncached(dir).0),
-    }
+    // The same catalogue in every open of a view (crate::view_memo): a library's list folder is not a real one, so
+    // the change-watched cache below cannot keep it and every open parsed it again (~30 ms).
+    crate::view_memo(format!("characustom|{}", dir.display()), || {
+        static CACHE:std::sync::OnceLock<std::sync::Mutex<catalog_cache::Cache>>=std::sync::OnceLock::new();
+        match CACHE.get_or_init(Default::default).lock(){
+            Ok(mut cache)=>cache.get(dir,load_characustom_dir_uncached),
+            // A poisoned cache is never a reason to return stale or empty data.
+            Err(_)=>std::sync::Arc::new(load_characustom_dir_uncached(dir).0),
+        }
+    })
 }
 
 pub fn load_characustom_dir(dir: &Path) -> ChaListCatalog {
@@ -532,7 +536,12 @@ fn load_characustom_dir_uncached(dir: &Path) -> (ChaListCatalog,bool) {
 }
 
 /// Signature of a mods tree's zipmod list (paths, sizes, times), for per-process memos.
-pub(crate) fn zip_list_sig(mods_dir: &Path) -> u64 {
+pub(crate) fn zip_list_sig(mods_dir: &Path) -> u64 {let _spot=crate::profile::spot("view: zip_list_sig");
+    // The same in every open of a view (crate::view_memo): several memo keys of each open ask for it.
+    crate::view_memo(format!("zip_list_sig|{}", mods_dir.display()), || zip_list_sig_view(mods_dir))
+}
+
+fn zip_list_sig_view(mods_dir: &Path) -> u64 {
     if let Some(tree) = crate::mods::watched_tree_zips(mods_dir) { return tree.1; }
     // A replaying library's recorded tree only changes with the mounted card pack: walking and stating its ~7000
     // archives for every memo key (several per open) cost ~0.1 s each time.
@@ -644,7 +653,12 @@ fn parse_catalog(text: &str) -> ChaListCatalog {
 /// referenced by the card's KKEx resolves.
 /// load_mods_catalog without a copy per call: the SQL catalogue as it is held, or one merged catalogue per mods tree
 /// (zip list, mounted card pack) kept for the process. A card open used to copy the full catalogue (~0.8 s).
-pub fn load_mods_catalog_shared(mods_dir: &Path) -> std::sync::Arc<ChaListCatalog> {
+pub fn load_mods_catalog_shared(mods_dir: &Path) -> std::sync::Arc<ChaListCatalog> {let _spot=crate::profile::spot("view: mods catalog");
+    // The same catalogue in every open of a view (crate::view_memo); its lookups still record their answers.
+    crate::view_memo(format!("mods_catalog|{}", mods_dir.display()), || load_mods_catalog_view(mods_dir))
+}
+
+fn load_mods_catalog_view(mods_dir: &Path) -> std::sync::Arc<ChaListCatalog> {
     use std::sync::Arc;
     // An OK card answering its catalogue questions (tree_answers.rs): no archive of the tree is read for them.
     if let Some(table) = crate::tree_answers::table().filter(|t| t.contains_key(&("cat-view".to_owned(), Vec::new()))) {

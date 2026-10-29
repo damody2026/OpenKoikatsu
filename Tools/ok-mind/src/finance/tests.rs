@@ -79,6 +79,10 @@ fn lotto_numbers_unknown_until_drawn() {
 #[test]
 fn an_afternoon_market_order_fills() {
     let Some((f, _)) = fin() else { return };
+    // It fills from the real A-share bars: skipped where MarketData was not built (Tools/build_ashare_data).
+    if !data().is_some_and(|d| d.join("MarketData").exists()) {
+        return;
+    }
     op(&f, json!({"op": "deposit", "market": "cn", "date": "2010-09-29", "minute": 833, "twd": 9000}));
     let o = op(&f, json!({"op": "order", "market": "cn", "date": "2010-09-29", "minute": 833, "code": "sh.600348", "side": "buy", "kind": "market", "qty": 500}));
     eprintln!("CHECK afternoon {o}");

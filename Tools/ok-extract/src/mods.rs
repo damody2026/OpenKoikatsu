@@ -326,7 +326,7 @@ pub(crate) fn watched_tree_zips(mods_dir: &Path) -> Option<Arc<(Vec<PathBuf>, u6
 /// Every GUID a mods tree declares (lower case) -> the first zipmod in walk order declaring it, built once per tree
 /// signature with the archives' manifests read in parallel (each archive's once per generation, `zip_memo`). An
 /// original card's open asks for its few GUIDs; when one is not installed, the per-card walk read ~7000 manifests.
-fn tree_guid_index(mods_dir: &Path) -> Option<Arc<HashMap<String, PathBuf>>> {
+fn tree_guid_index(mods_dir: &Path) -> Option<Arc<HashMap<String, PathBuf>>> {let _spot=crate::profile::spot("view: tree_guid_index");
     use std::sync::Mutex;
     let watched = watched_tree_zips(mods_dir);
     let walk = match &watched { Some(tree) => tree.0.clone(), None => collect_zipmods(mods_dir).ok()? };

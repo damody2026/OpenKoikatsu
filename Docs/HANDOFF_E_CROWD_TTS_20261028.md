@@ -279,6 +279,49 @@ ok-song 的權重轉換：`Build/ok-song/ok-song.exe prepare-models --seedvc E:/
 
 ---
 
+## C. OK 卡轉換與開卡速度（e-okcard，2026-10-29 暫停時的狀態）
+
+使用者的目標：新版 OK 卡只靠卡內 `okLc`／`okLt` 與基礎庫開卡；用 zipmod 資料夾轉卡，每套服裝完整。速度目標：
+- 轉卡：100 張合計 ≤ 100 秒（可以並行），每張 ≤ 10 秒，不含初始化。
+- 冷開：每張 ≤ 3 秒。
+
+方法與數字細節見 `Docs/OK_BASE_LIBRARY_PLAN.md`「批次轉換」、`Docs/OK_EXTRACT_REFACTOR_PLAN.md`「進度」、`Docs/ERROR_LOG.md`。
+
+### C1. 已完成（都已提交；`b5ad7c31d` 之後的未推送）
+
+| commit | 內容 |
+|---|---|
+| `3581190b2`、`b9a4cdfdd`、`6ffcdcad9`、`1f09d79ba` | `view_memo`：同一張卡的多次開卡共用基礎 bundle、清單、頭部細節、身體／臉的 rig（重構 2c、2d）；轉卡時 bundle 快取上限 160 |
+| `e0736beda` | 貼圖上下翻轉以內容快取 |
+| `0f7fd1add` | `view_memo` 只在開卡的 thread 上記住（修正 helper thread 換卡沿用記憶的隱患） |
+| `315aff4cf` | **C032 根因**：外部 CAB 索引在預取 thread 上重建，讀遍 8,427 個 bundle 檔頭全算成缺口；改在 `okstrict::scanning` 裡跑，基礎庫模式不讀寫 `base_v1\.ok_serialized_index_v1.bin` |
+| `75725edac`、`b5ad7c31d` | 卡片解析、`entry_sql_key`、身體貼圖合成的記憶 |
+| `9d47c1ef2` | 安裝 OK 卡時保留被取代卡片的聲音（`Tools/ok_card_voice.lua`）；街頭女主十張的聲音已寫回 |
+
+驗收方法（每一步都跑）：
+- 6 張樣本卡轉換的摘要與 `pack-keys` 記錄和基準相同（`validate6.sh` 的做法）。
+- C018、march_7th、jeanne 共 126 個 session，有記憶與 `OK_NO_VIEW_MEMO=1` 逐位元組相同。
+- 21 個 session 和今天優化前的版本 `63173020b` 逐位元組相同。
+
+### C2. 數字
+
+- 100 張 CrowdAPNG、12 個工作程序、雙 slot：今天優化前 857 秒，`0f7fd1add` 507 秒。之後的 `315aff4cf`～`b5ad7c31d` 還沒有重量（排隊時被暫停）。
+- 單張（機器空閒）：jeanne 24.8 → 約 10 秒；C001 約 16 秒。
+- 批次受 CPU 限制：單張平均只用約 1.6 個核心，CrowdAPNG 每張 CPU 約 25 秒（機器空閒時）；12 個程序同時跑會把機器吃滿。
+- 冷開：10-28 量過 30 張，平均 1.63 秒，最慢 3.13 秒（march_7th、C018）。之後沒有重量。
+
+### C3. 下一步
+
+1. 拿雙 slot 用目前版本重量 100 張批次（`ok_cards.lua convert <清單> <輸出> --workers 12`），和 507／857 秒比較。量測腳本只看 slot 與佇列，停掉後確認程序真的結束（見 ERROR_LOG 10-29 的兩條）。
+2. 每張卡的 CPU 還要再降一半以上，100 張才可能 ≤ 100 秒。剩下的大多是每個項目第一次出現的工作：貼圖解碼／PNG 編碼、配件第一次上色、`outfit 0` 的初始化；換穿著狀態的重開已經只剩 60–200 ms。另外每個程序第一次開卡會掃整棵 mods 樹（GUID、ME、檔案字尾），約 45 CPU 秒。
+3. 冷開 ≤ 3 秒：march_7th、C018 約 3.1 秒。遊戲裡的材質準備（`PrepareSharedRuntimeTexture`：PNG 解碼、mip、SHA1，約 1.6 秒）是 e-galgame 量到最大的一段，屬於共用的 KKUnityBundle／KKRuntimePose，要先和 e-galgame 協調。
+4. 重構還剩：2d 之後的衣服／配件階段、5g（`ParsedBundle` 的 impl 分檔）。
+5. 未完成的「CrowdRoom100 預設改用 GPU rig」（`CrowdRoom100.cmd`、`Tools/run_crowd_room100.lua`、`Docs/CROWD_ROOM100.md`）還沒做 FPS 實測，存成 patch：`E:\OpenKoikatsu\Saved\Crowd\e-okcard-gpu-rig-default-20261029.patch`（`git apply` 可以套回）；工作樹已還原成 HEAD。
+
+開發方式：在匯出副本 `E:\OpenKoikatsu\Saved\okx-okcard`（`git archive HEAD Tools/ok-extract Tools/vendor`，加上編譯期 include 的檔案，`BASE_COMMIT` 記基準）搭配獨立的 `CARGO_TARGET_DIR` 開發，驗證後再寫回共用樹。改到開卡路徑的寫回前，先通知 e-galgame。暫停時匯出副本與 HEAD 相同，沒有未寫回的改動。
+
+---
+
 ## 接手順序建議
 
 1. 處理 A5 第 2 項的 96 張問題，讓 `CrowdRoom100.cmd` 能啟動：轉新卡補滿。

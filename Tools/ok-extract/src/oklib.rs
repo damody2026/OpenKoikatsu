@@ -832,13 +832,46 @@ fn take_card_pack() -> Result<Option<CardPack>, String> {
 
 /// The `okLc` payload of a pack: zstd (OK_PACK_LEVEL, default 3) on all hardware threads. Level 9 made cards ~5%
 /// smaller for several times the CPU, an eighth of a batch conversion's; reading is as fast either way.
+/// Written in independent frames of this many bytes (each states its size), compressed and decoded in parallel.
+const PACK_FRAME: usize = 16 << 20;
+
 fn encode_card_pack(pack: &CardPack) -> Result<Vec<u8>, String> {
+    use rayon::prelude::*;
     let raw = bincode::serialize(pack).map_err(|e| e.to_string())?;
     let level = std::env::var("OK_PACK_LEVEL").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
-    let mut encoder = zstd::stream::Encoder::new(Vec::new(), level).map_err(|e| e.to_string())?;
-    encoder.multithread(crate::cpu_threads() as u32).map_err(|e| e.to_string())?;
-    std::io::Write::write_all(&mut encoder, &raw).map_err(|e| e.to_string())?;
-    encoder.finish().map_err(|e| e.to_string())
+    let frames = raw.par_chunks(PACK_FRAME).map(|part| zstd::bulk::compress(part, level)).collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(frames.concat())
+}
+
+/// An `okLc` payload decompressed. Concatenated frames are one zstd stream to any reader; when every frame states
+/// its size (packs written since 2026-10-29) they are decoded in parallel into their places: one frame of a 400 MB
+/// pack took ~0.2 s of the card's open.
+pub(crate) fn decode_card_pack_bytes(chunk: &[u8]) -> Result<Vec<u8>, String> {
+    use rayon::prelude::*;
+    use zstd::zstd_safe;
+    let whole = || zstd::stream::decode_all(chunk).map_err(|e| format!("card pack: {e}"));
+    let (mut frames, mut pos) = (Vec::new(), 0);
+    while pos < chunk.len() {
+        let len = zstd_safe::find_frame_compressed_size(&chunk[pos..]).ok().filter(|&l| l > 0);
+        let size = zstd_safe::get_frame_content_size(&chunk[pos..]).ok().flatten();
+        let (Some(len), Some(size)) = (len, size) else { return whole() };
+        frames.push((pos, len, size as usize));
+        pos += len;
+    }
+    if frames.len() < 2 { return whole(); }
+    let mut out = vec![0u8; frames.iter().map(|f| f.2).sum()];
+    let mut places = Vec::with_capacity(frames.len());
+    let mut rest = &mut out[..];
+    for &(_, _, size) in &frames { let (place, tail) = rest.split_at_mut(size); places.push(place); rest = tail; }
+    frames.par_iter().zip(places.into_par_iter()).try_for_each(|(&(at, len, size), place)| {
+        match zstd::bulk::decompress_to_buffer(&chunk[at..at + len], place) {
+            Ok(n) if n == size => Ok(()),
+            Ok(n) => Err(format!("card pack: frame of {n} bytes, {size} stated")),
+            Err(e) => Err(format!("card pack: {e}")),
+        }
+    })?;
+    Ok(out)
 }
 
 /// What a sealing or converting open copied from the library, added to a pack (its own entries keep precedence).
@@ -889,7 +922,7 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     // once, and nothing is written to disk.
     active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
     let (profile, t) = (std::env::var_os("OK_PROFILE").is_some(), std::time::Instant::now());
-    let raw = zstd::stream::decode_all(chunk).map_err(|e| format!("card pack: {e}"))?;
+    let raw = decode_card_pack_bytes(chunk)?;
     if profile { eprintln!("ok-extract: PROFILE pack zstd {} -> {} bytes {:>8.1}ms", chunk.len(), raw.len(), t.elapsed().as_secs_f64() * 1e3); }
     let pack: CardPack = bincode::deserialize(&raw).map_err(|e| format!("card pack: {e}"))?;
     if pack.version != CARD_PACK_VERSION { return Err(format!("card pack version {} (expected {CARD_PACK_VERSION})", pack.version)); }
@@ -1768,7 +1801,7 @@ fn open_outfits(lib: &Path, card: &[u8], what: &str) -> Result<(), String> {
 fn extend_card_pack(card: &[u8], adds: crate::okstrict::Additions) -> Result<Vec<u8>, String> {
     let mut pack = match png_chunk(card, PACK_CHUNK) {
         Some(chunk) => {
-            let raw = zstd::stream::decode_all(chunk).map_err(|e| format!("card pack: {e}"))?;
+            let raw = decode_card_pack_bytes(chunk)?;
             bincode::deserialize::<CardPack>(&raw).map_err(|e| format!("card pack: {e}"))?
         }
         None => CardPack { version: CARD_PACK_VERSION, index: Default::default(), records: Vec::new() },
@@ -2401,13 +2434,20 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 let _ = out.write_all(line.as_bytes());
             }
         }
+        "reencode-pack" => {
+            // reencode-pack <OK card> <out>: the same card with its okLc written again by this build (independent
+            // frames, decoded in parallel on open); records, answers and identity unchanged.
+            let bytes = std::fs::read(args.get(1).ok_or("card required")?).map_err(|e| e.to_string())?;
+            let out = extend_card_pack(&bytes, crate::okstrict::Additions::default())?;
+            std::fs::write(args.get(2).ok_or("output required")?, out).map_err(|e| e.to_string())?;
+        }
         "pack-keys" => {
             // pack-keys <OK card>: what its okLc and okLt hold, one sorted line each (record keys with their value
             //   hashes, overlay files, archives and entries, answer keys): two conversions of a card are compared by it.
             let bytes = std::fs::read(args.get(1).ok_or("card required")?).map_err(|e| e.to_string())?;
             let mut lines = Vec::new();
             if let Some(chunk) = png_chunk(&bytes, PACK_CHUNK) {
-                let raw = zstd::stream::decode_all(chunk).map_err(|e| e.to_string())?;
+                let raw = decode_card_pack_bytes(chunk)?;
                 let pack: CardPack = bincode::deserialize(&raw).map_err(|e| e.to_string())?;
                 for PackRecord(id, query, a, value) in &pack.records { lines.push(format!("record {} {query} {} {}", hex(id), hex(a), hex(&hash16(value)))); }
                 for (k, e) in &pack.index.files { lines.push(format!("file {k} {}", hex(&hash16(&bincode::serialize(e).unwrap_or_default())))); }

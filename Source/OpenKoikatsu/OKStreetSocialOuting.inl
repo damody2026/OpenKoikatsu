@@ -721,7 +721,10 @@ float AOKStreetSocialScene::StepOuting(float Dt){
    // R3-234). Held up in the same spot a third time: round it on the grid (cells tested with his body's clearance);
    // a fifth: he squeezes past to the next point, as the navigation does when wedged.
    if(FVector::Dist2D(S.Male,S.OutingStuckPos)<30.f)++S.OutingStuckCount;else{S.OutingStuckCount=1;S.OutingStuckPos=S.Male;}
-   if(S.OutingStuckCount>=5&&S.OutingRoute.IsValidIndex(S.OutingStep)){
+   // Held up within reach of the last point (the seat at the table): he takes it now. At the cafeteria he stood 60 cm (at the
+   // department store 1.55 m) from his chair for 16 s while the route was planned round the table again and again.
+   const bool AtLast=S.OutingStep==S.OutingRoute.Num()-1&&FVector::Dist2D(S.Male,S.OutingRoute[S.OutingStep])<200.f;
+   if((S.OutingStuckCount>=5||AtLast)&&S.OutingRoute.IsValidIndex(S.OutingStep)){
     const FVector Next=S.OutingRoute[S.OutingStep];UE_LOG(LogTemp,Display,TEXT("Street outing: wedged at (%.0f,%.0f); he steps past to the next point %s"),S.Male.X,S.Male.Y,*Next.ToCompactString());
     S.Male=FVector(Next.X,Next.Y,S.Male.Z);++S.OutingStep;S.OutingStuckCount=0;return 0;}
    if(S.OutingStuckCount>=3&&S.OutingRoute.IsValidIndex(S.OutingStep)){TArray<FVector> Around=GridRoute(S.Male,S.OutingRoute[S.OutingStep]);

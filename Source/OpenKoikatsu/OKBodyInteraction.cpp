@@ -5,6 +5,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeLock.h"
 
 namespace {
 FVector Vector(const TSharedPtr<FJsonObject>& O){return FVector(O->GetNumberField(TEXT("x")),O->GetNumberField(TEXT("y")),O->GetNumberField(TEXT("z")));}
@@ -33,15 +34,26 @@ double CapsuleHit(const FVector& O,const FVector& D,const FVector& A,const FVect
  return Best;
 }
 }
+// The shared definition and the 8.5 MB catalogue, parsed once: they were read again for every 1-on-1,
+// inside the 0.6 s frame in which her scene came up (March 7th, Gal1028T). The catalogue is only read after this.
+namespace {
+FCriticalSection SharedLock;TArray<uint8> SharedDefinition;TSharedPtr<FJsonObject> SharedCatalog;
+}
+bool FOKBodyInteraction::WarmShared(FString& Error){
+ FScopeLock Lock(&SharedLock);if(SharedCatalog)return true;
+ const FString Root=FPaths::ProjectContentDir()/TEXT("IndependentResources/BodyInteractions");
+ TArray<uint8> Definition;FString Json;TSharedPtr<FJsonObject> Next;
+ if(!FFileHelper::LoadFileToArray(Definition,*(Root/TEXT("hit-reaction-v1.json")))||!FFileHelper::LoadFileToString(Json,*(Root/TEXT("catalog-v1.json")))||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),Next)||!Next){
+  Error=TEXT("缺少共享身體互動資料");return false;
+ }
+ SharedDefinition=MoveTemp(Definition);SharedCatalog=Next;return true;
+}
 bool FOKBodyInteraction::Prepare(AKKPreviewActor* Actor,FString& Error){
  const double Started=FPlatformTime::Seconds();
  Cancel();Owner.Reset();Catalog.Reset();Colliders.Reset();ActiveReactions.Reset();PairKey.Reset();StateName.Reset();++Revision;
  if(!IsValid(Actor)||!Actor->Session.IsOpen()){Error=TEXT("角色尚未載入");return false;}
- const FString Root=FPaths::ProjectContentDir()/TEXT("IndependentResources/BodyInteractions");
- TArray<uint8> Definition;FString Json;TSharedPtr<FJsonObject> Next;
- if(!FFileHelper::LoadFileToArray(Definition,*(Root/TEXT("hit-reaction-v1.json")))||!FFileHelper::LoadFileToString(Json,*(Root/TEXT("catalog-v1.json")))||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),Next)){
-  Error=TEXT("缺少共享身體互動資料");return false;
- }
+ if(!WarmShared(Error))return false;
+ const TSharedPtr<FJsonObject> Next=SharedCatalog;const TArray<uint8>& Definition=SharedDefinition;const double Loaded=FPlatformTime::Seconds();
  TArray<FOKBodyTouchCollider> Shapes;
  for(const auto& Value:Next->GetArrayField(TEXT("colliders"))){
   const auto O=Value->AsObject();FOKBodyTouchCollider C;
@@ -51,9 +63,9 @@ bool FOKBodyInteraction::Prepare(AKKPreviewActor* Actor,FString& Error){
   float Matrix[16];if(Actor->Session.BoneWorldMatrix(C.Bone,Matrix))Shapes.Add(MoveTemp(C));
  }
  if(Shapes.IsEmpty()){Error=TEXT("角色沒有可用的原作互動碰撞骨架");return false;}
- if(!Actor->Session.PrepareBodyReaction(Definition,Error))return false;
- Owner=Actor;Catalog=MoveTemp(Next);Colliders=MoveTemp(Shapes);
- UE_LOG(LogTemp,Display,TEXT("OK body interaction prepared colliders=%d prepare_ms=%.3f"),Colliders.Num(),(FPlatformTime::Seconds()-Started)*1000.);return true;
+ const double Collided=FPlatformTime::Seconds();if(!Actor->Session.PrepareBodyReaction(Definition,Error))return false;
+ Owner=Actor;Catalog=Next;Colliders=MoveTemp(Shapes);const double Done=FPlatformTime::Seconds();
+ UE_LOG(LogTemp,Display,TEXT("OK body interaction prepared colliders=%d prepare_ms=%.3f (data %.0f, colliders %.0f, reaction %.0f)"),Colliders.Num(),(Done-Started)*1000.,(Loaded-Started)*1000.,(Collided-Loaded)*1000.,(Done-Collided)*1000.);return true;
 }
 void FOKBodyInteraction::SetContext(const FString& Pair,const FString& State){
  if(PairKey==Pair&&StateName==State)return;

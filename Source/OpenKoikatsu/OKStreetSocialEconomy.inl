@@ -195,7 +195,7 @@ void AOKStreetSocialScene::TickServes(){
   TArray<FString> Names;
   if(!P.Applied){
    P.Applied=true;
-   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?S.Manifest.Characters[L.Girl].Name+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
+   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
    // Served: the dishes can be eaten now; her needs fill as she eats them (TickMeal).
    for(auto& D:S.Table)if(D.Batch==P.Batch)D.Served=true;
    // "Not served yet, a few seconds" still waiting to be told: it is served now (爱丽丝 heard it after her drink came and
@@ -330,7 +330,7 @@ void AOKStreetSocialScene::SettleGroupOrder(int32 Partner){
   }
   UE_LOG(LogTemp,Display,TEXT("Street group order: actor=%d lines=%d -> %s"),G,S.Cart.Num(),*Option);
   FinishCheckout(Option,G,G==Partner?FString():OKStreetStableId(S.Manifest.Characters[G]));
-  Notices.Add(S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.colon_mark"))+S.FreeTalkNotice);
+  Notices.Add(OKStreetScriptedName(S.Manifest.Characters[G].Name)+OKT(TEXT("ui.economy.colon_mark"))+S.FreeTalkNotice);
  }
  S.Cart.Reset();S.FreeTalkNotice=FString::Join(Notices,TEXT("\n"));RefreshUI();
 }
@@ -438,6 +438,9 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   return;
  }
  S.MealAwayAt=0;
+ // Not yet at the table: on the way to its seat, or still sitting down. Jeanne Alter's soup came as they stood at the
+ // counter and was a third gone by the time she sat (25 s walking round a chair, then the seated clips loading).
+ if((S.OutingGirl!=INDEX_NONE&&S.OutingGirl==Her)||(S.Pair.Partner==Her&&S.Pair.Phase==0))return;
  // Everyone eating: the partner and the girls with them (each her own dishes); a dish ordered for "her" with nobody named is the partner's.
  auto DishOwner=[&](const FOKStreetDish& D){return S.Manifest.Characters.IsValidIndex(D.Her)?D.Her:Her;};
  // The meal ends: each girl who ate remembers it (with its time): where, with whom, what she had and what he had.

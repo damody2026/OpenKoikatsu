@@ -47,6 +47,14 @@ fn run() -> Result<serde_json::Value, String> {
                 let (fresh, _) = ok_extract::open_card_compare_cache(lib, Path::new(card), outfit)?;
                 std::fs::write(out.join(format!("{stem}_{outfit}.bin")), &fresh).map_err(|e| e.to_string())?;
                 rows.push(serde_json::json!({"card": card, "outfit": outfit, "bytes": fresh.len(), "seconds": t.elapsed().as_secs_f64()}));
+                // OK_FRESH_STATES=1: also the garment states an OK card is converted and checked in (all 1, 2, 3, the
+                // card reader's two preloads), each opened after the previous one in this process.
+                if std::env::var_os("OK_FRESH_STATES").is_some() {
+                    for (i, states) in [[1u8; 9], [2; 9], [3; 9], [1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 3, 3, 3, 3, 3]].into_iter().enumerate() {
+                        let (fresh, _) = ok_extract::with_clothes_states(states, || ok_extract::open_card_compare_cache(lib, Path::new(card), outfit))?;
+                        std::fs::write(out.join(format!("{stem}_{outfit}_s{i}.bin")), &fresh).map_err(|e| e.to_string())?;
+                    }
+                }
             }
         }
         return Ok(serde_json::json!({"fresh": rows}));
