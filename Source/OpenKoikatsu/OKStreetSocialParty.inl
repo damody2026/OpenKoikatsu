@@ -282,7 +282,7 @@ void AOKStreetSocialScene::SendPartyTalk(const FString& Text){
   FOKFreeTalkPersona P;FString E;OKStreetFreeTalkLoadPersona(S.Manifest.Characters[G].Name,P,E);
   const FString Id=OKStreetStableId(S.Manifest.Characters[G]);const FOKStreetRelation R=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
   const TCHAR* Stage=R.Stage==TEXT("lover")?OKT(TEXT("ui.party.his_girlfriend_label")):R.Stage==TEXT("friend")?OKT(TEXT("ui.bonds.friend_stage")):OKT(TEXT("ui.party.just_met"));
-  const TCHAR* Hunger=R.Satiety<35.f?OKT(TEXT("ui.party.very_hungry")):R.Satiety<65.f?OKT(TEXT("ui.party.somewhat_hungry")):R.Satiety<OKStreetFullSatiety?OKT(TEXT("ui.party.not_very_hungry")):OKT(TEXT("ui.party.very_full"));
+  const TCHAR* Hunger=R.Satiety<35.f?OKT(TEXT("ui.party.very_hungry")):R.Satiety<65.f?OKT(TEXT("ui.party.somewhat_hungry")):R.Satiety<80.f?OKT(TEXT("ui.party.not_very_hungry")):R.Satiety<OKStreetFullSatiety?OKT(TEXT("ui.party.rather_full")):OKT(TEXT("ui.party.very_full"));
   // Named by her spoken name; the card's name (romaji) is mentioned once so a line that uses it still reaches her.
   const FString Also=!P.DisplayName.IsEmpty()&&P.DisplayName!=S.Manifest.Characters[G].Name?OKMsg(TEXT("ui.party.card_name_hint"), {{TEXT("card_name"), *S.Manifest.Characters[G].Name}}):FString();
   // Who she is stays in the system text (the same every turn: DeepSeek's cache keeps it); how she is now goes to the

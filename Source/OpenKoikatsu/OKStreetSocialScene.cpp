@@ -499,7 +499,8 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  // and the heroine asked for on the command line (-StreetSocialInspect=N) once everyone is loaded.
  int32 InspectSlot=INDEX_NONE,InspectAsked=INDEX_NONE;FVector InspectMaleBack=FVector::ZeroVector,InspectHerBack=FVector::ZeroVector;TArray<TWeakObjectPtr<AActor>> InspectRoom;
  float InspectYaw=0.f,InspectPitch=8.f,InspectDistance=420.f;
- struct FVoiceCandidate {FString Tag,Reference,Preview;};TArray<FVoiceCandidate> VoicePickCandidates;bool VoicePickOpen=false,VoicePickBusy=false,CardHasVoice=false;FString VoicePickDescription,VoicePickNotice,TtsVoiceInstruct;int32 VoicePickTarget=INDEX_NONE;
+ struct FVoiceCandidate {FString Tag,Reference,Preview;};TArray<FVoiceCandidate> VoicePickCandidates;bool VoicePickOpen=false,VoicePickBusy=false,CardHasVoice=false;int32 CardVoiceProbedFor=INDEX_NONE; // whose card CardHasVoice answers for (R5-9)
+FString VoicePickDescription,VoicePickNotice,TtsVoiceInstruct;int32 VoicePickTarget=INDEX_NONE;
  FOKStreetStore Store;
  TArray<FOKStreetAgentSim> Agents;
  TArray<FRotator> Rotations,RenderedRotations;

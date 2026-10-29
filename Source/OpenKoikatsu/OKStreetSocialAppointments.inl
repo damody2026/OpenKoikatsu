@@ -98,7 +98,8 @@ void AOKStreetSocialScene::AddPromiseFromChat(int32 Character,const FString& Day
   // A day and a place but no hour ("Saturday at the park"): agreed, yet nothing to book. She asks him what time,
   // instead of the meeting being dropped without either of them knowing.
   // A day and nothing else yet ("all of Sunday with you"): she asks when and where.
-  if(Reason==TEXT("not_a_place")&&Place.IsEmpty()&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_place_note"),{{TEXT("day"),*Day}}));S.PromiseAskNotes.Add(S.TellHer.Last());
+  // With the hour said, only where: told "no time or place", Keqing asked "what time?" of his "tomorrow at six" (R5-11).
+  if(Reason==TEXT("not_a_place")&&Place.IsEmpty()&&!Day.IsEmpty()){S.TellHer.Add(Time.IsEmpty()?OKMsg(TEXT("ui.appointments.no_time_place_note"),{{TEXT("day"),*Day}}):OKMsg(TEXT("ui.appointments.no_place_note"),{{TEXT("day"),*Day},{TEXT("time"),*Time}}));S.PromiseAskNotes.Add(S.TellHer.Last());
    UE_LOG(LogTemp,Display,TEXT("Street promise: %s agreed, no time or place yet; she asks"),*Day);}
   if(Reason==TEXT("no_time")&&P&&!Day.IsEmpty()){S.TellHer.Add(OKMsg(TEXT("ui.appointments.no_time_note"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}}));S.PromiseAskNotes.Add(S.TellHer.Last());
    S.FreeTalkNotice=OKMsg(TEXT("ui.appointments.no_time_notice"),{{TEXT("day"),*Day},{TEXT("place_name"),P->Name}});RefreshUI();}

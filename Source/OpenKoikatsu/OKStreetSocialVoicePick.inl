@@ -35,13 +35,16 @@ static TSharedPtr<FJsonObject> OKVoicePickAnswer(FHttpResponsePtr Response,bool 
 // Whether her card already holds a voice of her own.
 void AOKStreetSocialScene::ProbeCardVoice(){
  if(!State)return;auto& S=*State;S.CardHasVoice=false;
- const int32 Target=S.Target;const FString Card=OKStreetCardFor(S,Target);
+ const int32 Target=S.Target;const FString Card=OKStreetCardFor(S,Target);S.CardVoiceProbedFor=Target;
  if(!S.TtsEnabled||Card.IsEmpty())return;
  auto Request=FHttpModule::Get().CreateRequest();
  Request->SetURL(S.TtsEndpoint/TEXT("voice/card?card=")+FGenericPlatformHttp::UrlEncode(Card));Request->SetVerb(TEXT("GET"));Request->SetTimeout(5);
  Request->OnProcessRequestComplete().BindWeakLambda(this,[this,Target](FHttpRequestPtr,FHttpResponsePtr Response,bool Connected){
   if(!State||State->Target!=Target)return;FString Error;
-  if(const auto J=OKVoicePickAnswer(Response,Connected,Error)){const TSharedPtr<FJsonObject>* Voice=nullptr;const bool Has=J->TryGetObjectField(TEXT("voice"),Voice)&&Voice&&Voice->IsValid();
+  const auto J=OKVoicePickAnswer(Response,Connected,Error);
+  // Not answered (the server busy with her line): asked again the next time the panel is drawn.
+  if(!J){State->CardVoiceProbedFor=INDEX_NONE;UE_LOG(LogTemp,Display,TEXT("Street voice: card voice of actor %d not known yet (%s)"),Target,*Error);return;}
+  {const TSharedPtr<FJsonObject>* Voice=nullptr;const bool Has=J->TryGetObjectField(TEXT("voice"),Voice)&&Voice&&Voice->IsValid();
    // Shown in the right panel only (and only when it changed: asked on every new target).
    if(Has!=State->CardHasVoice){State->CardHasVoice=Has;RefreshUI(OKStreetUi::Right);}}
  });
@@ -116,6 +119,9 @@ void AOKStreetSocialScene::RemoveCardVoice(){
 void AOKStreetSocialScene::AddVoicePickUI(TSharedRef<SVerticalBox> Box){
  auto& S=*State;
  if(!S.TtsEnabled||!S.Manifest.Characters.IsValidIndex(S.Target))return;
+ // The target changes in many places (an activity's partner, a song, a reload) that do not ask about her card: the
+ // panel said Jeanne Alter spoke with her personality's default voice while her card held her own (R5-9).
+ if(S.CardVoiceProbedFor!=S.Target)ProbeCardVoice();
  const TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  Box->AddSlot().AutoHeight().Padding(8,2)[SNew(STextBlock).Text(FText::FromString(S.CardHasVoice?OKT(TEXT("ui.voice.voice_pick_card_voice")):OKT(TEXT("ui.voice.voice_pick_card_none")))).AutoWrapText(true).WrapTextAt(360).Font(FCoreStyle::GetDefaultFontStyle("Regular",11))];
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(S.VoicePickOpen?OKT(TEXT("ui.voice.voice_pick_close")):OKT(TEXT("ui.voice.voice_pick_open"))))

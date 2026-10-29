@@ -502,7 +502,8 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
    S.TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is full"),*O.Id);continue;}
   // Not one for herself while she is on her shift serving him: 爱丽丝, making his milk tea at the drink shop, ordered a
   // milk tea for herself and he paid for both (R4-21).
-  if(ForHer&&ShiftUntil(Character)>0){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is on her shift"),*O.Id);continue;}
+  // Told so: not told, she asked where her milk tea was, "still being made, then" (R5-10).
+  if(ForHer&&ShiftUntil(Character)>0){S.TellHer.Add(OKMsg(TEXT("ui.economy.on_shift_no_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is on her shift"),*O.Id);continue;}
   FOKStreetCartLine Line;Line.ItemId=O.Id;Line.ForHer=ForHer;Line.HerOwn=ForHer;Line.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
   if(!Item->Options.IsEmpty()){Line.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Line.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
   S.ShopPlace=Place;S.Cart.Add(Line);++Added;
@@ -560,8 +561,9 @@ FString AOKStreetSocialScene::MindPanelText(int32 Character) const{
  if(!Bias.Combos.IsEmpty())Out+=OKT(TEXT("ui.mind.status_header"))+FString::Join(Bias.Combos,OKT(TEXT("ui.bank.list_separator")));
  Out+=OKMsg(TEXT("ui.mind.needs_wallet_line"), {{TEXT("satiety"), R.Satiety}, {TEXT("energy"), R.Energy}, {TEXT("fun"), R.Fun}, {TEXT("social"), R.Social}, {TEXT("hygiene"), R.Hygiene}, {TEXT("cash"), R.Cash}, {TEXT("debt_suffix"), R.Debt>0?*OKMsg(TEXT("ui.mind.debt_amount_note"), {{TEXT("debt"), R.Debt}}):TEXT("")}, {TEXT("appeal"), AppealOf(Character)}});
  // The number in words, as a group talk has it: she ate breakfast in the dorm (satiety 98) and still said "just hungry,
- // let's go" when he asked her to breakfast (R3-212).
- Out+=OKMsg(TEXT("ui.mind.hunger_line"),{{TEXT("hunger"),R.Satiety<35.f?OKT(TEXT("ui.party.very_hungry")):R.Satiety<65.f?OKT(TEXT("ui.party.somewhat_hungry")):R.Satiety<OKStreetFullSatiety?OKT(TEXT("ui.party.not_very_hungry")):OKT(TEXT("ui.party.very_full"))}});
+ // let's go" when he asked her to breakfast (R3-212). "Not very hungry" up to 92 let Jeanne Alter at 91, two hours
+ // after her noodles, say "I'm a bit hungry too" (R4-12): from 80 she is still full.
+ Out+=OKMsg(TEXT("ui.mind.hunger_line"),{{TEXT("hunger"),R.Satiety<35.f?OKT(TEXT("ui.party.very_hungry")):R.Satiety<65.f?OKT(TEXT("ui.party.somewhat_hungry")):R.Satiety<80.f?OKT(TEXT("ui.party.not_very_hungry")):R.Satiety<OKStreetFullSatiety?OKT(TEXT("ui.party.rather_full")):OKT(TEXT("ui.party.very_full"))}});
  {auto Request=OKRulesHeroineRequest(S,TEXT("heroine_private"),Id);Request->SetNumberField(TEXT("charm"),PlayerLook());
   if(const TSharedPtr<FJsonObject> P=OKRulesEval(S,Request)){const float Chance=float(P->GetNumberField(TEXT("chance"))),Resistance=float(P->GetNumberField(TEXT("resistance")));
    Out+=OKMsg(TEXT("ui.mind.chastity_charm_line"), {{TEXT("chastity"), P->GetNumberField(TEXT("chastity"))}, {TEXT("charm_resistance"), int32(P->GetNumberField(TEXT("charm_resistance")))}, {TEXT("player_appeal"), PlayerLook()}, {TEXT("alone_chance_text"), Chance<0.f?OKT(TEXT("ui.mind.lover_by_invite")):Chance<=0.f?*OKMsg(TEXT("ui.mind.no_chance_resistance"), {{TEXT("resistance"), Resistance}}):*OKMsg(TEXT("ui.mind.chance_resistance_label"), {{TEXT("chance_percent"), Chance*100.f}, {TEXT("resistance"), Resistance}})}});}}

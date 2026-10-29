@@ -6,6 +6,9 @@
 // BeginPhoto / BeginFacility / BeginCompanion. Activities without a place start where the pair stands.
 // When an activity ends both stay where they are, and talk resumes quietly if free talk was open.
 
+// How long before a place opens they may walk to its door and wait there (the same hour a promise may meet there).
+static constexpr int32 OKStreetDoorWaitMinutes=60;
+
 // A place model component made static once its sections are in: the same triangles and materials built into a
 // UStaticMesh at runtime (sections sharing a material become one), drawn by a static mesh component under it. A
 // procedural mesh is drawn on the dynamic path, its sections gathered again every frame for every pass (base, depth,
@@ -507,7 +510,12 @@ bool AOKStreetSocialScene::BeginOuting(int32 Girl,const FString& ActivityId,FStr
   const float WalkMinutes=OKStreetInsidePlace(*Place,S.Male)?0.f:FVector::Dist2D(S.Male,Place->Door)/100.f*1.3f/2.75f;
   const FDateTime Arrive=StreetNow()+FTimespan::FromMinutes(WalkMinutes);
   const bool ClosedThen=PlaceClosedAt(Place->Id,Arrive,Why);FString After;const bool ClosedAfter=PlaceClosedAt(Place->Id,Arrive+FTimespan::FromMinutes(15),After);
-  if(ClosedThen&&ClosedAfter){Error=Why;return false;}
+  // Only walking to it (go:, nothing to do there yet) to wait at its door: an hour before it opens is as good a place to
+  // be as the meeting point a promise may name there (R3-253c). Jeanne Alter and he were told "closed" at 10:19 for the
+  // department store opening at 11 they had met in front of (R5-8).
+  FString Later;const bool DoorWait=ActivityId.StartsWith(TEXT("go:"))&&ClosedThen&&!Place->Rooms.IsEmpty()&&!PlaceClosedAt(Place->Id,Arrive+FTimespan::FromMinutes(OKStreetDoorWaitMinutes),Later);
+  if(DoorWait){UE_LOG(LogTemp,Display,TEXT("Street outing: %s not open on arrival but within the hour; they go and wait at its door"),*ActivityId);}
+  else if(ClosedThen&&ClosedAfter){Error=Why;return false;}
   if(!ClosedThen&&ClosedAfter){
    Error=OKMsg(TEXT("ui.outing.closes_before_arrival"),{{TEXT("place"),Place->Name},{TEXT("minutes"),FMath::CeilToInt(WalkMinutes)},{TEXT("why"),After}});
    UE_LOG(LogTemp,Display,TEXT("Street outing: %s not started, %s closes before they could be there and stay (walk %.0f min)"),*ActivityId,Place->Id,WalkMinutes);return false;}}
@@ -680,7 +688,8 @@ float AOKStreetSocialScene::StepOuting(float Dt){
   if(Dest&&!Dest->Rooms.IsEmpty()&&!OKStreetInsidePlace(*Dest,S.Male)&&FVector::Dist2D(S.Male,Dest->Door)<150.f&&PlaceClosedNow(Dest->Id,Why)){
    // Half an hour: setting off allowed an opening a quarter of an hour after the estimated walk, and the walk was
    // quicker than that estimate (at the cafe at 07:36 for 08:00: called off at its door, R3-217).
-   if(PlaceClosedAt(Dest->Id,StreetNow()+FTimespan::FromMinutes(30),Why)){S.OutingWaitDoor=false;CancelOuting(OKMsg(TEXT("ui.outing.closed_at_door"),{{TEXT("place"),Dest->Name},{TEXT("why"),*Why}}));return 0;}
+   // Only going there (go:) waits as long as setting off allowed (R5-8).
+   if(PlaceClosedAt(Dest->Id,StreetNow()+FTimespan::FromMinutes(S.OutingActivity.StartsWith(TEXT("go:"))?OKStreetDoorWaitMinutes:30),Why)){S.OutingWaitDoor=false;CancelOuting(OKMsg(TEXT("ui.outing.closed_at_door"),{{TEXT("place"),Dest->Name},{TEXT("why"),*Why}}));return 0;}
    S.OutingProgressAt=Now;
    if(!S.OutingWaitDoor){S.OutingWaitDoor=true;S.Message=OKMsg(TEXT("ui.outing.wait_at_door_until_open"),{{TEXT("place"),Dest->Name}});RefreshUI();
     UE_LOG(LogTemp,Display,TEXT("Street outing: %s not open yet; they wait at its door (%s)"),Dest->Id,*Why);}
