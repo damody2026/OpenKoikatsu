@@ -1021,3 +1021,9 @@
 - 在餐廳和惠惠說話、貞德·Alter 在群組裡時存檔；讀檔後貞德·Alter 變成陪他走的人並接手對話，惠惠只在旁邊等。存檔把群組成員記成 follow，讀檔時第一個 follow 的人（依 slot 順序）被當成陪伴者。
 - 修正（`OKStreetSocialMind.inl` 存檔、`OKStreetSocialSchedule.inl` 讀檔）：群組成員（不是陪走的那位）記成 `party`，讀檔後回到群組（`ResumeParty`），不再搶陪伴者的位置。規則 `resume_with_him` 對非 follow 本來就回 `follow:false`，舊存檔照舊。
 - 驗證（Gal1029B，欄位 21）：讀檔後 `actor 9 was with him (party)` → `follows him again`，按 E 和貞德·Alter 說話時兩人一起回答。
+
+### 2026-10-29 群聊裡簡體卡名女主的台詞歸給對話對象、名字前綴留在台詞裡（E 組 galgame）
+- 和惠惠說話、貞德·Alter 在群組裡時，log 是 `Street galgame line c9 (voiced): 貞德·Alter：剛吃飽就喊甜點…`：她的話用了惠惠的立繪與名字標籤，台詞前面還多了「貞德·Alter：」。群聊字幕用的是遊戲顯示的名字（`OKStreetScriptedName`，繁中把卡片的「贞德·Alter」顯示成「貞德·Alter」），galgame 找說話者卻用卡片原名，對不上就歸給對話對象，也沒拿掉前綴。雷電將軍、三月七等簡體卡名的女主都會這樣，惠惠（兩種字體相同）不會。
+- 修正（`OKStreetSocialGalgame.inl`）：找說話者時卡片原名對不上，再用顯示的名字比對；拿掉前綴時用對上的那個名字。
+- 驗證（Gal1029D，欄位 21）：貞德·Alter＋惠惠群聊兩輪，log 每句都是正確的 c1／c9，台詞沒有前綴，`/galgame` 的 who／portrait 是 c1，截圖名字標籤與立繪正確。
+- 同一場 `galgame_regression.lua --private --girl 1` 的 rollback 項 FAIL：捲動後遊戲剛好送出「菜吃完了」通知，群聊新回覆把捲動位置清掉，腳本那句也因她們還在回覆沒送出；是測試撞上遊戲事件，不是回滾壞了。群組裡有人時跑回歸要先讓她們離開。
