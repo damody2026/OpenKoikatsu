@@ -222,6 +222,7 @@ void AOKStreetSocialScene::TickSchedules(){
     S.PlanBlock.Add(I,PlanIndex);S.PlanBlockSince.Add(I,Minute);S.WaitsForHim.Add(I,Now+int64(Out->GetNumberField(TEXT("wait_minutes"))));
     // The first who walked with him walks with him again; the others who followed him join the group again (R3-252).
     if(Out->GetBoolField(TEXT("follow"))){if(S.ResumeFollow==INDEX_NONE)S.ResumeFollow=I;else S.ResumeParty.AddUnique(I);S.ResumeFollowUntil=FPlatformTime::Seconds()+30;}
+    else if(W->Mode==TEXT("party")){S.ResumeParty.AddUnique(I);S.ResumeFollowUntil=FPlatformTime::Seconds()+30;}
     UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), put back at %s"),I,*W->Mode,*W->Spot.ToCompactString());
     S.ResumeWithHim.Remove(Id);continue;}
    UE_LOG(LogTemp,Display,TEXT("Street load: actor %d was with him (%s), her %s block takes her"),I,*W->Mode,Block?*Block->Kind:TEXT("-"));

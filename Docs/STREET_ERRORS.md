@@ -1011,3 +1011,13 @@
 - 修正（三語 `ui.party.group_dialogue_prompt`）：口頭禪、招牌台詞只在合適時用，不要當每次的開頭；前面對話用過就換說法。
 - 驗證（熱重載）：之後兩輪只有一次在插話時喊（3/3 → 1/2），被問的人先回答。對話紀錄裡已有的舊台詞仍可能讓模型照抄，新場次再觀察。
 - 另外：Windows 的 lua.exe 收到的中文命令列參數會被轉碼，改文字表的替換字串要寫進 Lua 檔，不要從命令列傳。
+
+### 2026-10-29 陪他走的女主一路 walk／stand 每 1～2 幀切換（E 組 galgame）
+- 和惠惠、貞德·Alter 從書局走去餐廳，log 的 `Street idle: slot=9` 在 walk／stand 間切了 2000 多次（約每秒 80 次）。`NpcIdleTick` 的防抖只給「通勤中」或「沒被行程定住且在走路模式」的人；陪他出門的女主帶 held 旗標，沒套到。
+- 修正（`OKStreetSocialAmbient.inl`）：只要 0.4 秒內動過就維持走路姿勢，不論是什麼讓她走。
+- 驗證（Gal1029A）：貞德·Alter 陪他從餐廳走到中央公園，整段只切一次（walk）。
+
+### 2026-10-29 讀檔後群聊換了對話對象（E 組 galgame）
+- 在餐廳和惠惠說話、貞德·Alter 在群組裡時存檔；讀檔後貞德·Alter 變成陪他走的人並接手對話，惠惠只在旁邊等。存檔把群組成員記成 follow，讀檔時第一個 follow 的人（依 slot 順序）被當成陪伴者。
+- 修正（`OKStreetSocialMind.inl` 存檔、`OKStreetSocialSchedule.inl` 讀檔）：群組成員（不是陪走的那位）記成 `party`，讀檔後回到群組（`ResumeParty`），不再搶陪伴者的位置。規則 `resume_with_him` 對非 follow 本來就回 `follow:false`，舊存檔照舊。
+- 驗證（Gal1029B，欄位 21）：讀檔後 `actor 9 was with him (party)` → `follows him again`，按 E 和貞德·Alter 說話時兩人一起回答。

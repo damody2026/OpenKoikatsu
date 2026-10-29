@@ -112,7 +112,11 @@ void AOKStreetSocialScene::SaveCalendar(){
    const bool Remote=S.RemoteMode!=0&&S.RemotePeer==I;
    const bool Stay=S.Pair.Partner==I||S.Target==I||(FreeTalkPartner()==I&&!Remote)||S.PrivateGirl==I||(S.Facility!=INDEX_NONE&&S.FacilityCharacter==I);
    if(!Follow&&!Stay)continue;
-   FOKStreetStore::FWithHim W;W.Id=OKStreetStableId(S.Manifest.Characters[I]);W.Mode=Follow?TEXT("follow"):TEXT("stay");
+   // One of the group (not the one who walks with him): "party", she joins the group again after a load. As "follow" the
+   // first of them by slot walked with him and took the talk, while the one he was talking to (惠惠 with 贞德·Alter at
+   // the restaurant) only waited beside him.
+   const bool Member=S.Party.Contains(I)&&S.Companion!=I&&S.OutingGirl!=I;
+   FOKStreetStore::FWithHim W;W.Id=OKStreetStableId(S.Manifest.Characters[I]);W.Mode=Member?TEXT("party"):Follow?TEXT("follow"):TEXT("stay");
    const FVector Her=S.Agents[I-1].Position;
    // Where she stood, when that is by him (the trail behind him, or a set far from where he is put back: beside him).
    if(!S.FacilityEntered&&FVector::Dist2D(Her,His)<(Follow?230.f:600.f)&&FMath::Abs(Her.Z-His.Z)<150.f){W.Spot=Her;W.Yaw=S.Rotations.IsValidIndex(I)?S.Rotations[I].Yaw:0.f;}
