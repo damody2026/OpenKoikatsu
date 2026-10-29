@@ -751,6 +751,9 @@ void AOKStreetSocialScene::ArriveOuting(){
  const int32 Girl=S.OutingGirl;const FString Activity=S.OutingActivity;const FString Place=S.OutingPlace;
  S.OutingGirl=INDEX_NONE;S.OutingRoute.Reset();S.OutingActivity.Reset();S.OutingPlace.Reset();S.LiftRide=FOKStreetLiftRide();S.OutingWaitDoor=false;
  S.LastActivity=Activity;S.LastActivityGirl=Girl;S.LastActivityAt=SceneTime(); // for its aftermath when it ends (Life.inl)
+ // Where the two of them just got to, for a meeting there later today that this walk already was (R5-13).
+ if(Girl!=INDEX_NONE){const FOKStreetActivity* A=OKStreetFindActivity(Activity);S.ArrivedWith=Girl;S.ArrivedMinute=OKStreetMindNow(S);
+  S.ArrivedPlace=Activity.StartsWith(TEXT("go:"))?Activity.Mid(3):A&&A->Place?FString(A->Place):Place;}
  if(Girl!=INDEX_NONE)MindRemember(Girl,TEXT("outing"),OKMsg(TEXT("ui.memory.outing_arrived"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(Place)},{TEXT("activity"),OKStreetActivityName(Activity)}}),Place,0.3f);
  if(S.Companion==Girl){
   if(S.Agents.IsValidIndex(Girl-1)){auto& Agent=S.Agents[Girl-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}

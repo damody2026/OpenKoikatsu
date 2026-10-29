@@ -260,7 +260,7 @@ struct FOKStreetSceneState {
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
  struct FPendingText{int32 Girl=INDEX_NONE;FString Why,Kind;double Due=0;int32 Tries=0;};TArray<FPendingText> PendingTexts;bool PhoneInFlight=false;double GateNudgeAt=-100;
- TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;bool ActCutShort=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
+ TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;int32 ArrivedWith=INDEX_NONE;FString ArrivedPlace;int64 ArrivedMinute=-1; /* the last walk he and a girl ended together, for appointments_tick (R5-13) */bool ActCutShort=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
  // Round 3 (Docs/STREET_BEHAVIOR_PLAN_20261012b.md).
  TMap<int32,int32> PlanBlockSince;TMap<FString,int32> PaidShiftMinutes;bool ActIsHers=false,ActLover=false;int32 IntroFriend=INDEX_NONE;double IntroAt=0,GatePenaltyAt=-100,LastActivityAt=-100;
  TMap<int32,TArray<int64>> SelfTexts;int32 SentRemoteGirl=INDEX_NONE,SentRemoteMode=0,ReplyRemoteGirl=INDEX_NONE,ReplyRemoteMode=0;int64 LastCheckoutMinute=-1;FString NotServedNote;TMap<FString,int32> JobRejected;
@@ -1624,6 +1624,12 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     L->ShopPlace=Shop;L->Cart.Add(Line);++Added;UE_LOG(LogTemp,Display,TEXT("Street judge order: %s for %s"),*Item->Name,*For);
    }
    if(Added>0||(OrderWaited&&!L->Cart.IsEmpty()))Weak->PlaceChatOrder(Character,Her);}
+  // Something agreed to be bought here that the shop does not sell (a book on the 6F of the department store, which
+  // sells stationery: Jeanne Alter said "I'll pay for it myself" and believed she had it; Hu Tao "took" a book he never
+  // bought, R4-23 / R5-12). Nothing was billed: she is told, so she does not go on as if it were hers.
+  {const TArray<TSharedPtr<FJsonValue>>* Unsold=nullptr;if(Verdict->TryGetArrayField(TEXT("unsold"),Unsold))for(const auto& V:*Unsold){FString Name;if(!V.IsValid()||!V->TryGetString(Name)||Name.TrimStartAndEnd().IsEmpty())continue;
+   L->TellHer.Add(OKMsg(TEXT("ui.economy.not_sold_here_order"),{{TEXT("item"),Name}}));L->FreeTalkNotice=OKMsg(TEXT("ui.economy.not_sold_here_notice"),{{TEXT("item"),Name}});
+   UE_LOG(LogTemp,Display,TEXT("Street judge: %s is not sold here; nothing bought, she is told"),*Name);}}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
   {double Lend=0;Verdict->TryGetNumberField(TEXT("he_lends"),Lend);Weak->SettleMoneyHandover(Character,Lend,true);}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).

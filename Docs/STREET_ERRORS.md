@@ -1010,10 +1010,4 @@
 - 打包完後用一行 `mkdir slot1 && 寫 owner ; game_launch` 拿名額：mkdir 因 slot1 已被 c-street-city 拿走而失敗，但 `;` 讓 game_launch 照跑，機器上變成 c-street-city 的 Editor＋我的遊戲，排隊中的 e-okcard（10:20 起）、e-galgame 被插隊。
 - 發現後立刻關掉自己的遊戲 PID，在 `queue/c-conquest.txt` 排在最後。
 - 以後：拿名額與啟動分成兩步，先確認 slot 目錄是自己建的（owner.txt 是自己寫的）再啟動；也要先看 queue 有沒有人等更久。
-- 2026-10-29 世界邊緣 skirt 第一次安裝：旅館驗收的 audit 從房間往下打的射線打到 `WorldEdge_Skirt`（城內、高 18.7 m）。
-  - 原因：Interchange 匯入替這片 5 km 的網格自動產生了簡易碰撞（凸包），而 body setup 是 `CTF_USE_SIMPLE_AS_COMPLEX`；`set_collision_enabled(NO_COLLISION)` 也沒有擋住 audit 的射線。凸包把整個城市蓋在底下。
-  - 我一度以為是 Y 軸鏡像放錯了：從匯入後網格的頂點驗算，朝向其實是對的。
-  - 修正：
-    - 清空 body setup 的 `agg_geom`，元件改用 `NoCollision` 碰撞設定檔，並關掉 overlap；
-    - 朝向改用 MeshDescription 的頂點驗算：設計時記下的 9 個不對稱頂點，都要在 5 cm 內對上。
-  - 以後只當遠景、不給人走的大網格：匯入後一定要清掉自動產生的簡易碰撞，再看 audit。
+- 又一條（同日）：改了 ui_text.toml（R4-12 的 rather_full）後沒先 `cargo build --release` ok-rules 就用 C1029c 開 sandbox；文字由 ok-rules DLL 以 include_str 編入，所以那次新詞沒生效。以後改任何 Localization toml，啟動前一定重編 ok-rules（並跑 cargo test 確認 toml 能解析）。

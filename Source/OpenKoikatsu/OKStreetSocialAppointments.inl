@@ -320,6 +320,7 @@ void AOKStreetSocialScene::TickAppointments(){
  auto Request=OKRulesRequest(TEXT("appointments_tick"));Request->SetNumberField(TEXT("now"),double(Now));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);
  Request->SetStringField(TEXT("talking_to"),IdOf(S.Target));Request->SetStringField(TEXT("talking_name"),S.Target>0?SpokenName(S.Target):FString());Request->SetStringField(TEXT("approaching"),IdOf(S.ApproachGirl));Request->SetStringField(TEXT("with"),IdOf(S.Target!=INDEX_NONE?S.Target:S.Companion));
  Request->SetStringField(TEXT("came_with"),IdOf(S.OutingGirl!=INDEX_NONE?S.OutingGirl:S.Companion!=INDEX_NONE?S.Companion:S.Pair.Partner));
+ if(S.ArrivedWith!=INDEX_NONE){Request->SetStringField(TEXT("arrived_with"),IdOf(S.ArrivedWith));Request->SetStringField(TEXT("arrived_place"),S.ArrivedPlace);Request->SetNumberField(TEXT("arrived_minute"),double(S.ArrivedMinute));}
  TArray<TSharedPtr<FJsonValue>> Rows;auto Hers=MakeShared<FJsonObject>();
  for(const auto& A:S.Store.Appointments){
   auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("id"),A.Id);O->SetStringField(TEXT("kind"),A.Kind);O->SetStringField(TEXT("heroine"),A.Heroine);O->SetStringField(TEXT("place"),A.Place);

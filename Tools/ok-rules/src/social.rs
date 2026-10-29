@@ -471,6 +471,18 @@ fn appointments_tick(r: &Value) -> Result<Value, String> {
         // With her at its time, somewhere else they went together (the cake at the snack shop eaten on the department
         // store's 9F instead): the meeting is kept, not a no-show at the snack shop (R3-251).
         let with_her = girl && (came_with == a.heroine || talking == a.heroine);
+        // They have just walked there together, earlier the same day, for what the meeting was ("I'll walk you back at
+        // three", and at 13:24 he walked her back from the park): kept, not a no-show at three. Only an arrival there,
+        // not already being there when it was booked (R4-27) (R5-13).
+        let arrived_at = r.get("arrived_minute").and_then(Value::as_i64).unwrap_or(-1);
+        if girl && s(r, "arrived_with") == a.heroine && s(r, "arrived_place") == a.place && arrived_at >= 0 && now - arrived_at <= 3
+            && now < a.start && a.start.div_euclid(1440) == now.div_euclid(1440) {
+            list[k].status = "done".into();
+            updates.push(json!({"id": a.id, "status": "done"}));
+            fx.note_at(&a.heroine, "date", crate::tr::t("social.came_together"), &a.place, 0.6);
+            notice = format!("{}{}", crate::tr::t("social.arrived_on_time_prefix"), a.label);
+            continue;
+        }
         // At its time, not half an hour before: 胡桃 and he booked the snack shop at 4:30 while talking at 4:03, and the
         // meeting counted as kept the moment it was made; her "4:30, not six" then moved their aquarium day instead (R4-27).
         if with_her && !a.there && now >= a.start - WITH_HER_EARLY && now <= a.start + a.grace as i64 + wait {
@@ -1197,6 +1209,14 @@ mod tests {
             "appointments": [{"id": 9, "kind": "date", "heroine": "a", "place": "snack", "start": 900, "grace": 20, "status": "pending", "there": false}],
             "heroines": {"a": her(100.0)}})).unwrap();
         assert_eq!(early["updates"], json!([]), "{early}");
+        // "I'll walk you back at 15:00", and at 13:24 they walked into her dorm together: kept then (R5-13); an arrival
+        // there ten minutes ago, or the meeting on another day, is not it.
+        let walked = |now: i64, arrived: i64, start: i64| appointments_tick(&json!({"now": now, "day": 0, "arrived_with": "a", "arrived_place": "girls_dorm", "arrived_minute": arrived,
+            "appointments": [{"id": 16, "kind": "date", "heroine": "a", "place": "girls_dorm", "start": start, "grace": 20, "status": "pending", "there": true}],
+            "heroines": {"a": her(100.0)}})).unwrap();
+        assert_eq!(walked(804, 804, 900)["updates"], json!([{"id": 16, "status": "done"}]));
+        assert_eq!(walked(814, 804, 900)["updates"], json!([]));
+        assert_eq!(walked(804, 804, 1440 + 900)["updates"], json!([]));
         let v = appointments_tick(&json!({"now": 1000 + DATE_WAIT, "day": 0, "with": "c",
             "appointments": [{"id": 1, "kind": "date", "heroine": "a", "place": "cafe", "start": 900, "grace": 20, "status": "pending"},
                              {"id": 2, "kind": "reservation", "heroine": "", "place": "restaurant", "start": 900, "grace": 15, "status": "pending"},
