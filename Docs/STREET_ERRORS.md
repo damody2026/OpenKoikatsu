@@ -1012,3 +1012,48 @@
 - 以後：拿名額與啟動分成兩步，先確認 slot 目錄是自己建的（owner.txt 是自己寫的）再啟動；也要先看 queue 有沒有人等更久。
 - 又一條（同日）：改了 ui_text.toml（R4-12 的 rather_full）後沒先 `cargo build --release` ok-rules 就用 C1029c 開 sandbox；文字由 ok-rules DLL 以 include_str 編入，所以那次新詞沒生效。以後改任何 Localization toml，啟動前一定重編 ok-rules（並跑 cargo test 確認 toml 能解析）。
 - 又一條（同日）：用「HEAD＋檔尾 tail」組 STREET_ERRORS 的 blob 時，c-street-city 剛好在我段落尾端追加了「世界邊緣 skirt」幾行，被 c0774ffb 一起提交並推上 origin。84cecc56 已從版本中拿掉（工作檔保留）。以後組 blob 前先 diff 那段 tail，只取自己寫的行。
+
+### 2026-10-29 驗證 `5c4c672d5`（E 組 galgame，GalE 沙盒，Int1029E）
+- 21:05 在飲料店約惠惠去百貨（營業到 21:30，走到時已關），她答應，行動被拒（`Street free talk action refused: go:department`）。送給她的說明（mind trace）有「你們現在還在飲料店，還沒走過去。」，她回「現在過去大概剛好吃閉門羹」，不再說走到門口。
+
+### 2026-10-29 胡桃說了自己六點去學生餐廳，判斷器記成和他的晚餐約定（E 組 galgame）
+- 胡桃在女生宿舍聊天時只說「六點再晃去學生餐廳填肚子」，他沒約她；判斷器卻填了 promise `+0 18:00 cafeteria meal`（理由寫「只是之後的約定」），遊戲記下約會，下一句她就說「約吃飯就算了」。
+- 修正（三語 `ui.scene.ai_judge_prompt` 的 promise 段）：她只是說自己待會或之後的行程，他沒有約她、她也沒有邀他一起，是她自己的事，不是約定，填 null。
+- 驗證（熱重載文字表）：惠惠說「回去翻翻書、練習詠唱」，判斷器回「沒有約他一起」，promise 空。英文版第一次寫成沒跳脫的 `"`，`/rules reload` 報 TOML parse error，已改成 `\"`；改文字表後要先 reload 看 `ok: true`。
+
+### 2026-10-29 群聊裡惠惠每輪開頭都喊「吾乃惠惠！」（E 組 galgame）
+- 惠惠＋貞德·Alter 在書局群聊，惠惠連三輪台詞都用「吾乃惠惠！」開頭；人設寫的是自我介紹時才喊。另一輪他問貞德·Alter 在看什麼，先回答的是惠惠（提示已寫「問了誰就由她先回答」，屬模型偶發，沒改）。
+- 修正（三語 `ui.party.group_dialogue_prompt`）：口頭禪、招牌台詞只在合適時用，不要當每次的開頭；前面對話用過就換說法。
+- 驗證（熱重載）：之後兩輪只有一次在插話時喊（3/3 → 1/2），被問的人先回答。對話紀錄裡已有的舊台詞仍可能讓模型照抄，新場次再觀察。
+- 另外：Windows 的 lua.exe 收到的中文命令列參數會被轉碼，改文字表的替換字串要寫進 Lua 檔，不要從命令列傳。
+
+### 2026-10-29 陪他走的女主一路 walk／stand 每 1～2 幀切換（E 組 galgame）
+- 和惠惠、貞德·Alter 從書局走去餐廳，log 的 `Street idle: slot=9` 在 walk／stand 間切了 2000 多次（約每秒 80 次）。`NpcIdleTick` 的防抖只給「通勤中」或「沒被行程定住且在走路模式」的人；陪他出門的女主帶 held 旗標，沒套到。
+- 修正（`OKStreetSocialAmbient.inl`）：只要 0.4 秒內動過就維持走路姿勢，不論是什麼讓她走。
+- 驗證（Gal1029A）：貞德·Alter 陪他從餐廳走到中央公園，整段只切一次（walk）。
+
+### 2026-10-29 讀檔後群聊換了對話對象（E 組 galgame）
+- 在餐廳和惠惠說話、貞德·Alter 在群組裡時存檔；讀檔後貞德·Alter 變成陪他走的人並接手對話，惠惠只在旁邊等。存檔把群組成員記成 follow，讀檔時第一個 follow 的人（依 slot 順序）被當成陪伴者。
+- 修正（`OKStreetSocialMind.inl` 存檔、`OKStreetSocialSchedule.inl` 讀檔）：群組成員（不是陪走的那位）記成 `party`，讀檔後回到群組（`ResumeParty`），不再搶陪伴者的位置。規則 `resume_with_him` 對非 follow 本來就回 `follow:false`，舊存檔照舊。
+- 驗證（Gal1029B，欄位 21）：讀檔後 `actor 9 was with him (party)` → `follows him again`，按 E 和貞德·Alter 說話時兩人一起回答。
+
+### 2026-10-29 群聊裡簡體卡名女主的台詞歸給對話對象、名字前綴留在台詞裡（E 組 galgame）
+- 和惠惠說話、貞德·Alter 在群組裡時，log 是 `Street galgame line c9 (voiced): 貞德·Alter：剛吃飽就喊甜點…`：她的話用了惠惠的立繪與名字標籤，台詞前面還多了「貞德·Alter：」。群聊字幕用的是遊戲顯示的名字（`OKStreetScriptedName`，繁中把卡片的「贞德·Alter」顯示成「貞德·Alter」），galgame 找說話者卻用卡片原名，對不上就歸給對話對象，也沒拿掉前綴。雷電將軍、三月七等簡體卡名的女主都會這樣，惠惠（兩種字體相同）不會。
+- 修正（`OKStreetSocialGalgame.inl`）：找說話者時卡片原名對不上，再用顯示的名字比對；拿掉前綴時用對上的那個名字。
+- 驗證（Gal1029D，欄位 21）：貞德·Alter＋惠惠群聊兩輪，log 每句都是正確的 c1／c9，台詞沒有前綴，`/galgame` 的 who／portrait 是 c1，截圖名字標籤與立繪正確。
+- 同一場 `galgame_regression.lua --private --girl 1` 的 rollback 項 FAIL：捲動後遊戲剛好送出「菜吃完了」通知，群聊新回覆把捲動位置清掉，腳本那句也因她們還在回覆沒送出；是測試撞上遊戲事件，不是回滾壞了。群組裡有人時跑回歸要先讓她們離開。
+
+### 2026-10-29 和愛麗絲在公園散步時又跳出「剛到公園、有賣魚飼料」（E 組 galgame）
+- 在公園和愛麗絲說話後一起散步，他問「妳常常來這裡嗎？」，她卻回「啊，有賣魚飼料耶…要不要餵個魚」：log 先是 `was already in park; no arrival prompt`，散步一分鐘內又出 `Street shop arrival: actor=8 place=park`。散步路線走出公園範圍又走回來；離店後「一分鐘內回來不算新到店」是從上次菜單提示算起，而她本來就在公園、沒有提示過，所以一走出去就重設，走回來當成新到店，提示蓋過了他的問題。
+- 修正（`OKStreetSocialEconomy.inl` `TickShopArrival`）：一分鐘從走出去那刻算（在店裡時一直更新時間）；陪她散步（stroll／walk）途中不重設。
+- 驗證（Gal1029E，欄位 25）：再和愛麗絲散步 15 分鐘（遊戲時間），沒有再出到店提示。這次路線一直在公園範圍內，「走出又走回」沒有直接重現，只確認沒有新的誤觸發。
+
+### 2026-10-29 時鐘往回撥之後，十位女主的需求整個下午不動（E 組 galgame）
+- GalE 一整個下午到傍晚，十位女主飽足度都停在 100（午餐後），體力、清潔也不變；胡桃 17:30 還說「最期待待會兒的飯」。存檔裡每位的 `needs.minute` 都是 2742（9/2 21:42），遊戲時間是 9/2 15:50：回歸腳本把時鐘從 21:xx 撥回 10:00（介面的「-1小時」也會），上次結算時間留在「未來」，`Now - NeedsMinute` 是負的，就一直不結算，要等時間追過 21:42。女主間關係的結算（`BondTickMinute`）同樣。
+- 修正（`OKStreetSocialNeeds.inl`、`OKStreetSocialBonds.inl`）：上次結算時間比現在晚（時鐘被撥回）就從現在重新起算。
+- 驗證（Gal1029F，欄位 28）：讀檔後 48 遊戲分鐘內，八位的飽足度從 100 降到 96.6（另兩位正在吃東西）。
+
+### 2026-10-29 和惠惠在水族館看魚時，對話換回舊字幕面板（E 組 galgame）
+- 水族館約會，她開始「看魚」（單人活動 `aquarium_observe`，`target=-1`）後對話仍開著、她照常回答，但 galgame 對話框與立繪消失，台詞改在舊的字幕面板顯示。galgame 在 `SoloGirl` 有值時一律關閉，註解說「對她說話反正會結束活動」，但對話早已開著時不會經過 `BeginTalk`，活動不會結束。
+- 修正（`OKStreetSocialGalgame.inl`）：單人活動中對話開著就照樣顯示對話框與立繪；對話鏡頭仍不接管（它要 `S.Target`，活動中是空的），R3-119（爆裂魔法被對話鏡頭擋在畫面外）不會回來。
+- 驗證（Gal1029H，欄位 32）：惠惠看水母時問她「哪一隻最漂亮」，`/galgame` active、who c9，截圖是對話框＋立繪，鏡頭仍是活動的跟隨鏡頭。

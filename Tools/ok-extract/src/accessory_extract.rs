@@ -85,8 +85,54 @@ pub(crate) fn emit<'a>(game:&'a Path,card:&'a CardInfo,outfit:i32,source:&Source
         eprintln!("ok-extract: DBONE slot {} missing_entry={} ab={} main={} zip={:?} meshes={:?}",source.property,source.missing_entry,source.entry.main_ab,source.entry.main_data,source.zip,
             meshes.iter().map(|m|(m.name.clone(),m.deferred_dbones.as_ref().map(|d|d.len()))).collect::<Vec<_>>());
     }
+    // With an open's batch (OK_FIRSTLOAD=A2) the slot's colour bake and push run at its flush, the colour bakes of
+    // every slot at once (a card's accessories coloured one after another took ~0.9 s of a first open). The push keeps
+    // its place among the batch's calls; its duplicate keys carry the slot's card property, which no other call has.
+    if batch.is_some() && crate::first_load_option("A2") {
+        batch.unwrap().defer_accessory(Deferred{game,card,outfit,source:Source{entry:source.entry.clone(),zip:source.zip.clone(),guid:source.guid.clone(),
+            category:source.category,id:source.id,property:source.property.clone(),display:source.display.clone(),missing_entry:source.missing_entry},
+            context,out,meshes,rig,clothes_active:crate::unity::active_clothes_states(),clothes_requested:crate::unity::explicit_requested_clothes_states(),
+            overrides:crate::profile::snapshot()});
+        return Ok(());
+    }
+    color(game,card,outfit,source,context,&mut meshes);
+    finish(game,card,outfit,source,context,out,manifest,parts,seen,batch,meshes,rig)
+}
+
+/// An accessory slot kept by an open's PushBatch (`emit`): its meshes, and this thread's state when it was kept (the
+/// garment states and profile switches, applied again on the worker that colours it).
+pub(crate) struct Deferred<'a> {
+    pub game:&'a Path,pub card:&'a CardInfo,pub outfit:i32,pub source:Source,pub context:&'a Context,pub out:Option<&'a Path>,
+    pub meshes:Vec<crate::unity::ExtractedMesh>,pub rig:Option<Skeleton>,
+    pub clothes_active:Option<[u8;9]>,pub clothes_requested:Option<[u8;9]>,pub overrides:Vec<(&'static str,Option<&'static str>)>,
+}
+impl<'a> Deferred<'a> {
+    /// The colour bake, on any thread.
+    pub(crate) fn color(&mut self) {
+        let _profile=crate::profile::scope(&self.overrides);
+        let _active=self.clothes_active.map(crate::unity::set_session_clothes_states);
+        let _requested=self.clothes_requested.map(crate::unity::request_clothes_states);
+        color(self.game,self.card,self.outfit,&self.source,self.context,&mut self.meshes);
+    }
+    /// The push, on the open's thread, into `batch`.
+    pub(crate) fn finish(self,manifest:&mut Vec<ManifestPart>,parts:&mut Vec<SessionPart>,seen:&mut HashSet<String>,batch:&mut crate::PushBatch<'a>)->Result<(),String> {
+        let _active=self.clothes_active.map(crate::unity::set_session_clothes_states);
+        let _requested=self.clothes_requested.map(crate::unity::request_clothes_states);
+        let Deferred{game,card,outfit,source,context,out,meshes,rig,..}=self;
+        finish(game,card,outfit,&source,context,out,manifest,parts,seen,Some(batch),meshes,rig)
+    }
+}
+
+fn color(game:&Path,card:&CardInfo,outfit:i32,source:&Source,context:&Context,meshes:&mut Vec<crate::unity::ExtractedMesh>) {
     crate::appearance::timings::measure("slot.color",||crate::color_accessory_meshes(game,source.zip.as_deref(),&source.entry,card,&source.property,outfit,
-        &mut meshes,&context.head_textures,&context.body_textures,context.hair_gloss.as_deref()));
+        meshes,&context.head_textures,&context.body_textures,context.hair_gloss.as_deref()));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish<'a>(game:&'a Path,card:&'a CardInfo,outfit:i32,source:&Source,context:&'a Context,
+    out:Option<&'a Path>,manifest:&mut Vec<ManifestPart>,parts:&mut Vec<SessionPart>,seen:&mut HashSet<String>,
+    batch:Option<&mut crate::PushBatch<'a>>,meshes:Vec<crate::unity::ExtractedMesh>,rig:Option<Skeleton>)->Result<(),String>{
+    let role=crate::role_for_category(source.category,&source.property);
     let moves=crate::accessory_slot_from_property(&source.property).and_then(|i|card.accessory.get(i))
         .map(|a|crate::acc_place_moves(a,crate::hide_hair_list(&source.entry)))
         .unwrap_or([crate::identity_move(),crate::identity_move()]);

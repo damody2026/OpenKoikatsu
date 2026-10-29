@@ -411,6 +411,18 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 	if (G.ViewHost) G.ViewHost->SetVisibility(S.PrivateGirl != INDEX_NONE ? EVisibility::Collapsed : EVisibility::HitTestInvisible);
 	const TArray<FString> Names = OKStreetCharacterNames(S);
 	auto NameOf = [&](int32 Slot) { return Names.IsValidIndex(Slot) ? Names[Slot] : FString(); };
+	// A group caption names each girl as the game shows her (OKStreetScriptedName): "贞德·Alter" on the card is "貞德·Alter"
+	// in the traditional game, so her lines matched nobody, went to the one he was talking to (惠惠's portrait and voice)
+	// and kept "貞德·Alter：" in front, read aloud.
+	TArray<FString> ScriptedNames;
+	auto ShownNames = [&]() -> const TArray<FString>& { if (ScriptedNames.IsEmpty()) for (const FString& N : Names) ScriptedNames.Add(OKStreetScriptedName(N)); return ScriptedNames; };
+	auto SpeakerOf = [&](const FString& Line) { const int32 Slot = OKStreetLineSpeaker(Line, Names); return Slot != INDEX_NONE ? Slot : OKStreetLineSpeaker(Line, ShownNames()); };
+	auto WordsOf = [&](const FString& Line, int32 Slot)
+	{
+		const FString Name = NameOf(Slot);
+		const FString& Display = ShownNames().IsValidIndex(Slot) ? ShownNames()[Slot] : Name;
+		return OKStreetGalgameWords(Line, !Name.IsEmpty() && Line.StartsWith(Name) ? Name : Display);
+	};
 	auto SendLine = [&](int32 Slot, const FString& Text, bool bVoiced)
 	{
 		TSharedRef<FJsonObject> L = MakeShared<FJsonObject>();
@@ -438,9 +450,11 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 
 	// The conversation: who he talks with (free talk follows the walk companion, the date, the pair partner too).
 	const int32 Partner = FreeTalkPartner();
-	// Not while she does a one-person activity beside him (watching the fish, her explosion spell): that is watched with
-	// its own camera, and speaking to her ends it anyway. The dialog shot held the whole spell off screen (R3-119).
-	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen) && S.SoloGirl == INDEX_NONE;
+	// While she does a one-person activity beside him (watching the fish, her explosion spell) the talk stays open and
+	// she answers him: the box and her portrait stay too (惠惠 at the aquarium went on talking in the old caption panel).
+	// The dialog shot is not taken then (it needs S.Target, which the activity clears): it held the whole spell off
+	// screen (R3-119).
+	const bool bTalking = Partner != INDEX_NONE && (S.Target != INDEX_NONE || S.FreeTalkOpen);
 	// History lines played back (the replay button, a line's play button in the history window) are shown as scene
 	// lines too, with her portrait; without a conversation the scene opens for the replay alone and closes after it.
 	const bool bReplaying = !S.FreeTalkReplay.IsEmpty() || !S.FreeTalkReplayParts.IsEmpty() ||
@@ -507,7 +521,7 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			if (bReplaying && S.FreeTalkReplayShownSlot != INDEX_NONE)
 			{
 				const int32 Slot = S.FreeTalkReplayShownSlot;
-				const FString Words = OKStreetGalgameWords(S.FreeTalkReplayShownText, NameOf(Slot));
+				const FString Words = WordsOf(S.FreeTalkReplayShownText, Slot);
 				G.bNoRecord = true;
 				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.FreeTalkReplayShownVoiced);
 				G.bNoRecord = false;
@@ -538,9 +552,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			S.FreeTalkCaptionHer.ParseIntoArrayLines(Lines);
 			if (Lines.Num())
 			{
-				int32 Slot = OKStreetLineSpeaker(Lines.Last(), Names);
+				int32 Slot = SpeakerOf(Lines.Last());
 				if (Slot == INDEX_NONE) Slot = G.Partner;
-				const FString Words = OKStreetGalgameWords(Lines.Last(), NameOf(Slot));
+				const FString Words = WordsOf(Lines.Last(), Slot);
 				if (!OKStreetGalgamePlaceholder(Words) && OKStreetGalgameWords(Words, FString()) != G.OnScreen) SendLine(Slot, Words, false);
 			}
 		}
@@ -564,9 +578,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 				TSet<int32> Who;
 				for (const FString& Line : Lines)
 				{
-					int32 Slot = OKStreetLineSpeaker(Line, Names);
+					int32 Slot = SpeakerOf(Line);
 					if (Slot == INDEX_NONE) Slot = Partner;
-					const FString Words = OKStreetGalgameWords(Line, NameOf(Slot));
+					const FString Words = WordsOf(Line, Slot);
 					if (OKStreetGalgamePlaceholder(Words)) continue;
 					G.Group.Add({ Slot, Words });Who.Add(Slot);
 				}
@@ -577,9 +591,9 @@ void AOKStreetSocialScene::TickGalgame(float Dt)
 			if (Lines.Num() && G.Group.IsEmpty())
 			{
 				const FString& Last = Lines.Last();
-				int32 Slot = OKStreetLineSpeaker(Last, Names);
+				int32 Slot = SpeakerOf(Last);
 				if (Slot == INDEX_NONE) Slot = Partner;
-				const FString Words = OKStreetGalgameWords(Last, NameOf(Slot));
+				const FString Words = WordsOf(Last, Slot);
 				if (!OKStreetGalgamePlaceholder(Words)) SendLine(Slot, Words, S.TtsEnabled && Slot != 0);
 			}
 		}

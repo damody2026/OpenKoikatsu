@@ -41,7 +41,17 @@
   - `CardInfo.source_digest`：卡片資料（IEND 之後的位元組）與解析模式的雜湊，給要讀很多卡片欄位的階段當 memo 鍵。
   - head_detail 每個頭部網格的 rig 與貼圖，以 `(source_digest, 服裝, 網格)` 共用；有 OK Studio 眼型時照舊每次重算。jeanne 42 次開卡的 head_detail 合計 1.4 → 0.6 秒。
 - 2d 第二部分（2026-10-29）：`rig_memo`（rig.rs）。身體、臉、嘴唇、生殖器的 rig／蒙皮以 `(source_digest, 服裝, 部位, 網格)` 共用，鍵要能決定 rig 前的網格與骨架。OK Studio 的狀態覆寫（`studio_status::apply`）也併進 `source_digest`。jeanne 42 次開卡的臉部準備合計 0.8 → 0.3 秒，整張卡 13.6 秒（今早 24.8 秒）。`compose_body_texture` 仍以網格內容雜湊為鍵（傳進來的身體網格可能隨穿著狀態不同），每次約 10 ms。
-- 之後：衣服與配件的延後網格（`deferred meshes`，每次約 34 ms）、`resolves`（約 20 ms）要看各穿著狀態實際用到哪些查詢，才能決定可不可以共用。
+- 2d 第三部分（2026-10-29 下午，e-okcard 新 session）：同一張卡 42 次開卡之間的重複工作。每一項都驗收「6 張樣本卡轉換的 digest／卡包記錄／okLt 與 HEAD 相同」與「march_7th、C018、jeanne 共 126 個 session（`ok-card-open-bench --fresh-dump`，`OK_FRESH_STATES=1`）與 HEAD 逐位元組相同」。
+  - 衣服／配件網格的 entry 記憶鍵（`885a4a3c7`）：穿著狀態只透過 prefab 的狀態節點（`n_top_a`…）決定留下哪些網格，所以鍵改成「這個 prefab 的狀態節點在目前狀態下的可見性」（`collect_state_nodes`／`STATE_NODES`，第一次抽取時記下節點，鍵含來源與卡包身分）。Alice 42 次開卡的 `meshes_for_entry` 457 → 128 次。
+  - 身體貼圖合成（`885a4a3c7`）：鍵從「卡＋服裝」改為「卡＋KSOX 覆蓋圖內容＋身體貼圖內容」（兩段 CRC-32），沒有服裝專屬覆蓋圖的卡 7 套服裝只合成一次。
+  - 衣服 create 上色（`885a4a3c7`）：`bake_clothes_create_memo` 以（檢視、卡、服裝、部件）記住，穿著狀態不影響。
+  - `fallback_identity` 依後備世代算一次（每次 stat 所有後備 zip 並列出卡片資料夾，轉一張卡被問約 1000 次、每次約 1 ms），`me_shader_registration` 以 `view_memo` 記住（約 2500 次）（`23b815664`）。
+  - 配件的延後網格轉換（`a8c88f7c7`）：`PushBatch::flush` 對配件項目以「網格內容＋轉換讀的輸入」的串流雜湊（`StreamHash`，CRC-32＋四路乘法混合＋長度）為鍵，放進 `view_memo`。鍵不含穿著狀態（配件只在外衣 alpha mask 時讀它，配件呼叫沒有）、服裝編號與欄位名（只用來找這個欄位、這套座標的 ME 列，而這些列本身在鍵裡）。同一頂頭髮每張卡只轉一次。
+  - zipmod bundle 快取上限 256 MiB／128 筆 → 768 MiB／1024 筆（一張卡內原本清空兩次）；DXT1、BC7 與 512² 以上 DXT5 的 texel 轉 PNG 以內容跨卡共用（`png_transform_cache`）（`9797de491`）。
+  - `SessionPart::from_mesh` 對 main_alpha 的「全不透明」檢查以內容記住（`8b408c1e4`）。
+  - 配件欄位的上色與 push 移到延後批次的 flush（`accessory_extract::Deferred`），所有欄位的上色同時做，再依原順序 push（`0ae3ce540`）；預取結果在 helper 學到狀態節點後仍交得出去（`entry_memo_keys`，`5677d8b9d`）。march_7th 冷開 2.9 → 2.1 秒。
+  - 結果（單執行緒、同機有兩個遊戲在跑，數字只能互相比）：Alice 穩態一張 22.6 → 約 16 秒；6 張樣本卡同一程序轉換 238 → 75–120 秒。一次狀態重開剩約 170 ms（延後網格 60、resolves 44）。雙 slot 的 100 張批次與冷讀見 `Docs/OK_BASE_LIBRARY_PLAN.md`「批次轉換」（491.6 → 322.3 秒；冷讀最慢 2.20 秒）。
+  - 試過但不採用：`OK_RAW_TEXTURES=1`（管線內不用 PNG）在冷開反而更慢（march_7th 4.5 → 5.3 秒、C018 3.2 → 3.6 秒，同一時段交替量）。
 
 ## 做法
 

@@ -41,24 +41,141 @@ pub(crate) type PushDone = (usize, ExtractedMesh, Option<crate::session::Accesso
 /// (PNG decode/re-encode, flips, tints, masks, normal conversion) at once, then emits them in call order, which keeps
 /// the output identical. Nothing between the calls reads the emitted parts.
 #[derive(Default)]
-pub(crate) struct PushBatch<'a> { groups: Vec<(PushCtx<'a, 'static>, Vec<PushWork>)> }
+pub(crate) struct PushBatch<'a> {
+    groups: Vec<(PushCtx<'a, 'static>, Vec<PushWork>)>,
+    /// Accessory slots whose colour bake and push wait for the flush (accessory_extract::emit), each with the number of
+    /// groups kept before it (its place among the calls).
+    slots: Vec<(usize, crate::accessory_extract::Deferred<'a>)>,
+}
 impl<'a> PushBatch<'a> {
-    pub(crate) fn flush(&mut self, parts: &mut Vec<ManifestPart>, session_parts: &mut Vec<crate::session::SessionPart>) -> Result<(), String> {
+    pub(crate) fn defer_accessory(&mut self, slot: crate::accessory_extract::Deferred<'a>) {
+        self.slots.push((self.groups.len(), slot));
+    }
+    pub(crate) fn flush(&mut self, parts: &mut Vec<ManifestPart>, session_parts: &mut Vec<crate::session::SessionPart>,
+        seen: &mut std::collections::HashSet<String>) -> Result<(), String> {
+        use rayon::prelude::*;
+        // The kept accessory slots: their colour bakes at once, then their pushes in their places, in call order.
+        let mut slots = std::mem::take(&mut self.slots);
+        if !slots.is_empty() {
+            crate::session::native_parallel_work(|| slots.par_iter_mut().for_each(|(_, slot)| slot.color()));
+            let kept = std::mem::take(&mut self.groups);
+            let mut kept = kept.into_iter();
+            let mut taken = 0;
+            for (at, slot) in slots {
+                while taken < at { if let Some(g) = kept.next() { self.groups.push(g); } taken += 1; }
+                slot.finish(parts, session_parts, seen, self)?;
+            }
+            self.groups.extend(kept);
+        }
         let groups = std::mem::take(&mut self.groups);
         let (ctxs, works): (Vec<PushCtx<'a, 'static>>, Vec<Vec<PushWork>>) = groups.into_iter().unzip();
         let items: Vec<(usize, PushWork)> = works.into_iter().enumerate().flat_map(|(g, w)| w.into_iter().map(move |item| (g, item))).collect();
-        let done: Vec<(usize, PushDone)> = {
-            use rayon::prelude::*;
-            crate::session::native_parallel_work(|| items.into_par_iter().map(|(g, item)| (g, ctxs[g].run_on_worker(item))).collect())
-        };
+        // An accessory item's transform depends only on the mesh and the call's inputs: the same item in the view's next
+        // opens (a conversion opens every outfit in six garment states, the accessories mostly the same each time) takes
+        // the transformed mesh kept by content (~1500 transforms a card, ~5 s, before).
+
+        let ctx_keys: Vec<Option<[u64; 2]>> = ctxs.iter().map(|ctx| ctx.memo_fingerprint()).collect();
+        let keys: Vec<Option<String>> = crate::session::native_parallel_work(|| items.par_iter().map(|(g, item)| ctx_keys[*g].map(|c| {
+            let mut h = StreamHash::default();
+            {
+                let mut w = std::io::BufWriter::with_capacity(1 << 16, &mut h);
+                // (obj and texture_plan are not serialized with the mesh)
+                let _ = bincode::serialize_into(&mut w, &(c, item.2, item.3, &item.1, &item.1.obj, &item.1.texture_plan));
+                let _ = std::io::Write::flush(&mut w);
+            }
+            let [a, b] = h.finish();
+            format!("push_acc|{a:016x}{b:016x}")
+        })).collect());
+        let mut done: Vec<Option<(usize, PushDone)>> = Vec::with_capacity(items.len());
+        let mut todo = Vec::new();
+        for (n, ((g, item), key)) in items.into_iter().zip(keys).enumerate() {
+            match key.as_deref().and_then(crate::view_memo_get::<(ExtractedMesh, Option<crate::session::AccessoryRuntime>)>) {
+                Some((mesh, runtime)) => done.push(Some((g, (item.0, mesh, runtime)))),
+                None => { done.push(None); todo.push((n, g, item, key)); }
+            }
+        }
+        if profile_enabled() { eprintln!("ok-extract: PUSHMEMO hits={} misses={} keyed_misses={}", done.iter().filter(|d| d.is_some()).count(), todo.len(), todo.iter().filter(|t| t.3.is_some()).count()); }
+        let ran: Vec<(usize, usize, Option<String>, PushDone)> = crate::session::native_parallel_work(||
+            todo.into_par_iter().map(|(n, g, item, key)| (n, g, key, ctxs[g].run_on_worker(item))).collect());
+        for (n, g, key, d) in ran {
+            if let Some(key) = key { crate::view_memo_put(key, (d.1.clone(), d.2.clone())); }
+            done[n] = Some((g, d));
+        }
         let mut by_group: Vec<Vec<PushDone>> = (0..ctxs.len()).map(|_| Vec::new()).collect();
-        for (g, d) in done { by_group[g].push(d); }
+        for (g, d) in done.into_iter().flatten() { by_group[g].push(d); }
         for (ctx, done) in ctxs.iter().zip(by_group) { ctx.emit(done, parts, session_parts)?; }
         Ok(())
     }
 }
 
+/// A streamed 96-bit content hash (CRC-32 and a four-lane multiply-rotate mix, with the length) for memo keys of
+/// large values: bincode writes the value straight into it.
+#[derive(Default)]
+pub(crate) struct StreamHash { crc: crc32fast::Hasher, lanes: [u64; 4], buf: [u8; 32], n: usize, total: u64 }
+impl StreamHash {
+    fn block(&mut self, b: &[u8; 32]) {
+        for (i, lane) in self.lanes.iter_mut().enumerate() {
+            let w = u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap());
+            *lane = (*lane ^ w).wrapping_add(0x9E37_79B9_7F4A_7C15 ^ i as u64).wrapping_mul(0xFF51_AFD7_ED55_8CCD).rotate_left(29);
+        }
+    }
+    pub(crate) fn finish(mut self) -> [u64; 2] {
+        let mut last = [0u8; 32];
+        last[..self.n].copy_from_slice(&self.buf[..self.n]);
+        last[24..].copy_from_slice(&(self.total ^ ((self.n as u64) << 56)).to_le_bytes());
+        self.block(&last);
+        let mut h = self.lanes[0];
+        for lane in &self.lanes[1..] { h = (h ^ lane.rotate_left(17)).wrapping_mul(0xC4CE_B9FE_1A85_EC53); }
+        [h, ((self.crc.finalize() as u64) << 32) | (self.total & 0xFFFF_FFFF)]
+    }
+}
+impl std::io::Write for StreamHash {
+    fn write(&mut self, mut data: &[u8]) -> std::io::Result<usize> {
+        let len = data.len();
+        self.crc.update(data);
+        self.total += len as u64;
+        if self.n > 0 {
+            let take = (32 - self.n).min(data.len());
+            self.buf[self.n..self.n + take].copy_from_slice(&data[..take]);
+            self.n += take; data = &data[take..];
+            if self.n < 32 { return Ok(len); }
+            let b = self.buf; self.block(&b); self.n = 0;
+        }
+        let mut chunks = data.chunks_exact(32);
+        for c in &mut chunks { self.block(c.try_into().unwrap()); }
+        let rest = chunks.remainder();
+        self.buf[..rest.len()].copy_from_slice(rest); self.n = rest.len();
+        Ok(len)
+    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+
 impl<'a, 's> PushCtx<'a, 's> {
+    /// Hash of everything an accessory item's transform reads besides the mesh (None: not kept, see flush). The garment
+    /// states are not in it: an accessory's transform reads them only for an outer garment's alpha mask, which an
+    /// accessory call does not carry. Nor are the outfit and the card property: the transform reads them only to find
+    /// the slot's MaterialEditor rows, which are in it (the same hair in every outfit transforms once).
+    fn memo_fingerprint(&self) -> Option<[u64; 2]> {
+        if !self.role.contains("acc") || self.alpha_mask.is_some() || self.out_dir.is_some() { return None; }
+        // The MaterialEditor rows me_texture / me_maintex and the colour pass read: (object type, coordinate, slot).
+        let (ot, slot) = (me_object_type(&self.role), me_slot(&self.role, self.property.as_deref()));
+        let coord = if ot == Some(4) { 0 } else { self.outfit };
+        let matches = |&(t, c, s, _, _): &(i32, i32, i32, String, String)| Some(t) == ot && c == coord && Some(s) == slot;
+        let mut tex: Vec<_> = self.me_tex.into_iter().flatten().filter(|(k, _)| matches(k))
+            .map(|(k, v)| (&k.3, &k.4, serde_bytes::Bytes::new(v.as_slice()))).collect();
+        tex.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        let mut color: Vec<_> = self.me_color.into_iter().flatten().filter(|(k, _)| matches(k)).map(|(k, v)| (&k.3, &k.4, *v)).collect();
+        color.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        let mut h = StreamHash::default();
+        let mut w = std::io::BufWriter::with_capacity(1 << 16, &mut h);
+        bincode::serialize_into(&mut w, &((self.game_root.to_string_lossy(), &self.role, self.category_no, &self.guid, ot, slot,
+            self.me_tex.is_some(), self.me_color.is_some(), tex, color, self.body_skel.as_deref(), self.head_skel.as_deref()),
+            (&self.parent_key, self.hair_color, &self.part_skel, self.part_local,
+            &self.accessory_assignment, self.convert_normals, &self.acc_place, &self.overrides, self.hair_gloss_sampling))).ok()?;
+        std::io::Write::flush(&mut w).ok()?;
+        drop(w);
+        Some(h.finish())
+    }
     fn run_on_worker(&self, item: PushWork) -> PushDone {
         let _profile = crate::profile::scope(&self.overrides);
         let _active = self.clothes_active.map(crate::unity::set_session_clothes_states);

@@ -4,11 +4,14 @@
 // is saved with the hourly calendar save.
 void AOKStreetSocialScene::TickNeeds(){
  auto& S=*State;if(S.SelfTest||!S.Rules)return;OKRulesSyncDefaults(S);const int64 Now=OKStreetMindNow(S);
+ // The clock set back ("-1 hour", a test rewinding the day): counted from now. Left in the future, every heroine's needs
+ // stood still until the clock caught up (all ten at satiety 100 from lunch to 21:42).
+ if(S.NeedsTickMinute>Now)S.NeedsTickMinute=-1;
  if(S.NeedsTickMinute>=0&&Now-S.NeedsTickMinute<S.NeedsTickMinutes)return;S.NeedsTickMinute=Now;
  const int32 Minute=int32(Now%1440);
  TArray<TSharedPtr<FJsonValue>> Rows;
  for(auto& R:S.Store.Relations){
-  if(R.NeedsMinute<0){R.NeedsMinute=Now;continue;}
+  if(R.NeedsMinute<0||R.NeedsMinute>Now){R.NeedsMinute=Now;continue;}
   auto O=MakeShared<FJsonObject>();O->SetStringField(TEXT("id"),R.Id);O->SetNumberField(TEXT("minutes"),double(Now-R.NeedsMinute));
   auto N=MakeShared<FJsonObject>();N->SetNumberField(TEXT("satiety"),R.Satiety);N->SetNumberField(TEXT("energy"),R.Energy);N->SetNumberField(TEXT("fun"),R.Fun);
   N->SetNumberField(TEXT("social"),R.Social);N->SetNumberField(TEXT("hygiene"),R.Hygiene);O->SetObjectField(TEXT("needs"),N);

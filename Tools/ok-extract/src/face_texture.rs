@@ -194,8 +194,17 @@ pub(crate) fn compose_face_texture(
         compose_face_texture_legacy(game_root, vanilla, mod_catalog, card, head_texs,
                                    body_texs, skin, skin_sub, outfit, guid_index)
     } else {
-        face_create_source::compose(game_root, vanilla, mod_catalog, card, skin,
-                                    skin_sub, outfit, guid_index)
+        // The same composite in every open of a view for the same card, colours and KSOX face overlays (kinds 4 and 2,
+        // the only way the outfit enters): a conversion's 42 opens composited it each time (~30 ms).
+        let overlays = [4, 2].map(|kind| {
+            let overlay = ksox_overlay_png(card, outfit, kind);
+            let mut h = [crc32fast::Hasher::new(), crc32fast::Hasher::new()];
+            if let Some(o) = &overlay { let (a, b) = o.split_at(o.len() / 2); h[0].update(a); h[1].update(b); }
+            let [a, b] = h;
+            overlay.map(|o| (o.len(), a.finalize(), b.finalize()))
+        });
+        crate::view_memo(format!("compose_face|{:016x}|{skin:?}|{skin_sub:?}|{overlays:?}", card.source_digest),
+            || face_create_source::compose(game_root, vanilla, mod_catalog, card, skin, skin_sub, outfit, guid_index))
     }
 }
 

@@ -515,22 +515,28 @@ pub(crate) fn compose_body_texture(
     // The same composite for the same inputs in every open of a view (crate::view_memo): the body mesh as it comes in
     // (its content, not only its outfit: a garment state may change it), the outfit, the colours and the textures.
     if !crate::okstrict::assembling() { return; }
-    // The composite reads the card (its digest), the outfit, the colours, the body textures and, only when those lack
-    // cf_body_00_t, the mesh's own texture; it writes the texture, its name and the _MainTex runtime flag. Hashing the
-    // whole mesh for the key cost ~20 ms an open.
-    // With a card, the body textures (the base bundle's, or an uncensor body's) follow from the card and the outfit:
-    // their names and lengths are kept in the key as a check, their bytes hashed only without one.
+    // The composite reads the card (its digest), the outfit (only for its KSOX body overlay), the colours, the body
+    // textures and, only when those lack cf_body_00_t, the mesh's own texture; it writes the texture, its name and the
+    // _MainTex runtime flag. Hashing the whole mesh for the key cost ~20 ms an open.
+    // The key hashes the overlay and the body textures instead of naming the outfit: the outfits of a card mostly share
+    // both, and each composited them again (~350 ms an outfit). Two CRC-32s (each half on its own, with the names and
+    // lengths) hash them in a few ms.
     let key = {
-        use sha2::Digest;
-        let mut h = sha2::Sha256::new();
+        let mut h = [crc32fast::Hasher::new(), crc32fast::Hasher::new()];
+        let mut add = |bytes: &[u8]| { let (a, b) = bytes.split_at(bytes.len() / 2); h[0].update(a); h[1].update(b); };
         for (name, bytes) in body_texs {
-            h.update(name.as_bytes()); h.update((bytes.len() as u64).to_le_bytes());
-            if card.is_none() { h.update(bytes); }
+            add(name.as_bytes()); add(&(bytes.len() as u64).to_le_bytes());
+            add(bytes);
         }
-        if pick_named_png(body_texs, &["cf_body_00_t"]).is_none() { h.update(mesh.texture_png.as_deref().unwrap_or_default()); }
+        if pick_named_png(body_texs, &["cf_body_00_t"]).is_none() { add(mesh.texture_png.as_deref().unwrap_or_default()); }
+        let overlay = card.and_then(|card| card.ksox.get(&(crate::clothes_texture::ksox_overlay_coordinate(card, outfit, 3)?, 3)));
+        add(b"overlay"); add(&(overlay.map_or(u64::MAX, |o| o.len() as u64)).to_le_bytes());
+        add(overlay.map_or(&[][..], |o| o.as_slice()));
+        let [a, b] = h;
+        let h = ((a.finalize() as u64) << 32) | b.finalize() as u64;
         match card {
-            Some(card) => format!("compose_body_texture|{:016x}|{outfit}|{skin:?}|{sub:?}|{:x}", card.source_digest, h.finalize()),
-            None => format!("compose_body_texture|-|{outfit}|{skin:?}|{sub:?}|{:x}", h.finalize()),
+            Some(card) => format!("compose_body_texture|{:016x}|{skin:?}|{sub:?}|{h:016x}", card.source_digest),
+            None => format!("compose_body_texture|-|{skin:?}|{sub:?}|{h:016x}"),
         }
     };
     let made = crate::view_memo(key, || {
@@ -693,22 +699,39 @@ pub(crate) fn adopt_uncensor_genitals(
     outfit: i32,
 ) {
     if !sources.iter().any(|mesh| is_kind(&mesh.name)) { return; }
+    // The installed uncensor's painted meshes follow from the card, the kind, the outfit (its skin draw settings), the
+    // seed and the colours: once per view (every open of a conversion painted them again, ~15 ms).
+    let painted = crate::view_memo(format!("uncensor_genitals|{:016x}|{kind:?}|{outfit}|{seed}|{skin:?}|{sub:?}|{nail:?}", card.source_digest),
+        || uncensor_genitals_painted(game_root, card, kind, is_kind, seed, skin, sub, nail, outfit));
+    match painted {
+        None => {
+            if !replaced_body {
+                let before = sources.len();
+                sources.retain(|mesh| !is_kind(&mesh.name));
+                if sources.len() != before {
+                    eprintln!("ok-extract: removed vanilla {kind:?} meshes; no non-mosaic uncensor is installed");
+                }
+            } else {
+                eprintln!("ok-extract: {kind:?} uncensor was not found; the body mesh is unchanged");
+            }
+        }
+        Some(painted) if painted.is_empty() => { if !replaced_body { sources.retain(|mesh| !is_kind(&mesh.name)); } }
+        Some(painted) => {
+            sources.retain(|mesh| !is_kind(&mesh.name));
+            sources.extend(painted);
+        }
+    }
+}
+
+/// The installed uncensor's meshes of this kind painted for the card (None: no uncensor of it installed).
+#[allow(clippy::too_many_arguments)]
+fn uncensor_genitals_painted(game_root: &Path, card: &CardInfo, kind: crate::mods::UncensorGenitalKind, is_kind: fn(&str) -> bool,
+    seed: i32, skin: [f32; 4], sub: [f32; 4], nail: [f32; 4], outfit: i32) -> Option<Vec<ExtractedMesh>> {
     let explicit = match kind {
         crate::mods::UncensorGenitalKind::Penis => card.penis_guid.as_deref(),
         crate::mods::UncensorGenitalKind::Balls => card.balls_guid.as_deref(),
     };
-    let Some((source, bytes)) = crate::mods::uncensor_genital_for_card(game_root, kind, explicit, card.sex, seed) else {
-        if !replaced_body {
-            let before = sources.len();
-            sources.retain(|mesh| !is_kind(&mesh.name));
-            if sources.len() != before {
-                eprintln!("ok-extract: removed vanilla {kind:?} meshes; no non-mosaic uncensor is installed");
-            }
-        } else {
-            eprintln!("ok-extract: {kind:?} uncensor was not found; the body mesh is unchanged");
-        }
-        return;
-    };
+    let (source, bytes) = crate::mods::uncensor_genital_for_card(game_root, kind, explicit, card.sex, seed)?;
     let bundle = crate::unity::parse_bundle_cached(bytes);
     bundle.configure_game_references(game_root);
     // The installed uncensor's meshes before painting are the same for every card (~0.25 s to extract each time).
@@ -747,13 +770,8 @@ pub(crate) fn adopt_uncensor_genitals(
         );
         painted.push(mesh);
     }
-    if painted.is_empty() {
-        eprintln!("ok-extract: {kind:?} uncensor {} had no paintable mesh", source.guid);
-        if !replaced_body { sources.retain(|mesh| !is_kind(&mesh.name)); }
-        return;
-    }
-    sources.retain(|mesh| !is_kind(&mesh.name));
-    sources.extend(painted);
+    if painted.is_empty() { eprintln!("ok-extract: {kind:?} uncensor {} had no paintable mesh", source.guid); }
+    Some(painted)
 }
 
 pub(crate) fn is_hidden_part(name: &str) -> bool {

@@ -35,6 +35,26 @@ impl Drop for ViewMemoScope {
     fn drop(&mut self) { IN_VIEW.with(|v| v.set(self.0)); }
 }
 
+thread_local! { static STATE_VARIANT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+/// This thread's opens are a conversion's garment-state variants of an outfit already opened in its own states
+/// (oklib::make_ok_card): only what those states read is needed of them, the session is not kept.
+pub(crate) fn state_variant_open() -> bool { STATE_VARIANT.with(|v| v.get()) }
+/// Marks this thread's opens as garment-state variants while alive.
+pub(crate) struct StateVariantScope(bool);
+impl StateVariantScope { pub(crate) fn begin() -> Self { StateVariantScope(STATE_VARIANT.with(|v| v.replace(true))) } }
+impl Drop for StateVariantScope { fn drop(&mut self) { STATE_VARIANT.with(|v| v.set(self.0)); } }
+
+/// A value `view_memo_put` kept for this view and key (None outside an open, or with OK_NO_VIEW_MEMO).
+pub(crate) fn view_memo_get<T: Clone + 'static>(key: &str) -> Option<T> {
+    if std::env::var_os("OK_NO_VIEW_MEMO").is_some() || !IN_VIEW.with(|v| v.get()) { return None; }
+    VIEW_MEMO.with(|m| m.borrow().get(key).and_then(|v| v.downcast_ref::<T>().cloned()))
+}
+/// Keeps `value` for this view's later opens (no-op outside an open).
+pub(crate) fn view_memo_put<T: 'static>(key: String, value: T) {
+    if std::env::var_os("OK_NO_VIEW_MEMO").is_some() || !IN_VIEW.with(|v| v.get()) { return; }
+    VIEW_MEMO.with(|m| m.borrow_mut().insert(key, std::rc::Rc::new(value)));
+}
+
 /// `make()` once per view and key (see VIEW_MEMO); a clone of it after. Outside an open: `make()`.
 pub(crate) fn view_memo<T: Clone + 'static>(key: String, make: impl FnOnce() -> T) -> T {
     // OK_NO_VIEW_MEMO=1: every open computes it (to compare with the memo).
@@ -54,24 +74,30 @@ thread_local! {
         = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-pub(crate) fn entry_memo_key(zip: Option<&Path>, entry: &ListEntry) -> String {
-    format!(
-        "{}|{}|{}|{}|{:?}",
-        zip.map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_default(),
-        entry.main_ab,
-        entry.main_data,
-        entry.category_no,
-        crate::unity::clothes_states()
-    )
-}
-
 pub(crate) fn entry_sql_key(game_root: &Path, zip: Option<&Path>, entry: &ListEntry) -> String {let _spot=crate::profile::spot("entry_sql_key");
     if entry.main_ab.is_empty() { return String::new(); }
     // The same in every open of a view (crate::view_memo): finding the entry's bundle again took ~0.5 ms, for every
     // item of every open (ACCESSORY_SOURCE_MEMO keeps only four bundles).
-    crate::view_memo(format!("entry_sql_key|{}|{zip:?}|{}|{}", game_root.display(), entry.main_ab, entry.main_data),
+    // The entry prefetch helpers ask for it of every item they extract too (a miss reads the entry's bundle, 10–30 ms).
+    pack_memo(format!("entry_sql_key|{}|{zip:?}|{}|{}", game_root.display(), entry.main_ab, entry.main_data),
         || entry_sql_key_view(game_root, zip, entry))
+}
+
+/// `make()` once per mounted card pack's tree (its identity and the fallback's generation) and key, for every thread
+/// of its opens (the open's own, the entry prefetch helpers, pool work): a view_memo that the helpers share. Without a
+/// pack (a game folder): view_memo.
+pub(crate) fn pack_memo<T: Clone + Send + Sync + 'static>(key: String, make: impl FnOnce() -> T) -> T {
+    let pack = crate::oklib::mounted_pack_identity();
+    if pack.is_empty() || std::env::var_os("OK_NO_VIEW_MEMO").is_some() { return view_memo(key, make); }
+    type Slot = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+    static SHARED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, Slot>>> = std::sync::LazyLock::new(Default::default);
+    let shared_key = format!("{pack}|{}|{key}", crate::gamefs::fallback_generation());
+    if let Some(hit) = SHARED.lock().unwrap_or_else(|e| e.into_inner()).get(&shared_key).and_then(|v| v.downcast_ref::<T>().cloned()) { return hit; }
+    let made = make();
+    let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+    if shared.len() > 100_000 { shared.clear(); }
+    shared.insert(shared_key, std::sync::Arc::new(made.clone()));
+    made
 }
 
 fn entry_sql_key_view(game_root: &Path, zip: Option<&Path>, entry: &ListEntry) -> String {
@@ -219,12 +245,60 @@ pub(crate) type PrefetchSlot = std::sync::Arc<(std::sync::Mutex<Option<Option<En
 thread_local! { static ENTRY_PREFETCH: std::cell::RefCell<Option<std::collections::HashMap<String, PrefetchSlot>>> = const { std::cell::RefCell::new(None) }; }
 thread_local! { static PREFETCH_WORKER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 
+/// (in-process memo key, disk cache key; empty when the entry has no source to key on) of an entry's meshes.
+/// Garment states enter as the visibility of the state nodes the entry's prefab has (STATE_NODES), once an
+/// extraction of it named them: a conversion opens every outfit in six garment states, and most items look the same
+/// in all of them. Before that, as the states themselves.
 pub(crate) fn entry_memo_key_for(game_root: &Path, zip: Option<&Path>, entry: &ListEntry, shake_enabled: bool) -> (String, String) {
-    let variant = format!("{}|dynamicfix={}|references={}", entry_prefab_variant_key(entry.category_no, shake_enabled, crate::unity::clothes_states()),
-        crate::dbone::dynamic_bones_fix_enabled(game_root),crate::unity::references::current_signature(game_root));
     let base_sql_key = entry_sql_key(game_root, zip, entry);
-    let memo_key = format!("{base_sql_key}|{}|{variant}", entry_memo_key(zip, entry));
-    (memo_key, format!("{base_sql_key}|{variant}"))
+    let (base, states) = entry_state_base(game_root, zip, entry, shake_enabled, &base_sql_key);
+    let states = entry_state_sig(&base, entry.category_no, states);
+    let sql_key = if base_sql_key.is_empty() { String::new() } else { format!("{base_sql_key}|shake={shake_enabled}|{states}|dynamicfix={}|references={}",
+        crate::dbone::dynamic_bones_fix_enabled(game_root), crate::unity::references::current_signature(game_root)) };
+    (format!("{base}|{states}"), sql_key)
+}
+
+/// Everything an entry's meshes depend on except the garment states (the key of its STATE_NODES), and the states.
+fn entry_state_base(game_root: &Path, zip: Option<&Path>, entry: &ListEntry, shake_enabled: bool, base_sql_key: &str) -> (String, [u8; 9]) {
+    (format!("{base_sql_key}|{}|{}|{}|{}|shake={shake_enabled}|dynamicfix={}|references={}|pack={}",
+        zip.map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(), entry.main_ab, entry.main_data, entry.category_no,
+        crate::dbone::dynamic_bones_fix_enabled(game_root), crate::unity::references::current_signature(game_root),
+        crate::oklib::mounted_pack_identity()), crate::unity::clothes_states())
+}
+
+/// State nodes of an entry's prefab (collect_state_nodes), by entry_state_base. Shared by the threads of an open (the
+/// entry prefetch helpers learn them too); the base names the source and the mounted pack, so it holds across opens.
+static STATE_NODES: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<Vec<(String, Option<i32>)>>>>> =
+    std::sync::LazyLock::new(Default::default);
+
+fn entry_state_sig(base: &str, category: i32, states: [u8; 9]) -> String {
+    let nodes = STATE_NODES.lock().unwrap_or_else(|e| e.into_inner()).get(base).cloned();
+    match nodes {
+        Some(nodes) => format!("nodes={}", nodes.iter().map(|(name, cc)| match crate::unity::clothes_state_node_visible(name, &states, *cc) {
+            Some(true) => '1', Some(false) => '0', None => '-' }).collect::<String>()),
+        None => unlearned_state_sig(category, states),
+    }
+}
+
+/// The states part of an entry's key before an extraction named the prefab's state nodes.
+fn unlearned_state_sig(category: i32, states: [u8; 9]) -> String { format!("{}|{states:?}", entry_prefab_variant_key(category, true, states)) }
+
+/// The entry's memo key now and as it was before its state nodes were learned: an entry prefetch keyed before a helper
+/// learned them is still this extraction's (the same states).
+pub(crate) fn entry_memo_keys(game_root: &Path, zip: Option<&Path>, entry: &ListEntry, shake_enabled: bool) -> (String, String) {
+    let base_sql_key = entry_sql_key(game_root, zip, entry);
+    let (base, states) = entry_state_base(game_root, zip, entry, shake_enabled, &base_sql_key);
+    (format!("{base}|{}", entry_state_sig(&base, entry.category_no, states)), format!("{base}|{}", unlearned_state_sig(entry.category_no, states)))
+}
+
+/// Records the state nodes an extraction of the entry looked at (see entry_memo_key_for).
+fn learn_state_nodes(game_root: &Path, zip: Option<&Path>, entry: &ListEntry, shake_enabled: bool, nodes: Vec<(String, Option<i32>)>) {
+    let base_sql_key = entry_sql_key(game_root, zip, entry);
+    if base_sql_key.is_empty() { return; }
+    let (base, _) = entry_state_base(game_root, zip, entry, shake_enabled, &base_sql_key);
+    let mut map = STATE_NODES.lock().unwrap_or_else(|e| e.into_inner());
+    if map.len() > 200_000 { map.clear(); }
+    map.entry(base).or_insert_with(|| std::sync::Arc::new(nodes));
 }
 
 /// Starts extracting the items a card's hair, accessory and clothing passes are about to ask for, each on a helper
@@ -284,8 +358,8 @@ pub(crate) fn prefetch_entries(game_root: &Path, items: Vec<(Option<PathBuf>, Li
                 for (key, slot, zip, entry, shake) in group {
                     PREFETCH_WORKER.with(|w| w.set(true));
                     // Only a result made under the same key may stand in for the asking thread's own extraction.
-                    let mine = entry_memo_key_for(&game_root, zip.as_deref(), &entry, shake).0;
-                    let same = mine == key;
+                    let (mine, unlearned) = entry_memo_keys(&game_root, zip.as_deref(), &entry, shake);
+                    let same = mine == key || unlearned == key;
                     if !same && profile_enabled() { eprintln!("ok-extract: PROFILE prefetch key differs\n  asked {key}\n  here  {mine}"); }
                     let t_item = std::time::Instant::now();
                     let result = same.then(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
@@ -348,7 +422,8 @@ pub(crate) fn meshes_for_entry_shake_memo(
         return hit;
     }
     if !PREFETCH_WORKER.with(|w| w.get()) {
-        let slot = ENTRY_PREFETCH.with(|cell| cell.borrow_mut().as_mut().and_then(|s| s.remove(&memo_key)));
+        let slot = ENTRY_PREFETCH.with(|cell| cell.borrow_mut().as_mut().and_then(|s| s.remove(&memo_key)
+            .or_else(|| s.remove(&entry_memo_keys(game_root, zip, entry, shake_enabled).1))));
         let _prefetch_spot = crate::profile::spot(if slot.is_some() { "prefetch hit (wait)" } else { "prefetch miss" });
         if slot.is_none() && profile_enabled() && !entry.main_data.is_empty() {
             let keys: Vec<String> = ENTRY_PREFETCH.with(|cell| cell.borrow().as_ref().map(|s| s.keys().cloned().collect()).unwrap_or_default());
@@ -363,22 +438,23 @@ pub(crate) fn meshes_for_entry_shake_memo(
             // opened again (a conversion opens every outfit, extract_session keeps the memo) it is asked again:
             // there the copy is kept, or every outfit extracted the prefetched items anew.
             if let Some(Some(hit)) = done.take() {
-                if !crate::oklib::mounted_pack_identity().is_empty() { ENTRY_MEMO.with(|m| m.borrow_mut().insert(memo_key, hit.clone())); }
+                if !crate::oklib::mounted_pack_identity().is_empty() {
+                    // The helper's extraction named the prefab's state nodes: the other garment states ask under that key.
+                    let learned = entry_memo_key_for(game_root, zip, entry, shake_enabled).0;
+                    ENTRY_MEMO.with(|m| m.borrow_mut().insert(learned, hit.clone()));
+                }
                 return hit;
             }
         }
     }
-    let variant = format!("{}|dynamicfix={}|references={}", entry_prefab_variant_key(entry.category_no, shake_enabled, crate::unity::clothes_states()),
-        crate::dbone::dynamic_bones_fix_enabled(game_root),crate::unity::references::current_signature(game_root));
-    let base_sql_key = entry_sql_key(game_root, zip, entry);
-    let sql_key = if base_sql_key.is_empty() { String::new() }
-        else { format!("{base_sql_key}|{variant}") };
+    let (_, sql_key) = entry_memo_key_for(game_root, zip, entry, shake_enabled);
     if let Some(hit) = crate::sqlcache::load_prefab(game_root, &sql_key, &entry.main_data) {
         ENTRY_MEMO.with(|m| m.borrow_mut().insert(memo_key, hit.clone()));
         return hit;
     }
     let t0 = Instant::now();
-    let result = meshes_for_entry_inner(game_root, zip, entry, shake_enabled);
+    let (result, nodes) = crate::unity::collect_state_nodes(|| meshes_for_entry_inner(game_root, zip, entry, shake_enabled));
+    learn_state_nodes(game_root, zip, entry, shake_enabled, nodes);
     profile_tick(
         &format!(
             "meshes_for_entry {} {} n={}",
@@ -397,7 +473,10 @@ pub(crate) fn meshes_for_entry_shake_memo(
             result.1.as_ref(),
         );
         // A helper thread's memo would only grow (it hands its result over instead).
-        if !PREFETCH_WORKER.with(|w| w.get()) { ENTRY_MEMO.with(|m| m.borrow_mut().insert(memo_key, result.clone())); }
+        if !PREFETCH_WORKER.with(|w| w.get()) {
+            let learned = entry_memo_key_for(game_root, zip, entry, shake_enabled).0;
+            ENTRY_MEMO.with(|m| m.borrow_mut().insert(learned, result.clone()));
+        }
     }
     result
 }

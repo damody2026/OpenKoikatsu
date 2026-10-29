@@ -1391,6 +1391,10 @@ pub(crate) fn extract_session_from_info(
         let want_outfit = outfit_prefix(outfit);
         profile_tick("accessory context+manifest", t_ctx);
         check_preempted()?;
+        // A conversion's garment-state variant of an outfit (state_variant_open) is opened only for what the other
+        // garment states read; hair and accessories read the same in every state, and the outfit's own open read them.
+        let hair_and_accessories = !crate::state_variant_open();
+        if hair_and_accessories {
         let t_res = Instant::now();
         for resolve in &card.resolves {
             if !is_mesh_category(resolve.category_no) {
@@ -1711,6 +1715,7 @@ pub(crate) fn extract_session_from_info(
             crate::accessory_extract::emit(game_root,card,outfit,&source,&context,out_dir,&mut parts,&mut session_parts,&mut seen_meshes,Some(&mut push_batch))?;
         }
         profile_tick("accessories", t_acc);
+        }
         // Clothes from ChaFileClothes.parts (per outfit).
         // Sideloader's UniversalAutoResolver.ResolveStructure identifies an item
         // by (GUID, original Slot) from the per-outfit ResolveInfo whose
@@ -1811,14 +1816,8 @@ pub(crate) fn extract_session_from_info(
                 .and_then(|b| crate::unity::clothes_renderer_map(&b, &entry.main_data));
             profile_tick("clothes renderer map", t_part);
             let t_part = Instant::now();
-            let (baked, used_mask) = bake_clothes_create_textures(
-                game_root,
-                &entry,
-                cols,
-                &pats,
-                &head_texs,
-                &body_texs,
-            );
+            let (baked, used_mask) = bake_clothes_create_memo(game_root, card, outfit, &format!("main{kind}"), zip.as_deref(),
+                &entry, cols, &pats, &head_texs, &body_texs);
             if baked[0].is_none() && std::env::var("OK_DIAG").is_ok() {
                 eprintln!(
                     "ok-extract: clothes no list MainTex cat={cat} id={cid} mt='{}' zip={:?}",
@@ -1989,14 +1988,8 @@ pub(crate) fn extract_session_from_info(
                 );
                 let cmp = accessory_bundle_bytes(game_root, zip.as_deref(), &entry)
                     .and_then(|b| crate::unity::clothes_renderer_map(&b, &entry.main_data));
-                let (baked, used_mask) = bake_clothes_create_textures(
-                    game_root,
-                    &entry,
-                    cols,
-                    &pats,
-                    &head_texs,
-                    &body_texs,
-                );
+                let (baked, used_mask) = bake_clothes_create_memo(game_root, card, outfit, &format!("sub{kind}"), zip.as_deref(),
+                    &entry, cols, &pats, &head_texs, &body_texs);
                 apply_clothes_create_textures(&mut meshes, cmp.as_ref(), &baked);
                 finalize_clothes_texture(&mut meshes);
                 #[cfg(test)]
@@ -2059,7 +2052,7 @@ pub(crate) fn extract_session_from_info(
         }
         profile_tick("subclothes", t_sub);
         let t_batch = Instant::now();
-        push_batch.flush(&mut parts, &mut session_parts)?;
+        push_batch.flush(&mut parts, &mut session_parts, &mut seen_meshes)?;
         profile_tick("deferred meshes", t_batch);
         // ChaControl.DrawClothes disables the bra renderer when the selected
         // top (or its sailor/jacket subparts) sets NotBra. The subpart rules
@@ -2335,6 +2328,18 @@ struct BaseStage {
     body_colliders: crate::dbone::BodyColliderSet,
     clothes_dynamics: crate::dbone::DBoneSet,
     head_rest: Option<crate::pose::Skeleton>,
+}
+
+/// `bake_clothes_create_textures` once per view, card, outfit and garment (`part`: main kind or sub kind with its
+/// colour channel): its colours and patterns follow from those, and the garment states, which a conversion opens each
+/// outfit in six of, do not enter. The first open's bake read what it reads.
+#[allow(clippy::too_many_arguments)]
+fn bake_clothes_create_memo(game_root: &Path, card: &CardInfo, outfit: i32, part: &str, zip: Option<&Path>, entry: &ListEntry,
+    cols: [[f32; 4]; 4], pats: &[crate::clothes_texture::ClothesPatternSrc], head_texs: &[(String, Vec<u8>)], body_texs: &[(String, Vec<u8>)])
+    -> ([Option<Vec<u8>>; 3], bool) {
+    crate::view_memo(format!("bake_clothes_create|{:016x}|{outfit}|{part}|{}|{}|{}|{}|{zip:?}|{cols:?}", card.source_digest,
+        entry.category_no, entry.id, entry.main_ab, entry.main_data),
+        || bake_clothes_create_textures(game_root, entry, cols, pats, head_texs, body_texs))
 }
 
 fn base_bundles_stage(game_root: &Path, parsed_card: &Option<CardInfo>, vanilla: &ChaListCatalog,
@@ -2772,7 +2777,9 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
         let mut items: Vec<(Option<PathBuf>, ListEntry, bool)> = Vec::new();
         let mut lists: std::collections::HashMap<String, ChaListCatalog> = std::collections::HashMap::new();
         let mut seen = std::collections::HashSet::new();
-        for resolve in &card.resolves {
+        // A garment-state variant does not extract the hair and accessories (extract_session_from_info).
+        let hair_and_accessories = !crate::state_variant_open();
+        for resolve in card.resolves.iter().filter(|_| hair_and_accessories) {
             if !is_mesh_category(resolve.category_no) { continue; }
             let p = resolve.property.to_ascii_lowercase();
             if p.contains("outfit") && !p.contains(&want_outfit) { continue; }
@@ -2799,7 +2806,7 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
             }
         }
         // Hair slots (ChaFileHair.parts), as the hair-slot pass looks them up.
-        for (i, &hid) in card.hair_ids.iter().enumerate() {
+        for (i, &hid) in card.hair_ids.iter().enumerate().filter(|_| hair_and_accessories) {
             if hid == 0 { continue; }
             let cat = 101 + i as i32;
             let resolve = card.resolves.iter().find(|r| (r.slot == hid || r.local_slot == hid) && (r.category_no == cat || (101..=104).contains(&r.category_no)));
@@ -2813,7 +2820,7 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
             .filter(|r| is_mesh_category(r.category_no) && role_for_category(r.category_no, &r.property).starts_with("acc"))
             .filter(|r| { let p = r.property.to_ascii_lowercase(); !p.contains("outfit") || p.contains(&want_outfit) })
             .filter_map(|r| accessory_slot_from_property(&r.property)).collect();
-        for (slot_i, a) in card.accessory.iter().enumerate() {
+        for (slot_i, a) in card.accessory.iter().enumerate().filter(|_| hair_and_accessories) {
             if a.type_id == 120 || !is_mesh_category(a.type_id) || resolved_slots.contains(&slot_i) { continue; }
             if !role_for_category(a.type_id, "").starts_with("acc") { continue; }
             let Some(entry) = vanilla.get(a.type_id, a.id).or_else(|| mod_catalog.get(a.type_id, a.id)).cloned() else { continue };

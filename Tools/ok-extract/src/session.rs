@@ -820,12 +820,20 @@ impl SessionPart {
                 if let Some(mat)=material.as_mut().filter(|m|m.shader.eq_ignore_ascii_case("Shader Forge/main_alpha")) {
                     // Proven alpha=1 permits the native SrcAlpha pass to use
                     // UE's depth-writing opaque path without changing blending.
-                    let main=mesh.texture_png.as_ref().and_then(|p|crate::teximg::load_from_memory(p).ok());
-                    let mask=mesh.alpha_mask_png.as_ref().and_then(|p|crate::teximg::load_from_memory(p).ok());
-                    let opaque=(mesh.alpha_mask_png.is_none() || mask.is_some()) && main.is_some_and(|p|p.to_rgba8().pixels().all(|v|v[3]==255)) &&
-                        mask.is_none_or(|p|p.to_rgba8().pixels().all(|v|
-                            (mat.float("_alpha_a").unwrap_or(1.)==0. || v[0]==255) &&
-                            (mat.float("_alpha_b").unwrap_or(1.)==0. || v[1]==255)));
+                    // A pure function of the two textures and the two switches, decoded for every open of every
+                    // outfit before (~0.2–0.3 s a card conversion): kept by content (png_transform_cache).
+                    let (use_a,use_b)=(mat.float("_alpha_a").unwrap_or(1.)!=0.,mat.float("_alpha_b").unwrap_or(1.)!=0.);
+                    let opaque=mesh.texture_png.as_ref().is_some_and(|main_png|{
+                        let mut parameters=vec![use_a as u8,use_b as u8,mesh.alpha_mask_png.is_some() as u8];
+                        parameters.extend_from_slice(mesh.alpha_mask_png.as_deref().unwrap_or_default());
+                        crate::png_transform_cache::transform("native_alpha_opaque_v1",main_png,&parameters,||{
+                            let main=crate::teximg::load_from_memory(main_png).ok();
+                            let mask=mesh.alpha_mask_png.as_ref().and_then(|p|crate::teximg::load_from_memory(p).ok());
+                            let opaque=(mesh.alpha_mask_png.is_none() || mask.is_some()) && main.is_some_and(|p|p.to_rgba8().pixels().all(|v|v[3]==255)) &&
+                                mask.is_none_or(|p|p.to_rgba8().pixels().all(|v|(!use_a || v[0]==255) && (!use_b || v[1]==255)));
+                            Some(vec![opaque as u8])
+                        }).is_some_and(|v|v==[1])
+                    });
                     mat.floats.insert("_OKNativeAlphaOpaque".into(),if opaque {1.}else{0.});
                 }
                 material
@@ -3519,7 +3527,7 @@ impl PartBlob {
 
 pub fn open(game: &Path, card: Option<&Path>, outfit: i32) -> Result<OkSession, String> {
     let mut sess = open_unconfigured(game, card, outfit)?;
-    if let Some(bytes) = card.and_then(|c| std::fs::read(c).ok()) { sess.physics = crate::okphysics::CardPhysics::read_card(&bytes); }
+    if let Some(bytes) = card.and_then(|c| crate::card::card_file_bytes(c).ok()) { sess.physics = crate::okphysics::CardPhysics::read_card(&bytes); }
     Ok(sess)
 }
 

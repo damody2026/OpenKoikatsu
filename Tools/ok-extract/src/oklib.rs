@@ -903,7 +903,7 @@ pub fn png_chunk<'a>(bytes: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
 /// Mounts an OK card's pack over the active library (overlay index, pack models extracted once to a
 /// cache keyed by the pack's hash). Unmounted when the guard drops. None: the card carries no pack.
 pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
-    let bytes = std::fs::read(card).map_err(|e| e.to_string())?;
+    let bytes = crate::card::card_file_bytes(card).map_err(|e| e.to_string())?;
     // An OK card opens from its own data and the shared resources only (okstrict.rs), a card without a pack too; an
     // original card being made into one (its pack recorded) reads its zipmods.
     let strict = (png_chunk(&bytes, CARD_CHUNK).is_some() && !recording_card_pack()).then(crate::okstrict::for_open);
@@ -1677,9 +1677,11 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             let opened = if o == 0 { session_digest_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
             crate::okstrict::set_read_only(false);
             if let Err(e) = opened { failed.push(format!("outfit {o}: {e}")); }
-            // The other garment states the game and the card reader show (CLOTHES_STATE_VARIANTS): only read.
+            // The other garment states the game and the card reader show (CLOTHES_STATE_VARIANTS): only read. What
+            // reads the same in every state (hair, accessories) the outfit's own open above read (state_variant_open).
             for states in CLOTHES_STATE_VARIANTS {
                 let _states = crate::unity::request_clothes_states(states);
+                let _variant = crate::StateVariantScope::begin();
                 crate::okstrict::set_read_only(read_only);
                 let opened = crate::session::open(lib, Some(card), o);
                 crate::okstrict::set_read_only(false);
@@ -2230,7 +2232,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         }
         "cards" => {
             // cards <lib> <card list> <out dir>: `card` for every listed original card (convert in one pass, okstrict.rs).
-            // Worker processes (OK_CARDS_WORKERS, default half the hardware threads, at most 12) each set up the
+            // Worker processes (OK_CARDS_WORKERS, default half the hardware threads, at most 16) each set up the
             // library once and convert cards one after another; every card starts from released caches. A worker
             // takes its cards one at a time on stdin (card list "-").
             let lib = lib.ok_or("library directory required")?;
@@ -2244,7 +2246,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             if std::env::var_os("OK_CARDS_IN_PROCESS").is_none() {
                 let cards: Vec<String> = list.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned).collect();
                 let workers = std::env::var("OK_CARDS_WORKERS").ok().and_then(|v| v.parse().ok())
-                    .unwrap_or_else(|| (std::thread::available_parallelism().map_or(8, |n| n.get()) / 2).clamp(1, 12)).clamp(1, cards.len().max(1));
+                    .unwrap_or_else(|| (std::thread::available_parallelism().map_or(8, |n| n.get()) / 2).clamp(1, 16)).clamp(1, cards.len().max(1));
                 let exe = std::env::current_exe().map_err(|e| e.to_string())?;
                 // The workers share the machine: each one's pools get its part of the hardware threads.
                 let threads = (crate::cpu_threads() / workers).max(2);

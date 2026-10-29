@@ -659,6 +659,15 @@ pub(crate) fn over_layer_mask_png(
     mod_catalog: &ChaListCatalog, guid_index: &std::collections::HashMap<String,PathBuf>,
     outfit: i32, key: &str,
 ) -> Option<Vec<u8>> {let _spot=crate::profile::spot("over_layer_mask_png");
+    // The card's outfit decides it (not the garment states): once per view, card, outfit and mask.
+    crate::view_memo(format!("over_layer_mask|{:016x}|{outfit}|{key}", card.source_digest),
+        || over_layer_mask_png_now(game_root, card, vanilla, mod_catalog, guid_index, outfit, key))
+}
+fn over_layer_mask_png_now(
+    game_root: &Path, card: &CardInfo, vanilla: &ChaListCatalog,
+    mod_catalog: &ChaListCatalog, guid_index: &std::collections::HashMap<String,PathBuf>,
+    outfit: i32, key: &str,
+) -> Option<Vec<u8>> {
     // ChangeClothesTop loads its list mask first. Only Kind 1/2 loads SubA/B
     // afterwards, replacing that mask. IDs/resolves retained from another
     // style do not load subparts, even when their ID zero is a valid item.
@@ -820,6 +829,11 @@ pub(crate) fn body_mask_for_alpha_state_uncached(mask_png: &[u8], enabled: [bool
 /// KSOX skin overlay for (outfit, kind); mirrors `KoikatsuSkinOverlayData.TryGetTexture`
 /// (use the outfit's coordinate, else coordinate 0, else the first).
 pub(crate) fn ksox_overlay_png(card: &CardInfo, outfit: i32, kind: i32) -> Option<Vec<u8>> {
+    card.ksox.get(&(ksox_overlay_coordinate(card, outfit, kind)?, kind)).cloned()
+}
+
+/// The coordinate whose overlay of this kind `ksox_overlay_png` gives (None: no overlay).
+pub(crate) fn ksox_overlay_coordinate(card: &CardInfo, outfit: i32, kind: i32) -> Option<i32> {
     if card.ksox.is_empty() {
         return None;
     }
@@ -831,7 +845,7 @@ pub(crate) fn ksox_overlay_png(card: &CardInfo, outfit: i32, kind: i32) -> Optio
     } else {
         card.ksox.keys().next().map(|(c, _)| *c)?
     };
-    card.ksox.get(&(coord, kind)).cloned()
+    card.ksox.contains_key(&(coord, kind)).then_some(coord)
 }
 
 pub(crate) fn sample_rgba_clamped(image:&image::RgbaImage,u:f32,v:f32)->[f32;4] {

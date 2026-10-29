@@ -10,10 +10,15 @@ use zip::ZipArchive;
 mod migration_cache;
 
 /// One zipmod bundle read once for every thread (each used to read and keep its own copy). Owned bytes are
-/// bounded (`ZIP_AB_OWNED_LIMIT`); mapped stored entries cost no private memory.
+/// bounded (`zip_ab_limits`); mapped stored entries cost no private memory.
 type ZipAbCache = (HashMap<(PathBuf, String), Option<Arc<(String, crate::unity::SourceBytes)>>>, usize);
 static ZIP_AB_CACHE: std::sync::Mutex<Option<ZipAbCache>> = std::sync::Mutex::new(None);
-const ZIP_AB_OWNED_LIMIT: usize = 256 << 20;
+/// Past either limit the whole cache goes. A conversion (a card pack being recorded) opens a card 42 times: at 256 MiB /
+/// 128 entries it emptied twice a card, each time reading its zipmod bundles again (~0.3 s); it keeps 768 MiB / 1024
+/// and empties the cache between cards. Other opens keep the smaller limits.
+fn zip_ab_limits() -> (usize, usize) {
+    if crate::oklib::recording_card_pack() { (768 << 20, 1024) } else { (256 << 20, 128) }
+}
 
 /// Between independent card opens (`unity::release_bundle_caches`): the zipmod bundle cache.
 pub(crate) fn clear_zip_bundle_cache() {
@@ -1581,7 +1586,8 @@ fn zip_ab_cache_put(key: (PathBuf, String), found: Option<Arc<(String, crate::un
     // Another thread may have read it meanwhile: keep the first.
     if let Some(hit) = m.get(&key) { return hit.clone(); }
     let size = found.as_ref().filter(|f| !f.1.is_mapped()).map_or(0, |f| f.1.len());
-    if m.len() >= 128 || *owned + size > ZIP_AB_OWNED_LIMIT {
+    let (owned_limit, entry_limit) = zip_ab_limits();
+    if m.len() >= entry_limit || *owned + size > owned_limit {
         m.clear();
         *owned = 0;
     }
