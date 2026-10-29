@@ -252,6 +252,12 @@ pub(crate) fn select_card_top_subparts(
 /// First value: MaterialEditor.LoadShader can use this shader on Windows.
 /// Second value: its Unity Shader declaration for `_rimV`, when available.
 pub(crate) fn me_shader_registration(game_root: &Path, shader: &str) -> (bool, Option<bool>) {
+    // Asked for every MaterialEditor shader override of every mesh in every open (~2500 times a card conversion):
+    // once per view (crate::view_memo), whose tree and card answers it depends on.
+    crate::view_memo(format!("me_shader_registration|{}|{shader}", game_root.display()), || me_shader_registration_now(game_root, shader))
+}
+
+fn me_shader_registration_now(game_root: &Path, shader: &str) -> (bool, Option<bool>) {
     static DEFAULT: std::sync::OnceLock<Option<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
     static DEFAULT_RIM: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Option<bool>>>> = std::sync::OnceLock::new();
     static MOD_RESULTS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, (bool, Option<bool>)>>> = std::sync::OnceLock::new();

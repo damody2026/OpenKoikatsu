@@ -266,8 +266,18 @@ pub fn fallback_summary() -> (usize, usize) {
     (roots.iter().map(|f| f.files.len()).sum(), roots.iter().filter(|f| f.loose_mods).count())
 }
 /// Identity of what the fallback can serve (each archive's path, size and time; the card directory's
-/// archives): part of the cache key of sessions built with it.
+/// archives): part of the cache key of sessions built with it. Worked out once per fallback generation: in-process
+/// memos key on it (MaterialEditor shader registrations, library memos), ~1000 times a card conversion at ~1 ms each
+/// (a stat of every archive and a listing of the card directory).
 pub fn fallback_identity() -> String {
+    static LAST: Mutex<Option<(u64, String)>> = Mutex::new(None);
+    let generation = FALLBACK_GENERATION.load(std::sync::atomic::Ordering::Relaxed);
+    if let Some((g, identity)) = LAST.lock().unwrap_or_else(|e| e.into_inner()).as_ref() { if *g == generation { return identity.clone(); } }
+    let identity = fallback_identity_now();
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((generation, identity.clone()));
+    identity
+}
+fn fallback_identity_now() -> String {
     let roots = FALLBACK.read().unwrap();
     let mut out = String::new();
     let mut roots_seen = Vec::new();
