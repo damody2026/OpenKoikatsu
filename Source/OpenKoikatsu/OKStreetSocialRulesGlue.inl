@@ -309,7 +309,7 @@ void OKRulesSyncDefaults(FOKStreetSceneState& S){
 void OKRulesReadTables(FOKStreetSceneState& S){
  // The activities together (activities.rs): where and how each is shown; the rules decide whether one may start.
  if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,OKRulesRequest(TEXT("activities_table")))){
-  auto& All=OKStreetActivitiesMutable();All.Reset();
+  auto& All=OKStreetActivitiesMutable();All.Reset();OKStreetActivitySupplies().Reset();
   auto Kind=[](const FString& K){using E=EOKStreetActivityKind;return K==TEXT("photo")?E::Photo:K==TEXT("facility")?E::Facility:K==TEXT("walk")?E::Walk:K==TEXT("restroom")?E::Restroom:K==TEXT("sleep")?E::Sleep:K==TEXT("solo")?E::Solo:E::Pair;};
   for(const auto& V:Out->GetArrayField(TEXT("activities"))){const auto O=V->AsObject();
    auto Text=MakeUnique<FOKStreetActivityText>();Text->Id=O->GetStringField(TEXT("id"));Text->Name=O->GetStringField(TEXT("name"));Text->ZhName=O->GetStringField(TEXT("own_name"));
@@ -317,6 +317,7 @@ void OKRulesReadTables(FOKStreetSceneState& S){
    FOKStreetActivity A;A.Id=*Text->Id;A.Name=*Text->Name;A.ZhName=*Text->ZhName;A.Place=*Text->Place;A.Kind=Kind(O->GetStringField(TEXT("kind")));A.Code=int32(O->GetNumberField(TEXT("code")));
    // Absent is a null pointer, as the code reading them expects (no clip: the pose's own).
    A.Anchor=Text->Anchor.IsEmpty()?nullptr:*Text->Anchor;A.FemaleClip=Text->FemaleClip.IsEmpty()?nullptr:*Text->FemaleClip;A.MaleClip=Text->MaleClip.IsEmpty()?nullptr:*Text->MaleClip;A.Effect=Text->Effect.IsEmpty()?nullptr:*Text->Effect;{double Turn=0;if(O->TryGetNumberField(TEXT("turn"),Turn))A.Turn=float(Turn);}
+   {const TArray<TSharedPtr<FJsonValue>>* Needs=nullptr;if(O->TryGetArrayField(TEXT("needs"),Needs))for(const auto& N:*Needs)OKStreetActivitySupplies().Add(N->AsString());}
    All.Add(A);OKStreetActivityTexts().Add(MoveTemp(Text));}
   UE_LOG(LogTemp,Display,TEXT("Street activities: %d from the rules"),All.Num());}
  // Campus tables for the displays (academics.rs).
