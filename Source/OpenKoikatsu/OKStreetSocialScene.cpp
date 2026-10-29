@@ -317,7 +317,7 @@ struct FOKStreetSceneState {
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
  TMap<int32,FString> HerSaysNext; // what she says as soon as her reply and voice are done (TickAutoFriendship)
- FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
+ FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TMap<int32,FString> HerProposed; /* an activity she proposed in a nudge reply, not started: told to the next judge */TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
 TMap<int32,TArray<FOKStreetCartLine>> CarriedOrders;TMap<int32,FString> CarriedOrderSaid; // CarriedOrders: ordered on the way to the shop (Mind.inl), placed on arrival (StartOutingActivity)
  // RelationshipShy: talk.rs shy_confession
  // she said this meal is on her: until (game minute)
@@ -1286,6 +1286,9 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
   if(S.ChatOrderAwaitsJudge.Remove(Character)>0&&!S.Cart.IsEmpty())PlaceChatOrder(Character,Reply->Reply); // no judge comes for a nudge
   const FString A=Reply->Action;
   if(!A.IsEmpty()&&!(A.StartsWith(TEXT("go:"))||A==TEXT("stroll")||A==TEXT("walk")||OKStreetFindActivity(A)||OKStreetFindPlace(A)))ExecuteFreeTalkAction(Character,Id,A);
+  // Hers to propose, his to agree: kept for the judge of his next line. On arriving at the park she said "let's find a
+  // bench" (park_seat); he said "sure, that bench", and the judge took them as already sitting there.
+  else if(!A.IsEmpty()&&A!=TEXT("none"))S.HerProposed.Add(Character,A);
  }
  else{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkJudge);TArray<FString> Ordered;for(const auto& O:Reply->Orders)Ordered.Add(O.Id);JudgeFreeTalk(Character,Id,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply,Reply->Action,Ordered);}
  S.PlayerAskedText.Reset();
@@ -1428,6 +1431,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  if(!SongIsSinging()&&SongLatestMemory(Character)!=INDEX_NONE)User+=OKT(TEXT("ui.scene.judge_song_again"));
  // Her day ahead, with place ids: where "come along with me first" goes (JudgePlanLine).
  User+=JudgePlanLine(Character);
+ if(FString Proposed;S.HerProposed.RemoveAndCopyValue(Character,Proposed))User+=OKMsg(TEXT("ui.scene.judge_her_proposed"),{{TEXT("action"),Proposed}});
  TArray<TSharedPtr<FJsonValue>> Messages;
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and

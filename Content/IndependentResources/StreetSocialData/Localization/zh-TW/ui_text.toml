@@ -1458,6 +1458,7 @@ judge_song_again = "\n她以前唱過歌給他聽。如果他這句是要她再�
 judge_her_plan = "\n她今天接下來的安排：{plan}。如果她要他先陪她去辦自己的事（「先陪我走一趟」「陪我去買個東西」），而他這句答應了，do_now 填那件事的 go:地點id（括號裡的那個），她說之後才做的事照舊填在 then。"
 judge_earlier_lines = "（這之前的幾句對話，只用來理解「那裡」「走過去」指的是什麼：\n{lines}）\n"
 judge_his_bag = "\n他背包裡有：{items}（他說要送她、她收下時，gift 填其中一樣的名字）"
+judge_her_proposed = "\n她上一句自己提議的活動（還沒開始，兩人現在沒有在做）：{action}；他這句答應了，do_now 就填它"
 meeting_greet_note = "（系統說明，不是他說的話：這是你們約好的見面，他來了。用你自己的話跟他打招呼，自然地開始這次見面；favor_delta 設 0。）"
 ai_service_off = "AI 服務（ok-mind）沒有開啟"
 ai_service_off_reply = "AI 服務（ok-mind）沒有開啟，她現在沒辦法回話。"

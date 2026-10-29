@@ -1457,6 +1457,7 @@ judge_song_again = "\nShe has sung for him before. If his line asks her to sing 
 judge_her_plan = "\nHer day ahead: {plan}. If she asks him to come along to her own errand first (\"walk with me first\", \"come with me to buy something\") and his line agrees, do_now is that errand's go:place id (the one in brackets); what she said comes after it still goes in then."
 judge_earlier_lines = "(The few lines before these, only to tell what \"there\" or \"walk over\" means:\n{lines})\n"
 judge_his_bag = "\nIn his bag: {items} (when he gives her one and she accepts, gift is its name)"
+judge_her_proposed = "\nThe activity she proposed in her last line (not started; they are not doing it now): {action}. If his line agrees, do_now is it."
 meeting_greet_note = "(System note, not his words: this is the meeting you two agreed on, and he has come. Greet him in your own words and start the meeting naturally; favor_delta 0.)"
 ai_service_off = "AI service (ok-mind) is not running"
 ai_service_off_reply = "AI service (ok-mind) is not running, so she can't reply right now."
