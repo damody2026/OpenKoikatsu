@@ -66,8 +66,15 @@ pub(crate) fn entry_memo_key(zip: Option<&Path>, entry: &ListEntry) -> String {
     )
 }
 
-pub(crate) fn entry_sql_key(game_root: &Path, zip: Option<&Path>, entry: &ListEntry) -> String {
+pub(crate) fn entry_sql_key(game_root: &Path, zip: Option<&Path>, entry: &ListEntry) -> String {let _spot=crate::profile::spot("entry_sql_key");
     if entry.main_ab.is_empty() { return String::new(); }
+    // The same in every open of a view (crate::view_memo): finding the entry's bundle again took ~0.5 ms, for every
+    // item of every open (ACCESSORY_SOURCE_MEMO keeps only four bundles).
+    crate::view_memo(format!("entry_sql_key|{}|{zip:?}|{}|{}", game_root.display(), entry.main_ab, entry.main_data),
+        || entry_sql_key_view(game_root, zip, entry))
+}
+
+fn entry_sql_key_view(game_root: &Path, zip: Option<&Path>, entry: &ListEntry) -> String {
     match accessory_bundle_source(game_root, zip, entry).and_then(|(_,source)|source) {
         Some(source) => crate::sqlcache::zip_key(&source, &entry.main_ab),
         None => crate::sqlcache::file_key(&game_root.join("abdata").join(&entry.main_ab)),

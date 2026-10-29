@@ -2044,9 +2044,28 @@ pub fn parse_card(path: &Path) -> Result<CardInfo, String> {
     parse_card_outfit(path, 0)
 }
 
-pub fn parse_card_outfit(path: &Path, outfit: i32) -> Result<CardInfo, String> {
-    let data = crate::gamefs::read(path).map_err(|e| format!("read card: {e}"))?;
-    parse_card_bytes(&data, outfit)
+pub fn parse_card_outfit(path: &Path, outfit: i32) -> Result<CardInfo, String> {let _spot=crate::profile::spot("parse_card_outfit");
+    // The same card file opened again (every outfit and garment state of a conversion, a reader switching outfits):
+    // read and parsed once while its length and time stay the same. The Studio state is applied to each copy.
+    use std::sync::Mutex;
+    static PARSED: Mutex<Vec<((std::path::PathBuf, u64, std::time::SystemTime, i32), CardInfo)>> = Mutex::new(Vec::new());
+    let stamp = crate::gamefs::metadata(path).ok().and_then(|m| Some((path.to_path_buf(), m.len(), m.modified().ok()?, outfit)));
+    let hit = stamp.as_ref().and_then(|key| PARSED.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(k, _)| k == key).map(|(_, info)| info.clone()));
+    let mut info = match hit {
+        Some(info) => info,
+        None => {
+            let data = crate::gamefs::read(path).map_err(|e| format!("read card: {e}"))?;
+            let info = parse_card_bytes_mode(&data, outfit, true)?;
+            if let Some(key) = stamp {
+                let mut parsed = PARSED.lock().unwrap_or_else(|e| e.into_inner());
+                if parsed.len() >= 8 { parsed.remove(0); }
+                parsed.push((key, info.clone()));
+            }
+            info
+        }
+    };
+    crate::studio_status::apply(&mut info);
+    Ok(info)
 }
 
 pub(crate) fn parse_card_bytes(data: &[u8], outfit: i32) -> Result<CardInfo, String> {
