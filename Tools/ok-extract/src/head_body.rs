@@ -515,18 +515,34 @@ pub(crate) fn compose_body_texture(
     // The same composite for the same inputs in every open of a view (crate::view_memo): the body mesh as it comes in
     // (its content, not only its outfit: a garment state may change it), the outfit, the colours and the textures.
     if !crate::okstrict::assembling() { return; }
+    // The composite reads the card (its digest), the outfit, the colours, the body textures and, only when those lack
+    // cf_body_00_t, the mesh's own texture; it writes the texture, its name and the _MainTex runtime flag. Hashing the
+    // whole mesh for the key cost ~20 ms an open.
+    // With a card, the body textures (the base bundle's, or an uncensor body's) follow from the card and the outfit:
+    // their names and lengths are kept in the key as a check, their bytes hashed only without one.
     let key = {
         use sha2::Digest;
         let mut h = sha2::Sha256::new();
-        h.update(bincode::serialize(&*mesh).unwrap_or_default());
-        for (name, bytes) in body_texs { h.update(name.as_bytes()); h.update((bytes.len() as u64).to_le_bytes()); h.update(bytes); }
-        format!("compose_body_texture|{outfit}|{skin:?}|{sub:?}|{:x}", h.finalize())
+        for (name, bytes) in body_texs {
+            h.update(name.as_bytes()); h.update((bytes.len() as u64).to_le_bytes());
+            if card.is_none() { h.update(bytes); }
+        }
+        if pick_named_png(body_texs, &["cf_body_00_t"]).is_none() { h.update(mesh.texture_png.as_deref().unwrap_or_default()); }
+        match card {
+            Some(card) => format!("compose_body_texture|{:016x}|{outfit}|{skin:?}|{sub:?}|{:x}", card.source_digest, h.finalize()),
+            None => format!("compose_body_texture|-|{outfit}|{skin:?}|{sub:?}|{:x}", h.finalize()),
+        }
     };
-    *mesh = crate::view_memo(key, || {
-        let mut made = mesh.clone();
+    let made = crate::view_memo(key, || {
+        let mut made = ExtractedMesh { texture_png: mesh.texture_png.clone(), ..Default::default() };
         compose_body_texture_uncached(&mut made, card, skin, sub, body_texs, outfit);
-        made
+        (made.texture_name.is_empty()).then_some(None).unwrap_or(Some((made.texture_png, made.texture_name)))
     });
+    if let Some((png, name)) = made {
+        mesh.texture_png = png;
+        mark_runtime_main_texture(mesh);
+        mesh.texture_name = name;
+    }
 }
 
 fn compose_body_texture_uncached(
