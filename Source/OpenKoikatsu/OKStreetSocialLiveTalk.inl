@@ -285,6 +285,9 @@ void AOKStreetSocialScene::FreeTalkLeave(const FString& Message){
  FreeTalkLiveSet(false);
  if(Girl!=INDEX_NONE){
   S.PartedAt.Add(Girl,FPlatformTime::Seconds());
+  // What she was carrying to a shop for them is not ordered once they part (R5-6: a tea from the afternoon, still
+  // "carried", would be ordered the next time he passed the shop).
+  if(S.CarriedOrders.Remove(Girl)>0)UE_LOG(LogTemp,Display,TEXT("Street order carried: actor %d parted, her carried orders dropped"),Girl);
   {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveParty);PartyLeave(Girl,TEXT("she said goodbye"));} // a goodbye ends following him too
   if(S.Pair.Partner==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeavePhoto);FinishPhoto(false);}
   if(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveFacility);FinishFacility();}

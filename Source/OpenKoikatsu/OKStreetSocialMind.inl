@@ -81,6 +81,10 @@ bool AOKStreetSocialScene::SkipToNextMorning(){
  const double Wake=double(SkipWakeMinute()%1440)/60.0; // 07:00, earlier for a morning meeting
  S.ClockStartHours=Wake;S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;S.CalendarLastHours=Wake;
  if(NextDay()){
+  // Last night's order still being made is not waiting for him in the morning: 胡桃's machine drink, paid at 14:28,
+  // was "left behind at the girls' dorm" the next morning as he walked 优香 to school (R4-24).
+  if(S.Serves.Num()||S.Table.Num())UE_LOG(LogTemp,Display,TEXT("Street skip: %d orders being made and %d dishes cleared overnight"),S.Serves.Num(),S.Table.Num());
+  S.Serves.Reset();S.Table.Reset();S.ChatOrderAwaitsJudge.Reset();
   // He slept somewhere: where there is no bed for him (the street outside her dorm, a shop) he wakes in his own dorm,
   // not standing the whole night at the girls' dorm door he walked her to.
   const FString Here=PlaceHere(S.Male);auto Ask=OKRulesRequest(TEXT("wake_place"));Ask->SetStringField(TEXT("place"),Here);
@@ -483,7 +487,10 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   if(ShopAhead){FOKStreetCartLine Carry;Carry.ItemId=O.Id;Carry.ForHer=ForHer;Carry.HerOwn=ForHer;Carry.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
    if(!Item->Options.IsEmpty()){Carry.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Carry.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
    S.CarriedOrders.FindOrAdd(Character).Add(Carry);S.CarriedOrderSaid.Add(Character,Reply.Reply);UE_LOG(LogTemp,Display,TEXT("Street order carried: %s until they reach %s"),*O.Id,*Item->Place);continue;}
-  if(!Item||!SoldHere(*Item,Place)){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s at %s"),*O.Id,*Place);continue;}
+  // Not sold here: she is told, so she says so (胡桃 ordered "tiramisu and red bean soup" at the snack shop's door, both
+  // were dropped without a word, and she ate a strawberry cake while his soup never came, R4-28).
+  if(!Item||!SoldHere(*Item,Place)){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s at %s"),*O.Id,*Place);
+   S.TellHer.Add(OKMsg(TEXT("ui.economy.not_sold_here_order"),{{TEXT("item"),Item?Item->Name:O.Id}}));continue;}
   // Whoever it is for still has one of these on the table or on its way ("then a tea" again, the tea she ordered a
   // moment ago still coming): not a second one (as for the judge's orders).
   bool HadBefore=false;{const TArray<FOKStreetCartLine> Mine(S.Cart.GetData()+CartBefore,S.Cart.Num()-CartBefore);S.Cart.SetNum(CartBefore);HadBefore=HasDishLike(ForHer?Character:0,*Item);S.Cart.Append(Mine);}
@@ -493,6 +500,9 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
   if(ForHer&&TooFullFor(Character,*Item)){
    S.TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is full"),*O.Id);continue;}
+  // Not one for herself while she is on her shift serving him: 爱丽丝, making his milk tea at the drink shop, ordered a
+  // milk tea for herself and he paid for both (R4-21).
+  if(ForHer&&ShiftUntil(Character)>0){UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is on her shift"),*O.Id);continue;}
   FOKStreetCartLine Line;Line.ItemId=O.Id;Line.ForHer=ForHer;Line.HerOwn=ForHer;Line.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
   if(!Item->Options.IsEmpty()){Line.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Line.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
   S.ShopPlace=Place;S.Cart.Add(Line);++Added;

@@ -171,6 +171,13 @@ void AOKStreetSocialScene::TickServes(){
  // Her reply's order waiting for the judge's payer (R4-3): no verdict within 10 s (a reply with no judge after it), billed as it is.
  for(auto It=S.ChatOrderAwaitsJudge.CreateIterator();It;++It)if(FPlatformTime::Seconds()-It.Value()>10.0){const int32 Girl=It.Key();It.RemoveCurrent();
   UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d no judge in 10 s, billed now"),Girl);if(!S.Cart.IsEmpty())PlaceChatOrder(Girl,FString());}
+ // Carried to a shop they are already at, with no walk there to start (爱丽丝 on her shift took his wintermelon tea at the
+ // drink shop's door: "carried until they reach drinkshop", and it was never made, R5-6): ordered there now.
+ if(!S.FreeTalkBusy)for(auto It=S.CarriedOrders.CreateIterator();It;++It){const int32 Girl=It.Key();if(Girl==S.OutingGirl)continue;
+  const FString Here=PlaceHere(S.Male);int32 Added=0;
+  for(int32 K=It.Value().Num()-1;K>=0;--K)if(const auto* Item=S.Catalog.Find(It.Value()[K].ItemId);Item&&!Here.IsEmpty()&&Item->Place==Here){S.ShopPlace=Here;S.Cart.Add(It.Value()[K]);It.Value().RemoveAt(K);++Added;}
+  const FString Said=S.CarriedOrderSaid.FindRef(Girl);if(It.Value().IsEmpty())It.RemoveCurrent();
+  if(Added>0){UE_LOG(LogTemp,Display,TEXT("Street order carried: %d lines ordered at %s, they are there already"),Added,*Here);PlaceChatOrder(Girl,Said);break;}}
  // A gift he just bought for her goes to her once she can take it (the talk is not busy, the gift choice not open).
  if(!S.PendingGift.IsEmpty()&&!S.FreeTalkBusy&&FreeTalkPartner()!=INDEX_NONE&&!S.Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift");})){
   const FString Gift=S.PendingGift;S.PendingGift.Reset();if(S.Store.Inventory.Contains(Gift))StartGift(Gift);}if(S.Serves.IsEmpty())return;const double Now=SceneTime();
@@ -191,6 +198,9 @@ void AOKStreetSocialScene::TickServes(){
    for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?S.Manifest.Characters[L.Girl].Name+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
    // Served: the dishes can be eaten now; her needs fill as she eats them (TickMeal).
    for(auto& D:S.Table)if(D.Batch==P.Batch)D.Served=true;
+   // "Not served yet, a few seconds" still waiting to be told: it is served now (爱丽丝 heard it after her drink came and
+   // wondered what was still missing, R5-7).
+   if(!S.NotServedNote.IsEmpty()){S.TellHer.Remove(S.NotServedNote);S.NotServedNote.Reset();}
    S.Message=OKMsg(TEXT("ui.economy.dishes_served_line"), {{TEXT("dish_names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});
    S.FreeTalkNotice=S.Message;RefreshUI();
    UE_LOG(LogTemp,Display,TEXT("Street order served: %s"),*FString::Join(Names,TEXT("、")));
@@ -518,7 +528,7 @@ bool AOKStreetSocialScene::EatActBlocked(int32 Girl,const FString& Act){
  for(const auto& D:S.Table)if(D.Served)return false;
  const double Now=SceneTime();double Wait=0;for(const auto& P:S.Serves)Wait=FMath::Max(Wait,P.At-Now);
  S.FreeTalkNotice=OKT(TEXT("ui.economy.not_served_yet"));
- S.TellHer.Add(OKMsg(TEXT("ui.economy.not_served_wait_prompt"), {{TEXT("seconds"), FMath::Max(0,int32(FMath::CeilToDouble(Wait)))}}));
+ S.NotServedNote=OKMsg(TEXT("ui.economy.not_served_wait_prompt"), {{TEXT("seconds"), FMath::Max(0,int32(FMath::CeilToDouble(Wait)))}});S.TellHer.Add(S.NotServedNote);
  UE_LOG(LogTemp,Display,TEXT("Street meal: %s refused, the food is not served yet"),*Act);RefreshUI();
  return true;
 }

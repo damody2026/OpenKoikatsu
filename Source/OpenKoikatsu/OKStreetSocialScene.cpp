@@ -263,7 +263,7 @@ struct FOKStreetSceneState {
  TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;bool ActCutShort=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
  // Round 3 (Docs/STREET_BEHAVIOR_PLAN_20261012b.md).
  TMap<int32,int32> PlanBlockSince;TMap<FString,int32> PaidShiftMinutes;bool ActIsHers=false,ActLover=false;int32 IntroFriend=INDEX_NONE;double IntroAt=0,GatePenaltyAt=-100,LastActivityAt=-100;
- TMap<int32,TArray<int64>> SelfTexts;int32 SentRemoteGirl=INDEX_NONE,SentRemoteMode=0,ReplyRemoteGirl=INDEX_NONE,ReplyRemoteMode=0;int64 LastCheckoutMinute=-1;TMap<FString,int32> JobRejected;
+ TMap<int32,TArray<int64>> SelfTexts;int32 SentRemoteGirl=INDEX_NONE,SentRemoteMode=0,ReplyRemoteGirl=INDEX_NONE,ReplyRemoteMode=0;int64 LastCheckoutMinute=-1;FString NotServedNote;TMap<FString,int32> JobRejected;
  // His company (OKStreetSocialCompany*.inl).
  FString CompanyTab=TEXT("overview"),CompanyAmount,HeroJobSig,PayslipNote;TMap<int32,float> NpcLiftArrivedZ;bool FinMenuOpen=false; // the money buttons open under one "理財" (BuildFinanceRows)
  // The books (OKStreetSocialBooks.inl, OKStreetSocialAccountsApp.inl): journals by book, what each account was last seen at, posts already written.
@@ -1364,6 +1364,12 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
   // the photo they were taking (R3-229).
   else if(S.Pair.Partner==Character&&Action!=TEXT("leave")&&!Action.StartsWith(TEXT("go:"))&&!OKStreetFindActivity(Action)&&!OKStreetFindPlace(Action)){
    UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s during the activity they are in names nothing else: taken as that activity"),*Action);}
+  // Drinking or eating what is being made for them here, said as another place's drink or meal: 惠惠 agreed to two
+  // vending-machine drinks at the boys' dorm, the judge called it "drink" (the snack shop's), and once the bottles came
+  // the two of them walked off to the snack shop with them (R4-13).
+  else if(const FOKStreetActivity* Fed=OKStreetFindActivity(Action);Fed&&Fed->Kind==EOKStreetActivityKind::Pair&&(Fed->Code==2||Fed->Code==5)&&Fed->Place&&!PlaceHere(S.Male).Equals(Fed->Place)
+   &&S.Table.ContainsByPredicate([Character](const FOKStreetDish& D){return !D.Served&&(!D.ForHer||D.Her==INDEX_NONE||D.Her==Character);})){
+   UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s is what they ordered here, not a walk to %s"),*Action,Fed->Place);}
   else if(!BeginOuting(Character,Action,Error)){
    // Only because her scripted line is still playing: she said yes, so it starts as soon as the line ends (TickRetryAction).
    if(Error==OKT(TEXT("ui.scene.wait_her_finish_line"))){S.RetryAction=Action;S.RetryGirl=Character;S.RetryUntil=SceneTime()+25.0;UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s waits for her line to end"),*Action);}
@@ -3883,7 +3889,10 @@ void AOKStreetSocialScene::Tick(float Dt){
   }else if(S.MalePhase==2&&!OKCrowdRuntimeSpeechActive(this,0)){S.MalePhase=3;if(S.TtsSmoke)UE_LOG(LogTemp,Display,TEXT("Street male voice completed: tone=%s"),*S.MaleTone);}
   if(S.MalePhase==1||S.MalePhase==2){}
   else if(!S.ClipStarted&&S.TtsPending){if(Now-S.TtsRequestedAt>S.TtsTimeout+1){S.TtsPending=false;++S.TtsFallbacks;S.TtsNotice=OKT(TEXT("ui.scene.tts_timeout_builtin"));RefreshUI();}}
-  else if(!S.ClipStarted){const bool WithGesture=S.Voice==0&&(!S.Pair.Conversation()||S.TouchActive);const bool Played=WithGesture?OKSpeakCrowdRuntimeActionLine(this,S.Target,S.VoiceIds[S.Voice],S.ActiveGesture,Error):OKSpeakCrowdRuntimeLine(this,S.Target,S.VoiceIds[S.Voice],Error);
+  else if(!S.ClipStarted){const bool WithGesture=S.Voice==0&&(!S.Pair.Conversation()||S.TouchActive);bool Played=WithGesture?OKSpeakCrowdRuntimeActionLine(this,S.Target,S.VoiceIds[S.Voice],S.ActiveGesture,Error):OKSpeakCrowdRuntimeLine(this,S.Target,S.VoiceIds[S.Voice],Error);
+   // Her gesture could not be queued (her shy gesture from the line before still waiting to play): she says it without
+   // it. The confession scene 惠惠 was to answer ended the whole talk, and her shift took her off unanswered (R4-19).
+   if(!Played&&WithGesture){UE_LOG(LogTemp,Display,TEXT("Street dialogue: gesture not queued (%s); the line plays without it"),*Error);Played=OKSpeakCrowdRuntimeLine(this,S.Target,S.VoiceIds[S.Voice],Error);}
    if(!Played){FailTalk(TEXT("Dialogue start failed: ")+Error);}else S.ClipStarted=true;
   }else if(!OKCrowdRuntimeSpeechActive(this,S.Target)){
    EOKRuntimeSpeechState SpeechState;FString SpeechError;
