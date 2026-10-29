@@ -7,6 +7,7 @@
 #include "Dom/JsonObject.h"
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
+#include "HAL/FileManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -183,6 +184,12 @@ FString UOKSceneDocument::ToJson() const
 	TArray<TSharedPtr<FJsonValue>> TrackJson;
 	for (const FOKSceneTrack& T : Tracks) if (TSharedPtr<FJsonObject> J = FJsonObjectConverter::UStructToJsonObject(T)) TrackJson.Add(MakeShared<FJsonValueObject>(J));
 	Root->SetArrayField(TEXT("tracks"), TrackJson);
+	if (Bookmarks.ContainsByPredicate([](const FOKSceneBookmark& B) { return B.bSet; }))
+	{
+		TArray<TSharedPtr<FJsonValue>> MarkJson;
+		for (const FOKSceneBookmark& B : Bookmarks) if (TSharedPtr<FJsonObject> J = FJsonObjectConverter::UStructToJsonObject(B)) MarkJson.Add(MakeShared<FJsonValueObject>(J));
+		Root->SetArrayField(TEXT("bookmarks"), MarkJson);
+	}
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FOKSceneObject& O : Objects)
 	{
@@ -247,17 +254,132 @@ bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 		for (const TSharedPtr<FJsonValue>& V : *TrackJson)
 		{
 			FOKSceneTrack T;
-			if (V->AsObject() && FJsonObjectConverter::JsonObjectToUStruct(V->AsObject().ToSharedRef(), &T) && Ids.Contains(T.ObjectId)) Tracks.Add(MoveTemp(T));
+			if (V->AsObject() && FJsonObjectConverter::JsonObjectToUStruct(V->AsObject().ToSharedRef(), &T) && (Ids.Contains(T.ObjectId) || T.ObjectId == SceneTrackId)) Tracks.Add(MoveTemp(T));
+		}
+	Bookmarks.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* MarkJson = nullptr;
+	if (Root->TryGetArrayField(TEXT("bookmarks"), MarkJson))
+		for (const TSharedPtr<FJsonValue>& V : *MarkJson)
+		{
+			FOKSceneBookmark B;
+			if (V->AsObject()) FJsonObjectConverter::JsonObjectToUStruct(V->AsObject().ToSharedRef(), &B);
+			if (Bookmarks.Num() < 10) Bookmarks.Add(B);
 		}
 	NextId = FMath::Max(MaxId + 1, Root->HasField(TEXT("next_id")) ? int32(Root->GetNumberField(TEXT("next_id"))) : 1);
 	NotifyChanged();
 	return true;
 }
 
+bool UOKSceneDocument::ReplaceFile(const FString& Temp, const FString& Path, FString& OutError)
+{
+	if (IFileManager::Get().Move(*Path, *Temp, true, true, false, true)) return true;
+	IFileManager::Get().Delete(*Temp, false, true, true);
+	OutError = TEXT("cannot replace ") + Path;
+	return false;
+}
+
 bool UOKSceneDocument::SaveToFile(const FString& Path, FString& OutError) const
 {
-	if (!FFileHelper::SaveStringToFile(ToJson(), *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) { OutError = TEXT("cannot write ") + Path; return false; }
-	return true;
+	// The old file stays whole until the new one is written in full.
+	const FString Temp = Path + TEXT(".saving");
+	if (!FFileHelper::SaveStringToFile(ToJson(), *Temp, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) { IFileManager::Get().Delete(*Temp, false, true, true); OutError = TEXT("cannot write ") + Path; return false; }
+	return ReplaceFile(Temp, Path, OutError);
+}
+
+namespace
+{
+	/** Objects of a fragment or scene added to a document under new ids (parents inside the set follow; the set's top
+	 *  objects go under Parent). Tracks of the objects come along. */
+	TArray<int32> AddObjectsRemapped(UOKSceneDocument& Doc, TArray<FOKSceneObject>&& In, const TArray<FOKSceneTrack>& InTracks, int32 Parent)
+	{
+		TMap<int32, int32> IdMap;
+		for (FOKSceneObject& O : In) IdMap.Add(O.Id, Doc.NextId++);
+		TArray<int32> Tops;
+		for (FOKSceneObject& O : In)
+		{
+			const bool bTop = !IdMap.Contains(O.Parent);
+			O.Id = IdMap[O.Id];
+			O.Parent = bTop ? (Doc.Find(Parent) ? Parent : -1) : IdMap[O.Parent];
+			if (bTop) { Tops.Add(O.Id); if (O.Parent < 0 || (Doc.Find(O.Parent) && Doc.Find(O.Parent)->Kind != EOKSceneObjectKind::Character)) O.AttachBone.Reset(); }
+			Doc.Objects.Add(MoveTemp(O));
+		}
+		for (const FOKSceneTrack& T : InTracks)
+			if (const int32* To = IdMap.Find(T.ObjectId)) { FOKSceneTrack Copy = T; Copy.ObjectId = *To; Doc.Tracks.Add(MoveTemp(Copy)); }
+		return Tops;
+	}
+
+	bool ParseObjects(const TSharedPtr<FJsonObject>& Root, TArray<FOKSceneObject>& Out, TArray<FOKSceneTrack>& OutTracks, FString& OutError)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		if (!Root || !Root->TryGetArrayField(TEXT("objects"), Items)) { OutError = TEXT("no objects"); return false; }
+		TSet<int32> Ids;
+		for (const TSharedPtr<FJsonValue>& V : *Items)
+		{
+			FOKSceneObject O;
+			if (!V->AsObject() || !FJsonObjectConverter::JsonObjectToUStruct(V->AsObject().ToSharedRef(), &O) || Ids.Contains(O.Id)) { OutError = TEXT("bad scene object"); return false; }
+			Ids.Add(O.Id);
+			Out.Add(MoveTemp(O));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* TrackJson = nullptr;
+		if (Root->TryGetArrayField(TEXT("tracks"), TrackJson))
+			for (const TSharedPtr<FJsonValue>& V : *TrackJson)
+			{
+				FOKSceneTrack T;
+				if (V->AsObject() && FJsonObjectConverter::JsonObjectToUStruct(V->AsObject().ToSharedRef(), &T) && Ids.Contains(T.ObjectId)) OutTracks.Add(MoveTemp(T));
+			}
+		return true;
+	}
+}
+
+FString UOKSceneDocument::ExportFragment(const TArray<int32>& Ids) const
+{
+	// Every chosen object with its subtree, once, in document order (parents before children as the document has them).
+	TSet<int32> Wanted;
+	TArray<int32> Queue = Ids;
+	for (int32 I = 0; I < Queue.Num(); ++I) if (Find(Queue[I]) && !Wanted.Contains(Queue[I])) { Wanted.Add(Queue[I]); Queue.Append(Children(Queue[I])); }
+	TArray<TSharedPtr<FJsonValue>> Items, TrackJson;
+	for (const FOKSceneObject& O : Objects)
+		if (Wanted.Contains(O.Id))
+			if (TSharedPtr<FJsonObject> J = FJsonObjectConverter::UStructToJsonObject(O)) Items.Add(MakeShared<FJsonValueObject>(J));
+	for (const FOKSceneTrack& T : Tracks)
+		if (Wanted.Contains(T.ObjectId))
+			if (TSharedPtr<FJsonObject> J = FJsonObjectConverter::UStructToJsonObject(T)) TrackJson.Add(MakeShared<FJsonValueObject>(J));
+	TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("format"), TEXT("okscene-fragment"));
+	Root->SetNumberField(TEXT("version"), FormatVersion);
+	Root->SetArrayField(TEXT("objects"), Items);
+	Root->SetArrayField(TEXT("tracks"), TrackJson);
+	FString Out;
+	FJsonSerializer::Serialize(Root, TJsonWriterFactory<>::Create(&Out));
+	return Out;
+}
+
+TArray<int32> UOKSceneDocument::PasteFragment(const FString& Json, int32 Parent, FString& OutError)
+{
+	TSharedPtr<FJsonObject> Root;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Root) || !Root || Root->GetStringField(TEXT("format")) != TEXT("okscene-fragment")) { OutError = TEXT("not an OK Studio clipboard fragment"); return {}; }
+	TArray<FOKSceneObject> In;
+	TArray<FOKSceneTrack> InTracks;
+	if (!ParseObjects(Root, In, InTracks, OutError)) return {};
+	TArray<int32> Tops = AddObjectsRemapped(*this, MoveTemp(In), InTracks, Parent);
+	NotifyChanged();
+	return Tops;
+}
+
+TArray<int32> UOKSceneDocument::Merge(const FString& SceneJson, FString& OutError)
+{
+	TSharedPtr<FJsonObject> Root;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(SceneJson), Root) || !Root || Root->GetStringField(TEXT("format")) != TEXT("okscene")) { OutError = TEXT("not an .okscene"); return {}; }
+	TArray<FOKSceneObject> In;
+	TArray<FOKSceneTrack> InTracks;
+	if (!ParseObjects(Root, In, InTracks, OutError)) return {};
+	TSet<int32> Ids;
+	for (const FOKSceneObject& O : In) Ids.Add(O.Id);
+	for (FOKSceneObject& O : In) if (!Ids.Contains(O.Parent)) O.Parent = -1;
+	TArray<int32> Tops = AddObjectsRemapped(*this, MoveTemp(In), InTracks, -1);
+	if (Root->HasField(TEXT("duration"))) Duration = FMath::Max(Duration, float(Root->GetNumberField(TEXT("duration"))));
+	NotifyChanged();
+	return Tops;
 }
 
 bool UOKSceneDocument::LoadFromFile(const FString& Path, FString& OutError)
@@ -288,8 +410,40 @@ const FOKSceneTrack* UOKSceneDocument::TrackOf(int32 Id) const
 	return Tracks.FindByPredicate([Id](const FOKSceneTrack& T) { return T.ObjectId == Id; });
 }
 
+int32 UOKSceneDocument::MoveKey(int32 Id, int32 Index, float NewTime)
+{
+	FOKSceneTrack* T = Tracks.FindByPredicate([Id](const FOKSceneTrack& X) { return X.ObjectId == Id; });
+	if (!T || !T->Keys.IsValidIndex(Index)) return INDEX_NONE;
+	FOKSceneKey K = T->Keys[Index];
+	T->Keys.RemoveAt(Index);
+	K.Time = FMath::Max(NewTime, 0.f);
+	T->Keys.RemoveAll([&K](const FOKSceneKey& X) { return FMath::Abs(X.Time - K.Time) < KeyTolerance; });
+	T->Keys.Add(K);
+	T->Keys.Sort([](const FOKSceneKey& A, const FOKSceneKey& B) { return A.Time < B.Time; });
+	Duration = FMath::Max(Duration, K.Time);
+	NotifyChanged();
+	return T->Keys.IndexOfByPredicate([&K](const FOKSceneKey& X) { return X.Time == K.Time; });
+}
+
 void UOKSceneDocument::SetKey(int32 Id, float Time)
 {
+	if (Id == SceneTrackId)
+	{
+		FOKSceneTrack* T = Tracks.FindByPredicate([](const FOKSceneTrack& X) { return X.ObjectId == SceneTrackId; });
+		if (!T) { T = &Tracks.AddDefaulted_GetRef(); T->ObjectId = SceneTrackId; }
+		const FOKSceneKey* Old = T->Keys.FindByPredicate([Time](const FOKSceneKey& K) { return FMath::Abs(K.Time - Time) < KeyTolerance; });
+		FOKSceneKey K;
+		K.Ease = Old ? Old->Ease : EOKSceneEase::Linear;
+		T->Keys.RemoveAll([Time](const FOKSceneKey& X) { return FMath::Abs(X.Time - Time) < KeyTolerance; });
+		K.Time = FMath::Max(Time, 0.f);
+		K.Exposure = Post.Exposure;
+		K.FocalDistance = Post.FocalDistance;
+		T->Keys.Add(K);
+		T->Keys.Sort([](const FOKSceneKey& A, const FOKSceneKey& B) { return A.Time < B.Time; });
+		Duration = FMath::Max(Duration, K.Time);
+		NotifyChanged();
+		return;
+	}
 	const FOKSceneObject* O = Find(Id);
 	if (!O) return;
 	FOKSceneTrack* T = Tracks.FindByPredicate([Id](const FOKSceneTrack& X) { return X.ObjectId == Id; });
@@ -310,7 +464,10 @@ void UOKSceneDocument::SetKey(int32 Id, float Time)
 		K.bCharacterState = true;
 		K.EyebrowPattern = C.EyebrowPattern; K.EyesPattern = C.EyesPattern; K.MouthPattern = C.MouthPattern; K.MouthOpen = C.MouthOpen;
 		K.HandLeft = C.HandLeft; K.HandRight = C.HandRight; K.ClothesStates = C.ClothesStates;
+		// A stopped animation keys its frame (the timeline then scrubs it); a playing one runs on its own.
+		K.AnimTime = C.Speed == 0.f ? C.Time : -1.f;
 	}
+	if (O->Kind == EOKSceneObjectKind::Light) K.Color = O->Light.Color;
 	T->Keys.Add(K);
 	T->Keys.Sort([](const FOKSceneKey& A, const FOKSceneKey& B) { return A.Time < B.Time; });
 	Duration = FMath::Max(Duration, K.Time);
@@ -361,10 +518,39 @@ namespace
 void UOKSceneDocument::EvaluateTimeline(float Time)
 {
 	bool bAny = false;
+	// The keys around Time and the eased fraction between them (B null: hold A).
+	auto Around = [Time](const FOKSceneTrack& T, const FOKSceneKey*& A, const FOKSceneKey*& B, float& U)
+	{
+		const int32 Next = T.Keys.IndexOfByPredicate([Time](const FOKSceneKey& K) { return K.Time > Time; });
+		if (Next == INDEX_NONE) { A = &T.Keys.Last(); B = nullptr; U = 0.f; return; }
+		if (Next == 0) { A = &T.Keys[0]; B = nullptr; U = 0.f; return; }
+		A = &T.Keys[Next - 1]; B = &T.Keys[Next];
+		U = EaseAlpha(A->Ease, (Time - A->Time) / FMath::Max(B->Time - A->Time, 1e-4f));
+	};
+	for (const FOKSceneTrack& T : Tracks)
+	{
+		if (T.ObjectId != SceneTrackId || T.Keys.IsEmpty()) continue;
+		const FOKSceneKey* A = nullptr; const FOKSceneKey* B = nullptr; float U = 0.f;
+		Around(T, A, B, U);
+		Post.Exposure = B ? FMath::Lerp(A->Exposure, B->Exposure, U) : A->Exposure;
+		Post.FocalDistance = B ? FMath::Lerp(A->FocalDistance, B->FocalDistance, U) : A->FocalDistance;
+		bAny = true;
+	}
 	for (const FOKSceneTrack& T : Tracks)
 	{
 		FOKSceneObject* O = Find(T.ObjectId);
 		if (!O || T.Keys.IsEmpty()) continue;
+		{
+			// Light colour and a character's scrubbed animation time (keys that set them).
+			const FOKSceneKey* A = nullptr; const FOKSceneKey* B = nullptr; float U = 0.f;
+			Around(T, A, B, U);
+			if (O->Kind == EOKSceneObjectKind::Light && A->Color.A >= 0.f) O->Light.Color = B && B->Color.A >= 0.f ? FMath::Lerp(A->Color, B->Color, U) : A->Color;
+			if (O->Kind == EOKSceneObjectKind::Character && A->AnimTime >= 0.f)
+			{
+				O->Character.Speed = 0.f;
+				O->Character.Time = B && B->AnimTime >= 0.f ? FMath::Lerp(A->AnimTime, B->AnimTime, U) : A->AnimTime;
+			}
+		}
 		int32 Next = T.Keys.IndexOfByPredicate([Time](const FOKSceneKey& K) { return K.Time > Time; });
 		FTransform X;
 		float V;

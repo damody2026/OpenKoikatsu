@@ -16,6 +16,6 @@ public class OKStudio : ModuleRules
         if (Directory.Exists(ReflectionCubes)) foreach (string FileName in Directory.GetFiles(ReflectionCubes, "*.okcube")) RuntimeDependencies.Add(FileName, StagedFileType.NonUFS);
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "Json", "JsonUtilities", "Slate", "SlateCore", "InputCore" });
-		PrivateDependencyModuleNames.AddRange(new string[] { "KKUnityBundle", "KKCard", "OKAnimation", "OKHGShading", "KKRuntimePose", "RHI", "UMG", "RenderCore", "ImageCore", "Niagara", "XmlParser", "HTTP" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "KKUnityBundle", "KKCard", "OKAnimation", "OKHGShading", "KKRuntimePose", "RHI", "UMG", "RenderCore", "ImageCore", "Niagara", "XmlParser", "HTTP", "HTTPServer", "ImageWrapper", "ApplicationCore" });
 	}
 }

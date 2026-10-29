@@ -276,6 +276,8 @@ public:
 	void OnExitStudio();
 	// OK Studio (Plugins/OKStudio): the scene tree with the loaded card as its first character; the gallery returns when it closes.
 	UFUNCTION() void OnEnterOkStudio();
+	/** The gallery's 動作時間軸: OK Studio with the card and its timeline window open. */
+	UFUNCTION() void OnEnterOkStudioTimeline();
 	void OnOkStudioStopped();
 	bool bOkStudioOpen = false;
 	ESlateVisibility VisibilityBeforeOkStudio = ESlateVisibility::Visible;

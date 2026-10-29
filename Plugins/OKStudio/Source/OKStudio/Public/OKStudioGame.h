@@ -2,6 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "OKSceneDocument.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "InputCoreTypes.h"
 #include "Layout/Visibility.h"
 #include "Tickable.h"
 #include "UObject/Object.h"
@@ -11,6 +14,25 @@ class AOKSceneActor;
 class ACameraActor;
 class SOKStudioPanel;
 class SWidget;
+
+/** The studio view's camera: the scene camera's near plane (Unreal has one global near plane otherwise). */
+UCLASS()
+class OKSTUDIO_API UOKStudioViewCamera : public UCameraComponent
+{
+	GENERATED_BODY()
+public:
+	/** Near clipping plane (cm); <= 0: the engine's. */
+	float NearClip = 0.f;
+	virtual void GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView) override;
+};
+
+UCLASS()
+class OKSTUDIO_API AOKStudioViewer : public ACameraActor
+{
+	GENERATED_BODY()
+public:
+	AOKStudioViewer(const FObjectInitializer& Initializer);
+};
 
 /**
  * OK Studio inside the game: the shared scene tree shown in the running world, an orbit viewer camera and a Slate
@@ -44,7 +66,36 @@ public:
 	float Distance = 380.f;
 
 	FString File;
+	/** The primary selection: the guide's pivot and the object the detail windows show (also in Selection). */
 	int32 SelectedId = -1;
+	/** Every selected object (the guide, delete, duplicate, hide and copy act on all of them). */
+	TArray<int32> Selection;
+	bool IsSelected(int32 Id) const { return Selection.Contains(Id); }
+	/** Selects these objects; Primary (default: the last) becomes SelectedId. */
+	void SelectMany(const TArray<int32>& Ids, int32 Primary = -1);
+	/** Adds an object to the selection or takes it out (Ctrl / Shift click). */
+	void ToggleSelect(int32 Id);
+	/** Selected objects that are not under another selected object (a moved parent carries its children). */
+	TArray<int32> SelectionRoots() const;
+
+	/** The object under a panel position (-1: none): characters by their skeleton, other objects by their bounds; the
+	 *  nearest to the camera wins. */
+	int32 PickObject(const FVector2D& Position) const;
+	/** World bounds of an object (a character's bones, an item's meshes; a light or camera: a small box). */
+	bool WorldBounds(int32 Id, FBox& Out) const;
+	/** Points the free view at the selection, far enough to see all of it. */
+	void FocusSelection();
+	/** Free view presets: 0 front, 1 right side, 2 top, 3 back, 4 left side, 5 the view a new scene opens with. */
+	void ViewPreset(int32 Preset);
+	/** View bookmarks 0..9 (kept in the scene). */
+	void SaveBookmark(int32 Slot);
+	bool LoadBookmark(int32 Slot);
+	/** A camera object at the current view (selected); returns its id. */
+	int32 CameraFromView();
+	/** Moves a camera object to the current view. */
+	bool StoreViewInCamera(int32 Id);
+	/** Views through the next scene camera (after the last: the free view). */
+	void NextCamera();
 
 	/** Broadcast when the studio closes (the caller restores its own UI). */
 	FSimpleMulticastDelegate OnStopped;
@@ -68,6 +119,17 @@ public:
 
 	/** Guide object (gizmo) of the selection: 0 move, 1 rotate, 2 scale. */
 	int32 GuideMode = 0;
+	/** The transform bar's 主軸 switch: false hides the guide (and its handles cannot be dragged). */
+	bool bShowGuide = true;
+
+	/** The studio panel (null before the viewport has one). */
+	SOKStudioPanel* GetPanel() const { return Panel.Get(); }
+	/** The studio UI's command table (buttons, shortcuts and OKStudio.Cmd run the same commands). */
+	bool RunUiCommand(const FString& Id, const FString& Arg);
+	/** Open windows, menus, toggles, selection and the command ids, as JSON (OKStudio.UiState). */
+	FString UiStateJson() const;
+	/** The studio UI's widget rects in canvas units, as JSON comparable with the HS2Studio6 layout dumps (OKStudio.UiLayout). */
+	FString UiLayoutJson() const;
 	/** FK bone the guide turns (empty: the selected object). A bone guide is always the rotate rings on the bone's own
 	 *  local axes; dragging writes the bone's FK rotation. */
 	FString GuideBone;
@@ -76,23 +138,60 @@ public:
 	/** World position of an IK target of the selected character (false: no such target). */
 	bool IkTargetWorld(int32 Effector, FVector& Out) const;
 
-	/** One guide handle in panel coordinates: axis 0..2 (X, Y, Z), 3 uniform scale. */
+	/** One guide handle in panel coordinates: axis 0..2 (X, Y, Z), 3 uniform scale, 4..6 the planes XY, YZ, XZ (move),
+	 *  10..12 the character's own move axes shown small beside a bone or IK guide. */
 	struct FGuideHandle
 	{
 		int32 Axis = 0;
 		TArray<FVector2D> Points;
 		bool bClosed = false;
+		/** A filled plane square. */
+		bool bFilled = false;
 	};
 	/** Handles of the selected object (false when nothing is selected or it is off screen). */
 	bool GuideHandles(TArray<FGuideHandle>& Out, FVector2D& Center, double& CmPerPixel) const;
 	/** Handle under a panel position (-1: none). */
 	int32 HitGuide(const FVector2D& Position) const;
-	/** Drags a handle by a mouse movement (panel units): moves along, rotates about or scales the selected object. */
+	/** Drags a handle by a mouse movement (panel units): moves along, rotates about or scales the selection. */
 	bool ApplyGuideDrag(int32 Axis, const FVector2D& Delta);
+	/** A handle drag from mouse down to up: the whole movement so far is applied to where the selection started, snapped
+	 *  to the settings' steps while bSnap is on or Ctrl is held. */
+	void BeginGuideDrag(int32 Axis);
+	bool DragGuide(const FVector2D& Delta, bool bCtrl);
+	void EndGuideDrag();
+	bool IsGuideDragging() const { return DragAxis >= 0; }
+	/** The guide's axes: the world's, or the object's own (local). */
+	bool bLocalAxes = false;
+	/** Snap moves, turns and scales to the settings' steps (Ctrl does it while held). */
+	bool bSnap = false;
+	/** What the drag changes now ("移動 X +12.0 cm"), for the status line. */
+	FString GuideReadout;
+	/** The user is dragging something in the UI (a slider, the view): outside edits wait. */
+	bool bUserDragging = false;
+	/** Free-fly keys held while the right button is down in the view (W A S D Q E). */
+	TSet<FKey> FlyKeys;
+	bool bFlying = false;
+	/** Turns the free view about the camera itself (fly mode) instead of around its focus. */
+	void Look(float DeltaYaw, float DeltaPitch);
+
+	/** Unsaved changes since the scene was saved or opened. */
+	bool bDirty = false;
+	/** Why edits from outside (the control channel) wait now (empty: they need not). */
+	FString BusyReason() const;
+	/** Auto backup (Saved/OKStudio/Backup): writes one now unless the scene is unchanged since the last (bForce: always). */
+	FString BackupNow(bool bForce);
+	static FString BackupDirectory();
+	/** Backups, newest first. */
+	static TArray<FString> BackupFiles();
+	/** Objects the last open could not show (id, name, why). */
+	TArray<FString> LoadReport() const;
 
 	/** Timeline time (seconds) and playback (keyed objects follow while playing or when the time is moved). */
 	float TimelineTime = 0.f;
 	bool bTimelinePlaying = false;
+	/** Playback speed and the loop range (LoopEnd <= LoopStart: the whole timeline). */
+	float TimelineSpeed = 1.f;
+	float LoopStart = 0.f, LoopEnd = 0.f;
 	void SetTimelineTime(float Time);
 
 	/** Screenshot through the current view into UserData/Studio/screenshot (returns the file; empty on failure). */
@@ -102,7 +201,12 @@ public:
 	bool CaptureToPng(const FString& Path, int32 Width, int32 Height, FString& OutError, bool bTransparent = false);
 
 	/** Exports the timeline as numbered PNG frames (UserData/Studio/movie/<time>/frame_00000.png), one per Tick. */
-	FString ExportFrames(float Fps, int32 Width, int32 Height, bool bMp4 = false);
+	FString ExportFrames(float Fps, int32 Width, int32 Height, bool bMp4 = false, float From = 0.f, float To = -1.f, const FString& Folder = FString());
+	/** Stops a frame export: the frames written so far stay, no movie is made. */
+	void CancelExport();
+	int32 ExportFrameIndex() const { return ExportFrame; }
+	/** The folder of the last frame export. */
+	FString ExportFolder() const { return ExportDir; }
 	/** A character's pose over the timeline (animation, FK, IK, keys) as an OK animation in UserData/Studio/anim
 	 *  (returns the file; empty on failure). */
 	FString ExportOkAnim(int32 Id, float Fps, FString& OutError);
@@ -176,12 +280,26 @@ private:
 	/** Earlier document states (oldest first), undone states, and the state the history last recorded. */
 	TArray<FString> UndoStack, RedoStack;
 	FString HistoryState;
+	/** The selection each history state was left with (restored with it; the view is not). */
+	TArray<TArray<int32>> UndoSelections, RedoSelections;
+	TArray<int32> HistorySelection;
+	/** The timeline is posing the scene (not an edit: no history step, no unsaved mark). */
+	bool bEvaluatingTimeline = false;
+	/** The guide drag: its axis, the movement so far, the selection's world transforms when it started, a bone's turn. */
+	int32 DragAxis = -1;
+	FVector2D DragTotal = FVector2D::ZeroVector;
+	TMap<int32, FTransform> DragStart;
+	float DragBoneApplied = 0.f;
+	double LastBackupSeconds = 0.;
+	uint32 LastBackupHash = 0;
+	bool bFirstSync = true;
 	bool bHistoryDirty = false;
 	bool bHistoryRestoring = false;
 	double LastChangeSeconds = 0.;
 	void RestoreHistory(const FString& State);
 	FString ExportDir;
 	float ExportFps = 30.f;
+	float ExportFrom = 0.f;
 	int32 ExportFrame = -1, ExportTotal = 0, ExportWidth = 1920, ExportHeight = 1080;
 	bool bExportMp4 = false;
 	bool bExportShotPending = false;

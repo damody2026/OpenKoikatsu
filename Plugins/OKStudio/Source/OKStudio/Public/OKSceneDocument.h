@@ -137,6 +137,10 @@ struct OKSTUDIO_API FOKSceneCharacter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face", meta = (UIMin = "-1", UIMax = "1"))
 	float MouthOpen = -1.f;
 
+	/** Automatic blinking: -1 as the character does, 0 off, 1 on. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
+	int32 Blink = -1;
+
 	/** Where the eyes look. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
 	EOKSceneLook EyesLook = EOKSceneLook::Camera;
@@ -417,6 +421,14 @@ struct OKSTUDIO_API FOKSceneCamera
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "5", ClampMax = "170"))
 	float Fov = 40.f;
 
+	/** Near clipping plane (cm; <= 0: the engine's). Unreal draws perspective views without a far plane: Far is kept for
+	 *  the scene file and the UI, not applied. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float Near = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float Far = 0.f;
+
 	bool operator==(const FOKSceneCamera& O) const = default;
 };
 
@@ -683,6 +695,49 @@ struct OKSTUDIO_API FOKSceneKey
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
 	TArray<uint8> ClothesStates;
+
+	/** A light's colour at this key (alpha < 0: not keyed). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	FLinearColor Color = FLinearColor(1.f, 1.f, 1.f, -1.f);
+
+	/** A character's animation time at this key (seconds; < 0: the animation runs on its own). Between two keyed times the
+	 *  animation is scrubbed, which also holds a pose still. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float AnimTime = -1.f;
+
+	/** The scene track (ObjectId SceneTrackId): exposure (EV) and depth of field focus distance (cm) at this key. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float Exposure = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float FocalDistance = 300.f;
+};
+
+/** One of the scene's ten view bookmarks (Ctrl+digit stores the view, the digit returns to it). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneBookmark
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "View")
+	bool bSet = false;
+
+	/** Orbit view: focus (cm), yaw, pitch (degrees), distance (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "View")
+	FVector Focus = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "View")
+	float Yaw = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "View")
+	float Pitch = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "View")
+	float Distance = 380.f;
+
+	/** The scene camera in use (-1: the free view). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "View")
+	int32 Camera = -1;
 };
 
 /** Timeline keys of one object, in time order. */
@@ -740,8 +795,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
 	float Duration = 10.f;
 
-	/** Keys the object's current transform and value at Time (replacing a key within 1/60 s). */
+	/** Track id of the scene's own track (post-processing values). */
+	static constexpr int32 SceneTrackId = -2;
+
+	/** View bookmarks 0..9. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	TArray<FOKSceneBookmark> Bookmarks;
+
+	/** Keys the object's current transform and value at Time (replacing a key within 1/60 s). Id SceneTrackId keys the
+	 *  scene's exposure and focus distance. */
 	void SetKey(int32 Id, float Time);
+	/** Moves a key to another time (merging with a key already there); returns its new index. */
+	int32 MoveKey(int32 Id, int32 Index, float NewTime);
 	/** Removes the object's key within 1/60 s of Time. */
 	bool RemoveKey(int32 Id, float Time);
 	/** The key of the object at the time (within the key tolerance), or null. */
@@ -810,7 +875,15 @@ public:
 
 	FString ToJson() const;
 	bool FromJson(const FString& Json, FString& OutError);
+	/** Objects (with everything under them, and their tracks) as a clipboard fragment. */
+	FString ExportFragment(const TArray<int32>& Ids) const;
+	/** Adds a fragment's objects under Parent (-1: root) with new ids; returns the new ids of its top objects. */
+	TArray<int32> PasteFragment(const FString& Json, int32 Parent, FString& OutError);
+	/** Adds another scene's objects and tracks with new ids, keeping this scene's camera, map and look (Studio's 追加). */
+	TArray<int32> Merge(const FString& SceneJson, FString& OutError);
+	/** Writes the file whole or not at all: a temporary file beside it replaces it once written. */
 	bool SaveToFile(const FString& Path, FString& OutError) const;
+	static bool ReplaceFile(const FString& Temp, const FString& Path, FString& OutError);
 	bool LoadFromFile(const FString& Path, FString& OutError);
 
 	void NotifyChanged() { OnChanged.Broadcast(); }

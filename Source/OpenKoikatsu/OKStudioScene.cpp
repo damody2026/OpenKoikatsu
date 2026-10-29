@@ -1589,6 +1589,12 @@ void UOKCharacterController::OnEnterOkStudio()
 	UE_LOG(LogTemp, Display, TEXT("OK studio (scene tree) open card=%s"), *Card);
 }
 
+void UOKCharacterController::OnEnterOkStudioTimeline()
+{
+	OnEnterOkStudio();
+	if (UOKStudioGame* Game = bOkStudioOpen ? UOKStudioGame::Get() : nullptr) Game->RunUiCommand(TEXT("window.open"), TEXT("timeline"));
+}
+
 void UOKCharacterController::OnOkStudioStopped()
 {
 	if (!bOkStudioOpen) return;

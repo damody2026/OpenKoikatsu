@@ -445,6 +445,7 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
 	if (C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
 	if (C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
+	if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
 	// Hand shapes: a pattern overrides the animated fingers of that hand (-1 gives them back).
 	const int32 Hands[2] = { C.HandLeft, C.HandRight };
 	const int32 Count = Actor->GetHandShapeCount();
@@ -548,7 +549,12 @@ void AOKSceneActor::Sync()
 			Item = &Shown.Add(Object.Id, Fresh);
 			if (Object.Kind == EOKSceneObjectKind::Character) { ApplyCharacterState(Object, *Item); SetAnimationTime(Object.Id, 0.f); }
 		}
-		else if (Object.Kind == EOKSceneObjectKind::Character) ApplyCharacterState(Object, *Item);
+		else if (Object.Kind == EOKSceneObjectKind::Character)
+		{
+			ApplyCharacterState(Object, *Item);
+			// A stopped animation (speed 0) shows the frame at its time: the UI and timeline keys scrub it.
+			if (Object.Character.Speed == 0.f && Item->Time != Object.Character.Time) SetAnimationTime(Object.Id, 0.f);
+		}
 		if (Object.Kind == EOKSceneObjectKind::Camera)
 		{
 			if (UCameraComponent* Camera = Cast<UCameraComponent>(Item->Component.Get())) Camera->SetFieldOfView(Object.Camera.Fov);

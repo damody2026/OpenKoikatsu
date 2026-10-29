@@ -387,8 +387,8 @@ TSharedRef<SWidget> UOKGalleryWidget::RebuildWidget()
 	UButton* TimelineButton=WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(),TEXT("EditorStudioTimeline"));
 	UTextBlock* TimelineLabel=WidgetTree->ConstructWidget<UTextBlock>();
 	TimelineLabel->SetText(FText::FromString(TEXT("動作時間軸")));TimelineButton->SetContent(TimelineLabel);StylePoseButton(TimelineButton);
-	TimelineButton->SetToolTipText(FText::FromString(TEXT("以操作軸移動／旋轉／縮放角色，在時間軸上打關鍵幀，並可匯入影片產生動作。")));
-	TimelineButton->OnClicked.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnEnterStudio);ShapeCol->AddChild(TimelineButton);
+	TimelineButton->SetToolTipText(FText::FromString(TEXT("在 OK Studio 開啟目前的角色並打開時間軸：移動／旋轉／縮放、打關鍵幀、輸出影片。影片產生的動作在下方的影片動作區匯入。")));
+	TimelineButton->OnClicked.AddDynamic(static_cast<UOKCharacterController*>(this),&UOKCharacterController::OnEnterOkStudioTimeline);ShapeCol->AddChild(TimelineButton);
 	UButton* ModelApngSave=WidgetTree->ConstructWidget<UButton>();
 	UTextBlock* ModelApngLabel=WidgetTree->ConstructWidget<UTextBlock>();
 	ModelApngLabel->SetText(FText::FromString(TEXT("另存新檔")));
