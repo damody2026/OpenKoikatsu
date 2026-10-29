@@ -423,11 +423,32 @@ fn catalog(root: &Path) -> std::rc::Rc<Catalog> {
                 return catalog.clone();
             }
         }
-        let cache = root.join(".ok_serialized_index_v1.bin");
-        let previous: Catalog = crate::gamefs::read(&cache)
-            .ok()
-            .and_then(|b| bincode::deserialize(&b).ok())
-            .unwrap_or_default();
+        let catalog = std::rc::Rc::new(build_catalog(root));
+        *memory.borrow_mut() = Some((root.to_owned(), catalog.clone()));
+        catalog
+    })
+}
+
+/// The serialized files every source of `root` holds. Listing the tree and reading each bundle's headers is a scan of
+/// the whole tree (okstrict::scanning): while converting, none of it is the card's own data. Run on the opening
+/// thread instead, a conversion whose accessory names an external file counted all 8,427 headers as reads its OK card
+/// lacks (C032, when the index file was being rewritten by another worker). Sources unchanged since this process's
+/// previous index are not read again; a game root also keeps an index file, a library root none (no disk caches
+/// unless OK_LIBRARY_CACHE, oklib::library_scan_load).
+fn build_catalog(root: &Path) -> Catalog {
+    use std::sync::{Arc, Mutex};
+    static LAST: Mutex<Option<(PathBuf, Arc<Catalog>)>> = Mutex::new(None);
+    let library = crate::gamefs::serves_from_library(root);
+    let cache = root.join(".ok_serialized_index_v1.bin");
+    let last = LAST.lock().unwrap_or_else(|e| e.into_inner()).clone().filter(|(r, _)| r == root).map(|(_, c)| c);
+    let root_owned = root.to_owned();
+    let catalog = crate::okstrict::scanning(move || {
+        let root = root_owned.as_path();
+        let previous: Catalog = match last {
+            Some(last) => (*last).clone(),
+            None if library => crate::oklib::library_scan_load("serialized-index-v1").unwrap_or_default(),
+            None => crate::gamefs::read(&cache).ok().and_then(|b| bincode::deserialize(&b).ok()).unwrap_or_default(),
+        };
         let mut previous: HashMap<_, _> = previous
             .sources
             .into_iter()
@@ -469,13 +490,19 @@ fn catalog(root: &Path) -> std::rc::Rc<Catalog> {
             "ok-extract: serialized reference index sources={} refreshed={refreshed}",
             catalog.sources.len()
         );
-        if let Ok(bytes) = bincode::serialize(&catalog) {
-            let _ = std::fs::write(cache, bytes);
+        if refreshed > 0 {
+            if library {
+                crate::oklib::library_scan_save("serialized-index-v1", &catalog);
+            } else if let Ok(bytes) = bincode::serialize(&catalog) {
+                // Whole or not at all: other processes read it meanwhile.
+                let tmp = cache.with_extension(format!("{}.tmp", std::process::id()));
+                if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, &cache).is_err() { let _ = std::fs::remove_file(&tmp); }
+            }
         }
-        let catalog = std::rc::Rc::new(catalog);
-        *memory.borrow_mut() = Some((root.to_owned(), catalog.clone()));
         catalog
-    })
+    });
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((root.to_owned(), Arc::new(catalog.clone())));
+    catalog
 }
 fn load_external(root: &Path, key: &str, origin: Option<&Path>) -> Result<Vec<u8>, String> {
     let (assets, bytes) = read_external_source(root, key, origin)?;
