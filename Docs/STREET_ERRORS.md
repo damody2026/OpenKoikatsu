@@ -1097,3 +1097,11 @@
 - 修正：`MenuText` 在路上改給出遊目的地那家店的菜單，前面加 `ui.mind.menu_ahead`（還沒到、到了才點得到、用這裡的 id）；`ApplyChoiceReply` 的 `ShopAhead` 多認「人不在店裡、品項屬於這次出遊要去的店」，訂單帶到店裡。
 - 同一輪：`ok-game-mcp` 的 `game_wait` `until` 用字串比較，20:56 等 09:20 立刻結束；改成目標時間早於現在時先等時鐘跨過午夜（bd3b1d85c）。另外我在她 09:39 開對話後又呼叫 `game_wait`，讓她被晾了二十分鐘後離開，是我的操作錯誤：`game_wait` 在對話已開著時不會停，她來了要先 `game_talk`。
 - 驗證（Gal1030F）：從飲料店約惠惠去咖啡廳，路上請她幫兩人點；她的提示詞有「還沒到，這是你們正要去的咖啡廳的菜單……」，回覆沒有 action，訂單 `cf_matcha_latte`、`cf_cocoa` 都記「carried until they reach cafe」；到店結帳 NT$238，上桌「她的「熱可可」、你的「抹茶拿鐵」」。
+
+## 2026-10-30 赴約時他打電話問她到哪了，她走到身邊後電話還通著，被說「你們不在一起」（E 組 galgame）
+
+- 現象：和惠惠約兩點在書局見，13:35 他打電話問「妳到哪了」，她邊講邊走到他身邊（170 cm）後停住；之後他說「看到妳了，掛了吧」，她回「好，掛了，這就過去」，聲音仍是電話音，提示「她答應了；你們不在一起，約好時間地點再見面吧」。
+- 原因：bcfd87dfe 讓她走到身邊、他在講電話時原地等，但沒有分辨電話那頭就是她本人；等到他手動掛斷才算到達。
+- 修正：`OKStreetSocialInvite.inl` 的 `StepApproach`，走到他身邊時他正和她本人通話（`RemoteMode==2&&RemotePeer==I`）就 `PhoneHangUp`，接著照一般到達流程當面交談、她先開口。
+- 驗證（Gal1030G，欄位 21 起）：約兩點書局，13:37 打給她，聊了兩句她走到身邊，log 記「reached him while he was on the phone with her; the call ends」「call with actor 9 ended after 30 s」「arrived beside him」，她當面說「到了！沒讓你久等吧？進去挑書吧。」
+- 我的操作錯誤：對話開著時又呼叫 `game_wait`（她在書局說「他又發呆」）；讀檔後角色還沒載入完就按 E 和 Escape，把剛開的對話關掉。對話開著時只用 `game_talk`，讀檔後等 `busy=false` 再說話。

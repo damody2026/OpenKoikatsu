@@ -182,6 +182,10 @@ void AOKStreetSocialScene::StepApproach(){
  // 90 s and gave up.
  // On the phone or in the one-on-one scene: she waits until he hangs up or comes back (arriving opened her talk and the
  // talk closed the scene half a second after he entered it).
+ // The call is with her ("I'm at the bookstore, where are you?"): she is here, so it ends and they talk face to face. It
+ // went on as a call beside him; she said "coming now" and he was told they were apart.
+ if(S.RemoteMode==2&&S.RemotePeer==I&&(FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))){
+  UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d reached him while he was on the phone with her; the call ends"),I);PhoneHangUp();}
  if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))&&S.RemoteMode==0&&S.PrivateGirl==INDEX_NONE){
   const bool Join=S.ApproachJoin,ForSong=S.ApproachSong,ForPrivate=S.ApproachPrivate;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, private=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,ForPrivate?1:0,With);
