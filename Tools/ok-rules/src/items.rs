@@ -5,6 +5,7 @@
 //!
 //! Who gives or lends what is the AI's reading of the talk (judge fields she_gives, she_lends, she_returns, he_lends,
 //! he_returns, each naming the thing as it was said); here it is only matched to the things they really hold.
+use crate::activities::ActivitiesTuning;
 use crate::catalog::Catalog;
 use serde_json::{json, Value};
 
@@ -104,15 +105,16 @@ fn give_to_her(st: &mut Value, girl: &str, item: &str, name: &str, from: &str, t
     owned_mut(st, girl).push(e);
 }
 
-/// Paid for and had there: a room, a bath, a stay, a service, a play at the machine (tagged on_the_spot).
-fn on_the_spot(item: &crate::catalog::Item) -> bool {
-    matches!(item.category.as_str(), "stay" | "leisure" | "spa" | "bath" | "service") || item.tags.iter().any(|t| t == "on_the_spot")
+/// What he takes away from a till: goods and gifts, and what an activity needs later (fish food for feeding the fish).
+/// Everything else not eaten is had there and then: a room, a bath, a service, a play on the claw machine.
+fn carried(item: &crate::catalog::Item, acts: &ActivitiesTuning) -> bool {
+    matches!(item.category.as_str(), "goods" | "gift") || acts.activity.iter().any(|a| a.needs.iter().any(|n| *n == item.id))
 }
 
 /// A checkout's things: hers when she picked them for herself (her_own), his to carry otherwise; one bought for her
 /// that can be given is given to her next (the gift rules). Request: ext, girl, day, lines [{item, for_her, her_own}].
 /// Answer: ext, his_add [ids], give_her (id or "").
-fn checkout(c: &Catalog, r: &Value) -> Value {
+fn checkout(c: &Catalog, acts: &ActivitiesTuning, r: &Value) -> Value {
     let mut st = state(r);
     let girl = s(r, "girl");
     let mut his_add = Vec::new();
@@ -120,9 +122,9 @@ fn checkout(c: &Catalog, r: &Value) -> Value {
     for l in r.get("lines").and_then(Value::as_array).into_iter().flatten() {
         let id = s(l, "item");
         let Some(item) = c.items.iter().find(|i| i.id == id) else { continue };
-        // Eaten, or used up there and then: a room, a bath, a play on the claw machine is not carried away (one try at the
-        // convenience store's claw machine sat in his bag as "claw machine (one try)", R6-2).
-        if item.consumable || on_the_spot(item) {
+        // Eaten, or had there and then: not carried away (one try at the convenience store's claw machine sat in his
+        // bag as "claw machine (one try)", R6-2).
+        if item.consumable || !carried(item, acts) {
             continue;
         }
         if l.get("her_own").and_then(Value::as_bool).unwrap_or(false) && !girl.is_empty() {
@@ -341,9 +343,9 @@ fn view(c: &Catalog, r: &Value) -> Value {
     json!({"mine": mine, "borrowed": borrowed})
 }
 
-pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>> {
+pub fn eval(c: &Catalog, acts: &ActivitiesTuning, kind: &str, r: &Value) -> Option<Result<Value, String>> {
     Some(Ok(match kind {
-        "items_checkout" => checkout(c, r),
+        "items_checkout" => checkout(c, acts, r),
         "items_received" => received(r),
         "items_judge" => judge(c, r),
         "items_facts" => facts(c, r),
@@ -372,7 +374,7 @@ mod tests {
     #[test]
     fn checkout_keeps_what_she_picked_as_hers() {
         let c = cat();
-        let v = checkout(&c, &json!({"girl": "r", "day": 3, "lines": [
+        let v = checkout(&c, &Tuning::builtin().activities, &json!({"girl": "r", "day": 3, "lines": [
             {"item": "bk_novel_sword", "for_her": true, "her_own": true},
             {"item": "bk_postcard", "for_her": true, "her_own": false},
             {"item": "bk_notebook", "for_her": false},
@@ -384,9 +386,17 @@ mod tests {
     }
 
     #[test]
-    fn checkout_does_not_carry_a_claw_machine_play() {
+    fn checkout_carries_only_what_is_taken_away() {
         let c = cat();
-        let v = checkout(&c, &json!({"girl": "h", "day": 1, "lines": [{"item": "cv_claw"}, {"item": "park_fishfood"}]}));
+        let acts = Tuning::builtin().activities;
+        // Every non-food item: goods and gifts are carried, so is what an activity needs; the rest is had there.
+        for i in c.items.iter().filter(|i| !i.consumable) {
+            let v = checkout(&c, &acts, &json!({"girl": "h", "day": 1, "lines": [{"item": i.id}]}));
+            let kept = !v["his_add"].as_array().unwrap().is_empty();
+            let needed = acts.activity.iter().any(|a| a.needs.contains(&i.id));
+            assert_eq!(kept, matches!(i.category.as_str(), "goods" | "gift") || needed, "{} ({})", i.id, i.category);
+        }
+        let v = checkout(&c, &acts, &json!({"girl": "h", "day": 1, "lines": [{"item": "cv_claw"}, {"item": "park_fishfood"}]}));
         assert_eq!(v["his_add"], json!(["park_fishfood"]), "{v}");
     }
 

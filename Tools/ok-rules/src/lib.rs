@@ -186,7 +186,7 @@ impl Rules {
                     .or_else(|| contacts::eval(&kind, &request))
                     .or_else(|| events::eval(&kind, &request))
                     .or_else(|| reading::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
-                    .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
+                    .or_else(|| items::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &tuning.activities, &kind, &request))
                     .or_else(|| catalog::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| promise::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
                     .or_else(|| shop::eval(tuning.catalog_in(locale::region(&request), locale::lang(&request)), &kind, &request))
