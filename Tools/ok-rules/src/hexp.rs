@@ -127,6 +127,8 @@ fn experience(r: &Value) -> Result<Value, String> {
         "anal_chance": anal_chance,
         "service_rounds": service_rounds,
         "climax_limit": climax_limit,
+        // She resents him (resentment 50 or more): no anal whatever her experience (the scene asks nothing more of her).
+        "resentful": resentment >= 50.0,
         "kiss_ok": kiss_ok,
         "chastity": chaste,
         "used": level >= 2,
@@ -325,6 +327,12 @@ mod tests {
         assert!(a["service_rounds"].as_i64().unwrap() >= 1);
         assert!(b["climax_limit"].as_i64().unwrap() > a["climax_limit"].as_i64().unwrap());
         assert!(a["climax_limit"].as_i64().unwrap() >= 2);
+        let mut sore = loose.clone();
+        sore.resentment = 60.0;
+        let c = experience(&json!({"girl": "g", "relation": sore, "ext": ext})).unwrap();
+        assert_eq!(c["resentful"], true);
+        assert_eq!(c["climax_limit"], 1);
+        assert_eq!(b["resentful"], false);
     }
 
     #[test]

@@ -340,7 +340,9 @@ void UOKHScenePanel::Click(int32 Kind){
         bAnalPlay=false;Chain({TEXT("Insert"),TEXT("InsertIdle")});Note(OKT(bCondom?TEXT("ui.hscene.event_insert"):TEXT("ui.hscene.event_insert_raw")),false);break;
     case InsertAnal:{
         // Asked once a scene: her anal experience is the chance she agrees (isAnalInsertOK), more for a lover or a lewd girl.
-        if(!bAnalAsked){bAnalAsked=true;float Chance=X.IsValid()?float(X->GetNumberField(TEXT("anal_chance"))):0.f;if(Level()>=3)Chance=1.f;if(Gallery->HHeroineStage==TEXT("lover"))Chance+=.3f;bAnalRefused=FMath::FRand()>=FMath::Max(Chance,.1f);}
+        if(!bAnalAsked){bAnalAsked=true;float Chance=X.IsValid()?float(X->GetNumberField(TEXT("anal_chance"))):0.f;if(Level()>=3)Chance=1.f;if(Gallery->HHeroineStage==TEXT("lover"))Chance+=.3f;
+            const bool Resentful=X.IsValid()&&X->HasField(TEXT("resentful"))&&X->GetBoolField(TEXT("resentful")); // she resents him: no
+            bAnalRefused=Resentful||FMath::FRand()>=FMath::Max(Chance,.1f);}
         if(bAnalRefused){Note(OKT(TEXT("ui.hscene.anal_refused")));break;}
         bAnalPlay=true;Chain({TEXT("A_Insert"),TEXT("A_InsertIdle")});Note(OKT(TEXT("ui.hscene.event_insert_anal")),false);break;}
     case Pull:
