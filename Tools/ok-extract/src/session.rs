@@ -815,7 +815,9 @@ impl SessionPart {
         let is_hair_front = hair_shader_name.contains("main_hair_front") || hair_shader_name=="koikano/hair_main_sun_front";
         // Studio items (Shader Forge/main_item_studio and _alpha) mix their three colours, and the Studio patterns,
         // through the ColorMask like the game. The light effects (_add) have no ColorMask: texture times colour, added.
-        let is_studio_item = hair_shader_name.contains("main_item_studio") && !hair_shader_name.contains("_add");
+        // A Studio item part, also after Material Editor gave it another shader (okmodel_view: _OKStudioItemColors).
+        let is_studio_item = hair_shader_name.contains("main_item_studio") && !hair_shader_name.contains("_add")
+            || mesh.mat.as_ref().and_then(|m| m.float("_OKStudioItemColors")).is_some_and(|v| v > 0.5);
         Self {
             source_property: None,
             draw_layer: 0,
