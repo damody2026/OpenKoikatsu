@@ -314,6 +314,7 @@ int32 AKKPreviewActor::ApplyMaterialOverrides(TArray<FString>* OutUnapplied){
  if(OutUnapplied)OutUnapplied->Reset();
  if(MaterialOverrides.IsEmpty())return 0;
  TArray<bool> Applied;Applied.SetNumZeroed(MaterialOverrides.Num());int32 Writes=0;
+ TArray<FString> Lacking;Lacking.SetNum(MaterialOverrides.Num()); // a matching part's material without the parameter (log)
  TMap<int32,TPair<FString,FString>> Identity; // session part -> material name, source_property
  TInlineComponentArray<UMeshComponent*> Components;GetComponents(Components);
  for(auto* Component:Components){
@@ -335,7 +336,7 @@ int32 AKKPreviewActor::ApplyMaterialOverrides(TArray<FString>* OutUnapplied){
     // The generic part graph (no native Forge program) names its main texture KKAppearanceMain, not _MainTex.
     static const FName MainTex(TEXT("_MainTex")),AppearanceMain(TEXT("KKAppearanceMain"));
     if(Override.Parameter==MainTex&&!HasParameter(Material,Override))Override.Parameter=AppearanceMain;
-    if(!HasParameter(Material,Override))continue;
+    if(!HasParameter(Material,Override)){if(Lacking[O].IsEmpty())Lacking[O]=Material->GetBaseMaterial()?Material->GetBaseMaterial()->GetName():Material->GetName();continue;}
     // Shared (deduplicated) materials are never edited: each part slot writes its own MID.
     if(!Dynamic){
      Dynamic=Cast<UMaterialInstanceDynamic>(Material);
@@ -372,7 +373,7 @@ int32 AKKPreviewActor::ApplyMaterialOverrides(TArray<FString>* OutUnapplied){
    }
   }
  }
- TArray<FString> Missing;for(int32 O=0;O<MaterialOverrides.Num();++O)if(!Applied[O])Missing.Add(Describe(MaterialOverrides[O]));
+ TArray<FString> Missing;for(int32 O=0;O<MaterialOverrides.Num();++O)if(!Applied[O])Missing.Add(Describe(MaterialOverrides[O])+(Lacking[O].IsEmpty()?FString(TEXT(" (no matching part)")):TEXT(" (parameter not in ")+Lacking[O]+TEXT(")")));
  UE_LOG(LogTemp,Display,TEXT("OK material overrides=%d writes=%d unapplied=%d%s%s"),MaterialOverrides.Num(),Writes,Missing.Num(),Missing.Num()?TEXT(" first="):TEXT(""),Missing.Num()?*Missing[0]:TEXT(""));
  if(OutUnapplied)*OutUnapplied=MoveTemp(Missing);
  return Writes;

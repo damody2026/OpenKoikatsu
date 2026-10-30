@@ -803,6 +803,44 @@ return nullptr; // Editor graph creation is not a runtime rendering path.
 #endif
 }
 
+// MakeUnityMaskUV with the _ST as a vector parameter (default: the material's own value), so a later override of
+// that parameter (Material Editor's texture scale / offset) reaches the sampler.
+static UMaterialExpression* MakeUnityMaskUVParameter(UMaterial* Mat, FName Name, const FLinearColor& ST)
+{
+#if WITH_EDITOR
+	auto Add = [Mat](auto* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
+	auto* Param = Add(NewObject<UMaterialExpressionVectorParameter>(Mat));
+	Param->ParameterName = Name;
+	Param->DefaultValue = ST;
+	auto Mask = [&](bool R, bool G, bool B, bool A)
+	{
+		auto* M = Add(NewObject<UMaterialExpressionComponentMask>(Mat));
+		M->Input.Expression = Param; M->Input.OutputIndex = 5; // RGBA
+		M->R = R; M->G = G; M->B = B; M->A = A;
+		return M;
+	};
+	auto* Scaled = Add(NewObject<UMaterialExpressionMultiply>(Mat));
+	Scaled->A.Expression = Add(NewObject<UMaterialExpressionTextureCoordinate>(Mat));
+	Scaled->B.Expression = Mask(true, true, false, false);
+	// V' = sV·V + 1 − sV − oV (see MakeUnityMaskUV).
+	auto* ScaleOffsetV = Add(NewObject<UMaterialExpressionAdd>(Mat));
+	ScaleOffsetV->A.Expression = Mask(false, true, false, false);
+	ScaleOffsetV->B.Expression = Mask(false, false, false, true);
+	auto* OffsetV = Add(NewObject<UMaterialExpressionSubtract>(Mat));
+	OffsetV->ConstA = 1.f;
+	OffsetV->B.Expression = ScaleOffsetV;
+	auto* Offset = Add(NewObject<UMaterialExpressionAppendVector>(Mat));
+	Offset->A.Expression = Mask(false, false, true, false);
+	Offset->B.Expression = OffsetV;
+	auto* MappedUV = Add(NewObject<UMaterialExpressionAdd>(Mat));
+	MappedUV->A.Expression = Scaled;
+	MappedUV->B.Expression = Offset;
+	return MappedUV;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
 // The gag eye's moving texture coordinate, the pixel program of Koikano/sub_texture_animation (KKS chara/mm_base,
 // cf_m_gageye_*): the coordinate pulses in size around the centre (sin(_SizeSpeed·t·10), _SizeWidth), turns
 // (_AngleSpeed turns per second) and picks the sprite sheet frame (_TileAnimation columns × rows, frame
@@ -1075,7 +1113,8 @@ static UMaterialInterface* MakePartMaterial(UTexture2D* Tex, const FString& Blen
 	Samp->Texture = Tex;
 	// The Unity fragment samples t0 with _MainTex_ST (main_clothes_opaque
 	// 0024.asm.txt:100-101), including card driven offsets on eye materials.
-	Samp->Coordinates.Expression = MakeUnityMaskUV(Mat, Shadow ? Shadow->MainTexST : FLinearColor(1.f, 1.f, 0.f, 0.f));
+	// A parameter, so Material Editor's _MainTex scale / offset (an override of _MainTex_ST) applies.
+	Samp->Coordinates.Expression = MakeUnityMaskUVParameter(Mat, TEXT("_MainTex_ST"), Shadow ? Shadow->MainTexST : FLinearColor(1.f, 1.f, 0.f, 0.f));
 	if (Shadow && Shadow->EyeDrawKind) Samp->Coordinates.Expression=MakeRuntimeEyeUV(Mat,0,Shadow->MainTexST);
 	if (Shadow && Shadow->bGagAnimation) Samp->Coordinates.Expression=MakeGagEyeUV(Mat,Samp->Coordinates.Expression,Shadow->GagTileAnimation,Shadow->GagMotion);
 
@@ -2644,7 +2683,7 @@ return Base.rgb * sh;
 				Metal = NewObject<UMaterialExpressionTextureSample>(Mat);
 				Metal->Texture = Shadow->LightmapMetallicTex;
 				Metal->SamplerType = SAMPLERTYPE_LinearColor;
-				Metal->Coordinates.Expression = MakeUnityMaskUV(Mat, Shadow->MainTexST);
+				Metal->Coordinates.Expression = MakeUnityMaskUVParameter(Mat, TEXT("_MainTex_ST"), Shadow->MainTexST);
 				Input(TEXT("Metal"), Metal, 5);
 			}
 			const FString Metallic = bMetalMap ? FString(TEXT("Metal.r")) : FString::SanitizeFloat(Shadow->StandardMetallic);
@@ -2978,7 +3017,7 @@ static UMaterialInterface* MakeOutlineMaterial(UTexture2D* Tex, const FLinearCol
 				MainAlpha->Material = Mat;
 				MainAlpha->SamplerType = SAMPLERTYPE_Color;
 				MainAlpha->Texture = Tex;
-				MainAlpha->Coordinates.Expression = MakeUnityMaskUV(Mat, Shadow ? Shadow->MainTexST : FLinearColor(1.f, 1.f, 0.f, 0.f));
+				MainAlpha->Coordinates.Expression = MakeUnityMaskUVParameter(Mat, TEXT("_MainTex_ST"), Shadow ? Shadow->MainTexST : FLinearColor(1.f, 1.f, 0.f, 0.f));
 				Mat->GetExpressionCollection().AddExpression(MainAlpha);
 				Alpha = MainAlpha;
 				AlphaOutput = 4;
@@ -3037,7 +3076,7 @@ static UMaterialInterface* MakeOutlineMaterial(UTexture2D* Tex, const FLinearCol
 			S->Material = Mat;
 			S->SamplerType = SAMPLERTYPE_Color;
 			S->Texture = Tex;
-			S->Coordinates.Expression = MakeUnityMaskUV(Mat, Shadow ? Shadow->MainTexST : FLinearColor(1.f, 1.f, 0.f, 0.f));
+			S->Coordinates.Expression = MakeUnityMaskUVParameter(Mat, TEXT("_MainTex_ST"), Shadow ? Shadow->MainTexST : FLinearColor(1.f, 1.f, 0.f, 0.f));
 			Mat->GetExpressionCollection().AddExpression(S);
 			if (bSkinShader)
 			{
@@ -4212,7 +4251,7 @@ static UMaterialInstanceDynamic* OKModulateInstance(FOkSession& Source, int32 In
 		Main->ParameterName = TEXT("Main"); Main->Texture = OKExposureWhiteTexture(); Main->SamplerType = SAMPLERTYPE_Color;
 		Input(TEXT("Main"), Main);
 		auto* ST = NewObject<UMaterialExpressionVectorParameter>(Mat);
-		ST->ParameterName = TEXT("MainST"); ST->DefaultValue = FLinearColor(1.f, 1.f, 0.f, 0.f);
+		ST->ParameterName = TEXT("_MainTex_ST"); // the Unity name, so Material Editor's scale / offset override reaches it ST->DefaultValue = FLinearColor(1.f, 1.f, 0.f, 0.f);
 		Input(TEXT("MainST"), ST, 5);
 		auto* UV = NewObject<UMaterialExpressionTextureCoordinate>(Mat); UV->CoordinateIndex = 0; Input(TEXT("UV"), UV);
 		// Unity v is up: UE's v is 1 - v, so the _ST applies in Unity's frame.
@@ -4229,7 +4268,7 @@ static UMaterialInstanceDynamic* OKModulateInstance(FOkSession& Source, int32 In
 	FLinearColor ST(1.f, 1.f, 0.f, 0.f);
 	Source.MaterialValue(Index, "_MainTex_ST", ST);
 	Dynamic->SetTextureParameterValue(TEXT("Main"), MainTex);
-	Dynamic->SetVectorParameterValue(TEXT("MainST"), ST);
+	Dynamic->SetVectorParameterValue(TEXT("_MainTex_ST"), ST);
 	return Dynamic;
 #else
 	return nullptr; // Editor graph creation is not a runtime rendering path.
