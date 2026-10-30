@@ -300,7 +300,7 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
  auto* Mode=AOKInteractionMode::EnterCards(GetWorld()->GetFirstPlayerController(),S.HighCards[Character],S.HighCards[0],S.HighOutfits.IsValidIndex(Character)?S.HighOutfits[Character]:0);
  if(!Mode){OKStreetPrivateEnvRestore();S.ContactsNotice=OKT(TEXT("ui.contacts.interaction_load_failed"));RefreshUI();return;}
  // Her experience (hexp.rs) gates the poses, raw insertion and anal in the H panel.
- {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Ask=OKRulesHeroineRequest(S,TEXT("h_experience"),Id);Ask->SetStringField(TEXT("girl"),Id);OKRulesPutExt(S,Ask);
+ {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Ask=OKRulesHeroineRequest(S,TEXT("h_experience"),Id);Ask->SetStringField(TEXT("girl"),Id);Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay);OKRulesPutExt(S,Ask);
   Mode->BeginHScene(S.Manifest.Characters[Character].Name,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget).Stage,OKRulesEval(S,Ask),S.Manifest.Characters[0].Name);}
  S.PrivateShownLine=S.FreeTalkCaptionHer; // what was on screen before is not shown in the scene
  // The street clock runs about 24 times real time: an hour in the room would be a whole night gone (she said the sun was
@@ -350,7 +350,7 @@ void AOKStreetSocialScene::FinishPrivate(){
   const TSharedPtr<FJsonObject>* H=nullptr;
   if(S.HighPrivateResult->TryGetObjectField(TEXT("h"),H)&&(*H)->HasField(TEXT("counts"))){
    const FString Id=OKStreetStableId(S.Manifest.Characters[Girl]);auto Request=OKRulesHeroineRequest(S,TEXT("h_session_end"),Id);
-   Request->SetStringField(TEXT("girl"),Id);Request->SetStringField(TEXT("place"),PlaceHere(S.Male));Request->SetObjectField(TEXT("counts"),(*H)->GetObjectField(TEXT("counts")));{const TArray<TSharedPtr<FJsonValue>>* Poses=nullptr;if((*H)->TryGetArrayField(TEXT("poses"),Poses))Request->SetArrayField(TEXT("poses"),*Poses);}OKRulesPutExt(S,Request);
+   Request->SetStringField(TEXT("girl"),Id);Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);Request->SetStringField(TEXT("place"),PlaceHere(S.Male));Request->SetObjectField(TEXT("counts"),(*H)->GetObjectField(TEXT("counts")));{const TArray<TSharedPtr<FJsonValue>>* Poses=nullptr;if((*H)->TryGetArrayField(TEXT("poses"),Poses))Request->SetArrayField(TEXT("poses"),*Poses);}OKRulesPutExt(S,Request);
    if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Answer);ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
     UE_LOG(LogTemp,Display,TEXT("Street private: experience %d -> %d (%s)"),int32(Answer->GetNumberField(TEXT("level_before"))),int32(Answer->GetNumberField(TEXT("level_after"))),*Answer->GetStringField(TEXT("level_name")));}
   }

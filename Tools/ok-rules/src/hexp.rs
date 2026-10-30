@@ -32,11 +32,17 @@ pub struct HExp {
     pub raw_count: i32,
     pub virgin: bool,
     pub anal_virgin: bool,
+    /// The game day the today_* fields are for (-1 none): what she has had today carries from one scene to the next, so
+    /// leaving the room and coming back does not undo "that is enough for today".
+    pub today_day: i64,
+    pub today_orgasms: i32,
+    pub today_service: i32,
+    pub today_anal_refused: bool,
 }
 
 impl Default for HExp {
     fn default() -> Self {
-        HExp { count: 0, kissed: false, areas: [0.0; 6], crotch_h: 0.0, anal_h: 0.0, service: 0.0, service_count: 0, raw_count: 0, virgin: true, anal_virgin: true }
+        HExp { count: 0, kissed: false, areas: [0.0; 6], crotch_h: 0.0, anal_h: 0.0, service: 0.0, service_count: 0, raw_count: 0, virgin: true, anal_virgin: true, today_day: -1, today_orgasms: 0, today_service: 0, today_anal_refused: false }
     }
 }
 
@@ -120,6 +126,10 @@ fn experience(r: &Value) -> Result<Value, String> {
     // How many times she comes in one scene before she has had enough and wants it to stop (no more touching, moving,
     // entering her): the same things move it, a lover lasts longer.
     let climax_limit = if resentment >= 50.0 { 1 } else { (2 + level + (1.5 * easy).round() as i32 + 2 * i32::from(lover)).clamp(2, 10) };
+    // Today so far (the request's game day): she starts this scene where the last one today left her.
+    let day = r.get("day").and_then(Value::as_i64).unwrap_or(-1);
+    let today = day >= 0 && h.today_day == day;
+    let (today_orgasms, today_service, anal_refused_today) = if today { (h.today_orgasms, h.today_service, h.today_anal_refused) } else { (0, 0, false) };
     let areas: serde_json::Map<String, Value> = AREA_KEYS.iter().enumerate().map(|(i, k)| (k.to_string(), json!(h.area(i)))).collect();
     Ok(json!({
         "level": level, "level_name": level_name(level), "areas": areas, "count": h.count, "virgin": h.virgin, "anal_virgin": h.anal_virgin,
@@ -129,6 +139,10 @@ fn experience(r: &Value) -> Result<Value, String> {
         "climax_limit": climax_limit,
         // She resents him (resentment 50 or more): no anal whatever her experience (the scene asks nothing more of her).
         "resentful": resentment >= 50.0,
+        "today_orgasms": today_orgasms,
+        "today_service": today_service,
+        "anal_refused_today": anal_refused_today,
+        "had_enough": today_orgasms >= climax_limit,
         "kiss_ok": kiss_ok,
         "chastity": chaste,
         "used": level >= 2,
@@ -153,6 +167,18 @@ fn session_end(r: &Value) -> Result<Value, String> {
     let was = h.clone();
     let level_before = h.level(rel.lewdness);
     let mut fx = Effects::default();
+    // Today's tally (whatever was played): a new game day starts it again.
+    if let Some(day) = r.get("day").and_then(Value::as_i64).filter(|d| *d >= 0) {
+        if h.today_day != day {
+            h.today_day = day;
+            h.today_orgasms = 0;
+            h.today_service = 0;
+            h.today_anal_refused = false;
+        }
+        h.today_orgasms += num(&c, "her_orgasms") as i32;
+        h.today_service += num(&c, "service_finishes") as i32;
+        h.today_anal_refused |= flag(&c, "anal_refused");
+    }
 
     // Only what they did leaves a mark: opening the room and leaving at once is no intimate time.
     let played = flag(&c, "played");
@@ -333,6 +359,22 @@ mod tests {
         assert_eq!(c["resentful"], true);
         assert_eq!(c["climax_limit"], 1);
         assert_eq!(b["resentful"], false);
+    }
+
+    #[test]
+    fn what_she_had_today_carries_to_the_next_scene_that_day() {
+        let r = rel(0.0);
+        let first = session_end(&json!({"girl": "g", "relation": r, "ext": {}, "day": 3, "counts": {"played": true, "her_orgasms": 3, "service_finishes": 1, "anal_refused": true}})).unwrap();
+        let e = experience(&json!({"girl": "g", "relation": r, "ext": first["ext"], "day": 3})).unwrap();
+        assert_eq!(e["today_orgasms"], 3);
+        assert_eq!(e["today_service"], 1);
+        assert_eq!(e["anal_refused_today"], true);
+        assert_eq!(e["had_enough"], e["climax_limit"].as_i64().unwrap() <= 3);
+        let again = session_end(&json!({"girl": "g", "relation": r, "ext": first["ext"], "day": 3, "counts": {"played": true, "her_orgasms": 2}})).unwrap();
+        assert_eq!(experience(&json!({"girl": "g", "relation": r, "ext": again["ext"], "day": 3})).unwrap()["today_orgasms"], 5);
+        let tomorrow = experience(&json!({"girl": "g", "relation": r, "ext": again["ext"], "day": 4})).unwrap();
+        assert_eq!(tomorrow["today_orgasms"], 0);
+        assert_eq!(tomorrow["anal_refused_today"], false);
     }
 
     #[test]

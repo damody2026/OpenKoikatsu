@@ -336,7 +336,7 @@ void UOKHScenePanel::Click(int32 Kind){
     case Vomit:Chain({TEXT("Vomit_IN"),TEXT("Vomit"),TEXT("Vomit_A")});Note(OKT(TEXT("ui.hscene.event_vomit")));break;
     case Again:
         // Once more only while she is willing: past her service_rounds for the scene she says no (and the panel stops offering it).
-        if(ServiceFinishes>=FMath::Max(1,X.IsValid()?int32(X->GetNumberField(TEXT("service_rounds"))):2)){bServiceRefused=true;Note(OKT(TEXT("ui.hscene.again_refused")));BuildList();break;}
+        if(ServiceFinishes+(X.IsValid()&&X->HasField(TEXT("today_service"))?int32(X->GetNumberField(TEXT("today_service"))):0)>=FMath::Max(1,X.IsValid()?int32(X->GetNumberField(TEXT("service_rounds"))):2)){bServiceRefused=true;Note(OKT(TEXT("ui.hscene.again_refused")));BuildList();break;}
         Want(TEXT("WLoop"));bStrong=false;break;
     case Condom:bCondom=!bCondom;Note(OKT(bCondom?TEXT("ui.hscene.condom_on"):TEXT("ui.hscene.condom_off")),false);break;
     case Insert:
@@ -347,6 +347,8 @@ void UOKHScenePanel::Click(int32 Kind){
         bAnalPlay=false;Chain({TEXT("Insert"),TEXT("InsertIdle")});Note(OKT(bCondom?TEXT("ui.hscene.event_insert"):TEXT("ui.hscene.event_insert_raw")),false);break;
     case InsertAnal:{
         // Asked once a scene: her anal experience is the chance she agrees (isAnalInsertOK), more for a lover or a lewd girl.
+        // Already said no today (another scene): still no, not asked again.
+        if(!bAnalAsked&&X.IsValid()&&X->HasField(TEXT("anal_refused_today"))&&X->GetBoolField(TEXT("anal_refused_today"))){bAnalAsked=true;bAnalRefused=true;}
         if(!bAnalAsked){bAnalAsked=true;float Chance=X.IsValid()?float(X->GetNumberField(TEXT("anal_chance"))):0.f;if(Level()>=3)Chance=1.f;if(Gallery->HHeroineStage==TEXT("lover"))Chance+=.3f;
             const bool Resentful=X.IsValid()&&X->HasField(TEXT("resentful"))&&X->GetBoolField(TEXT("resentful")); // she resents him: no
             bAnalRefused=Resentful||FMath::FRand()>=FMath::Max(Chance,.1f);}
@@ -364,7 +366,8 @@ void UOKHScenePanel::Click(int32 Kind){
 
 bool UOKHScenePanel::HadEnough() const{
     const auto& X=Gallery?Gallery->HExperience:nullptr;
-    return HerOrgasms>=FMath::Max(1,X.IsValid()&&X->HasField(TEXT("climax_limit"))?int32(X->GetNumberField(TEXT("climax_limit"))):4);
+    const int32 Today=X.IsValid()&&X->HasField(TEXT("today_orgasms"))?int32(X->GetNumberField(TEXT("today_orgasms"))):0; // earlier scenes today
+    return Today+HerOrgasms>=FMath::Max(1,X.IsValid()&&X->HasField(TEXT("climax_limit"))?int32(X->GetNumberField(TEXT("climax_limit"))):4);
 }
 void UOKHScenePanel::CountHerOrgasm(){
     ++HerOrgasms;
@@ -715,7 +718,7 @@ bool UOKHScenePanel::SelectPoseNamed(const FString& Name){
 void UOKHScenePanel::SetSpeed(float Value){SpeedValue=FMath::Clamp(Value,0.f,1.f);if(Speed)Speed->SetValue(SpeedValue);}
 TSharedRef<FJsonObject> UOKHScenePanel::Result() const{
     auto Counts=MakeShared<FJsonObject>();
-    Counts->SetBoolField(TEXT("played"),bPlayed);Counts->SetBoolField(TEXT("service"),bService);Counts->SetNumberField(TEXT("service_finishes"),ServiceFinishes);
+    Counts->SetBoolField(TEXT("anal_refused"),bAnalAsked&&bAnalRefused);Counts->SetBoolField(TEXT("played"),bPlayed);Counts->SetBoolField(TEXT("service"),bService);Counts->SetNumberField(TEXT("service_finishes"),ServiceFinishes);
     auto Part=[](bool Inserted,int32 Climaxes){auto O=MakeShared<FJsonObject>();O->SetBoolField(TEXT("inserted"),Inserted);O->SetNumberField(TEXT("climaxes"),Climaxes);return O;};
     Counts->SetObjectField(TEXT("crotch"),Part(bCrotch,CrotchClimaxes));Counts->SetObjectField(TEXT("anal"),Part(bAnal,AnalClimaxes));
     {static const TCHAR* Keys[]={TEXT("kiss"),TEXT("chest"),TEXT("crotch"),TEXT("anal"),TEXT("butt"),TEXT("nipple")};auto Areas=MakeShared<FJsonObject>();
