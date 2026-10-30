@@ -454,9 +454,14 @@ impl ModelView {
         // MDK uses Standard-style slot names, not the character shader's
         // _NormalMap. Older model memos keep these bindings but omit their PNGs.
         // Resolve through the library's named-texture records at session time.
+        // Shaders the renderer draws with their own graph (AKKPreviewActor) take their named textures the same way.
+        const STANDARD: &[&str] = &["_MainTex", "_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"];
+        const STYLIZED_WATER: &[&str] = &["_Normals", "_Shadermap"];
         for mesh in &mut meshes {
-            let Some(mat) = mesh.mat.as_ref().filter(|m| m.shader == "Shader Forge/main_StandardMDK_studio" || m.shader.starts_with("Standard")) else { continue };
-            for property in ["_MainTex", "_BumpMap", "_ParallaxMap", "_MetallicGlossMap", "_EmissionMap"] {
+            let Some(mat) = mesh.mat.as_ref() else { continue };
+            let properties = if mat.shader == "Shader Forge/main_StandardMDK_studio" || mat.shader.starts_with("Standard") { STANDARD }
+                else if mat.shader == "StylizedWater/Desktop" { STYLIZED_WATER } else { continue };
+            for &property in properties {
                 let Some(name) = mat.slot(property) else { continue };
                 if let Some(png) = self.parsed.texture_png_named(name) {
                     if property!="_MainTex" {mesh.shader_extra_textures.insert(property.into(), png);}
