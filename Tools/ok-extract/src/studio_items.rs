@@ -928,7 +928,7 @@ mod sphere_mask_decode {
     #[test]
     #[ignore = "installed game: decodes the basic-shape ColorMask both ways"]
     fn sphere_mask_is_red() {
-        let pixels = |png: &[u8]| { let i = crate::teximg::load_from_memory(png).unwrap().to_rgba8(); i.pixels().map(|p| p.0).collect::<std::collections::BTreeSet<_>>() };
+        let pixels = |png: &[u8]| { let i = crate::teximg::load_from_memory(png).unwrap().into_rgba8(); i.pixels().map(|p| p.0).collect::<std::collections::BTreeSet<_>>() };
         let own = crate::unity::parse_bundle_cached(std::fs::read(crate::test_support::game_path("/abdata/studio/mat/00.unity3d")).unwrap());
         let a = own.texture_png_named("t_koi_stu_kihon00mc_02").expect("own decode");
         println!("own bundle: {:?}", pixels(&a));
@@ -990,7 +990,7 @@ mod filter_tests {
         assert!(!c.filters.is_empty(), "filters in studio_items.json (refresh_accessory_points refreshes them)");
         for f in &c.filters {
             let png = crate::okmodel_view::with_library(&lib, || texture_png(&lib, &f.bundle, &f.file).ok_or("none".to_string())).unwrap();
-            let img = crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+            let img = crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
             let (top, bottom) = (img.get_pixel(0, 0).0, img.get_pixel(0, img.height() - 1).0);
             println!("{} {} {}: {}x{} top-left {:?} bottom-left {:?} (31,0) {:?} (32,0) {:?} (1023,0) {:?} (1023,31) {:?}", f.no, f.name, f.file, img.width(), img.height(), top, bottom, img.get_pixel(31, 0).0, img.get_pixel(32, 0).0, img.get_pixel(1023, 0).0, img.get_pixel(1023, 31).0);
             let at = |r: u32, g: u32, b: u32| img.get_pixel(r + 32 * b, g).0;
@@ -1358,7 +1358,7 @@ mod lut_probe {
         let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
         let name = std::env::var("OK_LUT").unwrap_or_else(|_| "Lut_Amount".into());
         let png = crate::okmodel_view::with_library(&lib, || crate::studio_items::texture_png(&lib, "abdata/studio/filter/00.unity3d", &name).ok_or_else(|| "no lut".to_string())).unwrap();
-        let img = crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+        let img = crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
         println!("lut {}x{}", img.width(), img.height());
         for c in [[149u8, 156, 146], [139, 180, 222], [231, 219, 61], [128, 128, 128], [255, 255, 255], [0, 0, 0]] {
             let q = |v: u8| ((v as f32 / 255.) * 31.).round() as u32;
@@ -1541,7 +1541,7 @@ mod lightmap_probe {
                 let half = |p: &str| { let m = crate::teximg::load_from_memory(&std::fs::read(p).unwrap()).unwrap().to_rgb8(); let w = m.width() / 2; image::imageops::crop_imm(&m, w, 0, w, m.height()).to_image() };
                 let (uv, normal, ok) = (half(paths[0]), half(paths[1]), half(paths[2]));
                 let native = image::imageops::resize(&crate::teximg::load_from_memory(&std::fs::read(paths[3]).unwrap()).unwrap().to_rgb8(), uv.width(), uv.height(), image::imageops::FilterType::Triangle);
-                let dir_img = crate::teximg::load_from_memory(dir_png).unwrap().to_rgba8();
+                let dir_img = crate::teximg::load_from_memory(dir_png).unwrap().into_rgba8();
                 let lin = |c: f32| if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
                 let (w, h) = (img.width() as f32, img.height() as f32);
                 // Every pixel of this lightmap: quantiles of OK / native (linear green), and the mean by native brightness.

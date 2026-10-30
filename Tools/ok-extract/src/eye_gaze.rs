@@ -124,7 +124,7 @@ mod tests {
                     assert_eq!(row[4],"1","native fixtures use clamp samplers");
                     let path=format!("{}.{}{key}.png",prefix.display(),part.name);
                     let native=image::open(path).unwrap().to_rgba8();
-                    let extracted=crate::teximg::load_from_memory(draw.textures[layer].as_ref().expect("source highlight texture")).unwrap().to_rgba8();
+                    let extracted=crate::teximg::load_from_memory(draw.textures[layer].as_ref().expect("source highlight texture")).unwrap().into_rgba8();
                     extracted.save(format!("{}.{}{key}.extracted.png",prefix.display(),part.name)).unwrap();
                     assert_eq!(native.dimensions(),extracted.dimensions(),"{card} {} {key} native texture={}",part.name,row[3]);
                     let difference=|sample:&image::RgbaImage|native.as_raw().iter().zip(sample.as_raw()).map(|(a,b)|(*a as f64-*b as f64).abs()).sum::<f64>()/native.as_raw().len() as f64;

@@ -13,7 +13,7 @@ pub fn hair_get_diffuse(
 ) -> Option<Vec<u8>> {
     use std::io::Cursor;let _spot=crate::profile::spot("hair_get_diffuse");
     if !crate::okstrict::assembling() { return Some(main.to_vec()); }
-    let src = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
+    let src = crate::teximg::load_from_memory(main).ok()?.into_rgba8();
     let (w, h) = src.dimensions();
     if w == 0 || h == 0 {
         return None;
@@ -68,7 +68,7 @@ pub fn tint_hair_png(png: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
 
 pub fn overlay_skin_png(png: &[u8], skin: [f32; 4]) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let (sr, sg, sb) = (
         skin[0].clamp(0.0, 1.0),
         skin[1].clamp(0.0, 1.0),
@@ -100,8 +100,8 @@ pub fn apply_body_create_colors_sampled(
     main:&[u8],mask:&[u8],skin:[f32;4],sub:[f32;4],nail:[f32;4],main_srgb:bool,
 )->Option<Vec<u8>> {
     use std::io::Cursor;
-    let src = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
-    let mask = crate::teximg::load_from_memory(mask).ok()?.to_rgba8();
+    let src = crate::teximg::load_from_memory(main).ok()?.into_rgba8();
+    let mask = crate::teximg::load_from_memory(mask).ok()?.into_rgba8();
     let (w, h) = src.dimensions();
     let (mw, mh) = mask.dimensions();
     if w == 0 || h == 0 || mw == 0 || mh == 0 {
@@ -140,8 +140,8 @@ pub fn apply_body_create_colors_sampled(
 /// `Koikano/main_skin` `_LINETEXON_ON`: multiply `_DetailMask` (black lines on white).
 pub fn multiply_line_tex(base: &[u8], line: &[u8]) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(line).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(line).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if dw == 0 || dh == 0 || sw == 0 || sh == 0 {
@@ -164,8 +164,8 @@ pub fn multiply_line_tex(base: &[u8], line: &[u8]) -> Option<Vec<u8>> {
 /// Display material `_overtex1` / `_overtex2`: lerp(base, over * color, over.a) on the same UV.
 pub fn overlay_overtex(base: &[u8], over: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(over).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(over).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if dw == 0 || dh == 0 || sw == 0 || sh == 0 {
@@ -215,8 +215,8 @@ pub fn overlay_overtex_mapped(
     if uv0.len() != uv_over.len() || uv0.is_empty() || indices.len() < 3 {
         return None;
     }
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(over).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(over).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if dw == 0 || dh == 0 || sw == 0 || sh == 0 {
@@ -303,8 +303,8 @@ pub fn overlay_overtex_uv(
     scale: [f32; 2],
 ) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(over).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(over).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if dw == 0 || dh == 0 || sw == 0 || sh == 0 || scale[0] == 0.0 || scale[1] == 0.0 {
@@ -350,8 +350,8 @@ pub fn overlay_overtex_uv(
 /// overlays) where the texture RGB is itself a mask.
 pub fn blend_mask_tint(base: &[u8], over: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(over).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(over).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if dw == 0 || dh == 0 || sw == 0 || sh == 0 {
@@ -401,8 +401,8 @@ pub fn stamp_overtex(
     if uvs.is_empty() {
         return None;
     }
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(over).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(over).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if dw < 8 || dh < 8 || sw < 4 || sh < 4 {
@@ -459,7 +459,7 @@ pub fn tint_png(png: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
 pub(crate) fn tint_png_uncached(png:&[u8],color:[f32;3])->Option<Vec<u8>>{let _spot=crate::profile::spot("tint_png");
     use std::io::Cursor;
     let [cr,cg,cb]=color;
-    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     for p in img.pixels_mut() {
         p[0] = ((p[0] as f32) * cr).clamp(0.0, 255.0) as u8;
         p[1] = ((p[1] as f32) * cg).clamp(0.0, 255.0) as u8;

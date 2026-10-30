@@ -1101,7 +1101,7 @@ mod reader_regressions {
             let parts=session.parts.iter().filter(|p|p.role=="head"||p.name.contains("nosetama")).map(|p|{
                 let mut min=[f32::INFINITY;3];let mut max=[f32::NEG_INFINITY;3];
                 for v in &p.positions {for i in 0..3 {min[i]=min[i].min(v[i]);max[i]=max[i].max(v[i]);}}
-                let texture=p.png.as_ref().map(|raw|{let im=crate::teximg::load_from_memory(raw).unwrap().to_rgba8();let alpha=im.pixels().map(|v|v[3] as u64).sum::<u64>() as f64/(im.width() as f64*im.height() as f64*255.);serde_json::json!({"sha":format!("{:x}",Sha256::digest(raw)),"alpha_mean":alpha,"width":im.width(),"height":im.height()})});
+                let texture=p.png.as_ref().map(|raw|{let im=crate::teximg::load_from_memory(raw).unwrap().into_rgba8();let alpha=im.pixels().map(|v|v[3] as u64).sum::<u64>() as f64/(im.width() as f64*im.height() as f64*255.);serde_json::json!({"sha":format!("{:x}",Sha256::digest(raw)),"alpha_mean":alpha,"width":im.width(),"height":im.height()})});
                 serde_json::json!({"name":p.name,"role":p.role,"min":min,"max":max,"blend":p.blend,"material":p.source_material,"texture":texture,"item":p.item_draw,"visible":p.render_visible})
             }).collect::<Vec<_>>();
             rows.push(serde_json::json!({"outfit":outfit,"parts":parts,"bones":bones}));

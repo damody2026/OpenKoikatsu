@@ -1470,7 +1470,7 @@ fn installed_uncensor_penis_and_body_skin_are_not_black() {
     let mask = bundle.texture_png_named(&part.color_mask).expect("penis color mask");
     let skin = [0.78f32, 0.56, 0.46, 1.0];
     let baked = crate::unity::apply_body_create_colors_sampled(&main, &mask, skin, skin, [1.0; 4], false).expect("penis bake");
-    let image = crate::teximg::load_from_memory(&baked).unwrap().to_rgba8();
+    let image = crate::teximg::load_from_memory(&baked).unwrap().into_rgba8();
     let mut sum = 0u64;
     let mut lit = 0u64;
     for pixel in image.pixels() {
@@ -1494,7 +1494,7 @@ fn installed_uncensor_penis_and_body_skin_are_not_black() {
     let ball_main = ball_bundle.texture_png_named(&ball_part.main_tex).expect("balls main");
     let ball_mask = ball_bundle.texture_png_named(&ball_part.color_mask).expect("balls mask");
     let ball_baked = crate::unity::apply_body_create_colors_sampled(&ball_main, &ball_mask, skin, skin, [1.0; 4], false).expect("balls bake");
-    let ball_image = crate::teximg::load_from_memory(&ball_baked).unwrap().to_rgba8();
+    let ball_image = crate::teximg::load_from_memory(&ball_baked).unwrap().into_rgba8();
     let ball_mean = ball_image.pixels().map(|p| p[0] as u64 + p[1] as u64 + p[2] as u64).sum::<u64>() as f64
         / (ball_image.pixels().len() as f64 * 3.0);
     eprintln!("BALLS guid={} display={} mean={ball_mean:.1}", balls.guid, balls.display_name);
@@ -1508,7 +1508,7 @@ fn installed_uncensor_penis_and_body_skin_are_not_black() {
     eprintln!("BODY guid={} main_bytes={} mask_bytes={} same_as_vanilla={}",
         body.guid, body_main.len(), body_mask.len(), vanilla_main.as_ref().is_some_and(|v| v == &body_main));
     let body_baked = crate::unity::apply_body_create_colors_sampled(&body_main, &body_mask, skin, skin, [1.0; 4], false).unwrap();
-    let body_image = crate::teximg::load_from_memory(&body_baked).unwrap().to_rgba8();
+    let body_image = crate::teximg::load_from_memory(&body_baked).unwrap().into_rgba8();
     let body_mean = body_image.pixels().map(|p| p[0] as u64 + p[1] as u64 + p[2] as u64).sum::<u64>() as f64
         / (body_image.pixels().len() as f64 * 3.0);
     assert!(body_mean > 20.0, "vagina/body skin mean {body_mean} is black");

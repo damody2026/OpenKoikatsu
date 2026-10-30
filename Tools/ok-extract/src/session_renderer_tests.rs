@@ -318,7 +318,7 @@ fn compare_eyeline_slot_session_caches() {
                 assert!(b.name.to_ascii_lowercase().contains("eyeline") || b.name.to_ascii_lowercase().contains("mayuge"),"unexpected changed texture {}",b.name);
                 let mut mesh=crate::unity::ExtractedMesh{name:b.name.clone(),mat:b.source_material.clone(),..Default::default()};
                 crate::resolve_head_detail_texture(game,&vanilla,&mods,&card,&guids,0,&mut mesh,&[],&[]);
-                assert_eq!(crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().to_rgba8(),crate::teximg::load_from_memory(b.png.as_ref().unwrap()).unwrap().to_rgba8(),"changed texture must derive from selected source and actual material slot");
+                assert_eq!(crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().into_rgba8(),crate::teximg::load_from_memory(b.png.as_ref().unwrap()).unwrap().into_rgba8(),"changed texture must derive from selected source and actual material slot");
                 changes.push(b.name.clone());
             }
         }
@@ -406,7 +406,7 @@ fn compare_legacy_overlay_session_caches() {
                 assert!(b.name.eq_ignore_ascii_case("cf_O_face"),"unexpected texture {}",b.name);
                 let overlay=crate::ksox_overlay_png(&card,0,2).expect("changed face requires saved source overlay");
                 let expected=crate::composite_overlay(a.png.as_ref().unwrap(),&overlay).unwrap();
-                assert_eq!(crate::teximg::load_from_memory(&expected).unwrap().to_rgba8(),crate::teximg::load_from_memory(b.png.as_ref().unwrap()).unwrap().to_rgba8(),"changed face must derive exactly from existing generic overlay kernel");
+                assert_eq!(crate::teximg::load_from_memory(&expected).unwrap().into_rgba8(),crate::teximg::load_from_memory(b.png.as_ref().unwrap()).unwrap().into_rgba8(),"changed face must derive exactly from existing generic overlay kernel");
                 png_changes.push(b.name.clone());changed+=1;
                 std::fs::write("C:/portable/OpenKoikatsu/Saved/Tests/EyeRim320Inputs/final_cached_face.png",b.png.as_ref().unwrap()).unwrap();
             }
@@ -546,8 +546,8 @@ fn compare_socket_brow_session_caches() {
             assert_eq!((&a.role,&a.name),(&b.role,&b.name));assert_eq!(a.uvs,b.uvs);assert_eq!(a.indices,b.indices);assert_eq!(a.shader_textures,b.shader_textures);
             let reversed=if a.png!=b.png {
                 assert!(b.name.to_ascii_lowercase().contains("mayuge"),"unexpected changed texture {}",b.name);
-                let mut before=crate::teximg::load_from_memory(a.png.as_ref().unwrap()).unwrap().to_rgba8();image::imageops::flip_vertical_in_place(&mut before);
-                assert_eq!(before,crate::teximg::load_from_memory(b.png.as_ref().unwrap()).unwrap().to_rgba8(),"direct brow pixels must only reverse rows");true
+                let mut before=crate::teximg::load_from_memory(a.png.as_ref().unwrap()).unwrap().into_rgba8();image::imageops::flip_vertical_in_place(&mut before);
+                assert_eq!(before,crate::teximg::load_from_memory(b.png.as_ref().unwrap()).unwrap().into_rgba8(),"direct brow pixels must only reverse rows");true
             } else {false};
             let error=|a:&[[f32;3]],b:&[[f32;3]]| {assert_eq!(a.len(),b.len());a.iter().zip(b).map(|(a,b)|a.iter().zip(b).map(|(a,b)|(a-b).powi(2)).sum::<f32>().sqrt()).fold(0f32,f32::max)};
             let position=error(&a.positions,&b.positions);let normal=error(&a.normals,&b.normals);
@@ -722,7 +722,7 @@ fn diagnose_native_clothes_maintex_inputs() {
         let texture=dump["materials"][0]["properties"].as_array().unwrap().iter()
             .find(|v|v["name"]=="_MainTex").unwrap();
         let native=native_dir.join(texture["texture"]["exportedPng"].as_str().unwrap());
-        let got=crate::teximg::load_from_memory(part.png.as_ref().expect("session main texture")).unwrap().to_rgba8();
+        let got=crate::teximg::load_from_memory(part.png.as_ref().expect("session main texture")).unwrap().into_rgba8();
         let expected=image::open(&native).unwrap().to_rgba8();
         assert_eq!(got.dimensions(),expected.dimensions());
         let mut sum=[0u64;4];let mut maximum=[0u8;4];let mut flip_sum=[0u64;4];
@@ -768,7 +768,7 @@ fn native_item_material_matches_game_dump() {
         rows.push(serde_json::json!({"property":name,"actual":actual,"expected":expected,"maximum":error,
             "source":if mat.color(name).is_some() || mat.float(name).is_some(){"material"}else{"installed shader declaration default"}}));
     }
-    let main=crate::teximg::load_from_memory(p.shader_textures.get("_MainTex").unwrap()).unwrap().to_rgba8();
+    let main=crate::teximg::load_from_memory(p.shader_textures.get("_MainTex").unwrap()).unwrap().into_rgba8();
     assert!(main.pixels().all(|v|v.0==[255;4]),"native null MainTex means shader white, not CPU tint");
     assert!(p.shader_textures.contains_key("_ColorMask"));assert!(p.shader_textures.contains_key("_DetailMask"));
     let normal=dump["materials"][0]["properties"].as_array().unwrap().iter().find(|v|v["name"]=="_NormalMap").unwrap();
@@ -779,7 +779,7 @@ fn native_item_material_matches_game_dump() {
     for property in ["_ColorMask","_DetailMask","_NormalMap"] {
         let native_rt=native_dir.join(format!("Card0.json.renderer124.mat0.{property}.png"));
         if !native_rt.ok_exists() {continue;}
-        let got=crate::teximg::load_from_memory(p.shader_textures.get(property).unwrap()).unwrap().to_rgba8();
+        let got=crate::teximg::load_from_memory(p.shader_textures.get(property).unwrap()).unwrap().into_rgba8();
         let expected=image::open(&native_rt).unwrap().to_rgba8();
         assert_eq!(got.dimensions(),expected.dimensions());
         let mut maximum=0u8;let mut over_six=0usize;
@@ -889,7 +889,7 @@ fn native_mod_boot_clothes_albedo() {
     assert!(used_mask);
     let png=crate::flip_runtime_blit_v(baked[0].clone().unwrap());
     std::fs::write(output.join("BootAlbedoAfter.png"),&png).unwrap();
-    let a=crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+    let a=crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
     let b=image::open("C:/portable/OpenKoikatsu/Saved/Tests/SkinHsv307BootNative/Card0.json.renderer58.mat0._MainTex.png").unwrap().to_rgba8();
     assert_eq!(a.dimensions(),b.dimensions());
     let maximum=a.as_raw().iter().zip(b.as_raw()).map(|(x,y)|x.abs_diff(*y)).max().unwrap();
@@ -927,7 +927,7 @@ fn native_partial_override_accessory_colors() {
         let input=image::open(&native_path).unwrap().to_rgba8();
         assert!(input.pixels().all(|p|p.0[..3]==[255;3]),"independent game input fixture must be white");
         for m in meshes {
-            let png=m.texture_png.unwrap();let image=crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+            let png=m.texture_png.unwrap();let image=crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
             assert_eq!(image.dimensions(),input.dimensions());
             assert!(image.pixels().all(|p|p.0[..3]==[255;3]),"native colours are white; authored cyan/gray must not survive slot {slot}");
             eprintln!("native partial override slot={slot} RGB=white pixels={} renderer-group=normal",image.width()*image.height());
@@ -957,10 +957,10 @@ fn native_accessory_glass_material() {
     let part=s.parts.iter().find(|p|p.name=="o_glasses_typeF_lens").unwrap();
     assert_eq!(part.blend,"translucent","native source Forward pass is SrcAlpha/OneMinusSrcAlpha");
     let png=part.png.as_ref().expect("declared white default multiplied by Color4");
-    let image=crate::teximg::load_from_memory(png).unwrap().to_rgba8();
+    let image=crate::teximg::load_from_memory(png).unwrap().into_rgba8();
     // SourceWorld Card2 material TSV records Color4=(0,.163623989,.19607836,.1254902).
     assert!(image.pixels().all(|p|p.0==[0,42,50,32]),"native base colour and alpha must both survive null MainTex");
-    let native=crate::teximg::load_from_memory(&part.shader_textures["_MainTex"]).unwrap().to_rgba8();
+    let native=crate::teximg::load_from_memory(&part.shader_textures["_MainTex"]).unwrap().into_rgba8();
     assert!(native.pixels().all(|p|p.0==[255;4]),"exact shader must receive the untinted white default");
     assert!((part.source_material.as_ref().unwrap().color("_Color4").unwrap()[3]-0.1254902).abs()<1e-6,
         "native Color4 must receive the card's accessory alpha rather than keeping the prefab alpha");
@@ -1115,7 +1115,7 @@ fn native_eye_create_and_overlays() {
             let linear=has_source && settings.lines().any(|line|line==format!("mainColorSpace\t{side}\tLinear"));
             let output=crate::bake_iris_with_space(&input,&card.pupils[side],Some(&gradient),None,None,[1.;4],[1.;4],0.5,0.5,linear).unwrap();
             let compare=|png:&[u8],native:&[u8]| {
-                let a=crate::teximg::load_from_memory(png).unwrap().to_rgba8();let b=crate::teximg::load_from_memory(native).unwrap().to_rgba8();assert_eq!(a.dimensions(),b.dimensions());
+                let a=crate::teximg::load_from_memory(png).unwrap().into_rgba8();let b=crate::teximg::load_from_memory(native).unwrap().into_rgba8();assert_eq!(a.dimensions(),b.dimensions());
                 let mut sum=0.;let mut count=0.;let mut max=0u8;
                 for (a,b) in a.pixels().zip(b.pixels()) {if b[3]>=250 {for c in 0..3 {let d=a[c].abs_diff(b[c]);sum+=d as f64;count+=1.;max=max.max(d);}}}
                 (sum/count,max)
@@ -1127,7 +1127,7 @@ fn native_eye_create_and_overlays() {
             if let Some(overlay)=crate::ksox_overlay_png(&card,0,if side==0 {8}else{10}) {
                 let composite=crate::composite_overlay(&read("pure"),&overlay).unwrap();let original=read("original");
                 let metric=compare(&composite,&original);assert!(metric.0<0.6,"native KSOX {metric:?}");
-                let a=crate::teximg::load_from_memory(&composite).unwrap().to_rgba8();let b=crate::teximg::load_from_memory(&original).unwrap().to_rgba8();
+                let a=crate::teximg::load_from_memory(&composite).unwrap().into_rgba8();let b=crate::teximg::load_from_memory(&original).unwrap().into_rgba8();
                 assert!(a.pixels().zip(b.pixels()).all(|(a,b)|a[3].abs_diff(b[3])<=1),"KSOX alpha must also be interpolated");overlay_metric=Some(metric);
             }
             metrics.push(serde_json::json!({"card":row["card"],"side":side,"pure_mean":pure.0,"pure_max":pure.1,"overlay":overlay_metric}));
@@ -1216,7 +1216,7 @@ fn native_clothes_overlay_mask() {
     assert!(!card.clothes_masks.contains_key(&(1,"BodyMask".into())),"KCOX has no cross-coordinate fallback");
     let s=open(game,Some(&card_path),0).unwrap();
     let body=s.parts.iter().find(|p|p.role=="body").unwrap();
-    let image=crate::teximg::load_from_memory(body.alpha_mask.as_ref().expect("KCOX mask")).unwrap().to_rgba8();
+    let image=crate::teximg::load_from_memory(body.alpha_mask.as_ref().expect("KCOX mask")).unwrap().into_rgba8();
     let fixtures=Path::new("C:/portable/OpenKoikatsu/Saved/Tests/NewCards306BodyMaskNative");
     let native=crate::gamefs::read_dir(fixtures).unwrap().filter_map(Result::ok)
         .map(|e|e.path()).find(|p|p.file_name().unwrap().to_string_lossy().ends_with("._AlphaMask.png")).unwrap();

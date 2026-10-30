@@ -5,7 +5,7 @@ use crate::{clothes_gpu::Texture, face_create::Inputs};
 /// generator truncates each horizontal average before the vertical average;
 /// averaging four floating-point texels and rounding is a different chain.
 pub(crate) fn png_texture(png:&[u8],mut sampling:crate::unity::TextureSampling)->Option<Texture> {
-    let mut image=crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut image=crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     image::imageops::flip_vertical_in_place(&mut image);
     let (width,height)=image.dimensions();if width==0||height==0{return None;}
     let mut data=image.as_raw().clone();let mut mips=1;

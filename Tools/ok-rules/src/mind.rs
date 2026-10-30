@@ -44,6 +44,10 @@ pub fn needs_text(r: &Relation, money_stress: f32, show_money: bool) -> String {
         p.push(crate::tr::t("mind.hungry_mood"));
     } else if r.satiety < 45.0 {
         p.push(crate::tr::t("mind.feeling_hungry"));
+    } else if r.satiety >= 80.0 {
+        // Full, said as plainly as hungry is: with nothing about her stomach outside a menu, 三月七 an hour after her
+        // lunch opened with "I'm hungry, let's eat" and two lines later "I just ate, I'm not hungry" (R6-16).
+        p.push(crate::tr::t("mind.full_not_hungry"));
     }
     if r.energy < 20.0 {
         p.push(crate::tr::t("mind.very_tired"));
@@ -191,7 +195,8 @@ mod tests {
         assert_eq!(favor_gain(&json!({"stage": "friend", "favor": 10, "limit": 100, "delta": 10, "lovers": 9}))["delta"], 2.0, "never below 1/5");
         let owing = Relation { owes_player: 400, ..r.clone() };
         assert!(needs_text(&owing, 0.0, false).ends_with("你還欠他 ¥400（是他借給你的，不是他欠你）"));
-        assert_eq!(needs_text(&Relation::default(), 80.0, false), "");
+        assert_eq!(needs_text(&Relation { satiety: 60.0, ..Default::default() }, 80.0, false), "");
+        assert_eq!(needs_text(&Relation { satiety: 98.0, energy: 80.0, fun: 80.0, social: 80.0, hygiene: 80.0, ..Default::default() }, 0.0, false), "剛吃飽，不餓");
     }
 
     #[test]

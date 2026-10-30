@@ -433,7 +433,7 @@ pub(crate) fn sprite_png_from_bytes_unity(bytes: Vec<u8>, name: &str) -> Option<
   let texture_info=file.objects_of_type(28).into_iter().find(|i|i.path_id==texture)?;
   let obj=UnityObject::from_serialized_file(file,texture_info).ok()?;
   let (_,png)=png_from_texture(&obj,&parsed.files,None)?;
-  let image=crate::teximg::load_from_memory(&png).ok()?.to_rgba8();
+  let image=crate::teximg::load_from_memory(&png).ok()?.into_rgba8();
   if w==0||h==0||x+w>image.width()||y+h>image.height(){return None;}
   let mut cropped=image::imageops::crop_imm(&image,x,y,w,h).to_image();
   let settings=uv_obj(rd,"settingsRaw").map(uv_i32).unwrap_or(0);
@@ -962,7 +962,7 @@ pub(crate) fn mesh_stream_bytes<B: StreamBytes>(
 
 pub fn unpack_illusion_albedo(png: &[u8]) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let mut rsum = 0u64;
     let mut gsum = 0u64;
     let mut bsum = 0u64;

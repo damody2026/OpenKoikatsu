@@ -111,11 +111,11 @@ mod tests {
         img.put_pixel(4, 2, image::Rgba([1, 2, 3, 4]));
         let raw = raw_bytes(&img);
         assert_eq!(raw_size(&raw), Some((5, 3)));
-        assert_eq!(load_from_memory(&raw).unwrap().to_rgba8(), img);
+        assert_eq!(load_from_memory(&raw).unwrap().into_rgba8(), img);
         let png = png_bytes(&img).unwrap();
         assert!(!is_raw(&png));
-        assert_eq!(load_from_memory(&png).unwrap().to_rgba8(), img);
-        assert_eq!(load_from_memory(&to_png(raw.clone())).unwrap().to_rgba8(), img);
+        assert_eq!(load_from_memory(&png).unwrap().into_rgba8(), img);
+        assert_eq!(load_from_memory(&to_png(raw.clone())).unwrap().into_rgba8(), img);
         // A truncated container does not decode.
         assert!(raw_pixels(&raw[..raw.len() - 1]).is_none());
     }
@@ -126,6 +126,6 @@ mod tests {
         DynamicImage::ImageRgba8(img.clone()).write_to(&mut std::io::Cursor::new(&mut old), image::ImageFormat::Png).unwrap();
         assert_eq!(png_bytes(&img).unwrap(), old);
         // A session's textures take the fast deflate: other bytes, the same pixels.
-        assert_eq!(load_from_memory(&encode_rgba(&img).unwrap()).unwrap().to_rgba8(), img);
+        assert_eq!(load_from_memory(&encode_rgba(&img).unwrap()).unwrap().into_rgba8(), img);
     }
 }

@@ -19,7 +19,7 @@ fn source(game: &Path, entry: &ListEntry, ab: &str, name: &str) -> Option<ImageS
     let gpu=if super::sideloader_png(entry.extra.get("__zip").map(String::as_str),game,ab,&[&name]).is_some() {
         crate::face_create_gpu::png_texture(&png,sampling)?
     } else {super::named_texture_gpu(game,entry,ab,&name).or_else(||{eprintln!("face-create missing GPU payload {ab} {name}");None})?};
-    Some(ImageSource { image: crate::teximg::load_from_memory(&png).ok()?.to_rgba8(), sampling:gpu.sampling, gpu })
+    Some(ImageSource { image: crate::teximg::load_from_memory(&png).ok()?.into_rgba8(), sampling:gpu.sampling, gpu })
 }
 
 fn entry_ab(entry: &ListEntry, key: &str) -> String {
@@ -50,7 +50,7 @@ pub(crate) fn compose(game: &Path, vanilla: &ChaListCatalog, mods: &ChaListCatal
         let png = super::encode_png(&main.image)?;
         let png = if main.sampling.srgb { png } else { super::linear_texture_to_srgb_png(&png)? };
         let png = super::composite_overlay(&png, &overlay)?;
-        main.image = crate::teximg::load_from_memory(&png).ok()?.to_rgba8();
+        main.image = crate::teximg::load_from_memory(&png).ok()?.into_rgba8();
         main.sampling.srgb = true;
         let mut authored=main.image.clone();image::imageops::flip_vertical_in_place(&mut authored);
         main.gpu=crate::clothes_gpu::Texture{data:authored.into_raw(),width:main.image.width(),height:main.image.height(),
@@ -72,7 +72,7 @@ pub(crate) fn compose(game: &Path, vanilla: &ChaListCatalog, mods: &ChaListCatal
     let paint_mask = material.slot("_paintmask").and_then(|name| {
         let (_, png) = crate::unity::named_png_from_bytes(bytes.clone(), &[name])?;
         let png = super::flip_runtime_blit_v(png);
-        Some(ImageSource { image: crate::teximg::load_from_memory(&png).ok()?.to_rgba8(),
+        Some(ImageSource { image: crate::teximg::load_from_memory(&png).ok()?.into_rgba8(),
                            sampling: bundle.texture_sampling_named(name)?,gpu:bundle.texture_gpu_named(name)? })
     });
     let makeup = |cat, id, key: &str, property: &str| {

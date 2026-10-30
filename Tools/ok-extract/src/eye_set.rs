@@ -143,7 +143,7 @@ pub fn gag_texture_png(root: &Path, set: &EyeSet) -> Option<Vec<u8>> {
             crate::png_from_bundle(Path::new(&lib), &set.gag_bundle, None, &[set.gag_texture.as_str()], &[], &[])))?;
     let [cols, rows] = set.gag_tiles;
     if (cols <= 1 && rows <= 1) || set.animates_gag() { return Some(png); }
-    let img = crate::teximg::load_from_memory(&png).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(&png).ok()?.into_rgba8();
     let (w, h) = (img.width() / cols as u32, img.height() / rows as u32);
     // Frame 0 is the top-left tile (Unity UV origin bottom-left; the PNG is top-down).
     let tile = image::imageops::crop_imm(&img, 0, 0, w.max(1), h.max(1)).to_image();

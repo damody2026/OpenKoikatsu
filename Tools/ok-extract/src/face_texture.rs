@@ -278,7 +278,7 @@ pub(crate) fn compose_face_texture_legacy(
             composite_overlay(&base, &ov)
         })
         .unwrap_or(base);
-    let img = crate::teximg::load_from_memory(&base).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(&base).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     if std::env::var("OK_OVER_DUMP").is_ok() {
         eprintln!(
@@ -386,7 +386,7 @@ pub(crate) fn compose_face_texture_legacy(
         }
         None => {
             if let Some(t) = crate::unity::tint_png(&base, skin) {
-                out = crate::teximg::load_from_memory(&t).ok()?.to_rgba8();
+                out = crate::teximg::load_from_memory(&t).ok()?.into_rgba8();
             }
         }
     }
@@ -590,7 +590,7 @@ pub(crate) fn compose_face_texture_legacy(
     // places the mouth-cavity rectangle above the facial skin in PNG rows.
     // Normalize by the atlas's actual cavity location, not the character or
     // the bundle filename: a fixed flip fixes one head mod but breaks another.
-    let mut face = crate::teximg::load_from_memory(&png).ok()?.to_rgba8();
+    let mut face = crate::teximg::load_from_memory(&png).ok()?.into_rgba8();
     if face_needs_vertical_flip {
         image::imageops::flip_vertical_in_place(&mut face);
     }
@@ -628,7 +628,7 @@ pub(crate) fn flip_png_vertical(png: &[u8]) -> Option<Vec<u8>> {
     png_transform_cache::transform("flip_v_v1",png,&[],||flip_png_vertical_uncached(png))
 }
 pub(crate) fn flip_png_vertical_uncached(png: &[u8]) -> Option<Vec<u8>> {
-    let mut image = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut image = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     image::imageops::flip_vertical_in_place(&mut image);
     encode_png(&image)
 }
@@ -645,7 +645,7 @@ pub(crate) fn linear_texture_to_srgb_png(png: &[u8]) -> Option<Vec<u8>> {
     png_transform_cache::transform("linear_to_srgb_v1",png,&[],||linear_texture_to_srgb_png_uncached(png))
 }
 pub(crate) fn linear_texture_to_srgb_png_uncached(png: &[u8]) -> Option<Vec<u8>> {
-    let mut image = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut image = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     for pixel in image.pixels_mut() {
         for c in 0..3 {
             pixel[c] = linear_to_srgb_u8(pixel[c]);
@@ -721,8 +721,8 @@ pub(crate) fn load_card_makeup_png(
 /// vector is the `cf_m_face_create` material default observed in Maker;
 /// DXBC computes (uv + offset) * (1 - scale) + (scale - 0.5).
 pub(crate) fn overlay_face_create_cheek(base: &[u8], cheek: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
-    let mut dst = crate::teximg::load_from_memory(base).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(cheek).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(base).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(cheek).ok()?.into_rgba8();
     let (w, h) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     if w == 0 || h == 0 || sw == 0 || sh == 0 { return None; }
@@ -766,7 +766,7 @@ pub(crate) fn overlay_face_create_cheek(base: &[u8], cheek: &[u8], color: [f32; 
 /// Turn a white-on-black mask (flat alpha) into a coloured RGBA where black is
 /// transparent and brightness is coverage. Used for the eye white texture.
 pub(crate) fn white_on_black_alpha(png: &[u8], color: [f32; 4]) -> Option<Vec<u8>> {
-    let img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     let alpha_varies = img.pixels().any(|p| p.0[3] < 245);
     let mut out = image::RgbaImage::new(w, h);
@@ -798,7 +798,7 @@ pub(crate) fn white_on_black_alpha(png: &[u8], color: [f32; 4]) -> Option<Vec<u8
 /// so a translucent iris composites over the opaque sclera (StudioEditor
 /// queues iris after sclera instead of punching holes with a masked blend).
 pub(crate) fn rgb_on_black_alpha(png: &[u8]) -> Option<Vec<u8>> {
-    let img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     let alpha_varies = img.pixels().any(|p| p.0[3] < 245);
     if alpha_varies {

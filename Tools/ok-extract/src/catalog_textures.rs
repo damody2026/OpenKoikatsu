@@ -297,7 +297,7 @@ pub(crate) fn studio_mdk_preview_normalizes_source_rows_once() {
         let parts = preview_session_parts(Path::new(""), role, vec![mesh], None).unwrap();
         assert_eq!(parts.len(), 1);
         for bytes in [parts[0].png.as_ref().unwrap(), &parts[0].shader_textures["_EmissionMap"], &parts[0].shader_textures["_OKLightmap"], &parts[0].shader_textures["_OKLightmapDirection"]] {
-            let decoded = crate::teximg::load_from_memory(bytes).unwrap().to_rgba8();
+            let decoded = crate::teximg::load_from_memory(bytes).unwrap().into_rgba8();
             assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 255, 255], "{role}: source top row");
             assert_eq!(decoded.get_pixel(0, 1).0, [255, 0, 0, 255], "{role}: source bottom row");
         }
@@ -328,7 +328,7 @@ pub(crate) fn studio_item_preview_normalizes_main_and_mask_rows_once() {
         let parts = preview_session_parts(Path::new(""), "part", vec![mesh], None).unwrap();
         let mask = parts[0].item_draw.as_ref().and_then(|d| d.color_mask.as_ref()).expect("item draw colour mask");
         for bytes in [parts[0].png.as_ref().unwrap(), mask] {
-            let decoded = crate::teximg::load_from_memory(bytes).unwrap().to_rgba8();
+            let decoded = crate::teximg::load_from_memory(bytes).unwrap().into_rgba8();
             assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 255, 255], "{shader}: source top row");
             assert_eq!(decoded.get_pixel(0, 1).0, [255, 0, 0, 255], "{shader}: source bottom row");
         }
@@ -414,7 +414,7 @@ pub(crate) fn clothes_overlay_follows_live_shared_rt_and_native_stop() {
         renderer_ids:vec![id],texture_png:Some(white.clone()),..Default::default()}).collect();
     apply_clothes_create_textures(&mut meshes,Some(&map),&baked);
     apply_clothes_overlay_rt("control",&mut meshes,&map,&baked,&red,false);
-    for mesh in &meshes[..4] {assert_eq!(crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().to_rgba8().get_pixel(0,0).0,[255,0,0,255]);}
+    for mesh in &meshes[..4] {assert_eq!(crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().into_rgba8().get_pixel(0,0).0,[255,0,0,255]);}
     assert_eq!(meshes[4].texture_png,Some(white.clone()));
     let mut stopped=meshes.clone();
     for mesh in &mut stopped {mesh.texture_png=Some(white.clone());}
