@@ -1829,7 +1829,8 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
 			const bool DecodeAlongside=AKKPreviewActor::FirstLoadOption(TEXT("B1"));
 			UE::Tasks::FTask TextureDecode;
 			if(DecodeAlongside){
-				auto Textures=AKKPreviewActor::CollectSessionTextures(Job->Session,false);
+				// (the player waits on this load: its materials' textures are prepared in parallel)
+				auto Textures=AKKPreviewActor::CollectSessionTextures(Job->Session,false,true);
 				TextureDecode=UE::Tasks::Launch(UE_SOURCE_LOCATION,[Textures](){AKKPreviewActor::PrecacheTextureJobs(*Textures);});
 			}
 			const double T0=FPlatformTime::Seconds();
@@ -1857,7 +1858,7 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
 				if(PrepareSkeleton)Job->Session.SkelBoneCount();
 				TextureDecode.Wait();
 			}
-			else AKKPreviewActor::PrecacheSessionTextures(Job->Session,PrepareSkeleton);
+			else AKKPreviewActor::PrecacheSessionTextures(Job->Session,PrepareSkeleton,true);
 		}
 		if(FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOAD_PROFILE"))==TEXT("1"))UE_LOG(LogTemp,Display,TEXT("OKGUI_WORKER open_ms=%.3f texture_prepare_ms=%.3f"),(OpenDone-WorkerStart)*1000.,(FPlatformTime::Seconds()-OpenDone)*1000.);
 		if(Job->bOk&&!Job->Session.IsPortable()){

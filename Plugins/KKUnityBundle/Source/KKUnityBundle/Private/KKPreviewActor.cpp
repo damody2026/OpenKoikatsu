@@ -5143,11 +5143,11 @@ bool AKKPreviewActor::FirstLoadOption(const TCHAR* Name)
  return Options.Contains(Name)||Options.Contains(TEXT("all"));
 }
 
-static void CollectTextures(FOkSession& Source,bool bPrepareSkeleton,bool bCopy,FOKSessionTextureJobs& Out)
+static void CollectTextures(FOkSession& Source,bool bPrepareSkeleton,bool bCopy,bool bParallelMaterials,FOKSessionTextureJobs& Out)
 {
  if(OKSharedParents()){
  const double MaterialStart=FPlatformTime::Seconds();
- FString MaterialError;if(!Source.PrepareRuntimeMaterials(MaterialError))UE_LOG(LogTemp,Error,TEXT("High model material preparation: %s"),*MaterialError);
+ FString MaterialError;if(!Source.PrepareRuntimeMaterials(MaterialError,bParallelMaterials))UE_LOG(LogTemp,Error,TEXT("High model material preparation: %s"),*MaterialError);
  if(FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOAD_PROFILE"))==TEXT("1"))UE_LOG(LogTemp,Display,TEXT("OK runtime material capture ms=%.1f"),(FPlatformTime::Seconds()-MaterialStart)*1000.);
  }
  if(bPrepareSkeleton){
@@ -5199,9 +5199,9 @@ static void CollectTextures(FOkSession& Source,bool bPrepareSkeleton,bool bCopy,
  Out.GatherSeconds=FPlatformTime::Seconds()-GatherStart;
 }
 
-TSharedRef<FOKSessionTextureJobs,ESPMode::ThreadSafe> AKKPreviewActor::CollectSessionTextures(FOkSession& Source,bool bPrepareSkeleton)
+TSharedRef<FOKSessionTextureJobs,ESPMode::ThreadSafe> AKKPreviewActor::CollectSessionTextures(FOkSession& Source,bool bPrepareSkeleton,bool bParallelMaterials)
 {
- auto Jobs=MakeShared<FOKSessionTextureJobs,ESPMode::ThreadSafe>();CollectTextures(Source,bPrepareSkeleton,true,*Jobs);return Jobs;
+ auto Jobs=MakeShared<FOKSessionTextureJobs,ESPMode::ThreadSafe>();CollectTextures(Source,bPrepareSkeleton,true,bParallelMaterials,*Jobs);return Jobs;
 }
 
 void AKKPreviewActor::PrecacheTextureJobs(const FOKSessionTextureJobs& Jobs)
@@ -5219,9 +5219,9 @@ void AKKPreviewActor::PrecacheTextureJobs(const FOKSessionTextureJobs& Jobs)
   UE_LOG(LogTemp,Display,TEXT("OK texture precache inputs=%d gather_ms=%.1f decode_ms=%.1f"),Jobs.Jobs.Num(),Jobs.GatherSeconds*1000.,(FPlatformTime::Seconds()-DecodeStart)*1000.);
 }
 
-void AKKPreviewActor::PrecacheSessionTextures(FOkSession& Source, bool bPrepareSkeleton)
+void AKKPreviewActor::PrecacheSessionTextures(FOkSession& Source, bool bPrepareSkeleton, bool bParallelMaterials)
 {
- FOKSessionTextureJobs Jobs;CollectTextures(Source,bPrepareSkeleton,false,Jobs);PrecacheTextureJobs(Jobs);
+ FOKSessionTextureJobs Jobs;CollectTextures(Source,bPrepareSkeleton,false,bParallelMaterials,Jobs);PrecacheTextureJobs(Jobs);
 }
 
 struct AKKPreviewActor::FSessionLoadState { FOKToonShadowParameters Shadow; FRotator ShadowRotation; int32 SetupStep=0; };

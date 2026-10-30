@@ -220,7 +220,7 @@ void UOKCharacterController::TickClothingPreviews(){
   FOkSession::SetThreadBackground(true);
   Job->Ok=Job->Session.Open(Game,Card,Outfit,Job->Error,States.GetData());const double Opened=FPlatformTime::Seconds();
   FOkSession::SetThreadBackground(false);
-  if(Job->Ok){Job->Session.ApplyBodyPhysics(Job->Physics.X,Job->Physics.Y);Job->Session.ApplyEditorMods(Job->Mods,Outfit);AKKPreviewActor::PrecacheSessionTextures(Job->Session,PrepareSkeleton);}
+  if(Job->Ok){Job->Session.ApplyBodyPhysics(Job->Physics.X,Job->Physics.Y);Job->Session.ApplyEditorMods(Job->Mods,Outfit);AKKPreviewActor::PrecacheSessionTextures(Job->Session,PrepareSkeleton,true);}
   UE_LOG(LogTemp,Display,TEXT("OK clothing warm worker ok=%d open_ms=%.3f texture_ms=%.3f"),Job->Ok,(Opened-Begin)*1000.,(FPlatformTime::Seconds()-Opened)*1000.);
   AsyncTask(ENamedThreads::GameThread,[Weak,Generation,Job](){if(auto* G=Weak.Get()){G->bClothingWarmInFlight=false;if(Generation==G->ClothingWarmGeneration)G->ClothingWarmReady=Job;}});
  });

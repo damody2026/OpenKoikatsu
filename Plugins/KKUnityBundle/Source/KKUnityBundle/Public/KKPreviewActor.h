@@ -490,10 +490,12 @@ public:
 	// Call on the session's owning worker before publishing it to the renderer.
 	// The caller captures the renderer mode before handing exclusive session
 	// ownership to a worker. Preparing reference data does not advance playback.
-	static void PrecacheSessionTextures(FOkSession& Source, bool bPrepareSkeleton = false);
+	// bParallelMaterials: the shared-parent materials' textures prepared in parallel (OKCaptureRuntimeMaterialsParallel),
+	// for a load the player waits on; background loads (neighbour preloads, the street) keep the one-at-a-time form.
+	static void PrecacheSessionTextures(FOkSession& Source, bool bPrepareSkeleton = false, bool bParallelMaterials = false);
 	// The same in two steps: collect the session's textures (copies, so the session may change meanwhile), then
 	// decode them (any thread). A load decodes while it applies the card's mods and shape (OK_FIRSTLOAD=B1).
-	static TSharedRef<struct FOKSessionTextureJobs, ESPMode::ThreadSafe> CollectSessionTextures(FOkSession& Source, bool bPrepareSkeleton = false);
+	static TSharedRef<struct FOKSessionTextureJobs, ESPMode::ThreadSafe> CollectSessionTextures(FOkSession& Source, bool bPrepareSkeleton = false, bool bParallelMaterials = false);
 	static void PrecacheTextureJobs(const struct FOKSessionTextureJobs& Jobs);
 	// First-load speed options (OK_FIRSTLOAD, comma list or "all"; read once): A1 A2 A3 B1 C2 C3 C4.
 	static bool FirstLoadOption(const TCHAR* Name);
