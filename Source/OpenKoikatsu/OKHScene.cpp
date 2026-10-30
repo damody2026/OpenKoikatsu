@@ -537,25 +537,44 @@ void UOKHScenePanel::UpdateFace(){
     const FString Key=FString::Printf(TEXT("%d/%d/%.2f"),Eye,Brow,Open);if(Key==FaceKey)return;FaceKey=Key;
     Girl->SetFaceControl(1,Eye,Open,true);Girl->SetFaceControl(2,Brow,1.f,true);
 }
+// A bone of theirs in the world (the male skeleton may name its bones like hers).
+static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
+    if(!IsValid(A)||!A->BodySkel)return false;
+    for(const TCHAR* P:{TEXT("cf_"),TEXT("cm_")}){const FName N(FString(P)+Name);if(A->BodySkel->GetBoneIndex(N)!=INDEX_NONE){Out=A->BodySkel->GetBoneLocation(N);return true;}}
+    return false;
+}
+// Where their body is now, from the bones (the component bounds can still be the standing pose's after a sit or a lie).
+static FBox HBodyBox(AKKPreviewActor* A){
+    FBox Box(ForceInit);FVector P;
+    for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_spine02"),TEXT("j_head"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_knee_L"),TEXT("j_knee_R")})if(HBone(A,N,P))Box+=P;
+    if(!Box.IsValid)return IsValid(A)?A->GetComponentsBoundingBox(true):Box;
+    Box=Box.ExpandBy(15.f);Box.Max.Z+=12.f;return Box; // the flesh around the bones, the top of the head
+}
 void UOKHScenePanel::FrameCamera(){
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->StudioCam)return;
     const FString Key=FString::Printf(TEXT("%d|%d|%d"),Mode,ActivePose,ActiveAibu);const double Now=FPlatformTime::Seconds();
     if(Key!=FramedKey){FramedKey=Key;FrameAt=Now+.8;return;} // after the pose has placed them
     if(FrameAt<=0||Now<FrameAt)return;FrameAt=0;
-    const FBox HerBox=Girl->GetComponentsBoundingBox(true);if(!HerBox.IsValid)return;
+    const FBox HerBox=HBodyBox(Girl);if(!HerBox.IsValid)return;
     FVector Facing=Girl->GetActorRotation().RotateVector(FVector(0,1,0));Facing.Z=0;Facing=Facing.GetSafeNormal();
     FVector Focus=HerBox.GetCenter(),Dir=Facing;float Size=HerBox.GetExtent().Size();
     auto* Him=Gallery->PartnerActor.Get();
     if(Mode!=0&&IsValid(Him)&&!Him->IsHidden()){
-        const FBox HisBox=Him->GetComponentsBoundingBox(true);
+        const FBox HisBox=HBodyBox(Him);
         if(HisBox.IsValid){
             FVector Line=HisBox.GetCenter()-HerBox.GetCenter();Line.Z=0;
             if(Line.Size()>5.f){Line.Normalize();FVector Side(-Line.Y,Line.X,0);if((Side|Facing)<0)Side=-Side;Dir=(Side+.45f*Facing-.25f*Line).GetSafeNormal();}
             Focus=FMath::Lerp(HerBox.GetCenter(),HisBox.GetCenter(),.3f);Size=FMath::Max(Size,(HerBox+HisBox).GetExtent().Size()*.8f);
         }
-    }else{Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();Size*=.95f;Focus.Z+=HerBox.GetExtent().Z*.25f;} // head to knees, the head never cut
+    }else{Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();Focus.Z+=HerBox.GetExtent().Z*.15f;} // her body from the bones, a little above its middle so the head is never cut
+    // Lying (on her back, on all fours): her body runs along the floor, not the way the actor faces. From beside her body,
+    // toward her face, and from higher up, so neither her feet nor her back fill the view.
+    float Pitch=18.f;
+    {FVector Head,Hips;if(Mode==0&&HBone(Girl,TEXT("j_head"),Head)&&HBone(Girl,TEXT("j_hips"),Hips)){
+        FVector Body=Head-Hips;const float Up=FMath::Abs(float(Body.Z));Body.Z=0;
+        if(Body.Size()>Up*1.2f&&Body.Normalize()){FVector Side(-Body.Y,Body.X,0);if((Side|Facing)<0)Side=-Side;Dir=(Side+.35f*Body).GetSafeNormal();Pitch=35.f;}}}
     if(Dir.IsNearlyZero())return;
-    Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=18.f;Girl->OrbitDistance=FMath::Clamp(Size*2.1f,120.f,600.f);
+    Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=Pitch;Girl->OrbitDistance=FMath::Clamp(Size*2.5f,120.f,650.f); // the bone box is tighter than the mesh bounds
     Girl->ApplyOrbitCamera();
 }
 void UOKHScenePanel::ClearProps(){for(AStaticMeshActor* A:Props)if(IsValid(A))A->Destroy();Props.Reset();}
@@ -563,11 +582,7 @@ void UOKHScenePanel::NativeDestruct(){ClearProps();Super::NativeDestruct();}
 void UOKHScenePanel::PlaceProps(int32 Kind){
     ClearProps();auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->BodySkel||!GetWorld())return;
     auto* Him=Mode!=0&&Gallery->PartnerActor&&!bMaleHidden?Gallery->PartnerActor.Get():nullptr;
-    // Their bones in the world (the male skeleton may name its bones like hers).
-    auto Bone=[](AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
-        if(!IsValid(A)||!A->BodySkel)return false;
-        for(const TCHAR* P:{TEXT("cf_"),TEXT("cm_")}){const FName N(FString(P)+Name);if(A->BodySkel->GetBoneIndex(N)!=INDEX_NONE){Out=A->BodySkel->GetBoneLocation(N);return true;}}
-        return false;};
+    auto Bone=HBone;
     TArray<FVector> Hers;FVector HerHips,HisHips,P;
     if(!Bone(Girl,TEXT("j_hips"),HerHips))return;
     for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_spine02"),TEXT("j_head"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R")})if(Bone(Girl,N,P))Hers.Add(P);
