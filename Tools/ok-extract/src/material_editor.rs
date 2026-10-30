@@ -258,7 +258,7 @@ pub(crate) fn selected_hair_gloss_texture(
         // KKEx pins the runtime id to one zipmod. Resolve its local slot in
         // that zip rather than relying on the merged catalog's id collisions.
         let zip = guid_path(guid_index, &resolve.mod_id)?;
-        let catalog = catalog_from_zipmod(zip);
+        let catalog = crate::list::zipmod_catalog(zip);
         let entry = catalog.get_slot(433, resolve.slot, resolve.local_slot)?;
         let result = load(entry, Some(zip))?;
         eprintln!("ok-extract: hair gloss id={} tex={} bytes={}",

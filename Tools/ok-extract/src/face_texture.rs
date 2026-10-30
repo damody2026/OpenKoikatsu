@@ -673,7 +673,7 @@ pub(crate) fn load_card_makeup_png(
     if let Some(resolve) = card.resolves.iter().find(|r|
         r.category_no == cat && (r.slot == id || r.local_slot == id)) {
         if let Some(zip) = guid_path(guid_index, &resolve.mod_id) {
-            let catalog = catalog_from_zipmod(zip);
+            let catalog = crate::list::zipmod_catalog(zip);
             if let Some(entry) = catalog.get_slot(cat, resolve.slot, resolve.local_slot) {
                 let tex = entry.info(key);
                 if std::env::var("OK_DIAG").is_ok() {

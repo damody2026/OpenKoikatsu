@@ -149,6 +149,11 @@ impl ChaListCatalog {
     }
 }
 
+/// The archive's lists once per view (crate::pack_memo): a card's opens look up the same zipmods again and again.
+pub(crate) fn zipmod_catalog(path: &Path) -> std::sync::Arc<ChaListCatalog> {
+    crate::pack_memo(format!("catalog_from_zipmod|{}", path.display()), || std::sync::Arc::new(catalog_from_zipmod(path)))
+}
+
 pub fn catalog_from_zipmod(path: &Path) -> ChaListCatalog {
     let mut cat = ChaListCatalog::default();
     let zip = path.to_string_lossy().into_owned();
