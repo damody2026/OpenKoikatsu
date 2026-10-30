@@ -1847,6 +1847,8 @@ void AOKStreetSocialScene::TickFreeTalkHisVoice(double Now){
 }
 
 // Plays the next ready line when she is quiet. Never over a scripted line or a replay; leaving her stops it.
+// Paced on the wall clock: the scene clock stands still in the one-on-one room, and with it every line after her first
+// waited for a time that never came (only one line voiced per visit).
 void AOKStreetSocialScene::TickFreeTalkSpeech(double Now){
  auto& S=*State;const int32 Character=S.FreeTalkSpeechSpeakers.IsValidIndex(S.FreeTalkSpeechPlayed)?S.FreeTalkSpeechSpeakers[S.FreeTalkSpeechPlayed]:S.FreeTalkSpeechCharacter;
  if(Character==INDEX_NONE||S.FreeTalkSpeechPlayed>=S.FreeTalkSpeechLines.Num()||Now<S.FreeTalkSpeechNext)return;
@@ -1860,6 +1862,7 @@ void AOKStreetSocialScene::TickFreeTalkSpeech(double Now){
   if(S.PrivateMode->HSceneSpeaking())return;const int32 Index=S.FreeTalkSpeechPlayed;
   if(S.FreeTalkSpeechPaths[Index].IsEmpty()&&S.FreeTalkSpeechReady[Index]!=2&&FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt<S.TtsTimeout+5)return;
   ++S.FreeTalkSpeechPlayed;if(!S.FreeTalkSpeechPaths[Index].IsEmpty())S.PrivateMode->HSceneSpeak(S.FreeTalkSpeechPaths[Index]);
+  else UE_LOG(LogTemp,Warning,TEXT("H scene: her line %d is not voiced (no file %.1fs after the reply)"),Index,FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt);
   S.FreeTalkSpeechNext=Now+.1;return;
  }
  // Several of them (a party): one at a time. The next girl waits until whoever spoke before her is done, not only
@@ -3684,7 +3687,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(!S.CatchLight.IsValid()){auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetLightingChannels(false,false,true);L->SetCastShadows(false);
   L->SetIntensityUnits(ELightUnits::Candelas);L->SetIntensity(100.f); /* 100 cd: a clear wet shine, short of glare (300 burns out) */L->SetAttenuationRadius(800.f);L->SetSourceRadius(2.f);L->RegisterComponent();AddInstanceComponent(L);S.CatchLight=L;}
  if(PC->PlayerCameraManager)S.CatchLight->SetWorldLocation(PC->PlayerCameraManager->GetCameraLocation()+FVector(0,0,25));
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkHisVoice(SceneTime());TickFreeTalkSpeech(Now);TickDeferredNotes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkHisVoice(SceneTime());TickFreeTalkSpeech(FPlatformTime::Seconds());TickDeferredNotes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickThenAction);TickThenAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}

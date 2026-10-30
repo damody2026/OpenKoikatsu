@@ -70,7 +70,7 @@ public:
         AibuBase=500,
         TouchChest=2101,TouchCrotch=2102,TouchAnal=2103,TouchButt=2104,TouchNipple=2105,Kiss=2106,Release=2107,
         PoseBase=1000,
-        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,LockHer=2017,LockHis=2018,
+        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,LockHer=2017,LockHis=2018,MaleBottom=2019,
         ClothesBase=3000,RoomBase=3200,
     };
 private:
@@ -130,7 +130,26 @@ private:
     // A new pose frames her from the side of the line between them, turned to her front (his back no longer fills the
     // view); he can be hidden as in the original. The player's own orbit stays until the next pose.
     void FrameCamera();
+    // A wall between the camera and them is hidden for the shot (after the camera moves and after props are placed).
+    void HideWallsInTheWay();
     FString FramedKey;double FrameAt=0;bool bMaleHidden=false;
+    // How he is drawn (the original's male display): 0 as he is, 1 one see-through colour (her and the penis seen through
+    // him), 2 hidden. His bottom comes off for the scene (the penis shows) unless the player puts it back on.
+    int32 MaleView=0;bool bMaleBottomOff=true;TWeakObjectPtr<class AKKPreviewActor> MaleLookFor;
+    UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> MaleGhost;
+    UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> MaleGhostComps;
+    UPROPERTY() TArray<TObjectPtr<class UMaterialInterface>> MaleGhostMats; // their own materials, slot by slot, to put back
+    UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> MaleGhostOutlines; // his outline shells, hidden while see-through
+    void ApplyMaleLook();
+    // The pair's clips are made for standard bodies: with her (or him) taller or shorter the penis misses her or goes
+    // through her (the original too). While he is in her, he is moved so the line of his penis passes through her entrance
+    // and the entrance stays along its length; the thrust along it is the clip's. His actor stays on her origin (the pair
+    // player requires one origin): the offset is on the parts under his root.
+    void AlignHim(float Delta);
+    FVector HimOffset=FVector::ZeroVector,HimApplied=FVector::ZeroVector;FString AlignedKey;bool bAlignLogged=false;TWeakObjectPtr<class AKKPreviewActor> AlignedHim;
+    float AlignOff=-1.f,AlignAt=0.f,AlignLen=0.f; // the last measure while he is in her (cm off the penis line, % of its length), for /hscene
+    float DeepAlong=1e9f; // the deepest point of his thrusts lately (entrance distance from the root along the penis), easing back
+    float AtMin=0.f,AtMax=0.f,AtShownMin=0.f,AtShownMax=0.f,AtWindow=0.f; // depth range over the last two seconds, for /hscene
     TSet<int32> Offered; // the action kinds BuildActions shows now
     // The original's poses on a chair, a desk or at a wall need that thing: the room puts a plain one where the pose
     // has her (or him) lean, sit or lie, measured from their bones once the pose stands (PlaceProps).

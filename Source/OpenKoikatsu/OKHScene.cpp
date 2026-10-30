@@ -1,4 +1,6 @@
 #include "OKHScene.h"
+#include "Camera/CameraActor.h"
+#include "Components/ButtonSlot.h"
 #include "HAL/IConsoleManager.h"
 #include "OKCharacterController.h"
 #include "OKStreetSocialText.h"
@@ -6,6 +8,7 @@
 #include "KKPreviewActor.h"
 #include "KKPairedPlayback.h"
 #include "KKRustExtract.h"
+#include "ok_extract.h"
 #include "KKSpeech.h"
 #include "Engine/StaticMeshActor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -204,13 +207,17 @@ void UOKHScenePanel::BuildList(){
     auto Add=[this](int32 Kind,const FString& Label,bool Enabled,bool Current){
         auto* B=WidgetTree->ConstructWidget<UOKHSceneButton>();B->Kind=Kind;B->Owner=this;B->OnClicked.AddDynamic(B,&UOKHSceneButton::HandleClick);B->SetIsEnabled(Enabled);
         if(Current)B->SetBackgroundColor(FLinearColor(1.f,.45f,.7f));
-        auto* L=WidgetTree->ConstructWidget<UTextBlock>();L->SetText(FText::FromString(Label));L->SetAutoWrapText(true);B->SetContent(L);List->AddChild(B);
+        auto* L=WidgetTree->ConstructWidget<UTextBlock>();L->SetText(FText::FromString(Label));L->SetAutoWrapText(true);L->SetJustification(ETextJustify::Center);
+        // The label fills the button: centred in it, it wrapped at its own last width ("單手／交" on two lines).
+        if(auto* S=Cast<UButtonSlot>(B->SetContent(L)))S->SetHorizontalAlignment(HAlign_Fill);List->AddChild(B);
     };
     if(Tab==TabClothes){
         static const TCHAR* Parts[]={TEXT("ui.hscene.cloth_top"),TEXT("ui.hscene.cloth_bottom"),TEXT("ui.hscene.cloth_bra"),TEXT("ui.hscene.cloth_shorts"),TEXT("ui.hscene.cloth_gloves"),TEXT("ui.hscene.cloth_pantyhose"),TEXT("ui.hscene.cloth_socks"),TEXT("ui.hscene.cloth_inner_shoes"),TEXT("ui.hscene.cloth_shoes")};
         static const TCHAR* States[]={TEXT("ui.hscene.cloth_on"),TEXT("ui.hscene.cloth_half"),TEXT("ui.hscene.cloth_half2"),TEXT("ui.hscene.cloth_off")};
         // Each piece she is wearing comes off or goes back on by itself (visibility only: a reload would end the scene).
-        Add(ToggleMale,OKT(bMaleHidden?TEXT("ui.hscene.male_show"):TEXT("ui.hscene.male_hide")),Mode!=0,bMaleHidden);
+        static const TCHAR* Views[]={TEXT("ui.hscene.male_view_shown"),TEXT("ui.hscene.male_view_ghost"),TEXT("ui.hscene.male_view_hidden")};
+        Add(ToggleMale,OKT(Views[FMath::Clamp(MaleView,0,2)]),Mode!=0,MaleView!=0);
+        Add(MaleBottom,OKT(bMaleBottomOff?TEXT("ui.hscene.male_bottom_off"):TEXT("ui.hscene.male_bottom_on")),Mode!=0,bMaleBottomOff);
         Add(RoomBase,OKT(TEXT("ui.hscene.room_floor")),true,Room==0);Add(RoomBase+1,OKT(TEXT("ui.hscene.room_bed")),true,Room==1);
         Add(ClothesBase+100,OKT(TEXT("ui.hscene.cloth_all_on")),true,false);Add(ClothesBase+102,OKT(TEXT("ui.hscene.cloth_all_off")),true,false);
         auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;
@@ -304,7 +311,9 @@ void UOKHScenePanel::Click(int32 Kind){
     if(Kind==InsertAnal&&!(Poses.IsValidIndex(ActivePose)&&Poses[ActivePose].Anal))return;
     if(Kind==LockHer){bLockHer=!bLockHer;ActionsKey.Reset();return;}
     if(Kind==LockHis){bLockHis=!bLockHis;ActionsKey.Reset();return;}
-    if(Kind==ToggleMale){bMaleHidden=!bMaleHidden;BuildList();return;}
+    if((Kind==ToggleMale||Kind==MaleBottom)&&Mode==0)return; // he is not there in a caress
+    if(Kind==ToggleMale){MaleView=(MaleView+1)%3;bMaleHidden=MaleView==2;ApplyMaleLook();BuildList();return;}
+    if(Kind==MaleBottom){bMaleBottomOff=!bMaleBottomOff;ApplyMaleLook();BuildList();return;}
     if(Kind==Release&&Mode==0){TouchArea=INDEX_NONE;Chain({TEXT("Idle")});ActionsKey.Reset();return;}
     if(Kind>=ClothesBase){
         auto* Girl=Gallery->PreviewActor.Get();const int32 C=Kind-ClothesBase;if(!IsValid(Girl))return;
@@ -424,6 +433,11 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
          bPlayed=true;if(Mode==1)bService=true;}
      if(Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)&&TouchArea!=INDEX_NONE)PosesPlayed.AddUnique(AibuPoses[ActiveAibu].Name);}
     if(Mode!=0&&Gallery->PartnerActor&&Gallery->PartnerActor->IsHidden()!=bMaleHidden)Gallery->PartnerActor->SetActorHiddenInGame(bMaleHidden);
+    // Only once the pair plays: while his parts and materials are still being prepared, hiding his clothes or swapping his
+    // materials keeps that preparation from ever finishing (the room timed out).
+    const bool PairPlaying=Gallery->PairedPlayback&&Gallery->PairedPlayback->GetElapsed()>0.f;
+    if(Mode!=0&&PairPlaying&&Gallery->PartnerActor&&MaleLookFor!=Gallery->PartnerActor.Get())ApplyMaleLook(); // he was (re)made for the pair
+    if(PairPlaying)AlignHim(Delta);
     const double Now=FPlatformTime::Seconds();
     auto* Playback=Gallery->PairedPlayback.Get();
     // The pose actually playing: the one he picked once it starts, or the one the scene opened with.
@@ -573,10 +587,24 @@ static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
     for(const TCHAR* P:{TEXT("cf_"),TEXT("cm_")}){const FName N(FString(P)+Name);if(A->BodySkel->GetBoneIndex(N)!=INDEX_NONE){Out=A->BodySkel->GetBoneLocation(N);return true;}}
     return false;
 }
+// Which way her chest faces now, from the shoulders (left to right, crossed with up), while her upper body is upright:
+// in a pair pose the actor's rotation is the pose's origin, not her body, and side-by-side poses were shot from behind.
+static bool HChestForward(AKKPreviewActor* A,FVector& Out){
+    FVector L,R,Head,Hips;
+    if(!HBone(A,TEXT("j_shoulder_L"),L)||!HBone(A,TEXT("j_shoulder_R"),R)||!HBone(A,TEXT("j_head"),Head)||!HBone(A,TEXT("j_hips"),Hips))return false;
+    const FVector Body=Head-Hips;if(FMath::Abs(float(Body.Z))<Body.Size2D()*1.2f)return false; // lying or on all fours: no upright chest
+    // Her face says it best when the face rig is on this skeleton: head to the tip of her nose.
+    FVector Nose;const FName NoseBone=A->BodySkel->GetBoneIndex(TEXT("cf_J_Nose_tip"))!=INDEX_NONE?FName(TEXT("cf_J_Nose_tip")):FName(TEXT("cm_J_Nose_tip"));
+    if(A->BodySkel->GetBoneIndex(NoseBone)!=INDEX_NONE){Nose=A->BodySkel->GetBoneLocation(NoseBone);Out=Nose-Head;Out.Z=0;
+        if(Out.Normalize()){UE_LOG(LogTemp,Display,TEXT("H camera: her front from her nose (%.2f,%.2f)"),Out.X,Out.Y);return true;}}
+    // The converted skeleton is mirrored (its _L shoulder is on her right in UE): up × (R − L) is her front.
+    FVector Right=R-L;Right.Z=0;Out=FVector::CrossProduct(FVector::UpVector,Right);Out.Z=0;
+    UE_LOG(LogTemp,Display,TEXT("H camera: her front from her shoulders (%.2f,%.2f)"),Out.X,Out.Y);return Out.Normalize();
+}
 // Where their body is now, from the bones (the component bounds can still be the standing pose's after a sit or a lie).
 static FBox HBodyBox(AKKPreviewActor* A){
     FBox Box(ForceInit);FVector P;
-    for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_spine02"),TEXT("j_head"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_knee_L"),TEXT("j_knee_R")})if(HBone(A,N,P))Box+=P;
+    for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_spine02"),TEXT("j_head"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_leg01_L"),TEXT("j_leg01_R")})if(HBone(A,N,P))Box+=P;
     if(!Box.IsValid)return IsValid(A)?A->GetComponentsBoundingBox(true):Box;
     Box=Box.ExpandBy(15.f);Box.Max.Z+=12.f;return Box; // the flesh around the bones, the top of the head
 }
@@ -588,24 +616,118 @@ void UOKHScenePanel::FrameCamera(){
     const FBox HerBox=HBodyBox(Girl);if(!HerBox.IsValid)return;
     FVector Facing=Girl->GetActorRotation().RotateVector(FVector(0,1,0));Facing.Z=0;Facing=Facing.GetSafeNormal();
     FVector Focus=HerBox.GetCenter(),Dir=Facing;float Size=HerBox.GetExtent().Size();
-    auto* Him=Gallery->PartnerActor.Get();
+    auto* Him=Gallery->PartnerActor.Get();bool bOverlap=false; // one on top of the other: no side between them to shoot from
     if(Mode!=0&&IsValid(Him)&&!Him->IsHidden()){
         const FBox HisBox=HBodyBox(Him);
         if(HisBox.IsValid){
-            FVector Line=HisBox.GetCenter()-HerBox.GetCenter();Line.Z=0;
-            if(Line.Size()>5.f){Line.Normalize();FVector Side(-Line.Y,Line.X,0);if((Side|Facing)<0)Side=-Side;Dir=(Side+.45f*Facing-.25f*Line).GetSafeNormal();}
+            FVector Line=HisBox.GetCenter()-HerBox.GetCenter();Line.Z=0;bOverlap=Line.Size()<=25.f;
+            // Both of their fronts: the side that sees the two faces (beside him, she faces him and he faces ahead).
+            // Face to face they cancel out: then her front alone.
+            FVector Chest,HisChest;if(HChestForward(Girl,Chest)){Facing=Chest;
+                if(HChestForward(Him,HisChest)&&(Chest+HisChest).Size2D()>.5f)Facing=(Chest+HisChest).GetSafeNormal2D();}
+            if(Line.Size()>5.f){Line.Normalize();FVector Side(-Line.Y,Line.X,0);if((Side|Facing)<0)Side=-Side;const FVector Across=Facing-Line*float(Facing|Line); // her front across the line between them, not toward him
+                Dir=(Side+.45f*Across-.25f*Line).GetSafeNormal();
+                // From the side where his body is least in the way of her face (an arch, a pose seen across his back).
+                FVector Face,B;TArray<FVector> HisBody;for(const TCHAR* N:{TEXT("j_head"),TEXT("j_spine02"),TEXT("j_hips")})if(HBone(Him,N,B))HisBody.Add(B);
+                if(HBone(Girl,TEXT("j_head"),Face)&&HisBody.Num()){
+                    const float Dist=FMath::Clamp(Size*2.5f,120.f,650.f);
+                    auto Clear=[&](const FVector& D){const FVector Eye=Focus+D*Dist+FVector(0,0,Dist*.32f);float Near=TNumericLimits<float>::Max();
+                        // Only what is between the eye and her face blocks it: his head beside hers (close to her end) does not.
+                        const FVector Ray=Face-Eye;for(const FVector& V:HisBody){const float T=float((V-Eye)|Ray)/FMath::Max(1.f,float(Ray.SizeSquared()));
+                            if(T>.05f&&T<.85f)Near=FMath::Min(Near,FMath::PointDistToSegment(V,Eye,Face));}return Near;};
+                    const FVector Other=(-Side+.45f*Across-.25f*Line).GetSafeNormal();
+                    const float Here=Clear(Dir);if(Here<20.f&&Clear(Other)>Here+12.f)Dir=Other;}} // only when this side is blocked
+            else Dir=FVector(-Facing.Y,Facing.X,0); // one right against the other (held up, face to face): from beside her, not through him
             Focus=FMath::Lerp(HerBox.GetCenter(),HisBox.GetCenter(),.3f);Size=FMath::Max(Size,(HerBox+HisBox).GetExtent().Size()*.8f);
         }
     }else{Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();Focus.Z+=HerBox.GetExtent().Z*.15f;} // her body from the bones, a little above its middle so the head is never cut
     // Lying (on her back, on all fours): her body runs along the floor, not the way the actor faces. From beside her body,
-    // toward her face, and from higher up, so neither her feet nor her back fill the view.
+    // toward her face, and from higher up, so neither her feet nor her back fill the view. One on top of the other (an
+    // arch under him): the same, from beside her body, though it is not flat.
     float Pitch=18.f;
-    {FVector Head,Hips;if(Mode==0&&HBone(Girl,TEXT("j_head"),Head)&&HBone(Girl,TEXT("j_hips"),Hips)){
+    {FVector Head,Hips;if((Mode==0||bOverlap)&&HBone(Girl,TEXT("j_head"),Head)&&HBone(Girl,TEXT("j_hips"),Hips)){
         FVector Body=Head-Hips;const float Up=FMath::Abs(float(Body.Z));Body.Z=0;
-        if(Body.Size()>Up*1.2f&&Body.Normalize()){FVector Side(-Body.Y,Body.X,0);if((Side|Facing)<0)Side=-Side;Dir=(Side+.35f*Body).GetSafeNormal();Pitch=35.f;}}}
+        const bool Flat=Body.Size()>Up*1.2f;
+        if((Flat||bOverlap&&Body.Size()>10.f)&&Body.Normalize()){FVector Side(-Body.Y,Body.X,0);if((Side|Facing)<0)Side=-Side;
+            if(Flat){Dir=(Side+.35f*Body).GetSafeNormal();Pitch=35.f;}else Dir=Side;}}} // held upright against him: straight from the side
     if(Dir.IsNearlyZero())return;
-    Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=Pitch;Girl->OrbitDistance=FMath::Clamp(Size*2.5f,120.f,650.f); // the bone box is tighter than the mesh bounds
+    Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=Pitch;Girl->OrbitDistance=FMath::Clamp(Size*(Mode==0&&Pitch<30.f?3.1f:2.5f),120.f,650.f); /* standing alone: head to feet in the shot (2.5 cut both) */ // the bone box is tighter than the mesh bounds
     Girl->ApplyOrbitCamera();
+    UE_LOG(LogTemp,Display,TEXT("H camera: facing (%.2f,%.2f) shot from (%.2f,%.2f) pitch %.0f distance %.0f"),Facing.X,Facing.Y,Dir.X,Dir.Y,Pitch,Girl->OrbitDistance);
+    HideWallsInTheWay();
+}
+void UOKHScenePanel::ApplyMaleLook(){
+    auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;if(!IsValid(Him)||Mode==0||Him->IsHidden()||!Gallery->PairedPlayback)return;MaleLookFor=Him;
+    // His bottom and briefs (the original takes them off in H): off shows the body under them, the penis with it.
+    {uint8 S[9];for(int32 K=0;K<9;++K)S[K]=Him->DisplayClothesStates[K];if(bMaleBottomOff){S[1]=3;S[3]=3;}Him->SetClothingPartsHidden(S);}
+    // Put his own materials back first, then (see-through) one colour on every part of him.
+    int32 M=0;for(UMeshComponent* Comp:MaleGhostComps){if(!IsValid(Comp)){continue;}for(int32 I=0;I<Comp->GetNumMaterials()&&M<MaleGhostMats.Num();++I,++M)Comp->SetMaterial(I,MaleGhostMats[M]);}
+    MaleGhostComps.Reset();MaleGhostMats.Reset();
+    for(UMeshComponent* Comp:MaleGhostOutlines)if(IsValid(Comp))Comp->SetVisibility(true);MaleGhostOutlines.Reset();
+    // The penis (hidden like the card preview's) shows when his bottom is off.
+    Him->SetGenitalVisible(bMaleBottomOff);
+    if(MaleView!=1)return;
+    static UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewTranslucent.M_PreviewTranslucent"));
+    if(!Parent){UE_LOG(LogTemp,Warning,TEXT("H scene: no see-through material for him"));return;}
+    if(!MaleGhost){MaleGhost=UMaterialInstanceDynamic::Create(Parent,this);MaleGhost->SetVectorParameterValue(TEXT("PreviewTint"),FLinearColor(.25f,.45f,1.f,.05f));}
+    TInlineComponentArray<UMeshComponent*> Comps;Him->GetComponents(Comps);
+    // Everything but the penis and the balls (o_dankon / cm_o_dan00, o_dan_f): those stay as they are, to see where he is in her.
+    auto PartName=[Him](UMeshComponent* Comp){for(const FName& Tag:Comp->ComponentTags){const FString T=Tag.ToString();if(!T.StartsWith(TEXT("KKSessionPart_")))continue;
+        OkMeshView V{};if(Him->Session.PartAt(FCString::Atoi(*T.Mid(14)),V)&&V.name)return FString(UTF8_TO_TCHAR(V.name)).ToLower();}return FString();};
+    auto Genital=[&](UMeshComponent* Comp){const FString N=PartName(Comp);return N==TEXT("o_dankon")||N==TEXT("cm_o_dan00")||N==TEXT("o_dan_f")||N==TEXT("cm_o_dan_f");};
+    for(UMeshComponent* Comp:Comps){if(!Comp->IsVisible()||Genital(Comp))continue;
+        // One layer of colour: his body and face only. Hair cards, clothes, eyes and outline shells stacked on them made the
+        // 5% look like half; they are hidden while he is see-through.
+        {const UMaterialInterface* First=Comp->GetNumMaterials()>0?Comp->GetMaterial(0):nullptr;const FString N=PartName(Comp);
+         if(!(N==TEXT("o_body_a")||N==TEXT("o_body_b")||N==TEXT("cf_o_face"))||(First&&First->GetName().Contains(TEXT("Outline")))){MaleGhostOutlines.Add(Comp);Comp->SetVisibility(false);continue;}}
+        MaleGhostComps.Add(Comp);
+        for(int32 I=0;I<Comp->GetNumMaterials();++I){MaleGhostMats.Add(Comp->GetMaterial(I));Comp->SetMaterial(I,MaleGhost);}}
+    UE_LOG(LogTemp,Display,TEXT("H scene: he is drawn see-through (%d parts)"),MaleGhostComps.Num());
+}
+void UOKHScenePanel::AlignHim(float Delta){
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
+    if(!IsValid(Girl)||!IsValid(Him))return;
+    const FString Key=FString::Printf(TEXT("%d|%d"),Mode,ActivePose);
+    // A new pose places him on her again (the pair commit copies her transform): start from no offset.
+    if(Key!=AlignedKey){AlignedKey=Key;HimOffset=FVector::ZeroVector;bAlignLogged=false;DeepAlong=1e9f;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;}
+    AlignOff=-1.f;
+    if(Mode!=2){return;}
+    const FString Cur=Current(),Base=HBase(Cur);
+    const bool In=Base==TEXT("Insert")||Base==TEXT("InsertIdle")||Base.EndsWith(TEXT("Loop"))&&!Base.Contains(TEXT("OUT"))||Base.Contains(TEXT("_IN_"))||Base==TEXT("IN_A");
+    FVector E,P0,P1;
+    if(In&&HBone(Girl,Cur.StartsWith(TEXT("A_"))?TEXT("J_Ana"):TEXT("J_Kokan"),E)&&HBone(Him,TEXT("J_dan100_00"),P0)&&HBone(Him,TEXT("J_dan109_00"),P1)){
+        const FVector Axis=(P1-P0).GetSafeNormal();const float Len=float((P1-P0).Size());
+        if(Len>2.f){
+            const FVector D=E-P0;const float Along=float(D|Axis);const FVector Fix=D-Axis*Along; // onto the line of the penis
+            AlignOff=float(Fix.Size());AlignAt=100.f*Along/Len;AlignLen=Len;
+            AtMin=FMath::Min(AtMin,AlignAt);AtMax=FMath::Max(AtMax,AlignAt);AtWindow+=Delta;
+            if(AtWindow>=2.f){AtShownMin=AtMin;AtShownMax=AtMax;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;}
+            // Depth: only the deepest point of his thrusts is set (70% of him in her); per frame it would flatten the clip's
+            // thrust. The deepest point eases back (a fifth of his length a second) so a shallower pose is followed too.
+            DeepAlong=FMath::Min(DeepAlong+Delta*Len*.2f,Along);
+            // The insertion itself starts with him outside her: its line is aligned, its depth is the clip's.
+            float Deeper=0.f;if(Base==TEXT("Insert")){}else if(DeepAlong>Len*.3f&&DeepAlong<1e8f)Deeper=DeepAlong-Len*.3f;else if(DeepAlong<Len*.05f)Deeper=DeepAlong-Len*.05f;
+            const float Rate=FMath::Min(1.f,Delta*10.f),Push=Deeper*FMath::Min(1.f,Delta*2.f);DeepAlong-=Push;
+            if(!bAlignLogged){bAlignLogged=true;UE_LOG(LogTemp,Display,TEXT("H align: %s penis %.1f cm, her entrance %.1f cm off its line at %.0f%% of it"),*Cur,Len,AlignOff,AlignAt);}
+            HimOffset+=Fix*Rate+Axis*Push;
+            HimOffset=HimOffset.GetClampedToMaxSize(45.f); // a mismatch past that is a different pose, not a height
+        }
+    }
+    if(AlignedHim!=Him){AlignedHim=Him;HimApplied=FVector::ZeroVector;} // a new him has his parts where they were made
+    const FVector Step=HimOffset-HimApplied;if(Step.IsNearlyZero(.01f))return;HimApplied=HimOffset;
+    if(USceneComponent* Root=Him->GetRootComponent()){const FVector Local=Root->GetComponentTransform().InverseTransformVectorNoScale(Step);
+        for(USceneComponent* Child:Root->GetAttachChildren())if(IsValid(Child))Child->AddRelativeLocation(Local);}
+}
+void UOKHScenePanel::HideWallsInTheWay(){
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->StudioCam||Props.IsEmpty())return;
+    auto* Him=Gallery->PartnerActor.Get();const FVector Focus=Girl->OrbitFocus;
+    const FVector Eye=Girl->StudioCam->GetActorLocation();
+    // A wall (the only prop taller than a person) between the camera and them is hidden for this shot; seats and beds stay.
+    // Lines to her head, her hips and his head, not only to the middle between them (a wall can hide her and miss that).
+    TArray<FVector> Seen={Focus};FVector B;if(HBone(Girl,TEXT("j_head"),B))Seen.Add(B);if(HBone(Girl,TEXT("j_hips"),B))Seen.Add(B);
+    if(Mode!=0&&IsValid(Him)&&!Him->IsHidden()&&HBone(Him,TEXT("j_head"),B))Seen.Add(B);
+    for(AStaticMeshActor* A:Props)if(IsValid(A)){FVector O,E;A->GetActorBounds(false,O,E);bool Blocks=false;
+        if(E.Z>90.f)for(const FVector& To:Seen)Blocks|=FMath::LineBoxIntersection(FBox(O-E,O+E),Eye,To,To-Eye);A->SetActorHiddenInGame(Blocks);}
 }
 void UOKHScenePanel::ClearProps(){for(AStaticMeshActor* A:Props)if(IsValid(A))A->Destroy();Props.Reset();}
 void UOKHScenePanel::NativeDestruct(){ClearProps();Super::NativeDestruct();}
@@ -628,8 +750,19 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
         A->SetActorScale3D(Size/100.f);Props.Add(A);};
     FString What;
     if(Kind==1){
-        // Under the lower hips of the two (he sits and she is on his lap, or she sits alone).
-        const bool HeSits=HasHim&&HisHips.Z<HerHips.Z;const FVector Sit=HeSits?HisHips:HerHips;
+        // Under whoever sits: knees off the floor and thighs about level with the hips (kneeling has the knees on the floor).
+        // Both sitting (she is on his lap): the lower hips. Neither clearly: the lower hips too.
+        auto Sitting=[&](AKKPreviewActor* A,const FVector& Hips){FVector KL,KR;if(!A||!Bone(A,TEXT("j_leg01_L"),KL)||!Bone(A,TEXT("j_leg01_R"),KR))return false;
+            const float Knee=float(KL.Z+KR.Z)/2;UE_LOG(LogTemp,Display,TEXT("H scene: seat check knee %.0f above the floor, hips %.0f above the knees"),Knee-Floor,float(Hips.Z)-Knee);
+            return Knee>Floor+25.f&&FMath::Abs(float(Hips.Z)-Knee)<25.f;}; // seated: 2–14 cm; bent over standing: 31
+        const bool SheSits=Sitting(Girl,HerHips),HisSit=HasHim&&Sitting(Him,HisHips);
+        // Nobody sits (she bends over it from behind): the seat is under her hands, nothing through her body.
+        FVector HL,HR;
+        if(!SheSits&&!HisSit&&Bone(Girl,TEXT("j_hand_L"),HL)&&Bone(Girl,TEXT("j_hand_R"),HR)&&FMath::Min(HL.Z,HR.Z)>Floor+25.f){
+            const FVector Hands=(HL+HR)/2;const float Top=float(FMath::Min(HL.Z,HR.Z))-4.f;
+            Box(FVector(Hands.X,Hands.Y,(Floor+Top)/2),FVector(48,48,Top-Floor),(Hands-HerHips).GetSafeNormal2D().Rotation());What=TEXT("seat under her hands");
+            UE_LOG(LogTemp,Display,TEXT("H scene: %s placed for the pose (%d)"),*What,Props.Num());return;}
+        const bool HeSits=HasHim&&(HisSit!=SheSits?HisSit:HisHips.Z<HerHips.Z);const FVector Sit=HeSits?HisHips:HerHips;
         const float Top=FMath::Max(Floor+20.f,Sit.Z-12.f);Box(FVector(Sit.X,Sit.Y,(Floor+Top)/2),FVector(48,48,Top-Floor),FRotator::ZeroRotator);What=TEXT("seat");
         // Leaning back (a sofa, a chair back): a slanted back from the hips along the spine to the head, behind it.
         FVector Head;if(Bone(HeSits?Him:Girl,TEXT("j_head"),Head)){
@@ -651,7 +784,9 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
         if(HasHim)Dir=HerHips-HisHips;
         if(Dir.Size2D()<5.f&&Bone(Girl,TEXT("j_hand_L"),L)&&Bone(Girl,TEXT("j_hand_R"),R))Dir=(L+R)/2-HerHips;
         Dir.Z=0;if(!Dir.Normalize())return;
-        float Far=0;for(const FVector& V:Hers)Far=FMath::Max(Far,float((V-HerHips)|Dir));
+        // Past both of them (he can be the one against it): never through anyone.
+        TArray<FVector> Both=Hers;if(HasHim)for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_spine02"),TEXT("j_head"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_leg01_L"),TEXT("j_leg01_R")})if(Bone(Him,N,P))Both.Add(P);
+        float Far=0;for(const FVector& V:Both)Far=FMath::Max(Far,float((V-HerHips)|Dir));
         const FVector At=HerHips+Dir*(Far+4.f);
         Box(FVector(At.X,At.Y,Floor+110.f),FVector(6,160,220),Dir.Rotation());What=TEXT("wall");
     }else if(Room==1&&HerHips.Z<Floor+60.f){
@@ -662,7 +797,7 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
         for(AKKPreviewActor* A:{Girl,HasHim?Him:nullptr}){FVector Hd,Hp;if(!A||!Bone(A,TEXT("j_head"),Hd)||!Bone(A,TEXT("j_hips"),Hp))continue;
             FVector D=Hd-Hp;D.Z=0;if(D.Size()>Flat){Flat=D.Size();Lying=Hp;if(D.Normalize())Along=D;}}
         const FVector Across(-Along.Y,Along.X,0);
-        TArray<FVector> All=Hers;if(HasHim){for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_head"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_knee_L"),TEXT("j_knee_R")})if(Bone(Him,N,P))All.Add(P);}
+        TArray<FVector> All=Hers;if(HasHim){for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_head"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_leg01_L"),TEXT("j_leg01_R")})if(Bone(Him,N,P))All.Add(P);}
         float A0=TNumericLimits<float>::Max(),A1=-A0,C0=A0,C1=-A0;
         for(const FVector& V:All){const FVector D=V-Lying;A0=FMath::Min(A0,float(D|Along));A1=FMath::Max(A1,float(D|Along));C0=FMath::Min(C0,float(D|Across));C1=FMath::Max(C1,float(D|Across));}
         A0-=30.f;A1+=25.f;C0-=30.f;C1+=30.f;
@@ -674,6 +809,7 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
         const FVector HeadAt=Lying+Along*(A1+8.f)+Across*((C0+C1)/2);Box(FVector(HeadAt.X,HeadAt.Y,Floor+20.f),FVector(8.f,C1-C0+12.f,80.f),Rot);What=TEXT("bed"); // a low headboard (below the camera)
     }
     UE_LOG(LogTemp,Display,TEXT("H scene: %s placed for the pose (%d)"),*What,Props.Num());
+    HideWallsInTheWay(); // the camera may already be framed for this pose
 }
 FString UOKHScenePanel::StateWords(const FString& Base) const{
     if(Mode==0)return OKT(Base==TEXT("K_Loop")||Base==TEXT("K_Touch")?TEXT("ui.hscene.state_kiss"):Base.StartsWith(TEXT("Orgasm"))?TEXT("ui.hscene.state_after"):TouchArea!=INDEX_NONE?TEXT("ui.hscene.state_caress"):TEXT("ui.hscene.state_idle"));
@@ -705,6 +841,7 @@ void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit
 TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     auto O=MakeShared<FJsonObject>();
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
+    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
     O->SetStringField(TEXT("state"),Current());O->SetStringField(TEXT("wanted"),Wanted);O->SetNumberField(TEXT("mode"),Mode);
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
     O->SetNumberField(TEXT("playback_speed"),PlaybackSpeed());O->SetNumberField(TEXT("held"),Held.Num());O->SetStringField(TEXT("caption"),Caption?Caption->GetText().ToString():FString());

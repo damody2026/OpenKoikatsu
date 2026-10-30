@@ -139,6 +139,15 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
         if(Body->TryGetStringField(TEXT("pose"),Pose)&&!Pose.IsEmpty()&&!Panel->SelectPoseNamed(Pose)){Why=TEXT("no pose named ")+Pose;return nullptr;}
         if(Body->TryGetNumberField(TEXT("kind"),Kind)&&Kind>0)Panel->Click(int32(Kind));
         FString Say;if(Body->TryGetStringField(TEXT("say"),Say)&&!Say.IsEmpty())Panel->Say(Say);
+        // {"height":{"her":0..1,"him":0..1}}: their height slider (ChaFile shapeBody[0]) for testing the pair at other sizes.
+        const TSharedPtr<FJsonObject>* Heights=nullptr;if(Body->TryGetObjectField(TEXT("height"),Heights)){
+            // The pair player holds views into both sessions: reshaping under it crashed the game. Stop it first; the next pose
+            // chosen makes the pair again at the new sizes.
+            Controller->CancelPairPreparation();
+            if(Controller->PairedPlayback){Controller->PairedPlayback->Stop();Controller->PairedPlayback->Destroy();Controller->PairedPlayback=nullptr;}
+            for(AKKPreviewActor* A:{Controller->PreviewActor.Get(),Controller->PartnerActor.Get()})if(IsValid(A))A->SetActorTickEnabled(true);
+            auto Set=[](AKKPreviewActor* A,double V){if(!IsValid(A)||A->ShapeBody.IsEmpty())return;A->ShapeBody[0]=float(V);A->ApplyShapes(A->ShapeFace,A->ShapeBody);};
+            double V;if((*Heights)->TryGetNumberField(TEXT("her"),V))Set(Controller->PreviewActor,V);if((*Heights)->TryGetNumberField(TEXT("him"),V))Set(Controller->PartnerActor,V);}
     }
     TSharedPtr<FJsonObject> View=Panel->Describe();
     // {"faces":true}: her eye (1) and brow (2) pattern labels, for choosing expressions.
@@ -151,6 +160,14 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
             FString PartRole;OkMeshView V{};if(Index!=INDEX_NONE&&Controller->PreviewActor->Session.PartAt(Index,V)&&V.role)PartRole=UTF8_TO_TCHAR(V.role);
             L.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%d %s %s vis=%d hig=%d main=%d parent=%s"),Index,*PartRole,*C->GetClass()->GetName(),C->IsVisible(),C->bHiddenInGame,C->bRenderInMainPass,C->GetAttachParent()?*C->GetAttachParent()->GetName():TEXT("-"))));}
         View->SetArrayField(TEXT("parts"),L);}
+    // {"his_parts":true}: the same for him, with each part's renderer name (the penis is o_dankon / cm_o_dan00).
+    bool HisDump=false;if(View.IsValid()&&Body.IsValid()&&Body->TryGetBoolField(TEXT("his_parts"),HisDump)&&HisDump&&IsValid(Controller->PartnerActor)){
+        TArray<TSharedPtr<FJsonValue>> L;TInlineComponentArray<UMeshComponent*> Components;Controller->PartnerActor->GetComponents(Components);
+        for(UMeshComponent* C:Components){int32 Index=INDEX_NONE;for(const FName& Tag:C->ComponentTags)if(Tag.ToString().StartsWith(TEXT("KKSessionPart_")))Index=FCString::Atoi(*Tag.ToString().Mid(14));
+            FString PartRole,PartName;OkMeshView V{};if(Index!=INDEX_NONE&&Controller->PartnerActor->Session.PartAt(Index,V)){if(V.role)PartRole=UTF8_TO_TCHAR(V.role);if(V.name)PartName=UTF8_TO_TCHAR(V.name);}
+            const UMaterialInterface* M=C->GetNumMaterials()>0?C->GetMaterial(0):nullptr;
+            L.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%d %s %s vis=%d mat=%s"),Index,*PartRole,*PartName,C->IsVisible(),M?*M->GetName():TEXT("-"))));}
+        View->SetArrayField(TEXT("his_parts"),L);}
     // {"bones":true}: where their hips, hands, feet and heads are (world cm), for placing props under a pose.
     bool BonesDump=false;if(View.IsValid()&&Body.IsValid()&&Body->TryGetBoolField(TEXT("bones"),BonesDump)&&BonesDump){
         auto Dump=[&](AKKPreviewActor* A,const TCHAR* Field,const TCHAR* P){if(!IsValid(A)||!A->BodySkel)return;auto O=MakeShared<FJsonObject>();
