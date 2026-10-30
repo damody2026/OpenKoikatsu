@@ -947,23 +947,32 @@ pub struct ZipEntry<'a> {
 }
 enum ZipSource<'a> {
     Real(zip::read::ZipFile<'a>, Option<(Sink, String, usize)>),
-    Library(Option<io::Cursor<Vec<u8>>>, Arc<State>, String),
+    Library(Option<io::Cursor<Vec<u8>>>, Arc<State>, Label<'a>),
     /// A recorded zipmod's entry whose content comes from the real archive: inflated on the first read, so walking
     /// an archive's entries for their names (manifest, suffix and list scans) no longer inflates every entry.
-    Pending(PendingEntry, Arc<State>, String),
+    Pending(PendingEntry<'a>, Arc<State>, Label<'a>),
 }
 
-struct PendingEntry { real: PathBuf, name: String, key: String, index: usize, names: Option<Vec<(String, u64, u32, bool)>> }
+/// A library entry's `zip|entry` label, made when a gap is reported (opening an entry is mostly a walk over names).
+#[derive(Clone, Copy)]
+struct Label<'a> { key: &'a str, name: &'a str }
 
-impl PendingEntry {
+impl Label<'_> {
+    fn text(&self) -> String { format!("{}|{}", self.key, self.name.replace('\\', "/").to_ascii_lowercase()) }
+}
+
+/// (`names`: the archive's entry list for a recording, copied when the entry is loaded.)
+struct PendingEntry<'a> { real: &'a Path, name: &'a str, key: &'a str, index: usize, names: Option<&'a [(String, u64, u32, bool)]> }
+
+impl PendingEntry<'_> {
     fn load(&self) -> Option<Vec<u8>> {
         let bytes = std::fs::File::open(&self.real).ok()
             .and_then(|f| zip::ZipArchive::new(std::io::BufReader::new(f)).ok())
-            .and_then(|mut z| { let mut f = z.by_name(&self.name).ok()?; let mut v = Vec::with_capacity(f.size() as usize); f.read_to_end(&mut v).ok()?; Some(v) })?;
+            .and_then(|mut z| { let mut f = z.by_name(self.name).ok()?; let mut v = Vec::with_capacity(f.size() as usize); f.read_to_end(&mut v).ok()?; Some(v) })?;
         mark_fallback_used();
         if let (Some(o), Some(names)) = (recording_overlay(), self.names.as_ref()) {
-            let entry = content_entry(Path::new(&self.name), &bytes);
-            o.index.lock().unwrap().zips.entry(self.key.clone()).or_insert_with(|| ZipIndex { names: names.clone(), entries: BTreeMap::new() }).entries.insert(self.index, entry);
+            let entry = content_entry(Path::new(self.name), &bytes);
+            o.index.lock().unwrap().zips.entry(self.key.to_owned()).or_insert_with(|| ZipIndex { names: names.to_vec(), entries: BTreeMap::new() }).entries.insert(self.index, entry);
         }
         Some(bytes)
     }
@@ -1010,7 +1019,9 @@ impl Zip {
                 Ok(ZipEntry { name: f.name().to_owned(), size: f.size(), crc: f.crc32(), dir: f.is_dir(), source: ZipSource::Real(f, rec) })
             }
             Zip::Library(st, key, index, real) => {
-                let (name, size, crc, dir) = index.names.get(i).cloned().ok_or(zip::result::ZipError::FileNotFound)?;
+                let (key, index, real): (&String, &ZipIndex, &Option<(PathBuf, bool)>) = (key, index, real);
+                let (entry_name, size, crc, dir) = index.names.get(i).map(|n| (n.0.as_str(), n.1, n.2, n.3)).ok_or(zip::result::ZipError::FileNotFound)?;
+                let name = entry_name.to_owned();
                 // A zipmod of the card itself is read from the real archive even when the library knows the entry's model:
                 // the library may hold only some queries of a model it never converted, and the card's pack records the rest.
                 let recorded = index.entries.get(&i);
@@ -1032,12 +1043,12 @@ impl Zip {
                 // as its token: the item catalog scan walks every zipmod's bundles, and only a query a session really
                 // makes on that model is a gap (it names the model, which `zips_with_model` turns into the zipmod).
                 let data = if use_real { None } else { recorded.and_then(entry_bytes).map(io::Cursor::new) };
-                let label = format!("{key}|{}", name.replace('\\', "/").to_ascii_lowercase());
+                let label = Label { key, name: entry_name };
                 if data.is_none() && !dir {
                     // Not converted (character-specific): the real archive's entry, read when the entry is read.
                     if let Some((path, _)) = real.as_ref().filter(|_| use_real) {
-                        let pending = PendingEntry { real: path.clone(), name: name.clone(), key: key.clone(), index: i,
-                            names: recording_overlay().map(|_| index.names.clone()) };
+                        let pending = PendingEntry { real: path, name: entry_name, key, index: i,
+                            names: recording_overlay().map(|_| index.names.as_slice()) };
                         return Ok(ZipEntry { name, size, crc, dir, source: ZipSource::Pending(pending, st.clone(), label) });
                     }
                 }
@@ -1064,7 +1075,7 @@ impl ZipEntry<'_> {
     fn resolve_pending(&mut self) {
         if let ZipSource::Pending(p, st, label) = &self.source {
             let data = p.load().map(io::Cursor::new);
-            self.source = ZipSource::Library(data, st.clone(), label.clone());
+            self.source = ZipSource::Library(data, st.clone(), *label);
         }
     }
 }
@@ -1076,7 +1087,7 @@ impl Read for ZipEntry<'_> {
             // partial read without recorded content is a reported gap.
             ZipSource::Real(f, _) => f.read(buf),
             ZipSource::Library(Some(c), _, _) => c.read(buf),
-            ZipSource::Library(None, _, key) => { missing("zip-entry", key); Err(not_found()) }
+            ZipSource::Library(None, _, label) => { missing("zip-entry", &label.text()); Err(not_found()) }
             ZipSource::Pending(..) => { self.resolve_pending(); self.read(buf) }
         }
     }
@@ -1093,7 +1104,7 @@ impl Read for ZipEntry<'_> {
                 Ok(n)
             }
             ZipSource::Library(Some(c), _, _) => c.read_to_end(out),
-            ZipSource::Library(None, _, key) => { missing("zip-entry", key); Err(not_found()) }
+            ZipSource::Library(None, _, label) => { missing("zip-entry", &label.text()); Err(not_found()) }
             ZipSource::Pending(..) => {
                 self.resolve_pending();
                 // The loaded entry itself when nothing was read yet (not a second copy of it).
