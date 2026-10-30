@@ -1,4 +1,5 @@
 #include "OKHScene.h"
+#include "HAL/IConsoleManager.h"
 #include "OKCharacterController.h"
 #include "OKStreetSocialText.h"
 #include "OKMotionLabelZh.h"
@@ -6,6 +7,10 @@
 #include "KKPairedPlayback.h"
 #include "KKRustExtract.h"
 #include "KKSpeech.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Async/Async.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
@@ -54,18 +59,28 @@ float UOKHScenePanel::AreaExperience(int32 Area) const{
 // The private room is a bare floor: a pose fits it when the original lets it play on the floor, a bed or standing
 // (H point categories 0, 1, 9). Chair, desk, wall, pool, fence, net and the rest need their prop and floated there (he
 // sat on air in 椅子対面, she lay in mid-air in 机寝位).
-static bool HFitsRoom(const FString& Category,int32 Id){
-    const TSharedPtr<FJsonObject>* M=HPoseMeta().Find(FString::Printf(TEXT("%s:%d"),*Category,Id));if(!M)return true;
-    const TArray<TSharedPtr<FJsonValue>>* Places=nullptr;if(!(*M)->TryGetArrayField(TEXT("categories"),Places)||Places->IsEmpty())return true;
-    for(const auto& V:*Places){const int32 C=int32(V->AsNumber());if(C==0||C==1||C==9)return true;}
-    return false;
+static TAutoConsoleVariable<int32> CVarHAllPoses(TEXT("ok.HScene.AllPoses"),0,TEXT("1: list every authored pose in the private room, props or not (testing prop placement)"));
+// The room's prop for a pose: 0 none (it plays on the floor, a bed or standing: categories 0, 1, 9), 1 a seat (chair
+// 2-5, bench 12, prank chair 1003, straddled chair 1200, sofa 1201), 2 a table (desk 6-7, box 1009, table tennis 1301,
+// crouch at a desk 1305), 3 a wall (8, bookshelf 1002, fence 1006, net 1300, wall 1302, pressed 1304); -1 none fits
+// (pool, banana boat, the rest): left out of the room.
+static int32 HPropKind(const FString& Category,int32 Id){
+    const TSharedPtr<FJsonObject>* M=HPoseMeta().Find(FString::Printf(TEXT("%s:%d"),*Category,Id));if(!M)return 0;
+    const TArray<TSharedPtr<FJsonValue>>* Places=nullptr;if(!(*M)->TryGetArrayField(TEXT("categories"),Places)||Places->IsEmpty())return 0;
+    int32 Kind=-1;
+    for(const auto& V:*Places){const int32 C=int32(V->AsNumber());
+        if(C==0||C==1||C==9)return 0;
+        const int32 K=(C>=2&&C<=5)||C==12||C==1003||C==1200||C==1201?1:(C==6||C==7||C==1009||C==1301||C==1305)?2:(C==8||C==1002||C==1006||C==1300||C==1302||C==1304)?3:-1;
+        if(K>0&&Kind<0)Kind=K;}
+    return Kind;
 }
+static bool HFitsRoom(const FString& Category,int32 Id){return CVarHAllPoses.GetValueOnGameThread()||HPropKind(Category,Id)>=0;}
 void UOKHScenePanel::LoadAibuPoses(){
     bAibuLoaded=true;AibuPoses.Reset();TArray<TSharedPtr<FJsonValue>> Rows;
     if(!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(FOkSession::CommonInteractionPoses()),Rows))return;
     for(const auto& V:Rows){const auto Row=V->AsObject();if(!Row||Row->GetIntegerField(TEXT("participants"))!=1||Row->GetStringField(TEXT("category"))!=TEXT("AnimationInfo_00"))continue;
         if(!HFitsRoom(TEXT("AnimationInfo_00"),Row->GetIntegerField(TEXT("id"))))continue;
-        FAibuPose& Pose=AibuPoses.AddDefaulted_GetRef();Pose.Source=Row->GetStringField(TEXT("female_source"));Pose.Layer=Row->GetIntegerField(TEXT("female_layer"));Pose.Id=Row->GetIntegerField(TEXT("id"));
+        FAibuPose& Pose=AibuPoses.AddDefaulted_GetRef();Pose.Source=Row->GetStringField(TEXT("female_source"));Pose.Layer=Row->GetIntegerField(TEXT("female_layer"));Pose.Id=Row->GetIntegerField(TEXT("id"));Pose.Prop=FMath::Max(0,HPropKind(TEXT("AnimationInfo_00"),Pose.Id));
         const FString Raw=Row->GetStringField(TEXT("name"));Pose.Name=Raw.IsEmpty()?FString::Printf(TEXT("#%d"),Row->GetIntegerField(TEXT("id"))):OKMotionLabelDisplay(Raw);}
     UE_LOG(LogTemp,Display,TEXT("H scene: %d caress poses"),AibuPoses.Num());
 }
@@ -176,6 +191,7 @@ void UOKHScenePanel::LoadPoses(){
             Pose.IsExperience=int32((*M)->GetNumberField(TEXT("is_experience")));Pose.StateRestriction=int32((*M)->GetNumberField(TEXT("state_restriction")));
             const FString Named=(*M)->GetStringField(TEXT("name"));if(!Named.IsEmpty())Pose.Name=Named;
         }
+        Pose.Prop=FMath::Max(0,HPropKind(Category,Id));
         if(Pose.Name.IsEmpty())Pose.Name=FString::Printf(TEXT("#%d"),Id);
         Pose.Raw=Pose.Name;Pose.Name=OKMotionLabelDisplay(Pose.Raw);
         Poses.Add(Pose);
@@ -368,6 +384,10 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     if(!Gallery)return;
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
     UpdateFace();FrameCamera();
+    {const int32 Kind=Mode==0?(AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Prop:0):(Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Prop:0);
+     const FString Key=FString::Printf(TEXT("%d|%d|%d"),Mode,ActivePose,ActiveAibu);const double T=FPlatformTime::Seconds();
+     if(Key!=PropKey){PropKey=Key;ClearProps();PropAt=Kind>0?T+.8:0.;}
+     else if(PropAt>0&&T>=PropAt){PropAt=0;PlaceProps(Kind);}}
     // A pose counts as done once something happened in it (a gauge rose, he entered her, a touch), not when it only opened:
     // a pair opens on a moving state for a few seconds before its Idle.
     {const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
@@ -533,6 +553,57 @@ void UOKHScenePanel::FrameCamera(){
     if(Dir.IsNearlyZero())return;
     Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=18.f;Girl->OrbitDistance=FMath::Clamp(Size*2.1f,120.f,600.f);
     Girl->ApplyOrbitCamera();
+}
+void UOKHScenePanel::ClearProps(){for(AStaticMeshActor* A:Props)if(IsValid(A))A->Destroy();Props.Reset();}
+void UOKHScenePanel::NativeDestruct(){ClearProps();Super::NativeDestruct();}
+void UOKHScenePanel::PlaceProps(int32 Kind){
+    ClearProps();auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->BodySkel||!GetWorld())return;
+    auto* Him=Mode!=0&&Gallery->PartnerActor&&!bMaleHidden?Gallery->PartnerActor.Get():nullptr;
+    // Their bones in the world (the male skeleton may name its bones like hers).
+    auto Bone=[](AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
+        if(!IsValid(A)||!A->BodySkel)return false;
+        for(const TCHAR* P:{TEXT("cf_"),TEXT("cm_")}){const FName N(FString(P)+Name);if(A->BodySkel->GetBoneIndex(N)!=INDEX_NONE){Out=A->BodySkel->GetBoneLocation(N);return true;}}
+        return false;};
+    TArray<FVector> Hers;FVector HerHips,HisHips,P;
+    if(!Bone(Girl,TEXT("j_hips"),HerHips))return;
+    for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_spine02"),TEXT("j_head"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R")})if(Bone(Girl,N,P))Hers.Add(P);
+    const bool HasHim=Bone(Him,TEXT("j_hips"),HisHips);
+    const float Floor=Girl->GetActorLocation().Z;
+    static UStaticMesh* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));if(!Cube)return;
+    auto Box=[&](const FVector& Center,const FVector& Size,const FRotator& Rot){
+        auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(Center,Rot);if(!A)return;
+        A->SetMobility(EComponentMobility::Movable);A->GetStaticMeshComponent()->SetStaticMesh(Cube);A->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        A->SetActorScale3D(Size/100.f);Props.Add(A);};
+    FString What;
+    if(Kind==1){
+        // Under the lower hips of the two (he sits and she is on his lap, or she sits alone).
+        const bool HeSits=HasHim&&HisHips.Z<HerHips.Z;const FVector Sit=HeSits?HisHips:HerHips;
+        const float Top=FMath::Max(Floor+20.f,Sit.Z-12.f);Box(FVector(Sit.X,Sit.Y,(Floor+Top)/2),FVector(48,48,Top-Floor),FRotator::ZeroRotator);What=TEXT("seat");
+        // Leaning back (a sofa, a chair back): a slanted back from the hips along the spine to the head, behind it.
+        FVector Head;if(Bone(HeSits?Him:Girl,TEXT("j_head"),Head)){
+            const FVector Spine=Head-Sit;FVector Away=HasHim?(HeSits?HerHips-HisHips:HisHips-HerHips):FVector::ZeroVector;Away.Z=0;
+            if(Away.Normalize()&&float(Spine|-Away)>20.f){
+                const FVector Along=Spine.GetSafeNormal();const FVector Behind=-Away-Along*float(-Away|Along);
+                Box((Sit+Head)/2+Behind.GetSafeNormal()*14.f,FVector(Spine.Size()+30.f,52,8),Along.Rotation());What=TEXT("seat with a back");}}
+    }else if(Kind==2){
+        // Under her body where it rests (hips, back, head, hands above the knees): a table just below the lowest of them.
+        TArray<FVector> Rest;for(const FVector& V:Hers)if(V.Z>Floor+40.f)Rest.Add(V);if(Rest.IsEmpty())return;
+        float Top=TNumericLimits<float>::Max();for(const FVector& V:Rest)Top=FMath::Min(Top,float(V.Z));Top-=6.f;
+        FBox2D Area(ForceInit);for(const FVector& V:Rest)if(V.Z<Top+30.f)Area+=FVector2D(V.X,V.Y);Area=Area.ExpandBy(18.f);
+        FVector2D Size=Area.GetSize();Size.X=FMath::Max(Size.X,55.);Size.Y=FMath::Max(Size.Y,55.);const FVector2D Mid=Area.GetCenter();
+        Box(FVector(Mid.X,Mid.Y,(Floor+Top)/2),FVector(Size.X,Size.Y,Top-Floor),FRotator::ZeroRotator);What=TEXT("table");
+    }else if(Kind==3){
+        // Beyond her on the side away from him (he is behind her: her hands are on it; he faces her: her back is), or the
+        // way her hands reach when she is alone.
+        FVector Dir=FVector::ZeroVector;FVector L,R;
+        if(HasHim)Dir=HerHips-HisHips;
+        if(Dir.Size2D()<5.f&&Bone(Girl,TEXT("j_hand_L"),L)&&Bone(Girl,TEXT("j_hand_R"),R))Dir=(L+R)/2-HerHips;
+        Dir.Z=0;if(!Dir.Normalize())return;
+        float Far=0;for(const FVector& V:Hers)Far=FMath::Max(Far,float((V-HerHips)|Dir));
+        const FVector At=HerHips+Dir*(Far+4.f);
+        Box(FVector(At.X,At.Y,Floor+110.f),FVector(6,160,220),Dir.Rotation());What=TEXT("wall");
+    }
+    UE_LOG(LogTemp,Display,TEXT("H scene: %s placed for the pose (%d)"),*What,Props.Num());
 }
 FString UOKHScenePanel::StateWords(const FString& Base) const{
     if(Mode==0)return OKT(Base==TEXT("K_Loop")||Base==TEXT("K_Touch")?TEXT("ui.hscene.state_kiss"):Base.StartsWith(TEXT("Orgasm"))?TEXT("ui.hscene.state_after"):TouchArea!=INDEX_NONE?TEXT("ui.hscene.state_caress"):TEXT("ui.hscene.state_idle"));

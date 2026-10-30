@@ -37,6 +37,7 @@ struct FOKHPose {
     int32 IsExperience=0;       // 1: needs her used to it (慣れ)
     int32 StateRestriction=0;
     FString Name,Raw;          // shown (OKMotionLabelDisplay) and authored
+    int32 Prop=0;              // what the private room adds for it: 0 none (floor), 1 seat, 2 table, 3 wall
 };
 
 UCLASS()
@@ -74,7 +75,7 @@ public:
     };
 private:
     // Caress (AnimationInfo_00): her own animation, him hidden (HAibu); each state is prepared up front.
-    struct FAibuPose {FString Name,Source;int32 Layer=0,Id=-1;};
+    struct FAibuPose {FString Name,Source;int32 Layer=0,Id=-1,Prop=0;};
     TArray<FAibuPose> AibuPoses;
     TMap<FString,FString> SoloKeys;      // state -> clip key of the active caress pose
     FString SoloState;double SoloStarted=0.;
@@ -127,6 +128,13 @@ private:
     void FrameCamera();
     FString FramedKey;double FrameAt=0;bool bMaleHidden=false;
     TSet<int32> Offered; // the action kinds BuildActions shows now
+    // The original's poses on a chair, a desk or at a wall need that thing: the room puts a plain one where the pose
+    // has her (or him) lean, sit or lie, measured from their bones once the pose stands (PlaceProps).
+    UPROPERTY() TArray<TObjectPtr<class AStaticMeshActor>> Props;
+    FString PropKey;double PropAt=0;
+    void PlaceProps(int32 Kind);
+    void ClearProps();
+    virtual void NativeDestruct() override;
     // The original's gauge locks: a locked gauge stops short of climax (his below the finish choices in a service, so
     // nothing happens by itself); he still finishes with the buttons.
     bool bLockHer=false,bLockHis=false;

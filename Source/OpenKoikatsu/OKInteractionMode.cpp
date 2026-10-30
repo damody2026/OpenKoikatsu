@@ -4,6 +4,7 @@
 #include "OKHScene.h"
 #include "KKPreviewActor.h"
 #include "ok_extract.h"
+#include "Components/PoseableMeshComponent.h"
 #include "KKPairedPlayback.h"
 #include "KKCardReader.h"
 #include "KKCardWorkspace.h"
@@ -150,6 +151,13 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
             FString PartRole;OkMeshView V{};if(Index!=INDEX_NONE&&Controller->PreviewActor->Session.PartAt(Index,V)&&V.role)PartRole=UTF8_TO_TCHAR(V.role);
             L.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%d %s %s vis=%d hig=%d main=%d parent=%s"),Index,*PartRole,*C->GetClass()->GetName(),C->IsVisible(),C->bHiddenInGame,C->bRenderInMainPass,C->GetAttachParent()?*C->GetAttachParent()->GetName():TEXT("-"))));}
         View->SetArrayField(TEXT("parts"),L);}
+    // {"bones":true}: where their hips, hands, feet and heads are (world cm), for placing props under a pose.
+    bool BonesDump=false;if(View.IsValid()&&Body.IsValid()&&Body->TryGetBoolField(TEXT("bones"),BonesDump)&&BonesDump){
+        auto Dump=[&](AKKPreviewActor* A,const TCHAR* Field,const TCHAR* P){if(!IsValid(A)||!A->BodySkel)return;auto O=MakeShared<FJsonObject>();
+            for(const TCHAR* B:{TEXT("j_hips"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_head"),TEXT("j_spine02")}){const FName Name(FString(P)+B);
+                if(A->BodySkel->GetBoneIndex(Name)==INDEX_NONE)continue;const FVector L=A->BodySkel->GetBoneLocation(Name);O->SetStringField(B,FString::Printf(TEXT("%.0f %.0f %.0f"),L.X,L.Y,L.Z));}
+            O->SetStringField(TEXT("actor"),A->GetActorLocation().ToCompactString());View->SetObjectField(Field,O);};
+        Dump(Controller->PreviewActor,TEXT("her_bones"),TEXT("cf_"));Dump(Controller->PartnerActor,TEXT("his_bones"),TEXT("cm_"));}
     return View;
 }
 bool AOKInteractionMode::HSceneTakeLine(FString& Text,FString& Context,bool& System){return Controller&&Controller->HPanel&&Controller->HPanel->TakeLine(Text,Context,System);}
