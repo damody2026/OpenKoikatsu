@@ -155,6 +155,10 @@ private:
 		/** Studio's guide replaces the prefab root TRS; undo the root baked into model vertices. */
 		FTransform RenderCorrection = FTransform::Identity;
 		TWeakObjectPtr<USceneComponent> Component;
+		/** Where the component sits in the object (a camera item's capture at its camera node); identity for the rest. */
+		FTransform ComponentOffset = FTransform::Identity;
+		/** A camera item's RenderTexture key (its capture is `Component`); 0 for the rest. */
+		int32 RenderCameraKey = 0;
 		float Time = 0.f;
 		/** FK bones the preview currently has. */
 		TArray<FOKSceneFkBone> AppliedFk;
@@ -187,6 +191,17 @@ private:
 	void ApplyMapTime(const FTransform& MapPlace);
 
 	bool Build(const FOKSceneObject& Object, FShown& Out, FString& OutError);
+	/** A Studio camera item (a camera drawing into a RenderTexture, e.g. HarvexARC's CH1-Camera): its capture as `Out.Component`. */
+	void AddRenderCamera(const FString& Model, const FString& Prefab, FShown& Out);
+	/** Gives each screen item showing a camera item's RenderTexture that camera's target (the first camera item of a
+	 *  key, hidden or not: Studio hides only an item's renderers), and captures every frame only the cameras some shown
+	 *  screen shows. */
+	void WireRenderTextures();
+	/** OK_RT_DUMP=1: the shown camera items' pictures and poses (debugging). */
+	void DumpRenderTextures();
+	/** The camera items' targets by RenderTexture key (shared by every camera and screen of that key). */
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<class UTextureRenderTarget2D>> SharedRenderTargets;
 	void Release(FShown& Item);
 	void ApplyCharacterState(const FOKSceneObject& Object, FShown& Item);
 };

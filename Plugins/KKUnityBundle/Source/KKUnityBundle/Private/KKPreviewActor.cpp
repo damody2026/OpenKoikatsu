@@ -6102,6 +6102,17 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							if (It.Value && It.Value->TextureTarget == Screen) It.Value->HideComponent(Comp);
 						UE_LOG(LogTemp, Display, TEXT("OK render texture screen part=%s bounds=%s"), *Name, *Comp->Bounds.GetBox().ToString());
 					}
+		// A screen item showing another item's camera (the scene pairs them by the RenderTexture's key).
+		FLinearColor SharedTarget;
+		if (Comp && !bBody && !bFaceDraw && Source.MaterialValue(i, "_OKRTShared", SharedTarget) && SharedTarget.R > 0.f)
+			if (UMaterialInterface* ScreenMat = OKRenderTextureScreenMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(ScreenMat, Comp))
+				{
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+					SharedRenderTextureScreens.Add({ FMath::RoundToInt(SharedTarget.R), FIntPoint(FMath::RoundToInt(SharedTarget.G), FMath::RoundToInt(SharedTarget.B)), Dynamic, Comp });
+					UE_LOG(LogTemp, Display, TEXT("OK render texture shared screen part=%s key=%d"), *Name, FMath::RoundToInt(SharedTarget.R));
+				}
 		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor, with source alpha, not the Studio light
 		// effect's three-colour mix the additive part graph draws.
 		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))

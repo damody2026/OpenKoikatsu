@@ -573,6 +573,77 @@ pub fn record_hierarchies(game: &Path, lib: &Path, threads: usize) -> Result<(),
     Ok(())
 }
 
+/// `--oklib studio-mod-nodes <lib> <scene folder> [threads]`: what `record_hierarchies` records for vanilla items, for the
+/// mod items the KStudio scenes below the folder use (their bundles were converted as character sources, which records
+/// no node tree, render-to-texture cameras or screens). Returns (bundles, prefabs, render cameras found).
+pub fn record_scene_mod_nodes(game: &Path, lib: &Path, scenes: &Path, threads: usize) -> Result<(usize, usize, usize), String> {
+    use rayon::prelude::*;
+    use std::io::Read;
+    fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() { walk(&p, out) } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("png")) { out.push(p) }
+        }
+    }
+    let text = std::fs::read_to_string(lib.join(MOD_FILE_NAME)).map_err(|e| format!("{MOD_FILE_NAME}: {e} (run studio-mods first)"))?;
+    let mods: ModCatalog = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let by_key: std::collections::HashMap<(String, i32), &ModItem> = mods.items.iter().map(|m| ((m.guid.to_ascii_lowercase(), m.item.no), m)).collect();
+    let mut files = Vec::new();
+    walk(scenes, &mut files);
+    let mut bundles: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for f in &files {
+        let Ok(bytes) = std::fs::read(f) else { continue };
+        for (guid, slot) in crate::studio_scene::scene_mod_items(&bytes).into_values() {
+            if let Some(m) = by_key.get(&(guid.to_ascii_lowercase(), slot)).filter(|m| !m.item.model.is_empty()) {
+                bundles.entry(m.item.bundle.clone()).or_default().insert(m.item.prefab.clone());
+            }
+        }
+    }
+    let started = std::time::Instant::now();
+    let store = crate::oklib::activate(lib, crate::oklib::Mode::Record)?;
+    crate::oklib::CONVERTING.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::gamefs::activate(crate::gamefs::Mode::Record, game, lib)?;
+    let totals = std::sync::Mutex::new((0usize, 0usize, 0usize));
+    let list: Vec<_> = bundles.into_iter().collect();
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(threads.max(1)).build().map_err(|e| e.to_string())?;
+    pool.install(|| list.par_iter().for_each(|(label, prefabs)| {
+        let Some((zip, entry)) = label.split_once('|') else { return };
+        let zip_path = game.join(zip);
+        let bytes = crate::gamefs::open_zip(&zip_path).and_then(|mut z| {
+            let name = z.file_names().into_iter().find(|n| n.replace('\\', "/").eq_ignore_ascii_case(entry))?;
+            let mut f = z.by_name(&name).ok()?;
+            let mut b = Vec::new();
+            f.read_to_end(&mut b).ok().map(|_| b)
+        });
+        let Some(bytes) = bytes else { println!("STUDIO MOD NODES missing {label}"); return };
+        let id = crate::oklib::content_id(&bytes);
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let parsed = crate::unity::parse_bundle_cached(bytes);
+            parsed.configure_game_references_from_zip(game, Some(&zip_path));
+            let mut cameras = 0;
+            for p in prefabs {
+                let _ = parsed.prefab_hierarchy(p);
+                let _ = parsed.prefab_renderer_settings(p);
+                cameras += parsed.prefab_render_textures(p).cameras.len();
+                let _ = parsed.prefab_animated_materials(p);
+                let _ = parsed.prefab_renderer_visibility(p);
+            }
+            cameras
+        }));
+        crate::unity::clear_bundle_cache();
+        store.forget_model(&id);
+        let mut t = totals.lock().unwrap();
+        match r { Ok(c) => { t.0 += 1; t.1 += prefabs.len(); t.2 += c; } Err(_) => println!("STUDIO MOD NODES panic {label}") }
+    }));
+    store.flush();
+    crate::gamefs::save(lib)?;
+    crate::oklib::deactivate();
+    crate::gamefs::deactivate();
+    let t = totals.into_inner().unwrap();
+    println!("STUDIO MOD NODES bundles={}/{} prefabs={} render cameras={} {:.0}s", t.0, list.len(), t.1, t.2, started.elapsed().as_secs_f64());
+    Ok(t)
+}
+
 /// `--oklib studio-check <lib>`: every catalogue item and map shows meshes from the library alone (replay).
 pub fn check(lib: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(lib.join(FILE_NAME)).map_err(|e| format!("{FILE_NAME}: {e}"))?;

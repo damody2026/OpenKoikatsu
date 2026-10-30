@@ -87,6 +87,7 @@ $mcp = '.\Tools\ok-game-mcp\target\release\ok-game-mcp.exe'
 - `studio_bones` 的 FK `euler` 是 Unity 區域角度（與 KK Studio 的 FK 相同）；IK `position` 是角色空間的 cm（+Y 前方、+Z 上方）；`world` 是世界座標 cm。
 - 縮放和 KK Studio 一樣：物件的大小只看自己的 `scale`，不繼承父物件。父物件的縮放只會放大子物件的位置（`location` 乘上父物件的縮放）。所以把東西掛到放大的道具底下時，子物件的 `location` 要除以父物件的縮放；`studio_reparent` 會保持物件的世界大小。
 - 匯入 KStudio 場景卡時，mod 道具要先在基礎庫裡（`ok-extract <遊戲> --oklib studio-mods <基礎庫> <場景資料夾>`）。之後 `studio_catalog` 也會列出 mod 的群組與道具，名稱是 mod 自己取的。
+- 相機道具與螢幕道具（例：HarvexARC 的 CH1-Camera／CH1-Screen）靠同一張 RenderTexture 相連，螢幕即時顯示相機畫面。要先記錄 mod 道具的節點與相機：`ok-extract <遊戲> --oklib studio-mod-nodes <基礎庫> <場景資料夾>`。相機道具隱藏時照樣拍（Studio 只關 renderer）。
 
 1. **啟動**：`studio_launch`（`studio_state` 回「OK Studio is not running」時）。
 2. **找素材**：`studio_catalog` 依 group／category 瀏覽道具、地圖、特效、動畫、濾鏡、天空與飾品掛點；知道關鍵字時用 `studio_catalog_search`。

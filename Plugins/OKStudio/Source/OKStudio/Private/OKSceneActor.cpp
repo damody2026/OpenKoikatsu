@@ -8,6 +8,8 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "HAL/PlatformMisc.h"
@@ -369,7 +371,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		{
 			// Studio's helper items draw nothing in the game either (a turning pivot "obj無し", a 3D sound emitter): only a
 			// place for their children, which the document already keeps. Not an error.
-			if (OutError.Contains(TEXT("has no meshes"))) { OutError.Reset(); return true; }
+			if (OutError.Contains(TEXT("has no meshes"))) { OutError.Reset(); AddRenderCamera(Model, Prefab, Out); return true; }
 			return false;
 		}
 		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, false,
@@ -384,6 +386,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 				FVector(-RootPosition.X, RootPosition.Z, RootPosition.Y) * 100.0, FVector(RootScale.X, RootScale.Z, RootScale.Y));
 			Out.RenderCorrection = Root.Inverse();
 		}
+		AddRenderCamera(Model, Prefab, Out);
 		return true;
 	}
 	case EOKSceneObjectKind::Light:
@@ -448,6 +451,152 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 	default:
 		return true;
 	}
+}
+
+void AOKSceneActor::AddRenderCamera(const FString& Model, const FString& Prefab, FShown& Out)
+{
+	const FString Json = FOkSession::OkModelRenderCameras(LibraryDirectory(), Model, Prefab);
+	TArray<TSharedPtr<FJsonValue>> Cameras;
+	if (Json.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Cameras) || Cameras.IsEmpty()) return;
+	const TSharedPtr<FJsonObject> C = Cameras[0]->AsObject();
+	if (!C || Out.Component.IsValid()) return;
+	auto Floats = [&C](const TCHAR* Field, int32 N)
+	{
+		TArray<float> V;
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (C->TryGetArrayField(Field, List)) for (const TSharedPtr<FJsonValue>& X : *List) V.Add(X->AsNumber());
+		V.SetNumZeroed(N);
+		return V;
+	};
+	const TArray<float> P = Floats(TEXT("pos"), 3), R = Floats(TEXT("rot"), 4);
+	const int32 Key = C->GetIntegerField(TEXT("key"));
+	const int32 W = FMath::Clamp(int32(C->GetIntegerField(TEXT("width"))), 16, 2048), H = FMath::Clamp(int32(C->GetIntegerField(TEXT("height"))), 16, 2048);
+	TObjectPtr<UTextureRenderTarget2D>& Target = SharedRenderTargets.FindOrAdd(Key);
+	if (!Target)
+	{
+		Target = NewObject<UTextureRenderTarget2D>(this);
+		Target->RenderTargetFormat = RTF_RGBA8_SRGB;
+		Target->ClearColor = FLinearColor::Black;
+		Target->InitAutoFormat(W, H);
+		Target->UpdateResourceImmediate(true);
+	}
+	USceneCaptureComponent2D* Capture = NewObject<USceneCaptureComponent2D>(this);
+	Capture->SetupAttachment(RootComponent);
+	const float Aspect = float(Target->SizeX) / float(FMath::Max<int32>(Target->SizeY, 1));
+	if (C->GetBoolField(TEXT("orthographic")))
+	{
+		Capture->ProjectionType = ECameraProjectionMode::Orthographic;
+		Capture->OrthoWidth = 2.f * float(C->GetNumberField(TEXT("ortho_size"))) * Aspect * 100.f;
+	}
+	else // Unity's field of view is vertical, Unreal's horizontal.
+		Capture->FOVAngle = FMath::RadiansToDegrees(2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(float(C->GetNumberField(TEXT("fov")))) * 0.5f) * Aspect));
+	Capture->bOverride_CustomNearClippingPlane = true;
+	Capture->CustomNearClippingPlane = FMath::Max(float(C->GetNumberField(TEXT("near"))) * 100.f, 0.1f);
+	Capture->MaxViewDistanceOverride = float(C->GetNumberField(TEXT("far"))) * 100.f;
+	Capture->CaptureSource = SCS_FinalColorLDR;
+	// Studio's image effects sit on the main camera only: this camera draws the shaders' colours as they are (no film
+	// curve, fixed exposure, no bloom, filter, fog or vignette). Without it the capture fell back to Unreal's auto
+	// exposure and the feeds came out white.
+	FOKScenePost Plain;
+	Plain.bBloom = Plain.bVignette = Plain.bDepthOfField = Plain.bFog = Plain.bAmbientOcclusion = Plain.bSunShafts = false;
+	Plain.ColorFilter = -1;
+	Plain.Exposure = 0.f;
+	Plain.ApplyTo(Capture->PostProcessSettings);
+	Capture->PostProcessBlendWeight = 1.f;
+	// WireRenderTextures captures it every frame while a shown screen shows it.
+	Capture->bCaptureEveryFrame = false;
+	Capture->bCaptureOnMovement = false;
+	Capture->TextureTarget = Target;
+	Capture->RegisterComponent();
+	// The camera node in the item (Unity prefab space, the prefab root undone as for the meshes), looking along Unity's +Z
+	// (Unreal +Y) with +Y (Unreal +Z) up.
+	FTransform RootInverse = FTransform::Identity;
+	FVector RootPosition, RootScale;
+	FQuat RootRotation;
+	if (FOkSession::OkModelNodeWorld(LibraryDirectory(), Model, Prefab, Prefab, RootPosition, RootRotation, RootScale))
+		RootInverse = FTransform(FQuat(-RootRotation.X, RootRotation.Z, RootRotation.Y, RootRotation.W).GetNormalized(), FVector(-RootPosition.X, RootPosition.Z, RootPosition.Y) * 100.0).Inverse();
+	const FTransform Node(FQuat(-R[0], R[2], R[1], R[3]).GetNormalized(), FVector(-P[0], P[2], P[1]) * 100.0);
+	const FTransform Look(FRotationMatrix::MakeFromXZ(FVector(0, 1, 0), FVector(0, 0, 1)).ToQuat());
+	Out.ComponentOffset = Look * Node * RootInverse;
+	Out.Component = Capture;
+	Out.RenderCameraKey = Key;
+	UE_LOG(LogTemp, Display, TEXT("OK studio: camera item %s key=%d %dx%d fov=%.1f"), *Prefab, Key, Target->SizeX, Target->SizeY, float(C->GetNumberField(TEXT("fov"))));
+}
+
+void AOKSceneActor::WireRenderTextures()
+{
+	// The first camera item of each key draws it (Unity: every camera of a RenderTexture draws in turn, the last one stays).
+	TMap<int32, USceneCaptureComponent2D*> Live;
+	TArray<USceneCaptureComponent2D*> All;
+	bool bAnyScreen = false;
+	for (const TPair<int32, FShown>& It : Shown)
+	{
+		if (It.Value.RenderCameraKey == 0) { bAnyScreen = bAnyScreen || (It.Value.Preview.IsValid() && It.Value.Preview->SharedRenderTextureScreens.Num()); continue; }
+		USceneCaptureComponent2D* Capture = Cast<USceneCaptureComponent2D>(It.Value.Component.Get());
+		if (!Capture) continue;
+		All.Add(Capture);
+		// Studio hides an item by turning its renderers off (OCIItem.visible): a hidden camera item still draws.
+		if (!Live.Contains(It.Value.RenderCameraKey)) Live.Add(It.Value.RenderCameraKey, Capture);
+	}
+	if (!bAnyScreen && All.IsEmpty()) return;
+	static UTexture* Black = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+	TSet<int32> Watched;
+	for (const TPair<int32, FShown>& It : Shown)
+	{
+		AKKPreviewActor* Preview = It.Value.Preview.Get();
+		if (!Preview) continue;
+		const bool bShown = !Document || Document->IsShown(It.Key);
+		for (const AKKPreviewActor::FSharedRenderTextureScreen& Screen : Preview->SharedRenderTextureScreens)
+		{
+			UMaterialInstanceDynamic* Material = Screen.Material.Get();
+			if (!Material) continue;
+			USceneCaptureComponent2D* const* Capture = Live.Find(Screen.Key);
+			UTexture* Want = Capture ? (*Capture)->TextureTarget.Get() : Black;
+			UTexture* Has = nullptr;
+			if (!Material->GetTextureParameterValue(FName(TEXT("Screen")), Has) || Has != Want) Material->SetTextureParameterValue(TEXT("Screen"), Want);
+			if (!Capture || !bShown) continue;
+			Watched.Add(Screen.Key);
+			// Not filmed by its own camera: the unlit screen showing itself feeds back to white.
+			if (UPrimitiveComponent* Comp = Screen.Component.Get()) (*Capture)->HideComponent(Comp);
+		}
+	}
+	for (USceneCaptureComponent2D* Capture : All)
+	{
+		const bool bWatched = Live.FindKey(Capture) && Watched.Contains(*Live.FindKey(Capture));
+		Capture->bCaptureEveryFrame = bWatched;
+	}
+	// OK_RT_DUMP=1 (debugging): 5 s after the first camera item shows, each shown camera item's picture to
+	// Saved/OKStudio/studio_rt_<key>.png and its pose (Unity metres, view direction) to the log.
+	static const bool bDump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RT_DUMP")) == TEXT("1");
+	static bool bDumpScheduled = false;
+	if (bDump && Live.Num() && !bDumpScheduled)
+	{
+		bDumpScheduled = true;
+		TWeakObjectPtr<AOKSceneActor> Weak(this);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Weak](float) { if (Weak.IsValid()) Weak->DumpRenderTextures(); return false; }), 5.f);
+	}
+}
+
+void AOKSceneActor::DumpRenderTextures()
+{
+	TMap<int32, USceneCaptureComponent2D*> Live;
+	for (const TPair<int32, FShown>& It : Shown)
+		if (USceneCaptureComponent2D* Capture = It.Value.RenderCameraKey ? Cast<USceneCaptureComponent2D>(It.Value.Component.Get()) : nullptr)
+			if (!Live.Contains(It.Value.RenderCameraKey)) Live.Add(It.Value.RenderCameraKey, Capture);
+	for (const TPair<int32, USceneCaptureComponent2D*>& It : Live)
+	{
+			UTextureRenderTarget2D* Target = It.Value->TextureTarget.Get();
+			FTextureRenderTargetResource* Resource = Target ? Target->GameThread_GetRenderTargetResource() : nullptr;
+			TArray<FColor> Pixels;
+			if (!Resource || !Resource->ReadPixels(Pixels)) continue;
+			for (FColor& P : Pixels) P.A = 255;
+			TArray64<uint8> Png;
+			FImageUtils::PNGCompressImageArray(Target->SizeX, Target->SizeY, Pixels, Png);
+			const FString Path = FPaths::ProjectSavedDir() / FString::Printf(TEXT("OKStudio/studio_rt_%d.png"), It.Key);
+			FFileHelper::SaveArrayToFile(Png, *Path);
+			const FVector L = It.Value->GetComponentLocation() / 100.0, F = It.Value->GetForwardVector();
+			UE_LOG(LogTemp, Display, TEXT("OK studio: camera item key=%d at unity (%.3f,%.3f,%.3f) looking (%.3f,%.3f,%.3f) fov=%.1f -> %s"), It.Key, -L.X, L.Z, L.Y, -F.X, F.Z, F.Y, It.Value->FOVAngle, *Path);
+		}
 }
 
 void AOKSceneActor::Release(FShown& Item)
@@ -624,14 +773,16 @@ void AOKSceneActor::Sync()
 		}
 		if (USceneComponent* Component = Item->Component.Get())
 		{
-			Component->SetWorldTransform(World);
-			Component->SetVisibility(bShown, true);
+			Component->SetWorldTransform(Item->ComponentOffset * World);
+			// A camera item's capture keeps drawing while the item is hidden (Studio hides only renderers).
+			if (Item->RenderCameraKey == 0) Component->SetVisibility(bShown, true);
 		}
 	}
 	for (auto It = Shown.CreateIterator(); It; ++It)
 	{
 		if (!Present.Contains(It.Key())) { Release(It.Value()); Errors.Remove(It.Key()); It.RemoveCurrent(); }
 	}
+	WireRenderTextures();
 	// A destroyed preview's meshes, textures and materials are freed by garbage collection, which the engine runs only
 	// now and then: after another scene is loaded (or many objects go) collect now, or scenes opened one after another
 	// pile up gigabytes.
@@ -1119,7 +1270,7 @@ void AOKSceneActor::PlaceAttached()
 		Item->PlacedGeneration = PlaceGeneration;
 		const FTransform World = Document->WorldTransform(Object.Id) * GetActorTransform();
 		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Item->RenderCorrection * World);
-		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(World);
+		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(Item->ComponentOffset * World);
 	}
 }
 

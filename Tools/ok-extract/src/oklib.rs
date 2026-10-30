@@ -2969,6 +2969,12 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 println!("OKCONVERT studio mod items={items} without library model={missing}");
             }
         }
+        "studio-mod-nodes" => {
+            // studio-mod-nodes <lib> <scene folder> [threads]: node trees, render cameras and screens of the scenes' mod items.
+            let lib = lib.ok_or("library directory required")?;
+            let threads = args.get(3).and_then(|t| t.parse().ok()).unwrap_or(6);
+            crate::studio_items::record_scene_mod_nodes(game, &lib, std::path::Path::new(args.get(2).ok_or("scene folder required")?), threads)?;
+        }
         "studio-child-anims" => crate::studio_child_animation::convert(game, &lib.ok_or("library directory required")?)?,
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
@@ -2993,6 +2999,13 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             println!("SCENES files={} parsed={} characters={} items={} vanilla_items={} mod_items={} lights={} folders={} routes={} cameras={} texts={}", s.files, s.parsed, s.characters, s.items, s.vanilla_items, s.mod_items, s.lights, s.folders, s.routes, s.cameras, s.texts);
             println!("SCENES maps {:?}", s.maps);
             for (f, e) in &s.failed { println!("SCENES FAILED {f}: {e}"); }
+        }
+        "scene-export" => {
+            // scene-export <scene png> <card dir>: the KStudio scene as the importer's JSON (cards written to the dir).
+            let scene = args.get(2).ok_or("scene png required")?;
+            let dir = std::path::PathBuf::from(args.get(3).ok_or("card directory required")?);
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            println!("{}", crate::studio_scene::export(std::path::Path::new(scene), &dir)?);
         }
         "model-view" => crate::okmodel_view::cli(&lib.ok_or("library directory required")?, args.get(2).ok_or("model id required")?, args.get(3).map(String::as_str))?,
         "diff" => {

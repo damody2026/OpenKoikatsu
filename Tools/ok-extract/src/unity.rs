@@ -1030,12 +1030,50 @@ pub struct PrefabRenderCamera {
     pub clear_flags: i32, pub background: [f32; 4],
     /// The target RenderTexture: name and size.
     pub target: String, pub width: i32, pub height: i32,
+    /// The target's identity across prefabs (`render_texture_key`): a Studio camera item and the screen items showing
+    /// it are separate prefabs sharing one RenderTexture asset.
+    pub target_key: u32,
+}
+
+/// `PrefabRenderCamera` / `PrefabRenderTextures` as libraries recorded them before target keys and shared screens
+/// (query `prefab_render_textures`; the records are bincode, which reads no added fields).
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabRenderCameraV1 {
+    pub node: i32, pub enabled: bool, pub active: bool,
+    pub fov: f32, pub near: f32, pub far: f32, pub orthographic: bool, pub ortho_size: f32,
+    pub culling_mask: u32, pub clear_flags: i32, pub background: [f32; 4],
+    pub target: String, pub width: i32, pub height: i32,
+}
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabRenderTexturesV1 { pub cameras: Vec<PrefabRenderCameraV1>, pub users: Vec<(i32, String, String, i32)> }
+impl From<PrefabRenderTexturesV1> for PrefabRenderTextures {
+    fn from(v: PrefabRenderTexturesV1) -> Self {
+        PrefabRenderTextures {
+            cameras: v.cameras.into_iter().map(|c| PrefabRenderCamera { node: c.node, enabled: c.enabled, active: c.active, fov: c.fov, near: c.near,
+                far: c.far, orthographic: c.orthographic, ortho_size: c.ortho_size, culling_mask: c.culling_mask, clear_flags: c.clear_flags,
+                background: c.background, target: c.target, width: c.width, height: c.height, target_key: 0 }).collect(),
+            users: v.users, shared: Vec::new(),
+        }
+    }
+}
+
+/// A RenderTexture asset's identity within its bundle: its name and path id hashed to 24 bits (exact in a float
+/// material value; 0 is none).
+pub fn render_texture_key(name: &str, path_id: i64) -> u32 {
+    let mut h: u32 = 0x811c9dc5;
+    for b in name.bytes().chain(path_id.to_le_bytes()) { h = (h ^ b as u32).wrapping_mul(0x01000193); }
+    (h & 0xff_ffff).max(1)
 }
 
 /// A prefab's render-to-texture cameras, and the renderers whose materials sample their RenderTextures:
 /// (renderer node, material name, texture property, camera index).
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PrefabRenderTextures { pub cameras: Vec<PrefabRenderCamera>, pub users: Vec<(i32, String, String, i32)> }
+pub struct PrefabRenderTextures {
+    pub cameras: Vec<PrefabRenderCamera>, pub users: Vec<(i32, String, String, i32)>,
+    /// Renderers sampling a RenderTexture no camera of this prefab draws (a Studio screen item): (renderer node,
+    /// material name, texture property, `render_texture_key`, width, height).
+    pub shared: Vec<(i32, String, String, u32, i32, i32)>,
+}
 
 /// One time of day of a Studio map's SunLightInfo (on the map root): the GameObjects shown then (`visibleList`, by
 /// `prefab_hierarchy` node; every list is hidden first, then the current one shown) and the sun (`_targetLight`'s Euler
@@ -1783,7 +1821,14 @@ impl ParsedBundle {
         })
     }
     /// Cameras rendering into RenderTextures and the materials sampling them (recorded by `studio-nodes`).
-    pub fn prefab_render_textures(&self,prefab:&str)->PrefabRenderTextures {self.memo_prefab("prefab_render_textures",prefab,prefab,||self.prefab_render_textures_unity(prefab))}
+    pub fn prefab_render_textures(&self,prefab:&str)->PrefabRenderTextures {
+        // v2 (target keys, shared screens); a library recorded before has v1 records (a map's own cameras and screens).
+        if self.library_model() && !crate::oklib::has_record(self.lib.as_ref(),"prefab_render_textures2",prefab)
+            && crate::oklib::has_record(self.lib.as_ref(),"prefab_render_textures",prefab) {
+            return self.memo_prefab("prefab_render_textures",prefab,prefab,PrefabRenderTexturesV1::default).into();
+        }
+        self.memo_prefab("prefab_render_textures2",prefab,prefab,||self.prefab_render_textures_unity(prefab))
+    }
     /// A map's SunLightInfo: times of day, what each shows, the sun (recorded by `studio-nodes`).
     pub fn prefab_sun_light(&self,prefab:&str)->PrefabSunLight {self.memo_prefab("prefab_sun_light",prefab,prefab,||self.prefab_sun_light_unity(prefab))}
     /// Baked reflection probes of a prefab and the scene's skybox reflection (recorded by `studio-nodes`).
@@ -2678,10 +2723,12 @@ impl ParsedBundle {
                     if uv_obj(v,"m_FileID").map(uv_i32).unwrap_or(0)==0 {find(sers.get(from)?).map(|o|(o,from))}
                     else {sers.iter().enumerate().filter(|(i,_)|*i!=from).find_map(|(i,s)|find(s).map(|o|(o,i)))}
                 };
-                let render_texture=|v:&unity_asset_core::UnityValue,from:usize|->Option<(String,i32,i32)> {
+                let render_texture=|v:&unity_asset_core::UnityValue,from:usize|->Option<(String,i32,i32,u32)> {
                     let (o,_)=object(v,84,from)?;
                     let p=o.class.properties();
-                    Some((o.name().unwrap_or_default(),p.get("m_Width").map(uv_i32).unwrap_or(0),p.get("m_Height").map(uv_i32).unwrap_or(0)))
+                    let name=o.name().unwrap_or_default();
+                    let key=render_texture_key(&name,uv_pptr(v).unwrap_or(0));
+                    Some((name,p.get("m_Width").map(uv_i32).unwrap_or(0),p.get("m_Height").map(uv_i32).unwrap_or(0),key))
                 };
                 let mut cameras=Vec::new();
                 for info in ser.objects_of_type(20) {
@@ -2689,7 +2736,7 @@ impl ParsedBundle {
                     let p=obj.class.properties();
                     let go=p.get("m_GameObject").and_then(uv_pptr).unwrap_or(0);
                     let Some(node)=go_node.get(&go).copied() else {continue;};
-                    let Some((target,width,height))=p.get("m_TargetTexture").and_then(|t|render_texture(t,gi)) else {continue;};
+                    let Some((target,width,height,target_key))=p.get("m_TargetTexture").and_then(|t|render_texture(t,gi)) else {continue;};
                     let f=|k:&str,d:f32|p.get(k).map(uv_f32).unwrap_or(d);
                     let active=ser.objects_of_type(1).into_iter().find(|i|i.path_id==go).and_then(|i|UnityObject::from_serialized_file(ser,i).ok())
                         .and_then(|o|o.class.properties().get("m_IsActive").map(uv_bool)).unwrap_or(true);
@@ -2698,10 +2745,9 @@ impl ParsedBundle {
                     cameras.push(PrefabRenderCamera{node,enabled:p.get("m_Enabled").map(uv_bool).unwrap_or(true),active,
                         fov:f("field of view",60.),near:f("near clip plane",0.3),far:f("far clip plane",1000.),
                         orthographic:p.get("orthographic").map(uv_bool).unwrap_or(false),ortho_size:f("orthographic size",5.),
-                        culling_mask,clear_flags:p.get("m_ClearFlags").map(uv_i32).unwrap_or(1),background,target,width,height});
+                        culling_mask,clear_flags:p.get("m_ClearFlags").map(uv_i32).unwrap_or(1),background,target,width,height,target_key});
                 }
-                if cameras.is_empty() {return Default::default();}
-                let mut users=Vec::new();
+                let (mut users,mut shared)=(Vec::new(),Vec::new());
                 for class in [23,137] { for info in ser.objects_of_type(class) {
                     let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
                     let p=obj.class.properties();
@@ -2714,15 +2760,18 @@ impl ParsedBundle {
                             let unity_asset_core::UnityValue::Array(pair)=env else {continue;};
                             let [key,value]=pair.as_slice() else {continue;};
                             let Some(tex)=uv_obj(value,"m_Texture") else {continue;};
-                            let Some((target,_,_))=render_texture(tex,file) else {continue;};
+                            let Some((target,width,height,target_key))=render_texture(tex,file) else {continue;};
                             if let Some(c)=cameras.iter().position(|c:&PrefabRenderCamera|c.target==target) {
                                 let user=(node,name.clone(),key.as_str().unwrap_or("").to_owned(),c as i32);
                                 if !users.contains(&user) {users.push(user);}
+                            } else {
+                                let user=(node,name.clone(),key.as_str().unwrap_or("").to_owned(),target_key,width,height);
+                                if !shared.contains(&user) {shared.push(user);}
                             }
                         }
                     }
                 }}
-                PrefabRenderTextures{cameras,users}
+                PrefabRenderTextures{cameras,users,shared}
             });
         }
         Default::default()

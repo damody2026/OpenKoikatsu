@@ -105,6 +105,8 @@ public:
 	bool OpenOkModelFk(const FString& Library, const FString& ModelId, const FString& Prefab, const FString& FkJson, FString& OutError);
 	/** Bones a model prefab's skinned meshes follow (what Studio item FK can turn). */
 	static TArray<FString> OkModelFkBones(const FString& Library, const FString& ModelId, const FString& Prefab);
+	/** Render-to-texture cameras of a model prefab (a Studio camera item) as JSON (`ok_okmodel_render_cameras`); empty when none. */
+	static FString OkModelRenderCameras(const FString& Library, const FString& ModelId, const FString& Prefab);
 	/** Prefab-space transform of a named node of a library model (Unity: metres, quaternion, scale); false when not recorded. */
 	static bool OkModelNodeWorld(const FString& Library, const FString& ModelId, const FString& Prefab, const FString& Node, FVector& OutPosition, FQuat& OutRotation, FVector& OutScale);
  bool ExportAnimationSnapshot(TArray<uint8>& Out) const;

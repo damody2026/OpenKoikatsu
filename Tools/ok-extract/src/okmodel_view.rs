@@ -170,6 +170,11 @@ fn mark_sun_visible(m: &mut ExtractedMesh, sun: &crate::unity::PrefabSunLight, h
 
 fn mark_render_texture(m: &mut ExtractedMesh, rt: &crate::unity::PrefabRenderTextures, node: i32, h: &crate::pose::PrefabHierarchy, worlds: &[crate::pose::Mat4]) {
     let Some(mat) = m.mat.as_mut() else { return; };
+    // A screen item: the RenderTexture is drawn by a camera of another item (the scene pairs them by key).
+    if let Some((_, _, _, key, w, h)) = rt.shared.iter().find(|(n, name, ..)| *n == node && *name == mat.name) {
+        mat.colors.insert("_OKRTShared".into(), [*key as f32, *w as f32, *h as f32, 0.]);
+        return;
+    }
     let Some(&(_, _, _, c)) = rt.users.iter().find(|(n, name, _, _)| *n == node && *name == mat.name) else { return; };
     let Some(cam) = rt.cameras.get(c as usize).filter(|c| c.enabled && c.active) else { return; };
     let Some(w) = worlds.get(cam.node as usize) else { return; };
@@ -381,6 +386,17 @@ impl ModelView {
     pub fn parsed_sun_light(&self, prefab: &str) -> crate::unity::PrefabSunLight { self.parsed.prefab_sun_light(prefab) }
 
     /// Bones a prefab's shown skinned meshes follow: what Studio item FK can turn.
+    /// The enabled cameras of a prefab drawing into a RenderTexture (a Studio camera item), with their node's
+    /// prefab-space pose as `ok_okmodel_node_world` gives it (Unity: metres, quaternion xyzw).
+    pub fn render_cameras(&self, prefab: &str) -> Vec<serde_json::Value> {
+        let h = self.hierarchy(prefab);
+        self.parsed.prefab_render_textures(prefab).cameras.iter().filter(|c| c.enabled && c.active && c.target_key != 0).filter_map(|c| {
+            let (pos, rot, _) = h.node_world(c.node as usize)?;
+            Some(serde_json::json!({"key": c.target_key, "target": c.target, "width": c.width, "height": c.height, "pos": pos, "rot": rot,
+                "fov": c.fov, "near": c.near, "far": c.far, "orthographic": c.orthographic, "ortho_size": c.ortho_size,
+                "clear_flags": c.clear_flags, "background": c.background}))
+        }).collect()
+    }
     pub fn fk_bones(&self, prefab: &str) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for m in self.prefab_meshes(prefab, false) {
@@ -630,6 +646,10 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             for name in view.prefabs_with_shader(&p[7..]) { println!("{name}"); }
         }
         None => println!("{}", serde_json::to_string_pretty(&view.contents()).unwrap()),
+        Some(p) if p.starts_with("cameras:") => {
+            println!("cameras {}", serde_json::to_string(&view.render_cameras(&p[8..])).unwrap());
+            println!("screens {:?}", view.parsed.prefab_render_textures(&p[8..]).shared);
+        }
         Some(p) => for m in view.prefab_meshes(p, true) {
             let shown = posed_static(&m);
             let (lo, hi) = crate::pose::aabb(&shown.positions);

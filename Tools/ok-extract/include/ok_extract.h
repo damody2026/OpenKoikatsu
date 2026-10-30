@@ -515,6 +515,10 @@ int32_t ok_okmodel_node_world(const char* library, const char* id, const char* p
 int32_t ok_okmodel_open_session_fk(const char* library, const char* id_hex, const char* prefab, int32_t include_disabled, const char* fk_json, OkSession** out, char* err, int32_t cap);
 /* Bones the prefab's skinned meshes follow (item FK): JSON array of names; returns the byte length (larger than cap: nothing written). */
 int32_t ok_okmodel_fk_bones(const char* library, const char* id_hex, const char* prefab, uint8_t* out, int32_t cap);
+/* Render-to-texture cameras of a prefab (a Studio camera item): JSON array of {key, target, width, height, pos[3],
+ * rot[4] (prefab space, Unity m / xyzw), fov, near, far, orthographic, ortho_size, clear_flags, background[4]}; returns
+ * the byte length (larger than cap: nothing written). */
+int32_t ok_okmodel_render_cameras(const char* library, const char* id_hex, const char* prefab, uint8_t* out, int32_t cap);
 int32_t ok_okmodel_edits_get(const char* library, const char* id_hex, uint8_t* out, int32_t cap);
 int32_t ok_okmodel_edits_set(const char* library, const char* id_hex, const char* json, char* err, int32_t cap);
 int32_t ok_okmodel_first_prefab(const char* library, const char* id_hex, char* out, int32_t cap);

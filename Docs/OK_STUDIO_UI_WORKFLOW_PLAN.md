@@ -599,10 +599,33 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 結果：mod 道具補轉後，vmd 57 張全部載入、沒有任何未顯示的物件（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck1030b`）；舞台場景修正縮放後，鏡頭、桁架、燈具都和原作一致（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck1030d`）。全部 7,694 張場景用到的 mod 道具共 146 種，47 個 bundle 補轉進基礎庫，全部都有模型了。
 
 尚未一致、尚未處理：
-- 螢幕道具在原作即時顯示另一台相機拍到的畫面（render texture），OK Studio 顯示灰色或靜態圖。
+- ~~螢幕道具在原作即時顯示另一台相機拍到的畫面（render texture），OK Studio 顯示灰色或靜態圖。~~ 已在 U13 完成。
 - vmd 資料夾的場景靠 MMD 的 VMD 外掛驅動角色姿勢與位置，原作縮圖拍的是外掛播放中的瞬間；OK Studio 沒有這個外掛，角色停在 T 字姿勢。
 - 部分地圖的光照與色調不同，例如 `ill_ss_sample_01` 的大浴場、`1546790632203` 的地板。
 - cs0004179 火鍋裡約 1 cm 的豆腐沒露出來；豆腐的位置和大小都正確，推測是周圍食材有毫米級的高低差，把它蓋住了。
+
+### U13　螢幕道具的即時畫面（2026-10-30，F 組，使用者選定）
+
+場景裡的「相機道具＋螢幕道具」（例：mod HarvexARC Studio Effects 的 CH1～CH3-Camera 與 CH1～CH3-Screen）在原作是兩個獨立 prefab，靠同一張 RenderTexture 資產相連：相機的 `m_TargetTexture` 指向它，螢幕材質的 `_MainTex` 取樣它。地圖內「相機與螢幕同在一個 prefab」的情形（live stage）原本已支援，這次補的是跨道具的情形。
+
+| 項目 | 做法 |
+|---|---|
+| 轉檔記錄 | `prefab_render_textures` 每台相機多記 `target_key`（RenderTexture 名稱＋path id 雜湊成 24 位元），另記 `shared`：取樣「本 prefab 沒有相機畫它」的 RenderTexture 的材質。基礎庫紀錄是 bincode，加欄位會讓舊紀錄讀不出來，所以新格式改存在 `prefab_render_textures2`；只有舊紀錄的地圖照舊讀（`PrefabRenderTexturesV1`） |
+| mod 道具補記錄 | mod 的 Studio bundle 當初以角色來源轉換，沒有記節點樹與相機。轉檔時 `abdata/studio/` 的 zipmod bundle 補記；已轉過的用 `ok-extract <遊戲> --oklib studio-mod-nodes <基礎庫> <場景資料夾> [執行緒]` 只補場景用到的道具（全部場景：49 個 bundle、145 個 prefab、14 台相機，20 秒） |
+| 螢幕 | 零件材質有 `_OKRTShared`（key、寬、高）時，`AKKPreviewActor` 換成不受光的螢幕材質並登記在 `SharedRenderTextureScreens`，預設黑色 |
+| 相機道具 | `ok_okmodel_render_cameras` 回傳 prefab 裡的相機（位置、旋轉、FOV、近遠平面、目標尺寸）；`AOKSceneActor::AddRenderCamera` 在道具上建 `USceneCaptureComponent2D`（Unity 垂直 FOV 換成 Unreal 水平 FOV，沿 Unity +Z 看），每個 key 共用一張 render target |
+| 配對 | `WireRenderTextures`：每次同步後，螢幕取同 key 第一台相機的畫面；只有被顯示中的螢幕用到的相機才每幀拍；螢幕不出現在自己的相機裡（不受光的螢幕拍自己會回授成白色） |
+| 隱藏的相機道具 | Studio 隱藏道具只關 renderer 與粒子（`OCIItem.visible`），GameObject 還在，相機照樣畫。所以相機道具不論顯示與否都拍 |
+| 後製 | Studio 的影像效果只在主相機上：相機道具的 capture 用 Studio 的「原樣輸出」設定（無 film curve、固定曝光、無 bloom／濾鏡／霧／暗角） |
+| 除錯 | `OK_RT_DUMP=1`：相機道具出現 5 秒後，把畫面存到 `Saved/OKStudio/studio_rt_<key>.png`，並在 log 印出 Unity 座標的位置與方向 |
+
+驗收：vmd 資料夾用到 HarvexARC 相機的 13 張場景全部載入（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck_rt2`）。`80639555_p1` 大螢幕與兩側小螢幕顯示即時畫面，構圖與原作一致；`1585406034802` 的相機道具是隱藏的，修正後螢幕顯示角色特寫（`F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\rt_debug_1585_nolight2.png`，暫時關掉前方的 tv_light 光暈資料夾後拍）。
+
+仍不一致：
+- `1585406034802` 螢幕前的「色影(四角2)」（`Shader Forge/main_item_studio_add`，透明度 0.06～0.38）疊起來比原作亮很多，把螢幕整片蓋白。
+- 原作螢幕材質是受光的 Toony Colors Pro（`_Color` 約 0.89），暗場景裡比較暗；OK Studio 的螢幕不受光，略亮。
+- `80639555_p1` 中間的小螢幕原作是暗色畫面，OK Studio 是白色，還沒查。
+- `2021_1022_2145_32_381` 整張黑畫面（修改前就是黑的，與螢幕無關）。
 
 ## 7. 優先順序總表
 
