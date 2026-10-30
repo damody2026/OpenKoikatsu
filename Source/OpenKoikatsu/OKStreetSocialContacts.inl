@@ -340,7 +340,9 @@ void AOKStreetSocialScene::FinishPrivate(){
  if(S.HighPrivateResult.IsValid()&&S.Manifest.Characters.IsValidIndex(Girl)){
   const TArray<TSharedPtr<FJsonValue>>* Acts=nullptr;TArray<FString> Done;
   if(S.HighPrivateResult->TryGetArrayField(TEXT("actions"),Acts))for(const auto& V:*Acts){const auto O=V->AsObject();if(!O)continue;
-   const int32 Sec=int32(O->GetNumberField(TEXT("seconds")));Done.Add(OKMsg(TEXT("ui.memory.private_action"),{{TEXT("label"),O->GetStringField(TEXT("label"))},{TEXT("minute"),Sec/60},{TEXT("second"),Sec%60}}));}
+   const int32 Sec=int32(O->GetNumberField(TEXT("seconds")));FString Label=O->GetStringField(TEXT("label"));
+   if(O->GetStringField(TEXT("kind"))==TEXT("said"))Label=OKMsg(TEXT("ui.memory.private_he_said"),{{TEXT("text"),Label}}); // his words, not a thing they did
+   Done.Add(OKMsg(TEXT("ui.memory.private_action"),{{TEXT("label"),Label},{TEXT("minute"),Sec/60},{TEXT("second"),Sec%60}}));}
   const int32 Seconds=int32(S.HighPrivateResult->HasField(TEXT("seconds"))?S.HighPrivateResult->GetNumberField(TEXT("seconds")):0.);
   const FString Text=OKMsg(TEXT("ui.memory.private_session"),{{TEXT("minutes"),FMath::Max(1,Seconds/60)},{TEXT("count"),Done.Num()},{TEXT("actions"),FString::Join(Done,OKT(TEXT("ui.memory.list_separator")))}});
   MindObserve(Girl,TEXT("private"),Text,PlaceHere(S.Male),Done.IsEmpty()?0.5f:0.75f);

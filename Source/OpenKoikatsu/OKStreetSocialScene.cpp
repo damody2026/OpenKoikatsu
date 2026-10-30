@@ -1180,7 +1180,8 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkMindStatus);FillMindStatus(Character,Status);}
  // The private room is not the street: no shop menu to order from, no open choices or invitations (her needs stay:
  // at satiety 23 she is hungry there too).
- if(S.PrivateGirl==Character&&S.PrivateMode.IsValid()){Status.Menu.Reset();Status.Choices.Reset();Status.Invite.Reset();}
+ // Nor the street place's scene line (the lounge, the crowd, who of hers is standing a few metres away): the room is theirs.
+ if(S.PrivateGirl==Character&&S.PrivateMode.IsValid()){Status.Menu.Reset();Status.Choices.Reset();Status.Invite.Reset();Status.Scene=OKT(TEXT("ui.free_talk.private_scene"));}
  System=OKStreetFreeTalkSystemPrompt(Persona,OKStreetPlaceCatalogue());UserMessage=OKStreetFreeTalkUserMessage(Status,Text);
  return true;
 }

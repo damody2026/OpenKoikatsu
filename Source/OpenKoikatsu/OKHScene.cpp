@@ -89,7 +89,7 @@ void UOKHScenePanel::SelectAibu(int32 Index){
     PendingAibu=Index;Queue.Reset();Wanted.Reset();TouchArea=INDEX_NONE;BuildList();
     const int32 Generation=++AibuGeneration;const FAibuPose Pose=AibuPoses[Index];const FString Root=FOkSession::CommonPairRoot();
     TWeakObjectPtr<UOKHScenePanel> Weak(this);
-    Note(OKT(TEXT("ui.hscene.loading_caress")),false);
+    if(Hint)Hint->SetText(FText::FromString(OKT(TEXT("ui.hscene.loading_caress")))); // a hint, not something they did (not in her memory)
     Async(EAsyncExecution::Thread,[Weak,Generation,Pose,Root](){
         TMap<FString,FString> Keys;const FString Prefix=TEXT(" / [Controller layer 0] Base Layer.");
         FOkSession::BeginAnimationPreparation();
