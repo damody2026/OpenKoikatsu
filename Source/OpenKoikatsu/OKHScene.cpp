@@ -78,7 +78,10 @@ void UOKHScenePanel::SelectAibu(int32 Index){
             if(!Keys.Contains(TEXT("Idle"))){UI->PendingAibu=INDEX_NONE;UI->Note(OKT(TEXT("ui.hscene.pose_missing")),false);UI->BuildList();return;}
             UOKCharacterController* G=UI->Gallery;
             // Him out of the picture as in the original caress; his pose stops.
-            G->OnStopPair();if(G->PartnerActor)G->PartnerActor->SetActorHiddenInGame(true);
+            // Only the pair playback stops: OnStopPair also destroys him, and no pose could be chosen after the caress.
+            G->CancelPairPreparation();G->bPairBreathArmed=false;G->PreviewActor->StopHBreath();
+            if(G->PairedPlayback){G->PairedPlayback->Stop();G->PairedPlayback->Destroy();G->PairedPlayback=nullptr;}
+            if(G->PartnerActor){G->PartnerActor->StopHBreath();G->PartnerActor->SetActorHiddenInGame(true);}
             G->PreviewActor->SetActorTickEnabled(true);G->PreviewActor->SetGameSceneMode(3,false);G->SelectedGameSceneMode=3;
             UI->SoloKeys=MoveTemp(Keys);UI->ActiveAibu=UI->PendingAibu;UI->PendingAibu=INDEX_NONE;UI->ActivePose=INDEX_NONE;UI->Mode=0;UI->SoloState.Reset();
             UI->PosesPlayed.AddUnique(UI->AibuPoses[UI->ActiveAibu].Name);G->NoteAction(TEXT("pair"),UI->AibuPoses[UI->ActiveAibu].Name);
@@ -101,6 +104,8 @@ void UOKHScenePanel::Touch(int32 Area){
     // Her anal untouched and him not her lover: she pulls away (anal_dislikes).
     if(Area==3&&AreaExperience(3)<=0.f&&Gallery->HHeroineStage!=TEXT("lover")){Note(OKT(TEXT("ui.hscene.anal_touch_refused")));Chain({TEXT("Back_Dislikes"),TEXT("Idle")});TouchArea=INDEX_NONE;return;}
     static const TCHAR* Prefix[]={TEXT(""),TEXT("M_"),TEXT("A_"),TEXT("S_"),TEXT("S_"),TEXT("M_")};
+    static const TCHAR* TouchEvents[]={TEXT(""),TEXT("ui.hscene.event_touch_chest"),TEXT("ui.hscene.event_touch_crotch"),TEXT("ui.hscene.event_touch_anal"),TEXT("ui.hscene.event_touch_butt"),TEXT("ui.hscene.event_touch_nipple")};
+    if(TouchArea!=Area)Note(OKT(TouchEvents[Area]));
     TouchArea=Area;Chain({FString(Prefix[Area])+TEXT("Touch"),FString(Prefix[Area])+TEXT("Idle")});
 }
 void UOKHScenePanel::Note(const FString& Text,bool bReact){Events.Add(Text);if(Gallery)Gallery->NoteAction(TEXT("h"),Text);if(bReact)React(Text);if(Hint)Hint->SetText(FText::FromString(Text));UE_LOG(LogTemp,Display,TEXT("H scene: %s"),*Text);}
@@ -254,6 +259,7 @@ void UOKHScenePanel::Click(int32 Kind){
     if(Kind>=PoseBase&&Kind<PoseBase+1000){SelectPose(Kind-PoseBase);return;}
     if(Kind>=AibuBase&&Kind<PoseBase){SelectAibu(Kind-AibuBase);return;}
     if(Kind>=TouchChest&&Kind<=Kiss&&Mode==0){static const int32 Areas[]={1,2,3,4,5,0};Touch(Areas[Kind-TouchChest]);ActionsKey.Reset();return;}
+    if(Mode==0&&Kind>=Faster&&Kind<=Continue)return; // pair actions while caressing (a stale button or the control channel)
     if(Kind==ToggleMale){bMaleHidden=!bMaleHidden;BuildList();return;}
     if(Kind==Release&&Mode==0){TouchArea=INDEX_NONE;Chain({TEXT("Idle")});ActionsKey.Reset();return;}
     if(Kind>=ClothesBase){
@@ -497,7 +503,7 @@ void UOKHScenePanel::FrameCamera(){
             if(Line.Size()>5.f){Line.Normalize();FVector Side(-Line.Y,Line.X,0);if((Side|Facing)<0)Side=-Side;Dir=(Side+.45f*Facing-.25f*Line).GetSafeNormal();}
             Focus=FMath::Lerp(HerBox.GetCenter(),HisBox.GetCenter(),.3f);Size=FMath::Max(Size,(HerBox+HisBox).GetExtent().Size()*.8f);
         }
-    }else Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();
+    }else{Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();Size*=.75f;}
     if(Dir.IsNearlyZero())return;
     Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=18.f;Girl->OrbitDistance=FMath::Clamp(Size*2.1f,120.f,600.f);
     Girl->ApplyOrbitCamera();
