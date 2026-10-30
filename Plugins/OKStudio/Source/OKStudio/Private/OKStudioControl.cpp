@@ -562,11 +562,15 @@ namespace
 			J->TryGetStringField(TEXT("has_param"), HasParam);
 			bool bParams = false;
 			J->TryGetBoolField(TEXT("params"), bParams);
+			// "owner": only the parts of the preview actor with that name (one item of several sharing part names).
+			FString Owner;
+			J->TryGetStringField(TEXT("owner"), Owner);
 			UWorld* World = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWorld() : nullptr;
 			if (!World) return Result(false, TEXT("no game world"));
 			TArray<TSharedPtr<FJsonValue>> Out;
 			for (TActorIterator<AKKPreviewActor> It(World); It; ++It)
 			{
+				if (!Owner.IsEmpty() && It->GetName() != Owner) continue;
 				TInlineComponentArray<UMeshComponent*> Meshes(*It);
 				for (UMeshComponent* Mesh : Meshes)
 				{

@@ -1,4 +1,5 @@
 ﻿#include "KKForgeAlpha.h"
+#include "KKRuntimeSharedMaterial.h"
 #include "KKToonShadowBias.h"
 #include "KKSkeletalBuilder.h"
 #include "KKMaterialDedupe.h"
@@ -223,7 +224,7 @@ UMaterial* OKMakeForgeAlphaMaterial(const FOKNativeItemDraw& Draw)
         } else {Ed->Opacity.Expression=PS;Ed->Opacity.Mask=1;Ed->Opacity.MaskA=1;}
     }
     // An equal graph finalized before (OK_MATERIAL_DEDUPE=1) is used as is.
-    FString DedupeKey;if(UMaterial* Same=OKFindEqualMaterial(Mat,TEXT("KKForgeAlpha"),DedupeKey))return Same;
+    OKAddUnityTranslucentDepthTest(Mat);FString DedupeKey;if(UMaterial* Same=OKFindEqualMaterial(Mat,TEXT("KKForgeAlpha"),DedupeKey))return Same;
     Mat->UpdateCachedExpressionData();Mat->PreEditChange(nullptr);OKEnsureSkeletalMaterialUsage(Mat);Mat->PostEditChange();OKRememberMaterial(DedupeKey,Mat);
     UE_LOG(LogTemp,Display,TEXT("OK native Forge MainAlpha shadow=%d uniforms=%d textures=%d"),bShadow,Draw.Values.Num(),Draw.Textures.Num());
     return Mat;

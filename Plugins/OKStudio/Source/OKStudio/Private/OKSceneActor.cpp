@@ -252,7 +252,7 @@ namespace
 		if (!bMap) Actor->CharacterDisplayShadowsOverride = Item == nullptr;
 		// Items draw from the Studio root: the street's parents plus M_ForgeStudioOpaque, the depth-writing variant of the
 		// game's item program (opaque items overlapping each other sort by depth, not by distance).
-		if (!bMap) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay28");
+		if (!bMap) Actor->SharedMaterialRootOverride = TEXT("/Game/IndependentResources/RuntimeMaterials/StudioDisplay29");
 		// The scene's shading globals (Studio's _ambientshadowG, _LineColorG, _linewidthG): Studio sets them for everything
 		// it draws, characters as well as items.
 		if (!bMap) Actor->StudioShaderGlobals = ShaderGlobals;
@@ -1544,35 +1544,112 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 	{
 		bSkyDomesDirty = false;
 		SkyDomeParts.Reset();
-		for (auto It = ZWriteShellParts.CreateIterator(); It; ++It) if (!It.Key().IsValid()) It.RemoveCurrent();
+		TMap<TWeakObjectPtr<UPrimitiveComponent>, TPair<int32, int32>> Ranks;
+		for (const FRankedPart& Ranked : BlendedParts) if (Ranked.Part.IsValid()) Ranks.Add(Ranked.Part, {Ranked.Rank, Ranked.BasePriority});
+		BlendedParts.Reset();
 		for (const TPair<int32, FShown>& It : Shown)
 			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
 			{
 				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
 				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
-				for (const TWeakObjectPtr<UPrimitiveComponent>& P : Preview->ZWriteBlendedParts)
-					if (P.IsValid() && !ZWriteShellParts.Contains(P)) ZWriteShellParts.Add(P, P->TranslucencySortPriority);
+				for (const AKKPreviewActor::FBlendedPart& Blended : Preview->BlendedParts)
+					if (Blended.Component.IsValid())
+					{
+						const TPair<int32, int32>* Rank = Ranks.Find(Blended.Component);
+						BlendedParts.Add({Blended.Component, Blended.Queue, Blended.bZWrite, Blended.Renderer, Blended.Submesh, Rank ? Rank->Key : -1,
+							Rank ? Rank->Value : Blended.Component->TranslucencySortPriority});
+					}
+			}
+		// UE orders blended parts by sort priority, then distance; Unity by queue, then distance. The parts keep their own
+		// priority (stacked copies of one surface) within their queue, and each queue above or below 3000 moves them a
+		// hundred priorities (queues in order) after or before the characters and the rest, which draw at about 3000.
+		TArray<int32> Queues;
+		for (const FRankedPart& Ranked : BlendedParts) Queues.AddUnique(Ranked.Queue);
+		Queues.AddUnique(3000);
+		Queues.Sort();
+		const int32 Zero = Queues.IndexOfByKey(3000);
+		for (const FRankedPart& Ranked : BlendedParts)
+			if (UPrimitiveComponent* P = Ranked.Part.Get())
+			{
+				const int32 Priority = FMath::Clamp(Ranked.BasePriority + (Queues.IndexOfByKey(Ranked.Queue) - Zero) * 100, -20000, 20000);
+				if (!P->ComponentHasTag(TEXT("OKSkyDome")) && P->TranslucencySortPriority != Priority) P->SetTranslucentSortPriority(Priority);
 			}
 	}
 	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : SkyDomeParts)
 		if (UPrimitiveComponent* P = Part.Get())
 			P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
-	// A blended part that writes depth (ZWrite On) around the view, such as a night-sky shell: Unity sorts it by its
-	// bounds' centre, near the camera, so it draws after what it encloses, and its depth test keeps it behind that.
-	// UE's blended parts write no depth, so a shell around the view draws first (after the sky domes), the larger
-	// (outer) shell before the smaller; it goes back to its own place when the view leaves it.
-	for (const TPair<TWeakObjectPtr<UPrimitiveComponent>, int32>& Shell : ZWriteShellParts)
-		if (UPrimitiveComponent* P = Shell.Key.Get())
-		{
-			const int32 Priority = P->Bounds.GetBox().IsInside(View.GetLocation())
-				? -5000 - FMath::Clamp(int32(P->Bounds.SphereRadius / 100.0), 0, 4000) : Shell.Value;
-			if (P->TranslucencySortPriority != Priority)
-			{
-				P->SetTranslucentSortPriority(Priority);
-				UE_LOG(LogTemp, Display, TEXT("OK zwrite shell %s/%s priority=%d radius=%.0f"), *GetNameSafe(P->GetOwner()), *P->GetName(), Priority, P->Bounds.SphereRadius);
-			}
-		}
+	RankBlendedParts(View.GetLocation());
 	PlaceSky(View);
+}
+
+void AOKSceneActor::RankBlendedParts(const FVector& Eye)
+{
+	// Unity draws the blended queues after the opaque ones: by queue, and within a queue back to front by the distance
+	// to the bounds' centre (up to queue 2500 front to back). A depth-writing blended part (ZWrite On) then hides what is
+	// behind it from every part drawn after it, such as a night-sky shell around the view (drawn last, its centre being
+	// near) behind a moon billboard drawn before it. UE's blended parts write no depth: each part gets its rank in that
+	// order (1..255, spread in order when there are more), and the depth-writing ones draw their rank into custom depth
+	// and stencil, which the parts' materials test (OKAddUnityTranslucentDepthTest).
+	// A renderer's submeshes (parts of one source renderer) sort as one object, at the renderer's bounds' centre, and
+	// draw in submesh order (a night-sky shell, then the moon billboard of the same mesh, over it).
+	// OK_UNITY_DEPTH_TEST=0 (diagnostic): no ranks, so the materials test nothing.
+	static const bool bOff = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_UNITY_DEPTH_TEST")) == TEXT("0");
+	if (bOff) return;
+	TMap<TPair<const AActor*, int32>, FBox> Renderers;
+	for (const FRankedPart& Ranked : BlendedParts)
+		if (const UPrimitiveComponent* P = Ranked.Part.Get())
+			if (Ranked.Renderer >= 0 && P->IsVisible())
+				Renderers.FindOrAdd({P->GetOwner(), Ranked.Renderer}, FBox(ForceInit)) += P->Bounds.GetBox();
+	struct FKey { int32 Index; int32 Queue; double Order; int32 Submesh; };
+	TArray<FKey, TInlineAllocator<256>> Keys;
+	for (int32 I = 0; I < BlendedParts.Num(); ++I)
+		if (UPrimitiveComponent* P = BlendedParts[I].Part.Get())
+			if (P->IsVisible())
+			{
+				const FRankedPart& Ranked = BlendedParts[I];
+				const FBox* Renderer = Ranked.Renderer >= 0 ? Renderers.Find({P->GetOwner(), Ranked.Renderer}) : nullptr;
+				const FVector Centre = Renderer ? Renderer->GetCenter() : P->Bounds.Origin;
+				const double Distance = FVector::Dist(Eye, Centre);
+				Keys.Add({I, Ranked.Queue, Ranked.Queue <= 2500 ? Distance : -Distance, Ranked.Submesh});
+				// UE sorts blended parts back to front by each one's own bounds' centre: shift the submeshes of one
+				// renderer to the renderer's distance, later submeshes a centimetre nearer, so they draw as Unity's do.
+				if (Renderer)
+				{
+					const float Offset = float(Distance - FVector::Dist(Eye, P->Bounds.Origin)) - float(Ranked.Submesh);
+					if (FMath::Abs(P->TranslucencySortDistanceOffset - Offset) > FMath::Max(0.5f, float(Distance) * 1e-4f))
+						P->SetTranslucencySortDistanceOffset(Offset);
+				}
+			}
+	if (!Keys.Num()) return;
+	Keys.Sort([](const FKey& A, const FKey& B)
+	{
+		return A.Queue != B.Queue ? A.Queue < B.Queue : A.Order != B.Order ? A.Order < B.Order : A.Submesh < B.Submesh;
+	});
+	if (!bCustomDepthStencil)
+	{
+		// The stencil half of custom depth (r.CustomDepth 3) is off by default.
+		bCustomDepthStencil = true;
+		if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth")))
+			if (V->GetInt() != 3) V->Set(3, ECVF_SetByCode);
+	}
+	const bool bEyeMoved = !RankEye.Equals(Eye, 0.25);
+	if (bEyeMoved) RankEye = Eye;
+	for (int32 K = 0; K < Keys.Num(); ++K)
+	{
+		FRankedPart& Ranked = BlendedParts[Keys[K].Index];
+		const int32 Rank = Keys.Num() <= 255 ? K + 1 : 1 + int32(int64(K) * 254 / (Keys.Num() - 1));
+		UPrimitiveComponent* P = Ranked.Part.Get();
+		// The view the ranks are for: the materials test only there (not in mirror or screen captures).
+		if (bEyeMoved || Ranked.Rank != Rank) P->SetCustomPrimitiveDataVector3(OKUnityDrawRankIndex + 1, Eye);
+		if (Ranked.Rank == Rank) continue;
+		Ranked.Rank = Rank;
+		P->SetCustomPrimitiveDataFloat(OKUnityDrawRankIndex, float(Rank));
+		if (Ranked.bZWrite)
+		{
+			P->SetRenderCustomDepth(true);
+			P->SetCustomDepthStencilValue(Rank);
+		}
+	}
 }
 
 void AOKSceneActor::PlaceSky(const FTransform& View)

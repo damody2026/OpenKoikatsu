@@ -1040,6 +1040,8 @@ static UMaterial* MakeVertexColorMaterial(const FString& Blend, bool bTwoSided, 
 		Coverage.Expression = Vc;
 		Coverage.OutputIndex = 4;
 	}
+	OKAddUnityTranslucentDepthTest(Mat);
+	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
 	OKEnsureSkeletalMaterialUsage(Mat);
@@ -2883,6 +2885,7 @@ total += surfaceReduction * env * Intensity * lerp(specColor, grazing.xxx, pow(1
 		}
 	}
 	// An equal graph finalized before (OK_MATERIAL_DEDUPE=1) is used as is.
+	OKAddUnityTranslucentDepthTest(Mat);
 	FString DedupeKey;
 	if (UMaterialInterface* Same = OKFindEqualMaterialGraph(Mat, FString::Printf(TEXT("part|noz=%d"), bEyeNoZ ? 1 : 0), DedupeKey, GetTransientPackage())) return Same;
 	Mat->UpdateCachedExpressionData();
@@ -3595,6 +3598,7 @@ static UMaterialInterface* OKMirrorMaterial(bool bTranslucent)
 			Ed->Opacity.Expression = Alpha;
 		}
 	}
+	OKAddUnityTranslucentDepthTest(Mat);
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -3680,6 +3684,7 @@ static UMaterialInterface* OKXRayMaterial()
 		Ed->EmissiveColor.Expression = Rgb;
 		Ed->Opacity.Expression = Alpha;
 	}
+	OKAddUnityTranslucentDepthTest(Mat);
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -3762,6 +3767,7 @@ static UMaterialInterface* OKGlitchMaterial()
 		Ed->EmissiveColor.Expression = Rgb;
 		Ed->Opacity.Expression = Alpha;
 	}
+	OKAddUnityTranslucentDepthTest(Mat);
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -3781,6 +3787,25 @@ static UMaterialInterface* OKGlitchMaterial()
 // foam), _FresnelColor towards grazing view, _Shadermap highlights, then lerp(grab refracted by the normals, lit colour,
 // alpha) with alpha from _Transparency, the rim and the depth (an overlay of the two). Unity's world is UE's with x
 // negated and y / z swapped, in metres. Not done: the _Reflection cubemap (no cubemap extraction; its term is zero).
+// HLSL statements that sample a cube atlas (a session cube slot, unity::cubemap_atlas: the six faces side by side in
+// Unity's order +X -X +Y -Y +Z -Z, mip 0 on the first row) at mip 0 along the Unity-space direction Dir, with D3D's cube
+// face conventions, into a new float4 Out. Tex is the graph's texture object input (its sampler TexSampler).
+static FString OKCubeAtlasSample(const TCHAR* Tex, const TCHAR* Dir, const TCHAR* Out)
+{
+	return FString::Printf(TEXT(R"(float4 %s;
+{
+float3 cd = %s; float3 ad = abs(cd); float face; float2 st; float ma;
+if (ad.x >= ad.y && ad.x >= ad.z) { ma = ad.x; face = cd.x > 0 ? 0 : 1; st = cd.x > 0 ? float2(-cd.z, -cd.y) : float2(cd.z, -cd.y); }
+else if (ad.y >= ad.z) { ma = ad.y; face = cd.y > 0 ? 2 : 3; st = cd.y > 0 ? float2(cd.x, cd.z) : float2(cd.x, -cd.z); }
+else { ma = ad.z; face = cd.z > 0 ? 4 : 5; st = cd.z > 0 ? float2(cd.x, -cd.y) : float2(-cd.x, -cd.y); }
+st = st / max(ma, 1e-5) * 0.5 + 0.5;
+float2 size; %s.GetDimensions(size.x, size.y); float w = size.y * 0.5;
+float2 p = clamp(st * w, 0.5, max(w - 0.5, 0.5));
+%s = Texture2DSampleLevel(%s, %sSampler, float2((face * w + p.x) / size.x, p.y / size.y), 0);
+}
+)"), Out, Dir, Tex, Out, Tex, Tex);
+}
+
 static UMaterialInterface* OKStylizedWaterMaterial()
 {
 #if WITH_EDITOR
@@ -3798,7 +3823,7 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 	auto Input = [Program](const TCHAR* Name, UMaterialExpression* E, int32 Output = 0) { FCustomInput C; C.InputName = Name; C.Input.Expression = E; C.Input.OutputIndex = Output; Program->Inputs.Add(C); };
 	auto Vector = [&](const TCHAR* Name, const FLinearColor& Default) { auto* P = NewObject<UMaterialExpressionVectorParameter>(Mat); P->ParameterName = Name; P->DefaultValue = Default; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P, 5 /* RGBA */); };
 	auto Scalar = [&](const TCHAR* Name, float Default) { auto* P = NewObject<UMaterialExpressionScalarParameter>(Mat); P->ParameterName = Name; P->DefaultValue = Default; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P); };
-	auto Texture = [&](const TCHAR* Name, const TCHAR* Default) { auto* P = NewObject<UMaterialExpressionTextureObjectParameter>(Mat); P->ParameterName = Name; P->Texture = LoadObject<UTexture2D>(nullptr, Default); P->SamplerType = SAMPLERTYPE_LinearColor; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P); };
+	auto Texture = [&](const TCHAR* Name, const TCHAR* Default, EMaterialSamplerType Sampler = SAMPLERTYPE_LinearColor) { auto* P = NewObject<UMaterialExpressionTextureObjectParameter>(Mat); P->ParameterName = Name; P->Texture = LoadObject<UTexture2D>(nullptr, Default); P->SamplerType = Sampler; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P); };
 	// The shader's property defaults (m_PropInfo of the water's own material), linear like Unity uploads them.
 	Vector(TEXT("_WaterColor"), FLinearColor(0.f, 0.2176f, 1.f, 0.503f));
 	Vector(TEXT("_RimColor"), FLinearColor(0.f, 0.f, 0.f, 0.491f));
@@ -3812,6 +3837,8 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 	Scalar(TEXT("_Surfacehightlightsize"), 0.5f); Scalar(TEXT("_SurfaceHightlighttiling"), 0.75f); Scalar(TEXT("_Fresnelexponent"), 3.f);
 	Texture(TEXT("_Normals"), TEXT("/Engine/EngineMaterials/DefaultNormal.DefaultNormal"));
 	Texture(TEXT("_Shadermap"), TEXT("/Engine/EngineResources/Black.Black"));
+	// The reflection cubemap as its cube atlas (OKCubeAtlasSample); black without one.
+	Texture(TEXT("_Reflection"), TEXT("/Engine/EngineResources/Black.Black"), SAMPLERTYPE_Color);
 	Input(TEXT("Uv"), Add(NewObject<UMaterialExpressionTextureCoordinate>(Mat)));
 	Input(TEXT("Pos"), Add(NewObject<UMaterialExpressionWorldPosition>(Mat)));
 	Input(TEXT("Cam"), Add(NewObject<UMaterialExpressionCameraPositionWS>(Mat)));
@@ -3875,6 +3902,9 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 		"float fres = 1.0 - pow(1.0 - max(dot(vn, V), 0.0), Fresnelexponent) * FresnelColor.a;\n"
 		"float sv = pow(1.0 - nv, 5.0);\n"
 		"float3 lit = specular * pow(1.0 - lh, 5.0);\n"
+		"float3 R = reflect(-V, n);\n")
+		+ OKCubeAtlasSample(TEXT("Reflection"), TEXT("R"), TEXT("refl")) + TEXT(
+		"lit += refl.rgb * Glossiness * saturate(r5.x) * sv;\n"
 		"float4 m0 = SAMPLE(Shadermap, r0.xy), m1 = SAMPLE(Shadermap, r0.zw);\n"
 		"float foam = -m0.z * m1.z + 1.0;\n"
 		"float depthDiff = max(SceneD - PixelD, 0.0) * 0.01;\n"
@@ -3913,6 +3943,7 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 		auto* One = NewObject<UMaterialExpressionConstant>(Mat); One->R = 1.f; Add(One);
 		Ed->Opacity.Expression = One;
 	}
+	OKAddUnityTranslucentDepthTest(Mat);
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -4138,6 +4169,7 @@ static UMaterialInterface* OKParticleAdditiveMaterial()
 	Program->Code = TEXT("float3 rgb = 2.0 * Vertex * Tint * Tex.rgb;\nfloat alpha = saturate(2.0 * VertexAlpha * SoftFade * TintAlpha * Tex.a);\nreturn max(rgb * alpha, 0.0);");
 	Mat->GetExpressionCollection().AddExpression(Program);
 	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Program;
+	OKAddUnityTranslucentDepthTest(Mat);
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -4225,6 +4257,7 @@ static UMaterialInterface* OKStageEffectMaterial(int32 Kind)
 	Hlsl += TEXT("\n#undef S\nreturn pow(saturate(r),2.2);");
 	Code->Code = Hlsl;
 	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
+	OKAddUnityTranslucentDepthTest(Mat);
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
 	Mat->PostEditChange();
@@ -4324,19 +4357,12 @@ static UMaterialInterface* OKSkyboxMaterial()
 	Code->Code = TEXT(R"(float3 v = Dir.rgb * 2.0 - 1.0;
 float a = radians(P.a); float c = cos(a), s = sin(a);
 float3 d = float3(c * v.x - s * v.z, v.y, s * v.x + c * v.z);
-float3 ad = abs(d); float face; float2 st; float ma;
-if (ad.x >= ad.y && ad.x >= ad.z) { ma = ad.x; face = d.x > 0 ? 0 : 1; st = d.x > 0 ? float2(-d.z, -d.y) : float2(d.z, -d.y); }
-else if (ad.y >= ad.z) { ma = ad.y; face = d.y > 0 ? 2 : 3; st = d.y > 0 ? float2(d.x, d.z) : float2(d.x, -d.z); }
-else { ma = ad.z; face = d.z > 0 ? 4 : 5; st = d.z > 0 ? float2(d.x, -d.y) : float2(-d.x, -d.y); }
-st = st / max(ma, 1e-5) * 0.5 + 0.5;
-float2 size; Cube.GetDimensions(size.x, size.y); float w = size.y * 0.5;
-float2 p = clamp(st * w, 0.5, w - 0.5);
-return Texture2DSampleLevel(Cube, CubeSampler, float2((face * w + p.x) / size.x, p.y / size.y), 0).rgb * P.rgb;)");
+)") + OKCubeAtlasSample(TEXT("Cube"), TEXT("d"), TEXT("sky")) + TEXT("return sky.rgb * P.rgb;");
 	// OK_SKY_DEBUG=1: the direction as colour, 2: the raw atlas sample, 3: P.rgb (diagnostic).
 	const FString SkyDebug = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_SKY_DEBUG"));
 	if (!SkyDebug.IsEmpty())
-		Code->Code = Code->Code.Replace(TEXT("return Texture2DSampleLevel"), SkyDebug == TEXT("1") ? TEXT("return normalize(d) * 0.5 + 0.5; //")
-			: SkyDebug == TEXT("2") ? TEXT("return Texture2DSampleLevel(Cube, CubeSampler, float2((face * w + p.x) / size.x, p.y / size.y), 0).rgb; //") : TEXT("return P.rgb; //"));
+		Code->Code = Code->Code.Replace(TEXT("return sky.rgb * P.rgb;"), SkyDebug == TEXT("1") ? TEXT("return normalize(d) * 0.5 + 0.5;")
+			: SkyDebug == TEXT("2") ? TEXT("return sky.rgb;") : TEXT("return P.rgb;"));
 	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
@@ -4359,7 +4385,7 @@ static UMaterialInstanceDynamic* OKSkyboxInstance(FOkSession& Source, int32 Inde
 	int32 Length = 0;
 	const bool bCube = Source.ShaderTexture(Index, "_OKSkyCube", Bytes, Length);
 	if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
-		UE_LOG(LogTemp, Display, TEXT("OK sky dome part=%d cube=%d bytes=%d"), Index, int32(bCube), Length);
+		{ FLinearColor Queue(-1.f, 0.f, 0.f, 0.f); Source.MaterialValue(Index, "_OKRenderQueue", Queue); UE_LOG(LogTemp, Display, TEXT("OK sky dome part=%d cube=%d bytes=%d queue=%d"), Index, int32(bCube), Length, FMath::RoundToInt(Queue.R)); }
 	if (!bCube) return nullptr;
 	UMaterialInterface* Base = OKSkyboxMaterial();
 	UMaterialInstanceDynamic* Dynamic = Base ? UMaterialInstanceDynamic::Create(Base, Outer) : nullptr;
@@ -4414,6 +4440,7 @@ static UMaterialInstanceDynamic* OKModulateInstance(FOkSession& Source, int32 In
 		// Unity v is up: UE's v is 1 - v, so the _ST applies in Unity's frame.
 		Code->Code = TEXT("float2 u = float2(UV.x, 1.0 - UV.y) * MainST.xy + MainST.zw; float4 t = Main.Sample(MainSampler, float2(u.x, 1.0 - u.y)); return lerp(float3(1, 1, 1), t.rgb, t.a);");
 		if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
+		OKAddUnityTranslucentDepthTest(Mat);
 		Mat->UpdateCachedExpressionData();
 		Mat->PreEditChange(nullptr);
 		Mat->PostEditChange();
@@ -6693,6 +6720,16 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							Dynamic->SetTextureParameterValue(Property, Texture);
 						}
 					}
+					// The reflection cubemap as its cube atlas (a colour: sampled sRGB).
+					{
+						const uint8* Bytes = nullptr; int32 Length = 0;
+						if (Source.ShaderTexture(i, "_Reflection", Bytes, Length))
+							if (UTexture2D* Atlas = TextureFromPngBytes(Bytes, Length))
+							{
+								Atlas->SRGB = true; Atlas->UpdateResource(); Atlas->AddToRoot(); Output.Textures.Add(Atlas);
+								Dynamic->SetTextureParameterValue(TEXT("_Reflection"), Atlas);
+							}
+					}
 					Comp->SetMaterial(0, Dynamic);
 					Comp->SetCastShadow(false);
 					Part.SurfaceMat = Dynamic;
@@ -6722,11 +6759,21 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					MirrorParts.Add(Mirror);
 					UE_LOG(LogTemp, Display, TEXT("OK mirror part=%s shader=%s normal=%s"), *Name, *Source.MaterialShaderName(i), *Mirror.LocalNormal.ToString());
 				}
-		// A blended part whose shader writes depth (ZWrite On): the scene sorts it as Unity's depth test would show it.
-		if (Comp && !bBody && !bFaceDraw && PassState.bZWrite && Blend.Equals(TEXT("translucent"), ESearchCase::IgnoreCase))
+		// A blended part: the scene ranks it in Unity's draw order (queue, then distance) for the depth test of its material.
+		if (Comp && !bBody && !bFaceDraw && (Blend.Equals(TEXT("translucent"), ESearchCase::IgnoreCase) || bModulate
+			|| Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase)))
 		{
-			ZWriteBlendedParts.Add(Comp);
-			UE_LOG(LogTemp, Display, TEXT("OK zwrite blended part=%s shader=%s bounds=%s"), *Name, *Source.MaterialShaderName(i), *Comp->Bounds.GetBox().ToString());
+			FBlendedPart& Blended = BlendedParts.AddDefaulted_GetRef();
+			Blended.Component = Comp;
+			// Without its own queue a material draws in its shader's: Skybox/Cubemap's is Background.
+			if (bSkybox) Blended.Queue = 1000;
+			FLinearColor Queue;
+			if (Source.MaterialValue(i, "_OKRenderQueue", Queue) && Queue.R >= 0.f) Blended.Queue = FMath::RoundToInt(Queue.R);
+			FLinearColor Renderer, Submesh;
+			if (Source.MaterialValue(i, "_OKRendererGroup", Renderer)) Blended.Renderer = FMath::RoundToInt(Renderer.R);
+			if (Source.MaterialValue(i, "_OKSubmesh", Submesh)) Blended.Submesh = FMath::RoundToInt(Submesh.R);
+			Blended.bZWrite = PassState.bZWrite && Blend.Equals(TEXT("translucent"), ESearchCase::IgnoreCase);
+			UE_LOG(LogTemp, Display, TEXT("OK blended part=%s shader=%s queue=%d zwrite=%d renderer=%d submesh=%d"), *Name, *Source.MaterialShaderName(i), Blended.Queue, int32(Blended.bZWrite), Blended.Renderer, Blended.Submesh);
 		}
 		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor, with source alpha, not the Studio light
 		// effect's three-colour mix the additive part graph draws.

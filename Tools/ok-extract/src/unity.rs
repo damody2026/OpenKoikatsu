@@ -4149,8 +4149,38 @@ impl ParsedBundle {
         Some(UnityObject::from_info_and_class(info.clone(),class))
     }
 
+    /// The (lowercase) names of the cubemaps in this bundle and its loaded dependency files: the material slots naming
+    /// one are sampled as cubes (`cube_slot_atlases`).
+    pub(crate) fn cubemap_names(&self) -> std::collections::HashSet<String> {
+        let mut names = std::collections::HashSet::new();
+        let mut add = |ser: &unity_asset_binary::asset::SerializedFile| for info in ser.objects_of_type(89) {
+            if let Some(n) = UnityObject::from_serialized_file(ser, info).ok().and_then(|o| o.name()) { names.insert(n.to_ascii_lowercase()); }
+        };
+        self.with_texture_sources(|sers| for (_, ser) in sers.iter() { add(ser); });
+        for file in self.external_files.borrow().values().flatten() { add(&file.0); }
+        names
+    }
+
+    /// Every cube slot of the meshes' materials (a slot naming a cubemap, Skybox/Cubemap `_Tex`, StylizedWater
+    /// `_Reflection`, ...) as its cube atlas (`cubemap_atlas`: the six faces side by side, mips below) in
+    /// `shader_extra_textures[<slot>]`, for the renderer's own graphs to sample by direction.
+    pub(crate) fn cube_slot_atlases(&self, meshes: &mut [ExtractedMesh]) {
+        let cubes = self.cubemap_names();
+        if cubes.is_empty() { return; }
+        let mut atlases: HashMap<String, Option<Vec<u8>>> = HashMap::new();
+        for m in meshes.iter_mut() {
+            let Some(mat) = m.mat.as_ref() else { continue };
+            for (slot, name) in &mat.tex_slots {
+                let key = name.to_ascii_lowercase();
+                if !cubes.contains(&key) || m.shader_extra_textures.contains_key(slot) { continue; }
+                let atlas = atlases.entry(key).or_insert_with(|| self.cubemap_atlas_named(name));
+                if let Some(png) = atlas { m.shader_extra_textures.insert(slot.clone(), png.clone()); }
+            }
+        }
+    }
+
     /// Cubemap `name` as the reflection atlas PNG (`cubemap_atlas`): this bundle's, else a loaded dependency file's.
-    fn cubemap_atlas_named(&self, name: &str) -> Option<Vec<u8>> {
+    pub(crate) fn cubemap_atlas_named(&self, name: &str) -> Option<Vec<u8>> {
         let find = |ser: &unity_asset_binary::asset::SerializedFile, streams: &dyn Fn(&UnityObject) -> Option<unity_asset_decode::texture::Texture2D>| {
             ser.objects_of_type(89).into_iter().find_map(|info| {
                 let object = ser.scene_object(info).ok()?;
@@ -4895,6 +4925,7 @@ impl ParsedBundle {
                 }
             }
         }
+        self.cube_slot_atlases(picked);
     }
 
     fn decode_all_unity(

@@ -735,9 +735,21 @@ public:
 		FVector LocalNormal = FVector::UpVector;
 	};
 	TArray<FMirrorPart> MirrorParts;
-	/** Blended parts whose shader writes depth (Unity's ZWrite On with a blend): Unity's depth test keeps such a part
-	 *  from covering nearer surfaces drawn before it; UE's blended parts write no depth, so the scene orders them. */
-	TArray<TWeakObjectPtr<UPrimitiveComponent>> ZWriteBlendedParts;
+	/** Blended parts outside characters (translucent, additive, modulate), with the material's Unity render queue and
+	 *  whether its shader writes depth (ZWrite On). Unity's depth test keeps a later part from covering a nearer
+	 *  depth-writing one drawn before it; UE's blended parts write no depth, so the scene ranks them in Unity's draw
+	 *  order for their materials' test (OKAddUnityTranslucentDepthTest). */
+	struct FBlendedPart
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+		int32 Queue = 3000;
+		bool bZWrite = false;
+		/** The source renderer (numbered within the actor; -1 unknown) and the part's submesh in it: Unity sorts a
+		 *  renderer's submeshes as one object and draws them in submesh order. */
+		int32 Renderer = -1;
+		int32 Submesh = 0;
+	};
+	TArray<FBlendedPart> BlendedParts;
 	UTextureRenderTarget2D* RenderTextureFor(FOkSession& Source, int32 PartIndex);
 	void StopRenderTextureCaptures();
 	UPROPERTY()
