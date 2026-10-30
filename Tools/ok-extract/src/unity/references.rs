@@ -38,6 +38,10 @@ impl Scripts {
             .collect();
         Self { classes }
     }
+    /// Whether any script of the file is of a class `matches` accepts (`class` answers only those).
+    pub(crate) fn has_class(&self, matches: impl Fn(&str) -> bool) -> bool {
+        self.classes.values().any(|class| matches(class))
+    }
     pub(crate) fn class(&self, value: Option<&UnityValue>) -> Option<&str> {
         self.classes.get(&PPtr::read(value?)?).map(String::as_str)
     }

@@ -37,6 +37,9 @@ pub(crate) fn rename_prefab_root(skel:&mut Skeleton,name:&str) {
 }
 
 pub(crate) fn parse_resolved(file: &SerializedFile, skel: &Skeleton, scripts:&crate::unity::references::Scripts) -> Vec<Marker> {
+    // Markers are BoneImplantProcess behaviours: a file without that script has none (decoding its every GameObject,
+    // Transform and behaviour was a third of a card conversion's allocations).
+    if !scripts.has_class(|class| class == "BoneImplantProcess") { return Vec::new(); }
     let mut transforms = HashMap::new(); let mut children = HashMap::new();
     let mut active_go=HashMap::new(); let mut component_order=HashMap::new();
     for info in &file.objects {

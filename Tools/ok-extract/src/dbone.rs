@@ -618,6 +618,8 @@ fn parse_colliders(serialized: &SerializedFile, body: Option<&Skeleton>) -> Vec<
     parse_colliders_resolved(serialized,body,&crate::unity::references::Scripts::local(serialized))
 }
 fn parse_colliders_resolved(serialized: &SerializedFile, body: Option<&Skeleton>, scripts:&crate::unity::references::Scripts) -> Vec<(i64, BodyCollider)> {
+    // Only DynamicBoneCollider behaviours are colliders: a file without that script has none (OK_DBDIAG: counted).
+    if !scripts.has_class(|class| class.eq_ignore_ascii_case("DynamicBoneCollider")) && std::env::var_os("OK_DBDIAG").is_none() { return Vec::new(); }
     let mut go_to_tf = HashMap::new();
     for info in serialized.objects.iter().filter(|o|o.type_id==4) {
         let Ok(obj)=UnityObject::from_serialized_file(serialized,info) else {continue;};
