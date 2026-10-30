@@ -1975,6 +1975,7 @@ she_called_you_missed = "She called you; you did not pick up"
 [ui.memory]
 saw_confession = "You saw him confess to {name} with your own eyes; {outcome, select, yes {she said yes} no {she turned him down} other {she has not answered yet}}"
 life_block = "{start}–{end} {kind, select, class {had class at {place}{has_activity, select, yes { ({activity})} other {}}} study {studied at {place}} sleep {slept at {place}} rest {rested at {place}} leisure {took a walk and relaxed at {place}} promise {went to {place} to keep a date} encounter {went to {place} to find him} bath {took a bath at {place}} other {was at {place}}}"
+left_without_word = "I spoke to him and he walked off without a word back"
 talk_session = "{start}–{end} talked with him face to face at {place} for {minutes, plural, one {# minute} other {# minutes}}"
 walked_together = "Walked side by side with him around {place}"
 phone_entry = "{kind, select, message {{who, select, him {He texted me: {text}} her {I texted him: {text}} other {{text}}}} other {Phone call: {text}}}"

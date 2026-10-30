@@ -1975,6 +1975,7 @@ she_called_you_missed = "她打电话给你，你没有接"
 [ui.memory]
 saw_confession = "你亲眼看到他向{name}告白，{outcome, select, yes {她答应了} no {她拒绝了} other {她还没给答复}}"
 life_block = "{start}–{end} {kind, select, class {在{place}上课{has_activity, select, yes {（{activity}）} other {}}} study {在{place}读书} sleep {在{place}睡觉} rest {在{place}休息} leisure {在{place}散步、放松} promise {到{place}赴约} encounter {跑去{place}找他} bath {在{place}洗澡} other {在{place}}}"
+left_without_word = "我跟他说了话，他一句也没回就走开了"
 talk_session = "{start}–{end} 和他在{place}面对面聊了 {minutes} 分钟"
 walked_together = "和他在{place}一带并肩走了一段路"
 phone_entry = "{kind, select, message {{who, select, him {他发消息给我：{text}} her {我发消息给他：{text}} other {{text}}}} other {电话：{text}}}"

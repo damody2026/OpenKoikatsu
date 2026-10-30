@@ -2204,6 +2204,15 @@ void AOKStreetSocialScene::EndTalk(){
  if(S.Pair.Conversation()&&S.Pair.Partner!=INDEX_NONE){FinishPhoto(false);return;} // ending the talk ends the meal too, not the other way round
  S.InvitationActive=false;S.InvitationSequence.Reset();S.InvitationQueued=INDEX_NONE;S.InvitationGirl=INDEX_NONE;S.InvitationCommand=INDEX_NONE;
  const bool Ending=S.Target!=INDEX_NONE;
+ // She spoke to him and he went off without one word back (any talk: she came over at their date, or he pressed E and
+ // walked away from her answer): hers to remember. A talk of under a minute left no memory at all, and 三月七, met at
+ // the park for their walk, greeted him a quarter hour later as if by chance (R6-15). How she takes it is the AI's.
+ // Not when the game is closing with her talk open.
+ if(Ending&&S.TalkStartMinute>=0&&S.Manifest.Characters.IsValidIndex(S.Target)&&!(GetWorld()&&GetWorld()->bIsTearingDown)){bool Hers=false,His=false;const auto& List=HistoryOf(OKStreetStableId(S.Manifest.Characters[S.Target]));
+  for(int32 K=List.Num()-1;K>=0;--K){const auto& E=List[K];if(E.Minute<S.TalkStartMinute)break;
+   if(E.Kind==TEXT("talk")){Hers|=E.Who==TEXT("her");His|=E.Who==TEXT("him");}}
+  if(Hers&&!His){const FString Text=OKT(TEXT("ui.memory.left_without_word"));HistoryAdd(S.Target,TEXT("talk"),TEXT("world"),Text);MindRemember(S.Target,TEXT("talk"),Text,PlaceHere(S.Male),0.4f);
+   UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d he left without a word to what she said"),S.Target);}}
  if(Ending&&S.TalkStartMinute>=0&&OKStreetMindNow(S)>S.TalkStartMinute){const int64 Now=OKStreetMindNow(S);const int64 From=S.TalkStartMinute;S.TalkStartMinute=-1; // a talk of under a minute (re-opened at once) is not a memory
   MindRemember(S.Target,TEXT("talk"),OKMsg(TEXT("ui.memory.talk_session"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))},{TEXT("minutes"),int32(FMath::Max<int64>(1,Now-From))},
    {TEXT("start"),FString::Printf(TEXT("%02d:%02d"),int32(From%1440/60),int32(From%60))},{TEXT("end"),FString::Printf(TEXT("%02d:%02d"),int32(Now%1440/60),int32(Now%60))}}),PlaceHere(S.Male),0.2f);}
