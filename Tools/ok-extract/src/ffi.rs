@@ -1709,7 +1709,9 @@ pub unsafe extern "C" fn ok_part_material_value(s:*mut OkSession,index:i32,prope
         .or_else(||name.ends_with("_ST").then(|| {
             let defaults=[1.,1.,0.,0.];let axes=["x","y","z","w"];
             std::array::from_fn(|i|mat.float(&format!("{name}_{}",axes[i])).unwrap_or(defaults[i]))
-        }));
+        }))
+        // The material's Unity render queue (-1: the shader's own).
+        .or_else(||(name=="_OKRenderQueue").then(||[mat.render_queue as f32,0.,0.,0.]));
     let Some(value)=value.filter(|v|v.iter().all(|v|v.is_finite())) else{return 1;};
     std::ptr::copy_nonoverlapping(value.as_ptr(),out,4);0
 }

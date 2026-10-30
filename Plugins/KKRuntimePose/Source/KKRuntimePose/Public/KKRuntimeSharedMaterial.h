@@ -64,6 +64,16 @@ class UMaterial;class UMaterialExpression;
 KKRUNTIMEPOSE_API UMaterialExpression* OKMakeRuntimeVertexAmbient(UMaterial*,const FKKRuntimeMaterialScene&);
 // Standard indirect diffuse: native vertex L2 plus pixel normal L0/L1.
 KKRUNTIMEPOSE_API UMaterialExpression* OKMakeRuntimeProbeAmbient(UMaterial*);
+// Unity draws the transparent queue in order and a ZWrite-on translucent shader writes depth, so a later part is depth
+// rejected where an earlier, nearer one drew (a moon billboard drawn first hides the sky dome behind its whole quad).
+// UE translucency writes no depth. This wraps a translucent graph's opacity in that test: each part carries its Unity
+// draw rank in custom primitive data OKUnityDrawRankIndex (1..255; 0, the default, is no test), the depth-writing
+// parts also render custom depth with their rank as stencil (the material allows translucent custom depth writes),
+// and a pixel is dropped where the custom depth there is nearer and its stencil rank earlier than the part's own.
+// Indices OKUnityDrawRankIndex+1..+3 hold the camera the ranks were made for: other views (scene captures) test nothing.
+// Editor only (graph authoring); the host ranks the parts (OKSceneActor). Needs r.CustomDepth 3 (stencil).
+constexpr int32 OKUnityDrawRankIndex=0;
+KKRUNTIMEPOSE_API void OKAddUnityTranslucentDepthTest(UMaterial*);
 
 KKRUNTIMEPOSE_API EBlendMode OKRuntimeSharedMaterialBlendMode(EKKRuntimeMaterialRecipe);
 

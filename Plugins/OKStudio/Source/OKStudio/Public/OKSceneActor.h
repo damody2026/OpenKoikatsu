@@ -135,9 +135,23 @@ private:
 	void PlaceSky(const FTransform& View);
 	/** The shown items' sky dome parts (OKSkyDome), found again after the shown objects change. */
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> SkyDomeParts;
-	/** The shown items' blended depth-writing parts (AKKPreviewActor::ZWriteBlendedParts) and their own sort priority
-	 *  (kept from when each was first seen); one around the view draws before other blended parts (PlaceBackground). */
-	TMap<TWeakObjectPtr<UPrimitiveComponent>, int32> ZWriteShellParts;
+	/** The shown items' blended parts (AKKPreviewActor::BlendedParts), ranked every frame in Unity's draw order for their
+	 *  materials' depth test (RankBlendedParts); Rank is what each was last given. */
+	struct FRankedPart
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Part;
+		int32 Queue = 3000;
+		bool bZWrite = false;
+		int32 Renderer = -1;
+		int32 Submesh = 0;
+		int32 Rank = -1;
+		/** Its own sort priority when first seen (OKSceneActor adds its queue's place to it). */
+		int32 BasePriority = 0;
+	};
+	TArray<FRankedPart> BlendedParts;
+	void RankBlendedParts(const FVector& Eye);
+	bool bCustomDepthStencil = false;
+	FVector RankEye = FVector(NAN);
 	bool bSkyDomesDirty = true;
 	bool bBuildsPending = false;
 	/** Previews destroyed since the last forced garbage collection. */

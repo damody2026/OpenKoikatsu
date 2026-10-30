@@ -474,6 +474,21 @@ impl ModelView {
                 }
             }
         }
+        // Cube slots (StylizedWater `_Reflection`, ...) as cube atlases, for the graphs that sample them by direction.
+        self.parsed.cube_slot_atlases(&mut meshes);
+        // Unity sorts a renderer's blended submeshes as one object (the renderer's bounds' centre) and draws them in
+        // submesh order (a night sky shell before the moon billboard of the same mesh): `_OKRendererGroup` (the
+        // renderer, numbered within this prefab) and `_OKSubmesh` let the scene rank them so.
+        let mut groups: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+        for mesh in &mut meshes {
+            let Some(&renderer) = mesh.renderer_ids.first() else { continue };
+            let next = groups.len();
+            let group = *groups.entry(renderer).or_insert(next);
+            if let Some(mat) = mesh.mat.as_mut() {
+                mat.floats.insert("_OKRendererGroup".into(), group as f32);
+                mat.floats.insert("_OKSubmesh".into(), mesh.submesh_index as f32);
+            }
+        }
         // Studio map times of day (SunLightInfo): what a time shows may be inactive in the prefab, so those meshes come in
         // too; every part under a time's list is marked with the times it shows at (mark_sun_visible).
         let sun = self.parsed.prefab_sun_light(prefab);

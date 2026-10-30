@@ -129,7 +129,7 @@ bool PrepareRuntimeSharedMaterial(const FString& AssetRoot,const FString& Root,c
  if(!Translucent)Program.ReplaceInline(TEXT("return o0;"),TEXT("return float4(o0.rgb,1.0);"));
  else if(Mat->BlendMode==BLEND_AlphaComposite)Program.ReplaceInline(TEXT("return o0;"),TEXT("return o0*RevealOpacity;"));
  else Program.ReplaceInline(TEXT("return o0;"),TEXT("return float4(o0.rgb,o0.a*RevealOpacity);"));
- PS->Code=Code+Program;Register(PS);auto* Ed=Mat->GetEditorOnlyData();Ed->EmissiveColor.Expression=PS;Ed->EmissiveColor.Mask=1;Ed->EmissiveColor.MaskR=Ed->EmissiveColor.MaskG=Ed->EmissiveColor.MaskB=1;Ed->OpacityMask.Expression=PS;Ed->OpacityMask.Mask=1;Ed->OpacityMask.MaskA=1;if(Translucent){Ed->Opacity.Expression=PS;Ed->Opacity.Mask=1;Ed->Opacity.MaskA=1;}
+ PS->Code=Code+Program;Register(PS);auto* Ed=Mat->GetEditorOnlyData();Ed->EmissiveColor.Expression=PS;Ed->EmissiveColor.Mask=1;Ed->EmissiveColor.MaskR=Ed->EmissiveColor.MaskG=Ed->EmissiveColor.MaskB=1;Ed->OpacityMask.Expression=PS;Ed->OpacityMask.Mask=1;Ed->OpacityMask.MaskA=1;if(Translucent){Ed->Opacity.Expression=PS;Ed->Opacity.Mask=1;Ed->Opacity.MaskA=1;OKAddUnityTranslucentDepthTest(Mat);}
 
  if(Outline){
   auto* WPO=NewObject<UMaterialExpressionCustom>(Mat);WPO->OutputType=CMOT_Float3;
