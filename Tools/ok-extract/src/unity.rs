@@ -4514,7 +4514,8 @@ impl ParsedBundle {
     fn prefab_directory_unity(&self) -> PrefabDirectory {
         self.with_serialized(|files| {
             let mut dir=PrefabDirectory::default();
-            for file in files {
+            let file_index=self.serialized_file_index.borrow().clone();
+            for (file,index) in files.iter().zip(file_index) {
                 let roots=prefab_asset_roots(file);
                 let mut objects=std::collections::BTreeSet::new();
                 let mut go_names=HashMap::new();
@@ -4532,7 +4533,11 @@ impl ParsedBundle {
                     }
                 }
                 for info in file.objects_of_type(MESH_CLASS_ID) {
-                    if let Ok(obj)=UnityObject::from_serialized_file(file,&info) {dir.meshes.insert(obj.name().unwrap_or_default().to_ascii_lowercase());}
+                    // Only the name, which leads the object (a whole mesh parse is its vertex and index arrays).
+                    let head=self.files[index].1.read_range(info.byte_start,info.byte_size.min(1024));
+                    let obj=head.as_deref().and_then(|b|Self::texture_header_fields(file,info,b,&["m_Name"]))
+                        .or_else(||UnityObject::from_serialized_file(file,&info).ok());
+                    if let Some(obj)=obj {dir.meshes.insert(obj.name().unwrap_or_default().to_ascii_lowercase());}
                 }
                 dir.roots.push((!roots.is_empty()).then(||roots.keys().cloned().collect()));
                 dir.objects.push(objects);
