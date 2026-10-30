@@ -212,6 +212,8 @@ struct FOKStreetActivityText { FString Id, Name, ZhName, Place, Anchor, FemaleCl
 inline TArray<TUniquePtr<FOKStreetActivityText>>& OKStreetActivityTexts() { static TArray<TUniquePtr<FOKStreetActivityText>> Texts; return Texts; }
 inline TArray<FOKStreetActivity>& OKStreetActivitiesMutable() { static TArray<FOKStreetActivity> All; return All; }
 inline const TArray<FOKStreetActivity>& OKStreetActivities() { return OKStreetActivitiesMutable(); }
+// What the activities use (activities.toml needs: the fish food, a sketchbook): one at hand is enough for the two of them.
+inline TSet<FString>& OKStreetActivitySupplies() { static TSet<FString> All; return All; }
 
 inline const FOKStreetActivity* OKStreetFindActivity(const FString& Id) {
  for (const auto& A : OKStreetActivities()) if (Id == A.Id) return &A;

@@ -299,6 +299,13 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
  OKStreetPrivateEnvSave(); // its high models change the extraction environment the crowd reads (OKStreetSocialPrivateEnv.cpp)
  auto* Mode=AOKInteractionMode::EnterCards(GetWorld()->GetFirstPlayerController(),S.HighCards[Character],S.HighCards[0],S.HighOutfits.IsValidIndex(Character)?S.HighOutfits[Character]:0);
  if(!Mode){OKStreetPrivateEnvRestore();S.ContactsNotice=OKT(TEXT("ui.contacts.interaction_load_failed"));RefreshUI();return;}
+ // Her experience (hexp.rs) gates the poses, raw insertion and anal in the H panel.
+ {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Ask=OKRulesHeroineRequest(S,TEXT("h_experience"),Id);Ask->SetStringField(TEXT("girl"),Id);OKRulesPutExt(S,Ask);
+  Mode->BeginHScene(S.Manifest.Characters[Character].Name,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget).Stage,OKRulesEval(S,Ask),S.Manifest.Characters[0].Name);}
+ S.PrivateShownLine=S.FreeTalkCaptionHer; // what was on screen before is not shown in the scene
+ // The street clock runs about 24 times real time: an hour in the room would be a whole night gone (she said the sun was
+ // up after one scene). It stands still while they are in there and moves on by the real time spent when they leave.
+ if(!S.ClockPaused){const double Wall=FPlatformTime::Seconds();S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);S.ClockStartWall=Wall;S.ClockPaused=true;S.PrivateClockFrozen=true;}
  S.PrivateGirl=Character;S.HighPrivateAt=FPlatformTime::Seconds();S.HighPrivateSeenReady=false;S.HighPrivateResult.Reset();S.PrivateMouse=S.MouseUI;S.PrivateMode=Mode;
  const FString Directory=FPaths::GetPath(S.Manifest.SocialReport)/TEXT("HighInteraction")/FGuid::NewGuid().ToString(EGuidFormats::Digits);IFileManager::Get().MakeDirectory(*Directory,true);
  S.HighPrivateReport=Directory/TEXT("result.json");Mode->ReportPath=S.HighPrivateReport;
@@ -319,8 +326,11 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
 void AOKStreetSocialScene::FinishPrivate(){
  if(!State||State->PrivateGirl==INDEX_NONE)return;auto& S=*State;
  auto Mode=S.PrivateMode;const int32 Girl=S.PrivateGirl;S.PrivateMode.Reset();S.PrivateGirl=INDEX_NONE;
- if(Mode.IsValid()&&!Mode->IsFinished()){Mode->Returned=nullptr;Mode->Exit(true);}
+ // Left from the street's own leave button (or the control channel): the scene still hands back what happened, or her
+ // memory and experience of it were lost (only the scene's own return kept them).
+ if(Mode.IsValid()&&!Mode->IsFinished()){TWeakObjectPtr<AOKStreetSocialScene> Weak(this);Mode->Returned=[Weak](TSharedRef<FJsonObject> Result){if(Weak.IsValid()&&Weak->State)Weak->State->HighPrivateResult=Result;};Mode->Exit(false);}
  OKStreetPrivateEnvRestore();
+ if(S.PrivateClockFrozen&&S.ClockPaused){const double Wall=FPlatformTime::Seconds();S.ClockStartHours=FMath::Fmod(S.ClockStartHours+FMath::Max(0.,Wall-S.HighPrivateAt)/3600.,24.);S.ClockStartWall=Wall;S.ClockPaused=false;RefreshUI();}S.PrivateClockFrozen=false; // (someone ran the clock meanwhile: it already moved)
  S.PrivatePausedSeconds+=FMath::Max(0.,FPlatformTime::Seconds()-S.HighPrivateAt);S.LastWall=0;
  OKSuspendCrowdRuntimeScene(this,false);S.MouseUI=S.PrivateMouse;S.MouseToggleRequested=false;
  if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(S.Camera.Get());
@@ -330,10 +340,20 @@ void AOKStreetSocialScene::FinishPrivate(){
  if(S.HighPrivateResult.IsValid()&&S.Manifest.Characters.IsValidIndex(Girl)){
   const TArray<TSharedPtr<FJsonValue>>* Acts=nullptr;TArray<FString> Done;
   if(S.HighPrivateResult->TryGetArrayField(TEXT("actions"),Acts))for(const auto& V:*Acts){const auto O=V->AsObject();if(!O)continue;
-   const int32 Sec=int32(O->GetNumberField(TEXT("seconds")));Done.Add(OKMsg(TEXT("ui.memory.private_action"),{{TEXT("label"),O->GetStringField(TEXT("label"))},{TEXT("minute"),Sec/60},{TEXT("second"),Sec%60}}));}
+   const int32 Sec=int32(O->GetNumberField(TEXT("seconds")));FString Label=O->GetStringField(TEXT("label"));
+   if(O->GetStringField(TEXT("kind"))==TEXT("said"))Label=OKMsg(TEXT("ui.memory.private_he_said"),{{TEXT("text"),Label}}); // his words, not a thing they did
+   Done.Add(OKMsg(TEXT("ui.memory.private_action"),{{TEXT("label"),Label},{TEXT("minute"),Sec/60},{TEXT("second"),Sec%60}}));}
   const int32 Seconds=int32(S.HighPrivateResult->HasField(TEXT("seconds"))?S.HighPrivateResult->GetNumberField(TEXT("seconds")):0.);
   const FString Text=OKMsg(TEXT("ui.memory.private_session"),{{TEXT("minutes"),FMath::Max(1,Seconds/60)},{TEXT("count"),Done.Num()},{TEXT("actions"),FString::Join(Done,OKT(TEXT("ui.memory.list_separator")))}});
   MindObserve(Girl,TEXT("private"),Text,PlaceHere(S.Male),Done.IsEmpty()?0.5f:0.75f);
+  // What it leaves on her: the experience, firsts and the relation (hexp.rs h_session_end), whichever way the scene opened.
+  const TSharedPtr<FJsonObject>* H=nullptr;
+  if(S.HighPrivateResult->TryGetObjectField(TEXT("h"),H)&&(*H)->HasField(TEXT("counts"))){
+   const FString Id=OKStreetStableId(S.Manifest.Characters[Girl]);auto Request=OKRulesHeroineRequest(S,TEXT("h_session_end"),Id);
+   Request->SetStringField(TEXT("girl"),Id);Request->SetStringField(TEXT("place"),PlaceHere(S.Male));Request->SetObjectField(TEXT("counts"),(*H)->GetObjectField(TEXT("counts")));{const TArray<TSharedPtr<FJsonValue>>* Poses=nullptr;if((*H)->TryGetArrayField(TEXT("poses"),Poses))Request->SetArrayField(TEXT("poses"),*Poses);}OKRulesPutExt(S,Request);
+   if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){auto Candidate=S.Store;OKRulesTakeExt(Candidate,*Answer);ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();
+    UE_LOG(LogTemp,Display,TEXT("Street private: experience %d -> %d (%s)"),int32(Answer->GetNumberField(TEXT("level_before"))),int32(Answer->GetNumberField(TEXT("level_after"))),*Answer->GetStringField(TEXT("level_name")));}
+  }
  }
  // Back on the street with her beside him: they go on talking (the scene started from their talk, which it ended).
  // Without this she went straight back to her schedule and walked off from the lunch he had just paid for. Opened from
@@ -344,7 +364,16 @@ void AOKStreetSocialScene::FinishPrivate(){
 }
 bool AOKStreetSocialScene::TickPrivate(double Now){
  auto& S=*State;if(S.PrivateGirl==INDEX_NONE)return false;
- if(S.PrivateMode.IsValid())return true;
+ // Esc leaves it like the leave button (the scene's own Esc check sees only real keys, not the control channel's).
+ if(S.PrivateMode.IsValid()&&OKKeyPressed(GetWorld()->GetFirstPlayerController(),EKeys::Escape)){FinishPrivate();return true;}
+ if(S.PrivateMode.IsValid()){
+  // Talk while it happens: his line from the H panel goes to her as free talk (she is the partner while the scene is
+  // open, FreeTalkPartner), with what she is in the middle of; her answer is shown on the panel.
+  FString Line,Context;bool System=false;
+  if(!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()&&!HerReplyUnspoken()&&S.PrivateMode->HSceneTakeLine(Line,Context,System)){S.PrivateTalkContext=Context;S.FreeTalkDraft=Line;S.SystemNote=System;SendFreeTalk();}
+  if(S.FreeTalkCaptionHer!=S.PrivateShownLine){S.PrivateShownLine=S.FreeTalkCaptionHer;S.PrivateMode->HSceneShowLine(S.FreeTalkCaptionHer);}
+  return true;
+ }
  FinishPrivate();if(S.SelfTest){S.Errors.Add(TEXT("Shared interaction mode disappeared without returning"));WriteReport(false);}return true;
 }
 void AOKStreetSocialScene::TickContacts(float Dt,double Now){

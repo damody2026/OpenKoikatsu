@@ -182,6 +182,10 @@ void AOKStreetSocialScene::StepApproach(){
  // 90 s and gave up.
  // On the phone or in the one-on-one scene: she waits until he hangs up or comes back (arriving opened her talk and the
  // talk closed the scene half a second after he entered it).
+ // The call is with her ("I'm at the bookstore, where are you?"): she is here, so it ends and they talk face to face. It
+ // went on as a call beside him; she said "coming now" and he was told they were apart.
+ if(S.RemoteMode==2&&S.RemotePeer==I&&(FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))){
+  UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d reached him while he was on the phone with her; the call ends"),I);PhoneHangUp();}
  if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))&&S.RemoteMode==0&&S.PrivateGirl==INDEX_NONE){
   const bool Join=S.ApproachJoin,ForSong=S.ApproachSong,ForPrivate=S.ApproachPrivate;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, private=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,ForPrivate?1:0,With);
@@ -214,6 +218,9 @@ void AOKStreetSocialScene::StepApproach(){
   SendFreeTalk();
   return;
  }
+ // Beside him while he is on the phone or in the one-on-one scene: she stands and waits there (above), not on into him.
+ // Walking on, she stood inside him, was stepped out and walked back in, 111 times in a minute while he texted her.
+ if(FVector::Dist2D(A.Position,S.Male)<170&&(S.RemoteMode!=0||S.PrivateGirl!=INDEX_NONE)){S.ApproachStarted=FPlatformTime::Seconds();return;}
  if(SceneTime()-S.ApproachRouteAt>.75){
   auto Fresh=ContactRoute(A.Position,S.Male);
   if(Fresh.IsEmpty())Fresh={A.Position,S.Male}; // no planned route (indoors, other floor): straight to him, the body sweep below stops her at walls
@@ -290,10 +297,8 @@ void AOKStreetSocialScene::RequestIntimacy(int32 Character,bool bHerIdea){
 void AOKStreetSocialScene::TickIntimacy(){
  auto& S=*State;
  if(S.IntimacyGirl!=INDEX_NONE&&S.PrivateGirl==INDEX_NONE){
-  const int32 Girl=S.IntimacyGirl;S.IntimacyGirl=INDEX_NONE;
-  // What it leaves is a rule (shop.rs intimacy_after).
-  auto Request=OKRulesHeroineRequest(S,TEXT("intimacy_after"),OKStreetStableId(S.Manifest.Characters[Girl]));Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
-  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
+  // What it leaves on her is written when the scene returns (FinishPrivate, hexp.rs h_session_end), as for every other way in.
+  S.IntimacyGirl=INDEX_NONE;
   return;
  }
  if(S.PendingIntimacy==INDEX_NONE||S.OutingGirl!=INDEX_NONE)return;

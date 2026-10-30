@@ -195,7 +195,7 @@ void AOKStreetSocialScene::TickServes(){
   TArray<FString> Names;
   if(!P.Applied){
    P.Applied=true;
-   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:L.ForHer?FString(OKT(TEXT("ui.economy.her_label")))+I->Name:I->Name);
+   for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:OKMsg(TEXT("ui.economy.item_owner_label"),{{TEXT("owner_label"),L.ForHer?OKT(TEXT("ui.economy.her_label")):OKT(TEXT("ui.economy.your_label"))},{TEXT("item_name"),*I->Name}}));
    // Served: the dishes can be eaten now; her needs fill as she eats them (TickMeal).
    for(auto& D:S.Table)if(D.Batch==P.Batch)D.Served=true;
    // "Not served yet, a few seconds" still waiting to be told: it is served now (爱丽丝 heard it after her drink came and
@@ -261,7 +261,10 @@ void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const F
  // On the way somewhere, or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's
  // then): for there.
  const FString Later=DestOf(S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString());
- S.PayAgreedShop=!Now.IsEmpty()?Now:!Later.IsEmpty()?Later:Here;
+ // At a table here, mid-meal: what he says is about this bill. "Order something, my treat" to the friend who sat down
+ // with them went to her dorm (then: he walks her home after), and her tea was billed to her.
+ const bool AtTableHere=!Here.IsEmpty()&&!S.Table.IsEmpty()&&S.MealPlace==Here;
+ S.PayAgreedShop=!Now.IsEmpty()?Now:AtTableHere?Here:!Later.IsEmpty()?Later:Here;
  UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
@@ -280,6 +283,17 @@ FString AOKStreetSocialScene::PayAgreed(int32 Girl) const{
 
 void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
  auto& S=*State;if(S.Cart.IsEmpty()||!S.Manifest.Characters.IsValidIndex(Her))return;
+ // A supply for what they do (activities.toml needs: the fish food) already at hand, in his bag or on the table: not a
+ // second one. 惠惠 at the pond: the judge ordered a bag "for him" and her next line ("fine, I'll buy it, one bag")
+ // another; or the feeding had bought him one and she ordered her own. Dishes and drinks keep their own rule (HasDishLike).
+ {TArray<FString> Dropped;
+  for(int32 K=S.Cart.Num()-1;K>=0;--K){const FString Item=S.Cart[K].ItemId;const auto* I=S.Catalog.Find(Item);
+   if(!I||!OKStreetActivitySupplies().Contains(Item))continue;
+   if(!S.Store.Inventory.Contains(Item)&&!S.Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ItemId==Item&&D.Percent>0.f;}))continue;
+   Dropped.AddUnique(I->Name);S.Cart.RemoveAt(K);}
+  if(!Dropped.IsEmpty()){const FString Items=FString::Join(Dropped,OKT(TEXT("ui.bank.list_separator")));UE_LOG(LogTemp,Display,TEXT("Street chat order: actor=%d %s already at hand, not ordered again"),Her,*Items);
+   S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),OKMsg(TEXT("ui.economy.already_bought_for_activity"),{{TEXT("items"),Items}})}}));
+   if(S.Cart.IsEmpty()){RefreshUI();return;}}}
  // She promised to treat him: it is hers to pay (what she cannot cover he fronts and she owes him).
  // She promised to treat him: hers to pay, unless he insists now (chat_order_payer, promise).
  FString Lean;float Insist=0;HeroineCheckoutLean(Her,CartTotal(),Lean,Insist);
@@ -295,6 +309,13 @@ void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
 // Whether Who (0: him, else a girl) already has one of these in front of them: the same kind (catalog category: a meal,
 // a dessert, a drink...; a steak and a pudding are both fine), on the table and not finished, or already in the cart. A second one is not ordered for them (the model may
 // list the same order again on every turn of a talk).
+bool AOKStreetSocialScene::DishComing(int32 Who,const FString& ItemId) const{
+ const auto& S=*State;
+ for(const auto& D:S.Table)if((D.ForHer?D.Her:0)==Who&&D.ItemId==ItemId&&D.Percent>0)return true;
+ for(const auto& L:S.Cart)if((L.Girl!=INDEX_NONE?L.Girl:L.ForHer?FreeTalkPartner():0)==Who&&L.ItemId==ItemId)return true;
+ for(const auto& Carried:S.CarriedOrders)for(const auto& L:Carried.Value)if((L.Girl!=INDEX_NONE?L.Girl:L.ForHer?Carried.Key:0)==Who&&L.ItemId==ItemId)return true;
+ return false;
+}
 bool AOKStreetSocialScene::HasDishLike(int32 Who,const FOKStreetCatalogItem& Item) const{
  const auto& S=*State;
  // A dish for two (the couple set, the moon-festival platter) is one for both of them: not a second one for him
@@ -561,7 +582,7 @@ void AOKStreetSocialScene::StartCheckout(int32 ForHer){
  OpenChoice(Her,TEXT("checkout"),Label,{TEXT("player_pays"),TEXT("split"),TEXT("she_pays"),TEXT("let_her_decide")},Lean,Insist,20,[Weak,Her](const FString& Option){if(Weak.IsValid())Weak->FinishCheckout(Option,Her);});
  S.FreeTalkNotice=Label+OKT(TEXT("ui.economy.pay_hint_text"));
  {const FOKStreetRelation Mine=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
-  S.TellHer.Add(OKMsg(TEXT("ui.economy.checkout_decision_prompt"), {{TEXT("total"), Total}, {TEXT("names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("wallet_cash"), FMath::Max<int64>(0,Mine.Cash)}, {TEXT("affordable"), Mine.Cash>=Total?TEXT("yes"):TEXT("no")}}));} // what she has, a fact: "not enough" said for 2 out of 235
+  S.CheckoutNote=OKMsg(TEXT("ui.economy.checkout_decision_prompt"), {{TEXT("total"), Total}, {TEXT("names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("wallet_cash"), FMath::Max<int64>(0,Mine.Cash)}, {TEXT("affordable"), Mine.Cash>=Total?TEXT("yes"):TEXT("no")}});S.TellHer.Add(S.CheckoutNote);} // what she has, a fact: "not enough" said for 2 out of 235
  if(S.HerTreatPromise.Contains(Her)&&Insist>=1.f)S.FreeTalkNotice+=OKT(TEXT("ui.economy.she_treats_this_time"));
  else if(Lean==TEXT("she_pays")&&Insist>0.6f)S.FreeTalkNotice+=OKT(TEXT("ui.economy.she_wants_to_pay_suffix"));
  RefreshUI();
@@ -570,7 +591,11 @@ void AOKStreetSocialScene::StartCheckout(int32 ForHer){
 // Paying the cart: who pays what, her shortfall, her tastes and what she remembers are rules (shop.rs checkout); here the
 // money goes through the books (a card when his wallet is short) and the dishes go to the kitchen.
 void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const FString& AsGirl){
- auto& S=*State;if(S.Cart.IsEmpty())return;
+ auto& S=*State;
+ // Settled (she said she pays, a button): the "not settled yet" note still waiting for her goes. Sent 107 s later, it had
+ // her insist on paying for the fish food she had already paid for.
+ if(!S.CheckoutNote.IsEmpty()){S.TellHer.Remove(S.CheckoutNote);S.CheckoutNote.Reset();}
+ if(S.Cart.IsEmpty())return;
  const bool WithHer=Her!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(Her);const FString Id=WithHer?OKStreetStableId(S.Manifest.Characters[Her]):FString();
  const FString PlaceName=OKStreetFindPlace(S.ShopPlace)?FString(OKStreetFindPlace(S.ShopPlace)->Name):S.ShopPlace;
  auto Request=WithHer?OKRulesHeroineRequest(S,TEXT("checkout"),Id):OKRulesRequest(TEXT("checkout"));
@@ -606,6 +631,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
   if(const TSharedPtr<FJsonObject> Whose=OKRulesEval(S,Things)){OKRulesTakeExt(Candidate,*Whose);const FString Give=Whose->GetStringField(TEXT("give_her"));if(!Give.IsEmpty())GiveHer.Add(Give);}}
  if(!CommitStore(MoveTemp(Candidate)))return;
  FlushRulesEffects();
+ for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId);I&&!I->Consumable)S.RecentBought.Add(L.ItemId+(L.ForHer?TEXT("|her"):TEXT("|him")),OKStreetMindNow(S));
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
  if(WithHer&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;

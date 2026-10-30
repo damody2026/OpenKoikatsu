@@ -2,6 +2,7 @@
 #include "Async/Async.h"
 #include "OKCharacterController.h"
 #include "OKInteractionMode.h"
+#include "OKHScene.h"
 #include "OKMotionComboBox.h"
 #include "OKMotionCatalogue.h"
 #include "OKMotionLabelZh.h"
@@ -49,6 +50,7 @@
 static FCriticalSection GInteractionMotionPreparationMutex;
 static FCriticalSection GInteractionSpeechCatalogMutex;
 static TAutoConsoleVariable<int32> CVarInteractionCacheControls(TEXT("ok.Interaction.CacheControls"),1,TEXT("Cache unchanged interaction controls with Slate invalidation; evaluated when constructing the scene UI."));
+static TAutoConsoleVariable<int32> CVarHSceneTestPanel(TEXT("ok.HScene.TestPanel"),0,TEXT("Show the card reader's test panel beside the street one-on-one's H panel (evaluated when the scene opens)."));
 static TAutoConsoleVariable<int32> CVarInteractionCopyDebugPose(TEXT("ok.Interaction.CopyDebugPose"),0,TEXT("Retain optional skeletal debug pose copies during interaction playback. The actual editor always retains its debug data."));
 
 AOKInteractionScene::AOKInteractionScene() {
@@ -109,6 +111,8 @@ TSharedRef<SWidget> UOKInteractionWidget::RebuildWidget() {
     if(!WidgetTree)WidgetTree=NewObject<UWidgetTree>(this);
     UHorizontalBox* Root=WidgetTree->ConstructWidget<UHorizontalBox>();WidgetTree->RootWidget=Root;
     USizeBox* Width=WidgetTree->ConstructWidget<USizeBox>();Width->SetWidthOverride(360.f);
+    // The street's one-on-one has its own H panel (OKHScene.h); the test controls stay built (the pair code reads them) but hidden.
+    if(Gallery&&Gallery->bHScene&&!CVarHSceneTestPanel.GetValueOnGameThread())Width->SetVisibility(ESlateVisibility::Collapsed);
     UInvalidationBox* Cache=WidgetTree->ConstructWidget<UInvalidationBox>();Cache->SetCanCache(CVarInteractionCacheControls.GetValueOnGameThread()!=0);Width->AddChild(Cache);
     UBorder* Background=WidgetTree->ConstructWidget<UBorder>();Background->SetBrushColor(FLinearColor(.025f,.045f,.07f,.96f));Cache->AddChild(Background);
     UScrollBox* Scroll=WidgetTree->ConstructWidget<UScrollBox>();Background->AddChild(Scroll);
@@ -429,7 +433,7 @@ void UOKCharacterController::ActivateInteraction() {
     PreviewActor->bReuseSpeechAudio=true;
     RefreshInteractionMotionSources();
     InteractionWidget->Gallery=this;InteractionWidget->Scene=InteractionScene;
-    SetModelLayout(true);InteractionWidget->AddToViewport(110);if(SpeechCombo)SpeechCombo->OnSelectionChanged.AddDynamic(InteractionWidget,&UOKInteractionWidget::OnSpeechSelection);InteractionWidget->PreloadSpeech();SetVisibility(ESlateVisibility::Collapsed);
+    SetModelLayout(true);InteractionWidget->AddToViewport(110);if(bHScene&&(HPanel=CreateWidget<UOKHScenePanel>(GetOwningPlayer()))!=nullptr){HPanel->Gallery=this;HPanel->AddToViewport(111);}if(SpeechCombo)SpeechCombo->OnSelectionChanged.AddDynamic(InteractionWidget,&UOKInteractionWidget::OnSpeechSelection);InteractionWidget->PreloadSpeech();SetVisibility(ESlateVisibility::Collapsed);
     if(auto* PC=Cast<AOpenKoikatsuPlayerController>(GetOwningPlayer()))PC->SetPaintPreviewActive(true);
     OnLoadSpeech();
     UE_LOG(LogTemp,Display,TEXT("OK interaction entered actor=%s card=%s"),*PreviewActor->GetName(),*PreviewCardPath);
@@ -442,6 +446,7 @@ void UOKCharacterController::OnExitInteraction() {
     CancelPairCatalogue();++PartnerLoadGeneration;bPartnerLoadInFlight=false;PendingPartnerPath.Empty();if(PartnerActor){PartnerActor->bShareIdenticalPose=false;PartnerActor->bUsePrivateGpuPlayback=false;PartnerActor->RefreshSkinnedDisplay();}CancelPairPreparation();if(PreviewActor)PreviewActor->bReuseSpeechAudio=false;OnStopSpeech();
     if(PreviewActor){PreviewActor->FollowHeadLookCamera(false);PreviewActor->bManualSpeechPattern=false;PreviewActor->bSpeechDrivesMouth=true;PreviewActor->bShareIdenticalPose=bInteractionPreviousPoseSharing;PreviewActor->bUsePrivateGpuPlayback=false;PreviewActor->RefreshSkinnedDisplay();}
     if(auto* PC=Cast<AOpenKoikatsuPlayerController>(GetOwningPlayer()))if(PC->PaintSprayer){PC->PaintSprayer->StopSpray();PC->PaintSprayer->ClearPaint();}
+    if(HPanel){HResult=HPanel->Result();HPanel->Gallery=nullptr;HPanel->RemoveFromParent();HPanel=nullptr;}
     if(InteractionWidget){InteractionWidget->RestoreControls();InteractionWidget->Gallery=nullptr;InteractionWidget->RemoveFromParent();InteractionWidget=nullptr;}
     if(InteractionScene){InteractionScene->SaveReport();InteractionScene->Destroy();InteractionScene=nullptr;}
     SyncShapeSliders();SetModelLayout(true);ApplyClickInputMode();

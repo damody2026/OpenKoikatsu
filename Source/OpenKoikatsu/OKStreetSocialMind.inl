@@ -328,7 +328,7 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  // Apart (a message or a call) the place, menu and people around him are not around her: she knows where he is only if
  // he says so or somebody saw him (what she heard).
  const bool Apart=RemoteWith(Character);
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusMenu);Status.Menu=Apart?FString():MenuText(R.Satiety,100.f/SatietyMax(Character));}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusMenu);Status.Menu=Apart?FString():MenuText(R.Satiety,100.f/SatietyMax(Character),Character);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusScene);Status.Scene=Apart?FString():SceneLine(Character);}
  if(!Apart&&S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusInvite);Status.Invite=RollInviteStance(Character);}
@@ -487,7 +487,8 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   const bool ForHer=O.ForHer; // whose it is: the AI's "for"
   // Ordered on the way to that shop ("let's go to the store: a tea egg and water"): carried until they get there.
   const FOKStreetActivity* Going=OKStreetFindActivity(Reply.Action);
-  const bool ShopAhead=Item&&Item->Place!=Place&&(Reply.Action==TEXT("go:")+Item->Place||(Going&&Going->Place&&Item->Place==Going->Place));
+  // Or the shop the outing is already walking to (a later reply on the way has no action of its own).
+  const bool ShopAhead=Item&&Item->Place!=Place&&(Reply.Action==TEXT("go:")+Item->Place||(Going&&Going->Place&&Item->Place==Going->Place)||(Place.IsEmpty()&&Item->Place==OutingShop(Character)));
   if(ShopAhead){FOKStreetCartLine Carry;Carry.ItemId=O.Id;Carry.ForHer=ForHer;Carry.HerOwn=ForHer;Carry.Size=Item->Price.Contains(O.Size)?O.Size:Item->DefaultSize();
    if(!Item->Options.IsEmpty()){Carry.Sweetness=O.Sweetness.IsEmpty()?OKT(TEXT("ui.mind.full_sugar_label")):O.Sweetness;Carry.Ice=O.Ice.IsEmpty()?OKT(TEXT("ui.mind.normal_state_label")):O.Ice;}
    S.CarriedOrders.FindOrAdd(Character).Add(Carry);S.CarriedOrderSaid.Add(Character,Reply.Reply);UE_LOG(LogTemp,Display,TEXT("Street order carried: %s until they reach %s"),*O.Id,*Item->Place);continue;}
@@ -500,7 +501,14 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   bool HadBefore=false;{const TArray<FOKStreetCartLine> Mine(S.Cart.GetData()+CartBefore,S.Cart.Num()-CartBefore);S.Cart.SetNum(CartBefore);HadBefore=HasDishLike(ForHer?Character:0,*Item);S.Cart.Append(Mine);}
   if(HadBefore&&SecondDishOk(Character,ForHer,O.Id))HadBefore=false; // starving, a different dish (shop.rs order_second_dish)
   if(HadBefore||S.Cart.ContainsByPredicate([&](const FOKStreetCartLine& C){return C.ItemId==O.Id&&C.ForHer==ForHer;})){
+   // Another of its kind still on the table, not this one coming: she is told it was not ordered. 胡桃 said "the lemon
+   // tart, fine, ordered" while his tiramisu was half eaten, and none came.
+   if(HadBefore&&!DishComing(ForHer?Character:0,O.Id))S.TellHer.Add(OKMsg(TEXT("ui.economy.still_has_one_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, %s still has one"),*O.Id,ForHer?TEXT("she"):TEXT("he"));continue;}
+  // A thing (not food) bought for the same one minutes ago (the judge's gift, then her own order for it): not twice.
+  if(!Item->Consumable)if(const int64* At=S.RecentBought.Find(O.Id+(ForHer?TEXT("|her"):TEXT("|him")));At&&OKStreetMindNow(S)-*At<=15){
+   S.TellHer.Add(OKMsg(TEXT("ui.economy.already_bought_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));
+   UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, bought for %s %lld min ago"),*O.Id,ForHer?TEXT("her"):TEXT("him"),OKStreetMindNow(S)-*At);continue;}
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
   if(ForHer&&TooFullFor(Character,*Item)){
    S.TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is full"),*O.Id);continue;}
@@ -657,10 +665,13 @@ bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Ite
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);return Out.IsValid()&&Out->GetBoolField(TEXT("too_full"));
 }
 
-FString AOKStreetSocialScene::MenuText(float Satiety,float Appetite) const{
- const FString Place=ShopPlaceHere();if(Place.IsEmpty())return FString();
+FString AOKStreetSocialScene::MenuText(float Satiety,float Appetite,int32 Girl) const{
+ // On the way to a shop with her, that shop's: without it she made up ids ("drink_bubble_tea"), was told the drink shop
+ // has none, and said "no bubble tea here?" of the 珍珠奶茶 on its menu.
+ FString Place=ShopPlaceHere();const bool Ahead=Place.IsEmpty();if(Ahead)Place=OutingShop(Girl);if(Place.IsEmpty())return FString();
  FString Why;if(PlaceClosedNow(Place,Why))return Why;
  TArray<FString> Lines;
+ if(Ahead){const auto* P=OKStreetFindPlace(Place);Lines.Add(OKMsg(TEXT("ui.mind.menu_ahead"),{{TEXT("place"),P?P->Name:Place}}));}
  // How much she can still eat (she stops at OKStreetFullSatiety): a dish that fills more than that is marked, so she
  // does not order a whole meal and leave it after a bite.
  const float Room=Satiety>=0.f?OKStreetOverfullSatiety-Satiety:1000.f;

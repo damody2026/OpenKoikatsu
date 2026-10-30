@@ -13,6 +13,8 @@ int32 AOKStreetSocialScene::FreeTalkPartner() const{
  if(!State)return INDEX_NONE;const auto& S=*State;
  // On a call, or typing to her on the phone: she is the one he talks to (OKStreetSocialPhoneInbox.inl).
  if(S.RemoteMode!=0&&S.Manifest.Characters.IsValidIndex(S.RemotePeer))return S.RemotePeer;
+ // In the one-on-one scene it is her (what he says on its panel goes to her).
+ if(S.PrivateGirl>0&&S.PrivateMode.IsValid()&&S.Manifest.Characters.IsValidIndex(S.PrivateGirl))return S.PrivateGirl;
  for(const int32 Girl:{S.Target,S.OutingGirl,S.Companion,S.Pair.Partner,S.Facility!=INDEX_NONE?S.FacilityCharacter:INDEX_NONE,S.RestroomGirl,S.SleepGirl,S.SoloGirl})
   if(Girl>0&&S.Manifest.Characters.IsValidIndex(Girl))return Girl;
  return INDEX_NONE;
@@ -132,7 +134,8 @@ void AOKStreetSocialScene::TickFreeTalkLive(double Now){
   // (SelfText), not after seconds of "silence".
   // Her song (its line before it, the song, its line after) is not his silence: a nudge in its opening line had her say
   // "say something!" and the song was cut off after nine seconds (R3-233).
-  const bool Waiting=Talking||Singing||S.FreeTalkBusy||S.RemoteMode==1||S.OutingGirl!=INDEX_NONE||!S.FreeTalkDraft.IsEmpty()||!S.FreeTalkLivePending.IsEmpty()||S.FreeTalkLiveSpeaking||S.ClockPaused||S.FreeTalkMicOpen||S.Bluff.Active||S.Studying||!S.FreeTalkReplay.IsEmpty()||S.SoloGirl!=INDEX_NONE||(S.Pair.Partner==Partner&&(S.Pair.Read||[&S]{const FOKStreetActivity* A=S.ActId.IsEmpty()?nullptr:OKStreetFindActivity(S.ActId);
+  // Being intimate in the one-on-one scene is not an awkward silence either: no nudge, no lost favor, no leaving.
+  const bool Waiting=S.PrivateMode.IsValid()||Talking||Singing||S.FreeTalkBusy||S.RemoteMode==1||S.OutingGirl!=INDEX_NONE||!S.FreeTalkDraft.IsEmpty()||!S.FreeTalkLivePending.IsEmpty()||S.FreeTalkLiveSpeaking||S.ClockPaused||S.FreeTalkMicOpen||S.Bluff.Active||S.Studying||!S.FreeTalkReplay.IsEmpty()||S.SoloGirl!=INDEX_NONE||(S.Pair.Partner==Partner&&(S.Pair.Read||[&S]{const FOKStreetActivity* A=S.ActId.IsEmpty()?nullptr:OKStreetFindActivity(S.ActId);
    // reading or studying side by side: the reading or study pose, or anything done in the library; the study button
   // (S.Studying) too: she said "each reads, don't disturb me" and then asked why he went quiet
    return A&&((A->Place&&FCString::Strcmp(A->Place,TEXT("library"))==0)||(A->FemaleClip&&(FCString::Strstr(A->FemaleClip,TEXT("read"))||FCString::Strstr(A->FemaleClip,TEXT("study")))));}()))||S.Table.ContainsByPredicate([](const FOKStreetDish& D){return D.Served&&D.Percent>0.f;})||Wall<S.FreeTalkQuietUntil; // playing cards (praying side by side, reading together, eating) is not silence, nor keeping quiet when she asked for it

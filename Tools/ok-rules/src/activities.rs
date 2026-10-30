@@ -278,7 +278,7 @@ fn table(t: &ActivitiesTuning, own: &ActivitiesTuning) -> Value {
         .map(|a| {
             let own_name = own.find(&a.id).map(|o| o.name.clone()).unwrap_or_else(|| a.name.clone());
             json!({"id": a.id, "name": a.name, "own_name": own_name, "place": a.place, "kind": a.kind, "code": a.code,
-                   "anchor": a.anchor, "turn": a.turn, "female_clip": a.female_clip, "male_clip": a.male_clip, "effect": a.effect})
+                   "anchor": a.anchor, "turn": a.turn, "female_clip": a.female_clip, "male_clip": a.male_clip, "effect": a.effect, "needs": a.needs})
         })
         .collect();
     json!({"activities": rows})

@@ -297,6 +297,12 @@ public:
         ActionLog.Add(MakeShared<FJsonValueObject>(O));
     }
     bool bInteractionOnly=false;
+    // The street's one-on-one: the original-style H panel (OKHScene.h) instead of the test panel, with her experience
+    // (ok-rules h_experience) and name; what happened comes back in HResult (the scene's result "h").
+    bool bHScene=false;
+    TSharedPtr<class FJsonObject> HExperience,HResult;
+    FString HHeroineName,HHeroineStage,HPlayerName;
+    UPROPERTY() TObjectPtr<class UOKHScenePanel> HPanel;
     void InitializeInteractionControls(bool Bind=true);
     void BindInteractionControls();
     void ActivateInteraction();
@@ -470,6 +476,8 @@ public:
     UPROPERTY() TArray<TObjectPtr<UTextBlock>> ClothesStateLabels;
     UPROPERTY() TArray<TObjectPtr<UButton>> ClothesStateButtons;
     void StartPairBreath();
+    // The extracted original voices (h_breath_index.json): OK_VOICE_ROOT, beside the configured game, or a usual install.
+    static FString DefaultVoiceRoot();
     int32 PartnerPersonality=-1;
     float PartnerVoiceRate=.5f;
     bool bPairBreathArmed=false,bPairBreathMoving=false;

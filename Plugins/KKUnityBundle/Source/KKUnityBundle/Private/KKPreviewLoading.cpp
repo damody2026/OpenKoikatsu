@@ -216,13 +216,53 @@ bool AKKPreviewActor::SetClothingHidden(bool Hidden){
  if(Hidden==bClothingHidden)return true;
  if(!Hidden){
   for(UMeshComponent* Component:HiddenClothingComponents)if(IsValid(Component))Component->SetVisibility(true,false);
-  for(int32 Index=0;Index<ClothingMaskMaterials.Num();++Index)if(IsValid(ClothingMaskMaterials[Index]))ClothingMaskMaterials[Index]->SetTextureParameterValue(TEXT("_AlphaMask"),ClothingOriginalMasks[Index]);
-  HiddenClothingComponents.Reset();ClothingMaskMaterials.Reset();ClothingOriginalMasks.Reset();bClothingHidden=false;return true;
+  RestoreBodyMasks();HiddenClothingComponents.Reset();bClothingHidden=false;return true;
  }
  TInlineComponentArray<UMeshComponent*> Components;GetComponents(Components);
  for(auto* Component:Components){
   const auto* Part=PartFor(this,Component);if(!Part)continue;
-  if(Part->Role.StartsWith(TEXT("clothes"))){if(Component->IsVisible()){HiddenClothingComponents.Add(Component);Component->SetVisibility(false,false);}continue;}
+  if(Part->Role.StartsWith(TEXT("clothes"))&&Component->IsVisible()){HiddenClothingComponents.Add(Component);Component->SetVisibility(false,false);}
+ }
+ OpenBodyMasks();
+ bClothingHidden=true;UE_LOG(LogTemp,Display,TEXT("OK clothing visibility hidden=%d components=%d masks=%d"),Hidden,HiddenClothingComponents.Num(),ClothingMaskMaterials.Num());return true;
+}
+
+void AKKPreviewActor::RestoreBodyMasks(){
+ for(int32 Index=0;Index<ClothingMaskMaterials.Num();++Index)if(IsValid(ClothingMaskMaterials[Index]))ClothingMaskMaterials[Index]->SetTextureParameterValue(TEXT("_AlphaMask"),ClothingOriginalMasks[Index]);
+ ClothingMaskMaterials.Reset();ClothingOriginalMasks.Reset();
+}
+
+int32 AKKPreviewActor::ClothingKindOfRole(const FString& Role){
+ static const TCHAR* Roles[9]={TEXT("clothes_top"),TEXT("clothes_bot"),TEXT("clothes_bra"),TEXT("clothes_shorts"),TEXT("clothes_gloves"),TEXT("clothes_panst"),TEXT("clothes_socks"),TEXT("clothes_shoes"),TEXT("clothes_shoes_outer")};
+ for(int32 Kind=8;Kind>=0;--Kind)if(Role==Roles[Kind]||Role.StartsWith(FString(Roles[Kind])+TEXT("_")))return Kind; // outer shoes before inner
+ return INDEX_NONE;
+}
+
+bool AKKPreviewActor::HasClothingKind(int32 Kind) const{
+ TInlineComponentArray<UMeshComponent*> Components;GetComponents(Components);
+ for(auto* Component:Components)if(const auto* Part=PartFor(const_cast<AKKPreviewActor*>(this),Component);Part&&ClothingKindOfRole(Part->Role)==Kind)return true;
+ return false;
+}
+
+void AKKPreviewActor::SetClothingPartsHidden(const uint8 States[9]){
+ if(bClothingHidden)SetClothingHidden(false);
+ for(UMeshComponent* Component:PartHiddenClothingComponents)if(IsValid(Component))Component->SetVisibility(true,false);
+ PartHiddenClothingComponents.Reset();
+ bool Any=false;for(int32 Kind=0;Kind<9;++Kind)Any|=States[Kind]==3;
+ TInlineComponentArray<UMeshComponent*> Components;GetComponents(Components);
+ for(auto* Component:Components){
+  const auto* Part=PartFor(this,Component);if(!Part)continue;
+  const int32 Kind=ClothingKindOfRole(Part->Role);
+  if(Kind!=INDEX_NONE&&States[Kind]==3&&Component->IsVisible()){PartHiddenClothingComponents.Add(Component);Component->SetVisibility(false,false);}
+ }
+ if(Any)OpenBodyMasks();else RestoreBodyMasks();
+ UE_LOG(LogTemp,Display,TEXT("OK clothing parts hidden=%d masks=%d"),PartHiddenClothingComponents.Num(),ClothingMaskMaterials.Num());
+}
+
+void AKKPreviewActor::OpenBodyMasks(){
+ TInlineComponentArray<UMeshComponent*> Components;GetComponents(Components);
+ for(auto* Component:Components){
+  const auto* Part=PartFor(this,Component);if(!Part)continue;
   if(Part->Role!=TEXT("body"))continue;
   for(int32 Slot=0;Slot<Component->GetNumMaterials();++Slot){
    UMaterialInterface* Material=Component->GetMaterial(Slot);FKKPreviewMaterialSlot* Pending=nullptr;
@@ -233,7 +273,6 @@ bool AKKPreviewActor::SetClothingHidden(bool Hidden){
    if(!ClothingMaskMaterials.Contains(Dynamic)){ClothingMaskMaterials.Add(Dynamic);ClothingOriginalMasks.Add(Mask);Dynamic->SetTextureParameterValue(TEXT("_AlphaMask"),WhiteMask());}
   }
  }
- bClothingHidden=true;UE_LOG(LogTemp,Display,TEXT("OK clothing visibility hidden=%d components=%d masks=%d"),Hidden,HiddenClothingComponents.Num(),ClothingMaskMaterials.Num());return true;
 }
 
 namespace {

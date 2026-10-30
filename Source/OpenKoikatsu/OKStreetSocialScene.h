@@ -175,6 +175,7 @@ private:
  void FinishCheckout(const FString& Option,int32 Her,const FString& AsGirl=FString()); // AsGirl: settle that girl's dishes as hers (a group table)
  void SettleGroupOrder(int32 Partner);
  bool HasDishLike(int32 Who,const struct FOKStreetCatalogItem& Item) const;
+ bool DishComing(int32 Who,const FString& ItemId) const; // this very item on the table, in the basket or carried for Who
  // Languages and regions (OKStreetSocialLocale.inl).
  FString T(const TCHAR* Key,const FStringFormatNamedArguments& Args=FStringFormatNamedArguments()) const;
  FString Money(int64 Amount) const;
@@ -379,12 +380,12 @@ private:
  void CampusAction(const FString& Action,const FString& Dept);
  void TickUiProbe();
  void EatFromBag(const FString& ItemId,bool Feed);
- FString MenuText(float Satiety=-1.f,float Appetite=1.f) const; // Appetite: 100 / her satiety_max (R3-269)
+ FString MenuText(float Satiety=-1.f,float Appetite=1.f,int32 Girl=INDEX_NONE) const; // Appetite: 100 / her satiety_max (R3-269)
  bool TooFullFor(int32 Girl,const struct FOKStreetCatalogItem& Item) const; // OKStreetSocialMind.inl // with her satiety: what she could not finish now is marked
  void ApplyChoiceReply(int32 Character,const struct FOKFreeTalkReply& Reply);
  void SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial);
  void RequestFreeTalkSegment(int32 Generation,int32 Index);
- void TickFreeTalkSpeech(double Now);void TickFreeTalkHisVoice(double Now);bool FreeTalkHisVoiceBusy() const;bool FreeTalkHerVoiceBusy() const;void GalgameDropGroupLines();
+ void TickFreeTalkSpeech(double Now);void TickFreeTalkHisVoice(double Now);void TickDeferredNotes();bool HerReplyUnspoken() const;bool FreeTalkHisVoiceBusy() const;bool FreeTalkHerVoiceBusy() const;void GalgameDropGroupLines();
  void ApplyFreeTalkFavor(int32 Character,int32 Delta,const FString& Reason);
  void CancelFreeTalkVoice();
  FString FreeTalkFilePath(const TCHAR* Name) const;

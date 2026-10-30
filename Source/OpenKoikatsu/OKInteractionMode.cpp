@@ -1,7 +1,10 @@
 #include "OKInteractionMode.h"
 #include "OKCharacterController.h"
 #include "OKInteractionScene.h"
+#include "OKHScene.h"
 #include "KKPreviewActor.h"
+#include "ok_extract.h"
+#include "Components/PoseableMeshComponent.h"
 #include "KKPairedPlayback.h"
 #include "KKCardReader.h"
 #include "KKCardWorkspace.h"
@@ -125,6 +128,50 @@ void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
         });
     });
 }
+void AOKInteractionMode::BeginHScene(const FString& Name,const FString& Stage,const TSharedPtr<FJsonObject>& Experience,const FString& Player){
+    if(!Controller)return;Controller->bHScene=true;Controller->HPlayerName=Player;Controller->HHeroineName=Name;Controller->HHeroineStage=Stage;Controller->HExperience=Experience;Controller->HResult.Reset();
+}
+TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJsonObject>& Body,FString& Why){
+    UOKHScenePanel* Panel=Controller?Controller->HPanel.Get():nullptr;if(!Panel){Why=TEXT("no H panel (scene not ready)");return nullptr;}
+    double Kind=0,Speed=-1;FString Pose;
+    if(Body.IsValid()){
+        if(Body->TryGetNumberField(TEXT("speed"),Speed)&&Speed>=0)Panel->SetSpeed(float(Speed));
+        if(Body->TryGetStringField(TEXT("pose"),Pose)&&!Pose.IsEmpty()&&!Panel->SelectPoseNamed(Pose)){Why=TEXT("no pose named ")+Pose;return nullptr;}
+        if(Body->TryGetNumberField(TEXT("kind"),Kind)&&Kind>0)Panel->Click(int32(Kind));
+        FString Say;if(Body->TryGetStringField(TEXT("say"),Say)&&!Say.IsEmpty())Panel->Say(Say);
+    }
+    TSharedPtr<FJsonObject> View=Panel->Describe();
+    // {"faces":true}: her eye (1) and brow (2) pattern labels, for choosing expressions.
+    bool Faces=false;if(View.IsValid()&&Body.IsValid()&&Body->TryGetBoolField(TEXT("faces"),Faces)&&Faces&&IsValid(Controller->PreviewActor))
+        for(int32 Control=1;Control<=2;++Control){TArray<TSharedPtr<FJsonValue>> L;for(int32 P=0;P<Controller->PreviewActor->GetFacePatternCount(Control);++P)L.Add(MakeShared<FJsonValueString>(Controller->PreviewActor->GetFacePatternLabel(Control,P)));View->SetArrayField(Control==1?TEXT("eyes"):TEXT("brows"),L);}
+    // {"parts":true}: every mesh component on her (role, class, shown), to see what draws.
+    bool PartsDump=false;if(View.IsValid()&&Body.IsValid()&&Body->TryGetBoolField(TEXT("parts"),PartsDump)&&PartsDump&&IsValid(Controller->PreviewActor)){
+        TArray<TSharedPtr<FJsonValue>> L;TInlineComponentArray<UMeshComponent*> Components;Controller->PreviewActor->GetComponents(Components);
+        for(UMeshComponent* C:Components){int32 Index=INDEX_NONE;for(const FName& Tag:C->ComponentTags)if(Tag.ToString().StartsWith(TEXT("KKSessionPart_")))Index=FCString::Atoi(*Tag.ToString().Mid(14));
+            FString PartRole;OkMeshView V{};if(Index!=INDEX_NONE&&Controller->PreviewActor->Session.PartAt(Index,V)&&V.role)PartRole=UTF8_TO_TCHAR(V.role);
+            L.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%d %s %s vis=%d hig=%d main=%d parent=%s"),Index,*PartRole,*C->GetClass()->GetName(),C->IsVisible(),C->bHiddenInGame,C->bRenderInMainPass,C->GetAttachParent()?*C->GetAttachParent()->GetName():TEXT("-"))));}
+        View->SetArrayField(TEXT("parts"),L);}
+    // {"bones":true}: where their hips, hands, feet and heads are (world cm), for placing props under a pose.
+    bool BonesDump=false;if(View.IsValid()&&Body.IsValid()&&Body->TryGetBoolField(TEXT("bones"),BonesDump)&&BonesDump){
+        auto Dump=[&](AKKPreviewActor* A,const TCHAR* Field,const TCHAR* P){if(!IsValid(A)||!A->BodySkel)return;auto O=MakeShared<FJsonObject>();
+            for(const TCHAR* B:{TEXT("j_hips"),TEXT("j_hand_L"),TEXT("j_hand_R"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_head"),TEXT("j_spine02")}){const FName Name(FString(P)+B);
+                if(A->BodySkel->GetBoneIndex(Name)==INDEX_NONE)continue;const FVector L=A->BodySkel->GetBoneLocation(Name);O->SetStringField(B,FString::Printf(TEXT("%.0f %.0f %.0f"),L.X,L.Y,L.Z));}
+            O->SetStringField(TEXT("actor"),A->GetActorLocation().ToCompactString());View->SetObjectField(Field,O);};
+        Dump(Controller->PreviewActor,TEXT("her_bones"),TEXT("cf_"));Dump(Controller->PartnerActor,TEXT("his_bones"),TEXT("cm_"));}
+    return View;
+}
+bool AOKInteractionMode::HSceneTakeLine(FString& Text,FString& Context,bool& System){return Controller&&Controller->HPanel&&Controller->HPanel->TakeLine(Text,Context,System);}
+bool AOKInteractionMode::HSceneHear(const FString& Text,FString& Context){return Controller&&Controller->HPanel&&Controller->HPanel->Hear(Text,Context);}
+void AOKInteractionMode::HSceneShowLine(const FString& Text){if(Controller&&Controller->HPanel)Controller->HPanel->ShowLine(Text);}
+bool AOKInteractionMode::HSceneSpeak(const FString& Path){
+    if(!Controller||!IsValid(Controller->PreviewActor))return false;auto* Her=Controller->PreviewActor.Get();
+    Her->StopHBreath();FString Why;const bool Ok=Her->PlaySpeechFile(Path,1.f,Why);
+    if(!Ok)UE_LOG(LogTemp,Warning,TEXT("H scene: her line did not play: %s"),*Why);
+    if(Ok)UE_LOG(LogTemp,Display,TEXT("H scene: her line spoken on her (%s)"),*FPaths::GetCleanFilename(Path));
+    if(Ok&&Controller->HPanel)Controller->HPanel->SpokeLine();
+    return Ok;
+}
+bool AOKInteractionMode::HSceneSpeaking() const{return Controller&&IsValid(Controller->PreviewActor)&&Controller->PreviewActor->IsSpeaking()&&!Controller->PreviewActor->bHBreath;}
 void AOKInteractionMode::Fail(const FString& Why){Error=Why;UE_LOG(LogTemp,Error,TEXT("Shared interaction mode: %s"),*Why);Exit(true);}
 void AOKInteractionMode::Tick(float Delta){
     Super::Tick(Delta);if(Finished||!Controller)return;
@@ -176,7 +223,7 @@ void AOKInteractionMode::Exit(bool WasCancelled){
     if(PreparingOverlay&&GEngine&&GEngine->GameViewport)GEngine->GameViewport->RemoveViewportWidgetContent(PreparingOverlay.ToSharedRef());PreparingOverlay.Reset();
     if(!Evidence)Evidence=MakeShared<FJsonObject>();Evidence->SetStringField(TEXT("state"),!WasCancelled&&Activated?TEXT("returned"):TEXT("cancelled"));Evidence->SetStringField(TEXT("error"),Error);Evidence->SetBoolField(TEXT("same_process"),true);Evidence->SetNumberField(TEXT("process_id"),FPlatformProcess::GetCurrentProcessId());
     if(Controller){Evidence->SetArrayField(TEXT("actions"),Controller->ActionLog);Evidence->SetNumberField(TEXT("seconds"),Ready?FMath::RoundToDouble(FPlatformTime::Seconds()-ReadyAt):0.);Controller->ActionLog.Reset();Controller->ActionLogStart=0;
-    if(Controller->PairedPlayback)Evidence->SetNumberField(TEXT("playback_end_seconds"),Controller->PairedPlayback->GetElapsed());Controller->InteractionReturned=nullptr;Controller->OnExitInteraction();++Controller->LoadGeneration;++Controller->PartnerLoadGeneration;Controller->CancelPairCatalogue();Controller->CancelPairPreparation();
+    if(Controller->PairedPlayback)Evidence->SetNumberField(TEXT("playback_end_seconds"),Controller->PairedPlayback->GetElapsed());Controller->InteractionReturned=nullptr;Controller->OnExitInteraction();if(Controller->HResult.IsValid())Evidence->SetObjectField(TEXT("h"),Controller->HResult);++Controller->LoadGeneration;++Controller->PartnerLoadGeneration;Controller->CancelPairCatalogue();Controller->CancelPairPreparation();
         if(OwnController){Controller->OnStopPair();if(Controller->PreviewActor)Controller->PreviewActor->Destroy();Controller->PreviewActor=nullptr;}
         if(auto* PC=Controller->GetOwningPlayer()){if(PreviousView)PC->SetViewTarget(PreviousView);PC->bShowMouseCursor=PreviousMouse;if(auto* O=Cast<AOpenKoikatsuPlayerController>(PC)){O->SetBodyTouchEnabled(false);O->BodyInteraction=MoveTemp(PreviousBodyInteraction);O->BodyGesture=MoveTemp(PreviousBodyGesture);O->bBodyTouchEnabled=PreviousTouch;O->SetPaintPreviewActive(PreviousPaint);}}
     }

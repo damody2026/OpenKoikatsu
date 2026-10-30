@@ -245,6 +245,11 @@ fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
             // nothing (she asked why he was silent and took it badly). A talk already open (a meal) does not.
             let talk_open = |st: &Value| st["free_talk"]["open"] == true;
             let talking_at_start = talk_open(&game.call("/state", None)?);
+            // A time earlier than now is tomorrow's: wait for the clock to wrap past midnight first (a plain string
+            // compare ended "until 09:20" at 20:56 at once).
+            let clock_now = |st: &Value| st["time"]["clock"].as_str().unwrap_or("").to_string();
+            let start_clock = clock_now(&game.call("/state", None)?);
+            let mut wrapped = until.as_ref().is_none_or(|u| u.as_str() > start_clock.as_str());
             clock(game, false)?;
             let start = Instant::now();
             let limit = seconds.unwrap_or(arg_f(a, "timeout_s", 600.0));
@@ -259,7 +264,9 @@ fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
                         break;
                     }
                     if let Some(u) = &until {
-                        if st["time"]["clock"].as_str().is_some_and(|c| c >= u.as_str()) {
+                        let c = clock_now(&st);
+                        wrapped |= c < start_clock;
+                        if wrapped && c.as_str() >= u.as_str() {
                             break;
                         }
                     }

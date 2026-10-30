@@ -22,6 +22,17 @@ public:
     virtual void Tick(float Delta) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     void Exit(bool Cancelled=false);
+    // The street's one-on-one: the H scene panel for her (name, relation stage, ok-rules h_experience answer).
+    void BeginHScene(const FString& Name,const FString& Stage,const TSharedPtr<FJsonObject>& Experience,const FString& Player);
+    // The control channel's /hscene: {kind} presses a panel button, {pose} picks a pose by name, {speed} sets it; answers the panel's view.
+    TSharedPtr<FJsonObject> HSceneControl(const TSharedPtr<FJsonObject>& Body,FString& Error);
+    // Talk in the H scene through the street (UOKHScenePanel::Say): his next line and what she is in the middle of;
+    // her line to show; her spoken line on her high model.
+    bool HSceneTakeLine(FString& Text,FString& Context,bool& System);
+    bool HSceneHear(const FString& Text,FString& Context);
+    void HSceneShowLine(const FString& Text);
+    bool HSceneSpeak(const FString& Path);
+    bool HSceneSpeaking() const;
     bool IsReady() const {return Ready;}
     bool IsFinished() const {return Finished;}
     FString Error;

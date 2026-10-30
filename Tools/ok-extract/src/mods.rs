@@ -13,8 +13,10 @@ mod migration_cache;
 /// bounded (`zip_ab_limits`); mapped stored entries cost no private memory.
 type ZipAbCache = (HashMap<(PathBuf, String), Option<Arc<(String, crate::unity::SourceBytes)>>>, usize);
 static ZIP_AB_CACHE: std::sync::Mutex<Option<ZipAbCache>> = std::sync::Mutex::new(None);
-/// Past either limit the whole cache goes. A conversion (a card pack being recorded) opens a card 42 times: at 256 MiB /
-/// 128 entries it emptied twice a card, each time reading its zipmod bundles again (~0.3 s); it keeps 768 MiB / 1024
+/// Bundles being read (zipmod_one_unity3d_arc): a second asker waits for the first read.
+static ZIP_AB_LOADING: std::sync::LazyLock<std::sync::Mutex<HashMap<(PathBuf, String), Arc<std::sync::Mutex<()>>>>> = std::sync::LazyLock::new(Default::default);
+/// Past either limit bundles give way until the new one fits (zip_ab_cache_put). A conversion (a card pack being recorded) opens a card 42 times: at 256 MiB /
+/// 128 entries it emptied twice a card (then the whole cache went), each time reading its zipmod bundles again (~0.3 s); it keeps 768 MiB / 1024
 /// and empties the cache between cards. Other opens keep the smaller limits.
 fn zip_ab_limits() -> (usize, usize) {
     if crate::oklib::recording_card_pack() { (768 << 20, 1024) } else { (256 << 20, 128) }
@@ -1572,11 +1574,19 @@ pub(crate) fn zipmod_one_unity3d_source(path: &Path, main_ab: &str) -> Option<(S
 fn zipmod_one_unity3d_arc(path: &Path, main_ab: &str) -> Option<Arc<(String, crate::unity::SourceBytes)>> {
     let want = main_ab.replace('\\', "/").to_ascii_lowercase();
     let key = (path.to_path_buf(), want.clone());
-    if let Some(hit) = ZIP_AB_CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|c| c.0.get(&key).cloned()) {
-        return hit;
-    }
-    let found = zipmod_one_unity3d_uncached(path, &want).map(Arc::new);
-    zip_ab_cache_put(key, found)
+    let cached = || ZIP_AB_CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|c| c.0.get(&key).cloned());
+    if let Some(hit) = cached() { return hit; }
+    // One read per bundle: the open and its entry prefetch helpers ask for the same bundles at once, and each used to
+    // read its own (a card's conversion read 859 MB of zipmod bundles for 38 bundles).
+    let loading = ZIP_AB_LOADING.lock().unwrap_or_else(|e| e.into_inner()).entry(key.clone()).or_default().clone();
+    let _one = loading.lock().unwrap_or_else(|e| e.into_inner());
+    let found = match cached() {
+        Some(hit) => hit,
+        None => { let found = zipmod_one_unity3d_uncached(path, &want).map(Arc::new); zip_ab_cache_put(key.clone(), found) }
+    };
+    let mut loads = ZIP_AB_LOADING.lock().unwrap_or_else(|e| e.into_inner());
+    if loads.get(&key).is_some_and(|l| Arc::ptr_eq(l, &loading)) && Arc::strong_count(&loading) <= 2 { loads.remove(&key); }
+    found
 }
 
 /// Stores a zipmod bundle read for `key` unless another thread stored one meanwhile (that one is kept).
@@ -1587,9 +1597,11 @@ fn zip_ab_cache_put(key: (PathBuf, String), found: Option<Arc<(String, crate::un
     if let Some(hit) = m.get(&key) { return hit.clone(); }
     let size = found.as_ref().filter(|f| !f.1.is_mapped()).map_or(0, |f| f.1.len());
     let (owned_limit, entry_limit) = zip_ab_limits();
-    if m.len() >= entry_limit || *owned + size > owned_limit {
-        m.clear();
-        *owned = 0;
+    // Past a limit, bundles give way until the new one fits (emptying the whole cache had the next open of the same
+    // card read all of them again).
+    while !m.is_empty() && (m.len() >= entry_limit || *owned + size > owned_limit) {
+        let Some(old) = m.keys().next().cloned() else { break };
+        if let Some(Some(gone)) = m.remove(&old) { if !gone.1.is_mapped() { *owned -= gone.1.len().min(*owned); } }
     }
     *owned += size;
     m.insert(key, found.clone());

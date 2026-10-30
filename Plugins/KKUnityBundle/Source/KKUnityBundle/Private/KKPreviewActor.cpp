@@ -6980,7 +6980,8 @@ bool AKKPreviewActor::UpdatePrivateGpuDisplay(FKKLoadedPart& Part,bool AllowPrep
  TRACE_CPUPROFILER_EVENT_SCOPE(KK_PrivateGpuDisplay);QUICK_SCOPE_CYCLE_COUNTER(STAT_KK_PrivateGpuDisplay);
  auto* Component=Cast<UKKAffineProceduralMeshComponent>(Part.Comp);
  const uint64 Epoch=Component?Component->GetGpuStreamProxyEpoch():0;
- auto Restore=[&](const FString& Reason,bool Reject){
+ // Reason by value: a rejected receipt's error lives in the display this resets (a reference crashed the log line).
+ auto Restore=[&](FString Reason,bool Reject){
   if(Part.PrivateGpuDisplay){EnsurePrivateGpuQueryGeometry(Part.Comp);Part.PrivateGpuDisplay.Reset();Part.RuntimeSourceGeometry.Reset();Part.bNativeDisplayPrepared=false;}
   if(Reject){Part.PrivateGpuRejectedEpoch=Epoch;Part.PrivateGpuRejectedRevision=Session.PrivateSkinSourceRevision(Part.SessionIndex);UE_LOG(LogTemp,Warning,TEXT("OK private GPU retained CPU actor=%s part=%d reason=%s"),*GetName(),Part.SessionIndex,*Reason);}
   return false;

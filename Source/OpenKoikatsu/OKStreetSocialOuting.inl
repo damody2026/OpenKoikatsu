@@ -443,6 +443,9 @@ TSharedRef<FJsonObject> AOKStreetSocialScene::ActivityContext(int32 Girl,const T
  // feeding that started before it came had him buy another bag (R4-16).
  TArray<TSharedPtr<FJsonValue>> Hers;
  for(const FOKStreetDish& D:S.Table)if(D.Percent>0.f){if(!D.ForHer)His.Add(MakeShared<FJsonValueString>(D.ItemId));else if(D.Her==INDEX_NONE||D.Her==Girl)Hers.Add(MakeShared<FJsonValueString>(D.ItemId));}
+ // And what is in the basket waiting for who pays: 惠惠 said she would buy the fish food, the feeding started while the
+ // checkout was still open, and he bought a second bag.
+ for(const FOKStreetCartLine& L:S.Cart){if(!L.ForHer)His.Add(MakeShared<FJsonValueString>(L.ItemId));else if(L.Girl==INDEX_NONE||L.Girl==Girl)Hers.Add(MakeShared<FJsonValueString>(L.ItemId));}
  R->SetArrayField(TEXT("his_items"),His);R->SetArrayField(TEXT("her_items"),Hers);
  OKRulesPutExt(S,R); // what she bought for herself (activities.rs reads her things from it)
  TArray<TSharedPtr<FJsonValue>> Done;if(S.ActivitiesDoneDay==Now/1440)if(const auto* D=S.ActivitiesDone.Find(Girl))for(const FString& I:*D)Done.Add(MakeShared<FJsonValueString>(I));R->SetArrayField(TEXT("done_today"),Done);

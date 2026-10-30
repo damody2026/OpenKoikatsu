@@ -1650,7 +1650,7 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
     let lap = |what: &str| if profile { eprintln!("OKPROFILE convert {what} at {:.2}s", clock.elapsed().as_secs_f64()); };
     // One pass (okstrict.rs, "Converting"): every saved outfit is opened once, the tree's answers recorded (okLt), the
     // third-party data the library holds copied and what only the zipmods hold recorded from them (okLc).
-    let made = with_zipmods_and(lib, game, card, &[], || {
+    let convert = |extra: &[PathBuf]| with_zipmods_and(lib, game, card, extra, || {
         let store = active().ok_or("library not active")?;
         store.forget_models();
         store.clear_missing();
@@ -1689,6 +1689,17 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             }
             if profile { eprintln!("OKPROFILE convert outfit {o} {:.2}s", t.elapsed().as_secs_f64()); }
         }
+        // An OK Studio eyes pattern that shows a gag eye builds that head object (cf_O_gag_eye_00..02), which no
+        // ordinary open does: its rig reads the card's own head (a mod head's skeleton). Once per gag object, after
+        // the outfits (the digest open is done), only read; the eye sets' textures are the base library's.
+        for set in gag_eye_sets(lib) {
+            let _status = crate::studio_status::request(crate::studio_status::StatusOverride { eyes_ptn: Some(set), ..Default::default() });
+            crate::okstrict::set_read_only(read_only);
+            let opened = crate::session::open(lib, Some(card), 0);
+            crate::okstrict::set_read_only(false);
+            if let Err(e) = opened { failed.push(format!("eyes pattern {set}: {e}")); }
+        }
+        lap("gag eyes");
         drop(mount);
         let answers = crate::tree_answers::end();
         lap("opens");
@@ -1697,8 +1708,33 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
         let models: Vec<String> = store.touched().iter().map(id_hex).collect();
         Ok::<_, String>((first, failed, strict.gaps(), strict.take_additions(), answers, pack, models))
     });
-    let _ = std::fs::remove_dir_all(&work);
-    let (first, failed, gaps, adds, answers, pack, models) = made?;
+    // A card saved without sideloader resolve data for an item names no zipmod for it; the game finds it by id in the
+    // installed mods, and the conversion (which reads only the zipmods the card names) finds a gap. The zipmods those
+    // gaps name are added and the card converted again: exactly those, never a scan of the mods directory.
+    let root = zipmod_source(game).0;
+    let mut extra: Vec<PathBuf> = Vec::new();
+    let made = loop {
+        // (a retry records a new pack: bundles cached by the previous attempt would be answered without being read)
+        if !extra.is_empty() { crate::unity::release_bundle_caches(); }
+        let made = convert(&extra);
+        let _ = std::fs::remove_dir_all(&work);
+        let made = made?;
+        let keys = gap_zipmods(&made.2);
+        let mut absent: Vec<String> = keys.iter().filter(|k| !root.join(k).is_file()
+            && !card.parent().is_some_and(|d| k.rsplit('/').next().is_some_and(|n| d.join(n).is_file())))
+            .filter_map(|k| k.rsplit('/').next().map(str::to_owned)).collect();
+        absent.sort();
+        absent.dedup();
+        LAST_ABSENT_ZIPMODS.lock().unwrap().clone_from(&absent);
+        let mut unnamed: Vec<PathBuf> = keys.iter().map(|k| root.join(k)).filter(|p| p.is_file() && !extra.contains(p)).collect();
+        unnamed.sort();
+        unnamed.dedup();
+        if unnamed.is_empty() || extra.len() > 64 { break made; }
+        eprintln!("ok-extract: {} uses {} zipmod(s) it does not name: {:?}", card.display(), unnamed.len(), unnamed);
+        extra.extend(unnamed);
+    };
+    LAST_UNNAMED_ZIPMOD_BYTES.store(extra.iter().filter_map(|p| std::fs::metadata(p).ok()).map(|m| m.len()).sum(), Ordering::Relaxed);
+    let (first, failed, gaps, adds, answers, pack, models) = made;
     if !gaps.is_empty() { return Err(crate::okstrict::failure(card, &gaps)); }
     if !failed.is_empty() { return Err(failed.join(" | ")); }
     let (digest, parts, _) = first.ok_or("outfit 0 did not open")?;
@@ -1775,6 +1811,33 @@ fn seal_step(lib: &Path, step: &str, card: &[u8]) -> Result<(Vec<u8>, String), S
 /// off (3), and the card reader's preloads (top four garments half off, the rest on or off). Opens in another state
 /// ask other questions (which prefab nodes a garment has, the skeleton of the mesh that stays drawn): a conversion
 /// opens these too, a strict check as well (the card reader's clothing warm load lacked 51 things of C000).
+/// One eyes pattern (cha_eyeset row) of the library for each gag eye object it shows (1..3), the lowest row of each.
+/// The mods zipmods a conversion's gaps name: the zip entry the library cannot serve, or the zipmods holding a model
+/// whose query was missing ("<query> <model id> <args>").
+fn gap_zipmods(gaps: &[String]) -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    for what in gaps {
+        if let Some(k) = what.strip_prefix("GAMEFS zip-entry ").and_then(|k| k.split('|').next()) { keys.push(k.to_owned()); continue; }
+        if what.starts_with("GAMEFS ") || what.starts_with("UNMEMOIZED ") { continue; }
+        if let Some(id) = what.split_whitespace().find(|w| w.len() == 32).and_then(id_from_hex) { keys.extend(crate::gamefs::zips_with_model(&id)); }
+    }
+    keys.retain(|k| k.starts_with("mods/"));
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+/// (once per library and process: walking the eyes patterns one by one cost seconds a card, eye_set falling back to
+/// row 0 for every unknown pattern)
+fn gag_eye_sets(lib: &Path) -> Vec<i32> {
+    static SETS: Mutex<Vec<(PathBuf, Vec<i32>)>> = Mutex::new(Vec::new());
+    let mut sets = SETS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, found)) = sets.iter().find(|(l, _)| l == lib) { return found.clone(); }
+    let found = crate::eye_set::gag_patterns(lib);
+    sets.push((lib.to_owned(), found.clone()));
+    found
+}
+
 pub(crate) const CLOTHES_STATE_VARIANTS: [[u8; 9]; 5] = [[1; 9], [2; 9], [3; 9], [1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 3, 3, 3, 3, 3]];
 
 fn open_outfits(lib: &Path, card: &[u8], what: &str) -> Result<(), String> {
@@ -2209,6 +2272,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let lib = lib.ok_or("library directory required")?;
             let card = PathBuf::from(args.get(2).ok_or("card required")?);
             let out = PathBuf::from(args.get(3).ok_or("output required")?);
+            crate::clothes_gpu::keep_results();
             let original = std::fs::read(&card).map_err(|e| e.to_string())?;
             ensure_library(&lib)?;
             let store = active().ok_or("library not active")?;
@@ -2299,6 +2363,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             // The process's one-time scans of the library's mods tree (GUIDs, MaterialEditor manifests, catalogues), all
             // at once before the first card: they used to land on whichever card first asked (2–3 s of that card).
             crate::prewarm(&lib)?;
+            crate::clothes_gpu::keep_results();
             let given: Box<dyn Iterator<Item = String>> = if list_arg == "-" { Box::new(std::io::stdin().lines().map_while(Result::ok)) }
                 else { Box::new(list.lines().map(str::to_owned).collect::<Vec<_>>().into_iter()) };
             for card in given.map(|l| l.trim().to_owned()).filter(|l| !l.is_empty()).map(PathBuf::from) {

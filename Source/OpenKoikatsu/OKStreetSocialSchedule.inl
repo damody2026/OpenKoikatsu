@@ -279,7 +279,8 @@ void AOKStreetSocialScene::TickSchedules(){
   // Walking along her route: advanced every frame by TickCommutes (a 0.5 s step here made her walk-stop-walk).
   if(S.Commutes.Contains(I)||S.PendingMoves.Contains(I))continue; // still walking there, or her way still being routed
   // At a meal: she orders what she likes within her budget and pays for it (plan §6.2 自主消費).
-  if(Block&&Block->Kind==TEXT("meal")&&!S.PlanEaten.Contains(I)&&!Block->Place.IsEmpty()){
+  // Only there: put back beside him in the park after a load, her lunch at the department store fed her where she stood.
+  if(Block&&Block->Kind==TEXT("meal")&&!S.PlanEaten.Contains(I)&&!Block->Place.IsEmpty()&&PlaceHere(S.Agents[I-1].Position)==Block->Place){
    S.PlanEaten.Add(I);
    auto Request=OKRulesRelationRequest(TEXT("plan_meal"),R,S.MindProfiles.FindRef(Id));Request->SetStringField(TEXT("place"),Block->Place);Request->SetNumberField(TEXT("month"),StreetNow().GetMonth());
    Request->SetNumberField(TEXT("budget"),Block->Budget);Request->SetNumberField(TEXT("seed"),int32(Now)+I);

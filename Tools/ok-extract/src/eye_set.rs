@@ -58,6 +58,17 @@ impl EyeSet {
 
 fn asset(v: String) -> String { if v == "0" { String::new() } else { v } }
 
+/// For each gag eye object (1..3), the lowest eyes pattern under `root` that shows it.
+pub fn gag_patterns(root: &Path) -> Vec<i32> {
+    let lists = crate::list::load_characustom_dir_shared(&root.join("abdata/list/characustom"));
+    let mut by_gag = std::collections::BTreeMap::new();
+    for e in lists.entries().filter(|e| e.category_no == CATEGORY) {
+        let gag = e.info("EyeObjNo").trim().parse::<i32>().unwrap_or(0).clamp(0, 3);
+        if gag != 0 { by_gag.entry(gag).and_modify(|p: &mut i32| *p = (*p).min(e.id)).or_insert(e.id); }
+    }
+    by_gag.into_values().collect()
+}
+
 /// The eye set of a pattern from the lists under `root` (a game or the OK base library); unknown patterns fall back
 /// to row 0 as the game does.
 pub fn eye_set(root: &Path, ptn: i32) -> Option<EyeSet> {

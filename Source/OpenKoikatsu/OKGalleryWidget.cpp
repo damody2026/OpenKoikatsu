@@ -725,7 +725,7 @@ TSharedRef<SWidget> UOKGalleryWidget::RebuildWidget()
 	MouthPatternCombo->OnSelectionChanged.AddDynamic(static_cast<UOKCharacterController*>(this), &UOKCharacterController::OnMouthPatternSelected);
 	MotionCol->AddChild(MouthPatternCombo);
 	SpeechRootInput=WidgetTree->ConstructWidget<UEditableTextBox>();
-	SpeechRootInput->SetText(FText::FromString(TEXT("C:/portable/KoikatuSunshine/voice_extract")));
+	SpeechRootInput->SetText(FText::FromString(DefaultVoiceRoot()));
 	SpeechRootInput->SetHintText(FText::FromString(TEXT("一般對話語音資料夾")));
 	MotionCol->AddChild(SpeechRootInput);
 	UTextBlock* VoiceLabel=WidgetTree->ConstructWidget<UTextBlock>();

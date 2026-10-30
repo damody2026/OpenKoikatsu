@@ -83,6 +83,8 @@ void AOKStreetSocialScene::TickInitiative(){
  Request->SetBoolField(TEXT("rain"),RainingAt(S.Store.CalendarDay,Minute)&&PlaceHere(S.Male).IsEmpty());Request->SetStringField(TEXT("holiday"),HolidayOn(S.Store.CalendarDay));
  auto Names=MakeShared<FJsonObject>();TArray<TSharedPtr<FJsonValue>> Rows;
  for(int32 I=1;I<S.Manifest.Characters.Num();++I){
+  // With him in the private room she is not weighing the street (her "hungry, ask him to eat" came in mid-H).
+  if(S.PrivateGirl==I&&S.PrivateMode.IsValid())continue;
   const FString Id=OKStreetStableId(S.Manifest.Characters[I]);Names->SetStringField(Id,S.Manifest.Characters[I].Name);
   auto H=MakeShared<FJsonObject>();H->SetNumberField(TEXT("actor"),I);H->SetStringField(TEXT("id"),Id);H->SetObjectField(TEXT("relation"),OKRulesRelationJson(OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget)));
   if(const auto P=ProfileOf(I))H->SetObjectField(TEXT("profile"),P.ToSharedRef());

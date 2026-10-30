@@ -23,8 +23,11 @@ void AOKStreetSocialScene::TickNeeds(){
   const bool WithHim=I!=INDEX_NONE&&(S.Target==I||FreeTalkPartner()==I||S.Companion==I||S.OutingGirl==I||S.Pair.Partner==I||S.Party.Contains(I));
   if(WithHim)O->SetStringField(TEXT("activity"),TEXT("social"));
   else if(const FOKStreetPlanBlock* B=I==INDEX_NONE?nullptr:LifeBlock(I,Minute)){
-   const FString Home=OKStreetProfileString(S.MindProfiles.FindRef(R.Id),nullptr,TEXT("home_place_id"));
-   O->SetStringField(TEXT("activity"),B->Kind);O->SetBoolField(TEXT("at_home"),B->Place==Home||B->Place==TEXT("girls_dorm"));
+   const FString Home=OKStreetProfileString(S.MindProfiles.FindRef(R.Id),nullptr,TEXT("home_place_id"));const bool AtHome=B->Place==Home||B->Place==TEXT("girls_dorm");
+   // Not there yet (on her way, or put back beside him in the park after a load while her block says lunch at the
+   // department store): it does not feed or rest her. 惠惠 went from satiety 87 to 99 standing in the park.
+   const bool Away=!AtHome&&!B->Place.IsEmpty()&&S.Agents.IsValidIndex(I-1)&&PlaceHere(S.Agents[I-1].Position)!=B->Place;
+   if(!Away)O->SetStringField(TEXT("activity"),B->Kind);else UE_LOG(LogTemp,Display,TEXT("Street needs: actor %d is not at %s yet (%s there), no %s gain"),I,*B->Place,*PlaceHere(S.Agents[I-1].Position),*B->Kind);O->SetBoolField(TEXT("at_home"),AtHome);
   }
   Rows.Add(MakeShared<FJsonValueObject>(O));
  }

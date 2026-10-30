@@ -37,6 +37,13 @@ void AOKStreetSocialScene::PlanPromisesToday(int32 Heroine){
  auto Same=[](const FOKStreetPlanBlock& X,const FOKStreetPlanBlock& Y){return X.Start==Y.Start&&X.End==Y.End&&X.Kind==Y.Kind&&X.Place==Y.Place&&X.Activity==Y.Activity;};
  bool Changed=New.Num()!=Day->Num();for(int32 K=0;!Changed&&K<New.Num();++K)Changed=!Same(New[K],(*Day)[K]);
  if(!Changed)return;
+ // Her own meal still to come that the date took the place of: she is told she skips it (asked to dinner, she had said
+ // "dinner at the mall at 18:15 first", and at the date claimed she had eaten there).
+ {const int32 Now=int32(OKStreetMindNow(S)%1440);
+  for(const auto& B:*Day)if(B.Kind==TEXT("meal")&&B.Start>Now&&!New.ContainsByPredicate([&](const FOKStreetPlanBlock& X){return X.Kind==B.Kind&&X.Start==B.Start&&X.Place==B.Place;})){
+   const auto* P=OKStreetFindPlace(B.Place);
+   MindObserve(Heroine,TEXT("meal"),OKMsg(TEXT("ui.schedule.meal_skipped_for_date"),{{TEXT("time"),FString::Printf(TEXT("%02d:%02d"),B.Start/60,B.Start%60)},{TEXT("place"),P?P->Name:B.Place}}),B.Place,0.3f);
+   UE_LOG(LogTemp,Display,TEXT("Street plan: actor %d skips her %02d:%02d meal at %s for the date"),Heroine,B.Start/60,B.Start%60,*B.Place);}}
  // Her current block is looked up again, as a change (-9, like ReleaseFromSchedule): she walks to the next place.
  // Not INDEX_NONE, which means the game just started and puts her there directly (she vanished next to him).
  *Day=MoveTemp(New);if(S.PlanBlock.Contains(Heroine))S.PlanBlock.Add(Heroine,-9);
@@ -294,6 +301,9 @@ void AOKStreetSocialScene::TickAppointments(){
     S.ApproachGirl=Girl;S.ApproachBlockedNear=false;S.ApproachBlockedSince=0;S.ApproachPath=MoveTemp(Path);S.ApproachStarted=FPlatformTime::Seconds();S.ApproachInvite=false;S.ApproachAppointment=true;S.ApproachJoin=Join;S.ApproachRetries=0;S.Agents[Girl-1].Held=true;
     UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d comes to him (route points=%d, she is at %s, he at %s)"),Girl,S.ApproachPath.Num(),*S.Agents[Girl-1].Position.ToCompactString(),*S.Male.ToCompactString());
    }else if(WithHim){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is already with him, no walk over"),Girl);}
+   // She is the one walking over already (to sing for him, and on the way he texted her to meet): that walk is the
+   // meeting. She waited for herself ("another girl is walking over (approach=9)").
+   else if(S.ApproachGirl==Girl){S.ApproachAppointment=true;UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d is walking over to him already"),Girl);}
    else{
     // Another one walking over first (the three of them meeting for dinner): she comes after her, not never. Only the
     // first came; the other two stood at home all evening, their meetings already counted as kept.

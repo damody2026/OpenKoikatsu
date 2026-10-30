@@ -17,10 +17,12 @@ struct Cache { bytes: usize, classes: Vec<(usize, usize, Vec<usize>)> }
 
 static CACHE: Mutex<Cache> = Mutex::new(Cache { bytes: 0, classes: Vec::new() });
 
-/// The block size kept for a request: sizes rounded up to an eighth of their power of two.
+/// The block size kept for a request: its power of two. Eighths of a power of two made so many sizes that a card
+/// converted after another found few of its sizes kept, and a block of an unused size stayed kept (C080: 626K page
+/// faults a card, 343K with powers of two and eviction; peak private memory 6.2 -> 5.9 GB). The rounding is
+/// only committed, not touched.
 fn class(size: usize) -> usize {
-    let step = (size.next_power_of_two() / 8).max(4096);
-    size.div_ceil(step) * step
+    size.next_power_of_two()
 }
 
 unsafe impl GlobalAlloc for RecyclingAlloc {
@@ -46,6 +48,18 @@ unsafe impl GlobalAlloc for RecyclingAlloc {
         if layout.size() < LARGE { return System.dealloc(block, layout); }
         let size = class(layout.size());
         if let Ok(mut cache) = CACHE.lock() {
+            // Full: the sizes kept most give way (the sizes an open asks for change from card to card; keeping the
+            // first ones forever sent every other size back to the system).
+            while cache.bytes + size > KEEP {
+                let Some(i) = cache.classes.iter().enumerate()
+                    .filter(|(_, (s, a, free))| !free.is_empty() && !(*s == size && *a == layout.align()))
+                    .max_by_key(|(_, (s, _, free))| s * free.len()).map(|(i, _)| i) else { break };
+                let (s, a, free) = &mut cache.classes[i];
+                let (s, a) = (*s, *a);
+                let Some(old) = free.pop() else { break };
+                cache.bytes -= s;
+                System.dealloc(old as *mut u8, Layout::from_size_align_unchecked(s, a));
+            }
             if cache.bytes + size <= KEEP {
                 cache.bytes += size;
                 match cache.classes.iter_mut().find(|(s, a, _)| *s == size && *a == layout.align()) {

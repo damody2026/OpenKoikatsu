@@ -363,7 +363,10 @@ bool AOKStreetSocialScene::PanelConsent(int32 Girl,const FString& Action,bool bN
 // The one-on-one scene: friends at least, then the private-room invitation.
 bool AOKStreetSocialScene::PrivateConsent(int32 Girl){
  auto& S=*State;if(Girl<=0||!S.Manifest.Characters.IsValidIndex(Girl))return false;
- return AloneConsent(Girl,TEXT("rest")); // lovers: the invitation; others: chastity against his charm (Heroine.inl)
+ if(AloneConsent(Girl,TEXT("rest")))return true; // lovers: the invitation; others: chastity against his charm (Heroine.inl)
+ // Asked to her face: she answers it now in her own words (why is in her recent context), not only in a line on the screen.
+ if(FreeTalkPartner()==Girl&&!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()){S.SystemNote=true;S.FreeTalkDraft=OKT(TEXT("ui.heroine.private_refused_prompt"));SendFreeTalk();}
+ return false;
 }
 
 // 3-2 Touching her needs the relationship for it: the gates are the heroine module's table (OKStreetHeroine.h),

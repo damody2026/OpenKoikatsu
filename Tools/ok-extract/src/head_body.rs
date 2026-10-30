@@ -699,10 +699,12 @@ pub(crate) fn adopt_uncensor_genitals(
     outfit: i32,
 ) {
     if !sources.iter().any(|mesh| is_kind(&mesh.name)) { return; }
-    // The installed uncensor's painted meshes follow from the card, the kind, the outfit (its skin draw settings), the
-    // seed and the colours: once per view (every open of a conversion painted them again, ~15 ms).
-    let painted = crate::view_memo(format!("uncensor_genitals|{:016x}|{kind:?}|{outfit}|{seed}|{skin:?}|{sub:?}|{nail:?}", card.source_digest),
-        || uncensor_genitals_painted(game_root, card, kind, is_kind, seed, skin, sub, nail, outfit));
+    // The installed uncensor's painted meshes follow from the card, the kind, the seed and the colours: once per view
+    // (every open of a conversion painted them again, ~15 ms; every outfit's first open, ~0.25 s). The outfit's skin
+    // draw settings are material values only, set on each open's copy.
+    let painted = crate::view_memo(format!("uncensor_genitals|{:016x}|{kind:?}|{seed}|{skin:?}|{sub:?}|{nail:?}", card.source_digest),
+        || uncensor_genitals_painted(game_root, card, kind, is_kind, seed, skin, sub, nail))
+        .map(|meshes| meshes.into_iter().map(|mut mesh| { apply_native_skin_draw_settings(&mut mesh, card, outfit, true); mesh }).collect::<Vec<_>>());
     match painted {
         None => {
             if !replaced_body {
@@ -723,10 +725,11 @@ pub(crate) fn adopt_uncensor_genitals(
     }
 }
 
-/// The installed uncensor's meshes of this kind painted for the card (None: no uncensor of it installed).
+/// The installed uncensor's meshes of this kind painted for the card (None: no uncensor of it installed), without the
+/// outfit's skin draw settings.
 #[allow(clippy::too_many_arguments)]
 fn uncensor_genitals_painted(game_root: &Path, card: &CardInfo, kind: crate::mods::UncensorGenitalKind, is_kind: fn(&str) -> bool,
-    seed: i32, skin: [f32; 4], sub: [f32; 4], nail: [f32; 4], outfit: i32) -> Option<Vec<ExtractedMesh>> {
+    seed: i32, skin: [f32; 4], sub: [f32; 4], nail: [f32; 4]) -> Option<Vec<ExtractedMesh>> {
     let explicit = match kind {
         crate::mods::UncensorGenitalKind::Penis => card.penis_guid.as_deref(),
         crate::mods::UncensorGenitalKind::Balls => card.balls_guid.as_deref(),
@@ -762,7 +765,6 @@ fn uncensor_genitals_painted(game_root: &Path, card: &CardInfo, kind: crate::mod
         if let Some(mat) = mesh.mat.as_mut() {
             mat.floats.insert("_linetexon".into(), if card.body_draw_add_line { 1.0 } else { 0.0 });
         }
-        apply_native_skin_draw_settings(&mut mesh, card, outfit, true);
         eprintln!(
             "ok-extract: {kind:?} {} guid={} display={} tex={} verts={}",
             mesh.name, source.guid, source.display_name,

@@ -423,9 +423,13 @@ void AOKStreetSocialScene::FinishPartyTalk(const FString& Text,const TArray<int3
    for(const auto& V:*Arr){const TSharedPtr<FJsonObject> O=V.IsValid()?V->AsObject():nullptr;if(!O)continue;FString Who,ItemId;O->TryGetStringField(TEXT("who"),Who);O->TryGetStringField(TEXT("id"),ItemId);
     const FOKStreetCatalogItem* Item=S.Catalog.Find(ItemId);
     if(!Item)for(const auto* I:ItemsHere(Shop))if(I->Name==ItemId||ItemId.Contains(I->Name)){Item=I;break;} // by name
-    if(!Item||!SoldHere(*Item,Shop)||!Item->Consumable)continue;ItemId=Item->Id;
+    // Every order not placed is said at the table, as one on one (OKStreetSocialMind.inl): not sold here, one like it
+    // still being eaten, too full. Dropped without a word, she went on as if it were coming.
+    if(!Item||!SoldHere(*Item,Shop)||!Item->Consumable){if(!Item||!SoldHere(*Item,Shop)){const int32 For=Find(Who);
+      S.PartyEvents.Add(OKMsg(TEXT("ui.party.not_sold_order"),{{TEXT("girl_name"),For==INDEX_NONE?OKT(TEXT("ui.party.he_pronoun")):*S.Manifest.Characters[For].Name},{TEXT("item"),Item?Item->Name:ItemId}}));}continue;}
+    ItemId=Item->Id;
     {const int32 For=Find(Who);const int32 Eater=For==INDEX_NONE?0:For;
-     if(HasDishLike(Eater,*Item)){UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s still has one"),*Item->Name,Eater==0?TEXT("he"):*S.Manifest.Characters[Eater].Name);continue;}
+     if(HasDishLike(Eater,*Item)){if(!DishComing(Eater,ItemId))S.PartyEvents.Add(OKMsg(TEXT("ui.party.still_has_one_order"),{{TEXT("girl_name"),Eater==0?OKT(TEXT("ui.party.he_pronoun")):*S.Manifest.Characters[Eater].Name},{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s still has one"),*Item->Name,Eater==0?TEXT("he"):*S.Manifest.Characters[Eater].Name);continue;}
      // Food for a girl already full is not ordered (as one-on-one, TooFullFor): she would leave it untouched.
      if(Eater!=0&&TooFullFor(Eater,*Item)){S.PartyEvents.Add(OKMsg(TEXT("ui.party.too_full_to_order"),{{TEXT("girl_name"),*S.Manifest.Characters[Eater].Name},{TEXT("item"),Item->Name}}));
       UE_LOG(LogTemp,Display,TEXT("Street party order skipped: %s, %s is full"),*Item->Name,*S.Manifest.Characters[Eater].Name);continue;}}
