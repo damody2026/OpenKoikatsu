@@ -1731,7 +1731,7 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
                 crate::okstrict::set_read_only(read_only);
                 let opened = crate::session::open(lib, Some(card), o);
                 crate::okstrict::set_read_only(false);
-                if let Err(e) = opened { failed.push(format!("outfit {o} clothes {states:?}: {e}")); }
+                if let Err(e) = opened.map(|_| ()).or_else(|e| if e == crate::STATE_VARIANT_READ { Ok(()) } else { Err(e) }) { failed.push(format!("outfit {o} clothes {states:?}: {e}")); }
             }
             if profile { eprintln!("OKPROFILE convert outfit {o} {:.2}s", t.elapsed().as_secs_f64()); }
         }

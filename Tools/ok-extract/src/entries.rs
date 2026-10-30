@@ -39,6 +39,10 @@ thread_local! { static STATE_VARIANT: std::cell::Cell<bool> = const { std::cell:
 /// This thread's opens are a conversion's garment-state variants of an outfit already opened in its own states
 /// (oklib::make_ok_card): only what those states read is needed of them, the session is not kept.
 pub(crate) fn state_variant_open() -> bool { STATE_VARIANT.with(|v| v.get()) }
+/// What a garment-state variant's open ends with once everything was read (extract_session_from_info): the session
+/// is not assembled, its inputs (configuration, the card, the head) read the same in every state and the outfit's own
+/// open read them.
+pub const STATE_VARIANT_READ: &str = "garment-state variant read";
 /// Marks this thread's opens as garment-state variants while alive.
 pub(crate) struct StateVariantScope(bool);
 impl StateVariantScope { pub(crate) fn begin() -> Self { StateVariantScope(STATE_VARIANT.with(|v| v.replace(true))) } }

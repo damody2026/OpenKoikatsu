@@ -2108,6 +2108,7 @@ pub(crate) fn extract_session_from_info(
         eprintln!("ok-extract: STAGE {name:28} {:8.1}ms x{} max {:.1}ms", s.total_ms, s.calls, s.max_ms);
     }
     crate::profile::dump_spots();
+    if crate::state_variant_open() { return Err(crate::STATE_VARIANT_READ.into()); }
     let _assembly = crate::profile::spot("session assembly");
     let (shape_body, shape_face, sex, type_bone, nip, abm) = parsed_card
         .as_ref()
