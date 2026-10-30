@@ -4,7 +4,7 @@ use serde::Deserialize;
 #[test]
 fn generic_transform_paths_distinguish_duplicate_leaf_names() {
     use crate::pose::{Skeleton,Tf};
-    let mut pose=Skeleton{names:Vec::new(),worlds:Vec::new(),rest:Vec::new(),smr_count:0,tfs:HashMap::new(),bone_ids:vec![1,2,3,4,5],source_mesh:0};
+    let mut pose=Skeleton{names:Vec::new(),worlds:Vec::new(),rest:Vec::new(),smr_count:0,tfs:HashMap::new().into(),bone_ids:vec![1,2,3,4,5],source_mesh:0};
     for (id,name,parent) in [(1,"cf_j_root",None),(2,"left",Some(1)),(3,"tip",Some(2)),(4,"right",Some(1)),(5,"tip",Some(4))] {
         pose.tfs.insert(id,Tf{name:name.into(),parent,sibling_index:None,pos:[0.;3],rot:[0.,0.,0.,1.],scale:[1.;3]});
     }

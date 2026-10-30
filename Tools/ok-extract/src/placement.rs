@@ -813,7 +813,7 @@ pub(crate) fn accessory_moves_preserve_independent_skin_branches() {
             (4,tf("fixed",Some(2))),(5,tf("hanging",Some(3)))]);
         tfs.get_mut(&3).unwrap().pos=[0.,7.,0.];
         let mut skel=Skeleton {names:vec!["fixed".into(),"hanging".into()],worlds:vec![],
-            rest:vec![ident();2],smr_count:2,tfs,bone_ids:vec![4,5],source_mesh:0};
+            rest:vec![ident();2],smr_count:2,tfs: tfs.into(),bone_ids:vec![4,5],source_mesh:0};
         skel.rebuild_worlds();
         let mut mesh=ExtractedMesh {renderer_skinned:Some(true),smr_skel:Some(skel.clone()),
             positions:vec![[1.,0.,0.];3],normals:vec![[0.,1.,0.];3],
@@ -842,7 +842,7 @@ pub(crate) fn accessory_split_move_alias_uses_actual_skin_ancestor() {
     let tfs=std::collections::HashMap::from([(1,tf("root",None)),
         (2,tf("N_move",Some(1))),(3,tf("N_move2",Some(1))),(4,tf("right",Some(3)))]);
     let mut skel=Skeleton {names:vec!["right".into()],worlds:vec![],rest:vec![ident()],
-        smr_count:1,tfs,bone_ids:vec![4],source_mesh:0};skel.rebuild_worlds();
+        smr_count:1,tfs: tfs.into(),bone_ids:vec![4],source_mesh:0};skel.rebuild_worlds();
     let mesh=ExtractedMesh {renderer_skinned:Some(true),smr_skel:Some(skel),
         move_nodes:[Some((ident(),ident())),None],..Default::default()};
     let moved=accessory_skeleton_with_moves(&mesh,None,&[local_trs([3.,2.,1.],[0.;3],[1.;3]),ident()]).unwrap();
@@ -856,9 +856,9 @@ pub(crate) fn attachment_chain_preserves_body_shear_and_prefers_live_head() {
     let tf=|name:&str,parent,pos,rot,scale|Tf{name:name.into(),parent,sibling_index:None,pos,rot,scale};
     let angle=std::f32::consts::FRAC_PI_8;
     let mut body=Skeleton{names:vec!["a_n_neck".into(),"cf_s_head".into()],worlds:vec![],rest:vec![ident();2],smr_count:2,bone_ids:vec![2,3],source_mesh:0,
-        tfs:std::collections::HashMap::from([(1,tf("root",None,[0.;3],[0.,0.,0.,1.],[2.,1.,1.])),(2,tf("a_n_neck",Some(1),[0.,1.,0.],[0.,0.,angle.sin(),angle.cos()],[1.;3])),(3,tf("cf_s_head",Some(2),[0.,2.,0.],[0.,0.,0.,1.],[0.8,1.,1.2])),(4,tf("a_n_headside",Some(1),[99.;3],[0.,0.,0.,1.],[1.;3]))])};body.rebuild_worlds();
+        tfs:std::collections::HashMap::from([(1,tf("root",None,[0.;3],[0.,0.,0.,1.],[2.,1.,1.])),(2,tf("a_n_neck",Some(1),[0.,1.,0.],[0.,0.,angle.sin(),angle.cos()],[1.;3])),(3,tf("cf_s_head",Some(2),[0.,2.,0.],[0.,0.,0.,1.],[0.8,1.,1.2])),(4,tf("a_n_headside",Some(1),[99.;3],[0.,0.,0.,1.],[1.;3]))]).into()};body.rebuild_worlds();
     let mut head=Skeleton{names:vec!["p_cf_head_bone".into(),"a_n_headside".into()],worlds:vec![],rest:vec![ident();2],smr_count:2,bone_ids:vec![100,101],source_mesh:0,
-        tfs:std::collections::HashMap::from([(100,tf("p_cf_head_bone",None,[0.,10.,0.],[0.,0.,0.,1.],[1.;3])),(101,tf("a_n_headside",Some(100),[0.,0.5,0.],[0.,0.,angle.sin(),angle.cos()],[1.;3]))])};head.rebuild_worlds();
+        tfs:std::collections::HashMap::from([(100,tf("p_cf_head_bone",None,[0.,10.,0.],[0.,0.,0.,1.],[1.;3])),(101,tf("a_n_headside",Some(100),[0.,0.5,0.],[0.,0.,angle.sin(),angle.cos()],[1.;3]))]).into()};head.rebuild_worlds();
     for name in ["a_n_neck","a_n_headside"] {
         let chain=attachment_transform_chain(Some(&body),Some(&head),name,&ident()).unwrap();
         let actual=chain.iter().fold(ident(),|m,tf|mat_mul_pub(&m,&trs(tf.pos,tf.rot,tf.scale)));

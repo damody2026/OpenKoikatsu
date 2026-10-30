@@ -643,7 +643,7 @@ mod tests {
         let mut tfs = HashMap::new();
         tfs.insert(1, tf("hips", None, [0.0, 1.0, 0.0]));
         tfs.insert(2, tf(arm, Some(1), [0.3, 0.4, 0.0]));
-        Skeleton { names: vec![], worlds: vec![], rest: vec![], smr_count: 0, tfs, bone_ids: vec![1, 2], source_mesh: 0 }
+        Skeleton { names: vec![], worlds: vec![], rest: vec![], smr_count: 0, tfs: tfs.into(), bone_ids: vec![1, 2], source_mesh: 0 }
     }
 
     /// A body naming a family bone differently (a mod body's "mod_arm" for "arm") still gets that bone's motion

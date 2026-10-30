@@ -1776,7 +1776,7 @@ use super::*;
         tfs.insert(2, Tf { sibling_index: None, name: "cf_j_hand_L".into(), parent: Some(1),
             pos: [0.0; 3], rot: [0.0, 0.0, 0.0, 1.0], scale: [1.0; 3] });
         let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-            smr_count: 2, tfs, bone_ids: vec![1, 2], source_mesh: 0 };
+            smr_count: 2, tfs: tfs.into(), bone_ids: vec![1, 2], source_mesh: 0 };
         apply_clip_at(game, &mut skel, "GSit_00", 0.25);
         let hand = &skel.tfs[&2];
         assert!((hand.scale[1] - 0.9).abs() < 0.001, "{:?}", hand.scale);
@@ -1840,7 +1840,7 @@ use super::*;
                 pos: [0.0; 3], rot: [0.0, 0.0, 0.0, 1.0], scale: [0.92, 0.9, 0.9] });
         }
         let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-            smr_count: 2, tfs, bone_ids: vec![1, 2], source_mesh: 0 };
+            smr_count: 2, tfs: tfs.into(), bone_ids: vec![1, 2], source_mesh: 0 };
         let (arm, hand) = clip_limb_corrections(game, "f_aruki_00_00_01");
         crate::pose::apply_scene_limb_size_corrections(&mut skel, arm, hand);
         assert_eq!(skel.tfs[&1].scale, [1.0, 1.0, 1.0]);
@@ -3014,7 +3014,7 @@ mod tests {
     #[test]
     fn resident_layer_masks_match_traversal_and_invalidate_topology() {
         use crate::pose::{Tf,ident};
-        let mut skel=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:0,tfs:HashMap::new(),bone_ids:vec![],source_mesh:7};
+        let mut skel=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:0,tfs:HashMap::new().into(),bone_ids:vec![],source_mesh:7};
         for(id,name,parent)in [(1,"cf_j_root",None),(2,"arm",Some(1)),(3,"hand",Some(2)),(4,"hand",Some(1)),(5,"detached",None)]{
             skel.tfs.insert(id,Tf{name:name.into(),parent,sibling_index:None,pos:[0.;3],rot:[0.,0.,0.,1.],scale:[1.;3]});
             skel.names.push(name.into());skel.bone_ids.push(id);skel.worlds.push(ident());skel.rest.push(ident());

@@ -39,7 +39,7 @@ pub(super) fn install(p:&mut SessionPart,rig:&SoftRig,head:&Mat4)->Result<(),Str
             ids.push(id);names.push(name);previous=point;parent=id;
         }
     }
-    let mut sk=Skeleton{names,worlds:vec![ident();ids.len()],rest:Vec::new(),smr_count:ids.len(),tfs,bone_ids:ids,source_mesh:0};
+    let mut sk=Skeleton{names,worlds:vec![ident();ids.len()],rest:Vec::new(),smr_count:ids.len(),tfs: tfs.into(),bone_ids:ids,source_mesh:0};
     sk.rebuild_worlds();sk.rest=sk.worlds.clone();
     let binds=sk.rest.iter().map(mat_inv_pub).collect::<Vec<_>>();
     let source=ExtractedMesh{name:p.name.clone(),renderer_skinned:Some(true),positions:p.rest_positions.clone(),rest_positions:p.rest_positions.clone(),

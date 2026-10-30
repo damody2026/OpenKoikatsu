@@ -161,11 +161,50 @@ pub struct Skeleton {
     pub rest: Vec<Mat4>,
     /// Bones that belong to the SkinnedMeshRenderer (bind-pose aligned).
     pub smr_count: usize,
-    #[serde(serialize_with="crate::ordered::map")]
-    pub tfs: std::collections::HashMap<i64, Tf>,
+    pub tfs: Tfs,
     pub bone_ids: Vec<i64>,
     /// Mesh path id this skeleton was built from (bind order source).
     pub source_mesh: i64,
+}
+
+/// A skeleton's transforms, shared by its copies until one changes them (a mesh carries its skeleton, and meshes
+/// are copied far more often than their transforms change). Reads and writes go through the map.
+#[derive(Clone, Default)]
+pub struct Tfs(std::sync::Arc<std::collections::HashMap<i64, Tf>>);
+
+impl std::ops::Deref for Tfs {
+    type Target = std::collections::HashMap<i64, Tf>;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+impl std::ops::DerefMut for Tfs {
+    fn deref_mut(&mut self) -> &mut Self::Target { std::sync::Arc::make_mut(&mut self.0) }
+}
+impl From<std::collections::HashMap<i64, Tf>> for Tfs {
+    fn from(map: std::collections::HashMap<i64, Tf>) -> Self { Tfs(std::sync::Arc::new(map)) }
+}
+impl<const N: usize> From<[(i64, Tf); N]> for Tfs {
+    fn from(items: [(i64, Tf); N]) -> Self { Tfs::from(std::collections::HashMap::from(items)) }
+}
+impl FromIterator<(i64, Tf)> for Tfs {
+    fn from_iter<I: IntoIterator<Item = (i64, Tf)>>(items: I) -> Self { Tfs::from(items.into_iter().collect::<std::collections::HashMap<_, _>>()) }
+}
+impl<'a> IntoIterator for &'a Tfs {
+    type Item = (&'a i64, &'a Tf);
+    type IntoIter = std::collections::hash_map::Iter<'a, i64, Tf>;
+    fn into_iter(self) -> Self::IntoIter { self.0.iter() }
+}
+impl<'a> IntoIterator for &'a mut Tfs {
+    type Item = (&'a i64, &'a mut Tf);
+    type IntoIter = std::collections::hash_map::IterMut<'a, i64, Tf>;
+    fn into_iter(self) -> Self::IntoIter { std::sync::Arc::make_mut(&mut self.0).iter_mut() }
+}
+impl serde::Serialize for Tfs {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> { crate::ordered::map(&*self.0, serializer) }
+}
+impl<'de> serde::Deserialize<'de> for Tfs {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        std::collections::HashMap::deserialize(deserializer).map(Tfs::from)
+    }
 }
 
 impl std::fmt::Debug for Skeleton {
@@ -1483,7 +1522,7 @@ pub fn accdiag_matches(name: &str) -> bool {
 fn rig_name_index_preserves_duplicate_policy_and_inventory_changes(){
     use std::collections::HashMap;use std::sync::Arc;
     let mut tfs=HashMap::new();for (id,name,parent) in [(1,"duplicate",None),(2,"duplicate",Some(1)),(3,"unique",Some(1)),(0,"zero",None)]{tfs.insert(id,Tf{sibling_index:None,name:name.into(),parent,pos:[id as f32,2.,-1.],rot:[0.,0.,0.,1.],scale:[1.,2.,0.5]});}
-    let mut s=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:4,tfs,bone_ids:vec![1,2,3,0],source_mesh:17};
+    let mut s=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:4,tfs: tfs.into(),bone_ids:vec![1,2,3,0],source_mesh:17};
     for frame in 0..40 {
         let mut first=HashMap::new();let mut last=HashMap::new();for(id,tf)in &s.tfs{first.entry(tf.name.clone()).or_insert(*id);last.insert(tf.name.clone(),*id);}
         assert_eq!(*rig_name_index(&s,false),first);assert_eq!(*rig_name_index(&s,true),last);
@@ -1507,7 +1546,7 @@ fn repeated_world_rebuild_retains_names_and_exact_hierarchy() {
             pos: [id as f32, 2., -3.], rot: [0., 0., 0., 1.], scale: [1., 2., 0.5] });
     }
     let mut s = Skeleton { names: vec![], worlds: vec![], rest: vec![], smr_count: 2,
-        tfs, bone_ids: vec![1, 2, 77], source_mesh: 0 };
+        tfs: tfs.into(), bone_ids: vec![1, 2, 77], source_mesh: 0 };
     s.rebuild_worlds();
     let pointers = [s.names[0].as_ptr(), s.names[1].as_ptr()];
     for frame in 0..64 {
@@ -1545,7 +1584,7 @@ fn repeated_world_rebuild_retains_names_and_exact_hierarchy() {
 #[test]
 fn pooled_animation_snapshots_preserve_values_order_and_nested_isolation(){
     POSE_SNAPSHOTS.with(|pool|pool.borrow_mut().clear());
-    let mut source=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:2,tfs:std::collections::HashMap::new(),bone_ids:vec![1,2],source_mesh:42};
+    let mut source=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:2,tfs:std::collections::HashMap::new().into(),bone_ids:vec![1,2],source_mesh:42};
     for id in 1..=2{source.tfs.insert(id,Tf{name:"duplicate".into(),parent:(id==2).then_some(1),sibling_index:Some(id as u32),pos:[id as f32,0.,0.],rot:[0.,0.,0.,1.],scale:[1.;3]});}source.rebuild_worlds();source.rest=source.worlds.clone();
     let check=|snapshot:&Skeleton,expected:&Skeleton|{assert_eq!(snapshot.tfs.keys().collect::<Vec<_>>(),expected.tfs.keys().collect::<Vec<_>>());assert_eq!(snapshot.names,expected.names);assert_eq!(snapshot.worlds,expected.worlds);assert_eq!(snapshot.rest,expected.rest);assert_eq!(snapshot.bone_ids,expected.bone_ids);for(id,t)in &expected.tfs{let a=&snapshot.tfs[id];assert_eq!((&a.name,a.parent,a.sibling_index,a.pos,a.rot,a.scale),(&t.name,t.parent,t.sibling_index,t.pos,t.rot,t.scale));}};
     for frame in 0..32 {source.tfs.get_mut(&1).unwrap().pos[1]=frame as f32;source.rebuild_worlds();let mut outer=SkeletonSnapshot::new(&source);check(&outer,&source);let inner=SkeletonSnapshot::new(&outer);outer.tfs.get_mut(&1).unwrap().pos[1]=-1.;check(&inner,&source);}
@@ -1590,7 +1629,7 @@ impl WorldPlan {
 #[cfg(test)]
 #[test]
 fn incremental_world_publication_matches_recursive_bits_after_live_changes(){
-    let mut s=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:4,tfs:std::collections::HashMap::new(),bone_ids:vec![1,2,3,99],source_mesh:-1918};
+    let mut s=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:4,tfs:std::collections::HashMap::new().into(),bone_ids:vec![1,2,3,99],source_mesh:-1918};
     for id in 1..=3 {s.tfs.insert(id,Tf{name:format!("bone{id}"),parent:if id==1{None}else{Some(id-1)},sibling_index:None,pos:[0.1,0.2,0.3],rot:[0.1,0.2,0.3,0.9],scale:[-0.7,0.0,1.3]});}
     for frame in 0..24 {
         match frame {
@@ -2086,7 +2125,7 @@ fn expression_hand_uses_world_position_and_rotation_under_scaled_parent() {
         tfs.insert(id, Tf { sibling_index: None, name: name.into(), parent, pos, rot, scale });
     }
     let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 7, tfs, bone_ids: (1..=7).collect(), source_mesh: 0 };
+        smr_count: 7, tfs: tfs.into(), bone_ids: (1..=7).collect(), source_mesh: 0 };
     skel.tfs.get_mut(&6).unwrap().rot = euler_deg_to_quat([15.0, 25.0, 35.0]);
     apply_expression_bone_hands(&mut skel);
     let expected_y = (0.1f32 * 100.0 * std::f32::consts::PI / 180.0).sin() * 1.5;
@@ -2122,7 +2161,7 @@ fn expression_elbow_uses_sine_of_whole_angle_and_independent_bones() {
             pos: [0.0; 3], rot, scale: [1.0; 3] });
     }
     let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 6, tfs, bone_ids: (1..=6).collect(), source_mesh: 0 };
+        smr_count: 6, tfs: tfs.into(), bone_ids: (1..=6).collect(), source_mesh: 0 };
     apply_expression_bone_elbows(&mut skel);
     let bend = ((30.0f32 - 1.0) * 0.006).sin() * 0.18;
     assert!((gt_pos(&skel, 2)[2] - (-0.25 + bend) * 0.1).abs() < 1e-5);
@@ -2148,7 +2187,7 @@ fn expression_bust_updates_deform_and_available_collision_side() {
         tfs.insert(id, Tf { sibling_index: None, name: name.into(), parent: None, pos, rot, scale });
     }
     let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 4, tfs, bone_ids: (1..=4).collect(), source_mesh: 0 };
+        smr_count: 4, tfs: tfs.into(), bone_ids: (1..=4).collect(), source_mesh: 0 };
     apply_expression_bone_bust(&mut skel);
     let e = quat_to_euler_deg(5, gt_rot(&skel, 2));
     for (actual, expected) in e.into_iter().zip([-7.0, -3.5, -1.75]) {
@@ -2185,7 +2224,7 @@ fn expression_leg_twists_read_their_own_source_bones() {
             pos: [0.0; 3], rot, scale: [1.0; 3] });
     }
     let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 9, tfs, bone_ids: (1..=9).collect(), source_mesh: 0 };
+        smr_count: 9, tfs: tfs.into(), bone_ids: (1..=9).collect(), source_mesh: 0 };
     apply_expression_bone_leg_twists(&mut skel);
     for (bone, expected) in [(4, -30.0), (5, -20.0), (6, -10.0)] {
         let actual = quat_to_euler_deg(5, gt_rot(&skel, bone))[1];
@@ -2223,7 +2262,7 @@ fn expression_leg_calculation_is_invariant_under_character_world_motion() {
     }
     tfs.get_mut(&2).unwrap().scale = [0.84; 3];
     let neutral = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 7, tfs, bone_ids: (1..=7).collect(), source_mesh: 0 };
+        smr_count: 7, tfs: tfs.into(), bone_ids: (1..=7).collect(), source_mesh: 0 };
     let mut base = neutral.clone();
     let mut moved = neutral;
     moved.tfs.get_mut(&1).unwrap().pos = [0.3, 3.0, -0.8];
@@ -2250,7 +2289,7 @@ fn expression_acs_null_moves_neck_anchor_from_head_rotation() {
     tfs.insert(2, Tf { sibling_index: None, name: "a_n_neck".into(), parent: None,
         pos: [0.0, 0.038, 0.0], rot: [0.0, 0.0, 0.0, 1.0], scale: [1.0; 3] });
     let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 2, tfs, bone_ids: vec![1, 2], source_mesh: 0 };
+        smr_count: 2, tfs: tfs.into(), bone_ids: vec![1, 2], source_mesh: 0 };
     let head_before = gt_pos(&skel, 1);
     apply_expression_bone_acs_null(&mut skel);
     let neck = gt_pos(&skel, 2);
@@ -2354,7 +2393,7 @@ fn skeleton_from_graph(graph: &SkelGraph, mesh_path_id: i64) -> Option<Skeleton>
         worlds,
         rest,
         smr_count,
-        tfs,
+        tfs: tfs.into(),
         bone_ids: bones,
         source_mesh: mesh_path_id,
     })
@@ -2386,7 +2425,7 @@ pub fn skeleton_full_tree(serialized: &SerializedFile) -> Option<Skeleton> {
         worlds,
         rest,
         smr_count: 0,
-        tfs: graph.tfs,
+        tfs: graph.tfs.into(),
         bone_ids,
         source_mesh: 0,
     })
@@ -2457,7 +2496,7 @@ pub fn skeleton_for_prefab(serialized: &SerializedFile, prefab_name: &str) -> Op
         worlds,
         rest,
         smr_count: 0,
-        tfs,
+        tfs: tfs.into(),
         bone_ids,
         source_mesh: 0,
     })
@@ -2538,7 +2577,7 @@ fn animator_root_id_oracle(skel: &Skeleton) -> Option<i64> {
 #[cfg(test)]
 #[test]
 fn animator_tree_and_assigned_publication_match_original_with_ties_and_reparenting(){
-    let mut skel=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:6,tfs:std::collections::HashMap::new(),bone_ids:vec![2,3,6,7,10,99],source_mesh:-913};
+    let mut skel=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:6,tfs:std::collections::HashMap::new().into(),bone_ids:vec![2,3,6,7,10,99],source_mesh:-913};
     for(id,name,parent)in [(1,"cf_j_root",None),(2,"bone",Some(1)),(3,"bone",Some(1)),(5,"cf_J_N_FaceRoot",None),(6,"bone",Some(5)),(7,"leaf",Some(5)),(9,"cf_J_FaceRoot",None),(10,"bone",Some(9))]{
         skel.tfs.insert(id,Tf{name:name.into(),parent,sibling_index:None,pos:[id as f32*0.1,-0.2,0.3],rot:[0.1,0.2,0.3,0.9],scale:if id==3{[-0.7,0.0,1.3]}else{[0.8,1.2,0.9]}});
     }

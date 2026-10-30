@@ -61,7 +61,7 @@ impl Recipe {
   for (id,name,parent,pos) in [(1,"root",None,[0.,0.,0.]),(2,"arm",Some(1),[0.5,0.,0.]),(3,"hand",Some(2),[0.5,0.,0.])] {
    tfs.insert(id,crate::pose::Tf{sibling_index:None,name:name.into(),parent,pos,rot:IDENTITY,scale:[1.;3]});
   }
-  let mut sk=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:0,tfs,bone_ids:vec![1,2,3],source_mesh:0};sk.rebuild_worlds();sk
+  let mut sk=Skeleton{names:vec![],worlds:vec![],rest:vec![],smr_count:0,tfs: tfs.into(),bone_ids:vec![1,2,3],source_mesh:0};sk.rebuild_worlds();sk
  }
  #[test] fn contact_solves_reachable_target_and_preserves_local_geometry(){
   let recipe=Recipe::parse(br#"{"start":0.2,"peak":0.5,"end":0.8,"constraints":[{"effector":"hand","tip":[0.5,0,0],"target":[0.8,0.8,0],"chain":[{"name":"arm","max_degrees":120},{"name":"root","max_degrees":120}]}]}"#).unwrap();

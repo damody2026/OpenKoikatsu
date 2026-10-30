@@ -1794,7 +1794,7 @@ mod tests {
     fn batch_shape_writes_match_scan_oracle_with_duplicate_names_and_reparenting() {
         use crate::pose::{Tf,ident};
         let mut skel=Skeleton {names:vec![],worlds:vec![],rest:vec![ident();5],smr_count:5,
-            tfs:HashMap::new(),bone_ids:(1..=5).collect(),source_mesh:-812};
+            tfs:HashMap::new().into(),bone_ids:(1..=5).collect(),source_mesh:-812};
         for (id,name,parent) in [(1,"cf_j_root",None),(2,"leaf",Some(1)),(3,"leaf",Some(1)),(4,"leaf",None),(5,"other",Some(1))] {
             skel.tfs.insert(id,Tf{name:name.into(),parent,sibling_index:None,pos:[0.2,0.3,0.4],rot:[0.,0.,0.,1.],scale:[1.;3]});
         }

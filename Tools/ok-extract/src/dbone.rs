@@ -824,7 +824,7 @@ fn dynamic_bone_ver01_uses_ordered_nodes_and_rotation_flag() {
     assert!(!particles[0].rotation_calc);
     particles[1].pos = [0.0, 1.0, 0.0];
     let mut skel = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 0, tfs, bone_ids: Vec::new(), source_mesh: 0 };
+        smr_count: 0, tfs: tfs.into(), bone_ids: Vec::new(), source_mesh: 0 };
     let mut cache = HashMap::new();
     apply_particles(&mut skel, &mut particles, &mut cache, 1, true);
     assert_eq!(skel.tfs[&1].rot, [0.0, 0.0, 0.0, 1.0]);
@@ -861,7 +861,7 @@ fn dynamic_bone_shared_chain_preserves_earlier_late_update() {
             rot: [0.0, 0.0, 0.0, 1.0], scale: [1.0; 3] });
     }
     let mut source = Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(),
-        smr_count: 0, tfs, bone_ids: Vec::new(), source_mesh: 0 };
+        smr_count: 0, tfs: tfs.into(), bone_ids: Vec::new(), source_mesh: 0 };
     source.rebuild_worlds();
     let set = DBoneSet { bones: vec![
         DBone { root: 1, force: [0.02, 0.0, 0.0], damping: 0.2,
@@ -2337,7 +2337,7 @@ mod collider_frame_tests {
     }
     #[test]
     fn prepared_binding_preserves_duplicates_case_missing_and_pose() {
-        let mut body=Skeleton {names:Vec::new(),worlds:Vec::new(),rest:Vec::new(),smr_count:0,bone_ids:Vec::new(),source_mesh:0,tfs:HashMap::new()};
+        let mut body=Skeleton {names:Vec::new(),worlds:Vec::new(),rest:Vec::new(),smr_count:0,bone_ids:Vec::new(),source_mesh:0,tfs:HashMap::new().into()};
         for (id,name) in [(1,"Root"),(2,"Root"),(3,"cf_j_root")] {
             body.tfs.insert(id,Tf{name:name.into(),parent:None,sibling_index:None,pos:[id as f32,0.3,0.4],rot:[0.0,0.0,0.0,1.0],scale:[-1.2,0.7,1.4]});
         }

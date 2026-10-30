@@ -147,7 +147,7 @@ fn native_accessory_asset_particle_parameters() {
 fn attached_ancestry_preserves_shear_and_particle_history() {
     let tf=|name:&str,parent,pos,rot,scale|Tf{name:name.into(),parent,sibling_index:None,pos,rot,scale};
     let mut source=Skeleton{names:vec!["root".into(),"tip".into()],worlds:vec![],rest:vec![ident();2],smr_count:2,
-        tfs:HashMap::from([(1,tf("root",None,[0.,1.,0.],[0.,0.,0.,1.],[1.;3])),(2,tf("tip",Some(1),[0.,1.,0.],[0.,0.,0.,1.],[1.;3]))]),bone_ids:vec![1,2],source_mesh:0};source.rebuild_worlds();
+        tfs:HashMap::from([(1,tf("root",None,[0.,1.,0.],[0.,0.,0.,1.],[1.;3])),(2,tf("tip",Some(1),[0.,1.,0.],[0.,0.,0.,1.],[1.;3]))]).into(),bone_ids:vec![1,2],source_mesh:0};source.rebuild_worlds();
     let angle=std::f32::consts::FRAC_PI_8;
     let mut chain=vec![tf("scaled_socket",None,[0.;3],[0.,0.,0.,1.],[2.,1.,1.]),tf("rotated_socket",None,[0.;3],[0.,0.,angle.sin(),angle.cos()],[1.;3])];
     let set=DBoneSet{bones:vec![DBone{root:1,component_transform:Some(1),force:[0.,-0.001,0.],..Default::default()}],..Default::default()};

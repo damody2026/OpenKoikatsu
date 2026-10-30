@@ -4193,7 +4193,7 @@ mod tests {    #[test]
             worlds: Vec::new(),
             rest: Vec::new(),
             smr_count: 0,
-            tfs,
+            tfs: tfs.into(),
             bone_ids,
             source_mesh: 0,
         };

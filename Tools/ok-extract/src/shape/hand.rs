@@ -159,7 +159,7 @@ mod tests {
         let mut baseline = HashMap::new();
         let mut hand = HandShapes::load(&crate::test_support::active_library());
         let mut skel = Skeleton { names: vec![], worlds: vec![], rest: vec![], smr_count: 0,
-            tfs: HashMap::new(), bone_ids: vec![], source_mesh: 0 };
+            tfs: HashMap::new().into(), bone_ids: vec![], source_mesh: 0 };
         let mut cases = 0;
         let mut compared = 0;
         let mut max_error = 0.0f32;
@@ -186,7 +186,7 @@ mod tests {
                 },
                 "case" => {
                     assert_eq!(baseline.len(), 34);
-                    skel.tfs = baseline.clone(); skel.bone_ids = (0..34).collect();
+                    skel.tfs = baseline.clone().into(); skel.bone_ids = (0..34).collect();
                     assert!(hand.set(0, false, 0, 0, 0.0)); assert!(hand.set(1, false, 0, 0, 0.0));
                     assert!(hand.set(c[2].parse().unwrap(), c[3] == "1", c[4].parse().unwrap(), c[5].parse().unwrap(), c[6].parse().unwrap()));
                     hand.apply(&mut skel); cases += 1;

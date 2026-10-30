@@ -157,7 +157,7 @@ fn empty_implant_sync_preserves_current_dynamic_pose_and_bridge_sync() {
             pos:[id as f32,2.,-3.],rot:[0.,0.,0.,1.],scale:[1.,2.,0.5]});
     }
     let mut body=Skeleton {names:vec![],worlds:vec![],rest:vec![],smr_count:2,
-        tfs,bone_ids:vec![1,2],source_mesh:0};body.rebuild_worlds();
+        tfs: tfs.into(),bone_ids:vec![1,2],source_mesh:0};body.rebuild_worlds();
     let mut private=body.clone();
     for frame in 0..64 {
         body.tfs.get_mut(&1).unwrap().pos[0]=frame as f32*0.125;body.rebuild_worlds();

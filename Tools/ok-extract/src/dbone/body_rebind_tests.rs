@@ -2,7 +2,7 @@ use super::*;
 
 fn rig(base:i64)->Skeleton {
     let mut sk=Skeleton {names:vec!["root".into(),"tip".into(),"aux".into()], worlds:vec![],rest:vec![],
-        smr_count:3,bone_ids:vec![base,base+1,base+2],source_mesh:0,tfs:HashMap::new()};
+        smr_count:3,bone_ids:vec![base,base+1,base+2],source_mesh:0,tfs:HashMap::new().into()};
     for (offset,name,parent,pos) in [(0,"root",None,[0.;3]),(1,"tip",Some(base),[0.,1.,0.]),(2,"aux",Some(base),[1.,0.,0.])] {
         sk.tfs.insert(base+offset,Tf{name:name.into(),parent,pos,rot:[0.,0.,0.,1.],scale:[1.;3],sibling_index:None});
     }
