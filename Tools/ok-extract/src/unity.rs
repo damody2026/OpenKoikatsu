@@ -106,6 +106,11 @@ impl SourceBytes {
         std::fs::read(path).map(Self::from)
     }
     fn range(&self) -> std::ops::Range<usize> { self.start..self.start + self.len }
+    /// `len` bytes at `start` of these bytes, sharing them.
+    pub(crate) fn sub(&self, start: usize, len: usize) -> Self {
+        assert!(start.checked_add(len).is_some_and(|end| end <= self.len), "slice out of range");
+        Self { data: self.data.clone(), start: self.start + start, len }
+    }
     /// Whether the bytes are a file map (not private memory).
     pub(crate) fn is_mapped(&self) -> bool { matches!(self.data, unity_asset_binary::shared_bytes::SharedBytes::Mmap(_)) }
 }

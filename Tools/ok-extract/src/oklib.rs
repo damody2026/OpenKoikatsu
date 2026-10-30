@@ -97,7 +97,7 @@ pub struct Store {
     /// An OK card's pack held in memory for its open (`Store::in_memory`): (model, query, args) -> stored value.
     /// Nothing is written to disk; the table is freed with the open.
     /// Also a card pack being recorded (`Store::recording_in_memory`): nothing goes to disk.
-    records: Option<RwLock<HashMap<(Id, String, Vec<u8>), Vec<u8>>>>,
+    records: Option<RwLock<HashMap<(Id, String, Vec<u8>), crate::unity::SourceBytes>>>,
     /// The models `records` hold.
     record_models: RwLock<std::collections::HashSet<Id>>,
 }
@@ -373,25 +373,26 @@ impl Store {
     }
 
     /// A replayed card pack in memory: its records answer queries directly (no model files).
-    fn in_memory(records: Vec<PackRecord>) -> Store {
+    fn in_memory(records: impl IntoIterator<Item = ((Id, String, Vec<u8>), crate::unity::SourceBytes)>) -> Store {
+        let records: HashMap<_, _> = records.into_iter().collect();
         Store {
             dir: PathBuf::new(), mode: Mode::Replay, models: Mutex::new(HashMap::new()), missing: Mutex::new(HashMap::new()),
             hits: AtomicU64::new(0), misses: AtomicU64::new(0), stored: AtomicU64::new(0), conflicts: AtomicU64::new(0),
             conflict_log: Mutex::new(HashMap::new()), pack: RwLock::new(None),
-            record_models: RwLock::new(records.iter().map(|r| r.0).collect()),
-            records: Some(RwLock::new(records.into_iter().map(|PackRecord(id, query, args, value)| ((id, query, args), value)).collect())),
+            record_models: RwLock::new(records.keys().map(|k| k.0).collect()),
+            records: Some(RwLock::new(records)),
         }
     }
 
     /// A card pack being recorded in memory (begin_card_pack): the first value of a query is kept.
     fn recording_in_memory() -> Store {
-        Store { mode: Mode::Record, ..Store::in_memory(Vec::new()) }
+        Store { mode: Mode::Record, ..Store::in_memory(std::iter::empty()) }
     }
 
     /// The records of an in-memory store, sorted.
     fn take_records(&self) -> Vec<PackRecord> {
         let mut out: Vec<PackRecord> = self.records.as_ref().map(|r| std::mem::take(&mut *r.write().unwrap()))
-            .unwrap_or_default().into_iter().map(|((id, query, args), value)| PackRecord(id, query, args, value)).collect();
+            .unwrap_or_default().into_iter().map(|((id, query, args), value)| PackRecord(id, query, args, value.to_vec())).collect();
         out.sort_by(|a, b| (a.0, &a.1, &a.2).cmp(&(b.0, &b.1, &b.2)));
         out
     }
@@ -434,7 +435,8 @@ impl Store {
 
     /// `get_own` without holding a large result in memory (decompressed into a mapped temporary file).
     fn get_own_source(&self, id: &Id, query: &str, args: &[u8]) -> Option<crate::unity::SourceBytes> {
-        if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).cloned().map(crate::unity::SourceBytes::from); }
+        // (a copy: a value kept past the open must not keep the whole pack alive)
+        if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).map(|v| crate::unity::SourceBytes::from(v.to_vec())); }
         let model = self.model(id);
         let loc = model.lock().unwrap().entries.get(&(query.to_owned(), args.to_vec()))?.clone();
         let file = File::open(model_file(&self.dir, id)).ok()?;
@@ -442,7 +444,7 @@ impl Store {
     }
 
     fn get_own(&self, id: &Id, query: &str, args: &[u8]) -> Option<Vec<u8>> {
-        if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).cloned(); }
+        if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).map(|v| v.to_vec()); }
         let model = self.model(id);
         let loc = model.lock().unwrap().entries.get(&(query.to_owned(), args.to_vec()))?.clone();
         let file = File::open(model_file(&self.dir, id)).ok()?;
@@ -461,7 +463,7 @@ impl Store {
     pub fn put_raw(&self, id: &Id, query: &str, args: &[u8], raw: &[u8]) {
         if self.mode != Mode::Record { return; }
         if let Some(records) = &self.records {
-            records.write().unwrap().entry((*id, query.to_owned(), args.to_vec())).or_insert_with(|| raw.to_vec());
+            records.write().unwrap().entry((*id, query.to_owned(), args.to_vec())).or_insert_with(|| raw.to_vec().into());
             self.record_models.write().unwrap().insert(*id);
             return;
         }
@@ -823,6 +825,12 @@ mod pack_bytes {
         d.deserialize_byte_buf(V)
     }
 }
+/// `CardPack` read in place: the values stay in the decoded pack bytes (an open used to copy them all out, a second
+/// copy of a pack of hundreds of MB).
+#[derive(serde::Deserialize)]
+struct CardPackRef<'a> { version: u32, index: crate::gamefs::Index, #[serde(borrow)] records: Vec<PackRecordRef<'a>> }
+#[derive(serde::Deserialize)]
+struct PackRecordRef<'a>(Id, String, #[serde(with = "pack_bytes")] Vec<u8>, &'a [u8]);
 const CARD_PACK_VERSION: u32 = 2;
 
 /// Start recording what an original card needs beyond the library (call with the library active and the
@@ -981,13 +989,15 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     // once, and nothing is written to disk.
     active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
     let (profile, t) = (std::env::var_os("OK_PROFILE").is_some(), std::time::Instant::now());
-    let raw = decode_card_pack_bytes(chunk)?;
+    let raw = crate::unity::SourceBytes::from(decode_card_pack_bytes(chunk)?);
     if profile { eprintln!("ok-extract: PROFILE pack zstd {} -> {} bytes {:>8.1}ms", chunk.len(), raw.len(), t.elapsed().as_secs_f64() * 1e3); }
-    let pack: CardPack = bincode::deserialize(&raw).map_err(|e| format!("card pack: {e}"))?;
+    let pack: CardPackRef = bincode::deserialize(&raw).map_err(|e| format!("card pack: {e}"))?;
     if pack.version != CARD_PACK_VERSION { return Err(format!("card pack version {} (expected {CARD_PACK_VERSION})", pack.version)); }
     if profile { eprintln!("ok-extract: PROFILE pack decoded {:>8.1}ms ({} records)", t.elapsed().as_secs_f64() * 1e3, pack.records.len()); }
-    let CardPack { index, records, .. } = pack;
+    let CardPackRef { index, records, .. } = pack;
     LAST_PACK_MODELS.store(records.iter().map(|r| r.0).collect::<std::collections::BTreeSet<_>>().len() as u64, Ordering::Relaxed);
+    let base = raw.as_ptr() as usize;
+    let records = records.into_iter().map(|PackRecordRef(id, query, args, value)| ((id, query, args), raw.sub(value.as_ptr() as usize - base, value.len())));
     let pack_store = Arc::new(Store::in_memory(records));
     if profile { eprintln!("ok-extract: PROFILE pack store in memory {:>8.1}ms", t.elapsed().as_secs_f64() * 1e3); }
     // What the pack serves under mods/ (zipmods, their entries, listings): the mods-tree memos only depend on this.
