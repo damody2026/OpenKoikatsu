@@ -84,7 +84,7 @@ void UOKHScenePanel::SelectAibu(int32 Index){
             if(G->PartnerActor){G->PartnerActor->StopHBreath();G->PartnerActor->SetActorHiddenInGame(true);}
             G->PreviewActor->SetActorTickEnabled(true);G->PreviewActor->SetGameSceneMode(3,false);G->SelectedGameSceneMode=3;
             UI->SoloKeys=MoveTemp(Keys);UI->ActiveAibu=UI->PendingAibu;UI->PendingAibu=INDEX_NONE;UI->ActivePose=INDEX_NONE;UI->Mode=0;UI->SoloState.Reset();
-            UI->PosesPlayed.AddUnique(UI->AibuPoses[UI->ActiveAibu].Name);G->NoteAction(TEXT("pair"),UI->AibuPoses[UI->ActiveAibu].Name);
+            G->NoteAction(TEXT("pair"),UI->AibuPoses[UI->ActiveAibu].Name);
             UI->PlaySolo(TEXT("Idle"));UI->BuildList();
         });
     });
@@ -260,6 +260,9 @@ void UOKHScenePanel::Click(int32 Kind){
     if(Kind>=AibuBase&&Kind<PoseBase){SelectAibu(Kind-AibuBase);return;}
     if(Kind>=TouchChest&&Kind<=Kiss&&Mode==0){static const int32 Areas[]={1,2,3,4,5,0};Touch(Areas[Kind-TouchChest]);ActionsKey.Reset();return;}
     if(Mode==0&&Kind>=Faster&&Kind<=Continue)return; // pair actions while caressing (a stale button or the control channel)
+    // Insertion and the condom belong to intercourse poses, anal to the ones that allow it (a stale button or the channel).
+    if((Kind==Insert||Kind==InsertAnal||Kind==Condom||Kind==Pull)&&Mode!=2)return;
+    if(Kind==InsertAnal&&!(Poses.IsValidIndex(ActivePose)&&Poses[ActivePose].Anal))return;
     if(Kind==ToggleMale){bMaleHidden=!bMaleHidden;BuildList();return;}
     if(Kind==Release&&Mode==0){TouchArea=INDEX_NONE;Chain({TEXT("Idle")});ActionsKey.Reset();return;}
     if(Kind>=ClothesBase){
@@ -348,6 +351,11 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     if(!Gallery)return;
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
     UpdateFace();FrameCamera();
+    // A pose counts as done once something happened in it (a gauge rose, he entered her, a touch), not when it only opened:
+    // a pair opens on a moving state for a few seconds before its Idle.
+    {const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
+     if(Mode!=0&&Poses.IsValidIndex(ActivePose)&&(Her>3.f||His>3.f||Base.StartsWith(TEXT("Insert"))))PosesPlayed.AddUnique(Poses[ActivePose].Name);
+     if(Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)&&TouchArea!=INDEX_NONE)PosesPlayed.AddUnique(AibuPoses[ActiveAibu].Name);}
     if(Mode!=0&&Gallery->PartnerActor&&Gallery->PartnerActor->IsHidden()!=bMaleHidden)Gallery->PartnerActor->SetActorHiddenInGame(bMaleHidden);
     const double Now=FPlatformTime::Seconds();
     auto* Playback=Gallery->PairedPlayback.Get();
@@ -357,7 +365,6 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
         const int32 Found=Poses.IndexOfByPredicate([Playing](const FOKHPose& Pose){return Pose.Pair==Playing;});
         if(Found!=INDEX_NONE&&(Found!=ActivePose||PendingPose==Found)){
             ActivePose=Found;PendingPose=INDEX_NONE;Mode=Poses[Found].Mode;Queue.Reset();Wanted.Reset();bAnalPlay=false;bInsideFinished=false;bStrong=false;
-            PosesPlayed.AddUnique(Poses[Found].Name);
             if(Has(TEXT("Idle")))Want(TEXT("Idle"));
             Tab=Mode==2?TabSonyu:TabHand+Poses[Found].KindHoushi;BuildList();
         }
@@ -415,7 +422,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     else if(Queue.IsEmpty()){Her=FMath::Max(0.f,Her-Delta*3.f);His=FMath::Max(0.f,His-Delta*3.f);}
     Her=FMath::Clamp(Her,0.f,100.f);His=FMath::Clamp(His,0.f,100.f);
     // In her mouth she decides herself if he waits (HHoushi Oral_Idle: drink or spit after a while).
-    if(Queue.IsEmpty()&&Base==TEXT("Oral_Idle")&&OralIdleSince>0.&&Now-OralIdleSince>8.){OralIdleSince=0.;Click(FMath::RandBool()?Drink:Vomit);}
+    if(Queue.IsEmpty()&&Base==TEXT("Oral_Idle")&&OralIdleSince>0.&&Now-OralIdleSince>8.){OralIdleSince=0.;static const float DrinkChance[]={.2f,.35f,.6f,.85f};Click(FMath::FRand()<DrinkChance[FMath::Clamp(Level(),0,3)]?Drink:Vomit);} // her own choice: the more used to it, the likelier she swallows
     ApplySpeed();
     // Her spoken answer is over: her breathing goes on (the line stopped it).
     if(bTalkSpoken&&Gallery->PreviewActor&&!Gallery->PreviewActor->IsSpeaking()){bTalkSpoken=false;if(Mode!=0&&Gallery->PairedPlayback)Gallery->StartPairBreath();}
