@@ -54,3 +54,6 @@
 - 2026-10-30：第 1 步完成：`Tools/ok-rules/src/hexp.rs`（`h_experience`、`h_session_end`，ext.hexp.<女主>，四級經驗、初次與部位熟練寫進記憶）；acts.toml 加 `h_first`/`h_area`/`h_level`。
 - 2026-10-30：原作姿勢表 `Content/IndependentResources/StreetSocialData/h_poses.json`（`ok-hposes D:/KoikatuSunshine <輸出>`，140 個姿勢的模式、奉仕種類、肛門、經驗門檻、服裝）。
 - 2026-10-30：第 2、3、4 步第一版：`Source/OpenKoikatsu/OKHScene.h/.cpp`（`UOKHScenePanel`）。街區進 1 對 1 時（`AOKInteractionMode::BeginHScene`）用它取代左側測試面板（`ok.HScene.TestPanel 1` 可叫回）。奉仕手／口／胸、插入分頁列出姿勢（需要「習慣了」的姿勢鎖住），奉仕與插入的原作狀態流程、兩條量表、速度、強弱、射在裡面／外面／嘴裡、吞下／吐出、保險套（她不准生插入時要你戴）、後庭（每場問一次，機率照經驗）、服裝部位切換；結束時 `h` 結果交給 `FinishPrivate` 呼叫 `h_session_end`。尚未：愛撫（部位觸碰經驗）、表情、TTS 台詞、換地點。
+- 2026-10-30：她的反應：場景中的事件（插入、初次、拒絕、換姿勢、脫衣、高潮等）以系統提示交給她回一句（`UOKHScenePanel::React`，只留最新一則；喘得說不出話時不送）；愛撫時播原作喘息（`CaressBreath`，mode 0）。原作語音根目錄自動找 `voice_extract`（`UOKCharacterController::DefaultVoiceRoot`）。
+- 2026-10-30：同意依個性與狀態值（`hexp.rs experience`）：貞操低、淫亂度高的女主較早允許生插入與肛門，被他吸引、沒有怨恨的女主在成為戀人前也肯接吻；回傳 `chastity` 給面板。
+- 2026-10-30：脫衣：修好脫衣後的當機（`Restore` 懸空參考，見 `Docs/STREET_ERRORS.md`）；面板的服裝改成逐件脫／穿（`AKKPreviewActor::SetClothingPartsHidden`，只改可見度與身體遮罩，不重載角色；重載會結束場景）。拿掉「全部半脫」。

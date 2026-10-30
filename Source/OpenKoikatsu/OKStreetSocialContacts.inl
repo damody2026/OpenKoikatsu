@@ -361,8 +361,8 @@ bool AOKStreetSocialScene::TickPrivate(double Now){
  if(S.PrivateMode.IsValid()){
   // Talk while it happens: his line from the H panel goes to her as free talk (she is the partner while the scene is
   // open, FreeTalkPartner), with what she is in the middle of; her answer is shown on the panel.
-  FString Line,Context;
-  if(!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()&&!HerReplyUnspoken()&&S.PrivateMode->HSceneTakeLine(Line,Context)){S.PrivateTalkContext=Context;S.FreeTalkDraft=Line;SendFreeTalk();}
+  FString Line,Context;bool System=false;
+  if(!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()&&!HerReplyUnspoken()&&S.PrivateMode->HSceneTakeLine(Line,Context,System)){S.PrivateTalkContext=Context;S.FreeTalkDraft=Line;S.SystemNote=System;SendFreeTalk();}
   if(S.FreeTalkCaptionHer!=S.PrivateShownLine){S.PrivateShownLine=S.FreeTalkCaptionHer;S.PrivateMode->HSceneShowLine(S.FreeTalkCaptionHer);}
   return true;
  }

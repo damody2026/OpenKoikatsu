@@ -96,6 +96,9 @@ fn area_name(i: usize) -> &'static str {
 /// What the scene allows with her now. Request: girl, ext, relation. Answer: level (0..3) and its name, the five areas,
 /// raw_ok (NamaInsertCheck without the calendar: 淫乱, or 慣れ with five raw times or as his lover), anal_chance
 /// (hAreaExps[3]+countAnalH percent), kiss_ok (lover or already kissed), used (poses marked isExperience need 慣れ).
+/// Her character moves each of these (the street has no calendar or H-scene favor of the original): a girl of low
+/// chastity who is lewd lets him go raw sooner and is easier about anal, one who is drawn to him kisses before they
+/// are lovers, one who resents him does not.
 fn experience(r: &Value) -> Result<Value, String> {
     let girl = r.get("girl").and_then(Value::as_str).ok_or("missing_field: girl")?;
     let rel: Option<Relation> = r.get("relation").filter(|v| v.is_object()).map(|v| serde_json::from_value(v.clone())).transpose().map_err(|e| format!("relation: {e}"))?;
@@ -103,12 +106,21 @@ fn experience(r: &Value) -> Result<Value, String> {
     let lover = rel.as_ref().is_some_and(|r| r.stage == "lover");
     let h = of(r.get("ext").unwrap_or(&Value::Null), girl);
     let level = h.level(lewd);
+    let t = crate::traits::Traits::from_profile(r.get("profile").unwrap_or(&Value::Null));
+    let chaste = rel.as_ref().map_or_else(|| crate::heroine::default_chastity(&t), |r| crate::heroine::chastity(r, &t));
+    let attraction = rel.as_ref().map_or(0.0, |r| r.attraction);
+    let resentment = rel.as_ref().map_or(0.0, |r| r.resentment);
+    let easy = lewd / 100.0 + (50.0 - chaste) / 100.0; // about -0.45 (chaste, innocent) .. 1.45 (lewd, loose)
+    let kiss_ok = lover || h.kissed || (resentment < 30.0 && attraction + 30.0 * easy >= 45.0 + 0.3 * chaste);
+    let raw_ok = level == 3 || (level == 2 && (h.raw_count >= 5 || lover)) || (level >= 1 && easy >= 0.9) || (lover && level >= 1 && t.worship >= 70);
+    let anal_chance = (h.area(ANAL) / 100.0 + 0.25 * easy).clamp(0.0, 1.0);
     let areas: serde_json::Map<String, Value> = AREA_KEYS.iter().enumerate().map(|(i, k)| (k.to_string(), json!(h.area(i)))).collect();
     Ok(json!({
         "level": level, "level_name": level_name(level), "areas": areas, "count": h.count, "virgin": h.virgin, "anal_virgin": h.anal_virgin,
-        "raw_ok": level == 3 || (level == 2 && (h.raw_count >= 5 || lover)),
-        "anal_chance": h.area(ANAL) / 100.0,
-        "kiss_ok": lover || h.kissed,
+        "raw_ok": raw_ok,
+        "anal_chance": anal_chance,
+        "kiss_ok": kiss_ok,
+        "chastity": chaste,
         "used": level >= 2,
     }))
 }
@@ -283,6 +295,24 @@ mod tests {
         easy.favor = 50.0;
         let fine = session_end(&json!({"girl": "g", "relation": easy, "ext": {}, "counts": {"played": true, "raw_pressed": true}})).unwrap();
         assert!(favor(&pressed) < favor(&fine), "chaste {} vs easy {}", favor(&pressed), favor(&fine));
+    }
+
+    #[test]
+    fn her_character_moves_kiss_raw_and_anal() {
+        let mut shy: Relation = serde_json::from_value(rel(0.0)).unwrap();
+        shy.chastity = 85.0;
+        shy.attraction = 50.0;
+        let mut loose: Relation = serde_json::from_value(rel(60.0)).unwrap();
+        loose.chastity = 15.0;
+        loose.attraction = 50.0;
+        let ext = json!({"hexp": {"g": {"count": 1, "virgin": false}}});
+        let a = experience(&json!({"girl": "g", "relation": shy, "ext": ext})).unwrap();
+        let b = experience(&json!({"girl": "g", "relation": loose, "ext": ext})).unwrap();
+        assert_eq!(a["kiss_ok"], false);
+        assert_eq!(b["kiss_ok"], true);
+        assert_eq!(a["raw_ok"], false);
+        assert_eq!(b["raw_ok"], true);
+        assert!(b["anal_chance"].as_f64().unwrap() > a["anal_chance"].as_f64().unwrap());
     }
 
     #[test]

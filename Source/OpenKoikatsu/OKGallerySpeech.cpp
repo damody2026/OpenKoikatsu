@@ -8,6 +8,8 @@
 #include "Components/Slider.h"
 #include "Components/TextBlock.h"
 #include "Misc/ScopeExit.h"
+#include "KKGameRoot.h"
+#include "Misc/Paths.h"
 
 namespace {
 // VoiceInfo.Param.Personality for No 0–39, from abdata/etcetra/list/config/00.unity3d.
@@ -81,6 +83,15 @@ void UOKCharacterController::OnStopSpeech() {
     if(IsValid(PreviewActor)){PreviewActor->SetSpeechPaused(false);PreviewActor->StopHBreath();}
     if(IsValid(PartnerActor)){PartnerActor->SetSpeechPaused(false);PartnerActor->StopHBreath();}
     if(SpeechStatus)SpeechStatus->SetText(FText::FromString(TEXT("語音已停止")));
+}
+FString UOKCharacterController::DefaultVoiceRoot(){
+    static FString Found;if(!Found.IsEmpty())return Found;
+    TArray<FString> Candidates;const FString Env=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_VOICE_ROOT"));if(!Env.IsEmpty())Candidates.Add(Env);
+    if(const UKKGameRoot* Game=UKKGameRoot::Get();Game&&!Game->Root.IsEmpty())Candidates.Add(Game->Root/TEXT("voice_extract"));
+    Candidates.Append({TEXT("C:/portable/KoikatuSunshine/voice_extract"),TEXT("D:/KoikatuSunshine/voice_extract"),TEXT("E:/KoikatuSunshine/voice_extract")});
+    for(const FString& C:Candidates)if(FPaths::FileExists(C/TEXT("h_breath_index.json"))){Found=C;break;}
+    if(Found.IsEmpty())Found=TEXT("C:/portable/KoikatuSunshine/voice_extract");
+    UE_LOG(LogTemp,Display,TEXT("Voice root: %s"),*Found);return Found;
 }
 void UOKCharacterController::StartPairBreath() {
     if(!IsValid(PairedPlayback)||!IsValid(PreviewActor)||!IsValid(PartnerActor)||!SpeechRootInput)return;

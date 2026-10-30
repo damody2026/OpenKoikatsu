@@ -2190,7 +2190,9 @@ void AOKStreetSocialScene::ApplyMouseMode(bool Focused){
  // The mouse is only taken (captured, locked, centred) while the game window is the foreground window: launched behind
  // another window, alt-tabbed away, or driven through the control channel from elsewhere, it stays free.
  const bool Foreground=S.SelfTest||S.RetargetSelfTest||(GEngine->GameViewport->Viewport&&GEngine->GameViewport->Viewport->IsForegroundWindow());
- const bool Show=S.MouseUI||!Focused||!Foreground;
+ // Played through the control channel (-Control: an AI or test driver sends the input), the mouse is never taken: the
+ // person at the machine keeps using it while the game runs in front.
+ const bool Show=S.MouseUI||!Focused||!Foreground||OKVirtualInput().Active;
  PC->bShowMouseCursor=Show;PC->bEnableClickEvents=Show;PC->bEnableMouseOverEvents=Show;
  auto* Viewport=GEngine->GameViewport.Get();
  if(Show){FInputModeGameAndUI Input;Input.SetHideCursorDuringCapture(false);Input.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Input);Viewport->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);Viewport->SetMouseLockMode(EMouseLockMode::DoNotLock);}
@@ -4015,9 +4017,10 @@ void AOKStreetSocialScene::Tick(float Dt){
    auto* V=GEngine->GameViewport.Get();bool Passed=true;
    const bool WasUI=S.MouseUI;
    S.MouseUI=true;ApplyMouseMode(true);Passed&=PC->bShowMouseCursor&&V->GetMouseCaptureMode()==EMouseCaptureMode::NoCapture&&V->GetMouseLockMode()==EMouseLockMode::DoNotLock;
-   S.MouseUI=false;ApplyMouseMode(true);Passed&=!PC->bShowMouseCursor&&V->GetMouseCaptureMode()==EMouseCaptureMode::CapturePermanently_IncludingInitialMouseDown&&V->GetMouseLockMode()==EMouseLockMode::LockAlways;
+   const bool Takes=!OKControlActive(); // under the control channel the mouse stays free
+   S.MouseUI=false;ApplyMouseMode(true);Passed&=Takes?!PC->bShowMouseCursor&&V->GetMouseCaptureMode()==EMouseCaptureMode::CapturePermanently_IncludingInitialMouseDown&&V->GetMouseLockMode()==EMouseLockMode::LockAlways:PC->bShowMouseCursor&&V->GetMouseLockMode()==EMouseLockMode::DoNotLock;
    ApplyMouseMode(false);Passed&=PC->bShowMouseCursor&&V->GetMouseCaptureMode()==EMouseCaptureMode::NoCapture;
-   ApplyMouseMode(true);Passed&=!PC->bShowMouseCursor&&V->GetMouseLockMode()==EMouseLockMode::LockAlways;
+   ApplyMouseMode(true);Passed&=Takes?!PC->bShowMouseCursor&&V->GetMouseLockMode()==EMouseLockMode::LockAlways:V->GetMouseLockMode()==EMouseLockMode::DoNotLock;
    // Read back submitted player motion in each cardinal/diagonal direction.
    for(const FVector Move:{FVector(1,0,0),FVector(-1,0,0),FVector(0,1,0),FVector(0,-1,0),FVector(1,1,0)}){
     FOKRuntimeCharacterStatus Submitted;const FRotator Rotation=OKStreetFacingMovement(Move,S.Rotations[0]);

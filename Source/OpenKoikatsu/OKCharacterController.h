@@ -476,6 +476,8 @@ public:
     UPROPERTY() TArray<TObjectPtr<UTextBlock>> ClothesStateLabels;
     UPROPERTY() TArray<TObjectPtr<UButton>> ClothesStateButtons;
     void StartPairBreath();
+    // The extracted original voices (h_breath_index.json): OK_VOICE_ROOT, beside the configured game, or a usual install.
+    static FString DefaultVoiceRoot();
     int32 PartnerPersonality=-1;
     float PartnerVoiceRate=.5f;
     bool bPairBreathArmed=false,bPairBreathMoving=false;

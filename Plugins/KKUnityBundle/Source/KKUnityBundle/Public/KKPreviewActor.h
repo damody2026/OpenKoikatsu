@@ -203,6 +203,12 @@ public:
  bool TickProgressiveMaterials();
  bool SetClothingHidden(bool Hidden);
  bool bClothingHidden=false;
+ // Take off or put back single clothing kinds (ChaFileClothes 0..8, state 3 = off) by visibility alone, without a
+ // reload: the one-on-one scene undresses her this way while the pair plays. Any kind off shows her whole body.
+ void SetClothingPartsHidden(const uint8 States[9]);
+ // The clothing kind (0..8) a session part role is, or INDEX_NONE.
+ static int32 ClothingKindOfRole(const FString& Role);
+ bool HasClothingKind(int32 Kind) const;
  uint8 DisplayClothesStates[9]={};
  /** Item colour overrides (sRGB, Unity _Color.._Color4 of item_draw materials), set before LoadSession; alpha < 0: keep the model colour. */
  TArray<FLinearColor> ItemColorOverrides;
@@ -255,6 +261,9 @@ public:
  UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> HiddenClothingComponents;
  UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> ClothingMaskMaterials;
  UPROPERTY() TArray<TObjectPtr<class UTexture>> ClothingOriginalMasks;
+ UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> PartHiddenClothingComponents;
+ void OpenBodyMasks();
+ void RestoreBodyMasks();
 	bool bPlaybackMaterialsReady=false;
 	bool bPlaybackRenderFencePending=false;
 	FRenderCommandFence PlaybackRenderFence;

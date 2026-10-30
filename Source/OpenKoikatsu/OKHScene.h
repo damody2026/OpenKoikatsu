@@ -57,7 +57,7 @@ public:
     // while she cannot answer (moving faster than 2x), is held and goes out at her climax; her answer shows here and is
     // spoken on her (the street plays it, then her breathing comes back).
     void Say(const FString& Text);
-    bool TakeLine(FString& Text,FString& Context);
+    bool TakeLine(FString& Text,FString& Context,bool& System);
     // His words from elsewhere (the microphone): false when she cannot answer now (held for her climax).
     bool Hear(const FString& Text,FString& Context);
     void ShowLine(const FString& Text);
@@ -69,12 +69,12 @@ public:
         AibuBase=500,
         TouchChest=2101,TouchCrotch=2102,TouchAnal=2103,TouchButt=2104,TouchNipple=2105,Kiss=2106,Release=2107,
         PoseBase=1000,
-        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,
+        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,
         ClothesBase=3000,
     };
 private:
     // Caress (AnimationInfo_00): her own animation, him hidden (HAibu); each state is prepared up front.
-    struct FAibuPose {FString Name,Source;int32 Layer=0;};
+    struct FAibuPose {FString Name,Source;int32 Layer=0,Id=-1;};
     TArray<FAibuPose> AibuPoses;
     TMap<FString,FString> SoloKeys;      // state -> clip key of the active caress pose
     FString SoloState;double SoloStarted=0.;
@@ -95,7 +95,7 @@ private:
     bool Has(const FString& State) const;
     FString P(const FString& State) const {return bAnalPlay?TEXT("A_")+State:State;}
     void Finish(const TCHAR* Kind);
-    void Note(const FString& Text);
+    void Note(const FString& Text,bool bReact=true);
     void ApplySpeed();
     FString Current() const;
     int32 Level() const;
@@ -111,7 +111,7 @@ private:
     UPROPERTY() TObjectPtr<UScrollBox> List;
     UPROPERTY() TObjectPtr<class UEditableTextBox> Input;
     UPROPERTY() TObjectPtr<UTextBlock> Caption;
-    struct FHLine {FString Text,Note;};
+    struct FHLine {FString Text,Note;bool System=false;};
     TArray<FHLine> Outbox;
     TArray<FString> Held;
     bool bTalkSpoken=false;
@@ -119,6 +119,16 @@ private:
     float PlaybackSpeed() const {return .5f+3.5f*SpeedValue;}
     bool CannotAnswer() const;
     void ReleaseHeld();
+    // Her eyes and brows follow the moment (state, her gauge, how used to it she is), as the original's H face lists do.
+    void UpdateFace();
+    FString FaceKey;
+    // A new pose frames her from the side of the line between them, turned to her front (his back no longer fills the
+    // view); he can be hidden as in the original. The player's own orbit stays until the next pose.
+    void FrameCamera();
+    FString FramedKey;double FrameAt=0;bool bMaleHidden=false;
+    // A moment she reacts to in her own words (her character, how she feels now): sent as a game note, the latest only.
+    void React(const FString& Event);
+    void CaressBreath();
     FString Context() const;
     FString StateWords(const FString& Base) const;
     bool bRawAsked=false,bRawPressed=false;

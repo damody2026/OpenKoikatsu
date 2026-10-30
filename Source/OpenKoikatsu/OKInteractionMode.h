@@ -28,7 +28,7 @@ public:
     TSharedPtr<FJsonObject> HSceneControl(const TSharedPtr<FJsonObject>& Body,FString& Error);
     // Talk in the H scene through the street (UOKHScenePanel::Say): his next line and what she is in the middle of;
     // her line to show; her spoken line on her high model.
-    bool HSceneTakeLine(FString& Text,FString& Context);
+    bool HSceneTakeLine(FString& Text,FString& Context,bool& System);
     bool HSceneHear(const FString& Text,FString& Context);
     void HSceneShowLine(const FString& Text);
     bool HSceneSpeak(const FString& Path);

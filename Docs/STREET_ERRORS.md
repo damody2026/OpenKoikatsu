@@ -1158,3 +1158,16 @@
 - 現象：從 1 對 1 右上角的「離開」（以及控制通道 `/private off`）回到街上，result.json 寫成 `cancelled`，`FinishPrivate` 用的是上一次的結果或沒有結果，這次做了什麼、她的經驗都沒寫進去。
 - 原因：`FinishPrivate` 先把場景的 `Returned` 回呼清掉，再以取消（`Exit(true)`）結束場景，場景的結果交不回街區；只有場景自己的返回鍵（Esc、面板返回）會交回。
 - 通用修正：`FinishPrivate` 結束還開著的場景時，一律以正常返回（`Exit(false)`）並接住結果，再寫記憶與經驗（`h_session_end`）。涵蓋所有離開方式：場景自己的返回、街區的離開鈕、控制通道、對話中斷導致的結束（`TickContacts` 的 `ContactReady` 失敗也走 `FinishPrivate`）。
+
+## 2026-10-30 1 對 1 H 場景脫衣後當機（E 組 galgame）
+
+- 現象：1 對 1 的 H 面板按「全脫」（`OnClothesState(102)` → `SetClothingHidden(true)`），不論愛撫或插入中，遊戲凍住約 25～60 秒後以 `EXCEPTION_ACCESS_VIOLATION` 結束。
+- 先猜錯一次：以為是播放中建立 MID、換材質造成，在 Gal1030X 加了「載入時先建好遮罩材質」和「換衣時暫時交還 GPU 播放」；仍然當機。Gal1030X 的崩潰紀錄有完整 callstack，才看到真正的原因，猜測的兩處已撤回。教訓：先拿有符號的 callstack（新建置的 game.log 有），不要憑現象猜。
+- 原因：`AKKPreviewActor::UpdatePrivateGpuDisplay` 的 `Restore` lambda 以 `const FString&` 接收原因。render thread 拒收某段 GPU stream 時呼叫 `Restore(State.Receipts[S]->Error,true)`，lambda 先 `Part.PrivateGpuDisplay.Reset()` 釋放了這張收據，再用懸空的參考寫 log，因此崩潰。脫衣後身體區段改變，這次拒收才被觸發。
+- 通用修正：`Restore` 改成以值接收原因。涵蓋所有拒收路徑，包括收據錯誤、擷取來源失敗、區段不符、bounds 失敗；任何角色、任何會讓私有 GPU 顯示退回 CPU 的情況都只會留下警告，不再崩潰。
+
+## 2026-10-30 1 對 1 鏡頭被男主擋住；控制通道啟動仍鎖滑鼠（E 組 galgame）
+
+- 鏡頭：H 場景換姿勢後鏡頭不動，男主在她正前方的姿勢（奉仕、對面坐等），畫面被他的背擋滿。我把他的格子襯衫當成她的上衣，以為逐件脫衣沒有作用，追了三輪建置；其實脫衣早就正常。是使用者指出「視角被男主擋住了」才發現。教訓：截圖先認清畫面上是誰，必要時把另一個角色藏起來再判斷。
+- 通用修正（`UOKHScenePanel::FrameCamera`）：任何姿勢開始播放 0.8 秒後，鏡頭重新取景。在雙人模式，鏡頭放在兩人連線的側面、偏向她的正面，焦點偏向她，距離依兩人合計大小決定；在愛撫模式（只有她）則從她的斜前方取景。玩家自己轉的鏡頭會保留到下一個姿勢。另外照原作在「服裝」頁加上「隱藏他／顯示他」。
+- 滑鼠：用控制通道啟動（`-Control`，AI 或測試驅動）時，遊戲視窗一到前景就鎖住、隱藏滑鼠，坐在電腦前的人無法用滑鼠。通用修正（`AOKStreetSocialScene::ApplyMouseMode`）：只要控制通道開著（`OKControlActive()`），任何畫面都不取用滑鼠；自我測試的滑鼠檢查也改成依這個條件期待。
