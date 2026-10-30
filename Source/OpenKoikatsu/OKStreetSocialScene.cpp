@@ -331,6 +331,7 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  double ApproachBlockedSince=0; // when she walking over to him was last held up (0: walking freely)
  int64 OrderDroppedMinute=-100000; // game minute an order was taken back or could not be paid (no implicit menu meal billed then)
  FString FeesDueText; // "pay tuition by 9/27" while the window is open and unpaid (bank.rs bank_daily fees_due)
+ int32 FeesDueDay=-1; // the calendar day FeesDueText was worked out for (-1: not yet, e.g. right after loading a save)
  double OverlapCheckAt=0; // next check that nobody stands inside him (TickFreeTalkTrace)
  bool SkipGreeting=false; // she walked up to him and opens in her own words (InitiativeNudge): no scripted greeting line first
  TSet<int32> MeetingGreeted; // appointments she already greeted him for: a talk after the meeting is not "you came as agreed" again
@@ -1446,7 +1447,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  FString OnTable;for(const auto& D:S.Table)if(D.ForHer&&D.Her==Character&&D.Percent>0)OnTable+=OKMsg(TEXT("ui.scene.dish_entry"), {{TEXT("dish_name"), *D.Name}, {TEXT("served_suffix"), D.Served?TEXT(""):OKT(TEXT("ui.scene.preparing_food"))}});
  FString Menu;{const FString Here=OrderShopHere(Character);const FString Shop=Here.IsEmpty()?OutingShop(Character):Here;FString Closed;if(!Shop.IsEmpty()&&!PlaceClosedNow(Shop,Closed))for(const auto* I:Here.IsEmpty()?OKStreetItemsAt(S.Catalog,Shop,StreetNow().GetMonth()):ItemsHere(Shop))Menu+=OKMsg(TEXT("ui.party.menu_id_name_entry"), {{TEXT("id"), *I->Id}, {TEXT("name"), *I->Name}});}
  // Meetings with her the game already has, so the same plan is not booked twice.
- FString Booked;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==HerId)Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("when"), *OKStreetCalendarLabel(int32(A.Start/1440),double(A.Start%1440)/60.0)}, {TEXT("label"), *A.Label}});}
+ FString Booked;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);for(const auto& A:S.Store.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==HerId){
+  // With the part of the day: her "10:15" pickup after a night shift was booked for the morning and the judge, reading
+  // "10:15", took "ten fifteen tonight" as the same time (R6-10).
+  const int32 Hour=int32(A.Start%1440)/60;const TCHAR* Part=Hour<5?OKT(TEXT("ui.free_talk.late_night_period")):Hour<8?OKT(TEXT("ui.free_talk.early_morning_period")):Hour<11?OKT(TEXT("ui.free_talk.morning_period")):Hour<13?OKT(TEXT("ui.free_talk.noon_period")):Hour<17?OKT(TEXT("ui.free_talk.afternoon_period")):Hour<19?OKT(TEXT("ui.free_talk.evening_dusk_period")):Hour<23?OKT(TEXT("ui.free_talk.night_period")):OKT(TEXT("ui.free_talk.late_night_period"));
+  Booked+=OKMsg(TEXT("ui.scene.schedule_entry"), {{TEXT("when"), OKStreetCalendarLabel(int32(A.Start/1440),double(A.Start%1440)/60.0)+TEXT(" ")+Part}, {TEXT("label"), *A.Label}});}}
  FString Nearby;for(int32 G=1;G<S.Manifest.Characters.Num();++G)if(PartyCanJoin(G))Nearby+=S.Manifest.Characters[G].Name+OKT(TEXT("ui.economy.semicolon_mark"));
  const FDateTime Now=StreetNow();
  FString User=OKMsg(TEXT("ui.scene.llm_context_prompt"), {{TEXT("year"), Now.GetYear()}, {TEXT("month"), Now.GetMonth()}, {TEXT("day"), Now.GetDay()}, {TEXT("weekday"), OKMsg(TEXT("ui.calendar.weekday_name"), {{TEXT("d"), int32(Now.GetDayOfWeek())}})}, {TEXT("hour"), Now.GetHour()}, {TEXT("minute"), Now.GetMinute()}, {TEXT("together_state"), RemoteWith(Character)?OKT(TEXT("ui.scene.apart_phone")):OKT(TEXT("ui.scene.face_to_face"))}, {TEXT("her_location"), *PlaceHere(S.Agents.IsValidIndex(Character-1)?S.Agents[Character-1].Position:S.Male)}, {TEXT("his_said"), *Said}, {TEXT("her_reply"), *Her}, {TEXT("her_action"), HerAction.IsEmpty()?OKT(TEXT("ui.scene.empty_label")):*HerAction}, {TEXT("doing_now"), S.ActGirl==Character&&!S.ActId.IsEmpty()?*S.ActId:S.OutingGirl==Character?*OKMsg(TEXT("ui.scene.walking_to_place"), {{TEXT("place"), *S.OutingPlace}, {TEXT("activity"), *S.OutingActivity}}):OKT(TEXT("ui.scene.none_label"))}, {TEXT("promise"), Booked.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Booked}, {TEXT("nearby_girls"), Nearby.IsEmpty()?OKT(TEXT("ui.scene.none_label")):*Nearby}, {TEXT("menu"), Menu.IsEmpty()?OKT(TEXT("ui.scene.not_in_shop")):*Menu}, {TEXT("her_ordered"), HerOrders.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*FString::Join(HerOrders,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("on_table"), OnTable.IsEmpty()?OKT(TEXT("ui.scene.none_paren_label")):*OnTable}});
@@ -1467,9 +1472,14 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
  // The lines before these two ("breakfast at the cafeteria?" ... "it's past seven, let's walk over"): what "there" and
  // "walk over" mean comes from them.
- FString Earlier;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);TArray<FString> Lines;
-  for(int32 K=S.FreeTalkLog.Num()-1;K>=0&&Lines.Num()<4;--K){const auto& Line=S.FreeTalkLog[K];if(Line.CharacterId!=HerId)continue;
-   if(Line.Text.Contains(Said)||Said.Contains(Line.Text)||Her.Contains(Line.Text)||Line.Text.Contains(Her))continue;Lines.Insert(Line.Speaker+TEXT(": ")+Line.Text,0);}
+ // Her history, not only the face-to-face log: her morning text "I work till ten, will you walk me home? the road is
+ // dark" is what makes "10:15" the night (it was booked for the morning, R6-10). The last day's talk, texts and calls.
+ FString Earlier;{const FString HerId=OKStreetStableId(S.Manifest.Characters[Character]);TArray<FString> Lines;const int64 Since=OKStreetMindNow(S)-1440;
+  const auto& List=HistoryOf(HerId);
+  for(int32 K=List.Num()-1;K>=0&&Lines.Num()<4;--K){const auto& E=List[K];if(E.Minute<Since)break;
+   if((E.Kind!=TEXT("talk")&&E.Kind!=TEXT("message")&&E.Kind!=TEXT("call"))||E.Who==TEXT("world")||E.Text.IsEmpty())continue;
+   if(E.Text.Contains(Said)||Said.Contains(E.Text)||Her.Contains(E.Text)||E.Text.Contains(Her))continue;
+   Lines.Insert(S.Manifest.Characters[E.Who==TEXT("him")?0:Character].Name+TEXT(": ")+E.Text,0);}
   if(Lines.Num())Earlier=FString::Join(Lines,TEXT("\n"));}
  // What he carries: the gift she accepts is one of these (it stayed in his bag when no field named it).
  FString Bag;{TArray<FString> Names;for(const FString& Item:S.Store.Inventory)if(const auto* Known=S.Catalog.Find(Item))Names.AddUnique(Known->Name);
@@ -1513,6 +1523,10 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // store"): it starts when it is over (TickThenAction), not only when he asks again. With a do_now as well (one more
   // round of the fish, then lunch), after that one.
   {FString Then;Verdict->TryGetStringField(TEXT("then"),Then);if(Then.StartsWith(TEXT("act:")))Then=Then.Mid(4);
+   // Setting off somewhere now with no next step said: that walk is the plan now, and the next step queued before it is
+   // gone. "After lunch, walk me to the teaching building" queued T1, then "walk me to the EE building" set off there,
+   // and on arrival they walked on to T1 (R6-9).
+   if(Then.IsEmpty()&&DoNow.StartsWith(TEXT("go:"))&&L->ThenGirl==Character&&!L->ThenAction.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d then=%s dropped, they set off for %s instead"),Character,*L->ThenAction,*DoNow);L->ThenAction.Reset();}
    if(!Then.IsEmpty()&&Then!=DoNow&&(!Then.StartsWith(TEXT("go:"))||OKStreetFindPlace(Then.Mid(3)))){L->ThenAction=Then;L->ThenGirl=Character;L->ThenUntil=OKStreetMindNow(*L)+120;L->ThenReadyAt=0;
     // Going somewhere first ("a walk in the park, then lunch"): some time there before the next, not off on arrival.
     L->ThenStayMinutes=DoNow.StartsWith(TEXT("go:"))?20:0;UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d then=%s, once what they are doing is over"),Character,*Then);}}
@@ -1591,6 +1605,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     else if(Cancel&&Place.IsEmpty()){FString Scope;Verdict->TryGetStringField(TEXT("cancel_scope"),Scope);double Grace=-1;Verdict->TryGetNumberField(TEXT("cancel_grace"),Grace);
      L->CancelCallGirl=Character;L->CancelCallGrace=Grace;L->CancelCallSaid.Reset();
      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the promise is called off on the phone (%s, grace %.0f)"),Character,*Scope,Grace);Weak->CancelPromiseWith(Character,Scope);}}
+   {bool Kept=false;Verdict->TryGetBoolField(TEXT("kept_promise"),Kept);if(Kept&&Weak.IsValid())Weak->KeepPromiseNow(Character);}
    // "Take it, it was for you anyway" — "thank you": the gift is given (her own act field may forget it). Only something
    // he still carries (her act may have given it already).
    {FString Gift;Verdict->TryGetStringField(TEXT("gift"),Gift);

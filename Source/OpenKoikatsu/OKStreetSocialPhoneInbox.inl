@@ -182,8 +182,17 @@ void AOKStreetSocialScene::PhoneSend(){
 float AOKStreetSocialScene::PhoneAnswerChance(int32 Girl) const{
  const auto& S=*State;const FOKStreetPlanBlock* B=LifeBlock(Girl,int32(OKStreetMindNow(S)%1440));
  auto Request=OKRulesRequest(TEXT("phone_answer"));Request->SetObjectField(TEXT("relation"),OKRulesRelationJson(OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget)));
- Request->SetStringField(TEXT("block"),B?B->Kind:FString());
+ Request->SetStringField(TEXT("block"),B?B->Kind:FString());Request->SetBoolField(TEXT("on_phone"),OnPhoneWithHim(Girl));
  const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request);return Answer?float(Answer->GetNumberField(TEXT("chance"))):0.f;
+}
+
+// She wrote to him in the last ten minutes: awake, the phone in her hand. Her day said "asleep" at 8:28, she had texted
+// "got it, 22:15" two minutes before, and then missed his call "because I was sleeping" (R6-11).
+bool AOKStreetSocialScene::OnPhoneWithHim(int32 Girl) const{
+ const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl))return false;const int64 Now=OKStreetMindNow(S);
+ const auto& List=const_cast<AOKStreetSocialScene*>(this)->HistoryOf(OKStreetStableId(S.Manifest.Characters[Girl]));
+ for(int32 K=List.Num()-1;K>=0;--K){const auto& E=List[K];if(Now-E.Minute>10)break;if(E.Who==TEXT("her")&&(E.Kind==TEXT("message")||E.Kind==TEXT("call")))return true;}
+ return false;
 }
 
 void AOKStreetSocialScene::PhoneCall(int32 Girl){
@@ -198,7 +207,7 @@ void AOKStreetSocialScene::PhoneCall(int32 Girl){
   S.FinNotice=Name+OKT(TEXT("ui.phone_inbox.no_answer_suffix"));
   // Friends and lovers call or write back once they can; someone who barely knows him does not.
   const FOKStreetRelation R=OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget);
-  if(R.Stage!=TEXT("stranger")&&R.Resentment<60&&!S.PendingTexts.ContainsByPredicate([Girl](const FOKStreetSceneState::FPendingText& T){return T.Girl==Girl;})){const FOKStreetPlanBlock* B=LifeBlock(Girl,int32(OKStreetMindNow(S)%1440));
+  if(R.Stage!=TEXT("stranger")&&R.Resentment<60&&!S.PendingTexts.ContainsByPredicate([Girl](const FOKStreetSceneState::FPendingText& T){return T.Girl==Girl;})){const FOKStreetPlanBlock* B=OnPhoneWithHim(Girl)?nullptr:LifeBlock(Girl,int32(OKStreetMindNow(S)%1440)); // texting him just now: not "asleep"
    QueueHerText(Girl,OKMsg(TEXT("ui.phone_inbox.missed_call_while_doing"), {{TEXT("doing"), B?OKPhoneDoingWord(B->Kind):OKT(TEXT("ui.phone_inbox.busy_word"))}}),TEXT("missed_call"),FMath::FRandRange(20.0,60.0));}
   UE_LOG(LogTemp,Display,TEXT("Street phone: call to actor %d not answered"),Girl);RefreshUI();return;
  }

@@ -580,6 +580,7 @@ void AOKStreetSocialScene::StartCheckout(int32 ForHer){
  const FString Label=OKMsg(TEXT("ui.economy.checkout_with_names_button"), {{TEXT("total"), Total}, {TEXT("names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});
  TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  OpenChoice(Her,TEXT("checkout"),Label,{TEXT("player_pays"),TEXT("split"),TEXT("she_pays"),TEXT("let_her_decide")},Lean,Insist,20,[Weak,Her](const FString& Option){if(Weak.IsValid())Weak->FinishCheckout(Option,Her);});
+ S.Choices.Last().Place=ShopPlaceHere();
  S.FreeTalkNotice=Label+OKT(TEXT("ui.economy.pay_hint_text"));
  {const FOKStreetRelation Mine=OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget);
   S.CheckoutNote=OKMsg(TEXT("ui.economy.checkout_decision_prompt"), {{TEXT("total"), Total}, {TEXT("names"), *FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}, {TEXT("wallet_cash"), FMath::Max<int64>(0,Mine.Cash)}, {TEXT("affordable"), Mine.Cash>=Total?TEXT("yes"):TEXT("no")}});S.TellHer.Add(S.CheckoutNote);} // what she has, a fact: "not enough" said for 2 out of 235

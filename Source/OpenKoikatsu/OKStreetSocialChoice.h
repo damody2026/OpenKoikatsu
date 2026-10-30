@@ -19,6 +19,7 @@ struct FOKStreetPendingChoice {
  int32 HisLinesAtOpen = 0; // his lines to her when it opened: a pick of his must come from something he said after
  int64 SentAtOpen = 0;  // talk requests sent when it opened: it waits for her answer to a later one (she knew of it)
  double OpenedAt = 0;   // scene seconds
+ FString Place;         // a bill: the shop it is for (left before it is settled, nothing is bought)
  TFunction<void(const FString& Option)> OnResolve;
 };
 

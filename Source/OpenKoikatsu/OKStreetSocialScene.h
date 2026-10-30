@@ -245,6 +245,7 @@ private:
  int32 PatienceOf(int32 Character) const;
  void AddPromiseFromChat(int32 Character,const FString& Day,const FString& Time,const FString& Place,const FString& What,const FString& Words,const FString& His,bool bReplaces=false,float Hours=0);
  void CancelPromiseWith(int32 Character,const FString& Scope=FString());
+ void KeepPromiseNow(int32 Character);
  void CancelAppointment(int32 AppointmentId); // one pending appointment, from the list (the cost: social.rs appointment_cancel)
  void BuildAppointmentRows(const TSharedRef<class SVerticalBox>& Panel);
  bool Blacklisted(const FString& Place,int32* DaysLeft=nullptr) const;
@@ -348,6 +349,7 @@ private:
  // Bank, net worth, alerts, heroines' own accounts: OKStreetSocialBank.inl.
  int64 NetWorthOf(const struct FOKStreetStore& C,TArray<TPair<FString,int64>>* Parts=nullptr);
  void BankDaily(struct FOKStreetStore& C);
+ void RefreshFeesDue() const;
  TSharedPtr<class FJsonObject> BankRequest(const struct FOKStreetStore& C,const FString& What,int64 Amount,int32 Arg) const;
  bool PayByCard(struct FOKStreetStore& C,int64 Amount,const FString& Place,const FString& Why,const TCHAR* Category=TEXT("shopping"));
  void BankAction(const FString& What,int64 Amount,int32 Arg);
@@ -518,6 +520,7 @@ private:
  // OKStreetSocialPhoneInbox.inl
  bool PrepareFreeTalk(int32 Character,const FString& Text,struct FOKFreeTalkSettings& Settings,FString& System,FString& UserMessage,FString& Error);
  TArray<struct FOKStreetHistoryEntry>& HistoryOf(const FString& Id);
+ bool OnPhoneWithHim(int32 Girl) const;
  FString HistoryPath(const FString& Id) const;
  void HistoryAdd(int32 Character,const FString& Kind,const FString& Who,const FString& Text,const FString& Place=FString());
  void MindRemember(int32 Character,const FString& Kind,const FString& Summary,const FString& Place,float Importance=-1.f,const TCHAR* Type=TEXT("observation"));

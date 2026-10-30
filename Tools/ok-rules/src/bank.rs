@@ -290,6 +290,19 @@ pub struct BankHeroine {
 
 /// The bank's day. Request: day, player_cash, player_bank, net_worth (the day that ended, Unreal's sum of everything he
 /// owns), banking, player_academic, heroines.
+/// His task-list line for the term's tuition and dorm fees while they are open and unpaid ("" otherwise). It stays on
+/// his task list (two passing notices were easy to miss: he was put on leave). A pure query (`bank_fees_due`) as well as
+/// part of the day: the scene keeps it in memory, and after loading a save the line was gone until the next morning.
+fn fees_due(me: &Value, civil: i64) -> String {
+    match campus::fees_term(civil) {
+        Some(t) if s(me, "status") == "enrolled" && s(me, "fees_paid") != t.key => {
+            let d = crate::calendar::date(campus::game_day(t.start + campus::FEES_DEADLINE_DAYS), 8.0);
+            crate::tr::m("bank.tuition_due_task", &[("amount", crate::tr::a(&crate::tr::money(campus::TUITION_FEE() + campus::DORM_FEE()))), ("month", crate::tr::a(&(d.month as i64))), ("day", crate::tr::a(&(d.day as i64)))])
+        }
+        _ => String::new(),
+    }
+}
+
 pub fn daily(request: &Value) -> Result<Value, String> {
     let day = request.get("day").and_then(Value::as_i64).ok_or("missing_field: day")? as i32;
     let mut b: Banking = serde_json::from_value(request.get("banking").cloned().unwrap_or(json!({}))).map_err(|e| format!("banking: {e}"))?;
@@ -417,14 +430,7 @@ pub fn daily(request: &Value) -> Result<Value, String> {
     }
     // Tuition and dorm: open 7 days before the term, due 14 days after the start; unpaid, the school files a leave.
     let fee_term = campus::fees_term(civil);
-    // While it is open and unpaid it stays on his task list (two passing notices were easy to miss: he was put on leave).
-    let mut fees_due = String::new();
-    if let Some(t) = &fee_term {
-        if s(&me, "status") == "enrolled" && s(&me, "fees_paid") != t.key {
-            let d = crate::calendar::date(campus::game_day(t.start + campus::FEES_DEADLINE_DAYS), 8.0);
-            fees_due = crate::tr::m("bank.tuition_due_task", &[("amount", crate::tr::a(&crate::tr::money(campus::TUITION_FEE() + campus::DORM_FEE()))), ("month", crate::tr::a(&(d.month as i64))), ("day", crate::tr::a(&(d.day as i64)))]);
-        }
-    }
+    let fees_due = fees_due(&me, civil);
     if let Some(t) = &fee_term {
         if s(&me, "status") == "enrolled" && s(&me, "fees_paid") != t.key {
             if civil == t.start - campus::FEES_OPEN_DAYS {
@@ -789,6 +795,10 @@ pub fn eval(kind: &str, request: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
         "bank_daily" => daily(request),
         "bank_action" => action(request),
+        "bank_fees_due" => (|| {
+            let day = request.get("day").and_then(Value::as_i64).ok_or("missing_field: day")? as i32;
+            Ok(json!({"fees_due": fees_due(request.get("player_academic").unwrap_or(&Value::Null), campus::civil_day(day))}))
+        })(),
         "bank_rates" => (|| {
             let day = request.get("day").and_then(Value::as_i64).ok_or("missing_field: day")? as i32;
             let rate = rates_on(ymd(day));
@@ -893,6 +903,10 @@ mod tests {
         assert!(v["fees_due"].as_str().unwrap_or("").contains("9/27"), "{}", v["fees_due"]);
         let v = run(json!({"day": start + 3, "player_academic": {"status": "enrolled", "fees_paid": "2010-1"}}));
         assert_eq!(v["fees_due"], "");
+        // The same line on its own, without a day passing (after loading a save).
+        let q = |paid: &str| eval("bank_fees_due", &json!({"day": start + 3, "player_academic": {"status": "enrolled", "fees_paid": paid}})).unwrap().unwrap();
+        assert!(q("")["fees_due"].as_str().unwrap().contains("9/27"));
+        assert_eq!(q("2010-1")["fees_due"], "");
         // She pays her own term when her profile says so; otherwise her family does (the term is settled, her money untouched).
         let v = run(json!({"day": start, "heroines": [{"relation": {"id": "a", "cash": 1000}, "profile": {"money": {"tuition_by": "self"}}, "academic": {"status": "enrolled", "fees_paid": ""}}]}));
         assert_eq!(v["academics"]["a"]["fees_paid"], "2010-1");

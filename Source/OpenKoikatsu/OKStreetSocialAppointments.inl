@@ -171,6 +171,17 @@ void AOKStreetSocialScene::TickSeries(){
  RefreshUI();
 }
 
+// They settled that what they do now is today's meeting with her, kept early (the judge's kept_promise): "come by the
+// cafe for a drink at 11:30", she came at 9:30 and he bought it — the meeting still stood two hours later and she said
+// "don't forget 11:30" over the very drink (R6-5). Her soonest meeting today, not one on another day.
+void AOKStreetSocialScene::KeepPromiseNow(int32 Character){
+ auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Character))return;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
+ const int64 Now=OKStreetMindNow(S);auto Candidate=S.Store;FOKStreetAppointment* Soonest=nullptr;
+ for(auto& A:Candidate.Appointments)if(A.Status==TEXT("pending")&&A.Heroine==Id&&A.Kind==TEXT("date")&&A.Start/1440==Now/1440&&Now<=A.Start+A.Grace&&(!Soonest||A.Start<Soonest->Start))Soonest=&A;
+ if(!Soonest)return;Soonest->Status=TEXT("done");const FString Label=Soonest->Label;
+ if(CommitStore(MoveTemp(Candidate))){UE_LOG(LogTemp,Display,TEXT("Street appointment: actor=%d kept early (%s)"),Character,*Label);PlanPromisesToday(Character);}
+}
+
 void AOKStreetSocialScene::CancelPromiseWith(int32 Character,const FString& Scope){
  auto& S=*State;const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
  // Her act and the judge read the same "cancel it": one date, not the next one too (R3-268).
@@ -396,7 +407,7 @@ FString AOKStreetSocialScene::TaskListText() const{
   const FString When=Left>=0?OKMsg(TEXT("ui.appointments.time_until_later"), {{TEXT("hours"), Left/60}, {TEXT("minutes"), Left%60}}):OKMsg(TEXT("ui.appointments.late_by"), {{TEXT("hours"), (-Left)/60}, {TEXT("minutes"), (-Left)%60}});
   const TCHAR* Mark=Left<0?TEXT("‼"):Left<15?TEXT("●"):Left<60?TEXT("○"):TEXT("·");
   Lines.Add(OKMsg(TEXT("ui.appointments.appointment_row"), {{TEXT("mark"), Mark}, {TEXT("label"), *A.Label}, {TEXT("when"), *When}}));}
- if(!S.FeesDueText.IsEmpty())Lines.Add(FString(TEXT("‼ "))+S.FeesDueText);
+ RefreshFeesDue();if(!S.FeesDueText.IsEmpty())Lines.Add(FString(TEXT("‼ "))+S.FeesDueText);
  for(const auto& B:S.Store.Blacklist)if(B.Value>S.Store.CalendarDay){const auto* P=OKStreetFindPlace(B.Key);Lines.Add(OKMsg(TEXT("ui.appointments.blacklist_days_left"), {{TEXT("name"), P?P->Name:*B.Key}, {TEXT("days"), B.Value-S.Store.CalendarDay}}));}
  return FString::Join(Lines,TEXT("\n"));
 }

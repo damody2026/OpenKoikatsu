@@ -413,6 +413,7 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // Cut short (the place closed on them): the minutes that really went by, not the activity's whole length.
  if(S.ActCutShort)Request->SetNumberField(TEXT("spent"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));Request->SetNumberField(TEXT("menu_seed"),int32(StartMinute)+Girl*31);Request->SetStringField(TEXT("agreed"),PayAgreed(Girl)); // who pays, as they settled it (the AI's reading)
  Request->SetNumberField(TEXT("elapsed"),double(FMath::Max<int64>(0,OKStreetMindNow(S)-StartMinute)));
+ Request->SetBoolField(TEXT("cut_short"),S.ActCutShort||S.ActTimeCut); // the clock is not filled up to the activity's minutes
  Request->SetNumberField(TEXT("player_cash"),double(S.Store.PlayerCash));Request->SetNumberField(TEXT("seed"),FMath::Rand());
  // A ticket inside is priced as at the door: the student price for a student card (shop.rs activity_end, R6-3).
  Request->SetStringField(TEXT("him_dept"),S.Store.PlayerAcademic.Dept);Request->SetStringField(TEXT("him_status"),S.Store.PlayerAcademic.Status);

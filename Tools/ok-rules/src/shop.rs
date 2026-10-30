@@ -529,7 +529,10 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
         fx.note_at(&rel.id, "activity", &what, place, (0.55 / (1 + again) as f32).clamp(0.15, 0.6));
     }
     // Said as long as it really went on: they sat 50 minutes, not the activity's 35 (elapsed: the minutes that went by).
-    let shown = minutes.max(r.get("elapsed").and_then(Value::as_f64).unwrap_or(0.0).round() as i32);
+    // Ended early (cut_short: the clock is not filled up to the activity's minutes, R6-1), only what went by: "about 50
+    // minutes" at the snack shop after 27, and the clock said so (R6-6).
+    let elapsed = r.get("elapsed").and_then(Value::as_f64).unwrap_or(0.0).round() as i32;
+    let shown = if r.get("cut_short").and_then(Value::as_bool) == Some(true) { elapsed } else { minutes.max(elapsed) };
     let notice = crate::tr::m("shop.date_ended_summary", &[("name", crate::tr::a(&name)), ("minutes", crate::tr::a(&shown)), ("payment_note", crate::tr::a(&(if price > 0 { crate::tr::m("shop.price_payer_suffix", &[("price", crate::tr::a(&crate::tr::money(price))), ("payer", crate::tr::a(&payer))]) } else { String::new() })))]);
     // What it leaves (activities.toml yields: reading moves on, a drawing, a photo): Unreal asks the rule of each.
     let yields = r.get("table_yields").cloned().unwrap_or_else(|| json!([]));
@@ -941,6 +944,14 @@ mod tests {
         assert_eq!((v["price"].as_i64(), v["payer"].as_str()), (Some(148), Some("你請客")));
         assert_eq!(v["feed"]["hygiene"], 15.0, "half again the same day");
         assert_eq!(v["admission"], true);
+        // Its length as it went: the activity's minutes unless it ran longer; cut short, only what went by (R6-6).
+        let mins = |extra: Value| {
+            let mut r = json!({"id": "snack_sweets", "kind": "pair", "code": 5, "name": "甜點", "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1, "elapsed": 27});
+            r.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            activity_end(&c, &r).unwrap()["notice"].as_str().unwrap().to_string()
+        };
+        assert!(mins(json!({})).contains("50"), "{}", mins(json!({})));
+        assert!(mins(json!({"cut_short": true})).contains("27"), "{}", mins(json!({"cut_short": true})));
         // A machine drink: the fee once, nothing more when the drink was already settled at the machine (R3-240).
         let machine = activity_end(&c, &json!({"id": "vending_girls_dorm", "kind": "solo", "name": "售貨機", "player_cash": 1000, "relation": rel(json!({"cash": 50})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!(machine["price"].as_i64(), Some(6));

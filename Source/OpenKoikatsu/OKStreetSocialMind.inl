@@ -414,6 +414,13 @@ void AOKStreetSocialScene::TickChoices(){
  // Her give_money still waiting after half a minute: the judge never answered; it goes through as she said.
  {TArray<int32> Waiting;S.PendingGiveMoney.GetKeys(Waiting);for(const int32 G:Waiting)SettleMoneyHandover(G,0,false);}
  for(int32 I=S.Choices.Num()-1;I>=0;--I){
+  // A bill not settled when they walk out of the shop: nothing is bought there. It timed out a minute later in the park
+  // and her latte was paid for and "served in 30 s" by the pond (R6-8).
+  if(const auto& C=S.Choices[I];!C.Place.IsEmpty()&&ShopPlaceHere()!=C.Place){
+   const FOKStreetPlace* P=OKStreetFindPlace(C.Place);TArray<FString> Names;for(const auto& L:S.Cart)if(const auto* It=S.Catalog.Find(L.ItemId))Names.Add(It->Name);
+   if(C.Heroine==FreeTalkPartner()&&!Names.IsEmpty())S.TellHer.Add(OKMsg(TEXT("ui.economy.left_unpaid_prompt"),{{TEXT("place_name"),P?P->Name:C.Place},{TEXT("names"),FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}}));
+   UE_LOG(LogTemp,Display,TEXT("Street choice dropped: %s %s, they left %s unsettled"),*C.Id,*C.Kind,*C.Place);
+   S.Cart.Reset();S.Choices.RemoveAt(I);RefreshUI();continue;}
   if(S.Choices[I].Deadline<=0||Now<S.Choices[I].Deadline)continue;
   // Her answer cannot come before she has replied to a turn that knew of it (a reply asked before it opened does not),
   // nor while she is still saying it: a gift was taken on its 15 s deadline while she talked on about dango, and she

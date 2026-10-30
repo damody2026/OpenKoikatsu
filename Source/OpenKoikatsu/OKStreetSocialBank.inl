@@ -38,6 +38,14 @@ int64 AOKStreetSocialScene::NetWorthOf(const FOKStreetStore& C,TArray<TPair<FStr
  return Total;
 }
 
+// The tuition line on his task list for today, when it was not worked out today (a save just loaded, a new game): it
+// was only set by the day's bank run, so after a load the list lost "pay tuition by 9/27" until the next morning.
+void AOKStreetSocialScene::RefreshFeesDue() const{
+ auto& S=*State;if(S.FeesDueDay==S.Store.CalendarDay)return;S.FeesDueDay=S.Store.CalendarDay;
+ auto Request=OKRulesRequest(TEXT("bank_fees_due"));Request->SetNumberField(TEXT("day"),S.Store.CalendarDay);Request->SetObjectField(TEXT("player_academic"),OKStreetAcademicJson(S.Store.PlayerAcademic));
+ if(const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request))S.FeesDueText=Out->GetStringField(TEXT("fees_due"));
+}
+
 // ------------------------------------------------------------------------------------------------ daily (from NextDay)
 
 void AOKStreetSocialScene::BankDaily(FOKStreetStore& C){
@@ -58,7 +66,7 @@ void AOKStreetSocialScene::BankDaily(FOKStreetStore& C){
  }
  Request->SetArrayField(TEXT("heroines"),Heroines);
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);if(!Out.IsValid())return;
- OKRulesReadBank(C,*Out);ApplyRulesEffects(C,*Out);S.FeesDueText=Out->GetStringField(TEXT("fees_due")); // on the task list while open and unpaid
+ OKRulesReadBank(C,*Out);ApplyRulesEffects(C,*Out);S.FeesDueText=Out->GetStringField(TEXT("fees_due"));S.FeesDueDay=C.CalendarDay; // on the task list while open and unpaid
  const FString Message=Out->GetStringField(TEXT("message"));if(!Message.IsEmpty())S.Message=Message;
 }
 

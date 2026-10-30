@@ -1054,7 +1054,11 @@ pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
         "bias_defer" => bias_defer(r),
         "mask_broken" => rel_of(r.get("relation")).map(|x| json!({"broken": mask_broken(&x, b(r, "public"))})),
         "self_text" => self_text(r),
-        "phone_answer" => rel_of(r.get("relation")).map(|x| json!({"chance": phone_answer(&x, s(r, "block"))})),
+        // She wrote to him a few minutes ago (on_phone): the phone is in her hand, whatever her day says she is doing.
+        "phone_answer" => rel_of(r.get("relation")).map(|x| {
+            let on_phone = r.get("on_phone").and_then(Value::as_bool).unwrap_or(false);
+            json!({"chance": phone_answer(&x, if on_phone { "" } else { s(r, "block") })})
+        }),
         "birthday_end" => birthday_end(r),
         _ => return None,
     })
@@ -1388,6 +1392,10 @@ mod tests {
         assert_eq!(sent, 3);
         let r: Relation = serde_json::from_value(rel(json!({"stage": "lover"}))).unwrap();
         assert!((phone_answer(&r, "sleep") - 0.135).abs() < 1e-6);
+        // Texting him two minutes ago, "asleep" in her day: she has the phone in her hand (R6-11).
+        let asleep = eval("phone_answer", &json!({"relation": rel(json!({"stage": "lover"})), "block": "sleep"})).unwrap().unwrap();
+        let texting = eval("phone_answer", &json!({"relation": rel(json!({"stage": "lover"})), "block": "sleep", "on_phone": true})).unwrap().unwrap();
+        assert!(asleep["chance"].as_f64().unwrap() < 0.2 && texting["chance"].as_f64().unwrap() > 0.85, "{asleep} {texting}");
     }
 
 

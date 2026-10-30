@@ -310,6 +310,11 @@ void AOKStreetSocialScene::StartControlServer(){
   OKControlReply(Done,O);});
  Bind(TEXT("/saves"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;const auto Body=OKControlBody(Req);FString Op,Slot;Body->TryGetStringField(TEXT("op"),Op);Body->TryGetStringField(TEXT("slot"),Slot);
+  if(int32 N=0;Slot.IsEmpty()&&Body->TryGetNumberField(TEXT("slot"),N))Slot=FString::FromInt(N);
+  // A request it cannot carry out says so: {"action":"save","slot":8} answered ok with the last notice ("saved to slot 8")
+  // and saved nothing, so three saves of a round were lost without a word.
+  const bool Known=Op.IsEmpty()&&Body->Values.Num()==0||Op==TEXT("list")||Op==TEXT("open")||Op==TEXT("start")||Op==TEXT("close")||Op==TEXT("new")||(Op==TEXT("save")||Op==TEXT("load"))&&!Slot.IsEmpty();
+  if(!Known){OKControlReply(Done,OKControlResult(false,TEXT("op must be list|open|start|close|new, or save|load with a slot")));return;}
   if(Op==TEXT("open"))OpenSaveMenu(TEXT("game"));else if(Op==TEXT("start"))OpenSaveMenu(TEXT("start"));else if(Op==TEXT("close"))CloseSaveMenu();
   else if(Op==TEXT("save")&&!Slot.IsEmpty()){bool Background=false;Body->TryGetBoolField(TEXT("background"),Background);SaveToSlot(Slot,Background);}
   auto O=OKControlResult(true);O->SetStringField(TEXT("menu"),S.SaveMenu);O->SetStringField(TEXT("notice"),S.SaveNotice);
