@@ -1827,13 +1827,15 @@ fn gap_zipmods(gaps: &[String]) -> Vec<String> {
     keys
 }
 
+/// (once per library and process: walking the eyes patterns one by one cost seconds a card, eye_set falling back to
+/// row 0 for every unknown pattern)
 fn gag_eye_sets(lib: &Path) -> Vec<i32> {
-    let mut by_gag = std::collections::BTreeMap::new();
-    for ptn in 0..256 {
-        let Some(set) = crate::eye_set::eye_set(lib, ptn) else { break };
-        if set.id == ptn && set.gag != 0 { by_gag.entry(set.gag).or_insert(ptn); }
-    }
-    by_gag.into_values().collect()
+    static SETS: Mutex<Vec<(PathBuf, Vec<i32>)>> = Mutex::new(Vec::new());
+    let mut sets = SETS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, found)) = sets.iter().find(|(l, _)| l == lib) { return found.clone(); }
+    let found = crate::eye_set::gag_patterns(lib);
+    sets.push((lib.to_owned(), found.clone()));
+    found
 }
 
 pub(crate) const CLOTHES_STATE_VARIANTS: [[u8; 9]; 5] = [[1; 9], [2; 9], [3; 9], [1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 3, 3, 3, 3, 3]];
