@@ -686,10 +686,11 @@ float AOKStreetSocialScene::StepOuting(float Dt){
   const FOKStreetPlace* Dest=S.OutingActivity.StartsWith(TEXT("go:"))?OKStreetFindPlace(S.OutingActivity.Mid(3)):Act&&Act->Place?OKStreetFindPlace(Act->Place):nullptr;
   FString Why;
   if(Dest&&!Dest->Rooms.IsEmpty()&&!OKStreetInsidePlace(*Dest,S.Male)&&FVector::Dist2D(S.Male,Dest->Door)<150.f&&PlaceClosedNow(Dest->Id,Why)){
-   // Half an hour: setting off allowed an opening a quarter of an hour after the estimated walk, and the walk was
-   // quicker than that estimate (at the cafe at 07:36 for 08:00: called off at its door, R3-217).
-   // Only going there (go:) waits as long as setting off allowed (R5-8).
-   if(PlaceClosedAt(Dest->Id,StreetNow()+FTimespan::FromMinutes(S.OutingActivity.StartsWith(TEXT("go:"))?OKStreetDoorWaitMinutes:30),Why)){S.OutingWaitDoor=false;CancelOuting(OKMsg(TEXT("ui.outing.closed_at_door"),{{TEXT("place"),Dest->Name},{TEXT("why"),*Why}}));return 0;}
+   // Setting off allowed an opening a quarter of an hour after the estimated walk, and the walk was quicker than that
+   // estimate (at the cafe at 07:36 for 08:00: called off at its door, R3-217).
+   // Setting off allowed it, so they wait as long as going there does (R5-8): the walk is often quicker than its
+   // estimate, and lunch at the restaurant opening at 11 was called off at its door at 10:20 on half an hour (R5-22).
+   if(PlaceClosedAt(Dest->Id,StreetNow()+FTimespan::FromMinutes(OKStreetDoorWaitMinutes),Why)){S.OutingWaitDoor=false;CancelOuting(OKMsg(TEXT("ui.outing.closed_at_door"),{{TEXT("place"),Dest->Name},{TEXT("why"),*Why}}));return 0;}
    S.OutingProgressAt=Now;
    if(!S.OutingWaitDoor){S.OutingWaitDoor=true;S.Message=OKMsg(TEXT("ui.outing.wait_at_door_until_open"),{{TEXT("place"),Dest->Name}});RefreshUI();
     UE_LOG(LogTemp,Display,TEXT("Street outing: %s not open yet; they wait at its door (%s)"),Dest->Id,*Why);}
