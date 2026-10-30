@@ -416,7 +416,19 @@ fn activity_end(c: &Catalog, r: &Value) -> Result<Value, String> {
         // soup was paid at the counter and the private room's ¥160 set dinner was billed on top (R4-7).
         let goods_paid = cst.3 == "satiety" && b(r, "bought_at_counter");
         if !goods_paid && !(ticket && (b(r, "admitted") || paid_at_door)) {
-            price += crate::region::price(cst.1 as i64) as i32;
+            // A ticket costs what the door charges (the place's entry, the student price for a student), for each one
+            // not yet bought today: his ¥74 was taken at the door and hers came to a flat ¥60 at the tank (R6-3).
+            let at_door = c.places.get(cst.0).filter(|pl| pl.entry > 0);
+            price += match (ticket, at_door) {
+                (true, Some(pl)) => {
+                    let (him_student, her_student) = students(r);
+                    let fee = |student: bool| crate::region::amount("price", if student && pl.entry_student > 0 { pl.entry_student } else { pl.entry }) as i32;
+                    let him = if in_today(cst.0) { 0 } else { fee(him_student) };
+                    let her = match &her_key { Some(k) if !in_today(k) => fee(her_student), _ => 0 };
+                    him + her
+                }
+                _ => crate::region::price(cst.1 as i64) as i32,
+            };
             admission |= ticket;
             // Paid here: the door does not charge it again today either.
             if let (true, Some(e), Some(d)) = (ticket, ext.as_mut(), day) {
@@ -686,6 +698,14 @@ fn entry_key(place: &str, relation: Option<&Value>) -> Option<String> {
     relation.and_then(|v| v.get("id")).and_then(Value::as_str).filter(|id| !id.is_empty()).map(|id| format!("{place}|{id}"))
 }
 
+/// Who has a student card: him (enrolled or on leave: the card is still his), her (enrolled), as the save keeps it.
+fn students(r: &Value) -> (bool, bool) {
+    let student = |dept: &str, status: &str| !dept.is_empty() && status != "none" && status != "expelled";
+    let him = r.get("him_student").and_then(Value::as_bool).unwrap_or_else(|| student(r.get("him_dept").and_then(Value::as_str).unwrap_or(""), r.get("him_status").and_then(Value::as_str).unwrap_or("")));
+    let her = r.get("her_student").and_then(Value::as_bool).unwrap_or_else(|| r.get("her_status").and_then(Value::as_str) == Some("enrolled"));
+    (him, her)
+}
+
 fn entry_fee(c: &Catalog, r: &Value) -> Result<Value, String> {
     let place = r.get("place").and_then(Value::as_str).unwrap_or("");
     let mut ext = r.get("ext").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
@@ -703,10 +723,8 @@ fn entry_fee(c: &Catalog, r: &Value) -> Result<Value, String> {
         return Ok(json!({"ok": true, "wait": true, "fee": 0, "his_pay": 0, "her_pay": 0, "notice": "", "effects": Effects::default().into_value(), "ext": ext}));
     }
     let price = |student: bool| crate::region::amount("price", if student && p.entry_student > 0 { p.entry_student } else { p.entry });
-    // A student (enrolled or on leave: the card is still his) pays the student price; academic status as the save keeps it.
-    let student = |dept: &str, status: &str| !dept.is_empty() && status != "none" && status != "expelled";
-    let him_student = r.get("him_student").and_then(Value::as_bool).unwrap_or_else(|| student(r.get("him_dept").and_then(Value::as_str).unwrap_or(""), r.get("him_status").and_then(Value::as_str).unwrap_or("")));
-    let her_student = r.get("her_student").and_then(Value::as_bool).unwrap_or_else(|| r.get("her_status").and_then(Value::as_str) == Some("enrolled"));
+    // A student pays the student price.
+    let (him_student, her_student) = students(r);
     let his_fee = if him_in { 0 } else { price(him_student) };
     let mut fx = Effects::default();
     let her = rel_of(r.get("relation"))?;
@@ -919,7 +937,8 @@ mod tests {
         assert_eq!(activity_minutes("x", "pair", 5), 50);
         let c = Tuning::builtin().catalog;
         let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "again": 1, "player_cash": 1000, "relation": rel(json!({"cash": 0, "affection": 10})), "profile": {}, "seed": 1})).unwrap();
-        assert_eq!((v["price"].as_i64(), v["payer"].as_str()), (Some(80), Some("你請客")));
+        // Two onsen tickets at the door's price (entry 74 each, no student price there).
+        assert_eq!((v["price"].as_i64(), v["payer"].as_str()), (Some(148), Some("你請客")));
         assert_eq!(v["feed"]["hygiene"], 15.0, "half again the same day");
         assert_eq!(v["admission"], true);
         // A machine drink: the fee once, nothing more when the drink was already settled at the machine (R3-240).
@@ -935,7 +954,7 @@ mod tests {
         assert_eq!(ordered["price"].as_i64(), Some(0));
         // Watching the tank and then sitting on the bench before it: one ticket for the visit.
         let tank = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
-        assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(60), Some(true)));
+        assert_eq!((tank["price"].as_i64(), tank["admission"].as_bool()), (Some(192), Some(true)));
         let bench = activity_end(&c, &json!({"id": "aquarium_bench", "kind": "pair", "code": 11, "name": "長椅", "admitted": true, "player_cash": 1000, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
         assert_eq!((bench["price"].as_i64(), bench["admission"].as_bool()), (Some(0), Some(false)), "{bench}");
         // The ticket bought at the door today (entry_fee's ext.entries): the tank is not charged again (it was, R3-76).
@@ -945,11 +964,15 @@ mod tests {
         // Only his ticket today (he went in alone, she came later): hers is still to pay (R3-105).
         let alone = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "day": 5,
             "ext": {"entries": {"aquarium": 5}}, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
-        assert_eq!((alone["price"].as_i64(), alone["ext"]["entries"]["aquarium|a"].as_i64()), (Some(60), Some(5)), "{alone}");
+        assert_eq!((alone["price"].as_i64(), alone["ext"]["entries"]["aquarium|a"].as_i64()), (Some(96), Some(5)), "{alone}");
+        // Hers at the student price, as the door would charge her (R6-3: a flat ¥60 after his ¥74 at the door).
+        let student = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "day": 5, "her_status": "enrolled",
+            "ext": {"entries": {"aquarium": 5}}, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
+        assert_eq!(student["price"].as_i64(), Some(74), "{student}");
         // Bought yesterday: today's ticket again, and recorded so the door does not charge it a second time.
         let next = activity_end(&c, &json!({"id": "aquarium_observe", "kind": "solo", "name": "看魚", "player_cash": 1000, "day": 6,
             "ext": {"entries": {"aquarium": 5}}, "relation": rel(json!({"cash": 0})), "profile": {}, "seed": 1})).unwrap();
-        assert_eq!((next["price"].as_i64(), next["ext"]["entries"]["aquarium"].as_i64()), (Some(60), Some(6)));
+        assert_eq!((next["price"].as_i64(), next["ext"]["entries"]["aquarium"].as_i64()), (Some(192), Some(6)));
         // They settled that he pays (the AI's reading): his, however rich she is and whatever the dice say.
         for seed in 1..20 {
             let v = activity_end(&c, &json!({"id": "onsen", "kind": "facility", "name": "泡湯", "player_cash": 1000, "agreed": "him",
