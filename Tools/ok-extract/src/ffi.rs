@@ -2623,6 +2623,13 @@ pub unsafe extern "C" fn ok_studio_scene_export(scene: *const c_char, out_dir: *
     })();
     match result { Ok(json) => { write_err(out, cap, &json); 0 } Err(e) => { write_err(out, cap, &e); 1 } }
 }
+/// `shader_states::ensure_in_background` for the game folder and base library (either missing: nothing).
+#[no_mangle]
+pub unsafe extern "C" fn ok_studio_shader_states_ensure(game: *const c_char, lib: *const c_char) {
+    if let (Some(game), Some(lib)) = (cstr_opt(game), cstr_opt(lib)) {
+        crate::shader_states::ensure_in_background(std::path::PathBuf::from(game), std::path::PathBuf::from(lib));
+    }
+}
 /// KK Studio pose file -> JSON (`studio_pose::Pose`) in `out`; 0 ok, 1 error (message in `out`).
 #[no_mangle]
 pub unsafe extern "C" fn ok_studio_pose_read(path: *const c_char, out: *mut c_char, cap: i32) -> i32 {

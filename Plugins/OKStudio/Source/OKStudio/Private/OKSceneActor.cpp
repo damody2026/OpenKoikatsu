@@ -17,6 +17,7 @@
 #include "KKExactSkinning.h"
 #include "KKRustExtract.h"
 #include "ok_extract.h"
+#include "Misc/ConfigCacheIni.h"
 #include "ImageUtils.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -1622,6 +1623,11 @@ void AOKSceneActor::PlaceSky(const FTransform& View)
 void AOKSceneActor::BeginPlay()
 {
 	Super::BeginPlay();
+	// The shader states (cull, outline, depth write by shader name) are read again in the background when the base
+	// library's copy is missing, older, or read from other game files than the configured game has.
+	FString GameRoot;
+	GConfig->GetString(TEXT("/Script/KKSideloader.KKGameRoot"), TEXT("Root"), GameRoot, GGameIni);
+	if (!GameRoot.IsEmpty()) ok_studio_shader_states_ensure(TCHAR_TO_UTF8(*FPaths::ConvertRelativePathToFull(GameRoot)), TCHAR_TO_UTF8(*LibraryDirectory()));
 	if (!SceneJson.IsEmpty() || GetWorld()->IsPlayInEditor()) UE_LOG(LogTemp, Display, TEXT("OK studio: scene actor %s begins play (scene %d chars, document %d)"), *GetName(), SceneJson.Len(), Document ? 1 : 0);
 	ShowSequenceTime();
 }
