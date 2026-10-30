@@ -11,6 +11,8 @@
 #include "Containers/Ticker.h"
 #include "Engine/Engine.h"
 #include "KKPreviewActor.h"
+#include "Materials/Material.h"
+#include "Engine/Texture.h"
 #include "EngineUtils.h"
 #include "Engine/GameViewportClient.h"
 
@@ -554,6 +556,12 @@ namespace
 			J->TryGetStringField(TEXT("match"), Match);
 			bool bHide = false;
 			const bool bSet = J->TryGetBoolField(TEXT("hide"), bHide);
+			// "has_param": only parts whose first material has that parameter; "params": true lists the material's
+			// parameter values (scalars, vectors, textures).
+			FString HasParam;
+			J->TryGetStringField(TEXT("has_param"), HasParam);
+			bool bParams = false;
+			J->TryGetBoolField(TEXT("params"), bParams);
 			UWorld* World = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWorld() : nullptr;
 			if (!World) return Result(false, TEXT("no game world"));
 			TArray<TSharedPtr<FJsonValue>> Out;
@@ -563,6 +571,21 @@ namespace
 				for (UMeshComponent* Mesh : Meshes)
 				{
 					if (!Match.IsEmpty() && !Mesh->GetName().Contains(Match)) continue;
+					UMaterialInterface* Material = Mesh->GetNumMaterials() ? Mesh->GetMaterial(0) : nullptr;
+					TArray<FMaterialParameterInfo> Scalars, Vectors, Textures;
+					TArray<FGuid> Ids;
+					if (Material)
+					{
+						Material->GetAllScalarParameterInfo(Scalars, Ids);
+						Material->GetAllVectorParameterInfo(Vectors, Ids);
+						Material->GetAllTextureParameterInfo(Textures, Ids);
+					}
+					if (!HasParam.IsEmpty())
+					{
+						const FName Wanted(*HasParam);
+						const auto Named = [&Wanted](const FMaterialParameterInfo& I) { return I.Name == Wanted; };
+						if (!Scalars.ContainsByPredicate(Named) && !Vectors.ContainsByPredicate(Named) && !Textures.ContainsByPredicate(Named)) continue;
+					}
 					if (bSet) Mesh->SetVisibility(!bHide);
 					if (Out.Num() >= 400) continue;
 					TSharedRef<FJsonObject> X = MakeShared<FJsonObject>();
@@ -572,6 +595,20 @@ namespace
 					X->SetStringField(TEXT("center"), B.Origin.ToString());
 					X->SetNumberField(TEXT("radius"), B.SphereRadius);
 					X->SetBoolField(TEXT("visible"), Mesh->IsVisible());
+					if (bParams && Material)
+					{
+						X->SetStringField(TEXT("material"), Material->GetPathName());
+						X->SetStringField(TEXT("base"), Material->GetBaseMaterial() ? Material->GetBaseMaterial()->GetPathName() : FString());
+						TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
+						for (const FMaterialParameterInfo& I : Scalars) { float V = 0.f; if (Material->GetScalarParameterValue(I, V)) P->SetNumberField(I.Name.ToString(), V); }
+						for (const FMaterialParameterInfo& I : Vectors) { FLinearColor V; if (Material->GetVectorParameterValue(I, V)) P->SetStringField(I.Name.ToString(), V.ToString()); }
+						for (const FMaterialParameterInfo& I : Textures)
+						{
+							UTexture* T = nullptr;
+							if (Material->GetTextureParameterValue(I, T)) P->SetStringField(I.Name.ToString(), T ? FString::Printf(TEXT("%s %dx%d"), *T->GetName(), int32(T->GetSurfaceWidth()), int32(T->GetSurfaceHeight())) : TEXT("null"));
+						}
+						X->SetObjectField(TEXT("params"), P);
+					}
 					Out.Add(MakeShared<FJsonValueObject>(X));
 				}
 			}

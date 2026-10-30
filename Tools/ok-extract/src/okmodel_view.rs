@@ -29,7 +29,9 @@ impl ItemMaterialEdits {
     fn shader_supported(shader: &str) -> bool {
         let family = crate::shader_family(shader);
         family.contains("main_item_studio") || ["shader forge/main_item", "shader forge/main_opaque", "shader forge/main_alpha",
-            "shader forge/main_standardmdk_studio", "standard"].contains(&family.as_str())
+            "shader forge/main_standardmdk_studio", "standard", "shader forge/main_item_emission",
+            // Drawn by AKKPreviewActor's own graphs (OKXRayMaterial, OKGlitchMaterial).
+            "harvexarc-xray", "harvexarc/xray", "unlit/glitch3dprojection"].contains(&family.as_str())
     }
 
     fn apply_shaders(&self, meshes: &mut [ExtractedMesh]) {
@@ -37,6 +39,10 @@ impl ItemMaterialEdits {
             let key = crate::card::me_mat_key(mat.name.trim_end_matches(" (Instance)"));
             for (material, shader, queue) in self.shaders.iter().filter(|(material, _, _)| crate::card::me_mat_key(material) == key) {
                 if Self::shader_supported(shader) {
+                    // Studio's ItemComponent keeps writing the item's colours (_Color.._Color3, _ShadowColor) to its
+                    // renderers whatever their shader: the part stays an item-colour part (SessionPart::item_draw).
+                    let family = crate::shader_family(&mat.shader);
+                    if family.contains("main_item_studio") && !family.contains("_add") { mat.floats.insert("_OKStudioItemColors".into(), 1.0); }
                     mat.shader = shader.clone();
                     mat.shader_has_rim = None;
                 } else {
