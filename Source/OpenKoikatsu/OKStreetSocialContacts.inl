@@ -303,6 +303,9 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
  {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Ask=OKRulesHeroineRequest(S,TEXT("h_experience"),Id);Ask->SetStringField(TEXT("girl"),Id);OKRulesPutExt(S,Ask);
   Mode->BeginHScene(S.Manifest.Characters[Character].Name,OKStreetViewRelation(S.Store,Id,S.Manifest.TalkBudget).Stage,OKRulesEval(S,Ask),S.Manifest.Characters[0].Name);}
  S.PrivateShownLine=S.FreeTalkCaptionHer; // what was on screen before is not shown in the scene
+ // The street clock runs about 24 times real time: an hour in the room would be a whole night gone (she said the sun was
+ // up after one scene). It stands still while they are in there and moves on by the real time spent when they leave.
+ if(!S.ClockPaused){const double Wall=FPlatformTime::Seconds();S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);S.ClockStartWall=Wall;S.ClockPaused=true;S.PrivateClockFrozen=true;}
  S.PrivateGirl=Character;S.HighPrivateAt=FPlatformTime::Seconds();S.HighPrivateSeenReady=false;S.HighPrivateResult.Reset();S.PrivateMouse=S.MouseUI;S.PrivateMode=Mode;
  const FString Directory=FPaths::GetPath(S.Manifest.SocialReport)/TEXT("HighInteraction")/FGuid::NewGuid().ToString(EGuidFormats::Digits);IFileManager::Get().MakeDirectory(*Directory,true);
  S.HighPrivateReport=Directory/TEXT("result.json");Mode->ReportPath=S.HighPrivateReport;
@@ -327,6 +330,7 @@ void AOKStreetSocialScene::FinishPrivate(){
  // memory and experience of it were lost (only the scene's own return kept them).
  if(Mode.IsValid()&&!Mode->IsFinished()){TWeakObjectPtr<AOKStreetSocialScene> Weak(this);Mode->Returned=[Weak](TSharedRef<FJsonObject> Result){if(Weak.IsValid()&&Weak->State)Weak->State->HighPrivateResult=Result;};Mode->Exit(false);}
  OKStreetPrivateEnvRestore();
+ if(S.PrivateClockFrozen&&S.ClockPaused){const double Wall=FPlatformTime::Seconds();S.ClockStartHours=FMath::Fmod(S.ClockStartHours+FMath::Max(0.,Wall-S.HighPrivateAt)/3600.,24.);S.ClockStartWall=Wall;S.ClockPaused=false;RefreshUI();}S.PrivateClockFrozen=false; // (someone ran the clock meanwhile: it already moved)
  S.PrivatePausedSeconds+=FMath::Max(0.,FPlatformTime::Seconds()-S.HighPrivateAt);S.LastWall=0;
  OKSuspendCrowdRuntimeScene(this,false);S.MouseUI=S.PrivateMouse;S.MouseToggleRequested=false;
  if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(S.Camera.Get());
