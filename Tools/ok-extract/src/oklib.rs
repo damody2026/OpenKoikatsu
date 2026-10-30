@@ -2968,6 +2968,8 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 let (items, missing) = crate::studio_items::add_mod_items(game, &lib)?;
                 println!("OKCONVERT studio mod items={items} without library model={missing}");
             }
+            let (filters, missing) = crate::studio_items::record_mod_filters(game, &lib)?;
+            println!("OKCONVERT studio mod filters recorded={filters} missing={missing}");
         }
         "studio-mod-nodes" => {
             // studio-mod-nodes <lib> <scene folder> [threads]: node trees, render cameras and screens of the scenes' mod items.

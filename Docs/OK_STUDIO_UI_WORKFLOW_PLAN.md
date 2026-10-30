@@ -626,6 +626,11 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 - 原作螢幕材質是受光的 Toony Colors Pro（`_Color` 約 0.89），暗場景裡比較暗；OK Studio 的螢幕不受光，略亮。
 - `80639555_p1` 中間的小螢幕原作是暗色畫面，OK Studio 是白色，還沒查。
 - ~~`2021_1022_2145_32_381` 整張黑畫面~~ 已修（2026-10-30）：場景相機在放大 5 倍的廚房（Petardo 的 CM3D2/Lighted 地圖 mod）牆外，Unity 只畫正面、看得穿；我們多加了卡通描邊外殼而整片黑。CM3D2 系列不再加描邊；CM3D2／Unlit 著色器改畫成不受光、陰影色白。修正後構圖與原作縮圖一致（`F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\kitchen_fixed.png`），廚房牆面比原作亮，歸入地圖色調。
+- 同一張的地圖色調（2026-10-30）：
+  - CM3D2 移植的地圖著色器以上下顛倒的 V 取樣（牆取到米白磁磚、櫥櫃門取到家電），CM3D2 部件改用 1-v。
+  - 場景的 131 號濾鏡是 `[mzam]Filter.zipmod` 的 `mzam_Lut_004`：`studio-mods` 現在把 mod 的 `Filter_*.csv` 寫進 `studio_mod_items.json` 的 `filters`，並把 LUT 記錄進基礎庫（本機 84 個）；目錄讀 mod 濾鏡時遊戲本身的編號優先。
+  - 場景 ramp 850 是 MoreShadowTypes 的 mod ramp，原本用 `kk_850` 找不到，改成依編號找 `<mod>_850`。
+  - 結果見 `F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\kitchen_cap4.png`：愛心 250,117,132 對原作 251,112,131。牆面仍比原作亮約 30（原作的 CM3D2/Lighted 受光，我們畫成不受光），留待地圖色調一併處理。
 
 ## 7. 優先順序總表
 

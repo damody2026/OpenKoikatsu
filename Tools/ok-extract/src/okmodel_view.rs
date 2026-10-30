@@ -711,6 +711,11 @@ mod source_mesh_uvs {
         for m in &meshes {
             println!("mesh {} vertices {} uv {:?} uv2 {:?}", m.name, m.positions.len(), &m.uvs[..m.uvs.len().min(6)], &m.uv2[..m.uv2.len().min(4)]);
         }
+        // OK_SOURCE_TEXTURES=<dir>: the bundle's textures as decoded (with OK_TEXDIAG, their formats on stderr).
+        if let Ok(dir) = std::env::var("OK_SOURCE_TEXTURES") {
+            let (_, textures) = crate::unity::meshes_and_textures_from_memory(std::fs::read(&bundle).unwrap());
+            for (name, png) in &textures { std::fs::write(std::path::Path::new(&dir).join(format!("src_{name}.png")), png).unwrap(); }
+        }
     }
 }
 
@@ -743,7 +748,17 @@ mod item_texture_dump {
                     let mut colors: Vec<_> = m.colors.iter().collect(); colors.sort_by(|a, b| a.0.cmp(b.0));
                     println!("  keywords {:?}\n  floats {:?}\n  colors {:?}", m.keywords, floats, colors);
                 }
-                println!("  uv2 {} uv3 {} uv4 {} first positions {:?}", p.uv2.len(), p.uv3.len(), p.uv4.len(), &p.positions[..p.positions.len().min(4)]);
+                println!("  uv2 {} uv3 {} uv4 {} first positions {:?} uvs {:?}", p.uv2.len(), p.uv3.len(), p.uv4.len(), &p.positions[..p.positions.len().min(4)], &p.uvs[..p.uvs.len().min(4)]);
+                // OK_ITEM_BOX=x0,y0,z0,x1,y1,z1: the UV range of the vertices inside that box (which part of the texture a
+                // wall or surface uses).
+                if let Some(b) = std::env::var("OK_ITEM_BOX").ok().map(|s| s.split(',').filter_map(|v| v.parse::<f32>().ok()).collect::<Vec<_>>()).filter(|b| b.len() == 6) {
+                    let (mut lo, mut hi, mut n) = ([f32::MAX; 2], [f32::MIN; 2], 0);
+                    for &i in &p.indices {
+                        let (q, uv) = (p.positions[i as usize], p.uvs[i as usize]);
+                        if (0..3).all(|k| q[k] >= b[k] && q[k] <= b[k + 3]) { n += 1; for k in 0..2 { lo[k] = lo[k].min(uv[k]); hi[k] = hi[k].max(uv[k]); } }
+                    }
+                    println!("  box: {n} vertices, uv {lo:?}..{hi:?}");
+                }
                 // Facing: the first triangle's winding normal (Unity is left-handed: clockwise seen from the front) against
                 // the vertex normal.
                 if p.indices.len() >= 3 {

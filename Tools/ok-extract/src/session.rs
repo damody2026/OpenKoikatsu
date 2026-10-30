@@ -908,7 +908,11 @@ impl SessionPart {
             rest_normals: rest_n,
             rest_tangents: mesh.tangents.clone(),
             normals: mesh.normals.clone(),
-            uvs: mesh.uvs.clone(),
+            // The CM3D2 ports of mod maps (Petardo's Kitchen) sample their textures upside down: drawn with the mesh's UVs
+            // as they are, the back wall showed the cream tiles instead of the red ones and the cupboard fronts showed the
+            // appliances (the scene's own picture). The meshes' UVs and textures decode like every other item's.
+            uvs: if mesh.mat.as_ref().is_some_and(|m| m.shader.to_ascii_lowercase().starts_with("cm3d2/")) { mesh.uvs.iter().map(|uv| [uv[0], 1.0 - uv[1]]).collect() }
+                else { mesh.uvs.clone() },
             uv2: mesh.uv2.clone(),
             uv3: mesh.uv3.clone(),
             uv4: mesh.uv4.clone(),

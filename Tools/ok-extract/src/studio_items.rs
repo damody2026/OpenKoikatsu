@@ -213,10 +213,33 @@ pub fn catalog(game: &Path) -> Catalog {
 }
 
 /// A texture of a game bundle by name (`bundle` relative to the game root or to `abdata`), e.g. a Studio filter LUT.
+/// A mod's bundle is `<zipmod relative to the game root>|<bundle>`.
 pub fn texture_png(root: &Path, bundle: &str, name: &str) -> Option<Vec<u8>> {
-    let ab = bundle.replace('\\', "/");
-    let ab = ab.strip_prefix("abdata/").unwrap_or(&ab);
-    crate::png_from_bundle(root, ab, None, &[name], &[], &[])
+    let bundle = bundle.replace('\\', "/");
+    let (zip, ab) = match bundle.split_once('|') { Some((zip, ab)) => (Some(root.join(zip).to_string_lossy().into_owned()), ab), None => (None, bundle.as_str()) };
+    let ab = ab.strip_prefix("abdata/").unwrap_or(ab);
+    crate::png_from_bundle(root, ab, zip.as_deref(), &[name], &[], &[])
+}
+
+/// The mods' screen filter LUTs (studio_mod_items.json `filters`) recorded into the library, so a scene saved with a
+/// mod filter grades the same without the mod. Returns (recorded, missing).
+pub fn record_mod_filters(game: &Path, lib: &Path) -> Result<(usize, usize), String> {
+    let text = std::fs::read_to_string(lib.join(MOD_FILE_NAME)).map_err(|e| format!("{MOD_FILE_NAME}: {e}"))?;
+    let mods: ModCatalog = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let store = crate::oklib::activate(lib, crate::oklib::Mode::Record)?;
+    crate::gamefs::activate(crate::gamefs::Mode::Record, game, lib)?;
+    let was_converting = crate::oklib::CONVERTING.swap(true, std::sync::atomic::Ordering::Relaxed);
+    let (mut found, mut missing) = (0, 0);
+    for f in &mods.filters {
+        if texture_png(game, &f.bundle, &f.file).is_some() { found += 1 } else { missing += 1; eprintln!("mod filter {} {}: no {} in {}", f.no, f.name, f.file, f.bundle); }
+    }
+    store.flush();
+    let saved = crate::gamefs::save(lib);
+    crate::unity::clear_bundle_cache();
+    crate::oklib::deactivate();
+    crate::gamefs::deactivate();
+    crate::oklib::CONVERTING.store(was_converting, std::sync::atomic::Ordering::Relaxed);
+    saved.map(|_| (found, missing))
 }
 
 /// Prefab names the lists ask for, per game bundle (converter hints).
@@ -313,6 +336,10 @@ pub struct ModCatalog {
     #[serde(default)]
     pub categories: Vec<Category>,
     pub items: Vec<ModItem>,
+    /// The mods' screen filters (Filter_*.csv: their own fixed numbers), bundle `<zipmod>|<bundle>`; their LUTs are
+    /// recorded into the library (`record_mod_filters`).
+    #[serde(default)]
+    pub filters: Vec<Filter>,
 }
 
 /// Mod items live beside the shared catalogue, in a file of their own that stays local (third-party content).
@@ -334,13 +361,26 @@ pub fn add_mod_items(game: &Path, lib: &Path) -> Result<(usize, usize), String> 
     let mut zips = crate::mods::all_zipmods(&mods);
     zips.sort();
     let mut out = Vec::new();
-    let (mut groups, mut categories) = (BTreeMap::new(), BTreeMap::new());
+    let (mut groups, mut categories, mut filters) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
     let mut missing = 0usize;
     for zip_path in zips {
         let Ok(file) = std::fs::File::open(&zip_path) else { continue };
         let Ok(mut zip) = zip::ZipArchive::new(file) else { continue };
         let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
         let info_csv = |n: &String, prefix: &str| { let l = n.replace('\\', "/").to_ascii_lowercase(); l.starts_with("abdata/studio/info/") && l.rsplit('/').next().is_some_and(|f| f.starts_with(prefix) && f.ends_with(".csv")) };
+        // Filter_<x>.csv (管理番号, 名称, bundle, LUT texture): screen filters keep their own numbers (scenes save them).
+        for n in names.iter().filter(|n| info_csv(n, "filter_")) {
+            let Ok(mut f) = zip.by_name(n) else { continue };
+            let mut bytes = Vec::new();
+            if f.read_to_end(&mut bytes).is_err() { continue; }
+            let rel = zip_path.strip_prefix(game).unwrap_or(&zip_path).to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+            for line in String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}').lines() {
+                let r: Vec<String> = line.split(',').map(|c| c.trim().to_owned()).collect();
+                let (Some(no), bundle, file) = (num(r.first()), game_bundle(&cell(&r, 2)), cell(&r, 3)) else { continue };
+                if bundle.is_empty() || file.is_empty() { continue; }
+                filters.entry(no).or_insert(Filter { no, name: cell(&r, 1), bundle: format!("{rel}|{bundle}"), file });
+            }
+        }
         let lists: Vec<&String> = names.iter().filter(|n| info_csv(n, "itemlist_")).collect();
         if lists.is_empty() { continue; }
         // ItemGroup_<name>.csv (id, name) and ItemCategory_<x>_<group>.csv (id, name).
@@ -383,7 +423,7 @@ pub fn add_mod_items(game: &Path, lib: &Path) -> Result<(usize, usize), String> 
         }
     }
     let n = out.len();
-    let text = serde_json::to_string_pretty(&ModCatalog { format: "ok-studio-mod-items-1".into(), groups: groups.into_values().collect(), categories: categories.into_values().collect(), items: out }).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&ModCatalog { format: "ok-studio-mod-items-1".into(), groups: groups.into_values().collect(), categories: categories.into_values().collect(), items: out, filters: filters.into_values().collect() }).map_err(|e| e.to_string())?;
     std::fs::write(lib.join(MOD_FILE_NAME), text).map_err(|e| format!("{MOD_FILE_NAME}: {e}"))?;
     Ok((n, missing))
 }

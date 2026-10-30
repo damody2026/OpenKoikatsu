@@ -206,6 +206,7 @@ pub(crate) fn png_from_payload_uncached(tex: unity_asset_decode::texture::Textur
     }
     let w = tex.width as u32;
     let h = tex.height as u32;
+    if std::env::var_os("OK_TEXDIAG").is_some() { eprintln!("Texture name={} dimensions={w}x{h} format={:?} bytes={}", tex.name, tex.format, tex.image_data.len()); }
     if w < 4 || h < 4 {
         return None;
     }

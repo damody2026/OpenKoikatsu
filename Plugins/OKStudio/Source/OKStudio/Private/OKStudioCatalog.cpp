@@ -122,6 +122,14 @@ void FOKStudioCatalog::LoadModItems(const FString& File)
 		if (!ModItems.Contains(Key)) ModItems.Add(Key, Items.Num());
 		Items.Add(MoveTemp(I));
 	}
+	// The mods' screen filters keep their own numbers (bundle `<zipmod>|<bundle>`, LUT recorded by studio-mods); the game's
+	// own numbers win a clash.
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("filters")))
+	{
+		const auto O = V->AsObject();
+		const int32 No = Int(O, TEXT("no"));
+		if (!FindFilter(No)) Filters.Add({ No, Str(O, TEXT("name")), Str(O, TEXT("bundle")), Str(O, TEXT("file")) });
+	}
 	// The mods' group and category names for the item browser: only ones the vanilla lists lack (mods reuse vanilla
 	// groups) and that hold an item of the library.
 	TSet<int32> UsedGroups;

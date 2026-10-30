@@ -247,8 +247,13 @@ namespace
 		// The scene's toon ramp (Studio's global _RampG, an mt_ramp of the game; OKHGShading's kk_<n>).
 		if (!bMap && Ramp >= 0)
 		{
+			// A mod ramp keeps its own number (MoreShadowTypes' 850): its key is <mod>_<n>.
+			FString RampKey = FString::Printf(TEXT("kk_%d"), Ramp);
+			if (!OKRenderRamps().ContainsByPredicate([&](const FOKRenderRamp& R) { return R.Key == RampKey; }))
+				if (const FOKRenderRamp* Mod = OKRenderRamps().FindByPredicate([Suffix = FString::Printf(TEXT("_%d"), Ramp)](const FOKRenderRamp& R) { return R.Key.EndsWith(Suffix); }))
+					RampKey = Mod->Key;
 			FString RampError;
-			Actor->RampOverride = OKLoadRenderRamp(FString::Printf(TEXT("kk_%d"), Ramp), RampError);
+			Actor->RampOverride = OKLoadRenderRamp(RampKey, RampError);
 			if (!Actor->RampOverride) UE_LOG(LogTemp, Warning, TEXT("OK studio: scene ramp %d not loaded: %s"), Ramp, *RampError);
 		}
 		if (Item)
