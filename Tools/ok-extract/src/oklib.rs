@@ -228,6 +228,24 @@ pub fn has_model(id: &Id) -> bool {
 /// Directory of the active library.
 pub fn active_dir() -> Option<PathBuf> { active().map(|s| s.dir.clone()) }
 
+/// A read-only model's index, scanned once per process while its file is unchanged (length and write time): the
+/// store's model list starts empty for every card a conversion makes (it names the models the card used), and
+/// scanning the same library files again was ~0.4 s of a card's CPU.
+fn unchanged_model(path: &Path) -> Arc<Mutex<Model>> {
+    type Kept = HashMap<PathBuf, (u64, Option<std::time::SystemTime>, Arc<Mutex<Model>>)>;
+    static KEPT: std::sync::LazyLock<Mutex<Kept>> = std::sync::LazyLock::new(Default::default);
+    let Ok(meta) = std::fs::metadata(path) else { return Arc::new(Mutex::new(load_model(path, false))) };
+    let stamp = (meta.len(), meta.modified().ok());
+    if let Some((len, modified, model)) = KEPT.lock().unwrap().get(path) {
+        if (*len, *modified) == stamp { return model.clone(); }
+    }
+    let model = Arc::new(Mutex::new(load_model(path, false)));
+    let mut kept = KEPT.lock().unwrap();
+    if kept.len() >= 8192 { kept.clear(); }
+    kept.insert(path.to_path_buf(), (stamp.0, stamp.1, model.clone()));
+    model
+}
+
 /// Scan a model's record headers (values are not read).
 fn load_model(path: &Path, hashes: bool) -> Model {
     let mut model = Model::default();
@@ -372,7 +390,10 @@ impl Store {
 
     fn model(&self, id: &Id) -> Arc<Mutex<Model>> {
         let mut models = self.models.lock().unwrap();
-        models.entry(*id).or_insert_with(|| Arc::new(Mutex::new(load_model(&model_file(&self.dir, id), self.mode == Mode::Record)))).clone()
+        models.entry(*id).or_insert_with(|| {
+            let path = model_file(&self.dir, id);
+            if self.mode == Mode::Record { Arc::new(Mutex::new(load_model(&path, true))) } else { unchanged_model(&path) }
+        }).clone()
     }
 
     /// Records held by the models loaded in this session.
@@ -734,7 +755,8 @@ pub fn card_identity(bytes: &[u8]) -> Option<String> {
 /// The card with its `okId` chunk set to `id` (placed right before IEND, replacing one it had).
 pub fn with_card_identity(bytes: &[u8], id: &str) -> Result<Vec<u8>, String> {
     if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" { return Err("not a PNG card".into()); }
-    let mut out = bytes[..8].to_vec();
+    let mut out = Vec::with_capacity(bytes.len() + 12 + IDENTITY_CHUNK.len() + id.len());
+    out.extend_from_slice(&bytes[..8]);
     let mut pos = 8usize;
     while pos + 12 <= bytes.len() {
         let len = u32::from_be_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
@@ -859,7 +881,9 @@ const PACK_FRAME: usize = 16 << 20;
 
 fn encode_card_pack(pack: &CardPack) -> Result<Vec<u8>, String> {
     use rayon::prelude::*;
-    let raw = bincode::serialize(pack).map_err(|e| e.to_string())?;
+    // (sized first: grown by doubling, a 400 MB pack was copied through every power of two below it)
+    let mut raw = Vec::with_capacity(bincode::serialized_size(pack).map_err(|e| e.to_string())? as usize);
+    bincode::serialize_into(&mut raw, pack).map_err(|e| e.to_string())?;
     let level = std::env::var("OK_PACK_LEVEL").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
     let frames = raw.par_chunks(PACK_FRAME).map(|part| zstd::bulk::compress(part, level)).collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
