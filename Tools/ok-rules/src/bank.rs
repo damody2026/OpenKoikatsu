@@ -468,7 +468,9 @@ pub fn daily(request: &Value) -> Result<Value, String> {
         if today.month % 3 == 0 && today.day == 21 {
             r.bank += (r.bank as f64 * rate.demand as f64 / 100.0 * 0.25) as i64;
         }
-        // Saving goals from her profile: once the money is there (keeping ¥300), she buys it.
+        // Saving goals from her profile: once the money is there (keeping ¥300), she buys it. A goal is a thing she then
+        // keeps (items.rs lists it among what she has); a trip, a stay or a ticket bought months early became "the
+        // fireworks tickets and lodging I have", and she invited him on a journey the city cannot hold (R6-4).
         for g in money.get("saving_goals").and_then(Value::as_array).into_iter().flatten() {
             let item = s(g, "item");
             let amount = g.get("amount").and_then(Value::as_f64).unwrap_or(0.0);
@@ -940,5 +942,26 @@ mod tests {
             "father": {"texts": [{"minute": 20000, "text": "我是你爸。"}], "seen": 1, "gifts": 1, "day": 13, "total": 100000, "bankrupt": false, "bankrupt_count": 0, "shortfall": 0, "rescue_at": -1}});
         let b: Banking = serde_json::from_value(saved.clone()).unwrap();
         assert_eq!(serde_json::to_value(&b).unwrap(), saved);
+    }
+
+    /// Every profile's saving goal is a thing she keeps once bought (it joins what she has), never a trip, a stay or a
+    /// ticket for some day: a bought "车票和住宿" read as owned and she set off on a journey the city cannot hold (R6-4).
+    #[test]
+    fn saving_goals_are_things_she_keeps() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/StreetSocialData/Profiles");
+        let mut seen = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            let Ok(p) = serde_json::from_str::<Value>(&text) else { continue };
+            for g in p["money"]["saving_goals"].as_array().into_iter().flatten() {
+                let item = s(g, "item");
+                seen += 1;
+                for word in ["车票", "机票", "门票", "住宿", "旅行", "旅游", "票", "trip", "ticket"] {
+                    assert!(!item.contains(word), "{}: saving goal {item:?} is not a thing she keeps", path.display());
+                }
+            }
+        }
+        assert!(seen > 0);
     }
 }
