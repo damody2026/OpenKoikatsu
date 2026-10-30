@@ -9,6 +9,10 @@
 #include "OKStudioSky.h"
 #include "UnrealClient.h"
 #include "Containers/Ticker.h"
+#include "Engine/Engine.h"
+#include "KKPreviewActor.h"
+#include "EngineUtils.h"
+#include "Engine/GameViewportClient.h"
 
 namespace
 {
@@ -533,6 +537,48 @@ namespace
 		// Leaves the studio (as its close button: the mode that started it comes back, its UI restored). The channel
 		// closes with the studio; with "name", a whole-window screenshot (UI included) is taken a second later to
 		// Saved/OKStudio/mcp_ui/<name>.png, showing what the mode looks like afterwards.
+		// A console command on the game world (cvars, show flags, stat), for diagnosing what the studio draws.
+		if (Op == TEXT("exec"))
+		{
+			FString Command;
+			J->TryGetStringField(TEXT("command"), Command);
+			UWorld* World = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWorld() : nullptr;
+			if (Command.IsEmpty() || !World) return Result(false, TEXT("command and a game world required"));
+			return Result(GEngine->Exec(World, *Command), FString());
+		}
+		// The drawn parts (mesh components of the scene's preview actors: map, items, characters) whose name contains
+		// "match": listed with their owner and bounds, and hidden or shown again with "hide" (diagnostics).
+		if (Op == TEXT("parts"))
+		{
+			FString Match;
+			J->TryGetStringField(TEXT("match"), Match);
+			bool bHide = false;
+			const bool bSet = J->TryGetBoolField(TEXT("hide"), bHide);
+			UWorld* World = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWorld() : nullptr;
+			if (!World) return Result(false, TEXT("no game world"));
+			TArray<TSharedPtr<FJsonValue>> Out;
+			for (TActorIterator<AKKPreviewActor> It(World); It; ++It)
+			{
+				TInlineComponentArray<UMeshComponent*> Meshes(*It);
+				for (UMeshComponent* Mesh : Meshes)
+				{
+					if (!Match.IsEmpty() && !Mesh->GetName().Contains(Match)) continue;
+					if (bSet) Mesh->SetVisibility(!bHide);
+					if (Out.Num() >= 400) continue;
+					TSharedRef<FJsonObject> X = MakeShared<FJsonObject>();
+					X->SetStringField(TEXT("name"), Mesh->GetName());
+					X->SetStringField(TEXT("owner"), It->GetName());
+					const FBoxSphereBounds B = Mesh->Bounds;
+					X->SetStringField(TEXT("center"), B.Origin.ToString());
+					X->SetNumberField(TEXT("radius"), B.SphereRadius);
+					X->SetBoolField(TEXT("visible"), Mesh->IsVisible());
+					Out.Add(MakeShared<FJsonValueObject>(X));
+				}
+			}
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetArrayField(TEXT("parts"), Out);
+			return O;
+		}
 		if (Op == TEXT("leave"))
 		{
 			FString Name;
@@ -843,7 +889,7 @@ namespace OKStudioControl
 		if (!GRouter.IsValid()) { UE_LOG(LogTemp, Warning, TEXT("OK studio control: could not open port %d"), Port); return; }
 		static const TCHAR* Ops[] = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("spawn"), TEXT("transform"), TEXT("reparent"), TEXT("delete"), TEXT("select"),
 			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline"),
-			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("leave") };
+			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
 		for (const TCHAR* Op : Ops)
 		{
 			const FString Name = Op;

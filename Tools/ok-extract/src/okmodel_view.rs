@@ -688,6 +688,13 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
                 let avg = (0..4).map(|c| m.vertex_colors.iter().map(|v| v[c] as f32).sum::<f32>() / n).collect::<Vec<_>>();
                 println!("  vertex colours {} avg rgba {:?}", m.vertex_colors.len(), avg);
             }
+            for (label, uv) in [("uv0", &m.uvs), ("uv1", &m.uv2)] {
+                if uv.is_empty() { continue; }
+                let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+                for p in uv.iter() { for c in 0..2 { lo[c] = lo[c].min(p[c]); hi[c] = hi[c].max(p[c]); } }
+                println!("  {label} [{:.3},{:.3}]..[{:.3},{:.3}]", lo[0], lo[1], hi[0], hi[1]);
+            }
+            if !m.uv2.is_empty() { println!("  uv0 == uv1: {}", m.uvs == m.uv2); }
             let zero = m.normals.iter().filter(|n| n[0] * n[0] + n[1] * n[1] + n[2] * n[2] < 0.25).count();
             println!("  normals {} (near zero {zero})", m.normals.len());
             if let Some(mat) = m.mat.as_ref() { println!("  colors {:?} floats {:?}", mat.colors, mat.floats.iter().filter(|(k, _)| !k.ends_with("_ST_x") && !k.ends_with("_ST_y") && !k.ends_with("_ST_z") && !k.ends_with("_ST_w")).collect::<Vec<_>>()); }
