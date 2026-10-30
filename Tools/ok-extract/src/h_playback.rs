@@ -954,3 +954,36 @@ mod tests {
         eprintln!("native frame bones {:?}",config.frame_bones);
     }
 }
+
+/// Every authored pose's scene metadata (AnimationListInfo, HSceneProc.cs:116) for the one-on-one H scene: which menu it
+/// sits in (mode from AnimationInfo_XX, kindHoushi hand/mouth/breast), whether its female base allows anal, the
+/// experience it needs (isExperience, stateRestriction), who leads, and the clothes it puts her in. One JSON array.
+pub fn h_pose_table(game:&Path)->String {
+    let Ok(paths)=catalogue_paths(game) else{return "[]".into();};
+    let int=|v:Option<&UnityValue>|v.and_then(|v|v.as_i64().or_else(||v.as_bool().map(i64::from))).unwrap_or(0);
+    let mut rows=std::collections::BTreeMap::new();
+    for path in &paths {
+        let Ok(bytes)=crate::gamefs::read(path) else {continue;};
+        let parsed=crate::unity::parse_bundle_cached(bytes);
+        parsed.with_serialized(|files|for file in files {for info in file.objects_of_type(114) {
+            let Ok(obj)=UnityObject::from_serialized_file(file,&info) else {continue;};
+            let Some(name)=obj.name().filter(|n|n.starts_with("AnimationInfo_")) else {continue;};
+            let Some(list)=obj.class.properties().get("param").and_then(|v|v.as_array()) else {continue;};
+            for row in list {
+                let Some(id)=field(row,"id").and_then(|v|v.as_i64()) else {continue;};
+                let female=field(row,"paramFemale");
+                let categories:Vec<i64>=field(row,"lstCategory").and_then(|v|v.as_array()).map(|a|a.iter().map(|c|int(field(c,"category"))).collect()).unwrap_or_default();
+                rows.insert((name.to_string(),id),serde_json::json!({
+                    "category":name,"id":id,"name":text(field(row,"nameAnimation")),"mode":name.trim_start_matches("AnimationInfo_").parse::<i64>().unwrap_or(-1),
+                    "kind_houshi":int(field(row,"kindHoushi")),"posture":int(field(row,"posture")),"is_experience":int(field(row,"isExperience")),
+                    "state_restriction":int(field(row,"stateRestriction")),"female_initiative":int(field(row,"isFemaleInitiative"))!=0,
+                    "anal":female.map(|f|int(field(f,"isAnal"))!=0).unwrap_or(false),"sys_taii":int(field(row,"sysTaii")),"num_ctrl":int(field(row,"numCtrl")),
+                    "upper_cloth":int(field(row,"numFemaleUpperCloth")),"lower_cloth":int(field(row,"numFemaleLowerCloth")),
+                    "use_desk":int(field(row,"useDesk"))!=0,"use_chair":int(field(row,"useChair"))!=0,"splash":int(field(row,"isSplash"))!=0,
+                    "release":int(field(row,"isRelease"))!=0,"categories":categories,
+                }));
+            }
+        }});
+    }
+    serde_json::to_string_pretty(&rows.into_values().collect::<Vec<_>>()).unwrap_or_else(|_|"[]".into())
+}

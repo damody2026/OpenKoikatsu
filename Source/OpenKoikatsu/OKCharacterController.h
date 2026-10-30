@@ -297,6 +297,12 @@ public:
         ActionLog.Add(MakeShared<FJsonValueObject>(O));
     }
     bool bInteractionOnly=false;
+    // The street's one-on-one: the original-style H panel (OKHScene.h) instead of the test panel, with her experience
+    // (ok-rules h_experience) and name; what happened comes back in HResult (the scene's result "h").
+    bool bHScene=false;
+    TSharedPtr<class FJsonObject> HExperience,HResult;
+    FString HHeroineName,HHeroineStage;
+    UPROPERTY() TObjectPtr<class UOKHScenePanel> HPanel;
     void InitializeInteractionControls(bool Bind=true);
     void BindInteractionControls();
     void ActivateInteraction();

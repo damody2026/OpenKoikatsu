@@ -432,6 +432,13 @@ void AOKStreetSocialScene::StartControlServer(){
    if(S.PrivateGirl!=int32(Girl)){OKControlReply(Done,OKControlResult(false,TEXT("could not open (not ready, not idle, or no high model for her)")));return;}}
   auto O=OKControlResult(true);O->SetNumberField(TEXT("girl"),S.PrivateGirl);OKControlReply(Done,O);
  });
+ // The one-on-one's H panel (OKHScene.h): {} its view; {kind} presses a button by kind, {pose} picks a pose, {speed}.
+ Bind(TEXT("/hscene"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
+  auto& S=*State;if(!S.PrivateMode.IsValid()){OKControlReply(Done,OKControlResult(false,TEXT("no one-on-one open")));return;}
+  FString Why;const TSharedPtr<FJsonObject> View=S.PrivateMode->HSceneControl(OKControlBody(Req),Why);
+  if(!View){OKControlReply(Done,OKControlResult(false,Why));return;}
+  auto O=OKControlResult(true);O->SetObjectField(TEXT("h"),View);OKControlReply(Done,O);
+ });
  // {girl, why, kind?}: she writes him now, from that reason (kind "initiative" when none: her own message).
  Bind(TEXT("/text"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;auto B=OKControlBody(Req);double Girl=0;B->TryGetNumberField(TEXT("girl"),Girl);FString Why,Kind=TEXT("initiative");B->TryGetStringField(TEXT("why"),Why);B->TryGetStringField(TEXT("kind"),Kind);

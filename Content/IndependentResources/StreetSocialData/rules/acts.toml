@@ -370,6 +370,28 @@ rumor = "secret"
 rumor_text = "%n和他好像在交往"
 rumor_heat = 50
 
+# 1 對 1 的經驗（Tools/ok-rules/src/hexp.rs，照原作 H 場景）：初次、某個部位習慣了、經驗等級變了；只在兩人之間
+[[act]]
+id = "h_first"
+cat = "activity"
+history = "intimacy"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "h_area"
+cat = "activity"
+history = "intimacy"
+text = "%s"
+memory = -1
+
+[[act]]
+id = "h_level"
+cat = "activity"
+history = "intimacy"
+text = "%s"
+memory = -1
+
 [[act]]
 id = "promise"
 cat = "activity"

@@ -297,10 +297,8 @@ void AOKStreetSocialScene::RequestIntimacy(int32 Character,bool bHerIdea){
 void AOKStreetSocialScene::TickIntimacy(){
  auto& S=*State;
  if(S.IntimacyGirl!=INDEX_NONE&&S.PrivateGirl==INDEX_NONE){
-  const int32 Girl=S.IntimacyGirl;S.IntimacyGirl=INDEX_NONE;
-  // What it leaves is a rule (shop.rs intimacy_after).
-  auto Request=OKRulesHeroineRequest(S,TEXT("intimacy_after"),OKStreetStableId(S.Manifest.Characters[Girl]));Request->SetStringField(TEXT("place"),PlaceHere(S.Male));
-  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Request)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
+  // What it leaves on her is written when the scene returns (FinishPrivate, hexp.rs h_session_end), as for every other way in.
+  S.IntimacyGirl=INDEX_NONE;
   return;
  }
  if(S.PendingIntimacy==INDEX_NONE||S.OutingGirl!=INDEX_NONE)return;

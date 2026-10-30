@@ -23,6 +23,7 @@ pub mod estate;
 pub mod events;
 pub mod games;
 pub mod heroine;
+pub mod hexp;
 pub mod invite;
 pub mod mind;
 pub mod needs;
@@ -162,6 +163,7 @@ impl Rules {
                     .or_else(|| heroine::eval(tuning.acts_in(locale::lang(&request)), tuning.places_in(locale::lang(&request)), &kind, &request))
                     .or_else(|| invite::eval(tuning.places_in(locale::lang(&request)), &kind, &request))
                     .or_else(|| mind::eval(&kind, &request))
+                    .or_else(|| hexp::eval(&kind, &request))
                     .or_else(|| day::eval(&kind, &request))
                     .or_else(|| bank::eval(&kind, &request))
                     .or_else(|| campus::eval(&kind, &request))

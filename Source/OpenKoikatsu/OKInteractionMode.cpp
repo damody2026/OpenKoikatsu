@@ -1,6 +1,7 @@
 #include "OKInteractionMode.h"
 #include "OKCharacterController.h"
 #include "OKInteractionScene.h"
+#include "OKHScene.h"
 #include "KKPreviewActor.h"
 #include "KKPairedPlayback.h"
 #include "KKCardReader.h"
@@ -125,6 +126,19 @@ void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
         });
     });
 }
+void AOKInteractionMode::BeginHScene(const FString& Name,const FString& Stage,const TSharedPtr<FJsonObject>& Experience){
+    if(!Controller)return;Controller->bHScene=true;Controller->HHeroineName=Name;Controller->HHeroineStage=Stage;Controller->HExperience=Experience;Controller->HResult.Reset();
+}
+TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJsonObject>& Body,FString& Why){
+    UOKHScenePanel* Panel=Controller?Controller->HPanel.Get():nullptr;if(!Panel){Why=TEXT("no H panel (scene not ready)");return nullptr;}
+    double Kind=0,Speed=-1;FString Pose;
+    if(Body.IsValid()){
+        if(Body->TryGetNumberField(TEXT("speed"),Speed)&&Speed>=0)Panel->SetSpeed(float(Speed));
+        if(Body->TryGetStringField(TEXT("pose"),Pose)&&!Pose.IsEmpty()&&!Panel->SelectPoseNamed(Pose)){Why=TEXT("no pose named ")+Pose;return nullptr;}
+        if(Body->TryGetNumberField(TEXT("kind"),Kind)&&Kind>0)Panel->Click(int32(Kind));
+    }
+    return Panel->Describe();
+}
 void AOKInteractionMode::Fail(const FString& Why){Error=Why;UE_LOG(LogTemp,Error,TEXT("Shared interaction mode: %s"),*Why);Exit(true);}
 void AOKInteractionMode::Tick(float Delta){
     Super::Tick(Delta);if(Finished||!Controller)return;
@@ -176,7 +190,7 @@ void AOKInteractionMode::Exit(bool WasCancelled){
     if(PreparingOverlay&&GEngine&&GEngine->GameViewport)GEngine->GameViewport->RemoveViewportWidgetContent(PreparingOverlay.ToSharedRef());PreparingOverlay.Reset();
     if(!Evidence)Evidence=MakeShared<FJsonObject>();Evidence->SetStringField(TEXT("state"),!WasCancelled&&Activated?TEXT("returned"):TEXT("cancelled"));Evidence->SetStringField(TEXT("error"),Error);Evidence->SetBoolField(TEXT("same_process"),true);Evidence->SetNumberField(TEXT("process_id"),FPlatformProcess::GetCurrentProcessId());
     if(Controller){Evidence->SetArrayField(TEXT("actions"),Controller->ActionLog);Evidence->SetNumberField(TEXT("seconds"),Ready?FMath::RoundToDouble(FPlatformTime::Seconds()-ReadyAt):0.);Controller->ActionLog.Reset();Controller->ActionLogStart=0;
-    if(Controller->PairedPlayback)Evidence->SetNumberField(TEXT("playback_end_seconds"),Controller->PairedPlayback->GetElapsed());Controller->InteractionReturned=nullptr;Controller->OnExitInteraction();++Controller->LoadGeneration;++Controller->PartnerLoadGeneration;Controller->CancelPairCatalogue();Controller->CancelPairPreparation();
+    if(Controller->PairedPlayback)Evidence->SetNumberField(TEXT("playback_end_seconds"),Controller->PairedPlayback->GetElapsed());Controller->InteractionReturned=nullptr;Controller->OnExitInteraction();if(Controller->HResult.IsValid())Evidence->SetObjectField(TEXT("h"),Controller->HResult);++Controller->LoadGeneration;++Controller->PartnerLoadGeneration;Controller->CancelPairCatalogue();Controller->CancelPairPreparation();
         if(OwnController){Controller->OnStopPair();if(Controller->PreviewActor)Controller->PreviewActor->Destroy();Controller->PreviewActor=nullptr;}
         if(auto* PC=Controller->GetOwningPlayer()){if(PreviousView)PC->SetViewTarget(PreviousView);PC->bShowMouseCursor=PreviousMouse;if(auto* O=Cast<AOpenKoikatsuPlayerController>(PC)){O->SetBodyTouchEnabled(false);O->BodyInteraction=MoveTemp(PreviousBodyInteraction);O->BodyGesture=MoveTemp(PreviousBodyGesture);O->bBodyTouchEnabled=PreviousTouch;O->SetPaintPreviewActive(PreviousPaint);}}
     }
