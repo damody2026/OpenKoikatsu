@@ -693,7 +693,10 @@ FString UOKHScenePanel::Context() const{
     // What he has already taken off her: she agreed to this room, so undressing is part of it, not news to protest.
     static const TCHAR* Parts[]={TEXT("ui.hscene.cloth_top"),TEXT("ui.hscene.cloth_bottom"),TEXT("ui.hscene.cloth_bra"),TEXT("ui.hscene.cloth_shorts"),TEXT("ui.hscene.cloth_gloves"),TEXT("ui.hscene.cloth_pantyhose"),TEXT("ui.hscene.cloth_socks"),TEXT("ui.hscene.cloth_inner_shoes"),TEXT("ui.hscene.cloth_shoes")};
     TArray<FString> Bare;if(Gallery&&Gallery->PreviewActor)for(int32 K=0;K<9;++K)if(Gallery->ClothesStates[K]==3&&Gallery->PreviewActor->DisplayClothesStates[K]!=3)Bare.Add(OKT(Parts[K]));
-    return OKMsg(TEXT("ui.hscene.talk_context"),{{TEXT("bare"),Bare.IsEmpty()?OKT(TEXT("ui.hscene.bare_none")):FString::Join(Bare,TEXT("、"))},{TEXT("pose"),PoseName},{TEXT("state"),StateWords(Base)},{TEXT("speed"),FString::Printf(TEXT("%.1f"),Mode==0||HIsLoop(Base)?PlaybackSpeed():0.f)},
+    // How many more she can take today (HadEnough's numbers): her words about having had enough follow the same limit.
+    const auto& X=Gallery?Gallery->HExperience:nullptr;
+    const int32 Left=FMath::Max(0,FMath::Max(1,X.IsValid()&&X->HasField(TEXT("climax_limit"))?int32(X->GetNumberField(TEXT("climax_limit"))):4)-(X.IsValid()&&X->HasField(TEXT("today_orgasms"))?int32(X->GetNumberField(TEXT("today_orgasms"))):0)-HerOrgasms);
+    return OKMsg(TEXT("ui.hscene.talk_context"),{{TEXT("left"),Left},{TEXT("bare"),Bare.IsEmpty()?OKT(TEXT("ui.hscene.bare_none")):FString::Join(Bare,TEXT("、"))},{TEXT("pose"),PoseName},{TEXT("state"),StateWords(Base)},{TEXT("speed"),FString::Printf(TEXT("%.1f"),Mode==0||HIsLoop(Base)?PlaybackSpeed():0.f)},
         {TEXT("her"),FMath::RoundToInt(Her)},{TEXT("his"),FMath::RoundToInt(His)},{TEXT("orgasms"),HerOrgasms},{TEXT("finishes"),HisFinishes},{TEXT("condom"),Mode==2&&(bCrotch||bAnal)?(bCondom?TEXT("yes"):TEXT("no")):TEXT("none")}});
 }
 void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit){
