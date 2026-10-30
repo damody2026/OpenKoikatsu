@@ -1578,6 +1578,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     bool Accepts=true;const bool Answered=Confessed&&Verdict->TryGetBoolField(TEXT("accepts"),Accepts);if(Answered&&!Accepts){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; she said no in her own words"),Character);Confessed=false;
      // Not a yes yet ("let me think about it"): her answer may come later in another talk (the judge is told).
      if(!L->ConfessionPending.Contains(Character))L->ConfessionPending.Add(Character,OKStreetMindNow(*L));}
+    // No answer in her words at all ("I won't answer yet, let me finish this pancake"): still hers to give, not a roll
+    // that answered for her. 胡桃 put it off, the dice said yes, and she "ran off blushing" as his girlfriend (R6-17).
+    // Any confession he says himself: only her own yes makes them lovers; the button keeps its roll.
+    if(Confessed&&!Answered){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; no answer from her yet"),Character);Confessed=false;
+     if(!L->ConfessionPending.Contains(Character))L->ConfessionPending.Add(Character,OKStreetMindNow(*L));}
     if(Confessed)L->ConfessionPending.Remove(Character);
     if(Confessed&&!Ends&&L->Target==Character&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
      &&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage!=TEXT("lover")){
