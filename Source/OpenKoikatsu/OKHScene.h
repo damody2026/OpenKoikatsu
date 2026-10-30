@@ -152,7 +152,7 @@ private:
     TArray<FString> Queue;      // states still to play, in order (a finish, the insertion)
     double StateSeen=0.,LastRequest=0.,OralIdleSince=0.;
     float Her=0.f,His=0.f,SpeedValue=.35f;
-    bool bStrong=false,bAnalPlay=false,bCondom=true,bInsertedNow=false,bInsideFinished=false,bAnalRefused=false,bAnalAsked=false;
+    bool bStrong=false,bAnalPlay=false,bCondom=true,bInsertedNow=false,bInsideFinished=false,bAnalRefused=false,bAnalAsked=false,bServiceRefused=false; // bServiceRefused: she has served him as many times as she will this scene (service_rounds)
     // Counts for her experience.
     bool bPlayed=false,bService=false,bRaw=false,bCrotch=false,bAnal=false;
     int32 ServiceFinishes=0,CrotchClimaxes=0,AnalClimaxes=0,HerOrgasms=0,HisFinishes=0;

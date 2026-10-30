@@ -309,7 +309,8 @@ void UOKHScenePanel::Click(int32 Kind){
     const auto& X=Gallery->HExperience;
     switch(Kind){
     case Faster:
-        SpeedValue=FMath::Min(1.f,SpeedValue+.15f);if(Speed)Speed->SetValue(SpeedValue);
+        // From a standstill the button only starts them moving (start, move); faster only once moving.
+        if(HIsLoop(Base)){SpeedValue=FMath::Min(1.f,SpeedValue+.15f);if(Speed)Speed->SetValue(SpeedValue);}
         if(Mode==1&&(Base==TEXT("Idle")||Base==TEXT("Stop_Idle")||Base.EndsWith(TEXT("_A"))))Want(TEXT("WLoop"));
         else if(Mode==2&&Base==TEXT("InsertIdle"))Want(P(TEXT("WLoop")));
         break;
@@ -323,7 +324,10 @@ void UOKHScenePanel::Click(int32 Kind){
     case Outside:Finish(TEXT("outside"));break;
     case Drink:++Swallowed;Chain({TEXT("Drink_IN"),TEXT("Drink"),TEXT("Drink_A")});Note(OKT(TEXT("ui.hscene.event_drink")));break;
     case Vomit:Chain({TEXT("Vomit_IN"),TEXT("Vomit"),TEXT("Vomit_A")});Note(OKT(TEXT("ui.hscene.event_vomit")));break;
-    case Again:Want(TEXT("WLoop"));bStrong=false;break;
+    case Again:
+        // Once more only while she is willing: past her service_rounds for the scene she says no (and the panel stops offering it).
+        if(ServiceFinishes>=FMath::Max(1,X.IsValid()?int32(X->GetNumberField(TEXT("service_rounds"))):2)){bServiceRefused=true;Note(OKT(TEXT("ui.hscene.again_refused")));BuildList();break;}
+        Want(TEXT("WLoop"));bStrong=false;break;
     case Condom:bCondom=!bCondom;Note(OKT(bCondom?TEXT("ui.hscene.condom_on"):TEXT("ui.hscene.condom_off")),false);break;
     case Insert:
         // Raw only when she lets him (NamaInsertCheck): otherwise she has him put one on (the original's voice 302).
@@ -350,7 +354,7 @@ void UOKHScenePanel::BuildActions(){
     if(!Actions||!WidgetTree)return;
     const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
     const bool Busy=!Queue.IsEmpty()&&!(Queue.Num()==1&&Cur==Queue[0]);
-    const FString Key=FString::Printf(TEXT("%d|%s|%d|%d|%d|%d|%d|%d|%d"),Mode,*Cur,Busy,TouchArea,ActiveAibu+100*PendingAibu,His>=70.f,int32(bCondom)+2*int32(bAnalRefused)+4*int32(bLockHer)+8*int32(bLockHis),ActivePose,PendingPose);
+    const FString Key=FString::Printf(TEXT("%d|%s|%d|%d|%d|%d|%d|%d|%d"),Mode,*Cur,Busy,TouchArea,ActiveAibu+100*PendingAibu,His>=70.f,int32(bCondom)+2*int32(bAnalRefused)+4*int32(bLockHer)+8*int32(bLockHis)+16*int32(bServiceRefused),ActivePose,PendingPose);
     if(Key==ActionsKey)return;ActionsKey=Key;Actions->ClearChildren();Offered.Reset();
     auto Add=[this](int32 Kind,const TCHAR* Label){Offered.Add(Kind);auto* B=WidgetTree->ConstructWidget<UOKHSceneButton>();B->Kind=Kind;B->Owner=this;B->OnClicked.AddDynamic(B,&UOKHSceneButton::HandleClick);auto* L=WidgetTree->ConstructWidget<UTextBlock>();L->SetText(FText::FromString(OKT(Label)));B->SetContent(L);Actions->AddChildToWrapBox(B);};
     if(Mode==0&&ActiveAibu!=INDEX_NONE&&PendingAibu==INDEX_NONE&&!Busy){
@@ -364,11 +368,11 @@ void UOKHScenePanel::BuildActions(){
     const FOKHPose& Pose=Poses[ActivePose];
     Add(LockHer,bLockHer?TEXT("ui.hscene.act_unlock_her"):TEXT("ui.hscene.act_lock_her"));Add(LockHis,bLockHis?TEXT("ui.hscene.act_unlock_his"):TEXT("ui.hscene.act_lock_his"));
     if(Mode==1){
-        if(Base==TEXT("Idle")||Base==TEXT("Stop_Idle"))Add(Faster,TEXT("ui.hscene.act_start"));
+        if((Base==TEXT("Idle")||Base==TEXT("Stop_Idle"))&&!bServiceRefused)Add(Faster,TEXT("ui.hscene.act_start"));
         else if(HIsLoop(Base)){Add(Faster,TEXT("ui.hscene.act_faster"));Add(Slower,TEXT("ui.hscene.act_slower"));Add(Toggle,TEXT("ui.hscene.act_toggle"));Add(Stop,TEXT("ui.hscene.act_stop"));}
         else if(Base==TEXT("OLoop")){Add(Inside,Pose.KindHoushi==1?TEXT("ui.hscene.act_in_mouth"):Pose.KindHoushi==2?TEXT("ui.hscene.act_on_chest"):TEXT("ui.hscene.act_in_hand"));Add(Outside,TEXT("ui.hscene.act_outside"));}
         else if(Base==TEXT("Oral_Idle")){Add(Drink,TEXT("ui.hscene.act_drink"));Add(Vomit,TEXT("ui.hscene.act_vomit"));}
-        else if(Base.EndsWith(TEXT("_A"))){Add(Again,TEXT("ui.hscene.act_again"));Add(Stop,TEXT("ui.hscene.act_rest"));}
+        else if(Base.EndsWith(TEXT("_A"))){if(!bServiceRefused)Add(Again,TEXT("ui.hscene.act_again"));Add(Stop,TEXT("ui.hscene.act_rest"));}
         return;
     }
     const bool Out=Base==TEXT("Idle")||Base==TEXT("OUT_A");
@@ -403,7 +407,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
         if(Found!=INDEX_NONE&&(Found!=ActivePose||PendingPose==Found)){
             ActivePose=Found;PendingPose=INDEX_NONE;Mode=Poses[Found].Mode;Queue.Reset();Wanted.Reset();bAnalPlay=false;bInsideFinished=false;bStrong=false;
             if(Has(TEXT("Idle")))Want(TEXT("Idle"));
-            Tab=Mode==2?TabSonyu:TabHand+Poses[Found].KindHoushi;BuildList();
+            Tab=Mode==2?TabSonyu:TabHand+Poses[Found].KindHoushi;BuildList();if(Hint)Hint->SetText(FText::FromString(Mode==1&&bServiceRefused?OKT(TEXT("ui.hscene.again_refused")):Poses[Found].Name)); // the new pose (or why she will not start it), not the last one's event
         }
     }
     const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
