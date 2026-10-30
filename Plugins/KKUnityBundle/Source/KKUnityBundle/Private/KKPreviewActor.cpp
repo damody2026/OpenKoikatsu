@@ -3562,6 +3562,173 @@ static UMaterialInterface* OKMirrorMaterial(bool bTranslucent)
 #endif
 }
 
+// HarvexARC/XRay (Material Editor's "HarvexARC-XRay", [HarvexARC]Shader Pack). Installed PS: with n_z the view-space
+// normal's z (towards the camera) and s = _InsideSize / 4,
+//   c = Inside * s + 0.5 * max(1 - n_z ^ _RimSize, 0) * (Rim - Inside * s) + _EmissionColor, alpha = s;
+// drawn twice, Cull Off, ZWrite Off: XRAYMAIN (SrcAlpha, OneMinusSrcAlpha) then XRAYSEC (One, One), so the frame gets
+// dst * (1 - s) + c * (1 + s): one premultiplied pass (AlphaComposite: emissive + dst * (1 - opacity)).
+static UMaterialInterface* OKXRayMaterial()
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (Cached) return Cached.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = BLEND_AlphaComposite;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TwoSided = true;
+	Mat->TranslucencyPass = MTP_BeforeDOF;
+	auto Vector = [Mat](const TCHAR* Name, const FLinearColor& Default)
+	{
+		auto* P = NewObject<UMaterialExpressionVectorParameter>(Mat);
+		P->Material = Mat;
+		P->ParameterName = Name;
+		P->DefaultValue = Default;
+		Mat->GetExpressionCollection().AddExpression(P);
+		return P;
+	};
+	auto Scalar = [Mat](const TCHAR* Name, float Default)
+	{
+		auto* P = NewObject<UMaterialExpressionScalarParameter>(Mat);
+		P->Material = Mat;
+		P->ParameterName = Name;
+		P->DefaultValue = Default;
+		Mat->GetExpressionCollection().AddExpression(P);
+		return P;
+	};
+	// Material Editor's defaults (its manifest sets them when it gives a material this shader).
+	UMaterialExpression* Inside = Vector(TEXT("_InsideColor"), FLinearColor(0.f, 0.f, 0.f, 1.f));
+	UMaterialExpression* Rim = Vector(TEXT("_RimColor"), FLinearColor::White);
+	UMaterialExpression* Emission = Vector(TEXT("_EmissionColor"), FLinearColor(0.f, 0.f, 0.f, 0.f));
+	UMaterialExpression* InsideSize = Scalar(TEXT("_InsideSize"), 0.f);
+	UMaterialExpression* RimSize = Scalar(TEXT("_RimSize"), 0.5f);
+	auto* Normal = NewObject<UMaterialExpressionVertexNormalWS>(Mat);
+	Normal->Material = Mat;
+	Mat->GetExpressionCollection().AddExpression(Normal);
+	auto Program = [Mat](ECustomMaterialOutputType Type, const TCHAR* Code, TArray<TPair<const TCHAR*, UMaterialExpression*>> In)
+	{
+		auto* P = NewObject<UMaterialExpressionCustom>(Mat);
+		P->Material = Mat;
+		P->OutputType = Type;
+		P->Code = Code;
+		for (const TPair<const TCHAR*, UMaterialExpression*>& I : In)
+		{
+			FCustomInput C;
+			C.InputName = I.Key;
+			C.Input.Expression = I.Value;
+			P->Inputs.Add(C);
+		}
+		Mat->GetExpressionCollection().AddExpression(P);
+		return P;
+	};
+	// n_z <= 0: log2 of it is NaN (no rim) or -inf (pow 0, full rim), as on the GPU.
+	auto* Rgb = Program(CMOT_Float3, TEXT(
+		"float nz = dot(normalize(N), -ResolvedView.ViewForward);\n"
+		"float rim = nz > 0.0 ? max(1.0 - pow(nz, RimSize), 0.0) : (nz == 0.0 ? 1.0 : 0.0);\n"
+		"float s = InsideSize * 0.25;\n"
+		"float3 c = Inside * s + 0.5 * rim * (Rim - Inside * s) + Emission;\n"
+		"return c * (1.0 + s);"),
+		{ { TEXT("N"), Normal }, { TEXT("Inside"), Inside }, { TEXT("Rim"), Rim }, { TEXT("Emission"), Emission }, { TEXT("InsideSize"), InsideSize }, { TEXT("RimSize"), RimSize } });
+	auto* Alpha = Program(CMOT_Float1, TEXT("return saturate(InsideSize * 0.25);"), { { TEXT("InsideSize"), InsideSize } });
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData())
+	{
+		Ed->EmissiveColor.Expression = Rgb;
+		Ed->Opacity.Expression = Alpha;
+	}
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Cached.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
+// Unlit/Glitch3DProjection ([KK_MaterialEditor]Glitch Shader), SrcAlpha OneMinusSrcAlpha, Cull Back. Installed PS, with
+// Unity's _Time = (t / 20, t, 2t, 3t), _SinTime.x = sin(t / 8), world positions in metres (y up):
+//   hash(p) = frac(sin(dot(p, (12.9898, 78.233))) * 43758.5453), h = hash(floor(_BlockSize * uv)) (_BlockSize an int)
+//   c = (_MainTex.rgb * _Color4.rgb, _Color4.a) + frac(frac(_BlockSpeed * -_SinTime.x * h) - 0.5) * _BlockAmount
+//     + frac(worldY - 8 * _Time.x) * 0.4 * _Color4 + 0.5 * (1 - saturate(dot(V, N)))^2
+//   alpha = c.a + (_FlickerTex(_FlickerSpeed * _Time.xy).r - 0.5) * _FlickerAmount
+// The vertex program's occasional glitch (a band of vertices pushed out, then a brighter block flash) is left out: the
+// object shows its resting state.
+static UMaterialInterface* OKGlitchMaterial()
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (Cached) return Cached.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = BLEND_Translucent;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TranslucencyPass = MTP_BeforeDOF;
+	auto Add = [Mat](UMaterialExpression* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
+	auto Vector = [&](const TCHAR* Name, const FLinearColor& Default) { auto* P = NewObject<UMaterialExpressionVectorParameter>(Mat); P->ParameterName = Name; P->DefaultValue = Default; Add(P); return P; };
+	auto Scalar = [&](const TCHAR* Name, float Default) { auto* P = NewObject<UMaterialExpressionScalarParameter>(Mat); P->ParameterName = Name; P->DefaultValue = Default; Add(P); return P; };
+	auto Texture = [&](const TCHAR* Name) { auto* P = NewObject<UMaterialExpressionTextureObjectParameter>(Mat); P->ParameterName = Name; P->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture")); Add(P); return P; };
+	// The shader's property defaults (m_PropInfo), and Material Editor's for _Color4 (its manifest sets 0.37, 0.84, 0.93,
+	// 0.2 when it gives a material this shader; Unity uploads it linear). The program's tint is _Color4, not _Color
+	// (Studio writes the item colour to _Color).
+	UMaterialExpression* Color = Vector(TEXT("_Color4"), FLinearColor(0.1144f, 0.6724f, 0.8469f, 0.2f));
+	UMaterialExpression* Main = Texture(TEXT("_MainTex"));
+	UMaterialExpression* Flicker = Texture(TEXT("_FlickerTex"));
+	UMaterialExpression* FlickerSpeed = Scalar(TEXT("_FlickerSpeed"), 20.f);
+	UMaterialExpression* FlickerAmount = Scalar(TEXT("_FlickerAmount"), 0.125f);
+	UMaterialExpression* BlockSize = Scalar(TEXT("_BlockSize"), 32.f);
+	UMaterialExpression* BlockAmount = Scalar(TEXT("_BlockAmount"), 0.125f);
+	UMaterialExpression* BlockSpeed = Scalar(TEXT("_BlockSpeed"), 2.f);
+	UMaterialExpression* Uv = Add(NewObject<UMaterialExpressionTextureCoordinate>(Mat));
+	UMaterialExpression* Normal = Add(NewObject<UMaterialExpressionVertexNormalWS>(Mat));
+	UMaterialExpression* Position = Add(NewObject<UMaterialExpressionWorldPosition>(Mat));
+	UMaterialExpression* Camera = Add(NewObject<UMaterialExpressionCameraPositionWS>(Mat));
+	UMaterialExpression* Time = Add(NewObject<UMaterialExpressionTime>(Mat));
+	auto* Program = NewObject<UMaterialExpressionCustom>(Mat);
+	Program->OutputType = CMOT_Float4;
+	Program->Code = TEXT(
+		"float t = Time; float4 ut = float4(t / 20.0, t, 2.0 * t, 3.0 * t);\n"
+		"float2 cell = floor((float)(int)BlockSize * Uv);\n"
+		"float h = frac(sin(dot(cell, float2(12.9898, 78.233))) * 43758.5453);\n"
+		"float block = frac(frac(BlockSpeed * -sin(t / 8.0) * h) - 0.5);\n"
+		"float4 tex = Texture2DSample(MainTex, MainTexSampler, Uv);\n"
+		"float4 c = float4(tex.rgb * Tint.rgb, Tint.a) + block * BlockAmount;\n"
+		"float3 v = normalize(Cam - Pos) ;\n"
+		"float rim = 1.0 - saturate(dot(v, normalize(N)));\n"
+		"float worldY = Pos.z / 100.0;\n"
+		"c += frac(worldY - 8.0 * ut.x) * 0.4 * Tint + rim * rim * 0.5;\n"
+		"float flick = Texture2DSample(FlickerTex, FlickerTexSampler, FlickerSpeed * ut.xy).r - 0.5;\n"
+		"return float4(c.rgb, saturate(c.a + flick * FlickerAmount));");
+	auto Input = [Program](const TCHAR* Name, UMaterialExpression* E, int32 Output = 0) { FCustomInput C; C.InputName = Name; C.Input.Expression = E; C.Input.OutputIndex = Output; Program->Inputs.Add(C); };
+	Input(TEXT("Time"), Time); Input(TEXT("BlockSize"), BlockSize); Input(TEXT("Uv"), Uv); Input(TEXT("BlockSpeed"), BlockSpeed);
+	Input(TEXT("MainTex"), Main); Input(TEXT("Tint"), Color, 5 /* RGBA */); Input(TEXT("BlockAmount"), BlockAmount); Input(TEXT("Cam"), Camera);
+	Input(TEXT("Pos"), Position); Input(TEXT("N"), Normal); Input(TEXT("FlickerTex"), Flicker); Input(TEXT("FlickerSpeed"), FlickerSpeed);
+	Input(TEXT("FlickerAmount"), FlickerAmount);
+	Add(Program);
+	auto* Rgb = Add(NewObject<UMaterialExpressionComponentMask>(Mat));
+	Cast<UMaterialExpressionComponentMask>(Rgb)->Input.Expression = Program;
+	Cast<UMaterialExpressionComponentMask>(Rgb)->R = Cast<UMaterialExpressionComponentMask>(Rgb)->G = Cast<UMaterialExpressionComponentMask>(Rgb)->B = 1;
+	auto* Alpha = Add(NewObject<UMaterialExpressionComponentMask>(Mat));
+	Cast<UMaterialExpressionComponentMask>(Alpha)->Input.Expression = Program;
+	Cast<UMaterialExpressionComponentMask>(Alpha)->A = 1;
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData())
+	{
+		Ed->EmissiveColor.Expression = Rgb;
+		Ed->Opacity.Expression = Alpha;
+	}
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Cached.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
 UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, int32 PartIndex)
 {
 	// okmodel_view::mark_render_texture: camera index, then the camera in prefab space (Unity axes, metres).
@@ -6266,6 +6433,43 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					Part.SurfaceMat = Dynamic;
 					SharedRenderTextureScreens.Add({ FMath::RoundToInt(SharedTarget.R), FIntPoint(FMath::RoundToInt(SharedTarget.G), FMath::RoundToInt(SharedTarget.B)), Dynamic, Comp });
 					UE_LOG(LogTemp, Display, TEXT("OK render texture shared screen part=%s key=%d"), *Name, FMath::RoundToInt(SharedTarget.R));
+				}
+		// HarvexARC XRay (a Material Editor shader): its rim glow over what is behind; the material's own values where it
+		// has them (a swapped material keeps its old properties), else the shader's defaults.
+		if (Comp && !bBody && !bFaceDraw && (Source.MaterialShaderName(i).Equals(TEXT("HarvexARC/XRay"), ESearchCase::IgnoreCase) || Source.MaterialShaderName(i).Equals(TEXT("HarvexARC-XRay"), ESearchCase::IgnoreCase)))
+			if (UMaterialInterface* XRayMat = OKXRayMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(XRayMat, Comp))
+				{
+					const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+					for (const TCHAR* Property : { TEXT("_InsideColor"), TEXT("_RimColor"), TEXT("_EmissionColor") })
+					{
+						FLinearColor V;
+						if (Source.MaterialValue(i, TCHAR_TO_UTF8(Property), V)) Dynamic->SetVectorParameterValue(Property, FLinearColor(Linear(V.R), Linear(V.G), Linear(V.B), V.A));
+					}
+					for (const TCHAR* Property : { TEXT("_InsideSize"), TEXT("_RimSize") })
+					{
+						FLinearColor V;
+						if (Source.MaterialValue(i, TCHAR_TO_UTF8(Property), V)) Dynamic->SetScalarParameterValue(Property, V.R);
+					}
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+					UE_LOG(LogTemp, Display, TEXT("OK xray part=%s"), *Name);
+				}
+		// Unlit/Glitch3DProjection (a Material Editor shader): the hologram look, from the material's values where it has
+		// them, else the shader's defaults.
+		if (Comp && !bBody && !bFaceDraw && Source.MaterialShaderName(i).Equals(TEXT("Unlit/Glitch3DProjection"), ESearchCase::IgnoreCase))
+			if (UMaterialInterface* GlitchMat = OKGlitchMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(GlitchMat, Comp))
+				{
+					const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+					if (Tex) Dynamic->SetTextureParameterValue(TEXT("_MainTex"), Tex);
+					FLinearColor V;
+					if (Source.MaterialValue(i, "_Color4", V)) Dynamic->SetVectorParameterValue(TEXT("_Color4"), FLinearColor(Linear(V.R), Linear(V.G), Linear(V.B), V.A));
+					for (const TCHAR* Property : { TEXT("_FlickerSpeed"), TEXT("_FlickerAmount"), TEXT("_BlockSize"), TEXT("_BlockAmount"), TEXT("_BlockSpeed") })
+						if (Source.MaterialValue(i, TCHAR_TO_UTF8(Property), V)) Dynamic->SetScalarParameterValue(Property, V.R);
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+					UE_LOG(LogTemp, Display, TEXT("OK glitch part=%s"), *Name);
 				}
 		// A mirror (FX/MirrorReflection): the scene gives "_ReflectionTex" a capture mirrored in the part's plane.
 		if (Comp && !bBody && !bFaceDraw && Source.MaterialShaderName(i).StartsWith(TEXT("FX/MirrorReflection")))
