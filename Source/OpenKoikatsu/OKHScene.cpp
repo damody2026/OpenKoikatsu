@@ -259,8 +259,15 @@ void UOKHScenePanel::ApplySpeed(){
 void UOKHScenePanel::Finish(const TCHAR* Kind){
     const FString K=Kind;
     if(Mode==1){
-        ++ServiceFinishes;++HisFinishes;His=0.f;if(K==TEXT("inside"))++HisMouth;else ++HisOutside;
-        if(K==TEXT("inside")){Chain({TEXT("IN_Start"),TEXT("IN_Loop"),TEXT("Oral_Idle_IN"),TEXT("Oral_Idle")});OralIdleSince=0.;const int32 Kind=Poses.IsValidIndex(ActivePose)?Poses[ActivePose].KindHoushi:1;Note(OKT(Kind==1?TEXT("ui.hscene.event_service_inside"):Kind==2?TEXT("ui.hscene.event_service_chest"):TEXT("ui.hscene.event_service_hand")));}
+        ++ServiceFinishes;++HisFinishes;His=0.f;
+        // In her mouth only for a mouth pose: on her chest or in her hand is outside her (not swallowed or spat).
+        if(K==TEXT("inside")&&(!Poses.IsValidIndex(ActivePose)||Poses[ActivePose].KindHoushi==1))++HisMouth;else ++HisOutside;
+        if(K==TEXT("inside")){const int32 Kind=Poses.IsValidIndex(ActivePose)?Poses[ActivePose].KindHoushi:1;
+            // In her mouth: she holds it, then swallows or spits (Oral_Idle). On her chest or in her hand there is nothing to
+            // swallow: the finish, then the after state (IN_A, or OUT_A where the pose has none).
+            if(Kind==1){Chain({TEXT("IN_Start"),TEXT("IN_Loop"),TEXT("Oral_Idle_IN"),TEXT("Oral_Idle")});OralIdleSince=0.;}
+            else Chain({TEXT("IN_Start"),TEXT("IN_Loop"),Has(TEXT("IN_A"))?TEXT("IN_A"):TEXT("OUT_A")});
+            Note(OKT(Kind==1?TEXT("ui.hscene.event_service_inside"):Kind==2?TEXT("ui.hscene.event_service_chest"):TEXT("ui.hscene.event_service_hand")));}
         else{Chain({TEXT("M_OUT_Start"),TEXT("M_OUT_Loop"),TEXT("OUT_A")});Note(OKT(TEXT("ui.hscene.event_service_outside")));}
         return;
     }
@@ -438,6 +445,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
             // What she agreed to goes with it (the reaction keeps only the latest note): she said yes to his asking.
             if(First){FString Event=OKT(Virgin?(Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.react_first_anal"):TEXT("ui.hscene.react_virgin")):Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.event_insert_anal"):bCondom?TEXT("ui.hscene.event_insert"):TEXT("ui.hscene.event_insert_raw"));
                 if(Cur.StartsWith(TEXT("A_")))Event+=OKT(TEXT("ui.hscene.react_agreed_anal"));else if(bRawPressed&&!bCondom)Event+=OKT(TEXT("ui.hscene.react_agreed_raw"));
+                else if(!bCondom)Event+=OKT(TEXT("ui.hscene.react_raw_fine")); // raw_ok: she lets him without being asked twice
                 React(Event);}
         }
         if(Base==TEXT("Oral_Idle"))OralIdleSince=Now;

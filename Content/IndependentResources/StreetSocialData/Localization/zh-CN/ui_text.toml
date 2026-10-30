@@ -2221,6 +2221,7 @@ talk_context = "（现在你们正在私密的房间里亲热：姿势「{pose}�
 react_note = "（刚刚发生的事：{event}。照你的个性和此刻的感受，用一两句很短、带喘息的话自然反应；不用重述发生了什么，也不要提议做别的事。）"
 react_agreed_anal = "（是你自己答应让他从后面进来的）"
 react_agreed_raw = "（你刚才拗不过他，答应了不戴套）"
+react_raw_fine = "（你不介意他不戴套）"
 react_virgin = "他第一次进入你的身体，这是你的第一次"
 react_first_anal = "他第一次从后面进入你"
 act_lock_her = "锁住她"
