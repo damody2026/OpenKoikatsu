@@ -582,11 +582,14 @@ fn class_clash(r: &Value) -> Result<Value, String> {
         return Ok(json!({"course": ""}));
     }
     // Class slots: 0 is 09:00-12:00, 1 is 13:30-16:30.
-    let clash = me.courses.iter().find(|c| {
+    // Every class it runs over, in the order of the day: an 8-14 shift on Friday named only Data Structures (the later
+    // one, first in his course list) and not the morning English it also misses (R6-23).
+    let mut clash: Vec<_> = me.courses.iter().filter(|c| {
         let (a, b) = if c.slot == 0 { (9.0, 12.0) } else { (13.5, 16.5) };
         c.weekday == weekday && from < b && to > a
-    });
-    Ok(json!({"course": clash.map(|c| c.name.clone()).unwrap_or_default()}))
+    }).collect();
+    clash.sort_by_key(|c| c.slot);
+    Ok(json!({"course": clash.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(crate::tr::t("bank.list_separator"))}))
 }
 
 pub fn eval(kind: &str, r: &Value) -> Option<Result<Value, String>> {
@@ -612,7 +615,9 @@ mod tests {
     fn a_shift_over_a_class_names_it_and_an_evening_one_does_not() {
         // Day 0 (2010-09-01) is a Wednesday (weekday 2).
         let player = json!({"status": "enrolled", "courses": [{"name": "OS", "weekday": 2, "slot": 0}, {"name": "DS", "weekday": 2, "slot": 1}]});
-        assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 8.0, "to": 14.0})).unwrap()["course"], "OS");
+        assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 8.0, "to": 12.0})).unwrap()["course"], "OS");
+        let both = json!({"status": "enrolled", "courses": [{"name": "DS", "weekday": 2, "slot": 1}, {"name": "OS", "weekday": 2, "slot": 0}]});
+        assert_eq!(class_clash(&json!({"player": both, "day": 0, "from": 8.0, "to": 14.0})).unwrap()["course"], format!("OS{}DS", crate::tr::t("bank.list_separator")), "both, morning first");
         assert_eq!(class_clash(&json!({"player": player, "day": 0, "from": 17.0, "to": 22.0})).unwrap()["course"], "");
         assert_eq!(class_clash(&json!({"player": player, "day": 1, "from": 8.0, "to": 14.0})).unwrap()["course"], "");
         let leave = json!({"status": "leave", "courses": [{"name": "OS", "weekday": 2, "slot": 0}]});
