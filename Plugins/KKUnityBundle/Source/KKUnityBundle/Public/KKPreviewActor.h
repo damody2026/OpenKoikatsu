@@ -735,6 +735,9 @@ public:
 		FVector LocalNormal = FVector::UpVector;
 	};
 	TArray<FMirrorPart> MirrorParts;
+	/** Blended parts whose shader writes depth (Unity's ZWrite On with a blend): Unity's depth test keeps such a part
+	 *  from covering nearer surfaces drawn before it; UE's blended parts write no depth, so the scene orders them. */
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> ZWriteBlendedParts;
 	UTextureRenderTarget2D* RenderTextureFor(FOkSession& Source, int32 PartIndex);
 	void StopRenderTextureCaptures();
 	UPROPERTY()

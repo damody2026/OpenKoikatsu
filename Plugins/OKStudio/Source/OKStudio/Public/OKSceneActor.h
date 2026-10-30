@@ -135,6 +135,9 @@ private:
 	void PlaceSky(const FTransform& View);
 	/** The shown items' sky dome parts (OKSkyDome), found again after the shown objects change. */
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> SkyDomeParts;
+	/** The shown items' blended depth-writing parts (AKKPreviewActor::ZWriteBlendedParts) and their own sort priority
+	 *  (kept from when each was first seen); one around the view draws before other blended parts (PlaceBackground). */
+	TMap<TWeakObjectPtr<UPrimitiveComponent>, int32> ZWriteShellParts;
 	bool bSkyDomesDirty = true;
 	bool bBuildsPending = false;
 	/** Previews destroyed since the last forced garbage collection. */
