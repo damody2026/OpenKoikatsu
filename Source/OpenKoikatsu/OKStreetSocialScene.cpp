@@ -2218,7 +2218,9 @@ void AOKStreetSocialScene::EndTalk(){
  if(Ending&&S.TalkStartMinute>=0&&S.Manifest.Characters.IsValidIndex(S.Target)&&!(GetWorld()&&GetWorld()->bIsTearingDown)){bool Hers=false,His=false;const auto& List=HistoryOf(OKStreetStableId(S.Manifest.Characters[S.Target]));
   for(int32 K=List.Num()-1;K>=0;--K){const auto& E=List[K];if(E.Minute<S.TalkStartMinute)break;
    if(E.Kind==TEXT("talk")){Hers|=E.Who==TEXT("her");His|=E.Who==TEXT("him");}}
-  if(Hers&&!His){const FString Text=OKT(TEXT("ui.memory.left_without_word"));HistoryAdd(S.Target,TEXT("talk"),TEXT("world"),Text);MindRemember(S.Target,TEXT("talk"),Text,PlaceHere(S.Male),0.4f);
+  // Her first words still on their way (she came over and he went before her line arrived: 三月七 asking about the book
+  // he gave Hu Tao) count the same.
+  if((Hers||S.FreeTalkBusy)&&!His){const FString Text=OKT(TEXT("ui.memory.left_without_word"));HistoryAdd(S.Target,TEXT("talk"),TEXT("world"),Text);MindRemember(S.Target,TEXT("talk"),Text,PlaceHere(S.Male),0.4f);
    UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d he left without a word to what she said"),S.Target);}}
  if(Ending&&S.TalkStartMinute>=0&&OKStreetMindNow(S)>S.TalkStartMinute){const int64 Now=OKStreetMindNow(S);const int64 From=S.TalkStartMinute;S.TalkStartMinute=-1; // a talk of under a minute (re-opened at once) is not a memory
   MindRemember(S.Target,TEXT("talk"),OKMsg(TEXT("ui.memory.talk_session"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))},{TEXT("minutes"),int32(FMath::Max<int64>(1,Now-From))},

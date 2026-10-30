@@ -186,7 +186,10 @@ void AOKStreetSocialScene::StepApproach(){
  // went on as a call beside him; she said "coming now" and he was told they were apart.
  if(S.RemoteMode==2&&S.RemotePeer==I&&(FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))){
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d reached him while he was on the phone with her; the call ends"),I);PhoneHangUp();}
- if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260))&&S.RemoteMode==0&&S.PrivateGirl==INDEX_NONE){
+ // At the end of her route a few steps short (the walk ends at his dorm's door, he is just inside): there, and she speaks
+ // from where she stands. 胡桃 stood 3.4 m from him for 90 s and went off without a word (R6-20).
+ const bool RouteDone=S.ApproachPath.Num()<2&&SceneTime()-S.ApproachRouteAt<1.0&&FVector::Dist2D(A.Position,S.Male)<450;
+ if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260)||RouteDone)&&S.RemoteMode==0&&S.PrivateGirl==INDEX_NONE){
   const bool Join=S.ApproachJoin,ForSong=S.ApproachSong,ForPrivate=S.ApproachPrivate;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, private=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,ForPrivate?1:0,With);
   Stop();

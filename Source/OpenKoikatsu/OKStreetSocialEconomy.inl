@@ -634,6 +634,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  FlushRulesEffects();
  for(const auto& L:S.Cart)if(const auto* I=S.Catalog.Find(L.ItemId);I&&!I->Consumable)S.RecentBought.Add(L.ItemId+(L.ForHer?TEXT("|her"):TEXT("|him")),OKStreetMindNow(S));
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
+ // Her treat promise this bill keeps: only one she had made (read before it is cleared just below).
+ const bool PromiseKept=WithHer&&Answer->GetBoolField(TEXT("treat_kept"))&&S.HerTreatPromise.Contains(Her);
  if(WithHer&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;
  {const bool Food=S.Cart.ContainsByPredicate([&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return I&&I->Consumable;});
@@ -653,8 +655,9 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // What she just paid all by herself, here (RecordPayAgreed: "my treat" right after hands it back to her).
  // Not a bill she paid as she had promised or agreed to (her treat this time): "my treat" after it is for what comes
  // next, and paying her back went against her own promise ("keep the money, I said it was mine").
- bool TreatKept=false;Answer->TryGetBoolField(TEXT("treat_kept"),TreatKept);
- if(HerPays>0&&PlayerPays==0&&!TreatKept&&PayAgreed(Her)!=TEXT("her")){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
+ // "treat_kept" is true for every bill she pays, so it kept this from ever happening: 三月七's tea, paid by her when
+ // the choice ran out, stayed hers after his "this meal is on me" a minute later (R6-21).
+ if(HerPays>0&&PlayerPays==0&&!PromiseKept&&PayAgreed(Her)!=TEXT("her")){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
  {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
  if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();

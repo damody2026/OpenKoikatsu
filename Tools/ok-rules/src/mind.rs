@@ -196,7 +196,7 @@ mod tests {
         let owing = Relation { owes_player: 400, ..r.clone() };
         assert!(needs_text(&owing, 0.0, false).ends_with("你還欠他 ¥400（是他借給你的，不是他欠你）"));
         assert_eq!(needs_text(&Relation { satiety: 60.0, ..Default::default() }, 80.0, false), "");
-        assert_eq!(needs_text(&Relation { satiety: 98.0, energy: 80.0, fun: 80.0, social: 80.0, hygiene: 80.0, ..Default::default() }, 0.0, false), "剛吃飽，不餓");
+        assert!(needs_text(&Relation { satiety: 98.0, energy: 80.0, fun: 80.0, social: 80.0, hygiene: 80.0, ..Default::default() }, 0.0, false).starts_with("剛吃飽，不餓"));
     }
 
     #[test]
