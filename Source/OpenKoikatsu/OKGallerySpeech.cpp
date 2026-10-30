@@ -116,8 +116,10 @@ void UOKCharacterController::StartPairBreath() {
     const auto& Cues=bMoving?PairMovingBreaths:PairStillBreaths;Error=bMoving?MovingError:StillError;
     if(!(bMoving?MovingReady:StillReady)||!Female->BeginHBreath(Cues,FMath::Lerp(.94f,1.06f,Rate),Error)){
         if(SpeechStatus)SpeechStatus->SetText(FText::FromString(Error.IsEmpty()?TEXT("這個動作沒有可播放的喘息"):Error));
+        UE_LOG(LogTemp,Display,TEXT("Pair breath: none for mode %d %s moving=%d: %s"),Mode,*State,bMoving,*Error);
         return;
     }
     bSpeechWasPlaying=true;
+    UE_LOG(LogTemp,Display,TEXT("Pair breath: mode %d %s moving=%d cues=%d playing"),Mode,*State,bMoving,Cues.Num());
     if(SpeechStatus)SpeechStatus->SetText(FText::FromString(FString::Printf(TEXT("喘息 %s · %s · %d 種叫聲"),*HeroineVoiceLabel(Personality),*State,Cues.Num())));
 }
