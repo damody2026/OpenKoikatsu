@@ -110,7 +110,7 @@ void UOKHScenePanel::SelectAibu(int32 Index){
             G->PreviewActor->SetActorTickEnabled(true);G->PreviewActor->SetGameSceneMode(3,false);G->SelectedGameSceneMode=3;
             UI->SoloKeys=MoveTemp(Keys);UI->ActiveAibu=UI->PendingAibu;UI->PendingAibu=INDEX_NONE;UI->ActivePose=INDEX_NONE;UI->Mode=0;UI->SoloState.Reset();
             G->NoteAction(TEXT("pair"),UI->AibuPoses[UI->ActiveAibu].Name);
-            UI->PlaySolo(TEXT("Idle"));UI->BuildList();
+            UI->PlaySolo(TEXT("Idle"));UI->BuildList();if(UI->Hint)UI->Hint->SetText(FText::FromString(UI->AibuPoses[UI->ActiveAibu].Name)); // loaded: the hint no longer says loading
         });
     });
 }
@@ -549,7 +549,7 @@ void UOKHScenePanel::FrameCamera(){
             if(Line.Size()>5.f){Line.Normalize();FVector Side(-Line.Y,Line.X,0);if((Side|Facing)<0)Side=-Side;Dir=(Side+.45f*Facing-.25f*Line).GetSafeNormal();}
             Focus=FMath::Lerp(HerBox.GetCenter(),HisBox.GetCenter(),.3f);Size=FMath::Max(Size,(HerBox+HisBox).GetExtent().Size()*.8f);
         }
-    }else{Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();Size*=.75f;}
+    }else{Dir=(Facing+.5f*FVector(Facing.Y,-Facing.X,0)).GetSafeNormal();Size*=.95f;Focus.Z+=HerBox.GetExtent().Z*.25f;} // head to knees, the head never cut
     if(Dir.IsNearlyZero())return;
     Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=18.f;Girl->OrbitDistance=FMath::Clamp(Size*2.1f,120.f,600.f);
     Girl->ApplyOrbitCamera();

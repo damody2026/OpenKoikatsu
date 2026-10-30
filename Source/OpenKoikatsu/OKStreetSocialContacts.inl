@@ -358,6 +358,8 @@ void AOKStreetSocialScene::FinishPrivate(){
 }
 bool AOKStreetSocialScene::TickPrivate(double Now){
  auto& S=*State;if(S.PrivateGirl==INDEX_NONE)return false;
+ // Esc leaves it like the leave button (the scene's own Esc check sees only real keys, not the control channel's).
+ if(S.PrivateMode.IsValid()&&OKKeyPressed(GetWorld()->GetFirstPlayerController(),EKeys::Escape)){FinishPrivate();return true;}
  if(S.PrivateMode.IsValid()){
   // Talk while it happens: his line from the H panel goes to her as free talk (she is the partner while the scene is
   // open, FreeTalkPartner), with what she is in the middle of; her answer is shown on the panel.
