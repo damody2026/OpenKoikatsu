@@ -9,7 +9,7 @@ pub(crate) fn resolve_face_entry(
     vanilla: &ChaListCatalog,
     card: &CardInfo,
     guid_index: &std::collections::HashMap<String, PathBuf>,
-    zip_lists: &mut std::collections::HashMap<String, ChaListCatalog>,
+    zip_lists: &mut std::collections::HashMap<String, std::sync::Arc<ChaListCatalog>>,
 ) -> Option<ListEntry> {
     if let Some(r) = card.resolves.iter().find(|r| {
         r.category_no == 100 && r.property.to_ascii_lowercase().contains("headid")

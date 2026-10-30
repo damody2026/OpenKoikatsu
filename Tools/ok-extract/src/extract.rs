@@ -1380,7 +1380,7 @@ pub(crate) fn extract_session_from_info(
         manifest.unmapped_face.clear();
         manifest.unmapped_body.clear();
         let index = &guid_index;
-        let mut zip_lists: std::collections::HashMap<String, ChaListCatalog> =
+        let mut zip_lists: std::collections::HashMap<String, std::sync::Arc<ChaListCatalog>> =
             std::collections::HashMap::new();
         let mut seen_part = std::collections::HashSet::new();
         // Accessory slots already emitted by the KKEx resolve pass, so the
@@ -2776,7 +2776,7 @@ fn lists_stage(game_root: &Path, parsed_card: &Option<CardInfo>, outfit: i32, ou
     if let Some(card) = parsed_card.as_ref() {
         let want_outfit = outfit_prefix(outfit);
         let mut items: Vec<(Option<PathBuf>, ListEntry, bool)> = Vec::new();
-        let mut lists: std::collections::HashMap<String, ChaListCatalog> = std::collections::HashMap::new();
+        let mut lists: std::collections::HashMap<String, std::sync::Arc<ChaListCatalog>> = std::collections::HashMap::new();
         let mut seen = std::collections::HashSet::new();
         // A garment-state variant does not extract the hair and accessories (extract_session_from_info).
         let hair_and_accessories = !crate::state_variant_open();
