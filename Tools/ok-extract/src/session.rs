@@ -151,6 +151,22 @@ pub(crate) struct AccessoryRuntime {
     state: Option<crate::dbone::AttachedDynamicSet>,
 }
 
+/// An accessory runtime keeps only geometry and rig data: the SessionPart already owns every image and material, so
+/// duplicating them in the cache wastes many MB.
+fn drop_part_images(source: &mut ExtractedMesh) {
+    source.obj.clear();
+    source.mat = None;
+    source.shader_extra_textures.clear();
+    source.texture_png = None;
+    source.color_mask_png = None;
+    source.alpha_mask_png = None;
+    source.detail_mask_png = None;
+    source.line_mask_png = None;
+    source.normal_map_png = None;
+    source.normal_mask_png = None;
+    source.hair_gloss_png = None;
+}
+
 impl AccessoryRuntime {
     /// Diagnostics: (deferred DynamicBone components on the source, live particles (pos, prev)) when simulated.
     #[cfg(test)]
@@ -281,7 +297,8 @@ impl AccessoryRuntime {
         // helpers outside the body's SMR palette. Keep the clothes' authored
         // slots/binds even when there are no private dynamics. Flattening these
         // slots onto the nearest SMR ancestor loses helper offsets (skirt bones).
-        let mut source = raw.clone(); source.deferred_dbones = Some(owned); source.bone_names=rig.names.clone(); source.smr_skel=Some(rig);
+        // (without the images from_placed_source drops: it copies this source again)
+        let mut source = raw.clone(); drop_part_images(&mut source); source.deferred_dbones = Some(owned); source.bone_names=rig.names.clone(); source.smr_skel=Some(rig);
         let identity = crate::pose::ident();
         let mut runtime = Self::from_placed_source(&source, part_skel, "", &identity,
             if implants_active {identity} else {parent_world.copied().unwrap_or(identity)}, true)?;
@@ -313,19 +330,7 @@ impl AccessoryRuntime {
         let mut state = crate::dbone::AttachedDynamicSet::new_unsettled(&dbones, &skel, &placement);
         if !dbones.is_empty() && state.is_none() { return None; }
         if let Some(state) = state.as_mut() { state.classify_chains(parent_key, &source.name); }
-        // Retain only geometry and rig data. The SessionPart already owns every
-        // image/material, so duplicating them in the cache wastes many MB.
-        source.obj.clear();
-        source.mat = None;
-        source.shader_extra_textures.clear();
-        source.texture_png = None;
-        source.color_mask_png = None;
-        source.alpha_mask_png = None;
-        source.detail_mask_png = None;
-        source.line_mask_png = None;
-        source.normal_map_png = None;
-        source.normal_mask_png = None;
-        source.hair_gloss_png = None;
+        drop_part_images(&mut source);
         source.smr_skel = Some(skel);
         source.deferred_dbones = Some(dbones);
         source.rest_positions = source.positions.clone();
