@@ -501,6 +501,9 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
   bool HadBefore=false;{const TArray<FOKStreetCartLine> Mine(S.Cart.GetData()+CartBefore,S.Cart.Num()-CartBefore);S.Cart.SetNum(CartBefore);HadBefore=HasDishLike(ForHer?Character:0,*Item);S.Cart.Append(Mine);}
   if(HadBefore&&SecondDishOk(Character,ForHer,O.Id))HadBefore=false; // starving, a different dish (shop.rs order_second_dish)
   if(HadBefore||S.Cart.ContainsByPredicate([&](const FOKStreetCartLine& C){return C.ItemId==O.Id&&C.ForHer==ForHer;})){
+   // Another of its kind still on the table, not this one coming: she is told it was not ordered. 胡桃 said "the lemon
+   // tart, fine, ordered" while his tiramisu was half eaten, and none came.
+   if(HadBefore&&!DishComing(ForHer?Character:0,O.Id))S.TellHer.Add(OKMsg(TEXT("ui.economy.still_has_one_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, %s still has one"),*O.Id,ForHer?TEXT("she"):TEXT("he"));continue;}
   // A thing (not food) bought for the same one minutes ago (the judge's gift, then her own order for it): not twice.
   if(!Item->Consumable)if(const int64* At=S.RecentBought.Find(O.Id+(ForHer?TEXT("|her"):TEXT("|him")));At&&OKStreetMindNow(S)-*At<=15){

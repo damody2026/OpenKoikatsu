@@ -233,6 +233,9 @@ void AOKStreetSocialScene::TickServes(){
   if(P.Her==INDEX_NONE||FreeTalkPartner()!=P.Her){S.Serves.RemoveAt(K);continue;}
   // A replay he asked for plays out first: "the tea is here" sent in the middle of it stopped it after two lines.
   if(S.FreeTalkBusy||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty())continue;
+  // Nor while her last reply is still to be spoken: its answer came in, "the panini is here" went out at once, and its
+  // reply cut hers off unheard (he asked whether her thin wallet was all right; she only said the panini had come).
+  if(S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()&&FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt<20.0)continue;
   TArray<FString> Dishes;for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Dishes.Add(OKMsg(TEXT("ui.economy.item_owner_label"), {{TEXT("owner_label"), L.ForHer?OKT(TEXT("ui.economy.your_label")):OKT(TEXT("ui.economy.his_label"))}, {TEXT("item_name"), *I->Name}}));
   S.SystemNote=true;S.FreeTalkDraft=OKMsg(TEXT("ui.economy.dishes_served_prompt"), {{TEXT("dish_names"), *FString::Join(Dishes,OKT(TEXT("ui.bank.list_separator")))}});
   S.Serves.RemoveAt(K);SendFreeTalk();return;
@@ -309,6 +312,13 @@ void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
 // Whether Who (0: him, else a girl) already has one of these in front of them: the same kind (catalog category: a meal,
 // a dessert, a drink...; a steak and a pudding are both fine), on the table and not finished, or already in the cart. A second one is not ordered for them (the model may
 // list the same order again on every turn of a talk).
+bool AOKStreetSocialScene::DishComing(int32 Who,const FString& ItemId) const{
+ const auto& S=*State;
+ for(const auto& D:S.Table)if((D.ForHer?D.Her:0)==Who&&D.ItemId==ItemId&&D.Percent>0)return true;
+ for(const auto& L:S.Cart)if((L.Girl!=INDEX_NONE?L.Girl:L.ForHer?FreeTalkPartner():0)==Who&&L.ItemId==ItemId)return true;
+ for(const auto& Carried:S.CarriedOrders)for(const auto& L:Carried.Value)if((L.Girl!=INDEX_NONE?L.Girl:L.ForHer?Carried.Key:0)==Who&&L.ItemId==ItemId)return true;
+ return false;
+}
 bool AOKStreetSocialScene::HasDishLike(int32 Who,const FOKStreetCatalogItem& Item) const{
  const auto& S=*State;
  // A dish for two (the couple set, the moon-festival platter) is one for both of them: not a second one for him

@@ -429,6 +429,7 @@ treat_paid_back = "他說要請客，把你剛才自己付的 ¥{amount} 還給�
 buy_for_self_button = "買下"
 too_full_to_order = "（你說要點的{item}沒有點成：你其實已經吃飽了。{item}不會上桌，別再說它會來，可以照實說吃不下了；想喝的話可以點飲料。）"
 not_sold_here_order = "（你說要點的「{item}」沒有點成：這家店沒有賣它。它不會上桌，跟他照實說這裡沒有，問他要不要換成菜單上相近的；他點的也一樣，沒點成就告訴他。）"
+still_has_one_order = "（{for, select, her {你} other {他}}說要點的「{item}」這次沒有點成：{for, select, her {你} other {他}}桌上同類的還沒吃完（一次一份）。它不會上桌，別說它會來；吃完再點就好。）"
 not_sold_here_notice = "這裡沒有賣「{item}」，什麼都沒買到"
 on_shift_no_order = "（你說要給自己做的{item}沒有點成：你還在上班，上班時不能給自己點東西。{item}不會上桌，別再說它在做；可以照實說下班後再喝。）"
 closing_time_leave = "現在沒有營業（打烊了或還沒開門），店員請你離開。"

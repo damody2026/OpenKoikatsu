@@ -175,6 +175,7 @@ private:
  void FinishCheckout(const FString& Option,int32 Her,const FString& AsGirl=FString()); // AsGirl: settle that girl's dishes as hers (a group table)
  void SettleGroupOrder(int32 Partner);
  bool HasDishLike(int32 Who,const struct FOKStreetCatalogItem& Item) const;
+ bool DishComing(int32 Who,const FString& ItemId) const; // this very item on the table, in the basket or carried for Who
  // Languages and regions (OKStreetSocialLocale.inl).
  FString T(const TCHAR* Key,const FStringFormatNamedArguments& Args=FStringFormatNamedArguments()) const;
  FString Money(int64 Amount) const;

@@ -1126,3 +1126,16 @@
 - 原因：這時已經約好「吃完送惠惠回宿舍」（judge then=go:girls_dorm）；`RecordPayAgreed` 把之後要去的地方排在現在所在的店前面，記成「pay agreed: him (for girls_dorm)」。餐廳的帳 `PayAgreed` 對不上店家，回到她自己的傾向。
 - 修正：`OKStreetSocialEconomy.inl` 的 `RecordPayAgreed`，人在這家店、桌上正在吃這家店的菜時，說的請客算這家店的帳，不再讓「之後要做的事」搶走。
 - 驗證（Gal1030J）：在點心店和惠惠喝奶茶，judge 記下 `then=go:girls_dorm`（喝完送她回宿舍），桌上有兩杯奶茶時他改說「接下來這杯各付各的」，log 記「pay agreed: actor=9 split (for snack)」，留在這家店而不是宿舍。原來的群聊情境（讀檔後愛麗絲已在隊伍裡、群聊不記 then）沒能原樣重現，改用同一個 `RecordPayAgreed` 的一對一路徑驗證。
+
+## 2026-10-30 他問完話，上桌提示把她的回答蓋掉了（E 組 galgame）
+
+- 現象：咖啡廳和胡桃吃午餐，他問「妳剛不是說錢包有點扁嗎？真的沒關係嗎？」，她只說「你的帕尼尼也來啦！」；之前在點心店問惠惠「妳最喜歡什麼口味的糰子」，她也只說「糰子來了」。
+- 原因：他的話送出後 `FreeTalkBusy` 擋住了上桌提示；她的回答一到（02.57.26）就不忙了，排著的上桌提示馬上送出，兩秒後那則回覆到了，`SpeakFreeTalk` 取消了還沒開始唸的回答（log 裡那句沒有 `galgame line`）。
+- 修正：`OKStreetSocialEconomy.inl` 上桌提示也等她上一則回覆唸完（`FreeTalkSpeechPlayed<FreeTalkSpeechLines.Num()`，最多等 20 秒），和 `OKStreetSocialHeroine.inl` 主動開口的條件一樣。
+
+## 2026-10-30 他加點檸檬塔，她說「點就是了」，結果沒點成也沒人知道（E 組 galgame）
+
+- 現象：咖啡廳他還在吃提拉米蘇時說「再幫我點一份檸檬塔」，她回「檸檬塔是吧，點就是了」；log「order skipped: cf_lemon_tart, he still has one」，檸檬塔不會來，她卻以為點了。
+- 原因：同類（dessert）一次一份是設計，但跳過時沒有告訴她（吃太飽、這家沒賣都有 TellHer，這條沒有）。
+- 修正：新增 `DishComing`（同一樣東西是否已在桌上、購物籃或帶著的單裡）；她回覆下單（`OKStreetSocialMind.inl`）和裁判下單（`OKStreetSocialScene.cpp`）因為同類還沒吃完而跳過、而且不是同一樣已經在來的路上時，告訴她 `ui.economy.still_has_one_order`（沒點成、吃完再點）。
+- 驗證（Gal1030L，欄位 33 起，兩項一起）：咖啡廳和胡桃，他點拿鐵後聊天，「那妳週末都怎麼過？」送出後 0.5 秒拿鐵上桌；她的回答「週末嘛，就晃、就寫詩唄」先唸出來（03.13.45），上桌那句等到 03.13.51 才說。拿鐵剩 75% 時他說「再幫我點一杯美式」，log「order skipped: cf_americano, he still has one」＋till notice，她說「美式沒點成啊，原來一次只能來一杯。那你先喝完這杯，我再幫你點。」

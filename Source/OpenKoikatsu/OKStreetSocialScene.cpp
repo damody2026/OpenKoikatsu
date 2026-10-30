@@ -1621,6 +1621,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     // Already on the table or on its way first: "too full, the braised pork rice was not ordered" about the bowl in
     // front of her made her say it never came.
     if(Weak->HasDishLike(ForHer?Character:0,*Item)&&!Weak->SecondDishOk(Character,ForHer,ItemId)){
+     if(!Weak->DishComing(ForHer?Character:0,ItemId))L->TellHer.Add(OKMsg(TEXT("ui.economy.still_has_one_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));
      UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, %s still has one on the table"),*Item->Name,ForHer?TEXT("she"):TEXT("he"));continue;}
     // A thing (not food) bought for the same one minutes ago: the judge reading "I'll buy it for you" after her own reply
     // had ordered the novel for herself bought it a second time as a gift (NT$360 for one book).
