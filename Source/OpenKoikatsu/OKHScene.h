@@ -53,14 +53,39 @@ public:
     TSharedRef<FJsonObject> Describe() const;
     bool SelectPoseNamed(const FString& Name);
     void SetSpeed(float Value);
+    // Talk while it happens (the street's free talk, OKStreetSocialContacts.inl). What he says goes out at once, or,
+    // while she cannot answer (moving faster than 2x), is held and goes out at her climax; her answer shows here and is
+    // spoken on her (the street plays it, then her breathing comes back).
+    void Say(const FString& Text);
+    bool TakeLine(FString& Text,FString& Context);
+    // His words from elsewhere (the microphone): false when she cannot answer now (held for her climax).
+    bool Hear(const FString& Text,FString& Context);
+    void ShowLine(const FString& Text);
+    void SpokeLine(){bTalkSpoken=true;}
+    UFUNCTION() void OnInputCommitted(const FText& Text,ETextCommit::Type Commit);
 
     enum EKind : int32 {
-        TabHand=10,TabMouth=11,TabBreast=12,TabSonyu=20,TabClothes=30,
+        TabHand=10,TabMouth=11,TabBreast=12,TabSonyu=20,TabClothes=30,TabAibu=40,
+        AibuBase=500,
+        TouchChest=2101,TouchCrotch=2102,TouchAnal=2103,TouchButt=2104,TouchNipple=2105,Kiss=2106,Release=2107,
         PoseBase=1000,
         Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,
         ClothesBase=3000,
     };
 private:
+    // Caress (AnimationInfo_00): her own animation, him hidden (HAibu); each state is prepared up front.
+    struct FAibuPose {FString Name,Source;int32 Layer=0;};
+    TArray<FAibuPose> AibuPoses;
+    TMap<FString,FString> SoloKeys;      // state -> clip key of the active caress pose
+    FString SoloState;double SoloStarted=0.;
+    int32 ActiveAibu=INDEX_NONE,PendingAibu=INDEX_NONE,AibuGeneration=0,TouchArea=INDEX_NONE;
+    float AreaSeconds[6]={};            // kiss, chest, crotch, anal, butt, nipples (hAreaExps order)
+    bool bAibuLoaded=false;
+    void LoadAibuPoses();
+    void SelectAibu(int32 Index);
+    void PlaySolo(const FString& State);
+    void Touch(int32 Area);
+    float AreaExperience(int32 Area) const;
     void LoadPoses();
     void BuildList();
     void BuildActions();
@@ -84,9 +109,23 @@ private:
     UPROPERTY() TObjectPtr<UWrapBox> Actions;
     UPROPERTY() TObjectPtr<UWrapBox> Tabs;
     UPROPERTY() TObjectPtr<UScrollBox> List;
+    UPROPERTY() TObjectPtr<class UEditableTextBox> Input;
+    UPROPERTY() TObjectPtr<UTextBlock> Caption;
+    struct FHLine {FString Text,Note;};
+    TArray<FHLine> Outbox;
+    TArray<FString> Held;
+    bool bTalkSpoken=false;
+    // 0.5x to 4x while moving; past 2x she has no breath to answer.
+    float PlaybackSpeed() const {return .5f+3.5f*SpeedValue;}
+    bool CannotAnswer() const;
+    void ReleaseHeld();
+    FString Context() const;
+    FString StateWords(const FString& Base) const;
+    bool bRawAsked=false,bRawPressed=false;
+    int32 HisInside=0,HisOutside=0,HisMouth=0,Swallowed=0;
     TArray<FOKHPose> Poses;
     int32 Tab=TabSonyu,ActivePose=INDEX_NONE,PendingPose=INDEX_NONE;
-    int32 Mode=0;               // of the active pose
+    int32 Mode=-1;              // of the active pose: 0 caress, 1 service, 2 intercourse
     FString Wanted,LastState,ActionsKey;
     TArray<FString> Queue;      // states still to play, in order (a finish, the insertion)
     double StateSeen=0.,LastRequest=0.,OralIdleSince=0.;

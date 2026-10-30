@@ -317,7 +317,7 @@ struct FOKStreetSceneState {
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
  TMap<int32,FString> HerSaysNext; // what she says as soon as her reply and voice are done (TickAutoFriendship)
- FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TArray<FString> DeferredNotes; /* game notes for her held until her last reply is spoken (SendFreeTalk) */TMap<int32,FString> HerProposed; /* an activity she proposed in a nudge reply, not started: told to the next judge */TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
+ FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TArray<FString> DeferredNotes;FString PrivateTalkContext,PrivateShownLine; /* talk in the H scene (TickPrivate) */ /* game notes for her held until her last reply is spoken (SendFreeTalk) */TMap<int32,FString> HerProposed; /* an activity she proposed in a nudge reply, not started: told to the next judge */TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
 TMap<int32,TArray<FOKStreetCartLine>> CarriedOrders;TMap<int32,FString> CarriedOrderSaid; // CarriedOrders: ordered on the way to the shop (Mind.inl), placed on arrival (StartOutingActivity)
  // RelationshipShy: talk.rs shy_confession
  // she said this meal is on her: until (game minute)
@@ -1202,6 +1202,8 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // A note the game writes for her (a dish served, a notice, a nudge) while her last reply is not yet spoken waits for
  // it: its reply would cut hers off unheard ("is your thin wallet all right?" got only "the panini is here").
  if(!His&&HerReplyUnspoken()){S.DeferredNotes.Add(Text);S.FreeTalkDraft.Reset();UE_LOG(LogTemp,Display,TEXT("Street free talk: game note held until her reply is spoken (%d held)"),S.DeferredNotes.Num());return;}
+ // In the H scene his words not from its panel (the microphone) go the same way: held while she cannot answer.
+ if(His&&S.PrivateGirl==Character&&S.PrivateMode.IsValid()&&S.PrivateTalkContext.IsEmpty()){FString Context;if(!S.PrivateMode->HSceneHear(Text,Context)){S.FreeTalkDraft.Reset();return;}S.PrivateTalkContext=Context;}
  if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;SongCountLines(Character,1);} // his line counts toward her next song
  // His line aloud in his tone (the dropdown's x-vector voice), face to face, when the voice is TTS: her answer waits
  // until he has said it (TickFreeTalkSpeech, the galgame box).
@@ -1224,6 +1226,8 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  {const FString RollId=OKStreetStableId(S.Manifest.Characters[Character]);if(His)GalgameRollBack({RollId});if(!OKStreetFreeTalkIsNudge(Text))GalgameCheckpoint(Character,RollId);}
  FOKFreeTalkSettings Settings;FString Error,System,UserMessage;
  if(!PrepareFreeTalk(Character,Text,Settings,System,UserMessage,Error)){S.FreeTalkNotice=Error;RefreshUI();return;}
+ // In the H scene: what she is in the middle of (pose, how fast, how close), in the turn message.
+ if(S.PrivateGirl==Character&&!S.PrivateTalkContext.IsEmpty()){UserMessage+=TEXT("\n")+S.PrivateTalkContext;S.PrivateTalkContext.Reset();}
  // The reply is handled in the mode this was sent in (phone or face to face), whatever happens meanwhile.
  S.SentRemoteGirl=RemoteWith(Character)?Character:INDEX_NONE;S.SentRemoteMode=RemoteKind(Character);
  const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);
@@ -1814,6 +1818,14 @@ void AOKStreetSocialScene::TickFreeTalkSpeech(double Now){
  if(FreeTalkHisVoiceBusy())return; // he is still saying his line
  if(FreeTalkPartner()!=Character&&!(S.FreeTalkSpeechSpeakers.Num()>0&&FreeTalkPartner()!=INDEX_NONE&&(S.Party.Contains(Character)||Character==FreeTalkPartner()))){S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();return;}
  if(S.Node!=INDEX_NONE||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty()||OKCrowdRuntimeSpeechActive(this,Character))return;
+ // In the H scene her line is spoken on her high model (the street's actors are hidden there): the finished file, not
+ // the stream, which plays on the street actor.
+ if(S.PrivateGirl==Character&&S.PrivateMode.IsValid()){
+  if(S.PrivateMode->HSceneSpeaking())return;const int32 Index=S.FreeTalkSpeechPlayed;
+  if(S.FreeTalkSpeechPaths[Index].IsEmpty()&&S.FreeTalkSpeechReady[Index]!=2&&FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt<S.TtsTimeout+5)return;
+  ++S.FreeTalkSpeechPlayed;if(!S.FreeTalkSpeechPaths[Index].IsEmpty())S.PrivateMode->HSceneSpeak(S.FreeTalkSpeechPaths[Index]);
+  S.FreeTalkSpeechNext=Now+.1;return;
+ }
  // Several of them (a party): one at a time. The next girl waits until whoever spoke before her is done, not only
  // until she herself is quiet (two heroines talked over each other).
  for(const int32 Other:S.FreeTalkSpeechSpeakers)if(Other!=Character&&OKCrowdRuntimeSpeechActive(this,Other))return;

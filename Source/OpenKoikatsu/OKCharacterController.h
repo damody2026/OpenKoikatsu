@@ -301,7 +301,7 @@ public:
     // (ok-rules h_experience) and name; what happened comes back in HResult (the scene's result "h").
     bool bHScene=false;
     TSharedPtr<class FJsonObject> HExperience,HResult;
-    FString HHeroineName,HHeroineStage;
+    FString HHeroineName,HHeroineStage,HPlayerName;
     UPROPERTY() TObjectPtr<class UOKHScenePanel> HPanel;
     void InitializeInteractionControls(bool Bind=true);
     void BindInteractionControls();

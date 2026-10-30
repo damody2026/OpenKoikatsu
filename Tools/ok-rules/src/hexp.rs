@@ -171,6 +171,25 @@ fn session_end(r: &Value) -> Result<Value, String> {
         let orgasms = num(&c, "her_orgasms").clamp(0.0, 3.0) as f32;
         let anal = if flag(c.get("anal").unwrap_or(&Value::Null), "inserted") { 2.0 } else { 0.0 };
         rel.lewdness = (rel.lewdness + 2.0 + 3.0 * orgasms + anal).min(crate::talk::LEWDNESS_CAP);
+        // Every climax he gave her warms her to him.
+        let climaxes = num(&c, "her_orgasms").clamp(0.0, 20.0) as f32;
+        if climaxes > 0.0 {
+            rel.add_liking(1.5 * climaxes);
+        }
+        // He asked again for no condom and she gave in: how she takes it is her chastity and her character (a proud
+        // girl minds, one who worships him or is already lewd less so).
+        if flag(&c, "raw_pressed") {
+            let t = crate::traits::Traits::from_profile(r.get("profile").unwrap_or(&Value::Null));
+            let chaste = crate::heroine::chastity(&rel, &t);
+            let delta = ((40.0 - chaste) / 10.0 - (t.self_esteem as f32 - 50.0) / 25.0 + (t.worship as f32 - 50.0) / 25.0 + rel.lewdness / 50.0).clamp(-8.0, 4.0);
+            rel.add_liking(delta);
+            fx.note_at(&rel.id, "h_first", crate::tr::t(if delta < 0.0 { "hexp.raw_pressed_upset" } else { "hexp.raw_pressed_ok" }), place, 0.85);
+        }
+        // The whole time in one memory she can be asked about ("how many times did you come?").
+        let int = |k: &str| crate::tr::a(&(num(&c, k) as i64).to_string());
+        let poses = r.get("poses").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("、")).unwrap_or_default();
+        let summary = crate::tr::m("hexp.session_summary", &[("orgasms", int("her_orgasms")), ("finishes", int("his_finishes")), ("inside", int("his_inside")), ("outside", int("his_outside")), ("mouth", int("his_mouth")), ("swallowed", int("swallowed")), ("poses", crate::tr::a(&poses))]);
+        fx.note_at(&rel.id, "h_level", &summary, place, 0.9);
     }
 
     // Her memories of the firsts and of what changed in her.
@@ -247,6 +266,23 @@ mod tests {
         let h: HExp = serde_json::from_value(out["ext"]["hexp"]["g"].clone()).unwrap();
         assert_eq!(h.level(100.0), 3);
         assert_eq!(HExp::default().level(100.0), 0, "never done it: 初めて whatever her lewdness");
+    }
+
+    #[test]
+    fn climaxes_warm_her_and_a_chaste_girl_minds_being_pressed_raw() {
+        let base = session_end(&json!({"girl": "g", "relation": rel(0.0), "ext": {}, "counts": {"played": true}})).unwrap();
+        let warm = session_end(&json!({"girl": "g", "relation": rel(0.0), "ext": {}, "counts": {"played": true, "her_orgasms": 3}})).unwrap();
+        let favor = |o: &Value| o["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").map(|e| e["set"]["favor"].as_f64().unwrap_or(0.0)).unwrap_or(0.0);
+        assert!(favor(&warm) > favor(&base), "three climaxes: {} vs {}", favor(&warm), favor(&base));
+        let mut chaste: Relation = serde_json::from_value(rel(0.0)).unwrap();
+        chaste.chastity = 90.0;
+        chaste.favor = 50.0;
+        let pressed = session_end(&json!({"girl": "g", "relation": chaste, "ext": {}, "counts": {"played": true, "raw_pressed": true}})).unwrap();
+        let mut easy: Relation = serde_json::from_value(rel(0.0)).unwrap();
+        easy.chastity = 10.0;
+        easy.favor = 50.0;
+        let fine = session_end(&json!({"girl": "g", "relation": easy, "ext": {}, "counts": {"played": true, "raw_pressed": true}})).unwrap();
+        assert!(favor(&pressed) < favor(&fine), "chaste {} vs easy {}", favor(&pressed), favor(&fine));
     }
 
     #[test]
