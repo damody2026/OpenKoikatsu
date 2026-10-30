@@ -2532,6 +2532,21 @@ pub unsafe extern "C" fn ok_okmodel_node_world(lib: *const c_char, id: *const c_
     std::ptr::copy_nonoverlapping(values.as_ptr(), out, 10);
     0
 }
+/// Render-to-texture cameras of a library model's prefab (a Studio camera item) as JSON: `okmodel_view::render_cameras`.
+/// Returns the byte length (larger than `cap`: nothing written).
+#[no_mangle]
+pub unsafe extern "C" fn ok_okmodel_render_cameras(lib: *const c_char, id: *const c_char, prefab: *const c_char, out: *mut u8, cap: i32) -> i32 {
+    let (prefab, root) = (cstr_opt(prefab).unwrap_or_default(), cstr_opt(lib).unwrap_or_default());
+    let cameras = crate::run_no_panic(|| crate::okmodel_view::with_library(std::path::Path::new(&root), || okmodel_view(lib, id).map(|v| v.render_cameras(&prefab)))).unwrap_or_default();
+    copy_text(&serde_json::to_string(&cameras).unwrap(), out, cap)
+}
+/// Realtime lights of a prefab (a Studio map's lamps, okmodel_view::map_lights): JSON array; out null / cap 0: size.
+#[no_mangle]
+pub unsafe extern "C" fn ok_okmodel_map_lights(lib: *const c_char, id: *const c_char, prefab: *const c_char, out: *mut u8, cap: i32) -> i32 {
+    let (prefab, root) = (cstr_opt(prefab).unwrap_or_default(), cstr_opt(lib).unwrap_or_default());
+    let lights = crate::run_no_panic(|| crate::okmodel_view::with_library(std::path::Path::new(&root), || okmodel_view(lib, id).map(|v| v.map_lights(&prefab)))).unwrap_or_default();
+    copy_text(&serde_json::to_string(&lights).unwrap(), out, cap)
+}
 /// Current edits (JSON) of a model.
 #[no_mangle]
 pub unsafe extern "C" fn ok_okmodel_edits_get(lib: *const c_char, id: *const c_char, out: *mut u8, cap: i32) -> i32 {

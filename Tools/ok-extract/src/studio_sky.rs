@@ -60,6 +60,15 @@ pub struct MapEnvironment {
     /// Unity's baked RenderSettings.m_AmbientProbe, in RGB groups of nine.
     /// These are already the coefficients the renderer receives; do not multiply intensity again.
     pub probe: [[f32; 9]; 3],
+    /// RenderSettings m_AmbientSkyColor / m_AmbientEquatorColor / m_AmbientGroundColor (as saved, gamma). With
+    /// ambient mode Trilight (1) or Flat (3) Unity derives the ambient from these at run time; the baked `probe` of
+    /// such a scene is stale (KKS bath, map 62: all zero, while native renderers get the trilight's warm SH).
+    #[serde(default)]
+    pub ambient_sky: [f32; 4],
+    #[serde(default)]
+    pub ambient_equator: [f32; 4],
+    #[serde(default)]
+    pub ambient_ground: [f32; 4],
 }
 
 /// Export map scene lighting independently of character-maker preferences.
@@ -86,8 +95,14 @@ pub fn convert_map_environments(game: &Path, lib: &Path) -> Result<usize, String
                     probe[index/9][index%9] = value as f32;
                     seen[index] = true;
                 }
+                let color = |key:&str| -> [f32;4] {
+                    let mut c = [0.;4];
+                    if let Some(UnityValue::Object(o)) = p.get(key) { for (i,k) in ["r","g","b","a"].iter().enumerate() { c[i] = o.get(*k).and_then(|v|v.as_f64()).unwrap_or(0.) as f32; } }
+                    c
+                };
                 if seen.iter().all(|v|*v) {
                     environments.push(MapEnvironment {map:map.no,model:map.model.clone(),probe,
+                        ambient_sky:color("m_AmbientSkyColor"),ambient_equator:color("m_AmbientEquatorColor"),ambient_ground:color("m_AmbientGroundColor"),
                         ambient_mode:p.get("m_AmbientMode").and_then(|v|v.as_i64()).unwrap_or(0) as i32,
                         ambient_intensity:p.get("m_AmbientIntensity").and_then(|v|v.as_f64()).unwrap_or(1.) as f32});
                 }

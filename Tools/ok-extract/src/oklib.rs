@@ -1,4 +1,4 @@
-﻿//! OK base library: the shared character resources of the game and its mods
+//! OK base library: the shared character resources of the game and its mods
 //! (bodies, heads, hair, clothes, accessories, textures, shaders), converted
 //! to OK models so cards open without the game or any Unity data.
 //!
@@ -123,7 +123,7 @@ pub fn id_hex(id: &Id) -> String { hex(id) }
 pub fn id_from_hex_pub(s: &str) -> Option<Id> { id_from_hex(s) }
 /// (query, args) of every record of a model.
 pub fn model_records(dir: &Path, id: &Id) -> Result<Vec<(String, Vec<u8>)>, String> {
-    let p = model_path(dir, id);
+    let p = model_file(dir, id);
     if !p.is_file() { return Err(format!("{} not found", p.display())); }
     let mut v: Vec<_> = load_model(&p, false).entries.into_keys().collect();
     v.sort();
@@ -197,11 +197,33 @@ pub fn model_path(dir: &Path, id: &Id) -> PathBuf {
     dir.join("models").join(&h[..2]).join(format!("{h}.okmodel"))
 }
 
+/// Local libraries of a library: where the models only third-party mods use (character and Studio mods) live, apart
+/// from the shared library (the original game and the shared mods). `OK_LOCAL_LIBRARY` names them (`;`-separated, a
+/// folder the user picks); without it `local_v1` beside the library is one when it exists. `--oklib split-local` moves
+/// such models out of the library. Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md.
+pub fn local_libraries(lib: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = std::env::var("OK_LOCAL_LIBRARY").ok()
+        .map(|v| v.split(';').map(str::trim).filter(|s| !s.is_empty()).map(PathBuf::from).collect()).unwrap_or_default();
+    if out.is_empty() {
+        if let Some(beside) = lib.parent().map(|p| p.join("local_v1")).filter(|d| d.join("models").is_dir()) { out.push(beside); }
+    }
+    out.retain(|d| d != lib);
+    out
+}
+
+/// The file of model `id` of library `dir`: its own, else a local library's (`local_libraries`); the library's own
+/// path when none has it (where a new model is recorded).
+pub fn model_file(dir: &Path, id: &Id) -> PathBuf {
+    let own = model_path(dir, id);
+    if own.is_file() || !dir.join("oklib.json").is_file() { return own; }
+    local_libraries(dir).iter().map(|l| model_path(l, id)).find(|p| p.is_file()).unwrap_or(own)
+}
+
 /// Whether the active library (or the pack mounted over it) has model `id` in this checkout. A library records
 /// sources whose models stay out of version control (third-party mods); those come from the real zipmods.
 pub fn has_model(id: &Id) -> bool {
     let Some(store) = active() else { return false };
-    model_path(&store.dir, id).is_file() || store.pack().is_some_and(|p| p.has_own_model(id))
+    model_file(&store.dir, id).is_file() || store.pack().is_some_and(|p| p.has_own_model(id))
 }
 /// Directory of the active library.
 pub fn active_dir() -> Option<PathBuf> { active().map(|s| s.dir.clone()) }
@@ -345,12 +367,12 @@ impl Store {
 
     /// Whether this store holds model `id` (a model file, or records of it in memory).
     fn has_own_model(&self, id: &Id) -> bool {
-        if self.records.is_some() { self.record_models.read().unwrap().contains(id) } else { model_path(&self.dir, id).is_file() }
+        if self.records.is_some() { self.record_models.read().unwrap().contains(id) } else { model_file(&self.dir, id).is_file() }
     }
 
     fn model(&self, id: &Id) -> Arc<Mutex<Model>> {
         let mut models = self.models.lock().unwrap();
-        models.entry(*id).or_insert_with(|| Arc::new(Mutex::new(load_model(&model_path(&self.dir, id), self.mode == Mode::Record)))).clone()
+        models.entry(*id).or_insert_with(|| Arc::new(Mutex::new(load_model(&model_file(&self.dir, id), self.mode == Mode::Record)))).clone()
     }
 
     /// Records held by the models loaded in this session.
@@ -381,7 +403,7 @@ impl Store {
         if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).cloned().map(crate::unity::SourceBytes::from); }
         let model = self.model(id);
         let loc = model.lock().unwrap().entries.get(&(query.to_owned(), args.to_vec()))?.clone();
-        let file = File::open(model_path(&self.dir, id)).ok()?;
+        let file = File::open(model_file(&self.dir, id)).ok()?;
         read_loc_source(&file, &loc)
     }
 
@@ -389,7 +411,7 @@ impl Store {
         if let Some(records) = &self.records { return records.read().unwrap().get(&(*id, query.to_owned(), args.to_vec())).cloned(); }
         let model = self.model(id);
         let loc = model.lock().unwrap().entries.get(&(query.to_owned(), args.to_vec()))?.clone();
-        let file = File::open(model_path(&self.dir, id)).ok()?;
+        let file = File::open(model_file(&self.dir, id)).ok()?;
         read_loc(&file, &loc)
     }
 
@@ -412,7 +434,7 @@ impl Store {
         let model = self.model(id);
         let mut m = model.lock().unwrap();
         let key = (query.to_owned(), args.to_vec());
-        let path = model_path(&self.dir, id);
+        let path = model_file(&self.dir, id);
         if let Some(loc) = m.entries.get(&key).cloned() {
             let same = || File::open(&path).ok().and_then(|f| read_loc(&f, &loc)).is_some_and(|old| old == raw);
             // A refreshed query (OKLIB_REFRESH) appends the new value; the
@@ -2201,12 +2223,24 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let store = activate(&lib, mode)?;
             crate::gamefs::activate(if mode == Mode::Record { crate::gamefs::Mode::Record } else { crate::gamefs::Mode::Replay }, &root, &lib)?;
             let expected = read_parity(&lib);
+            // OK_RECORD_STATUS (studio_status::StatusOverride JSON, e.g. {"eyes_ptn":23}): open the cards as an OK Studio
+            // scene overrides them, so what that look needs (a gag eye set's parts) is recorded into the library too.
+            // Such an open is not the card's own look: its digest is not written to the parity file.
+            let status: Option<crate::studio_status::StatusOverride> = match std::env::var("OK_RECORD_STATUS") {
+                Ok(s) if !s.trim().is_empty() => Some(serde_json::from_str(&s).map_err(|e| format!("OK_RECORD_STATUS: {e}"))?),
+                _ => None,
+            };
             let mut failures = 0;
             for card in &args[2..] {
                 let card = Path::new(card);
                 let started = std::time::Instant::now();
                 let (hits0, miss0, stored0) = (store.hits.load(Ordering::Relaxed), store.misses.load(Ordering::Relaxed), store.stored.load(Ordering::Relaxed));
+                let _scope = status.clone().map(crate::studio_status::request);
                 match session_digest(&root, card) {
+                    Ok((digest, parts, _)) if status.is_some() => {
+                        println!("OKLIB RECORDED-STATUS {} parts={parts} digest={digest} {:.1}s misses={} stored={}", card_key(card), started.elapsed().as_secs_f64(),
+                            store.misses.load(Ordering::Relaxed) - miss0, store.stored.load(Ordering::Relaxed) - stored0);
+                    }
                     Ok((digest, parts, bytes)) => {
                         let verdict = match (mode, expected.get(&card_key(card))) {
                             (Mode::Replay, Some(want)) if *want == digest => "MATCH",
@@ -2639,7 +2673,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                     // A query on a model with no file: its source was never converted.
                     // Every converted source has its directories: missing them means not converted.
                     let basic = ["texture_directory2", "prefab_directory"].iter().any(|q| what.starts_with(&format!("{q} ")));
-                    let unconverted = what.split_whitespace().nth(1).and_then(id_from_hex).filter(|id| basic || !model_path(&lib, id).is_file());
+                    let unconverted = what.split_whitespace().nth(1).and_then(id_from_hex).filter(|id| basic || !model_file(&lib, id).is_file());
                     match (source, unconverted) {
                         (Some(s), _) => { *sources.entry(s.to_owned()).or_insert(0u32) += count; }
                         (None, Some(id)) => { for s in crate::gamefs::labels_for_model(&id) { *sources.entry(s).or_insert(0u32) += count; } }
@@ -2822,14 +2856,19 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             println!("OKLIB MODELS count={} bytes={} records={}", models.len(), bytes, models.iter().map(|m| m.1).sum::<usize>());
             for (q, n) in queries { println!("  {q:32} {n}"); }
         }
-        "shared-ignore" => {
+        "shared-ignore" | "split-local" => {
             // shared-ignore <lib> [shared mods list]: writes <lib>/models/.gitignore. A model is a shared resource
             //   (kept in version control) when one of its sources is the original game (not under mods/) or a
             //   listed shared mod (Tools/base_library_shared_mods.txt: "folder/", "zip|bundle" or "zip" lines);
             //   every other model (third-party mods, models no source names) stays out. See
             //   Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md.
+            // split-local <lib> [local library]: the same rule, the models that stay out moved (with their edits) into
+            //   the local library (OK_LOCAL_LIBRARY, else local_v1 beside the library), where oklib::model_file finds them.
             let lib = lib.ok_or("library directory required")?;
-            let list = args.get(2).map(PathBuf::from).unwrap_or_else(|| {
+            let split = command == "split-local";
+            let local = split.then(|| args.get(2).map(PathBuf::from).or_else(|| local_libraries(&lib).into_iter().next())
+                .unwrap_or_else(|| lib.parent().unwrap_or(&lib).join("local_v1")));
+            let list = args.get(if split { 3 } else { 2 }).map(PathBuf::from).unwrap_or_else(|| {
                 lib.parent().and_then(Path::parent).and_then(Path::parent).unwrap_or(&lib).join("Tools").join("base_library_shared_mods.txt")
             });
             let shared: Vec<String> = std::fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?
@@ -2845,6 +2884,9 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             crate::gamefs::deactivate();
             let (mut kept, mut kept_bytes, mut out_bytes, mut unnamed) = (0usize, 0u64, 0u64, 0usize);
             let mut excluded: Vec<String> = Vec::new();
+            // What split-local moves: models every recorded source of which is a third-party mod (one no source names
+            // may be another checkout's shared model and stays).
+            let mut third_party: Vec<String> = Vec::new();
             let mut shards: Vec<_> = std::fs::read_dir(lib.join("models")).map_err(|e| e.to_string())?.flatten().filter(|e| e.path().is_dir()).collect();
             shards.sort_by_key(|e| e.file_name());
             for shard in shards {
@@ -2860,6 +2902,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                     else {
                         out_bytes += len;
                         excluded.push(format!("/{}/{name}", shard.file_name().to_string_lossy()));
+                        if !sources.is_empty() { third_party.push(excluded.last().unwrap().clone()); }
                         if std::env::var_os("OKLIB_SHARED_VERBOSE").is_some() { println!("OKLIB EXCLUDED {name}\t{}", sources.join(" ; ")); }
                     }
                 }
@@ -2868,6 +2911,30 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 # Models only third-party mods (or no recorded source) use stay out of version control; the original game,\n\
                 # the uncensor bodies and the shared mods stay in. Docs/BASE_LIBRARY_SHARED_RESOURCES_PLAN.md.\n");
             for e in &excluded { text.push_str(e); text.push('\n'); }
+            if let Some(local) = &local {
+                let (mut moved, mut moved_bytes) = (0usize, 0u64);
+                for e in &third_party {
+                    let from = lib.join("models").join(e.trim_start_matches('/'));
+                    let Some(stem) = from.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".okmodel")).map(str::to_owned) else { continue };
+                    let to_dir = local.join("models").join(&stem[..2]);
+                    std::fs::create_dir_all(&to_dir).map_err(|e| format!("{}: {e}", to_dir.display()))?;
+                    // The model and what sits beside it under its name (edits, their assets).
+                    for f in std::fs::read_dir(from.parent().unwrap()).map_err(|e| e.to_string())?.flatten() {
+                        let name = f.file_name().to_string_lossy().into_owned();
+                        if !name.starts_with(&stem) { continue; }
+                        let target = to_dir.join(&name);
+                        if target.exists() { return Err(format!("{} already in the local library", target.display())); }
+                        if name.ends_with(".okmodel") { moved += 1; moved_bytes += f.metadata().map(|m| m.len()).unwrap_or(0); }
+                        std::fs::rename(f.path(), &target).map_err(|e| format!("{} -> {}: {e}", f.path().display(), target.display()))?;
+                    }
+                }
+                let marker = local.join("README.txt");
+                if !marker.is_file() {
+                    std::fs::write(&marker, "OK local library: models only third-party mods use (character and Studio mods), moved out of the\n\
+                        shared base library by `ok-extract <game> --oklib split-local <lib>`. Never in version control.\n").map_err(|e| e.to_string())?;
+                }
+                println!("OKLIB LOCAL moved={moved} ({:.2} GB) into {}", moved_bytes as f64 / 1e9, local.display());
+            }
             std::fs::write(lib.join("models").join(".gitignore"), text).map_err(|e| e.to_string())?;
             // The library carries its list: an OK card's strict open (okstrict.rs) tells shared mods by it, also where
             // the project's Tools folder is not (a packaged game).
@@ -2893,7 +2960,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             // model <lib> <id hex>: records of one model; directories and plans in full.
             let lib = lib.ok_or("library directory required")?;
             let id = args.get(2).and_then(|h| id_from_hex(h)).ok_or("model id required")?;
-            let path = model_path(&lib, &id);
+            let path = model_file(&lib, &id);
             let model = load_model(&path, false);
             let handle = File::open(&path).map_err(|e| e.to_string())?;
             let mut keys: Vec<_> = model.entries.keys().cloned().collect();
@@ -2902,6 +2969,8 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 let raw = read_loc(&handle, &model.entries[&(q.clone(), a.clone())]).unwrap_or_default();
                 let detail = match q.as_str() {
                     "prefab_directory" => bincode::deserialize::<crate::unity::PrefabDirectory>(&raw).map(|d| format!("{d:?}")).unwrap_or_default(),
+                    "prefab_sun_light" => bincode::deserialize::<crate::unity::PrefabSunLight>(&raw).map(|d| format!("{d:?}")).unwrap_or_default(),
+                    "prefab_hierarchy" => bincode::deserialize::<crate::pose::PrefabHierarchy>(&raw).map(|h| h.nodes.iter().enumerate().map(|(i, n)| format!("{i}:{}<{}", n.name, n.parent)).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
                     "texture_directory2" => crate::unity::with_texture_plans(|| bincode::deserialize::<crate::unity::TexDirectory>(&raw)).map(|d| format!("{d:?}")).unwrap_or_default(),
                     "meshes_for_maindata" => crate::unity::with_texture_plans(|| bincode::deserialize::<(Vec<crate::unity::ExtractedMesh>, Vec<(i64, Vec<String>)>)>(&raw))
                         .map(|(m, _)| m.iter().map(|m| format!("{} plan={:?} extra={:?}", m.name, m.texture_plan, m.shader_extra_textures.keys().collect::<Vec<_>>())).collect::<Vec<_>>().join(" ; ")).unwrap_or_default(),
@@ -2943,6 +3012,38 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             crate::studio_items::write(&lib, &studio)?;
             println!("OKCONVERT studio items={} with components={} unresolved={unresolved}", studio.items.len(), studio.items.iter().filter(|i| i.line_width.is_some()).count());
         }
+        "studio-names" => {
+            // studio-names <lib>: the eye and hand pattern names (character list, HandAnime) into studio_items.json.
+            let (eyes, hands) = crate::studio_items::add_names(game, &lib.ok_or("library directory required")?)?;
+            println!("OKCONVERT studio names eyes={eyes} hands={hands}");
+        }
+        "studio-mods" => {
+            // studio-mods <lib> [scene folder [threads]]: the zipmods' Studio items (GUID + slot -> library model) into
+            // studio_mod_items.json; with a scene folder, the bundles of the mod items its scenes use converted first.
+            let lib = lib.ok_or("library directory required")?;
+            if let Some(scenes) = args.get(2) {
+                let threads = args.get(3).and_then(|t| t.parse().ok()).unwrap_or(6);
+                let (used, converted, still) = crate::studio_items::convert_scene_mod_items(game, &lib, std::path::Path::new(scenes), threads)?;
+                println!("OKCONVERT studio scene mod items={used} bundles converted={converted} still without model={still}");
+            } else {
+                let (items, missing) = crate::studio_items::add_mod_items(game, &lib)?;
+                println!("OKCONVERT studio mod items={items} without library model={missing}");
+            }
+            let (filters, missing) = crate::studio_items::record_mod_filters(game, &lib)?;
+            println!("OKCONVERT studio mod filters recorded={filters} missing={missing}");
+        }
+        "shader-states" => {
+            // shader-states <lib> [threads]: every game and zipmod shader's cull and outline pass into shader_states.json.
+            let threads = args.get(2).and_then(|t| t.parse().ok()).unwrap_or(6);
+            let (bundles, shaders, conflicts) = crate::shader_states::convert(game, &lib.ok_or("library directory required")?, threads)?;
+            println!("OKCONVERT shader states bundles={bundles} shaders={shaders} conflicting names={conflicts}");
+        }
+        "studio-mod-nodes" => {
+            // studio-mod-nodes <lib> <scene folder> [threads]: node trees, render cameras and screens of the scenes' mod items.
+            let lib = lib.ok_or("library directory required")?;
+            let threads = args.get(3).and_then(|t| t.parse().ok()).unwrap_or(6);
+            crate::studio_items::record_scene_mod_nodes(game, &lib, std::path::Path::new(args.get(2).ok_or("scene folder required")?), threads)?;
+        }
         "studio-child-anims" => crate::studio_child_animation::convert(game, &lib.ok_or("library directory required")?)?,
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
@@ -2967,6 +3068,13 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             println!("SCENES files={} parsed={} characters={} items={} vanilla_items={} mod_items={} lights={} folders={} routes={} cameras={} texts={}", s.files, s.parsed, s.characters, s.items, s.vanilla_items, s.mod_items, s.lights, s.folders, s.routes, s.cameras, s.texts);
             println!("SCENES maps {:?}", s.maps);
             for (f, e) in &s.failed { println!("SCENES FAILED {f}: {e}"); }
+        }
+        "scene-export" => {
+            // scene-export <scene png> <card dir>: the KStudio scene as the importer's JSON (cards written to the dir).
+            let scene = args.get(2).ok_or("scene png required")?;
+            let dir = std::path::PathBuf::from(args.get(3).ok_or("card directory required")?);
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            println!("{}", crate::studio_scene::export(std::path::Path::new(scene), &dir)?);
         }
         "model-view" => crate::okmodel_view::cli(&lib.ok_or("library directory required")?, args.get(2).ok_or("model id required")?, args.get(3).map(String::as_str))?,
         "diff" => {

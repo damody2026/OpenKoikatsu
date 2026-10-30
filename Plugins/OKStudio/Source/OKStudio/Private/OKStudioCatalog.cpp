@@ -1,4 +1,4 @@
-#include "OKStudioCatalog.h"
+﻿#include "OKStudioCatalog.h"
 #include "Dom/JsonObject.h"
 #include "Misc/FileHelper.h"
 #include "OKSceneActor.h"
@@ -35,6 +35,7 @@ const FOKStudioCatalog& FOKStudioCatalog::Get()
 	{
 		GCatalog = MakeUnique<FOKStudioCatalog>();
 		GCatalog->Load(AOKSceneActor::LibraryDirectory() / TEXT("studio_items.json"));
+		GCatalog->LoadModItems(AOKSceneActor::LibraryDirectory() / TEXT("studio_mod_items.json"));
 		GCatalog->LoadAnims(AOKSceneActor::LibraryDirectory() / TEXT("studio_anims.json"));
 		GCatalog->LoadEffects(EffectsFile());
         GCatalog->LoadChildAnimations(AOKSceneActor::LibraryDirectory() / TEXT("studio_child_animations.json"));
@@ -89,8 +90,70 @@ bool FOKStudioCatalog::Load(const FString& File)
 		const auto O = V->AsObject();
 		AccessoryPoints.Add({ Int(O, TEXT("no")), Int(O, TEXT("group")), Str(O, TEXT("key")), Str(O, TEXT("name")), Str(O, TEXT("bone")) });
 	}
+	// Pattern names (ok-extract --oklib studio-names): eyes from the character list, hands from Studio's HandAnime.
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("eye_names"))) { const auto O = V->AsObject(); EyeNames.Add(Int(O, TEXT("id")), Str(O, TEXT("name"))); }
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("hand_names")))
+	{
+		const auto O = V->AsObject();
+		HandNames[FMath::Clamp(Int(O, TEXT("group")), 0, 1)].Add(Int(O, TEXT("id")), Str(O, TEXT("name")));
+	}
 	bLoaded = true;
 	return true;
+}
+
+void FOKStudioCatalog::LoadModItems(const FString& File)
+{
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (!FFileHelper::LoadFileToString(Text, *File) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root) return;
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("items")))
+	{
+		const auto O = V->AsObject();
+		FOKStudioCatalogItem I;
+		I.Model = Str(O, TEXT("model"));
+		if (I.Model.IsEmpty()) continue;
+		I.Guid = Str(O, TEXT("guid"));
+		I.Group = Int(O, TEXT("group")); I.Category = Int(O, TEXT("category")); I.No = Int(O, TEXT("no"));
+		I.Name = Str(O, TEXT("name")); I.Prefab = Str(O, TEXT("prefab")); I.Child = Str(O, TEXT("child"));
+		O->TryGetBoolField(TEXT("anime"), I.bAnime); O->TryGetBoolField(TEXT("scale"), I.bScale);
+		Flags(O, TEXT("colors"), I.Colors); Flags(O, TEXT("patterns"), I.Patterns);
+		// Two mods may use the same group, category and number: the first keeps the key, both stay findable by GUID.
+		const TPair<FString, int32> Key(I.Guid.ToLower(), I.No);
+		if (!ModItems.Contains(Key)) ModItems.Add(Key, Items.Num());
+		Items.Add(MoveTemp(I));
+	}
+	// The mods' screen filters keep their own numbers (bundle `<zipmod>|<bundle>`, LUT recorded by studio-mods); the game's
+	// own numbers win a clash.
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("filters")))
+	{
+		const auto O = V->AsObject();
+		const int32 No = Int(O, TEXT("no"));
+		if (!FindFilter(No)) Filters.Add({ No, Str(O, TEXT("name")), Str(O, TEXT("bundle")), Str(O, TEXT("file")) });
+	}
+	// The mods' group and category names for the item browser: only ones the vanilla lists lack (mods reuse vanilla
+	// groups) and that hold an item of the library.
+	TSet<int32> UsedGroups;
+	TSet<FIntPoint> UsedCategories;
+	for (const TPair<TPair<FString, int32>, int32>& M : ModItems) { const FOKStudioCatalogItem& I = Items[M.Value]; UsedGroups.Add(I.Group); UsedCategories.Add(FIntPoint(I.Group, I.Category)); }
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("groups")))
+	{
+		const auto O = V->AsObject();
+		const int32 Id = Int(O, TEXT("id"));
+		if (UsedGroups.Contains(Id) && !Groups.ContainsByPredicate([Id](const FOKStudioCatalogGroup& G) { return G.Id == Id; })) Groups.Add({ -1, Id, Str(O, TEXT("name")) });
+	}
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("categories")))
+	{
+		const auto O = V->AsObject();
+		const int32 G = Int(O, TEXT("group")), Id = Int(O, TEXT("id"));
+		if (UsedCategories.Contains(FIntPoint(G, Id)) && !Categories.ContainsByPredicate([G, Id](const FOKStudioCatalogGroup& C) { return C.Group == G && C.Id == Id; }))
+			Categories.Add({ G, Id, Str(O, TEXT("name")) });
+	}
+}
+
+const FOKStudioCatalogItem* FOKStudioCatalog::FindModItem(const FString& Guid, int32 Slot) const
+{
+	const int32* Index = ModItems.Find(TPair<FString, int32>(Guid.ToLower(), Slot));
+	return Index && Items.IsValidIndex(*Index) ? &Items[*Index] : nullptr;
 }
 
 void FOKStudioCatalog::LoadAnims(const FString& File)
@@ -274,7 +337,11 @@ const FOKStudioFkBone* FOKStudioCatalog::FindFkBone(const FString& Bone) const
 
 const FOKStudioCatalogItem* FOKStudioCatalog::FindItem(int32 Group, int32 Category, int32 No) const
 {
-	return Items.FindByPredicate([&](const FOKStudioCatalogItem& I) { return I.Group == Group && I.Category == Category && I.No == No; });
+	// Indexed on first use (the catalogue with mod items holds tens of thousands; scenes look up thousands).
+	if (ItemIndex.Num() == 0 && Items.Num() > 0)
+		for (int32 K = 0; K < Items.Num(); ++K) ItemIndex.FindOrAdd(FIntVector(Items[K].Group, Items[K].Category, Items[K].No), K);
+	const int32* K = ItemIndex.Find(FIntVector(Group, Category, No));
+	return K ? &Items[*K] : nullptr;
 }
 
 FTransform FOKStudioCatalog::ItemChildPoint(int32 Group, int32 Category, int32 No) const

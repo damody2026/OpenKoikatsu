@@ -275,6 +275,17 @@ fn convert_source(game: &Path, source: &Source, bytes: &[u8], prefab_hints: &BTr
         for sk in &skeletons { let _ = parsed.bone_implants_for_skeleton(sk); }
         for name in &prefabs { let _ = parsed.accessory_body_binding(name); }
     }
+    // A zipmod's Studio items (scene mod items): what `studio-nodes` records for the vanilla ones (node tree, lights,
+    // render-to-texture cameras and screens, renderer settings).
+    if source.entry.is_some() && label.split_once('|').is_some_and(|(_, e)| e.starts_with(STUDIO_PREFIX)) {
+        for p in &prefabs {
+            let _ = parsed.prefab_hierarchy(p);
+            let _ = parsed.prefab_renderer_settings(p);
+            let _ = parsed.prefab_render_textures(p);
+            let _ = parsed.prefab_animated_materials(p);
+            let _ = parsed.prefab_renderer_visibility(p);
+        }
+    }
     let file_name = label.rsplit(['/', '|']).next().unwrap_or(label).to_owned();
     // Whole-bundle loads: the base body/head bundles (and their sideloader
     // overrides, same file name) and head items (cat 100).
@@ -308,7 +319,10 @@ fn convert_source(game: &Path, source: &Source, bytes: &[u8], prefab_hints: &BTr
 }
 
 /// `convert <lib> [threads] [filter]`
-pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) -> Result<(), String> {
+pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) -> Result<(), String> { convert_with(game, lib, threads, filter, true) }
+
+/// `convert`; `studio_catalog` false leaves studio_items.json alone (a few mod sources converted for scenes).
+pub fn convert_with(game: &Path, lib: &Path, threads: usize, filter: Option<&str>, studio_catalog: bool) -> Result<(), String> {
     use rayon::prelude::*;
     use std::io::Write;
     let started = std::time::Instant::now();
@@ -359,10 +373,12 @@ pub fn convert(game: &Path, lib: &Path, threads: usize, filter: Option<&str>) ->
         }
     }));
     // Studio catalogue with the library model of every item, light and map bundle.
-    let mut studio = crate::studio_items::catalog(game);
-    let unresolved = crate::studio_items::resolve_models(game, &mut studio);
-    crate::studio_items::write(lib, &studio)?;
-    println!("OKCONVERT studio items={} maps={} lights={} unresolved={unresolved}", studio.items.len(), studio.maps.len(), studio.lights.len());
+    if studio_catalog {
+        let mut studio = crate::studio_items::catalog(game);
+        let unresolved = crate::studio_items::resolve_models(game, &mut studio);
+        crate::studio_items::write(lib, &studio)?;
+        println!("OKCONVERT studio items={} maps={} lights={} unresolved={unresolved}", studio.items.len(), studio.maps.len(), studio.lights.len());
+    }
     crate::gamefs::save(lib)?;
     crate::oklib::deactivate();
     crate::gamefs::deactivate();

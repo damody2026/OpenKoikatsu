@@ -6,6 +6,8 @@ class UMaterialInterface;
 class UTextureCube;
 /** Lossless baked default reflection of a map (BC6H / RGBA16F). */
 UTextureCube* OKStudioMapReflection(int32 Map,FLinearColor& OutHDR,const FString& Root=FString(),int32 Node=-1);
+/** Unity's UnityBlackCube: what a scene without a baked default reflection, or a probe without a texture, reflects. */
+UTextureCube* OKStudioBlackReflection();
 
 /** Studio's sky patterns (StudioSky list): number and name, from the OK base library's studio/sky.json. */
 struct FOKStudioSkyPattern
@@ -41,10 +43,11 @@ UMaterialInterface* OKStudioSkyMaterial(int32 No, FString& OutError);
  */
 bool OKStudioSkyAmbient(int32 No, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb);
 
-/** Baked RenderSettings.m_AmbientProbe of a map scene, packed as Unity's
- * SHAr/g/b. Independent of the character maker's display environment. */
+/** A map scene's ambient, packed as Unity's SHAr/g/b: its baked RenderSettings.m_AmbientProbe, or for ambient mode
+ * Trilight / Flat the SH of its colours. Independent of the character maker's display environment. `OutMode`: the
+ * scene's ambient mode (0 Skybox, 1 Trilight, 3 Flat; -1 without a map). */
 bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb,
-    TArray<FLinearColor>* OutHigher = nullptr);
+    TArray<FLinearColor>* OutHigher = nullptr, int32* OutMode = nullptr);
 
 /** A sky body's direction (`_SunPosition`, `_MoonPosition` of pattern `No`) in UE axes; false when unknown. */
 bool OKStudioSkyBodyDirection(int32 No, const FString& Body, FVector& OutDirection);

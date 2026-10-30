@@ -170,6 +170,11 @@ fn mark_sun_visible(m: &mut ExtractedMesh, sun: &crate::unity::PrefabSunLight, h
 
 fn mark_render_texture(m: &mut ExtractedMesh, rt: &crate::unity::PrefabRenderTextures, node: i32, h: &crate::pose::PrefabHierarchy, worlds: &[crate::pose::Mat4]) {
     let Some(mat) = m.mat.as_mut() else { return; };
+    // A screen item: the RenderTexture is drawn by a camera of another item (the scene pairs them by key).
+    if let Some((_, _, _, key, w, h)) = rt.shared.iter().find(|(n, name, ..)| *n == node && *name == mat.name) {
+        mat.colors.insert("_OKRTShared".into(), [*key as f32, *w as f32, *h as f32, 0.]);
+        return;
+    }
     let Some(&(_, _, _, c)) = rt.users.iter().find(|(n, name, _, _)| *n == node && *name == mat.name) else { return; };
     let Some(cam) = rt.cameras.get(c as usize).filter(|c| c.enabled && c.active) else { return; };
     let Some(w) = worlds.get(cam.node as usize) else { return; };
@@ -225,7 +230,7 @@ fn decode<T: serde::de::DeserializeOwned>(raw: &[u8]) -> Option<T> {
 impl ModelView {
     pub fn open(lib: &Path, id: Id) -> Result<ModelView, String> {
         oklib::ensure_library(lib)?;
-        if !oklib::model_path(lib, &id).is_file() { return Err(format!("{} not found", oklib::model_path(lib, &id).display())); }
+        if !oklib::model_file(lib, &id).is_file() { return Err(format!("{} not found", oklib::model_file(lib, &id).display())); }
         let parsed = crate::unity::parse_bundle_cached(oklib::token(&id));
         Ok(ModelView { lib: lib.to_owned(), id, parsed, records: std::sync::OnceLock::new() })
     }
@@ -381,6 +386,34 @@ impl ModelView {
     pub fn parsed_sun_light(&self, prefab: &str) -> crate::unity::PrefabSunLight { self.parsed.prefab_sun_light(prefab) }
 
     /// Bones a prefab's shown skinned meshes follow: what Studio item FK can turn.
+    /// The enabled cameras of a prefab drawing into a RenderTexture (a Studio camera item), with their node's
+    /// prefab-space pose as `ok_okmodel_node_world` gives it (Unity: metres, quaternion xyzw).
+    pub fn render_cameras(&self, prefab: &str) -> Vec<serde_json::Value> {
+        let h = self.hierarchy(prefab);
+        self.parsed.prefab_render_textures(prefab).cameras.iter().filter(|c| c.enabled && c.active && c.target_key != 0).filter_map(|c| {
+            let (pos, rot, _) = h.node_world(c.node as usize)?;
+            Some(serde_json::json!({"key": c.target_key, "target": c.target, "width": c.width, "height": c.height, "pos": pos, "rot": rot,
+                "fov": c.fov, "near": c.near, "far": c.far, "orthographic": c.orthographic, "ortho_size": c.ortho_size,
+                "clear_flags": c.clear_flags, "background": c.background}))
+        }).collect()
+    }
+    /// The prefab's realtime lights (a Studio map's lamps): every enabled Light on an active GameObject that is not baked
+    /// into the lightmaps (m_Lightmapping 2) and is not the map's sun (SunLightInfo, lit separately); Unity prefab-space
+    /// position and rotation, LightType (0 spot, 1 directional, 2 point), colour, intensity, range, spot angle, culling
+    /// mask, shadow type and the times of day it shows at (`sun_mask`, 0: always).
+    pub fn map_lights(&self, prefab: &str) -> Vec<serde_json::Value> {
+        let h = self.hierarchy(prefab);
+        let sun = self.parsed.prefab_sun_light(prefab);
+        let modes = self.parsed.prefab_light_modes(prefab);
+        h.lights.iter().filter(|l| l.enabled && l.node != sun.light_node).filter_map(|l| {
+            let mode = modes.iter().find(|m| m.node == l.node)?;
+            if !mode.active || mode.lightmapping == 2 || l.intensity <= 0. { return None; }
+            let (pos, rot, _) = h.node_world(l.node as usize)?;
+            Some(serde_json::json!({"node": l.node, "name": h.nodes[l.node as usize].name, "kind": l.kind, "pos": pos, "rot": rot,
+                "color": l.color, "intensity": l.intensity, "range": l.range, "spot_angle": l.spot_angle,
+                "culling_mask": mode.culling_mask, "shadows": mode.shadows, "lightmapping": mode.lightmapping, "times": sun_mask(&sun, &h, l.node)}))
+        }).collect()
+    }
     pub fn fk_bones(&self, prefab: &str) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for m in self.prefab_meshes(prefab, false) {
@@ -411,6 +444,7 @@ impl ModelView {
         let t = std::time::Instant::now();
         let mut meshes = self.prefab_meshes(prefab, include_disabled);
         edits.apply_shaders(&mut meshes);
+        crate::shader_states::complete(&self.lib, &mut meshes);
         // MDK uses Standard-style slot names, not the character shader's
         // _NormalMap. Older model memos keep these bindings but omit their PNGs.
         // Resolve through the library's named-texture records at session time.
@@ -470,6 +504,11 @@ impl ModelView {
             m.rest_positions = m.positions.clone();
             m.rest_normals = m.normals.clone();
             m.prefab_local = None;
+            // A mirrored node (negative scale, e.g. a map built with -1 on one axis) turns the triangles inside out: Unity
+            // flips the culling for it, so reverse their winding, or the outside of a room is drawn and its inside culled.
+            let det = w[0][0] * (w[1][1] * w[2][2] - w[1][2] * w[2][1]) - w[0][1] * (w[1][0] * w[2][2] - w[1][2] * w[2][0])
+                + w[0][2] * (w[1][0] * w[2][1] - w[1][1] * w[2][0]);
+            if det < 0. { for t in m.indices.chunks_exact_mut(3) { t.swap(1, 2); } }
         };
         // A Mesh drawn by several GameObjects becomes one part per instance (the extra ones named `<mesh>#<n>`, as
         // parts are told apart by name).
@@ -630,12 +669,35 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             for name in view.prefabs_with_shader(&p[7..]) { println!("{name}"); }
         }
         None => println!("{}", serde_json::to_string_pretty(&view.contents()).unwrap()),
+        Some(p) if p.starts_with("nodes:") => {
+            let h = view.hierarchy(&p[6..]);
+            for (i, n) in h.nodes.iter().enumerate() { println!("{i}\t{}\tparent={}\tpos={:?}\trot={:?}\tscale={:?}", n.name, n.parent, n.pos, n.rot, n.scale); }
+        }
+        Some(p) if p.starts_with("cameras:") => {
+            println!("cameras {}", serde_json::to_string(&view.render_cameras(&p[8..])).unwrap());
+            println!("screens {:?}", view.parsed.prefab_render_textures(&p[8..]).shared);
+        }
         Some(p) => for m in view.prefab_meshes(p, true) {
             let shown = posed_static(&m);
             let (lo, hi) = crate::pose::aabb(&shown.positions);
             println!("{}\tverts={} tris={} tex={} {:?} detail={} normal={} mat={:?} skel={} bounds=[{:.3},{:.3},{:.3}]..[{:.3},{:.3},{:.3}]", m.name, m.positions.len(), m.indices.len() / 3, m.texture_name,
                 m.texture_png.as_ref().map(|v| v.len()), m.detail_mask_png.is_some(), m.normal_map_png.is_some(), m.mat.as_ref().map(|x| (&x.name, &x.shader)),
                 m.smr_skel.as_ref().map(|k| k.names.len()).unwrap_or(0), lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
+            if !m.vertex_colors.is_empty() {
+                let n = m.vertex_colors.len() as f32;
+                let avg = (0..4).map(|c| m.vertex_colors.iter().map(|v| v[c] as f32).sum::<f32>() / n).collect::<Vec<_>>();
+                println!("  vertex colours {} avg rgba {:?}", m.vertex_colors.len(), avg);
+            }
+            for (label, uv) in [("uv0", &m.uvs), ("uv1", &m.uv2)] {
+                if uv.is_empty() { continue; }
+                let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
+                for p in uv.iter() { for c in 0..2 { lo[c] = lo[c].min(p[c]); hi[c] = hi[c].max(p[c]); } }
+                println!("  {label} [{:.3},{:.3}]..[{:.3},{:.3}]", lo[0], lo[1], hi[0], hi[1]);
+            }
+            if !m.uv2.is_empty() { println!("  uv0 == uv1: {}", m.uvs == m.uv2); }
+            let zero = m.normals.iter().filter(|n| n[0] * n[0] + n[1] * n[1] + n[2] * n[2] < 0.25).count();
+            println!("  normals {} (near zero {zero})", m.normals.len());
+            if let Some(mat) = m.mat.as_ref() { println!("  colors {:?} floats {:?}", mat.colors, mat.floats.iter().filter(|(k, _)| !k.ends_with("_ST_x") && !k.ends_with("_ST_y") && !k.ends_with("_ST_z") && !k.ends_with("_ST_w")).collect::<Vec<_>>()); }
         },
     }
     Ok(())
@@ -674,6 +736,11 @@ mod source_mesh_uvs {
         for m in &meshes {
             println!("mesh {} vertices {} uv {:?} uv2 {:?}", m.name, m.positions.len(), &m.uvs[..m.uvs.len().min(6)], &m.uv2[..m.uv2.len().min(4)]);
         }
+        // OK_SOURCE_TEXTURES=<dir>: the bundle's textures as decoded (with OK_TEXDIAG, their formats on stderr).
+        if let Ok(dir) = std::env::var("OK_SOURCE_TEXTURES") {
+            let (_, textures) = crate::unity::meshes_and_textures_from_memory(std::fs::read(&bundle).unwrap());
+            for (name, png) in &textures { std::fs::write(std::path::Path::new(&dir).join(format!("src_{name}.png")), png).unwrap(); }
+        }
     }
 }
 
@@ -706,7 +773,17 @@ mod item_texture_dump {
                     let mut colors: Vec<_> = m.colors.iter().collect(); colors.sort_by(|a, b| a.0.cmp(b.0));
                     println!("  keywords {:?}\n  floats {:?}\n  colors {:?}", m.keywords, floats, colors);
                 }
-                println!("  uv2 {} uv3 {} uv4 {} first positions {:?}", p.uv2.len(), p.uv3.len(), p.uv4.len(), &p.positions[..p.positions.len().min(4)]);
+                println!("  uv2 {} uv3 {} uv4 {} first positions {:?} uvs {:?}", p.uv2.len(), p.uv3.len(), p.uv4.len(), &p.positions[..p.positions.len().min(4)], &p.uvs[..p.uvs.len().min(4)]);
+                // OK_ITEM_BOX=x0,y0,z0,x1,y1,z1: the UV range of the vertices inside that box (which part of the texture a
+                // wall or surface uses).
+                if let Some(b) = std::env::var("OK_ITEM_BOX").ok().map(|s| s.split(',').filter_map(|v| v.parse::<f32>().ok()).collect::<Vec<_>>()).filter(|b| b.len() == 6) {
+                    let (mut lo, mut hi, mut n) = ([f32::MAX; 2], [f32::MIN; 2], 0);
+                    for &i in &p.indices {
+                        let (q, uv) = (p.positions[i as usize], p.uvs[i as usize]);
+                        if (0..3).all(|k| q[k] >= b[k] && q[k] <= b[k + 3]) { n += 1; for k in 0..2 { lo[k] = lo[k].min(uv[k]); hi[k] = hi[k].max(uv[k]); } }
+                    }
+                    println!("  box: {n} vertices, uv {lo:?}..{hi:?}");
+                }
                 // Facing: the first triangle's winding normal (Unity is left-handed: clockwise seen from the front) against
                 // the vertex normal.
                 if p.indices.len() >= 3 {
@@ -715,6 +792,19 @@ mod item_texture_dump {
                     let (u, v) = ([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]]);
                     let cross = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
                     println!("  first triangle cross {cross:?} vertex normal {:?} indices {:?}", p.normals.get(a), &p.indices[..p.indices.len().min(6)]);
+                    // Every triangle: winding normal with or against its vertex normal, and how many face +/- each axis.
+                    let (mut with, mut against, mut axis) = (0, 0, [[0usize; 2]; 3]);
+                    for t in p.indices.chunks_exact(3) {
+                        let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+                        let (pa, pb, pc) = (p.positions[a], p.positions[b], p.positions[c]);
+                        let (u, v) = ([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]]);
+                        let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+                        let vn = p.normals.get(a).copied().unwrap_or([0.; 3]);
+                        if n[0] * vn[0] + n[1] * vn[1] + n[2] * vn[2] >= 0. { with += 1 } else { against += 1 }
+                        let k = (0..3).max_by(|x, y| n[*x].abs().total_cmp(&n[*y].abs())).unwrap();
+                        axis[k][usize::from(n[k] < 0.)] += 1;
+                    }
+                    println!("  winding with vertex normals {with}, against {against}; facing +-x {:?} +-y {:?} +-z {:?}", axis[0], axis[1], axis[2]);
                 }
                 // Each also upside down (for trying the other row direction).
                 let write = |name: String, png: &[u8]| {

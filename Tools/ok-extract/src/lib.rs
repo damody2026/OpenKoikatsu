@@ -74,6 +74,7 @@ pub mod okmodel_view;
 pub mod okmodel_edit;
 mod oklib_convert;
 mod studio_items;
+mod shader_states;
 mod studio_child_animation;
 mod studio_pose;
 mod studio_scene;
@@ -204,6 +205,15 @@ pub(crate) fn is_native_hair_shader(shader: &str) -> bool {
     shader.contains("main_hair") || matches!(shader.as_str(),"koikano/hair_main_sun"|"koikano/hair_main_sun_front")
 }
 
+/// Shader families that sample their main texture with V reversed, so a part drawn by them keeps (u, 1 - v).
+/// CM3D2's ports (CM3D2/Lighted, Lighted_Trans, Toony_*), which mod maps converted from Custom Maid 3D 2 carry: their
+/// meshes keep CM3D2's V and the shaders reverse it. Checked on Petardo's Kitchen against the scene's own picture
+/// (back wall red tiles, cupboard fronts, the trees behind the window); Standard and Unlit items of the same scenes
+/// (the helipad's lettering) draw with V as stored.
+pub(crate) fn shader_samples_flipped_v(shader: &str) -> bool {
+    shader.to_ascii_lowercase().starts_with("cm3d2/")
+}
+
 pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> (String, bool) {let _spot=crate::profile::spot("blend_for_mesh");
     // Gag eyes (cf_O_gag_eye_00..02, an eye set's drawn eyes): an unlit cut-out texture over the face.
     if crate::eye_set::eye_reference(&mesh.name) >= 3 {
@@ -264,6 +274,16 @@ pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> 
         // depth ordering for the mostly binary authored alpha in this preview.
         if is_native_hair_shader(&shader) {
             return ("masked".into(), true);
+        }
+        // Unity's built-in Unlit/* and the CM3D2 ports some mod maps bring (Petardo's Kitchen: CM3D2/Lighted,
+        // CM3D2/Lighted_Trans): none of Koikatsu's toon inputs apply. Unlit/* draws its texture as is; CM3D2/Lighted's
+        // textures carry their lighting baked in, so it is drawn unlit too (as a Koikatsu toon part with its near-black
+        // _ShadowColor the whole room came out black). A cutout variant clips, a Transparent / _Trans one blends.
+        if shader.starts_with("unlit/") || shader.starts_with("cm3d2/") {
+            let blend = if shader.contains("cutout") || alphatest { "masked" }
+                else if shader.contains("transparent") || shader.contains("_trans") || alphablend || mat.render_queue >= 3000 { "translucent" }
+                else { "opaque" };
+            return (blend.into(), true);
         }
         if alphablend || mat.render_queue >= 3000 {
             let (_, unlit) = blend_for(role, &mesh.name);

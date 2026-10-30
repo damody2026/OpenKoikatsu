@@ -714,6 +714,16 @@ public:
 	UPROPERTY()
 	TMap<int32, TObjectPtr<USceneCaptureComponent2D>> RenderTextureCaptures;
 	FTSTicker::FDelegateHandle RenderTextureTicker;
+	/** Screen parts sampling a RenderTexture another object's camera draws (a Studio screen item; okmodel_view `_OKRTShared`):
+	 *  the RenderTexture's key and size, and the screen's material ("Screen" is black until the scene gives it a target). */
+	struct FSharedRenderTextureScreen
+	{
+		int32 Key = 0;
+		FIntPoint Size = FIntPoint(0, 0);
+		TWeakObjectPtr<UMaterialInstanceDynamic> Material;
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+	};
+	TArray<FSharedRenderTextureScreen> SharedRenderTextureScreens;
 	UTextureRenderTarget2D* RenderTextureFor(FOkSession& Source, int32 PartIndex);
 	void StopRenderTextureCaptures();
 	UPROPERTY()

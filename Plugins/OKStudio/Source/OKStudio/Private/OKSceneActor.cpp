@@ -8,6 +8,8 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "HAL/PlatformMisc.h"
@@ -52,6 +54,13 @@ FString AOKSceneActor::LibraryDirectory()
 
 namespace
 {
+	/** `Local` then `World` as matrices: FTransform's own product applies World's non-uniform scale before Local's
+	 *  rotation (the prefab root's -90 X of an FBX building took the item's Y scale as its height, 127 m instead of 37). */
+	FTransform Compose(const FTransform& Local, const FTransform& World)
+	{
+		return FTransform(Local.ToMatrixWithScale() * World.ToMatrixWithScale());
+	}
+
 	/** The character state as ok_session_open_status takes it (empty: the card's own). */
 	FString StatusJson(const FOKSceneCharacter& C)
 	{
@@ -245,8 +254,13 @@ namespace
 		// The scene's toon ramp (Studio's global _RampG, an mt_ramp of the game; OKHGShading's kk_<n>).
 		if (!bMap && Ramp >= 0)
 		{
+			// A mod ramp keeps its own number (MoreShadowTypes' 850): its key is <mod>_<n>.
+			FString RampKey = FString::Printf(TEXT("kk_%d"), Ramp);
+			if (!OKRenderRamps().ContainsByPredicate([&](const FOKRenderRamp& R) { return R.Key == RampKey; }))
+				if (const FOKRenderRamp* Mod = OKRenderRamps().FindByPredicate([Suffix = FString::Printf(TEXT("_%d"), Ramp)](const FOKRenderRamp& R) { return R.Key.EndsWith(Suffix); }))
+					RampKey = Mod->Key;
 			FString RampError;
-			Actor->RampOverride = OKLoadRenderRamp(FString::Printf(TEXT("kk_%d"), Ramp), RampError);
+			Actor->RampOverride = OKLoadRenderRamp(RampKey, RampError);
 			if (!Actor->RampOverride) UE_LOG(LogTemp, Warning, TEXT("OK studio: scene ramp %d not loaded: %s"), Ramp, *RampError);
 		}
 		if (Item)
@@ -325,6 +339,30 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			if (Player && Actor->SetOkAnimation(Player, false)) { Actor->PoseMode = 3; Out.StudioAnim.Reset(Seq); }
 			else Errors.Add(Object.Id, FString::Printf(TEXT("studio animation %d/%d/%d/%d not playable: %s"), C.StudioAnimeKind, C.StudioAnimeGroup, C.StudioAnimeCategory, C.StudioAnimeNo, Entry ? (Entry->File.IsEmpty() ? TEXT("not converted") : *AnimError) : TEXT("not in the library")));
 		}
+		else if (!Object.Character.AnimFile.IsEmpty())
+		{
+			// An .okanim file of its own (a video motion, an exported timeline).
+			const FString File = FPaths::IsRelative(Object.Character.AnimFile) ? FPaths::ProjectDir() / Object.Character.AnimFile : Object.Character.AnimFile;
+			FString AnimError;
+			// A video motion (Tools/video_motion) is a session clip (OKCLIP01), played by the character's own session
+			// under its "video:|<name>" key; the OK animation library's files (OKANIM) play through an anim player.
+			TArray<uint8> Magic;
+			const bool bVideo = FFileHelper::LoadFileToArray(Magic, *File, FILEREAD_Silent) && Magic.Num() >= 8 && FMemory::Memcmp(Magic.GetData(), "OKCLIP01", 8) == 0;
+			if (bVideo)
+			{
+				const bool bInVideoDir = FPaths::IsSamePath(FPaths::GetPath(FPaths::ConvertRelativePathToFull(File)), FPaths::ConvertRelativePathToFull(FOkSession::VideoMotionDirectory()));
+				if (!bInVideoDir || !Actor->SetGameAnimation(TEXT("video:|") + FPaths::GetBaseFilename(File)))
+					Errors.Add(Object.Id, FString::Printf(TEXT("video motion %s not playable%s"), *Object.Character.AnimFile, bInVideoDir ? TEXT("") : TEXT(" (only Saved/VideoMotions plays)")));
+			}
+			else
+			{
+				UOKAnimSequence* Seq = UOKAnimationLibrary::LoadOkAnimFile(File, nullptr, NAME_None, AnimError);
+				const TSharedPtr<FOkAnimPlayer> Player = Seq ? Seq->CreatePlayer(AnimError) : nullptr;
+				if (Player && Actor->SetOkAnimation(Player, false)) { Actor->PoseMode = 3; Out.StudioAnim.Reset(Seq); }
+				else Errors.Add(Object.Id, FString::Printf(TEXT("animation file %s not playable: %s"), *Object.Character.AnimFile, *AnimError));
+			}
+			if (Errors.Contains(Object.Id)) UE_LOG(LogTemp, Warning, TEXT("OK studio: %s: %s"), *Object.Name, *Errors[Object.Id]);
+		}
 		else if (Object.Character.Animation.IsValid())
 		{
 			const UOKAnimationAsset* Anim = Cast<UOKAnimationAsset>(Object.Character.Animation.TryLoad());
@@ -341,7 +379,13 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		if (!ItemModel(Object.Item, Model, Prefab, OutError)) return false;
 		// Item FK turns the item's bones before its meshes are baked; Material Editor shader and renderer edits apply then too.
 		FOkSession Session;
-		if (!Session.OpenOkModelFk(LibraryDirectory(), Model, Prefab, ItemBuildJson(Object.Item), OutError)) return false;
+		if (!Session.OpenOkModelFk(LibraryDirectory(), Model, Prefab, ItemBuildJson(Object.Item), OutError))
+		{
+			// Studio's helper items draw nothing in the game either (a turning pivot "obj無し", a 3D sound emitter): only a
+			// place for their children, which the document already keeps. Not an error.
+			if (OutError.Contains(TEXT("has no meshes"))) { OutError.Reset(); AddRenderCamera(Model, Prefab, Out); return true; }
+			return false;
+		}
 		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, false,
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;
@@ -354,6 +398,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 				FVector(-RootPosition.X, RootPosition.Z, RootPosition.Y) * 100.0, FVector(RootScale.X, RootScale.Z, RootScale.Y));
 			Out.RenderCorrection = Root.Inverse();
 		}
+		AddRenderCamera(Model, Prefab, Out);
 		return true;
 	}
 	case EOKSceneObjectKind::Light:
@@ -420,6 +465,152 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 	}
 }
 
+void AOKSceneActor::AddRenderCamera(const FString& Model, const FString& Prefab, FShown& Out)
+{
+	const FString Json = FOkSession::OkModelRenderCameras(LibraryDirectory(), Model, Prefab);
+	TArray<TSharedPtr<FJsonValue>> Cameras;
+	if (Json.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Cameras) || Cameras.IsEmpty()) return;
+	const TSharedPtr<FJsonObject> C = Cameras[0]->AsObject();
+	if (!C || Out.Component.IsValid()) return;
+	auto Floats = [&C](const TCHAR* Field, int32 N)
+	{
+		TArray<float> V;
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (C->TryGetArrayField(Field, List)) for (const TSharedPtr<FJsonValue>& X : *List) V.Add(X->AsNumber());
+		V.SetNumZeroed(N);
+		return V;
+	};
+	const TArray<float> P = Floats(TEXT("pos"), 3), R = Floats(TEXT("rot"), 4);
+	const int32 Key = C->GetIntegerField(TEXT("key"));
+	const int32 W = FMath::Clamp(int32(C->GetIntegerField(TEXT("width"))), 16, 2048), H = FMath::Clamp(int32(C->GetIntegerField(TEXT("height"))), 16, 2048);
+	TObjectPtr<UTextureRenderTarget2D>& Target = SharedRenderTargets.FindOrAdd(Key);
+	if (!Target)
+	{
+		Target = NewObject<UTextureRenderTarget2D>(this);
+		Target->RenderTargetFormat = RTF_RGBA8_SRGB;
+		Target->ClearColor = FLinearColor::Black;
+		Target->InitAutoFormat(W, H);
+		Target->UpdateResourceImmediate(true);
+	}
+	USceneCaptureComponent2D* Capture = NewObject<USceneCaptureComponent2D>(this);
+	Capture->SetupAttachment(RootComponent);
+	const float Aspect = float(Target->SizeX) / float(FMath::Max<int32>(Target->SizeY, 1));
+	if (C->GetBoolField(TEXT("orthographic")))
+	{
+		Capture->ProjectionType = ECameraProjectionMode::Orthographic;
+		Capture->OrthoWidth = 2.f * float(C->GetNumberField(TEXT("ortho_size"))) * Aspect * 100.f;
+	}
+	else // Unity's field of view is vertical, Unreal's horizontal.
+		Capture->FOVAngle = FMath::RadiansToDegrees(2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(float(C->GetNumberField(TEXT("fov")))) * 0.5f) * Aspect));
+	Capture->bOverride_CustomNearClippingPlane = true;
+	Capture->CustomNearClippingPlane = FMath::Max(float(C->GetNumberField(TEXT("near"))) * 100.f, 0.1f);
+	Capture->MaxViewDistanceOverride = float(C->GetNumberField(TEXT("far"))) * 100.f;
+	Capture->CaptureSource = SCS_FinalColorLDR;
+	// Studio's image effects sit on the main camera only: this camera draws the shaders' colours as they are (no film
+	// curve, fixed exposure, no bloom, filter, fog or vignette). Without it the capture fell back to Unreal's auto
+	// exposure and the feeds came out white.
+	FOKScenePost Plain;
+	Plain.bBloom = Plain.bVignette = Plain.bDepthOfField = Plain.bFog = Plain.bAmbientOcclusion = Plain.bSunShafts = false;
+	Plain.ColorFilter = -1;
+	Plain.Exposure = 0.f;
+	Plain.ApplyTo(Capture->PostProcessSettings);
+	Capture->PostProcessBlendWeight = 1.f;
+	// WireRenderTextures captures it every frame while a shown screen shows it.
+	Capture->bCaptureEveryFrame = false;
+	Capture->bCaptureOnMovement = false;
+	Capture->TextureTarget = Target;
+	Capture->RegisterComponent();
+	// The camera node in the item (Unity prefab space, the prefab root undone as for the meshes), looking along Unity's +Z
+	// (Unreal +Y) with +Y (Unreal +Z) up.
+	FTransform RootInverse = FTransform::Identity;
+	FVector RootPosition, RootScale;
+	FQuat RootRotation;
+	if (FOkSession::OkModelNodeWorld(LibraryDirectory(), Model, Prefab, Prefab, RootPosition, RootRotation, RootScale))
+		RootInverse = FTransform(FQuat(-RootRotation.X, RootRotation.Z, RootRotation.Y, RootRotation.W).GetNormalized(), FVector(-RootPosition.X, RootPosition.Z, RootPosition.Y) * 100.0).Inverse();
+	const FTransform Node(FQuat(-R[0], R[2], R[1], R[3]).GetNormalized(), FVector(-P[0], P[2], P[1]) * 100.0);
+	const FTransform Look(FRotationMatrix::MakeFromXZ(FVector(0, 1, 0), FVector(0, 0, 1)).ToQuat());
+	Out.ComponentOffset = Look * Node * RootInverse;
+	Out.Component = Capture;
+	Out.RenderCameraKey = Key;
+	UE_LOG(LogTemp, Display, TEXT("OK studio: camera item %s key=%d %dx%d fov=%.1f"), *Prefab, Key, Target->SizeX, Target->SizeY, float(C->GetNumberField(TEXT("fov"))));
+}
+
+void AOKSceneActor::WireRenderTextures()
+{
+	// The first camera item of each key draws it (Unity: every camera of a RenderTexture draws in turn, the last one stays).
+	TMap<int32, USceneCaptureComponent2D*> Live;
+	TArray<USceneCaptureComponent2D*> All;
+	bool bAnyScreen = false;
+	for (const TPair<int32, FShown>& It : Shown)
+	{
+		if (It.Value.RenderCameraKey == 0) { bAnyScreen = bAnyScreen || (It.Value.Preview.IsValid() && It.Value.Preview->SharedRenderTextureScreens.Num()); continue; }
+		USceneCaptureComponent2D* Capture = Cast<USceneCaptureComponent2D>(It.Value.Component.Get());
+		if (!Capture) continue;
+		All.Add(Capture);
+		// Studio hides an item by turning its renderers off (OCIItem.visible): a hidden camera item still draws.
+		if (!Live.Contains(It.Value.RenderCameraKey)) Live.Add(It.Value.RenderCameraKey, Capture);
+	}
+	if (!bAnyScreen && All.IsEmpty()) return;
+	static UTexture* Black = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+	TSet<int32> Watched;
+	for (const TPair<int32, FShown>& It : Shown)
+	{
+		AKKPreviewActor* Preview = It.Value.Preview.Get();
+		if (!Preview) continue;
+		const bool bShown = !Document || Document->IsShown(It.Key);
+		for (const AKKPreviewActor::FSharedRenderTextureScreen& Screen : Preview->SharedRenderTextureScreens)
+		{
+			UMaterialInstanceDynamic* Material = Screen.Material.Get();
+			if (!Material) continue;
+			USceneCaptureComponent2D* const* Capture = Live.Find(Screen.Key);
+			UTexture* Want = Capture ? (*Capture)->TextureTarget.Get() : Black;
+			UTexture* Has = nullptr;
+			if (!Material->GetTextureParameterValue(FName(TEXT("Screen")), Has) || Has != Want) Material->SetTextureParameterValue(TEXT("Screen"), Want);
+			if (!Capture || !bShown) continue;
+			Watched.Add(Screen.Key);
+			// Not filmed by its own camera: the unlit screen showing itself feeds back to white.
+			if (UPrimitiveComponent* Comp = Screen.Component.Get()) (*Capture)->HideComponent(Comp);
+		}
+	}
+	for (USceneCaptureComponent2D* Capture : All)
+	{
+		const bool bWatched = Live.FindKey(Capture) && Watched.Contains(*Live.FindKey(Capture));
+		Capture->bCaptureEveryFrame = bWatched;
+	}
+	// OK_RT_DUMP=1 (debugging): 5 s after the first camera item shows, each shown camera item's picture to
+	// Saved/OKStudio/studio_rt_<key>.png and its pose (Unity metres, view direction) to the log.
+	static const bool bDump = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_RT_DUMP")) == TEXT("1");
+	static bool bDumpScheduled = false;
+	if (bDump && Live.Num() && !bDumpScheduled)
+	{
+		bDumpScheduled = true;
+		TWeakObjectPtr<AOKSceneActor> Weak(this);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Weak](float) { if (Weak.IsValid()) Weak->DumpRenderTextures(); return false; }), 5.f);
+	}
+}
+
+void AOKSceneActor::DumpRenderTextures()
+{
+	TMap<int32, USceneCaptureComponent2D*> Live;
+	for (const TPair<int32, FShown>& It : Shown)
+		if (USceneCaptureComponent2D* Capture = It.Value.RenderCameraKey ? Cast<USceneCaptureComponent2D>(It.Value.Component.Get()) : nullptr)
+			if (!Live.Contains(It.Value.RenderCameraKey)) Live.Add(It.Value.RenderCameraKey, Capture);
+	for (const TPair<int32, USceneCaptureComponent2D*>& It : Live)
+	{
+			UTextureRenderTarget2D* Target = It.Value->TextureTarget.Get();
+			FTextureRenderTargetResource* Resource = Target ? Target->GameThread_GetRenderTargetResource() : nullptr;
+			TArray<FColor> Pixels;
+			if (!Resource || !Resource->ReadPixels(Pixels)) continue;
+			for (FColor& P : Pixels) P.A = 255;
+			TArray64<uint8> Png;
+			FImageUtils::PNGCompressImageArray(Target->SizeX, Target->SizeY, Pixels, Png);
+			const FString Path = FPaths::ProjectSavedDir() / FString::Printf(TEXT("OKStudio/studio_rt_%d.png"), It.Key);
+			FFileHelper::SaveArrayToFile(Png, *Path);
+			const FVector L = It.Value->GetComponentLocation() / 100.0, F = It.Value->GetForwardVector();
+			UE_LOG(LogTemp, Display, TEXT("OK studio: camera item key=%d at unity (%.3f,%.3f,%.3f) looking (%.3f,%.3f,%.3f) fov=%.1f -> %s"), It.Key, -L.X, L.Z, L.Y, -F.X, F.Z, F.Y, It.Value->FOVAngle, *Path);
+		}
+}
+
 void AOKSceneActor::Release(FShown& Item)
 {
 	if (Item.Preview.IsValid()) { Item.Preview->Destroy(); ++ReleasedSinceCollect; }
@@ -445,6 +636,7 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
 	if (C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
 	if (C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
+	if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
 	// Hand shapes: a pattern overrides the animated fingers of that hand (-1 gives them back).
 	const int32 Hands[2] = { C.HandLeft, C.HandRight };
 	const int32 Count = Actor->GetHandShapeCount();
@@ -548,7 +740,12 @@ void AOKSceneActor::Sync()
 			Item = &Shown.Add(Object.Id, Fresh);
 			if (Object.Kind == EOKSceneObjectKind::Character) { ApplyCharacterState(Object, *Item); SetAnimationTime(Object.Id, 0.f); }
 		}
-		else if (Object.Kind == EOKSceneObjectKind::Character) ApplyCharacterState(Object, *Item);
+		else if (Object.Kind == EOKSceneObjectKind::Character)
+		{
+			ApplyCharacterState(Object, *Item);
+			// A stopped animation (speed 0) shows the frame at its time: the UI and timeline keys scrub it.
+			if (Object.Character.Speed == 0.f && Item->Time != Object.Character.Time) SetAnimationTime(Object.Id, 0.f);
+		}
 		if (Object.Kind == EOKSceneObjectKind::Camera)
 		{
 			if (UCameraComponent* Camera = Cast<UCameraComponent>(Item->Component.Get())) Camera->SetFieldOfView(Object.Camera.Fov);
@@ -582,20 +779,22 @@ void AOKSceneActor::Sync()
 		const bool bShown = Document->IsShown(Object.Id);
 		if (AKKPreviewActor* Preview = Item->Preview.Get())
 		{
-			Preview->SetActorTransform(Item->RenderCorrection * World);
+			Preview->SetActorTransform(Compose(Item->RenderCorrection, World));
 			Preview->SetActorHiddenInGame(!bShown);
 			if (USceneComponent* Root = Preview->GetRootComponent()) Root->SetVisibility(bShown, true);
 		}
 		if (USceneComponent* Component = Item->Component.Get())
 		{
-			Component->SetWorldTransform(World);
-			Component->SetVisibility(bShown, true);
+			Component->SetWorldTransform(Item->ComponentOffset * World);
+			// A camera item's capture keeps drawing while the item is hidden (Studio hides only renderers).
+			if (Item->RenderCameraKey == 0) Component->SetVisibility(bShown, true);
 		}
 	}
 	for (auto It = Shown.CreateIterator(); It; ++It)
 	{
 		if (!Present.Contains(It.Key())) { Release(It.Value()); Errors.Remove(It.Key()); It.RemoveCurrent(); }
 	}
+	WireRenderTextures();
 	// A destroyed preview's meshes, textures and materials are freed by garbage collection, which the engine runs only
 	// now and then: after another scene is loaded (or many objects go) collect now, or scenes opened one after another
 	// pile up gigabytes.
@@ -618,6 +817,8 @@ void AOKSceneActor::SyncMap()
 		return;
 	}
 	ShownMapTime = -2;
+	for (const TPair<TWeakObjectPtr<ULightComponent>, uint32>& L : MapLights) if (L.Key.IsValid()) L.Key->DestroyComponent();
+	MapLights.Reset();
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) { P->Destroy(); ReleasedSinceCollect += 32; }
 	ShownMapPreviews.Reset();
 	ShownMap = Document->Map;
@@ -640,6 +841,7 @@ void AOKSceneActor::SyncMap()
 		TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
 		for (UPrimitiveComponent* P : Primitives) P->SetLightingChannels(false, false, !P->ComponentHasTag(TEXT("OKSunExcluded")));
 		ShownMapPreviews.Add(Actor);
+		AddMapLights(Actor, Entry->Model, Root);
 	}
 	if (ShownMapPreviews.IsEmpty()) MapError = FString::Join(Failed, TEXT("; "));
 	ApplyMapTime(MapPlace);
@@ -691,6 +893,11 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 			if (C->ComponentHasTag(TEXT("OKRendererDisabled"))) C->SetVisibility(false);
 		}
 	}
+	// The map's lamps of a time of day show with that time's list (SunLightInfo.Set), the others always.
+	for (const TPair<TWeakObjectPtr<ULightComponent>, uint32>& L : MapLights)
+		if (L.Key.IsValid()) L.Key->SetVisibility(L.Value == 0 || (Time >= 0 && ((L.Value >> Time) & 1) != 0));
+	ItemsLit.Reset();
+	MapSunMask = 0;
 	if (!bSun)
 	{
 		if (MapSun) { MapSun->DestroyComponent(); MapSun = nullptr; }
@@ -720,7 +927,78 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
     const float Energy=FMath::Max3(Irradiance.R,Irradiance.G,Irradiance.B);
     MapSun->SetLightColor(Energy>0 ? FLinearColor(Irradiance.R/Energy,Irradiance.G/Energy,Irradiance.B/Energy,1) : FLinearColor::Black);
     MapSun->SetIntensity(Energy*UE_PI);
+	// The items' forward light when it reaches their layer (UpdateItemLighting): Unity (-x, z, y) towards the light.
+	FLinearColor Lo, Hi, Low24;
+	if (Map->Session.MaterialValue(0, "_OKSunCullingLo", Lo) && Map->Session.MaterialValue(0, "_OKSunCullingHi", Hi))
+		MapSunMask = uint32(FMath::RoundToInt(Lo.R)) | (uint32(FMath::RoundToInt(Hi.R)) << 16);
+	else if (Map->Session.MaterialValue(0, "_OKSunCulling", Low24)) MapSunMask = uint32(FMath::RoundToInt(Low24.R));
+	const FVector SunForward = MapSun->GetForwardVector();
+	const FVector Towards = FVector(SunForward.X, -SunForward.Z, -SunForward.Y).GetSafeNormal();
+	MapSunItemDirection = FLinearColor(Towards.X, Towards.Y, Towards.Z, 0.f);
+	MapSunItemColor = FLinearColor(Irradiance.R, Irradiance.G, Irradiance.B, 1.f);
 	UE_LOG(LogTemp, Display, TEXT("OK studio: map time %d sun angle=(%.1f,%.1f,%.1f) colour=(%.2f,%.2f,%.2f) intensity=%.2f"), Time, Angle.R, Angle.G, Angle.B, Color.R, Color.G, Color.B, Color.A);
+}
+
+// A Studio map's realtime lamps (point, spot and extra directional lights the map scene keeps unbaked): Unreal lights
+// on the map's lighting channel, at their node of the map prefab. Unity's point / spot attenuation (its falloff
+// texture, 1 / (1 + 25 (d / range)^2), cut at the range) is approximated by Unreal's non-inverse-squared falloff.
+void AOKSceneActor::AddMapLights(AKKPreviewActor* Map, const FString& Model, const FString& Root)
+{
+	const FString Json = FOkSession::OkModelMapLights(LibraryDirectory(), Model, Root);
+	TArray<TSharedPtr<FJsonValue>> Lights;
+	if (!Map || Json.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Lights)) return;
+	for (const TSharedPtr<FJsonValue>& V : Lights)
+	{
+		const TSharedPtr<FJsonObject> L = V->AsObject();
+		if (!L) continue;
+		auto Floats = [&L](const TCHAR* Field, int32 N)
+		{
+			TArray<float> Out;
+			const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+			if (L->TryGetArrayField(Field, List)) for (const TSharedPtr<FJsonValue>& X : *List) Out.Add(X->AsNumber());
+			Out.SetNumZeroed(N);
+			return Out;
+		};
+		const TArray<float> P = Floats(TEXT("pos"), 3), R = Floats(TEXT("rot"), 4), C = Floats(TEXT("color"), 4);
+		const int32 Kind = L->GetIntegerField(TEXT("kind"));
+		const float Range = float(L->GetNumberField(TEXT("range"))) * 100.f;
+		ULightComponent* Light = nullptr;
+		if (Kind == 1) Light = NewObject<UDirectionalLightComponent>(Map);
+		else if (Kind == 0)
+		{
+			USpotLightComponent* Spot = NewObject<USpotLightComponent>(Map);
+			const float Half = float(L->GetNumberField(TEXT("spot_angle"))) * 0.5f;
+			Spot->SetOuterConeAngle(Half);
+			Spot->SetInnerConeAngle(Half * 0.8f);
+			Light = Spot;
+		}
+		else Light = NewObject<UPointLightComponent>(Map);
+		if (UPointLightComponent* Local = Cast<UPointLightComponent>(Light))
+		{
+			Local->SetAttenuationRadius(Range);
+			Local->bUseInverseSquaredFalloff = false;
+			Local->LightFalloffExponent = 8.f;
+		}
+		Light->SetMobility(EComponentMobility::Movable);
+		Light->SetupAttachment(Map->GetRootComponent());
+		// Unity prefab space (-x, z, y); a Unity light shines along its +Z, an Unreal light along +X.
+		const FQuat Node = FQuat(-R[0], R[2], R[1], R[3]).GetNormalized();
+		Light->SetRelativeLocation(FVector(-P[0], P[2], P[1]) * 100.0);
+		Light->SetRelativeRotation(Node * FRotationMatrix::MakeFromXZ(FVector(0, 1, 0), FVector(0, 0, 1)).ToQuat());
+		const FLinearColor Irradiance = OKStudioLinearLightColor(FLinearColor(C[0], C[1], C[2], 1), float(L->GetNumberField(TEXT("intensity"))));
+		const float Energy = FMath::Max3(Irradiance.R, Irradiance.G, Irradiance.B);
+		Light->SetLightColor(Energy > 0 ? FLinearColor(Irradiance.R / Energy, Irradiance.G / Energy, Irradiance.B / Energy, 1) : FLinearColor::Black);
+		Light->SetIntensity(Energy * UE_PI);
+		Light->SetCastShadows(L->GetIntegerField(TEXT("shadows")) != 0);
+		// The culling mask: the map layer (11) is the map's lighting channel, the Chara layer (10) the characters'.
+		const uint32 Mask = uint32(L->GetNumberField(TEXT("culling_mask")));
+		Light->LightingChannels.bChannel0 = (Mask & (1u << 10)) != 0;
+		Light->LightingChannels.bChannel2 = (Mask & (1u << 11)) != 0;
+		Light->RegisterComponent();
+		MapLights.Emplace(Light, uint32(L->GetNumberField(TEXT("times"))));
+		UE_LOG(LogTemp, Display, TEXT("OK studio: map lamp %s kind=%d intensity=%.2f range=%.1f mask=%u times=%u"), *L->GetStringField(TEXT("name")), Kind,
+			float(L->GetNumberField(TEXT("intensity"))), Range / 100.f, Mask, uint32(L->GetNumberField(TEXT("times"))));
+	}
 }
 
 int32 AOKSceneActor::MapPartCount() const
@@ -756,7 +1034,8 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         AKKPreviewActor* Actor = Pair.Value.Preview.Get();
         const FOKSceneObject* Object = Document->Find(Pair.Key);
         if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) continue;
-        if (Actor->OkPlayer)
+        // An anim player or a session clip (a video motion, PoseMode 2) runs on the scene's clock.
+        if (Actor->OkPlayer || Actor->PoseMode == 2)
         {
             if (bAdvancePhase) Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
             Actor->AnimPhase = Pair.Value.Time;
@@ -820,7 +1099,7 @@ void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
 	const FOKSceneObject* Object = Document ? Document->Find(Id) : nullptr;
 	AKKPreviewActor* Actor = Item ? Item->Preview.Get() : nullptr;
 	if (!Actor || !Object || Object->Kind != EOKSceneObjectKind::Character) return;
-	if (Actor->OkPlayer)
+	if (Actor->OkPlayer || Actor->PoseMode == 2)
 	{
 		Item->Time = Object->Character.Time + Time * Object->Character.Speed;
 		Actor->AnimPhase = Item->Time;
@@ -953,20 +1232,42 @@ void AOKSceneActor::UpdateItemLighting()
 	// Studio's character light (CameraLightCtrl: a scene-root light, turned by charaLight.rot) lights the Chara layer,
 	// where Studio's characters and items are: its direction towards the light in Unity space, and its colour times
 	// intensity (a dim character light leaves the characters in their toon shadow, as in Studio).
+	// The toon shaders take one forward light: the shown character light, else the first shown directional light. A
+	// hidden (switched off) light gives none; once the scene has had a light, no light on leaves the characters in
+	// their toon shadow, so switching lights on and off shows on them.
 	const ULightComponent* Light = nullptr;
 	const FOKSceneLight* SourceLight = nullptr;
 	float Intensity = 1.f;
-	for (const FOKSceneObject& Object : Document->Objects)
-		if (Object.Kind == EOKSceneObjectKind::Light && Object.Light.bCharactersOnly && Object.Light.Type == EOKSceneLightType::Directional)
+	bool bAnyLight = false;
+	for (const int32 Pass : { 0, 1 })
+	{
+		for (const FOKSceneObject& Object : Document->Objects)
+		{
+			if (Object.Kind != EOKSceneObjectKind::Light) continue;
+			bAnyLight = true;
+			if (Object.Light.Type != EOKSceneLightType::Directional || (Pass == 0 && !Object.Light.bCharactersOnly) || !Document->IsShown(Object.Id)) continue;
 			if (const FShown* S = Shown.Find(Object.Id); S && S->Component.IsValid())
 				if ((Light = Cast<ULightComponent>(S->Component.Get()))) { Intensity = Object.Light.Intensity / 4.f; SourceLight = &Object.Light; break; }
+		}
+		if (Light) break;
+	}
+	bCharacterLightSeen = bCharacterLightSeen || bAnyLight;
 	// The sky's ambient (Studio's ambient mode is Skybox: the sky controller updates the ambient probe) on the
 	// scene renderers' unity_SHA*. Without a map or sky, native Studio's
 	// empty environment is zero, rather than the Maker display environment.
 	if (SkyShown != AmbientSky || Document->Map != AmbientMap) { AmbientSky = SkyShown; AmbientMap = Document->Map; AmbientLit.Reset(); }
 	FLinearColor SH[3];
 	TArray<FLinearColor> Higher = { FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,1) };
-	if (!(AmbientSky >= 0 && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
+	// A loaded map's scene is the active one: its RenderSettings give the ambient. Only with ambient mode Skybox does the
+	// Studio sky's controller replace it (DynamicGI.UpdateEnvironment from the sky); a Trilight or Flat map keeps its
+	// colours under the sky (native bath, map 62: sky on, ambient still its trilight).
+	int32 MapMode = -1;
+	FLinearColor MapSH[3];
+	TArray<FLinearColor> MapHigher = Higher;
+	const bool bMapAmbient = Document->Map >= 0 && OKStudioMapAmbient(Document->Map, MapSH[0], MapSH[1], MapSH[2], &MapHigher, &MapMode);
+	const bool bSkyLit = AmbientSky >= 0 && !(bMapAmbient && (MapMode == 1 || MapMode == 3));
+	if (!bSkyLit && bMapAmbient) { for (int32 I = 0; I < 3; ++I) SH[I] = MapSH[I]; Higher = MapHigher; }
+	else if (!(bSkyLit && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
 		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2], &Higher))
 	{
 		FKKRuntimeMaterialScene Maker;
@@ -995,7 +1296,9 @@ void AOKSceneActor::UpdateItemLighting()
 		Preview->SetSharedVectorParameter(TEXT("glstate_lightmodel_ambient"), Document->Map < 0
 			? FLinearColor(0.0412349328f, 0.0474586822f, 0.0624753758f, 0.75f) : FLinearColor(0.01223285f, 0.01223285f, 0.01223285f, 0.5f));
 		FLinearColor ReflectionHDR(1,1,0,0);
-		UTextureCube* Reflection = AmbientSky<0 ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
+		// A map without a baked default reflection reflects Unity's black cube (native probe: reflection_default UnityBlackCube), not UE's sky.
+		UTextureCube* Reflection = !bSkyLit ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
+		if (!Reflection && !bSkyLit) Reflection = OKStudioBlackReflection();
 		for(const FName Name:{FName(TEXT("unity_SpecCube0")),FName(TEXT("unity_SpecCube1"))})Preview->SetSharedTextureParameter(Name,Reflection);
 		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube0_HDR"),ReflectionHDR);
 		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube1_HDR"),ReflectionHDR);
@@ -1003,18 +1306,23 @@ void AOKSceneActor::UpdateItemLighting()
         {
             FString Root;
             for(const FName Tag:Preview->Tags){const FString T=Tag.ToString();const FString Prefix=TEXT("OKStudioMapRoot=");if(T.StartsWith(Prefix))Root=T.Mid(Prefix.Len());}
-            Preview->BindSourceReflectionProbes([&](int32 Node,FLinearColor& HDR)->UTexture*{return Node<0&&AmbientSky>=0?nullptr:OKStudioMapReflection(Document->Map,HDR,Root,Node);});
+            Preview->BindSourceReflectionProbes([&](int32 Node,FLinearColor& HDR)->UTexture*{if(Node<0&&bSkyLit)return nullptr;UTexture* Cube=OKStudioMapReflection(Document->Map,HDR,Root,Node);return Cube||bSkyLit?Cube:OKStudioBlackReflection();});
         }
 		AmbientLit.Add(Preview);
 	}
-	if (!Light) return;
-	const FVector F = Light->GetForwardVector();
-	// Unreal (x, y, z) is Unity (-x, z, y); towards the light is against the light's forward.
-	const FVector Towards = FVector(F.X, -F.Z, -F.Y).GetSafeNormal();
-	const FLinearColor Direction(Towards.X, Towards.Y, Towards.Z, 0.f);
-	// Unity's linear renderer converts the final gamma-space light colour,
-	// including intensity; values above one use its GammaToLinearSpace HDR tail.
-	const FLinearColor Color=OKStudioLinearLightColor(SourceLight->Color,Intensity);
+	if (!Light && !bCharacterLightSeen && MapSunMask == 0) return;
+	FLinearColor Direction = ItemLightDirection.A < 0.f ? FLinearColor(0.f, 0.f, -1.f, 0.f) : ItemLightDirection;
+	FLinearColor Color(0.f, 0.f, 0.f, 0.f);
+	if (Light)
+	{
+		const FVector F = Light->GetForwardVector();
+		// Unreal (x, y, z) is Unity (-x, z, y); towards the light is against the light's forward.
+		const FVector Towards = FVector(F.X, -F.Z, -F.Y).GetSafeNormal();
+		Direction = FLinearColor(Towards.X, Towards.Y, Towards.Z, 0.f);
+		// Unity's linear renderer converts the final gamma-space light colour,
+		// including intensity; values above one use its GammaToLinearSpace HDR tail.
+		Color = OKStudioLinearLightColor(SourceLight->Color, Intensity);
+	}
 	if (!Direction.Equals(ItemLightDirection, 1e-4f) || !Color.Equals(ItemLightColor, 1e-4f)) { ItemLightDirection = Direction; ItemLightColor = Color; ItemsLit.Reset(); }
 	for (const TPair<int32, FShown>& It : Shown)
 	{
@@ -1026,13 +1334,19 @@ void AOKSceneActor::UpdateItemLighting()
 		// pieces on Map, 11) get no forward light, _LightColor0 is black for them (native probe: hiding the light
 		// leaves them unchanged).
 		const bool bUnreached = It.Value.Kind == EOKSceneObjectKind::Item && Preview->IsOutsideLayerMask(1u << 10);
+		// Unity forward rendering gives an object the brightest directional light whose culling mask has its layer:
+		// items authored on the map layer (11: sand, grass, landscape pieces) are lit by the map's own sun.
+		const bool bSun = It.Value.Kind == EOKSceneObjectKind::Item && MapSunMask != 0 && !Preview->IsOutsideLayerMask(MapSunMask)
+			&& (bUnreached || MapSunItemColor.GetLuminance() > ItemLightColor.GetLuminance());
+		if (bSun) Preview->SetSharedVectorParameter(TEXT("_WorldSpaceLightPos0"), MapSunItemDirection);
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
 		{
 			FString LayerTags; TInlineComponentArray<UMeshComponent*> Meshes(Preview);
 			for (const UMeshComponent* M : Meshes) for (const FName& T : M->ComponentTags) if (T.ToString().StartsWith(TEXT("OKLayer"))) { LayerTags += T.ToString() + TEXT(" "); break; }
 			UE_LOG(LogTemp, Display, TEXT("OK studio item light %s item=%d/%d/%d unreached=%d layers=%s"), *Preview->GetName(), Document->Find(It.Key) ? Document->Find(It.Key)->Item.Group : -1, Document->Find(It.Key) ? Document->Find(It.Key)->Item.Category : -1, Document->Find(It.Key) ? Document->Find(It.Key)->Item.No : -1, int32(bUnreached), *LayerTags.Left(60));
 		}
-		Preview->SetSharedVectorParameter(TEXT("_LightColor0"), bUnreached ? FLinearColor(0.f, 0.f, 0.f, ItemLightColor.A) : ItemLightColor);
+		Preview->SetSharedVectorParameter(TEXT("_LightColor0"), bSun ? FLinearColor(MapSunItemColor.R, MapSunItemColor.G, MapSunItemColor.B, ItemLightColor.A)
+			: bUnreached ? FLinearColor(0.f, 0.f, 0.f, ItemLightColor.A) : ItemLightColor);
 		ItemsLit.Add(Preview);
 	}
 }
@@ -1048,7 +1362,7 @@ void AOKSceneActor::PlaceAttached()
 	for (const FOKSceneObject& Object : Document->Objects)
 	{
 		bool bAttached = false, bMoving = false;
-		for (int32 Steps = 0, Cur = Object.Id; Cur >= 0 && Steps < 256; ++Steps)
+		for (int32 Steps = 0, Cur = Object.Id; Cur >= 0 && Steps < UOKSceneDocument::MaxDepth; ++Steps)
 		{
 			const FOKSceneObject* O = Document->Find(Cur);
 			if (!O) break;
@@ -1063,8 +1377,8 @@ void AOKSceneActor::PlaceAttached()
 		if (!bMoving && Item->PlacedGeneration == PlaceGeneration) continue;
 		Item->PlacedGeneration = PlaceGeneration;
 		const FTransform World = Document->WorldTransform(Object.Id) * GetActorTransform();
-		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Item->RenderCorrection * World);
-		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(World);
+		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Compose(Item->RenderCorrection, World));
+		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(Compose(Item->ComponentOffset, World));
 	}
 }
 

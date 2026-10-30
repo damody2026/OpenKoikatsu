@@ -3,6 +3,7 @@
 //! uses: walking, keys, the UI's buttons, saying things to her, waiting with the clock running. Profiling: game_exec runs
 //! engine console commands, game_trace_start/stop record an Unreal Insights trace. Docs/STREET_SOCIAL_GAME_MCP.md.
 mod game;
+mod studio;
 
 use anyhow::{Context, Result, bail};
 use base64::Engine;
@@ -13,7 +14,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn tools() -> Value {
-    let t = |name: &str, description: &str, properties: Value, required: &[&str]| {
+    let mut all = street_tools();
+    all.as_array_mut().expect("tool list").extend(studio::tools());
+    all
+}
+
+fn street_tools() -> Value {
+    let t =|name: &str, description: &str, properties: Value, required: &[&str]| {
         json!({"name": name, "description": description, "inputSchema": {"type": "object", "properties": properties, "required": required}})
     };
     json!([
@@ -133,6 +140,9 @@ fn end_talk(game: &Game) -> Result<()> {
 }
 
 fn run(game: &Game, name: &str, a: &Value) -> Result<Value> {
+    if name.starts_with("studio_") {
+        return studio::run(&studio::Studio::locate(&game.root), name, a);
+    }
     Ok(match name {
         "game_launch" => {
             let window = a["window"].as_str().unwrap_or("1280x720");
@@ -334,27 +344,32 @@ fn screenshot(game: &Game, scale: f64) -> Result<Value> {
         {
             let r = game.call("/screenshot", Some(&json!({"scale": scale})))?;
             let file = r["path"].as_str().context("no screenshot path")?.to_string();
-            // Written a frame or two later; wait until it is there and complete.
-            let start = Instant::now();
-            let mut last = 0;
-            loop {
-                let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
-                if size > 0 && size == last {
-                    break;
-                }
-                if start.elapsed() > Duration::from_secs(15) {
-                    bail!("screenshot not written: {file}");
-                }
-                last = size;
-                sleep(0.4);
-            }
-            let img = image::open(&file)?.to_rgb8();
-            let img = if img.width() > 1600 { image::imageops::resize(&img, 1600, img.height() * 1600 / img.width(), image::imageops::FilterType::Triangle) } else { img };
-            let mut jpeg = Vec::new();
-            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85).encode_image(&img)?;
-            json!({"content": [{"type": "text", "text": file}, {"type": "image", "data": base64::engine::general_purpose::STANDARD.encode(jpeg), "mimeType": "image/jpeg"}], "isError": false})
+            json!({"content": [{"type": "text", "text": file}, image_part(&file)?], "isError": false})
         }
     })
+}
+
+/// An image file as MCP image content (JPEG, at most 1600 wide). It is written a frame or two after the request: waits
+/// until it is there and its size stops changing.
+pub(crate) fn image_part(file: &str) -> Result<Value> {
+    let start = Instant::now();
+    let mut last = 0;
+    loop {
+        let size = std::fs::metadata(file).map(|m| m.len()).unwrap_or(0);
+        if size > 0 && size == last {
+            break;
+        }
+        if start.elapsed() > Duration::from_secs(15) {
+            bail!("image not written: {file}");
+        }
+        last = size;
+        sleep(0.4);
+    }
+    let img = image::open(file)?.to_rgb8();
+    let img = if img.width() > 1600 { image::imageops::resize(&img, 1600, img.height() * 1600 / img.width(), image::imageops::FilterType::Triangle) } else { img };
+    let mut jpeg = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85).encode_image(&img)?;
+    Ok(json!({"type": "image", "data": base64::engine::general_purpose::STANDARD.encode(jpeg), "mimeType": "image/jpeg"}))
 }
 
 impl ServerHandler for App {
@@ -377,7 +392,7 @@ impl ServerHandler for App {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("ok-game", "0.1.0"))
-            .with_instructions("StreetSocial through its control channel. game_launch if game_state says the channel is not up. Keys act only while the clock runs (game_key does it). Talk: walk to her (game_goto girl), game_key E, then game_talk. Profiling: game_exec, game_trace_start/stop.")
+            .with_instructions("StreetSocial through its control channel. game_launch if game_state says the channel is not up. Keys act only while the clock runs (game_key does it). Talk: walk to her (game_goto girl), game_key E, then game_talk. Profiling: game_exec, game_trace_start/stop. OK Studio (SceneEditor): the studio_* tools on its own port (OK_STUDIO_PORT, default 47890); studio_launch when studio_state says it is not running; studio_state lists the objects and their ids.")
     }
 }
 

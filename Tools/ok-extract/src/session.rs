@@ -908,7 +908,8 @@ impl SessionPart {
             rest_normals: rest_n,
             rest_tangents: mesh.tangents.clone(),
             normals: mesh.normals.clone(),
-            uvs: mesh.uvs.clone(),
+            uvs: if mesh.mat.as_ref().is_some_and(|m| crate::shader_samples_flipped_v(&m.shader)) { mesh.uvs.iter().map(|uv| [uv[0], 1.0 - uv[1]]).collect() }
+                else { mesh.uvs.clone() },
             uv2: mesh.uv2.clone(),
             uv3: mesh.uv3.clone(),
             uv4: mesh.uv4.clone(),
@@ -931,8 +932,10 @@ impl SessionPart {
                 let d = [1.0, 1.0, 0.0, 0.0];
                 std::array::from_fn(|i| mesh.mat.as_ref().and_then(|m| m.float(k[i])).unwrap_or(d[i]))
             },
-            shadow_color: mesh.mat.as_ref().and_then(|m| m.color("_ShadowColor"))
-                .unwrap_or([0.628, 0.628, 0.628, 1.0]),
+            // Unity's Unlit/* and the CM3D2 ports of mod maps (lib::blend_for_mesh draws them unlit) have no toon shadow
+            // side: white keeps the ramp from darkening them (CM3D2/Lighted's _ShadowColor is near black).
+            shadow_color: if mesh.mat.as_ref().is_some_and(|m| { let s = m.shader.to_ascii_lowercase(); s.starts_with("unlit/") || s.starts_with("cm3d2/") }) { [1.0; 4] }
+                else { mesh.mat.as_ref().and_then(|m| m.color("_ShadowColor")).unwrap_or([0.628, 0.628, 0.628, 1.0]) },
             line_color: mesh.mat.as_ref().and_then(|m| m.color("_LineColor")
                 .or_else(|| {
                     // MaterialEditor.LoadShader exposes the replacement

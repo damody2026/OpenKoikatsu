@@ -46,9 +46,21 @@ impl Game {
 
     /// GET (body None) or POST JSON to the control channel; the reply is JSON.
     pub fn call(&self, path: &str, body: Option<&Value>) -> Result<Value> {
-        let mut stream = TcpStream::connect(("127.0.0.1", self.port))
-            .with_context(|| format!("the game's control channel is not up on 127.0.0.1:{} (start it with game_launch)", self.port))?;
-        stream.set_read_timeout(Some(Duration::from_secs(60)))?;
+        http(self.port, path, body, Duration::from_secs(60), || {
+            format!("the game's control channel is not up on 127.0.0.1:{} (start it with game_launch)", self.port)
+        })
+    }
+
+    pub fn up(&self) -> bool {
+        self.call("/health", None).is_ok()
+    }
+}
+
+/// GET (body None) or POST JSON to a local HTTP control server; the reply is JSON. down: the error when nothing listens.
+pub fn http(port: u16, path: &str, body: Option<&Value>, timeout: Duration, down: impl FnOnce() -> String) -> Result<Value> {
+    {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).with_context(down)?;
+        stream.set_read_timeout(Some(timeout))?;
         let payload = body.map(|b| b.to_string()).unwrap_or_default();
         let head = if body.is_some() {
             format!(
@@ -75,11 +87,9 @@ impl Game {
         }
         serde_json::from_str(&text).with_context(|| format!("{path}: reply is not JSON"))
     }
+}
 
-    pub fn up(&self) -> bool {
-        self.call("/health", None).is_ok()
-    }
-
+impl Game {
     /// Starts the game with the control channel (Tools/run_street_social_development.lua -Control), windowed, and waits
     /// until the channel answers. extra: more launcher options ("-Trace", "-Exec", "stat unit", "-Sandbox", "x", ...).
     pub fn launch(&self, window: &str, extra: &[String], timeout: Duration) -> Result<Value> {

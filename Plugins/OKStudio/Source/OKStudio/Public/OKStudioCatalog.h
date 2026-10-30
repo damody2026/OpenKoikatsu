@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 
@@ -30,6 +30,8 @@ struct FOKStudioCatalogItem
 	float LineWidth = -1.f;
 	/** The item fades with its alpha (ItemComponent.rendAlpha). */
 	bool bAlpha = false;
+	/** A sideloader mod's item (studio_mod_items.json): the mod's GUID; group, category and No are the mod's own. */
+	FString Guid;
 };
 
 struct FOKStudioCatalogMap
@@ -129,6 +131,9 @@ public:
 	TArray<FOKStudioFkBone> FkBones;
 	TArray<FOKStudioAccessoryPoint> AccessoryPoints;
 	TArray<FOKStudioFilter> Filters;
+	/** Eyes pattern names (cha_eyeset rows) and Studio hand pattern names per side (0 left, 1 right; the HandAnime clip). */
+	TMap<int32, FString> EyeNames;
+	TMap<int32, FString> HandNames[2];
 	/** Studio animations (studio_anims.json) with their groups and categories. */
 	TArray<FOKStudioAnim> Anims;
 	TArray<FOKStudioCatalogGroup> AnimGroups;
@@ -157,6 +162,12 @@ public:
 	FEyeSet EyeSet(int32 Ptn) const;
 
 	const FOKStudioCatalogItem* FindItem(int32 Group, int32 Category, int32 No) const;
+	/** A mod item by its mod's GUID and slot (a KStudio scene's StudioResolveInfo), null when the library lacks it. */
+	const FOKStudioCatalogItem* FindModItem(const FString& Guid, int32 Slot) const;
+	/** Mod items (ok-extract --oklib studio-mods) whose bundles are in the library; added to Items. */
+	void LoadModItems(const FString& File);
+	TMap<TPair<FString, int32>, int32> ModItems;
+	mutable TMap<FIntVector, int32> ItemIndex;
 	/** Where an item's children attach (its 子の接続先 node, item space, UE units); identity without one. Cached. */
 	FTransform ItemChildPoint(int32 Group, int32 Category, int32 No) const;
     FTransform AnimatedItemChildPoint(int32 Group, int32 Category, int32 No, int32 Pattern, float NormalizedTime, float ElapsedSeconds, float Speed) const;

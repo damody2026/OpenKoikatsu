@@ -627,7 +627,7 @@ pub struct AccessoryColorUse {
     /// `ChaCustomHairComponent.rendHair`. HairAccessoryCustomizer writes
     /// ColorMatch / outline / gloss here, after `ChangeAccessoryColor`.
     pub custom_hair: std::collections::HashSet<i64>,
-    /// `ChaCustomHairComponent.rendAccessory` — `AccessoryColor` on all three channels.
+    /// `ChaCustomHairComponent.rendAccessory` ??`AccessoryColor` on all three channels.
     pub rend_accessory: std::collections::HashSet<i64>,
     pub has_hair_component: bool,
     pub has_accessory_component: bool,
@@ -1030,18 +1030,60 @@ pub struct PrefabRenderCamera {
     pub clear_flags: i32, pub background: [f32; 4],
     /// The target RenderTexture: name and size.
     pub target: String, pub width: i32, pub height: i32,
+    /// The target's identity across prefabs (`render_texture_key`): a Studio camera item and the screen items showing
+    /// it are separate prefabs sharing one RenderTexture asset.
+    pub target_key: u32,
+}
+
+/// `PrefabRenderCamera` / `PrefabRenderTextures` as libraries recorded them before target keys and shared screens
+/// (query `prefab_render_textures`; the records are bincode, which reads no added fields).
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabRenderCameraV1 {
+    pub node: i32, pub enabled: bool, pub active: bool,
+    pub fov: f32, pub near: f32, pub far: f32, pub orthographic: bool, pub ortho_size: f32,
+    pub culling_mask: u32, pub clear_flags: i32, pub background: [f32; 4],
+    pub target: String, pub width: i32, pub height: i32,
+}
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabRenderTexturesV1 { pub cameras: Vec<PrefabRenderCameraV1>, pub users: Vec<(i32, String, String, i32)> }
+impl From<PrefabRenderTexturesV1> for PrefabRenderTextures {
+    fn from(v: PrefabRenderTexturesV1) -> Self {
+        PrefabRenderTextures {
+            cameras: v.cameras.into_iter().map(|c| PrefabRenderCamera { node: c.node, enabled: c.enabled, active: c.active, fov: c.fov, near: c.near,
+                far: c.far, orthographic: c.orthographic, ortho_size: c.ortho_size, culling_mask: c.culling_mask, clear_flags: c.clear_flags,
+                background: c.background, target: c.target, width: c.width, height: c.height, target_key: 0 }).collect(),
+            users: v.users, shared: Vec::new(),
+        }
+    }
+}
+
+/// A RenderTexture asset's identity within its bundle: its name and path id hashed to 24 bits (exact in a float
+/// material value; 0 is none).
+pub fn render_texture_key(name: &str, path_id: i64) -> u32 {
+    let mut h: u32 = 0x811c9dc5;
+    for b in name.bytes().chain(path_id.to_le_bytes()) { h = (h ^ b as u32).wrapping_mul(0x01000193); }
+    (h & 0xff_ffff).max(1)
 }
 
 /// A prefab's render-to-texture cameras, and the renderers whose materials sample their RenderTextures:
 /// (renderer node, material name, texture property, camera index).
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PrefabRenderTextures { pub cameras: Vec<PrefabRenderCamera>, pub users: Vec<(i32, String, String, i32)> }
+pub struct PrefabRenderTextures {
+    pub cameras: Vec<PrefabRenderCamera>, pub users: Vec<(i32, String, String, i32)>,
+    /// Renderers sampling a RenderTexture no camera of this prefab draws (a Studio screen item): (renderer node,
+    /// material name, texture property, `render_texture_key`, width, height).
+    pub shared: Vec<(i32, String, String, u32, i32, i32)>,
+}
 
 /// One time of day of a Studio map's SunLightInfo (on the map root): the GameObjects shown then (`visibleList`, by
 /// `prefab_hierarchy` node; every list is hidden first, then the current one shown) and the sun (`_targetLight`'s Euler
 /// angle in degrees, colour, intensity).
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PrefabSunInfo { pub kind: i32, pub visible: Vec<i32>, pub angle: [f32; 3], pub color: [f32; 4], pub intensity: f32 }
+
+/// A prefab Light's runtime part (`prefab_light_modes`): baking mode, culling mask, shadow type, active GameObject.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabLightMode { pub node: i32, pub lightmapping: i32, pub culling_mask: u32, pub shadows: i32, pub active: bool }
 
 /// A Studio map's SunLightInfo: the sun Light's node, type, culling mask and baking mode (m_Lightmapping 4 realtime),
 /// and the times of day it has (SunLightInfo.Info.Type 0 morning, 1 day, 2 evening, 3 night).
@@ -1683,6 +1725,69 @@ fn shader_declares_property(object: &UnityObject, wanted: &str) -> Option<bool> 
     }))
 }
 
+/// The shader's own fixed-function state, as Unity draws it: the cull mode of the main colour pass and whether
+/// another pass is an inverted-hull outline (culls the faces the main pass keeps). A cull mode bound to a material
+/// property (`Cull [_Cull]`) is returned as that property name; the material's saved float then decides it.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool }
+
+pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState> {
+    let parsed = object.class.properties().get("m_ParsedForm")?;
+    let sub = uv_arr(uv_obj(parsed, "m_SubShaders")?).first()?;
+    // (cull, pass name, light mode) for each pass that draws (UsePass and GrabPass carry no state of their own).
+    let mut passes = Vec::new();
+    for pass in uv_arr(uv_obj(sub, "m_Passes")?) {
+        if uv_obj(pass, "m_Type").and_then(|v| v.as_i64()).unwrap_or(0) != 0 { continue; }
+        let Some(state) = uv_obj(pass, "m_State") else { continue };
+        let culling = uv_obj(state, "culling").or_else(|| uv_obj(state, "m_Culling"))?;
+        let bound = uv_obj(culling, "name").and_then(|v| v.as_str()).unwrap_or("");
+        let cull = if bound.is_empty() || bound == "<noninit>" {
+            Ok(uv_obj(culling, "val").and_then(|v| v.as_f64()).unwrap_or(2.0) as i64)
+        } else { Err(bound.to_string()) };
+        let name = uv_obj(state, "m_Name").and_then(|v| v.as_str()).unwrap_or("").to_ascii_uppercase();
+        let mut light_mode = String::new();
+        if let Some(tags) = uv_obj(state, "m_Tags").and_then(|t| uv_obj(t, "tags")) {
+            for pair in uv_arr(tags) {
+                let a = uv_arr(pair);
+                let (k, v) = if a.len() == 2 { (a[0].as_str(), a[1].as_str()) }
+                    else { (uv_obj(pair, "first").and_then(|v| v.as_str()), uv_obj(pair, "second").and_then(|v| v.as_str())) };
+                if k.is_some_and(|k| k.eq_ignore_ascii_case("LightMode")) { light_mode = v.unwrap_or("").to_ascii_lowercase(); }
+            }
+        }
+        passes.push((cull, name, light_mode));
+    }
+    // Shadow, depth and meta passes never draw colour.
+    let colour = |(_, name, mode): &&(Result<i64, String>, String, String)|
+        !matches!(mode.as_str(), "shadowcaster" | "shadowcollector" | "meta" | "prepassbase" | "deferred")
+            && !name.contains("SHADOW") && !name.contains("META");
+    // Additive per-light passes repeat the main pass's geometry state.
+    let colour: Vec<_> = passes.iter().filter(colour).filter(|p| p.2 != "forwardadd").collect();
+    // An inverted-hull outline is a colour pass named OUTLINE, or a Cull Front pass beside one that draws front faces
+    // (Cull Back or Off; Koikatsu draws its outline first, then the surface).
+    let draws_front = colour.iter().any(|p| matches!(p.0, Ok(0) | Ok(2)));
+    let is_outline = |p: &(Result<i64, String>, String, String)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
+    let main = colour.iter().position(|p| !is_outline(p)).or((!colour.is_empty()).then_some(0))?;
+    let outline = colour.iter().enumerate().any(|(i, p)| i != main && is_outline(p));
+    Some(ShaderPassState { cull: colour[main].0.clone(), outline })
+}
+
+/// Material floats carrying the shader's pass state to the renderer: `_OKShaderCull` (0 off, 1 front, 2 back),
+/// `_OKShaderOutline` (0/1) and `_OKShaderState`, the 24-bit FNV-1a hash of the shader name they were read from. Later
+/// steps replace a material's shader (Material Editor, native shader swaps); the renderer trusts the state only while
+/// the hash still names the material's shader. Absent when the shader object is not in the material's file.
+pub(crate) fn record_shader_pass_state(floats: &mut HashMap<String, f32>, shader: &str, state: Option<&ShaderPassState>) {
+    let Some(state) = state else { return };
+    let cull = match &state.cull { Ok(v) => Some(*v as f32), Err(name) => floats.get(name).copied() };
+    let Some(cull) = cull else { return };
+    floats.insert("_OKShaderCull".into(), cull);
+    floats.insert("_OKShaderOutline".into(), if state.outline { 1.0 } else { 0.0 });
+    floats.insert("_OKShaderState".into(), shader_state_key(shader) as f32);
+}
+
+pub(crate) fn shader_state_key(shader: &str) -> u32 {
+    shader.bytes().fold(0x811c9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x01000193)) & 0xFF_FFFF
+}
+
 impl Default for TextureSampling {
     fn default()->Self {Self{filter:1,wrap_u:0,wrap_v:0,srgb:true,mip_count:1}}
 }
@@ -1783,7 +1888,14 @@ impl ParsedBundle {
         })
     }
     /// Cameras rendering into RenderTextures and the materials sampling them (recorded by `studio-nodes`).
-    pub fn prefab_render_textures(&self,prefab:&str)->PrefabRenderTextures {self.memo_prefab("prefab_render_textures",prefab,prefab,||self.prefab_render_textures_unity(prefab))}
+    pub fn prefab_render_textures(&self,prefab:&str)->PrefabRenderTextures {
+        // v2 (target keys, shared screens); a library recorded before has v1 records (a map's own cameras and screens).
+        if self.library_model() && !crate::oklib::has_record(self.lib.as_ref(),"prefab_render_textures2",prefab)
+            && crate::oklib::has_record(self.lib.as_ref(),"prefab_render_textures",prefab) {
+            return self.memo_prefab("prefab_render_textures",prefab,prefab,PrefabRenderTexturesV1::default).into();
+        }
+        self.memo_prefab("prefab_render_textures2",prefab,prefab,||self.prefab_render_textures_unity(prefab))
+    }
     /// A map's SunLightInfo: times of day, what each shows, the sun (recorded by `studio-nodes`).
     pub fn prefab_sun_light(&self,prefab:&str)->PrefabSunLight {self.memo_prefab("prefab_sun_light",prefab,prefab,||self.prefab_sun_light_unity(prefab))}
     /// Baked reflection probes of a prefab and the scene's skybox reflection (recorded by `studio-nodes`).
@@ -1850,6 +1962,42 @@ impl ParsedBundle {
     }
     /// Material values of a prefab's settled Animators (recorded by `studio-nodes`).
     pub fn prefab_animated_materials(&self,prefab:&str)->PrefabAnimatedMaterials {self.memo_prefab("prefab_animated_materials",prefab,prefab,||self.prefab_animated_materials_unity(prefab))}
+    /// How each Light of a prefab (`prefab_hierarchy` lights, same order) takes part at runtime: its baking mode
+    /// (m_Lightmapping: 4 realtime, 1 mixed, 2 baked into the lightmaps), culling mask (the layers it lights), shadow type
+    /// and whether its GameObject is active (a time-of-day list root counts as active: SunLightInfo shows it at its time).
+    /// Recorded by `studio-nodes`.
+    pub fn prefab_light_modes(&self, prefab: &str) -> Vec<PrefabLightMode> {
+        self.memo_prefab("prefab_light_modes", prefab, prefab, || {
+            for (gi, graph) in self.transform_graphs().iter().enumerate() {
+                let (h, go_node) = crate::pose::prefab_hierarchy_in(graph, prefab);
+                if h.nodes.is_empty() { continue; }
+                let listed: std::collections::HashSet<i32> = self.prefab_sun_light(prefab).infos.iter().flat_map(|i| i.visible.clone()).collect();
+                return self.with_serialized(|sers| {
+                    let Some(ser) = sers.get(gi) else { return Vec::new(); };
+                    let mut active = vec![true; h.nodes.len()];
+                    for info in ser.objects_of_type(1) {
+                        if let (Some(&node), Ok(o)) = (go_node.get(&info.path_id), UnityObject::from_serialized_file(ser, info)) {
+                            active[node as usize] = o.class.properties().get("m_IsActive").map(uv_bool).unwrap_or(true) || listed.contains(&(node as i32));
+                        }
+                    }
+                    let mut out = Vec::new();
+                    for info in ser.objects_of_type(108) {
+                        let Ok(obj) = UnityObject::from_serialized_file(ser, info) else { continue };
+                        let p = obj.class.properties();
+                        let Some(node) = p.get("m_GameObject").and_then(uv_pptr).and_then(|go| go_node.get(&go)).copied() else { continue };
+                        let mut on = true;
+                        let mut n = node as i32;
+                        while n >= 0 { on &= active[n as usize]; n = h.nodes[n as usize].parent; }
+                        out.push(PrefabLightMode { node: node as i32, lightmapping: p.get("m_Lightmapping").map(uv_i32).unwrap_or(4),
+                            culling_mask: p.get("m_CullingMask").and_then(|m| uv_obj(m, "m_Bits")).and_then(|v| v.as_i64()).map(|v| v as u32).unwrap_or(u32::MAX),
+                            shadows: p.get("m_Shadows").and_then(|s| uv_obj(s, "m_Type")).map(uv_i32).unwrap_or(0), active: on });
+                    }
+                    out
+                });
+            }
+            Vec::new()
+        })
+    }
     /// Per-renderer-instance activeInHierarchy, including static activeSelf and settled Animator curves.
     /// SunLightInfo list roots remain eligible and are gated separately by the selected time of day.
     pub fn prefab_renderer_visibility(&self, prefab: &str) -> Vec<(i32, bool)> {
@@ -2167,9 +2315,9 @@ fn cache_put(key: BundleCacheKey, v: Arc<ParsedBundle>) {
     sync_bundle_cache();
     BUNDLE_CACHE.with(|c| {
         let mut m = c.borrow_mut();
-        // A conversion opens its card 42 times (every outfit in six garment states) over 60–150 bundles: at 24 the
+        // A conversion opens its card 42 times (every outfit in six garment states) over 60??50 bundles: at 24 the
         // cache emptied itself in every open, which parsed them all again and lost their decoded textures
-        // (raiden_shogun 41 → 32 s, jeanne 15.7 → 13.7 s, the same peak memory). Its worker drops the cache after the
+        // (raiden_shogun 41 ??32 s, jeanne 15.7 ??13.7 s, the same peak memory). Its worker drops the cache after the
         // card (release_bundle_caches). Other opens keep the small cache: what it holds after an open stays held.
         if m.len() >= if crate::oklib::recording_card_pack() { 160 } else { 24 } {
             m.clear();
@@ -2259,7 +2407,7 @@ pub(crate) fn parse_bundle_fresh(bytes: Vec<u8>) -> ParsedBundle {
     parse_bundle_uncached(bytes.into())
 }
 
-fn parse_bundle_uncached(bytes: SourceBytes) -> ParsedBundle {let _spot=crate::profile::spot("parse_bundle_uncached");
+pub(crate) fn parse_bundle_uncached(bytes: SourceBytes) -> ParsedBundle {let _spot=crate::profile::spot("parse_bundle_uncached");
     let profile=std::env::var_os("OK_APPEARANCE_PROFILE").is_some();
     let started=std::time::Instant::now();
     let source_len=bytes.len();
@@ -2678,10 +2826,12 @@ impl ParsedBundle {
                     if uv_obj(v,"m_FileID").map(uv_i32).unwrap_or(0)==0 {find(sers.get(from)?).map(|o|(o,from))}
                     else {sers.iter().enumerate().filter(|(i,_)|*i!=from).find_map(|(i,s)|find(s).map(|o|(o,i)))}
                 };
-                let render_texture=|v:&unity_asset_core::UnityValue,from:usize|->Option<(String,i32,i32)> {
+                let render_texture=|v:&unity_asset_core::UnityValue,from:usize|->Option<(String,i32,i32,u32)> {
                     let (o,_)=object(v,84,from)?;
                     let p=o.class.properties();
-                    Some((o.name().unwrap_or_default(),p.get("m_Width").map(uv_i32).unwrap_or(0),p.get("m_Height").map(uv_i32).unwrap_or(0)))
+                    let name=o.name().unwrap_or_default();
+                    let key=render_texture_key(&name,uv_pptr(v).unwrap_or(0));
+                    Some((name,p.get("m_Width").map(uv_i32).unwrap_or(0),p.get("m_Height").map(uv_i32).unwrap_or(0),key))
                 };
                 let mut cameras=Vec::new();
                 for info in ser.objects_of_type(20) {
@@ -2689,7 +2839,7 @@ impl ParsedBundle {
                     let p=obj.class.properties();
                     let go=p.get("m_GameObject").and_then(uv_pptr).unwrap_or(0);
                     let Some(node)=go_node.get(&go).copied() else {continue;};
-                    let Some((target,width,height))=p.get("m_TargetTexture").and_then(|t|render_texture(t,gi)) else {continue;};
+                    let Some((target,width,height,target_key))=p.get("m_TargetTexture").and_then(|t|render_texture(t,gi)) else {continue;};
                     let f=|k:&str,d:f32|p.get(k).map(uv_f32).unwrap_or(d);
                     let active=ser.objects_of_type(1).into_iter().find(|i|i.path_id==go).and_then(|i|UnityObject::from_serialized_file(ser,i).ok())
                         .and_then(|o|o.class.properties().get("m_IsActive").map(uv_bool)).unwrap_or(true);
@@ -2698,10 +2848,9 @@ impl ParsedBundle {
                     cameras.push(PrefabRenderCamera{node,enabled:p.get("m_Enabled").map(uv_bool).unwrap_or(true),active,
                         fov:f("field of view",60.),near:f("near clip plane",0.3),far:f("far clip plane",1000.),
                         orthographic:p.get("orthographic").map(uv_bool).unwrap_or(false),ortho_size:f("orthographic size",5.),
-                        culling_mask,clear_flags:p.get("m_ClearFlags").map(uv_i32).unwrap_or(1),background,target,width,height});
+                        culling_mask,clear_flags:p.get("m_ClearFlags").map(uv_i32).unwrap_or(1),background,target,width,height,target_key});
                 }
-                if cameras.is_empty() {return Default::default();}
-                let mut users=Vec::new();
+                let (mut users,mut shared)=(Vec::new(),Vec::new());
                 for class in [23,137] { for info in ser.objects_of_type(class) {
                     let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
                     let p=obj.class.properties();
@@ -2714,15 +2863,18 @@ impl ParsedBundle {
                             let unity_asset_core::UnityValue::Array(pair)=env else {continue;};
                             let [key,value]=pair.as_slice() else {continue;};
                             let Some(tex)=uv_obj(value,"m_Texture") else {continue;};
-                            let Some((target,_,_))=render_texture(tex,file) else {continue;};
+                            let Some((target,width,height,target_key))=render_texture(tex,file) else {continue;};
                             if let Some(c)=cameras.iter().position(|c:&PrefabRenderCamera|c.target==target) {
                                 let user=(node,name.clone(),key.as_str().unwrap_or("").to_owned(),c as i32);
                                 if !users.contains(&user) {users.push(user);}
+                            } else {
+                                let user=(node,name.clone(),key.as_str().unwrap_or("").to_owned(),target_key,width,height);
+                                if !shared.contains(&user) {shared.push(user);}
                             }
                         }
                     }
                 }}
-                PrefabRenderTextures{cameras,users}
+                PrefabRenderTextures{cameras,users,shared}
             });
         }
         Default::default()
@@ -2997,6 +3149,7 @@ impl ParsedBundle {
                 // another file in the bundle must never answer HasProperty.
                 let mut shaders = HashMap::<i64, String>::new();
                 let mut shader_rim = HashMap::<i64, bool>::new();
+                let mut shader_state = HashMap::<i64, ShaderPassState>::new();
                 for info in ser.objects_of_type(48) {
                     if let Ok(o) = UnityObject::from_serialized_file(ser, info) {
                         let name = shader_runtime_name(&o);
@@ -3004,6 +3157,7 @@ impl ParsedBundle {
                         if let Some(has_rim) = shader_declares_property(&o, "_rimV") {
                             shader_rim.insert(o.path_id(), has_rim);
                         }
+                        if let Some(state) = shader_pass_state(&o) { shader_state.insert(o.path_id(), state); }
                     }
                 }
                 for info in ser.objects_of_type(21) {
@@ -3068,6 +3222,9 @@ impl ParsedBundle {
                             }
                         }
                     }
+                    let state = props.get("m_Shader").and_then(local_pptr_path_id).and_then(|id| shader_state.get(&id));
+                    let shader = mat.shader.clone();
+                    record_shader_pass_state(&mut mat.floats, &shader, state);
                     return Some(mat);
                 }
             }
@@ -3469,9 +3626,9 @@ impl ParsedBundle {
     }
 
     /// Drop the non-worn clothes-state meshes. Koikatsu clothes prefabs carry a
-    /// `n_top_a`/`n_top_b`(?�脫) `n_bot_a`/`n_bot_b`/`n_bot_c`(?�脫) `o_inner_a/b`
+    /// `n_top_a`/`n_top_b`(?嚙質) `n_bot_a`/`n_bot_b`/`n_bot_c`(?嚙質) `o_inner_a/b`
     /// `o_bra_a/b` `n_panst_*` `n_socks_*` ??node per state; the character shows
-    /// only one (`ChaControl.cs:1317-1495`, default state 0 = 穿好 = the `_a`
+    /// only one (`ChaControl.cs:1317-1495`, default state 0 = 蝛踹末 = the `_a`
     /// node). We loaded the whole prefab, so both states rendered at once.
     fn clothes_state_filter(&self, meshes: &mut Vec<ExtractedMesh>, chains: &[(i64, Vec<String>)], clothes_category: Option<i32>) {
         let states = clothes_states();
@@ -4565,7 +4722,7 @@ impl ParsedBundle {
                 if let Some(png) = m.mat.as_ref().and_then(|mat| mat.slot("_Tex")).and_then(|name| self.cubemap_atlas_named(name)) {
                     m.shader_extra_textures.insert("_OKSkyCube".into(), png);
                     if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKSkybox".into(), 1.0); }
-                    // The object-space direction the program samples along, kept as vertex colour (d·0.5+0.5): the
+                    // The object-space direction the program samples along, kept as vertex colour (d繚0.5+0.5): the
                     // positions get the renderer transform baked in later.
                     m.vertex_colors = m.positions.iter().map(|p| {
                         let l = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1e-6);
@@ -4574,8 +4731,8 @@ impl ParsedBundle {
                     }).collect();
                 }
             }
-            // Xffect/heat_distortion_t2 (Studio's 水面 items): a GrabPass then SrcAlpha/OneMinusSrcAlpha of
-            // grab·_MainTex.rgb with alpha _MainTex.a, i.e. the screen behind times lerp(1, _MainTex.rgb, _MainTex.a)
+            // Xffect/heat_distortion_t2 (Studio's 瘞湧 items): a GrabPass then SrcAlpha/OneMinusSrcAlpha of
+            // grab繚_MainTex.rgb with alpha _MainTex.a, i.e. the screen behind times lerp(1, _MainTex.rgb, _MainTex.a)
             // (plus a small _HeatForce ripple). OK draws it as that multiply (`_OKModulate`).
             if m.mat.as_ref().is_some_and(|mat| mat.shader.to_ascii_lowercase().starts_with("xffect/heat_distortion")) {
                 if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKModulate".into(), 1.0); }
@@ -5058,4 +5215,40 @@ pub fn bundle_texture_report(bytes: Vec<u8>) -> Vec<(String, u32, bool)> {
     let parsed = parse_bundle_ref(&bytes);
     let dir = parsed.texture_directory();
     dir.catalog.iter().map(|(name, px)| (name.clone(), *px, parsed.texture_png_named(name).is_some())).collect()
+}
+
+#[cfg(test)]
+mod shader_pass_state_dump {
+    /// OK_SHADER_BUNDLE=<bundle>: each shader's pass state as read for the renderer (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: bundle named by OK_SHADER_BUNDLE"]
+    fn print_shader_pass_state() {
+        let Ok(path) = std::env::var("OK_SHADER_BUNDLE") else { return };
+        let bytes = std::fs::read(&path).unwrap();
+        let parsed = super::parse_bundle_ref(&bytes);
+        parsed.with_serialized(|files| {
+            for file in files {
+                let (mut local, mut external) = (0, 0);
+                for info in file.objects_of_type(21) {
+                    let Ok(o) = super::UnityObject::from_serialized_file(file, info) else { continue };
+                    if o.class.properties().get("m_Shader").and_then(super::local_pptr_path_id).is_some() { local += 1 } else { external += 1 }
+                }
+                println!("materials with local shader {local}, external {external} (externals {:?})", file.externals.iter().map(|e| e.path.clone()).collect::<Vec<_>>());
+            }
+            for file in files { for info in file.objects_of_type(48) {
+                let Ok(o) = super::UnityObject::from_serialized_file(file, info) else { continue };
+                println!("{} {:?}", super::shader_runtime_name(&o), super::shader_pass_state(&o));
+                if std::env::var("OK_SHADER_RAW").is_ok() {
+                    let sub = super::uv_arr(super::uv_obj(o.class.properties().get("m_ParsedForm").unwrap(), "m_SubShaders").unwrap()).first().cloned();
+                    if let Some(sub) = sub { for p in super::uv_arr(super::uv_obj(&sub, "m_Passes").unwrap()) {
+                        let s = super::uv_obj(p, "m_State");
+                        if let Some(unity_asset_core::UnityValue::Object(m)) = s { println!("  keys {:?} cull {:?}", m.keys().collect::<Vec<_>>(), m.get("culling")); }
+                        println!("  type={:?} name={:?} cull={:?} tags={:?}", super::uv_obj(p, "m_Type"),
+                            s.and_then(|s| super::uv_obj(s, "m_Name")), s.and_then(|s| super::uv_obj(s, "m_Culling")),
+                            s.and_then(|s| super::uv_obj(s, "m_Tags")));
+                    }}
+                }
+            }}
+        });
+    }
 }

@@ -14,6 +14,11 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "OpenKoikatsu")
 	FString Root;
 
+	// Local library: models of third-party mods (character and Studio mods) converted on this machine, kept apart from
+	// the shared base library (OK_LOCAL_LIBRARY; empty: Content/IndependentResources/local_v1 when present).
+	UPROPERTY(config, EditAnywhere, Category = "OpenKoikatsu")
+	FString LocalLibrary;
+
 	UFUNCTION(BlueprintCallable, Category = "OpenKoikatsu")
 	static UKKGameRoot* Get();
 

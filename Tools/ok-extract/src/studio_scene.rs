@@ -193,6 +193,51 @@ fn scene_plugins(bytes: &[u8]) -> Option<rmpv::Value> {
     rmpv::decode::read_value(&mut std::io::Cursor::new(data)).ok()
 }
 
+/// Sideloader's Studio items (UniversalAutoResolver "itemInfo", StudioResolveInfo): scene object key (DicKey) -> the
+/// mod's GUID and the item's slot in the mod's own list. The scene saved the session's local slot as the item's number.
+pub fn scene_mod_items(bytes: &[u8]) -> std::collections::HashMap<i32, (String, i32)> {
+    use crate::card::map_get;
+    let mut out = std::collections::HashMap::new();
+    let Some(blocks) = scene_plugins(bytes) else { return out };
+    for key in ["com.bepis.sideloader.universalautoresolver", "EC.Core.Sideloader.UniversalAutoResolver"] {
+        let Some(plugin) = map_get(&blocks, key) else { continue };
+        let data = plugin.as_array().and_then(|a| a.get(1)).unwrap_or(plugin);
+        for info in map_get(data, "itemInfo").and_then(rmpv::Value::as_array).into_iter().flatten() {
+            let decoded = info.as_slice().and_then(|b| rmpv::decode::read_value(&mut std::io::Cursor::new(b)).ok());
+            let info = decoded.as_ref().unwrap_or(info);
+            let guid = map_get(info, "ModID").and_then(rmpv::Value::as_str).unwrap_or_default();
+            let slot = map_get(info, "Slot").and_then(rmpv::Value::as_i64);
+            // KKS sideloader writes SceneDicKey (with SceneObjectOrder, Group, Category); older ones DicKey.
+            let dic = map_get(info, "SceneDicKey").or_else(|| map_get(info, "DicKey")).and_then(rmpv::Value::as_i64);
+            if let (false, Some(slot), Some(dic)) = (guid.is_empty(), slot, dic) { out.insert(dic as i32, (guid.to_owned(), slot as i32)); }
+        }
+    }
+    out
+}
+
+/// KKVMDPlay's scene data ("KKVMDPlayExtSave": XML VMDPlaySaveData): the scene part (VMDSceneData: camera motion, music)
+/// and each character's part (VMDCharaData by its dicKey: the VMD motion file and the plugin's retarget settings), every
+/// XML attribute kept by name. The files are paths on the machine that saved the scene.
+pub fn scene_vmd(bytes: &[u8]) -> Option<(serde_json::Map<String, serde_json::Value>, std::collections::HashMap<i32, serde_json::Map<String, serde_json::Value>>)> {
+    use crate::card::map_get;
+    let blocks = scene_plugins(bytes)?;
+    let plugin = map_get(&blocks, "KKVMDPlayExtSave")?;
+    let data = plugin.as_array().and_then(|a| a.get(1)).unwrap_or(plugin);
+    let xml = map_get(data, "xml").and_then(|v| v.as_str().map(str::to_owned).or_else(|| v.as_slice().map(|b| String::from_utf8_lossy(b).into_owned())))?;
+    let doc = roxmltree::Document::parse(xml.trim_start_matches('\u{feff}')).ok()?;
+    let attrs = |n: roxmltree::Node| n.attributes().map(|a| (a.name().to_owned(), serde_json::Value::from(a.value()))).collect::<serde_json::Map<_, _>>();
+    let mut scene = serde_json::Map::new();
+    let mut chars = std::collections::HashMap::new();
+    for n in doc.root_element().children().filter(|n| n.is_element()) {
+        match n.tag_name().name() {
+            "VMDSceneData" => scene = attrs(n),
+            "VMDCharaData" => if let Some(key) = n.attribute("dicKey").and_then(|k| k.parse::<i32>().ok()) { chars.insert(key, attrs(n)); },
+            _ => {}
+        }
+    }
+    Some((scene, chars))
+}
+
 /// Material Editor edits in the scene's plugin data.
 fn scene_material_edits(bytes: &[u8]) -> Vec<MaterialEdit> {
     use crate::card::{map_get, me_plugin_data, parse_color};
@@ -977,21 +1022,33 @@ pub fn export(scene_path: &std::path::Path, out_dir: &std::path::Path) -> Result
     }
     walk(&bytes, &scene.objects, out_dir, &mut cards, &mut errors);
     let mut json = serde_json::to_value(&scene).map_err(|e| e.to_string())?;
-    fn mark(v: &mut serde_json::Value, cards: &std::collections::HashMap<i32, (String, serde_json::Value)>) {
+    let mods = scene_mod_items(&bytes);
+    let vmd = scene_vmd(&bytes);
+    let no_vmd = std::collections::HashMap::new();
+    let vmd_chars = vmd.as_ref().map(|v| &v.1).unwrap_or(&no_vmd);
+    fn mark(v: &mut serde_json::Value, cards: &std::collections::HashMap<i32, (String, serde_json::Value)>, mods: &std::collections::HashMap<i32, (String, i32)>, vmd: &std::collections::HashMap<i32, serde_json::Map<String, serde_json::Value>>) {
         match v {
             serde_json::Value::Object(m) => {
+                // A mod item: its mod's GUID and slot in the mod's list (studio_mods resolves it).
+                if m.get("kind").and_then(|k| k.as_str()) == Some("Item") {
+                    let key = m.get("key").and_then(|k| k.as_i64()).unwrap_or(-1) as i32;
+                    if let Some((guid, slot)) = mods.get(&key) { m.insert("mod_guid".into(), guid.clone().into()); m.insert("mod_slot".into(), (*slot).into()); }
+                }
                 if m.get("kind").and_then(|k| k.as_str()) == Some("Character") {
                     let key = m.get("key").and_then(|k| k.as_i64()).unwrap_or(-1) as i32;
                     if let Some((p, status)) = cards.get(&key) { m.insert("card".into(), p.clone().into()); m.insert("status".into(), status.clone()); }
+                    // KKVMDPlay drives this character with a VMD motion (scene_vmd).
+                    if let Some(d) = vmd.get(&key) { m.insert("vmd".into(), serde_json::Value::Object(d.clone())); }
                     for k in ["card_offset", "card_len", "face_png_offset", "face_png_len", "ext_offset", "ext_len"] { m.remove(k); }
                 }
-                for (_, x) in m.iter_mut() { mark(x, cards); }
+                for (_, x) in m.iter_mut() { mark(x, cards, mods, vmd); }
             }
-            serde_json::Value::Array(a) => for x in a { mark(x, cards); },
+            serde_json::Value::Array(a) => for x in a { mark(x, cards, mods, vmd); },
             _ => {}
         }
     }
-    mark(&mut json, &cards);
+    mark(&mut json, &cards, &mods, vmd_chars);
+    if let Some((scene_vmd, _)) = &vmd { json["vmd_scene"] = serde_json::Value::Object(scene_vmd.clone()); }
     json["card_errors"] = errors.into();
     Ok(json)
 }

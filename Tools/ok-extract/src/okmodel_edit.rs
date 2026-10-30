@@ -36,8 +36,8 @@ pub struct ModelEdits {
     #[serde(default)] pub meshes: BTreeMap<String, MeshEdit>,
 }
 
-pub fn path(lib: &Path, id: &Id) -> PathBuf { crate::oklib::model_path(lib, id).with_extension("okedit.json") }
-fn assets(lib: &Path, id: &Id) -> PathBuf { crate::oklib::model_path(lib, id).with_extension("okedit") }
+pub fn path(lib: &Path, id: &Id) -> PathBuf { crate::oklib::model_file(lib, id).with_extension("okedit.json") }
+fn assets(lib: &Path, id: &Id) -> PathBuf { crate::oklib::model_file(lib, id).with_extension("okedit") }
 
 type Cached = (PathBuf, Option<std::time::SystemTime>, Option<Arc<ModelEdits>>);
 static CACHE: Mutex<Vec<Cached>> = Mutex::new(Vec::new());
@@ -101,7 +101,10 @@ pub fn save_as(lib: &Path, id: &Id) -> Result<Id, String> {
     seed.extend_from_slice(b"\0okedit-save-as\0");
     seed.extend_from_slice(&json);
     let new = crate::oklib::hash16(&seed);
-    let (from, to) = (crate::oklib::model_path(lib, id), crate::oklib::model_path(lib, &new));
+    // The new model goes beside its source: the shared library or the local one (oklib::local_libraries).
+    let from = crate::oklib::model_file(lib, id);
+    let layer = from.parent().and_then(Path::parent).and_then(Path::parent).unwrap_or(lib);
+    let to = crate::oklib::model_path(layer, &new);
     if let Some(parent) = to.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
     std::fs::copy(&from, &to).map_err(|e| format!("{}: {e}", from.display()))?;
     let (src, dst) = (assets(lib, id), assets(lib, &new));

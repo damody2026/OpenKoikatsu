@@ -1,10 +1,10 @@
-#include "OKCharacterController.h"
+﻿#include "OKCharacterController.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "OKHGShading.h"
 #include "OKCharacterMCPRegistry.h"
 #include "OKCharacterMCPGeometry.h"
 #include "OKVideoMotionPanel.h"
-#include "OKStudioScene.h"
+#include "OKStudioGame.h"
 #include "KKPreviewActor.h"
 #include "KKCardWorkspace.h"
 #include "Blueprint/SlateBlueprintLibrary.h"
@@ -83,7 +83,7 @@ static FMCPObject State(UOKCharacterController* G,FOKCharacterMCPState& S,bool b
 {
  if(bFingerprint)Refresh(G,S);auto R=MakeShared<FJsonObject>();R->SetStringField(TEXT("session"),S.Session);R->SetNumberField(TEXT("revision"),S.Revision);R->SetStringField(TEXT("card"),G->Entries[G->SelectedIndex].Path);R->SetNumberField(TEXT("outfit"),G->OutfitIndex);R->SetBoolField(TEXT("busy"),Busy(G));R->SetNumberField(TEXT("pending_properties"),G->PendingProperties.Num());R->SetStringField(TEXT("status"),Busy(G)?TEXT("busy"):G->PendingProperties.IsEmpty()?TEXT("applied"):TEXT("staged"));
  if(G->AnimationStatus)R->SetStringField(TEXT("animation_status"),G->AnimationStatus->GetText().ToString());if(G->PairStatus)R->SetStringField(TEXT("pair_status"),G->PairStatus->GetText().ToString());
- if(G->StudioWidget)R->SetObjectField(TEXT("studio"),G->StudioWidget->StateJson());
+ if(UOKStudioGame* Studio=G->bOkStudioOpen?UOKStudioGame::Get():nullptr){TSharedPtr<FJsonObject> Ui;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Studio->UiStateJson()),Ui)&&Ui)R->SetObjectField(TEXT("studio"),Ui);}
  if(G->VideoMotionPanel){R->SetStringField(TEXT("video_status"),G->VideoMotionPanel->StatusText());R->SetBoolField(TEXT("video_importing"),G->VideoMotionPanel->IsImporting());}R->SetStringField(TEXT("selected_clip"),G->SelectedGameClip);
  R->SetBoolField(TEXT("partner_loaded"),IsValid(G->PartnerActor)&&G->PartnerActor->Session.IsOpen());R->SetBoolField(TEXT("partner_loading"),G->bPartnerLoadInFlight);
  if(IsValid(G->PartnerActor)){R->SetNumberField(TEXT("partner_pose_mode"),G->PartnerActor->PoseMode);R->SetBoolField(TEXT("partner_ticking"),G->PartnerActor->IsActorTickEnabled());R->SetNumberField(TEXT("partner_anim_phase"),G->PartnerActor->AnimPhase);}
@@ -170,9 +170,14 @@ void UOKCharacterController::TickCharacterMCP()
  if(S.Phase==2){if(!Settled(this,S))return;if(S.Action==TEXT("views")&&!S.CaptureActor.IsValid()){Refresh(this,S);S.CaptureRevision=S.Revision;S.CaptureActor=PreviewActor;S.WasTicking=PreviewActor->IsActorTickEnabled();S.SavedYaw=PreviewActor->OrbitYaw;S.SavedPitch=PreviewActor->OrbitPitch;PreviewActor->SetActorTickEnabled(false);PreviewActor->OrbitYaw=0;PreviewActor->OrbitPitch=0;PreviewActor->ApplyOrbitCamera();S.View=0;S.ReadyAt=0;return;}Capture(this,S);return;}
  // Video motion panel / partner (Docs/VIDEO_MOTION.md): the same paths as clicks.
  if(S.Action==TEXT("studio")){FString Op;S.Request->TryGetStringField(TEXT("op"),Op);
-  if(Op==TEXT("enter")){OnEnterStudio();if(!StudioWidget){Finish(S,nullptr,TEXT("Cannot open studio"));return;}Finish(S,State(this,S));return;}
-  if(!StudioWidget){Finish(S,nullptr,TEXT("Studio is not open"));return;}
-  FString Error;auto Result=StudioWidget->Command(*S.Request,Error);if(!Result){Finish(S,nullptr,Error);return;}auto R=State(this,S);if(StudioWidget)R->SetObjectField(TEXT("studio"),Result);Finish(S,R);return;}
+  // OK Studio (the old UMG studio is gone): enter opens it with this character, cmd runs its command table (id, arg),
+  // exit closes it; scene editing goes through ok-game-mcp's studio_* tools (Docs/OK_STUDIO_MCP.md).
+  if(Op==TEXT("enter")){OnEnterOkStudio();if(!bOkStudioOpen){Finish(S,nullptr,TEXT("Cannot open studio"));return;}Finish(S,State(this,S));return;}
+  UOKStudioGame* Studio=bOkStudioOpen?UOKStudioGame::Get():nullptr;
+  if(!Studio){Finish(S,nullptr,TEXT("Studio is not open"));return;}
+  if(Op==TEXT("exit")){Studio->RequestStop();Finish(S,State(this,S));return;}
+  if(Op==TEXT("cmd")){FString Id,Arg;S.Request->TryGetStringField(TEXT("id"),Id);S.Request->TryGetStringField(TEXT("arg"),Arg);if(!Studio->RunUiCommand(Id,Arg)){Finish(S,nullptr,TEXT("Studio command failed: ")+Id);return;}Finish(S,State(this,S));return;}
+  Finish(S,nullptr,TEXT("Studio op ")+Op+TEXT(": use enter, cmd or exit here; scene editing is ok-game-mcp's studio_* tools"));return;}
  if(S.Action==TEXT("video_import")){FString Path,Name;bool Static=false,Pair=false,MaleLeft=true;S.Request->TryGetStringField(TEXT("path"),Path);S.Request->TryGetStringField(TEXT("name"),Name);S.Request->TryGetBoolField(TEXT("static"),Static);S.Request->TryGetBoolField(TEXT("pair"),Pair);S.Request->TryGetBoolField(TEXT("male_left"),MaleLeft);
   if(!VideoMotionPanel||!VideoMotionPanel->StartImport(Path,Name,Static,Pair,MaleLeft)){Finish(S,nullptr,VideoMotionPanel?VideoMotionPanel->StatusText():TEXT("No video motion panel"));return;}Finish(S,State(this,S));return;}
  if(S.Action==TEXT("video_motion")){FString Item;S.Request->TryGetStringField(TEXT("item"),Item);if(!VideoMotionPanel||!VideoMotionPanel->SelectItem(Item)){Finish(S,nullptr,TEXT("Unknown video motion item"));return;}Finish(S,State(this,S));return;}

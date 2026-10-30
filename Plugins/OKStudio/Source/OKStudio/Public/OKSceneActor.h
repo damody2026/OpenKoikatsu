@@ -101,6 +101,8 @@ public:
 	 *  _WorldSpaceLightPos0 and _LightColor0, written when the light changes. */
 	void UpdateItemLighting();
 	FLinearColor ItemLightDirection = FLinearColor(0.f, 0.f, 0.f, -1.f), ItemLightColor = FLinearColor(0.f, 0.f, 0.f, -1.f);
+	/** The scene has had a light: from then on the characters' forward light follows the scene's lights (off when none is on). */
+	bool bCharacterLightSeen = false;
 	TSet<TWeakObjectPtr<AKKPreviewActor>> ItemsLit;
 	/** The map/sky's full probe on characters and unlightmapped Standard surfaces: the sky pattern it was written for (-1: the
 	 *  character display's own) and the characters that have it. */
@@ -153,6 +155,10 @@ private:
 		/** Studio's guide replaces the prefab root TRS; undo the root baked into model vertices. */
 		FTransform RenderCorrection = FTransform::Identity;
 		TWeakObjectPtr<USceneComponent> Component;
+		/** Where the component sits in the object (a camera item's capture at its camera node); identity for the rest. */
+		FTransform ComponentOffset = FTransform::Identity;
+		/** A camera item's RenderTexture key (its capture is `Component`); 0 for the rest. */
+		int32 RenderCameraKey = 0;
 		float Time = 0.f;
 		/** FK bones the preview currently has. */
 		TArray<FOKSceneFkBone> AppliedFk;
@@ -180,11 +186,30 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<class UDirectionalLightComponent> MapSun;
 	int32 ShownMapTime = -2;
+	/** The map sun as the items' forward light (Unity: the brightest directional light whose culling mask has the
+	 *  item's layer; the map's own sun lights layer 11, where landscape items are authored): towards-light direction,
+	 *  linear colour and culling mask (0: no sun). */
+	FLinearColor MapSunItemDirection = FLinearColor::Black, MapSunItemColor = FLinearColor::Black;
+	uint32 MapSunMask = 0;
+	/** The map's own realtime lamps (ok_okmodel_map_lights) with the times of day they show at (0: always). */
+	TArray<TPair<TWeakObjectPtr<class ULightComponent>, uint32>> MapLights;
+	void AddMapLights(class AKKPreviewActor* Map, const FString& Model, const FString& Root);
 	int32 ShownMapComponents = 0;
 	FTransform ShownMapSunPlace;
 	void ApplyMapTime(const FTransform& MapPlace);
 
 	bool Build(const FOKSceneObject& Object, FShown& Out, FString& OutError);
+	/** A Studio camera item (a camera drawing into a RenderTexture, e.g. HarvexARC's CH1-Camera): its capture as `Out.Component`. */
+	void AddRenderCamera(const FString& Model, const FString& Prefab, FShown& Out);
+	/** Gives each screen item showing a camera item's RenderTexture that camera's target (the first camera item of a
+	 *  key, hidden or not: Studio hides only an item's renderers), and captures every frame only the cameras some shown
+	 *  screen shows. */
+	void WireRenderTextures();
+	/** OK_RT_DUMP=1: the shown camera items' pictures and poses (debugging). */
+	void DumpRenderTextures();
+	/** The camera items' targets by RenderTexture key (shared by every camera and screen of that key). */
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<class UTextureRenderTarget2D>> SharedRenderTargets;
 	void Release(FShown& Item);
 	void ApplyCharacterState(const FOKSceneObject& Object, FShown& Item);
 };

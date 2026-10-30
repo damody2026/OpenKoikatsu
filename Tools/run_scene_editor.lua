@@ -55,7 +55,7 @@ local function main()
   local root = ok.root
   local engine = o.engine and path.abs(o.engine) or ok.engine_root()
   local width = size(o, "windowwidth", 1600, 640, 7680)
-  local height = size(o, "windowheight", 1000, 480, 4320)
+  local height = size(o, "windowheight", 900, 480, 4320)
   local scene = o.scene
   if scene then
     scene = path.abs(scene)

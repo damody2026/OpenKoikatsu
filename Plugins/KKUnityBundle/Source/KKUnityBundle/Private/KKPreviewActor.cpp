@@ -686,6 +686,8 @@ struct FOKToonShadowParameters
 	UTexture2D* AnotherRampTex = nullptr;
 	UTexture2D* EmissionTex = nullptr;
 	FLinearColor EmissionColor = FLinearColor::Black;
+	// Unity Standard-family _Color (linear), multiplied into the albedo; white for other shaders.
+	FLinearColor StandardAlbedoTint = FLinearColor::White;
 	// Baked lightmap (RGBM, linear sampling) of a map part, on TEXCOORD1; Lightmaps keeps each index's texture for the
 	// later parts of the same load (only the first part using a lightmap carries it).
 	UTexture2D* LightmapTex = nullptr;
@@ -2373,6 +2375,20 @@ return diffuse * (light * (1.0 - shadow) + shadow) * faceScale * lightLift;
 				ColorOut = Lit;
 			}
 		}
+		// Unity Standard-family albedo is _MainTex x _Color (a [Color] property: linear in the game's linear colour space).
+		if (Shadow && !Shadow->StandardAlbedoTint.Equals(FLinearColor::White))
+		{
+			UMaterialExpressionConstant3Vector* Tint = NewObject<UMaterialExpressionConstant3Vector>(Mat);
+			Tint->Material = Mat;
+			Tint->Constant = Shadow->StandardAlbedoTint;
+			Mat->GetExpressionCollection().AddExpression(Tint);
+			UMaterialExpressionMultiply* Tinted = NewObject<UMaterialExpressionMultiply>(Mat);
+			Tinted->Material = Mat;
+			Tinted->A.Expression = ColorOut;
+			Tinted->B.Expression = Tint;
+			Mat->GetExpressionCollection().AddExpression(Tinted);
+			ColorOut = Tinted;
+		}
 		// Maker CustomScene's measured interpolated light probe is blue above,
 		// neutral below, and identical in the four horizontal directions. Add
 		// that scene irradiance to this IBL pass; the grey UE backdrop does not
@@ -3234,7 +3250,40 @@ static bool OKShaderHasNoOutlinePass(const FString& Shader)
 	static const TCHAR* Families[] = { TEXT("Standard"), TEXT("Legacy Shaders/"), TEXT("Unlit/"), TEXT("Mobile/"), TEXT("Particles/"), TEXT("FX/"),
 		TEXT("Skybox/"), TEXT("Sprites/"), TEXT("UI/"), TEXT("Nature/"), TEXT("Diffuse"), TEXT("Transparent/") };
 	for (const TCHAR* F : Families) if (Shader.StartsWith(F, ESearchCase::IgnoreCase)) return true;
+	// CM3D2 map shaders (CM3D2/Lighted, Lighted_Trans): only the *_Outline variants have one. The shell of a scaled-up
+	// room drew its walls black from outside (Petardo's kitchen, seen from the scene camera behind a wall Unity culls).
+	if (Shader.StartsWith(TEXT("CM3D2/"), ESearchCase::IgnoreCase)) return !Shader.Contains(TEXT("Outline"), ESearchCase::IgnoreCase);
 	return false;
+}
+
+// The material's shader as Unity draws it, read from the shader's own passes at extraction (unity.rs
+// record_shader_pass_state): the main colour pass's cull (0 off, 1 front, 2 back) and whether an inverted-hull outline
+// pass exists. Known only while the recorded name hash still names the material's shader; a later shader swap
+// (Material Editor, native replacements) or a shader outside the material's file leaves it unknown.
+struct FOKShaderPassState { bool bKnown = false; int32 Cull = 2; bool bOutline = false; };
+
+static FOKShaderPassState OKShaderPassState(const FOkSession& Source, int32 Index)
+{
+	FOKShaderPassState State;
+	TSharedPtr<FJsonObject> Root;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Source.MaterialMetadataJson(Index)), Root) || !Root) return State;
+	const TSharedPtr<FJsonObject>* Material = nullptr;
+	const TSharedPtr<FJsonObject>* Floats = nullptr;
+	FString Shader;
+	double Key = 0, Cull = 0, Outline = 0;
+	if (!Root->TryGetObjectField(TEXT("material"), Material) || !Material || !*Material) return State;
+	(*Material)->TryGetStringField(TEXT("shader"), Shader);
+	if (!(*Material)->TryGetObjectField(TEXT("floats"), Floats) || !Floats || !*Floats) return State;
+	if (!(*Floats)->TryGetNumberField(TEXT("_OKShaderState"), Key) || !(*Floats)->TryGetNumberField(TEXT("_OKShaderCull"), Cull)
+		|| !(*Floats)->TryGetNumberField(TEXT("_OKShaderOutline"), Outline)) return State;
+	const FTCHARToUTF8 Utf8(*Shader);
+	uint32 Hash = 0x811c9dc5u;
+	for (int32 b = 0; b < Utf8.Length(); ++b) Hash = (Hash ^ uint8(Utf8.Get()[b])) * 0x01000193u;
+	if ((Hash & 0xFFFFFFu) != uint32(Key)) return State;
+	State.bKnown = true;
+	State.Cull = FMath::RoundToInt32(Cull);
+	State.bOutline = Outline > 0.5;
+	return State;
 }
 
 static bool OutlineEnabled()
@@ -5469,6 +5518,16 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 				}
 			}
 		}
+		ShadowParams.StandardAlbedoTint = FLinearColor::White;
+		if (!ShadowParams.bItemDraw && Source.MaterialShaderName(i).StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase))
+		{
+			FLinearColor Tint;
+			if (Source.MaterialValue(i, "_Color", Tint))
+			{
+				auto Linear = [](float V) { return V <= .04045f ? V / 12.92f : FMath::Pow((V + .055f) / 1.055f, 2.4f); };
+				ShadowParams.StandardAlbedoTint = FLinearColor(Linear(Tint.R), Linear(Tint.G), Linear(Tint.B), 1.f);
+			}
+		}
 		// Unity Standard-family emission (keyword _EMISSION): _EmissionColor (gamma, may exceed 1) times _EmissionMap.
 		ShadowParams.EmissionTex = nullptr;
 		ShadowParams.EmissionColor = FLinearColor::Black;
@@ -5838,7 +5897,11 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// Koikano/main_skin ForwardBase uses Cull Back (kind 5).
 		// KKS main_item_studio_alpha ForwardBase has Cull Back. Its ME copy
 		// may share a hair renderer, but the copied shader keeps its own cull.
-		const bool bTwoSided = Part.ShaderKind != 4 &&
+		// The shader's own main pass decides when it was read (a Cull Front pass has no UE equivalent; drawing both
+		// sides keeps its back faces). The kind list below is the fallback for shaders without that record.
+		const FOKShaderPassState PassState = OKShaderPassState(Source, i);
+		const bool bTwoSided = PassState.bKnown ? (PassState.Cull != 2 || (Part.bFaceSphereNormals && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FACE_TWOSIDED")) == TEXT("1"))) :
+			Part.ShaderKind != 4 &&
 			((Part.ShaderKind == 1 || Part.ShaderKind == 10) || Part.ShaderKind == 2 || Part.ShaderKind == 3 || Part.ShaderKind == 7 || Part.ShaderKind == 8 || Part.ShaderKind == 11 || Part.Role.Contains(TEXT("hair")) ||
 			(Part.bFaceSphereNormals && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FACE_TWOSIDED")) == TEXT("1")));
 		// Let the extracted shader's render state decide whether the front hair
@@ -5870,7 +5933,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			Blend = TEXT("translucent");
 		}
 		const bool bOutlinable =
-			OutlineEnabled() && bItemOutline && !OKShaderHasNoOutlinePass(Source.MaterialShaderName(i)) &&
+			OutlineEnabled() && bItemOutline && (PassState.bKnown ? PassState.bOutline : !OKShaderHasNoOutlinePass(Source.MaterialShaderName(i))) &&
 			((Part.ShaderKind != 2 && Part.ShaderKind != 3 && Part.ShaderKind != 9) || Source.OutlineEnabled(i)) &&
 			Part.EyeSort == 0 &&
 			// Forge MainAlpha has an independent One/Zero OUTLINE pass.
@@ -6102,6 +6165,17 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 							if (It.Value && It.Value->TextureTarget == Screen) It.Value->HideComponent(Comp);
 						UE_LOG(LogTemp, Display, TEXT("OK render texture screen part=%s bounds=%s"), *Name, *Comp->Bounds.GetBox().ToString());
 					}
+		// A screen item showing another item's camera (the scene pairs them by the RenderTexture's key).
+		FLinearColor SharedTarget;
+		if (Comp && !bBody && !bFaceDraw && Source.MaterialValue(i, "_OKRTShared", SharedTarget) && SharedTarget.R > 0.f)
+			if (UMaterialInterface* ScreenMat = OKRenderTextureScreenMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(ScreenMat, Comp))
+				{
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+					SharedRenderTextureScreens.Add({ FMath::RoundToInt(SharedTarget.R), FIntPoint(FMath::RoundToInt(SharedTarget.G), FMath::RoundToInt(SharedTarget.B)), Dynamic, Comp });
+					UE_LOG(LogTemp, Display, TEXT("OK render texture shared screen part=%s key=%d"), *Name, FMath::RoundToInt(SharedTarget.R));
+				}
 		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor, with source alpha, not the Studio light
 		// effect's three-colour mix the additive part graph draws.
 		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))

@@ -114,8 +114,9 @@ const TArray<FOKStudioSkyPattern>& OKStudioSkyPatterns()
 	return Patterns;
 }
 
-bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb, TArray<FLinearColor>* OutHigher)
+bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg, FLinearColor& OutSHAb, TArray<FLinearColor>* OutHigher, int32* OutMode)
 {
+    if (OutMode) *OutMode = -1;
     if (Map < 0)
     {
         OutSHAr = OutSHAg = OutSHAb = FLinearColor(0,0,0,0);
@@ -124,11 +125,13 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
     }
 	static FString LoadedFile;
 	static TMap<int32, TArray<FLinearColor>> Probes;
+	static TMap<int32, int32> Modes;
 	const FString File = AOKSceneActor::LibraryDirectory() / TEXT("studio/map_environments.json");
 	if (LoadedFile != File)
 	{
 		LoadedFile = File;
 		Probes.Reset();
+		Modes.Reset();
 		FString Text, Format;
 		TSharedPtr<FJsonObject> Root;
 		const TArray<TSharedPtr<FJsonValue>>* Maps = nullptr;
@@ -144,6 +147,27 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
 				TArray<FLinearColor> Packed;
 				TArray<FLinearColor> Higher;
 				FLinearColor Last(0,0,0,1);
+				// Ambient mode Trilight (1) or Flat (3, one colour): Unity derives the ambient probe from the sky, equator
+				// and ground colours at run time (the scene's baked m_AmbientProbe is stale: bath map 62 saved zeros). The
+				// coefficients, fitted exactly (to 1e-5 in all three channels) on native renderer_sh of map 62: C0 = (sky +
+				// ground) / 6 + 2 equator / 3, C1 (up) = sqrt(2/27) (sky - ground), C6 = 5/96 (equator - (sky + ground) / 2),
+				// C8 = 3 C6; the colours linear, times the ambient intensity.
+				double Mode = 0, Intensity = 1;
+				Row->TryGetNumberField(TEXT("ambient_mode"), Mode);
+				Row->TryGetNumberField(TEXT("ambient_intensity"), Intensity);
+				auto AmbientColor = [&](const TCHAR* Key, FLinearColor& Out)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* V = nullptr;
+					if (!Row->TryGetArrayField(Key, V) || V->Num() < 3) return false;
+					Out = FLinearColor(0, 0, 0, 0);
+					for (int32 I = 0; I < 3; ++I) { const float G = float((*V)[I]->AsNumber()); (&Out.R)[I] = G <= .04045f ? G / 12.92f : FMath::Pow((G + .055f) / 1.055f, 2.4f); }
+					Out *= float(Intensity);
+					return true;
+				};
+				FLinearColor Sky, Equator, Ground;
+				const bool bGradient = (Mode == 1 || Mode == 3) && AmbientColor(TEXT("ambient_sky"), Sky)
+					&& (Mode == 3 || (AmbientColor(TEXT("ambient_equator"), Equator) && AmbientColor(TEXT("ambient_ground"), Ground)));
+				if (bGradient && Mode == 3) Equator = Ground = Sky;
 				for (const auto& Channel : *Channels)
 				{
 					const TArray<TSharedPtr<FJsonValue>>* Coefficients = nullptr;
@@ -157,11 +181,21 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
 						C[I] = float(V);
 					}
 					if (!Valid) break;
+					if (bGradient)
+					{
+						const int32 Ch = Packed.Num();
+						const float S = (&Sky.R)[Ch], E = (&Equator.R)[Ch], G = (&Ground.R)[Ch];
+						for (float& V : C) V = 0.f;
+						C[0] = (S + G) / 6.f + 2.f * E / 3.f;
+						C[1] = FMath::Sqrt(2.f / 27.f) * (S - G);
+						C[6] = 5.f / 96.f * (E - (S + G) / 2.f);
+						C[8] = 3.f * C[6];
+					}
 					Packed.Add(FLinearColor(C[3], C[1], C[2], C[0] - C[6]));
 					Higher.Add(FLinearColor(C[4], C[5], 3.f*C[6], C[7]));
 					(&Last.R)[Packed.Num()-1] = C[8];
 				}
-				if (Packed.Num() == 3) { Packed.Append(Higher); Packed.Add(Last); Probes.Add(int32(No), MoveTemp(Packed)); }
+				if (Packed.Num() == 3) { Packed.Append(Higher); Packed.Add(Last); Probes.Add(int32(No), MoveTemp(Packed)); Modes.Add(int32(No), int32(Mode)); }
 			}
 		}
 		else UE_LOG(LogTemp, Warning, TEXT("OK Studio map environment missing or invalid: %s"), *File);
@@ -170,6 +204,7 @@ bool OKStudioMapAmbient(int32 Map, FLinearColor& OutSHAr, FLinearColor& OutSHAg,
 	if (!Probe) return false;
 	OutSHAr = (*Probe)[0]; OutSHAg = (*Probe)[1]; OutSHAb = (*Probe)[2];
 	if (OutHigher) { OutHigher->Reset(); for (int32 I=3; I<7; ++I) OutHigher->Add((*Probe)[I]); }
+	if (OutMode) *OutMode = Modes.FindRef(Map);
 	return true;
 }
 
