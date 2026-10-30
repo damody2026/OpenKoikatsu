@@ -655,6 +655,11 @@ fn order_too_full(r: &Value) -> Value {
     let satiety = r.get("satiety").and_then(Value::as_f64).unwrap_or(0.0);
     // Food in her own stomach's terms (R3-269): satiety is 0..100 of it, a dish fills 100 / satiety_max of its own fill.
     let appetite = 100.0 / f64::from(crate::needs::satiety_max(r.get("profile").unwrap_or(&Value::Null)));
+    // Her own pick (her_choice): she knows her stomach; only when she is full already (with what is coming) is it not
+    // ordered. 胡桃 asked for curry omurice at seven in the evening (satiety 75) and it was quietly dropped (R6-12).
+    if r.get("her_choice").and_then(Value::as_bool) == Some(true) {
+        return json!({"too_full": satiety + coming * appetite >= 100.0});
+    }
     json!({"too_full": satiety + (coming + weight(&item)) * appetite > OVERFULL_SATIETY})
 }
 
@@ -826,6 +831,11 @@ mod tests {
     assert_eq!(order_too_full(&json!({"satiety": 86, "item": bowl, "profile": {"satiety_max": 200}}))["too_full"], false);
     assert_eq!(order_too_full(&json!({"satiety": 70, "item": bowl, "profile": {"satiety_max": 60}}))["too_full"], true);
     assert_eq!(order_too_full(&json!({"satiety": 70, "item": bowl}))["too_full"], false, "the same bowl at 70, ordinary");
+    // Her own pick stands unless she is full already (R6-12); ordered for her by him, the stomach rule above.
+    let omurice = json!({"fill": 45, "category": "meal"});
+    assert_eq!(order_too_full(&json!({"satiety": 75, "item": omurice, "her_choice": true}))["too_full"], false);
+    assert_eq!(order_too_full(&json!({"satiety": 75, "item": omurice}))["too_full"], true);
+    assert_eq!(order_too_full(&json!({"satiety": 70, "item": omurice, "her_choice": true, "coming": [omurice]}))["too_full"], true, "a second omurice coming");
     }
 
     #[test]

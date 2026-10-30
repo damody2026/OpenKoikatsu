@@ -517,7 +517,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
    S.TellHer.Add(OKMsg(TEXT("ui.economy.already_bought_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, bought for %s %lld min ago"),*O.Id,ForHer?TEXT("her"):TEXT("him"),OKStreetMindNow(S)-*At);continue;}
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
-  if(ForHer&&TooFullFor(Character,*Item)){
+  if(ForHer&&TooFullFor(Character,*Item,true)){
    S.TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street order rejected: %s, she is full"),*O.Id);continue;}
   // Not one for herself while she is on her shift serving him: 爱丽丝, making his milk tea at the drink shop, ordered a
   // milk tea for herself and he paid for both (R4-21).
@@ -658,7 +658,7 @@ void AOKStreetSocialScene::ApplyMindExpression(int32 Character,const FString& Em
 // What this place sells, for the 【這裡的菜單】 line (empty outside a shop or when it is closed).
 // Food for her that she could not finish: her satiety, what she still has coming (her dishes on the table not yet
 // eaten, and in the cart) and this dish together over OKStreetOverfullSatiety. A drink always fits.
-bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Item) const{
+bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Item,bool HerChoice) const{
  // Whether she could still finish it is the rules' (shop.rs order_too_full): here only what she has coming.
  const auto& S=*State;if(!S.Manifest.Characters.IsValidIndex(Girl))return false;
  auto Dish=[](const FOKStreetCatalogItem& I,double Left){auto O=MakeShared<FJsonObject>();const float* V=I.Effects.Find(TEXT("satiety"));
@@ -666,7 +666,7 @@ bool AOKStreetSocialScene::TooFullFor(int32 Girl,const FOKStreetCatalogItem& Ite
  TArray<TSharedPtr<FJsonValue>> Coming;
  for(const auto& D:S.Table)if(D.ForHer&&D.Percent>0.f)if(const auto* I=S.Catalog.Find(D.ItemId))Coming.Add(MakeShared<FJsonValueObject>(Dish(*I,D.Percent/100.f)));
  for(const auto& C:S.Cart)if(C.ForHer)if(const auto* I=S.Catalog.Find(C.ItemId))Coming.Add(MakeShared<FJsonValueObject>(Dish(*I,1.0)));
- auto Request=OKRulesRequest(TEXT("order_too_full"));Request->SetArrayField(TEXT("coming"),Coming);Request->SetObjectField(TEXT("item"),Dish(Item,1.0));
+ auto Request=OKRulesRequest(TEXT("order_too_full"));Request->SetArrayField(TEXT("coming"),Coming);Request->SetObjectField(TEXT("item"),Dish(Item,1.0));Request->SetBoolField(TEXT("her_choice"),HerChoice); // she picked it herself (R6-12)
  Request->SetNumberField(TEXT("satiety"),OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Satiety);
  if(const TSharedPtr<FJsonObject> P=ProfileOf(Girl))Request->SetObjectField(TEXT("profile"),P.ToSharedRef()); // her appetite (R3-269)
  const TSharedPtr<FJsonObject> Out=OKRulesEval(S,Request);return Out.IsValid()&&Out->GetBoolField(TEXT("too_full"));

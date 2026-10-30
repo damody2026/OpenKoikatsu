@@ -383,7 +383,7 @@ private:
  void TickUiProbe();
  void EatFromBag(const FString& ItemId,bool Feed);
  FString MenuText(float Satiety=-1.f,float Appetite=1.f,int32 Girl=INDEX_NONE) const; // Appetite: 100 / her satiety_max (R3-269)
- bool TooFullFor(int32 Girl,const struct FOKStreetCatalogItem& Item) const; // OKStreetSocialMind.inl // with her satiety: what she could not finish now is marked
+ bool TooFullFor(int32 Girl,const struct FOKStreetCatalogItem& Item,bool HerChoice=false) const; // OKStreetSocialMind.inl // with her satiety: what she could not finish now is marked
  void ApplyChoiceReply(int32 Character,const struct FOKFreeTalkReply& Reply);
  void SpeakFreeTalk(int32 Character,const TArray<FString>& Lines,int64 Serial);
  void RequestFreeTalkSegment(int32 Generation,int32 Index);
