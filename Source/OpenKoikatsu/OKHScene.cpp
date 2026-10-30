@@ -330,7 +330,7 @@ void UOKHScenePanel::Click(int32 Kind){
         break;
     case Toggle:if(HIsLoop(Base)){bStrong=Base==TEXT("WLoop");Want(P(bStrong?TEXT("SLoop"):TEXT("WLoop")));}break;
     case Stop:Want(Mode==1?(Has(TEXT("Stop_Idle"))?TEXT("Stop_Idle"):TEXT("Idle")):P(TEXT("InsertIdle")));break;
-    case Inside:Finish(Mode==2&&Her>=70.f?(bStrong?TEXT("sameS"):TEXT("sameW")):TEXT("inside"));break;
+    case Inside:Finish(Mode==2&&Her>=70.f&&!bLockHer?(bStrong?TEXT("sameS"):TEXT("sameW")):TEXT("inside"));break; // with her gauge locked she does not come with him
     case Outside:Finish(TEXT("outside"));break;
     case Drink:++Swallowed;Chain({TEXT("Drink_IN"),TEXT("Drink"),TEXT("Drink_A")});Note(OKT(TEXT("ui.hscene.event_drink")));break;
     case Vomit:Chain({TEXT("Vomit_IN"),TEXT("Vomit"),TEXT("Vomit_A")});Note(OKT(TEXT("ui.hscene.event_vomit")));break;
@@ -488,7 +488,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
         else{His+=Delta*(1.2f+3.5f*Rate)*Strong;Her+=Delta*(1.5f+6.f*Rate)*Strong*HerByLevel[FMath::Clamp(Level(),0,3)];
             if(bLockHer)Her=FMath::Min(Her,95.f);if(bLockHis)His=FMath::Min(His,95.f);
             if(Her>=100.f)Finish(His>=70.f?(Strong>1.f?TEXT("sameS"):TEXT("sameW")):(Strong>1.f?TEXT("orgS"):TEXT("orgW")));
-            else if(His>=100.f)Finish(!bCondom?TEXT("outside"):Her>=70.f?(Strong>1.f?TEXT("sameS"):TEXT("sameW")):TEXT("inside"));}
+            else if(His>=100.f)Finish(!bCondom?TEXT("outside"):Her>=70.f&&!bLockHer?(Strong>1.f?TEXT("sameS"):TEXT("sameW")):TEXT("inside"));}
     }else if(Queue.IsEmpty()&&Base==TEXT("OLoop")&&Mode==1){His=FMath::Min(bLockHis?95.f:100.f,His+Delta*3.f);if(His>=100.f)Finish(Poses.IsValidIndex(ActivePose)&&Poses[ActivePose].KindHoushi==1?TEXT("inside"):TEXT("outside"));}
     else if(Queue.IsEmpty()){Her=FMath::Max(0.f,Her-Delta*3.f);His=FMath::Max(0.f,His-Delta*3.f);}
     Her=FMath::Clamp(Her,0.f,100.f);His=FMath::Clamp(His,0.f,100.f);
