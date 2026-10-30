@@ -29,6 +29,34 @@ local function receipt_problem(receipt_path, engine_manifest)
   return nil, receipt, engine
 end
 
+-- Newest project source (Source/, Plugins/*/Source/, *.uplugin, *.Build.cs ...) newer than the receipt: after a merge or
+-- pull the receipt still matches the engine, but the DLLs are older than the code and would run the previous build.
+local SOURCE_EXT = { cpp = true, h = true, hpp = true, inl = true, cs = true, uplugin = true, usf = true, ush = true }
+local function newest_source(dir, newest)
+  if not path.is_dir(dir) then return newest end
+  path.walk(dir, function(d, _, files)
+    for _, n in ipairs(files) do
+      local ext = n:match("%.([%w]+)$")
+      if ext and SOURCE_EXT[ext:lower()] then
+        local t = path.mtime(path.join(d, n))
+        if t and t > newest then newest = t end
+      end
+    end
+  end)
+  return newest
+end
+
+local function sources_newer(project_root, receipt_path)
+  local built = path.mtime(receipt_path)
+  if not built then return nil end
+  local newest = newest_source(path.join(project_root, "Source"), 0)
+  local plugins = path.join(project_root, "Plugins")
+  for _, plugin in ipairs(path.is_dir(plugins) and path.list(plugins) or {}) do
+    newest = newest_source(path.join(project_root, "Plugins", plugin, "Source"), newest)
+  end
+  if newest > built then return ("Project sources are newer than the editor build (%s > %s)"):format(os.date("%m-%d %H:%M", math.floor(newest)), os.date("%m-%d %H:%M", math.floor(built))) end
+end
+
 -- Builds OpenKoikatsuEditor against the engine without touching the engine's own binaries.
 function M.build(project_root, engine_root)
   local bat = path.join(engine_root, "Engine/Build/BatchFiles/Build.bat")
@@ -48,6 +76,7 @@ function M.ensure(project_root, engine_root, opts)
   local receipt_path = path.join(project_root, "Binaries/Win64/OpenKoikatsuEditor.target")
   local engine_manifest = path.join(engine_root, "Engine/Binaries/Win64/UnrealEditor.modules")
   local problem, receipt, engine = receipt_problem(receipt_path, engine_manifest)
+  if not problem and opts.build then problem = sources_newer(project_root, receipt_path) end
   if problem and opts.build then
     io.write(problem, "\n"); io.flush()
     M.build(project_root, engine_root)
