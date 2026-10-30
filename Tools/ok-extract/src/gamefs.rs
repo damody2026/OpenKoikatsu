@@ -950,7 +950,7 @@ impl PendingEntry {
     fn load(&self) -> Option<Vec<u8>> {
         let bytes = std::fs::File::open(&self.real).ok()
             .and_then(|f| zip::ZipArchive::new(std::io::BufReader::new(f)).ok())
-            .and_then(|mut z| { let mut v = Vec::new(); z.by_name(&self.name).ok()?.read_to_end(&mut v).ok()?; Some(v) })?;
+            .and_then(|mut z| { let mut f = z.by_name(&self.name).ok()?; let mut v = Vec::with_capacity(f.size() as usize); f.read_to_end(&mut v).ok()?; Some(v) })?;
         mark_fallback_used();
         if let (Some(o), Some(names)) = (recording_overlay(), self.names.as_ref()) {
             let entry = content_entry(Path::new(&self.name), &bytes);
@@ -1085,7 +1085,14 @@ impl Read for ZipEntry<'_> {
             }
             ZipSource::Library(Some(c), _, _) => c.read_to_end(out),
             ZipSource::Library(None, _, key) => { missing("zip-entry", key); Err(not_found()) }
-            ZipSource::Pending(..) => { self.resolve_pending(); self.read_to_end(out) }
+            ZipSource::Pending(..) => {
+                self.resolve_pending();
+                // The loaded entry itself when nothing was read yet (not a second copy of it).
+                if let ZipSource::Library(Some(c), _, _) = &mut self.source {
+                    if out.is_empty() && c.position() == 0 { *out = std::mem::take(c.get_mut()); return Ok(out.len()); }
+                }
+                self.read_to_end(out)
+            }
         }
     }    fn read_to_string(&mut self, out: &mut String) -> io::Result<usize> {
         let mut bytes = Vec::new();

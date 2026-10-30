@@ -1639,20 +1639,16 @@ fn zipmod_one_unity3d_uncached(path: &Path, want: &str) -> Option<(String, crate
     zip_entry_source(&mut zip, path, idx).map(|bytes| (names[idx].clone(), bytes))
 }
 
-/// A zipmod entry's bytes (more than 16), without holding a large one in memory: a stored entry is mapped from the
-/// archive, a compressed one is inflated into a mapped temporary file; small entries are read.
+/// A zipmod entry's bytes (more than 16): a large stored entry is mapped from the archive, others are read.
 fn zip_entry_source(zip: &mut crate::gamefs::Zip, path: &Path, idx: usize) -> Option<crate::unity::SourceBytes> {
     if let Some((start, len)) = zip.stored_range(idx).filter(|(_, len)| *len >= crate::unity::MAP_AT_LEAST) {
         if let Some(mapped) = crate::unity::SourceBytes::map(path, start, len) { return Some(mapped); }
     }
-    let size = zip.by_index(idx).ok()?.size();
-    if size >= crate::unity::MAP_AT_LEAST {
-        let spilled = crate::unity::SourceBytes::spill(&mut zip.by_index(idx).ok()?, size);
-        // (read in parts: a card's pack being recorded logs the whole entry here)
-        if let Some(bytes) = &spilled { zip.note_read(idx, bytes); return spilled; }
-    }
+    // Read whole into a buffer of its size: a recording logs it, and an entry the library holds is handed over without
+    // a copy (grown by doubling, and copied once more into a buffer of its own, a large entry was allocated anew
+    // several times over: C030 ~0.8 GB of fresh pages a card).
     let mut f = zip.by_index(idx).ok()?;
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(f.size() as usize);
     if f.read_to_end(&mut bytes).is_err() || bytes.len() <= 16 {
         return None;
     }
