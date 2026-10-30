@@ -54,6 +54,13 @@ FString AOKSceneActor::LibraryDirectory()
 
 namespace
 {
+	/** `Local` then `World` as matrices: FTransform's own product applies World's non-uniform scale before Local's
+	 *  rotation (the prefab root's -90 X of an FBX building took the item's Y scale as its height, 127 m instead of 37). */
+	FTransform Compose(const FTransform& Local, const FTransform& World)
+	{
+		return FTransform(Local.ToMatrixWithScale() * World.ToMatrixWithScale());
+	}
+
 	/** The character state as ok_session_open_status takes it (empty: the card's own). */
 	FString StatusJson(const FOKSceneCharacter& C)
 	{
@@ -772,7 +779,7 @@ void AOKSceneActor::Sync()
 		const bool bShown = Document->IsShown(Object.Id);
 		if (AKKPreviewActor* Preview = Item->Preview.Get())
 		{
-			Preview->SetActorTransform(Item->RenderCorrection * World);
+			Preview->SetActorTransform(Compose(Item->RenderCorrection, World));
 			Preview->SetActorHiddenInGame(!bShown);
 			if (USceneComponent* Root = Preview->GetRootComponent()) Root->SetVisibility(bShown, true);
 		}
@@ -1274,8 +1281,8 @@ void AOKSceneActor::PlaceAttached()
 		if (!bMoving && Item->PlacedGeneration == PlaceGeneration) continue;
 		Item->PlacedGeneration = PlaceGeneration;
 		const FTransform World = Document->WorldTransform(Object.Id) * GetActorTransform();
-		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Item->RenderCorrection * World);
-		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(Item->ComponentOffset * World);
+		if (AKKPreviewActor* Preview = Item->Preview.Get()) Preview->SetActorTransform(Compose(Item->RenderCorrection, World));
+		if (USceneComponent* Component = Item->Component.Get()) Component->SetWorldTransform(Compose(Item->ComponentOffset, World));
 	}
 }
 

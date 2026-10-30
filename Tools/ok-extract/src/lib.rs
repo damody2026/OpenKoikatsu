@@ -203,6 +203,15 @@ pub(crate) fn is_native_hair_shader(shader: &str) -> bool {
     shader.contains("main_hair") || matches!(shader.as_str(),"koikano/hair_main_sun"|"koikano/hair_main_sun_front")
 }
 
+/// Shader families that sample their main texture with V reversed, so a part drawn by them keeps (u, 1 - v).
+/// CM3D2's ports (CM3D2/Lighted, Lighted_Trans, Toony_*), which mod maps converted from Custom Maid 3D 2 carry: their
+/// meshes keep CM3D2's V and the shaders reverse it. Checked on Petardo's Kitchen against the scene's own picture
+/// (back wall red tiles, cupboard fronts, the trees behind the window); Standard and Unlit items of the same scenes
+/// (the helipad's lettering) draw with V as stored.
+pub(crate) fn shader_samples_flipped_v(shader: &str) -> bool {
+    shader.to_ascii_lowercase().starts_with("cm3d2/")
+}
+
 pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> (String, bool) {let _spot=crate::profile::spot("blend_for_mesh");
     // Gag eyes (cf_O_gag_eye_00..02, an eye set's drawn eyes): an unlit cut-out texture over the face.
     if crate::eye_set::eye_reference(&mesh.name) >= 3 {

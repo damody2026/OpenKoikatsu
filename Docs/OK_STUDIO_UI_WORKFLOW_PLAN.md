@@ -630,6 +630,7 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
   - CM3D2 移植的地圖著色器以上下顛倒的 V 取樣（牆取到米白磁磚、櫥櫃門取到家電），CM3D2 部件改用 1-v。
   - 場景的 131 號濾鏡是 `[mzam]Filter.zipmod` 的 `mzam_Lut_004`：`studio-mods` 現在把 mod 的 `Filter_*.csv` 寫進 `studio_mod_items.json` 的 `filters`，並把 LUT 記錄進基礎庫（本機 84 個）；目錄讀 mod 濾鏡時遊戲本身的編號優先。
   - 場景 ramp 850 是 MoreShadowTypes 的 mod ramp，原本用 `kk_850` 找不到，改成依編號找 `<mod>_850`。
+  - vmd 全部 57 張整批比對都能載入（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck_vmd3`）。`90697134_p0` 原本被大樓擋住：道具非等比縮放與 prefab 根轉動的組合用 FTransform 相乘算錯，改成矩陣相乘後構圖一致（`F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\r90697_fixed.png`）；仍缺光束、中央球體的發光線框、霧與景深。`83626612_p1` 背景白（原作星空藍）、`86003286_p4` 缺暗色煙霧背景，待查。
   - 結果見 `F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\kitchen_cap4.png`：愛心 250,117,132 對原作 251,112,131。牆面仍比原作亮約 30（原作的 CM3D2/Lighted 受光，我們畫成不受光），留待地圖色調一併處理。
 
 ## 7. 優先順序總表
