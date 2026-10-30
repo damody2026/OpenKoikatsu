@@ -404,7 +404,9 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     // A pose counts as done once something happened in it (a gauge rose, he entered her, a touch), not when it only opened:
     // a pair opens on a moving state for a few seconds before its Idle.
     {const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
-     if(Mode!=0&&Poses.IsValidIndex(ActivePose)&&(Her>3.f||His>3.f||Base.StartsWith(TEXT("Insert"))))PosesPlayed.AddUnique(Poses[ActivePose].Name);
+     if(Mode!=0&&Poses.IsValidIndex(ActivePose)&&(Her>3.f||His>3.f||Base.StartsWith(TEXT("Insert")))){PosesPlayed.AddUnique(Poses[ActivePose].Name);
+         // The session counts (her experience, h_session_end) only then too: opening a room and leaving is not an H.
+         bPlayed=true;if(Mode==1)bService=true;}
      if(Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)&&TouchArea!=INDEX_NONE)PosesPlayed.AddUnique(AibuPoses[ActiveAibu].Name);}
     if(Mode!=0&&Gallery->PartnerActor&&Gallery->PartnerActor->IsHidden()!=bMaleHidden)Gallery->PartnerActor->SetActorHiddenInGame(bMaleHidden);
     const double Now=FPlatformTime::Seconds();
@@ -430,7 +432,6 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
             if(Cur.StartsWith(TEXT("A_")))bAnal=true;else{bCrotch=true;if(!bCondom)bRaw=true;}
             if(First)React(OKT(Virgin?(Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.react_first_anal"):TEXT("ui.hscene.react_virgin")):Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.event_insert_anal"):bCondom?TEXT("ui.hscene.event_insert"):TEXT("ui.hscene.event_insert_raw")));
         }
-        if(HIsLoop(Base)){bPlayed=true;if(Mode==1)bService=true;}
         if(Base==TEXT("Oral_Idle"))OralIdleSince=Now;
     }
     // The queued flow: a one-shot state moves on when it has played once; a finish's own loop after two rounds.
@@ -662,7 +663,8 @@ TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
     O->SetNumberField(TEXT("playback_speed"),PlaybackSpeed());O->SetNumberField(TEXT("held"),Held.Num());O->SetStringField(TEXT("caption"),Caption?Caption->GetText().ToString():FString());
     O->SetNumberField(TEXT("her"),Her);O->SetNumberField(TEXT("his"),His);O->SetNumberField(TEXT("speed"),SpeedValue);O->SetBoolField(TEXT("condom"),bCondom);O->SetBoolField(TEXT("anal_play"),bAnalPlay);
-    O->SetStringField(TEXT("title"),Title?Title->GetText().ToString():FString());O->SetStringField(TEXT("hint"),Hint?Hint->GetText().ToString():FString());O->SetStringField(TEXT("face"),FaceKey); // eye/brow/openness now (UpdateFace)
+    O->SetStringField(TEXT("title"),Title?Title->GetText().ToString():FString());O->SetStringField(TEXT("hint"),Hint?Hint->GetText().ToString():FString());O->SetStringField(TEXT("face"),FaceKey); /* eye/brow/openness now (UpdateFace) */
+    if(Gallery&&Gallery->HExperience.IsValid())O->SetObjectField(TEXT("experience"),Gallery->HExperience); // what she allows (hexp.rs h_experience)
     auto Buttons=[](UPanelWidget* Panel){TArray<TSharedPtr<FJsonValue>> Out;if(Panel)for(int32 I=0;I<Panel->GetChildrenCount();++I)if(auto* B=Cast<UOKHSceneButton>(Panel->GetChildAt(I))){auto R=MakeShared<FJsonObject>();R->SetNumberField(TEXT("kind"),B->Kind);R->SetBoolField(TEXT("enabled"),B->GetIsEnabled());
         if(auto* L=Cast<UTextBlock>(B->GetContent()))R->SetStringField(TEXT("label"),L->GetText().ToString());Out.Add(MakeShared<FJsonValueObject>(R));}return Out;};
     O->SetArrayField(TEXT("actions"),Buttons(Actions));O->SetArrayField(TEXT("list"),Buttons(List));O->SetNumberField(TEXT("tab"),Tab);
