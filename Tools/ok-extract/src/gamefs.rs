@@ -413,17 +413,26 @@ pub fn serves_from_library(root: &Path) -> bool {
 }
 
 pub fn normalize(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    let s = s.strip_prefix("//?/").unwrap_or(&s).to_owned();
+    // `\` is `/`, a leading `//?/` goes. (Every file query normalizes a path: one string and the part list.)
+    let lossy = path.to_string_lossy();
+    let sep = |c: char| c == '/' || c == '\\';
+    let s: &str = &lossy;
+    let mut head = s.chars();
+    let s = match (head.next(), head.next(), head.next(), head.next()) {
+        (Some(a), Some(b), Some('?'), Some(d)) if sep(a) && sep(b) && sep(d) => &s[4..],
+        _ => s,
+    };
     let mut parts: Vec<&str> = Vec::new();
-    for part in s.split('/') {
+    for part in s.split(sep) {
         match part {
-            "" | "." => { if parts.is_empty() && s.starts_with('/') { parts.push(""); } }
+            "" | "." => { if parts.is_empty() && s.starts_with(sep) { parts.push(""); } }
             ".." => { parts.pop(); }
             p => parts.push(p),
         }
     }
-    parts.join("/").to_ascii_lowercase()
+    let mut out = parts.join("/");
+    out.make_ascii_lowercase();
+    out
 }
 
 fn logical(st: &State, path: &Path) -> Option<String> {
@@ -1286,6 +1295,28 @@ pub fn merge_index(other: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod mapped_index_tests {
     use super::*;
+
+    /// `normalize` gives what it gave when it replaced `\` in a copy first.
+    #[test]
+    fn normalize_matches_replacing_form() {
+        fn replacing(path: &Path) -> String {
+            let s = path.to_string_lossy().replace('\\', "/");
+            let s = s.strip_prefix("//?/").unwrap_or(&s).to_owned();
+            let mut parts: Vec<&str> = Vec::new();
+            for part in s.split('/') {
+                match part {
+                    "" | "." => { if parts.is_empty() && s.starts_with('/') { parts.push(""); } }
+                    ".." => { parts.pop(); }
+                    p => parts.push(p),
+                }
+            }
+            parts.join("/").to_ascii_lowercase()
+        }
+        for p in [r"\\?\D:\KoikatuSunshine\Mods\A.zipmod", "//?/d:/x", r"\/?\x", "/a/../../b//", "/../a", "a/..//b", r"C:\A\.\B\..\C",
+            "", "/", "?", "//?", r"\\?\", "abc", "./x/./y/", r"E:\OpenKoikatsu\Content\IndependentResources\base_v1\abdata\chara\mm_base.unity3d", "a\\b/Ü/中"] {
+            assert_eq!(normalize(Path::new(p)), replacing(Path::new(p)), "{p}");
+        }
+    }
 
     /// A replayed library's index read through its mapped cache holds file contents as `Mapped` offsets; they read
     /// and serialize exactly as the `Data` they came from.
