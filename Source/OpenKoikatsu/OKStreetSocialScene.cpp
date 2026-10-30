@@ -1495,7 +1495,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  const int64 HisLinesAt=S.HisLines;
  // Room for the whole verdict: with the things, photos and series fields it runs past 200 tokens and came back cut off
  // mid-"why" (no verdict at all: a meeting agreed was never booked).
- SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier,InCall,HisLinesAt](bool Ok,const FString& Content,const FString& Failure){
+ SubmitMindChat(FString::Printf(TEXT("judge:%d"),Character),TEXT("dialogue"),Messages,600,0.f,[WeakState,Weak,Character,Id,Said,Her,HerAction,HerOrders,Earlier,InCall,HisLinesAt,HadMenu=!Menu.IsEmpty()](bool Ok,const FString& Content,const FString& Failure){
   const auto L=WeakState.Pin();if(!L||!Weak.IsValid()||Weak->State!=L)return;
   TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
   if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("Street judge: no verdict, her action field \"%s\" is used"),*HerAction);
@@ -1687,7 +1687,9 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   // Something agreed to be bought here that the shop does not sell (a book on the 6F of the department store, which
   // sells stationery: Jeanne Alter said "I'll pay for it myself" and believed she had it; Hu Tao "took" a book he never
   // bought, R4-23 / R5-12). Nothing was billed: she is told, so she does not go on as if it were hers.
-  {const TArray<TSharedPtr<FJsonValue>>* Unsold=nullptr;if(Verdict->TryGetArrayField(TEXT("unsold"),Unsold))for(const auto& V:*Unsold){FString Name;if(!V.IsValid()||!V->TryGetString(Name)||Name.TrimStartAndEnd().IsEmpty())continue;
+  // Only against a menu the judge was shown: said on the way, in the very line that set off for the bookstore, there
+  // was none yet, and 胡桃 was told the bookstore did not sell the book it does (R6-18). She orders it on arrival.
+  {const TArray<TSharedPtr<FJsonValue>>* Unsold=nullptr;if(HadMenu&&Verdict->TryGetArrayField(TEXT("unsold"),Unsold))for(const auto& V:*Unsold){FString Name;if(!V.IsValid()||!V->TryGetString(Name)||Name.TrimStartAndEnd().IsEmpty())continue;
    L->TellHer.Add(OKMsg(TEXT("ui.economy.not_sold_here_order"),{{TEXT("item"),Name}}));L->FreeTalkNotice=OKMsg(TEXT("ui.economy.not_sold_here_notice"),{{TEXT("item"),Name}});
    UE_LOG(LogTemp,Display,TEXT("Street judge: %s is not sold here; nothing bought, she is told"),*Name);}}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
