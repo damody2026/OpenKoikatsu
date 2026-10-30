@@ -595,6 +595,12 @@ pub fn record_hierarchies(game: &Path, lib: &Path, threads: usize) -> Result<(),
                 if !parsed.prefab_lightmaps(p).textures.is_empty() { parsed.prefab_lightmap_directions(p); }
                 parsed.prefab_renderer_settings(p);
                 parsed.prefab_render_textures(p); parsed.prefab_reflection_probes(p); parsed.prefab_animated_materials(p); parsed.prefab_renderer_visibility(p); parsed.prefab_sun_light(p); parsed.prefab_light_modes(p);
+                // The prefab's meshes, where already recorded: OKLIB_REFRESH=meshes_for_maindata records them again
+                // after a decoding fix (main UV: TexCoord0 over the lightmap's TexCoord1).
+                for disabled in [false, true] {
+                    if !crate::oklib::has_record(Some(&id), "meshes_for_maindata", &(p.as_str(), disabled)) { continue; }
+                    if disabled { parsed.meshes_for_maindata_including_disabled(p); } else { parsed.meshes_for_maindata(p); }
+                }
             }
             (n, l, empty)
         }));

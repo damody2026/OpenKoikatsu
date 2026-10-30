@@ -543,6 +543,7 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
 - 效能：照 slot 規則要同時拿到兩個名額才量，還沒量。
 - **EyeSetTest 漩渦眼**：不是 UI 造成的。OK 卡 `C002.png` 平常開得起來（眼型 0 時 69 個部件）；切到眼型 23 時要換成 gag eye 部件重建，而轉卡時只記錄了卡片預設狀態的開卡閉包，模型 `3e5b33000000000056e2c0bf4f4b4331` 的骨架不在卡內也不在基礎庫，10-28 嚴格開卡後就開不了。`ok-extract --oklib seal` 照預設狀態重放，補不到（試過，卡片已還原）。要在 ok-extract 轉卡／seal 時把「會換部件的眼型」也記錄進閉包，或讓基礎庫收 gag eye 模型，屬 OK 卡工具（e-okcard）的範圍。測試另加了「整張卡開不了時換下一張本機卡」。
   - 10-30 e-okcard 回覆：E `duo2` commit `70b762429` 修好（尚未 push）。轉卡在各套服裝之後，對 gag 物件 1／2／3 各取一個眼型（21、23、27），用 outfit 0 再開一次並記錄，每張卡多 3 筆 skeleton，digest 不變。舊卡要用該版之後的 ok-extract 重轉，seal 只用基礎庫，補不到 mod 頭。F 等該 commit 合併進來後，重轉 `C002.png` 再跑 EyeSetTest。
+  - 10-30 整合後：70b762429 已在 F 的 HEAD。但 `C002.png` 的 `okId`（原作卡 sha256 `663284207c…`）在 F 這台的遊戲 `UserData`、`Content/CharacterCards`、`Saved` 都找不到相符的原作卡，無法用新版重轉。需要原作卡的人（轉出這批 CrowdAPNG 的 checkout）重轉後放回本機。
 
 **沒做到或做法不同的地方**
 - 遠面：Unreal 的透視投影沒有遠面，`Far` 只存檔，不影響畫面。近面有效（`UOKStudioViewCamera`）。
@@ -582,7 +583,7 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 | 診斷 | `OK_STUDIO_INFO_DUMP=1` 時 studio 目錄轉換印出各表與角色清單分類 |
 | 影片動作的格式 | 影片動作檔是 session 片段（`OKCLIP01`），不是動作庫的 `OKANIM02`，第一版用 anim player 讀而失敗（角色標成「未顯示」）。改成：`AnimFile` 開頭是 `OKCLIP01` 且在 `Saved/VideoMotions` 時，以 `video:\|<名稱>` 交給角色自己的 session 播（`SetGameAnimation`，PoseMode 2），場景時鐘與時間軸也推動 PoseMode 2。實測 `網球示範.okanim` 播放 10.37 秒、循環 |
 | 燈光開關（使用者回報） | 角色的卡通著色只讀一盞「角色光」（勾了「只照角色與道具」的方向光），而且不看它有沒有開：關燈、刪燈、或新增一般燈都不影響角色。改成：取「顯示中」的角色光，沒有就取第一盞顯示中的方向光；場景有過燈但全部關掉時角色進入陰影色；燈光頁加「開啟」勾選（等於樹上的顯示）。新燈預設強度 6 → 4（換算 1.0，Studio 角色光的預設），原本 1.5 倍把角色照到泛白。實測（`Saved/StudioUIRef/ok/L0_main.png`～`L4_dir_on_again.png`）：主光、方向光逐一關掉後角色變暗，再開回復 |
-| 點光、聚光照角色 | 尚未支援：卡通著色只有一盞前向光，點光與聚光只照得到地圖與一般材質的道具 |
+| 點光、聚光照角色 | 和原作一致，不需補：原作角色著色器 `Koikano/main_skin` 只有 ForwardBase（描邊、本體）與 ShadowCaster 三個 pass，沒有 ForwardAdd，所以 KKS 裡點光與聚光本來就不會逐像素照到角色（2026-10-30 讀 shader 的 pass 標籤確認）。卡通著色只用一盞前向光，點光與聚光照地圖與一般材質的道具 |
 
 ### U12　各種 KKS 場景卡正確載入（2026-10-30，F 組，使用者要求）
 
@@ -647,9 +648,9 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 | 沒有反射資料的地圖反射到 UE 天空 | 原生 tsv 的 `reflection_default` 在沒有烘焙預設反射的地圖是 `UnityBlackCube`，probe 沒有貼圖時也一樣。我們之前退回材質預設的天空 cube。改成這種情況一律綁黑色 cube（`OKStudioBlackReflection`）；工作室天空開著時不變 |
 
 | 大浴場地板偏藍、木桶偏綠 | 不是反射（關掉 UE 反射畫面不變）。地板沒有 lightmap，環境光來自 `unity_SHA*`；我們給的是地圖烘焙的 `m_AmbientProbe`，地圖 62 存的是 0。KKS 地圖沒有 LightProbes 物件（KK 地圖的是空的）。地圖 62 的 ambient mode 是 Trilight：Unity 執行時用天空、地平線、地面三色算環境 SH，烘焙值是過時的。拿原生 `renderer_sh` 對三色擬合，三個色版都精確到 1e-5：C0 = (天空+地面)/6 + 2·地平線/3，C1 = √(2/27)·(天空−地面)，C6 = 5/96·(地平線−(天空+地面)/2)，C8 = 3·C6（顏色先轉線性，再乘 ambient intensity）。Flat 是三色相同的特例。`studio-environments` 現在多記 `ambient_sky`／`ambient_equator`／`ambient_ground`，`OKStudioMapAmbient` 在 Trilight／Flat 時改用三色算。72 張地圖中有 15 張 Trilight、27 張 Flat 都受影響 |
+| 操場舞台上方一大片模糊 | 不是景深：關掉 DOF、關掉半透明都一樣。這張場景把地圖移了 (−82.5, 3.43, −4.75)（SceneInfo.caMap，Studio 載入時 `MapCtrl.Reflect` 會套用；KK 縮圖舞台後方就是外牆的磚格）。外牆 `mo_koi_map34_sotokabe01_00` 因此緊貼舞台後方，但貼圖被拉滿整面牆。原因是 mesh 解碼挑主 UV 的啟發式：選「數值落在 ±8 內比例最高」的 channel。地圖的主 UV（TexCoord0）重複到 0–30，反而輸給全在 0–1 的 lightmap UV（TexCoord1）。原作地圖 205 個 mesh 中有 27 個、工作室道具中有網子、樓梯、樹等 6 個中招，角色 mesh 全部用 TexCoord0、不受影響。規則：TexCoord1 是 Unity 的 lightmap UV，只要 TexCoord0 是有效 UV（有限、不超過 4096、不是全 0），主 UV 就用 TexCoord0。基礎庫裡已記錄的 mesh 要重錄：`OKLIB_REFRESH=meshes_for_maindata ok-extract <遊戲> --oklib studio-nodes <基礎庫>`（studio-nodes 現在也會重錄已記錄的 `meshes_for_maindata`）|
 
 尚未一致：
-- 操場畫面上方的模糊：關掉 DOF（`r.DepthOfFieldQuality 0`）畫面完全一樣，所以不是景深；還要查是前景的柱子／橫樑還是缺了遠處的樹與圍欄。
 - `87018458_p3` 的舞台地板與布幕顏色和原作不同（加地圖燈光前就是這樣）。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
@@ -657,6 +658,8 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。
 
 控制通道新增 `leave`（`POST /studio/leave`，可帶 `{"name":"<名稱>"}`）：等同按工作室的關閉鈕，回到啟動工作室的模式。工作室關閉時控制通道也會關，所以帶 `name` 時在一秒後另拍一張含 UI 的整個視窗截圖，存到 `Saved/OKStudio/mcp_ui/<名稱>.png`。實測（卡片牆 `-game -Control "-ExecCmds=OKStudio.Play"`）：在工作室時畫面只有工作室 UI；`leave` 之後卡片牆的清單、按鈕與角色資訊完整還原。
+
+診斷用的控制通道指令：`exec`（`{"command":"ShowFlag.Translucency 0"}`，在遊戲世界下主控台指令）、`parts`（`{"match":"Part_133","hide":true}`，列出或隱藏名稱含 match 的預覽元件，附 owner、包圍球中心與半徑）。注意 `camera` 只要設了 focus／yaw／pitch／distance 就會切到自由相機；要回到場景相機用 `{"use_camera":<相機物件 id>}`，`capture` 拍的是目前的相機。另外，`run_scene_visual_audit.lua` 的原生畫面沒有套用場景的地圖位移（caMap），有移動地圖的場景要以 KK 縮圖為準。
 
 ## 7. 優先順序總表
 

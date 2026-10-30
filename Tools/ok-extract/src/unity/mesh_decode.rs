@@ -922,6 +922,15 @@ pub(crate) fn decoded_from_object(
     let uv2 = decode_texcoord_slot(&mesh, uv_base+1, 0);
     let uv3 = decode_texcoord_slot(&mesh, uv_base+2, 0);
     let uv4 = decode_texcoord_slot(&mesh, uv_base+3, 0);
+    // TexCoord1 is Unity's lightmap UV (packed in [0, 1] with padding). The look-alike pick above prefers it over a
+    // TexCoord0 that tiles past [-8, 8] (the ground map's roads and walls, Studio's fence and goal nets): their texture
+    // came out stretched over the whole mesh. A usable TexCoord0 (finite, within 4096, not all zero) is the main UV.
+    let uv = {
+        let t0 = if !uv2.is_empty() && uv == uv2 { decode_texcoord_slot(&mesh, uv_base, 0) } else { Vec::new() };
+        let usable = t0.len() == uv.len() && t0 != uv && t0.iter().all(|p| p.iter().all(|v| v.is_finite() && v.abs() <= 4096.))
+            && t0.iter().map(|p| p[0].abs() as f64 + p[1].abs() as f64).sum::<f64>() > 1.0;
+        if usable { t0 } else { uv }
+    };
     let vertex_colors = decode_vertex_colors(&mesh);
     // Diagnostic `OK_FACE_DROP_CAVITY`: the vanilla face texture `cf_face_00_t`
     // paints the mouth cavity as a dark rectangle (u 0.32-0.68, v_img 0.83-0.99
