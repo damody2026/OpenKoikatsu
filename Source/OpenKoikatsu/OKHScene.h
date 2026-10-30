@@ -71,7 +71,7 @@ public:
         TouchChest=2101,TouchCrotch=2102,TouchAnal=2103,TouchButt=2104,TouchNipple=2105,Kiss=2106,Release=2107,
         PoseBase=1000,
         Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,LockHer=2017,LockHis=2018,
-        ClothesBase=3000,
+        ClothesBase=3000,RoomBase=3200,
     };
 private:
     // Caress (AnimationInfo_00): her own animation, him hidden (HAibu); each state is prepared up front.
@@ -137,6 +137,8 @@ private:
     UPROPERTY() TArray<TObjectPtr<class AStaticMeshActor>> Props;
     FString PropKey;double PropAt=0;
     void PlaceProps(int32 Kind);
+    // Where they are (the original's map choice): 0 the floor, 1 a bed under them in the floor poses.
+    int32 Room=0;
     void ClearProps();
     virtual void NativeDestruct() override;
     // The original's gauge locks: a locked gauge stops short of climax (his below the finish choices in a service, so

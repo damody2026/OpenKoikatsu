@@ -8,6 +8,7 @@
 #include "KKRustExtract.h"
 #include "KKSpeech.h"
 #include "Engine/StaticMeshActor.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PoseableMeshComponent.h"
@@ -210,6 +211,7 @@ void UOKHScenePanel::BuildList(){
         static const TCHAR* States[]={TEXT("ui.hscene.cloth_on"),TEXT("ui.hscene.cloth_half"),TEXT("ui.hscene.cloth_half2"),TEXT("ui.hscene.cloth_off")};
         // Each piece she is wearing comes off or goes back on by itself (visibility only: a reload would end the scene).
         Add(ToggleMale,OKT(bMaleHidden?TEXT("ui.hscene.male_show"):TEXT("ui.hscene.male_hide")),Mode!=0,bMaleHidden);
+        Add(RoomBase,OKT(TEXT("ui.hscene.room_floor")),true,Room==0);Add(RoomBase+1,OKT(TEXT("ui.hscene.room_bed")),true,Room==1);
         Add(ClothesBase+100,OKT(TEXT("ui.hscene.cloth_all_on")),true,false);Add(ClothesBase+102,OKT(TEXT("ui.hscene.cloth_all_off")),true,false);
         auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;
         for(int32 K=0;K<9;++K)if(Girl&&Girl->HasClothingKind(K)&&Girl->DisplayClothesStates[K]!=3)
@@ -284,6 +286,7 @@ void UOKHScenePanel::Click(int32 Kind){
     if(Kind>=TabHand&&Kind<=TabAibu){Tab=Kind;BuildList();return;}
     if(Kind>=PoseBase&&Kind<PoseBase+1000){SelectPose(Kind-PoseBase);return;}
     if(Kind>=AibuBase&&Kind<PoseBase){SelectAibu(Kind-AibuBase);return;}
+    if(Kind>=RoomBase&&Kind<=RoomBase+1){Room=Kind-RoomBase;PropKey.Reset();Note(OKT(Room==1?TEXT("ui.hscene.event_room_bed"):TEXT("ui.hscene.event_room_floor")),false);BuildList();return;}
     if(Kind>=TouchChest&&Kind<=Kiss&&Mode==0){static const int32 Areas[]={1,2,3,4,5,0};Touch(Areas[Kind-TouchChest]);ActionsKey.Reset();return;}
     if(Mode==0&&Kind>=Faster&&Kind<=Continue)return; // pair actions while caressing (a stale button or the control channel)
     // An action counts only when the panel offers it now (finishing outside at an empty gauge, inserting during a
@@ -399,7 +402,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     UpdateFace();FrameCamera();
     {const int32 Kind=Mode==0?(AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Prop:0):(Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Prop:0);
      const FString Key=FString::Printf(TEXT("%d|%d|%d"),Mode,ActivePose,ActiveAibu);const double T=FPlatformTime::Seconds();
-     if(Key!=PropKey){PropKey=Key;ClearProps();PropAt=Kind>0?T+.8:0.;}
+     if(Key!=PropKey){PropKey=Key;ClearProps();PropAt=Kind>0||Room!=0?T+.8:0.;}
      else if(PropAt>0&&T>=PropAt){PropAt=0;PlaceProps(Kind);}}
     // A pose counts as done once something happened in it (a gauge rose, he entered her, a touch), not when it only opened:
     // a pair opens on a moving state for a few seconds before its Idle.
@@ -600,9 +603,12 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
     const bool HasHim=Bone(Him,TEXT("j_hips"),HisHips);
     const float Floor=Girl->GetActorLocation().Z;
     static UStaticMesh* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));if(!Cube)return;
+    static UMaterialInterface* Shape=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+    FLinearColor Tint=FLinearColor(.55f,.55f,.55f); // set before a Box for its colour
     auto Box=[&](const FVector& Center,const FVector& Size,const FRotator& Rot){
         auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(Center,Rot);if(!A)return;
         A->SetMobility(EComponentMobility::Movable);A->GetStaticMeshComponent()->SetStaticMesh(Cube);A->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        if(Shape)if(auto* M=UMaterialInstanceDynamic::Create(Shape,A)){M->SetVectorParameterValue(TEXT("Color"),Tint);A->GetStaticMeshComponent()->SetMaterial(0,M);}
         A->SetActorScale3D(Size/100.f);Props.Add(A);};
     FString What;
     if(Kind==1){
@@ -632,6 +638,24 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
         float Far=0;for(const FVector& V:Hers)Far=FMath::Max(Far,float((V-HerHips)|Dir));
         const FVector At=HerHips+Dir*(Far+4.f);
         Box(FVector(At.X,At.Y,Floor+110.f),FVector(6,160,220),Dir.Rotation());What=TEXT("wall");
+    }else if(Room==1&&HerHips.Z<Floor+60.f){
+        // A bed: its mattress top level with the floor under both of them (nobody moves), along her body, with a frame
+        // and a headboard past her head. Not under a standing pose.
+        // Along the body that lies flattest (him on his back when she rides him), the headboard past that head.
+        FVector Along(1,0,0),Lying=HerHips;float Flat=-1.f;
+        for(AKKPreviewActor* A:{Girl,HasHim?Him:nullptr}){FVector Hd,Hp;if(!A||!Bone(A,TEXT("j_head"),Hd)||!Bone(A,TEXT("j_hips"),Hp))continue;
+            FVector D=Hd-Hp;D.Z=0;if(D.Size()>Flat){Flat=D.Size();Lying=Hp;if(D.Normalize())Along=D;}}
+        const FVector Across(-Along.Y,Along.X,0);
+        TArray<FVector> All=Hers;if(HasHim){for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_head"),TEXT("j_foot_L"),TEXT("j_foot_R"),TEXT("j_knee_L"),TEXT("j_knee_R")})if(Bone(Him,N,P))All.Add(P);}
+        float A0=TNumericLimits<float>::Max(),A1=-A0,C0=A0,C1=-A0;
+        for(const FVector& V:All){const FVector D=V-Lying;A0=FMath::Min(A0,float(D|Along));A1=FMath::Max(A1,float(D|Along));C0=FMath::Min(C0,float(D|Across));C1=FMath::Max(C1,float(D|Across));}
+        A0-=30.f;A1+=25.f;C0-=30.f;C1+=30.f;
+        if(A1-A0<200.f){const float Grow=(200.f-(A1-A0))/2;A0-=Grow;A1+=Grow;}
+        if(C1-C0<150.f){const float Grow=(150.f-(C1-C0))/2;C0-=Grow;C1+=Grow;}
+        const FVector Mid=Lying+Along*((A0+A1)/2)+Across*((C0+C1)/2);const FRotator Rot=Along.Rotation();
+        Tint=FLinearColor(.92f,.9f,.86f);Box(FVector(Mid.X,Mid.Y,Floor-18.f),FVector(A1-A0,C1-C0,40.f),Rot); // mattress, top 2 cm above the floor
+        Tint=FLinearColor(.32f,.2f,.12f);Box(FVector(Mid.X,Mid.Y,Floor-32.f),FVector(A1-A0+12.f,C1-C0+12.f,30.f),Rot); // frame
+        const FVector HeadAt=Lying+Along*(A1+8.f)+Across*((C0+C1)/2);Box(FVector(HeadAt.X,HeadAt.Y,Floor+20.f),FVector(8.f,C1-C0+12.f,80.f),Rot);What=TEXT("bed"); // a low headboard (below the camera)
     }
     UE_LOG(LogTemp,Display,TEXT("H scene: %s placed for the pose (%d)"),*What,Props.Num());
 }
