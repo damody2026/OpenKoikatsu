@@ -13,6 +13,21 @@
 
 共用 mod 的清單在 `Tools/base_library_shared_mods.txt`；`Tools/gen_base_library_ignore.lua` 依 `converted.tsv` 的來源產生 `base_v1/models/.gitignore`：任一來源是原作 `abdata` 或白名單 mod 就收，其餘排除。
 
+### 本機庫：第三方 mod 的模型不放在共用庫（2026-10-30，F）
+
+共用庫 `base_v1` 只放原作和共用 mod 的模型。原作場景的共用資源本來就不會超過 30 GB：F 搬移後，`base_v1/models` 剩 617 個、6.04 GB，整個 `base_v1`（含 paired、anims、索引）約 8 GB。
+
+角色服裝、髮型、配件這類 mod（角色專有）和 Studio 道具 mod 轉出的模型，屬於第三方資源，不能算成場景共用資源。它們放在**本機庫**：
+
+| 項目 | 說明 |
+|---|---|
+| 位置 | 由使用者指定：UE 設定 `[/Script/KKSideloader.KKGameRoot] LocalLibrary=<資料夾>`，或環境變數 `OK_LOCAL_LIBRARY`（多個以 `;` 分隔，可用相對專案的路徑）。沒指定時，若 `Content/IndependentResources/local_v1` 存在就用它（已列入 `.gitignore`）。 |
+| 讀取 | `oklib::model_file`：先找共用庫自己的 `models/`，找不到再依序找本機庫。嚴格開 OK 卡（`okstrict`）只把共用庫本身的模型當成共用資源，本機庫的模型仍要錄進卡內的 `okLc`。 |
+| 搬移 | `ok-extract <遊戲> --oklib split-local <基礎庫> [本機庫] [共用 mod 清單]`：判斷規則和 `shared-ignore` 相同。只搬「記錄到的來源全是第三方 mod」的模型，連同同名的 `.okedit*` 一起搬；沒有來源記錄的模型（可能是別的 checkout 的共用模型）留在原處。轉換新的 mod 後重跑一次。 |
+| 原版資源與 zipmod | 共用庫和本機庫都沒有的模型，由使用者指定的遊戲資料夾（`KKGameRoot Root`／`OK_GAME_ROOT`）讀取真正的 `abdata` 與 zipmod（修正 A 的後備）。 |
+
+F 的搬移結果：搬了 3,925 個模型（19.96 GB）到 `local_v1`，其中角色 mod 約 10 GB，Studio 道具 mod 約 7.3 GB。
+
 ## 二、讀卡的三種情境
 
 | 情境 | 資源來源 | 預設身體（卡片沒存身體 GUID 時） |

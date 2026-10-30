@@ -230,7 +230,7 @@ fn decode<T: serde::de::DeserializeOwned>(raw: &[u8]) -> Option<T> {
 impl ModelView {
     pub fn open(lib: &Path, id: Id) -> Result<ModelView, String> {
         oklib::ensure_library(lib)?;
-        if !oklib::model_path(lib, &id).is_file() { return Err(format!("{} not found", oklib::model_path(lib, &id).display())); }
+        if !oklib::model_file(lib, &id).is_file() { return Err(format!("{} not found", oklib::model_file(lib, &id).display())); }
         let parsed = crate::unity::parse_bundle_cached(oklib::token(&id));
         Ok(ModelView { lib: lib.to_owned(), id, parsed, records: std::sync::OnceLock::new() })
     }
@@ -427,6 +427,7 @@ impl ModelView {
         let t = std::time::Instant::now();
         let mut meshes = self.prefab_meshes(prefab, include_disabled);
         edits.apply_shaders(&mut meshes);
+        crate::shader_states::complete(&self.lib, &mut meshes);
         // MDK uses Standard-style slot names, not the character shader's
         // _NormalMap. Older model memos keep these bindings but omit their PNGs.
         // Resolve through the library's named-texture records at session time.

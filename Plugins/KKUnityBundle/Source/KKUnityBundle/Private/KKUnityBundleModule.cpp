@@ -13,6 +13,15 @@ void FKKUnityBundleModule::StartupModule()
 	{
 		FPlatformMisc::SetEnvironmentVar(TEXT("OK_ANIM_CACHE_DIR"), *FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("OkAnimCache")));
 	}
+	// Local library (models only third-party mods use, apart from the shared base library): the user's folder from the
+	// KKGameRoot LocalLibrary setting; Rust falls back to local_v1 beside the base library (oklib::local_libraries).
+	FString LocalLibrary;
+	if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOCAL_LIBRARY")).IsEmpty() && GConfig
+		&& GConfig->GetString(TEXT("/Script/KKSideloader.KKGameRoot"), TEXT("LocalLibrary"), LocalLibrary, GGameIni) && !LocalLibrary.IsEmpty())
+	{
+		if (FPaths::IsRelative(LocalLibrary)) LocalLibrary = FPaths::ProjectDir() / LocalLibrary;
+		FPlatformMisc::SetEnvironmentVar(TEXT("OK_LOCAL_LIBRARY"), *FPaths::ConvertRelativePathToFull(LocalLibrary));
+	}
 	FOkSession::InitBindings();
 	// DynamicBone chains of this module's ok_extract copy run on PhysX.
 	OKPhysXSecondary::Register(&ok_set_physx_dynamic_solver);

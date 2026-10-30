@@ -740,6 +740,7 @@ pub(crate) struct TextureSources<'a> {
 pub(crate) fn materials_in(ser: &unity_asset_binary::asset::SerializedFile, tex_id_name: &mut HashMap<i64, String>, tex_id_wrap: &mut HashMap<i64, i32>, sources: &mut TextureSources) -> HashMap<i64, MeshMaterial> {
     let mut shader_id_name: HashMap<i64, String> = HashMap::new();
     let mut shader_id_rim: HashMap<i64, bool> = HashMap::new();
+    let mut shader_id_state: HashMap<i64, super::ShaderPassState> = HashMap::new();
     let mut mat_info: HashMap<i64, MeshMaterial> = HashMap::new();
     shader_id_name.clear();
     shader_id_rim.clear();
@@ -768,6 +769,9 @@ pub(crate) fn materials_in(ser: &unity_asset_binary::asset::SerializedFile, tex_
             }
             if let Some(has_rim) = shader_declares_property(&object, "_rimV") {
                 shader_id_rim.insert(object.path_id(), has_rim);
+            }
+            if let Some(state) = super::shader_pass_state(&object) {
+                shader_id_state.insert(object.path_id(), state);
             }
         }
     }
@@ -906,6 +910,9 @@ pub(crate) fn materials_in(ser: &unity_asset_binary::asset::SerializedFile, tex_
                 }
             }
         }
+        let state = props.get("m_Shader").and_then(local_pptr_path_id).and_then(|id| shader_id_state.get(&id));
+        let shader = m.shader.clone();
+        super::record_shader_pass_state(&mut m.floats, &shader, state);
         mat_info.insert(object.path_id(), m);
     }
     mat_info

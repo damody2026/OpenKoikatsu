@@ -1131,7 +1131,7 @@ fn zip_lacks_models(st: &State, key: &str) -> bool {
     if let Some(v) = memo.lock().unwrap().get(&memo_key) { return *v; }
     let dir = PathBuf::from(&st.root);
     let lacks = st.index.lock().unwrap().zips.get(key).is_some_and(|z| z.entries.values()
-        .any(|e| matches!(e, Entry::Model(id, _) if !crate::oklib::model_path(&dir, id).is_file())));
+        .any(|e| matches!(e, Entry::Model(id, _) if !crate::oklib::model_file(&dir, id).is_file())));
     memo.lock().unwrap().insert(memo_key, lacks);
     lacks
 }

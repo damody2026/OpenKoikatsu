@@ -627,7 +627,7 @@ pub struct AccessoryColorUse {
     /// `ChaCustomHairComponent.rendHair`. HairAccessoryCustomizer writes
     /// ColorMatch / outline / gloss here, after `ChangeAccessoryColor`.
     pub custom_hair: std::collections::HashSet<i64>,
-    /// `ChaCustomHairComponent.rendAccessory` — `AccessoryColor` on all three channels.
+    /// `ChaCustomHairComponent.rendAccessory` ??`AccessoryColor` on all three channels.
     pub rend_accessory: std::collections::HashSet<i64>,
     pub has_hair_component: bool,
     pub has_accessory_component: bool,
@@ -1721,6 +1721,69 @@ fn shader_declares_property(object: &UnityObject, wanted: &str) -> Option<bool> 
     }))
 }
 
+/// The shader's own fixed-function state, as Unity draws it: the cull mode of the main colour pass and whether
+/// another pass is an inverted-hull outline (culls the faces the main pass keeps). A cull mode bound to a material
+/// property (`Cull [_Cull]`) is returned as that property name; the material's saved float then decides it.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool }
+
+pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState> {
+    let parsed = object.class.properties().get("m_ParsedForm")?;
+    let sub = uv_arr(uv_obj(parsed, "m_SubShaders")?).first()?;
+    // (cull, pass name, light mode) for each pass that draws (UsePass and GrabPass carry no state of their own).
+    let mut passes = Vec::new();
+    for pass in uv_arr(uv_obj(sub, "m_Passes")?) {
+        if uv_obj(pass, "m_Type").and_then(|v| v.as_i64()).unwrap_or(0) != 0 { continue; }
+        let Some(state) = uv_obj(pass, "m_State") else { continue };
+        let culling = uv_obj(state, "culling").or_else(|| uv_obj(state, "m_Culling"))?;
+        let bound = uv_obj(culling, "name").and_then(|v| v.as_str()).unwrap_or("");
+        let cull = if bound.is_empty() || bound == "<noninit>" {
+            Ok(uv_obj(culling, "val").and_then(|v| v.as_f64()).unwrap_or(2.0) as i64)
+        } else { Err(bound.to_string()) };
+        let name = uv_obj(state, "m_Name").and_then(|v| v.as_str()).unwrap_or("").to_ascii_uppercase();
+        let mut light_mode = String::new();
+        if let Some(tags) = uv_obj(state, "m_Tags").and_then(|t| uv_obj(t, "tags")) {
+            for pair in uv_arr(tags) {
+                let a = uv_arr(pair);
+                let (k, v) = if a.len() == 2 { (a[0].as_str(), a[1].as_str()) }
+                    else { (uv_obj(pair, "first").and_then(|v| v.as_str()), uv_obj(pair, "second").and_then(|v| v.as_str())) };
+                if k.is_some_and(|k| k.eq_ignore_ascii_case("LightMode")) { light_mode = v.unwrap_or("").to_ascii_lowercase(); }
+            }
+        }
+        passes.push((cull, name, light_mode));
+    }
+    // Shadow, depth and meta passes never draw colour.
+    let colour = |(_, name, mode): &&(Result<i64, String>, String, String)|
+        !matches!(mode.as_str(), "shadowcaster" | "shadowcollector" | "meta" | "prepassbase" | "deferred")
+            && !name.contains("SHADOW") && !name.contains("META");
+    // Additive per-light passes repeat the main pass's geometry state.
+    let colour: Vec<_> = passes.iter().filter(colour).filter(|p| p.2 != "forwardadd").collect();
+    // An inverted-hull outline is a colour pass named OUTLINE, or a Cull Front pass beside one that draws front faces
+    // (Cull Back or Off; Koikatsu draws its outline first, then the surface).
+    let draws_front = colour.iter().any(|p| matches!(p.0, Ok(0) | Ok(2)));
+    let is_outline = |p: &(Result<i64, String>, String, String)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
+    let main = colour.iter().position(|p| !is_outline(p)).or((!colour.is_empty()).then_some(0))?;
+    let outline = colour.iter().enumerate().any(|(i, p)| i != main && is_outline(p));
+    Some(ShaderPassState { cull: colour[main].0.clone(), outline })
+}
+
+/// Material floats carrying the shader's pass state to the renderer: `_OKShaderCull` (0 off, 1 front, 2 back),
+/// `_OKShaderOutline` (0/1) and `_OKShaderState`, the 24-bit FNV-1a hash of the shader name they were read from. Later
+/// steps replace a material's shader (Material Editor, native shader swaps); the renderer trusts the state only while
+/// the hash still names the material's shader. Absent when the shader object is not in the material's file.
+pub(crate) fn record_shader_pass_state(floats: &mut HashMap<String, f32>, shader: &str, state: Option<&ShaderPassState>) {
+    let Some(state) = state else { return };
+    let cull = match &state.cull { Ok(v) => Some(*v as f32), Err(name) => floats.get(name).copied() };
+    let Some(cull) = cull else { return };
+    floats.insert("_OKShaderCull".into(), cull);
+    floats.insert("_OKShaderOutline".into(), if state.outline { 1.0 } else { 0.0 });
+    floats.insert("_OKShaderState".into(), shader_state_key(shader) as f32);
+}
+
+pub(crate) fn shader_state_key(shader: &str) -> u32 {
+    shader.bytes().fold(0x811c9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x01000193)) & 0xFF_FFFF
+}
+
 impl Default for TextureSampling {
     fn default()->Self {Self{filter:1,wrap_u:0,wrap_v:0,srgb:true,mip_count:1}}
 }
@@ -2212,9 +2275,9 @@ fn cache_put(key: BundleCacheKey, v: Arc<ParsedBundle>) {
     sync_bundle_cache();
     BUNDLE_CACHE.with(|c| {
         let mut m = c.borrow_mut();
-        // A conversion opens its card 42 times (every outfit in six garment states) over 60–150 bundles: at 24 the
+        // A conversion opens its card 42 times (every outfit in six garment states) over 60??50 bundles: at 24 the
         // cache emptied itself in every open, which parsed them all again and lost their decoded textures
-        // (raiden_shogun 41 → 32 s, jeanne 15.7 → 13.7 s, the same peak memory). Its worker drops the cache after the
+        // (raiden_shogun 41 ??32 s, jeanne 15.7 ??13.7 s, the same peak memory). Its worker drops the cache after the
         // card (release_bundle_caches). Other opens keep the small cache: what it holds after an open stays held.
         if m.len() >= if crate::oklib::recording_card_pack() { 160 } else { 24 } {
             m.clear();
@@ -2304,7 +2367,7 @@ pub(crate) fn parse_bundle_fresh(bytes: Vec<u8>) -> ParsedBundle {
     parse_bundle_uncached(bytes.into())
 }
 
-fn parse_bundle_uncached(bytes: SourceBytes) -> ParsedBundle {let _spot=crate::profile::spot("parse_bundle_uncached");
+pub(crate) fn parse_bundle_uncached(bytes: SourceBytes) -> ParsedBundle {let _spot=crate::profile::spot("parse_bundle_uncached");
     let profile=std::env::var_os("OK_APPEARANCE_PROFILE").is_some();
     let started=std::time::Instant::now();
     let source_len=bytes.len();
@@ -3046,6 +3109,7 @@ impl ParsedBundle {
                 // another file in the bundle must never answer HasProperty.
                 let mut shaders = HashMap::<i64, String>::new();
                 let mut shader_rim = HashMap::<i64, bool>::new();
+                let mut shader_state = HashMap::<i64, ShaderPassState>::new();
                 for info in ser.objects_of_type(48) {
                     if let Ok(o) = UnityObject::from_serialized_file(ser, info) {
                         let name = shader_runtime_name(&o);
@@ -3053,6 +3117,7 @@ impl ParsedBundle {
                         if let Some(has_rim) = shader_declares_property(&o, "_rimV") {
                             shader_rim.insert(o.path_id(), has_rim);
                         }
+                        if let Some(state) = shader_pass_state(&o) { shader_state.insert(o.path_id(), state); }
                     }
                 }
                 for info in ser.objects_of_type(21) {
@@ -3117,6 +3182,9 @@ impl ParsedBundle {
                             }
                         }
                     }
+                    let state = props.get("m_Shader").and_then(local_pptr_path_id).and_then(|id| shader_state.get(&id));
+                    let shader = mat.shader.clone();
+                    record_shader_pass_state(&mut mat.floats, &shader, state);
                     return Some(mat);
                 }
             }
@@ -3518,9 +3586,9 @@ impl ParsedBundle {
     }
 
     /// Drop the non-worn clothes-state meshes. Koikatsu clothes prefabs carry a
-    /// `n_top_a`/`n_top_b`(?�脫) `n_bot_a`/`n_bot_b`/`n_bot_c`(?�脫) `o_inner_a/b`
+    /// `n_top_a`/`n_top_b`(?嚙質) `n_bot_a`/`n_bot_b`/`n_bot_c`(?嚙質) `o_inner_a/b`
     /// `o_bra_a/b` `n_panst_*` `n_socks_*` ??node per state; the character shows
-    /// only one (`ChaControl.cs:1317-1495`, default state 0 = 穿好 = the `_a`
+    /// only one (`ChaControl.cs:1317-1495`, default state 0 = 蝛踹末 = the `_a`
     /// node). We loaded the whole prefab, so both states rendered at once.
     fn clothes_state_filter(&self, meshes: &mut Vec<ExtractedMesh>, chains: &[(i64, Vec<String>)], clothes_category: Option<i32>) {
         let states = clothes_states();
@@ -4614,7 +4682,7 @@ impl ParsedBundle {
                 if let Some(png) = m.mat.as_ref().and_then(|mat| mat.slot("_Tex")).and_then(|name| self.cubemap_atlas_named(name)) {
                     m.shader_extra_textures.insert("_OKSkyCube".into(), png);
                     if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKSkybox".into(), 1.0); }
-                    // The object-space direction the program samples along, kept as vertex colour (d·0.5+0.5): the
+                    // The object-space direction the program samples along, kept as vertex colour (d繚0.5+0.5): the
                     // positions get the renderer transform baked in later.
                     m.vertex_colors = m.positions.iter().map(|p| {
                         let l = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1e-6);
@@ -4623,8 +4691,8 @@ impl ParsedBundle {
                     }).collect();
                 }
             }
-            // Xffect/heat_distortion_t2 (Studio's 水面 items): a GrabPass then SrcAlpha/OneMinusSrcAlpha of
-            // grab·_MainTex.rgb with alpha _MainTex.a, i.e. the screen behind times lerp(1, _MainTex.rgb, _MainTex.a)
+            // Xffect/heat_distortion_t2 (Studio's 瘞湧 items): a GrabPass then SrcAlpha/OneMinusSrcAlpha of
+            // grab繚_MainTex.rgb with alpha _MainTex.a, i.e. the screen behind times lerp(1, _MainTex.rgb, _MainTex.a)
             // (plus a small _HeatForce ripple). OK draws it as that multiply (`_OKModulate`).
             if m.mat.as_ref().is_some_and(|mat| mat.shader.to_ascii_lowercase().starts_with("xffect/heat_distortion")) {
                 if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKModulate".into(), 1.0); }
@@ -5107,4 +5175,40 @@ pub fn bundle_texture_report(bytes: Vec<u8>) -> Vec<(String, u32, bool)> {
     let parsed = parse_bundle_ref(&bytes);
     let dir = parsed.texture_directory();
     dir.catalog.iter().map(|(name, px)| (name.clone(), *px, parsed.texture_png_named(name).is_some())).collect()
+}
+
+#[cfg(test)]
+mod shader_pass_state_dump {
+    /// OK_SHADER_BUNDLE=<bundle>: each shader's pass state as read for the renderer (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: bundle named by OK_SHADER_BUNDLE"]
+    fn print_shader_pass_state() {
+        let Ok(path) = std::env::var("OK_SHADER_BUNDLE") else { return };
+        let bytes = std::fs::read(&path).unwrap();
+        let parsed = super::parse_bundle_ref(&bytes);
+        parsed.with_serialized(|files| {
+            for file in files {
+                let (mut local, mut external) = (0, 0);
+                for info in file.objects_of_type(21) {
+                    let Ok(o) = super::UnityObject::from_serialized_file(file, info) else { continue };
+                    if o.class.properties().get("m_Shader").and_then(super::local_pptr_path_id).is_some() { local += 1 } else { external += 1 }
+                }
+                println!("materials with local shader {local}, external {external} (externals {:?})", file.externals.iter().map(|e| e.path.clone()).collect::<Vec<_>>());
+            }
+            for file in files { for info in file.objects_of_type(48) {
+                let Ok(o) = super::UnityObject::from_serialized_file(file, info) else { continue };
+                println!("{} {:?}", super::shader_runtime_name(&o), super::shader_pass_state(&o));
+                if std::env::var("OK_SHADER_RAW").is_ok() {
+                    let sub = super::uv_arr(super::uv_obj(o.class.properties().get("m_ParsedForm").unwrap(), "m_SubShaders").unwrap()).first().cloned();
+                    if let Some(sub) = sub { for p in super::uv_arr(super::uv_obj(&sub, "m_Passes").unwrap()) {
+                        let s = super::uv_obj(p, "m_State");
+                        if let Some(unity_asset_core::UnityValue::Object(m)) = s { println!("  keys {:?} cull {:?}", m.keys().collect::<Vec<_>>(), m.get("culling")); }
+                        println!("  type={:?} name={:?} cull={:?} tags={:?}", super::uv_obj(p, "m_Type"),
+                            s.and_then(|s| super::uv_obj(s, "m_Name")), s.and_then(|s| super::uv_obj(s, "m_Culling")),
+                            s.and_then(|s| super::uv_obj(s, "m_Tags")));
+                    }}
+                }
+            }}
+        });
+    }
 }

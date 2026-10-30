@@ -138,7 +138,7 @@ pub fn library_entry(zip: &str, entry: &str) -> bool {
 /// Under a strict open: the library may serve this archive's listing (a shared mod, or one a shared bundle is in).
 pub fn library_zip(zip: &str) -> bool { shared().is_some_and(|s| s.zip(zip)) }
 /// Under a strict open: the library may serve this model: it holds it, and not as one only third-party mods use.
-pub fn library_model(id: &Id) -> bool { shared().is_some_and(|s| !s.excluded.contains(id) && s.present(id)) }
+pub fn library_model(id: &Id) -> bool { shared().is_some_and(|s| !s.excluded.contains(id) && s.shared_present(id)) }
 
 /// The library's shared mods (`shared_mods.txt`) and the models that stay out of version control (`models/.gitignore`,
 /// both written by `--oklib shared-ignore`).
@@ -157,8 +157,10 @@ impl Shared {
     }
     /// The library has model `id` (a model only a card's own zipmod has is not shared, whatever the ignore list).
     fn present(&self, id: &Id) -> bool {
-        *self.present.lock().unwrap_or_else(|e| e.into_inner()).entry(*id).or_insert_with(|| crate::oklib::model_path(&self.lib, id).is_file())
+        *self.present.lock().unwrap_or_else(|e| e.into_inner()).entry(*id).or_insert_with(|| crate::oklib::model_file(&self.lib, id).is_file())
     }
+    /// The library itself has model `id` (a local library holds only models third-party mods use: never shared).
+    fn shared_present(&self, id: &Id) -> bool { self.present(id) && crate::oklib::model_path(&self.lib, id).is_file() }
     /// The same rule as `shared-ignore`: original sources, list bundles of any archive, listed folders, archives and bundles.
     fn entry(&self, label: &str) -> bool {
         !label.starts_with("mods/") || label.contains("|abdata/list/") || self.lines.iter().any(|s| {

@@ -3240,6 +3240,36 @@ static bool OKShaderHasNoOutlinePass(const FString& Shader)
 	return false;
 }
 
+// The material's shader as Unity draws it, read from the shader's own passes at extraction (unity.rs
+// record_shader_pass_state): the main colour pass's cull (0 off, 1 front, 2 back) and whether an inverted-hull outline
+// pass exists. Known only while the recorded name hash still names the material's shader; a later shader swap
+// (Material Editor, native replacements) or a shader outside the material's file leaves it unknown.
+struct FOKShaderPassState { bool bKnown = false; int32 Cull = 2; bool bOutline = false; };
+
+static FOKShaderPassState OKShaderPassState(const FOkSession& Source, int32 Index)
+{
+	FOKShaderPassState State;
+	TSharedPtr<FJsonObject> Root;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Source.MaterialMetadataJson(Index)), Root) || !Root) return State;
+	const TSharedPtr<FJsonObject>* Material = nullptr;
+	const TSharedPtr<FJsonObject>* Floats = nullptr;
+	FString Shader;
+	double Key = 0, Cull = 0, Outline = 0;
+	if (!Root->TryGetObjectField(TEXT("material"), Material) || !Material || !*Material) return State;
+	(*Material)->TryGetStringField(TEXT("shader"), Shader);
+	if (!(*Material)->TryGetObjectField(TEXT("floats"), Floats) || !Floats || !*Floats) return State;
+	if (!(*Floats)->TryGetNumberField(TEXT("_OKShaderState"), Key) || !(*Floats)->TryGetNumberField(TEXT("_OKShaderCull"), Cull)
+		|| !(*Floats)->TryGetNumberField(TEXT("_OKShaderOutline"), Outline)) return State;
+	const FTCHARToUTF8 Utf8(*Shader);
+	uint32 Hash = 0x811c9dc5u;
+	for (int32 b = 0; b < Utf8.Length(); ++b) Hash = (Hash ^ uint8(Utf8.Get()[b])) * 0x01000193u;
+	if ((Hash & 0xFFFFFFu) != uint32(Key)) return State;
+	State.bKnown = true;
+	State.Cull = FMath::RoundToInt32(Cull);
+	State.bOutline = Outline > 0.5;
+	return State;
+}
+
 static bool OutlineEnabled()
 {
 	// A ShotPreview batch can change the render variant between actors.
@@ -5841,7 +5871,11 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		// Koikano/main_skin ForwardBase uses Cull Back (kind 5).
 		// KKS main_item_studio_alpha ForwardBase has Cull Back. Its ME copy
 		// may share a hair renderer, but the copied shader keeps its own cull.
-		const bool bTwoSided = Part.ShaderKind != 4 &&
+		// The shader's own main pass decides when it was read (a Cull Front pass has no UE equivalent; drawing both
+		// sides keeps its back faces). The kind list below is the fallback for shaders without that record.
+		const FOKShaderPassState PassState = OKShaderPassState(Source, i);
+		const bool bTwoSided = PassState.bKnown ? (PassState.Cull != 2 || (Part.bFaceSphereNormals && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FACE_TWOSIDED")) == TEXT("1"))) :
+			Part.ShaderKind != 4 &&
 			((Part.ShaderKind == 1 || Part.ShaderKind == 10) || Part.ShaderKind == 2 || Part.ShaderKind == 3 || Part.ShaderKind == 7 || Part.ShaderKind == 8 || Part.ShaderKind == 11 || Part.Role.Contains(TEXT("hair")) ||
 			(Part.bFaceSphereNormals && FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FACE_TWOSIDED")) == TEXT("1")));
 		// Let the extracted shader's render state decide whether the front hair
@@ -5873,7 +5907,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			Blend = TEXT("translucent");
 		}
 		const bool bOutlinable =
-			OutlineEnabled() && bItemOutline && !OKShaderHasNoOutlinePass(Source.MaterialShaderName(i)) &&
+			OutlineEnabled() && bItemOutline && (PassState.bKnown ? PassState.bOutline : !OKShaderHasNoOutlinePass(Source.MaterialShaderName(i))) &&
 			((Part.ShaderKind != 2 && Part.ShaderKind != 3 && Part.ShaderKind != 9) || Source.OutlineEnabled(i)) &&
 			Part.EyeSort == 0 &&
 			// Forge MainAlpha has an independent One/Zero OUTLINE pass.

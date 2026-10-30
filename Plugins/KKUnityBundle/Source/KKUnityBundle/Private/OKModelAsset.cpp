@@ -8,7 +8,15 @@
 
 FString UOKModelAsset::ModelPath() const
 {
-	return Library / TEXT("models") / ModelId.Left(2) / ModelId + TEXT(".okmodel");
+	const FString Relative = FString(TEXT("models")) / ModelId.Left(2) / ModelId + TEXT(".okmodel");
+	const FString Own = Library / Relative;
+	if (FPaths::FileExists(Own)) return Own;
+	// A model only third-party mods use lives in a local library (oklib::model_file): OK_LOCAL_LIBRARY, else local_v1.
+	TArray<FString> Locals;
+	FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOCAL_LIBRARY")).ParseIntoArray(Locals, TEXT(";"));
+	if (Locals.IsEmpty()) Locals.Add(FPaths::GetPath(Library) / TEXT("local_v1"));
+	for (const FString& Local : Locals) if (FPaths::FileExists(Local.TrimStartAndEnd() / Relative)) return Local.TrimStartAndEnd() / Relative;
+	return Own;
 }
 
 bool UOKModelAsset::Refresh(FString& OutError)
