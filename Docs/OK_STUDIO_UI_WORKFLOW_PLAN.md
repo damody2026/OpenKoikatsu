@@ -656,8 +656,12 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 
 兩側布幕：KK 縮圖是紅色，但 KKS 原生畫面（`F:\OpenKoikatsu\Saved\Tests\kks_stage87018_1030\Scene1.png`）的側幕就是藍灰色（Sims4 `LargeFancyCurtains` 的 IBL_Shader 在 KKS 下的樣子），我們和原生一致，不改。
 
+| `87688028_p5` 背景的電路板圖片變成白色 | 圖片是 Material Editor 換上的 `_MainTex`（JPEG，存在場景的 `TextureDictionary`）。Material Editor 把這個字典和其他清單一樣存成 msgpack bytes，我們只當成 map 讀，所以場景裡每一張換過的貼圖都被丟掉（`material_edits` 是空的）。改成先把 bytes 解開；舊存檔的純 map 照樣讀。另外，沒有原生 Forge 程式的通用零件材質把主貼圖參數叫 `KKAppearanceMain`，Material Editor 的 `_MainTex` 找不到參數就沒套上；現在 `_MainTex` 找不到時改套 `KKAppearanceMain`。修正後背景與原作一致（`F:\OpenKoikatsu\Saved\OKStudio\metex1\87688028_p5.png`） |
+
 尚未一致：
 - 鏡子的倒影沒有依 `m_ReflectLayers` 篩圖層（目前拍到全部物件）。
+- 通用零件材質的 `_MainTex_ST` 是建材質時寫死的常數，Material Editor 改貼圖縮放／位移套不上（vmd 有一張場景的 `m_koi_stu_kawa00_00`）。
+- `83572034_p1`：舞台後方缺月亮背景、兩側藍色發光道具顯示成灰白，舞台中間的紅色板子原作沒有，待查。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
