@@ -125,7 +125,9 @@ pub fn private_chance(r: &Relation, t: &Traits, charm: f32) -> (f32, f32, String
     let resistance = (0.6 * chastity(r, t) + 0.4 * t.charm_resistance as f32 - if friend { 10.0 } else { 0.0 }).clamp(0.0, 100.0);
     let mut chance = 0.0f32;
     if charm > resistance {
-        chance = (0.5 + (charm - resistance) / 40.0).clamp(0.5, 0.95);
+        // Rising with how far his charm is past her resistance, not a jump to one in two the moment it is (a stranger
+        // whose resistance he passed by a hair went to a locked room with him at favor 8).
+        chance = ((charm - resistance) / 35.0).clamp(0.0, 0.95);
     }
     if friend && r.favor > 100.0 {
         chance = chance.max((0.7 + (r.favor - 100.0) / 100.0 * 0.25).clamp(0.7, 0.95));
@@ -407,7 +409,9 @@ mod tests {
         assert!((resistance - 26.0).abs() < 1e-4 && chance >= 0.9);
         let chaste = Relation { chastity: 90.0, ..loose.clone() };
         let (chance, _, why) = private_chance(&chaste, &t, 60.0);
-        assert!(chance == 0.0 && !why.is_empty());
+        assert!(chance == 0.0 && !why.is_empty());
+        let (barely, _, _) = private_chance(&Relation { chastity: 40.0, ..Default::default() }, &t, 45.0);
+        assert!(barely < 0.1, "charm a hair past her resistance is not one in two: {barely}");
         let friend = Relation { stage: "friend".into(), favor: 150.0, ..chaste.clone() };
         assert!(private_chance(&friend, &t, 0.0).0 >= 0.8);
         assert_eq!(private_chance(&Relation { favor: 90.0, ..friend }, &t, 0.0).0, 0.0);
