@@ -685,7 +685,9 @@ pub(crate) fn lookup_entry(
     if let Some(zp) = zip_path {
         let cat = zip_lists
             .entry(guid.to_string())
-            .or_insert_with(|| catalog_from_zipmod(zp));
+            // (once per view and archive, crate::pack_memo: callers often pass a fresh map, and every open of a conversion's 45 parsed the
+            // card's zipmod lists again; the view's first open read them)
+            .or_insert_with(|| (*crate::pack_memo(format!("catalog_from_zipmod|{}", zp.display()), || std::sync::Arc::new(catalog_from_zipmod(zp)))).clone());
         let hit = cat.get_slot(category_no, slot, local_slot).cloned();
         if std::env::var("OK_DIAG").is_ok() {
             eprintln!(
