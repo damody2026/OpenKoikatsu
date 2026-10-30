@@ -117,12 +117,16 @@ fn experience(r: &Value) -> Result<Value, String> {
     // How many times in one scene she serves him to the end (hand, mouth, breasts) before she has had enough: more
     // as she gets used to it, is lewd and loose, or is his lover; once if she resents him.
     let service_rounds = if resentment >= 50.0 { 1 } else { (1 + level + (1.5 * easy).round() as i32 + i32::from(lover)).clamp(1, 6) };
+    // How many times she comes in one scene before she has had enough and wants it to stop (no more touching, moving,
+    // entering her): the same things move it, a lover lasts longer.
+    let climax_limit = if resentment >= 50.0 { 1 } else { (2 + level + (1.5 * easy).round() as i32 + 2 * i32::from(lover)).clamp(2, 10) };
     let areas: serde_json::Map<String, Value> = AREA_KEYS.iter().enumerate().map(|(i, k)| (k.to_string(), json!(h.area(i)))).collect();
     Ok(json!({
         "level": level, "level_name": level_name(level), "areas": areas, "count": h.count, "virgin": h.virgin, "anal_virgin": h.anal_virgin,
         "raw_ok": raw_ok,
         "anal_chance": anal_chance,
         "service_rounds": service_rounds,
+        "climax_limit": climax_limit,
         "kiss_ok": kiss_ok,
         "chastity": chaste,
         "used": level >= 2,
@@ -319,6 +323,8 @@ mod tests {
         assert!(b["anal_chance"].as_f64().unwrap() > a["anal_chance"].as_f64().unwrap());
         assert!(b["service_rounds"].as_i64().unwrap() > a["service_rounds"].as_i64().unwrap());
         assert!(a["service_rounds"].as_i64().unwrap() >= 1);
+        assert!(b["climax_limit"].as_i64().unwrap() > a["climax_limit"].as_i64().unwrap());
+        assert!(a["climax_limit"].as_i64().unwrap() >= 2);
     }
 
     #[test]

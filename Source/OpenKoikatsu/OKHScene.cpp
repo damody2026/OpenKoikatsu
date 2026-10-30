@@ -263,9 +263,9 @@ void UOKHScenePanel::Finish(const TCHAR* Kind){
         return;
     }
     const bool Org=K.StartsWith(TEXT("org")),Same=K.StartsWith(TEXT("same"));
-    if(Org||Same){++HerOrgasms;++(bAnalPlay?AnalClimaxes:CrotchClimaxes);Her=0.f;}
+    if(Org||Same){++(bAnalPlay?AnalClimaxes:CrotchClimaxes);Her=0.f;}
     if(Same||K==TEXT("inside")||K==TEXT("outside")){++HisFinishes;His=0.f;++(K==TEXT("outside")?HisOutside:HisInside);}
-    if(Org||Same)ReleaseHeld();
+    if(Org||Same){ReleaseHeld();CountHerOrgasm();}
     bInsideFinished=Same||K==TEXT("inside");
     TArray<FString> States={P(TEXT("OLoop"))};
     if(K==TEXT("outside"))States.Append({P(TEXT("M_OUT_Start")),P(TEXT("M_OUT_Loop")),P(TEXT("OUT_A"))});
@@ -350,16 +350,25 @@ void UOKHScenePanel::Click(int32 Kind){
     ActionsKey.Reset();
 }
 
+bool UOKHScenePanel::HadEnough() const{
+    const auto& X=Gallery?Gallery->HExperience:nullptr;
+    return HerOrgasms>=FMath::Max(1,X.IsValid()&&X->HasField(TEXT("climax_limit"))?int32(X->GetNumberField(TEXT("climax_limit"))):4);
+}
+void UOKHScenePanel::CountHerOrgasm(){
+    ++HerOrgasms;
+    if(HadEnough()&&!bSaidEnough){bSaidEnough=true;Note(OKT(TEXT("ui.hscene.she_had_enough")));ActionsKey.Reset();}
+}
 void UOKHScenePanel::BuildActions(){
     if(!Actions||!WidgetTree)return;
     const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
     const bool Busy=!Queue.IsEmpty()&&!(Queue.Num()==1&&Cur==Queue[0]);
-    const FString Key=FString::Printf(TEXT("%d|%s|%d|%d|%d|%d|%d|%d|%d"),Mode,*Cur,Busy,TouchArea,ActiveAibu+100*PendingAibu,His>=70.f,int32(bCondom)+2*int32(bAnalRefused)+4*int32(bLockHer)+8*int32(bLockHis)+16*int32(bServiceRefused),ActivePose,PendingPose);
+    const FString Key=FString::Printf(TEXT("%d|%s|%d|%d|%d|%d|%d|%d|%d"),Mode,*Cur,Busy,TouchArea,ActiveAibu+100*PendingAibu,His>=70.f,int32(bCondom)+2*int32(bAnalRefused)+4*int32(bLockHer)+8*int32(bLockHis)+16*int32(bServiceRefused)+32*int32(HadEnough()),ActivePose,PendingPose);
     if(Key==ActionsKey)return;ActionsKey=Key;Actions->ClearChildren();Offered.Reset();
     auto Add=[this](int32 Kind,const TCHAR* Label){Offered.Add(Kind);auto* B=WidgetTree->ConstructWidget<UOKHSceneButton>();B->Kind=Kind;B->Owner=this;B->OnClicked.AddDynamic(B,&UOKHSceneButton::HandleClick);auto* L=WidgetTree->ConstructWidget<UTextBlock>();L->SetText(FText::FromString(OKT(Label)));B->SetContent(L);Actions->AddChildToWrapBox(B);};
     if(Mode==0&&ActiveAibu!=INDEX_NONE&&PendingAibu==INDEX_NONE&&!Busy){
         if(!Base.StartsWith(TEXT("Orgasm"))&&!Base.EndsWith(TEXT("Dislikes"))){
-            Add(Kiss,TEXT("ui.hscene.act_kiss"));Add(TouchChest,TEXT("ui.hscene.act_touch_chest"));Add(TouchNipple,TEXT("ui.hscene.act_touch_nipple"));Add(TouchCrotch,TEXT("ui.hscene.act_touch_crotch"));Add(TouchButt,TEXT("ui.hscene.act_touch_butt"));Add(TouchAnal,TEXT("ui.hscene.act_touch_anal"));
+            if(!HadEnough()){Add(Kiss,TEXT("ui.hscene.act_kiss"));Add(TouchChest,TEXT("ui.hscene.act_touch_chest"));Add(TouchNipple,TEXT("ui.hscene.act_touch_nipple"));Add(TouchCrotch,TEXT("ui.hscene.act_touch_crotch"));Add(TouchButt,TEXT("ui.hscene.act_touch_butt"));Add(TouchAnal,TEXT("ui.hscene.act_touch_anal"));
+            }
             if(TouchArea!=INDEX_NONE)Add(Release,TEXT("ui.hscene.act_release"));
             Add(LockHer,bLockHer?TEXT("ui.hscene.act_unlock_her"):TEXT("ui.hscene.act_lock_her"));}
         return;
@@ -368,19 +377,19 @@ void UOKHScenePanel::BuildActions(){
     const FOKHPose& Pose=Poses[ActivePose];
     Add(LockHer,bLockHer?TEXT("ui.hscene.act_unlock_her"):TEXT("ui.hscene.act_lock_her"));Add(LockHis,bLockHis?TEXT("ui.hscene.act_unlock_his"):TEXT("ui.hscene.act_lock_his"));
     if(Mode==1){
-        if((Base==TEXT("Idle")||Base==TEXT("Stop_Idle"))&&!bServiceRefused)Add(Faster,TEXT("ui.hscene.act_start"));
+        if((Base==TEXT("Idle")||Base==TEXT("Stop_Idle"))&&!bServiceRefused&&!HadEnough())Add(Faster,TEXT("ui.hscene.act_start"));
         else if(HIsLoop(Base)){Add(Faster,TEXT("ui.hscene.act_faster"));Add(Slower,TEXT("ui.hscene.act_slower"));Add(Toggle,TEXT("ui.hscene.act_toggle"));Add(Stop,TEXT("ui.hscene.act_stop"));}
         else if(Base==TEXT("OLoop")){Add(Inside,Pose.KindHoushi==1?TEXT("ui.hscene.act_in_mouth"):Pose.KindHoushi==2?TEXT("ui.hscene.act_on_chest"):TEXT("ui.hscene.act_in_hand"));Add(Outside,TEXT("ui.hscene.act_outside"));}
         else if(Base==TEXT("Oral_Idle")){Add(Drink,TEXT("ui.hscene.act_drink"));Add(Vomit,TEXT("ui.hscene.act_vomit"));}
-        else if(Base.EndsWith(TEXT("_A"))){if(!bServiceRefused)Add(Again,TEXT("ui.hscene.act_again"));Add(Stop,TEXT("ui.hscene.act_rest"));}
+        else if(Base.EndsWith(TEXT("_A"))){if(!bServiceRefused&&!HadEnough())Add(Again,TEXT("ui.hscene.act_again"));Add(Stop,TEXT("ui.hscene.act_rest"));}
         return;
     }
     const bool Out=Base==TEXT("Idle")||Base==TEXT("OUT_A");
-    if(Out){Add(Insert,TEXT("ui.hscene.act_insert"));if(Pose.Anal&&!bAnalRefused)Add(InsertAnal,TEXT("ui.hscene.act_insert_anal"));Add(Condom,bCondom?TEXT("ui.hscene.act_condom_on"):TEXT("ui.hscene.act_condom_off"));}
-    else if(Base==TEXT("InsertIdle")){Add(Faster,TEXT("ui.hscene.act_move"));Add(Pull,TEXT("ui.hscene.act_pull"));}
+    if(Out&&!HadEnough()){Add(Insert,TEXT("ui.hscene.act_insert"));if(Pose.Anal&&!bAnalRefused)Add(InsertAnal,TEXT("ui.hscene.act_insert_anal"));Add(Condom,bCondom?TEXT("ui.hscene.act_condom_on"):TEXT("ui.hscene.act_condom_off"));}
+    else if(Base==TEXT("InsertIdle")){if(!HadEnough())Add(Faster,TEXT("ui.hscene.act_move"));Add(Pull,TEXT("ui.hscene.act_pull"));}
     else if(HIsLoop(Base)){Add(Faster,TEXT("ui.hscene.act_faster"));Add(Slower,TEXT("ui.hscene.act_slower"));Add(Toggle,TEXT("ui.hscene.act_toggle"));Add(Stop,TEXT("ui.hscene.act_stop"));
         if(His>=70.f){Add(Inside,TEXT("ui.hscene.act_inside"));Add(Outside,TEXT("ui.hscene.act_outside"));}}
-    else if(Base.EndsWith(TEXT("_A"))){Add(Continue,TEXT("ui.hscene.act_continue"));Add(Pull,TEXT("ui.hscene.act_pull"));}
+    else if(Base.EndsWith(TEXT("_A"))){if(!HadEnough())Add(Continue,TEXT("ui.hscene.act_continue"));Add(Pull,TEXT("ui.hscene.act_pull"));}
 }
 
 void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
@@ -453,7 +462,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
         const float Used=FMath::Clamp(AreaExperience(TouchArea)/100.f,0.f,1.f);
         Her+=Delta*(1.5f+5.f*Rate)*(.6f+.6f*Used)*HerByLevel[FMath::Clamp(Level(),0,3)];if(bLockHer)Her=FMath::Min(Her,95.f);
         if(Rate>=.7f&&Used<=0.f&&TouchArea!=0){Note(OKT(TEXT("ui.hscene.too_hard")));Chain({TouchArea>=3&&TouchArea<=4?TEXT("Back_Dislikes"):TEXT("Front_Dislikes"),TEXT("Idle")});TouchArea=INDEX_NONE;}
-        else if(Her>=100.f){++HerOrgasms;Her=0.f;TouchArea=INDEX_NONE;ReleaseHeld();Chain({TEXT("Orgasm_Start"),TEXT("Orgasm_Loop"),TEXT("Orgasm_A"),TEXT("Idle")});Note(OKT(TEXT("ui.hscene.event_her_orgasm")));}
+        else if(Her>=100.f){Her=0.f;TouchArea=INDEX_NONE;ReleaseHeld();Chain({TEXT("Orgasm_Start"),TEXT("Orgasm_Loop"),TEXT("Orgasm_A"),TEXT("Idle")});Note(OKT(TEXT("ui.hscene.event_her_orgasm")));CountHerOrgasm();}
     }else if(Queue.IsEmpty()&&HIsLoop(Base)){
         if(Mode==1){His+=Delta*(2.5f+8.f*Rate)*Strong;if(bLockHis)His=FMath::Min(His,69.f);Her=FMath::Min(69.f,Her+Delta*.8f);if(His>=70.f&&Wanted.IsEmpty())Want(TEXT("OLoop"));}
         else{His+=Delta*(1.2f+3.5f*Rate)*Strong;Her+=Delta*(1.5f+6.f*Rate)*Strong*HerByLevel[FMath::Clamp(Level(),0,3)];
@@ -533,6 +542,7 @@ void UOKHScenePanel::UpdateFace(){
     else if(Base==TEXT("OLoop")||Her>=70.f){Eye=12;Brow=11;Open=.5f;}
     else if(Base==TEXT("SLoop")||Base==TEXT("WLoop")||(Mode==0&&TouchArea!=INDEX_NONE)){Eye=L>=3?8:7;Brow=L<=1?11:2;Open=Base==TEXT("SLoop")?.55f:.7f;}
     else if(Base==TEXT("Insert")||Base==TEXT("InsertIdle")){Eye=L<=1?12:8;Brow=L<=1?11:2;Open=.7f;}
+    else if(HadEnough()){Eye=13;Brow=2;Open=.6f;} // she has had enough: tired of it, not smiling
     else if(L>=2){Eye=4;Brow=0;Open=.9f;}
     const FString Key=FString::Printf(TEXT("%d/%d/%.2f"),Eye,Brow,Open);if(Key==FaceKey)return;FaceKey=Key;
     Girl->SetFaceControl(1,Eye,Open,true);Girl->SetFaceControl(2,Brow,1.f,true);
@@ -652,7 +662,7 @@ TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
     O->SetNumberField(TEXT("playback_speed"),PlaybackSpeed());O->SetNumberField(TEXT("held"),Held.Num());O->SetStringField(TEXT("caption"),Caption?Caption->GetText().ToString():FString());
     O->SetNumberField(TEXT("her"),Her);O->SetNumberField(TEXT("his"),His);O->SetNumberField(TEXT("speed"),SpeedValue);O->SetBoolField(TEXT("condom"),bCondom);O->SetBoolField(TEXT("anal_play"),bAnalPlay);
-    O->SetStringField(TEXT("title"),Title?Title->GetText().ToString():FString());O->SetStringField(TEXT("hint"),Hint?Hint->GetText().ToString():FString());
+    O->SetStringField(TEXT("title"),Title?Title->GetText().ToString():FString());O->SetStringField(TEXT("hint"),Hint?Hint->GetText().ToString():FString());O->SetStringField(TEXT("face"),FaceKey); // eye/brow/openness now (UpdateFace)
     auto Buttons=[](UPanelWidget* Panel){TArray<TSharedPtr<FJsonValue>> Out;if(Panel)for(int32 I=0;I<Panel->GetChildrenCount();++I)if(auto* B=Cast<UOKHSceneButton>(Panel->GetChildAt(I))){auto R=MakeShared<FJsonObject>();R->SetNumberField(TEXT("kind"),B->Kind);R->SetBoolField(TEXT("enabled"),B->GetIsEnabled());
         if(auto* L=Cast<UTextBlock>(B->GetContent()))R->SetStringField(TEXT("label"),L->GetText().ToString());Out.Add(MakeShared<FJsonValueObject>(R));}return Out;};
     O->SetArrayField(TEXT("actions"),Buttons(Actions));O->SetArrayField(TEXT("list"),Buttons(List));O->SetNumberField(TEXT("tab"),Tab);
