@@ -1657,6 +1657,8 @@ pub(crate) fn build_skel_graph(serialized: &SerializedFile) -> SkelGraph {
     let mut smr_bones: std::collections::HashMap<i64, Vec<Vec<i64>>> = std::collections::HashMap::new();
     let mut go_tf: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
     let mut mesh_go: std::collections::HashMap<i64, Vec<i64>> = std::collections::HashMap::new();
+    // Each transform's children and game object, for the sibling indexes and names once every object is read (parsed once).
+    let mut tf_links: Vec<(i64, Vec<Option<i64>>, Option<i64>)> = Vec::new();
     for info in &serialized.objects {
         // Only these types are used: skip reading (decompressing, parsing) textures and meshes.
         if !matches!(info.type_id, 1 | 4 | 33 | 137) { continue; }
@@ -1673,6 +1675,11 @@ pub(crate) fn build_skel_graph(serialized: &SerializedFile) -> SkelGraph {
                 if let Some(g) = go {
                     go_tf.insert(g, info.path_id);
                 }
+                let children = match props.get("m_Children") {
+                    Some(UnityValue::Array(children)) => children.iter().map(pptr).collect(),
+                    _ => Vec::new(),
+                };
+                tf_links.push((info.path_id, children, go));
                 let name = go.and_then(|g| go_name.get(&g).cloned()).unwrap_or_default();
                 tfs.insert(
                     info.path_id,
@@ -1710,23 +1717,14 @@ pub(crate) fn build_skel_graph(serialized: &SerializedFile) -> SkelGraph {
             _ => {}
         }
     }
-    for info in &serialized.objects {
-        if info.type_id != 4 {
-            continue;
-        }
-        let Ok(obj) = UnityObject::from_serialized_file(serialized, info) else {
-            continue;
-        };
-        let props=obj.class.properties();
-        if let Some(UnityValue::Array(children))=props.get("m_Children") {
-            for (index,child) in children.iter().enumerate() {
-                if let Some(tf)=pptr(child).and_then(|id|tfs.get_mut(&id)) {
-                    if tf.parent==Some(info.path_id) {tf.sibling_index=Some(index as u32);}
-                }
+    for (path_id, children, go) in tf_links {
+        for (index,child) in children.into_iter().enumerate() {
+            if let Some(tf)=child.and_then(|id|tfs.get_mut(&id)) {
+                if tf.parent==Some(path_id) {tf.sibling_index=Some(index as u32);}
             }
         }
-        if let Some(g) = props.get("m_GameObject").and_then(pptr) {
-            if let Some(tf) = tfs.get_mut(&info.path_id) {
+        if let Some(g) = go {
+            if let Some(tf) = tfs.get_mut(&path_id) {
                 if let Some(n) = go_name.get(&g) {
                     tf.name = n.clone();
                 }
