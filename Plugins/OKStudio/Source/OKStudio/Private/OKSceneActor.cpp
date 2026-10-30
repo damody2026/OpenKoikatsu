@@ -1543,16 +1543,34 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 	{
 		bSkyDomesDirty = false;
 		SkyDomeParts.Reset();
+		for (auto It = ZWriteShellParts.CreateIterator(); It; ++It) if (!It.Key().IsValid()) It.RemoveCurrent();
 		for (const TPair<int32, FShown>& It : Shown)
 			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
 			{
 				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
 				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
+				for (const TWeakObjectPtr<UPrimitiveComponent>& P : Preview->ZWriteBlendedParts)
+					if (P.IsValid() && !ZWriteShellParts.Contains(P)) ZWriteShellParts.Add(P, P->TranslucencySortPriority);
 			}
 	}
 	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : SkyDomeParts)
 		if (UPrimitiveComponent* P = Part.Get())
 			P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
+	// A blended part that writes depth (ZWrite On) around the view, such as a night-sky shell: Unity sorts it by its
+	// bounds' centre, near the camera, so it draws after what it encloses, and its depth test keeps it behind that.
+	// UE's blended parts write no depth, so a shell around the view draws first (after the sky domes), the larger
+	// (outer) shell before the smaller; it goes back to its own place when the view leaves it.
+	for (const TPair<TWeakObjectPtr<UPrimitiveComponent>, int32>& Shell : ZWriteShellParts)
+		if (UPrimitiveComponent* P = Shell.Key.Get())
+		{
+			const int32 Priority = P->Bounds.GetBox().IsInside(View.GetLocation())
+				? -5000 - FMath::Clamp(int32(P->Bounds.SphereRadius / 100.0), 0, 4000) : Shell.Value;
+			if (P->TranslucencySortPriority != Priority)
+			{
+				P->SetTranslucentSortPriority(Priority);
+				UE_LOG(LogTemp, Display, TEXT("OK zwrite shell %s/%s priority=%d radius=%.0f"), *GetNameSafe(P->GetOwner()), *P->GetName(), Priority, P->Bounds.SphereRadius);
+			}
+		}
 	PlaceSky(View);
 }
 

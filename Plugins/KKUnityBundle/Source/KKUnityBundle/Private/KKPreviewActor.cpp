@@ -3300,7 +3300,7 @@ static bool OKShaderHasNoOutlinePass(const FString& Shader)
 // record_shader_pass_state): the main colour pass's cull (0 off, 1 front, 2 back) and whether an inverted-hull outline
 // pass exists. Known only while the recorded name hash still names the material's shader; a later shader swap
 // (Material Editor, native replacements) or a shader outside the material's file leaves it unknown.
-struct FOKShaderPassState { bool bKnown = false; int32 Cull = 2; bool bOutline = false; };
+struct FOKShaderPassState { bool bKnown = false; int32 Cull = 2; bool bOutline = false; bool bZWrite = false; };
 
 static FOKShaderPassState OKShaderPassState(const FOkSession& Source, int32 Index)
 {
@@ -3323,6 +3323,9 @@ static FOKShaderPassState OKShaderPassState(const FOkSession& Source, int32 Inde
 	State.bKnown = true;
 	State.Cull = FMath::RoundToInt32(Cull);
 	State.bOutline = Outline > 0.5;
+	// The main pass's depth write (absent from records made before it was kept: treated as not writing).
+	double ZWrite = 0;
+	State.bZWrite = (*Floats)->TryGetNumberField(TEXT("_OKShaderZWrite"), ZWrite) && ZWrite > 0.5;
 	return State;
 }
 
@@ -6534,6 +6537,12 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					MirrorParts.Add(Mirror);
 					UE_LOG(LogTemp, Display, TEXT("OK mirror part=%s shader=%s normal=%s"), *Name, *Source.MaterialShaderName(i), *Mirror.LocalNormal.ToString());
 				}
+		// A blended part whose shader writes depth (ZWrite On): the scene sorts it as Unity's depth test would show it.
+		if (Comp && !bBody && !bFaceDraw && PassState.bZWrite && Blend.Equals(TEXT("translucent"), ESearchCase::IgnoreCase))
+		{
+			ZWriteBlendedParts.Add(Comp);
+			UE_LOG(LogTemp, Display, TEXT("OK zwrite blended part=%s shader=%s bounds=%s"), *Name, *Source.MaterialShaderName(i), *Comp->Bounds.GetBox().ToString());
+		}
 		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor, with source alpha, not the Studio light
 		// effect's three-colour mix the additive part graph draws.
 		if (Comp && Tex && Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase) && Source.MaterialShaderName(i).Contains(TEXT("Particles/Additive")))

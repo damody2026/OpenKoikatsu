@@ -1,5 +1,5 @@
 //! The render state of every shader the game and its mods ship, by shader name (`shader_states.json` in the base
-//! library): the main colour pass's cull and whether an outline pass exists, read from each Shader object's passes
+//! library): the main colour pass's cull and depth write and whether an outline pass exists, read from each Shader object's passes
 //! (`unity::shader_pass_state`). Materials recorded before their shader's state was kept, materials whose shader lives
 //! in another file and materials given another shader (Material Editor) take it from here by name.
 use std::collections::BTreeMap;
@@ -8,8 +8,19 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 pub const FILE_NAME: &str = "shader_states.json";
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct State { pub cull: i64, pub outline: bool }
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct State {
+    pub cull: i64,
+    pub outline: bool,
+    /// The main pass's depth write (absent in catalogs written before it was kept: unknown).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zwrite: Option<ZWrite>,
+}
+
+/// A fixed depth write (0 / 1), or the material property it is bound to (`ZWrite [_ZWrite]`).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum ZWrite { Fixed(i64), Property(String) }
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Catalog {
@@ -26,14 +37,21 @@ fn load(lib: &Path) -> Arc<Catalog> {
         .and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default())).clone()
 }
 
-/// Gives each material the state of the shader it now has, unless it already carries that shader's own record.
+/// Gives each material the state of the shader it now has, unless it already carries that shader's own record (then
+/// only the depth write, when that record predates it).
 pub fn complete(lib: &Path, meshes: &mut [crate::unity::ExtractedMesh]) {
     let catalog = load(lib);
     if catalog.shaders.is_empty() { return; }
     for mat in meshes.iter_mut().filter_map(|m| m.mat.as_mut()) {
         let key = crate::unity::shader_state_key(&mat.shader) as f32;
-        if mat.floats.get("_OKShaderState") == Some(&key) { continue; }
         let Some(state) = catalog.shaders.get(&mat.shader) else { continue };
+        let zwrite = state.zwrite.as_ref().map(|z| crate::unity::resolve_zwrite(&match z {
+            ZWrite::Fixed(v) => Ok(*v), ZWrite::Property(name) => Err(name.clone()) }, &mat.floats));
+        if mat.floats.get("_OKShaderState") == Some(&key) {
+            if let Some(z) = zwrite { mat.floats.entry("_OKShaderZWrite".into()).or_insert(z); }
+            continue;
+        }
+        match zwrite { Some(z) => { mat.floats.insert("_OKShaderZWrite".into(), z); } None => { mat.floats.remove("_OKShaderZWrite"); } }
         mat.floats.insert("_OKShaderCull".into(), state.cull as f32);
         mat.floats.insert("_OKShaderOutline".into(), if state.outline { 1.0 } else { 0.0 });
         mat.floats.insert("_OKShaderState".into(), key);
@@ -51,7 +69,8 @@ fn bundle_states(bytes: Vec<u8>) -> Vec<(String, State)> {
                 let Ok(o) = unity_asset_decode::object::UnityObject::from_serialized_file(file, info) else { continue };
                 let name = crate::unity::shader_runtime_name(&o);
                 let Some(s) = crate::unity::shader_pass_state(&o).filter(|_| !name.is_empty()) else { continue };
-                out.push((name, State { cull: s.cull.unwrap_or(2), outline: s.outline }));
+                let zwrite = match s.zwrite { Ok(v) => ZWrite::Fixed(v), Err(name) => ZWrite::Property(name) };
+                out.push((name, State { cull: s.cull.unwrap_or(2), outline: s.outline, zwrite: Some(zwrite) }));
             }
         }
         out
@@ -74,7 +93,7 @@ pub fn convert(game: &Path, lib: &Path, threads: usize) -> Result<(usize, usize,
     let bundles_in_game = items.len();
     items.extend(crate::mods::all_zipmods(&game.join("mods")));
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let found: Mutex<BTreeMap<String, BTreeMap<(i64, bool), usize>>> = Mutex::default();
+    let found: Mutex<BTreeMap<String, BTreeMap<State, usize>>> = Mutex::default();
     let read = std::sync::atomic::AtomicUsize::new(0);
     std::thread::scope(|scope| {
         for _ in 0..threads.max(1) {
@@ -96,16 +115,15 @@ pub fn convert(game: &Path, lib: &Path, threads: usize) -> Result<(usize, usize,
                 }
                 if i % 500 == 0 { eprintln!("shader-states {i}/{}", items.len()); }
                 let mut found = found.lock().unwrap();
-                for (name, s) in states { *found.entry(name).or_default().entry((s.cull, s.outline)).or_default() += 1; }
+                for (name, s) in states { *found.entry(name).or_default().entry(s).or_default() += 1; }
             });
         }
     });
     let mut catalog = Catalog::default();
     for (name, copies) in found.into_inner().unwrap() {
-        let state = |(cull, outline): (i64, bool)| State { cull, outline };
-        let best = copies.iter().max_by_key(|(_, n)| **n).map(|(s, _)| *s).unwrap();
-        if copies.len() > 1 { catalog.conflicts.insert(name.clone(), copies.iter().map(|(s, n)| (state(*s), *n)).collect()); }
-        catalog.shaders.insert(name, state(best));
+        let best = copies.iter().max_by_key(|(_, n)| **n).map(|(s, _)| s.clone()).unwrap();
+        if copies.len() > 1 { catalog.conflicts.insert(name.clone(), copies.iter().map(|(s, n)| (s.clone(), *n)).collect()); }
+        catalog.shaders.insert(name, best);
     }
     let text = serde_json::to_string_pretty(&catalog).map_err(|e| e.to_string())?;
     std::fs::write(lib.join(FILE_NAME), text).map_err(|e| format!("{FILE_NAME}: {e}"))?;

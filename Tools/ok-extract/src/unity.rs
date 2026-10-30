@@ -1727,9 +1727,10 @@ fn shader_declares_property(object: &UnityObject, wanted: &str) -> Option<bool> 
 
 /// The shader's own fixed-function state, as Unity draws it: the cull mode of the main colour pass and whether
 /// another pass is an inverted-hull outline (culls the faces the main pass keeps). A cull mode bound to a material
-/// property (`Cull [_Cull]`) is returned as that property name; the material's saved float then decides it.
+/// property (`Cull [_Cull]`) is returned as that property name; the material's saved float then decides it. `zwrite`
+/// is the main colour pass's depth write (0 / 1, or a property name), bound the same way.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool }
+pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool, pub zwrite: Result<i64, String> }
 
 pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState> {
     let parsed = object.class.properties().get("m_ParsedForm")?;
@@ -1744,6 +1745,14 @@ pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState>
         let cull = if bound.is_empty() || bound == "<noninit>" {
             Ok(uv_obj(culling, "val").and_then(|v| v.as_f64()).unwrap_or(2.0) as i64)
         } else { Err(bound.to_string()) };
+        // ZWrite: Unity's default is On.
+        let zwrite = match uv_obj(state, "zWrite").or_else(|| uv_obj(state, "m_ZWrite")) {
+            Some(z) => match uv_obj(z, "name").and_then(|v| v.as_str()).unwrap_or("") {
+                "" | "<noninit>" => Ok(uv_obj(z, "val").and_then(|v| v.as_f64()).unwrap_or(1.0) as i64),
+                name => Err(name.to_string()),
+            },
+            None => Ok(1),
+        };
         let name = uv_obj(state, "m_Name").and_then(|v| v.as_str()).unwrap_or("").to_ascii_uppercase();
         let mut light_mode = String::new();
         if let Some(tags) = uv_obj(state, "m_Tags").and_then(|t| uv_obj(t, "tags")) {
@@ -1754,10 +1763,10 @@ pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState>
                 if k.is_some_and(|k| k.eq_ignore_ascii_case("LightMode")) { light_mode = v.unwrap_or("").to_ascii_lowercase(); }
             }
         }
-        passes.push((cull, name, light_mode));
+        passes.push((cull, name, light_mode, zwrite));
     }
     // Shadow, depth and meta passes never draw colour.
-    let colour = |(_, name, mode): &&(Result<i64, String>, String, String)|
+    let colour = |(_, name, mode, _): &&(Result<i64, String>, String, String, Result<i64, String>)|
         !matches!(mode.as_str(), "shadowcaster" | "shadowcollector" | "meta" | "prepassbase" | "deferred")
             && !name.contains("SHADOW") && !name.contains("META");
     // Additive per-light passes repeat the main pass's geometry state.
@@ -1765,10 +1774,16 @@ pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState>
     // An inverted-hull outline is a colour pass named OUTLINE, or a Cull Front pass beside one that draws front faces
     // (Cull Back or Off; Koikatsu draws its outline first, then the surface).
     let draws_front = colour.iter().any(|p| matches!(p.0, Ok(0) | Ok(2)));
-    let is_outline = |p: &(Result<i64, String>, String, String)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
+    let is_outline = |p: &(Result<i64, String>, String, String, Result<i64, String>)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
     let main = colour.iter().position(|p| !is_outline(p)).or((!colour.is_empty()).then_some(0))?;
     let outline = colour.iter().enumerate().any(|(i, p)| i != main && is_outline(p));
-    Some(ShaderPassState { cull: colour[main].0.clone(), outline })
+    Some(ShaderPassState { cull: colour[main].0.clone(), outline, zwrite: colour[main].3.clone() })
+}
+
+/// The depth write of a pass state for a material: a value bound to a property takes the material's float (Unity's
+/// default, On, when the material has none).
+pub(crate) fn resolve_zwrite(zwrite: &Result<i64, String>, floats: &HashMap<String, f32>) -> f32 {
+    match zwrite { Ok(v) => (*v != 0) as i32 as f32, Err(name) => floats.get(name).map_or(1.0, |v| (*v > 0.5) as i32 as f32) }
 }
 
 /// Material floats carrying the shader's pass state to the renderer: `_OKShaderCull` (0 off, 1 front, 2 back),
@@ -1781,6 +1796,8 @@ pub(crate) fn record_shader_pass_state(floats: &mut HashMap<String, f32>, shader
     let Some(cull) = cull else { return };
     floats.insert("_OKShaderCull".into(), cull);
     floats.insert("_OKShaderOutline".into(), if state.outline { 1.0 } else { 0.0 });
+    let zwrite = resolve_zwrite(&state.zwrite, floats);
+    floats.insert("_OKShaderZWrite".into(), zwrite);
     floats.insert("_OKShaderState".into(), shader_state_key(shader) as f32);
 }
 
