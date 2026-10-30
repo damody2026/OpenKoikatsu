@@ -1119,3 +1119,10 @@
 - 原因：她到達後那句是系統觸發（nudge），照設計她提議的活動不自己開始、等他答應；但這個提議沒有留給下一次裁判，裁判只看到對話，就以為已經坐下了（「兩人正在一起做：無」也沒讓它改判）。
 - 修正：`OKStreetSocialScene.cpp` 的 nudge 分支把沒有執行的活動記進 `HerProposed`；`JudgeFreeTalk` 下一次判他的話時加上 `ui.scene.judge_her_proposed`（她上一句提議了什麼、還沒開始、他答應了 do_now 就填它），用過就清掉。
 - 驗證（Gal1030I，欄位 23 起）：同樣從書局約去公園，到了她說「長椅那邊有位子，走，去坐下吧」（`park_seat`），他回「好啊，就坐那張長椅吧」；裁判判「她提議在長椅坐下看書，他答應了」，`do_now="park_seat"`，兩人坐下（`pair=9`，坐姿準備）。
+
+## 2026-10-30 和惠惠吃飯時愛麗絲加入，他說「點點什麼？我請客」，她的飲料卻是她自己付（E 組 galgame）
+
+- 現象：餐廳和惠惠晚餐，叫愛麗絲過來坐；他說「愛麗絲要不要也點點什麼？我請客」，下一輪愛麗絲點紅茶，結帳「你付 0、她付 45」（split）。
+- 原因：這時已經約好「吃完送惠惠回宿舍」（judge then=go:girls_dorm）；`RecordPayAgreed` 把之後要去的地方排在現在所在的店前面，記成「pay agreed: him (for girls_dorm)」。餐廳的帳 `PayAgreed` 對不上店家，回到她自己的傾向。
+- 修正：`OKStreetSocialEconomy.inl` 的 `RecordPayAgreed`，人在這家店、桌上正在吃這家店的菜時，說的請客算這家店的帳，不再讓「之後要做的事」搶走。
+- 驗證（Gal1030J）：在點心店和惠惠喝奶茶，judge 記下 `then=go:girls_dorm`（喝完送她回宿舍），桌上有兩杯奶茶時他改說「接下來這杯各付各的」，log 記「pay agreed: actor=9 split (for snack)」，留在這家店而不是宿舍。原來的群聊情境（讀檔後愛麗絲已在隊伍裡、群聊不記 then）沒能原樣重現，改用同一個 `RecordPayAgreed` 的一對一路徑驗證。

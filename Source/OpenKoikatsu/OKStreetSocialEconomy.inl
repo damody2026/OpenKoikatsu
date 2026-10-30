@@ -261,7 +261,10 @@ void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const F
  // On the way somewhere, or for what they do next ("after the fish, lunch at the restaurant, my treat": the judge's
  // then): for there.
  const FString Later=DestOf(S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString());
- S.PayAgreedShop=!Now.IsEmpty()?Now:!Later.IsEmpty()?Later:Here;
+ // At a table here, mid-meal: what he says is about this bill. "Order something, my treat" to the friend who sat down
+ // with them went to her dorm (then: he walks her home after), and her tea was billed to her.
+ const bool AtTableHere=!Here.IsEmpty()&&!S.Table.IsEmpty()&&S.MealPlace==Here;
+ S.PayAgreedShop=!Now.IsEmpty()?Now:AtTableHere?Here:!Later.IsEmpty()?Later:Here;
  UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
