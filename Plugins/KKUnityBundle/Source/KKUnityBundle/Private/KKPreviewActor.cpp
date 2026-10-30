@@ -108,6 +108,9 @@ void AKKPreviewActor::ReleaseSceneCaches()
 #include "Materials/MaterialExpressionAppendVector.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionLinearInterpolate.h"
+#include "Materials/MaterialExpressionSceneColor.h"
+#include "Materials/MaterialExpressionSceneDepth.h"
+#include "Materials/MaterialExpressionPixelDepth.h"
 #include "Materials/MaterialExpressionVertexColor.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionScreenPosition.h"
@@ -3771,6 +3774,157 @@ static UMaterialInterface* OKGlitchMaterial()
 #endif
 }
 
+// StylizedWater/Desktop (a third-party water shader in Studio mods), its ForwardBase DIRECTIONAL pixel program (blob 4)
+// after a GrabPass, read from the zipmod's DXBC with the program's own constant names: two scrolling _Normals samples
+// (world- or UV-tiled, _Wavesspeed), GGX light from the camera-parented light, _WaterColor darkened with the depth
+// behind the surface (_Depth, _Depthdarkness), an intersection rim (_RimSize, _Rimfalloff, _RimColor and the _Shadermap
+// foam), _FresnelColor towards grazing view, _Shadermap highlights, then lerp(grab refracted by the normals, lit colour,
+// alpha) with alpha from _Transparency, the rim and the depth (an overlay of the two). Unity's world is UE's with x
+// negated and y / z swapped, in metres. Not done: the _Reflection cubemap (no cubemap extraction; its term is zero).
+static UMaterialInterface* OKStylizedWaterMaterial()
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached;
+	if (Cached) return Cached.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = BLEND_Translucent;
+	Mat->SetShadingModel(MSM_Unlit);
+	Mat->TranslucencyPass = MTP_BeforeDOF;
+	Mat->TwoSided = true;
+	auto Add = [Mat](UMaterialExpression* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
+	auto* Program = NewObject<UMaterialExpressionCustom>(Mat);
+	Program->OutputType = CMOT_Float4;
+	auto Input = [Program](const TCHAR* Name, UMaterialExpression* E, int32 Output = 0) { FCustomInput C; C.InputName = Name; C.Input.Expression = E; C.Input.OutputIndex = Output; Program->Inputs.Add(C); };
+	auto Vector = [&](const TCHAR* Name, const FLinearColor& Default) { auto* P = NewObject<UMaterialExpressionVectorParameter>(Mat); P->ParameterName = Name; P->DefaultValue = Default; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P, 5 /* RGBA */); };
+	auto Scalar = [&](const TCHAR* Name, float Default) { auto* P = NewObject<UMaterialExpressionScalarParameter>(Mat); P->ParameterName = Name; P->DefaultValue = Default; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P); };
+	auto Texture = [&](const TCHAR* Name, const TCHAR* Default) { auto* P = NewObject<UMaterialExpressionTextureObjectParameter>(Mat); P->ParameterName = Name; P->Texture = LoadObject<UTexture2D>(nullptr, Default); P->SamplerType = SAMPLERTYPE_LinearColor; Add(P); Input(*FString(Name).Replace(TEXT("_"), TEXT("")), P); };
+	// The shader's property defaults (m_PropInfo of the water's own material), linear like Unity uploads them.
+	Vector(TEXT("_WaterColor"), FLinearColor(0.f, 0.2176f, 1.f, 0.503f));
+	Vector(TEXT("_RimColor"), FLinearColor(0.f, 0.f, 0.f, 0.491f));
+	Vector(TEXT("_FresnelColor"), FLinearColor(0.26f, 0.72f, 1.f, 0.272f));
+	Vector(TEXT("_LightColor0"), FLinearColor::White);
+	Vector(TEXT("_OKAmbient"), FLinearColor(0.2f, 0.2f, 0.2f, 1.f));
+	Scalar(TEXT("_RimSize"), 0.75f); Scalar(TEXT("_Tiling"), 0.9f); Scalar(TEXT("_RefractionAmount"), 0.055f);
+	Scalar(TEXT("_Transparency"), 0.35f); Scalar(TEXT("_Wavesspeed"), 0.5f); Scalar(TEXT("_Glossiness"), 0.5f);
+	Scalar(TEXT("_Depth"), 15.f); Scalar(TEXT("_Depthdarkness"), 0.15f); Scalar(TEXT("_Rimtiling"), 1.f);
+	Scalar(TEXT("_Worldspacetiling"), 1.f); Scalar(TEXT("_Rimfalloff"), 0.5f); Scalar(TEXT("_SurfaceHighlight"), 0.15f);
+	Scalar(TEXT("_Surfacehightlightsize"), 0.5f); Scalar(TEXT("_SurfaceHightlighttiling"), 0.75f); Scalar(TEXT("_Fresnelexponent"), 3.f);
+	Texture(TEXT("_Normals"), TEXT("/Engine/EngineMaterials/DefaultNormal.DefaultNormal"));
+	Texture(TEXT("_Shadermap"), TEXT("/Engine/EngineResources/Black.Black"));
+	Input(TEXT("Uv"), Add(NewObject<UMaterialExpressionTextureCoordinate>(Mat)));
+	Input(TEXT("Pos"), Add(NewObject<UMaterialExpressionWorldPosition>(Mat)));
+	Input(TEXT("Cam"), Add(NewObject<UMaterialExpressionCameraPositionWS>(Mat)));
+	Input(TEXT("N"), Add(NewObject<UMaterialExpressionVertexNormalWS>(Mat)));
+	Input(TEXT("T"), Add(NewObject<UMaterialExpressionVertexTangentWS>(Mat)));
+	auto* Y = NewObject<UMaterialExpressionConstant3Vector>(Mat); Y->Constant = FLinearColor(0, 1, 0, 1); Add(Y);
+	auto* Bitangent = NewObject<UMaterialExpressionTransform>(Mat);
+	Bitangent->TransformSourceType = TRANSFORMSOURCE_Tangent; Bitangent->TransformType = TRANSFORM_World; Bitangent->Input.Expression = Y; Add(Bitangent);
+	Input(TEXT("B"), Bitangent);
+	Input(TEXT("Time"), Add(NewObject<UMaterialExpressionTime>(Mat)));
+	Input(TEXT("SceneD"), Add(NewObject<UMaterialExpressionSceneDepth>(Mat)));
+	Input(TEXT("PixelD"), Add(NewObject<UMaterialExpressionPixelDepth>(Mat)));
+	// The grab coordinate's refraction offset (screen fraction) leaves through a second output for the SceneColor node.
+	FCustomOutput& OffsetOut = Program->AdditionalOutputs.AddDefaulted_GetRef();
+	OffsetOut.OutputName = TEXT("GrabOffset"); OffsetOut.OutputType = CMOT_Float2;
+	Program->Code = TEXT(
+		"float3 wp = float3(-Pos.x, Pos.z, Pos.y) * 0.01, cam = float3(-Cam.x, Cam.z, Cam.y) * 0.01;\n"
+		"float3 v3 = float3(-N.x, N.z, N.y), v4 = float3(-T.x, T.z, T.y), v5 = normalize(float3(-B.x, B.z, B.y));\n"
+		"float2 v1 = float2(Uv.x, 1.0 - Uv.y);\n"
+		"float3 L = normalize(float3(ResolvedView.ViewForward.x, -ResolvedView.ViewForward.z, -ResolvedView.ViewForward.y));\n"
+		"float4 r0, r1, r2, r3, r4, r5, r6, r7; float4 s;\n"
+		"r0.x = Time * (Wavesspeed * 0.1);\n"
+		"r0 = r0.xxxx * float4(0.0, 1.0, 0.9, 0.0);\n"
+		"r1 = v1.xyxy * -20.0;\n"
+		"r2 = v1.xyxy * 20.0 + wp.xzxz;\n"
+		"r1 = Worldspacetiling * r2 + r1;\n"
+		"r2.xy = 1.0 - float2(Tiling, Transparency);\n"
+		"r3 = r1.zwzw * r2.x + r0;\n"
+		"r1 = r1 * r2.x;\n"
+		"r0 = r1 * Rimtiling + r0.yxxy;\n"
+		"#define SAMPLE(t, uv) Texture2DSample(t, t##Sampler, float2((uv).x, 1.0 - (uv).y))\n"
+		"r1 = SAMPLE(Normals, r3.xy);\n"
+		"r4.xy = r1.wy * 2.0 - 1.0;\n"
+		"r1.xy = r1.wy + r1.wy;\n"
+		"r1.w = 1.0 - min(dot(r4.xy, r4.xy), 1.0);\n"
+		"r1.z = sqrt(r1.w);\n"
+		"r1.xyz = r1.xyz + float3(-1.0, -1.0, 1.0);\n"
+		"r5 = SAMPLE(Normals, r3.zw);\n"
+		"r3 = r3 * SurfaceHightlighttiling;\n"
+		"r5.xy = r5.wy * 2.0 - 1.0;\n"
+		"r5.z = sqrt(1.0 - min(dot(r5.xy, r5.xy), 1.0));\n"
+		"r2.xzw = float3(-r5.x, -r5.y, r5.z);\n"
+		"r1.w = dot(r1.xyz, r2.xzw);\n"
+		"s.xyz = r1.w * r1.xyz; r1.xyz = float3(s.x, s.y, s.z) / r1.z;\n"
+		"r1.xyz = r5.xyz * float3(1.0, 1.0, -1.0) + r1.xyz;\n"
+		"r1.xyz = normalize(r1.x * v4 + r1.y * v5 + r1.z * normalize(v3));\n"
+		"float3 n = r1.xyz, vn = normalize(v3);\n"
+		"float3 V = normalize(cam - wp), H = normalize(V + L);\n"
+		"float nh = max(dot(n, H), 0.0), lh = max(dot(L, H), 0.0), nl = max(dot(n, L), 0.0);\n"
+		"r5.x = saturate(-(1.0 - r4.x) * (1.0 - r5.y) + 1.0);\n"
+		"r5.x = -r5.x * Glossiness + 1.0;\n"
+		"float rough = 1.0 - r5.x;\n"
+		"r4.z = r5.y;\n"
+		"r4.xz = r4.xz * RefractionAmount;\n"
+		"float a2 = rough * rough;\n"
+		"float d = nh * (nh * a2 - nh) + 1.0; d = a2 * 0.318310 / (d * d);\n"
+		"float nv = max(dot(n, V), 0.0);\n"
+		"float vis = 0.5 / (nl * (nv * (1.0 - rough) + rough) + nv * (nl * (1.0 - rough) + rough) + 1e-5);\n"
+		"float spec = nl * sqrt(max(d * nl * vis * 0.785398, 1e-4));\n"
+		"float3 specular = spec * LightColor0.rgb;\n"
+		"float fres = 1.0 - pow(1.0 - max(dot(vn, V), 0.0), Fresnelexponent) * FresnelColor.a;\n"
+		"float sv = pow(1.0 - nv, 5.0);\n"
+		"float3 lit = specular * pow(1.0 - lh, 5.0);\n"
+		"float4 m0 = SAMPLE(Shadermap, r0.xy), m1 = SAMPLE(Shadermap, r0.zw);\n"
+		"float foam = -m0.z * m1.z + 1.0;\n"
+		"float depthDiff = max(SceneD - PixelD, 0.0) * 0.01;\n"
+		"float rim = 1.0 - pow(saturate(depthDiff / RimSize), Rimfalloff); rim *= RimColor.a;\n"
+		"float rimA = foam * rim * RimColor.a + rim;\n"
+		"float deep = saturate(depthDiff / Depth);\n"
+		"float alpha = rimA * r2.y + Transparency;\n"
+		"float3 water = lerp(WaterColor.rgb, WaterColor.rgb * (1.0 - Depthdarkness), deep);\n"
+		"water = lerp(water, RimColor.rgb, saturate(rimA));\n"
+		"water = lerp(FresnelColor.rgb, water, fres);\n"
+		"float4 h0 = SAMPLE(Shadermap, r3.xy), h1 = SAMPLE(Shadermap, r3.zw);\n"
+		"float high = saturate(((h0.x - h1.x) >= Surfacehightlightsize ? 1.0 : 0.0) * SurfaceHighlight);\n"
+		"water = lerp(water, 1.0, high);\n"
+		"float fd = lh * lh * 2.0 * rough - 0.5;\n"
+		"float diffuse = nl * (fd * sv + 1.0) * (fd * pow(1.0 - nl, 5.0) + 1.0);\n"
+		"lit += (diffuse * LightColor0.rgb + 2.0 * OKAmbient.rgb) * water;\n"
+		"float overlay = alpha > 0.5 ? 1.0 - (1.0 - 2.0 * (alpha - 0.5)) * (1.0 - deep) : 2.0 * alpha * deep;\n"
+		"GrabOffset = r4.xz;\n"
+		"return float4(lit, saturate(overlay) + high);");
+	Add(Program);
+	auto* Lit = Add(NewObject<UMaterialExpressionComponentMask>(Mat));
+	Cast<UMaterialExpressionComponentMask>(Lit)->Input.Expression = Program;
+	Cast<UMaterialExpressionComponentMask>(Lit)->R = Cast<UMaterialExpressionComponentMask>(Lit)->G = Cast<UMaterialExpressionComponentMask>(Lit)->B = 1;
+	auto* Alpha = Add(NewObject<UMaterialExpressionComponentMask>(Mat));
+	Cast<UMaterialExpressionComponentMask>(Alpha)->Input.Expression = Program;
+	Cast<UMaterialExpressionComponentMask>(Alpha)->A = 1;
+	auto* Grab = Cast<UMaterialExpressionSceneColor>(Add(NewObject<UMaterialExpressionSceneColor>(Mat)));
+	Grab->InputMode = EMaterialSceneAttributeInputMode::OffsetFraction;
+	Grab->Input.Expression = Program; Grab->Input.OutputIndex = 1;
+	auto* Mix = Cast<UMaterialExpressionLinearInterpolate>(Add(NewObject<UMaterialExpressionLinearInterpolate>(Mat)));
+	Mix->A.Expression = Grab; Mix->B.Expression = Lit; Mix->Alpha.Expression = Alpha;
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData())
+	{
+		// The program writes alpha 1 and blends with the grab itself: drawn over what is behind, fully covering.
+		Ed->EmissiveColor.Expression = Mix;
+		auto* One = NewObject<UMaterialExpressionConstant>(Mat); One->R = 1.f; Add(One);
+		Ed->Opacity.Expression = One;
+	}
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Cached.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
 UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, int32 PartIndex)
 {
 	// okmodel_view::mark_render_texture: camera index, then the camera in prefab space (Unity axes, metres).
@@ -6512,6 +6666,37 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					Comp->SetMaterial(0, Dynamic);
 					Part.SurfaceMat = Dynamic;
 					UE_LOG(LogTemp, Display, TEXT("OK glitch part=%s"), *Name);
+				}
+		// StylizedWater/Desktop (a mod water shader): its own graph, with the material's values and textures.
+		if (Comp && !bBody && !bFaceDraw && Source.MaterialShaderName(i).Equals(TEXT("StylizedWater/Desktop"), ESearchCase::IgnoreCase))
+			if (UMaterialInterface* WaterMat = OKStylizedWaterMaterial())
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(WaterMat, Comp))
+				{
+					const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+					FLinearColor V;
+					for (const TCHAR* Property : { TEXT("_WaterColor"), TEXT("_RimColor"), TEXT("_FresnelColor") })
+						if (Source.MaterialValue(i, TCHAR_TO_UTF8(Property), V)) Dynamic->SetVectorParameterValue(Property, FLinearColor(Linear(V.R), Linear(V.G), Linear(V.B), V.A));
+					for (const TCHAR* Property : { TEXT("_RimSize"), TEXT("_Tiling"), TEXT("_RefractionAmount"), TEXT("_Transparency"), TEXT("_Wavesspeed"),
+						TEXT("_Glossiness"), TEXT("_Depth"), TEXT("_Depthdarkness"), TEXT("_Rimtiling"), TEXT("_Worldspacetiling"), TEXT("_Rimfalloff"),
+						TEXT("_SurfaceHighlight"), TEXT("_Surfacehightlightsize"), TEXT("_SurfaceHightlighttiling"), TEXT("_Fresnelexponent") })
+						if (Source.MaterialValue(i, TCHAR_TO_UTF8(Property), V)) Dynamic->SetScalarParameterValue(Property, V.R);
+					// Both textures are data (normals, masks): sampled linear.
+					for (const TCHAR* Property : { TEXT("_Normals"), TEXT("_Shadermap") })
+					{
+						const uint8* Bytes = nullptr; int32 Length = 0;
+						if (!Source.ShaderTexture(i, TCHAR_TO_UTF8(Property), Bytes, Length)) continue;
+						OkTextureSettings Settings{ 1, 0, 0, 0, 0 };
+						if (Source.TextureSettings(i, TCHAR_TO_UTF8(Property), Settings)) Settings.srgb = 0;
+						if (UTexture2D* Texture = TextureFromPngBytes(Bytes, Length, false, &Settings, true))
+						{
+							Texture->AddToRoot(); Output.Textures.Add(Texture);
+							Dynamic->SetTextureParameterValue(Property, Texture);
+						}
+					}
+					Comp->SetMaterial(0, Dynamic);
+					Comp->SetCastShadow(false);
+					Part.SurfaceMat = Dynamic;
+					UE_LOG(LogTemp, Display, TEXT("OK stylized water part=%s"), *Name);
 				}
 		// A mirror (FX/MirrorReflection): the scene gives "_ReflectionTex" a capture mirrored in the part's plane.
 		if (Comp && !bBody && !bFaceDraw && Source.MaterialShaderName(i).StartsWith(TEXT("FX/MirrorReflection")))
