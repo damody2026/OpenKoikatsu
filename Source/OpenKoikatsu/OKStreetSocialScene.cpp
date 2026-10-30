@@ -2222,6 +2222,9 @@ void AOKStreetSocialScene::EndTalk(){
   // he gave Hu Tao) count the same.
   if((Hers||S.FreeTalkBusy)&&!His){const FString Text=OKT(TEXT("ui.memory.left_without_word"));HistoryAdd(S.Target,TEXT("talk"),TEXT("world"),Text);MindRemember(S.Target,TEXT("talk"),Text,PlaceHere(S.Male),0.4f);
    UE_LOG(LogTemp,Display,TEXT("Street talk: actor=%d he left without a word to what she said"),S.Target);}}
+ // Any talk he ends counts as parting, as her own goodbye does (TickApproach waits 3 minutes): 三月七 said goodnight at
+ // her door, he closed the talk, and she walked straight back up to him to start another (R6-22).
+ if(Ending)S.PartedAt.Add(S.Target,FPlatformTime::Seconds());
  if(Ending&&S.TalkStartMinute>=0&&OKStreetMindNow(S)>S.TalkStartMinute){const int64 Now=OKStreetMindNow(S);const int64 From=S.TalkStartMinute;S.TalkStartMinute=-1; // a talk of under a minute (re-opened at once) is not a memory
   MindRemember(S.Target,TEXT("talk"),OKMsg(TEXT("ui.memory.talk_session"),{{TEXT("place"),([&](const FString& Id){const FOKStreetPlace* P=OKStreetFindPlace(Id);return P?FString(P->Name):Id.IsEmpty()?FString(OKT(TEXT("ui.etiquette.street_location"))):Id;})(PlaceHere(S.Male))},{TEXT("minutes"),int32(FMath::Max<int64>(1,Now-From))},
    {TEXT("start"),FString::Printf(TEXT("%02d:%02d"),int32(From%1440/60),int32(From%60))},{TEXT("end"),FString::Printf(TEXT("%02d:%02d"),int32(Now%1440/60),int32(Now%60))}}),PlaceHere(S.Male),0.2f);}
