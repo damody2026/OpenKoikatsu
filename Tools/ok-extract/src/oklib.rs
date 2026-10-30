@@ -304,8 +304,21 @@ fn read_loc(file: &File, loc: &Loc) -> Option<Vec<u8>> {
     match loc {
         Loc::Packed(offset, len) => read(*offset, *len),
         Loc::Chunks(parts) => {
-            let mut out = Vec::new();
-            for (offset, len) in parts { out.extend(read(*offset, *len)?); }
+            // Every part states its size: one buffer of the whole, each part decompressed into its place (grown part by
+            // part, a large value was copied through every power of two below it).
+            let mut blocks = Vec::with_capacity(parts.len());
+            for (offset, len) in parts {
+                let mut buf = vec![0u8; *len as usize];
+                read_at(file, &mut buf, *offset).ok()?;
+                let size = u32::from_le_bytes(buf.get(..4)?.try_into().ok()?) as usize;
+                blocks.push((buf, size));
+            }
+            let mut out = vec![0u8; blocks.iter().map(|(_, size)| size).sum()];
+            let mut at = 0;
+            for (buf, size) in &blocks {
+                if lz4_flex::block::decompress_into(&buf[4..], &mut out[at..at + size]).ok()? != *size { return None; }
+                at += size;
+            }
             Some(out)
         }
     }
@@ -1720,7 +1733,7 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
             let t = std::time::Instant::now();
             // (only outfit 0's session is the card's digest; the others are opened for what they read)
             crate::okstrict::set_read_only(o > 0 && read_only);
-            let opened = if o == 0 { session_digest_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
+            let opened = if o == 0 { session_hash_outfit(lib, card, o).map(|d| first = Some(d)) } else { crate::session::open(lib, Some(card), o).map(|_| ()) };
             crate::okstrict::set_read_only(false);
             if let Err(e) = opened { failed.push(format!("outfit {o}: {e}")); }
             // The other garment states the game and the card reader show (CLOTHES_STATE_VARIANTS): only read. What
@@ -2188,6 +2201,23 @@ pub fn card_memory_line(phase: &str, card: &Path, start: u64) -> String {
 
 fn session_digest(game: &Path, card: &Path) -> Result<(String, usize, Vec<u8>), String> {
     session_digest_outfit(game, card, 0)
+}
+/// `session_digest_outfit` without the bytes: the serialized session goes straight into the hash (a conversion only
+/// needs the digest; the session's bytes were a buffer of hundreds of MB grown by doubling, then hashed).
+fn session_hash_outfit(game: &Path, card: &Path, outfit: i32) -> Result<(String, usize, Vec<u8>), String> {
+    struct Hashing(sha2::Sha256);
+    impl std::io::Write for Hashing {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> { sha2::Digest::update(&mut self.0, b); Ok(b.len()) }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    }
+    let session = crate::session::open(game, Some(card), outfit)?;
+    // (buffered: bincode writes every number on its own)
+    let mut hashing = std::io::BufWriter::with_capacity(1 << 16, Hashing(sha2::Digest::new()));
+    session.write_preview(&mut hashing)?;
+    let digest = sha2::Digest::finalize(hashing.into_inner().map_err(|e| e.to_string())?.0);
+    let mut id = [0u8; 16];
+    id.copy_from_slice(&digest[..16]);
+    Ok((hex(&id), session.parts.len(), Vec::new()))
 }
 fn session_digest_outfit(game: &Path, card: &Path, outfit: i32) -> Result<(String, usize, Vec<u8>), String> {
     let session = crate::session::open(game, Some(card), outfit)?;

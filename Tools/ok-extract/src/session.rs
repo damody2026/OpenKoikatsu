@@ -2920,6 +2920,10 @@ impl OkSession {
     pub(crate) fn to_preview_bytes(&self) -> Result<Vec<u8>, String> {
         bincode::serialize(&self.preview_snapshot()).map_err(|e| e.to_string())
     }
+    /// The bytes of to_preview_bytes, written to `out` as they are made.
+    pub(crate) fn write_preview(&self, out: &mut impl std::io::Write) -> Result<(), String> {
+        bincode::serialize_into(out, &self.preview_snapshot()).map_err(|e| e.to_string())
+    }
     /// What to_preview_bytes serializes, owned (serialized elsewhere).
     pub(crate) fn preview_snapshot(&self) -> PreviewSnapshot {
         let mut blob = SessionBlob::from_session(self);
