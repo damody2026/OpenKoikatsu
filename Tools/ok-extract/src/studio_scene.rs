@@ -277,7 +277,10 @@ fn scene_material_edits(bytes: &[u8]) -> Vec<MaterialEdit> {
         out.push(MaterialEdit { id, material, property: String::new(), kind: "shader".into(), value: [queue, 0.0, 0.0, 0.0], text: shader });
     }
     // MaterialTexturePropertyList: a texture from TextureDictionary (by TexID) and / or its offset and scale.
-    let textures: Vec<(i64, Vec<u8>)> = map_get(inner, "TextureDictionary").and_then(rmpv::Value::as_map).into_iter().flatten()
+    // Material Editor serializes the dictionary as msgpack bytes too (like the lists); older saves keep a plain map.
+    let dictionary = map_get(inner, "TextureDictionary").map(|v| v.as_slice()
+        .and_then(|bin| rmpv::decode::read_value(&mut std::io::Cursor::new(bin)).ok()).unwrap_or_else(|| v.clone()));
+    let textures: Vec<(i64, Vec<u8>)> = dictionary.as_ref().and_then(rmpv::Value::as_map).into_iter().flatten()
         .filter_map(|(k, v)| Some((k.as_i64()?, v.as_slice()?.to_vec()))).collect();
     let vec2 = |v: Option<&rmpv::Value>| -> Option<[f32; 2]> {
         let v = v?;

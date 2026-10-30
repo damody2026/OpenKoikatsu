@@ -330,8 +330,12 @@ int32 AKKPreviewActor::ApplyMaterialOverrides(TArray<FString>* OutUnapplied){
    if(!Material)continue;
    UMaterialInstanceDynamic* Dynamic=nullptr;
    for(int32 O=0;O<MaterialOverrides.Num();++O){
-    const auto& Override=MaterialOverrides[O];
-    if(Override.Parameter.IsNone()||!OverrideMatches(Override,Index,PartRole,Id.Key,Id.Value)||!HasParameter(Material,Override))continue;
+    FOKMaterialOverride Override=MaterialOverrides[O];
+    if(Override.Parameter.IsNone()||!OverrideMatches(Override,Index,PartRole,Id.Key,Id.Value))continue;
+    // The generic part graph (no native Forge program) names its main texture KKAppearanceMain, not _MainTex.
+    static const FName MainTex(TEXT("_MainTex")),AppearanceMain(TEXT("KKAppearanceMain"));
+    if(Override.Parameter==MainTex&&!HasParameter(Material,Override))Override.Parameter=AppearanceMain;
+    if(!HasParameter(Material,Override))continue;
     // Shared (deduplicated) materials are never edited: each part slot writes its own MID.
     if(!Dynamic){
      Dynamic=Cast<UMaterialInstanceDynamic>(Material);
