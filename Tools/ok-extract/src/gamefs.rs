@@ -39,6 +39,17 @@ pub enum Entry {
     /// GB that every library session used to hold in memory. Written as `Data`, never read back as this.
     #[serde(skip_deserializing)]
     Mapped(usize, usize),
+    /// An OK card pack's `Data` left in the pack's decompressed bytes (an open used to copy them all out). Written as
+    /// `Data`, never read back as this; copied out (`portable`) when kept beyond the open.
+    #[serde(skip_deserializing)]
+    Shared(PackData),
+}
+
+/// Bytes of a mounted card pack (`Entry::Shared`).
+#[derive(Clone)]
+pub struct PackData(crate::unity::SourceBytes);
+impl std::fmt::Debug for PackData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "PackData({} bytes)", self.0.len()) }
 }
 
 impl serde::Serialize for Entry {
@@ -56,6 +67,7 @@ impl serde::Serialize for Entry {
                 t.end()
             }
             Entry::Mapped(..) => s.serialize_newtype_variant("Entry", 3, "Data", &self.data().unwrap_or_default()),
+            Entry::Shared(bytes) => s.serialize_newtype_variant("Entry", 3, "Data", &*bytes.0),
         }
     }
 }
@@ -66,12 +78,13 @@ impl Entry {
         match self {
             Entry::Data(bytes) => Some(bytes.clone()),
             Entry::Mapped(offset, len) => INDEX_MAP.read().unwrap().as_ref().and_then(|m| m.get(*offset..*offset + *len)).map(<[u8]>::to_vec),
+            Entry::Shared(bytes) => Some(bytes.0.to_vec()),
             _ => None,
         }
     }
-    fn is_data(&self) -> bool { matches!(self, Entry::Data(_) | Entry::Mapped(..)) }
+    fn is_data(&self) -> bool { matches!(self, Entry::Data(_) | Entry::Mapped(..) | Entry::Shared(_)) }
     fn data_len(&self) -> Option<usize> {
-        match self { Entry::Data(bytes) => Some(bytes.len()), Entry::Mapped(_, len) => Some(*len), _ => None }
+        match self { Entry::Data(bytes) => Some(bytes.len()), Entry::Mapped(_, len) => Some(*len), Entry::Shared(bytes) => Some(bytes.0.len()), _ => None }
     }
 }
 
@@ -84,10 +97,27 @@ enum EntryRef<'a> { Missing, Dir, Present(u64), Data(#[serde(borrow)] &'a [u8]),
 #[derive(serde::Deserialize)]
 struct ZipIndexRef<'a> { names: Vec<(String, u64, u32, bool)>, #[serde(borrow)] entries: BTreeMap<usize, EntryRef<'a>> }
 #[derive(serde::Deserialize)]
-struct IndexRef<'a> {
+pub(crate) struct IndexRef<'a> {
     #[serde(borrow)] files: BTreeMap<String, EntryRef<'a>>,
     dirs: BTreeMap<String, Vec<(String, bool)>>,
     #[serde(borrow)] zips: BTreeMap<String, ZipIndexRef<'a>>,
+}
+
+/// A card pack's index read in place from its decompressed bytes `raw`: file contents stay there (`Entry::Shared`).
+pub(crate) fn pack_index(parsed: IndexRef<'_>, raw: &crate::unity::SourceBytes) -> Index {
+    let base = raw.as_ptr() as usize;
+    let entry = |e: EntryRef| match e {
+        EntryRef::Missing => Entry::Missing,
+        EntryRef::Dir => Entry::Dir,
+        EntryRef::Present(len) => Entry::Present(len),
+        EntryRef::Data(bytes) => Entry::Shared(PackData(raw.sub(bytes.as_ptr() as usize - base, bytes.len()))),
+        EntryRef::Model(id, len) => Entry::Model(id, len),
+    };
+    Index {
+        files: parsed.files.into_iter().map(|(k, e)| (k, entry(e))).collect(),
+        dirs: parsed.dirs,
+        zips: parsed.zips.into_iter().map(|(k, z)| (k, ZipIndex { names: z.names, entries: z.entries.into_iter().map(|(i, e)| (i, entry(e))).collect() })).collect(),
+    }
 }
 
 /// A replayed library's index from a mapped, decompressed copy kept in the library's work area (made once per index
@@ -522,7 +552,7 @@ fn is_unity(path: &Path, bytes: &[u8]) -> bool {
 
 fn entry_bytes(entry: &Entry) -> Option<Vec<u8>> {
     match entry {
-        Entry::Data(_) | Entry::Mapped(..) => entry.data(),
+        Entry::Data(_) | Entry::Mapped(..) | Entry::Shared(_) => entry.data(),
         Entry::Model(id, _) => Some(crate::oklib::token(id)),
         _ => None,
     }
@@ -703,7 +733,7 @@ fn observe_library(st: &State, key: &str) -> Option<Entry> {
 
 /// A library entry as a card's pack keeps it (content left in the mapped index copied out).
 fn portable(entry: &Entry) -> Entry {
-    match entry { Entry::Mapped(..) => Entry::Data(entry.data().unwrap_or_default()), e => e.clone() }
+    match entry { Entry::Mapped(..) | Entry::Shared(_) => Entry::Data(entry.data().unwrap_or_default()), e => e.clone() }
 }
 
 fn observe_in(index: &Index, key: &str) -> Option<Entry> {
@@ -1273,7 +1303,7 @@ pub fn summary() -> Vec<(String, String, usize, usize)> {
         let ext = name.rsplit('/').next().and_then(|n| n.rsplit_once('.')).map(|(_, e)| e.to_owned()).unwrap_or_default();
         let (kind, size) = match entry {
             Entry::Missing => ("missing", 0), Entry::Dir => ("dir", 0), Entry::Present(_) => ("present", 0),
-            Entry::Data(_) | Entry::Mapped(..) => ("data", entry.data_len().unwrap_or(0)), Entry::Model(..) => ("model", 0),
+            Entry::Data(_) | Entry::Mapped(..) | Entry::Shared(_) => ("data", entry.data_len().unwrap_or(0)), Entry::Model(..) => ("model", 0),
         };
         let slot = out.entry((kind.to_owned(), ext)).or_default();
         slot.0 += 1; slot.1 += size;

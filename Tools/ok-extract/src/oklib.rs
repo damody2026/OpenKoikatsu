@@ -828,7 +828,7 @@ mod pack_bytes {
 /// `CardPack` read in place: the values stay in the decoded pack bytes (an open used to copy them all out, a second
 /// copy of a pack of hundreds of MB).
 #[derive(serde::Deserialize)]
-struct CardPackRef<'a> { version: u32, index: crate::gamefs::Index, #[serde(borrow)] records: Vec<PackRecordRef<'a>> }
+struct CardPackRef<'a> { version: u32, #[serde(borrow)] index: crate::gamefs::IndexRef<'a>, #[serde(borrow)] records: Vec<PackRecordRef<'a>> }
 #[derive(serde::Deserialize)]
 struct PackRecordRef<'a>(Id, String, #[serde(with = "pack_bytes")] Vec<u8>, &'a [u8]);
 const CARD_PACK_VERSION: u32 = 2;
@@ -989,12 +989,15 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
     // once, and nothing is written to disk.
     active().filter(|s| s.mode == Mode::Replay).ok_or("library not active")?;
     let (profile, t) = (std::env::var_os("OK_PROFILE").is_some(), std::time::Instant::now());
-    let raw = crate::unity::SourceBytes::from(decode_card_pack_bytes(chunk)?);
+    // (the pack's identity hashed while it is decompressed)
+    let (raw, identity) = rayon::join(|| decode_card_pack_bytes(chunk), || hex(&hash16(chunk)));
+    let raw = crate::unity::SourceBytes::from(raw?);
     if profile { eprintln!("ok-extract: PROFILE pack zstd {} -> {} bytes {:>8.1}ms", chunk.len(), raw.len(), t.elapsed().as_secs_f64() * 1e3); }
     let pack: CardPackRef = bincode::deserialize(&raw).map_err(|e| format!("card pack: {e}"))?;
     if pack.version != CARD_PACK_VERSION { return Err(format!("card pack version {} (expected {CARD_PACK_VERSION})", pack.version)); }
     if profile { eprintln!("ok-extract: PROFILE pack decoded {:>8.1}ms ({} records)", t.elapsed().as_secs_f64() * 1e3, pack.records.len()); }
     let CardPackRef { index, records, .. } = pack;
+    let index = crate::gamefs::pack_index(index, &raw);
     LAST_PACK_MODELS.store(records.iter().map(|r| r.0).collect::<std::collections::BTreeSet<_>>().len() as u64, Ordering::Relaxed);
     let base = raw.as_ptr() as usize;
     let records = records.into_iter().map(|PackRecordRef(id, query, args, value)| ((id, query, args), raw.sub(value.as_ptr() as usize - base, value.len())));
@@ -1007,9 +1010,9 @@ pub fn mount_card_pack(card: &Path) -> Result<Option<PackMount>, String> {
         let dirs: Vec<_> = index.dirs.iter().filter(|(k, _)| in_mods(k)).collect();
         // Nothing under mods/: the library's own tree, the same memos as without a pack (and as a prewarm).
         if files.is_empty() && dirs.is_empty() && index.zips.is_empty() { String::new() }
-        else { bincode::serialize(&(files, dirs, &index.zips)).map(|b| hex(&hash16(&b))).unwrap_or_else(|_| hex(&hash16(chunk))) }
+        else { hash16_serialized(&(files, dirs, &index.zips)).map(|id| hex(&id)).unwrap_or_else(|| identity.clone()) }
     };
-    Ok(Some(mount_scope(PackScope { overlay: crate::gamefs::replay_overlay_of(index), store: Some(pack_store), identity: hex(&hash16(chunk)),
+    Ok(Some(mount_scope(PackScope { overlay: crate::gamefs::replay_overlay_of(index), store: Some(pack_store), identity,
         mods_identity: mods_view, fallback_used: AtomicBool::new(false), pool: std::sync::OnceLock::new(), tree, strict })))
 }
 
@@ -2154,6 +2157,22 @@ pub fn note_unmemoized(label: &str) {
         let frames: Vec<&str> = bt.lines().filter(|l| l.contains("ok_extract::") && !l.contains("oklib::") && !l.contains("library_internals")).take(5).collect();
         store.note_missing(format!("UNMEMOIZED {label} {}", frames.join(" <- ").split_whitespace().collect::<Vec<_>>().join(" ")));
     }
+}
+
+/// `hash16` of `value`'s bincode bytes, hashed as they are written (the bytes are not built first).
+fn hash16_serialized<T: serde::Serialize + ?Sized>(value: &T) -> Option<Id> {
+    struct Hashing(sha2::Sha256);
+    impl std::io::Write for Hashing {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> { sha2::Digest::update(&mut self.0, b); Ok(b.len()) }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    }
+    // (buffered: bincode writes every number on its own)
+    let mut hashing = std::io::BufWriter::with_capacity(1 << 16, Hashing(sha2::Digest::new()));
+    bincode::serialize_into(&mut hashing, value).ok()?;
+    let digest = sha2::Digest::finalize(hashing.into_inner().ok()?.0);
+    let mut id = [0u8; 16];
+    id.copy_from_slice(&digest[..16]);
+    Some(id)
 }
 
 pub fn hash16(bytes: &[u8]) -> Id {
