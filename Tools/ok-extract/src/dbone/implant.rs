@@ -44,7 +44,7 @@ pub(crate) fn parse_resolved(file: &SerializedFile, skel: &Skeleton, scripts:&cr
     let mut active_go=HashMap::new(); let mut component_order=HashMap::new();
     for info in &file.objects {
         if info.type_id != 4 && info.type_id != 1 { continue; }
-        let Ok(obj) = UnityObject::from_serialized_file(file,info) else { continue; }; let p=obj.class.properties();
+        let Ok(obj) = file.scene_object(info) else { continue; }; let p=obj.class.properties();
         if info.type_id==1 {
             active_go.insert(info.path_id,behaviour_enabled(p.get("m_IsActive")));
             if let Some(UnityValue::Array(items))=p.get("m_Component") {
@@ -66,7 +66,7 @@ pub(crate) fn parse_resolved(file: &SerializedFile, skel: &Skeleton, scripts:&cr
         if let Some(children_of)=children.get(&id) {for child in children_of {walk(*child,children,colliders,out);}}
     }
     let mut markers:Vec<_>=file.objects.iter().filter(|info|info.type_id==114).filter_map(|info| {
-        let obj=UnityObject::from_serialized_file(file,info).ok()?; let p=obj.class.properties();
+        let obj=file.scene_object(info).ok()?; let p=obj.class.properties();
         if scripts.class(p.get("m_Script"))!=Some("BoneImplantProcess") {return None;}
         let component=*transforms.get(&p.get("m_GameObject").and_then(pptr)?)?;
         if !skel.tfs.contains_key(&component) {return None;}

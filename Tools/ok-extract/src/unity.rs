@@ -23,7 +23,7 @@ fn head_item_shader_decode_audit() {
     parsed.with_serialized(|sers| {
         for ser in sers {
             for info in ser.objects_of_type(48) {
-                match UnityObject::from_serialized_file(ser,info) {
+                match ser.scene_object(info) {
                     Ok(object) => eprintln!("SHADER {} name={:?} keys={:?} warnings={:?}",info.path_id,object.name(),object.class.properties().keys(),object.typetree_warnings()),
                     Err(error)=>eprintln!("SHADER {} error={error:?}",info.path_id),
                 }
@@ -214,7 +214,7 @@ fn shader_bundle_has_dxbc_unity(bytes: &[u8], shader_name: &str,nested:bool) -> 
         let Ok(fb) = bundle.extract_file_data(file) else { continue; };
         let Ok(serialized) = parse_serialized_file(fb) else { continue; };
         for info in serialized.objects_of_type(48) {
-            let Ok(obj) = UnityObject::from_serialized_file(&serialized, info) else { continue; };
+            let Ok(obj) = serialized.scene_object(info) else { continue; };
             let props = obj.class.properties();
             let name = props.get("m_ParsedForm").and_then(|v| match v {
                 unity_asset_core::UnityValue::Object(o) => o.get("m_Name").and_then(|v| v.as_str()),
@@ -346,7 +346,7 @@ fn prefab_pathid_names(
     let mut go_name: HashMap<i64, String> = HashMap::new();
     for info in &ser.objects {
         if info.type_id == 1 {
-            if let Ok(obj) = UnityObject::from_serialized_file(ser, info) {
+            if let Ok(obj) = ser.scene_object(info) {
                 go_name.insert(info.path_id, obj.name().unwrap_or_default());
             }
         }
@@ -354,7 +354,7 @@ fn prefab_pathid_names(
     let mut names = HashMap::new();
     for info in &ser.objects {
         if info.type_id == 4 {
-            if let Ok(obj) = UnityObject::from_serialized_file(ser, info) {
+            if let Ok(obj) = ser.scene_object(info) {
                 let props = obj.class.properties();
                 if let Some(g) = props.get("m_GameObject").and_then(uv_pptr) {
                     if let Some(n) = go_name.get(&g) {
@@ -375,7 +375,7 @@ fn parse_prefab_ik_ser(
     let nm = |v: &UnityValue| -> Option<String> { uv_pptr(v).and_then(|id| names.get(&id).cloned()) };
     let mut scripts: HashMap<i64, String> = HashMap::new();
     for info in ser.objects_of_type(115) {
-        if let Ok(obj) = UnityObject::from_serialized_file(ser, &info) {
+        if let Ok(obj) = ser.scene_object(&info) {
             let class = obj
                 .class
                 .properties()
@@ -388,7 +388,7 @@ fn parse_prefab_ik_ser(
         }
     }
     for info in ser.objects_of_type(114) {
-        let Ok(obj) = UnityObject::from_serialized_file(ser, &info) else {
+        let Ok(obj) = ser.scene_object(&info) else {
             continue;
         };
         let props = obj.class.properties();
@@ -517,7 +517,7 @@ fn parse_prefab_ik_ser(
         }
         let owner=props.get("m_GameObject").and_then(uv_pptr);
         for other in ser.objects_of_type(114) {
-            let Ok(frame)=UnityObject::from_serialized_file(ser,&other) else {continue;};
+            let Ok(frame)=ser.scene_object(&other) else {continue;};
             let values=frame.class.properties();
             if values.get("m_GameObject").and_then(uv_pptr)!=owner || values.get("m_Script").and_then(uv_pptr).and_then(|id|scripts.get(&id)).map(String::as_str)!=Some("FrameCorrect") {continue;}
             if let Some(list)=values.get("_list").and_then(|v|v.as_array()) {
@@ -655,7 +655,7 @@ pub(crate) fn accessory_color_use_in(files: &[unity_asset_binary::asset::Seriali
     for ser in files {
         let mut scripts: HashMap<i64, String> = HashMap::new();
         for info in ser.objects_of_type(115) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 let props = obj.class.properties();
                 let class = props
                     .get("m_ClassName")
@@ -670,14 +670,14 @@ pub(crate) fn accessory_color_use_in(files: &[unity_asset_binary::asset::Seriali
         let mut tf_go: HashMap<i64, i64> = HashMap::new();
         let mut tf_children: HashMap<i64, Vec<i64>> = HashMap::new();
         for info in ser.objects_of_type(1) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 if let Some(n) = obj.name() {
                     go_names.insert(info.path_id, n);
                 }
             }
         }
         for info in ser.objects_of_type(4) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 let props = obj.class.properties();
                 if let Some(g) = props.get("m_GameObject").and_then(pptr_path_id) {
                     tf_go.insert(info.path_id, g);
@@ -720,7 +720,7 @@ pub(crate) fn accessory_color_use_in(files: &[unity_asset_binary::asset::Seriali
         if !prefab_name.is_empty() && subtree.is_empty() { continue; }
         let mut found: Option<AccessoryColorUse> = None;
         for info in ser.objects_of_type(114) {
-            let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) else {
+            let Ok(obj) = ser.scene_object(&info) else {
                 continue;
             };
             let props = obj.class.properties();
@@ -848,7 +848,7 @@ fn clothes_renderer_map_unity<B: BundleInput + ?Sized>(bytes: &B, prefab_name: &
         };
         let mut scripts: HashMap<i64, String> = HashMap::new();
         for info in ser.objects_of_type(115) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 let props = obj.class.properties();
                 let class = props
                     .get("m_ClassName")
@@ -863,14 +863,14 @@ fn clothes_renderer_map_unity<B: BundleInput + ?Sized>(bytes: &B, prefab_name: &
         let mut tf_go: HashMap<i64, i64> = HashMap::new();
         let mut tf_children: HashMap<i64, Vec<i64>> = HashMap::new();
         for info in ser.objects_of_type(1) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 if let Some(n) = obj.name() {
                     go_names.insert(info.path_id, n);
                 }
             }
         }
         for info in ser.objects_of_type(4) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 let props = obj.class.properties();
                 if let Some(g) = props.get("m_GameObject").and_then(pptr_path_id) {
                     tf_go.insert(info.path_id, g);
@@ -908,7 +908,7 @@ fn clothes_renderer_map_unity<B: BundleInput + ?Sized>(bytes: &B, prefab_name: &
             }
         }
         for info in ser.objects_of_type(114) {
-            let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) else {
+            let Ok(obj) = ser.scene_object(&info) else {
                 continue;
             };
             let props = obj.class.properties();
@@ -975,14 +975,14 @@ fn prefab_node_names_unity(bytes: &[u8], prefab_name: &str) -> std::collections:
         let mut tf_go = HashMap::<i64, i64>::new();
         let mut tf_children = HashMap::<i64, Vec<i64>>::new();
         for info in ser.objects_of_type(1) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 if let Some(name) = obj.name() {
                     go_names.insert(info.path_id, name.to_ascii_lowercase());
                 }
             }
         }
         for info in ser.objects_of_type(4) {
-            if let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) {
+            if let Ok(obj) = ser.scene_object(&info) {
                 let props = obj.class.properties();
                 if let Some(go) = props.get("m_GameObject").and_then(pptr_path_id) {
                     tf_go.insert(info.path_id, go);
@@ -1700,7 +1700,7 @@ fn shader_bundle_declares_property_unity(bytes: &[u8], shader_name: &str, proper
         let Ok(fb) = bundle.extract_file_data(file) else { continue; };
         let Ok(serialized) = parse_serialized_file(fb) else { continue; };
         for info in serialized.objects_of_type(48) {
-            let Ok(shader) = UnityObject::from_serialized_file(&serialized, info) else { continue; };
+            let Ok(shader) = serialized.scene_object(info) else { continue; };
             if shader_runtime_name(&shader) == shader_name {
                 return shader_declares_property(&shader, property);
             }
@@ -1889,12 +1889,12 @@ impl ParsedBundle {
                 return self.with_serialized(|sers| {
                     let Some(ser)=sers.get(gi) else {return Vec::new();};
                     ser.objects_of_type(23).into_iter().chain(ser.objects_of_type(137)).filter_map(|info| {
-                        let obj=UnityObject::from_serialized_file(ser,info).ok()?;
+                        let obj=ser.scene_object(info).ok()?;
                         let props=obj.class.properties();
                         let go=props.get("m_GameObject").and_then(uv_pptr)?;
                         let node=*go_node.get(&go)?;
                         let layer=ser.objects_of_type(1).into_iter().find(|i|i.path_id==go)
-                            .and_then(|i|UnityObject::from_serialized_file(ser,i).ok())
+                            .and_then(|i|ser.scene_object(i).ok())
                             .and_then(|o|o.class.properties().get("m_Layer").map(uv_i32)).unwrap_or(0);
                         Some((node,props.get("m_CastShadows").map(uv_i32).unwrap_or(1),layer,
                             props.get("m_Enabled").map(uv_bool).unwrap_or(true)))
@@ -1933,7 +1933,7 @@ impl ParsedBundle {
                 };
                 let target=sers.get(target).ok_or("reflection file absent")?;
                 let info=target.objects_of_type(89).into_iter().find(|i|i.path_id==ptr.path).ok_or("reflection cubemap absent")?;
-                let cube=UnityObject::from_serialized_file(target,info).map_err(|e|e.to_string())?;
+                let cube=target.scene_object(info).map_err(|e|e.to_string())?;
                 let texture=read_texture_payload(&cube,&self.files,None).ok_or("reflection payload absent")?;
                 use unity_asset_decode::texture::TextureFormat;
                 let format=match texture.format{TextureFormat::BC6H=>95,TextureFormat::RGBAHalf=>10,other=>return Err(format!("unsupported lossless reflection format {other:?}"))};
@@ -1947,11 +1947,11 @@ impl ParsedBundle {
             let mut out=Vec::new();
             for(from,ser) in sers.iter().enumerate(){
                 for info in ser.objects_of_type(104){
-                    let object=UnityObject::from_serialized_file(ser,info).map_err(|e|e.to_string())?;let p=object.class.properties();
+                    let object=ser.scene_object(info).map_err(|e|e.to_string())?;let p=object.class.properties();
                     if let Some(cube)=read(from,p.get("m_GeneratedSkyboxReflection"),p.get("m_ReflectionIntensity").map(uv_f32).unwrap_or(1.))?{out.push((from,0,cube));}
                 }
                 for info in ser.objects_of_type(215){
-                    let object=UnityObject::from_serialized_file(ser,info).map_err(|e|e.to_string())?;let p=object.class.properties();
+                    let object=ser.scene_object(info).map_err(|e|e.to_string())?;let p=object.class.properties();
                     if !p.get("m_Enabled").map(uv_bool).unwrap_or(true){continue;}
                     let Some(go)=p.get("m_GameObject").and_then(references::PPtr::read) else{continue;};
                     if go.file!=0{return Err("reflection probe GameObject is external".into());}
@@ -1993,13 +1993,13 @@ impl ParsedBundle {
                     let Some(ser) = sers.get(gi) else { return Vec::new(); };
                     let mut active = vec![true; h.nodes.len()];
                     for info in ser.objects_of_type(1) {
-                        if let (Some(&node), Ok(o)) = (go_node.get(&info.path_id), UnityObject::from_serialized_file(ser, info)) {
+                        if let (Some(&node), Ok(o)) = (go_node.get(&info.path_id), ser.scene_object(info)) {
                             active[node as usize] = o.class.properties().get("m_IsActive").map(uv_bool).unwrap_or(true) || listed.contains(&(node as i32));
                         }
                     }
                     let mut out = Vec::new();
                     for info in ser.objects_of_type(108) {
-                        let Ok(obj) = UnityObject::from_serialized_file(ser, info) else { continue };
+                        let Ok(obj) = ser.scene_object(info) else { continue };
                         let p = obj.class.properties();
                         let Some(node) = p.get("m_GameObject").and_then(uv_pptr).and_then(|go| go_node.get(&go)).copied() else { continue };
                         let mut on = true;
@@ -2034,12 +2034,12 @@ impl ParsedBundle {
                         };
                         let ser = sers.get(file)?;
                         let info = ser.objects_of_type(class).into_iter().find(|i| i.path_id == ptr.path)?;
-                        Some((file, UnityObject::from_serialized_file(ser, info).ok()?))
+                        Some((file, ser.scene_object(info).ok()?))
                     };
                     let mut active = vec![true; h.nodes.len()];
                     for info in ser.objects_of_type(1) {
                         if let Some(&node) = go_node.get(&info.path_id) {
-                            if let Ok(o) = UnityObject::from_serialized_file(ser, info) {
+                            if let Ok(o) = ser.scene_object(info) {
                                 active[node as usize] = o.class.properties().get("m_IsActive").map(uv_bool).unwrap_or(true);
                             }
                         }
@@ -2051,7 +2051,7 @@ impl ParsedBundle {
                     }
                     let mut overrides = HashMap::new();
                     for info in ser.objects_of_type(95) {
-                        let Ok(a) = UnityObject::from_serialized_file(ser, info) else { continue; };
+                        let Ok(a) = ser.scene_object(info) else { continue; };
                         let p = a.class.properties();
                         if !p.get("m_Enabled").map(uv_bool).unwrap_or(true) { continue; }
                         let Some(&anim_node) = p.get("m_GameObject").and_then(uv_pptr).and_then(|id| go_node.get(&id)) else { continue; };
@@ -2538,7 +2538,7 @@ impl ParsedBundle {
             let roots = prefab_asset_roots(file);
             if !roots.is_empty() { return roots.contains_key(&name.to_ascii_lowercase()); }
             file.objects_of_type(1).into_iter().any(|info|
-                UnityObject::from_serialized_file(file, info).ok()
+                file.scene_object(info).ok()
                     .and_then(|obj| obj.name()).is_some_and(|n| n.eq_ignore_ascii_case(name)))
         }))
     }
@@ -2550,10 +2550,10 @@ impl ParsedBundle {
         self.with_serialized(|sers| {
             for ser in sers {
                 let names: HashMap<_,_> = ser.objects_of_type(1).into_iter().filter_map(|info|
-                    UnityObject::from_serialized_file(ser,info).ok().map(|obj|
+                    ser.scene_object(info).ok().map(|obj|
                         (info.path_id,obj.name().unwrap_or_default()))).collect();
                 for info in ser.objects_of_type(114) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let props=obj.class.properties();
                     if !props.get("m_GameObject").and_then(uv_pptr).and_then(|id|names.get(&id))
                         .is_some_and(|name|name.eq_ignore_ascii_case(main_data)) {continue;}
@@ -2584,17 +2584,17 @@ impl ParsedBundle {
             for (file,scripts) in files.iter().zip(scripts) {
                 let mut gos=HashMap::new();let mut nodes=HashMap::new();let mut by_go=HashMap::new();
                 for info in file.objects_of_type(1) {
-                    if let Ok(obj)=UnityObject::from_serialized_file(file,info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}
+                    if let Ok(obj)=file.scene_object(info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}
                 }
                 for info in file.objects_of_type(4) {
-                    if let Ok(obj)=UnityObject::from_serialized_file(file,info) {
+                    if let Ok(obj)=file.scene_object(info) {
                         let p=obj.class.properties();
                         if let Some(go)=p.get("m_GameObject").and_then(references::PPtr::local) {
                             nodes.insert(info.path_id,(go,p.get("m_Father").and_then(references::PPtr::local).unwrap_or(0)));by_go.insert(go,info.path_id);
                         }
                     }
                 }
-                let objects:Vec<_>=file.objects_of_type(114).into_iter().filter_map(|info|UnityObject::from_serialized_file(file,&info).ok()).collect();
+                let objects:Vec<_>=file.objects_of_type(114).into_iter().filter_map(|info|file.scene_object(&info).ok()).collect();
                 for object in &objects {
                     let p=object.class.properties();
                     if scripts.class(p.get("m_Script"))!=Some("ChaAccessoryClothes") {continue;}
@@ -2628,7 +2628,7 @@ impl ParsedBundle {
                 let Some(ser)=sers.get(gi) else {return Vec::new();};
                 let mut lights=Vec::new();
                 for info in ser.objects_of_type(108) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let props=obj.class.properties();
                     let Some(node)=props.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied() else {continue;};
                     let f=|k:&str|props.get(k).map(uv_f32).unwrap_or(0.);
@@ -2659,7 +2659,7 @@ impl ParsedBundle {
                 // renderer, lightmapIndex, scaleOffset), by renderer path id; it wins over the renderer's serialized values.
                 let mut restored=HashMap::new();
                 for info in ser.objects_of_type(114) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let Some(unity_asset_core::UnityValue::Array(list))=obj.class.properties().get("lightmapParameters").cloned() else {continue;};
                     for e in &list {
                         let (Some(r),Some(i),Some(st))=(uv_obj(e,"renderer").and_then(uv_pptr),uv_obj(e,"lightmapIndex").map(uv_i32),uv_obj(e,"scaleOffset").map(vec4)) else {continue;};
@@ -2668,7 +2668,7 @@ impl ParsedBundle {
                 }
                 let mut renderers=Vec::new();
                 for info in ser.objects_of_type(23) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let props=obj.class.properties();
                     let Some(node)=props.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied() else {continue;};
                     // Unity 2019 serializes the atlas placement as m_LightmapTilingOffset (m_LightmapScaleOffset in the API
@@ -2683,13 +2683,13 @@ impl ParsedBundle {
                 // The lightmaps live in the scene's shared assets (another file of the bundle): found by path id and type.
                 let mut names=Vec::new();
                 for info in ser.objects_of_type(157) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     if slot == "m_DirLightmap" && obj.class.properties().get("m_LightmapsMode").map(uv_i32) != Some(1) { continue; }
                     let Some(unity_asset_core::UnityValue::Array(maps))=obj.class.properties().get("m_Lightmaps").cloned() else {continue;};
                     for m in &maps {
                         let id=uv_obj(m,slot).and_then(uv_pptr).unwrap_or(0);
                         let name=sers.iter().find_map(|s| s.objects_of_type(28).into_iter().find(|i|i.path_id==id)
-                            .and_then(|i|UnityObject::from_serialized_file(s,i).ok()).and_then(|o|o.name())).unwrap_or_default();
+                            .and_then(|i|s.scene_object(i).ok()).and_then(|o|o.name())).unwrap_or_default();
                         names.push(name);
                     }
                 }
@@ -2713,13 +2713,13 @@ impl ParsedBundle {
                 let Some(ser)=sers.get(gi) else {return Default::default();};
                 let cubemap=|v:&unity_asset_core::UnityValue|->Option<(u32,u32,Vec<u8>)> {
                     let id=uv_pptr(v).filter(|id|*id!=0)?;
-                    let object=sers.iter().find_map(|s|s.objects_of_type(89).into_iter().find(|i|i.path_id==id).and_then(|i|UnityObject::from_serialized_file(s,i).ok()))?;
+                    let object=sers.iter().find_map(|s|s.objects_of_type(89).into_iter().find(|i|i.path_id==id).and_then(|i|s.scene_object(i).ok()))?;
                     cubemap_atlas(&read_texture_payload(&object,&self.files,None)?)
                 };
                 let vec3=|v:Option<&unity_asset_core::UnityValue>,d:f32|v.map(|v|["x","y","z"].map(|k|uv_obj(v,k).map(uv_f32).unwrap_or(d))).unwrap_or([d;3]);
                 let mut probes=Vec::new();
                 for info in ser.objects_of_type(215) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let p=obj.class.properties();
                     let Some(node)=p.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied() else {continue;};
                     if !p.get("m_Enabled").map(uv_bool).unwrap_or(true) {continue;}
@@ -2729,7 +2729,7 @@ impl ParsedBundle {
                         importance:p.get("m_Importance").map(uv_i32).unwrap_or(1),intensity:p.get("m_IntensityMultiplier").map(uv_f32).unwrap_or(1.),size,mips,atlas});
                 }
                 for info in ser.objects_of_type(104) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let p=obj.class.properties();
                     if let Some((size,mips,atlas))=p.get("m_GeneratedSkyboxReflection").and_then(cubemap) {
                         probes.push(PrefabReflectionProbe{node:-1,box_size:[0.;3],box_offset:[0.;3],importance:0,intensity:p.get("m_ReflectionIntensity").map(uv_f32).unwrap_or(1.),size,mips,atlas});
@@ -2750,7 +2750,7 @@ impl ParsedBundle {
             if h.nodes.is_empty() {continue;}
             return self.with_serialized(|sers| {
                 let Some(ser)=sers.get(gi) else {return Default::default();};
-                let find=|class:i32,id:i64| sers.iter().find_map(|s|s.objects_of_type(class).into_iter().find(|i|i.path_id==id).and_then(|i|UnityObject::from_serialized_file(s,i).ok()));
+                let find=|class:i32,id:i64| sers.iter().find_map(|s|s.objects_of_type(class).into_iter().find(|i|i.path_id==id).and_then(|i|s.scene_object(i).ok()));
                 // A node's path below an ancestor (Unity binding paths are relative to the Animator's GameObject).
                 let path_of=|anc:usize,node:usize|->Option<String> {
                     let mut names=Vec::new();
@@ -2761,7 +2761,7 @@ impl ParsedBundle {
                 };
                 let mut values=Vec::new();
                 for info in ser.objects_of_type(95) {
-                    let Ok(a)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(a)=ser.scene_object(info) else {continue;};
                     let p=a.class.properties();
                     if !p.get("m_Enabled").map(uv_bool).unwrap_or(true) {continue;}
                     let Some(anim_node)=p.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied() else {continue;};
@@ -2796,13 +2796,13 @@ impl ParsedBundle {
             return self.with_serialized(|sers| {
                 let Some(ser)=sers.get(gi) else {return Default::default();};
                 for info in ser.objects_of_type(114) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let p=obj.class.properties();
                     let (Some(unity_asset_core::UnityValue::Array(list)),Some(target))=(p.get("_infos"),p.get("_targetLight")) else {continue;};
                     if !p.get("m_GameObject").and_then(uv_pptr).is_some_and(|go|go_node.contains_key(&go)) {continue;}
                     let mut sun=PrefabSunLight{light_node:-1,light_type:1,culling_mask:u32::MAX,lightmapping:4,infos:Vec::new()};
                     let light_id=uv_pptr(target).unwrap_or(0);
-                    if let Some(l)=ser.objects_of_type(108).into_iter().find(|i|i.path_id==light_id).and_then(|i|UnityObject::from_serialized_file(ser,i).ok()) {
+                    if let Some(l)=ser.objects_of_type(108).into_iter().find(|i|i.path_id==light_id).and_then(|i|ser.scene_object(i).ok()) {
                         let lp=l.class.properties();
                         sun.light_node=lp.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied().unwrap_or(-1);
                         sun.light_type=lp.get("m_Type").map(uv_i32).unwrap_or(1);
@@ -2837,9 +2837,9 @@ impl ParsedBundle {
                 // A PPtr written in file `from` with m_FileID 0 is looked up in that file, another file's by path id in the
                 // bundle's other files (a scene's materials and RenderTextures live in its shared assets). Returns the
                 // object and the file holding it (its own PPtrs are relative to that file).
-                let object=|v:&unity_asset_core::UnityValue,class:i32,from:usize|->Option<(UnityObject,usize)> {
+                let object=|v:&unity_asset_core::UnityValue,class:i32,from:usize|->Option<(std::sync::Arc<UnityObject>,usize)> {
                     let id=uv_pptr(v).filter(|id|*id!=0)?;
-                    let find=|s:&SerializedFile| s.objects_of_type(class).into_iter().find(|i|i.path_id==id).and_then(|i|UnityObject::from_serialized_file(s,i).ok());
+                    let find=|s:&SerializedFile| s.objects_of_type(class).into_iter().find(|i|i.path_id==id).and_then(|i|s.scene_object(i).ok());
                     if uv_obj(v,"m_FileID").map(uv_i32).unwrap_or(0)==0 {find(sers.get(from)?).map(|o|(o,from))}
                     else {sers.iter().enumerate().filter(|(i,_)|*i!=from).find_map(|(i,s)|find(s).map(|o|(o,i)))}
                 };
@@ -2852,13 +2852,13 @@ impl ParsedBundle {
                 };
                 let mut cameras=Vec::new();
                 for info in ser.objects_of_type(20) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let p=obj.class.properties();
                     let go=p.get("m_GameObject").and_then(uv_pptr).unwrap_or(0);
                     let Some(node)=go_node.get(&go).copied() else {continue;};
                     let Some((target,width,height,target_key))=p.get("m_TargetTexture").and_then(|t|render_texture(t,gi)) else {continue;};
                     let f=|k:&str,d:f32|p.get(k).map(uv_f32).unwrap_or(d);
-                    let active=ser.objects_of_type(1).into_iter().find(|i|i.path_id==go).and_then(|i|UnityObject::from_serialized_file(ser,i).ok())
+                    let active=ser.objects_of_type(1).into_iter().find(|i|i.path_id==go).and_then(|i|ser.scene_object(i).ok())
                         .and_then(|o|o.class.properties().get("m_IsActive").map(uv_bool)).unwrap_or(true);
                     let background=p.get("m_BackGroundColor").map(|c|["r","g","b","a"].map(|k|uv_obj(c,k).map(uv_f32).unwrap_or(0.))).unwrap_or([0.,0.,0.,1.]);
                     let culling_mask=p.get("m_CullingMask").and_then(|m|uv_obj(m,"m_Bits")).and_then(|v|v.as_i64()).map(|v|v as u32).unwrap_or(u32::MAX);
@@ -2869,7 +2869,7 @@ impl ParsedBundle {
                 }
                 let (mut users,mut shared)=(Vec::new(),Vec::new());
                 for class in [23,137] { for info in ser.objects_of_type(class) {
-                    let Ok(obj)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(obj)=ser.scene_object(info) else {continue;};
                     let p=obj.class.properties();
                     let Some(node)=p.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_node.get(&go)).copied() else {continue;};
                     for m in p.get("m_Materials").map(uv_arr).unwrap_or(&[]) {
@@ -2900,10 +2900,10 @@ impl ParsedBundle {
         self.with_serialized(|sers| sers.iter().any(|ser| {
             let mut gos=HashMap::new();let mut nodes=HashMap::new();let mut by_go=HashMap::new();
             for info in ser.objects_of_type(1) {
-                if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}
+                if let Ok(obj)=ser.scene_object(info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}
             }
             for info in ser.objects_of_type(4) {
-                if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {
+                if let Ok(obj)=ser.scene_object(info) {
                     let props=obj.class.properties();
                     if let Some(go)=props.get("m_GameObject").and_then(uv_pptr) {
                         nodes.insert(info.path_id,(go,props.get("m_Father").and_then(uv_pptr).unwrap_or(0)));
@@ -2912,7 +2912,7 @@ impl ParsedBundle {
                 }
             }
             ser.objects_of_type(114).into_iter().any(|info| {
-                let Ok(obj)=UnityObject::from_serialized_file(ser,info) else{return false;};
+                let Ok(obj)=ser.scene_object(info) else{return false;};
                 let props=obj.class.properties();
                 if !props.contains_key(field) {return false;}
                 let mut id=props.get("m_GameObject").and_then(uv_pptr).and_then(|go|by_go.get(&go)).copied().unwrap_or(0);
@@ -2931,13 +2931,13 @@ impl ParsedBundle {
         self.with_serialized(|sers| {
             for ser in sers {
                 let mut gos=HashMap::new();let mut nodes=HashMap::new();let mut by_go=HashMap::new();let mut scripts=HashMap::new();
-                for info in ser.objects_of_type(1) {if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}}
-                for info in ser.objects_of_type(4) {if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {
+                for info in ser.objects_of_type(1) {if let Ok(obj)=ser.scene_object(info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}}
+                for info in ser.objects_of_type(4) {if let Ok(obj)=ser.scene_object(info) {
                     let p=obj.class.properties();if let Some(go)=p.get("m_GameObject").and_then(uv_pptr) {
                         nodes.insert(info.path_id,(go,p.get("m_Father").and_then(uv_pptr).unwrap_or(0)));by_go.insert(go,info.path_id);
                     }
                 }}
-                for info in ser.objects_of_type(114) {if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {scripts.insert(info.path_id,obj.class.properties().clone());}}
+                for info in ser.objects_of_type(114) {if let Ok(obj)=ser.scene_object(info) {scripts.insert(info.path_id,obj.class.properties().clone());}}
                 for preparation in scripts.values() {
                     let go=preparation.get("m_GameObject").and_then(references::PPtr::local).unwrap_or(0);
                     if gos.get(&go).is_none_or(|n|n!=prefab) {continue;}
@@ -2970,13 +2970,13 @@ impl ParsedBundle {
             for ser in sers {
                 let mut gos=HashMap::new();let mut nodes=HashMap::new();let mut by_go=HashMap::new();
                 let mut scripts=HashMap::new();
-                for info in ser.objects_of_type(1) {if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}}
-                for info in ser.objects_of_type(4) {if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {
+                for info in ser.objects_of_type(1) {if let Ok(obj)=ser.scene_object(info) {gos.insert(info.path_id,obj.name().unwrap_or_default());}}
+                for info in ser.objects_of_type(4) {if let Ok(obj)=ser.scene_object(info) {
                     let p=obj.class.properties();if let Some(go)=p.get("m_GameObject").and_then(uv_pptr) {
                         nodes.insert(info.path_id,(go,p.get("m_Father").and_then(uv_pptr).unwrap_or(0)));by_go.insert(go,info.path_id);
                     }
                 }}
-                for info in ser.objects_of_type(114) {if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {scripts.insert(info.path_id,obj.class.properties().clone());}}
+                for info in ser.objects_of_type(114) {if let Ok(obj)=ser.scene_object(info) {scripts.insert(info.path_id,obj.class.properties().clone());}}
                 for controller in scripts.values() {
                     let Some(calc)=controller.get("eyeLookScript").and_then(uv_pptr).and_then(|id|scripts.get(&id)) else{continue;};
                     let mut id=controller.get("m_GameObject").and_then(uv_pptr).and_then(|id|by_go.get(&id)).copied().unwrap_or(0);
@@ -3015,14 +3015,14 @@ impl ParsedBundle {
             let mut go_renderers=HashMap::new();
             for info in ser.objects_of_type(137) {
                 if !renderer_mesh.contains_key(&info.path_id) {continue;}
-                if let Ok(obj)=UnityObject::from_serialized_file(ser,info) {
+                if let Ok(obj)=ser.scene_object(info) {
                     if let Some(go)=obj.class.properties().get("m_GameObject").and_then(uv_pptr) {
                         go_renderers.insert(go,info.path_id);
                     }
                 }
             }
             for info in ser.objects_of_type(114) {
-                let Ok(obj)=UnityObject::from_serialized_file(ser,info) else{continue;};
+                let Ok(obj)=ser.scene_object(info) else{continue;};
                 let props=obj.class.properties();
                 if !props.contains_key("InsideWait") || !props.contains_key("texStates") {continue;}
                 // ReSetupMaterial falls back to GetComponent<Renderer>(); all
@@ -3066,20 +3066,20 @@ impl ParsedBundle {
             for ser in sers {
                 let mut go_names = HashMap::new();
                 for go in ser.objects_of_type(1) {
-                    if let Ok(obj) = UnityObject::from_serialized_file(ser, go) {
+                    if let Ok(obj) = ser.scene_object(go) {
                         go_names.insert(go.path_id, obj.name().unwrap_or_default());
                     }
                 }
                 let mut target_mesh = HashMap::new();
                 for renderer in ser.objects_of_type(137) {
                     let Some(mesh_name) = renderer_mesh.get(&renderer.path_id) else { continue; };
-                    let Ok(obj) = UnityObject::from_serialized_file(ser, renderer) else { continue; };
+                    let Ok(obj) = ser.scene_object(renderer) else { continue; };
                     if let Some(go) = obj.class.properties().get("m_GameObject").and_then(uv_pptr) {
                         target_mesh.insert(go, mesh_name.clone());
                     }
                 }
                 for info in ser.objects_of_type(114) {
-                    let Ok(obj) = UnityObject::from_serialized_file(ser, info) else { continue; };
+                    let Ok(obj) = ser.scene_object(info) else { continue; };
                     let props = obj.class.properties();
                     let root = props.get("m_GameObject").and_then(uv_pptr)
                         .and_then(|id| go_names.get(&id));
@@ -3115,9 +3115,9 @@ impl ParsedBundle {
             let mut out = Vec::new();
             for ser in sers {
                 let names: HashMap<i64, String> = ser.objects_of_type(21).into_iter().filter_map(|info|
-                    UnityObject::from_serialized_file(ser, info).ok().map(|o| (info.path_id, o.name().unwrap_or_default()))).collect();
+                    ser.scene_object(info).ok().map(|o| (info.path_id, o.name().unwrap_or_default()))).collect();
                 for info in ser.objects_of_type(137).into_iter().chain(ser.objects_of_type(23)) {
-                    let Ok(renderer)=UnityObject::from_serialized_file(ser,info) else {continue;};
+                    let Ok(renderer)=ser.scene_object(info) else {continue;};
                     let slots = renderer.class.properties().get("m_Materials").map(|v| uv_arr(v).iter()
                         .map(|m| local_pptr_path_id(m).and_then(|id| names.get(&id).cloned())).collect()).unwrap_or_default();
                     out.push((info.path_id, slots));
@@ -3137,9 +3137,9 @@ impl ParsedBundle {
             let mut out = std::collections::BTreeSet::new();
             for file in files {
                 let names: HashMap<i64, String> = file.objects_of_type(1).into_iter().filter_map(|info|
-                    UnityObject::from_serialized_file(file, info).ok().map(|o| (info.path_id, o.name().unwrap_or_default()))).collect();
+                    file.scene_object(info).ok().map(|o| (info.path_id, o.name().unwrap_or_default()))).collect();
                 for info in file.objects_of_type(114) {
-                    if let Ok(o) = UnityObject::from_serialized_file(file, info) {
+                    if let Ok(o) = file.scene_object(info) {
                         if let Some(name) = o.class.properties().get("m_GameObject").and_then(uv_pptr).and_then(|id| names.get(&id)) { out.insert(name.clone()); }
                     }
                 }
@@ -3156,7 +3156,7 @@ impl ParsedBundle {
             let mut textures = HashMap::<i64, String>::new();
             for ser in sers {
                 for info in ser.objects_of_type(28) {
-                    if let Ok(o) = UnityObject::from_serialized_file(ser, info) {
+                    if let Ok(o) = ser.scene_object(info) {
                         textures.insert(o.path_id(), o.name().unwrap_or_default());
                     }
                 }
@@ -3168,7 +3168,7 @@ impl ParsedBundle {
                 let mut shader_rim = HashMap::<i64, bool>::new();
                 let mut shader_state = HashMap::<i64, ShaderPassState>::new();
                 for info in ser.objects_of_type(48) {
-                    if let Ok(o) = UnityObject::from_serialized_file(ser, info) {
+                    if let Ok(o) = ser.scene_object(info) {
                         let name = shader_runtime_name(&o);
                         if !name.is_empty() { shaders.insert(o.path_id(), name); }
                         if let Some(has_rim) = shader_declares_property(&o, "_rimV") {
@@ -3178,7 +3178,7 @@ impl ParsedBundle {
                     }
                 }
                 for info in ser.objects_of_type(21) {
-                    let Ok(o) = UnityObject::from_serialized_file(ser, info) else { continue; };
+                    let Ok(o) = ser.scene_object(info) else { continue; };
                     if !o.name().unwrap_or_default().eq_ignore_ascii_case(wanted) { continue; }
                     let props = o.class.properties();
                     let mut mat = MeshMaterial {
@@ -3257,7 +3257,7 @@ impl ParsedBundle {
         let sampling=self.texture_sampling_named(name)?;
         self.with_serialized(|files| {
             for file in files {for info in file.objects_of_type(28) {
-                let Ok(object)=UnityObject::from_serialized_file(file,info) else {continue;};
+                let Ok(object)=file.scene_object(info) else {continue;};
                 if !object.name().unwrap_or_default().eq_ignore_ascii_case(name){continue;}
                 let tex=read_texture_payload(&object,&self.files,None)?;
                 use unity_asset_decode::texture::TextureFormat;
@@ -3285,7 +3285,7 @@ impl ParsedBundle {
     fn shader_pixel_dxbc_named_unity(&self,name:&str)->Option<Vec<u8>> {
         self.with_serialized(|files| {
             for file in files {for info in file.objects_of_type(48) {
-                let Ok(object)=UnityObject::from_serialized_file(file,info) else {continue;};
+                let Ok(object)=file.scene_object(info) else {continue;};
                 if std::env::var_os("OK_CLOTHES_GPU_DIAG").is_some(){eprintln!("CLOTHES_SHADER name={} wanted={name} keys={:?}",shader_runtime_name(&object),object.class.properties().keys());}
                 if shader_runtime_name(&object)!=name {continue;}
                 if name=="Koikano/create_topN" {clothes_create_shader_layout(&object)?;}
@@ -3391,8 +3391,8 @@ impl ParsedBundle {
         self.with_serialized(|files| {
             let (mut materials, mut shaders) = (Vec::new(), Vec::new());
             for file in files {
-                for info in file.objects_of_type(21) { if let Ok(o) = UnityObject::from_serialized_file(file, info) { materials.push(o.name().unwrap_or_default()); } }
-                for info in file.objects_of_type(48) { if let Ok(o) = UnityObject::from_serialized_file(file, info) { shaders.push(shader_runtime_name(&o)); } }
+                for info in file.objects_of_type(21) { if let Ok(o) = file.scene_object(info) { materials.push(o.name().unwrap_or_default()); } }
+                for info in file.objects_of_type(48) { if let Ok(o) = file.scene_object(info) { shaders.push(shader_runtime_name(&o)); } }
             }
             materials.retain(|n| !n.is_empty()); shaders.retain(|n| !n.is_empty());
             materials.sort(); materials.dedup(); shaders.sort(); shaders.dedup();
@@ -3683,7 +3683,7 @@ impl ParsedBundle {
                 for info in &ser.objects {
                     // Only these types are used: skip reading (decompressing, parsing) textures and meshes.
                     if !matches!(info.type_id, 1 | 4 | 33 | 137) { continue; }
-                    let Ok(obj) = UnityObject::from_serialized_file(ser, info) else {
+                    let Ok(obj) = ser.scene_object(info) else {
                         continue;
                     };
                     match info.type_id {
@@ -3900,7 +3900,7 @@ impl ParsedBundle {
                     if self.meshes.borrow().contains_key(&info.path_id) {
                         continue;
                     }
-                    let Ok(object) = UnityObject::from_serialized_file(ser, &info) else {
+                    let Ok(object) = ser.scene_object(&info) else {
                         continue;
                     };
                     let stream = mesh_stream_bytes(&object, &self.files);
@@ -3984,7 +3984,7 @@ impl ParsedBundle {
     fn external_texture_name(&self, external_path: &str, path_id: i64) -> Option<String> {
         let file = self.external_file(external_path)?;
         let info = file.0.objects_of_type(28).into_iter().find(|i| i.path_id == path_id).or_else(|| file.0.objects_of_type(89).into_iter().find(|i| i.path_id == path_id))?;
-        UnityObject::from_serialized_file(&file.0, info).ok()?.name()
+        file.0.scene_object(info).ok()?.name()
     }
 
     /// A texture of a dependency bundle's material, by name, as PNG (cached under the external path).
@@ -3994,7 +3994,7 @@ impl ParsedBundle {
         let png = self.external_file(external_path).and_then(|file| {
             let (ser, streams) = (&file.0, &file.1);
             ser.objects_of_type(28).into_iter().find_map(|info| {
-                let object = UnityObject::from_serialized_file(ser, info).ok()?;
+                let object = ser.scene_object(info).ok()?;
                 if !object.name().is_some_and(|n| n.eq_ignore_ascii_case(name)) { return None; }
                 png_from_texture(&object, streams, None).map(|(_, png)| png)
             })
@@ -4041,7 +4041,7 @@ impl ParsedBundle {
             let (ser, streams) = (&file.0, &file.1);
             for info in ser.objects_of_type(MESH_CLASS_ID) {
                 if !ids.contains(&info.path_id) || self.meshes.borrow().contains_key(&info.path_id) { continue; }
-                let Ok(object) = UnityObject::from_serialized_file(ser, &info) else { continue; };
+                let Ok(object) = ser.scene_object(&info) else { continue; };
                 let stream = mesh_stream_bytes(&object, streams);
                 match decoded_from_object(&object, ver, stream.as_deref(), &ser.unity_version) {
                     Some(mesh) => { self.meshes.borrow_mut().insert(info.path_id, mesh); }
@@ -4095,7 +4095,7 @@ impl ParsedBundle {
             let mut out = Vec::new();
             for ser in sers {
                 for info in ser.objects_of_type(MESH_CLASS_ID) {
-                    let Ok(object) = UnityObject::from_serialized_file(ser, &info) else {
+                    let Ok(object) = ser.scene_object(&info) else {
                         continue;
                     };
                     let n = object.name().unwrap_or_default().to_ascii_lowercase();
@@ -4148,7 +4148,7 @@ impl ParsedBundle {
     fn cubemap_atlas_named(&self, name: &str) -> Option<Vec<u8>> {
         let find = |ser: &unity_asset_binary::asset::SerializedFile, streams: &dyn Fn(&UnityObject) -> Option<unity_asset_decode::texture::Texture2D>| {
             ser.objects_of_type(89).into_iter().find_map(|info| {
-                let object = UnityObject::from_serialized_file(ser, info).ok()?;
+                let object = ser.scene_object(info).ok()?;
                 if !object.name().is_some_and(|n| n.eq_ignore_ascii_case(name)) { return None; }
                 cubemap_atlas(&streams(&object)?).map(|(_, _, png)| png)
             })
@@ -4520,13 +4520,13 @@ impl ParsedBundle {
                 let mut objects=std::collections::BTreeSet::new();
                 let mut go_names=HashMap::new();
                 for info in file.objects_of_type(1) {
-                    if let Ok(obj)=UnityObject::from_serialized_file(file,info) {
+                    if let Ok(obj)=file.scene_object(info) {
                         let name=obj.name().unwrap_or_default();
                         objects.insert(name.to_ascii_lowercase());go_names.insert(info.path_id,name);
                     }
                 }
                 for info in file.objects_of_type(4) {
-                    let Ok(obj)=UnityObject::from_serialized_file(file,info) else {continue};
+                    let Ok(obj)=file.scene_object(info) else {continue};
                     let p=obj.class.properties();
                     if p.get("m_Father").and_then(uv_pptr).unwrap_or(0)==0 {
                         if let Some(name)=p.get("m_GameObject").and_then(uv_pptr).and_then(|go|go_names.get(&go)) {dir.top.push(name.clone());}
@@ -4615,7 +4615,7 @@ impl ParsedBundle {
                 };
                 // SkinnedMeshRenderer (137) has m_Mesh + m_Materials.
                 for info in ser.objects_of_type(137) {
-                    let Ok(object) = UnityObject::from_serialized_file(ser, info) else {
+                    let Ok(object) = ser.scene_object(info) else {
                         continue;
                     };
                     let props = object.class.properties();
@@ -4636,7 +4636,7 @@ impl ParsedBundle {
                 let mut go_mesh: HashMap<i64, i64> = HashMap::new();
                 let mut go_mat: HashMap<i64, (i64, Vec<MeshMaterial>)> = HashMap::new();
                 for info in ser.objects_of_type(33) {
-                    let Ok(object) = UnityObject::from_serialized_file(ser, info) else {
+                    let Ok(object) = ser.scene_object(info) else {
                         continue;
                     };
                     let props = object.class.properties();
@@ -4648,7 +4648,7 @@ impl ParsedBundle {
                     }
                 }
                 for info in ser.objects_of_type(23) {
-                    let Ok(object) = UnityObject::from_serialized_file(ser, info) else {
+                    let Ok(object) = ser.scene_object(info) else {
                         continue;
                     };
                     let props = object.class.properties();
@@ -4907,7 +4907,7 @@ impl ParsedBundle {
                 continue;
             };
             for info in serialized.objects_of_type(MESH_CLASS_ID) {
-                let Ok(object) = UnityObject::from_serialized_file(&serialized, &info) else {
+                let Ok(object) = serialized.scene_object(&info) else {
                     continue;
                 };
                 let pid = object.path_id();
@@ -4932,7 +4932,7 @@ impl ParsedBundle {
                 }
             }
             for info in serialized.objects_of_type(28) {
-                let Ok(object) = UnityObject::from_serialized_file(&serialized, info) else {
+                let Ok(object) = serialized.scene_object(info) else {
                     continue;
                 };
                 let n = object.name().unwrap_or_default();
@@ -5155,7 +5155,7 @@ mod streamed_repair_survey {
                     let Ok(data) = bundle.extract_file_data(node) else { continue };
                     let Ok(ser) = unity_asset_binary::asset::parse_serialized_file(data) else { continue };
                     for info in ser.objects_of_type(28) {
-                        let Ok(o) = UnityObject::from_serialized_file(&ser, &info) else { continue };
+                        let Ok(o) = ser.scene_object(&info) else { continue };
                         let Ok(tex) = unity_asset_decode::texture::TextureProcessor::new(version()).convert_object(&o) else { continue };
                         if !tex.is_streamed() || tex.width < 4 || tex.height < 4 { continue; }
                         let min = ((tex.width as usize + 3) / 4) * ((tex.height as usize + 3) / 4) * 8;
@@ -5185,7 +5185,7 @@ mod shader_dxbc_probe {
         std::fs::create_dir_all(&out).unwrap();
         let parsed = super::parse_bundle_cached(std::fs::read(&path).unwrap());
         parsed.with_serialized(|files| for file in files { for info in file.objects_of_type(48) {
-            let Ok(object) = UnityObject::from_serialized_file(file, info) else { continue };
+            let Ok(object) = file.scene_object(info) else { continue };
             let name = super::shader_runtime_name(&object);
             if std::env::var("OK_SF_LIST").is_ok() { println!("shader {name}"); }
             if !wanted.contains(&name) { continue; }
@@ -5252,13 +5252,13 @@ mod shader_pass_state_dump {
             for file in files {
                 let (mut local, mut external) = (0, 0);
                 for info in file.objects_of_type(21) {
-                    let Ok(o) = super::UnityObject::from_serialized_file(file, info) else { continue };
+                    let Ok(o) = file.scene_object(info) else { continue };
                     if o.class.properties().get("m_Shader").and_then(super::local_pptr_path_id).is_some() { local += 1 } else { external += 1 }
                 }
                 println!("materials with local shader {local}, external {external} (externals {:?})", file.externals.iter().map(|e| e.path.clone()).collect::<Vec<_>>());
             }
             for file in files { for info in file.objects_of_type(48) {
-                let Ok(o) = super::UnityObject::from_serialized_file(file, info) else { continue };
+                let Ok(o) = file.scene_object(info) else { continue };
                 println!("{} {:?}", super::shader_runtime_name(&o), super::shader_pass_state(&o));
                 if std::env::var("OK_SHADER_RAW").is_ok() {
                     let sub = super::uv_arr(super::uv_obj(o.class.properties().get("m_ParsedForm").unwrap(), "m_SubShaders").unwrap()).first().cloned();

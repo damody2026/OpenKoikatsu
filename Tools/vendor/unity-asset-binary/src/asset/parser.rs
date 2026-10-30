@@ -88,6 +88,7 @@ impl SerializedFileParser {
             data: view,
             object_source: None,
             object_index_by_path_id: OnceLock::new(),
+            scene_objects: Default::default(),
         };
 
         {
@@ -426,11 +427,24 @@ pub struct SerializedFile {
     /// Where object payloads are read from when `data` holds only the metadata.
     object_source: Option<LazyObjects>,
     object_index_by_path_id: OnceLock<HashMap<i64, usize>>,
+    /// GameObjects and Transforms parsed so far (`scene_object`).
+    scene_objects: std::sync::Mutex<HashMap<i64, Arc<crate::object::UnityObject>>>,
 }
 
 impl SerializedFile {
     pub fn set_type_tree_registry(&mut self, registry: Option<Arc<dyn TypeTreeRegistry>>) {
         self.type_tree_registry = registry;
+        self.scene_objects.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+
+    /// A GameObject or Transform parsed once for every reader of this file (hierarchy scans read them all, again and
+    /// again); other objects are parsed for the call.
+    pub fn scene_object(&self, info: &ObjectInfo) -> Result<Arc<crate::object::UnityObject>> {
+        if !matches!(info.type_id, 1 | 4) { return crate::object::UnityObject::from_serialized_file(self, info).map(Arc::new); }
+        if let Some(hit) = self.scene_objects.lock().unwrap_or_else(|e| e.into_inner()).get(&info.path_id) { return Ok(hit.clone()); }
+        let object = Arc::new(crate::object::UnityObject::from_serialized_file(self, info)?);
+        self.scene_objects.lock().unwrap_or_else(|e| e.into_inner()).insert(info.path_id, object.clone());
+        Ok(object)
     }
 
     /// Get the raw file data

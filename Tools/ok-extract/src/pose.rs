@@ -1701,7 +1701,7 @@ pub(crate) fn build_skel_graph(serialized: &SerializedFile) -> SkelGraph {
     for info in &serialized.objects {
         // Only these types are used: skip reading (decompressing, parsing) textures and meshes.
         if !matches!(info.type_id, 1 | 4 | 33 | 137) { continue; }
-        let Ok(obj) = UnityObject::from_serialized_file(serialized, info) else {
+        let Ok(obj) = serialized.scene_object(info) else {
             continue;
         };
         match info.type_id {
@@ -1790,7 +1790,7 @@ fn source_sibling_serialized_hierarchy_control() {
         let Ok(serialized)=unity_asset_binary::asset::parse_serialized_file(bytes) else {continue;};
         let graph=build_skel_graph(&serialized);
         for info in serialized.objects_of_type(4) {
-            let obj=UnityObject::from_serialized_file(&serialized,info).unwrap();
+            let obj=serialized.scene_object(info).unwrap();
             let Some(UnityValue::Array(children))=obj.class.properties().get("m_Children") else {continue;};
             let expected:Vec<_>=children.iter().filter_map(pptr).filter(|id|graph.tfs.contains_key(id)).collect();
             for (index,id) in expected.iter().enumerate() {assert_eq!(graph.tfs[id].sibling_index,Some(index as u32));}

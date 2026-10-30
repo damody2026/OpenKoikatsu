@@ -528,7 +528,7 @@ fn parse_dbones(serialized: &SerializedFile) -> Vec<DBone> {
 fn parse_dbones_resolved(serialized: &SerializedFile, scripts:&crate::unity::references::Scripts) -> Vec<DBone> {
     let mut go_to_tf = HashMap::new();
     for info in serialized.objects.iter().filter(|o|o.type_id==4) {
-        let Ok(obj)=UnityObject::from_serialized_file(serialized,info) else {continue;};
+        let Ok(obj)=serialized.scene_object(info) else {continue;};
         if let Some(go)=obj.class.properties().get("m_GameObject").and_then(pptr) {go_to_tf.insert(go,info.path_id);}
     }
     let mut out = Vec::new();
@@ -536,7 +536,7 @@ fn parse_dbones_resolved(serialized: &SerializedFile, scripts:&crate::unity::ref
         if info.type_id != 114 {
             continue;
         }
-        let Ok(obj) = UnityObject::from_serialized_file(serialized, info) else {
+        let Ok(obj) = serialized.scene_object(info) else {
             continue;
         };
         let props = obj.class.properties();
@@ -622,7 +622,7 @@ fn parse_colliders_resolved(serialized: &SerializedFile, body: Option<&Skeleton>
     if !scripts.has_class(|class| class.eq_ignore_ascii_case("DynamicBoneCollider")) && std::env::var_os("OK_DBDIAG").is_none() { return Vec::new(); }
     let mut go_to_tf = HashMap::new();
     for info in serialized.objects.iter().filter(|o|o.type_id==4) {
-        let Ok(obj)=UnityObject::from_serialized_file(serialized,info) else {continue;};
+        let Ok(obj)=serialized.scene_object(info) else {continue;};
         if let Some(go)=obj.class.properties().get("m_GameObject").and_then(pptr) {go_to_tf.insert(go,info.path_id);}
     }
     let mut out = Vec::new();
@@ -630,7 +630,7 @@ fn parse_colliders_resolved(serialized: &SerializedFile, body: Option<&Skeleton>
     let mut transform_hits = 0;
     for info in &serialized.objects {
         if info.type_id != 114 { continue; }
-        let Ok(obj) = UnityObject::from_serialized_file(serialized, info) else { continue };
+        let Ok(obj) = serialized.scene_object(info) else { continue };
         let props = obj.class.properties();
         let class = scripts.class(props.get("m_Script")).unwrap_or("");
         if !class.eq_ignore_ascii_case("DynamicBoneCollider") { continue; }
@@ -2257,7 +2257,7 @@ impl BodyColliderSet {
     pub(crate) fn extend_serialized(&mut self, file: &SerializedFile, source: &Skeleton, scripts:&crate::unity::references::Scripts) {
         let colliders = parse_colliders_resolved(file, Some(source),scripts);
         let children: HashMap<_, _> = file.objects.iter().filter(|o| o.type_id == 4).filter_map(|o| {
-            let obj = UnityObject::from_serialized_file(file, o).ok()?;
+            let obj = file.scene_object(o).ok()?;
             Some((o.path_id, pptr_list(obj.class.properties().get("m_Children"))))
         }).collect();
         fn walk(id: i64, children: &HashMap<i64, Vec<i64>>, order: &mut Vec<i64>) {

@@ -40,13 +40,13 @@ pub(crate) fn meshes_and_textures_from_loaded_bundle(
                 if info.type_id != 90 {
                     continue;
                 }
-                if let Ok(obj) = UnityObject::from_serialized_file(&serialized, info) {
+                if let Ok(obj) = serialized.scene_object(info) {
                     crate::anim::ingest_avatar_tos(&obj);
                 }
             }
         }
         for info in serialized.objects_of_type(MESH_CLASS_ID) {
-            let Ok(object) = UnityObject::from_serialized_file(&serialized, &info) else {
+            let Ok(object) = serialized.scene_object(&info) else {
                 continue;
             };
             let stream = mesh_stream_bytes(&object, &files);
@@ -234,7 +234,7 @@ pub(crate) fn skeleton_from_bundle(
             continue;
         };
         for info in ser.objects_of_type(MESH_CLASS_ID) {
-            let Ok(obj) = UnityObject::from_serialized_file(&ser, &info) else {
+            let Ok(obj) = ser.scene_object(&info) else {
                 continue;
             };
             if obj.name().unwrap_or_default().eq_ignore_ascii_case(mesh_name) {
@@ -324,7 +324,7 @@ pub(crate) fn prefab_asset_roots(serialized:&unity_asset_binary::asset::Serializ
     use unity_asset_core::UnityValue;
     let mut result:HashMap<String,Vec<i64>>=HashMap::new();
     for info in serialized.objects_of_type(142) {
-        let Ok(obj)=UnityObject::from_serialized_file(serialized,info) else {continue;};
+        let Ok(obj)=serialized.scene_object(info) else {continue;};
         let Some(container)=obj.class.properties().get("m_Container") else {continue;};
         for row in uv_arr(container) {
             let pair=match row {
@@ -389,7 +389,7 @@ pub(crate) fn scan_prefab_graph(serialized: &unity_asset_binary::asset::Serializ
     for info in &serialized.objects {
         // Only these types are read below: reading every object decompressed and parsed each texture and mesh too.
         if !matches!(info.type_id, 1 | 4 | 23 | 33 | 137) { continue; }
-        let Ok(obj) = UnityObject::from_serialized_file(serialized, info) else {
+        let Ok(obj) = serialized.scene_object(info) else {
             continue;
         };
         match info.type_id {
