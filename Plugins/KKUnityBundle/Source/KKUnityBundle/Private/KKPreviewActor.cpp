@@ -686,6 +686,8 @@ struct FOKToonShadowParameters
 	UTexture2D* AnotherRampTex = nullptr;
 	UTexture2D* EmissionTex = nullptr;
 	FLinearColor EmissionColor = FLinearColor::Black;
+	// Unity Standard-family _Color (linear), multiplied into the albedo; white for other shaders.
+	FLinearColor StandardAlbedoTint = FLinearColor::White;
 	// Baked lightmap (RGBM, linear sampling) of a map part, on TEXCOORD1; Lightmaps keeps each index's texture for the
 	// later parts of the same load (only the first part using a lightmap carries it).
 	UTexture2D* LightmapTex = nullptr;
@@ -2372,6 +2374,20 @@ return diffuse * (light * (1.0 - shadow) + shadow) * faceScale * lightLift;
 				Mat->GetExpressionCollection().AddExpression(Lit);
 				ColorOut = Lit;
 			}
+		}
+		// Unity Standard-family albedo is _MainTex x _Color (a [Color] property: linear in the game's linear colour space).
+		if (Shadow && !Shadow->StandardAlbedoTint.Equals(FLinearColor::White))
+		{
+			UMaterialExpressionConstant3Vector* Tint = NewObject<UMaterialExpressionConstant3Vector>(Mat);
+			Tint->Material = Mat;
+			Tint->Constant = Shadow->StandardAlbedoTint;
+			Mat->GetExpressionCollection().AddExpression(Tint);
+			UMaterialExpressionMultiply* Tinted = NewObject<UMaterialExpressionMultiply>(Mat);
+			Tinted->Material = Mat;
+			Tinted->A.Expression = ColorOut;
+			Tinted->B.Expression = Tint;
+			Mat->GetExpressionCollection().AddExpression(Tinted);
+			ColorOut = Tinted;
 		}
 		// Maker CustomScene's measured interpolated light probe is blue above,
 		// neutral below, and identical in the four horizontal directions. Add
@@ -5500,6 +5516,16 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					ShadowParams.ReflectionMips = Source.MaterialValue(i, "_OKReflectionMips", Mips) ? FMath::Max(1.f, Mips.R) : 1.f;
 					ShadowParams.ReflectionIntensity = Source.MaterialValue(i, "_OKReflectionIntensity", Intensity) ? Intensity.R : 1.f;
 				}
+			}
+		}
+		ShadowParams.StandardAlbedoTint = FLinearColor::White;
+		if (!ShadowParams.bItemDraw && Source.MaterialShaderName(i).StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase))
+		{
+			FLinearColor Tint;
+			if (Source.MaterialValue(i, "_Color", Tint))
+			{
+				auto Linear = [](float V) { return V <= .04045f ? V / 12.92f : FMath::Pow((V + .055f) / 1.055f, 2.4f); };
+				ShadowParams.StandardAlbedoTint = FLinearColor(Linear(Tint.R), Linear(Tint.G), Linear(Tint.B), 1.f);
 			}
 		}
 		// Unity Standard-family emission (keyword _EMISSION): _EmissionColor (gamma, may exceed 1) times _EmissionMap.

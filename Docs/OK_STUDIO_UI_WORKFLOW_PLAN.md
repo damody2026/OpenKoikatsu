@@ -643,14 +643,20 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 | 大浴場 `ill_ss_sample_01` 偏暗偏藍 | 地圖自己的即時燈光（`Map/light/morning` 的點光源、聚光燈，以及只照水面的平行光）沒有建。新增 `prefab_light_modes` 記錄（`m_Lightmapping`、culling mask、陰影、GameObject 是否啟用；由 `studio-nodes` 記錄）與 `ok_okmodel_map_lights`。載入地圖時，不屬於烘焙燈、也不是地圖太陽的燈都建成 Unreal 燈光，掛在 map 的 lighting channel 上，並依時段顯示。衰減以 Unreal 非平方反比衰減近似 Unity 的衰減貼圖 |
 | vmd 場景角色姿勢、`80639555_p1` 中間小螢幕 | 場景以 KKVMDPlay 外掛播放 VMD，存檔只記作者電腦上的 VMD 路徑，本機沒有這些檔案。原作的小螢幕拍到的是跳舞中角色的近景。現在匯入報告會列出每個角色用的 VMD 檔名，並說明找不到檔案、不支援播放 |
 
+| 大浴場的貓偏白 | Standard 著色器的反照率是 `_MainTex × _Color`（線性），我們沒乘 `_Color`。Standard 系材質現在把 `_Color` 轉成線性後乘進反照率（卡通道具路徑不受影響）。修正後貓是灰色與豹紋，和原生一致 |
+| 沒有反射資料的地圖反射到 UE 天空 | 原生 tsv 的 `reflection_default` 在沒有烘焙預設反射的地圖是 `UnityBlackCube`，probe 沒有貼圖時也一樣。我們之前退回材質預設的天空 cube。改成這種情況一律綁黑色 cube（`OKStudioBlackReflection`）；工作室天空開著時不變 |
+
+| 大浴場地板偏藍、木桶偏綠 | 不是反射（關掉 UE 反射畫面不變）。地板沒有 lightmap，環境光來自 `unity_SHA*`；我們給的是地圖烘焙的 `m_AmbientProbe`，地圖 62 存的是 0。KKS 地圖沒有 LightProbes 物件（KK 地圖的是空的）。地圖 62 的 ambient mode 是 Trilight：Unity 執行時用天空、地平線、地面三色算環境 SH，烘焙值是過時的。拿原生 `renderer_sh` 對三色擬合，三個色版都精確到 1e-5：C0 = (天空+地面)/6 + 2·地平線/3，C1 = √(2/27)·(天空−地面)，C6 = 5/96·(地平線−(天空+地面)/2)，C8 = 3·C6（顏色先轉線性，再乘 ambient intensity）。Flat 是三色相同的特例。`studio-environments` 現在多記 `ambient_sky`／`ambient_equator`／`ambient_ground`，`OKStudioMapAmbient` 在 Trilight／Flat 時改用三色算。72 張地圖中有 15 張 Trilight、27 張 Flat 都受影響 |
+
 尚未一致：
-- 大浴場的貓（Standard 著色器的 Studio 道具）走卡通材質路徑，沒有套用 `_Color`（約 0.47）與 Standard 光照，所以偏白；木桶偏綠、地板偏藍，原因還要再查。
-- 操場的天空、樹、圍欄沒出現：畫面上方是一塊模糊的雲。
+- 操場畫面上方的模糊：關掉 DOF（`r.DepthOfFieldQuality 0`）畫面完全一樣，所以不是景深；還要查是前景的柱子／橫樑還是缺了遠處的樹與圍欄。
 - `87018458_p3` 的舞台地板與布幕顏色和原作不同（加地圖燈光前就是這樣）。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。
+
+控制通道新增 `leave`（`POST /studio/leave`，可帶 `{"name":"<名稱>"}`）：等同按工作室的關閉鈕，回到啟動工作室的模式。工作室關閉時控制通道也會關，所以帶 `name` 時在一秒後另拍一張含 UI 的整個視窗截圖，存到 `Saved/OKStudio/mcp_ui/<名稱>.png`。實測（卡片牆 `-game -Control "-ExecCmds=OKStudio.Play"`）：在工作室時畫面只有工作室 UI；`leave` 之後卡片牆的清單、按鈕與角色資訊完整還原。
 
 ## 7. 優先順序總表
 

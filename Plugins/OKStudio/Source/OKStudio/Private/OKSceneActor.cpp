@@ -1258,7 +1258,16 @@ void AOKSceneActor::UpdateItemLighting()
 	if (SkyShown != AmbientSky || Document->Map != AmbientMap) { AmbientSky = SkyShown; AmbientMap = Document->Map; AmbientLit.Reset(); }
 	FLinearColor SH[3];
 	TArray<FLinearColor> Higher = { FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,0), FLinearColor(0,0,0,1) };
-	if (!(AmbientSky >= 0 && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
+	// A loaded map's scene is the active one: its RenderSettings give the ambient. Only with ambient mode Skybox does the
+	// Studio sky's controller replace it (DynamicGI.UpdateEnvironment from the sky); a Trilight or Flat map keeps its
+	// colours under the sky (native bath, map 62: sky on, ambient still its trilight).
+	int32 MapMode = -1;
+	FLinearColor MapSH[3];
+	TArray<FLinearColor> MapHigher = Higher;
+	const bool bMapAmbient = Document->Map >= 0 && OKStudioMapAmbient(Document->Map, MapSH[0], MapSH[1], MapSH[2], &MapHigher, &MapMode);
+	const bool bSkyLit = AmbientSky >= 0 && !(bMapAmbient && (MapMode == 1 || MapMode == 3));
+	if (!bSkyLit && bMapAmbient) { for (int32 I = 0; I < 3; ++I) SH[I] = MapSH[I]; Higher = MapHigher; }
+	else if (!(bSkyLit && OKStudioSkyAmbient(AmbientSky, SH[0], SH[1], SH[2]))
 		&& !OKStudioMapAmbient(Document->Map, SH[0], SH[1], SH[2], &Higher))
 	{
 		FKKRuntimeMaterialScene Maker;
@@ -1287,7 +1296,9 @@ void AOKSceneActor::UpdateItemLighting()
 		Preview->SetSharedVectorParameter(TEXT("glstate_lightmodel_ambient"), Document->Map < 0
 			? FLinearColor(0.0412349328f, 0.0474586822f, 0.0624753758f, 0.75f) : FLinearColor(0.01223285f, 0.01223285f, 0.01223285f, 0.5f));
 		FLinearColor ReflectionHDR(1,1,0,0);
-		UTextureCube* Reflection = AmbientSky<0 ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
+		// A map without a baked default reflection reflects Unity's black cube (native probe: reflection_default UnityBlackCube), not UE's sky.
+		UTextureCube* Reflection = !bSkyLit ? OKStudioMapReflection(Document->Map,ReflectionHDR) : nullptr;
+		if (!Reflection && !bSkyLit) Reflection = OKStudioBlackReflection();
 		for(const FName Name:{FName(TEXT("unity_SpecCube0")),FName(TEXT("unity_SpecCube1"))})Preview->SetSharedTextureParameter(Name,Reflection);
 		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube0_HDR"),ReflectionHDR);
 		Preview->SetSharedVectorParameter(TEXT("unity_SpecCube1_HDR"),ReflectionHDR);
@@ -1295,7 +1306,7 @@ void AOKSceneActor::UpdateItemLighting()
         {
             FString Root;
             for(const FName Tag:Preview->Tags){const FString T=Tag.ToString();const FString Prefix=TEXT("OKStudioMapRoot=");if(T.StartsWith(Prefix))Root=T.Mid(Prefix.Len());}
-            Preview->BindSourceReflectionProbes([&](int32 Node,FLinearColor& HDR)->UTexture*{return Node<0&&AmbientSky>=0?nullptr:OKStudioMapReflection(Document->Map,HDR,Root,Node);});
+            Preview->BindSourceReflectionProbes([&](int32 Node,FLinearColor& HDR)->UTexture*{if(Node<0&&bSkyLit)return nullptr;UTexture* Cube=OKStudioMapReflection(Document->Map,HDR,Root,Node);return Cube||bSkyLit?Cube:OKStudioBlackReflection();});
         }
 		AmbientLit.Add(Preview);
 	}

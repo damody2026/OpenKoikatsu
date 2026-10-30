@@ -8,6 +8,7 @@
 #include "IHttpRouter.h"
 #include "OKStudioSky.h"
 #include "UnrealClient.h"
+#include "Containers/Ticker.h"
 
 namespace
 {
@@ -529,6 +530,24 @@ namespace
 			O->SetStringField(TEXT("file"), File);
 			return O;
 		}
+		// Leaves the studio (as its close button: the mode that started it comes back, its UI restored). The channel
+		// closes with the studio; with "name", a whole-window screenshot (UI included) is taken a second later to
+		// Saved/OKStudio/mcp_ui/<name>.png, showing what the mode looks like afterwards.
+		if (Op == TEXT("leave"))
+		{
+			FString Name;
+			J->TryGetStringField(TEXT("name"), Name);
+			if (UOKStudioGame* G = UOKStudioGame::Get()) G->RequestStop();
+			TSharedRef<FJsonObject> O = Result(true);
+			if (!Name.IsEmpty())
+			{
+				const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("OKStudio/mcp_ui")) / FPaths::MakeValidFileName(Name) + TEXT(".png");
+				IFileManager::Get().Delete(*File, false, true, true);
+				FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([File](float) { FScreenshotRequest::RequestScreenshot(File, true, false); return false; }), 1.f);
+				O->SetStringField(TEXT("file"), File);
+			}
+			return O;
+		}
 		return nullptr;
 	}
 
@@ -824,7 +843,7 @@ namespace OKStudioControl
 		if (!GRouter.IsValid()) { UE_LOG(LogTemp, Warning, TEXT("OK studio control: could not open port %d"), Port); return; }
 		static const TCHAR* Ops[] = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("spawn"), TEXT("transform"), TEXT("reparent"), TEXT("delete"), TEXT("select"),
 			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline"),
-			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot") };
+			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("leave") };
 		for (const TCHAR* Op : Ops)
 		{
 			const FString Name = Op;

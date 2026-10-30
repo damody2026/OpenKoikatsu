@@ -2966,6 +2966,7 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
                 let detail = match q.as_str() {
                     "prefab_directory" => bincode::deserialize::<crate::unity::PrefabDirectory>(&raw).map(|d| format!("{d:?}")).unwrap_or_default(),
                     "prefab_sun_light" => bincode::deserialize::<crate::unity::PrefabSunLight>(&raw).map(|d| format!("{d:?}")).unwrap_or_default(),
+                    "prefab_hierarchy" => bincode::deserialize::<crate::pose::PrefabHierarchy>(&raw).map(|h| h.nodes.iter().enumerate().map(|(i, n)| format!("{i}:{}<{}", n.name, n.parent)).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
                     "texture_directory2" => crate::unity::with_texture_plans(|| bincode::deserialize::<crate::unity::TexDirectory>(&raw)).map(|d| format!("{d:?}")).unwrap_or_default(),
                     "meshes_for_maindata" => crate::unity::with_texture_plans(|| bincode::deserialize::<(Vec<crate::unity::ExtractedMesh>, Vec<(i64, Vec<String>)>)>(&raw))
                         .map(|(m, _)| m.iter().map(|m| format!("{} plan={:?} extra={:?}", m.name, m.texture_plan, m.shader_extra_textures.keys().collect::<Vec<_>>())).collect::<Vec<_>>().join(" ; ")).unwrap_or_default(),

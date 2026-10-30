@@ -8,6 +8,20 @@
 #include "Serialization/JsonSerializer.h"
 #include "UObject/StrongObjectPtr.h"
 
+UTextureCube* OKStudioBlackReflection()
+{
+    static TStrongObjectPtr<UTextureCube> Black;
+    if(!Black)
+    {
+        UTextureCube* Cube=UTextureCube::CreateTransient(4,4,PF_FloatRGBA);if(!Cube)return nullptr;
+        FTexture2DMipMap& Mip=Cube->GetPlatformData()->Mips[0];
+        void* Dest=Mip.BulkData.Lock(LOCK_READ_WRITE);FMemory::Memzero(Dest,Mip.BulkData.GetBulkDataSize());Mip.BulkData.Unlock();
+        Cube->SRGB=false;Cube->NeverStream=true;Cube->LODGroup=TEXTUREGROUP_Skybox;Cube->UpdateResource();
+        Black.Reset(Cube);
+    }
+    return Black.Get();
+}
+
 UTextureCube* OKStudioMapReflection(int32 Map,FLinearColor& OutHDR,const FString& Prefab,int32 Node)
 {
     static FString Loaded;
