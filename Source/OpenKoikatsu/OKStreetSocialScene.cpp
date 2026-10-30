@@ -317,7 +317,7 @@ struct FOKStreetSceneState {
  FString AtmTab=TEXT("cash"),BankAmount=TEXT("1000"),AlertValue;int32 WorthRange=30;TSharedPtr<FOKChartData> WorthChart;TSharedPtr<FJsonObject> FinAlerts,HerAccount;
  bool ShowDebug=!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STREET_DEV")).IsEmpty(); // the "女角數值" panel (F10)
  TMap<int32,FString> HerSaysNext; // what she says as soon as her reply and voice are done (TickAutoFriendship)
- FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TMap<int32,FString> HerProposed; /* an activity she proposed in a nudge reply, not started: told to the next judge */TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
+ FString RelationshipEventName,RelationshipShy;TMap<int32,int64> HerTreatPromise,HerTreatKept; /* HerTreatKept: when her treat was paid (R3-227) */TMap<int32,TSet<FIntPoint>> NavLearned; /* cells a walk was stopped in (by height): GridRoute avoids them */TMap<int32,double> PromiseBookedAt; /* appointment id -> when a promise in talk booked it (one exchange books once) */FString PendingGift;TArray<FString> DeferredNotes; /* game notes for her held until her last reply is spoken (SendFreeTalk) */TMap<int32,FString> HerProposed; /* an activity she proposed in a nudge reply, not started: told to the next judge */TMap<FString,int64> RecentBought; /* "item|her" / "item|him" -> minute bought (FinishCheckout): not bought again */int32 HisLines=0;bool SystemNote=false; /* SystemNote: the next turn sent is the game's, not his */ // HisLines: his lines to the girls, counted (a choice answered after it opened)
 TMap<int32,TArray<FOKStreetCartLine>> CarriedOrders;TMap<int32,FString> CarriedOrderSaid; // CarriedOrders: ordered on the way to the shop (Mind.inl), placed on arrival (StartOutingActivity)
  // RelationshipShy: talk.rs shy_confession
  // she said this meal is on her: until (game minute)
@@ -1180,6 +1180,16 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  return true;
 }
 
+bool AOKStreetSocialScene::HerReplyUnspoken() const{
+ const auto& S=*State;return S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()&&FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt<20.0;
+}
+// The held game notes, in order, once she has said her reply and is free; with the talk over they have nobody to go to.
+void AOKStreetSocialScene::TickDeferredNotes(){
+ auto& S=*State;if(S.DeferredNotes.IsEmpty())return;
+ if(FreeTalkPartner()==INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street free talk: %d held game notes dropped, the talk is over"),S.DeferredNotes.Num());S.DeferredNotes.Reset();return;}
+ if(S.FreeTalkBusy||HerReplyUnspoken()||!S.FreeTalkDraft.IsEmpty())return;
+ S.SystemNote=true;S.FreeTalkDraft=S.DeferredNotes[0];S.DeferredNotes.RemoveAt(0);SendFreeTalk();
+}
 void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SendFreeTalk);
  const int32 Character=FreeTalkPartner();
  if(!State||Character==INDEX_NONE||State->FreeTalkBusy)return;auto& S=*State;
@@ -1189,6 +1199,9 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // What he said, for the rules that read it (who pays: shop.rs chat_order_payer), one on one or to the group alike. A
  // turn the game wrote for her (a till note, "you just walked in", a nudge) is not his words.
  const bool His=!OKStreetFreeTalkIsNudge(Text)&&!S.SystemNote;S.SystemNote=false;
+ // A note the game writes for her (a dish served, a notice, a nudge) while her last reply is not yet spoken waits for
+ // it: its reply would cut hers off unheard ("is your thin wallet all right?" got only "the panini is here").
+ if(!His&&HerReplyUnspoken()){S.DeferredNotes.Add(Text);S.FreeTalkDraft.Reset();UE_LOG(LogTemp,Display,TEXT("Street free talk: game note held until her reply is spoken (%d held)"),S.DeferredNotes.Num());return;}
  if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;SongCountLines(Character,1);} // his line counts toward her next song
  // His line aloud in his tone (the dropdown's x-vector voice), face to face, when the voice is TTS: her answer waits
  // until he has said it (TickFreeTalkSpeech, the galgame box).
@@ -1626,7 +1639,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     // A thing (not food) bought for the same one minutes ago: the judge reading "I'll buy it for you" after her own reply
     // had ordered the novel for herself bought it a second time as a gift (NT$360 for one book).
     if(!Item->Consumable){const int64* At=L->RecentBought.Find(ItemId+(ForHer?TEXT("|her"):TEXT("|him")));
-     if(At&&OKStreetMindNow(*L)-*At<=15){UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, bought for %s %lld min ago"),*Item->Name,ForHer?TEXT("her"):TEXT("him"),OKStreetMindNow(*L)-*At);continue;}}
+     if(At&&OKStreetMindNow(*L)-*At<=15){L->TellHer.Add(OKMsg(TEXT("ui.economy.already_bought_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, bought for %s %lld min ago"),*Item->Name,ForHer?TEXT("her"):TEXT("him"),OKStreetMindNow(*L)-*At);continue;}}
     if(ForHer&&Weak->TooFullFor(Character,*Item)){L->TellHer.Add(OKMsg(TEXT("ui.economy.too_full_to_order"),{{TEXT("item"),Item->Name}}));UE_LOG(LogTemp,Display,TEXT("Street judge order skipped: %s, she is full"),*Item->Name);continue;}
     FOKStreetCartLine Line;Line.ItemId=ItemId;Line.ForHer=ForHer;Line.Size=Item->DefaultSize();if(!Item->Options.IsEmpty()){Line.Sweetness=OKT(TEXT("ui.mind.full_sugar_label"));Line.Ice=OKT(TEXT("ui.mind.normal_state_label"));}
     if(OnTheWay){L->CarriedOrders.FindOrAdd(Character).Add(Line);UE_LOG(LogTemp,Display,TEXT("Street judge order: %s for %s, carried to %s"),*Item->Name,*For,*Shop);continue;}
@@ -3603,7 +3616,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(!S.CatchLight.IsValid()){auto* L=NewObject<UPointLightComponent>(this);L->SetMobility(EComponentMobility::Movable);L->SetLightingChannels(false,false,true);L->SetCastShadows(false);
   L->SetIntensityUnits(ELightUnits::Candelas);L->SetIntensity(100.f); /* 100 cd: a clear wet shine, short of glare (300 burns out) */L->SetAttenuationRadius(800.f);L->SetSourceRadius(2.f);L->RegisterComponent();AddInstanceComponent(L);S.CatchLight=L;}
  if(PC->PlayerCameraManager)S.CatchLight->SetWorldLocation(PC->PlayerCameraManager->GetCameraLocation()+FVector(0,0,25));
- {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkHisVoice(SceneTime());TickFreeTalkSpeech(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkReplay);TickFreeTalkReplay(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkSpeech);TickFreeTalkHisVoice(SceneTime());TickFreeTalkSpeech(Now);TickDeferredNotes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkLive);TickFreeTalkLive(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFreeTalkTrace);TickFreeTalkTrace(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickOrderNotice);TickOrderNotice();}
  // The street clock paused: the kitchen and the eating wait too (nothing on the table is eaten while time stands still).
  if(S.ClockPaused)for(auto& P:S.Serves)P.At+=Dt;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickServes);TickServes();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickShopArrival);TickShopArrival();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickMeal);TickMeal(S.ClockPaused?0.f:Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickRetryAction);TickRetryAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickThenAction);TickThenAction();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickEnsureFreeTalk);TickEnsureFreeTalk();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFaceTalkPartner);TickFaceTalkPartner();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickParty);TickParty(Dt);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickBluff);TickBluff();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFarewell);TickFarewell();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceClosing);TickPlaceClosing();}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPlaceTour);TickPlaceTour(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickLiveTalkTest);TickLiveTalkTest(Now);}

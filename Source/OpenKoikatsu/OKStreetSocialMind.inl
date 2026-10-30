@@ -507,6 +507,7 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, %s still has one"),*O.Id,ForHer?TEXT("she"):TEXT("he"));continue;}
   // A thing (not food) bought for the same one minutes ago (the judge's gift, then her own order for it): not twice.
   if(!Item->Consumable)if(const int64* At=S.RecentBought.Find(O.Id+(ForHer?TEXT("|her"):TEXT("|him")));At&&OKStreetMindNow(S)-*At<=15){
+   S.TellHer.Add(OKMsg(TEXT("ui.economy.already_bought_order"),{{TEXT("for"),ForHer?TEXT("her"):TEXT("him")},{TEXT("item"),Item->Name}}));
    UE_LOG(LogTemp,Display,TEXT("Street order skipped: %s, bought for %s %lld min ago"),*O.Id,ForHer?TEXT("her"):TEXT("him"),OKStreetMindNow(S)-*At);continue;}
   // Food for her when she is already full is not ordered (she would leave it after a bite); a drink still is.
   if(ForHer&&TooFullFor(Character,*Item)){

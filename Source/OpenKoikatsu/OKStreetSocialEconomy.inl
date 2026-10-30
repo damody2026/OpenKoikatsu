@@ -233,9 +233,6 @@ void AOKStreetSocialScene::TickServes(){
   if(P.Her==INDEX_NONE||FreeTalkPartner()!=P.Her){S.Serves.RemoveAt(K);continue;}
   // A replay he asked for plays out first: "the tea is here" sent in the middle of it stopped it after two lines.
   if(S.FreeTalkBusy||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty())continue;
-  // Nor while her last reply is still to be spoken: its answer came in, "the panini is here" went out at once, and its
-  // reply cut hers off unheard (he asked whether her thin wallet was all right; she only said the panini had come).
-  if(S.FreeTalkSpeechPlayed<S.FreeTalkSpeechLines.Num()&&FPlatformTime::Seconds()-S.FreeTalkSpeechRepliedAt<20.0)continue;
   TArray<FString> Dishes;for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Dishes.Add(OKMsg(TEXT("ui.economy.item_owner_label"), {{TEXT("owner_label"), L.ForHer?OKT(TEXT("ui.economy.your_label")):OKT(TEXT("ui.economy.his_label"))}, {TEXT("item_name"), *I->Name}}));
   S.SystemNote=true;S.FreeTalkDraft=OKMsg(TEXT("ui.economy.dishes_served_prompt"), {{TEXT("dish_names"), *FString::Join(Dishes,OKT(TEXT("ui.bank.list_separator")))}});
   S.Serves.RemoveAt(K);SendFreeTalk();return;
