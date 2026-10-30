@@ -661,7 +661,7 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 尚未一致：
 - 鏡子的倒影沒有依 `m_ReflectLayers` 篩圖層（目前拍到全部物件）。
 - 通用零件材質的 `_MainTex_ST` 是建材質時寫死的常數，Material Editor 改貼圖縮放／位移套不上（vmd 有一張場景的 `m_koi_stu_kawa00_00`）。
-- `83572034_p1`：舞台後方缺月亮背景、兩側藍色發光道具顯示成灰白，舞台中間的紅色板子原作沒有，待查。
+- `83572034_p1`：舞台後方缺月亮背景、兩側藍色發光道具顯示成灰白，舞台中間的紅色板子原作沒有。原因是 Material Editor 換著色器（`MaterialShaderList`）：全部 7,694 張場景的統計是 `Shader Forge/main_item_emission` 362 筆／14 張場景、`main_item_studio` 56／2、`main_item_studio_alpha` 31／3、`Unlit/Glitch3DProjection` 15／2（藍色發光手把）、`Goo` 8／1、`main_item` 7／4、`IBL_Shader` 3／1、`HarvexARC-XRay` 2／2（中間的紅板，原作是透視、看得到後面的月亮）、`main_opaque` 2／1、`HarvexARC-Gem` 1／1。`okmodel_view::ItemMaterialEdits::shader_supported` 不收 `main_item_emission`，所以保留原著色器。試過把它加進去（Unreal 共用母材質有 ForgeEmission 程式）：牆和地板變成白／粉色，KKS 原生（`F:\OpenKoikatsu\Saved\Tests\kks_p1emission_1030\Scene1.png`）是黑色——場景用 Material Editor 給 `_AnotherRamp` 換了一張暗色 ramp（`_AnotherRampFull` 1.3），換到 ForgeEmission 後這張 ramp 沒有生效，原因待查，已退回。`Glitch3DProjection`、`HarvexARC-XRay` 是第三方著色器，需要從各自的 zipmod 反組譯。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
