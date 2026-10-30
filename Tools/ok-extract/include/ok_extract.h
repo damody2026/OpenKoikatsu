@@ -93,6 +93,8 @@ int32_t ok_session_ik_effector_position(OkSession* s,int32_t effector,float* out
 int32_t ok_studio_pose_read(const char* path,char* out,int32_t cap);
 /* KStudio scene import step 1: scene as JSON in out (characters' rebuilt KKS cards written to out_dir); 0 ok / 1 error. */
 int32_t ok_studio_scene_export(const char* scene,const char* out_dir,char* out,int32_t cap);
+/* Reads the library's shader_states.json again on a background thread when it is missing, older or from other game files (once per library). */
+void ok_studio_shader_states_ensure(const char* game,const char* lib);
 /* Unity local Euler degrees turned about the bone's own local axis (0 X, 1 Y, 2 Z); result in out3. */
 int32_t ok_unity_euler_rotate(const float* euler3,int32_t axis,float degrees,float* out3);
 /* Timeline FK: Unity Euler degrees t (0..1) of the way from a3 to b3 along the shortest arc. */

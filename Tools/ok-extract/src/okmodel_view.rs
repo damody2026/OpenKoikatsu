@@ -683,7 +683,11 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             println!("cameras {}", serde_json::to_string(&view.render_cameras(&p[8..])).unwrap());
             println!("screens {:?}", view.parsed.prefab_render_textures(&p[8..]).shared);
         }
-        Some(p) => for m in view.prefab_meshes(p, true) {
+        Some(p) => for (index, m) in view.prefab_meshes(p, true).into_iter().enumerate() {
+            // OK_MODEL_VIEW_PNG=<folder> (diagnostic): each mesh's main texture written there.
+            if let (Some(dir), Some(png)) = (std::env::var_os("OK_MODEL_VIEW_PNG"), m.texture_png.as_ref()) {
+                let _ = std::fs::write(Path::new(&dir).join(format!("{index:03}_{}.png", m.texture_name)), png);
+            }
             let shown = posed_static(&m);
             let (lo, hi) = crate::pose::aabb(&shown.positions);
             println!("{}\tverts={} tris={} tex={} {:?} detail={} normal={} mat={:?} skel={} bounds=[{:.3},{:.3},{:.3}]..[{:.3},{:.3},{:.3}]", m.name, m.positions.len(), m.indices.len() / 3, m.texture_name,
