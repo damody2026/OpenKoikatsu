@@ -264,6 +264,16 @@ pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> 
         if is_native_hair_shader(&shader) {
             return ("masked".into(), true);
         }
+        // Unity's built-in Unlit/* and the CM3D2 ports some mod maps bring (Petardo's Kitchen: CM3D2/Lighted,
+        // CM3D2/Lighted_Trans): none of Koikatsu's toon inputs apply. Unlit/* draws its texture as is; CM3D2/Lighted's
+        // textures carry their lighting baked in, so it is drawn unlit too (as a Koikatsu toon part with its near-black
+        // _ShadowColor the whole room came out black). A cutout variant clips, a Transparent / _Trans one blends.
+        if shader.starts_with("unlit/") || shader.starts_with("cm3d2/") {
+            let blend = if shader.contains("cutout") || alphatest { "masked" }
+                else if shader.contains("transparent") || shader.contains("_trans") || alphablend || mat.render_queue >= 3000 { "translucent" }
+                else { "opaque" };
+            return (blend.into(), true);
+        }
         if alphablend || mat.render_queue >= 3000 {
             let (_, unlit) = blend_for(role, &mesh.name);
             return ("translucent".into(), toon_unlit || unlit);

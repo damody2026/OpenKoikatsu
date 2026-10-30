@@ -486,6 +486,11 @@ impl ModelView {
             m.rest_positions = m.positions.clone();
             m.rest_normals = m.normals.clone();
             m.prefab_local = None;
+            // A mirrored node (negative scale, e.g. a map built with -1 on one axis) turns the triangles inside out: Unity
+            // flips the culling for it, so reverse their winding, or the outside of a room is drawn and its inside culled.
+            let det = w[0][0] * (w[1][1] * w[2][2] - w[1][2] * w[2][1]) - w[0][1] * (w[1][0] * w[2][2] - w[1][2] * w[2][0])
+                + w[0][2] * (w[1][0] * w[2][1] - w[1][1] * w[2][0]);
+            if det < 0. { for t in m.indices.chunks_exact_mut(3) { t.swap(1, 2); } }
         };
         // A Mesh drawn by several GameObjects becomes one part per instance (the extra ones named `<mesh>#<n>`, as
         // parts are told apart by name).
@@ -646,6 +651,10 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             for name in view.prefabs_with_shader(&p[7..]) { println!("{name}"); }
         }
         None => println!("{}", serde_json::to_string_pretty(&view.contents()).unwrap()),
+        Some(p) if p.starts_with("nodes:") => {
+            let h = view.hierarchy(&p[6..]);
+            for (i, n) in h.nodes.iter().enumerate() { println!("{i}\t{}\tparent={}\tpos={:?}\trot={:?}\tscale={:?}", n.name, n.parent, n.pos, n.rot, n.scale); }
+        }
         Some(p) if p.starts_with("cameras:") => {
             println!("cameras {}", serde_json::to_string(&view.render_cameras(&p[8..])).unwrap());
             println!("screens {:?}", view.parsed.prefab_render_textures(&p[8..]).shared);
@@ -656,6 +665,14 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             println!("{}\tverts={} tris={} tex={} {:?} detail={} normal={} mat={:?} skel={} bounds=[{:.3},{:.3},{:.3}]..[{:.3},{:.3},{:.3}]", m.name, m.positions.len(), m.indices.len() / 3, m.texture_name,
                 m.texture_png.as_ref().map(|v| v.len()), m.detail_mask_png.is_some(), m.normal_map_png.is_some(), m.mat.as_ref().map(|x| (&x.name, &x.shader)),
                 m.smr_skel.as_ref().map(|k| k.names.len()).unwrap_or(0), lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
+            if !m.vertex_colors.is_empty() {
+                let n = m.vertex_colors.len() as f32;
+                let avg = (0..4).map(|c| m.vertex_colors.iter().map(|v| v[c] as f32).sum::<f32>() / n).collect::<Vec<_>>();
+                println!("  vertex colours {} avg rgba {:?}", m.vertex_colors.len(), avg);
+            }
+            let zero = m.normals.iter().filter(|n| n[0] * n[0] + n[1] * n[1] + n[2] * n[2] < 0.25).count();
+            println!("  normals {} (near zero {zero})", m.normals.len());
+            if let Some(mat) = m.mat.as_ref() { println!("  colors {:?} floats {:?}", mat.colors, mat.floats.iter().filter(|(k, _)| !k.ends_with("_ST_x") && !k.ends_with("_ST_y") && !k.ends_with("_ST_z") && !k.ends_with("_ST_w")).collect::<Vec<_>>()); }
         },
     }
     Ok(())
@@ -735,6 +752,19 @@ mod item_texture_dump {
                     let (u, v) = ([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]]);
                     let cross = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
                     println!("  first triangle cross {cross:?} vertex normal {:?} indices {:?}", p.normals.get(a), &p.indices[..p.indices.len().min(6)]);
+                    // Every triangle: winding normal with or against its vertex normal, and how many face +/- each axis.
+                    let (mut with, mut against, mut axis) = (0, 0, [[0usize; 2]; 3]);
+                    for t in p.indices.chunks_exact(3) {
+                        let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+                        let (pa, pb, pc) = (p.positions[a], p.positions[b], p.positions[c]);
+                        let (u, v) = ([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]]);
+                        let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+                        let vn = p.normals.get(a).copied().unwrap_or([0.; 3]);
+                        if n[0] * vn[0] + n[1] * vn[1] + n[2] * vn[2] >= 0. { with += 1 } else { against += 1 }
+                        let k = (0..3).max_by(|x, y| n[*x].abs().total_cmp(&n[*y].abs())).unwrap();
+                        axis[k][usize::from(n[k] < 0.)] += 1;
+                    }
+                    println!("  winding with vertex normals {with}, against {against}; facing +-x {:?} +-y {:?} +-z {:?}", axis[0], axis[1], axis[2]);
                 }
                 // Each also upside down (for trying the other row direction).
                 let write = |name: String, png: &[u8]| {

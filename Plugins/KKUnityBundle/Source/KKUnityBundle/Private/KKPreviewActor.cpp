@@ -3234,6 +3234,9 @@ static bool OKShaderHasNoOutlinePass(const FString& Shader)
 	static const TCHAR* Families[] = { TEXT("Standard"), TEXT("Legacy Shaders/"), TEXT("Unlit/"), TEXT("Mobile/"), TEXT("Particles/"), TEXT("FX/"),
 		TEXT("Skybox/"), TEXT("Sprites/"), TEXT("UI/"), TEXT("Nature/"), TEXT("Diffuse"), TEXT("Transparent/") };
 	for (const TCHAR* F : Families) if (Shader.StartsWith(F, ESearchCase::IgnoreCase)) return true;
+	// CM3D2 map shaders (CM3D2/Lighted, Lighted_Trans): only the *_Outline variants have one. The shell of a scaled-up
+	// room drew its walls black from outside (Petardo's kitchen, seen from the scene camera behind a wall Unity culls).
+	if (Shader.StartsWith(TEXT("CM3D2/"), ESearchCase::IgnoreCase)) return !Shader.Contains(TEXT("Outline"), ESearchCase::IgnoreCase);
 	return false;
 }
 
