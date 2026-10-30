@@ -433,7 +433,10 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
             const bool Virgin=Gallery->HExperience.IsValid()&&Gallery->HExperience->GetBoolField(Cur.StartsWith(TEXT("A_"))?TEXT("anal_virgin"):TEXT("virgin"));
             const bool First=Cur.StartsWith(TEXT("A_"))?!bAnal:!bCrotch;
             if(Cur.StartsWith(TEXT("A_")))bAnal=true;else{bCrotch=true;if(!bCondom)bRaw=true;}
-            if(First)React(OKT(Virgin?(Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.react_first_anal"):TEXT("ui.hscene.react_virgin")):Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.event_insert_anal"):bCondom?TEXT("ui.hscene.event_insert"):TEXT("ui.hscene.event_insert_raw")));
+            // What she agreed to goes with it (the reaction keeps only the latest note): she said yes to his asking.
+            if(First){FString Event=OKT(Virgin?(Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.react_first_anal"):TEXT("ui.hscene.react_virgin")):Cur.StartsWith(TEXT("A_"))?TEXT("ui.hscene.event_insert_anal"):bCondom?TEXT("ui.hscene.event_insert"):TEXT("ui.hscene.event_insert_raw"));
+                if(Cur.StartsWith(TEXT("A_")))Event+=OKT(TEXT("ui.hscene.react_agreed_anal"));else if(bRawPressed&&!bCondom)Event+=OKT(TEXT("ui.hscene.react_agreed_raw"));
+                React(Event);}
         }
         if(Base==TEXT("Oral_Idle"))OralIdleSince=Now;
     }
