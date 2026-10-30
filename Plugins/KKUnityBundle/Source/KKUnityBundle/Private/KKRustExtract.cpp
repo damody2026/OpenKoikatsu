@@ -499,6 +499,19 @@ bool FOkSession::OkModelNodeWorld(const FString& Library, const FString& ModelId
 	return true;
 }
 
+FString FOkSession::OkModelMapLights(const FString& Library, const FString& ModelId, const FString& Prefab)
+{
+	if (!InitBindings()) return FString();
+	const FTCHARToUTF8 LibUtf(*Library), IdUtf(*ModelId), PrefabUtf(*Prefab);
+	TArray<uint8> Buffer;
+	Buffer.SetNumUninitialized(1 << 12);
+	int32 N = ok_okmodel_map_lights(LibUtf.Get(), IdUtf.Get(), PrefabUtf.Get(), Buffer.GetData(), Buffer.Num());
+	if (N > Buffer.Num()) { Buffer.SetNumUninitialized(N); N = ok_okmodel_map_lights(LibUtf.Get(), IdUtf.Get(), PrefabUtf.Get(), Buffer.GetData(), Buffer.Num()); }
+	if (N <= 0 || N > Buffer.Num()) return FString();
+	const FUTF8ToTCHAR Text(reinterpret_cast<const ANSICHAR*>(Buffer.GetData()), N);
+	return FString(Text.Length(), Text.Get());
+}
+
 FString FOkSession::OkModelRenderCameras(const FString& Library, const FString& ModelId, const FString& Prefab)
 {
 	if (!InitBindings()) return FString();

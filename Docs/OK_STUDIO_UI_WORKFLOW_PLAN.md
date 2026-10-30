@@ -633,6 +633,25 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
   - vmd 全部 57 張整批比對都能載入（`F:\OpenKoikatsu\Saved\OKStudio\scenecheck_vmd3`）。`90697134_p0` 原本被大樓擋住：道具非等比縮放與 prefab 根轉動的組合用 FTransform 相乘算錯，改成矩陣相乘後構圖一致（`F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\r90697_fixed.png`）；仍缺光束、中央球體的發光線框、霧與景深。`83626612_p1` 背景白（原作星空藍）、`86003286_p4` 缺暗色煙霧背景，待查。
   - 結果見 `F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\kitchen_cap4.png`：愛心 250,117,132 對原作 251,112,131。牆面仍比原作亮約 30（原作的 CM3D2/Lighted 受光，我們畫成不受光），留待地圖色調一併處理。
 
+### U14　以 KKS 原生畫面為準修地圖光照（2026-10-30，F 組）
+
+原作縮圖常是 KK 舊版拍的，不能直接當標準。改用 `Tools/GamePoseProbe/run_scene_visual_audit.lua --tag <名稱> --scenes <場景>`：在 KKS 的 CharaStudio 開同一張場景，存下原生畫面（1280×720）、材質、燈光（含 culling mask）與每個 renderer 的圖層。例如 `F:\OpenKoikatsu\Saved\Tests\kks_maptone_1030\Scene1.png`。
+
+| 問題 | 原因與處理 |
+|---|---|
+| 操場 `1546790632203` 地面棕色 | 黃沙是 Studio 道具「砂地1」（`o_koi_stu_yuka_02_01`），在 Unity 圖層 11。地圖太陽的 culling mask 是 2048，也照得到這一層。我們的道具光照模擬只取角色燈，所以第 11 層的道具主光源是黑的。改成和 Unity forward 選主平行光相同的規則：照得到道具圖層的平行光中，取最亮的一盞（角色燈或地圖太陽），寫進 `_LightColor0`／`_WorldSpaceLightPos0`。修正後沙地顏色與原生一致 |
+| 大浴場 `ill_ss_sample_01` 偏暗偏藍 | 地圖自己的即時燈光（`Map/light/morning` 的點光源、聚光燈，以及只照水面的平行光）沒有建。新增 `prefab_light_modes` 記錄（`m_Lightmapping`、culling mask、陰影、GameObject 是否啟用；由 `studio-nodes` 記錄）與 `ok_okmodel_map_lights`。載入地圖時，不屬於烘焙燈、也不是地圖太陽的燈都建成 Unreal 燈光，掛在 map 的 lighting channel 上，並依時段顯示。衰減以 Unreal 非平方反比衰減近似 Unity 的衰減貼圖 |
+| vmd 場景角色姿勢、`80639555_p1` 中間小螢幕 | 場景以 KKVMDPlay 外掛播放 VMD，存檔只記作者電腦上的 VMD 路徑，本機沒有這些檔案。原作的小螢幕拍到的是跳舞中角色的近景。現在匯入報告會列出每個角色用的 VMD 檔名，並說明找不到檔案、不支援播放 |
+
+尚未一致：
+- 大浴場的貓（Standard 著色器的 Studio 道具）走卡通材質路徑，沒有套用 `_Color`（約 0.47）與 Standard 光照，所以偏白；木桶偏綠、地板偏藍，原因還要再查。
+- 操場的天空、樹、圍欄沒出現：畫面上方是一塊模糊的雲。
+- `87018458_p3` 的舞台地板與布幕顏色和原作不同（加地圖燈光前就是這樣）。
+
+### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
+
+從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。
+
 ## 7. 優先順序總表
 
 | 優先 | 階段 | 理由 |

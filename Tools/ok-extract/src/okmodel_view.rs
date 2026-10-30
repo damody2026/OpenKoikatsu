@@ -397,6 +397,23 @@ impl ModelView {
                 "clear_flags": c.clear_flags, "background": c.background}))
         }).collect()
     }
+    /// The prefab's realtime lights (a Studio map's lamps): every enabled Light on an active GameObject that is not baked
+    /// into the lightmaps (m_Lightmapping 2) and is not the map's sun (SunLightInfo, lit separately); Unity prefab-space
+    /// position and rotation, LightType (0 spot, 1 directional, 2 point), colour, intensity, range, spot angle, culling
+    /// mask, shadow type and the times of day it shows at (`sun_mask`, 0: always).
+    pub fn map_lights(&self, prefab: &str) -> Vec<serde_json::Value> {
+        let h = self.hierarchy(prefab);
+        let sun = self.parsed.prefab_sun_light(prefab);
+        let modes = self.parsed.prefab_light_modes(prefab);
+        h.lights.iter().filter(|l| l.enabled && l.node != sun.light_node).filter_map(|l| {
+            let mode = modes.iter().find(|m| m.node == l.node)?;
+            if !mode.active || mode.lightmapping == 2 || l.intensity <= 0. { return None; }
+            let (pos, rot, _) = h.node_world(l.node as usize)?;
+            Some(serde_json::json!({"node": l.node, "name": h.nodes[l.node as usize].name, "kind": l.kind, "pos": pos, "rot": rot,
+                "color": l.color, "intensity": l.intensity, "range": l.range, "spot_angle": l.spot_angle,
+                "culling_mask": mode.culling_mask, "shadows": mode.shadows, "lightmapping": mode.lightmapping, "times": sun_mask(&sun, &h, l.node)}))
+        }).collect()
+    }
     pub fn fk_bones(&self, prefab: &str) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for m in self.prefab_meshes(prefab, false) {

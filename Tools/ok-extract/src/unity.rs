@@ -1081,6 +1081,10 @@ pub struct PrefabRenderTextures {
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PrefabSunInfo { pub kind: i32, pub visible: Vec<i32>, pub angle: [f32; 3], pub color: [f32; 4], pub intensity: f32 }
 
+/// A prefab Light's runtime part (`prefab_light_modes`): baking mode, culling mask, shadow type, active GameObject.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PrefabLightMode { pub node: i32, pub lightmapping: i32, pub culling_mask: u32, pub shadows: i32, pub active: bool }
+
 /// A Studio map's SunLightInfo: the sun Light's node, type, culling mask and baking mode (m_Lightmapping 4 realtime),
 /// and the times of day it has (SunLightInfo.Info.Type 0 morning, 1 day, 2 evening, 3 night).
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -1958,6 +1962,42 @@ impl ParsedBundle {
     }
     /// Material values of a prefab's settled Animators (recorded by `studio-nodes`).
     pub fn prefab_animated_materials(&self,prefab:&str)->PrefabAnimatedMaterials {self.memo_prefab("prefab_animated_materials",prefab,prefab,||self.prefab_animated_materials_unity(prefab))}
+    /// How each Light of a prefab (`prefab_hierarchy` lights, same order) takes part at runtime: its baking mode
+    /// (m_Lightmapping: 4 realtime, 1 mixed, 2 baked into the lightmaps), culling mask (the layers it lights), shadow type
+    /// and whether its GameObject is active (a time-of-day list root counts as active: SunLightInfo shows it at its time).
+    /// Recorded by `studio-nodes`.
+    pub fn prefab_light_modes(&self, prefab: &str) -> Vec<PrefabLightMode> {
+        self.memo_prefab("prefab_light_modes", prefab, prefab, || {
+            for (gi, graph) in self.transform_graphs().iter().enumerate() {
+                let (h, go_node) = crate::pose::prefab_hierarchy_in(graph, prefab);
+                if h.nodes.is_empty() { continue; }
+                let listed: std::collections::HashSet<i32> = self.prefab_sun_light(prefab).infos.iter().flat_map(|i| i.visible.clone()).collect();
+                return self.with_serialized(|sers| {
+                    let Some(ser) = sers.get(gi) else { return Vec::new(); };
+                    let mut active = vec![true; h.nodes.len()];
+                    for info in ser.objects_of_type(1) {
+                        if let (Some(&node), Ok(o)) = (go_node.get(&info.path_id), UnityObject::from_serialized_file(ser, info)) {
+                            active[node as usize] = o.class.properties().get("m_IsActive").map(uv_bool).unwrap_or(true) || listed.contains(&(node as i32));
+                        }
+                    }
+                    let mut out = Vec::new();
+                    for info in ser.objects_of_type(108) {
+                        let Ok(obj) = UnityObject::from_serialized_file(ser, info) else { continue };
+                        let p = obj.class.properties();
+                        let Some(node) = p.get("m_GameObject").and_then(uv_pptr).and_then(|go| go_node.get(&go)).copied() else { continue };
+                        let mut on = true;
+                        let mut n = node as i32;
+                        while n >= 0 { on &= active[n as usize]; n = h.nodes[n as usize].parent; }
+                        out.push(PrefabLightMode { node: node as i32, lightmapping: p.get("m_Lightmapping").map(uv_i32).unwrap_or(4),
+                            culling_mask: p.get("m_CullingMask").and_then(|m| uv_obj(m, "m_Bits")).and_then(|v| v.as_i64()).map(|v| v as u32).unwrap_or(u32::MAX),
+                            shadows: p.get("m_Shadows").and_then(|s| uv_obj(s, "m_Type")).map(uv_i32).unwrap_or(0), active: on });
+                    }
+                    out
+                });
+            }
+            Vec::new()
+        })
+    }
     /// Per-renderer-instance activeInHierarchy, including static activeSelf and settled Animator curves.
     /// SunLightInfo list roots remain eligible and are gated separately by the selected time of day.
     pub fn prefab_renderer_visibility(&self, prefab: &str) -> Vec<(i32, bool)> {

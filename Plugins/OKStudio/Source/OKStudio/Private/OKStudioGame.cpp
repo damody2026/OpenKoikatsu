@@ -60,6 +60,7 @@
 #include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/SViewport.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/SListView.h"
 #include "UObject/GarbageCollection.h"
@@ -181,6 +182,28 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 		Game->Panel = SNew(SOKStudioPanel).Game(Game);
 		Game->PanelHost = Game->Panel;
 		GEngine->GameViewport->AddViewportWidgetContent(Game->PanelHost.ToSharedRef(), 10);
+		// Studio mode shows only the studio's UI: along the path from the viewport down to the panel, every other branch
+		// (another mode's widgets and layers) is collapsed until Stop.
+		TFunction<bool(const TSharedRef<SWidget>&)> HideOthers = [&](const TSharedRef<SWidget>& Node) -> bool
+		{
+			if (Node == Game->PanelHost.ToSharedRef()) return true;
+			FChildren* Children = Node->GetChildren();
+			if (!Children) return false;
+			int32 Path = INDEX_NONE;
+			for (int32 I = 0; I < Children->Num() && Path == INDEX_NONE; ++I) if (HideOthers(Children->GetChildAt(I))) Path = I;
+			if (Path == INDEX_NONE) return false;
+			for (int32 I = 0; I < Children->Num(); ++I)
+			{
+				const TSharedRef<SWidget> Other = Children->GetChildAt(I);
+				if (I == Path || !Other->GetVisibility().IsVisible()) continue;
+				Game->HiddenViewportWidgets.Emplace(Other, Other->GetVisibility());
+				Other->SetVisibility(EVisibility::Collapsed);
+			}
+			return true;
+		};
+		if (const TSharedPtr<SViewport> Viewport = GEngine->GameViewport->GetGameViewportWidget()) HideOthers(Viewport.ToSharedRef());
+		if (APlayerController* PC = World->GetFirstPlayerController())
+			if (AHUD* HUD = PC->GetHUD(); HUD && HUD->bShowHUD) { HUD->bShowHUD = false; Game->HiddenHUDs.Add(HUD); }
 	}
 	Game->SyncNow();
 	Game->ResetHistory();
@@ -295,6 +318,10 @@ void UOKStudioGame::Stop()
 		if (PC && PreviousViewTarget.IsValid() && PC->GetViewTarget() == Viewer) PC->SetViewTarget(PreviousViewTarget.Get());
 	}
 	if (PanelHost && GEngine && GEngine->GameViewport) GEngine->GameViewport->RemoveViewportWidgetContent(PanelHost.ToSharedRef());
+	for (const TPair<TWeakPtr<SWidget>, EVisibility>& W : HiddenViewportWidgets) if (const TSharedPtr<SWidget> Widget = W.Key.Pin()) Widget->SetVisibility(W.Value);
+	HiddenViewportWidgets.Reset();
+	for (const TWeakObjectPtr<AHUD>& HUD : HiddenHUDs) if (HUD.IsValid()) HUD->bShowHUD = true;
+	HiddenHUDs.Reset();
 	Panel.Reset();
 	PanelHost.Reset();
 	if (SceneActor) SceneActor->Destroy();

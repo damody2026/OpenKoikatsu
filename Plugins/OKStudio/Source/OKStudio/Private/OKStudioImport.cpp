@@ -332,6 +332,17 @@ namespace
 				if (bCard) ++Report->CharacterCards; else Report->Notes.Add(FString::Printf(TEXT("character %d: no OK card (%s)"), Key, *Summary));
 				// A card that did not convert stays beside the scene's cards (char_<key>.kks.png) to reproduce the failure.
 				if (bCard) IFileManager::Get().Delete(*KksCard);
+				// KKVMDPlay drove this character with an MMD motion when the scene was saved (its thumbnail shows that
+				// moment). The file is a path on the saving machine; it is looked up by name beside the scene too.
+				const TSharedPtr<FJsonObject>* Vmd = nullptr;
+				if (O->TryGetObjectField(TEXT("vmd"), Vmd) && (*Vmd)->GetStringField(TEXT("VMDAnimEnabled")).Equals(TEXT("True"), ESearchCase::IgnoreCase))
+				{
+					const FString Motion = (*Vmd)->GetStringField(TEXT("lastLoadedVMD"));
+					const FString Name = FPaths::GetCleanFilename(Motion.Replace(TEXT("\\"), TEXT("/")));
+					const bool bHere = FPaths::FileExists(Motion) || FPaths::FileExists(FPaths::GetPath(Report->Source) / Name);
+					Report->Notes.Add(FString::Printf(TEXT("character %d: KKVMDPlay motion %s (%s; VMD playback is not supported, the character keeps its saved pose)"),
+						Key, *Name, bHere ? TEXT("found") : TEXT("not on this machine")));
+				}
 				const int32 Id = Add(EOKSceneObjectKind::Character, FString::Printf(TEXT("Character %d"), Key), Parent, O);
 				FOKSceneCharacter& C = Doc->Find(Id)->Character;
 				C.EyesLook = EOKSceneLook::Animation;

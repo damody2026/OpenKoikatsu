@@ -519,6 +519,10 @@ int32_t ok_okmodel_fk_bones(const char* library, const char* id_hex, const char*
  * rot[4] (prefab space, Unity m / xyzw), fov, near, far, orthographic, ortho_size, clear_flags, background[4]}; returns
  * the byte length (larger than cap: nothing written). */
 int32_t ok_okmodel_render_cameras(const char* library, const char* id_hex, const char* prefab, uint8_t* out, int32_t cap);
+/* Realtime lights of a prefab (a Studio map's lamps: not baked, not its SunLightInfo sun): JSON array of {node, name, kind
+ * (0 spot, 1 directional, 2 point), pos[3], rot[4] (Unity prefab space), color[4], intensity, range, spot_angle, culling_mask,
+ * shadows, lightmapping, times (time-of-day mask, 0: always)}; out null / cap 0: size. */
+int32_t ok_okmodel_map_lights(const char* library, const char* id_hex, const char* prefab, uint8_t* out, int32_t cap);
 int32_t ok_okmodel_edits_get(const char* library, const char* id_hex, uint8_t* out, int32_t cap);
 int32_t ok_okmodel_edits_set(const char* library, const char* id_hex, const char* json, char* err, int32_t cap);
 int32_t ok_okmodel_first_prefab(const char* library, const char* id_hex, char* out, int32_t cap);

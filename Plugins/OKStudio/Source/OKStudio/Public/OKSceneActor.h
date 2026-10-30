@@ -186,6 +186,14 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<class UDirectionalLightComponent> MapSun;
 	int32 ShownMapTime = -2;
+	/** The map sun as the items' forward light (Unity: the brightest directional light whose culling mask has the
+	 *  item's layer; the map's own sun lights layer 11, where landscape items are authored): towards-light direction,
+	 *  linear colour and culling mask (0: no sun). */
+	FLinearColor MapSunItemDirection = FLinearColor::Black, MapSunItemColor = FLinearColor::Black;
+	uint32 MapSunMask = 0;
+	/** The map's own realtime lamps (ok_okmodel_map_lights) with the times of day they show at (0: always). */
+	TArray<TPair<TWeakObjectPtr<class ULightComponent>, uint32>> MapLights;
+	void AddMapLights(class AKKPreviewActor* Map, const FString& Model, const FString& Root);
 	int32 ShownMapComponents = 0;
 	FTransform ShownMapSunPlace;
 	void ApplyMapTime(const FTransform& MapPlace);

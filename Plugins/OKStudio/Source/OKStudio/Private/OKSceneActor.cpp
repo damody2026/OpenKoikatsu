@@ -817,6 +817,8 @@ void AOKSceneActor::SyncMap()
 		return;
 	}
 	ShownMapTime = -2;
+	for (const TPair<TWeakObjectPtr<ULightComponent>, uint32>& L : MapLights) if (L.Key.IsValid()) L.Key->DestroyComponent();
+	MapLights.Reset();
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) { P->Destroy(); ReleasedSinceCollect += 32; }
 	ShownMapPreviews.Reset();
 	ShownMap = Document->Map;
@@ -839,6 +841,7 @@ void AOKSceneActor::SyncMap()
 		TInlineComponentArray<UPrimitiveComponent*> Primitives(Actor);
 		for (UPrimitiveComponent* P : Primitives) P->SetLightingChannels(false, false, !P->ComponentHasTag(TEXT("OKSunExcluded")));
 		ShownMapPreviews.Add(Actor);
+		AddMapLights(Actor, Entry->Model, Root);
 	}
 	if (ShownMapPreviews.IsEmpty()) MapError = FString::Join(Failed, TEXT("; "));
 	ApplyMapTime(MapPlace);
@@ -890,6 +893,11 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 			if (C->ComponentHasTag(TEXT("OKRendererDisabled"))) C->SetVisibility(false);
 		}
 	}
+	// The map's lamps of a time of day show with that time's list (SunLightInfo.Set), the others always.
+	for (const TPair<TWeakObjectPtr<ULightComponent>, uint32>& L : MapLights)
+		if (L.Key.IsValid()) L.Key->SetVisibility(L.Value == 0 || (Time >= 0 && ((L.Value >> Time) & 1) != 0));
+	ItemsLit.Reset();
+	MapSunMask = 0;
 	if (!bSun)
 	{
 		if (MapSun) { MapSun->DestroyComponent(); MapSun = nullptr; }
@@ -919,7 +927,78 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
     const float Energy=FMath::Max3(Irradiance.R,Irradiance.G,Irradiance.B);
     MapSun->SetLightColor(Energy>0 ? FLinearColor(Irradiance.R/Energy,Irradiance.G/Energy,Irradiance.B/Energy,1) : FLinearColor::Black);
     MapSun->SetIntensity(Energy*UE_PI);
+	// The items' forward light when it reaches their layer (UpdateItemLighting): Unity (-x, z, y) towards the light.
+	FLinearColor Lo, Hi, Low24;
+	if (Map->Session.MaterialValue(0, "_OKSunCullingLo", Lo) && Map->Session.MaterialValue(0, "_OKSunCullingHi", Hi))
+		MapSunMask = uint32(FMath::RoundToInt(Lo.R)) | (uint32(FMath::RoundToInt(Hi.R)) << 16);
+	else if (Map->Session.MaterialValue(0, "_OKSunCulling", Low24)) MapSunMask = uint32(FMath::RoundToInt(Low24.R));
+	const FVector SunForward = MapSun->GetForwardVector();
+	const FVector Towards = FVector(SunForward.X, -SunForward.Z, -SunForward.Y).GetSafeNormal();
+	MapSunItemDirection = FLinearColor(Towards.X, Towards.Y, Towards.Z, 0.f);
+	MapSunItemColor = FLinearColor(Irradiance.R, Irradiance.G, Irradiance.B, 1.f);
 	UE_LOG(LogTemp, Display, TEXT("OK studio: map time %d sun angle=(%.1f,%.1f,%.1f) colour=(%.2f,%.2f,%.2f) intensity=%.2f"), Time, Angle.R, Angle.G, Angle.B, Color.R, Color.G, Color.B, Color.A);
+}
+
+// A Studio map's realtime lamps (point, spot and extra directional lights the map scene keeps unbaked): Unreal lights
+// on the map's lighting channel, at their node of the map prefab. Unity's point / spot attenuation (its falloff
+// texture, 1 / (1 + 25 (d / range)^2), cut at the range) is approximated by Unreal's non-inverse-squared falloff.
+void AOKSceneActor::AddMapLights(AKKPreviewActor* Map, const FString& Model, const FString& Root)
+{
+	const FString Json = FOkSession::OkModelMapLights(LibraryDirectory(), Model, Root);
+	TArray<TSharedPtr<FJsonValue>> Lights;
+	if (!Map || Json.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Lights)) return;
+	for (const TSharedPtr<FJsonValue>& V : Lights)
+	{
+		const TSharedPtr<FJsonObject> L = V->AsObject();
+		if (!L) continue;
+		auto Floats = [&L](const TCHAR* Field, int32 N)
+		{
+			TArray<float> Out;
+			const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+			if (L->TryGetArrayField(Field, List)) for (const TSharedPtr<FJsonValue>& X : *List) Out.Add(X->AsNumber());
+			Out.SetNumZeroed(N);
+			return Out;
+		};
+		const TArray<float> P = Floats(TEXT("pos"), 3), R = Floats(TEXT("rot"), 4), C = Floats(TEXT("color"), 4);
+		const int32 Kind = L->GetIntegerField(TEXT("kind"));
+		const float Range = float(L->GetNumberField(TEXT("range"))) * 100.f;
+		ULightComponent* Light = nullptr;
+		if (Kind == 1) Light = NewObject<UDirectionalLightComponent>(Map);
+		else if (Kind == 0)
+		{
+			USpotLightComponent* Spot = NewObject<USpotLightComponent>(Map);
+			const float Half = float(L->GetNumberField(TEXT("spot_angle"))) * 0.5f;
+			Spot->SetOuterConeAngle(Half);
+			Spot->SetInnerConeAngle(Half * 0.8f);
+			Light = Spot;
+		}
+		else Light = NewObject<UPointLightComponent>(Map);
+		if (UPointLightComponent* Local = Cast<UPointLightComponent>(Light))
+		{
+			Local->SetAttenuationRadius(Range);
+			Local->bUseInverseSquaredFalloff = false;
+			Local->LightFalloffExponent = 8.f;
+		}
+		Light->SetMobility(EComponentMobility::Movable);
+		Light->SetupAttachment(Map->GetRootComponent());
+		// Unity prefab space (-x, z, y); a Unity light shines along its +Z, an Unreal light along +X.
+		const FQuat Node = FQuat(-R[0], R[2], R[1], R[3]).GetNormalized();
+		Light->SetRelativeLocation(FVector(-P[0], P[2], P[1]) * 100.0);
+		Light->SetRelativeRotation(Node * FRotationMatrix::MakeFromXZ(FVector(0, 1, 0), FVector(0, 0, 1)).ToQuat());
+		const FLinearColor Irradiance = OKStudioLinearLightColor(FLinearColor(C[0], C[1], C[2], 1), float(L->GetNumberField(TEXT("intensity"))));
+		const float Energy = FMath::Max3(Irradiance.R, Irradiance.G, Irradiance.B);
+		Light->SetLightColor(Energy > 0 ? FLinearColor(Irradiance.R / Energy, Irradiance.G / Energy, Irradiance.B / Energy, 1) : FLinearColor::Black);
+		Light->SetIntensity(Energy * UE_PI);
+		Light->SetCastShadows(L->GetIntegerField(TEXT("shadows")) != 0);
+		// The culling mask: the map layer (11) is the map's lighting channel, the Chara layer (10) the characters'.
+		const uint32 Mask = uint32(L->GetNumberField(TEXT("culling_mask")));
+		Light->LightingChannels.bChannel0 = (Mask & (1u << 10)) != 0;
+		Light->LightingChannels.bChannel2 = (Mask & (1u << 11)) != 0;
+		Light->RegisterComponent();
+		MapLights.Emplace(Light, uint32(L->GetNumberField(TEXT("times"))));
+		UE_LOG(LogTemp, Display, TEXT("OK studio: map lamp %s kind=%d intensity=%.2f range=%.1f mask=%u times=%u"), *L->GetStringField(TEXT("name")), Kind,
+			float(L->GetNumberField(TEXT("intensity"))), Range / 100.f, Mask, uint32(L->GetNumberField(TEXT("times"))));
+	}
 }
 
 int32 AOKSceneActor::MapPartCount() const
@@ -1220,7 +1299,7 @@ void AOKSceneActor::UpdateItemLighting()
         }
 		AmbientLit.Add(Preview);
 	}
-	if (!Light && !bCharacterLightSeen) return;
+	if (!Light && !bCharacterLightSeen && MapSunMask == 0) return;
 	FLinearColor Direction = ItemLightDirection.A < 0.f ? FLinearColor(0.f, 0.f, -1.f, 0.f) : ItemLightDirection;
 	FLinearColor Color(0.f, 0.f, 0.f, 0.f);
 	if (Light)
@@ -1244,13 +1323,19 @@ void AOKSceneActor::UpdateItemLighting()
 		// pieces on Map, 11) get no forward light, _LightColor0 is black for them (native probe: hiding the light
 		// leaves them unchanged).
 		const bool bUnreached = It.Value.Kind == EOKSceneObjectKind::Item && Preview->IsOutsideLayerMask(1u << 10);
+		// Unity forward rendering gives an object the brightest directional light whose culling mask has its layer:
+		// items authored on the map layer (11: sand, grass, landscape pieces) are lit by the map's own sun.
+		const bool bSun = It.Value.Kind == EOKSceneObjectKind::Item && MapSunMask != 0 && !Preview->IsOutsideLayerMask(MapSunMask)
+			&& (bUnreached || MapSunItemColor.GetLuminance() > ItemLightColor.GetLuminance());
+		if (bSun) Preview->SetSharedVectorParameter(TEXT("_WorldSpaceLightPos0"), MapSunItemDirection);
 		if (FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_LIGHTING_AUDIT")) == TEXT("1"))
 		{
 			FString LayerTags; TInlineComponentArray<UMeshComponent*> Meshes(Preview);
 			for (const UMeshComponent* M : Meshes) for (const FName& T : M->ComponentTags) if (T.ToString().StartsWith(TEXT("OKLayer"))) { LayerTags += T.ToString() + TEXT(" "); break; }
 			UE_LOG(LogTemp, Display, TEXT("OK studio item light %s item=%d/%d/%d unreached=%d layers=%s"), *Preview->GetName(), Document->Find(It.Key) ? Document->Find(It.Key)->Item.Group : -1, Document->Find(It.Key) ? Document->Find(It.Key)->Item.Category : -1, Document->Find(It.Key) ? Document->Find(It.Key)->Item.No : -1, int32(bUnreached), *LayerTags.Left(60));
 		}
-		Preview->SetSharedVectorParameter(TEXT("_LightColor0"), bUnreached ? FLinearColor(0.f, 0.f, 0.f, ItemLightColor.A) : ItemLightColor);
+		Preview->SetSharedVectorParameter(TEXT("_LightColor0"), bSun ? FLinearColor(MapSunItemColor.R, MapSunItemColor.G, MapSunItemColor.B, ItemLightColor.A)
+			: bUnreached ? FLinearColor(0.f, 0.f, 0.f, ItemLightColor.A) : ItemLightColor);
 		ItemsLit.Add(Preview);
 	}
 }

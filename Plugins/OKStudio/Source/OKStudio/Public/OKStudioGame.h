@@ -311,6 +311,10 @@ private:
 	/** Hidden world actors whose tick was paused while the studio runs (restored on Stop). */
 	TArray<TWeakObjectPtr<AActor>> PausedWorldActors;
 	TArray<TWeakObjectPtr<USceneComponent>> HiddenWorldComponents;
+	/** Every other mode's UI on the game viewport (the gallery's UMG, street / interaction / paint panels, HUD layers)
+	 *  collapsed while the studio runs, with the visibility each had; the HUD's drawing too. Restored by Stop. */
+	TArray<TPair<TWeakPtr<SWidget>, EVisibility>> HiddenViewportWidgets;
+	TArray<TWeakObjectPtr<class AHUD>> HiddenHUDs;
 	TArray<TWeakObjectPtr<class APostProcessVolume>> DisabledWorldVolumes;
 	/** r.AllowOcclusionQueries before the studio turned it off (restored on Stop; INDEX_NONE: not changed). */
 	int32 SavedOcclusionQueries = INDEX_NONE;
