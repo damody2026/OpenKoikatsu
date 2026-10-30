@@ -210,6 +210,12 @@ private:
 	/** The camera items' targets by RenderTexture key (shared by every camera and screen of that key). */
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<class UTextureRenderTarget2D>> SharedRenderTargets;
+	/** Draws each shown mirror part's reflection (AKKPreviewActor::MirrorParts) as Unity's MirrorReflection script does:
+	 *  the main view mirrored in the part's plane, clipped at the plane by an oblique near plane, without image effects. */
+	void UpdateMirrors();
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class USceneCaptureComponent2D>> MirrorCaptures;
+	TArray<TWeakObjectPtr<class UMaterialInstanceDynamic>> MirrorCaptureMaterials;
 	void Release(FShown& Item);
 	void ApplyCharacterState(const FOKSceneObject& Object, FShown& Item);
 };

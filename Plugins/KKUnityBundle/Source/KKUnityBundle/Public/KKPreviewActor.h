@@ -724,6 +724,17 @@ public:
 		TWeakObjectPtr<UPrimitiveComponent> Component;
 	};
 	TArray<FSharedRenderTextureScreen> SharedRenderTextureScreens;
+	/** Mirror parts (Unity's FX/MirrorReflection shaders: a script draws the scene mirrored in the part's plane into
+	 *  _ReflectionTex, sampled at the screen position): the part's material ("_ReflectionTex" is black until the scene gives
+	 *  it a capture) and its plane in component space (a point on it and its front normal). */
+	struct FMirrorPart
+	{
+		TWeakObjectPtr<UMaterialInstanceDynamic> Material;
+		TWeakObjectPtr<UPrimitiveComponent> Component;
+		FVector LocalPoint = FVector::ZeroVector;
+		FVector LocalNormal = FVector::UpVector;
+	};
+	TArray<FMirrorPart> MirrorParts;
 	UTextureRenderTarget2D* RenderTextureFor(FOkSession& Source, int32 PartIndex);
 	void StopRenderTextureCaptures();
 	UPROPERTY()

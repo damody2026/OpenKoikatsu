@@ -650,8 +650,14 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 | 大浴場地板偏藍、木桶偏綠 | 不是反射（關掉 UE 反射畫面不變）。地板沒有 lightmap，環境光來自 `unity_SHA*`；我們給的是地圖烘焙的 `m_AmbientProbe`，地圖 62 存的是 0。KKS 地圖沒有 LightProbes 物件（KK 地圖的是空的）。地圖 62 的 ambient mode 是 Trilight：Unity 執行時用天空、地平線、地面三色算環境 SH，烘焙值是過時的。拿原生 `renderer_sh` 對三色擬合，三個色版都精確到 1e-5：C0 = (天空+地面)/6 + 2·地平線/3，C1 = √(2/27)·(天空−地面)，C6 = 5/96·(地平線−(天空+地面)/2)，C8 = 3·C6（顏色先轉線性，再乘 ambient intensity）。Flat 是三色相同的特例。`studio-environments` 現在多記 `ambient_sky`／`ambient_equator`／`ambient_ground`，`OKStudioMapAmbient` 在 Trilight／Flat 時改用三色算。72 張地圖中有 15 張 Trilight、27 張 Flat 都受影響 |
 | 操場舞台上方一大片模糊 | 不是景深：關掉 DOF、關掉半透明都一樣。這張場景把地圖移了 (−82.5, 3.43, −4.75)（SceneInfo.caMap，Studio 載入時 `MapCtrl.Reflect` 會套用；KK 縮圖舞台後方就是外牆的磚格）。外牆 `mo_koi_map34_sotokabe01_00` 因此緊貼舞台後方，但貼圖被拉滿整面牆。原因是 mesh 解碼挑主 UV 的啟發式：選「數值落在 ±8 內比例最高」的 channel。地圖的主 UV（TexCoord0）重複到 0–30，反而輸給全在 0–1 的 lightmap UV（TexCoord1）。原作地圖 205 個 mesh 中有 27 個、工作室道具中有網子、樓梯、樹等 6 個中招，角色 mesh 全部用 TexCoord0、不受影響。規則：TexCoord1 是 Unity 的 lightmap UV，只要 TexCoord0 是有效 UV（有限、不超過 4096、不是全 0），主 UV 就用 TexCoord0。基礎庫裡已記錄的 mesh 要重錄：`OKLIB_REFRESH=meshes_for_maindata ok-extract <遊戲> --oklib studio-nodes <基礎庫>`（studio-nodes 現在也會重錄已記錄的 `meshes_for_maindata`）|
 
+| `87018458_p3` 舞台地板灰色、沒有倒影 | 地板上鋪的是 mod 鏡子道具（`yamadamod.studioItem_mirror`「鏡 四角 アルファ 64」，著色器 `FX/MirrorReflection_Transparent`），我們沒有鏡子。原作 PS（反組譯 bundle 裡的 DXBC）：`rgb = tex2Dproj(_ReflectionTex, 螢幕座標) × _MainTex × _Color`、`alpha = _MainTex.a × _Color.a`；腳本 `MirrorReflection` 的設定是 1024 解析度、clip 偏移 0、只照圖層 10／11。做法：`AKKPreviewActor` 遇到 `FX/MirrorReflection*` 的零件換成鏡子材質（參數沿用 Unity 名稱，Material Editor 改 `_Color` 仍有效），記下網格平面；`AOKSceneActor::UpdateMirrors` 每幀用主相機對平面鏡射的位置拍一張（右手系相機，所以畫面左右相反，材質取 `1-u`），近平面用 Unity `CalculateObliqueMatrix` 同樣的斜截面（換成 Unreal 反向 Z 投影：`clip.z = w − k·d`），沒有影像後製 |
+
+修正後舞台地板變成暗色、有建築／鼓組／齒輪的倒影，和原作一致（`F:\OpenKoikatsu\Saved\OKStudio\mirror2\87018458_p3.png`）。全部 7,694 張場景中有 17 張用到這組鏡子道具。
+
+兩側布幕：KK 縮圖是紅色，但 KKS 原生畫面（`F:\OpenKoikatsu\Saved\Tests\kks_stage87018_1030\Scene1.png`）的側幕就是藍灰色（Sims4 `LargeFancyCurtains` 的 IBL_Shader 在 KKS 下的樣子），我們和原生一致，不改。
+
 尚未一致：
-- `87018458_p3` 的舞台地板與布幕顏色和原作不同（加地圖燈光前就是這樣）。
+- 鏡子的倒影沒有依 `m_ReflectLayers` 篩圖層（目前拍到全部物件）。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 

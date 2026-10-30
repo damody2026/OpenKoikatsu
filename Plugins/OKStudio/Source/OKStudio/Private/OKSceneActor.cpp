@@ -19,6 +19,10 @@
 #include "ok_extract.h"
 #include "ImageUtils.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "EngineUtils.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -1222,8 +1226,94 @@ void AOKSceneActor::Tick(float DeltaSeconds)
     {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_UpdateLooks);UpdateLooks(DeltaSeconds, false);}
     {QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_CharacterFrames);AdvanceCharacterFrames(DeltaSeconds, SceneJson.IsEmpty() && !bPauseAnimations);}
 	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_PlaceAttached);PlaceAttached();}
-	QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_ItemLighting);
-	UpdateItemLighting();
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_ItemLighting);UpdateItemLighting();}
+	{QUICK_SCOPE_CYCLE_COUNTER(STAT_OKScene_Mirrors);UpdateMirrors();}
+}
+
+void AOKSceneActor::UpdateMirrors()
+{
+	TArray<const AKKPreviewActor::FMirrorPart*> Mirrors;
+	for (TActorIterator<AKKPreviewActor> It(GetWorld()); It; ++It)
+		for (const AKKPreviewActor::FMirrorPart& M : It->MirrorParts)
+			if (M.Material.IsValid() && M.Component.IsValid()) Mirrors.Add(&M);
+	// Captures of mirrors that are gone.
+	for (int32 C = MirrorCaptures.Num() - 1; C >= 0; --C)
+		if (!MirrorCaptureMaterials[C].IsValid() || !Mirrors.ContainsByPredicate([&](const AKKPreviewActor::FMirrorPart* M) { return M->Material == MirrorCaptureMaterials[C]; }))
+		{
+			if (MirrorCaptures[C]) MirrorCaptures[C]->DestroyComponent();
+			MirrorCaptures.RemoveAt(C);
+			MirrorCaptureMaterials.RemoveAt(C);
+		}
+	if (Mirrors.IsEmpty()) return;
+	APlayerController* Controller = GetWorld()->GetFirstPlayerController();
+	if (!Controller || !Controller->PlayerCameraManager) return;
+	const FMinimalViewInfo View = Controller->PlayerCameraManager->GetCameraCacheView();
+	FVector2D ViewportSize(1280.0, 720.0);
+	if (GEngine && GEngine->GameViewport) GEngine->GameViewport->GetViewportSize(ViewportSize);
+	const double Aspect = ViewportSize.Y > 0.0 ? ViewportSize.X / ViewportSize.Y : 16.0 / 9.0;
+	// MirrorReflection.m_TextureSize (1024 in every yamadamod mirror): the reflection's resolution, stretched over the view.
+	const int32 TextureSize = 1024;
+	const int32 W = FMath::Clamp(FMath::Min(int32(ViewportSize.X), TextureSize), 16, TextureSize), H = FMath::Clamp(FMath::Min(int32(ViewportSize.Y), TextureSize), 16, TextureSize);
+	const FMatrix Rotation = FRotationMatrix(View.Rotation);
+	const FVector Forward = Rotation.GetUnitAxis(EAxis::X), Up = Rotation.GetUnitAxis(EAxis::Z);
+	const double TanX = FMath::Tan(FMath::DegreesToRadians(double(View.FOV)) * 0.5), TanY = TanX / Aspect;
+	for (const AKKPreviewActor::FMirrorPart* M : Mirrors)
+	{
+		UPrimitiveComponent* Comp = M->Component.Get();
+		const int32 Index = MirrorCaptureMaterials.IndexOfByKey(M->Material);
+		USceneCaptureComponent2D* Capture = Index == INDEX_NONE ? nullptr : MirrorCaptures[Index].Get();
+		if (!Capture)
+		{
+			UTextureRenderTarget2D* Target = NewObject<UTextureRenderTarget2D>(this);
+			Target->RenderTargetFormat = RTF_RGBA8_SRGB;
+			Target->ClearColor = FLinearColor::Black;
+			Target->InitAutoFormat(W, H);
+			Target->UpdateResourceImmediate(true);
+			Capture = NewObject<USceneCaptureComponent2D>(this);
+			Capture->SetupAttachment(RootComponent);
+			Capture->CaptureSource = SCS_FinalColorLDR;
+			// The reflection camera is a copy of the main camera without its image effects (see AddRenderCamera).
+			FOKScenePost Plain;
+			Plain.bBloom = Plain.bVignette = Plain.bDepthOfField = Plain.bFog = Plain.bAmbientOcclusion = Plain.bSunShafts = false;
+			Plain.ColorFilter = -1;
+			Plain.Exposure = 0.f;
+			Plain.ApplyTo(Capture->PostProcessSettings);
+			Capture->PostProcessBlendWeight = 1.f;
+			Capture->bCaptureOnMovement = false;
+			Capture->bUseCustomProjectionMatrix = true;
+			Capture->TextureTarget = Target;
+			Capture->HideComponent(Comp);
+			Capture->RegisterComponent();
+			M->Material->SetTextureParameterValue(TEXT("_ReflectionTex"), Target);
+			MirrorCaptures.Add(Capture);
+			MirrorCaptureMaterials.Add(M->Material);
+			UE_LOG(LogTemp, Display, TEXT("OK studio: mirror %s %dx%d"), *Comp->GetName(), W, H);
+		}
+		Capture->bCaptureEveryFrame = Comp->IsVisible();
+		if (!Capture->bCaptureEveryFrame) continue;
+		// The plane in world space (normals take the inverse scale), facing the camera.
+		const FTransform& T = Comp->GetComponentTransform();
+		const FVector Point = T.TransformPosition(M->LocalPoint);
+		FVector Normal = T.GetRotation().RotateVector(M->LocalNormal / T.GetScale3D()).GetSafeNormal();
+		if (FVector::DotProduct(View.Location - Point, Normal) < 0.0) Normal = -Normal;
+		const auto Reflect = [&Normal](const FVector& V) { return V - 2.0 * FVector::DotProduct(V, Normal) * Normal; };
+		const FVector Location = View.Location - 2.0 * FVector::DotProduct(View.Location - Point, Normal) * Normal;
+		// A right-handed camera along the mirrored forward and up: its picture is the reflection flipped left to right
+		// (the mirror material samples at 1 - u).
+		const FMatrix Axes = FRotationMatrix::MakeFromXZ(Reflect(Forward), Reflect(Up));
+		Capture->SetWorldLocationAndRotation(Location, Axes.Rotator());
+		// Unity's CalculateObliqueMatrix in Unreal's reversed-Z projection: clip z = w - k * d, with d the signed distance
+		// to the mirror plane (view space x right, y up, z forward), so points behind the mirror fall in front of the near
+		// plane. k keeps the depth of every visible point at or above 0 (the far end of the frustum's corner rays).
+		const FVector Right = Axes.GetUnitAxis(EAxis::Y), CamUp = Axes.GetUnitAxis(EAxis::Z), CamForward = Axes.GetUnitAxis(EAxis::X);
+		const double A = FVector::DotProduct(Normal, Right), B = FVector::DotProduct(Normal, CamUp), C = FVector::DotProduct(Normal, CamForward);
+		const double E = FVector::DotProduct(Location - Point, Normal);
+		double MaxRatio = 0.0;
+		for (const double SX : { -1.0, 1.0 }) for (const double SY : { -1.0, 1.0 }) MaxRatio = FMath::Max(MaxRatio, A * SX * TanX + B * SY * TanY + C);
+		const double K = MaxRatio > 1e-6 ? 0.999 / MaxRatio : 1.0;
+		FMatrix Projection(FPlane(1.0 / TanX, 0.0, -K * A, 0.0), FPlane(0.0, 1.0 / TanY, -K * B, 0.0), FPlane(0.0, 0.0, 1.0 - K * C, 1.0), FPlane(0.0, 0.0, -K * E, 0.0));
+		Capture->CustomProjectionMatrix = Projection;
+	}
 }
 
 void AOKSceneActor::UpdateItemLighting()

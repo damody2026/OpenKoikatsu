@@ -110,6 +110,7 @@ void AKKPreviewActor::ReleaseSceneCaches()
 #include "Materials/MaterialExpressionLinearInterpolate.h"
 #include "Materials/MaterialExpressionVertexColor.h"
 #include "Materials/MaterialExpressionCustom.h"
+#include "Materials/MaterialExpressionScreenPosition.h"
 #include "Materials/MaterialExpressionTime.h"
 #include "Engine/Texture.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -3471,6 +3472,96 @@ static UMaterialInterface* OKRenderTextureScreenMaterial()
 #endif
 }
 
+// Unity's FX/MirrorReflection shaders (yamadamod's Studio mirrors). Installed PS of the _Transparent variant:
+// rgb = tex2Dproj(_ReflectionTex, screen) * _MainTex * _Color, alpha = _MainTex.a * _Color.a (blended); the plain one is
+// opaque. Unlit: the reflection already holds the scene's light. The reflection is a capture with a proper (right-handed)
+// mirrored camera, so its picture is the reflection flipped left to right: sampled at (1 - u, v). Parameters keep the
+// Unity names so Material Editor edits of _Color and _MainTex reach them.
+static UMaterialInterface* OKMirrorMaterial(bool bTranslucent)
+{
+#if WITH_EDITOR
+	static TStrongObjectPtr<UMaterial> Cached[2];
+	TStrongObjectPtr<UMaterial>& Slot = Cached[bTranslucent ? 1 : 0];
+	if (Slot) return Slot.Get();
+	UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
+	Mat->MaterialDomain = MD_Surface;
+	Mat->BlendMode = bTranslucent ? BLEND_Translucent : BLEND_Opaque;
+	Mat->SetShadingModel(MSM_Unlit);
+	if (bTranslucent) Mat->TranslucencyPass = MTP_BeforeDOF;
+	auto* Screen = NewObject<UMaterialExpressionScreenPosition>(Mat);
+	Screen->Material = Mat;
+	Mat->GetExpressionCollection().AddExpression(Screen);
+	auto* Flip = NewObject<UMaterialExpressionCustom>(Mat);
+	Flip->Material = Mat;
+	Flip->OutputType = CMOT_Float2;
+	FCustomInput Uv;
+	Uv.InputName = TEXT("Uv");
+	Uv.Input.Expression = Screen;
+	Uv.Input.OutputIndex = 0; // viewport UV
+	Flip->Inputs.Add(Uv);
+	Flip->Code = TEXT("return float2(1.0 - Uv.x, Uv.y);");
+	Mat->GetExpressionCollection().AddExpression(Flip);
+	auto* Reflection = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
+	Reflection->Material = Mat;
+	Reflection->ParameterName = TEXT("_ReflectionTex");
+	Reflection->SamplerType = SAMPLERTYPE_Color;
+	Reflection->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+	Reflection->Coordinates.Expression = Flip;
+	Mat->GetExpressionCollection().AddExpression(Reflection);
+	auto* Main = NewObject<UMaterialExpressionTextureSampleParameter2D>(Mat);
+	Main->Material = Mat;
+	Main->ParameterName = TEXT("_MainTex");
+	Main->SamplerType = SAMPLERTYPE_Color;
+	Main->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+	Mat->GetExpressionCollection().AddExpression(Main);
+	auto* Color = NewObject<UMaterialExpressionVectorParameter>(Mat);
+	Color->Material = Mat;
+	Color->ParameterName = TEXT("_Color");
+	Color->DefaultValue = FLinearColor::White;
+	Mat->GetExpressionCollection().AddExpression(Color);
+	auto* Rgb = NewObject<UMaterialExpressionCustom>(Mat);
+	Rgb->Material = Mat;
+	Rgb->OutputType = CMOT_Float3;
+	auto Input = [](UMaterialExpressionCustom* Program, const TCHAR* Name, UMaterialExpression* Expression, int32 Output)
+	{
+		FCustomInput In;
+		In.InputName = Name;
+		In.Input.Expression = Expression;
+		In.Input.OutputIndex = Output;
+		Program->Inputs.Add(In);
+	};
+	Input(Rgb, TEXT("Refl"), Reflection, 0);
+	Input(Rgb, TEXT("Tex"), Main, 0);
+	Input(Rgb, TEXT("Tint"), Color, 0);
+	Rgb->Code = TEXT("return Refl * Tex * Tint;");
+	Mat->GetExpressionCollection().AddExpression(Rgb);
+	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData())
+	{
+		Ed->EmissiveColor.Expression = Rgb;
+		if (bTranslucent)
+		{
+			auto* Alpha = NewObject<UMaterialExpressionCustom>(Mat);
+			Alpha->Material = Mat;
+			Alpha->OutputType = CMOT_Float1;
+			Input(Alpha, TEXT("Tex"), Main, 4);
+			Input(Alpha, TEXT("Tint"), Color, 4);
+			Alpha->Code = TEXT("return saturate(Tex * Tint);");
+			Mat->GetExpressionCollection().AddExpression(Alpha);
+			Ed->Opacity.Expression = Alpha;
+		}
+	}
+	Mat->UpdateCachedExpressionData();
+	Mat->PreEditChange(nullptr);
+	Mat->PostEditChange();
+	Mat->ForceRecompileForRendering();
+	OKEnsureSkeletalMaterialUsage(Mat);
+	Slot.Reset(Mat);
+	return Mat;
+#else
+	return nullptr; // Editor graph creation is not a runtime rendering path.
+#endif
+}
+
 UTextureRenderTarget2D* AKKPreviewActor::RenderTextureFor(FOkSession& Source, int32 PartIndex)
 {
 	// okmodel_view::mark_render_texture: camera index, then the camera in prefab space (Unity axes, metres).
@@ -6175,6 +6266,30 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					Part.SurfaceMat = Dynamic;
 					SharedRenderTextureScreens.Add({ FMath::RoundToInt(SharedTarget.R), FIntPoint(FMath::RoundToInt(SharedTarget.G), FMath::RoundToInt(SharedTarget.B)), Dynamic, Comp });
 					UE_LOG(LogTemp, Display, TEXT("OK render texture shared screen part=%s key=%d"), *Name, FMath::RoundToInt(SharedTarget.R));
+				}
+		// A mirror (FX/MirrorReflection): the scene gives "_ReflectionTex" a capture mirrored in the part's plane.
+		if (Comp && !bBody && !bFaceDraw && Source.MaterialShaderName(i).StartsWith(TEXT("FX/MirrorReflection")))
+			if (UMaterialInterface* MirrorMat = OKMirrorMaterial(Source.MaterialShaderName(i).Contains(TEXT("Transparent"))))
+				if (UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(MirrorMat, Comp))
+				{
+					if (Tex) Dynamic->SetTextureParameterValue(TEXT("_MainTex"), Tex);
+					FLinearColor Color = FLinearColor::White;
+					Source.MaterialValue(i, "_Color", Color);
+					const auto Linear = [](float C) { return C <= .04045f ? C / 12.92f : FMath::Pow((C + .055f) / 1.055f, 2.4f); };
+					Dynamic->SetVectorParameterValue(TEXT("_Color"), FLinearColor(Linear(Color.R), Linear(Color.G), Linear(Color.B), Color.A));
+					Comp->SetMaterial(0, Dynamic);
+					Part.SurfaceMat = Dynamic;
+					FMirrorPart Mirror;
+					Mirror.Material = Dynamic;
+					Mirror.Component = Comp;
+					// The plane: the mesh's mean point and mean normal (its front, where Unity's script looks from).
+					FVector Sum = FVector::ZeroVector, Normal = FVector::ZeroVector;
+					for (const FVector& V : Part.BaseVertices) Sum += V;
+					for (const FVector& N : Part.BaseNormals) Normal += N;
+					if (Part.BaseVertices.Num()) Mirror.LocalPoint = Sum / Part.BaseVertices.Num();
+					if (!Normal.IsNearlyZero()) Mirror.LocalNormal = Normal.GetSafeNormal();
+					MirrorParts.Add(Mirror);
+					UE_LOG(LogTemp, Display, TEXT("OK mirror part=%s shader=%s normal=%s"), *Name, *Source.MaterialShaderName(i), *Mirror.LocalNormal.ToString());
 				}
 		// Unity's additive particle shaders (Studio's 2D lens flares): texture x 2 _TintColor, with source alpha, not the Studio light
 		// effect's three-colour mix the additive part graph draws.
