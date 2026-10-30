@@ -2265,7 +2265,9 @@
     "": 2
    },
    "season": null,
-   "tags": [],
+   "tags": [
+    "on_the_spot"
+   ],
    "prop": "none",
    "options": [],
    "effects": {

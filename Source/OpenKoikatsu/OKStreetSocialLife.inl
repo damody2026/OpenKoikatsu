@@ -423,7 +423,8 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  // she said she would be late (R3-226).
  {const int32 Minute=int32(OKStreetMindNow(S)%1440);if(const TArray<FOKStreetPlanBlock>* Plan=S.Plans.Find(Girl))for(const auto& B:*Plan)
   if(OKStreetFixedBlock(&B)&&B.Start>Minute)Room=FMath::Min<int64>(Room,B.Start-5-Minute);}
- if(!S.ClockPaused&&Want>Spent&&Room>0){
+ // Ended early by the pair session itself (FinishPhoto): no more than what went by, whatever the bill (R6-1).
+ if(!S.ClockPaused&&!S.ActCutShort&&!S.ActTimeCut&&Want>Spent&&Room>0){
   const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);
   const double Add=FMath::Min3(double(Want-Spent)/60.0,FMath::Max(0.0,23.75-Hours),double(FMath::Min<int64>(Room,24*60))/60.0); // never past the day's end or an appointment
   // What was ordered is on the table by then: the kitchen counts seconds of play, not the skipped half hour (her
@@ -447,7 +448,7 @@ void AOKStreetSocialScene::ActivityAftermath(const FString& ActivityId,int32 Gir
  TMap<FString,float> Feed;for(const auto& E:Answer->GetObjectField(TEXT("feed"))->Values)Feed.Add(FString(*E.Key),float(E.Value->AsNumber()));
  FeedHer(Girl,Feed);
  S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"));RefreshUI();
- S.ActCutShort=false;
+ S.ActCutShort=false;S.ActTimeCut=false;
  // What it used up (the fish food), now that it is over (activities.rs at_end).
  {FString Ignore;ActivityCheck(Girl,ActivityId,Ignore,true,true);}
  // Done with her today (activities.rs once_per_day).
@@ -485,7 +486,7 @@ void AOKStreetSocialScene::TickActivityWatch(){
   S.ActGirl=INDEX_NONE;if(!S.ActLover){S.ActCutShort=true;ActivityAftermath(S.ActId,Girl,S.ActStart);}
  }
  if(Girl!=INDEX_NONE&&S.ActGirl==INDEX_NONE){
-  S.ActGirl=Girl;S.ActSig=Sig;S.ActStart=OKStreetMindNow(S);S.ActFirstAppointment=S.Store.NextAppointment;S.ActCutShort=false;S.ActLover=S.LoverPose.Girl!=INDEX_NONE; // a kiss or an embrace is not an outing activity
+  S.ActGirl=Girl;S.ActSig=Sig;S.ActStart=OKStreetMindNow(S);S.ActFirstAppointment=S.Store.NextAppointment;S.ActCutShort=false;S.ActTimeCut=false;S.ActLover=S.LoverPose.Girl!=INDEX_NONE; // a kiss or an embrace is not an outing activity
   if(S.LastActivityGirl==Girl&&!S.LastActivity.IsEmpty()&&SceneTime()-S.LastActivityAt<20.0)S.ActId=S.LastActivity;
   else if(const auto* F=S.Facility!=INDEX_NONE?OKStreetFacilityActivity(S.Facility):nullptr)S.ActId=F->Id;
   else if(S.Pair.Partner!=INDEX_NONE)S.ActId=S.Pair.Seated?TEXT("sit_talk"):S.Pair.PhoneUse?TEXT("phone_together"):S.Pair.Meal?TEXT("meal"):S.Pair.Drink?TEXT("drink"):TEXT("photo");

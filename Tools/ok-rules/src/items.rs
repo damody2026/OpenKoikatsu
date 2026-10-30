@@ -104,6 +104,11 @@ fn give_to_her(st: &mut Value, girl: &str, item: &str, name: &str, from: &str, t
     owned_mut(st, girl).push(e);
 }
 
+/// Paid for and had there: a room, a bath, a stay, a service, a play at the machine (tagged on_the_spot).
+fn on_the_spot(item: &crate::catalog::Item) -> bool {
+    matches!(item.category.as_str(), "stay" | "leisure" | "spa" | "bath" | "service") || item.tags.iter().any(|t| t == "on_the_spot")
+}
+
 /// A checkout's things: hers when she picked them for herself (her_own), his to carry otherwise; one bought for her
 /// that can be given is given to her next (the gift rules). Request: ext, girl, day, lines [{item, for_her, her_own}].
 /// Answer: ext, his_add [ids], give_her (id or "").
@@ -115,7 +120,9 @@ fn checkout(c: &Catalog, r: &Value) -> Value {
     for l in r.get("lines").and_then(Value::as_array).into_iter().flatten() {
         let id = s(l, "item");
         let Some(item) = c.items.iter().find(|i| i.id == id) else { continue };
-        if item.consumable {
+        // Eaten, or used up there and then: a room, a bath, a play on the claw machine is not carried away (one try at the
+        // convenience store's claw machine sat in his bag as "claw machine (one try)", R6-2).
+        if item.consumable || on_the_spot(item) {
             continue;
         }
         if l.get("her_own").and_then(Value::as_bool).unwrap_or(false) && !girl.is_empty() {
@@ -374,6 +381,13 @@ mod tests {
         assert_eq!(v["his_add"], json!(["bk_postcard", "bk_notebook"]));
         assert_eq!(v["give_her"], "bk_postcard");
         assert_eq!(v["ext"]["items"]["owned"]["r"][0]["item"], "bk_novel_sword");
+    }
+
+    #[test]
+    fn checkout_does_not_carry_a_claw_machine_play() {
+        let c = cat();
+        let v = checkout(&c, &json!({"girl": "h", "day": 1, "lines": [{"item": "cv_claw"}, {"item": "park_fishfood"}]}));
+        assert_eq!(v["his_add"], json!(["park_fishfood"]), "{v}");
     }
 
     #[test]

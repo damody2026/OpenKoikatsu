@@ -260,7 +260,7 @@ struct FOKStreetSceneState {
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
  struct FPendingText{int32 Girl=INDEX_NONE;FString Why,Kind;double Due=0;int32 Tries=0;};TArray<FPendingText> PendingTexts;bool PhoneInFlight=false;double GateNudgeAt=-100;
- TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;int32 ArrivedWith=INDEX_NONE;FString ArrivedPlace;int64 ArrivedMinute=-1; /* the last walk he and a girl ended together, for appointments_tick (R5-13) */bool ActCutShort=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
+ TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;int32 ArrivedWith=INDEX_NONE;FString ArrivedPlace;int64 ArrivedMinute=-1; /* the last walk he and a girl ended together, for appointments_tick (R5-13) */bool ActCutShort=false,ActTimeCut=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
  // Round 3 (Docs/STREET_BEHAVIOR_PLAN_20261012b.md).
  TMap<int32,int32> PlanBlockSince;TMap<FString,int32> PaidShiftMinutes;bool ActIsHers=false,ActLover=false;int32 IntroFriend=INDEX_NONE;double IntroAt=0,GatePenaltyAt=-100,LastActivityAt=-100;
  TMap<int32,TArray<int64>> SelfTexts;int32 SentRemoteGirl=INDEX_NONE,SentRemoteMode=0,ReplyRemoteGirl=INDEX_NONE,ReplyRemoteMode=0;int64 LastCheckoutMinute=-1;FString NotServedNote;TMap<FString,int32> JobRejected;
@@ -2751,6 +2751,10 @@ void AOKStreetSocialScene::FinishPhoto(bool bKeepTalking){
  if(P.Conversation()&&SceneTime()-P.RequestedAt<30){ANSICHAR Stack[2048]={};FPlatformStackWalk::StackWalkAndDump(Stack,sizeof(Stack),1);
   UE_LOG(LogTemp,Warning,TEXT("Street pair: ended early (phase %d, %.1f s after it was asked for):\n%hs"),P.Phase,SceneTime()-P.RequestedAt,Stack);}
  const bool WasTalking=S.FreeTalkOpen&&FreeTalkPartner()==P.Partner;
+ // Sitting over a meal, a drink or a talk ended (goodbye, standing up, their words): it lasted the minutes that went by.
+ // Billed as before, but the clock is not put on to its whole length: seven minutes at the cafeteria with 三月七, his
+ // dish already eaten, ended at his goodbye and the clock jumped 43 minutes (R6-1).
+ if(P.Conversation()&&S.ActGirl==P.Partner)S.ActTimeCut=true;
  const auto Before=P;P=FOKStreetPairSession();if(Before.Conversation())EndTalk();
  for(auto& Prop:S.PairProps)DestroyLater(Prop.Get());S.PairProps.Reset();S.MealHandProps.Reset();
  const auto& Restore=Before;FString Error;ResumeBehavior(0,Error);ResumeBehavior(Restore.Partner,Error);
