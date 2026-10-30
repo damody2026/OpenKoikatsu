@@ -3444,9 +3444,11 @@ pub fn transform_positions(pos: &[[f32; 3]], m: &Mat4) -> Vec<[f32; 3]> {
     pos.iter().map(|p| mat_vec(m, *p)).collect()
 }
 
+/// New positions; the OBJ text goes (write_mesh makes it from the final positions when a part is written: making it
+/// again after every skinning and placement was millions of allocations a card conversion, for text nothing read).
 pub fn rebuild_obj(mesh: &mut ExtractedMesh, pos: Vec<[f32; 3]>) {
     mesh.positions = pos;
-    mesh.obj = crate::unity::mesh_to_obj(&mesh.name, &mesh.positions, &mesh.uvs, &mesh.indices);
+    mesh.obj.clear();
 }
 
 pub fn aabb(pos: &[[f32; 3]]) -> ([f32; 3], [f32; 3]) {

@@ -619,7 +619,7 @@ mod live_skin_geometry_tests {
         let mut exported=source.clone();let mut live=source;
         assert!(skin_mesh(&mut exported,&skeleton));assert!(skin_mesh_geometry(&mut live,&skeleton));
         assert_eq!(live.positions,exported.positions);assert_eq!(live.normals,exported.normals);
-        assert!(live.obj.is_empty());assert!(!exported.obj.is_empty());
+        assert!(live.obj.is_empty());assert!(exported.obj.is_empty(),"the OBJ text is made when written");
         apply_parent(&mut exported,&rotated);apply_parent_geometry(&mut live,&rotated);
         assert_eq!(live.positions,exported.positions);assert_eq!(live.normals,exported.normals);
         assert!(live.obj.is_empty());
