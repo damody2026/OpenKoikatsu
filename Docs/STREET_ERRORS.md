@@ -1535,3 +1535,4 @@
 - 驗證（Gal1030ZZE，刻晴）：她被鎖住、量表 90，按射在裡面，結果是「他戴著保險套射在裡面」，her_orgasms 維持 0。
 - 2026-10-30 c-conquest R6-12 的通用規則：她自己決定要點的餐，規則只在她真的已經吃飽時才擋（她最懂自己的肚子）；他替她點的才用「點了會撐」預估。涵蓋所有餐廳、咖啡廳、點心店與聚餐的點餐。
 - 2026-10-30 c-conquest：自己的 Lua 編輯腳本用 `io.open(p,"wb"):write(t)` 不關檔，同一個檔案連續改兩次時，第二次讀到寫了一半的內容，shop.rs 和 OKStreetSocialMind.inl 被截斷（cargo 報 unclosed delimiter 才發現）。兩檔改前與 HEAD 相同，從 HEAD 還原後重做；之後寫檔一律 `local w=io.open(...) w:write(t) w:close()`。
+- 2026-10-30 c-conquest R6-13 的通用規則：大聲的舉動（唱歌）在規範安靜的地方不做，不管當下人多人少、她多大膽、關係多近；涵蓋 places.toml 裡 quiet ≥ 0.7 的所有地點（圖書館、教室、書局、神社，之後新增的也一樣）。

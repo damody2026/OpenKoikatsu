@@ -252,6 +252,9 @@ fn interact(acts: &ActsTuning, places: &PlacesTuning, request: &Value) -> Result
     Ok(Value::Object(out))
 }
 
+/// Places this quiet (places.toml quiet) keep loud acts out entirely (heroine_place_ease).
+const QUIET_PLACE: f32 = 0.7;
+
 pub fn eval(acts: &ActsTuning, places: &PlacesTuning, kind: &str, request: &Value) -> Option<Result<Value, String>> {
     Some(match kind {
         "heroine_acts" => Ok(json!({"acts": acts.act.iter().map(|a| json!({"id": a.id, "cat": a.cat, "name": a.name, "stage": a.stage, "face_to_face": a.face_to_face, "button": a.button})).collect::<Vec<_>>()})),
@@ -264,7 +267,11 @@ pub fn eval(acts: &ActsTuning, places: &PlacesTuning, kind: &str, request: &Valu
             let crowd = places::crowd_at(place, request.get("hours").and_then(Value::as_f64).unwrap_or(12.0));
             let awkward = places::awkwardness(places.norms(place), crowd, places.act(act));
             let reaction = places::react(awkward, c.traits.shyness, c.traits.public_boldness, &c.rel.stage);
-            json!({"awkward": awkward, "reaction": reaction as i32, "at_ease": matches!(reaction, Reaction::Fine | Reaction::Thrilled)})
+            // A loud act where people keep quiet (library, lecture hall, bookstore, shrine: quiet 0.7 and up) is not
+            // done there, however empty it is or however bold she is: 三月七 sang to him in the bookstore at three in the
+            // afternoon (R6-13). Her song waits for another place.
+            let hushed = places.act(act).loud && places.norms(place).quiet >= QUIET_PLACE;
+            json!({"awkward": awkward, "reaction": reaction as i32, "at_ease": !hushed && matches!(reaction, Reaction::Fine | Reaction::Thrilled)})
         }),
         "heroine_chastity" => Ctx::from_request(request).map(|c| json!({"chastity": chastity(&c.rel, &c.traits)})),
         "heroine_stranger_cap" => Ctx::from_request(request).map(|c| json!({"stranger_cap": stranger_cap(&c.traits)})),
@@ -287,6 +294,20 @@ mod tests {
         let mut base = json!({"relation": {"id": "a"}, "profile": {}, "name": "小美", "place": "", "hours": 12.0});
         base.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
         base
+    }
+
+    /// Her song waits out every quiet place, empty or not, lover or not; an evening park is fine (R6-13).
+    #[test]
+    fn no_song_where_people_keep_quiet() {
+        let t = Tuning::builtin();
+        let ease = |place: &str, hours: f64| {
+            let r = req(json!({"relation": {"id": "a", "stage": "lover", "affection": 100}, "profile": {"traits": {"public_boldness": 90, "shyness": 10}}, "place": place, "hours": hours, "act": "sing"}));
+            eval(&t.acts, &t.places, "heroine_place_ease", &r).unwrap().unwrap()["at_ease"].as_bool().unwrap()
+        };
+        for place in ["library", "lecture", "bookstore", "shrine"] {
+            assert!(!ease(place, 15.0), "{place}");
+        }
+        assert!(ease("park", 20.0));
     }
 
     #[test]
@@ -409,7 +430,7 @@ mod tests {
         assert!((resistance - 26.0).abs() < 1e-4 && chance >= 0.9);
         let chaste = Relation { chastity: 90.0, ..loose.clone() };
         let (chance, _, why) = private_chance(&chaste, &t, 60.0);
-        assert!(chance == 0.0 && !why.is_empty());
+        assert!(chance == 0.0 && !why.is_empty());
         let (barely, _, _) = private_chance(&Relation { chastity: 40.0, ..Default::default() }, &t, 45.0);
         assert!(barely < 0.1, "charm a hair past her resistance is not one in two: {barely}");
         let friend = Relation { stage: "friend".into(), favor: 150.0, ..chaste.clone() };
