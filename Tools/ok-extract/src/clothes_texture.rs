@@ -192,8 +192,8 @@ pub(crate) fn apply_clothes_color_mask_sampled(
     // alpha-dependent pattern colour arithmetic, then cascading RGB masks.
     if !crate::okstrict::assembling() { return Some(main.to_vec()); }
     let mask_mode = std::env::var("OK_CLOTHES_MASK").unwrap_or_default();
-    let src = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
-    let mask = crate::teximg::load_from_memory(mask).ok()?.to_rgba8();
+    let src = crate::teximg::load_from_memory(main).ok()?.into_rgba8();
+    let mask = crate::teximg::load_from_memory(mask).ok()?.into_rgba8();
     let (w, h) = src.dimensions();
     let (mw, mh) = mask.dimensions();
     if w == 0 || h == 0 || mw == 0 || mh == 0 {
@@ -723,8 +723,8 @@ pub(crate) fn native_clothes_dynamic_mask_matches_cpu_rows_and_keeps_main_textur
         let part=crate::session::SessionPart::from_mesh("clothes_top",&mesh,"masked",true);
         assert_eq!(part.shader_textures["_MainTex"],main);
         assert_eq!(part.alpha_mask_st,[1.,1.,0.,0.]);
-        let native=crate::teximg::load_from_memory(&part.shader_textures["_AlphaMask"]).unwrap().to_rgba8();
-        let cpu=crate::teximg::load_from_memory(&apply_clothes_over_mask(&main,&mask,1.,0.,flags).unwrap()).unwrap().to_rgba8();
+        let native=crate::teximg::load_from_memory(&part.shader_textures["_AlphaMask"]).unwrap().into_rgba8();
+        let cpu=crate::teximg::load_from_memory(&apply_clothes_over_mask(&main,&mask,1.,0.,flags).unwrap()).unwrap().into_rgba8();
         for (a,b) in native.pixels().zip(cpu.pixels()) {
             assert_eq!(masked_alpha(255,[a[0],a[1]],flags),b[3]);
         }
@@ -747,8 +747,8 @@ pub(crate) fn apply_clothes_over_mask(png: &[u8], mask_png: &[u8], v_scale: f32,
     png_transform_cache::transform("clothes_over_mask_v1",png,&parameters,||apply_clothes_over_mask_uncached(png,mask_png,v_scale,v_offset,enabled))
 }
 pub(crate) fn apply_clothes_over_mask_uncached(png: &[u8], mask_png: &[u8], v_scale: f32, v_offset: f32, enabled: [bool; 2]) -> Option<Vec<u8>> {
-    let mut main = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
-    let mask = crate::teximg::load_from_memory(mask_png).ok()?.to_rgba8();
+    let mut main = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
+    let mask = crate::teximg::load_from_memory(mask_png).ok()?.into_rgba8();
     let (w,h) = main.dimensions();
     let (mw,mh) = mask.dimensions();
     if w == 0 || h == 0 || mw == 0 || mh == 0 { return None; }
@@ -773,8 +773,8 @@ pub(crate) fn apply_hair_alpha_mask(png: &[u8], mask_png: &[u8]) -> Option<Vec<u
     png_transform_cache::transform("hair_alpha_mask_v1",png,mask_png,||apply_hair_alpha_mask_uncached(png,mask_png))
 }
 pub(crate) fn apply_hair_alpha_mask_uncached(png: &[u8], mask_png: &[u8]) -> Option<Vec<u8>> {
-    let mut main = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
-    let mask = crate::teximg::load_from_memory(mask_png).ok()?.to_rgba8();
+    let mut main = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
+    let mask = crate::teximg::load_from_memory(mask_png).ok()?.into_rgba8();
     let (w, h) = main.dimensions();
     let (mw, mh) = mask.dimensions();
     if w == 0 || h == 0 || mw == 0 || mh == 0 { return None; }
@@ -818,7 +818,7 @@ pub(crate) fn body_mask_for_alpha_state(mask_png: &[u8], enabled: [bool; 2]) -> 
 }
 pub(crate) fn body_mask_for_alpha_state_uncached(mask_png: &[u8], enabled: [bool; 2]) -> Option<Vec<u8>> {
     if enabled == [true, true] { return Some(mask_png.to_vec()); }
-    let mut mask = crate::teximg::load_from_memory(mask_png).ok()?.to_rgba8();
+    let mut mask = crate::teximg::load_from_memory(mask_png).ok()?.into_rgba8();
     for pixel in mask.pixels_mut() {
         if !enabled[0] { pixel[0] = 255; }
         if !enabled[1] { pixel[1] = 255; }
@@ -877,7 +877,7 @@ pub(crate) fn composite_overlay_space(base:&[u8],overlay:&[u8],base_srgb:bool,ou
     png_transform_cache::transform("composite_overlay_v1",base,&parameters,||composite_overlay_space_uncached(base,overlay,base_srgb,output_srgb))
 }
 pub(crate) fn composite_overlay_space_uncached(base:&[u8],overlay:&[u8],base_srgb:bool,output_srgb:bool)->Option<Vec<u8>> {
-    let mut dst=crate::teximg::load_from_memory(base).ok()?.to_rgba8();let over=crate::teximg::load_from_memory(overlay).ok()?.to_rgba8();
+    let mut dst=crate::teximg::load_from_memory(base).ok()?.into_rgba8();let over=crate::teximg::load_from_memory(overlay).ok()?.into_rgba8();
     let (w,h)=dst.dimensions();if w==0||h==0||over.width()==0||over.height()==0{return None;}
     for y in 0..h {for x in 0..w {
         let p=sample_rgba_linear(&over,(x as f32+0.5)/w as f32,(y as f32+0.5)/h as f32);

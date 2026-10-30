@@ -3,7 +3,7 @@ use super::*;
 
 /// Mean RGBA (0..1) of a PNG, for diagnostics.
 pub(crate) fn png_mean(png: &[u8]) -> Option<[f32; 4]> {
-    let img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     if w == 0 || h == 0 {
         return None;
@@ -34,7 +34,7 @@ pub(crate) fn flip_png_v(png: &[u8]) -> Option<Vec<u8>> {let _spot=crate::profil
     }
     // Eye and face textures repeat across cards and outfits: decode+flip+encode once per content.
     png_transform_cache::transform("flip_png_v_v1",png,&[],||{
-        let mut im = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+        let mut im = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
         image::imageops::flip_vertical_in_place(&mut im);
         encode_png(&im)
     })
@@ -61,7 +61,7 @@ pub(crate) fn bake_eye_white_create_rt_sized(png:&[u8],base:[f32;4],sub:[f32;4],
     for v in base.into_iter().chain(sub){parameters.extend(v.to_bits().to_le_bytes());}
     parameters.push(u8::from(source_linear));parameters.extend(size.to_le_bytes());parameters.push(u8::from(flip_source));
     png_transform_cache::transform("create_eyew_rt_v1",png,&parameters,||{
-        let image=crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+        let image=crate::teximg::load_from_memory(png).ok()?.into_rgba8();
         let decode:[f32;256]=std::array::from_fn(|i|{
             let v=i as f32/255.;if source_linear{v}else{srgb_channel_to_linear(v)}
         });
@@ -94,7 +94,7 @@ pub(crate) fn bake_eye_white_with_space(png: &[u8], base: [f32; 4], sub: [f32; 4
     png_transform_cache::transform("create_eyew_v1",png,&parameters,||bake_eye_white_uncached(png,base,sub,source_linear))
 }
 pub(crate) fn bake_eye_white_uncached(png: &[u8], base: [f32; 4], sub: [f32; 4], source_linear: bool) -> Option<Vec<u8>> {
-    let img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     let mut out = image::RgbaImage::new(w, h);
     // create_eyew depends only on the sampled red byte. Evaluate its exact
@@ -144,7 +144,7 @@ pub(crate) fn bake_iris_with_space_uncached(
     hl_up:Option<&[u8]>,hl_down:Option<&[u8]>,hl_up_color:[f32;4],hl_down_color:[f32;4],
     hl_up_y:f32,hl_down_y:f32,source_linear:bool,
 ) -> Option<Vec<u8>> {
-    let source=crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let source=crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let gradient=grad.and_then(|p|crate::teximg::load_from_memory(p).ok().map(|i|i.to_rgba8()));
     let highlights=[hl_up,hl_down].map(|p|p.and_then(|p|crate::teximg::load_from_memory(p).ok().map(|i|i.to_rgba8())));
     let colors=[hl_up_color,hl_down_color];let offsets=[lerp_f(0.1,-0.1,hl_up_y),lerp_f(0.1,-0.1,hl_down_y)];
@@ -201,7 +201,7 @@ pub(crate) fn bake_iris_with_space_reference(
     hl_up:Option<&[u8]>,hl_down:Option<&[u8]>,hl_up_color:[f32;4],hl_down_color:[f32;4],
     hl_up_y:f32,hl_down_y:f32,source_linear:bool,
 ) -> Option<Vec<u8>> {
-    let source=crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let source=crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let gradient=grad.and_then(|p|crate::teximg::load_from_memory(p).ok().map(|i|i.to_rgba8()));
     let highlights=[hl_up,hl_down].map(|p|p.and_then(|p|crate::teximg::load_from_memory(p).ok().map(|i|i.to_rgba8())));
     let colors=[hl_up_color,hl_down_color];let offsets=[lerp_f(0.1,-0.1,hl_up_y),lerp_f(0.1,-0.1,hl_down_y)];
@@ -274,8 +274,8 @@ pub(crate) fn sample_rgba_linear(image:&image::RgbaImage,u:f32,v:f32)->[f32;4] {
 
 pub(crate) fn composite_over(under: &[u8], over: &[u8]) -> Option<Vec<u8>> {
     use std::io::Cursor;
-    let mut dst = crate::teximg::load_from_memory(under).ok()?.to_rgba8();
-    let src = crate::teximg::load_from_memory(over).ok()?.to_rgba8();
+    let mut dst = crate::teximg::load_from_memory(under).ok()?.into_rgba8();
+    let src = crate::teximg::load_from_memory(over).ok()?.into_rgba8();
     let (dw, dh) = dst.dimensions();
     let (sw, sh) = src.dimensions();
     for y in 0..dh {

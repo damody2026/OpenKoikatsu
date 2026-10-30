@@ -307,8 +307,8 @@ pub(crate) fn clothes_over_mask(p: &crate::session::SessionPart) -> Option<(Vec<
 pub(crate) fn bake_alpha_mask(main: &[u8], mask: &(Vec<u8>, [f32; 4], [bool; 2])) -> Option<Vec<u8>> {
     let (png, st, [use_r, use_g]) = mask;
     if !use_r && !use_g { return None; }
-    let mut main = crate::teximg::load_from_memory(main).ok()?.to_rgba8();
-    let mask = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut main = crate::teximg::load_from_memory(main).ok()?.into_rgba8();
+    let mask = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     let (w, h) = main.dimensions();
     let (mw, mh) = mask.dimensions();
     for y in 0..h {

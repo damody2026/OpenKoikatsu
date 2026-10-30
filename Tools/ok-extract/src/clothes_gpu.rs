@@ -154,12 +154,12 @@ mod tests {
   let data=vec![32,188,188,73,80,128,255,191];
   let texture=Texture {data:data.clone(),width:1,height:2,format:29,mips:1,sampling:Default::default(),aniso:0,bias:0.};
   let png=texture_readback(texture.clone()).unwrap();
-  assert_eq!(crate::teximg::load_from_memory(&png).unwrap().to_rgba8().into_raw(),data);
+  assert_eq!(crate::teximg::load_from_memory(&png).unwrap().into_rgba8().into_raw(),data);
   let mut linear=texture;linear.format=28;linear.sampling.srgb=false;
   let png=texture_readback(linear).unwrap();
-  let pixels=crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+  let pixels=crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
   assert_eq!(pixels.into_raw(),data);
-  let pixels=crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+  let pixels=crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
   assert_eq!(pixels.get_pixel(0,0)[3],73);
  }
  fn fixture(modes:&[(i32,i32)])->Vec<u8>{

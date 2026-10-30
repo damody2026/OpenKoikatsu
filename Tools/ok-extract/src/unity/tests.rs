@@ -359,7 +359,7 @@ fn native_mod_dxt5_texture_payload() {
                 assert!(tex.image_data==expected,"original compressed bytes must be exact");
                 let png=png_from_texture(&object,&parsed.files,None).unwrap().1;
                 std::fs::write(fixture.join(format!("{name}.Rust.png")),&png).unwrap();
-                let actual=crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+                let actual=crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
                 let mut reference=image::open(fixture.join(format!("{name}.UnityPy.png"))).unwrap().to_rgba8();
                 image::imageops::flip_vertical_in_place(&mut reference);
                 assert_eq!(actual.dimensions(),reference.dimensions());
@@ -627,7 +627,7 @@ fn hair_get_diffuse_mask_r_multiplies_color() {
         [0.0, 0.0, 1.0, 1.0],
     )
     .unwrap();
-    let got = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let got = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     let p = got.get_pixel(0, 0).0;
     assert!(p[0] > 100 && p[1] < 20 && p[2] < 20, "mask.r ??Color * main, got {p:?}");
 }
@@ -644,13 +644,13 @@ fn hair_get_diffuse_black_mask_keeps_maintex() {
         [0.0, 1.0, 0.0, 1.0],
     )
     .unwrap();
-    let got = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let got = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     let p = got.get_pixel(0, 0).0;
     assert_eq!(p, [128, 64, 32, 255], "black ColorMask ??GetDiffuse=1");
 }
 
 fn png_mean_rgb(png: &[u8]) -> (u32, u32, u32, u32) {
-    let img = crate::teximg::load_from_memory(png).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(png).unwrap().into_rgba8();
     let mut r = 0u64;
     let mut g = 0u64;
     let mut b = 0u64;
@@ -700,7 +700,7 @@ fn named_png_prefers_eri_over_kage() {
         ln == "eri" || ln == "eri_low",
         "expected eri / eri_low, got {n}"
     );
-    let img = crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
     let a_max = img.pixels().map(|p| p[3]).max().unwrap_or(0);
     assert!(a_max > 200, "eri must have opaque stroke pixels");
 }
@@ -941,7 +941,7 @@ fn diag_eye_uv() {
 }
 
 fn dump_tex_stats(label: &str, png: &[u8], out_dir: &std::path::Path) {
-    let img = crate::teximg::load_from_memory(png).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(png).unwrap().into_rgba8();
     let (w, h) = img.dimensions();
     let mut amin = 255u8;
     let mut amax = 0u8;
@@ -1296,7 +1296,7 @@ fn eyeshadow_00f_alpha_at_dump_eye_uv() {
         return;
     };
     let (_, png) = named_png_from_bytes(bytes, &["cw_t_eyeshadow_00f"]).expect("00f");
-    let img = crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
     let (w, h) = img.dimensions();
     let dump = crate::gamefs::read_to_string(crate::test_support::game_path(r"\mesh_dump\outfit4\Ushiwakamaru_0\mesh_22_cf_O_face.json"),
     )
@@ -1570,7 +1570,7 @@ fn dump_eyeshadow_00f_matches_dump_size() {
         return;
     };
     let (n, b) = named_png_from_bytes(bytes, &["cw_t_eyeshadow_00f"]).expect("00f");
-    let img = crate::teximg::load_from_memory(&b).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&b).unwrap().into_rgba8();
     let (w, h) = img.dimensions();
     assert_eq!(n, "cw_t_eyeshadow_00f");
     assert_eq!((w, h), (512, 256), "dump _overtex3 is 512x256");
@@ -1609,7 +1609,7 @@ fn dump_overlay_vc_matches_png_sample() {
     let png = crate::gamefs::read(crate::test_support::game_path(r"\mesh_dump\outfit0\Ushiwakamaru_0\tex_4_cf_m_face_00__overtex3.png"),
     )
     .unwrap();
-    let img = crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
     let (w, h) = img.dimensions();
     let parse2 = |key: &str| -> Vec<[f32; 2]> {
         let s = json.split(&format!("\"{key}\":[")).nth(1).unwrap();
@@ -1735,7 +1735,7 @@ fn overtex3_uv4_clamp_hits_eye_not_cheek() {
         return;
     };
     let (_, png) = named_png_from_bytes(bytes, &["cw_t_eyeshadow_00f"]).expect("00f");
-    let img = crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
     let (w, h) = img.dimensions();
     let dump = crate::gamefs::read_to_string(crate::test_support::game_path(r"\mesh_dump\outfit4\Ushiwakamaru_0\mesh_22_cf_O_face.json"),
     )
@@ -1852,8 +1852,8 @@ fn overlay_mapped_stains_lids_not_cheeks() {
         &face.indices,
     )
     .expect("overlay");
-    let dst = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
-    let src = crate::teximg::load_from_memory(&base).unwrap().to_rgba8();
+    let dst = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
+    let src = crate::teximg::load_from_memory(&base).unwrap().into_rgba8();
     let (w, h) = dst.dimensions();
     let pix = |img: &image::RgbaImage, u: f32, v: f32| -> [i32; 3] {
         let x = ((u.clamp(0.0, 0.999) * w as f32) as u32).min(w - 1);
@@ -2254,7 +2254,7 @@ fn unpack_red_packed_atlas() {
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
         .unwrap();
     let out = unpack_illusion_albedo(&png).expect("unpack");
-    let decoded = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let decoded = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     let p = decoded.get_pixel(0, 0);
     assert!(p[1] > 100, "g={}", p[1]);
     assert!(p[2] > 80, "b={}", p[2]);

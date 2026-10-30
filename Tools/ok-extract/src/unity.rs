@@ -2086,7 +2086,7 @@ impl ParsedBundle {
         if let (Some(e),Some(id))=(self.model_edits(),self.lib) {
             if let Some(png)=crate::okmodel_edit::texture_png(&crate::oklib::active()?.dir,&id,&e,name) {
                 // A replaced texture is RGBA8 texels (sRGB unless the original was linear).
-                let rgba=crate::teximg::load_from_memory(&png).ok()?.to_rgba8();
+                let rgba=crate::teximg::load_from_memory(&png).ok()?.into_rgba8();
                 let sampling=self.texture_sampling_named(name).unwrap_or_default();
                 return Some(crate::clothes_gpu::Texture{width:rgba.width(),height:rgba.height(),format:if sampling.srgb{29}else{28},mips:1,
                     sampling:TextureSampling{mip_count:1,..sampling},aniso:1,bias:0.0,data:rgba.into_raw()});
@@ -4997,7 +4997,7 @@ pub fn scale_png_alpha(png: &[u8], factor: f32) -> Option<Vec<u8>> {
     crate::png_transform_cache::transform("scale_alpha_v1", png, &factor.to_bits().to_le_bytes(), || scale_png_alpha_uncached(png, factor))
 }
 fn scale_png_alpha_uncached(png: &[u8], factor: f32) -> Option<Vec<u8>> {
-    let mut img = crate::teximg::load_from_memory(png).ok()?.to_rgba8();
+    let mut img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
     for p in img.pixels_mut() {
         p[3] = ((p[3] as f32) * factor).round() as u8;
     }

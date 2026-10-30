@@ -84,7 +84,7 @@ fn stage333_alpha_source_diagnostics() {
         for (name,png) in &p.shader_textures {std::fs::write(out.join(format!("part{i}.shader{name}.png")),png).unwrap();}
         if p.name=="o_inner_a" {
             assert_eq!(p.shader_kind,11);
-            let actual=crate::teximg::load_from_memory(p.png.as_ref().unwrap()).unwrap().to_rgba8();
+            let actual=crate::teximg::load_from_memory(p.png.as_ref().unwrap()).unwrap().into_rgba8();
             let native=image::open("C:/portable/OpenKoikatsu/Saved/Tests/Tatsumaki333Native/Card0.json.renderer30.mat0._MainTex.png").unwrap().to_rgba8();
             assert_eq!(actual.dimensions(),native.dimensions());
             let max=actual.as_raw().iter().zip(native.as_raw()).map(|(a,b)|a.abs_diff(*b)).max().unwrap();
@@ -176,7 +176,7 @@ fn native_argb_clothes_source() {
         let gpu=parsed.texture_gpu_named(name).unwrap();
         assert_eq!(gpu.format,29);assert!(gpu.mips>=1);
         let png=parsed.texture_png_named(name).unwrap();
-        let image=crate::teximg::load_from_memory(&png).unwrap().to_rgba8();
+        let image=crate::teximg::load_from_memory(&png).unwrap().into_rgba8();
         // PNG decoder exports source rows, GPU input keeps original texels.
         let decoded=image.into_raw();
         assert_eq!(gpu.data[..decoded.len()],decoded);
@@ -196,7 +196,7 @@ fn native_clothes_gpu_rejects_partial_inputs() {
     let textures=std::array::from_fn(|_|clothes_gpu::Texture::white());
     let mut cb=[[1.0;4];16];cb[2]=[1.0,1.0,0.0,0.0];cb[7]=cb[2];
     let positive=clothes_gpu::bake(&shader,&textures,&cb,2).unwrap();
-    assert_eq!(crate::teximg::load_from_memory(&positive).unwrap().to_rgba8().get_pixel(0,0).0,[255;4]);
+    assert_eq!(crate::teximg::load_from_memory(&positive).unwrap().into_rgba8().get_pixel(0,0).0,[255;4]);
     let mut bad=textures.clone();bad[0].data.clear();assert!(clothes_gpu::bake(&shader,&bad,&cb,2).unwrap_err().contains("short mip payload"));
     let mut bad=textures.clone();bad[0].mips=17;assert!(clothes_gpu::bake(&shader,&bad,&cb,2).unwrap_err().contains("invalid texture input"));
     let mut bad=textures.clone();bad[4].width=0;assert!(clothes_gpu::bake(&shader,&bad,&cb,2).unwrap_err().contains("invalid bake arguments"));
@@ -401,7 +401,7 @@ fn head_item_actual_cards_and_mod_material_identity() {
         assert_eq!(draw.color_count,if source.mat.as_ref().unwrap().shader=="Shader Forge/main_item" {3}else{4});
         assert_eq!(draw.colors[0], expected, "{name}");
         assert_eq!(mesh.texture_png, source.texture_png, "MainTex must remain unbaked {name}");
-        let png = crate::teximg::load_from_memory(draw.color_mask.as_ref().unwrap()).unwrap().to_rgba8();
+        let png = crate::teximg::load_from_memory(draw.color_mask.as_ref().unwrap()).unwrap().into_rgba8();
         assert!(png.pixels().all(|p| p.0 == [255,0,0,255]));
         writeln!(audit,"CARD\t{name}\t{:?}\t{:?}",draw.colors[0],part.shadow_color).unwrap();
         // Synthetic mod edits verify material identity, independent ST,
@@ -1358,7 +1358,7 @@ fn body_create_shader_uses_green_for_sub_and_blue_for_nails() {
         [0.80222213, 0.6018249, 0.528676, 1.0],
         [1.0, 0.875, 0.875, 1.0],
     ).unwrap();
-    let img = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     assert_eq!(img.get_pixel(0, 0).0, [250, 238, 230, 255]);
     assert_eq!(img.get_pixel(1, 0).0, [200, 143, 121, 255]);
     assert_eq!(img.get_pixel(2, 0).0, [250, 216, 209, 255]);
@@ -2573,7 +2573,7 @@ fn material_editor_normal_blit_sets_red_and_preserves_gba() {
     source.put_pixel(0, 0, image::Rgba([32, 90, 120, 140]));
     source.put_pixel(0, 1, image::Rgba([80, 180, 200, 220]));
     let out = convert_runtime_normal_map(encode_png(&source).unwrap());
-    let img = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let img = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     assert_eq!(img.get_pixel(0, 0).0, [255, 180, 200, 220]);
     assert_eq!(img.get_pixel(0, 1).0, [255, 90, 120, 140]);
 }
@@ -2584,7 +2584,7 @@ fn native_material_editor_normal_rt_encodes_linear_source_rgb() {
         image::Rgba([32,190,192,191]))).unwrap();
     let converted=convert_runtime_normal_map(source);
     let stored=linear_texture_to_srgb_png(&converted).unwrap();
-    let pixel=crate::teximg::load_from_memory(&stored).unwrap().to_rgba8();
+    let pixel=crate::teximg::load_from_memory(&stored).unwrap().into_rgba8();
     assert_eq!(pixel.get_pixel(0,0).0,[255,224,225,191]);
 }
 
@@ -2592,11 +2592,11 @@ fn native_material_editor_normal_rt_encodes_linear_source_rgb() {
 fn native_material_editor_normal_srgb_source_is_not_encoded_twice() {
     let source=encode_png(&image::RgbaImage::from_pixel(1,1,image::Rgba([32,188,188,73]))).unwrap();
     let linear=convert_runtime_normal_map_sampled(source.clone(),true);
-    assert_eq!(crate::teximg::load_from_memory(&linear).unwrap().to_rgba8().get_pixel(0,0).0,[255,128,128,73]);
+    assert_eq!(crate::teximg::load_from_memory(&linear).unwrap().into_rgba8().get_pixel(0,0).0,[255,128,128,73]);
     let encoded=linear_texture_to_srgb_png(&linear).unwrap();
-    assert_eq!(crate::teximg::load_from_memory(&encoded).unwrap().to_rgba8().get_pixel(0,0).0,[255,188,188,73]);
+    assert_eq!(crate::teximg::load_from_memory(&encoded).unwrap().into_rgba8().get_pixel(0,0).0,[255,188,188,73]);
     let wrong=linear_texture_to_srgb_png(&convert_runtime_normal_map_sampled(source,false)).unwrap();
-    assert!(crate::teximg::load_from_memory(&wrong).unwrap().to_rgba8().get_pixel(0,0)[1]>210);
+    assert!(crate::teximg::load_from_memory(&wrong).unwrap().into_rgba8().get_pixel(0,0)[1]>210);
 }
 
 #[test]
@@ -2610,7 +2610,7 @@ fn body_under_rows_match_native_rt_coordinates() {
     let mask=crate::unity::solid_png([0.,0.,0.,1.],1,2).unwrap();
     let mut mesh=ExtractedMesh::default();
     compose_body_texture(&mut mesh,Some(&card),[1.;4],[1.;4],&[("cf_body_00_t".into(),main),("cf_body_00_mc".into(),mask)],0);
-    let result=crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().to_rgba8();
+    let result=crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().into_rgba8();
     for (actual,expected) in result.pixels().zip(overlay.pixels()) {
         for c in 0..4 {assert!((actual[c] as i16-expected[c] as i16).abs()<=1,"BodyUnder must remain in native RT row coordinates after the body Blit");}
     }
@@ -2621,7 +2621,7 @@ fn normal_override_keeps_texture_container_rt_rows() {
     let source=image::RgbaImage::from_raw(1,2,vec![255,188,128,73,255,80,220,191]).unwrap();
     let png=encode_png(&source).unwrap();
     let output=convert_runtime_normal_map_rows(png.clone(),true,false);
-    let actual=crate::teximg::load_from_memory(&output).unwrap().to_rgba8();
+    let actual=crate::teximg::load_from_memory(&output).unwrap().into_rgba8();
     assert_eq!(actual.get_pixel(0,0).0,[255,128,55,73]);
     assert_eq!(actual.get_pixel(0,1).0,[255,20,183,191]);
     assert_ne!(output,convert_runtime_normal_map_rows(png,true,true));
@@ -2644,7 +2644,7 @@ fn body_create_preserves_native_skin_alpha() {
     let main=crate::unity::solid_png([1.;4],1,1).unwrap();
     let mask=crate::unity::solid_png([0.;4],1,1).unwrap();
     let output=crate::unity::apply_body_create_colors(&main,&mask,[1.,1.,1.,236./255.],[1.;4],[1.;4]).unwrap();
-    assert_eq!(crate::teximg::load_from_memory(&output).unwrap().to_rgba8().get_pixel(0,0)[3],236);
+    assert_eq!(crate::teximg::load_from_memory(&output).unwrap().into_rgba8().get_pixel(0,0)[3],236);
 }
 
 #[test]
@@ -2657,7 +2657,7 @@ fn body_base_normal_matches_game_render_texture() {
     let (_, raw) = crate::unity::named_png_from_bundle(&bundle, &["cf_body_00_base_n"])
         .expect("body base normal");
     let converted = convert_runtime_normal_map(raw);
-    let got = crate::teximg::load_from_memory(&converted).unwrap().to_rgba8();
+    let got = crate::teximg::load_from_memory(&converted).unwrap().into_rgba8();
     let expected = image::open(reference).unwrap().to_rgba8();
     assert_eq!(got.dimensions(), expected.dimensions());
     let mut error = [0u64; 4];
@@ -2675,7 +2675,7 @@ fn face_blit_uses_measured_unity_srgb_transfer() {
     let input = encode_png(&image::RgbaImage::from_pixel(1, 1,
         image::Rgba([75, 28, 28, 255]))).unwrap();
     let output = linear_texture_to_srgb_png(&input).unwrap();
-    let pixel = crate::teximg::load_from_memory(&output).unwrap().to_rgba8();
+    let pixel = crate::teximg::load_from_memory(&output).unwrap().into_rgba8();
     assert_eq!(pixel.get_pixel(0, 0).0, [148, 93, 93, 255]);
 }
 
@@ -2703,7 +2703,7 @@ fn configured_minimalist_ramp_is_loaded_from_game_settings() {
     if !game.join("UserData/config/system.xml").ok_exists() { return; }
     let vanilla = load_characustom_dir(&game.join("abdata/list/characustom"));
     let ramp = configured_ramp_png(game, &vanilla).expect("configured mt_ramp");
-    let image = crate::teximg::load_from_memory(&ramp).unwrap().to_rgba8();
+    let image = crate::teximg::load_from_memory(&ramp).unwrap().into_rgba8();
     assert_eq!((image.width(), image.height()), (256, 4));
     assert_eq!(image.get_pixel(0, 2)[0], 0);
     assert_eq!(image.get_pixel(128, 2)[0], 255);
@@ -2735,8 +2735,8 @@ fn material_editor_top_subpart_uses_top_clothes_slot() {
 fn clothes_alpha_state_follows_change_alpha_mask() {
     let main = encode_png(&image::RgbaImage::from_pixel(1, 1, image::Rgba([80, 90, 100, 255]))).unwrap();
     let mask = encode_png(&image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 128, 0, 255]))).unwrap();
-    let alpha = |bytes: Vec<u8>| crate::teximg::load_from_memory(&bytes).unwrap().to_rgba8().get_pixel(0, 0)[3];
-    let channels = |bytes: Vec<u8>| { let p = *crate::teximg::load_from_memory(&bytes).unwrap().to_rgba8().get_pixel(0, 0); [p[0], p[1]] };
+    let alpha = |bytes: Vec<u8>| crate::teximg::load_from_memory(&bytes).unwrap().into_rgba8().get_pixel(0, 0)[3];
+    let channels = |bytes: Vec<u8>| { let p = *crate::teximg::load_from_memory(&bytes).unwrap().into_rgba8().get_pixel(0, 0); [p[0], p[1]] };
     for (state, expected, expected_channels) in [(0, 0, [0, 128]), (1, 128, [255, 128]), (2, 128, [255, 128]), (3, 255, [255, 255])] {
         let flags = clothes_alpha_state(state);
         assert_eq!(channels(body_mask_for_alpha_state(&mask, flags).unwrap()), expected_channels);
@@ -2779,12 +2779,12 @@ fn material_editor_hair_alpha_mask_multiplies_main_alpha() {
     };
     let mask = me_texture(Some(&card.me_tex), 0, "accessory", Some("accessory11"), &mesh, "alphamask")
         .expect("K384 ME alpha mask");
-    let mask_image = crate::teximg::load_from_memory(mask).unwrap().to_rgba8();
+    let mask_image = crate::teximg::load_from_memory(mask).unwrap().into_rgba8();
     assert_eq!(mask_image.get_pixel(250, 400)[0], 0);
     assert_eq!(mask_image.get_pixel(100, 400)[0], 255);
     let main = crate::unity::solid_png([1.0, 1.0, 1.0, 1.0], 512, 512).unwrap();
     let masked = apply_hair_alpha_mask(&main, mask).unwrap();
-    let image = crate::teximg::load_from_memory(&masked).unwrap().to_rgba8();
+    let image = crate::teximg::load_from_memory(&masked).unwrap().into_rgba8();
     assert_eq!(image.get_pixel(250, 400)[3], 0);
     assert_eq!(image.get_pixel(100, 400)[3], 255);
 }
@@ -2818,7 +2818,7 @@ fn material_editor_face_detailmask_matches_runtime_draw_texture() {
     let mesh = crate::unity::ExtractedMesh { name: "cf_O_face".into(), ..Default::default() };
     let png = me_texture(Some(&card.me_tex), 0, "head", None, &mesh, "detailmask")
         .expect("face draw material DetailMask override");
-    let source = crate::teximg::load_from_memory(png).unwrap().to_rgba8();
+    let source = crate::teximg::load_from_memory(png).unwrap().into_rgba8();
     let runtime = image::open(dump_path).unwrap().to_rgba8();
     assert_eq!(source.dimensions(), runtime.dimensions());
     let mut differing = 0usize;
@@ -2923,11 +2923,11 @@ fn accessory_colormask_mixed_source_rows() {
             let mut output = meshes[0].texture_png.clone().unwrap();
             // Match the render boundary's source orientation convention.
             if !main_from_me { output = flip_png_v(&output).unwrap(); }
-            let actual = crate::teximg::load_from_memory(&output).unwrap().to_rgba8();
+            let actual = crate::teximg::load_from_memory(&output).unwrap().into_rgba8();
             // The recovered native fragment performs ColorMask mixing.
             // Preserve source rows/bytes and separate uniforms, rather
             // than requiring the obsolete CPU pre-tint (double coloring).
-            assert_eq!(actual.as_raw(), crate::teximg::load_from_memory(&main).unwrap().to_rgba8().as_raw());
+            assert_eq!(actual.as_raw(), crate::teximg::load_from_memory(&main).unwrap().into_rgba8().as_raw());
             let mut output_mask=meshes[0].color_mask_png.clone().unwrap();
             if !mask_from_me {output_mask=flip_png_v(&output_mask).unwrap();}
             assert_eq!(output_mask, mask, "mask provenance main_me={main_from_me} mask_me={mask_from_me}");
@@ -3083,8 +3083,8 @@ fn clothes_tex_ab_falls_back_to_main_ab() {
 }
 
 fn png_mean_abs_diff(a: &[u8], b: &[u8]) -> Option<f64> {
-    let ia = crate::teximg::load_from_memory(a).ok()?.to_rgba8();
-    let ib = crate::teximg::load_from_memory(b).ok()?.to_rgba8();
+    let ia = crate::teximg::load_from_memory(a).ok()?.into_rgba8();
+    let ib = crate::teximg::load_from_memory(b).ok()?.into_rgba8();
     let (wa, ha) = ia.dimensions();
     let (wb, hb) = ib.dimensions();
     if wa == 0 || ha == 0 || wb == 0 || hb == 0 {
@@ -3774,7 +3774,7 @@ fn vanilla_zero_subpart_supplies_bra_mask() {
     let vanilla = crate::list::load_characustom_dir(&game.join("abdata/list/characustom"));
     let mask = over_layer_mask_png(game, &card, &vanilla, &ChaListCatalog::default(), &std::collections::HashMap::new(), 0, "OverBraMask")
         .expect("jacket SubA id 0 must contribute its authored mask");
-    let image = crate::teximg::load_from_memory(&mask).unwrap().to_rgba8();
+    let image = crate::teximg::load_from_memory(&mask).unwrap().into_rgba8();
     assert_eq!(image.dimensions(), (512, 256));
     let chest = image.get_pixel(185, 119).0;
     assert_eq!(chest[0], 0);
@@ -4035,7 +4035,7 @@ fn rgb_on_black_alpha_punches_black() {
     img.put_pixel(1, 0, image::Rgba([80, 120, 200, 255]));
     let png = encode_png(&img).expect("png");
     let out = rgb_on_black_alpha(&png).expect("alpha");
-    let got = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let got = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     assert_eq!(got.get_pixel(0, 0).0[3], 0, "black should be transparent");
     assert!(
         got.get_pixel(1, 0).0[3] > 100,
@@ -4063,7 +4063,7 @@ fn overlay_overtex_applies_eyeshadow_tint() {
     let bp = encode_png(&base).unwrap();
     let op = encode_png(&over).unwrap();
     let out = crate::unity::overlay_overtex(&bp, &op, [0.529, 0.230, 0.230, 0.65]).unwrap();
-    let got = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let got = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     let keep = got.get_pixel(0, 0).0;
     let tint = got.get_pixel(7, 0).0;
     assert!((keep[0] as i32 - 220).abs() < 3);
@@ -4248,7 +4248,7 @@ fn bake_eye_white_uses_r_as_coverage() {
     img.put_pixel(1, 0, image::Rgba([255, 255, 255, 255]));
     let png = encode_png(&img).unwrap();
     let out = bake_eye_white(&png, [1.0, 1.0, 1.0, 1.0], [0.2, 0.2, 0.2, 1.0]).unwrap();
-    let got = crate::teximg::load_from_memory(&out).unwrap().to_rgba8();
+    let got = crate::teximg::load_from_memory(&out).unwrap().into_rgba8();
     // fragWhite returns alpha 1 everywhere (opaque quad masked by the face).
     assert_eq!(got.get_pixel(0, 0).0[3], 255, "black maps to opaque sub color");
     assert!(got.get_pixel(0, 0).0[0] < 80, "black maps to sub color");
@@ -4263,7 +4263,7 @@ fn create_eyew_uses_linear_samples_and_color_alpha() {
     let base=[1.,0.5,0.25,0.8]; let sub=[0.1,0.2,0.3,0.2];
     for source_linear in [false,true] {
         let out=bake_eye_white_with_space(&png,base,sub,source_linear).unwrap();
-        let actual=crate::teximg::load_from_memory(&out).unwrap().to_rgba8().get_pixel(0,0).0;
+        let actual=crate::teximg::load_from_memory(&out).unwrap().into_rgba8().get_pixel(0,0).0;
         // Independent piecewise IEC sRGB calculation of PS 0001's mad.
         let linear=|v:f64|if v<=0.04045 {v/12.92}else{((v+0.055)/1.055).powf(2.4)};
         let gamma=|v:f64|if v<=0.0031308 {v*12.92}else{1.055*v.powf(1./2.4)-0.055};
@@ -4285,7 +4285,7 @@ fn create_eyew_rt_matches_linear_bilinear_shader_and_original_sizes(){
     for size in [256,512]{for source_linear in [false,true]{for flip_source in [false,true]{
         let mut reference=source.clone();if flip_source{image::imageops::flip_vertical_in_place(&mut reference);}
         let actual=bake_eye_white_create_rt_sized(&png,base,sub,source_linear,size,flip_source).unwrap();
-        let actual=crate::teximg::load_from_memory(&actual).unwrap().to_rgba8();
+        let actual=crate::teximg::load_from_memory(&actual).unwrap().into_rgba8();
         assert_eq!(actual.dimensions(),(size,size));
         for(x,y,p)in actual.enumerate_pixels(){
             let shade=sample_rgba_clamped_space(&reference,(x as f32+0.5)/size as f32,(y as f32+0.5)/size as f32,!source_linear)[0];
@@ -4307,7 +4307,7 @@ fn create_eyew_lookup_matches_scalar_for_every_red_byte() {
                         ([0.73,0.17,0.91,0.37],[0.28,0.64,0.03,0.93])] {
         for source_linear in [false, true] {
             let result = bake_eye_white_with_space(&png,base,sub,source_linear).unwrap();
-            let result = crate::teximg::load_from_memory(&result).unwrap().to_rgba8();
+            let result = crate::teximg::load_from_memory(&result).unwrap().into_rgba8();
             for (p, actual) in source.pixels().zip(result.pixels()) {
                 let shade = if source_linear {p[0] as f32/255.} else {srgb_channel_to_linear(p[0] as f32/255.)};
                 let mut expected = [0;4];
@@ -4327,7 +4327,7 @@ fn null_clothes_maintex_uses_shader_declared_white_default() {
     for shader in ["Shader Forge/main_opaque","Koikano/main_clothes_opaque"] {
         let mut mesh=ExtractedMesh {mat:Some(crate::unity::MeshMaterial {shader:shader.into(),..Default::default()}),..Default::default()};
         apply_clothes_default_main_texture(&mut mesh);
-        let image=crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().to_rgba8();
+        let image=crate::teximg::load_from_memory(mesh.texture_png.as_ref().unwrap()).unwrap().into_rgba8();
         assert!(image.pixels().all(|p|p.0==[255;4]));
         let existing=vec![1,2,3];mesh.texture_png=Some(existing.clone());
         apply_clothes_default_main_texture(&mut mesh);assert_eq!(mesh.texture_png,Some(existing));
@@ -4354,7 +4354,7 @@ fn koikano_accessory_hair_retains_mask_and_null_main_default() {
         color_accessory_meshes(Path::new("C:/portable/OpenKoikatsu/Saved/Tests/MixedTextureSource"),None,
             &ListEntry::default(),&card,"accessory999",0,&mut meshes,&[],&[],None);
         assert_eq!(meshes[0].color_mask_png.as_ref(),Some(&mask));
-        let image=crate::teximg::load_from_memory(meshes[0].texture_png.as_ref().unwrap()).unwrap().to_rgba8();
+        let image=crate::teximg::load_from_memory(meshes[0].texture_png.as_ref().unwrap()).unwrap().into_rgba8();
         assert!(image.pixels().all(|p|p.0==[255;4]),"null main must not use fallback or baked mask");
         // Without a component map, ChangeAccessoryColor writes the
         // selected accessory's default white colours before shader draw.
@@ -4397,7 +4397,7 @@ fn native_hair_accessory_component_provenance() {
                 assert_eq!(m.mat.as_ref().unwrap().color("_Color2"),Some(a.color2));
                 assert_eq!(m.mat.as_ref().unwrap().color("_Color3"),Some(a.color3));
                 assert!(!m.hair_gloss_png.is_some(),"absent HAC must not introduce gloss");
-                let img=crate::teximg::load_from_memory(m.texture_png.as_ref().unwrap()).unwrap().to_rgba8();
+                let img=crate::teximg::load_from_memory(m.texture_png.as_ref().unwrap()).unwrap().into_rgba8();
                 assert!(img.pixels().all(|p|p.0==[255;4]));
                 let native=crate::gamefs::read_to_string("C:/portable/OpenKoikatsu/Saved/Tests/Hair322NativeR2/Card0.json.materials.tsv").unwrap();
                 for (key,color) in [("_Color",a.color),("_Color2",a.color2),("_Color3",a.color3)] {
@@ -4644,7 +4644,7 @@ fn create_eye_matches_native_shader_constant_probe() {
     let grad=encode_png(&image::RgbaImage::from_pixel(1,1,image::Rgba([to_unorm8(linear_channel_to_srgb(64.0/255.0)),0,0,255]))).unwrap();
     let pupil=crate::card::PupilInfo {base_color:[0.5,0.25,0.75,1.0],sub_color:[0.1,0.9,0.4,1.0],grad_blend:0.6,..Default::default()};
     let output=bake_iris(&input,&pupil,Some(&grad),None,None,[1.0;4],[1.0;4],0.5,0.5).unwrap();
-    let image=crate::teximg::load_from_memory(&output).unwrap().to_rgba8();let pixel=image.get_pixel(256,256).0;
+    let image=crate::teximg::load_from_memory(&output).unwrap().into_rgba8();let pixel=image.get_pixel(256,256).0;
     for (actual,expected) in pixel.iter().zip([85u8,185,42,204]) {assert!((*actual as i16-expected as i16).abs()<=2,"native shader {pixel:?}");}
 }
 
@@ -4687,7 +4687,7 @@ fn selected_hair_gloss_matches_native_input() {
     let native=std::env::var("OK_HAIR_NATIVE_GLOSS").expect("OK_HAIR_NATIVE_GLOSS");
     let session=crate::session::open(&game,Some(&card),0).unwrap();
     let part=session.parts.iter().find(|p|p.name==mesh).expect("selected native renderer");
-    let ours=crate::teximg::load_from_memory(part.hair_gloss.as_ref().expect("selected gloss texture")).unwrap().to_rgba8();
+    let ours=crate::teximg::load_from_memory(part.hair_gloss.as_ref().expect("selected gloss texture")).unwrap().into_rgba8();
     let theirs=image::open(native).unwrap().to_rgba8();
     assert_eq!(ours.dimensions(),theirs.dimensions());
     let mut total=0u64;
@@ -4711,7 +4711,7 @@ fn selected_iris_create_rt_matches_native() {
     for part in session.parts.iter().filter(|p|p.eye_draw.as_ref().is_some_and(|d|d.kind==1)) {
         let side=usize::from(part.name.to_ascii_lowercase().contains("_r"));
         let native=image::open(format!("{prefix}.eye{side}.pure.png")).unwrap().to_rgba8();
-        let actual=crate::teximg::load_from_memory(part.png.as_ref().expect("resolved iris RT")).unwrap().to_rgba8();
+        let actual=crate::teximg::load_from_memory(part.png.as_ref().expect("resolved iris RT")).unwrap().into_rgba8();
         assert_eq!(native.dimensions(),actual.dimensions());
         let mut error=0u64;
         let mut count=0u64;
@@ -6094,7 +6094,7 @@ fn standalone_material_editor_normal_draw_assembly() {
             };
             let standalone = draw();
             assert_eq!(standalone.1, Some([1,2,2,1,1]), "converted RT preserves wrap, sRGB and mips: {role}");
-            assert!(crate::teximg::load_from_memory(&standalone.0).unwrap().to_rgba8().pixels().all(|p| p[0] == 255));
+            assert!(crate::teximg::load_from_memory(&standalone.0).unwrap().into_rgba8().pixels().all(|p| p[0] == 255));
             std::fs::write(&config, "Convert Normal Maps = true\n").unwrap();
             assert_eq!(standalone, draw(), "standalone must match configured plugin: {role}/{overridden}");
             std::fs::write(&config, "Convert Normal Maps = false\n").unwrap();

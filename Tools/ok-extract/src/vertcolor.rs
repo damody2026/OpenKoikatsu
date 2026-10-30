@@ -111,7 +111,7 @@ impl Bake {
     /// bilinear samples near chart borders and alpha holes keep the colour of
     /// the surface instead of the black capture background.
     pub fn load(png: &[u8], area: [f32; 4], uvs: &[[f32; 2]], indices: &[u32]) -> Result<Self, String> {
-        let image = crate::teximg::load_from_memory(png).map_err(|e| e.to_string())?.to_rgba8();
+        let image = crate::teximg::load_from_memory(png).map_err(|e| e.to_string())?.into_rgba8();
         let (width, height) = (image.width() as usize, image.height() as usize);
         if width == 0 || height == 0 { return Err("empty bake".into()); }
         if !(area[2] > area[0] && area[3] > area[1]) { return Err("invalid bake area".into()); }

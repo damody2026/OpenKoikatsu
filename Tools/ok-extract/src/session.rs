@@ -4435,7 +4435,7 @@ mod tests {
             }
             let mut null=mesh;null.texture_png=None;
             let p=SessionPart::from_mesh(role,&null,"masked",true);
-            let image=crate::teximg::load_from_memory(&p.shader_textures["_MainTex"]).unwrap().to_rgba8();
+            let image=crate::teximg::load_from_memory(&p.shader_textures["_MainTex"]).unwrap().into_rgba8();
             assert_eq!(image.get_pixel(0,0).0,[255;4]);
         }
     }
@@ -5785,7 +5785,7 @@ mod tests {
     #[ignore="game oracle: reads the original KKS installation (set OK_TEST_GAME_ROOT)"]
     fn diag_eye_uv_vs_tex() {
         fn band(png: &[u8]) -> String {
-            let im = crate::teximg::load_from_memory(png).unwrap().to_rgba8();
+            let im = crate::teximg::load_from_memory(png).unwrap().into_rgba8();
             let (w, h) = im.dimensions();
             let mean = |y0: u32, y1: u32| {
                 let mut s = [0u64; 4];
