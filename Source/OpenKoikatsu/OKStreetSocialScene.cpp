@@ -1178,6 +1178,9 @@ bool AOKStreetSocialScene::PrepareFreeTalk(int32 Character,const FString& Text,F
  {const double Hours=OKStreetClockHours(S.ClockStartHours,FPlatformTime::Seconds()-S.ClockStartWall);Status.Now=OKStreetFreeTalkDateTime(OKStreetCalendarDateTime(S.Store.CalendarDay,Hours));Status.StreetTime=OKStreetFreeTalkClock(Hours);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkRecall);Status.Memories=MindRecallText(Id,Text);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkHistory);Status.Memories+=HistoryPromptText(Character);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FreeTalkMindStatus);FillMindStatus(Character,Status);}
+ // The private room is not the street: no shop menu to order from, no open choices or invitations (her needs stay:
+ // at satiety 23 she is hungry there too).
+ if(S.PrivateGirl==Character&&S.PrivateMode.IsValid()){Status.Menu.Reset();Status.Choices.Reset();Status.Invite.Reset();}
  System=OKStreetFreeTalkSystemPrompt(Persona,OKStreetPlaceCatalogue());UserMessage=OKStreetFreeTalkUserMessage(Status,Text);
  return true;
 }
@@ -1204,6 +1207,9 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // A note the game writes for her (a dish served, a notice, a nudge) while her last reply is not yet spoken waits for
  // it: its reply would cut hers off unheard ("is your thin wallet all right?" got only "the panini is here").
  if(!His&&HerReplyUnspoken()){S.DeferredNotes.Add(Text);S.FreeTalkDraft.Reset();UE_LOG(LogTemp,Display,TEXT("Street free talk: game note held until her reply is spoken (%d held)"),S.DeferredNotes.Num());return;}
+ // In the private room the street's own notes for her (a shop closing, a table served, a nudge) do not reach them:
+ // only the H scene's (they carry its context). The cafe closing sent her home from the room ("I should go back to the dorm").
+ if(!His&&S.PrivateGirl==Character&&S.PrivateMode.IsValid()&&S.PrivateTalkContext.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street free talk: street note dropped in the private room: %s"),*Text.Left(60));S.FreeTalkDraft.Reset();return;}
  // In the H scene his words not from its panel (the microphone) go the same way: held while she cannot answer.
  if(His&&S.PrivateGirl==Character&&S.PrivateMode.IsValid()&&S.PrivateTalkContext.IsEmpty()){FString Context;if(!S.PrivateMode->HSceneHear(Text,Context)){S.FreeTalkDraft.Reset();return;}S.PrivateTalkContext=Context;}
  if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;SongCountLines(Character,1);} // his line counts toward her next song
@@ -1270,6 +1276,11 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
  S.FreeTalkBusy=false;
  S.ReplyRemoteGirl=S.SentRemoteGirl;S.ReplyRemoteMode=S.SentRemoteMode;S.SentRemoteGirl=INDEX_NONE;
  if(!Reply){S.ReplyRemoteGirl=INDEX_NONE;S.FreeTalkNotice=Failure;S.FreeTalkDraft=Text;S.FreeTalkCaptionHer.Reset();RefreshUI();return;}
+ // In the private room her reply is words only: the street's actions (a meal, an outing, an order, ending the talk) are
+ // not hers to start from there, and no judge reads the H talk for them (the judge had her decide to go for a meal).
+ FOKFreeTalkReply PrivateReply;const bool InPrivate=S.PrivateGirl==Character&&S.PrivateMode.IsValid();
+ if(InPrivate){PrivateReply=*Reply;PrivateReply.Action.Reset();PrivateReply.ActKind.Reset();PrivateReply.ActArg.Reset();PrivateReply.Orders.Reset();PrivateReply.Payer.Reset();
+  PrivateReply.ProposeId.Reset();PrivateReply.ResolveId.Reset();Reply=&PrivateReply;}
  S.FreeTalkAnswered=S.FreeTalkSent; // the open choices were in that request (TickChoices)
  // Her memory keeps the exchange (her turn in the same JSON form she answers in); the values travel
  // only with the newest message. With the mind open this copy is only the fallback's memory.
@@ -1309,7 +1320,7 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
   // bench" (park_seat); he said "sure, that bench", and the judge took them as already sitting there.
   else if(!A.IsEmpty()&&A!=TEXT("none"))S.HerProposed.Add(Character,A);
  }
- else{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkJudge);TArray<FString> Ordered;for(const auto& O:Reply->Orders)Ordered.Add(O.Id);JudgeFreeTalk(Character,Id,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply,Reply->Action,Ordered);}
+ else if(!InPrivate){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkJudge);TArray<FString> Ordered;for(const auto& O:Reply->Orders)Ordered.Add(O.Id);JudgeFreeTalk(Character,Id,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply,Reply->Action,Ordered);}
  S.PlayerAskedText.Reset();
  S.ReplyRemoteGirl=INDEX_NONE;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkUi);RefreshUI();}
 }

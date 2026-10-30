@@ -69,7 +69,7 @@ public:
         AibuBase=500,
         TouchChest=2101,TouchCrotch=2102,TouchAnal=2103,TouchButt=2104,TouchNipple=2105,Kiss=2106,Release=2107,
         PoseBase=1000,
-        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,
+        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,LockHer=2017,LockHis=2018,
         ClothesBase=3000,
     };
 private:
@@ -126,6 +126,10 @@ private:
     // view); he can be hidden as in the original. The player's own orbit stays until the next pose.
     void FrameCamera();
     FString FramedKey;double FrameAt=0;bool bMaleHidden=false;
+    TSet<int32> Offered; // the action kinds BuildActions shows now
+    // The original's gauge locks: a locked gauge stops short of climax (his below the finish choices in a service, so
+    // nothing happens by itself); he still finishes with the buttons.
+    bool bLockHer=false,bLockHis=false;
     // A moment she reacts to in her own words (her character, how she feels now): sent as a game note, the latest only.
     void React(const FString& Event);
     void CaressBreath();
