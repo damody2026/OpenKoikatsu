@@ -219,6 +219,9 @@ public:
 	/** The effect a sideloader particle item stands for: a particle or effect pack's item whose name or prefab carries an
 	 *  effect's word (the longest wins); null for other items. */
 	const FOKStudioEffect* EffectForParticleMod(const FOKStudioCatalogItem& Item, float* OutScale = nullptr) const;
+	/** The effect whose longest word the text (a particle item's name and prefab, lower case: ParticleText) carries. */
+	const FOKStudioEffect* EffectForParticleText(const FString& Text, float* OutScale = nullptr) const;
+	static FString ParticleText(const FOKStudioCatalogItem& Item);
 	/** Where effects.json is. */
 	static FString EffectsFile();
 };

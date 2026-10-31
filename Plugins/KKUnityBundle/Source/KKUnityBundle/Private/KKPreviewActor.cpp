@@ -5,6 +5,7 @@
 #include "UObject/StrongObjectPtr.h"
 #include "ImageUtils.h"
 #include "KKMaterialExposure.h"
+#include "Materials/MaterialExpressionSceneTexture.h"
 #include "Materials/MaterialExpressionTextureObjectParameter.h"
 #include "Materials/MaterialExpressionTextureObject.h"
 #include "OKPhysXSecondary.h"
@@ -3859,6 +3860,13 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 	Input(TEXT("Time"), Add(NewObject<UMaterialExpressionTime>(Mat)));
 	Input(TEXT("SceneD"), Add(NewObject<UMaterialExpressionSceneDepth>(Mat)));
 	Input(TEXT("PixelD"), Add(NewObject<UMaterialExpressionPixelDepth>(Mat)));
+	for (ESceneTextureId Id : { PPI_CustomDepth, PPI_CustomStencil })
+	{
+		auto* T = NewObject<UMaterialExpressionSceneTexture>(Mat);
+		T->SceneTextureId = Id;
+		Add(T);
+		Input(Id == PPI_CustomDepth ? TEXT("CustomD") : TEXT("Stencil"), T);
+	}
 	// The grab coordinate's refraction offset (screen fraction) leaves through a second output for the SceneColor node.
 	FCustomOutput& OffsetOut = Program->AdditionalOutputs.AddDefaulted_GetRef();
 	OffsetOut.OutputName = TEXT("GrabOffset"); OffsetOut.OutputType = CMOT_Float2;
@@ -3915,7 +3923,10 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 		"lit += refl.rgb * Glossiness * saturate(r5.x) * sv;\n"
 		"float4 m0 = SAMPLE(Shadermap, r0.xy), m1 = SAMPLE(Shadermap, r0.zw);\n"
 		"float foam = -m0.z * m1.z + 1.0;\n"
-		"float depthDiff = max(SceneD - PixelD, 0.0) * 0.01;\n"
+		// Unity's depth texture leaves out queue > 2500 parts (Studio's basic shapes): behind the water there they are
+		// not there, the water is deep. The scene marks them (stencil 255 in custom depth, OKSceneActor).
+		"float sceneD = (Stencil > 254.5 && abs(CustomD - SceneD) < 0.002 * SceneD + 1.0) ? 1e7 : SceneD;\n"
+		"float depthDiff = max(sceneD - PixelD, 0.0) * 0.01;\n"
 		"float rim = 1.0 - pow(saturate(depthDiff / RimSize), Rimfalloff); rim *= RimColor.a;\n"
 		"float rimA = foam * rim * RimColor.a + rim;\n"
 		"float deep = saturate(depthDiff / Depth);\n"
@@ -4418,7 +4429,8 @@ static UMaterialInstanceDynamic* OKSkyboxInstance(FOkSession& Source, int32 Inde
 	return Dynamic;
 }
 
-// A screen multiply (`_OKModulate`, Xffect/heat_distortion_t2): what is behind times lerp(1, _MainTex.rgb, _MainTex.a).
+// A screen multiply (`_OKModulate`, Xffect/heat_distortion and _t2): what is behind times lerp(1, _MainTex.rgb, _MainTex.a).
+// The game blends in gamma space, so the factor is made from the encoded texel and decoded (behind times it then matches).
 static UMaterialInstanceDynamic* OKModulateInstance(FOkSession& Source, int32 Index, UTexture2D* MainTex, UObject* Outer)
 {
 	FLinearColor Flag;
@@ -4450,7 +4462,7 @@ static UMaterialInstanceDynamic* OKModulateInstance(FOkSession& Source, int32 In
 		Input(TEXT("MainST"), ST, 5);
 		auto* UV = NewObject<UMaterialExpressionTextureCoordinate>(Mat); UV->CoordinateIndex = 0; Input(TEXT("UV"), UV);
 		// Unity v is up: UE's v is 1 - v, so the _ST applies in Unity's frame.
-		Code->Code = TEXT("float2 u = float2(UV.x, 1.0 - UV.y) * MainST.xy + MainST.zw; float4 t = Main.Sample(MainSampler, float2(u.x, 1.0 - u.y)); return lerp(float3(1, 1, 1), t.rgb, t.a);");
+		Code->Code = TEXT("float2 u = float2(UV.x, 1.0 - UV.y) * MainST.xy + MainST.zw; float4 t = Main.Sample(MainSampler, float2(u.x, 1.0 - u.y)); return pow(lerp(float3(1, 1, 1), pow(max(t.rgb, 0.0), 1.0 / 2.2), t.a), 2.2);");
 		if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
 		OKAddUnityTranslucentDepthTest(Mat);
 		Mat->UpdateCachedExpressionData();
@@ -6749,6 +6761,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					Comp->SetMaterial(0, Dynamic);
 					Comp->SetCastShadow(false);
 					Part.SurfaceMat = Dynamic;
+					bReadsUnityDepthTexture = true;
 					UE_LOG(LogTemp, Display, TEXT("OK stylized water part=%s"), *Name);
 				}
 		// A mirror (FX/MirrorReflection): the scene gives "_ReflectionTex" a capture mirrored in the part's plane.

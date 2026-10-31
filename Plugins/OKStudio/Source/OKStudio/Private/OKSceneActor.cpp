@@ -1759,12 +1759,14 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 				if (UPrimitiveComponent* P = Part.Get()) P->SetRenderCustomDepth(false);
 		DepthTextureAbsentParts.Reset();
 		bDepthTextureAbsentMarked = false;
+		bDepthTextureReaders = false;
 		for (const TPair<int32, FShown>& It : Shown)
 			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
 			{
 				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
 				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
 				DepthTextureAbsentParts.Append(Preview->DepthTextureAbsentParts);
+				bDepthTextureReaders |= Preview->bReadsUnityDepthTexture;
 				for (const AKKPreviewActor::FBlendedPart& Blended : Preview->BlendedParts)
 					if (Blended.Component.IsValid())
 					{
@@ -1798,8 +1800,8 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 
 void AOKSceneActor::MarkDepthTextureAbsent()
 {
-	// Only while the scene has SunShafts (the one effect here reading Unity's depth texture): a custom depth pass more.
-	const bool bWant = Document && Document->Post.bSunShafts && DepthTextureAbsentParts.Num();
+	// Only while something reads Unity's depth texture (SunShafts, StylizedWater's depth): a custom depth pass more.
+	const bool bWant = Document && (Document->Post.bSunShafts || bDepthTextureReaders) && DepthTextureAbsentParts.Num();
 	if (bWant == bDepthTextureAbsentMarked) return;
 	bDepthTextureAbsentMarked = bWant;
 	if (bWant) EnableCustomDepthStencil();

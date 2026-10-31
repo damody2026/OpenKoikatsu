@@ -531,6 +531,12 @@ struct OKSTUDIO_API FOKSceneEffect
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
 	FLinearColor Color = FLinearColor(1.f, 1.f, 1.f, -1.f);
 
+	/** The original Studio particle item a KStudio import turned into this effect (its mod item's name and prefab,
+	 *  lower case): loading maps it again to the library's best effect for it (FOKStudioCatalog::EffectForParticleText).
+	 *  Empty: added here, or imported before it was kept. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect")
+	FString Source;
+
 	bool operator==(const FOKSceneEffect& O) const = default;
 };
 

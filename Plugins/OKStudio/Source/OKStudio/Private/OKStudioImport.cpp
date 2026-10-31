@@ -226,12 +226,14 @@ namespace
 				FString ModGuid;
 				const FOKStudioEffect* ModEffect = nullptr;
 				float ModEffectScale = 1.f;
+				FString ModParticleText;
 				if (O->TryGetStringField(TEXT("mod_guid"), ModGuid) && !ModGuid.IsEmpty())
 				{
 					// A particle pack's item (its ParticleSystems are not converted): the OK effect its name stands for.
 					if (const FOKStudioCatalogItem* Particle = FOKStudioCatalog::Get().FindModParticle(ModGuid, int32(O->GetNumberField(TEXT("mod_slot")))))
 					{
 						ModEffect = FOKStudioCatalog::Get().EffectForParticleMod(*Particle, &ModEffectScale);
+						ModParticleText = FOKStudioCatalog::ParticleText(*Particle);
 						if (!ModEffect && Particle->Model.IsEmpty()) Note(FString::Printf(TEXT("mod particle items without a matching OK effect (add a word to effects.json): %s"), *Particle->Name));
 					}
 					Entry = FOKStudioCatalog::Get().FindModItem(ModGuid, int32(O->GetNumberField(TEXT("mod_slot"))));
@@ -243,7 +245,11 @@ namespace
 				{
 					const int32 FxId = Add(EOKSceneObjectKind::Effect, Effect->Name, Parent, O);
 					Doc->Find(FxId)->Effect.Effect = Effect->Id;
-					if (Effect == ModEffect) Doc->Find(FxId)->Transform.MultiplyScale3D(FVector(ModEffectScale));
+					if (Effect == ModEffect)
+					{
+						Doc->Find(FxId)->Transform.MultiplyScale3D(FVector(ModEffectScale));
+						Doc->Find(FxId)->Effect.Source = ModParticleText;
+					}
 					Note(TEXT("particle items become OK Niagara effects"));
 					Children(O, FxId);
 					return;

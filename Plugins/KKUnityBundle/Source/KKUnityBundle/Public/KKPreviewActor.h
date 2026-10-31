@@ -755,6 +755,8 @@ public:
 	/** Parts drawn opaque here whose material's Unity render queue is past 2500 (Studio's basic shapes, queue 3000):
 	 *  Unity's camera depth texture holds only queues up to 2500, so effects reading it (SunShafts) see past them. */
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTextureAbsentParts;
+	/** A part's material reads Unity's depth texture (StylizedWater's depth): the scene marks the absent parts for it. */
+	bool bReadsUnityDepthTexture = false;
 	UTextureRenderTarget2D* RenderTextureFor(FOkSession& Source, int32 PartIndex);
 	void StopRenderTextureCaptures();
 	UPROPERTY()

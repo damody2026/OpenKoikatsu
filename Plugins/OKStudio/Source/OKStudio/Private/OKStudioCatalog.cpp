@@ -271,7 +271,16 @@ void FOKStudioCatalog::LoadEffects(const FString& File)
 const FOKStudioEffect* FOKStudioCatalog::EffectForParticleMod(const FOKStudioCatalogItem& Item, float* OutScale) const
 {
 	if (Item.Guid.IsEmpty() || !IsParticlePack(Item.Bundle)) return nullptr;
-	const FString Text = (Item.Name + TEXT(" ") + Item.Prefab).ToLower();
+	return EffectForParticleText(ParticleText(Item), OutScale);
+}
+
+FString FOKStudioCatalog::ParticleText(const FOKStudioCatalogItem& Item)
+{
+	return (Item.Name + TEXT(" ") + Item.Prefab).ToLower();
+}
+
+const FOKStudioEffect* FOKStudioCatalog::EffectForParticleText(const FString& Text, float* OutScale) const
+{
 	const FOKStudioEffect* Best = nullptr;
 	int32 BestLength = 0;
 	for (const FOKStudioEffect& E : Effects)

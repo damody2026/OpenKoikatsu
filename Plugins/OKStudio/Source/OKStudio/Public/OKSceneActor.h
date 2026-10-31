@@ -159,6 +159,8 @@ private:
 	 *  the scene has SunShafts they draw into custom depth with stencil 255, which the shafts take for far (OKStudioPost). */
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTextureAbsentParts;
 	bool bDepthTextureAbsentMarked = false;
+	/** A shown item reads Unity's depth texture itself (AKKPreviewActor::bReadsUnityDepthTexture: StylizedWater). */
+	bool bDepthTextureReaders = false;
 	void MarkDepthTextureAbsent();
 	void EnableCustomDepthStencil();
 	bool bCustomDepthStencil = false;

@@ -254,6 +254,14 @@ bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 		MaxId = FMath::Max(MaxId, O.Id);
 	}
 	for (FOKSceneObject& O : Loaded) if (O.Parent >= 0 && !Ids.Contains(O.Parent)) O.Parent = -1;
+	// An imported particle item takes the library's best effect for it now (the library may have gained one since).
+	for (FOKSceneObject& O : Loaded)
+		if (O.Kind == EOKSceneObjectKind::Effect && !O.Effect.Source.IsEmpty())
+			if (const FOKStudioEffect* Best = FOKStudioCatalog::Get().EffectForParticleText(O.Effect.Source); Best && Best->Id != O.Effect.Effect)
+			{
+				UE_LOG(LogTemp, Display, TEXT("OK scene: effect %d (%s) now %s"), O.Id, *O.Effect.Source, *Best->Id);
+				O.Effect.Effect = Best->Id;
+			}
 	Objects = MoveTemp(Loaded);
 	ActiveCamera = Root->HasField(TEXT("active_camera")) ? int32(Root->GetNumberField(TEXT("active_camera"))) : -1;
 	Map = Root->HasField(TEXT("map")) ? int32(Root->GetNumberField(TEXT("map"))) : -1;
