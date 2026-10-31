@@ -1,5 +1,6 @@
 ﻿#include "OKStreetSocialFreeTalk.h"
 #include "OKStreetSocialText.h"
+#include "OKStreetSocialRules.h"
 #include "HAL/PlatformMisc.h"
 #include "PlatformHttp.h"
 #include "HAL/PlatformProcess.h"
@@ -166,7 +167,8 @@ FString OKStreetFreeTalkDateTime(const FDateTime& Time) {
 
 FString OKStreetFreeTalkClock(double Hours) {
  const int32 Minutes = FMath::Clamp(FMath::FloorToInt32(Hours * 60.0), 0, 24 * 60 - 1);
- return FString::Printf(TEXT("%s %02d:%02d"), OKFreeTalkDayPart(Minutes / 60), Minutes / 60, Minutes % 60);
+ static const TCHAR* const SkyKeys[] = {TEXT("ui.free_talk.sky_night"), TEXT("ui.free_talk.sky_dawn"), TEXT("ui.free_talk.sky_day"), TEXT("ui.free_talk.sky_sunset")};
+ return OKMsg(TEXT("ui.free_talk.street_sky_label"), {{TEXT("day_part"), OKFreeTalkDayPart(Minutes / 60)}, {TEXT("hour"), Minutes / 60}, {TEXT("minute"), Minutes % 60}, {TEXT("sky"), OKT(SkyKeys[int32(OKStreetSkyAt(Hours))])}, {TEXT("rise"), int32(OKStreetSunriseHour)}, {TEXT("set"), int32(OKStreetSunsetHour)}});
 }
 
 // The date and time live here, not in the system prompt, so the cached prefix stays the same between turns.

@@ -584,10 +584,11 @@ struct FOKStreetSunState {
 // this matches the authored sun (yaw -30). From 20:00 to 4:00 the same light becomes a cool moon on the opposite
 // side, bright enough that the street stays readable, and shadows keep turning. The light fades briefly at the
 // horizon to hide the swap, but never to black.
+constexpr double OKStreetSunriseHour = 4.0, OKStreetSunsetHour = 20.0;
 inline FOKStreetSunState OKStreetSunAt(double Hours) {
  FOKStreetSunState Sun;
  const double H = FMath::Fmod(Hours + 24.0, 24.0);
- Sun.Day = H >= 4.0 && H < 20.0;
+ Sun.Day = H >= OKStreetSunriseHour && H < OKStreetSunsetHour;
  // Position along the current half of the cycle: 0 at its start (sunrise / moonrise), 1 at its end.
  const double Progress = Sun.Day ? (H - 4.0) / 16.0 : (H >= 20.0 ? H - 20.0 : H + 4.0) / 8.0;
  const double Height = FMath::Sin(Progress * PI);
@@ -605,6 +606,16 @@ inline FOKStreetSunState OKStreetSunAt(double Hours) {
   Sun.Color = FLinearColor(.7f, .8f, 1.f);
  }
  return Sun;
+}
+
+// What the street sky looks like at this hour, from the same light as OKStreetSunAt: she describes the sky from
+// this, not from the day part (at 16:00 the sun is still high; it only turns orange after ~18:10).
+enum class EOKStreetSky : uint8 { Night, Dawn, Day, Sunset };
+inline EOKStreetSky OKStreetSkyAt(double Hours) {
+ const FOKStreetSunState Sun = OKStreetSunAt(Hours);
+ if (!Sun.Day) return EOKStreetSky::Night;
+ if (Sun.Color.Equals(FLinearColor::White)) return EOKStreetSky::Day;
+ return FMath::Fmod(Hours + 24.0, 24.0) < 12.0 ? EOKStreetSky::Dawn : EOKStreetSky::Sunset;
 }
 
 struct FOKStreetTalkCandidateSample {
