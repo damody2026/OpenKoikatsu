@@ -728,6 +728,45 @@ void SOKStudioPanel::SceneSettingsPage()
 		PostText(TEXT("背景圖"), &FOKScenePost::Background, TEXT("PNG 路徑（基礎庫相對或檔案）"));
 		PostText(TEXT("前景框"), &FOKScenePost::Frame, TEXT("PNG 路徑（含透明）"));
 		PostColor(TEXT("背景色"), &FOKScenePost::BackgroundColor, true);
+		// HS2Studio6's background and frame lists: the base library's pictures (studio/bg, studio/frame) and the user's
+		// (UserData/Studio/bg, frame); a click shows it at once, 無 takes it off.
+		for (int32 Kind = 0; Kind < 2; ++Kind)
+		{
+			const TCHAR* Folder = Kind == 0 ? TEXT("bg") : TEXT("frame");
+			FString FOKScenePost::* Field = Kind == 0 ? &FOKScenePost::Background : &FOKScenePost::Frame;
+			Label(Kind == 0 ? TEXT("背景圖一覽") : TEXT("前景框一覽"));
+			TArray<TPair<FString, FString>> Pictures; // shown file, value stored in the scene
+			for (const FString& Root : { AOKSceneActor::LibraryDirectory() / TEXT("studio") / Folder, FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio")) / Folder })
+			{
+				TArray<FString> Names;
+				IFileManager::Get().FindFiles(Names, *(Root / TEXT("*.png")), true, false);
+				Names.Sort();
+				const bool bLibrary = Root.StartsWith(AOKSceneActor::LibraryDirectory());
+				for (const FString& N : Names) Pictures.Add({ Root / N, bLibrary ? FString(TEXT("studio/")) + Folder + TEXT("/") + N : Root / N });
+			}
+			TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
+			Grid->AddSlot().Padding(1.f)[Button(FText::FromString(TEXT("無")), [this, Field] { (Game->Document->Post.*Field).Reset(); Changed(); DeferRebuild(); }, 48.f, 27.f,
+				TAttribute<bool>::CreateLambda([this, Field] { return Game.IsValid() && (Game->Document->Post.*Field).IsEmpty(); }), 10.f)];
+			for (const TPair<FString, FString>& P : Pictures)
+			{
+				const FString File = P.Key, Value = P.Value;
+				Grid->AddSlot().Padding(1.f)
+				[
+					SNew(SBox).WidthOverride(48.f).HeightOverride(27.f).ToolTipText(FText::FromString(FPaths::GetCleanFilename(File)))
+					[
+						OKStudioStyle::Fill(TAttribute<bool>::CreateLambda([this, Field, Value] { return Game.IsValid() && Game->Document->Post.*Field == Value; }), Input(),
+							// The 2 px rim shows green round the picture shown now.
+							SNew(SBox).Padding(2.f)
+							[
+								SNew(SButton).ButtonStyle(&OKStudioStyle::FlatButton()).ContentPadding(0.f)
+								.OnClicked_Lambda([this, Field, Value] { Game->Document->Post.*Field = Value; Changed(); return FReply::Handled(); })
+								[SNew(SImage).Image_Lambda([File] { const FSlateBrush* B = FOKStudioThumbnails::Get().File(File, 64); return B ? B : Brush(Input()); })]
+							])
+					]
+				];
+			}
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Grid];
+		}
 		break;
 	default:
 	{

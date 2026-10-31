@@ -231,5 +231,28 @@ check(click("最近場景").ok, "system menu 最近場景 opens the window")
 call("cmd", { id = "window.close", arg = "recent" }); call("cmd", { id = "menu.system" }); wait(10)
 call("select", { ids = { id } })
 
+-- U22: area light (添加光源 page), the screenshot window's 含前景框 / 本次目錄, the background list's 無.
+local lights0 = objects()
+call("cmd", { id = "page.lights" }); wait(20)
+check(click("面光源").ok, "面光源 clicked")
+local area = nil
+for oid, o in pairs(objects()) do if not lights0[oid] and o.kind == "light" then area = o end end
+check(area ~= nil and area.light_type == "area", "面光源 adds an area light")
+if area then call("select", { ids = { area.id } }); wait(20); call("cmd", { id = "edit.delete" }); wait(20) end
+call("cmd", { id = "app.screenshot" }); wait(30)
+local ui = function() return call("state").ui or {} end
+local dir0 = ui().shot_directory or ""
+check(click("含前景框").ok and ui().shot_frame == false, "含前景框 off")
+check(click("含前景框").ok and ui().shot_frame == true, "含前景框 on")
+local r = call("click", { text = "本次目錄", contains = true }); wait(20)
+check(r.ok and (ui().shot_directory or ""):find("session_") ~= nil, "本次目錄 on: shots go into a session folder")
+call("click", { text = "本次目錄", contains = true }); wait(20)
+check(ui().shot_directory == dir0, "本次目錄 off: back to the shot folder")
+call("cmd", { id = "window.close", arg = "shot" }); wait(10)
+call("cmd", { id = "scene.tab", arg = "7" }); wait(30)
+check(click("無").ok and call("state").background == "", "background 無 leaves no picture")
+call("cmd", { id = "page.scene" }); wait(10)
+call("select", { ids = { id } })
+
 print(("BUTTONS %d/%d"):format(passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

@@ -8,6 +8,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/RectLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Dom/JsonObject.h"
@@ -419,6 +420,15 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			Spot->SetInnerConeAngle(Object.Light.SpotAngle * 0.8f);
 			Spot->SetAttenuationRadius(Object.Light.Range);
 			Light = Spot;
+			break;
+		}
+		case EOKSceneLightType::Area:
+		{
+			URectLightComponent* Rect = NewObject<URectLightComponent>(this);
+			Rect->SetSourceWidth(Object.Light.AreaWidth);
+			Rect->SetSourceHeight(Object.Light.AreaHeight);
+			Rect->SetAttenuationRadius(Object.Light.Range);
+			Light = Rect;
 			break;
 		}
 		default:

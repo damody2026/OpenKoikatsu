@@ -117,6 +117,8 @@ public:
 
 	/** Directory of the OK base library (items). */
 	static FString LibraryDirectory();
+	/** Shows or hides the scene's frame picture (a screenshot without it); it stays hidden only until shown again. */
+	void SetFrameShown(bool bShown) { if (Frame.Plane.IsValid()) Frame.Plane->SetVisibility(bShown && Frame.Texture.IsValid()); }
 	/** The library model and prefab an item shows (its catalogue entry's, or its own). */
 	static bool ItemModel(const FOKSceneItem& Item, FString& OutModel, FString& OutPrefab, FString& OutError);
 

@@ -80,7 +80,7 @@ void SOKStudioPanel::RegisterFloats()
 	AddFloat(TEXT("maps"), TEXT("地圖"), FMargin(142.f, 36.f, 320.f, 400.f), [this] { return BuildMapBrowser(); });
 	AddFloat(TEXT("color"), TEXT("顏色"), FMargin(470.f, 60.f, 260.f, 330.f), [this] { return BuildColorPicker(); });
 	AddFloat(TEXT("settings"), TEXT("設定"), FMargin(260.f, 60.f, 640.f, 460.f), [this] { return BuildSettings(); });
-	AddFloat(TEXT("shot"), TEXT("截圖"), FMargin(470.f, 60.f, 300.f, 300.f), [this] { return BuildShot(); });
+	AddFloat(TEXT("shot"), TEXT("截圖"), FMargin(470.f, 60.f, 300.f, 345.f), [this] { return BuildShot(); });
 	AddFloat(TEXT("export"), TEXT("輸出動畫"), FMargin(470.f, 60.f, 340.f, 330.f), [this] { return BuildExport(); });
 	AddFloat(TEXT("report"), TEXT("讀取報告"), FMargin(470.f, 60.f, 440.f, 320.f), [this] { return BuildReport(); });
 	AddFloat(TEXT("resources"), TEXT("資源檢查"), FMargin(470.f, 60.f, 440.f, 360.f), [this] { return BuildResources(); });
@@ -845,14 +845,18 @@ TSharedRef<SWidget> SOKStudioPanel::BuildStories()
 FString SOKStudioPanel::TakeShot()
 {
 	if (!Game.IsValid()) return FString();
-	const FString Folder = ShotFolder.IsEmpty() ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio/screenshot")) : ShotFolder;
+	const FString Folder = ShotDirectory();
+	IFileManager::Get().MakeDirectory(*Folder, true);
 	FString ShotBase = FDateTime::Now().ToString(*ShotPattern);
 	if (bShotAlpha) ShotBase += TEXT("_alpha");
 	FString Path = Folder / FPaths::MakeValidFileName(ShotBase) + TEXT(".png");
 	// Never over an existing picture unless asked.
 	for (int32 N = 1; bShotNoOverwrite && FPaths::FileExists(Path); ++N) Path = Folder / FPaths::MakeValidFileName(ShotBase) + FString::Printf(TEXT("_%d.png"), N);
 	FString Error;
-	if (!Game->CaptureToPng(Path, ShotW, ShotH, Error, bShotAlpha)) { SetStatus(TEXT("截圖失敗：") + Error); return FString(); }
+	if (!bShotFrame && Game->SceneActor) Game->SceneActor->SetFrameShown(false);
+	const bool bCaptured = Game->CaptureToPng(Path, ShotW, ShotH, Error, bShotAlpha);
+	if (!bShotFrame && Game->SceneActor) Game->SceneActor->SetFrameShown(true);
+	if (!bCaptured) { SetStatus(TEXT("截圖失敗：") + Error); return FString(); }
 	SetStatus(TEXT("截圖：") + Path);
 	return Path;
 }
@@ -870,6 +874,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildShot()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)[Line(TEXT("高"), Spin([this] { return float(ShotH); }, [this](float V) { ShotH = FMath::Clamp(FMath::RoundToInt(V), 16, 8192); }, 16.f, 8192.f, 1.f))]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("透明背景（只有角色與道具）"), [this] { return bShotAlpha; }, [this](bool B) { bShotAlpha = B; })]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("不覆蓋既有檔案"), [this] { return bShotNoOverwrite; }, [this](bool B) { bShotNoOverwrite = B; })]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("含前景框"), [this] { return bShotFrame; }, [this](bool B) { bShotFrame = B; })]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("本次目錄（這次啟動的截圖放進同一個子資料夾）"), [this] { return bShotSessionFolder; }, [this](bool B) { bShotSessionFolder = B; })]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)[Line(TEXT("資料夾"), TextBox([this] { return ShotFolder; }, [this](const FString& V) { ShotFolder = V.TrimStartAndEnd().TrimQuotes(); }, TEXT("UserData/Studio/screenshot")))]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)[Line(TEXT("檔名樣式"), TextBox([this] { return ShotPattern; }, [this](const FString& V) { if (!V.TrimStartAndEnd().IsEmpty()) ShotPattern = V.TrimStartAndEnd(); }))]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 2.f)
@@ -878,7 +884,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildShot()
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(TEXT("拍攝")), [this] { TakeShot(); }, 0.f, 24.f, false, 12.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("開資料夾")), [this]
 			{
-				const FString Folder = ShotFolder.IsEmpty() ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio/screenshot")) : ShotFolder;
+				const FString Folder = ShotDirectory();
 				IFileManager::Get().MakeDirectory(*Folder, true);
 				FPlatformProcess::ExploreFolder(*Folder);
 			}, 0.f, 24.f)]

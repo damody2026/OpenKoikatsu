@@ -93,6 +93,8 @@ namespace
 		O->SetNumberField(TEXT("primary"), G.SelectedId);
 		O->SetBoolField(TEXT("grid"), G.bShowGrid);
 		O->SetBoolField(TEXT("hide_helpers"), G.bHideHelpers);
+		O->SetStringField(TEXT("background"), G.Document->Post.Background);
+		O->SetStringField(TEXT("frame_picture"), G.Document->Post.Frame);
 		TArray<TSharedPtr<FJsonValue>> Objects;
 		for (const FOKSceneObject& X : G.Document->Objects)
 		{
@@ -104,6 +106,11 @@ namespace
 			J->SetBoolField(TEXT("visible"), X.bVisible);
 			J->SetBoolField(TEXT("locked"), X.bLocked);
 			if (X.Kind == EOKSceneObjectKind::Camera) { J->SetBoolField(TEXT("ortho"), X.Camera.bOrtho); J->SetNumberField(TEXT("ortho_width"), X.Camera.OrthoWidth); }
+			if (X.Kind == EOKSceneObjectKind::Light)
+			{
+				static const TCHAR* LightTypes[] = { TEXT("directional"), TEXT("point"), TEXT("spot"), TEXT("area") };
+				J->SetStringField(TEXT("light_type"), LightTypes[FMath::Min(int32(X.Light.Type), 3)]);
+			}
 			J->SetStringField(TEXT("attach_bone"), X.AttachBone);
 			J->SetArrayField(TEXT("location"), Vec(X.Transform.GetLocation()));
 			const FRotator R = X.Transform.Rotator();
