@@ -163,7 +163,8 @@ private:
     // The pair solves its next frame in the background (ok.Anim.AsyncPair): wait for it before touching either session.
     void SyncPair();
     void RestoreAlign();
-    float AlignFoot=0.f,AlignPushed=0.f,AlignDeep=0.f; // his lower ankle above her floor (cm), for /hscene
+    float AlignFoot=0.f,AlignPushed=0.f,AlignDeep=0.f;
+    float FeetMin[2]={0,0},FeetMax[2]={0,0},FeetShown[4]={0,0,0,0}; // his and her lower ankle over the floor, range in the last two seconds // his lower ankle above her floor (cm), for /hscene
     float AlignOff=-1.f,AlignAt=0.f,AlignLen=0.f; // the last measure while he is in her (cm off the penis line, % of its length), for /hscene
     float DeepAlong=1e9f; // the deepest point of his thrusts lately (entrance distance from the root along the penis), easing back
     float AtMin=0.f,AtMax=0.f,AtShownMin=0.f,AtShownMax=0.f,AtWindow=0.f; // depth range over the last two seconds, for /hscene
@@ -172,6 +173,12 @@ private:
     // has her (or him) lean, sit or lie, measured from their bones once the pose stands (PlaceProps).
     UPROPERTY() TArray<TObjectPtr<class AStaticMeshActor>> Props;bool bPropsTable=false; // a table she leans on goes down with her
     FString PropKey;double PropAt=0;
+    // A new pose or place jumps them, the props and the camera at once: the screen goes black at the change and fades in
+    // once the new pose plays (the pair restarted, at most three seconds), as the original fades its position changes.
+    bool bCovered=false,bEntered=false;double CoverAt=0;float CoverElapsed=0;TWeakObjectPtr<class AKKPairedPlayback> CoverPlayback;FString CoverClip,LastPoseKey;bool bPlaceOnly=false;
+    // What the pair played on the previous tick: a cached pose is committed in the click itself, before this tick sees it.
+    TWeakObjectPtr<class AKKPairedPlayback> SeenPlayback;FString SeenClip;float SeenElapsed=0;
+    bool NewPosePlays(double Now) const;void Cover(bool bOn,double Now);
     void PlaceProps(int32 Kind);
     // Where they are (the original's map choice): 0 the floor, 1 a bed under them in the floor poses.
     int32 Room=0;

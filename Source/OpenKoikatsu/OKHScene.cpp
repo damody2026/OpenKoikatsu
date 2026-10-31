@@ -1,5 +1,6 @@
 #include "OKHScene.h"
 #include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/ButtonSlot.h"
 #include "HAL/IConsoleManager.h"
 #include "OKCharacterController.h"
@@ -423,8 +424,14 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     UpdateFace();UpdateBlush(Delta);FrameCamera();
     {const int32 Kind=Mode==0?(AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Prop:0):(Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Prop:0);
      const FString Key=FString::Printf(TEXT("%d|%d|%d"),Mode,ActivePose,ActiveAibu);const double T=FPlatformTime::Seconds();
-     if(Key!=PropKey){PropKey=Key;ClearProps();PropAt=Kind>0||Room!=0?T+.8:0.;}
-     else if(PropAt>0&&T>=PropAt){PropAt=0;PlaceProps(Kind);}}
+     // A place change (bed, floor) resets the key too: the same pose, only the props change.
+     if(Key!=PropKey){PropKey=Key;ClearProps();PropAt=Kind>0||Room!=0?T+.8:0.;bPlaceOnly=Key==LastPoseKey;LastPoseKey=Key;if(bEntered)Cover(true,T);bEntered=true;}
+     else{const bool bPlays=NewPosePlays(T);
+         // Props are set on the bones of the new pose: not before it has replaced the old one.
+         if(PropAt>0&&T>=PropAt&&bPlays){PropAt=0;PlaceProps(Kind);}
+         if(bCovered&&bPlays&&T>=CoverAt+.45&&PropAt==0)Cover(false,T);}
+     auto* Playback=Gallery->PairedPlayback.Get();SeenPlayback=Playback;
+     SeenClip=Playback?Playback->GetFemaleClip()+Playback->GetFemaleMotion():FString();SeenElapsed=Playback?Playback->GetElapsed():0.f;}
     // A pose counts as done once something happened in it (a gauge rose, he entered her, a touch), not when it only opened:
     // a pair opens on a moving state for a few seconds before its Idle.
     {const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
@@ -610,6 +617,23 @@ void UOKHScenePanel::RestoreBlush(){
         FLinearColor C;if(BlushMats[I]->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("_overcolor2")),C)){C.A=BlushBase[I];BlushMats[I]->SetVectorParameterValue(TEXT("_overcolor2"),C);}}
     BlushMats.Reset();BlushBase.Reset();BlushFor=nullptr;
 }
+bool UOKHScenePanel::NewPosePlays(double Now) const{
+    if(Now>CoverAt+3.)return true; // never held black: a pose that does not start shows what there is
+    if(Mode==0||bPlaceOnly)return Now>CoverAt+.2;
+    auto* Playback=Gallery?Gallery->PairedPlayback.Get():nullptr;if(!Playback)return false;
+    // The new pose is committed: another player, its clip or motion changed, or its clock started again. A place change
+    // keeps the pose: its props are what changes.
+    return Playback!=CoverPlayback.Get()||Playback->GetFemaleClip()+Playback->GetFemaleMotion()!=CoverClip||Playback->GetElapsed()<CoverElapsed-.01f;
+}
+void UOKHScenePanel::Cover(bool bOn,double Now){
+    APlayerCameraManager* Camera=GetOwningPlayer()?GetOwningPlayer()->PlayerCameraManager.Get():nullptr;
+    if(bOn){CoverAt=Now;CoverPlayback=SeenPlayback;CoverElapsed=SeenElapsed;CoverClip=SeenClip;}
+    else if(bCovered)UE_LOG(LogTemp,Display,TEXT("H scene: new pose shown %.2fs after the change"),Now-CoverAt);
+    if(!Camera){bCovered=false;return;}
+    bCovered=bOn;
+    if(bOn)Camera->StartCameraFade(1.f,1.f,0.f,FLinearColor::Black,false,true); // black this very frame: the jump is never seen
+    else Camera->StartCameraFade(1.f,0.f,.35f,FLinearColor::Black,false,false);
+}
 // A bone of theirs in the world (the male skeleton may name its bones like hers).
 static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
     if(!IsValid(A)||!A->BodySkel)return false;
@@ -771,7 +795,10 @@ void UOKHScenePanel::AlignHim(float Delta){
             AlignOff=float(Fix.Size());AlignAt=100.f*Along/Len;AlignLen=Len;
             {FVector FL,FR;float Foot=1e9f;if(HBone(Him,TEXT("j_foot_L"),FL))Foot=float(FL.Z);if(HBone(Him,TEXT("j_foot_R"),FR))Foot=FMath::Min(Foot,float(FR.Z));AlignFoot=Foot-float(Girl->GetActorLocation().Z);}
             AtMin=FMath::Min(AtMin,AlignAt);AtMax=FMath::Max(AtMax,AlignAt);AtWindow+=Delta;
-            if(AtWindow>=2.f){AtShownMin=AtMin;AtShownMax=AtMax;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;}
+            {const float Floor=float(Girl->GetActorLocation().Z);AKKPreviewActor* Who[2]={Him,Girl};
+             for(int32 W=0;W<2;++W){FVector FL,FR;if(HBone(Who[W],TEXT("j_foot_L"),FL)&&HBone(Who[W],TEXT("j_foot_R"),FR)){const float F=float(FMath::Min(FL.Z,FR.Z))-Floor;FeetMin[W]=FMath::Min(FeetMin[W],F);FeetMax[W]=FMath::Max(FeetMax[W],F);}}}
+            if(AtWindow>=2.f){AtShownMin=AtMin;AtShownMax=AtMax;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;
+                for(int32 W=0;W<2;++W){FeetShown[W*2]=FeetMin[W];FeetShown[W*2+1]=FeetMax[W];FeetMin[W]=1e9f;FeetMax[W]=-1e9f;}}
             // Depth: only the deepest point of his thrusts is set (70% of him in her); per frame it would flatten the clip's
             // thrust. The deepest point eases back (a fifth of his length a second) so a shallower pose is followed too.
             DeepAlong=FMath::Min(DeepAlong+Delta*Len*.2f,Along);
@@ -803,7 +830,7 @@ void UOKHScenePanel::HideWallsInTheWay(){
         if(E.Z>90.f)for(const FVector& To:Seen)Blocks|=FMath::LineBoxIntersection(FBox(O-E,O+E),Eye,To,To-Eye);A->SetActorHiddenInGame(Blocks);}
 }
 void UOKHScenePanel::ClearProps(){for(AStaticMeshActor* A:Props)if(IsValid(A))A->Destroy();Props.Reset();}
-void UOKHScenePanel::NativeDestruct(){ClearProps();RestoreBlush();RestoreAlign();Super::NativeDestruct();}
+void UOKHScenePanel::NativeDestruct(){if(bCovered)Cover(false,FPlatformTime::Seconds());ClearProps();RestoreBlush();RestoreAlign();Super::NativeDestruct();}
 void UOKHScenePanel::PlaceProps(int32 Kind){
     ClearProps();bPropsTable=false;auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->BodySkel||!GetWorld())return;
     auto* Him=Mode!=0&&Gallery->PartnerActor&&!bMaleHidden?Gallery->PartnerActor.Get():nullptr;
@@ -926,7 +953,8 @@ void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit
 TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     auto O=MakeShared<FJsonObject>();
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
-    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
+    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
+    O->SetBoolField(TEXT("covered"),bCovered);
     O->SetNumberField(TEXT("blush"),BlushMats.IsEmpty()?-1.f:BlushShown);
     O->SetStringField(TEXT("state"),Current());O->SetStringField(TEXT("wanted"),Wanted);O->SetNumberField(TEXT("mode"),Mode);
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
