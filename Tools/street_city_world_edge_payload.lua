@@ -786,4 +786,28 @@ def motel_world_ocean_probe():
   rows.append(dict(label=a.get_actor_label(),cls=a.get_class().get_name(),loc=[t.translation.x,t.translation.y,t.translation.z],rot=[t.rotation.rotator().roll,t.rotation.rotator().pitch,t.rotation.rotator().yaw],scale=[t.scale3d.x,t.scale3d.y,t.scale3d.z],bounds=[o.x-e.x,o.y-e.y,o.z-e.z,o.x+e.x,o.y+e.y,o.z+e.z],components=comps))
  assert sha(MAPFILE)==LOAD_SHA
  (EDGE_OUT/'ocean-probe.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,actors=rows),ensure_ascii=False,indent=1),'utf8')
+def motel_world_seabed_layers_probe():
+ # world_seabed_layers_probe (read-only): the A03 sea (x 80-135 m, y 700-830 m) still shows light and dark rectangles
+ # after the sand sheet was raised 1 -> 15 cm (captures 2026-11-01 01:37), so they are not depth fighting. Every 1 m in
+ # x and 2 m in y, trace down from 50 m and pass through each hit actor (no size filter: shore_grid_probe skipped actors
+ # under 15 m extent, which can include ground tiles), recording up to 8 layers: label, z, material leaf.
+ # Output world-edge-v1/seabed-layers.json (rows along y; cells = list of [label, z, material]).
+ world=unreal.EditorLevelLibrary.get_editor_world()
+ def layers(x,y):
+  ign=[];out=[]
+  for _ in range(8):
+   r=unreal.SystemLibrary.line_trace_single(world,unreal.Vector(x,y,5000),unreal.Vector(x,y,-5000),unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,True,ign,unreal.DrawDebugTrace.NONE,True)
+   t=r.to_tuple() if r is not None else (False,)
+   if not t[0] or t[9] is None:break
+   mat=''
+   try:
+    m=t[10].get_material(t[11]) if t[10] is not None else None
+    mat=m.get_path_name().split('/')[-1] if m else ''
+   except Exception:pass
+   out.append([t[9].get_actor_label(),round(t[4].z,1),mat]);ign.append(t[9])
+  return out
+ xs=list(range(8000,13600,100));rows=[]
+ for y in range(70000,83001,200):rows.append(dict(y=y,cells=[layers(x,y) for x in xs]))
+ assert sha(MAPFILE)==LOAD_SHA
+ (EDGE_OUT/'seabed-layers.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,x_cm=xs,rows=rows)),'utf8')
 ]====]

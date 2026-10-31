@@ -122,15 +122,17 @@ assert cols_all,'no shore line'
 # sand bed: the water bed cells keep the material of the ground they were pressed down from (grass squares read as dark
 # blue stairs under the shallow water off the river mouth, A03 2026-10-31), so every water bed cell (ground < 1060, water)
 # gets one sand sheet 15 cm over the bed, merged into runs along x per 1 m row; the shelf (down to --bed 1030) stays on
-# top. 1 cm was not enough: seen from 100 m+ the sheet z-fought the old ground in tile-sized blocks (A03 17:10).
+# top. A run only merges cells of the same ground height: taking the run's highest cell lifted whole rows of open sea
+# to a near-shore stair (1040 -> sheet 1055 next to rows at 1015), and the two water depths read as light and dark
+# rectangles off A03 (seabed-layers probe 2026-11-01).
 bed=0
 for i in range(ny):
  k=0
  while k<nx:
   if 0<=Z[i,k]<1060 and WET[i,k]:
    e=k
-   while e+1<nx and 0<=Z[i,e+1]<1060 and WET[i,e+1]:e+=1
-   x0,x1=xs[0]+(k-.5)*st,xs[0]+(e+.5)*st;y0,y1=ys[0]+(i-.5)*st,ys[0]+(i+.5)*st;zb=float(Z[i,k:e+1].max())/100+.15
+   while e+1<nx and Z[i,e+1]==Z[i,k] and WET[i,e+1]:e+=1
+   x0,x1=xs[0]+(k-.5)*st,xs[0]+(e+.5)*st;y0,y1=ys[0]+(i-.5)*st,ys[0]+(i+.5)*st;zb=float(Z[i,k])/100+.15
    v=[bm.verts.new((x0,y0,zb)),bm.verts.new((x1,y0,zb)),bm.verts.new((x1,y1,zb)),bm.verts.new((x0,y1,zb))];bm.faces.new(v);bed+=1;k=e+1
   else:k+=1
 bmesh.ops.recalc_face_normals(bm,faces=bm.faces)
