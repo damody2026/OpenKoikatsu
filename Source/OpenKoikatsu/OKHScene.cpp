@@ -454,6 +454,11 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
     // She came in already spent today: nothing will be offered, say so at once rather than on the first click.
     if(!bToldSpent&&(ActivePose!=INDEX_NONE||ActiveAibu!=INDEX_NONE)){bToldSpent=true;if(HadEnough()&&Hint)Hint->SetText(FText::FromString(OKT(TEXT("ui.hscene.enough_no_more_poses"))));}
+    // Shoes off, hers and his: the one-on-one room is her own room, and the original's map table (h/list h_map_dependent)
+    // has shoes=1 for every 自室 (hotel, inn, training camp) and the shower: HSceneProc.LoadMapDependent sets clothes
+    // states 7 and 8 to 3 for everyone there.
+    if(AKKPreviewActor* Girl=Gallery->PreviewActor.Get();IsValid(Girl)&&ShoesOffFor!=Girl){ShoesOffFor=Girl;uint8* S=Gallery->ClothesStates;
+        if(S[7]!=3||S[8]!=3){S[7]=S[8]=3;Girl->SetClothingPartsHidden(S);Gallery->RefreshClothesStateLabels();}}
     UpdateFace();UpdateBlush(Delta);FrameCamera();
     // The original writes the liquid every frame; her materials are remade when her clothes or pose parts change.
     if(Siru[0]+Siru[1]+Siru[2]+Siru[3]+Siru[4]>0&&(SiruRefresh-=Delta)<=0.f){SiruRefresh=.5f;ApplySiru();}
@@ -854,8 +859,9 @@ void UOKHScenePanel::FrameCamera(){
 }
 void UOKHScenePanel::ApplyMaleLook(){
     auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;if(!IsValid(Him)||Mode==0||Him->IsHidden()||!Gallery->PairedPlayback)return;MaleLookFor=Him;
-    // His bottom and briefs (the original takes them off in H): off shows the body under them, the penis with it.
-    {uint8 S[9];for(int32 K=0;K<9;++K)S[K]=Him->DisplayClothesStates[K];if(bMaleBottomOff){S[1]=3;S[3]=3;}Him->SetClothingPartsHidden(S);}
+    // His bottom and briefs (the original takes them off in H): off shows the body under them, the penis with it. His
+    // shoes are off in her room as hers are (see NativeTick).
+    {uint8 S[9];for(int32 K=0;K<9;++K)S[K]=Him->DisplayClothesStates[K];if(bMaleBottomOff){S[1]=3;S[3]=3;}S[7]=S[8]=3;Him->SetClothingPartsHidden(S);}
     // Put his own materials back first, then (see-through) one colour on every part of him.
     int32 M=0;for(UMeshComponent* Comp:MaleGhostComps){if(!IsValid(Comp)){continue;}for(int32 I=0;I<Comp->GetNumMaterials()&&M<MaleGhostMats.Num();++I,++M)Comp->SetMaterial(I,MaleGhostMats[M]);}
     MaleGhostComps.Reset();MaleGhostMats.Reset();

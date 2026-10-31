@@ -186,6 +186,8 @@ private:
     void ReadPairSessions();void ReadBulge(class AKKPreviewActor* Girl,const FVector& Tip);
     TWeakObjectPtr<class AKKPairedPlayback> ReadingPlayback;FDelegateHandle ReadingHandle;
     TMap<FName,float> Bulge;int32 BulgePart=INDEX_NONE;FName BulgeTarget;float BulgePast=0.f,BulgeMoves=0.f;bool bBulgeLogged=false;TWeakObjectPtr<class AKKPreviewActor> BulgedHer;
+    // The girl whose shoes were taken off on coming into her room (NativeTick): once each, she may put them back on.
+    TWeakObjectPtr<class AKKPreviewActor> ShoesOffFor;
     // His glans from his penis root, from his session (the end of his penis mesh; J_dan109 draws in as he goes in): kept
     // between reads.
     FVector GlansFromRoot=FVector::ZeroVector;bool bGlans=false;
