@@ -1044,7 +1044,7 @@ unsafe fn animation_pair_frame_impl(female:*mut OkSession,male:*mut OkSession,ti
         // feet bend (one-on-one fitting of different heights keeps the taller one's feet on the floor).
         for s in [&mut *female,&mut *male] {
             if s.studio_ik.is_empty() {continue;}
-            if let Some(sk)=s.body_skel.as_mut() {crate::session::apply_studio_ik(sk,&mut s.studio_ik_solver,&s.studio_ik,&s.studio_ik_rotations);}
+            if let Some(sk)=s.body_skel.as_mut() {crate::session::apply_studio_ik(sk,&mut s.studio_ik_solver,&s.studio_ik,&s.studio_ik_rotations,&s.studio_ik_weights);}
         }
         let contacted=start.elapsed();
         // Contact solving is a barrier: both sampled actors must be visible
