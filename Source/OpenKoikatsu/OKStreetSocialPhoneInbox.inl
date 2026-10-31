@@ -578,7 +578,8 @@ void AOKStreetSocialScene::BuildAppointmentRows(const TSharedRef<SVerticalBox>& 
  Panel->AddSlot().AutoHeight().Padding(2)[SNew(SHorizontalBox)+SHorizontalBox::Slot().AutoWidth()[OKFinButton(Weak,Title,[Weak](){Weak->State->AppointmentsOpen=!Weak->State->AppointmentsOpen;Weak->RefreshUI();})]];
  if(!S.AppointmentsOpen)return;
  for(const auto* A:Pending){const int32 Id=A->Id;const int64 Left=A->Start-Now;
-  const FString When=FString::Printf(TEXT("%s %02d:%02d"),*OKStreetCalendarLabel(int32(A->Start/1440),0.0).Left(10),int32(A->Start%1440)/60,int32(A->Start%1440)%60);
+  // The date at its own hour: hour 0 is the small hours of the day before, so 14:00 on 9/5 read 9/6 (R6-47).
+  const FString When=FString::Printf(TEXT("%s %02d:%02d"),*OKStreetCalendarLabel(int32(A->Start/1440),double(A->Start%1440)/60.0).Left(10),int32(A->Start%1440)/60,int32(A->Start%1440)%60);
   auto Row=SNew(SWrapBox).UseAllottedSize(true);
   Row->AddSlot().Padding(2)[OKFinText(OKMsg(TEXT("ui.bank.date_text_line"), {{TEXT("date"), *When}, {TEXT("text"), *A->Label}}),Left<120?FLinearColor(1,.75f,.3f):FLinearColor::White,10)];
   // A date with her is called off on the phone (R3-268): the button calls her; a shift or a table is just given up.
