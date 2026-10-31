@@ -157,8 +157,11 @@ fn promise(c: &Catalog, r: &Value) -> Value {
     let d = date((start / 1440) as i32, 12.0);
     let hours = (start % 1440) as f64 / 60.0;
     let opens_soon = (1..=4).any(|k| c.place_open(place, hours + k as f64 * 0.25, d.weekday as i32));
-    // Its door as it closes is one too: picking her up at 22:00 when her shift at the cafe (8-22) ends (R3-260).
-    let just_closed = (1..=2).any(|k| c.place_open(place, hours - k as f64 * 0.25, d.weekday as i32));
+    // Its door as it closes is one too: picking her up at 22:00 when her shift at the cafe (8-22) ends (R3-260). Only
+    // then (her shift or class, or his, ends there about that time: request ends_there [{place, end}]): dinner at the
+    // student cafeteria booked for 19:00, its closing time, was cut off as they sat down (R6-44).
+    let ends_there = r.get("ends_there").and_then(Value::as_array).is_some_and(|l| l.iter().any(|e| s(e, "place") == place && (i(e, "end") - start).abs() <= 30));
+    let just_closed = ends_there && (1..=2).any(|k| c.place_open(place, hours - k as f64 * 0.25, d.weekday as i32));
     if !c.place_open(place, hours, d.weekday as i32) && !opens_soon && !just_closed {
         return json!({"action": "closed", "reason": "closed", "start": start, "minute": minute, "why": c.closed_why(place, d.weekday as i32)});
     }
@@ -261,8 +264,10 @@ mod tests {
         let door = ask(json!({"place": "bookstore", "time": "09:30"}));
         assert_ne!(door["action"], "closed", "{door}");
         // Picking her up at the cafe door as it closes (22:00, her shift's end) is a meeting too; an hour later is not (R3-260).
-        let pickup = ask(json!({"place": "cafe", "time": "22:00"}));
+        let pickup = ask(json!({"place": "cafe", "time": "22:00", "ends_there": [{"place": "cafe", "end": 11 * 1440 + 22 * 60}]}));
         assert_ne!(pickup["action"], "closed", "{pickup}");
+        // Not when nobody finishes there then: eating at its closing time is no meeting (R6-44).
+        assert_eq!(ask(json!({"place": "cafe", "time": "22:00"}))["action"], "closed");
         assert_eq!(ask(json!({"place": "cafe", "time": "23:00"}))["action"], "closed");
     }
 

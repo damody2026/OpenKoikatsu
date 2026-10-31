@@ -263,7 +263,9 @@ void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const F
  const FString Later=DestOf(S.OutingGirl==Girl&&!S.OutingActivity.IsEmpty()?S.OutingActivity:S.ThenGirl==Girl?S.ThenAction:FString());
  // At a table here, mid-meal: what he says is about this bill. "Order something, my treat" to the friend who sat down
  // with them went to her dorm (then: he walks her home after), and her tea was billed to her.
- const bool AtTableHere=!Here.IsEmpty()&&!S.Table.IsEmpty()&&S.MealPlace==Here;
+ // So is a bill of hers waiting here (the checkout choice): "my treat" at the convenience store counter went to her dorm,
+ // where they were going next, and the bill timed out to her paying (R6-43).
+ const bool AtTableHere=!Here.IsEmpty()&&((!S.Table.IsEmpty()&&S.MealPlace==Here)||S.Choices.ContainsByPredicate([Girl](const FOKStreetPendingChoice& C){return C.Heroine==Girl&&C.Kind==TEXT("checkout");}));
  S.PayAgreedShop=!Now.IsEmpty()?Now:AtTableHere?Here:!Later.IsEmpty()?Later:Here;
  UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and

@@ -475,7 +475,12 @@ void AOKStreetSocialScene::ApplyChoiceReply(int32 Character,const FOKFreeTalkRep
  // What she read from him: only from a line he said after the choice opened (her own reply does not decide the bill for him).
  if(!Reply.ResolveId.IsEmpty()){const auto* C=S.Choices.FindByPredicate([&](const FOKStreetPendingChoice& X){return X.Id==Reply.ResolveId;});
   if(C&&C->Kind==TEXT("checkout")&&S.HisLines==C->HisLinesAtOpen){UE_LOG(LogTemp,Display,TEXT("Street choice: %s not resolved by her reply, he has not answered it yet"),*C->Id);}
-  else ResolveChoice(Reply.ResolveId,Reply.ResolveOption,Reply.ResolveInsist);}
+  else{
+   // Settled in her own words ("fine, then I'll take it"): that is her side of the haggling, not a pushback the rules
+   // add on top (R6-43: 惠惠 accepted his treat aloud, the rules pushed back for her and the bill timed out to her paying).
+   // Still wanting her way, she says so in this reply (propose).
+   if(Reply.ProposeId!=Reply.ResolveId)if(auto* M=S.Choices.FindByPredicate([&](const FOKStreetPendingChoice& X){return X.Id==Reply.ResolveId;});M&&M->Heroine==Character&&M->Options.Contains(Reply.ResolveOption))M->HerLean=Reply.ResolveOption;
+   ResolveChoice(Reply.ResolveId,Reply.ResolveOption,Reply.ResolveInsist);}}
  // Meetings are booked by the judge, which reads his line and hers (her own promise field cannot tell whether he said yes).
  HandleFinanceReply(Character,Reply.Predict,Reply.Trade,Reply.Bet);
  // Ordering by chat (plan §8.2): only items this place sells; then checkout when asked.
