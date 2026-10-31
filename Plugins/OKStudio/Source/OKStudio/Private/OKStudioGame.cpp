@@ -373,6 +373,18 @@ int32 UOKStudioGame::AddCharacter(const FString& Card, int32 Outfit)
 		// HS2Studio6 defaults for a new character: IK on, FK on for body, chest, hands and skirt (hair and neck off).
 		O->Character.FkPartsOff = (1 << 2) | (1 << 3);
 		O->Name = FPaths::GetBaseFilename(Card);
+		// It stands on the floor under the view's focus, beside the characters already there (not inside them): three
+		// cards added in a row are three people side by side, each one moved on from where it came.
+		const FVector Right = FRotationMatrix(FRotator(0.f, Yaw, 0.f)).GetUnitAxis(EAxis::Y);
+		FVector At(Focus.X, Focus.Y, 0.f);
+		for (int32 Step = 0; Step < 16; ++Step)
+		{
+			const bool bTaken = Document->Objects.ContainsByPredicate([this, Id, &At](const FOKSceneObject& X)
+				{ return X.Id != Id && X.Kind == EOKSceneObjectKind::Character && FVector::Dist2D(Document->WorldTransform(X.Id).GetLocation(), At) < 50.f; });
+			if (!bTaken) break;
+			At += Right * 60.f;
+		}
+		O->Transform.SetLocation(O->Parent >= 0 ? Document->WorldTransform(O->Parent).InverseTransformPosition(At) : At);
 		if (Panel) Panel->RefreshRows();
 		Document->NotifyChanged();
 	}
@@ -381,10 +393,15 @@ int32 UOKStudioGame::AddCharacter(const FString& Card, int32 Outfit)
 
 int32 UOKStudioGame::Add(EOKSceneObjectKind Kind)
 {
+	// Into the selected folder, or the folder the selection is in: not under a character or item (a camera added while a
+	// book in her hand is selected would move with her; hanging something on a character is the group panel's job).
 	const FOKSceneObject* Sel = Document->Find(SelectedId);
-	const int32 Parent = !Sel ? -1 : (Sel->Kind == EOKSceneObjectKind::Folder ? Sel->Id : Sel->Parent);
+	while (Sel && Sel->Kind != EOKSceneObjectKind::Folder) Sel = Document->Find(Sel->Parent);
+	const int32 Parent = Sel ? Sel->Id : -1;
 	const int32 Id = Document->AddObject(Kind, FString(), Parent);
 	FOKSceneObject* O = Document->Find(Id);
+	if (Kind == EOKSceneObjectKind::Camera) O->Name = FString::Printf(TEXT("相機 %d"), Document->Objects.FilterByPredicate([](const FOKSceneObject& X) { return X.Kind == EOKSceneObjectKind::Camera; }).Num());
+	if (Kind == EOKSceneObjectKind::Folder) O->Name = FString::Printf(TEXT("資料夾 %d"), Id);
 	if (Kind == EOKSceneObjectKind::Light) { O->Name = TEXT("主光"); O->Light.Type = EOKSceneLightType::Directional; O->Light.Intensity = 4.f; /* Studio's character light at 1 (4 per unit, as imported) */ O->Transform = FTransform(FRotator(-35.f, -120.f, 0.f), FVector(0.f, 0.f, 300.f)); }
 	// A new item or effect comes where the view looks (its orbit focus), not at the world origin, which a map's
 	// furniture often hides (the 自室 table): what was added is in sight to move on from.
@@ -486,7 +503,7 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 	// A KStudio scene is imported, not edited in place: saving writes an OK scene card beside it.
 	File = FOKSceneCard::Kind(Path) == FOKSceneCard::EKind::KStudio ? FString() : Path;
 	ReleaseSceneResources();
-	TimelineTime = 0.f;
+	TimelineTime = FMath::Clamp(Document->Playhead, 0.f, FMath::Max(Document->Duration, 0.f)); // where it was saved
 	LoopStart = 0.f;
 	LoopEnd = 0.f;
 	MmdCameraOffset = FVector::ZeroVector;
@@ -1239,6 +1256,7 @@ void UOKStudioGame::SetTimelineTime(float Time)
 {
 	TimelineTime = FMath::Clamp(Time, 0.f, FMath::Max(Document->Duration, 0.01f));
 	Document->ItemAnimationSeconds = TimelineTime;
+	Document->Playhead = TimelineTime; // saved with the scene
 	// Posing the scene for a time is not an edit (no undo step, no unsaved mark).
 	TGuardValue<bool> Evaluating(bEvaluatingTimeline, true);
 	Document->EvaluateTimeline(TimelineTime);

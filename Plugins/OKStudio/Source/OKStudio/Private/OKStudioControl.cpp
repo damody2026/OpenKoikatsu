@@ -16,6 +16,7 @@
 #include "EngineUtils.h"
 #include "Engine/GameViewportClient.h"
 #include "Types/ISlateMetaData.h"
+#include "Widgets/Input/SEditableText.h"
 
 namespace
 {
@@ -586,6 +587,8 @@ namespace
 			J->TryGetBoolField(TEXT("contains"), bContains);
 			bool bTag = false; // match the widget's tag instead (picture buttons have no text)
 			J->TryGetBoolField(TEXT("tag"), bTag);
+			bool bTip = false; // match a button's tooltip (icon buttons: play, first, key...)
+			J->TryGetBoolField(TEXT("tip"), bTip);
 			if (Text.IsEmpty() || !FSlateApplication::IsInitialized()) return Result(false, TEXT("text required"));
 			// Buttons and check boxes (a check box's label is a text block inside it; clicking it toggles).
 			TArray<TSharedRef<SWidget>> Found;
@@ -593,7 +596,15 @@ namespace
 			TFunction<void(const TSharedRef<SWidget>&)> Walk = [&](const TSharedRef<SWidget>& W)
 			{
 				if (!W->GetVisibility().IsVisible()) return;
-				if (bTag)
+				if (bTip)
+				{
+					// Icon buttons carry their tooltip as a "tip:" tag (OKStudioStyle::IconButton). Tooltips themselves are
+					// not read: many are lambdas over objects that may be gone (ERROR_LOG: reading them crashed the game).
+					const TSharedPtr<FTagMetaData> Tag = W->GetType() == TEXT("SButton") ? W->GetMetaData<FTagMetaData>() : nullptr;
+					const FString T = Tag.IsValid() ? Tag->Tag.ToString() : FString();
+					if (T.StartsWith(TEXT("tip:")) && (bContains ? T.Mid(4).Contains(Text) : T.Mid(4) == Text)) { Found.Add(W); Labels.Add(T.Mid(4)); }
+				}
+				else if (bTag)
 				{
 					const TSharedPtr<FTagMetaData> Tag = W->GetMetaData<FTagMetaData>();
 					const FString T = Tag.IsValid() ? Tag->Tag.ToString() : FString();
@@ -633,6 +644,10 @@ namespace
 				// A list row has no click handler of its own: a left click at its middle, through Slate as the mouse would.
 				const FVector2D At = Found[Index]->GetTickSpaceGeometry().GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5));
 				FSlateApplication& App = FSlateApplication::Get();
+				// The row reports a new selection on release only (its highlight changes on press), and a capture left over
+				// from an earlier press would take the release: start from no capture, as a fresh press does. (A tree click
+				// once only moved the highlight, 2026-11-01; not seen again, the log says whether a capture was released.)
+				if (App.HasAnyMouseCaptor()) { UE_LOG(LogTemp, Display, TEXT("OK studio control: click released a stale mouse capture")); App.ReleaseAllPointerCapture(); }
 				App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(0, 0, At, At, TSet<FKey>{ EKeys::LeftMouseButton }, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
 				App.ProcessMouseButtonUpEvent(FPointerEvent(0, 0, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
 			}
@@ -640,6 +655,49 @@ namespace
 			TSharedRef<FJsonObject> O = Result(true);
 			O->SetNumberField(TEXT("matches"), Found.Num());
 			O->SetStringField(TEXT("clicked"), Labels[Index]);
+			return O;
+		}
+		// Types into a text field as the keyboard would: the field whose hint (or text) contains "field" takes keyboard
+		// focus, Ctrl+A and Backspace clear it, each character is a key press and "enter" commits (its own handlers run).
+		if (Op == TEXT("type"))
+		{
+			FString Field, Text;
+			J->TryGetStringField(TEXT("field"), Field);
+			J->TryGetStringField(TEXT("text"), Text);
+			int32 Index = 0;
+			J->TryGetNumberField(TEXT("index"), Index);
+			bool bEnter = false;
+			J->TryGetBoolField(TEXT("enter"), bEnter);
+			if (Field.IsEmpty() || !FSlateApplication::IsInitialized()) return Result(false, TEXT("field required"));
+			TArray<TSharedRef<SEditableText>> Found;
+			TFunction<void(const TSharedRef<SWidget>&)> Walk = [&](const TSharedRef<SWidget>& W)
+			{
+				if (!W->GetVisibility().IsVisible()) return;
+				if (W->GetType() == TEXT("SEditableText"))
+				{
+					const TSharedRef<SEditableText> E = StaticCastSharedRef<SEditableText>(W);
+					if (E->GetHintText().ToString().Contains(Field) || E->GetText().ToString().Contains(Field)) Found.Add(E);
+				}
+				FChildren* Children = W->GetChildren();
+				for (int32 I = 0; Children && I < Children->Num(); ++I) Walk(Children->GetChildAt(I));
+			};
+			for (const TSharedRef<SWindow>& Window : FSlateApplication::Get().GetInteractiveTopLevelWindows()) Walk(Window);
+			if (!Found.IsValidIndex(Index)) return Result(false, FString::Printf(TEXT("%d fields match"), Found.Num()));
+			FSlateApplication& App = FSlateApplication::Get();
+			App.SetKeyboardFocus(Found[Index], EFocusCause::Mouse);
+			auto Key = [&App](const FKey& K, bool bCtrl)
+			{
+				const FModifierKeysState Mods(false, false, bCtrl, false, false, false, false, false, false);
+				App.ProcessKeyDownEvent(FKeyEvent(K, Mods, 0, false, 0, 0));
+				App.ProcessKeyUpEvent(FKeyEvent(K, Mods, 0, false, 0, 0));
+			};
+			Key(EKeys::A, true);
+			Key(EKeys::BackSpace, false);
+			for (const TCHAR Ch : Text) App.ProcessKeyCharEvent(FCharacterEvent(Ch, FModifierKeysState(), 0, false));
+			if (bEnter) Key(EKeys::Enter, false);
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetNumberField(TEXT("matches"), Found.Num());
+			O->SetStringField(TEXT("text"), Found[Index]->GetText().ToString());
 			return O;
 		}
 		// A console command on the game world (cvars, show flags, stat), for diagnosing what the studio draws.
@@ -760,8 +818,10 @@ namespace
 		if (!ReadsOnly(Op, J))
 		{
 			const FString Busy = G->BusyReason();
-			// The timeline op itself may stop playback.
-			if (!Busy.IsEmpty() && !(Op == TEXT("timeline") && Busy == TEXT("playing")))
+			// The timeline op itself may stop playback; buttons and fields work during playback as they do for the user
+			// (the stop button among them), and a capture only looks.
+			static const TSet<FString> WhilePlaying = { TEXT("timeline"), TEXT("click"), TEXT("type"), TEXT("capture") };
+			if (!Busy.IsEmpty() && !(Busy == TEXT("playing") && WhilePlaying.Contains(Op)))
 			{
 				TSharedRef<FJsonObject> O = Result(false, TEXT("busy: ") + Busy);
 				O->SetStringField(TEXT("busy"), Busy);
@@ -1053,7 +1113,7 @@ namespace OKStudioControl
 		if (!GRouter.IsValid()) { UE_LOG(LogTemp, Warning, TEXT("OK studio control: could not open port %d"), Port); return; }
 		static const TCHAR* Ops[] = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("spawn"), TEXT("transform"), TEXT("reparent"), TEXT("delete"), TEXT("select"),
 			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline"),
-			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("click"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
+			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("click"), TEXT("type"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
 		for (const TCHAR* Op : Ops)
 		{
 			const FString Name = Op;

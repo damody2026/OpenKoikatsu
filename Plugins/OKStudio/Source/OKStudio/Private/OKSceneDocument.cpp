@@ -193,6 +193,7 @@ FString UOKSceneDocument::ToJson() const
 	Root->SetNumberField(TEXT("map"), Map);
 	if (!MapTransform.Equals(FTransform::Identity)) Root->SetStringField(TEXT("map_transform"), MapTransform.ToString());
 	Root->SetNumberField(TEXT("duration"), Duration);
+	if (Playhead > 0.f) Root->SetNumberField(TEXT("playhead"), Playhead);
 	if (!SoundFile.IsEmpty()) Root->SetStringField(TEXT("sound_file"), SoundFile);
 	if (!FMath::IsNearlyZero(SoundDelay)) Root->SetNumberField(TEXT("sound_delay"), SoundDelay);
 	if (TSharedPtr<FJsonObject> PostJson = FJsonObjectConverter::UStructToJsonObject(Post)) Root->SetObjectField(TEXT("post"), PostJson);
@@ -260,6 +261,7 @@ bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 	FString MapTransformText;
 	if (Root->TryGetStringField(TEXT("map_transform"), MapTransformText)) MapTransform.InitFromString(MapTransformText);
 	Duration = Root->HasField(TEXT("duration")) ? float(Root->GetNumberField(TEXT("duration"))) : 10.f;
+	Playhead = Root->HasField(TEXT("playhead")) ? float(Root->GetNumberField(TEXT("playhead"))) : 0.f;
 	SoundFile = Root->HasField(TEXT("sound_file")) ? Root->GetStringField(TEXT("sound_file")) : FString();
 	SoundDelay = Root->HasField(TEXT("sound_delay")) ? float(Root->GetNumberField(TEXT("sound_delay"))) : 0.f;
 	Post = FOKScenePost();

@@ -130,8 +130,18 @@ int32 UOKStudioGame::PickObject(const FVector2D& Position) const
 	return Best;
 }
 
-void UOKStudioGame::FocusSelection()
+void UOKStudioGame::FocusSelection(bool bFace)
 {
+	const FOKSceneObject* One = Selection.Num() == 1 ? Document->Find(Selection[0]) : nullptr;
+	FTransform Head;
+	if (bFace && One && One->Kind == EOKSceneObjectKind::Character && SceneActor && OKStudioGameInternal::BoneWorld(SceneActor->PreviewOf(One->Id), TEXT("cf_j_head"), Head))
+	{
+		// The head bone sits at the top of the neck: the face is a hand above it.
+		Focus = Head.GetLocation() + FVector(0.f, 0.f, 8.f);
+		Distance = 90.f;
+		Document->ActiveCamera = -1;
+		return;
+	}
 	FBox All(ForceInit);
 	for (int32 Id : Selection) { FBox B; if (WorldBounds(Id, B)) All += B; }
 	if (!All.IsValid || !SceneActor) return;

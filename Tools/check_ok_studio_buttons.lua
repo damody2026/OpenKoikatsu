@@ -231,7 +231,8 @@ if cam then
   check(click("正交").ok and objects()[cam.id].ortho == false, "camera 正交 off")
   call("cmd", { id = "edit.delete" }); wait(20)
 end
-call("cmd", { id = "menu.system" }); wait(20)
+-- The root buttons toggle: open the system menu unless an earlier session left it open.
+if (call("state").ui or {}).root_menu ~= 3 then call("cmd", { id = "menu.system" }); wait(20) end
 check(click("最近場景").ok, "system menu 最近場景 opens the window")
 call("cmd", { id = "window.close", arg = "recent" }); call("cmd", { id = "menu.system" }); wait(10)
 call("select", { ids = { id } })

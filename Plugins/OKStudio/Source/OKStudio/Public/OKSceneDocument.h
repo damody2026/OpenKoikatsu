@@ -876,6 +876,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
 	float Duration = 10.f;
 
+	/** The timeline playhead (seconds), saved with the scene: the objects hold their values at that time. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float Playhead = 0.f;
+
 	/** Track id of the scene's own track (post-processing values). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
 	FString SoundFile;

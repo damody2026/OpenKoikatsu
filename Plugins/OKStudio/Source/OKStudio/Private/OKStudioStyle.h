@@ -16,6 +16,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Types/ISlateMetaData.h"
 
 namespace OKStudioStyle
 {
@@ -312,7 +313,10 @@ namespace OKStudioStyle
 		return SNew(SBox).WidthOverride(Width).HeightOverride(Height).ToolTipText(FText::FromString(Tip))
 		[
 			Fill(bOn, FillColor,
+				// The tooltip is also the button's "tip:" tag: the control channel finds icon buttons by it without running
+				// tooltip lambdas (the box keeps its own tag from SOKStudioPanel::Tagged).
 				SNew(SButton).ButtonStyle(&FlatButton()).IsEnabled(bEnabled).HAlign(HAlign_Center).VAlign(VAlign_Center).ContentPadding(FMargin(0.f))
+				.AddMetaData<FTagMetaData>(FName(TEXT("tip:") + Tip))
 				.OnClicked_Lambda([Do] { if (Do) Do(); return FReply::Handled(); })
 				[SNew(SIcon).Icon(Icon).Size(FMath::Min(Width, Height) * 0.62f)], OnFill)
 		];

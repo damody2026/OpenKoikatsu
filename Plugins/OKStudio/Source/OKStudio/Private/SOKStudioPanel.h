@@ -349,6 +349,8 @@ public:
 				Game->ReleaseSceneResources();
 				Game->Document->Objects.Reset(); Game->Document->Tracks.Reset(); Game->Document->Bookmarks.Reset(); Game->Document->NextId = 1; Game->Document->ActiveCamera = -1;
 				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->File.Reset();
+				// The timeline starts over too (the playhead stayed where the last scene was paused).
+				Game->Document->Duration = 10.f; Game->bTimelinePlaying = false; Game->TimelineTime = Game->Document->Playhead = 0.f; Game->LoopStart = Game->LoopEnd = 0.f;
 				SaveAsName = FDateTime::Now().ToString(TEXT("scene_%Y%m%d_%H%M%S")); // not the last scene's name to overwrite
 				Game->Add(EOKSceneObjectKind::Light); Game->Document->NotifyChanged();
 				Game->ResetHistory(); Game->bDirty = false;
@@ -465,7 +467,7 @@ public:
 			Game->bLockActiveCamera = !Game->bLockActiveCamera;
 			SetStatus(Game->bLockActiveCamera ? TEXT("鏡頭鎖定：開（滑鼠拖曳不脫離系統鏡頭）") : TEXT("鏡頭鎖定：關"));
 		});
-		Simple(TEXT("camera.focus"), TEXT("聚焦所選"), [this] { Game->FocusSelection(); });
+		Simple(TEXT("camera.focus"), TEXT("聚焦所選"), [this] { Game->FocusSelection(Page == EPage::Bones && BonePage >= 2 && BonePage <= 4); });
 		Simple(TEXT("camera.reset"), TEXT("初始視角"), [this] { Game->ViewPreset(5); });
 		Simple(TEXT("camera.front"), TEXT("前視"), [this] { Game->ViewPreset(0); });
 		Simple(TEXT("camera.side"), TEXT("側視"), [this] { Game->ViewPreset(1); });
@@ -766,8 +768,10 @@ public:
 		default: return {};
 		}
 	}
-	/** HS2Studio6 sub menus are fixed: 187 high (add, character, sound), the system menu 140. */
-	float SubMenuHeight() const { return RootMenu == 3 ? 140.f : 187.f; }
+	/** HS2Studio6 sub menus are 187 high (add, character, sound), the system menu 140; taller when a menu has more entries
+	 *  than that holds (18 per row): a 3 px scroll bar hid half of the system menu. */
+	float SubMenuHeight() const { return FMath::Max(RootMenu == 3 ? 140.f : 187.f, SubMenuRows * 18.f + 9.f); }
+	int32 SubMenuRows = 0;
 
 	void DeferSubMenu() { RegisterActiveTimer(0.f, FWidgetActiveTimerDelegate::CreateLambda([this](double, float) { RebuildSubMenu(); return EActiveTimerReturnType::Stop; })); }
 	void RebuildSubMenu()
@@ -775,6 +779,7 @@ public:
 		using namespace OKStudioStyle;
 		if (!SubMenuBody) return;
 		TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+		SubMenuRows = SubMenuEntries().Num();
 		for (const FMenuEntry& E : SubMenuEntries())
 		{
 			TFunction<bool()> On = E.On;
@@ -784,7 +789,7 @@ public:
 				[SNew(SBox).ToolTipText(FText::FromString(Tip(E.Label, Id)))[Button(FText::FromString(E.Label), [this, Id] { if (!Id.IsEmpty()) RunCommand(Id); DeferSubMenu(); }, 70.f, 17.f, TAttribute<bool>::CreateLambda([On] { return On && On(); }), 11.f, ButtonFill(),
 					TAttribute<bool>::CreateLambda([this, bEnabled, Id] { return bEnabled && !Id.IsEmpty(); }))]];
 		}
-		// The menus keep HS2Studio6's fixed heights; a longer one scrolls.
+		// SubMenuHeight fits the entries; the scroll box only matters on a very short window.
 		SubMenuBody->SetContent(SNew(SBorder).BorderImage(Brush(Panel())).Padding(FMargin(5.f, 5.f, 5.f, 4.f))[SNew(SScrollBox).ScrollBarThickness(FVector2D(3.f, 3.f)) + SScrollBox::Slot()[Box]]);
 	}
 

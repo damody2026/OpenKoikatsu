@@ -86,8 +86,9 @@ public:
 	int32 PickObject(const FVector2D& Position) const;
 	/** World bounds of an object (a character's bones, an item's meshes; a light or camera: a small box). */
 	bool WorldBounds(int32 Id, FBox& Out) const;
-	/** Points the free view at the selection, far enough to see all of it. */
-	void FocusSelection();
+	/** Points the free view at the selection, far enough to see all of it; bFace: at one character's face, close up (the
+	 *  look, neck and expression pages edit what the face shows). */
+	void FocusSelection(bool bFace = false);
 	/** Free view presets: 0 front, 1 right side, 2 top, 3 back, 4 left side, 5 the view a new scene opens with. */
 	void ViewPreset(int32 Preset);
 	/** View bookmarks 0..9 (kept in the scene). */

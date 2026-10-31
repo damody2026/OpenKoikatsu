@@ -1,0 +1,132 @@
+# Second full scene (2026-11-01, docs: OK_STUDIO_UI_WORKFLOW_PLAN.md): classroom map, three characters added in a row,
+# outfit and expression, Studio poses, a book hung on a hand, two cameras, a timeline walk paused into a freeze-frame
+# screenshot, save as, new scene, reopen. Cards: Content/CharacterCards (local). Moves use the transform op (gizmo drags).
+# Tools/lua/lua.exe Tools/ok_studio_ui_flow.lua Tools/ok_studio_flows/scene2_classroom.txt
+# ---- map
+?root_menu!=0 g:Root_add
+?closed:maps t:地圖
+c:教室1-1
+t:讀取
+w:15
+# ---- three characters, added in a row
+?closed:cards t:角色
+t:CharacterCards
+c:CrowdAPNG
+t:C002
+t:加入
+w:6
+t:C011
+t:加入
+w:6
+t:CharacterCards
+c:Demo
+t:Male01
+t:加入
+w:10
+s:{stamp}_01_added
+# ---- onto the podium, facing the seats (stand-in for gizmo drags)
+o:transform {"id":2,"location":[-90,370,0],"rotation":[0,180,0]}
+o:transform {"id":3,"location":[10,370,0],"rotation":[0,180,0]}
+o:transform {"id":4,"location":[110,370,0],"rotation":[0,180,0]}
+o:camera {"focus":[10,370,85],"yaw":90,"pitch":-4,"distance":420}
+# ---- C002: outfit 2, expression (focus goes to her face on the expression page)
+t:C002
+?root_menu!=1 g:Root_character
+t:狀態
+t:2
+w:6
+t:骨骼
+t:表情
+o:cmd {"id":"camera.focus"}
+t:▶#0
+t:▶#0
+t:▶#0
+t:▶#1
+t:▶#1
+t:▶#1
+t:▶#1
+t:▶#2
+t:▶#2
+w:2
+s:{stamp}_02_face
+# ---- poses
+t:動畫
+t:C011
+t:立ち3
+t:C002
+t:立ち6
+t:Male01
+t:立ち1
+o:camera {"focus":[10,370,85],"yaw":90,"pitch":-4,"distance":420}
+w:3
+s:{stamp}_03_poses
+# ---- a book in C011's right hand
+t:C011
+?root_menu!=0 g:Root_add
+t:道具
+y:搜尋道具=本!
+t:本1
+w:4
+c:分組：手
+c:右手（a_n_hand_R
+t:掛到所選部位
+w:2
+s:{stamp}_04_book
+# ---- two cameras: the whole podium, C002 close
+o:camera {"focus":[10,370,90],"yaw":90,"pitch":-4,"distance":420}
+t:相機
+w:1
+o:camera {"focus":[-90,370,125],"yaw":60,"pitch":-6,"distance":140}
+t:相機
+w:1
+s:{stamp}_05_cameras
+t:相機 1
+?root_menu!=1 g:Root_character
+t:屬性
+t:用此相機
+w:2
+o:capture {"path":"{out}/cam1.png","width":960,"height":540}
+t:相機 2
+t:用此相機
+w:2
+o:capture {"path":"{out}/cam2.png","width":960,"height":540}
+t:相機 1
+t:用此相機
+w:1
+# ---- timeline: Male01 walks from the podium edge to the seats over 10 s
+?timeline=false p:時間軸
+t:Male01
+p:開頭
+p:為選取物件打 key
+p:結尾
+o:transform {"id":4,"location":[110,220,0]}
+p:為選取物件打 key
+p:開頭
+w:1
+p:播放／停止
+w:4
+p:播放／停止
+w:1
+s:{stamp}_06_paused
+o:capture {"path":"{out}/freeze_a.png","width":960,"height":540}
+w:2
+o:capture {"path":"{out}/freeze_b.png","width":960,"height":540}
+# ---- freeze-frame shot, save, new, reopen
+?root_menu!=3 g:Root_system
+w:1
+s:{stamp}_09_sysmenu
+?closed:shot t:截圖
+t:拍攝
+w:3
+t:另存新檔
+y:scene_=教室三人_{stamp}
+t:另存
+w:8
+t:新場景
+w:4
+o:state {}
+# the scene window is still open from the save
+c:教室三人_{stamp}
+c:覆蓋（開啟
+w:25
+s:{stamp}_10_reopened

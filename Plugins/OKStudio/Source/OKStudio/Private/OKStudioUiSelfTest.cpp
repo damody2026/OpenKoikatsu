@@ -120,7 +120,7 @@ namespace
 				Check(bDragged && !A2.Equals(A, 0.01) && (A2 - A).Equals(B2 - B, 0.5), TEXT("the guide moves both selected objects together"));
 				G->CommitHistory();
 				G->Undo();
-				Check(Obj(Character)->Transform.GetLocation().Equals(A, 0.01) && Obj(Item)->Transform.GetLocation().Equals(B, 0.01), TEXT("one undo returns both"));
+				Check(Obj(Character) && Obj(Item) && Obj(Character)->Transform.GetLocation().Equals(A, 0.01) && Obj(Item)->Transform.GetLocation().Equals(B, 0.01), TEXT("one undo returns both"));
 				// U2-4: dropped on the right hand it hangs there and stays after save and open.
 				const FOKStudioAccessoryPoint* Hand = C_Hand();
 				G->Select(Character);
