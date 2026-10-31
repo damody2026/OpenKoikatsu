@@ -2036,8 +2036,13 @@ impl OkSession {
     /// (limb size corrections, expression bones), then ABMX, interaction and hair/cloth physics.
     pub(crate) fn ok_finish_frame(&mut self, dt: f32, scene: i32) {
         let saved = self.anim_scene_mode;
+        let saved_pv_fk = self.pv_fk;
         self.anim_scene_mode = if (1..=4).contains(&scene) { scene } else if saved != 0 { saved } else { 2 };
+        // OkAnim tracks only drive `cf_j_*` bones (not `cf_pv_*`), so Studio PVCopy must not
+        // overwrite the solved `cf_j_hand_*` / `cf_j_leg03_*` pose with un-animated T-pose `cf_pv_*` helpers.
+        self.pv_fk = true;
         self.finish_animator_pose(dt.max(0.0), true);
+        self.pv_fk = saved_pv_fk;
         self.anim_scene_mode = saved;
     }
     /// The Animator's own output at `t` for the selected clip (no shape, corrections, IK or physics): what the OK

@@ -25,7 +25,8 @@ use crate::vmd::{
 };
 use crate::vnge::{parse_py_or_json, unwrap_scene_decoder, VngeSceneData};
 
-/// Default MMDD 2.0 character bone definition (`BepInEx/plugins/Console/Lib/mmdd/chara_default_2.0.ini`).
+/// Default MMDD 2.0 character bone definition (`BepInEx/plugins/Console/Lib/mmdd/chara_default_2.0.ini`,
+/// with `AxisScale=0.079` matching `mmddirector.ini` / `MotionController.DEFAULT_AXIS_SCALE`).
 pub const DEFAULT_CHARA_INI: &str = r#"
 [General]
 Description=Default Char Bone 2.0 (TDA spec)
@@ -33,7 +34,7 @@ Type=chara
 HeightBone=cf_n_height
 AutoRotAdj=0
 DefWeightSyncMode=global
-AxisScale=0.0832
+AxisScale=0.079
 
 [BoneDefine]
 ROOT=:全ての親:rp
@@ -885,7 +886,8 @@ impl CharaIniConfig {
         let mut height_bone = "cf_n_height".to_string();
         let mut auto_rot_adj = false;
         let mut default_sync_local = false;
-        let mut axis_scale = 0.0832f32;
+        // `vmdlib.py::_populateRuntimeState` always sets `self.axisScale = self.DEFAULT_AXIS_SCALE` (`0.079` from `mmddirector.ini`).
+        let axis_scale = 0.079f32;
         if let Some(gen) = sections.get("general") {
             for (k, v) in gen {
                 match k.as_str() {
@@ -894,7 +896,6 @@ impl CharaIniConfig {
                     "defweightsyncmode" => {
                         default_sync_local = v.eq_ignore_ascii_case("local") || v.eq_ignore_ascii_case("l")
                     }
-                    "axisscale" => axis_scale = v.parse().unwrap_or(0.0832),
                     _ => {}
                 }
             }
@@ -3305,12 +3306,12 @@ pub fn extract_mmdd(
                 .unwrap_or(1.0);
             let pos_scale = smap
                 .get("posScale")
-                .map(|v| val_to_f32(v, 0.08))
-                .unwrap_or(0.08);
+                .map(|v| val_to_f32(v, 0.079))
+                .unwrap_or(0.079);
             let dst_scale = smap
                 .get("dstScale")
-                .map(|v| val_to_f32(v, 0.08))
-                .unwrap_or(0.08);
+                .map(|v| val_to_f32(v, 0.079))
+                .unwrap_or(0.079);
             let off_pos = smap
                 .get("offPos")
                 .and_then(val_to_v3)
