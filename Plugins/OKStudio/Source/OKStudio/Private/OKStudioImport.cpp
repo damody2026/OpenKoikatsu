@@ -499,6 +499,12 @@ namespace
 					C.Speed = 1.f;
 					C.Fk.Reset();
 					C.Ik.Reset();
+					C.HandLeft = -1;
+					C.HandRight = -1;
+					C.NeckLook = EOKSceneLook::Animation;
+					C.EyesLook = EOKSceneLook::Animation;
+					C.FixedNeck.Reset();
+					C.FixedEyes.Reset();
 					Note(TEXT("MMDD / KKVMDPlay VMD motion solved to .okanim"));
 				}
 				// Children on accessory slots: kept under the character.
@@ -801,6 +807,12 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 						CharObj->Character.StudioAnimeNo = -1;
 						CharObj->Character.Fk.Reset();
 						CharObj->Character.Ik.Reset();
+						CharObj->Character.HandLeft = -1;
+						CharObj->Character.HandRight = -1;
+						CharObj->Character.NeckLook = EOKSceneLook::Animation;
+						CharObj->Character.EyesLook = EOKSceneLook::Animation;
+						CharObj->Character.FixedNeck.Reset();
+						CharObj->Character.FixedEyes.Reset();
 						CharObj->Character.EyebrowPattern = -1;
 						CharObj->Character.EyesPattern = -1;
 						CharObj->Character.MouthPattern = -1;

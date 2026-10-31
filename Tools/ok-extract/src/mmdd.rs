@@ -753,11 +753,7 @@ impl BoneAdjustment {
 
     pub fn get_adjusted_rotation(&self, rot: Quat) -> Quat {
         let mut r = if rot != [0.0, 0.0, 0.0, 1.0] {
-            let v = quat_to_unity_euler(rot);
-            let mut q = euler_deg_to_quat([-v[0], v[1], -v[2]]);
-            if (self.rotation_scale - 1.0).abs() > 1e-6 {
-                q = quat_slerp_unclamped([0.0, 0.0, 0.0, 1.0], q, self.rotation_scale);
-            }
+            let mut q = [-rot[0], rot[1], -rot[2], rot[3]];
             if self.rot_axis_adjusted {
                 let adj = self.rot_axis_adjustment;
                 q = quat_mul(quat_mul(adj, q), qinv(adj));
@@ -769,20 +765,19 @@ impl BoneAdjustment {
         if self.rot_adjusted {
             r = quat_mul(r, self.rot_adjustment);
         }
+        if (self.rotation_scale - 1.0).abs() > 1e-6 {
+            r = quat_slerp_unclamped([0.0, 0.0, 0.0, 1.0], r, self.rotation_scale);
+        }
         r
     }
 
     pub fn get_adjusted_position(&self, pos: V3) -> V3 {
         let mut p = if pos != [0.0, 0.0, 0.0] {
-            let mut p1 = [
+            [
                 -pos[0] * self.position_scale,
                 pos[1] * self.position_scale,
                 -pos[2] * self.position_scale,
-            ];
-            if self.rot_axis_adjusted {
-                p1 = qrot(self.rot_axis_adjustment, p1);
-            }
-            p1
+            ]
         } else {
             pos
         };
@@ -1303,12 +1298,11 @@ enum IkSolver {
         chain1_hip: usize,
         iterations: usize,
         step_angle: f32,
-        min_knee_rot: f32,
-        upper_length: f32,
-        lower_length: f32,
-        max_length: f32,
-        min_length: f32,
-        zero_pose_vec: V3,
+        min_knee_q: Quat,
+        leg_sum: f32,
+        leg_mul2: f32,
+        leg_sqr_sum: f32,
+        base_inv_q: Quat,
     },
     NoLimit {
         ik_bone: usize,
@@ -1321,7 +1315,7 @@ enum IkSolver {
 
 impl IkSolver {
     fn create_leg(
-        tree: &DummyTree,
+        tree: &mut DummyTree,
         ik_bone: usize,
         ik_tgt: usize,
         chain0_knee: usize,
@@ -1330,14 +1324,20 @@ impl IkSolver {
         step_angle: f32,
         min_knee_rot: f32,
     ) -> Self {
+        let min_knee_q = euler_deg_to_quat([min_knee_rot, 0.0, 0.0]);
+        tree.set_local_rot(chain0_knee, min_knee_q);
         let hip_pos = tree.nodes[chain1_hip].world_pos;
         let knee_pos = tree.nodes[chain0_knee].world_pos;
         let foot_pos = tree.nodes[ik_tgt].world_pos;
-        let upper_length = vlen(vsub( hip_pos, knee_pos));
-        let lower_length = vlen(vsub(foot_pos, knee_pos));
-        let max_length = upper_length + lower_length;
-        let min_length = (upper_length - lower_length).abs();
-        let zero_pose_vec = vsub(foot_pos, hip_pos);
+        let thigh2knee = vsub(knee_pos, hip_pos);
+        let knee2foot = vsub(foot_pos, knee_pos);
+        let thigh2knee_len = vlen(thigh2knee);
+        let knee2foot_len = vlen(knee2foot);
+        let leg_sum = vlen(vsub(hip_pos, foot_pos));
+        let leg_mul2 = thigh2knee_len * knee2foot_len * 2.0;
+        let leg_sqr_sum = thigh2knee_len * thigh2knee_len + knee2foot_len * knee2foot_len;
+        let base_q = qfrom_to(thigh2knee, knee2foot);
+        let base_inv_q = qinv(base_q);
         Self::Leg {
             ik_bone,
             ik_tgt,
@@ -1345,12 +1345,11 @@ impl IkSolver {
             chain1_hip,
             iterations,
             step_angle,
-            min_knee_rot,
-            upper_length,
-            lower_length,
-            max_length,
-            min_length,
-            zero_pose_vec,
+            min_knee_q,
+            leg_sum,
+            leg_mul2,
+            leg_sqr_sum,
+            base_inv_q,
         }
     }
 
@@ -1363,48 +1362,28 @@ impl IkSolver {
                 chain1_hip,
                 iterations,
                 step_angle,
-                min_knee_rot,
-                upper_length,
-                lower_length,
-                max_length,
-                min_length,
-                zero_pose_vec,
+                min_knee_q,
+                leg_sum,
+                leg_mul2,
+                leg_sqr_sum,
+                base_inv_q,
             } => {
-                // Matches vmdlib.py::MMDIKSolverLeg.Solve (lines 1473-1618)
+                // Matches vmdlib.py::MMDIKSolverLeg.Solve (lines 1494-1533)
                 let tgt_pos = tree.nodes[ik_bone].world_pos;
-                let root_pos = tree.nodes[chain1_hip].world_pos;
-                let tgt_distance = vlen(vsub(tgt_pos, root_pos));
-                let knee_angle = if tgt_distance >= max_length {
-                    0.0
-                } else if tgt_distance <= min_length {
-                    180.0
-                } else {
-                    let cos_a = ((upper_length * upper_length + lower_length * lower_length
-                        - tgt_distance * tgt_distance)
-                        / (2.0 * upper_length * lower_length))
+                let thigh2tgt_len = vlen(vsub(tgt_pos, tree.nodes[chain1_hip].world_pos));
+                if thigh2tgt_len < leg_sum && leg_mul2 > 1e-6 {
+                    let cos_a = ((leg_sqr_sum - thigh2tgt_len * thigh2tgt_len) / leg_mul2)
                         .clamp(-1.0, 1.0);
-                    let a = cos_a.acos().to_degrees();
-                    180.0 - a
-                };
-                let knee_angle = knee_angle.max(min_knee_rot);
-                tree.set_local_rot(chain0_knee, euler_deg_to_quat([knee_angle, 0.0, 0.0]));
-
-                // Step 2: pre-turn upper leg toward target
-                let to_v = vsub(tgt_pos, root_pos);
-                let init_q = qfrom_to(zero_pose_vec, to_v);
-                let (mut angle0, axis0) = quat_to_angle_axis_deg(init_q);
-                if angle0 > step_angle {
-                    angle0 = step_angle;
+                    let knee_angle = 180.0 - cos_a.acos().to_degrees();
+                    tree.set_local_rot(
+                        chain0_knee,
+                        quat_mul(euler_deg_to_quat([knee_angle, 0.0, 0.0]), base_inv_q),
+                    );
+                } else {
+                    tree.set_local_rot(chain0_knee, min_knee_q);
                 }
-                let q0 = quat_from_angle_axis_deg(angle0, axis0);
-                let q1 = euler_deg_to_quat([
-                    -knee_angle / 2.0,
-                    tree.nodes[chain1_hip].local_rot[1],
-                    tree.nodes[chain1_hip].local_rot[2],
-                ]);
-                tree.set_local_rot(chain1_hip, quat_mul(q0, q1));
 
-                // Step 3: CCD loop on upper leg
+                // Turn upper leg to target via CCD without clobbering VMD thigh twist
                 for _ in 0..iterations {
                     let end_pos = tree.nodes[ik_tgt].world_pos;
                     let bone_pos = tree.nodes[chain1_hip].world_pos;
@@ -1737,7 +1716,7 @@ pub fn solve_vmd_to_okanim(
                 ik_solvers.insert(
                     ik_idx,
                     IkSolver::create_leg(
-                        &tree,
+                        &mut tree,
                         ik_idx,
                         tgt_idx,
                         c0,
@@ -1810,7 +1789,9 @@ pub fn solve_vmd_to_okanim(
             adj.set_pos_local_scale(pscale);
         }
     }
-    let global_scale = ini.axis_scale * params.char_scale;
+    // `prep_body` is `standard_kk_skeleton()` (unscaled `cf_n_height` = 1.0), and `.okanim`
+    // normalizes hip translations by `hips_len` so runtime characters apply their own height scale.
+    let global_scale = ini.axis_scale;
     for adj in bone_adjusts.values_mut() {
         adj.set_pos_global_scale(global_scale);
     }
@@ -2351,6 +2332,9 @@ pub fn evaluate_camera_vmd(
     off_pos: V3,
     off_rot: V3,
 ) -> Vec<MmddCameraKeyEval> {
+    if vmd.camera_keyframes.is_empty() {
+        return Vec::new();
+    }
     let speed = if playback_speed > 1e-4 {
         playback_speed
     } else {
@@ -2358,16 +2342,21 @@ pub fn evaluate_camera_vmd(
     };
     let has_off_rot = off_rot.iter().any(|v| v.abs() > 1e-5);
     let off_rot_q = euler_deg_to_quat(off_rot);
-    let mut out = Vec::with_capacity(vmd.camera_keyframes.len());
-    for kf in &vmd.camera_keyframes {
-        // Matches vmdlib.py::CameraController.applyOffsetScale (lines 6792-6806)
+
+    // Sort and deduplicate camera keyframes by frame_no (matching VmdLib.loadVmd)
+    let mut kfs = vmd.camera_keyframes.clone();
+    kfs.sort_by_key(|k| k.frame_no);
+    kfs.dedup_by_key(|k| k.frame_no);
+
+    let make_eval = |frame_no: u32, time: f32, pos: V3, rot: V3, dist: f32, fov: f32| -> MmddCameraKeyEval {
+        // Matches vmdlib.py::CameraController.applyOffsetScale (lines 7380-7394)
         let mut cpos = [
-            -kf.pos[0] * pos_scale,
-            kf.pos[1] * pos_scale,
-            -kf.pos[2] * pos_scale,
+            -pos[0] * pos_scale,
+            pos[1] * pos_scale,
+            -pos[2] * pos_scale,
         ];
-        let cdst = [0.0, 0.0, kf.dist * dst_scale];
-        let mut crot = [-kf.rot[0], -kf.rot[1] + 180.0, -kf.rot[2]];
+        let cdst = [0.0, 0.0, dist * dst_scale];
+        let mut crot = [-rot[0], -rot[1] + 180.0, -rot[2]];
         if has_off_rot {
             cpos = qrot(off_rot_q, cpos);
             crot = quat_to_unity_euler(quat_mul(off_rot_q, euler_deg_to_quat(crot)));
@@ -2375,22 +2364,70 @@ pub fn evaluate_camera_vmd(
         cpos = vadd(cpos, off_pos);
         let cam_rot_q = euler_deg_to_quat(crot);
         let world_pos = vadd(qrot(cam_rot_q, cdst), cpos);
-        let time = delay + (kf.frame_no as f32) / (30.0 * speed);
-        out.push(MmddCameraKeyEval {
+        MmddCameraKeyEval {
             time,
-            frame_no: kf.frame_no,
+            frame_no,
             target_pos: cpos,
             distance: cdst,
             world_pos,
             rot: crot,
-            fov: kf.view_angle,
-            x_curve: kf.x_curve,
-            y_curve: kf.y_curve,
-            z_curve: kf.z_curve,
-            r_curve: kf.r_curve,
-            d_curve: kf.d_curve,
-            v_curve: kf.v_curve,
-        });
+            fov,
+            x_curve: [0.25, 0.25, 0.75, 0.75],
+            y_curve: [0.25, 0.25, 0.75, 0.75],
+            z_curve: [0.25, 0.25, 0.75, 0.75],
+            r_curve: [0.25, 0.25, 0.75, 0.75],
+            d_curve: [0.25, 0.25, 0.75, 0.75],
+            v_curve: [0.25, 0.25, 0.75, 0.75],
+        }
+    };
+
+    let max_frame = kfs.last().map(|k| k.frame_no).unwrap_or(0);
+    let mut out = Vec::with_capacity(max_frame as usize + 16);
+    let mut seg = 0usize;
+    let fps = 30.0 * speed;
+
+    for f in 0..=max_frame {
+        while seg + 1 < kfs.len() && kfs[seg + 1].frame_no <= f {
+            seg += 1;
+        }
+        let time = delay + (f as f32) / fps;
+        if f <= kfs[0].frame_no {
+            let kf = &kfs[0];
+            out.push(make_eval(f, time, kf.pos, kf.rot, kf.dist, kf.view_angle));
+        } else if seg + 1 >= kfs.len() || f == kfs[seg].frame_no {
+            let kf = &kfs[seg];
+            out.push(make_eval(f, time, kf.pos, kf.rot, kf.dist, kf.view_angle));
+            // Camera cut: prevFrame.frameNo + 1 == nextFrame.frameNo
+            // Emit a hold keyframe right before nextFrame so >30fps playback snaps cleanly without smearing
+            if seg + 1 < kfs.len() && kf.frame_no + 1 == kfs[seg + 1].frame_no {
+                let cut_time = delay + ((kfs[seg + 1].frame_no as f32) - 0.005) / fps;
+                out.push(make_eval(f, cut_time, kf.pos, kf.rot, kf.dist, kf.view_angle));
+            }
+        } else {
+            let prev = &kfs[seg];
+            let next = &kfs[seg + 1];
+            let span = (next.frame_no - prev.frame_no) as f32;
+            let t = ((f - prev.frame_no) as f32 / span).clamp(0.0, 1.0);
+            let tx = mmd_cubic_bezier(&next.x_curve, t);
+            let ty = mmd_cubic_bezier(&next.y_curve, t);
+            let tz = mmd_cubic_bezier(&next.z_curve, t);
+            let tr = mmd_cubic_bezier(&next.r_curve, t);
+            let td = mmd_cubic_bezier(&next.d_curve, t);
+            let tv = mmd_cubic_bezier(&next.v_curve, t);
+            let pos = [
+                prev.pos[0] + (next.pos[0] - prev.pos[0]) * tx,
+                prev.pos[1] + (next.pos[1] - prev.pos[1]) * ty,
+                prev.pos[2] + (next.pos[2] - prev.pos[2]) * tz,
+            ];
+            let rot = [
+                prev.rot[0] + (next.rot[0] - prev.rot[0]) * tr,
+                prev.rot[1] + (next.rot[1] - prev.rot[1]) * tr,
+                prev.rot[2] + (next.rot[2] - prev.rot[2]) * tr,
+            ];
+            let dist = prev.dist + (next.dist - prev.dist) * td;
+            let fov = prev.view_angle + (next.view_angle - prev.view_angle) * tv;
+            out.push(make_eval(f, time, pos, rot, dist, fov));
+        }
     }
     out
 }
