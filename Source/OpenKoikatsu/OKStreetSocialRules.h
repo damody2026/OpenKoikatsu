@@ -592,7 +592,8 @@ inline FOKStreetSunState OKStreetSunAt(double Hours) {
  // Position along the current half of the cycle: 0 at its start (sunrise / moonrise), 1 at its end.
  const double Progress = Sun.Day ? (H - 4.0) / 16.0 : (H >= 20.0 ? H - 20.0 : H + 4.0) / 8.0;
  const double Height = FMath::Sin(Progress * PI);
- const double Elevation = Sun.Day ? FMath::Max(10.0, 62.0 * Height) : FMath::Max(35.0, 55.0 * Height);
+ // The day sun goes down to 3 degrees: held at 10 the sky never reddened at the horizon (R6-64).
+ const double Elevation = Sun.Day ? FMath::Max(3.0, 62.0 * Height) : FMath::Max(35.0, 55.0 * Height);
  // 180 degrees across the day (11.25 per hour) and across the night; the moon starts where the sun rose.
  const double Yaw = Sun.Day ? -30.0 + (H - 12.0) * 11.25 : -120.0 + Progress * 180.0;
  Sun.Rotation = FRotator(-Elevation, FRotator::NormalizeAxis(Yaw), 0.0);
@@ -606,6 +607,25 @@ inline FOKStreetSunState OKStreetSunAt(double Hours) {
   Sun.Color = FLinearColor(.7f, .8f, 1.f);
  }
  return Sun;
+}
+
+// How much brighter than the atmosphere gives it the sky dome is drawn at this hour (its SkyLuminanceFactor). The street
+// sun is dim (2.5 lux) under a fixed exposure, so the scattered sky fell steeply with the sun's height: blue at noon,
+// navy by 18:00 and black by 19:00 while the sun still shone for an hour and she spoke of the glow (R6-64). The gain
+// holds the dome near its noon brightness by the sun's height; the light's own fade before 20:00 still darkens it, and
+// Warm tints it toward the evening glow.
+inline FLinearColor OKStreetSkyLuminanceAt(double Hours) {
+ const FOKStreetSunState Sun = OKStreetSunAt(Hours);
+ if (!Sun.Day) return FLinearColor::White;
+ // Gain by the sun's elevation in degrees, measured against the noon sky.
+ static constexpr double Elev[] = {3.0, 6.0, 12.0, 18.0, 24.0, 40.0};
+ static constexpr double Gain[] = {15.0, 12.0, 5.0, 2.0, 1.2, 1.0};
+ const double E = -Sun.Rotation.Pitch;
+ double G = E <= Elev[0] ? Gain[0] : 1.0;
+ for (int32 I = 0; I + 1 < UE_ARRAY_COUNT(Elev); ++I)
+  if (E > Elev[I] && E <= Elev[I + 1]) G = FMath::Lerp(Gain[I], Gain[I + 1], (E - Elev[I]) / (Elev[I + 1] - Elev[I]));
+ const float Warm = float(FMath::Clamp(FMath::Sin(FMath::Clamp(((FMath::Fmod(Hours + 24.0, 24.0)) - 4.0) / 16.0, 0.0, 1.0) * PI) / 0.35, 0.0, 1.0));
+ return FMath::Lerp(FLinearColor(1.3f, .95f, .8f), FLinearColor::White, Warm) * float(G);
 }
 
 // What the street sky looks like at this hour, from the same light as OKStreetSunAt: she describes the sky from
@@ -2737,6 +2757,7 @@ inline void OKStreetCheckHintAndSun(TArray<FString>& Failures) {
  OKStreetExpect(Failures, Noon.Day && FMath::IsNearlyEqual(Noon.Rotation.Yaw, -30.0) && Noon.Rotation.Pitch < -60.0 && Noon.Intensity > 2.4f, TEXT("noon matches the authored high sun"));
  OKStreetExpect(Failures, Morning.Day && Evening.Day && FMath::IsNearlyEqual(Morning.Rotation.Pitch, Evening.Rotation.Pitch, 1.e-3) && FMath::Abs(FRotator::NormalizeAxis(Evening.Rotation.Yaw - Morning.Rotation.Yaw)) > 60.0, TEXT("morning and afternoon cast shadows to opposite sides"));
  OKStreetExpect(Failures, !Night.Day && Night.Rotation.Pitch < -10.0 && Night.Intensity < 2.f, TEXT("night uses a dim light that still points down"));
+ OKStreetExpect(Failures, OKStreetSkyLuminanceAt(12.0).Equals(FLinearColor::White) && OKStreetSkyLuminanceAt(19.0).B > 2.f && OKStreetSkyLuminanceAt(19.0).R > OKStreetSkyLuminanceAt(19.0).B, TEXT("the sky dome keeps its brightness and warms as the sun goes down (R6-64)"));
 }
 
 inline void OKStreetRunScenarios(TArray<FString>& Failures) {

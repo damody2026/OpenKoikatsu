@@ -238,6 +238,9 @@ struct FOKStreetSceneState {
  FString ThenWaitLogged; // the "then" logged as waiting for its place to open (TickThenAction)
  FString ResumeCartPlace;int32 ResumeCartHer=INDEX_NONE; // the saved basket's shop and girl, until its bill is asked again (R3-257)
  double ClockStartHours=12,ClockStartWall=0,NextSunUpdate=0;bool ClockDrivesSun=false,ClockPaused=false;TWeakObjectPtr<ADirectionalLight> Sun;
+ // The sky dome the sun lights; SkyGainOverride (R >= 0, from the control channel's /clock "sky_gain") replaces
+ // OKStreetSkyLuminanceAt while tuning it.
+ TWeakObjectPtr<USkyAtmosphereComponent> Sky;FLinearColor SkyGainOverride=FLinearColor(-1.f,-1.f,-1.f,1.f);
  // 2010 calendar (OKStreetSocialMind.inl): the clock reading last tick (-1 after a manual jump) and the last saved hour.
  double CalendarLastHours=-1;int32 CalendarSavedHour=-1;
  // ok_mind.dll, when it loaded; null keeps the old behaviour.
@@ -756,7 +759,8 @@ void AOKStreetSocialScene::BeginPlay(){
   FString Clock;const bool Override=FParse::Value(FCommandLine::Get(),TEXT("StreetSocialClock="),Clock);if(Override){FString H,M;if(!Clock.Split(TEXT(":"),&H,&M))H=Clock;S.ClockStartHours=FMath::Clamp(FCString::Atod(*H),0.0,23.99)+FMath::Clamp(FCString::Atod(*M),0.0,59.0)/60.0;}
   // Self-tests keep the authored sun unless a clock is asked for, so their captures stay comparable.
   S.ClockDrivesSun=Override||!S.SelfTest;
-  for(TActorIterator<ADirectionalLight> It(GetWorld());It;++It){S.Sun=*It;It->GetLightComponent()->SetMobility(EComponentMobility::Movable);break;}}
+  for(TActorIterator<ADirectionalLight> It(GetWorld());It;++It){S.Sun=*It;It->GetLightComponent()->SetMobility(EComponentMobility::Movable);break;}
+  for(TActorIterator<AActor> It(GetWorld());It;++It)if(auto* Sky=It->FindComponentByClass<USkyAtmosphereComponent>()){S.Sky=Sky;break;}}
  auto Quality=[](const TCHAR* Name,float Value){if(auto* C=IConsoleManager::Get().FindConsoleVariable(Name))C->Set(Value,ECVF_SetByConsole);};
  Quality(TEXT("r.AntiAliasingMethod"),2);Quality(TEXT("r.ScreenPercentage"),100);Quality(TEXT("r.SecondaryScreenPercentage.GameViewport"),100);Quality(TEXT("r.DynamicRes.OperationMode"),0);Quality(TEXT("r.TemporalAA.Quality"),2);Quality(TEXT("r.TemporalAA.HistoryScreenPercentage"),100);
  // Cascaded shadow maps, not virtual ones: the same toon shadows on screen, and every scene measured ran faster with
@@ -3757,7 +3761,8 @@ void AOKStreetSocialScene::Tick(float Dt){
  else if(S.Bluff.Active&&S.Bluff.ClockRate<1.0){const double Wall=FPlatformTime::Seconds();
   S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,FMath::Max(0.0,Wall-S.ClockStartWall)*FMath::Max(0.0,S.Bluff.ClockRate));S.ClockStartWall=Wall;}
  // Once a real second is enough: the sun turns 0.1 degree per second, and each move redraws shadow maps.
- if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const auto Sun=OKStreetSunAt(S.InspectSlot!=INDEX_NONE?14.0:OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall)); /* the inspection room is in afternoon light at any hour */S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);}}
+ if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const double SunHours=S.InspectSlot!=INDEX_NONE?14.0:OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);const auto Sun=OKStreetSunAt(SunHours); /* the inspection room is in afternoon light at any hour */S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);
+  if(auto* Sky=S.Sky.Get())Sky->SetSkyLuminanceFactor(S.SkyGainOverride.R>=0.f?S.SkyGainOverride:OKStreetSkyLuminanceAt(SunHours));}}
  if(TickPrivate(Now))return;
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFacility);TickFacility(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPhoto);TickPhoto(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickContacts);TickContacts(Dt,Now);}
  // Every actor of this roster (one male and up to OKStreetFemaleCount heroines).

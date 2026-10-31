@@ -330,6 +330,11 @@ void AOKStreetSocialScene::StartControlServer(){
   auto& S=*State;bool Paused=S.ClockPaused;const auto ClockBody=OKControlBody(Req);ClockBody->TryGetBoolField(TEXT("paused"),Paused);
   // "hours": set the time of day, like the panel's clock buttons (tests start where the heroines are about, not at dinner).
   double Hours=-1;if(ClockBody->TryGetNumberField(TEXT("hours"),Hours)&&Hours>=0){S.ClockStartHours=FMath::Fmod(Hours+48.0,24.0);S.ClockStartWall=FPlatformTime::Seconds();S.NextSunUpdate=0;S.CalendarLastHours=-1;S.ClockDrivesSun=S.Sun.IsValid();}
+  // "sky_gain": the sky dome's brightness, a number or [r, g, b], in place of OKStreetSkyLuminanceAt (tuning it); -1 clears.
+  {double G=0;const TArray<TSharedPtr<FJsonValue>>* Rgb=nullptr;
+   if(ClockBody->TryGetArrayField(TEXT("sky_gain"),Rgb)&&Rgb->Num()>=3)S.SkyGainOverride=FLinearColor(float((*Rgb)[0]->AsNumber()),float((*Rgb)[1]->AsNumber()),float((*Rgb)[2]->AsNumber()));
+   else if(ClockBody->TryGetNumberField(TEXT("sky_gain"),G))S.SkyGainOverride=FLinearColor(float(G),float(G),float(G));
+   if(ClockBody->HasField(TEXT("sky_gain")))S.NextSunUpdate=0;}
   if(Paused!=S.ClockPaused){const double Wall=FPlatformTime::Seconds();if(Paused)S.ClockStartHours=OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);S.ClockStartWall=Wall;S.ClockPaused=Paused;RefreshUI();}
   auto O=OKControlResult(true);O->SetBoolField(TEXT("paused"),S.ClockPaused);OKControlReply(Done,O);
  });
