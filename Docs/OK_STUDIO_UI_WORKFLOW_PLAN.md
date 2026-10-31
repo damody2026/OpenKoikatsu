@@ -682,6 +682,33 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
   - 2026-10-31 立方體貼圖轉出（通用）：`ParsedBundle::cube_slot_atlases` 把材質裡指向 Cubemap 的欄位（依名稱比對 bundle 與相依檔的 Cubemap）轉成 cube atlas（`cubemap_atlas`：六面並排，mip 往下），放進 `shader_extra_textures[<欄位>]`。`attach_material_texs` 與 `okmodel_view` 都會跑；原本只有 Skybox/Cubemap 的 `_Tex` 有轉。C++ 端的 atlas 取樣抽成 `OKCubeAtlasSample`（D3D 立方體面規則，Unity 空間方向），天空盒與水面共用。`StylizedWater/Desktop` 照 DXBC 加上反射項：`reflect(-V,n)` 取 `_Reflection`，乘 `_Glossiness`、`saturate(1-roughness)`、`(1-n·v)^5`，以 sRGB 載入。共用母材質（`SharedShaders/*Bindings.inl`）的 cube 貼圖只有 `unity_SpecCube0／1`，沒有材質欄位的 Cubemap；它們由 `OKSceneActor` 綁上地圖反射探針轉出的真正 `UTextureCube`（`OKStudioMapReflection`），不需要改走 atlas。材質欄位的 Cubemap 只出現在自建圖的家族（天空盒、水面），已走 atlas。
   - 2026-10-31 實測水面（`83283571_p1`，[DA]xv2stuff 的 Water Plane 1）：`_Reflection` 原本還是黑色 32×32，三個原因都修了。(1) 這個模型在 atlas 功能之前就轉好，`meshes_for_maindata` 記錄裡的材質沒有 `_Reflection` 欄位（當時外部 bundle 的 Cubemap 取不到名稱）；`studio-mod-nodes` 改成和 `studio-nodes` 一樣，可用 `OKLIB_REFRESH=meshes_for_maindata` 重錄已有的網格記錄。(2) 函式庫模型 replay 時 `cube_slot_atlases` 會讀 bundle 內部而記一筆「未 memo」缺口；改成 cube atlas 是獨立的 memo 查詢 `cube_atlas_named`（只記真的 Cubemap），replay 時有記錄才用；`studio-nodes`／`studio-mod-nodes` 會補錄。(3) `SessionPart::from_mesh` 對一般 shader 只留白名單內的貼圖，`StylizedWater/Desktop` 不在名單上，`_Normals`／`_Shadermap`／`_Reflection` 全被丟掉（水面法線其實也一直沒接上）；加了水面的分支。結果：`_Reflection` 是 3072×1024 的 atlas，`_Normals` 256×256、`_Shadermap` 1024×1024，水面出現波紋與反射（`F:\OpenKoikatsu\Saved\OKStudio\water1031\83283571_p1_after.png`，之前 `F:\OpenKoikatsu\Saved\OKStudio\scenecheck_vmd17\83283571_p1.png`）。這張場景整體過曝（火焰、泛光）是既有問題，另外查。診斷：`ok-extract X:/NoGame --oklib model-view <lib> <id> session:<prefab>` 列出 session 各部件的 shader 貼圖。本機只對這張場景的 mod 道具跑了 `OKLIB_REFRESH=meshes_for_maindata ok-extract D:/KoikatuSunshine --oklib studio-mod-nodes <base_v1> F:/OpenKoikatsu/Saved/OKStudio/mainst_in 4`（第三方 mod 模型不進版控）；原版道具與地圖的 cube 欄位要在整合時跑 `studio-nodes` 補錄進共用基礎庫。
 
+  - 2026-10-31 過曝與月盤偏亮：用 `Tools/GamePoseProbe/run_scene_visual_audit.lua --tag kks_bright_1031` 拍了原生畫面（`F:\OpenKoikatsu\Saved\Tests\kks_bright_1031\Scene1.png`、`Scene2.png`），兩者**不同源**，也都不是泛光或曝光：
+    - `83283571_p1` 的白天空：原生天空盒是 mod 的 `Funly/Sky Studio/Skybox/3D Standard`（`m_skybox_simple_daytime`，粉紅夕陽），OK Studio 沒有這個 shader，畫成白色；關掉泛光（`ShowFlag.Bloom 0`）仍是白的（`F:\OpenKoikatsu\Saved\OKStudio\bright1031\b_nobloom.png`）。另外火焰粒子比原生大很多、鋼架被橘光照亮，要分別查粒子尺寸與點光強度。
+    - 月盤：原生是新月，未照亮的半邊全黑；我們整個月盤以暗藍顯示。月亮是 `main_item_studio_alpha`（`YK_Yue`），泛光參數（強度 0.79、門檻 0.903）也不高，比較像是月亮貼圖暗面的 alpha 或該 shader 的明暗項沒對上，下一步是讀 `YK_Yue` 暗面像素的 RGBA 與 OK 的 alpha 混合結果逐像素比。
+    - 待做：Funly Sky Studio 天空盒（照 DXBC 自建圖，和 `Skybox/Cubemap` 同一條路）、火焰粒子尺寸、月盤暗面。
+
+### U16～U22　對照 HS2Studio6 的第二批缺口（2026-10-31，F 組，依使用頻率排序）
+
+2026-10-31 對照第 3 節與 `Saved/StudioUIRef/hs2/` 逐項讀程式盤點（30 項：9 項沒有、17 項部分完成），整理成以下項目。排序依擺姿勢與擺場景時每分鐘會碰到幾次。
+
+| 階段 | 內容 | 目前缺的 |
+|---|---|---|
+| U16 角色細調頁 | 表情：眉／眼／嘴顯示目前編號＋上一個／下一個、眼睛開合滑桿；手勢：左右手上一個／下一個／復位與「目前／總數」；視線與頸部：加「正面」「背離」模式、「取鏡頭位置」「恢復看鏡頭」、頸部跟隨強度；遊戲內建姿勢：「n / 總數」上一個／下一個、「復位 T-pose」 | 現在只有下拉與數值框；沒有正面／背離；內建姿勢清單沒有 |
+| U17 衣服一鍵 | 狀態窗加「全穿／半脫／全裸」 | 只有逐部位三態 |
+| U18 動作瀏覽與控制器 | 全部／女／男／共用頁籤、搜尋（譯名與原名）、項目數；獨立的「動畫控制器」浮窗（速度、動作變化、輔助 1／2、循環、播放／暫停／停止），關掉清單仍留著 | 只有群組下拉與清單；控制只有內嵌滑桿 |
+| U19 物件樹操作 | 群組／解散群組（Ctrl+G；吸附改 Ctrl+Shift+G）、帶位移複製、只顯示所選（solo）、鎖定不被視窗點選、拖動時靠邊自動捲動；底部工具列補「設父級」「複製變換」「材質編輯」；道具／動作／地圖／特效目錄的「定位當前」 | 沒有群組、solo、鎖定、自動捲動 |
+| U20 FK／IK 部位開關 | 每個部位真的啟用／停用 FK 與 IK（不只篩選清單）、各部位初始化／復位、IK「全部」；新角色預設 IK 開、FK 開胸／身體／雙手／裙子；IK 權重頁；明確的 FK←IK | 部位鈕只篩選清單；沒有權重 |
+| U21 時間軸骨骼軌 | 骨骼搜尋＋單骨打 key／刪 key、「清空軌道」 | 只能整個物件打 key |
+| U22 其他 | 相機正交與正交大小、遠裁面套用；視窗格線／地面開關與「隱藏全部輔助」；場景統計（物件／角色／道具數）；最近開啟的場景；返回標題；面光源；背景圖瀏覽與「套用」；材質編輯器三欄窗；`?` 說明圖示；截圖窗的前景框選項與「本次目錄」 | 見各項 |
+
+**完成紀錄（2026-10-31，F 組）**
+- U16（部分）：
+  - 表情的眉／眼／嘴、手勢的左右手：清單下方加「◀ ▶」與「目前／總數」（`SOKStudioPanel::Named`，從 -1「照卡片／照動畫」循環）；手勢加「復位」。
+  - 視線與頸部加「正面」「背離」模式（`EOKSceneLook::Front`／`Away`，加在列舉最後，舊檔不受影響）：正面是角色正前方頭高的遠點，背離是鏡頭對頭部的鏡射點；控制通道也接受 `front`／`away`。另加「取鏡頭位置」（注視點設為目前鏡頭位置並改成注視模式）與「恢復看鏡頭」。
+  - 還沒做：眼睛開合滑桿（`AKKPreviewActor` 只有 `SetMouthOpen`，眼睛沒有後端）、頸部跟隨強度、遊戲內建姿勢清單。
+- U17：狀態窗「全穿／半脫／全裸」一鍵。
+- U18（部分）：動作瀏覽改用主題按鈕（目前分頁亮綠），加搜尋（空格＝且、`-詞`＝排除；比對動作名與分組、分類名，結果跨分組並標出所在分組／分類）與「N 個動作」計數。修正：每次重建都把分頁同步回目前播放的動作，播 Studio 動作時按「H 動作」會被拉回；改成只在目前動作改變時同步。還沒做：女／男／共用頁籤（目錄沒有性別資料）、獨立的動畫控制器浮窗。
+- 截圖：`F:\OpenKoikatsu\Saved\StudioUIRef\ok\U16b_state.png`、`U16b_look.png`、`U16b_expression.png`、`U16b_hand.png`、`U18b_anim.png`（腳本 `Saved/StudioUIRef/scripts/u16_new2.txt`，`OKStudio.RunScript` 要給絕對路徑）。`OKStudio.UiSelfTest` 46/46。
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。

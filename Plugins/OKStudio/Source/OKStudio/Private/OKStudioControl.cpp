@@ -809,8 +809,9 @@ namespace
 				auto Look = [](const TSharedPtr<FJsonValue>& V, EOKSceneLook& Out)
 				{
 					if (!V) return;
-					static const TMap<FString, EOKSceneLook> Names = { { TEXT("animation"), EOKSceneLook::Animation }, { TEXT("camera"), EOKSceneLook::Camera }, { TEXT("point"), EOKSceneLook::Point }, { TEXT("fixed"), EOKSceneLook::Fixed } };
-					if (V->Type == EJson::Number) Out = EOKSceneLook(FMath::Clamp(int32(V->AsNumber()), 0, 3));
+					static const TMap<FString, EOKSceneLook> Names = { { TEXT("animation"), EOKSceneLook::Animation }, { TEXT("camera"), EOKSceneLook::Camera }, { TEXT("point"), EOKSceneLook::Point }, { TEXT("fixed"), EOKSceneLook::Fixed },
+						{ TEXT("front"), EOKSceneLook::Front }, { TEXT("away"), EOKSceneLook::Away } };
+					if (V->Type == EJson::Number) Out = EOKSceneLook(FMath::Clamp(int32(V->AsNumber()), 0, int32(EOKSceneLook::Away)));
 					else if (const EOKSceneLook* L = Names.Find(V->AsString().ToLower())) Out = *L;
 				};
 				Look((*Sub)->TryGetField(TEXT("eyes")), X->Character.EyesLook);

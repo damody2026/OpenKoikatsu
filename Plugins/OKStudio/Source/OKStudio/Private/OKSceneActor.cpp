@@ -1177,6 +1177,9 @@ void AOKSceneActor::UpdateLooks(float DeltaSeconds, bool bApplyStaticPose)
 		{
 			if (Mode == EOKSceneLook::Camera && bHasViewLocation) { Out = ViewLocation; return true; }
 			if (Mode == EOKSceneLook::Point) { Out = Actor->GetActorTransform().TransformPosition(C.LookPoint); return true; }
+			// Front and away in the character's space at head height (the default look point's: 140 cm, forward +Y).
+			if (Mode == EOKSceneLook::Front) { Out = Actor->GetActorTransform().TransformPosition(FVector(0.f, 1000.f, 140.f)); return true; }
+			if (Mode == EOKSceneLook::Away && bHasViewLocation) { Out = 2.f * Actor->GetActorTransform().TransformPosition(FVector(0.f, 0.f, 140.f)) - ViewLocation; return true; }
 			return false;
 		};
 		FVector Look;

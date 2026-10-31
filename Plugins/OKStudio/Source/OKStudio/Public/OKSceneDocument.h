@@ -16,6 +16,10 @@ enum class EOKSceneLook : uint8
 	Point,
     /** The neck locals saved with the imported pose. */
     Fixed,
+	/** Straight ahead of the character (HS2Studio6 正面). */
+	Front,
+	/** Away from the view: the view mirrored through the head (HS2Studio6 背離). */
+	Away,
 };
 
 /** How a timeline key blends into the next one. */

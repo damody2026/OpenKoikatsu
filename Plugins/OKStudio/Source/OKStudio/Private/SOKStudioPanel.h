@@ -1576,12 +1576,43 @@ public:
 	}
 	/** Named pattern lists (TArray of options kept per list; -1 first: "the card's / the animation's"). */
 	TMap<FString, TSharedRef<TArray<TSharedPtr<int32>>>> NamedOptions;
+	/** The eye / neck look modes offered (HS2Studio6's order); Fixed only when the character carries the saved locals. */
+	static TArray<EOKSceneLook> LookModes(bool bFixed)
+	{
+		TArray<EOKSceneLook> Modes = { EOKSceneLook::Animation, EOKSceneLook::Camera, EOKSceneLook::Front, EOKSceneLook::Away, EOKSceneLook::Point };
+		if (bFixed) Modes.Add(EOKSceneLook::Fixed);
+		return Modes;
+	}
+	static FString LookModeName(EOKSceneLook L)
+	{
+		switch (L)
+		{
+		case EOKSceneLook::Camera: return TEXT("鏡頭");
+		case EOKSceneLook::Front: return TEXT("正面");
+		case EOKSceneLook::Away: return TEXT("背離");
+		case EOKSceneLook::Point: return TEXT("注視");
+		case EOKSceneLook::Fixed: return TEXT("固定");
+		default: return TEXT("動畫");
+		}
+	}
 	void Named(const FString& Name, const FString& ListName, int32 Count, TFunction<FString(int32)> Show, TFunction<int32(FOKSceneObject&)> Get, TFunction<void(FOKSceneObject&, int32)> Set)
 	{
 		if (!NamedOptions.Contains(ListName)) NamedOptions.Add(ListName, MakeShared<TArray<TSharedPtr<int32>>>());
 		TArray<TSharedPtr<int32>>& Options = NamedOptions[ListName].Get();
 		if (Options.Num() != Count + 1) { Options.Reset(); for (int32 I = -1; I < Count; ++I) Options.Add(MakeShared<int32>(I)); }
 		Row(Name, Combo(&Options, Show, [this, Get] { FOKSceneObject* O = Obj(); return O ? Get(*O) : -1; }, [this, Set](int32 V) { if (FOKSceneObject* O = Obj()) { Set(*O, V); Changed(); } }));
+		// HS2Studio6's pattern pages: previous / next (wrapping, -1 is the card's or animation's own) and "current / total".
+		auto Step = [this, Get, Set, Count](int32 By) { if (FOKSceneObject* O = Obj()) { Set(*O, (Get(*O) + 1 + By + Count + 1) % (Count + 1) - 1); Changed(); } };
+		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.4f)
+			+ SHorizontalBox::Slot().FillWidth(0.2f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("◀")), [Step] { Step(-1); }, 0.f, 18.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.2f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+				[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this, Get, Count] { FOKSceneObject* O = Obj(); const int32 V = O ? Get(*O) : -1;
+					return FText::FromString(V < 0 ? FString::Printf(TEXT("— / %d"), Count) : FString::Printf(TEXT("%d / %d"), V + 1, Count)); }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.2f)[OKStudioStyle::Button(FText::FromString(TEXT("▶")), [Step] { Step(1); }, 0.f, 18.f, false, 10.f)]
+		];
 	}
 	/** The detail window's rows for the current page (HS2Studio6: one window per menu entry). */
 	void RebuildProperties()
@@ -1790,6 +1821,17 @@ public:
 				[this] { OpenFloat(TEXT("cards")); }, 0.f, 18.f, false, 10.f, OKStudioStyle::Input()), 0.3f);
 			Choice(TEXT("服裝組"), { TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5"), TEXT("6"), TEXT("7") }, [](FOKSceneObject& X) { return X.Character.Outfit; }, [](FOKSceneObject& X, int32 V) { X.Character.Outfit = V; });
 		Label(TEXT("服裝狀態"));
+			{
+				// HS2Studio6's one-click 全穿 / 半脫 / 全裸: every part to the game's state 0, 1 or 3.
+				auto All = [this](uint8 State) { return [this, State] { if (FOKSceneObject* X = Obj()) { X->Character.ClothesStates.Init(State, 9); Changed(); DeferRebuild(); } }; };
+				Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("全穿")), All(0), 0.f, 18.f, false, 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("半脫")), All(1), 0.f, 18.f, false, 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("全裸")), All(3), 0.f, 18.f, false, 10.f)]
+				];
+			}
 			for (int32 Part = 0; Part < 9; ++Part)
 			{
 				// 穿 / 半脫 / 脫 are the game's states 0, 1, 3.
@@ -1926,7 +1968,8 @@ public:
 	/** 骨骼 pages: FK, IK, eyes, neck, expression, hands, pose files. */
 	void CharacterBones(FOKSceneObject* O)
 	{
-			auto LookName = [](EOKSceneLook L) { return FString(L == EOKSceneLook::Fixed ? TEXT("固定姿勢") : L == EOKSceneLook::Camera ? TEXT("看鏡頭") : L == EOKSceneLook::Point ? TEXT("看注視點") : TEXT("照動畫")); };
+			auto LookName = [](EOKSceneLook L) { return LookModeName(L); };
+			auto NextLook = [](EOKSceneLook L, bool bFixed) { const TArray<EOKSceneLook> M = LookModes(bFixed); return M[(M.IndexOfByKey(L) + 1) % M.Num()]; };
 		switch (BonePage)
 		{
 		case 0: FkPage(*O); return;
@@ -1942,14 +1985,14 @@ public:
 		{
 		case 2:
 			Label(TEXT("視線"));
-			Cycle(TEXT("眼睛"), [LookName](FOKSceneObject& X) { return LookName(X.Character.EyesLook); }, [](FOKSceneObject& X) { X.Character.EyesLook = EOKSceneLook((uint8(X.Character.EyesLook) + 1) % (X.Character.FixedEyes.Num() == 12 ? 4 : 3)); });
+			Cycle(TEXT("眼睛"), [LookName](FOKSceneObject& X) { return LookName(X.Character.EyesLook); }, [NextLook](FOKSceneObject& X) { X.Character.EyesLook = NextLook(X.Character.EyesLook, X.Character.FixedEyes.Num() == 12); });
 			Label(TEXT("注視點（cm，角色空間）"));
 			for (int32 Axis = 0; Axis < 3; ++Axis)
 				Float(FString(TEXT("XYZ")).Mid(Axis, 1), [Axis](FOKSceneObject& X) { return float(X.Character.LookPoint[Axis]); }, [Axis](FOKSceneObject& X, float V) { X.Character.LookPoint[Axis] = V; }, -1000.f, 1000.f, 1.f);
 			break;
 		case 3:
 			Label(TEXT("頸部"));
-			Cycle(TEXT("脖子"), [LookName](FOKSceneObject& X) { return LookName(X.Character.NeckLook); }, [](FOKSceneObject& X) { X.Character.NeckLook = EOKSceneLook((uint8(X.Character.NeckLook) + 1) % (X.Character.FixedNeck.Num() == 2 ? 4 : 3)); });
+			Cycle(TEXT("脖子"), [LookName](FOKSceneObject& X) { return LookName(X.Character.NeckLook); }, [NextLook](FOKSceneObject& X) { X.Character.NeckLook = NextLook(X.Character.NeckLook, X.Character.FixedNeck.Num() == 2); });
 			break;
 		case 4:
 			Label(TEXT("表情（-1 照卡片）"));
@@ -2286,7 +2329,9 @@ private:
 		const FOKStudioAnim* Current = O.Character.StudioAnimeNo >= 0 ? C.FindAnim(O.Character.StudioAnimeKind, O.Character.StudioAnimeGroup, O.Character.StudioAnimeCategory, O.Character.StudioAnimeNo) : nullptr;
 		Label(TEXT("Studio 動畫：") + (Current ? Current->Name : FString(TEXT("（無）"))));
 		if (C.Anims.IsEmpty()) { Label(TEXT("基礎庫沒有 Studio 動畫（studio_anims.json）")); return; }
-		if (Current) { AnimKind = Current->Kind; AnimGroup = Current->Group; AnimCategory = Current->Category; }
+		// Show the playing motion's group when it changes (not on every rebuild: a kind or group picked by hand stays).
+		if (Current && AnimSyncedTo != Current) { AnimKind = Current->Kind; AnimGroup = Current->Group; AnimCategory = Current->Category; }
+		AnimSyncedTo = Current;
 		// Groups and categories that have converted motions of this kind.
 		TSet<int32> Groups;
 		for (const FOKStudioAnim& A : C.Anims) if (A.Kind == AnimKind && !A.File.IsEmpty()) Groups.Add(A.Group);
@@ -2298,17 +2343,36 @@ private:
 		AnimGroupOptions.Sort([](const TSharedPtr<int32>& A, const TSharedPtr<int32>& B) { return *A < *B; });
 		AnimCategoryOptions.Reset(); for (int32 K : Cats) AnimCategoryOptions.Add(MakeShared<int32>(K));
 		AnimCategoryOptions.Sort([](const TSharedPtr<int32>& A, const TSharedPtr<int32>& B) { return *A < *B; });
+		auto GroupLabel = [](int32 G) { const FOKStudioCatalogGroup* X = FOKStudioCatalog::Get().AnimGroups.FindByPredicate([G](const FOKStudioCatalogGroup& Y) { return Y.Id == G; }); return X ? X->Name : FString(); };
+		auto CategoryLabel = [](int32 G, int32 K) { const FOKStudioCatalogGroup* X = FOKStudioCatalog::Get().AnimCategories.FindByPredicate([G, K](const FOKStudioCatalogGroup& Y) { return Y.Group == G && Y.Id == K; }); return X ? X->Name : FString(); };
+		auto GroupName = [GroupLabel](int32 G) { const FString N = GroupLabel(G); return N.IsEmpty() ? FString::FromInt(G) : FString::Printf(TEXT("%d %s"), G, *N); };
+		auto CategoryName = [this, CategoryLabel](int32 K) { const FString N = CategoryLabel(AnimGroup, K); return N.IsEmpty() ? FString::FromInt(K) : FString::Printf(TEXT("%d %s"), K, *N); };
+		// A search (spaces: and; -word: exclude) runs over every motion of the kind, by its name and its group and category names.
+		TArray<FString> Include, Exclude;
+		{ TArray<FString> Words; AnimSearch.ParseIntoArrayWS(Words); for (const FString& W : Words) (W.StartsWith(TEXT("-")) && W.Len() > 1 ? Exclude : Include).Add(W.StartsWith(TEXT("-")) && W.Len() > 1 ? W.Mid(1) : W); }
 		AnimOptions.Reset();
-		for (int32 I = 0; I < C.Anims.Num(); ++I) { const FOKStudioAnim& A = C.Anims[I]; if (A.Kind == AnimKind && A.Group == AnimGroup && A.Category == AnimCategory && !A.File.IsEmpty()) AnimOptions.Add(MakeShared<int32>(I)); }
-		auto GroupName = [](int32 G) { const FOKStudioCatalogGroup* X = FOKStudioCatalog::Get().AnimGroups.FindByPredicate([G](const FOKStudioCatalogGroup& Y) { return Y.Id == G; }); return X ? FString::Printf(TEXT("%d %s"), G, *X->Name) : FString::FromInt(G); };
-		auto CategoryName = [this](int32 K) { const int32 G = AnimGroup; const FOKStudioCatalogGroup* X = FOKStudioCatalog::Get().AnimCategories.FindByPredicate([G, K](const FOKStudioCatalogGroup& Y) { return Y.Group == G && Y.Id == K; }); return X ? FString::Printf(TEXT("%d %s"), K, *X->Name) : FString::FromInt(K); };
+		for (int32 I = 0; I < C.Anims.Num(); ++I)
+		{
+			const FOKStudioAnim& A = C.Anims[I];
+			if (A.Kind != AnimKind || A.File.IsEmpty()) continue;
+			if (AnimSearch.IsEmpty()) { if (A.Group == AnimGroup && A.Category == AnimCategory) AnimOptions.Add(MakeShared<int32>(I)); continue; }
+			const FString Text = A.Name + TEXT(" ") + GroupLabel(A.Group) + TEXT(" ") + CategoryLabel(A.Group, A.Category);
+			if (Include.ContainsByPredicate([&Text](const FString& W) { return !Text.Contains(W); }) || Exclude.ContainsByPredicate([&Text](const FString& W) { return Text.Contains(W); })) continue;
+			AnimOptions.Add(MakeShared<int32>(I));
+		}
 		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(1.f)[SNew(SButton).Text(FText::FromString(TEXT("Studio 動作"))).OnClicked_Lambda([this] { AnimKind = 0; DeferRebuild(); return FReply::Handled(); })]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(1.f)[SNew(SButton).Text(FText::FromString(TEXT("H 動作"))).OnClicked_Lambda([this] { AnimKind = 1; DeferRebuild(); return FReply::Handled(); })]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(1.f)[SNew(SButton).Text(FText::FromString(TEXT("停止動畫"))).OnClicked_Lambda([this] { if (FOKSceneObject* X = Obj()) { X->Character.StudioAnimeNo = -1; Changed(); DeferRebuild(); } return FReply::Handled(); })]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("Studio 動作")), [this] { AnimKind = 0; DeferRebuild(); }, 0.f, 18.f, AnimKind == 0, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("H 動作")), [this] { AnimKind = 1; DeferRebuild(); }, 0.f, 18.f, AnimKind == 1, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("停止動畫")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.StudioAnimeNo = -1; Changed(); DeferRebuild(); } }, 0.f, 18.f, false, 10.f)]
 		];
+		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SEditableTextBox).Style(&OKStudioStyle::TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋動作（空格＝且，-詞＝排除）"))).Text(FText::FromString(AnimSearch))
+			.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type) { AnimSearch = T.ToString(); DeferRebuild(); })
+		];
+		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 個動作%s"), AnimOptions.Num(), AnimSearch.IsEmpty() ? TEXT("") : TEXT("（搜尋結果，跨分組）"))), 10.f, OKStudioStyle::TextHint())];
 		auto Combo = [this](TArray<TSharedPtr<int32>>* Options, TFunction<FString(int32)> Show, TFunction<int32()> Current, TFunction<void(int32)> Pick)
 		{
 			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
@@ -2319,17 +2383,22 @@ private:
 				[SNew(STextBlock).Text_Lambda([Show, Current] { return FText::FromString(Show(Current())); })]
 			];
 		};
-		Combo(&AnimGroupOptions, GroupName, [this] { return AnimGroup; }, [this](int32 V) { AnimGroup = V; AnimCategory = -1; DeferRebuild(); });
-		Combo(&AnimCategoryOptions, CategoryName, [this] { return AnimCategory; }, [this](int32 V) { AnimCategory = V; DeferRebuild(); });
+		if (AnimSearch.IsEmpty())
+		{
+			Combo(&AnimGroupOptions, GroupName, [this] { return AnimGroup; }, [this](int32 V) { AnimGroup = V; AnimCategory = -1; DeferRebuild(); });
+			Combo(&AnimCategoryOptions, CategoryName, [this] { return AnimCategory; }, [this](int32 V) { AnimCategory = V; DeferRebuild(); });
+		}
 		Props->AddSlot().AutoHeight().MaxHeight(220.f).Padding(0.f, 2.f)
 		[
 			SNew(SListView<TSharedPtr<int32>>).ListItemsSource(&AnimOptions).SelectionMode(ESelectionMode::Single)
-			.OnGenerateRow_Lambda([this](TSharedPtr<int32> I, const TSharedRef<STableViewBase>& Owner)
+			.OnGenerateRow_Lambda([this, GroupLabel, CategoryLabel](TSharedPtr<int32> I, const TSharedRef<STableViewBase>& Owner)
 			{
 				const FOKStudioAnim& A = FOKStudioCatalog::Get().Anims[*I];
 				const FOKSceneObject* X = Obj();
 				const bool bCurrent = X && X->Character.StudioAnimeNo == A.No && X->Character.StudioAnimeKind == A.Kind && X->Character.StudioAnimeGroup == A.Group && X->Character.StudioAnimeCategory == A.Category;
-				return SNew(STableRow<TSharedPtr<int32>>, Owner)[SNew(STextBlock).ColorAndOpacity(bCurrent ? FLinearColor::Yellow : FLinearColor::White).Text(FText::FromString(A.Name))];
+				// Search hits come from every group: each says where it is.
+				const FString Where = AnimSearch.IsEmpty() ? FString() : FString::Printf(TEXT("　· %s／%s"), *GroupLabel(A.Group), *CategoryLabel(A.Group, A.Category));
+				return SNew(STableRow<TSharedPtr<int32>>, Owner)[SNew(STextBlock).ColorAndOpacity(bCurrent ? FLinearColor::Yellow : FLinearColor::White).Text(FText::FromString(A.Name + Where))];
 			})
 			.OnMouseButtonClick_Lambda([this](TSharedPtr<int32> I) { if (I) PickAnim(*I); })
 		];
@@ -2352,6 +2421,8 @@ public:
 
 private:
 	int32 AnimKind = 0, AnimGroup = -1, AnimCategory = -1;
+	FString AnimSearch;
+	const FOKStudioAnim* AnimSyncedTo = nullptr;
 	TArray<TSharedPtr<int32>> AnimGroupOptions, AnimCategoryOptions, AnimOptions;
 
 	/** Studio IK of a character: pick an effector, enable its target (it starts where the limb is), move it. */

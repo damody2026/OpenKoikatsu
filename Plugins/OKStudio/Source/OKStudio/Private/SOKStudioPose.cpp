@@ -530,13 +530,32 @@ void SOKStudioPanel::LookPage(FOKSceneObject& O, bool bNeck)
 {
 	Label(bNeck ? TEXT("頸部") : TEXT("視線"));
 	const bool bFixed = bNeck ? O.Character.FixedNeck.Num() == 2 : O.Character.FixedEyes.Num() == 12;
-	TArray<FString> Options = { TEXT("照動畫"), TEXT("看鏡頭"), TEXT("注視點") };
-	if (bFixed) Options.Add(TEXT("固定"));
-	Choice(bNeck ? TEXT("脖子") : TEXT("眼睛"), Options, [bNeck](FOKSceneObject& X) { return int32(bNeck ? X.Character.NeckLook : X.Character.EyesLook); },
-		[this, bNeck](FOKSceneObject& X, int32 V) { (bNeck ? X.Character.NeckLook : X.Character.EyesLook) = EOKSceneLook(V); DeferRebuild(); });
+	const TArray<EOKSceneLook> Modes = LookModes(bFixed);
+	TArray<FString> Options;
+	for (EOKSceneLook M : Modes) Options.Add(LookModeName(M));
+	Choice(bNeck ? TEXT("脖子") : TEXT("眼睛"), Options, [bNeck, Modes](FOKSceneObject& X) { return Modes.IndexOfByKey(bNeck ? X.Character.NeckLook : X.Character.EyesLook); },
+		[this, bNeck, Modes](FOKSceneObject& X, int32 V) { if (Modes.IsValidIndex(V)) (bNeck ? X.Character.NeckLook : X.Character.EyesLook) = Modes[V]; DeferRebuild(); });
 	Label(TEXT("注視點（cm，角色空間；選「注視點」時可在畫面上拖動）"));
 	for (int32 Axis = 0; Axis < 3; ++Axis)
 		Float(FString(TEXT("XYZ")).Mid(Axis, 1), [Axis](FOKSceneObject& X) { return float(X.Character.LookPoint[Axis]); }, [Axis](FOKSceneObject& X, float V) { X.Character.LookPoint[Axis] = V; }, -1000.f, 1000.f, 1.f);
+	// HS2Studio6: take the view's position as the look point (and look there), or go back to following the view.
+	auto TakeView = [this, bNeck]
+	{
+		FOKSceneObject* X = Obj();
+		APlayerController* PC = ViewController(Game.Get());
+		const AKKPreviewActor* P = X && Game.IsValid() && Game->SceneActor ? Game->SceneActor->PreviewOf(X->Id) : nullptr;
+		if (!X || !PC || !PC->PlayerCameraManager || !P) return;
+		X->Character.LookPoint = P->GetActorTransform().InverseTransformPosition(PC->PlayerCameraManager->GetCameraLocation());
+		(bNeck ? X->Character.NeckLook : X->Character.EyesLook) = EOKSceneLook::Point;
+		Changed(); DeferRebuild();
+	};
+	auto BackToView = [this, bNeck] { if (FOKSceneObject* X = Obj()) { (bNeck ? X->Character.NeckLook : X->Character.EyesLook) = EOKSceneLook::Camera; Changed(); DeferRebuild(); } };
+	Props->AddSlot().AutoHeight().Padding(0.f, 3.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("取鏡頭位置")), TakeView, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("恢復看鏡頭")), BackToView, 0.f, 18.f, false, 10.f)]
+	];
 }
 
 void SOKStudioPanel::ExpressionPage(FOKSceneObject& O)
@@ -590,7 +609,8 @@ void SOKStudioPanel::HandPage(FOKSceneObject& O)
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("左→右")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.HandRight = X->Character.HandLeft; Changed(); } }, 0.f, 18.f, false, 10.f)]
-		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("右→左")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.HandLeft = X->Character.HandRight; Changed(); } }, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("右→左")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.HandLeft = X->Character.HandRight; Changed(); } }, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("復位")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.HandLeft = X->Character.HandRight = -1; Changed(); } }, 0.f, 18.f, false, 10.f)]
 	];
 }
 
