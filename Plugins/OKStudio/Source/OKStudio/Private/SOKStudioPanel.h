@@ -359,6 +359,9 @@ public:
 		AddCommand(TEXT("scene.import"), TEXT("匯入 KStudio"), [this](const FString& Arg) { if (Arg.IsEmpty()) { bSceneSaveMode = false; SceneFolder = KStudioFolder(); OpenFloat(TEXT("scenes")); return true; } return ImportKStudio(Arg); });
 		AddCommand(TEXT("scene.backup"), TEXT("立即備份"), [this](const FString&) { const FString F = Game->BackupNow(true); SetStatus(F.IsEmpty() ? FString(TEXT("備份失敗")) : TEXT("已備份 ") + F); return !F.IsEmpty(); });
 		Float_(TEXT("scene.backups"), TEXT("備份恢復"), TEXT("backups"));
+		Float_(TEXT("scene.recent"), TEXT("最近的場景"), TEXT("recent"));
+		Simple(TEXT("view.grid"), TEXT("視窗格線"), [this] { Game->bShowGrid = !Game->bShowGrid; });
+		Simple(TEXT("view.helpers"), TEXT("隱藏全部輔助"), [this] { Game->bHideHelpers = !Game->bHideHelpers; SetStatus(Game->bHideHelpers ? TEXT("輔助全部隱藏（再按一次顯示）") : TEXT("輔助顯示")); });
 		Float_(TEXT("scene.report"), TEXT("讀取報告"), TEXT("report"));
 		Float_(TEXT("scene.resources"), TEXT("資源檢查"), TEXT("resources"));
 		// Adding objects.
@@ -449,7 +452,7 @@ public:
 			Simple(FString::Printf(TEXT("view.load.%d"), N), FString::Printf(TEXT("讀視角 %d"), N), [this, N] { if (!Game->LoadBookmark(N)) SetStatus(FString::Printf(TEXT("視角 %d 還沒存"), N)); });
 		}
 		// Application.
-		Simple(TEXT("app.quit"), TEXT("離開"), [this] { GuardUnsaved([this] { Game->RequestStop(); }); });
+		Simple(TEXT("app.quit"), TEXT("返回標題"), [this] { GuardUnsaved([this] { Game->RequestStop(); }); });
 		Float_(TEXT("app.settings"), TEXT("設定"), TEXT("settings"));
 		Float_(TEXT("app.screenshot"), TEXT("截圖"), TEXT("shot"));
 		Float_(TEXT("app.quicksearch"), TEXT("快搜"), TEXT("quick"));
@@ -707,7 +710,7 @@ public:
 		case 3: return { { TEXT("新場景"), TEXT("scene.new"), nullptr }, { TEXT("開啟／儲存"), TEXT("scene.browser"), Win(TEXT("scenes")) }, { TEXT("另存新檔"), TEXT("scene.saveas"), nullptr },
 			{ TEXT("畫面設定"), TEXT("page.scene"), On(EPage::Scene) }, { TEXT("時間軸"), TEXT("toggle.timeline"), Win(TEXT("timeline")) }, { TEXT("截圖"), TEXT("app.screenshot"), Win(TEXT("shot")) },
 			{ TEXT("備份恢復"), TEXT("scene.backups"), Win(TEXT("backups")) }, { TEXT("資源檢查"), TEXT("scene.resources"), Win(TEXT("resources")) }, { TEXT("匯入 KStudio"), TEXT("scene.import"), nullptr },
-			{ TEXT("播放故事"), TEXT("app.story"), Win(TEXT("stories")) }, { TEXT("設定"), TEXT("app.settings"), Win(TEXT("settings")) }, { TEXT("離開"), TEXT("app.quit"), nullptr } };
+			{ TEXT("播放故事"), TEXT("app.story"), Win(TEXT("stories")) }, { TEXT("設定"), TEXT("app.settings"), Win(TEXT("settings")) }, { TEXT("最近場景"), TEXT("scene.recent"), Win(TEXT("recent")) }, { TEXT("返回標題"), TEXT("app.quit"), nullptr } };
 		default: return {};
 		}
 	}
@@ -1298,6 +1301,7 @@ public:
 	bool DeleteScene(const FString& Path);
 	bool RenameScene(const FString& Path, const FString& NewName);
 	TSharedRef<SWidget> BuildBackups();
+	TSharedRef<SWidget> BuildRecent();
 	TSharedRef<SWidget> BuildReport();
 	TSharedRef<SWidget> BuildResources();
 	TSharedRef<SWidget> BuildStories();
@@ -1847,7 +1851,9 @@ public:
 			Label(TEXT("相機"));
 			Float(TEXT("視角"), [](FOKSceneObject& X) { return X.Camera.Fov; }, [](FOKSceneObject& X, float V) { X.Camera.Fov = V; }, 5.f, 170.f, 1.f);
 			Float(TEXT("近面 cm（0 預設）"), [](FOKSceneObject& X) { return X.Camera.Near; }, [](FOKSceneObject& X, float V) { X.Camera.Near = FMath::Max(V, 0.f); }, 0.f, 500.f, 0.5f);
-			Float(TEXT("遠面 cm（只存檔）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
+			Float(TEXT("遠面 cm（正交時套用）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
+			Check(TEXT("正交"), [](FOKSceneObject& X) { return X.Camera.bOrtho; }, [](FOKSceneObject& X, bool V) { X.Camera.bOrtho = V; });
+			Float(TEXT("正交寬度 cm"), [](FOKSceneObject& X) { return X.Camera.OrthoWidth; }, [](FOKSceneObject& X, float V) { X.Camera.OrthoWidth = FMath::Max(V, 1.f); }, 1.f, 100000.f, 5.f);
 			Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SHorizontalBox)
@@ -2243,9 +2249,13 @@ public:
 		{
 			Float(TEXT("視野角度"), [](FOKSceneObject& X) { return X.Camera.Fov; }, [](FOKSceneObject& X, float V) { X.Camera.Fov = V; }, 5.f, 170.f, 1.f);
 			Float(TEXT("近面 cm"), [](FOKSceneObject& X) { return X.Camera.Near; }, [](FOKSceneObject& X, float V) { X.Camera.Near = FMath::Max(V, 0.f); }, 0.f, 500.f, 0.5f);
+			Check(TEXT("正交"), [](FOKSceneObject& X) { return X.Camera.bOrtho; }, [](FOKSceneObject& X, bool V) { X.Camera.bOrtho = V; });
+			Float(TEXT("正交寬度 cm"), [](FOKSceneObject& X) { return X.Camera.OrthoWidth; }, [](FOKSceneObject& X, float V) { X.Camera.OrthoWidth = FMath::Max(V, 1.f); }, 1.f, 100000.f, 5.f);
 		}
 		Label(TEXT("視角"));
 		Buttons({ { TEXT("聚焦所選"), TEXT("camera.focus") }, { TEXT("初始"), TEXT("camera.reset") }, { TEXT("前"), TEXT("camera.front") }, { TEXT("側"), TEXT("camera.side") }, { TEXT("上"), TEXT("camera.top") } });
+		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("視窗格線（地面 10 m）"), [this] { return Game.IsValid() && Game->bShowGrid; }, [this](bool) { RunCommand(TEXT("view.grid")); })];
+		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("隱藏全部輔助（把手、骨點、光源範圍）"), [this] { return Game.IsValid() && Game->bHideHelpers; }, [this](bool) { RunCommand(TEXT("view.helpers")); })];
 		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
 			[CheckBox(TEXT("自由飛行（按住右鍵，W A S D Q E 移動）"), [] { return FOKStudioSettings::Get().bFlyMode; }, [this](bool) { RunCommand(TEXT("camera.fly")); })];
 		Label(TEXT("視角書籤（Ctrl+數字存、數字讀；存在場景裡）"));

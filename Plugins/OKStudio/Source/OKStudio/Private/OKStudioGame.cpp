@@ -217,6 +217,15 @@ void UOKStudioViewCamera::GetCameraView(float DeltaTime, FMinimalViewInfo& Desir
 {
 	Super::GetCameraView(DeltaTime, DesiredView);
 	if (NearClip > 0.f) DesiredView.PerspectiveNearClipPlane = NearClip;
+	if (bOrtho)
+	{
+		// The ortho box is centred on the camera: things behind it would draw, so the near plane sits at the camera.
+		DesiredView.ProjectionMode = ECameraProjectionMode::Orthographic;
+		DesiredView.OrthoWidth = FMath::Max(OrthoViewWidth, 1.f);
+		DesiredView.OrthoNearClipPlane = FMath::Max(NearClip, 0.f);
+		DesiredView.OrthoFarClipPlane = FarClip > 0.f ? FarClip : UE_OLD_WORLD_MAX;
+		DesiredView.bAutoCalculateOrthoPlanes = false;
+	}
 }
 
 AOKStudioViewer::AOKStudioViewer(const FObjectInitializer& Initializer)
@@ -425,6 +434,7 @@ bool UOKStudioGame::Save(const FString& Path, FString& OutError)
 	}
 	else if (!Document->SaveToFile(Path, OutError)) return false;
 	File = Path;
+	FOKStudioSettings::Get().UseScene(Path);
 	bDirty = false;
 	return true;
 }
@@ -434,6 +444,7 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 	FString Note;
 	if (!FOKSceneCard::Open(Path, Document, OutError, &Note)) return false;
 	UE_LOG(LogTemp, Display, TEXT("OK studio: opened %s: %s"), *Path, *Note);
+	FOKStudioSettings::Get().UseScene(Path);
 	// A KStudio scene is imported, not edited in place: saving writes an OK scene card beside it.
 	File = FOKSceneCard::Kind(Path) == FOKSceneCard::EKind::KStudio ? FString() : Path;
 	ReleaseSceneResources();
@@ -585,6 +596,7 @@ namespace
 bool UOKStudioGame::GuideHandles(TArray<FGuideHandle>& Out, FVector2D& Center, double& CmPerPixel) const
 {
 	Out.Reset();
+	if (bHideHelpers) return false;
 	FGuideFrame F;
 	if (!MakeGuideFrame(*this, F)) return false;
 	Center = F.Center;
@@ -895,7 +907,14 @@ void UOKStudioGame::UpdateViewer()
 	}
 	UOKStudioViewCamera* Near = Cast<UOKStudioViewCamera>(ViewerCamera);
 	const FOKSceneObject* ActiveObject = Document ? Document->Find(Document->ActiveCamera) : nullptr;
-	if (Near) Near->NearClip = ActiveObject && ActiveObject->Kind == EOKSceneObjectKind::Camera ? ActiveObject->Camera.Near : 0.f;
+	const bool bSceneCamera = ActiveObject && ActiveObject->Kind == EOKSceneObjectKind::Camera;
+	if (Near)
+	{
+		Near->NearClip = bSceneCamera ? ActiveObject->Camera.Near : 0.f;
+		Near->bOrtho = bSceneCamera && ActiveObject->Camera.bOrtho;
+		Near->OrthoViewWidth = bSceneCamera ? ActiveObject->Camera.OrthoWidth : 400.f;
+		Near->FarClip = bSceneCamera ? ActiveObject->Camera.Far : 0.f;
+	}
 	if (const UCameraComponent* Active = SceneActor ? SceneActor->ActiveCamera() : nullptr)
 	{
 		Viewer->SetActorTransform(Active->GetComponentTransform());

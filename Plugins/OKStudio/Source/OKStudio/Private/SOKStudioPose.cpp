@@ -108,6 +108,29 @@ int32 SOKStudioView::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 		for (const FVector2D& V : Points) P.Add(FVector2f(V));
 		FSlateDrawElement::MakeLines(Out, L, Paint, P, ESlateDrawEffect::None, Color, true, Thickness);
 	};
+	if (Game->bHideHelpers) return Layer;
+	// The ground grid: 50 cm cells over 10 m on the scene's floor, each line in short pieces so lines that pass behind
+	// the view are cut instead of folding across the screen.
+	if (Game->bShowGrid && Game->SceneActor)
+	{
+		const FTransform Floor = Game->SceneActor->GetActorTransform();
+		for (int32 I = -10; I <= 10; ++I)
+			for (int32 Dir = 0; Dir < 2; ++Dir)
+			{
+				const FLinearColor C = I == 0 ? FLinearColor(1.f, 1.f, 1.f, .45f) : FLinearColor(.8f, .8f, .8f, .18f);
+				TArray<FVector2D> Run;
+				for (int32 S = 0; S <= 20; ++S)
+				{
+					const float A = I * 50.f, B = -500.f + S * 50.f;
+					const FVector P = Floor.TransformPosition(Dir == 0 ? FVector(A, B, 0.f) : FVector(B, A, 0.f));
+					FVector2D At;
+					if (ToScreen(Game.Get(), P, At)) { Run.Add(At); continue; }
+					if (Run.Num() > 1) Lines(Run, C, 1.f, Layer + 1);
+					Run.Reset();
+				}
+				if (Run.Num() > 1) Lines(Run, C, 1.f, Layer + 1);
+			}
+	}
 	// The selection's bounds (thin), so several selected objects show.
 	if (Game->Selection.Num() > 1)
 		for (int32 Id : Game->Selection)
@@ -230,7 +253,7 @@ bool SOKStudioPanel::IsPoseMode() const
 bool SOKStudioPanel::PosePoints(TArray<FPosePoint>& Out) const
 {
 	Out.Reset();
-	if (!IsPoseMode() || !Game->SceneActor) return false;
+	if (!IsPoseMode() || !Game->SceneActor || Game->bHideHelpers) return false;
 	const FOKSceneObject* O = Obj();
 	AKKPreviewActor* P = Game->SceneActor->PreviewOf(O->Id);
 	if (!P) return false;

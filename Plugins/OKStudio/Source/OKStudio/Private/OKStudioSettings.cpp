@@ -104,6 +104,16 @@ void FOKStudioSettings::UseRecent(const FString& Key)
 	SaveFavorites();
 }
 
+void FOKStudioSettings::UseScene(const FString& Path)
+{
+	if (Path.IsEmpty()) return;
+	const FString Full = FPaths::ConvertRelativePathToFull(Path);
+	RecentScenes.Remove(Full);
+	RecentScenes.Insert(Full, 0);
+	if (RecentScenes.Num() > 10) RecentScenes.SetNum(10);
+	SaveFavorites();
+}
+
 void FOKStudioSettings::UseColor(const FLinearColor& Color)
 {
 	RecentColors.RemoveAll([&Color](const FLinearColor& C) { return C.Equals(Color, 1e-3f); });
@@ -151,6 +161,7 @@ void FOKStudioSettings::Load()
 		if (J->TryGetStringArrayField(TEXT("favorites"), L)) Favorites.Append(L);
 		if (J->TryGetStringArrayField(TEXT("hidden"), L)) Hidden.Append(L);
 		J->TryGetStringArrayField(TEXT("recent"), Recent);
+		J->TryGetStringArrayField(TEXT("recent_scenes"), RecentScenes);
 	}
 }
 
@@ -183,6 +194,7 @@ void FOKStudioSettings::SaveFavorites() const
 	List(TEXT("favorites"), Favorites.Array());
 	List(TEXT("hidden"), Hidden.Array());
 	List(TEXT("recent"), Recent);
+	List(TEXT("recent_scenes"), RecentScenes);
 	FString Out;
 	FJsonSerializer::Serialize(J, TJsonWriterFactory<>::Create(&Out));
 	FFileHelper::SaveStringToFile(Out, *(Directory() / TEXT("favorites.json")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);

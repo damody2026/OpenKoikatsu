@@ -465,6 +465,13 @@ struct OKSTUDIO_API FOKSceneCamera
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float Far = 0.f;
 
+	/** Orthographic view (HS2Studio6 正交): OrthoWidth is how wide the view is (cm); there Near and Far both apply. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	bool bOrtho = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "1"))
+	float OrthoWidth = 400.f;
+
 	bool operator==(const FOKSceneCamera& O) const = default;
 };
 

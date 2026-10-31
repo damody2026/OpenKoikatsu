@@ -45,6 +45,9 @@ struct FOKStudioSettings
 	TSet<FString> Favorites, Hidden;
 	TArray<FString> Recent;
 	void UseRecent(const FString& Key);
+	/** Scenes opened or saved lately (newest first, at most 10; HS2Studio6 最近開啟). */
+	TArray<FString> RecentScenes;
+	void UseScene(const FString& Path);
 	/** Colours picked lately (newest first). */
 	TArray<FLinearColor> RecentColors;
 	void UseColor(const FLinearColor& Color);

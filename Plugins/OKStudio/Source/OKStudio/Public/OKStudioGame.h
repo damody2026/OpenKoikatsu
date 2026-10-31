@@ -23,6 +23,9 @@ class OKSTUDIO_API UOKStudioViewCamera : public UCameraComponent
 public:
 	/** Near clipping plane (cm); <= 0: the engine's. */
 	float NearClip = 0.f;
+	/** Orthographic view of the active scene camera (width cm; far plane cm, <= 0: far). */
+	bool bOrtho = false;
+	float OrthoViewWidth = 400.f, FarClip = 0.f;
 	virtual void GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView) override;
 };
 
@@ -121,6 +124,10 @@ public:
 	int32 GuideMode = 0;
 	/** The transform bar's 主軸 switch: false hides the guide (and its handles cannot be dragged). */
 	bool bShowGuide = true;
+	/** HS2Studio6 視窗格線: a 10 m ground grid (50 cm cells) on the scene's floor. */
+	bool bShowGrid = false;
+	/** 隱藏全部輔助: no gizmo, pose points, look point, light reach, selection boxes or grid (and the gizmo cannot be grabbed). */
+	bool bHideHelpers = false;
 
 	/** The studio panel (null before the viewport has one). */
 	SOKStudioPanel* GetPanel() const { return Panel.Get(); }

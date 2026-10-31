@@ -207,5 +207,29 @@ check(click("清空軌道").ok and #keys() == 0, "清空軌道 removes the track
 call("cmd", { id = "toggle.timeline" }); wait(10)
 click("清除 FK")
 
+-- U22: viewport helpers (camera page check boxes), an orthographic scene camera, the system menu's recent scenes.
+call("cmd", { id = "page.camera" }); wait(20)
+local function state() return call("state") end
+check(click("視窗格線（地面 10 m）").ok and state().grid == true, "視窗格線 on")
+check(click("視窗格線（地面 10 m）").ok and state().grid == false, "視窗格線 off")
+check(click("隱藏全部輔助（把手、骨點、光源範圍）").ok and state().hide_helpers == true, "隱藏全部輔助 on")
+check(click("隱藏全部輔助（把手、骨點、光源範圍）").ok and state().hide_helpers == false, "隱藏全部輔助 off")
+local cams0 = objects()
+call("cmd", { id = "add.camera" }); wait(20)
+local cam = nil
+for oid, o in pairs(objects()) do if not cams0[oid] and o.kind == "camera" then cam = o end end
+check(cam ~= nil, "add.camera adds a camera")
+if cam then
+  -- The camera page is still open (page.* toggles), the selection rebuilds it.
+  call("select", { ids = { cam.id } }); wait(20)
+  check(click("正交").ok and objects()[cam.id].ortho == true, "camera 正交 on")
+  check(click("正交").ok and objects()[cam.id].ortho == false, "camera 正交 off")
+  call("cmd", { id = "edit.delete" }); wait(20)
+end
+call("cmd", { id = "menu.system" }); wait(20)
+check(click("最近場景").ok, "system menu 最近場景 opens the window")
+call("cmd", { id = "window.close", arg = "recent" }); call("cmd", { id = "menu.system" }); wait(10)
+call("select", { ids = { id } })
+
 print(("BUTTONS %d/%d"):format(passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

@@ -91,6 +91,8 @@ namespace
 		for (int32 Id : G.Selection) Sel.Add(MakeShared<FJsonValueNumber>(Id));
 		O->SetArrayField(TEXT("selection"), Sel);
 		O->SetNumberField(TEXT("primary"), G.SelectedId);
+		O->SetBoolField(TEXT("grid"), G.bShowGrid);
+		O->SetBoolField(TEXT("hide_helpers"), G.bHideHelpers);
 		TArray<TSharedPtr<FJsonValue>> Objects;
 		for (const FOKSceneObject& X : G.Document->Objects)
 		{
@@ -101,6 +103,7 @@ namespace
 			J->SetStringField(TEXT("kind"), KindName(X.Kind));
 			J->SetBoolField(TEXT("visible"), X.bVisible);
 			J->SetBoolField(TEXT("locked"), X.bLocked);
+			if (X.Kind == EOKSceneObjectKind::Camera) { J->SetBoolField(TEXT("ortho"), X.Camera.bOrtho); J->SetNumberField(TEXT("ortho_width"), X.Camera.OrthoWidth); }
 			J->SetStringField(TEXT("attach_bone"), X.AttachBone);
 			J->SetArrayField(TEXT("location"), Vec(X.Transform.GetLocation()));
 			const FRotator R = X.Transform.Rotator();
@@ -564,7 +567,8 @@ namespace
 			bool bContains = false;
 			J->TryGetBoolField(TEXT("contains"), bContains);
 			if (Text.IsEmpty() || !FSlateApplication::IsInitialized()) return Result(false, TEXT("text required"));
-			TArray<TSharedRef<SButton>> Found;
+			// Buttons and check boxes (a check box's label is a text block inside it; clicking it toggles).
+			TArray<TSharedRef<SWidget>> Found;
 			TArray<FString> Labels;
 			TFunction<void(const TSharedRef<SWidget>&)> Walk = [&](const TSharedRef<SWidget>& W)
 			{
@@ -574,7 +578,7 @@ namespace
 					const FString T = StaticCastSharedRef<STextBlock>(W)->GetText().ToString();
 					if (bContains ? T.Contains(Text) : T == Text)
 						for (TSharedPtr<SWidget> P = W->GetParentWidget(); P; P = P->GetParentWidget())
-							if (P->GetType() == TEXT("SButton")) { Found.Add(StaticCastSharedRef<SButton>(P.ToSharedRef())); Labels.Add(T); break; }
+							if (P->GetType() == TEXT("SButton") || P->GetType() == TEXT("SCheckBox")) { Found.Add(P.ToSharedRef()); Labels.Add(T); break; }
 				}
 				FChildren* Children = W->GetChildren();
 				for (int32 I = 0; Children && I < Children->Num(); ++I) Walk(Children->GetChildAt(I));
@@ -582,7 +586,8 @@ namespace
 			for (const TSharedRef<SWindow>& Window : FSlateApplication::Get().GetInteractiveTopLevelWindows()) Walk(Window);
 			if (!Found.IsValidIndex(Index)) return Result(false, FString::Printf(TEXT("%d buttons match: %s"), Found.Num(), *FString::Join(Labels, TEXT(" | "))));
 			if (!Found[Index]->IsEnabled()) return Result(false, TEXT("the button is disabled"));
-			Found[Index]->SimulateClick();
+			if (Found[Index]->GetType() == TEXT("SCheckBox")) StaticCastSharedRef<SCheckBox>(Found[Index])->ToggleCheckedState();
+			else StaticCastSharedRef<SButton>(Found[Index])->SimulateClick();
 			TSharedRef<FJsonObject> O = Result(true);
 			O->SetNumberField(TEXT("matches"), Found.Num());
 			O->SetStringField(TEXT("clicked"), Labels[Index]);

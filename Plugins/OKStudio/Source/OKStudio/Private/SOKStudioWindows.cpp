@@ -85,6 +85,7 @@ void SOKStudioPanel::RegisterFloats()
 	AddFloat(TEXT("report"), TEXT("讀取報告"), FMargin(470.f, 60.f, 440.f, 320.f), [this] { return BuildReport(); });
 	AddFloat(TEXT("resources"), TEXT("資源檢查"), FMargin(470.f, 60.f, 440.f, 360.f), [this] { return BuildResources(); });
 	AddFloat(TEXT("backups"), TEXT("備份恢復"), FMargin(300.f, 60.f, 500.f, 400.f), [this] { return BuildBackups(); });
+	AddFloat(TEXT("recent"), TEXT("最近的場景"), FMargin(300.f, 60.f, 520.f, 380.f), [this] { return BuildRecent(); });
 	AddFloat(TEXT("stories"), TEXT("播放故事"), FMargin(300.f, 60.f, 420.f, 360.f), [this] { return BuildStories(); });
 	AddFloat(TEXT("dialog"), TEXT("確認"), FMargin(640.f, 380.f, 340.f, 120.f), [this] { return BuildDialog(); });
 }
@@ -713,6 +714,40 @@ TSharedRef<SWidget> SOKStudioPanel::BuildBackups()
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("每 %d 分鐘自動備份，保留 %d 份（設定可改）"), S.BackupMinutes, S.BackupKeep)), 10.f, TextHint())]
 			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("立即備份")), [this] { RunCommand(TEXT("scene.backup")); DeferFloat(TEXT("backups")); }, 80.f, 20.f)]
 		]
+		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[Box]]];
+}
+
+TSharedRef<SWidget> SOKStudioPanel::BuildRecent()
+{
+	// HS2Studio6's scene info: how many objects of each kind, then the scenes opened or saved lately.
+	int32 Counts[6] = {};
+	for (const FOKSceneObject& O : Game.IsValid() ? Game->Document->Objects : TArray<FOKSceneObject>()) ++Counts[FMath::Clamp(int32(O.Kind), 0, 5)];
+	int32 Keys = 0;
+	if (Game.IsValid()) for (const FOKSceneTrack& T : Game->Document->Tracks) Keys += T.Keys.Num();
+	const FString Stats = FString::Printf(TEXT("物件 %d：角色 %d、道具 %d、燈光 %d、相機 %d、特效 %d、資料夾 %d；時間軸 key %d"),
+		Game.IsValid() ? Game->Document->Objects.Num() : 0, Counts[int32(EOKSceneObjectKind::Character)], Counts[int32(EOKSceneObjectKind::Item)], Counts[int32(EOKSceneObjectKind::Light)],
+		Counts[int32(EOKSceneObjectKind::Camera)], Counts[int32(EOKSceneObjectKind::Effect)], Counts[int32(EOKSceneObjectKind::Folder)], Keys);
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+	for (const FString& F : FOKStudioSettings::Get().RecentScenes)
+	{
+		const bool bThere = FPaths::FileExists(F);
+		const FString Picture = FPaths::GetExtension(F).Equals(TEXT("png"), ESearchCase::IgnoreCase) ? F : FString();
+		Box->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(64.f).HeightOverride(36.f)[SNew(SImage).Image_Lambda([Picture] { const FSlateBrush* B = Picture.IsEmpty() ? nullptr : FOKStudioThumbnails::Get().File(Picture, 64); return B ? B : Brush(Input()); })]]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(6.f, 0.f).VAlign(VAlign_Center)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FPaths::GetBaseFilename(F) + (bThere ? TEXT("") : TEXT("（檔案不在了）"))), 11.f)]
+				+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FPaths::GetPath(F)), 9.f, TextHint())]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Button(FText::FromString(TEXT("開啟")), [this, F] { if (OpenScene(F, false)) CloseFloat(TEXT("recent")); }, 50.f, 20.f, false, 10.f, ButtonFill(), bThere)]
+		];
+	}
+	if (FOKStudioSettings::Get().RecentScenes.IsEmpty()) Box->AddSlot().AutoHeight()[OKStudioStyle::Label(FText::FromString(TEXT("還沒有開啟或儲存過場景。")), 10.f, TextHint())];
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)[OKStudioStyle::Label(FText::FromString(Stats), 10.f)]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[Box]]];
 }
 
