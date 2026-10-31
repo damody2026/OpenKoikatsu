@@ -1143,7 +1143,9 @@ pub(crate) unsafe extern "C" fn session_open(
         Ok(sess)
     });
     match run {
-        Ok(sess) => {
+        Ok(mut sess) => {
+            // Her belly bulge targets (belly_bulge.rs), on every way a body opens: original cards, OK cards, packs.
+            crate::belly_bulge::add(&mut sess);
             if out.is_null() {
                 write_err(err_buf, err_cap, "null out");
                 return 1;

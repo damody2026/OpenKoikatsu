@@ -174,6 +174,11 @@ private:
     // and the entrance stays along its length; the thrust along it is the clip's. His actor stays on her origin (the pair
     // player requires one origin): the offset is on the parts under his root.
     void AlignHim(float Delta);
+    // Where his tip is past the way into her (a thin girl, a clip made for a thicker one), her belly (or her back) swells
+    // there instead of letting it come through: the eight belly.bulge morphs made on her body (ok-extract belly_bulge.rs),
+    // front or back by the side his tip is on, the two heights nearest it blended. Tip null: he is not in her, all ease off.
+    void BulgeBelly(class AKKPreviewActor* Girl,const FVector* Tip,float Off,float Delta);
+    float Bulge[8]={0,0,0,0,0,0,0,0};int32 BulgePart=INDEX_NONE;float BulgeAt=-1.f;bool bBulgeLogged=false;TWeakObjectPtr<class AKKPreviewActor> BulgedHer;
     FVector HimOffset=FVector::ZeroVector,HimApplied=FVector::ZeroVector;FString AlignedKey;bool bAlignLogged=false;TWeakObjectPtr<class AKKPreviewActor> AlignedHim;
     // The taller one bends the knees instead of sinking through the floor or floating over it: he is lowered with his feet
     // held where they were (Studio IK foot targets); when he would have to rise, she is lowered the same way.

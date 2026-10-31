@@ -13,6 +13,7 @@ mod accessory_extract;
 mod editor_mods;
 mod clothing_rules;
 mod pregnancy;
+mod belly_bulge;
 mod card;
 mod face_create;
 mod face_create_source;
