@@ -106,6 +106,11 @@ for name in pairs(pose_files()) do if not had[name] then os.remove(poses .. "/" 
 
 -- U19: the tree's tools (群組／解散／鎖定／獨顯／錯開複製) on the character.
 local function objects() local t = {} for _, o in ipairs(call("state").objects or {}) do t[o.id] = o end return t end
+-- Opens a window by its command unless it is open already (the layout reopens what was open last time).
+local function open_window(cmd, window)
+  for _, w in ipairs((call("state").ui or {}).windows or {}) do if w == window then return end end
+  call("cmd", { id = cmd }); wait(30)
+end
 local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
 call("select", { ids = { id } }); wait(10)
 local parent0 = objects()[id].parent
@@ -239,7 +244,7 @@ local area = nil
 for oid, o in pairs(objects()) do if not lights0[oid] and o.kind == "light" then area = o end end
 check(area ~= nil and area.light_type == "area", "面光源 adds an area light")
 if area then call("select", { ids = { area.id } }); wait(20); call("cmd", { id = "edit.delete" }); wait(20) end
-call("cmd", { id = "app.screenshot" }); wait(30)
+open_window("app.screenshot", "shot")
 local ui = function() return call("state").ui or {} end
 local dir0 = ui().shot_directory or ""
 check(click("含前景框").ok and ui().shot_frame == false, "含前景框 off")
@@ -250,9 +255,52 @@ call("click", { text = "本次目錄", contains = true }); wait(20)
 check(ui().shot_directory == dir0, "本次目錄 off: back to the shot folder")
 call("cmd", { id = "window.close", arg = "shot" }); wait(10)
 call("cmd", { id = "scene.tab", arg = "7" }); wait(30)
-check(click("無").ok and call("state").background == "", "background 無 leaves no picture")
+local function thumb(name) local r = call("click", { text = name, tag = true }); wait(20); return r end
+check(thumb("bg_01.png").ok and call("state").background == "studio/bg/bg_01.png", "a background thumbnail puts that picture behind the scene")
+check(thumb("koi_studio_frame_01.png").ok and call("state").frame_picture == "studio/frame/koi_studio_frame_01.png", "a frame thumbnail lays that frame over the view")
+check(thumb("frame:none").ok and call("state").frame_picture == "", "frame 無 takes the frame off")
+check(thumb("bg:none").ok and call("state").background == "", "background 無 leaves no picture")
 call("cmd", { id = "page.scene" }); wait(10)
 call("select", { ids = { id } })
+
+-- U22: the ? help (hover shows, a click pins it in the 說明 window), the Material Editor window (renderer, material,
+-- properties of the selected item), the animation controller window and the catalogues' 定位當前.
+open_window("app.settings", "settings")
+check(click("?").ok and (call("state").ui or {}).help ~= "", "a settings ? pins its help")
+check(click("?").ok and (call("state").ui or {}).help == "", "the same ? again unpins it")
+call("cmd", { id = "window.close", arg = "settings" }); wait(10)
+local items0 = objects()
+call("cmd", { id = "add.item", arg = "2/12/681" })
+local item = nil
+for _ = 1, 60 do
+  for oid, o in pairs(objects()) do if not items0[oid] and o.kind == "item" then item = o end end
+  if item then break end
+  wait(30)
+end
+check(item ~= nil, "a catalogue item to edit")
+if item then
+  call("select", { ids = { item.id } }); wait(60)
+  check(click("材質").ok, "the tree's 材質 button opens the Material Editor")
+  local mui = {}
+  for _ = 1, 40 do wait(30); mui = call("state").ui or {}; if (mui.material_properties or 0) > 0 then break end end
+  check((mui.material_properties or 0) > 0 and (mui.material_name or "") ~= "", ("the editor lists the material %s and its %d properties"):format(tostring(mui.material_name), mui.material_properties or 0))
+  check(click("此材質全部預設").ok, "此材質全部預設 clicked")
+  call("cmd", { id = "window.close", arg = "material" }); wait(10)
+  call("cmd", { id = "page.items" }); wait(30)
+  check(click("定位當前道具").ok, "定位當前道具 clicked")
+  call("cmd", { id = "page.items" }); wait(10)
+  call("cmd", { id = "edit.delete" }); wait(20)
+end
+call("select", { ids = { id } }); wait(20)
+open_window("app.animcontrol", "animctl")
+local function speed() local o = objects()[id] return o and o.speed end
+check(click("播放").ok and speed() > 0, "動畫控制器 播放: the character plays")
+check(click("暫停").ok and speed() == 0, "動畫控制器 暫停: speed 0")
+check(click("播放").ok and speed() > 0, "動畫控制器 播放 again: the speed it had")
+call("cmd", { id = "page.anim" }); wait(30)
+check(click("定位當前", 1).ok or click("定位當前").ok, "動作 定位當前 clicked")
+call("cmd", { id = "page.anim" }); wait(10)
+call("cmd", { id = "window.close", arg = "animctl" }); wait(10)
 
 print(("BUTTONS %d/%d"):format(passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

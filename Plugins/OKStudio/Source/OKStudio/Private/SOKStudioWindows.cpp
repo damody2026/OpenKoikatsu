@@ -87,6 +87,14 @@ void SOKStudioPanel::RegisterFloats()
 	AddFloat(TEXT("backups"), TEXT("備份恢復"), FMargin(300.f, 60.f, 500.f, 400.f), [this] { return BuildBackups(); });
 	AddFloat(TEXT("recent"), TEXT("最近的場景"), FMargin(300.f, 60.f, 520.f, 380.f), [this] { return BuildRecent(); });
 	AddFloat(TEXT("stories"), TEXT("播放故事"), FMargin(300.f, 60.f, 420.f, 360.f), [this] { return BuildStories(); });
+	AddFloat(TEXT("material"), TEXT("材質編輯器"), FMargin(300.f, 60.f, 640.f, 420.f), [this] { return BuildMaterialEditor(); });
+	AddFloat(TEXT("animctl"), TEXT("動畫控制器"), FMargin(470.f, 400.f, 300.f, 150.f), [this] { return BuildAnimController(); });
+	AddFloat(TEXT("help"), TEXT("說明"), FMargin(640.f, 120.f, 300.f, 140.f), [this]
+	{
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)[OKStudioStyle::Label(FText::FromString(PinnedHelpTitle), 11.f)]
+			+ SVerticalBox::Slot().FillHeight(1.f)[SNew(STextBlock).Text(FText::FromString(PinnedHelp)).Font(OKStudioStyle::Font(10.f)).ColorAndOpacity(OKStudioStyle::Text()).AutoWrapText(true)];
+	});
 	AddFloat(TEXT("dialog"), TEXT("確認"), FMargin(640.f, 380.f, 340.f, 120.f), [this] { return BuildDialog(); });
 }
 
@@ -213,6 +221,13 @@ void SOKStudioPanel::TickUi(float DeltaTime)
 	if (!Game->GuideReadout.IsEmpty()) SetStatus(Game->GuideReadout);
 	// The colour window is bound to the object it was opened for.
 	if (IsFloatOpen(TEXT("color")) && ColorKey.StartsWith(TEXT("obj")) && FCString::Atoi(*ColorKey.Mid(3)) != Game->SelectedId) CloseFloat(TEXT("color"));
+	// The material editor follows the selection, and fills in once the item has built.
+	if (IsFloatOpen(TEXT("material")))
+	{
+		const AKKPreviewActor* Shown = Game->SceneActor ? Game->SceneActor->PreviewOf(Game->SelectedId) : nullptr;
+		const TPair<int32, int32> Now(Game->SelectedId, Shown ? Shown->Session.PartCount() : 0);
+		if (Now != MaterialShown) { if (Now.Key != MaterialShown.Key) MaterialPart = 0; MaterialShown = Now; DeferFloat(TEXT("material")); }
+	}
 	// The window title: the scene and a star while it has unsaved changes.
 	if (GEngine && GEngine->GameViewport)
 		if (TSharedPtr<SWindow> Window = GEngine->GameViewport->GetWindow())
@@ -751,6 +766,212 @@ TSharedRef<SWidget> SOKStudioPanel::BuildRecent()
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[Box]]];
 }
 
+TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
+{
+	// HS2Studio6's Material Editor: the selected item's renderers, the material of the one picked, and that material's
+	// shader properties (filtered by name). A change is a material edit of the item, saved with the scene; 預設 drops it.
+	FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Game->SelectedId) : nullptr;
+	AKKPreviewActor* Shown = O && O->Kind == EOKSceneObjectKind::Item && Game->SceneActor ? Game->SceneActor->PreviewOf(O->Id) : nullptr;
+	const int32 Parts = Shown ? Shown->Session.PartCount() : 0;
+	MaterialPropertiesShown = 0;
+	MaterialNameShown.Reset();
+	if (Parts <= 0) return OKStudioStyle::Label(FText::FromString(TEXT("選取一個已載入的道具，這裡會列出它的模型、材質與屬性。")), 10.f, TextHint());
+	MaterialPart = FMath::Clamp(MaterialPart, 0, Parts - 1);
+	const int32 ItemId = O->Id;
+	auto Column = [this](const FString& Title, const TSharedRef<SWidget>& Body)
+	{
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)[OKStudioStyle::Label(FText::FromString(Title), 10.f, TextHint())]
+			+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(2.f)[SNew(SScrollBox) + SScrollBox::Slot()[Body]]];
+	};
+	TSharedRef<SVerticalBox> Models = SNew(SVerticalBox);
+	for (int32 I = 0; I < Parts; ++I)
+	{
+		OkMeshView Mesh{};
+		const FString Name = Shown->Session.PartAt(I, Mesh) && Mesh.name && *Mesh.name ? FString(UTF8_TO_TCHAR(Mesh.name)) : FString::Printf(TEXT("部件 %d"), I);
+		Models->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)[Button(FText::FromString(Name), [this, I] { MaterialPart = I; RebuildFloat(TEXT("material")); }, 0.f, 18.f, MaterialPart == I, 10.f)];
+	}
+	// The picked renderer's source material (name, shader, values), as the card's bundle has it.
+	FString Material, Shader;
+	TArray<TPair<FString, FLinearColor>> Colors;
+	TArray<TPair<FString, float>> Numbers;
+	TArray<TPair<FString, FString>> Textures;
+	TSharedPtr<FJsonObject> Root;
+	const TSharedPtr<FJsonObject>* M = nullptr;
+	if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Shown->Session.MaterialMetadataJson(MaterialPart)), Root) && Root && Root->TryGetObjectField(TEXT("material"), M) && M && *M)
+	{
+		(*M)->TryGetStringField(TEXT("name"), Material);
+		(*M)->TryGetStringField(TEXT("shader"), Shader);
+		const TSharedPtr<FJsonObject>* Map = nullptr;
+		if ((*M)->TryGetObjectField(TEXT("colors"), Map) && Map && *Map)
+			for (const auto& P : (*Map)->Values)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* A = nullptr;
+				if (P.Value->TryGetArray(A) && A->Num() >= 4) Colors.Add({ FString(*P.Key), FLinearColor((*A)[0]->AsNumber(), (*A)[1]->AsNumber(), (*A)[2]->AsNumber(), (*A)[3]->AsNumber()) });
+			}
+		if ((*M)->TryGetObjectField(TEXT("floats"), Map) && Map && *Map)
+			for (const auto& P : (*Map)->Values) if (!FString(*P.Key).StartsWith(TEXT("_OK"))) Numbers.Add({ FString(*P.Key), float(P.Value->AsNumber()) });
+		const TArray<TSharedPtr<FJsonValue>>* Slots = nullptr;
+		if ((*M)->TryGetArrayField(TEXT("tex_slots"), Slots))
+			for (const TSharedPtr<FJsonValue>& S : *Slots)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+				if (S->TryGetArray(Pair) && Pair->Num() >= 2) Textures.Add({ (*Pair)[0]->AsString(), (*Pair)[1]->AsString() });
+			}
+	}
+	MaterialNameShown = Material;
+	MaterialPropertiesShown = Colors.Num() + Numbers.Num() + Textures.Num();
+	Colors.Sort([](const auto& A, const auto& B) { return A.Key < B.Key; });
+	Numbers.Sort([](const auto& A, const auto& B) { return A.Key < B.Key; });
+	TSharedRef<SVerticalBox> Materials = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()[Button(FText::FromString(Material.IsEmpty() ? TEXT("（無名材質）") : Material), [] {}, 0.f, 18.f, true, 10.f)]
+		+ SVerticalBox::Slot().AutoHeight().Padding(2.f)[OKStudioStyle::Label(FText::FromString(Shader), 9.f, TextHint())];
+	// The item's edit of this material's property (empty material: every material), or null.
+	auto EditOf = [this, ItemId, Material](const FString& Property) -> FOKSceneMaterialEdit*
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return nullptr;
+		for (FOKSceneMaterialEdit& E : X->Item.MaterialEdits)
+			if ((E.Kind == EOKSceneMaterialEditKind::Float || E.Kind == EOKSceneMaterialEditKind::Color) && E.Material == Material
+				&& (E.Property == Property || TEXT("_") + E.Property == Property)) return &E;
+		return nullptr;
+	};
+	auto Write = [this, ItemId, Material, EditOf](const FString& Property, EOKSceneMaterialEditKind Kind, const FLinearColor& Value)
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return;
+		FOKSceneMaterialEdit* E = EditOf(Property);
+		if (!E) { E = &X->Item.MaterialEdits.AddDefaulted_GetRef(); E->Material = Material; E->Property = Property; }
+		E->Kind = Kind;
+		E->Value = Value;
+		Changed();
+	};
+	auto Reset = [this, ItemId, Material](const FString& Property)
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return;
+		X->Item.MaterialEdits.RemoveAll([&](const FOKSceneMaterialEdit& E) { return E.Material == Material && (Property.IsEmpty() || E.Property == Property || TEXT("_") + E.Property == Property); });
+		Changed();
+		RebuildFloat(TEXT("material"));
+	};
+	auto Shows = [this](const FString& Property) { return MaterialFilter.IsEmpty() || Property.Contains(MaterialFilter); };
+	TSharedRef<SVerticalBox> Properties = SNew(SVerticalBox);
+	auto Line = [&Properties, this, EditOf, Reset](const FString& Property, const TSharedRef<SWidget>& Value)
+	{
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.42f).VAlign(VAlign_Center)
+				[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([EditOf, Property] { return FText::FromString((EditOf(Property) ? TEXT("● ") : TEXT("")) + Property); }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.58f)[SNew(SBox).HeightOverride(18.f)[Value]]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f, 0.f, 0.f)[Button(FText::FromString(TEXT("預設")), [Reset, Property] { Reset(Property); }, 34.f, 18.f, false, 9.f)]
+		];
+	};
+	for (const TPair<FString, FLinearColor>& C : Colors)
+	{
+		if (!Shows(C.Key)) continue;
+		const FString Property = C.Key;
+		const FLinearColor Source = C.Value;
+		Line(Property, Swatch(FString::Printf(TEXT("mat%d:%s:%s"), ItemId, *Material, *Property), Property,
+			[EditOf, Property, Source] { const FOKSceneMaterialEdit* E = EditOf(Property); return E ? E->Value : Source; },
+			[Write, Property](const FLinearColor& V) { Write(Property, EOKSceneMaterialEditKind::Color, V.A < 0.f ? FLinearColor(V.R, V.G, V.B, 1.f) : V); }));
+	}
+	for (const TPair<FString, float>& N : Numbers)
+	{
+		if (!Shows(N.Key)) continue;
+		const FString Property = N.Key;
+		const float Source = N.Value;
+		Line(Property, Spin([EditOf, Property, Source] { const FOKSceneMaterialEdit* E = EditOf(Property); return E ? E->Value.R : Source; },
+			[Write, Property](float V) { Write(Property, EOKSceneMaterialEditKind::Float, FLinearColor(V, 0.f, 0.f, 0.f)); }, -100.f, 100.f, 0.01f));
+	}
+	for (const TPair<FString, FString>& T : Textures)
+		if (Shows(T.Key))
+			Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(0.42f)[OKStudioStyle::Label(FText::FromString(T.Key), 10.f)]
+				+ SHorizontalBox::Slot().FillWidth(0.58f)[OKStudioStyle::Label(FText::FromString(T.Value.IsEmpty() ? TEXT("（無貼圖）") : T.Value), 9.f, TextHint())]
+			];
+	const TSharedRef<SVerticalBox> Right = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
+			[TextBox([this] { return MaterialFilter; }, [this](const FString& V) { MaterialFilter = V.TrimStartAndEnd(); RebuildFloat(TEXT("material")); }, TEXT("篩選屬性"))]
+		+ SVerticalBox::Slot().FillHeight(1.f)[Column(FString::Printf(TEXT("屬性（%d 色、%d 數值、%d 貼圖）"), Colors.Num(), Numbers.Num(), Textures.Num()), Properties)];
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().FillHeight(1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.28f).Padding(0.f, 0.f, 3.f, 0.f)[Column(FString::Printf(TEXT("模型（%d）"), Parts), Models)]
+			+ SHorizontalBox::Slot().FillWidth(0.22f).Padding(0.f, 0.f, 3.f, 0.f)[Column(TEXT("材質"), Materials)]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[Right]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("● 是改過的屬性；改動隨場景儲存。")), 9.f, TextHint())]
+			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("此材質全部預設")), [Reset] { Reset(FString()); }, 0.f, 20.f, false, 10.f)]
+		];
+}
+
+TSharedRef<SWidget> SOKStudioPanel::BuildAnimController()
+{
+	// HS2Studio6's animation controller: a window of its own for the selected character's motion, kept open when the
+	// motion list closes. Everything reads the selection live, so it follows whichever character is picked.
+	auto Character = [this]() -> FOKSceneObject* { FOKSceneObject* X = Obj(); return X && X->Kind == EOKSceneObjectKind::Character ? X : nullptr; };
+	auto Playing = [Character]() -> const FOKStudioAnim*
+	{
+		const FOKSceneObject* X = Character();
+		return X && X->Character.StudioAnimeNo >= 0 ? FOKStudioCatalog::Get().FindAnim(X->Character.StudioAnimeKind, X->Character.StudioAnimeGroup, X->Character.StudioAnimeCategory, X->Character.StudioAnimeNo) : nullptr;
+	};
+	// The next or previous converted motion of the same category (Studio's 動作變化).
+	auto Step = [this, Playing](int32 Dir)
+	{
+		const FOKStudioCatalog& C = FOKStudioCatalog::Get();
+		const FOKStudioAnim* Now = Playing();
+		if (!Now) return;
+		TArray<int32> Same;
+		for (int32 I = 0; I < C.Anims.Num(); ++I)
+			if (C.Anims[I].Kind == Now->Kind && C.Anims[I].Group == Now->Group && C.Anims[I].Category == Now->Category && !C.Anims[I].File.IsEmpty()) Same.Add(I);
+		const int32 At = Same.IndexOfByPredicate([&C, Now](int32 I) { return &C.Anims[I] == Now; });
+		if (At != INDEX_NONE && Same.Num() > 1) PickAnim(Same[(At + Dir + Same.Num()) % Same.Num()]);
+	};
+	auto Do = [this, Character](TFunction<void(FOKSceneCharacter&)> F) { if (FOKSceneObject* X = Character()) { F(X->Character); Changed(); } };
+	auto Line = [](const FString& Name, const TSharedRef<SWidget>& W)
+	{
+		return SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.3f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(Name), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.7f)[SNew(SBox).HeightOverride(18.f)[W]];
+	};
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
+			[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([Character, Playing]
+			{
+				const FOKSceneObject* X = Character();
+				const FOKStudioAnim* A = Playing();
+				return FText::FromString(!X ? FString(TEXT("請選取一個角色")) : FString::Printf(TEXT("%s：%s"), *X->Name, A ? *A->Name : TEXT("（沒有動作）")));
+			}), 11.f)]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)
+			[Line(TEXT("速度"), Spin([Character] { const FOKSceneObject* X = Character(); return X ? X->Character.Speed : 0.f; }, [Do](float V) { Do([V](FOKSceneCharacter& C) { C.Speed = FMath::Max(V, 0.f); }); }, 0.f, 4.f, 0.05f))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)
+			[Line(TEXT("時間 秒"), Spin([Character] { const FOKSceneObject* X = Character(); return X ? X->Character.Time : 0.f; }, [Do](float V) { Do([V](FOKSceneCharacter& C) { C.Time = FMath::Max(V, 0.f); C.Speed = 0.f; }); }, 0.f, 600.f, 0.01f))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("◀ 變化")), [Step] { Step(-1); }, 0.f, 20.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("變化 ▶")), [Step] { Step(1); }, 0.f, 20.f, false, 10.f)]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("播放")), [this, Do]
+				{ Do([this](FOKSceneCharacter& C) { if (C.Speed <= 0.f) C.Speed = AnimPausedSpeed > 0.f ? AnimPausedSpeed : 1.f; }); },
+				0.f, 20.f, TAttribute<bool>::CreateLambda([Character] { const FOKSceneObject* X = Character(); return X && X->Character.Speed > 0.f; }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("暫停")), [this, Do]
+				{ Do([this](FOKSceneCharacter& C) { if (C.Speed > 0.f) { AnimPausedSpeed = C.Speed; C.Speed = 0.f; } }); }, 0.f, 20.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("從頭")), [Do] { Do([](FOKSceneCharacter& C) { C.Time = 0.f; }); }, 0.f, 20.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("停止")), [this, Do] { Do([](FOKSceneCharacter& C) { C.StudioAnimeNo = -1; }); DeferRebuild(); }, 0.f, 20.f, false, 10.f)]
+		];
+}
+
 void SOKStudioPanel::ShowLoadReport()
 {
 	ReportLines = Game.IsValid() ? Game->LoadReport() : TArray<FString>();
@@ -874,7 +1095,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildShot()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)[Line(TEXT("高"), Spin([this] { return float(ShotH); }, [this](float V) { ShotH = FMath::Clamp(FMath::RoundToInt(V), 16, 8192); }, 16.f, 8192.f, 1.f))]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("透明背景（只有角色與道具）"), [this] { return bShotAlpha; }, [this](bool B) { bShotAlpha = B; })]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("不覆蓋既有檔案"), [this] { return bShotNoOverwrite; }, [this](bool B) { bShotNoOverwrite = B; })]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("含前景框"), [this] { return bShotFrame; }, [this](bool B) { bShotFrame = B; })]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(1.f)[CheckBox(TEXT("含前景框"), [this] { return bShotFrame; }, [this](bool B) { bShotFrame = B; })]
+			+ SHorizontalBox::Slot().AutoWidth()[HelpIcon(TEXT("含前景框"), TEXT("關掉時，拍攝的那一刻把前景框藏起來，截圖只有場景；畫面上的前景框不受影響。"))]]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)[CheckBox(TEXT("本次目錄（這次啟動的截圖放進同一個子資料夾）"), [this] { return bShotSessionFolder; }, [this](bool B) { bShotSessionFolder = B; })]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)[Line(TEXT("資料夾"), TextBox([this] { return ShotFolder; }, [this](const FString& V) { ShotFolder = V.TrimStartAndEnd().TrimQuotes(); }, TEXT("UserData/Studio/screenshot")))]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)[Line(TEXT("檔名樣式"), TextBox([this] { return ShotPattern; }, [this](const FString& V) { if (!V.TrimStartAndEnd().IsEmpty()) ShotPattern = V.TrimStartAndEnd(); }))]
@@ -1013,7 +1235,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 	const FString Find = SettingsSearch;
 	auto Show = [&Find](const FString& Name) { return Find.IsEmpty() || Name.Contains(Find); };
 	// One setting: name, its control, a "?" with what it does, and back to the default.
-	auto Setting = [&Body, &Show](const FString& Name, const FString& Help, const TSharedRef<SWidget>& Control, TFunction<void()> Default)
+	auto Setting = [this, &Body, &Show](const FString& Name, const FString& Help, const TSharedRef<SWidget>& Control, TFunction<void()> Default)
 	{
 		if (!Show(Name) && !Show(Help)) return;
 		Body->AddSlot().AutoHeight().Padding(0.f, 1.f)
@@ -1021,7 +1243,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(0.38f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(Name), 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(0.45f)[SNew(SBox).HeightOverride(18.f)[Control]]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[SNew(SBox).ToolTipText(FText::FromString(Help))[Button(FText::FromString(TEXT("?")), nullptr, 18.f, 18.f, false, 10.f, Input())]]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[HelpIcon(Name, Help)]
 			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("預設")), [Default] { if (Default) Default(); FOKStudioSettings::Get().Save(); }, 36.f, 18.f, false, 9.f)]
 		];
 	};

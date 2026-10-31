@@ -360,6 +360,9 @@ public:
 		AddCommand(TEXT("scene.backup"), TEXT("立即備份"), [this](const FString&) { const FString F = Game->BackupNow(true); SetStatus(F.IsEmpty() ? FString(TEXT("備份失敗")) : TEXT("已備份 ") + F); return !F.IsEmpty(); });
 		Float_(TEXT("scene.backups"), TEXT("備份恢復"), TEXT("backups"));
 		Float_(TEXT("scene.recent"), TEXT("最近的場景"), TEXT("recent"));
+		Float_(TEXT("app.material"), TEXT("材質編輯器"), TEXT("material"));
+		Float_(TEXT("app.animcontrol"), TEXT("動畫控制器"), TEXT("animctl"));
+		Simple(TEXT("anim.locate"), TEXT("動作定位當前"), [this] { LocateAnim(); });
 		Simple(TEXT("view.grid"), TEXT("視窗格線"), [this] { Game->bShowGrid = !Game->bShowGrid; });
 		Simple(TEXT("view.helpers"), TEXT("隱藏全部輔助"), [this] { Game->bHideHelpers = !Game->bHideHelpers; SetStatus(Game->bHideHelpers ? TEXT("輔助全部隱藏（再按一次顯示）") : TEXT("輔助顯示")); });
 		Float_(TEXT("scene.report"), TEXT("讀取報告"), TEXT("report"));
@@ -606,6 +609,10 @@ public:
 		J->SetBoolField(TEXT("ui_hidden"), bHideUi);
 		J->SetBoolField(TEXT("shot_frame"), bShotFrame);
 		J->SetStringField(TEXT("shot_directory"), ShotDirectory());
+		J->SetNumberField(TEXT("material_part"), MaterialPart);
+		J->SetNumberField(TEXT("material_properties"), MaterialPropertiesShown);
+		J->SetStringField(TEXT("material_name"), MaterialNameShown);
+		J->SetStringField(TEXT("help"), IsFloatOpen(TEXT("help")) ? PinnedHelpTitle : FString());
 		J->SetNumberField(TEXT("rows"), Rows.Num());
 		TArray<TSharedPtr<FJsonValue>> Sel, Open;
 		if (Game.IsValid()) for (int32 Id : Game->Selection) Sel.Add(MakeShared<FJsonValueNumber>(Id));
@@ -1173,7 +1180,7 @@ public:
 	{
 		struct FTool { const TCHAR* Label; const TCHAR* Command; };
 		static const FTool Items[] = { { TEXT("群組"), TEXT("edit.group") }, { TEXT("解散"), TEXT("edit.ungroup") }, { TEXT("錯開複製"), TEXT("edit.duplicateoffset") },
-			{ TEXT("獨顯"), TEXT("edit.solo") }, { TEXT("鎖定"), TEXT("edit.lock") }, { TEXT("設父"), TEXT("edit.parent") }, { TEXT("拷變換"), TEXT("transform.copy") }, { TEXT("貼變換"), TEXT("transform.paste") } };
+			{ TEXT("獨顯"), TEXT("edit.solo") }, { TEXT("鎖定"), TEXT("edit.lock") }, { TEXT("設父"), TEXT("edit.parent") }, { TEXT("拷變換"), TEXT("transform.copy") }, { TEXT("貼變換"), TEXT("transform.paste") }, { TEXT("材質"), TEXT("app.material") } };
 		TSharedRef<SWrapBox> Box = SNew(SWrapBox).PreferredSize(234.f).InnerSlotPadding(FVector2D(1.f, 1.f));
 		for (const FTool& T : Items)
 		{
@@ -1337,6 +1344,16 @@ public:
 	/** Shader properties an item's materials have (for the material edit drop-down). */
 	TArray<FString> MaterialProperties(int32 Id) const;
 	TMap<int32, TSharedRef<TArray<TSharedPtr<FString>>>> MaterialPropertyOptions;
+	/** HS2Studio6's Material Editor window: renderer, material, filterable properties of the selected item. */
+	TSharedRef<SWidget> BuildMaterialEditor();
+	int32 MaterialPart = 0;
+	FString MaterialFilter;
+	TPair<int32, int32> MaterialShown = { -2, 0 }; // selection and its part count the window shows
+	/** HS2Studio6's animation controller window (speed, time, motion variation, play/pause/stop). */
+	TSharedRef<SWidget> BuildAnimController();
+	float AnimPausedSpeed = 1.f;
+	int32 MaterialPropertiesShown = 0;
+	FString MaterialNameShown;
 
 	// --- Settings (U9). ---
 	int32 SettingsTab = 0;
@@ -1551,12 +1568,43 @@ public:
 	/** A row: name on the left (40 %), the control on the right. */
 	void Row(const FString& Name, const TSharedRef<SWidget>& Control, float NameShare = 0.4f)
 	{
-		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
-		[
-			SNew(SHorizontalBox)
+		const FString* Help = RowHelp().Find(Name);
+		TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(NameShare).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(Name), 10.f)]
-			+ SHorizontalBox::Slot().FillWidth(1.f - NameShare)[SNew(SBox).HeightOverride(18.f)[Control]]
-		];
+			+ SHorizontalBox::Slot().FillWidth(1.f - NameShare)[SNew(SBox).HeightOverride(18.f)[Control]];
+		if (Help) Line->AddSlot().AutoWidth().Padding(2.f, 0.f, 0.f, 0.f)[HelpIcon(Name, *Help)];
+		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Line];
+	}
+	/** HS2Studio6's "?": the help shows while hovered, a click pins it in the 說明 window (another click unpins). */
+	TSharedRef<SWidget> HelpIcon(const FString& Title, const FString& Help)
+	{
+		return SNew(SBox).ToolTipText(FText::FromString(Help))
+			[OKStudioStyle::Button(FText::FromString(TEXT("?")), [this, Title, Help]
+			{
+				if (IsFloatOpen(TEXT("help")) && PinnedHelp == Help) { CloseFloat(TEXT("help")); return; }
+				PinnedHelpTitle = Title; PinnedHelp = Help;
+				if (IsFloatOpen(TEXT("help"))) DeferFloat(TEXT("help")); else OpenFloat(TEXT("help"));
+			}, 18.f, 18.f, TAttribute<bool>::CreateLambda([this, Help] { return IsFloatOpen(TEXT("help")) && PinnedHelp == Help; }), 10.f, OKStudioStyle::Input())];
+	}
+	FString PinnedHelpTitle, PinnedHelp;
+	/** What the less obvious property rows do (Row adds a "?" for these names). */
+	static const TMap<FString, FString>& RowHelp()
+	{
+		static const TMap<FString, FString> Help = {
+			{ TEXT("種類"), TEXT("方向光從一個方向照整個場景；點光從一點照向四周；聚光是錐形；面光是一塊發光的矩形，光線較柔和。") },
+			{ TEXT("寬 cm"), TEXT("面光發光矩形的寬度（公分）。") },
+			{ TEXT("高 cm"), TEXT("面光發光矩形的高度（公分）。") },
+			{ TEXT("範圍 cm"), TEXT("點光、聚光、面光照得到的距離；視窗裡的線框就是這個範圍。") },
+			{ TEXT("聚光角"), TEXT("聚光燈錐形的張角（度）。") },
+			{ TEXT("作用對象"), TEXT("「只照角色與道具」時地圖不受這盞燈影響。") },
+			{ TEXT("正交寬度 cm"), TEXT("正交相機看得到的橫向寬度（公分），等於正交時的縮放。") },
+			{ TEXT("透明度"), TEXT("整個道具的透明度；只有原作可透明的道具有這項。") },
+			{ TEXT("描邊寬度"), TEXT("卡通描邊的粗細倍率，0 是不描邊。") },
+			{ TEXT("背景圖"), TEXT("填滿畫面放在場景後面的 PNG；可填基礎庫相對路徑（studio/bg/...）或檔案路徑。下方縮圖點一下即套用。") },
+			{ TEXT("前景框"), TEXT("蓋在整個畫面上的含透明 PNG；截圖窗的「含前景框」決定截圖要不要拍進去。") },
+			{ TEXT("背景色"), TEXT("沒有背景圖時場景後面的純色；預設照原作清成黑色。") },
+		};
+		return Help;
 	}
 	/** Number box in the theme: drag to change, click to type. Dragging counts as one undo step. */
 	TSharedRef<SWidget> Spin(TFunction<float()> Get, TFunction<void(float)> Set, float Min, float Max, float Delta)
@@ -1748,6 +1796,7 @@ public:
 				// Material Editor style edits: material (empty: every material), shader property, and a colour (#RRGGBB or
 				// #RRGGBBAA, sRGB) or a number; imported textures, texture scale/offset, shaders and renderer switches are
 				// shown and can be deleted. Changing them rebuilds the item.
+				Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[OKStudioStyle::Button(FText::FromString(Tip(TEXT("材質編輯器…"), TEXT("app.material"))), Cmd(TEXT("app.material")), 0.f, 20.f)];
 				Label(TEXT("材質編輯（材質名空白＝全部；值 #RRGGBB 是顏色，數字是數值）"));
 				for (int32 Index = 0; Index < O->Item.MaterialEdits.Num(); ++Index)
 				{
@@ -2114,6 +2163,14 @@ public:
 		using namespace OKStudioStyle;
 		const FOKStudioCatalog& C = FOKStudioCatalog::Get();
 		if (!C.bLoaded) { Label(C.Error); return; }
+		// 定位當前: the selected item's group and category, its row scrolled into view.
+		Props->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
+		[OKStudioStyle::Button(FText::FromString(TEXT("定位當前道具")), [this]
+		{
+			const FOKSceneObject* X = Obj();
+			if (!X || X->Kind != EOKSceneObjectKind::Item || X->Item.No < 0) { SetStatus(TEXT("請先選取一個目錄道具")); return; }
+			BrowseGroup = X->Item.Group; BrowseCategory = X->Item.Category; ItemSearch.Reset(); bItemLocate = true; DeferRebuild();
+		}, 0.f, 18.f, false, 10.f)];
 		Props->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
 		[
 			SNew(SBox).HeightOverride(18.f)
@@ -2167,7 +2224,7 @@ public:
 		[
 			SNew(SBorder).BorderImage(Brush(ListArea())).Padding(1.f)
 			[
-				SNew(SListView<TSharedPtr<int32>>).ListItemsSource(&ItemOptions).SelectionMode(ESelectionMode::None)
+				SAssignNew(ItemCatalogList, SListView<TSharedPtr<int32>>).ListItemsSource(&ItemOptions).SelectionMode(ESelectionMode::None)
 				.OnGenerateRow_Lambda([this](TSharedPtr<int32> V, const TSharedRef<STableViewBase>& Owner)
 				{
 					const FOKStudioCatalogItem& I = FOKStudioCatalog::Get().Items[*V];
@@ -2225,6 +2282,16 @@ public:
 			];
 		else Props->AddSlot().AutoHeight()[Items];
 		Label(FString::Printf(TEXT("%d 個道具；左鍵加入、中鍵加為子物件"), ItemOptions.Num()));
+		if (bItemLocate && ItemCatalogList)
+		{
+			bItemLocate = false;
+			if (const FOKSceneObject* X = Obj())
+				for (const TSharedPtr<int32>& V : ItemOptions)
+				{
+					const FOKStudioCatalogItem& I = C.Items[*V];
+					if (I.Group == X->Item.Group && I.Category == X->Item.Category && I.No == X->Item.No) { ItemCatalogList->RequestScrollIntoView(V); break; }
+				}
+		}
 	}
 
 	/** Light catalogue: add a directional, point, spot or area light. */
@@ -2293,7 +2360,7 @@ public:
 			];
 		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[Marks];
 		Label(TEXT("截圖"));
-		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(Tip(TEXT("截圖…"), TEXT("app.screenshot"))), Cmd(TEXT("app.screenshot")), 0.f, 22.f)];
+		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[OKStudioStyle::Button(FText::FromString(Tip(TEXT("截圖…"), TEXT("app.screenshot"))), Cmd(TEXT("app.screenshot")), 0.f, 22.f)];
 	}
 
 	/** KK Studio pose files (UserData/Studio/pose): load one, or save the selected character's FK. */
@@ -2440,6 +2507,12 @@ private:
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("H 動作")), [this] { AnimKind = 1; DeferRebuild(); }, 0.f, 18.f, AnimKind == 1, 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("停止動畫")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.StudioAnimeNo = -1; Changed(); DeferRebuild(); } }, 0.f, 18.f, false, 10.f)]
 		];
+		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("定位當前")), [this] { LocateAnim(); }, 0.f, 18.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("動畫控制器")), [this] { RunCommand(TEXT("app.animcontrol")); }, 0.f, 18.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("animctl")); }), 10.f)]
+		];
 		{
 			TSharedRef<SHorizontalBox> Tabs = SNew(SHorizontalBox);
 			const TCHAR* SexNames[4] = { TEXT("全部"), TEXT("女"), TEXT("男"), TEXT("共用") };
@@ -2470,7 +2543,7 @@ private:
 		}
 		Props->AddSlot().AutoHeight().MaxHeight(220.f).Padding(0.f, 2.f)
 		[
-			SNew(SListView<TSharedPtr<int32>>).ListItemsSource(&AnimOptions).SelectionMode(ESelectionMode::Single)
+			SAssignNew(AnimList, SListView<TSharedPtr<int32>>).ListItemsSource(&AnimOptions).SelectionMode(ESelectionMode::Single)
 			.OnGenerateRow_Lambda([this, GroupLabel, CategoryLabel](TSharedPtr<int32> I, const TSharedRef<STableViewBase>& Owner)
 			{
 				const FOKStudioAnim& A = FOKStudioCatalog::Get().Anims[*I];
@@ -2482,6 +2555,13 @@ private:
 			})
 			.OnMouseButtonClick_Lambda([this](TSharedPtr<int32> I) { if (I) PickAnim(*I); })
 		];
+		// 定位當前: the playing motion scrolled into view, picked in the list.
+		if (bAnimLocate && AnimList && Current)
+		{
+			bAnimLocate = false;
+			for (const TSharedPtr<int32>& I : AnimOptions)
+				if (&C.Anims[*I] == Current) { AnimList->RequestScrollIntoView(I); AnimList->SetSelection(I, ESelectInfo::Direct); break; }
+		}
 	}
 
 public:
@@ -2506,6 +2586,19 @@ private:
 	/** The pose page's place in the Studio pose files (-1: none loaded by stepping). */
 	int32 PoseStep = -1;
 	const FOKStudioAnim* AnimSyncedTo = nullptr;
+	TSharedPtr<SListView<TSharedPtr<int32>>> AnimList;
+	bool bAnimLocate = false;
+	/** 定位當前: the motion list shows the selected character's playing motion (its kind, group and category, no search). */
+	void LocateAnim()
+	{
+		const FOKSceneObject* X = Obj();
+		const FOKStudioAnim* A = X && X->Kind == EOKSceneObjectKind::Character && X->Character.StudioAnimeNo >= 0
+			? FOKStudioCatalog::Get().FindAnim(X->Character.StudioAnimeKind, X->Character.StudioAnimeGroup, X->Character.StudioAnimeCategory, X->Character.StudioAnimeNo) : nullptr;
+		if (!A) { SetStatus(TEXT("所選角色沒有播放動作")); return; }
+		AnimKind = A->Kind; AnimGroup = A->Group; AnimCategory = A->Category; AnimSearch.Reset(); AnimSex = -1;
+		bAnimLocate = true;
+		if (Page != EPage::Anim) SetPage(EPage::Anim); else DeferRebuild();
+	}
 	TArray<TSharedPtr<int32>> AnimGroupOptions, AnimCategoryOptions, AnimOptions;
 
 	/** Studio IK of a character: pick an effector, enable its target (it starts where the limb is), move it. */
@@ -2764,6 +2857,8 @@ private:
 	}
 
 	int32 BrowseGroup = -1;
+	TSharedPtr<SListView<TSharedPtr<int32>>> ItemCatalogList;
+	bool bItemLocate = false;
 	int32 BrowseCategory = -1;
 	TArray<TSharedPtr<int32>> GroupOptions, CategoryOptions, ItemOptions, MapOptions, SkyOptions, SunOptions;
 

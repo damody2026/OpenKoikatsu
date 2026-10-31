@@ -719,6 +719,13 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 - U21：時間軸 FK 改成每根骨骼各自一條軌（`SampleTrackFk`：找 Time 前後最近、含這根骨骼的 key 內插，只出現在部分 key 的骨骼也會平順地動）；FK 頁加「骨骼打 key」「骨骼刪 key」（只動目前骨骼，沒有 key 的時間點新增一個只含這根骨骼的 key，其餘值取該時間點的軌道值），時間軸窗加「清空軌道」。骨骼搜尋沿用 FK 頁的搜尋框。
 - U22（部分）：相機物件加「正交」與「正交寬度」（`FOKSceneCamera::bOrtho`／`OrthoWidth`；用這台相機時 `UOKStudioViewCamera` 改成正交投影，遠面在正交時套用，透視時 Unreal 沒有遠裁面，仍只存檔）；相機頁加「視窗格線」（場景地面 10 m、50 cm 一格，線段分段投影，穿到鏡頭後方的部分截掉）與「隱藏全部輔助」（把手、骨點、注視點、光源範圍、選取框、格線都不畫，把手與骨點也點不到）；系統選單加「最近場景」浮窗（上方是場景統計：各類物件數與時間軸 key 數；下方是最近開啟或儲存的 10 個場景，`favorites.json` 的 `recent_scenes`），「離開」改名「返回標題」（行為本來就是回到啟動工作室的模式）。控制通道的 `click` 也能按勾選框。截圖 `F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\u22_ortho_grid.png`。還沒做：面光源、背景圖瀏覽與套用、材質編輯器三欄窗、`?` 說明圖示、截圖窗的前景框與本次目錄。
 - U22（第二批）：光源加「面光」類型（`EOKSceneLightType::Area`，`URectLightComponent`，寬／高 cm 預設 100；和點光、聚光一樣只照地圖與 Standard 部件，卡通角色與道具仍只吃一盞方向光），添加光源頁加「面光源」四種，視窗裡畫出發光矩形與朝向；畫面設定「背景／前景」分頁加「背景圖一覽」「前景框一覽」縮圖格（基礎庫 `studio/bg`、`studio/frame` 與 `UserData/Studio/bg`、`frame`，點一下立即套用，綠框標出目前的，「無」拿掉）；截圖窗加「含前景框」（關掉時拍攝期間把前景框藏起來）與「本次目錄」（這次啟動的截圖放進 `session_<日期時間>` 子資料夾，「開資料夾」也開那裡）。控制通道 `state` 多回報燈光 `light_type`、`background`、`frame_picture`，`ui` 多回報 `shot_frame`、`shot_directory`。還沒做：材質編輯器三欄窗、`?` 說明圖示。
+- U22（第三批）與 U18／U19 剩餘：
+  - 材質編輯器浮窗（`app.material`；樹工具列「材質」、道具屬性頁「材質編輯器…」）：左欄是所選道具的模型（renderer），中欄是它的來源材質與 shader，右欄是那個材質的全部顏色、數值與貼圖槽（值取自卡片 bundle 的材質，可篩選屬性名）。改值寫成道具的材質編輯（隨場景儲存，名稱前標 ●），每列「預設」拿掉該筆，底部「此材質全部預設」。浮窗跟著選取與道具載入完成自動更新。
+  - `?` 說明：共用的 `HelpIcon`，懸停顯示、點一下固定在「說明」浮窗（再點一次收起）；設定窗每列、屬性列（`RowHelp` 表：燈光種類、範圍、聚光角、作用對象、面光寬高、正交寬度、透明度、描邊寬度、背景圖、前景框、背景色）與截圖窗「含前景框」都有。
+  - 動畫控制器浮窗（`app.animcontrol`，動畫頁「動畫控制器」）：所選角色的動作名、速度、時間、◀ 變化／變化 ▶（同分類的上一個／下一個動作）、播放（回到暫停前的速度）、暫停、從頭、停止；即時讀選取，關掉動作清單也留著。輔助 1／2 與循環還沒有對應資料，沒做。
+  - 定位當前：動畫頁「定位當前」（`anim.locate`，切到正在播的動作的種類／分組／分類並捲到它）、添加道具頁「定位當前道具」（切到所選道具的大／中分類並捲到它）。
+  - 控制通道：`click` 加 `"tag": true`，比對控件的 `FTagMetaData`（縮圖與「無」掛 `bg:none`／`frame:none`／檔名 tag）；`state` 的角色多 `speed`、`anime_no`，`ui` 多 `material_part`、`material_properties`、`material_name`、`help`。
+  - 驗證：`check_ok_studio_buttons.lua` 86/86（新增縮圖點選套用背景與前景框、兩個「無」、設定 `?` 固定與收起、樹「材質」開材質編輯器並列出 m_koi_stu_desk00_01 的 46 個屬性、此材質全部預設、定位當前道具、控制器播放／暫停／播放、動作定位當前）；UiSelfTest 46/46；`verify_ok_studio.lua` 6/6。截圖 `F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\u22_material_editor.png`。
 - 驗證：新增 `Tools/check_ok_studio_buttons.lua`，經控制通道新的 `click` 操作（`{"text","index","contains"}`，找畫面上文字相符的 `STextBlock`，對它所在的 `SButton` 呼叫 `SimulateClick`，跑的就是按鈕自己的處理）逐一按下 U16～U21 新加的按鈕，再用 `bones`／`state`／`keys` 讀回結果。實測 57/57（加上 U22 後 65/65，第二批後 72/72）；`OKStudio.UiSelfTest` 46/46；`verify_ok_studio.lua` 6/6；`cargo test studio_ik --include-ignored` 通過。
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 

@@ -15,6 +15,7 @@
 #include "Engine/Texture.h"
 #include "EngineUtils.h"
 #include "Engine/GameViewportClient.h"
+#include "Types/ISlateMetaData.h"
 
 namespace
 {
@@ -106,6 +107,7 @@ namespace
 			J->SetBoolField(TEXT("visible"), X.bVisible);
 			J->SetBoolField(TEXT("locked"), X.bLocked);
 			if (X.Kind == EOKSceneObjectKind::Camera) { J->SetBoolField(TEXT("ortho"), X.Camera.bOrtho); J->SetNumberField(TEXT("ortho_width"), X.Camera.OrthoWidth); }
+			if (X.Kind == EOKSceneObjectKind::Character) { J->SetNumberField(TEXT("speed"), X.Character.Speed); J->SetNumberField(TEXT("anime_no"), X.Character.StudioAnimeNo); }
 			if (X.Kind == EOKSceneObjectKind::Light)
 			{
 				static const TCHAR* LightTypes[] = { TEXT("directional"), TEXT("point"), TEXT("spot"), TEXT("area") };
@@ -564,7 +566,8 @@ namespace
 		// Saved/OKStudio/mcp_ui/<name>.png, showing what the mode looks like afterwards.
 		// Clicks a shown button by its text, as a person would ({"text": "全裸", "index": 0}; "contains": true matches part of
 		// the text): the button's own click handler runs, so a test exercises the UI and not a shortcut around it. The
-		// matches (in window order, top to bottom) are listed when "index" is out of range.
+		// matches (in window order, top to bottom) are listed when "index" is out of range. "tag": true matches the widget's
+		// tag (FTagMetaData) instead, for picture buttons (thumbnails) that show no text.
 		if (Op == TEXT("click"))
 		{
 			FString Text;
@@ -573,6 +576,8 @@ namespace
 			J->TryGetNumberField(TEXT("index"), Index);
 			bool bContains = false;
 			J->TryGetBoolField(TEXT("contains"), bContains);
+			bool bTag = false; // match the widget's tag instead (picture buttons have no text)
+			J->TryGetBoolField(TEXT("tag"), bTag);
 			if (Text.IsEmpty() || !FSlateApplication::IsInitialized()) return Result(false, TEXT("text required"));
 			// Buttons and check boxes (a check box's label is a text block inside it; clicking it toggles).
 			TArray<TSharedRef<SWidget>> Found;
@@ -580,7 +585,28 @@ namespace
 			TFunction<void(const TSharedRef<SWidget>&)> Walk = [&](const TSharedRef<SWidget>& W)
 			{
 				if (!W->GetVisibility().IsVisible()) return;
-				if (W->GetType() == TEXT("STextBlock"))
+				if (bTag)
+				{
+					const TSharedPtr<FTagMetaData> Tag = W->GetMetaData<FTagMetaData>();
+					const FString T = Tag.IsValid() ? Tag->Tag.ToString() : FString();
+					if (!T.IsEmpty() && (bContains ? T.Contains(Text) : T == Text))
+					{
+						// The button is the widget itself, inside it (a tag on the box round it) or round it.
+						TSharedPtr<SWidget> Hit;
+						TFunction<void(const TSharedRef<SWidget>&)> Down = [&](const TSharedRef<SWidget>& C)
+						{
+							if (Hit) return;
+							if (C->GetType() == TEXT("SButton") || C->GetType() == TEXT("SCheckBox")) { Hit = C; return; }
+							FChildren* Ch = C->GetChildren();
+							for (int32 I = 0; Ch && I < Ch->Num(); ++I) Down(Ch->GetChildAt(I));
+						};
+						Down(W);
+						for (TSharedPtr<SWidget> P = W->GetParentWidget(); !Hit && P; P = P->GetParentWidget())
+							if (P->GetType() == TEXT("SButton") || P->GetType() == TEXT("SCheckBox")) Hit = P;
+						if (Hit) { Found.Add(Hit.ToSharedRef()); Labels.Add(T); }
+					}
+				}
+				else if (W->GetType() == TEXT("STextBlock"))
 				{
 					const FString T = StaticCastSharedRef<STextBlock>(W)->GetText().ToString();
 					if (bContains ? T.Contains(Text) : T == Text)

@@ -745,14 +745,14 @@ void SOKStudioPanel::SceneSettingsPage()
 				for (const FString& N : Names) Pictures.Add({ Root / N, bLibrary ? FString(TEXT("studio/")) + Folder + TEXT("/") + N : Root / N });
 			}
 			TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
-			Grid->AddSlot().Padding(1.f)[Button(FText::FromString(TEXT("無")), [this, Field] { (Game->Document->Post.*Field).Reset(); Changed(); DeferRebuild(); }, 48.f, 27.f,
-				TAttribute<bool>::CreateLambda([this, Field] { return Game.IsValid() && (Game->Document->Post.*Field).IsEmpty(); }), 10.f)];
+			Grid->AddSlot().Padding(1.f)[Tagged(Kind == 0 ? TEXT("bg:none") : TEXT("frame:none"), Button(FText::FromString(TEXT("無")), [this, Field] { (Game->Document->Post.*Field).Reset(); Changed(); DeferRebuild(); }, 48.f, 27.f,
+				TAttribute<bool>::CreateLambda([this, Field] { return Game.IsValid() && (Game->Document->Post.*Field).IsEmpty(); }), 10.f))];
 			for (const TPair<FString, FString>& P : Pictures)
 			{
 				const FString File = P.Key, Value = P.Value;
 				Grid->AddSlot().Padding(1.f)
 				[
-					SNew(SBox).WidthOverride(48.f).HeightOverride(27.f).ToolTipText(FText::FromString(FPaths::GetCleanFilename(File)))
+					SNew(SBox).WidthOverride(48.f).HeightOverride(27.f).ToolTipText(FText::FromString(FPaths::GetCleanFilename(File))).AddMetaData<FTagMetaData>(FName(FPaths::GetCleanFilename(File)))
 					[
 						OKStudioStyle::Fill(TAttribute<bool>::CreateLambda([this, Field, Value] { return Game.IsValid() && Game->Document->Post.*Field == Value; }), Input(),
 							// The 2 px rim shows green round the picture shown now.
