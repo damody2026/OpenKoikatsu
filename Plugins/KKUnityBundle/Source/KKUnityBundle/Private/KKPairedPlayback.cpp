@@ -62,6 +62,7 @@ bool AKKPairedPlayback::Advance(float Delta,FString& Error)
 	// A frame solved in the background (ok.Anim.AsyncPair) is shown first: nothing below may read the sessions while
 	// the worker writes them.
 	if(bSolvePending){SyncAsync();if(!bSolveOk){Error=TEXT("OK pair frame: ")+OkReport;return false;}}
+	OnSessionsIdle.Broadcast();
     const bool Reactions[2]={FemaleActor->Session.IsBodyReactionPlaying(),MaleActor->Session.IsBodyReactionPlaying()};
     const bool BodyUpdate=Reactions[0]||Reactions[1]||FemaleActor->bBodyReactionPoseDirty||MaleActor->bBodyReactionPoseDirty;
 	if(bPaused&&!BodyUpdate&&!FemaleActor->bShapeDirty&&!MaleActor->bShapeDirty&&!FemaleActor->bHeadLookFollowCamera&&!FemaleActor->bHeadLookPoseDirty&&!MaleActor->bHeadLookFollowCamera&&!MaleActor->bHeadLookPoseDirty){for(auto* PreviewRole:{FemaleActor.Get(),MaleActor.Get()}){PreviewRole->BeginFaceDisplayUpdate();PreviewRole->AdvanceEyeLook(Delta);PreviewRole->AdvanceFaceAnimation(Delta);PreviewRole->AdvanceSpeech();PreviewRole->EndFaceDisplayUpdate();}return true;}

@@ -179,11 +179,15 @@ private:
     // Where his glans comes out of her skin (a thin girl, a clip made for a thicker one), her skin swells there instead of
     // letting it come through: of the belly.bulge morphs made on her body (ok-extract belly_bulge.rs, a grid over her pubic
     // mound, groins, belly and back), the one that moves that skin most, out by how far he is past it. Her session tells
-    // (BellyBulgePast), read only while no pair solve writes it. Tip null: he is not in her, all ease off.
+    // (BellyBulgePast). Tip null: he is not in her, all ease off.
     void BulgeBelly(class AKKPreviewActor* Girl,const FVector* Tip,float Off,float Delta);
+    // His glans and how far it is out of her skin, read from both sessions when the pair playback says they are idle
+    // (AKKPairedPlayback::OnSessionsIdle); without a playback, AlignHim and BulgeBelly read them themselves.
+    void ReadPairSessions();void ReadBulge(class AKKPreviewActor* Girl,const FVector& Tip);
+    TWeakObjectPtr<class AKKPairedPlayback> ReadingPlayback;FDelegateHandle ReadingHandle;
     TMap<FName,float> Bulge;int32 BulgePart=INDEX_NONE;FName BulgeTarget;float BulgePast=0.f,BulgeMoves=0.f;bool bBulgeLogged=false;TWeakObjectPtr<class AKKPreviewActor> BulgedHer;
     // His glans from his penis root, from his session (the end of his penis mesh; J_dan109 draws in as he goes in): kept
-    // between reads, which wait for the pair solve.
+    // between reads.
     FVector GlansFromRoot=FVector::ZeroVector;bool bGlans=false;
     FVector HimOffset=FVector::ZeroVector,HimApplied=FVector::ZeroVector;FString AlignedKey;bool bAlignLogged=false;TWeakObjectPtr<class AKKPreviewActor> AlignedHim;
     // The taller one bends the knees instead of sinking through the floor or floating over it: he is lowered with his feet

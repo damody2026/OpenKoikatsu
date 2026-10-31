@@ -21,6 +21,9 @@ public:
 	bool IsPaused() const {return bPaused;}
 	// A worker is writing both sessions now (ok.Anim.AsyncPair): read neither until it is done.
 	bool IsSolving() const {return bSolvePending&&!PendingSolve.IsCompleted();}
+	// Each tick, once the frame solved in the background is on screen and before the next solve is launched: the one moment
+	// a game-thread reader is sure both sessions are idle and match what is shown (between ticks a solve nearly always runs).
+	FSimpleMulticastDelegate OnSessionsIdle;
 	bool SetSpeed(float Value);
 	float GetSpeed() const {return Speed;}
 	bool bMeasureAdvance=false;

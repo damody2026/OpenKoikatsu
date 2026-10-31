@@ -922,15 +922,11 @@ void UOKHScenePanel::BulgeBelly(AKKPreviewActor* Girl,const FVector* Tip,float O
             if(Girl->GetPartMorphNames(Part).ContainsByPredicate([](const FName& N){return N.ToString().StartsWith(TEXT("belly.bulge."));})){BulgePart=Part;break;}
         UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge morphs %s"),BulgePart!=INDEX_NONE?*FString::Printf(TEXT("on part %d"),BulgePart):TEXT("missing (her body has none)"));}
     if(BulgePart==INDEX_NONE)return;
-    // Where his tip is against her skin now: her session, read only while no pair solve writes it on a worker (reading it
-    // then crashed the game), otherwise the last answer, a frame old.
-    const AKKPairedPlayback* Playback=Gallery?Gallery->PairedPlayback.Get():nullptr;FVector Kokan;float M[16];
+    // Where his tip is against her skin now: read when the pair playback has the sessions idle (ReadPairSessions); with
+    // none, here.
+    FVector Kokan;
     if(!Tip)BulgeTarget=NAME_None;
-    else if((!IsValid(Playback)||!Playback->IsSolving())&&HBone(Girl,TEXT("J_Kokan"),Kokan)&&(Girl->Session.BoneWorldMatrix(TEXT("cf_J_Kokan"),M)||Girl->Session.BoneWorldMatrix(TEXT("cf_j_kokan"),M))){
-        const FTransform& Body=Girl->GetActorTransform();float Past=0.f,Near=0.f,Moves=0.f;FName Target;
-        const FVector Here=AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(*Tip))-AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(Kokan));
-        if(Girl->Session.BellyBulgePast(FVector(M[3],M[7],M[11])+Here,Past,Near,Target,Moves)){BulgeTarget=Target;BulgePast=Past*100.f;BulgeMoves=Moves*100.f;}
-        else BulgeTarget=NAME_None;}
+    else if(!IsValid(Gallery?Gallery->PairedPlayback.Get():nullptr))ReadBulge(Girl,*Tip);
     // Once his tip is past her skin (inside, the margin swelled her where he does not show), out by how far and 2.5 cm
     // more (his glans is round, the skin beside the one measured moves less). A swell that hardly moves that skin (the
     // end of its reach) would only bloat her elsewhere.
@@ -945,9 +941,29 @@ void UOKHScenePanel::BulgeBelly(AKKPreviewActor* Girl,const FVector* Tip,float O
             if(!bBulgeLogged&&B>1.f){bBulgeLogged=true;UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge %s, his tip %.1f cm out of her skin (%.1f off the way in)"),*Name.ToString(),BulgePast,Off);}}
         if(B==0.f)Bulge.Remove(Name);}
 }
+void UOKHScenePanel::ReadBulge(AKKPreviewActor* Girl,const FVector& Tip){
+    FVector Kokan;float M[16];
+    if(!HBone(Girl,TEXT("J_Kokan"),Kokan)||!(Girl->Session.BoneWorldMatrix(TEXT("cf_J_Kokan"),M)||Girl->Session.BoneWorldMatrix(TEXT("cf_j_kokan"),M)))return;
+    const FTransform& Body=Girl->GetActorTransform();float Past=0.f,Near=0.f,Moves=0.f;FName Target;
+    const FVector Here=AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(Tip))-AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(Kokan));
+    if(Girl->Session.BellyBulgePast(FVector(M[3],M[7],M[11])+Here,Past,Near,Target,Moves)){BulgeTarget=Target;BulgePast=Past*100.f;BulgeMoves=Moves*100.f;}
+    else BulgeTarget=NAME_None;
+}
+void UOKHScenePanel::ReadPairSessions(){
+    // Both sessions are idle and show this frame (AKKPairedPlayback::OnSessionsIdle). Reading them at any other time while
+    // the pair plays meant either a crash (the solve was writing them) or values several frames old: a tick almost never
+    // finds the background solve finished, and the swell missed his glans coming out.
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;FVector P0,Glans;
+    if(!IsValid(Girl)||!IsValid(Him)||AlignedHim!=Him||!HBone(Him,TEXT("J_dan100_00"),P0)||!Him->Session.PenisTip(Glans))return;
+    GlansFromRoot=Him->GetActorTransform().TransformPosition(AKKPreviewActor::UnityToActorLocal(Glans))+HimApplied-P0;bGlans=true;
+    if(BulgedHer==Girl&&BulgePart!=INDEX_NONE)ReadBulge(Girl,P0+GlansFromRoot);
+}
 void UOKHScenePanel::AlignHim(float Delta){
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
     if(!IsValid(Girl)||!IsValid(Him))return;
+    if(AKKPairedPlayback* Playback=Gallery->PairedPlayback.Get();Playback!=ReadingPlayback.Get()){
+        if(AKKPairedPlayback* Was=ReadingPlayback.Get())Was->OnSessionsIdle.Remove(ReadingHandle);
+        ReadingPlayback=Playback;ReadingHandle=IsValid(Playback)?Playback->OnSessionsIdle.AddUObject(this,&UOKHScenePanel::ReadPairSessions):FDelegateHandle();}
     if(AlignedHim!=Him){AlignedHim=Him;HimApplied=FVector::ZeroVector;bHisIk=false;bGlans=false;} // a new him has his parts where they were made
     if(AlignedHer!=Girl){AlignedHer=Girl;HerApplied=FVector::ZeroVector;bHerIk=false;}
     const FString Key=FString::Printf(TEXT("%d|%d"),Mode,ActivePose);
@@ -977,11 +993,10 @@ void UOKHScenePanel::AlignHim(float Delta){
         if(Len>2.f){
             const FVector D=E-P0;const float Along=float(D|Axis);const FVector Fix=D-Axis*Along; // onto the line of the penis
             AlignOff=float(Fix.Size());AlignAt=100.f*Along/Len;AlignLen=Len;
-            // His glans: the end of his penis mesh, from his session while no pair solve writes it (then where it was from his
-            // root). Not J_dan109: the dan bones draw in as he goes in (17.8 cm at her entrance, 5 to 9 in a loop) while his
-            // penis is drawn whole, so that bone is mid-shaft then and everything measured at it came out short.
-            {const AKKPairedPlayback* Playback=Gallery->PairedPlayback.Get();FVector Glans;
-             if((!IsValid(Playback)||!Playback->IsSolving())&&Him->Session.PenisTip(Glans)){
+            // His glans: the end of his penis mesh, from his session (ReadPairSessions while the pair plays, kept from his
+            // root between reads). Not J_dan109: the dan bones draw in as he goes in (17.8 cm at her entrance, 5 to 9 in a
+            // loop) while his penis is drawn whole, so that bone is mid-shaft then and everything measured at it came out short.
+            {FVector Glans;if(!IsValid(Gallery->PairedPlayback.Get())&&Him->Session.PenisTip(Glans)){
                  GlansFromRoot=Him->GetActorTransform().TransformPosition(AKKPreviewActor::UnityToActorLocal(Glans))+HimApplied-P0;bGlans=true;}}
             const FVector Tip=bGlans?P0+GlansFromRoot:P1;
             // How far his tip is off the line into her (her entrance to her lower spine): along it, he runs inside her; well off
