@@ -192,6 +192,11 @@ public:
 	bool IkEffectorPosition(int32 Effector,FVector& OutUnity) const;
 	// Last head-look check in degrees: face vs its limited goal, goal vs the target. False when not looking.
 	bool HeadLookError(float& Residual,float& Excess) const;
+	// The end of his penis mesh now, skeleton space (Unity metres).
+	bool PenisTip(FVector& OutUnity) const;
+	// How far a point (skeleton space, Unity metres) is outside her skin now, unswollen (metres; negative inside), how far
+	// the skin vertex that says so is, and the belly.bulge swell that moves it most with how far it does at weight 100.
+	bool BellyBulgePast(const FVector& UnityTip,float& OutPast,float& OutNear,FName& OutTarget,float& OutMoves) const;
 	bool StaticInteractionFrame(float Delta);
 	bool Skin();
 	TArray<float> ShapeBody() const;

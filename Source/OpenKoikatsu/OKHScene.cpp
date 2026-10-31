@@ -917,33 +917,37 @@ void UOKHScenePanel::RestoreAlign(){
     if(BulgedHer==Girl&&IsValid(Girl)&&BulgePart!=INDEX_NONE){BulgeBelly(Girl,nullptr,0.f,1e3f);}
 }
 void UOKHScenePanel::BulgeBelly(AKKPreviewActor* Girl,const FVector* Tip,float Off,float Delta){
-    static const TCHAR* Names[8]={TEXT("belly.bulge.f0"),TEXT("belly.bulge.f1"),TEXT("belly.bulge.f2"),TEXT("belly.bulge.f3"),TEXT("belly.bulge.b0"),TEXT("belly.bulge.b1"),TEXT("belly.bulge.b2"),TEXT("belly.bulge.b3")};
-    if(BulgedHer!=Girl){BulgedHer=Girl;BulgePart=INDEX_NONE;bBulgeLogged=false;for(float& B:Bulge)B=0.f;
-        for(int32 Part=0;IsValid(Girl)&&Part<Girl->Session.PartCount();++Part)if(Girl->GetPartMorphNames(Part).Contains(FName(Names[0]))){BulgePart=Part;break;}
+    if(BulgedHer!=Girl){BulgedHer=Girl;BulgePart=INDEX_NONE;bBulgeLogged=false;Bulge.Reset();BulgeTarget=NAME_None;
+        for(int32 Part=0;IsValid(Girl)&&Part<Girl->Session.PartCount();++Part)
+            if(Girl->GetPartMorphNames(Part).ContainsByPredicate([](const FName& N){return N.ToString().StartsWith(TEXT("belly.bulge."));})){BulgePart=Part;break;}
         UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge morphs %s"),BulgePart!=INDEX_NONE?*FString::Printf(TEXT("on part %d"),BulgePart):TEXT("missing (her body has none)"));}
     if(BulgePart==INDEX_NONE)return;
-    float Want[8]={0,0,0,0,0,0,0,0};BulgeAt=-1.f;
-    FVector Kokan,Ana,Top;
-    if(Tip&&HBone(Girl,TEXT("J_Kokan"),Kokan)&&HBone(Girl,TEXT("J_Ana"),Ana)&&HBone(Girl,TEXT("j_spine02"),Top)){
-        // Along her: crotch to upper spine (the morphs' heights are fractions of it); her front: anus to entrance, across that.
-        const FVector Up=Top-Kokan;const float L2=float(Up.SizeSquared());
-        FVector Front=Kokan-Ana;Front-=Up*(float(Front|Up)/FMath::Max(L2,1.f));
-        if(L2>1.f&&Front.Normalize()){
-            const float T=float((*Tip-Kokan)|Up)/L2;const bool bBack=float((*Tip-(Kokan+Up*T))|Front)<0.f;
-            // Full at 7 cm off the way in (the swell's middle is BULGE_M 10 cm out; where his tip is, off its middle, less):
-            // what covered his glans in the original's thinnest girl, 三月七 pressed from behind (R11).
-            const float Amount=FMath::Clamp((Off-1.f)/6.f,0.f,1.f)*100.f;
-            const float K=FMath::Clamp(T/.8f*4.f-.5f,0.f,3.f);const int32 K0=FMath::FloorToInt32(K),K1=FMath::Min(K0+1,3);const float F=K-K0;
-            BulgeAt=(bBack?-K:K);Want[(bBack?4:0)+K0]+=Amount*(1.f-F);Want[(bBack?4:0)+K1]+=Amount*F;}}
-    // Eased (a thrust swings it): fast in, a little slower out.
-    for(int32 I=0;I<8;++I){const float Was=Bulge[I];Bulge[I]=FMath::FInterpTo(Bulge[I],Want[I],Delta,Want[I]>Bulge[I]?14.f:8.f);if(Want[I]==0.f&&Bulge[I]<.5f)Bulge[I]=0.f;
-        if(FMath::Abs(Bulge[I]-Was)>.05f||(Bulge[I]==0.f&&Was!=0.f)){Girl->SetPartMorphWeight(BulgePart,FName(Names[I]),Bulge[I]);
-            if(!bBulgeLogged&&Bulge[I]>1.f){bBulgeLogged=true;UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge %s at tip %.1f cm"),Names[I],Off);}}}
+    // Where his tip is against her skin now: her session, read only while no pair solve writes it on a worker (reading it
+    // then crashed the game), otherwise the last answer, a frame old.
+    const AKKPairedPlayback* Playback=Gallery?Gallery->PairedPlayback.Get():nullptr;FVector Kokan;float M[16];
+    if(!Tip)BulgeTarget=NAME_None;
+    else if((!IsValid(Playback)||!Playback->IsSolving())&&HBone(Girl,TEXT("J_Kokan"),Kokan)&&(Girl->Session.BoneWorldMatrix(TEXT("cf_J_Kokan"),M)||Girl->Session.BoneWorldMatrix(TEXT("cf_j_kokan"),M))){
+        const FTransform& Body=Girl->GetActorTransform();float Past=0.f,Near=0.f,Moves=0.f;FName Target;
+        const FVector Here=AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(*Tip))-AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(Kokan));
+        if(Girl->Session.BellyBulgePast(FVector(M[3],M[7],M[11])+Here,Past,Near,Target,Moves)){BulgeTarget=Target;BulgePast=Past*100.f;BulgeMoves=Moves*100.f;}
+        else BulgeTarget=NAME_None;}
+    // Out by how far his tip is past her skin and 2.5 cm more (his glans is round, the skin beside the one measured
+    // moves less). A swell that hardly moves that skin (the end of its reach) would only bloat her elsewhere.
+    TMap<FName,float> Want;
+    // Within 6 cm of her entrance his glans is in it, not through her: the nearest skin there is her labia.
+    if(Tip&&!BulgeTarget.IsNone()&&BulgeMoves>2.f&&!(HBone(Girl,TEXT("J_Kokan"),Kokan)&&FVector::Dist(*Tip,Kokan)<6.))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*100.f);
+    TArray<FName> Names;Bulge.GetKeys(Names);for(const auto& W:Want)Names.AddUnique(W.Key);
+    // Eased: fast in, slow out, so it holds near its deepest through a thrust (read between solves, it lagged the tip).
+    for(const FName& Name:Names){float& B=Bulge.FindOrAdd(Name);const float Was=B,To=Want.FindRef(Name);
+        B=FMath::FInterpTo(B,To,Delta,To>B?25.f:2.5f);if(To==0.f&&B<.5f)B=0.f;
+        if(FMath::Abs(B-Was)>.05f||(B==0.f&&Was!=0.f)){Girl->SetPartMorphWeight(BulgePart,Name,B);
+            if(!bBulgeLogged&&B>1.f){bBulgeLogged=true;UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge %s, his tip %.1f cm out of her skin (%.1f off the way in)"),*Name.ToString(),BulgePast,Off);}}
+        if(B==0.f)Bulge.Remove(Name);}
 }
 void UOKHScenePanel::AlignHim(float Delta){
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
     if(!IsValid(Girl)||!IsValid(Him))return;
-    if(AlignedHim!=Him){AlignedHim=Him;HimApplied=FVector::ZeroVector;bHisIk=false;} // a new him has his parts where they were made
+    if(AlignedHim!=Him){AlignedHim=Him;HimApplied=FVector::ZeroVector;bHisIk=false;bGlans=false;} // a new him has his parts where they were made
     if(AlignedHer!=Girl){AlignedHer=Girl;HerApplied=FVector::ZeroVector;bHerIk=false;}
     const FString Key=FString::Printf(TEXT("%d|%d"),Mode,ActivePose);
     // A new pose places them on one origin again: start from no offset, no held feet.
@@ -972,9 +976,16 @@ void UOKHScenePanel::AlignHim(float Delta){
         if(Len>2.f){
             const FVector D=E-P0;const float Along=float(D|Axis);const FVector Fix=D-Axis*Along; // onto the line of the penis
             AlignOff=float(Fix.Size());AlignAt=100.f*Along/Len;AlignLen=Len;
+            // His glans: the end of his penis mesh, from his session while no pair solve writes it (then where it was from his
+            // root). Not J_dan109: the dan bones draw in as he goes in (17.8 cm at her entrance, 5 to 9 in a loop) while his
+            // penis is drawn whole, so that bone is mid-shaft then and everything measured at it came out short.
+            {const AKKPairedPlayback* Playback=Gallery->PairedPlayback.Get();FVector Glans;
+             if((!IsValid(Playback)||!Playback->IsSolving())&&Him->Session.PenisTip(Glans)){
+                 GlansFromRoot=Him->GetActorTransform().TransformPosition(AKKPreviewActor::UnityToActorLocal(Glans))+HimApplied-P0;bGlans=true;}}
+            const FVector Tip=bGlans?P0+GlansFromRoot:P1;
             // How far his tip is off the line into her (her entrance to her lower spine): along it, he runs inside her; well off
             // it, his penis comes out through her belly or her bottom (the angle of the clip, not the place).
-            {FVector Spine;if(HBone(Girl,TEXT("j_spine01"),Spine)){const FVector Seg=Spine-E;const float L2=float(Seg.SizeSquared());const float T=L2>1.f?FMath::Clamp(float((P1-E)|Seg)/L2,0.f,1.f):0.f;AlignTip=float((P1-(E+Seg*T)).Size());BulgeBelly(Girl,&P1,AlignTip,Delta);bBulged=true;}}
+            {FVector Spine;if(HBone(Girl,TEXT("j_spine01"),Spine)){const FVector Seg=Spine-E;const float L2=float(Seg.SizeSquared());const float T=L2>1.f?FMath::Clamp(float((Tip-E)|Seg)/L2,0.f,1.f):0.f;AlignTip=float((Tip-(E+Seg*T)).Size());BulgeBelly(Girl,&Tip,AlignTip,Delta);bBulged=true;}}
             {FVector FL,FR;float Foot=1e9f;if(HBone(Him,TEXT("j_foot_L"),FL))Foot=float(FL.Z);if(HBone(Him,TEXT("j_foot_R"),FR))Foot=FMath::Min(Foot,float(FR.Z));AlignFoot=Foot-float(Girl->GetActorLocation().Z);}
             AtMin=FMath::Min(AtMin,AlignAt);AtMax=FMath::Max(AtMax,AlignAt);AtWindow+=Delta;
             {const float Floor=float(Girl->GetActorLocation().Z);AKKPreviewActor* Who[2]={Him,Girl};
@@ -1143,7 +1154,7 @@ void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit
 TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     auto O=MakeShared<FJsonObject>();
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
-    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("tip"),AlignTip);{float Most=0.f;for(float B:Bulge)Most=FMath::Max(Most,B);A->SetNumberField(TEXT("bulge"),Most);A->SetNumberField(TEXT("bulge_at"),BulgeAt);}A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
+    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("tip"),AlignTip);{float Most=0.f;for(const auto& B:Bulge)Most=FMath::Max(Most,B.Value);A->SetNumberField(TEXT("bulge"),Most);A->SetStringField(TEXT("bulge_at"),BulgeTarget.IsNone()?FString():BulgeTarget.ToString());A->SetNumberField(TEXT("bulge_past"),BulgePast);A->SetNumberField(TEXT("bulge_moves"),BulgeMoves);}A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
     O->SetBoolField(TEXT("covered"),bCovered);{TArray<TSharedPtr<FJsonValue>> S;for(int32 V:Siru)S.Add(MakeShared<FJsonValueNumber>(V));O->SetArrayField(TEXT("siru"),S);}
     {TArray<TSharedPtr<FJsonValue>> L;for(const FString& R:LiquidReport())L.Add(MakeShared<FJsonValueString>(R));O->SetArrayField(TEXT("liquid"),L);}
     // Where their heads and feet are on the screen (0..1; -1 behind the camera): both whole in the shot or not.

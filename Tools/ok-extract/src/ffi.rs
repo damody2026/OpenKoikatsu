@@ -126,6 +126,26 @@ pub unsafe extern "C" fn ok_head_look_error(s:*mut OkSession,out:*mut f32)->i32 
     *out=residual;*out.add(1)=excess;0
 }
 #[no_mangle]
+pub unsafe extern "C" fn ok_penis_tip(s:*mut OkSession,out:*mut f32)->i32 {
+    // The end of his penis mesh now (belly_bulge::penis_tip), his skeleton space, metres.
+    let Some(s)=sess_ref(s) else{return -1;};
+    if out.is_null() {return -1;}
+    let Some(p)=crate::belly_bulge::penis_tip(s) else{return 1;};
+    std::ptr::copy_nonoverlapping(p.as_ptr(),out,3);0
+}
+#[no_mangle]
+pub unsafe extern "C" fn ok_belly_bulge_past(s:*mut OkSession,tip:*const f32,out:*mut f32,target:*mut c_char,cap:i32)->i32 {
+    // How far a point (her skeleton space, metres) is outside her skin now (belly_bulge::past): out[0] past (negative
+    // inside), out[1] how far the skin vertex that says so is, out[2] how far `target` (the swell that moves it most)
+    // moves it at weight 100.
+    let Some(s)=sess_ref(s) else{return -1;};
+    if tip.is_null()||out.is_null()||target.is_null()||cap<=0 {return -1;}
+    let Some((d,near,name,moves))=crate::belly_bulge::past(s,[*tip,*tip.add(1),*tip.add(2)]) else{return 1;};
+    if name.len()>=cap as usize {return 1;}
+    *out=d;*out.add(1)=near;*out.add(2)=moves;
+    std::ptr::copy_nonoverlapping(name.as_ptr(),target as *mut u8,name.len());*target.add(name.len())=0;0
+}
+#[no_mangle]
 pub unsafe extern "C" fn ok_set_head_look(s:*mut OkSession,x:f32,y:f32,z:f32,enabled:i32)->i32 {
     let Some(s)=sess_ref(s) else{return -1;};
     if enabled==0 {s.head_look.reset();return 0;}

@@ -19,6 +19,8 @@ public:
 	void Stop();
 	void SetPaused(bool Paused) {bPaused=Paused;}
 	bool IsPaused() const {return bPaused;}
+	// A worker is writing both sessions now (ok.Anim.AsyncPair): read neither until it is done.
+	bool IsSolving() const {return bSolvePending&&!PendingSolve.IsCompleted();}
 	bool SetSpeed(float Value);
 	float GetSpeed() const {return Speed;}
 	bool bMeasureAdvance=false;

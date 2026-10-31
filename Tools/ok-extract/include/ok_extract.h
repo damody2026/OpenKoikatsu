@@ -108,6 +108,13 @@ int32_t ok_session_set_physx_secondary(OkSession* s,int32_t enabled);
    (process-wide; another actor loading may change it). */
 int32_t ok_session_set_external_animation(OkSession* s,int32_t external);
 int32_t ok_head_look_error(OkSession* s,float* out);
+/* The end of his penis mesh now (the vertex farthest from cm_J_dan100_00), his skeleton space, Unity metres; out holds 3.
+   J_dan109 draws in as he goes in, his penis does not. 1: no penis mesh. */
+int32_t ok_penis_tip(OkSession* s,float* out);
+/* How far tip (her skeleton space, Unity metres) is outside her skin in her current pose, unswollen: out[0] metres
+   (negative inside), out[1] distance to the skin vertex that says so, out[2] how far target (the belly.bulge swell that
+   moves that vertex most, written to target) moves it at weight 100. 1: no belly.bulge targets. */
+int32_t ok_belly_bulge_past(OkSession* s,const float* tip,float* out,char* target,int32_t cap);
 int32_t ok_static_interaction_frame(OkSession* s,float dt);
 int32_t ok_apply_shape_live(OkSession* s,const float* body,int32_t n_body,const float* face,int32_t n_face);
 int32_t ok_prepare_shape_live(OkSession* s,const float* body,int32_t n_body,const float* face,int32_t n_face);

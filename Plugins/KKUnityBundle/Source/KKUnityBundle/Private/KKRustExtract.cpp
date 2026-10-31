@@ -228,6 +228,11 @@ static void OkLogThunk(int32_t Level, const char* MsgUtf8)
 bool FOkSession::SetPhysXSecondary(bool bOn) { bPhysXSecondary=bOn; return !Handle||ok_session_set_physx_secondary(Handle,bOn?1:0)==0; }
 void FOkSession::ApplyPhysXSecondary() const { if(Handle){ok_session_set_physx_secondary(Handle,bPhysXSecondary?1:0);ok_session_set_external_animation(Handle,ExternalAnimation);} }
 bool FOkSession::SetExternalAnimation(bool bExternal) { ExternalAnimation=bExternal?1:0; return !Handle||ok_session_set_external_animation(Handle,ExternalAnimation)==0; }
+bool FOkSession::PenisTip(FVector& OutUnity) const { float P[3]; if(!Handle||ok_penis_tip(Handle,P)!=0)return false;OutUnity=FVector(P[0],P[1],P[2]);return true; }
+bool FOkSession::BellyBulgePast(const FVector& UnityTip,float& OutPast,float& OutNear,FName& OutTarget,float& OutMoves) const {
+	const float Tip[3]={float(UnityTip.X),float(UnityTip.Y),float(UnityTip.Z)};float Out[3]={};char Target[64]={};
+	if(!Handle||ok_belly_bulge_past(Handle,Tip,Out,Target,64)!=0)return false;
+	OutPast=Out[0];OutNear=Out[1];OutMoves=Out[2];OutTarget=FName(UTF8_TO_TCHAR(Target));return true; }
 bool FOkSession::HeadLookError(float& Residual,float& Excess) const { float Out[2]={0.f,0.f}; if(!Handle||ok_head_look_error(Handle,Out)!=0)return false; Residual=Out[0];Excess=Out[1];return true; }
 bool FOkSession::SetHeadLook(const FVector& Target,bool Enabled) { return Handle&&ok_set_head_look(Handle,Target.X,Target.Y,Target.Z,Enabled?1:0)==0; }
 bool FOkSession::SetFk(const TArray<FString>& Bones,const TArray<FVector>& UnityEuler)
