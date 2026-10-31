@@ -786,6 +786,12 @@ void AOKStreetSocialScene::ArriveOuting(){
   if(BluffCanStart(&Why)){S.Message=OKMsg(TEXT("ui.outing.arrived_start_bluff_game"), {{TEXT("place"), *Place}});StartBluff();}
   else{S.BluffDealBy=SceneTime()+20.0;S.Message=OKMsg(TEXT("ui.outing.arrived_deal_after_seated"), {{TEXT("place"), *Place}});ResumeTalkQuiet(Girl);RefreshUI();} // the others still walking in (TickBluff)
   return;}
+ // At a meal upstairs in a building they were already in (the food court on 9F): no menu prompt came, as they had
+ // walked in on 1F, and the ramen 惠惠 asked for on the way was never ordered; she said "the ramen is here" over his
+ // bowl alone (R6-62). Arriving at it is walking into the place to eat: the prompt comes once (TickShopArrival).
+ if(Girl!=INDEX_NONE){const FOKStreetActivity* A=OKStreetFindActivity(Activity);const FString At=A&&A->Place?FString(A->Place):Place;
+  if(!At.IsEmpty()&&S.ShopPromptedPlace!=At&&ItemsHere(At).ContainsByPredicate([](const FOKStreetCatalogItem* I){return I&&I->Consumable;})){
+   S.ShopArrivalPlace.Reset();S.ShopSeenPlace=At;S.ShopEnteredWith=true;UE_LOG(LogTemp,Display,TEXT("Street outing: arrived to eat at %s; the menu prompt is due"),*At);}}
  if(!StartOutingActivity(Girl,Activity,Error)){S.Message=OKMsg(TEXT("ui.outing.arrived_but_error"), {{TEXT("place"), *Place}, {TEXT("error"), *Error}});ResumeTalkQuiet(Girl);RefreshUI();}
 }
 

@@ -38,6 +38,8 @@ constexpr double OKStreetServeSeconds = 30.0;
 // Not served yet it shows 100% and cannot be eaten. Booked: how much of it has already filled her needs.
 constexpr double OKStreetEatSeconds = 70.0;
 constexpr float OKStreetFullSatiety = 92.f;
+// Below this she is very hungry (mind.rs hungry_mood): she does not stop eating "because she is full".
+constexpr float OKStreetHungrySatiety = 25.f;
 // A little too much is still eaten: a dish whose rest fits under this (satiety now + what is left of it) is finished,
 // so a tea egg at 80 is eaten, not left after a bite at 92. Ordering food uses the same measure.
 constexpr float OKStreetOverfullSatiety = 115.f;

@@ -330,6 +330,13 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  const bool Apart=RemoteWith(Character);
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusMenu);Status.Menu=Apart?FString():MenuText(R.Satiety,100.f/SatietyMax(Character),Character);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusScene);Status.Scene=Apart?FString():SceneLine(Character);}
+ // Whose number each has: without his she cannot send him the photo they just took (she said her phone "can't do that").
+ if(!Apart){const bool His=HasHerNumber(Character),Hers=HasHerNumber(Character,true);
+  Status.Scene+=OKMsg(TEXT("ui.mind.phone_contact_status"),{{TEXT("state"),His&&Hers?TEXT("both"):His?TEXT("his_only"):Hers?TEXT("hers_only"):TEXT("none")}});
+  // Whether she has a song she can really sing now (the song system plays it): 安可 said "here it comes!" at their
+  // singing date with none ready, then stood silent and asked why he said nothing (R6-55).
+  const EOKSongPhase Song=S.Song.Girl==Character?S.Song.Phase:EOKSongPhase::Idle;
+  Status.Scene+=OKMsg(TEXT("ui.mind.song_status"),{{TEXT("state"),Song==EOKSongPhase::Ready||Song==EOKSongPhase::Offered?TEXT("ready"):Song>=EOKSongPhase::Intro&&Song<=EOKSongPhase::Outro?TEXT("singing"):Song==EOKSongPhase::Preparing?TEXT("preparing"):TEXT("none")}});}
  if(!Apart&&S.ShiftAppointment)if(const auto* Job=S.Catalog.FindJob(S.ShiftJob)){const FDateTime T=StreetNow();Status.Scene+=OKMsg(TEXT("ui.mind.he_working_here_status"), {{TEXT("job_title"), *Job->Title}, {TEXT("busyness_percent"), OKRulesCrowdAt(S,Job->Place,T.GetHour()+T.GetMinute()/60.0)*100.f}, {TEXT("minutes_to_shift_end"), FMath::Max<int64>(0,S.ShiftEnd-OKStreetMindNow(S))}});NoteShiftChat();}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusInvite);Status.Invite=RollInviteStance(Character);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_StatusHeard);Status.Heard=HeardText(Character);}

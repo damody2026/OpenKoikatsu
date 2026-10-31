@@ -260,7 +260,7 @@ struct FOKStreetSceneState {
  TMap<FString,TArray<FOKStreetHistoryEntry>> History;TSet<FString> HistoryLoaded;TMap<FString,int64> PhoneSeen;bool PhoneSeenLoaded=false;
  int32 RemotePeer=INDEX_NONE,RemoteMode=0,PhoneThread=INDEX_NONE,RingGirl=INDEX_NONE,PhoneComposing=0;FString PhoneTab=TEXT("msg"),PhoneDraft,RingWhy;double RingUntil=0,CallStarted=0;
  struct FPendingText{int32 Girl=INDEX_NONE;FString Why,Kind;double Due=0;int32 Tries=0;};TArray<FPendingText> PendingTexts;bool PhoneInFlight=false;double GateNudgeAt=-100;
- TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;int32 ArrivedWith=INDEX_NONE;FString ArrivedPlace;int64 ArrivedMinute=-1; /* the last walk he and a girl ended together, for appointments_tick (R5-13) */bool ActCutShort=false,ActTimeCut=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;FString HerPaidNote;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
+ TMap<int32,FOKNpcLift> NpcLifts;int32 ActGirl=INDEX_NONE,LastActivityGirl=INDEX_NONE;int32 ArrivedWith=INDEX_NONE;FString ArrivedPlace;int64 ArrivedMinute=-1; /* the last walk he and a girl ended together, for appointments_tick (R5-13) */bool ActCutShort=false,ActTimeCut=false;int64 ActStart=0,LifeBlocksMinute=-1;int32 ActFirstAppointment=0; /* the appointments made during it are for later (ActivityAftermath) */ FString ActId,ActSig,LastActivity;int32 HerPaidGirl=INDEX_NONE;int64 HerPaidAmount=0,HerPaidAt=0;bool HerPaidAgreed=false;FString ShopPromptedPlace; /* the place whose menu prompt she was given (TickShopArrival) */int32 PaidBackGirl=INDEX_NONE;int64 PaidBackAmount=0,PaidBackAt=0;FString HerPaidNote;FString HerPaidShop; /* her own bill just paid (RecordPayAgreed) */ /* ActSig: what kind of activity ActId is (TickActivityWatch) */ TSet<FString> LifeDone;double BiasCheckAt=0;TMap<int32,double> PossessiveAt;
  // Round 3 (Docs/STREET_BEHAVIOR_PLAN_20261012b.md).
  TMap<int32,int32> PlanBlockSince;TMap<FString,int32> PaidShiftMinutes;bool ActIsHers=false,ActLover=false;int32 IntroFriend=INDEX_NONE;double IntroAt=0,GatePenaltyAt=-100,LastActivityAt=-100;
  TMap<int32,TArray<int64>> SelfTexts;int32 SentRemoteGirl=INDEX_NONE,SentRemoteMode=0,ReplyRemoteGirl=INDEX_NONE,ReplyRemoteMode=0;int64 LastCheckoutMinute=-1;FString NotServedNote,CheckoutNote;TMap<FString,int32> JobRejected;
@@ -1619,9 +1619,12 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
     if(Confessed&&!Answered){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed; no answer from her yet"),Character);Confessed=false;
      if(!L->ConfessionPending.Contains(Character))L->ConfessionPending.Add(Character,OKStreetMindNow(*L));}
     if(Confessed)L->ConfessionPending.Remove(Character);
-    if(Confessed&&!Ends&&L->Target==Character&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
+    // Talking with her inside a shared activity (stargazing on the park lawn) leaves Target empty: the one he talks with
+    // is what counts. 胡桃 said "yes, I accept" under the stars and stayed a friend (R6-59).
+    if(Confessed&&!Ends&&(L->Target==Character||Weak->FreeTalkPartner()==Character)&&!L->RelationshipPending&&L->Node==INDEX_NONE&&!Weak->RemoteWith(Character)
      &&OKStreetViewRelation(L->Store,OKStreetStableId(L->Manifest.Characters[Character]),L->Manifest.TalkBudget).Stage!=TEXT("lover")){
-     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words%s"),Character,Answered&&Accepts?TEXT("; she said yes"):TEXT(""));Weak->RelationshipEvent(TEXT("confession"),Answered&&Accepts);}}
+     UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he confessed in his own words%s"),Character,Answered&&Accepts?TEXT("; she said yes"):TEXT(""));if(L->Target==INDEX_NONE){L->Target=Character;UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the confession is hers to answer; she is the target now (shared activity)"),Character);} // RelationshipEvent reads Target: 优香 said yes at the aquarium and it was "ignored: target=-1" (R6-59)
+     Weak->RelationshipEvent(TEXT("confession"),Answered&&Accepts);}}
    // A confession in front of others (Anko drinking at the next table of the cafe): they saw it, and how she answered.
    {bool SaidIt=false;Verdict->TryGetBoolField(TEXT("confessed"),SaidIt);
     if(SaidIt&&!Weak->RemoteWith(Character)){bool Yes=false;const bool Ans=Verdict->TryGetBoolField(TEXT("accepts"),Yes);Weak->ConfessionWitnessed(Character,Ans?(Yes?TEXT("yes"):TEXT("no")):TEXT("open"));}}
@@ -1738,6 +1741,7 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    UE_LOG(LogTemp,Display,TEXT("Street judge: %s is not sold here; nothing bought, she is told"),*Name);}}
   // He lends her money now ("拿去吧，五百"), as the judge read it: only he can offer it; her act alone asks.
   {double Lend=0;Verdict->TryGetNumberField(TEXT("he_lends"),Lend);Weak->SettleMoneyHandover(Character,Lend,true);}
+  {bool Back=false;Verdict->TryGetBoolField(TEXT("pays_her_back"),Back);if(Back)Weak->PayHerBack(Character);}
   // He told her himself about another girl ("I'm going out with 三月七"): heard from him, not a rumour to have out (social.rs rival_named).
   {TArray<FString> Told;FString One;const TArray<TSharedPtr<FJsonValue>>* List=nullptr;if(Verdict->TryGetArrayField(TEXT("told_about"),List))for(const auto& V:*List){FString N;if(V.IsValid()&&V->TryGetString(N)&&!N.IsEmpty())Told.Add(N);}else if(Verdict->TryGetStringField(TEXT("told_about"),One)&&!One.IsEmpty())Told.Add(One);for(const FString& N:Told)Weak->ToldAboutRival(Character,N);}
   Weak->ExecuteFreeTalkAction(Character,Id,DoNow);

@@ -270,8 +270,14 @@ void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const F
  UE_LOG(LogTemp,Display,TEXT("Street pay agreed: actor=%d %s (for %s)"),Girl,*How,S.PayAgreedShop.IsEmpty()?TEXT("the next shop"):*S.PayAgreedShop);
  // "My treat" just after she paid her own bill here (she ordered on the way in): he pays her back what she paid, and
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
- if(How==TEXT("him")&&Girl==S.HerPaidGirl&&S.HerPaidAmount>0&&!S.HerPaidShop.IsEmpty()&&S.HerPaidShop==ShopPlaceHere()&&OKStreetMindNow(S)-S.HerPaidAt<=15&&S.Store.PlayerCash>=S.HerPaidAmount){
-  const int64 Back=S.HerPaidAmount;S.HerPaidAmount=0;GiveMoneyNow(Girl,Back);
+ // Not a bill she paid as she had promised or agreed to: that takes her taking the money back (PayHerBack).
+ if(How==TEXT("him")&&!S.HerPaidAgreed)PayHerBack(Girl);
+}
+// He pays her back the bill she just paid here (the judge's pays_her_back, or "my treat" right after her own bill).
+void AOKStreetSocialScene::PayHerBack(int32 Girl){
+ auto& S=*State;
+ if(Girl==S.HerPaidGirl&&S.HerPaidAmount>0&&!S.HerPaidShop.IsEmpty()&&S.HerPaidShop==ShopPlaceHere()&&OKStreetMindNow(S)-S.HerPaidAt<=15&&S.Store.PlayerCash>=S.HerPaidAmount){
+  const int64 Back=S.HerPaidAmount;S.HerPaidAmount=0;GiveMoneyNow(Girl,Back);S.PaidBackGirl=Girl;S.PaidBackAmount=Back;S.PaidBackAt=OKStreetMindNow(S);
   // That bill's note ("you paid your own, he did not treat you") not yet heard is out of date now: it reached her after
   // the money was back and she said "I paid it myself after all" (R6-45).
   if(!S.HerPaidNote.IsEmpty()&&S.TellHer.RemoveSingle(S.HerPaidNote)>0)UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d the note of the bill she paid is dropped, paid back"),Girl);
@@ -373,7 +379,7 @@ void AOKStreetSocialScene::TickShopArrival(){
  // counted from the last menu prompt, and none is given when she was already inside: a stroll with 爱丽丝 in the park
  // left it for a moment and "we just walked in, there is fish food" came over his question). A stroll keeps the place.
  if(Place.IsEmpty()){if(S.OutingGirl!=INDEX_NONE&&(S.OutingActivity==TEXT("stroll")||S.OutingActivity==TEXT("walk")))S.ShopArrivalAt=SceneTime();
-  if(SceneTime()-S.ShopArrivalAt>60.0)S.ShopArrivalPlace.Reset();return;}
+  if(SceneTime()-S.ShopArrivalAt>60.0){S.ShopArrivalPlace.Reset();S.ShopPromptedPlace.Reset();}return;}
  if(Place==S.ShopArrivalPlace)S.ShopArrivalAt=SceneTime();
  if(Place==S.ShopArrivalPlace||!S.FreeTalkOpen||S.FreeTalkBusy)return;
  const int32 Her=FreeTalkPartner();if(Her==INDEX_NONE)return;
@@ -381,6 +387,12 @@ void AOKStreetSocialScene::TickShopArrival(){
  // On their way through a shop to an activity in the same building (the food court on 9F of the department store):
  // that activity is the visit. The "we just walked in, nothing to eat here" at the 1F door came back on 9F, at the
  // table: "this is the first floor" (R3-245). A restaurant's own menu still comes (the meal is ordered from it).
+ // Passing through on the way to another place (the park between the cafe and the department store): not a visit.
+ // 惠惠, walking to the food court she was treating him at, was told "we just walked in, here is the menu" in the park and
+ // asked why he had led her to the park (R6-57).
+ if(S.OutingGirl!=INDEX_NONE&&!S.OutingActivity.IsEmpty()){FString Dest=S.OutingActivity.StartsWith(TEXT("go:"))?S.OutingActivity.Mid(3):FString();
+  if(Dest.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(S.OutingActivity);A&&A->Place&&*A->Place)Dest=A->Place;
+  if(!Dest.IsEmpty()&&Dest!=Place){S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: passing %s on the way to %s; no arrival prompt"),*Place,*Dest);return;}}
  const bool SellsFood=ItemsHere(Place).ContainsByPredicate([](const FOKStreetCatalogItem* I){return I&&I->Consumable;});
  if(!SellsFood&&S.OutingGirl!=INDEX_NONE&&!S.OutingActivity.StartsWith(TEXT("go:")))if(const auto* Act=OKStreetFindActivity(S.OutingActivity);Act&&Act->Place==Place){
   S.ShopArrivalPlace=Place;UE_LOG(LogTemp,Display,TEXT("Street shop arrival: on the way to %s inside %s; no arrival prompt"),*S.OutingActivity,*Place);return;}
@@ -397,11 +409,11 @@ void AOKStreetSocialScene::TickShopArrival(){
  const bool Food=ItemsHere(Place).ContainsByPredicate([](const FOKStreetCatalogItem* I){return I&&I->Consumable;});
  if(S.Party.ContainsByPredicate([Her](int32 G){return G!=Her;})){
   S.SystemNote=true;S.FreeTalkDraft=OKMsg(Food?TEXT("ui.economy.group_entered_menu_prompt"):TEXT("ui.economy.group_entered_shop_prompt"), {{TEXT("place_name"), Where?Where->Name:*Place}});
-  UE_LOG(LogTemp,Display,TEXT("Street shop arrival: party of %d at %s"),S.Party.Num()+1,*Place);SendFreeTalk();return;
+  UE_LOG(LogTemp,Display,TEXT("Street shop arrival: party of %d at %s"),S.Party.Num()+1,*Place);S.ShopPromptedPlace=Place;SendFreeTalk();return;
  }
  S.SystemNote=true;S.FreeTalkDraft=OKMsg(Food?TEXT("ui.economy.entered_place_prompt"):TEXT("ui.economy.entered_shop_prompt"), {{TEXT("place_name"), Where?Where->Name:*Place}});
  UE_LOG(LogTemp,Display,TEXT("Street shop arrival: actor=%d place=%s"),Her,*Place);
- SendFreeTalk();
+ S.ShopPromptedPlace=Place;SendFreeTalk();
 }
 
 // A shop that closes while they are in it: the meal or drink ends, and she is told so she can suggest somewhere else.
@@ -668,7 +680,9 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // next, and paying her back went against her own promise ("keep the money, I said it was mine").
  // "treat_kept" is true for every bill she pays, so it kept this from ever happening: 三月七's tea, paid by her when
  // the choice ran out, stayed hers after his "this meal is on me" a minute later (R6-21).
- if(HerPays>0&&PlayerPays==0&&!PromiseKept&&PayAgreed(Her)!=TEXT("her")){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
+ // A bill she paid as agreed is kept too, for when he insists and she takes the money back (pays_her_back): 惠惠 said
+ // "fine, I'll take the money" at the convenience store and none moved (R6-52).
+ if(HerPays>0&&PlayerPays==0){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);S.HerPaidAgreed=PromiseKept||PayAgreed(Her)==TEXT("her");}
  {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&Food&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
  if(!Tell.IsEmpty())S.TellHer.Add(Tell); // handed over at once: no "it comes in 3 seconds" for her to say
   if(S.HerPaidGirl==Her&&S.HerPaidAt==OKStreetMindNow(S))S.HerPaidNote=Tell;}

@@ -757,6 +757,7 @@ private:
  void HerNumberGiven(int32 Girl,const TCHAR* What=TEXT("hers"));
  void HerErrand(int32 Character,const FString& Kind);
  void GiveMoneyNow(int32 Girl,int64 Amount);
+ void PayHerBack(int32 Girl); // OKStreetSocialEconomy.inl: the bill she just paid here goes back to her
  void SettleMoneyHandover(int32 Girl,double Lend,bool bVerdict); // OKStreetSocialLover.inl (shop.rs money_handover)
  bool SecondDishOk(int32 Her,bool bForHer,const FString& ItemId); // OKStreetSocialLover.inl (shop.rs order_second_dish) // OKStreetSocialLover.inl: her act's give_money, once the judge has read the exchange // OKStreetSocialPhotos.inl (errand.rs): her student loan, her fees
  void StartEffect(const FString& Kind,int32 Girl); // OKStreetSocialPhotos.inl: an activity's effect (the explosion)

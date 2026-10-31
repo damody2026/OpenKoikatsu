@@ -188,6 +188,9 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
  // He hands her money to keep (pays her back what she paid for him): her "I'll take it" used to move nothing.
  if(Kind==TEXT("give_money")){const int64 Amount=Arg.IsEmpty()?0:MoneyIn(Arg);
   if(Amount<=0){UE_LOG(LogTemp,Display,TEXT("Street act: give_money without an amount (%s)"),*Arg);return true;}
+  // The bill she paid, already handed back by his "my treat" (PayHerBack): her give_money for the same money is that
+  // refund, not more. 惠惠's ¥60 set meal went back to her twice and he paid ¥189 for a ¥69 order (R6-58).
+  if(Girl==S.PaidBackGirl&&Amount==S.PaidBackAmount&&OKStreetMindNow(S)-S.PaidBackAt<=15){UE_LOG(LogTemp,Display,TEXT("Street act: give_money %lld to actor=%d is the bill already paid back"),Amount,Girl);return true;}
   // What his money does is the judge's reading of both lines: "I'll lend you fifty" was her give_money and the judge's
   // he_lends at once, and he paid a hundred. It waits for the verdict (GiveMoneyNow, or dropped for a loan).
   S.PendingGiveMoney.Add(Girl,TPair<int64,double>(Amount,FPlatformTime::Seconds()));
@@ -199,6 +202,10 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
   return true;
  }
  // She cannot eat any more: she stops eating what is left on the table.
+ // Not while she is still very hungry: 惠惠, starving after her explosion, said "just right, I'm full" after one bite of
+ // her rice ball and the bento was packed untouched (R6-53). She keeps eating and is told how hungry she still is.
+ if(Kind==TEXT("stop_eating")&&OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[Girl]),S.Manifest.TalkBudget).Satiety<OKStreetHungrySatiety){
+  S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),OKT(TEXT("ui.lover.still_hungry_not_full"))}}));UE_LOG(LogTemp,Display,TEXT("Street meal: actor=%d stop_eating refused, still very hungry"),Girl);return true;}
  if(Kind==TEXT("stop_eating")){S.StopEating=true;S.FreeTalkNotice=OKT(TEXT("ui.lover.she_is_full"));UE_LOG(LogTemp,Display,TEXT("Street meal: she stops eating by her own word"));RefreshUI();return true;}
  // She does not want a dish he ordered for her: it comes off the order (by name or id).
  if(Kind==TEXT("cancel_order")){
@@ -234,7 +241,8 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
 FString AOKStreetSocialScene::FreeTalkExtras() const{
  if(!State)return FString();const auto& S=*State;FString Out;
  TArray<FString> Bag;for(const FString& Id:S.Store.Inventory)if(const auto* Item=S.Catalog.Find(Id))Bag.AddUnique(Item->Name);
- if(!Bag.IsEmpty())Out+=OKT(TEXT("ui.lover.his_backpack_label"))+FString::Join(Bag,OKT(TEXT("ui.bank.list_separator")));
+ // An empty bag is said too: 胡桃 twice ate the candy he only said he gave her (R6-56).
+ Out+=OKT(TEXT("ui.lover.his_backpack_label"))+(Bag.IsEmpty()?FString(OKT(TEXT("ui.lover.his_backpack_empty"))):FString::Join(Bag,OKT(TEXT("ui.bank.list_separator"))));
  const int32 Lift=ElevatorWithMale();
  if(Lift!=INDEX_NONE)Out+=OKT(TEXT("ui.lover.elevator_reaches_label"))+FString::Join(S.Elevators[Lift].Labels,OKT(TEXT("ui.bank.list_separator")));
  if(S.SleepPhase==0&&OKStreetNearestBed(S.Male,400,nullptr))Out+=OKT(TEXT("ui.lover.bed_nearby_note"));
@@ -276,7 +284,9 @@ void AOKStreetSocialScene::SettleMoneyHandover(int32 Girl,double Lend,bool bVerd
   // Read from a turn she has already answered (R3-261): her「谢谢你」was the answer, yet the money waited 105 s for another
   // reply while she asked if he did not want to lend it after all.
   if(bVerdict)for(auto& C:S.Choices)if(C.Kind==TEXT("loan")&&C.Heroine==Girl){C.SentAtOpen=FMath::Min(C.SentAtOpen,S.FreeTalkAnswered-1);C.Deadline=FMath::Min(C.Deadline,SceneTime()+2.0);}}
- else if(Action==TEXT("give")&&Give){const int64 Amount=Give->Key;S.PendingGiveMoney.Remove(Girl);GiveMoneyNow(Girl,Amount);}
+ else if(Action==TEXT("give")&&Give){const int64 Amount=Give->Key;S.PendingGiveMoney.Remove(Girl);GiveMoneyNow(Girl,Amount);
+  // The money of the bill she paid went back this way: PayHerBack must not hand it over again (R6-58).
+  if(Girl==S.HerPaidGirl&&Amount==S.HerPaidAmount){S.HerPaidAmount=0;S.PaidBackGirl=Girl;S.PaidBackAmount=Amount;S.PaidBackAt=OKStreetMindNow(S);}}
 }
 
 // Whether a second dish like the one she has goes in (shop.rs order_second_dish): the facts are what is on her table.
