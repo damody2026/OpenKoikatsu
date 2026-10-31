@@ -205,6 +205,7 @@ test_adjustment_label = "Test adjustment"
 [ui.calendar]
 # The day of the week by FDateTime::GetDayOfWeek (0 Monday .. 6 Sunday).
 weekday_name = "{d, select, 0 {Mon} 1 {Tue} 2 {Wed} 3 {Thu} 4 {Fri} 5 {Sat} other {Sun}}"
+date_full = "{year}/{month}/{day} ({weekday})"
 datetime_full = "{year}/{month}/{day} ({weekday}) {hour, number, ::integer-width/*00}:{minute, number, ::integer-width/*00}"
 
 [ui.campus]
