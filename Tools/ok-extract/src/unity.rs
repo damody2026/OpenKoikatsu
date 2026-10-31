@@ -1205,6 +1205,13 @@ fn builtin_mesh(path_id: i64) -> Option<ExtractedMesh> {
     })
 }
 
+/// unity_ColorSpaceDouble as compiled into a pixel program: 4.5948 (linear projects) when that literal is in the
+/// bytecode, else 2 (gamma projects add the colour to itself instead of multiplying).
+fn color_space_double(dxbc: &[u8]) -> f32 {
+    let linear = dxbc.chunks_exact(4).any(|w| (4.594_f32..4.596).contains(&f32::from_le_bytes([w[0], w[1], w[2], w[3]])));
+    if linear { 4.594_793_8 } else { 2.0 }
+}
+
 /// A cubemap's faces and mips (Unity Texture2D payload of a Cubemap: six faces one after another, each with its mip
 /// chain) as the atlas `PrefabReflectionProbe::atlas` describes; None for formats it does not decode.
 fn cubemap_atlas(tex: &unity_asset_decode::texture::Texture2D) -> Option<(u32, u32, Vec<u8>)> {
@@ -4798,6 +4805,11 @@ impl ParsedBundle {
                 if let Some(png) = m.mat.as_ref().and_then(|mat| mat.slot("_Tex")).and_then(|name| self.cubemap_atlas_named(name)) {
                     m.shader_extra_textures.insert("_OKSkyCube".into(), png);
                     if let Some(mat) = m.mat.as_mut() { mat.floats.insert("_OKSkybox".into(), 1.0); }
+                    // unity_ColorSpaceDouble is baked into the program when it is compiled: 4.5948 in a linear project,
+                    // 2 in a gamma one. A mod's own copy of the shader keeps the colour space it was built in (nashi's
+                    // studio skybox: 2, so its sky is 2.3x darker than the built-in program would draw it).
+                    let double = self.memo("skybox_color_space_double", "Skybox/Cubemap", || self.shader_pixel_dxbc_named("Skybox/Cubemap").map(|dxbc| color_space_double(&dxbc)));
+                    if let (Some(d), Some(mat)) = (double, m.mat.as_mut()) { mat.floats.insert("_OKSkyDouble".into(), d); }
                     // The object-space direction the program samples along, kept as vertex colour (d繚0.5+0.5): the
                     // positions get the renderer transform baked in later.
                     m.vertex_colors = m.positions.iter().map(|p| {
@@ -5292,6 +5304,37 @@ pub fn bundle_texture_report(bytes: Vec<u8>) -> Vec<(String, u32, bool)> {
     let parsed = parse_bundle_ref(&bytes);
     let dir = parsed.texture_directory();
     dir.catalog.iter().map(|(name, px)| (name.clone(), *px, parsed.texture_png_named(name).is_some())).collect()
+}
+
+#[cfg(test)]
+mod cubemap_info_dump {
+    #[test]
+    fn color_space_double_reads_the_compiled_constant() {
+        let mut linear = b"DXBCxxxx".to_vec();
+        linear.extend_from_slice(&4.594_793_8_f32.to_le_bytes());
+        assert_eq!(super::color_space_double(&linear), 4.594_793_8);
+        // A gamma build adds the colour to itself: no 4.59 literal anywhere.
+        assert_eq!(super::color_space_double(&[0u8; 64]), 2.0);
+    }
+
+    /// OK_CUBE_BUNDLE=<bundle> (a zipmod's inner bundle extracted to a file): each cubemap's format, encoding
+    /// (m_LightmapFormat: Unity's texture usage, decides DecodeHDR) and colour space, and its alpha range (diagnostic).
+    #[test]
+    #[ignore = "diagnostic: bundle named by OK_CUBE_BUNDLE"]
+    fn print_cubemaps() {
+        let Ok(path) = std::env::var("OK_CUBE_BUNDLE") else { return };
+        let bytes = std::fs::read(&path).unwrap();
+        let parsed = super::parse_bundle_ref(&bytes);
+        parsed.with_serialized(|files| {
+            for file in files { for info in file.objects_of_type(89) {
+                let Ok(o) = file.scene_object(info) else { continue };
+                let Some(t) = super::read_texture_payload(&o, &parsed.files, None) else { println!("{:?}: no payload", o.name()); continue };
+                let mut alpha = (255u8, 0u8);
+                if let Some((_, _, png)) = super::cubemap_atlas(&t) { if let Ok(img) = image::load_from_memory(&png) { for p in img.to_rgba8().pixels() { alpha = (alpha.0.min(p[3]), alpha.1.max(p[3])); } } }
+                println!("{:?} {}x{} {:?} lightmap_format {} color_space {} mips {} atlas alpha {:?}", o.name(), t.width, t.height, t.format, t.light_map_format, t.color_space, t.mip_count, alpha);
+            } }
+        });
+    }
 }
 
 #[cfg(test)]
