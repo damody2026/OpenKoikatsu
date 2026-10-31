@@ -297,7 +297,7 @@ void AOKStreetSocialScene::PlaceChatOrder(int32 Her,const FString& HerSaid){
  // She promised to treat him: it is hers to pay (what she cannot cover he fronts and she owes him).
  // She promised to treat him: hers to pay, unless he insists now (chat_order_payer, promise).
  FString Lean;float Insist=0;HeroineCheckoutLean(Her,CartTotal(),Lean,Insist);
- auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Her));Request->SetBoolField(TEXT("has_hers"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return L.ForHer;}));Request->SetNumberField(TEXT("insist"),Insist);Request->SetBoolField(TEXT("promise"),S.HerTreatPromise.Contains(Her));
+ auto Request=OKRulesRequest(TEXT("chat_order_payer"));Request->SetStringField(TEXT("lean"),Lean);Request->SetStringField(TEXT("agreed"),PayAgreed(Her));Request->SetBoolField(TEXT("has_hers"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return L.ForHer;}));Request->SetBoolField(TEXT("has_his"),S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return !L.ForHer&&L.Girl==INDEX_NONE;}));Request->SetNumberField(TEXT("insist"),Insist);Request->SetBoolField(TEXT("promise"),S.HerTreatPromise.Contains(Her));
  // Everything a thing he buys to give her (for her, not her own pick, nothing to eat or drink): his to pay (R3-255b).
  Request->SetBoolField(TEXT("his_gift"),S.Cart.Num()>0&&!S.Cart.ContainsByPredicate([&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return !L.ForHer||L.HerOwn||!I||I->Consumable;}));
  const TSharedPtr<FJsonObject> Payer=OKRulesEval(S,Request);const FString Option=Payer.IsValid()?Payer->GetStringField(TEXT("option")):Lean;
@@ -638,8 +638,10 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  const bool PromiseKept=WithHer&&Answer->GetBoolField(TEXT("treat_kept"))&&S.HerTreatPromise.Contains(Her);
  if(WithHer&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;
- {const bool Food=S.Cart.ContainsByPredicate([&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return I&&I->Consumable;});
-  S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"))+(Food&&ServeIn>=10?OKMsg(TEXT("ui.economy.dish_serve_eta_suffix"), {{TEXT("seconds"), int32(ServeIn)}}):FString());}
+ // Only food and drink are served: a book or a plush bought is in hand at once, no "on the table in 30 s" (R6-37: the
+ // picture book at the bookstore came with "the dish is served in about 30 s" in her note).
+ const bool Food=S.Cart.ContainsByPredicate([&S](const FOKStreetCartLine& L){const auto* I=S.Catalog.Find(L.ItemId);return I&&I->Consumable;});
+ {S.FreeTalkNotice=Answer->GetStringField(TEXT("notice"))+(Food&&ServeIn>=10?OKMsg(TEXT("ui.economy.dish_serve_eta_suffix"), {{TEXT("seconds"), int32(ServeIn)}}):FString());}
  {
   // Only food and drink go to the kitchen and onto the table (a notebook or a gift is simply bought).
   FOKStreetPendingServe Serve;Serve.Batch=++S.ServeBatch;Serve.At=SceneTime()+ServeIn;Serve.Her=Her;Serve.Place=PlaceName;Serve.PlaceId=S.ShopPlace;
@@ -658,7 +660,7 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // "treat_kept" is true for every bill she pays, so it kept this from ever happening: 三月七's tea, paid by her when
  // the choice ran out, stayed hers after his "this meal is on me" a minute later (R6-21).
  if(HerPays>0&&PlayerPays==0&&!PromiseKept&&PayAgreed(Her)!=TEXT("her")){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
- {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
+ {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&Food&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
  if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();
 }

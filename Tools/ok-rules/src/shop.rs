@@ -591,7 +591,7 @@ fn intimacy_after(r: &Value) -> Result<Value, String> {
 }
 
 /// Who pays for what she ordered in conversation. Request: agreed (what the AI read they settled: "him" | "her" |
-/// "split" | ""), promise (she promised to treat him), lean and insist (her own inclination), has_hers.
+/// "split" | ""), promise (she promised to treat him), lean and insist (her own inclination), has_hers, has_his.
 /// Answer: option (player_pays | split | she_pays | choice). Who offered what is the AI's reading, not words looked up.
 pub fn chat_order_payer(r: &Value) -> Value {
     let lean = r.get("lean").and_then(Value::as_str).unwrap_or("player_pays");
@@ -603,6 +603,10 @@ pub fn chat_order_payer(r: &Value) -> Value {
         return json!({"option": "player_pays"});
     }
     let option = match agreed(r) {
+        // "her" is the girls paying for themselves (her treating him is her promise): with something of his on the
+        // bill, each pays their own. 三月七 said "this one I pay myself" of her cream puff, and his douhua ordered next was
+        // billed to her (R6-38).
+        Some("she_pays") if !promise && r.get("has_his").and_then(Value::as_bool).unwrap_or(false) => "split",
         Some(o) => o,
         None if promise => "she_pays",
         None if lean == "she_pays" && insist > 0.6 => "choice",
@@ -1017,6 +1021,8 @@ mod tests {
         assert_eq!(o(json!({"lean": "she_pays", "insist": 0.9})), "choice");
         assert_eq!(o(json!({"lean": "player_pays", "agreed": "split"})), "split", "settled beats her wish that he pays");
         assert_eq!(o(json!({"lean": "player_pays", "agreed": "her"})), "she_pays");
+        assert_eq!(o(json!({"lean": "she_pays", "agreed": "her", "has_his": true})), "split", "she pays her own, his is his (R6-38)");
+        assert_eq!(o(json!({"lean": "she_pays", "agreed": "her", "has_his": true, "promise": true})), "she_pays", "her treat pays his too");
         assert_eq!(o(json!({"lean": "player_pays", "insist": 0.4, "has_hers": true})), "choice", "her own order, nothing settled: he decides");
         assert_eq!(o(json!({"lean": "split", "promise": true})), "she_pays", "her promise");
         assert_eq!(o(json!({"lean": "split", "promise": true, "agreed": "him"})), "player_pays", "he insisted and she let him");
