@@ -709,9 +709,16 @@ fn initiative(r: &Value) -> Result<Value, String> {
     let holiday = s(r, "holiday");
     let names = r.get("names").cloned().unwrap_or(json!({}));
     let mut best: Option<(f32, i32, String, String, String)> = None;
+    // The weighted score of the best so far: a later reason (or heroine) must beat it weighted the same way (it was
+    // weighted against the raw best, so a reason listed after hunger hardly ever won).
+    let mut best_weighted = 0.0f32;
     // The heroine whose confrontation won, with her jealousy then: she has had it out with him once; only new news
     // (jealousy 8 higher) brings her back for it (every slot for days: "you heard about Arthuria, ask him" again and again).
     let mut confront: Option<(Relation, Relation)> = None;
+    // Left wanting, she comes to him once a day at most (a want, not an urge that cuts in every few hours): the day she
+    // did is kept on her ("frustrated_day:N").
+    let today = n(r, "day") as i32;
+    let mut frustrated: Option<(Relation, Relation)> = None;
     for h in r.get("heroines").and_then(Value::as_array).into_iter().flatten() {
         if b(h, "busy") {
             continue;
@@ -761,15 +768,26 @@ fn initiative(r: &Value) -> Result<Value, String> {
         }
         // Left wanting (her desire for him unsatisfied, three or more climaxes' worth) after they have slept together
         // (his lover, or lewd with him): she comes to him for it, more the more she wants.
-        if crate::hexp::climax_wanted(rel.sex_desire) >= 3 && (rel.stage == "lover" || rel.lewdness >= 30.0) && rel.resentment < 50.0 {
-            reasons.push((40.0 + rel.sex_desire * 0.35, crate::tr::t("social.frustrated_seek").into(), "seek_player"));
+        let sought_today = rel.flags.iter().any(|f| f.strip_prefix("frustrated_day:").and_then(|v| v.parse::<i32>().ok()) == Some(today));
+        let frustrated_why = (crate::hexp::climax_wanted(rel.sex_desire) >= 3 && (rel.stage == "lover" || rel.lewdness >= 30.0) && rel.resentment < 50.0 && !sought_today)
+            .then(|| crate::tr::t("social.frustrated_seek").to_string());
+        if let Some(why) = &frustrated_why {
+            reasons.push((40.0 + rel.sex_desire * 0.35, why.clone(), "seek_player"));
         }
         for (score, why, intent) in reasons {
-            if score * (0.8 + t.possessiveness as f32 / 500.0) > best.as_ref().map(|x| x.0).unwrap_or(0.0) {
+            let weighted = score * (0.8 + t.possessiveness as f32 / 500.0);
+            if weighted > best_weighted {
+                best_weighted = weighted;
                 confront = (confront_why.as_ref() == Some(&why)).then(|| {
                     let mut after = rel.clone();
                     after.flags.retain(|f| !f.starts_with("confront_j:"));
                     after.flags.push(format!("confront_j:{}", j.round()));
+                    (after, rel.clone())
+                });
+                frustrated = (frustrated_why.as_ref() == Some(&why)).then(|| {
+                    let mut after = rel.clone();
+                    after.flags.retain(|f| !f.starts_with("frustrated_day:"));
+                    after.flags.push(format!("frustrated_day:{today}"));
                     (after, rel.clone())
                 });
                 best = Some((score, n(h, "actor") as i32, s(h, "id").to_string(), why, intent.to_string()));
@@ -779,7 +797,7 @@ fn initiative(r: &Value) -> Result<Value, String> {
     let mut out = json!({"slot": key});
     if let Some((score, actor, id, why, intent)) = best.filter(|x| x.0 >= 40.0) {
         let mut fx = Effects::default();
-        if let Some((after, before)) = &confront {
+        if let Some((after, before)) = confront.as_ref().or(frustrated.as_ref()) {
             fx.relation(after, before);
         }
         fx.recent(&id, &why);
@@ -1365,6 +1383,25 @@ mod tests {
                 later["jealousy_toward"] = json!({"b": 80});
         let news = initiative(&h(later)).unwrap();
         assert!(news["why"].as_str().unwrap_or("").contains('B'), "new news: {news}");
+    }
+
+    #[test]
+    fn left_wanting_she_comes_once_a_day() {
+        let keen = rel(json!({"stage": "lover", "favor": 120, "sex_desire": 90, "satiety": 90}));
+        let h = |r: Value, day: i32| json!({"minute": 13 * 60, "day": day, "last_slot": 0, "heroines": [{"actor": 1, "id": "a", "relation": r, "profile": {}}]});
+        let first = initiative(&h(keen.clone(), 5)).unwrap();
+        assert_eq!(first["why"].as_str().unwrap_or(""), crate::tr::t("social.frustrated_seek"), "{first}");
+        assert!(first.to_string().contains("frustrated_day:5"), "{first}");
+        let mut came = keen.clone();
+        came["flags"] = json!(["frustrated_day:5"]);
+        let evening = initiative(&json!({"minute": 19 * 60, "day": 5, "last_slot": 0, "heroines": [{"actor": 1, "id": "a", "relation": came.clone(), "profile": {}}]})).unwrap();
+        assert!(evening.get("actor").is_none(), "not again the same day: {evening}");
+        let next_day = initiative(&h(came, 6)).unwrap();
+        assert_eq!(next_day["actor"].as_i64(), Some(1), "the next day she may: {next_day}");
+        // The stronger reason wins whatever its place in the list: hungry (70) and left wanting (75), she comes for the latter.
+        let hungry = rel(json!({"stage": "lover", "favor": 120, "attraction": 100, "sex_desire": 100, "satiety": 30}));
+        let both = initiative(&h(hungry, 7)).unwrap();
+        assert_eq!(both["why"].as_str().unwrap_or(""), crate::tr::t("social.frustrated_seek"), "{both}");
     }
 
     #[test]

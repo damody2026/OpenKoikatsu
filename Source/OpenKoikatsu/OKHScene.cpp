@@ -117,7 +117,7 @@ void UOKHScenePanel::SelectAibu(int32 Index){
             if(G->PairedPlayback){G->PairedPlayback->Stop();G->PairedPlayback->Destroy();G->PairedPlayback=nullptr;}
             if(G->PartnerActor){G->PartnerActor->StopHBreath();G->PartnerActor->SetActorHiddenInGame(true);}
             G->PreviewActor->SetActorTickEnabled(true);G->PreviewActor->SetGameSceneMode(3,false);G->SelectedGameSceneMode=3;
-            UI->SoloKeys=MoveTemp(Keys);UI->ActiveAibu=UI->PendingAibu;UI->PendingAibu=INDEX_NONE;UI->ActivePose=INDEX_NONE;UI->Mode=0;UI->SoloState.Reset();
+            UI->SoloKeys=MoveTemp(Keys);UI->ActiveAibu=UI->PendingAibu;UI->PendingAibu=INDEX_NONE;UI->ClearLine();UI->ActivePose=INDEX_NONE;UI->Mode=0;UI->SoloState.Reset();
             G->NoteAction(TEXT("pair"),UI->AibuPoses[UI->ActiveAibu].Name);
             UI->PlaySolo(TEXT("Idle"));UI->BuildList();if(UI->Hint)UI->Hint->SetText(FText::FromString(UI->AibuPoses[UI->ActiveAibu].Name)); // loaded: the hint no longer says loading
         });
@@ -270,7 +270,7 @@ void UOKHScenePanel::ApplySpeed(){
 }
 
 void UOKHScenePanel::Finish(const TCHAR* Kind){
-    const FString K=Kind;
+    const FString K=Kind;++LineEpoch;
     if(Mode==1){
         ++ServiceFinishes;++HisFinishes;His=0.f;
         // In her mouth only for a mouth pose: on her chest or in her hand is outside her (not swallowed or spat).
@@ -405,6 +405,7 @@ bool UOKHScenePanel::HadEnough() const{
     return Today+HerOrgasms>=FMath::Max(1,X.IsValid()&&X->HasField(TEXT("climax_limit"))?int32(X->GetNumberField(TEXT("climax_limit"))):4);
 }
 void UOKHScenePanel::CountHerOrgasm(){
+    ++LineEpoch;
     ++HerOrgasms;
     if(HadEnough()&&!bSaidEnough){bSaidEnough=true;Note(OKT(TEXT("ui.hscene.she_had_enough")));ActionsKey.Reset();}
 }
@@ -481,7 +482,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     if((Mode!=0||PendingPose!=INDEX_NONE)&&Playback&&!Gallery->bPairPreparing&&Gallery->PairStateCombo&&Gallery->PairStateCombo->GetOptionCount()>1){
         const int32 Found=Poses.IndexOfByPredicate([Playing](const FOKHPose& Pose){return Pose.Pair==Playing;});
         if(Found!=INDEX_NONE&&(Found!=ActivePose||PendingPose==Found)){
-            ActivePose=Found;PendingPose=INDEX_NONE;Mode=Poses[Found].Mode;Queue.Reset();Wanted.Reset();bAnalPlay=false;bInsideFinished=false;bStrong=false;
+            ActivePose=Found;PendingPose=INDEX_NONE;Mode=Poses[Found].Mode;ClearLine();Queue.Reset();Wanted.Reset();bAnalPlay=false;bInsideFinished=false;bStrong=false;
             if(Has(TEXT("Idle")))Want(TEXT("Idle"));
             if(Mode==1&&Poses[Found].KindHoushi==2)BareChest();
             Tab=Mode==2?TabSonyu:TabHand+Poses[Found].KindHoushi;BuildList();if(Hint)Hint->SetText(FText::FromString(Mode==1&&bServiceRefused?OKT(TEXT("ui.hscene.again_refused")):Poses[Found].Name)); // the new pose (or why she will not start it), not the last one's event
@@ -575,7 +576,7 @@ void UOKHScenePanel::ReleaseHeld(){
 }
 bool UOKHScenePanel::TakeLine(FString& Text,FString& Out,bool& System){
     if(Outbox.IsEmpty())return false;
-    Text=Outbox[0].Text;System=Outbox[0].System;Out=Context();if(!Outbox[0].Note.IsEmpty())Out+=TEXT("\n")+Outbox[0].Note;Outbox.RemoveAt(0);
+    Text=Outbox[0].Text;System=Outbox[0].System;Out=Context();SentEpoch=LineEpoch;if(!Outbox[0].Note.IsEmpty())Out+=TEXT("\n")+Outbox[0].Note;Outbox.RemoveAt(0);
     if(!System&&Caption&&Gallery)Caption->SetText(FText::FromString(Gallery->HPlayerName+TEXT("：")+Text));
     return true;
 }
@@ -597,9 +598,56 @@ bool UOKHScenePanel::Hear(const FString& Raw,FString& Out){
     const FString Text=Raw.TrimStartAndEnd();if(Text.IsEmpty())return false;
     if(Gallery)Gallery->NoteAction(TEXT("said"),Text);
     if(CannotAnswer()){Held.Add(Text);if(Hint)Hint->SetText(FText::FromString(OKT(TEXT("ui.hscene.cannot_answer"))));return false;}
-    Out=Context();if(Caption&&Gallery)Caption->SetText(FText::FromString(Gallery->HPlayerName+TEXT("：")+Text));return true;
+    Out=Context();SentEpoch=LineEpoch;if(Caption&&Gallery)Caption->SetText(FText::FromString(Gallery->HPlayerName+TEXT("：")+Text));return true;
 }
-void UOKHScenePanel::ShowLine(const FString& Text){if(Caption)Caption->SetText(FText::FromString(Text));}
+void UOKHScenePanel::ShowLine(const FString& Text){
+    bStaleLine=SentEpoch!=LineEpoch;if(bStaleLine){UE_LOG(LogTemp,Display,TEXT("H scene: her line from before the last climax / finish / pose not shown: %s"),*Text.Left(60));return;}
+    if(Caption)Caption->SetText(FText::FromString(Text));
+}
+// What his words in the scene asked for (the street's H judge, ui.scene.h_judge_prompt): the pose and what is going on
+// now, and every pose and caress by name.
+FString UOKHScenePanel::JudgeFacts() const{
+    const FString Cur=Current(),Base=Mode==0?Cur:HBase(Cur);
+    const FString PoseName=Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString();
+    TArray<FString> Names;for(const FOKHPose& P:Poses)Names.AddUnique(P.Name);for(const auto& A:AibuPoses)Names.AddUnique(A.Name);
+    return OKMsg(TEXT("ui.hscene.judge_facts"),{{TEXT("pose"),PoseName},{TEXT("state"),Cur.IsEmpty()?FString():StateWords(Base)},{TEXT("poses"),FString::Join(Names,TEXT("、"))}});
+}
+// His words do what the buttons do, and only what they offer now: "stop" stops (whatever she would like), "pull out",
+// "faster" / "slower", where he finishes; another pose only when she agreed in her reply. Ending the scene is the street's.
+bool UOKHScenePanel::ApplyTalk(const TSharedPtr<FJsonObject>& V){
+    if(!V.IsValid()||!Gallery)return false;
+    bool bStop=false,bPull=false,bEnd=false,bAgrees=true;FString Pose,Pace,Where,Why;
+    V->TryGetBoolField(TEXT("stop"),bStop);V->TryGetBoolField(TEXT("pull"),bPull);V->TryGetBoolField(TEXT("end"),bEnd);V->TryGetBoolField(TEXT("she_agrees"),bAgrees);
+    V->TryGetStringField(TEXT("pose"),Pose);V->TryGetStringField(TEXT("speed"),Pace);V->TryGetStringField(TEXT("finish"),Where);V->TryGetStringField(TEXT("why"),Why);
+    UE_LOG(LogTemp,Display,TEXT("H talk judge: stop=%d pull=%d end=%d pose=\"%s\" agrees=%d speed=\"%s\" finish=\"%s\"; %s"),bStop,bPull,bEnd,*Pose,bAgrees,*Pace,*Where,*Why);
+    if(bEnd)return true;
+    ActionsKey.Reset();BuildActions();
+    if(bStop||bPull){
+        if(Mode==0){if(TouchArea!=INDEX_NONE)Click(Release);}
+        else{
+            const FString Base=HBase(Current());
+            if(Offered.Contains(Stop))Click(Stop);
+            // Close to his climax nothing is offered but finishing: stopping is still his to do.
+            else if(HIsLoop(Base)||Base==TEXT("OLoop")){Queue.Reset();Want(Mode==1?(Has(TEXT("Stop_Idle"))?TEXT("Stop_Idle"):TEXT("Idle")):P(TEXT("InsertIdle")));}
+            // Pulling out while moving: stop, then out (the stop's InsertIdle has not played yet, so Pull is not offered).
+            if(bPull){ActionsKey.Reset();BuildActions();if(Offered.Contains(Pull))Click(Pull);
+                else if(Mode==2&&Has(P(TEXT("Pull")))){Chain({P(TEXT("InsertIdle")),P(TEXT("Pull")),P(TEXT("Idle"))});bInsideFinished=false;}}
+        }
+        return false;
+    }
+    if(!Pose.IsEmpty()&&bAgrees){
+        const int32 A=AibuPoses.IndexOfByPredicate([&](const auto& X){return X.Name==Pose;});
+        if(A!=INDEX_NONE){Tab=TabAibu;SelectAibu(A);}else if(!SelectPoseNamed(Pose)){UE_LOG(LogTemp,Display,TEXT("H talk judge: no pose named %s"),*Pose);}
+        return false;
+    }
+    if(Pace==TEXT("faster")&&Offered.Contains(Faster))Click(Faster);
+    else if(Pace==TEXT("slower")&&Offered.Contains(Slower))Click(Slower);
+    if(Where==TEXT("inside")&&Offered.Contains(Inside))Click(Inside);
+    else if(Where==TEXT("outside")&&Offered.Contains(Outside))Click(Outside);
+    return false;
+}
+// A new pose or caress: what she said to the last one is no longer what is on the screen (her next line replaces nothing stale).
+void UOKHScenePanel::ClearLine(){++LineEpoch;if(Caption)Caption->SetText(FText::GetEmpty());}
 // Standard face patterns (eye_face.f00_*, mayuge.mayu00_*): eyes 1 closed, 4 smile, 7 setunai, 8 tere, 12 kurusi,
 // 13 keno, 24 gyu (squeezed shut); brows 0 default, 1 oko, 2 koma, 11 huan.
 void UOKHScenePanel::UpdateFace(){
@@ -699,6 +747,14 @@ int32 UOKHScenePanel::SiruSide() const{
 }
 // A bone of theirs in the world (the male skeleton may name its bones like hers).
 static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out);
+void UOKHScenePanel::LookAtCrotch(float Distance,float Pitch,float Turn){
+    // Where his penis is in her: her crotch from beside her body (across the line from her hips to her head), a little above.
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;FVector At,Head,Hips;
+    if(!IsValid(Girl)||!Girl->StudioCam||!HBone(Girl,TEXT("J_Kokan"),At)||!HBone(Girl,TEXT("j_head"),Head)||!HBone(Girl,TEXT("j_hips"),Hips))return;
+    FVector Body=Head-Hips;Body.Z=0;FVector Side=FVector::CrossProduct(Body.IsNearlyZero()?FVector::ForwardVector:Body.GetSafeNormal(),FVector::UpVector);if(Side.IsNearlyZero())Side=FVector::RightVector;
+    Girl->OrbitFocus=At;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Side.X,Side.Y))+Turn;Girl->OrbitPitch=FMath::Clamp(Pitch,-80.f,85.f);
+    Girl->OrbitDistance=FMath::Clamp(Distance,15.f,650.f);Girl->ApplyOrbitCamera();
+}
 void UOKHScenePanel::LookAtFace(float Distance){
     // Where her nose points from her head: the camera that way, at her face's height and tilt (down at him, up at the ceiling).
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;FVector Head,Nose;
@@ -802,7 +858,9 @@ void UOKHScenePanel::ApplyMaleLook(){
     // The penis (hidden like the card preview's) shows when his bottom is off.
     Him->SetGenitalVisible(bMaleBottomOff);
     if(MaleView!=1)return;
-    static UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewTranslucent.M_PreviewTranslucent"));
+    // Looked up each time, not kept in a static: once the scene that made his ghost material is gone, nothing holds the
+    // parent and it is collected; the next scene read the freed one (crash on coming back into the room, R9).
+    UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewTranslucent.M_PreviewTranslucent"));
     if(!Parent){UE_LOG(LogTemp,Warning,TEXT("H scene: no see-through material for him"));return;}
     if(!MaleGhost){MaleGhost=UMaterialInstanceDynamic::Create(Parent,this);MaleGhost->SetVectorParameterValue(TEXT("PreviewTint"),FLinearColor(.25f,.45f,1.f,.05f));}
     TInlineComponentArray<UMeshComponent*> Comps;Him->GetComponents(Comps);
@@ -923,7 +981,7 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
     const bool HasHim=Bone(Him,TEXT("j_hips"),HisHips);
     const float Floor=Girl->GetActorLocation().Z;
     static UStaticMesh* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));if(!Cube)return;
-    static UMaterialInterface* Shape=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+    UMaterialInterface* Shape=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
     FLinearColor Tint=FLinearColor(.55f,.55f,.55f); // set before a Box for its colour
     auto Box=[&](const FVector& Center,const FVector& Size,const FRotator& Rot){
         auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(Center,Rot);if(!A)return;

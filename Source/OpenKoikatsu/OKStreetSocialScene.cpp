@@ -1325,6 +1325,8 @@ void AOKStreetSocialScene::FinishFreeTalk(int32 Character,const FString& Id,cons
   // bench" (park_seat); he said "sure, that bench", and the judge took them as already sitting there.
   else if(!A.IsEmpty()&&A!=TEXT("none"))S.HerProposed.Add(Character,A);
  }
+ // In the private room his words still do things there: stop, pull out, another pose, faster, end (JudgeHTalk).
+ else if(InPrivate)JudgeHTalk(Character,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply);
  else if(!InPrivate){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkJudge);TArray<FString> Ordered;for(const auto& O:Reply->Orders)Ordered.Add(O.Id);JudgeFreeTalk(Character,Id,S.PlayerAskedText.IsEmpty()?Text:S.PlayerAskedText,Reply->Reply,Reply->Action,Ordered);}
  S.PlayerAskedText.Reset();
  S.ReplyRemoteGirl=INDEX_NONE;{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_FinishTalkUi);RefreshUI();}
@@ -1434,6 +1436,23 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
   // "leave" ends the activity they are in: not an outing she agreed to ("he went to leave with her" in the rumours).
   else if(Action!=TEXT("leave"))HeroineNote(Character,TEXT("outing"),OKMsg(TEXT("ui.scene.accepted_date_activity"), {{TEXT("activity"), *OKStreetActivityName(Action)}}),TEXT(""),-1.f,OKStreetActivityName(Action)); // words, not the id (rumours repeat it)
  }
+}
+
+// The H scene's own judge: his words and her reply read for what he asked the scene to do (ui.scene.h_judge_prompt);
+// the panel does it as its buttons would. The street judge stays out of the private room (it sent her to dinner).
+void AOKStreetSocialScene::JudgeHTalk(int32 Character,const FString& Said,const FString& Her){
+ auto& S=*State;if(!S.PrivateMode.IsValid()||Said.IsEmpty())return;
+ TArray<TSharedPtr<FJsonValue>> Messages;
+ auto AddMessage=[&Messages](const TCHAR* Who,const FString& Content){TSharedRef<FJsonObject> O=MakeShared<FJsonObject>();O->SetStringField(TEXT("role"),Who);O->SetStringField(TEXT("content"),Content);Messages.Add(MakeShared<FJsonValueObject>(O));};
+ AddMessage(TEXT("system"),OKT(TEXT("ui.scene.h_judge_prompt")));
+ AddMessage(TEXT("user"),OKMsg(TEXT("ui.scene.h_judge_user"),{{TEXT("facts"),S.PrivateMode->HSceneJudgeFacts()},{TEXT("said"),Said},{TEXT("her"),Her}}));
+ TWeakPtr<FOKStreetSceneState> WeakState=State;TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
+ SubmitMindChat(FString::Printf(TEXT("hjudge:%d"),Character),TEXT("dialogue"),Messages,300,0.f,[WeakState,Weak,Character](bool Ok,const FString& Content,const FString& Failure){
+  const auto L=WeakState.Pin();if(!L||!Weak.IsValid()||Weak->State!=L||L->PrivateGirl!=Character||!L->PrivateMode.IsValid())return;
+  TSharedPtr<FJsonObject> Verdict;if(Ok)FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Content),Verdict);
+  if(!Verdict.IsValid()){UE_LOG(LogTemp,Display,TEXT("H talk judge: no verdict (%s)"),*Failure);return;}
+  if(L->PrivateMode->HSceneApplyTalk(Verdict)){UE_LOG(LogTemp,Display,TEXT("H talk judge: the scene ends as he said"));Weak->FinishPrivate();}
+ });
 }
 
 // DeepSeek judges, from what he said and what she answered, whether they do something now (and what) or promised to meet

@@ -138,7 +138,15 @@ private:
     TWeakObjectPtr<class AKKPreviewActor> BlushFor;float Blush=-1.f,BlushShown=-1.f;bool bBlushLogged=false;
 public:
     bool RefuseWhenEnough();void BareChest();bool bToldSpent=false;
-    void LookAtFace(float Distance); // /hscene {"face_cam":cm}: the camera in front of her face, to see what is on it
+    void ClearLine();
+    // Her line asked for before a climax, a finish or a new pose comes back after it ("don't stop" once he had come):
+    // it is not shown or spoken. LineEpoch moves at those; SentEpoch is the epoch her last line was asked in.
+    int32 LineEpoch=0,SentEpoch=0;bool bStaleLine=false;
+    bool LineIsStale() const {return bStaleLine;}
+    FString JudgeFacts() const; // for the H talk judge: the pose, what is happening, the poses she could be asked into
+    bool ApplyTalk(const TSharedPtr<FJsonObject>& Verdict); // its verdict done as the buttons would; true: the scene ends
+    void LookAtFace(float Distance);
+    void LookAtCrotch(float Distance,float Pitch=15.f,float Turn=0.f); // /hscene {"crotch_cam":cm} or {distance, pitch, turn}: where they join, from beside her body // /hscene {"face_cam":cm}: the camera in front of her face, to see what is on it
     void SetSiruTest(const int32 (&Levels)[5]); // /hscene {"siru":[...]}: set her liquid levels directly
     float BlushTest=-1.f; // /hscene {"blush":v}: hold her blush at v (0..1) to compare shots; -1 follows her
 private:
@@ -152,7 +160,8 @@ private:
     FString FramedKey;double FrameAt=0;bool bMaleHidden=false;
     // How he is drawn (the original's male display): 0 as he is, 1 one see-through colour (her and the penis seen through
     // him), 2 hidden. His bottom comes off for the scene (the penis shows) unless the player puts it back on.
-    int32 MaleView=0;bool bMaleBottomOff=true;TWeakObjectPtr<class AKKPreviewActor> MaleLookFor;
+    // See-through by default: where his penis is in her shows (the original's silhouette).
+    int32 MaleView=1;bool bMaleBottomOff=true;TWeakObjectPtr<class AKKPreviewActor> MaleLookFor;
     UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> MaleGhost;
     UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> MaleGhostComps;
     UPROPERTY() TArray<TObjectPtr<class UMaterialInterface>> MaleGhostMats; // their own materials, slot by slot, to put back
