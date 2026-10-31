@@ -4362,7 +4362,7 @@ float3 d = float3(c * v.x - s * v.z, v.y, s * v.x + c * v.z);
 	const FString SkyDebug = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_SKY_DEBUG"));
 	if (!SkyDebug.IsEmpty())
 		Code->Code = Code->Code.Replace(TEXT("return sky.rgb * P.rgb;"), SkyDebug == TEXT("1") ? TEXT("return normalize(d) * 0.5 + 0.5;")
-			: SkyDebug == TEXT("2") ? TEXT("return sky.rgb;") : TEXT("return P.rgb;"));
+			: SkyDebug == TEXT("2") ? TEXT("return sky.rgb;") : SkyDebug == TEXT("4") ? TEXT("return sky.aaa;") : SkyDebug == TEXT("5") ? TEXT("return sky.rgb * P.rgb * sky.a;") : TEXT("return P.rgb;"));
 	if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
 	Mat->UpdateCachedExpressionData();
 	Mat->PreEditChange(nullptr);
@@ -4401,7 +4401,11 @@ static UMaterialInstanceDynamic* OKSkyboxInstance(FOkSession& Source, int32 Inde
 	Source.MaterialValue(Index, "_Exposure", Exposure);
 	Source.MaterialValue(Index, "_Rotation", Rotation);
 	auto Linear = [](float V) { return V <= 0.04045f ? V / 12.92f : FMath::Pow((V + 0.055f) / 1.055f, 2.4f); };
-	const float Scale = 4.59479380f * Exposure.R;
+	// unity_ColorSpaceDouble as the program the bundle ships has it baked in (`_OKSkyDouble`: 2 for a shader built in a
+	// gamma project, such as a mod's own copy); without it the game's linear built-in one.
+	FLinearColor Double(4.59479380f, 0.f, 0.f, 0.f);
+	Source.MaterialValue(Index, "_OKSkyDouble", Double);
+	const float Scale = Double.R * Exposure.R;
 	Dynamic->SetVectorParameterValue(TEXT("P"), FLinearColor(Linear(Tint.R) * Scale, Linear(Tint.G) * Scale, Linear(Tint.B) * Scale, Rotation.R));
 	return Dynamic;
 }
