@@ -39,6 +39,12 @@ bool AOKStreetSocialScene::PartyJoin(int32 Girl){
    else if(Mood==1)S.PartyEvents.Add(OKMsg(TEXT("ui.party.reluctant_stay_note"), {{TEXT("grudge_name"), *S.Manifest.Characters[M].Name}, {TEXT("target_name"), *S.Manifest.Characters[Girl].Name}}));}}
  // Joining him where he sits with someone (Yuuka at the cafe table for their study evening) is not following him.
  const bool JoinsTalk=FreeTalkPartner()!=INDEX_NONE&&FreeTalkPartner()!=Girl;
+ // The talk she walks into goes on as the group's: its last lines start the group's log. Without them his next line
+ // ("here's the sweet drink I made for you"), meant for 惠惠 who had just asked for it, went to 三月七 who had arrived
+ // six seconds before (R6-31).
+ if(JoinsTalk&&S.Party.Num()==1&&S.PartyLog.IsEmpty()){const FString With=OKStreetStableId(S.Manifest.Characters[FreeTalkPartner()]);TArray<FString> Last;
+  for(int32 K=S.FreeTalkLog.Num()-1;K>=0&&Last.Num()<6;--K)if(const auto& L=S.FreeTalkLog[K];L.CharacterId==With)Last.Insert(L.Speaker+OKT(TEXT("ui.economy.colon_mark"))+L.Text,0);
+  S.PartyLog=MoveTemp(Last);}
  S.FreeTalkNotice=OKMsg(JoinsTalk?TEXT("ui.party.joins_you_line"):TEXT("ui.party.follows_you_line"), {{TEXT("girl_name"), *S.Manifest.Characters[Girl].Name}});S.Message=S.FreeTalkNotice;
  MindObserve(Girl,TEXT("party"),FreeTalkPartner()!=INDEX_NONE&&FreeTalkPartner()!=Girl?OKMsg(TEXT("ui.party.joined_talk_with"), {{TEXT("partner_name"), *S.Manifest.Characters[FreeTalkPartner()].Name}}):FString(OKT(TEXT("ui.party.he_asked_me_follow"))),PlaceHere(S.Male),0.3f);
  UE_LOG(LogTemp,Display,TEXT("Street party: actor %d joins (party %d)"),Girl,S.Party.Num());
