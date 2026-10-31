@@ -1206,6 +1206,9 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  // What he said, for the rules that read it (who pays: shop.rs chat_order_payer), one on one or to the group alike. A
  // turn the game wrote for her (a till note, "you just walked in", a nudge) is not his words.
  const bool His=!OKStreetFreeTalkIsNudge(Text)&&!S.SystemNote;S.SystemNote=false;
+ // While she sings to him his words wait (kept in the box): her answer would be drowned by the song, unshown and
+ // unheard, and still decide things ("my treat" to 惠惠 mid-song: her unheard "no, mine" made her pay, R6-34).
+ if(His&&SongIsSinging()&&S.Song.Girl==Character){S.FreeTalkNotice=OKMsg(TEXT("ui.song.wait_until_sung"),{{TEXT("name"),S.Manifest.Characters[Character].Name}});RefreshUI();UE_LOG(LogTemp,Display,TEXT("Street free talk: his line waits, actor=%d is singing"),Character);return;}
  // A note the game writes for her (a dish served, a notice, a nudge) while her last reply is not yet spoken waits for
  // it: its reply would cut hers off unheard ("is your thin wallet all right?" got only "the panini is here").
  if(!His&&HerReplyUnspoken()){S.DeferredNotes.Add(Text);S.FreeTalkDraft.Reset();UE_LOG(LogTemp,Display,TEXT("Street free talk: game note held until her reply is spoken (%d held)"),S.DeferredNotes.Num());return;}
@@ -1468,6 +1471,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
  if(const int64* Asked=S.ConfessionPending.Find(Character)){if(OKStreetMindNow(S)-*Asked<=3*1440)User+=OKT(TEXT("ui.scene.judge_pending_confession"));else S.ConfessionPending.Remove(Character);}
  // What the place they are in offers now (and what is out of reach): the activity do_now names belongs here.
  {const FString Here=ActivityBlockedLine(Character);if(!Here.IsEmpty())User+=TEXT("\n")+Here;}
+ // What they already did together today: "let's eat the watermelon we just split" refilled do_now with the watermelon
+ // splitting and bought and paid a second one three minutes after the first (R6-33).
+ if(S.ActivitiesDoneDay==OKStreetMindNow(S)/1440)if(const TArray<FString>* Done=S.ActivitiesDone.Find(Character)){TArray<FString> Names;
+  for(const FString& Id:*Done)if(const FOKStreetActivity* A=OKStreetFindActivity(Id))Names.Add(A->Name);
+  if(!Names.IsEmpty())User+=TEXT("\n")+OKMsg(TEXT("ui.scene.judge_done_today"),{{TEXT("list"),FString::Join(Names,OKT(TEXT("ui.bank.list_separator")))}});}
  // She offered to sing for him and waits for his answer: his words may be it (song_answer; Song.inl acts on it).
  if(S.Song.Phase==EOKSongPhase::Offered&&S.Song.Girl==Character)User+=OKT(TEXT("ui.scene.judge_song_offer"));
  // Or her song is ready and he asked her to wait (he may want it now); and a song she sang him before he may ask again.

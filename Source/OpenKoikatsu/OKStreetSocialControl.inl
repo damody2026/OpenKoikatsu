@@ -128,6 +128,7 @@ void AOKStreetSocialScene::StartControlServer(){
   if(Text.IsEmpty()){OKControlReply(Done,OKControlResult(false,TEXT("empty text")));return;}
   if(FreeTalkPartner()==INDEX_NONE){OKControlReply(Done,OKControlResult(false,TEXT("nobody to talk to")));return;}
   if(S.FreeTalkBusy){OKControlReply(Done,OKControlResult(false,TEXT("busy: she is still answering")));return;}
+  if(SongIsSinging()&&S.Song.Girl==FreeTalkPartner()){OKControlReply(Done,OKControlResult(false,TEXT("busy: she is singing")));return;}
   S.SystemNote=false;S.FreeTalkHeard=Text;S.FreeTalkDraft=Text;SendFreeTalk();
   OKControlReply(Done,OKControlResult(true));
  });
