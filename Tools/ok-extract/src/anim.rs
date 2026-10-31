@@ -2269,6 +2269,30 @@ pub(crate) fn studio_height_parameter(game_root:&Path,want:&str)->Option<String>
     ["height1","height"].iter().find(|name|entry.float_names.iter().any(|p|p==**name)).map(|p|p.to_string())
 }
 
+/// The Studio H controls a clip's blend trees actually vary along: (control, parameter, sample values). The controls are
+/// Studio's option 1 (height), option 2 (breast) and pattern (motion), as `studio_parameters` sets them; the values are
+/// the tree's own thresholds inside the sliders' 0..1, with both ends, so blending between them reproduces the tree.
+pub(crate) fn studio_blend_axes(game_root:&Path,want:&str)->Vec<(&'static str,String,f32,Vec<f32>)> {
+    let Some((source,label))=want.split_once('|') else {return Vec::new();};
+    let Some(source)=source.strip_prefix(controller::SOURCE_PREFIX).and_then(|s|source_path(game_root,s)) else {return Vec::new();};
+    let entries=controller::entries(&source);
+    let Some(entry)=entries.iter().find(|e|e.label==label) else {return Vec::new();};
+    let mut trees:Vec<&controller::MotionNode>=entry.motion.iter().chain(entry.active_layers.iter().filter_map(|l|l.motion.as_ref())).collect();
+    if let Some(base)=entry.layer.as_ref().and_then(|l|entries.iter().find(|e|e.label==l.base_label)) {trees.extend(base.motion.iter());}
+    let mut axes=Vec::new();
+    for (control,names) in [("option1",&["height1","height"][..]),("option2",&["Breast1","Breast","breast"][..]),("pattern",&["motion"][..])] {
+        let Some(p)=names.iter().find_map(|n|entry.float_defaults.iter().find(|p|p.name==*n)) else {continue;};
+        let mut at=Vec::new();
+        for t in &trees {t.positions_of(p.id,&mut at);}
+        if at.is_empty() {continue;}
+        at.extend([0.,1.]);
+        let mut at:Vec<f32>=at.into_iter().filter(|v|v.is_finite()).map(|v|v.clamp(0.,1.)).collect();
+        at.sort_by(f32::total_cmp);at.dedup_by(|a,b|(*a-*b).abs()<1e-4);
+        axes.push((control,p.name.clone(),p.default.clamp(0.,1.),at));
+    }
+    axes
+}
+
 pub(crate) fn studio_parameters(game_root:&Path,want:&str,height:f32,breast:f32,is_h:bool,
     options:[f32;2],motion:Option<f32>)->Option<HashMap<String,f32>> {
     if ![height,breast,options[0],options[1]].iter().all(|v|v.is_finite()) || motion.is_some_and(|v|!v.is_finite()) {return None;}

@@ -70,6 +70,9 @@ public:
 
 	/** The preview actor showing a character or item object. */
 	AKKPreviewActor* PreviewOf(int32 Id) const;
+	/** The Studio controls (option1, option2, pattern) a shown character's H motion blends along and the values its
+	 *  player has (empty: a plain clip). */
+	TArray<TPair<FString, float>> BlendControlsOf(int32 Id) const;
 	/** The shown objects' preview actors (characters and items; not the map). */
 	TArray<AActor*> ObjectPreviews() const;
 	USceneComponent* ComponentOf(int32 Id) const;
@@ -186,6 +189,10 @@ private:
         TArray<FQuat> AppliedFixedNeck;
 		/** Studio animation loaded from the OK animation library (kept alive while shown). */
 		TStrongObjectPtr<UObject> StudioAnim;
+		/** The Studio controls the shown animation blends along (player parameter I is control I), their defaults and
+		 *  the values the player has. */
+		TArray<FString> BlendControls;
+		TArray<float> BlendDefaults, AppliedBlend;
 		int32 AppliedHands[2] = { -1, -1 };
 		bool bEyesTracking = false;
 		bool bFixedEyesApplied = false;

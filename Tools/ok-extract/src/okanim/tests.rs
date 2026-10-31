@@ -63,7 +63,7 @@ fn blend_1d_2d() {
     p.params = vec![0.5, 0.0];
     let e = p.eval(1.0 - 1e-4);
     assert!((angle_x(e.roles[0].pose.rot[1]) - 0.5).abs() < 2e-2, "{}", angle_x(e.roles[0].pose.rot[1]));
-    let axes = vec![Axis { name: "x".into(), min: 0.0, max: 1.0 }, Axis { name: "y".into(), min: 0.0, max: 1.0 }];
+    let axes = vec![Axis { name: "x".into(), min: 0.0, max: 1.0, param: None }, Axis { name: "y".into(), min: 0.0, max: 1.0, param: None }];
     let s = |x: f32, y: f32| BlendSample { at: vec![x, y], spec: Box::new(Spec::Anim { anim: 0, speed: 1.0 }) };
     let samples = vec![s(0.0, 0.0), s(1.0, 0.0), s(0.0, 1.0), s(1.0, 1.0)];
     for p in [[0.25f32, 0.25], [0.9, 0.6], [0.5, 0.5], [2.0, -1.0]] {
@@ -394,7 +394,7 @@ fn batch_matches_session() {
     let keys: Vec<String> = crate::anim::clip_names_for_source(&game, &source).into_iter().take(6).map(|l| format!("{source}|{l}")).collect();
     let dir = std::env::temp_dir().join("ok_batch_test");
     let _ = std::fs::remove_dir_all(&dir);
-    let items: Vec<super::batch::Item> = keys.iter().enumerate().map(|(i, k)| super::batch::Item { key: k.clone(), file: dir.join(format!("{i}.okanim")).to_string_lossy().into(), source: source.clone() }).collect();
+    let items: Vec<super::batch::Item> = keys.iter().enumerate().map(|(i, k)| super::batch::Item { key: k.clone(), file: dir.join(format!("{i}.okanim")).to_string_lossy().into(), source: source.clone(), params: Default::default() }).collect();
     let sampler = convert::ClipSampler::of_session(&mut s).unwrap();
     let t0 = std::time::Instant::now();
     let b = super::batch::Batch::start(sampler, items, 30.0, 4);

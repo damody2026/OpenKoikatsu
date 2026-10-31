@@ -266,7 +266,8 @@ pub struct Section {
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct Axis { pub name: String, pub min: f32, pub max: f32 }
+/// `param`: which player parameter drives the axis (default: the axis's own position), so nested blends can read different ones.
+pub struct Axis { pub name: String, pub min: f32, pub max: f32, #[serde(default, skip_serializing_if = "Option::is_none")] pub param: Option<usize> }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BlendSample { pub at: Vec<f32>, pub spec: Box<Spec> }
@@ -381,9 +382,10 @@ fn duration(spec: &Spec, anims: &[Arc<OkAnim>], params: &[f32]) -> f32 {
 /// edge/point outside the hull).
 pub fn blend_weights(axes: &[Axis], samples: &[BlendSample], params: &[f32]) -> Vec<(usize, f32)> {
     let norm = |v: f32, a: &Axis| if a.max > a.min { ((v - a.min) / (a.max - a.min)).clamp(0.0, 1.0) } else { 0.0 };
+    let value = |i: usize| params.get(axes[i].param.unwrap_or(i)).copied().unwrap_or(0.0);
     if samples.len() == 1 { return vec![(0, 1.0)]; }
     if axes.len() == 1 {
-        let x = norm(params.first().copied().unwrap_or(0.0), &axes[0]);
+        let x = norm(value(0), &axes[0]);
         let mut order: Vec<usize> = (0..samples.len()).collect();
         order.sort_by(|&a, &b| norm(samples[a].at[0], &axes[0]).total_cmp(&norm(samples[b].at[0], &axes[0])));
         let xs: Vec<f32> = order.iter().map(|&i| norm(samples[i].at[0], &axes[0])).collect();
@@ -398,7 +400,7 @@ pub fn blend_weights(axes: &[Axis], samples: &[BlendSample], params: &[f32]) -> 
         }
         return vec![(order[0], 1.0)];
     }
-    let p = [norm(params.first().copied().unwrap_or(0.0), &axes[0]), norm(params.get(1).copied().unwrap_or(0.0), &axes[1])];
+    let p = [norm(value(0), &axes[0]), norm(value(1), &axes[1])];
     let pts: Vec<[f32; 2]> = samples.iter().map(|s| [norm(s.at[0], &axes[0]), norm(s.at[1], &axes[1])]).collect();
     let tris = delaunay(&pts);
     for t in &tris {

@@ -169,6 +169,20 @@ impl MotionNode {
         match self {Self::Clip{clip,..}=>clip.additive_reference_valid,
             Self::OneD{children,..}|Self::Cartesian{children,..}=>children.iter().all(Self::valid_additive_reference)}
     }
+    /// The values the tree's blend nodes place children at along parameter `id` (unsorted, may repeat).
+    pub fn positions_of(&self, id: u32, out: &mut Vec<f32>) {
+        match self {
+            Self::Clip{..} => {}
+            Self::OneD{parameter,thresholds,children} => {
+                if *parameter==id {out.extend_from_slice(thresholds);}
+                for c in children {c.positions_of(id,out);}
+            }
+            Self::Cartesian{parameters:ids,positions,children,..} => {
+                for (axis,p) in ids.iter().enumerate() {if *p==id {out.extend(positions.iter().map(|q|q[axis]));}}
+                for c in children {c.positions_of(id,out);}
+            }
+        }
+    }
     pub fn leaves(&self, parameters: &HashMap<u32,f32>, weight: f32, out: &mut Vec<(ClipEntry,f32,f32,f32)>) {
         match self {
             Self::Clip{clip,cycle,duration_factor} => out.push((clip.clone(),weight,*cycle,*duration_factor)),

@@ -102,6 +102,22 @@ struct OKSTUDIO_API FOKSceneIkTarget
 	bool operator==(const FOKSceneIkTarget& O) const = default;
 };
 
+/** One Studio control of the character's H motion by name: option1 (height), option2 (breast) or pattern (KStudio's
+ *  animeOptionParam1/2 and animePattern, HS2Studio6's 輔助 1/2). */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneAnimFloat
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	FString Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	float Value = 0.f;
+
+	bool operator==(const FOKSceneAnimFloat& O) const = default;
+};
+
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneCharacter
 {
@@ -134,6 +150,14 @@ struct OKSTUDIO_API FOKSceneCharacter
 	/** Seconds into the animation when the scene opens. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", meta = (ClampMin = "0"))
 	float Time = 0.f;
+
+	/** Plays the motion over and over even when it does not loop by itself (KStudio's forceLoop). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character")
+	bool bForceLoop = false;
+
+	/** The Studio controls set for the motion (the rest keep the controller's own values). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character")
+	TArray<FOKSceneAnimFloat> AnimFloats;
 
 	/** Clothing state per part (top, bottom, bra, shorts, gloves, pantyhose, socks, inner shoes, outer shoes): 0 on, 1 half, 3 off. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character", EditFixedSize)

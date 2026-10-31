@@ -220,17 +220,26 @@ namespace
 				// A sideloader mod item: the scene saved the session's local slot; the mod's GUID and own slot name it
 				// (studio_mod_items.json, ok-extract --oklib studio-mods). The item keeps the mod's numbers from now on.
 				FString ModGuid;
+				const FOKStudioEffect* ModEffect = nullptr;
+				float ModEffectScale = 1.f;
 				if (O->TryGetStringField(TEXT("mod_guid"), ModGuid) && !ModGuid.IsEmpty())
 				{
+					// A particle pack's item (its ParticleSystems are not converted): the OK effect its name stands for.
+					if (const FOKStudioCatalogItem* Particle = FOKStudioCatalog::Get().FindModParticle(ModGuid, int32(O->GetNumberField(TEXT("mod_slot")))))
+					{
+						ModEffect = FOKStudioCatalog::Get().EffectForParticleMod(*Particle, &ModEffectScale);
+						if (!ModEffect && Particle->Model.IsEmpty()) Note(FString::Printf(TEXT("mod particle items without a matching OK effect (add a word to effects.json): %s"), *Particle->Name));
+					}
 					Entry = FOKStudioCatalog::Get().FindModItem(ModGuid, int32(O->GetNumberField(TEXT("mod_slot"))));
 					if (Entry) { Group = Entry->Group; Category = Entry->Category; No = Entry->No; Note(TEXT("mod items come from the library's converted mods")); }
-					else Note(FString::Printf(TEXT("mod items not in the library (ok-extract <game> --oklib studio-mods <library> <scene folder>): %s"), *ModGuid));
+					else if (!ModEffect) Note(FString::Printf(TEXT("mod items not in the library (ok-extract <game> --oklib studio-mods <library> <scene folder>): %s"), *ModGuid));
 				}
 				// Particle items become OK Niagara effects (the game's ParticleSystems are not converted).
-				if (const FOKStudioEffect* Effect = FOKStudioCatalog::Get().EffectForKks(Group, Category, No))
+				if (const FOKStudioEffect* Effect = ModEffect ? ModEffect : FOKStudioCatalog::Get().EffectForKks(Group, Category, No))
 				{
 					const int32 FxId = Add(EOKSceneObjectKind::Effect, Effect->Name, Parent, O);
 					Doc->Find(FxId)->Effect.Effect = Effect->Id;
+					if (Effect == ModEffect) Doc->Find(FxId)->Transform.MultiplyScale3D(FVector(ModEffectScale));
 					Note(TEXT("particle items become OK Niagara effects"));
 					Children(O, FxId);
 					return;
@@ -471,6 +480,20 @@ namespace
 						if (O->TryGetNumberField(TEXT("anime_speed"), Speed)) C.Speed = float(Speed);
 						double Time = 0.;
 						if (O->TryGetNumberField(TEXT("anime_time"), Time)) C.Time = float(Time) * FMath::Max(A->Duration, 0.01f);
+						O->TryGetBoolField(TEXT("anime_force_loop"), C.bForceLoop);
+						// The H controls the motion blends along: KStudio's animeOptionParam1/2 and animePattern.
+						const TArray<TSharedPtr<FJsonValue>>* Options = nullptr;
+						O->TryGetArrayField(TEXT("anime_options"), Options);
+						double Pattern = 0.;
+						const bool bPattern = O->TryGetNumberField(TEXT("anime_pattern"), Pattern);
+						for (const FString& Control : A->Controls)
+						{
+							const int32 Option = Control == TEXT("option1") ? 0 : Control == TEXT("option2") ? 1 : -1;
+							if (Option >= 0 ? !(Options && Options->IsValidIndex(Option)) : !bPattern) continue;
+							FOKSceneAnimFloat& F = C.AnimFloats.AddDefaulted_GetRef();
+							F.Name = Control;
+							F.Value = FMath::Clamp(float(Option >= 0 ? (*Options)[Option]->AsNumber() : Pattern), 0.f, 1.f);
+						}
 					}
 					else Note(FString::Printf(TEXT("Studio animation %d/%d/%d is not in the OK animation library (a mod motion this installation lacks; anim-convert adds it once the mod is installed)"), G, Cat, N));
 				}

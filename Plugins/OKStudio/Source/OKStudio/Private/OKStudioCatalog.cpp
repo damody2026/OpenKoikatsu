@@ -16,6 +16,13 @@ namespace
 
 	int32 Int(const TSharedPtr<FJsonObject>& O, const TCHAR* Key) { double V = 0.; return O->TryGetNumberField(Key, V) ? int32(V) : 0; }
 	FString Str(const TSharedPtr<FJsonObject>& O, const TCHAR* Key) { FString V; O->TryGetStringField(Key, V); return V; }
+	/** A mod bundle of particle effects: the zipmod or the bundle is named for them (RSkoi's studio particle effects,
+	 *  Pineapple's unity particle pack, …). */
+	bool IsParticlePack(const FString& Bundle)
+	{
+		const FString B = Bundle.ToLower();
+		return B.Contains(TEXT("particle")) || B.Contains(TEXT("effect")) || B.Contains(TEXT("/fx"));
+	}
 	void Flags(const TSharedPtr<FJsonObject>& O, const TCHAR* Key, bool (&Out)[3])
 	{
 		const TArray<TSharedPtr<FJsonValue>>* A = nullptr;
@@ -111,7 +118,7 @@ void FOKStudioCatalog::LoadModItems(const FString& File)
 		const auto O = V->AsObject();
 		FOKStudioCatalogItem I;
 		I.Model = Str(O, TEXT("model"));
-		if (I.Model.IsEmpty()) continue;
+		I.Bundle = Str(O, TEXT("bundle"));
 		I.Guid = Str(O, TEXT("guid"));
 		I.Group = Int(O, TEXT("group")); I.Category = Int(O, TEXT("category")); I.No = Int(O, TEXT("no"));
 		I.Name = Str(O, TEXT("name")); I.Prefab = Str(O, TEXT("prefab")); I.Child = Str(O, TEXT("child"));
@@ -119,6 +126,10 @@ void FOKStudioCatalog::LoadModItems(const FString& File)
 		Flags(O, TEXT("colors"), I.Colors); Flags(O, TEXT("patterns"), I.Patterns);
 		// Two mods may use the same group, category and number: the first keeps the key, both stay findable by GUID.
 		const TPair<FString, int32> Key(I.Guid.ToLower(), I.No);
+		// A particle pack's items are also kept for KStudio imports (EffectForParticleMod); ones without a converted model
+		// (ParticleSystems only) stay out of the item browser.
+		if (IsParticlePack(I.Bundle) && !ModParticles.Contains(Key)) ModParticles.Add(Key, I);
+		if (I.Model.IsEmpty()) continue;
 		if (!ModItems.Contains(Key)) ModItems.Add(Key, Items.Num());
 		Items.Add(MoveTemp(I));
 	}
@@ -156,6 +167,11 @@ const FOKStudioCatalogItem* FOKStudioCatalog::FindModItem(const FString& Guid, i
 	return Index && Items.IsValidIndex(*Index) ? &Items[*Index] : nullptr;
 }
 
+const FOKStudioCatalogItem* FOKStudioCatalog::FindModParticle(const FString& Guid, int32 Slot) const
+{
+	return ModParticles.Find(TPair<FString, int32>(Guid.ToLower(), Slot));
+}
+
 void FOKStudioCatalog::LoadAnims(const FString& File)
 {
 	FString Text;
@@ -172,6 +188,18 @@ void FOKStudioCatalog::LoadAnims(const FString& File)
 		A.Name = Str(O, TEXT("name")); A.File = Str(O, TEXT("file"));
 		double D = 0.; O->TryGetNumberField(TEXT("duration"), D); A.Duration = float(D);
 		O->TryGetBoolField(TEXT("looping"), A.bLooping);
+		for (const TSharedPtr<FJsonValue>& X : Array(O, TEXT("axes")))
+		{
+			const auto Axis = X->AsObject();
+			if (!Axis) continue;
+			double Default = 0.;
+			Axis->TryGetNumberField(TEXT("default"), Default);
+			TArray<float>& At = A.ControlValues.AddDefaulted_GetRef();
+			for (const TSharedPtr<FJsonValue>& Value : Array(Axis, TEXT("at"))) At.Add(float(Value->AsNumber()));
+			A.Controls.Add(Str(Axis, TEXT("control")));
+			A.ControlDefaults.Add(float(Default));
+		}
+		for (const TSharedPtr<FJsonValue>& X : Array(O, TEXT("variants"))) A.Variants.Add(X->AsString());
 		// Who plays it: the catalogue's "sex" (ok-extract studio_anims::motion_sex), or the same rule on a catalogue
 		// written before it (group or category named for a man or a woman).
 		double Sex = -1.;
@@ -206,6 +234,14 @@ void FOKStudioCatalog::LoadEffects(const FString& File)
 		E.Asset = Str(O, TEXT("asset")); E.Template = Str(O, TEXT("template"));
 		const TArray<TSharedPtr<FJsonValue>> Rgb = Array(O, TEXT("color"));
 		if (Rgb.Num() >= 3) E.Color = FLinearColor(float(Rgb[0]->AsNumber()), float(Rgb[1]->AsNumber()), float(Rgb[2]->AsNumber()), 1.f);
+		// A word is "fire", or ["cigarette", 0.1] with the scale it gives the effect.
+		for (const TSharedPtr<FJsonValue>& W : Array(O, TEXT("words")))
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+			const bool bScaled = W->TryGetArray(Pair) && Pair->Num() == 2;
+			E.Words.Add((bScaled ? (*Pair)[0]->AsString() : W->AsString()).ToLower());
+			E.WordScales.Add(bScaled ? float((*Pair)[1]->AsNumber()) : 1.f);
+		}
 		for (const TSharedPtr<FJsonValue>& K : Array(O, TEXT("kks")))
 		{
 			const TArray<TSharedPtr<FJsonValue>>& A = K->AsArray();
@@ -213,6 +249,23 @@ void FOKStudioCatalog::LoadEffects(const FString& File)
 		}
 		if (!E.Id.IsEmpty()) Effects.Add(MoveTemp(E));
 	}
+}
+
+const FOKStudioEffect* FOKStudioCatalog::EffectForParticleMod(const FOKStudioCatalogItem& Item, float* OutScale) const
+{
+	if (Item.Guid.IsEmpty() || !IsParticlePack(Item.Bundle)) return nullptr;
+	const FString Text = (Item.Name + TEXT(" ") + Item.Prefab).ToLower();
+	const FOKStudioEffect* Best = nullptr;
+	int32 BestLength = 0;
+	for (const FOKStudioEffect& E : Effects)
+		for (int32 I = 0; I < E.Words.Num(); ++I)
+			if (E.Words[I].Len() > BestLength && Text.Contains(E.Words[I]))
+			{
+				Best = &E;
+				BestLength = E.Words[I].Len();
+				if (OutScale) *OutScale = E.WordScales[I];
+			}
+	return Best;
 }
 
 const FOKStudioEffect* FOKStudioCatalog::FindEffect(const FString& Id) const

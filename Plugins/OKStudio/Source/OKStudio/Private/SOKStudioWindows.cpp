@@ -228,6 +228,13 @@ void SOKStudioPanel::TickUi(float DeltaTime)
 		const TPair<int32, int32> Now(Game->SelectedId, Shown ? Shown->Session.PartCount() : 0);
 		if (Now != MaterialShown) { if (Now.Key != MaterialShown.Key) MaterialPart = 0; MaterialShown = Now; DeferFloat(TEXT("material")); }
 	}
+	// The animation controller lists the Studio controls of the selected character's motion, which change with it.
+	if (IsFloatOpen(TEXT("animctl")))
+	{
+		FString Now = FString::FromInt(Game->SelectedId);
+		if (Game->SceneActor) for (const TPair<FString, float>& P : Game->SceneActor->BlendControlsOf(Game->SelectedId)) Now += TEXT("|") + P.Key;
+		if (Now != AnimCtlShown) { AnimCtlShown = Now; DeferFloat(TEXT("animctl")); }
+	}
 	// The window title: the scene and a star while it has unsaved changes.
 	if (GEngine && GEngine->GameViewport)
 		if (TSharedPtr<SWindow> Window = GEngine->GameViewport->GetWindow())
@@ -941,7 +948,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildAnimController()
 			+ SHorizontalBox::Slot().FillWidth(0.3f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(Name), 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(0.7f)[SNew(SBox).HeightOverride(18.f)[W]];
 	};
-	return SNew(SVerticalBox)
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
 			[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([Character, Playing]
 			{
@@ -957,7 +964,10 @@ TSharedRef<SWidget> SOKStudioPanel::BuildAnimController()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("◀ 變化")), [Step] { Step(-1); }, 0.f, 20.f, false, 10.f)]
-			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("變化 ▶")), [Step] { Step(1); }, 0.f, 20.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("變化 ▶")), [Step] { Step(1); }, 0.f, 20.f, false, 10.f)]
+			// Studio's 強制ループ: a motion that ends starts over.
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("強制循環")), [Do] { Do([](FOKSceneCharacter& C) { C.bForceLoop = !C.bForceLoop; }); },
+				0.f, 20.f, TAttribute<bool>::CreateLambda([Character] { const FOKSceneObject* X = Character(); return X && X->Character.bForceLoop; }), 10.f)]
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f)
 		[
@@ -970,6 +980,46 @@ TSharedRef<SWidget> SOKStudioPanel::BuildAnimController()
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("從頭")), [Do] { Do([](FOKSceneCharacter& C) { C.Time = 0.f; }); }, 0.f, 20.f, false, 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("停止")), [this, Do] { Do([](FOKSceneCharacter& C) { C.StudioAnimeNo = -1; }); DeferRebuild(); }, 0.f, 20.f, false, 10.f)]
 		];
+	// Studio's 輔助 1／2 and 動作模式 sliders: the controls the selected character's H motion blends along.
+	const FOKSceneObject* Selected = Character();
+	const TArray<TPair<FString, float>> Controls = Selected && Game.IsValid() && Game->SceneActor ? Game->SceneActor->BlendControlsOf(Selected->Id) : TArray<TPair<FString, float>>();
+	if (!Controls.IsEmpty())
+	{
+		Box->AddSlot().AutoHeight().Padding(0.f, 5.f, 0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("動作參數")), 10.f, TextSoft())]
+			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("預設")), [Do] { Do([](FOKSceneCharacter& C) { C.AnimFloats.Reset(); }); }, 44.f, 18.f, false, 10.f)]
+		];
+	}
+	for (const TPair<FString, float>& Control : Controls)
+	{
+		const FString Name = Control.Key;
+		const TCHAR* Label = Name == TEXT("option1") ? TEXT("輔助 1（身長）") : Name == TEXT("option2") ? TEXT("輔助 2（胸）") : Name == TEXT("pattern") ? TEXT("動作模式") : *Name;
+		Box->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			Line(Label, Spin([this, Character, Name]
+				{
+					const FOKSceneObject* X = Character();
+					const FOKSceneAnimFloat* F = X ? X->Character.AnimFloats.FindByPredicate([&Name](const FOKSceneAnimFloat& A) { return A.Name == Name; }) : nullptr;
+					if (F) return F->Value;
+					// Not set by the scene: what the player has (the controller's own value).
+					for (const TPair<FString, float>& P : X && Game.IsValid() && Game->SceneActor ? Game->SceneActor->BlendControlsOf(X->Id) : TArray<TPair<FString, float>>())
+						if (P.Key == Name) return P.Value;
+					return 0.f;
+				},
+				[Do, Name](float V)
+				{
+					Do([&Name, V](FOKSceneCharacter& C)
+					{
+						FOKSceneAnimFloat* F = C.AnimFloats.FindByPredicate([&Name](const FOKSceneAnimFloat& A) { return A.Name == Name; });
+						if (!F) { F = &C.AnimFloats.AddDefaulted_GetRef(); F->Name = Name; }
+						F->Value = FMath::Clamp(V, 0.f, 1.f);
+					});
+				}, 0.f, 1.f, 0.01f))
+		];
+	}
+	return Box;
 }
 
 void SOKStudioPanel::ShowLoadReport()

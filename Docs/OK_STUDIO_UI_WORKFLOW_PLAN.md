@@ -730,7 +730,7 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 - 2026-10-31 畫面差異（先用診斷確認是誰畫的）：
   - `83283571_p1` 中央白團：逐項隱藏與關閉後處理確認是 SunShafts（`scene` 操作 `{"post":{"bSunShafts":false}}` 後白團和右側鋼架的橘白光都消失）。原生相機的順序是 BloomAndFlares → AmplifyColor → SunShafts，我們把光束和霧、AO 放在同一個泛光前的材質裡，加上去的光束再被泛光擴散成一整團。改成同一段程式跑兩個 pass：霧與 AO 在泛光前，SunShafts 在調色之後（`BL_SceneColorAfterDOF` priority 110）；每個取樣另外夾在 0～1（原生的光束來源是 8 位元 RT）。結果窗口後方出現一條條光線，白團消失：`F:\OpenKoikatsu\Saved\OKStudio\bright1031\u_shafts_after_grade.png`（之前 `r_before.png`）。
   - 「火焰太大、鋼架被橘光照亮」：對照舊圖，其實是過亮天空與被泛光放大的光束，上一項一起修掉。真正的火焰（mod 道具 Fire 1／Fire 4，分組 8422 的 ParticleSystem）目前完全沒畫（`bounds` 的 `built` 為 false、沒有部件）；ParticleSystem 不轉換是 10-17 的決定，要畫得改用 OK 的 Niagara 特效對應。
-  - `83572034_p1` 月盤暗面：H_enry 的 `main_item_studio_alpha` 主 pass 是 `AlphaToMask On`（DXBC 確認沒有 0.5 clip，alpha＝貼圖 a×`_alpha`，SrcAlpha/OneMinusSrcAlpha、寫深度）。月亮貼圖（DXT5）暗面 alpha 0.17、月牙接近 1；原生用一個取樣畫，alpha 低於一半的像素不畫，所以只剩月牙。修正：`shader_pass_state` 讀主 pass 的 `alphaToMask`，記成 `_OKShaderAlphaToMask`；建零件時對仍是自己 shader（state key 相符）的 `main_item_studio_alpha` 把 alpha < 0.5 的 texel 清成 0。不透明的 `main_item_studio` 也帶同一個旗標但輸出 alpha 1，不能裁（第一版裁了，活塞頂變成白盤）。逐點：月盤內 (640,90) 原生 (0,0,3)、修正前 (2,7,63)、修正後 (0,0,0)；月牙 (800,120) 兩邊一致。`F:\OpenKoikatsu\Saved\OKStudio\moon1031\d_alpha_only.png`。已轉好的 mod 模型要 `OKLIB_REFRESH=meshes_for_maindata ... --oklib studio-mod-nodes` 重錄才帶這個旗標。
+  - `83572034_p1` 月盤暗面：H_enry 的 `main_item_studio_alpha` 主 pass 是 `AlphaToMask On`（DXBC 確認沒有 0.5 clip，alpha＝貼圖 a×`_alpha`，SrcAlpha/OneMinusSrcAlpha、寫深度）。月亮貼圖（DXT5）暗面 alpha 0.17、月牙接近 1；原生用一個取樣畫，alpha 低於一半的像素不畫，所以只剩月牙。修正：`shader_pass_state` 讀主 pass 的 `alphaToMask`，記成 `_OKShaderAlphaToMask`；建零件時對仍是自己 shader（state key 相符）的 `main_item_studio_alpha` 把 alpha < 0.5 的 texel 清成 0。不透明的 `main_item_studio` 也帶同一個旗標但輸出 alpha 1，不能裁（第一版裁了，活塞頂變成白盤）。逐點：月盤內 (640,90) 原生 (0,0,3)、修正前 (2,7,63)、修正後 (0,0,0)；月牙 (800,120) 兩邊一致。`F:\OpenKoikatsu\Saved\OKStudio\moon1031\d_alpha_only.png`。已轉好的模型不必重錄：`shader_states.json` 改版到 3 也記 AlphaToMask，遊戲啟動時發現目錄版本舊就在背景重建（`shader_states::ensure_in_background`），讀模型時 `complete` 依 shader 名稱補上旗標（記錄時沒帶 AlphaToMask 的舊模型也補）；KKS 原版的 `main_item_studio_alpha` 同樣是 AlphaToMask On。
   - 同一張場景還有未修的差異：原生中央有一個玻璃房間（角色在白磚房裡），我們沒有；兩側螢幕的內容也不同。
 - 驗證：新增 `Tools/check_ok_studio_buttons.lua`，經控制通道新的 `click` 操作（`{"text","index","contains"}`，找畫面上文字相符的 `STextBlock`，對它所在的 `SButton` 呼叫 `SimulateClick`，跑的就是按鈕自己的處理）逐一按下 U16～U21 新加的按鈕，再用 `bones`／`state`／`keys` 讀回結果。實測 57/57（加上 U22 後 65/65，第二批後 72/72）；`OKStudio.UiSelfTest` 46/46；`verify_ok_studio.lua` 6/6；`cargo test studio_ik --include-ignored` 通過。
 
@@ -740,12 +740,23 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 
 | 階段 | 內容 | 目前缺的 |
 |---|---|---|
-| U23 角色細調補完 | 眼睛開合滑桿（要先在 `AKKPreviewActor` 加眼睛開合的後端，現在只有 `SetMouthOpen`）、頸部跟隨強度、遊戲內建姿勢清單（「n／總數」上一個／下一個、復位 T-pose） | U16 留下的三項 |
-| U24 姿勢鏡像 | 所選角色的 FK 姿勢左右鏡像（含手指）、只鏡像左／右半邊；IK 目標同時鏡像。HS2Studio6 還沒做（第 3.3 節），可以超前 | 沒有 |
-| U25 動畫控制器補完 | 輔助 1／2（Studio 的 `animeOptionParam1/2`，要從動畫資料帶出混合參數）、循環開關 | 浮窗已有速度、時間、變化、播放／暫停／停止 |
-| U26 mod 粒子道具 | mod 的 ParticleSystem 道具（`83283571_p1` 的 Fire 1／Fire 4）現在完全不畫：依名稱與貼圖對到 OK 的 Niagara 特效，對不到的列進讀取報告 | 完全沒有 |
-| U27 場景比對剩餘 | `83572034_p1` 中央的玻璃房間不見、兩側螢幕內容不同；`83283571_p1` 原生整體偏粉紅（AmplifyColor LUT 或雲層零件）；光束道具ビーム・扇本身的放射光 | 未查 |
+| U23 角色細調補完 | 眼睛開合滑桿、頸部跟隨強度、遊戲內建姿勢清單（「n／總數」上一個／下一個、復位 T-pose） | **已在 87b9c7877 做完**（列表時漏查程式碼，誤列為未做） |
+| U24 姿勢鏡像 | 所選角色的 FK 姿勢左右鏡像（含手指）、只鏡像左／右半邊；IK 目標同時鏡像 | **已在 87b9c7877 做完**；按鈕測試補上左→右讀回 |
+| U25 動畫控制器補完 | 輔助 1／2（Studio 的 `animeOptionParam1/2`）、動作模式（`animePattern`）、循環開關 | **已做**：輔助與動作模式（下方記錄）、強制循環 |
+| U26 mod 粒子道具 | mod 的 ParticleSystem 道具（`83283571_p1` 的 Fire 1／Fire 4）現在完全不畫：依名稱與貼圖對到 OK 的 Niagara 特效，對不到的列進讀取報告 | **已做**（下方記錄） |
+| U27 場景比對剩餘 | `83572034_p1` 中央的玻璃房間不見、兩側螢幕內容不同；`83283571_p1` 原生整體偏粉紅（AmplifyColor LUT 或雲層零件）；光束道具ビーム・扇本身的放射光 | 玻璃房間是原生截圖工具的假差異（下方記錄）；偏粉紅、光束放射光未查 |
 | U28 效能與小視窗 | `run_ok_studio_perf.lua` 只開一個 Unreal 時量；1280×720 視窗下逐窗檢查不出框 | 未量 |
+
+**U25 記錄（2026-10-31）**：OK Studio 播的是動作庫預先烘好的 `.okanim`，每個動作只有控制器預設值那一份，Session 的 Animator 參數 API 對它回 0 個參數（實測 60 多個動作）。改法：
+
+- 轉換器（`ok-extract <遊戲> --oklib anim-convert <lib> <card> [filter] [threads]`）對 H 動作讀控制器，找出 blend tree 真正沿著哪些 Studio 控制變化（`anim::studio_blend_axes`：輔助 1＝`height`／`height1`、輔助 2＝`breast` 系、動作模式＝`motion`），在樹的門檻值與 0、1 的每個格點各烘一份 `<動作>@<控制>-<值>_….okanim`（預設值那點也重烘，不混用舊檔：舊檔可能是別張卡轉的）。轉完逐軸比對：沿某軸所有變體一模一樣（控制器有這個參數、取樣出來的動作卻不跟著變）就去掉那一軸，留第一個值的變體改名、其餘刪除。目錄 `studio_anims.json` 每個動作多記 `axes`（控制、參數名、預設值、取樣值）與 `variants`；讀控制器很慢（全部 H 動作約 20 分鐘），所以記 `blend_checked`，之後的轉換沿用。
+- 全部 4,918 個 H 動作的控制器：4,318 個的樹用到身長（0、0.5、1）、558 個另有動作模式（0、1）、14 個用 `height1`、胸部參數沒有任何動作用到、26 個都沒有。但實際取樣 `2/112/1` 弱ループ時身長 0～1 五個值輸出完全相同（`h_motion_along_height`），只有動作模式改變動作，所以身長軸會被上面的比對去掉；身長沒作用是取樣器的限制還是動作本身如此尚未查明。
+- OK Studio：有變體的動作把格點組成巢狀 1D blend（每層一個控制，`Axis.param` 指定讀第幾個播放器參數，等於多線性內插）；`FOKSceneCharacter::AnimFloats` 以控制名（`option1`／`option2`／`pattern`）記值，沒設的用控制器預設值。動畫控制器浮窗列出這個動作有的控制（輔助 1（身長）、動作模式）與「預設」；KStudio 場景匯入帶入 `animeOptionParam1/2` 與 `animePattern`。控制通道：`state` 每個角色的 `anim_controls`（播放器目前的值），`pose` 的 `anim_controls` 設值（空物件＝全部回預設）。
+- 強制循環（KStudio 的 forceLoop）：動畫控制器「強制循環」，播放時間對動作長度取模；KStudio 匯入帶入。
+
+**U26 記錄（2026-10-31）**：mod 粒子道具（只有 ParticleSystem）原本完全不畫。`studio_mod_items.json` 的道具若來自粒子包（bundle 路徑含 particle／effect／fx），另存一份（沒有轉出模型的也留，但不進道具瀏覽器）；KStudio 匯入時依名稱與 prefab 對 `effects.json` 新增的 `words`（最長的字優先，可寫成 `["cigarette", 0.1]` 帶縮放）換成 OK 的 Niagara 特效，對不到的列進讀取報告。`83283571_p1`：RSkoi 的 Fire 1／Fire 4 變成火焰、Gas 變成煙、Dust 變成光粉；手上的 Cigarette Smoke 第一版對成全尺寸的煙，畫面中央一大團白，加上 0.1 縮放後消失。`F:\OpenKoikatsu\Saved\OKStudio\u26\83283571_p1_fx2.png`。粒子包裡有模型的道具（螢幕、蝴蝶）照常當模型，只有沒模型又對不到的才進讀取報告。
+
+**U27 記錄（2026-10-31）**：`83572034_p1` 中央「玻璃房間不見、兩側螢幕內容不同」不是我們的問題：場景的地圖是 33 號（空き部室，prefab `p_koi_stu_map49_00`），地圖位移 caMap 是 y＝-100，OK Studio 照樣放在地下 100 m；原生截圖工具（`kks_bright_1031\Scene2`）沒套 caMap，把房間畫在舞台中央，螢幕相機才拍到房間裡的她。場景 PNG 自己的 KK 縮圖中央是暗的、螢幕拍到舞台上的她，和 OK Studio 一致（`F:\OpenKoikatsu\Saved\OKStudio\u27\83572034_p1_a.png`）。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 

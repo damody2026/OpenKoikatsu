@@ -27,6 +27,67 @@ pub struct StudioAnim {
     /// Who plays it (`motion_sex`): 0 either, 1 female, 2 male.
     #[serde(default)]
     pub sex: i32,
+    /// The Studio controls an H motion blends along (`anim::studio_blend_axes`), with the values it was sampled at.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub axes: Vec<BlendAxis>,
+    /// `.okanim` files at every grid point of `axes` (the first axis slowest), relative to the library; OK Studio
+    /// blends them at the character's control values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variants: Vec<String>,
+    /// `axes` was read from the controller (so a later conversion keeps it instead of reading again).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub blend_checked: bool,
+}
+
+/// One Studio control of an H motion: `control` is option1 (height), option2 (breast) or pattern (motion), `param`
+/// the controller's float, `at` the slider values (0..1) the variants are sampled at.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct BlendAxis {
+    pub control: String,
+    pub param: String,
+    /// The controller's own value (the plain `file` was sampled there).
+    pub default: f32,
+    pub at: Vec<f32>,
+}
+
+/// Every grid point of `axes`, first axis slowest: the controller floats to sample there.
+fn grid(axes: &[BlendAxis]) -> Vec<std::collections::HashMap<String, f32>> {
+    let mut points = vec![std::collections::HashMap::new()];
+    for a in axes {
+        points = points.into_iter().flat_map(|p| a.at.iter().map(move |v| { let mut q = p.clone(); q.insert(a.param.clone(), *v); q }).collect::<Vec<_>>()).collect();
+    }
+    points
+}
+
+/// A variant's file: the motion's name and the value of each of `axes` (so the name stays when an axis is dropped).
+fn variant_file(a: &StudioAnim, axes: &[BlendAxis], point: &std::collections::HashMap<String, f32>) -> String {
+    let values: Vec<String> = axes.iter().map(|x| format!("{}-{}", x.control, point.get(&x.param).copied().unwrap_or(x.default))).collect();
+    format!("anims/studio/{}_{}_{}_{}@{}.okanim", a.kind, a.group, a.category, a.no, values.join("_"))
+}
+
+/// Drops the axes every variant comes out the same along (the controller has the parameter, but the sampled motion
+/// does not follow it): the variants at the axis's first value stay (renamed without it), the rest are deleted.
+/// Returns how many axes went.
+fn prune_axes(lib: &Path, a: &mut StudioAnim) -> usize {
+    let points = grid(&a.axes);
+    let bytes: Vec<Vec<u8>> = points.iter().map(|p| std::fs::read(lib.join(variant_file(a, &a.axes, p))).unwrap_or_default()).collect();
+    let dead: Vec<bool> = a.axes.iter().map(|x| {
+        points.iter().enumerate().all(|(i, p)| {
+            let mut first = p.clone();
+            first.insert(x.param.clone(), x.at[0]);
+            points.iter().position(|q| *q == first).is_some_and(|j| bytes[i] == bytes[j])
+        })
+    }).collect();
+    if !dead.contains(&true) { return 0; }
+    let kept: Vec<BlendAxis> = a.axes.iter().zip(&dead).filter(|(_, d)| !**d).map(|(x, _)| x.clone()).collect();
+    for p in &points {
+        let from = lib.join(variant_file(a, &a.axes, p));
+        let at_first = a.axes.iter().zip(&dead).all(|(x, d)| !*d || p[&x.param] == x.at[0]);
+        if at_first && !kept.is_empty() { let _ = std::fs::rename(&from, lib.join(variant_file(a, &kept, p))); } else { let _ = std::fs::remove_file(&from); }
+    }
+    let n = a.axes.len() - kept.len();
+    a.axes = kept;
+    n
 }
 
 /// The lists carry no sex column: the game names it in the group (女H奉仕 / 男H奉仕, H女複数, レズ) or the category (キャラ / 男).
@@ -220,9 +281,23 @@ pub fn convert(lib: &Path, game: &Path, card: &Path, filter: Option<&str>, threa
     let previous: Option<AnimCatalog> = std::fs::read_to_string(lib.join(FILE_NAME)).ok().and_then(|t| serde_json::from_str(&t).ok());
     let file_of = |a: &StudioAnim| format!("anims/studio/{}_{}_{}_{}.okanim", a.kind, a.group, a.category, a.no);
     let wanted = |a: &StudioAnim| filter.is_none_or(|f| format!("{}_{}_{}_{}", a.kind, a.group, a.category, a.no).contains(f));
-    let items: Vec<crate::okanim::batch::Item> = cat.anims.iter().filter(|a| wanted(a))
-        .map(|a| crate::okanim::batch::Item { key: a.key.clone(), file: lib.join(file_of(a)).display().to_string(), source: a.key.split('|').next().unwrap_or_default().to_owned() })
-        .collect();
+    // H motions also get a variant at every grid point of the Studio controls their blend trees vary along. Reading
+    // the controllers takes minutes, so a previous catalogue's finding for the same clip is kept.
+    crate::anim::begin_animation_preparation();
+    for a in cat.anims.iter_mut().filter(|a| a.kind == "hanime" && wanted(a)) {
+        if let Some(p) = previous.as_ref().and_then(|p| p.anims.iter().find(|x| x.key == a.key && x.blend_checked)) { a.axes = p.axes.clone(); }
+        else { a.axes = crate::anim::studio_blend_axes(game, &a.key).into_iter().map(|(control, param, default, at)| BlendAxis { control: control.into(), param, default, at }).collect(); }
+        a.blend_checked = true;
+    }
+    crate::anim::end_animation_preparation();
+    let mut items: Vec<crate::okanim::batch::Item> = Vec::new();
+    for a in cat.anims.iter().filter(|a| wanted(a)) {
+        let source = a.key.split('|').next().unwrap_or_default().to_owned();
+        items.push(crate::okanim::batch::Item { key: a.key.clone(), file: lib.join(file_of(a)).display().to_string(), source: source.clone(), params: Default::default() });
+        for params in grid(&a.axes).into_iter().filter(|_| !a.axes.is_empty()) {
+            items.push(crate::okanim::batch::Item { key: a.key.clone(), file: lib.join(variant_file(a, &a.axes, &params)).display().to_string(), source: source.clone(), params });
+        }
+    }
     let mut session = crate::oklib::open_test_card(card, 0)?;
     session.game_root = game.to_path_buf();
     let sampler = crate::okanim::convert::ClipSampler::of_session(&mut session)?;
@@ -239,16 +314,24 @@ pub fn convert(lib: &Path, game: &Path, card: &Path, filter: Option<&str>, threa
     };
     println!("OKANIM done {} converted={} skipped={} failed={} first_error={} {:.0}s", progress["total"], progress["converted"], progress["skipped"], progress["failed"], progress["first_error"], started.elapsed().as_secs_f64());
     // Catalogue: converted entries get their file, duration and looping; the rest keep a previous conversion's.
-    let done: BTreeMap<String, serde_json::Value> = progress["entries"].as_array().into_iter().flatten().filter_map(|e| Some((e["key"].as_str()?.to_owned(), e.clone()))).collect();
+    // By file: an H motion's variants share its key.
+    let done: BTreeMap<String, serde_json::Value> = progress["entries"].as_array().into_iter().flatten().filter_map(|e| Some((e["file"].as_str()?.to_owned(), e.clone()))).collect();
+    let converted = |file: &str| done.contains_key(&lib.join(file).display().to_string());
+    let mut pruned = 0;
     for a in &mut cat.anims {
-        if let Some(e) = done.get(&a.key) {
+        let complete = !a.axes.is_empty() && grid(&a.axes).iter().all(|p| converted(&variant_file(a, &a.axes, p)));
+        if complete && wanted(a) { pruned += prune_axes(lib, a); }
+        a.variants = if complete { grid(&a.axes).iter().map(|p| variant_file(a, &a.axes, p)).collect() } else { Vec::new() };
+        if let Some(e) = done.get(&lib.join(file_of(a)).display().to_string()) {
             a.file = file_of(a);
             a.duration = e["duration"].as_f64().unwrap_or(0.) as f32;
             a.looping = e["looping"].as_bool().unwrap_or(false);
         } else if let Some(p) = previous.as_ref().and_then(|p| p.anims.iter().find(|x| x.key == a.key && !x.file.is_empty())) {
             a.file = p.file.clone(); a.duration = p.duration; a.looping = p.looping;
+            if a.variants.is_empty() { a.axes = p.axes.clone(); a.variants = p.variants.clone(); }
         }
     }
+    if pruned > 0 { println!("OKANIM {pruned} controls dropped: the sampled motion does not follow them"); }
     std::fs::write(lib.join(FILE_NAME), serde_json::to_string_pretty(&cat).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     Ok(cat)
 }
@@ -264,6 +347,45 @@ mod tests {
         println!("groups={} categories={} anime={anime} hanime={hanime}", c.groups.len(), c.categories.len());
         for a in c.anims.iter().take(3) { println!("  {} {}/{}/{} {} {}", a.kind, a.group, a.category, a.no, a.name, &a.key[a.key.len().saturating_sub(40)..]); }
         assert!(anime > 500 && hanime > 1000);
+    }
+
+    #[test]
+    #[ignore = "installed game: which Studio controls the H motions blend along"]
+    fn h_blend_axes() {
+        let game = crate::test_support::game_path("");
+        let c = super::catalog(&game);
+        crate::anim::begin_animation_preparation();
+        let mut counts = std::collections::BTreeMap::<String, usize>::new();
+        let mut clips = 0usize;
+        for a in c.anims.iter().filter(|a| a.kind == "hanime") {
+            let axes = crate::anim::studio_blend_axes(&game, &a.key);
+            clips += axes.iter().map(|x| x.3.len()).product::<usize>().max(1);
+            let sig = axes.iter().map(|(c, n, d, at)| format!("{c}:{n}={d}{at:?}")).collect::<Vec<_>>().join(" ");
+            *counts.entry(sig).or_default() += 1;
+        }
+        for (sig, n) in &counts { println!("{n:5} {sig}"); }
+        println!("clips needed={clips}");
+        crate::anim::end_animation_preparation();
+    }
+
+    #[test]
+    #[ignore = "installed game: an H motion sampled along its height control (OK_ANIM=group/category/no)"]
+    fn h_motion_along_height() {
+        let game = crate::test_support::game_path("");
+        let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Content/IndependentResources/base_v1");
+        let want = std::env::var("OK_ANIM").unwrap_or_else(|_| "2/112/1".into());
+        let c: super::AnimCatalog = serde_json::from_str(&std::fs::read_to_string(lib.join(super::FILE_NAME)).unwrap()).unwrap();
+        let a = c.anims.iter().find(|a| a.kind == "hanime" && format!("{}/{}/{}", a.group, a.category, a.no) == want).unwrap();
+        let mut session = crate::oklib::open_test_card(&lib.join("../../CharacterCards/CrowdAPNG/C000.png"), 0).unwrap();
+        session.game_root = game.clone();
+        let sampler = crate::okanim::convert::ClipSampler::of_session(&mut session).unwrap();
+        println!("{} {} axes={:?} sampler params={:?}", want, a.name, crate::anim::studio_blend_axes(&game, &a.key), sampler.params);
+        for h in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+            let params = std::collections::HashMap::from([("height".to_owned(), h)]);
+            let bytes = crate::okanim::convert::from_clip_with(&sampler, &a.key, 30.0, None, &params).unwrap().to_bytes().unwrap();
+            let sum: u64 = bytes.iter().enumerate().map(|(i, b)| (i as u64 + 1) * *b as u64).sum();
+            println!("height {h}: {} bytes, checksum {sum}", bytes.len());
+        }
     }
 
     #[test]

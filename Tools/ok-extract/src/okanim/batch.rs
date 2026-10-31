@@ -1,14 +1,15 @@
 //! Background KK -> OK batch conversion on worker threads (the game keeps its own session and frame time).
 #[allow(unused_imports)] use crate::gamefs::GamePath as _;
 
-use super::convert::{from_clip, ClipSampler};
+use super::convert::{from_clip, from_clip_with, ClipSampler};
 use super::OkAnim;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[derive(serde::Deserialize)]
-pub struct Item { pub key: String, pub file: String, #[serde(default)] pub source: String }
+/// `params`: Animator floats set over the sampler's for this clip (one point of its blend trees).
+pub struct Item { pub key: String, pub file: String, #[serde(default)] pub source: String, #[serde(default)] pub params: std::collections::HashMap<String, f32> }
 
 #[derive(Default)]
 struct Progress { converted: usize, skipped: usize, failed: usize, first_error: String, entries: Vec<serde_json::Value> }
@@ -93,7 +94,15 @@ fn convert_one(sampler: &ClipSampler, item: &Item, fps: f32) -> Result<(serde_js
     let (anim, bytes) = match existing.and_then(|b| OkAnim::from_bytes(&b).ok().map(|a| (a, b))) {
         Some(v) => v,
         None if skipped => return Ok((entry, true)),
-        None => { let a = from_clip(sampler, &item.key, fps, None)?; let b = a.to_bytes()?; (a, b) }
+        None => {
+            let a = if item.params.is_empty() { from_clip(sampler, &item.key, fps, None)? } else {
+                let mut params = sampler.params.clone();
+                params.extend(item.params.iter().map(|(k, v)| (k.clone(), *v)));
+                from_clip_with(sampler, &item.key, fps, None, &params)?
+            };
+            let b = a.to_bytes()?;
+            (a, b)
+        }
     };
     if skipped { fill(&mut entry, &anim, bytes.len()); return Ok((entry, true)); }
     if let Some(dir) = path.parent() { std::fs::create_dir_all(dir).map_err(|e| e.to_string())?; }

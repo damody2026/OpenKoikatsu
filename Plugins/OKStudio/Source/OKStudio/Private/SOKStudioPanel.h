@@ -1358,6 +1358,7 @@ public:
 	int32 MaterialPart = 0;
 	FString MaterialFilter;
 	TPair<int32, int32> MaterialShown = { -2, 0 }; // selection and its part count the window shows
+	FString AnimCtlShown; // selection and animation parameters the animation controller shows
 	/** HS2Studio6's animation controller window (speed, time, motion variation, play/pause/stop). */
 	TSharedRef<SWidget> BuildAnimController();
 	float AnimPausedSpeed = 1.f;

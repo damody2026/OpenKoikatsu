@@ -107,7 +107,14 @@ namespace
 			J->SetBoolField(TEXT("visible"), X.bVisible);
 			J->SetBoolField(TEXT("locked"), X.bLocked);
 			if (X.Kind == EOKSceneObjectKind::Camera) { J->SetBoolField(TEXT("ortho"), X.Camera.bOrtho); J->SetNumberField(TEXT("ortho_width"), X.Camera.OrthoWidth); }
-			if (X.Kind == EOKSceneObjectKind::Character) { J->SetNumberField(TEXT("speed"), X.Character.Speed); J->SetNumberField(TEXT("anime_no"), X.Character.StudioAnimeNo); }
+			if (X.Kind == EOKSceneObjectKind::Character) { J->SetNumberField(TEXT("speed"), X.Character.Speed); J->SetNumberField(TEXT("anime_no"), X.Character.StudioAnimeNo); J->SetBoolField(TEXT("force_loop"), X.Character.bForceLoop); }
+			// The Studio controls the shown H motion blends along, with the values its player has (the controller's sliders).
+			if (X.Kind == EOKSceneObjectKind::Character && G.SceneActor)
+			{
+				TSharedRef<FJsonObject> F = MakeShared<FJsonObject>();
+				for (const TPair<FString, float>& P : G.SceneActor->BlendControlsOf(X.Id)) F->SetNumberField(P.Key, P.Value);
+				J->SetObjectField(TEXT("anim_controls"), F);
+			}
 			if (X.Kind == EOKSceneObjectKind::Light)
 			{
 				static const TCHAR* LightTypes[] = { TEXT("directional"), TEXT("point"), TEXT("spot"), TEXT("area") };
@@ -404,6 +411,7 @@ namespace
 							O->SetStringField(TEXT("name"), A.Name);
 							O->SetNumberField(TEXT("duration"), A.Duration);
 							O->SetBoolField(TEXT("looping"), A.bLooping);
+							if (!A.Variants.IsEmpty()) { TArray<TSharedPtr<FJsonValue>> Controls; for (const FString& Control : A.Controls) Controls.Add(MakeShared<FJsonValueString>(Control)); O->SetArrayField(TEXT("controls"), Controls); }
 							Entries.Add(MakeShared<FJsonValueObject>(O));
 						}
 			}
@@ -910,6 +918,18 @@ namespace
 				if ((*Sub)->TryGetNumberField(TEXT("neck_follow"), D)) X->Character.NeckFollow = FMath::Clamp(float(D), 0.f, 1.f);
 				FVector Point;
 				if (ReadVec(Sub->ToSharedRef(), TEXT("point"), Point)) X->Character.LookPoint = Point;
+			}
+			// Studio controls (option1, option2, pattern) by name; an empty object gives them all back to the animation.
+			if (J->TryGetObjectField(TEXT("anim_controls"), Sub))
+			{
+				if ((*Sub)->Values.IsEmpty()) X->Character.AnimFloats.Reset();
+				for (const auto& Pair : (*Sub)->Values)
+				{
+					const FString Key(*Pair.Key);
+					FOKSceneAnimFloat* F = X->Character.AnimFloats.FindByPredicate([&Key](const FOKSceneAnimFloat& A) { return A.Name == Key; });
+					if (!F) { F = &X->Character.AnimFloats.AddDefaulted_GetRef(); F->Name = Key; }
+					F->Value = float(Pair.Value->AsNumber());
+				}
 			}
 			Doc->NotifyChanged();
 			if (J->TryGetStringField(TEXT("mirror"), S) && !S.IsEmpty())

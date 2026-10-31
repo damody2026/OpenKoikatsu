@@ -95,6 +95,8 @@ pub enum Object {
         neck: Option<StudioNeck>,
         eyes: Option<Vec<f32>>,
         anime: [i32; 3], anime_speed: f32, anime_time: f32, hand: [i32; 2], mouth_open: f32,
+        /// OICharInfo animePattern and animeOptionParam1/2 (H motions: pattern, height, breast), and isAnimeForceLoop.
+        anime_pattern: f32, anime_options: [f32; 2], anime_force_loop: bool,
         /// OICharInfo nipple (0..1) and siru levels (face, chest front, chest back, lower front, lower back).
         nipple: f32, siru: [u8; 5],
         /// Children attached to accessory slots (slot, objects).
@@ -579,21 +581,22 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             for a in &mut active_fk { *a = r.bool()?; }
             for _ in 0..if v.at_least("0.0.9") { 8 } else { 4 } { r.bool()?; }
             let anime_speed = r.f32()?;
-            r.f32()?; // anime pattern
-            r.bool()?; r.bool()?; // option visible, force loop
+            let anime_pattern = r.f32()?;
+            r.bool()?; // option visible
+            let anime_force_loop = r.bool()?;
             let voices = r.count("voice")?;
             r.take(voices * 12)?;
             r.i32()?; // voice repeat
             r.bool()?; r.f32()?; r.bool()?; // son visible / length, simple
             r.json_color()?;
-            r.f32()?; r.f32()?; // anime option params
+            let anime_options = [r.f32()?, r.f32()?];
             let neck_len = r.bytes_len("neck data")?;
             let neck = read_neck(r.take(neck_len)?)?;
             let eyes_len = r.bytes_len("eyes data")?;
             let eyes = read_eyes(r.take(eyes_len)?, v)?;
             let anime_time = r.f32()?;
             for _ in 0..2 { let n = r.count("access")?; r.take(n * 8)?; }
-            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, nipple, siru, children: kids })
+            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, anime_pattern, anime_options, anime_force_loop, nipple, siru, children: kids })
         }
         1 => {
             let (key, change, visible) = base(r, true)?;
@@ -801,6 +804,22 @@ pub fn stats(lib: &std::path::Path, dir: &std::path::Path) -> Result<Stats, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "diagnostic: the sideloader resolver's scene data of OK_SCENE"]
+    fn print_scene_resolver_data() {
+        let Ok(path) = std::env::var("OK_SCENE") else { return };
+        let bytes = std::fs::read(path).unwrap();
+        let blocks = scene_plugins(&bytes).unwrap();
+        for key in ["com.bepis.sideloader.universalautoresolver", "EC.Core.Sideloader.UniversalAutoResolver"] {
+            let Some(plugin) = crate::card::map_get(&blocks, key) else { continue };
+            let data = plugin.as_array().and_then(|a| a.get(1)).unwrap_or(plugin);
+            for (k, v) in data.as_map().into_iter().flatten() {
+                let decoded = v.as_slice().and_then(|b| rmpv::decode::read_value(&mut std::io::Cursor::new(b)).ok());
+                let text = format!("{}", decoded.as_ref().unwrap_or(v));
+                println!("{k}: {}", &text[..text.len().min(600)]);
+            }
+        }
+    }
     // OK_CMP_NATIVE=<original capture>, OK_CMP_OK=<OK Studio picture> (a CompareKStudio picture: its right half),
     // OK_CMP_GRID=<columns>x<rows> (default 8x4): cells whose mean colour differs by more than 10 % (diagnostic).
     #[test]

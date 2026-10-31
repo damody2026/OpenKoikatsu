@@ -65,8 +65,13 @@ pub fn from_session_clip(s: &mut OkSession, key: &str, fps: f32) -> Result<OkAni
 
 /// A KK clip through a detached sampler (any thread): the Animator output frame by frame against the unshaped rest.
 pub fn from_clip(sampler: &ClipSampler, key: &str, fps: f32, duration: Option<f32>) -> Result<OkAnim, String> {
+    from_clip_with(sampler, key, fps, duration, &sampler.params)
+}
+
+/// The same with the Animator float parameters `params` in place of the sampler's (a blend tree sampled at one point).
+pub fn from_clip_with(sampler: &ClipSampler, key: &str, fps: f32, duration: Option<f32>, params: &HashMap<String, f32>) -> Result<OkAnim, String> {
     if !(fps > 0.0) { return Err("fps must be positive".into()); }
-    let duration = duration.unwrap_or_else(|| crate::anim::clip_duration_parameters(&sampler.game, key, &sampler.params));
+    let duration = duration.unwrap_or_else(|| crate::anim::clip_duration_parameters(&sampler.game, key, params));
     if !(duration > 0.0) || !duration.is_finite() { return Err(format!("{key}: no duration")); }
     let rest = sampler.rest.clone();
     let mut skel = sampler.base.clone();
@@ -90,7 +95,7 @@ pub fn from_clip(sampler: &ClipSampler, key: &str, fps: f32, duration: Option<f3
         // The last frame of a loop is its first: sample just before the wrap.
         let t = (f as f32 / fps).min(duration - if looping { 1e-4 } else { 0.0 });
         skel.restore_from(&sampler.base);
-        crate::anim::crossfade::sample(&sampler.game, &mut skel, key, t, &sampler.params, sampler.clock);
+        crate::anim::crossfade::sample(&sampler.game, &mut skel, key, t, params, sampler.clock);
         skel.rebuild_worlds();
         let body = &skel;
         let ids: HashMap<&str, i64> = body.tfs.iter().map(|(id, t)| (t.name.as_str(), *id)).collect();

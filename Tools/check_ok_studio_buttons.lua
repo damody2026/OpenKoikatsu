@@ -303,6 +303,9 @@ local function speed() local o = objects()[id] return o and o.speed end
 check(click("播放").ok and speed() > 0, "動畫控制器 播放: the character plays")
 check(click("暫停").ok and speed() == 0, "動畫控制器 暫停: speed 0")
 check(click("播放").ok and speed() > 0, "動畫控制器 播放 again: the speed it had")
+local function looping() local o = objects()[id] return o and o.force_loop end
+check(click("強制循環").ok and looping() == true, "動畫控制器 強制循環 on")
+check(click("強制循環").ok and looping() == false, "動畫控制器 強制循環 off again")
 -- 定位當前 in the motion list: play a motion, look at the H motions, then come back to it.
 local ag = (call("catalog", { kind = "anim" }).groups or {})[2]
 local acat = ag and (call("catalog", { kind = "anim", group = ag.id }).categories or {})[1]
@@ -318,7 +321,42 @@ local k = motion and motion.anim:match("^(%d+/%d+/%d+)/") or ""
 check(r.ok and aui().anim_browse == k and aui().anim_selected == (motion and motion.name),
   ("動作 定位當前 goes back to the playing motion (%s %s)"):format(tostring(aui().anim_browse), tostring(aui().anim_selected)))
 call("cmd", { id = "page.anim" }); wait(10)
+-- U25: an H motion's Studio controls (輔助 1／2, 動作模式) reach its blended player and come back to the motion's own.
+local blended
+for _, g in ipairs(call("catalog", { kind = "anim", anim_kind = 1 }).groups or {}) do
+  for _, c in ipairs(call("catalog", { kind = "anim", anim_kind = 1, group = g.id }).categories or {}) do
+    for _, e in ipairs(call("catalog", { kind = "anim", anim_kind = 1, group = g.id, category = c.id }).entries or {}) do
+      if e.controls and #e.controls > 0 then blended = e break end
+    end
+    if blended then break end
+  end
+  if blended then break end
+end
+check(blended ~= nil and call("pose", { id = id, anim = blended.anim }).ok, "an H motion with Studio controls (" .. tostring(blended and blended.name) .. ")")
+if blended then
+  wait(60)
+  local control = blended.controls[1]
+  local function controls() local o = objects()[id] return o and o.anim_controls or {} end
+  local own = controls()[control]
+  check(own ~= nil and own >= 0, ("the blended player has %s (%s)"):format(control, tostring(own)))
+  call("pose", { id = id, anim_controls = { [control] = 0.8 } }); wait(20)
+  check(math.abs((controls()[control] or -1) - 0.8) < 1e-4, ("%s set to 0.8 reaches the player (%s)"):format(control, tostring(controls()[control])))
+  check(click("預設").ok and math.abs((controls()[control] or -1) - own) < 1e-4, ("動作參數 預設 gives %s back to the motion (%s)"):format(control, tostring(controls()[control])))
+end
 call("cmd", { id = "window.close", arg = "animctl" }); wait(10)
+
+-- U24: mirror the pose (FK page): the left arm's rotation onto the right arm, reflected (x, -y, -z).
+call("select", { ids = { id } }); wait(10)
+if (call("state").ui or {}).page ~= "bones" then call("cmd", { id = "page.bones" }) end
+call("cmd", { id = "bones.page", arg = "0" }); wait(20)
+call("pose", { id = id, fk = { { bone = "cf_j_arm00_L", euler = { 10, 20, 30 } } } }); wait(10)
+local function fk_euler(bone) for _, b in ipairs(bones().fk or {}) do if b.bone == bone then return b.euler end end end
+check(click("左→右").ok, "左→右 clicked")
+wait(20)
+local r = fk_euler("cf_j_arm00_R") or {}
+local function near(a, b) return a and math.abs(((a - b + 180) % 360) - 180) < 0.5 end
+check(near(r[1], 10) and near(r[2], -20) and near(r[3], -30), ("左→右 puts the left arm's rotation on the right arm, mirrored (%s)"):format(table.concat(r, ",")))
+click("清除 FK")
 
 print(("BUTTONS %d/%d"):format(passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

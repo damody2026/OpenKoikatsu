@@ -34,6 +34,7 @@
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
 #include "OKAnimationAssets.h"
+#include "KKOkAnimation.h"
 #include "OKStudioCatalog.h"
 #include "OKStudioSky.h"
 #include "OKHGShading.h"
@@ -60,6 +61,55 @@ FString AOKSceneActor::LibraryDirectory()
 
 namespace
 {
+	/** An H motion's variants as nested 1D blends, one per Studio control (player parameter I is control I): blending
+	 *  each grid line in turn is the multilinear interpolation of the sampled blend trees. Null when the variants do
+	 *  not fill the grid (the plain clip plays). */
+	TSharedPtr<FOkAnimPlayer> StudioBlendPlayer(const FOKStudioAnim& A, FString& OutError)
+	{
+		const int32 Axes = A.Controls.Num();
+		int32 Points = 1;
+		for (const TArray<float>& At : A.ControlValues) Points *= At.Num();
+		if (Axes == 0 || Axes > 8 || A.ControlValues.Num() != Axes || Points != A.Variants.Num()) return nullptr;
+		TArray<TArray<uint8>> Blobs;
+		for (const FString& File : A.Variants)
+		{
+			const UOKAnimSequence* Seq = UOKAnimationLibrary::LoadOkAnimFile(AOKSceneActor::LibraryDirectory() / File, nullptr, NAME_None, OutError);
+			if (!Seq) return nullptr;
+			Blobs.Add(Seq->Data);
+		}
+		TFunction<TSharedPtr<FJsonObject>(int32, int32)> Node = [&](int32 Axis, int32 First) -> TSharedPtr<FJsonObject>
+		{
+			TSharedPtr<FJsonObject> J = MakeShared<FJsonObject>();
+			if (Axis == Axes) { J->SetStringField(TEXT("type"), TEXT("anim")); J->SetNumberField(TEXT("anim"), First); return J; }
+			int32 Stride = 1;
+			for (int32 K = Axis + 1; K < Axes; ++K) Stride *= A.ControlValues[K].Num();
+			TSharedRef<FJsonObject> Range = MakeShared<FJsonObject>();
+			Range->SetStringField(TEXT("name"), A.Controls[Axis]);
+			Range->SetNumberField(TEXT("min"), 0.);
+			Range->SetNumberField(TEXT("max"), 1.);
+			Range->SetNumberField(TEXT("param"), Axis);
+			TArray<TSharedPtr<FJsonValue>> Samples;
+			for (int32 I = 0; I < A.ControlValues[Axis].Num(); ++I)
+			{
+				TSharedRef<FJsonObject> S = MakeShared<FJsonObject>();
+				S->SetArrayField(TEXT("at"), { MakeShared<FJsonValueNumber>(A.ControlValues[Axis][I]) });
+				S->SetObjectField(TEXT("spec"), Node(Axis + 1, First + I * Stride));
+				Samples.Add(MakeShared<FJsonValueObject>(S));
+			}
+			J->SetStringField(TEXT("type"), TEXT("blend"));
+			J->SetArrayField(TEXT("axes"), { MakeShared<FJsonValueObject>(Range) });
+			J->SetArrayField(TEXT("samples"), Samples);
+			J->SetBoolField(TEXT("sync"), true);
+			return J;
+		};
+		FString Spec;
+		FJsonSerializer::Serialize(Node(0, 0).ToSharedRef(), TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Spec));
+		TSharedPtr<FOkAnimPlayer> Player = MakeShared<FOkAnimPlayer>();
+		if (!Player->Create(Spec, Blobs)) { OutError = FOkAnimBridge::LastError(); return nullptr; }
+		UOKAnimationAsset::ApplyFamilyAliases(*Player);
+		return Player;
+	}
+
 	/** `Local` then `World` as matrices: FTransform's own product applies World's non-uniform scale before Local's
 	 *  rotation (the prefab root's -90 X of an FBX building took the item's Y scale as its height, 127 m instead of 37). */
 	FTransform Compose(const FTransform& Local, const FTransform& World)
@@ -341,8 +391,16 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			const FOKStudioAnim* Entry = FOKStudioCatalog::Get().FindAnim(C.StudioAnimeKind, C.StudioAnimeGroup, C.StudioAnimeCategory, C.StudioAnimeNo);
 			FString AnimError;
 			UOKAnimSequence* Seq = Entry && !Entry->File.IsEmpty() ? UOKAnimationLibrary::LoadOkAnimFile(LibraryDirectory() / Entry->File, nullptr, NAME_None, AnimError) : nullptr;
-			const TSharedPtr<FOkAnimPlayer> Player = Seq ? Seq->CreatePlayer(AnimError) : nullptr;
-			if (Player && Actor->SetOkAnimation(Player, false)) { Actor->PoseMode = 3; Out.StudioAnim.Reset(Seq); }
+			// An H motion with variants blends them at the character's Studio controls (ApplyCharacterState sets them).
+			TSharedPtr<FOkAnimPlayer> Player = Seq && !Entry->Variants.IsEmpty() ? StudioBlendPlayer(*Entry, AnimError) : nullptr;
+			const bool bBlend = Player.IsValid();
+			if (!Player && Seq) Player = Seq->CreatePlayer(AnimError);
+			if (Player && Actor->SetOkAnimation(Player, false))
+			{
+				Actor->PoseMode = 3;
+				Out.StudioAnim.Reset(Seq);
+				if (bBlend) { Out.BlendControls = Entry->Controls; Out.BlendDefaults = Entry->ControlDefaults; Out.AppliedBlend.Init(-1.f, Entry->Controls.Num()); }
+			}
 			else Errors.Add(Object.Id, FString::Printf(TEXT("studio animation %d/%d/%d/%d not playable: %s"), C.StudioAnimeKind, C.StudioAnimeGroup, C.StudioAnimeCategory, C.StudioAnimeNo, Entry ? (Entry->File.IsEmpty() ? TEXT("not converted") : *AnimError) : TEXT("not in the library")));
 		}
 		else if (!Object.Character.AnimFile.IsEmpty())
@@ -666,6 +724,14 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		Item.EyesOpenBefore = -1.f;
 	}
 	if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
+	// Studio controls of a blended H motion (option 1 height, option 2 breast, pattern): the scene's value, else the
+	// controller's own.
+	for (int32 I = 0; I < Item.BlendControls.Num() && Actor->OkPlayer; ++I)
+	{
+		const FOKSceneAnimFloat* Want = C.AnimFloats.FindByPredicate([&Item, I](const FOKSceneAnimFloat& F) { return F.Name == Item.BlendControls[I]; });
+		const float Value = FMath::Clamp(Want ? Want->Value : Item.BlendDefaults[I], 0.f, 1.f);
+		if (Item.AppliedBlend[I] != Value) { Actor->OkPlayer->SetParam(I, Value); Item.AppliedBlend[I] = Value; }
+	}
 	// Hand shapes: a pattern overrides the animated fingers of that hand (-1 gives them back).
 	const int32 Hands[2] = { C.HandLeft, C.HandRight };
 	const int32 Count = Actor->GetHandShapeCount();
@@ -1079,7 +1145,9 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         if (Actor->OkPlayer || Actor->PoseMode == 2)
         {
             if (bAdvancePhase) Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
-            Actor->AnimPhase = Pair.Value.Time;
+            // Forced looping starts a motion that ends over again (one that loops by itself wraps anyway).
+            const float Length = Object->Character.bForceLoop && Actor->OkPlayer ? Actor->OkPlayer->Duration() : 0.f;
+            Actor->AnimPhase = Length > 0.f ? FMath::Fmod(Pair.Value.Time, Length) : Pair.Value.Time;
         }
         // Scene actors have their own Tick disabled. A static FK pose still needs
         // a finishing pass so cloth receives the current limb pose and elapsed time.
@@ -1143,7 +1211,8 @@ void AOKSceneActor::SetAnimationTime(int32 Id, float Time)
 	if (Actor->OkPlayer || Actor->PoseMode == 2)
 	{
 		Item->Time = Object->Character.Time + Time * Object->Character.Speed;
-		Actor->AnimPhase = Item->Time;
+		const float Length = Object->Character.bForceLoop && Actor->OkPlayer ? Actor->OkPlayer->Duration() : 0.f;
+		Actor->AnimPhase = Length > 0.f ? FMath::Fmod(Item->Time, Length) : Item->Time;
 	}
 	Actor->ApplyPoseFrame(0.f, false);
 }
@@ -1187,6 +1256,14 @@ AKKPreviewActor* AOKSceneActor::PreviewOf(int32 Id) const
 {
 	const FShown* Item = Shown.Find(Id);
 	return Item ? Item->Preview.Get() : nullptr;
+}
+
+TArray<TPair<FString, float>> AOKSceneActor::BlendControlsOf(int32 Id) const
+{
+	TArray<TPair<FString, float>> Out;
+	if (const FShown* Item = Shown.Find(Id))
+		for (int32 I = 0; I < Item->BlendControls.Num(); ++I) Out.Emplace(Item->BlendControls[I], Item->AppliedBlend.IsValidIndex(I) ? Item->AppliedBlend[I] : -1.f);
+	return Out;
 }
 
 USceneComponent* AOKSceneActor::ComponentOf(int32 Id) const
