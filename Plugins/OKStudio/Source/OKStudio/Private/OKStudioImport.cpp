@@ -820,7 +820,7 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 						CharObj->Character.Blink = 0;
 					}
 					double Speed = 1., Duration = 0.;
-					if (M->TryGetNumberField(TEXT("playback_speed"), Speed) && Speed > 0.) CharObj->Character.Speed = float(Speed);
+					if (SolvedAnim.IsEmpty() && M->TryGetNumberField(TEXT("playback_speed"), Speed) && Speed > 0.) CharObj->Character.Speed = float(Speed);
 					if (M->TryGetNumberField(TEXT("duration"), Duration) && Duration > 0.) Document->Duration = FMath::Max(Document->Duration, float(Duration));
 				}
 			}

@@ -1559,6 +1559,7 @@ pub struct MotionSolveParams {
     pub delay: f32,
     pub interpolate_consecutive: bool,
     pub looping: bool,
+    pub high_heels_rot: Option<[f32; 3]>,
     pub ik_enable: HashMap<String, bool>,
     pub custom_rot_adj: HashMap<String, V3>,
     pub custom_axis_adj: HashMap<String, V3>,
@@ -1576,6 +1577,7 @@ impl Default for MotionSolveParams {
             delay: 0.0,
             interpolate_consecutive: true,
             looping: false,
+            high_heels_rot: None,
             ik_enable: HashMap::new(),
             custom_rot_adj: HashMap::new(),
             custom_axis_adj: HashMap::new(),
@@ -1748,7 +1750,27 @@ pub fn solve_vmd_to_okanim(
         }
     }
 
-    // 4. Apply custom rot/axis adjustments, then autoBoneAxisAdjust() and charScale
+    // 4. Apply high-heels preset, custom rot/axis adjustments, then autoBoneAxisAdjust() and charScale
+    if let Some([foot_adj, heel_adj, toes_adj]) = params.high_heels_rot {
+        for bname in ["foot_r", "foot_l"] {
+            if let Some(adj) = bone_adjusts.get_mut(bname) {
+                adj.set_rot_adjustment([foot_adj, 0.0, 0.0]);
+                adj.rot_adj_auto = false;
+            }
+        }
+        for bname in ["upleg_d_r", "upleg_d_l"] {
+            if let Some(adj) = bone_adjusts.get_mut(bname) {
+                adj.set_rot_adjustment([heel_adj, 0.0, 0.0]);
+                adj.rot_adj_auto = false;
+            }
+        }
+        for bname in ["toe_ex_r", "toe_ex_l"] {
+            if let Some(adj) = bone_adjusts.get_mut(bname) {
+                adj.set_rot_adjustment([toes_adj, 0.0, 0.0]);
+                adj.rot_adj_auto = false;
+            }
+        }
+    }
     for (bname, rot_adj) in &params.custom_rot_adj {
         if let Some(adj) = bone_adjusts.get_mut(&bname.to_ascii_lowercase()) {
             adj.set_rot_adjustment(*rot_adj);
@@ -1877,7 +1899,10 @@ pub fn solve_vmd_to_okanim(
     if let Some(last_mkf) = vmd.morph_keyframes.iter().map(|k| k.frame_no).max() {
         max_frame_no = max_frame_no.max(last_mkf);
     }
-    let frames = (max_frame_no as usize + 1).max(2);
+    const SUB_STEPS: usize = 2;
+    let delay_frames = params.delay * 30.0;
+    let total_vmd_frames = (max_frame_no as usize + 1 + delay_frames.max(0.0).ceil() as usize).max(2);
+    let frames = (total_vmd_frames - 1) * SUB_STEPS + 1;
 
     // 6. Resort weight bones in `rest` tree depth order (parents before children), skipping `ROOT`
     // so `cf_j_root` stays at identity and `cf_j_hips` captures the full root+center+groove+waist+hips motion.
@@ -1911,14 +1936,20 @@ pub fn solve_vmd_to_okanim(
         }
     }
 
+    let eye_l_idx = tree.by_name.get("eye_l").copied();
+    let eye_r_idx = tree.by_name.get("eye_r").copied();
+    let mut gaze_lh_out = Vec::with_capacity(frames);
+    let mut gaze_rh_out = Vec::with_capacity(frames);
+    let mut gaze_v_out = Vec::with_capacity(frames);
+
     let mut rot_out = Vec::with_capacity(frames * tracks.len());
     let mut hips_out = Vec::with_capacity(frames);
     let mut last_rot: Vec<Option<Quat>> = vec![None; tracks.len()];
     let mut work_body = rest.clone();
 
-    // 7. Frame-by-frame evaluation
-    for f in 0..frames {
-        let frame_no = f as f32;
+    // 7. Sub-frame (60fps) evaluation with MMD cubic Bezier interpolation & per-step CCD IK
+    for s in 0..frames {
+        let frame_no = (s as f32 / SUB_STEPS as f32 - delay_frames).max(0.0);
         for (idx, bname) in ini.bone_names.iter().enumerate() {
             let bdef = &ini.bones[bname];
             let adj = &bone_adjusts[bname];
@@ -1967,6 +1998,26 @@ pub fn solve_vmd_to_okanim(
                 }
             }
         }
+
+        // Extract eye gaze rates from `EYE_L` and `EYE_R` (which inherit `EYES` via TrackBone)
+        let wrap180 = |deg: f32| if deg > 180.0 { deg - 360.0 } else { deg };
+        let (lh, vl) = eye_l_idx.map_or((0.0, 0.0), |idx| {
+            let e = quat_to_unity_euler(tree.nodes[idx].local_rot);
+            (
+                (wrap180(e[1]) / 15.0).clamp(-1.0, 1.0),
+                (-wrap180(e[0]) / 12.0).clamp(-1.0, 1.0),
+            )
+        });
+        let (rh, vr) = eye_r_idx.map_or((0.0, 0.0), |idx| {
+            let e = quat_to_unity_euler(tree.nodes[idx].local_rot);
+            (
+                (wrap180(e[1]) / 15.0).clamp(-1.0, 1.0),
+                (-wrap180(e[0]) / 12.0).clamp(-1.0, 1.0),
+            )
+        });
+        gaze_lh_out.push(lh);
+        gaze_rh_out.push(rh);
+        gaze_v_out.push(0.5 * (vl + vr));
 
         // Twist disperse
         for td in &ini.twist_disperse {
@@ -2054,8 +2105,27 @@ pub fn solve_vmd_to_okanim(
         ]);
     }
 
-    let fps = (30.0 * params.playback_speed).max(1.0);
-    let curves = evaluate_vmd_morph_curves(&vmd.morph_keyframes, frames);
+    let fps = (30.0 * SUB_STEPS as f32 * params.playback_speed).max(1.0);
+    let mut curves = evaluate_vmd_morph_curves(&vmd.morph_keyframes, frames, SUB_STEPS, delay_frames);
+    if gaze_lh_out
+        .iter()
+        .chain(&gaze_rh_out)
+        .chain(&gaze_v_out)
+        .any(|v| v.abs() > 1e-4)
+    {
+        curves.push(crate::okanim::Curve {
+            name: "face.eye_gaze_lh".into(),
+            values: gaze_lh_out,
+        });
+        curves.push(crate::okanim::Curve {
+            name: "face.eye_gaze_rh".into(),
+            values: gaze_rh_out,
+        });
+        curves.push(crate::okanim::Curve {
+            name: "face.eye_gaze_v".into(),
+            values: gaze_v_out,
+        });
+    }
     let mut meta = BTreeMap::new();
     meta.insert("source".into(), "mmdd_vmd".into());
     meta.insert("name".into(), source_name.to_string());
@@ -2105,6 +2175,8 @@ fn sample_vmd_morph_kfs(kfs: &[VmdMorphKeyFrame], frame_no: f32) -> f32 {
 fn evaluate_vmd_morph_curves(
     morph_kfs: &[VmdMorphKeyFrame],
     frames: usize,
+    sub_steps: usize,
+    delay_frames: f32,
 ) -> Vec<crate::okanim::Curve> {
     if morph_kfs.is_empty() || frames == 0 {
         return Vec::new();
@@ -2156,7 +2228,6 @@ fn evaluate_vmd_morph_curves(
         ("ω□", 37, 1.0, 1.0),
     ];
     const EYE_DEFS: &[(&str, i32, f32, f32)] = &[
-        ("まばたき", 0, 1.0, 0.0),
         ("笑い", 3, 1.0, 1.0),
         ("笑い目", 4, 1.0, 1.0),
         ("ウィンク", 6, 1.0, 1.0),
@@ -2187,16 +2258,17 @@ fn evaluate_vmd_morph_curves(
     let mut eye_ptn = Vec::with_capacity(frames);
     let mut eye_open = Vec::with_capacity(frames);
     let mut brow_ptn = Vec::with_capacity(frames);
+    let step_div = sub_steps.max(1) as f32;
 
     for f in 0..frames {
-        let fno = f as f32;
+        let fno = (f as f32 / step_div - delay_frames).max(0.0);
 
-        // 1. Mouth: pick active morph with largest weight > 0.02
+        // 1. Mouth: pick active morph with largest weight > 0.005 (smooth vowel opening)
         let mut best_mouth: Option<(f32, i32, f32)> = None;
         for &(mname, ptn, r0, r1) in MOUTH_DEFS {
             if let Some(kfs) = by_name.get(mname) {
                 let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
-                if w > 0.02 && best_mouth.map_or(true, |(bw, _, _)| w > bw) {
+                if w > 0.005 && best_mouth.map_or(true, |(bw, _, _)| w > bw) {
                     let open = (r0 + (r1 - r0) * w).clamp(0.0, 1.0);
                     best_mouth = Some((w, ptn, open));
                 }
@@ -2210,23 +2282,31 @@ fn evaluate_vmd_morph_curves(
             mouth_open.push(0.0);
         }
 
-        // 2. Eye: pick active morph with largest weight > 0.02
+        // 2. Eye: evaluate blink (`まばたき`) continuously, and check expression eye morphs (`EYE_DEFS`)
+        let w_blink = by_name
+            .get("まばたき")
+            .map_or(0.0, |kfs| sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0));
         let mut best_eye: Option<(f32, i32, f32)> = None;
         for &(ename, ptn, r0, r1) in EYE_DEFS {
             if let Some(kfs) = by_name.get(ename) {
                 let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
-                if w > 0.02 && best_eye.map_or(true, |(bw, _, _)| w > bw) {
+                if w > 0.05 && best_eye.map_or(true, |(bw, _, _)| w > bw) {
                     let open = (r0 + (r1 - r0) * w).clamp(0.0, 1.0);
                     best_eye = Some((w, ptn, open));
                 }
             }
         }
-        if let Some((_, ptn, open)) = best_eye {
-            eye_ptn.push(ptn as f32);
-            eye_open.push(open);
+        if let Some((w_expr, ptn, open)) = best_eye {
+            if w_blink > w_expr {
+                eye_ptn.push(0.0);
+                eye_open.push((1.0 - w_blink).clamp(0.0, 1.0));
+            } else {
+                eye_ptn.push(ptn as f32);
+                eye_open.push(open);
+            }
         } else {
             eye_ptn.push(0.0);
-            eye_open.push(1.0);
+            eye_open.push((1.0 - w_blink).clamp(0.0, 1.0));
         }
 
         // 3. Eyebrow: pick active morph with largest weight > 0.05
@@ -3101,6 +3181,17 @@ pub fn extract_mmdd(
                 looping: out.loop_play,
                 ..Default::default()
             };
+            if let Some(hh_val) = smap
+                .get("highHeels")
+                .or_else(|| smap.get("heelzRot"))
+                .or_else(|| smap.get("enableHeels"))
+            {
+                if let Some(v3) = val_to_v3(hh_val) {
+                    params.high_heels_rot = Some(v3);
+                } else if val_to_bool(hh_val, false) {
+                    params.high_heels_rot = Some([-35.0, 0.0, 25.0]);
+                }
+            }
             if let Some(ik_val) = smap.get("ikEnable") {
                 let ik_obj = if let Some(s) = ik_val.as_str() {
                     parse_py_or_json(s).ok()
@@ -3235,7 +3326,7 @@ pub fn extract_mmdd(
                         .and_then(|s| s.to_str())
                         .unwrap_or("mmdd");
                     if let Ok(anim) = solve_vmd_to_okanim(&parsed_vmd, &ini, &params, stem) {
-                        frames = anim.frames;
+                        frames = ((anim.frames.saturating_sub(1)) / 2 + 1).max(1);
                         duration = anim.duration();
                         if let Ok(anim_bytes) = anim.to_bytes() {
                             let target = out_dir.join(format!("mmdd_{char_key}.okanim"));
@@ -3660,7 +3751,7 @@ pub fn extract_mmdd(
                             .and_then(|s| s.to_str())
                             .unwrap_or("kkvmd");
                         if let Ok(anim) = solve_vmd_to_okanim(&parsed_vmd, &ini, &params, stem) {
-                            frames = anim.frames;
+                            frames = ((anim.frames.saturating_sub(1)) / 2 + 1).max(1);
                             duration = anim.duration();
                             if let Ok(anim_bytes) = anim.to_bytes() {
                                 let target = out_dir.join(format!("mmdd_{char_key}.okanim"));

@@ -342,7 +342,7 @@ void FOkAnimPlayer::ApplyFaceCurveValues(const TMap<FString, float>& C, AKKPrevi
 	if (const float* V = C.Find(TEXT("face.brow_pattern")))
 	{
 		const int32 Pattern = FMath::RoundToInt(*V);
-		if (Pattern != Actor.FacePattern[1]) Actor.SetFacePattern(2, Pattern, false);
+		if (Pattern != Actor.FacePattern[1]) Actor.SetFacePattern(2, Pattern, false); } if (!Actor.bEyeLookTracking) { const float *GL = C.Find(TEXT("face.eye_gaze_lh")), *GR = C.Find(TEXT("face.eye_gaze_rh")), *GV = C.Find(TEXT("face.eye_gaze_v")); if (GL || GR || GV) { const float LH = FMath::Clamp(GL ? *GL : Actor.EyeGaze[0], -1.f, 1.f), RH = FMath::Clamp(GR ? *GR : Actor.EyeGaze[1], -1.f, 1.f), V = FMath::Clamp(GV ? *GV : Actor.EyeGaze[2], -1.f, 1.f); if (!FMath::IsNearlyEqual(LH, Actor.EyeGaze[0], 1.e-3f) || !FMath::IsNearlyEqual(RH, Actor.EyeGaze[1], 1.e-3f) || !FMath::IsNearlyEqual(V, Actor.EyeGaze[2], 1.e-3f)) Actor.SetEyeGaze(LH, RH, V); }
 	}
 }
 

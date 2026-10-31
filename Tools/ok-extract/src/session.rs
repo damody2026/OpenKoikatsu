@@ -1853,7 +1853,7 @@ impl OkSession {
             }
             let names: Vec<String> = self.abm.iter().map(|b| b.name.clone()).collect();
             let base = crate::pose::capture_baseline(sk, &names);
-            crate::pose::apply_abm(sk, &self.abm, 0, &base);
+            let saved_cf_j: Vec<(i64, crate::finalik::Quat)> = if self.anim_scene_mode == 4 && self.user_fk.is_empty() { sk.tfs.iter().filter(|(_, tf)| tf.name.starts_with("cf_j_")).map(|(&id, tf)| (id, tf.rot)).collect() } else { Vec::new() }; crate::pose::apply_abm(sk, &self.abm, 0, &base); if !saved_cf_j.is_empty() { for (id, rot) in saved_cf_j { if let Some(tf) = sk.tfs.get_mut(&id) { tf.rot = rot; } } sk.rebuild_worlds(); }
             // Studio IK after the bone modifiers: a target is where the limb ends up.
             apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations);
             if !self.game_root.as_os_str().is_empty() && std::env::var("OK_FINALIK").is_ok() {
@@ -2041,7 +2041,7 @@ impl OkSession {
         // OkAnim tracks only drive `cf_j_*` bones (not `cf_pv_*`), so Studio PVCopy must not
         // overwrite the solved `cf_j_hand_*` / `cf_j_leg03_*` pose with un-animated T-pose `cf_pv_*` helpers.
         self.pv_fk = true;
-        self.finish_animator_pose(dt.max(0.0), true);
+        let saved_head_fixed = self.head_look.fixed; if scene == 4 && self.user_fk.is_empty() { self.head_look.fixed = None; } self.finish_animator_pose(dt.max(0.0), true); self.head_look.fixed = saved_head_fixed;
         self.pv_fk = saved_pv_fk;
         self.anim_scene_mode = saved;
     }
@@ -2134,7 +2134,7 @@ impl OkSession {
             prof::add(14, t);
             let t = std::time::Instant::now();
             let base = crate::pose::capture_abm_baseline(sk,&self.abm);
-            crate::pose::apply_abm(sk, &self.abm, 0, &base);
+            let saved_cf_j: Vec<(i64, crate::finalik::Quat)> = if self.anim_scene_mode == 4 && self.user_fk.is_empty() { sk.tfs.iter().filter(|(_, tf)| tf.name.starts_with("cf_j_")).map(|(&id, tf)| (id, tf.rot)).collect() } else { Vec::new() }; crate::pose::apply_abm(sk, &self.abm, 0, &base); if !saved_cf_j.is_empty() { for (id, rot) in saved_cf_j { if let Some(tf) = sk.tfs.get_mut(&id) { tf.rot = rot; } } sk.rebuild_worlds(); }
             prof::add(15, t);
             let t = std::time::Instant::now();
             // Studio IK after the bone modifiers: a target is where the limb ends up.
