@@ -53,6 +53,7 @@
 | `studio_scenes` | `scenes` | `folder?` | `{folder, files[{path,name,kind,modified}]}`，給 `studio_load` 開 |
 | `studio_report` | `report` | 無 | `{load[...], missing[...]}`：上次開檔沒能顯示的內容、場景缺的資源 |
 | `studio_ui_shot` | `ui_shot` | `name?` | `{file}`，含 UI 面板的整個視窗截圖（晚一兩幀寫出，最多等 15 秒），並附上圖片預覽 |
+| （只有控制通道） | `ui_fit` | `open?`、`close?`、`page?`＋`bones?` | 開關浮窗或詳情頁；不帶參數時回 `{view, shown, problems}`：超出視窗的元件、被截斷的文字、跑出畫面的視窗（`Tools/ok_studio_ui_fit.lua` 逐窗跑） |
 
 ## 範例：加角色、擺姿勢、拍照、存檔
 

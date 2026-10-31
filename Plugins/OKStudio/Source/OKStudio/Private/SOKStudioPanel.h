@@ -1032,6 +1032,8 @@ public:
 					[
 						SNew(SSpinBox<float>).Style(&SpinStyle()).Font(Font(11.f)).MinValue(Row == 2 ? 0.01f : -100000.f).MaxValue(100000.f).Delta(Row == 1 ? 1.f : (Row == 2 ? 0.01f : 1.f))
 						.Value_Lambda([this, Row, Axis] { const FOKSceneObject* O = Obj(); return O ? TransformValue(O->Transform, Row, Axis) : 0.f; })
+						// The field holds about seven characters (-2412.5): 1 mm and 0.1 degree, scale to 0.01.
+						.MaxFractionalDigits(Row == 2 ? 2 : 1)
 						.OnValueChanged_Lambda([this, Row, Axis](float V) { if (FOKSceneObject* O = Obj()) { SetTransformValue(O->Transform, Row, Axis, V); Changed(); } })
 						.OnBeginSliderMovement_Lambda([this] { if (Game.IsValid()) Game->bUserDragging = true; })
 						.OnEndSliderMovement_Lambda([this](float) { if (Game.IsValid()) Game->bUserDragging = false; })
@@ -1636,14 +1638,19 @@ public:
 	/** A section heading of the detail window. */
 	void Label(const FString& Text)
 	{
-		Props->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(Text), 11.f, OKStudioStyle::TextSoft())];
+		TSharedRef<STextBlock> Heading = OKStudioStyle::Label(FText::FromString(Text), 11.f, OKStudioStyle::TextSoft());
+		Heading->SetAutoWrapText(true);
+		Props->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 1.f)[Heading];
 	}
 	/** A row: name on the left (40 %), the control on the right. */
 	void Row(const FString& Name, const TSharedRef<SWidget>& Control, float NameShare = 0.4f)
 	{
 		const FString* Help = RowHelp().Find(Name);
+		// A long name wraps (the row grows) rather than running under the control.
+		TSharedRef<STextBlock> NameText = OKStudioStyle::Label(FText::FromString(Name), 10.f);
+		NameText->SetAutoWrapText(true);
 		TSharedRef<SHorizontalBox> Line = SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(NameShare).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(Name), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(NameShare).VAlign(VAlign_Center)[NameText]
 			+ SHorizontalBox::Slot().FillWidth(1.f - NameShare)[SNew(SBox).HeightOverride(18.f)[Control]];
 		if (Help) Line->AddSlot().AutoWidth().Padding(2.f, 0.f, 0.f, 0.f)[HelpIcon(Name, *Help)];
 		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Line];
@@ -1682,7 +1689,7 @@ public:
 	/** Number box in the theme: drag to change, click to type. Dragging counts as one undo step. */
 	TSharedRef<SWidget> Spin(TFunction<float()> Get, TFunction<void(float)> Set, float Min, float Max, float Delta)
 	{
-		return SNew(SSpinBox<float>).Style(&OKStudioStyle::SpinStyle()).Font(OKStudioStyle::Font(10.f)).MinValue(Min).MaxValue(Max).Delta(Delta)
+		return SNew(SSpinBox<float>).Style(&OKStudioStyle::SpinStyle()).Font(OKStudioStyle::Font(10.f)).MinValue(Min).MaxValue(Max).Delta(Delta).MaxFractionalDigits(3)
 			.Value_Lambda([Get] { return Get(); })
 			.OnValueChanged_Lambda([Set](float V) { Set(V); })
 			.OnBeginSliderMovement_Lambda([this] { if (Game.IsValid()) Game->bUserDragging = true; })
@@ -1694,10 +1701,21 @@ public:
 	}
 	TSharedRef<SWidget> CheckBox(const FString& Name, TFunction<bool()> Get, TFunction<void(bool)> Set)
 	{
-		return SNew(SCheckBox).Style(&OKStudioStyle::CheckStyle())
-			.IsChecked_Lambda([Get] { return Get() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-			.OnCheckStateChanged_Lambda([Set](ECheckBoxState S) { Set(S == ECheckBoxState::Checked); })
-			[SNew(SBox).Padding(FMargin(4.f, 0.f, 0.f, 0.f))[OKStudioStyle::Label(FText::FromString(Name), 10.f)]];
+		// The label sits beside the box (inside SCheckBox it keeps its whole width and runs out of narrow windows) and
+		// wraps; clicking it toggles as well.
+		return SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+			[
+				SNew(SCheckBox).Style(&OKStudioStyle::CheckStyle())
+				.IsChecked_Lambda([Get] { return Get() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([Set](ECheckBoxState S) { Set(S == ECheckBoxState::Checked); })
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(4.f, 0.f, 0.f, 0.f)
+			[
+				SNew(SButton).ButtonStyle(&OKStudioStyle::FlatButton()).ContentPadding(FMargin(0.f))
+				.OnClicked_Lambda([Get, Set] { Set(!Get()); return FReply::Handled(); })
+				[SNew(STextBlock).Text(FText::FromString(Name)).Font(OKStudioStyle::Font(10.f)).ColorAndOpacity(OKStudioStyle::Text()).AutoWrapText(true)]
+			];
 	}
 	void Check(const FString& Name, TFunction<bool(FOKSceneObject&)> Get, TFunction<void(FOKSceneObject&, bool)> Set)
 	{
@@ -2292,8 +2310,8 @@ public:
 						return SNew(STableRow<TSharedPtr<int32>>, Owner).Style(&RowStyle()).Padding(FMargin(0.f, 0.f, 0.f, 1.f))
 						[
 							Fill(IsOn(Value), RowFill(), SNew(SButton).ButtonStyle(&FlatButton()).ContentPadding(FMargin(2.f, 0.f))
-							.OnClicked_Lambda([Pick, Value] { Pick(Value); return FReply::Handled(); })
-							[SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(OKStudioStyle::Text()).Text(FText::FromString(Name(Value)))])
+							.OnClicked_Lambda([Pick, Value] { Pick(Value); return FReply::Handled(); }).ToolTipText(FText::FromString(Name(Value)))
+							[SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(Name(Value)))])
 						];
 					})
 				]
@@ -2468,7 +2486,7 @@ public:
 				SNew(SComboBox<TSharedPtr<FString>>).OptionsSource(&PoseOptions)
 				.OnGenerateWidget_Lambda([](TSharedPtr<FString> F) { return SNew(STextBlock).Text(FText::FromString(FPaths::GetBaseFilename(*F))); })
 				.OnSelectionChanged_Lambda([this](TSharedPtr<FString> F, ESelectInfo::Type Info) { if (F && Info != ESelectInfo::Direct) LoadPose(*F); })
-				[SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("讀 KK 姿勢（%d）"), PoseOptions.Num())))]
+				[SNew(STextBlock).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(FString::Printf(TEXT("讀 KK 姿勢（%d）"), PoseOptions.Num())))]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(1.f)[SNew(SButton).Text(FText::FromString(TEXT("存成 KK 姿勢"))).OnClicked_Lambda([this]
 			{

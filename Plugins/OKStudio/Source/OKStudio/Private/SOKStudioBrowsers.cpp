@@ -180,7 +180,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 					[
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SImage).Image_Lambda([F] { const FSlateBrush* B = FOKStudioThumbnails::Get().File(F, 96); return B ? B : Brush(Input()); })]
-						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(8.f)).ColorAndOpacity(OKStudioStyle::Text()).Text(FText::FromString(FPaths::GetBaseFilename(F)))]
+						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(8.f)).ColorAndOpacity(OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(FPaths::GetBaseFilename(F)))]
 					])
 			]
 		];
@@ -198,7 +198,12 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 		Pick->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(TEXT("加入")), [this, F] { AddOrReplaceCard(F, false); }, 0.f, 22.f)];
 		Pick->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(TEXT("替換所選角色")), [this, F] { AddOrReplaceCard(F, true); }, 0.f, 22.f, false, 11.f, ButtonFill(), bCanReplace)];
 	}
-	else Pick->AddSlot().AutoHeight()[OKStudioStyle::Label(FText::FromString(TEXT("點一張卡預覽，再按「加入」或「替換所選角色」。")), 10.f, TextHint())];
+	else
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("點一張卡預覽，再按「加入」或「替換所選角色」。")), 10.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		Pick->AddSlot().AutoHeight()[Hint];
+	}
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)
 		[

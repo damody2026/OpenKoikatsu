@@ -566,6 +566,86 @@ namespace
 			O->SetArrayField(TEXT("missing"), Missing);
 			return O;
 		}
+		// What does not fit the window at its current size (U28): {"open": "<float>"} / {"close": ...} opens a floating
+		// window, {"page": n, "bones": k} a detail page (EPage, the bones window's sub page); without them it reports, for
+		// every shown part of the studio canvas (floats, the detail window, the shell groups), the widgets reaching out of
+		// it, text cut short and parts outside the view. Lists and scroll boxes run on by design and are not checked inside.
+		if (Op == TEXT("ui_fit"))
+		{
+			FString Id;
+			if (J->TryGetStringField(TEXT("open"), Id)) { P.OpenFloat(Id); return Result(P.Floats.Contains(Id), P.Floats.Contains(Id) ? FString() : TEXT("no such window")); }
+			if (J->TryGetStringField(TEXT("close"), Id)) { P.CloseFloat(Id); return Result(true); }
+			int32 PageNo = -1;
+			if (J->TryGetNumberField(TEXT("page"), PageNo))
+			{
+				J->TryGetNumberField(TEXT("bones"), P.BonePage);
+				P.SetPage(SOKStudioPanel::EPage(FMath::Clamp(PageNo, 0, int32(SOKStudioPanel::EPage::Camera))));
+				return Result(true);
+			}
+			if (!P.Canvas) return Result(false, TEXT("no canvas"));
+			TArray<TSharedPtr<FJsonValue>> Out, Shown;
+			auto Note = [&Out](const FString& Region, const FString& What, const FString& Widget, const FSlateRect& R, const FSlateRect& Bound, float Scale)
+			{
+				TSharedRef<FJsonObject> X = MakeShared<FJsonObject>();
+				X->SetStringField(TEXT("region"), Region);
+				X->SetStringField(TEXT("what"), What);
+				X->SetStringField(TEXT("widget"), Widget);
+				// How far it reaches out, in canvas units (left, top, right, bottom; 0 where it fits).
+				X->SetStringField(TEXT("over"), FString::Printf(TEXT("%.0f %.0f %.0f %.0f"), FMath::Max(0.f, Bound.Left - R.Left) / Scale, FMath::Max(0.f, Bound.Top - R.Top) / Scale, FMath::Max(0.f, R.Right - Bound.Right) / Scale, FMath::Max(0.f, R.Bottom - Bound.Bottom) / Scale));
+				Out.Add(MakeShared<FJsonValueObject>(X));
+			};
+			auto Describe = [](const SWidget& W)
+			{
+				FString Text;
+				if (W.GetType() == TEXT("STextBlock")) Text = static_cast<const STextBlock&>(W).GetText().ToString().Left(40);
+				return Text.IsEmpty() ? W.GetType().ToString() : W.GetType().ToString() + TEXT(" ") + Text;
+			};
+			TFunction<void(const FArrangedWidget&, const FString&, const FSlateRect&, float)> Walk;
+			Walk = [&](const FArrangedWidget& A, const FString& Region, const FSlateRect& Bound, float Scale)
+			{
+				const SWidget& W = A.Widget.Get();
+				const FSlateRect R = A.Geometry.GetLayoutBoundingRect();
+				if (R.Left < Bound.Left - 1.f || R.Top < Bound.Top - 1.f || R.Right > Bound.Right + 1.f || R.Bottom > Bound.Bottom + 1.f)
+				{
+					Note(Region, TEXT("outside"), Describe(W), R, Bound, Scale);
+					return;
+				}
+				// Text shortened with an ellipsis on purpose carries the tag "Ellipsis".
+				const TSharedPtr<FTagMetaData> TextTag = W.GetMetaData<FTagMetaData>();
+				if (W.GetType() == TEXT("STextBlock") && !(TextTag && TextTag->Tag == TEXT("Ellipsis")) && W.GetDesiredSize().X > A.Geometry.GetLocalSize().X + 1.f)
+					Note(Region, TEXT("text cut"), Describe(W), R, FSlateRect(R.Left, R.Top, R.Left + A.Geometry.GetLocalSize().X * Scale, R.Bottom), Scale);
+				// Inside a scroll box or list only the width counts (rows below the fold are scrolled to), within the box.
+				const FString Type = W.GetType().ToString();
+				FSlateRect Inner = Bound;
+				if (Type == TEXT("SScrollBox") || Type.StartsWith(TEXT("SListView")) || Type.StartsWith(TEXT("STreeView")) || Type.StartsWith(TEXT("STileView")))
+					Inner = FSlateRect(FMath::Max(Bound.Left, R.Left), -1e9f, FMath::Min(Bound.Right, R.Right), 1e9f);
+				FArrangedChildren Children(EVisibility::Visible);
+				W.ArrangeChildren(A.Geometry, Children);
+				for (int32 I = 0; I < Children.Num(); ++I) Walk(Children[I], Region, Inner, Scale);
+			};
+			const FGeometry& CanvasGeometry = P.Canvas->GetCachedGeometry();
+			const FSlateRect View = CanvasGeometry.GetLayoutBoundingRect();
+			const float Scale = CanvasGeometry.Scale > 0.f ? CanvasGeometry.Scale : 1.f;
+			FArrangedChildren Parts(EVisibility::Visible);
+			P.Canvas->ArrangeChildren(CanvasGeometry, Parts);
+			for (int32 I = 0; I < Parts.Num(); ++I)
+			{
+				const FArrangedWidget& Part = Parts[I];
+				const TSharedPtr<FTagMetaData> Tag = Part.Widget->GetMetaData<FTagMetaData>();
+				const FString Region = Tag ? Tag->Tag.ToString() : Part.Widget->GetType().ToString();
+				const FSlateRect R = Part.Geometry.GetLayoutBoundingRect();
+				Shown.Add(MakeShared<FJsonValueString>(Region));
+				if (R.Left < View.Left - 1.f || R.Top < View.Top - 1.f || R.Right > View.Right + 1.f || R.Bottom > View.Bottom + 1.f) Note(Region, TEXT("outside view"), Region, R, View, Scale);
+				FArrangedChildren Inner(EVisibility::Visible);
+				Part.Widget->ArrangeChildren(Part.Geometry, Inner);
+				for (int32 C = 0; C < Inner.Num(); ++C) Walk(Inner[C], Region, R, Scale);
+			}
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetStringField(TEXT("view"), FString::Printf(TEXT("%.0fx%.0f px, canvas %.0fx%.0f"), View.GetSize().X, View.GetSize().Y, CanvasGeometry.GetLocalSize().X, CanvasGeometry.GetLocalSize().Y));
+			O->SetArrayField(TEXT("shown"), Shown);
+			O->SetArrayField(TEXT("problems"), Out);
+			return O;
+		}
 		if (Op == TEXT("ui_shot"))
 		{
 			FString Name;
@@ -1126,7 +1206,7 @@ namespace OKStudioControl
 		if (!GRouter.IsValid()) { UE_LOG(LogTemp, Warning, TEXT("OK studio control: could not open port %d"), Port); return; }
 		static const TCHAR* Ops[] = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("spawn"), TEXT("transform"), TEXT("reparent"), TEXT("delete"), TEXT("select"),
 			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline"),
-			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("click"), TEXT("type"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
+			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("ui_fit"), TEXT("click"), TEXT("type"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
 		for (const TCHAR* Op : Ops)
 		{
 			const FString Name = Op;

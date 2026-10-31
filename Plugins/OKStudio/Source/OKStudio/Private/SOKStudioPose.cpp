@@ -531,7 +531,7 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 		for (const TPair<const TCHAR*, TFunction<void()>>& B : List) Box->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(B.Key), B.Value, 0.f, 18.f, false, 10.f)];
 		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Box];
 	};
-	Buttons({ { TEXT("FK←目前姿勢"), Cmd(TEXT("pose.fkfrompose")) }, { TEXT("IK←FK"), Cmd(TEXT("pose.ikfromfk")) }, { TEXT("清除 FK"), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Fk.Reset(); Changed(); DeferRebuild(); } } } });
+	Buttons({ { TEXT("FK←姿勢"), Cmd(TEXT("pose.fkfrompose")) }, { TEXT("IK←FK"), Cmd(TEXT("pose.ikfromfk")) }, { TEXT("清除 FK"), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Fk.Reset(); Changed(); DeferRebuild(); } } } });
 	Buttons({ { TEXT("鏡像全部"), Cmd(TEXT("pose.mirror"), TEXT("all")) }, { TEXT("左→右"), Cmd(TEXT("pose.mirror"), TEXT("l2r")) }, { TEXT("右→左"), Cmd(TEXT("pose.mirror"), TEXT("r2l")) } });
 	Buttons({ { TEXT("複製姿勢"), Cmd(TEXT("pose.copy")) }, { TEXT("貼上姿勢"), Cmd(TEXT("pose.paste")) }, { TEXT("姿勢庫…"), Cmd(TEXT("app.poselibrary")) } });
 	// The chosen bone on the timeline (its own track: it moves between the keys that hold it).
@@ -780,7 +780,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildPoseLibrary()
 						.OnClicked_Lambda([this, F] { PreviewPose(F); return FReply::Handled(); })
 						[SNew(SImage).Image_Lambda([Picture] { const FSlateBrush* B = FPaths::FileExists(Picture) ? FOKStudioThumbnails::Get().File(Picture, 96) : nullptr; return B ? B : Brush(Input()); })]
 					]
-					+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(8.f)).ColorAndOpacity(OKStudioStyle::Text()).Text(FText::FromString(FPaths::GetBaseFilename(F)))]
+					+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(8.f)).ColorAndOpacity(OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(FPaths::GetBaseFilename(F)))]
 					+ SVerticalBox::Slot().AutoHeight()
 					[
 						SNew(SHorizontalBox)

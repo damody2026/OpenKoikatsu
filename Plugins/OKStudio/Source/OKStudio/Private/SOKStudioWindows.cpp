@@ -666,7 +666,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 						[
 							SNew(SImage).Image_Lambda([F, bPng] { const FSlateBrush* B = bPng ? FOKStudioThumbnails::Get().File(F, 96) : nullptr; return B ? B : Brush(Input()); })
 						]
-						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(9.f)).ColorAndOpacity(OKStudioStyle::Text()).Text(FText::FromString(KindTag + FPaths::GetBaseFilename(F)))]
+						+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(9.f)).ColorAndOpacity(OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(KindTag + FPaths::GetBaseFilename(F)))]
 					])
 			]
 		];
@@ -688,7 +688,12 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 			Confirm(FString::Printf(TEXT("把 %s 移到 Saved/OKStudio/Trash？"), *FPaths::GetCleanFilename(F)), { { TEXT("移到 Trash"), [this, F] { DeleteScene(F); } }, { TEXT("取消"), nullptr } });
 		}, 0.f, 20.f)];
 	}
-	else Pick->AddSlot().AutoHeight()[OKStudioStyle::Label(FText::FromString(TEXT("點一個場景來預覽，再選覆蓋或疊加。")), 10.f, TextHint())];
+	else
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("點一個場景來預覽，再選覆蓋或疊加。")), 10.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		Pick->AddSlot().AutoHeight()[Hint];
+	}
 	if (SaveAsName.IsEmpty()) SaveAsName = Game.IsValid() && !Game->File.IsEmpty() ? FPaths::GetBaseFilename(Game->File) : FDateTime::Now().ToString(TEXT("scene_%Y%m%d_%H%M%S"));
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)
@@ -1052,8 +1057,10 @@ TSharedRef<SWidget> SOKStudioPanel::BuildReport()
 {
 	if (ReportLines.IsEmpty() && Game.IsValid()) ReportLines = Game->LoadReport();
 	const TArray<FString> Lines = ReportLines;
+	TSharedRef<STextBlock> Note = OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 個物件沒有顯示；它們仍在場景裡（工作區名稱後標「（未顯示）」），補齊資源後重新開啟就會出現。點一行選取該物件。"), Lines.Num())), 10.f, TextSoft());
+	Note->SetAutoWrapText(true);
 	return SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 個物件沒有顯示；它們仍在場景裡（工作區名稱後標「（未顯示）」），補齊資源後重新開啟就會出現。點一行選取該物件。"), Lines.Num())), 10.f, TextSoft())]
+		+ SVerticalBox::Slot().AutoHeight()[Note]
 		+ SVerticalBox::Slot().FillHeight(1.f).Padding(0.f, 3.f)[TextList(Lines, [this, Lines](int32 I) { const int32 Id = LineId(Lines[I]); if (Id > 0 && Game.IsValid()) Game->Select(Id); }, 220.f)]
 		+ SVerticalBox::Slot().AutoHeight()
 		[
@@ -1619,7 +1626,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("速度")), 9.f, TextSoft())]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[SNew(SBox).WidthOverride(44.f).HeightOverride(16.f)[Spin([this, Id] { const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr; return X ? X->Character.Speed : 1.f; }, [this, Id](float V) { if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr) { X->Character.Speed = FMath::Clamp(V, 0.f, 4.f); Changed(); } }, 0.f, 4.f, 0.05f)]]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("偏移(s)")), 9.f, TextSoft())]
-						+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[SNew(SBox).WidthOverride(48.f).HeightOverride(16.f)[Spin([this, Id] { const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr; return X ? X->Character.Time : 0.f; }, [this, Id](float V) { if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr) { X->Character.Time = V; Changed(); } }, -120.f, 120.f, 0.05f)]]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[SNew(SBox).WidthOverride(62.f).HeightOverride(16.f)[Spin([this, Id] { const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr; return X ? X->Character.Time : 0.f; }, [this, Id](float V) { if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr) { X->Character.Time = V; Changed(); } }, -120.f, 120.f, 0.05f)]]
 						+ SHorizontalBox::Slot().FillWidth(1.f)
 						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)
 						[
