@@ -91,7 +91,7 @@ int32 UOKStudioGame::PickObject(const FVector2D& Position) const
 	double BestDepth = TNumericLimits<double>::Max();
 	for (const FOKSceneObject& O : Document->Objects)
 	{
-		if (!Document->IsShown(O.Id) || O.Kind == EOKSceneObjectKind::Folder) continue;
+		if (!Document->IsShown(O.Id) || O.Kind == EOKSceneObjectKind::Folder || O.bLocked) continue;
 		double Depth = -1.;
 		if (O.Kind == EOKSceneObjectKind::Character)
 		{

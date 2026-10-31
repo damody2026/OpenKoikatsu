@@ -100,6 +100,7 @@ namespace
 			J->SetStringField(TEXT("name"), X.Name);
 			J->SetStringField(TEXT("kind"), KindName(X.Kind));
 			J->SetBoolField(TEXT("visible"), X.bVisible);
+			J->SetBoolField(TEXT("locked"), X.bLocked);
 			J->SetStringField(TEXT("attach_bone"), X.AttachBone);
 			J->SetArrayField(TEXT("location"), Vec(X.Transform.GetLocation()));
 			const FRotator R = X.Transform.Rotator();
@@ -282,6 +283,7 @@ namespace
 				O->SetNumberField(TEXT("effector"), E);
 				O->SetStringField(TEXT("name"), Effectors[E]);
 				O->SetBoolField(TEXT("enabled"), T != nullptr);
+				O->SetNumberField(TEXT("weight"), T ? T->Weight : 1.f);
 				O->SetArrayField(TEXT("position"), Vec(Local));
 				O->SetArrayField(TEXT("world"), Vec(A->GetActorTransform().TransformPosition(Local)));
 				Ik.Add(MakeShared<FJsonValueObject>(O));
@@ -299,7 +301,18 @@ namespace
 			TSharedRef<FJsonObject> O = Result(true);
 			O->SetArrayField(TEXT("fk"), Fk);
 			O->SetArrayField(TEXT("ik"), Ik);
+			O->SetNumberField(TEXT("fk_parts_off"), X->Character.FkPartsOff);
+			O->SetNumberField(TEXT("ik_parts_off"), X->Character.IkPartsOff);
 			O->SetArrayField(TEXT("look_point"), Vec(X->Character.LookPoint));
+			// What the character shows now (the actor's own state, not the document's): checks for the face and look controls.
+			O->SetNumberField(TEXT("face_eyes_open"), A->FaceOpen01[0]);
+			O->SetNumberField(TEXT("face_eyes_pattern"), A->FacePattern[0]);
+			O->SetNumberField(TEXT("eyes_look"), int32(X->Character.EyesLook));
+			O->SetNumberField(TEXT("neck_look"), int32(X->Character.NeckLook));
+			O->SetNumberField(TEXT("neck_follow"), X->Character.NeckFollow);
+			if (const FOKSceneCharacter* C = &X->Character) { TArray<TSharedPtr<FJsonValue>> Cl; for (uint8 S : C->ClothesStates) Cl.Add(MakeShared<FJsonValueNumber>(S)); O->SetArrayField(TEXT("clothes_states"), Cl); }
+			O->SetNumberField(TEXT("hand_left"), X->Character.HandLeft);
+			O->SetNumberField(TEXT("hand_right"), X->Character.HandRight);
 			O->SetArrayField(TEXT("accessory_points"), Points);
 			O->SetStringField(TEXT("note"), TEXT("euler: Unity local degrees (as KK Studio FK); ik position: cm in the character's space (+Y ahead, +Z up); world: cm. A character with rotation [0,0,0] faces +Y (the front view looks at its face); yaw -90 faces +X, yaw 90 faces -X, yaw 180 faces away."));
 			return O;
@@ -539,6 +552,42 @@ namespace
 		// Leaves the studio (as its close button: the mode that started it comes back, its UI restored). The channel
 		// closes with the studio; with "name", a whole-window screenshot (UI included) is taken a second later to
 		// Saved/OKStudio/mcp_ui/<name>.png, showing what the mode looks like afterwards.
+		// Clicks a shown button by its text, as a person would ({"text": "全裸", "index": 0}; "contains": true matches part of
+		// the text): the button's own click handler runs, so a test exercises the UI and not a shortcut around it. The
+		// matches (in window order, top to bottom) are listed when "index" is out of range.
+		if (Op == TEXT("click"))
+		{
+			FString Text;
+			J->TryGetStringField(TEXT("text"), Text);
+			int32 Index = 0;
+			J->TryGetNumberField(TEXT("index"), Index);
+			bool bContains = false;
+			J->TryGetBoolField(TEXT("contains"), bContains);
+			if (Text.IsEmpty() || !FSlateApplication::IsInitialized()) return Result(false, TEXT("text required"));
+			TArray<TSharedRef<SButton>> Found;
+			TArray<FString> Labels;
+			TFunction<void(const TSharedRef<SWidget>&)> Walk = [&](const TSharedRef<SWidget>& W)
+			{
+				if (!W->GetVisibility().IsVisible()) return;
+				if (W->GetType() == TEXT("STextBlock"))
+				{
+					const FString T = StaticCastSharedRef<STextBlock>(W)->GetText().ToString();
+					if (bContains ? T.Contains(Text) : T == Text)
+						for (TSharedPtr<SWidget> P = W->GetParentWidget(); P; P = P->GetParentWidget())
+							if (P->GetType() == TEXT("SButton")) { Found.Add(StaticCastSharedRef<SButton>(P.ToSharedRef())); Labels.Add(T); break; }
+				}
+				FChildren* Children = W->GetChildren();
+				for (int32 I = 0; Children && I < Children->Num(); ++I) Walk(Children->GetChildAt(I));
+			};
+			for (const TSharedRef<SWindow>& Window : FSlateApplication::Get().GetInteractiveTopLevelWindows()) Walk(Window);
+			if (!Found.IsValidIndex(Index)) return Result(false, FString::Printf(TEXT("%d buttons match: %s"), Found.Num(), *FString::Join(Labels, TEXT(" | "))));
+			if (!Found[Index]->IsEnabled()) return Result(false, TEXT("the button is disabled"));
+			Found[Index]->SimulateClick();
+			TSharedRef<FJsonObject> O = Result(true);
+			O->SetNumberField(TEXT("matches"), Found.Num());
+			O->SetStringField(TEXT("clicked"), Labels[Index]);
+			return O;
+		}
 		// A console command on the game world (cvars, show flags, stat), for diagnosing what the studio draws.
 		if (Op == TEXT("exec"))
 		{
@@ -774,7 +823,9 @@ namespace
 					if (!T || !ReadVec(T.ToSharedRef(), TEXT("position"), Pos)) continue;
 					const int32 E = int32(T->GetNumberField(TEXT("effector")));
 					X->Character.Ik.RemoveAll([E](const FOKSceneIkTarget& I) { return I.Effector == E; });
-					X->Character.Ik.Add({ E, Pos });
+					FOKSceneIkTarget& Added = X->Character.Ik.Add_GetRef({ E, Pos });
+					double W = 1.;
+					if (T->TryGetNumberField(TEXT("weight"), W)) Added.Weight = FMath::Clamp(float(W), 0.f, 1.f);
 				}
 			FString S;
 			if (J->TryGetStringField(TEXT("pose_file"), S) && !S.IsEmpty() && !P->LoadPose(S)) return Result(false, TEXT("pose file not loaded"));
@@ -797,6 +848,7 @@ namespace
 				if ((*Sub)->TryGetNumberField(TEXT("eyes"), D)) X->Character.EyesPattern = int32(D);
 				if ((*Sub)->TryGetNumberField(TEXT("mouth"), D)) X->Character.MouthPattern = int32(D);
 				if ((*Sub)->TryGetNumberField(TEXT("mouth_open"), D)) X->Character.MouthOpen = float(D);
+				if ((*Sub)->TryGetNumberField(TEXT("eyes_open"), D)) X->Character.EyesOpen = float(D);
 			}
 			if (J->TryGetObjectField(TEXT("hands"), Sub))
 			{
@@ -816,6 +868,10 @@ namespace
 				};
 				Look((*Sub)->TryGetField(TEXT("eyes")), X->Character.EyesLook);
 				Look((*Sub)->TryGetField(TEXT("neck")), X->Character.NeckLook);
+				double D;
+				if ((*Sub)->TryGetNumberField(TEXT("neck_follow"), D)) X->Character.NeckFollow = FMath::Clamp(float(D), 0.f, 1.f);
+				FVector Point;
+				if (ReadVec(Sub->ToSharedRef(), TEXT("point"), Point)) X->Character.LookPoint = Point;
 			}
 			Doc->NotifyChanged();
 			if (J->TryGetStringField(TEXT("mirror"), S) && !S.IsEmpty())
@@ -931,7 +987,7 @@ namespace OKStudioControl
 		if (!GRouter.IsValid()) { UE_LOG(LogTemp, Warning, TEXT("OK studio control: could not open port %d"), Port); return; }
 		static const TCHAR* Ops[] = { TEXT("state"), TEXT("inspect"), TEXT("catalog_search"), TEXT("spawn"), TEXT("transform"), TEXT("reparent"), TEXT("delete"), TEXT("select"),
 			TEXT("pose"), TEXT("camera"), TEXT("capture"), TEXT("save"), TEXT("load"), TEXT("undo"), TEXT("redo"), TEXT("cmd"), TEXT("timeline"),
-			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
+			TEXT("patch"), TEXT("scene"), TEXT("bones"), TEXT("bounds"), TEXT("catalog"), TEXT("keys"), TEXT("duplicate"), TEXT("export"), TEXT("scenes"), TEXT("report"), TEXT("ui_shot"), TEXT("click"), TEXT("leave"), TEXT("exec"), TEXT("parts") };
 		for (const TCHAR* Op : Ops)
 		{
 			const FString Name = Op;

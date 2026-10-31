@@ -364,6 +364,96 @@ void SOKStudioPanel::DuplicateSelection()
 	if (New.Num()) Game->SelectMany(New, New.Last());
 }
 
+void SOKStudioPanel::DuplicateSelectionOffset()
+{
+	// As 複製物件, the copies moved 20 cm along the view's right so they do not sit inside the originals.
+	DuplicateSelection();
+	UWorld* World = Game->SceneActor ? Game->SceneActor->GetWorld() : nullptr;
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const FVector Right = PC && PC->PlayerCameraManager ? FRotationMatrix(PC->PlayerCameraManager->GetCameraRotation()).GetUnitAxis(EAxis::Y) : FVector(1.f, 0.f, 0.f);
+	for (int32 Id : Game->SelectionRoots())
+		if (FOKSceneObject* O = Game->Document->Find(Id))
+		{
+			// The offset is in the parent's space (the transform is local to it).
+			const FTransform ParentWorld = Game->Document->ChildFrame(O->Parent);
+			O->Transform.AddToTranslation(ParentWorld.InverseTransformVector(Right * 20.f));
+		}
+	Changed();
+}
+
+void SOKStudioPanel::GroupSelection()
+{
+	// HS2Studio6-style grouping: a new folder beside the first selected object holds the selection (world placement kept).
+	const TArray<int32> Roots = Game->SelectionRoots();
+	if (Roots.IsEmpty()) { SetStatus(TEXT("沒有選取")); return; }
+	const FOKSceneObject* First = Game->Document->Find(Roots[0]);
+	const int32 Folder = Game->Document->AddObject(EOKSceneObjectKind::Folder, TEXT("群組"), First ? First->Parent : -1);
+	for (int32 Id : Roots) Game->Document->Reparent(Id, Folder);
+	Game->Select(Folder);
+	SetStatus(FString::Printf(TEXT("%d 個物件放進新群組"), Roots.Num()));
+	Changed();
+}
+
+void SOKStudioPanel::UngroupSelection()
+{
+	// The selected folders' children move up to the folder's parent (world placement kept), then the folders go.
+	TArray<int32> Freed, Folders;
+	for (int32 Id : Game->Selection)
+		if (const FOKSceneObject* F = Game->Document->Find(Id)) if (F->Kind == EOKSceneObjectKind::Folder) Folders.Add(Id);
+	for (int32 Folder : Folders)
+	{
+		const FOKSceneObject* F = Game->Document->Find(Folder);
+		if (!F) continue;
+		const int32 Up = F->Parent;
+		TArray<int32> Children;
+		for (const FOKSceneObject& O : Game->Document->Objects) if (O.Parent == Folder) Children.Add(O.Id);
+		for (int32 Child : Children) { Game->Document->Reparent(Child, Up); Freed.Add(Child); }
+		Game->Document->RemoveObject(Folder);
+	}
+	if (Folders.IsEmpty()) { SetStatus(TEXT("選取裡沒有資料夾")); return; }
+	Game->SelectMany(Freed, Freed.Num() ? Freed.Last() : -1);
+	Changed();
+}
+
+void SOKStudioPanel::SoloSelection()
+{
+	// Only the selection (with its parents and children) shows; again: every object's own visibility comes back.
+	if (SoloSaved.Num())
+	{
+		for (const TPair<int32, bool>& P : SoloSaved) if (FOKSceneObject* O = Game->Document->Find(P.Key)) O->bVisible = P.Value;
+		SoloSaved.Reset();
+		SetStatus(TEXT("全部恢復顯示"));
+		Changed();
+		return;
+	}
+	if (Game->Selection.IsEmpty()) { SetStatus(TEXT("沒有選取")); return; }
+	TSet<int32> Keep;
+	for (int32 Id : Game->Selection)
+	{
+		for (int32 P = Id; P >= 0; ) { Keep.Add(P); const FOKSceneObject* O = Game->Document->Find(P); P = O ? O->Parent : -1; }
+	}
+	for (const FOKSceneObject& O : Game->Document->Objects)
+		for (int32 P = O.Parent; P >= 0; ) { if (Game->IsSelected(P)) { Keep.Add(O.Id); break; } const FOKSceneObject* Up = Game->Document->Find(P); P = Up ? Up->Parent : -1; }
+	for (FOKSceneObject& O : Game->Document->Objects)
+	{
+		// Lights and the active camera keep lighting and framing the scene.
+		if (Keep.Contains(O.Id) || O.Kind == EOKSceneObjectKind::Light || O.Id == Game->Document->ActiveCamera) continue;
+		SoloSaved.Add(O.Id, O.bVisible);
+		O.bVisible = false;
+	}
+	SetStatus(TEXT("只顯示所選（再按一次恢復）"));
+	Changed();
+}
+
+void SOKStudioPanel::LockSelection()
+{
+	bool bAllLocked = true;
+	for (int32 Id : Game->Selection) if (const FOKSceneObject* O = Game->Document->Find(Id)) bAllLocked &= O->bLocked;
+	for (int32 Id : Game->Selection) if (FOKSceneObject* O = Game->Document->Find(Id)) O->bLocked = !bAllLocked;
+	SetStatus(bAllLocked ? TEXT("解除鎖定") : TEXT("已鎖定：畫面上點不到，樹上仍可選"));
+	Changed();
+}
+
 void SOKStudioPanel::DeleteSelection()
 {
 	for (int32 Id : Game->SelectionRoots()) Game->Document->RemoveObject(Id);
@@ -791,6 +881,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildTimeline()
 		+ SHorizontalBox::Slot().AutoWidth()[IconButton(TEXT("key"), Tip(TEXT("為選取物件打 key"), TEXT("timeline.key")), Cmd(TEXT("timeline.key")), 22.f, 20.f)]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(1.f, 0.f)[Button(FText::FromString(TEXT("刪 key")), Cmd(TEXT("timeline.delete")), 40.f, 20.f, false, 10.f)]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(1.f, 0.f)[Button(FText::FromString(TEXT("場景 key")), Cmd(TEXT("timeline.scenekey")), 52.f, 20.f, false, 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(1.f, 0.f)[Button(FText::FromString(TEXT("清空軌道")), Cmd(TEXT("timeline.clear")), 52.f, 20.f, false, 10.f)]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(1.f, 0.f)[Button(TAttribute<FText>::CreateLambda([this]
 		{
 			const FOKSceneTrack* T = Game.IsValid() ? Game->Document->TrackOf(Game->SelectedId) : nullptr;

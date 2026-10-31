@@ -29,7 +29,7 @@ const TArray<TPair<FString, FString>>& FOKStudioSettings::DefaultBindings()
 			{ TEXT("transform.copy"), TEXT("Ctrl+Shift+C") }, { TEXT("transform.paste"), TEXT("Ctrl+Shift+V") },
 			{ TEXT("scene.save"), TEXT("Ctrl+S") }, { TEXT("scene.saveas"), TEXT("Ctrl+Shift+S") }, { TEXT("scene.browser"), TEXT("Ctrl+O") },
 			{ TEXT("gizmo.move"), TEXT("W") }, { TEXT("gizmo.rotate"), TEXT("E") }, { TEXT("gizmo.scale"), TEXT("R") },
-			{ TEXT("gizmo.local"), TEXT("L") }, { TEXT("gizmo.snap"), TEXT("Ctrl+G") },
+			{ TEXT("gizmo.local"), TEXT("L") }, { TEXT("gizmo.snap"), TEXT("Ctrl+Shift+G") }, { TEXT("edit.group"), TEXT("Ctrl+G") }, { TEXT("edit.ungroup"), TEXT("Ctrl+Shift+U") }, { TEXT("edit.duplicateoffset"), TEXT("Ctrl+Shift+D") }, { TEXT("edit.solo"), TEXT("Shift+H") },
 			{ TEXT("toggle.ui"), TEXT("Z") }, { TEXT("app.settings"), TEXT("F1") }, { TEXT("app.screenshot"), TEXT("F12") },
 			{ TEXT("app.quicksearch"), TEXT("Ctrl+F") }, { TEXT("app.poselibrary"), TEXT("Ctrl+P") },
 			{ TEXT("camera.focus"), TEXT("F") }, { TEXT("camera.reset"), TEXT("Ctrl+SpaceBar") },

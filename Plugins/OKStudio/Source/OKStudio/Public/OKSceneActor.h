@@ -180,6 +180,7 @@ private:
 		/** FK bones the preview currently has. */
 		TArray<FOKSceneFkBone> AppliedFk;
 		TArray<FOKSceneIkTarget> AppliedIk;
+		int32 AppliedFkPartsOff = 0, AppliedIkPartsOff = 0;
         TArray<FQuat> AppliedFixedNeck;
 		/** Studio animation loaded from the OK animation library (kept alive while shown). */
 		TStrongObjectPtr<UObject> StudioAnim;
@@ -189,6 +190,9 @@ private:
 		TArray<float> AppliedFixedEyes;
 		int32 AppliedFixedEyesPattern = -1;
 		bool bNeckLooking = false;
+		/** The character's eye opening before the scene set one (-1: the scene never did). */
+		float EyesOpenBefore = -1.f;
+		bool bEyesManualBefore = false;
 		/** PlaceAttached's placement generation this object was last placed at (static placements skip until it changes). */
 		uint32 PlacedGeneration = 0;
 	};

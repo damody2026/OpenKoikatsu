@@ -197,7 +197,7 @@ int32 SOKStudioView::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 
 // --- Pose points ---
 
-int32 SOKStudioPanel::FkPartOf(const FString& Bone)
+int32 FOKSceneCharacter::FkPartOf(const FString& Bone)
 {
 	const FString B = Bone.ToLower();
 	if (B.Contains(TEXT("hair"))) return 2;
@@ -209,7 +209,7 @@ int32 SOKStudioPanel::FkPartOf(const FString& Bone)
 	return 0;
 }
 
-int32 SOKStudioPanel::IkPartOf(int32 Effector)
+int32 FOKSceneCharacter::IkPartOf(int32 Effector)
 {
 	switch (Effector)
 	{
@@ -241,7 +241,7 @@ bool SOKStudioPanel::PosePoints(TArray<FPosePoint>& Out) const
 		if (bReady) P->bStudioIkReady = true;
 		for (int32 E = 0; E < 13; ++E)
 		{
-			if (!IkParts.IsValidIndex(IkPartOf(E)) || !IkParts[IkPartOf(E)]) continue;
+			if (!IkPartOn(IkPartOf(E))) continue;
 			FVector World;
 			if (!Game->IkTargetWorld(E, World))
 			{
@@ -261,7 +261,7 @@ bool SOKStudioPanel::PosePoints(TArray<FPosePoint>& Out) const
 		TMap<FName, FVector2D> Shown;
 		for (const FOKStudioFkBone& B : FOKStudioCatalog::Get().FkBones)
 		{
-			if (!FkParts.IsValidIndex(FkPartOf(B.Bone)) || !FkParts[FkPartOf(B.Bone)]) continue;
+			if (!FkPartOn(FkPartOf(B.Bone))) continue;
 			FTransform World;
 			FPosePoint Point;
 			if (!OKStudioGameInternal::BoneWorld(P, B.Bone, World) || !ToScreen(Game.Get(), World.GetLocation(), Point.At)) continue;
@@ -415,10 +415,27 @@ void SOKStudioPanel::FkFromPose(FOKSceneObject& X)
 {
 	int32 Count = 0;
 	for (const FOKStudioFkBone& B : FOKStudioCatalog::Get().FkBones)
-		if (FkParts.IsValidIndex(FkPartOf(B.Bone)) && FkParts[FkPartOf(B.Bone)]) { SetFk(X, B.Bone, PosedEuler(X, B.Bone)); ++Count; }
+		if (X.Character.FkPartOn(FkPartOf(B.Bone))) { SetFk(X, B.Bone, PosedEuler(X, B.Bone)); ++Count; }
 	Changed();
 	DeferRebuild();
 	SetStatus(FString::Printf(TEXT("FK←目前姿勢：%d 根骨骼"), Count));
+}
+
+void SOKStudioPanel::FkFromIk(FOKSceneObject& X)
+{
+	if (X.Kind != EOKSceneObjectKind::Character) return;
+	// The pose IK makes now (body and hands, where IK reaches) becomes FK, and the IK targets go (HS2Studio6 FK←IK).
+	int32 Count = 0;
+	for (const FOKStudioFkBone& B : FOKStudioCatalog::Get().FkBones)
+	{
+		const int32 Part = FkPartOf(B.Bone);
+		if (Part == 0 || Part == 4 || Part == 5) { SetFk(X, B.Bone, PosedEuler(X, B.Bone)); ++Count; }
+	}
+	X.Character.Ik.Reset();
+	if (Game.IsValid()) Game->GuideIk = -1;
+	Changed();
+	DeferRebuild();
+	SetStatus(FString::Printf(TEXT("FK←IK：%d 根骨骼"), Count));
 }
 
 void SOKStudioPanel::BoneTree(const TArray<FString>& Bones, TFunction<FString(const FString&)> Show, TFunction<FVector(FOKSceneObject&, const FString&)> Get,
@@ -461,8 +478,18 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 	static const TCHAR* Parts[] = { TEXT("身體"), TEXT("胸"), TEXT("頭髮"), TEXT("頸"), TEXT("左手"), TEXT("右手"), TEXT("裙子") };
 	TSharedRef<SWrapBox> PartBox = SNew(SWrapBox).UseAllottedSize(true);
 	for (int32 I = 0; I < 7; ++I)
-		PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { FkParts[I] = !FkParts[I]; DeferRebuild(); }, 42.f, 17.f, TAttribute<bool>::CreateLambda([this, I] { return FkParts[I]; }), 10.f)];
+		PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { if (FOKSceneObject* X = Obj()) { X->Character.FkPartsOff ^= 1 << I; Changed(); DeferRebuild(); } }, 42.f, 17.f,
+			TAttribute<bool>::CreateLambda([this, I] { return FkPartOn(I); }), 10.f)];
 	Props->AddSlot().AutoHeight()[PartBox];
+	// 復位: one part's FK values go (the part follows the animation again until posed).
+	TSharedRef<SWrapBox> ResetBox = SNew(SWrapBox).UseAllottedSize(true);
+	ResetBox->AddSlot().Padding(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("復位")), 10.f)];
+	for (int32 I = 0; I < 7; ++I)
+		ResetBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I]
+		{
+			if (FOKSceneObject* X = Obj()) { X->Character.Fk.RemoveAll([I](const FOKSceneFkBone& B) { return FkPartOf(B.Bone) == I; }); Changed(); DeferRebuild(); }
+		}, 36.f, 16.f, false, 9.f)];
+	Props->AddSlot().AutoHeight()[ResetBox];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("畫面上顯示骨點（點骨點用把手轉它）"), [this] { return bShowFkPoints; }, [this](bool B) { bShowFkPoints = B; })];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("用 3D 把手轉選中骨骼"), [this] { return Game.IsValid() && !Game->GuideBone.IsEmpty(); }, [this](bool B) { if (Game.IsValid()) { Game->GuideBone = B ? FkBone : FString(); if (B) Game->GuideIk = -1; } })];
 	auto Buttons = [this](std::initializer_list<TPair<const TCHAR*, TFunction<void()>>> List)
@@ -474,11 +501,13 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 	Buttons({ { TEXT("FK←目前姿勢"), Cmd(TEXT("pose.fkfrompose")) }, { TEXT("IK←FK"), Cmd(TEXT("pose.ikfromfk")) }, { TEXT("清除 FK"), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Fk.Reset(); Changed(); DeferRebuild(); } } } });
 	Buttons({ { TEXT("鏡像全部"), Cmd(TEXT("pose.mirror"), TEXT("all")) }, { TEXT("左→右"), Cmd(TEXT("pose.mirror"), TEXT("l2r")) }, { TEXT("右→左"), Cmd(TEXT("pose.mirror"), TEXT("r2l")) } });
 	Buttons({ { TEXT("複製姿勢"), Cmd(TEXT("pose.copy")) }, { TEXT("貼上姿勢"), Cmd(TEXT("pose.paste")) }, { TEXT("姿勢庫…"), Cmd(TEXT("app.poselibrary")) } });
+	// The chosen bone on the timeline (its own track: it moves between the keys that hold it).
+	Buttons({ { TEXT("骨骼打 key"), Cmd(TEXT("timeline.bonekey")) }, { TEXT("骨骼刪 key"), Cmd(TEXT("timeline.boneunkey")) } });
 	if (Game.IsValid() && !Game->GuideBone.IsEmpty()) Game->GuideBone = FkBone.IsEmpty() ? Game->GuideBone : FkBone;
 	TArray<FString> Bones;
 	for (int32 Op = 0; Op < 2; ++Op)
 		for (const FOKStudioFkBone& B : C.FkBones)
-			if ((B.Op == 0) == (Op == 0) && FkParts.IsValidIndex(FkPartOf(B.Bone)) && FkParts[FkPartOf(B.Bone)]) Bones.Add(B.Bone);
+			if ((B.Op == 0) == (Op == 0) && FkPartOn(FkPartOf(B.Bone))) Bones.Add(B.Bone);
 	BoneTree(Bones, [](const FString& Bone) { const FOKStudioFkBone* B = FOKStudioCatalog::Get().FindFkBone(Bone); return B ? FString::Printf(TEXT("%s %s"), *B->Name, *Bone) : Bone; },
 		[this](FOKSceneObject& X, const FString& Bone) { const FOKSceneFkBone* B = X.Character.Fk.FindByPredicate([&Bone](const FOKSceneFkBone& F) { return F.Bone == Bone; }); return B ? B->Euler : PosedEuler(X, Bone); },
 		[](FOKSceneObject& X, const FString& Bone, const FVector& E) { SetFk(X, Bone, E); },
@@ -494,14 +523,17 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 	Label(FString::Printf(TEXT("IK（%d 個目標）"), O.Character.Ik.Num()));
 	TSharedRef<SWrapBox> PartBox = SNew(SWrapBox).UseAllottedSize(true);
 	for (int32 I = 0; I < 5; ++I)
-		PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { IkParts[I] = !IkParts[I]; DeferRebuild(); }, 42.f, 17.f, TAttribute<bool>::CreateLambda([this, I] { return IkParts[I]; }), 10.f)];
+		PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { if (FOKSceneObject* X = Obj()) { X->Character.IkPartsOff ^= 1 << I; Changed(); DeferRebuild(); } }, 42.f, 17.f,
+			TAttribute<bool>::CreateLambda([this, I] { return IkPartOn(I); }), 10.f)];
+	PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(TEXT("全部")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.IkPartsOff = X->Character.IkPartsOff ? 0 : 0x1f; Changed(); DeferRebuild(); } }, 42.f, 17.f,
+		TAttribute<bool>::CreateLambda([this] { const FOKSceneObject* X = Obj(); return X && X->Character.IkPartsOff == 0; }), 10.f)];
 	Props->AddSlot().AutoHeight()[PartBox];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("畫面上顯示 IK 點（點一下啟用並用把手移動）"), [this] { return bShowIkPoints; }, [this](bool B) { bShowIkPoints = B; })];
 	// The effectors: green while on; the chosen one is outlined by its name in the heading below.
 	TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
 	for (int32 E = 0; E < 13; ++E)
 	{
-		if (!IkParts[IkPartOf(E)]) continue;
+		if (!IkPartOn(IkPartOf(E))) continue;
 		Grid->AddSlot().Padding(1.f)[Button(FText::FromString(Names[E]), [this, E] { IkEffector = E; if (Game.IsValid() && Game->GuideIk >= 0) Game->GuideIk = E; DeferRebuild(); }, 52.f, 18.f,
 			TAttribute<bool>::CreateLambda([this, E] { const FOKSceneObject* X = Obj(); return X && X->Character.Ik.ContainsByPredicate([E](const FOKSceneIkTarget& T) { return T.Effector == E; }); }), 10.f,
 			IkEffector == E ? FLinearColor(0.45f, 0.35f, 0.1f) : ButtonFill())];
@@ -518,9 +550,13 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 			Float(FString(TEXT("XYZ")).Mid(Axis, 1),
 				[this, Axis](FOKSceneObject& X) { const FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); return T ? float(T->Position[Axis]) : 0.f; },
 				[this, Axis](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; })) T->Position[Axis] = V; }, -300.f, 300.f, 0.5f);
+		Float(TEXT("權重"),
+			[this](FOKSceneObject& X) { const FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); return T ? T->Weight : 1.f; },
+			[this](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; })) T->Weight = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
 	}
 	TSharedRef<SHorizontalBox> Row1 = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("IK←FK")), Cmd(TEXT("pose.ikfromfk")), 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("FK←IK")), Cmd(TEXT("pose.fkfromik")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("鏡像")), Cmd(TEXT("pose.mirror"), TEXT("all")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("清除 IK")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Ik.Reset(); if (Game.IsValid()) Game->GuideIk = -1; Changed(); DeferRebuild(); } }, 0.f, 18.f, false, 10.f)];
 	Props->AddSlot().AutoHeight().Padding(0.f, 3.f)[Row1];
@@ -538,6 +574,7 @@ void SOKStudioPanel::LookPage(FOKSceneObject& O, bool bNeck)
 	Label(TEXT("注視點（cm，角色空間；選「注視點」時可在畫面上拖動）"));
 	for (int32 Axis = 0; Axis < 3; ++Axis)
 		Float(FString(TEXT("XYZ")).Mid(Axis, 1), [Axis](FOKSceneObject& X) { return float(X.Character.LookPoint[Axis]); }, [Axis](FOKSceneObject& X, float V) { X.Character.LookPoint[Axis] = V; }, -1000.f, 1000.f, 1.f);
+	if (bNeck) Float(TEXT("跟隨強度"), [](FOKSceneObject& X) { return X.Character.NeckFollow; }, [](FOKSceneObject& X, float V) { X.Character.NeckFollow = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.05f);
 	// HS2Studio6: take the view's position as the look point (and look there), or go back to following the view.
 	auto TakeView = [this, bNeck]
 	{
@@ -575,6 +612,7 @@ void SOKStudioPanel::ExpressionPage(FOKSceneObject& O)
 	}, [](FOKSceneObject& X) { return X.Character.EyesPattern; }, [](FOKSceneObject& X, int32 V) { X.Character.EyesPattern = V; });
 	Named(TEXT("嘴"), TEXT("mouth"), 40, Show(TEXT("嘴型")), [](FOKSceneObject& X) { return X.Character.MouthPattern; }, [](FOKSceneObject& X, int32 V) { X.Character.MouthPattern = V; });
 	Float(TEXT("張嘴（-1 照動畫）"), [](FOKSceneObject& X) { return X.Character.MouthOpen; }, [](FOKSceneObject& X, float V) { X.Character.MouthOpen = V; }, -1.f, 1.f, 0.05f);
+	Float(TEXT("睜眼（-1 照角色）"), [](FOKSceneObject& X) { return X.Character.EyesOpen; }, [](FOKSceneObject& X, float V) { X.Character.EyesOpen = V < 0.f ? -1.f : FMath::Min(V, 1.f); }, -1.f, 1.f, 0.05f);
 	Choice(TEXT("眨眼"), { TEXT("照卡片"), TEXT("不眨"), TEXT("眨") }, [](FOKSceneObject& X) { return X.Character.Blink + 1; }, [](FOKSceneObject& X, int32 V) { X.Character.Blink = V - 1; });
 	Label(TEXT("數值輸入（進階）"));
 	Float(TEXT("眉 #"), [](FOKSceneObject& X) { return float(X.Character.EyebrowPattern); }, [](FOKSceneObject& X, float V) { X.Character.EyebrowPattern = FMath::RoundToInt(V); }, -1.f, 200.f, 1.f);
@@ -620,6 +658,30 @@ void SOKStudioPanel::PoseFilesPage()
 {
 	Label(TEXT("姿勢檔（KK Studio 的 UserData/Studio/pose）"));
 	Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(Tip(TEXT("開姿勢庫…"), TEXT("app.poselibrary"))), Cmd(TEXT("app.poselibrary")), 0.f, 22.f)];
+	// HS2Studio6's pose page (n / total, previous / next, back to the T-pose). KKS has no built-in pose presets: these
+	// step through the Studio pose files.
+	auto Step = [this](int32 By)
+	{
+		const TArray<FString> Files = FOKStudioPose::Files();
+		if (Files.IsEmpty()) { SetStatus(TEXT("沒有姿勢檔")); return; }
+		PoseStep = ((PoseStep < 0 ? (By > 0 ? -1 : 0) : PoseStep) + By + Files.Num()) % Files.Num();
+		LoadPose(Files[PoseStep]);
+		DeferRebuild();
+	};
+	auto TPose = [this]
+	{
+		if (FOKSceneObject* X = Obj()) { X->Character.Fk.Reset(); X->Character.Ik.Reset(); X->Character.StudioAnimeNo = -1; PoseStep = -1; Changed(); DeferRebuild(); }
+	};
+	const int32 Total = FOKStudioPose::Files().Num();
+	Props->AddSlot().AutoHeight().Padding(0.f, 3.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("◀")), [Step] { Step(-1); }, 0.f, 22.f, false, 11.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+			[OKStudioStyle::Label(FText::FromString(PoseStep < 0 ? FString::Printf(TEXT("— / %d"), Total) : FString::Printf(TEXT("%d / %d"), PoseStep + 1, Total)), 13.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(1.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("▶")), [Step] { Step(1); }, 0.f, 22.f, false, 11.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.5f)[Button(FText::FromString(TEXT("復位 T-pose")), TPose, 0.f, 22.f, false, 10.f)]
+	];
 	PoseFiles();
 }
 

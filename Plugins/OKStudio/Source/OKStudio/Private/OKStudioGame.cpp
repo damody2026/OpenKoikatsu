@@ -353,6 +353,8 @@ int32 UOKStudioGame::AddCharacter(const FString& Card, int32 Outfit)
 	{
 		O->Character.Card = Card;
 		O->Character.Outfit = Outfit;
+		// HS2Studio6 defaults for a new character: IK on, FK on for body, chest, hands and skirt (hair and neck off).
+		O->Character.FkPartsOff = (1 << 2) | (1 << 3);
 		O->Name = FPaths::GetBaseFilename(Card);
 		if (Panel) Panel->RefreshRows();
 		Document->NotifyChanged();

@@ -624,6 +624,7 @@ void AOKSceneActor::Release(FShown& Item)
 	Item.bFixedEyesApplied = false;
 	Item.AppliedFixedEyes.Reset();
 	Item.AppliedFixedEyesPattern = -1;
+	Item.EyesOpenBefore = -1.f;
 	Item.Component = nullptr;
 }
 
@@ -641,6 +642,19 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
 	if (C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
 	if (C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
+	// Eye opening: the eye control's fixed open rate on its current pattern (ChaControl.ChangeEyesOpenMax).
+	if (C.EyesOpen >= 0.f)
+	{
+		if (Item.EyesOpenBefore < 0.f) { Item.EyesOpenBefore = Actor->FaceOpen01[0]; Item.bEyesManualBefore = Actor->bManualFaceControl[0]; }
+		Actor->SetFaceControl(1, Actor->FacePattern[0], C.EyesOpen, false);
+	}
+	else if (Item.EyesOpenBefore >= 0.f)
+	{
+		// Back to the character's own opening.
+		Actor->FaceOpen01[0] = Item.EyesOpenBefore;
+		Actor->bManualFaceControl[0] = Item.bEyesManualBefore;
+		Item.EyesOpenBefore = -1.f;
+	}
 	if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
 	// Hand shapes: a pattern overrides the animated fingers of that hand (-1 gives them back).
 	const int32 Hands[2] = { C.HandLeft, C.HandRight };
@@ -652,30 +666,42 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		if (Actor->SetHandShape(Side, Pattern >= 0, FMath::Max(Pattern, 0), FMath::Max(Pattern, 0), 0.f)) Item.AppliedHands[Side] = Pattern;
 	}
 	// FK re-poses the character (no rebuild); a fresh character starts without FK.
-	if (C.Fk != Item.AppliedFk)
+	if (C.Fk != Item.AppliedFk || C.FkPartsOff != Item.AppliedFkPartsOff)
 	{
+		Item.AppliedFkPartsOff = C.FkPartsOff;
 		TArray<FString> Bones;
 		TArray<FVector> Euler;
-		for (const FOKSceneFkBone& B : C.Fk) { Bones.Add(B.Bone); Euler.Add(B.Euler); }
+		// A switched-off part's bones follow the animation (their values are kept for when it comes back on).
+		for (const FOKSceneFkBone& B : C.Fk) if (C.FkPartOn(FOKSceneCharacter::FkPartOf(B.Bone))) { Bones.Add(B.Bone); Euler.Add(B.Euler); }
 		if (Actor->SetUserFk(Bones, Euler)) Item.AppliedFk = C.Fk;
 		else Errors.Add(Object.Id, TEXT("FK not applied"));
 	}
-	if (C.Ik != Item.AppliedIk)
+	if (C.Ik != Item.AppliedIk || C.IkPartsOff != Item.AppliedIkPartsOff)
 	{
+		Item.AppliedIkPartsOff = C.IkPartsOff;
 		TArray<int32> Effectors;
 		TArray<FVector> Positions;
 		TArray<FQuat> Rotations;
         TArray<uint8> UseRotations;
+		TArray<float> Weights;
         for (const FOKSceneIkTarget& T : C.Ik)
         {
+            // A switched-off part's targets are kept but do not pull.
+            if (!C.IkPartOn(FOKSceneCharacter::IkPartOf(T.Effector))) continue;
             Effectors.Add(T.Effector);
+            Weights.Add(T.Weight);
             Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position));
             const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector,T.Euler,FVector::OneVector).GetRotation();
             Rotations.Add(FQuat(-U.X,U.Z,U.Y,U.W));
             UseRotations.Add(T.bUseRotation ? 1 : 0);
         }
 		FString Error;
-		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations)) Item.AppliedIk = C.Ik;
+		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations))
+		{
+			// Weights after the targets (setting targets resets them to 1); all-1 needs no call.
+			if (Weights.ContainsByPredicate([](float W) { return W < 1.f; })) Actor->Session.SetStudioIkWeights(Weights);
+			Item.AppliedIk = C.Ik;
+		}
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);
 	}
     const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Fixed ? C.FixedNeck : TArray<FQuat>();
@@ -1205,6 +1231,16 @@ void AOKSceneActor::UpdateLooks(float DeltaSeconds, bool bApplyStaticPose)
 		Actor->AdvanceEyeLook(DeltaSeconds);
 		// Head look runs in the pose frame: a static character re-poses for it, an animated one gets it on its next frame.
 		const bool bNeck = Target(C.NeckLook, Look);
+		// Follow strength: the target's direction from the head turned only that far from straight ahead.
+		if (bNeck && C.NeckFollow < 1.f)
+		{
+			const FTransform& T = Actor->GetActorTransform();
+			const FVector Head = T.TransformPosition(FVector(0.f, 0.f, 140.f));
+			const FVector Ahead = T.TransformVectorNoScale(FVector(0.f, 1.f, 0.f));
+			const FVector To = Look - Head;
+			const FQuat Turn = FQuat::FindBetweenNormals(Ahead, To.GetSafeNormal());
+			Look = Head + FQuat::Slerp(FQuat::Identity, Turn, FMath::Clamp(C.NeckFollow, 0.f, 1.f)).RotateVector(Ahead) * FMath::Max(To.Size(), 100.f);
+		}
 		if (bNeck || Pair.Value.bNeckLooking)
 		{
 			const FVector Local = Actor->GetActorTransform().InverseTransformPosition(Look);

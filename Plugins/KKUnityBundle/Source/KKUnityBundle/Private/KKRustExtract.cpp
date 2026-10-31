@@ -268,6 +268,10 @@ bool FOkSession::SetStudioIkPose(const TArray<int32>& Effectors,const TArray<FVe
     for(const FQuat& V:Rotations) Q.Append({float(V.X),float(V.Y),float(V.Z),float(V.W)});
     return ok_session_set_studio_ik_pose(Handle,Effectors.GetData(),P.GetData(),Q.GetData(),UseRotations.GetData(),Effectors.Num())==0;
 }
+bool FOkSession::SetStudioIkWeights(const TArray<float>& Weights)
+{
+	return Handle && ok_session_set_studio_ik_weights(Handle,Weights.GetData(),Weights.Num())==0;
+}
 bool FOkSession::SetStudioFixedNeck(const TArray<FQuat>& Rotations)
 {
     TArray<float> Q;

@@ -709,6 +709,12 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
 - U17：狀態窗「全穿／半脫／全裸」一鍵。
 - U18（部分）：動作瀏覽改用主題按鈕（目前分頁亮綠），加搜尋（空格＝且、`-詞`＝排除；比對動作名與分組、分類名，結果跨分組並標出所在分組／分類）與「N 個動作」計數。修正：每次重建都把分頁同步回目前播放的動作，播 Studio 動作時按「H 動作」會被拉回；改成只在目前動作改變時同步。還沒做：女／男／共用頁籤（目錄沒有性別資料）、獨立的動畫控制器浮窗。
 - 截圖：`F:\OpenKoikatsu\Saved\StudioUIRef\ok\U16b_state.png`、`U16b_look.png`、`U16b_expression.png`、`U16b_hand.png`、`U18b_anim.png`（腳本 `Saved/StudioUIRef/scripts/u16_new2.txt`，`OKStudio.RunScript` 要給絕對路徑）。`OKStudio.UiSelfTest` 46/46。
+- U16 其餘：表情頁「睜眼」（`FOKSceneCharacter::EyesOpen`，-1 照角色；接到 `AKKPreviewActor::SetFaceControl` 的手動開合，-1 時還原原本的開合與手動旗標）；頸部「跟隨強度」（`NeckFollow`，目標方向從頭的正前方 slerp 過去）；姿勢頁「◀ n／總數 ▶」逐一套用 `UserData/Studio/pose` 的姿勢檔（KKS 沒有內建姿勢預設，HS2Studio6 的內建清單在 KK 對應的就是 Studio 姿勢檔）與「復位 T-pose」。
+- U18 其餘：動作瀏覽加「全部／女／男／共用」頁籤。目錄原本沒有性別：`studio_anims.rs` 的 `motion_sex` 從分組／分類名推（含「男」→ 男；含「女」或「レズ」→ 女；其他 → 共用），寫進目錄的 `sex` 欄位；舊目錄沒有欄位時 C++ 讀取端用同一規則推。動畫控制器浮窗還沒做。
+- U19：樹工具列（展開／收起下方）加「群組」（Ctrl+G，所選放進第一個物件旁的新資料夾，世界位置不變；吸附改 Ctrl+Shift+G）、「解散」（Ctrl+Shift+U，子物件移到資料夾的上層後刪掉資料夾）、「錯開複製」（Ctrl+Shift+D，複製後沿畫面右方移 20 cm）、「獨顯」（Shift+H，只顯示所選與其上下層，燈光與目前相機保留；再按一次還原各物件原本的顯示）、「鎖定」（`FOKSceneObject::bLocked`，畫面點選略過它，樹上仍可選）、「設父」「拷變換」「貼變換」。樹拖放時游標靠清單上下緣 20 px 會自動捲動。目錄的「定位當前」還沒做。
+- U20：FK／IK 部位按鈕改成真的開關（`FkPartsOff`／`IkPartsOff` 位元，關掉的部位保留數值、改跟動畫；清單只列開著的部位）；FK 頁加「復位」一列逐部位清掉 FK；IK 頁加「全部」；新角色預設 FK 關頭髮與頸部、其他與 IK 全開；調某根骨骼時自動打開它的部位。IK 目標加「權重」（`FOKSceneIkTarget::Weight`，經新的 `ok_session_set_studio_ik_weights` 送到 FullBodyBipedIK 的 effector position／rotation weight 與彎曲 goal weight）；加「FK←IK」（把 IK 擺出的身體與雙手姿勢寫成 FK，清掉 IK）。
+- U21：時間軸 FK 改成每根骨骼各自一條軌（`SampleTrackFk`：找 Time 前後最近、含這根骨骼的 key 內插，只出現在部分 key 的骨骼也會平順地動）；FK 頁加「骨骼打 key」「骨骼刪 key」（只動目前骨骼，沒有 key 的時間點新增一個只含這根骨骼的 key，其餘值取該時間點的軌道值），時間軸窗加「清空軌道」。骨骼搜尋沿用 FK 頁的搜尋框。
+- 驗證：新增 `Tools/check_ok_studio_buttons.lua`，經控制通道新的 `click` 操作（`{"text","index","contains"}`，找畫面上文字相符的 `STextBlock`，對它所在的 `SButton` 呼叫 `SimulateClick`，跑的就是按鈕自己的處理）逐一按下 U16～U21 新加的按鈕，再用 `bones`／`state`／`keys` 讀回結果。實測 57/57；`OKStudio.UiSelfTest` 46/46；`verify_ok_studio.lua` 6/6；`cargo test studio_ik --include-ignored` 通過。
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。

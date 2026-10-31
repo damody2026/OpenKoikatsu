@@ -24,6 +24,14 @@ pub struct StudioAnim {
     pub duration: f32,
     #[serde(default)]
     pub looping: bool,
+    /// Who plays it (`motion_sex`): 0 either, 1 female, 2 male.
+    #[serde(default)]
+    pub sex: i32,
+}
+
+/// The lists carry no sex column: the game names it in the group (女H奉仕 / 男H奉仕, H女複数, レズ) or the category (キャラ / 男).
+pub fn motion_sex(group: &str, category: &str) -> i32 {
+    if group.contains('男') || category.contains('男') { 2 } else if group.contains('女') || group.contains("レズ") || category.contains('女') { 1 } else { 0 }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -195,13 +203,13 @@ pub fn catalog_with_mods(game: &Path, mod_motions: &std::collections::BTreeSet<(
             }
         }
     }
-    AnimCatalog {
-        format: "ok-studio-anims-1".into(),
-        groups: groups.into_values().collect(),
-        categories: categories.into_values().collect(),
-        // Rows whose state the controller does not have are left out (the game cannot play them either).
-        anims: anims.into_values().filter(|a: &StudioAnim| !a.key.is_empty()).collect(),
-    }
+    let groups: Vec<Group> = groups.into_values().collect();
+    let categories: Vec<Group> = categories.into_values().collect();
+    let name_of = |list: &[Group], g: i32, id: i32| list.iter().find(|x| x.group == g && x.id == id).map(|x| x.name.clone()).unwrap_or_default();
+    // Rows whose state the controller does not have are left out (the game cannot play them either).
+    let anims = anims.into_values().filter(|a: &StudioAnim| !a.key.is_empty())
+        .map(|mut a| { a.sex = motion_sex(&name_of(&groups, -1, a.group), &name_of(&categories, a.group, a.category)); a }).collect();
+    AnimCatalog { format: "ok-studio-anims-1".into(), groups, categories, anims }
 }
 
 /// `--oklib anim-convert <lib> <card> [filter] [threads]`: samples the Studio animations (those whose

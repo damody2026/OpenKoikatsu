@@ -85,6 +85,8 @@ int32_t ok_session_bone_euler(OkSession* s,const char* name,float* out3);
 int32_t ok_session_prepare_studio_ik(OkSession* s,const char* root,char* err,int32_t cap);
 int32_t ok_session_set_studio_ik(OkSession* s,const int32_t* effectors,const float* positions,int32_t count);
 int32_t ok_session_set_studio_ik_pose(OkSession* s,const int32_t* effectors,const float* positions,const float* rotations,const uint8_t* enabled,int32_t count);
+/* Studio IK weights 0..1, one per target of the last set_studio_ik(_pose) call (in its order); count 0: all 1. */
+int32_t ok_session_set_studio_ik_weights(OkSession* s,const float* weights,int32_t count);
 int32_t ok_session_set_studio_fixed_neck(OkSession* s,const float* rotations,int32_t count);
 /* SaveAngle order: QL(4), QR(4), H0,H1,V0,V1; accepts only source NO_LOOK patterns. */
 int32_t ok_session_set_studio_fixed_eyes(OkSession* s,const float* values,int32_t count,int32_t pattern,float* out_rates);

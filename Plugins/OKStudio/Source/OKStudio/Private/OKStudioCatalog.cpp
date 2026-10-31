@@ -172,6 +172,17 @@ void FOKStudioCatalog::LoadAnims(const FString& File)
 		A.Name = Str(O, TEXT("name")); A.File = Str(O, TEXT("file"));
 		double D = 0.; O->TryGetNumberField(TEXT("duration"), D); A.Duration = float(D);
 		O->TryGetBoolField(TEXT("looping"), A.bLooping);
+		// Who plays it: the catalogue's "sex" (ok-extract studio_anims::motion_sex), or the same rule on a catalogue
+		// written before it (group or category named for a man or a woman).
+		double Sex = -1.;
+		if (!O->TryGetNumberField(TEXT("sex"), Sex))
+		{
+			const FOKStudioCatalogGroup* G = AnimGroups.FindByPredicate([&A](const FOKStudioCatalogGroup& X) { return X.Id == A.Group; });
+			const FOKStudioCatalogGroup* C = AnimCategories.FindByPredicate([&A](const FOKStudioCatalogGroup& X) { return X.Group == A.Group && X.Id == A.Category; });
+			const FString GN = G ? G->Name : FString(), CN = C ? C->Name : FString();
+			Sex = GN.Contains(TEXT("男")) || CN.Contains(TEXT("男")) ? 2 : GN.Contains(TEXT("女")) || GN.Contains(TEXT("レズ")) || CN.Contains(TEXT("女")) ? 1 : 0;
+		}
+		A.Sex = int32(Sex);
 		Anims.Add(MoveTemp(A));
 	}
 }

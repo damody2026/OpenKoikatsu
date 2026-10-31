@@ -93,6 +93,8 @@ struct FOKStudioAnim
 	FString File;
 	float Duration = 0.f;
 	bool bLooping = false;
+	/** Who plays it: 0 either, 1 female, 2 male. */
+	int32 Sex = 0;
 };
 
 /** One Niagara effect of the OK effect library (`IndependentResources/OKStudio/effects.json`). */

@@ -399,6 +399,11 @@ public:
 		Float_(TEXT("add.map"), TEXT("地圖"), TEXT("maps"));
 		// Editing the selection.
 		Simple(TEXT("edit.duplicate"), TEXT("複製物件"), [this] { DuplicateSelection(); });
+		Simple(TEXT("edit.duplicateoffset"), TEXT("複製並錯開"), [this] { DuplicateSelectionOffset(); });
+		Simple(TEXT("edit.group"), TEXT("群組"), [this] { GroupSelection(); });
+		Simple(TEXT("edit.ungroup"), TEXT("解散群組"), [this] { UngroupSelection(); });
+		Simple(TEXT("edit.solo"), TEXT("只顯示所選"), [this] { SoloSelection(); });
+		Simple(TEXT("edit.lock"), TEXT("鎖定／解鎖"), [this] { LockSelection(); });
 		Simple(TEXT("edit.copy"), TEXT("拷貝"), [this] { CopySelection(); });
 		AddCommand(TEXT("edit.paste"), TEXT("貼上"), [this](const FString&) { return PasteClipboard(); });
 		Simple(TEXT("edit.root"), TEXT("移到根層"), [this] { for (int32 Id : Game->SelectionRoots()) { if (FOKSceneObject* O = Game->Document->Find(Id)) O->AttachBone.Reset(); Game->Document->Reparent(Id, -1); } });
@@ -498,6 +503,9 @@ public:
 		// Timeline.
 		Simple(TEXT("timeline.key"), TEXT("打 key"), [this] { if (TimelineView) TimelineView->KeySelection(); else for (int32 Id : Game->Selection) Game->Document->SetKey(Id, Game->TimelineTime); });
 		Simple(TEXT("timeline.scenekey"), TEXT("場景 key"), [this] { Game->Document->SetKey(UOKSceneDocument::SceneTrackId, Game->TimelineTime); });
+		Simple(TEXT("timeline.bonekey"), TEXT("骨骼打 key"), [this] { if (FkBone.IsEmpty()) { SetStatus(TEXT("先在 FK 頁選一根骨骼")); return; } for (int32 Id : Game->Selection) Game->Document->SetBoneKey(Id, Game->TimelineTime, FkBone); SetStatus(TEXT("骨骼 key：") + FkBone); });
+		Simple(TEXT("timeline.boneunkey"), TEXT("骨骼刪 key"), [this] { for (int32 Id : Game->Selection) Game->Document->RemoveBoneKey(Id, Game->TimelineTime, FkBone); });
+		Simple(TEXT("timeline.clear"), TEXT("清空軌道"), [this] { for (int32 Id : Game->Selection) Game->Document->ClearTrack(Id); SetStatus(TEXT("已清空所選物件的軌道")); });
 		Simple(TEXT("timeline.delete"), TEXT("刪 key"), [this] { if (TimelineView && TimelineView->Selected.Num()) TimelineView->DeleteSelected(); else for (int32 Id : Game->Selection) Game->Document->RemoveKey(Id, Game->TimelineTime); });
 		Simple(TEXT("timeline.copy"), TEXT("複製 key"), [this] { if (TimelineView) TimelineView->CopySelected(); });
 		Simple(TEXT("timeline.paste"), TEXT("貼上 key"), [this] { if (TimelineView) TimelineView->PasteAtPlayhead(); });
@@ -517,6 +525,7 @@ public:
 		AddCommand(TEXT("pose.mirror"), TEXT("鏡像姿勢"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && MirrorPose(*X, Arg == TEXT("l2r") ? 1 : Arg == TEXT("r2l") ? 2 : 0); });
 		Simple(TEXT("pose.ikfromfk"), TEXT("IK←FK"), [this] { if (FOKSceneObject* X = Obj()) IkFromFk(*X); });
 		Simple(TEXT("pose.fkfrompose"), TEXT("FK←目前姿勢"), [this] { if (FOKSceneObject* X = Obj()) FkFromPose(*X); });
+		Simple(TEXT("pose.fkfromik"), TEXT("FK←IK"), [this] { if (FOKSceneObject* X = Obj()) FkFromIk(*X); });
 		Simple(TEXT("pose.copy"), TEXT("複製姿勢"), [this] { if (const FOKSceneObject* X = Obj(); X && X->Kind == EOKSceneObjectKind::Character) { PoseClipFk = X->Character.Fk; PoseClipIk = X->Character.Ik; bHasPoseClip = true; SetStatus(TEXT("已複製姿勢")); } });
 		Simple(TEXT("pose.paste"), TEXT("貼上姿勢"), [this] { if (!bHasPoseClip) return; for (int32 Id : Game->Selection) if (FOKSceneObject* X = Game->Document->Find(Id); X && X->Kind == EOKSceneObjectKind::Character) { X->Character.Fk = PoseClipFk; X->Character.Ik = PoseClipIk; } Changed(); DeferRebuild(); });
 	}
@@ -775,6 +784,7 @@ public:
 				+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("展開全部")), Cmd(TEXT("tree.expand")), 117.f, 18.f, false, 10.f)]
 				+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("收起全部")), Cmd(TEXT("tree.collapse")), 117.f, 18.f, false, 10.f)]
 			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(3.f, 2.f, 3.f, 0.f)[TreeTools()]
 			+ SVerticalBox::Slot().AutoHeight().Padding(3.f, 3.f, 3.f, 0.f)
 			[
 				SNew(SBox).HeightOverride(285.f)
@@ -1153,6 +1163,35 @@ public:
 	void CopySelection();
 	bool PasteClipboard();
 	void DuplicateSelection();
+	// The tree's text tools under 展開／收起 (HS2Studio6's workspace row): grouping, offset copy, solo, lock, parent.
+	TSharedRef<SWidget> TreeTools()
+	{
+		struct FTool { const TCHAR* Label; const TCHAR* Command; };
+		static const FTool Items[] = { { TEXT("群組"), TEXT("edit.group") }, { TEXT("解散"), TEXT("edit.ungroup") }, { TEXT("錯開複製"), TEXT("edit.duplicateoffset") },
+			{ TEXT("獨顯"), TEXT("edit.solo") }, { TEXT("鎖定"), TEXT("edit.lock") }, { TEXT("設父"), TEXT("edit.parent") }, { TEXT("拷變換"), TEXT("transform.copy") }, { TEXT("貼變換"), TEXT("transform.paste") } };
+		TSharedRef<SWrapBox> Box = SNew(SWrapBox).PreferredSize(234.f).InnerSlotPadding(FVector2D(1.f, 1.f));
+		for (const FTool& T : Items)
+		{
+			const FString Command = T.Command;
+			TAttribute<bool> On = false;
+			if (Command == TEXT("edit.solo")) On = TAttribute<bool>::CreateLambda([this] { return SoloSaved.Num() > 0; });
+			if (Command == TEXT("edit.lock")) On = TAttribute<bool>::CreateLambda([this]
+			{
+				const FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Game->SelectedId) : nullptr;
+				return O && O->bLocked;
+			});
+			Box->AddSlot()[SNew(SBox).ToolTipText(FText::FromString(Tip(T.Label, T.Command)))
+				[OKStudioStyle::Button(FText::FromString(T.Label), Cmd(T.Command), Command == TEXT("edit.duplicateoffset") ? 56.f : Command.StartsWith(TEXT("transform.")) ? 58.f : 37.f, 17.f, On, 9.f)]];
+		}
+		return Box;
+	}
+	void DuplicateSelectionOffset();
+	void GroupSelection();
+	void UngroupSelection();
+	void SoloSelection();
+	void LockSelection();
+	// 只顯示所選 keeps every hidden object's own visibility to give back.
+	TMap<int32, bool> SoloSaved;
 	void DeleteSelection();
 	void HideSelection();
 	void ParentSelectionToPrimary();
@@ -1198,13 +1237,12 @@ public:
 	FString EffectSearch, MapSearch;
 
 	// --- Pose (U5). ---
-	/** FK parts shown and posed: body, chest, hair, neck, left hand, right hand, skirt (HS2Studio6's defaults: body). */
-	TArray<bool> FkParts = { true, false, false, false, false, false, false };
-	/** IK parts: body, left arm, right arm, left leg, right leg. */
-	TArray<bool> IkParts = { true, true, true, true, true };
+	// FK / IK parts are switched per character (FOKSceneCharacter::FkPartsOff / IkPartsOff); the lists show the parts that are on.
 	bool bShowFkPoints = true, bShowIkPoints = true;
-	static int32 FkPartOf(const FString& Bone);
-	static int32 IkPartOf(int32 Effector);
+	static int32 FkPartOf(const FString& Bone) { return FOKSceneCharacter::FkPartOf(Bone); }
+	static int32 IkPartOf(int32 Effector) { return FOKSceneCharacter::IkPartOf(Effector); }
+	bool FkPartOn(int32 Part) const { const FOKSceneObject* O = Obj(); return !O || O->Character.FkPartOn(Part); }
+	bool IkPartOn(int32 Part) const { const FOKSceneObject* O = Obj(); return !O || O->Character.IkPartOn(Part); }
 	FString BoneSearch;
 	TSet<FString> OpenBones;
 	struct FPosePoint { FVector2D At = FVector2D::ZeroVector; int32 Ik = -1; FString Bone; bool bParent = false; FVector2D Parent = FVector2D::ZeroVector; bool bOn = false; };
@@ -1216,6 +1254,7 @@ public:
 	bool MirrorPose(FOKSceneObject& X, int32 Mode);
 	void IkFromFk(FOKSceneObject& X);
 	void FkFromPose(FOKSceneObject& X);
+	void FkFromIk(FOKSceneObject& X);
 	TArray<FOKSceneFkBone> PoseClipFk;
 	TArray<FOKSceneIkTarget> PoseClipIk;
 	bool bHasPoseClip = false;
@@ -1421,6 +1460,14 @@ public:
 				const double Now = FPlatformTime::Seconds();
 				if (DragHoverId != Id) { DragHoverId = Id; DragHoverStart = Now; }
 				else if (Now - DragHoverStart > 0.45 && Collapsed.Contains(Id)) { Collapsed.Remove(Id); DeferRebuild(); }
+				// Near the list's top or bottom edge the list scrolls, so a long tree can be crossed in one drag.
+				if (List.IsValid())
+				{
+					const FGeometry& G = List->GetCachedGeometry();
+					const float Y = G.AbsoluteToLocal(E.GetScreenSpacePosition()).Y, H = G.GetLocalSize().Y;
+					if (Y < 20.f) List->AddScrollOffset(-0.25f);
+					else if (Y > H - 20.f) List->AddScrollOffset(0.25f);
+				}
 				return Op->bCanDrop ? TOptional<EItemDropZone>(EItemDropZone::OntoItem) : TOptional<EItemDropZone>();
 			})
 			.OnAcceptDrop_Lambda([this, Id](const FDragDropEvent& E, EItemDropZone, TSharedPtr<FRow>)
@@ -2332,12 +2379,13 @@ private:
 		// Show the playing motion's group when it changes (not on every rebuild: a kind or group picked by hand stays).
 		if (Current && AnimSyncedTo != Current) { AnimKind = Current->Kind; AnimGroup = Current->Group; AnimCategory = Current->Category; }
 		AnimSyncedTo = Current;
-		// Groups and categories that have converted motions of this kind.
+		// Groups and categories that have converted motions of this kind (and of the picked sex: either-sex motions show in every tab but 共用 shows only them).
+		auto Shown = [this](const FOKStudioAnim& A) { return A.Kind == AnimKind && !A.File.IsEmpty() && (AnimSex < 0 || A.Sex == AnimSex || (AnimSex > 0 && A.Sex == 0)); };
 		TSet<int32> Groups;
-		for (const FOKStudioAnim& A : C.Anims) if (A.Kind == AnimKind && !A.File.IsEmpty()) Groups.Add(A.Group);
+		for (const FOKStudioAnim& A : C.Anims) if (Shown(A)) Groups.Add(A.Group);
 		if (!Groups.Contains(AnimGroup) && Groups.Num()) AnimGroup = *Groups.CreateConstIterator();
 		TSet<int32> Cats;
-		for (const FOKStudioAnim& A : C.Anims) if (A.Kind == AnimKind && A.Group == AnimGroup && !A.File.IsEmpty()) Cats.Add(A.Category);
+		for (const FOKStudioAnim& A : C.Anims) if (Shown(A) && A.Group == AnimGroup) Cats.Add(A.Category);
 		if (!Cats.Contains(AnimCategory) && Cats.Num()) AnimCategory = *Cats.CreateConstIterator();
 		AnimGroupOptions.Reset(); for (int32 G : Groups) AnimGroupOptions.Add(MakeShared<int32>(G));
 		AnimGroupOptions.Sort([](const TSharedPtr<int32>& A, const TSharedPtr<int32>& B) { return *A < *B; });
@@ -2354,7 +2402,7 @@ private:
 		for (int32 I = 0; I < C.Anims.Num(); ++I)
 		{
 			const FOKStudioAnim& A = C.Anims[I];
-			if (A.Kind != AnimKind || A.File.IsEmpty()) continue;
+			if (!Shown(A)) continue;
 			if (AnimSearch.IsEmpty()) { if (A.Group == AnimGroup && A.Category == AnimCategory) AnimOptions.Add(MakeShared<int32>(I)); continue; }
 			const FString Text = A.Name + TEXT(" ") + GroupLabel(A.Group) + TEXT(" ") + CategoryLabel(A.Group, A.Category);
 			if (Include.ContainsByPredicate([&Text](const FString& W) { return !Text.Contains(W); }) || Exclude.ContainsByPredicate([&Text](const FString& W) { return Text.Contains(W); })) continue;
@@ -2367,6 +2415,13 @@ private:
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("H 動作")), [this] { AnimKind = 1; DeferRebuild(); }, 0.f, 18.f, AnimKind == 1, 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("停止動畫")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.StudioAnimeNo = -1; Changed(); DeferRebuild(); } }, 0.f, 18.f, false, 10.f)]
 		];
+		{
+			TSharedRef<SHorizontalBox> Tabs = SNew(SHorizontalBox);
+			const TCHAR* SexNames[4] = { TEXT("全部"), TEXT("女"), TEXT("男"), TEXT("共用") };
+			for (int32 S = -1; S < 3; ++S)
+				Tabs->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, S < 2 ? 1.f : 0.f, 0.f)[OKStudioStyle::Button(FText::FromString(SexNames[S + 1]), [this, S] { AnimSex = S; DeferRebuild(); }, 0.f, 18.f, AnimSex == S, 10.f)];
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Tabs];
+		}
 		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)
 		[
 			SNew(SEditableTextBox).Style(&OKStudioStyle::TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋動作（空格＝且，-詞＝排除）"))).Text(FText::FromString(AnimSearch))
@@ -2422,6 +2477,9 @@ public:
 private:
 	int32 AnimKind = 0, AnimGroup = -1, AnimCategory = -1;
 	FString AnimSearch;
+	int32 AnimSex = -1;
+	/** The pose page's place in the Studio pose files (-1: none loaded by stepping). */
+	int32 PoseStep = -1;
 	const FOKStudioAnim* AnimSyncedTo = nullptr;
 	TArray<TSharedPtr<int32>> AnimGroupOptions, AnimCategoryOptions, AnimOptions;
 
@@ -2472,6 +2530,7 @@ public:
 			if (!P || !P->Session.PrepareStudioIk(Error) || !P->Session.IkEffectorPosition(Effector, Unity)) { SetStatus(TEXT("IK 無法啟用：") + Error); return false; }
 			P->bStudioIkReady = true;
 			X.Character.Ik.Add({ Effector, AKKPreviewActor::UnityToActorLocal(Unity) });
+			X.Character.IkPartsOff &= ~(1 << FOKSceneCharacter::IkPartOf(Effector));
 		}
 		if (Game.IsValid() && !bOn && Game->GuideIk == Effector) Game->GuideIk = -1;
 		Changed();
@@ -2501,6 +2560,8 @@ public:
 	{
 		if (FOKSceneFkBone* B = X.Character.Fk.FindByPredicate([&](const FOKSceneFkBone& F) { return F.Bone == Bone; })) B->Euler = Euler;
 		else X.Character.Fk.Add({ Bone, Euler });
+		// Posing a bone of a switched-off part switches the part on (otherwise the edit would not show).
+		X.Character.FkPartsOff &= ~(1 << FOKSceneCharacter::FkPartOf(Bone));
 	}
 
 private:

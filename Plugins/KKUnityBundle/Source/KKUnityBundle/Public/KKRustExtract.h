@@ -185,6 +185,8 @@ public:
 	bool PrepareStudioIk(FString& OutError);
 	bool SetStudioIk(const TArray<int32>& Effectors,const TArray<FVector>& UnityPositions);
     bool SetStudioIkPose(const TArray<int32>& Effectors,const TArray<FVector>& UnityPositions,const TArray<FQuat>& UnityRotations,const TArray<uint8>& UseRotations);
+	/** Weights 0..1 for the targets just set, in their order (empty: all 1). */
+	bool SetStudioIkWeights(const TArray<float>& Weights);
     bool SetStudioFixedNeck(const TArray<FQuat>& UnityRotations);
     bool SetStudioFixedEyes(const TArray<float>& Values, int32 Pattern, FVector& Rates);
 	bool IkEffectorPosition(int32 Effector,FVector& OutUnity) const;

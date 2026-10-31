@@ -1193,6 +1193,8 @@ pub struct OkSession {
     pub(crate) studio_ik_solver: Option<crate::finalik::IKSolverFullBodyBiped>,
     pub(crate) studio_ik: Vec<(usize, [f32; 3])>,
     pub(crate) studio_ik_rotations: Vec<(usize, [f32;4])>,
+    /// Studio IK weights, one per `studio_ik` target (missing: 1, the target is reached).
+    pub(crate) studio_ik_weights: Vec<f32>,
     pub correct: Vec<CorrectInfo>,
     pub sex: i32,
     pub type_bone: i32,
@@ -1865,7 +1867,7 @@ impl OkSession {
             let base = crate::pose::capture_baseline(sk, &names);
             crate::pose::apply_abm(sk, &self.abm, 0, &base);
             // Studio IK after the bone modifiers: a target is where the limb ends up.
-            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations);
+            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations, &self.studio_ik_weights);
             if !self.game_root.as_os_str().is_empty() && std::env::var("OK_FINALIK").is_ok() {
                 crate::finalik::apply_final_ik(
                     &self.game_root,
@@ -2143,7 +2145,7 @@ impl OkSession {
             prof::add(15, t);
             let t = std::time::Instant::now();
             // Studio IK after the bone modifiers: a target is where the limb ends up.
-            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations);
+            apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations, &self.studio_ik_weights);
             prof::add(16, t);
         }
     }
@@ -3320,6 +3322,7 @@ impl SessionBlob {
             studio_ik_solver: None,
             studio_ik: Vec::new(),
             studio_ik_rotations: Vec::new(),
+            studio_ik_weights: Vec::new(),
             correct: self.correct,
             sex: self.sex,
             type_bone: self.type_bone,
@@ -6560,7 +6563,7 @@ mod user_fk_card_tests {
 pub(crate) const STUDIO_BEND_FIRST: usize = 9;
 pub(crate) const STUDIO_IK_TARGETS: usize = 13;
 
-pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Option<crate::finalik::IKSolverFullBodyBiped>, targets: &[(usize, [f32; 3])], rotations: &[(usize,[f32;4])]) {
+pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Option<crate::finalik::IKSolverFullBodyBiped>, targets: &[(usize, [f32; 3])], rotations: &[(usize,[f32;4])], weights: &[f32]) {
     let Some(solver) = solver.as_mut() else { return; };
     if targets.is_empty() { return; }
     let mut ik = crate::finalik::IkSkeleton::new_batched(sk);
@@ -6568,13 +6571,16 @@ pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Optio
     for effector in solver.effectors.iter_mut() { effector.target = None; effector.position_weight = 0.; effector.rotation_weight = 0.; effector.position_offset = [0.; 3]; }
     // 9..12: elbow / knee targets bend the limbs (left arm, right arm, left leg, right leg = bend constraints 1..4).
     for bend in solver.bend_constraints.iter_mut() { bend.goal_position = None; bend.weight = 0.; }
+    // HS2Studio6 IK weights: a target pulls (and turns its hand / foot) only that far.
+    let weight_of = |index: usize| targets.iter().position(|(i, _)| *i == index).and_then(|n| weights.get(n)).copied().unwrap_or(1.).clamp(0., 1.);
     for (index, position) in targets {
+        let w = weight_of(*index);
         if *index >= STUDIO_BEND_FIRST {
-            if let Some(bend) = solver.bend_constraints.get_mut(*index - STUDIO_BEND_FIRST + 1) { bend.goal_position = Some(*position); bend.weight = 1.; }
-        } else if let Some(effector) = solver.effectors.get_mut(*index) { effector.position = *position; effector.position_weight = 1.; }
+            if let Some(bend) = solver.bend_constraints.get_mut(*index - STUDIO_BEND_FIRST + 1) { bend.goal_position = Some(*position); bend.weight = w; }
+        } else if let Some(effector) = solver.effectors.get_mut(*index) { effector.position = *position; effector.position_weight = w; }
     }
     for (index, rotation) in rotations {
-        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=1.; }
+        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=weight_of(*index); }
     }
     solver.update(&mut ik);
     ik.sk.rebuild_worlds();

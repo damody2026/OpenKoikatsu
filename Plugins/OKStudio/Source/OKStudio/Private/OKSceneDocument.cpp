@@ -487,6 +487,49 @@ void UOKSceneDocument::SetKey(int32 Id, float Time)
 	NotifyChanged();
 }
 
+void UOKSceneDocument::SetBoneKey(int32 Id, float Time, const FString& Bone)
+{
+	const FOKSceneObject* O = Find(Id);
+	if (!O || O->Kind != EOKSceneObjectKind::Character || Bone.IsEmpty()) return;
+	// The bone's value now: its FK, or nothing to key.
+	const FOKSceneFkBone* Now = O->Character.Fk.FindByPredicate([&](const FOKSceneFkBone& B) { return B.Bone == Bone; });
+	if (!Now) return;
+	const FOKSceneFkBone Value = *Now;
+	FOKSceneKey* K = KeyAt(Id, Time);
+	if (!K)
+	{
+		FOKSceneTrack* T = TrackOf(Id);
+		if (!T) { T = &Tracks.AddDefaulted_GetRef(); T->ObjectId = Id; }
+		// The rest of the new key is what the track gives at Time, so only this bone changes.
+		FOKSceneKey& New = T->Keys.AddDefaulted_GetRef();
+		New.Time = FMath::Max(Time, 0.f);
+		New.Transform = O->Transform;
+		New.Value = KeyValue(*O);
+		New.AnimTime = O->Character.Speed == 0.f ? O->Character.Time : -1.f;
+		T->Keys.Sort([](const FOKSceneKey& A, const FOKSceneKey& B) { return A.Time < B.Time; });
+		Duration = FMath::Max(Duration, Time);
+		K = KeyAt(Id, Time);
+	}
+	if (FOKSceneFkBone* B = K->Fk.FindByPredicate([&](const FOKSceneFkBone& X) { return X.Bone == Bone; })) *B = Value;
+	else K->Fk.Add(Value);
+	NotifyChanged();
+}
+
+bool UOKSceneDocument::RemoveBoneKey(int32 Id, float Time, const FString& Bone)
+{
+	FOKSceneKey* K = KeyAt(Id, Time);
+	if (!K || !K->Fk.RemoveAll([&](const FOKSceneFkBone& B) { return B.Bone == Bone; })) return false;
+	NotifyChanged();
+	return true;
+}
+
+bool UOKSceneDocument::ClearTrack(int32 Id)
+{
+	if (!Tracks.RemoveAll([Id](const FOKSceneTrack& X) { return X.ObjectId == Id; })) return false;
+	NotifyChanged();
+	return true;
+}
+
 FOKSceneKey* UOKSceneDocument::KeyAt(int32 Id, float Time)
 {
 	FOKSceneTrack* T = Tracks.FindByPredicate([Id](const FOKSceneTrack& X) { return X.ObjectId == Id; });
@@ -525,6 +568,40 @@ namespace
 		C.HandLeft = K.HandLeft; C.HandRight = K.HandRight;
 		// Clothes only change when they differ (a change rebuilds the character).
 		if (K.ClothesStates.Num() == C.ClothesStates.Num() && K.ClothesStates != C.ClothesStates) C.ClothesStates = K.ClothesStates;
+	}
+
+	/** A character track's FK at Time. */
+	TArray<FOKSceneFkBone> SampleTrackFk(const FOKSceneTrack& T, float Time)
+	{
+		// Every FK bone is its own track (HS2Studio6 bone keys): it turns between the nearest keys around Time that
+		// hold it, so a bone keyed at fewer keys still moves smoothly; before its first / after its last key it holds.
+		TArray<FString> Names;
+		for (const FOKSceneKey& K : T.Keys) for (const FOKSceneFkBone& Bone : K.Fk) Names.AddUnique(Bone.Bone);
+		TArray<FOKSceneFkBone> Fk;
+		for (const FString& Name : Names)
+		{
+			const FOKSceneFkBone* From = nullptr; const FOKSceneFkBone* To = nullptr;
+			const FOKSceneKey* KeyFrom = nullptr; const FOKSceneKey* KeyTo = nullptr;
+			for (const FOKSceneKey& K : T.Keys)
+			{
+				const FOKSceneFkBone* Bone = K.Fk.FindByPredicate([&](const FOKSceneFkBone& X2) { return X2.Bone == Name; });
+				if (!Bone) continue;
+				if (K.Time <= Time) { From = Bone; KeyFrom = &K; }
+				else if (!To) { To = Bone; KeyTo = &K; }
+			}
+			if (!From) { Fk.Add(*To); continue; }
+			FOKSceneFkBone Out = *From;
+			if (To)
+			{
+				const float W = UOKSceneDocument::EaseAlpha(KeyFrom->Ease, (Time - KeyFrom->Time) / FMath::Max(KeyTo->Time - KeyFrom->Time, 1e-4f));
+				const float Ea[3] = { float(From->Euler.X), float(From->Euler.Y), float(From->Euler.Z) };
+				const float Eb[3] = { float(To->Euler.X), float(To->Euler.Y), float(To->Euler.Z) };
+				float E[3] = {};
+				if (ok_unity_euler_slerp(Ea, Eb, W, E) == 0) Out.Euler = FVector(E[0], E[1], E[2]);
+			}
+			Fk.Add(Out);
+		}
+		return Fk;
 	}
 }
 
@@ -568,8 +645,8 @@ void UOKSceneDocument::EvaluateTimeline(float Time)
 		FTransform X;
 		float V;
 		const bool bCharacter = O->Kind == EOKSceneObjectKind::Character;
-		if (Next == INDEX_NONE) { const FOKSceneKey& K = T.Keys.Last(); X = K.Transform; V = K.Value; if (bCharacter) { O->Character.Fk = K.Fk; ApplyCharacterKey(O->Character, K, K.MouthOpen); } }
-		else if (Next == 0) { const FOKSceneKey& K = T.Keys[0]; X = K.Transform; V = K.Value; if (bCharacter) { O->Character.Fk = K.Fk; ApplyCharacterKey(O->Character, K, K.MouthOpen); } }
+		if (Next == INDEX_NONE) { const FOKSceneKey& K = T.Keys.Last(); X = K.Transform; V = K.Value; if (bCharacter) { O->Character.Fk = SampleTrackFk(T, Time); ApplyCharacterKey(O->Character, K, K.MouthOpen); } }
+		else if (Next == 0) { const FOKSceneKey& K = T.Keys[0]; X = K.Transform; V = K.Value; if (bCharacter) { O->Character.Fk = SampleTrackFk(T, Time); ApplyCharacterKey(O->Character, K, K.MouthOpen); } }
 		else
 		{
 			const FOKSceneKey& A = T.Keys[Next - 1];
@@ -589,19 +666,7 @@ void UOKSceneDocument::EvaluateTimeline(float Time)
 			V = FMath::Lerp(A.Value, B.Value, U);
 			if (bCharacter)
 			{
-				// Each FK bone turns from its rotation at A to its rotation at B; a bone keyed on one side only holds.
-				TArray<FOKSceneFkBone> Fk = A.Fk;
-				for (FOKSceneFkBone& Bone : Fk)
-				{
-					const FOKSceneFkBone* To = B.Fk.FindByPredicate([&](const FOKSceneFkBone& X2) { return X2.Bone == Bone.Bone; });
-					if (!To) continue;
-					const float Ea[3] = { float(Bone.Euler.X), float(Bone.Euler.Y), float(Bone.Euler.Z) };
-					const float Eb[3] = { float(To->Euler.X), float(To->Euler.Y), float(To->Euler.Z) };
-					float E[3] = {};
-					if (ok_unity_euler_slerp(Ea, Eb, U, E) == 0) Bone.Euler = FVector(E[0], E[1], E[2]);
-				}
-				for (const FOKSceneFkBone& Bone : B.Fk) if (!Fk.ContainsByPredicate([&](const FOKSceneFkBone& X2) { return X2.Bone == Bone.Bone; })) Fk.Add(Bone);
-				O->Character.Fk = MoveTemp(Fk);
+				O->Character.Fk = SampleTrackFk(T, Time);
 				// Patterns hold the earlier key's; the mouth opening blends when both keys set it.
 				const float Mouth = A.MouthOpen >= 0.f && B.MouthOpen >= 0.f ? FMath::Lerp(A.MouthOpen, B.MouthOpen, U) : A.MouthOpen;
 				ApplyCharacterKey(O->Character, A, Mouth);

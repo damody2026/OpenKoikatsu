@@ -92,6 +92,10 @@ struct OKSTUDIO_API FOKSceneIkTarget
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
     FVector Euler = FVector::ZeroVector;
 
+	/** How strongly the effector pulls, 0..1 (HS2Studio6 IK 權重; 1 reaches the target). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
+	float Weight = 1.f;
+
 	bool operator==(const FOKSceneIkTarget& O) const = default;
 };
 
@@ -146,6 +150,14 @@ struct OKSTUDIO_API FOKSceneCharacter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face", meta = (UIMin = "-1", UIMax = "1"))
 	float MouthOpen = -1.f;
 
+	/** Eye opening 0..1 (-1 keeps the character's; HS2Studio6 眼睛開合). Blinking still closes them from there. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face", meta = (UIMin = "-1", UIMax = "1"))
+	float EyesOpen = -1.f;
+
+	/** How far the neck turns towards its look target, 0..1 (HS2Studio6 跟隨強度; 1 fully). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
+	float NeckFollow = 1.f;
+
 	/** Automatic blinking: -1 as the character does, 0 off, 1 on. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Face")
 	int32 Blink = -1;
@@ -197,6 +209,21 @@ struct OKSTUDIO_API FOKSceneCharacter
 	/** Studio IK: these effectors reach these positions (solved after FK and the card's bone modifiers). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	TArray<FOKSceneIkTarget> Ik;
+
+	/** Parts whose FK is switched off (bit per FkPartOf part: body, chest, hair, neck, left hand, right hand, skirt): their
+	 *  bones keep their values but follow the animation (HS2Studio6 部位開關). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 FkPartsOff = 0;
+
+	/** Parts whose IK is switched off (bit per IkPartOf part: body, left arm, right arm, left leg, right leg). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 IkPartsOff = 0;
+
+	/** The FK part of a bone (0 body, 1 chest, 2 hair, 3 neck, 4 left hand, 5 right hand, 6 skirt) and the IK part of an effector. */
+	static int32 FkPartOf(const FString& Bone);
+	static int32 IkPartOf(int32 Effector);
+	bool FkPartOn(int32 Part) const { return !(FkPartsOff & (1 << Part)); }
+	bool IkPartOn(int32 Part) const { return !(IkPartsOff & (1 << Part)); }
 
 	bool operator==(const FOKSceneCharacter& O) const = default;
 	/** Same built character: only the card, outfit, clothes and animation need a rebuild; face, pose and look are
@@ -490,6 +517,10 @@ struct OKSTUDIO_API FOKSceneObject
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Object")
 	bool bVisible = true;
+
+	/** Locked: clicks in the view pass through it (it is still selectable in the tree). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Object")
+	bool bLocked = false;
 
 	/** Under a character: the bone (Studio accessory point, e.g. a_n_hand_R) the object hangs on and follows as the character
 	 * moves; empty: the character root. Transform is then relative to that bone. */
@@ -818,6 +849,13 @@ public:
 	int32 MoveKey(int32 Id, int32 Index, float NewTime);
 	/** Removes the object's key within 1/60 s of Time. */
 	bool RemoveKey(int32 Id, float Time);
+	/** One FK bone of a character keyed at Time (HS2Studio6 bone key): a key already there gets only this bone; a new key
+	 *  holds only this bone (no transform or state change: it takes the track's values at Time). */
+	void SetBoneKey(int32 Id, float Time, const FString& Bone);
+	/** Drops one bone from the key at Time (the key stays for its other values). */
+	bool RemoveBoneKey(int32 Id, float Time, const FString& Bone);
+	/** Removes the object's whole track (清空軌道). */
+	bool ClearTrack(int32 Id);
 	/** The key of the object at the time (within the key tolerance), or null. */
 	FOKSceneKey* KeyAt(int32 Id, float Time);
 	/** The eased blend (0..1) between two keys at fraction U of the way. */

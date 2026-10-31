@@ -169,7 +169,7 @@ pub unsafe extern "C" fn ok_session_set_studio_ik(s:*mut OkSession,effectors:*co
         if !(0..crate::session::STUDIO_IK_TARGETS as i32).contains(&e) || !p.iter().all(|v|v.is_finite()) {return -1;}
         targets.push((e as usize,[p[0],p[1],p[2]]));
     }
-    s.studio_ik=targets;s.studio_ik_rotations.clear();0
+    s.studio_ik=targets;s.studio_ik_rotations.clear();s.studio_ik_weights.clear();0
 }
 /// Full Studio IK targets. Rotations are Unity skeleton-space quaternions; disabled targets retain position-only semantics.
 #[no_mangle]
@@ -219,6 +219,17 @@ pub unsafe extern "C" fn ok_session_set_studio_ik_pose(
     }
     s.studio_ik = targets;
     s.studio_ik_rotations = angles;
+    s.studio_ik_weights.clear();
+    0
+}
+/// Studio IK weights 0..1, one per target of the last set_studio_ik(_pose) call, in its order; 0 count: all 1.
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_studio_ik_weights(s: *mut OkSession, weights: *const f32, count: i32) -> i32 {
+    let Some(s) = sess_ref(s) else { return -1; };
+    if count < 0 || count > 0 && weights.is_null() { return -1; }
+    let w = if count > 0 { std::slice::from_raw_parts(weights, count as usize) } else { &[] };
+    if !w.iter().all(|v| v.is_finite()) { return -1; }
+    s.studio_ik_weights = w.to_vec();
     0
 }
 /// EyeLookCalc.LoadAngle for a source NO_LOOK pattern; validate before publishing runtime state.

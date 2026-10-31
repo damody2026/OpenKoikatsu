@@ -1,0 +1,211 @@
+-- Clicks OK Studio's character-page buttons through the control channel's "click" op (the button's own handler runs)
+-- and reads the result back ("bones" op), one check per line. Needs a studio started with -Control.
+-- Tools/lua/lua.exe Tools/check_ok_studio_buttons.lua [--port 47890] [--card Content/CharacterCards/CrowdAPNG/C000.png]
+local json = require "ok.json"
+local port, card = "47890", "Content/CharacterCards/CrowdAPNG/C000.png"
+for i = 1, #arg, 2 do
+  if arg[i] == "--port" then port = arg[i + 1] elseif arg[i] == "--card" then card = arg[i + 1] else error("unknown option " .. arg[i]) end
+end
+local tmp = os.getenv("TEMP") .. "\\ok_studio_buttons.json"
+
+local function call(op, body)
+  local f = assert(io.open(tmp, "wb")); f:write(json.encode(body or {})); f:close()
+  local p = io.popen(('curl -s -m 120 -X POST http://127.0.0.1:%s/studio/%s --data-binary "@%s"'):format(port, op, tmp))
+  local out = p:read("a"); p:close()
+  local ok, value = pcall(json.decode, out)
+  return ok and value or { ok = false, error = out }
+end
+local function wait(frames) local t = os.clock() + frames / 60 while os.clock() < t do end end
+
+local passed, failed = 0, 0
+local function check(cond, what)
+  if cond then passed = passed + 1 else failed = failed + 1 end
+  print((cond and "PASS " or "FAIL ") .. what)
+end
+
+local function character()
+  for _, o in ipairs(call("state").objects or {}) do if o.kind == "character" then return o.id end end
+end
+local id = character()
+if not id then
+  call("cmd", { id = "add.character", arg = card })
+  for _ = 1, 120 do id = character() if id then break end wait(30) end
+end
+assert(id, "no character in the scene")
+wait(120)
+call("select", { ids = { id } })
+local function bones() return call("bones", { id = id }) end
+local function click(text, index) local r = call("click", { text = text, index = index or 0 }); wait(20); return r end
+
+-- U17: one-click clothes (state page).
+call("cmd", { id = "page.state" }); wait(20)
+local function all(states, v) if #states ~= 9 then return false end for _, s in ipairs(states) do if s ~= v then return false end end return true end
+check(click("全裸").ok and all(bones().clothes_states, 3), "全裸 → every part off (3)")
+check(click("半脫").ok and all(bones().clothes_states, 1), "半脫 → every part half (1)")
+check(click("全穿").ok and all(bones().clothes_states, 0), "全穿 → every part on (0)")
+
+-- U16: look modes and buttons (bones page, look tab).
+call("cmd", { id = "page.bones" }); call("cmd", { id = "bones.page", arg = "2" }); wait(20)
+check(click("正面").ok and bones().eyes_look == 4, "eyes 正面 → Front")
+check(click("背離").ok and bones().eyes_look == 5, "eyes 背離 → Away")
+-- Away from the camera first, so taking the camera position always moves it (also on a second run).
+call("pose", { id = id, look = { point = { 0, 300, 140 } } }); wait(10)
+local before = bones().look_point
+check(click("取鏡頭位置").ok and bones().eyes_look == 2, "取鏡頭位置 → look point mode")
+local after = bones().look_point
+check(before and after and (before[1] ~= after[1] or before[2] ~= after[2] or before[3] ~= after[3]), "取鏡頭位置 moves the look point to the camera")
+check(click("恢復看鏡頭").ok and bones().eyes_look == 1, "恢復看鏡頭 → camera")
+-- Neck tab: follow strength through the pose op (a slider), and the neck's own front mode.
+call("cmd", { id = "bones.page", arg = "3" }); wait(20)
+check(click("正面").ok and bones().neck_look == 4, "neck 正面 → Front")
+call("pose", { id = id, look = { neck_follow = 0.25 } }); wait(10)
+check(math.abs((bones().neck_follow or 1) - 0.25) < 1e-3, "neck follow strength 0.25 kept")
+call("pose", { id = id, look = { neck = "animation", neck_follow = 1 } })
+
+-- U16: expression steppers and eye opening (expression tab): ▶ on the eyes row (the second ▶ of the page).
+call("cmd", { id = "bones.page", arg = "4" }); wait(20)
+local p0 = bones().face_eyes_pattern
+-- From 照動畫 (-1) two steps reach pattern 1, which the animation's own pattern (often 0) is not.
+check(click("▶", 1).ok and click("▶", 1).ok, "eyes ▶ clicked twice")
+wait(30)
+local p1 = bones().face_eyes_pattern
+check(p1 == 1, ("eyes ▶▶ shows eye pattern 1 (%s → %s)"):format(tostring(p0), tostring(p1)))
+check(click("◀", 1).ok and click("◀", 1).ok, "eyes ◀ clicked twice")
+call("pose", { id = id, expression = { eyes_open = 0.3 } }); wait(30)
+check(math.abs((bones().face_eyes_open or 0) - 0.3) < 0.02, "eyes_open 0.3 reaches the face")
+call("pose", { id = id, expression = { eyes_open = -1 } }); wait(30)
+check((bones().face_eyes_open or 0) > 0.5, "eyes_open -1 gives the character's own opening back")
+
+-- U16: hands (hand tab): ▶ on the left hand, then 復位.
+call("cmd", { id = "bones.page", arg = "5" }); wait(20)
+check(click("▶", 0).ok and bones().hand_left == 0, "left hand ▶ from 照動畫 → pattern 0")
+check(click("▶", 0).ok and bones().hand_left == 1, "left hand ▶ again → pattern 1")
+check(click("復位").ok and bones().hand_left == -1 and bones().hand_right == -1, "hand 復位 → both -1")
+
+-- U18: motion browser tabs and search (anim page): the count label changes with the tab.
+call("cmd", { id = "page.anim" }); wait(20)
+check(click("男").ok, "anim tab 男 clicked")
+check(click("共用").ok, "anim tab 共用 clicked")
+check(click("全部").ok, "anim tab 全部 clicked")
+
+-- Pose page: save a pose file (the page's own button), back to the T-pose, then step to the file.
+local poses = "UserData/Studio/pose"
+local function pose_files() local t = {} local p = io.popen('dir /b "' .. poses:gsub("/", "\\") .. '\\*.dat" 2>nul') for l in p:lines() do t[l] = true end p:close() return t end
+local had = pose_files()
+call("pose", { id = id, fk = { { bone = "cf_j_neck", euler = { 20, 0, 0 } } } }); wait(20)
+call("cmd", { id = "page.bones" }); call("cmd", { id = "bones.page", arg = "6" }); wait(20)
+local function fk_set() for _, b in ipairs(bones().fk or {}) do if b.set then return true end end return false end
+check(click("存成 KK 姿勢").ok, "存成 KK 姿勢 clicked")
+check(click("復位 T-pose").ok and not fk_set(), "復位 T-pose clears FK")
+wait(20)
+local r = click("▶", 0)
+wait(30)
+check(r.ok and fk_set(), "pose ▶ loads the saved pose file (" .. tostring(r.error or r.clicked) .. ")")
+check(click("復位 T-pose").ok and not fk_set(), "復位 T-pose clears it again")
+for name in pairs(pose_files()) do if not had[name] then os.remove(poses .. "/" .. name) end end
+
+-- U19: the tree's tools (群組／解散／鎖定／獨顯／錯開複製) on the character.
+local function objects() local t = {} for _, o in ipairs(call("state").objects or {}) do t[o.id] = o end return t end
+local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+call("select", { ids = { id } }); wait(10)
+local parent0 = objects()[id].parent
+check(click("群組").ok, "群組 clicked")
+local grouped = objects()
+local folder = grouped[id] and grouped[grouped[id].parent]
+check(folder and folder.kind == "folder", "群組 puts the character under a new folder")
+check(click("解散").ok, "解散 clicked")
+local ungrouped = objects()
+check(ungrouped[id].parent == parent0 and not (folder and ungrouped[folder.id]), "解散 removes the folder, the character is back")
+call("select", { ids = { id } }); wait(10)
+check(click("鎖定").ok and objects()[id].locked == true, "鎖定 locks")
+check(click("鎖定").ok and objects()[id].locked == false, "鎖定 again unlocks")
+check(click("獨顯").ok, "獨顯 clicked")
+local solo_ok = true
+for oid, o in pairs(objects()) do if oid ~= id and o.kind ~= "light" and o.kind ~= "camera" and o.visible then solo_ok = false end end
+check(solo_ok, "獨顯 hides everything but the selection (lights, cameras stay)")
+check(click("獨顯").ok, "獨顯 again clicked")
+local before_copy = objects()
+check(click("錯開複製").ok, "錯開複製 clicked")
+local after_copy, copy = objects(), nil
+for oid, o in pairs(after_copy) do if not before_copy[oid] and o.kind == "character" then copy = o end end
+local a, b = before_copy[id].location, copy and copy.location
+check(copy and a and b and math.abs(a[1] - b[1]) + math.abs(a[2] - b[2]) + math.abs(a[3] - b[3]) > 5, "錯開複製 adds a character away from the original")
+if copy then call("select", { ids = { copy.id } }); call("cmd", { id = "edit.delete" }); wait(20) end
+check(count(objects()) == count(before_copy), "the copy is deleted again")
+call("select", { ids = { id } }); wait(10)
+
+-- U20: FK parts really switch FK (FK tab).
+call("cmd", { id = "page.bones" }); call("cmd", { id = "bones.page", arg = "0" }); wait(20)
+local function fk_world(bone) for _, b in ipairs(bones().fk or {}) do if b.bone == bone then return b.world end end end
+local function dist(p, q) return p and q and math.sqrt((p[1] - q[1]) ^ 2 + (p[2] - q[2]) ^ 2 + (p[3] - q[3]) ^ 2) or 0 end
+local off0 = bones().fk_parts_off or 0
+check(click("頭髮", 0).ok and bones().fk_parts_off == off0 ~ 4, "FK 頭髮 toggles the hair part")
+click("頭髮", 0)
+local head0 = fk_world("cf_j_head")
+call("pose", { id = id, fk = { { bone = "cf_j_neck", euler = { 40, 0, 0 } } } }); wait(20)
+local head1 = fk_world("cf_j_head")
+check(dist(head0, head1) > 1 and (bones().fk_parts_off & 8) == 0, ("posing the neck switches its part on and moves the head (%.1f cm)"):format(dist(head0, head1)))
+check(click("頸", 0).ok and (bones().fk_parts_off & 8) == 8, "FK 頸 switches the neck part off")
+wait(20)
+check(dist(fk_world("cf_j_head"), head0) < 0.5, "neck part off: the head follows the animation again")
+click("頸", 0); wait(20)
+check(dist(fk_world("cf_j_head"), head1) < 0.5, "neck part on: the kept FK value shows again")
+local function neck_set() for _, b in ipairs(bones().fk or {}) do if b.bone == "cf_j_neck" then return b.set end end end
+check(click("頸", 1).ok and not neck_set(), "復位 頸 drops the neck's FK")
+
+-- U20: IK parts, 全部, weights, FK←IK (IK tab).
+call("cmd", { id = "bones.page", arg = "1" }); wait(20)
+if (bones().ik_parts_off or 0) ~= 0 then click("全部") end
+check(click("全部").ok and bones().ik_parts_off == 31, "IK 全部 switches every part off")
+check(click("全部").ok and bones().ik_parts_off == 0, "IK 全部 again switches every part on")
+local hand0 = fk_world("cf_j_hand_L")
+check(hand0 ~= nil, "the left hand bone is in the FK list")
+local function ik_hand(weight)
+  local target = { hand0[1] + 25, hand0[2], hand0[3] }
+  local actor = nil
+  for _, e in ipairs(bones().ik or {}) do if e.effector == 5 then actor = e end end
+  -- The target in character space: the hand's own character-space position plus 25 cm on X.
+  local local_pos = { actor.position[1] + 25, actor.position[2], actor.position[3] }
+  call("pose", { id = id, ik = { { effector = 5, position = local_pos, weight = weight } } }); wait(30)
+  return dist(fk_world("cf_j_hand_L"), hand0)
+end
+if hand0 then
+  local full = ik_hand(1)
+  local none = ik_hand(0)
+  check(full > 10 and none < full * 0.5, ("IK weight 1 pulls the hand (%.1f cm), weight 0 leaves it (%.1f cm)"):format(full, none))
+  ik_hand(1)
+  check(click("左手").ok and dist(fk_world("cf_j_hand_L"), hand0) < full * 0.5, "IK 左手 part off: the hand goes back")
+  click("左手"); wait(20)
+  check(click("FK←IK").ok, "FK←IK clicked")
+  wait(20)
+  local any_ik = false for _, e in ipairs(bones().ik or {}) do if e.enabled then any_ik = true end end
+  check(not any_ik and fk_set(), "FK←IK turns the IK pose into FK and clears IK")
+  check(dist(fk_world("cf_j_hand_L"), hand0) > full * 0.5, "after FK←IK the hand stays where IK put it")
+end
+call("cmd", { id = "bones.page", arg = "0" }); wait(20)
+click("清除 FK")
+
+-- U21: one bone's own timeline track (FK page buttons), and 清空軌道 (timeline window).
+call("keys", { id = id, action = "clear" })
+local function keys() return call("keys", { id = id, action = "list" }).keys or {} end
+local function neck_x() for _, b in ipairs(bones().fk or {}) do if b.bone == "cf_j_neck" then return b.euler[1] end end end
+call("timeline", { time = 0 }); wait(5)
+call("pose", { id = id, fk = { { bone = "cf_j_neck", euler = { 0, 0, 0 } } } }); wait(10)
+check(call("click", { text = "cf_j_neck", contains = true }).ok, "the neck row picked in the FK tree")
+wait(20)
+check(click("骨骼打 key").ok and #keys() == 1 and keys()[1].fk_bones == 1, "骨骼打 key at 0 s: a key holding only the neck")
+call("timeline", { time = 2 }); wait(5)
+call("pose", { id = id, fk = { { bone = "cf_j_neck", euler = { 40, 0, 0 } } } }); wait(10)
+check(click("骨骼打 key").ok and #keys() == 2, "骨骼打 key at 2 s: a second key")
+call("timeline", { time = 1 }); wait(20)
+local mid = neck_x() or 0
+check(math.abs(mid - 20) < 2, ("at 1 s the neck is half way (%.1f°)"):format(mid))
+call("timeline", { time = 2 }); wait(5)
+check(click("骨骼刪 key").ok and (keys()[2] or {}).fk_bones == 0, "骨骼刪 key drops the neck from the 2 s key")
+call("cmd", { id = "toggle.timeline" }); wait(30)
+check(click("清空軌道").ok and #keys() == 0, "清空軌道 removes the track")
+call("cmd", { id = "toggle.timeline" }); wait(10)
+click("清除 FK")
+
+print(("BUTTONS %d/%d"):format(passed, passed + failed))
+os.exit(failed == 0 and 0 or 1)

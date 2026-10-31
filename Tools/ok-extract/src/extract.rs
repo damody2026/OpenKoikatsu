@@ -2273,6 +2273,7 @@ pub(crate) fn extract_session_from_info(
         studio_ik_solver: None,
         studio_ik: Vec::new(),
             studio_ik_rotations: Vec::new(),
+            studio_ik_weights: Vec::new(),
         correct,
         sex,
         type_bone,
