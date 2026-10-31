@@ -155,6 +155,12 @@ private:
 	};
 	TArray<FRankedPart> BlendedParts;
 	void RankBlendedParts(const FVector& Eye);
+	/** The shown items' parts Unity's camera depth texture leaves out (AKKPreviewActor::DepthTextureAbsentParts): while
+	 *  the scene has SunShafts they draw into custom depth with stencil 255, which the shafts take for far (OKStudioPost). */
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTextureAbsentParts;
+	bool bDepthTextureAbsentMarked = false;
+	void MarkDepthTextureAbsent();
+	void EnableCustomDepthStencil();
 	bool bCustomDepthStencil = false;
 	FVector RankEye = FVector(NAN);
 	bool bSkyDomesDirty = true;

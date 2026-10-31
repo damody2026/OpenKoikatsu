@@ -1727,11 +1727,17 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		TMap<TWeakObjectPtr<UPrimitiveComponent>, TPair<int32, int32>> Ranks;
 		for (const FRankedPart& Ranked : BlendedParts) if (Ranked.Part.IsValid()) Ranks.Add(Ranked.Part, {Ranked.Rank, Ranked.BasePriority});
 		BlendedParts.Reset();
+		if (bDepthTextureAbsentMarked)
+			for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTextureAbsentParts)
+				if (UPrimitiveComponent* P = Part.Get()) P->SetRenderCustomDepth(false);
+		DepthTextureAbsentParts.Reset();
+		bDepthTextureAbsentMarked = false;
 		for (const TPair<int32, FShown>& It : Shown)
 			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
 			{
 				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
 				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
+				DepthTextureAbsentParts.Append(Preview->DepthTextureAbsentParts);
 				for (const AKKPreviewActor::FBlendedPart& Blended : Preview->BlendedParts)
 					if (Blended.Component.IsValid())
 					{
@@ -1759,7 +1765,33 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		if (UPrimitiveComponent* P = Part.Get())
 			P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
 	RankBlendedParts(View.GetLocation());
+	MarkDepthTextureAbsent();
 	PlaceSky(View);
+}
+
+void AOKSceneActor::MarkDepthTextureAbsent()
+{
+	// Only while the scene has SunShafts (the one effect here reading Unity's depth texture): a custom depth pass more.
+	const bool bWant = Document && Document->Post.bSunShafts && DepthTextureAbsentParts.Num();
+	if (bWant == bDepthTextureAbsentMarked) return;
+	bDepthTextureAbsentMarked = bWant;
+	if (bWant) EnableCustomDepthStencil();
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTextureAbsentParts)
+		if (UPrimitiveComponent* P = Part.Get())
+		{
+			P->SetRenderCustomDepth(bWant);
+			// Past the blended parts' ranks (1-255 tested below their own rank), so their test never sees these.
+			if (bWant) P->SetCustomDepthStencilValue(255);
+		}
+}
+
+void AOKSceneActor::EnableCustomDepthStencil()
+{
+	if (bCustomDepthStencil) return;
+	// The stencil half of custom depth (r.CustomDepth 3) is off by default.
+	bCustomDepthStencil = true;
+	if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth")))
+		if (V->GetInt() != 3) V->Set(3, ECVF_SetByCode);
 }
 
 void AOKSceneActor::RankBlendedParts(const FVector& Eye)
@@ -1805,13 +1837,7 @@ void AOKSceneActor::RankBlendedParts(const FVector& Eye)
 	{
 		return A.Queue != B.Queue ? A.Queue < B.Queue : A.Order != B.Order ? A.Order < B.Order : A.Submesh < B.Submesh;
 	});
-	if (!bCustomDepthStencil)
-	{
-		// The stencil half of custom depth (r.CustomDepth 3) is off by default.
-		bCustomDepthStencil = true;
-		if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth")))
-			if (V->GetInt() != 3) V->Set(3, ECVF_SetByCode);
-	}
+	EnableCustomDepthStencil();
 	const bool bEyeMoved = !RankEye.Equals(Eye, 0.25);
 	if (bEyeMoved) RankEye = Eye;
 	for (int32 K = 0; K < Keys.Num(); ++K)

@@ -6776,8 +6776,14 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					UE_LOG(LogTemp, Display, TEXT("OK mirror part=%s shader=%s normal=%s"), *Name, *Source.MaterialShaderName(i), *Mirror.LocalNormal.ToString());
 				}
 		// A blended part: the scene ranks it in Unity's draw order (queue, then distance) for the depth test of its material.
-		if (Comp && !bBody && !bFaceDraw && (Blend.Equals(TEXT("translucent"), ESearchCase::IgnoreCase) || bModulate
-			|| Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase)))
+		const bool bBlendedPart = Comp && !bBody && !bFaceDraw && (Blend.Equals(TEXT("translucent"), ESearchCase::IgnoreCase) || bModulate
+			|| Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase));
+		if (Comp && !bBlendedPart)
+		{
+			FLinearColor Queue;
+			if (Source.MaterialValue(i, "_OKRenderQueue", Queue) && Queue.R > 2500.f) DepthTextureAbsentParts.Add(Comp);
+		}
+		if (bBlendedPart)
 		{
 			FBlendedPart& Blended = BlendedParts.AddDefaulted_GetRef();
 			Blended.Component = Comp;

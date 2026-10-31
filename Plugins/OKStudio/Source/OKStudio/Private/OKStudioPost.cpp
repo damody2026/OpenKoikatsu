@@ -27,7 +27,9 @@ namespace
 	 *   pixels (sky, background) feed it, dot(max(colour - threshold, 0), 1) times saturate(0.5 - distance to the sun).
 	 *   The four radial blurs move a tap to the sun by 1 - prod(1 - j_k b_k) (b_k: 3 x 0.0013, 6/768, 12/768,
 	 *   18/768); the two largest are sampled fully (36 taps), the two smallest by their mean.
-	 * Far: more than 900 m away (the background plane is at 1 km, the sky dome at 10 km).
+	 * Far: more than 900 m away (the background plane is at 1 km, the sky dome at 10 km), or a surface Unity's depth
+	 *   texture leaves out (render queue past 2500, such as Studio's basic shapes at 3000: SunShafts sees the far plane
+	 *   there and their colour feeds the shafts). OKSceneActor draws those into custom depth with stencil 255.
 	 */
 	const TCHAR* GStudioPostCode = TEXT(R"(
 float2 VUV = GetViewportUV(Parameters);
@@ -39,6 +41,8 @@ float2 Base = GetDefaultSceneTextureUV(Parameters, 14);
 float2 Scale = ViewportUVToSceneTextureUV(float2(1, 1), 14) - ViewportUVToSceneTextureUV(float2(0, 0), 14);
 #define OK_COLOR(V) SceneTextureLookup(Base + ((V) - VUV) * Scale, 14, false).rgb
 #define OK_DEPTH(V) (SceneTextureLookup(Base + ((V) - VUV) * Scale, 1, false).r * 0.01)
+#define OK_CUSTOM_DEPTH(V) (SceneTextureLookup(Base + ((V) - VUV) * Scale, 13, false).r * 0.01)
+#define OK_STENCIL(V) SceneTextureLookup(Base + ((V) - VUV) * Scale, 25, false).r
 const float FarM = 900.0;
 bool bFar = DepthM > FarM;
 if (FogOn > 0.5 && !bFar)
@@ -94,7 +98,9 @@ if (ShaftsOn > 0.5)
 		float Keep = Small * (1.0 - j3 * B3) * (1.0 - j4 * B4);
 		float2 T = Sun - (Sun - VUV) * Keep;
 		float Dt = OK_DEPTH(T);
-		if (Dt > FarM)
+		// The visible surface is one the depth texture leaves out: the marked parts' custom depth is where it is.
+		bool bAbsent = OK_STENCIL(T) > 254.5 && abs(OK_CUSTOM_DEPTH(T) - Dt) < 0.002 * Dt + 0.01;
+		if (Dt > FarM || bAbsent || ShaftsAllFar > 0.5)
 		{
 			float3 Ct = OK_COLOR(T);
 			// The shaft source lives in an 8-bit render texture (RenderTexture.GetTemporary's ARGB32): each tap is at
@@ -107,6 +113,8 @@ if (ShaftsOn > 0.5)
 return C;
 #undef OK_COLOR
 #undef OK_DEPTH
+#undef OK_CUSTOM_DEPTH
+#undef OK_STENCIL
 )");
 
 	/** The pass at `Location` (priority `Priority` there). */
@@ -127,14 +135,15 @@ return C;
 		auto Vector = [&](const TCHAR* Name) { auto* P = NewObject<UMaterialExpressionVectorParameter>(Mat); P->ParameterName = Name; Add(P); Input(Name, P); };
 		Scalar(TEXT("FogOn")); Vector(TEXT("FogColor"));
 		Scalar(TEXT("AOOn")); Vector(TEXT("AOTint")); Scalar(TEXT("AORadius"));
-		Scalar(TEXT("ShaftsOn")); Vector(TEXT("SunColor")); Vector(TEXT("SunThreshold"));
+		Scalar(TEXT("ShaftsOn")); Scalar(TEXT("ShaftsAllFar")); Vector(TEXT("SunColor")); Vector(TEXT("SunThreshold"));
 		// The scene textures the code samples (SceneTextureLookup needs them in the graph).
-		for (ESceneTextureId Id : { PPI_PostProcessInput0, PPI_SceneDepth })
+		for (ESceneTextureId Id : { PPI_PostProcessInput0, PPI_SceneDepth, PPI_CustomDepth, PPI_CustomStencil })
 		{
 			auto* T = NewObject<UMaterialExpressionSceneTexture>(Mat);
 			T->SceneTextureId = Id;
 			Add(T);
-			Input(Id == PPI_SceneDepth ? TEXT("SceneDepthIn") : TEXT("SceneColorIn"), T);
+			Input(Id == PPI_SceneDepth ? TEXT("SceneDepthIn") : Id == PPI_PostProcessInput0 ? TEXT("SceneColorIn")
+				: Id == PPI_CustomDepth ? TEXT("CustomDepthIn") : TEXT("CustomStencilIn"), T);
 		}
 		Add(Code);
 		if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData()) Ed->EmissiveColor.Expression = Code;
@@ -247,6 +256,9 @@ void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettin
 		M->SetVectorParameterValue(TEXT("AOTint"), Post.AmbientOcclusionTint);
 		M->SetScalarParameterValue(TEXT("AORadius"), FMath::Max(Post.AmbientOcclusionRadius, 0.001f));
 		M->SetScalarParameterValue(TEXT("ShaftsOn"), Index == 1 ? 1.f : 0.f);
+		// OK_STUDIO_SHAFTS_DEPTH=0: every pixel feeds the shafts, near or far (diagnostic).
+		static const bool bShaftsAllFar = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_SHAFTS_DEPTH")) == TEXT("0");
+		M->SetScalarParameterValue(TEXT("ShaftsAllFar"), bShaftsAllFar ? 1.f : 0.f);
 		// SunShafts.sunColor and sunThreshold reach the shader as vectors (SetVector): not linearised.
 		M->SetVectorParameterValue(TEXT("SunColor"), Post.SunShaftColor);
 		M->SetVectorParameterValue(TEXT("SunThreshold"), Post.SunShaftThreshold);
