@@ -1,6 +1,9 @@
 #include "OKHScene.h"
 #include "Camera/CameraActor.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Camera/CameraComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Components/ButtonSlot.h"
 #include "HAL/IConsoleManager.h"
 #include "OKCharacterController.h"
@@ -275,8 +278,9 @@ void UOKHScenePanel::Finish(const TCHAR* Kind){
             // swallow: the finish, then the after state (IN_A, or OUT_A where the pose has none).
             if(Kind==1){Chain({TEXT("IN_Start"),TEXT("IN_Loop"),TEXT("Oral_Idle_IN"),TEXT("Oral_Idle")});OralIdleSince=0.;}
             else Chain({TEXT("IN_Start"),TEXT("IN_Loop"),Has(TEXT("IN_A"))?TEXT("IN_A"):TEXT("OUT_A")});
+            if(Kind==2)AddSiru(1); // on her chest
             Note(OKT(Kind==1?TEXT("ui.hscene.event_service_inside"):Kind==2?TEXT("ui.hscene.event_service_chest"):TEXT("ui.hscene.event_service_hand")));}
-        else{Chain({TEXT("M_OUT_Start"),TEXT("M_OUT_Loop"),TEXT("OUT_A")});Note(OKT(TEXT("ui.hscene.event_service_outside")));}
+        else{Chain({TEXT("M_OUT_Start"),TEXT("M_OUT_Loop"),TEXT("OUT_A")});AddSiru(Poses.IsValidIndex(ActivePose)&&Poses[ActivePose].KindHoushi==1?0:1);Note(OKT(TEXT("ui.hscene.event_service_outside")));}
         return;
     }
     const bool Org=K.StartsWith(TEXT("org")),Same=K.StartsWith(TEXT("same"));
@@ -284,6 +288,8 @@ void UOKHScenePanel::Finish(const TCHAR* Kind){
     if(Same||K==TEXT("inside")||K==TEXT("outside")){++HisFinishes;His=0.f;++(K==TEXT("outside")?HisOutside:HisInside);}
     if(Org||Same){ReleaseHeld();CountHerOrgasm();}
     bInsideFinished=Same||K==TEXT("inside");
+    if(K==TEXT("outside"))AddSiru(SiruSide()==0?1:3); // over the side of her he is on
+    else if((Same||K==TEXT("inside"))&&!bCondom)AddSiru(bAnalPlay?4:2);
     TArray<FString> States={P(TEXT("OLoop"))};
     if(K==TEXT("outside"))States.Append({P(TEXT("M_OUT_Start")),P(TEXT("M_OUT_Loop")),P(TEXT("OUT_A"))});
     else if(K==TEXT("inside"))States.Append({P(TEXT("M_IN_Start")),P(TEXT("M_IN_Loop")),P(TEXT("IN_A"))});
@@ -343,7 +349,7 @@ void UOKHScenePanel::Click(int32 Kind){
     case Inside:Finish(Mode==2&&Her>=70.f&&!bLockHer?(bStrong?TEXT("sameS"):TEXT("sameW")):TEXT("inside"));break; // with her gauge locked she does not come with him
     case Outside:Finish(TEXT("outside"));break;
     case Drink:++Swallowed;Chain({TEXT("Drink_IN"),TEXT("Drink"),TEXT("Drink_A")});Note(OKT(TEXT("ui.hscene.event_drink")));break;
-    case Vomit:Chain({TEXT("Vomit_IN"),TEXT("Vomit"),TEXT("Vomit_A")});Note(OKT(TEXT("ui.hscene.event_vomit")));break;
+    case Vomit:Chain({TEXT("Vomit_IN"),TEXT("Vomit"),TEXT("Vomit_A")});AddSiru(0);Note(OKT(TEXT("ui.hscene.event_vomit")));break; // spat out: on her mouth and chin
     case Again:
         // Once more only while she is willing: past her service_rounds for the scene she says no (and the panel stops offering it).
         if(ServiceFinishes+(X.IsValid()&&X->HasField(TEXT("today_service"))?int32(X->GetNumberField(TEXT("today_service"))):0)>=FMath::Max(1,X.IsValid()?int32(X->GetNumberField(TEXT("service_rounds"))):2)){bServiceRefused=true;Note(OKT(TEXT("ui.hscene.again_refused")));BuildList();break;}
@@ -634,6 +640,25 @@ void UOKHScenePanel::Cover(bool bOn,double Now){
     if(bOn)Camera->StartCameraFade(1.f,1.f,0.f,FLinearColor::Black,false,true); // black this very frame: the jump is never seen
     else Camera->StartCameraFade(1.f,0.f,.35f,FLinearColor::Black,false,false);
 }
+static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out);
+void UOKHScenePanel::AddSiru(int32 Area){
+    if(Area<0||Area>4)return;Siru[Area]=FMath::Min(2,Siru[Area]+1);ApplySiru();
+    UE_LOG(LogTemp,Display,TEXT("H scene: semen on her %d (levels %d %d %d %d %d)"),Area,Siru[0],Siru[1],Siru[2],Siru[3],Siru[4]);
+}
+void UOKHScenePanel::ApplySiru(){
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl))return;
+    static const FName Names[5]={TEXT("_liquidface"),TEXT("_liquidftop"),TEXT("_liquidfbot"),TEXT("_liquidbtop"),TEXT("_liquidbbot")};
+    TInlineComponentArray<UMeshComponent*> Comps;Girl->GetComponents(Comps);
+    for(UMeshComponent* Comp:Comps)for(int32 I=0;I<Comp->GetNumMaterials();++I)if(auto* M=Cast<UMaterialInstanceDynamic>(Comp->GetMaterial(I)))
+        for(int32 A=0;A<5;++A){float Was=0.f;if(M->GetScalarParameterValue(FHashedMaterialParameterInfo(Names[A]),Was)&&Was!=float(Siru[A]))M->SetScalarParameterValue(Names[A],float(Siru[A]));}
+}
+int32 UOKHScenePanel::SiruSide() const{
+    // 0 when he is on her front (her face turns toward him), 1 when he is behind her.
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
+    FVector Nose,Head,HerHips,HisHips;
+    if(!HBone(Girl,TEXT("J_Nose_tip"),Nose)||!HBone(Girl,TEXT("j_head"),Head)||!HBone(Girl,TEXT("j_hips"),HerHips)||!HBone(Him,TEXT("j_hips"),HisHips))return 0;
+    return ((Nose-Head)|(HisHips-HerHips))>=0.?0:1;
+}
 // A bone of theirs in the world (the male skeleton may name its bones like hers).
 static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
     if(!IsValid(A)||!A->BodySkel)return false;
@@ -704,7 +729,17 @@ void UOKHScenePanel::FrameCamera(){
         if((Flat||bOverlap&&Body.Size()>10.f)&&Body.Normalize()){FVector Side(-Body.Y,Body.X,0);if((Side|Facing)<0)Side=-Side;
             if(Flat){Dir=(Side+.35f*Body).GetSafeNormal();Pitch=35.f;}else Dir=Side;}}} // held upright against him: straight from the side
     if(Dir.IsNearlyZero())return;
-    Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=Pitch;Girl->OrbitDistance=FMath::Clamp(Size*(Mode==0&&Pitch<30.f?3.1f:2.5f),120.f,650.f); /* standing alone: head to feet in the shot (2.5 cut both) */ // the bone box is tighter than the mesh bounds
+    float Distance=Size*(Mode==0&&Pitch<30.f?3.1f:2.5f); /* standing alone: head to feet in the shot (2.5 cut both) */ // the bone box is tighter than the mesh bounds
+    // Tall shots (a standing pair: 立位 cut both heads at 2.5) need the height in the picture: far enough that the vertical
+    // field of view holds their whole height, with a margin.
+    {FBox Shot=HerBox;if(auto* Partner=Mode!=0&&Gallery->PartnerActor&&!bMaleHidden?Gallery->PartnerActor.Get():nullptr){const FBox PartnerBox=HBodyBox(Partner);if(PartnerBox.IsValid)Shot+=PartnerBox;}
+     const float HFov=Girl->StudioCam&&Girl->StudioCam->GetCameraComponent()?Girl->StudioCam->GetCameraComponent()->FieldOfView:60.f;
+     FVector2D View(16.,9.);if(GEngine&&GEngine->GameViewport)GEngine->GameViewport->GetViewportSize(View);
+     const float Aspect=View.Y>1.?float(View.X/View.Y):16.f/9.f;
+     const float HalfV=FMath::Atan(FMath::Tan(FMath::DegreesToRadians(HFov*.5f))/Aspect);
+     const float Upper=float(Shot.Max.Z-Focus.Z),Lower=float(Focus.Z-Shot.Min.Z); // the focus need not be the middle
+     Distance=FMath::Max(Distance,FMath::Max(Upper,Lower)*1.15f/FMath::Tan(HalfV));}
+    Girl->OrbitFocus=Focus;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=Pitch;Girl->OrbitDistance=FMath::Clamp(Distance,120.f,650.f);
     Girl->ApplyOrbitCamera();
     UE_LOG(LogTemp,Display,TEXT("H camera: facing (%.2f,%.2f) shot from (%.2f,%.2f) pitch %.0f distance %.0f"),Facing.X,Facing.Y,Dir.X,Dir.Y,Pitch,Girl->OrbitDistance);
     HideWallsInTheWay();
@@ -830,7 +865,7 @@ void UOKHScenePanel::HideWallsInTheWay(){
         if(E.Z>90.f)for(const FVector& To:Seen)Blocks|=FMath::LineBoxIntersection(FBox(O-E,O+E),Eye,To,To-Eye);A->SetActorHiddenInGame(Blocks);}
 }
 void UOKHScenePanel::ClearProps(){for(AStaticMeshActor* A:Props)if(IsValid(A))A->Destroy();Props.Reset();}
-void UOKHScenePanel::NativeDestruct(){if(bCovered)Cover(false,FPlatformTime::Seconds());ClearProps();RestoreBlush();RestoreAlign();Super::NativeDestruct();}
+void UOKHScenePanel::NativeDestruct(){if(Siru[0]+Siru[1]+Siru[2]+Siru[3]+Siru[4]>0){FMemory::Memzero(Siru);ApplySiru();}if(bCovered)Cover(false,FPlatformTime::Seconds());ClearProps();RestoreBlush();RestoreAlign();Super::NativeDestruct();}
 void UOKHScenePanel::PlaceProps(int32 Kind){
     ClearProps();bPropsTable=false;auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->BodySkel||!GetWorld())return;
     auto* Him=Mode!=0&&Gallery->PartnerActor&&!bMaleHidden?Gallery->PartnerActor.Get():nullptr;
@@ -954,7 +989,7 @@ TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     auto O=MakeShared<FJsonObject>();
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
     if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
-    O->SetBoolField(TEXT("covered"),bCovered);
+    O->SetBoolField(TEXT("covered"),bCovered);{TArray<TSharedPtr<FJsonValue>> S;for(int32 V:Siru)S.Add(MakeShared<FJsonValueNumber>(V));O->SetArrayField(TEXT("siru"),S);}
     O->SetNumberField(TEXT("blush"),BlushMats.IsEmpty()?-1.f:BlushShown);
     O->SetStringField(TEXT("state"),Current());O->SetStringField(TEXT("wanted"),Wanted);O->SetNumberField(TEXT("mode"),Mode);
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
