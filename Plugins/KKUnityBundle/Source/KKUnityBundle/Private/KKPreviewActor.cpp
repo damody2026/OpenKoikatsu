@@ -2844,7 +2844,7 @@ for (int k = 0; k < 2; ++k)
 	float w = max(Size / exp2(l), 1.0);
 	float row = Size * (2.0 - 2.0 / exp2(l));
 	float2 p = clamp(st * w, 0.5, w - 0.5);
-	float2 auv = float2((face * Size + p.x) / (6.0 * Size), (row + p.y) / (2.0 * Size));
+	float2 auv = float2((face * Size + p.x) / (6.0 * Size), (row + w - p.y) / (2.0 * Size));
 	env += (k == 0 ? 1.0 - frac(lod) : frac(lod)) * Texture2DSampleLevel(Atlas, AtlasSampler, auv, 0).rgb;
 }
 float3 specColor = lerp(float3(0.04, 0.04, 0.04), a, metallic);
@@ -3794,6 +3794,10 @@ static UMaterialInterface* OKGlitchMaterial()
 // HLSL statements that sample a cube atlas (a session cube slot, unity::cubemap_atlas: the six faces side by side in
 // Unity's order +X -X +Y -Y +Z -Z, mip 0 on the first row) at mip 0 along the Unity-space direction Dir, with D3D's cube
 // face conventions, into a new float4 Out. Tex is the graph's texture object input (its sampler TexSampler).
+// The atlas rows of each face are upside down: a cubemap's face data is stored top row first, and the atlas turned it
+// over as it does a Texture2D's bottom-up rows. The atlases are recorded in the base library that way, so every
+// reader takes the row from the bottom (w - p.y); read top-down, 83283571_p1's sunset sky dome showed the sun low and
+// its white core where the native shows pink, and the sun shafts lit the trusses (128 vs native 51).
 static FString OKCubeAtlasSample(const TCHAR* Tex, const TCHAR* Dir, const TCHAR* Out)
 {
 	return FString::Printf(TEXT(R"(float4 %s;
@@ -3805,7 +3809,7 @@ else { ma = ad.z; face = cd.z > 0 ? 4 : 5; st = cd.z > 0 ? float2(cd.x, -cd.y) :
 st = st / max(ma, 1e-5) * 0.5 + 0.5;
 float2 size; %s.GetDimensions(size.x, size.y); float w = size.y * 0.5;
 float2 p = clamp(st * w, 0.5, max(w - 0.5, 0.5));
-%s = Texture2DSampleLevel(%s, %sSampler, float2((face * w + p.x) / size.x, p.y / size.y), 0);
+%s = Texture2DSampleLevel(%s, %sSampler, float2((face * w + p.x) / size.x, (w - p.y) / size.y), 0);
 }
 )"), Out, Dir, Tex, Out, Tex, Tex);
 }
