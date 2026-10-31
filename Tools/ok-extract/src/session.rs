@@ -884,7 +884,8 @@ impl SessionPart {
                 } else if is_hair_shader {
                     textures.retain(|name, _| name == "_AnotherRamp");
                 } else if role == "head" && matches!(hair_shader_name.as_str(), "koikano/main_skin" | "shader forge/main_skin" | "xukmi/skinplus") {
-                    textures.retain(|name, _| matches!(name.as_str(), "_overtex1" | "_overtex2" | "_overtex3"));
+                    // The face's liquid (ChaControl siruLv `_liquidface`) samples its region mask and pattern.
+                    textures.retain(|name, _| matches!(name.as_str(), "_overtex1" | "_overtex2" | "_overtex3" | "_liquidmask" | "_Texture2" | "_Texture3"));
                 } else {
                     // Unity Standard-family emission (keyword _EMISSION): the map is kept, the renderer adds _EmissionColor x map.
                     let emits=mesh.mat.as_ref().is_some_and(|m|m.keywords.iter().any(|k|k=="_EMISSION"));
@@ -897,7 +898,10 @@ impl SessionPart {
                     let stage=mesh.mat.as_ref().is_some_and(|m|m.floats.contains_key("_OKStageEffect"));
                     let metal_map=mesh.mat.as_ref().is_some_and(|m|m.keywords.iter().any(|k|k=="_METALLICGLOSSMAP"));
                     let standard_normal=mesh.mat.as_ref().is_some_and(|m|m.shader.starts_with("Standard")&&m.keywords.iter().any(|k|k=="_NORMALMAP"));
+                    // The character shaders' liquid (ChaControl siruLv, the H scene's semen) samples its region mask
+                    // `_liquidmask`, pattern `_Texture2` and (Forge) normal `_Texture3`: kept so the skin and clothes show it.
                     textures.retain(|name,_|(standard_normal && name=="_BumpMap") || (emits && name=="_EmissionMap") || (metal_map && name=="_MetallicGlossMap") || name=="_OKLightmap" || name=="_OKLightmapDirection" || name=="_OKReflection" || name=="_OKSkyCube" || name=="_expression"
+                        || matches!(name.as_str(),"_liquidmask"|"_Texture2"|"_Texture3")
                         || (stage && matches!(name.as_str(),"_color"|"_mask"|"_Emission"|"_MaskFast"|"_MaskSlow"|"_MaskFull")));
                 }
                 textures

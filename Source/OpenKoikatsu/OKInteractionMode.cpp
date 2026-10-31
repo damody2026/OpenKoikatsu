@@ -141,6 +141,8 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
         FString Say;if(Body->TryGetStringField(TEXT("say"),Say)&&!Say.IsEmpty())Panel->Say(Say);
         // {"height":{"her":0..1,"him":0..1}}: their height slider (ChaFile shapeBody[0]) for testing the pair at other sizes.
         double BlushValue;if(Body->TryGetNumberField(TEXT("blush"),BlushValue))Panel->BlushTest=float(BlushValue);
+        // {"siru":[face,ftop,fbot,btop,bbot]}: set the liquid levels (0..2) directly, to look at how they draw.
+        const TArray<TSharedPtr<FJsonValue>>* SiruLevels=nullptr;if(Body->TryGetArrayField(TEXT("siru"),SiruLevels)&&SiruLevels->Num()==5){int32 L[5];for(int32 A=0;A<5;++A)L[A]=int32((*SiruLevels)[A]->AsNumber());Panel->SetSiruTest(L);}
         const TSharedPtr<FJsonObject>* Heights=nullptr;if(Body->TryGetObjectField(TEXT("height"),Heights)){
             // The pair player holds views into both sessions: reshaping under it crashed the game. Stop it first; the next pose
             // chosen makes the pair again at the new sizes.

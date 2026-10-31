@@ -133,8 +133,11 @@ private:
     // _liquid* as the original does every frame; where it lands follows the finish and which side of her he is on. It is
     // cleared when the scene ends, as the original cleans her up after H.
     int32 Siru[5]={0,0,0,0,0};void AddSiru(int32 Area);void ApplySiru();int32 SiruSide() const;
+    // Her materials that draw the liquid: component, parent, the liquid textures bound (diagnostic in /hscene).
+    TArray<FString> LiquidReport() const;float SiruRefresh=0.f;
     TWeakObjectPtr<class AKKPreviewActor> BlushFor;float Blush=-1.f,BlushShown=-1.f;bool bBlushLogged=false;
 public:
+    void SetSiruTest(const int32 (&Levels)[5]); // /hscene {"siru":[...]}: set her liquid levels directly
     float BlushTest=-1.f; // /hscene {"blush":v}: hold her blush at v (0..1) to compare shots; -1 follows her
 private:
     UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> BlushMats; TArray<float> BlushBase;

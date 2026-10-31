@@ -428,6 +428,8 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     if(!Gallery)return;
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
     UpdateFace();UpdateBlush(Delta);FrameCamera();
+    // The original writes the liquid every frame; her materials are remade when her clothes or pose parts change.
+    if(Siru[0]+Siru[1]+Siru[2]+Siru[3]+Siru[4]>0&&(SiruRefresh-=Delta)<=0.f){SiruRefresh=.5f;ApplySiru();}
     {const int32 Kind=Mode==0?(AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Prop:0):(Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Prop:0);
      const FString Key=FString::Printf(TEXT("%d|%d|%d"),Mode,ActivePose,ActiveAibu);const double T=FPlatformTime::Seconds();
      // A place change (bed, floor) resets the key too: the same pose, only the props change.
@@ -651,6 +653,20 @@ void UOKHScenePanel::ApplySiru(){
     TInlineComponentArray<UMeshComponent*> Comps;Girl->GetComponents(Comps);
     for(UMeshComponent* Comp:Comps)for(int32 I=0;I<Comp->GetNumMaterials();++I)if(auto* M=Cast<UMaterialInstanceDynamic>(Comp->GetMaterial(I)))
         for(int32 A=0;A<5;++A){float Was=0.f;if(M->GetScalarParameterValue(FHashedMaterialParameterInfo(Names[A]),Was)&&Was!=float(Siru[A]))M->SetScalarParameterValue(Names[A],float(Siru[A]));}
+}
+void UOKHScenePanel::SetSiruTest(const int32 (&Levels)[5]){for(int32 A=0;A<5;++A)Siru[A]=FMath::Clamp(Levels[A],0,2);ApplySiru();}
+TArray<FString> UOKHScenePanel::LiquidReport() const{
+    TArray<FString> Out;auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl))return Out;
+    TInlineComponentArray<UMeshComponent*> Comps;Girl->GetComponents(Comps);
+    auto Name=[](UMaterialInstanceDynamic* M,const TCHAR* P){UTexture* T=nullptr;return M->GetTextureParameterValue(FHashedMaterialParameterInfo(P),T)&&T?FString::Printf(TEXT("%s(%dx%d)"),*T->GetName(),int32(T->GetSurfaceWidth()),int32(T->GetSurfaceHeight())):FString(TEXT("-"));};
+    // Which of her session's parts carry the liquid textures at all (the renderer can only bind what the open made).
+    for(int32 P=0;P<Girl->Session.PartCount();++P){OkMeshView V{};const uint8* Bytes=nullptr;int32 Length=0;
+        if(Girl->Session.PartAt(P,V)&&Girl->Session.ShaderTexture(P,"_liquidmask",Bytes,Length))
+            Out.Add(FString::Printf(TEXT("session part %d %s/%s liquidmask=%d"),P,UTF8_TO_TCHAR(V.role?V.role:""),UTF8_TO_TCHAR(V.name?V.name:""),Length));}
+    for(UMeshComponent* Comp:Comps)for(int32 I=0;I<Comp->GetNumMaterials();++I)if(auto* M=Cast<UMaterialInstanceDynamic>(Comp->GetMaterial(I))){
+        float Top=0.f;if(!M->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("_liquidftop")),Top))continue;
+        Out.Add(FString::Printf(TEXT("%s#%d %s ftop=%g mask=%s tex2=%s tex3=%s"),*Comp->GetName(),I,M->Parent?*M->Parent->GetName():TEXT("?"),Top,*Name(M,TEXT("_liquidmask")),*Name(M,TEXT("_Texture2")),*Name(M,TEXT("_Texture3"))));}
+    return Out;
 }
 int32 UOKHScenePanel::SiruSide() const{
     // 0 when he is on her front (her face turns toward him), 1 when he is behind her.
@@ -990,6 +1006,14 @@ TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
     if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
     O->SetBoolField(TEXT("covered"),bCovered);{TArray<TSharedPtr<FJsonValue>> S;for(int32 V:Siru)S.Add(MakeShared<FJsonValueNumber>(V));O->SetArrayField(TEXT("siru"),S);}
+    {TArray<TSharedPtr<FJsonValue>> L;for(const FString& R:LiquidReport())L.Add(MakeShared<FJsonValueString>(R));O->SetArrayField(TEXT("liquid"),L);}
+    // Where their heads and feet are on the screen (0..1; -1 behind the camera): both whole in the shot or not.
+    {TArray<TSharedPtr<FJsonValue>> Shot;APlayerController* PC=GetOwningPlayer();FVector2D View(1.,1.);if(GEngine&&GEngine->GameViewport)GEngine->GameViewport->GetViewportSize(View);
+     for(AKKPreviewActor* A:{Gallery?Gallery->PreviewActor.Get():nullptr,bMaleHidden||!Gallery?nullptr:Gallery->PartnerActor.Get()})if(IsValid(A)&&PC&&View.X>1.)
+      for(const TCHAR* N:{TEXT("j_head"),TEXT("j_foot_L"),TEXT("j_foot_R")}){FVector P;FVector2D S(-View.X,-View.Y);
+       if(HBone(A,N,P))PC->ProjectWorldLocationToScreen(P+(N[2]==TEXT('h')?FVector(0,0,12):FVector::ZeroVector),S);
+       Shot.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(S.X/View.X*100)/100));Shot.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(S.Y/View.Y*100)/100));}
+     O->SetArrayField(TEXT("shot"),Shot);}
     O->SetNumberField(TEXT("blush"),BlushMats.IsEmpty()?-1.f:BlushShown);
     O->SetStringField(TEXT("state"),Current());O->SetStringField(TEXT("wanted"),Wanted);O->SetNumberField(TEXT("mode"),Mode);
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);

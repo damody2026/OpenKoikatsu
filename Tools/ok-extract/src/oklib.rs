@@ -1256,7 +1256,8 @@ pub fn session_cache_location() -> Option<PathBuf> {
 /// 27: coincident opaque/masked layers (Material Editor copies, duplicated accessories) step outward in draw order.
 /// 28: including an accessory's private-rig source mesh, which every pose is skinned from.
 /// 29: the geometry stays put again; parts carry their draw layer and the engine orders them (OpaqueSortPriority).
-const SESSION_CACHE_REVISION: u32 = 29;
+/// 30-32: the skin and clothes keep their liquid textures (_liquidmask, _Texture2, _Texture3) for the H scene's semen.
+const SESSION_CACHE_REVISION: u32 = 32;
 /// What the library contributes to an open, by content (not file times): the same library in another clone, after a
 /// git checkout or a copy gives the same identity, so its cached opens stay valid there. Memoized per process.
 fn library_identity(lib: &Path) -> String {

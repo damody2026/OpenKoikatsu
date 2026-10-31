@@ -611,6 +611,12 @@ pub(crate) fn extract_session_from_info(
         let t_skin = Instant::now();
         rig_memo(rig_key("body", mesh), mesh,
             |mesh| rig_mesh(mesh, "body", body_skel.as_ref(), head_skel.as_ref(), None, None, None, None, None));
+        // ChaControl writes the liquid amounts (siruLv) into the draw material; its liquid region mask and pattern come
+        // with it (the body mesh's own material has none, so the skin drew no liquid). After the rig memo, which
+        // returns the mesh as an earlier build made it.
+        if let (Some(bundle), Some(mat)) = (skin_material_bundle.as_ref(), mesh.mat.clone()) {
+            add_draw_liquid_textures(bundle, &mat, mesh, true);
+        }
         profile_tick("skin+rig body", t_skin);
         let t_body_tex = Instant::now();
         compose_body_texture(
@@ -2342,6 +2348,25 @@ fn bake_clothes_create_memo(game_root: &Path, card: &CardInfo, outfit: i32, part
     crate::view_memo(format!("bake_clothes_create|{:016x}|{outfit}|{part}|{}|{}|{}|{}|{zip:?}|{cols:?}", card.source_digest,
         entry.category_no, entry.id, entry.main_ab, entry.main_data),
         || bake_clothes_create_textures(game_root, entry, cols, pats, head_texs, body_texs))
+}
+
+/// The liquid textures (`_liquidmask` region mask, `_Texture2` pattern, `_Texture3` normal) of a character's draw material,
+/// oriented like the other raw masks the skin samples on UV0 (`orient`; the head's extras are flipped later with the rest).
+pub(crate) fn add_draw_liquid_textures(bundle: &crate::unity::ParsedBundle, mat: &crate::unity::MeshMaterial, mesh: &mut ExtractedMesh, orient: bool) {
+    for property in ["_liquidmask", "_Texture2", "_Texture3"] {
+        let Some(name) = mat.slot(property) else { continue };
+        let Some(png) = bundle.texture_png_named(name) else { continue };
+        mesh.shader_extra_textures.insert(property.into(), if orient { orient_raw_mask(png) } else { png });
+        if let Some(s) = bundle.texture_sampling_named(name) {
+            mesh.runtime_textures.insert(property.into(), [s.filter, s.wrap_u, s.wrap_v, i32::from(s.srgb), s.mip_count]);
+        }
+    }
+    if std::env::var_os("OK_DIAG").is_some() {
+        eprintln!("ok-extract: draw liquid {} mat={} slots={:?}", mesh.name, mat.name,
+            ["_liquidmask", "_Texture2", "_Texture3"].map(|p| mat.slot(p).map(str::to_string)));
+        eprintln!("ok-extract: draw liquid decoded={:?}",
+            ["_liquidmask", "_Texture2", "_Texture3"].map(|p| mesh.shader_extra_textures.get(p).map_or(0, Vec::len)));
+    }
 }
 
 fn base_bundles_stage(game_root: &Path, parsed_card: &Option<CardInfo>, vanilla: &ChaListCatalog,
