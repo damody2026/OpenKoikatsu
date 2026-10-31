@@ -783,8 +783,8 @@ fn studio_alpha_texture(role: &str, mesh: &ExtractedMesh) -> Option<Vec<u8>> {
     let alpha = mat.float("_alpha").unwrap_or(1.0);
     let out = if baked || alpha >= 1.0 || !crate::shader_family(&mat.shader).contains("main_item_studio_alpha") { png.clone() }
         else { crate::unity::scale_png_alpha(png, alpha.max(0.0)).unwrap_or_else(|| png.clone()) };
-    // AlphaToMask On, recorded from the material's own shader (still that shader: its state key): Studio draws with
-    // one sample, so a texel below half alpha is not drawn at all. 83572034_p1's moon (H_enry's main_item_studio_alpha)
+    // AlphaToMask On, from the material's own shader or the shader_states.json catalog (still that shader: its state
+    // key; KKS's own main_item_studio_alpha has it too): a texel below half alpha is not drawn at all. 83572034_p1's moon (H_enry's main_item_studio_alpha)
     // has alpha 0.17 over the dark side: drawn blended it showed a dim blue full moon where Studio has a crescent.
     // Only where the pass outputs the texture's alpha (main_item_studio_alpha: o0.w = _MainTex.a · _alpha); the opaque
     // main_item_studio carries the same AlphaToMask with alpha 1, and its texture alpha is a mask of its own (cutting
