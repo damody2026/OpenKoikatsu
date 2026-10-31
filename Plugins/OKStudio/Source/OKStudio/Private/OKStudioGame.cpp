@@ -378,6 +378,10 @@ int32 UOKStudioGame::Add(EOKSceneObjectKind Kind)
 	const int32 Id = Document->AddObject(Kind, FString(), Parent);
 	FOKSceneObject* O = Document->Find(Id);
 	if (Kind == EOKSceneObjectKind::Light) { O->Name = TEXT("主光"); O->Light.Type = EOKSceneLightType::Directional; O->Light.Intensity = 4.f; /* Studio's character light at 1 (4 per unit, as imported) */ O->Transform = FTransform(FRotator(-35.f, -120.f, 0.f), FVector(0.f, 0.f, 300.f)); }
+	// A new item or effect comes where the view looks (its orbit focus), not at the world origin, which a map's
+	// furniture often hides (the 自室 table): what was added is in sight to move on from.
+	if (Kind == EOKSceneObjectKind::Item || Kind == EOKSceneObjectKind::Effect)
+		O->Transform.SetLocation(Parent >= 0 ? Document->WorldTransform(Parent).InverseTransformPosition(Focus) : Focus);
 	if (Kind == EOKSceneObjectKind::Camera) O->Transform = FTransform(FRotator(Pitch, Yaw, 0.f), Focus - FRotator(Pitch, Yaw, 0.f).Vector() * Distance);
 	Select(Id);
 	return Id;

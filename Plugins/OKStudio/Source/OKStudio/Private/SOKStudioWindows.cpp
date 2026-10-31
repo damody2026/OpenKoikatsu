@@ -1,6 +1,7 @@
 ﻿// OK Studio panel: floating windows and their saved places, the dialog, the workspace tree's editing, scene files
 // (browser, backups, the open report, the resource check, stories), screenshots, the timeline and its export, settings.
 #include "SOKStudioPanel.h"
+#include "Algo/Find.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Widgets/SToolTip.h"
@@ -120,7 +121,14 @@ void SOKStudioPanel::OpenFloat(const FString& Id, bool bToggle)
 {
 	FFloat* F = Floats.Find(Id);
 	if (!F) return;
-	if (F->bOpen && bToggle) { CloseFloat(Id); return; }
+	// A toggle closes the window only when it is in front: one under another window (the 動畫 page over the card list)
+	// comes up instead, as clicking its menu button again would mean.
+	if (F->bOpen && bToggle && (!F->Slot || F->Slot->GetZOrder() >= TopZ)) { CloseFloat(Id); return; }
+	if (Algo::FindByPredicate(AddLists, [&Id](const TCHAR* L) { return Id == L; }))
+	{
+		CloseAddLists(Id);
+		if (Page == EPage::ItemAdd || Page == EPage::LightAdd) SetPage(EPage::None);
+	}
 	F->bOpen = true;
 	if (Id == TEXT("cards") && CardFiles.IsEmpty()) ScanCardFolder();
 	if (Id == TEXT("scenes")) ScanScenes();
@@ -136,6 +144,11 @@ void SOKStudioPanel::OpenFloat(const FString& Id, bool bToggle)
 	bLayoutDirty = true;
 	DeferFloat(Id);
 	DeferSubMenu();
+}
+
+void SOKStudioPanel::CloseAddLists(const FString& Keep)
+{
+	for (const TCHAR* Other : AddLists) if (Keep != Other && IsFloatOpen(Other)) CloseFloat(Other);
 }
 
 void SOKStudioPanel::CloseFloat(const FString& Id)
@@ -623,7 +636,13 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	FolderButton(TEXT("自動備份"), UOKStudioGame::BackupDirectory());
 	TArray<FString> Subs;
 	IFileManager::Get().FindFiles(Subs, *(SceneFolder / TEXT("*")), false, true);
-	for (const FString& S : Subs) FolderButton(TEXT("▸ ") + S, SceneFolder / S);
+	// "<scene>_cards" beside its scene holds the cards an import took out of it: no scenes to browse there.
+	auto SceneCards = [this](const FString& S)
+	{
+		const FString Scene = SceneFolder / S.LeftChop(6);
+		return S.EndsWith(TEXT("_cards")) && (FPaths::FileExists(Scene + TEXT(".okscene")) || FPaths::FileExists(Scene + TEXT(".png")));
+	};
+	for (const FString& S : Subs) if (!SceneCards(S)) FolderButton(TEXT("▸ ") + S, SceneFolder / S);
 	if (SceneFolder != UOKStudioGame::SceneDirectory() && SceneFolder != KStudioFolder() && SceneFolder != UOKStudioGame::BackupDirectory()) FolderButton(TEXT(".. 上一層"), FPaths::GetPath(SceneFolder));
 
 	// Pictures of the scenes, four across.
@@ -674,7 +693,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.f)[SNew(SBox).HeightOverride(20.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("場景名稱"))).Text(FText::FromString(SaveAsName))
+			+ SHorizontalBox::Slot().FillWidth(1.f)[SNew(SBox).HeightOverride(20.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("場景名稱"))).Text_Lambda([this] { return FText::FromString(SaveAsName); })
 				.OnTextChanged_Lambda([this](const FText& T) { SaveAsName = T.ToString(); })
 				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type C) { SaveAsName = T.ToString(); if (C == ETextCommit::OnEnter) SaveNamed(SaveAsName); })]]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[Button(FText::FromString(bSceneSaveMode ? TEXT("另存") : TEXT("儲存")), [this]

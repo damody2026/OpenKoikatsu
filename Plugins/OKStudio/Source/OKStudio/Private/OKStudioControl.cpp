@@ -572,7 +572,7 @@ namespace
 		// Leaves the studio (as its close button: the mode that started it comes back, its UI restored). The channel
 		// closes with the studio; with "name", a whole-window screenshot (UI included) is taken a second later to
 		// Saved/OKStudio/mcp_ui/<name>.png, showing what the mode looks like afterwards.
-		// Clicks a shown button by its text, as a person would ({"text": "全裸", "index": 0}; "contains": true matches part of
+		// Clicks a shown button by its text, as a person would, a list row too ({"text": "全裸", "index": 0}; "contains": true matches part of
 		// the text): the button's own click handler runs, so a test exercises the UI and not a shortcut around it. The
 		// matches (in window order, top to bottom) are listed when "index" is out of range. "tag": true matches the widget's
 		// tag (FTagMetaData) instead, for picture buttons (thumbnails) that show no text.
@@ -619,7 +619,7 @@ namespace
 					const FString T = StaticCastSharedRef<STextBlock>(W)->GetText().ToString();
 					if (bContains ? T.Contains(Text) : T == Text)
 						for (TSharedPtr<SWidget> P = W->GetParentWidget(); P; P = P->GetParentWidget())
-							if (P->GetType() == TEXT("SButton") || P->GetType() == TEXT("SCheckBox")) { Found.Add(P.ToSharedRef()); Labels.Add(T); break; }
+							if (P->GetType() == TEXT("SButton") || P->GetType() == TEXT("SCheckBox") || P->GetType().ToString().StartsWith(TEXT("STableRow"))) { Found.Add(P.ToSharedRef()); Labels.Add(T); break; }
 				}
 				FChildren* Children = W->GetChildren();
 				for (int32 I = 0; Children && I < Children->Num(); ++I) Walk(Children->GetChildAt(I));
@@ -628,6 +628,14 @@ namespace
 			if (!Found.IsValidIndex(Index)) return Result(false, FString::Printf(TEXT("%d buttons match: %s"), Found.Num(), *FString::Join(Labels, TEXT(" | "))));
 			if (!Found[Index]->IsEnabled()) return Result(false, TEXT("the button is disabled"));
 			if (Found[Index]->GetType() == TEXT("SCheckBox")) StaticCastSharedRef<SCheckBox>(Found[Index])->ToggleCheckedState();
+			else if (Found[Index]->GetType().ToString().StartsWith(TEXT("STableRow")))
+			{
+				// A list row has no click handler of its own: a left click at its middle, through Slate as the mouse would.
+				const FVector2D At = Found[Index]->GetTickSpaceGeometry().GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5));
+				FSlateApplication& App = FSlateApplication::Get();
+				App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(0, 0, At, At, TSet<FKey>{ EKeys::LeftMouseButton }, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+				App.ProcessMouseButtonUpEvent(FPointerEvent(0, 0, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+			}
 			else StaticCastSharedRef<SButton>(Found[Index])->SimulateClick();
 			TSharedRef<FJsonObject> O = Result(true);
 			O->SetNumberField(TEXT("matches"), Found.Num());

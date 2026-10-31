@@ -470,7 +470,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		ULightComponent* Light = nullptr;
 		switch (Object.Light.Type)
 		{
-		case EOKSceneLightType::Directional: Light = NewObject<UDirectionalLightComponent>(this); break;
+		case EOKSceneLightType::Directional: { UDirectionalLightComponent* Sun = NewObject<UDirectionalLightComponent>(this); Sun->ForwardShadingPriority = 2000 + Object.Id; Light = Sun; break; }
 		case EOKSceneLightType::Spot:
 		{
 			USpotLightComponent* Spot = NewObject<USpotLightComponent>(this);
@@ -1015,6 +1015,7 @@ void AOKSceneActor::ApplyMapTime(const FTransform& MapPlace)
 	if (!MapSun)
 	{
 		MapSun = NewObject<UDirectionalLightComponent>(this, TEXT("MapSun"));
+		MapSun->ForwardShadingPriority = 1000;
 		MapSun->SetMobility(EComponentMobility::Movable);
 		MapSun->SetupAttachment(RootComponent);
 		MapSun->SetCastShadows(true);
@@ -1054,6 +1055,9 @@ void AOKSceneActor::AddMapLights(AKKPreviewActor* Map, const FString& Model, con
 	const FString Json = FOkSession::OkModelMapLights(LibraryDirectory(), Model, Root);
 	TArray<TSharedPtr<FJsonValue>> Lights;
 	if (!Map || Json.IsEmpty() || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Lights)) return;
+	// Each directional light gets its own forward shading priority (the editor build reports equal ones on screen): the
+	// map's lights in order, under the map sun (1000) and the scene's own lights (2000 + id).
+	int32 DirectionalPriority = 0;
 	for (const TSharedPtr<FJsonValue>& V : Lights)
 	{
 		const TSharedPtr<FJsonObject> L = V->AsObject();
@@ -1070,7 +1074,7 @@ void AOKSceneActor::AddMapLights(AKKPreviewActor* Map, const FString& Model, con
 		const int32 Kind = L->GetIntegerField(TEXT("kind"));
 		const float Range = float(L->GetNumberField(TEXT("range"))) * 100.f;
 		ULightComponent* Light = nullptr;
-		if (Kind == 1) Light = NewObject<UDirectionalLightComponent>(Map);
+		if (Kind == 1) { UDirectionalLightComponent* Sun = NewObject<UDirectionalLightComponent>(Map); Sun->ForwardShadingPriority = DirectionalPriority++; Light = Sun; }
 		else if (Kind == 0)
 		{
 			USpotLightComponent* Spot = NewObject<USpotLightComponent>(Map);

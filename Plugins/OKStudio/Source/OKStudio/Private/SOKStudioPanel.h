@@ -288,7 +288,7 @@ public:
 					+ SConstraintCanvas::Slot().Alignment(FVector2D(0.f, 0.f)).Anchors(FAnchors(0.f, 1.f)).Offset(FMargin(0.f, -60.f, 478.f, 60.f))
 						[Tagged(TEXT("TransformBar"), SNew(SBox).Visibility_Lambda([this] { return bShowTransform ? EVisibility::Visible : EVisibility::Collapsed; })[MakeTransformBar()])]
 					+ SConstraintCanvas::Slot().Expose(DetailSlot).Alignment(FVector2D(0.f, 0.f)).Anchors(FAnchors(0.f, 0.f)).Offset(TAttribute<FMargin>::CreateLambda([this] { return PageRect(); }))
-						[Tagged(TEXT("DetailWindow"), SNew(SBox).Visibility_Lambda([this] { return Page == EPage::None ? EVisibility::Collapsed : EVisibility::Visible; })
+						[Tagged(TEXT("DetailWindow"), SNew(SBox).Visibility_Lambda([this] { return Page == EPage::None || !PageFitsSelection() ? EVisibility::Collapsed : EVisibility::Visible; })
 							[SNew(SFrontArea).OnFront([this] { BringToFront(DetailSlot); })
 								[Window(TAttribute<FText>::CreateLambda([this] { return FText::FromString(PageTitle()); }), SAssignNew(DetailBody, SBox), [this] { SetPage(EPage::None); }, Panel(),
 									[this](const FVector2D& D) { DetailOffsets.FindOrAdd(uint8(Page)) += D; bLayoutDirty = true; })]])]
@@ -333,7 +333,12 @@ public:
 	void RegisterCommands()
 	{
 		auto Simple = [this](const FString& Id, const FString& Label, TFunction<void()> Do) { AddCommand(Id, Label, [Do](const FString&) { Do(); return true; }); };
-		auto Page_ = [this](const FString& Id, const FString& Label, EPage P) { AddCommand(Id, Label, [this, P](const FString&) { SetPage(Page == P ? EPage::None : P); return true; }); };
+		// As a window toggle: a page under another window comes up instead of closing.
+		auto Page_ = [this](const FString& Id, const FString& Label, EPage P) { AddCommand(Id, Label, [this, P](const FString&)
+		{
+			if (Page == P && DetailSlot && DetailSlot->GetZOrder() < TopZ) BringToFront(DetailSlot); else SetPage(Page == P ? EPage::None : P);
+			return true;
+		}); };
 		auto Float_ = [this](const FString& Id, const FString& Label, const FString& Window) { AddCommand(Id, Label, [this, Window](const FString&) { OpenFloat(Window, true); return true; }); };
 		// Scene files.
 		Simple(TEXT("scene.new"), TEXT("新場景"), [this]
@@ -343,6 +348,7 @@ public:
 				Game->ReleaseSceneResources();
 				Game->Document->Objects.Reset(); Game->Document->Tracks.Reset(); Game->Document->Bookmarks.Reset(); Game->Document->NextId = 1; Game->Document->ActiveCamera = -1;
 				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->File.Reset();
+				SaveAsName = FDateTime::Now().ToString(TEXT("scene_%Y%m%d_%H%M%S")); // not the last scene's name to overwrite
 				Game->Add(EOKSceneObjectKind::Light); Game->Document->NotifyChanged();
 				Game->ResetHistory(); Game->bDirty = false;
 			});
@@ -362,13 +368,14 @@ public:
 		Float_(TEXT("scene.recent"), TEXT("最近的場景"), TEXT("recent"));
 		Float_(TEXT("app.material"), TEXT("材質編輯器"), TEXT("material"));
 		Float_(TEXT("app.animcontrol"), TEXT("動畫控制器"), TEXT("animctl"));
+		AddCommand(TEXT("anim.partner"), TEXT("配給對方"), [this](const FString&) { return PairAnim(); });
 		Simple(TEXT("anim.locate"), TEXT("動作定位當前"), [this] { LocateAnim(); });
 		Simple(TEXT("view.grid"), TEXT("視窗格線"), [this] { Game->bShowGrid = !Game->bShowGrid; });
 		Simple(TEXT("view.helpers"), TEXT("隱藏全部輔助"), [this] { Game->bHideHelpers = !Game->bHideHelpers; SetStatus(Game->bHideHelpers ? TEXT("輔助全部隱藏（再按一次顯示）") : TEXT("輔助顯示")); });
 		Float_(TEXT("scene.report"), TEXT("讀取報告"), TEXT("report"));
 		Float_(TEXT("scene.resources"), TEXT("資源檢查"), TEXT("resources"));
 		// Adding objects.
-		Simple(TEXT("add.folder"), TEXT("資料夾"), [this] { Game->Add(EOKSceneObjectKind::Folder); });
+		Simple(TEXT("add.folder"), TEXT("資料夾"), [this] { Game->Add(EOKSceneObjectKind::Folder); AddedStatus(); });
 		AddCommand(TEXT("add.character"), TEXT("角色"), [this](const FString& Arg)
 		{
 			if (Arg.IsEmpty()) { OpenFloat(TEXT("cards")); return true; }
@@ -389,9 +396,10 @@ public:
 				O->Name = Arg == TEXT("spot") ? TEXT("聚光") : Arg == TEXT("point") ? TEXT("點光") : Arg == TEXT("area") ? TEXT("面光") : TEXT("方向光");
 				Game->Document->NotifyChanged();
 			}
+			AddedStatus();
 			return true;
 		});
-		Simple(TEXT("add.camera"), TEXT("相機"), [this] { Game->CameraFromView(); });
+		Simple(TEXT("add.camera"), TEXT("相機"), [this] { Game->CameraFromView(); AddedStatus(); });
 		AddCommand(TEXT("add.effect"), TEXT("特效"), [this](const FString& Arg)
 		{
 			if (Arg.IsEmpty()) { OpenFloat(TEXT("effects")); return true; }
@@ -400,6 +408,7 @@ public:
 			const int32 Id = Game->Add(EOKSceneObjectKind::Effect);
 			if (FOKSceneObject* O = Game->Document->Find(Id)) { O->Effect.Effect = E->Id; O->Name = E->Name; Game->Document->NotifyChanged(); }
 			FOKStudioSettings::Get().UseRecent(TEXT("effect:") + E->Id);
+			AddedStatus();
 			return true;
 		});
 		Float_(TEXT("add.map"), TEXT("地圖"), TEXT("maps"));
@@ -467,7 +476,7 @@ public:
 		{
 			static const TCHAR* Ids[] = { TEXT("menu.add"), TEXT("menu.character"), TEXT("menu.sound"), TEXT("menu.system") };
 			static const TCHAR* Labels[] = { TEXT("加入"), TEXT("角色"), TEXT("音效"), TEXT("系統") };
-			Simple(Ids[M], Labels[M], [this, M] { RootMenu = RootMenu == M ? -1 : M; DeferSubMenu(); });
+			Simple(Ids[M], Labels[M], [this, M] { if (RootMenu == 0 && M != 0) LeaveAddMenu(); RootMenu = RootMenu == M ? -1 : M; DeferSubMenu(); });
 		}
 		Page_(TEXT("page.object"), TEXT("屬性"), EPage::Object);
 		Page_(TEXT("page.state"), TEXT("狀態"), EPage::State);
@@ -1097,12 +1106,23 @@ public:
 		}
 	}
 
+	/** Whether the page has something to show for the selection: a character page waits (hidden, not closed) while no
+	 *  character is selected, as HS2Studio6's character menus do, instead of standing as an empty panel. */
+	bool PageFitsSelection() const
+	{
+		if (Page != EPage::State && Page != EPage::Bones && Page != EPage::Anim && Page != EPage::Object) return true;
+		const FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Game->SelectedId) : nullptr;
+		return O && (Page == EPage::Object || O->Kind == EOKSceneObjectKind::Character);
+	}
+
 	void SetPage(EPage P)
 	{
 		// The scene files and the character loader are their own windows now.
 		if (P == EPage::Files) { OpenFloat(TEXT("scenes")); return; }
 		if (P == EPage::CharLoader) { OpenFloat(TEXT("cards")); return; }
 		Page = P;
+		// The item and light lists open where the add lists do (beside the menus): one add list at a time.
+		if (P == EPage::ItemAdd || P == EPage::LightAdd) CloseAddLists(FString());
 		if (P != EPage::None && DetailSlot) BringToFront(DetailSlot);
 		RegisterActiveTimer(0.f, FWidgetActiveTimerDelegate::CreateLambda([this](double, float) { RebuildDetailBody(); RefreshRows(); RebuildSubMenu(); return EActiveTimerReturnType::Stop; }));
 	}
@@ -1154,6 +1174,15 @@ public:
 	void RegisterFloats();
 	void OpenFloat(const FString& Id, bool bToggle = false);
 	void CloseFloat(const FString& Id);
+	/** The add lists open in one place beside the menus (HS2Studio6 shows one at a time): a new one replaces the others. */
+	static constexpr const TCHAR* AddLists[] = { TEXT("cards"), TEXT("scenes"), TEXT("maps"), TEXT("effects") };
+	void CloseAddLists(const FString& Keep);
+	/** Another root menu taken after 加入: its lists close (they stand where the character pages open, as in HS2Studio6). */
+	void LeaveAddMenu()
+	{
+		for (const TCHAR* L : { TEXT("cards"), TEXT("maps"), TEXT("effects") }) if (IsFloatOpen(L)) CloseFloat(L);
+		if (Page == EPage::ItemAdd || Page == EPage::LightAdd) SetPage(EPage::None);
+	}
 	bool IsFloatOpen(const FString& Id) const { const FFloat* F = Floats.Find(Id); return F && F->bOpen; }
 	void RebuildFloat(const FString& Id);
 	void DeferFloat(const FString& Id);
@@ -1389,6 +1418,8 @@ public:
 public:
 
 	void SetStatus(const FString& Text) { if (Status) Status->SetText(FText::FromString(Text)); }
+	/** The status after adding an object: what came in (the selection), not the last character's line. */
+	void AddedStatus() { if (const FOKSceneObject* O = Obj()) SetStatus(FString::Printf(TEXT("加入%s %s"), OKStudioPanelText::KindTag(O->Kind), *O->Name)); }
 
 	bool SaveNamed(const FString& Name)
 	{
@@ -1408,7 +1439,7 @@ public:
 		FString E;
 		const bool bOk = Game->Load(Path, E);
 		SetStatus(bOk ? TEXT("已讀取 ") + FPaths::GetBaseFilename(Path) : E);
-		if (bOk) ReportPending = 90;
+		if (bOk) { ReportPending = 90; SaveAsName = FPaths::GetBaseFilename(Path); }
 		return bOk;
 	}
 	/** Scene files the browser lists now (UserData/Studio/scene when it was never opened). */
@@ -2522,7 +2553,10 @@ private:
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("定位當前")), [this] { LocateAnim(); }, 0.f, 18.f, false, 10.f)]
-			+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("動畫控制器")), [this] { RunCommand(TEXT("app.animcontrol")); }, 0.f, 18.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("animctl")); }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[OKStudioStyle::Button(FText::FromString(TEXT("動畫控制器")), [this] { RunCommand(TEXT("app.animcontrol")); }, 0.f, 18.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("animctl")); }), 10.f)]
+			// The H partner in one click: the other sex's motion on the other character, at this one's place.
+			+ SHorizontalBox::Slot().FillWidth(1.f)[OKStudioStyle::Button(FText::FromString(TEXT("配給對方")), [this] { RunCommand(TEXT("anim.partner")); }, 0.f, 18.f, false, 10.f, OKStudioStyle::ButtonFill(),
+				TAttribute<bool>::CreateLambda([this] { const FOKSceneObject* X = Obj(); return X && X->Kind == EOKSceneObjectKind::Character && PartnerAnim(X->Character); }))]
 		];
 		{
 			TSharedRef<SHorizontalBox> Tabs = SNew(SHorizontalBox);
@@ -2585,6 +2619,53 @@ public:
 		const FOKStudioAnim& A = C.Anims[Index];
 		X->Character.StudioAnimeKind = A.Kind; X->Character.StudioAnimeGroup = A.Group; X->Character.StudioAnimeCategory = A.Category; X->Character.StudioAnimeNo = A.No; X->Character.AnimFile.Reset();
 		X->Character.Time = 0.f;
+		Changed();
+		DeferRebuild();
+		return true;
+	}
+	/** The other side of the selected character's H motion (女H挿入／騎乗位／弱ループ → 男H挿入／騎乗位／弱ループ): the
+	 *  catalogue motion of the same category, number and name for the other sex. */
+	static const FOKStudioAnim* PartnerAnim(const FOKSceneCharacter& C)
+	{
+		const FOKStudioAnim* A = C.StudioAnimeNo >= 0 ? FOKStudioCatalog::Get().FindAnim(C.StudioAnimeKind, C.StudioAnimeGroup, C.StudioAnimeCategory, C.StudioAnimeNo) : nullptr;
+		if (!A || A->Sex == 0) return nullptr;
+		return FOKStudioCatalog::Get().Anims.FindByPredicate([A](const FOKStudioAnim& B)
+		{
+			return B.Kind == A->Kind && B.Category == A->Category && B.No == A->No && B.Name == A->Name && B.Sex != 0 && B.Sex != A->Sex && !B.File.IsEmpty();
+		});
+	}
+	/** Puts the partner motion on the other character (another selected one, else the nearest), at the selected
+	 *  character's place (a pair is authored on one origin), with the same controls; both start together. */
+	bool PairAnim()
+	{
+		FOKSceneObject* X = Obj();
+		const FOKStudioAnim* B = X && X->Kind == EOKSceneObjectKind::Character ? PartnerAnim(X->Character) : nullptr;
+		if (!B || !Game.IsValid()) return false;
+		FOKSceneObject* Y = nullptr;
+		for (const int32 Id : Game->Selection)
+			if (FOKSceneObject* S = Game->Document->Find(Id); S && S != X && S->Kind == EOKSceneObjectKind::Character) { Y = S; break; }
+		if (!Y)
+		{
+			double Best = TNumericLimits<double>::Max();
+			for (FOKSceneObject& S : Game->Document->Objects)
+			{
+				if (&S == X || S.Kind != EOKSceneObjectKind::Character) continue;
+				const double D = FVector::DistSquared(Game->Document->WorldTransform(S.Id).GetLocation(), Game->Document->WorldTransform(X->Id).GetLocation());
+				if (D < Best) { Best = D; Y = &S; }
+			}
+		}
+		if (!Y) { SetStatus(TEXT("場景裡沒有另一個角色可以配對")); return false; }
+		Y->Character.StudioAnimeKind = B->Kind; Y->Character.StudioAnimeGroup = B->Group; Y->Character.StudioAnimeCategory = B->Category; Y->Character.StudioAnimeNo = B->No;
+		Y->Character.AnimFile.Reset();
+		Y->Character.AnimFloats = X->Character.AnimFloats;
+		Y->Character.Speed = X->Character.Speed;
+		Y->Character.Time = X->Character.Time = 0.f;
+		// Reparenting may move the objects: X's place is read first.
+		const int32 YId = Y->Id, Parent = X->Parent;
+		const FString Bone = X->AttachBone, Name = X->Name;
+		const FTransform Place = X->Transform;
+		Game->Document->Reparent(YId, Parent);
+		if (FOKSceneObject* Z = Game->Document->Find(YId)) { Z->AttachBone = Bone; Z->Transform = Place; SetStatus(FString::Printf(TEXT("%s 配上 %s：%s"), *Z->Name, *Name, *B->Name)); }
 		Changed();
 		DeferRebuild();
 		return true;

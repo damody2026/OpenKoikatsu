@@ -164,7 +164,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 	Subs.Sort();
 	for (const FString& S : Subs) if (!S.StartsWith(TEXT("."))) FolderButton(TEXT("▸ ") + S, CardFolder / S);
 
-	// A page of cards: 6 across, 3 down.
+	// A page of cards: 6 across, 3 down. Each keeps its size (a folder of two cards does not blow them up to fill the area).
 	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(2.f));
 	const int32 PerPage = 18, First = CardPage * PerPage;
 	for (int32 I = First; I < FMath::Min(First + PerPage, CardFiles.Num()); ++I)
@@ -221,7 +221,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(120.f)[SNew(SScrollBox) + SScrollBox::Slot()[Folders]]]
-			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(2.f)[Grid]]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(2.f).HAlign(HAlign_Left).VAlign(VAlign_Top)[Grid]]
 			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(132.f)[Pick]]
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)
@@ -246,6 +246,7 @@ bool SOKStudioPanel::AddItemTo(int32 Group, int32 Category, int32 No, bool bAsCh
 	Game->Select(Id);
 	PickItem(Group, Category, No);
 	FOKStudioSettings::Get().UseRecent(ItemKey(Group, Category, No));
+	AddedStatus();
 	return true;
 }
 
