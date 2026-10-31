@@ -896,7 +896,12 @@ FString AOKStreetSocialScene::FreeTalkDoing() const{
  const auto& S=*State;
  if(S.OutingGirl!=INDEX_NONE){
   const FOKStreetActivity* A=OKStreetFindActivity(S.OutingActivity);
-  return A?OKMsg(TEXT("ui.outing.walking_prepare_activity"), {{TEXT("outing_place"), *S.OutingPlace}, {TEXT("activity_name"), A->Name}}):OKMsg(TEXT("ui.outing.walking_with_player_to"), {{TEXT("outing_place"), *S.OutingPlace}});
+  // How far is still left: told only "walking to the dorm", 胡桃 said "here's the door, see you tomorrow" with most of
+  // the walk ahead (R6-26).
+  float Left=0.f;if(S.OutingRoute.IsValidIndex(S.OutingStep)){Left=FVector::Dist2D(S.Male,S.OutingRoute[S.OutingStep]);
+   for(int32 K=S.OutingStep+1;K<S.OutingRoute.Num();++K)Left+=FVector::Dist2D(S.OutingRoute[K-1],S.OutingRoute[K]);}
+  const FString Way=Left>=500.f?OKMsg(TEXT("ui.outing.walking_left"),{{TEXT("meters"),FMath::RoundToInt(Left/100.f)}}):FString();
+  return (A?OKMsg(TEXT("ui.outing.walking_prepare_activity"), {{TEXT("outing_place"), *S.OutingPlace}, {TEXT("activity_name"), A->Name}}):OKMsg(TEXT("ui.outing.walking_with_player_to"), {{TEXT("outing_place"), *S.OutingPlace}}))+Way;
  }
  if(S.Pair.Partner!=INDEX_NONE){
   const auto& P=S.Pair;

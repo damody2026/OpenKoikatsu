@@ -72,7 +72,7 @@ he_calls_about_date = "(A note from the game, not his words: he is calling you a
 yandere_comes = "{name} hung up and is walking your way..."
 yandere_arrived = "{name} has come for you."
 cancelled_prefix = "Canceled: "
-late_by = "Late by {hours}:{minutes, number, ::integer-width/*00}"
+late_by = "late by {hours, plural, =0 {} other {# h }}{minutes} min"
 meet_with_summary = "Date with {character_name}: {what} — {person_name}"
 clash_notice = "Note: you already have a meeting around then ({label}); sort it out."
 no_such_place_note = "(System note, not his words: you just agreed to meet at \"{place_name}\", but there is no such place in town, so nothing was arranged. Tell him in your own words and pick a place the town has.)"
@@ -84,7 +84,7 @@ no_place_note = "(System note, not his words: you just agreed to meet {day} at {
 closed_then_note = "(System note, not his words: you just agreed to meet at {place_name}, but it is not open then ({why}). Remind him in your own words and pick another time or place.)"
 meeting_label = "Meetup"
 promised_meet_with_him = "Plans with him to {label} at {place_name}{what}"
-time_until_later = "{hours}:{minutes, number, ::integer-width/*00} from now"
+time_until_later = "in {hours, plural, =0 {} other {# h }}{minutes} min"
 
 [ui.bank]
 a_shares_account_label = "A-share account"
@@ -429,6 +429,7 @@ you_are_label = "You are"
 treat_paid_back = "he said it was his treat and gave you back the ¥{amount} you had just paid yourself"
 buy_for_self_button = "Buy"
 too_full_to_order = "(The {item} you meant to order was not ordered: you are already full. It is not coming, so do not say it is; you can simply say you could not eat it. You can still order a drink.)"
+gift_not_carried = "(The {item} he said he was giving you was not given: he does not have one and none is sold here. You did not receive it, so do not say you took it.)"
 not_sold_here_order = "(The \"{item}\" you meant to order was not ordered: this shop does not sell it. It is not coming; tell him plainly it is not sold here and ask whether he wants something close from the menu instead. The same for what he ordered: if it was not ordered, tell him.)"
 still_has_one_order = "(The \"{item}\" {for, select, her {you} other {he}} asked for was not ordered this time: {for, select, her {you} other {he}} still {for, select, her {have} other {has}} one like it on the table (one at a time). It will not come, so do not say it will; order it after finishing.)"
 already_bought_order = "(The \"{item}\" {for, select, her {you} other {he}} asked for was not bought again: it was just bought for {for, select, her {you} other {him}}. No second one; do not say another was bought.)"
@@ -1260,6 +1261,7 @@ opened_go_in = "{place} is open now. You go in together."
 closed_at_door = "{place} is closed: {why}"
 walking_prepare_activity = "Walking to {outing_place} with the player, getting ready to {activity_name}"
 walking_with_player_to = "Walking to {outing_place} with the player"
+walking_left = " (still on the way, about {meters} m to go; you are there only when you arrive)"
 with_player_doing = "With the player {solo_activity}"
 
 [ui.party]

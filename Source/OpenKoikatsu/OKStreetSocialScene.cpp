@@ -1390,10 +1390,16 @@ void AOKStreetSocialScene::ExecuteFreeTalkAction(int32 Character,const FString& 
   if(!Handled)if(const int32 Until=ShiftUntil(Character);Until>0){Handled=true;
    const FOKStreetPlanBlock* B=BlockNow(Character,int32(OKStreetMindNow(S)%1440));const FOKStreetPlace* P=B?OKStreetFindPlace(B->Place):nullptr;
    const FString Place=P?FString(P->Name):B?B->Place:FString();const FString At=FString::Printf(TEXT("%d:%02d"),Until/60,Until%60);
+   // The activity is at the shop she is working in and he is there: he is her customer (his order is the shop's), not
+   // asking her out. Told "on shift, after 22:00" for the latte he ordered from 三月七 at her counter, she said "showing
+   // you round has to wait till I'm off" to a man who had only asked for a coffee (R6-25).
+   const FOKStreetActivity* Act=OKStreetFindActivity(Action);const FOKStreetPlace* ActAt=OKStreetFindPlace(Act&&Act->Place?FString(Act->Place):Action.StartsWith(TEXT("go:"))?Action.Mid(3):Action);
+   if(B&&ActAt&&ActAt->Id==B->Place&&PlaceHere(S.Male)==B->Place){UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s is him served at %s where actor=%d works, not an outing"),*Action,*B->Place,Character);}
+   else{
    // Named, not "you": in a group the model writes every girl's lines, and "you are on shift till three" became his.
    S.TellHer.Add(OKMsg(TEXT("ui.invite.on_shift_tell_her"),{{TEXT("name"),SpokenName(Character)},{TEXT("place"),Place},{TEXT("until"),At}}));
    S.Message=OKMsg(TEXT("ui.invite.on_shift_player"),{{TEXT("name"),S.Manifest.Characters[Character].Name},{TEXT("place"),Place},{TEXT("until"),At}});RefreshUI();
-   UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s not started, actor=%d is on shift until %s"),*Action,Character,*At);}
+   UE_LOG(LogTemp,Display,TEXT("Street free talk action: %s not started, actor=%d is on shift until %s"),*Action,Character,*At);}}
   if(Handled){}
   // In the middle of an activity with him, an action that names no activity or place is her word for what they are doing
   // ("take_photo" while their photo was being taken): told it "failed", she said the camera had died and they gave up
@@ -1614,9 +1620,18 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    // "Take it, it was for you anyway" — "thank you": the gift is given (her own act field may forget it). Only something
    // he still carries (her act may have given it already).
    {FString Gift;Verdict->TryGetStringField(TEXT("gift"),Gift);
-    if(!Gift.IsEmpty()&&L->PendingGift.IsEmpty()&&!L->Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift");}))
+    if(!Gift.IsEmpty()&&L->PendingGift.IsEmpty()&&!L->Choices.ContainsByPredicate([](const FOKStreetPendingChoice& C){return C.Kind==TEXT("gift");})){
+     // Not in his bag: "I'll buy this one and give it to you" at the shop that sells it buys it first (as the buy-as-gift
+     // button); sold nowhere here, she is told nothing was given. 胡桃 thanked him for the 烟火图鉴 he "bought" at the
+     // bookstore, and no money left his wallet and no book reached her (R6-28).
+     auto Matches=[&](const FString& Id,const FOKStreetCatalogItem& I){return Id==Gift||OKStreetNameMatches(Gift,I.Name);};
+     const bool Carried=L->Store.Inventory.ContainsByPredicate([&](const FString& Id){const auto* I=L->Catalog.Find(Id);return I&&Matches(Id,*I);});
+     if(!Carried&&Weak.IsValid()){const FString Shop=Weak->ShopPlaceHere();const FOKStreetCatalogItem* Sold=nullptr;
+      if(!Shop.IsEmpty())for(const auto* I:Weak->ItemsHere(Shop))if(I&&I->Giftable&&Matches(I->Id,*I)){Sold=I;break;}
+      if(Sold){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d gift %s not carried, bought here first"),Character,*Sold->Id);Weak->BuyForGift(Sold->Id);}
+      else{L->TellHer.Add(OKMsg(TEXT("ui.economy.gift_not_carried"),{{TEXT("item"),Gift}}));UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d gift %s: he has none and none is sold here"),Character,*Gift);}}
      for(const FString& Item:L->Store.Inventory)if(const auto* Known=L->Catalog.Find(Item);Known&&(Item==Gift||OKStreetNameMatches(Gift,Known->Name))){ // either script: "月饼" for the catalogue's 月餅（單顆）
-      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he gives her %s"),Character,*Item);Weak->HandleWorldAct(Character,TEXT("gift"),Item);break;}}
+      UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he gives her %s"),Character,*Item);Weak->HandleWorldAct(Character,TEXT("gift"),Item);break;}}}
    // She takes a photo, or sends him one (photos.rs): the picture is taken from where they stand.
    {const TSharedPtr<FJsonObject>* Shot=nullptr;bool SendToo=false;
     const TSharedPtr<FJsonValue> SendField=Verdict->TryGetField(TEXT("she_sends_photo"));const bool Sends=SendField.IsValid()&&!SendField->IsNull()&&!(SendField->Type==EJson::String&&SendField->AsString().IsEmpty())&&!(SendField->Type==EJson::Boolean&&!SendField->AsBool());

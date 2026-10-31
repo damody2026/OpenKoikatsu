@@ -72,7 +72,7 @@ he_calls_about_date = "（系統說明，不是他說的話：他打這通電話
 yandere_comes = "{name} 掛了電話，朝你這邊走過來了……"
 yandere_arrived = "{name} 來找你了。"
 cancelled_prefix = "已取消："
-late_by = "遲到 {hours}:{minutes, number, ::integer-width/*00}"
+late_by = "遲到 {hours, plural, =0 {} other {# 小時 }}{minutes} 分鐘"
 meet_with_summary = "和 {character_name} 的約定：{what} — {person_name}"
 clash_notice = "注意：這個時間你已經有約了（{label}），記得調整。"
 no_such_place_note = "（系統說明，不是他說的話：剛才約在「{place_name}」，可是街上沒有這個地方，約定沒有成立。用你自己的口吻告訴他，改約街上有的地方。）"
@@ -84,7 +84,7 @@ no_place_note = "（系統說明，不是他說的話：剛才說好{day} {time}
 closed_then_note = "（系統說明，不是他說的話：剛才約在{place_name}，可是那個時間那裡沒開（{why}）。用你自己的口吻提醒他，改個時間或地點。）"
 meeting_label = "見面"
 promised_meet_with_him = "和他約好{label}在{place_name}{what}"
-time_until_later = "{hours}:{minutes, number, ::integer-width/*00} 後"
+time_until_later = "{hours, plural, =0 {} other {# 小時 }}{minutes} 分鐘後"
 
 [ui.bank]
 a_shares_account_label = "A 股帳戶"
@@ -429,6 +429,7 @@ you_are_label = "你是"
 treat_paid_back = "他說要請客，把你剛才自己付的 ¥{amount} 還給你了"
 buy_for_self_button = "買下"
 too_full_to_order = "（你說要點的{item}沒有點成：你其實已經吃飽了。{item}不會上桌，別再說它會來，可以照實說吃不下了；想喝的話可以點飲料。）"
+gift_not_carried = "（他說要送你的{item}其實沒有送出：他身上沒有這樣東西，這裡也買不到。你沒有收到{item}，別說已經收下了。）"
 not_sold_here_order = "（你說要點的「{item}」沒有點成：這家店沒有賣它。它不會上桌，跟他照實說這裡沒有，問他要不要換成菜單上相近的；他點的也一樣，沒點成就告訴他。）"
 still_has_one_order = "（{for, select, her {你} other {他}}說要點的「{item}」這次沒有點成：{for, select, her {你} other {他}}桌上同類的還沒吃完（一次一份）。它不會上桌，別說它會來；吃完再點就好。）"
 already_bought_order = "（{for, select, her {你} other {他}}說要買的「{item}」沒有再買：剛剛已經買給{for, select, her {你} other {他}}了。不會再買一份，別說又買了。）"
@@ -1260,6 +1261,7 @@ opened_go_in = "{place}開門了，一起進去。"
 closed_at_door = "{place}沒有營業：{why}"
 walking_prepare_activity = "正和玩家一起走向{outing_place}，準備{activity_name}"
 walking_with_player_to = "正和玩家一起走向{outing_place}"
+walking_left = "（還在路上，還要走約 {meters} 公尺才到；到了才算到）"
 with_player_doing = "正和玩家{solo_activity}"
 
 [ui.party]
