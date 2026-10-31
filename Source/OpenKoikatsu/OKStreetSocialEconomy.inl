@@ -272,6 +272,10 @@ void AOKStreetSocialScene::RecordPayAgreed(int32 Girl,const FString& How,const F
  // she is told. Only later bills followed the agreement; she thanked him for a treat that never moved any money.
  if(How==TEXT("him")&&Girl==S.HerPaidGirl&&S.HerPaidAmount>0&&!S.HerPaidShop.IsEmpty()&&S.HerPaidShop==ShopPlaceHere()&&OKStreetMindNow(S)-S.HerPaidAt<=15&&S.Store.PlayerCash>=S.HerPaidAmount){
   const int64 Back=S.HerPaidAmount;S.HerPaidAmount=0;GiveMoneyNow(Girl,Back);
+  // That bill's note ("you paid your own, he did not treat you") not yet heard is out of date now: it reached her after
+  // the money was back and she said "I paid it myself after all" (R6-45).
+  if(!S.HerPaidNote.IsEmpty()&&S.TellHer.RemoveSingle(S.HerPaidNote)>0)UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d the note of the bill she paid is dropped, paid back"),Girl);
+  S.HerPaidNote.Reset();
   S.TellHer.Add(OKMsg(TEXT("ui.scene.game_fact_note"),{{TEXT("fact"),OKMsg(TEXT("ui.economy.treat_paid_back"),{{TEXT("amount"),Back}})}}));
   UE_LOG(LogTemp,Display,TEXT("Street pay: actor=%d had paid %lld here; his treat pays it back"),Girl,Back);
  }
@@ -666,7 +670,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // the choice ran out, stayed hers after his "this meal is on me" a minute later (R6-21).
  if(HerPays>0&&PlayerPays==0&&!PromiseKept&&PayAgreed(Her)!=TEXT("her")){S.HerPaidGirl=Her;S.HerPaidAmount=HerPays;S.HerPaidShop=S.ShopPlace;S.HerPaidAt=OKStreetMindNow(S);}
  {FString Tell=Answer->GetStringField(TEXT("tell_her"));if(!Tell.IsEmpty()&&Food&&ServeIn>=10){const FString Natural=OKT(TEXT("ui.economy.please_naturally"));Tell=Tell.Contains(Natural)?Tell.Replace(*Natural,*OKMsg(TEXT("ui.economy.dish_eta_natural_hint"), {{TEXT("seconds"), int32(ServeIn)}})):Tell+OKMsg(TEXT("ui.economy.dish_eta_note"), {{TEXT("seconds"), int32(ServeIn)}});} // the payment notes too: paid is not served ("the hamburg steak is here!" while it was being made)
- if(!Tell.IsEmpty())S.TellHer.Add(Tell);} // handed over at once: no "it comes in 3 seconds" for her to say
+ if(!Tell.IsEmpty())S.TellHer.Add(Tell); // handed over at once: no "it comes in 3 seconds" for her to say
+  if(S.HerPaidGirl==Her&&S.HerPaidAt==OKStreetMindNow(S))S.HerPaidNote=Tell;}
  S.Cart.Reset();S.OrderNoticeSig.Reset();S.OrderNoticeDue=0;RefreshUI();
 }
 
