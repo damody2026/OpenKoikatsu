@@ -15,6 +15,7 @@
 #include "Engine/World.h"
 #include "HAL/PlatformMisc.h"
 #include "KKPreviewActor.h"
+#include "KKOkAnimation.h"
 #include "KKExactSkinning.h"
 #include "KKRustExtract.h"
 #include "ok_extract.h"
@@ -746,14 +747,15 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (!Actor) return;
 	const FOKSceneCharacter& C = Object.Character;
 	// The eyes pattern is a cha_eyeset row: its FaceBlendShape pattern is the row's EyesPtn (ChaControl.ChangeEyesPtn).
-	if (C.EyesPattern >= 0)
+	const bool bHasAnimFace = Actor->OkPlayer && Actor->OkPlayer->Curves(0, 0.f).Contains(TEXT("face.mouth_open"));
+	if (!bHasAnimFace && C.EyesPattern >= 0)
 	{
 		const int32 Blend = FOKStudioCatalog::Get().EyeSet(C.EyesPattern).BlendPattern;
 		Actor->SetFacePattern(1, Blend >= 0 ? Blend : C.EyesPattern, false);
 	}
-	if (C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
-	if (C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
-	if (C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
+	if (!bHasAnimFace && C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
+	if (!bHasAnimFace && C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
+	if (!bHasAnimFace && C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
 	// Eye opening: the eye control's fixed open rate on its current pattern (ChaControl.ChangeEyesOpenMax).
 	if (C.EyesOpen >= 0.f)
 	{
@@ -767,7 +769,7 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		Actor->bManualFaceControl[0] = Item.bEyesManualBefore;
 		Item.EyesOpenBefore = -1.f;
 	}
-	if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
+	if (bHasAnimFace) { if (Actor->bAutomaticBlink) Actor->SetAutomaticBlink(false); } else if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
 	// Studio controls of a blended H motion (option 1 height, option 2 breast, pattern): the scene's value, else the
 	// controller's own.
 	for (int32 I = 0; I < Item.BlendControls.Num() && Actor->OkPlayer; ++I)
@@ -1181,7 +1183,8 @@ namespace
 void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase)
 {
     if (!Document || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
-    if (bAdvancePhase) Document->ItemAnimationSeconds += DeltaSeconds;
+    const bool bHasTracks = Document->Tracks.Num() > 0;
+    if (bAdvancePhase && !bHasTracks) Document->ItemAnimationSeconds += DeltaSeconds;
     TArray<AKKPreviewActor*, TInlineAllocator<16>> Actors;
     const bool bSharePose = CVarSharePose.GetValueOnGameThread() != 0;
     for (auto& Pair : Shown)
@@ -1192,7 +1195,10 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         // An anim player or a session clip (a video motion, PoseMode 2) runs on the scene's clock.
         if (Actor->OkPlayer || Actor->PoseMode == 2)
         {
-            if (bAdvancePhase) Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
+            if (bHasTracks)
+                Pair.Value.Time = Object->Character.Time + Document->ItemAnimationSeconds * Object->Character.Speed;
+            else if (bAdvancePhase)
+                Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
             // Forced looping starts a motion that ends over again (one that loops by itself wraps anyway).
             const float Length = Object->Character.bForceLoop && Actor->OkPlayer ? Actor->OkPlayer->Duration() : 0.f;
             Actor->AnimPhase = Length > 0.f ? FMath::Fmod(Pair.Value.Time, Length) : Pair.Value.Time;

@@ -37,6 +37,8 @@ namespace
 		TMap<FString, int32> Notes;
 		/** Material Editor's scene data: material edits by object key. */
 		TMap<int32, TArray<FOKSceneMaterialEdit>> MaterialEdits;
+		/** Maps Studio dicKey ("key") to UOKSceneDocument ObjectId. */
+		TMap<int32, int32> KeyToId;
 
 		void Note(const FString& What) { ++Notes.FindOrAdd(What); }
 
@@ -59,6 +61,8 @@ namespace
 			PendingAttach.Reset();
 			bool bVisible = true;
 			if (O->TryGetBoolField(TEXT("visible"), bVisible)) X->bVisible = bVisible;
+			int32 ObjKey = -1;
+			if (O->TryGetNumberField(TEXT("key"), ObjKey) && ObjKey >= 0) KeyToId.Add(ObjKey, Id);
 			return Id;
 		}
 
@@ -341,6 +345,9 @@ namespace
 				if (bCard) ++Report->CharacterCards; else Report->Notes.Add(FString::Printf(TEXT("character %d: no OK card (%s)"), Key, *Summary));
 				// A card that did not convert stays beside the scene's cards (char_<key>.kks.png) to reproduce the failure.
 				if (bCard) IFileManager::Get().Delete(*KksCard);
+				FString OkAnimPath;
+				O->TryGetStringField(TEXT("okanim"), OkAnimPath);
+				const bool bHasOkAnim = !OkAnimPath.IsEmpty() && FPaths::FileExists(OkAnimPath);
 				// KKVMDPlay drove this character with an MMD motion when the scene was saved (its thumbnail shows that
 				// moment). The file is a path on the saving machine; it is looked up by name beside the scene too.
 				const TSharedPtr<FJsonObject>* Vmd = nullptr;
@@ -348,14 +355,21 @@ namespace
 				{
 					const FString Motion = (*Vmd)->GetStringField(TEXT("lastLoadedVMD"));
 					const FString Name = FPaths::GetCleanFilename(Motion.Replace(TEXT("\\"), TEXT("/")));
-					const bool bHere = FPaths::FileExists(Motion) || FPaths::FileExists(FPaths::GetPath(Report->Source) / Name);
-					Report->Notes.Add(FString::Printf(TEXT("character %d: KKVMDPlay motion %s (%s; VMD playback is not supported, the character keeps its saved pose)"),
-						Key, *Name, bHere ? TEXT("found") : TEXT("not on this machine")));
+					if (bHasOkAnim)
+					{
+						Report->Notes.Add(FString::Printf(TEXT("character %d: KKVMDPlay motion %s solved to .okanim and attached"), Key, *Name));
+					}
+					else
+					{
+						const bool bHere = FPaths::FileExists(Motion) || FPaths::FileExists(FPaths::GetPath(Report->Source) / Name);
+						Report->Notes.Add(FString::Printf(TEXT("character %d: KKVMDPlay motion %s (%s; VMD file not resolved, the character keeps its saved pose)"),
+							Key, *Name, bHere ? TEXT("found") : TEXT("not on this machine")));
+					}
 				}
 				const int32 Id = Add(EOKSceneObjectKind::Character, FString::Printf(TEXT("Character %d"), Key), Parent, O);
 				FOKSceneCharacter& C = Doc->Find(Id)->Character;
 				C.EyesLook = EOKSceneLook::Animation;
-				C.Card = bCard ? OkCard : FString();
+				C.Card = bCard ? OkCard : KksCard;
 				double Mouth = -1.;
 				if (O->TryGetNumberField(TEXT("mouth_open"), Mouth)) C.MouthOpen = float(Mouth);
 				// Character state: Studio's nipple and fluids, the card's tears and accessory slots (blush and gloss the card
@@ -497,6 +511,25 @@ namespace
 					}
 					else Note(FString::Printf(TEXT("Studio animation %d/%d/%d is not in the OK animation library (a mod motion this installation lacks; anim-convert adds it once the mod is installed)"), G, Cat, N));
 				}
+				if (bHasOkAnim)
+				{
+					C.AnimFile = OkAnimPath;
+					C.StudioAnimeKind = 0;
+					C.StudioAnimeGroup = -1;
+					C.StudioAnimeCategory = -1;
+					C.StudioAnimeNo = -1;
+					C.Time = 0.f;
+					C.Speed = 1.f;
+					C.Fk.Reset();
+					C.Ik.Reset();
+					C.HandLeft = -1;
+					C.HandRight = -1;
+					C.NeckLook = EOKSceneLook::Animation;
+					C.EyesLook = EOKSceneLook::Animation;
+					C.FixedNeck.Reset();
+					C.FixedEyes.Reset();
+					Note(TEXT("MMDD / KKVMDPlay VMD motion solved to .okanim"));
+				}
 				// Children on accessory slots: kept under the character.
 				const TArray<TSharedPtr<FJsonValue>>* Slots = nullptr;
 				if (O->TryGetArrayField(TEXT("children"), Slots))
@@ -566,6 +599,8 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
     Document->MapTransform = FTransform::Identity;
     Document->Tracks.Reset();
     Document->Duration = 10.f;
+    Document->SoundFile.Reset();
+    Document->SoundDelay = 0.f;
     Document->ItemAnimationSeconds=0.f;
 	Document->NextId = 1;
 	Document->ActiveCamera = -1;
@@ -761,6 +796,232 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 				Light.bCharactersOnly = true;
 				++Report.Lights;
 			}
+	}
+	// MMDD (MMD Director / KKVMDPlay) motion speeds, durations, and evaluated VMD camera timeline track.
+	const TSharedPtr<FJsonObject>* Mmdd = nullptr;
+	if (Scene->TryGetObjectField(TEXT("mmdd"), Mmdd) && Mmdd && (*Mmdd).IsValid())
+	{
+		double TotalFrameLen = 0.;
+		if ((*Mmdd)->TryGetNumberField(TEXT("total_frame_len"), TotalFrameLen) && TotalFrameLen > 0.)
+		{
+			double Fps = 30.;
+			(*Mmdd)->TryGetNumberField(TEXT("fps"), Fps);
+			Document->Duration = FMath::Max(Document->Duration, float(TotalFrameLen / FMath::Max(Fps, 1.)));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Motions = nullptr;
+		if ((*Mmdd)->TryGetArrayField(TEXT("motions"), Motions))
+		{
+			for (const TSharedPtr<FJsonValue>& MVal : *Motions)
+			{
+				const TSharedPtr<FJsonObject> M = MVal->AsObject();
+				if (!M) continue;
+				const int32 CharKey = int32(M->GetNumberField(TEXT("char_key")));
+				const int32* ObjId = Importer.KeyToId.Find(CharKey);
+				if (!ObjId) continue;
+				if (FOKSceneObject* CharObj = Document->Find(*ObjId))
+				{
+					FString SolvedAnim;
+					if (M->TryGetStringField(TEXT("okanim"), SolvedAnim) && !SolvedAnim.IsEmpty() && FPaths::FileExists(SolvedAnim))
+					{
+						CharObj->Character.AnimFile = SolvedAnim;
+						CharObj->Character.StudioAnimeKind = 0;
+						CharObj->Character.StudioAnimeGroup = -1;
+						CharObj->Character.StudioAnimeCategory = -1;
+						CharObj->Character.StudioAnimeNo = -1;
+						CharObj->Character.Fk.Reset();
+						CharObj->Character.Ik.Reset();
+						CharObj->Character.HandLeft = -1;
+						CharObj->Character.HandRight = -1;
+						CharObj->Character.NeckLook = EOKSceneLook::Animation;
+						CharObj->Character.EyesLook = EOKSceneLook::Animation;
+						CharObj->Character.FixedNeck.Reset();
+						CharObj->Character.FixedEyes.Reset();
+						CharObj->Character.EyebrowPattern = -1;
+						CharObj->Character.EyesPattern = -1;
+						CharObj->Character.MouthPattern = -1;
+						CharObj->Character.MouthOpen = -1.f;
+						CharObj->Character.Blink = 0;
+					}
+					double Speed = 1., Duration = 0.;
+					if (SolvedAnim.IsEmpty() && M->TryGetNumberField(TEXT("playback_speed"), Speed) && Speed > 0.) CharObj->Character.Speed = float(Speed);
+					if (M->TryGetNumberField(TEXT("duration"), Duration) && Duration > 0.) Document->Duration = FMath::Max(Document->Duration, float(Duration));
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Sounds = nullptr;
+		if ((*Mmdd)->TryGetArrayField(TEXT("sounds"), Sounds))
+		{
+			for (const TSharedPtr<FJsonValue>& SVal : *Sounds)
+			{
+				const TSharedPtr<FJsonObject> S = SVal->AsObject();
+				if (!S) continue;
+				bool bEn = true;
+				S->TryGetBoolField(TEXT("enable"), bEn);
+				if (!bEn) continue;
+				FString ResolvedSound;
+				if (!S->TryGetStringField(TEXT("resolved_sound"), ResolvedSound) || ResolvedSound.IsEmpty())
+					S->TryGetStringField(TEXT("sound_file"), ResolvedSound);
+				if (!ResolvedSound.IsEmpty() && FPaths::FileExists(ResolvedSound))
+				{
+					Document->SoundFile = ResolvedSound;
+					double Delay = 0.0;
+					if (S->TryGetNumberField(TEXT("delay"), Delay)) Document->SoundDelay = float(Delay);
+					Importer.Note(TEXT("MMDD audio track imported"));
+					break;
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Cameras = nullptr;
+		if ((*Mmdd)->TryGetArrayField(TEXT("cameras"), Cameras))
+		{
+			for (const TSharedPtr<FJsonValue>& CVal : *Cameras)
+			{
+				const TSharedPtr<FJsonObject> C = CVal->AsObject();
+				if (!C || !C->GetBoolField(TEXT("enable"))) continue;
+				const TArray<TSharedPtr<FJsonValue>>* Keyframes = nullptr;
+				if (!C->TryGetArrayField(TEXT("keyframes"), Keyframes) || Keyframes->IsEmpty()) continue;
+				const int32 MmddCamId = Document->AddObject(EOKSceneObjectKind::Camera, TEXT("MMDD camera"), -1);
+				FOKSceneObject* MmddCam = Document->Find(MmddCamId);
+				FOKSceneTrack CamTrack;
+				CamTrack.ObjectId = MmddCamId;
+				CamTrack.bSmoothPath = false;
+				const FQuat CamTurn(FVector::UpVector, UE_HALF_PI);
+				for (int32 K = 0; K < Keyframes->Num(); ++K)
+				{
+					const TSharedPtr<FJsonObject> Kf = (*Keyframes)[K]->AsObject();
+					if (!Kf) continue;
+					const FVector WorldPos = Vec3(Kf, TEXT("world_pos"));
+					const FVector Rot = Vec3(Kf, TEXT("rot"));
+					FTransform T = UnityToUe(WorldPos, Rot, FVector::OneVector);
+					T.SetRotation(T.GetRotation() * CamTurn);
+					const double VertFov = FMath::DegreesToRadians(FMath::Clamp(Kf->GetNumberField(TEXT("fov")), 1.0, 170.0));
+					const float HorizFov = float(FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(VertFov * 0.5) * 16.0 / 9.0)));
+					if (K == 0)
+					{
+						MmddCam->Transform = T;
+						MmddCam->Camera.Fov = HorizFov;
+					}
+					FOKSceneKey Key;
+					Key.Time = float(Kf->GetNumberField(TEXT("time")));
+					Key.Ease = EOKSceneEase::Linear;
+					Key.Transform = T;
+					Key.Value = HorizFov;
+					CamTrack.Keys.Add(MoveTemp(Key));
+					Document->Duration = FMath::Max(Document->Duration, Key.Time);
+				}
+				if (!CamTrack.Keys.IsEmpty())
+				{
+					Document->Tracks.Add(MoveTemp(CamTrack));
+					Document->ActiveCamera = MmddCamId;
+					++Report.Cameras;
+					Document->Post.bDepthOfField = false;
+					Importer.Note(TEXT("MMDD VMD camera track imported"));
+				}
+				break;
+			}
+		}
+	}
+	// VNGE (Visual Novel Game Engine) KFA keyframe clips and SceneSaveState (SSS) tracks.
+	const TSharedPtr<FJsonObject>* Vnge = nullptr;
+	if (Scene->TryGetObjectField(TEXT("vnge"), Vnge) && Vnge && (*Vnge).IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Clips = nullptr;
+		if ((*Vnge)->TryGetArrayField(TEXT("clips"), Clips) && !Clips->IsEmpty())
+		{
+			// Build alias -> ObjectId lookup from vnge.registry (actors, props, lights).
+			TMap<FString, int32> AliasToId;
+			const TSharedPtr<FJsonObject>* Registry = nullptr;
+			if ((*Vnge)->TryGetObjectField(TEXT("registry"), Registry) && Registry && (*Registry).IsValid())
+			{
+				auto MapSection = [&](const TCHAR* Section)
+				{
+					const TSharedPtr<FJsonObject>* SecObj = nullptr;
+					if ((*Registry)->TryGetObjectField(Section, SecObj) && SecObj && (*SecObj).IsValid())
+					{
+						for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*SecObj)->Values)
+						{
+							const int32 DicKey = int32(Pair.Value->AsNumber());
+							if (const int32* Id = Importer.KeyToId.Find(DicKey)) AliasToId.Add(Pair.Key, *Id);
+						}
+					}
+				};
+				MapSection(TEXT("actors"));
+				MapSection(TEXT("props"));
+				MapSection(TEXT("lights"));
+			}
+			for (const TPair<int32, int32>& Pair : Importer.KeyToId)
+			{
+				AliasToId.FindOrAdd(FString::Printf(TEXT("%d"), Pair.Key), Pair.Value);
+			}
+
+			// Import the first non-empty KFA clip's per-object keyframes onto Document->Tracks.
+			for (const TSharedPtr<FJsonValue>& ClipVal : *Clips)
+			{
+				const TSharedPtr<FJsonObject> Clip = ClipVal->AsObject();
+				if (!Clip) continue;
+				const TArray<TSharedPtr<FJsonValue>>* Kfs = nullptr;
+				if (!Clip->TryGetArrayField(TEXT("keyframes"), Kfs) || Kfs->IsEmpty()) continue;
+				TMap<int32, FOKSceneTrack> ObjTracks;
+				for (const TSharedPtr<FJsonValue>& KfVal : *Kfs)
+				{
+					const TSharedPtr<FJsonObject> Kf = KfVal->AsObject();
+					if (!Kf) continue;
+					const float Time = float(Kf->GetNumberField(TEXT("time")));
+					const TSharedPtr<FJsonObject>* Props = nullptr;
+					if (!Kf->TryGetObjectField(TEXT("props"), Props) || !Props || !(*Props).IsValid()) continue;
+					for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*Props)->Values)
+					{
+						FString Alias, PropName;
+						if (!Entry.Key.Split(TEXT("."), &Alias, &PropName)) continue;
+						const int32* ObjId = AliasToId.Find(Alias);
+						if (!ObjId) continue;
+						const FOKSceneObject* BaseObj = Document->Find(*ObjId);
+						if (!BaseObj) continue;
+						FOKSceneTrack& Track = ObjTracks.FindOrAdd(*ObjId);
+						Track.ObjectId = *ObjId;
+						FOKSceneKey* Key = Track.Keys.FindByPredicate([Time](const FOKSceneKey& Existing) { return FMath::IsNearlyEqual(Existing.Time, Time, 1e-3f); });
+						if (!Key)
+						{
+							FOKSceneKey NewKey;
+							NewKey.Time = Time;
+							NewKey.Transform = BaseObj->Transform;
+							Key = &Track.Keys.Add_GetRef(MoveTemp(NewKey));
+						}
+						if (PropName == TEXT("pos") && Entry.Value->Type == EJson::Array && Entry.Value->AsArray().Num() == 3)
+						{
+							const auto& A = Entry.Value->AsArray();
+							const FVector P(A[0]->AsNumber(), A[1]->AsNumber(), A[2]->AsNumber());
+							Key->Transform.SetLocation(FVector(-P.X, P.Z, P.Y) * 100.0);
+						}
+						else if ((PropName == TEXT("rot") || PropName == TEXT("angle")) && Entry.Value->Type == EJson::Array && Entry.Value->AsArray().Num() == 3)
+						{
+							const auto& A = Entry.Value->AsArray();
+							const FVector R(A[0]->AsNumber(), A[1]->AsNumber(), A[2]->AsNumber());
+							Key->Transform.SetRotation(UnityToUe(FVector::ZeroVector, R, FVector::OneVector).GetRotation());
+						}
+						else if (PropName == TEXT("eyebrow_ptn")) { Key->bCharacterState = true; Key->EyebrowPattern = int32(Entry.Value->AsNumber()); }
+						else if (PropName == TEXT("eyes_ptn")) { Key->bCharacterState = true; Key->EyesPattern = int32(Entry.Value->AsNumber()); }
+						else if (PropName == TEXT("mouth_ptn")) { Key->bCharacterState = true; Key->MouthPattern = int32(Entry.Value->AsNumber()); }
+						else if (PropName == TEXT("mouth_open")) { Key->bCharacterState = true; Key->MouthOpen = float(Entry.Value->AsNumber()); }
+					}
+					Document->Duration = FMath::Max(Document->Duration, Time);
+				}
+				int32 AddedTracks = 0;
+				for (TPair<int32, FOKSceneTrack>& Pair : ObjTracks)
+				{
+					if (!Pair.Value.Keys.IsEmpty())
+					{
+						Document->Tracks.Add(MoveTemp(Pair.Value));
+						++AddedTracks;
+					}
+				}
+				if (AddedTracks > 0)
+				{
+					Importer.Note(TEXT("VNGE KFA animation tracks imported"));
+					break;
+				}
+			}
+		}
 	}
 	for (const TPair<FString, int32>& N : Importer.Notes) Report.Notes.Add(FString::Printf(TEXT("%s (%d)"), *N.Key, N.Value));
 	Document->NotifyChanged();

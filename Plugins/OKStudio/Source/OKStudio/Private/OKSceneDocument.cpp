@@ -193,6 +193,8 @@ FString UOKSceneDocument::ToJson() const
 	Root->SetNumberField(TEXT("map"), Map);
 	if (!MapTransform.Equals(FTransform::Identity)) Root->SetStringField(TEXT("map_transform"), MapTransform.ToString());
 	Root->SetNumberField(TEXT("duration"), Duration);
+	if (!SoundFile.IsEmpty()) Root->SetStringField(TEXT("sound_file"), SoundFile);
+	if (!FMath::IsNearlyZero(SoundDelay)) Root->SetNumberField(TEXT("sound_delay"), SoundDelay);
 	if (TSharedPtr<FJsonObject> PostJson = FJsonObjectConverter::UStructToJsonObject(Post)) Root->SetObjectField(TEXT("post"), PostJson);
 	TArray<TSharedPtr<FJsonValue>> TrackJson;
 	for (const FOKSceneTrack& T : Tracks) if (TSharedPtr<FJsonObject> J = FJsonObjectConverter::UStructToJsonObject(T)) TrackJson.Add(MakeShared<FJsonValueObject>(J));
@@ -258,6 +260,8 @@ bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 	FString MapTransformText;
 	if (Root->TryGetStringField(TEXT("map_transform"), MapTransformText)) MapTransform.InitFromString(MapTransformText);
 	Duration = Root->HasField(TEXT("duration")) ? float(Root->GetNumberField(TEXT("duration"))) : 10.f;
+	SoundFile = Root->HasField(TEXT("sound_file")) ? Root->GetStringField(TEXT("sound_file")) : FString();
+	SoundDelay = Root->HasField(TEXT("sound_delay")) ? float(Root->GetNumberField(TEXT("sound_delay"))) : 0.f;
 	Post = FOKScenePost();
 	const TSharedPtr<FJsonObject>* PostJson = nullptr;
 	if (Root->TryGetObjectField(TEXT("post"), PostJson)) FJsonObjectConverter::JsonObjectToUStruct(PostJson->ToSharedRef(), &Post);
@@ -696,6 +700,10 @@ void FOKScenePost::ApplyTo(FPostProcessSettings& S) const
 	// colours the game's Amplify Color sees.
 	S.bOverride_ToneCurveAmount = true;
 	S.ToneCurveAmount = 0.f;
+	S.bOverride_MotionBlurAmount = true;
+	S.MotionBlurAmount = 0.f;
+	S.bOverride_MotionBlurMax = true;
+	S.MotionBlurMax = 0.f;
 	S.bOverride_ExpandGamut = true;
 	S.ExpandGamut = 0.f;
 	S.bOverride_BlueCorrection = true;

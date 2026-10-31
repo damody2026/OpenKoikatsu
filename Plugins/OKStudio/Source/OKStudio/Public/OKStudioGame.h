@@ -201,6 +201,19 @@ public:
 	float LoopStart = 0.f, LoopEnd = 0.f;
 	void SetTimelineTime(float Time);
 
+	/** Prevents mouse orbit/pan/zoom/fly in the viewport from clearing Document->ActiveCamera = -1 while following an MMD/scene camera. */
+	bool bLockActiveCamera = false;
+	/** Live non-destructive calibration offset applied to the active scene/MMD camera in UpdateViewer. */
+	FVector MmdCameraOffset = FVector::ZeroVector;
+	float MmdCameraYawOffset = 0.f;
+	float MmdCameraFovOffset = 0.f;
+	/** Finds the MMD system camera id in Document (-1 if none). When bOnlyMmdScene is true, only matches cameras named MMD/MMDD or tracked cameras in a VMD scene. */
+	int32 FindMmdCameraId(bool bOnlyMmdScene = false) const;
+	bool bMuteSound = false;
+	float SoundVolume = 1.f;
+	void StopSceneAudio();
+	void UpdateSceneAudio();
+
 	/** Screenshot through the current view into UserData/Studio/screenshot (returns the file; empty on failure). */
 	FString Screenshot(int32 Width, int32 Height, bool bTransparent = false);
 	/** Renders the current view (camera, FOV, scene post-processing) at a resolution and writes a PNG, synchronously. */
@@ -325,6 +338,12 @@ private:
 	TArray<TWeakObjectPtr<class APostProcessVolume>> DisabledWorldVolumes;
 	/** r.AllowOcclusionQueries before the studio turned it off (restored on Stop; INDEX_NONE: not changed). */
 	int32 SavedOcclusionQueries = INDEX_NONE;
+	TWeakObjectPtr<class UAudioComponent> SceneAudio;
+	TSharedPtr<const struct FKKSpeechPcm, ESPMode::ThreadSafe> SceneAudioPcm;
+	FString LoadedSoundFile;
+	float AudioStartTimelineTime = -1000.f;
+	double AudioStartWallSeconds = 0.0;
+	float AudioStartSpeed = 1.f;
 	void UpdateViewer();
 	void SyncNow();
 	/** Whether a shown preview still draws stand-in materials or runtime shaders are compiling (pictures would miss it). */

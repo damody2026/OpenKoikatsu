@@ -186,7 +186,7 @@ pub(crate) fn base64(bytes: &[u8]) -> String {
 
 /// The scene's trailing ExtendedSave block ("KKEx", version, length, msgpack of plugin id -> PluginData), the last
 /// block of the file.
-fn scene_plugins(bytes: &[u8]) -> Option<rmpv::Value> {
+pub(crate) fn scene_plugins(bytes: &[u8]) -> Option<rmpv::Value> {
     let marker = b"\x04KKEx";
     let at = bytes.windows(marker.len()).rposition(|w| w == marker)?;
     let p = at + marker.len();
@@ -1048,7 +1048,17 @@ pub fn export(scene_path: &std::path::Path, out_dir: &std::path::Path) -> Result
     let vmd = scene_vmd(&bytes);
     let no_vmd = std::collections::HashMap::new();
     let vmd_chars = vmd.as_ref().map(|v| &v.1).unwrap_or(&no_vmd);
-    fn mark(v: &mut serde_json::Value, cards: &std::collections::HashMap<i32, (String, serde_json::Value)>, mods: &std::collections::HashMap<i32, (String, i32)>, vmd: &std::collections::HashMap<i32, serde_json::Map<String, serde_json::Value>>) {
+    let vnge = crate::vnge::extract_vnge(&scene, &bytes);
+    let mmdd = crate::mmdd::extract_mmdd(&bytes, &scene, Some(&vnge), Some(scene_path), out_dir);
+    let mut mmdd_okanims = std::collections::HashMap::new();
+    if let Some(m) = &mmdd {
+        for c in &m.motions {
+            if !c.okanim.is_empty() {
+                mmdd_okanims.insert(c.char_key, c.okanim.clone());
+            }
+        }
+    }
+    fn mark(v: &mut serde_json::Value, cards: &std::collections::HashMap<i32, (String, serde_json::Value)>, mods: &std::collections::HashMap<i32, (String, i32)>, vmd: &std::collections::HashMap<i32, serde_json::Map<String, serde_json::Value>>, mmdd_okanims: &std::collections::HashMap<i32, String>) {
         match v {
             serde_json::Value::Object(m) => {
                 // A mod item: its mod's GUID and slot in the mod's list (studio_mods resolves it).
@@ -1061,16 +1071,20 @@ pub fn export(scene_path: &std::path::Path, out_dir: &std::path::Path) -> Result
                     if let Some((p, status)) = cards.get(&key) { m.insert("card".into(), p.clone().into()); m.insert("status".into(), status.clone()); }
                     // KKVMDPlay drives this character with a VMD motion (scene_vmd).
                     if let Some(d) = vmd.get(&key) { m.insert("vmd".into(), serde_json::Value::Object(d.clone())); }
+                    // MMDD or KKVMDPlay solved OkAnim path for direct loading in OKStudio.
+                    if let Some(okanim) = mmdd_okanims.get(&key) { m.insert("okanim".into(), okanim.clone().into()); }
                     for k in ["card_offset", "card_len", "face_png_offset", "face_png_len", "ext_offset", "ext_len"] { m.remove(k); }
                 }
-                for (_, x) in m.iter_mut() { mark(x, cards, mods, vmd); }
+                for (_, x) in m.iter_mut() { mark(x, cards, mods, vmd, mmdd_okanims); }
             }
-            serde_json::Value::Array(a) => for x in a { mark(x, cards, mods, vmd); },
+            serde_json::Value::Array(a) => for x in a { mark(x, cards, mods, vmd, mmdd_okanims); },
             _ => {}
         }
     }
-    mark(&mut json, &cards, &mods, vmd_chars);
+    mark(&mut json, &cards, &mods, vmd_chars, &mmdd_okanims);
     if let Some((scene_vmd, _)) = &vmd { json["vmd_scene"] = serde_json::Value::Object(scene_vmd.clone()); }
+    if !vnge.is_empty() { if let Ok(val) = serde_json::to_value(vnge) { json["vnge"] = val; } }
+    if let Some(mmdd_data) = mmdd { if let Ok(val) = serde_json::to_value(mmdd_data) { json["mmdd"] = val; } }
     json["card_errors"] = errors.into();
     Ok(json)
 }

@@ -204,7 +204,8 @@ pub(crate) fn compose_face_texture(
             overlay.map(|o| (o.len(), a.finalize(), b.finalize()))
         });
         crate::view_memo(format!("compose_face|{:016x}|{skin:?}|{skin_sub:?}|{overlays:?}", card.source_digest),
-            || face_create_source::compose(game_root, vanilla, mod_catalog, card, skin, skin_sub, outfit, guid_index))
+            || face_create_source::compose(game_root, vanilla, mod_catalog, card, skin, skin_sub, outfit, guid_index)
+                .or_else(|| compose_face_texture_legacy(game_root, vanilla, mod_catalog, card, head_texs, body_texs, skin, skin_sub, outfit, guid_index)))
     }
 }
 

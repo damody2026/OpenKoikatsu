@@ -43,7 +43,10 @@ pub(crate) fn compose(game: &Path, vanilla: &ChaListCatalog, mods: &ChaListCatal
     let mut main = if main_name=="0" || main_ab=="0" {
         ImageSource{image:image::RgbaImage::from_pixel(1,1,image::Rgba([255;4])),
                     sampling:TextureSampling::default(),gpu:crate::clothes_gpu::Texture::white()}
-    } else {source(game,&entry,&main_ab,&main_name)?};
+    } else {
+        source(game,&entry,&main_ab,&main_name)
+            .or_else(|| (main_name == "cf_face_00_t").then(|| source(game, &entry, "chara/bo_head_00.unity3d", &main_name)).flatten())?
+    };
     // Hooks.OverlayBlitImpl creates a temporary sRGB RT only for underlays.
     // Linear source bytes must first undergo that Blit before its overlay.
     if let Some(overlay) = super::ksox_overlay_png(card, outfit, 4) {
@@ -57,13 +60,15 @@ pub(crate) fn compose(game: &Path, vanilla: &ChaListCatalog, mods: &ChaListCatal
             format:29,mips:1,sampling:main.sampling,aniso:0,bias:0.};
     }
     let mask_name = entry.info("ColorMaskTex");
-    let mask = source(game, &entry, &entry_ab(&entry, "ColorMaskAB"), &mask_name);
+    let mask = source(game, &entry, &entry_ab(&entry, "ColorMaskAB"), &mask_name)
+        .or_else(|| (mask_name == "cf_face_00_mc").then(|| source(game, &entry, "chara/bo_head_00.unity3d", &mask_name)).flatten());
     let ab="chara/mm_base.unity3d";
     // Sideloader overrides individual assets. A partial mm_base replacement
     // containing only clothes assets cannot hide the vanilla face material.
     let candidate = |bytes:crate::unity::SourceBytes| {
         let bundle=crate::unity::parse_bundle_ref(&bytes);
         let material=bundle.material_named("cf_m_face_create")?;
+        if material.shader != "Koikano/create_skinface" { return None; }
         Some((bytes,bundle,material))
     };
     let (bytes,bundle,material) = crate::mods::override_bundle(&game.join("mods"),ab).map(crate::unity::SourceBytes::from).and_then(candidate)
