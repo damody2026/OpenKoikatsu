@@ -1733,3 +1733,6 @@
   - 依序排除：關掉跟他身體的碰撞（`OKPhysXSecondary.CrossCollision 0`）、關掉 PhysX（`Enabled 0`）、完全不跑頭髮物理（環境變數 `OK_NODB=1`），爱丽丝的兩條長馬尾都一樣水平往後浮。
   - 原因：她的頭髮是飾品 mod，DynamicBone 的重力 0、外力 -0.0005～-0.001、彈性 0.2（用 `OK_DBDIAG=1 OK_DBONE_DIAG=1` 跑 `ok-card-open-bench --compare` 印出），頭髮停在相對頭部的靜止方向。騎乘位她前傾、頭朝下，那個方向就是水平往後；後背位頭的角度讓它朝下，看起來正常。原作同參數也會這樣，不是我們的物理錯。
   - 通則：頭髮「不垂」先用 `OK_NODB=1` 看靜止姿勢，再看卡片自己的重力，不要先調碰撞或求解器。
+- 2026-11-01 e-galgame（第十七輪之二：凸起法線，撤回）：
+  - 試了在 `KKSkeletalBuilder` 建 `belly.bulge.*` morph 時，用鼓起前後的面積加權法線（UV 縫線合併）算 `TangentZDelta`。結果三月七壓住後入的隆起上出現塊狀暗斑：卡通 ramp 的明暗交界落在鼓起的粗三角形上，變成鋸齒。暫停陰影擷取（`ok.ShadowCapturesPerFrame 0`）暗斑仍在，不是陰影擷取造成的。沒有法線的版本（R16c）反而平滑，所以撤回、未提交（diff 留在本機 scratchpad）。
+  - 同一輪看到：壓住後入有一幀龜頭在皮膚外約 4 cm 卻沒有鼓起，待查（讀值只在求解間隔更新，加上入口 6 cm 內不鼓的條件）。
