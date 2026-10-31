@@ -3,6 +3,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
 #include "Dom/JsonObject.h"
+#include "Commandlets/Commandlet.h"
 #include "OKHScene.generated.h"
 
 // The street one-on-one as the original H scene (HSceneProc / HSprite, D:\KoikatuSunshine\H_scene.md): a menu of the
@@ -163,6 +164,7 @@ private:
     // See-through by default: where his penis is in her shows (the original's silhouette).
     int32 MaleView=1;bool bMaleBottomOff=true;TWeakObjectPtr<class AKKPreviewActor> MaleLookFor;
     UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> MaleGhost;
+    UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> PenisXRay; // over her while he is see-through (M_PreviewXRay)
     UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> MaleGhostComps;
     UPROPERTY() TArray<TObjectPtr<class UMaterialInterface>> MaleGhostMats; // their own materials, slot by slot, to put back
     UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> MaleGhostOutlines; // his outline shells, hidden while see-through
@@ -183,7 +185,7 @@ private:
     void RestoreAlign();
     float AlignFoot=0.f,AlignPushed=0.f,AlignDeep=0.f;
     float FeetMin[2]={0,0},FeetMax[2]={0,0},FeetShown[4]={0,0,0,0}; // his and her lower ankle over the floor, range in the last two seconds // his lower ankle above her floor (cm), for /hscene
-    float AlignOff=-1.f,AlignAt=0.f,AlignLen=0.f; // the last measure while he is in her (cm off the penis line, % of its length), for /hscene
+    float AlignOff=-1.f,AlignAt=0.f,AlignLen=0.f,AlignTip=-1.f; // the last measure while he is in her (cm off the penis line, % of its length), for /hscene
     float DeepAlong=1e9f; // the deepest point of his thrusts lately (entrance distance from the root along the penis), easing back
     float AtMin=0.f,AtMax=0.f,AtShownMin=0.f,AtShownMax=0.f,AtWindow=0.f; // depth range over the last two seconds, for /hscene
     TSet<int32> Offered; // the action kinds BuildActions shows now
@@ -224,4 +226,13 @@ private:
     bool bPlayed=false,bService=false,bRaw=false,bCrotch=false,bAnal=false;
     int32 ServiceFinishes=0,CrotchClimaxes=0,AnalClimaxes=0,HerOrgasms=0,HisFinishes=0;
     TArray<FString> PosesPlayed,Events;
+};
+
+// The see-through material for his penis inside her (M_PreviewXRay): the translucent preview parent with the depth
+// test off, drawn over her as an overlay. Run once in the editor: -run=OKBuildHXRayMaterial (PreviewMaterials is cooked).
+UCLASS()
+class OPENKOIKATSU_API UOKBuildHXRayMaterialCommandlet : public UCommandlet {
+    GENERATED_BODY()
+public:
+    virtual int32 Main(const FString& Params) override;
 };
