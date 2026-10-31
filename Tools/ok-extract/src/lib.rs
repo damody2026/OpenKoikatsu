@@ -249,6 +249,12 @@ pub(crate) fn blend_for_mesh(role: &str, mesh: &crate::unity::ExtractedMesh) -> 
         if shader.contains("main_item_studio_add") {
             return ("additive".into(), true);
         }
+        // main_item_studio itself is One/Zero with ZWrite (its _ALPHATEST_ON variant clips): a material that keeps an
+        // alpha shader's queue 3000 after Material Editor gave it this shader still draws opaque, only later (read by its
+        // queue, 205 parts of 83283571_p1 drew blended).
+        if shader_family(&mat.shader) == "shader forge/main_item_studio" {
+            return (if alphatest { "masked" } else { "opaque" }.into(), toon_unlit);
+        }
         // Unity's built-in additive particle shaders (Studio's 2D lens flares: Legacy Shaders/Particles/Additive) blend
         // SrcAlpha One: the renderer folds source alpha and soft-particle fade into the contribution.
         if shader.contains("particles/additive") {
