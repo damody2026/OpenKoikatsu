@@ -1,6 +1,6 @@
 //! Belly bulge morphs for the H scene: where his penis presses out through her belly (or her back) the game swells
 //! the skin there instead of letting it come through. Made once on opening a female body: a grid of round swells
-//! "belly.bulge.<side><height><across>", on her front, back, left and right (f b l r), at seven heights from the tops of her thighs and just under her
+//! "belly.bulge.<side><height><across>", on her front, back, left and right (f b l r), at eight heights from her upper thighs and just under her
 //! crotch (her pubic mound and perineum) to her upper spine and three places across that side (front and back: her
 //! middle and her groins 5.5 cm to each side; left and right: 5 cm before and behind her middle), each `BULGE_M` out
 //! along the skin at weight 100. The scene asks `past` where his glans is against her skin now and drives
@@ -10,9 +10,9 @@ use crate::pose::{mat_inv_pub, mat_mul_pub, Mat4};
 use crate::session::{OkSession, SessionPart};
 use std::collections::HashMap;
 
-/// Where the swells are along her crotch-to-upper-spine line (fractions of it; below 0 is under her crotch: -0.2 the
-/// tops of her thighs, where his glans comes out when she lies curled on her side).
-const HEIGHTS: [f32; 7] = [-0.2, -0.05, 0.05, 0.15, 0.28, 0.42, 0.58];
+/// Where the swells are along her crotch-to-upper-spine line (fractions of it; below 0 is under her crotch: -0.4 and -0.2
+/// her upper thighs, where his glans comes out when she lies curled on her side).
+const HEIGHTS: [f32; 8] = [-0.4, -0.2, -0.05, 0.05, 0.15, 0.28, 0.42, 0.58];
 /// Where across her front and back (metres from her middle), and across her sides (metres before her middle).
 const ACROSS: [f32; 3] = [-0.055, 0.0, 0.055];
 const ALONG_SIDE: [f32; 3] = [-0.05, 0.0, 0.05];
