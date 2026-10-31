@@ -407,6 +407,47 @@ public sealed partial class GamePoseProbe {
                     }
                 }
             }
+            // OK_PROBE_SHADOW_MASK=1: the shadowing directional light's screen-space shadow mask (what SHADOWS_SCREEN
+            // shaders sample, collected from the camera depth texture) as <output>.shadow-mask.png, and that depth texture
+            // (raw device depth) as <output>.depth.r32f, from one render of the main camera.
+            if (Environment.GetEnvironmentVariable("OK_PROBE_SHADOW_MASK") == "1") {
+                Light shadowLight = null;
+                foreach (Light l in UnityEngine.Object.FindObjectsOfType<Light>())
+                    if (l.type == LightType.Directional && l.isActiveAndEnabled && l.shadows != LightShadows.None && (l.cullingMask & main.cullingMask) != 0) { shadowLight = l; break; }
+                RenderTexture oldTarget = main.targetTexture, oldActive = RenderTexture.active;
+                DepthTextureMode oldMode = main.depthTextureMode;
+                var mask = RenderTexture.GetTemporary(1280, 720, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+                var depth = RenderTexture.GetTemporary(1280, 720, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+                var target = RenderTexture.GetTemporary(1280, 720, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+                var maskRead = new Texture2D(1280, 720, TextureFormat.RGBA32, false, true);
+                var depthRead = new Texture2D(1280, 720, TextureFormat.RFloat, false, true);
+                var maskCommands = new UnityEngine.Rendering.CommandBuffer { name = "OK shadow mask" };
+                maskCommands.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CurrentActive, mask);
+                var depthCommands = new UnityEngine.Rendering.CommandBuffer { name = "OK depth texture" };
+                depthCommands.Blit(new UnityEngine.Rendering.RenderTargetIdentifier("_CameraDepthTexture"), depth);
+                try {
+                    RenderTexture.active = mask; GL.Clear(false, true, new Color(0.5f, 0.5f, 0.5f, 1f));
+                    if (shadowLight != null) shadowLight.AddCommandBuffer(UnityEngine.Rendering.LightEvent.AfterScreenspaceMask, maskCommands);
+                    main.depthTextureMode |= DepthTextureMode.Depth;
+                    main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.BeforeForwardAlpha, depthCommands);
+                    main.targetTexture = target;
+                    main.Render();
+                    RenderTexture.active = mask; maskRead.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); maskRead.Apply();
+                    File.WriteAllBytes(output + ".shadow-mask.png", maskRead.EncodeToPNG());
+                    RenderTexture.active = depth; depthRead.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); depthRead.Apply();
+                    File.WriteAllBytes(output + ".depth.r32f", depthRead.GetRawTextureData());
+                    File.WriteAllText(output + ".shadow-mask.txt", "light\t" + (shadowLight == null ? "none" : PathOf(shadowLight.transform) + "\t" + shadowLight.shadows + "\t" + shadowLight.shadowStrength.ToString("R"))
+                        + "\nshadow_distance\t" + QualitySettings.shadowDistance.ToString("R") + "\ncascades\t" + QualitySettings.shadowCascades
+                        + "\nnear\t" + main.nearClipPlane.ToString("R") + "\nfar\t" + main.farClipPlane.ToString("R") + "\n");
+                } finally {
+                    if (shadowLight != null) shadowLight.RemoveCommandBuffer(UnityEngine.Rendering.LightEvent.AfterScreenspaceMask, maskCommands);
+                    main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.BeforeForwardAlpha, depthCommands);
+                    main.depthTextureMode = oldMode; main.targetTexture = oldTarget; RenderTexture.active = oldActive;
+                    RenderTexture.ReleaseTemporary(mask); RenderTexture.ReleaseTemporary(depth); RenderTexture.ReleaseTemporary(target);
+                    UnityEngine.Object.Destroy(maskRead); UnityEngine.Object.Destroy(depthRead);
+                    maskCommands.Release(); depthCommands.Release();
+                }
+            }
             // OK_PROBE_CAPTURE_STAGES=1: the same frame with every enabled image effect off, then with each one off alone.
             if (Environment.GetEnvironmentVariable("OK_PROBE_CAPTURE_STAGES") == "1") {
                 var enabled = effects.FindAll(e => e.enabled);
