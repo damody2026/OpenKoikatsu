@@ -95,6 +95,7 @@ private:
  void FinishPartyTalk(const FString& Text,const TArray<int32>& Members,const TSharedPtr<class FJsonObject>& Reply);
  void SpeakPartyLines(const TArray<int32>& Speakers,const TArray<FString>& Lines);
  void JudgeFreeTalk(int32 Character,const FString& Id,const FString& Said,const FString& Her,const FString& HerAction,const TArray<FString>& HerOrders);
+ void JudgeHTalk(int32 Character,const FString& Said,const FString& Her);
  void SetCharacterRelationship(int32 Character,const FString& Stage);
  void SetCharacterStat(int32 Character,int32 Field,float Value);
  void RunPresentationProbe(double Now);

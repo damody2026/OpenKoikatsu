@@ -31,6 +31,8 @@ public:
     bool HSceneTakeLine(FString& Text,FString& Context,bool& System);
     bool HSceneHear(const FString& Text,FString& Context);
     void HSceneShowLine(const FString& Text);
+    FString HSceneJudgeFacts() const;
+    bool HSceneApplyTalk(const TSharedPtr<FJsonObject>& Verdict);
     bool HSceneSpeak(const FString& Path);
     bool HSceneSpeaking() const;
     bool IsReady() const {return Ready;}

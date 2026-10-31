@@ -144,6 +144,8 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
         // {"siru":[face,ftop,fbot,btop,bbot]}: set the liquid levels (0..2) directly, to look at how they draw.
         const TArray<TSharedPtr<FJsonValue>>* SiruLevels=nullptr;if(Body->TryGetArrayField(TEXT("siru"),SiruLevels)&&SiruLevels->Num()==5){int32 L[5];for(int32 A=0;A<5;++A)L[A]=int32((*SiruLevels)[A]->AsNumber());Panel->SetSiruTest(L);}
         double FaceCam=0;if(Body->TryGetNumberField(TEXT("face_cam"),FaceCam))Panel->LookAtFace(float(FaceCam));
+        double CrotchCam=0;const TSharedPtr<FJsonObject>* CrotchView=nullptr;if(Body->TryGetNumberField(TEXT("crotch_cam"),CrotchCam))Panel->LookAtCrotch(float(CrotchCam));
+        else if(Body->TryGetObjectField(TEXT("crotch_cam"),CrotchView)){double Dist=60,Pitch=15,Turn=0;(*CrotchView)->TryGetNumberField(TEXT("distance"),Dist);(*CrotchView)->TryGetNumberField(TEXT("pitch"),Pitch);(*CrotchView)->TryGetNumberField(TEXT("turn"),Turn);Panel->LookAtCrotch(float(Dist),float(Pitch),float(Turn));}
         const TSharedPtr<FJsonObject>* Heights=nullptr;if(Body->TryGetObjectField(TEXT("height"),Heights)){
             // The pair player holds views into both sessions: reshaping under it crashed the game. Stop it first; the next pose
             // chosen makes the pair again at the new sizes.
@@ -184,8 +186,11 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
 bool AOKInteractionMode::HSceneTakeLine(FString& Text,FString& Context,bool& System){return Controller&&Controller->HPanel&&Controller->HPanel->TakeLine(Text,Context,System);}
 bool AOKInteractionMode::HSceneHear(const FString& Text,FString& Context){return Controller&&Controller->HPanel&&Controller->HPanel->Hear(Text,Context);}
 void AOKInteractionMode::HSceneShowLine(const FString& Text){if(Controller&&Controller->HPanel)Controller->HPanel->ShowLine(Text);}
+FString AOKInteractionMode::HSceneJudgeFacts() const{return Controller&&Controller->HPanel?Controller->HPanel->JudgeFacts():FString();}
+bool AOKInteractionMode::HSceneApplyTalk(const TSharedPtr<FJsonObject>& Verdict){return Controller&&Controller->HPanel&&Controller->HPanel->ApplyTalk(Verdict);}
 bool AOKInteractionMode::HSceneSpeak(const FString& Path){
     if(!Controller||!IsValid(Controller->PreviewActor))return false;auto* Her=Controller->PreviewActor.Get();
+    if(Controller->HPanel&&Controller->HPanel->LineIsStale())return false; // said to what happened before (UOKHScenePanel::ShowLine)
     Her->StopHBreath();FString Why;const bool Ok=Her->PlaySpeechFile(Path,1.f,Why);
     if(!Ok)UE_LOG(LogTemp,Warning,TEXT("H scene: her line did not play: %s"),*Why);
     if(Ok)UE_LOG(LogTemp,Display,TEXT("H scene: her line spoken on her (%s)"),*FPaths::GetCleanFilename(Path));
