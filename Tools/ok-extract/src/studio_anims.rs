@@ -65,6 +65,109 @@ fn variant_file(a: &StudioAnim, axes: &[BlendAxis], point: &std::collections::Ha
     format!("anims/studio/{}_{}_{}_{}@{}.okanim", a.kind, a.group, a.category, a.no, values.join("_"))
 }
 
+/// The H motion variants of the library in one file (`anims/studio_variants.okpack`), one entry per name the
+/// catalogue's `variants` lists, each read alone at its offset (OK Studio's `FOKStudioVariantPack` reads it too):
+/// `OKVPACK1`, u32 count, then per entry (sorted by name) u16 name length, the UTF-8 name, u64 offset, u32 length;
+/// then the `.okanim` bytes. Thirteen thousand small files were too many to keep in the repository.
+pub mod variant_pack {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::path::Path;
+
+    pub const FILE: &str = "anims/studio_variants.okpack";
+    const MAGIC: &[u8; 8] = b"OKVPACK1";
+
+    /// The index: name -> (offset, length).
+    pub fn index(lib: &Path) -> Option<std::collections::BTreeMap<String, (u64, u32)>> {
+        let mut f = std::io::BufReader::new(std::fs::File::open(lib.join(FILE)).ok()?);
+        let mut head = [0u8; 12];
+        f.read_exact(&mut head).ok()?;
+        if &head[..8] != MAGIC { return None; }
+        let count = u32::from_le_bytes(head[8..12].try_into().ok()?);
+        let mut out = std::collections::BTreeMap::new();
+        for _ in 0..count {
+            let mut n = [0u8; 2];
+            f.read_exact(&mut n).ok()?;
+            let mut name = vec![0u8; u16::from_le_bytes(n) as usize];
+            f.read_exact(&mut name).ok()?;
+            let mut at = [0u8; 12];
+            f.read_exact(&mut at).ok()?;
+            out.insert(String::from_utf8(name).ok()?, (u64::from_le_bytes(at[..8].try_into().ok()?), u32::from_le_bytes(at[8..].try_into().ok()?)));
+        }
+        Some(out)
+    }
+
+    /// One variant's bytes: the loose file when there is one (a conversion in progress), else the pack's entry.
+    pub fn read(lib: &Path, name: &str) -> Option<Vec<u8>> {
+        if let Ok(bytes) = std::fs::read(lib.join(name)) { return Some(bytes); }
+        read_at(lib, *index(lib)?.get(name)?)
+    }
+
+    fn read_at(lib: &Path, (offset, len): (u64, u32)) -> Option<Vec<u8>> {
+        let mut f = std::fs::File::open(lib.join(FILE)).ok()?;
+        f.seek(SeekFrom::Start(offset)).ok()?;
+        let mut bytes = vec![0u8; len as usize];
+        f.read_exact(&mut bytes).ok()?;
+        Some(bytes)
+    }
+
+    /// Writes the pack of `names` (each from its loose file, else the old pack) and then deletes the loose files.
+    /// Returns (entries, bytes of data).
+    pub fn write(lib: &Path, names: &[String]) -> Result<(usize, u64), String> {
+        let mut names: Vec<&String> = names.iter().collect();
+        names.sort();
+        names.dedup();
+        let old = index(lib).unwrap_or_default();
+        let mut blobs = Vec::with_capacity(names.len());
+        for n in &names {
+            let bytes = std::fs::read(lib.join(n.as_str())).ok().or_else(|| old.get(n.as_str()).and_then(|at| read_at(lib, *at)));
+            blobs.push(bytes.ok_or_else(|| format!("variant missing: {n}"))?);
+        }
+        let header: u64 = 12 + names.iter().map(|n| 2 + n.len() as u64 + 12).sum::<u64>();
+        let tmp = lib.join(format!("{FILE}.writing"));
+        let mut f = std::io::BufWriter::new(std::fs::File::create(&tmp).map_err(|e| e.to_string())?);
+        let mut put = |b: &[u8]| f.write_all(b).map_err(|e| e.to_string());
+        put(MAGIC)?;
+        put(&(names.len() as u32).to_le_bytes())?;
+        let mut offset = header;
+        for (n, b) in names.iter().zip(&blobs) {
+            put(&(n.len() as u16).to_le_bytes())?;
+            put(n.as_bytes())?;
+            put(&offset.to_le_bytes())?;
+            put(&(b.len() as u32).to_le_bytes())?;
+            offset += b.len() as u64;
+        }
+        for b in &blobs { put(b)?; }
+        f.into_inner().map_err(|e| e.to_string())?.sync_all().map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, lib.join(FILE)).map_err(|e| e.to_string())?;
+        for n in &names { let _ = std::fs::remove_file(lib.join(n)); }
+        Ok((names.len(), offset - header))
+    }
+
+    /// Writes every pack entry back as its loose file (a conversion samples next to them and skips those it has).
+    pub fn unpack(lib: &Path) -> usize {
+        let Some(index) = index(lib) else { return 0 };
+        index.iter().filter(|(n, _)| !lib.join(n).exists()).filter(|(n, at)| read_at(lib, **at).is_some_and(|b| std::fs::write(lib.join(n), b).is_ok())).count()
+    }
+}
+
+/// `--oklib anim-pack <lib>`: the variants `studio_anims.json` lists into the pack, the loose files deleted.
+pub fn pack_variants(lib: &Path) -> Result<(usize, u64), String> {
+    let cat: AnimCatalog = serde_json::from_str(&std::fs::read_to_string(lib.join(FILE_NAME)).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let names: Vec<String> = cat.anims.iter().flat_map(|a| a.variants.iter().cloned()).collect();
+    let out = variant_pack::write(lib, &names)?;
+    remove_loose_variants(lib);
+    Ok(out)
+}
+
+/// Deletes the loose variant files (`anims/studio/*@*.okanim`): they live in the pack.
+fn remove_loose_variants(lib: &Path) {
+    let Ok(dir) = std::fs::read_dir(lib.join("anims/studio")) else { return };
+    for e in dir.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.contains('@') && name.ends_with(".okanim") { let _ = std::fs::remove_file(e.path()); }
+    }
+}
+
 /// Drops the axes every variant comes out the same along (the controller has the parameter, but the sampled motion
 /// does not follow it): the variants at the axis's first value stay (renamed without it), the rest are deleted.
 /// Returns how many axes went.
@@ -302,6 +405,9 @@ pub fn convert(lib: &Path, game: &Path, card: Option<&Path>, filter: Option<&str
         a.blend_checked = true;
     }
     crate::anim::end_animation_preparation();
+    // The packed variants as loose files again: the batch skips what is there, and pruning compares them.
+    let unpacked = variant_pack::unpack(lib);
+    if unpacked > 0 { println!("OKANIM {unpacked} variants taken out of {}", variant_pack::FILE); }
     let mut items: Vec<crate::okanim::batch::Item> = Vec::new();
     for a in cat.anims.iter().filter(|a| wanted(a)) {
         let source = a.key.split('|').next().unwrap_or_default().to_owned();
@@ -345,6 +451,13 @@ pub fn convert(lib: &Path, game: &Path, card: Option<&Path>, filter: Option<&str
     }
     if pruned > 0 { println!("OKANIM {pruned} controls dropped: the sampled motion does not follow them"); }
     std::fs::write(lib.join(FILE_NAME), serde_json::to_string_pretty(&cat).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    // Every variant into the pack; no loose `@` file stays (those pruning left unlisted included).
+    let names: Vec<String> = cat.anims.iter().flat_map(|a| a.variants.iter().cloned()).collect();
+    if !names.is_empty() {
+        let (n, bytes) = variant_pack::write(lib, &names)?;
+        println!("OKANIM {n} variants in {} ({bytes} bytes)", variant_pack::FILE);
+    }
+    remove_loose_variants(lib);
     Ok(cat)
 }
 
@@ -398,7 +511,7 @@ mod tests {
             let bytes = crate::okanim::convert::from_clip_with(&sampler, &a.key, 30.0, None, &params).unwrap().to_bytes().unwrap();
             let sum: u64 = bytes.iter().enumerate().map(|(i, b)| (i as u64 + 1) * *b as u64).sum();
             // The library's variant at this height (when it has one): the same bytes means the card does not matter.
-            let same = a.variants.iter().find(|f| f.ends_with(&format!("@option1-{h}.okanim"))).map(|f| std::fs::read(lib.join(f)).ok() == Some(bytes.clone()));
+            let same = a.variants.iter().find(|f| f.ends_with(&format!("@option1-{h}.okanim"))).map(|f| super::variant_pack::read(&lib, f) == Some(bytes.clone()));
             println!("height {h}: {} bytes, checksum {sum}, same as the library's: {same:?}", bytes.len());
         }
     }

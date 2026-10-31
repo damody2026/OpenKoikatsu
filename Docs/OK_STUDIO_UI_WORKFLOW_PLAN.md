@@ -753,13 +753,14 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 - 全部 4,918 個 H 動作的控制器：4,318 個的樹用到身長（0、0.5、1）、558 個另有動作模式（0、1）、14 個用 `height1`、胸部參數沒有任何動作用到、26 個都沒有。實際取樣後比對（853 條軸輸出不變被去掉，例如 `2/112/*` 的身長 0～1 輸出完全相同，`h_motion_along_height`）：3,605 個沿身長、425 個沿身長＋動作模式、137 個只沿動作模式、751 個沒有變體。共 13,639 個變體檔、361 MB（`base_v1/anims/studio/*@*.okanim`，8 執行緒取樣約 3 分鐘；讀控制器約 20 分鐘只在第一次）。
 - OK Studio：有變體的動作把格點組成巢狀 1D blend（每層一個控制，`Axis.param` 指定讀第幾個播放器參數，等於多線性內插）；`FOKSceneCharacter::AnimFloats` 以控制名（`option1`／`option2`／`pattern`）記值，沒設的用控制器預設值。動畫控制器浮窗列出這個動作有的控制（輔助 1（身長）、動作模式）與「預設」；KStudio 場景匯入帶入 `animeOptionParam1/2` 與 `animePattern`。控制通道：`state` 每個角色的 `anim_controls`（播放器目前的值），`pose` 的 `anim_controls` 設值（空物件＝全部回預設）。
 - 強制循環（KStudio 的 forceLoop）：動畫控制器「強制循環」，播放時間對動作長度取模；KStudio 匯入帶入。
-- **重新產生變體（變體檔與 `studio_anims.json` 不在版控）**：乾淨 clone 建好 ok-extract（`cargo build --release --bin ok-extract --manifest-path Tools/ok-extract/Cargo.toml`）後，一條指令：
+- **變體打包檔（2026-10-31 起進版控）**：13,639 個小檔改成一個打包檔 `base_v1/anims/studio_variants.okpack`（351 MB，Git LFS，`.gitattributes` 的 `base_v1/anims/*.okpack` 規則）。格式：`OKVPACK1`、u32 個數、依名稱排序的索引（u16 名稱長度、UTF-8 名稱、u64 偏移、u32 長度），後面接各變體的 `.okanim` 原始位元組；名稱就是 `studio_anims.json` 的 `variants` 裡的路徑（`anims/studio/<動作>@<控制>-<值>….okanim`），json 照舊記 `axes`／`variants`。OK Studio（`OKSceneActor.cpp` 的 `ReadStudioVariant`）先找同名散檔，沒有就讀打包檔：索引每個檔案只讀一次，單一變體依偏移讀出，不整包載入；打包檔不在時照舊播單一動作（沒有輔助／動作模式）。Rust 端是 `studio_anims::variant_pack`。打包檔讀出的 13,639 個變體和原散檔逐位元組相同；`studio_anims.json` 一起進版控。
+- **重新產生變體**：乾淨 clone 建好 ok-extract（`cargo build --release --bin ok-extract --manifest-path Tools/ok-extract/Cargo.toml`）後，一條指令：
 
   ```powershell
   .\Tools\ok-extract\target\release\ok-extract.exe D:/KoikatuSunshine --oklib anim-convert Content/IndependentResources/base_v1 - hanime_ 8
   ```
 
-  第一個參數換成自己的 KKS 遊戲目錄。`-` 表示用遊戲的預設角色取樣（不讀任何卡；取樣結果帶一點角色的基本姿勢，用同一個角色才能逐位元組重現，任何安裝都有預設角色）；也可以給一張 OK 卡或原作卡。已經存在的檔案會跳過。第一次要讀全部 H 動作的控制器（約 20 分鐘），之後 `studio_anims.json` 記了 `blend_checked` 就沿用；取樣約 3 分鐘（8 執行緒）；最後重建目錄約 20 分鐘。完成時印出 `OKANIM … controls dropped` 與 `OKANIM catalogue 5805 animations`。
+  第一個參數換成自己的 KKS 遊戲目錄。`-` 表示用遊戲的預設角色取樣（不讀任何卡；取樣結果帶一點角色的基本姿勢，用同一個角色才能逐位元組重現，任何安裝都有預設角色）；也可以給一張 OK 卡或原作卡。轉換時先把打包檔展開成散檔（已經存在的會跳過、去軸比對也用它們），完成後全部寫回打包檔並刪掉散檔。只想把現有散檔打包時用 `ok-extract X:/NoGame --oklib anim-pack Content/IndependentResources/base_v1`。第一次要讀全部 H 動作的控制器（約 20 分鐘），之後 `studio_anims.json` 記了 `blend_checked` 就沿用；取樣約 3 分鐘（8 執行緒）；最後重建目錄約 20 分鐘。完成時印出 `OKANIM … controls dropped` 與 `OKANIM catalogue 5805 animations`。
 
 **U26 記錄（2026-10-31）**：mod 粒子道具（只有 ParticleSystem）原本完全不畫。`studio_mod_items.json` 的道具若來自粒子包（bundle 路徑含 particle／effect／fx），另存一份（沒有轉出模型的也留，但不進道具瀏覽器）；KStudio 匯入時依名稱與 prefab 對 `effects.json` 新增的 `words`（最長的字優先，可寫成 `["cigarette", 0.1]` 帶縮放）換成 OK 的 Niagara 特效，對不到的列進讀取報告。`83283571_p1`：RSkoi 的 Fire 1／Fire 4 變成火焰、Gas 變成煙、Dust 變成光粉；手上的 Cigarette Smoke 第一版對成全尺寸的煙，畫面中央一大團白，加上 0.1 縮放後消失。`F:\OpenKoikatsu\Saved\OKStudio\u26\83283571_p1_fx2.png`。粒子包裡有模型的道具（螢幕、蝴蝶）照常當模型，只有沒模型又對不到的才進讀取報告。
 

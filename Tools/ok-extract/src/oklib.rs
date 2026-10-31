@@ -3149,6 +3149,11 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let c = crate::studio_anims::convert(&lib.ok_or("library directory required")?, game, card.as_deref(), filter, threads)?;
             println!("OKANIM catalogue {} animations, {} with files", c.anims.len(), c.anims.iter().filter(|a| !a.file.is_empty()).count());
         }
+        // anim-pack <lib>: the H motion variants studio_anims.json lists into anims/studio_variants.okpack.
+        "anim-pack" => {
+            let (n, bytes) = crate::studio_anims::pack_variants(&lib.ok_or("library directory required")?)?;
+            println!("OKANIM {n} variants in {} ({bytes} bytes)", crate::studio_anims::variant_pack::FILE);
+        }
         "scene-stats" => {
             let s = crate::studio_scene::stats(&lib.ok_or("library directory required")?, std::path::Path::new(args.get(2).ok_or("scene folder required")?))?;
             let mut top: Vec<_> = s.fk_item_ids.iter().collect(); top.sort_by(|a, b| b.1.cmp(a.1));

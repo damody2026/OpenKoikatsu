@@ -61,6 +61,51 @@ FString AOKSceneActor::LibraryDirectory()
 
 namespace
 {
+	/** One H motion variant's .okanim bytes: the loose file under the library (a conversion in progress), else its entry
+	 *  in the variant pack `anims/studio_variants.okpack` (ok-extract's studio_anims::variant_pack: `OKVPACK1`, u32
+	 *  count, per entry u16 name length, UTF-8 name, u64 offset, u32 length). The index is read once per pack file;
+	 *  each variant is read alone at its offset. */
+	bool ReadStudioVariant(const FString& Name, TArray<uint8>& Out)
+	{
+		const FString Lib = AOKSceneActor::LibraryDirectory();
+		if (FPaths::FileExists(Lib / Name) && FFileHelper::LoadFileToArray(Out, *(Lib / Name))) return true;
+		struct FPack { FString Path; FDateTime Stamp; TMap<FString, TPair<int64, int32>> Index; };
+		static FPack Pack;
+		static FCriticalSection Lock;
+		FScopeLock Locked(&Lock);
+		const FString Path = Lib / TEXT("anims/studio_variants.okpack");
+		const FDateTime Stamp = IFileManager::Get().GetTimeStamp(*Path);
+		if (Pack.Path != Path || Pack.Stamp != Stamp)
+		{
+			Pack = FPack{ Path, Stamp, {} };
+			TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileReader(*Path));
+			char Magic[8] = {};
+			uint32 Count = 0;
+			if (!Ar) return false;
+			Ar->Serialize(Magic, 8);
+			*Ar << Count;
+			if (FMemory::Memcmp(Magic, "OKVPACK1", 8) != 0 || Ar->IsError()) return false;
+			Pack.Index.Reserve(Count);
+			TArray<uint8> NameBytes;
+			for (uint32 I = 0; I < Count && !Ar->IsError(); ++I)
+			{
+				uint16 Len = 0; uint64 Offset = 0; uint32 Size = 0;
+				*Ar << Len;
+				NameBytes.SetNumUninitialized(Len);
+				Ar->Serialize(NameBytes.GetData(), Len);
+				*Ar << Offset << Size;
+				Pack.Index.Add(FString(FUTF8ToTCHAR(reinterpret_cast<const ANSICHAR*>(NameBytes.GetData()), Len)), { int64(Offset), int32(Size) });
+			}
+		}
+		const TPair<int64, int32>* At = Pack.Index.Find(Name);
+		TUniquePtr<FArchive> Ar(At ? IFileManager::Get().CreateFileReader(*Path) : nullptr);
+		if (!Ar) return false;
+		Ar->Seek(At->Key);
+		Out.SetNumUninitialized(At->Value);
+		Ar->Serialize(Out.GetData(), At->Value);
+		return !Ar->IsError();
+	}
+
 	/** An H motion's variants as nested 1D blends, one per Studio control (player parameter I is control I): blending
 	 *  each grid line in turn is the multilinear interpolation of the sampled blend trees. Null when the variants do
 	 *  not fill the grid (the plain clip plays). */
@@ -73,9 +118,8 @@ namespace
 		TArray<TArray<uint8>> Blobs;
 		for (const FString& File : A.Variants)
 		{
-			const UOKAnimSequence* Seq = UOKAnimationLibrary::LoadOkAnimFile(AOKSceneActor::LibraryDirectory() / File, nullptr, NAME_None, OutError);
-			if (!Seq) return nullptr;
-			Blobs.Add(Seq->Data);
+			TArray<uint8>& Bytes = Blobs.AddDefaulted_GetRef();
+			if (!ReadStudioVariant(File, Bytes)) { OutError = TEXT("H motion variant missing: ") + File; return nullptr; }
 		}
 		TFunction<TSharedPtr<FJsonObject>(int32, int32)> Node = [&](int32 Axis, int32 First) -> TSharedPtr<FJsonObject>
 		{
