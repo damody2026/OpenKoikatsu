@@ -5098,11 +5098,13 @@ fn scale_png_alpha_uncached(png: &[u8], factor: f32) -> Option<Vec<u8>> {
     crate::teximg::encode_rgba_owned(img)
 }
 
-/// Alpha-to-coverage with one sample: texels below half alpha become fully transparent, the rest keep their alpha.
-pub fn cut_png_alpha_below_half(png: &[u8]) -> Option<Vec<u8>> {
-    crate::png_transform_cache::transform("alpha_to_mask_v1", png, &[], || {
+/// Alpha-to-coverage under the game's 8x MSAA: a texel covers round(alpha x 8) of the pixel's 8 samples and blends
+/// with its alpha on those, so the resolved pixel takes alpha x round(alpha x 8) / 8 (alpha 0.17 shows at 0.02, 0.4 at
+/// 0.15, 1 stays 1). Baked into the texture's alpha, the plain alpha blend then draws the same.
+pub fn alpha_to_coverage_png(png: &[u8]) -> Option<Vec<u8>> {
+    crate::png_transform_cache::transform("alpha_to_coverage_8x_v1", png, &[], || {
         let mut img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
-        for p in img.pixels_mut() { if p[3] < 128 { p[3] = 0; } }
+        for p in img.pixels_mut() { let a = p[3] as f32 / 255.0; p[3] = (a * (a * 8.0).round() / 8.0 * 255.0).round() as u8; }
         crate::teximg::encode_rgba_owned(img)
     })
 }
@@ -5110,12 +5112,13 @@ pub fn cut_png_alpha_below_half(png: &[u8]) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod alpha_to_mask_tests {
     #[test]
-    fn texels_below_half_alpha_are_not_drawn() {
+    fn alpha_keeps_its_share_of_the_eight_samples() {
         let mut img = image::RgbaImage::new(3, 1);
         for (x, a) in [(0, 44u8), (1, 128), (2, 200)] { img.put_pixel(x, 0, image::Rgba([10, 20, 30, a])); }
         let png = crate::teximg::encode_rgba_owned(img).unwrap();
-        let cut = crate::teximg::load_from_memory(&super::cut_png_alpha_below_half(&png).unwrap()).unwrap().into_rgba8();
-        assert_eq!([cut.get_pixel(0, 0)[3], cut.get_pixel(1, 0)[3], cut.get_pixel(2, 0)[3]], [0, 128, 200]);
+        let cut = crate::teximg::load_from_memory(&super::alpha_to_coverage_png(&png).unwrap()).unwrap().into_rgba8();
+        // 44 (0.17): 1 of 8 samples -> 6; 128 (0.5): 4 of 8 -> 64; 200 (0.78): 6 of 8 -> 150.
+        assert_eq!([cut.get_pixel(0, 0)[3], cut.get_pixel(1, 0)[3], cut.get_pixel(2, 0)[3]], [6, 64, 150]);
         assert_eq!(cut.get_pixel(0, 0)[0], 10, "colour kept");
     }
 }

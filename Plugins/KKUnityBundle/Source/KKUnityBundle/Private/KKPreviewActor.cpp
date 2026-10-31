@@ -5499,6 +5499,14 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		ShadowParams.EyeTextures[0] = ShadowParams.EyeTextures[1] = nullptr; ShadowParams.EyeExpressionTex = nullptr;
 		ShadowParams.bItemFourthColor = View.item_draw == 4;
 		ShadowParams.ItemAlpha = View.item_draw != 0 ? FMath::Clamp(ItemAlpha, 0.f, 1.f) : 1.f;
+		// A Studio item's alpha is the shader's _alpha. main_item_studio_alpha draws with AlphaToMask under the game's
+		// 8x MSAA: a solid texel covers round(alpha x 8) of the samples and blends with alpha there, so it shows at
+		// alpha x round(alpha x 8) / 8 (ok-extract's alpha_to_coverage_png bakes the same into texture alpha). A white
+		// window cube at 0.48 shows the sky through at 0.24 (83283571_p1), not a nearly white pane.
+		FLinearColor AlphaToMask;
+		if (ShadowParams.ItemAlpha < 1.f && Source.MaterialValue(i, "_OKShaderAlphaToMask", AlphaToMask) && AlphaToMask.R > 0.5f
+			&& Source.MaterialShaderName(i).Contains(TEXT("main_item_studio_alpha"), ESearchCase::IgnoreCase))
+			ShadowParams.ItemAlpha *= FMath::RoundToFloat(ShadowParams.ItemAlpha * 8.f) / 8.f;
 		ShadowParams.ColorMaskTex = nullptr;
 		ShadowParams.ColorMaskST = FLinearColor(View.color_mask_st[0], View.color_mask_st[1], View.color_mask_st[2], View.color_mask_st[3]);
 		for (int32 ColorIndex = 0; ColorIndex < 4; ++ColorIndex)

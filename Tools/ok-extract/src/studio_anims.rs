@@ -273,9 +273,21 @@ pub fn catalog_with_mods(game: &Path, mod_motions: &std::collections::BTreeSet<(
     AnimCatalog { format: "ok-studio-anims-1".into(), groups, categories, anims }
 }
 
-/// `--oklib anim-convert <lib> <card> [filter] [threads]`: samples the Studio animations (those whose
+/// The character the motions are sampled on: `card` (an OK card opens from the library, an original card from the
+/// installed game), else the game's default character (no card), which every installation has: the samples carry a
+/// little of the character's base pose, so a library regenerated anywhere matches only on the same character.
+pub(crate) fn sampling_session(game: &Path, card: Option<&Path>) -> Result<crate::session::OkSession, String> {
+    if let Some(card) = card.filter(|c| crate::oklib::is_library_card(c) || std::fs::read(c).ok().and_then(|b| crate::portable::png_snapshot(&b).ok()).is_some_and(|s| s.1.is_some())) {
+        return crate::oklib::open_test_card(card, 0);
+    }
+    let mut session = crate::session::open(game, card, 0)?;
+    if session.body_shaped.is_none() { let body = session.shape_body.clone(); let face = session.shape_face.clone(); session.apply_shape(&body, &face); }
+    Ok(session)
+}
+
+/// `--oklib anim-convert <lib> [card|-] [filter] [threads]`: samples the Studio animations (those whose
 /// `kind_group_category_no` contains `filter`) with a character of the installed game and writes the library files.
-pub fn convert(lib: &Path, game: &Path, card: &Path, filter: Option<&str>, threads: usize) -> Result<AnimCatalog, String> {
+pub fn convert(lib: &Path, game: &Path, card: Option<&Path>, filter: Option<&str>, threads: usize) -> Result<AnimCatalog, String> {
     // Mod motions join the library when the installed game's scenes play them.
     let mut cat = catalog_with_mods(game, &scene_motions(game));
     let previous: Option<AnimCatalog> = std::fs::read_to_string(lib.join(FILE_NAME)).ok().and_then(|t| serde_json::from_str(&t).ok());
@@ -298,7 +310,7 @@ pub fn convert(lib: &Path, game: &Path, card: &Path, filter: Option<&str>, threa
             items.push(crate::okanim::batch::Item { key: a.key.clone(), file: lib.join(variant_file(a, &a.axes, &params)).display().to_string(), source: source.clone(), params });
         }
     }
-    let mut session = crate::oklib::open_test_card(card, 0)?;
+    let mut session = sampling_session(game, card)?;
     session.game_root = game.to_path_buf();
     let sampler = crate::okanim::convert::ClipSampler::of_session(&mut session)?;
     let started = std::time::Instant::now();
@@ -376,7 +388,8 @@ mod tests {
         let want = std::env::var("OK_ANIM").unwrap_or_else(|_| "2/112/1".into());
         let c: super::AnimCatalog = serde_json::from_str(&std::fs::read_to_string(lib.join(super::FILE_NAME)).unwrap()).unwrap();
         let a = c.anims.iter().find(|a| a.kind == "hanime" && format!("{}/{}/{}", a.group, a.category, a.no) == want).unwrap();
-        let mut session = crate::oklib::open_test_card(&lib.join("../../CharacterCards/CrowdAPNG/C000.png"), 0).unwrap();
+        let card = std::env::var("OK_CARD").ok().map(std::path::PathBuf::from);
+        let mut session = super::sampling_session(&game, card.as_deref()).unwrap();
         session.game_root = game.clone();
         let sampler = crate::okanim::convert::ClipSampler::of_session(&mut session).unwrap();
         println!("{} {} axes={:?} sampler params={:?}", want, a.name, crate::anim::studio_blend_axes(&game, &a.key), sampler.params);
@@ -384,7 +397,9 @@ mod tests {
             let params = std::collections::HashMap::from([("height".to_owned(), h)]);
             let bytes = crate::okanim::convert::from_clip_with(&sampler, &a.key, 30.0, None, &params).unwrap().to_bytes().unwrap();
             let sum: u64 = bytes.iter().enumerate().map(|(i, b)| (i as u64 + 1) * *b as u64).sum();
-            println!("height {h}: {} bytes, checksum {sum}", bytes.len());
+            // The library's variant at this height (when it has one): the same bytes means the card does not matter.
+            let same = a.variants.iter().find(|f| f.ends_with(&format!("@option1-{h}.okanim"))).map(|f| std::fs::read(lib.join(f)).ok() == Some(bytes.clone()));
+            println!("height {h}: {} bytes, checksum {sum}, same as the library's: {same:?}", bytes.len());
         }
     }
 

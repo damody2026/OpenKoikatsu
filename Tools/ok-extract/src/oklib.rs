@@ -3142,10 +3142,11 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         "studio-nodes" => crate::studio_items::record_hierarchies(game, &lib.ok_or("library directory required")?, args.get(2).and_then(|t| t.parse().ok()).unwrap_or(6))?,
         "studio-standard-textures" => crate::studio_items::record_standard_map_textures(game, &lib.ok_or("library directory required")?, args.get(2).map(String::as_str))?,
         "anim-convert" => {
-            let card = std::path::PathBuf::from(args.get(2).ok_or("character card required (sampling skeleton)")?);
+            // The sampling character: a card, or "-" / nothing for the game's default character (reproducible bytes).
+            let card = args.get(2).filter(|c| !c.is_empty() && *c != "-").map(std::path::PathBuf::from);
             let filter = args.get(3).map(String::as_str).filter(|f| !f.is_empty() && *f != "all");
             let threads = args.get(4).and_then(|t| t.parse().ok()).unwrap_or(6);
-            let c = crate::studio_anims::convert(&lib.ok_or("library directory required")?, game, &card, filter, threads)?;
+            let c = crate::studio_anims::convert(&lib.ok_or("library directory required")?, game, card.as_deref(), filter, threads)?;
             println!("OKANIM catalogue {} animations, {} with files", c.anims.len(), c.anims.iter().filter(|a| !a.file.is_empty()).count());
         }
         "scene-stats" => {
