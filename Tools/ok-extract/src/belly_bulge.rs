@@ -1,6 +1,6 @@
 //! Belly bulge morphs for the H scene: where his penis presses out through her belly (or her back) the game swells
 //! the skin there instead of letting it come through. Made once on opening a female body: a grid of round swells
-//! "belly.bulge.<side><height><across>", on her front, back, left and right (f b l r), at six heights from just under her
+//! "belly.bulge.<side><height><across>", on her front, back, left and right (f b l r), at seven heights from the tops of her thighs and just under her
 //! crotch (her pubic mound and perineum) to her upper spine and three places across that side (front and back: her
 //! middle and her groins 5.5 cm to each side; left and right: 5 cm before and behind her middle), each `BULGE_M` out
 //! along the skin at weight 100. The scene asks `past` where his glans is against her skin now and drives
@@ -10,8 +10,9 @@ use crate::pose::{mat_inv_pub, mat_mul_pub, Mat4};
 use crate::session::{OkSession, SessionPart};
 use std::collections::HashMap;
 
-/// Where the swells are along her crotch-to-upper-spine line (fractions of it; below 0 is under her crotch).
-const HEIGHTS: [f32; 6] = [-0.05, 0.05, 0.15, 0.28, 0.42, 0.58];
+/// Where the swells are along her crotch-to-upper-spine line (fractions of it; below 0 is under her crotch: -0.2 the
+/// tops of her thighs, where his glans comes out when she lies curled on her side).
+const HEIGHTS: [f32; 7] = [-0.2, -0.05, 0.05, 0.15, 0.28, 0.42, 0.58];
 /// Where across her front and back (metres from her middle), and across her sides (metres before her middle).
 const ACROSS: [f32; 3] = [-0.055, 0.0, 0.055];
 const ALONG_SIDE: [f32; 3] = [-0.05, 0.0, 0.05];
@@ -137,16 +138,20 @@ pub fn penis_tip(session: &OkSession) -> Option<[f32; 3]> {
     best.map(|(_, p)| p)
 }
 
-/// How far `tip` (her skeleton space, Unity metres) is outside her skin now (negative: inside): the nearest skin vertex
-/// any swell moves, in her current pose without the swell, along its normal; how far that vertex is; the swell that moves
-/// it most and how far it does at weight 100 (metres).
+/// How near his glans a skin vertex counts as where it comes through.
+const NEAR_M: f32 = 0.06;
+/// How far `tip` (her skeleton space, Unity metres) is outside her skin now (negative: inside): of the skin vertices any
+/// swell moves within `NEAR_M` of it, in her current pose without the swell, the one it is farthest out of along its normal
+/// (none that near: the nearest); how far that vertex is; the swell that moves it most and how far it does at weight 100
+/// (metres). Not simply the nearest: a glans 6 cm out of her belly is often nearest a vertex below where it came through,
+/// and the swell picked there bulged under it.
 pub fn past(session: &OkSession, tip: [f32; 3]) -> Option<(f32, f32, String, f32)> {
     let skel = session.body_skel.as_ref()?;
     let part = session.parts.iter().find(|p| p.blend_shapes.iter().any(|(n, _)| is_bulge(n)))?;
     let (worlds, binds) = crate::skel_export::palettes(skel, part);
     if worlds.is_empty() { return None; }
     let mut seen = std::collections::HashSet::new();
-    let mut best: Option<(f32, f32, usize)> = None;
+    let (mut nearest, mut most_out): (Option<(f32, f32, usize)>, Option<(f32, f32, usize)>) = (None, None);
     for (_, deltas) in part.blend_shapes.iter().filter(|(n, _)| is_bulge(n)) {
         for (j, _) in deltas {
             let j = *j as usize;
@@ -155,14 +160,16 @@ pub fn past(session: &OkSession, tip: [f32; 3]) -> Option<(f32, f32, String, f32
             let p = point(&skin, part.rest_positions[j]);
             let d = [tip[0] - p[0], tip[1] - p[1], tip[2] - p[2]];
             let dist = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-            if best.is_some_and(|(b, _, _)| b <= dist) { continue; }
+            if dist > NEAR_M * NEAR_M && nearest.is_some_and(|(b, _, _)| b <= dist) { continue; }
             let o = point(&skin, [0.; 3]);
             let Some(n) = part.rest_normals.get(j).map(|v| { let v = point(&skin, *v); [v[0] - o[0], v[1] - o[1], v[2] - o[2]] }) else { continue; };
             let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();if len < 1e-6 { continue; }
-            best = Some((dist, (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) / len, j));
+            let out = (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) / len;
+            if nearest.map_or(true, |(b, _, _)| dist < b) { nearest = Some((dist, out, j)); }
+            if dist <= NEAR_M * NEAR_M && most_out.map_or(true, |(_, b, _)| out > b) { most_out = Some((dist, out, j)); }
         }
     }
-    let (dist, out, j) = best?;
+    let (dist, out, j) = most_out.or(nearest)?;
     let mut most: Option<(&std::ffi::CString, f32)> = None;
     for (n, deltas) in part.blend_shapes.iter().filter(|(n, _)| is_bulge(n)) {
         let Some((_, d)) = deltas.iter().find(|(i, _)| *i as usize == j) else { continue; };

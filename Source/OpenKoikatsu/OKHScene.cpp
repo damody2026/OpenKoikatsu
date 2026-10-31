@@ -931,11 +931,12 @@ void UOKHScenePanel::BulgeBelly(AKKPreviewActor* Girl,const FVector* Tip,float O
         const FVector Here=AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(*Tip))-AKKPreviewActor::ActorLocalToUnity(Body.InverseTransformPosition(Kokan));
         if(Girl->Session.BellyBulgePast(FVector(M[3],M[7],M[11])+Here,Past,Near,Target,Moves)){BulgeTarget=Target;BulgePast=Past*100.f;BulgeMoves=Moves*100.f;}
         else BulgeTarget=NAME_None;}
-    // Out by how far his tip is past her skin and 2.5 cm more (his glans is round, the skin beside the one measured
-    // moves less). A swell that hardly moves that skin (the end of its reach) would only bloat her elsewhere.
+    // Once his tip is past her skin (inside, the margin swelled her where he does not show), out by how far and 2.5 cm
+    // more (his glans is round, the skin beside the one measured moves less). A swell that hardly moves that skin (the
+    // end of its reach) would only bloat her elsewhere.
     TMap<FName,float> Want;
     // Within 6 cm of her entrance his glans is in it, not through her: the nearest skin there is her labia.
-    if(Tip&&!BulgeTarget.IsNone()&&BulgeMoves>2.f&&!(HBone(Girl,TEXT("J_Kokan"),Kokan)&&FVector::Dist(*Tip,Kokan)<6.))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*100.f);
+    if(Tip&&!BulgeTarget.IsNone()&&BulgePast>0.f&&BulgeMoves>2.f&&!(HBone(Girl,TEXT("J_Kokan"),Kokan)&&FVector::Dist(*Tip,Kokan)<6.))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*100.f);
     TArray<FName> Names;Bulge.GetKeys(Names);for(const auto& W:Want)Names.AddUnique(W.Key);
     // Eased: fast in, slow out, so it holds near its deepest through a thrust (read between solves, it lagged the tip).
     for(const FName& Name:Names){float& B=Bulge.FindOrAdd(Name);const float Was=B,To=Want.FindRef(Name);
