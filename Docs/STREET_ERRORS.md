@@ -1618,3 +1618,6 @@
   - 自己的錯：MCP 的 game_launch 預設跑 Saved/StreetSocial/Build 裡最新的 .stage，別的 session（e-okcard）剛編好的 okcard1031b 比我的新，我以為在驗自己的版本，其實是在跑它的。之後啟動時一律加 `-Executable <自己 tag 的 OpenKoikatsu.exe>`，並在 log 的 Base Directory 確認是哪個 stage。
   - 體液顯示第一版（R7c）讓所有 OK 卡都開不了：在臉部材質多做了 mm_base 的 material_named 查詢，封存的 OK 卡沒有這些查詢的記錄（UNMEMOIZED），11 張卡全數失敗。教訓：開卡路徑上新增任何 bundle 查詢都會讓既有 OK 卡失效，要嘛把資料放進基礎庫共用資源，要嘛不走開卡查詢。
   - 體液看不到的真正原因有兩層：(1) 身體的繪製材質從 mm_base 換成 cf_m_body 時只帶了 DetailMask／LineMask／NormalMap，沒帶液體遮罩 `cf_body_01_ml` 與花紋 `liquid01_t`；(2) session 建部件時依 shader 過濾 shader 貼圖，皮膚臉只留 overtex、身體與 Koikano 衣服只留 lightmap 等，液體三張全被丟掉，所以原作 main_skin 程式的液體計算一直讀到黑貼圖。修法：擷取時把繪製材質的液體貼圖帶上（放在 rig_memo 之後，避免被舊版記憶的網格蓋掉），過濾時保留 `_liquidmask`／`_Texture2`／`_Texture3`，開卡快取版本 +1。教訓：先在遊戲裡拿實際資料（MID 綁的貼圖、session 部件有哪些貼圖），bench 印的是過濾前的網格，看起來有不代表最後有；我中間繞了好幾版。
+- 2026-10-31 c-conquest R6-41：答應交換號碼卻沒存號碼。通用修正：判斷器 gives_number 規則註明答應交換就算（遊戲替兩人存），涵蓋所有女主與當面／手機。
+- 2026-10-31 c-conquest R6-42：「我去結帳買這本」沒被當成購買。通用修正：判斷器 orders 規則註明去結帳、「我買那本」都算現在買，涵蓋所有店。
+- 2026-10-31 c-conquest：第 8 輪又一次預先排好多句台詞連續送出，沒看她的回覆，說了她沒提過的「小貓」；waitline 迴圈沒在她說「碰杯」時停，空等 30 分鐘。之後一次一句、等待一律在她開口時停。
