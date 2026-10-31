@@ -321,7 +321,7 @@ pub fn convert(lib: &Path, game: &Path, card: &Path, filter: Option<&str>, threa
     for a in &mut cat.anims {
         let complete = !a.axes.is_empty() && grid(&a.axes).iter().all(|p| converted(&variant_file(a, &a.axes, p)));
         if complete && wanted(a) { pruned += prune_axes(lib, a); }
-        a.variants = if complete { grid(&a.axes).iter().map(|p| variant_file(a, &a.axes, p)).collect() } else { Vec::new() };
+        a.variants = if complete && !a.axes.is_empty() { grid(&a.axes).iter().map(|p| variant_file(a, &a.axes, p)).collect() } else { Vec::new() };
         if let Some(e) = done.get(&lib.join(file_of(a)).display().to_string()) {
             a.file = file_of(a);
             a.duration = e["duration"].as_f64().unwrap_or(0.) as f32;
