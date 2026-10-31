@@ -296,6 +296,9 @@ void AOKStreetSocialScene::FreeTalkLeave(const FString& Message){
   if(S.Facility!=INDEX_NONE&&S.FacilityCharacter==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveFacility);FinishFacility();}
   if(S.OutingGirl==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveOuting);CancelOuting(FString());}
   if(S.Companion==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveCompanion);FinishCompanion();}
+  // Something they were doing together at a spot (browsing books, R6-48): her goodbye ends it too, or the talk opened
+  // again by itself because she was still "with him", and they stood there silent until it ran out.
+  if(S.SoloGirl==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveSolo);UE_LOG(LogTemp,Display,TEXT("Street solo: %s ends, she said goodbye"),*S.SoloWhat);EndSolo();}
   if(S.Target==Girl){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_LeaveEndTalk);EndTalk();}
   if(S.Agents.IsValidIndex(Girl-1)){auto& Agent=S.Agents[Girl-1];Agent.Held=false;Agent.Mode=EOKStreetMove::Walking;Agent.Stuck=0;}
  }
