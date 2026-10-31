@@ -7,6 +7,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Dom/JsonObject.h"
+#include "Async/Async.h"
+#include "Misc/ScopeLock.h"
 
 namespace {
 // HasError is a virtual interface entry, not exported as a concrete Vorbis symbol.
@@ -48,8 +50,48 @@ public:
 };
 }
 
+namespace {
+using FLinesResult=TTuple<bool,TArray<FKKSpeechLine>,FString>;
+FLinesResult LoadLinesUncached(const FString& Root,int32 Personality);
+// Parsed lines by index file (path, size, time) and voice: parsing the whole index was ~0.5 s of each card load's game
+// thread. Failures are not kept (the voices may be extracted later).
+FCriticalSection LinesLock;
+TMap<FString,TSharedFuture<FLinesResult>> LinesCache;
+FString LinesKey(const FString& Root,int32 Personality) {
+    const FString Index=Root/TEXT("comm_lines.json");
+    return FString::Printf(TEXT("%s|%d|%lld|%s"),*Index,Personality,IFileManager::Get().FileSize(*Index),*IFileManager::Get().GetTimeStamp(*Index).ToString());
+}
+TSharedFuture<FLinesResult> LinesFuture(const FString& Root,int32 Personality,bool bAsync) {
+    const FString Key=LinesKey(Root,Personality);
+    {FScopeLock Lock(&LinesLock);if(const auto* Found=LinesCache.Find(Key))return *Found;}
+    TSharedFuture<FLinesResult> Future;
+    if(bAsync)Future=Async(EAsyncExecution::ThreadPool,[Root,Personality](){return LoadLinesUncached(Root,Personality);}).Share();
+    else {TPromise<FLinesResult> Ready;Ready.SetValue(LoadLinesUncached(Root,Personality));Future=Ready.GetFuture().Share();}
+    FScopeLock Lock(&LinesLock);
+    if(const auto* Found=LinesCache.Find(Key))return *Found;
+    return LinesCache.Add(Key,Future);
+}
+}
+
+void KKSpeech::PrefetchLines(const FString& Root,int32 Personality) {
+    if(Root.IsEmpty()||Personality<0)return;
+    LinesFuture(Root,Personality,true);
+}
+
 bool KKSpeech::LoadLines(const FString& Root,int32 Personality,TArray<FKKSpeechLine>& Lines,FString& Error) {
-    Lines.Reset();Error.Reset();FString Source;TSharedPtr<FJsonObject> Json;
+    const FString Key=LinesKey(Root,Personality);
+    const TSharedFuture<FLinesResult> Future=LinesFuture(Root,Personality,false);
+    const FLinesResult& Result=Future.Get();
+    Lines=Result.Get<1>();Error=Result.Get<2>();
+    if(!Result.Get<0>()){FScopeLock Lock(&LinesLock);LinesCache.Remove(Key);}
+    return Result.Get<0>();
+}
+
+namespace {
+FLinesResult LoadLinesUncached(const FString& Root,int32 Personality) {
+    TArray<FKKSpeechLine> Lines;FString Error;
+    const bool Ok=[&]{
+    FString Source;TSharedPtr<FJsonObject> Json;
     if(!FFileHelper::LoadFileToString(Source,*(Root/TEXT("comm_lines.json")))||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Source),Json)||!Json.IsValid()){
         Error=TEXT("找不到或無法讀取一般對話語音索引 comm_lines.json");return false;
     }
@@ -69,6 +111,9 @@ bool KKSpeech::LoadLines(const FString& Root,int32 Personality,TArray<FKKSpeechL
     Lines.Sort([](const FKKSpeechLine& A,const FKKSpeechLine& B){return A.Id<B.Id;});
     if(Lines.IsEmpty()){Error=FString::Printf(TEXT("性格 %d 沒有已擷取的一般話題語音"),Personality);return false;}
     return true;
+    }();
+    return FLinesResult(Ok,MoveTemp(Lines),MoveTemp(Error));
+}
 }
 
 bool KKSpeech::DecodeOgg(const FString& Path,TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe>& Out,FString& Error) {

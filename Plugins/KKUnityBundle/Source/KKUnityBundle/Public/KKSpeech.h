@@ -28,7 +28,10 @@ struct FKKHBreathCue {
     TArray<float> OpenMins;
 };
 namespace KKSpeech {
+    // A voice's general lines, parsed once per index file (comm_lines.json) and voice; waits for a running prefetch.
     KKUNITYBUNDLE_API bool LoadLines(const FString& Root,int32 Personality,TArray<FKKSpeechLine>& Lines,FString& Error);
+    // LoadLines started on the thread pool (a card load names the voice before its speech panel asks for it).
+    KKUNITYBUNDLE_API void PrefetchLines(const FString& Root,int32 Personality);
     KKUNITYBUNDLE_API bool DecodeOgg(const FString& Path,TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe>& Out,FString& Error);
     KKUNITYBUNDLE_API float MouthRate(float Rms,float& Previous);
     KKUNITYBUNDLE_API ISoundGeneratorPtr MakeGenerator(TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe> Pcm,TSharedPtr<FKKSpeechMeter,ESPMode::ThreadSafe> Meter,float StartSeconds=0.f,int32 OutputRate=0);

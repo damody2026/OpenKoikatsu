@@ -15,6 +15,7 @@
 #include "OKMotionLabelZh.h"
 #include "Brushes/SlateColorBrush.h"
 #include "KKPreviewActor.h"
+#include "KKSpeech.h"
 #include "KKPairedPlayback.h"
 #include "KKRustExtract.h"
 #include "KKSkeletalBuilder.h"
@@ -1766,6 +1767,9 @@ void UOKCharacterController::StartLoad3D(bool bAppearanceGeometryOnly)
         const bool Enter=bEnterInteractionAfterLoad;bEnterInteractionAfterLoad=false;if(Enter)OnEnterInteraction();return;
 	}
 	if(auto* PC=Cast<AOpenKoikatsuPlayerController>(GetOwningPlayer()))PC->SetPaintPreviewActive(false);
+	// The card's voice lines are read while it loads (OnLoadSpeech takes them when the load finishes).
+	if(!bAppearanceGeometryOnly&&SpeechRootInput&&Selected.Sex==1&&Selected.Personality>=0&&Selected.Personality<=39)
+		KKSpeech::PrefetchLines(SpeechRootInput->GetText().ToString(),Selected.Personality);
 	if(!bAppearanceGeometryOnly&&TryNeighborPreload())return;
 	if (PreviewActor)
 	{
