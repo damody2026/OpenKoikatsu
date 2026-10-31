@@ -16,6 +16,10 @@
 #include "KKSpeech.h"
 #include "Engine/StaticMeshActor.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/Material.h"
+#include "UObject/SavePackage.h"
+#include "UObject/Package.h"
+#include "Misc/PackageName.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PoseableMeshComponent.h"
@@ -857,6 +861,15 @@ void UOKHScenePanel::ApplyMaleLook(){
     for(UMeshComponent* Comp:MaleGhostOutlines)if(IsValid(Comp))Comp->SetVisibility(true);MaleGhostOutlines.Reset();
     // The penis (hidden like the card preview's) shows when his bottom is off.
     Him->SetGenitalVisible(bMaleBottomOff);
+    // Where his penis is inside her: while he is see-through it is drawn once more over everything (depth test off), a
+    // faint colour, so the part in her body shows too (whether it runs inside her or comes out through her skin).
+    TInlineComponentArray<UMeshComponent*> All;Him->GetComponents(All);
+    auto IsGenital=[Him](UMeshComponent* Comp){for(const FName& Tag:Comp->ComponentTags){const FString T=Tag.ToString();if(!T.StartsWith(TEXT("KKSessionPart_")))continue;
+        OkMeshView V{};if(Him->Session.PartAt(FCString::Atoi(*T.Mid(14)),V)&&V.name){const FString N=FString(UTF8_TO_TCHAR(V.name)).ToLower();return N==TEXT("o_dankon")||N==TEXT("cm_o_dan00");}}return false;};
+    UMaterialInterface* XRayParent=MaleView==1&&bMaleBottomOff?LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewXRay.M_PreviewXRay"),nullptr,LOAD_NoWarn):nullptr;
+    if(XRayParent&&!PenisXRay){PenisXRay=UMaterialInstanceDynamic::Create(XRayParent,this);PenisXRay->SetVectorParameterValue(TEXT("PreviewTint"),FLinearColor(1.f,.35f,.75f,.45f));}
+    int32 Shown=0;for(UMeshComponent* Comp:All)if(IsGenital(Comp)){Comp->SetOverlayMaterial(XRayParent?PenisXRay.Get():nullptr);Shown+=XRayParent?1:0;}
+    if(MaleView==1)UE_LOG(LogTemp,Display,TEXT("H scene: penis drawn through her: %d parts%s"),Shown,XRayParent?TEXT(""):TEXT(" (no M_PreviewXRay)"));
     if(MaleView!=1)return;
     // Looked up each time, not kept in a static: once the scene that made his ghost material is gone, nothing holds the
     // parent and it is collected; the next scene read the freed one (crash on coming back into the room, R9).
@@ -912,7 +925,7 @@ void UOKHScenePanel::AlignHim(float Delta){
         if(bHisIk||bHerIk)SyncPair();
         if(bHisIk){Him->Session.SetStudioIk({},{});bHisIk=false;}if(bHerIk){Girl->Session.SetStudioIk({},{});bHerIk=false;}
         FeetWait=0;bFeetRead=false;}
-    AlignOff=-1.f;
+    AlignOff=-1.f;AlignTip=-1.f;
     const FString Cur=Current(),Base=HBase(Cur);
     const bool In=Mode==2&&Gallery->PairedPlayback&&Gallery->PairedPlayback->GetElapsed()>0.f&&(Base==TEXT("Insert")||Base==TEXT("InsertIdle")||Base.EndsWith(TEXT("Loop"))&&!Base.Contains(TEXT("OUT"))||Base.Contains(TEXT("_IN_"))||Base==TEXT("IN_A"));
     // Where their feet are in the clip (no IK yet), and whether each stands on the floor: read a few frames into the pose.
@@ -933,6 +946,9 @@ void UOKHScenePanel::AlignHim(float Delta){
         if(Len>2.f){
             const FVector D=E-P0;const float Along=float(D|Axis);const FVector Fix=D-Axis*Along; // onto the line of the penis
             AlignOff=float(Fix.Size());AlignAt=100.f*Along/Len;AlignLen=Len;
+            // How far his tip is off the line into her (her entrance to her lower spine): along it, he runs inside her; well off
+            // it, his penis comes out through her belly or her bottom (the angle of the clip, not the place).
+            {FVector Spine;if(HBone(Girl,TEXT("j_spine01"),Spine)){const FVector Seg=Spine-E;const float L2=float(Seg.SizeSquared());const float T=L2>1.f?FMath::Clamp(float((P1-E)|Seg)/L2,0.f,1.f):0.f;AlignTip=float((P1-(E+Seg*T)).Size());}}
             {FVector FL,FR;float Foot=1e9f;if(HBone(Him,TEXT("j_foot_L"),FL))Foot=float(FL.Z);if(HBone(Him,TEXT("j_foot_R"),FR))Foot=FMath::Min(Foot,float(FR.Z));AlignFoot=Foot-float(Girl->GetActorLocation().Z);}
             AtMin=FMath::Min(AtMin,AlignAt);AtMax=FMath::Max(AtMax,AlignAt);AtWindow+=Delta;
             {const float Floor=float(Girl->GetActorLocation().Z);AKKPreviewActor* Who[2]={Him,Girl};
@@ -1095,7 +1111,7 @@ void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit
 TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     auto O=MakeShared<FJsonObject>();
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
-    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
+    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("tip"),AlignTip);A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);{TArray<TSharedPtr<FJsonValue>> F;for(float V:FeetShown)F.Add(MakeShared<FJsonValueNumber>(V));A->SetArrayField(TEXT("feet"),F);}A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
     O->SetBoolField(TEXT("covered"),bCovered);{TArray<TSharedPtr<FJsonValue>> S;for(int32 V:Siru)S.Add(MakeShared<FJsonValueNumber>(V));O->SetArrayField(TEXT("siru"),S);}
     {TArray<TSharedPtr<FJsonValue>> L;for(const FString& R:LiquidReport())L.Add(MakeShared<FJsonValueString>(R));O->SetArrayField(TEXT("liquid"),L);}
     // Where their heads and feet are on the screen (0..1; -1 behind the camera): both whole in the shot or not.
@@ -1137,4 +1153,24 @@ TSharedRef<FJsonObject> UOKHScenePanel::Result() const{
     TArray<TSharedPtr<FJsonValue>> P,E;for(const FString& S:PosesPlayed)P.Add(MakeShared<FJsonValueString>(S));for(const FString& S:Events)E.Add(MakeShared<FJsonValueString>(S));
     Out->SetArrayField(TEXT("poses"),P);Out->SetArrayField(TEXT("events"),E);
     return Out;
+}
+
+int32 UOKBuildHXRayMaterialCommandlet::Main(const FString& Params){
+#if WITH_EDITOR
+    // A copy of the translucent preview parent (its skeletal / vertex-factory usage comes with it), depth test off.
+    UMaterial* Source=LoadObject<UMaterial>(nullptr,TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewTranslucent.M_PreviewTranslucent"));
+    if(!Source){UE_LOG(LogTemp,Error,TEXT("OKBuildHXRayMaterial: no M_PreviewTranslucent"));return 1;}
+    const FString Path=TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewXRay");
+    UPackage* Package=CreatePackage(*Path);Package->FullyLoad();
+    UMaterial* XRay=Cast<UMaterial>(StaticDuplicateObject(Source,Package,TEXT("M_PreviewXRay")));
+    if(!XRay)return 1;
+    XRay->SetFlags(RF_Public|RF_Standalone);XRay->bDisableDepthTest=true;XRay->TwoSided=true;
+    XRay->PostEditChange();XRay->MarkPackageDirty();
+    FSavePackageArgs Save;Save.TopLevelFlags=RF_Public|RF_Standalone;
+    const bool Ok=UPackage::SavePackage(Package,XRay,*FPackageName::LongPackageNameToFilename(Path,FPackageName::GetAssetPackageExtension()),Save);
+    UE_LOG(LogTemp,Display,TEXT("OKBuildHXRayMaterial: %s"),Ok?TEXT("saved M_PreviewXRay"):TEXT("save failed"));
+    return Ok?0:1;
+#else
+    return 1;
+#endif
 }
