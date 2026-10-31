@@ -126,6 +126,14 @@ private:
     void ReleaseHeld();
     // Her eyes and brows follow the moment (state, her gauge, how used to it she is), as the original's H face lists do.
     void UpdateFace();
+    // Her cheeks flush with her excitement (the face's blush overlay, ChangeHohoAkaRate's _overcolor2 alpha = lerp(0, .2, rate)):
+    // it rises with her gauge and fades slowly after, so she is still flushed after she comes. Her card's own blush is the floor.
+    void UpdateBlush(float Delta);void RestoreBlush();
+    TWeakObjectPtr<class AKKPreviewActor> BlushFor;float Blush=-1.f,BlushShown=-1.f;bool bBlushLogged=false;
+public:
+    float BlushTest=-1.f; // /hscene {"blush":v}: hold her blush at v (0..1) to compare shots; -1 follows her
+private:
+    UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> BlushMats; TArray<float> BlushBase;
     FString FaceKey;
     // A new pose frames her from the side of the line between them, turned to her front (his back no longer fills the
     // view); he can be hidden as in the original. The player's own orbit stays until the next pose.
@@ -147,13 +155,22 @@ private:
     // player requires one origin): the offset is on the parts under his root.
     void AlignHim(float Delta);
     FVector HimOffset=FVector::ZeroVector,HimApplied=FVector::ZeroVector;FString AlignedKey;bool bAlignLogged=false;TWeakObjectPtr<class AKKPreviewActor> AlignedHim;
+    // The taller one bends the knees instead of sinking through the floor or floating over it: he is lowered with his feet
+    // held where they were (Studio IK foot targets); when he would have to rise, she is lowered the same way.
+    FVector HerOffset=FVector::ZeroVector,HerApplied=FVector::ZeroVector;TWeakObjectPtr<class AKKPreviewActor> AlignedHer;
+    int32 FeetWait=0;bool bFeetRead=false,bHisStands=false,bHerStands=false,bHisIk=false,bHerIk=false;FVector HisFeet[2],HerFeet[2],HisHeld[2],HerHeld[2];
+    void MoveParts(class AKKPreviewActor* A,const FVector& Want,FVector& Applied);void HoldFeet(class AKKPreviewActor* A,bool bStands,const FVector& Offset,const FVector (&Feet)[2],FVector (&Kept)[2],bool& bIk);
+    // The pair solves its next frame in the background (ok.Anim.AsyncPair): wait for it before touching either session.
+    void SyncPair();
+    void RestoreAlign();
+    float AlignFoot=0.f,AlignPushed=0.f,AlignDeep=0.f; // his lower ankle above her floor (cm), for /hscene
     float AlignOff=-1.f,AlignAt=0.f,AlignLen=0.f; // the last measure while he is in her (cm off the penis line, % of its length), for /hscene
     float DeepAlong=1e9f; // the deepest point of his thrusts lately (entrance distance from the root along the penis), easing back
     float AtMin=0.f,AtMax=0.f,AtShownMin=0.f,AtShownMax=0.f,AtWindow=0.f; // depth range over the last two seconds, for /hscene
     TSet<int32> Offered; // the action kinds BuildActions shows now
     // The original's poses on a chair, a desk or at a wall need that thing: the room puts a plain one where the pose
     // has her (or him) lean, sit or lie, measured from their bones once the pose stands (PlaceProps).
-    UPROPERTY() TArray<TObjectPtr<class AStaticMeshActor>> Props;
+    UPROPERTY() TArray<TObjectPtr<class AStaticMeshActor>> Props;bool bPropsTable=false; // a table she leans on goes down with her
     FString PropKey;double PropAt=0;
     void PlaceProps(int32 Kind);
     // Where they are (the original's map choice): 0 the floor, 1 a bed under them in the floor poses.

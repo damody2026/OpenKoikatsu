@@ -420,7 +420,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     Super::NativeTick(Geometry,Delta);
     if(!Gallery)return;
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
-    UpdateFace();FrameCamera();
+    UpdateFace();UpdateBlush(Delta);FrameCamera();
     {const int32 Kind=Mode==0?(AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Prop:0):(Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Prop:0);
      const FString Key=FString::Printf(TEXT("%d|%d|%d"),Mode,ActivePose,ActiveAibu);const double T=FPlatformTime::Seconds();
      if(Key!=PropKey){PropKey=Key;ClearProps();PropAt=Kind>0||Room!=0?T+.8:0.;}
@@ -437,7 +437,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     // materials keeps that preparation from ever finishing (the room timed out).
     const bool PairPlaying=Gallery->PairedPlayback&&Gallery->PairedPlayback->GetElapsed()>0.f;
     if(Mode!=0&&PairPlaying&&Gallery->PartnerActor&&MaleLookFor!=Gallery->PartnerActor.Get())ApplyMaleLook(); // he was (re)made for the pair
-    if(PairPlaying)AlignHim(Delta);
+    AlignHim(Delta); // measures while the pair plays; a new pose or mode puts them back
     const double Now=FPlatformTime::Seconds();
     auto* Playback=Gallery->PairedPlayback.Get();
     // The pose actually playing: the one he picked once it starts, or the one the scene opened with.
@@ -581,6 +581,35 @@ void UOKHScenePanel::UpdateFace(){
     const FString Key=FString::Printf(TEXT("%d/%d/%.2f"),Eye,Brow,Open);if(Key==FaceKey)return;FaceKey=Key;
     Girl->SetFaceControl(1,Eye,Open,true);Girl->SetFaceControl(2,Brow,1.f,true);
 }
+void UOKHScenePanel::UpdateBlush(float Delta){
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl))return;
+    static const FName Alpha(TEXT("_overcolor2__A")),Color(TEXT("_overcolor2"));
+    if(BlushFor!=Girl){RestoreBlush();BlushFor=Girl;Blush=BlushShown=-1.f;
+        TInlineComponentArray<UMeshComponent*> Comps;Girl->GetComponents(Comps);
+        for(UMeshComponent* Comp:Comps)for(const FName& Tag:Comp->ComponentTags){const FString T=Tag.ToString();if(!T.StartsWith(TEXT("KKSessionPart_")))continue;
+            OkMeshView V{};if(!Girl->Session.PartAt(FCString::Atoi(*T.Mid(14)),V)||!V.name||FString(UTF8_TO_TCHAR(V.name)).ToLower()!=TEXT("cf_o_face"))break;
+            for(int32 I=0;I<Comp->GetNumMaterials();++I)if(auto* M=Cast<UMaterialInstanceDynamic>(Comp->GetMaterial(I))){float A=0.f;
+                if(M->GetScalarParameterValue(FHashedMaterialParameterInfo(Alpha),A)){BlushMats.Add(M);BlushBase.Add(A);}}
+            break;}
+        if(BlushMats.IsEmpty()&&!bBlushLogged){bBlushLogged=true;UE_LOG(LogTemp,Warning,TEXT("H scene: her face has no live blush parameter (_overcolor2__A); her cheeks stay as her card has them"));}
+    }
+    if(BlushMats.IsEmpty())return;
+    const FString Base=Mode==0?Current():HBase(Current());
+    // Her gauge; flushed through the afterglow, and once she has come a little stays for the rest of the scene.
+    float Target=Base.StartsWith(TEXT("Orgasm"))?1.f:FMath::Clamp(Her/100.f,0.f,1.f);
+    if(Mode!=0&&StateWords(Base)==OKT(TEXT("ui.hscene.state_after")))Target=FMath::Max(Target,.7f);
+    if(HerOrgasms>0)Target=FMath::Max(Target,.35f);
+    // Up in a few seconds, down over twenty: the flush outlasts the moment.
+    Blush=BlushTest>=0.f?BlushTest:Blush<0.f?Target:Target>Blush?FMath::Min(Target,Blush+Delta*.5f):FMath::Max(Target,Blush-Delta*.05f);
+    const float Shown=FMath::RoundToFloat(Blush*40.f)/40.f;if(Shown==BlushShown)return;BlushShown=Shown;
+    for(int32 I=0;I<BlushMats.Num();++I)if(IsValid(BlushMats[I])){const float A=FMath::Lerp(BlushBase[I],FMath::Max(BlushBase[I],.2f),Shown);
+        BlushMats[I]->SetScalarParameterValue(Alpha,A);FLinearColor C;if(BlushMats[I]->GetVectorParameterValue(FHashedMaterialParameterInfo(Color),C)){C.A=A;BlushMats[I]->SetVectorParameterValue(Color,C);}}
+}
+void UOKHScenePanel::RestoreBlush(){
+    for(int32 I=0;I<BlushMats.Num();++I)if(IsValid(BlushMats[I])){BlushMats[I]->SetScalarParameterValue(TEXT("_overcolor2__A"),BlushBase[I]);
+        FLinearColor C;if(BlushMats[I]->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("_overcolor2")),C)){C.A=BlushBase[I];BlushMats[I]->SetVectorParameterValue(TEXT("_overcolor2"),C);}}
+    BlushMats.Reset();BlushBase.Reset();BlushFor=nullptr;
+}
 // A bone of theirs in the world (the male skeleton may name its bones like hers).
 static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
     if(!IsValid(A)||!A->BodySkel)return false;
@@ -684,22 +713,63 @@ void UOKHScenePanel::ApplyMaleLook(){
         for(int32 I=0;I<Comp->GetNumMaterials();++I){MaleGhostMats.Add(Comp->GetMaterial(I));Comp->SetMaterial(I,MaleGhost);}}
     UE_LOG(LogTemp,Display,TEXT("H scene: he is drawn see-through (%d parts)"),MaleGhostComps.Num());
 }
+void UOKHScenePanel::MoveParts(AKKPreviewActor* A,const FVector& Want,FVector& Applied){
+    const FVector Step=Want-Applied;if(!IsValid(A)||Step.IsNearlyZero(.01f))return;Applied=Want;
+    if(USceneComponent* Root=A->GetRootComponent()){const FVector Local=Root->GetComponentTransform().InverseTransformVectorNoScale(Step);
+        for(USceneComponent* Child:Root->GetAttachChildren())if(IsValid(Child))Child->AddRelativeLocation(Local);}
+}
+void UOKHScenePanel::SyncPair(){if(Gallery&&Gallery->PairedPlayback)Gallery->PairedPlayback->SyncAsync();}
+void UOKHScenePanel::HoldFeet(AKKPreviewActor* A,bool bStands,const FVector& Offset,const FVector (&Feet)[2],FVector (&Kept)[2],bool& bIk){
+    if(!IsValid(A)||!A->Session.IsOpen())return;
+    // Lowered while standing: the feet stay where the clip put them (on the floor), so the knees bend.
+    if(bStands&&Offset.Z<-1.f){
+        const FVector Local=A->GetRootComponent()?A->GetRootComponent()->GetComponentTransform().InverseTransformVectorNoScale(Offset):Offset;
+        const FVector Shift=AKKPreviewActor::ActorLocalToUnity(Local);
+        const FVector L=Feet[0]-Shift,R=Feet[1]-Shift;
+        if(bIk&&FVector::Dist(L,Kept[0])<.002&&FVector::Dist(R,Kept[1])<.002)return; // within 2 mm: leave the solver alone
+        SyncPair();if(A->Session.SetStudioIk({7,8},{L,R})){bIk=true;Kept[0]=L;Kept[1]=R;}
+    }else if(bIk){SyncPair();A->Session.SetStudioIk({},{});bIk=false;}
+}
+void UOKHScenePanel::RestoreAlign(){
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
+    if(AlignedHer==Girl)MoveParts(Girl,FVector::ZeroVector,HerApplied);if(AlignedHim==Him)MoveParts(Him,FVector::ZeroVector,HimApplied);
+    if(bHerIk||bHisIk)SyncPair();
+    if(bHerIk&&IsValid(Girl)&&Girl->Session.IsOpen())Girl->Session.SetStudioIk({},{});if(bHisIk&&IsValid(Him)&&Him->Session.IsOpen())Him->Session.SetStudioIk({},{});
+    bHerIk=bHisIk=false;HimOffset=HerOffset=FVector::ZeroVector;
+}
 void UOKHScenePanel::AlignHim(float Delta){
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
     if(!IsValid(Girl)||!IsValid(Him))return;
+    if(AlignedHim!=Him){AlignedHim=Him;HimApplied=FVector::ZeroVector;bHisIk=false;} // a new him has his parts where they were made
+    if(AlignedHer!=Girl){AlignedHer=Girl;HerApplied=FVector::ZeroVector;bHerIk=false;}
     const FString Key=FString::Printf(TEXT("%d|%d"),Mode,ActivePose);
-    // A new pose places him on her again (the pair commit copies her transform): start from no offset.
-    if(Key!=AlignedKey){AlignedKey=Key;HimOffset=FVector::ZeroVector;bAlignLogged=false;DeepAlong=1e9f;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;}
+    // A new pose places them on one origin again: start from no offset, no held feet.
+    if(Key!=AlignedKey){AlignedKey=Key;HimOffset=HerOffset=FVector::ZeroVector;bAlignLogged=false;DeepAlong=1e9f;AlignPushed=0.f;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;
+        if(bHisIk||bHerIk)SyncPair();
+        if(bHisIk){Him->Session.SetStudioIk({},{});bHisIk=false;}if(bHerIk){Girl->Session.SetStudioIk({},{});bHerIk=false;}
+        FeetWait=0;bFeetRead=false;}
     AlignOff=-1.f;
-    if(Mode!=2){return;}
     const FString Cur=Current(),Base=HBase(Cur);
-    const bool In=Base==TEXT("Insert")||Base==TEXT("InsertIdle")||Base.EndsWith(TEXT("Loop"))&&!Base.Contains(TEXT("OUT"))||Base.Contains(TEXT("_IN_"))||Base==TEXT("IN_A");
+    const bool In=Mode==2&&Gallery->PairedPlayback&&Gallery->PairedPlayback->GetElapsed()>0.f&&(Base==TEXT("Insert")||Base==TEXT("InsertIdle")||Base.EndsWith(TEXT("Loop"))&&!Base.Contains(TEXT("OUT"))||Base.Contains(TEXT("_IN_"))||Base==TEXT("IN_A"));
+    // Where their feet are in the clip (no IK yet), and whether each stands on the floor: read a few frames into the pose.
+    if(In&&!bFeetRead&&++FeetWait>3){
+        const float Floor=float(Girl->GetActorLocation().Z);SyncPair();
+        auto Read=[&](AKKPreviewActor* A,FVector (&Feet)[2],bool& bStands){FString Error;bStands=false;
+            if(!A->bStudioIkReady){if(!A->Session.PrepareStudioIk(Error)){UE_LOG(LogTemp,Warning,TEXT("H align: no IK for %s: %s"),*A->GetName(),*Error);return;}A->bStudioIkReady=true;}
+            FVector L,R,Hips;if(!A->Session.IkEffectorPosition(7,Feet[0])||!A->Session.IkEffectorPosition(8,Feet[1])||!HBone(A,TEXT("j_foot_L"),L)||!HBone(A,TEXT("j_foot_R"),R)||!HBone(A,TEXT("j_hips"),Hips))return;
+            // On a foot (the other may be lifted) with the hips well over it: kneeling, sitting and lying have a foot near the
+            // floor too, and lowering those sinks knees and backs into the floor.
+            const float Low=float(FMath::Min(L.Z,R.Z));bStands=Low-Floor<18.f&&float(Hips.Z)-Low>60.f;};
+        Read(Him,HisFeet,bHisStands);Read(Girl,HerFeet,bHerStands);bFeetRead=true;
+        UE_LOG(LogTemp,Display,TEXT("H align: %s he %s, she %s"),*Cur,bHisStands?TEXT("stands"):TEXT("does not stand"),bHerStands?TEXT("stands"):TEXT("does not stand"));
+    }
     FVector E,P0,P1;
     if(In&&HBone(Girl,Cur.StartsWith(TEXT("A_"))?TEXT("J_Ana"):TEXT("J_Kokan"),E)&&HBone(Him,TEXT("J_dan100_00"),P0)&&HBone(Him,TEXT("J_dan109_00"),P1)){
         const FVector Axis=(P1-P0).GetSafeNormal();const float Len=float((P1-P0).Size());
         if(Len>2.f){
             const FVector D=E-P0;const float Along=float(D|Axis);const FVector Fix=D-Axis*Along; // onto the line of the penis
             AlignOff=float(Fix.Size());AlignAt=100.f*Along/Len;AlignLen=Len;
+            {FVector FL,FR;float Foot=1e9f;if(HBone(Him,TEXT("j_foot_L"),FL))Foot=float(FL.Z);if(HBone(Him,TEXT("j_foot_R"),FR))Foot=FMath::Min(Foot,float(FR.Z));AlignFoot=Foot-float(Girl->GetActorLocation().Z);}
             AtMin=FMath::Min(AtMin,AlignAt);AtMax=FMath::Max(AtMax,AlignAt);AtWindow+=Delta;
             if(AtWindow>=2.f){AtShownMin=AtMin;AtShownMax=AtMax;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;}
             // Depth: only the deepest point of his thrusts is set (70% of him in her); per frame it would flatten the clip's
@@ -707,16 +777,19 @@ void UOKHScenePanel::AlignHim(float Delta){
             DeepAlong=FMath::Min(DeepAlong+Delta*Len*.2f,Along);
             // The insertion itself starts with him outside her: its line is aligned, its depth is the clip's.
             float Deeper=0.f;if(Base==TEXT("Insert")){}else if(DeepAlong>Len*.3f&&DeepAlong<1e8f)Deeper=DeepAlong-Len*.3f;else if(DeepAlong<Len*.05f)Deeper=DeepAlong-Len*.05f;
-            const float Rate=FMath::Min(1.f,Delta*10.f),Push=Deeper*FMath::Min(1.f,Delta*2.f);DeepAlong-=Push;
+            const float Rate=FMath::Min(1.f,Delta*10.f),Push=Deeper*FMath::Min(1.f,Delta*2.f);DeepAlong-=Push;AlignPushed+=Push;AlignDeep=100.f*DeepAlong/Len;
             if(!bAlignLogged){bAlignLogged=true;UE_LOG(LogTemp,Display,TEXT("H align: %s penis %.1f cm, her entrance %.1f cm off its line at %.0f%% of it"),*Cur,Len,AlignOff,AlignAt);}
             HimOffset+=Fix*Rate+Axis*Push;
             HimOffset=HimOffset.GetClampedToMaxSize(45.f); // a mismatch past that is a different pose, not a height
+            // Both standing: the one who would have to go down bends, and nobody rises off the floor.
+            if(bFeetRead&&bHisStands&&bHerStands){const double Net=HimOffset.Z-HerOffset.Z;
+                if(Net>0.){HerOffset.Z=-Net;HimOffset.Z=0.;}else{HerOffset.Z=0.;HimOffset.Z=Net;}}
         }
     }
-    if(AlignedHim!=Him){AlignedHim=Him;HimApplied=FVector::ZeroVector;} // a new him has his parts where they were made
-    const FVector Step=HimOffset-HimApplied;if(Step.IsNearlyZero(.01f))return;HimApplied=HimOffset;
-    if(USceneComponent* Root=Him->GetRootComponent()){const FVector Local=Root->GetComponentTransform().InverseTransformVectorNoScale(Step);
-        for(USceneComponent* Child:Root->GetAttachChildren())if(IsValid(Child))Child->AddRelativeLocation(Local);}
+    MoveParts(Him,HimOffset,HimApplied);
+    {const double Was=HerApplied.Z;MoveParts(Girl,HerOffset,HerApplied);const double Down=HerApplied.Z-Was;
+     if(Down!=0.&&bPropsTable)for(AStaticMeshActor* Prop:Props)if(IsValid(Prop))Prop->AddActorWorldOffset(FVector(0.,0.,Down));}
+    if(bFeetRead){HoldFeet(Him,bHisStands,HimOffset,HisFeet,HisHeld,bHisIk);HoldFeet(Girl,bHerStands,HerOffset,HerFeet,HerHeld,bHerIk);}
 }
 void UOKHScenePanel::HideWallsInTheWay(){
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->StudioCam||Props.IsEmpty())return;
@@ -730,9 +803,9 @@ void UOKHScenePanel::HideWallsInTheWay(){
         if(E.Z>90.f)for(const FVector& To:Seen)Blocks|=FMath::LineBoxIntersection(FBox(O-E,O+E),Eye,To,To-Eye);A->SetActorHiddenInGame(Blocks);}
 }
 void UOKHScenePanel::ClearProps(){for(AStaticMeshActor* A:Props)if(IsValid(A))A->Destroy();Props.Reset();}
-void UOKHScenePanel::NativeDestruct(){ClearProps();Super::NativeDestruct();}
+void UOKHScenePanel::NativeDestruct(){ClearProps();RestoreBlush();RestoreAlign();Super::NativeDestruct();}
 void UOKHScenePanel::PlaceProps(int32 Kind){
-    ClearProps();auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->BodySkel||!GetWorld())return;
+    ClearProps();bPropsTable=false;auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl)||!Girl->BodySkel||!GetWorld())return;
     auto* Him=Mode!=0&&Gallery->PartnerActor&&!bMaleHidden?Gallery->PartnerActor.Get():nullptr;
     auto Bone=HBone;
     TArray<FVector> Hers;FVector HerHips,HisHips,P;
@@ -774,9 +847,21 @@ void UOKHScenePanel::PlaceProps(int32 Kind){
         // Under her body where it rests (hips, back, head, hands above the knees): a table just below the lowest of them.
         TArray<FVector> Rest;for(const FVector& V:Hers)if(V.Z>Floor+40.f)Rest.Add(V);if(Rest.IsEmpty())return;
         float Top=TNumericLimits<float>::Max();for(const FVector& V:Rest)Top=FMath::Min(Top,float(V.Z));Top-=6.f;
-        FBox2D Area(ForceInit);for(const FVector& V:Rest)if(V.Z<Top+30.f)Area+=FVector2D(V.X,V.Y);Area=Area.ExpandBy(18.f);
-        FVector2D Size=Area.GetSize();Size.X=FMath::Max(Size.X,55.);Size.Y=FMath::Max(Size.Y,55.);const FVector2D Mid=Area.GetCenter();
-        Box(FVector(Mid.X,Mid.Y,(Floor+Top)/2),FVector(Size.X,Size.Y,Top-Floor),FRotator::ZeroRotator);What=TEXT("table");
+        // Laid along her body (hips to head), not square to the world: a square box around a turned body reached into them.
+        FVector Head,Along=FVector::ZeroVector;if(Bone(Girl,TEXT("j_head"),Head))Along=Head-HerHips;Along.Z=0;if(!Along.Normalize())Along=FVector::ForwardVector;
+        const FVector Across(-Along.Y,Along.X,0.);
+        float A0=1e9f,A1=-1e9f,C0=1e9f,C1=-1e9f;
+        for(const FVector& V:Rest)if(V.Z<Top+30.f){const float A=float((V-HerHips)|Along),C=float((V-HerHips)|Across);A0=FMath::Min(A0,A);A1=FMath::Max(A1,A);C0=FMath::Min(C0,C);C1=FMath::Max(C1,C);}
+        A0-=15.f;A1+=15.f;C0-=18.f;C1+=18.f;
+        // Its near edge clear of what stands beside it (his hips, knees and feet; her knees and feet hanging down): she bends
+        // over the edge, he stands at it, nobody is inside the table.
+        TArray<FVector> Beside;for(const TCHAR* N:{TEXT("j_leg01_L"),TEXT("j_leg01_R"),TEXT("j_foot_L"),TEXT("j_foot_R")})if(Bone(Girl,N,P)&&P.Z<Top+10.f)Beside.Add(P);
+        if(HasHim)for(const TCHAR* N:{TEXT("j_hips"),TEXT("j_leg01_L"),TEXT("j_leg01_R"),TEXT("j_foot_L"),TEXT("j_foot_R")})if(Bone(Him,N,P)&&P.Z<Top+25.f)Beside.Add(P);
+        const float Middle=(A0+A1)/2;
+        for(const FVector& V:Beside){const float A=float((V-HerHips)|Along),C=float((V-HerHips)|Across);if(C>C0-10.f&&C<C1+10.f&&A<Middle)A0=FMath::Max(A0,A+12.f);}
+        A1=FMath::Max(A1,A0+45.f);if(C1-C0<55.f){const float M=(C0+C1)/2;C0=M-27.5f;C1=M+27.5f;}
+        const FVector Mid=HerHips+Along*((A0+A1)/2)+Across*((C0+C1)/2);
+        Box(FVector(Mid.X,Mid.Y,(Floor+Top)/2),FVector(A1-A0,C1-C0,Top-Floor),Along.Rotation());What=TEXT("table");bPropsTable=true;
     }else if(Kind==3){
         // Beyond her on the side away from him (he is behind her: her hands are on it; he faces her: her back is), or the
         // way her hands reach when she is alone.
@@ -841,13 +926,14 @@ void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit
 TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     auto O=MakeShared<FJsonObject>();
     O->SetStringField(TEXT("pose"),Mode==0&&AibuPoses.IsValidIndex(ActiveAibu)?AibuPoses[ActiveAibu].Name:Poses.IsValidIndex(ActivePose)?Poses[ActivePose].Name:FString());O->SetStringField(TEXT("pending"),Poses.IsValidIndex(PendingPose)?Poses[PendingPose].Name:FString());
-    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
+    if(AlignOff>=0.f){auto A=MakeShared<FJsonObject>();A->SetNumberField(TEXT("off"),AlignOff);A->SetNumberField(TEXT("at"),AlignAt);A->SetNumberField(TEXT("len"),AlignLen);A->SetNumberField(TEXT("moved"),HimOffset.Size());A->SetNumberField(TEXT("at_min"),AtShownMin);A->SetNumberField(TEXT("foot"),AlignFoot);A->SetNumberField(TEXT("mz"),HimOffset.Z);A->SetNumberField(TEXT("her_z"),HerOffset.Z);A->SetBoolField(TEXT("his_knees"),bHisIk);A->SetBoolField(TEXT("her_knees"),bHerIk);A->SetNumberField(TEXT("pushed"),AlignPushed);A->SetNumberField(TEXT("deep"),AlignDeep);A->SetNumberField(TEXT("at_max"),AtShownMax);O->SetObjectField(TEXT("align"),A);}
+    O->SetNumberField(TEXT("blush"),BlushMats.IsEmpty()?-1.f:BlushShown);
     O->SetStringField(TEXT("state"),Current());O->SetStringField(TEXT("wanted"),Wanted);O->SetNumberField(TEXT("mode"),Mode);
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
     O->SetNumberField(TEXT("playback_speed"),PlaybackSpeed());O->SetNumberField(TEXT("held"),Held.Num());O->SetStringField(TEXT("caption"),Caption?Caption->GetText().ToString():FString());
     O->SetNumberField(TEXT("her"),Her);O->SetNumberField(TEXT("his"),His);O->SetNumberField(TEXT("speed"),SpeedValue);O->SetBoolField(TEXT("condom"),bCondom);O->SetBoolField(TEXT("anal_play"),bAnalPlay);
     O->SetStringField(TEXT("title"),Title?Title->GetText().ToString():FString());O->SetStringField(TEXT("hint"),Hint?Hint->GetText().ToString():FString());O->SetStringField(TEXT("face"),FaceKey); /* eye/brow/openness now (UpdateFace) */
-    if(Gallery&&Gallery->PreviewActor){O->SetBoolField(TEXT("breath"),Gallery->PreviewActor->bHBreath);O->SetBoolField(TEXT("speaking"),Gallery->PreviewActor->IsSpeaking());}
+    if(Gallery&&Gallery->PreviewActor){O->SetBoolField(TEXT("breath"),Gallery->PreviewActor->bHBreath);O->SetBoolField(TEXT("speaking"),Gallery->PreviewActor->IsSpeaking());O->SetNumberField(TEXT("mouth"),Gallery->PreviewActor->EffectiveFaceRate(0));}
     if(Gallery&&Gallery->HExperience.IsValid())O->SetObjectField(TEXT("experience"),Gallery->HExperience); // what she allows (hexp.rs h_experience)
     auto Buttons=[](UPanelWidget* Panel){TArray<TSharedPtr<FJsonValue>> Out;if(Panel)for(int32 I=0;I<Panel->GetChildrenCount();++I)if(auto* B=Cast<UOKHSceneButton>(Panel->GetChildAt(I))){auto R=MakeShared<FJsonObject>();R->SetNumberField(TEXT("kind"),B->Kind);R->SetBoolField(TEXT("enabled"),B->GetIsEnabled());
         if(auto* L=Cast<UTextBlock>(B->GetContent()))R->SetStringField(TEXT("label"),L->GetText().ToString());Out.Add(MakeShared<FJsonValueObject>(R));}return Out;};

@@ -1040,6 +1040,12 @@ unsafe fn animation_pair_frame_impl(female:*mut OkSession,male:*mut OkSession,ti
             ||{let _trace=crate::native_profile::Scope::new(14);male.sample_paired_frame(time)}));}
         let sampled=start.elapsed();
         let contacts={let _trace=crate::native_profile::Scope::new(2);crate::h_playback::apply_contacts_prepared_with_policy(female,male,&state,setups,false,true,dt)?};
+        // Studio IK once more after the contacts: MotionIK solves the whole body again and took back the knees that held
+        // feet bend (one-on-one fitting of different heights keeps the taller one's feet on the floor).
+        for s in [&mut *female,&mut *male] {
+            if s.studio_ik.is_empty() {continue;}
+            if let Some(sk)=s.body_skel.as_mut() {crate::session::apply_studio_ik(sk,&mut s.studio_ik_solver,&s.studio_ik,&s.studio_ik_rotations);}
+        }
         let contacted=start.elapsed();
         // Contact solving is a barrier: both sampled actors must be visible
         // to the coupled solver before either actor advances private physics.
