@@ -219,7 +219,7 @@ CardReaderDevelopment.cmd -DryRun
 | C3 | 先顯示替代材質，最終材質的編譯每幀送出約 3 ms | KKPreviewLoading.cpp |
 | C4 | 打包版讀卡器走預先 cook 的共用材質（不需要執行期編譯） | KKPreviewRuntimeMaterials.inl，見下 |
 | C5 | 打包版材質準備（解碼＋mip）各貼圖平行 | KKRuntimeMaterial.cpp `OKCaptureRuntimeMaterials` |
-| C6 | 打包版 cooked 部件不再從 PNG 建貼圖、不做 UE 端預解碼 | KKPreviewActor.cpp `BuildSessionPartRange`、`PrecacheTextureJobs` |
+| C6 | 有共用母材質實例的部件不再從 PNG 建貼圖、不做 UE 端預解碼（2026-10-31 起編輯器讀卡器也適用，預設開） | KKPreviewActor.cpp `BuildSessionPartRange`、`PrecacheTextureJobs` |
 
 原生輸出驗證：`ok-card-open-bench --compare`（新增 `OK_BENCH_PREWARM=1` 先跑讀卡器的預熱；`OK_BENCH_DUMP=<dir>` 寫出兩份位元組）在 A2＋A3 下，C030–C033 與基準逐位元組相同。
 
@@ -416,6 +416,13 @@ best＋C5 下，cooked 路徑還有兩段工作和 cooked 材質已準備好的�
 | C032 最終 | 10.68 | 7.53 | **−3.15 s（−29%）** |
 
 打包版剩下的大頭是原生開卡（C030 3.5 s、C032 5.8–6.2 s），UE 端只剩 1.1–1.4 s。
+
+**2026-10-31：C6 擴及編輯器讀卡器並改為預設**（`OK_FIRSTLOAD` 沒設時等於 UE 端 B1、C3、C6）。編輯器的讀卡器（`CardReaderDevelopment.cmd`，`-game`）同樣走共用母材質（`OKSharedParents()`），有母材質實例的部件 `ApplyPartMaterial` 一開始就套實例返回，外框也取共用的 `_Outline` 實例；只有沒有母材質的部件（`own_graph`）才自己建材質圖，它們照舊從 PNG 建貼圖。所以條件改成「`OKSharedParents()` 且部件有母材質實例」，兩種建置一樣；`CollectTextures` 在 C6 下也不再收集、複製這些 PNG。
+
+- 量測：`ok.ProfileGalleryReload`（小绯雪，同一個執行檔，舊＝`OK_FIRSTLOAD=A2,A3,B1,C3`），UE 端（總時間扣掉開卡與工作執行緒貼圖準備）2038／1439 → 1404／1089 ms，部件建立 565／367 → 148／141 ms，工作執行緒 texture_prepare 616／613 → 478／497 ms。
+- 畫面：`OK_GUI_RELOAD_SHOT` 截圖（`FScreenshotRequest`），角色區域（x 240–1040）最大差 1/255；差異只在 FPS 文字。注意截圖時 C3 的替代材質可能還沒全部換成最終材質，臉會是一片紅，新舊版都會出現，要拿同一狀態的兩張比。
+- 細分計時：`OKCARD_PROFILE cooked_role texture_ms parent_load_ms instance_ms`。母材質同步載入（`parent_load_ms`）約 120–520 ms；試過工作執行緒知道 recipe 後就 `LoadPackageAsync`，中位數約少 80 ms 但範圍重疊，而且非同步載入中的母材質不能直接拿來建實例（`FindObject` 拿到還沒 PostLoad 的物件，臉變紅），沒有提交。
+- 量測工具：`OK_GUI_RELOAD_SHOT=<png>`（第一次載入完成後的畫面）、`OK_GUI_RELOAD_DELAY=<秒>`（晚幾秒才開卡，模擬使用者在啟動預熱跑完後才選卡）。
 
 ## 部件材質參數覆寫（2026-10-18，給 OK Studio 道具花紋、汁的貼花、SkinEffects）
 

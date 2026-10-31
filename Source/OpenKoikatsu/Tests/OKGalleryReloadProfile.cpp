@@ -13,13 +13,14 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/UObjectIterator.h"
+#include "UnrealClient.h"
 #if WITH_DEV_AUTOMATION_TESTS
 namespace OKGalleryReloadProfile {
 struct FRun : TSharedFromThis<FRun> {
  TWeakObjectPtr<UWorld> World;TWeakObjectPtr<UOKGalleryWidget> Gallery;
  TWeakObjectPtr<AKKPreviewActor> Previous;
  FString Card,Output;FTimerHandle Timer;TArray<TSharedPtr<FJsonValue>> Rows;
- double Start=FPlatformTime::Seconds(),Begin=0,Finished=0;uint64 FinishFrame=0;
+ double Start=FPlatformTime::Seconds(),Begin=0,Finished=0,GalleryFound=0;uint64 FinishFrame=0,HoldUntilFrame=0;
  int32 Run=0;bool Loading=false,Ready=false;
  void Stop(const FString& Error){
   const auto Keep=AsShared();if(auto* W=World.Get())W->GetTimerManager().ClearTimer(Timer);
@@ -33,6 +34,10 @@ struct FRun : TSharedFromThis<FRun> {
  void Step(){
   const auto Keep=AsShared();auto* W=World.Get();if(!W||FPlatformTime::Seconds()-Start>540){Stop(TEXT("World closed or reload timeout"));return;}
   auto* G=Gallery.Get();if(!G){for(TObjectIterator<UOKGalleryWidget> It;It;++It)if(It->GetWorld()==W&&It->PreviewImage){Gallery=*It;G=*It;break;}if(!G)return;}
+  if(GFrameCounter<HoldUntilFrame)return; // the requested shot is drawn and saved first
+  // OK_GUI_RELOAD_DELAY=<s>: the first load starts that long after the gallery appeared (as a user picks a card after
+  // the startup prewarm instead of at once).
+  if(Run==0&&!Loading&&!Ready){static const double Delay=FCString::Atod(*FPlatformMisc::GetEnvironmentVariable(TEXT("OK_GUI_RELOAD_DELAY")));if(GalleryFound==0)GalleryFound=FPlatformTime::Seconds();if(FPlatformTime::Seconds()-GalleryFound<Delay)return;}
   if(Ready){
    if(GShaderCompilingManager&&GShaderCompilingManager->IsCompiling())return;
    if(GFrameCounter<FinishFrame+4)return;FlushRenderingCommands();
@@ -40,6 +45,10 @@ struct FRun : TSharedFromThis<FRun> {
    Row->SetNumberField(TEXT("ready_ms"),(FPlatformTime::Seconds()-Begin)*1000.);Row->SetNumberField(TEXT("parts"),G->PreviewActor->Parts.Num());
    Row->SetNumberField(TEXT("catalogue_rows"),G->NativePairs.Num());
    if(G->NativePairs.IsEmpty()||G->PendingLoadPairGeneration!=INDEX_NONE){Stop(TEXT("Prepared pair catalogue missing or not consumed by active generation"));return;}
+   // OK_GUI_RELOAD_SHOT=<png>: the first load's next drawn frame, for comparing two builds (taken while the second
+   // load's worker still runs, so the first actor is what it shows).
+   if(Run==0){const FString Shot=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_GUI_RELOAD_SHOT"));
+    if(!Shot.IsEmpty()){FScreenshotRequest::RequestScreenshot(Shot,true,false);HoldUntilFrame=GFrameCounter+4;UE_LOG(LogTemp,Display,TEXT("Gallery reload shot requested %s"),*Shot);}}
    if(Run==0){
     auto* A=G->PreviewActor.Get();const bool Tick=A->IsActorTickEnabled(),Blink=A->bAutomaticBlink;A->SetActorTickEnabled(false);A->bAutomaticBlink=false;
     auto Set=[A](){A->SetMouthPattern(2,false);A->SetMouthOpen(.6f);A->SetFaceControl(1,1,.4f);A->SetFaceControl(2,1,.7f);};
@@ -64,6 +73,7 @@ struct FRun : TSharedFromThis<FRun> {
    }
    Rows.Add(MakeShared<FJsonValueObject>(Row));UE_LOG(LogTemp,Display,TEXT("Gallery async reload run=%d identity=1 shape=1 fresh_actor=1 gui_ms=%.3f ready_ms=%.3f parts=%d"),Run+1,Row->GetNumberField(TEXT("gui_complete_ms")),Row->GetNumberField(TEXT("ready_ms")),G->PreviewActor->Parts.Num());
    Previous=G->PreviewActor;Ready=false;Loading=false;if(++Run==2){Stop(FString());return;}
+   if(GFrameCounter<HoldUntilFrame)return;
   }
   if(Loading){
    if(G->bLoadInFlight)return;

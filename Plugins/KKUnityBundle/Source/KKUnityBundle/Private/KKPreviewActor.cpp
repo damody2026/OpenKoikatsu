@@ -200,6 +200,10 @@ struct FOkCardLoadProfile
 	double MaterialSeconds = 0.0;
 	double MaterialFinalizeSeconds = 0.0;
 	double SkeletonSeconds = 0.0;
+	// OKPrepareCookedRole: its textures, the shared parents it loads, and the part instances.
+	double RoleTextureSeconds = 0.0;
+	double RoleParentSeconds = 0.0;
+	double RoleInstanceSeconds = 0.0;
 	int32 TextureCount = 0;
 	int32 MaterialCount = 0;
 };
@@ -5140,9 +5144,9 @@ struct FOKSessionTextureJobs {
 
 bool AKKPreviewActor::FirstLoadOption(const TCHAR* Name)
 {
- // Unset: the measured defaults (B1, C3; A2, A3 on the native side). OK_FIRSTLOAD=none turns every option off; any list
- // replaces the defaults.
- static const TArray<FString> Options=[]{TArray<FString> Out;FString Value;if(!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FIRSTLOAD")).IsEmpty())Value=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FIRSTLOAD"));else Value=TEXT("B1,C3");
+ // Unset: the measured defaults (B1, C3, C6; A2, A3 on the native side). OK_FIRSTLOAD=none turns every option off; any
+ // list replaces the defaults.
+ static const TArray<FString> Options=[]{TArray<FString> Out;FString Value;if(!FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FIRSTLOAD")).IsEmpty())Value=FPlatformMisc::GetEnvironmentVariable(TEXT("OK_FIRSTLOAD"));else Value=TEXT("B1,C3,C6");
   Value.ParseIntoArray(Out,TEXT(","));for(FString& O:Out)O.TrimStartAndEndInline();return Out;}();
  return Options.Contains(Name)||Options.Contains(TEXT("all"));
 }
@@ -5160,6 +5164,8 @@ static void CollectTextures(FOkSession& Source,bool bPrepareSkeleton,bool bCopy,
   const int32 Bones=Source.SkelBoneCount();
   UE_LOG(LogTemp,Display,TEXT("OK preview native reference prepared bones=%d worker=%d ms=%.3f"),Bones,!IsInGameThread(),(FPlatformTime::Seconds()-Start)*1000.);
  }
+ // C6: nothing decodes the part PNGs (PrecacheTextureJobs), so they are not gathered or copied either.
+ if(OKSharedParents()&&AKKPreviewActor::FirstLoadOption(TEXT("C6")))return;
  const double GatherStart=FPlatformTime::Seconds();
  // The session's own bytes (copied when the session may change before they are decoded). Repeats of one slot are
  // the same pointer; equal content at another address is merged here (equal length, then equal bytes: memcmp is
@@ -5210,13 +5216,12 @@ TSharedRef<FOKSessionTextureJobs,ESPMode::ThreadSafe> AKKPreviewActor::CollectSe
 
 void AKKPreviewActor::PrecacheTextureJobs(const FOKSessionTextureJobs& Jobs)
 {
-#if !WITH_EDITOR
- // OK_FIRSTLOAD=C6: cooked parts bind the prepared material textures, so nothing reads these decodes.
- if(FirstLoadOption(TEXT("C6"))){
+ // OK_FIRSTLOAD=C6: shared-parent parts bind the prepared material textures, so nothing reads these decodes (an
+ // editor part its own graph draws decodes when it is built).
+ if(OKSharedParents()&&FirstLoadOption(TEXT("C6"))){
   if(FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOAD_PROFILE"))==TEXT("1"))UE_LOG(LogTemp,Display,TEXT("OK texture precache inputs=%d gather_ms=%.1f decode_ms=0.0 skipped=cooked"),Jobs.Jobs.Num(),Jobs.GatherSeconds*1000.);
   return;
  }
-#endif
  const double DecodeStart=FPlatformTime::Seconds();
  ParallelFor(Jobs.Jobs.Num(),[&](int32 I){OKPrecacheRuntimePngView(Jobs.Jobs[I].Bytes,Jobs.Jobs[I].Length,Jobs.Jobs[I].Mips);},EParallelForFlags::Unbalanced);
  if(FPlatformMisc::GetEnvironmentVariable(TEXT("OK_LOAD_PROFILE"))==TEXT("1"))
@@ -5416,14 +5421,11 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
             auto Described=MakeShared<FKKRuntimeMaterialPart>();FString DescribeError;
             if(Source.DescribeRuntimeMaterialPart(i,*Described,DescribeError))ShadowParams.OutlinePart=Described;
         }
-        // OK_FIRSTLOAD=C6 (cooked games): the cooked material already binds this part's prepared textures, and
-        // ApplyPartMaterial uses nothing else, so no part texture is decoded again; Part.Texture/Overtex are the
-        // cooked material's own.
-        bool bCookedTextures=false;
-#if !WITH_EDITOR
-        bCookedTextures=ShadowParams.CookedMaterial&&FirstLoadOption(TEXT("C6"));
+        // OK_FIRSTLOAD=C6: the shared-parent instance already binds this part's prepared textures, and
+        // ApplyPartMaterial uses nothing else (the editor too, while OKSharedParents), so no part texture is decoded
+        // again; Part.Texture/Overtex are the instance's own.
+        const bool bCookedTextures=ShadowParams.CookedMaterial&&OKSharedParents()&&FirstLoadOption(TEXT("C6"));
         auto CookedTexture=[&](const TCHAR* Name)->UTexture2D*{UTexture* T=nullptr;return ShadowParams.CookedMaterial&&ShadowParams.CookedMaterial->GetTextureParameterValue(FMaterialParameterInfo(Name),T)?Cast<UTexture2D>(T):nullptr;};
-#endif
 		ShadowParams.LineWidth = View.line_width;
 		ShadowParams.LineDepth = View.line_depth;
 		ShadowParams.LineTexOn = View.line_tex_on;
@@ -5837,7 +5839,6 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			View.ramp_png && View.ramp_png_len > 0 ? FCrc::MemCrc32(View.ramp_png, View.ramp_png_len) : 0);
 		const bool bEyeSolid = Part.EyeSort != 0 &&
 			FPlatformMisc::GetEnvironmentVariable(TEXT("OK_EYE_SOLID")) == TEXT("1");
-#if !WITH_EDITOR
 		if (bCookedTextures)
 		{
 			Tex = CookedTexture(TEXT("_MainTex"));Part.Texture = Tex;
@@ -5847,7 +5848,6 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			if (bBody && View.overtex2_png && View.overtex2_png_len > 16) Part.Overtex2 = CookedTexture(TEXT("_overtex2"));
 		}
 		else
-#endif
 		if (View.png && View.png_len > 16 && !bEyeSolid)
 		{
 			const bool bClamp = Part.EyeSort != 0 || Part.Role.Contains(TEXT("clothes"))
@@ -7464,6 +7464,8 @@ bool AKKPreviewActor::LoadSessionBatch(FString& OutError, int32 PartLimit, bool 
 			GOkCardLoadProfile.TextureSeconds * 1000.0, GOkCardLoadProfile.TextureDecodeSeconds * 1000.0, GOkCardLoadProfile.TextureCount,
 			GOkCardLoadProfile.MaterialSeconds * 1000.0, GOkCardLoadProfile.MaterialFinalizeSeconds * 1000.0, GOkCardLoadProfile.MaterialCount,
 			GOkCardLoadProfile.SkeletonSeconds * 1000.0, Parts.Num(), Dedupe.Hits, Dedupe.Misses, Dedupe.SignatureSeconds * 1000.0);
+		UE_LOG(LogTemp, Display, TEXT("OKCARD_PROFILE cooked_role texture_ms=%.1f parent_load_ms=%.1f instance_ms=%.1f"),
+			GOkCardLoadProfile.RoleTextureSeconds * 1000.0, GOkCardLoadProfile.RoleParentSeconds * 1000.0, GOkCardLoadProfile.RoleInstanceSeconds * 1000.0);
 		OKResetMaterialDedupeStats();
 		GOkCardLoadProfile.bActive = false;
 	}
