@@ -199,7 +199,9 @@ void AOKStreetSocialScene::StepApproach(){
    if(S.PrivateGirl==I){UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d takes him into the one-on-one"),I);return;}
    UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d could not open the one-on-one; she talks to him"),I);}
   // She came to sing for him (SongCallOver): the talk opens without her usual opener, and her song starts from it.
-  if(ForSong){if(S.Target==INDEX_NONE){S.SkipGreeting=true;BeginTalk(I);S.SkipGreeting=false;}S.Song.NextCheck=0;return;}
+  // Not where singing is awkward (the bookstore): then she opens like any visit and the song waits for a better moment;
+  // with no opener and no song 三月七 stood beside him silent for 14 minutes, and his "silence" cost favor (R6-49).
+  if(ForSong&&SongAtEase(I)){if(S.Target==INDEX_NONE){S.SkipGreeting=true;BeginTalk(I);S.SkipGreeting=false;}S.Song.NextCheck=0;return;}
   // Their meeting, and he is talking with another girl: she joins them (the group talk hears that she came for it).
   if(Join&&With!=INDEX_NONE&&With!=I){
    if(PartyJoin(I)){S.MeetJoinSince.Remove(I);S.PartyEvents.Add(OKMsg(TEXT("ui.party.came_for_meeting"),{{TEXT("name"),*SpokenName(I)}}));UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d came for their meeting and joins the talk"),I);return;}
