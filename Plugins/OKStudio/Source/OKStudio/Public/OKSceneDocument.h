@@ -54,6 +54,9 @@ enum class EOKSceneLightType : uint8
 	Directional,
 	Point,
 	Spot,
+	/** A rectangle that emits (HS2Studio6 面光源); like Point and Spot it lights the maps and Standard parts, not the toon
+	 *  characters and items, which take one directional light. */
+	Area,
 };
 
 /** A character: an OK card (or an original KKS card) with its outfit, animation and state. */
@@ -438,6 +441,13 @@ struct OKSTUDIO_API FOKSceneLight
 	/** Spot: outer cone angle (degrees). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "1", ClampMax = "80"))
 	float SpotAngle = 30.f;
+
+	/** Area (HS2Studio6 面光源): the emitting rectangle's width and height (cm), facing the light's forward. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "1"))
+	float AreaWidth = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "1"))
+	float AreaHeight = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
 	bool bShadows = true;

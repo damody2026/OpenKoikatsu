@@ -169,6 +169,16 @@ int32 SOKStudioView::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 			if (ToScreen(Game.Get(), O, A))
 				for (int32 I = 0; I < 8; ++I) { FVector2D B; const float T = 2.f * UE_PI * I / 8.f; if (ToScreen(Game.Get(), End + (U * FMath::Cos(T) + V * FMath::Sin(T)) * R, B)) Lines({ A, B }, C, 1.f, Layer + 1); }
 		}
+		else if (L->Light.Type == EOKSceneLightType::Area)
+		{
+			// The emitting rectangle and its facing.
+			const FVector U = W.GetRotation().GetRightVector() * (L->Light.AreaWidth * 0.5f), V = W.GetRotation().GetUpVector() * (L->Light.AreaHeight * 0.5f);
+			TArray<FVector2D> Rect;
+			for (const FVector& Corner : { O - U - V, O + U - V, O + U + V, O - U + V, O - U - V }) { FVector2D S; if (ToScreen(Game.Get(), Corner, S)) Rect.Add(S); }
+			if (Rect.Num() == 5) Lines(Rect, C, 1.5f, Layer + 1);
+			FVector2D A, B;
+			if (ToScreen(Game.Get(), O, A) && ToScreen(Game.Get(), O + Fwd * 60.f, B)) Lines({ A, B }, C, 2.f, Layer + 1);
+		}
 		else
 		{
 			FVector2D A, B;

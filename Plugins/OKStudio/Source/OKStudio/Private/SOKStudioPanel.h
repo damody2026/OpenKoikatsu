@@ -382,8 +382,8 @@ public:
 			const int32 Id = Game->Add(EOKSceneObjectKind::Light);
 			if (FOKSceneObject* O = Game->Document->Find(Id))
 			{
-				O->Light.Type = Arg == TEXT("spot") ? EOKSceneLightType::Spot : Arg == TEXT("point") ? EOKSceneLightType::Point : EOKSceneLightType::Directional;
-				O->Name = Arg == TEXT("spot") ? TEXT("聚光") : Arg == TEXT("point") ? TEXT("點光") : TEXT("方向光");
+				O->Light.Type = Arg == TEXT("spot") ? EOKSceneLightType::Spot : Arg == TEXT("point") ? EOKSceneLightType::Point : Arg == TEXT("area") ? EOKSceneLightType::Area : EOKSceneLightType::Directional;
+				O->Name = Arg == TEXT("spot") ? TEXT("聚光") : Arg == TEXT("point") ? TEXT("點光") : Arg == TEXT("area") ? TEXT("面光") : TEXT("方向光");
 				Game->Document->NotifyChanged();
 			}
 			return true;
@@ -604,6 +604,8 @@ public:
 		J->SetBoolField(TEXT("groups"), bShowGroups);
 		J->SetBoolField(TEXT("transform"), bShowTransform);
 		J->SetBoolField(TEXT("ui_hidden"), bHideUi);
+		J->SetBoolField(TEXT("shot_frame"), bShotFrame);
+		J->SetStringField(TEXT("shot_directory"), ShotDirectory());
 		J->SetNumberField(TEXT("rows"), Rows.Num());
 		TArray<TSharedPtr<FJsonValue>> Sel, Open;
 		if (Game.IsValid()) for (int32 Id : Game->Selection) Sel.Add(MakeShared<FJsonValueNumber>(Id));
@@ -1053,7 +1055,7 @@ public:
 		case EPage::Bones: return FMargin(134.f, 7.f, 320.f, 390.f);
 		case EPage::Anim: return FMargin(135.f, 10.f, 446.f, 370.f);
 		case EPage::ItemAdd: return FMargin(134.f, 7.f, 274.f, 234.f);
-		case EPage::LightAdd: return FMargin(142.f, 36.f, 210.f, 166.f);
+		case EPage::LightAdd: return FMargin(142.f, 36.f, 210.f, 192.f);
 		case EPage::CharLoader: case EPage::Files: return FMargin(142.f, 36.f, 620.f, 420.f);
 		case EPage::Scene: return FMargin(142.f, 36.f, 480.f, 326.f);
 		default: return FMargin(135.f, 47.f, 300.f, 429.f);
@@ -1321,6 +1323,14 @@ public:
 	void SceneSettingsPage();
 	int32 ShotW = 1920, ShotH = 1080;
 	bool bShotAlpha = false, bShotNoOverwrite = true;
+	/** HS2Studio6's screenshot options: the frame picture in the shot, and a folder of its own for this run (本次目錄). */
+	bool bShotFrame = true, bShotSessionFolder = false;
+	FString ShotSessionName = FDateTime::Now().ToString(TEXT("session_%Y%m%d_%H%M%S"));
+	FString ShotDirectory() const
+	{
+		const FString Base = ShotFolder.IsEmpty() ? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio/screenshot")) : ShotFolder;
+		return bShotSessionFolder ? Base / ShotSessionName : Base;
+	}
 	FString ShotFolder, ShotPattern = TEXT("okstudio_%Y%m%d_%H%M%S");
 	FString TakeShot();
 	TSharedRef<SWidget> BuildShot();
@@ -1837,12 +1847,17 @@ public:
 			Label(TEXT("燈光"));
 			// On/off is the object's visibility (the tree's eye): a switched-off light lights nothing, characters included.
 			Check(TEXT("開啟"), [](FOKSceneObject& X) { return X.bVisible; }, [](FOKSceneObject& X, bool V) { X.bVisible = V; });
-			Choice(TEXT("種類"), { TEXT("方向光"), TEXT("點光"), TEXT("聚光") }, [](FOKSceneObject& X) { return int32(X.Light.Type); }, [](FOKSceneObject& X, int32 V) { X.Light.Type = EOKSceneLightType(V); });
+			Choice(TEXT("種類"), { TEXT("方向光"), TEXT("點光"), TEXT("聚光"), TEXT("面光") }, [](FOKSceneObject& X) { return int32(X.Light.Type); }, [](FOKSceneObject& X, int32 V) { X.Light.Type = EOKSceneLightType(V); });
 			Float(TEXT("強度"), [](FOKSceneObject& X) { return X.Light.Intensity; }, [](FOKSceneObject& X, float V) { X.Light.Intensity = V; }, 0.f, 200.f, 0.5f);
 			if (O->Light.Type != EOKSceneLightType::Directional)
 				Float(TEXT("範圍 cm"), [](FOKSceneObject& X) { return X.Light.Range; }, [](FOKSceneObject& X, float V) { X.Light.Range = V; }, 1.f, 10000.f, 10.f);
 			if (O->Light.Type == EOKSceneLightType::Spot)
 				Float(TEXT("聚光角"), [](FOKSceneObject& X) { return X.Light.SpotAngle; }, [](FOKSceneObject& X, float V) { X.Light.SpotAngle = V; }, 1.f, 80.f, 1.f);
+			if (O->Light.Type == EOKSceneLightType::Area)
+			{
+				Float(TEXT("寬 cm"), [](FOKSceneObject& X) { return X.Light.AreaWidth; }, [](FOKSceneObject& X, float V) { X.Light.AreaWidth = FMath::Max(V, 1.f); }, 1.f, 2000.f, 1.f);
+				Float(TEXT("高 cm"), [](FOKSceneObject& X) { return X.Light.AreaHeight; }, [](FOKSceneObject& X, float V) { X.Light.AreaHeight = FMath::Max(V, 1.f); }, 1.f, 2000.f, 1.f);
+			}
 			ColorRow(TEXT("顏色"), [](FOKSceneObject& X) { return X.Light.Color; }, [](FOKSceneObject& X, const FLinearColor& C) { X.Light.Color = FLinearColor(C.R, C.G, C.B, 1.f); });
 			Check(TEXT("陰影"), [](FOKSceneObject& X) { return X.Light.bShadows; }, [](FOKSceneObject& X, bool V) { X.Light.bShadows = V; });
 			Choice(TEXT("作用對象"), { TEXT("全部"), TEXT("只照角色與道具") }, [](FOKSceneObject& X) { return X.Light.bCharactersOnly ? 1 : 0; }, [](FOKSceneObject& X, int32 V) { X.Light.bCharactersOnly = V == 1; });
@@ -2212,13 +2227,13 @@ public:
 		Label(FString::Printf(TEXT("%d 個道具；左鍵加入、中鍵加為子物件"), ItemOptions.Num()));
 	}
 
-	/** Light catalogue: add a directional, point or spot light. */
+	/** Light catalogue: add a directional, point, spot or area light. */
 	void LightCatalog()
 	{
 		using namespace OKStudioStyle;
-		static const TCHAR* Names[] = { TEXT("方向光"), TEXT("點光源"), TEXT("聚光燈") };
-		static const TCHAR* Args[] = { TEXT("directional"), TEXT("point"), TEXT("spot") };
-		for (int32 I = 0; I < 3; ++I)
+		static const TCHAR* Names[] = { TEXT("方向光"), TEXT("點光源"), TEXT("聚光燈"), TEXT("面光源") };
+		static const TCHAR* Args[] = { TEXT("directional"), TEXT("point"), TEXT("spot"), TEXT("area") };
+		for (int32 I = 0; I < 4; ++I)
 			Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(Names[I]), Cmd(TEXT("add.light"), Args[I]), 196.f, 22.f)];
 		int32 Lights = 0;
 		if (Game.IsValid()) for (const FOKSceneObject& O : Game->Document->Objects) Lights += O.Kind == EOKSceneObjectKind::Light ? 1 : 0;
