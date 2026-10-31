@@ -1265,7 +1265,9 @@ fn cubemap_atlas(tex: &unity_asset_decode::texture::Texture2D) -> Option<(u32, u
                 }
             };
             if !decoded { return None; }
-            // Unity stores texture rows bottom-up; the atlas is top-down like every other exported PNG.
+            // Turned over like a Texture2D's bottom-up rows, but a cubemap face is stored top row first: each face ends up
+            // upside down in the atlas. The base library records atlases this way, so the readers (KKPreviewActor's
+            // OKCubeAtlasSample and the map probe reflection) take the rows from the bottom instead.
             for y in 0..w { for x in 0..w {
                 let v = px[(w - 1 - y) * w + x];
                 atlas.put_pixel((face * size + x) as u32, (row + y) as u32, image::Rgba([(v >> 16) as u8, (v >> 8) as u8, v as u8, 255]));
