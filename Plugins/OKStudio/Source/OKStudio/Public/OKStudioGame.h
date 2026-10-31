@@ -194,6 +194,15 @@ public:
 	float LoopStart = 0.f, LoopEnd = 0.f;
 	void SetTimelineTime(float Time);
 
+	/** Prevents mouse orbit/pan/zoom/fly in the viewport from clearing Document->ActiveCamera = -1 while following an MMD/scene camera. */
+	bool bLockActiveCamera = false;
+	/** Live non-destructive calibration offset applied to the active scene/MMD camera in UpdateViewer. */
+	FVector MmdCameraOffset = FVector::ZeroVector;
+	float MmdCameraYawOffset = 0.f;
+	float MmdCameraFovOffset = 0.f;
+	/** Finds the MMD system camera id in Document (-1 if none). When bOnlyMmdScene is true, only matches cameras named MMD/MMDD or tracked cameras in a VMD scene. */
+	int32 FindMmdCameraId(bool bOnlyMmdScene = false) const;
+
 	/** Screenshot through the current view into UserData/Studio/screenshot (returns the file; empty on failure). */
 	FString Screenshot(int32 Width, int32 Height, bool bTransparent = false);
 	/** Renders the current view (camera, FOV, scene post-processing) at a resolution and writes a PNG, synchronously. */

@@ -302,6 +302,7 @@ public:
 		RebuildSubMenu();
 		RebuildDetailBody();
 		RefreshRows();
+		if (Game.IsValid() && Game->FindMmdCameraId(true) >= 0) OpenFloat(TEXT("mmd"), false);
 		KeyProcessor = MakeShared<FOKStudioKeyProcessor>();
 		KeyProcessor->OnKey = [this](const FKeyEvent& E) { return HandleKey(E); };
 		KeyProcessor->OnKeyUp = [this](const FKeyEvent& E) { return HandleKeyUp(E); };
@@ -426,7 +427,24 @@ public:
 		Simple(TEXT("gizmo.snap"), TEXT("吸附"), [this] { Game->bSnap = !Game->bSnap; SetStatus(Game->bSnap ? TEXT("吸附：開") : TEXT("吸附：關（按住 Ctrl 也會吸附）")); });
 		// View and cameras.
 		Simple(TEXT("camera.use"), TEXT("用此相機"), [this] { const FOKSceneObject* O = Obj(); Game->Document->ActiveCamera = O && O->Kind == EOKSceneObjectKind::Camera ? O->Id : -1; });
-		Simple(TEXT("camera.free"), TEXT("自由視角"), [this] { Game->Document->ActiveCamera = -1; });
+		Simple(TEXT("camera.free"), TEXT("自由視角"), [this] { Game->bLockActiveCamera = false; Game->Document->ActiveCamera = -1; SetStatus(TEXT("視角：自由視角（已解除鏡頭鎖定）")); });
+		Simple(TEXT("camera.mmd"), TEXT("MMD 系統鏡頭"), [this]
+		{
+			const int32 CamId = Game->FindMmdCameraId(false);
+			if (CamId >= 0)
+			{
+				Game->Document->ActiveCamera = CamId;
+				Game->bLockActiveCamera = true;
+				const FOKSceneObject* C = Game->Document->Find(CamId);
+				SetStatus(FString::Printf(TEXT("已啟用並鎖定 MMD 系統鏡頭：%s (#%d)"), C ? *C->Name : TEXT("Camera"), CamId));
+			}
+			else SetStatus(TEXT("場景中沒有相機物件"));
+		});
+		Simple(TEXT("camera.lock"), TEXT("鎖定系統鏡頭"), [this]
+		{
+			Game->bLockActiveCamera = !Game->bLockActiveCamera;
+			SetStatus(Game->bLockActiveCamera ? TEXT("鏡頭鎖定：開（滑鼠拖曳不脫離系統鏡頭）") : TEXT("鏡頭鎖定：關"));
+		});
 		Simple(TEXT("camera.focus"), TEXT("聚焦所選"), [this] { Game->FocusSelection(); });
 		Simple(TEXT("camera.reset"), TEXT("初始視角"), [this] { Game->ViewPreset(5); });
 		Simple(TEXT("camera.front"), TEXT("前視"), [this] { Game->ViewPreset(0); });
@@ -477,6 +495,7 @@ public:
 		Simple(TEXT("toggle.groups"), TEXT("分組"), [this] { bShowGroups = !bShowGroups; bLayoutDirty = true; });
 		Simple(TEXT("toggle.transform"), TEXT("變換列"), [this] { bShowTransform = !bShowTransform; bLayoutDirty = true; });
 		Simple(TEXT("toggle.timeline"), TEXT("時間軸"), [this] { OpenFloat(TEXT("timeline"), true); });
+		Simple(TEXT("toggle.mmd"), TEXT("MMD 導演"), [this] { OpenFloat(TEXT("mmd"), true); });
 		Simple(TEXT("toggle.ui"), TEXT("隱藏介面"), [this] { bHideUi = !bHideUi; });
 		Simple(TEXT("tree.expand"), TEXT("展開全部"), [this] { Collapsed.Reset(); RefreshRows(); });
 		Simple(TEXT("tree.collapse"), TEXT("收起全部"), [this] { for (const FOKSceneObject& O : Game->Document->Objects) if (Game->Document->Children(O.Id).Num()) Collapsed.Add(O.Id); RefreshRows(); });
@@ -588,6 +607,11 @@ public:
 		J->SetNumberField(TEXT("root_menu"), RootMenu);
 		J->SetNumberField(TEXT("selected"), Game.IsValid() ? Game->SelectedId : -1);
 		J->SetBoolField(TEXT("timeline"), IsFloatOpen(TEXT("timeline")));
+		J->SetBoolField(TEXT("mmd"), IsFloatOpen(TEXT("mmd")));
+		J->SetNumberField(TEXT("active_camera"), Game.IsValid() && Game->Document ? Game->Document->ActiveCamera : -1);
+		J->SetBoolField(TEXT("lock_camera"), Game.IsValid() && Game->bLockActiveCamera);
+		J->SetNumberField(TEXT("timeline_time"), Game.IsValid() ? Game->TimelineTime : 0.f);
+		J->SetBoolField(TEXT("timeline_playing"), Game.IsValid() && Game->bTimelinePlaying);
 		J->SetBoolField(TEXT("workspace"), bShowWorkspace);
 		J->SetBoolField(TEXT("groups"), bShowGroups);
 		J->SetBoolField(TEXT("transform"), bShowTransform);
@@ -693,12 +717,12 @@ public:
 			{ TEXT("相機"), TEXT("add.camera"), nullptr }, { TEXT("特效"), TEXT("add.effect"), Win(TEXT("effects")) }, { TEXT("資料夾"), TEXT("add.folder"), nullptr }, { TEXT("地圖"), TEXT("add.map"), Win(TEXT("maps")) },
 			{ TEXT("快搜"), TEXT("app.quicksearch"), Win(TEXT("quick")) } };
 		case 1: return { { TEXT("狀態"), TEXT("page.state"), On(EPage::State), bChar }, { TEXT("骨骼"), TEXT("page.bones"), On(EPage::Bones), bChar }, { TEXT("動畫"), TEXT("page.anim"), On(EPage::Anim), bChar },
-			{ TEXT("屬性"), TEXT("page.object"), On(EPage::Object), O != nullptr }, { TEXT("姿勢庫"), TEXT("app.poselibrary"), Win(TEXT("poselib")), bChar } };
+			{ TEXT("屬性"), TEXT("page.object"), On(EPage::Object), O != nullptr }, { TEXT("姿勢庫"), TEXT("app.poselibrary"), Win(TEXT("poselib")), bChar }, { TEXT("MMD 導演"), TEXT("toggle.mmd"), Win(TEXT("mmd")) } };
 		case 2: return { { TEXT("背景音樂（未支援）"), FString(), nullptr, false } };
 		case 3: return { { TEXT("新場景"), TEXT("scene.new"), nullptr }, { TEXT("開啟／儲存"), TEXT("scene.browser"), Win(TEXT("scenes")) }, { TEXT("另存新檔"), TEXT("scene.saveas"), nullptr },
-			{ TEXT("畫面設定"), TEXT("page.scene"), On(EPage::Scene) }, { TEXT("時間軸"), TEXT("toggle.timeline"), Win(TEXT("timeline")) }, { TEXT("截圖"), TEXT("app.screenshot"), Win(TEXT("shot")) },
-			{ TEXT("備份恢復"), TEXT("scene.backups"), Win(TEXT("backups")) }, { TEXT("資源檢查"), TEXT("scene.resources"), Win(TEXT("resources")) }, { TEXT("匯入 KStudio"), TEXT("scene.import"), nullptr },
-			{ TEXT("播放故事"), TEXT("app.story"), Win(TEXT("stories")) }, { TEXT("設定"), TEXT("app.settings"), Win(TEXT("settings")) }, { TEXT("離開"), TEXT("app.quit"), nullptr } };
+			{ TEXT("畫面設定"), TEXT("page.scene"), On(EPage::Scene) }, { TEXT("時間軸"), TEXT("toggle.timeline"), Win(TEXT("timeline")) }, { TEXT("MMD 導演"), TEXT("toggle.mmd"), Win(TEXT("mmd")) },
+			{ TEXT("截圖"), TEXT("app.screenshot"), Win(TEXT("shot")) }, { TEXT("備份恢復"), TEXT("scene.backups"), Win(TEXT("backups")) }, { TEXT("資源檢查"), TEXT("scene.resources"), Win(TEXT("resources")) },
+			{ TEXT("匯入 KStudio"), TEXT("scene.import"), nullptr }, { TEXT("播放故事"), TEXT("app.story"), Win(TEXT("stories")) }, { TEXT("設定"), TEXT("app.settings"), Win(TEXT("settings")) }, { TEXT("離開"), TEXT("app.quit"), nullptr } };
 		default: return {};
 		}
 	}
@@ -730,7 +754,7 @@ public:
 		struct FTool { const TCHAR* Label; const TCHAR* Command; TFunction<bool()> On; const TCHAR* Icon; };
 		const FTool Tools[] = {
 			{ TEXT("角色分組"), TEXT("toggle.groups"), [this] { return bShowGroups; }, TEXT("groups") },
-			{ TEXT(""), nullptr, nullptr, nullptr },
+			{ TEXT("MMD 導演／設定"), TEXT("toggle.mmd"), [this] { return IsFloatOpen(TEXT("mmd")); }, TEXT("play") },
 			{ TEXT("主選單"), TEXT("toggle.root"), [this] { return bShowRoot; }, TEXT("menu") },
 			{ TEXT("工作區"), TEXT("toggle.workspace"), [this] { return bShowWorkspace; }, TEXT("tree") },
 			{ TEXT("變換列"), TEXT("toggle.transform"), [this] { return bShowTransform; }, TEXT("move") },
@@ -800,8 +824,9 @@ public:
 			+ SVerticalBox::Slot().AutoHeight().Padding(2.f, 8.f, 3.f, 0.f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth()[IconButton(TEXT("timeline"), Tip(TEXT("時間軸"), TEXT("toggle.timeline")), Cmd(TEXT("toggle.timeline")), 74.f, 22.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("timeline")); }))]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)
+				+ SHorizontalBox::Slot().AutoWidth()[IconButton(TEXT("timeline"), Tip(TEXT("時間軸"), TEXT("toggle.timeline")), Cmd(TEXT("toggle.timeline")), 64.f, 22.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("timeline")); }))]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f, 0.f, 0.f)[Button(FText::FromString(TEXT("MMD")), Cmd(TEXT("toggle.mmd")), 38.f, 22.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("mmd")); }), 10.f)]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)
 				[
 					SNew(SBox).WidthOverride(22.f).HeightOverride(22.f).ToolTipText_Lambda([this]
 					{
@@ -815,12 +840,12 @@ public:
 							[SAssignNew(FilterIcon, SBox)[SNew(SIcon).Icon(FilterIcons[0]).Size(14.f)]])
 					]
 				]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)[IconButton(TEXT("eye"), TEXT("定位當前"), Cmd(TEXT("tree.locate")), 22.f, 22.f)]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f, 0.f, 0.f)[IconButton(TEXT("eye"), TEXT("定位當前"), Cmd(TEXT("tree.locate")), 22.f, 22.f)]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f, 0.f, 0.f)
 				[
-					SNew(SBox).WidthOverride(100.f).HeightOverride(22.f)
+					SNew(SBox).WidthOverride(72.f).HeightOverride(22.f)
 					[
-						SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋物件")))
+						SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋")))
 						.OnTextChanged_Lambda([this](const FText& T) { Search = T.ToString(); RefreshRows(); })
 					]
 				]
@@ -1246,6 +1271,7 @@ public:
 	int32 ExportW = 1920, ExportH = 1080, ExportKind = 0;
 	FString ExportFolderText;
 	TSharedRef<SWidget> BuildExport();
+	TSharedRef<SWidget> BuildMmdDirector();
 
 	// --- Scene files (U7). ---
 	FString SceneFolder, SceneSearch, ScenePick, SceneNewName, SaveAsName;
@@ -1873,6 +1899,15 @@ public:
 			Names.Sort();
 			for (const FString& N : Names) Out.Add(Folder / N);
 		}
+		TArray<FString> SceneAnims;
+		IFileManager::Get().FindFilesRecursive(SceneAnims, *(FPaths::ProjectDir() / TEXT("UserData/Studio/scene")), TEXT("*.okanim"), true, false);
+		SceneAnims.Sort();
+		const FString Proj = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		for (FString Path : SceneAnims)
+		{
+			FPaths::MakePathRelativeTo(Path, *(Proj + TEXT("/")));
+			Out.Add(Path);
+		}
 		return Out;
 	}
 	/** Plays an .okanim file on a character (the Studio animation stops). */
@@ -2145,9 +2180,17 @@ public:
 		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
 		[
 			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("啟用 MMD 系統鏡頭")), Cmd(TEXT("camera.mmd")), 0.f, 20.f, TAttribute<bool>::CreateLambda([this] { return Game.IsValid() && Game->Document->ActiveCamera >= 0 && Game->Document->ActiveCamera == Game->FindMmdCameraId(false); }))]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("MMD 導演／設定")), Cmd(TEXT("toggle.mmd")), 0.f, 20.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("mmd")); }))]
+		];
+		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
+		[
+			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("使用選中相機")), Cmd(TEXT("camera.use")), 0.f, 20.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("自由視角")), Cmd(TEXT("camera.free")), 0.f, 20.f, TAttribute<bool>::CreateLambda([this] { return Game.IsValid() && Game->Document->ActiveCamera < 0; }))]
 		];
+		Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
+			[CheckBox(TEXT("鎖定目前相機（防止滑鼠拖曳視角時脫離）"), [this] { return Game.IsValid() && Game->bLockActiveCamera; }, [this](bool B) { if (Game.IsValid()) Game->bLockActiveCamera = B; })];
 		Buttons({ { TEXT("從視角建相機"), TEXT("camera.fromview") }, { TEXT("視角存入所選"), TEXT("camera.store") }, { TEXT("下一相機"), TEXT("camera.next") } });
 		if (const FOKSceneObject* O = Obj(); O && O->Kind == EOKSceneObjectKind::Camera)
 		{

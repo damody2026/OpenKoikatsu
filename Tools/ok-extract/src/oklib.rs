@@ -1766,13 +1766,13 @@ fn make_ok_card_for_outfit(lib: &Path, game: &Path, card: &Path, outfit: i32) ->
         let _ = std::fs::remove_dir_all(&work);
         let made = made?;
         let keys = gap_zipmods(&made.2);
-        let mut absent: Vec<String> = keys.iter().filter(|k| !root.join(k).is_file()
+        let mut absent: Vec<String> = keys.iter().filter(|k| crate::gamefs::resolve_mod_archive(&root, k).is_none()
             && !card.parent().is_some_and(|d| k.rsplit('/').next().is_some_and(|n| d.join(n).is_file())))
             .filter_map(|k| k.rsplit('/').next().map(str::to_owned)).collect();
         absent.sort();
         absent.dedup();
         LAST_ABSENT_ZIPMODS.lock().unwrap().clone_from(&absent);
-        let mut unnamed: Vec<PathBuf> = keys.iter().map(|k| root.join(k)).filter(|p| p.is_file() && !extra.contains(p)).collect();
+        let mut unnamed: Vec<PathBuf> = keys.iter().filter_map(|k| crate::gamefs::resolve_mod_archive(&root, k)).filter(|p| !extra.contains(p)).collect();
         unnamed.sort();
         unnamed.dedup();
         if unnamed.is_empty() || extra.len() > 64 { break made; }
@@ -1864,7 +1864,7 @@ fn gap_zipmods(gaps: &[String]) -> Vec<String> {
     let mut keys: Vec<String> = Vec::new();
     for what in gaps {
         if let Some(k) = what.strip_prefix("GAMEFS zip-entry ").and_then(|k| k.split('|').next()) { keys.push(k.to_owned()); continue; }
-        if what.starts_with("GAMEFS ") || what.starts_with("UNMEMOIZED ") { continue; }
+        if (what.starts_with("GAMEFS ") && !what.starts_with("GAMEFS absent-model ")) || what.starts_with("UNMEMOIZED ") { continue; }
         if let Some(id) = what.split_whitespace().find(|w| w.len() == 32).and_then(id_from_hex) { keys.extend(crate::gamefs::zips_with_model(&id)); }
     }
     keys.retain(|k| k.starts_with("mods/"));

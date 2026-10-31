@@ -327,6 +327,101 @@ pub fn fallback_used() -> bool {
 
 fn is_mods_key(key: &str) -> bool { key == "mods" || key.starts_with("mods/") }
 
+fn strip_author_tag(name: &str) -> &str {
+    let mut s = name.trim();
+    while let Some(rest) = s.strip_prefix('[') {
+        let Some((_, after)) = rest.split_once(']') else { break };
+        let trimmed = after.trim_start();
+        if trimmed.split('.').next().is_some_and(|stem| stem.len() >= 3) {
+            s = trimmed;
+        } else {
+            break;
+        }
+    }
+    s
+}
+
+pub fn same_archive_name(a: &str, b: &str) -> bool {
+    a.eq_ignore_ascii_case(b) || strip_author_tag(a).eq_ignore_ascii_case(strip_author_tag(b))
+}
+
+fn zip_unity3d_entries(path: &Path) -> Vec<(String, u64)> {
+    static CACHE: std::sync::OnceLock<Mutex<std::collections::HashMap<PathBuf, Vec<(String, u64)>>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(hit) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(path).cloned() {
+        return hit;
+    }
+    let mut out = Vec::new();
+    if let Ok(file) = std::fs::File::open(path) {
+        if let Ok(mut zip) = zip::ZipArchive::new(std::io::BufReader::new(file)) {
+            for i in 0..zip.len() {
+                if let Ok(f) = zip.by_index_raw(i) {
+                    let n = f.name().replace('\\', "/").to_ascii_lowercase();
+                    if n.ends_with(".unity3d") {
+                        out.push((n, f.size()));
+                    }
+                }
+            }
+        }
+    }
+    cache.lock().unwrap_or_else(|e| e.into_inner()).insert(path.to_owned(), out.clone());
+    out
+}
+
+fn recorded_zip_matches_file(key: &str, candidate: &Path) -> bool {
+    let Some(st) = state() else { return false };
+    let recorded_bundles: Vec<(String, u64)> = {
+        let index = st.index.lock().unwrap();
+        let Some(z) = index.zips.get(key) else { return false };
+        z.names.iter()
+            .filter_map(|(n, sz, _, dir)| (!*dir && n.to_ascii_lowercase().ends_with(".unity3d")).then(|| (n.replace('\\', "/").to_ascii_lowercase(), *sz)))
+            .collect()
+    };
+    if recorded_bundles.is_empty() { return false; }
+    let cand_bundles = zip_unity3d_entries(candidate);
+    recorded_bundles.iter().any(|(n, sz)| cand_bundles.iter().any(|(cn, csz)| cn == n && (csz == sz || *sz == 0)))
+}
+
+/// Resolves a logical `mods/.../<file>.zipmod` key against a game root whose `mods/` tree may organize
+/// archives in different subfolders (e.g. `ForCharactersLoading/...`) or with an `[Author]` prefix.
+pub fn resolve_mod_archive(root: &Path, key: &str) -> Option<PathBuf> {
+    if root.as_os_str().is_empty() { return None; }
+    let direct = root.join(key);
+    if direct.is_file() { return Some(direct); }
+    if !is_mods_key(key) { return None; }
+    let want = key.rsplit('/').next()?;
+    let want_lower = want.to_ascii_lowercase();
+    if !want_lower.ends_with(".zipmod") && !want_lower.ends_with(".zip") { return None; }
+    static INDEX: std::sync::OnceLock<Mutex<std::collections::HashMap<PathBuf, Vec<(String, String, PathBuf)>>>> = std::sync::OnceLock::new();
+    let map = INDEX.get_or_init(Default::default);
+    let mut guard = map.lock().unwrap_or_else(|e| e.into_inner());
+    let entries = guard.entry(root.to_owned()).or_insert_with(|| {
+        let mut list = Vec::new();
+        let mut stack = vec![root.join("mods")];
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if e.file_type().is_ok_and(|t| t.is_dir()) {
+                    stack.push(p);
+                } else if let Some(n) = p.file_name().map(|s| s.to_string_lossy().into_owned()) {
+                    let lower = n.to_ascii_lowercase();
+                    if lower.ends_with(".zipmod") || lower.ends_with(".zip") {
+                        let stripped = strip_author_tag(&lower).to_ascii_lowercase();
+                        list.push((lower, stripped, p));
+                    }
+                }
+            }
+        }
+        list
+    });
+    if let Some((_, _, p)) = entries.iter().find(|(l, _, _)| *l == want_lower) {
+        return Some(p.clone());
+    }
+    let want_stripped = strip_author_tag(&want_lower).to_ascii_lowercase();
+    entries.iter().find(|(_, s, _)| *s == want_stripped).map(|(_, _, p)| p.clone())
+}
+
 /// Real paths that may serve `key`, each with whether it is the installation's (see `Fallback::installation`).
 /// While a card is recorded the installation serves nothing: what the card needs from it is found through gaps.
 fn fallback_candidates(key: &str) -> Vec<(PathBuf, bool)> {
@@ -338,11 +433,24 @@ fn fallback_candidates(key: &str) -> Vec<(PathBuf, bool)> {
     for f in roots.iter() {
         if f.installation && recording { continue; }
         if !f.root.as_os_str().is_empty() {
-            out.push((f.root.join(key), f.installation));
+            if let Some(resolved) = resolve_mod_archive(&f.root, key) {
+                out.push((resolved, f.installation));
+            } else {
+                out.push((f.root.join(key), f.installation));
+            }
             if let (true, Some(name)) = (f.loose_mods, file_name) { out.push((f.root.join(name), false)); }
         }
         if let Some(name) = file_name {
-            out.extend(f.files.iter().filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(name))).map(|p| (p.clone(), false)));
+            let mut matched = false;
+            for p in f.files.iter().filter(|p| p.file_name().is_some_and(|n| same_archive_name(&n.to_string_lossy(), name))) {
+                out.push((p.clone(), false));
+                matched = true;
+            }
+            if !matched {
+                for p in f.files.iter().filter(|p| recorded_zip_matches_file(key, p)) {
+                    out.push((p.clone(), false));
+                }
+            }
         }
     }
     out

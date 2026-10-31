@@ -427,6 +427,32 @@ bool UOKStudioGame::Save(const FString& Path, FString& OutError)
 	return true;
 }
 
+int32 UOKStudioGame::FindMmdCameraId(bool bOnlyMmdScene) const
+{
+	if (!Document) return -1;
+	for (const FOKSceneObject& O : Document->Objects)
+		if (O.Kind == EOKSceneObjectKind::Camera && (O.Name.Contains(TEXT("MMDD"), ESearchCase::IgnoreCase) || O.Name.Contains(TEXT("MMD"), ESearchCase::IgnoreCase)))
+			return O.Id;
+	bool bHasMmdAnim = false;
+	for (const FOKSceneObject& O : Document->Objects)
+		if (O.Kind == EOKSceneObjectKind::Character && O.Character.AnimFile.Contains(TEXT("mmd_"), ESearchCase::IgnoreCase))
+			bHasMmdAnim = true;
+	if (!bOnlyMmdScene || bHasMmdAnim)
+	{
+		for (const FOKSceneObject& O : Document->Objects)
+			if (O.Kind == EOKSceneObjectKind::Camera)
+				if (const FOKSceneTrack* T = Document->TrackOf(O.Id); T && T->Keys.Num() > 0)
+					return O.Id;
+	}
+	if (!bOnlyMmdScene)
+	{
+		for (const FOKSceneObject& O : Document->Objects)
+			if (O.Kind == EOKSceneObjectKind::Camera)
+				return O.Id;
+	}
+	return -1;
+}
+
 bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 {
 	FString Note;
@@ -435,6 +461,26 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 	// A KStudio scene is imported, not edited in place: saving writes an OK scene card beside it.
 	File = FOKSceneCard::Kind(Path) == FOKSceneCard::EKind::KStudio ? FString() : Path;
 	ReleaseSceneResources();
+	TimelineTime = 0.f;
+	LoopStart = 0.f;
+	LoopEnd = 0.f;
+	MmdCameraOffset = FVector::ZeroVector;
+	MmdCameraYawOffset = 0.f;
+	MmdCameraFovOffset = 0.f;
+	const int32 MmdCamId = FindMmdCameraId(true);
+	if (MmdCamId >= 0)
+	{
+		Document->ActiveCamera = MmdCamId;
+		bLockActiveCamera = true;
+		bTimelinePlaying = true;
+		SetTimelineTime(0.f);
+		if (Panel) Panel->OpenFloat(TEXT("mmd"), false);
+	}
+	else
+	{
+		bLockActiveCamera = false;
+		bTimelinePlaying = false;
+	}
 	ResetHistory();
 	bDirty = false;
 	return true;
@@ -843,6 +889,7 @@ bool UOKStudioGame::IkTargetWorld(int32 Effector, FVector& Out) const
 
 void UOKStudioGame::Orbit(float DeltaYaw, float DeltaPitch)
 {
+	if (bLockActiveCamera && Document && Document->ActiveCamera >= 0) return;
 	Yaw += DeltaYaw;
 	Pitch = FMath::Clamp(Pitch + DeltaPitch, -89.f, 89.f);
 	Document->ActiveCamera = -1;
@@ -850,6 +897,7 @@ void UOKStudioGame::Orbit(float DeltaYaw, float DeltaPitch)
 
 void UOKStudioGame::Look(float DeltaYaw, float DeltaPitch)
 {
+	if (bLockActiveCamera && Document && Document->ActiveCamera >= 0) return;
 	// The camera stays where it is and turns; the focus moves with its line of sight.
 	const FVector Eye = Focus - FRotator(Pitch, Yaw, 0.f).Vector() * Distance;
 	Yaw += DeltaYaw;
@@ -860,6 +908,7 @@ void UOKStudioGame::Look(float DeltaYaw, float DeltaPitch)
 
 void UOKStudioGame::Pan(float Right, float Up)
 {
+	if (bLockActiveCamera && Document && Document->ActiveCamera >= 0) return;
 	const FRotator R(Pitch, Yaw, 0.f);
 	const float Scale = Distance * 0.002f * FOKStudioSettings::Get().PanSpeed;
 	Focus += (FRotationMatrix(R).GetUnitAxis(EAxis::Y) * Right + FRotationMatrix(R).GetUnitAxis(EAxis::Z) * Up) * Scale;
@@ -868,6 +917,7 @@ void UOKStudioGame::Pan(float Right, float Up)
 
 void UOKStudioGame::Zoom(float Steps)
 {
+	if (bLockActiveCamera && Document && Document->ActiveCamera >= 0) return;
 	Distance = FMath::Clamp(Distance * FMath::Pow(0.88f, Steps * FOKStudioSettings::Get().ZoomSpeed), 20.f, 5000.f);
 	Document->ActiveCamera = -1;
 }
@@ -896,8 +946,19 @@ void UOKStudioGame::UpdateViewer()
 	if (Near) Near->NearClip = ActiveObject && ActiveObject->Kind == EOKSceneObjectKind::Camera ? ActiveObject->Camera.Near : 0.f;
 	if (const UCameraComponent* Active = SceneActor ? SceneActor->ActiveCamera() : nullptr)
 	{
-		Viewer->SetActorTransform(Active->GetComponentTransform());
-		ViewerCamera->SetFieldOfView(Active->FieldOfView);
+		FTransform CamTransform = Active->GetComponentTransform();
+		if (!MmdCameraOffset.IsNearlyZero() || !FMath::IsNearlyZero(MmdCameraYawOffset))
+		{
+			CamTransform.AddToTranslation(MmdCameraOffset);
+			if (!FMath::IsNearlyZero(MmdCameraYawOffset))
+			{
+				FRotator R = CamTransform.Rotator();
+				R.Yaw += MmdCameraYawOffset;
+				CamTransform.SetRotation(R.Quaternion());
+			}
+		}
+		Viewer->SetActorTransform(CamTransform);
+		ViewerCamera->SetFieldOfView(FMath::Clamp(Active->FieldOfView + MmdCameraFovOffset, 5.f, 170.f));
 		if (SceneActor) SceneActor->PlaceBackground(Viewer->GetActorTransform(), ViewerCamera->FieldOfView);
 		return;
 	}
@@ -1015,10 +1076,16 @@ void UOKStudioGame::SyncNow()
 void UOKStudioGame::SetTimelineTime(float Time)
 {
 	TimelineTime = FMath::Clamp(Time, 0.f, FMath::Max(Document->Duration, 0.01f));
-    Document->ItemAnimationSeconds = TimelineTime;
+	Document->ItemAnimationSeconds = TimelineTime;
 	// Posing the scene for a time is not an edit (no undo step, no unsaved mark).
 	TGuardValue<bool> Evaluating(bEvaluatingTimeline, true);
 	Document->EvaluateTimeline(TimelineTime);
+	if (!bTimelinePlaying && SceneActor)
+	{
+		for (const FOKSceneObject& O : Document->Objects)
+			if (O.Kind == EOKSceneObjectKind::Character)
+				SceneActor->SetAnimationTime(O.Id, TimelineTime);
+	}
 }
 
 FString UOKStudioGame::ExportOkAnim(int32 Id, float Fps, FString& OutError)
@@ -1111,7 +1178,7 @@ void UOKStudioGame::Tick(float DeltaTime)
 	FOKStudioThumbnails::Get().Tick();
 	if (Panel) Panel->TickUi(DeltaTime);
 	// Free fly: W A S D forward / sideways, Q E down / up, while the right button is held in the view.
-	if (bFlying && FlyKeys.Num())
+	if (bFlying && FlyKeys.Num() && !(bLockActiveCamera && Document && Document->ActiveCamera >= 0))
 	{
 		const FRotator R(Pitch, Yaw, 0.f);
 		FVector Move = FVector::ZeroVector;

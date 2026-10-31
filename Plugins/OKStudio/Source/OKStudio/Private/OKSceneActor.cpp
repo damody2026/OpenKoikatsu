@@ -1026,7 +1026,8 @@ namespace
 void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase)
 {
     if (!Document || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
-    if (bAdvancePhase) Document->ItemAnimationSeconds += DeltaSeconds;
+    const bool bHasTracks = Document->Tracks.Num() > 0;
+    if (bAdvancePhase && !bHasTracks) Document->ItemAnimationSeconds += DeltaSeconds;
     TArray<AKKPreviewActor*, TInlineAllocator<16>> Actors;
     const bool bSharePose = CVarSharePose.GetValueOnGameThread() != 0;
     for (auto& Pair : Shown)
@@ -1037,7 +1038,10 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         // An anim player or a session clip (a video motion, PoseMode 2) runs on the scene's clock.
         if (Actor->OkPlayer || Actor->PoseMode == 2)
         {
-            if (bAdvancePhase) Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
+            if (bHasTracks)
+                Pair.Value.Time = Object->Character.Time + Document->ItemAnimationSeconds * Object->Character.Speed;
+            else if (bAdvancePhase)
+                Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
             Actor->AnimPhase = Pair.Value.Time;
         }
         // Scene actors have their own Tick disabled. A static FK pose still needs

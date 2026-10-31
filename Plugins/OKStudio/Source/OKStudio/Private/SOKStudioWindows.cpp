@@ -72,6 +72,7 @@ void SOKStudioPanel::RegisterFloats()
 {
 	// Default places: HS2Studio6's (layout spec) where it has the window, else beside the menus.
 	AddFloat(TEXT("timeline"), TEXT("時間軸"), FMargin(160.f, 458.f, 520.f, 260.f), [this] { return BuildTimeline(); });
+	AddFloat(TEXT("mmd"), TEXT("MMD 導演／設定（MMDD / KKVMD）"), FMargin(140.f, 47.f, 430.f, 520.f), [this] { return BuildMmdDirector(); });
 	AddFloat(TEXT("cards"), TEXT("角色卡"), FMargin(142.f, 36.f, 620.f, 420.f), [this] { return BuildCardBrowser(); });
 	AddFloat(TEXT("scenes"), TEXT("場景檔"), FMargin(142.f, 36.f, 620.f, 420.f), [this] { return BuildSceneBrowser(); });
 	AddFloat(TEXT("quick"), TEXT("快搜"), FMargin(140.f, 40.f, 360.f, 590.f), [this] { return BuildQuickSearch(); });
@@ -984,4 +985,262 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 6.f, 0.f)[Menu]
 			+ SHorizontalBox::Slot().FillWidth(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(4.f)[SNew(SScrollBox) + SScrollBox::Slot()[Body]]]
 		];
+}
+
+// --- MMD Director & Settings (MMDD / KKVMDPlay / VNGE) ---
+
+TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
+{
+	TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
+	auto SectionHeader = [](const FString& Title)
+	{
+		return SNew(SBorder).BorderImage(Brush(FLinearColor(0.12f, 0.22f, 0.38f, 0.95f))).Padding(FMargin(6.f, 3.f))
+			[OKStudioStyle::Label(FText::FromString(Title), 11.f, FLinearColor(0.95f, 0.98f, 1.f))];
+	};
+
+	// 1. MMD Transport & Timeline Sync
+	Body->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[SectionHeader(TEXT("一、MMD 播放與時間軸總控（動作＋鏡頭同步）"))];
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.4f).Padding(0.f, 0.f, 2.f, 0.f)
+		[
+			Button(TAttribute<FText>::CreateLambda([this]
+			{
+				return FText::FromString(Game.IsValid() && Game->bTimelinePlaying ? TEXT("■ 暫停 MMD") : TEXT("▶ 播放 MMD"));
+			}), Cmd(TEXT("timeline.play")), 0.f, 24.f, TAttribute<bool>::CreateLambda([this] { return Game.IsValid() && Game->bTimelinePlaying; }), 11.f)
+		]
+		+ SHorizontalBox::Slot().FillWidth(0.8f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("|< 開頭")), Cmd(TEXT("timeline.first")), 0.f, 24.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(0.7f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("-1 幀")), Cmd(TEXT("timeline.prev")), 0.f, 24.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(0.7f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("+1 幀")), Cmd(TEXT("timeline.next")), 0.f, 24.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(0.8f)[Button(FText::FromString(TEXT("結尾 >|")), Cmd(TEXT("timeline.last")), 0.f, 24.f, false, 10.f)]
+	];
+
+	Body->AddSlot().AutoHeight().Padding(2.f, 2.f)
+	[
+		OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this]
+		{
+			if (!Game.IsValid() || !Game->Document) return FText::GetEmpty();
+			const float T = Game->TimelineTime, D = FMath::Max(Game->Document->Duration, 0.01f);
+			return FText::FromString(FString::Printf(TEXT("進度：%.2f / %.2f 秒　｜　幀：%d / %d (30 fps)"),
+				T, D, FMath::RoundToInt(T * 30.f), FMath::RoundToInt(D * 30.f)));
+		}), 10.f, FLinearColor(0.85f, 0.95f, 1.f))
+	];
+
+	Body->AddSlot().AutoHeight().Padding(2.f, 2.f)
+	[
+		SNew(SBox).HeightOverride(20.f)
+		[
+			SNew(SSlider)
+			.Value_Lambda([this]
+			{
+				if (!Game.IsValid() || !Game->Document) return 0.f;
+				return FMath::Clamp(Game->TimelineTime / FMath::Max(Game->Document->Duration, 0.01f), 0.f, 1.f);
+			})
+			.OnValueChanged_Lambda([this](float V)
+			{
+				if (!Game.IsValid() || !Game->Document) return;
+				ScrubTo(V * FMath::Max(Game->Document->Duration, 0.01f));
+			})
+		]
+	];
+
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("倍速")), 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f)[SNew(SBox).WidthOverride(52.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? Game->TimelineSpeed : 1.f; }, [this](float V) { if (Game.IsValid()) Game->TimelineSpeed = FMath::Clamp(V, 0.05f, 4.f); }, 0.05f, 4.f, 0.05f)]]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("0.5x")), [this] { if (Game.IsValid()) Game->TimelineSpeed = 0.5f; }, 34.f, 18.f, false, 9.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("1.0x")), [this] { if (Game.IsValid()) Game->TimelineSpeed = 1.0f; }, 34.f, 18.f, false, 9.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("2.0x")), [this] { if (Game.IsValid()) Game->TimelineSpeed = 2.0f; }, 34.f, 18.f, false, 9.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("總長(秒)")), 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)[SNew(SBox).WidthOverride(56.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() && Game->Document ? Game->Document->Duration : 10.f; }, [this](float V) { if (Game.IsValid() && Game->Document) { Game->Document->Duration = FMath::Max(V, 0.1f); Changed(); } }, 0.1f, 3600.f, 0.5f)]]
+	];
+
+	// 2. MMD System Camera
+	Body->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 3.f)[SectionHeader(TEXT("二、MMD 系統鏡頭控制與補償（MMDD Camera）"))];
+	Body->AddSlot().AutoHeight().Padding(2.f, 1.f)
+	[
+		OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this]
+		{
+			if (!Game.IsValid() || !Game->Document) return FText::GetEmpty();
+			const int32 ActiveId = Game->Document->ActiveCamera;
+			const FOKSceneObject* ActiveCam = Game->Document->Find(ActiveId);
+			const int32 MmdId = Game->FindMmdCameraId(false);
+			const FOKSceneObject* MmdCam = Game->Document->Find(MmdId);
+			const FOKSceneTrack* Track = MmdCam ? Game->Document->TrackOf(MmdId) : nullptr;
+			const int32 Keys = Track ? Track->Keys.Num() : 0;
+			if (ActiveCam && ActiveCam->Kind == EOKSceneObjectKind::Camera)
+			{
+				const FVector Pos = ActiveCam->Transform.GetLocation() + Game->MmdCameraOffset;
+				const float Fov = FMath::Clamp(ActiveCam->Camera.Fov + Game->MmdCameraFovOffset, 5.f, 170.f);
+				return FText::FromString(FString::Printf(TEXT("目前鏡頭：%s (#%d)%s｜關鍵幀：%d｜FOV：%.1f°｜XYZ：(%.0f, %.0f, %.0f)"),
+					*ActiveCam->Name, ActiveCam->Id, Game->bLockActiveCamera ? TEXT(" [已鎖定]") : TEXT(""),
+					Keys, Fov, Pos.X, Pos.Y, Pos.Z));
+			}
+			return FText::FromString(FString::Printf(TEXT("目前鏡頭：自由視角（場景鏡頭：%s，共 %d 個關鍵幀）"),
+				MmdCam ? *MmdCam->Name : TEXT("無"), Keys));
+		}), 10.f, FLinearColor(0.95f, 0.9f, 0.65f))
+	];
+
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.2f).Padding(0.f, 0.f, 2.f, 0.f)
+		[
+			Button(FText::FromString(TEXT("啟用 MMD 系統鏡頭")), Cmd(TEXT("camera.mmd")), 0.f, 22.f,
+				TAttribute<bool>::CreateLambda([this] { return Game.IsValid() && Game->Document && Game->Document->ActiveCamera >= 0 && Game->Document->ActiveCamera == Game->FindMmdCameraId(false); }), 10.f)
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)
+		[
+			Button(FText::FromString(TEXT("切換自由視角")), Cmd(TEXT("camera.free")), 0.f, 22.f,
+				TAttribute<bool>::CreateLambda([this] { return Game.IsValid() && Game->Document && Game->Document->ActiveCamera < 0; }), 10.f)
+		]
+		+ SHorizontalBox::Slot().FillWidth(0.9f)
+		[
+			Button(FText::FromString(TEXT("選取鏡頭物件")), [this]
+			{
+				if (!Game.IsValid()) return;
+				const int32 CamId = Game->FindMmdCameraId(false);
+				if (CamId >= 0) { Game->Select(CamId); LocateSelection(); }
+			}, 0.f, 22.f, false, 10.f)
+		]
+	];
+
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		CheckBox(TEXT("鎖定 MMD 系統鏡頭（防止滑鼠拖曳／滾輪誤觸脫離鏡頭）"),
+			[this] { return Game.IsValid() && Game->bLockActiveCamera; },
+			[this](bool B) { if (Game.IsValid()) Game->bLockActiveCamera = B; })
+	];
+
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("鏡頭位移 cm")), 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 1.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("X")), 10.f, FLinearColor(1.f, .4f, .4f))]
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(52.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? float(Game->MmdCameraOffset.X) : 0.f; }, [this](float V) { if (Game.IsValid()) Game->MmdCameraOffset.X = V; }, -2000.f, 2000.f, 1.f)]]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 1.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("Y")), 10.f, FLinearColor(.4f, 1.f, .4f))]
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(52.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? float(Game->MmdCameraOffset.Y) : 0.f; }, [this](float V) { if (Game.IsValid()) Game->MmdCameraOffset.Y = V; }, -2000.f, 2000.f, 1.f)]]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 1.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("Z(高)")), 10.f, FLinearColor(.5f, .7f, 1.f))]
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(52.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? float(Game->MmdCameraOffset.Z) : 0.f; }, [this](float V) { if (Game.IsValid()) Game->MmdCameraOffset.Z = V; }, -2000.f, 2000.f, 1.f)]]
+		+ SHorizontalBox::Slot().FillWidth(1.f)
+		+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("重設補償")), [this] { if (Game.IsValid()) { Game->MmdCameraOffset = FVector::ZeroVector; Game->MmdCameraYawOffset = 0.f; Game->MmdCameraFovOffset = 0.f; } }, 56.f, 18.f, false, 9.f)]
+	];
+
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("水平旋轉 °")), 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f)[SNew(SBox).WidthOverride(52.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? Game->MmdCameraYawOffset : 0.f; }, [this](float V) { if (Game.IsValid()) Game->MmdCameraYawOffset = V; }, -180.f, 180.f, 1.f)]]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0.f, 0.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("FOV 補償 °")), 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f)[SNew(SBox).WidthOverride(52.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? Game->MmdCameraFovOffset : 0.f; }, [this](float V) { if (Game.IsValid()) Game->MmdCameraFovOffset = V; }, -60.f, 60.f, 0.5f)]]
+		+ SHorizontalBox::Slot().FillWidth(1.f)
+		+ SHorizontalBox::Slot().AutoWidth().Padding(1.f, 0.f)[Button(FText::FromString(TEXT("高-5")), [this] { if (Game.IsValid()) Game->MmdCameraOffset.Z -= 5.f; }, 34.f, 18.f, false, 9.f)]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(1.f, 0.f)[Button(FText::FromString(TEXT("高+5")), [this] { if (Game.IsValid()) Game->MmdCameraOffset.Z += 5.f; }, 34.f, 18.f, false, 9.f)]
+	];
+
+	// 3. Characters & VMD Motions
+	Body->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 3.f)[SectionHeader(TEXT("三、角色 VMD 動作、視線與表情設定"))];
+	if (Game.IsValid() && Game->Document)
+	{
+		int32 CharCount = 0;
+		auto LookText = [](EOKSceneLook L) { return L == EOKSceneLook::Fixed ? TEXT("固定") : L == EOKSceneLook::Camera ? TEXT("看鏡頭") : L == EOKSceneLook::Point ? TEXT("注視點") : TEXT("照動畫"); };
+		for (const FOKSceneObject& O : Game->Document->Objects)
+		{
+			if (O.Kind != EOKSceneObjectKind::Character) continue;
+			++CharCount;
+			const int32 Id = O.Id;
+			const FString AnimName = !O.Character.AnimFile.IsEmpty() ? FPaths::GetCleanFilename(O.Character.AnimFile)
+				: (O.Character.StudioAnimeNo >= 0 ? FString::Printf(TEXT("Studio %d/%d/%d"), O.Character.StudioAnimeGroup, O.Character.StudioAnimeCategory, O.Character.StudioAnimeNo) : FString(TEXT("（無動作）")));
+			Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+			[
+				SNew(SBorder).BorderImage(Brush(FLinearColor(0.08f, 0.09f, 0.12f, 0.9f))).Padding(4.f)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+						[
+							OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("#%d %s　[%s]"), Id, *O.Name, *AnimName)), 10.f,
+								Game->SelectedId == Id ? FLinearColor(1.f, 0.9f, 0.35f) : OKStudioStyle::Text())
+						]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("選取")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); DeferFloat(TEXT("mmd")); } }, 36.f, 18.f, Game->SelectedId == Id, 9.f)]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("換動作")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); SetPage(EPage::Anim); DeferFloat(TEXT("mmd")); } }, 44.f, 18.f, false, 9.f)]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("骨骼/表情")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); SetPage(EPage::Bones); DeferFloat(TEXT("mmd")); } }, 54.f, 18.f, false, 9.f)]
+						+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("服裝")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); SetPage(EPage::State); DeferFloat(TEXT("mmd")); } }, 36.f, 18.f, false, 9.f)]
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("速度")), 9.f, TextSoft())]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[SNew(SBox).WidthOverride(44.f).HeightOverride(16.f)[Spin([this, Id] { const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr; return X ? X->Character.Speed : 1.f; }, [this, Id](float V) { if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr) { X->Character.Speed = FMath::Clamp(V, 0.f, 4.f); Changed(); } }, 0.f, 4.f, 0.05f)]]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("偏移(s)")), 9.f, TextSoft())]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f)[SNew(SBox).WidthOverride(48.f).HeightOverride(16.f)[Spin([this, Id] { const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr; return X ? X->Character.Time : 0.f; }, [this, Id](float V) { if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr) { X->Character.Time = V; Changed(); } }, -120.f, 120.f, 0.05f)]]
+						+ SHorizontalBox::Slot().FillWidth(1.f)
+						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)
+						[
+							Button(TAttribute<FText>::CreateLambda([this, Id, LookText]
+							{
+								const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr;
+								return FText::FromString(FString(TEXT("眼：")) + (X ? LookText(X->Character.EyesLook) : TEXT("")));
+							}), [this, Id]
+							{
+								if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr)
+								{
+									X->Character.EyesLook = EOKSceneLook((uint8(X->Character.EyesLook) + 1) % 3);
+									Changed();
+								}
+							}, 72.f, 16.f, false, 9.f)
+						]
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							Button(TAttribute<FText>::CreateLambda([this, Id, LookText]
+							{
+								const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr;
+								return FText::FromString(FString(TEXT("頸：")) + (X ? LookText(X->Character.NeckLook) : TEXT("")));
+							}), [this, Id]
+							{
+								if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(Id) : nullptr)
+								{
+									X->Character.NeckLook = EOKSceneLook((uint8(X->Character.NeckLook) + 1) % 3);
+									Changed();
+								}
+							}, 72.f, 16.f, false, 9.f)
+						]
+					]
+				]
+			];
+		}
+		if (CharCount == 0)
+			Body->AddSlot().AutoHeight()[OKStudioStyle::Label(FText::FromString(TEXT("場景中尚無角色")), 10.f, TextSoft())];
+	}
+
+	// 4. Keyframe Tracks & Quick Tools
+	Body->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 3.f)[SectionHeader(TEXT("四、場景關鍵幀軌道與工具"))];
+	if (Game.IsValid() && Game->Document)
+	{
+		for (const FOKSceneTrack& T : Game->Document->Tracks)
+		{
+			const FOKSceneObject* ObjPtr = Game->Document->Find(T.ObjectId);
+			const FString ObjName = T.ObjectId == UOKSceneDocument::SceneTrackId ? FString(TEXT("場景後製軌道")) : (ObjPtr ? ObjPtr->Name : FString::Printf(TEXT("物件 #%d"), T.ObjectId));
+			const float LastTime = T.Keys.Num() ? T.Keys.Last().Time : 0.f;
+			Body->AddSlot().AutoHeight().Padding(2.f, 1.f)
+			[
+				OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("• %s (#%d)：%d 個關鍵幀（0.0s ~ %.2fs）"), *ObjName, T.ObjectId, T.Keys.Num(), LastTime)), 9.5f, TextSoft())
+			];
+		}
+	}
+	Body->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("開啟完整時間軸視窗")), Cmd(TEXT("toggle.timeline")), 0.f, 22.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("timeline")); }), 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("輸出影片 / MP4…")), Cmd(TEXT("timeline.export")), 0.f, 22.f, TAttribute<bool>::CreateLambda([this] { return IsFloatOpen(TEXT("export")); }), 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(0.8f)[Button(FText::FromString(TEXT("儲存場景")), Cmd(TEXT("scene.save")), 0.f, 22.f, false, 10.f)]
+	];
+
+	return SNew(SScrollBox).ScrollBarThickness(FVector2D(4.f, 4.f))
+		+ SScrollBox::Slot().Padding(4.f)[Body];
 }
