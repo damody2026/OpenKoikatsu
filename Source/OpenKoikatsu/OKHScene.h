@@ -129,6 +129,10 @@ private:
     // Her cheeks flush with her excitement (the face's blush overlay, ChangeHohoAkaRate's _overcolor2 alpha = lerp(0, .2, rate)):
     // it rises with her gauge and fades slowly after, so she is still flushed after she comes. Her card's own blush is the floor.
     void UpdateBlush(float Delta);void RestoreBlush();
+    // Semen on her (ChaControl siruLv: face, front top, front bottom, back top, back bottom; 0..2), written to her materials'
+    // _liquid* as the original does every frame; where it lands follows the finish and which side of her he is on. It is
+    // cleared when the scene ends, as the original cleans her up after H.
+    int32 Siru[5]={0,0,0,0,0};void AddSiru(int32 Area);void ApplySiru();int32 SiruSide() const;
     TWeakObjectPtr<class AKKPreviewActor> BlushFor;float Blush=-1.f,BlushShown=-1.f;bool bBlushLogged=false;
 public:
     float BlushTest=-1.f; // /hscene {"blush":v}: hold her blush at v (0..1) to compare shots; -1 follows her
