@@ -441,24 +441,31 @@ pub fn open_session(game_root: &Path, card_path: Option<&Path>, outfit: i32) -> 
 /// Builds the per-process memos every card open needs (lists, mods catalog, GUID index, StripAll migrations,
 /// UncensorSelector and MaterialEditor manifests, toon ramp, H pair metadata) for a game folder or OK base library,
 /// so the first card a reader opens costs what later ones do. The mods-tree scans run in parallel. Safe to call
-/// from a background thread while nothing else is open; it mounts no card pack.
+/// from a background thread, also while a card opens: it works in a pool of its own whose threads belong to no open
+/// (`oklib::mark_outside_opens`; they were handed the card being opened) and run below normal priority, so a card
+/// picked right after startup is not slowed by it. It mounts no card pack.
 pub fn prewarm(game_root: &Path) -> Result<(), String> {
     let t = Instant::now();
     crate::oklib::ensure_library(game_root)?;
     let mods_dir = game_root.join("mods");
-    std::thread::scope(|scope| {
-        scope.spawn(|| { let vanilla = load_characustom_dir(&game_root.join("abdata/list/characustom")); let _ = configured_ramp_png(game_root, &vanilla); });
-        scope.spawn(|| { let _ = crate::list::load_mods_catalog_shared(&mods_dir); });
-        scope.spawn(|| { let _ = crate::sqlcache::guid_index_shared(&mods_dir); });
-        scope.spawn(|| { let _ = crate::mods::strip_all_guids(&mods_dir); });
-        scope.spawn(|| { let _ = crate::mods::uncensor_sources(game_root); });
-        scope.spawn(|| { let _ = me_manifest_sections(game_root); });
-        scope.spawn(|| { let _ = crate::h_playback::pairs(game_root); });
+    static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+    let pool = POOL.get_or_init(|| rayon::ThreadPoolBuilder::new()
+        .num_threads(cpu_threads().clamp(2, 16)).thread_name(|i| format!("OKPrewarm{i}"))
+        .start_handler(|_| { crate::oklib::mark_outside_opens(); below_normal_priority(); }).build().ok());
+    let work = || rayon::scope(|scope| {
+        scope.spawn(|_| { let vanilla = load_characustom_dir(&game_root.join("abdata/list/characustom")); let _ = configured_ramp_png(game_root, &vanilla); });
+        scope.spawn(|_| { let _ = crate::list::load_mods_catalog_shared(&mods_dir); });
+        scope.spawn(|_| { let _ = crate::sqlcache::guid_index_shared(&mods_dir); });
+        scope.spawn(|_| { let _ = crate::mods::strip_all_guids(&mods_dir); });
+        scope.spawn(|_| { let _ = crate::mods::uncensor_sources(game_root); });
+        scope.spawn(|_| { let _ = me_manifest_sections(game_root); });
+        scope.spawn(|_| { let _ = crate::h_playback::pairs(game_root); });
         // Original KKS cards open from the library plus the installation's zipmods they name (OK_GAME_ROOT).
         if let Some(game) = std::env::var_os("OK_GAME_ROOT").map(PathBuf::from).filter(|g| g.join("mods").is_dir()) {
-            scope.spawn(move || crate::mods::prewarm_guid_index(&game.join("mods")));
+            scope.spawn(move |_| crate::mods::prewarm_guid_index(&game.join("mods")));
         }
     });
+    match pool { Some(pool) => pool.install(work), None => { crate::oklib::mark_outside_opens(); work() } }
     eprintln!("ok-extract: prewarm {} in {:.2}s", game_root.display(), t.elapsed().as_secs_f64());
     Ok(())
 }
@@ -987,6 +994,17 @@ pub fn export_session_posed_objs(game_root: &Path, card_path: &Path, outfit: i32
 
 /// Threads one process's pools may use: OK_THREADS (set by `--oklib cards` for its workers, which share the machine),
 /// else the hardware threads.
+/// This thread below normal priority (background work beside the opens a user waits for).
+fn below_normal_priority() {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" { fn GetCurrentThread() -> isize; fn SetThreadPriority(thread: isize, priority: i32) -> i32; }
+        const THREAD_PRIORITY_BELOW_NORMAL: i32 = -1;
+        // SAFETY: GetCurrentThread returns this thread's pseudo handle, which needs no closing.
+        unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); }
+    }
+}
 pub fn cpu_threads() -> usize {
     std::env::var("OK_THREADS").ok().and_then(|v| v.parse().ok()).filter(|&n: &usize| n > 0)
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()))

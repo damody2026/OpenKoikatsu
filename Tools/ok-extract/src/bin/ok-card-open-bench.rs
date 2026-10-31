@@ -71,7 +71,11 @@ fn run() -> Result<serde_json::Value, String> {
         let lib = Path::new(args.get(2).ok_or("missing LIBRARY")?);
         // Original KKS cards open as the reader opens them: this library plus OK_GAME_ROOT's zipmods they name.
         std::env::set_var("OK_BASE_LIBRARY", lib);
-        if std::env::var_os("OK_BENCH_PREWARM").is_some() { ok_extract::prewarm(lib)?; }
+        // OK_BENCH_PREWARM=concurrent: the prewarm runs beside the first open, as in a reader whose card is picked
+        // right after startup; any other value: it finishes first.
+        let concurrent = std::env::var("OK_BENCH_PREWARM").as_deref() == Ok("concurrent");
+        let prewarm = concurrent.then(|| { let lib = lib.to_path_buf(); std::thread::spawn(move || ok_extract::prewarm(&lib)) });
+        if !concurrent && std::env::var_os("OK_BENCH_PREWARM").is_some() { ok_extract::prewarm(lib)?; }
         let mut rows = Vec::new();
         for spec in &args[3..] {
             let (card, outfit) = spec.rsplit_once('@').map(|(c, o)| (c, o.parse().unwrap_or(0))).unwrap_or((spec.as_str(), 0));
@@ -85,6 +89,7 @@ fn run() -> Result<serde_json::Value, String> {
             eprintln!("ok-card-open-bench: {card}@{outfit} {seconds:.2}s");
             rows.push(serde_json::json!({"card": card, "outfit": outfit, "seconds": seconds, "parts": parts}));
         }
+        if let Some(prewarm) = prewarm { prewarm.join().map_err(|_| "prewarm panicked")??; }
         return Ok(serde_json::json!({"library": lib.display().to_string(), "sequence": rows}));
     }
     if args.len() < 3 { return Err("usage: ok-card-open-bench LIBRARY CARD [CARD ...]".into()); }

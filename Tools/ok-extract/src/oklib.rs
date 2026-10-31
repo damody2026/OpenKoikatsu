@@ -1057,12 +1057,17 @@ impl Drop for PackScopeGuard {
     fn drop(&mut self) { if let Some(previous) = self.0.take() { PACK_SCOPE.with(|c| *c.borrow_mut() = previous); } }
 }
 fn own_scope() -> Option<Arc<PackScope>> { PACK_SCOPE.with(|c| c.borrow().clone()).or_else(|| POOL_SCOPE.with(|c| c.borrow().upgrade())) }
+// A thread that works for no open (the reader's startup prewarm, `prewarm`): never handed the only open's pack, which
+// made its scans of the whole tree that card's reads (an OK card's strict open counted them as its gaps).
+thread_local! { static OUTSIDE_OPENS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+pub fn mark_outside_opens() { OUTSIDE_OPENS.with(|o| o.set(true)); }
 /// Scopes of the opens running now (the fallback for a thread outside every open's pool).
 static ACTIVE_SCOPES: Mutex<Vec<std::sync::Weak<PackScope>>> = Mutex::new(Vec::new());
 /// The pack of the open this thread works for: its own, else the only one open (a worker outside every open's pool
 /// while one card opens). Several open and none on this thread: none, and said once.
 pub fn pack_scope() -> Option<Arc<PackScope>> {
     if let Some(s) = own_scope() { return Some(s); }
+    if OUTSIDE_OPENS.with(|o| o.get()) { return None; }
     let mut active = ACTIVE_SCOPES.lock().unwrap_or_else(|e| e.into_inner());
     active.retain(|w| w.strong_count() > 0);
     match active.len() {
