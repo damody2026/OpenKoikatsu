@@ -143,6 +143,8 @@ public:
     // Her line asked for before a climax, a finish or a new pose comes back after it ("don't stop" once he had come):
     // it is not shown or spoken. LineEpoch moves at those; SentEpoch is the epoch her last line was asked in.
     int32 LineEpoch=0,SentEpoch=0;bool bStaleLine=false;
+    // When he or she last came (Finish) and who (0 he, 1 she, 2 both): the words for the state until the after pose.
+    double JustCameAt=0.;int32 JustCame=0;
     bool LineIsStale() const {return bStaleLine;}
     FString JudgeFacts() const; // for the H talk judge: the pose, what is happening, the poses she could be asked into
     bool ApplyTalk(const TSharedPtr<FJsonObject>& Verdict); // its verdict done as the buttons would; true: the scene ends

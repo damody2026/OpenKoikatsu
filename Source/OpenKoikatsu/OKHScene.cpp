@@ -275,6 +275,7 @@ void UOKHScenePanel::ApplySpeed(){
 
 void UOKHScenePanel::Finish(const TCHAR* Kind){
     const FString K=Kind;++LineEpoch;
+    JustCameAt=FPlatformTime::Seconds();JustCame=K.StartsWith(TEXT("org"))?1:K.StartsWith(TEXT("same"))?2:0;
     if(Mode==1){
         ++ServiceFinishes;++HisFinishes;His=0.f;
         // In her mouth only for a mouth pose: on her chest or in her hand is outside her (not swallowed or spat).
@@ -1109,6 +1110,11 @@ FString UOKHScenePanel::StateWords(const FString& Base) const{
     if(Mode==0)return OKT(Base==TEXT("K_Loop")||Base==TEXT("K_Touch")?TEXT("ui.hscene.state_kiss"):Base.StartsWith(TEXT("Orgasm"))?TEXT("ui.hscene.state_after"):TouchArea!=INDEX_NONE?TEXT("ui.hscene.state_caress"):TEXT("ui.hscene.state_idle"));
     if(Base==TEXT("Idle")||Base==TEXT("Stop_Idle"))return OKT(TEXT("ui.hscene.state_idle"));
     if(Base==TEXT("Insert")||Base==TEXT("InsertIdle"))return OKT(TEXT("ui.hscene.state_inserted"));
+    // His finish or her climax plays out of the loop it started in for a few seconds (OLoop, M_OUT_Start, M_OUT_Loop,
+    // then OUT_A): "almost there" then had her beg him not to stop after he had come outside her.
+    const bool bAfter=Base.EndsWith(TEXT("_A"))||Base==TEXT("Drop")||Base==TEXT("Pull")||Base.StartsWith(TEXT("Oral"));
+    if(!bAfter&&JustCameAt>0.&&FPlatformTime::Seconds()-JustCameAt<10.)
+        return OKT(JustCame==1?TEXT("ui.hscene.state_her_came"):JustCame==2?TEXT("ui.hscene.state_both_came"):TEXT("ui.hscene.state_his_came"));
     if(Base==TEXT("WLoop"))return OKT(TEXT("ui.hscene.state_slow"));
     if(Base==TEXT("SLoop"))return OKT(TEXT("ui.hscene.state_fast"));
     if(Base==TEXT("OLoop"))return OKT(TEXT("ui.hscene.state_near"));
