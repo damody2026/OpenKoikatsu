@@ -3786,7 +3786,7 @@ static UMaterialInterface* OKGlitchMaterial()
 // behind the surface (_Depth, _Depthdarkness), an intersection rim (_RimSize, _Rimfalloff, _RimColor and the _Shadermap
 // foam), _FresnelColor towards grazing view, _Shadermap highlights, then lerp(grab refracted by the normals, lit colour,
 // alpha) with alpha from _Transparency, the rim and the depth (an overlay of the two). Unity's world is UE's with x
-// negated and y / z swapped, in metres. Not done: the _Reflection cubemap (no cubemap extraction; its term is zero).
+// negated and y / z swapped, in metres. The _Reflection cubemap comes as a cube atlas (unity::cube_slot_atlases).
 // HLSL statements that sample a cube atlas (a session cube slot, unity::cubemap_atlas: the six faces side by side in
 // Unity's order +X -X +Y -Y +Z -Z, mip 0 on the first row) at mip 0 along the Unity-space direction Dir, with D3D's cube
 // face conventions, into a new float4 Out. Tex is the graph's texture object input (its sampler TexSampler).

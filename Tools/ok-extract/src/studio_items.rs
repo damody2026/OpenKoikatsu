@@ -602,6 +602,7 @@ pub fn record_hierarchies(game: &Path, lib: &Path, threads: usize) -> Result<(),
                     if disabled { parsed.meshes_for_maindata_including_disabled(p); } else { parsed.meshes_for_maindata(p); }
                 }
             }
+            parsed.record_cube_slot_atlases();
             (n, l, empty)
         }));
         crate::unity::clear_bundle_cache();
@@ -649,7 +650,7 @@ pub fn record_scene_mod_nodes(game: &Path, lib: &Path, scenes: &Path, threads: u
     let store = crate::oklib::activate(lib, crate::oklib::Mode::Record)?;
     crate::oklib::CONVERTING.store(true, std::sync::atomic::Ordering::Relaxed);
     crate::gamefs::activate(crate::gamefs::Mode::Record, game, lib)?;
-    let totals = std::sync::Mutex::new((0usize, 0usize, 0usize));
+    let totals = std::sync::Mutex::new((0usize, 0usize, 0usize, 0usize));
     let list: Vec<_> = bundles.into_iter().collect();
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads.max(1)).build().map_err(|e| e.to_string())?;
     pool.install(|| list.par_iter().for_each(|(label, prefabs)| {
@@ -673,21 +674,27 @@ pub fn record_scene_mod_nodes(game: &Path, lib: &Path, scenes: &Path, threads: u
                 cameras += parsed.prefab_render_textures(p).cameras.len();
                 let _ = parsed.prefab_animated_materials(p);
                 let _ = parsed.prefab_renderer_visibility(p);
+                // Recorded meshes again with OKLIB_REFRESH=meshes_for_maindata (as record_hierarchies).
+                for disabled in [false, true] {
+                    if !crate::oklib::has_record(Some(&id), "meshes_for_maindata", &(p.as_str(), disabled)) { continue; }
+                    if disabled { parsed.meshes_for_maindata_including_disabled(p); } else { parsed.meshes_for_maindata(p); }
+                }
             }
-            cameras
+            // Cube slots (StylizedWater `_Reflection`, ...) of models converted before they were sampled.
+            (cameras, parsed.record_cube_slot_atlases())
         }));
         crate::unity::clear_bundle_cache();
         store.forget_model(&id);
         let mut t = totals.lock().unwrap();
-        match r { Ok(c) => { t.0 += 1; t.1 += prefabs.len(); t.2 += c; } Err(_) => println!("STUDIO MOD NODES panic {label}") }
+        match r { Ok((c, cubes)) => { t.0 += 1; t.1 += prefabs.len(); t.2 += c; t.3 += cubes; } Err(_) => println!("STUDIO MOD NODES panic {label}") }
     }));
     store.flush();
     crate::gamefs::save(lib)?;
     crate::oklib::deactivate();
     crate::gamefs::deactivate();
     let t = totals.into_inner().unwrap();
-    println!("STUDIO MOD NODES bundles={}/{} prefabs={} render cameras={} {:.0}s", t.0, list.len(), t.1, t.2, started.elapsed().as_secs_f64());
-    Ok(t)
+    println!("STUDIO MOD NODES bundles={}/{} prefabs={} render cameras={} cube slots={} {:.0}s", t.0, list.len(), t.1, t.2, t.3, started.elapsed().as_secs_f64());
+    Ok((t.0, t.1, t.2))
 }
 
 /// `--oklib studio-check <lib>`: every catalogue item and map shows meshes from the library alone (replay).

@@ -699,6 +699,12 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             let h = view.hierarchy(&p[6..]);
             for (i, n) in h.nodes.iter().enumerate() { println!("{i}\t{}\tparent={}\tpos={:?}\trot={:?}\tscale={:?}", n.name, n.parent, n.pos, n.rot, n.scale); }
         }
+        Some(p) if p.starts_with("session:") => {
+            // The preview session's parts and their shader textures (what the renderer's own graphs get).
+            for part in &view.prefab_session(&p[8..], false)?.parts {
+                println!("{}\t{:?}", part.name, part.shader_textures.iter().map(|(k, v)| (k.clone(), v.len())).collect::<Vec<_>>());
+            }
+        }
         Some(p) if p.starts_with("cameras:") => {
             println!("cameras {}", serde_json::to_string(&view.render_cameras(&p[8..])).unwrap());
             println!("screens {:?}", view.parsed.prefab_render_textures(&p[8..]).shared);

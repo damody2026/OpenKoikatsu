@@ -867,6 +867,9 @@ impl SessionPart {
                     // MDK reads emission regardless of Standard's _EMISSION
                     // keyword, and its normal slot is _BumpMap.
                     textures.retain(|name, _| matches!(name.as_str(), "_BumpMap" | "_ParallaxMap" | "_MetallicGlossMap" | "_EmissionMap" | "_OKLightmap" | "_OKLightmapDirection" | "_OKReflection"));
+                } else if mesh.mat.as_ref().is_some_and(|m| m.shader == "StylizedWater/Desktop") {
+                    // Drawn by the renderer's own water graph (AKKPreviewActor): its normals, mask and reflection cube atlas.
+                    textures.retain(|name, _| matches!(name.as_str(), "_Normals" | "_Shadermap" | "_Reflection" | "_OKLightmap" | "_OKLightmapDirection"));
                 } else if is_hair_shader {
                     textures.retain(|name, _| name == "_AnotherRamp");
                 } else if role == "head" && matches!(hair_shader_name.as_str(), "koikano/main_skin" | "shader forge/main_skin" | "xukmi/skinplus") {

@@ -4164,19 +4164,38 @@ impl ParsedBundle {
     /// Every cube slot of the meshes' materials (a slot naming a cubemap, Skybox/Cubemap `_Tex`, StylizedWater
     /// `_Reflection`, ...) as its cube atlas (`cubemap_atlas`: the six faces side by side, mips below) in
     /// `shader_extra_textures[<slot>]`, for the renderer's own graphs to sample by direction.
+    /// A library model answers from its `cube_atlas_named` records only (recorded by conversion or `studio-cubes`): a
+    /// slot naming no recorded cubemap is an ordinary texture there, not a gap.
     pub(crate) fn cube_slot_atlases(&self, meshes: &mut [ExtractedMesh]) {
-        let cubes = self.cubemap_names();
-        if cubes.is_empty() { return; }
+        let replay = self.library_model();
+        let cubes = if replay { Default::default() } else { self.cubemap_names() };
+        if !replay && cubes.is_empty() { return; }
         let mut atlases: HashMap<String, Option<Vec<u8>>> = HashMap::new();
         for m in meshes.iter_mut() {
             let Some(mat) = m.mat.as_ref() else { continue };
             for (slot, name) in &mat.tex_slots {
                 let key = name.to_ascii_lowercase();
-                if !cubes.contains(&key) || m.shader_extra_textures.contains_key(slot) { continue; }
-                let atlas = atlases.entry(key).or_insert_with(|| self.cubemap_atlas_named(name));
+                if m.shader_extra_textures.contains_key(slot) { continue; }
+                if replay { if !crate::oklib::has_record(self.lib.as_ref(), "cube_atlas_named", key.as_str()) { continue; } }
+                else if !cubes.contains(&key) { continue; }
+                let atlas = atlases.entry(key.clone()).or_insert_with(|| self.memo("cube_atlas_named", key.as_str(), || self.cubemap_atlas_named(name)));
                 if let Some(png) = atlas { m.shader_extra_textures.insert(slot.clone(), png.clone()); }
             }
         }
+    }
+
+    /// Records `cube_atlas_named` for every cube slot of this bundle's renderer materials (models converted before cube
+    /// slots were sampled; `studio-cubes`). Returns how many slots named a cubemap.
+    pub(crate) fn record_cube_slot_atlases(&self) -> usize {
+        let cubes = self.cubemap_names();
+        if cubes.is_empty() { return 0; }
+        let maps = self.resolved_material_maps();
+        let mut names: std::collections::BTreeMap<String, String> = Default::default();
+        for mat in maps.1.values().flatten() {
+            for (_, name) in &mat.tex_slots { let key = name.to_ascii_lowercase(); if cubes.contains(&key) { names.insert(key, name.clone()); } }
+        }
+        for (key, name) in &names { self.memo("cube_atlas_named", key.as_str(), || self.cubemap_atlas_named(name)); }
+        names.len()
     }
 
     /// Cubemap `name` as the reflection atlas PNG (`cubemap_atlas`): this bundle's, else a loaded dependency file's.
