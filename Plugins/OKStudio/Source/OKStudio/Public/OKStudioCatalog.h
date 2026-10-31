@@ -121,8 +121,18 @@ struct FOKStudioEffect
 	 *  scale each gives the effect (a cigarette's smoke is a wisp of the smoke effect). */
 	TArray<FString> Words;
 	TArray<float> WordScales;
-	/** Particle colour when the scene object sets none (linear; times the intensity, into User.Color). */
+	/** Particle colour when the scene object sets none (linear; times the intensity, into User.Color; alpha kept). */
 	FLinearColor Color = FLinearColor::White;
+	/** Values OKStudio.MakeEffects gives the template emitter's module constants when it makes the system, by
+	 *  "<Module>.<Input>" (InitializeParticle.Uniform Sprite Size Max): one number, or three or four for a vector. */
+	TMap<FString, TArray<float>> Constants;
+	/** The sprite material MakeEffects gives the system's sprite renderers (made when missing, as a translucent soft
+	 *  sprite); empty keeps the template's. */
+	FString Material;
+	/** Other effects of the library shown with this one (their own colour), each moved by Offset (cm, in the effect's
+	 *  space): a mod particle item of several ParticleSystems, such as dust motes over a low smoke. */
+	struct FLayer { FString Effect; FVector Offset = FVector::ZeroVector; };
+	TArray<FLayer> Layers;
 };
 
 /** Studio item, map and light lists of the OK base library. */

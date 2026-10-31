@@ -566,6 +566,21 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		Effect->SetAutoActivate(true);
 		Effect->RegisterComponent();
 		Effect->Activate(true);
+		// The entry's layers: other effects of the library under it, each tagged with its effect for its colour.
+		for (const FOKStudioEffect::FLayer& Layer : Entry->Layers)
+		{
+			const FOKStudioEffect* LayerEntry = FOKStudioCatalog::Get().FindEffect(Layer.Effect);
+			UNiagaraSystem* LayerSystem = LayerEntry ? LoadObject<UNiagaraSystem>(nullptr, *LayerEntry->Asset) : nullptr;
+			if (!LayerSystem) { UE_LOG(LogTemp, Warning, TEXT("OK studio: effect %s layer %s missing"), *Entry->Id, *Layer.Effect); continue; }
+			UNiagaraComponent* Sub = NewObject<UNiagaraComponent>(this);
+			Sub->SetupAttachment(Effect);
+			Sub->SetRelativeLocation(Layer.Offset);
+			Sub->ComponentTags.Add(*(TEXT("OKEffectLayer:") + Layer.Effect));
+			Sub->SetAsset(LayerSystem);
+			Sub->SetAutoActivate(true);
+			Sub->RegisterComponent();
+			Sub->Activate(true);
+		}
 		Out.Component = Effect;
 		return true;
 	}
@@ -913,7 +928,19 @@ void AOKSceneActor::Sync()
 				const FOKStudioEffect* Def = FOKStudioCatalog::Get().FindEffect(Object.Effect.Effect);
 				FLinearColor Color = Object.Effect.Color.A >= 0.f ? Object.Effect.Color : (Def ? Def->Color : FLinearColor::White);
 				const float Intensity = FMath::Max(Object.Effect.Intensity, 0.f);
-				Effect->SetVariableLinearColor(TEXT("User.Color"), FLinearColor(Color.R * Intensity, Color.G * Intensity, Color.B * Intensity, 1.f));
+				const float Alpha = Def ? Def->Color.A : 1.f;
+				Effect->SetVariableLinearColor(TEXT("User.Color"), FLinearColor(Color.R * Intensity, Color.G * Intensity, Color.B * Intensity, Alpha));
+				// Layers keep their own effect's colour, with the object's speed and intensity.
+				for (USceneComponent* Child : Effect->GetAttachChildren())
+					if (UNiagaraComponent* Sub = Cast<UNiagaraComponent>(Child))
+						for (const FName& Tag : Sub->ComponentTags)
+							if (const FString T = Tag.ToString(); T.StartsWith(TEXT("OKEffectLayer:")))
+								if (const FOKStudioEffect* LayerDef = FOKStudioCatalog::Get().FindEffect(T.Mid(14)))
+								{
+									const FLinearColor L = LayerDef->Color;
+									Sub->SetCustomTimeDilation(FMath::Max(Object.Effect.Speed, 0.f));
+									Sub->SetVariableLinearColor(TEXT("User.Color"), FLinearColor(L.R * Intensity, L.G * Intensity, L.B * Intensity, L.A));
+								}
 			}
 		}
 		const FTransform World = Document->WorldTransform(Object.Id) * GetActorTransform();

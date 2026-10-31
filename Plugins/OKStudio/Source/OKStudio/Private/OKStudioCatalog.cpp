@@ -231,9 +231,26 @@ void FOKStudioCatalog::LoadEffects(const FString& File)
 		const auto O = V->AsObject();
 		FOKStudioEffect E;
 		E.Id = Str(O, TEXT("id")); E.Name = Str(O, TEXT("name")); E.Category = Str(O, TEXT("category"));
-		E.Asset = Str(O, TEXT("asset")); E.Template = Str(O, TEXT("template"));
+		E.Asset = Str(O, TEXT("asset")); E.Template = Str(O, TEXT("template")); E.Material = Str(O, TEXT("material"));
 		const TArray<TSharedPtr<FJsonValue>> Rgb = Array(O, TEXT("color"));
-		if (Rgb.Num() >= 3) E.Color = FLinearColor(float(Rgb[0]->AsNumber()), float(Rgb[1]->AsNumber()), float(Rgb[2]->AsNumber()), 1.f);
+		if (Rgb.Num() >= 3) E.Color = FLinearColor(float(Rgb[0]->AsNumber()), float(Rgb[1]->AsNumber()), float(Rgb[2]->AsNumber()), Rgb.Num() >= 4 ? float(Rgb[3]->AsNumber()) : 1.f);
+		const TSharedPtr<FJsonObject>* Constants = nullptr;
+		if (O->TryGetObjectField(TEXT("constants"), Constants))
+			for (const auto& It : (*Constants)->Values)
+			{
+				TArray<float>& Values = E.Constants.Add(FString(It.Key), TArray<float>());
+				const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+				if (It.Value->TryGetArray(List)) for (const TSharedPtr<FJsonValue>& X : *List) Values.Add(float(X->AsNumber()));
+				else Values.Add(float(It.Value->AsNumber()));
+			}
+		for (const TSharedPtr<FJsonValue>& L : Array(O, TEXT("layers")))
+		{
+			const auto LO = L->AsObject();
+			FOKStudioEffect::FLayer& Layer = E.Layers.AddDefaulted_GetRef();
+			Layer.Effect = Str(LO, TEXT("effect"));
+			const TArray<TSharedPtr<FJsonValue>> Offset = Array(LO, TEXT("offset"));
+			if (Offset.Num() == 3) Layer.Offset = FVector(Offset[0]->AsNumber(), Offset[1]->AsNumber(), Offset[2]->AsNumber());
+		}
 		// A word is "fire", or ["cigarette", 0.1] with the scale it gives the effect.
 		for (const TSharedPtr<FJsonValue>& W : Array(O, TEXT("words")))
 		{

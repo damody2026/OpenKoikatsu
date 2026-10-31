@@ -42,6 +42,13 @@
 #include "NiagaraGraph.h"
 #include "NiagaraNodeFunctionCall.h"
 #include "NiagaraRendererProperties.h"
+#include "NiagaraSpriteRendererProperties.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialExpressionCustom.h"
+#include "Materials/MaterialExpressionParticleColor.h"
+#include "Materials/MaterialExpressionPixelDepth.h"
+#include "Materials/MaterialExpressionSceneDepth.h"
+#include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "ViewModels/Stack/NiagaraStackGraphUtilities.h"
 #include "ViewModels/Stack/NiagaraParameterHandle.h"
 #include "Misc/PackageName.h"
@@ -892,6 +899,104 @@ namespace
 		return Linked > 0;
 	}
 
+	/** The sprite material of an effect (effects.json "material"), made when missing: translucent, unlit, the particle
+	 *  colour with a soft round alpha (times the particle alpha), faded where it meets the scene (soft particles, 1 m),
+	 *  so a dark colour darkens what is behind it (the templates' default sprite material is additive). */
+	UMaterialInterface* EffectSpriteMaterial(const FString& ObjectPath, TArray<FString>& OutLines)
+	{
+		if (UMaterialInterface* Existing = LoadObject<UMaterialInterface>(nullptr, *ObjectPath)) return Existing;
+		const FString PackageName = FPackageName::ObjectPathToPackageName(ObjectPath);
+		UPackage* Package = CreatePackage(*PackageName);
+		UMaterial* Mat = NewObject<UMaterial>(Package, *FPackageName::ObjectPathToObjectName(ObjectPath), RF_Public | RF_Standalone | RF_Transactional);
+		Mat->MaterialDomain = MD_Surface;
+		Mat->BlendMode = BLEND_Translucent;
+		Mat->SetShadingModel(MSM_Unlit);
+		Mat->bUsedWithNiagaraSprites = true;
+		auto Add = [Mat](UMaterialExpression* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
+		auto* Color = Cast<UMaterialExpressionParticleColor>(Add(NewObject<UMaterialExpressionParticleColor>(Mat)));
+		auto* Shape = Cast<UMaterialExpressionCustom>(Add(NewObject<UMaterialExpressionCustom>(Mat)));
+		Shape->OutputType = CMOT_Float1;
+		Shape->Code = TEXT("float r = saturate(1.0 - length(UV * 2.0 - 1.0));\nreturn C.a * r * r * saturate((SceneD - PixelD) / 100.0);");
+		Shape->Inputs.Reset();
+		auto Input = [Shape](const TCHAR* Name, UMaterialExpression* E, int32 Output = 0) { FCustomInput& I = Shape->Inputs.AddDefaulted_GetRef(); I.InputName = Name; I.Input.Expression = E; I.Input.OutputIndex = Output; };
+		Input(TEXT("C"), Color, 5 /* RGBA */);
+		Input(TEXT("UV"), Add(NewObject<UMaterialExpressionTextureCoordinate>(Mat)));
+		Input(TEXT("SceneD"), Add(NewObject<UMaterialExpressionSceneDepth>(Mat)));
+		Input(TEXT("PixelD"), Add(NewObject<UMaterialExpressionPixelDepth>(Mat)));
+		if (UMaterialEditorOnlyData* Ed = Mat->GetEditorOnlyData())
+		{
+			Ed->EmissiveColor.Expression = Color;
+			Ed->EmissiveColor.OutputIndex = 0;
+			Ed->Opacity.Expression = Shape;
+		}
+		Mat->PreEditChange(nullptr);
+		Mat->PostEditChange();
+		FAssetRegistryModule::AssetCreated(Mat);
+		Package->MarkPackageDirty();
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		const FString File = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+		if (!UPackage::SavePackage(Package, Mat, *File, SaveArgs)) { OutLines.Add(TEXT("FAIL save ") + File); return nullptr; }
+		OutLines.Add(TEXT("MADE ") + ObjectPath);
+		return Mat;
+	}
+
+	/** The effect's sprite renderers draw with its material (effects.json "material"), when it names one. */
+	bool ApplyEffectMaterial(UNiagaraSystem& System, const FOKStudioEffect& E, TArray<FString>& OutLines)
+	{
+		if (E.Material.IsEmpty()) return true;
+		UMaterialInterface* Material = EffectSpriteMaterial(E.Material, OutLines);
+		if (!Material) return false;
+		int32 Set = 0;
+		for (const FNiagaraEmitterHandle& Handle : System.GetEmitterHandles())
+			if (FVersionedNiagaraEmitterData* Data = Handle.GetEmitterData())
+				for (UNiagaraRendererProperties* R : Data->GetRenderers())
+					if (UNiagaraSpriteRendererProperties* Sprite = Cast<UNiagaraSpriteRendererProperties>(R)) { Sprite->Material = Material; ++Set; }
+		OutLines.Add(FString::Printf(TEXT("%s %s: material %s on %d sprite renderers"), Set ? TEXT("SET") : TEXT("FAIL"), *E.Id, *E.Material, Set));
+		return Set > 0;
+	}
+
+	/** The effect's constants (effects.json "constants") on every script's rapid iteration parameter of that module
+	 *  input ("Constants.<emitter>.<Module>.<Input>"). False when one names no input of the system. */
+	bool ApplyEffectConstants(UNiagaraSystem& System, const FOKStudioEffect& E, TArray<FString>& OutLines)
+	{
+		bool bAll = true;
+		for (const TPair<FString, TArray<float>>& C : E.Constants)
+		{
+			int32 Set = 0;
+			for (const FNiagaraEmitterHandle& Handle : System.GetEmitterHandles())
+			{
+				FVersionedNiagaraEmitterData* Data = Handle.GetEmitterData();
+				if (!Data) continue;
+				const FString Name = FString::Printf(TEXT("Constants.%s.%s"), *Handle.GetName().ToString(), *C.Key);
+				TArray<UNiagaraScript*> Scripts;
+				Data->GetScripts(Scripts, false);
+				for (UNiagaraScript* Script : Scripts)
+				{
+					if (!Script) continue;
+					for (const FNiagaraVariableWithOffset& P : Script->RapidIterationParameters.ReadParameterVariables())
+					{
+						if (P.GetName().ToString() != Name) continue;
+						const bool bInt = P.GetType() == FNiagaraTypeDefinition::GetIntDef();
+						if (P.GetType().GetSize() != C.Value.Num() * 4) { OutLines.Add(FString::Printf(TEXT("FAIL %s: %s takes %d bytes"), *E.Id, *Name, P.GetType().GetSize())); bAll = false; continue; }
+						TArray<uint8> Bytes;
+						Bytes.SetNumUninitialized(C.Value.Num() * 4);
+						for (int32 I = 0; I < C.Value.Num(); ++I)
+						{
+							if (bInt) { const int32 V = FMath::RoundToInt(C.Value[I]); FMemory::Memcpy(&Bytes[I * 4], &V, 4); }
+							else FMemory::Memcpy(&Bytes[I * 4], &C.Value[I], 4);
+						}
+						Script->RapidIterationParameters.SetParameterData(Bytes.GetData(), P, true);
+						++Set;
+					}
+				}
+			}
+			OutLines.Add(FString::Printf(TEXT("%s %s: %s in %d scripts"), Set ? TEXT("SET") : TEXT("FAIL"), *E.Id, *C.Key, Set));
+			bAll &= Set > 0;
+		}
+		return bAll;
+	}
+
 	int32 MakeEffects(TArray<FString>& OutLines, bool bRewire = false)
 	{
 		int32 Failures = 0;
@@ -903,7 +1008,7 @@ namespace
 			{
 				if (!bRewire) { OutLines.Add(TEXT("KEEP ") + E.Asset); continue; }
 				UNiagaraSystem* Existing = LoadObject<UNiagaraSystem>(nullptr, *E.Asset);
-				if (!Existing || !WireEffectColor(*Existing, OutLines)) { OutLines.Add(TEXT("FAIL rewire ") + E.Asset); ++Failures; continue; }
+				if (!Existing || !WireEffectColor(*Existing, OutLines) || !ApplyEffectConstants(*Existing, E, OutLines) || !ApplyEffectMaterial(*Existing, E, OutLines)) { OutLines.Add(TEXT("FAIL rewire ") + E.Asset); ++Failures; continue; }
 				Existing->RequestCompile(false);
 				Existing->WaitForCompilationComplete();
 				Existing->MarkPackageDirty();
@@ -920,6 +1025,7 @@ namespace
 			UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, *AssetName, RF_Public | RF_Standalone | RF_Transactional);
 			UNiagaraSystemFactoryNew::InitializeSystem(System, true);
 			FNiagaraEditorUtilities::AddEmitterToSystem(*System, *Template, Template->GetExposedVersion().VersionGuid);
+			if (!WireEffectColor(*System, OutLines) || !ApplyEffectConstants(*System, E, OutLines) || !ApplyEffectMaterial(*System, E, OutLines)) { OutLines.Add(TEXT("FAIL set up ") + E.Asset); ++Failures; continue; }
 			System->RequestCompile(false);
 			System->WaitForCompilationComplete();
 			FAssetRegistryModule::AssetCreated(System);
@@ -932,6 +1038,48 @@ namespace
 		}
 		return Failures;
 	}
+
+	FAutoConsoleCommand DumpEffectInputsCommand(TEXT("OKStudio.DumpEffectInputs"),
+		TEXT("OKStudio.DumpEffectInputs <effect id> [exit]: every module input pin and rapid iteration constant of that effect's Niagara system."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FOKStudioEffect* E = Args.Num() ? FOKStudioCatalog::Get().FindEffect(Args[0]) : nullptr;
+			const UNiagaraSystem* System = E ? LoadObject<UNiagaraSystem>(nullptr, *E->Asset) : nullptr;
+			if (System)
+				for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+				{
+					FVersionedNiagaraEmitterData* Data = Handle.GetEmitterData();
+					const UNiagaraScriptSource* Source = Data ? Cast<UNiagaraScriptSource>(Data->GraphSource) : nullptr;
+					if (Source && Source->NodeGraph)
+						for (const UEdGraphNode* Node : Source->NodeGraph->Nodes)
+							if (const UNiagaraNodeFunctionCall* Call = Cast<UNiagaraNodeFunctionCall>(Node))
+								for (const UEdGraphPin* Pin : Call->Pins)
+									if (Pin && Pin->Direction == EGPD_Input)
+										UE_LOG(LogTemp, Display, TEXT("OK studio effect input: %s / %s / %s = %s (links %d)"), *Handle.GetName().ToString(), *Call->GetFunctionName(), *Pin->PinName.ToString(), *Pin->DefaultValue, Pin->LinkedTo.Num());
+					if (Data)
+					{
+						for (const UNiagaraRendererProperties* R : Data->GetRenderers())
+							if (const UNiagaraSpriteRendererProperties* Sprite = Cast<UNiagaraSpriteRendererProperties>(R))
+								UE_LOG(LogTemp, Display, TEXT("OK studio effect renderer: %s sprite material %s blend %d"), *Handle.GetName().ToString(),
+									Sprite->Material ? *Sprite->Material->GetPathName() : TEXT("none"), Sprite->Material ? int32(Sprite->Material->GetBlendMode()) : -1);
+						TArray<UNiagaraScript*> Scripts;
+						Data->GetScripts(Scripts, false);
+						for (UNiagaraScript* Script : Scripts)
+							if (Script)
+								for (const FNiagaraVariableWithOffset& P : Script->RapidIterationParameters.ReadParameterVariables())
+								{
+									const uint8* Raw = Script->RapidIterationParameters.GetParameterData(P.Offset);
+									FString Value;
+									const int32 Size = P.GetType().GetSize();
+									if (Raw && P.GetType() == FNiagaraTypeDefinition::GetFloatDef()) Value = FString::SanitizeFloat(*(const float*)Raw);
+									else if (Raw && Size % 4 == 0 && Size <= 16) for (int32 I = 0; I < Size / 4; ++I) Value += FString::Printf(TEXT("%s%g"), I ? TEXT(",") : TEXT(""), ((const float*)Raw)[I]);
+									UE_LOG(LogTemp, Display, TEXT("OK studio effect constant: %s / %s / %s %s = %s"), *Handle.GetName().ToString(), *Script->GetName(), *P.GetName().ToString(), *P.GetType().GetName(), *Value);
+								}
+					}
+				}
+			else UE_LOG(LogTemp, Display, TEXT("OK studio effect input: no system for %s"), Args.Num() ? *Args[0] : TEXT("(none)"));
+			if (Args.Contains(TEXT("exit"))) FPlatformMisc::RequestExit(false);
+		}));
 
 	FAutoConsoleCommand DumpEffectsCommand(TEXT("OKStudio.DumpEffects"),
 		TEXT("OKStudio.DumpEffects [exit]: lists the emitters, modules and renderers of the OK effect library's Niagara systems."),
