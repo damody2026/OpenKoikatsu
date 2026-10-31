@@ -12,8 +12,9 @@ struct FPostProcessSettings;
  */
 void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettings& Settings);
 
-/** The post material's state: "ready", "not made", "compiling", "no shader map" or its compile errors. */
-FString OKStudioScenePostMaterialState();
+/** A pass's post material state (0: fog and occlusion, 1: sun shafts): "ready", "not made", "compiling", "no shader
+ *  map" or its compile errors. */
+FString OKStudioScenePostMaterialState(int32 Pass = 0);
 
 /** Original 32-cube Amplify grading after DOF, before UE device encoding. */
 bool OKStudioApplySourceGrade(const FOKScenePost& Post, FPostProcessSettings& Settings);

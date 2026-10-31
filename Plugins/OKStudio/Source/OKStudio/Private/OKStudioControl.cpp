@@ -7,6 +7,8 @@
 #include "HttpServerResponse.h"
 #include "IHttpRouter.h"
 #include "OKStudioSky.h"
+#include "OKStudioPost.h"
+#include "Camera/CameraComponent.h"
 #include "UnrealClient.h"
 #include "Containers/Ticker.h"
 #include "Engine/Engine.h"
@@ -97,6 +99,11 @@ namespace
 		O->SetBoolField(TEXT("hide_helpers"), G.bHideHelpers);
 		O->SetStringField(TEXT("background"), G.Document->Post.Background);
 		O->SetStringField(TEXT("frame_picture"), G.Document->Post.Frame);
+		// The scene post passes' shaders and how many blendables the view's camera draws (sun shafts only once ready).
+		O->SetStringField(TEXT("post_opaque"), OKStudioScenePostMaterialState(0));
+		O->SetStringField(TEXT("post_shafts"), OKStudioScenePostMaterialState(1));
+		O->SetBoolField(TEXT("sun_shafts"), G.Document->Post.bSunShafts);
+		if (G.Viewer) O->SetNumberField(TEXT("post_blendables"), G.Viewer->GetCameraComponent()->PostProcessSettings.WeightedBlendables.Array.Num());
 		TArray<TSharedPtr<FJsonValue>> Objects;
 		for (const FOKSceneObject& X : G.Document->Objects)
 		{
@@ -1045,6 +1052,12 @@ namespace
 			if (!G->CaptureToPng(Path, W, H, Error, bAlpha)) return Result(false, Error);
 			TSharedRef<FJsonObject> O = Result(true);
 			O->SetStringField(TEXT("file"), Path);
+			// The scene's post passes still compiling: the picture lacks them (fog / occlusion, sun shafts).
+			const bool bOpaquePost = G->Document->Post.bFog || G->Document->Post.bAmbientOcclusion;
+			if (bOpaquePost && OKStudioScenePostMaterialState(0) != TEXT("ready"))
+				O->SetStringField(TEXT("warning_post_opaque"), TEXT("fog / occlusion pass not ready: ") + OKStudioScenePostMaterialState(0));
+			if (G->Document->Post.bSunShafts && OKStudioScenePostMaterialState(1) != TEXT("ready"))
+				O->SetStringField(TEXT("warning_post_shafts"), TEXT("sun shafts pass not ready: ") + OKStudioScenePostMaterialState(1));
 			return O;
 		}
 		if (Op == TEXT("save"))

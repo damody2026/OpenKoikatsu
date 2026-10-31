@@ -218,12 +218,28 @@ namespace
 #endif
 		if (Base->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform)) return nullptr;
 		const FString State = MaterialState(Base);
+		// Each change of a pass's state, once (why a scene shows without its shafts while they compile).
+		static FString Reported[2];
+		static int32 Submits[2] = {};
+		if (State != Reported[Index])
+		{
+			UE_LOG(LogTemp, Display, TEXT("OK studio post pass %d: %s (%d submits)"), Index, *State, Submits[Index]);
+			Reported[Index] = State;
+		}
 		if (State == TEXT("shader map incomplete"))
 		{
 			// With the shader job cache (on-demand compilation) only the shaders asked for are compiled, and nothing asks
-			// for the post-process pass shaders of a material made at run time: submit the rest of the map.
-			static int32 Submits[2] = {};
-			if (Submits[Index] < 4) { ++Submits[Index]; Base->CacheShaders(EMaterialShaderPrecompileMode::Default); }
+			// for the post-process pass shaders of a material made at run time: submit the rest of the map, again every
+			// two seconds while it stays incomplete. Four submits in the first frames once ran out while the compiler was
+			// busy (a new Niagara system), and that process never drew its shafts.
+			static double LastSubmit[2] = {};
+			const double Now = FPlatformTime::Seconds();
+			if (Submits[Index] == 0 || Now - LastSubmit[Index] > 2.0)
+			{
+				++Submits[Index];
+				LastSubmit[Index] = Now;
+				Base->CacheShaders(EMaterialShaderPrecompileMode::Default);
+			}
 		}
 		if (State != TEXT("ready")) return nullptr;
 		if (!P.Instance.IsValid()) P.Instance.Reset(UMaterialInstanceDynamic::Create(Base, GetTransientPackage()));
@@ -231,9 +247,9 @@ namespace
 	}
 }
 
-FString OKStudioScenePostMaterialState()
+FString OKStudioScenePostMaterialState(int32 Pass)
 {
-	return MaterialState(Passes[0].Base.Get());
+	return MaterialState(Passes[FMath::Clamp(Pass, 0, 1)].Base.Get());
 }
 
 void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettings& Settings)
