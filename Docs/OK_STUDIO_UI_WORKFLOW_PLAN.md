@@ -733,6 +733,20 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
   - `83572034_p1` 月盤暗面：H_enry 的 `main_item_studio_alpha` 主 pass 是 `AlphaToMask On`（DXBC 確認沒有 0.5 clip，alpha＝貼圖 a×`_alpha`，SrcAlpha/OneMinusSrcAlpha、寫深度）。月亮貼圖（DXT5）暗面 alpha 0.17、月牙接近 1；原生用一個取樣畫，alpha 低於一半的像素不畫，所以只剩月牙。修正：`shader_pass_state` 讀主 pass 的 `alphaToMask`，記成 `_OKShaderAlphaToMask`；建零件時對仍是自己 shader（state key 相符）的 `main_item_studio_alpha` 把 alpha < 0.5 的 texel 清成 0。不透明的 `main_item_studio` 也帶同一個旗標但輸出 alpha 1，不能裁（第一版裁了，活塞頂變成白盤）。逐點：月盤內 (640,90) 原生 (0,0,3)、修正前 (2,7,63)、修正後 (0,0,0)；月牙 (800,120) 兩邊一致。`F:\OpenKoikatsu\Saved\OKStudio\moon1031\d_alpha_only.png`。已轉好的 mod 模型要 `OKLIB_REFRESH=meshes_for_maindata ... --oklib studio-mod-nodes` 重錄才帶這個旗標。
   - 同一張場景還有未修的差異：原生中央有一個玻璃房間（角色在白磚房裡），我們沒有；兩側螢幕的內容也不同。
 - 驗證：新增 `Tools/check_ok_studio_buttons.lua`，經控制通道新的 `click` 操作（`{"text","index","contains"}`，找畫面上文字相符的 `STextBlock`，對它所在的 `SButton` 呼叫 `SimulateClick`，跑的就是按鈕自己的處理）逐一按下 U16～U21 新加的按鈕，再用 `bones`／`state`／`keys` 讀回結果。實測 57/57（加上 U22 後 65/65，第二批後 72/72）；`OKStudio.UiSelfTest` 46/46；`verify_ok_studio.lua` 6/6；`cargo test studio_ik --include-ignored` 通過。
+
+### U23～U28　對照 HS2Studio6 的第三批（2026-10-31，F 組）
+
+U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節規格裡仍缺的部分與畫面比對的未修差異收在一起，依擺姿勢、擺場景時碰到的頻率排序。
+
+| 階段 | 內容 | 目前缺的 |
+|---|---|---|
+| U23 角色細調補完 | 眼睛開合滑桿（要先在 `AKKPreviewActor` 加眼睛開合的後端，現在只有 `SetMouthOpen`）、頸部跟隨強度、遊戲內建姿勢清單（「n／總數」上一個／下一個、復位 T-pose） | U16 留下的三項 |
+| U24 姿勢鏡像 | 所選角色的 FK 姿勢左右鏡像（含手指）、只鏡像左／右半邊；IK 目標同時鏡像。HS2Studio6 還沒做（第 3.3 節），可以超前 | 沒有 |
+| U25 動畫控制器補完 | 輔助 1／2（Studio 的 `animeOptionParam1/2`，要從動畫資料帶出混合參數）、循環開關 | 浮窗已有速度、時間、變化、播放／暫停／停止 |
+| U26 mod 粒子道具 | mod 的 ParticleSystem 道具（`83283571_p1` 的 Fire 1／Fire 4）現在完全不畫：依名稱與貼圖對到 OK 的 Niagara 特效，對不到的列進讀取報告 | 完全沒有 |
+| U27 場景比對剩餘 | `83572034_p1` 中央的玻璃房間不見、兩側螢幕內容不同；`83283571_p1` 原生整體偏粉紅（AmplifyColor LUT 或雲層零件）；光束道具ビーム・扇本身的放射光 | 未查 |
+| U28 效能與小視窗 | `run_ok_studio_perf.lua` 只開一個 Unreal 時量；1280×720 視窗下逐窗檢查不出框 | 未量 |
+
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。
