@@ -20,7 +20,9 @@ use crate::okanim::convert::{family_tracks, FAMILY};
 use crate::okanim::OkAnim;
 use crate::pose::{euler_deg_to_quat, mat_pos, quat_mul, quat_to_unity_euler, Skeleton};
 use crate::studio_scene::{Object, Scene};
-use crate::vmd::{mmd_cubic_bezier, VmdBoneKeyFrame, VmdFile, VmdIkVisibleKeyFrame};
+use crate::vmd::{
+    mmd_cubic_bezier, VmdBoneKeyFrame, VmdFile, VmdIkVisibleKeyFrame, VmdMorphKeyFrame,
+};
 use crate::vnge::{parse_py_or_json, unwrap_scene_decoder, VngeSceneData};
 
 /// Default MMDD 2.0 character bone definition (`BepInEx/plugins/Console/Lib/mmdd/chara_default_2.0.ini`).
@@ -445,10 +447,10 @@ pub struct MmddClipTrack {
 // File Resolver for VMD & Audio paths
 // ---------------------------------------------------------------------------
 
-static ACTION_FILE_INDEX: OnceLock<Mutex<Option<HashMap<String, PathBuf>>>> = OnceLock::new();
+static ACTION_FILE_INDEX: OnceLock<Mutex<Option<HashMap<String, Vec<PathBuf>>>>> = OnceLock::new();
 
-fn build_file_index() -> HashMap<String, PathBuf> {
-    let mut map = HashMap::new();
+fn build_file_index() -> HashMap<String, Vec<PathBuf>> {
+    let mut map: HashMap<String, Vec<PathBuf>> = HashMap::new();
     let mut roots = vec![
         PathBuf::from(r"E:\02_Mocap_Animation\action"),
         PathBuf::from(r"E:\action"),
@@ -460,7 +462,7 @@ fn build_file_index() -> HashMap<String, PathBuf> {
             roots.push(PathBuf::from(part.trim()));
         }
     }
-    fn walk(dir: &Path, depth: usize, out: &mut HashMap<String, PathBuf>) {
+    fn walk(dir: &Path, depth: usize, out: &mut HashMap<String, Vec<PathBuf>>) {
         if depth > 8 {
             return;
         }
@@ -477,7 +479,7 @@ fn build_file_index() -> HashMap<String, PathBuf> {
                     "vmd" | "wav" | "ogg" | "mp3" | "ini"
                 ) {
                     if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
-                        out.entry(name.to_lowercase()).or_insert(p);
+                        out.entry(name.to_lowercase()).or_default().push(p);
                     }
                 }
             }
@@ -531,8 +533,69 @@ pub fn resolve_external_file(raw_path: &str, scene_path: Option<&Path>) -> Optio
         let lock = ACTION_FILE_INDEX.get_or_init(|| Mutex::new(None));
         let mut guard = lock.lock().unwrap();
         let index = guard.get_or_insert_with(build_file_index);
-        if let Some(found) = index.get(&fname.to_lowercase()) {
-            return Some(found.clone());
+        if let Some(candidates) = index.get(&fname.to_lowercase()) {
+            if candidates.len() == 1 {
+                return Some(candidates[0].clone());
+            }
+            // Extract directory parts of raw_path (nearest parent first)
+            let parts: Vec<String> = norm
+                .split('\\')
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| !s.is_empty() && !s.ends_with(':'))
+                .collect();
+            let dir_parts: Vec<&str> = if parts.len() > 1 {
+                parts[..parts.len() - 1]
+                    .iter()
+                    .rev()
+                    .map(String::as_str)
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let raw_parent = dir_parts.first().copied().unwrap_or("");
+            let is_generic_dir = |d: &str| {
+                matches!(
+                    d,
+                    "action" | "[vmd]" | "vmd" | "userdata" | "koikatu" | "studio" | "scene"
+                )
+            };
+            let mut best_score = i32::MIN;
+            let mut best_path: Option<&PathBuf> = None;
+            for cand in candidates {
+                let cand_str = cand.to_string_lossy().to_lowercase();
+                let mut score = 0i32;
+                if cand_str.contains("_整理报告") || cand_str.contains("backup") {
+                    score -= 100;
+                }
+                let cand_parent = cand
+                    .parent()
+                    .and_then(|cp| cp.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_lowercase())
+                    .unwrap_or_default();
+                if !raw_parent.is_empty() && !is_generic_dir(raw_parent) {
+                    if cand_parent == raw_parent {
+                        score += 1000;
+                    } else if raw_parent.len() >= 3
+                        && (cand_parent.contains(raw_parent) || raw_parent.contains(&cand_parent))
+                        && !cand_parent.is_empty()
+                    {
+                        score += 500;
+                    }
+                }
+                for (depth, &dp) in dir_parts.iter().enumerate() {
+                    if !is_generic_dir(dp) && dp.len() >= 2 && cand_str.contains(dp) {
+                        score += (200i32 - (depth as i32) * 30).max(20);
+                    }
+                }
+                if score > best_score {
+                    best_score = score;
+                    best_path = Some(cand);
+                }
+            }
+            if let Some(chosen) = best_path {
+                return Some(chosen.clone());
+            }
         }
     }
     None
@@ -1829,6 +1892,9 @@ pub fn solve_vmd_to_okanim(
     if let Some(last_ikv) = vmd.ik_keyframes.last() {
         max_frame_no = max_frame_no.max(last_ikv.frame_no);
     }
+    if let Some(last_mkf) = vmd.morph_keyframes.iter().map(|k| k.frame_no).max() {
+        max_frame_no = max_frame_no.max(last_mkf);
+    }
     let frames = (max_frame_no as usize + 1).max(2);
 
     // 6. Resort weight bones in `rest` tree depth order (parents before children), skipping `ROOT`
@@ -2007,6 +2073,7 @@ pub fn solve_vmd_to_okanim(
     }
 
     let fps = (30.0 * params.playback_speed).max(1.0);
+    let curves = evaluate_vmd_morph_curves(&vmd.morph_keyframes, frames);
     let mut meta = BTreeMap::new();
     meta.insert("source".into(), "mmdd_vmd".into());
     meta.insert("name".into(), source_name.to_string());
@@ -2022,12 +2089,199 @@ pub fn solve_vmd_to_okanim(
         tracks: tracks.into_iter().map(|(_, t)| t).collect(),
         rot: rot_out,
         hips: hips_out,
-        curves: Vec::new(),
+        curves,
         contacts: Vec::new(),
         meta,
     };
     anim.validate()?;
     Ok(anim)
+}
+
+fn sample_vmd_morph_kfs(kfs: &[VmdMorphKeyFrame], frame_no: f32) -> f32 {
+    if kfs.is_empty() {
+        return 0.0;
+    }
+    let first = &kfs[0];
+    if frame_no <= first.frame_no as f32 {
+        return first.weight;
+    }
+    let last = kfs.last().unwrap();
+    if frame_no >= last.frame_no as f32 {
+        return last.weight;
+    }
+    let idx = kfs.partition_point(|k| (k.frame_no as f32) <= frame_no);
+    let prev = &kfs[idx.saturating_sub(1)];
+    if (prev.frame_no as f32 - frame_no).abs() < 1e-5 || idx >= kfs.len() {
+        return prev.weight;
+    }
+    let next = &kfs[idx];
+    let span = (next.frame_no - prev.frame_no).max(1) as f32;
+    let t = ((frame_no - prev.frame_no as f32) / span).clamp(0.0, 1.0);
+    prev.weight + (next.weight - prev.weight) * t
+}
+
+fn evaluate_vmd_morph_curves(
+    morph_kfs: &[VmdMorphKeyFrame],
+    frames: usize,
+) -> Vec<crate::okanim::Curve> {
+    if morph_kfs.is_empty() || frames == 0 {
+        return Vec::new();
+    }
+    let mut by_name: HashMap<String, Vec<VmdMorphKeyFrame>> = HashMap::new();
+    for kf in morph_kfs {
+        if kf.name.is_empty() {
+            continue;
+        }
+        by_name.entry(kf.name.clone()).or_default().push(kf.clone());
+    }
+    for list in by_name.values_mut() {
+        list.sort_by_key(|k| k.frame_no);
+        list.dedup_by_key(|k| k.frame_no);
+        if list.first().map_or(true, |k| k.frame_no > 0) {
+            list.insert(
+                0,
+                VmdMorphKeyFrame {
+                    name: String::new(),
+                    frame_no: 0,
+                    weight: 0.0,
+                },
+            );
+        }
+    }
+
+    // Morph definitions from chara_default_1.3.ini: (vmd_name, pattern, range_start, range_end)
+    const MOUTH_DEFS: &[(&str, i32, f32, f32)] = &[
+        ("あ", 26, 0.0, 1.0),
+        ("い", 28, 0.0, 1.0),
+        ("う", 30, 0.0, 1.0),
+        ("え", 31, 0.0, 1.0),
+        ("お", 33, 0.0, 1.0),
+        ("わ", 2, 0.0, 1.0),
+        ("ワ", 2, 0.0, 1.0),
+        ("ん", 36, 0.0, 1.0),
+        ("あ２", 1, 0.0, 1.0),
+        ("にやり", 2, 0.0, 0.0),
+        ("にやり２", 2, 0.0, 0.0),
+        ("口角上げ", 2, 0.0, 0.0),
+        ("にっこり", 19, 0.0, 0.0),
+        ("口角下げ", 8, 0.0, 0.0),
+        ("ぺろっ", 20, 0.0, 1.0),
+        ("てへぺろ", 20, 0.0, 1.0),
+        ("てへぺろ２", 20, 0.0, 1.0),
+        ("∧", 7, 0.0, 0.0),
+        ("▲", 38, 0.0, 1.0),
+        ("ω", 37, 0.0, 0.0),
+        ("ω□", 37, 1.0, 1.0),
+    ];
+    const EYE_DEFS: &[(&str, i32, f32, f32)] = &[
+        ("まばたき", 0, 1.0, 0.0),
+        ("笑い", 3, 1.0, 1.0),
+        ("笑い目", 4, 1.0, 1.0),
+        ("ウィンク", 6, 1.0, 1.0),
+        ("ウィンク２", 6, 1.0, 1.0),
+        ("ウィンク右", 5, 1.0, 1.0),
+        ("ｳｨﾝｸ２右", 5, 1.0, 1.0),
+        ("びっくり", 17, 1.0, 1.0),
+        ("じと目", 10, 1.0, 1.0),
+        ("ｷﾘｯ", 9, 1.0, 1.0),
+        ("なごみ", 31, 1.0, 1.0),
+        ("はぅ", 30, 1.0, 1.0),
+        ("はちゅ目", 22, 1.0, 1.0),
+        ("星目", 24, 1.0, 1.0),
+        ("はぁと", 25, 1.0, 1.0),
+        ("ハート", 25, 1.0, 1.0),
+    ];
+    const BROW_DEFS: &[(&str, i32)] = &[
+        ("困る", 13),
+        ("怒り", 1),
+        ("にこり", 12),
+        ("真面目", 0),
+        ("上", 0),
+        ("下", 0),
+    ];
+
+    let mut mouth_ptn = Vec::with_capacity(frames);
+    let mut mouth_open = Vec::with_capacity(frames);
+    let mut eye_ptn = Vec::with_capacity(frames);
+    let mut eye_open = Vec::with_capacity(frames);
+    let mut brow_ptn = Vec::with_capacity(frames);
+
+    for f in 0..frames {
+        let fno = f as f32;
+
+        // 1. Mouth: pick active morph with largest weight > 0.02
+        let mut best_mouth: Option<(f32, i32, f32)> = None;
+        for &(mname, ptn, r0, r1) in MOUTH_DEFS {
+            if let Some(kfs) = by_name.get(mname) {
+                let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
+                if w > 0.02 && best_mouth.map_or(true, |(bw, _, _)| w > bw) {
+                    let open = (r0 + (r1 - r0) * w).clamp(0.0, 1.0);
+                    best_mouth = Some((w, ptn, open));
+                }
+            }
+        }
+        if let Some((_, ptn, open)) = best_mouth {
+            mouth_ptn.push(ptn as f32);
+            mouth_open.push(open);
+        } else {
+            mouth_ptn.push(0.0);
+            mouth_open.push(0.0);
+        }
+
+        // 2. Eye: pick active morph with largest weight > 0.02
+        let mut best_eye: Option<(f32, i32, f32)> = None;
+        for &(ename, ptn, r0, r1) in EYE_DEFS {
+            if let Some(kfs) = by_name.get(ename) {
+                let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
+                if w > 0.02 && best_eye.map_or(true, |(bw, _, _)| w > bw) {
+                    let open = (r0 + (r1 - r0) * w).clamp(0.0, 1.0);
+                    best_eye = Some((w, ptn, open));
+                }
+            }
+        }
+        if let Some((_, ptn, open)) = best_eye {
+            eye_ptn.push(ptn as f32);
+            eye_open.push(open);
+        } else {
+            eye_ptn.push(0.0);
+            eye_open.push(1.0);
+        }
+
+        // 3. Eyebrow: pick active morph with largest weight > 0.05
+        let mut best_brow: Option<(f32, i32)> = None;
+        for &(bname, ptn) in BROW_DEFS {
+            if let Some(kfs) = by_name.get(bname) {
+                let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
+                if w > 0.05 && best_brow.map_or(true, |(bw, _)| w > bw) {
+                    best_brow = Some((w, ptn));
+                }
+            }
+        }
+        brow_ptn.push(best_brow.map_or(0.0, |(_, ptn)| ptn as f32));
+    }
+
+    vec![
+        crate::okanim::Curve {
+            name: "face.mouth_pattern".into(),
+            values: mouth_ptn,
+        },
+        crate::okanim::Curve {
+            name: "face.mouth_open".into(),
+            values: mouth_open,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_pattern".into(),
+            values: eye_ptn,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_open".into(),
+            values: eye_open,
+        },
+        crate::okanim::Curve {
+            name: "face.brow_pattern".into(),
+            values: brow_ptn,
+        },
+    ]
 }
 
 fn sample_vmd_bone_kfs(
@@ -2638,6 +2892,90 @@ pub fn extract_mmdd(
             .map(|v| val_to_bool(v, false))
             .unwrap_or(false);
 
+        // Morph controllers (`morph` dict or `morphs` array) — parse first so separate morph VMDs merge into motion solve
+        let mut morph_entries: Vec<(String, serde_json::Value)> = Vec::new();
+        if let Some(morph_val) = map.get("morph") {
+            let m_obj = if let Some(s) = morph_val.as_str() {
+                parse_py_or_json(s).ok()
+            } else {
+                Some(morph_val.clone())
+            };
+            if let Some(serde_json::Value::Object(mo)) = m_obj {
+                for (k, v) in mo {
+                    morph_entries.push((k, v));
+                }
+            }
+        } else if let Some(serde_json::Value::Array(morphs)) = map.get("morphs") {
+            for m_item in morphs {
+                if let Some(arr) = m_item.as_array() {
+                    if arr.len() >= 2 {
+                        let alias = arr[0].as_str().unwrap_or("").to_string();
+                        morph_entries.push((alias, arr[1].clone()));
+                    }
+                }
+            }
+        }
+        let mut extra_morphs_by_char: HashMap<i32, Vec<VmdMorphKeyFrame>> = HashMap::new();
+        for (alias, raw_setting) in morph_entries {
+            let char_key = resolve_actor_key(&alias);
+            let setting = if let Some(s) = raw_setting.as_str() {
+                parse_py_or_json(s)
+                    .ok()
+                    .map(unwrap_scene_decoder)
+                    .unwrap_or(serde_json::Value::Null)
+            } else {
+                raw_setting
+            };
+            let Some(smap) = setting.as_object() else {
+                continue;
+            };
+            let enable = smap
+                .get("enable")
+                .map(|v| val_to_bool(v, true))
+                .unwrap_or(true);
+            let vmd_file = smap
+                .get("filename")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let resolved = resolve_external_file(&vmd_file, scene_path);
+            let parsed_mkfs: Vec<VmdMorphKeyFrame> = resolved
+                .as_ref()
+                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|b| VmdFile::parse(&b).ok())
+                .map(|v| v.morph_keyframes)
+                .unwrap_or_default();
+            let morph_count = if !parsed_mkfs.is_empty() {
+                parsed_mkfs.len()
+            } else {
+                smap.get("keyframes")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0)
+            };
+            if enable && !parsed_mkfs.is_empty() {
+                extra_morphs_by_char
+                    .entry(char_key)
+                    .or_default()
+                    .extend(parsed_mkfs);
+            }
+            out.morphs.push(MmddMorphTrack {
+                char_key,
+                alias,
+                vmd_file,
+                resolved_vmd: resolved
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+                delay: smap.get("delay").map(|v| val_to_f32(v, 0.0)).unwrap_or(0.0),
+                playback_speed: smap
+                    .get("playbackSpeed")
+                    .map(|v| val_to_f32(v, 1.0))
+                    .unwrap_or(1.0),
+                morph_count,
+            });
+        }
+
         // Collect motion entries from either dict `motion: {aid: setting}` or array `motions: [[aid, setting], ...]`
         let mut motion_entries: Vec<(String, serde_json::Value)> = Vec::new();
         if let Some(motion_val) = map.get("motion") {
@@ -2834,7 +3172,25 @@ pub fn extract_mmdd(
                     .and_then(|p| std::fs::read(p).ok())
                     .and_then(|b| VmdFile::parse(&b).ok())
                     .or_else(|| parse_embedded_motion_vmd(smap));
-                if let Some(parsed_vmd) = parsed_vmd_opt {
+                if let Some(mut parsed_vmd) = parsed_vmd_opt {
+                    if parsed_vmd.morph_keyframes.is_empty() {
+                        if let Some(extra_mkfs) = extra_morphs_by_char.get(&char_key) {
+                            parsed_vmd.morph_keyframes = extra_mkfs.clone();
+                        }
+                    } else if !out.morphs.iter().any(|m| m.char_key == char_key && m.morph_count > 0) {
+                        out.morphs.push(MmddMorphTrack {
+                            char_key,
+                            alias: alias.clone(),
+                            vmd_file: vmd_file.clone(),
+                            resolved_vmd: resolved
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default(),
+                            delay: params.delay,
+                            playback_speed: params.playback_speed,
+                            morph_count: parsed_vmd.morph_keyframes.len(),
+                        });
+                    }
                     let stem = resolved
                         .as_ref()
                         .and_then(|p| p.file_stem())
@@ -2869,65 +3225,6 @@ pub fn extract_mmdd(
                 frames,
                 duration,
                 looping: params.looping,
-            });
-        }
-
-        // Morph controllers (`morph` dict or `morphs` array)
-        let mut morph_entries: Vec<(String, serde_json::Value)> = Vec::new();
-        if let Some(serde_json::Value::Object(mo)) = map.get("morph") {
-            for (k, v) in mo {
-                morph_entries.push((k.clone(), v.clone()));
-            }
-        } else if let Some(serde_json::Value::Array(morphs)) = map.get("morphs") {
-            for m_item in morphs {
-                if let Some(arr) = m_item.as_array() {
-                    if arr.len() >= 2 {
-                        let alias = arr[0].as_str().unwrap_or("").to_string();
-                        morph_entries.push((alias, arr[1].clone()));
-                    }
-                }
-            }
-        }
-        for (alias, raw_setting) in morph_entries {
-            let char_key = resolve_actor_key(&alias);
-            let setting = if let Some(s) = raw_setting.as_str() {
-                parse_py_or_json(s)
-                    .ok()
-                    .map(unwrap_scene_decoder)
-                    .unwrap_or(serde_json::Value::Null)
-            } else {
-                raw_setting
-            };
-            let Some(smap) = setting.as_object() else {
-                continue;
-            };
-            let vmd_file = smap
-                .get("filename")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let resolved = resolve_external_file(&vmd_file, scene_path);
-            let morph_count = resolved
-                .as_ref()
-                .and_then(|p| std::fs::read(p).ok())
-                .and_then(|b| VmdFile::parse(&b).ok())
-                .map(|v| v.morph_keyframes.len())
-                .or_else(|| smap.get("keyframes").and_then(|v| v.as_array()).map(|a| a.len()))
-                .unwrap_or(0);
-            out.morphs.push(MmddMorphTrack {
-                char_key,
-                alias,
-                vmd_file,
-                resolved_vmd: resolved
-                    .as_ref()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_default(),
-                delay: smap.get("delay").map(|v| val_to_f32(v, 0.0)).unwrap_or(0.0),
-                playback_speed: smap
-                    .get("playbackSpeed")
-                    .map(|v| val_to_f32(v, 1.0))
-                    .unwrap_or(1.0),
-                morph_count,
             });
         }
 

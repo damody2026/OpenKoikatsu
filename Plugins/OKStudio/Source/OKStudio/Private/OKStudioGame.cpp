@@ -1,4 +1,4 @@
-﻿#include "OKStudioGame.h"
+#include "OKStudioGame.h"
 #include "SOKStudioPanel.h"
 #include "OKStudioGameInternal.h"
 #include "OKStudioSettings.h"
@@ -76,6 +76,10 @@
 #include "Rendering/SkeletalMeshLODRenderData.h"
 #include "Engine/SkinnedAsset.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "AudioDevice.h"
+#include "KKSpeech.h"
 
 namespace
 {
@@ -139,6 +143,7 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 	{
 		Game->SavedOcclusionQueries = Occlusion->GetInt();
 		Occlusion->Set(0, ECVF_SetByCode);
+	if (GEngine) { GEngine->Exec(World, TEXT("r.MotionBlurQuality 0")); GEngine->Exec(World, TEXT("r.DefaultFeature.MotionBlur 0")); GEngine->Exec(World, TEXT("r.AntiAliasingMethod 5")); GEngine->Exec(World, TEXT("r.SMAA.Quality 3")); }
 	}
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
@@ -311,6 +316,9 @@ void UOKStudioGame::Redo()
 void UOKStudioGame::Stop()
 {
 	bStopRequested = false;
+	StopSceneAudio();
+	SceneAudioPcm.Reset();
+	LoadedSoundFile.Reset();
 	OKStudioControl::Stop();
 	if (SceneActor && SceneActor->GetWorld())
 	{
@@ -471,6 +479,7 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 	if (MmdCamId >= 0)
 	{
 		Document->ActiveCamera = MmdCamId;
+		Document->Post.bDepthOfField = false;
 		bLockActiveCamera = true;
 		bTimelinePlaying = true;
 		SetTimelineTime(0.f);
@@ -489,6 +498,9 @@ bool UOKStudioGame::Load(const FString& Path, FString& OutError)
 void UOKStudioGame::ReleaseSceneResources()
 {
 	Select(-1);
+	StopSceneAudio();
+	SceneAudioPcm.Reset();
+	LoadedSoundFile.Reset();
 	// Release the old scene as one unit, including ids also present in the new
 	// document. A budgeted Sync otherwise retains old actors until their turn,
 	// and only schedules GC after the replacement map has already been built.
@@ -1073,6 +1085,131 @@ void UOKStudioGame::SyncNow()
 	if (Panel) Panel->RefreshRows();
 }
 
+static bool OKStudioLoadAudioFile(const FString& Path, TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe>& Out, FString& Error)
+{
+	if (Path.EndsWith(TEXT(".ogg"), ESearchCase::IgnoreCase)) return KKSpeech::DecodeOgg(Path, Out, Error);
+	TArray<uint8> Bytes;
+	if (!FFileHelper::LoadFileToArray(Bytes, *Path)) { Error = TEXT("cannot read ") + Path; return false; }
+	if (Bytes.Num() < 12 || FMemory::Memcmp(Bytes.GetData(), "RIFF", 4) || FMemory::Memcmp(Bytes.GetData() + 8, "WAVE", 4)) { Error = TEXT("not a WAV file: ") + Path; return false; }
+	auto U16 = [&](int32 At) { return int32(Bytes[At]) | int32(Bytes[At + 1]) << 8; };
+	auto U32 = [&](int32 At) { return int32(U16(At)) | int32(U16(At + 2)) << 16; };
+	int32 Channels = 0, Rate = 0, Bits = 0, Format = 0;
+	for (int32 At = 12; At + 8 <= Bytes.Num();)
+	{
+		const int32 Size = U32(At + 4), Body = At + 8;
+		if (Size < 0 || Body > Bytes.Num()) break;
+		if (!FMemory::Memcmp(Bytes.GetData() + At, "fmt ", 4) && Body + 16 <= Bytes.Num())
+		{
+			Format = U16(Body); Channels = U16(Body + 2); Rate = U32(Body + 4); Bits = U16(Body + 14);
+			if (Format == 0xFFFE && Body + 40 <= Bytes.Num()) Format = U16(Body + 24);
+		}
+		else if (!FMemory::Memcmp(Bytes.GetData() + At, "data", 4))
+		{
+			if (Channels < 1 || Channels > 2 || Rate <= 0) { Error = TEXT("unsupported WAV channels/rate: ") + Path; return false; }
+			const int32 DataBytes = FMath::Min(Size, Bytes.Num() - Body);
+			auto Pcm = MakeShared<FKKSpeechPcm, ESPMode::ThreadSafe>();
+			Pcm->Channels = Channels;
+			Pcm->SampleRate = Rate;
+			if (Format == 1 && Bits == 16)
+			{
+				const int32 Count = DataBytes / 2;
+				Pcm->Samples.SetNumUninitialized(Count);
+				FMemory::Memcpy(Pcm->Samples.GetData(), Bytes.GetData() + Body, Count * 2);
+				Out = Pcm;
+				return true;
+			}
+			if (Format == 1 && Bits == 24)
+			{
+				const int32 Count = DataBytes / 3;
+				Pcm->Samples.SetNumUninitialized(Count);
+				for (int32 I = 0; I < Count; ++I)
+				{
+					const int32 V = (int32(Bytes[Body + I * 3 + 1]) << 8) | (int32(int8(Bytes[Body + I * 3 + 2])) << 16);
+					Pcm->Samples[I] = int16(V >> 8);
+				}
+				Out = Pcm;
+				return true;
+			}
+			if (Format == 3 && Bits == 32)
+			{
+				const int32 Count = DataBytes / 4;
+				Pcm->Samples.SetNumUninitialized(Count);
+				const float* Src = reinterpret_cast<const float*>(Bytes.GetData() + Body);
+				for (int32 I = 0; I < Count; ++I)
+					Pcm->Samples[I] = int16(FMath::Clamp(FMath::RoundToInt(Src[I] * 32767.f), -32768, 32767));
+				Out = Pcm;
+				return true;
+			}
+			Error = FString::Printf(TEXT("unsupported WAV format=%d bits=%d: %s"), Format, Bits, *Path);
+			return false;
+		}
+		At = Body + Size + (Size & 1);
+	}
+	Error = TEXT("WAV without data: ") + Path;
+	return false;
+}
+
+void UOKStudioGame::StopSceneAudio()
+{
+	if (SceneAudio.IsValid())
+	{
+		if (SceneAudio->IsPlaying()) SceneAudio->Stop();
+		SceneAudio.Reset();
+	}
+	AudioStartTimelineTime = -1000.f;
+}
+
+void UOKStudioGame::UpdateSceneAudio()
+{
+	if (!Document || Document->SoundFile.IsEmpty() || bMuteSound || !bTimelinePlaying || IsExporting())
+	{
+		StopSceneAudio();
+		return;
+	}
+	if (LoadedSoundFile != Document->SoundFile)
+	{
+		StopSceneAudio();
+		LoadedSoundFile = Document->SoundFile;
+		SceneAudioPcm.Reset();
+		FString Error;
+		if (OKStudioLoadAudioFile(Document->SoundFile, SceneAudioPcm, Error))
+		{
+			const float Len = SceneAudioPcm && SceneAudioPcm->Channels > 0 && SceneAudioPcm->SampleRate > 0 ? float(SceneAudioPcm->Samples.Num() / SceneAudioPcm->Channels) / float(SceneAudioPcm->SampleRate) : 0.f;
+			UE_LOG(LogTemp, Display, TEXT("OK studio: loaded scene audio %s (%.2fs, %d Hz, %d ch)"), *Document->SoundFile, Len, SceneAudioPcm ? SceneAudioPcm->SampleRate : 0, SceneAudioPcm ? SceneAudioPcm->Channels : 0);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("OK studio: scene audio %s failed to load: %s"), *Document->SoundFile, *Error);
+		}
+	}
+	if (!SceneAudioPcm || SceneAudioPcm->Channels <= 0 || SceneAudioPcm->SampleRate <= 0) return;
+	const float AudioTime = TimelineTime - Document->SoundDelay;
+	const float TotalDuration = float(SceneAudioPcm->Samples.Num() / SceneAudioPcm->Channels) / float(SceneAudioPcm->SampleRate);
+	if (AudioTime < 0.f || AudioTime >= TotalDuration)
+	{
+		StopSceneAudio();
+		return;
+	}
+	const float Speed = FMath::Clamp(TimelineSpeed, 0.1f, 4.f);
+	const double ElapsedWall = FPlatformTime::Seconds() - AudioStartWallSeconds;
+	const float ExpectedAudioTime = AudioStartTimelineTime + float(ElapsedWall) * AudioStartSpeed;
+	if (!SceneAudio.IsValid() || !SceneAudio->IsPlaying() || !FMath::IsNearlyEqual(Speed, AudioStartSpeed, 1e-3f) || FMath::Abs(AudioTime - ExpectedAudioTime) > 0.25f)
+	{
+		StopSceneAudio();
+		UWorld* World = GetTickableGameObjectWorld();
+		if (!World) return;
+		UKKSpeechWave* Wave = NewObject<UKKSpeechWave>(this);
+		Wave->Init(SceneAudioPcm, World->GetAudioDevice().IsValid() ? World->GetAudioDevice()->GetSampleRate() : SceneAudioPcm->SampleRate);
+		if (UAudioComponent* Comp = UGameplayStatics::SpawnSound2D(World, Wave, FMath::Clamp(SoundVolume, 0.f, 2.f), Speed, AudioTime))
+		{
+			SceneAudio = Comp;
+			AudioStartTimelineTime = AudioTime;
+			AudioStartWallSeconds = FPlatformTime::Seconds();
+			AudioStartSpeed = Speed;
+		}
+	}
+}
+
 void UOKStudioGame::SetTimelineTime(float Time)
 {
 	TimelineTime = FMath::Clamp(Time, 0.f, FMath::Max(Document->Duration, 0.01f));
@@ -1201,6 +1338,7 @@ void UOKStudioGame::Tick(float DeltaTime)
 		if (Next > End) Next = Begin + FMath::Fmod(Next - Begin, FMath::Max(End - Begin, 0.01f));
 		SetTimelineTime(Next);
 	}
+	UpdateSceneAudio();
 	// Auto backup every few minutes, not while something is moving or loading.
 	const int32 Minutes = FOKStudioSettings::Get().BackupMinutes;
 	if (Minutes > 0 && FPlatformTime::Seconds() - LastBackupSeconds > Minutes * 60. && BusyReason().IsEmpty() && !bStoryMode) BackupNow(false);

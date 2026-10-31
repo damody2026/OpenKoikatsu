@@ -801,6 +801,12 @@ public:
 	float Duration = 10.f;
 
 	/** Track id of the scene's own track (post-processing values). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	FString SoundFile;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
+	float SoundDelay = 0.f;
+
 	static constexpr int32 SceneTrackId = -2;
 
 	/** View bookmarks 0..9. */

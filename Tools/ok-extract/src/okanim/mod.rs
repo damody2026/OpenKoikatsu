@@ -179,7 +179,14 @@ impl OkAnim {
             hips[0] -= c[0] * u;
             hips[2] -= c[2] * u;
         }
-        let curves = self.curves.iter().map(|c| (c.name.clone(), c.values[i0] + (c.values[i1] - c.values[i0]) * a)).collect();
+        let curves = self.curves.iter().map(|c| {
+            let v = if c.name.ends_with("_pattern") {
+                if a < 0.5 { c.values[i0] } else { c.values[i1] }
+            } else {
+                c.values[i0] + (c.values[i1] - c.values[i0]) * a
+            };
+            (c.name.clone(), v)
+        }).collect();
         RolePose { rot, hips, curves }
     }
 }

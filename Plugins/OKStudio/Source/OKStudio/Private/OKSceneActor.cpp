@@ -14,6 +14,7 @@
 #include "Engine/World.h"
 #include "HAL/PlatformMisc.h"
 #include "KKPreviewActor.h"
+#include "KKOkAnimation.h"
 #include "KKExactSkinning.h"
 #include "KKRustExtract.h"
 #include "ok_extract.h"
@@ -628,15 +629,16 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (!Actor) return;
 	const FOKSceneCharacter& C = Object.Character;
 	// The eyes pattern is a cha_eyeset row: its FaceBlendShape pattern is the row's EyesPtn (ChaControl.ChangeEyesPtn).
-	if (C.EyesPattern >= 0)
+	const bool bHasAnimFace = Actor->OkPlayer && Actor->OkPlayer->Curves(0, 0.f).Contains(TEXT("face.mouth_open"));
+	if (!bHasAnimFace && C.EyesPattern >= 0)
 	{
 		const int32 Blend = FOKStudioCatalog::Get().EyeSet(C.EyesPattern).BlendPattern;
 		Actor->SetFacePattern(1, Blend >= 0 ? Blend : C.EyesPattern, false);
 	}
-	if (C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
-	if (C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
-	if (C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
-	if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
+	if (!bHasAnimFace && C.EyebrowPattern >= 0) Actor->SetFacePattern(2, C.EyebrowPattern, false);
+	if (!bHasAnimFace && C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
+	if (!bHasAnimFace && C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
+	if (bHasAnimFace) { if (Actor->bAutomaticBlink) Actor->SetAutomaticBlink(false); } else if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
 	// Hand shapes: a pattern overrides the animated fingers of that hand (-1 gives them back).
 	const int32 Hands[2] = { C.HandLeft, C.HandRight };
 	const int32 Count = Actor->GetHandShapeCount();

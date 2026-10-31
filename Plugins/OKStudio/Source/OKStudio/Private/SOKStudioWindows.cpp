@@ -1,4 +1,4 @@
-﻿// OK Studio panel: floating windows and their saved places, the dialog, the workspace tree's editing, scene files
+// OK Studio panel: floating windows and their saved places, the dialog, the workspace tree's editing, scene files
 // (browser, backups, the open report, the resource check, stories), screenshots, the timeline and its export, settings.
 #include "SOKStudioPanel.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -1056,6 +1056,24 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
 		+ SHorizontalBox::Slot().FillWidth(1.f)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("總長(秒)")), 10.f)]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)[SNew(SBox).WidthOverride(56.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() && Game->Document ? Game->Document->Duration : 10.f; }, [this](float V) { if (Game.IsValid() && Game->Document) { Game->Document->Duration = FMath::Max(V, 0.1f); Changed(); } }, 0.1f, 3600.f, 0.5f)]]
+	];
+
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+		[
+			OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this]
+			{
+				if (!Game.IsValid() || !Game->Document || Game->Document->SoundFile.IsEmpty()) return FText::FromString(TEXT("音樂：（無音軌）"));
+				return FText::FromString(FString::Printf(TEXT("音樂：%s"), *FPaths::GetCleanFilename(Game->Document->SoundFile)));
+			}), 9.5f, FLinearColor(0.65f, 0.95f, 0.75f))
+		]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f).VAlign(VAlign_Center)[CheckBox(TEXT("靜音"), [this] { return Game.IsValid() && Game->bMuteSound; }, [this](bool B) { if (Game.IsValid()) { Game->bMuteSound = B; Game->UpdateSceneAudio(); } })]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 2.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("音量")), 9.5f)]
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(44.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? Game->SoundVolume : 1.f; }, [this](float V) { if (Game.IsValid()) { Game->SoundVolume = FMath::Clamp(V, 0.f, 2.f); Game->StopSceneAudio(); Game->UpdateSceneAudio(); } }, 0.f, 2.f, 0.05f)]]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 2.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("延遲(s)")), 9.5f)]
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(48.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() && Game->Document ? Game->Document->SoundDelay : 0.f; }, [this](float V) { if (Game.IsValid() && Game->Document) { Game->Document->SoundDelay = V; Game->StopSceneAudio(); Game->UpdateSceneAudio(); Changed(); } }, -60.f, 60.f, 0.05f)]]
 	];
 
 	// 2. MMD System Camera

@@ -570,6 +570,8 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
     Document->MapTransform = FTransform::Identity;
     Document->Tracks.Reset();
     Document->Duration = 10.f;
+    Document->SoundFile.Reset();
+    Document->SoundDelay = 0.f;
     Document->ItemAnimationSeconds=0.f;
 	Document->NextId = 1;
 	Document->ActiveCamera = -1;
@@ -799,10 +801,38 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 						CharObj->Character.StudioAnimeNo = -1;
 						CharObj->Character.Fk.Reset();
 						CharObj->Character.Ik.Reset();
+						CharObj->Character.EyebrowPattern = -1;
+						CharObj->Character.EyesPattern = -1;
+						CharObj->Character.MouthPattern = -1;
+						CharObj->Character.MouthOpen = -1.f;
+						CharObj->Character.Blink = 0;
 					}
 					double Speed = 1., Duration = 0.;
 					if (M->TryGetNumberField(TEXT("playback_speed"), Speed) && Speed > 0.) CharObj->Character.Speed = float(Speed);
 					if (M->TryGetNumberField(TEXT("duration"), Duration) && Duration > 0.) Document->Duration = FMath::Max(Document->Duration, float(Duration));
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Sounds = nullptr;
+		if ((*Mmdd)->TryGetArrayField(TEXT("sounds"), Sounds))
+		{
+			for (const TSharedPtr<FJsonValue>& SVal : *Sounds)
+			{
+				const TSharedPtr<FJsonObject> S = SVal->AsObject();
+				if (!S) continue;
+				bool bEn = true;
+				S->TryGetBoolField(TEXT("enable"), bEn);
+				if (!bEn) continue;
+				FString ResolvedSound;
+				if (!S->TryGetStringField(TEXT("resolved_sound"), ResolvedSound) || ResolvedSound.IsEmpty())
+					S->TryGetStringField(TEXT("sound_file"), ResolvedSound);
+				if (!ResolvedSound.IsEmpty() && FPaths::FileExists(ResolvedSound))
+				{
+					Document->SoundFile = ResolvedSound;
+					double Delay = 0.0;
+					if (S->TryGetNumberField(TEXT("delay"), Delay)) Document->SoundDelay = float(Delay);
+					Importer.Note(TEXT("MMDD audio track imported"));
+					break;
 				}
 			}
 		}
@@ -849,6 +879,7 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 					Document->Tracks.Add(MoveTemp(CamTrack));
 					Document->ActiveCamera = MmddCamId;
 					++Report.Cameras;
+					Document->Post.bDepthOfField = false;
 					Importer.Note(TEXT("MMDD VMD camera track imported"));
 				}
 				break;

@@ -322,10 +322,12 @@ void FOkAnimPlayer::ApplyFaceCurves(int32 Role, float T, AKKPreviewActor& Actor)
 void FOkAnimPlayer::ApplyFaceCurveValues(const TMap<FString, float>& C, AKKPreviewActor& Actor)
 {
 	if (C.IsEmpty()) return;
+	Actor.BeginFaceDisplayUpdate();
+	ON_SCOPE_EXIT { Actor.EndFaceDisplayUpdate(); };
 	if (const float* V = C.Find(TEXT("face.mouth_pattern")))
 	{
 		const int32 Pattern = FMath::RoundToInt(*V);
-		if (Pattern != Actor.MouthPattern) Actor.SetMouthPattern(Pattern, true);
+		if (Pattern != Actor.MouthPattern) Actor.SetMouthPattern(Pattern, false);
 	}
 	// An unchanged opening does not rebuild the mouth morphs.
 	if (const float* V = C.Find(TEXT("face.mouth_open"))) if (!FMath::IsNearlyEqual(FMath::Clamp(*V, 0.f, 1.f), Actor.MouthOpen01, 1.e-4f)) Actor.SetMouthOpen(*V);
@@ -335,12 +337,12 @@ void FOkAnimPlayer::ApplyFaceCurveValues(const TMap<FString, float>& C, AKKPrevi
 	{
 		const int32 Pattern = EyePattern ? FMath::RoundToInt(*EyePattern) : Actor.FacePattern[0];
 		const float Open = EyeOpen ? *EyeOpen : Actor.FaceOpen01[0];
-		if (Pattern != Actor.FacePattern[0] || !FMath::IsNearlyEqual(Open, Actor.FaceOpen01[0], 1.e-3f)) Actor.SetFaceControl(1, Pattern, Open, true);
+		if (Pattern != Actor.FacePattern[0] || !FMath::IsNearlyEqual(Open, Actor.FaceOpen01[0], 1.e-3f)) Actor.SetFaceControl(1, Pattern, Open, false);
 	}
 	if (const float* V = C.Find(TEXT("face.brow_pattern")))
 	{
 		const int32 Pattern = FMath::RoundToInt(*V);
-		if (Pattern != Actor.FacePattern[1]) Actor.SetFacePattern(2, Pattern, true);
+		if (Pattern != Actor.FacePattern[1]) Actor.SetFacePattern(2, Pattern, false);
 	}
 }
 
