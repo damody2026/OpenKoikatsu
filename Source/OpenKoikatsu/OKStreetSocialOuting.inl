@@ -635,7 +635,18 @@ void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error,bool bRun){
   return true;
  };
  // A run (jogging in the park): longer legs that stay inside the place they run in.
- TArray<FVector> Route;Route.Add(S.Male);FVector At=S.Male;const FString Here=PlaceHere(S.Male);const bool Indoors=!Here.IsEmpty()&&!bRun;
+ const FString Here=PlaceHere(S.Male);
+ // A room under 15 m across (a restaurant, a cafe) is no place for a walk: out of its door and round outside, back to
+ // the door (R6-36: her "quiet path" after lunch was 14 points among the restaurant tables, over in 22 s). A floor to
+ // walk round (the department store's) keeps its loop inside.
+ const FOKStreetPlace* In=Here.IsEmpty()||bRun?nullptr:OKStreetFindPlace(Here);bool Small=false;
+ if(In&&!In->Door.IsNearlyZero())for(const FBox& R:In->Rooms)if(S.Male.X>=R.Min.X&&S.Male.X<=R.Max.X&&S.Male.Y>=R.Min.Y&&S.Male.Y<=R.Max.Y&&S.Male.Z>=R.Min.Z-60.f&&S.Male.Z<R.Max.Z)
+  Small=FMath::Min(R.Max.X-R.Min.X,R.Max.Y-R.Min.Y)<1500.f;
+ TArray<FVector> Route;
+ if(Small){Route=PlaceRoute(S.Male,In->Door);if(Route.Num()<2)Route=GridRoute(S.Male,In->Door);if(Route.Num()<2)Route={S.Male,In->Door};
+  UE_LOG(LogTemp,Display,TEXT("Street stroll: %s is a small room; the walk goes out of its door (%d points) and round outside"),In->Name,Route.Num());}
+ else Route.Add(S.Male);
+ const int32 Out=Route.Num();FVector At=Route.Last();const FVector Home=At;const bool Indoors=!Here.IsEmpty()&&!bRun&&!Small;
  // Indoors the legs are short: more of them, so a walk round the floor is not over in a minute or two.
  for(int32 Leg=0;Leg<(Indoors?12:5);++Leg){
   bool Found=false;
@@ -648,8 +659,8 @@ void AOKStreetSocialScene::BeginStroll(int32 Girl,FString& Error,bool bRun){
   }
   if(!Found)break;
  }
- if(Route.Num()>=3&&Clear(At,S.Male))Route.Add(S.Male);
- if(Route.Num()<3){Error=OKT(TEXT("ui.outing.no_walk_route_nearby"));UE_LOG(LogTemp,Display,TEXT("Street stroll: no route found around (%.0f,%.0f)"),S.Male.X,S.Male.Y);return;}
+ if(Route.Num()-Out>=2&&Clear(At,Home))Route.Add(Home);
+ if(Route.Num()-Out<2){Error=OKT(TEXT("ui.outing.no_walk_route_nearby"));UE_LOG(LogTemp,Display,TEXT("Street stroll: no route found around (%.0f,%.0f)"),S.Male.X,S.Male.Y);return;}
  StopAmbientActivity();EndTalk();
  S.OutingGirl=Girl;S.OutingActivity=TEXT("stroll");S.OutingPlace=OKT(TEXT("ui.outing.nearby_label"));S.OutingRoute=Route;S.OutingStep=1;S.OutingProgressAt=S.OutingBegunAt=SceneTime();S.OutingRun=bRun;
  S.Companion=Girl;S.Agents[Girl-1].Held=true;S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;S.CompanionBlockedAt=0;S.CompanionTravel=0;S.CompanionWalk=0;

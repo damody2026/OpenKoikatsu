@@ -161,7 +161,7 @@ void AOKStreetSocialScene::TickElevators(float Dt){
  for(auto It=S.LiftWalks.CreateIterator();It;++It){
   const int32 Girl=It.Key();auto& W=It.Value();if(!S.Agents.IsValidIndex(Girl-1)||W.Path.IsEmpty()){It.RemoveCurrent();continue;}
   auto& A=S.Agents[Girl-1];A.Position=FVector(W.At.X,W.At.Y,A.Position.Z);FVector D=W.Path[0]-A.Position;D.Z=0;const float Len=D.Size();
-  if(Len<6.f){A.Position=FVector(W.Path[0].X,W.Path[0].Y,A.Position.Z);W.At=A.Position;W.Path.RemoveAt(0);if(W.Path.IsEmpty()){if(!W.KeepHeld)A.Held=W.WasHeld;else S.LiftPins.Add(Girl,A.Position);if(S.Companion==Girl){S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;}It.RemoveCurrent();}continue;}
+  if(Len<6.f){A.Position=FVector(W.Path[0].X,W.Path[0].Y,A.Position.Z);W.At=A.Position;W.Path.RemoveAt(0);if(W.Path.IsEmpty()){if(!W.KeepHeld)A.Held=W.WasHeld||BusyWithPlayer(Girl);else S.LiftPins.Add(Girl,A.Position);if(S.Companion==Girl){S.CompanionTrail.Reset();S.CompanionTrail.Add(S.Male);S.CompanionLastMale=S.Male;}It.RemoveCurrent();}continue;}
   const float Step=FMath::Min(Len,OKStreetWalkSpeed*FMath::Min(Dt,.05f));A.Position+=D/Len*Step;W.At=A.Position;S.Rotations[Girl]=OKStreetFacingMovement(D,S.Rotations[Girl]);
  }
  for(int32 Index=0;Index<S.Elevators.Num();++Index){
