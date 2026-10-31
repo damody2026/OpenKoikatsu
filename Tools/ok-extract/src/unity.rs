@@ -1742,7 +1742,7 @@ fn shader_declares_property(object: &UnityObject, wanted: &str) -> Option<bool> 
 /// property (`Cull [_Cull]`) is returned as that property name; the material's saved float then decides it. `zwrite`
 /// is the main colour pass's depth write (0 / 1, or a property name), bound the same way.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool, pub zwrite: Result<i64, String> }
+pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool, pub zwrite: Result<i64, String>, pub alpha_to_mask: bool }
 
 pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState> {
     let parsed = object.class.properties().get("m_ParsedForm")?;
@@ -1775,10 +1775,14 @@ pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState>
                 if k.is_some_and(|k| k.eq_ignore_ascii_case("LightMode")) { light_mode = v.unwrap_or("").to_ascii_lowercase(); }
             }
         }
-        passes.push((cull, name, light_mode, zwrite));
+        // AlphaToMask On (a fixed value; Studio draws without MSAA, so one sample: alpha below one half is not drawn).
+        let to_mask = uv_obj(state, "alphaToMask").or_else(|| uv_obj(state, "m_AlphaToMask"))
+            .filter(|a| matches!(uv_obj(a, "name").and_then(|v| v.as_str()).unwrap_or(""), "" | "<noninit>"))
+            .and_then(|a| uv_obj(a, "val")).and_then(|v| v.as_f64()).is_some_and(|v| v > 0.5);
+        passes.push((cull, name, light_mode, zwrite, to_mask));
     }
     // Shadow, depth and meta passes never draw colour.
-    let colour = |(_, name, mode, _): &&(Result<i64, String>, String, String, Result<i64, String>)|
+    let colour = |(_, name, mode, _, _): &&(Result<i64, String>, String, String, Result<i64, String>, bool)|
         !matches!(mode.as_str(), "shadowcaster" | "shadowcollector" | "meta" | "prepassbase" | "deferred")
             && !name.contains("SHADOW") && !name.contains("META");
     // Additive per-light passes repeat the main pass's geometry state.
@@ -1786,10 +1790,10 @@ pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState>
     // An inverted-hull outline is a colour pass named OUTLINE, or a Cull Front pass beside one that draws front faces
     // (Cull Back or Off; Koikatsu draws its outline first, then the surface).
     let draws_front = colour.iter().any(|p| matches!(p.0, Ok(0) | Ok(2)));
-    let is_outline = |p: &(Result<i64, String>, String, String, Result<i64, String>)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
+    let is_outline = |p: &(Result<i64, String>, String, String, Result<i64, String>, bool)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
     let main = colour.iter().position(|p| !is_outline(p)).or((!colour.is_empty()).then_some(0))?;
     let outline = colour.iter().enumerate().any(|(i, p)| i != main && is_outline(p));
-    Some(ShaderPassState { cull: colour[main].0.clone(), outline, zwrite: colour[main].3.clone() })
+    Some(ShaderPassState { cull: colour[main].0.clone(), outline, zwrite: colour[main].3.clone(), alpha_to_mask: colour[main].4 })
 }
 
 /// The depth write of a pass state for a material: a value bound to a property takes the material's float (Unity's
@@ -1810,6 +1814,7 @@ pub(crate) fn record_shader_pass_state(floats: &mut HashMap<String, f32>, shader
     floats.insert("_OKShaderOutline".into(), if state.outline { 1.0 } else { 0.0 });
     let zwrite = resolve_zwrite(&state.zwrite, floats);
     floats.insert("_OKShaderZWrite".into(), zwrite);
+    if state.alpha_to_mask { floats.insert("_OKShaderAlphaToMask".into(), 1.0); } else { floats.remove("_OKShaderAlphaToMask"); }
     floats.insert("_OKShaderState".into(), shader_state_key(shader) as f32);
 }
 
@@ -5091,6 +5096,28 @@ fn scale_png_alpha_uncached(png: &[u8], factor: f32) -> Option<Vec<u8>> {
         p[3] = ((p[3] as f32) * factor).round() as u8;
     }
     crate::teximg::encode_rgba_owned(img)
+}
+
+/// Alpha-to-coverage with one sample: texels below half alpha become fully transparent, the rest keep their alpha.
+pub fn cut_png_alpha_below_half(png: &[u8]) -> Option<Vec<u8>> {
+    crate::png_transform_cache::transform("alpha_to_mask_v1", png, &[], || {
+        let mut img = crate::teximg::load_from_memory(png).ok()?.into_rgba8();
+        for p in img.pixels_mut() { if p[3] < 128 { p[3] = 0; } }
+        crate::teximg::encode_rgba_owned(img)
+    })
+}
+
+#[cfg(test)]
+mod alpha_to_mask_tests {
+    #[test]
+    fn texels_below_half_alpha_are_not_drawn() {
+        let mut img = image::RgbaImage::new(3, 1);
+        for (x, a) in [(0, 44u8), (1, 128), (2, 200)] { img.put_pixel(x, 0, image::Rgba([10, 20, 30, a])); }
+        let png = crate::teximg::encode_rgba_owned(img).unwrap();
+        let cut = crate::teximg::load_from_memory(&super::cut_png_alpha_below_half(&png).unwrap()).unwrap().into_rgba8();
+        assert_eq!([cut.get_pixel(0, 0)[3], cut.get_pixel(1, 0)[3], cut.get_pixel(2, 0)[3]], [0, 128, 200]);
+        assert_eq!(cut.get_pixel(0, 0)[0], 10, "colour kept");
+    }
 }
 
 fn store_tex_env_transform(mat: &mut MeshMaterial, key: &str, value: &unity_asset_core::UnityValue) {

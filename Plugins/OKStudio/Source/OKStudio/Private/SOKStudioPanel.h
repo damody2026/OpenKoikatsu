@@ -613,6 +613,15 @@ public:
 		J->SetNumberField(TEXT("material_properties"), MaterialPropertiesShown);
 		J->SetStringField(TEXT("material_name"), MaterialNameShown);
 		J->SetStringField(TEXT("help"), IsFloatOpen(TEXT("help")) ? PinnedHelpTitle : FString());
+		// The motion and item catalogues' place (定位當前 reads back here): kind/group/category, and what the list picked.
+		J->SetStringField(TEXT("anim_browse"), FString::Printf(TEXT("%d/%d/%d"), AnimKind, AnimGroup, AnimCategory));
+		{
+			const TArray<TSharedPtr<int32>> Picked = AnimList ? AnimList->GetSelectedItems() : TArray<TSharedPtr<int32>>();
+			const FOKStudioCatalog& Cat = FOKStudioCatalog::Get();
+			J->SetStringField(TEXT("anim_selected"), Picked.Num() && Cat.Anims.IsValidIndex(*Picked[0]) ? Cat.Anims[*Picked[0]].Name : FString());
+		}
+		J->SetStringField(TEXT("item_browse"), FString::Printf(TEXT("%d/%d"), BrowseGroup, BrowseCategory));
+		J->SetStringField(TEXT("item_located"), ItemLocated);
 		J->SetNumberField(TEXT("rows"), Rows.Num());
 		TArray<TSharedPtr<FJsonValue>> Sel, Open;
 		if (Game.IsValid()) for (int32 Id : Game->Selection) Sel.Add(MakeShared<FJsonValueNumber>(Id));
@@ -2285,11 +2294,12 @@ public:
 		if (bItemLocate && ItemCatalogList)
 		{
 			bItemLocate = false;
+			ItemLocated.Reset();
 			if (const FOKSceneObject* X = Obj())
 				for (const TSharedPtr<int32>& V : ItemOptions)
 				{
 					const FOKStudioCatalogItem& I = C.Items[*V];
-					if (I.Group == X->Item.Group && I.Category == X->Item.Category && I.No == X->Item.No) { ItemCatalogList->RequestScrollIntoView(V); break; }
+					if (I.Group == X->Item.Group && I.Category == X->Item.Category && I.No == X->Item.No) { ItemCatalogList->RequestScrollIntoView(V); ItemLocated = FString::Printf(TEXT("%d/%d/%d"), I.Group, I.Category, I.No); break; }
 				}
 		}
 	}
@@ -2859,6 +2869,7 @@ private:
 	int32 BrowseGroup = -1;
 	TSharedPtr<SListView<TSharedPtr<int32>>> ItemCatalogList;
 	bool bItemLocate = false;
+	FString ItemLocated; // the item 定位當前 scrolled to, "group/category/no"
 	int32 BrowseCategory = -1;
 	TArray<TSharedPtr<int32>> GroupOptions, CategoryOptions, ItemOptions, MapOptions, SkyOptions, SunOptions;
 

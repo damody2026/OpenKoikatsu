@@ -726,6 +726,12 @@ EyeSetTest 漩渦眼（使用者 2026-10-30：缺的元件從 `D:\KoikatuSunshin
   - 定位當前：動畫頁「定位當前」（`anim.locate`，切到正在播的動作的種類／分組／分類並捲到它）、添加道具頁「定位當前道具」（切到所選道具的大／中分類並捲到它）。
   - 控制通道：`click` 加 `"tag": true`，比對控件的 `FTagMetaData`（縮圖與「無」掛 `bg:none`／`frame:none`／檔名 tag）；`state` 的角色多 `speed`、`anime_no`，`ui` 多 `material_part`、`material_properties`、`material_name`、`help`。
   - 驗證：`check_ok_studio_buttons.lua` 86/86（新增縮圖點選套用背景與前景框、兩個「無」、設定 `?` 固定與收起、樹「材質」開材質編輯器並列出 m_koi_stu_desk00_01 的 46 個屬性、此材質全部預設、定位當前道具、控制器播放／暫停／播放、動作定位當前）；UiSelfTest 46/46；`verify_ok_studio.lua` 6/6。截圖 `F:\OpenKoikatsu\Saved\OKStudio\mcp_ui\u22_material_editor.png`。
+  - 定位當前讀回：`ui.anim_browse`（種類／分組／分類）、`ui.anim_selected`（清單選中的動作名）、`ui.item_browse`（大／中分類）、`ui.item_located`（捲到的道具）。實測：先切到別的分組或「H 動作」，按定位當前後回到正在播的 ポーズ7（0/7/20）、書桌（2/12/681）。按鈕檢查 89/89。
+- 2026-10-31 畫面差異（先用診斷確認是誰畫的）：
+  - `83283571_p1` 中央白團：逐項隱藏與關閉後處理確認是 SunShafts（`scene` 操作 `{"post":{"bSunShafts":false}}` 後白團和右側鋼架的橘白光都消失）。原生相機的順序是 BloomAndFlares → AmplifyColor → SunShafts，我們把光束和霧、AO 放在同一個泛光前的材質裡，加上去的光束再被泛光擴散成一整團。改成同一段程式跑兩個 pass：霧與 AO 在泛光前，SunShafts 在調色之後（`BL_SceneColorAfterDOF` priority 110）；每個取樣另外夾在 0～1（原生的光束來源是 8 位元 RT）。結果窗口後方出現一條條光線，白團消失：`F:\OpenKoikatsu\Saved\OKStudio\bright1031\u_shafts_after_grade.png`（之前 `r_before.png`）。
+  - 「火焰太大、鋼架被橘光照亮」：對照舊圖，其實是過亮天空與被泛光放大的光束，上一項一起修掉。真正的火焰（mod 道具 Fire 1／Fire 4，分組 8422 的 ParticleSystem）目前完全沒畫（`bounds` 的 `built` 為 false、沒有部件）；ParticleSystem 不轉換是 10-17 的決定，要畫得改用 OK 的 Niagara 特效對應。
+  - `83572034_p1` 月盤暗面：H_enry 的 `main_item_studio_alpha` 主 pass 是 `AlphaToMask On`（DXBC 確認沒有 0.5 clip，alpha＝貼圖 a×`_alpha`，SrcAlpha/OneMinusSrcAlpha、寫深度）。月亮貼圖（DXT5）暗面 alpha 0.17、月牙接近 1；原生用一個取樣畫，alpha 低於一半的像素不畫，所以只剩月牙。修正：`shader_pass_state` 讀主 pass 的 `alphaToMask`，記成 `_OKShaderAlphaToMask`；建零件時對仍是自己 shader（state key 相符）的 `main_item_studio_alpha` 把 alpha < 0.5 的 texel 清成 0。不透明的 `main_item_studio` 也帶同一個旗標但輸出 alpha 1，不能裁（第一版裁了，活塞頂變成白盤）。逐點：月盤內 (640,90) 原生 (0,0,3)、修正前 (2,7,63)、修正後 (0,0,0)；月牙 (800,120) 兩邊一致。`F:\OpenKoikatsu\Saved\OKStudio\moon1031\d_alpha_only.png`。已轉好的 mod 模型要 `OKLIB_REFRESH=meshes_for_maindata ... --oklib studio-mod-nodes` 重錄才帶這個旗標。
+  - 同一張場景還有未修的差異：原生中央有一個玻璃房間（角色在白磚房裡），我們沒有；兩側螢幕的內容也不同。
 - 驗證：新增 `Tools/check_ok_studio_buttons.lua`，經控制通道新的 `click` 操作（`{"text","index","contains"}`，找畫面上文字相符的 `STextBlock`，對它所在的 `SButton` 呼叫 `SimulateClick`，跑的就是按鈕自己的處理）逐一按下 U16～U21 新加的按鈕，再用 `bones`／`state`／`keys` 讀回結果。實測 57/57（加上 U22 後 65/65，第二批後 72/72）；`OKStudio.UiSelfTest` 46/46；`verify_ok_studio.lua` 6/6；`cargo test studio_ik --include-ignored` 通過。
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 

@@ -287,7 +287,13 @@ if item then
   check(click("此材質全部預設").ok, "此材質全部預設 clicked")
   call("cmd", { id = "window.close", arg = "material" }); wait(10)
   call("cmd", { id = "page.items" }); wait(30)
-  check(click("定位當前道具").ok, "定位當前道具 clicked")
+  local other = nil
+  for _, g in ipairs(call("catalog", { kind = "item" }).groups or {}) do if g.id ~= 2 and (g.name or "") ~= "" then other = g break end end
+  if other then click(other.name) end
+  local ui = function() return call("state").ui or {} end
+  check(other ~= nil and ui().item_browse ~= "2/12", ("the item list shows another group first (%s)"):format(tostring(ui().item_browse)))
+  check(click("定位當前道具").ok and ui().item_browse == "2/12" and ui().item_located == "2/12/681",
+    ("定位當前道具 goes to the selected item's group and category and scrolls to it (%s, %s)"):format(tostring(ui().item_browse), tostring(ui().item_located)))
   call("cmd", { id = "page.items" }); wait(10)
   call("cmd", { id = "edit.delete" }); wait(20)
 end
@@ -297,8 +303,20 @@ local function speed() local o = objects()[id] return o and o.speed end
 check(click("播放").ok and speed() > 0, "動畫控制器 播放: the character plays")
 check(click("暫停").ok and speed() == 0, "動畫控制器 暫停: speed 0")
 check(click("播放").ok and speed() > 0, "動畫控制器 播放 again: the speed it had")
+-- 定位當前 in the motion list: play a motion, look at the H motions, then come back to it.
+local ag = (call("catalog", { kind = "anim" }).groups or {})[2]
+local acat = ag and (call("catalog", { kind = "anim", group = ag.id }).categories or {})[1]
+local entries = acat and call("catalog", { kind = "anim", group = ag.id, category = acat.id }).entries or {}
+local motion = entries[#entries]
+check(motion ~= nil and call("pose", { id = id, anim = motion.anim }).ok, "a Studio motion to locate (" .. tostring(motion and motion.name) .. ")")
 call("cmd", { id = "page.anim" }); wait(30)
-check(click("定位當前", 1).ok or click("定位當前").ok, "動作 定位當前 clicked")
+local aui = function() return call("state").ui or {} end
+click("H 動作")
+check((aui().anim_browse or ""):sub(1, 1) == "1", "the list shows the H motions (" .. tostring(aui().anim_browse) .. ")")
+local r = call("click", { text = "定位當前", index = 0 }); wait(30)
+local k = motion and motion.anim:match("^(%d+/%d+/%d+)/") or ""
+check(r.ok and aui().anim_browse == k and aui().anim_selected == (motion and motion.name),
+  ("動作 定位當前 goes back to the playing motion (%s %s)"):format(tostring(aui().anim_browse), tostring(aui().anim_selected)))
 call("cmd", { id = "page.anim" }); wait(10)
 call("cmd", { id = "window.close", arg = "animctl" }); wait(10)
 

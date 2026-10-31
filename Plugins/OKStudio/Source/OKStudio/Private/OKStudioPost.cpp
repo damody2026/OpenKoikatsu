@@ -15,7 +15,8 @@
 namespace
 {
 	/**
-	 * One pass over the scene colour, in Studio's order (opaque effects, then the image effects):
+	 * One program over the scene colour, run as two passes in Studio's order (FPass: the opaque effects before bloom,
+	 * the sun shafts after bloom and the grade):
 	 * - Fog: Unity's own fog of the objects (RenderSettings of the Studio scene, level2: fog mode Exp2, density 0.01):
 	 *   factor exp2(-(1.2011 density z)^2) of the eye depth z in metres, the colour (linearised fogColor) towards it.
 	 *   The GlobalFog image effect on Studio's camera has distance fog off and a height density of 0.001: it adds nothing.
@@ -96,7 +97,9 @@ if (ShaftsOn > 0.5)
 		if (Dt > FarM)
 		{
 			float3 Ct = OK_COLOR(T);
-			Sum += dot(max(Ct - SunThreshold.rgb, 0.0), float3(1, 1, 1)) * saturate(0.5 - length(Sun - T));
+			// The shaft source lives in an 8-bit render texture (RenderTexture.GetTemporary's ARGB32): each tap is at
+			// most 1. Summed unclamped, a bright HDR sky saturated the whole disc into a white blob without rays.
+			Sum += saturate(dot(max(Ct - SunThreshold.rgb, 0.0), float3(1, 1, 1)) * saturate(0.5 - length(Sun - T)));
 		}
 	}
 	C += saturate(Sum / 36.0 * SunColor.rgb * 2.2);
@@ -106,12 +109,14 @@ return C;
 #undef OK_DEPTH
 )");
 
-	UMaterial* BuildMaterial()
+	/** The pass at `Location` (priority `Priority` there). */
+	UMaterial* BuildMaterial(EBlendableLocation Location, int32 Priority)
 	{
 #if WITH_EDITORONLY_DATA
 		UMaterial* Mat = NewObject<UMaterial>(GetTransientPackage(), NAME_None, RF_Transient);
 		Mat->MaterialDomain = MD_PostProcess;
-		Mat->BlendableLocation = BL_SceneColorBeforeDOF;
+		Mat->BlendableLocation = Location;
+		Mat->BlendablePriority = Priority;
 		auto Add = [Mat](UMaterialExpression* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
 		auto* Code = NewObject<UMaterialExpressionCustom>(Mat);
 		Code->OutputType = CMOT_Float3;
@@ -151,73 +156,100 @@ return C;
 
 namespace
 {
-	TStrongObjectPtr<UMaterial> Base;
-	TStrongObjectPtr<UMaterialInstanceDynamic> Instance;
-}
-
-FString OKStudioScenePostMaterialState()
-{
-	if (!Base.IsValid()) return TEXT("not made");
-	if (Base->IsCompiling()) return TEXT("compiling");
-	const FMaterialResource* Resource = Base->GetMaterialResource(GMaxRHIShaderPlatform);
-	if (!Resource) return TEXT("no resource");
-#if WITH_EDITOR
-	// Compile errors and compile progress are editor-only on FMaterialResource (a packaged game did not build).
-	if (Resource->GetCompileErrors().Num()) return FString::Join(Resource->GetCompileErrors(), TEXT(" | "));
-#endif
-	if (!Resource->GetGameThreadShaderMap()) return TEXT("no shader map");
-#if WITH_EDITOR
-	if (!Resource->IsCompilationFinished()) return TEXT("shaders compiling");
-#endif
-	if (!Resource->IsGameThreadShaderMapComplete()) return TEXT("shader map incomplete");
-	return TEXT("ready");
-}
-
-void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettings& Settings)
-{
-	if (Instance.IsValid()) Settings.WeightedBlendables.Array.RemoveAll([](const FWeightedBlendable& B) { return B.Object == Instance.Get(); });
-	if (!Post.bFog && !Post.bAmbientOcclusion && !Post.bSunShafts) return;
-	if (!Base.IsValid()) Base.Reset(BuildMaterial());
-	if (!Base.IsValid()) return;
-	// Until its shaders are compiled the engine would draw the default material over the whole view.
+	/**
+	 * Two passes of the same program, in Studio's order: the opaque effects (fog, ambient occlusion) before bloom, and
+	 * SunShafts after bloom and the colour grade (Studio's camera runs BloomAndFlares, AmplifyColor, then SunShafts).
+	 * Added before bloom, the shafts were bloomed into a white blob over the view centre (83283571_p1's stage window).
+	 */
+	struct FPass
 	{
+		TStrongObjectPtr<UMaterial> Base;
+		TStrongObjectPtr<UMaterialInstanceDynamic> Instance;
+	};
+	FPass Passes[2];
+	const EBlendableLocation PassLocation[2] = { BL_SceneColorBeforeDOF, BL_SceneColorAfterDOF };
+	// After the grade (OKStudioGrade.cpp: after depth of field, priority 100).
+	const int32 PassPriority[2] = { 0, 110 };
+
+	FString MaterialState(const UMaterial* Base)
+	{
+		if (!Base) return TEXT("not made");
+		if (Base->IsCompiling()) return TEXT("compiling");
+		const FMaterialResource* Resource = Base->GetMaterialResource(GMaxRHIShaderPlatform);
+		if (!Resource) return TEXT("no resource");
+#if WITH_EDITOR
+		// Compile errors and compile progress are editor-only on FMaterialResource (a packaged game did not build).
+		if (Resource->GetCompileErrors().Num()) return FString::Join(Resource->GetCompileErrors(), TEXT(" | "));
+#endif
+		if (!Resource->GetGameThreadShaderMap()) return TEXT("no shader map");
+#if WITH_EDITOR
+		if (!Resource->IsCompilationFinished()) return TEXT("shaders compiling");
+#endif
+		if (!Resource->IsGameThreadShaderMapComplete()) return TEXT("shader map incomplete");
+		return TEXT("ready");
+	}
+
+	/** The pass's instance once its shaders are ready (null until then: the engine would draw the default material). */
+	UMaterialInstanceDynamic* ReadyInstance(int32 Index)
+	{
+		FPass& P = Passes[Index];
+		if (!P.Base.IsValid()) P.Base.Reset(BuildMaterial(PassLocation[Index], PassPriority[Index]));
+		UMaterial* Base = P.Base.Get();
+		if (!Base || Base->IsCompiling()) return nullptr;
+#if WITH_EDITOR
 		static bool bReported = false;
 		const FMaterialResource* Resource = Base->GetMaterialResource(GMaxRHIShaderPlatform);
-		if (Base->IsCompiling()) return;
-#if WITH_EDITOR
 		// FMaterialResource::GetCompileErrors is editor-only: a packaged game (StreetSocial) did not build.
 		if (!bReported && Resource && Resource->GetCompileErrors().Num())
 		{
 			bReported = true;
 			for (const FString& Message : Resource->GetCompileErrors()) UE_LOG(LogTemp, Warning, TEXT("OK studio: the scene post material did not compile: %s"), *Message);
 		}
-		if (Resource && Resource->GetCompileErrors().Num()) return;
+		if (Resource && Resource->GetCompileErrors().Num()) return nullptr;
 #endif
-		if (Base->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform)) return;
-		const FString State = OKStudioScenePostMaterialState();
+		if (Base->IsCompilingOrHadCompileError(GMaxRHIShaderPlatform)) return nullptr;
+		const FString State = MaterialState(Base);
 		if (State == TEXT("shader map incomplete"))
 		{
 			// With the shader job cache (on-demand compilation) only the shaders asked for are compiled, and nothing asks
 			// for the post-process pass shaders of a material made at run time: submit the rest of the map.
-			static int32 Submits = 0;
-			if (Submits < 4) { ++Submits; Base->CacheShaders(EMaterialShaderPrecompileMode::Default); }
+			static int32 Submits[2] = {};
+			if (Submits[Index] < 4) { ++Submits[Index]; Base->CacheShaders(EMaterialShaderPrecompileMode::Default); }
 		}
-		if (State != TEXT("ready")) return;
+		if (State != TEXT("ready")) return nullptr;
+		if (!P.Instance.IsValid()) P.Instance.Reset(UMaterialInstanceDynamic::Create(Base, GetTransientPackage()));
+		return P.Instance.Get();
 	}
-	if (!Instance.IsValid()) Instance.Reset(UMaterialInstanceDynamic::Create(Base.Get(), GetTransientPackage()));
-	UMaterialInstanceDynamic* M = Instance.Get();
-	M->SetScalarParameterValue(TEXT("FogOn"), Post.bFog ? 1.f : 0.f);
-	M->SetVectorParameterValue(TEXT("FogColor"), Linear(Post.FogColor));
+}
+
+FString OKStudioScenePostMaterialState()
+{
+	return MaterialState(Passes[0].Base.Get());
+}
+
+void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettings& Settings)
+{
+	for (const FPass& P : Passes)
+		if (P.Instance.IsValid()) Settings.WeightedBlendables.Array.RemoveAll([&P](const FWeightedBlendable& B) { return B.Object == P.Instance.Get(); });
 	// OK_STUDIO_POST_AO=0: without the occlusion pass (diagnostic).
 	static const bool bAoOff = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_POST_AO")) == TEXT("0");
-	M->SetScalarParameterValue(TEXT("AOOn"), Post.bAmbientOcclusion && !bAoOff ? 1.f : 0.f);
-	// AmplifyOcclusionBase writes _AO_Levels with Shader.SetGlobalColor, which
-	// forwards directly to SetGlobalVectorImpl. Its RGB is already shader input.
-	M->SetVectorParameterValue(TEXT("AOTint"), Post.AmbientOcclusionTint);
-	M->SetScalarParameterValue(TEXT("AORadius"), FMath::Max(Post.AmbientOcclusionRadius, 0.001f));
-	M->SetScalarParameterValue(TEXT("ShaftsOn"), Post.bSunShafts ? 1.f : 0.f);
-	// SunShafts.sunColor and sunThreshold reach the shader as vectors (SetVector): not linearised.
-	M->SetVectorParameterValue(TEXT("SunColor"), Post.SunShaftColor);
-	M->SetVectorParameterValue(TEXT("SunThreshold"), Post.SunShaftThreshold);
-	Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, M));
+	const bool bOpaque = Post.bFog || (Post.bAmbientOcclusion && !bAoOff);
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		if (Index == 0 ? !bOpaque : !Post.bSunShafts) continue;
+		UMaterialInstanceDynamic* M = ReadyInstance(Index);
+		if (!M) continue;
+		M->SetScalarParameterValue(TEXT("FogOn"), Index == 0 && Post.bFog ? 1.f : 0.f);
+		M->SetVectorParameterValue(TEXT("FogColor"), Linear(Post.FogColor));
+		M->SetScalarParameterValue(TEXT("AOOn"), Index == 0 && Post.bAmbientOcclusion && !bAoOff ? 1.f : 0.f);
+		// AmplifyOcclusionBase writes _AO_Levels with Shader.SetGlobalColor, which
+		// forwards directly to SetGlobalVectorImpl. Its RGB is already shader input.
+		M->SetVectorParameterValue(TEXT("AOTint"), Post.AmbientOcclusionTint);
+		M->SetScalarParameterValue(TEXT("AORadius"), FMath::Max(Post.AmbientOcclusionRadius, 0.001f));
+		M->SetScalarParameterValue(TEXT("ShaftsOn"), Index == 1 ? 1.f : 0.f);
+		// SunShafts.sunColor and sunThreshold reach the shader as vectors (SetVector): not linearised.
+		M->SetVectorParameterValue(TEXT("SunColor"), Post.SunShaftColor);
+		M->SetVectorParameterValue(TEXT("SunThreshold"), Post.SunShaftThreshold);
+		Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, M));
+	}
 }
