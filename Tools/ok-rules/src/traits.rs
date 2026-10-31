@@ -20,6 +20,9 @@ pub struct Traits {
     pub difficulty: i32,
     /// traits.yandere (病嬌), or the card's own personality 病嬌 (profile personality 24).
     pub yandere: bool,
+    /// traits.libido (her own sex drive, fixed): how fast her desire for him (relation sex_desire) grows. A profile
+    /// made before it had one gets a fixed value from her name (20..80), the same every time.
+    pub libido: i32,
 }
 
 impl Default for Traits {
@@ -39,6 +42,7 @@ impl Default for Traits {
             money_resistance: 50,
             difficulty: 0,
             yandere: false,
+            libido: 50,
         }
     }
 }
@@ -53,6 +57,12 @@ impl Traits {
         let mut t = Traits::default();
         // Koikatsu's personality 24 is 病嬌 (the card's own, when the request carries it).
         t.yandere = profile.get("personality").and_then(Value::as_i64) == Some(24);
+        let name = profile_str(profile, "display_name");
+        if !name.is_empty() {
+            // FNV-1a of her name: stable across runs and builds.
+            let hash = name.bytes().fold(0x811c9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x01000193));
+            t.libido = 20 + (hash % 61) as i32;
+        }
         let Some(traits) = profile.get("traits").filter(|v| v.is_object()) else { return t };
         if traits.get("yandere").and_then(Value::as_bool).unwrap_or(false) { t.yandere = true; }
         let get = |name: &str, out: &mut i32| {
@@ -71,6 +81,7 @@ impl Traits {
         get("public_boldness", &mut t.public_boldness);
         get("charm_resistance", &mut t.charm_resistance);
         get("money_resistance", &mut t.money_resistance);
+        get("libido", &mut t.libido);
         if let Some(d) = traits.get("difficulty").and_then(Value::as_f64).filter(|v| v.is_finite()) {
             t.difficulty = d as i32;
         }
@@ -88,6 +99,16 @@ pub fn profile_str<'a>(profile: &'a Value, name: &str) -> &'a str {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn libido_is_hers_and_fixed() {
+        let a = super::Traits::from_profile(&serde_json::json!({"display_name": "惠惠"}));
+        let b = super::Traits::from_profile(&serde_json::json!({"display_name": "惠惠", "traits": {"shyness": 70}}));
+        assert_eq!(a.libido, b.libido, "the same girl, the same drive");
+        assert!((20..=80).contains(&a.libido));
+        let set = super::Traits::from_profile(&serde_json::json!({"display_name": "惠惠", "traits": {"libido": 95}}));
+        assert_eq!(set.libido, 95, "a profile's own value wins");
+    }
+
     use super::*;
     use serde_json::json;
 

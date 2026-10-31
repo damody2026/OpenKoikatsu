@@ -125,6 +125,10 @@ pub struct Traits {
     /// 病嬌: a lover who is told a date is off does not sulk, she comes to him (ok-rules social.rs call_cancel).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub yandere: bool,
+    /// Her own sex drive (0..100, fixed): how fast her desire for him grows (ok-rules traits.rs; a profile without
+    /// one gets a fixed value from her name there).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub libido: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -286,6 +290,7 @@ pub fn validate(mut p: Profile, id: &str, places: &[String]) -> Result<Profile, 
     ] {
         *v = pct(*v);
     }
+    t.libido = t.libido.map(pct);
     t.mask_axes.retain(|a| ["affection", "admiration", "jealousy"].contains(&a.as_str()));
     if t.tsundere > 0 && t.mask_axes.is_empty() {
         t.mask_axes = vec!["affection".into(), "admiration".into(), "jealousy".into()];
@@ -317,13 +322,13 @@ pub fn generation_prompt(card: &Value, places: &[String]) -> String {
         "tastes": {"likes": ["dk_pearl_milk"], "dislikes": [], "allergies": [], "diet": "none", "drink": {"sweetness": "半糖", "ice": "去冰", "toppings": []},
                    "spice": 1, "alcohol": "social", "gift_style": "cute", "lucky_numbers": [7], "favorite_teams": []},
         "traits": {"worship_proneness": 50, "jealousy_proneness": 50, "possessiveness": 50, "insecurity": 50, "competitiveness": 50, "self_esteem": 50,
-                   "tsundere": 0, "mask_axes": [], "shyness": 50, "public_boldness": 50, "charm_resistance": 50, "money_resistance": 50}
+                   "tsundere": 0, "mask_axes": [], "shyness": 50, "public_boldness": 50, "charm_resistance": 50, "money_resistance": 50, "libido": 50}
     });
     format!(
         "以下是一張角色卡的資料：\n{card}\n\n\
 遊戲背景：2010 年 9 月開始的台灣大學城開放世界，她是住在這裡的成年女性（18 歲以上）。\
 可用的地點 id：{places}。\n\
-請依卡片的性格為她寫一份完整的人物設定。數值 0–100，金額一律用人民幣（大家都用人民幣），符合 2010 年的物價（例如一杯珍奶約 10 元、一頓簡餐約 20–50 元、學生每月生活費約 1,000–2,000 元）。\
+請依卡片的性格為她寫一份完整的人物設定。數值 0–100（traits.libido 是她天生的性欲強弱，依卡片性格給，0 很淡、100 很強），金額一律用人民幣（大家都用人民幣），符合 2010 年的物價（例如一杯珍奶約 10 元、一頓簡餐約 20–50 元、學生每月生活費約 1,000–2,000 元）。\
 birthday 依她的年齡與性格自己決定（不要用 5 月 12 日）。\n她若是學生（occupation.primary 為 student），department 填她讀的科系 id（{depts}），否則留空字串；intelligence 是她的學業能力 0–100，依性格決定。money_needs 只在她真的有經濟困境時才填，沒有就給空陣列；secret 表示她不想讓別人知道。\
 tastes.likes 可以填飲料店或店家的品項 id（例如 dk_pearl_milk、cf_latte）或簡短的喜好描述。\
 所有內容（喜歡的偶像、歌、品牌、產品、App、興趣、背景經歷）只能用 2010 年 9 月以前就已經存在的東西，不要出現之後才有的產品、作品或事件。用繁體中文寫文字欄位。只輸出一個 JSON 物件，欄位與下面範本完全相同：\n{template}",

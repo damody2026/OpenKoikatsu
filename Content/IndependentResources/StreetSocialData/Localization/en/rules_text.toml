@@ -457,6 +457,7 @@ late_minutes = "He arrived {minutes, plural, one {# minute} other {# minutes}} l
 waited_while_he_talked = "When I got there he was talking with {other}; I waited {minutes} minutes"
 late_prefix = "Running late: "
 lonely_chat = "You feel a little lonely and want to talk to him"
+frustrated_seek = "Last time was not enough for you; you want him again and go looking for him"
 met_and_chatted = "Ran into {name} at {place} and chatted for a bit"
 no_show_blacklist = "You didn't go ({label}) and were blacklisted for 7 days."
 no_show_fired = "You didn't show up for your shift ({label}) and lost the job."

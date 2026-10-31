@@ -759,6 +759,11 @@ fn initiative(r: &Value) -> Result<Value, String> {
         if rel.social < 30.0 && rel.liking() > 30.0 {
             reasons.push((35.0 + (100.0 - rel.social) * 0.2, crate::tr::t("social.lonely_chat").into(), "seek_player"));
         }
+        // Left wanting (her desire for him unsatisfied, three or more climaxes' worth) after they have slept together
+        // (his lover, or lewd with him): she comes to him for it, more the more she wants.
+        if crate::hexp::climax_wanted(rel.sex_desire) >= 3 && (rel.stage == "lover" || rel.lewdness >= 30.0) && rel.resentment < 50.0 {
+            reasons.push((40.0 + rel.sex_desire * 0.35, crate::tr::t("social.frustrated_seek").into(), "seek_player"));
+        }
         for (score, why, intent) in reasons {
             if score * (0.8 + t.possessiveness as f32 / 500.0) > best.as_ref().map(|x| x.0).unwrap_or(0.0) {
                 confront = (confront_why.as_ref() == Some(&why)).then(|| {

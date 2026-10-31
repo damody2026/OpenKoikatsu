@@ -1459,6 +1459,9 @@ pub fn eval(data: Option<&TalkData>, kind: &str, r: &Value) -> Option<Result<Val
                     None => format!("offer:{}", answer.unwrap_or(-1)),
                 };
                 let (point, desire) = topic_points(&d.topics, answer, asked, &interests);
+                // An erotic topic stirs her as much as her own sex drive lets it (libido 50: as before; 100: half again).
+                let libido = crate::traits::Traits::from_profile(r.get("profile").unwrap_or(&Value::Null)).libido;
+                let desire = desire * (0.5 + libido as f32 / 100.0);
                 Ok(json!({"effect": e, "match": asked.map(|q| topic_match(&d.topics, answer, q)), "point": point, "sex_desire": desire}))
             }
             "topic_drop" => {

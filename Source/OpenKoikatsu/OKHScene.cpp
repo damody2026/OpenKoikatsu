@@ -94,6 +94,7 @@ void UOKHScenePanel::LoadAibuPoses(){
 }
 void UOKHScenePanel::SelectAibu(int32 Index){
     if(!Gallery||!AibuPoses.IsValidIndex(Index)||!Gallery->PreviewActor)return;
+    if(RefuseWhenEnough())return;
     PendingAibu=Index;Queue.Reset();Wanted.Reset();TouchArea=INDEX_NONE;BuildList();
     const int32 Generation=++AibuGeneration;const FAibuPose Pose=AibuPoses[Index];const FString Root=FOkSession::CommonPairRoot();
     TWeakObjectPtr<UOKHScenePanel> Weak(this);
@@ -241,6 +242,7 @@ void UOKHScenePanel::BuildList(){
 
 void UOKHScenePanel::SelectPose(int32 Index){
     if(!Gallery||!Poses.IsValidIndex(Index)||!Gallery->PairCombo)return;
+    if(RefuseWhenEnough())return;
     int32 Option=Gallery->PairVisibleIndices.Find(Poses[Index].Pair);
     if(Option==INDEX_NONE&&Gallery->PairCategoryCombo){Gallery->PairCategoryCombo->SetSelectedIndex(0);Option=Gallery->PairVisibleIndices.Find(Poses[Index].Pair);}
     if(Option==INDEX_NONE){Note(OKT(TEXT("ui.hscene.pose_missing")),false);return;}
@@ -280,7 +282,9 @@ void UOKHScenePanel::Finish(const TCHAR* Kind){
             else Chain({TEXT("IN_Start"),TEXT("IN_Loop"),Has(TEXT("IN_A"))?TEXT("IN_A"):TEXT("OUT_A")});
             if(Kind==2)AddSiru(1); // on her chest
             Note(OKT(Kind==1?TEXT("ui.hscene.event_service_inside"):Kind==2?TEXT("ui.hscene.event_service_chest"):TEXT("ui.hscene.event_service_hand")));}
-        else{Chain({TEXT("M_OUT_Start"),TEXT("M_OUT_Loop"),TEXT("OUT_A")});AddSiru(Poses.IsValidIndex(ActivePose)&&Poses[ActivePose].KindHoushi==1?0:1);Note(OKT(TEXT("ui.hscene.event_service_outside")));}
+        else{const bool Mouth=Poses.IsValidIndex(ActivePose)&&Poses[ActivePose].KindHoushi==1;Chain({TEXT("M_OUT_Start"),TEXT("M_OUT_Loop"),TEXT("OUT_A")});AddSiru(Mouth?0:1);
+            // Out of her mouth it lands on her face (she said "my mouth is full" to a plain "outside").
+            Note(OKT(Mouth?TEXT("ui.hscene.event_service_face"):TEXT("ui.hscene.event_service_outside")));}
         return;
     }
     const bool Org=K.StartsWith(TEXT("org")),Same=K.StartsWith(TEXT("same"));
@@ -380,6 +384,21 @@ void UOKHScenePanel::Click(int32 Kind){
     ActionsKey.Reset();
 }
 
+// Breast service is done bare: through her top and bra his penis went in and out of the cloth. Off with them, as she
+// would (only those two; a part already off stays as it is).
+void UOKHScenePanel::BareChest(){
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;if(!IsValid(Girl))return;
+    uint8* S=Gallery->ClothesStates;bool Changed=false;
+    for(const int32 C:{0,2})if(S[C]!=3){S[C]=3;Changed=true;}
+    if(!Changed)return;
+    Girl->SetClothingPartsHidden(S);Gallery->RefreshClothesStateLabels();Note(OKT(TEXT("ui.hscene.event_chest_bared")),false);
+}
+// Once she has had enough every action is gone; another pose or caress only stood them in it with nothing to press (a
+// dead end that did not say leaving is all that is left). The first pose of a scene is still chosen.
+bool UOKHScenePanel::RefuseWhenEnough(){
+    if(!HadEnough()||(ActivePose==INDEX_NONE&&ActiveAibu==INDEX_NONE))return false;
+    if(Hint)Hint->SetText(FText::FromString(OKT(TEXT("ui.hscene.enough_no_more_poses"))));return true;
+}
 bool UOKHScenePanel::HadEnough() const{
     const auto& X=Gallery?Gallery->HExperience:nullptr;
     const int32 Today=X.IsValid()&&X->HasField(TEXT("today_orgasms"))?int32(X->GetNumberField(TEXT("today_orgasms"))):0; // earlier scenes today
@@ -427,6 +446,8 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     Super::NativeTick(Geometry,Delta);
     if(!Gallery)return;
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
+    // She came in already spent today: nothing will be offered, say so at once rather than on the first click.
+    if(!bToldSpent&&(ActivePose!=INDEX_NONE||ActiveAibu!=INDEX_NONE)){bToldSpent=true;if(HadEnough()&&Hint)Hint->SetText(FText::FromString(OKT(TEXT("ui.hscene.enough_no_more_poses"))));}
     UpdateFace();UpdateBlush(Delta);FrameCamera();
     // The original writes the liquid every frame; her materials are remade when her clothes or pose parts change.
     if(Siru[0]+Siru[1]+Siru[2]+Siru[3]+Siru[4]>0&&(SiruRefresh-=Delta)<=0.f){SiruRefresh=.5f;ApplySiru();}
@@ -462,6 +483,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
         if(Found!=INDEX_NONE&&(Found!=ActivePose||PendingPose==Found)){
             ActivePose=Found;PendingPose=INDEX_NONE;Mode=Poses[Found].Mode;Queue.Reset();Wanted.Reset();bAnalPlay=false;bInsideFinished=false;bStrong=false;
             if(Has(TEXT("Idle")))Want(TEXT("Idle"));
+            if(Mode==1&&Poses[Found].KindHoushi==2)BareChest();
             Tab=Mode==2?TabSonyu:TabHand+Poses[Found].KindHoushi;BuildList();if(Hint)Hint->SetText(FText::FromString(Mode==1&&bServiceRefused?OKT(TEXT("ui.hscene.again_refused")):Poses[Found].Name)); // the new pose (or why she will not start it), not the last one's event
         }
     }
@@ -676,6 +698,15 @@ int32 UOKHScenePanel::SiruSide() const{
     return ((Nose-Head)|(HisHips-HerHips))>=0.?0:1;
 }
 // A bone of theirs in the world (the male skeleton may name its bones like hers).
+static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out);
+void UOKHScenePanel::LookAtFace(float Distance){
+    // Where her nose points from her head: the camera that way, at her face's height and tilt (down at him, up at the ceiling).
+    auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;FVector Head,Nose;
+    if(!IsValid(Girl)||!Girl->StudioCam||!HBone(Girl,TEXT("j_head"),Head)||!HBone(Girl,TEXT("J_Nose_tip"),Nose))return;
+    FVector Dir=(Nose-Head).GetSafeNormal();if(Dir.IsNearlyZero())return;
+    Girl->OrbitFocus=Nose;Girl->OrbitYaw=FMath::RadiansToDegrees(FMath::Atan2(Dir.X,Dir.Y));Girl->OrbitPitch=FMath::Clamp(FMath::RadiansToDegrees(FMath::Asin(Dir.Z)),-70.f,70.f);
+    Girl->OrbitDistance=FMath::Clamp(Distance,15.f,650.f);Girl->ApplyOrbitCamera();
+}
 static bool HBone(AKKPreviewActor* A,const TCHAR* Name,FVector& Out){
     if(!IsValid(A)||!A->BodySkel)return false;
     for(const TCHAR* P:{TEXT("cf_"),TEXT("cm_")}){const FName N(FString(P)+Name);if(A->BodySkel->GetBoneIndex(N)!=INDEX_NONE){Out=A->BodySkel->GetBoneLocation(N);return true;}}
@@ -995,7 +1026,9 @@ FString UOKHScenePanel::Context() const{
     // How many more she can take today (HadEnough's numbers): her words about having had enough follow the same limit.
     const auto& X=Gallery?Gallery->HExperience:nullptr;
     const int32 Left=FMath::Max(0,FMath::Max(1,X.IsValid()&&X->HasField(TEXT("climax_limit"))?int32(X->GetNumberField(TEXT("climax_limit"))):4)-(X.IsValid()&&X->HasField(TEXT("today_orgasms"))?int32(X->GetNumberField(TEXT("today_orgasms"))):0)-HerOrgasms);
-    return OKMsg(TEXT("ui.hscene.talk_context"),{{TEXT("left"),Left},{TEXT("bare"),Bare.IsEmpty()?OKT(TEXT("ui.hscene.bare_none")):FString::Join(Bare,TEXT("、"))},{TEXT("pose"),PoseName},{TEXT("state"),StateWords(Base)},{TEXT("speed"),FString::Printf(TEXT("%.1f"),Mode==0||HIsLoop(Base)?PlaybackSpeed():0.f)},
+    // How many more times her desire for him wants (ok-rules hexp climax_wanted): a keen girl says she wants more.
+    const int32 Want=FMath::Max(0,(X.IsValid()&&X->HasField(TEXT("climax_wanted"))?int32(X->GetNumberField(TEXT("climax_wanted"))):0)-(X.IsValid()&&X->HasField(TEXT("today_orgasms"))?int32(X->GetNumberField(TEXT("today_orgasms"))):0)-HerOrgasms);
+    return OKMsg(TEXT("ui.hscene.talk_context"),{{TEXT("left"),Left},{TEXT("want"),FMath::Min(Want,Left)},{TEXT("bare"),Bare.IsEmpty()?OKT(TEXT("ui.hscene.bare_none")):FString::Join(Bare,TEXT("、"))},{TEXT("pose"),PoseName},{TEXT("state"),StateWords(Base)},{TEXT("speed"),FString::Printf(TEXT("%.1f"),Mode==0||HIsLoop(Base)?PlaybackSpeed():0.f)},
         {TEXT("her"),FMath::RoundToInt(Her)},{TEXT("his"),FMath::RoundToInt(His)},{TEXT("orgasms"),HerOrgasms},{TEXT("finishes"),HisFinishes},{TEXT("condom"),Mode==2&&(bCrotch||bAnal)?(bCondom?TEXT("yes"):TEXT("no")):TEXT("none")}});
 }
 void UOKHScenePanel::OnInputCommitted(const FText& Text,ETextCommit::Type Commit){

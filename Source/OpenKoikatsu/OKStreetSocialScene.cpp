@@ -2135,6 +2135,7 @@ void AOKStreetSocialScene::UseCollectedTopic(int32 No){
  // What the answer is worth and how well it matches are rules (talk.rs topic_effect).
  auto Worth=OKRulesRequest(TEXT("topic_effect"));if(Answer)Worth->SetNumberField(TEXT("answer"),Answer->No);if(Asked)Worth->SetNumberField(TEXT("asked"),Asked->No);
  {TArray<TSharedPtr<FJsonValue>> Interests;for(const int32 C:S.Manifest.Characters[S.Target].InterestCategories)Interests.Add(MakeShared<FJsonValueNumber>(C));Worth->SetArrayField(TEXT("interests"),Interests);}
+ if(const auto P=ProfileOf(S.Target))Worth->SetObjectField(TEXT("profile"),P.ToSharedRef()); // her libido scales an erotic topic's desire
  const TSharedPtr<FJsonObject> Worthy=OKRulesEval(S,Worth);if(!Worthy)return;
  if(Asked){const FOKStreetTopicListen* Listen=nullptr;for(const auto& L:Profile->Listen)if(L.Topic==Asked->No)Listen=&L;if(!Listen)return;const int32 Match=int32(Worthy->GetNumberField(TEXT("match")));const auto& Choices=Match==0?Listen->Success:Match==1?Listen->Normal:Listen->Failure;if(Choices.IsEmpty())return;Sequence.Add(Choices[S.Random.RandRange(0,Choices.Num()-1)]);}
  else{if(!Answer)return;if(Answer->Rarity>=2&&Relation.Topics.Contains(OKStreetTopicToken(No))){S.Message=OKT(TEXT("ui.scene.rare_topic_used"));RefreshUI();return;}const auto* Choices=Profile->Offers.Find(No);if(!Choices||Choices->IsEmpty())return;Sequence=(*Choices)[S.Random.RandRange(0,Choices->Num()-1)];S.AskedTopic=INDEX_NONE;}

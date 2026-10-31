@@ -88,6 +88,11 @@ fn level_name(level: i32) -> &'static str {
     }
 }
 
+/// How many times she wants to come for her desire for him: one per ten points (100 wants ten, 50 five).
+pub fn climax_wanted(sex_desire: f32) -> i32 {
+    (sex_desire.clamp(0.0, 100.0) / 10.0).round() as i32
+}
+
 fn area_name(i: usize) -> &'static str {
     match i {
         KISS => crate::tr::t("hexp.area_kiss"),
@@ -125,7 +130,10 @@ fn experience(r: &Value) -> Result<Value, String> {
     let service_rounds = if resentment >= 50.0 { 1 } else { (1 + level + (1.5 * easy).round() as i32 + i32::from(lover)).clamp(1, 6) };
     // How many times she comes in one scene before she has had enough and wants it to stop (no more touching, moving,
     // entering her): the same things move it, a lover lasts longer.
-    let climax_limit = if resentment >= 50.0 { 1 } else { (2 + level + (1.5 * easy).round() as i32 + 2 * i32::from(lover)).clamp(2, 10) };
+    // Her desire for him (sex_desire, 0..100) is how many times she wants to come: 100 wants ten, 50 five. She does
+    // not have enough before that (a lewd girl left wanting stays frustrated and comes looking for him, `initiative`).
+    let wanted = climax_wanted(rel.as_ref().map_or(0.0, |r| r.sex_desire));
+    let climax_limit = if resentment >= 50.0 { 1 } else { (2 + level + (1.5 * easy).round() as i32 + 2 * i32::from(lover)).max(wanted).clamp(2, 10) };
     // Today so far (the request's game day): she starts this scene where the last one today left her.
     let day = r.get("day").and_then(Value::as_i64).unwrap_or(-1);
     let today = day >= 0 && h.today_day == day;
@@ -137,6 +145,7 @@ fn experience(r: &Value) -> Result<Value, String> {
         "anal_chance": anal_chance,
         "service_rounds": service_rounds,
         "climax_limit": climax_limit,
+        "climax_wanted": wanted,
         // She resents him (resentment 50 or more): no anal whatever her experience (the scene asks nothing more of her).
         "resentful": resentment >= 50.0,
         "today_orgasms": today_orgasms,
@@ -224,6 +233,8 @@ fn session_end(r: &Value) -> Result<Value, String> {
         if climaxes > 0.0 {
             rel.add_liking(1.5 * climaxes);
         }
+        // Each climax satisfies ten points of her desire for him; what is left she still wants (frustrated).
+        rel.sex_desire = (rel.sex_desire - 10.0 * climaxes).max(0.0);
         // He asked again for no condom and she gave in: how she takes it is her chastity and her character (a proud
         // girl minds, one who worships him or is already lewd less so).
         if flag(&c, "raw_pressed") {
@@ -359,6 +370,25 @@ mod tests {
         assert_eq!(c["resentful"], true);
         assert_eq!(c["climax_limit"], 1);
         assert_eq!(b["resentful"], false);
+    }
+
+    #[test]
+    fn her_desire_is_how_many_times_she_wants_to_come() {
+        let mut keen: Relation = serde_json::from_value(rel(0.0)).unwrap();
+        keen.sex_desire = 100.0;
+        let mut half = keen.clone();
+        half.sex_desire = 50.0;
+        let ext = json!({"hexp": {"g": {"count": 1, "virgin": false}}});
+        let a = experience(&json!({"girl": "g", "relation": keen, "ext": ext})).unwrap();
+        let b = experience(&json!({"girl": "g", "relation": half, "ext": ext})).unwrap();
+        assert_eq!(a["climax_wanted"], 10);
+        assert_eq!(a["climax_limit"], 10);
+        assert_eq!(b["climax_wanted"], 5);
+        assert!(b["climax_limit"].as_i64().unwrap() >= 5);
+        // Three climaxes satisfy thirty points: twenty are left (two more she wants).
+        let out = session_end(&json!({"girl": "g", "relation": half, "ext": {}, "counts": {"played": true, "her_orgasms": 3}})).unwrap();
+        let desire = out["effects"].as_array().unwrap().iter().find(|e| e["op"] == "relation").map(|e| e["set"]["sex_desire"].as_f64().unwrap_or(-1.0)).unwrap_or(-1.0);
+        assert!((desire - 20.0).abs() < 0.01, "desire left {desire}");
     }
 
     #[test]

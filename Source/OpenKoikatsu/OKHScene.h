@@ -137,6 +137,8 @@ private:
     TArray<FString> LiquidReport() const;float SiruRefresh=0.f;
     TWeakObjectPtr<class AKKPreviewActor> BlushFor;float Blush=-1.f,BlushShown=-1.f;bool bBlushLogged=false;
 public:
+    bool RefuseWhenEnough();void BareChest();bool bToldSpent=false;
+    void LookAtFace(float Distance); // /hscene {"face_cam":cm}: the camera in front of her face, to see what is on it
     void SetSiruTest(const int32 (&Levels)[5]); // /hscene {"siru":[...]}: set her liquid levels directly
     float BlushTest=-1.f; // /hscene {"blush":v}: hold her blush at v (0..1) to compare shots; -1 follows her
 private:

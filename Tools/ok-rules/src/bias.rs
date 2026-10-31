@@ -62,6 +62,10 @@ pub fn decay_daily(r: &mut Relation, t: &Traits) {
     r.resentment *= 0.92;
     r.mystique *= 0.97;
     r.admiration *= 0.97 + 0.03 * t.worship as f32 / 100.0;
+    // Her desire for him grows by itself each day, as fast as her own sex drive (libido 100: 15 a day); a girl who
+    // does not care for him yet feels a third of it.
+    let warm = r.stage == "lover" || r.attraction >= 30.0;
+    r.sex_desire = (r.sex_desire + t.libido as f32 * 0.15 * if warm { 1.0 } else { 0.3 }).min(100.0);
 }
 
 /// 0 ordinary .. 5 deeply dependent. Feats are quotable wins she remembers.
@@ -282,6 +286,18 @@ mod tests {
         decay_daily(&mut r, &Traits { jealousy_prone: 100, worship: 0, ..Default::default() });
         assert!((r.jealousy - 95.0).abs() < 1e-4 && (r.jealousy_toward["b"] - 76.0).abs() < 1e-4);
         assert!((r.resentment - 46.0).abs() < 1e-4 && (r.mystique - 97.0).abs() < 1e-4 && (r.admiration - 97.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn her_desire_grows_daily_with_her_libido() {
+        let mut keen = Relation { attraction: 50.0, ..rel() };
+        let mut cool = keen.clone();
+        decay_daily(&mut keen, &Traits { libido: 100, ..Default::default() });
+        decay_daily(&mut cool, &Traits { libido: 20, ..Default::default() });
+        assert!((keen.sex_desire - 15.0).abs() < 1e-4 && (cool.sex_desire - 3.0).abs() < 1e-4, "{} {}", keen.sex_desire, cool.sex_desire);
+        let mut stranger = Relation { attraction: 0.0, ..rel() };
+        decay_daily(&mut stranger, &Traits { libido: 100, ..Default::default() });
+        assert!((stranger.sex_desire - 4.5).abs() < 1e-4, "not warm to him: a third");
     }
 
     #[test]
