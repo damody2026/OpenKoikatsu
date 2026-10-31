@@ -636,7 +636,10 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  if(GiveHer.Num()){S.PendingGift=GiveHer[0];UE_LOG(LogTemp,Display,TEXT("Street checkout: %s bought for her, given next"),*GiveHer[0]);}
  // Her treat promise this bill keeps: only one she had made (read before it is cleared just below).
  const bool PromiseKept=WithHer&&Answer->GetBoolField(TEXT("treat_kept"))&&S.HerTreatPromise.Contains(Her);
- if(WithHer&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
+ // Kept only by a bill with something of his on it: her own noodles, billed first, used up "this meal is on me" and his
+ // chicken rice a minute later was his to pay (R6-39).
+ const bool HisOnBill=S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return !L.ForHer&&L.Girl==INDEX_NONE;});
+ if(WithHer&&HisOnBill&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;
  // Only food and drink are served: a book or a plush bought is in hand at once, no "on the table in 30 s" (R6-37: the
  // picture book at the bookstore came with "the dish is served in about 30 s" in her note).
