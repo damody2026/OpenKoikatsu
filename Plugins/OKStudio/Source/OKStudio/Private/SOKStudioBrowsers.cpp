@@ -810,7 +810,9 @@ void SOKStudioPanel::SceneSettingsPage()
 			FString FOKScenePost::* Field = Kind == 0 ? &FOKScenePost::Background : &FOKScenePost::Frame;
 			Label(Kind == 0 ? TEXT("背景圖一覽") : TEXT("前景框一覽"));
 			TArray<TPair<FString, FString>> Pictures; // shown file, value stored in the scene
-			for (const FString& Root : { AOKSceneActor::LibraryDirectory() / TEXT("studio") / Folder, FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio")) / Folder })
+			TArray<FString> PictureRoots = { AOKSceneActor::LibraryDirectory() / TEXT("studio") / Folder, FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio")) / Folder };
+			for (const FString& R : Kind == 0 ? FOKStudioSettings::Get().BgRoots : FOKStudioSettings::Get().FrameRoots) PictureRoots.AddUnique(R);
+			for (const FString& Root : PictureRoots)
 			{
 				TArray<FString> Names;
 				IFileManager::Get().FindFiles(Names, *(Root / TEXT("*.png")), true, false);

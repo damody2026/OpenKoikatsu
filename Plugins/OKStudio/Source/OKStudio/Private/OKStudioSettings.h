@@ -28,6 +28,9 @@ struct FOKStudioSettings
 	int32 BackupKeep = 10;
 	/** Card folders the card browser lists besides Content/CharacterCards and the game's UserData/chara. */
 	TArray<FString> CardRoots;
+	/** More folders for the outside sound list (besides UserData/audio), the pose library (besides UserData/Studio/pose)
+	 *  and the background / frame pictures (besides the base library's and UserData/Studio/bg, frame). */
+	TArray<FString> AudioRoots, PoseRoots, BgRoots, FrameRoots;
 	/** The cards 加入預設角色 adds (HS2Studio6 添加默认角色): [0] male, [1] female (KK sex); empty: the first such card
 	 *  under Content/CharacterCards/Demo. */
 	FString DefaultCards[2];

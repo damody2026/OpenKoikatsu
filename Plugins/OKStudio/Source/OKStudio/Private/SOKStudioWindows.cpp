@@ -912,12 +912,15 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 	auto Sound = [this]() -> FOKSceneSound* { return Game.IsValid() && Game->Document ? &Game->Document->Sound : nullptr; };
 	const FString Folder = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/audio"));
 	TArray<FString> Files;
-	for (const TCHAR* Ext : { TEXT("*.ogg"), TEXT("*.wav") })
-	{
-		TArray<FString> Found;
-		IFileManager::Get().FindFiles(Found, *(Folder / Ext), true, false);
-		for (const FString& F : Found) Files.Add(Folder / F);
-	}
+	TArray<FString> Folders = { Folder };
+	for (const FString& R : FOKStudioSettings::Get().AudioRoots) Folders.AddUnique(R);
+	for (const FString& Dir : Folders)
+		for (const TCHAR* Ext : { TEXT("*.ogg"), TEXT("*.wav") })
+		{
+			TArray<FString> Found;
+			IFileManager::Get().FindFiles(Found, *(Dir / Ext), true, false);
+			for (const FString& F : Found) Files.AddUnique(Dir / F);
+		}
 	// A scene's own file (an imported scene's copy beside its cards) is listed too.
 	if (const FOKSceneSound* S = Sound(); S && !S->Outside.IsEmpty() && Game.IsValid() && !Game->OutsideSoundFile().IsEmpty()) Files.AddUnique(Game->OutsideSoundFile());
 	Files.Sort();
@@ -1959,25 +1962,34 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 		break;
 	case 3:
 	{
-		Body->AddSlot().AutoHeight()[OKStudioStyle::Label(FText::FromString(TEXT("角色卡瀏覽器的資料夾（Content/CharacterCards 與遊戲的 UserData/chara 一定會列）")), 10.f, TextSoft())];
-		for (int32 I = 0; I < S.CardRoots.Num(); ++I)
-			Body->AddSlot().AutoHeight().Padding(0.f, 1.f)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(S.CardRoots[I]), 10.f)]
-				+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("移除")), [this, I] { FOKStudioSettings& X = FOKStudioSettings::Get(); if (X.CardRoots.IsValidIndex(I)) X.CardRoots.RemoveAt(I); X.Save(); DeferFloat(TEXT("settings")); }, 40.f, 18.f)]
-			];
-		Body->AddSlot().AutoHeight().Padding(0.f, 4.f)
-			[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("輸入資料夾路徑後按 Enter 加入")))
-				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type C)
-				{
-					const FString Dir = T.ToString().TrimStartAndEnd().TrimQuotes();
-					if (C != ETextCommit::OnEnter || Dir.IsEmpty()) return;
-					if (!FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
-					FOKStudioSettings::Get().CardRoots.AddUnique(Dir);
-					FOKStudioSettings::Get().Save();
-					DeferFloat(TEXT("settings"));
-				})]];
+		// One list per kind of resource (HS2Studio6 资源目录): the folders the browser lists besides its fixed ones.
+		auto Roots = [this, &Body, &S](const TCHAR* Title, TArray<FString> FOKStudioSettings::* List)
+		{
+			Body->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[OKStudioStyle::Label(FText::FromString(Title), 10.f, TextSoft())];
+			for (int32 I = 0; I < (S.*List).Num(); ++I)
+				Body->AddSlot().AutoHeight().Padding(0.f, 1.f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString((S.*List)[I]), 10.f)]
+					+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("移除")), [this, I, List] { FOKStudioSettings& X = FOKStudioSettings::Get(); if ((X.*List).IsValidIndex(I)) (X.*List).RemoveAt(I); X.Save(); DeferFloat(TEXT("settings")); }, 40.f, 18.f)]
+				];
+			Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+				[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("輸入資料夾路徑後按 Enter 加入")))
+					.OnTextCommitted_Lambda([this, List](const FText& T, ETextCommit::Type C)
+					{
+						const FString Dir = T.ToString().TrimStartAndEnd().TrimQuotes();
+						if (C != ETextCommit::OnEnter || Dir.IsEmpty()) return;
+						if (!FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
+						(FOKStudioSettings::Get().*List).AddUnique(Dir);
+						FOKStudioSettings::Get().Save();
+						DeferFloat(TEXT("settings"));
+					})]];
+		};
+		Roots(TEXT("角色卡瀏覽器（Content/CharacterCards 與遊戲的 UserData/chara 一定會列）"), &FOKStudioSettings::CardRoots);
+		Roots(TEXT("外部音源 .ogg／.wav（UserData/audio 一定會列）"), &FOKStudioSettings::AudioRoots);
+		Roots(TEXT("姿勢庫 .dat（UserData/Studio/pose 一定會列；存姿勢仍存到那裡）"), &FOKStudioSettings::PoseRoots);
+		Roots(TEXT("背景圖 .png（基礎庫與 UserData/Studio/bg 一定會列）"), &FOKStudioSettings::BgRoots);
+		Roots(TEXT("前景框 .png（基礎庫與 UserData/Studio/frame 一定會列）"), &FOKStudioSettings::FrameRoots);
 		break;
 	}
 	case 4:

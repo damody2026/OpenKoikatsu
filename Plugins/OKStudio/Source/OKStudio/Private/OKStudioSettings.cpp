@@ -170,6 +170,10 @@ void FOKStudioSettings::Load()
 		if (J->TryGetNumberField(TEXT("backup_minutes"), D)) BackupMinutes = int32(D);
 		if (J->TryGetNumberField(TEXT("backup_keep"), D)) BackupKeep = FMath::Max(1, int32(D));
 		J->TryGetStringArrayField(TEXT("card_roots"), CardRoots);
+		J->TryGetStringArrayField(TEXT("audio_roots"), AudioRoots);
+		J->TryGetStringArrayField(TEXT("pose_roots"), PoseRoots);
+		J->TryGetStringArrayField(TEXT("bg_roots"), BgRoots);
+		J->TryGetStringArrayField(TEXT("frame_roots"), FrameRoots);
 		J->TryGetStringField(TEXT("default_card_male"), DefaultCards[0]);
 		J->TryGetStringField(TEXT("default_card_female"), DefaultCards[1]);
 		const TSharedPtr<FJsonObject>* B = nullptr;
@@ -198,9 +202,17 @@ void FOKStudioSettings::Save() const
 	J->SetNumberField(TEXT("ui_scale"), UiScale);
 	J->SetNumberField(TEXT("master_volume"), MasterVolume); J->SetBoolField(TEXT("run_in_background"), bRunInBackground);
 	J->SetNumberField(TEXT("vsync"), VSync); J->SetNumberField(TEXT("max_fps"), MaxFps);
-	TArray<TSharedPtr<FJsonValue>> Roots;
-	for (const FString& R : CardRoots) Roots.Add(MakeShared<FJsonValueString>(R));
-	J->SetArrayField(TEXT("card_roots"), Roots);
+	auto Paths = [&J](const TCHAR* Key, const TArray<FString>& List)
+	{
+		TArray<TSharedPtr<FJsonValue>> Roots;
+		for (const FString& R : List) Roots.Add(MakeShared<FJsonValueString>(R));
+		J->SetArrayField(Key, Roots);
+	};
+	Paths(TEXT("card_roots"), CardRoots);
+	Paths(TEXT("audio_roots"), AudioRoots);
+	Paths(TEXT("pose_roots"), PoseRoots);
+	Paths(TEXT("bg_roots"), BgRoots);
+	Paths(TEXT("frame_roots"), FrameRoots);
 	J->SetStringField(TEXT("default_card_male"), DefaultCards[0]);
 	J->SetStringField(TEXT("default_card_female"), DefaultCards[1]);
 	TSharedRef<FJsonObject> B = MakeShared<FJsonObject>();
