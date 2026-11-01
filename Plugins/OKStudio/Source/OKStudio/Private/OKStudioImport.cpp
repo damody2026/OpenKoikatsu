@@ -607,6 +607,7 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
     Document->Duration = 10.f;
     Document->SoundFile.Reset();
     Document->SoundDelay = 0.f;
+    Document->Sound = FOKSceneSound();
     Document->ItemAnimationSeconds=0.f;
 	Document->NextId = 1;
 	Document->ActiveCamera = -1;
@@ -726,6 +727,32 @@ bool FOKStudioImport::Import(const FString& ScenePng, UOKSceneDocument* Document
 		};
 		Document->Post.Background = Picture(TEXT("background"), TEXT("bg"));
 		Document->Post.Frame = Picture(TEXT("frame"), TEXT("frame"));
+		// The sound menu (BGMCtrl, OutsideSoundCtrl): the BGM by its list no; the outside sound is a file of the game's
+		// UserData/audio, copied beside the cards like a user's picture.
+		{
+			FOKSceneSound& S = Document->Sound;
+			S.Bgm = E.HasField(TEXT("bgm_no")) ? int32(E.GetNumberField(TEXT("bgm_no"))) : 0;
+			S.bBgmRepeat = !E.HasField(TEXT("bgm_repeat")) || int32(E.GetNumberField(TEXT("bgm_repeat"))) != 0;
+			E.TryGetBoolField(TEXT("bgm_play"), S.bBgmPlay);
+			S.bOutsideRepeat = !E.HasField(TEXT("outside_repeat")) || int32(E.GetNumberField(TEXT("outside_repeat"))) != 0;
+			E.TryGetBoolField(TEXT("outside_play"), S.bOutsidePlay);
+			if (S.bBgmPlay && FOKStudioCatalog::Get().BgmSound(S.Bgm).IsEmpty())
+				Report.Notes.Add(FString::Printf(TEXT("BGM %d is not in the base library (ok-extract --oklib studio-sounds)"), S.Bgm));
+			FString Name;
+			if (E.TryGetStringField(TEXT("outside_file"), Name) && !Name.IsEmpty())
+			{
+				const FString FileName = FPaths::GetCleanFilename(Name);
+				const FString Normal = FPaths::ConvertRelativePathToFull(ScenePng).Replace(TEXT("\\"), TEXT("/"));
+				const int32 UserData = Normal.Find(TEXT("/UserData/"), ESearchCase::IgnoreCase);
+				TArray<FString> Candidates;
+				if (UserData >= 0) Candidates.Add(Normal.Left(UserData) / TEXT("UserData/audio") / FileName);
+				Candidates.Add(FPaths::GetPath(Normal) / FileName);
+				const FString* Source = Candidates.FindByPredicate([](const FString& C) { return FPaths::FileExists(C); });
+				const FString Copy = CardDirectory / FileName;
+				if (Source && (IFileManager::Get().Copy(*Copy, **Source) == COPY_OK || FPaths::FileExists(Copy))) S.Outside = Copy;
+				else Report.Notes.Add(FString::Printf(TEXT("outside sound %s is neither in the game's UserData/audio nor beside the scene"), *FileName));
+			}
+		}
 		// StudioScene initializes the colour-clearing main camera from EstData.BackColor.
 		// Its depth-only child camera's blue colour never clears the scene.
 		bool bSky = false;

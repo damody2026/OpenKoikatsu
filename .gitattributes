@@ -8,4 +8,5 @@ Content/IndependentResources/base_v1/paired/cache/pack.bin filter=lfs diff=lfs m
 Content/IndependentResources/base_v1/paired/okpaired.json filter=lfs diff=lfs merge=lfs -text
 Content/IndependentResources/base_v1/studio/**/*.png filter=lfs diff=lfs merge=lfs -text
 Content/IndependentResources/base_v1/studio/**/*.okcube filter=lfs diff=lfs merge=lfs -text
+Content/IndependentResources/base_v1/studio/**/*.ogg filter=lfs diff=lfs merge=lfs -text
 Content/IndependentResources/RuntimeAnimations/library/*.okanim filter=lfs diff=lfs merge=lfs -text

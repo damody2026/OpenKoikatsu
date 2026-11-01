@@ -348,7 +348,7 @@ public:
 			{
 				Game->ReleaseSceneResources();
 				Game->Document->Objects.Reset(); Game->Document->Tracks.Reset(); Game->Document->Bookmarks.Reset(); Game->Document->NextId = 1; Game->Document->ActiveCamera = -1;
-				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->File.Reset();
+				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->Document->Sound = FOKSceneSound(); Game->File.Reset();
 				// The timeline starts over too (the playhead stayed where the last scene was paused).
 				Game->Document->Duration = 10.f; Game->bTimelinePlaying = false; Game->TimelineTime = Game->Document->Playhead = 0.f; Game->LoopStart = Game->LoopEnd = 0.f;
 				SaveAsName = FDateTime::Now().ToString(TEXT("scene_%Y%m%d_%H%M%S")); // not the last scene's name to overwrite
@@ -371,6 +371,8 @@ public:
 		Float_(TEXT("scene.recent"), TEXT("最近的場景"), TEXT("recent"));
 		Float_(TEXT("app.material"), TEXT("材質編輯器"), TEXT("material"));
 		Float_(TEXT("app.animcontrol"), TEXT("動畫控制器"), TEXT("animctl"));
+		Float_(TEXT("app.bgm"), TEXT("背景音樂"), TEXT("bgm"));
+		Float_(TEXT("app.outsidesound"), TEXT("外部音源"), TEXT("outside"));
 		AddCommand(TEXT("anim.partner"), TEXT("配給對方"), [this](const FString&) { return PairAnim(); });
 		Simple(TEXT("anim.locate"), TEXT("動作定位當前"), [this] { LocateAnim(); });
 		Simple(TEXT("view.grid"), TEXT("視窗格線"), [this] { Game->bShowGrid = !Game->bShowGrid; });
@@ -759,7 +761,7 @@ public:
 			{ TEXT("快搜"), TEXT("app.quicksearch"), Win(TEXT("quick")) } };
 		case 1: return { { TEXT("狀態"), TEXT("page.state"), On(EPage::State), bChar }, { TEXT("骨骼"), TEXT("page.bones"), On(EPage::Bones), bChar }, { TEXT("動畫"), TEXT("page.anim"), On(EPage::Anim), bChar },
 			{ TEXT("屬性"), TEXT("page.object"), On(EPage::Object), O != nullptr }, { TEXT("姿勢庫"), TEXT("app.poselibrary"), Win(TEXT("poselib")), bChar }, { TEXT("MMD 導演"), TEXT("toggle.mmd"), Win(TEXT("mmd")) } };
-		case 2: return { { TEXT("背景音樂（未支援）"), FString(), nullptr, false } };
+		case 2: return { { TEXT("背景音樂"), TEXT("app.bgm"), Win(TEXT("bgm")) }, { TEXT("外部音源"), TEXT("app.outsidesound"), Win(TEXT("outside")) } };
 		case 3: return { { TEXT("新場景"), TEXT("scene.new"), nullptr }, { TEXT("開啟／儲存"), TEXT("scene.browser"), Win(TEXT("scenes")) }, { TEXT("另存新檔"), TEXT("scene.saveas"), nullptr },
 			{ TEXT("畫面設定"), TEXT("page.scene"), On(EPage::Scene) }, { TEXT("時間軸"), TEXT("toggle.timeline"), Win(TEXT("timeline")) }, { TEXT("MMD 導演"), TEXT("toggle.mmd"), Win(TEXT("mmd")) },
 			{ TEXT("截圖"), TEXT("app.screenshot"), Win(TEXT("shot")) },
@@ -1383,6 +1385,9 @@ public:
 	bool RenameScene(const FString& Path, const FString& NewName);
 	TSharedRef<SWidget> BuildBackups();
 	TSharedRef<SWidget> BuildRecent();
+	/** The sound menu (U29): the Studio BGM list and an outside sound file, each with play / stop and repeat. */
+	TSharedRef<SWidget> BuildBgm();
+	TSharedRef<SWidget> BuildOutsideSound();
 	TSharedRef<SWidget> BuildReport();
 	TSharedRef<SWidget> BuildResources();
 	TSharedRef<SWidget> BuildStories();

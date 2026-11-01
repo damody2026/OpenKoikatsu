@@ -91,6 +91,8 @@ void SOKStudioPanel::RegisterFloats()
 	AddFloat(TEXT("stories"), TEXT("播放故事"), FMargin(300.f, 60.f, 420.f, 360.f), [this] { return BuildStories(); });
 	AddFloat(TEXT("material"), TEXT("材質編輯器"), FMargin(300.f, 60.f, 640.f, 420.f), [this] { return BuildMaterialEditor(); });
 	AddFloat(TEXT("animctl"), TEXT("動畫控制器"), FMargin(470.f, 400.f, 300.f, 150.f), [this] { return BuildAnimController(); });
+	AddFloat(TEXT("bgm"), TEXT("背景音樂"), FMargin(142.f, 36.f, 280.f, 420.f), [this] { return BuildBgm(); });
+	AddFloat(TEXT("outside"), TEXT("外部音源"), FMargin(142.f, 36.f, 320.f, 360.f), [this] { return BuildOutsideSound(); });
 	AddFloat(TEXT("help"), TEXT("說明"), FMargin(640.f, 120.f, 300.f, 140.f), [this]
 	{
 		return SNew(SVerticalBox)
@@ -796,6 +798,103 @@ TSharedRef<SWidget> SOKStudioPanel::BuildRecent()
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)[OKStudioStyle::Label(FText::FromString(Stats), 10.f)]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[Box]]];
+}
+
+TSharedRef<SWidget> SOKStudioPanel::BuildBgm()
+{
+	// Studio's BGM window: pick a piece of the BGM list (the base library's converted clips), then play / stop; it
+	// plays apart from the timeline and is saved with the scene (FOKSceneSound).
+	using namespace OKStudioStyle;
+	const FOKStudioCatalog& C = FOKStudioCatalog::Get();
+	auto Sound = [this]() -> FOKSceneSound* { return Game.IsValid() && Game->Document ? &Game->Document->Sound : nullptr; };
+	TSharedRef<SVerticalBox> SoundRows = SNew(SVerticalBox);
+	int32 Missing = 0;
+	for (const FOKStudioBgm& B : C.Bgm)
+	{
+		const int32 No = B.No;
+		const bool bThere = !C.BgmSound(No).IsEmpty();
+		Missing += bThere ? 0 : 1;
+		SoundRows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+			[Button(FText::FromString(FString::Printf(TEXT("%02d %s"), No, *B.Name)), [this, Sound, No] { if (FOKSceneSound* S = Sound()) { S->Bgm = No; Changed(); } }, 0.f, 18.f,
+				TAttribute<bool>::CreateLambda([Sound, No] { const FOKSceneSound* S = Sound(); return S && S->Bgm == No; }), 10.f, ButtonFill(), bThere)];
+	}
+	const FString Note = C.Bgm.IsEmpty() ? TEXT("基礎庫沒有 BGM 清單：執行 ok-extract <遊戲> --oklib studio-sounds <基礎庫>。")
+		: Missing ? FString::Printf(TEXT("%d 首尚未轉換（灰色）。"), Missing) : FString();
+	TSharedRef<STextBlock> State = OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this, Sound]
+	{
+		const FOKSceneSound* S = Sound();
+		if (!S || !Game.IsValid()) return FText();
+		const FOKStudioBgm* B = FOKStudioCatalog::Get().FindBgm(S->Bgm);
+		const FString Name = B ? FString::Printf(TEXT("%02d %s"), B->No, *B->Name) : FString::Printf(TEXT("%d（不在清單）"), S->Bgm);
+		return FText::FromString(Name + (Game->IsBgmPlaying() ? TEXT("：播放中") : S->bBgmPlay ? TEXT("：準備中／已播完") : TEXT("：停止")));
+	}), 10.f);
+	State->SetAutoWrapText(true);
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[State]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("播放")), [this, Sound] { if (FOKSceneSound* S = Sound()) { S->bBgmPlay = true; Changed(); } }, 0.f, 20.f,
+				TAttribute<bool>::CreateLambda([Sound] { const FOKSceneSound* S = Sound(); return S && S->bBgmPlay; }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("停止")), [this, Sound] { if (FOKSceneSound* S = Sound()) { S->bBgmPlay = false; Changed(); } }, 0.f, 20.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[CheckBox(TEXT("循環"), [Sound] { const FOKSceneSound* S = Sound(); return S && S->bBgmRepeat; }, [this, Sound](bool B) { if (FOKSceneSound* S = Sound()) { S->bBgmRepeat = B; Changed(); } })]
+		];
+	if (!Note.IsEmpty())
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(Note), 9.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		Box->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[Hint];
+	}
+	Box->AddSlot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[SoundRows]]];
+	return Box;
+}
+
+TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
+{
+	// Studio's outside sound: an Ogg Vorbis or WAV file of UserData/audio (or beside the scene), play / stop, repeat.
+	using namespace OKStudioStyle;
+	auto Sound = [this]() -> FOKSceneSound* { return Game.IsValid() && Game->Document ? &Game->Document->Sound : nullptr; };
+	const FString Folder = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/audio"));
+	TArray<FString> Files;
+	for (const TCHAR* Ext : { TEXT("*.ogg"), TEXT("*.wav") })
+	{
+		TArray<FString> Found;
+		IFileManager::Get().FindFiles(Found, *(Folder / Ext), true, false);
+		for (const FString& F : Found) Files.Add(Folder / F);
+	}
+	// A scene's own file (an imported scene's copy beside its cards) is listed too.
+	if (const FOKSceneSound* S = Sound(); S && !S->Outside.IsEmpty() && Game.IsValid() && !Game->OutsideSoundFile().IsEmpty()) Files.AddUnique(Game->OutsideSoundFile());
+	Files.Sort();
+	TSharedRef<SVerticalBox> SoundRows = SNew(SVerticalBox);
+	for (const FString& F : Files)
+		SoundRows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+			[Button(FText::FromString(FPaths::GetCleanFilename(F)), [this, Sound, F] { if (FOKSceneSound* S = Sound()) { S->Outside = F; Changed(); } }, 0.f, 18.f,
+				TAttribute<bool>::CreateLambda([this, F] { return Game.IsValid() && Game->OutsideSoundFile() == F; }), 10.f)];
+	if (Files.IsEmpty())
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("把 .ogg 或 .wav 放進 ") + Folder + TEXT("，再開一次這個視窗。")), 10.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		SoundRows->AddSlot().AutoHeight()[Hint];
+	}
+	TSharedRef<STextBlock> State = OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this, Sound]
+	{
+		const FOKSceneSound* S = Sound();
+		if (!S || !Game.IsValid()) return FText();
+		const FString Name = S->Outside.IsEmpty() ? FString(TEXT("（未選檔）")) : FPaths::GetCleanFilename(S->Outside) + (Game->OutsideSoundFile().IsEmpty() ? TEXT("（找不到檔案）") : TEXT(""));
+		return FText::FromString(Name + (Game->IsOutsideSoundPlaying() ? TEXT("：播放中") : S->bOutsidePlay ? TEXT("：準備中／已播完") : TEXT("：停止")));
+	}), 10.f);
+	State->SetAutoWrapText(true);
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[State]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("播放")), [this, Sound] { if (FOKSceneSound* S = Sound()) { S->bOutsidePlay = true; Changed(); } }, 0.f, 20.f,
+				TAttribute<bool>::CreateLambda([Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsidePlay; }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("停止")), [this, Sound] { if (FOKSceneSound* S = Sound()) { S->bOutsidePlay = false; Changed(); } }, 0.f, 20.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[CheckBox(TEXT("循環"), [Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsideRepeat; }, [this, Sound](bool B) { if (FOKSceneSound* S = Sound()) { S->bOutsideRepeat = B; Changed(); } })]
+		]
+		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[SoundRows]]];
 }
 
 TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()

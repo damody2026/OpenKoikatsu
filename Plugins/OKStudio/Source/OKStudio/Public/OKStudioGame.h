@@ -214,6 +214,13 @@ public:
 	float SoundVolume = 1.f;
 	void StopSceneAudio();
 	void UpdateSceneAudio();
+	/** The sound menu's files: the scene's BGM (the library's Ogg) and its outside sound (relative to the scene file's
+	 *  folder when not absolute); empty when there is none or the file is missing. */
+	FString BgmFile() const;
+	FString OutsideSoundFile() const;
+	/** Whether the BGM / outside sound is audible now (still loading or ended: false). */
+	bool IsBgmPlaying() const;
+	bool IsOutsideSoundPlaying() const;
 
 	/** Screenshot through the current view into UserData/Studio/screenshot (returns the file; empty on failure). */
 	FString Screenshot(int32 Width, int32 Height, bool bTransparent = false);
@@ -345,6 +352,20 @@ private:
 	float AudioStartTimelineTime = -1000.f;
 	double AudioStartWallSeconds = 0.0;
 	float AudioStartSpeed = 1.f;
+	/** A sound of the sound menu (FOKSceneSound): plays on its own, apart from the timeline; decoded on a worker. */
+	struct FStudioSound
+	{
+		FString File;
+		TSharedPtr<const struct FKKSpeechPcm, ESPMode::ThreadSafe> Pcm;
+		/** The decode in flight (its result is taken once done). */
+		TSharedPtr<struct FOKStudioSoundLoad, ESPMode::ThreadSafe> Load;
+		TWeakObjectPtr<class UAudioComponent> Audio;
+		bool bStarted = false;
+		bool bEnded = false;
+	};
+	FStudioSound StudioBgm, StudioOutside;
+	void UpdateStudioSound(FStudioSound& Sound, const FString& File, bool bPlay, bool bRepeat);
+	void StopStudioSounds();
 	void UpdateViewer();
 	void SyncNow();
 	/** Whether a shown preview still draws stand-in materials or runtime shaders are compiling (pictures would miss it). */

@@ -33,6 +33,7 @@ crc32fast = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"
+fsbex = "0.3"
 rayon = "1"
 instant-meshes = { path = "../vendor/instant-meshes", default-features = false }
 

@@ -746,6 +746,15 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 | U26 mod 粒子道具 | mod 的 ParticleSystem 道具（`83283571_p1` 的 Fire 1／Fire 4）現在完全不畫：依名稱與貼圖對到 OK 的 Niagara 特效，對不到的列進讀取報告 | **已做**（下方記錄） |
 | U27 場景比對剩餘 | `83572034_p1` 中央的玻璃房間不見、兩側螢幕內容不同；`83283571_p1` 原生整體偏粉紅（AmplifyColor LUT 或雲層零件）；光束道具ビーム・扇本身的放射光 | 玻璃房間是原生截圖工具的假差異；偏粉紅已修（cube atlas 面上下顛倒）；齒輪的放射光是 SunShafts，queue > 2500 的零件不在原生深度貼圖裡、要當光源，已修（下方記錄）；舞台前地板偏亮未查 |
 | U28 效能與小視窗 | `run_ok_studio_perf.lua` 只開一個 Unreal 時量；1280×720 視窗下逐窗檢查不出框 | 小視窗**已做**（下方記錄）；效能未量（等全機只剩一個 Unreal） |
+| U29 音效選單 | 左上「音效」主選單（第 3.1 節規格）只是空殼：Studio 背景音樂（BGMCtrl）與外部音源（OutsideSoundCtrl）的播放、循環、隨場景存讀，KStudio 場景帶進來 | **已做**（下方記錄）；KKS 的 Studio 沒有環境音清單（ENVCtrl 只讀過不用）；KKPE 外掛資料見記錄 |
+
+**U29 音效記錄（2026-11-01）**：
+
+- 轉換：`ok-extract <遊戲> --oklib studio-sounds <base_v1>` 讀 `abdata/studio/info/` 的 BGM 表（51 首：KK 的 `bgm_00`～`27`、KKS 追加的 `kks_bgm_*`、`kks_song_00` 等；編號、名稱、bundle、clip 名），把 AudioClip 的 `.resource`（FSB5）用 `fsbex` 取出 Vorbis 寫成 `base_v1/studio/bgm/<clip>.ogg`（50 檔、296 MB，LFS），`studio_items.json` 多記 `bgm`。`kks_bgm_14` 的 Vorbis 標頭 fsbex 重建不出來（`failed to encode Vorbis stream`），清單裡顯示灰色。
+- 場景：`.okscene` 多存 `sound`（`Bgm`、`bBgmPlay`、`bBgmRepeat`、`Outside`、`bOutsidePlay`、`bOutsideRepeat`）。音效選單兩個浮窗：背景音樂（清單、播放／停止、循環；沒轉換的灰色）、外部音源（專案 `UserData/audio` 的 ogg／wav 加上場景自己的檔）。解碼在背景執行緒，播完依循環重播或停住；匯出影片與靜音時不出聲。
+- KStudio 匯入：SceneInfo 依序存 BGMCtrl（`repeat`、`no`、`play`，repeat 在前）、ENVCtrl（同格式）、OutsideSoundCtrl（`repeat`、檔名、`play`）。本機 7,652 個場景的 repeat 全是 1（全部循環），編號 0～29（清單是 0～29 與 50～70，沒轉出來的列進讀取報告）；外部音源檔從遊戲 `UserData/audio` 或場景旁邊複製進場景的卡片夾，找不到列進報告。
+- 控制通道：`state.sound` 回報設定、檔案與是否正在播；`scene` 的 `{"sound": {...}}` 改設定。驗證：BGM 播放、換曲、停止、窗內按鈕、存讀、`koikatu_cs0000383`（BGM 1 自動播放）匯入、外部音源 ogg 播放；`ok_studio_ui_fit.lua` 加入兩個新浮窗，1280×720 為 0 項。
+- KKPE（`kkpe` 外掛）：本機有這份資料的 28 個場景全是空的（道具 `<iks/>`、角色的校正全關），沒有可還原的內容，不實作。
 
 **U28 小視窗記錄（2026-11-01）**：控制通道新增 `ui_fit`（`{"open": 浮窗}`／`{"close": …}`／`{"page": n, "bones": k}` 開窗；不帶參數時回報）：走訪工作室畫布上每個顯示中的區塊（浮窗、詳情窗、外殼各欄），列出超出所屬視窗的元件、被截斷的文字（文字想要的寬度大於分到的寬度）、跑出畫面的視窗；捲動區與清單內只看寬度。刻意以省略號截斷的文字掛 `Ellipsis` 標記，不算問題。`Tools/ok_studio_ui_fit.lua --scene <有角色的 .okscene>` 逐一打開 21 個浮窗、詳情頁（骨骼 7 個子頁）並各拍一張 UI 截圖（`Saved/OKStudio/mcp_ui/<tag>_*.png`），有問題時結束碼 1。
 
