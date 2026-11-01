@@ -47,6 +47,8 @@ cc = "1"
 
 [patch.crates-io]
 unity-asset-binary = { path = "../vendor/unity-asset-binary" }
+# A stream ending in one padding byte (Studio kks_bgm_14 and 260 voices) failed to convert; see src/encode/vorbis.rs.
+fsbex = { path = "../vendor/fsbex" }
 
 [profile.dev]
 lto = "off"

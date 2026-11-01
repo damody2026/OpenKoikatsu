@@ -758,7 +758,7 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 
 **U30 角色語音記錄（2026-11-01）**：
 
-- 轉換：`ok-extract <遊戲> --oklib studio-voices <base_v1>` 讀 Studio 的 VoiceGroup（40 個性格）、VoiceCategory（`VoiceCategory_<x>_<性格>`）、`Voice_<性格>_<分類>_<n>` 表（編號、性格、分類、台詞、bundle、clip），寫 `studio_voices.json`（另存一檔，8,280 句放進 studio_items.json 太長），clip 寫成 `base_v1/studio/voice/<clip>.ogg`。40 個 `sound/data/pcm/cXX/h/01.unity3d`（共 6.6 GB）每個只載一次、8 執行緒約 5 分鐘；BGM 也改用同一個「一個 bundle 取多個 clip」的函式。寫出 8,020 句、1.94 GB；260 句和 `kks_bgm_14` 一樣是 fsbex 的 `failed to encode Vorbis stream`，清單裡顯示灰色。
+- 轉換：`ok-extract <遊戲> --oklib studio-voices <base_v1>` 讀 Studio 的 VoiceGroup（40 個性格）、VoiceCategory（`VoiceCategory_<x>_<性格>`）、`Voice_<性格>_<分類>_<n>` 表（編號、性格、分類、台詞、bundle、clip），寫 `studio_voices.json`（另存一檔，8,280 句放進 studio_items.json 太長），clip 寫成 `base_v1/studio/voice/<clip>.ogg`。40 個 `sound/data/pcm/cXX/h/01.unity3d`（共 6.6 GB）每個只載一次、8 執行緒約 5 分鐘；BGM 也改用同一個「一個 bundle 取多個 clip」的函式。寫出 8,020 句、1.94 GB；另外 260 句和 `kks_bgm_14` 一樣是 fsbex 的 `failed to encode Vorbis stream`。原因（錯誤改印 Debug 後看到 `ReadPacket … Incomplete(Size(1))`）：這些串流結尾只剩 1 個對齊位元組，沒有 0／0xFFFF 結束標記，fsbex 還要再讀 2 位元組的封包長度而整首放棄（音訊其實已解完）。fsbex 改用 `Tools/vendor/fsbex`（`[patch.crates-io]`），剩不到 2 位元組就當結束；補轉後 8,280 句全部轉出（2.0 GB）。fsbex 是先解碼再以 quality 1.0 重新編碼，所以 ogg 比原始資料大。
 - 場景：角色多存 `Voices`（性格、分類、編號）、`VoiceRepeat`（0 播完停止、1 全部循環、2 單句循環，Studio 的 None／All／Select）、`bVoicePlay`、`VoiceStart`（從清單第幾句開始）。播放用角色自己的 `PlaySpeechPcm`（嘴型跟著音量動）；解碼在背景執行緒；不在基礎庫的句子跳過；匯出影片與靜音時不出聲；改清單不重建角色。
 - 建置（2026-11-01 修正，`6ef532add`）：`fsbex` 自帶一份 libvorbis，放進 `ok_extract.lib` 會和 UE 的 libvorbis 重複定義、遊戲執行檔連結失敗；`studio-sounds` 改成 cargo feature，CLI 預設帶著，`build-release.cmd` 建 Unreal 用的靜態庫時加 `--no-default-features` 不帶它。
 - KStudio 匯入：OCIChar 的 voiceCtrl（清單每項三個 int、之後一個 repeat）原本讀過就丟，現在帶進來，有清單的角色開場就說。本機 7,652 個場景有 1,059 個角色帶語音（repeat 0：68、1：944、2：47）。
@@ -767,7 +767,7 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 
 **U29 音效記錄（2026-11-01）**：
 
-- 轉換：`ok-extract <遊戲> --oklib studio-sounds <base_v1>` 讀 `abdata/studio/info/` 的 BGM 表（51 首：KK 的 `bgm_00`～`27`、KKS 追加的 `kks_bgm_*`、`kks_song_00` 等；編號、名稱、bundle、clip 名），把 AudioClip 的 `.resource`（FSB5）用 `fsbex` 取出 Vorbis 寫成 `base_v1/studio/bgm/<clip>.ogg`（50 檔、296 MB，LFS），`studio_items.json` 多記 `bgm`。`kks_bgm_14` 的 Vorbis 標頭 fsbex 重建不出來（`failed to encode Vorbis stream`），清單裡顯示灰色。
+- 轉換：`ok-extract <遊戲> --oklib studio-sounds <base_v1>` 讀 `abdata/studio/info/` 的 BGM 表（51 首：KK 的 `bgm_00`～`27`、KKS 追加的 `kks_bgm_*`、`kks_song_00` 等；編號、名稱、bundle、clip 名），把 AudioClip 的 `.resource`（FSB5）用 `fsbex` 取出 Vorbis 寫成 `base_v1/studio/bgm/<clip>.ogg`（50 檔、296 MB，LFS），`studio_items.json` 多記 `bgm`。`kks_bgm_14` 原本轉不出來（`failed to encode Vorbis stream`），已修（見 U30 記錄的 fsbex 修補），51 首全部轉出。
 - 場景：`.okscene` 多存 `sound`（`Bgm`、`bBgmPlay`、`bBgmRepeat`、`Outside`、`bOutsidePlay`、`bOutsideRepeat`）。音效選單兩個浮窗：背景音樂（清單、播放／停止、循環；沒轉換的灰色）、外部音源（專案 `UserData/audio` 的 ogg／wav 加上場景自己的檔）。解碼在背景執行緒，播完依循環重播或停住；匯出影片與靜音時不出聲。
 - KStudio 匯入：SceneInfo 依序存 BGMCtrl（`repeat`、`no`、`play`，repeat 在前）、ENVCtrl（同格式）、OutsideSoundCtrl（`repeat`、檔名、`play`）。本機 7,652 個場景的 repeat 全是 1（全部循環），編號 0～29（清單是 0～29 與 50～70，沒轉出來的列進讀取報告）；外部音源檔從遊戲 `UserData/audio` 或場景旁邊複製進場景的卡片夾，找不到列進報告。
 - 控制通道：`state.sound` 回報設定、檔案與是否正在播；`scene` 的 `{"sound": {...}}` 改設定。驗證：BGM 播放、換曲、停止、窗內按鈕、存讀、`koikatu_cs0000383`（BGM 1 自動播放）匯入、外部音源 ogg 播放；`ok_studio_ui_fit.lua` 加入兩個新浮窗，1280×720 為 0 項。

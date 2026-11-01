@@ -53,7 +53,8 @@ pub fn bank_to_audio(bank: &[u8]) -> Result<(Vec<u8>, &'static str), String> {
     let ext = if bank.format() == fsbex::AudioFormat::Vorbis { "ogg" } else { "wav" };
     let stream = bank.into_iter().next().ok_or("empty sound bank")?;
     let mut out = Vec::new();
-    stream.write(&mut out).map_err(|e| e.to_string())?;
+    // The Debug form names the step that failed (setup header lookup, packet decode, ...).
+    stream.write(&mut out).map_err(|e| format!("{e} ({e:?})"))?;
     Ok((out, ext))
 }
 
