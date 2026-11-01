@@ -195,6 +195,14 @@ bool AOKStreetSocialScene::HandleWorldAct(int32 Girl,const FString& Kind,const F
   // he_lends at once, and he paid a hundred. It waits for the verdict (GiveMoneyNow, or dropped for a loan).
   S.PendingGiveMoney.Add(Girl,TPair<int64,double>(Amount,FPlatformTime::Seconds()));
   UE_LOG(LogTemp,Display,TEXT("Street act: give_money %lld to actor=%d waits for the judge"),Amount,Girl);return true;}
+ // She will not take the bill his "my treat" just paid back and hands it back: 胡桃 said "you paid your own, take the
+ // money back" and her give_money was read as that refund again, so nothing moved. Only that money, and only soon after.
+ if(Kind==TEXT("return_money")){const int64 Amount=FMath::Min<int64>(Arg.IsEmpty()?S.PaidBackAmount:MoneyIn(Arg),S.PaidBackAmount);
+  if(Girl!=S.PaidBackGirl||Amount<=0||OKStreetMindNow(S)-S.PaidBackAt>15){UE_LOG(LogTemp,Display,TEXT("Street act: return_money %s from actor=%d is not money he just paid back"),*Arg,Girl);return true;}
+  auto Settle=OKRulesHeroineRequest(S,TEXT("return_money_settle"),OKStreetStableId(S.Manifest.Characters[Girl]));Settle->SetNumberField(TEXT("amount"),double(Amount));Settle->SetStringField(TEXT("name"),S.Manifest.Characters[Girl].Name);
+  if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(S,Settle)){auto Candidate=S.Store;ApplyRulesEffects(Candidate,*Answer);if(CommitStore(MoveTemp(Candidate)))FlushRulesEffects();}
+  S.PaidBackGirl=INDEX_NONE;S.PaidBackAmount=0;
+  UE_LOG(LogTemp,Display,TEXT("Street act: actor=%d returns %lld he paid back"),Girl,Amount);RefreshUI();return true;}
  // Only a posing session takes a photo: not in the middle of a meal, a drink, a book or the phone.
  if(Kind==TEXT("take_photo")){
   if(S.Pair.Partner!=INDEX_NONE&&S.Pair.Phase==1&&!S.Pair.Seated&&!S.Pair.Drink&&!S.Pair.Meal&&!S.Pair.PhoneUse&&!S.Pair.Watermelon&&!S.Pair.Splash&&!S.Pair.Read&&!S.Pair.Bath&&!S.Pair.NoProps){if(!S.Pair.CapturePending)CapturePhoto();}

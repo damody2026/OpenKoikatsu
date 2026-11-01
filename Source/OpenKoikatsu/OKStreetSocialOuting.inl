@@ -944,7 +944,13 @@ FString AOKStreetSocialScene::FreeTalkNearby() const{
  // eleven, and that it opens in five minutes.
  for(const FOKStreetPlace* P:NearbyPlaces(4000)){FString Why;const bool Closed=PlaceClosedNow(P->Id,Why);
   Items.Add(OKMsg(Closed?TEXT("ui.outing.person_compass_distance_closed"):TEXT("ui.outing.person_compass_distance"), {{TEXT("name"), P->Name}, {TEXT("compass"), *OKStreetCompass(State->Male,P->Door)}, {TEXT("distance_m"), FVector::Dist2D(State->Male,P->Door)/100.f}, {TEXT("why"), Why}}));}
- return Items.IsEmpty()?OKT(TEXT("ui.outing.no_special_place_nearby")):FString::Join(Items,OKT(TEXT("ui.bank.list_separator")));
+ // The ones farther off that are closed now, too: at 08:42 安可 proposed the bookstore "since the department store is
+ // not open yet", and the bookstore opened at ten; neither was near enough to be listed with its hours.
+ TArray<FString> FarClosed;const auto Near=NearbyPlaces(4000);
+ for(const auto& P:OKStreetPlaces())if(!Near.Contains(&P)){FString Why;if(PlaceClosedNow(P.Id,Why))FarClosed.Add(FString(P.Name)+OKMsg(TEXT("ui.outing.far_closed_why"),{{TEXT("why"),Why}}));}
+ FString Out=Items.IsEmpty()?OKT(TEXT("ui.outing.no_special_place_nearby")):FString::Join(Items,OKT(TEXT("ui.bank.list_separator")));
+ if(!FarClosed.IsEmpty())Out+=OKMsg(TEXT("ui.outing.far_closed_places"),{{TEXT("places"),FString::Join(FarClosed,OKT(TEXT("ui.bank.list_separator")))}});
+ return Out;
 }
 
 // Panel buttons for place activities go through the same outing as free talk, and the same yes or no: she is asked

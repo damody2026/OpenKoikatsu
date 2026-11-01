@@ -314,6 +314,24 @@ fn give_money_settle(r: &Value) -> Result<Value, String> {
     Ok(json!({"effects": fx.into_value()}))
 }
 
+/// She hands back money he just gave her (the bill his "my treat" paid back, which she will not take): it leaves her
+/// cash, as much as she has, and comes back to his. 胡桃: "you paid your own, take the money back", and nothing moved.
+fn return_money_settle(r: &Value) -> Result<Value, String> {
+    let mut rel = rel_of(r.get("relation"))?.ok_or("missing_field: relation")?;
+    let before = rel.clone();
+    let amount = (n(r, "amount") as i64).min(rel.cash.max(0));
+    if amount <= 0 {
+        return Err("amount must be positive".into());
+    }
+    let name = s(r, "name");
+    let mut fx = Effects::default();
+    fx.cash(amount, "gift", &crate::tr::m("shop.money_back_from", &[("name", crate::tr::a(&name))]));
+    rel.cash -= amount;
+    fx.relation(&rel, &before);
+    fx.note_at(&rel.id, "money", &crate::tr::m("shop.gave_money_back", &[("amount", crate::tr::a(&crate::tr::money(amount)))]), "", 0.5);
+    Ok(json!({"effects": fx.into_value()}))
+}
+
 // ------------------------------------------------------------------------------------------------ activities
 
 /// Fixed prices of what is not on the menu (base yuan for both; region::price at use), how long it takes (game minutes), what it does to her.
@@ -800,6 +818,7 @@ pub fn eval(c: &Catalog, kind: &str, r: &Value) -> Option<Result<Value, String>>
         "loan_offer" => loan_offer(r),
         "loan_settle" => loan_settle(r),
         "give_money_settle" => give_money_settle(r),
+        "return_money_settle" => return_money_settle(r),
         "activity_end" => activity_end(c, r),
         // How long it takes (game minutes): a solo activity (praying, watching the fish) ends on its own after this.
         "activity_minutes" => Ok(json!({"minutes": r.get("table_minutes").and_then(Value::as_i64).map(|m| m as i32).unwrap_or_else(|| activity_minutes(s(r, "id"), s(r, "kind"), n(r, "code") as i32))})),
@@ -915,6 +934,13 @@ mod tests {
         assert!(fx.iter().any(|e| e["op"] == "cash" && e["amount"].as_i64() == Some(-7)), "{fx:?}");
         assert!(!fx.iter().any(|e| e["op"] == "post"), "not a loan");
         assert!(give_money_settle(&json!({"amount": 0, "relation": rel(json!({}))})).is_err());
+    }
+    #[test]
+    fn returned_money_goes_back() {
+        let v = return_money_settle(&json!({"amount": 17, "relation": rel(json!({"cash": 10})), "name": "胡桃"})).unwrap();
+        let fx = v["effects"].as_array().unwrap();
+        assert!(fx.iter().any(|e| e["op"] == "cash" && e["amount"].as_i64() == Some(10)), "only what she has: {fx:?}");
+        assert!(return_money_settle(&json!({"amount": 5, "relation": rel(json!({"cash": 0}))})).is_err());
     }
     #[test]
     fn who_pays() {

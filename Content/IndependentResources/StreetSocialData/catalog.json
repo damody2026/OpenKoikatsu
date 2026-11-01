@@ -3057,6 +3057,108 @@
    "floor": 5
   },
   {
+   "id": "dept_notebook",
+   "place": "department",
+   "name": "筆記本",
+   "category": "goods",
+   "price": {
+    "": 6
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 6
+  },
+  {
+   "id": "dept_pen",
+   "place": "department",
+   "name": "原子筆",
+   "category": "goods",
+   "price": {
+    "": 3
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 6
+  },
+  {
+   "id": "dept_stationery",
+   "place": "department",
+   "name": "文具組",
+   "category": "goods",
+   "price": {
+    "": 32
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 6
+  },
+  {
+   "id": "dept_sketchbook",
+   "place": "department",
+   "name": "素描本",
+   "category": "goods",
+   "price": {
+    "": 15
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 6
+  },
+  {
+   "id": "dept_comic",
+   "place": "department",
+   "name": "漫畫",
+   "category": "goods",
+   "price": {
+    "": 19
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 6
+  },
+  {
+   "id": "dept_magazine",
+   "place": "department",
+   "name": "雜誌",
+   "category": "goods",
+   "price": {
+    "": 26
+   },
+   "season": null,
+   "tags": [],
+   "prop": "bag",
+   "options": [],
+   "effects": {},
+   "giftable": false,
+   "consumable": false,
+   "floor": 6
+  },
+  {
    "id": "dept_iphone4",
    "place": "department",
    "name": "iPhone 4 16G",
