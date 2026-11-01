@@ -3,6 +3,9 @@
 #include "SOKStudioPanel.h"
 #include "KKCardReader.h"
 #include "KKCardWorkspace.h"
+#include "KKRustExtract.h"
+#include "ImageUtils.h"
+#include "Misc/Base64.h"
 #include "Algo/Find.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
@@ -1091,6 +1094,108 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
 	TSharedRef<SVerticalBox> Materials = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Button(FText::FromString(Material.IsEmpty() ? TEXT("（無名材質）") : Material), [] {}, 0.f, 18.f, true, 10.f)]
 		+ SVerticalBox::Slot().AutoHeight().Padding(2.f)[OKStudioStyle::Label(FText::FromString(Shader), 9.f, TextHint())];
+	// One edit of the item (kind, material or renderer, property), or null; Put adds it when missing.
+	auto FindEdit = [this, ItemId](EOKSceneMaterialEditKind Kind, const FString& Target, const FString& Property) -> FOKSceneMaterialEdit*
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return nullptr;
+		return X->Item.MaterialEdits.FindByPredicate([&](const FOKSceneMaterialEdit& E) { return E.Kind == Kind && E.Material == Target && (Property.IsEmpty() || E.Property == Property || TEXT("_") + E.Property == Property); });
+	};
+	auto Put = [this, ItemId, FindEdit](EOKSceneMaterialEditKind Kind, const FString& Target, const FString& Property) -> FOKSceneMaterialEdit*
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return nullptr;
+		FOKSceneMaterialEdit* E = FindEdit(Kind, Target, Property);
+		if (!E) { E = &X->Item.MaterialEdits.AddDefaulted_GetRef(); E->Kind = Kind; E->Material = Target; E->Property = Property; }
+		return E;
+	};
+	auto Drop = [this, ItemId](EOKSceneMaterialEditKind Kind, const FString& Target, const FString& Property)
+	{
+		if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr)
+			X->Item.MaterialEdits.RemoveAll([&](const FOKSceneMaterialEdit& E) { return E.Kind == Kind && E.Material == Target && (E.Property == Property || TEXT("_") + E.Property == Property); });
+	};
+	// The picked renderer (HS2Studio6 Renderer 頁): shown or not, and how it casts shadows (Unity ShadowCastingMode).
+	OkMeshView PickedMesh{};
+	const FString Renderer = Shown->Session.PartAt(MaterialPart, PickedMesh) && PickedMesh.name ? FString(UTF8_TO_TCHAR(PickedMesh.name)) : FString();
+	if (!Renderer.IsEmpty())
+	{
+		static const TCHAR* ShadowNames[] = { TEXT("不投影"), TEXT("投影"), TEXT("雙面投影"), TEXT("只有影子") };
+		auto RendererValue = [FindEdit, Renderer](const TCHAR* Property, float Default) { const FOKSceneMaterialEdit* E = FindEdit(EOKSceneMaterialEditKind::Renderer, Renderer, Property); return E ? E->Value.R : Default; };
+		auto SetRenderer = [this, Put, Drop, Renderer](const TCHAR* Property, float Value, float Default)
+		{
+			if (FMath::IsNearlyEqual(Value, Default)) Drop(EOKSceneMaterialEditKind::Renderer, Renderer, Property);
+			else if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Renderer, Renderer, Property)) E->Value = FLinearColor(Value, 0.f, 0.f, 0.f);
+			Changed();
+		};
+		Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(TEXT("Renderer")), 10.f, TextHint())];
+		Materials->AddSlot().AutoHeight()[CheckBox(TEXT("顯示"), [RendererValue] { return RendererValue(TEXT("Enabled"), 1.f) > 0.5f; }, [SetRenderer](bool B) { SetRenderer(TEXT("Enabled"), B ? 1.f : 0.f, 1.f); })];
+		Materials->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(TAttribute<FText>::CreateLambda([RendererValue] { return FText::FromString(FString(TEXT("陰影：")) + ShadowNames[FMath::Clamp(FMath::RoundToInt(RendererValue(TEXT("ShadowCastingMode"), 1.f)), 0, 3)]); }),
+			[RendererValue, SetRenderer] { SetRenderer(TEXT("ShadowCastingMode"), float((FMath::Clamp(FMath::RoundToInt(RendererValue(TEXT("ShadowCastingMode"), 1.f)), 0, 3) + 1) % 4), 1.f); }, 0.f, 18.f, false, 10.f)];
+	}
+	// The material's shader and render queue (Material Editor 换 shader): the item is built again with them.
+	{
+		auto ShaderEdit = [FindEdit, Material] { return FindEdit(EOKSceneMaterialEditKind::Shader, Material, FString()); };
+		Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(TEXT("Shader（Enter 套用；空白回原本）")), 10.f, TextHint())];
+		Materials->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(18.f)[TextBox([ShaderEdit, Shader] { const FOKSceneMaterialEdit* E = ShaderEdit(); return E ? E->Text : Shader; },
+			[this, Put, Drop, Material, Shader, ShaderEdit](const FString& V)
+			{
+				const FString Name = V.TrimStartAndEnd();
+				const FOKSceneMaterialEdit* Old = ShaderEdit();
+				const float Queue = Old ? Old->Value.R : -1.f;
+				if (Name.IsEmpty() || (Name == Shader && Queue < 0.f)) Drop(EOKSceneMaterialEditKind::Shader, Material, FString());
+				else if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Shader, Material, FString())) { E->Text = Name; E->Value = FLinearColor(Queue, 0.f, 0.f, 0.f); }
+				Changed();
+			}, Shader)]];
+		Materials->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("Render Queue")), 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SBox).HeightOverride(18.f)[Spin([ShaderEdit] { const FOKSceneMaterialEdit* E = ShaderEdit(); return E ? E->Value.R : -1.f; },
+				[this, Put, Material, Shader, ShaderEdit](float V)
+				{
+					// -1 keeps the material's own queue; a queue alone keeps the shader.
+					const FOKSceneMaterialEdit* Old = ShaderEdit();
+					const FString Name = Old && !Old->Text.IsEmpty() ? Old->Text : Shader;
+					if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Shader, Material, FString())) { E->Text = Name; E->Value = FLinearColor(FMath::RoundToFloat(FMath::Clamp(V, -1.f, 5000.f)), 0.f, 0.f, 0.f); }
+					Changed();
+				}, -1.f, 5000.f, 1.f)]]
+		];
+	}
+	// Copy / paste a material's edits (onto the material picked then, of this or another item) and the item's reset.
+	Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("複製改動")), [this, ItemId, Material]
+		{
+			const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+			if (!X) return;
+			MaterialClipboard = X->Item.MaterialEdits.FilterByPredicate([&](const FOKSceneMaterialEdit& E) { return E.Material == Material && E.Kind != EOKSceneMaterialEditKind::Renderer; });
+			SetStatus(FString::Printf(TEXT("複製了 %d 筆材質改動"), MaterialClipboard.Num()));
+		}, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("貼上改動")), [this, ItemId, Material]
+		{
+			FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+			if (!X || MaterialClipboard.IsEmpty()) return;
+			X->Item.MaterialEdits.RemoveAll([&](const FOKSceneMaterialEdit& E) { return E.Material == Material && E.Kind != EOKSceneMaterialEditKind::Renderer; });
+			for (FOKSceneMaterialEdit E : MaterialClipboard) { E.Material = Material; X->Item.MaterialEdits.Add(E); }
+			Changed();
+			RebuildFloat(TEXT("material"));
+			SetStatus(FString::Printf(TEXT("貼上 %d 筆材質改動"), MaterialClipboard.Num()));
+		}, 0.f, 18.f, false, 10.f)]
+	];
+	Materials->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(FText::FromString(TEXT("道具全部重置")), [this, ItemId]
+	{
+		if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr) { X->Item.MaterialEdits.Reset(); Changed(); RebuildFloat(TEXT("material")); }
+	}, 0.f, 18.f, false, 10.f)];
+	// Exports (HS2Studio6 导出): the picked renderer's UV layout, the item as OBJ, every texture it shows.
+	Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(TEXT("匯出到 Saved/OKStudio/MaterialExport")), 9.f, TextHint())];
+	Materials->AddSlot().AutoHeight()
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("UV")), Cmd(TEXT("material.export"), TEXT("uv")), 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("OBJ")), Cmd(TEXT("material.export"), TEXT("obj")), 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("貼圖")), Cmd(TEXT("material.export"), TEXT("textures")), 0.f, 18.f, false, 10.f)]
+	];
 	// The item's edit of this material's property (empty material: every material), or null.
 	auto EditOf = [this, ItemId, Material](const FString& Property) -> FOKSceneMaterialEdit*
 	{
@@ -1149,14 +1254,93 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
 		Line(Property, Spin([EditOf, Property, Source] { const FOKSceneMaterialEdit* E = EditOf(Property); return E ? E->Value.R : Source; },
 			[Write, Property](float V) { Write(Property, EOKSceneMaterialEditKind::Float, FLinearColor(V, 0.f, 0.f, 0.f)); }, -100.f, 100.f, 0.01f));
 	}
+	// Texture slots (HS2Studio6 纹理): load a PNG (a path, or a name under UserData/Studio/texture), clear it, back to the
+	// source, export what it shows; scale and offset (_ST).
+	if (!Textures.IsEmpty())
+		Properties->AddSlot().AutoHeight().Padding(0.f, 2.f)[SNew(SBox).HeightOverride(18.f)[TextBox([this] { return MaterialTexturePath; }, [this](const FString& V) { MaterialTexturePath = V.TrimStartAndEnd().TrimQuotes(); }, TEXT("載入用的 PNG 路徑（或 UserData/Studio/texture 下的檔名）"))]];
 	for (const TPair<FString, FString>& T : Textures)
-		if (Shows(T.Key))
-			Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+	{
+		if (!Shows(T.Key)) continue;
+		const FString Property = T.Key;
+		const FString SourceName = T.Value;
+		auto TextureEdit = [FindEdit, Material, Property] { return FindEdit(EOKSceneMaterialEditKind::Texture, Material, Property); };
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.42f)[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([TextureEdit, Property] { return FText::FromString((TextureEdit() ? TEXT("● ") : TEXT("")) + Property); }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.58f)[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([TextureEdit, SourceName]
+				{
+					const FOKSceneMaterialEdit* E = TextureEdit();
+					return FText::FromString(E ? (E->Value.A < 0.f ? TEXT("（已清空）") : TEXT("（載入的圖）")) : SourceName.IsEmpty() ? TEXT("（無貼圖）") : SourceName);
+				}), 9.f, TextHint())]
+		];
+		auto Load = [this, Put, Material, Property]
+		{
+			FString Path = MaterialTexturePath;
+			if (!Path.IsEmpty() && FPaths::IsRelative(Path))
+			{
+				const FString Under = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio/texture") / Path);
+				Path = FPaths::FileExists(Under) ? Under : FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / Path);
+			}
+			TArray<uint8> Png;
+			static const uint8 Signature[8] = { 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A };
+			if (Path.IsEmpty() || !FFileHelper::LoadFileToArray(Png, *Path) || Png.Num() < 8 || FMemory::Memcmp(Png.GetData(), Signature, 8)) { SetStatus(TEXT("載入貼圖：讀不到 PNG ") + Path); return; }
+			if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Texture, Material, Property)) { E->Text = FBase64::Encode(Png); E->Value = FLinearColor::White; }
+			Changed();
+			SetStatus(FString::Printf(TEXT("%s 換成 %s"), *Property, *FPaths::GetCleanFilename(Path)));
+		};
+		auto Clear = [this, Put, Material, Property]
+		{
+			// A 1x1 white texture stands for "none" (what Unity binds for an empty white-default slot); alpha -1 marks it.
+			TArray64<uint8> Png;
+			FImageUtils::PNGCompressImageArray(1, 1, TArray<FColor>{ FColor::White }, Png);
+			if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Texture, Material, Property)) { E->Text = FBase64::Encode(Png.GetData(), uint32(Png.Num())); E->Value = FLinearColor(1.f, 1.f, 1.f, -1.f); }
+			Changed();
+		};
+		auto Back = [this, Drop, Material, Property] { Drop(EOKSceneMaterialEditKind::Texture, Material, Property); Drop(EOKSceneMaterialEditKind::TextureST, Material, Property); Changed(); };
+		auto Export = [this, Material, Property, TextureEdit, SourceName, ItemId]
+		{
+			TArray<uint8> Png;
+			if (const FOKSceneMaterialEdit* E = TextureEdit()) FBase64::Decode(E->Text, Png);
+			else if (const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr)
+			{
+				FString Model, Prefab, Error;
+				if (!SourceName.IsEmpty() && AOKSceneActor::ItemModel(X->Item, Model, Prefab, Error)) FOkModel::TexturePng(UKKCardWorkspace::LibraryRoot(), Model, SourceName, Png);
+			}
+			const FString Out = MaterialExportDir(ItemId) / FPaths::MakeValidFileName(Material + TEXT("_") + Property) + TEXT(".png");
+			if (Png.IsEmpty() || !FFileHelper::SaveArrayToFile(Png, *Out)) { SetStatus(TEXT("匯出貼圖失敗：") + Property); return; }
+			SetStatus(TEXT("匯出 ") + Out);
+		};
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("載入")), Load, 0.f, 16.f, false, 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("清空")), Clear, 0.f, 16.f, false, 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("預設")), Back, 0.f, 16.f, false, 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("匯出")), Export, 0.f, 16.f, false, 9.f)]
+		];
+		// Scale X / Y and offset X / Y, from the material's own _ST when it has one.
+		FLinearColor SourceST(1.f, 1.f, 0.f, 0.f);
+		for (const TPair<FString, FLinearColor>& C : Colors) if (C.Key == Property + TEXT("_ST")) SourceST = C.Value;
+		TSharedRef<SHorizontalBox> ST = SNew(SHorizontalBox);
+		static const TCHAR* STNames[] = { TEXT("縮X"), TEXT("縮Y"), TEXT("移X"), TEXT("移Y") };
+		for (int32 C = 0; C < 4; ++C)
+			ST->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(0.42f)[OKStudioStyle::Label(FText::FromString(T.Key), 10.f)]
-				+ SHorizontalBox::Slot().FillWidth(0.58f)[OKStudioStyle::Label(FText::FromString(T.Value.IsEmpty() ? TEXT("（無貼圖）") : T.Value), 9.f, TextHint())]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 2.f, 0.f)[OKStudioStyle::Label(FText::FromString(STNames[C]), 9.f, TextHint())]
+				+ SHorizontalBox::Slot().FillWidth(1.f)[SNew(SBox).HeightOverride(16.f)[Spin([FindEdit, Material, Property, SourceST, C] { const FOKSceneMaterialEdit* E = FindEdit(EOKSceneMaterialEditKind::TextureST, Material, Property); return (E ? E->Value : SourceST).Component(C); },
+					[this, Put, FindEdit, Material, Property, SourceST, C](float V)
+					{
+						const FOKSceneMaterialEdit* Old = FindEdit(EOKSceneMaterialEditKind::TextureST, Material, Property);
+						FLinearColor Now = Old ? Old->Value : SourceST;
+						Now.Component(C) = V;
+						if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::TextureST, Material, Property)) E->Value = Now;
+						Changed();
+					}, -100.f, 100.f, 0.01f)]]
 			];
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[ST];
+	}
 	const TSharedRef<SVerticalBox> Right = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
 			[TextBox([this] { return MaterialFilter; }, [this](const FString& V) { MaterialFilter = V.TrimStartAndEnd(); RebuildFloat(TEXT("material")); }, TEXT("篩選屬性"))]
@@ -1175,6 +1359,111 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("● 是改過的屬性；改動隨場景儲存。")), 9.f, TextHint())]
 			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("此材質全部預設")), [Reset] { Reset(FString()); }, 0.f, 20.f, false, 10.f)]
 		];
+}
+
+FString SOKStudioPanel::MaterialExportDir(int32 ItemId) const
+{
+	const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("OKStudio/MaterialExport")
+		/ FPaths::MakeValidFileName(FString::Printf(TEXT("%d_%s"), ItemId, X ? *X->Name : TEXT(""))));
+	IFileManager::Get().MakeDirectory(*Dir, true);
+	return Dir;
+}
+
+bool SOKStudioPanel::ExportMaterial(const FString& What)
+{
+	FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Game->SelectedId) : nullptr;
+	AKKPreviewActor* Shown = O && O->Kind == EOKSceneObjectKind::Item && Game->SceneActor ? Game->SceneActor->PreviewOf(O->Id) : nullptr;
+	const int32 Parts = Shown ? Shown->Session.PartCount() : 0;
+	if (Parts <= 0) { SetStatus(TEXT("匯出：先選取一個已載入的道具")); return false; }
+	const FString Dir = MaterialExportDir(O->Id);
+	auto PartName = [](const OkMeshView& M, int32 I) { return M.name && *M.name ? FPaths::MakeValidFileName(UTF8_TO_TCHAR(M.name)) : FString::Printf(TEXT("part%d"), I); };
+	int32 Files = 0;
+	if (What == TEXT("uv"))
+	{
+		// The picked renderer's triangles in UV space, black lines on white (1024 square, v up).
+		OkMeshView M{};
+		const int32 I = FMath::Clamp(MaterialPart, 0, Parts - 1);
+		if (!Shown->Session.PartAt(I, M) || !M.uvs || !M.indices) { SetStatus(TEXT("匯出 UV：這個 renderer 沒有 UV")); return false; }
+		const int32 Size = 1024;
+		TArray<FColor> Pixels;
+		Pixels.Init(FColor::White, Size * Size);
+		auto At = [&](uint32 V) { return FIntPoint(FMath::Clamp(int32(M.uvs[V * 2] * Size), 0, Size - 1), FMath::Clamp(int32((1.f - M.uvs[V * 2 + 1]) * Size), 0, Size - 1)); };
+		auto Line = [&](FIntPoint A, const FIntPoint B)
+		{
+			const int32 DX = FMath::Abs(B.X - A.X), DY = -FMath::Abs(B.Y - A.Y), SX = A.X < B.X ? 1 : -1, SY = A.Y < B.Y ? 1 : -1;
+			for (int32 Err = DX + DY;;)
+			{
+				Pixels[A.Y * Size + A.X] = FColor::Black;
+				if (A == B) break;
+				const int32 E2 = 2 * Err;
+				if (E2 >= DY) { Err += DY; A.X += SX; }
+				if (E2 <= DX) { Err += DX; A.Y += SY; }
+			}
+		};
+		for (int32 T = 0; T + 2 < M.n_idx; T += 3)
+		{
+			const uint32 A = M.indices[T], B = M.indices[T + 1], C = M.indices[T + 2];
+			if (int32(FMath::Max3(A, B, C)) >= M.n_verts) continue;
+			Line(At(A), At(B)); Line(At(B), At(C)); Line(At(C), At(A));
+		}
+		TArray64<uint8> Png;
+		FImageUtils::PNGCompressImageArray(Size, Size, Pixels, Png);
+		const FString Out = Dir / PartName(M, I) + TEXT("_uv.png");
+		if (FFileHelper::SaveArrayToFile(Png, *Out)) ++Files;
+	}
+	else if (What == TEXT("obj"))
+	{
+		// Every renderer as one object (Unity's left-handed space mirrored on X, so the faces turn back).
+		FString Obj = FString::Printf(TEXT("# OK Studio item %d %s\n"), O->Id, *O->Name);
+		int32 Base = 1;
+		for (int32 I = 0; I < Parts; ++I)
+		{
+			OkMeshView M{};
+			if (!Shown->Session.PartAt(I, M) || !M.positions || !M.indices || M.n_verts <= 0) continue;
+			Obj += FString::Printf(TEXT("o %s\n"), *PartName(M, I));
+			for (int32 V = 0; V < M.n_verts; ++V) Obj += FString::Printf(TEXT("v %.6f %.6f %.6f\n"), -M.positions[V * 3], M.positions[V * 3 + 1], M.positions[V * 3 + 2]);
+			if (M.uvs) for (int32 V = 0; V < M.n_verts; ++V) Obj += FString::Printf(TEXT("vt %.6f %.6f\n"), M.uvs[V * 2], M.uvs[V * 2 + 1]);
+			for (int32 T = 0; T + 2 < M.n_idx; T += 3)
+			{
+				const int32 A = int32(M.indices[T]) + Base, B = int32(M.indices[T + 2]) + Base, C = int32(M.indices[T + 1]) + Base;
+				Obj += M.uvs ? FString::Printf(TEXT("f %d/%d %d/%d %d/%d\n"), A, A, B, B, C, C) : FString::Printf(TEXT("f %d %d %d\n"), A, B, C);
+			}
+			Base += M.n_verts;
+		}
+		const FString Out = Dir / FPaths::MakeValidFileName(O->Name.IsEmpty() ? TEXT("item") : O->Name) + TEXT(".obj");
+		if (FFileHelper::SaveStringToFile(Obj, *Out, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) ++Files;
+	}
+	else if (What == TEXT("textures"))
+	{
+		// What each renderer shows (its main texture as built) and the material's named textures from the library.
+		FString Model, Prefab, Error;
+		const bool bModel = AOKSceneActor::ItemModel(O->Item, Model, Prefab, Error);
+		TSet<FString> Named;
+		for (int32 I = 0; I < Parts; ++I)
+		{
+			OkMeshView M{};
+			if (!Shown->Session.PartAt(I, M)) continue;
+			if (M.png && M.png_len > 0 && FFileHelper::SaveArrayToFile(TArrayView<const uint8>(M.png, M.png_len), *(Dir / PartName(M, I) + TEXT("_main.png")))) ++Files;
+			TSharedPtr<FJsonObject> Root;
+			const TSharedPtr<FJsonObject>* Mat = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Slots = nullptr;
+			if (!bModel || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Shown->Session.MaterialMetadataJson(I)), Root) || !Root || !Root->TryGetObjectField(TEXT("material"), Mat) || !Mat || !(*Mat)->TryGetArrayField(TEXT("tex_slots"), Slots)) continue;
+			for (const TSharedPtr<FJsonValue>& S : *Slots)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+				if (!S->TryGetArray(Pair) || Pair->Num() < 2) continue;
+				const FString Texture = (*Pair)[1]->AsString();
+				TArray<uint8> Png;
+				if (Texture.IsEmpty() || Named.Contains(Texture) || !FOkModel::TexturePng(UKKCardWorkspace::LibraryRoot(), Model, Texture, Png)) continue;
+				Named.Add(Texture);
+				if (FFileHelper::SaveArrayToFile(Png, *(Dir / FPaths::MakeValidFileName(Texture) + TEXT(".png")))) ++Files;
+			}
+		}
+	}
+	else { SetStatus(TEXT("匯出：參數是 uv、obj 或 textures")); return false; }
+	SetStatus(FString::Printf(TEXT("匯出 %d 個檔案到 %s"), Files, *Dir));
+	return Files > 0;
 }
 
 TSharedRef<SWidget> SOKStudioPanel::BuildAnimController()

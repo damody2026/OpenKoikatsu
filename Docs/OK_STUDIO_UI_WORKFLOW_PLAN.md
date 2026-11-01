@@ -982,6 +982,17 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 - 沒做到的：原作卡指名的 mod 裡哪幾個實際缺少。開卡時缺哪些 zipmod 只在 Rust 轉 OK 卡時記錄（`LAST_ABSENT_ZIPMODS`），執行期的 session 沒有對外的介面；要做得加 FFI，留給之後。Shader 異常也一樣沒有逐角色的資料可讀。
 - 驗證（83283571_p1）：OK 卡角色顯示「OK 卡（自帶資源），已顯示」；另加一張原作卡（遊戲 `UserData/chara/female` 的卡複製到 `Saved`，測完刪除）列出「原作卡，已顯示，卡片指名 19 個 mod」與各 GUID；按「重新讀取角色」狀態列顯示「重新讀取 1 個角色」，角色仍正常顯示。遊戲與編輯器都連結成功，`verify_ok_studio --tag u38_1101` 6/6。
 
+#### U39 完成紀錄
+
+材質編輯器（道具）補上 HS2Studio6 Material Editor 其餘的頁面，全部寫成既有的材質編輯（`EOKSceneMaterialEditKind`），執行期本來就會套用，隨場景存檔：
+- 貼圖槽：上方一個 PNG 路徑欄（可只寫 `UserData/Studio/texture` 底下的檔名）；每個槽「載入／清空／預設／匯出」，下面一列縮放 X／Y、偏移 X／Y（`TextureST`，起始值取材質自己的 `_ST`）。清空用 1×1 白圖代表沒有貼圖；匯出改過的槽存改過的圖，沒改的從基礎庫取原圖（`FOkModel::TexturePng`）。
+- Renderer：目前選的 renderer「顯示」開關與「陰影」切換（不投影／投影／雙面投影／只有影子），值回到預設時拿掉那筆編輯。
+- Shader：輸入 shader 名稱按 Enter 套用（空白回原本），Render Queue（-1 不改）。改 shader 會重建道具。
+- 「複製改動」「貼上改動」：複製目前材質的改動，貼到目前選的材質（可以是別的 renderer 或別的道具）；「道具全部重置」清掉這個道具的所有材質改動。
+- 匯出到 `Saved/OKStudio/MaterialExport/<id>_<名稱>/`（指令 `material.export uv|obj|textures`）：目前 renderer 的 UV 線框（1024 白底黑線）、整個道具的 OBJ（Unity 座標轉成右手、面朝向跟著反轉，含 UV）、每個 renderer 顯示的主貼圖與材質具名的全部貼圖。
+- 驗證（83283571_p1 的道具 #309 apart2，11 個 renderer）：OBJ、UV、貼圖共匯出 44 個檔；點「顯示」「陰影」寫出 Renderer 編輯（Enabled 0、ShadowCastingMode 2）；載入一張匯出的貼圖到 `_BumpMap`、清空 `_EmissionMap`、輸入 shader 都寫進文件；從 pipe 的材質複製後貼到 edge renderer 的另一個材質（kabe_3-1），兩邊的改動一致；「道具全部重置」後清空。測完刪掉匯出資料夾。遊戲與編輯器都連結成功，`verify_ok_studio --tag u39_1101` 6/6。
+- 沒做：Material Editor 的 shader 下拉清單（目前要自己輸入名稱）與角色的材質編輯（第 9 節不做）。
+
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。

@@ -370,6 +370,7 @@ public:
 		Float_(TEXT("scene.backups"), TEXT("備份恢復"), TEXT("backups"));
 		Float_(TEXT("scene.recent"), TEXT("最近的場景"), TEXT("recent"));
 		Float_(TEXT("app.material"), TEXT("材質編輯器"), TEXT("material"));
+		AddCommand(TEXT("material.export"), TEXT("匯出道具的 UV／OBJ／貼圖（參數 uv、obj、textures）"), [this](const FString& Arg) { return ExportMaterial(Arg); });
 		Float_(TEXT("app.animcontrol"), TEXT("動畫控制器"), TEXT("animctl"));
 		Float_(TEXT("app.bgm"), TEXT("背景音樂"), TEXT("bgm"));
 		Float_(TEXT("app.voice"), TEXT("語音"), TEXT("voice"));
@@ -1451,6 +1452,13 @@ public:
 	TSharedRef<SWidget> BuildMaterialEditor();
 	int32 MaterialPart = 0;
 	FString MaterialFilter;
+	/** A material's edits copied for 貼上改動, and the PNG path the texture slots' 載入 reads. */
+	TArray<FOKSceneMaterialEdit> MaterialClipboard;
+	FString MaterialTexturePath;
+	/** Saved/OKStudio/MaterialExport/<item id>_<name>/ (made when missing). */
+	FString MaterialExportDir(int32 ItemId) const;
+	/** The selected item's exports: "uv" (the picked renderer's UV layout PNG), "obj" (every renderer), "textures". */
+	bool ExportMaterial(const FString& What);
 	TPair<int32, int32> MaterialShown = { -2, 0 }; // selection and its part count the window shows
 	FString AnimCtlShown; // selection and animation parameters the animation controller shows
 	int32 VoiceGroupPick = 0, VoiceCategoryPick = 0, VoiceListPick = -1; // the voice window's browsed personality / category and picked list entry
