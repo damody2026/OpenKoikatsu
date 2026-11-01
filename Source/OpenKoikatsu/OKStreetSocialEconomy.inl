@@ -483,10 +483,11 @@ void AOKStreetSocialScene::TickMeal(float Dt){
     if(!Candidate.Relations.IsValidIndex(Index))continue;auto& R=Candidate.Relations[Index];
     // Full, with most of it left: it goes with him as a takeaway (安可's untouched omelette; 優香's curry, two bites in,
     // "let's pack it"), not into the bin.
-    if(!I->IsDrink()&&R.Satiety>=OKStreetFullSatiety){if(D.Percent>=50.f&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}continue;}
+    // So does what she said she cannot finish (stop_eating): 安可's "I can't drink any more soup" was booked as drunk at 107.
+    if(!I->IsDrink()&&(R.Satiety>=OKStreetFullSatiety||S.StopEating)){if(D.Percent>=50.f&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}continue;}
     const float Left=100.f-D.Booked;
     for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;
-     if(V)*V=FMath::Clamp(*V+E.Value*Left/100.f*(V==&R.Satiety?100.f/SatietyMax(D.Her):1.f),0.f,V==&R.Satiety?OKStreetOverfullSatiety:100.f);}
+     if(V)*V=FMath::Clamp(*V+E.Value*Left/100.f*(V==&R.Satiety?100.f/SatietyMax(D.Her):1.f),0.f,V==&R.Satiety?float(OKStreetFullSatiety):100.f);} // up to full, as she stops eating at the table (not to 107)
    }
    for(const auto& D:S.Table)if((!D.ForHer||!S.Manifest.Characters.IsValidIndex(D.Her))&&D.Served&&D.Percent>=99.f)if(const auto* I=S.Catalog.Find(D.ItemId);I&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}
    CommitStore(MoveTemp(Candidate));

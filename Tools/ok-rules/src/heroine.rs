@@ -219,6 +219,11 @@ fn interact(acts: &ActsTuning, places: &PlacesTuning, request: &Value) -> Result
         let crowd = places::crowd_at(&place, request.get("hours").and_then(Value::as_f64).unwrap_or(12.0));
         awkward = places::awkwardness(norms, crowd, needs);
         reaction = places::react(awkward, c.traits.shyness, c.traits.public_boldness, &c.rel.stage);
+        // Her own idea is not refused by her: 安可 held out the pudding to feed him at the restaurant and was told "she
+        // refused and pulls you away". Shy as she may be, she does what she offered.
+        if hers && reaction == Reaction::Refuse {
+            reaction = Reaction::Shy;
+        }
         let words = [crate::tr::t("heroine.she_goes_along_naturally"), crate::tr::t("heroine.she_shy_but_went_along"), crate::tr::t("heroine.she_whispers_protest_ends"), crate::tr::t("heroine.she_refused_pulls_away"), crate::tr::t("heroine.she_finds_it_thrilling")];
         recent = crate::tr::m("heroine.together_reaction_line", &[("norm_label", crate::tr::a(&norms.label)), ("need_name", crate::tr::a(&needs.name)), ("reaction_text", crate::tr::a(&(words[reaction as usize])))]);
         // Staff speak up when the act breaks the place's rules (food where nobody eats, noise where it is quiet, more
@@ -338,6 +343,8 @@ mod tests {
         assert_eq!(v["record"]["text"], "他和你接吻（你小聲抗議）");
         assert!(v["recent"].as_str().unwrap().contains("管理員過來提醒"));
         assert_eq!(v["play_act"], true);
+        let mine = interact(&t.acts, &t.places, &req(json!({"act": "kiss", "hers": true, "relation": {"id": "a", "stage": "lover"}, "place": "library", "hours": 10.0, "traits": {"shyness": 1.0}}))).unwrap();
+        assert_ne!(mine["reaction"], 3, "her own idea is not refused by her");
         assert!(v["awkward_memory"]["importance"].as_f64().unwrap() >= 0.3);
     }
 
