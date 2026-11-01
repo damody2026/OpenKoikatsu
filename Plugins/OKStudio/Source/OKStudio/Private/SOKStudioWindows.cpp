@@ -931,7 +931,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 				TAttribute<bool>::CreateLambda([this, F] { return Game.IsValid() && Game->OutsideSoundFile() == F; }), 10.f)];
 	if (Files.IsEmpty())
 	{
-		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("把 .ogg 或 .wav 放進 ") + Folder + TEXT("，再開一次這個視窗。")), 10.f, TextHint());
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("把 .ogg 或 .wav 放進 ") + Folder + TEXT("（或設定的資源目錄），再按「重新掃描」。")), 10.f, TextHint());
 		Hint->SetAutoWrapText(true);
 		SoundRows->AddSlot().AutoHeight()[Hint];
 	}
@@ -952,6 +952,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 				TAttribute<bool>::CreateLambda([Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsidePlay; }), 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("停止")), [this, Sound] { if (FOKSceneSound* S = Sound()) { S->bOutsidePlay = false; Changed(); } }, 0.f, 20.f, false, 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[CheckBox(TEXT("循環"), [Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsideRepeat; }, [this, Sound](bool B) { if (FOKSceneSound* S = Sound()) { S->bOutsideRepeat = B; Changed(); } })]
+			// HS2Studio6 重新扫描: list the folders again without closing the window.
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("重新掃描")), [this] { DeferFloat(TEXT("outside")); }, 0.f, 20.f, false, 10.f)]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[SoundRows]]];
 }
