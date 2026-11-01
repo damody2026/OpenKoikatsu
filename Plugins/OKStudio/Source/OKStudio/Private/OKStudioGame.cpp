@@ -14,6 +14,7 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Containers/Ticker.h"
+#include "SceneViewExtension.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
@@ -220,10 +221,52 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 	return Game;
 }
 
+namespace
+{
+	/** A scene camera's far plane in perspective (Studio's camera Far, cm; 0: none). UE's perspective projection has no far
+	 *  plane, so the studio's own view extension turns the view's projection into one with this far plane. It
+	 *  is set only by the studio's viewer camera, and cleared when the studio stops: other game modes never see it. */
+	float GOKStudioPerspectiveFar = 0.f;
+	/** Where the studio's view is: only views from there (the viewport, its screenshots and captures) get the far plane,
+	 *  not mirror or screen-item captures, which look from elsewhere. */
+	FVector GOKStudioFarOrigin = FVector::ZeroVector;
+
+	class FOKStudioFarPlaneExtension : public FSceneViewExtensionBase
+	{
+	public:
+		FOKStudioFarPlaneExtension(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister) {}
+		virtual void SetupView(FSceneViewFamily&, FSceneView& View) override
+		{
+			const float Far = GOKStudioPerspectiveFar;
+			if (Far <= 0.f || !View.ViewMatrices.GetViewOrigin().Equals(GOKStudioFarOrigin, 1.0)) return;
+			// The projection the view was made with (its view matrices are not complete yet here).
+			FMatrix M = View.SceneViewInitOptions.ProjectionMatrix;
+			// Only UE's infinite reversed-Z perspective ([2][2] 0, [3][2] the near plane); orthographic views keep theirs.
+			const double Near = M.M[3][2];
+			if (M.M[3][3] != 0.0 || M.M[2][2] != 0.0 || Near <= 0.0 || Far <= Near) return;
+			// FReversedZPerspectiveMatrix with MinZ = Near, MaxZ = Far: depth 1 at the near plane, 0 at the far one.
+			M.M[2][2] = Near / (Near - Far);
+			M.M[3][2] = -Far * Near / (Near - Far);
+			View.UpdateProjectionMatrix(M);
+		}
+	protected:
+		virtual bool IsActiveThisFrame_Internal(const FSceneViewExtensionContext&) const override { return GOKStudioPerspectiveFar > 0.f; }
+	};
+
+	void OKStudioSetPerspectiveFar(float Far)
+	{
+		static TSharedPtr<FOKStudioFarPlaneExtension, ESPMode::ThreadSafe> Extension;
+		if (Far > 0.f && !Extension.IsValid()) Extension = FSceneViewExtensions::NewExtension<FOKStudioFarPlaneExtension>();
+		GOKStudioPerspectiveFar = Far;
+	}
+}
+
 void UOKStudioViewCamera::GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView)
 {
 	Super::GetCameraView(DeltaTime, DesiredView);
 	if (NearClip > 0.f) DesiredView.PerspectiveNearClipPlane = NearClip;
+	GOKStudioFarOrigin = DesiredView.Location;
+	OKStudioSetPerspectiveFar(bOrtho ? 0.f : FarClip);
 	if (bOrtho)
 	{
 		// The ortho box is centred on the camera: things behind it would draw, so the near plane sits at the camera.
@@ -332,6 +375,7 @@ void UOKStudioGame::Stop()
 	SceneAudioPcm.Reset();
 	LoadedSoundFile.Reset();
 	OKStudioControl::Stop();
+	OKStudioSetPerspectiveFar(0.f);
 	if (SceneActor && SceneActor->GetWorld())
 	{
 		APlayerController* PC = SceneActor->GetWorld()->GetFirstPlayerController();

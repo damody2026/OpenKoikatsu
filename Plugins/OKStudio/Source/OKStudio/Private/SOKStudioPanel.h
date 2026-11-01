@@ -2023,7 +2023,7 @@ public:
 			Label(TEXT("相機"));
 			Float(TEXT("視角"), [](FOKSceneObject& X) { return X.Camera.Fov; }, [](FOKSceneObject& X, float V) { X.Camera.Fov = V; }, 5.f, 170.f, 1.f);
 			Float(TEXT("近面 cm（0 預設）"), [](FOKSceneObject& X) { return X.Camera.Near; }, [](FOKSceneObject& X, float V) { X.Camera.Near = FMath::Max(V, 0.f); }, 0.f, 500.f, 0.5f);
-			Float(TEXT("遠面 cm（正交時套用）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
+			Float(TEXT("遠面 cm（0 無）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
 			Check(TEXT("正交"), [](FOKSceneObject& X) { return X.Camera.bOrtho; }, [](FOKSceneObject& X, bool V) { X.Camera.bOrtho = V; });
 			Float(TEXT("正交寬度 cm"), [](FOKSceneObject& X) { return X.Camera.OrthoWidth; }, [](FOKSceneObject& X, float V) { X.Camera.OrthoWidth = FMath::Max(V, 1.f); }, 1.f, 100000.f, 5.f);
 			Props->AddSlot().AutoHeight().Padding(0.f, 2.f)

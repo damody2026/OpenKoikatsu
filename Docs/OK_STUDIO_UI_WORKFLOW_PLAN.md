@@ -547,7 +547,7 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
   - 10-30 整合後：70b762429 已在 F 的 HEAD。但 `C002.png` 的 `okId`（原作卡 sha256 `663284207c…`）在 F 這台的遊戲 `UserData`、`Content/CharacterCards`、`Saved` 都找不到相符的原作卡，無法用新版重轉。需要原作卡的人（轉出這批 CrowdAPNG 的 checkout）重轉後放回本機。
 
 **沒做到或做法不同的地方**
-- 遠面：Unreal 的透視投影沒有遠面，`Far` 只存檔，不影響畫面。近面有效（`UOKStudioViewCamera`）。
+- 遠面：Unreal 的透視投影沒有遠面，`Far` 原本只存檔、不影響畫面。2026-11-01 補上：OKStudio 外掛自己註冊一個 SceneViewExtension（`OKStudioGame.cpp` 的 `FOKStudioFarPlaneExtension`，只在工作室用場景相機、`Far` > 0 時啟用，工作室停止就清掉；不改 Config、不換共用的 LocalPlayer，C／E 不受影響），在 `SetupView` 把原點等於工作室視角的視圖（畫面、截圖、`capture`；鏡子與螢幕道具的 capture 看出去的點不同，不套）的無限遠反向 Z 透視投影換成有遠面的版本（`FReversedZPerspectiveMatrix` 的 MinZ／MaxZ），遠面外逐像素裁掉。實測 `83283571_p1` 相機 310：遠面 10 m 只剩前景，25 m 裁掉後牆與天空，設回 0 恢復（`C:\Users\Damody\AppData\Local\Temp\claude\C--portable-OpenKoikatsu\06cb08af-708c-4559-954f-993ce591a332\scratchpad\far_c2500.png`）。正交照舊用 `OrthoFarClipPlane`。屬性列標籤改成「遠面 cm（0 無）」。`verify_ok_studio.lua --tag far_1101` 6/6。近面有效（`UOKStudioViewCamera`）。
 - 地圖縮圖：KK Studio 的地圖清單（`abdata/studio/info` 的 `Map` 表）本身就沒有縮圖欄位，原作也只列名稱；維持只列名稱。
 - 表情與手型名稱：U11 從遊戲資料補上眼型與手型名稱；眉型、嘴型遊戲資料沒有名稱，維持編號。
 - U6-8：讀卡畫面「動作時間軸」改成開 OK Studio 並打開時間軸。舊 UMG 工作室已在 U11 移除（2026-10-30）。
