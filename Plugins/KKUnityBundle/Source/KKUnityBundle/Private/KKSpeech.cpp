@@ -148,3 +148,31 @@ void UKKSpeechWave::Init(TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe> InPc
 ISoundGeneratorPtr UKKSpeechWave::CreateSoundGenerator(const FSoundGeneratorInitParams& Params) {
     return KKSpeech::MakeGenerator(Pcm,Meter,Params.StartTime,FMath::RoundToInt(Params.SampleRate));
 }
+
+TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe> KKSpeech::TimeStretch(const TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe>& In,float Tempo){
+    if(!In||Tempo<=1.001f||In->Channels<=0||In->SampleRate<=0)return In;
+    const int32 Ch=In->Channels,Frames=In->Samples.Num()/Ch;
+    // 30 ms windows, half overlapped; each next window is searched within 10 ms of where the tempo puts it.
+    const int32 Win=FMath::Max(64,In->SampleRate*30/1000),Hop=Win/2,Seek=In->SampleRate*10/1000;
+    if(Frames<Win*2)return In;
+    TArray<float> Mono;Mono.SetNumUninitialized(Frames);
+    for(int32 F=0;F<Frames;++F){float Sum=0.f;for(int32 C=0;C<Ch;++C)Sum+=In->Samples[F*Ch+C];Mono[F]=Sum/Ch;}
+    const int32 OutFrames=int32(Frames/Tempo)+Win;TArray<float> Out,Weight;Out.SetNumZeroed(OutFrames*Ch);Weight.SetNumZeroed(OutFrames);
+    TArray<float> Hann;Hann.SetNumUninitialized(Win);for(int32 I=0;I<Win;++I)Hann[I]=.5f-.5f*FMath::Cos(2.f*PI*I/(Win-1));
+    int32 Prev=0;
+    for(int32 OutAt=0;OutAt+Win<OutFrames;OutAt+=Hop){
+        // Where the tempo puts this window in the source, moved to the offset whose start best continues the last one.
+        const int32 Want=FMath::Clamp(int32(OutAt*Tempo),0,Frames-Win);int32 Best=Want;
+        if(OutAt>0){const int32 Next=FMath::Min(Prev+Hop,Frames-Win);float BestScore=-FLT_MAX;
+            for(int32 D=-Seek;D<=Seek;D+=2){const int32 At=Want+D;if(At<0||At+Hop>Frames)continue;float Score=0.f;
+                for(int32 I=0;I<Hop;I+=4)Score+=Mono[At+I]*Mono[Next+I];
+                if(Score>BestScore){BestScore=Score;Best=At;}}}
+        Prev=Best;
+        for(int32 I=0;I<Win&&Best+I<Frames;++I){const float W=Hann[I];Weight[OutAt+I]+=W;
+            for(int32 C=0;C<Ch;++C)Out[(OutAt+I)*Ch+C]+=W*In->Samples[(Best+I)*Ch+C];}
+    }
+    const TSharedPtr<FKKSpeechPcm,ESPMode::ThreadSafe> Result=MakeShared<FKKSpeechPcm,ESPMode::ThreadSafe>();
+    Result->SampleRate=In->SampleRate;Result->Channels=Ch;const int32 Used=int32(Frames/Tempo);Result->Samples.SetNumUninitialized(Used*Ch);
+    for(int32 F=0;F<Used;++F){const float W=Weight[F]>1e-3f?Weight[F]:1.f;for(int32 C=0;C<Ch;++C)Result->Samples[F*Ch+C]=int16(FMath::Clamp(Out[F*Ch+C]/W,-32768.f,32767.f));}
+    return Result;
+}

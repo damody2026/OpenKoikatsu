@@ -268,6 +268,15 @@ struct KKCARD_API FKKCharacterFile
 	UPROPERTY(BlueprintReadOnly, Category = "KKCard")
 	TArray<FKKResolveInfo> Resolves;
 
+	// KK_SkinEffects card settings (KKEx "Marco.SkinEffects"): her hymen grows back after each time, it is already
+	// stretched (no blood the first time), she bleeds easily (陰部脆弱).
+	UPROPERTY(BlueprintReadOnly, Category = "KKCard")
+	bool bHymenRegen = false;
+	UPROPERTY(BlueprintReadOnly, Category = "KKCard")
+	bool bStretchedHymen = false;
+	UPROPERTY(BlueprintReadOnly, Category = "KKCard")
+	bool bFragileVag = false;
+
 	TMap<FString, TArray<uint8>> RawBlocks;
 	TArray<uint8> OriginalBytes;
     TSharedPtr<const IKKDeferredCardPreview, ESPMode::ThreadSafe> DeferredPreview;

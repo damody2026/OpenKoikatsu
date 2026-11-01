@@ -231,6 +231,26 @@ namespace
 		}
 	}
 
+	// KK_SkinEffects' card data: PluginData [version, {HymenRegen, StretchedHymen, FragileVag}].
+	void ParseSkinEffects(const FKKMsgValue& Root, FKKCharacterFile& Out)
+	{
+		const FKKMsgValue* Plugin = Root.Find(TEXT("Marco.SkinEffects"));
+		if (!Plugin)
+		{
+			return;
+		}
+		const FKKMsgValue* Data = Plugin->Kind == EKKMsgKind::Array && Plugin->Array.Num() >= 2 ? Plugin->Array[1].Get()
+			: Plugin->Kind == EKKMsgKind::Map ? (Plugin->Find(TEXT("data")) ? Plugin->Find(TEXT("data")) : Plugin->Find(TEXT("1"))) : nullptr;
+		if (!Data || Data->Kind != EKKMsgKind::Map)
+		{
+			return;
+		}
+		auto Flag = [Data](const TCHAR* Key) { const FKKMsgValue* V = Data->Find(Key); return V && V->Kind == EKKMsgKind::Bool && V->b; };
+		Out.bHymenRegen = Flag(TEXT("HymenRegen"));
+		Out.bStretchedHymen = Flag(TEXT("StretchedHymen"));
+		Out.bFragileVag = Flag(TEXT("FragileVag"));
+	}
+
 	void ParseKKEx(const FKKMsgValue& Root, TArray<FKKResolveInfo>& Out)
 	{
 		static const TCHAR* UarKeys[] = {
@@ -374,10 +394,11 @@ bool UKKCardReader::LoadFromBytes(const TArray<uint8>& Bytes, FKKCharacterFile& 
 
 	FKKMsgValue KKEx;
 	const TArray<uint8>* Extended=OutFile.RawBlocks.Find(TEXT("KKEx"));
-    const TArray<FString> ResolveKeys={TEXT("com.bepis.sideloader.universalautoresolver"),TEXT("EC.Core.Sideloader.UniversalAutoResolver")};
+    const TArray<FString> ResolveKeys={TEXT("com.bepis.sideloader.universalautoresolver"),TEXT("EC.Core.Sideloader.UniversalAutoResolver"),TEXT("Marco.SkinEffects")};
 	if (Extended && UnpackMsgpackSelectedMap(Extended->GetData(),Extended->Num(),ResolveKeys,KKEx,OutError))
 	{
 		ParseKKEx(KKEx, OutFile.Resolves);
+		ParseSkinEffects(KKEx, OutFile);
 	}
 
 	OutError.Empty();

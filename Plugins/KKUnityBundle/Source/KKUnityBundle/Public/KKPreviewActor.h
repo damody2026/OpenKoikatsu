@@ -320,6 +320,8 @@ public:
 	UPROPERTY() TObjectPtr<UKKSpeechWave> SpeechWave;
 	UPROPERTY() TArray<FKKSpeechLine> SpeechLines;
 	float SpeechPitch=1.f,SpeechOpen=0.f,SpeechOpenMin=0.f,SpeechPrevious=0.f;
+	// Her breaths (PlayHCue) played this many times as fast at their own pitch (KKSpeech::TimeStretch).
+	float SpeechTempo=1.f;
 	bool bSpeechActive=false,bHBreath=false,bSpeechPaused=false;
 	bool bSpeechDrivesMouth=true;
 	bool bReuseSpeechAudio=false;
@@ -607,6 +609,9 @@ public:
 	FName VaginaMorphName;
 	bool bVaginaMorphResolved=false;
 	bool bVaginaOpeningLogged=false;
+	// How open she is (0..1), set by whoever knows he is in her (the one-on-one H scene, UOKHScenePanel::BulgeBelly):
+	// DriveVaginaOpening uses it instead of its own guess from his tip. Below 0: its own guess.
+	float VaginaOpenOverride=-1.f;
 	TMap<FName, FTransform> RigidNeutralBones;
 	// Every leader bone at the same load-time capture, so an exact-slot
 	// accessory can adopt its socket's neutral without a mid-animation capture.

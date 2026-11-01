@@ -8,16 +8,19 @@
 #include "Serialization/JsonSerializer.h"
 
 namespace {
-struct FBreathInfo {TArray<int32> Ids,Cond,Voices;};
+struct FBreathInfo {TArray<int32> Ids,Cond,Voices;int32 State=0;};
 struct FBreathPattern {int32 Mode=0;FString Anim;TArray<FBreathInfo> Info;};
 struct FBreathIndex {
     FString Root;
     TArray<FBreathPattern> Patterns;
     TMap<FString,FString> Files;
+    TMap<FString,TArray<FString>> Banks; // the file in each HExperience bank (h_breath_index version 2, ok-hbreath)
     TMap<FString,TArray<int32>> Faces;
     TMap<FString,int32> Mouths;
     TMap<FString,float> OpenMins;
     TMap<FString,int32> MainVoice;
+    TMap<int32,TArray<FBreathInfo>> Voices; // the intercourse voice table's rows (voice_03_00)
+    TMap<FString,TArray<FString>> VoiceFiles; // personality|id: its file in each bank
 };
 FString Key3(int32 A,int32 B,int32 C){return FString::Printf(TEXT("%d|%d|%d"),A,B,C);}
 FString Key2(int32 A,int32 B){return FString::Printf(TEXT("%d|%d"),A,B);}
@@ -49,6 +52,7 @@ bool LoadIndex(const FString& Root,TSharedPtr<const FBreathIndex,ESPMode::Thread
         for(const TSharedPtr<FJsonValue>& InfoValue:*Info){
             const TSharedPtr<FJsonObject> InfoRow=InfoValue.IsValid()?InfoValue->AsObject():nullptr;if(!InfoRow.IsValid())continue;
             FBreathInfo Item;if(!ReadInts(InfoRow,TEXT("ids"),Item.Ids)||!ReadInts(InfoRow,TEXT("cond"),Item.Cond)||!ReadInts(InfoRow,TEXT("voices"),Item.Voices))continue;
+            double State=0.;if(InfoRow->TryGetNumberField(TEXT("state"),State))Item.State=int32(State);
             Pattern.Info.Add(MoveTemp(Item));
         }
         Fresh.Patterns.Add(MoveTemp(Pattern));
@@ -60,7 +64,9 @@ bool LoadIndex(const FString& Root,TSharedPtr<const FBreathIndex,ESPMode::Thread
         double P=0.,M=0.,Id=0.;FString File;
         if(!Row->TryGetNumberField(TEXT("p"),P)||!Row->TryGetNumberField(TEXT("m"),M)||!Row->TryGetNumberField(TEXT("id"),Id)||!Row->TryGetStringField(TEXT("file"),File))continue;
         const FString Key=Key3(int32(P),int32(M),int32(Id));
-        Fresh.Files.Add(Key,File);TArray<int32> FaceIds;ReadInts(Row,TEXT("faces"),FaceIds);Fresh.Faces.Add(Key,MoveTemp(FaceIds));
+        Fresh.Files.Add(Key,File);
+        const TArray<TSharedPtr<FJsonValue>>* Banks=nullptr;if(Row->TryGetArrayField(TEXT("files"),Banks)){TArray<FString>& Bank=Fresh.Banks.Add(Key);for(const auto& B:*Banks)Bank.Add(B.IsValid()?B->AsString():FString());}
+        TArray<int32> FaceIds;ReadInts(Row,TEXT("faces"),FaceIds);Fresh.Faces.Add(Key,MoveTemp(FaceIds));
     }
     const TArray<TSharedPtr<FJsonValue>>* Mouths=nullptr;
     if(Json->TryGetArrayField(TEXT("mouths"),Mouths))for(const TSharedPtr<FJsonValue>& Value:*Mouths){
@@ -76,9 +82,64 @@ bool LoadIndex(const FString& Root,TSharedPtr<const FBreathIndex,ESPMode::Thread
         if(!Row->TryGetNumberField(TEXT("m"),M)||!Row->TryGetNumberField(TEXT("id"),Id)||!Row->TryGetNumberField(TEXT("v"),Voice))continue;
         Fresh.MainVoice.Add(Key2(int32(M),int32(Id)),int32(Voice));
     }
+    const TArray<TSharedPtr<FJsonValue>>* VoiceRows=nullptr;
+    if(Json->TryGetArrayField(TEXT("voices"),VoiceRows))for(const TSharedPtr<FJsonValue>& Value:*VoiceRows){
+        const TSharedPtr<FJsonObject> Row=Value.IsValid()?Value->AsObject():nullptr;if(!Row.IsValid())continue;
+        double Id=0.;const TArray<TSharedPtr<FJsonValue>>* Info=nullptr;if(!Row->TryGetNumberField(TEXT("id"),Id)||!Row->TryGetArrayField(TEXT("info"),Info))continue;
+        TArray<FBreathInfo>& Infos=Fresh.Voices.Add(int32(Id));
+        for(const TSharedPtr<FJsonValue>& InfoValue:*Info){const TSharedPtr<FJsonObject> InfoRow=InfoValue.IsValid()?InfoValue->AsObject():nullptr;if(!InfoRow.IsValid())continue;
+            FBreathInfo Item;ReadInts(InfoRow,TEXT("ids"),Item.Ids);ReadInts(InfoRow,TEXT("cond"),Item.Cond);ReadInts(InfoRow,TEXT("voices"),Item.Voices);double State=0.;if(InfoRow->TryGetNumberField(TEXT("state"),State))Item.State=int32(State);Infos.Add(MoveTemp(Item));}
+    }
+    const TArray<TSharedPtr<FJsonValue>>* VoiceClips=nullptr;
+    if(Json->TryGetArrayField(TEXT("voiceClips"),VoiceClips))for(const TSharedPtr<FJsonValue>& Value:*VoiceClips){
+        const TSharedPtr<FJsonObject> Row=Value.IsValid()?Value->AsObject():nullptr;if(!Row.IsValid())continue;
+        double P=0.,Id=0.;const TArray<TSharedPtr<FJsonValue>>* Files=nullptr;if(!Row->TryGetNumberField(TEXT("p"),P)||!Row->TryGetNumberField(TEXT("id"),Id)||!Row->TryGetArrayField(TEXT("files"),Files))continue;
+        TArray<FString>& Bank=Fresh.VoiceFiles.Add(Key2(int32(P),int32(Id)));for(const auto& F:*Files)Bank.Add(F.IsValid()?F->AsString():FString());
+    }
     if(Fresh.Patterns.IsEmpty()||Fresh.Files.IsEmpty()){Error=TEXT("性愛喘息索引是空的");return false;}
     Index=MakeShared<FBreathIndex,ESPMode::ThreadSafe>(MoveTemp(Fresh));
     {FScopeLock Guard(&Lock);if(Cache.Num()>=8)Cache.Reset();Cache.Add(CachePath,FEntry{Size,Modified,Index});}return true;
+}
+// HVoiceCtrl.IsBreathPtnConditions with what a scene knows (FKKHBreathContext); no hands, kiss, items or gentleness.
+bool AllowsNow(int32 Condition,const FKKHBreathContext& C,int32 MainVoice){
+    if(Condition<0)return true; // -1: no condition (the after-climax rows; IsBreathPtnConditions has no case for it)
+    if(Condition>=90)return false;
+    switch(Condition){
+    case 0:return C.Gauge>=50.f;
+    case 1:return C.Gauge<50.f;
+    case 3:case 6:case 9:case 10:case 15:case 16:return true;
+    case 2:case 7:case 8:case 11:case 14:case 17:return false;
+    case 4:return !C.bFast;
+    case 5:return C.bFast;
+    case 12:return C.bMoving;
+    case 13:return !C.bMoving;
+    case 18:return MainVoice<0||MainVoice==0;
+    case 19:return MainVoice<0||MainVoice==1;
+    default:return false;
+    }
+}
+// HVoiceCtrl.GetStateSelect: her bank, 淫乱 always the last; states 8 / 9 the first bank until she has had it there.
+int32 BankFor(int32 State,const FKKHBreathContext& C){
+    const int32 Experience=FMath::Clamp(C.Experience,0,3);if(Experience==3)return 3;
+    if(State==8)return C.bHadVaginal?Experience:0;
+    if(State==9)return C.bHadAnal?Experience:0;
+    return State==0?Experience:0;
+}
+// HVoiceCtrl.IsPtnConditionsSonyu with what a scene knows: no hands, items, kiss or her cycle (taken as a safe day).
+bool SonyuAllows(int32 Condition,const FKKHBreathContext& C){
+    if(Condition>=90)return false;
+    switch(Condition){
+    case 0:return !C.bAnal;
+    case 1:return C.bAnal;
+    case 6:case 10:case 11:return true;           // no kiss, a safe day, his hands idle
+    case 7:return C.bCondom;
+    case 8:return !C.bCondom;
+    case 14:return C.bVirginFirst;
+    case 15:return !C.bVirginFirst;
+    case 16:return C.bAnalVirginFirst;
+    case 17:return !C.bAnalVirginFirst;
+    default:return false;                          // 2-5, 9, 12, 13, 18, 19: his hands, a kiss, a danger day
+    }
 }
 bool Allows(int32 Condition,bool bMoving,int32 MainVoice){
     // Gallery has no pleasure gauge, hand, kiss or speed-motion toggle.
@@ -99,7 +160,9 @@ bool Allows(int32 Condition,bool bMoving,int32 MainVoice){
 bool KKSpeech::PrepareHBreathIndex(const FString& Root,FString& Error){
     TSharedPtr<const FBreathIndex,ESPMode::ThreadSafe> Index;Error.Reset();return LoadIndex(Root,Index,Error);
 }
-bool KKSpeech::CollectHBreath(const FString& Root,int32 Personality,int32 Mode,const FString& State,int32 AnimId,bool bMoving,TArray<FKKHBreathCue>& Out,FString& Error){
+namespace {
+// Both pickers: Allow is the condition test, Bank which file bank an info row's state reads (0: the first-time file).
+bool CollectBreath(const FString& Root,int32 Personality,int32 Mode,const FString& State,int32 AnimId,TFunctionRef<bool(int32 Condition,int32 MainVoice)> Allow,TFunctionRef<int32(int32 InfoState)> Bank,TArray<FKKHBreathCue>& Out,FString& Error){
     Out.Reset();Error.Reset();
     if(Personality<0||Personality>39||Mode<0||Mode>7||State.IsEmpty()){Error=TEXT("沒有對應的女角性愛喘息");return false;}
     TSharedPtr<const FBreathIndex,ESPMode::ThreadSafe> SharedIndex;if(!LoadIndex(Root,SharedIndex,Error))return false;const FBreathIndex& Index=*SharedIndex;
@@ -112,11 +175,12 @@ bool KKSpeech::CollectHBreath(const FString& Root,int32 Personality,int32 Mode,c
     TSet<int32> Seen;
     for(const FBreathInfo& Info:Pattern->Info){
         if(Info.Ids.Num()&&!Info.Ids.Contains(-1)&&!Info.Ids.Contains(AnimId))continue;
-        bool bAllowed=true;for(const int32 Condition:Info.Cond)if(!Allows(Condition,bMoving,MainVoice)){bAllowed=false;break;}
+        bool bAllowed=true;for(const int32 Condition:Info.Cond)if(!Allow(Condition,MainVoice)){bAllowed=false;break;}
         if(!bAllowed)continue;
         for(const int32 Voice:Info.Voices){
             if(Seen.Contains(Voice))continue;
             const FString* File=Index.Files.Find(Key3(Personality,ClipMode,Voice));if(!File)continue;
+            const int32 B=Bank(Info.State);if(const TArray<FString>* Banks=Index.Banks.Find(Key3(Personality,ClipMode,Voice));B>0&&Banks&&Banks->IsValidIndex(B)&&!(*Banks)[B].IsEmpty())File=&(*Banks)[B];
             FKKHBreathCue Cue;Cue.Name=*File;Cue.Path=Root/FString::Printf(TEXT("audio/c%02d/h/%s.ogg"),Personality,**File);
             if(!IFileManager::Get().FileExists(*Cue.Path))continue;
             if(const TArray<int32>* FaceIds=Index.Faces.Find(Key3(Personality,ClipMode,Voice)))for(const int32 Face:*FaceIds){
@@ -129,4 +193,29 @@ bool KKSpeech::CollectHBreath(const FString& Root,int32 Personality,int32 Mode,c
     Out.Sort([](const FKKHBreathCue& A,const FKKHBreathCue& B){return A.Name<B.Name;});
     if(Out.IsEmpty()){Error=FString::Printf(TEXT("%s 在這個條件下沒有已擷取的喘息"),*State);return false;}
     return true;
+}
+}
+bool KKSpeech::CollectHBreath(const FString& Root,int32 Personality,int32 Mode,const FString& State,int32 AnimId,bool bMoving,TArray<FKKHBreathCue>& Out,FString& Error){
+    return CollectBreath(Root,Personality,Mode,State,AnimId,[bMoving](int32 Condition,int32 MainVoice){return Allows(Condition,bMoving,MainVoice);},[](int32){return 0;},Out,Error);
+}
+bool KKSpeech::CollectHVoice(const FString& Root,int32 Personality,int32 Row,int32 AnimId,const FKKHBreathContext& Context,TArray<FKKHBreathCue>& Out,FString& Error){
+    Out.Reset();Error.Reset();
+    TSharedPtr<const FBreathIndex,ESPMode::ThreadSafe> SharedIndex;if(!LoadIndex(Root,SharedIndex,Error))return false;const FBreathIndex& Index=*SharedIndex;
+    const TArray<FBreathInfo>* Infos=Index.Voices.Find(Row);if(!Infos){Error=FString::Printf(TEXT("性愛語音表沒有第 %d 列（舊索引：用 ok-hbreath 重新匯出）"),Row);return false;}
+    TSet<FString> Seen;
+    for(const FBreathInfo& Info:*Infos){
+        if(Info.Ids.Num()&&!Info.Ids.Contains(-1)&&!Info.Ids.Contains(AnimId))continue;
+        bool bAllowed=true;for(const int32 Condition:Info.Cond)if(!SonyuAllows(Condition,Context)){bAllowed=false;break;}
+        if(!bAllowed)continue;
+        const int32 B=BankFor(Info.State,Context);
+        for(const int32 Voice:Info.Voices){const TArray<FString>* Banks=Index.VoiceFiles.Find(Key2(Personality,Voice));if(!Banks||Banks->IsEmpty())continue;
+            const FString& File=Banks->IsValidIndex(B)&&!(*Banks)[B].IsEmpty()?(*Banks)[B]:(*Banks)[0];if(Seen.Contains(File))continue;
+            FKKHBreathCue Cue;Cue.Name=File;Cue.Path=Root/FString::Printf(TEXT("audio/c%02d/h/%s.ogg"),Personality,*File);
+            if(!IFileManager::Get().FileExists(*Cue.Path))continue;Seen.Add(File);Out.Add(MoveTemp(Cue));}
+    }
+    if(Out.IsEmpty()){Error=FString::Printf(TEXT("第 %d 列沒有已擷取的叫聲"),Row);return false;}
+    return true;
+}
+bool KKSpeech::CollectHBreath(const FString& Root,int32 Personality,int32 Mode,const FString& State,int32 AnimId,const FKKHBreathContext& Context,TArray<FKKHBreathCue>& Out,FString& Error){
+    return CollectBreath(Root,Personality,Mode,State,AnimId,[&Context](int32 Condition,int32 MainVoice){return AllowsNow(Condition,Context,MainVoice);},[&Context](int32 InfoState){return BankFor(InfoState,Context);},Out,Error);
 }

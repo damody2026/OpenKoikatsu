@@ -115,6 +115,12 @@ int32_t ok_penis_tip(OkSession* s,float* out);
    (negative inside), out[1] distance to the skin vertex that says so, out[2] how far target (the belly.bulge swell that
    moves that vertex most, written to target) moves it at weight 100. 1: no belly.bulge targets. */
 int32_t ok_belly_bulge_past(OkSession* s,const float* tip,float* out,char* target,int32_t cap);
+/* Her hair chains hang under their weight (on 1) or keep the card's own DynamicBone parameters (0). Returns the chains
+   changed now, -1 on a bad session. */
+int32_t ok_hang_hair(OkSession* s,int32_t on);
+/* His penis root turned so his penis points along dir[3] (his skeleton space, Unity): written as his FK on
+   cm_J_dan100_00, applied after the pair contacts. 0 ok (out_degrees: turned now), 1 no penis. */
+int32_t ok_aim_penis(OkSession* s,const float* dir,float* out_degrees);
 int32_t ok_static_interaction_frame(OkSession* s,float dt);
 int32_t ok_apply_shape_live(OkSession* s,const float* body,int32_t n_body,const float* face,int32_t n_face);
 int32_t ok_prepare_shape_live(OkSession* s,const float* body,int32_t n_body,const float* face,int32_t n_face);

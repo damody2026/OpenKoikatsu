@@ -197,6 +197,11 @@ public:
 	// How far a point (skeleton space, Unity metres) is outside her skin now, unswollen (metres; negative inside), how far
 	// the skin vertex that says so is, and the belly.bulge swell that moves it most with how far it does at weight 100.
 	bool BellyBulgePast(const FVector& UnityTip,float& OutPast,float& OutNear,FName& OutTarget,float& OutMoves) const;
+	// Her hair hangs under its weight (true) or keeps the card's DynamicBone parameters: the chains changed now.
+	int32 HangHair(bool bOn);
+	// His penis root turned so his penis points along UnityDir (his skeleton space): written as his FK, applied after the
+	// pair contacts. False: no penis. OutDegrees: turned now.
+	bool AimPenis(const FVector& UnityDir,float& OutDegrees);
 	bool StaticInteractionFrame(float Delta);
 	bool Skin();
 	TArray<float> ShapeBody() const;

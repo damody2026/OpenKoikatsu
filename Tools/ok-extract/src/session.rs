@@ -517,6 +517,7 @@ impl AccessoryRuntime {
 
     /// Its DynamicBone state (the GPU rig exports the chains; None: no simulated bones).
     pub(crate) fn dynamic_state(&self) -> Option<&crate::dbone::AttachedDynamicSet> { self.state.as_ref() }
+    pub(crate) fn dynamic_state_mut(&mut self) -> Option<&mut crate::dbone::AttachedDynamicSet> { self.state.as_mut() }
     /// The body bone each palette matrix follows, by name (export_skin_palette order), for an accessory skinned onto the
     /// body (copy_weights_body); None for one with its own rig. A coordinated implanted bone follows the clothes set's
     /// bone of that key (true), as effective_worlds reads it; any other implanted bone's name is its private one.
@@ -6513,7 +6514,8 @@ fn body_bone_id(sk: &crate::pose::Skeleton, name: &str) -> Option<i64> {
 pub(crate) struct BoneIdCache { pub(crate) key: u64, pub(crate) ids: Vec<Option<i64>> }
 
 /// `apply_user_fk` with the bone lookup kept across frames (the key covers the FK names and the skeleton's bones), local
-/// rotations only: the caller rebuilds the world matrices when this returns true.
+/// rotations only: the caller rebuilds the world matrices when this returns true. A name starting with '+' turns that
+/// bone by the rotation on top of the animated one (her trembling as she comes) instead of replacing it.
 pub(crate) fn apply_user_fk_locals(sk: &mut crate::pose::Skeleton, fk: &[(String, [f32; 3])], cache: &mut BoneIdCache) -> bool {
     if fk.is_empty() { return false; }
     use std::hash::{Hash, Hasher};
@@ -6525,11 +6527,14 @@ pub(crate) fn apply_user_fk_locals(sk: &mut crate::pose::Skeleton, fk: &[(String
         let ids = crate::pose::animator_root_id(sk).map(|root| crate::pose::subtree_ids_pub(root, &sk.tfs)).unwrap_or_else(|| sk.bone_ids.clone());
         let mut by_name: HashMap<String, i64> = HashMap::with_capacity(ids.len());
         for id in ids { if let Some(t) = sk.tfs.get(&id) { by_name.entry(t.name.to_ascii_lowercase()).or_insert(id); } }
-        cache.ids = fk.iter().map(|(name, _)| by_name.get(&name.to_ascii_lowercase()).copied()).collect();
+        cache.ids = fk.iter().map(|(name, _)| by_name.get(&name.trim_start_matches('+').to_ascii_lowercase()).copied()).collect();
         cache.key = key;
     }
-    for ((_, euler), id) in fk.iter().zip(&cache.ids) {
-        if let Some(tf) = id.and_then(|id| sk.tfs.get_mut(&id)) { tf.rot = crate::pose::euler_deg_to_quat(*euler); }
+    for ((name, euler), id) in fk.iter().zip(&cache.ids) {
+        if let Some(tf) = id.and_then(|id| sk.tfs.get_mut(&id)) {
+            let turn = crate::pose::euler_deg_to_quat(*euler);
+            tf.rot = if name.starts_with('+') { crate::pose::quat_mul(tf.rot, turn) } else { turn };
+        }
     }
     true
 }

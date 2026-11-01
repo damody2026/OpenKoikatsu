@@ -3149,6 +3149,12 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
             let (written, kept, failed) = crate::studio_sounds::convert_voices(game, &lib.ok_or("library directory required")?)?;
             println!("OKCONVERT studio voices written={written} kept={kept} failed={failed}");
         }
+        #[cfg(feature = "studio-sounds")]
+        "h-sounds" => {
+            // h-sounds <lib>: the original H sound effects (HSeCtrl) into h/se.json and each clip as h/se/<clip>.ogg.
+            let (written, kept, failed) = crate::studio_sounds::convert_h_sounds(game, &lib.ok_or("library directory required")?)?;
+            println!("OKCONVERT h sounds written={written} kept={kept} failed={failed}");
+        }
         "studio-environments" => println!("OKCONVERT studio map environments={}", crate::studio_sky::convert_map_environments(game, &lib.ok_or("library directory required")?)?),
         "studio-reflections" => println!("OKCONVERT studio map reflections={}", crate::studio_sky::convert_map_reflections(game,&lib.ok_or("library directory required")?)?),
         "studio-nodes" => crate::studio_items::record_hierarchies(game, &lib.ok_or("library directory required")?, args.get(2).and_then(|t| t.parse().ok()).unwrap_or(6))?,

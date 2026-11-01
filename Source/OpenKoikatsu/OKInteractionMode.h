@@ -16,9 +16,12 @@ class OPENKOIKATSU_API AOKInteractionMode : public AActor {
     GENERATED_BODY()
 public:
     AOKInteractionMode();
-    static AOKInteractionMode* Enter(UOKCharacterController* Controller);
+    // InPlace: where she stands in the world the scene is in (the street's one-on-one, user 2026-11-01: right there,
+    // no change of scene): nothing of the world is hidden, she is set down there and the scene's showcase floor, wall
+    // and light stay away. Null: the showcase room as before.
+    static AOKInteractionMode* Enter(UOKCharacterController* Controller,const FTransform* InPlace=nullptr);
     static AOKInteractionMode* EnterReader(UOKCharacterController* Source);
-    static AOKInteractionMode* EnterCards(APlayerController* Player,const FString& Female,const FString& Male,int32 FemaleOutfit=0); // FemaleOutfit: the outfit she wears (the street's)
+    static AOKInteractionMode* EnterCards(APlayerController* Player,const FString& Female,const FString& Male,int32 FemaleOutfit=0,const FTransform* InPlace=nullptr); // FemaleOutfit: the outfit she wears (the street's)
     virtual void Tick(float Delta) override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     void Exit(bool Cancelled=false);
@@ -57,7 +60,7 @@ private:
     FString MalePath;
     TSharedPtr<FThreadSafeBool,ESPMode::ThreadSafe> Cancelled;
     double Started=0,ReadyAt=0;
-    bool OwnController=false,Activated=false,Ready=false,Finished=false,Exiting=false;
+    bool OwnController=false,Activated=false,Ready=false,Finished=false,Exiting=false,bInPlace=false;FTransform InPlaceAt;
     bool PreviousPaint=false,PreviousMouse=false,PreviousTouch=false;
     FOKBodyInteraction PreviousBodyInteraction;
     FOKBodyGesture PreviousBodyGesture;

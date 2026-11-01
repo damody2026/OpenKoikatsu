@@ -55,6 +55,8 @@ inline constexpr int32 OKStreetSocialSchema = 2;
 inline constexpr int32 OKStreetSocialOldestSchema = 1;
 // The most the street holds: one male and up to ten heroines (the roster, Launch/heroines.json, may name fewer).
 inline constexpr int32 OKStreetCastCount = 11;
+// Her desire for him (relation sex_desire) goes up to 200 (user, 2026-11-01); past 100 she is flushed and wet near him.
+inline constexpr float OKStreetSexDesireMax = 200.f;
 inline constexpr int32 OKStreetFemaleCount = 10;
 inline constexpr int32 OKStreetMaxRetargetRequests = 10;
 inline constexpr int32 OKStreetMaxChoices = 8;

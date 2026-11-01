@@ -33,11 +33,11 @@ namespace {
 struct FInteractionRoleLoad {FOkSession Session;FKKCharacterFile Card;FString Error,Pairs;bool Ok=false;};
 }
 AOKInteractionMode::AOKInteractionMode(){PrimaryActorTick.bCanEverTick=true;}
-AOKInteractionMode* AOKInteractionMode::Enter(UOKCharacterController* Input){
+AOKInteractionMode* AOKInteractionMode::Enter(UOKCharacterController* Input,const FTransform* InPlace){
     if(!Input||!Input->GetWorld()||!Input->GetOwningPlayer()||Input->Selected.Sex!=1)return nullptr;
     for(TActorIterator<AOKInteractionMode> It(Input->GetWorld());It;++It)if(!It->Finished)return It->Controller==Input?*It:nullptr;
     auto* Mode=Input->GetWorld()->SpawnActor<AOKInteractionMode>();if(!Mode)return nullptr;
-    Mode->Controller=Input;Mode->Started=FPlatformTime::Seconds();Mode->PreviousView=Input->GetOwningPlayer()->GetViewTarget();Mode->PreviousMouse=Input->GetOwningPlayer()->bShowMouseCursor;
+    Mode->Controller=Input;Mode->Started=FPlatformTime::Seconds();if(InPlace){Mode->bInPlace=true;Mode->InPlaceAt=*InPlace;Input->bInteractionInPlace=true;}Mode->PreviousView=Input->GetOwningPlayer()->GetViewTarget();Mode->PreviousMouse=Input->GetOwningPlayer()->bShowMouseCursor;
     if(auto* PC=Cast<AOpenKoikatsuPlayerController>(Input->GetOwningPlayer())){
         Mode->PreviousPaint=PC->IsPaintPreviewActive();Mode->PreviousTouch=PC->bBodyTouchEnabled;
         // Detach the source context before stage activation can cancel it.
@@ -48,8 +48,9 @@ AOKInteractionMode* AOKInteractionMode::Enter(UOKCharacterController* Input){
     for(TActorIterator<AActor> It(Input->GetWorld());It;++It){
         AActor* A=*It;if(A==Mode)continue;
         Mode->SourceActors.Add({A,A->IsHidden(),A->GetActorEnableCollision(),A->IsActorTickEnabled()});
-        TInlineComponentArray<UAudioComponent*> Audio;A->GetComponents(Audio);for(auto* Component:Audio)if(Component->IsPlaying()){Mode->SourceAudio.Add({Component,Component->bIsPaused!=0});Component->SetPaused(true);}
         if(Cast<AKKPreviewActor>(A)||Cast<AKKPairedPlayback>(A))A->SetActorTickEnabled(false);
+        if(InPlace)continue; // the world goes on around them: its sounds, its sights
+        TInlineComponentArray<UAudioComponent*> Audio;A->GetComponents(Audio);for(auto* Component:Audio)if(Component->IsPlaying()){Mode->SourceAudio.Add({Component,Component->bIsPaused!=0});Component->SetPaused(true);}
         if(A!=Input->PreviewActor&&A!=Input->PartnerActor){A->SetActorHiddenInGame(true);A->SetActorEnableCollision(false);}
     }
     if(GEngine&&GEngine->GameViewport){
@@ -86,10 +87,10 @@ AOKInteractionMode* AOKInteractionMode::EnterReader(UOKCharacterController* Sour
     Mode->Returned=[Weak=TWeakObjectPtr<UOKCharacterController>(Source),SourceVisibility](TSharedRef<FJsonObject>){if(Weak.IsValid()){Weak->SetVisibility(SourceVisibility);Weak->ApplyClickInputMode();}};
     return Mode;
 }
-AOKInteractionMode* AOKInteractionMode::EnterCards(APlayerController* Player,const FString& Female,const FString& Male,int32 FemaleOutfit){
+AOKInteractionMode* AOKInteractionMode::EnterCards(APlayerController* Player,const FString& Female,const FString& Male,int32 FemaleOutfit,const FTransform* InPlace){
     if(!Player||!FPaths::FileExists(Female)||!FPaths::FileExists(Male))return nullptr;
     auto* Shared=CreateWidget<UOKCharacterController>(Player);Shared->bInteractionOnly=true;Shared->bIndependentCards=!UKKCardWorkspace::PortableSourcePath(Female).IsEmpty();Shared->Selected.Sex=1;Shared->InitializeInteractionControls();
-    auto* Mode=Enter(Shared);if(!Mode)return nullptr;
+    auto* Mode=Enter(Shared,InPlace);if(!Mode)return nullptr;
     Mode->OwnController=true;Mode->MalePath=Male;Mode->ReturnLabel=TEXT("返回多人街區");Mode->LoadFemale(Female,FemaleOutfit);return Mode;
 }
 void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
@@ -123,7 +124,7 @@ void AOKInteractionMode::LoadFemale(const FString& Path,int32 Outfit){
             if(!Job->Ok){Mode->Fail(Job->Error.IsEmpty()?TEXT("女角高模載入失敗"):Job->Error);return;}
             C->Selected=MoveTemp(Job->Card);C->Entries.Reset();auto& E=C->Entries.AddDefaulted_GetRef();E.Path=Path;E.FileName=FPaths::GetCleanFilename(Path);C->SelectedIndex=0;C->OutfitIndex=Outfit;C->PreviewOutfitIndex=Outfit;C->PreviewCardPath=Path;C->bModelLayout=true;
             if(!Job->Pairs.IsEmpty()){C->PendingLoadPairJson=MoveTemp(Job->Pairs);C->PendingLoadPairGeneration=C->LoadGeneration;}
-            Mode->LoadingFemale=Mode->GetWorld()->SpawnActor<AKKPreviewActor>();if(!Mode->LoadingFemale){Mode->Fail(TEXT("無法建立高模角色"));return;}Mode->LoadingFemale->bPreserveSourceWorld=true;Mode->LoadingFemale->SetActorLocation(FVector::ZeroVector);Mode->LoadingFemale->SetActorHiddenInGame(true);Mode->LoadingFemale->Session=MoveTemp(Job->Session);
+            Mode->LoadingFemale=Mode->GetWorld()->SpawnActor<AKKPreviewActor>();if(!Mode->LoadingFemale){Mode->Fail(TEXT("無法建立高模角色"));return;}Mode->LoadingFemale->bPreserveSourceWorld=true;if(Mode->bInPlace)Mode->LoadingFemale->SetActorTransform(FTransform(Mode->InPlaceAt.GetRotation(),Mode->InPlaceAt.GetLocation()));else Mode->LoadingFemale->SetActorLocation(FVector::ZeroVector);Mode->LoadingFemale->SetActorHiddenInGame(true);Mode->LoadingFemale->Session=MoveTemp(Job->Session);
             FString Error;if(!Mode->LoadingFemale->BeginSessionLoad(Error)){Mode->Fail(Error);return;}
         });
     });
@@ -143,9 +144,11 @@ TSharedPtr<FJsonObject> AOKInteractionMode::HSceneControl(const TSharedPtr<FJson
         double BlushValue;if(Body->TryGetNumberField(TEXT("blush"),BlushValue))Panel->BlushTest=float(BlushValue);
         // {"siru":[face,ftop,fbot,btop,bbot]}: set the liquid levels (0..2) directly, to look at how they draw.
         const TArray<TSharedPtr<FJsonValue>>* SiruLevels=nullptr;if(Body->TryGetArrayField(TEXT("siru"),SiruLevels)&&SiruLevels->Num()==5){int32 L[5];for(int32 A=0;A<5;++A)L[A]=int32((*SiruLevels)[A]->AsNumber());Panel->SetSiruTest(L);}
+        // {"dev":{"oral":100,...}}: her development there, for testing (0..100; -1 back to hers).
+        const TSharedPtr<FJsonObject>* Devs=nullptr;if(Body->TryGetObjectField(TEXT("dev"),Devs))for(const auto& D:(*Devs)->Values){const double V=D.Value->AsNumber();if(V<0.)Panel->DevTest.Remove(FString(D.Key));else Panel->DevTest.Add(FString(D.Key),float(V));}
         double FaceCam=0;if(Body->TryGetNumberField(TEXT("face_cam"),FaceCam))Panel->LookAtFace(float(FaceCam));
         double CrotchCam=0;const TSharedPtr<FJsonObject>* CrotchView=nullptr;if(Body->TryGetNumberField(TEXT("crotch_cam"),CrotchCam))Panel->LookAtCrotch(float(CrotchCam));
-        else if(Body->TryGetObjectField(TEXT("crotch_cam"),CrotchView)){double Dist=60,Pitch=15,Turn=0;(*CrotchView)->TryGetNumberField(TEXT("distance"),Dist);(*CrotchView)->TryGetNumberField(TEXT("pitch"),Pitch);(*CrotchView)->TryGetNumberField(TEXT("turn"),Turn);Panel->LookAtCrotch(float(Dist),float(Pitch),float(Turn));}
+        else if(Body->TryGetObjectField(TEXT("crotch_cam"),CrotchView)){double Dist=60,Pitch=15,Turn=0;(*CrotchView)->TryGetNumberField(TEXT("distance"),Dist);(*CrotchView)->TryGetNumberField(TEXT("pitch"),Pitch);(*CrotchView)->TryGetNumberField(TEXT("turn"),Turn);bool Front=false;(*CrotchView)->TryGetBoolField(TEXT("front"),Front);Panel->LookAtCrotch(float(Dist),float(Pitch),float(Turn),Front);}
         const TSharedPtr<FJsonObject>* Heights=nullptr;if(Body->TryGetObjectField(TEXT("height"),Heights)){
             // The pair player holds views into both sessions: reshaping under it crashed the game. Stop it first; the next pose
             // chosen makes the pair again at the new sizes.

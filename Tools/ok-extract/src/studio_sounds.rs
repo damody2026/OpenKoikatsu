@@ -99,6 +99,29 @@ pub fn convert(game: &Path, lib: &Path) -> Result<(usize, usize, usize), String>
     write_clips(game, &lib.join(BGM_DIR), &wanted)
 }
 
+/// The library folder of the original H sound effects (HSeCtrl).
+pub const H_SE_DIR: &str = "h/se";
+
+/// Writes the original H sound table (h_playback::h_se_table) as `<lib>/h/se.json` and each of its clips as
+/// `<lib>/h/se/<clip>.ogg` (existing files kept). Returns (written, already there, failed).
+pub fn convert_h_sounds(game: &Path, lib: &Path) -> Result<(usize, usize, usize), String> {
+    let table = crate::h_playback::h_se_table(game);
+    let dir = lib.join(H_SE_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(lib.join("h/se.json"), serde_json::to_string_pretty(&table).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let mut wanted: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for rows in table.get("files").and_then(|f| f.as_object()).into_iter().flat_map(|f| f.values()) {
+        for r in rows.as_array().into_iter().flatten() {
+            let b = r.get("bundle").and_then(|v| v.as_str()).unwrap_or_default();
+            for k in ["se", "shorts_se"] {
+                if let Some(c) = r.get(k).and_then(|v| v.as_str()).filter(|c| !c.is_empty() && !b.is_empty()) { wanted.entry(b.to_owned()).or_default().insert(c.to_owned()); }
+            }
+        }
+    }
+    let wanted: BTreeMap<&str, BTreeSet<&str>> = wanted.iter().map(|(b, c)| (b.as_str(), c.iter().map(String::as_str).collect())).collect();
+    write_clips(game, &dir, &wanted)
+}
+
 /// Writes the Studio voice lists as `<lib>/studio_voices.json` and every voice as `<lib>/studio/voice/<clip>.ogg`
 /// (existing files kept). Returns (written, already there, failed).
 pub fn convert_voices(game: &Path, lib: &Path) -> Result<(usize, usize, usize), String> {

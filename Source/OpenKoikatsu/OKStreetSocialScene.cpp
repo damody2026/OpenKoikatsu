@@ -59,6 +59,10 @@
 #include "OKCrowdRoom.h"
 #include "HighResScreenshot.h"
 #include "KKRuntimeSpeech.h"
+#include "KKCardReader.h"
+#include "OKArousalDrops.h"
+// Where a street figure goes while its high model stands in for it (the one-on-one in place): far under the street.
+static const FVector OKStreetOffstage(0.,0.,-100000.);
 #include "OKCrowdScene.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -204,8 +208,17 @@ struct FOKStreetPendingMove {
  TSharedPtr<FOKStreetGridSearch> Search;FVector Final=FVector::ZeroVector,Fallback=FVector::ZeroVector;bool HasFinal=false,Leave=false;float Yaw=0;FString Place;
 };
 
+// What her card says of her body (read once, OKStreetHerCard): bust size (shapeBody 4, 0..1) and KK_SkinEffects' settings.
+struct FOKStreetHerCard {bool Read=false,HymenRegen=false,HymenStretched=false,Fragile=false;float Bust=0.f;};
+
 struct FOKStreetSceneState {
  FOKStreetPairSession Pair,PhotoProbeSession,SeatedProbeSession,PhoneUseProbeSession;
+ // Her desire past 100 and what runs out of her after a scene (TickArousal): the flush set on her, her desire last read,
+ // her next drop; the drops and the wet marks they left (OKArousalDrops.h); how wet she is (drops from her crotch and
+ // her nipples since she last slept or bathed, a scene with him included) and whether she was asleep or bathing.
+ float ArousalBlush[OKStreetCastCount]={},ArousalDesire[OKStreetCastCount]={};double ArousalDripAt[OKStreetCastCount]={},ArousalCheckAt=0;
+ int64 ArousalWhiteUntil[OKStreetCastCount]={},ArousalRedUntil[OKStreetCastCount]={};uint32 ArousalExtHash=0,ArousalTurn[OKStreetCastCount]={};FOKStreetHerCard HerCard[OKStreetCastCount];double ArousalNippleAt[OKStreetCastCount]={}; // after a scene: until when she runs white / red (hexp)
+ FOKArousalDrops ArousalDrops;int32 ArousalWetCrotch[OKStreetCastCount]={},ArousalWetMilk[OKStreetCastCount]={};bool ArousalWashing[OKStreetCastCount]={};int32 ArousalDay=-1;
  int32 AmbientActor=INDEX_NONE,AmbientCursor=0,AmbientPhase=0,AmbientAction=0,AmbientNextAction=0;FString AmbientPlaceClip;
  bool AmbientDrinkOnlyTest=false,AmbientSelfieOnlyTest=false,AmbientGroomOnlyTest=false;
  double AmbientRequested=0,AmbientPlaying=0,AmbientDuration=0;FOKStreetAgentSim AmbientSaved;
@@ -367,6 +380,9 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
  TArray<FString> HighCards;TArray<int32> HighOutfits;TWeakObjectPtr<AOKInteractionMode> PrivateMode;TSharedPtr<SWidget> PrivateLeave; /* the one-on-one scene's own leave button (R3-228) */FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool PrivateClockFrozen=false; /* the street clock stood still for the private scene (it runs again on leaving, by the real minutes spent) */bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
  TMap<int32,double> CommutePausedUntil; // a girl he walked up to stops her walk for a moment (StepNavigation)
+ // PrivateInPlace: the one-on-one is where she stands on the street (user, 2026-11-01: no change of scene); the street
+ // goes on around them and their street figures are kept out of sight under it (OKStreetOffstage).
+ bool PrivateInPlace=false;
  int32 NavGirl=INDEX_NONE,PrivateGirl=INDEX_NONE,ContactsProbePhase=0;FOKStreetLiftRide NavRide; // the navigation riding an elevator (PlanNavLift)
  double NavAt=0,ContactsProbeAt=0;
  int32 ContactsProbeGreeting=0;TArray<TSharedPtr<FJsonValue>> ContactsVoiceEvidence;TArray<FVector> NavPath;
@@ -871,6 +887,9 @@ void AOKStreetSocialScene::BeginPlay(){
 }
 
 static int64 OKStreetMindNow(const FOKStreetSceneState& S); // OKStreetSocialMind.inl
+static void OKStreetApplyHerExtras(FOKStreetSceneState& S,const FString& Id); // OKStreetSocialArousal.inl
+static FString OKStreetBodyWetStatus(const FOKStreetSceneState& S,int32 Girl,int64 Minute); // OKStreetSocialArousal.inl
+static const FOKStreetHerCard& OKStreetHerCard(FOKStreetSceneState& S,int32 Girl); // OKStreetSocialArousal.inl
 bool AOKStreetSocialScene::BeginTalk(int32 Character){
  auto& S=*State;S.WaitsForHim.Remove(Character); // he found her: her waiting for him is over
  if(S.Pair.Partner!=INDEX_NONE||S.Facility!=INDEX_NONE||S.Companion!=INDEX_NONE)return false;
@@ -2212,7 +2231,7 @@ void AOKStreetSocialScene::CompleteCollectedTopic(){
  const auto Result=OKRulesTalkCommit(S,Candidate,Id,Transaction,S.CollectedEffect);if(!Result.Applied){FailTalk(TEXT("Collected topic commit rejected: ")+Result.Reason);return;}
  auto& Relation=Candidate.Relations[OKStreetRelationIndex(Candidate,Id,S.Manifest.TalkBudget,true)];Relation.TopicPoints+=S.CollectedPoint;
  if(S.AskedTopic!=INDEX_NONE){Relation.ListenRecent.Add(S.AskedTopic);if(Relation.ListenRecent.Num()>5)Relation.ListenRecent.RemoveAt(0);}
- else if(S.CollectedDesire>0){Relation.SexDesire=FMath::Min(100.f,Relation.SexDesire+S.CollectedDesire);}
+ else if(S.CollectedDesire>0){Relation.SexDesire=FMath::Min(OKStreetSexDesireMax,Relation.SexDesire+S.CollectedDesire);}
  FString Error;if(!OKStreetAtomicSave(S.Manifest.SavePath,OKStreetWriteSave(Candidate),Error)){FailTalk(TEXT("Collected topic atomic save failed: ")+Error);return;}
  const auto After=Relation;
  auto Evidence=MakeShared<FJsonObject>();Evidence->SetStringField(TEXT("id"),Id);Evidence->SetStringField(TEXT("transaction"),Transaction);Evidence->SetNumberField(TEXT("personality"),S.Manifest.Characters[S.Target].PersonalityId);Evidence->SetNumberField(TEXT("asked"),S.AskedTopic);Evidence->SetNumberField(TEXT("used"),S.UsedTopic);Evidence->SetNumberField(TEXT("favor_before"),Before.Favor);Evidence->SetNumberField(TEXT("favor_after"),After.Favor);Evidence->SetNumberField(TEXT("lewd_before"),Before.Lewdness);Evidence->SetNumberField(TEXT("lewd_after"),After.Lewdness);Evidence->SetNumberField(TEXT("stock_after"),Candidate.TopicStock.FindRef(S.UsedTopic));OKStreetWriteStringArray(Evidence,TEXT("voice_ids"),S.CollectedVoiceIds);
@@ -2840,6 +2859,7 @@ static int64 OKStreetMindNow(const FOKStreetSceneState& S);
 #include "OKStreetSocialLover.inl"
 #include "OKStreetSocialLife.inl"
 #include "OKStreetSocialMind.inl"
+#include "OKStreetSocialArousal.inl"
 #include "OKStreetSocialSong.inl"
 #include "OKStreetSocialInspect.inl"
 #include "OKStreetSocialEconomy.inl"
@@ -3789,6 +3809,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(S.ClockDrivesSun&&S.Sun.IsValid()){const double Wall=FPlatformTime::Seconds();if(Wall>=S.NextSunUpdate){S.NextSunUpdate=Wall+1;const double SunHours=S.InspectSlot!=INDEX_NONE?14.0:OKStreetClockHours(S.ClockStartHours,Wall-S.ClockStartWall);const auto Sun=OKStreetSunAt(SunHours); /* the inspection room is in afternoon light at any hour */S.Sun->SetActorRotation(Sun.Rotation);auto* Light=S.Sun->GetLightComponent();Light->SetIntensity(Sun.Intensity);for(auto& Fill:S.PlaceFills)if(Fill.IsValid())Fill->GetLightComponent()->SetIntensity(FMath::Max(Sun.Intensity*OKStreetPlaceFillShare,OKStreetPlaceFillNight));Light->SetLightColor(Sun.Color);
   if(auto* Sky=S.Sky.Get())Sky->SetSkyLuminanceFactor(S.SkyGainOverride.R>=0.f?S.SkyGainOverride:OKStreetSkyLuminanceAt(SunHours));}}
  if(TickPrivate(Now))return;
+ {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickArousal);TickArousal(Dt);}
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickFacility);TickFacility(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickPhoto);TickPhoto(Now);}{QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickContacts);TickContacts(Dt,Now);}
  // Every actor of this roster (one male and up to OKStreetFemaleCount heroines).
  const int32 Cast=FMath::Min(S.Manifest.Characters.Num(),OKStreetCastCount);
@@ -3850,7 +3871,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  S.CompanionWalk=S.FollowMode!=0&&S.OutingGirl!=INDEX_NONE&&S.Companion==S.OutingGirl&&SceneTime()-S.ManualMoveAt>3.0?S.FollowGirlWalk:StepCompanion(Dt);
  // Standing still he always takes his own stand (conversation_male, the game's mc_m_stand): the base idle is the
  // heroines' book-reading loop, and alone he stood holding an invisible book.
- FString Error;OKSetCrowdRuntimeLocomotionState(this,0,true,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
+ FString Error;OKSetCrowdRuntimeLocomotionState(this,0,true,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.PrivateInPlace?OKStreetOffstage:S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
  // A girl he is with is not on her schedule walk any more (it would keep pulling her to its route, on the ground).
  for(int32 G=1;G<=S.Agents.Num();++G)if(S.Commutes.Contains(G)&&(BusyWithPlayer(G)||S.LiftWalks.Contains(G)||S.LiftPins.Contains(G)))S.Commutes.Remove(G);
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickElevators);TickElevators(Dt);}
@@ -3919,7 +3940,7 @@ void AOKStreetSocialScene::Tick(float Dt){
    if(Rate>15.f&&Rate<600.f)ShownWalk=Rate/OKStreetWalkSpeed;
   }
   S.LastShown.Add(Agent.Slot,Shown);
- OKSetCrowdRuntimeCharacterMotion(this,Agent.Slot,FTransform(S.RenderedRotations[Agent.Slot],Shown),S.ReadingForceWalk==Agent.Slot?1.f:ShownWalk,Error);
+ OKSetCrowdRuntimeCharacterMotion(this,Agent.Slot,FTransform(S.RenderedRotations[Agent.Slot],S.PrivateInPlace&&Agent.Slot==S.PrivateGirl?OKStreetOffstage:Shown),S.ReadingForceWalk==Agent.Slot?1.f:ShownWalk,Error);
   if(S.SelfTest&&Agent.Position!=Before&&!S.FacingActorsChecked.Contains(Agent.Slot)){FOKRuntimeCharacterStatus Submitted;const float BeforeError=FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousFacing.Yaw,S.Rotations[Agent.Slot].Yaw));const float AfterError=FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[Agent.Slot].Yaw,S.Rotations[Agent.Slot].Yaw));if(OKGetCrowdRuntimeCharacterStatus(this,Agent.Slot,Submitted)&&Submitted.Transform.Rotator().Equals(S.RenderedRotations[Agent.Slot],.01f)&&Turn<=OKStreetFemaleTurnDegreesPerSecond*FMath::Max(0.f,Dt)+.001f&&AfterError<=BeforeError+.001f){S.FacingActorsChecked.Add(Agent.Slot);++S.FacingChecks;}else S.Errors.Add(TEXT("NPC submitted facing exceeded turn limit or turned away from movement"));}
 
  }
