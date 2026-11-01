@@ -506,33 +506,47 @@ def motel_world_coast_strip_install():
  bs=mesh.get_editor_property('body_setup')
  if bs:bs.set_editor_property('collision_trace_flag',unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
  assert EAL.save_loaded_asset(mesh,False)
- probes=[[v*100 for v in p] for p in b['probes_m']];B0=[v*100 for v in b['bounds_m'][0]];B1=[v*100 for v in b['bounds_m'][1]]
  def near(a,c):return abs(a-c)<=max(200.,abs(c)*.01)
  actors={a.get_actor_label():a for a in SUB.get_all_level_actors()}
  backup=EDGE_OUT/('UniversityCity-before-coast-strip-'+LOAD_SHA[:16]+'.umap')
  if not backup.exists():shutil.copy2(MAPFILE,backup)
- if 'WorldEdge_CoastStrip' in actors:SUB.destroy_actor(actors['WorldEdge_CoastStrip'])
- a=SUB.spawn_actor_from_class(unreal.StaticMeshActor,unreal.Vector(0,0,0),unreal.Rotator(0,0,0));a.set_actor_label('WorldEdge_CoastStrip')
- a.tags=[unreal.Name('WorldEdgeV1')];a.set_folder_path('UniversityCity/WorldEdgeV1')
- c=a.static_mesh_component;c.set_static_mesh(mesh);c.set_editor_property('cast_shadow',False);c.set_editor_property('mobility',unreal.ComponentMobility.STATIC)
- md=mesh.get_static_mesh_description(0);loc=[md.get_vertex_position(unreal.VertexID(i)) for i in range(md.get_vertex_count())];assert loc
- pick=None;tried=[]
- for yaw in (0,90,180,270):
-  for sy in (1,-1):
-   cs,sn=round(math.cos(math.radians(yaw))),round(math.sin(math.radians(yaw)))
-   W=[(cs*v.x-sn*sy*v.y,sn*v.x+cs*sy*v.y,v.z) for v in loc]
-   miss=[p for p in probes if min(abs(w[0]-p[0])+abs(w[1]-p[1])+abs(w[2]-p[2]) for w in W)>5]
-   tried.append(dict(yaw=yaw,mirror_y=sy,missing=len(miss)))
-   if not miss and pick is None:pick=(yaw,sy)
- assert pick,('no orientation puts the strip on its authored vertices',tried)
- a.set_actor_rotation(unreal.Rotator(0,0,pick[0]),False);a.set_actor_scale3d(unreal.Vector(1,pick[1],1))
- c.set_collision_profile_name('BlockAll');c.set_editor_property('can_character_step_up_on',unreal.CanBeCharacterBase.ECB_YES)
- o,e=a.get_actor_bounds(False);got=[o.x-e.x,o.y-e.y,o.x+e.x,o.y+e.y];want=[B0[0],B0[1],B1[0],B1[1]]
- assert all(near(g,w) for g,w in zip(got,want)),('placed bounds differ from the authored world bounds',got,want)
+ for l in ('WorldEdge_CoastStrip','WorldEdge_Seawall'):
+  if l in actors:SUB.destroy_actor(actors[l])
+ def place(meta,mesh,label):
+  # authored in world metres: find the yaw x mirror that puts the build's probe vertices on the imported mesh
+  probes=[[v*100 for v in p] for p in meta['probes_m']];B0=[v*100 for v in meta['bounds_m'][0]];B1=[v*100 for v in meta['bounds_m'][1]]
+  a=SUB.spawn_actor_from_class(unreal.StaticMeshActor,unreal.Vector(0,0,0),unreal.Rotator(0,0,0));a.set_actor_label(label)
+  a.tags=[unreal.Name('WorldEdgeV1')];a.set_folder_path('UniversityCity/WorldEdgeV1')
+  c=a.static_mesh_component;c.set_static_mesh(mesh);c.set_editor_property('cast_shadow',False);c.set_editor_property('mobility',unreal.ComponentMobility.STATIC)
+  md=mesh.get_static_mesh_description(0);loc=[md.get_vertex_position(unreal.VertexID(i)) for i in range(md.get_vertex_count())];assert loc
+  pick=None;tried=[]
+  for yaw in (0,90,180,270):
+   for sy in (1,-1):
+    cs,sn=round(math.cos(math.radians(yaw))),round(math.sin(math.radians(yaw)))
+    W=[(cs*v.x-sn*sy*v.y,sn*v.x+cs*sy*v.y,v.z) for v in loc]
+    miss=[p for p in probes if min(abs(w[0]-p[0])+abs(w[1]-p[1])+abs(w[2]-p[2]) for w in W)>5]
+    tried.append(dict(yaw=yaw,mirror_y=sy,missing=len(miss)))
+    if not miss and pick is None:pick=(yaw,sy)
+  assert pick,('no orientation puts '+label+' on its authored vertices',tried)
+  a.set_actor_rotation(unreal.Rotator(0,0,pick[0]),False);a.set_actor_scale3d(unreal.Vector(1,pick[1],1))
+  c.set_collision_profile_name('BlockAll');c.set_editor_property('can_character_step_up_on',unreal.CanBeCharacterBase.ECB_YES)
+  o,e=a.get_actor_bounds(False);got=[o.x-e.x,o.y-e.y,o.x+e.x,o.y+e.y];want=[B0[0],B0[1],B1[0],B1[1]]
+  assert all(near(g,w) for g,w in zip(got,want)),('placed bounds differ from the authored world bounds',label,got,want)
+  return a,pick,tried,got
+ _,pick,tried,got=place(b,mesh,'WorldEdge_CoastStrip')
+ # river-mouth quay (Tools/build_street_city_shore_strip.lua --channel): its own grey stone material from the glb;
+ # the wall casts a shadow on the water like any bank
+ wall=None
+ if b.get('seawall'):
+  w=b['seawall'];assert sha(w['path'])==w['sha256']
+  wm=imp(Path(w['path']),'world-edge-seawall',0,True);ws=wm.get_editor_property('body_setup')
+  if ws:ws.set_editor_property('collision_trace_flag',unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE);assert EAL.save_loaded_asset(wm,False)
+  wa,wp,_,wg=place(w,wm,'WorldEdge_Seawall')
+  wa.static_mesh_component.set_editor_property('cast_shadow',True);wall=dict(asset=wm.get_path_name(),actor_yaw=wp[0],actor_mirror_y=wp[1],placed_bounds=wg,triangles=wm.get_num_triangles(0))
  actors.get('CityEnvironmentController') and actors['CityEnvironmentController'].prepare_for_save()
  assert unreal.EditorLevelLibrary.save_current_level();new=sha(MAPFILE)
  installed=read('motel-install');installed.update(parent_map_sha256=LOAD_SHA,map_sha256=new);write('motel-install',installed)
- (EDGE_OUT/('coast-strip-install-'+time.strftime('%Y%m%d-%H%M%S')+'.json')).write_text(json.dumps(dict(status='saved_requires_capture_review',map_sha256=new,parent_map_sha256=LOAD_SHA,backup=str(backup),asset=mesh.get_path_name(),sand=sand.get_path_name(),orientation_trials=tried,actor_yaw=pick[0],actor_mirror_y=pick[1],placed_bounds=got,triangles=mesh.get_num_triangles(0)),ensure_ascii=False,indent=1),'utf8')
+ (EDGE_OUT/('coast-strip-install-'+time.strftime('%Y%m%d-%H%M%S')+'.json')).write_text(json.dumps(dict(status='saved_requires_capture_review',map_sha256=new,parent_map_sha256=LOAD_SHA,backup=str(backup),asset=mesh.get_path_name(),sand=sand.get_path_name(),orientation_trials=tried,actor_yaw=pick[0],actor_mirror_y=pick[1],placed_bounds=got,triangles=mesh.get_num_triangles(0),seawall=wall),ensure_ascii=False,indent=1),'utf8')
 def motel_world_beach_props_install():
  # world_beach_props_install: world-edge-v1/beach-props/placements.json (Tools/build_street_city_beach_props.lua) ->
  # one StaticMeshActor per placement, label Beach_<kind>_<n>, folder UniversityCity/WorldEdgeV1/Beach. Models keep their
@@ -786,13 +800,116 @@ def motel_world_ocean_probe():
   rows.append(dict(label=a.get_actor_label(),cls=a.get_class().get_name(),loc=[t.translation.x,t.translation.y,t.translation.z],rot=[t.rotation.rotator().roll,t.rotation.rotator().pitch,t.rotation.rotator().yaw],scale=[t.scale3d.x,t.scale3d.y,t.scale3d.z],bounds=[o.x-e.x,o.y-e.y,o.z-e.z,o.x+e.x,o.y+e.y,o.z+e.z],components=comps))
  assert sha(MAPFILE)==LOAD_SHA
  (EDGE_OUT/'ocean-probe.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,actors=rows),ensure_ascii=False,indent=1),'utf8')
+def motel_world_water_plane_install():
+ # world_water_plane_install: world-edge-v1/water-plane/water-plane.glb (Tools/build_street_city_water_plane.lua) as
+ # one NoCollision, no-shadow actor WorldEdge_Water with the city water material (G04_Water's M_ocean). The G??_Water
+ # planes it replaces are hidden (visibility off, kept with their assets for reversal): their meshes hold fans of
+ # translucent slopes from a z 0 corner vertex (water_owner_probe 2026-11-01). Orientation by the probe-vertex search.
+ global PREFIX,KEEP,save
+ b=json.loads((EDGE_OUT/'water-plane/build.json').read_text('utf8'));assert sha(b['path'])==b['sha256']
+ PREFIX='/Game/UniversityCity/WorldEdgeV1';KEEP=[];save=save_asset
+ src=(ROOT/'Tools/street_city_activity_native_payload.lua').read_text('utf8').split('def import_one(',1)[1].split('def simple_water(',1)[0];ns=dict(globals());exec('def import_one('+src,ns);imp=ns['import_one']
+ actors={a.get_actor_label():a for a in SUB.get_all_level_actors()}
+ waters=sorted(l for l in actors if re.match(r'^G\d\d_Water$',l));assert waters,'no G??_Water actors'
+ mat=actors['G04_Water'].static_mesh_component.get_material(0);assert mat and 'ocean' in mat.get_path_name().lower(),mat
+ mesh=imp(Path(b['path']),'world-edge-water',0,False)
+ for k in range(len(mesh.get_editor_property('static_materials'))):mesh.set_material(k,mat)
+ bs=mesh.get_editor_property('body_setup')
+ if bs:bs.set_editor_property('collision_trace_flag',unreal.CollisionTraceFlag.CTF_USE_SIMPLE_AS_COMPLEX);bs.set_editor_property('agg_geom',unreal.KAggregateGeom())
+ assert EAL.save_loaded_asset(mesh,False)
+ backup=EDGE_OUT/('UniversityCity-before-water-plane-'+LOAD_SHA[:16]+'.umap')
+ if not backup.exists():shutil.copy2(MAPFILE,backup)
+ if 'WorldEdge_Water' in actors:SUB.destroy_actor(actors['WorldEdge_Water'])
+ a=SUB.spawn_actor_from_class(unreal.StaticMeshActor,unreal.Vector(0,0,0),unreal.Rotator(0,0,0));a.set_actor_label('WorldEdge_Water')
+ a.tags=[unreal.Name('WorldEdgeV1')];a.set_folder_path('UniversityCity/WorldEdgeV1')
+ c=a.static_mesh_component;c.set_static_mesh(mesh);c.set_editor_property('cast_shadow',False);c.set_editor_property('mobility',unreal.ComponentMobility.STATIC)
+ md=mesh.get_static_mesh_description(0);loc=[md.get_vertex_position(unreal.VertexID(i)) for i in range(md.get_vertex_count())];assert loc
+ probes=[[v*100 for v in p] for p in b['probes_m']];pick=None;tried=[]
+ for yaw in (0,90,180,270):
+  for sy in (1,-1):
+   cs,sn=round(math.cos(math.radians(yaw))),round(math.sin(math.radians(yaw)))
+   W=[(cs*v.x-sn*sy*v.y,sn*v.x+cs*sy*v.y,v.z) for v in loc]
+   miss=[p for p in probes if min(abs(w[0]-p[0])+abs(w[1]-p[1])+abs(w[2]-p[2]) for w in W)>5]
+   tried.append(dict(yaw=yaw,mirror_y=sy,missing=len(miss)))
+   if not miss and pick is None:pick=(yaw,sy)
+ assert pick,('no orientation puts the water plane on its authored vertices',tried)
+ a.set_actor_rotation(unreal.Rotator(0,0,pick[0]),False);a.set_actor_scale3d(unreal.Vector(1,pick[1],1))
+ c.set_collision_profile_name('NoCollision');c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION);c.set_editor_property('generate_overlap_events',False)
+ o,e=a.get_actor_bounds(False);got=[o.x-e.x,o.y-e.y,o.z+e.z,o.x+e.x,o.y+e.y];want=[b['bounds_m'][0][0]*100,b['bounds_m'][0][1]*100,1100,b['bounds_m'][1][0]*100,b['bounds_m'][1][1]*100]
+ assert all(abs(g-w)<=5 for g,w in zip(got,want)),('placed bounds differ from the authored world bounds',got,want)
+ hidden=[]
+ for l in waters:
+  w=actors[l];w.set_actor_hidden_in_game(True)
+  for cc in w.get_components_by_class(unreal.PrimitiveComponent):cc.set_visibility(False)
+  hidden.append(l)
+ actors.get('CityEnvironmentController') and actors['CityEnvironmentController'].prepare_for_save()
+ assert unreal.EditorLevelLibrary.save_current_level();new=sha(MAPFILE)
+ installed=read('motel-install');installed.update(parent_map_sha256=LOAD_SHA,map_sha256=new);write('motel-install',installed)
+ (EDGE_OUT/('water-plane-install-'+time.strftime('%Y%m%d-%H%M%S')+'.json')).write_text(json.dumps(dict(status='saved_requires_capture_review',map_sha256=new,parent_map_sha256=LOAD_SHA,backup=str(backup),asset=mesh.get_path_name(),material=mat.get_path_name(),orientation_trials=tried,actor_yaw=pick[0],actor_mirror_y=pick[1],placed_bounds=got,triangles=mesh.get_num_triangles(0),hidden_water_actors=hidden),ensure_ascii=False,indent=1),'utf8')
+def motel_world_water_owner_probe():
+ # world_water_owner_probe (read-only): for each point in world-edge-v1/point-actors-points.json, every water / ocean
+ # surface triangle that covers it (any StaticMeshActor whose material path has 'water' or 'ocean', mesh triangles
+ # rasterised like water_cover_probe), with actor label, component, section material and the triangle's z. The river
+ # mouth shows a world-fixed stair between pale and teal water although one G04_Water plane's bounds cover both sides.
+ pts=json.loads((EDGE_OUT/'point-actors-points.json').read_text('utf8'));hits=[[] for _ in pts]
+ for a in SUB.get_all_level_actors():
+  if not isinstance(a,unreal.StaticMeshActor):continue
+  c=a.static_mesh_component;sm=c.static_mesh
+  if sm is None:continue
+  try:mats=[(c.get_material(k).get_path_name() if c.get_material(k) else '') for k in range(c.get_num_materials())]
+  except Exception:continue
+  if not any(('water' in m.lower() or 'ocean' in m.lower()) for m in mats):continue
+  o,e=a.get_actor_bounds(False)
+  if not any(o.x-e.x<=x<=o.x+e.x and o.y-e.y<=y<=o.y+e.y for x,y in pts):continue
+  md=sm.get_static_mesh_description(0);T=c.get_world_transform()
+  if md is None:continue
+  for t in range(md.get_triangle_count()):
+   tid=unreal.TriangleID(t);vs=md.get_triangle_vertices(tid);Q=[T.transform_location(md.get_vertex_position(v)) for v in vs]
+   if len(Q)<3:continue
+   try:sec=md.get_triangle_polygon_group(tid).id_value
+   except Exception:sec=-1
+   for P in [(Q[0],Q[m],Q[m+1]) for m in range(1,len(Q)-1)]:
+    (ax,ay),(bx,by),(cx,cy)=[(p.x,p.y) for p in P];den=(by-cy)*(ax-cx)+(cx-bx)*(ay-cy)
+    if abs(den)<1e-6:continue
+    for n,(x,y) in enumerate(pts):
+     l1=((by-cy)*(x-cx)+(cx-bx)*(y-cy))/den;l2=((cy-ay)*(x-cx)+(ax-cx)*(y-cy))/den
+     if l1>=-1e-6 and l2>=-1e-6 and 1-l1-l2>=-1e-6:hits[n].append(dict(label=a.get_actor_label(),mesh=sm.get_name(),section=sec,mats=[m.split('/')[-1] for m in mats],z=round(sum(p.z for p in P)/3,1),z_at=round(l1*P[0].z+l2*P[1].z+(1-l1-l2)*P[2].z,1),tri=[[round(q.x),round(q.y),round(q.z)] for q in P],visible=bool(c.get_editor_property('visible')),hidden=bool(a.is_hidden_ed())))
+ assert sha(MAPFILE)==LOAD_SHA
+ (EDGE_OUT/'water-owner.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,points=[dict(point=p,hits=h) for p,h in zip(pts,hits)]),ensure_ascii=False,indent=1),'utf8')
+def motel_world_point_actors_probe():
+ # world_point_actors_probe (read-only): every actor whose bounds contain one of the points in
+ # world-edge-v1/point-actors-points.json ([[x,y],...] cm, any z), with class, bounds, collision, hidden flags and per
+ # component mesh / materials. For things traces cannot see (NoCollision planes, water) that still change the picture.
+ pts=json.loads((EDGE_OUT/'point-actors-points.json').read_text('utf8'));out=[]
+ for x,y in pts:
+  rows=[]
+  for a in SUB.get_all_level_actors():
+   try:o,e=a.get_actor_bounds(False)
+   except Exception:continue
+   if not (o.x-e.x<=x<=o.x+e.x and o.y-e.y<=y<=o.y+e.y) or e.x>2e6:continue
+   comps=[]
+   for c in a.get_components_by_class(unreal.PrimitiveComponent):
+    mats=[]
+    try:
+     for k in range(c.get_num_materials()):m=c.get_material(k);mats.append(m.get_path_name().split('/')[-1] if m else '')
+    except Exception:pass
+    mesh=''
+    try:mesh=c.get_editor_property('static_mesh').get_path_name().split('/')[-1]
+    except Exception:pass
+    comps.append(dict(cls=c.get_class().get_name(),mesh=mesh,mats=mats,collision=str(c.get_collision_enabled()),visible=bool(c.get_editor_property('visible'))))
+   rows.append(dict(label=a.get_actor_label(),cls=a.get_class().get_name(),bounds=[round(v) for v in (o.x-e.x,o.y-e.y,o.z-e.z,o.x+e.x,o.y+e.y,o.z+e.z)],hidden=bool(a.is_hidden_ed()),components=comps))
+  out.append(dict(point=[x,y],actors=rows))
+ assert sha(MAPFILE)==LOAD_SHA
+ (EDGE_OUT/'point-actors.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,points=out),ensure_ascii=False,indent=1),'utf8')
 def motel_world_seabed_layers_probe():
  # world_seabed_layers_probe (read-only): the A03 sea (x 80-135 m, y 700-830 m) still shows light and dark rectangles
  # after the sand sheet was raised 1 -> 15 cm (captures 2026-11-01 01:37), so they are not depth fighting. Every 1 m in
  # x and 2 m in y, trace down from 50 m and pass through each hit actor (no size filter: shore_grid_probe skipped actors
  # under 15 m extent, which can include ground tiles), recording up to 8 layers: label, z, material leaf.
- # Output world-edge-v1/seabed-layers.json (rows along y; cells = list of [label, z, material]).
+ # Output world-edge-v1/seabed-layers.json (rows along y; cells = list of [label, z, material]). Another region:
+ # world-edge-v1/seabed-layers-region.json {"x":[x0,x1,dx],"y":[y0,y1,dy],"out":"name.json"} (cm).
  world=unreal.EditorLevelLibrary.get_editor_world()
+ R=EDGE_OUT/'seabed-layers-region.json';R=json.loads(R.read_text('utf8')) if R.exists() else dict(x=[8000,13500,100],y=[70000,83000,200],out='seabed-layers.json')
  def layers(x,y):
   ign=[];out=[]
   for _ in range(8):
@@ -806,8 +923,8 @@ def motel_world_seabed_layers_probe():
    except Exception:pass
    out.append([t[9].get_actor_label(),round(t[4].z,1),mat]);ign.append(t[9])
   return out
- xs=list(range(8000,13600,100));rows=[]
- for y in range(70000,83001,200):rows.append(dict(y=y,cells=[layers(x,y) for x in xs]))
+ xs=list(range(R['x'][0],R['x'][1]+1,R['x'][2]));rows=[]
+ for y in range(R['y'][0],R['y'][1]+1,R['y'][2]):rows.append(dict(y=y,cells=[layers(x,y) for x in xs]))
  assert sha(MAPFILE)==LOAD_SHA
- (EDGE_OUT/'seabed-layers.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,x_cm=xs,rows=rows)),'utf8')
+ (EDGE_OUT/R['out']).write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,x_cm=xs,rows=rows)),'utf8')
 ]====]

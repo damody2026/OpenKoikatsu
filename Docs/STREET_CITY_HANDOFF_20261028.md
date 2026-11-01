@@ -367,4 +367,15 @@
 - 沙片從高出地面 1 cm 改成 15 cm 之後，方格完全沒變，可見不是 z-fighting。新增唯讀探測 `world_seabed_layers_probe`（A03 外海 x 80～135 m、y 700～830 m，逐層記錄 actor、高度、材質，輸出 `world-edge-v1/seabed-layers.json`）。結果：沙片沿 x 合併成長條時取整條最高格的高度，碰到近岸台階格（約 1040 cm）的列整列被抬到 1055 cm，其他列在 1015 cm，兩種水深形成深淺方格。改成同高度的格子才合併、各用自己的高度後重建並安裝。
 - 驗收：4 段實走全通過（physics-20261101-034313、035531、041452 與第 0 段）；重拍 `shop-survey-v1/captures-20261101-042558`（20/20）中，A02／A03／A04 外海已均勻，沒有方格。
 - 剩下：A03 河口右側的水面邊緣仍有小段階梯狀的水面輪廓（河道水面網格本身的邊），之後和河口海堤一起處理。
+- 河口（11-01 下午）：
+  - 海床改成一整片連續高度面（離沙灘陸地越遠越深，最深到 1015 cm；2 m 格，約 8.2 萬三角面），取代淺灘斜坡和逐格沙片。
+  - 河道兩岸（對岸 80 m 內）不鋪沙灘，改成連續灰石海堤 `WorldEdge_Seawall`（`seawall.glb`，1602 三角面，有碰撞）。檢查圖 `world-edge-v1/coast-strip/seabed-review.png`。
+  - 河口仍有的階梯水色，原因是 G??_Water 網格帶著從 z 0 角點拉出的斜面扇。新增 `Tools/build_street_city_water_plane.lua`，以 `world_water_plane_install` 裝成一整片 z 1100 的 `WorldEdge_Water`（820 三角面），原 G??_Water 隱藏。詳見 `Docs/STREET_ERRORS.md`。
+  - 驗收：4 段實走全通過，重拍 `shop-survey-v1/captures-20261101-102245`，A03 河口和外海連成同一種水色，海堤清楚，G113 內河正常。
+  - 新的唯讀探測：`world_seabed_layers_probe`（區域可由 `seabed-layers-region.json` 指定）、`world_point_actors_probe`、`world_water_owner_probe`（逐點列出覆蓋的水面三角形與 z）。
+  - 剩下：
+    - A13 左上內陸湖（x>299 m，不在 shore-grid 範圍）水下仍看得到綠色草地方塊，要把海床高度面延伸到全城水域；
+    - 燈塔旁白色方塊來源未查；
+    - `/Game/UniversityCity/WorldEdgeV1/Water/` 下有一個沒用到的 G01 複本資產，可刪。
+- 背景鏈（scratchpad `bed_chain.txt`）：實走與重拍每 30 秒看佇列，有更高優先的人在等就停掉自己的程序樹、release，之後重跑該段；安裝 job 失敗即停。
 - 實走偶發失敗（10-31 16:42、19:15）：發生在泳池入水台階往下的第一階，不是旅館樓梯，屬於「懸空」判定的餘裕太小（站立高差約 120.5 cm，上限 120 cm），詳見 `Docs/STREET_ERRORS.md`。要修得改 StreetSocialCity 的 `CityEnvironmentImmersionAudit.cpp`，依規則不動，失敗就重跑。

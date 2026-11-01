@@ -5,16 +5,18 @@
 --   land = ground top >= 1150 cm; blur the land mask (gaussian, sigma `--sigma` m) and take the iso-line at `--level`
 --   (below 0.5 = seaward of the 2.5 m stair corners), chain it into polylines (marching squares), drop pieces shorter
 --   than 30 m, smooth (Chaikin) and resample every metre;
---   along each polyline lay the old cross profile on the line normal: flat 1 cm over the 1200 land from `--inland` m
---   inland out to the line, then down to 1060 over `--slope` m into the water (z 1100), then on to `--bed` cm over
---   `--shelf` m more, so the shallow water reads as one sandy shelf instead of the 1000/1095 seabed squares.
--- Water bed cells also get a sand sheet 15 cm over the bed (they kept the grass of the land they were pressed from).
--- Output world-edge-v1/coast-strip/coast-strip.glb + build.json in the coast strip contract (probes, bounds), so the
--- native job world_coast_strip_install places it as WorldEdge_CoastStrip (replacing v1).
--- Usage: lua Tools/build_street_city_shore_strip.lua [--dir <world-edge-v1 dir>] [--sigma 2.5] [--level 0.2] [--inland 6] [--slope 6] [--shelf 14] [--bed 1030]
+--   along each polyline lay the beach cross profile on the line normal: flat 1 cm over the 1200 land from `--inland` m
+--   inland out to the line, then down to 1060 over `--slope` m into the water (z 1100);
+--   where the far bank is within `--channel` m (the river mouth) a quay wall replaces the beach (seawall.glb);
+--   every water bed cell is covered by one seabed heightfield: the profile continued by the distance to beach land
+--   (`--off` m from the land cells to the line), down to `--bed` cm over `--shelf` m more, then 1015 in open water, never
+--   under the original ground + 15 cm (the bed cells kept the grass of the land they were pressed from).
+-- Output world-edge-v1/coast-strip/coast-strip.glb (+ seawall.glb) + build.json in the coast strip contract (probes,
+-- bounds), so the native job world_coast_strip_install places them as WorldEdge_CoastStrip / WorldEdge_Seawall.
+-- Usage: lua Tools/build_street_city_shore_strip.lua [--dir <world-edge-v1 dir>] [--sigma 2.5] [--level 0.2] [--inland 6] [--slope 6] [--shelf 14] [--bed 1030] [--channel 80] [--off 2]
 package.path='Tools/lua/?.lua;'..package.path
 local j=require('ok.json');local out='C:/portable/OpenKoikatsu/output/street-social-city-production/world-edge-v1'
-local o={sigma=2.5,level=0.2,inland=6,slope=6,shelf=14,bed=1030}
+local o={sigma=2.5,level=0.2,inland=6,slope=6,shelf=14,bed=1030,channel=80,off=2}
 for i=1,#arg-1 do local k=arg[i]:match('^%-%-(%w+)$');if k and o[k] then o[k]=tonumber(arg[i+1]) elseif k=='dir' then out=arg[i+1] end end
 local code=[====[
 import bpy,bmesh,json,hashlib,math
@@ -106,51 +108,121 @@ for l in lines:
  N=normals(l)
  if sum(wet_at(p[0]+5*n[0],p[1]+5*n[1]) for p,n in zip(l,N))>=.5*len(l):kept.append((l,N))
 dropped=len(lines)-len(kept);lines=[l for l,_ in kept]
-bm=bmesh.new();cols_all=0
+# channel banks (the far bank within --channel m along the seaward normal) get a quay wall instead of a beach: sand on
+# both sides of the ~50 m river mouth read as a flooded beach, and its shelves ended in stairs (A03 2026-11-01)
+CH=T['channel']
+def far_bank(p,n):return next((s for s in range(2,int(CH)+1) if Fat(p[0]+n[0]*s,p[1]+n[1]*s)>=L),None)
+# the lines keep the land part of the cross profile down to the waterline slope (d <= --slope); everything under the
+# water is the seabed heightfield below, so no shelf ends in a stair where a line stops
+lprof=[q for q in prof if q[0]<=SL]
+bm=bmesh.new();wm=bmesh.new();cols_all=0;quay=[]
 for l,N in kept:
- cols=[]
- for p,(nx_,ny_) in zip(l,N):
-  # in a channel the far bank is close: squeeze the slope + shelf into half the gap so the two banks' shelves never
-  # overlap (coplanar shelves would flicker under the water)
-  far=next((s for s in range(2,int(SL+SH)*2+4) if Fat(p[0]+nx_*s,p[1]+ny_*s)>=L),None)
-  k=1.0 if far is None else min(1.0,max(.2,(far/2-.5)/(SL+SH)))
-  cols.append([bm.verts.new((p[0]+nx_*(d if d<=0 else d*k),p[1]+ny_*(d if d<=0 else d*k),z)) for d,z in prof])
- for a,b in zip(cols,cols[1:]):
-  for k in range(len(prof)-1):bm.faces.new((a[k],a[k+1],b[k+1],b[k]))
- cols_all+=len(cols)
+ runs=[[]]
+ for p,n in zip(l,N):
+  q=far_bank(p,n) is not None
+  if runs[-1] and runs[-1][-1][2]!=q:runs.append([runs[-1][-1][:2]+(q,)])
+  runs[-1].append((p,n,q))
+ for run in runs:
+  if len(run)<2:continue
+  if run[-1][2]:
+   # quay: battered face from under the seabed to 30 cm over the land top, 1.2 m cap, back face into the land
+   cols=[[wm.verts.new((p[0]+n[0]*d,p[1]+n[1]*d,z)) for d,z in ((0.3,BED-.2),(0.0,12.30),(-1.2,12.30),(-1.2,11.90))] for p,n,_ in run]
+   for a,b in zip(cols,cols[1:]):
+    for k in range(3):wm.faces.new((a[k],a[k+1],b[k+1],b[k]))
+   quay+=[p for p,_,_ in run]
+  else:
+   cols=[[bm.verts.new((p[0]+n[0]*d,p[1]+n[1]*d,z)) for d,z in lprof] for p,n,_ in run]
+   for a,b in zip(cols,cols[1:]):
+    for k in range(len(lprof)-1):bm.faces.new((a[k],a[k+1],b[k+1],b[k]))
+   cols_all+=len(cols)
 assert cols_all,'no shore line'
-# sand bed: the water bed cells keep the material of the ground they were pressed down from (grass squares read as dark
-# blue stairs under the shallow water off the river mouth, A03 2026-10-31), so every water bed cell (ground < 1060, water)
-# gets one sand sheet 15 cm over the bed, merged into runs along x per 1 m row; the shelf (down to --bed 1030) stays on
-# top. A run only merges cells of the same ground height: taking the run's highest cell lifted whole rows of open sea
-# to a near-shore stair (1040 -> sheet 1055 next to rows at 1015), and the two water depths read as light and dark
-# rectangles off A03 (seabed-layers probe 2026-11-01).
-bed=0
+# seabed: one heightfield over every water bed cell (ground < 1060 under water). Height = the cross profile continued
+# by the distance to the nearest beach land (--off m from the land cells to the line): slope to 10.60, shelf to --bed
+# over --shelf m, then 10.15 in open water; never under the original ground + 15 cm (the bed cells kept the grass of the
+# land they were pressed from). Land within 20 m of a quay (4 m still left a shallow shelf along it) is not beach land, so the bed stays deep at a quay face.
+# Replaces the per-row sand runs, whose heights followed the old terrace stairs (light / dark rectangles off A03,
+# 2026-11-01) and the shelf quads, whose ends drew stairs at the river mouth.
+src=land.astype(bool).copy()
+for p in quay:
+ k=int(round((p[0]-xs[0])/st));i=int(round((p[1]-ys[0])/st));r=int(math.ceil(20/st))
+ src[max(0,i-r):i+r+1,max(0,k-r):k+r+1]=False
+# chamfer distance (1, sqrt 2) in cells, two passes, then a light blur
+INF=1e9;D=np.where(src,0.0,INF).tolist();s2=math.sqrt(2)
 for i in range(ny):
- k=0
- while k<nx:
-  if 0<=Z[i,k]<1060 and WET[i,k]:
-   e=k
-   while e+1<nx and Z[i,e+1]==Z[i,k] and WET[i,e+1]:e+=1
-   x0,x1=xs[0]+(k-.5)*st,xs[0]+(e+.5)*st;y0,y1=ys[0]+(i-.5)*st,ys[0]+(i+.5)*st;zb=float(Z[i,k])/100+.15
-   v=[bm.verts.new((x0,y0,zb)),bm.verts.new((x1,y0,zb)),bm.verts.new((x1,y1,zb)),bm.verts.new((x0,y1,zb))];bm.faces.new(v);bed+=1;k=e+1
-  else:k+=1
-bmesh.ops.recalc_face_normals(bm,faces=bm.faces)
-for f in bm.faces:
- if f.normal.z<0:f.normal_flip()
-me=bpy.data.meshes.new('CoastStrip');bm.to_mesh(me);bm.free()
-for p in me.polygons:p.use_smooth=True
-ob=bpy.data.objects.new('CoastStrip',me);bpy.context.collection.objects.link(ob)
-m=bpy.data.materials.new('S_CoastSand');m.use_nodes=True;me.materials.append(m)
-uv=me.uv_layers.new(name='UVMap')
-for lp in me.loops:v=me.vertices[lp.vertex_index].co;uv.data[lp.index].uv=(v.x/4,v.y/4)
-me.calc_loop_triangles();dest=O/'coast-strip';dest.mkdir(parents=True,exist_ok=True);glb=dest/'coast-strip.glb'
-bpy.ops.object.select_all(action='SELECT');bpy.ops.export_scene.gltf(filepath=str(glb),export_format='GLB',use_selection=True,export_apply=True,export_yup=True)
-xyz=[v.co for v in me.vertices]
-probes=[[round(c.x,3),round(c.y,3),round(c.z,3)] for c in (xyz[0],xyz[len(xyz)//2],xyz[-1],xyz[len(prof)*7+2])]
-meta=dict(status='authored_requires_native_install',mode='shore-grid-v2',path=str(glb),sha256=hashlib.sha256(glb.read_bytes()).hexdigest(),probe_map_sha256=G['map_sha256'],opt=T,
- triangles=len(me.loop_triangles),lines=len(lines),dropped_dry_lines=dropped,bed_quads=bed,line_lengths_m=sorted([round(length(l)) for l in lines],reverse=True)[:20],bounds_m=[[min(c[k] for c in xyz) for k in range(3)],[max(c[k] for c in xyz) for k in range(3)]],probes_m=probes)
-(dest/'build.json').write_text(json.dumps(meta,indent=1),'utf8');print('SHORE',meta['triangles'],'tris lines',meta['lines'],meta['line_lengths_m'][:8],flush=True)
+ R=D[i];P=D[i-1] if i else None
+ for k in range(nx):
+  v=R[k]
+  if k and R[k-1]+1<v:v=R[k-1]+1
+  if P is not None:
+   if P[k]+1<v:v=P[k]+1
+   if k and P[k-1]+s2<v:v=P[k-1]+s2
+   if k+1<nx and P[k+1]+s2<v:v=P[k+1]+s2
+  R[k]=v
+for i in range(ny-1,-1,-1):
+ R=D[i];P=D[i+1] if i+1<ny else None
+ for k in range(nx-1,-1,-1):
+  v=R[k]
+  if k+1<nx and R[k+1]+1<v:v=R[k+1]+1
+  if P is not None:
+   if P[k]+1<v:v=P[k]+1
+   if k+1<nx and P[k+1]+s2<v:v=P[k+1]+s2
+   if k and P[k-1]+s2<v:v=P[k-1]+s2
+  R[k]=v
+Dm=blur(np.minimum(np.array(D),200.0)*st,1.0/st)
+ds=[d for d,_ in prof]+[SL+SH+20];zs=[z for _,z in prof]+[10.15]
+zf=np.maximum(Z/100+.15,np.interp(Dm-T['off'],ds,zs))
+bedc=(Z>=0)&(Z<1060)&WET
+# 2 x 2 cell blocks (a 1 m heightfield was 296k triangles): a block covers its bed cells at their highest height
+S=2;by,bx=(ny+S-1)//S,(nx+S-1)//S
+zp=np.full((by*S,bx*S),-1e9);zp[:ny,:nx]=np.where(bedc,zf,-1e9);zp=zp.reshape(by,S,bx,S).max(axis=(1,3));bb=zp>-1e8
+hm=bmesh.new();cv={}
+def corner(i,k):
+ # corner between blocks (i-1..i, k-1..k): the highest adjacent bed block, so no cell pokes through
+ if (i,k) not in cv:
+  z=max(zp[a,b] for a in (i-1,i) for b in (k-1,k) if 0<=a<by and 0<=b<bx and bb[a,b])
+  cv[(i,k)]=hm.verts.new((xs[0]+(k*S-.5)*st,ys[0]+(i*S-.5)*st,z))
+ return cv[(i,k)]
+bed=0
+for i in range(by):
+ for k in range(bx):
+  if bb[i,k]:hm.faces.new((corner(i,k),corner(i,k+1),corner(i+1,k+1),corner(i+1,k)));bed+=1
+# merge the flat open water (and every planar run) into large faces
+bmesh.ops.dissolve_limit(hm,angle_limit=math.radians(0.3),use_dissolve_boundaries=False,verts=hm.verts,edges=hm.edges)
+tmp=bpy.data.meshes.new('bed');hm.to_mesh(tmp);hm.free();bm.from_mesh(tmp)
+def finish(b,name,matname,rgb):
+ bmesh.ops.recalc_face_normals(b,faces=b.faces)
+ for f in b.faces:
+  if f.normal.z<-1e-3:f.normal_flip()
+ me=bpy.data.meshes.new(name);b.to_mesh(me);b.free()
+ for p in me.polygons:p.use_smooth=name=='CoastStrip'
+ ob=bpy.data.objects.new(name,me);bpy.context.collection.objects.link(ob)
+ m=bpy.data.materials.new(matname);m.use_nodes=True;m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value=(*rgb,1);me.materials.append(m)
+ uv=me.uv_layers.new(name='UVMap')
+ for lp in me.loops:v=me.vertices[lp.vertex_index].co;uv.data[lp.index].uv=((v.x+v.z)/4,(v.y+v.z)/4)
+ me.calc_loop_triangles();return ob
+ob=finish(bm,'CoastStrip','S_CoastSand',(.76,.70,.56))
+wall=finish(wm,'Seawall','S_Seawall',(.52,.52,.50)) if quay else None
+dest=O/'coast-strip';dest.mkdir(parents=True,exist_ok=True)
+def export(o,glb):
+ bpy.ops.object.select_all(action='DESELECT');o.select_set(True)
+ bpy.ops.export_scene.gltf(filepath=str(glb),export_format='GLB',use_selection=True,export_apply=True,export_yup=True)
+ me=o.data;xyz=[v.co for v in me.vertices];n=len(xyz)
+ # asymmetric probe vertices for the native yaw x mirror search
+ probes=[[round(c.x,3),round(c.y,3),round(c.z,3)] for c in (xyz[0],xyz[n//3],xyz[n//2],xyz[-1])]
+ return dict(path=str(glb),sha256=hashlib.sha256(glb.read_bytes()).hexdigest(),triangles=len(me.loop_triangles),bounds_m=[[min(c[k] for c in xyz) for k in range(3)],[max(c[k] for c in xyz) for k in range(3)]],probes_m=probes)
+# review image (1 px = 1 cell, north up): land green, seabed blue (darker = deeper), quay points red
+px=np.zeros((ny,nx,4));px[...,3]=1
+px[land.astype(bool)]=(.25,.55,.2,1)
+t=np.clip((zf-10.15)/(11.0-10.15),0,1);bl=bedc&~land.astype(bool)
+for c,(lo,hi) in enumerate(((.05,.75),(.15,.85),(.35,.95))):px[...,c]=np.where(bl,lo+(hi-lo)*t,px[...,c])
+for p in quay:
+ k=int(round((p[0]-xs[0])/st));i=int(round((p[1]-ys[0])/st))
+ if 0<=i<ny and 0<=k<nx:px[i,k]=(1,0,0,1)
+im=bpy.data.images.new('seabed',nx,ny);im.pixels.foreach_set(px.astype(np.float32).ravel());im.filepath_raw=str(dest/'seabed-review.png');im.file_format='PNG';im.save()
+meta=export(ob,dest/'coast-strip.glb')
+meta.update(status='authored_requires_native_install',mode='shore-grid-v3',probe_map_sha256=G['map_sha256'],opt=T,lines=len(lines),dropped_dry_lines=dropped,bed_cells=bed,quay_points=len(quay),line_lengths_m=sorted([round(length(l)) for l in lines],reverse=True)[:20])
+if wall:meta['seawall']=export(wall,dest/'seawall.glb')
+(dest/'build.json').write_text(json.dumps(meta,indent=1),'utf8');print('SHORE',meta['triangles'],'tris lines',meta['lines'],'quay',len(quay),'wall',meta.get('seawall',{}).get('triangles'),flush=True)
 ]====]
 local path=out..'/shore-strip-payload.json'
 local f=assert(io.open(path,'wb'));f:write(j.encode({out=out,code=code,opt=o}));f:close()
