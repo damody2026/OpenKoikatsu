@@ -17,6 +17,7 @@
 - **腳本與工具**：專案腳本用 Lua（`Tools\lua\lua.exe`），不新增 `.py`／`.ps1`；交付的工具用 Rust。
 - **錯誤紀錄**：做錯的事與修正寫進 `Docs/ERROR_LOG.md`（街頭相關寫 `Docs/STREET_ERRORS.md`），兩邊合併時兩邊的列都保留。
 - **共用工作樹**：其他 session 可能同時改同一批檔案，只提交自己的 hunk。
+- **不能讓別組編譯失敗**：C／E／F 三組共用 `Tools/ok-extract`、`Tools/ok-rules`、`Plugins/`、`Source/`，任何一組的改動讓另一組編譯或連結失敗都是重大 bug，最優先修。改到這些共用程式碼（含 `Cargo.toml`／`Cargo.lock`、`.Build.cs`）的提交，提交前除了 `cargo check`（Rust 另跑 `--no-default-features`，那是 `build-release.cmd` 給 Unreal 的版本），還要實際建置會連結它的 Unreal 目標（遊戲 `OpenKoikatsu` Development 與編輯器）並確認連結成功。
 
 ## 打包街區交流 demo（StreetSocial.cmd 執行的版本）
 
