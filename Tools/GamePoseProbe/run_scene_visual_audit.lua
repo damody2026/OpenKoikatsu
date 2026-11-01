@@ -17,7 +17,14 @@ parser:flag("--stages")
 parser:flag("--lightmaps")
 parser:flag("--normals")
 parser:flag("--shadow-mask")
+-- Every property of the materials whose shader name contains one of these |-separated words (or all), as `prop` rows
+-- of Scene<n>.scene.tsv.
+parser:opt("--material-props")
 parser:opt("--hide")
+-- The --hide list from a UTF-8 text file, one path part per line (paths with non-ASCII names).
+parser:opt("--hide-file")
+-- Renderers (path parts, comma-separated) hidden for the --shadow-mask render only.
+parser:opt("--depth-hide")
 parser:opt("--white")
 parser:opt("--mesh-dump")
 local a = parser:parse(arg)
@@ -59,7 +66,16 @@ local success, err = xpcall(function()
         if a.lightmaps then fs.setenv("OK_PROBE_LIGHTMAPS", "1") end
         if a.normals then fs.setenv("OK_PROBE_NORMALS", "1") end
         if a.shadow_mask then fs.setenv("OK_PROBE_SHADOW_MASK", "1") end
-        if a.hide then fs.setenv("OK_PROBE_HIDE", a.hide) end
+        if a.material_props then fs.setenv("OK_PROBE_MATERIAL_PROPS", a.material_props) end
+        local hide = a.hide
+        if a.hide_file then
+            local parts = {}
+            for line in path.read_text(a.hide_file):gmatch("[^\r\n]+") do parts[#parts + 1] = line end
+            if hide then table.insert(parts, 1, hide) end
+            hide = table.concat(parts, ",")
+        end
+        if hide then fs.setenv("OK_PROBE_HIDE", hide) end
+        if a.depth_hide then fs.setenv("OK_PROBE_DEPTH_HIDE", a.depth_hide) end
         if a.white then fs.setenv("OK_PROBE_WHITE", a.white) end
         if a.mesh_dump then fs.setenv("OK_PROBE_MESH", a.mesh_dump) end
         if a.gpu_probe then

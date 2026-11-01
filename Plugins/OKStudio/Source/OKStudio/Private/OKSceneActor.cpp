@@ -495,7 +495,14 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			if (OutError.Contains(TEXT("has no meshes"))) { OutError.Reset(); AddRenderCamera(Model, Prefab, Out); return true; }
 			return false;
 		}
-		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, false,
+		// A mod item made entirely with Unity's Standard shader (buildings, ground pieces) is lit as Standard is: the
+		// item program's toon shading ignores its _Color, _Metallic and the light's angle (83283571_p1's concrete ground
+		// under the water drew 1.8 times the native brightness). It draws with the map materials' Standard graph instead,
+		// still on the items' lighting channel (Studio's character light).
+		bool bStandardItem = Session.PartCount() > 0;
+		for (int32 Part = 0; Part < Session.PartCount() && bStandardItem; ++Part)
+			bStandardItem = Session.MaterialShaderName(Part).StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase);
+		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, bStandardItem,
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;
 		Out.Preview = Actor;

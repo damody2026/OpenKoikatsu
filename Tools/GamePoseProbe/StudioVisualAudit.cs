@@ -275,6 +275,29 @@ public sealed partial class GamePoseProbe {
                         if (texture != null) { var cs = typeof(Texture).GetProperty("activeTextureColorSpace", BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic); var rt = texture as RenderTexture; writer.WriteLine("texture_space\t"+prefix+"\t"+key+"\t"+(cs==null?"unknown":cs.GetValue(texture,null).ToString())+"\trt_srgb="+(rt==null?"n/a":rt.sRGB.ToString())); }
                         writer.WriteLine("texture\t" + prefix + "\t" + key + "\t" + (texture == null ? "null" : texture.name + ":" + texture.width + ":" + texture.height) + "\t" + material.GetTextureScale(key).ToString("R") + "\t" + material.GetTextureOffset(key).ToString("R"));
                     }
+                    // OK_PROBE_MATERIAL_PROPS=<parts of shader names separated by |, or all>: every property those materials
+                    // have, plus their render queue (the lists above only name the common ones).
+                    string allProps = Environment.GetEnvironmentVariable("OK_PROBE_MATERIAL_PROPS");
+                    if (!String.IsNullOrEmpty(allProps) && (allProps == "all" || Array.Exists(allProps.Split('|'), w => w.Length > 0 && material.shader.name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))) {
+                        Shader shader = material.shader;
+                        writer.WriteLine("prop\t" + prefix + "\t(renderQueue)\tQueue\t" + material.renderQueue);
+                        for (int p = 0; p < shader.GetPropertyCount(); ++p) {
+                            string name = shader.GetPropertyName(p);
+                            var type = shader.GetPropertyType(p);
+                            string value;
+                            switch (type) {
+                                case UnityEngine.Rendering.ShaderPropertyType.Color: value = material.GetColor(name).ToString("R"); break;
+                                case UnityEngine.Rendering.ShaderPropertyType.Vector: value = material.GetVector(name).ToString("R"); break;
+                                case UnityEngine.Rendering.ShaderPropertyType.Texture: {
+                                    Texture t = material.GetTexture(name);
+                                    value = (t == null ? "null" : t.name + ":" + t.width + ":" + t.height + ":" + t.GetType().Name) + "\t" + material.GetTextureScale(name).ToString("R") + "\t" + material.GetTextureOffset(name).ToString("R");
+                                    break;
+                                }
+                                default: value = material.GetFloat(name).ToString("R"); break;
+                            }
+                            writer.WriteLine("prop\t" + prefix + "\t" + name + "\t" + type + "\t" + value);
+                        }
+                    }
                 }
             }
         }
@@ -436,6 +459,17 @@ public sealed partial class GamePoseProbe {
                     File.WriteAllBytes(output + ".shadow-mask.png", maskRead.EncodeToPNG());
                     RenderTexture.active = depth; depthRead.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); depthRead.Apply();
                     File.WriteAllBytes(output + ".depth.r32f", depthRead.GetRawTextureData());
+                    // The camera's depth texture itself (the global _CameraDepthTexture the render left bound), sampled as
+                    // a texture: raw device depth in r (reversed Z on D3D11: 1 near, 0 far). The command-buffer copy above
+                    // names the texture by id and can resolve to another target.
+                    Texture global = Shader.GetGlobalTexture("_CameraDepthTexture");
+                    string globalInfo = global == null ? "none" : global.name + ":" + global.width + ":" + global.height + ":" + ((global as RenderTexture) == null ? global.GetType().Name : (global as RenderTexture).format.ToString());
+                    if (global != null) {
+                        Graphics.Blit(global, depth);
+                        RenderTexture.active = depth; depthRead.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); depthRead.Apply();
+                        File.WriteAllBytes(output + ".depth-global.r32f", depthRead.GetRawTextureData());
+                    }
+                    File.WriteAllText(output + ".depth-global.txt", "texture\t" + globalInfo + "\nreversed_z\t" + SystemInfo.usesReversedZBuffer + "\n");
                     File.WriteAllText(output + ".shadow-mask.txt", "light\t" + (shadowLight == null ? "none" : PathOf(shadowLight.transform) + "\t" + shadowLight.shadows + "\t" + shadowLight.shadowStrength.ToString("R"))
                         + "\nshadow_distance\t" + QualitySettings.shadowDistance.ToString("R") + "\ncascades\t" + QualitySettings.shadowCascades
                         + "\nnear\t" + main.nearClipPlane.ToString("R") + "\nfar\t" + main.farClipPlane.ToString("R") + "\n");
@@ -446,6 +480,29 @@ public sealed partial class GamePoseProbe {
                     RenderTexture.ReleaseTemporary(mask); RenderTexture.ReleaseTemporary(depth); RenderTexture.ReleaseTemporary(target);
                     UnityEngine.Object.Destroy(maskRead); UnityEngine.Object.Destroy(depthRead);
                     maskCommands.Release(); depthCommands.Release();
+                }
+                // OK_PROBE_DEPTH_HIDE=<path part>[,...]: the screen camera's depth texture again with those renderers
+                // hidden for two frames (is a surface in the depth texture, and what lies behind it), as
+                // <output>.depth-global-hidden.r32f.
+                string depthHide = Environment.GetEnvironmentVariable("OK_PROBE_DEPTH_HIDE");
+                if (!String.IsNullOrEmpty(depthHide)) {
+                    var hidden = new System.Collections.Generic.List<Renderer>();
+                    foreach (Renderer renderer in UnityEngine.Object.FindObjectsOfType<Renderer>())
+                        if (renderer.enabled && Array.Exists(depthHide.Split(','), p => PathOf(renderer.transform).Contains(p))) { renderer.enabled = false; hidden.Add(renderer); }
+                    yield return new WaitForEndOfFrame();
+                    yield return new WaitForEndOfFrame();
+                    Texture global = Shader.GetGlobalTexture("_CameraDepthTexture");
+                    if (global != null) {
+                        var hiddenDepth = RenderTexture.GetTemporary(1280, 720, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+                        var hiddenRead = new Texture2D(1280, 720, TextureFormat.RFloat, false, true);
+                        RenderTexture wasActive = RenderTexture.active;
+                        Graphics.Blit(global, hiddenDepth);
+                        RenderTexture.active = hiddenDepth; hiddenRead.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0); hiddenRead.Apply();
+                        File.WriteAllBytes(output + ".depth-global-hidden.r32f", hiddenRead.GetRawTextureData());
+                        RenderTexture.active = wasActive; RenderTexture.ReleaseTemporary(hiddenDepth); UnityEngine.Object.Destroy(hiddenRead);
+                    }
+                    File.WriteAllText(output + ".depth-global-hidden.txt", "hidden\t" + hidden.Count + "\n");
+                    foreach (Renderer renderer in hidden) renderer.enabled = true;
                 }
             }
             // OK_PROBE_CAPTURE_STAGES=1: the same frame with every enabled image effect off, then with each one off alone.
