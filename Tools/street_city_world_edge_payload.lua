@@ -800,6 +800,45 @@ def motel_world_ocean_probe():
   rows.append(dict(label=a.get_actor_label(),cls=a.get_class().get_name(),loc=[t.translation.x,t.translation.y,t.translation.z],rot=[t.rotation.rotator().roll,t.rotation.rotator().pitch,t.rotation.rotator().yaw],scale=[t.scale3d.x,t.scale3d.y,t.scale3d.z],bounds=[o.x-e.x,o.y-e.y,o.z-e.z,o.x+e.x,o.y+e.y,o.z+e.z],components=comps))
  assert sha(MAPFILE)==LOAD_SHA
  (EDGE_OUT/'ocean-probe.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,actors=rows),ensure_ascii=False,indent=1),'utf8')
+def motel_world_bank_probe():
+ # world_bank_probe (read-only): the river / lake banks (G099: a grass strip interrupts the stone bank above the water;
+ # A04 / A17: stepped bank stones). Every land cell within 8 m of the water plane (world-edge-v1/water-plane/mask.json),
+ # ground top z and the hit material leaf, passing through our own dressing. Output world-edge-v1/bank.json: rows {x,
+ # y0, z: space separated cm ints (-1 none), m: '|' separated material leaf names}.
+ M=json.loads((EDGE_OUT/'water-plane/mask.json').read_text('utf8'));world=unreal.EditorLevelLibrary.get_editor_world()
+ wet=set()
+ for x,runs in M['rows']:
+  for y0,y1 in runs:wet.update((x,y) for y in range(y0,y1))
+ band=set()
+ for x,y in wet:
+  for dx in range(-8,9):
+   for dy in range(-8,9):
+    if dx*dx+dy*dy<=64 and (x+dx,y+dy) not in wet:band.add((x+dx,y+dy))
+ def own(l):return l.startswith(('WorldEdge_','Beach_','Park_','Landmark_')) or bool(re.match(r'^G\d\d_Water$',l)) or l.startswith('Activity_ACTSPACE')
+ def ground(x,y):
+  ign=[]
+  for _ in range(10):
+   r=unreal.SystemLibrary.line_trace_single(world,unreal.Vector(x,y,5000),unreal.Vector(x,y,-5000),unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,True,ign,unreal.DrawDebugTrace.NONE,True)
+   t=r.to_tuple() if r is not None else (False,)
+   if not t[0] or t[9] is None:return -1,''
+   if own(t[9].get_actor_label()):ign.append(t[9]);continue
+   mat=''
+   try:
+    m=t[10].get_material(t[11]) if t[10] is not None else None
+    mat=m.get_name() if m else ''
+   except Exception:pass
+   return int(round(t[4].z)),mat
+  return -1,''
+ rows=[];byx={}
+ for x,y in band:byx.setdefault(x,[]).append(y)
+ for x in sorted(byx):
+  ys=sorted(byx[x]);run=[]
+  for y in ys+[None]:
+   if run and (y is None or y!=run[-1]+1):
+    g=[ground(x*100+50,yy*100+50) for yy in run];rows.append(dict(x=x,y0=run[0],z=' '.join(str(a) for a,_ in g),m='|'.join(b for _,b in g)));run=[]
+   if y is not None:run.append(y)
+ assert sha(MAPFILE)==LOAD_SHA
+ (EDGE_OUT/'bank.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,step_cm=100,rows=rows)),'utf8')
 def motel_world_water_copy_cleanup():
  # world_water_copy_cleanup: the abandoned top-only water copies (/Game/UniversityCity/WorldEdgeV1/Water, left by a
  # failed 2026-11-01 attempt before WorldEdge_Water replaced the G??_Water planes) are deleted when nothing references them

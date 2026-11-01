@@ -35,36 +35,38 @@ def blur(a,s):
  a=np.apply_along_axis(lambda v:np.convolve(np.pad(v,r,mode='edge'),k,'valid'),1,a)
  return np.apply_along_axis(lambda v:np.convolve(np.pad(v,r,mode='edge'),k,'valid'),0,a)
 F=blur(land,T['sigma']/st);L=T['level']
-# marching squares on F at level L: one segment per crossed cell edge pair (saddles split by the cell mean)
-ny,nx=F.shape;segs=[]
-def cross(p,q,fp,fq):t=(L-fp)/(fq-fp);return (p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t)
-for i in range(ny-1):
- for k in range(nx-1):
-  c=[(k,i),(k+1,i),(k+1,i+1),(k,i+1)];f=[F[i,k],F[i,k+1],F[i+1,k+1],F[i+1,k]];b=[v>=L for v in f]
-  if all(b) or not any(b):continue
-  pts=[cross(c[e],c[(e+1)%4],f[e],f[(e+1)%4]) for e in range(4) if b[e]!=b[(e+1)%4]]
-  if len(pts)==2:segs.append((pts[0],pts[1]))
-  elif len(pts)==4:
-   if (sum(f)/4>=L)==b[0]:segs+=[(pts[0],pts[1]),(pts[2],pts[3])]
-   else:segs+=[(pts[0],pts[3]),(pts[1],pts[2])]
-# chain segments into polylines through shared end points
-key=lambda p:(round(p[0],4),round(p[1],4));adj={}
-for n,(a,b) in enumerate(segs):adj.setdefault(key(a),[]).append(n);adj.setdefault(key(b),[]).append(n)
-used=[False]*len(segs);lines=[]
-for n in range(len(segs)):
- if used[n]:continue
- used[n]=True;line=[segs[n][0],segs[n][1]]
- for end in (1,0):
-  while True:
-   p=line[-1] if end else line[0];nxt=None
-   for m in adj[key(p)]:
-    if not used[m]:nxt=m;break
-   if nxt is None:break
-   used[nxt]=True;a,b=segs[nxt];q=b if key(a)==key(p) else a
-   if end:line.append(q)
-   else:line.insert(0,q)
- lines.append(line)
-# grid index -> world metres
+# marching squares on a field at a level: one segment per crossed cell edge pair (saddles split by the cell mean),
+# chained into polylines through shared end points; points in grid index (column, row)
+def iso_lines(Fa,Lv):
+ segs=[];ny_,nx_=Fa.shape
+ def cross(p,q,fp,fq):t=(Lv-fp)/(fq-fp);return (p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t)
+ for i in range(ny_-1):
+  for k in range(nx_-1):
+   c=[(k,i),(k+1,i),(k+1,i+1),(k,i+1)];f=[Fa[i,k],Fa[i,k+1],Fa[i+1,k+1],Fa[i+1,k]];b=[v>=Lv for v in f]
+   if all(b) or not any(b):continue
+   pts=[cross(c[e],c[(e+1)%4],f[e],f[(e+1)%4]) for e in range(4) if b[e]!=b[(e+1)%4]]
+   if len(pts)==2:segs.append((pts[0],pts[1]))
+   elif len(pts)==4:
+    if (sum(f)/4>=Lv)==b[0]:segs+=[(pts[0],pts[1]),(pts[2],pts[3])]
+    else:segs+=[(pts[0],pts[3]),(pts[1],pts[2])]
+ key=lambda p:(round(p[0],4),round(p[1],4));adj={}
+ for n,(a,b) in enumerate(segs):adj.setdefault(key(a),[]).append(n);adj.setdefault(key(b),[]).append(n)
+ used=[False]*len(segs);out=[]
+ for n in range(len(segs)):
+  if used[n]:continue
+  used[n]=True;line=[segs[n][0],segs[n][1]]
+  for end in (1,0):
+   while True:
+    p=line[-1] if end else line[0];nxt=None
+    for m in adj[key(p)]:
+     if not used[m]:nxt=m;break
+    if nxt is None:break
+    used[nxt]=True;a,b=segs[nxt];q=b if key(a)==key(p) else a
+    if end:line.append(q)
+    else:line.insert(0,q)
+  out.append(line)
+ return out
+ny,nx=F.shape;lines=iso_lines(F,L)# grid index -> world metres
 def w(p):return (xs[0]+p[0]*st,ys[0]+p[1]*st)
 def length(l):return sum(math.dist(l[i],l[i+1]) for i in range(len(l)-1))
 lines=[[w(p) for p in l] for l in lines];lines=[l for l in lines if length(l)>=30]
@@ -202,7 +204,7 @@ tmp=bpy.data.meshes.new('bed');hm.to_mesh(tmp);hm.free();bm.from_mesh(tmp)
 # 2026-11-01): world-edge-v1/water-bed.json (native world_water_bed_probe, ground under every water-plane cell) gets the
 # same heightfield with a bank profile instead of a beach one (no beach lines inland): 10.85 at the bank, 10.15 from
 # 10 m out, never under the ground + 15 cm. Land = every cell outside the water plane.
-inland=0
+inland=0;inland_quay=0;iq_pts=[]
 WB=O/'water-bed.json'
 if WB.exists():
  R=json.loads(WB.read_text('utf8'));NW=1101;Zw=np.full((NW,NW),-1.0)
@@ -246,6 +248,28 @@ if WB.exists():
   for k in range(bx2):
    if bq[i,k]:im2.faces.new((corner2(i,k),corner2(i+1,k),corner2(i+1,k+1),corner2(i,k+1)));inland+=1
  tmp2=bpy.data.meshes.new('inland');im2.to_mesh(tmp2);im2.free();bm.from_mesh(tmp2)
+ # inland banks are ~1 m vertical ground faces between the water (1100) and the land (1198), stone on one tile and grass
+ # on the next (G099) and stepped along the 1 m raster (A04, A17; bank_probe 2026-11-01: 102 of 37,951 band cells are
+ # slopes). One stone quay along every inland water edge: the smoothed contour of the city water raster (the edge the
+ # flat-campus prep pressed the bed from), face 25 cm water-side from under the bed to 12 cm over the land, 0.6 m cap.
+ Wr=(np.load(O.parent/'world-ground-v1/world-field.npz')['water_map']>0)[::-1,:].astype(float)   # [x m, y m]
+ Fw=blur(Wr,1.5)
+ for l in iso_lines(Fw,.5):
+  pts=[(p[1]+.5,p[0]+.5) for p in l]
+  # inland only: the coast strip owns the shore grid (beach lines and the river-mouth quay)
+  for part in [list(g) for k,g in __import__('itertools').groupby(pts,key=lambda q:q[0]>=x_end) if k]:
+   if len(part)<2 or length(part)<10:continue
+   part=resample(relax(resample(chaikin(part,3))))
+   if len(part)<3:continue
+   def Fwat(x,y):return Fw[min(max(int(round(x-.5)),0),NW-1),min(max(int(round(y-.5)),0),NW-1)]
+   cols=[]
+   for i,p in enumerate(part):
+    a,b=part[max(0,i-2)],part[min(len(part)-1,i+2)];tx,ty=b[0]-a[0],b[1]-a[1];n=math.hypot(tx,ty) or 1;nx_,ny_=ty/n,-tx/n
+    if Fwat(p[0]+nx_,p[1]+ny_)<Fwat(p[0]-nx_,p[1]-ny_):nx_,ny_=-nx_,-ny_   # normal points into the water
+    cols.append([wm.verts.new((p[0]+nx_*d,p[1]+ny_*d,z)) for d,z in ((0.25,10.70),(0.0,12.10),(-0.6,12.10),(-0.6,11.80))])
+   for a,b in zip(cols,cols[1:]):
+    for k in range(3):wm.faces.new((a[k],a[k+1],b[k+1],b[k]))
+   inland_quay+=len(cols);iq_pts+=part
 def finish(b,name,matname,rgb):
  bmesh.ops.recalc_face_normals(b,faces=b.faces)
  for f in b.faces:
@@ -258,7 +282,7 @@ def finish(b,name,matname,rgb):
  for lp in me.loops:v=me.vertices[lp.vertex_index].co;uv.data[lp.index].uv=((v.x+v.z)/4,(v.y+v.z)/4)
  me.calc_loop_triangles();return ob
 ob=finish(bm,'CoastStrip','S_CoastSand',(.76,.70,.56))
-wall=finish(wm,'Seawall','S_Seawall',(.52,.52,.50)) if quay else None
+wall=finish(wm,'Seawall','S_Seawall',(.52,.52,.50)) if quay or inland_quay else None
 dest=O/'coast-strip';dest.mkdir(parents=True,exist_ok=True)
 def export(o,glb):
  bpy.ops.object.select_all(action='DESELECT');o.select_set(True)
@@ -276,10 +300,18 @@ for p in quay:
  k=int(round((p[0]-xs[0])/st));i=int(round((p[1]-ys[0])/st))
  if 0<=i<ny and 0<=k<nx:px[i,k]=(1,0,0,1)
 im=bpy.data.images.new('seabed',nx,ny);im.pixels.foreach_set(px.astype(np.float32).ravel());im.filepath_raw=str(dest/'seabed-review.png');im.file_format='PNG';im.save()
+if iq_pts:
+ # whole-city review (1 px = 1 m, north up): water blue, land green, inland quay red
+ NW2=1101;q=np.zeros((NW2,NW2,4));q[...,3]=1;Wr2=(np.load(O.parent/'world-ground-v1/world-field.npz')['water_map']>0)[::-1,:]
+ q[Wr2]=(.2,.35,.8,1);q[~Wr2]=(.25,.55,.2,1)
+ for x,y in iq_pts:
+  i,k=int(x),int(y)
+  if 0<=i<NW2 and 0<=k<NW2:q[i,k]=(1,0,0,1)
+ im3=bpy.data.images.new('inland',NW2,NW2);im3.pixels.foreach_set(np.transpose(q,(0,1,2)).astype(np.float32).ravel());im3.filepath_raw=str(dest/'inland-review.png');im3.file_format='PNG';im3.save()
 meta=export(ob,dest/'coast-strip.glb')
-meta.update(status='authored_requires_native_install',mode='shore-grid-v3',probe_map_sha256=G['map_sha256'],opt=T,lines=len(lines),dropped_dry_lines=dropped,bed_cells=bed,inland_blocks=inland,quay_points=len(quay),line_lengths_m=sorted([round(length(l)) for l in lines],reverse=True)[:20])
+meta.update(status='authored_requires_native_install',mode='shore-grid-v3',probe_map_sha256=G['map_sha256'],opt=T,lines=len(lines),dropped_dry_lines=dropped,bed_cells=bed,inland_blocks=inland,inland_quay_points=inland_quay,quay_points=len(quay),line_lengths_m=sorted([round(length(l)) for l in lines],reverse=True)[:20])
 if wall:meta['seawall']=export(wall,dest/'seawall.glb')
-(dest/'build.json').write_text(json.dumps(meta,indent=1),'utf8');print('SHORE',meta['triangles'],'tris lines',meta['lines'],'quay',len(quay),'wall',meta.get('seawall',{}).get('triangles'),flush=True)
+(dest/'build.json').write_text(json.dumps(meta,indent=1),'utf8');print('SHORE',meta['triangles'],'tris lines',meta['lines'],'quay',len(quay),'inland quay',inland_quay,'wall',meta.get('seawall',{}).get('triangles'),flush=True)
 ]====]
 local path=out..'/shore-strip-payload.json'
 local f=assert(io.open(path,'wb'));f:write(j.encode({out=out,code=code,opt=o}));f:close()

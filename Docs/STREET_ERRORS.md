@@ -1680,6 +1680,15 @@
 - 現象：`native_soak_walk_obstructed`，位置 x=31360 cm、路線點從 1842 cm 下到 1814 cm 的第一階。16:42（route 1 seg 24，y 68626）與 19:15（route 2 seg 28，y 71666）各發生一次，同一個打包版重跑都曾通過。
 - 更正（11-01）：這不是旅館樓梯，是 `imore-*-pool-entry-and-exit`（私人泳池入水台階，每階 22 cm 深、13.6 cm 高）回程往下的第一階。也不是卡住：報告只有 `unsupported_character_cm`，沒有 `stalled_character_cm`，屬於 `CityEnvironmentImmersionAudit.cpp` CharacterWalk 的「懸空」判定。當時膠囊中心 1936.65 cm，中心射線打到下一階 1814.8 cm，差 121.85 cm，超出允許帶 86～120 cm；正常站立時這個差值本來就約 120.5 cm（同報告裡完成路線的終點）。角色踏在上一階邊緣、CharacterMovement 那一幀不是 walkable floor（踩邊或下階瞬間 falling）時，只剩 1～2 cm 餘裕的中心射線判定就會失敗。
 - 判斷：和海岸、沙底、公園小物及地標無關。通用修法是把懸空判定改成持續一段時間（例如 0.3 s）才算失敗，或把上限放寬到一階高（約 135 cm）。但這要改 StreetSocialCity 專案的 C++，依規則不能動，所以先記錄、只靠重跑。
+- 11-01 14:55 內陸護岸驗收第 0 段又發生一次（route 3 seg 28，同一點 31360／65586，差 121.85 cm），已排隊重跑。
+
+## 2026-11-01 實走開場的輸入煙霧測試在低幀率時判定失敗（c-street-city）
+
+- 現象：`normal_player_input_smoke_failed`。16:08、16:10 兩次是 `walk_did_not_brake`（phase 2：W 放開 0.3 s 後速度仍 > 5 cm/s），09:06 是 `Space_did_not_jump`（phase 7）。之前把它當偶發，只重排三次。
+- 原因：`CityImmersionInputAudit.cpp` 每一步用牆鐘時間（`FPlatformTime::Seconds()`）等待，W 1.2 s、放開後 0.3 s、跳 0.x s。測試在地圖載入後固定 2 s（`CityEnvironmentImmersionAudit.cpp` 的 `ReadyAt=Now+2`）就開始，這時還在編 PSO，又有另外兩個 Unreal 佔 GPU。失敗的三次在開場前 3～7 s 只有 4.9、7.0、8.3 FPS，通過的 6 次是 14.5～50.6 FPS。5 FPS 時 0.3 s 只過 1 幀，放開的鍵要到下一幀才生效，速度還沒煞住就被檢查。
+- 和地圖、護岸無關：失敗的三次起點都一樣（55250, 57450），W 量到的距離也正常。
+- 修法：等待改成「牆鐘時間到且至少過 N 幀」，或開場先等幀率穩定（例如連續 30 幀 < 50 ms）才開始煙霧測試。兩者都要改 StreetSocialCity 專案的 C++，依規則不能自己動，已回報協調者，由使用者決定。11-01 使用者決定：StreetSocialCity 不改，只在 runner 端重試。
+- 暫時處理（runner 端）：`Tools/run_street_city_motel_physics.lua` 從 game log 算開場 FPS（控制通道開啟後第一筆 ≥ 3 s 的 log 行的幀號 ÷ 經過秒數）。錯誤是 `walk_did_not_brake`／`Space_did_not_jump` 且開場 < 12 FPS 時重開，最多重試 3 次。每次的 receipt、開場 FPS、錯誤都記在 launch json 的 `attempts`。
 - 2026-10-31 e-galgame（第十輪 H：看見她體內的陰莖）：
   - 半透明只能看到她體外的陰莖，體內那段看不到，無法判斷是否穿模。新增 M_PreviewXRay（M_PreviewTranslucent 的複本，關閉深度測試；用 `-run=OKBuildHXRayMaterial` 產生），男主半透明時疊加在陰莖上（overlay），隔著她的身體也看得到。三月七 52 個插入體位實拍：陰莖位置清楚可見。
   - 用它找到穿模：壓住後入（站姿後入）陰莖照動作檔維持水平，三月七身體薄，整根穿過、龜頭從腹部穿出；/hscene 的 align.tip（陰莖前端到「入口→下段脊椎」線的距離）7.2 cm，其次背面側位 4.3、躺姿後入 4.2，其餘 ≤3.4。通用修法（陰莖根部 FK 轉向通道方向）寫好未驗證，暫停整合時留在工作樹，未提交。
