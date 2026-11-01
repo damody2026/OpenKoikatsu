@@ -229,6 +229,8 @@ bool FOkSession::SetPhysXSecondary(bool bOn) { bPhysXSecondary=bOn; return !Hand
 void FOkSession::ApplyPhysXSecondary() const { if(Handle){ok_session_set_physx_secondary(Handle,bPhysXSecondary?1:0);ok_session_set_external_animation(Handle,ExternalAnimation);} }
 bool FOkSession::SetExternalAnimation(bool bExternal) { ExternalAnimation=bExternal?1:0; return !Handle||ok_session_set_external_animation(Handle,ExternalAnimation)==0; }
 bool FOkSession::PenisTip(FVector& OutUnity) const { float P[3]; if(!Handle||ok_penis_tip(Handle,P)!=0)return false;OutUnity=FVector(P[0],P[1],P[2]);return true; }
+int32 FOkSession::HangHair(bool bOn){return Handle?ok_hang_hair(Handle,bOn?1:0):-1;}
+bool FOkSession::AimPenis(const FVector& UnityDir,float& OutDegrees){OutDegrees=0.f;const float D[3]={float(UnityDir.X),float(UnityDir.Y),float(UnityDir.Z)};return Handle&&ok_aim_penis(Handle,D,&OutDegrees)==0;}
 bool FOkSession::BellyBulgePast(const FVector& UnityTip,float& OutPast,float& OutNear,FName& OutTarget,float& OutMoves) const {
 	const float Tip[3]={float(UnityTip.X),float(UnityTip.Y),float(UnityTip.Z)};float Out[3]={};char Target[64]={};
 	if(!Handle||ok_belly_bulge_past(Handle,Tip,Out,Target,64)!=0)return false;

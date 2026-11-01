@@ -18,7 +18,18 @@ local function main()
     error("Runtime host must be inside project Saved directory", 0)
   end
   path.mkdir(destination)
-  for _, name in ipairs({ "Source", "Config" }) do path.copytree(path.join(project_root, name), path.join(destination, name)) end
+  -- Copies only what changed and stamps it now: a copy keeps the source's write time, older than the UHT output of the
+  -- last build, so UnrealHeaderTool took a changed header for up to date and the build failed on its old
+  -- GENERATED_BODY lines (OKSceneDocument.h, R20h).
+  local function mirror(src, dst)
+    path.mkdir(dst)
+    for _, n in ipairs(path.list(src)) do
+      local a, b = path.join(src, n), path.join(dst, n)
+      if path.is_dir(a) then mirror(a, b)
+      elseif not path.exists(b) or path.read_bytes(a) ~= path.read_bytes(b) then path.copy(a, b); lfs.touch(b) end
+    end
+  end
+  for _, name in ipairs({ "Source", "Config" }) do mirror(path.join(project_root, name), path.join(destination, name)) end
   -- Source files deleted from the project go from the host copy too (copying only adds), else the build still compiles them.
   local host_source, project_source = path.join(destination, "Source"), path.join(project_root, "Source")
   local stale = {}
@@ -64,7 +75,7 @@ local function main()
     path.mkdir(to)
     path.copy(path.join(from, name .. ".uplugin"), path.join(to, name .. ".uplugin"))
     for _, folder in ipairs({ "Source", "Shaders", "Resources", "Config" }) do
-      if path.exists(path.join(from, folder)) then path.copytree(path.join(from, folder), path.join(to, folder)) end
+      if path.exists(path.join(from, folder)) then mirror(path.join(from, folder), path.join(to, folder)) end
     end
   end
   local project = json.decode(path.read_text(path.join(project_root, "OpenKoikatsu.uproject")))

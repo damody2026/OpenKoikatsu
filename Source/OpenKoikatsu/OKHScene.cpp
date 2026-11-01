@@ -454,6 +454,7 @@ void UOKHScenePanel::NativeTick(const FGeometry& Geometry,float Delta){
     if(Poses.IsEmpty()&&!Gallery->NativePairs.IsEmpty()){LoadPoses();BuildList();}
     // She came in already spent today: nothing will be offered, say so at once rather than on the first click.
     if(!bToldSpent&&(ActivePose!=INDEX_NONE||ActiveAibu!=INDEX_NONE)){bToldSpent=true;if(HadEnough()&&Hint)Hint->SetText(FText::FromString(OKT(TEXT("ui.hscene.enough_no_more_poses"))));}
+    if(!IsValid(Gallery->PairedPlayback.Get()))HangHair(Gallery->PreviewActor.Get());
     // Shoes off, hers and his: the one-on-one room is her own room, and the original's map table (h/list h_map_dependent)
     // has shoes=1 for every 自室 (hotel, inn, training camp) and the shower: HSceneProc.LoadMapDependent sets clothes
     // states 7 and 8 to 3 for everyone there.
@@ -938,23 +939,15 @@ void UOKHScenePanel::BulgeBelly(AKKPreviewActor* Girl,const FVector* Tip,float O
     // end of its reach) would only bloat her elsewhere.
     TMap<FName,float> Want;
     // Within 6 cm of her entrance his glans is in it, not through her: the nearest skin there is her labia.
-    // It swells with the thrust: how deep he is in her now between the shallowest and deepest of the last strokes (his
-    // tip's distance from her entrance), none when he draws back, all of it at the deepest. In these poses his tip is
-    // past her skin through the whole stroke, so the depth alone kept her swollen all the time (user, R20).
+    // It swells as far as his tip is out of her skin at each moment, no more: it rises and falls with the thrust and never
+    // lets him show through. Scaling it by how deep the stroke is (R20c) left her flat while his penis, which hardly moves
+    // in these clips, was still out of her skin (user, R20).
     const bool HasKokan=Tip&&HBone(Girl,TEXT("J_Kokan"),Kokan);const float Depth=HasKokan?float(FVector::Dist(*Tip,Kokan)):0.f;
-    float Stroke=1.f;
-    if(HasKokan){
-        if(StrokeLow>StrokeHigh){StrokeLow=StrokeHigh=Depth;}
-        // The ends move with the stroke and slowly forget it (a pose or pace change).
-        const float Forget=FMath::Min(1.f,Delta*.5f);
-        StrokeLow=Depth<StrokeLow?Depth:StrokeLow+(Depth-StrokeLow)*Forget;StrokeHigh=Depth>StrokeHigh?Depth:StrokeHigh+(Depth-StrokeHigh)*Forget;
-        if(StrokeHigh-StrokeLow>2.f)Stroke=FMath::SmoothStep(0.f,1.f,(Depth-StrokeLow)/(StrokeHigh-StrokeLow));
-    }else{StrokeLow=1.f;StrokeHigh=0.f;}
-    if(Tip&&!BulgeTarget.IsNone()&&BulgePast>0.f&&BulgeMoves>2.f&&!(HasKokan&&Depth<6.f))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*Stroke*100.f);
+    if(Tip&&!BulgeTarget.IsNone()&&BulgePast>0.f&&BulgeMoves>2.f&&!(HasKokan&&Depth<6.f))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*100.f);
     TArray<FName> Names;Bulge.GetKeys(Names);for(const auto& W:Want)Names.AddUnique(W.Key);
-    // Eased both ways alike: it follows the stroke in and out.
+    // Eased to follow the stroke: faster rising (a lag there shows him through her skin), falling as it draws back.
     for(const FName& Name:Names){float& B=Bulge.FindOrAdd(Name);const float Was=B,To=Want.FindRef(Name);
-        B=FMath::FInterpTo(B,To,Delta,20.f);if(To==0.f&&B<.5f)B=0.f;
+        B=FMath::FInterpTo(B,To,Delta,To>B?40.f:20.f);if(To==0.f&&B<.5f)B=0.f;
         if(FMath::Abs(B-Was)>.05f||(B==0.f&&Was!=0.f)){Girl->SetPartMorphWeight(BulgePart,Name,B);
             if(!bBulgeLogged&&B>1.f){bBulgeLogged=true;UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge %s, his tip %.1f cm out of her skin (%.1f off the way in)"),*Name.ToString(),BulgePast,Off);}}
         if(B==0.f)Bulge.Remove(Name);}
@@ -967,14 +960,44 @@ void UOKHScenePanel::ReadBulge(AKKPreviewActor* Girl,const FVector& Tip){
     if(Girl->Session.BellyBulgePast(FVector(M[3],M[7],M[11])+Here,Past,Near,Target,Moves)){BulgeTarget=Target;BulgePast=Past*100.f;BulgeMoves=Moves*100.f;}
     else BulgeTarget=NAME_None;
 }
+// Her hair hangs under its weight in the scene (user, 2026-11-01: leaning forward it stayed level behind her head; the
+// scene may leave the card's hair weight and stiffness). Asked again each time: a part whose dynamics are rebuilt starts
+// from the card's own. Only while her session is not being solved (ReadPairSessions, or with no pair playback).
+void UOKHScenePanel::HangHair(AKKPreviewActor* Girl){
+    if(!IsValid(Girl))return;const int32 Chains=Girl->Session.HangHair(true);
+    if(Chains>0)UE_LOG(LogTemp,Display,TEXT("H scene: her hair let hang (%d chains)"),Chains);
+}
 void UOKHScenePanel::ReadPairSessions(){
     // Both sessions are idle and show this frame (AKKPairedPlayback::OnSessionsIdle). Reading them at any other time while
     // the pair plays meant either a crash (the solve was writing them) or values several frames old: a tick almost never
     // finds the background solve finished, and the swell missed his glans coming out.
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;FVector P0,Glans;
+    HangHair(Girl);
     if(!IsValid(Girl)||!IsValid(Him)||AlignedHim!=Him||!HBone(Him,TEXT("J_dan100_00"),P0)||!Him->Session.PenisTip(Glans))return;
     GlansFromRoot=Him->GetActorTransform().TransformPosition(AKKPreviewActor::UnityToActorLocal(Glans))+HimApplied-P0;bGlans=true;
     if(BulgedHer==Girl&&BulgePart!=INDEX_NONE)ReadBulge(Girl,P0+GlansFromRoot);
+    // In her, his penis runs along the way into her (her entrance to her lower spine, J_Ana for the back): the clips point
+    // it where the original pins its tip at her entrance (Lookat_dan: cm_J_dan101 looks at k_f_kokan_00, dan109 stuck
+    // there), so at the depth he goes here (a fifth to nine tenths of him, user R20) it came out of her belly or went into
+    // the floor (躺姿後入, user 2026-11-01). Its root turns (his FK); the alignment then puts that line through her
+    // entrance. In every pose his glans heads for the front of her belly with her entrance as the pivot (user, 2026-11-01:
+    // what the game needs; the physics can follow later): from her entrance up along her spine, turned 35 degrees toward
+    // her front. Her front is the way her breasts sit from her upper spine, across her spine (her crotch moved with her
+    // legs, 0.4 to 7.7 cm before her spine, R20l), and a point a set way before her spine aimed only 0 to 17 degrees off
+    // it (hips to mid spine is 7 cm). Half the clip's line and half the way to her spine (R20j) still went up her back.
+    // Outside her (Idle, the insertion itself, after) his penis keeps the clip's angle.
+    const FString Cur=Current(),Base=HBase(Cur);
+    const bool bInHer=Mode==2&&Base!=TEXT("Idle")&&Base!=TEXT("Insert")&&!Base.Contains(TEXT("OUT"))&&!Base.StartsWith(TEXT("Pull"))&&!Base.StartsWith(TEXT("Drop"));
+    if(LiftedPose!=ActivePose||!bInHer){if(bLifted){Him->Session.SetFk({},{});bLifted=false;}LiftedPose=ActivePose;}
+    FVector Entrance,Hips,Chest,BustL,BustR;
+    if(bInHer&&HBone(Girl,Cur.StartsWith(TEXT("A_"))?TEXT("J_Ana"):TEXT("J_Kokan"),Entrance)&&HBone(Girl,TEXT("j_hips"),Hips)
+        &&HBone(Girl,TEXT("j_spine03"),Chest)&&HBone(Girl,TEXT("j_bust01_L"),BustL)&&HBone(Girl,TEXT("j_bust01_R"),BustR)){
+        const FVector Up=(Chest-Hips).GetSafeNormal();FVector Front=(BustL+BustR)*.5f-Chest;Front-=Up*FVector::DotProduct(Front,Up);
+        const float Tilt=FMath::DegreesToRadians(35.f);
+        const FVector Want=(Up*FMath::Cos(Tilt)+Front.GetSafeNormal()*FMath::Sin(Tilt)).GetSafeNormal();
+        if(!bLifted)UE_LOG(LogTemp,Display,TEXT("H scene: %s aim at her belly (breasts %.1f cm before her spine)"),*Cur,float(Front.Size()));
+        const FVector Dir=AKKPreviewActor::ActorLocalToUnity(Him->GetActorTransform().InverseTransformVector(Want));float Turned=0.f;
+        if(Him->Session.AimPenis(Dir,Turned)){if(!bLifted)UE_LOG(LogTemp,Display,TEXT("H scene: %s his penis turned %.1f degrees along the way into her"),*Cur,Turned);bLifted=true;}}
 }
 void UOKHScenePanel::AlignHim(float Delta){
     auto* Girl=Gallery?Gallery->PreviewActor.Get():nullptr;auto* Him=Gallery?Gallery->PartnerActor.Get():nullptr;
@@ -986,7 +1009,7 @@ void UOKHScenePanel::AlignHim(float Delta){
     if(AlignedHer!=Girl){AlignedHer=Girl;HerApplied=FVector::ZeroVector;bHerIk=false;}
     const FString Key=FString::Printf(TEXT("%d|%d"),Mode,ActivePose);
     // A new pose places them on one origin again: start from no offset, no held feet.
-    if(Key!=AlignedKey){AlignedKey=Key;HimOffset=HerOffset=FVector::ZeroVector;bAlignLogged=false;DeepAlong=1e9f;AlignPushed=0.f;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;
+    if(Key!=AlignedKey){AlignedKey=Key;HimOffset=HerOffset=FVector::ZeroVector;bAlignLogged=false;DeepAlong=1e9f;AlignPushed=0.f;ThrustApplied=0.f;ThrustLow=1.f;ThrustHigh=0.f;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;
         if(bHisIk||bHerIk)SyncPair();
         if(bHisIk){Him->Session.SetStudioIk({},{});bHisIk=false;}if(bHerIk){Girl->Session.SetStudioIk({},{});bHerIk=false;}
         FeetWait=0;bFeetRead=false;}
@@ -1026,14 +1049,23 @@ void UOKHScenePanel::AlignHim(float Delta){
              for(int32 W=0;W<2;++W){FVector FL,FR;if(HBone(Who[W],TEXT("j_foot_L"),FL)&&HBone(Who[W],TEXT("j_foot_R"),FR)){const float F=float(FMath::Min(FL.Z,FR.Z))-Floor;FeetMin[W]=FMath::Min(FeetMin[W],F);FeetMax[W]=FMath::Max(FeetMax[W],F);}}}
             if(AtWindow>=2.f){AtShownMin=AtMin;AtShownMax=AtMax;AtWindow=0.f;AtMin=1e9f;AtMax=-1e9f;
                 for(int32 W=0;W<2;++W){FeetShown[W*2]=FeetMin[W];FeetShown[W*2+1]=FeetMax[W];FeetMin[W]=1e9f;FeetMax[W]=-1e9f;}}
-            // Depth: only the deepest point of his thrusts is set (70% of him in her); per frame it would flatten the clip's
-            // thrust. The deepest point eases back (a fifth of his length a second) so a shallower pose is followed too.
-            DeepAlong=FMath::Min(DeepAlong+Delta*Len*.2f,Along);
-            // The insertion itself starts with him outside her: its line is aligned, its depth is the clip's.
-            float Deeper=0.f;if(Base==TEXT("Insert")){}else if(DeepAlong>Len*.3f&&DeepAlong<1e8f)Deeper=DeepAlong-Len*.3f;else if(DeepAlong<Len*.05f)Deeper=DeepAlong-Len*.05f;
-            const float Rate=FMath::Min(1.f,Delta*10.f),Push=Deeper*FMath::Min(1.f,Delta*2.f);DeepAlong-=Push;AlignPushed+=Push;AlignDeep=100.f*DeepAlong/Len;
+            // Depth: moving, he draws out until a fifth of him is in her and goes back in to nine tenths, in time with the
+            // clip's own thrust (its shallowest and deepest of late; the clips hardly move him, so he stayed all the way in,
+            // user R20); still in her (InsertIdle), nine tenths. The insertion itself starts with him outside her: its line is
+            // aligned, its depth is the clip's.
+            const float Rate=FMath::Min(1.f,Delta*10.f);float Thrust=0.f;
+            if(Base!=TEXT("Insert")){
+                const float Full=bGlans?float(GlansFromRoot.Size()):Len;
+                const float Raw=Along+ThrustApplied; // where the clip has him, before this push along his penis
+                if(ThrustLow>ThrustHigh){ThrustLow=ThrustHigh=Raw;}
+                const float Forget=FMath::Min(1.f,Delta*.5f);
+                ThrustLow=Raw<ThrustLow?Raw:ThrustLow+(Raw-ThrustLow)*Forget;ThrustHigh=Raw>ThrustHigh?Raw:ThrustHigh+(Raw-ThrustHigh)*Forget;
+                float InHer=.9f;
+                if((HIsLoop(Base)||Base==TEXT("OLoop"))&&ThrustHigh-ThrustLow>.5f)InHer=.2f+.7f*FMath::SmoothStep(0.f,1.f,(ThrustHigh-Raw)/(ThrustHigh-ThrustLow));
+                Thrust=Raw-Full*(1.f-InHer);AlignDeep=100.f*InHer;
+            }
             if(!bAlignLogged){bAlignLogged=true;UE_LOG(LogTemp,Display,TEXT("H align: %s penis %.1f cm, her entrance %.1f cm off its line at %.0f%% of it"),*Cur,Len,AlignOff,AlignAt);}
-            HimOffset+=Fix*Rate+Axis*Push;
+            HimOffset+=Fix*Rate+Axis*(Thrust-ThrustApplied);AlignPushed=Thrust;ThrustApplied=Thrust;
             HimOffset=HimOffset.GetClampedToMaxSize(45.f); // a mismatch past that is a different pose, not a height
             // Both standing: the one who would have to go down bends, and nobody rises off the floor.
             if(bFeetRead&&bHisStands&&bHerStands){const double Net=HimOffset.Z-HerOffset.Z;

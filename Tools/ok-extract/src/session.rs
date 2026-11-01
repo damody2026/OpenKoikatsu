@@ -517,6 +517,7 @@ impl AccessoryRuntime {
 
     /// Its DynamicBone state (the GPU rig exports the chains; None: no simulated bones).
     pub(crate) fn dynamic_state(&self) -> Option<&crate::dbone::AttachedDynamicSet> { self.state.as_ref() }
+    pub(crate) fn dynamic_state_mut(&mut self) -> Option<&mut crate::dbone::AttachedDynamicSet> { self.state.as_mut() }
     /// The body bone each palette matrix follows, by name (export_skin_palette order), for an accessory skinned onto the
     /// body (copy_weights_body); None for one with its own rig. A coordinated implanted bone follows the clothes set's
     /// bone of that key (true), as effective_worlds reads it; any other implanted bone's name is its private one.

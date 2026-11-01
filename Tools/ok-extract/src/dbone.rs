@@ -2619,7 +2619,17 @@ struct AttachedChain {
     body_radius: Vec<f32>,
     /// What this chain is (hair, tail, ordinary accessory), set by `classify_chains`; None = the part's own component.
     physics: Option<crate::px::PhysicsComponent>,
+    /// While hanging (`hang_hair`): the authored gravity, local gravity and per-particle elasticity / stiffness / damping.
+    unhung: Option<([f32; 3], [f32; 3], Vec<(f32, f32, f32)>)>,
 }
+
+/// Hair let hang (`AttachedDynamicSet::hang_hair`): pull per step (world down, metres before object scale) and how much of
+/// its authored spring back to the animated pose it keeps.
+pub(crate) const HANG_GRAVITY: f32 = 0.02;
+pub(crate) const HANG_ELASTICITY: f32 = 0.1;
+pub(crate) const HANG_STIFFNESS: f32 = 0.05;
+/// Least damping while hanging: with its springs let go, riding and sitting bounce flung her hair level behind her (R20m).
+pub(crate) const HANG_DAMPING: f32 = 0.5;
 
 fn attached_parent_tf(placement: &Mat4) -> Option<Tf> {
     let mut scale = [0.0f32; 3];
@@ -2768,7 +2778,7 @@ impl AttachedDynamicSet {
             }
             chains.push(AttachedChain { db: db.clone(), authored_freeze_axis: db.freeze_axis, particles, component,
                 local_gravity: root_local_gravity_rotation(world_rot_of(db.root, &skel.tfs), db.gravity),
-                prev_component_pos: component_pos, time: 0.0, colliders, external_colliders: Vec::new(), implanted_colliders,implanted_collider_offset:0,px_key:crate::px::PxKey::new(),body_radius:Vec::new(),physics:None });
+                prev_component_pos: component_pos, time: 0.0, colliders, external_colliders: Vec::new(), implanted_colliders,implanted_collider_offset:0,px_key:crate::px::PxKey::new(),body_radius:Vec::new(),physics:None, unhung: None });
         }
         if chains.is_empty() { return None; }
         Some(Self { skel, parent_id, exact_placement: *placement, chains, shared_component_tfs,body_space:!set.rigs.is_empty(),attachment_ids:Vec::new(),world_cache:HashMap::new(),rotation_cache:HashMap::new(),lossy_rotation_cache:HashMap::new(),child_counts:HashMap::new(),child_ids:HashMap::new(),child_topology:Vec::new(),px_batch:crate::px::PxKey::new(),skin_chains:false })
@@ -2996,6 +3006,32 @@ impl AttachedDynamicSet {
             let bones: Vec<&str> = chain.particles.iter().filter_map(|p| p.id.and_then(|id| self.skel.tfs.get(&id)).map(|tf| tf.name.as_str())).collect();
             chain.physics = Some(crate::px::PhysicsComponent::of_accessory_chain(attach, mesh, &bones));
         }
+    }
+    /// Her hair and accessory chains hang under their weight (on) or go back to the card's own parameters (off). Many hair mods have no
+    /// gravity and a firm spring to the head (爱丽丝: gravity 0, force -0.001, elasticity 0.2), so leaning forward their
+    /// hair stays out level behind her head; in the one-on-one scene it hangs down (user, 2026-11-01). Gravity is world
+    /// down in full, whatever pose the chain was set up in. Returns the
+    /// chains changed.
+    pub(crate) fn hang_hair(&mut self, on: bool) -> usize {
+        let mut changed = 0;
+        for chain in &mut self.chains {
+            // Every chain of her hair and accessory parts: a hair mod worn as an accessory (爱丽丝's twin tails on an
+            // accessory slot) is classified an accessory chain, and stayed out level when only hair chains hung (R20i).
+            if chain.unhung.is_some() == on { continue; }
+            if on {
+                chain.unhung = Some((chain.db.gravity, chain.local_gravity, chain.particles.iter().map(|p| (p.elasticity, p.stiffness, p.damping)).collect()));
+                chain.db.gravity = [0.0, -HANG_GRAVITY, 0.0];
+                // No setup-pose share taken out: the chain is set up in whatever pose she is in then (already bent over
+                // in the scene), so that share was the whole pull and she hung nothing (爱丽丝, R20f).
+                chain.local_gravity = [0.0; 3];
+                for p in &mut chain.particles { p.elasticity *= HANG_ELASTICITY; p.stiffness *= HANG_STIFFNESS; p.damping = p.damping.max(HANG_DAMPING); }
+            } else if let Some((gravity, local, springs)) = chain.unhung.take() {
+                chain.db.gravity = gravity; chain.local_gravity = local;
+                for (p, (e, k, d)) in chain.particles.iter_mut().zip(springs) { p.elasticity = e; p.stiffness = k; p.damping = d; }
+            }
+            changed += 1;
+        }
+        changed
     }
     /// Component of each chain (diagnostics, tests).
     pub(crate) fn chain_components(&self) -> Vec<Option<crate::px::PhysicsComponent>> { self.chains.iter().map(|c| c.physics).collect() }

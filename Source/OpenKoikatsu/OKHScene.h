@@ -185,9 +185,9 @@ private:
     void BulgeBelly(class AKKPreviewActor* Girl,const FVector* Tip,float Off,float Delta);
     // His glans and how far it is out of her skin, read from both sessions when the pair playback says they are idle
     // (AKKPairedPlayback::OnSessionsIdle); without a playback, AlignHim and BulgeBelly read them themselves.
-    void ReadPairSessions();void ReadBulge(class AKKPreviewActor* Girl,const FVector& Tip);
+    void ReadPairSessions();void ReadBulge(class AKKPreviewActor* Girl,const FVector& Tip);void HangHair(class AKKPreviewActor* Girl);int32 LiftedPose=INDEX_NONE;bool bLifted=false;
     TWeakObjectPtr<class AKKPairedPlayback> ReadingPlayback;FDelegateHandle ReadingHandle;
-    TMap<FName,float> Bulge;int32 BulgePart=INDEX_NONE;FName BulgeTarget;float BulgePast=0.f,BulgeMoves=0.f,StrokeLow=1.f,StrokeHigh=0.f;bool bBulgeLogged=false;TWeakObjectPtr<class AKKPreviewActor> BulgedHer;
+    TMap<FName,float> Bulge;int32 BulgePart=INDEX_NONE;FName BulgeTarget;float BulgePast=0.f,BulgeMoves=0.f;bool bBulgeLogged=false;TWeakObjectPtr<class AKKPreviewActor> BulgedHer;
     // The girl whose shoes were taken off on coming into her room (NativeTick): once each, she may put them back on.
     TWeakObjectPtr<class AKKPreviewActor> ShoesOffFor;
     // His glans from his penis root, from his session (the end of his penis mesh; J_dan109 draws in as he goes in): kept
@@ -205,6 +205,7 @@ private:
     float AlignFoot=0.f,AlignPushed=0.f,AlignDeep=0.f;
     float FeetMin[2]={0,0},FeetMax[2]={0,0},FeetShown[4]={0,0,0,0}; // his and her lower ankle over the floor, range in the last two seconds // his lower ankle above her floor (cm), for /hscene
     float AlignOff=-1.f,AlignAt=0.f,AlignLen=0.f,AlignTip=-1.f; // the last measure while he is in her (cm off the penis line, % of its length), for /hscene
+    float ThrustApplied=0.f,ThrustLow=1.f,ThrustHigh=0.f; // his push along his penis now, the clip's shallowest / deepest lately
     float DeepAlong=1e9f; // the deepest point of his thrusts lately (entrance distance from the root along the penis), easing back
     float AtMin=0.f,AtMax=0.f,AtShownMin=0.f,AtShownMax=0.f,AtWindow=0.f; // depth range over the last two seconds, for /hscene
     TSet<int32> Offered; // the action kinds BuildActions shows now

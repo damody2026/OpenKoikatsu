@@ -146,6 +146,23 @@ pub unsafe extern "C" fn ok_belly_bulge_past(s:*mut OkSession,tip:*const f32,out
     std::ptr::copy_nonoverlapping(name.as_ptr(),target as *mut u8,name.len());*target.add(name.len())=0;0
 }
 #[no_mangle]
+pub unsafe extern "C" fn ok_aim_penis(s:*mut OkSession,dir:*const f32,out_degrees:*mut f32)->i32 {
+    // His penis root turned so his penis points along dir (belly_bulge::aim_penis), his skeleton space, Unity.
+    // 0 ok (out: degrees turned now), 1 no penis / root.
+    let Some(s)=sess_ref(s) else{return -1;};
+    if dir.is_null() {return -1;}
+    let d=[*dir,*dir.add(1),*dir.add(2)];if !d.iter().all(|v|v.is_finite()) {return -1;}
+    let Some(d)=crate::belly_bulge::aim_penis(s,d) else{return 1;};
+    if !out_degrees.is_null(){*out_degrees=d;}0
+}
+#[no_mangle]
+pub unsafe extern "C" fn ok_hang_hair(s:*mut OkSession,on:i32)->i32 {
+    // Her hair chains hang under their weight (on 1) or keep the card's own parameters (0): dbone hang_hair. Returns the
+    // chains changed now (a part whose dynamics are rebuilt later starts from the card's own; call it again then).
+    let Some(s)=sess_ref(s) else{return -1;};
+    s.parts.iter_mut().filter_map(|p|p.runtime_accessory.as_mut()).filter_map(|r|r.dynamic_state_mut()).map(|d|d.hang_hair(on!=0) as i32).sum()
+}
+#[no_mangle]
 pub unsafe extern "C" fn ok_set_head_look(s:*mut OkSession,x:f32,y:f32,z:f32,enabled:i32)->i32 {
     let Some(s)=sess_ref(s) else{return -1;};
     if enabled==0 {s.head_look.reset();return 0;}
@@ -1062,6 +1079,8 @@ unsafe fn animation_pair_frame_impl(female:*mut OkSession,male:*mut OkSession,ti
         let contacts={let _trace=crate::native_profile::Scope::new(2);crate::h_playback::apply_contacts_prepared_with_policy(female,male,&state,setups,false,true,dt)?};
         // Studio IK once more after the contacts: MotionIK solves the whole body again and took back the knees that held
         // feet bend (one-on-one fitting of different heights keeps the taller one's feet on the floor).
+        // His FK (his penis root turned toward her belly, belly_bulge::aim_penis) over what the contacts set.
+        if let Some(sk)=male.body_skel.as_mut() {if crate::session::apply_user_fk_locals(sk,&male.user_fk,&mut male.user_fk_ids){sk.rebuild_worlds();}}
         for s in [&mut *female,&mut *male] {
             if s.studio_ik.is_empty() {continue;}
             if let Some(sk)=s.body_skel.as_mut() {crate::session::apply_studio_ik(sk,&mut s.studio_ik_solver,&s.studio_ik,&s.studio_ik_rotations,&s.studio_ik_weights);}

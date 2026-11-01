@@ -141,6 +141,68 @@ pub fn add(session: &mut OkSession) -> bool {
     added
 }
 
+/// His penis root (cm_J_dan100_00) turned so his penis points along `dir` (his skeleton space, Unity, any length): lying
+/// face down (躺姿後入) the clip points it almost straight down, through her lower belly and about 10 cm into the floor,
+/// where no swell of hers has room to cover it (user, 2026-11-01: turning it is fine there). The scene gives the line into
+/// her (her entrance to her lower spine). Written as his FK on that bone (user_fk, applied after the pair contacts), from
+/// the pose as it is now. Returns the degrees turned now; None without his penis.
+pub fn aim_penis(session: &mut OkSession, dir: [f32; 3]) -> Option<f32> {
+    const ROOT: &str = "cm_J_dan100_00";
+    let tip = penis_tip(session)?;
+    let skel = session.body_skel.as_ref()?;
+    let world = skel.world_tf(ROOT)?;
+    let root = translation(&world);
+    let norm = |v: [f32; 3]| { let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt(); if l < 1e-6 { None } else { Some([v[0] / l, v[1] / l, v[2] / l]) } };
+    let v = norm([tip[0] - root[0], tip[1] - root[1], tip[2] - root[2]])?;
+    let d = norm(dir)?;
+    let dot = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]).clamp(-1.0, 1.0);
+    let angle = dot.acos();
+    if angle < 0.002 { return Some(0.0); }
+    let axis = [v[1] * d[2] - v[2] * d[1], v[2] * d[0] - v[0] * d[2], v[0] * d[1] - v[1] * d[0]];
+    let mut turn = crate::pose::quat_axis_angle(axis, angle);
+    // Whichever handedness the axis came out in: the turned penis must point along `dir`.
+    let r = rotate(turn, v);
+    if r[0] * d[0] + r[1] * d[1] + r[2] * d[2] < dot { turn = crate::pose::quat_axis_angle(axis, -angle); }
+    // To the bone's own frame: local' = local * (world^-1 * turn * world).
+    let w = rotation_of(&world);
+    let local_turn = crate::pose::quat_mul(conj(w), crate::pose::quat_mul(turn, w));
+    let id = skel.tfs.iter().find(|(_, t)| t.name == ROOT).map(|(id, _)| *id)?;
+    let local = crate::pose::quat_mul(skel.tfs.get(&id)?.rot, local_turn);
+    let euler = crate::pose::quat_to_unity_euler(local);
+    if !euler.iter().all(|e| e.is_finite()) { return None; }
+    session.user_fk.retain(|(n, _)| n != ROOT);
+    session.user_fk.push((ROOT.to_string(), euler));
+    Some(angle.to_degrees())
+}
+
+fn conj(q: [f32; 4]) -> [f32; 4] { [-q[0], -q[1], -q[2], q[3]] }
+fn rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
+    let p = crate::pose::quat_mul(crate::pose::quat_mul(q, [v[0], v[1], v[2], 0.0]), conj(q));
+    [p[0], p[1], p[2]]
+}
+/// The rotation of a world matrix (scale taken out of its columns).
+fn rotation_of(m: &Mat4) -> [f32; 4] {
+    let col = |c: usize| { let v = [m[0][c], m[1][c], m[2][c]]; let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-6); [v[0] / l, v[1] / l, v[2] / l] };
+    let (x, y, z) = (col(0), col(1), col(2));
+    let (m00, m11, m22) = (x[0], y[1], z[2]);
+    let trace = m00 + m11 + m22;
+    let q = if trace > 0.0 {
+        let s = (trace + 1.0).sqrt() * 2.0;
+        [(y[2] - z[1]) / s, (z[0] - x[2]) / s, (x[1] - y[0]) / s, 0.25 * s]
+    } else if m00 > m11 && m00 > m22 {
+        let s = (1.0 + m00 - m11 - m22).sqrt() * 2.0;
+        [0.25 * s, (y[0] + x[1]) / s, (z[0] + x[2]) / s, (y[2] - z[1]) / s]
+    } else if m11 > m22 {
+        let s = (1.0 + m11 - m00 - m22).sqrt() * 2.0;
+        [(y[0] + x[1]) / s, 0.25 * s, (z[1] + y[2]) / s, (z[0] - x[2]) / s]
+    } else {
+        let s = (1.0 + m22 - m00 - m11).sqrt() * 2.0;
+        [(z[0] + x[2]) / s, (z[1] + y[2]) / s, 0.25 * s, (x[1] - y[0]) / s]
+    };
+    let l = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).sqrt().max(1e-6);
+    [q[0] / l, q[1] / l, q[2] / l, q[3] / l]
+}
+
 /// The end of his penis now: the vertex of his penis mesh farthest from its root (his skeleton space, Unity metres).
 /// Not J_dan109: the dan bones draw in as he goes in (17.8 cm at her entrance, 5 to 9 in a loop) while his penis is drawn
 /// whole (19.6 cm), so that bone is mid-shaft then.
