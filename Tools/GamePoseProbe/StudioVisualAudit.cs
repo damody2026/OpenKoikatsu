@@ -281,6 +281,10 @@ public sealed partial class GamePoseProbe {
                     if (!String.IsNullOrEmpty(allProps) && (allProps == "all" || Array.Exists(allProps.Split('|'), w => w.Length > 0 && material.shader.name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0))) {
                         Shader shader = material.shader;
                         writer.WriteLine("prop\t" + prefix + "\t(renderQueue)\tQueue\t" + material.renderQueue);
+                        // What decides whether it is in the camera depth texture: its passes, RenderType and shadow casting.
+                        var passes = new System.Collections.Generic.List<string>();
+                        for (int p = 0; p < material.passCount; ++p) passes.Add(material.GetPassName(p));
+                        writer.WriteLine("prop\t" + prefix + "\t(passes)\tPasses\t" + String.Join(",", passes.ToArray()) + "\tRenderType=" + material.GetTag("RenderType", true) + "\tcast=" + renderer.shadowCastingMode);
                         for (int p = 0; p < shader.GetPropertyCount(); ++p) {
                             string name = shader.GetPropertyName(p);
                             var type = shader.GetPropertyType(p);

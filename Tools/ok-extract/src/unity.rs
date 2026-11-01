@@ -1744,7 +1744,32 @@ fn shader_declares_property(object: &UnityObject, wanted: &str) -> Option<bool> 
 /// property (`Cull [_Cull]`) is returned as that property name; the material's saved float then decides it. `zwrite`
 /// is the main colour pass's depth write (0 / 1, or a property name), bound the same way.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool, pub zwrite: Result<i64, String>, pub alpha_to_mask: bool }
+pub(crate) struct ShaderPassState { pub cull: Result<i64, String>, pub outline: bool, pub zwrite: Result<i64, String>, pub alpha_to_mask: bool,
+    /// The shader's own render queue (its SubShader's `Queue` tag; Geometry when it has none): Material.renderQueue for
+    /// a material that saves no queue of its own (-1).
+    pub queue: i64 }
+
+/// A `Queue` tag as Unity reads it: Background / Geometry / AlphaTest / Transparent / Overlay, optionally +/- an offset.
+fn queue_from_tag(tag: &str) -> Option<i64> {
+    let tag = tag.trim();
+    let split = tag.find(['+', '-']).unwrap_or(tag.len());
+    let base = match tag[..split].trim().to_ascii_lowercase().as_str() {
+        "background" => 1000, "geometry" => 2000, "alphatest" => 2450, "geometrylast" => 2500, "transparent" => 3000, "overlay" => 4000,
+        _ => return None,
+    };
+    let offset = tag[split..].replace(' ', "");
+    Some(base + if offset.is_empty() { 0 } else { offset.parse::<i64>().ok()? })
+}
+
+fn tag_in(holder: Option<&unity_asset_core::UnityValue>, key: &str) -> Option<String> {
+    let tags = uv_obj(uv_obj(holder?, "m_Tags")?, "tags")?;
+    uv_arr(tags).iter().find_map(|pair| {
+        let a = uv_arr(pair);
+        let (k, v) = if a.len() == 2 { (a[0].as_str(), a[1].as_str()) }
+            else { (uv_obj(pair, "first").and_then(|v| v.as_str()), uv_obj(pair, "second").and_then(|v| v.as_str())) };
+        k.filter(|k| k.eq_ignore_ascii_case(key)).and(v).map(str::to_string)
+    })
+}
 
 pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState> {
     let parsed = object.class.properties().get("m_ParsedForm")?;
@@ -1795,7 +1820,11 @@ pub(crate) fn shader_pass_state(object: &UnityObject) -> Option<ShaderPassState>
     let is_outline = |p: &(Result<i64, String>, String, String, Result<i64, String>, bool)| p.1.contains("OUTLINE") || (draws_front && p.0 == Ok(1));
     let main = colour.iter().position(|p| !is_outline(p)).or((!colour.is_empty()).then_some(0))?;
     let outline = colour.iter().enumerate().any(|(i, p)| i != main && is_outline(p));
-    Some(ShaderPassState { cull: colour[main].0.clone(), outline, zwrite: colour[main].3.clone(), alpha_to_mask: colour[main].4 })
+    // The SubShader's tags (a pass's own tags as a fallback: some serialisations keep the Queue there).
+    let queue = tag_in(Some(sub), "Queue")
+        .or_else(|| uv_arr(uv_obj(sub, "m_Passes")?).iter().find_map(|p| tag_in(uv_obj(p, "m_State"), "Queue")))
+        .and_then(|t| queue_from_tag(&t)).unwrap_or(2000);
+    Some(ShaderPassState { cull: colour[main].0.clone(), outline, zwrite: colour[main].3.clone(), alpha_to_mask: colour[main].4, queue })
 }
 
 /// The depth write of a pass state for a material: a value bound to a property takes the material's float (Unity's
@@ -1817,6 +1846,7 @@ pub(crate) fn record_shader_pass_state(floats: &mut HashMap<String, f32>, shader
     let zwrite = resolve_zwrite(&state.zwrite, floats);
     floats.insert("_OKShaderZWrite".into(), zwrite);
     if state.alpha_to_mask { floats.insert("_OKShaderAlphaToMask".into(), 1.0); } else { floats.remove("_OKShaderAlphaToMask"); }
+    floats.insert("_OKShaderQueue".into(), state.queue as f32);
     floats.insert("_OKShaderState".into(), shader_state_key(shader) as f32);
 }
 
@@ -5366,6 +5396,19 @@ mod cubemap_info_dump {
                 println!("{:?} {}x{} {:?} lightmap_format {} color_space {} mips {} atlas alpha {:?}", o.name(), t.width, t.height, t.format, t.light_map_format, t.color_space, t.mip_count, alpha);
             } }
         });
+    }
+}
+
+#[cfg(test)]
+mod queue_tag_tests {
+    #[test]
+    fn queue_tags_read_as_unity() {
+        assert_eq!(super::queue_from_tag("Transparent"), Some(3000));
+        assert_eq!(super::queue_from_tag("AlphaTest"), Some(2450));
+        assert_eq!(super::queue_from_tag("Geometry+1"), Some(2001));
+        assert_eq!(super::queue_from_tag("Transparent - 10"), Some(2990));
+        assert_eq!(super::queue_from_tag("overlay"), Some(4000));
+        assert_eq!(super::queue_from_tag("Somewhere"), None);
     }
 }
 

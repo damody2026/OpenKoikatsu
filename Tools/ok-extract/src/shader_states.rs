@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 pub const FILE_NAME: &str = "shader_states.json";
-/// The catalog's form: 2 keeps the main pass's depth write, 3 its AlphaToMask.
-pub const VERSION: u32 = 3;
+/// The catalog's form: 2 keeps the main pass's depth write, 3 its AlphaToMask, 4 the shader's render queue.
+pub const VERSION: u32 = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct State {
@@ -22,6 +22,9 @@ pub struct State {
     /// The main pass's AlphaToMask (absent in catalogs written before it was kept: off).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub alpha_to_mask: bool,
+    /// The shader's render queue (its SubShader's Queue tag; absent in catalogs written before it was kept: unknown).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue: Option<i64>,
 }
 
 /// A fixed depth write (0 / 1), or the material property it is bound to (`ZWrite [_ZWrite]`).
@@ -129,12 +132,14 @@ pub fn complete(lib: &Path, meshes: &mut [crate::unity::ExtractedMesh]) {
             if let Some(z) = zwrite { mat.floats.entry("_OKShaderZWrite".into()).or_insert(z); }
             // Records made before AlphaToMask was kept: the catalog's (a shader shipped twice keeps the same state).
             if state.alpha_to_mask { mat.floats.entry("_OKShaderAlphaToMask".into()).or_insert(1.0); }
+            if let Some(q) = state.queue { mat.floats.entry("_OKShaderQueue".into()).or_insert(q as f32); }
             continue;
         }
         match zwrite { Some(z) => { mat.floats.insert("_OKShaderZWrite".into(), z); } None => { mat.floats.remove("_OKShaderZWrite"); } }
         mat.floats.insert("_OKShaderCull".into(), state.cull as f32);
         mat.floats.insert("_OKShaderOutline".into(), if state.outline { 1.0 } else { 0.0 });
         if state.alpha_to_mask { mat.floats.insert("_OKShaderAlphaToMask".into(), 1.0); } else { mat.floats.remove("_OKShaderAlphaToMask"); }
+        match state.queue { Some(q) => { mat.floats.insert("_OKShaderQueue".into(), q as f32); } None => { mat.floats.remove("_OKShaderQueue"); } }
         mat.floats.insert("_OKShaderState".into(), key);
     }
 }
@@ -151,7 +156,7 @@ fn bundle_states(bytes: Vec<u8>) -> Vec<(String, State)> {
                 let name = crate::unity::shader_runtime_name(&o);
                 let Some(s) = crate::unity::shader_pass_state(&o).filter(|_| !name.is_empty()) else { continue };
                 let zwrite = match s.zwrite { Ok(v) => ZWrite::Fixed(v), Err(name) => ZWrite::Property(name) };
-                out.push((name, State { cull: s.cull.unwrap_or(2), outline: s.outline, zwrite: Some(zwrite), alpha_to_mask: s.alpha_to_mask }));
+                out.push((name, State { cull: s.cull.unwrap_or(2), outline: s.outline, zwrite: Some(zwrite), alpha_to_mask: s.alpha_to_mask, queue: Some(s.queue) }));
             }
         }
         out

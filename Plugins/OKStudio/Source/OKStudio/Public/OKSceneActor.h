@@ -155,13 +155,14 @@ private:
 	};
 	TArray<FRankedPart> BlendedParts;
 	void RankBlendedParts(const FVector& Eye);
-	/** The shown items' parts Unity's camera depth texture leaves out (AKKPreviewActor::DepthTextureAbsentParts): while
-	 *  the scene has SunShafts they draw into custom depth with stencil 255, which the shafts take for far (OKStudioPost). */
-	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTextureAbsentParts;
-	bool bDepthTextureAbsentMarked = false;
+	/** The shown objects' and map's parts Unity's camera depth texture holds (AKKPreviewActor::DepthTexturePresentParts):
+	 *  while something reads that texture (SunShafts, StylizedWater) they draw into custom depth (stencil 0, below every
+	 *  blended part's rank), which stands in for it (OKStudioPost, the water's depth). */
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTexturePresentParts;
+	bool bDepthTextureMarked = false;
 	/** A shown item reads Unity's depth texture itself (AKKPreviewActor::bReadsUnityDepthTexture: StylizedWater). */
 	bool bDepthTextureReaders = false;
-	void MarkDepthTextureAbsent();
+	void MarkDepthTexture();
 	void EnableCustomDepthStencil();
 	bool bCustomDepthStencil = false;
 	FVector RankEye = FVector(NAN);

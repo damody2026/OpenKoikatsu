@@ -1776,18 +1776,20 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		TMap<TWeakObjectPtr<UPrimitiveComponent>, TPair<int32, int32>> Ranks;
 		for (const FRankedPart& Ranked : BlendedParts) if (Ranked.Part.IsValid()) Ranks.Add(Ranked.Part, {Ranked.Rank, Ranked.BasePriority});
 		BlendedParts.Reset();
-		if (bDepthTextureAbsentMarked)
-			for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTextureAbsentParts)
+		if (bDepthTextureMarked)
+			for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTexturePresentParts)
 				if (UPrimitiveComponent* P = Part.Get()) P->SetRenderCustomDepth(false);
-		DepthTextureAbsentParts.Reset();
-		bDepthTextureAbsentMarked = false;
+		DepthTexturePresentParts.Reset();
+		bDepthTextureMarked = false;
 		bDepthTextureReaders = false;
+		for (const auto& MapPreview : ShownMapPreviews)
+			if (AKKPreviewActor* Preview = MapPreview.Get()) DepthTexturePresentParts.Append(Preview->DepthTexturePresentParts);
 		for (const TPair<int32, FShown>& It : Shown)
 			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
 			{
 				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
 				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
-				DepthTextureAbsentParts.Append(Preview->DepthTextureAbsentParts);
+				DepthTexturePresentParts.Append(Preview->DepthTexturePresentParts);
 				bDepthTextureReaders |= Preview->bReadsUnityDepthTexture;
 				for (const AKKPreviewActor::FBlendedPart& Blended : Preview->BlendedParts)
 					if (Blended.Component.IsValid())
@@ -1816,23 +1818,24 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		if (UPrimitiveComponent* P = Part.Get())
 			P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
 	RankBlendedParts(View.GetLocation());
-	MarkDepthTextureAbsent();
+	MarkDepthTexture();
 	PlaceSky(View);
 }
 
-void AOKSceneActor::MarkDepthTextureAbsent()
+void AOKSceneActor::MarkDepthTexture()
 {
 	// Only while something reads Unity's depth texture (SunShafts, StylizedWater's depth): a custom depth pass more.
-	const bool bWant = Document && (Document->Post.bSunShafts || bDepthTextureReaders) && DepthTextureAbsentParts.Num();
-	if (bWant == bDepthTextureAbsentMarked) return;
-	bDepthTextureAbsentMarked = bWant;
+	const bool bWant = Document && (Document->Post.bSunShafts || bDepthTextureReaders) && DepthTexturePresentParts.Num();
+	if (bWant == bDepthTextureMarked) return;
+	bDepthTextureMarked = bWant;
 	if (bWant) EnableCustomDepthStencil();
-	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTextureAbsentParts)
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTexturePresentParts)
 		if (UPrimitiveComponent* P = Part.Get())
 		{
 			P->SetRenderCustomDepth(bWant);
-			// Past the blended parts' ranks (1-255 tested below their own rank), so their test never sees these.
-			if (bWant) P->SetCustomDepthStencilValue(255);
+			// Stencil 0: the blended parts' test (a rank 1-255 below their own) never takes these for a blended part drawn
+			// before them; where these are nearer, the scene depth hides the blended part anyway.
+			if (bWant) P->SetCustomDepthStencilValue(0);
 		}
 }
 

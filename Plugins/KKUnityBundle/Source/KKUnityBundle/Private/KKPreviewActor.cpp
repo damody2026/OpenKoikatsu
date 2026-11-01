@@ -3826,6 +3826,8 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 	Mat->SetShadingModel(MSM_Unlit);
 	Mat->TranslucencyPass = MTP_BeforeDOF;
 	Mat->TwoSided = true;
+	// It stands in Unity's depth texture (custom depth, OKSceneActor) as it does in the native one.
+	Mat->AllowTranslucentCustomDepthWrites = true;
 	auto Add = [Mat](UMaterialExpression* E) { E->Material = Mat; Mat->GetExpressionCollection().AddExpression(E); return E; };
 	auto* Program = NewObject<UMaterialExpressionCustom>(Mat);
 	Program->OutputType = CMOT_Float4;
@@ -3923,9 +3925,9 @@ static UMaterialInterface* OKStylizedWaterMaterial()
 		"lit += refl.rgb * Glossiness * saturate(r5.x) * sv;\n"
 		"float4 m0 = SAMPLE(Shadermap, r0.xy), m1 = SAMPLE(Shadermap, r0.zw);\n"
 		"float foam = -m0.z * m1.z + 1.0;\n"
-		// Unity's depth texture leaves out queue > 2500 parts (Studio's basic shapes): behind the water there they are
-		// not there, the water is deep. The scene marks them (stencil 255 in custom depth, OKSceneActor).
-		"float sceneD = (Stencil > 254.5 && abs(CustomD - SceneD) < 0.002 * SceneD + 1.0) ? 1e7 : SceneD;\n"
+		// Unity's depth texture: the scene draws what it holds (opaque parts up to queue 2500, this water itself) into
+		// custom depth (OKSceneActor::MarkDepthTexture). The water is in it, so here it reads its own depth, as natively.
+		"float sceneD = CustomD;\n"
 		"float depthDiff = max(sceneD - PixelD, 0.0) * 0.01;\n"
 		"float rim = 1.0 - pow(saturate(depthDiff / RimSize), Rimfalloff); rim *= RimColor.a;\n"
 		"float rimA = foam * rim * RimColor.a + rim;\n"
@@ -6762,6 +6764,9 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 					Comp->SetCastShadow(false);
 					Part.SurfaceMat = Dynamic;
 					bReadsUnityDepthTexture = true;
+					// The water writes Unity's depth texture itself (queue 2500 with a shadow caster): it reads its own
+					// depth there (native probe: hiding it moves the depth behind it), so it is in the stand-in too.
+					DepthTexturePresentParts.Add(Comp);
 					UE_LOG(LogTemp, Display, TEXT("OK stylized water part=%s"), *Name);
 				}
 		// A mirror (FX/MirrorReflection): the scene gives "_ReflectionTex" a capture mirrored in the part's plane.
@@ -6793,8 +6798,12 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 			|| Blend.Equals(TEXT("additive"), ESearchCase::IgnoreCase));
 		if (Comp && !bBlendedPart)
 		{
-			FLinearColor Queue;
-			if (Source.MaterialValue(i, "_OKRenderQueue", Queue) && Queue.R > 2500.f) DepthTextureAbsentParts.Add(Comp);
+			// Material.renderQueue: its own (Studio's basic shapes save 3000: not in the depth texture), or its shader's
+			// when it saves none (-1).
+			FLinearColor Queue(-1.f, 0.f, 0.f, 0.f);
+			Source.MaterialValue(i, "_OKRenderQueue", Queue);
+			if (Queue.R < 0.f) Source.MaterialValue(i, "_OKShaderQueue", Queue);
+			if (Queue.R <= 2500.f) DepthTexturePresentParts.Add(Comp);
 		}
 		if (bBlendedPart)
 		{
