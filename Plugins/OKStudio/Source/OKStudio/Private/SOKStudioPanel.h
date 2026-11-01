@@ -1945,11 +1945,6 @@ public:
 				if (!Entry || Entry->bAlpha)
 					Float(TEXT("透明度"), [](FOKSceneObject& X) { return X.Item.Alpha; }, [](FOKSceneObject& X, float V) { X.Item.Alpha = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.05f);
 				Float(TEXT("描邊寬度"), [](FOKSceneObject& X) { return X.Item.LineWidth; }, [](FOKSceneObject& X, float V) { X.Item.LineWidth = FMath::Max(V, 0.f); }, 0.f, 2.f, 0.05f);
-				// Material Editor style edits: material (empty: every material), shader property, and a colour (#RRGGBB or
-				// #RRGGBBAA, sRGB) or a number; imported textures, texture scale/offset, shaders and renderer switches are
-				// shown and can be deleted. Changing them rebuilds the item.
-				Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[OKStudioStyle::Button(FText::FromString(Tip(TEXT("材質編輯器…"), TEXT("app.material"))), Cmd(TEXT("app.material")), 0.f, 20.f)];
-				Label(TEXT("材質編輯（材質名空白＝全部；值 #RRGGBB 是顏色，數字是數值）"));
 				// Studio's item light cancel, emission and outline colour (-1 / alpha < 0: the model's) and its animation
 				// (pattern, start time 0..1, speed) — the clock children hung on its animated points follow.
 				ColorRow(TEXT("描邊顏色"), [](FOKSceneObject& X) { return X.Item.LineColor; }, [](FOKSceneObject& X, const FLinearColor& C) { X.Item.LineColor = C; });
@@ -1959,6 +1954,11 @@ public:
 				Float(TEXT("動作模式"), [](FOKSceneObject& X) { return float(X.Item.AnimePattern); }, [](FOKSceneObject& X, float V) { X.Item.AnimePattern = FMath::Clamp(FMath::RoundToInt(V), 0, 99); }, 0.f, 99.f, 1.f);
 				Float(TEXT("動畫起點 0～1"), [](FOKSceneObject& X) { return X.Item.AnimeTime; }, [](FOKSceneObject& X, float V) { X.Item.AnimeTime = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
 				Float(TEXT("動畫速度"), [](FOKSceneObject& X) { return X.Item.AnimeSpeed; }, [](FOKSceneObject& X, float V) { X.Item.AnimeSpeed = FMath::Max(V, 0.f); }, 0.f, 10.f, 0.05f);
+				// Material Editor style edits: material (empty: every material), shader property, and a colour (#RRGGBB or
+				// #RRGGBBAA, sRGB) or a number; imported textures, texture scale/offset, shaders and renderer switches are
+				// shown and can be deleted. Changing them rebuilds the item.
+				Props->AddSlot().AutoHeight().Padding(0.f, 2.f)[OKStudioStyle::Button(FText::FromString(Tip(TEXT("材質編輯器…"), TEXT("app.material"))), Cmd(TEXT("app.material")), 0.f, 20.f)];
+				Label(TEXT("材質編輯（材質名空白＝全部；值 #RRGGBB 是顏色，數字是數值）"));
 				for (int32 Index = 0; Index < O->Item.MaterialEdits.Num(); ++Index)
 				{
 					auto Edit = [Index](FOKSceneObject& X) -> FOKSceneMaterialEdit* { return X.Item.MaterialEdits.IsValidIndex(Index) ? &X.Item.MaterialEdits[Index] : nullptr; };
