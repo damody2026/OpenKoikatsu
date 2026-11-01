@@ -220,6 +220,7 @@ pub fn eval(texts: &Texts, kind: &str, r: &Value) -> Option<Result<Value, String
             let max = r.get("max").and_then(Value::as_u64).unwrap_or(15) as usize;
             let mut lines = Vec::new();
             let texts: Vec<&str> = r.get("texts").and_then(Value::as_array).into_iter().flatten().map(|t| t.as_str().unwrap_or("")).collect();
+            let texts = balance_quotes(&texts);
             for (k, t) in texts.iter().enumerate() {
                 // The model's lines of one reply: one cut in the middle of a sentence ("你今天还和胡桃" / "一起吃了饭吧。")
                 // has no stop of its own. Before another of its lines it ends with a comma, not the full stop a last
@@ -270,6 +271,28 @@ pub fn fix_hey(text: &str) -> String {
         let starts = i == 0 || PAUSE.contains(chars[i - 1]) || "「『（(\"".contains(chars[i - 1]);
         if c == '餵' && starts && chars.get(i + 1).is_some_and(|n| PAUSE.contains(*n)) { '喂' } else { c }
     }).collect()
+}
+
+/// One reply's lines without the quote marks the model left unpaired: a 」 with no 「 before it (刻晴 "……熱。」") and a 「
+/// never closed. A quote may open in one line and close in the next.
+pub fn balance_quotes(texts: &[&str]) -> Vec<String> {
+    const PAIRS: [(char, char); 3] = [('「', '」'), ('『', '』'), ('“', '”')];
+    let chars: Vec<Vec<char>> = texts.iter().map(|t| t.chars().collect()).collect();
+    let mut drop = std::collections::HashSet::new();
+    for (open, close) in PAIRS {
+        let mut opened = Vec::new();
+        for (k, line) in chars.iter().enumerate() {
+            for (i, &c) in line.iter().enumerate() {
+                if c == open {
+                    opened.push((k, i));
+                } else if c == close && opened.pop().is_none() {
+                    drop.insert((k, i));
+                }
+            }
+        }
+        drop.extend(opened);
+    }
+    chars.iter().enumerate().map(|(k, line)| line.iter().enumerate().filter(|(i, _)| !drop.contains(&(k, *i))).map(|(_, c)| *c).collect()).collect()
 }
 
 /// Her lines joined into one reply: English with spaces, Chinese without.
@@ -498,6 +521,11 @@ mod tests {
         let texts = Texts::builtin();
         let r = eval(&texts, "reply_lines", &serde_json::json!({"texts": ["就为了问这个，不行吗？", "你今天还和胡桃", "一起吃了饭吧"], "max": 15})).unwrap().unwrap();
         assert_eq!(r["reply"], "就为了问这个，不行吗？你今天还和胡桃，一起吃了饭吧。", "{r}");
+        // Unpaired quote marks go, paired ones (also across her lines) stay.
+        let r = eval(&texts, "reply_lines", &serde_json::json!({"texts": ["呼……你這就結束了？別、別貼過來，熱。」"], "max": 30})).unwrap().unwrap();
+        assert_eq!(r["reply"], "呼……你這就結束了？別、別貼過來，熱。", "{r}");
+        let r = eval(&texts, "reply_lines", &serde_json::json!({"texts": ["她說「好啊", "走吧」。", "「還有"], "max": 30})).unwrap().unwrap();
+        assert_eq!(r["reply"], "她說「好啊，走吧」。還有。", "{r}");
     }
 
     #[test]
