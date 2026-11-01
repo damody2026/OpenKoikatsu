@@ -195,6 +195,7 @@ private:
 		TArray<FOKSceneFkBone> AppliedFk;
 		TArray<FOKSceneIkTarget> AppliedIk;
 		int32 AppliedFkPartsOff = 0, AppliedIkPartsOff = 0;
+		float AppliedIkWeight = 1.f;
 		/** The joint correction categories the preview session runs (-1: not set yet, the session runs all). */
 		int32 AppliedJointCorrection = -1;
         TArray<FQuat> AppliedFixedNeck;

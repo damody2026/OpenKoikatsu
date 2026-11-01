@@ -99,6 +99,10 @@ struct OKSTUDIO_API FOKSceneIkTarget
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
 	float Weight = 1.f;
 
+	/** How far a hand / foot turns to Euler, 0..1 (HS2Studio6 旋轉權重), apart from the position weight. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
+	float RotationWeight = 1.f;
+
 	bool operator==(const FOKSceneIkTarget& O) const = default;
 };
 
@@ -264,6 +268,10 @@ struct OKSTUDIO_API FOKSceneCharacter
 	/** Parts whose IK is switched off (bit per IkPartOf part: body, left arm, right arm, left leg, right leg). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	int32 IkPartsOff = 0;
+
+	/** The whole IK's weight, 0..1 (HS2Studio6 整體權重): every target's position and rotation weight is scaled by it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
+	float IkWeight = 1.f;
 
 	/** Studio joint correction (関節補正, OICharInfo.expression): bit per ExpressionBone category, 0 left arm, 1 right arm,
 	 *  2 left leg, 3 right leg, 4 left forearm, 5 right forearm, 6 left thigh, 7 right thigh. Bust and accessory follow

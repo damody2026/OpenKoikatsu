@@ -653,10 +653,41 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 				}, 0.f, 18.f, false, 10.f)];
 			}
 		}
-		Float(TEXT("權重"),
+		Float(TEXT("位置權重"),
 			[this](FOKSceneObject& X) { const FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); return T ? T->Weight : 1.f; },
 			[this](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; })) T->Weight = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
+		if (const FOKSceneIkTarget* T = O.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); T && T->bUseRotation)
+			Float(TEXT("旋轉權重"),
+				[this](FOKSceneObject& X) { const FOKSceneIkTarget* Y = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Z) { return Z.Effector == IkEffector; }); return Y ? Y->RotationWeight : 1.f; },
+				[this](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* Y = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Z) { return Z.Effector == IkEffector; })) Y->RotationWeight = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
 	}
+	// HS2Studio6 IK 權重: the whole IK's weight, stepping through the targets that are on, and the reset.
+	Float(TEXT("整體權重"), [](FOKSceneObject& X) { return X.Character.IkWeight; }, [](FOKSceneObject& X, float V) { X.Character.IkWeight = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
+	auto Step = [this](int32 Dir)
+	{
+		const FOKSceneObject* X = Obj();
+		if (!X || X->Character.Ik.IsEmpty()) return;
+		TArray<int32> On;
+		for (const FOKSceneIkTarget& T : X->Character.Ik) On.AddUnique(T.Effector);
+		On.Sort();
+		const int32 At = On.IndexOfByKey(IkEffector);
+		IkEffector = On[At == INDEX_NONE ? (Dir > 0 ? 0 : On.Num() - 1) : (At + Dir + On.Num()) % On.Num()];
+		if (Game.IsValid() && Game->GuideIk >= 0) Game->GuideIk = IkEffector;
+		DeferRebuild();
+	};
+	TSharedRef<SHorizontalBox> Weights = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("上一個目標")), [Step] { Step(-1); }, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("下一個目標")), [Step] { Step(1); }, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("權重復位")), [this]
+		{
+			// The whole weight and the chosen target's weights back to 1 (HS2Studio6 复位整体与当前目标权重).
+			FOKSceneObject* X = Obj();
+			if (!X) return;
+			X->Character.IkWeight = 1.f;
+			if (FOKSceneIkTarget* T = X->Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; })) T->Weight = T->RotationWeight = 1.f;
+			Changed();
+		}, 0.f, 18.f, false, 10.f)];
+	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Weights];
 	TSharedRef<SHorizontalBox> Row1 = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("IK←FK")), Cmd(TEXT("pose.ikfromfk")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("FK←IK")), Cmd(TEXT("pose.fkfromik")), 0.f, 18.f, false, 10.f)]

@@ -6600,8 +6600,13 @@ pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Optio
     for effector in solver.effectors.iter_mut() { effector.target = None; effector.position_weight = 0.; effector.rotation_weight = 0.; effector.position_offset = [0.; 3]; }
     // 9..12: elbow / knee targets bend the limbs (left arm, right arm, left leg, right leg = bend constraints 1..4).
     for bend in solver.bend_constraints.iter_mut() { bend.goal_position = None; bend.weight = 0.; }
-    // HS2Studio6 IK weights: a target pulls (and turns its hand / foot) only that far.
+    // HS2Studio6 IK weights: a target pulls (and turns its hand / foot) only that far. Twice as many weights as targets:
+    // the second half are the rotation weights (HS2Studio6 位置／旋轉權重), otherwise a target turns as far as it pulls.
     let weight_of = |index: usize| targets.iter().position(|(i, _)| *i == index).and_then(|n| weights.get(n)).copied().unwrap_or(1.).clamp(0., 1.);
+    let rotation_weight_of = |index: usize| {
+        if weights.len() != 2 * targets.len() { return weight_of(index); }
+        targets.iter().position(|(i, _)| *i == index).and_then(|n| weights.get(targets.len() + n)).copied().unwrap_or(1.).clamp(0., 1.)
+    };
     for (index, position) in targets {
         let w = weight_of(*index);
         if *index >= STUDIO_BEND_FIRST {
@@ -6609,7 +6614,7 @@ pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Optio
         } else if let Some(effector) = solver.effectors.get_mut(*index) { effector.position = *position; effector.position_weight = w; }
     }
     for (index, rotation) in rotations {
-        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=weight_of(*index); }
+        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=rotation_weight_of(*index); }
     }
     solver.update(&mut ik);
     ik.sk.rebuild_worlds();

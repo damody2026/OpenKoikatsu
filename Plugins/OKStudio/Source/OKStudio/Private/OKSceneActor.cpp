@@ -824,9 +824,12 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		if (Actor->SetUserFk(Bones, Euler)) Item.AppliedFk = C.Fk;
 		else Errors.Add(Object.Id, TEXT("FK not applied"));
 	}
-	if (C.Ik != Item.AppliedIk || C.IkPartsOff != Item.AppliedIkPartsOff)
+	if (C.Ik != Item.AppliedIk || C.IkPartsOff != Item.AppliedIkPartsOff || C.IkWeight != Item.AppliedIkWeight)
 	{
 		Item.AppliedIkPartsOff = C.IkPartsOff;
+		Item.AppliedIkWeight = C.IkWeight;
+		const float Whole = FMath::Clamp(C.IkWeight, 0.f, 1.f);
+		TArray<float> TurnWeights;
 		TArray<int32> Effectors;
 		TArray<FVector> Positions;
 		TArray<FQuat> Rotations;
@@ -837,7 +840,8 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
             // A switched-off part's targets are kept but do not pull.
             if (!C.IkPartOn(FOKSceneCharacter::IkPartOf(T.Effector))) continue;
             Effectors.Add(T.Effector);
-            Weights.Add(T.Weight);
+            Weights.Add(FMath::Clamp(T.Weight, 0.f, 1.f) * Whole);
+            TurnWeights.Add(FMath::Clamp(T.RotationWeight, 0.f, 1.f) * Whole);
             Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position));
             const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector,T.Euler,FVector::OneVector).GetRotation();
             Rotations.Add(FQuat(-U.X,U.Z,U.Y,U.W));
@@ -846,8 +850,10 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		FString Error;
 		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations))
 		{
-			// Weights after the targets (setting targets resets them to 1); all-1 needs no call.
-			if (Weights.ContainsByPredicate([](float W) { return W < 1.f; })) Actor->Session.SetStudioIkWeights(Weights);
+			// Weights after the targets (setting targets resets them to 1); all-1 needs no call. Rotation weights apart from
+			// the position ones go after them (twice as many weights as targets).
+			if (TurnWeights != Weights) { Weights.Append(TurnWeights); Actor->Session.SetStudioIkWeights(Weights); }
+			else if (Weights.ContainsByPredicate([](float W) { return W < 1.f; })) Actor->Session.SetStudioIkWeights(Weights);
 			Item.AppliedIk = C.Ik;
 		}
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);

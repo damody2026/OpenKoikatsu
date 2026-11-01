@@ -243,6 +243,7 @@ pub unsafe extern "C" fn ok_session_set_studio_ik_pose(
     0
 }
 /// Studio IK weights 0..1, one per target of the last set_studio_ik(_pose) call, in its order; 0 count: all 1.
+/// Twice the targets: the second half are the hand / foot rotation weights (otherwise rotation follows position).
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_set_studio_ik_weights(s: *mut OkSession, weights: *const f32, count: i32) -> i32 {
     let Some(s) = sess_ref(s) else { return -1; };
