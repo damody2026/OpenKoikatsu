@@ -346,6 +346,10 @@ pub struct SceneEffects {
     /// SceneInfo.skyInfo (≥ 1.1.2.0, MessagePack {Enable, Pattern}): Studio's sky dome and its pattern.
     pub sky: bool, pub sky_pattern: i32,
     pub background: String, pub frame: String,
+    /// The sound menu (BGMCtrl, OutsideSoundCtrl): BGM `no` of the BGM list, `repeat` 1 = all (0 none), playing;
+    /// outside sound: a file of the game's UserData/audio.
+    pub bgm_no: i32, pub bgm_repeat: i32, pub bgm_play: bool,
+    pub outside_file: String, pub outside_repeat: i32, pub outside_play: bool,
 }
 
 /// What SceneInfo.Load reads after the map: the screen settings, the main camera, the stored views, Studio's lights,
@@ -413,9 +417,9 @@ fn main_camera(r: &mut Reader, v: &Version) -> Result<(StudioCamera, SceneEffect
     if tail.is_err() { lights.clear(); }
     else {
         let sound = (|| -> Result<(String, String), String> {
-            r.i32()?; r.i32()?; r.bool()?; // BGMCtrl
-            r.i32()?; r.i32()?; r.bool()?; // ENVCtrl
-            r.i32()?; r.string()?; r.bool()?; // OutsideSoundCtrl
+            e.bgm_repeat = r.i32()?; e.bgm_no = r.i32()?; e.bgm_play = r.bool()?; // BGMCtrl: repeat before no
+            r.i32()?; r.i32()?; r.bool()?; // ENVCtrl (KKS Studio lists no environment sounds)
+            e.outside_repeat = r.i32()?; e.outside_file = r.string()?; e.outside_play = r.bool()?; // OutsideSoundCtrl
             Ok((r.string()?, r.string()?))
         })();
         if let Ok((background, frame)) = sound { e.background = background; e.frame = frame; }
@@ -820,6 +824,38 @@ mod tests {
             }
         }
     }
+    /// Writes each scene under OK_SCENE_DIR that carries plugin OK_PLUGIN's data (default "kkpe") to OK_OUT as
+    /// <scene>.txt: the data's fields, strings and byte strings shown as text (XML payloads readable).
+    #[test]
+    #[ignore = "diagnostic: dumps a scene plugin's data from OK_SCENE_DIR to OK_OUT"]
+    fn dump_scene_plugin_data() {
+        let (Ok(dir), Ok(out)) = (std::env::var("OK_SCENE_DIR"), std::env::var("OK_OUT")) else { return };
+        let key = std::env::var("OK_PLUGIN").unwrap_or_else(|_| "kkpe".into());
+        std::fs::create_dir_all(&out).unwrap();
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() { walk(&p, out) } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("png")) { out.push(p) }
+            }
+        }
+        let mut files = Vec::new();
+        walk(std::path::Path::new(&dir), &mut files);
+        let mut n = 0;
+        for f in files {
+            let Ok(bytes) = std::fs::read(&f) else { continue };
+            let Some(blocks) = scene_plugins(&bytes) else { continue };
+            let Some(plugin) = crate::card::map_get(&blocks, &key) else { continue };
+            let data = plugin.as_array().and_then(|a| a.get(1)).unwrap_or(plugin);
+            let mut text = format!("{}\n", f.display());
+            for (k, v) in data.as_map().into_iter().flatten() {
+                let shown = v.as_str().map(str::to_owned).or_else(|| v.as_slice().map(|b| String::from_utf8_lossy(b).into_owned())).unwrap_or_else(|| format!("{v}"));
+                text += &format!("== {k}\n{shown}\n");
+            }
+            std::fs::write(std::path::Path::new(&out).join(format!("{}.txt", f.file_stem().unwrap().to_string_lossy())), text).unwrap();
+            n += 1;
+        }
+        println!("{n} scenes with {key}");
+    }
     // OK_CMP_NATIVE=<original capture>, OK_CMP_OK=<OK Studio picture> (a CompareKStudio picture: its right half),
     // OK_CMP_GRID=<columns>x<rows> (default 8x4): cells whose mean colour differs by more than 10 % (diagnostic).
     #[test]
@@ -897,6 +933,11 @@ mod tests {
             }
             if let Some(fx) = super::read_nested(&bytes).ok().and_then(|s| s.effects).filter(|e| e.sky) {
                 let e = used.entry(format!("(Studio sky pattern {})", fx.sky_pattern)).or_default();
+                e.0 += 1;
+                if e.1.is_empty() { e.1 = f.display().to_string(); }
+            }
+            if let Some(fx) = super::read_nested(&bytes).ok().and_then(|s| s.effects) {
+                let e = used.entry(format!("(BGM {} repeat {} play {}; outside play {})", fx.bgm_no, fx.bgm_repeat, fx.bgm_play, fx.outside_play)).or_default();
                 e.0 += 1;
                 if e.1.is_empty() { e.1 = f.display().to_string(); }
             }

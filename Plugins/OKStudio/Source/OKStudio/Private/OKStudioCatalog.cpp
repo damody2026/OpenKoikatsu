@@ -92,6 +92,12 @@ bool FOKStudioCatalog::Load(const FString& File)
 		const auto O = V->AsObject();
 		Filters.Add({ Int(O, TEXT("no")), Str(O, TEXT("name")), Str(O, TEXT("bundle")), Str(O, TEXT("file")) });
 	}
+	// Studio BGM (ok-extract --oklib studio-sounds): the list and each clip's Ogg in the library.
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("bgm")))
+	{
+		const auto O = V->AsObject();
+		Bgm.Add({ Int(O, TEXT("no")), Str(O, TEXT("name")), Str(O, TEXT("file")) });
+	}
 	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("accessory_points")))
 	{
 		const auto O = V->AsObject();
@@ -319,6 +325,18 @@ const FOKStudioAnim* FOKStudioCatalog::FindAnimAnyKind(int32 Group, int32 Catego
 const FOKStudioFilter* FOKStudioCatalog::FindFilter(int32 No) const
 {
 	return Filters.FindByPredicate([No](const FOKStudioFilter& F) { return F.No == No; });
+}
+
+const FOKStudioBgm* FOKStudioCatalog::FindBgm(int32 No) const
+{
+	return Bgm.FindByPredicate([No](const FOKStudioBgm& B) { return B.No == No; });
+}
+
+FString FOKStudioCatalog::BgmSound(int32 No) const
+{
+	const FOKStudioBgm* B = FindBgm(No);
+	const FString File = B ? AOKSceneActor::LibraryDirectory() / TEXT("studio/bgm") / B->File + TEXT(".ogg") : FString();
+	return !File.IsEmpty() && FPaths::FileExists(File) ? File : FString();
 }
 
 FOKStudioCatalog::FEyeSet FOKStudioCatalog::EyeSet(int32 Ptn) const

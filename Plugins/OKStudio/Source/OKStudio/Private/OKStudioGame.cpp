@@ -80,6 +80,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "AudioDevice.h"
 #include "KKSpeech.h"
+#include "Async/Async.h"
+#include <atomic>
 
 namespace
 {
@@ -326,6 +328,7 @@ void UOKStudioGame::Stop()
 {
 	bStopRequested = false;
 	StopSceneAudio();
+	StopStudioSounds();
 	SceneAudioPcm.Reset();
 	LoadedSoundFile.Reset();
 	OKStudioControl::Stop();
@@ -533,6 +536,7 @@ void UOKStudioGame::ReleaseSceneResources()
 {
 	Select(-1);
 	StopSceneAudio();
+	StopStudioSounds();
 	SceneAudioPcm.Reset();
 	LoadedSoundFile.Reset();
 	// Release the old scene as one unit, including ids also present in the new
@@ -1191,6 +1195,87 @@ static bool OKStudioLoadAudioFile(const FString& Path, TSharedPtr<const FKKSpeec
 	return false;
 }
 
+/** A sound menu file decoding on a worker thread. */
+struct FOKStudioSoundLoad
+{
+	TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe> Pcm;
+	std::atomic<bool> bDone{ false };
+};
+
+FString UOKStudioGame::BgmFile() const
+{
+	return Document ? FOKStudioCatalog::Get().BgmSound(Document->Sound.Bgm) : FString();
+}
+
+FString UOKStudioGame::OutsideSoundFile() const
+{
+	if (!Document || Document->Sound.Outside.IsEmpty()) return FString();
+	const FString Path = FPaths::IsRelative(Document->Sound.Outside) && !File.IsEmpty() ? FPaths::GetPath(File) / Document->Sound.Outside : Document->Sound.Outside;
+	return FPaths::FileExists(Path) ? Path : FString();
+}
+
+bool UOKStudioGame::IsBgmPlaying() const { return StudioBgm.Audio.IsValid() && StudioBgm.Audio->IsPlaying(); }
+bool UOKStudioGame::IsOutsideSoundPlaying() const { return StudioOutside.Audio.IsValid() && StudioOutside.Audio->IsPlaying(); }
+
+void UOKStudioGame::UpdateStudioSound(FStudioSound& Sound, const FString& Path, bool bPlay, bool bRepeat)
+{
+	auto Silence = [&Sound] { if (Sound.Audio.IsValid()) Sound.Audio->Stop(); Sound.Audio.Reset(); Sound.bStarted = false; };
+	if (!bPlay || Path.IsEmpty() || bMuteSound || IsExporting()) { Silence(); Sound.bEnded = false; return; }
+	if (Sound.File != Path)
+	{
+		Silence();
+		Sound.File = Path;
+		Sound.Pcm.Reset();
+		Sound.bEnded = false;
+		TSharedPtr<FOKStudioSoundLoad, ESPMode::ThreadSafe> Load = MakeShared<FOKStudioSoundLoad, ESPMode::ThreadSafe>();
+		Sound.Load = Load;
+		Async(EAsyncExecution::ThreadPool, [Load, Path]
+		{
+			FString Error;
+			if (!OKStudioLoadAudioFile(Path, Load->Pcm, Error)) UE_LOG(LogTemp, Warning, TEXT("OK studio: sound %s failed to load: %s"), *Path, *Error);
+			Load->bDone = true;
+		});
+	}
+	if (Sound.Load)
+	{
+		if (!Sound.Load->bDone) return;
+		Sound.Pcm = Sound.Load->Pcm;
+		Sound.Load.Reset();
+	}
+	if (!Sound.Pcm || Sound.Pcm->Channels <= 0 || Sound.Pcm->SampleRate <= 0) return;
+	if (Sound.bStarted && (!Sound.Audio.IsValid() || !Sound.Audio->IsPlaying()))
+	{
+		// Played to the end: again from the start when it repeats (Studio's repeat All), else it stays ended.
+		Sound.bStarted = false;
+		Sound.Audio.Reset();
+		Sound.bEnded = !bRepeat;
+	}
+	if (Sound.bStarted)
+	{
+		Sound.Audio->SetVolumeMultiplier(FMath::Clamp(SoundVolume, 0.f, 2.f));
+		return;
+	}
+	if (Sound.bEnded) return;
+	UWorld* World = GetTickableGameObjectWorld();
+	if (!World) return;
+	UKKSpeechWave* Wave = NewObject<UKKSpeechWave>(this);
+	Wave->Init(Sound.Pcm, World->GetAudioDevice().IsValid() ? World->GetAudioDevice()->GetSampleRate() : Sound.Pcm->SampleRate);
+	if (UAudioComponent* Comp = UGameplayStatics::SpawnSound2D(World, Wave, FMath::Clamp(SoundVolume, 0.f, 2.f)))
+	{
+		Sound.Audio = Comp;
+		Sound.bStarted = true;
+	}
+}
+
+void UOKStudioGame::StopStudioSounds()
+{
+	for (FStudioSound* S : { &StudioBgm, &StudioOutside })
+	{
+		if (S->Audio.IsValid()) S->Audio->Stop();
+		*S = FStudioSound();
+	}
+}
+
 void UOKStudioGame::StopSceneAudio()
 {
 	if (SceneAudio.IsValid())
@@ -1382,6 +1467,11 @@ void UOKStudioGame::Tick(float DeltaTime)
 		SetTimelineTime(Next);
 	}
 	UpdateSceneAudio();
+	if (Document)
+	{
+		UpdateStudioSound(StudioBgm, BgmFile(), Document->Sound.bBgmPlay, Document->Sound.bBgmRepeat);
+		UpdateStudioSound(StudioOutside, OutsideSoundFile(), Document->Sound.bOutsidePlay, Document->Sound.bOutsideRepeat);
+	}
 	// Auto backup every few minutes, not while something is moving or loading.
 	const int32 Minutes = FOKStudioSettings::Get().BackupMinutes;
 	if (Minutes > 0 && FPlatformTime::Seconds() - LastBackupSeconds > Minutes * 60. && BusyReason().IsEmpty() && !bStoryMode) BackupNow(false);

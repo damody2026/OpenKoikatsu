@@ -26,7 +26,7 @@
 |---|---|---|---|
 | `studio_launch` | — | `scene?`、`width?`、`height?`、`no_build?`（`-NoBuild`）、`options?`（`--` 後的 Unreal 參數）、`timeout_s?`（預設 120） | `{pid, port, seconds}` |
 | `studio_stop` | `cmd` | 無（送 `{"id":"app.quit"}`，不殺程序） | `{}` |
-| `studio_state` | `state` | 無 | `scene_file, dirty, selection, primary, objects[{id,parent,name,kind,visible,attach_bone,location,rotation,scale,error?}], ui{commands...}, busy, timeline{time,duration,playing}` |
+| `studio_state` | `state` | 無 | `scene_file, dirty, selection, primary, objects[{id,parent,name,kind,visible,attach_bone,location,rotation,scale,error?}], ui{commands...}, busy, timeline{time,duration,playing}, sound{bgm,bgm_play,bgm_repeat,bgm_file,bgm_playing,outside,outside_play,outside_repeat,outside_file,outside_playing}` |
 | `studio_inspect` | `inspect` | `id` | `{object}` |
 | `studio_catalog_search` | `catalog_search` | `query`（空白分隔、全部符合；`-字` 排除）、`kinds?`（`item effect map anim pose card`）、`limit?` | `{results[{kind,key,name,path?}]}` |
 | `studio_spawn` | `spawn` | `kind`（`character item light camera effect folder`）、`card?`、`item?`（`group/category/no`）、`effect?`、`light_type?`（`directional point spot`）、`parent?`、`bone?`、`name?`、`location?`、`rotation?`、`scale?` | `{id}` |
@@ -43,7 +43,7 @@
 | `studio_cmd` | `cmd` | `id`（`studio_state` 的 `ui.commands`）、`arg?` | `{}` |
 | `studio_timeline` | `timeline` | `time?`、`play?`、`key?{ids}` | `{time,duration,playing}` |
 | `studio_patch` | `patch` | `id`、`fields`（深層合併進物件 JSON，即 `studio_inspect` 的 `object`；物件逐鍵合併、陣列與純值取代；`id`／`kind`／`parent` 不能改，改父物件用 `studio_reparent`） | `{object}` |
-| `studio_scene` | `scene` | `post?`（深層合併：bloom、景深、霧、天空、濾鏡、背景…，鍵同回傳的 `post`）、`map?`（-1 = 無）、`map_transform?{location,rotation,scale}`、`duration?`（秒）、`active_camera?`（-1 = 自由視角）；全不給只讀取 | `{post,map,map_transform,duration,active_camera,bookmarks}` |
+| `studio_scene` | `scene` | `post?`（深層合併：bloom、景深、霧、天空、濾鏡、背景…，鍵同回傳的 `post`）、`map?`（-1 = 無）、`map_transform?{location,rotation,scale}`、`duration?`（秒）、`active_camera?`（-1 = 自由視角）、`sound?`（音效選單：`Bgm`、`bBgmPlay`、`bBgmRepeat`、`Outside`、`bOutsidePlay`、`bOutsideRepeat`，深層合併）；全不給只讀取 | `{post,map,map_transform,duration,active_camera,bookmarks}` |
 | `studio_bones` | `bones` | `id`（角色） | `{fk[{bone,name,part,euler,set,world}], ik[{effector,name,enabled,position,world}], look_point, accessory_points[{key,name,group,world}]}` |
 | `studio_bounds` | `bounds` | `ids?`（預設全部） | `{objects[{id,min,max,center,size}]}`（世界座標 cm） |
 | `studio_catalog` | `catalog` | `kind`（`item map effect anim filter sky accessory_point`）、`group?`、`category?`、`anim_kind?` | `{groups?, categories?, entries[...]}`；文字搜尋仍用 `studio_catalog_search` |

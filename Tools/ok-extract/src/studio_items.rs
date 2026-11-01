@@ -98,7 +98,14 @@ pub struct Catalog {
     /// Studio hand patterns (HandAnime sheets: group 0 left, 1 right): the row's display name, else its clip name.
     #[serde(default)]
     pub hand_names: Vec<Category>,
+    /// Studio background music (BGM sheet); its sound is `studio/bgm/<file>.ogg` in the library once converted
+    /// (studio-sounds).
+    #[serde(default)]
+    pub bgm: Vec<Bgm>,
 }
+/// Studio BGM (BGM sheet: no, name, bundle, clip); SceneInfo.bgmCtrl.no picks one.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Bgm { pub no: i32, pub name: String, pub bundle: String, pub file: String }
 
 pub const FILE_NAME: &str = "studio_items.json";
 
@@ -157,6 +164,7 @@ pub fn catalog(game: &Path) -> Catalog {
     let mut accessory_points = BTreeMap::new();
     let mut filters = BTreeMap::new();
     let mut hand_names = BTreeMap::new();
+    let mut bgm = BTreeMap::new();
     for file in files {
         let Ok(bytes) = crate::gamefs::read(&file) else { continue; };
         for (name, rows) in sheets(bytes) {
@@ -191,6 +199,7 @@ pub fn catalog(game: &Path) -> Catalog {
                         hand_names.insert((side, no), Category { group: side, id: no, name: label });
                     }
                     "Light" => { lights.insert(no, Light { no, name: cell(r, 1), bundle: game_bundle(&cell(r, 3)), prefab: cell(r, 4), model: String::new() }); }
+                    "BGM" => { bgm.insert(no, Bgm { no, name: cell(r, 1), bundle: game_bundle(&cell(r, 2)), file: cell(r, 3) }); }
                     _ => {}
                 }
             }
@@ -209,6 +218,7 @@ pub fn catalog(game: &Path) -> Catalog {
         fk_bones: fk_bones.into_values().filter(|b: &FkBone| !b.bone.is_empty()).collect(),
         accessory_points: accessory_points.into_values().filter(|p: &AccessoryPoint| !p.key.is_empty()).collect(),
         filters: filters.into_values().filter(|f: &Filter| !f.bundle.is_empty() && !f.file.is_empty()).collect(),
+        bgm: bgm.into_values().filter(|b: &Bgm| !b.bundle.is_empty() && !b.file.is_empty()).collect(),
     }
 }
 

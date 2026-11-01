@@ -99,6 +99,22 @@ namespace
 		O->SetBoolField(TEXT("hide_helpers"), G.bHideHelpers);
 		O->SetStringField(TEXT("background"), G.Document->Post.Background);
 		O->SetStringField(TEXT("frame_picture"), G.Document->Post.Frame);
+		// The sound menu: the scene's settings, the files they resolve to and whether each is audible now.
+		{
+			const FOKSceneSound& S = G.Document->Sound;
+			TSharedRef<FJsonObject> Sound = MakeShared<FJsonObject>();
+			Sound->SetNumberField(TEXT("bgm"), S.Bgm);
+			Sound->SetBoolField(TEXT("bgm_play"), S.bBgmPlay);
+			Sound->SetBoolField(TEXT("bgm_repeat"), S.bBgmRepeat);
+			Sound->SetStringField(TEXT("bgm_file"), G.BgmFile());
+			Sound->SetBoolField(TEXT("bgm_playing"), G.IsBgmPlaying());
+			Sound->SetStringField(TEXT("outside"), S.Outside);
+			Sound->SetBoolField(TEXT("outside_play"), S.bOutsidePlay);
+			Sound->SetBoolField(TEXT("outside_repeat"), S.bOutsideRepeat);
+			Sound->SetStringField(TEXT("outside_file"), G.OutsideSoundFile());
+			Sound->SetBoolField(TEXT("outside_playing"), G.IsOutsideSoundPlaying());
+			O->SetObjectField(TEXT("sound"), Sound);
+		}
 		// The scene post passes' shaders and how many blendables the view's camera draws (sun shafts only once ready).
 		O->SetStringField(TEXT("post_opaque"), OKStudioScenePostMaterialState(0));
 		O->SetStringField(TEXT("post_shafts"), OKStudioScenePostMaterialState(1));
@@ -255,6 +271,16 @@ namespace
 				FOKScenePost Patched;
 				if (!FJsonObjectConverter::JsonObjectToUStruct(Now.ToSharedRef(), &Patched)) return Result(false, TEXT("post fields do not fit (see studio_scene)"));
 				Doc->Post = Patched;
+			}
+			// The sound menu ({"sound": {"Bgm": 3, "bBgmPlay": true, ...}}, FOKSceneSound's fields).
+			const TSharedPtr<FJsonObject>* SoundPatch = nullptr;
+			if (J->TryGetObjectField(TEXT("sound"), SoundPatch))
+			{
+				TSharedPtr<FJsonObject> Now = FJsonObjectConverter::UStructToJsonObject(Doc->Sound);
+				DeepMerge(Now, *SoundPatch);
+				FOKSceneSound Patched;
+				if (!FJsonObjectConverter::JsonObjectToUStruct(Now.ToSharedRef(), &Patched)) return Result(false, TEXT("sound fields do not fit"));
+				Doc->Sound = Patched;
 			}
 			double D;
 			if (J->TryGetNumberField(TEXT("map"), D)) Doc->Map = int32(D);

@@ -197,6 +197,7 @@ FString UOKSceneDocument::ToJson() const
 	if (!SoundFile.IsEmpty()) Root->SetStringField(TEXT("sound_file"), SoundFile);
 	if (!FMath::IsNearlyZero(SoundDelay)) Root->SetNumberField(TEXT("sound_delay"), SoundDelay);
 	if (TSharedPtr<FJsonObject> PostJson = FJsonObjectConverter::UStructToJsonObject(Post)) Root->SetObjectField(TEXT("post"), PostJson);
+	if (TSharedPtr<FJsonObject> SoundJson = FJsonObjectConverter::UStructToJsonObject(Sound)) Root->SetObjectField(TEXT("sound"), SoundJson);
 	TArray<TSharedPtr<FJsonValue>> TrackJson;
 	for (const FOKSceneTrack& T : Tracks) if (TSharedPtr<FJsonObject> J = FJsonObjectConverter::UStructToJsonObject(T)) TrackJson.Add(MakeShared<FJsonValueObject>(J));
 	Root->SetArrayField(TEXT("tracks"), TrackJson);
@@ -275,6 +276,9 @@ bool UOKSceneDocument::FromJson(const FString& Json, FString& OutError)
 	Post = FOKScenePost();
 	const TSharedPtr<FJsonObject>* PostJson = nullptr;
 	if (Root->TryGetObjectField(TEXT("post"), PostJson)) FJsonObjectConverter::JsonObjectToUStruct(PostJson->ToSharedRef(), &Post);
+	Sound = FOKSceneSound();
+	const TSharedPtr<FJsonObject>* SoundJson = nullptr;
+	if (Root->TryGetObjectField(TEXT("sound"), SoundJson)) FJsonObjectConverter::JsonObjectToUStruct(SoundJson->ToSharedRef(), &Sound);
 	Tracks.Reset();
 	const TArray<TSharedPtr<FJsonValue>>* TrackJson = nullptr;
 	if (Root->TryGetArrayField(TEXT("tracks"), TrackJson))

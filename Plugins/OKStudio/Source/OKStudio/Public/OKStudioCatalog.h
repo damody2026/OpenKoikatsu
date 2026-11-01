@@ -73,6 +73,14 @@ struct FOKStudioFilter
 	FString File;
 };
 
+/** Studio BGM (BGM sheet): its sound is the library's studio/bgm/<File>.ogg (ok-extract --oklib studio-sounds). */
+struct FOKStudioBgm
+{
+	int32 No = 0;
+	FString Name;
+	FString File;
+};
+
 /** Studio character attach point (AccessoryPoint sheet): the transform scene children on that slot hang on. */
 struct FOKStudioAccessoryPoint
 {
@@ -155,6 +163,10 @@ public:
 	TArray<FOKStudioFkBone> FkBones;
 	TArray<FOKStudioAccessoryPoint> AccessoryPoints;
 	TArray<FOKStudioFilter> Filters;
+	TArray<FOKStudioBgm> Bgm;
+	const FOKStudioBgm* FindBgm(int32 No) const;
+	/** BGM `No`'s Ogg file, empty when the list or the converted file lacks it. */
+	FString BgmSound(int32 No) const;
 	/** Eyes pattern names (cha_eyeset rows) and Studio hand pattern names per side (0 left, 1 right; the HandAnime clip). */
 	TMap<int32, FString> EyeNames;
 	TMap<int32, FString> HandNames[2];

@@ -61180,5 +61180,313 @@
       "id": 21,
       "name": "par_straight"
     }
+  ],
+  "bgm": [
+    {
+      "no": 0,
+      "name": "タイトル",
+      "bundle": "abdata/studio/sound/bgm/bgm_00.unity3d",
+      "file": "bgm_00"
+    },
+    {
+      "no": 1,
+      "name": "マップ移動中",
+      "bundle": "abdata/studio/sound/bgm/bgm_01.unity3d",
+      "file": "bgm_01"
+    },
+    {
+      "no": 2,
+      "name": "マップ夕方",
+      "bundle": "abdata/studio/sound/bgm/bgm_02.unity3d",
+      "file": "bgm_02"
+    },
+    {
+      "no": 3,
+      "name": "カスタム",
+      "bundle": "abdata/studio/sound/bgm/bgm_03.unity3d",
+      "file": "bgm_03"
+    },
+    {
+      "no": 4,
+      "name": "コミュニケーションモード",
+      "bundle": "abdata/studio/sound/bgm/bgm_04.unity3d",
+      "file": "bgm_04"
+    },
+    {
+      "no": 5,
+      "name": "出会い",
+      "bundle": "abdata/studio/sound/bgm/bgm_05.unity3d",
+      "file": "bgm_05"
+    },
+    {
+      "no": 6,
+      "name": "恋人と会話",
+      "bundle": "abdata/studio/sound/bgm/bgm_06.unity3d",
+      "file": "bgm_06"
+    },
+    {
+      "no": 7,
+      "name": "怒り",
+      "bundle": "abdata/studio/sound/bgm/bgm_07.unity3d",
+      "file": "bgm_07"
+    },
+    {
+      "no": 8,
+      "name": "Hシーン(穏やか)",
+      "bundle": "abdata/studio/sound/bgm/bgm_08.unity3d",
+      "file": "bgm_08"
+    },
+    {
+      "no": 9,
+      "name": "Hシーン(Hなムード)",
+      "bundle": "abdata/studio/sound/bgm/bgm_09.unity3d",
+      "file": "bgm_09"
+    },
+    {
+      "no": 10,
+      "name": "Hシーン(覗き)",
+      "bundle": "abdata/studio/sound/bgm/bgm_10.unity3d",
+      "file": "bgm_10"
+    },
+    {
+      "no": 11,
+      "name": "もの悲しい",
+      "bundle": "abdata/studio/sound/bgm/bgm_11.unity3d",
+      "file": "bgm_11"
+    },
+    {
+      "no": 12,
+      "name": "告白/回想",
+      "bundle": "abdata/studio/sound/bgm/bgm_12.unity3d",
+      "file": "bgm_12"
+    },
+    {
+      "no": 13,
+      "name": "デート(ウキウキ)",
+      "bundle": "abdata/studio/sound/bgm/bgm_13.unity3d",
+      "file": "bgm_13"
+    },
+    {
+      "no": 14,
+      "name": "自宅(朝メニュー)",
+      "bundle": "abdata/studio/sound/bgm/bgm_14.unity3d",
+      "file": "bgm_14"
+    },
+    {
+      "no": 15,
+      "name": "自宅(夜メニュー)",
+      "bundle": "abdata/studio/sound/bgm/bgm_15.unity3d",
+      "file": "bgm_15"
+    },
+    {
+      "no": 16,
+      "name": "システムメニュー",
+      "bundle": "abdata/studio/sound/bgm/bgm_16.unity3d",
+      "file": "bgm_16"
+    },
+    {
+      "no": 17,
+      "name": "部室",
+      "bundle": "abdata/studio/sound/bgm/bgm_17.unity3d",
+      "file": "bgm_17"
+    },
+    {
+      "no": 18,
+      "name": "日常",
+      "bundle": "abdata/studio/sound/bgm/bgm_18.unity3d",
+      "file": "bgm_18"
+    },
+    {
+      "no": 19,
+      "name": "夕焼け",
+      "bundle": "abdata/studio/sound/bgm/bgm_19.unity3d",
+      "file": "bgm_19"
+    },
+    {
+      "no": 20,
+      "name": "思い出",
+      "bundle": "abdata/studio/sound/bgm/bgm_20.unity3d",
+      "file": "bgm_20"
+    },
+    {
+      "no": 21,
+      "name": "エンディング曲アレンジ1",
+      "bundle": "abdata/studio/sound/bgm/bgm_21.unity3d",
+      "file": "bgm_21"
+    },
+    {
+      "no": 22,
+      "name": "エンディング曲アレンジ2",
+      "bundle": "abdata/studio/sound/bgm/bgm_22.unity3d",
+      "file": "bgm_22"
+    },
+    {
+      "no": 23,
+      "name": "クールな女の子と会話",
+      "bundle": "abdata/studio/sound/bgm/bgm_23.unity3d",
+      "file": "bgm_23"
+    },
+    {
+      "no": 24,
+      "name": "元気な女の子と会話",
+      "bundle": "abdata/studio/sound/bgm/bgm_24.unity3d",
+      "file": "bgm_24"
+    },
+    {
+      "no": 25,
+      "name": "朝の公園",
+      "bundle": "abdata/studio/sound/bgm/bgm_25.unity3d",
+      "file": "bgm_25"
+    },
+    {
+      "no": 26,
+      "name": "カフェ",
+      "bundle": "abdata/studio/sound/bgm/bgm_26.unity3d",
+      "file": "bgm_26"
+    },
+    {
+      "no": 27,
+      "name": "システム画面",
+      "bundle": "abdata/studio/sound/bgm/bgm_27.unity3d",
+      "file": "bgm_27"
+    },
+    {
+      "no": 28,
+      "name": "青空アドベンチャー",
+      "bundle": "abdata/studio/sound/song/aozoraadventure.unity3d",
+      "file": "AozoraAdventure"
+    },
+    {
+      "no": 29,
+      "name": "RunningDreamer",
+      "bundle": "abdata/studio/sound/song/runningdreamer.unity3d",
+      "file": "RunningDreamer"
+    },
+    {
+      "no": 50,
+      "name": "BGM 00",
+      "bundle": "abdata/sound/data/bgm/kks_song_00.unity3d",
+      "file": "kks_song_00"
+    },
+    {
+      "no": 51,
+      "name": "BGM 01",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_00.unity3d",
+      "file": "kks_bgm_00"
+    },
+    {
+      "no": 52,
+      "name": "BGM 02",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_01.unity3d",
+      "file": "kks_bgm_01"
+    },
+    {
+      "no": 53,
+      "name": "BGM 03",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_02.unity3d",
+      "file": "kks_bgm_02"
+    },
+    {
+      "no": 54,
+      "name": "BGM 04",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_03.unity3d",
+      "file": "kks_bgm_03"
+    },
+    {
+      "no": 55,
+      "name": "BGM 05",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_04.unity3d",
+      "file": "kks_bgm_04"
+    },
+    {
+      "no": 56,
+      "name": "BGM 06",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_05.unity3d",
+      "file": "kks_bgm_05"
+    },
+    {
+      "no": 57,
+      "name": "BGM 07",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_06.unity3d",
+      "file": "kks_bgm_06"
+    },
+    {
+      "no": 58,
+      "name": "BGM 08",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_07.unity3d",
+      "file": "kks_bgm_07"
+    },
+    {
+      "no": 59,
+      "name": "BGM 09",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_08.unity3d",
+      "file": "kks_bgm_08"
+    },
+    {
+      "no": 60,
+      "name": "BGM 10",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_09.unity3d",
+      "file": "kks_bgm_09"
+    },
+    {
+      "no": 61,
+      "name": "BGM 11",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_10.unity3d",
+      "file": "kks_bgm_10"
+    },
+    {
+      "no": 62,
+      "name": "BGM 12",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_11.unity3d",
+      "file": "kks_bgm_11"
+    },
+    {
+      "no": 63,
+      "name": "BGM 13",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_12.unity3d",
+      "file": "kks_bgm_12"
+    },
+    {
+      "no": 64,
+      "name": "BGM 14",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_13.unity3d",
+      "file": "kks_bgm_13"
+    },
+    {
+      "no": 65,
+      "name": "BGM 15",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_14.unity3d",
+      "file": "kks_bgm_14"
+    },
+    {
+      "no": 66,
+      "name": "BGM 16",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_15.unity3d",
+      "file": "kks_bgm_15"
+    },
+    {
+      "no": 67,
+      "name": "BGM 17",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_16.unity3d",
+      "file": "kks_bgm_16"
+    },
+    {
+      "no": 68,
+      "name": "BGM 18",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_17.unity3d",
+      "file": "kks_bgm_17"
+    },
+    {
+      "no": 69,
+      "name": "BGM 19",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_18.unity3d",
+      "file": "kks_bgm_18"
+    },
+    {
+      "no": 70,
+      "name": "BGM 20",
+      "bundle": "abdata/sound/data/bgm/kks_bgm_19.unity3d",
+      "file": "kks_bgm_19"
+    }
   ]
 }

@@ -827,6 +827,34 @@ struct OKSTUDIO_API FOKSceneBookmark
 	int32 Camera = -1;
 };
 
+/** The sound menu (Studio's BGMCtrl and OutsideSoundCtrl): what plays while the scene is open. */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneSound
+{
+	GENERATED_BODY()
+
+	/** Studio BGM (the catalogue's BGM list no); its sound is the base library's studio/bgm/<clip>.ogg. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	int32 Bgm = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	bool bBgmPlay = false;
+
+	/** Plays again from the start at the end (Studio's repeat All). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	bool bBgmRepeat = true;
+
+	/** Outside sound: an Ogg Vorbis or WAV file (absolute, or relative to the scene file's folder). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	FString Outside;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	bool bOutsidePlay = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	bool bOutsideRepeat = true;
+};
+
 /** Timeline keys of one object, in time order. */
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneTrack
@@ -874,6 +902,10 @@ public:
 	/** Post-processing of the scene's view. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
 	FOKScenePost Post;
+
+	/** BGM and outside sound. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	FOKSceneSound Sound;
 
 	/** Timeline: keyframe tracks of objects and the length (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timeline")
