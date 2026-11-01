@@ -5696,6 +5696,7 @@ bool AKKPreviewActor::BuildSessionPartRange(FOkSession& Source,FPartBuildOutput&
 		Part.ShadowColor = FLinearColor(View.shadow_color[0], View.shadow_color[1], View.shadow_color[2], View.shadow_color[3]);
 		if (View.item_draw != 0 && ItemShadowColorOverride.A >= 0.f) Part.ShadowColor = FLinearColor(ItemShadowColorOverride.R, ItemShadowColorOverride.G, ItemShadowColorOverride.B, 1.f);
 		Part.LineColor = FLinearColor(View.line_color[0], View.line_color[1], View.line_color[2], View.line_color[3]);
+		if (View.item_draw != 0 && ItemLineColorOverride.A >= 0.f) Part.LineColor = FLinearColor(ItemLineColorOverride.R, ItemLineColorOverride.G, ItemLineColorOverride.B, 1.f);
 		Part.ShadowExtend = View.shadow_extend;
 		Part.NormalDetailScale = View.normal_detail_scale;
 		Part.ShaderKind = View.shader_kind;

@@ -466,8 +466,8 @@ struct OKSTUDIO_API FOKSceneItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	float LightCancel = -1.f;
 
-	/** Studio's item emission colour / power and outline colour (OIItemInfo), kept for the scene; alpha / value < 0: the
-	 *  model's. Not written to the materials yet (the game writes them only to the materials an item flags). */
+	/** Studio's item emission colour / power and outline colour (OIItemInfo); alpha / value < 0: the model's. Emission is written as
+	 *  _EmissionColor / _EmissionIntensity to the materials that have them; the line colour is the item_draw outline's. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	FLinearColor EmissionColor = FLinearColor(1.f, 1.f, 1.f, -1.f);
 

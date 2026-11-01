@@ -263,6 +263,10 @@ namespace
 			Add(FString::Printf(TEXT("_patternclamp%d"), Slot), EOKMaterialOverrideKind::Scalar, P.bClamp ? 1.f : 0.f, FLinearColor::White, nullptr);
 			Add(FString::Printf(TEXT("_Color%d_2"), Slot), EOKMaterialOverrideKind::Color, 0.f, P.Color, nullptr);
 		}
+		// Studio's item emission colour / power (ItemComponent.SetLineAndEmission), on the materials that have those
+		// inputs; the Material Editor edits below still win. (The outline colour goes to the item_draw outline itself.)
+		if (Item.EmissionColor.A >= 0.f) Add(TEXT("_EmissionColor"), EOKMaterialOverrideKind::Color, 0.f, FLinearColor(Item.EmissionColor.R, Item.EmissionColor.G, Item.EmissionColor.B, 1.f), nullptr);
+		if (Item.EmissionPower >= 0.f) Add(TEXT("_EmissionIntensity"), EOKMaterialOverrideKind::Scalar, Item.EmissionPower, FLinearColor::White, nullptr);
 		// Material Editor edits: the named material's property (Material Editor drops the leading underscore). Shader and
 		// renderer edits change how the item is built (ItemBuildJson).
 		for (const FOKSceneMaterialEdit& E : Item.MaterialEdits)
@@ -369,6 +373,7 @@ namespace
 			// Studio item state the materials are made with: shadow colour, fading, outline (ItemComponent defaults).
 			const FOKStudioCatalogItem* Entry = Item->No >= 0 ? FOKStudioCatalog::Get().FindItem(Item->Group, Item->Category, Item->No) : nullptr;
 			Actor->ItemShadowColorOverride = Item->ShadowColor;
+			Actor->ItemLineColorOverride = Item->LineColor;
 			Actor->ItemAlpha = !Entry || Entry->bAlpha ? Item->Alpha : 1.f;
 			// The game writes the scene line width to _LineWidthS (ItemComponent.UpdateColor); 0 draws no outline.
 			Actor->bItemOutline = Item->LineWidth > 0.f;

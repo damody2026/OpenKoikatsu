@@ -214,6 +214,8 @@ public:
  TArray<FLinearColor> ItemColorOverrides;
  /** Item shadow colour override (sRGB; the item_draw materials' _ShadowColor, Studio's item shadow colour), set before LoadSession; alpha < 0: keep the model's. */
  FLinearColor ItemShadowColorOverride=FLinearColor(1.f,1.f,1.f,-1.f);
+ /** Item outline colour override (sRGB; the item_draw outline's _LineColor, Studio's item line colour), set before LoadSession; alpha < 0: keep the model's. */
+ FLinearColor ItemLineColorOverride=FLinearColor(1.f,1.f,1.f,-1.f);
  /** Studio item alpha (< 1: the item_draw parts blend with this opacity), set before LoadSession. */
  float ItemAlpha=1.f;
  /** false: no outline shell on any part (a Studio item made without outline, ItemComponent.defLineWidth 0). */

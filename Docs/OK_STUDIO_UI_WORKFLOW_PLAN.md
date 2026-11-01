@@ -1013,6 +1013,31 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 - 「全部恢復預設」後會再套一次（音量回 1、背景照常執行；垂直同步與幀率上限回到「不改」，引擎維持當下的值）。
 - 驗證：`settings.json` 設音量 0.5、背景不執行、VSync 0、幀率 30 後開工作室，log 讀回 `t.MaxFPS = "30"`、`r.VSync = "0"`、`t.IdleWhenNotForeground = "1"`（LastSetBy: Console），設定窗顯示這些值；測完刪掉設定檔。遊戲與編輯器都連結成功，`verify_ok_studio --tag u42_1101` 6/6。
 
+### U43～U52　對照 HS2Studio6 的第五批（2026-11-01，F 組）
+
+協調者要求再對照一次 `Saved/StudioUIRef/hs2/`。逐張看截圖，排除第 9 節不做的與 U0～U42 已做的，每項都 grep 確認程式裡沒有。依擺姿勢、擺場景時碰到的頻率排序。
+
+| 階段 | 內容 | 目前缺的 |
+|---|---|---|
+| U43 道具動畫與光照欄位 | 道具頁加動作模式、速度、起始時間、光源取消、發光色／強度、描邊色 | `FOKSceneItem` 已有 `AnimePattern`／`AnimeTime`／`AnimeSpeed`／`LightCancel`／`EmissionColor`／`EmissionPower`／`LineColor`，UI 一個都沒有（只能由 KStudio 匯入） |
+| U44 動畫位置姿態 | IK 頁「动画位置姿态」：IK 目標放到動作目前的位置；FK 頁補「FK←IK」（`53_bones.png`、`61_bones_ik.png`） | IK 頁只有 IK←FK；FK←IK 只在 IK 頁 |
+| U45 場景瀏覽器分頁 | 「第 N / M 頁」與上一頁／下一頁（`21_scene_card_choice.png`） | 超過 500 個只顯示提示，其餘要搜尋 |
+| U46 快搜種類篩選、刷新目錄 | 「筛选列表」限定道具／特效／地圖／動畫／姿勢／角色卡，「刷新目录」（`16_quick_search.png`） | 只有全部／收藏／最近／已隱藏；`FOKStudioCatalog::Reload()` 沒有入口 |
+| U47 資源目錄擴充 | 音效、姿勢、背景與前景框的根目錄可在設定裡加（`L_32_sound_external.png`、`17_pose_library.png`） | 設定只有角色卡根目錄 |
+| U48 外部音源重新掃描 | 外部音源窗「重新掃描」 | 要關掉再開視窗 |
+| U49 地圖窗「設定」 | 地圖窗「读取地图」旁的「设置」（`07_map.png`） | 地圖位置／時段在畫面設定分頁，地圖窗沒有入口 |
+| U50 角色卡路徑列 | 上一步／下一步／回根目錄與可輸入的路徑列（`51_kk_card1_full.png`） | 只有根目錄、子資料夾與上一層 |
+| U51 資源檢查「資源目錄」 | 資源檢查窗跳到設定的資源目錄頁（`15_save.png`） | 沒有 |
+| U52 材質編輯器隱藏屬性、接收陰影 | 「隐藏属性」開關、Renderer 接收陰影（`20_material_editor.png`） | `_OK*` 屬性一律不列；Renderer 只有投影模式 |
+
+前一批的「待確認」：道具動畫與 LightCancel 的 UI → U43；快搜「刷新目录」→ U46；地圖窗「设置」→ U49；「动画位置姿态」FK 頁已有（FK←姿勢），IK 頁 → U44。
+
+#### U43 完成紀錄
+
+- 道具頁「描邊寬度」下多七列：描邊顏色、發光顏色（色塊 alpha < 0 是「照模型」）、發光強度與光源取消（-1 照模型）、動作模式（0～99）、動畫起點（0～1）、動畫速度。
+- 發光顏色／強度以材質覆寫送到 `_EmissionColor`／`_EmissionIntensity`。描邊顏色原本只寫進材質覆寫 `_LineColor`，實測對 item_draw 描邊沒有作用，改成新欄位 `AKKPreviewActor::ItemLineColorOverride`（共用外掛，預設 alpha -1 不改）：建立道具部件時，有 item_draw 描邊的部件改用這個顏色。
+- 驗證：控制通道 `patch` 改輪 #45 的 lineColor／lineWidth、emission 後 `inspect` 讀回新值，重建道具沒有錯誤。畫面上沒能確認：測試場景（83283571_p1）裡有描邊的道具太小，改紅色、寬度 4 前後的截圖分不出差異；立方體 #312、道具 309 不畫描邊，也看不出發光。描邊與發光的實際畫面效果**尚未確認**。遊戲與編輯器都連結成功，`verify_ok_studio --tag u43_1101` 6/6。
+
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。
