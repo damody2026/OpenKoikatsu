@@ -620,6 +620,37 @@ namespace OKStudioGameInternal
 		Out = Mesh->GetBoneTransformByName(*Bone, EBoneSpaces::WorldSpace);
 		return true;
 	}
+	FQuat UnityQuatFromEuler(const FVector& E)
+	{
+		const FQuat Qx(FVector(1, 0, 0), FMath::DegreesToRadians(E.X));
+		const FQuat Qy(FVector(0, 1, 0), FMath::DegreesToRadians(E.Y));
+		const FQuat Qz(FVector(0, 0, 1), FMath::DegreesToRadians(E.Z));
+		return Qy * Qx * Qz;
+	}
+	FVector UnityEulerFromQuat(const FQuat& In)
+	{
+		const FQuat Q = In.GetNormalized();
+		const double SinX = FMath::Clamp(2.0 * (Q.W * Q.X - Q.Y * Q.Z), -1.0, 1.0);
+		const double X = FMath::Asin(SinX);
+		const double Y = FMath::Atan2(2.0 * (Q.W * Q.Y + Q.X * Q.Z), 1.0 - 2.0 * (Q.X * Q.X + Q.Y * Q.Y));
+		const double Z = FMath::Atan2(2.0 * (Q.W * Q.Z + Q.X * Q.Y), 1.0 - 2.0 * (Q.X * Q.X + Q.Z * Q.Z));
+		return FVector(FMath::RadiansToDegrees(X), FMath::RadiansToDegrees(Y), FMath::RadiansToDegrees(Z));
+	}
+	bool IkEffectorEuler(const AKKPreviewActor* Actor, int32 Effector, FVector& OutEuler)
+	{
+		static const TCHAR* Bones[4] = { TEXT("cf_j_hand_L"), TEXT("cf_j_hand_R"), TEXT("cf_j_leg03_L"), TEXT("cf_j_leg03_R") };
+		float M[16];
+		if (!Actor || !IkEffectorTurns(Effector) || !Actor->Session.BoneWorldMatrix(Bones[Effector - 5], M)) return false;
+		// Row-major, translation in the last column: the rotation's columns are the bone's axes (scale removed).
+		FMatrix R = FMatrix::Identity;
+		for (int32 Col = 0; Col < 3; ++Col)
+		{
+			const FVector Axis = FVector(M[Col], M[4 + Col], M[8 + Col]).GetSafeNormal();
+			R.M[Col][0] = Axis.X; R.M[Col][1] = Axis.Y; R.M[Col][2] = Axis.Z;
+		}
+		OutEuler = UnityEulerFromQuat(FQuat(R));
+		return true;
+	}
 	/** Unity local axes X, Y, Z as UE local axes (the converter maps rotations by R_ue = B R_unity B, B a proper rotation). */
 	const FVector UnityAxesInUe[3] = { FVector(-1, 0, 0), FVector(0, 0, 1), FVector(0, 1, 0) };
 }
@@ -668,7 +699,10 @@ namespace
 		if (F.bIk) World = FTransform(IkWorld);
 		if (!F.bBone)
 			for (int32 K = 0; K < 3; ++K) F.Axes[K] = G.bLocalAxes && !F.bIk ? ObjectWorld.GetRotation().RotateVector(GuideAxes[K]).GetSafeNormal() : GuideAxes[K];
-		F.Mode = F.bBone ? 1 : (F.bIk ? 0 : G.GuideMode);
+		// A hand or foot target that keeps a rotation turns in rotate mode; other IK targets only move.
+		const FOKSceneIkTarget* IkTarget = F.bIk ? Object->Character.Ik.FindByPredicate([&G](const FOKSceneIkTarget& T) { return T.Effector == G.GuideIk; }) : nullptr;
+		const bool bIkTurns = IkTarget && IkTarget->bUseRotation && OKStudioGameInternal::IkEffectorTurns(G.GuideIk);
+		F.Mode = F.bBone ? 1 : (F.bIk ? (bIkTurns && G.GuideMode == 1 ? 1 : 0) : G.GuideMode);
 		F.Origin = World.GetLocation();
 		// Panel pixels per 10 cm at the pivot, measured sideways to the camera.
 		FVector2D Side;
@@ -864,6 +898,21 @@ bool UOKStudioGame::DragGuide(const FVector2D& Delta, bool bCtrl)
 		const AKKPreviewActor* P = SceneActor->PreviewOf(SelectedId);
 		const FTransform* Start = DragStart.Find(-1);
 		if (!T || !P || !Start) return false;
+		if (F.Mode == 1)
+		{
+			// Turn the hand / foot about the world axis, in the character's Unity space (the target's Euler space).
+			const float Total = float(Snapped(DragTotal.X * 0.5, S.SnapRotate, bSnapNow));
+			const float Step = Total - DragBoneApplied;
+			DragBoneApplied = Total;
+			GuideReadout = FString::Printf(TEXT("IK 旋轉 %s %+.1f°"), AxisNames[Axis], Total);
+			if (FMath::IsNearlyZero(Step)) return true;
+			const FVector Local = P->GetActorTransform().InverseTransformVectorNoScale(F.Axes[Axis]);
+			const FVector UnityAxis(-Local.X, Local.Z, Local.Y);
+			const FQuat Turn(UnityAxis.GetSafeNormal(), FMath::DegreesToRadians(Step));
+			T->Euler = OKStudioGameInternal::UnityEulerFromQuat(Turn * OKStudioGameInternal::UnityQuatFromEuler(T->Euler));
+			Document->NotifyChanged();
+			return true;
+		}
 		const double Cm = Snapped(AlongAxis(F.PerCm[Axis], DragTotal), S.SnapMove, bSnapNow);
 		T->Position = Start->GetLocation() + P->GetActorTransform().InverseTransformVector(F.Axes[Axis] * Cm);
 		GuideReadout = FString::Printf(TEXT("IK 移動 %s %+.1f cm"), AxisNames[Axis], Cm);

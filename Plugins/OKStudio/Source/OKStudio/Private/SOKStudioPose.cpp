@@ -593,6 +593,34 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 			Float(FString(TEXT("XYZ")).Mid(Axis, 1),
 				[this, Axis](FOKSceneObject& X) { const FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); return T ? float(T->Position[Axis]) : 0.f; },
 				[this, Axis](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; })) T->Position[Axis] = V; }, -300.f, 300.f, 0.5f);
+		// Hands and feet can also keep a direction (HS2Studio6 IK rotation): in rotate mode (E) the handle turns them.
+		if (OKStudioGameInternal::IkEffectorTurns(IkEffector))
+		{
+			auto Target = [this](FOKSceneObject& X) { return X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); };
+			Check(TEXT("用旋轉（把手按 E 轉方向）"), [Target](FOKSceneObject& X) { const FOKSceneIkTarget* T = Target(X); return T && T->bUseRotation; },
+				[this, Target](FOKSceneObject& X, bool bOn)
+				{
+					FOKSceneIkTarget* T = Target(X);
+					if (!T) return;
+					// Switched on, it starts from where the hand / foot points now, so nothing jumps.
+					if (bOn && !T->bUseRotation && Game.IsValid() && Game->SceneActor) OKStudioGameInternal::IkEffectorEuler(Game->SceneActor->PreviewOf(X.Id), IkEffector, T->Euler);
+					T->bUseRotation = bOn;
+					DeferRebuild();
+				});
+			if (const FOKSceneIkTarget* T = O.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); T && T->bUseRotation)
+			{
+				for (int32 Axis = 0; Axis < 3; ++Axis)
+					Float(FString(TEXT("轉 X轉 Y轉 Z")).Mid(Axis * 3, 3).TrimStart(),
+						[Target, Axis](FOKSceneObject& X) { const FOKSceneIkTarget* Y = Target(X); return Y ? float(Y->Euler[Axis]) : 0.f; },
+						[Target, Axis](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* Y = Target(X)) Y->Euler[Axis] = V; }, -180.f, 180.f, 1.f);
+				Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(FText::FromString(TEXT("取目前方向")), [this, Target]
+				{
+					FOKSceneObject* X = Obj();
+					FOKSceneIkTarget* T = X ? Target(*X) : nullptr;
+					if (T && Game.IsValid() && Game->SceneActor && OKStudioGameInternal::IkEffectorEuler(Game->SceneActor->PreviewOf(X->Id), IkEffector, T->Euler)) { Changed(); DeferRebuild(); }
+				}, 0.f, 18.f, false, 10.f)];
+			}
+		}
 		Float(TEXT("權重"),
 			[this](FOKSceneObject& X) { const FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; }); return T ? T->Weight : 1.f; },
 			[this](FOKSceneObject& X, float V) { if (FOKSceneIkTarget* T = X.Character.Ik.FindByPredicate([this](const FOKSceneIkTarget& Y) { return Y.Effector == IkEffector; })) T->Weight = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
