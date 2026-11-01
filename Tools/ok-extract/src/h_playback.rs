@@ -1006,7 +1006,7 @@ pub fn h_breath_table(game:&Path)->String {
                 for row in list {
                     let id=int(field(row,"id"));
                     let infos:Vec<_>=field(row,"lstInfo").and_then(|v|v.as_array()).map(|a|a.iter().map(|i|serde_json::json!({
-                        "ids":ints(field(i,"lstAnimID")),"voices":ints(field(i,"lstVoice")),"state":int(field(i,"state")),
+                        "ids":ints(field(i,"lstAnimID")),"cond":ints(field(i,"lstConditions")),"voices":ints(field(i,"lstVoice")),"state":int(field(i,"state")),
                     })).collect()).unwrap_or_default();
                     voices.insert(id,serde_json::json!({"t":VOICE_TABLE,"id":id,"info":infos}));
                 }
@@ -1037,6 +1037,39 @@ pub fn h_breath_table(game:&Path)->String {
     serde_json::json!({"version":2,"patterns":patterns.into_values().collect::<Vec<_>>(),"clips":clips.into_values().collect::<Vec<_>>(),
         "mouths":mouths.into_values().collect::<Vec<_>>(),"mainVoice":main_voice.into_values().collect::<Vec<_>>(),
         "voices":voices.into_values().collect::<Vec<_>>(),"voiceClips":voice_clips.into_values().collect::<Vec<_>>()}).to_string()
+}
+/// The original H sound effects (HSeCtrl): each pose's HSEData (AnimationInfo paramFemale.fileSe) and, per state, the
+/// normalized time and clip of each sound: `{"poses":[{"m","id","file"}],"files":{file:[{anim,key,loop,switch,bundle,se,
+/// shorts,shorts_se,parent,null,female}]}}`. A sound plays when the state's time (looped: its fraction) passes `key`.
+pub fn h_se_table(game:&Path)->serde_json::Value {
+    let Ok(paths)=catalogue_paths(game) else{return serde_json::json!({});};
+    let int=|v:Option<&UnityValue>|v.and_then(|v|v.as_i64().or_else(||v.as_bool().map(i64::from))).unwrap_or(0);
+    let bundle=|p:&str|{let p=p.trim().replace('\\',"/").to_ascii_lowercase();if p.is_empty()||p.starts_with("abdata/"){p}else{format!("abdata/{p}")}};
+    let (mut poses,mut files)=(std::collections::BTreeMap::new(),std::collections::BTreeMap::new());
+    for path in &paths {
+        let Ok(bytes)=crate::gamefs::read(path) else {continue;};
+        let parsed=crate::unity::parse_bundle_cached(bytes);
+        parsed.with_serialized(|list|for file in list {for info in file.objects_of_type(114) {
+            let Ok(obj)=UnityObject::from_serialized_file(file,&info) else {continue;};
+            let Some(name)=obj.name() else {continue;};
+            let Some(rows)=obj.class.properties().get("param").and_then(|v|v.as_array()) else {continue;};
+            if let Some(mode)=name.strip_prefix("AnimationInfo_").filter(|r|r.len()==2).and_then(|r|r.parse::<i64>().ok()) {
+                for row in rows {
+                    let se=text(field(row,"paramFemale").and_then(|f|field(f,"fileSe")));
+                    if !se.is_empty(){let id=int(field(row,"id"));poses.insert((mode,id),serde_json::json!({"m":mode,"id":id,"file":se}));}
+                }
+            } else if rows.first().is_some_and(|r|field(r,"nameSE").is_some()) {
+                let sounds:Vec<_>=rows.iter().map(|r|serde_json::json!({
+                    "anim":text(field(r,"anim")),"key":field(r,"key").and_then(|v|v.as_f64()).unwrap_or(0.0),"loop":int(field(r,"isLoop"))!=0,
+                    "switch":int(field(r,"loopSwitch")),"bundle":bundle(&text(field(r,"pathAsset"))),"se":text(field(r,"nameSE")),
+                    "shorts":int(field(r,"isShorts"))!=0,"shorts_se":text(field(r,"nameShortsSE")),"parent":int(field(r,"parent")),
+                    "null":text(field(r,"parentNull")),"female":int(field(r,"nFemale")),
+                })).collect();
+                files.insert(name.to_string(),serde_json::Value::Array(sounds));
+            }
+        }});
+    }
+    serde_json::json!({"poses":poses.into_values().collect::<Vec<_>>(),"files":files})
 }
 pub fn h_pose_table(game:&Path)->String {
     let Ok(paths)=catalogue_paths(game) else{return "[]".into();};

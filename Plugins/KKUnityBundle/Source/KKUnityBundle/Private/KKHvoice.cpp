@@ -88,7 +88,7 @@ bool LoadIndex(const FString& Root,TSharedPtr<const FBreathIndex,ESPMode::Thread
         double Id=0.;const TArray<TSharedPtr<FJsonValue>>* Info=nullptr;if(!Row->TryGetNumberField(TEXT("id"),Id)||!Row->TryGetArrayField(TEXT("info"),Info))continue;
         TArray<FBreathInfo>& Infos=Fresh.Voices.Add(int32(Id));
         for(const TSharedPtr<FJsonValue>& InfoValue:*Info){const TSharedPtr<FJsonObject> InfoRow=InfoValue.IsValid()?InfoValue->AsObject():nullptr;if(!InfoRow.IsValid())continue;
-            FBreathInfo Item;ReadInts(InfoRow,TEXT("ids"),Item.Ids);ReadInts(InfoRow,TEXT("voices"),Item.Voices);double State=0.;if(InfoRow->TryGetNumberField(TEXT("state"),State))Item.State=int32(State);Infos.Add(MoveTemp(Item));}
+            FBreathInfo Item;ReadInts(InfoRow,TEXT("ids"),Item.Ids);ReadInts(InfoRow,TEXT("cond"),Item.Cond);ReadInts(InfoRow,TEXT("voices"),Item.Voices);double State=0.;if(InfoRow->TryGetNumberField(TEXT("state"),State))Item.State=int32(State);Infos.Add(MoveTemp(Item));}
     }
     const TArray<TSharedPtr<FJsonValue>>* VoiceClips=nullptr;
     if(Json->TryGetArrayField(TEXT("voiceClips"),VoiceClips))for(const TSharedPtr<FJsonValue>& Value:*VoiceClips){
@@ -124,6 +124,22 @@ int32 BankFor(int32 State,const FKKHBreathContext& C){
     if(State==8)return C.bHadVaginal?Experience:0;
     if(State==9)return C.bHadAnal?Experience:0;
     return State==0?Experience:0;
+}
+// HVoiceCtrl.IsPtnConditionsSonyu with what a scene knows: no hands, items, kiss or her cycle (taken as a safe day).
+bool SonyuAllows(int32 Condition,const FKKHBreathContext& C){
+    if(Condition>=90)return false;
+    switch(Condition){
+    case 0:return !C.bAnal;
+    case 1:return C.bAnal;
+    case 6:case 10:case 11:return true;           // no kiss, a safe day, his hands idle
+    case 7:return C.bCondom;
+    case 8:return !C.bCondom;
+    case 14:return C.bVirginFirst;
+    case 15:return !C.bVirginFirst;
+    case 16:return C.bAnalVirginFirst;
+    case 17:return !C.bAnalVirginFirst;
+    default:return false;                          // 2-5, 9, 12, 13, 18, 19: his hands, a kiss, a danger day
+    }
 }
 bool Allows(int32 Condition,bool bMoving,int32 MainVoice){
     // Gallery has no pleasure gauge, hand, kiss or speed-motion toggle.
@@ -189,6 +205,8 @@ bool KKSpeech::CollectHVoice(const FString& Root,int32 Personality,int32 Row,int
     TSet<FString> Seen;
     for(const FBreathInfo& Info:*Infos){
         if(Info.Ids.Num()&&!Info.Ids.Contains(-1)&&!Info.Ids.Contains(AnimId))continue;
+        bool bAllowed=true;for(const int32 Condition:Info.Cond)if(!SonyuAllows(Condition,Context)){bAllowed=false;break;}
+        if(!bAllowed)continue;
         const int32 B=BankFor(Info.State,Context);
         for(const int32 Voice:Info.Voices){const TArray<FString>* Banks=Index.VoiceFiles.Find(Key2(Personality,Voice));if(!Banks||Banks->IsEmpty())continue;
             const FString& File=Banks->IsValidIndex(B)&&!(*Banks)[B].IsEmpty()?(*Banks)[B]:(*Banks)[0];if(Seen.Contains(File))continue;

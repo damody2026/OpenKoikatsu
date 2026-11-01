@@ -366,7 +366,8 @@ bool AOKStreetSocialScene::PrivateConsent(int32 Girl){
  // She has had enough today (earlier scenes, h_experience had_enough): not again today, whatever else would say yes.
  {const FString Id=OKStreetStableId(S.Manifest.Characters[Girl]);auto Ask=OKRulesHeroineRequest(S,TEXT("h_experience"),Id);Ask->SetStringField(TEXT("girl"),Id);Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay);OKRulesPutExt(S,Ask);
   const TSharedPtr<FJsonObject> X=OKRulesEval(S,Ask);
-  if(X.IsValid()&&X->HasField(TEXT("had_enough"))&&X->GetBoolField(TEXT("had_enough"))){
+  // Hooked on it (hexp addicted) she says yes again, whatever she has had today.
+  if(X.IsValid()&&X->HasField(TEXT("had_enough"))&&X->GetBoolField(TEXT("had_enough"))&&!(X->HasField(TEXT("addicted"))&&X->GetBoolField(TEXT("addicted")))){
    const FString Why=OKT(TEXT("ui.heroine.enough_for_today"));S.MindRecent.Add(Id,OKT(TEXT("ui.heroine.he_wants_alone_declined"))+Why+OKT(TEXT("ui.finance_apps.close_paren")));
    S.Message=OKMsg(TEXT("ui.heroine.refused_reason"),{{TEXT("name"),*S.Manifest.Characters[Girl].Name},{TEXT("reason"),*Why}});S.FreeTalkNotice=S.Message;RefreshUI();
    UE_LOG(LogTemp,Display,TEXT("Street consent refused: actor=%d private (had enough today)"),Girl);

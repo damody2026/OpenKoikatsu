@@ -38,6 +38,12 @@ struct FKKHBreathContext {
     int32 Experience=0;
     bool bHadVaginal=false;
     bool bHadAnal=false;
+    // The intercourse voice table's conditions (HVoiceCtrl.IsPtnConditionsSonyu): in her anus, his condom, and her first
+    // time there this scene while still a virgin (isVirgin && !count.isInsertKokan; the anal one likewise).
+    bool bAnal=false;
+    bool bCondom=false;
+    bool bVirginFirst=false;
+    bool bAnalVirginFirst=false;
 };
 namespace KKSpeech {
     // A voice's general lines, parsed once per index file (comm_lines.json) and voice; waits for a running prefetch.
@@ -54,6 +60,9 @@ namespace KKSpeech {
     KKUNITYBUNDLE_API bool PrepareHBreathIndex(const FString& Root,FString& Error);
     // Her cries for one row of the intercourse voice table (HSonyu plays 300 + row: 25 her climax in the slow loop, 26 in
     // the fast one) for this animation, from her experience bank (h_breath_index version 2 "voices").
+    // The same sound played Tempo times as fast at its own pitch (WSOLA: overlapped windows taken further apart, each
+    // matched to the last by its waveform). Tempo 1 or less returns In.
+    KKUNITYBUNDLE_API TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe> TimeStretch(const TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe>& In,float Tempo);
     KKUNITYBUNDLE_API bool CollectHVoice(const FString& Root,int32 Personality,int32 Row,int32 AnimId,const FKKHBreathContext& Context,TArray<FKKHBreathCue>& Out,FString& Error);
 }
 

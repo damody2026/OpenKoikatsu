@@ -36,6 +36,7 @@ struct FOKHPose {
     int32 Mode=0;               // 1 service, 2 intercourse (AnimationInfo_XX)
     int32 KindHoushi=0;         // service: 0 hand, 1 mouth, 2 breasts
     bool Anal=false;
+    bool FemaleLead=false;      // isFemaleInitiative: her lines are the voice table's rows 38 on (HSonyu num2)
     int32 IsExperience=0;       // 1: needs her used to it (慣れ)
     int32 StateRestriction=0;
     FString Name,Raw;          // shown (OKMotionLabelDisplay) and authored
@@ -72,7 +73,7 @@ public:
         AibuBase=500,
         TouchChest=2101,TouchCrotch=2102,TouchAnal=2103,TouchButt=2104,TouchNipple=2105,Kiss=2106,Release=2107,
         PoseBase=1000,
-        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,LockHer=2017,LockHis=2018,MaleBottom=2019,
+        Faster=2001,Slower=2002,Toggle=2003,Inside=2004,Outside=2005,Drink=2006,Vomit=2007,Again=2008,Insert=2009,InsertAnal=2010,Pull=2011,Condom=2012,Stop=2014,Continue=2015,ToggleMale=2016,LockHer=2017,LockHis=2018,MaleBottom=2019,PenisXRayToggle=2020,PhysicsNext=2021,GrayRoomToggle=2022,
         ClothesBase=3000,RoomBase=3200,
     };
 private:
@@ -89,6 +90,13 @@ private:
     void PlaySolo(const FString& State);
     void Touch(int32 Area);
     float AreaExperience(int32 Area) const;
+    // Her development there, 0..1 (Docs/H_DEVELOPMENT_EXPERIENCE_PLAN.md): chest, nipple, crotch, anal or oral, as she
+    // came in plus ten points for each climax there this scene (crotch, anal) or each time he came in her mouth (oral).
+    float Dev(const TCHAR* Area) const;
+    // Her bust grows with her excitement as her chest is developed (up to half again at 100%), eased.
+    // and, sucking him, her face (her mouth's development): cheeks drawn in, mouth and chin pulled long, eyes rolled up,
+    // tears. Both through her live shape (her card's values changed, MarkShapeDirty).
+    void SwellBust(float Delta);float BustSwell=1.f,BustSwellSet=1.f,OralSuck=0.f,OralSuckSet=0.f,OralGazeSet=0.f;double NippleUntil=0,TearAt=0;bool bSucking=false;
     void LoadPoses();
     void BuildList();
     void BuildActions();
@@ -99,6 +107,13 @@ private:
     FString P(const FString& State) const {return bAnalPlay?TEXT("A_")+State:State;}
     void Finish(const TCHAR* Kind);
     void Note(const FString& Text,bool bReact=true);
+    bool Hooked() const; // hooked on it (ok-rules hexp addicted): past her limit she begs for more
+    // The original's H sounds (HSeCtrl, the base library's h/se.json): a pose's state plays each of its sounds as its
+    // normalized time passes the sound's key (entering her, the thrusts, pulling out).
+    void TickSounds();void PlaySe(const FString& Clip);FString SoundState;float SoundTime=0.f;
+    UPROPERTY() TArray<TObjectPtr<USoundBase>> SoundsPlaying;
+    // One of her lines from the intercourse voice table (HSonyu playVoices - 300), in her experience bank.
+    bool PlayHVoice(int32 Row);
     void ApplySpeed();bool bStrokeDeep=false;double StrokeCryAt=0.;
     FString Current() const;
     int32 Level() const;
@@ -157,6 +172,7 @@ public:
     void LookAtFace(float Distance);
     void LookAtCrotch(float Distance,float Pitch=15.f,float Turn=0.f,bool bFront=false); // /hscene {"crotch_cam":cm} or {distance, pitch, turn}: where they join, from beside her body // /hscene {"face_cam":cm}: the camera in front of her face, to see what is on it
     void SetSiruTest(const int32 (&Levels)[5]); // /hscene {"siru":[...]}: set her liquid levels directly
+    TMap<FString,float> DevTest; // /hscene {"dev":{...}}: her development, for testing (Dev)
     float BlushTest=-1.f; // /hscene {"blush":v}: hold her blush at v (0..1) to compare shots; -1 follows her
 private:
     UPROPERTY() TArray<TObjectPtr<class UMaterialInstanceDynamic>> BlushMats; TArray<float> BlushBase;
@@ -170,7 +186,10 @@ private:
     // How he is drawn (the original's male display): 0 as he is, 1 one see-through colour (her and the penis seen through
     // him), 2 hidden. His bottom comes off for the scene (the penis shows) unless the player puts it back on.
     // See-through by default: where his penis is in her shows (the original's silhouette).
-    int32 MaleView=1;bool bMaleBottomOff=true;TWeakObjectPtr<class AKKPreviewActor> MaleLookFor;
+    // The street hidden behind a plain grey room around them (user, 2026-11-01): the world's actors hidden (lights,
+    // cameras and the two of them kept), six grey slabs round her.
+    void SetGrayRoom(bool bOn);bool bGrayRoom=false;UPROPERTY() TArray<TObjectPtr<AActor>> GrayRoom;TArray<TWeakObjectPtr<AActor>> GrayHidden;
+    int32 MaleView=1;bool bMaleBottomOff=true;bool bPenisXRay=true;TWeakObjectPtr<class AKKPreviewActor> MaleLookFor;
     UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> MaleGhost;
     UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> PenisXRay; // over her while he is see-through (M_PreviewXRay)
     UPROPERTY() TArray<TObjectPtr<class UMeshComponent>> MaleGhostComps;

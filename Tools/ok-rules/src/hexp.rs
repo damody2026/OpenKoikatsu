@@ -31,6 +31,8 @@ pub struct HExp {
     pub anal_h: f32,
     pub service: f32,
     pub service_count: i32,
+    /// Her mouth's development, 0..100 (Docs/H_DEVELOPMENT_EXPERIENCE_PLAN.md): ten points each time he comes in her mouth.
+    pub oral: f32,
     pub raw_count: i32,
     pub virgin: bool,
     pub anal_virgin: bool,
@@ -50,7 +52,7 @@ pub struct HExp {
 
 impl Default for HExp {
     fn default() -> Self {
-        HExp { count: 0, kissed: false, areas: [0.0; 6], crotch_h: 0.0, anal_h: 0.0, service: 0.0, service_count: 0, raw_count: 0, virgin: true, anal_virgin: true, today_day: -1, today_orgasms: 0, today_service: 0, today_anal_refused: false, libido_gain: 0, white_until: -1, red_until: -1 }
+        HExp { count: 0, kissed: false, areas: [0.0; 6], crotch_h: 0.0, anal_h: 0.0, service: 0.0, service_count: 0, oral: 0.0, raw_count: 0, virgin: true, anal_virgin: true, today_day: -1, today_orgasms: 0, today_service: 0, today_anal_refused: false, libido_gain: 0, white_until: -1, red_until: -1 }
     }
 }
 
@@ -156,7 +158,8 @@ fn experience(r: &Value) -> Result<Value, String> {
     let day = r.get("day").and_then(Value::as_i64).unwrap_or(-1);
     let today = day >= 0 && h.today_day == day;
     let (today_orgasms, today_service, anal_refused_today) = if today { (h.today_orgasms, h.today_service, h.today_anal_refused) } else { (0, 0, false) };
-    let areas: serde_json::Map<String, Value> = AREA_KEYS.iter().enumerate().map(|(i, k)| (k.to_string(), json!(h.area(i)))).collect();
+    let mut areas: serde_json::Map<String, Value> = AREA_KEYS.iter().enumerate().map(|(i, k)| (k.to_string(), json!(h.area(i)))).collect();
+    areas.insert("oral".into(), json!(h.oral.min(100.0)));
     Ok(json!({
         "level": level, "level_name": level_name(level), "areas": areas, "count": h.count, "virgin": h.virgin, "anal_virgin": h.anal_virgin,
         "raw_ok": raw_ok,
@@ -170,6 +173,10 @@ fn experience(r: &Value) -> Result<Value, String> {
         "today_service": today_service,
         "anal_refused_today": anal_refused_today,
         "had_enough": today_orgasms >= climax_limit,
+        // Hooked on it (user, 2026-11-01: most heroines who keep coming get addicted to sex instead of wanting to go
+        // home when tired): every girl but one who hates him (resentment 90 and up). Past her limit she is
+        // worn out but cannot stop and begs for more.
+        "addicted": resentment < 90.0,
         "libido_gain": h.libido_gain,
         "white_until": h.white_until,
         "red_until": h.red_until,
@@ -251,6 +258,13 @@ fn session_end(r: &Value) -> Result<Value, String> {
         if flag(&c, "service") || finishes > 0 {
             h.service_count = (h.service_count + 1).min(1000);
         }
+        // Development (Docs/H_DEVELOPMENT_EXPERIENCE_PLAN.md, user 2026-11-01): each climax with him in her vagina or
+        // anus opens it ten points more; each time he comes in her mouth, her mouth ten.
+        for (key, i) in [("crotch", CROTCH), ("anal", ANAL)] {
+            let climaxes = num(c.get(key).unwrap_or(&Value::Null), "climaxes").clamp(0.0, 20.0) as f32;
+            h.areas[i] = (h.areas[i] + 10.0 * climaxes).min(100.0);
+        }
+        h.oral = (h.oral + 10.0 * num(&c, "his_mouth").clamp(0.0, 20.0) as f32).min(100.0);
         for (key, slot, virgin) in [("crotch", &mut h.crotch_h, &mut h.virgin), ("anal", &mut h.anal_h, &mut h.anal_virgin)] {
             let part = c.get(key).cloned().unwrap_or_else(|| json!({}));
             if flag(&part, "inserted") {
@@ -351,6 +365,19 @@ mod tests {
         assert_eq!(h["kissed"], true);
         let notes: Vec<&str> = out["effects"].as_array().unwrap().iter().filter_map(|e| e.get("act").and_then(Value::as_str)).collect();
         assert!(notes.iter().filter(|a| **a == "h_first").count() >= 3, "first time, virginity, kiss: {notes:?}");
+    }
+
+    #[test]
+    fn climaxes_in_her_and_his_mouth_develop_her() {
+        let ext = json!({"hexp": {"g": {"count": 1, "areas": [0, 0, 30, 95, 0, 0], "oral": 40}}});
+        let out = session_end(&json!({"girl": "g", "relation": rel(0.0), "ext": ext, "counts": {"played": true,
+            "crotch": {"inserted": true, "climaxes": 2}, "anal": {"inserted": true, "climaxes": 1}, "his_mouth": 3}})).unwrap();
+        let h: HExp = serde_json::from_value(out["ext"]["hexp"]["g"].clone()).unwrap();
+        assert_eq!(h.areas[CROTCH], 50.0);
+        assert_eq!(h.areas[ANAL], 100.0);
+        assert_eq!(h.oral, 70.0);
+        let e = experience(&json!({"girl": "g", "relation": rel(0.0), "ext": out["ext"]})).unwrap();
+        assert_eq!(e["areas"]["oral"], json!(70.0));
     }
 
     #[test]

@@ -1796,6 +1796,13 @@
   - 使用者：在大世界直接進 1 對 1，不要換場景。原本 `AOKInteractionMode::Enter` 會隱藏整個街區並在原點擺展示房（地板、背景板、平行光）。改成原地模式：不隱藏世界、不暫停群眾與聲音，女角高模放在她在街上的位置與朝向，展示房的地板、背景板、燈拿掉，兩人的街頭低模在這段期間擺到地底（`OKStreetOffstage`）。
   - 我的錯：用 sed 在一行尾端插 `//` 註解，把原本行尾的 `}` 一起註解掉，整個 cpp 編譯失敗（C2601），白跑一次 stage 建置。註解要放在 `}` 之後或另起一行。
 
+- 2026-11-01 e-galgame（第二十輪之八：上癮、插入的語音與效果音、睪丸與插入點，使用者指正）：
+  - 使用者：連續高潮的女主大多應該對 H 上癮，不是累了就想回家。ok-rules `h_experience` 加 `addicted`（不怨恨他），1 對 1 的台詞前提改用上癮版、到極限也求他繼續；邀約不再因 had_enough 拒絕。
+  - 我的錯：控制通道 `/stat` 沒帶 value 時把數值當 0 寫進去，我拿它「讀」愛麗絲的數值，結果全部歸零。修正：沒有 value 只讀不寫；之後從自動存檔讀回。
+  - 我的錯（再犯）：又用 sed 在行尾插 `//` 註解，把 `OKStreetSocialControl.inl` 同一行後面的 `TryGetStringField` 吃掉。註解一律另起一行。
+  - 我的錯：改了規則 DLL 熱重載後直接重跑測試，但 1 對 1 場景在進場時就讀好 HExperience，`/private {}` 不會退出場景，測到的還是舊值。要先 `/private {"off":true}` 再重進。
+  - 使用者：插入時的語音要依 virgin／inexp／exp／horny 播不同的聲音，插入的效果音也沒播。查原作（ilspy 反編譯 `HSonyu`、`HSeCtrl`）：插入時 `playVoices[0]=307`（女性主導姿勢 +38），依 `GetStateSelect` 的經驗分組選檔；拔出 303／306。效果音是 HSEData：每個姿勢（AnimationInfo paramFemale.fileSe）的每個狀態在 normalizedTime 越過 key 時播（Insert 0.2、WLoop／SLoop 每圈、Pull 0.1…）。我們完全沒做效果音。修正：`ok-extract --oklib h-sounds` 匯出 `base_v1/h/se.json` 與 `h/se/*.ogg`，OKHScene 依狀態時間觸發；插入、拔出播原作語音。
+  - 使用者：睪丸藏起來；插入點往下一點才看得到陰唇；插入部分的半透明要能用勾選隨時開關。修正：隱藏 o_dan_f／cm_o_dan_f；入口改為 J_Kokan 往 J_Ana 方向 1.5 cm（`ok.HScene.EntranceDown`）；衣服頁加「☑ 半透明顯示插入部分」，不再綁在「他半透明」模式。
 ## 2026-11-01 河口水色階梯：G??_Water 不是平面（c-street-city）
 
 - 現象：A03 河口有一條在世界中固定的階梯狀交界，一邊是淺色（河道），一邊是青綠（外海）。換角度重拍，位置都不變。

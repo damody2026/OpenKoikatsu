@@ -320,6 +320,8 @@ public:
 	UPROPERTY() TObjectPtr<UKKSpeechWave> SpeechWave;
 	UPROPERTY() TArray<FKKSpeechLine> SpeechLines;
 	float SpeechPitch=1.f,SpeechOpen=0.f,SpeechOpenMin=0.f,SpeechPrevious=0.f;
+	// Her breaths (PlayHCue) played this many times as fast at their own pitch (KKSpeech::TimeStretch).
+	float SpeechTempo=1.f;
 	bool bSpeechActive=false,bHBreath=false,bSpeechPaused=false;
 	bool bSpeechDrivesMouth=true;
 	bool bReuseSpeechAudio=false;

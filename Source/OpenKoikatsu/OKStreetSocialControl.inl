@@ -240,9 +240,9 @@ void AOKStreetSocialScene::StartControlServer(){
  // OKHeroineStats id). Answers the value it holds now.
  Bind(TEXT("/stat"),EHttpServerRequestVerbs::VERB_POST,[this](const FHttpServerRequest& Req,const FHttpResultCallback& Done){
   auto& S=*State;const auto Body=OKControlBody(Req);double Girl=0,Value=0;FString Field;
-  Body->TryGetNumberField(TEXT("girl"),Girl);Body->TryGetNumberField(TEXT("value"),Value);Body->TryGetStringField(TEXT("field"),Field);
+  Body->TryGetNumberField(TEXT("girl"),Girl);const bool Set=Body->TryGetNumberField(TEXT("value"),Value);Body->TryGetStringField(TEXT("field"),Field); // without a value: only read
   const int32 F=OKHeroineStats().IndexOfByPredicate([&](const FOKHeroineStat& X){return Field==X.Id;});
-  const bool Ok=F!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(int32(Girl));if(Ok)SetCharacterStat(int32(Girl),F,float(Value));
+  const bool Ok=F!=INDEX_NONE&&S.Manifest.Characters.IsValidIndex(int32(Girl));if(Ok&&Set)SetCharacterStat(int32(Girl),F,float(Value));
   auto O=OKControlResult(Ok);
   if(Ok)O->SetNumberField(TEXT("value"),OKHeroineStats()[F].Get(OKStreetViewRelation(S.Store,OKStreetStableId(S.Manifest.Characters[int32(Girl)]),S.Manifest.TalkBudget)));
   OKControlReply(Done,O);

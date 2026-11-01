@@ -57,7 +57,9 @@ void AKKPreviewActor::SetSpeechPaused(bool bPaused) {
 bool AKKPreviewActor::PlayHCue(FString& Error) {
     if(!HBreaths.IsValidIndex(HBreathIndex)){Error=TEXT("性愛喘息已結束");return false;}
     const FKKHBreathCue Cue=HBreaths[HBreathIndex];
-    if(!PlaySpeechFile(Cue.Path,SpeechPitch,Error))return false;
+    if(SpeechTempo>1.01f){TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe> Pcm;
+        if(!KKSpeech::DecodeOgg(Cue.Path,Pcm,Error)||!PlaySpeechPcm(KKSpeech::TimeStretch(Pcm,SpeechTempo),SpeechPitch,Error))return false;}
+    else if(!PlaySpeechFile(Cue.Path,SpeechPitch,Error))return false;
     // StopSpeech inside playback clears the floor; the face list puts it back.
     if(Cue.Mouths.Num()&&!bManualSpeechPattern){
         const int32 Pick=FMath::RandRange(0,Cue.Mouths.Num()-1);
