@@ -372,6 +372,7 @@ fortune_drawn_note = " (System note: the slips are drawn: {slips}. This is the g
 fortune_slip = "{who} drew \"{luck}\""
 fortune_him = "he"
 fortune_you = "you"
+fortune_her = "she"
 fortune_other = "another girl"
 fortune_great = "great blessing"
 fortune_good = "blessing"

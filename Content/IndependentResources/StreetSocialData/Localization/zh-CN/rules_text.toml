@@ -372,6 +372,7 @@ fortune_drawn_note = "（系统说明：签已经抽了，结果是 {slips}。�
 fortune_slip = "{who}抽到「{luck}」"
 fortune_him = "他"
 fortune_you = "你"
+fortune_her = "她"
 fortune_other = "另一位"
 fortune_great = "大吉"
 fortune_good = "吉"

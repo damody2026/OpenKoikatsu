@@ -457,11 +457,37 @@ void AOKStreetSocialScene::TickMeal(float Dt){
  const int32 Talking=FreeTalkPartner();
  // A dish for "her" with nobody named (bought before she was his partner again) is the partner's, as DishOwner reads it.
  const int32 Her=Talking!=INDEX_NONE&&S.Table.ContainsByPredicate([Talking,&S](const FOKStreetDish& D){return D.Her==Talking||(D.ForHer&&!S.Manifest.Characters.IsValidIndex(D.Her));})?Talking:INDEX_NONE;
+ // Her dishes as she leaves the table: she finishes them as far as she still has room (she said "I'll finish, then go"):
+ // 惠惠 left at satiety 27 with her dumplings and soup untouched, and those went into his bag.
+ auto SettleHers=[&](FOKStreetStore& Candidate,TArray<FString>& Packed,TFunctionRef<bool(const FOKStreetDish&)> Which){
+  for(const auto& D:S.Table)if(D.ForHer&&D.Served&&D.Percent>0.f&&S.Manifest.Characters.IsValidIndex(D.Her)&&Which(D))if(const auto* I=S.Catalog.Find(D.ItemId)){
+   const int32 Index=OKStreetRelationIndex(Candidate,OKStreetStableId(S.Manifest.Characters[D.Her]),S.Manifest.TalkBudget,true);
+   if(!Candidate.Relations.IsValidIndex(Index))continue;auto& R=Candidate.Relations[Index];
+   // Full, with most of it left: it goes with him as a takeaway (安可's untouched omelette; 優香's curry, two bites in,
+   // "let's pack it"), not into the bin.
+   // So does what she said she cannot finish (stop_eating): 安可's "I can't drink any more soup" was booked as drunk at 107.
+   if(!I->IsDrink()&&(R.Satiety>=OKStreetFullSatiety||S.StopEating)){if(D.Percent>=50.f&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}continue;}
+   const float Left=100.f-D.Booked;
+   for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;
+    if(V)*V=FMath::Clamp(*V+E.Value*Left/100.f*(V==&R.Satiety?100.f/SatietyMax(D.Her):1.f),0.f,V==&R.Satiety?float(OKStreetFullSatiety):100.f);} // up to full, as she stops eating at the table (not to 107)
+  }
+ };
  // Still at the meal: in the place, or in one of its rooms (a private room is a facility away from the floor).
  const bool There=PlaceHere(S.Male)==S.MealPlace||S.Facility!=INDEX_NONE;
+ // One who has gone from the table (not talking with him, not in the group, a few steps off) has left hers: 安可 said
+ // goodbye with her soup half drunk, and it sat on the table for 胡桃, who came for lunch half an hour later.
+ auto Gone=[&S,Talking](const FOKStreetDish& D){return D.Her!=Talking&&S.Agents.IsValidIndex(D.Her-1)&&!S.Party.Contains(D.Her)&&FVector::Dist2D(S.Agents[D.Her-1].Position,S.Male)>300.f;};
+ if(There&&S.Table.ContainsByPredicate([&](const FOKStreetDish& D){return D.ForHer&&Gone(D);})){
+  auto Candidate=S.Store;TArray<FString> Packed;SettleHers(Candidate,Packed,Gone);CommitStore(MoveTemp(Candidate));
+  const int32 Before=S.Table.Num();S.Table.RemoveAll([&](const FOKStreetDish& D){return D.ForHer&&Gone(D);});
+  if(!Packed.IsEmpty()){S.Message=OKMsg(TEXT("ui.economy.untouched_packed"),{{TEXT("items"),FString::Join(Packed,TEXT("、"))}});RefreshUI();}
+  UE_LOG(LogTemp,Display,TEXT("Street meal: %d of her dishes cleared, she has gone (%d packed)"),Before-S.Table.Num(),Packed.Num());
+  if(S.Table.IsEmpty())return;
+ }
  // Leaving the place (or her) ends the meal.
  if(Her==INDEX_NONE&&There){
-  // Alone at the table: he eats his own dishes; hers (if any) wait. The table stays while he is in the place.
+  // Alone at the table: he eats his own dishes; hers (if any) wait while she is at the table. The table stays while
+  // he is in the place.
   S.MealAwayAt=0;
   const float SoloStep=float(100.0/OKStreetEatSeconds)*FMath::Clamp(Dt,0.f,.1f);
   // One dish and one drink at a time, side by side (tea with the tart, not the tea first and then the tart).
@@ -476,19 +502,7 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   else if(Wall-S.MealAwayAt>5){
    // Untouched ones go with him, as a takeaway would (R3-259): a ¥14 bento served just as he walked her home was thrown away.
    auto Candidate=S.Store;TArray<FString> Packed;
-   // Hers she finishes as far as she still has room (she said "I'll finish, then go"): 惠惠 left at satiety 27 with
-   // her dumplings and soup untouched, and those went into his bag.
-   for(const auto& D:S.Table)if(D.ForHer&&D.Served&&D.Percent>0.f&&S.Manifest.Characters.IsValidIndex(D.Her))if(const auto* I=S.Catalog.Find(D.ItemId)){
-    const int32 Index=OKStreetRelationIndex(Candidate,OKStreetStableId(S.Manifest.Characters[D.Her]),S.Manifest.TalkBudget,true);
-    if(!Candidate.Relations.IsValidIndex(Index))continue;auto& R=Candidate.Relations[Index];
-    // Full, with most of it left: it goes with him as a takeaway (安可's untouched omelette; 優香's curry, two bites in,
-    // "let's pack it"), not into the bin.
-    // So does what she said she cannot finish (stop_eating): 安可's "I can't drink any more soup" was booked as drunk at 107.
-    if(!I->IsDrink()&&(R.Satiety>=OKStreetFullSatiety||S.StopEating)){if(D.Percent>=50.f&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}continue;}
-    const float Left=100.f-D.Booked;
-    for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;
-     if(V)*V=FMath::Clamp(*V+E.Value*Left/100.f*(V==&R.Satiety?100.f/SatietyMax(D.Her):1.f),0.f,V==&R.Satiety?float(OKStreetFullSatiety):100.f);} // up to full, as she stops eating at the table (not to 107)
-   }
+   SettleHers(Candidate,Packed,[](const FOKStreetDish&){return true;});
    for(const auto& D:S.Table)if((!D.ForHer||!S.Manifest.Characters.IsValidIndex(D.Her))&&D.Served&&D.Percent>=99.f)if(const auto* I=S.Catalog.Find(D.ItemId);I&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}
    CommitStore(MoveTemp(Candidate));
    if(!Packed.IsEmpty()){S.Message=OKMsg(TEXT("ui.economy.untouched_packed"),{{TEXT("items"),FString::Join(Packed,TEXT("、"))}});RefreshUI();}
@@ -856,7 +870,7 @@ TSharedRef<SWidget> AOKStreetSocialScene::BuildMenuCard(const FString& Title,int
   // The dotted leader from the dish to its price.
   Row->AddSlot().FillWidth(1).VAlign(VAlign_Center).Padding(6,0)[SNew(STextBlock).Clipping(EWidgetClipping::ClipToBounds).ColorAndOpacity(Ink.CopyWithNewOpacity(.45f)).Text(FText::FromString(FString::ChrN(120,TEXT('.'))))];
   Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0,0,10,0)[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold",15)).ColorAndOpacity(Ink).Text(FText::FromString(Money(Item->PriceOf(Item->DefaultSize()))))];
-  if(Item->Consumable||Item->Category==TEXT("stay")||Item->Category==TEXT("leisure")||Item->Category==TEXT("spa")||Item->Category==TEXT("bath")||Item->Category==TEXT("game")||Item->Category==TEXT("service"))
+  if(Item->Consumable||Item->UsedOnTheSpot())
    Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.i_want_button")),[Weak,Id](){Weak->AddToCart(Id,false);})];
   if(Her!=INDEX_NONE&&Item->Consumable)Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.order_for_her_button")),[Weak,Id](){Weak->AddToCart(Id,true);})];
   if(Item->Giftable)Row->AddSlot().AutoWidth().Padding(2,0)[Button(OKT(TEXT("ui.economy.buy_as_gift_label")),[Weak,Id](){Weak->BuyForGift(Id);})];

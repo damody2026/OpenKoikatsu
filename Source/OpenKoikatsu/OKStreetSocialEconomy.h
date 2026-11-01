@@ -19,6 +19,8 @@ struct FOKStreetCatalogItem {
  int32 Floor = 0;            // a building's floor it is sold on (1-based); 0 = anywhere in the place
  // A drink (served in a cup): sipped even when full, while food stops at OKStreetFullSatiety.
  bool IsDrink() const { return Prop == TEXT("cup"); }
+ // Used where it is bought (a fortune slip, fish food, an onsen ticket): nothing kept, so buying it again is another go.
+ bool UsedOnTheSpot() const { return Category == TEXT("stay") || Category == TEXT("leisure") || Category == TEXT("spa") || Category == TEXT("bath") || Category == TEXT("game") || Category == TEXT("service"); }
  int32 PriceOf(const FString& Size) const { if (const int32* P = Price.Find(Size)) return *P; int32 Low = MAX_int32; for (const auto& P : Price) Low = FMath::Min(Low, P.Value); return Low == MAX_int32 ? 0 : Low; }
  FString DefaultSize() const { if (Price.Contains(TEXT(""))) return FString(); if (Price.Contains(TEXT("M"))) return TEXT("M"); TArray<FString> Keys; Price.GetKeys(Keys); return Keys.IsEmpty() ? FString() : Keys[0]; }
 };

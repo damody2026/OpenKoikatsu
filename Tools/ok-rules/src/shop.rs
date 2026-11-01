@@ -189,9 +189,11 @@ fn checkout(c: &Catalog, r: &Value) -> Result<Value, String> {
     }
     // A fortune slip (tag fortune) is read as it is bought: each one's luck. Two slips paid for and none read left her
     // saying "we didn't get one" (R3-114).
-    let drawn = draw_fortunes(c, &cart, &hers, n(r, "seed") as i32 ^ total.wrapping_mul(7919) ^ (player_pays as i32));
-    if !drawn.is_empty() {
-        notice += &crate::tr::m("shop.fortune_drawn", &[("slips", crate::tr::a(&drawn.join(crate::tr::t("bank.list_separator"))))]);
+    let slips = draw_fortunes(c, &cart, &hers, n(r, "seed") as i32 ^ total.wrapping_mul(7919) ^ (player_pays as i32));
+    // Her words say "you" for her; the notice is his to read: 胡桃's and his slips showed him "you drew 凶, he drew 凶".
+    let drawn = fortune_words(&slips, false);
+    if !slips.is_empty() {
+        notice += &crate::tr::m("shop.fortune_drawn", &[("slips", crate::tr::a(&fortune_words(&slips, true).join(crate::tr::t("bank.list_separator"))))]);
     }
     let tell_her = if her.is_some() {
         // How she answers depends on who paid: thanks only when he paid for her.
@@ -214,8 +216,9 @@ fn checkout(c: &Catalog, r: &Value) -> Result<Value, String> {
     Ok(json!({"total": total, "player_pays": player_pays, "her_pays": her_pays, "advanced": advanced, "card": card, "effects": fx.into_value(), "notice": notice, "tell_her": tell_her, "treat_kept": her_pays > 0 || advanced > 0}))
 }
 
-/// The luck on each fortune slip in the cart (items tagged fortune), as "he: 吉" words; "you" is the girl at the table.
-fn draw_fortunes(c: &Catalog, cart: &[Line], hers: &dyn Fn(&Line) -> bool, seed: i32) -> Vec<String> {
+/// The luck on each fortune slip in the cart (items tagged fortune): whose it is (0 the girl at the table, 1 him, 2 another
+/// girl) and its luck's text key.
+fn draw_fortunes(c: &Catalog, cart: &[Line], hers: &dyn Fn(&Line) -> bool, seed: i32) -> Vec<(u8, &'static str)> {
     // The shrine's slips, most often a plain blessing and seldom the worst.
     const LUCK: [(&str, i32); 6] = [("shop.fortune_great", 15), ("shop.fortune_good", 30), ("shop.fortune_middle", 20), ("shop.fortune_small", 15), ("shop.fortune_end", 12), ("shop.fortune_bad", 8)];
     let mut rng = RandomStream::new(seed);
@@ -223,10 +226,26 @@ fn draw_fortunes(c: &Catalog, cart: &[Line], hers: &dyn Fn(&Line) -> bool, seed:
     for l in cart.iter().filter(|l| c.find(&l.item).is_some_and(|i| i.tags.iter().any(|t| t == "fortune"))) {
         let mut roll = rng.rand_range(0, LUCK.iter().map(|x| x.1).sum::<i32>() - 1);
         let luck = LUCK.iter().find(|x| { roll -= x.1; roll < 0 }).map(|x| x.0).unwrap_or(LUCK[1].0);
-        let who = if hers(l) { "shop.fortune_you" } else if l.girl.is_empty() { "shop.fortune_him" } else { "shop.fortune_other" };
-        out.push(crate::tr::m("shop.fortune_slip", &[("who", crate::tr::a(crate::tr::t(who))), ("luck", crate::tr::a(crate::tr::t(luck)))]));
+        out.push((if hers(l) { 0 } else if l.girl.is_empty() { 1 } else { 2 }, luck));
     }
     out
+}
+
+/// The slips as words, "you drew 吉": told to her ("you" is her) or shown to him ("you" is him).
+fn fortune_words(slips: &[(u8, &'static str)], for_him: bool) -> Vec<String> {
+    slips
+        .iter()
+        .map(|&(who, luck)| {
+            let who = match (who, for_him) {
+                (0, false) => "shop.fortune_you",
+                (0, true) => "shop.fortune_her",
+                (1, false) => "shop.fortune_him",
+                (1, true) => "shop.fortune_you",
+                _ => "shop.fortune_other",
+            };
+            crate::tr::m("shop.fortune_slip", &[("who", crate::tr::a(crate::tr::t(who))), ("luck", crate::tr::a(crate::tr::t(luck)))])
+        })
+        .collect()
 }
 
 // ------------------------------------------------------------------------------------------------ gifts and loans
@@ -971,7 +990,11 @@ mod tests {
         let (him, you) = (crate::tr::t("shop.fortune_him"), crate::tr::t("shop.fortune_you"));
         let tell = v["tell_her"].as_str().unwrap();
         assert!(tell.contains(him) && tell.contains(you), "both slips told to her: {tell}");
-        assert!(v["notice"].as_str().unwrap().contains(you), "and shown to him: {}", v["notice"]);
+        // Shown to him, "you" being him: her slip is hers, none is "his" (R6-89).
+        let shown = v["notice"].as_str().unwrap();
+        let slip = |who: &'static str| crate::tr::m("shop.fortune_slip", &[("who", crate::tr::a(crate::tr::t(who))), ("luck", crate::tr::a("\u{1}"))]).split('\u{1}').next().unwrap().to_string();
+        assert!(shown.contains(&slip("shop.fortune_her")) && shown.contains(&slip("shop.fortune_you")), "{shown}");
+        assert!(!shown.contains(&slip("shop.fortune_him")), "{shown}");
     }
 
     #[test]

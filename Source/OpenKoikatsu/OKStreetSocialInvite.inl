@@ -171,7 +171,9 @@ void AOKStreetSocialScene::StepApproach(){
    return;
   }
  }
- if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit||(S.Target!=INDEX_NONE&&S.Target!=I&&!S.ApproachJoin)){
+ // Not on her way to their meeting: 胡桃, coming to their 12:00 lunch, turned back 37 m off (out of sight) at 11:25 because he
+ // was talking with 安可, and never came. She comes on and joins them (below).
+ if(FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit||(S.Target!=INDEX_NONE&&S.Target!=I&&!S.ApproachJoin&&!S.ApproachAppointment)){
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d gave up (%s) at %s, he is at %s, distance %.0f"),I,FPlatformTime::Seconds()-S.ApproachStarted>S.ApproachLimit?*FString::Printf(TEXT("%.0f s"),S.ApproachLimit):TEXT("he talks to someone else"),*A.Position.ToCompactString(),*S.Male.ToCompactString(),FVector::Dist2D(A.Position,S.Male));
   if(S.ApproachAppointment&&S.Target==INDEX_NONE&&S.Manifest.Characters.IsValidIndex(I)){S.FreeTalkNotice=OKMsg(TEXT("ui.invite.meeting_walk_blocked"),{{TEXT("name"),*S.Manifest.Characters[I].Name}});RefreshUI();}
   // He is talking with someone else: said, not left at "she is coming over" for a girl who never comes (R3-232).
@@ -190,7 +192,7 @@ void AOKStreetSocialScene::StepApproach(){
  // from where she stands. 胡桃 stood 3.4 m from him for 90 s and went off without a word (R6-20).
  const bool RouteDone=S.ApproachPath.Num()<2&&SceneTime()-S.ApproachRouteAt<1.0&&FVector::Dist2D(A.Position,S.Male)<450;
  if((FVector::Dist2D(A.Position,S.Male)<170||(S.ApproachBlockedNear&&FVector::Dist2D(A.Position,S.Male)<260)||RouteDone)&&S.RemoteMode==0&&S.PrivateGirl==INDEX_NONE){
-  const bool Join=S.ApproachJoin,ForSong=S.ApproachSong,ForPrivate=S.ApproachPrivate;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
+  const bool Join=S.ApproachJoin||S.ApproachAppointment,ForSong=S.ApproachSong,ForPrivate=S.ApproachPrivate;const int32 With=S.Target!=INDEX_NONE?S.Target:FreeTalkPartner();
   UE_LOG(LogTemp,Display,TEXT("Street approach: actor=%d arrived beside him (join=%d, song=%d, private=%d, he is with %d)"),I,Join?1:0,ForSong?1:0,ForPrivate?1:0,With);
   Stop();
   // The date he called off (a yandere lover, R3-268): straight into the one-on-one; while he is on a date with someone
