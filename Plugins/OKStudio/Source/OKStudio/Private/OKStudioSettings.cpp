@@ -149,6 +149,8 @@ void FOKStudioSettings::Load()
 		if (J->TryGetNumberField(TEXT("backup_minutes"), D)) BackupMinutes = int32(D);
 		if (J->TryGetNumberField(TEXT("backup_keep"), D)) BackupKeep = FMath::Max(1, int32(D));
 		J->TryGetStringArrayField(TEXT("card_roots"), CardRoots);
+		J->TryGetStringField(TEXT("default_card_male"), DefaultCards[0]);
+		J->TryGetStringField(TEXT("default_card_female"), DefaultCards[1]);
 		const TSharedPtr<FJsonObject>* B = nullptr;
 		if (J->TryGetObjectField(TEXT("bindings"), B)) for (const auto& P : (*B)->Values) Bindings.Add(FString(*P.Key), P.Value->AsString());
 		const TArray<TSharedPtr<FJsonValue>>* Colors = nullptr;
@@ -176,6 +178,8 @@ void FOKStudioSettings::Save() const
 	TArray<TSharedPtr<FJsonValue>> Roots;
 	for (const FString& R : CardRoots) Roots.Add(MakeShared<FJsonValueString>(R));
 	J->SetArrayField(TEXT("card_roots"), Roots);
+	J->SetStringField(TEXT("default_card_male"), DefaultCards[0]);
+	J->SetStringField(TEXT("default_card_female"), DefaultCards[1]);
 	TSharedRef<FJsonObject> B = MakeShared<FJsonObject>();
 	for (const TPair<FString, FString>& P : Bindings) B->SetStringField(P.Key, P.Value);
 	J->SetObjectField(TEXT("bindings"), B);

@@ -1,6 +1,7 @@
 ﻿// OK Studio panel: the card browser, item previews, quick search, the effect list and map browser, the colour window and
 // colour fields, the scene settings (畫面設定) tabs and their presets.
 #include "SOKStudioPanel.h"
+#include "KKCardReader.h"
 #include "Materials/MaterialInstance.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Widgets/SToolTip.h"
@@ -83,6 +84,31 @@ TArray<FString> SOKStudioPanel::CardRoots() const
 	return Roots;
 }
 
+int32 SOKStudioPanel::CardSex(const FString& Card)
+{
+	// Read once per file version (the card's whole data is parsed; a folder of hundreds takes a moment the first time).
+	static TMap<FString, TPair<FDateTime, int32>> Known;
+	const FDateTime Stamp = IFileManager::Get().GetTimeStamp(*Card);
+	if (const TPair<FDateTime, int32>* K = Known.Find(Card); K && K->Key == Stamp) return K->Value;
+	FKKCharacterFile File;
+	FString Error;
+	const int32 Sex = UKKCardReader::LoadFromFile(Card, File, Error) ? File.Sex : -1;
+	Known.Add(Card, { Stamp, Sex });
+	return Sex;
+}
+
+FString SOKStudioPanel::DefaultCard(int32 Sex)
+{
+	const FString& Set = FOKStudioSettings::Get().DefaultCards[Sex == 0 ? 0 : 1];
+	if (!Set.IsEmpty() && FPaths::FileExists(Set)) return Set;
+	TArray<FString> Demo;
+	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / TEXT("CharacterCards/Demo"));
+	IFileManager::Get().FindFiles(Demo, *(Dir / TEXT("*.png")), true, false);
+	Demo.Sort();
+	for (const FString& N : Demo) if (CardSex(Dir / N) == (Sex == 0 ? 0 : 1)) return Dir / N;
+	return FString();
+}
+
 void SOKStudioPanel::ScanCardFolder()
 {
 	if (CardFolder.IsEmpty() || !FPaths::DirectoryExists(CardFolder))
@@ -110,6 +136,8 @@ void SOKStudioPanel::ScanCardFolder()
 	IFileManager::Get().FindFiles(Names, *(CardFolder / TEXT("*.png")), true, false);
 	Names.Sort();
 	for (const FString& N : Names) if (CardSearch.IsEmpty() || N.Contains(CardSearch)) CardFiles.Add(CardFolder / N);
+	// 女／男 (HS2Studio6 角色載入器): cards of the other sex (or unreadable) are left out.
+	if (CardSexFilter >= 0) CardFiles.RemoveAll([this](const FString& F) { return CardSex(F) != CardSexFilter; });
 	CardPage = FMath::Clamp(CardPage, 0, FMath::Max(0, (CardFiles.Num() - 1) / 18));
 }
 
@@ -197,6 +225,14 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 		Pick->AddSlot().AutoHeight().Padding(0.f, 2.f)[SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(OKStudioStyle::Text()).AutoWrapText(true).Text(FText::FromString(FPaths::GetBaseFilename(F)))];
 		Pick->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(TEXT("加入")), [this, F] { AddOrReplaceCard(F, false); }, 0.f, 22.f)];
 		Pick->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(TEXT("替換所選角色")), [this, F] { AddOrReplaceCard(F, true); }, 0.f, 22.f, false, 11.f, ButtonFill(), bCanReplace)];
+		Pick->AddSlot().AutoHeight().Padding(0.f, 2.f)[Button(FText::FromString(TEXT("設為預設角色")), [this, F]
+		{
+			const int32 Sex = CardSex(F);
+			if (Sex < 0) { SetStatus(TEXT("讀不出這張卡的性別")); return; }
+			FOKStudioSettings::Get().DefaultCards[Sex == 0 ? 0 : 1] = F;
+			FOKStudioSettings::Get().Save();
+			SetStatus(FString::Printf(TEXT("預設%s角色：%s"), Sex == 0 ? TEXT("男") : TEXT("女"), *FPaths::GetBaseFilename(F)));
+		}, 0.f, 20.f, false, 10.f)];
 	}
 	else
 	{
@@ -209,6 +245,10 @@ TSharedRef<SWidget> SOKStudioPanel::BuildCardBrowser()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(CardFolder), 9.f, TextHint())]
+			// 全部 → 女 → 男, and 加入預設角色 of the sex shown (female when all are).
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(CardSexFilter < 0 ? TEXT("全部") : CardSexFilter == 1 ? TEXT("女") : TEXT("男")),
+				[this] { CardSexFilter = CardSexFilter < 0 ? 1 : CardSexFilter == 1 ? 0 : -1; CardPage = 0; DeferFloat(TEXT("cards")); }, 40.f, 20.f, CardSexFilter >= 0, 10.f)]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(TEXT("加入預設角色")), Cmd(TEXT("add.defaultcharacter"), CardSexFilter == 0 ? TEXT("male") : TEXT("female")), 84.f, 20.f, false, 10.f)]
 			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(150.f).HeightOverride(20.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋卡片"))).Text(FText::FromString(CardSearch))
 				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type) { CardSearch = T.ToString(); CardPage = 0; DeferFloat(TEXT("cards")); })]]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)[IconButton(TEXT("eye"), TEXT("定位當前角色的卡"), [this]

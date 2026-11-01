@@ -28,6 +28,9 @@ struct FOKStudioSettings
 	int32 BackupKeep = 10;
 	/** Card folders the card browser lists besides Content/CharacterCards and the game's UserData/chara. */
 	TArray<FString> CardRoots;
+	/** The cards 加入預設角色 adds (HS2Studio6 添加默认角色): [0] male, [1] female (KK sex); empty: the first such card
+	 *  under Content/CharacterCards/Demo. */
+	FString DefaultCards[2];
 	/** UI scale (times the HS2Studio6 canvas scale). */
 	float UiScale = 1.f;
 

@@ -412,6 +412,12 @@ public:
 			if (P.Num() < 3) { SetPage(EPage::ItemAdd); return true; }
 			return AddItemTo(FCString::Atoi(*P[0]), FCString::Atoi(*P[1]), FCString::Atoi(*P[2]), P.Num() > 3 && P[3] == TEXT("child"));
 		});
+		AddCommand(TEXT("add.defaultcharacter"), TEXT("加入預設角色（參數 female／male）"), [this](const FString& Arg)
+		{
+			const FString Card = DefaultCard(Arg == TEXT("male") ? 0 : 1);
+			if (Card.IsEmpty()) { SetStatus(TEXT("沒有預設角色卡：在角色卡窗選一張卡按「設為預設角色」")); return false; }
+			return AddOrReplaceCard(Card, false);
+		});
 		AddCommand(TEXT("add.light"), TEXT("燈光"), [this](const FString& Arg)
 		{
 			const int32 Id = Game->Add(EOKSceneObjectKind::Light);
@@ -1313,6 +1319,11 @@ public:
 	TArray<FString> CardRoots() const;
 	void ScanCardFolder();
 	TSharedRef<SWidget> BuildCardBrowser();
+	/** The card browser's 女／男 filter (KK sex: 1 female, 0 male; -1 all). */
+	int32 CardSexFilter = -1;
+	/** A card's sex (cached per file version; -1 unreadable) and the default card of a sex (settings, else Demo). */
+	static int32 CardSex(const FString& Card);
+	static FString DefaultCard(int32 Sex);
 	bool AddOrReplaceCard(const FString& Card, bool bReplace);
 
 	// --- Items: search, hover preview, middle click adds as a child (U3-2). ---
