@@ -938,11 +938,23 @@ void UOKHScenePanel::BulgeBelly(AKKPreviewActor* Girl,const FVector* Tip,float O
     // end of its reach) would only bloat her elsewhere.
     TMap<FName,float> Want;
     // Within 6 cm of her entrance his glans is in it, not through her: the nearest skin there is her labia.
-    if(Tip&&!BulgeTarget.IsNone()&&BulgePast>0.f&&BulgeMoves>2.f&&!(HBone(Girl,TEXT("J_Kokan"),Kokan)&&FVector::Dist(*Tip,Kokan)<6.))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*100.f);
+    // It swells with the thrust: how deep he is in her now between the shallowest and deepest of the last strokes (his
+    // tip's distance from her entrance), none when he draws back, all of it at the deepest. In these poses his tip is
+    // past her skin through the whole stroke, so the depth alone kept her swollen all the time (user, R20).
+    const bool HasKokan=Tip&&HBone(Girl,TEXT("J_Kokan"),Kokan);const float Depth=HasKokan?float(FVector::Dist(*Tip,Kokan)):0.f;
+    float Stroke=1.f;
+    if(HasKokan){
+        if(StrokeLow>StrokeHigh){StrokeLow=StrokeHigh=Depth;}
+        // The ends move with the stroke and slowly forget it (a pose or pace change).
+        const float Forget=FMath::Min(1.f,Delta*.5f);
+        StrokeLow=Depth<StrokeLow?Depth:StrokeLow+(Depth-StrokeLow)*Forget;StrokeHigh=Depth>StrokeHigh?Depth:StrokeHigh+(Depth-StrokeHigh)*Forget;
+        if(StrokeHigh-StrokeLow>2.f)Stroke=FMath::SmoothStep(0.f,1.f,(Depth-StrokeLow)/(StrokeHigh-StrokeLow));
+    }else{StrokeLow=1.f;StrokeHigh=0.f;}
+    if(Tip&&!BulgeTarget.IsNone()&&BulgePast>0.f&&BulgeMoves>2.f&&!(HasKokan&&Depth<6.f))Want.Add(BulgeTarget,FMath::Clamp((BulgePast+2.5f)/BulgeMoves,0.f,1.f)*Stroke*100.f);
     TArray<FName> Names;Bulge.GetKeys(Names);for(const auto& W:Want)Names.AddUnique(W.Key);
-    // Eased: fast in, slow out, so it holds near its deepest through a thrust (read between solves, it lagged the tip).
+    // Eased both ways alike: it follows the stroke in and out.
     for(const FName& Name:Names){float& B=Bulge.FindOrAdd(Name);const float Was=B,To=Want.FindRef(Name);
-        B=FMath::FInterpTo(B,To,Delta,To>B?25.f:2.5f);if(To==0.f&&B<.5f)B=0.f;
+        B=FMath::FInterpTo(B,To,Delta,20.f);if(To==0.f&&B<.5f)B=0.f;
         if(FMath::Abs(B-Was)>.05f||(B==0.f&&Was!=0.f)){Girl->SetPartMorphWeight(BulgePart,Name,B);
             if(!bBulgeLogged&&B>1.f){bBulgeLogged=true;UE_LOG(LogTemp,Display,TEXT("H scene: belly bulge %s, his tip %.1f cm out of her skin (%.1f off the way in)"),*Name.ToString(),BulgePast,Off);}}
         if(B==0.f)Bulge.Remove(Name);}
