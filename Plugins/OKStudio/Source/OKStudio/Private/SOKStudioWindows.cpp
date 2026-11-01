@@ -1,6 +1,8 @@
 // OK Studio panel: floating windows and their saved places, the dialog, the workspace tree's editing, scene files
 // (browser, backups, the open report, the resource check, stories), screenshots, the timeline and its export, settings.
 #include "SOKStudioPanel.h"
+#include "KKCardReader.h"
+#include "KKCardWorkspace.h"
 #include "Algo/Find.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
@@ -1330,6 +1332,36 @@ TSharedRef<SWidget> SOKStudioPanel::BuildResources()
 	}
 	const int32 Count = Lines.Num();
 	if (Lines.IsEmpty()) Lines.Add(TEXT("沒有缺少的資源。"));
+	// Each character (HS2Studio6 资源检查): its card's kind, whether it shows, and the mods an original card names (what
+	// to install before 重新讀取角色). An OK card carries its own parts.
+	if (Game.IsValid())
+	{
+		const FString Project = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		bool bHeading = false;
+		for (const FOKSceneObject& O : Game->Document->Objects)
+		{
+			if (O.Kind != EOKSceneObjectKind::Character) continue;
+			if (!bHeading) { Lines.Add(TEXT("── 角色 ──")); bHeading = true; }
+			const FString Card = FPaths::IsRelative(O.Character.Card) ? Project / O.Character.Card : O.Character.Card;
+			const bool bShown = Game->SceneActor && Game->SceneActor->PreviewOf(O.Id);
+			FString Kind;
+			TArray<FString> Mods;
+			if (!FPaths::FileExists(Card)) Kind = TEXT("缺卡片");
+			else if (!UKKCardWorkspace::PortableSourcePath(Card).IsEmpty()) Kind = TEXT("OK 卡（自帶資源）");
+			else
+			{
+				Kind = TEXT("原作卡");
+				FKKCharacterFile File;
+				FString Error;
+				if (UKKCardReader::LoadFromFile(Card, File, Error)) { for (const FKKResolveInfo& R : File.Resolves) if (!R.ModID.IsEmpty()) Mods.AddUnique(R.ModID); }
+				else Kind += TEXT("，讀不出：") + Error;
+			}
+			Lines.Add(FString::Printf(TEXT("#%d %s：%s，%s%s"), O.Id, *O.Name, *Kind, bShown ? TEXT("已顯示") : TEXT("未顯示"),
+				Mods.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("，卡片指名 %d 個 mod"), Mods.Num())));
+			Mods.Sort();
+			for (const FString& M : Mods) Lines.Add(FString::Printf(TEXT("#%d 　　%s"), O.Id, *M));
+		}
+	}
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 項缺件（點一行選取物件）"), Count)), 10.f, TextSoft())]
 		+ SVerticalBox::Slot().FillHeight(1.f).Padding(0.f, 3.f)[TextList(Lines, [this, Lines](int32 I) { const int32 Id = LineId(Lines[I]); if (Id > 0 && Game.IsValid()) { Game->Select(Id); LocateSelection(); } }, 260.f)]
@@ -1337,7 +1369,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildResources()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(TEXT("複製清單")), [Lines] { FPlatformApplicationMisc::ClipboardCopy(*FString::Join(Lines, TEXT("\n"))); }, 0.f, 20.f)]
-			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("重新檢查")), [this] { DeferFloat(TEXT("resources")); }, 0.f, 20.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(TEXT("重新檢查")), [this] { DeferFloat(TEXT("resources")); }, 0.f, 20.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("重新讀取角色")), Cmd(TEXT("scene.reloadcharacters")), 0.f, 20.f)]
 		];
 }
 

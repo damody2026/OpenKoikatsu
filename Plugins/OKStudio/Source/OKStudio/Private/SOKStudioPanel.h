@@ -380,6 +380,24 @@ public:
 		Simple(TEXT("view.helpers"), TEXT("隱藏全部輔助"), [this] { Game->bHideHelpers = !Game->bHideHelpers; SetStatus(Game->bHideHelpers ? TEXT("輔助全部隱藏（再按一次顯示）") : TEXT("輔助顯示")); });
 		Float_(TEXT("scene.report"), TEXT("讀取報告"), TEXT("report"));
 		Float_(TEXT("scene.resources"), TEXT("資源檢查"), TEXT("resources"));
+		// 補齊後重試 (HS2Studio6 资源检查): the characters that did not show (or every one, when all did) are read again, so
+		// zipmods installed meanwhile are found.
+		Simple(TEXT("scene.reloadcharacters"), TEXT("重新讀取角色"), [this]
+		{
+			if (!Game.IsValid() || !Game->SceneActor) return;
+			TArray<int32> Failed, All;
+			for (const FOKSceneObject& O : Game->Document->Objects)
+				if (O.Kind == EOKSceneObjectKind::Character)
+				{
+					All.Add(O.Id);
+					if (!Game->SceneActor->PreviewOf(O.Id) || Game->SceneActor->Errors.Contains(O.Id)) Failed.Add(O.Id);
+				}
+			const TArray<int32>& Again = Failed.IsEmpty() ? All : Failed;
+			for (int32 Id : Again) { Game->SceneActor->Errors.Remove(Id); Game->SceneActor->Rebuild(Id); }
+			Game->SyncDocumentNow();
+			DeferFloat(TEXT("resources"));
+			SetStatus(FString::Printf(TEXT("重新讀取 %d 個角色"), Again.Num()));
+		});
 		// Adding objects.
 		Simple(TEXT("add.folder"), TEXT("資料夾"), [this] { Game->Add(EOKSceneObjectKind::Folder); AddedStatus(); });
 		AddCommand(TEXT("add.character"), TEXT("角色"), [this](const FString& Arg)
