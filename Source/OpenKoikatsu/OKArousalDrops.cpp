@@ -5,6 +5,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 
 namespace{
  constexpr int32 MaxDrops=160,MaxMarks=160;
@@ -20,12 +22,33 @@ UMaterialInstanceDynamic* FOKArousalDrops::Material(AActor* Owner,uint8 Colour,b
  M=UMaterialInstanceDynamic::Create(Parent,Owner);M->SetVectorParameterValue(TEXT("PreviewTint"),bMark?OKArousal::MarkTint(Colour):OKArousal::Tint(Colour));return M.Get();
 }
 
+UStaticMeshComponent* FOKArousalDrops::NewGlint(AActor* Owner){
+ UStaticMesh* Mesh=Sphere();if(!Owner||!Mesh)return nullptr;
+ if(!GlintMaterial.IsValid()){UMaterialInterface* Parent=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/IndependentResources/PreviewMaterials/M_PreviewTranslucent.M_PreviewTranslucent"));if(!Parent)return nullptr;
+  GlintMaterial=UMaterialInstanceDynamic::Create(Parent,Owner);GlintMaterial->SetVectorParameterValue(TEXT("PreviewTint"),FLinearColor(4.f,4.f,4.f,1.f));} // brighter than white: it blooms, the way light shines off water
+ auto* C=NewObject<UStaticMeshComponent>(Owner);C->SetStaticMesh(Mesh);C->SetMaterial(0,GlintMaterial.Get());C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+ C->SetCastShadow(false);C->SetMobility(EComponentMobility::Movable);C->SetTranslucentSortPriority(1);C->RegisterComponent();C->SetWorldScale3D(FVector(.0001f));return C;
+}
+
+// Each highlight where the light would shine back: a drop's toward the camera and up, a third of its size; a wet mark's
+// a flat streak a third of the way toward the camera.
+void FOKArousalDrops::PlaceGlints(const FVector& Eye){
+ for(FDrop& D:Drops){auto* C=D.Mesh.Get();auto* G=D.Glint.Get();if(!C||!G)continue;
+  const FVector At=C->GetComponentLocation();const FVector S=C->GetComponentScale();const float R=float(S.X)*50.f;
+  const FVector Toward=((Eye-At).GetSafeNormal()+FVector(0,0,.6f)).GetSafeNormal();
+  G->SetWorldLocation(At+Toward*R*.6f);G->SetWorldScale3D(FVector(S.X*.24f,S.Y*.24f,FMath::Min(S.Z,S.X)*.24f));}
+ for(FMark& K:Marks){auto* C=K.Mesh.Get();auto* G=K.Glint.Get();if(!C||!G)continue;
+  FVector Toward=Eye-K.At;Toward.Z=0.;Toward=Toward.GetSafeNormal();const FVector Side(-Toward.Y,Toward.X,0.);
+  G->SetWorldLocation(K.At+Toward*K.Radius*.35f+FVector(0,0,.03f));G->SetWorldRotation(Side.Rotation());
+  G->SetWorldScale3D(FVector(K.Radius/50.f*.45f,K.Radius/50.f*.12f,.0004f));}
+}
+
 bool FOKArousalDrops::Spawn(AActor* Owner,int32 Who,FName Bone,const FVector& At,float Ground,uint8 Colour){
  UStaticMesh* Mesh=Sphere();if(!Owner||!Mesh||Drops.Num()>=MaxDrops)return false;
  UMaterialInstanceDynamic* M=Material(Owner,Colour,false);if(!M)return false;
  auto* C=NewObject<UStaticMeshComponent>(Owner);C->SetStaticMesh(Mesh);C->SetMaterial(0,M);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
  C->SetCastShadow(false);C->SetMobility(EComponentMobility::Movable);C->RegisterComponent();C->SetWorldScale3D(FVector(.001f));C->SetWorldLocation(At);
- FDrop& D=Drops.AddDefaulted_GetRef();D.Mesh=C;D.Bone=Bone;D.Who=Who;D.Colour=Colour;D.Ground=Ground;MarkOwner=Owner;return true;
+ FDrop& D=Drops.AddDefaulted_GetRef();D.Mesh=C;D.Glint=NewGlint(Owner);D.Bone=Bone;D.Who=Who;D.Colour=Colour;D.Ground=Ground;MarkOwner=Owner;return true;
 }
 
 bool FOKArousalDrops::Squirt(AActor* Owner,int32 Who,const FVector& At,const FVector& Velocity,float Ground,uint8 Colour){
@@ -44,7 +67,7 @@ void FOKArousalDrops::Land(AActor* Owner,const FDrop& D,const FVector& At){
  UStaticMesh* Mesh=Sphere();UMaterialInstanceDynamic* M=Material(Owner,D.Colour,true);if(!Mesh||!M)return;
  auto* C=NewObject<UStaticMeshComponent>(Owner);C->SetStaticMesh(Mesh);C->SetMaterial(0,M);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
  C->SetCastShadow(false);C->SetMobility(EComponentMobility::Movable);C->RegisterComponent();
- FMark& K=Marks.AddDefaulted_GetRef();K.Mesh=C;K.Who=D.Who;K.Colour=D.Colour;K.At=FVector(At.X,At.Y,D.Ground+.05f);K.Radius=MarkFirst;
+ FMark& K=Marks.AddDefaulted_GetRef();K.Mesh=C;K.Glint=NewGlint(Owner);K.Who=D.Who;K.Colour=D.Colour;K.At=FVector(At.X,At.Y,D.Ground+.05f);K.Radius=MarkFirst;
  C->SetWorldLocation(K.At);C->SetWorldScale3D(FVector(K.Radius/50.f,K.Radius/50.f,.0008f));
 }
 
@@ -58,17 +81,19 @@ void FOKArousalDrops::Tick(float Dt,FWhere Where){
    if(P.Z<=D.Ground){P.Z=D.Ground+.2f;D.Phase=2;if(Owner)Land(Owner,D,P);}C->SetWorldLocation(P);}
   // A bead where it fell, drying away until its ten seconds are up.
   else if(!Gone&&D.Phase==2){const float K=FMath::Clamp(1.f-D.Age/OKArousal::DropLife,.15f,1.f);C->SetWorldScale3D(FVector(.012f*K,.012f*K,.003f*K));}
-  if(Gone){if(C)C->DestroyComponent();Drops.RemoveAtSwap(I);}
+  if(Gone){if(C)C->DestroyComponent();if(auto* G=D.Glint.Get())G->DestroyComponent();Drops.RemoveAtSwap(I);}
  }
+ UWorld* World=Owner?Owner->GetWorld():nullptr;APlayerController* PC=World?World->GetFirstPlayerController():nullptr;
+ if(PC&&PC->PlayerCameraManager)PlaceGlints(PC->PlayerCameraManager->GetCameraLocation());
 }
 
 void FOKArousalDrops::ClearMarks(int32 Who){
- for(int32 I=Marks.Num()-1;I>=0;--I)if(Marks[I].Who==Who){if(auto* C=Marks[I].Mesh.Get())C->DestroyComponent();Marks.RemoveAtSwap(I);}
+ for(int32 I=Marks.Num()-1;I>=0;--I)if(Marks[I].Who==Who){if(auto* C=Marks[I].Mesh.Get())C->DestroyComponent();if(auto* G=Marks[I].Glint.Get())G->DestroyComponent();Marks.RemoveAtSwap(I);}
 }
 
 void FOKArousalDrops::Reset(){
- for(FDrop& D:Drops)if(auto* C=D.Mesh.Get())C->DestroyComponent();
- for(FMark& K:Marks)if(auto* C=K.Mesh.Get())C->DestroyComponent();
+ for(FDrop& D:Drops){if(auto* C=D.Mesh.Get())C->DestroyComponent();if(auto* G=D.Glint.Get())G->DestroyComponent();}
+ for(FMark& K:Marks){if(auto* C=K.Mesh.Get())C->DestroyComponent();if(auto* G=K.Glint.Get())G->DestroyComponent();}
  Drops.Reset();Marks.Reset();
 }
 

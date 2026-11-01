@@ -299,7 +299,11 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
  if(!ContactReady(Character)||!ContactIdle()||!State->HighCards.IsValidIndex(Character)||State->HighCards.IsEmpty())return;
  auto& S=*State;StopAmbientActivity();EndTalk();GalgameHideForPrivate();
  OKStreetPrivateEnvSave(); // its high models change the extraction environment the crowd reads (OKStreetSocialPrivateEnv.cpp)
- auto* Mode=AOKInteractionMode::EnterCards(GetWorld()->GetFirstPlayerController(),S.HighCards[Character],S.HighCards[0],S.HighOutfits.IsValidIndex(Character)?S.HighOutfits[Character]:0);
+ // Right where she stands, facing as she does (user, 2026-11-01: into the one-on-one on the street itself, no change of
+ // scene): her high model takes her place, his is set by the pair; the street goes on around them.
+ const FOKStreetAgentSim* Her=S.Agents.FindByPredicate([Character](const FOKStreetAgentSim& A){return A.Slot==Character;});
+ const FTransform There(FRotator(0.,S.RenderedRotations.IsValidIndex(Character)?S.RenderedRotations[Character].Yaw:0.,0.),Her?Her->Position:S.Male);
+ auto* Mode=AOKInteractionMode::EnterCards(GetWorld()->GetFirstPlayerController(),S.HighCards[Character],S.HighCards[0],S.HighOutfits.IsValidIndex(Character)?S.HighOutfits[Character]:0,&There);
  if(!Mode){OKStreetPrivateEnvRestore();S.ContactsNotice=OKT(TEXT("ui.contacts.interaction_load_failed"));RefreshUI();return;}
  // Her experience (hexp.rs) gates the poses, raw insertion and anal in the H panel.
  {const FString Id=OKStreetStableId(S.Manifest.Characters[Character]);auto Ask=OKRulesHeroineRequest(S,TEXT("h_experience"),Id);Ask->SetStringField(TEXT("girl"),Id);Ask->SetNumberField(TEXT("day"),S.Store.CalendarDay);OKRulesPutExt(S,Ask);
@@ -316,7 +320,7 @@ void AOKStreetSocialScene::BeginPrivate(int32 Character){
  Mode->AutoReturnSeconds=S.SelfTest?2:0;
  TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
  Mode->Returned=[Weak](TSharedRef<FJsonObject> Result){if(Weak.IsValid()&&Weak->State){Weak->State->HighPrivateResult=Result;Weak->State->HighPrivateSeenReady=Result->HasField(TEXT("partner_ready"))&&Result->GetBoolField(TEXT("partner_ready"));Weak->FinishPrivate();if(Weak->State->SelfTest&&!Weak->State->Reported)Weak->RunContactsProbe(Weak->SceneTime());}};
- OKSuspendCrowdRuntimeScene(this,true);S.MouseToggleRequested=false;S.ContactsNotice=OKT(TEXT("ui.contacts.loading_one_on_one"));RefreshUI();
+ S.PrivateInPlace=true;S.MouseToggleRequested=false;S.ContactsNotice=OKT(TEXT("ui.contacts.loading_one_on_one"));RefreshUI();
  if(S.Overlay)S.Overlay->SetVisibility(EVisibility::Collapsed);
  // A leave button of the street's own, top right over the scene: back to the street at any time (its panel's return is
  // at the top of a long scrolled list, and the control channel cannot reach it).
@@ -336,7 +340,7 @@ void AOKStreetSocialScene::FinishPrivate(){
  OKStreetPrivateEnvRestore();
  if(S.PrivateClockFrozen&&S.ClockPaused){const double Wall=FPlatformTime::Seconds();S.ClockStartHours=FMath::Fmod(S.ClockStartHours+FMath::Max(0.,Wall-S.HighPrivateAt)/3600.,24.);S.ClockStartWall=Wall;S.ClockPaused=false;RefreshUI();}S.PrivateClockFrozen=false; // (someone ran the clock meanwhile: it already moved)
  S.PrivatePausedSeconds+=FMath::Max(0.,FPlatformTime::Seconds()-S.HighPrivateAt);S.LastWall=0;
- OKSuspendCrowdRuntimeScene(this,false);S.MouseUI=S.PrivateMouse;S.MouseToggleRequested=false;
+ OKSuspendCrowdRuntimeScene(this,false);S.PrivateInPlace=false;S.MouseUI=S.PrivateMouse;S.MouseToggleRequested=false;
  if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(S.Camera.Get());
  if(S.Overlay)S.Overlay->SetVisibility(EVisibility::Visible);
  if(S.PrivateLeave.IsValid()){if(GEngine&&GEngine->GameViewport)GEngine->GameViewport->RemoveViewportWidgetContent(S.PrivateLeave.ToSharedRef());S.PrivateLeave.Reset();}

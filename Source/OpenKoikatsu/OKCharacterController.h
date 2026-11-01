@@ -307,6 +307,7 @@ public:
     void ActivateInteraction();
 	UPROPERTY() TObjectPtr<class UOKInteractionWidget> InteractionWidget;
 	UPROPERTY() TObjectPtr<class AOKInteractionScene> InteractionScene;
+	bool bInteractionInPlace=false; // AOKInteractionMode::Enter InPlace: the scene keeps the world's ground and light
  bool bInteractionPreviousPoseSharing=false;
 	bool bEnterInteractionAfterLoad=false;
 

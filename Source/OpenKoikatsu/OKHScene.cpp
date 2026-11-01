@@ -1185,6 +1185,13 @@ void UOKHScenePanel::AlignHim(float Delta){
                 float InHer=.9f;
                 if((HIsLoop(Base)||Base==TEXT("OLoop"))&&ThrustHigh-ThrustLow>.5f)InHer=.2f+.7f*FMath::SmoothStep(0.f,1.f,(ThrustHigh-Raw)/(ThrustHigh-ThrustLow));
                 Thrust=Raw-Full*(1.f-InHer);AlignDeep=100.f*InHer;
+                // Her cries keep his rhythm (user, 2026-11-01): each time he reaches deep, her next breath starts, cutting
+                // the one playing once it has had its first moan (a quarter second). Her breaths are the original's for
+                // this state and speed (HVoiceCtrl), only started on his strokes instead of one after another.
+                if(HIsLoop(Base)||Base==TEXT("OLoop")){const bool Deep=InHer>.8f;const double Now=FPlatformTime::Seconds();
+                    if(Deep&&!bStrokeDeep&&Girl->bHBreath&&Girl->HBreaths.Num()&&Now-StrokeCryAt>=.25){StrokeCryAt=Now;
+                        Girl->HBreathIndex=(Girl->HBreathIndex+1)%Girl->HBreaths.Num();FString Error;if(!Girl->PlayHCue(Error))Girl->StopHBreath();}
+                    bStrokeDeep=Deep;}
             }
             if(!bAlignLogged){bAlignLogged=true;UE_LOG(LogTemp,Display,TEXT("H align: %s penis %.1f cm, her entrance %.1f cm off its line at %.0f%% of it"),*Cur,Len,AlignOff,AlignAt);}
             HimOffset+=Fix*Rate+Axis*(Thrust-ThrustApplied);AlignPushed=Thrust;ThrustApplied=Thrust;
@@ -1360,7 +1367,7 @@ TSharedRef<FJsonObject> UOKHScenePanel::Describe() const{
     O->SetNumberField(TEXT("blush"),BlushMats.IsEmpty()?-1.f:BlushShown);
     O->SetStringField(TEXT("state"),Current());O->SetStringField(TEXT("wanted"),Wanted);O->SetNumberField(TEXT("mode"),Mode);
     TArray<TSharedPtr<FJsonValue>> Q;for(const FString& S:Queue)Q.Add(MakeShared<FJsonValueString>(S));O->SetArrayField(TEXT("queue"),Q);
-    O->SetNumberField(TEXT("playback_speed"),PlaybackSpeed());O->SetNumberField(TEXT("held"),Held.Num());O->SetStringField(TEXT("caption"),Caption?Caption->GetText().ToString():FString());
+    O->SetNumberField(TEXT("playback_speed"),PlaybackSpeed());if(Gallery&&Gallery->PairedPlayback)O->SetNumberField(TEXT("pair_rate"),Gallery->PairedPlayback->GetSpeed());O->SetNumberField(TEXT("held"),Held.Num());O->SetStringField(TEXT("caption"),Caption?Caption->GetText().ToString():FString());
     O->SetNumberField(TEXT("her"),Her);O->SetNumberField(TEXT("his"),His);O->SetNumberField(TEXT("speed"),SpeedValue);O->SetBoolField(TEXT("condom"),bCondom);O->SetBoolField(TEXT("anal_play"),bAnalPlay);
     O->SetStringField(TEXT("title"),Title?Title->GetText().ToString():FString());O->SetStringField(TEXT("hint"),Hint?Hint->GetText().ToString():FString());O->SetStringField(TEXT("face"),FaceKey); /* eye/brow/openness now (UpdateFace) */
     if(Gallery&&Gallery->PreviewActor){O->SetBoolField(TEXT("breath"),Gallery->PreviewActor->bHBreath);O->SetBoolField(TEXT("speaking"),Gallery->PreviewActor->IsSpeaking());O->SetNumberField(TEXT("mouth"),Gallery->PreviewActor->EffectiveFaceRate(0));}

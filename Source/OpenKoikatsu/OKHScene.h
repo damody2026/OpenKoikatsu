@@ -99,7 +99,7 @@ private:
     FString P(const FString& State) const {return bAnalPlay?TEXT("A_")+State:State;}
     void Finish(const TCHAR* Kind);
     void Note(const FString& Text,bool bReact=true);
-    void ApplySpeed();
+    void ApplySpeed();bool bStrokeDeep=false;double StrokeCryAt=0.;
     FString Current() const;
     int32 Level() const;
     // She has come as many times as she will this scene (climax_limit): she wants it to stop, the panel offers no more

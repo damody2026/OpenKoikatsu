@@ -424,6 +424,9 @@ void UOKCharacterController::ActivateInteraction() {
     InteractionScene=GetWorld()->SpawnActor<AOKInteractionScene>();
     if(!InteractionScene)return;
     InteractionScene->SetActorLocation(PreviewActor->GetActorLocation()+FVector(0.,0.,-1.));
+    // In the world itself (the street's one-on-one in place): its own ground and light, not the showcase's.
+    if(bInteractionInPlace){InteractionScene->Floor->SetVisibility(false);InteractionScene->Backdrop->SetVisibility(false);
+        TArray<AActor*> Attached;InteractionScene->GetAttachedActors(Attached);for(AActor* A:Attached)if(Cast<ADirectionalLight>(A))A->Destroy();}
     InteractionWidget=CreateWidget<UOKInteractionWidget>(GetOwningPlayer());
     if(!InteractionWidget){InteractionScene->Destroy();InteractionScene=nullptr;return;}
     InteractionWidget->BodyPrepareAttempt=PreviewActor;InteractionWidget->BodyPreparationError=BodyError;

@@ -61,6 +61,8 @@
 #include "KKRuntimeSpeech.h"
 #include "KKCardReader.h"
 #include "OKArousalDrops.h"
+// Where a street figure goes while its high model stands in for it (the one-on-one in place): far under the street.
+static const FVector OKStreetOffstage(0.,0.,-100000.);
 #include "OKCrowdScene.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -375,6 +377,9 @@ int64 BankruptCheckHour=-1,BankruptLogTick=-1;double BankruptShowAt=0;TArray<FSt
  bool ContactsOpen=false,ActivitiesOpen=false,TouchOpen=false,ContactsUI=false,ContactsOnlyTest=false,ContactsChecked=false;int32 ContactSelection=INDEX_NONE,ContactRows=0,ContactActions=0;
  TArray<FString> HighCards;TArray<int32> HighOutfits;TWeakObjectPtr<AOKInteractionMode> PrivateMode;TSharedPtr<SWidget> PrivateLeave; /* the one-on-one scene's own leave button (R3-228) */FString HighPrivateReport;double HighPrivateAt=0,PrivatePausedSeconds=0;bool PrivateClockFrozen=false; /* the street clock stood still for the private scene (it runs again on leaving, by the real minutes spent) */bool HighPrivateSeenReady=false;TSharedPtr<FJsonObject> HighPrivateResult;TArray<FOKStreetAgentSim> HighPrivateAgents;TArray<FRotator> HighPrivateRotations;FVector HighPrivateMale;
  TMap<int32,double> CommutePausedUntil; // a girl he walked up to stops her walk for a moment (StepNavigation)
+ // PrivateInPlace: the one-on-one is where she stands on the street (user, 2026-11-01: no change of scene); the street
+ // goes on around them and their street figures are kept out of sight under it (OKStreetOffstage).
+ bool PrivateInPlace=false;
  int32 NavGirl=INDEX_NONE,PrivateGirl=INDEX_NONE,ContactsProbePhase=0;FOKStreetLiftRide NavRide; // the navigation riding an elevator (PlanNavLift)
  double NavAt=0,ContactsProbeAt=0;
  int32 ContactsProbeGreeting=0;TArray<TSharedPtr<FJsonValue>> ContactsVoiceEvidence;TArray<FVector> NavPath;
@@ -3844,7 +3849,7 @@ void AOKStreetSocialScene::Tick(float Dt){
  S.CompanionWalk=S.FollowMode!=0&&S.OutingGirl!=INDEX_NONE&&S.Companion==S.OutingGirl&&SceneTime()-S.ManualMoveAt>3.0?S.FollowGirlWalk:StepCompanion(Dt);
  // Standing still he always takes his own stand (conversation_male, the game's mc_m_stand): the base idle is the
  // heroines' book-reading loop, and alone he stood holding an invisible book.
- FString Error;OKSetCrowdRuntimeLocomotionState(this,0,true,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
+ FString Error;OKSetCrowdRuntimeLocomotionState(this,0,true,Speed>2.f,Error);OKSetCrowdRuntimeCharacterMotion(this,0,FTransform(S.Rotations[0],S.PrivateInPlace?OKStreetOffstage:S.Male),S.ReadingForceWalk==0?1.f:Speed,Error);
  // A girl he is with is not on her schedule walk any more (it would keep pulling her to its route, on the ground).
  for(int32 G=1;G<=S.Agents.Num();++G)if(S.Commutes.Contains(G)&&(BusyWithPlayer(G)||S.LiftWalks.Contains(G)||S.LiftPins.Contains(G)))S.Commutes.Remove(G);
  {QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_TickElevators);TickElevators(Dt);}
@@ -3913,7 +3918,7 @@ void AOKStreetSocialScene::Tick(float Dt){
    if(Rate>15.f&&Rate<600.f)ShownWalk=Rate/OKStreetWalkSpeed;
   }
   S.LastShown.Add(Agent.Slot,Shown);
- OKSetCrowdRuntimeCharacterMotion(this,Agent.Slot,FTransform(S.RenderedRotations[Agent.Slot],Shown),S.ReadingForceWalk==Agent.Slot?1.f:ShownWalk,Error);
+ OKSetCrowdRuntimeCharacterMotion(this,Agent.Slot,FTransform(S.RenderedRotations[Agent.Slot],S.PrivateInPlace&&Agent.Slot==S.PrivateGirl?OKStreetOffstage:Shown),S.ReadingForceWalk==Agent.Slot?1.f:ShownWalk,Error);
   if(S.SelfTest&&Agent.Position!=Before&&!S.FacingActorsChecked.Contains(Agent.Slot)){FOKRuntimeCharacterStatus Submitted;const float BeforeError=FMath::Abs(FMath::FindDeltaAngleDegrees(PreviousFacing.Yaw,S.Rotations[Agent.Slot].Yaw));const float AfterError=FMath::Abs(FMath::FindDeltaAngleDegrees(S.RenderedRotations[Agent.Slot].Yaw,S.Rotations[Agent.Slot].Yaw));if(OKGetCrowdRuntimeCharacterStatus(this,Agent.Slot,Submitted)&&Submitted.Transform.Rotator().Equals(S.RenderedRotations[Agent.Slot],.01f)&&Turn<=OKStreetFemaleTurnDegreesPerSecond*FMath::Max(0.f,Dt)+.001f&&AfterError<=BeforeError+.001f){S.FacingActorsChecked.Add(Agent.Slot);++S.FacingChecks;}else S.Errors.Add(TEXT("NPC submitted facing exceeded turn limit or turned away from movement"));}
 
  }
