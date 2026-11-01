@@ -1416,6 +1416,8 @@ public:
 	FString SceneFolder, SceneSearch, ScenePick, SceneNewName, SaveAsName;
 	/** The scene browser lists the folders inside the current one too (包含子資料夾). */
 	bool bSceneRecursive = false;
+	/** The scene browser's page (100 scenes a page). */
+	int32 ScenePage = 0;
 	int32 SceneSort = 0;
 	bool bSceneSaveMode = false;
 	TArray<FString> SceneList;

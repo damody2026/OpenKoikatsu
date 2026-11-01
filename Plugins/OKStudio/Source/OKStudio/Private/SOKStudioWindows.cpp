@@ -661,7 +661,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	{
 		if (Folder.IsEmpty()) return;
 		Folders->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
-			[Button(FText::FromString(Label), [this, Folder] { SceneFolder = Folder; ScenePick.Reset(); ScanScenes(); DeferFloat(TEXT("scenes")); }, 0.f, 18.f, SceneFolder == Folder, 10.f)];
+			[Button(FText::FromString(Label), [this, Folder] { SceneFolder = Folder; ScenePick.Reset(); ScenePage = 0; ScanScenes(); DeferFloat(TEXT("scenes")); }, 0.f, 18.f, SceneFolder == Folder, 10.f)];
 	};
 	FolderButton(TEXT("場景（UserData）"), UOKStudioGame::SceneDirectory());
 	FolderButton(TEXT("KStudio 場景"), KStudioFolder());
@@ -678,7 +678,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	if (SceneFolder != UOKStudioGame::SceneDirectory() && SceneFolder != KStudioFolder() && SceneFolder != UOKStudioGame::BackupDirectory()) FolderButton(TEXT(".. 上一層"), FPaths::GetPath(SceneFolder));
 	// 包含子資料夾 and 選擇資料夾 (HS2Studio6 场景卡选择): any folder, typed or pasted, Enter goes there.
 	Folders->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 2.f)
-		[CheckBox(TEXT("包含子資料夾"), [this] { return bSceneRecursive; }, [this](bool B) { bSceneRecursive = B; ScenePick.Reset(); ScanScenes(); DeferFloat(TEXT("scenes")); })];
+		[CheckBox(TEXT("包含子資料夾"), [this] { return bSceneRecursive; }, [this](bool B) { bSceneRecursive = B; ScenePick.Reset(); ScenePage = 0; ScanScenes(); DeferFloat(TEXT("scenes")); })];
 	Folders->AddSlot().AutoHeight().Padding(0.f, 2.f)
 		[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("選擇資料夾（貼上路徑按 Enter）")))
 			.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type C)
@@ -688,21 +688,18 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 				if (Dir.IsEmpty() || !FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
 				SceneFolder = Dir;
 				ScenePick.Reset();
-				ScanScenes();
+				ScenePage = 0; ScanScenes();
 				DeferFloat(TEXT("scenes"));
 			})]];
 
 	// Pictures of the scenes, four across.
 	TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
-	// A whole tree (包含子資料夾) can be thousands of scenes: the first 500 are shown, the search narrows the rest.
-	constexpr int32 MaxShown = 500;
-	for (int32 Index = 0; Index < SceneList.Num(); ++Index)
+	// Pages of 100 (HS2Studio6 第 N / M 页): a whole tree (包含子資料夾) can be thousands of scenes.
+	constexpr int32 PerPage = 100;
+	const int32 Pages = FMath::Max(1, (SceneList.Num() + PerPage - 1) / PerPage);
+	ScenePage = FMath::Clamp(ScenePage, 0, Pages - 1);
+	for (int32 Index = ScenePage * PerPage; Index < FMath::Min(SceneList.Num(), (ScenePage + 1) * PerPage); ++Index)
 	{
-		if (Index == MaxShown)
-		{
-			Grid->AddSlot().Padding(4.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("還有 %d 個場景沒列出，請用搜尋縮小範圍。"), SceneList.Num() - MaxShown)), 10.f, TextHint())];
-			break;
-		}
 		const FString& F = SceneList[Index];
 		const bool bPng = F.EndsWith(TEXT(".png"));
 		const FOKSceneCard::EKind K = bPng ? FOKSceneCard::Kind(F) : FOKSceneCard::EKind::Json;
@@ -764,7 +761,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 				else SaveNamed(SaveAsName);
 			}, 60.f, 20.f)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)[SNew(SBox).WidthOverride(130.f).HeightOverride(20.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋"))).Text(FText::FromString(SceneSearch))
-				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type) { SceneSearch = T.ToString(); ScanScenes(); DeferFloat(TEXT("scenes")); })]]
+				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type) { SceneSearch = T.ToString(); ScenePage = 0; ScanScenes(); DeferFloat(TEXT("scenes")); })]]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)[Button(FText::FromString(SceneSort == 1 ? TEXT("依名稱") : TEXT("依時間")), [this] { SceneSort = 1 - SceneSort; ScanScenes(); DeferFloat(TEXT("scenes")); }, 56.f, 20.f)]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)
@@ -774,7 +771,14 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(2.f)[SNew(SScrollBox) + SScrollBox::Slot()[Grid]]]
 			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(140.f)[SNew(SScrollBox) + SScrollBox::Slot()[Pick]]]
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%s　%d 個場景"), *SceneFolder, SceneList.Num())), 9.f, TextHint())];
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("‹")), [this] { if (ScenePage > 0) { --ScenePage; DeferFloat(TEXT("scenes")); } }, 24.f, 18.f, false, 10.f)]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d / %d 頁"), ScenePage + 1, Pages)), 9.f)]
+			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("›")), [this, Pages] { if (ScenePage + 1 < Pages) { ++ScenePage; DeferFloat(TEXT("scenes")); } }, 24.f, 18.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%s　%d 個場景"), *SceneFolder, SceneList.Num())), 9.f, TextHint())]
+		];
 }
 
 TSharedRef<SWidget> SOKStudioPanel::BuildBackups()
