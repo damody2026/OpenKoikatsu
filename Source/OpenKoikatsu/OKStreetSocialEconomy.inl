@@ -476,8 +476,19 @@ void AOKStreetSocialScene::TickMeal(float Dt){
   else if(Wall-S.MealAwayAt>5){
    // Untouched ones go with him, as a takeaway would (R3-259): a ¥14 bento served just as he walked her home was thrown away.
    auto Candidate=S.Store;TArray<FString> Packed;
-   for(const auto& D:S.Table)if(D.Served&&D.Percent>=99.f)if(const auto* I=S.Catalog.Find(D.ItemId);I&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}
-   if(!Packed.IsEmpty()){CommitStore(MoveTemp(Candidate));S.Message=OKMsg(TEXT("ui.economy.untouched_packed"),{{TEXT("items"),FString::Join(Packed,TEXT("、"))}});RefreshUI();}
+   // Hers she finishes as far as she still has room (she said "I'll finish, then go"): 惠惠 left at satiety 27 with
+   // her dumplings and soup untouched, and those went into his bag.
+   for(const auto& D:S.Table)if(D.ForHer&&D.Served&&D.Percent>0.f&&S.Manifest.Characters.IsValidIndex(D.Her))if(const auto* I=S.Catalog.Find(D.ItemId)){
+    const int32 Index=OKStreetRelationIndex(Candidate,OKStreetStableId(S.Manifest.Characters[D.Her]),S.Manifest.TalkBudget,true);
+    if(!Candidate.Relations.IsValidIndex(Index))continue;auto& R=Candidate.Relations[Index];
+    if(!I->IsDrink()&&R.Satiety>=OKStreetFullSatiety)continue;
+    const float Left=100.f-D.Booked;
+    for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;
+     if(V)*V=FMath::Clamp(*V+E.Value*Left/100.f*(V==&R.Satiety?100.f/SatietyMax(D.Her):1.f),0.f,V==&R.Satiety?OKStreetOverfullSatiety:100.f);}
+   }
+   for(const auto& D:S.Table)if((!D.ForHer||!S.Manifest.Characters.IsValidIndex(D.Her))&&D.Served&&D.Percent>=99.f)if(const auto* I=S.Catalog.Find(D.ItemId);I&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}
+   CommitStore(MoveTemp(Candidate));
+   if(!Packed.IsEmpty()){S.Message=OKMsg(TEXT("ui.economy.untouched_packed"),{{TEXT("items"),FString::Join(Packed,TEXT("、"))}});RefreshUI();}
    UE_LOG(LogTemp,Display,TEXT("Street meal: they left, the table is cleared (%d dishes, %d packed)"),S.Table.Num(),Packed.Num());S.Table.Reset();return;}
   return;
  }
