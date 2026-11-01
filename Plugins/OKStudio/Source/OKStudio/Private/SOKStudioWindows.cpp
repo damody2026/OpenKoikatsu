@@ -564,7 +564,22 @@ void SOKStudioPanel::ScanScenes()
 {
 	if (SceneFolder.IsEmpty()) SceneFolder = UOKStudioGame::SceneDirectory();
 	SceneList.Reset();
-	if (SceneFolder == UOKStudioGame::SceneDirectory()) SceneList = UOKStudioGame::SceneFiles();
+	if (bSceneRecursive)
+	{
+		// 包含子資料夾 (HS2Studio6): every scene under the folder, except the cards an import took out of a scene
+		// ("<scene>_cards", character PNGs only).
+		TArray<FString> Found;
+		IFileManager::Get().FindFilesRecursive(Found, *SceneFolder, TEXT("*.png"), true, false);
+		TArray<FString> More;
+		IFileManager::Get().FindFilesRecursive(More, *SceneFolder, TEXT("*.okscene"), true, false);
+		Found.Append(More);
+		for (const FString& F : Found)
+		{
+			if (FPaths::GetPath(F).Contains(TEXT("_cards"))) continue;
+			if (F.EndsWith(TEXT(".okscene")) || FOKSceneCard::Kind(F) != FOKSceneCard::EKind::None) SceneList.Add(F);
+		}
+	}
+	else if (SceneFolder == UOKStudioGame::SceneDirectory()) SceneList = UOKStudioGame::SceneFiles();
 	else
 	{
 		TArray<FString> Names;
@@ -661,11 +676,34 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	};
 	for (const FString& S : Subs) if (!SceneCards(S)) FolderButton(TEXT("▸ ") + S, SceneFolder / S);
 	if (SceneFolder != UOKStudioGame::SceneDirectory() && SceneFolder != KStudioFolder() && SceneFolder != UOKStudioGame::BackupDirectory()) FolderButton(TEXT(".. 上一層"), FPaths::GetPath(SceneFolder));
+	// 包含子資料夾 and 選擇資料夾 (HS2Studio6 场景卡选择): any folder, typed or pasted, Enter goes there.
+	Folders->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 2.f)
+		[CheckBox(TEXT("包含子資料夾"), [this] { return bSceneRecursive; }, [this](bool B) { bSceneRecursive = B; ScenePick.Reset(); ScanScenes(); DeferFloat(TEXT("scenes")); })];
+	Folders->AddSlot().AutoHeight().Padding(0.f, 2.f)
+		[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("選擇資料夾（貼上路徑按 Enter）")))
+			.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type C)
+			{
+				if (C != ETextCommit::OnEnter) return;
+				const FString Dir = FPaths::ConvertRelativePathToFull(T.ToString().TrimStartAndEnd().TrimQuotes());
+				if (Dir.IsEmpty() || !FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
+				SceneFolder = Dir;
+				ScenePick.Reset();
+				ScanScenes();
+				DeferFloat(TEXT("scenes"));
+			})]];
 
 	// Pictures of the scenes, four across.
 	TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
-	for (const FString& F : SceneList)
+	// A whole tree (包含子資料夾) can be thousands of scenes: the first 500 are shown, the search narrows the rest.
+	constexpr int32 MaxShown = 500;
+	for (int32 Index = 0; Index < SceneList.Num(); ++Index)
 	{
+		if (Index == MaxShown)
+		{
+			Grid->AddSlot().Padding(4.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("還有 %d 個場景沒列出，請用搜尋縮小範圍。"), SceneList.Num() - MaxShown)), 10.f, TextHint())];
+			break;
+		}
+		const FString& F = SceneList[Index];
 		const bool bPng = F.EndsWith(TEXT(".png"));
 		const FOKSceneCard::EKind K = bPng ? FOKSceneCard::Kind(F) : FOKSceneCard::EKind::Json;
 		const FString KindTag = K == FOKSceneCard::EKind::KStudio ? TEXT("[KStudio] ") : (!bPng ? TEXT("[.okscene] ") : TEXT(""));

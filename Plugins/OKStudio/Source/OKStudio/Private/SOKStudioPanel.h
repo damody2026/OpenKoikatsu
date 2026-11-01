@@ -1400,6 +1400,8 @@ public:
 
 	// --- Scene files (U7). ---
 	FString SceneFolder, SceneSearch, ScenePick, SceneNewName, SaveAsName;
+	/** The scene browser lists the folders inside the current one too (包含子資料夾). */
+	bool bSceneRecursive = false;
 	int32 SceneSort = 0;
 	bool bSceneSaveMode = false;
 	TArray<FString> SceneList;
