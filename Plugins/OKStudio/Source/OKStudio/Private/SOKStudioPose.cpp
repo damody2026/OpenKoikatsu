@@ -523,6 +523,16 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 			if (FOKSceneObject* X = Obj()) { X->Character.Fk.RemoveAll([I](const FOKSceneFkBone& B) { return FkPartOf(B.Bone) == I; }); Changed(); DeferRebuild(); }
 		}, 36.f, 16.f, false, 9.f)];
 	Props->AddSlot().AutoHeight()[ResetBox];
+	// 關節補正 (Studio's joint correction): ExpressionBone straightens these joints' skin as they bend.
+	static const TCHAR* Joints[] = { TEXT("左臂"), TEXT("右臂"), TEXT("左腿"), TEXT("右腿"), TEXT("左前臂"), TEXT("右前臂"), TEXT("左大腿"), TEXT("右大腿") };
+	TSharedRef<SWrapBox> JointBox = SNew(SWrapBox).UseAllottedSize(true);
+	JointBox->AddSlot().Padding(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("關節補正")), 10.f)];
+	for (int32 I = 0; I < 8; ++I)
+		JointBox->AddSlot().Padding(1.f)[Button(FText::FromString(Joints[I]), [this, I] { if (FOKSceneObject* X = Obj()) { X->Character.JointCorrection ^= 1 << I; Changed(); } }, 42.f, 17.f,
+			TAttribute<bool>::CreateLambda([this, I] { const FOKSceneObject* X = Obj(); return X && (X->Character.JointCorrection & (1 << I)); }), 10.f)];
+	JointBox->AddSlot().Padding(1.f)[Button(FText::FromString(TEXT("全部")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.JointCorrection = (X->Character.JointCorrection & 0xff) == 0xff ? 0 : 0xff; Changed(); } }, 42.f, 17.f,
+		TAttribute<bool>::CreateLambda([this] { const FOKSceneObject* X = Obj(); return X && (X->Character.JointCorrection & 0xff) == 0xff; }), 10.f)];
+	Props->AddSlot().AutoHeight()[JointBox];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("畫面上顯示骨點（點骨點用把手轉它）"), [this] { return bShowFkPoints; }, [this](bool B) { bShowFkPoints = B; })];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("用 3D 把手轉選中骨骼"), [this] { return Game.IsValid() && !Game->GuideBone.IsEmpty(); }, [this](bool B) { if (Game.IsValid()) { Game->GuideBone = B ? FkBone : FString(); if (B) Game->GuideIk = -1; } })];
 	auto Buttons = [this](std::initializer_list<TPair<const TCHAR*, TFunction<void()>>> List)

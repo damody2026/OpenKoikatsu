@@ -194,6 +194,8 @@ private:
 		TArray<FOKSceneFkBone> AppliedFk;
 		TArray<FOKSceneIkTarget> AppliedIk;
 		int32 AppliedFkPartsOff = 0, AppliedIkPartsOff = 0;
+		/** The joint correction categories the preview session runs (-1: not set yet, the session runs all). */
+		int32 AppliedJointCorrection = -1;
         TArray<FQuat> AppliedFixedNeck;
 		/** Studio animation loaded from the OK animation library (kept alive while shown). */
 		TStrongObjectPtr<UObject> StudioAnim;

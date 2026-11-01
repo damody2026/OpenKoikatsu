@@ -361,6 +361,7 @@ namespace
 			O->SetArrayField(TEXT("ik"), Ik);
 			O->SetNumberField(TEXT("fk_parts_off"), X->Character.FkPartsOff);
 			O->SetNumberField(TEXT("ik_parts_off"), X->Character.IkPartsOff);
+			O->SetNumberField(TEXT("joint_correction"), X->Character.JointCorrection);
 			O->SetArrayField(TEXT("look_point"), Vec(X->Character.LookPoint));
 			// What the character shows now (the actor's own state, not the document's): checks for the face and look controls.
 			O->SetNumberField(TEXT("face_eyes_open"), A->FaceOpen01[0]);

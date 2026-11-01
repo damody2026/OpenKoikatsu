@@ -748,7 +748,16 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 | U28 效能與小視窗 | `run_ok_studio_perf.lua` 只開一個 Unreal 時量；1280×720 視窗下逐窗檢查不出框 | 小視窗**已做**（下方記錄）；效能未量（等全機只剩一個 Unreal） |
 | U29 音效選單 | 左上「音效」主選單（第 3.1 節規格）只是空殼：Studio 背景音樂（BGMCtrl）與外部音源（OutsideSoundCtrl）的播放、循環、隨場景存讀，KStudio 場景帶進來 | **已做**（下方記錄）；KKS 的 Studio 沒有環境音清單（ENVCtrl 只讀過不用）；KKPE 外掛資料見記錄 |
 | U30 角色語音 | 角色選單的「語音」（第 3.8 節 `hs2/55_voice.png`）：性格→分類→語音三欄，加入角色的播放清單；清單的播放、停止、循環方式、移除、上移／下移、清空；角色說話時嘴型跟著動；KStudio 場景的 voiceCtrl 帶進來 | **已做**（下方記錄）；語音檔 1.9 GB 進 LFS，分三個提交（81159b7de、f13019417、4fb0b298c，各約 650 MB） |
-| U31 燈光細項 | 第 3.5 節：燈光作用對象（全部／角色／地圖）、內外錐角、陰影軟硬 | **已做**（下方記錄）；關節補正（KStudio 角色的 expression 旗標）要先查原作 Expression 類別才能對應，未排 |
+| U31 燈光細項 | 第 3.5 節：燈光作用對象（全部／角色／地圖）、內外錐角、陰影軟硬 | **已做**（下方記錄）；關節補正改由 U32 做 |
+| U32 關節補正 | 角色的關節補正（Studio `OICharInfo.expression`、`MPCharCtrl` 的 JointInfo）：查原作 ExpressionBone 的類別，對應 KStudio 存檔旗標，八個開關、存讀、匯入 | **已做**（下方記錄） |
+
+**U32 關節補正記錄（2026-11-01）**：
+
+- 原作：`ExpressionBone.EnableCategory` 有 10 類，0 左臂（ShoulderL、UpperarmL、ElboL、HandL）、1 右臂、2 左腿（LegL、KneeL、CalfL）、3 右腿、4 左前臂（ForearmL）、5 右前臂、6 左大腿（ThighL）、7 右大腿、8 胸（Bust、BustColDB）、9 飾品掛點（AcsNull）。Studio 的 `OICharInfo.expression` 是 8 個 bool（0.0.9 以前 4 個），預設全關；`AddObjectFemale／Male` 只對 0～7 呼叫 `EnableExpressionCategory`，胸與飾品掛點一直開著。
+- Rust：`pose::apply_expression_bone_masked(skel, mask)`，各分支照上面對應類別（ForearmL 寫 `cf_d_hand` 位置與 `cf_d_wrist`、HandL 寫 `cf_d_forearm02`；大腿扭轉是 6／7，膝與小腿是 2／3）。session 多 `expression_mask: Option<u16>`，C ABI `ok_session_set_expression_mask`（`FOkSession::SetExpressionMask`）。設定後不論動畫來源每幀都跑（原生 Studio 每個角色都有這個元件）；沒設定的路徑（Gallery、街區）照舊規則。原本 OK 卡的 session 沒有 game_root，ExpressionBone 從來沒在 OK Studio 跑過（見 ERROR_LOG）。測試 `expression_mask_runs_only_its_categories`。
+- 場景：`FOKSceneCharacter::JointCorrection`（位元 0～7），預設 0 = Studio 預設全關；舊 `.okscene` 沒有欄位也是 0，與以前顯示一致。場景物件把 `(JointCorrection & 0xff) | 0x300` 送進角色 session。KStudio 匯入讀 `expression` 陣列。FK 頁加「關節補正」一列：左臂、右臂、左腿、右腿、左前臂、右前臂、左大腿、右大腿、全部。控制通道 `bones` 回報 `joint_correction`，`patch` 用 `{"Character": {"JointCorrection": n}}`。
+- 統計：本機 7,652 個場景的角色旗標 `00000000` 26,145 個、`11111111` 12,152 個，其餘混合（`11001100` 1,233 個等）；14 個基礎庫樣本中 `koikatu_cs0000010` 同時有 0、3（`11000000`）、255。
+- 驗證：0010 匯入後六個角色各自的旗標正確；角色定格（Speed 0）後全開與全關的截圖平均差 1.88（同設定兩張 0.023），差異在手臂與腿的關節輪廓，沒有撕裂；FK 頁按鈕、存讀（0x55）一致；`ok_studio_ui_fit.lua`（1280×720）0 項、`check_ok_studio_buttons.lua` 97/97、`verify_ok_studio.lua` 全 PASS；`cargo check --release` 與 `--no-default-features`、遊戲 `OpenKoikatsu` 與編輯器 Development 連結成功。
 
 **U31 燈光細項記錄（2026-11-01）**：
 

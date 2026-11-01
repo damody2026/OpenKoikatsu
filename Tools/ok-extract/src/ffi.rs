@@ -252,6 +252,15 @@ pub unsafe extern "C" fn ok_session_set_studio_ik_weights(s: *mut OkSession, wei
     s.studio_ik_weights = w.to_vec();
     0
 }
+/// A Studio character's joint correction: ExpressionBone runs every frame with these categories, bit i =
+/// ExpressionCategory i (0..9; 0x3ff all), whatever the clip or source (Studio gives every character the component).
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_expression_mask(s: *mut OkSession, mask: u32) -> i32 {
+    let Some(s) = sess_ref(s) else { return -1; };
+    if mask > crate::pose::EXPRESSION_ALL as u32 { return -1; }
+    s.expression_mask = Some(mask as u16);
+    0
+}
 /// EyeLookCalc.LoadAngle for a source NO_LOOK pattern; validate before publishing runtime state.
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_set_studio_fixed_eyes(

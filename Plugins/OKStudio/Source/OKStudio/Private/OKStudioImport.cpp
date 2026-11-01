@@ -501,6 +501,12 @@ namespace
 				O->TryGetNumberField(TEXT("voice_repeat"), VoiceRepeat);
 				C.VoiceRepeat = FMath::Clamp(int32(VoiceRepeat), 0, 2);
 				C.bVoicePlay = !C.Voices.IsEmpty();
+				// Joint correction (OICharInfo.expression, one flag per ExpressionBone category; 4 in old scenes).
+				const TArray<TSharedPtr<FJsonValue>>* Expression = nullptr;
+				C.JointCorrection = 0;
+				if (O->TryGetArrayField(TEXT("expression"), Expression))
+					for (int32 I = 0; I < FMath::Min(Expression->Num(), 8); ++I)
+						if ((*Expression)[I]->AsBool()) C.JointCorrection |= 1 << I;
 				const TArray<TSharedPtr<FJsonValue>>* Anime = nullptr;
 				if (O->TryGetArrayField(TEXT("anime"), Anime) && Anime->Num() == 3 && (*Anime)[0]->AsNumber() >= 0)
 				{

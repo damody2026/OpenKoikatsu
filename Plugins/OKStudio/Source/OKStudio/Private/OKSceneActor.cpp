@@ -845,6 +845,17 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		}
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);
 	}
+	// Joint correction: the eight Studio categories, bust (8) and accessory follow (9) always on.
+	const int32 Joints = (C.JointCorrection & 0xff) | 0x300;
+	if (Joints != Item.AppliedJointCorrection)
+	{
+		if (Actor->Session.SetExpressionMask(uint32(Joints)))
+		{
+			Item.AppliedJointCorrection = Joints;
+			Actor->bUserPoseDirty = true;
+		}
+		else Errors.Add(Object.Id, TEXT("joint correction not applied"));
+	}
     const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Fixed ? C.FixedNeck : TArray<FQuat>();
     if (Neck != Item.AppliedFixedNeck)
     {

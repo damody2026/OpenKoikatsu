@@ -265,6 +265,12 @@ struct OKSTUDIO_API FOKSceneCharacter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	int32 IkPartsOff = 0;
 
+	/** Studio joint correction (関節補正, OICharInfo.expression): bit per ExpressionBone category, 0 left arm, 1 right arm,
+	 *  2 left leg, 3 right leg, 4 left forearm, 5 right forearm, 6 left thigh, 7 right thigh. Bust and accessory follow
+	 *  always run. Studio's default is all off (so are scenes from before the field: OK Studio ran none then). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 JointCorrection = 0;
+
 	/** Studio voice list (VoiceCtrl): played in order on the character, the mouth following the sound. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
 	TArray<FOKSceneVoice> Voices;

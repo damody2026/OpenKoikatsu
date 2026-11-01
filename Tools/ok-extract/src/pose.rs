@@ -691,9 +691,9 @@ fn translation_mat(x: f32, y: f32, z: f32) -> Mat4 {
 /// The game's skinned deform bones `cf_d_*` are re-driven every frame from the
 /// animated `cf_j_*` bones to stop the T-pose-bind shoulder/elbow collapse.
 pub fn apply_expression_bone_arms(skel: &mut Skeleton) {
-    apply_expression_bone_arms_impl(skel,true,false);
+    apply_expression_bone_arms_impl(skel,true,false,EXPRESSION_ALL);
 }
-fn apply_expression_bone_arms_impl(skel:&mut Skeleton,rebuild:bool,complete_snapshot:bool){
+fn apply_expression_bone_arms_impl(skel:&mut Skeleton,rebuild:bool,complete_snapshot:bool,mask:u16){
     let name2id=rig_name_index(skel,false);
     let mut world: std::collections::HashMap<i64, Mat4> = std::collections::HashMap::new();
     let needed=["cf_j_shoulder_L","cf_j_shoulder_R","cf_j_forearm01_L","cf_j_forearm01_R"];
@@ -705,6 +705,8 @@ fn apply_expression_bone_arms_impl(skel:&mut Skeleton,rebuild:bool,complete_snap
 
     // ---- Shoulder L/R: re-place cf_d_shoulder02_* from the forearm goal ----
     for &(side, is_left) in &[("L", true), ("R", false)] {
+        // Shoulder and upper arm belong to the arm category.
+        if !expression_on(mask, 0, is_left) { continue; }
         let arm = format!("cf_j_arm00_{side}");
         let dsh = format!("cf_d_shoulder02_{side}");
         let fore = format!("cf_j_forearm01_{side}");
@@ -928,11 +930,12 @@ pub(crate) fn world_rotation_of(id: i64, tfs: &std::collections::HashMap<i64, Tf
 /// game, and its local z offset uses sin((forearm_y - 1) * 0.006), not a
 /// linearized angle multiplied by sin(0.006).
 pub fn apply_expression_bone_elbows(skel: &mut Skeleton) {
-    apply_expression_bone_elbows_impl(skel,true);
+    apply_expression_bone_elbows_impl(skel,true,EXPRESSION_ALL);
 }
-fn apply_expression_bone_elbows_impl(skel:&mut Skeleton,rebuild:bool){
+fn apply_expression_bone_elbows_impl(skel:&mut Skeleton,rebuild:bool,mask:u16){
     let by_name=rig_name_index(skel,true);
     for (side, is_left) in [("L", true), ("R", false)] {
+        if !expression_on(mask, 0, is_left) { continue; }
         let find = |stem: &str| by_name.get(&format!("{stem}_{side}")).copied();
         let Some(fore) = find("cf_j_forearm01") else { continue };
         let y = quat_to_euler_deg(4, gt_rot(skel, fore))[1];
@@ -966,9 +969,9 @@ fn apply_expression_bone_elbows_impl(skel:&mut Skeleton,rebuild:bool){
 /// `ExpressionBone.LateUpdate` ForearmL/R and HandL/R. The wrist geometry
 /// uses world transforms; the forearm twist uses local hand rotation.
 pub fn apply_expression_bone_hands(skel: &mut Skeleton) {
-    apply_expression_bone_hands_impl(skel,true);
+    apply_expression_bone_hands_impl(skel,true,EXPRESSION_ALL);
 }
-fn apply_expression_bone_hands_impl(skel:&mut Skeleton,rebuild:bool){
+fn apply_expression_bone_hands_impl(skel:&mut Skeleton,rebuild:bool,mask:u16){
     let by_name=rig_name_index(skel,true);
     let mut world_cache = std::collections::HashMap::new();
     for (side, offset) in [("L", [-0.01, 0.01, 0.0]), ("R", [0.01, 0.01, 0.0])] {
@@ -976,6 +979,9 @@ fn apply_expression_bone_hands_impl(skel:&mut Skeleton,rebuild:bool){
         let Some(hand) = find("cf_j_hand") else {
             continue;
         };
+        // cf_d_hand / cf_d_wrist are the forearm category's (ForearmL/R), cf_d_forearm02 the arm's (HandL/R).
+        let is_left = side == "L";
+        if !expression_on(mask, 4, is_left) {} else
         if let (Some(fore), Some(mid)) = (find("cf_j_forearm01"), find("cf_j_middle01")) {
             let fore_world = world_of(fore, &skel.tfs, &mut world_cache);
             let hand_world = world_of(hand, &skel.tfs, &mut world_cache);
@@ -1022,7 +1028,7 @@ fn apply_expression_bone_hands_impl(skel:&mut Skeleton,rebuild:bool){
                 }
             }
         }
-        if let Some(dfore) = find("cf_d_forearm02") {
+        if let Some(dfore) = find("cf_d_forearm02").filter(|_| expression_on(mask, 0, is_left)) {
             let x = quat_to_euler_deg(5, gt_rot(skel, hand))[0];
             let mut euler = quat_to_euler_deg(5, gt_rot(skel, dfore));
             euler[0] = x * 0.45;
@@ -1039,9 +1045,10 @@ fn apply_expression_bone_hands_impl(skel:&mut Skeleton,rebuild:bool){
 /// The game's independent Bust and BustColDB branches update the breast
 /// deform bone and each collision helper from local spine/bust transforms.
 pub fn apply_expression_bone_bust(skel: &mut Skeleton) {
-    apply_expression_bone_bust_impl(skel,true);
+    apply_expression_bone_bust_impl(skel,true,EXPRESSION_ALL);
 }
-fn apply_expression_bone_bust_impl(skel:&mut Skeleton,rebuild:bool){
+fn apply_expression_bone_bust_impl(skel:&mut Skeleton,rebuild:bool,mask:u16){
+    if mask & 1 << 8 == 0 { return; }
     let by_name=rig_name_index(skel,true);
     if let (Some(&spine), Some(&deform)) =
         (by_name.get("cf_j_spine03"), by_name.get("cf_d_bust00"))
@@ -1073,13 +1080,14 @@ fn apply_expression_bone_bust_impl(skel:&mut Skeleton,rebuild:bool){
 /// Thigh twist reads cf_j_thigh00, while knee reads cf_j_leg01 and calf
 /// reads cf_j_leg03; they do not depend on the leg-position helper branch.
 pub fn apply_expression_bone_leg_twists(skel: &mut Skeleton) {
-    apply_expression_bone_leg_twists_impl(skel,true);
+    apply_expression_bone_leg_twists_impl(skel,true,EXPRESSION_ALL);
 }
-fn apply_expression_bone_leg_twists_impl(skel:&mut Skeleton,rebuild:bool){
+fn apply_expression_bone_leg_twists_impl(skel:&mut Skeleton,rebuild:bool,mask:u16){
     let by_name=rig_name_index(skel,true);
     for (side, is_left) in [("L", true), ("R", false)] {
         let find = |stem: &str| by_name.get(&format!("{stem}_{side}")).copied();
-        if let Some(thigh) = find("cf_j_thigh00") {
+        // Thigh twist is the thigh category; knee and calf the leg category.
+        if let Some(thigh) = find("cf_j_thigh00").filter(|_| expression_on(mask, 6, is_left)) {
             let y = quat_to_euler_deg(5, gt_rot(skel, thigh))[1];
             for (stem, coef) in [("cf_d_thigh01", 0.75), ("cf_d_thigh02", 0.5),
                 ("cf_d_thigh03", 0.25)] {
@@ -1090,6 +1098,7 @@ fn apply_expression_bone_leg_twists_impl(skel:&mut Skeleton,rebuild:bool){
                 }
             }
         }
+        if !expression_on(mask, 2, is_left) { continue; }
         if let Some(knee) = find("cf_j_leg01") {
             let x = quat_to_euler_deg(5, gt_rot(skel, knee))[0];
             // BoneName[9/12] is cf_s_kneeB; names do not describe the
@@ -1127,9 +1136,10 @@ fn apply_expression_bone_leg_twists_impl(skel:&mut Skeleton,rebuild:bool){
 /// `ExpressionBone.LateUpdate` AcsNull. BoneName index 61 is cf_j_head
 /// (source rotation) and index 60 is a_n_neck (accessory attachment target).
 pub fn apply_expression_bone_acs_null(skel: &mut Skeleton) {
-    apply_expression_bone_acs_null_impl(skel,true);
+    apply_expression_bone_acs_null_impl(skel,true,EXPRESSION_ALL);
 }
-fn apply_expression_bone_acs_null_impl(skel:&mut Skeleton,rebuild:bool){
+fn apply_expression_bone_acs_null_impl(skel:&mut Skeleton,rebuild:bool,mask:u16){
+    if mask & 1 << 9 == 0 { return; }
     let head = skel.tfs.iter().find(|(_, tf)| tf.name == "cf_j_head").map(|(id, _)| *id);
     let neck = skel.tfs.iter().find(|(_, tf)| tf.name == "a_n_neck").map(|(id, _)| *id);
     if let (Some(head), Some(neck)) = (head, neck) {
@@ -1145,24 +1155,40 @@ fn apply_expression_bone_acs_null_impl(skel:&mut Skeleton,rebuild:bool){
 /// Default enabled branches of the Studio ExpressionBone component.
 /// The scene factory decides whether this component exists at all.
 pub fn apply_expression_bone(skel: &mut Skeleton) {
+    apply_expression_bone_masked(skel, EXPRESSION_ALL);
+}
+
+/// ExpressionBone.ExpressionCategory bits: 0 left arm (shoulder, upper arm, elbow, hand), 1 right arm, 2 left leg
+/// (leg, knee, calf), 3 right leg, 4 left forearm, 5 right forearm, 6 left thigh, 7 right thigh, 8 bust, 9 accessory
+/// null. Studio's joint correction toggles (OICharInfo.expression) set 0..7; 8 and 9 stay on.
+pub const EXPRESSION_ALL: u16 = 0x3ff;
+/// Studio's character default: every joint correction off (OICharInfo.expression is all false), bust and
+/// accessory null on.
+pub const EXPRESSION_STUDIO_DEFAULT: u16 = 0x300;
+
+/// `apply_expression_bone` with only the categories of `mask` (EnableCategory).
+pub fn apply_expression_bone_masked(skel: &mut Skeleton, mask: u16) {
     // Branches read local transforms (or world_of snapshots from those locals),
     // never the display palette. Publish the identical final palette once.
-    apply_expression_bone_arms_impl(skel,false,false);
-    apply_expression_bone_elbows_impl(skel,false);
-    apply_expression_bone_hands_impl(skel,false);
-    apply_expression_bone_leg_positions_impl(skel,false,false);
-    apply_expression_bone_leg_twists_impl(skel,false);
-    apply_expression_bone_bust_impl(skel,false);
-    apply_expression_bone_acs_null_impl(skel,false);
+    apply_expression_bone_arms_impl(skel,false,false,mask);
+    apply_expression_bone_elbows_impl(skel,false,mask);
+    apply_expression_bone_hands_impl(skel,false,mask);
+    apply_expression_bone_leg_positions_impl(skel,false,false,mask);
+    apply_expression_bone_leg_twists_impl(skel,false,mask);
+    apply_expression_bone_bust_impl(skel,false,mask);
+    apply_expression_bone_acs_null_impl(skel,false,mask);
     skel.rebuild_worlds();
 }
+
+/// Whether category `category` (left side; +1 for the right) is on in `mask`.
+fn expression_on(mask: u16, category: u16, is_left: bool) -> bool { mask & (1 << (category + if is_left { 0 } else { 1 })) != 0 }
 
 /// LegL/R use a calculation Transform with thigh WORLD position and waist
 /// WORLD rotation, then the helpers created by ExpressionBone.Initialize.
 pub fn apply_expression_bone_leg_positions(skel: &mut Skeleton) {
-    apply_expression_bone_leg_positions_impl(skel,true,false);
+    apply_expression_bone_leg_positions_impl(skel,true,false,EXPRESSION_ALL);
 }
-fn apply_expression_bone_leg_positions_impl(skel:&mut Skeleton,rebuild:bool,complete_snapshot:bool){
+fn apply_expression_bone_leg_positions_impl(skel:&mut Skeleton,rebuild:bool,complete_snapshot:bool,mask:u16){
     use std::collections::HashMap;
     let name2id=rig_name_index(skel,false);
     let mut world: HashMap<i64, Mat4> = HashMap::new();
@@ -1179,6 +1205,7 @@ fn apply_expression_bone_leg_positions_impl(skel:&mut Skeleton,rebuild:bool,comp
     if let (Some(i_nh), Some(i_waist)) = (get("cf_n_height"), get("cf_j_waist02")) {
         let nheight = gt_scale(skel, i_nh)[1].max(1e-6);
         for &(side, is_left) in &[("L", true), ("R", false)] {
+            if !expression_on(mask, 2, is_left) { continue; }
             let (Some(i_thigh), Some(i_leg01)) =
                 (get(&format!("cf_j_thigh00_{side}")), get(&format!("cf_j_leg01_{side}")))
             else {
@@ -1273,9 +1300,9 @@ fn expression_sparse_snapshot_and_single_publish_match_legacy(){
         // The original branch sequence: whole-rig snapshots and publication
         // after each correction, using the unchanged correction formulas.
         let start=std::time::Instant::now();
-        apply_expression_bone_arms_impl(&mut old,true,true);
+        apply_expression_bone_arms_impl(&mut old,true,true,EXPRESSION_ALL);
         apply_expression_bone_elbows(&mut old);apply_expression_bone_hands(&mut old);
-        apply_expression_bone_leg_positions_impl(&mut old,true,true);
+        apply_expression_bone_leg_positions_impl(&mut old,true,true,EXPRESSION_ALL);
         apply_expression_bone_leg_twists(&mut old);apply_expression_bone_bust(&mut old);apply_expression_bone_acs_null(&mut old);
         old_ns+=start.elapsed().as_nanos();
         let start=std::time::Instant::now();apply_expression_bone(&mut new);new_ns+=start.elapsed().as_nanos();
@@ -2242,6 +2269,39 @@ fn expression_leg_twists_read_their_own_source_bones() {
     apply_expression_bone_leg_twists(&mut skel);
     assert!((quat_to_euler_deg(5, gt_rot(&skel, 4))[1] + 30.0).abs() < 1e-3,
         "thigh twist must not require a knee source");
+}
+
+#[cfg(test)]
+#[test]
+fn expression_mask_runs_only_its_categories() {
+    // Studio's joint correction toggles: the thigh (6) and leg (2) categories of the left side, separately.
+    let identity = [0.0, 0.0, 0.0, 1.0];
+    let rig = || {
+        let mut tfs = std::collections::HashMap::new();
+        for (id, name, rot) in [
+            (1, "cf_j_thigh00_L", euler_order_to_quat(5, 0.0, 40.0, 0.0)),
+            (2, "cf_j_leg01_L", euler_order_to_quat(5, 30.0, -25.0, 0.0)),
+            (3, "cf_d_thigh01_L", identity),
+            (4, "cf_s_kneeB_L", identity),
+        ] {
+            tfs.insert(id, Tf { sibling_index: None, name: name.into(), parent: None, pos: [0.0; 3], rot, scale: [1.0; 3] });
+        }
+        Skeleton { names: Vec::new(), worlds: Vec::new(), rest: Vec::new(), smr_count: 4, tfs: tfs.into(), bone_ids: (1..=4).collect(), source_mesh: 0 }
+    };
+    let thigh = |s: &Skeleton| quat_to_euler_deg(5, gt_rot(s, 3))[1];
+    let knee = |s: &Skeleton| quat_to_euler_deg(5, gt_rot(s, 4))[0];
+    let mut off = rig();
+    apply_expression_bone_masked(&mut off, EXPRESSION_STUDIO_DEFAULT);
+    assert!(thigh(&off).abs() < 1e-3 && knee(&off).abs() < 1e-3, "Studio's default runs no joint correction");
+    let mut legs = rig();
+    apply_expression_bone_masked(&mut legs, EXPRESSION_STUDIO_DEFAULT | 1 << 2);
+    assert!(thigh(&legs).abs() < 1e-3 && (knee(&legs) + 15.0).abs() < 1e-3, "left leg: knee only");
+    let mut thighs = rig();
+    apply_expression_bone_masked(&mut thighs, EXPRESSION_STUDIO_DEFAULT | 1 << 6);
+    assert!((thigh(&thighs) + 30.0).abs() < 1e-3 && knee(&thighs).abs() < 1e-3, "left thigh: twist only");
+    let mut right = rig();
+    apply_expression_bone_masked(&mut right, EXPRESSION_STUDIO_DEFAULT | 1 << 3 | 1 << 7);
+    assert!(thigh(&right).abs() < 1e-3 && knee(&right).abs() < 1e-3, "right-side bits leave the left alone");
 }
 
 #[cfg(test)]

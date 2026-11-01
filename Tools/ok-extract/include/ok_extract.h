@@ -87,6 +87,8 @@ int32_t ok_session_set_studio_ik(OkSession* s,const int32_t* effectors,const flo
 int32_t ok_session_set_studio_ik_pose(OkSession* s,const int32_t* effectors,const float* positions,const float* rotations,const uint8_t* enabled,int32_t count);
 /* Studio IK weights 0..1, one per target of the last set_studio_ik(_pose) call (in its order); count 0: all 1. */
 int32_t ok_session_set_studio_ik_weights(OkSession* s,const float* weights,int32_t count);
+/* Studio joint correction: ExpressionBone categories to run, bit i = ExpressionCategory i (0..9; 0x3ff all). */
+int32_t ok_session_set_expression_mask(OkSession* s,uint32_t mask);
 int32_t ok_session_set_studio_fixed_neck(OkSession* s,const float* rotations,int32_t count);
 /* SaveAngle order: QL(4), QR(4), H0,H1,V0,V1; accepts only source NO_LOOK patterns. */
 int32_t ok_session_set_studio_fixed_eyes(OkSession* s,const float* values,int32_t count,int32_t pattern,float* out_rates);
