@@ -129,6 +129,9 @@ pub struct Traits {
     /// one gets a fixed value from her name there).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub libido: Option<i32>,
+    /// 陰部脆弱: she bleeds a little after a long session (ok-rules hexp.rs discharge; user 2026-11-01).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub vagina_fragile: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -373,11 +376,12 @@ impl Profiles {
         let text = std::fs::read_to_string(&path).map_err(|e| format!("profile_unreadable: {e}"))?;
         let mut p: Profile = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("profile_invalid: {e}"))?;
         // Her design settings are the shipped profile's, not the save's (a save from before they were written has none):
-        // her appetite (satiety_max) and 病嬌 (traits.yandere).
+        // her appetite (satiety_max), 病嬌 (traits.yandere) and 陰部脆弱 (traits.vagina_fragile).
         if let Some(shipped) = self.seed.as_ref().map(|d| d.join(file_name(id))).filter(|s| s.exists() && *s != path) {
             if let Some(s) = std::fs::read_to_string(&shipped).ok().and_then(|t| serde_json::from_str::<Profile>(t.trim_start_matches('\u{feff}')).ok()) {
                 if s.satiety_max.is_some() { p.satiety_max = s.satiety_max; }
                 p.traits.yandere = s.traits.yandere;
+                p.traits.vagina_fragile = s.traits.vagina_fragile;
             }
         }
         if p.money.currency != "CNY" {

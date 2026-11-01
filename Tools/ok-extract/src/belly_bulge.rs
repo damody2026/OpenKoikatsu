@@ -1,18 +1,18 @@
 //! Belly bulge morphs for the H scene: where his penis presses out through her belly (or her back) the game swells
 //! the skin there instead of letting it come through. Made once on opening a female body: a grid of round swells
-//! "belly.bulge.<side><height><across>", on her front, back, left and right (f b l r), at eight heights from her upper thighs and just under her
-//! crotch (her pubic mound and perineum) to her upper spine and three places across that side (front and back: her
+//! "belly.bulge.<side><height><across>", on her front, back, left and right (f b l r), at six heights on her belly, from just over her
+//! crotch to her upper spine and three places across that side (front and back: her
 //! middle and her groins 5.5 cm to each side; left and right: 5 cm before and behind her middle), each `BULGE_M` out
 //! along the skin at weight 100. The scene asks `past` where his glans is against her skin now and drives
 //! the one swell that moves that skin most (UOKHScenePanel::BulgeBelly). Skin on her breasts, arms, head and lower legs
-//! stays.
+//! stays, and so does skin on her thighs.
 use crate::pose::{mat_inv_pub, mat_mul_pub, Mat4};
 use crate::session::{OkSession, SessionPart};
 use std::collections::HashMap;
 
-/// Where the swells are along her crotch-to-upper-spine line (fractions of it; below 0 is under her crotch: -0.4 and -0.2
-/// her upper thighs, where his glans comes out when she lies curled on her side).
-const HEIGHTS: [f32; 8] = [-0.4, -0.2, -0.05, 0.05, 0.15, 0.28, 0.42, 0.58];
+/// Where the swells are along her crotch-to-upper-spine line (fractions of it): her belly only, from just over her
+/// crotch up (user 2026-11-01: the swells under it, on her upper thighs and by her entrance, moved her thighs).
+const HEIGHTS: [f32; 6] = [0.05, 0.15, 0.25, 0.35, 0.46, 0.58];
 /// Where across her front and back (metres from her middle), and across her sides (metres before her middle).
 const ACROSS: [f32; 3] = [-0.055, 0.0, 0.055];
 const ALONG_SIDE: [f32; 3] = [-0.05, 0.0, 0.05];
@@ -27,6 +27,19 @@ const SMOOTH_M: f32 = 0.03;
 /// Bones whose skin never swells (part of a name): a straight clip leaves her low, at the groin, where the skin is on
 /// her waist and thigh bones, so those are not limited. Her own hidden penis mesh (dan bones) is not her skin.
 const STILL: [&str; 12] = ["bust", "arm", "hand", "head", "neck", "shoulder", "leg02", "leg03", "foot", "toe", "knee", "dan"];
+/// Her thighs (part of a name): their skin never swells. A swell made with her legs straight moved her thighs with it
+/// once they were drawn up over her belly or spread by her entrance (大張腿, 抬腿朝天; user 2026-11-01, plain from the
+/// front), even at her groin.
+const THIGH: [&str; 2] = ["thigh", "leg01"];
+/// Her opening around him (user 2026-11-01: it opens and closes with him): the morph `OPEN` parts the skin at her
+/// entrance to either side, `OPEN_M` at its middle at weight 100, fading over `OPEN_ROUND_M` around it. The scene drives it
+/// with his stroke (UOKHScenePanel::BulgeBelly), on bodies without an opening of their own (`OWN_OPEN`; the BP bodies open
+/// with their cf_J_Vagina bones instead).
+pub const OPEN: &str = "kokan.open";
+/// The opening some bodies carry themselves (the SAC uncensor bodies), used instead of `OPEN`.
+pub const OWN_OPEN: &str = "vagina.open";
+const OPEN_M: f32 = 0.011;
+const OPEN_ROUND_M: f32 = 0.016;
 
 fn point(m: &Mat4, p: [f32; 3]) -> [f32; 3] { std::array::from_fn(|i| m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3]) }
 fn translation(m: &Mat4) -> [f32; 3] { [m[0][3], m[1][3], m[2][3]] }
@@ -36,17 +49,18 @@ fn is_bulge(n: &std::ffi::CString) -> bool { n.to_bytes().starts_with(b"belly.bu
 pub fn name(side: char, k: usize, across: usize) -> String { format!("belly.bulge.{side}{k}{across}") }
 
 /// The skin matrix of vertex `j` (palette blended by its weights) and how much of it is on bones that swell.
-fn skin_of(part: &SessionPart, j: usize, worlds: &[Mat4], binds: &[Mat4], still: &[bool]) -> Option<(Mat4, f32)> {
+fn skin_of(part: &SessionPart, j: usize, worlds: &[Mat4], binds: &[Mat4], still: &[bool], thigh: &[bool]) -> Option<(Mat4, f32, f32)> {
     let (indices, weights) = (part.bone_idx.get(j)?, part.weights.get(j)?);
-    let mut free = 1.0f32;
+    let mut free = 1.0f32;let mut on_thigh = 0.0f32;
     let mut skin = [[0.0f32; 4]; 4];
     for (b, w) in indices.iter().zip(weights) {
         let b = *b as usize;if *w <= 0. || b >= worlds.len() { continue; }
         if still.get(b) == Some(&true) { free -= *w; }
+        if thigh.get(b) == Some(&true) { on_thigh += *w; }
         let m = mat_mul_pub(&worlds[b], &binds[b]);
         for r in 0..4 { for c in 0..4 { skin[r][c] += m[r][c] * w; } }
     }
-    Some((skin, free))
+    Some((skin, free, on_thigh))
 }
 
 /// Adds the targets to her body part once; true when added (the skeleton export is then rebuilt with them).
@@ -58,6 +72,7 @@ pub fn add(session: &mut OkSession) -> bool {
     // Her crotch to her upper spine in the bind pose (she faces +z): the heights the swells are at.
     let (Some(kokan), Some(top)) = (at("cf_j_kokan").or_else(|| at("cf_J_Kokan")), at("cf_j_spine02")) else { return false; };
     let still: Vec<bool> = rest.names.iter().map(|n| { let n = n.to_ascii_lowercase(); STILL.iter().any(|s| n.contains(s)) }).collect();
+    let thigh: Vec<bool> = rest.names.iter().map(|n| { let n = n.to_ascii_lowercase(); THIGH.iter().any(|s| n.contains(s)) }).collect();
     let mut added = false;
     for part in session.parts.iter_mut() {
         if part.role != "body" || part.skel_kind != 1 || part.runtime_accessory.is_some() { continue; }
@@ -68,9 +83,10 @@ pub fn add(session: &mut OkSession) -> bool {
         struct Vert { j: usize, p: [f32; 3], n: [f32; 3], inv: Mat4, free: f32 }
         let mut verts = Vec::new();
         for j in 0..part.rest_positions.len() {
-            let Some((skin, free)) = skin_of(part, j, &worlds, &binds, &still) else { continue; };
-            if free <= 0.01 { continue; }
+            let Some((skin, free, on_thigh)) = skin_of(part, j, &worlds, &binds, &still, &thigh) else { continue; };
             let p = point(&skin, part.rest_positions[j]);
+            let free = free - on_thigh;
+            if free <= 0.01 { continue; }
             let o = point(&skin, [0.; 3]);
             let n = part.rest_normals.get(j).map(|v| { let v = point(&skin, *v); [v[0] - o[0], v[1] - o[1], v[2] - o[2]] }).unwrap_or([0., 0., 1.]);
             verts.push(Vert { j, p, n, inv: mat_inv_pub(&skin), free });
@@ -130,6 +146,19 @@ pub fn add(session: &mut OkSession) -> bool {
                 }
             }
         }
+        // Her entrance parted: each side of her middle (x) away from it, most at her entrance, nothing at her middle line.
+        let mut open = Vec::new();
+        for v in &verts {
+            let d = [v.p[0] - kokan[0], v.p[1] - kokan[1], v.p[2] - kokan[2]];
+            let r2 = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) / (OPEN_ROUND_M * OPEN_ROUND_M);if r2 > 9. { continue; }
+            let side = (d[0] / 0.004).clamp(-1., 1.);
+            let push = OPEN_M * (-0.5 * r2).exp() * side * v.free.min(1.);if push.abs() < 1e-5 { continue; }
+            let local = point(&v.inv, [v.p[0] + push, v.p[1], v.p[2]]);let base = part.rest_positions[v.j];
+            open.push((v.j as u32, [local[0] - base[0], local[1] - base[1], local[2] - base[2]]));
+        }
+        // A body with its own opening (SAC bodies: vagina.open) opens with that one, not this.
+        let own = part.blend_shapes.iter().any(|(n, _)| n.to_bytes() == OWN_OPEN.as_bytes());
+        if !own && !open.is_empty() { targets.push((OPEN.to_string(), open)); }
         for (target, deltas) in targets {
             part.morph_idx.push(deltas.iter().map(|(i, _)| *i).collect());
             part.morph_dxyz.push(deltas.iter().flat_map(|(_, d)| *d).collect());
@@ -214,7 +243,7 @@ pub fn penis_tip(session: &OkSession) -> Option<[f32; 3]> {
     if worlds.is_empty() { return None; }
     let mut best: Option<(f32, [f32; 3])> = None;
     for j in 0..part.rest_positions.len() {
-        let Some((skin, _)) = skin_of(part, j, &worlds, &binds, &[]) else { continue; };
+        let Some((skin, _, _)) = skin_of(part, j, &worlds, &binds, &[], &[]) else { continue; };
         let p = point(&skin, part.rest_positions[j]);
         let d = (p[0] - root[0]).powi(2) + (p[1] - root[1]).powi(2) + (p[2] - root[2]).powi(2);
         if best.map_or(true, |(b, _)| d > b) { best = Some((d, p)); }
@@ -240,7 +269,7 @@ pub fn past(session: &OkSession, tip: [f32; 3]) -> Option<(f32, f32, String, f32
         for (j, _) in deltas {
             let j = *j as usize;
             if !seen.insert(j) { continue; }
-            let Some((skin, _)) = skin_of(part, j, &worlds, &binds, &[]) else { continue; };
+            let Some((skin, _, _)) = skin_of(part, j, &worlds, &binds, &[], &[]) else { continue; };
             let p = point(&skin, part.rest_positions[j]);
             let d = [tip[0] - p[0], tip[1] - p[1], tip[2] - p[2]];
             let dist = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];

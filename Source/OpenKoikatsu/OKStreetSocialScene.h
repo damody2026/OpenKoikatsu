@@ -622,6 +622,7 @@ private:
  void TickSolo();
  void EndSolo();
  void TickRestroom();
+ void TickArousal(float Dt); // her desire past 100: flushed, and near him dripping (OKStreetSocialArousal.inl)
  void EndRestroom(bool Returned);
  void DestroyStreetPlaces();
  TArray<FVector> PlaceRoute(const FVector& From,const FVector& To) const;

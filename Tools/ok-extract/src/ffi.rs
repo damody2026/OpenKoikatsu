@@ -1079,8 +1079,12 @@ unsafe fn animation_pair_frame_impl(female:*mut OkSession,male:*mut OkSession,ti
         let contacts={let _trace=crate::native_profile::Scope::new(2);crate::h_playback::apply_contacts_prepared_with_policy(female,male,&state,setups,false,true,dt)?};
         // Studio IK once more after the contacts: MotionIK solves the whole body again and took back the knees that held
         // feet bend (one-on-one fitting of different heights keeps the taller one's feet on the floor).
-        // His FK (his penis root turned toward her belly, belly_bulge::aim_penis) over what the contacts set.
-        if let Some(sk)=male.body_skel.as_mut() {if crate::session::apply_user_fk_locals(sk,&male.user_fk,&mut male.user_fk_ids){sk.rebuild_worlds();}}
+        // His FK (his penis root turned toward her belly, belly_bulge::aim_penis) and hers (her body trembling as she comes,
+        // OKHScene) over what the contacts set.
+        for s in [&mut *female,&mut *male] {
+            if s.user_fk.is_empty() {continue;}
+            if let Some(sk)=s.body_skel.as_mut() {if crate::session::apply_user_fk_locals(sk,&s.user_fk,&mut s.user_fk_ids){sk.rebuild_worlds();}}
+        }
         for s in [&mut *female,&mut *male] {
             if s.studio_ik.is_empty() {continue;}
             if let Some(sk)=s.body_skel.as_mut() {crate::session::apply_studio_ik(sk,&mut s.studio_ik_solver,&s.studio_ik,&s.studio_ik_rotations,&s.studio_ik_weights);}

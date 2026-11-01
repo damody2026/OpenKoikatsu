@@ -24,6 +24,7 @@ mod finalik;
 mod point_contact;
 mod h_playback;
 pub use h_playback::h_pose_table;
+pub use h_playback::h_breath_table;
 mod list;
 pub mod lowpoly;
 pub mod vertcolor;

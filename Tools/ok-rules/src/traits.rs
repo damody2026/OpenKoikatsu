@@ -20,9 +20,17 @@ pub struct Traits {
     pub difficulty: i32,
     /// traits.yandere (病嬌), or the card's own personality 病嬌 (profile personality 24).
     pub yandere: bool,
-    /// traits.libido (her own sex drive, fixed): how fast her desire for him (relation sex_desire) grows. A profile
-    /// made before it had one gets a fixed value from her name (20..80), the same every time.
+    /// traits.libido (her own sex drive): how fast her desire for him (relation sex_desire) grows. A profile made
+    /// before it had one gets a fixed value from her name (20..80), the same every time. The profile's libido_gain
+    /// (what she gained past ten climaxes a day, hexp.rs) is added on top.
     pub libido: i32,
+    /// traits.vagina_fragile (陰部脆弱): she bleeds a little after a long session (hexp.rs discharge).
+    pub vagina_fragile: bool,
+    /// traits.hymen_regen (處女膜再生): her hymen grows back, so she bleeds as the first time each scene; traits.
+    /// hymen_stretched: it is already stretched, no blood the first time. Both from her card (KK_SkinEffects), set
+    /// on her profile by the street (OKStreetApplyHerExtras).
+    pub hymen_regen: bool,
+    pub hymen_stretched: bool,
 }
 
 impl Default for Traits {
@@ -43,6 +51,9 @@ impl Default for Traits {
             difficulty: 0,
             yandere: false,
             libido: 50,
+            vagina_fragile: false,
+            hymen_regen: false,
+            hymen_stretched: false,
         }
     }
 }
@@ -54,6 +65,14 @@ fn round(v: f64) -> i32 {
 
 impl Traits {
     pub fn from_profile(profile: &Value) -> Traits {
+        let mut t = Traits::authored(profile);
+        if let Some(g) = profile.get("libido_gain").and_then(Value::as_f64).filter(|v| v.is_finite()) {
+            t.libido = (t.libido + round(g)).clamp(0, 100);
+        }
+        t
+    }
+
+    fn authored(profile: &Value) -> Traits {
         let mut t = Traits::default();
         // Koikatsu's personality 24 is 病嬌 (the card's own, when the request carries it).
         t.yandere = profile.get("personality").and_then(Value::as_i64) == Some(24);
@@ -65,6 +84,10 @@ impl Traits {
         }
         let Some(traits) = profile.get("traits").filter(|v| v.is_object()) else { return t };
         if traits.get("yandere").and_then(Value::as_bool).unwrap_or(false) { t.yandere = true; }
+        let flag = |name: &str| traits.get(name).and_then(Value::as_bool).unwrap_or(false);
+        t.vagina_fragile = flag("vagina_fragile");
+        t.hymen_regen = flag("hymen_regen");
+        t.hymen_stretched = flag("hymen_stretched");
         let get = |name: &str, out: &mut i32| {
             if let Some(v) = traits.get(name).and_then(Value::as_f64).filter(|v| v.is_finite()) {
                 *out = round(v).clamp(0, 100);
@@ -107,6 +130,10 @@ mod tests {
         assert!((20..=80).contains(&a.libido));
         let set = super::Traits::from_profile(&serde_json::json!({"display_name": "惠惠", "traits": {"libido": 95}}));
         assert_eq!(set.libido, 95, "a profile's own value wins");
+        let gained = super::Traits::from_profile(&serde_json::json!({"traits": {"libido": 95}, "libido_gain": 3}));
+        assert_eq!(gained.libido, 98, "what she gained adds to it");
+        let capped = super::Traits::from_profile(&serde_json::json!({"traits": {"libido": 99}, "libido_gain": 7}));
+        assert_eq!(capped.libido, 100);
     }
 
     use super::*;

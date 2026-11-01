@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+/// Her desire for him (sex_desire) goes up to 200 (user, 2026-11-01): past 100 the street shows her flushed and wet near
+/// him (OKStreetSocialArousal.inl).
+pub const SEX_DESIRE_MAX: f32 = 200.0;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct Relation {
@@ -14,6 +18,7 @@ pub struct Relation {
     pub stage: String,
     pub talks_remaining: i32,
     pub day: i32,
+    /// Her desire for him, 0..SEX_DESIRE_MAX.
     pub sex_desire: f32,
     pub topic_points: f32,
     // Axes 0..100, written only by rules.

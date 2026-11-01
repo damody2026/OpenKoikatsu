@@ -174,7 +174,7 @@ void AOKStreetSocialScene::TickCalendarAndMind(){
    if(Kind==TEXT("reflect")){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_MindReflectResult);HandleReflect(R);continue;}
    if(Kind==TEXT("note"))continue;
    {FString Tag;if(Kind==TEXT("chat")&&R->TryGetStringField(TEXT("tag"),Tag)&&Tag.StartsWith(TEXT("overheard:"))){TArray<FString> P;Tag.ParseIntoArray(P,TEXT(":"));if(P.Num()==3){HandleOverheard(R,FCString::Atoi(*P[1]),FCString::Atoi(*P[2]));continue;}}}
-   if(Kind==TEXT("profile")){const TSharedPtr<FJsonObject>* Profile=nullptr;FString Heroine;if(R->TryGetStringField(TEXT("heroine"),Heroine)&&R->TryGetObjectField(TEXT("profile"),Profile)){S.MindProfiles.Add(Heroine,*Profile);InitWalletFromProfile(Heroine,*Profile);InitStrangerCap(Heroine,*Profile);if(S.PlannedWithoutProfiles&&MindProfilesReady()){S.PlannedWithoutProfiles=false;S.PlanDay=-1;UE_LOG(LogTemp,Display,TEXT("Street plan: the profiles came; today planned again"));}}}
+   if(Kind==TEXT("profile")){const TSharedPtr<FJsonObject>* Profile=nullptr;FString Heroine;if(R->TryGetStringField(TEXT("heroine"),Heroine)&&R->TryGetObjectField(TEXT("profile"),Profile)){S.MindProfiles.Add(Heroine,*Profile);OKStreetApplyHerExtras(S,Heroine);InitWalletFromProfile(Heroine,*Profile);InitStrangerCap(Heroine,*Profile);if(S.PlannedWithoutProfiles&&MindProfilesReady()){S.PlannedWithoutProfiles=false;S.PlanDay=-1;UE_LOG(LogTemp,Display,TEXT("Street plan: the profiles came; today planned again"));}}}
    if(Kind==TEXT("profile")){bool Generated=false;R->TryGetBoolField(TEXT("generated"),Generated);FString Who,Why;R->TryGetStringField(TEXT("heroine"),Who);R->TryGetStringField(TEXT("error"),Why);UE_LOG(LogTemp,Display,TEXT("StreetSocial mind profile %s: %s%s"),*Who,Why.IsEmpty()?(Generated?TEXT("generated"):TEXT("loaded")):TEXT("failed "),*Why);continue;}
    FString Text;FJsonSerializer::Serialize(R.ToSharedRef(),TJsonWriterFactory<TCHAR,TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text));
    UE_LOG(LogTemp,Display,TEXT("StreetSocial mind result: %s"),*Text.Left(600));
@@ -353,6 +353,8 @@ void AOKStreetSocialScene::FillMindStatus(int32 Character,FOKFreeTalkStatus& Sta
  if(Mind.IsValid())Status.Needs=Mind->GetStringField(TEXT("needs_text"));
  // Her spirits (R3-269), in a word: in the turn's own status, not the cached prefix. Her usual self says nothing.
  {const FString Band=OKStreetMoodBand(MoodNow(Character));if(Band!=TEXT("usual"))Status.Needs+=OKMsg(TEXT("ui.mind.spirits_status"),{{TEXT("band"),Band}});}
+ // What runs out of her and how wet she is (OKStreetSocialArousal.inl): she feels it, so he may say so and she knows.
+ if(!Apart)Status.Needs+=OKStreetBodyWetStatus(S,Character,OKStreetMindNow(S));
  if(const FString* Recent=S.MindRecent.Find(Id)){Status.Recent=*Recent;S.MindRecent.Remove(Id);}
  TArray<FOKStreetPendingChoice> Mine;for(const auto& C:S.Choices)if(C.Heroine==Character)Mine.Add(C);
  Status.Choices=OKStreetChoiceBlock(Mine,SceneTime());
@@ -656,6 +658,7 @@ void AOKStreetSocialScene::ApplyMindExpression(int32 Character,const FString& Em
  FString Error;
  if(OKSetCrowdRuntimeFaceExpression(this,Character,State2,Blink,Error))UE_LOG(LogTemp,Display,TEXT("Street mind expression: actor=%d emotion=%s face=%s%s"),Character,*Emotion,*Name,*Parts);
  FOKRuntimeFaceLook Look;Look.Blush=Reply&&Reply->FaceBlush>=0.f?Reply->FaceBlush:Expression->Blush;
+ if(Character>=0&&Character<OKStreetCastCount)Look.Blush=FMath::Max(Look.Blush,S.ArousalBlush[Character]); // her desire past 100 keeps her flushed (TickArousal)
  // Her tears on her face: welling up shows the small drops, crying the large streams (the source's tearsLv 1 / 3);
  // without a word on it, what the expression itself carries.
  Look.Tears=Tears>=0?(Tears>=2?3:Tears):Expression->Tears;Look.Sweat=Reply&&Reply->FaceSweat>=0.f?Reply->FaceSweat:0.f;

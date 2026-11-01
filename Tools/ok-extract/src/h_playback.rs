@@ -958,6 +958,86 @@ mod tests {
 /// Every authored pose's scene metadata (AnimationListInfo, HSceneProc.cs:116) for the one-on-one H scene: which menu it
 /// sits in (mode from AnimationInfo_XX, kindHoushi hand/mouth/breast), whether its female base allows anal, the
 /// experience it needs (isExperience, stateRestriction), who leads, and the clothes it puts her in. One JSON array.
+/// The original H breathing tables as HVoiceCtrl loads them (abdata/h/list): breath_XX_00 (mode XX: per animation
+/// state, which voices under which conditions, and which experience bank, "state"), personality_breath_cNN (each
+/// voice's file in the four banks, HExperience 初めて / 不慣れ / 慣れ / 淫乱, and its faces), HFaceList (mouths) and
+/// AnimationInfo's main voice. Later bundles in name order override the same key, as the game's sorted load does.
+/// With them the intercourse voice table (voice_03_00, the rows HSonyu plays as 300 + row: 325 her climax in the slow
+/// loop, 326 in the fast one) and each personality's files for it in the four banks (personality_voice_cNN mode 3):
+/// her cries come from there (the spoken lines are the scene's own TTS).
+/// The json the gallery and the one-on-one room read (KKHvoice.cpp, h_breath_index.json).
+pub fn h_breath_table(game:&Path)->String {
+    let Ok(paths)=catalogue_paths(game) else{return "{}".into();};
+    let int=|v:Option<&UnityValue>|v.and_then(|v|v.as_i64().or_else(||v.as_bool().map(i64::from))).unwrap_or(0);
+    let ints=|v:Option<&UnityValue>|->Vec<i64>{v.and_then(|v|v.as_array()).map(|a|a.iter().filter_map(|x|x.as_i64()).collect()).unwrap_or_default()};
+    let num=|s:&str|s.parse::<i64>().ok();
+    let (mut patterns,mut clips,mut mouths,mut main_voice)=(std::collections::BTreeMap::new(),std::collections::BTreeMap::new(),std::collections::BTreeMap::new(),std::collections::BTreeMap::new());
+    let (mut voices,mut voice_clips)=(std::collections::BTreeMap::new(),std::collections::BTreeMap::new());
+    const VOICE_TABLE:i64=3;
+    for path in &paths {
+        let Ok(bytes)=crate::gamefs::read(path) else {continue;};
+        let parsed=crate::unity::parse_bundle_cached(bytes);
+        parsed.with_serialized(|files|for file in files {for info in file.objects_of_type(114) {
+            let Ok(obj)=UnityObject::from_serialized_file(file,&info) else {continue;};
+            let Some(name)=obj.name() else {continue;};
+            let Some(list)=obj.class.properties().get("param").and_then(|v|v.as_array()) else {continue;};
+            if let Some(mode)=name.strip_prefix("breath_").and_then(|r|r.strip_suffix("_00")).and_then(num) {
+                for row in list {
+                    let anim=text(field(row,"anim"));if anim.is_empty(){continue;}
+                    let infos:Vec<_>=field(row,"lstInfo").and_then(|v|v.as_array()).map(|a|a.iter().map(|i|serde_json::json!({
+                        "ids":ints(field(i,"lstAnimID")),"cond":ints(field(i,"lstConditions")),"voices":ints(field(i,"lstVoice")),"state":int(field(i,"state")),
+                    })).collect()).unwrap_or_default();
+                    patterns.insert((mode,anim.clone()),serde_json::json!({"m":mode,"anim":anim,"info":infos}));
+                }
+            } else if let Some(personality)=name.strip_prefix("personality_breath_c").and_then(|r|r.get(..2)).and_then(num) {
+                for row in list {
+                    let mode=field(row,"mode").and_then(|v|v.as_i64()).unwrap_or(-1);
+                    for datum in field(row,"data").and_then(|v|v.as_array()).map(|a|a.as_slice()).unwrap_or(&[]) {
+                        let banks:Vec<&UnityValue>=field(datum,"info").and_then(|v|v.as_array()).map(|a|a.iter().collect()).unwrap_or_default();
+                        let Some(first)=banks.first() else {continue;};
+                        let file=text(field(first,"nameFile"));if file.is_empty()||text(field(first,"pathAsset")).is_empty(){continue;}
+                        let files:Vec<String>=banks.iter().map(|b|text(field(b,"nameFile"))).collect();
+                        let faces:Vec<i64>=ints(field(first,"lstFaceNormal")).into_iter().filter(|f|*f>=0).collect();
+                        let id=int(field(datum,"id"));
+                        clips.insert((personality,mode,id),serde_json::json!({"p":personality,"m":mode,"id":id,"file":file,"files":files,"faces":faces}));
+                    }
+                }
+            } else if name==format!("voice_{VOICE_TABLE:02}_00") {
+                for row in list {
+                    let id=int(field(row,"id"));
+                    let infos:Vec<_>=field(row,"lstInfo").and_then(|v|v.as_array()).map(|a|a.iter().map(|i|serde_json::json!({
+                        "ids":ints(field(i,"lstAnimID")),"voices":ints(field(i,"lstVoice")),"state":int(field(i,"state")),
+                    })).collect()).unwrap_or_default();
+                    voices.insert(id,serde_json::json!({"t":VOICE_TABLE,"id":id,"info":infos}));
+                }
+            } else if let Some(personality)=name.strip_prefix("personality_voice_c").and_then(|r|r.get(..2)).and_then(num) {
+                for row in list.iter().filter(|r|field(r,"mode").and_then(|v|v.as_i64())==Some(VOICE_TABLE)) {
+                    for datum in field(row,"data").and_then(|v|v.as_array()).map(|a|a.as_slice()).unwrap_or(&[]) {
+                        let files:Vec<String>=field(datum,"info").and_then(|v|v.as_array()).map(|a|a.iter().map(|b|text(field(b,"nameFile"))).collect()).unwrap_or_default();
+                        if files.first().is_none_or(|f|f.is_empty()){continue;}
+                        let id=int(field(datum,"id"));
+                        voice_clips.insert((personality,id),serde_json::json!({"p":personality,"t":VOICE_TABLE,"id":id,"files":files}));
+                    }
+                }
+            } else if let Some(rest)=name.strip_prefix("HFaceList_c").filter(|_|name.contains("_00_")) {
+                let (Some(personality),Some(action))=(rest.get(..2).and_then(num),name.get(name.len()-2..).and_then(num)) else {continue;};
+                for row in list {
+                    let id=int(field(row,"id"));
+                    let open=field(row,"openMinMouth").and_then(|v|v.as_f64()).unwrap_or(0.0);
+                    mouths.insert((personality,action,id),serde_json::json!({"p":personality,"m":action,"id":id,"mouth":int(field(row,"mouth")),"open":open}));
+                }
+            } else if let Some(mode)=name.strip_prefix("AnimationInfo_").filter(|r|r.len()==2).and_then(num) {
+                for row in list {
+                    let voice=field(row,"numMainVoiceID").and_then(|v|v.as_i64()).unwrap_or(-1);
+                    if voice!=-1 {let id=int(field(row,"id"));main_voice.insert((mode,id),serde_json::json!({"m":mode,"id":id,"v":voice}));}
+                }
+            }
+        }});
+    }
+    serde_json::json!({"version":2,"patterns":patterns.into_values().collect::<Vec<_>>(),"clips":clips.into_values().collect::<Vec<_>>(),
+        "mouths":mouths.into_values().collect::<Vec<_>>(),"mainVoice":main_voice.into_values().collect::<Vec<_>>(),
+        "voices":voices.into_values().collect::<Vec<_>>(),"voiceClips":voice_clips.into_values().collect::<Vec<_>>()}).to_string()
+}
 pub fn h_pose_table(game:&Path)->String {
     let Ok(paths)=catalogue_paths(game) else{return "[]".into();};
     let int=|v:Option<&UnityValue>|v.and_then(|v|v.as_i64().or_else(||v.as_bool().map(i64::from))).unwrap_or(0);

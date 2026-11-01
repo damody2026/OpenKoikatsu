@@ -65,7 +65,7 @@ pub fn decay_daily(r: &mut Relation, t: &Traits) {
     // Her desire for him grows by itself each day, as fast as her own sex drive (libido 100: 15 a day); a girl who
     // does not care for him yet feels a third of it.
     let warm = r.stage == "lover" || r.attraction >= 30.0;
-    r.sex_desire = (r.sex_desire + t.libido as f32 * 0.15 * if warm { 1.0 } else { 0.3 }).min(100.0);
+    r.sex_desire = (r.sex_desire + t.libido as f32 * 0.15 * if warm { 1.0 } else { 0.3 }).min(crate::relation::SEX_DESIRE_MAX);
 }
 
 /// 0 ordinary .. 5 deeply dependent. Feats are quotable wins she remembers.

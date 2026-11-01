@@ -281,6 +281,7 @@ void OKRulesTakeExt(FOKStreetStore& Store,const FJsonObject& Answer){
  if(Answer.TryGetArrayField(TEXT("his_add"),Items))for(const auto& V:*Items)Store.Inventory.Add(V->AsString());
  if(Answer.TryGetArrayField(TEXT("his_remove"),Items))for(const auto& V:*Items)Store.Inventory.RemoveSingle(V->AsString());
 }
+
 void OKRulesSyncDefaults(FOKStreetSceneState& S){
  if(!S.Rules||S.RulesDefaultsGeneration==S.Rules->Generation())return;
  S.RulesDefaultsGeneration=S.Rules->Generation();

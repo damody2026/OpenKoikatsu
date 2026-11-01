@@ -15,6 +15,8 @@ pub const CROTCH: usize = 2;
 pub const ANAL: usize = 3;
 pub const BUTT: usize = 4;
 pub const NIPPLE: usize = 5;
+/// Climaxes in a day after which each one raises her libido (hexp libido_gain).
+const LIBIDO_AFTER: i32 = 10;
 const AREA_KEYS: [&str; 6] = ["kiss", "chest", "crotch", "anal", "butt", "nipple"];
 
 /// What she has been through (Heroine's H fields).
@@ -38,11 +40,17 @@ pub struct HExp {
     pub today_orgasms: i32,
     pub today_service: i32,
     pub today_anal_refused: bool,
+    /// Libido she gained (one point for each climax past the tenth in a day, user 2026-11-01): added to her profile's
+    /// traits.libido (the street passes it as profile.libido_gain).
+    pub libido_gain: i32,
+    /// Game minute until which his semen (white) and her blood (red) run out of her after a scene (-1 none; discharge).
+    pub white_until: i64,
+    pub red_until: i64,
 }
 
 impl Default for HExp {
     fn default() -> Self {
-        HExp { count: 0, kissed: false, areas: [0.0; 6], crotch_h: 0.0, anal_h: 0.0, service: 0.0, service_count: 0, raw_count: 0, virgin: true, anal_virgin: true, today_day: -1, today_orgasms: 0, today_service: 0, today_anal_refused: false }
+        HExp { count: 0, kissed: false, areas: [0.0; 6], crotch_h: 0.0, anal_h: 0.0, service: 0.0, service_count: 0, raw_count: 0, virgin: true, anal_virgin: true, today_day: -1, today_orgasms: 0, today_service: 0, today_anal_refused: false, libido_gain: 0, white_until: -1, red_until: -1 }
     }
 }
 
@@ -74,6 +82,16 @@ fn of(ext: &Value, girl: &str) -> HExp {
     ext.get("hexp").and_then(|h| h.get(girl)).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default()
 }
 
+/// Hours his semen (white) and her blood (red) run out of her after a scene with `raw` finishes inside her without a
+/// condom and `condom` with one: past four, an hour and an hour more for each after; blood with the semen when she
+/// `bleeds` (陰部脆弱 or her first time), and blood alone past four with a condom.
+pub fn discharge_hours(raw: i64, condom: i64, bleeds: bool) -> (i64, i64) {
+    const FREE: i64 = 4;
+    let white = (raw - FREE).max(0);
+    let red = (if bleeds { white } else { 0 }).max((condom - FREE).max(0));
+    (white, red)
+}
+
 /// The original's diminishing ladder for each finish or climax in one scene: 15, 10, 5, then 1.
 fn ladder(times: i64) -> f32 {
     (0..times.max(0)).map(|k| match k { 0 => 15.0, 1 => 10.0, 2 => 5.0, _ => 1.0 }).sum()
@@ -90,7 +108,7 @@ fn level_name(level: i32) -> &'static str {
 
 /// How many times she wants to come for her desire for him: one per ten points (100 wants ten, 50 five).
 pub fn climax_wanted(sex_desire: f32) -> i32 {
-    (sex_desire.clamp(0.0, 100.0) / 10.0).round() as i32
+    (sex_desire.clamp(0.0, crate::relation::SEX_DESIRE_MAX) / 10.0).round() as i32
 }
 
 fn area_name(i: usize) -> &'static str {
@@ -130,7 +148,7 @@ fn experience(r: &Value) -> Result<Value, String> {
     let service_rounds = if resentment >= 50.0 { 1 } else { (1 + level + (1.5 * easy).round() as i32 + i32::from(lover)).clamp(1, 6) };
     // How many times she comes in one scene before she has had enough and wants it to stop (no more touching, moving,
     // entering her): the same things move it, a lover lasts longer.
-    // Her desire for him (sex_desire, 0..100) is how many times she wants to come: 100 wants ten, 50 five. She does
+    // Her desire for him (sex_desire, 0..200) is how many times she wants to come: 100 wants ten, 50 five. She does
     // not have enough before that (a lewd girl left wanting stays frustrated and comes looking for him, `initiative`).
     let wanted = climax_wanted(rel.as_ref().map_or(0.0, |r| r.sex_desire));
     let climax_limit = if resentment >= 50.0 { 1 } else { (2 + level + (1.5 * easy).round() as i32 + 2 * i32::from(lover)).max(wanted).clamp(2, 10) };
@@ -152,6 +170,9 @@ fn experience(r: &Value) -> Result<Value, String> {
         "today_service": today_service,
         "anal_refused_today": anal_refused_today,
         "had_enough": today_orgasms >= climax_limit,
+        "libido_gain": h.libido_gain,
+        "white_until": h.white_until,
+        "red_until": h.red_until,
         "kiss_ok": kiss_ok,
         "chastity": chaste,
         "used": level >= 2,
@@ -184,9 +205,26 @@ fn session_end(r: &Value) -> Result<Value, String> {
             h.today_service = 0;
             h.today_anal_refused = false;
         }
+        let before = h.today_orgasms;
         h.today_orgasms += num(&c, "her_orgasms") as i32;
+        // Past ten climaxes in a day each one raises her libido a point.
+        h.libido_gain = (h.libido_gain + (h.today_orgasms - before.max(LIBIDO_AFTER)).max(0)).min(100);
         h.today_service += num(&c, "service_finishes") as i32;
         h.today_anal_refused |= flag(&c, "anal_refused");
+    }
+
+    // What runs out of her afterwards (user, 2026-11-01): past four finishes inside her without a condom his semen, for
+    // an hour of game time and an hour more for each one after that; her blood with it when she is 陰部脆弱
+    // (traits.vagina_fragile), or it was her first time or her hymen grows back (traits.hymen_regen) unless it is
+    // stretched (traits.hymen_stretched, KK_SkinEffects' card settings); past four with a condom only her blood, the
+    // same way. Counted from the minute the scene ended; a longer run already going is kept.
+    if let Some(now) = r.get("minute").and_then(Value::as_i64).filter(|m| *m >= 0) {
+        let t = crate::traits::Traits::from_profile(r.get("profile").unwrap_or(&Value::Null));
+        let first = h.virgin && flag(c.get("crotch").unwrap_or(&Value::Null), "inserted");
+        let bleeds = t.vagina_fragile || ((first || t.hymen_regen) && !t.hymen_stretched);
+        let (white, red) = discharge_hours(num(&c, "his_inside_raw") as i64, num(&c, "his_condom") as i64, bleeds);
+        if white > 0 { h.white_until = h.white_until.max(now + 60 * white); }
+        if red > 0 { h.red_until = h.red_until.max(now + 60 * red); }
     }
 
     // Only what they did leaves a mark: opening the room and leaving at once is no intimate time.
@@ -405,6 +443,34 @@ mod tests {
         let tomorrow = experience(&json!({"girl": "g", "relation": r, "ext": again["ext"], "day": 4})).unwrap();
         assert_eq!(tomorrow["today_orgasms"], 0);
         assert_eq!(tomorrow["anal_refused_today"], false);
+    }
+
+    #[test]
+    fn past_four_finishes_she_runs_white_or_red_for_hours() {
+        assert_eq!(discharge_hours(4, 0, true), (0, 0), "four is not past four");
+        assert_eq!(discharge_hours(5, 0, false), (1, 0));
+        assert_eq!(discharge_hours(7, 0, false), (3, 0), "an hour more for each after");
+        assert_eq!(discharge_hours(6, 0, true), (2, 2), "fragile or her first time: blood with it");
+        assert_eq!(discharge_hours(0, 6, false), (0, 2), "with a condom only blood");
+        let r = rel(0.0);
+        let out = session_end(&json!({"girl": "g", "relation": r, "ext": {}, "day": 3, "minute": 600,
+            "profile": {"traits": {"vagina_fragile": true}}, "counts": {"played": true, "his_inside_raw": 6}})).unwrap();
+        assert_eq!(out["ext"]["hexp"]["g"]["white_until"], 720);
+        assert_eq!(out["ext"]["hexp"]["g"]["red_until"], 720);
+        let after = session_end(&json!({"girl": "g", "relation": r, "ext": out["ext"], "day": 3, "minute": 650, "counts": {"played": true, "his_inside_raw": 5}})).unwrap();
+        assert_eq!(after["ext"]["hexp"]["g"]["white_until"], 720, "a longer run already going is kept");
+    }
+
+    #[test]
+    fn climaxes_past_ten_a_day_raise_her_libido() {
+        let r = rel(0.0);
+        let first = session_end(&json!({"girl": "g", "relation": r, "ext": {}, "day": 3, "counts": {"played": true, "her_orgasms": 8}})).unwrap();
+        assert_eq!(first["ext"]["hexp"]["g"]["libido_gain"], 0);
+        let again = session_end(&json!({"girl": "g", "relation": r, "ext": first["ext"], "day": 3, "counts": {"played": true, "her_orgasms": 5}})).unwrap();
+        assert_eq!(again["ext"]["hexp"]["g"]["libido_gain"], 3, "the 11th, 12th and 13th of the day");
+        let next_day = session_end(&json!({"girl": "g", "relation": r, "ext": again["ext"], "day": 4, "counts": {"played": true, "her_orgasms": 4}})).unwrap();
+        assert_eq!(next_day["ext"]["hexp"]["g"]["libido_gain"], 3, "kept; a new day counts from zero");
+        assert_eq!(experience(&json!({"girl": "g", "relation": r, "ext": next_day["ext"], "day": 4})).unwrap()["libido_gain"], 3);
     }
 
     #[test]

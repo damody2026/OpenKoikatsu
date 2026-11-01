@@ -480,6 +480,9 @@ public:
     int32 PartnerPersonality=-1;
     float PartnerVoiceRate=.5f;
     bool bPairBreathArmed=false,bPairBreathMoving=false;
+    // In the one-on-one room her breathing follows the scene (OKHScene: her gauge, his speed, her experience), as the
+    // original's HVoiceCtrl picks it; elsewhere the first-time scene-start bank.
+    FKKHBreathContext HBreath;
     TArray<FKKHBreathCue> PairMovingBreaths,PairStillBreaths;
     UFUNCTION() void OnPairSelected(FString Item,ESelectInfo::Type Type);
     UFUNCTION() void OnPairStateSelected(FString Item,ESelectInfo::Type Type);

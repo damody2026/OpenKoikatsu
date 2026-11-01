@@ -607,6 +607,9 @@ public:
 	FName VaginaMorphName;
 	bool bVaginaMorphResolved=false;
 	bool bVaginaOpeningLogged=false;
+	// How open she is (0..1), set by whoever knows he is in her (the one-on-one H scene, UOKHScenePanel::BulgeBelly):
+	// DriveVaginaOpening uses it instead of its own guess from his tip. Below 0: its own guess.
+	float VaginaOpenOverride=-1.f;
 	TMap<FName, FTransform> RigidNeutralBones;
 	// Every leader bone at the same load-time capture, so an exact-slot
 	// accessory can adopt its socket's neutral without a mid-animation capture.

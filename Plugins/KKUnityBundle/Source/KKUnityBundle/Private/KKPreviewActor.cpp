@@ -9170,7 +9170,8 @@ void AKKPreviewActor::DriveVaginaOpening(const AKKPreviewActor& Male, float& Ran
 		RangeMax = FMath::Max(RangeMax, Dist);
 	}
 	const float Span = RangeMax - RangeMin;
-	const float Open01 = Span >= GVaginaOpenSpanCm ? FMath::Clamp(1.f - (Dist - RangeMin) / Span, 0.f, 1.f) : 0.f;
+	const float Open01 = VaginaOpenOverride >= 0.f ? FMath::Min(VaginaOpenOverride, 1.f)
+		: Span >= GVaginaOpenSpanCm ? FMath::Clamp(1.f - (Dist - RangeMin) / Span, 0.f, 1.f) : 0.f;
 	if (VaginaMorphPart != INDEX_NONE)
 	{
 		const bool bApplied = SetPartMorphWeight(VaginaMorphPart, VaginaMorphName, Open01 * 100.f);

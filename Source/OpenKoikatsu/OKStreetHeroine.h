@@ -46,7 +46,7 @@ inline const TArray<FOKHeroineStat>& OKHeroineStats() {
  static const TArray<FOKHeroineStat> All = {
   {TEXT("favor"), TEXT("好感度"), 200.f, [](const FOKStreetRelation& R) { return R.Favor; }, [](FOKStreetRelation& R, float V) { R.Favor = V; }},
   {TEXT("lewdness"), TEXT("興奮度"), 100.f, [](const FOKStreetRelation& R) { return R.Lewdness; }, [](FOKStreetRelation& R, float V) { R.Lewdness = V; }},
-  {TEXT("sex_desire"), TEXT("欲望"), 100.f, [](const FOKStreetRelation& R) { return R.SexDesire; }, [](FOKStreetRelation& R, float V) { R.SexDesire = V; }},
+  {TEXT("sex_desire"), TEXT("欲望"), OKStreetSexDesireMax, [](const FOKStreetRelation& R) { return R.SexDesire; }, [](FOKStreetRelation& R, float V) { R.SexDesire = V; }},
   {TEXT("topic_points"), TEXT("話題點"), 100.f, [](const FOKStreetRelation& R) { return R.TopicPoints; }, [](FOKStreetRelation& R, float V) { R.TopicPoints = V; }},
   {TEXT("talks"), TEXT("可談次數"), 20.f, [](const FOKStreetRelation& R) { return float(R.TalksRemaining); }, [](FOKStreetRelation& R, float V) { R.TalksRemaining = FMath::RoundToInt32(V); }},
   {TEXT("chastity"), TEXT("貞操"), 100.f, [](const FOKStreetRelation& R) { return R.Chastity; }, [](FOKStreetRelation& R, float V) { R.Chastity = V; }},

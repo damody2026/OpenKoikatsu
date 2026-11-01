@@ -99,8 +99,9 @@ void UOKCharacterController::StartPairBreath() {
     Female->BeginFaceDisplayUpdate();ON_SCOPE_EXIT{Female->EndFaceDisplayUpdate();};
     const bool bMoving=!PairedPlayback->IsPaused()&&PairSpeedSlider&&PairSpeedSlider->GetValue()*4.f>0.01f;
     bPairBreathMoving=bMoving;bPairBreathArmed=true;
+    // In the room a cry or a line of hers is playing (her climax): the breathing waits for it (OKHScene restarts it).
+    if(bHScene&&Female->IsSpeaking()&&!Female->bHBreath)return;
     Female->SetSpeechPaused(PairedPlayback->IsPaused());
-    Female->StopHBreath();
     const int32 PairIndex=PairCombo?PairCombo->GetSelectedIndex()-1:-1;
     const TSharedPtr<FJsonObject> Pair=NativePairs.IsValidIndex(PairIndex)?NativePairs[PairIndex]:nullptr;
     const FString Category=Pair.IsValid()?Pair->GetStringField(TEXT("category")):FString();
@@ -111,15 +112,20 @@ void UOKCharacterController::StartPairBreath() {
     const float Rate=Selected.Sex==1?Selected.VoiceRate:PartnerVoiceRate;
     FString Error,MovingError,StillError;const FString Root=SpeechRootInput->GetText().ToString();const int32 AnimId=Pair.IsValid()?int32(Pair->GetNumberField(TEXT("id"))):-1;
     PairMovingBreaths.Reset();PairStillBreaths.Reset();
-    const bool MovingReady=Mode>=0&&KKSpeech::CollectHBreath(Root,Personality,Mode,State,AnimId,true,PairMovingBreaths,MovingError);
-    const bool StillReady=Mode>=0&&KKSpeech::CollectHBreath(Root,Personality,Mode,State,AnimId,false,PairStillBreaths,StillError);
+    FKKHBreathContext Moving=HBreath,Still=HBreath;Moving.bMoving=true;Still.bMoving=false;
+    const bool MovingReady=Mode>=0&&(bHScene?KKSpeech::CollectHBreath(Root,Personality,Mode,State,AnimId,Moving,PairMovingBreaths,MovingError):KKSpeech::CollectHBreath(Root,Personality,Mode,State,AnimId,true,PairMovingBreaths,MovingError));
+    const bool StillReady=Mode>=0&&(bHScene?KKSpeech::CollectHBreath(Root,Personality,Mode,State,AnimId,Still,PairStillBreaths,StillError):KKSpeech::CollectHBreath(Root,Personality,Mode,State,AnimId,false,PairStillBreaths,StillError));
     const auto& Cues=bMoving?PairMovingBreaths:PairStillBreaths;Error=bMoving?MovingError:StillError;
+    // A state with no breathing of its own (the insertion, OLoop before her climax): in the room she goes on as she was
+    // (stopped first, it went silent there); elsewhere it stops as before.
+    if(!(bMoving?MovingReady:StillReady)&&bHScene){UE_LOG(LogTemp,Display,TEXT("Pair breath: none for mode %d %s, she goes on as before: %s"),Mode,*State,*Error);return;}
+    Female->StopHBreath();
     if(!(bMoving?MovingReady:StillReady)||!Female->BeginHBreath(Cues,FMath::Lerp(.94f,1.06f,Rate),Error)){
         if(SpeechStatus)SpeechStatus->SetText(FText::FromString(Error.IsEmpty()?TEXT("這個動作沒有可播放的喘息"):Error));
         UE_LOG(LogTemp,Display,TEXT("Pair breath: none for mode %d %s moving=%d: %s"),Mode,*State,bMoving,*Error);
         return;
     }
     bSpeechWasPlaying=true;
-    UE_LOG(LogTemp,Display,TEXT("Pair breath: mode %d %s moving=%d cues=%d playing"),Mode,*State,bMoving,Cues.Num());
+    UE_LOG(LogTemp,Display,TEXT("Pair breath: mode %d %s moving=%d cues=%d playing (gauge %.0f fast %d experience %d: %s)"),Mode,*State,bMoving,Cues.Num(),HBreath.Gauge,HBreath.bFast,HBreath.Experience,*FString::JoinBy(Cues,TEXT(" "),[](const FKKHBreathCue& C){return C.Name;}));
     if(SpeechStatus)SpeechStatus->SetText(FText::FromString(FString::Printf(TEXT("喘息 %s · %s · %d 種叫聲"),*HeroineVoiceLabel(Personality),*State,Cues.Num())));
 }
