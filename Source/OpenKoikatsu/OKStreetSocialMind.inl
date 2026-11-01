@@ -728,6 +728,11 @@ FString AOKStreetSocialScene::SceneLine(int32 Character) const{
   const bool Overlaps=!Own.IsEmpty()&&!Name.IsEmpty()&&(Own.Contains(Name)||Name.Contains(Own));
   if(D<25.f)Known.Add(OKMsg(TEXT("ui.mind.nearby_person_distance"), {{TEXT("name"), *Name}, {TEXT("distance"), D}})+(Overlaps?OKT(TEXT("ui.mind.nearby_not_you")):TEXT("")));}
  if(!Known.IsEmpty())Line+=OKT(TEXT("ui.mind.known_people_label"))+FString::Join(Known,OKT(TEXT("ui.bank.list_separator")));
+ // On the way somewhere with him: said only "street", she took his "we're here, go ask" for arriving and spoke to the
+ // dorm manager from the road (R6-66).
+ if(S.OutingGirl==Character&&Character!=INDEX_NONE){FString Dest=S.OutingActivity.StartsWith(TEXT("go:"))?S.OutingActivity.Mid(3):FString();
+  if(Dest.IsEmpty())if(const FOKStreetActivity* A=OKStreetFindActivity(S.OutingActivity))Dest=A->Place?A->Place:TEXT("");
+  if(!Dest.IsEmpty()&&Dest!=Place)if(const auto* To=OKStreetFindPlace(Dest))Line+=OKMsg(TEXT("ui.mind.heading_to_line"),{{TEXT("place"),To->Name}});}
  const FString Things=ThingsFacts(Character);
  return Line+ActivityBlockedLine(Character)+(Things.IsEmpty()?FString():OKT(TEXT("ui.bank.list_separator"))+Things)+FinanceSceneText();
 }
