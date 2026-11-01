@@ -37,7 +37,8 @@ rem RUSTFLAGS overrides target rustflags, so preserve the required Windows flags
 rem No +crt-static: Unreal links ok_extract.lib with the dynamic CRT (/MD); crt-static made cc build clothes_gpu.cpp as /MT
 rem and the game link failed with LNK2038 (RuntimeLibrary MT_StaticRelease vs MD_DynamicRelease).
 set "RUSTFLAGS=%RUSTFLAGS% -C linker-flavor=lld-link --cap-lints allow"
-"%CARGO%" build --release --lib --quiet --manifest-path "%~dp0Cargo.toml"
+rem Without default features: the Studio sound conversion (fsbex) brings a second libvorbis / libogg (see Cargo.toml).
+"%CARGO%" build --release --lib --no-default-features --quiet --manifest-path "%~dp0Cargo.toml"
 if errorlevel 1 (
 	popd
 	echo [ok-extract] cargo build --release --lib failed

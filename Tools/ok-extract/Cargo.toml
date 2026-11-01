@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+# Studio BGM / voice conversion (oklib studio-sounds, studio-voices): fsbex builds its own libvorbis / libogg, which the
+# game executable already links from Unreal (LNK2005 vorbis_encode_init_vbr, ogg_stream_*). The library Unreal links
+# (build-release.cmd) is built without it; the ok-extract command keeps it.
+default = ["studio-sounds"]
+studio-sounds = ["dep:fsbex"]
 three-export = []
 
 [lib]
@@ -33,7 +38,7 @@ crc32fast = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"
-fsbex = "0.3"
+fsbex = { version = "0.3", optional = true }
 rayon = "1"
 instant-meshes = { path = "../vendor/instant-meshes", default-features = false }
 

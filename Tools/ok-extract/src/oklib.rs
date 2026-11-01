@@ -3137,11 +3137,13 @@ pub fn cli(game: &Path, args: &[String]) -> Result<(), String> {
         "studio-check" => crate::studio_items::check(&lib.ok_or("library directory required")?)?,
         "studio-images" => println!("OKCONVERT studio images copied={}", crate::studio_items::copy_user_images(game, &lib.ok_or("library directory required")?)?),
         "studio-sky" => println!("OKCONVERT studio sky patterns={}", crate::studio_sky::convert(game, &lib.ok_or("library directory required")?)?),
+        #[cfg(feature = "studio-sounds")]
         "studio-sounds" => {
             // studio-sounds <lib>: the Studio BGM list into studio_items.json and each clip as studio/bgm/<clip>.ogg.
             let (written, kept, failed) = crate::studio_sounds::convert(game, &lib.ok_or("library directory required")?)?;
             println!("OKCONVERT studio bgm written={written} kept={kept} failed={failed}");
         }
+        #[cfg(feature = "studio-sounds")]
         "studio-voices" => {
             // studio-voices <lib>: the Studio character voice lists into studio_voices.json and each clip as studio/voice/<clip>.ogg.
             let (written, kept, failed) = crate::studio_sounds::convert_voices(game, &lib.ok_or("library directory required")?)?;

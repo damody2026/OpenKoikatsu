@@ -15,7 +15,7 @@ local path, proc = ok.path, ok.proc
 local ROOT = os.getenv("OK_UNREAL_SLOTS") or "C:/portable/OpenKoikatsu/Saved/UnrealSlots"
 local SLOTS = 3
 -- Lower runs first; agents not listed rank after these.
-local PRIORITY = { F = 1, ["e-galgame"] = 2, ["c-conquest"] = 3, ["e-okcard"] = 3, ["c-street-city"] = 4 }
+local PRIORITY = { ["e-galgame"] = 1, F = 2, ["c-conquest"] = 3, ["e-okcard"] = 3, ["c-street-city"] = 4 }
 
 local function rank(agent) return PRIORITY[agent] or 9 end
 local function owner_file(i) return path.join(ROOT, "slot" .. i, "owner.txt") end

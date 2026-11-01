@@ -75,6 +75,7 @@ pub mod okmodel_view;
 pub mod okmodel_edit;
 mod oklib_convert;
 mod studio_items;
+#[cfg(feature = "studio-sounds")]
 mod studio_sounds;
 mod shader_states;
 mod studio_child_animation;
