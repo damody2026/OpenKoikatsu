@@ -229,6 +229,9 @@ struct FOKStreetSceneState {
  TMap<int32,int64> WaitsForHim; // she wrote him where she is: until this minute she stays there for him (R3-230)
  // Who was with him in the save, by stable id, until each is put back (R3-238); the one who walks with him again, and until when it is tried.
  TMap<FString,FOKStreetStore::FWithHim> ResumeWithHim;int32 ResumeFollow=INDEX_NONE;double ResumeFollowUntil=0;TArray<int32> ResumeParty;
+ int32 HisShareGirl=INDEX_NONE;int64 HisShareAmount=0,HisShareMinute=-1; // his own part of the last bill with her (a treat she says next covers it)
+ int32 FreeTalkTurns=0; // turns sent to the model (each sees the table as it is then)
+ TMap<FString,int32> ServedNoteTurns; // a dish-served note -> the turns sent when the dish came
  TArray<FString> PromiseAskNotes; // "ask him what time / where" notes not sent yet: dropped once the meeting is booked (R3-242)
  double FreeTalkSentAt=0,OutingBegunAt=0; // when her reply now coming was asked for, and when the outing under way began (R3-250)
  // Walking with several: each one's place by his facing (places.rs party_formation), for the group it was asked for;
@@ -1199,6 +1202,8 @@ void AOKStreetSocialScene::TickDeferredNotes(){
  auto& S=*State;if(S.DeferredNotes.IsEmpty())return;
  if(FreeTalkPartner()==INDEX_NONE){UE_LOG(LogTemp,Display,TEXT("Street free talk: %d held game notes dropped, the talk is over"),S.DeferredNotes.Num());S.DeferredNotes.Reset();return;}
  if(S.FreeTalkBusy||HerReplyUnspoken()||!S.FreeTalkDraft.IsEmpty())return;
+ // A dish-served note held while she spoke, and he said something since: that turn saw the dish on the table (R6-93).
+ {const FString Note=S.DeferredNotes[0];if(const int32* Turns=S.ServedNoteTurns.Find(Note);Turns&&S.FreeTalkTurns>*Turns){S.DeferredNotes.RemoveAt(0);S.ServedNoteTurns.Remove(Note);UE_LOG(LogTemp,Display,TEXT("Street order served: held note dropped, she has seen it on the table already"));return;}}
  S.SystemNote=true;S.FreeTalkDraft=S.DeferredNotes[0];S.DeferredNotes.RemoveAt(0);SendFreeTalk();
 }
 void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_SendFreeTalk);
@@ -1221,6 +1226,7 @@ void AOKStreetSocialScene::SendFreeTalk(){QUICK_SCOPE_CYCLE_COUNTER(STAT_Street_
  if(!His&&S.PrivateGirl==Character&&S.PrivateMode.IsValid()&&S.PrivateTalkContext.IsEmpty()){UE_LOG(LogTemp,Display,TEXT("Street free talk: street note dropped in the private room: %s"),*Text.Left(60));S.FreeTalkDraft.Reset();return;}
  // In the H scene his words not from its panel (the microphone) go the same way: held while she cannot answer.
  if(His&&S.PrivateGirl==Character&&S.PrivateMode.IsValid()&&S.PrivateTalkContext.IsEmpty()){FString Context;if(!S.PrivateMode->HSceneHear(Text,Context)){S.FreeTalkDraft.Reset();return;}S.PrivateTalkContext=Context;}
+ ++S.FreeTalkTurns;S.ServedNoteTurns.Remove(Text); // a turn going out (one held or dropped above is not)
  if(His){S.LastPlayerSaid=Text;S.PlayerAskedText=Text;SongCountLines(Character,1);} // his line counts toward her next song
  // His line aloud in his tone (the dropdown's x-vector voice), face to face, when the voice is TTS: her answer waits
  // until he has said it (TickFreeTalkSpeech, the galgame box).
@@ -1585,6 +1591,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
   if(!Place.IsEmpty()||!Day.IsEmpty()){bool Replaces=false;Verdict->TryGetBoolField(TEXT("replaces"),Replaces);if(Replaces)UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d the new meeting replaces the one they had"),Character);
    double Hours=0;if(Promise&&(*Promise).IsValid())(*Promise)->TryGetNumberField(TEXT("hours"),Hours);
    Weak->AddPromiseFromChat(Character,Day,Time,Place,What,Said+TEXT("\n")+Her,Said,Replaces,float(Hours));
+   // A second meeting agreed in the same breath ("the cafe at eleven, the aquarium at two"): only the aquarium was booked
+   // and 三月七 waited at the cafe for a meeting the game never had.
+   {const TSharedPtr<FJsonObject>* Second=nullptr;FString Day2,Time2,Place2,What2;double Hours2=0;
+    if(Verdict->TryGetObjectField(TEXT("promise2"),Second)&&Second&&(*Second).IsValid()){(*Second)->TryGetStringField(TEXT("day"),Day2);(*Second)->TryGetStringField(TEXT("time"),Time2);(*Second)->TryGetStringField(TEXT("place"),Place2);(*Second)->TryGetStringField(TEXT("what"),What2);(*Second)->TryGetNumberField(TEXT("hours"),Hours2);
+     if(!Place2.IsEmpty()&&!(Day2==Day&&Time2==Time&&Place2==Place)){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d a second meeting %s %s %s %s"),Character,*Day2,*Time2,*Place2,*What2);Weak->AddPromiseFromChat(Character,Day2,Time2,Place2,What2,Said+TEXT("\n")+Her,Said,false,float(Hours2));}}}
    // Who pays, said with it ("Friday seven, the restaurant, my apology treat"): kept on the meeting just booked or moved,
    // for that day (R3-216).
    FString Payer;if(Verdict->TryGetStringField(TEXT("payer"),Payer)&&(Payer==TEXT("him")||Payer==TEXT("her")||Payer==TEXT("split"))){
@@ -1642,6 +1653,12 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
    // Her treat already paid within the hour: "I'm treating you" said over that same dango is not a new promise (it made
    // her pay at every shop for six hours; R3-227).
    if(Treats&&OKStreetMindNow(*L)-L->HerTreatKept.FindRef(Character,-100000)<60){UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d already treated him, not again"),Character);}
+   // Said with the order just billed to him: 三月七's "this one is on me, I promised" came with his braised pork rice, and
+   // the bill (read before her treat) had him pay it. She pays him that part now, as the treat it was.
+   else if(Treats&&L->HisShareGirl==Character&&L->HisShareAmount>0&&OKStreetMindNow(*L)-L->HisShareMinute<=5&&Weak.IsValid()){
+    auto Settle=OKRulesHeroineRequest(*L,TEXT("return_money_settle"),OKStreetStableId(L->Manifest.Characters[Character]));Settle->SetNumberField(TEXT("amount"),double(L->HisShareAmount));Settle->SetStringField(TEXT("name"),L->Manifest.Characters[Character].Name);
+    if(const TSharedPtr<FJsonObject> Answer=OKRulesEval(*L,Settle)){auto Candidate=L->Store;Weak->ApplyRulesEffects(Candidate,*Answer);if(Weak->CommitStore(MoveTemp(Candidate)))Weak->FlushRulesEffects();}
+    L->HerTreatKept.Add(Character,OKStreetMindNow(*L));UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d pays the %lld he was just billed"),Character,L->HisShareAmount);L->HisShareGirl=INDEX_NONE;L->HisShareAmount=0;Weak->RefreshUI();}
    else if(Treats){L->HerTreatPromise.Add(Character,OKStreetMindNow(*L)+6*60);UE_LOG(LogTemp,Display,TEXT("Street treat promise: actor=%d will pay for what he orders (judged)"),Character);}
    // "Let's skip lunch then, another day" — "fine": the meeting they had is called off (her own act field may forget it).
    {bool Cancel=false;Verdict->TryGetBoolField(TEXT("cancel_promise"),Cancel);

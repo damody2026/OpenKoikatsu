@@ -213,7 +213,7 @@ fn checkout(c: &Catalog, r: &Value) -> Result<Value, String> {
     } else {
         String::new()
     };
-    Ok(json!({"total": total, "player_pays": player_pays, "her_pays": her_pays, "advanced": advanced, "card": card, "effects": fx.into_value(), "notice": notice, "tell_her": tell_her, "treat_kept": her_pays > 0 || advanced > 0}))
+    Ok(json!({"total": total, "player_pays": player_pays, "her_pays": her_pays, "advanced": advanced, "card": card, "effects": fx.into_value(), "notice": notice, "tell_her": tell_her, "treat_kept": her_pays > i64::from(her_share) || advanced > 0}))
 }
 
 /// The luck on each fortune slip in the cart (items tagged fortune): whose it is (0 the girl at the table, 1 him, 2 another
@@ -980,6 +980,18 @@ mod tests {
         assert_eq!((v["player_pays"].as_i64(), v["her_pays"].as_i64()), (Some(0), Some(price as i64)));
         let v = checkout(&c, &json!({"option": "split", "cart": group, "player_cash": 10000, "relation": rel(json!({"cash": 1000})), "profile": {}})).unwrap();
         assert_eq!(v["player_pays"].as_i64(), Some(price as i64), "without as_girl another girl's dish is his to pay");
+    }
+
+    #[test]
+    fn her_own_share_is_not_her_treat() {
+        // Paying only for her own cocoa is not the treat she promised: 三月七's "this time I pay" still had him pay his
+        // latte and scone, and the treat counted as kept (R6-96).
+        let c = Tuning::builtin().catalog;
+        let cart = json!([{"item": "shrine_fortune"}, {"item": "shrine_fortune", "for_her": true}]);
+        let split = checkout(&c, &json!({"option": "split", "cart": cart, "player_cash": 100, "relation": rel(json!({"cash": 1000})), "profile": {}, "seed": 3})).unwrap();
+        assert_eq!(split["treat_kept"], false, "{split}");
+        let hers = checkout(&c, &json!({"option": "she_pays", "cart": cart, "player_cash": 100, "relation": rel(json!({"cash": 1000})), "profile": {}, "seed": 3})).unwrap();
+        assert_eq!(hers["treat_kept"], true, "{hers}");
     }
 
     #[test]

@@ -63,6 +63,7 @@ struct FOKStreetPendingServe {
  FString Place, PlaceId; // the shop's name (for words) and id (where it is served)
  TArray<FOKStreetCartLine> Lines;
  bool Applied = false, Told = false;
+ int32 TurnsAtServe = -1; // free-talk turns sent when it came (a later turn already saw it on the table)
 };
 
 struct FOKStreetCatalogPlace {

@@ -194,7 +194,7 @@ void AOKStreetSocialScene::TickServes(){
    UE_LOG(LogTemp,Display,TEXT("Street order left behind at %s: %s"),*P.Place,*FString::Join(Left,TEXT("、")));S.Serves.RemoveAt(K);continue;}
   TArray<FString> Names;
   if(!P.Applied){
-   P.Applied=true;
+   P.Applied=true;P.TurnsAtServe=S.FreeTalkTurns;
    for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Names.Add(S.Manifest.Characters.IsValidIndex(L.Girl)?OKStreetScriptedName(S.Manifest.Characters[L.Girl].Name)+OKT(TEXT("ui.economy.possessive_de"))+I->Name:OKMsg(TEXT("ui.economy.item_owner_label"),{{TEXT("owner_label"),L.ForHer?OKT(TEXT("ui.economy.her_label")):OKT(TEXT("ui.economy.your_label"))},{TEXT("item_name"),*I->Name}}));
    // Served: the dishes can be eaten now; her needs fill as she eats them (TickMeal).
    for(auto& D:S.Table)if(D.Batch==P.Batch)D.Served=true;
@@ -233,9 +233,12 @@ void AOKStreetSocialScene::TickServes(){
   if(P.Her==INDEX_NONE||FreeTalkPartner()!=P.Her){S.Serves.RemoveAt(K);continue;}
   // A replay he asked for plays out first: "the tea is here" sent in the middle of it stopped it after two lines.
   if(S.FreeTalkBusy||!S.FreeTalkReplay.IsEmpty()||!S.FreeTalkReplayParts.IsEmpty())continue;
+  // A turn since it came already had it on the table (FreeTalkDoing): 惠惠 was eating her noodles when "the beef noodles
+  // are here" reached her and she announced them again.
+  if(S.FreeTalkTurns>P.TurnsAtServe){UE_LOG(LogTemp,Display,TEXT("Street order served: not told, she has seen it on the table already"));S.Serves.RemoveAt(K);continue;}
   TArray<FString> Dishes;for(const auto& L:P.Lines)if(const auto* I=S.Catalog.Find(L.ItemId))Dishes.Add(OKMsg(TEXT("ui.economy.item_owner_label"), {{TEXT("owner_label"), L.ForHer?OKT(TEXT("ui.economy.your_label")):OKT(TEXT("ui.economy.his_label"))}, {TEXT("item_name"), *I->Name}}));
   S.SystemNote=true;S.FreeTalkDraft=OKMsg(TEXT("ui.economy.dishes_served_prompt"), {{TEXT("dish_names"), *FString::Join(Dishes,OKT(TEXT("ui.bank.list_separator")))}});
-  S.Serves.RemoveAt(K);SendFreeTalk();return;
+  S.ServedNoteTurns.Add(S.FreeTalkDraft.TrimStartAndEnd(),P.TurnsAtServe);S.Serves.RemoveAt(K);SendFreeTalk();return;
  }
 }
 
@@ -686,6 +689,8 @@ void AOKStreetSocialScene::FinishCheckout(const FString& Option,int32 Her,const 
  // chicken rice a minute later was his to pay (R6-39).
  const bool HisOnBill=S.Cart.ContainsByPredicate([](const FOKStreetCartLine& L){return !L.ForHer&&L.Girl==INDEX_NONE;});
  if(WithHer&&HisOnBill&&Answer->GetBoolField(TEXT("treat_kept"))){S.HerTreatPromise.Remove(Her);S.HerTreatKept.Add(Her,OKStreetMindNow(S));}
+ // What he paid of it himself, for a treat she says in the same breath (the judge reads it a moment later).
+ if(WithHer&&HisOnBill&&!Answer->GetBoolField(TEXT("treat_kept"))&&Answer->GetNumberField(TEXT("player_pays"))>0){S.HisShareGirl=Her;S.HisShareAmount=int64(Answer->GetNumberField(TEXT("player_pays")));S.HisShareMinute=OKStreetMindNow(S);}
  const double ServeIn=S.Catalog.Places.Contains(S.ShopPlace)?S.Catalog.Places[S.ShopPlace].ServeSeconds:OKStreetServeSeconds;
  // Only food and drink are served: a book or a plush bought is in hand at once, no "on the table in 30 s" (R6-37: the
  // picture book at the bookstore came with "the dish is served in about 30 s" in her note).

@@ -399,7 +399,10 @@ void AOKStreetSocialScene::TickAppointments(){
   bool Join=false;V->AsObject()->TryGetBoolField(TEXT("join"),Join);
   // Who they said would pay when they made it: the bill there follows it (RecordPayAgreed), as said that day (R3-216).
   {const int32 Id=int32(V->AsObject()->GetNumberField(TEXT("id")));if(const FOKStreetAppointment* A=S.Store.Appointments.FindByPredicate([&](const FOKStreetAppointment& X){return X.Id==Id;});A&&!A->Payer.IsEmpty())
-    RecordPayAgreed(Girl,A->Payer,TEXT("go:")+A->Place);}
+   {RecordPayAgreed(Girl,A->Payer,TEXT("go:")+A->Place);
+    // Hers to pay is her treat ("this time I pay"), his order included: 三月七's coffee date she said she would pay for
+    // billed his latte and scone to him, as "her" alone reads as each paying their own (R6-38).
+    if(A->Payer==TEXT("her")&&OKStreetMindNow(S)-S.HerTreatKept.FindRef(Girl,-100000)>=60)S.HerTreatPromise.Add(Girl,OKStreetMindNow(S)+180);}}
   ArriveNow(Girl,Join);
  }
  RefreshUI();
